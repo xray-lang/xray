@@ -1,0 +1,125 @@
+// 1301_is_as_union.xr
+// Test: is type guard, as type assertion, and union type behavior
+
+// ===== is type guard =====
+
+@test
+fn test_is_basic(): void {
+    let x: int | string | bool = 42
+    assert_eq(x is int, true)
+    assert_eq(x is string, false)
+    assert_eq(x is bool, false)
+}
+
+@test
+fn test_is_string(): void {
+    let x: int | string | bool = "hello"
+    assert_eq(x is string, true)
+    assert_eq(x is int, false)
+}
+
+@test
+fn test_is_bool(): void {
+    let x: int | string | bool = true
+    assert_eq(x is bool, true)
+    assert_eq(x is int, false)
+}
+
+@test
+fn test_is_null(): void {
+    let x: int? = null
+    assert_eq(x is null, true)
+    assert_eq(x is int, false)
+}
+
+@test
+fn test_is_array(): void {
+    let x: Array<int> = [1, 2, 3]
+    assert_eq(x is Array, true)
+    assert_eq(x is int, false)
+}
+
+// ===== as type assertion =====
+
+@test
+fn test_as_safe(): void {
+    let x: int | string | bool = 42
+    let n = x as int?
+    assert_eq(n, 42)
+    
+    let s = x as string?
+    assert_eq(s, null)
+}
+
+@test
+fn test_as_unsafe(): void {
+    let x: int | string | bool = "hello"
+    let s = x as string
+    assert_eq(s, "hello")
+}
+
+@test
+fn test_as_safe_chain(): void {
+    let x: int | float | string = 3.14
+    let n = x as int?
+    assert_eq(n, null)
+    
+    let f = x as float?
+    assert_eq(f, 3.14)
+}
+
+// ===== is type guard narrowing =====
+
+@test
+fn test_is_narrowing_in_if(): void {
+    let x: int | string | bool = 42
+    let result: int = 0
+    if (x is int) {
+        result = x + 1
+    }
+    assert_eq(result, 43)
+}
+
+@test
+fn test_is_narrowing_string(): void {
+    let x: int | string | bool = "hello"
+    let result: string = ""
+    if (x is string) {
+        result = x + " world"
+    }
+    assert_eq(result, "hello world")
+}
+
+// ===== Union type basics =====
+
+@test
+fn test_union_variable(): void {
+    let x: int | string = 42
+    assert_eq(x is int, true)
+    
+    let y: int | string = "hello"
+    assert_eq(y is string, true)
+}
+
+@test
+fn test_union_function_param(): void {
+    fn process(x: int | string): string {
+        if (x is int) {
+            return "int"
+        }
+        return "other"
+    }
+    assert_eq(process(42), "int")
+    assert_eq(process("hi"), "other")
+}
+
+@test
+fn test_union_nullable(): void {
+    let x: int? = null
+    assert_eq(x is null, true)
+    assert_eq(x is int, false)
+    
+    let y: int? = 42
+    assert_eq(y is int, true)
+    assert_eq(y is null, false)
+}

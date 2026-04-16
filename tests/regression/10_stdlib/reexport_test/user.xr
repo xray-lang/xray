@@ -1,0 +1,13 @@
+// user.xr
+// 作者：xingleixu@gmail.com
+// 测试模块：用户模块
+
+export fn getUser(): string {
+    return "Alice"
+}
+
+export fn getUserAge(): int {
+    return 25
+}
+
+export const VERSION = "1.0"

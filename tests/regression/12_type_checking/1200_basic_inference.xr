@@ -1,0 +1,168 @@
+// 1200_basic_inference.xr
+// Test basic type inference
+// ===== Literal Type Inference =====
+@test
+fn test_int_literal(): void {
+    let x = 42
+    assert_eq(typeof(x), Type.int)
+}
+
+@test
+fn test_float_literal(): void {
+    let x = 3.14
+    assert_eq(typeof(x), Type.float)
+}
+
+@test
+fn test_string_literal(): void {
+    let x = "hello"
+    assert_eq(typeof(x), Type.string)
+}
+
+@test
+fn test_bool_literal(): void {
+    let x = true
+    let y = false
+    assert_eq(typeof(x), Type.bool)
+    assert_eq(typeof(y), Type.bool)
+}
+
+@test
+fn test_null_literal(): void {
+    let x = null
+    assert_eq(typeof(x), Type.null)
+}
+
+// ===== Array Inference =====
+@test
+fn test_array_int(): void {
+    let arr = [1, 2, 3]
+    assert_eq(typeof(arr), Type.Array)
+    assert_eq(arr.length, 3)
+}
+
+@test
+fn test_array_string(): void {
+    let arr = ["a", "b", "c"]
+    assert_eq(typeof(arr), Type.Array)
+}
+
+@test
+fn test_array_empty(): void {
+    let arr: Array<int> = []
+    assert_eq(typeof(arr), Type.Array)
+}
+
+@test
+fn test_array_nested(): void {
+    let arr = [[1, 2], [3, 4]]
+    assert_eq(typeof(arr), Type.Array)
+    assert_eq(arr[0][0], 1)
+}
+
+// ===== Map Inference =====
+@test
+fn test_map_basic(): void {
+    let m = { "a" => 1, "b" => 2 }
+    assert_eq(typeof(m), Type.Map)
+    assert_eq(m.get("a"), 1)
+}
+
+@test
+fn test_map_empty(): void {
+    let m = #{}
+    assert_eq(typeof(m), Type.Map)
+}
+
+// ===== Set Inference =====
+@test
+fn test_set_basic(): void {
+    let s = #[1, 2, 3]
+    assert_eq(typeof(s), Type.Set)
+    assert_eq(s.length, 3)
+}
+
+// ===== Binary Expression Inference =====
+@test
+fn test_arithmetic_int(): void {
+    let a = 10
+    let b = 3
+    let sum = a + b
+    let diff = a - b
+    let prod = a * b
+    let quot = a / b
+    assert_eq(typeof(sum), Type.int)
+    assert_eq(sum, 13)
+}
+
+@test
+fn test_arithmetic_float(): void {
+    let a = 10.0
+    let b = 3.0
+    let result = a / b
+    assert_eq(typeof(result), Type.float)
+}
+
+@test
+fn test_arithmetic_mixed(): void {
+    let a = 10
+    let b = 3.0
+    let result = a + b
+    // int + float = float
+    assert_eq(typeof(result), Type.float)
+}
+
+@test
+fn test_string_concat(): void {
+    let a = "hello"
+    let b = " world"
+    let result = a + b
+    assert_eq(typeof(result), Type.string)
+    assert_eq(result, "hello world")
+}
+
+@test
+fn test_comparison(): void {
+    let a = 10
+    let b = 20
+    let result = a < b
+    assert_eq(typeof(result), Type.bool)
+    assert_eq(result, true)
+}
+
+@test
+fn test_logical(): void {
+    let a = true
+    let b = false
+    let and_result = a && b
+    let or_result = a || b
+    assert_eq(typeof(and_result), Type.bool)
+    assert_eq(typeof(or_result), Type.bool)
+}
+
+// ===== Ternary Expression Inference =====
+@test
+fn test_ternary_same_type(): void {
+    let x = true ? 1 : 2
+    assert_eq(typeof(x), Type.int)
+    assert_eq(x, 1)
+}
+
+@test
+fn test_ternary_different_types(): void {
+    let cond = true
+    // When types differ, result is the common type or any
+    let x = cond ? 1 : "hello"
+    // Either int, string, or any depending on implementation
+    assert(x == 1)
+}
+
+// ===== Variable Reassignment =====
+@test
+fn test_reassignment(): void {
+    let x = 10
+    assert_eq(typeof(x), Type.int)
+    x = 20
+    assert_eq(typeof(x), Type.int)
+    assert_eq(x, 20)
+}

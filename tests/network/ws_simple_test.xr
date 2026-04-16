@@ -1,0 +1,50 @@
+/*
+ * ws_simple_test.xr - 简单的 WebSocket 测试
+ */
+
+import ws
+
+print("WebSocket module loaded!")
+
+if (ws.connect != null) {
+    print("ws.connect exists")
+}
+if (ws.send != null) {
+    print("ws.send exists")
+}
+if (ws.recv != null) {
+    print("ws.recv exists")
+}
+if (ws.close != null) {
+    print("ws.close exists")
+}
+
+print("")
+print("=== Testing different WebSocket servers ===")
+
+// Test servers
+let servers = [
+    "wss://ws.postman-echo.com/raw",
+    "wss://echo.websocket.org",
+    "wss://socketsbay.com/wss/v2/1/demo/"
+]
+
+for (server in servers) {
+    print("")
+    print("Trying: " + server)
+    let conn = ws.connect(server, null)
+    
+    if (conn == null) {
+        print("  conn is null")
+    } else if (conn.error) {
+        print("  Error: " + conn.error)
+    } else {
+        print("  Connected!")
+        print("  State: " + ws.state(conn))
+        ws.close(conn, null, null)
+        print("  Closed")
+    }
+}
+
+print("")
+print("Test complete!")

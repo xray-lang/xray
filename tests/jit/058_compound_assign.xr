@@ -1,0 +1,34 @@
+// EXPECTED: 15
+// EXPECTED: 50
+// EXPECTED: 10
+// Test: Compound assignment operators (+=, -=, *=)
+
+fn compound_ops(x: int) : int {
+    let a = x
+    a += 5
+    return a
+}
+
+fn compound_mul(x: int) : int {
+    let a = x
+    a *= 5
+    return a
+}
+
+fn compound_sub(x: int) : int {
+    let a = x
+    a -= 5
+    return a
+}
+
+let i = 0
+while (i < 200) {
+    compound_ops(10)
+    compound_mul(10)
+    compound_sub(15)
+    i = i + 1
+}
+
+print(compound_ops(10))
+print(compound_mul(10))
+print(compound_sub(15))

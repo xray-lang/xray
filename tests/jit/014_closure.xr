@@ -1,0 +1,49 @@
+// EXPECTED: 15
+// EXPECTED: 20
+// EXPECTED: 111
+// Test: Closures and upvalues in JIT (CLOSURE, GETUPVAL, SETUPVAL)
+
+fn make_adder(x: int) {
+    fn adder(y: int) : int {
+        return x + y
+    }
+    return adder
+}
+
+fn make_counter(start: int) {
+    let count = start
+    fn increment() : int {
+        count = count + 1
+        return count
+    }
+    return increment
+}
+
+let add10 = make_adder(10)
+let add15 = make_adder(15)
+
+let i = 0
+while (i < 200) {
+    add10(5)
+    add15(5)
+    i = i + 1
+}
+
+print(add10(5))
+print(add15(5))
+
+let counter = make_counter(100)
+let i2 = 0
+while (i2 < 200) {
+    counter()
+    i2 = i2 + 1
+}
+// After 200 calls, counter should be 100+200 = 300
+// But we need a fresh counter for the expected output
+let c2 = make_counter(100)
+let j = 0
+while (j < 10) {
+    c2()
+    j = j + 1
+}
+print(c2())

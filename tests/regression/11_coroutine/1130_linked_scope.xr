@@ -1,0 +1,72 @@
+// Test linked scope: child error propagates to parent as exception
+
+fn failing_worker(): int {
+    throw "child error from linked scope"
+    return 0
+}
+
+fn ok_worker(): int {
+    return 42
+}
+
+// Test 1: linked scope with a failing child should throw
+fn test_linked_scope_error() {
+    let caught = false
+    try {
+        linked scope {
+            go ok_worker()
+            go failing_worker()
+        }
+    } catch (e) {
+        caught = true
+    }
+    assert(caught, "linked scope should have thrown child error")
+}
+
+// Test 2: normal scope with a failing child should NOT throw
+fn test_normal_scope_no_error() {
+    let caught = false
+    try {
+        scope {
+            go ok_worker()
+            go failing_worker()
+        }
+    } catch (e) {
+        caught = true
+    }
+    assert(!caught, "normal scope should not throw child error")
+}
+
+// Test 3: linked scope with all success should NOT throw
+fn test_linked_scope_success() {
+    let caught = false
+    try {
+        linked scope {
+            go ok_worker()
+            go ok_worker()
+        }
+    } catch (e) {
+        caught = true
+    }
+    assert(!caught, "linked scope with all success should not throw")
+}
+
+// Test 4: supervisor scope with a failing child should NOT throw
+fn test_supervisor_scope_no_throw() {
+    let caught = false
+    try {
+        supervisor scope {
+            go ok_worker()
+            go failing_worker()
+        }
+    } catch (e) {
+        caught = true
+    }
+    assert(!caught, "supervisor scope should not throw child error")
+}
+
+test_linked_scope_error()
+test_normal_scope_no_error()
+test_linked_scope_success()
+test_supervisor_scope_no_throw()
+print("PASS")

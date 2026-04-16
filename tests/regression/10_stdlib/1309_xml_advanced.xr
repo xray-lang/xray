@@ -1,0 +1,216 @@
+// 1304_xml_advanced.xr - Advanced XML module tests
+
+import xml
+
+// ===== Entity decoding =====
+
+@test
+fn test_entity_decode_named(): void {
+    let data = "<root>&lt;hello&gt; &amp; &quot;world&quot; &apos;!</root>"
+    let doc = xml.parse(data) ?? {}
+    let text = doc["children"][0]["text"]
+    assert_eq(text, "<hello> & \"world\" '!")
+}
+
+@test
+fn test_entity_decode_numeric_decimal(): void {
+    let data = "<root>&#65;&#66;&#67;</root>"
+    let doc = xml.parse(data) ?? {}
+    let text = doc["children"][0]["text"]
+    assert_eq(text, "ABC")
+}
+
+@test
+fn test_entity_decode_numeric_hex(): void {
+    let data = "<root>&#x41;&#x42;&#x43;</root>"
+    let doc = xml.parse(data) ?? {}
+    let text = doc["children"][0]["text"]
+    assert_eq(text, "ABC")
+}
+
+@test
+fn test_entity_decode_unicode(): void {
+    // &#x4e2d; = 中, &#x6587; = 文
+    let data = "<root>&#x4e2d;&#x6587;</root>"
+    let doc = xml.parse(data) ?? {}
+    let text = doc["children"][0]["text"]
+    assert_eq(text, "中文")
+}
+
+// ===== Attribute entity decoding =====
+
+@test
+fn test_attr_entity_decode(): void {
+    let data = "<a href=\"a&amp;b\"/>"
+    let doc = xml.parse(data) ?? {}
+    assert_eq(doc["attrs"]["href"], "a&b")
+}
+
+// ===== CDATA =====
+
+@test
+fn test_cdata_preserve(): void {
+    let data = "<root><![CDATA[<not-xml>&]]></root>"
+    let doc = xml.parse(data) ?? {}
+    let child = doc["children"][0]
+    assert_eq(child["type"], "cdata")
+    assert_eq(child["text"], "<not-xml>&")
+}
+
+@test
+fn test_cdata_as_text(): void {
+    let data = "<root><![CDATA[content]]></root>"
+    let doc = xml.parse(data, { preserveCData: false }) ?? {}
+    let child = doc["children"][0]
+    assert_eq(child["type"], "text")
+    assert_eq(child["text"], "content")
+}
+
+// ===== Self-closing with attributes =====
+
+@test
+fn test_self_closing_with_attrs(): void {
+    let data = "<root><img src=\"a.png\" alt=\"pic\"/></root>"
+    let doc = xml.parse(data) ?? {}
+    let img = doc["children"][0]
+    assert_eq(img["tag"], "img")
+    assert_eq(img["attrs"]["src"], "a.png")
+    assert_eq(img["attrs"]["alt"], "pic")
+    assert_eq(img["children"].length, 0)
+}
+
+// ===== Processing instruction =====
+
+@test
+fn test_skip_processing_instruction(): void {
+    let data = "<?xml version=\"1.0\"?><root>OK</root>"
+    let doc = xml.parse(data) ?? {}
+    assert_eq(doc["tag"], "root")
+}
+
+// ===== Create element with attrs =====
+
+@test
+fn test_create_element_with_attrs(): void {
+    let elem = xml.element("div", { class: "container", id: "main" })
+    assert_eq(elem["tag"], "div")
+    assert_eq(elem["attrs"]["class"], "container")
+    assert_eq(elem["attrs"]["id"], "main")
+    assert_eq(elem["children"].length, 0)
+}
+
+// ===== Create text/comment/cdata nodes =====
+
+@test
+fn test_create_text_node(): void {
+    let node = xml.text("hello")
+    assert_eq(node["type"], "text")
+    assert_eq(node["text"], "hello")
+}
+
+@test
+fn test_create_comment_node(): void {
+    let node = xml.comment(" a comment ")
+    assert_eq(node["type"], "comment")
+    assert_eq(node["text"], " a comment ")
+}
+
+@test
+fn test_create_cdata_node(): void {
+    let node = xml.cdata("<raw>&data")
+    assert_eq(node["type"], "cdata")
+    assert_eq(node["text"], "<raw>&data")
+}
+
+// ===== Create document =====
+
+@test
+fn test_create_document(): void {
+    let doc = xml.document()
+    assert_eq(doc["type"], "document")
+}
+
+// ===== Stringify roundtrip =====
+
+@test
+fn test_stringify_roundtrip(): void {
+    let data = "<root><item id=\"1\">Hello</item><item id=\"2\">World</item></root>"
+    let doc = xml.parse(data) ?? {}
+    let str = xml.stringify(doc, { indent: 0, declaration: false })
+    let doc2 = xml.parse(str)
+    assert_eq(doc2["tag"], "root")
+    assert_eq(doc2["children"].length, 2)
+    assert_eq(doc2["children"][0]["attrs"]["id"], "1")
+    assert_eq(doc2["children"][1]["children"][0]["text"], "World")
+}
+
+// ===== Parse detailed with errors =====
+
+@test
+fn test_parse_detailed_valid(): void {
+    let result = xml.parseDetailed("<ok/>")
+    assert_eq(result["doc"]["tag"], "ok")
+    assert_eq(result["errors"].length, 0)
+}
+
+// ===== Whitespace handling =====
+
+@test
+fn test_whitespace_stripped_by_default(): void {
+    let data = "<root>  \n  <item/>\n  </root>"
+    let doc = xml.parse(data) ?? {}
+    assert_eq(doc["children"].length, 1)
+    assert_eq(doc["children"][0]["tag"], "item")
+}
+
+@test
+fn test_whitespace_preserved(): void {
+    let data = "<root> text </root>"
+    let doc = xml.parse(data, { preserveWhitespace: true }) ?? {}
+    // Should preserve whitespace-only text nodes
+    assert_eq(doc["children"].length, 1)
+}
+
+// ===== DOCTYPE handling =====
+
+@test
+fn test_skip_doctype(): void {
+    let data = "<!DOCTYPE html><root>OK</root>"
+    let doc = xml.parse(data) ?? {}
+    assert_eq(doc["tag"], "root")
+}
+
+@test
+fn test_skip_doctype_with_internal_subset(): void {
+    let data = "<!DOCTYPE root [ <!ELEMENT root (#PCDATA)> ]><root>OK</root>"
+    let doc = xml.parse(data) ?? {}
+    assert_eq(doc["tag"], "root")
+    let text = doc["children"][0]["text"]
+    assert_eq(text, "OK")
+}
+
+// ===== Escape in stringify =====
+
+@test
+fn test_stringify_escapes_text(): void {
+    let elem = xml.element("p")
+    // Manually build a node with special chars
+    let data = "<p>&lt;script&gt;</p>"
+    let doc = xml.parse(data) ?? {}
+    let str = xml.stringify(doc, { indent: 0, declaration: false })
+    assert_eq(str, "<p>&lt;script&gt;</p>")
+}
+
+// ===== Mixed content =====
+
+@test
+fn test_mixed_content(): void {
+    let data = "<root>Hello<b>World</b>!</root>"
+    let doc = xml.parse(data) ?? {}
+    assert_eq(doc["children"].length, 3)
+    assert_eq(doc["children"][0]["type"], "text")
+    assert_eq(doc["children"][0]["text"], "Hello")
+    assert_eq(doc["children"][1]["tag"], "b")
+    assert_eq(doc["children"][2]["type"], "text")
+    assert_eq(doc["children"][2]["text"], "!")
+}

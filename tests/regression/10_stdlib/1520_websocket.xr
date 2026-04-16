@@ -1,0 +1,34 @@
+// Test WebSocket module API existence
+
+import ws
+
+@test
+fn test_ws_apis_exist(): void {
+    assert(ws.connect != null)
+    assert(ws.send != null)
+    assert(ws.recv != null)
+    assert(ws.close != null)
+    assert(ws.ping != null)
+    assert(ws.state != null)
+}
+
+@test
+fn test_ws_url_format(): void {
+    fn isWsUrl(url: string): bool {
+        return url.indexOf("ws://") == 0 || url.indexOf("wss://") == 0
+    }
+    assert(isWsUrl("ws://example.com/socket"))
+    assert(isWsUrl("wss://example.com/socket"))
+    assert(!isWsUrl("http://example.com"))
+    assert(!isWsUrl("https://example.com"))
+}
+
+@test
+fn test_ws_message_types(): void {
+    let text = "Hello WebSocket"
+    let binary = Bytes(10)
+    assert_eq(typeof(text), Type.string)
+    assert_eq(typeof(binary), Type.Array)
+}
+
+print("All websocket tests passed")

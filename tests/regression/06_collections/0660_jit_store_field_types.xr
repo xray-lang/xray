@@ -1,0 +1,148 @@
+// 0660_jit_store_field_types.xr
+// Test: JIT STORE_FIELD with all value types
+// Verifies that vreg.xr_tag correctly drives tag in STORE_FIELD codegen.
+// Each value type (null/true/false/int/float/string/object) is written
+// to a Json field and read back, ensuring tag + payload are correct.
+
+// ===== Store null to field =====
+@test
+fn test_store_null(): void {
+    let obj = { "val": 42 }
+    obj.val = null
+    assert_eq(obj.val, null)
+}
+
+// ===== Store true/false to field =====
+@test
+fn test_store_true(): void {
+    let obj = { "val": 0 }
+    obj.val = true
+    assert_eq(obj.val, true)
+}
+
+@test
+fn test_store_false(): void {
+    let obj = { "val": 1 }
+    obj.val = false
+    assert_eq(obj.val, false)
+}
+
+// ===== Store int to field =====
+@test
+fn test_store_int(): void {
+    let obj = { "val": null }
+    obj.val = 42
+    assert_eq(obj.val, 42)
+}
+
+@test
+fn test_store_negative_int(): void {
+    let obj = { "val": 0 }
+    obj.val = -123
+    assert_eq(obj.val, -123)
+}
+
+// ===== Store float to field =====
+@test
+fn test_store_float(): void {
+    let obj = { "val": 0 }
+    obj.val = 3.14
+    assert_eq(obj.val, 3.14)
+}
+
+@test
+fn test_store_negative_float(): void {
+    let obj = { "val": 0 }
+    obj.val = -2.718
+    assert_eq(obj.val, -2.718)
+}
+
+// ===== Store string to field =====
+@test
+fn test_store_string(): void {
+    let obj = { "val": 0 }
+    obj.val = "hello"
+    assert_eq(obj.val, "hello")
+}
+
+@test
+fn test_store_empty_string(): void {
+    let obj = { "val": 42 }
+    obj.val = ""
+    assert_eq(obj.val, "")
+}
+
+// ===== Store object to field =====
+@test
+fn test_store_nested_object(): void {
+    let obj = { "child": null }
+    obj.child = { "x": 10, "y": 20 }
+    assert_eq(obj.child.x, 10)
+    assert_eq(obj.child.y, 20)
+}
+
+// ===== Type transition: overwrite with different types =====
+@test
+fn test_type_transition_int_to_null(): void {
+    let obj = { "val": 42 }
+    assert_eq(obj.val, 42)
+    obj.val = null
+    assert_eq(obj.val, null)
+}
+
+@test
+fn test_type_transition_null_to_string(): void {
+    let obj = { "val": null }
+    assert_eq(obj.val, null)
+    obj.val = "hello"
+    assert_eq(obj.val, "hello")
+}
+
+@test
+fn test_type_transition_bool_to_int(): void {
+    let obj = { "val": true }
+    assert_eq(obj.val, true)
+    obj.val = 99
+    assert_eq(obj.val, 99)
+}
+
+@test
+fn test_type_transition_string_to_float(): void {
+    let obj = { "val": "abc" }
+    assert_eq(obj.val, "abc")
+    obj.val = 1.5
+    assert_eq(obj.val, 1.5)
+}
+
+// ===== Multiple fields with mixed types =====
+@test
+fn test_multi_field_mixed_types(): void {
+    let obj = { "a": null, "b": true, "c": false, "d": 42, "e": 3.14, "f": "hi" }
+    assert_eq(obj.a, null)
+    assert_eq(obj.b, true)
+    assert_eq(obj.c, false)
+    assert_eq(obj.d, 42)
+    assert_eq(obj.e, 3.14)
+    assert_eq(obj.f, "hi")
+}
+
+// ===== Store in loop (JIT hot path) =====
+@test
+fn test_store_in_loop(): void {
+    let obj = { "sum": 0 }
+    for (let i = 0; i < 100; i++) {
+        obj.sum = obj.sum + i
+    }
+    assert_eq(obj.sum, 4950)
+}
+
+// ===== Store function result to field =====
+@test
+fn test_store_function_result(): void {
+    fn compute(x: int): int {
+        return x * x + 1
+    }
+    let obj = { "result": 0 }
+    obj.result = compute(7)
+    assert_eq(obj.result, 50)
+}

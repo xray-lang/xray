@@ -1,0 +1,150 @@
+// 0330_bitwise.xr
+// 作者：xingleixu@gmail.com
+// 测试：位运算符
+
+// ===== AND (&) =====
+
+@test
+fn test_and_basic(): void {
+    assert_eq(0b1100 & 0b1010, 0b1000)
+    assert_eq(0xFF & 0x0F, 0x0F)
+    assert_eq(12 & 10, 8)
+}
+
+@test
+fn test_and_zero(): void {
+    assert_eq(0xFF & 0, 0)
+    assert_eq(0 & 0xFF, 0)
+}
+
+@test
+fn test_and_all_ones(): void {
+    assert_eq(0xFF & 0xFF, 0xFF)
+}
+
+// ===== OR (|) =====
+
+@test
+fn test_or_basic(): void {
+    assert_eq(0b1100 | 0b1010, 0b1110)
+    assert_eq(0xF0 | 0x0F, 0xFF)
+    assert_eq(12 | 10, 14)
+}
+
+@test
+fn test_or_zero(): void {
+    assert_eq(0xFF | 0, 0xFF)
+    assert_eq(0 | 0xFF, 0xFF)
+}
+
+@test
+fn test_or_same(): void {
+    assert_eq(0xFF | 0xFF, 0xFF)
+}
+
+// ===== XOR (^) =====
+
+@test
+fn test_xor_basic(): void {
+    assert_eq(0b1100 ^ 0b1010, 0b0110)
+    assert_eq(0xFF ^ 0x0F, 0xF0)
+    assert_eq(12 ^ 10, 6)
+}
+
+@test
+fn test_xor_zero(): void {
+    assert_eq(0xFF ^ 0, 0xFF)
+    assert_eq(0 ^ 0xFF, 0xFF)
+}
+
+@test
+fn test_xor_same(): void {
+    assert_eq(0xFF ^ 0xFF, 0)  // 自身异或为 0
+}
+
+@test
+fn test_xor_swap(): void {
+    let a = 5
+    let b = 3
+    a = a ^ b
+    b = a ^ b
+    a = a ^ b
+    assert_eq(a, 3)
+    assert_eq(b, 5)
+}
+
+// ===== NOT (~) =====
+
+@test
+fn test_not_basic(): void {
+    assert_eq(~0, -1)
+    assert_eq(~(-1), 0)
+}
+
+@test
+fn test_not_byte(): void {
+    // ~0xFF 在 64 位上是很大的负数
+    let x = ~0xFF
+    assert_eq(x < 0, true)
+}
+
+// ===== 移位运算 =====
+
+@test
+fn test_shl_basic(): void {
+    let x = 1
+    let shift = 3
+    let result = x << shift
+    assert_eq(result, 8)
+}
+
+@test
+fn test_shr_basic(): void {
+    let x = 16
+    let shift = 2
+    let result = x >> shift
+    assert_eq(result, 4)
+}
+
+// ===== 实际应用 =====
+
+@test
+fn test_check_bit(): void {
+    let flags = 0b1010
+    assert_eq((flags & 0b0010) != 0, true)   // 第 1 位设置
+    assert_eq((flags & 0b0001) != 0, false)  // 第 0 位未设置
+}
+
+@test
+fn test_set_bit(): void {
+    let flags = 0b0000
+    flags = flags | 0b0100  // 设置第 2 位
+    assert_eq(flags, 0b0100)
+}
+
+@test
+fn test_clear_bit(): void {
+    let flags = 0b1111
+    flags = flags & ~0b0100  // 清除第 2 位
+    assert_eq(flags, 0b1011)
+}
+
+@test
+fn test_toggle_bit(): void {
+    let flags = 0b1010
+    flags = flags ^ 0b0010  // 切换第 1 位
+    assert_eq(flags, 0b1000)
+    flags = flags ^ 0b0010  // 再次切换
+    assert_eq(flags, 0b1010)
+}
+
+// ===== 边界条件 =====
+
+@test
+fn test_shift_large(): void {
+    let x = 1
+    let shift = 20
+    let result = x << shift
+    assert_eq(result > 0, true)
+}
+

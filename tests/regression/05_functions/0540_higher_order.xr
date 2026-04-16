@@ -1,0 +1,212 @@
+// 0540_higher_order.xr
+// 作者：xingleixu@gmail.com
+// 测试：高阶函数
+
+// ===== 函数作为参数 =====
+
+@test
+fn test_function_as_param(): void {
+    fn apply(f: fn(int): int, x: int): int {
+        return f(x)
+    }
+    
+    fn double(x: int): int { return x * 2 }
+    fn square(x: int): int { return x * x }
+    
+    assert_eq(apply(double, 5), 10)
+    assert_eq(apply(square, 5), 25)
+}
+
+@test
+fn test_binary_function_param(): void {
+    fn combine(f: fn(int, int): int, a: int, b: int): int {
+        return f(a, b)
+    }
+    
+    fn add(x: int, y: int): int { return x + y }
+    fn mul(x: int, y: int): int { return x * y }
+    
+    assert_eq(combine(add, 3, 5), 8)
+    assert_eq(combine(mul, 3, 5), 15)
+}
+
+// ===== 函数作为返回值 =====
+
+@test
+fn test_function_factory(): void {
+    fn createGreeter(greeting: string): fn(string): string {
+        fn greet(name: string): string {
+            return greeting + ", " + name + "!"
+        }
+        return greet
+    }
+    
+    let hello = createGreeter("Hello")
+    let hi = createGreeter("Hi")
+    
+    assert_eq(hello("Alice"), "Hello, Alice!")
+    assert_eq(hi("Bob"), "Hi, Bob!")
+}
+
+// ===== 函数组合 =====
+
+@test
+fn test_compose(): void {
+    fn compose(f: fn(int): int, g: fn(int): int): fn(int): int {
+        fn composed(x: int): int {
+            return f(g(x))
+        }
+        return composed
+    }
+    
+    fn double(x: int): int { return x * 2 }
+    fn addOne(x: int): int { return x + 1 }
+    
+    let doubleThenAdd = compose(addOne, double)
+    let addThenDouble = compose(double, addOne)
+    
+    assert_eq(doubleThenAdd(5), 11)  // (5*2)+1
+    assert_eq(addThenDouble(5), 12)  // (5+1)*2
+}
+
+// ===== 部分应用 =====
+
+@test
+fn test_partial(): void {
+    fn add(a: int, b: int): int {
+        return a + b
+    }
+    
+    fn partial(f: fn(int, int): int, x: int): fn(int): int {
+        fn applied(y: int): int {
+            return f(x, y)
+        }
+        return applied
+    }
+    
+    let add5 = partial(add, 5)
+    assert_eq(add5(3), 8)
+    assert_eq(add5(10), 15)
+}
+
+// ===== 回调模式 =====
+
+@test
+fn test_callback(): void {
+    let received = 0
+    
+    fn processAsync(callback: fn(int): void): void {
+        let result = 42
+        callback(result)
+    }
+    
+    fn handler(value: int): void {
+        received = value
+    }
+    
+    processAsync(handler)
+    assert_eq(received, 42)
+}
+
+// ===== 自定义迭代器 =====
+
+@test
+fn test_custom_map(): void {
+    fn myMap(arr: Array<int>, transform: fn(int): int): Array<int> {
+        let result: Array<int> = []
+        for (x in arr) {
+            result.push(transform(x))
+        }
+        return result
+    }
+    
+    fn double(x: int): int { return x * 2 }
+    
+    let arr = [1, 2, 3]
+    let doubled = myMap(arr, double)
+    
+    assert_eq(doubled[0], 2)
+    assert_eq(doubled[1], 4)
+    assert_eq(doubled[2], 6)
+}
+
+@test
+fn test_custom_filter(): void {
+    fn myFilter(arr: Array<int>, predicate: fn(int): bool): Array<int> {
+        let result: Array<int> = []
+        for (x in arr) {
+            if (predicate(x)) {
+                result.push(x)
+            }
+        }
+        return result
+    }
+    
+    fn isEven(x: int): bool { return x % 2 == 0 }
+    
+    let arr = [1, 2, 3, 4, 5, 6]
+    let evens = myFilter(arr, isEven)
+    
+    assert_eq(evens.length, 3)
+    assert_eq(evens[0], 2)
+}
+
+@test
+fn test_custom_reduce(): void {
+    fn myReduce(arr: Array<int>, reducer: fn(int, int): int, initial: int): int {
+        let acc = initial
+        for (x in arr) {
+            acc = reducer(acc, x)
+        }
+        return acc
+    }
+    
+    fn addFn(a: int, b: int): int { return a + b }
+    fn mulFn(a: int, b: int): int { return a * b }
+    
+    let arr = [1, 2, 3, 4]
+    assert_eq(myReduce(arr, addFn, 0), 10)
+    assert_eq(myReduce(arr, mulFn, 1), 24)
+}
+
+// ===== 管道 =====
+
+@test
+fn test_pipe(): void {
+    fn double(x: int): int { return x * 2 }
+    fn addTen(x: int): int { return x + 10 }
+    fn square(x: int): int { return x * x }
+    
+    // 手动管道
+    let x = 5
+    x = double(x)   // 10
+    x = addTen(x)   // 20
+    x = square(x)   // 400
+    assert_eq(x, 400)
+}
+
+// ===== 边界条件 =====
+
+@test
+fn test_identity_function(): void {
+    fn identity<T>(x: T): T { return x }
+    
+    assert_eq(identity(42), 42)
+    assert_eq(identity("hello"), "hello")
+    // null requires nullable type parameter, skip this test
+}
+
+@test
+fn test_constant_function(): void {
+    fn makeConstant(value: int): fn(): int {
+        fn constant(): int {
+            return value
+        }
+        return constant
+    }
+    
+    let always42 = makeConstant(42)
+    assert_eq(always42(), 42)
+    assert_eq(always42(), 42)
+}
+

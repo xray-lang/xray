@@ -1,0 +1,198 @@
+// 1201_function_inference.xr
+// Test function type inference
+// ===== Return Type Inference =====
+@test
+fn test_implicit_return_int(): void {
+    fn add(a: int, b: int): int {
+        return a + b
+    }
+    let result = add(2, 3)
+    assert_eq(result, 5)
+    assert_eq(typeof(result), Type.int)
+}
+
+@test
+fn test_implicit_return_string(): void {
+    fn greet(name: string): string {
+        return "Hello, " + name
+    }
+    let result = greet("World")
+    assert_eq(result, "Hello, World")
+    assert_eq(typeof(result), Type.string)
+}
+
+@test
+fn test_explicit_return_type(): void {
+    fn double(x: int): int {
+        return x * 2
+    }
+    let result = double(5)
+    assert_eq(result, 10)
+    assert_eq(typeof(result), Type.int)
+}
+
+@test
+fn test_void_return(): void {
+    let called = false
+    fn doSomething(): void {
+        called = true
+    }
+    doSomething()
+    assert_eq(called, true)
+}
+
+// ===== Parameter Type Inference =====
+@test
+fn test_typed_params(): void {
+    fn multiply(a: int, b: int): int {
+        return a * b
+    }
+    assert_eq(multiply(3, 4), 12)
+}
+
+@test
+fn test_mixed_typed_params(): void {
+    fn format(name: string, age: int): string {
+        return name + " is " + string(age)
+    }
+    assert_eq(format("Alice", 30), "Alice is 30")
+}
+
+// ===== Multi-value Return =====
+@test
+fn test_multi_return(): void {
+    fn divmod(a: int, b: int): (int, int) {
+        return a / b, a % b
+    }
+    let q, r = divmod(17, 5)
+    assert_eq(q, 3)
+    assert_eq(r, 2)
+}
+
+@test
+fn test_multi_return_typed(): void {
+    fn minmax(a: int, b: int): (int, int) {
+        if (a < b) {
+            return a, b
+        }
+        return b, a
+    }
+    let min, max = minmax(10, 5)
+    assert_eq(min, 5)
+    assert_eq(max, 10)
+}
+
+// ===== Closure Type Inference =====
+@test
+fn test_closure_captures(): void {
+    let multiplier = 3
+    fn triple(x: int): int {
+        return x * multiplier
+    }
+    assert_eq(triple(4), 12)
+}
+
+@test
+fn test_counter_closure(): void {
+    fn makeCounter(): fn(): int {
+        let count = 0
+        return fn() {
+            count = count + 1
+            return count
+        }
+    }
+    let counter = makeCounter()
+    assert_eq(counter(), 1)
+    assert_eq(counter(), 2)
+    assert_eq(counter(), 3)
+}
+
+// ===== Arrow Function Inference =====
+@test
+fn test_arrow_single_expr(): void {
+    let double = fn(x: int) {
+        return x * 2
+    }
+    assert_eq(double(5), 10)
+}
+
+@test
+fn test_arrow_with_block(): void {
+    let factorial = fn(n: int): int {
+        if (n <= 1) {
+            return 1
+        }
+        return n * factorial(n - 1)
+    }
+    assert_eq(factorial(5), 120)
+}
+
+@test
+fn test_arrow_multi_param(): void {
+    let add = fn(a: int, b: int) {
+        return a + b
+    }
+    assert_eq(add(3, 4), 7)
+}
+
+// ===== Higher Order Functions =====
+@test
+fn test_callback_inference(): void {
+    let arr = [1, 2, 3, 4, 5]
+    let doubled = arr.map(fn(x) {
+        return x * 2
+    })
+    assert_eq(doubled[0], 2)
+    assert_eq(doubled[4], 10)
+}
+
+@test
+fn test_filter_inference(): void {
+    let arr = [1, 2, 3, 4, 5]
+    let evens = arr.filter(fn(x) {
+        return x % 2 == 0
+    })
+    assert_eq(evens.length, 2)
+    assert_eq(evens[0], 2)
+    assert_eq(evens[1], 4)
+}
+
+@test
+fn test_reduce_inference(): void {
+    let arr = [1, 2, 3, 4, 5]
+    let sum = arr.reduce(fn(acc, x) {
+        return acc + x
+    }, 0)
+    assert_eq(sum, 15)
+}
+
+// ===== Recursive Function Inference =====
+@test
+fn test_recursive_fibonacci(): void {
+    fn fib(n: int): int {
+        if (n <= 1) {
+            return n
+        }
+        return fib(n - 1) + fib(n - 2)
+    }
+    assert_eq(fib(10), 55)
+}
+
+// Mutual recursion - now supported via function hoisting
+@test
+fn test_mutual_recursion(): void {
+    fn isEven(n: int): bool {
+        if (n == 0) {
+            return true
+        }
+        return isOdd(n - 1)
+    }
+    fn isOdd(n: int): bool {
+        if (n == 0) {
+            return false
+        }
+        return isEven(n - 1)
+    }
+    assert_eq(isEven(10), true)
+    assert_eq(isOdd(10), false)
+}

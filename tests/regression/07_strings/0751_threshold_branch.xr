@@ -1,0 +1,324 @@
+// 0751_threshold_branch.xr
+// 作者：xingleixu@gmail.com
+// 
+// Property 4: 长度阈值分支正确性
+// Validates: Requirements 2.1, 2.2
+//
+// 测试字符串拼接的长度阈值分支逻辑：
+// - 当 len(A) + len(B) < 64 时，使用栈上缓冲区路径
+// - 当 len(A) + len(B) >= 64 时，使用 XrStrBuf 路径
+//
+// 属性：对于任意两个字符串 A 和 B，如果 len(A) + len(B) < 64，
+//       应该走栈上缓冲区路径；否则走 XrStrBuf 路径。
+//       无论走哪条路径，结果都应该正确。
+
+// ===== 阈值边界精确测试 =====
+
+@test
+fn test_threshold_boundary_exact_63(): void {
+    // **Feature: string-concat-optimization, Property 4: 长度阈值分支正确性**
+    // **Validates: Requirements 2.1, 2.2**
+    // 总长度 = 63（< 64，栈上缓冲区路径）
+    let a = "a".repeat(31)
+    let b = "b".repeat(32)
+    let result = a + b
+    
+    assert_eq(result.length, 63)
+    assert_eq(result, a + b)
+    assert_eq(result.substring(0, 31), a)
+    assert_eq(result.substring(31, 63), b)
+}
+
+@test
+fn test_threshold_boundary_exact_64(): void {
+    // **Feature: string-concat-optimization, Property 4: 长度阈值分支正确性**
+    // **Validates: Requirements 2.1, 2.2**
+    // 总长度 = 64（>= 64，XrStrBuf 路径）
+    let a = "a".repeat(32)
+    let b = "b".repeat(32)
+    let result = a + b
+    
+    assert_eq(result.length, 64)
+    assert_eq(result, a + b)
+    assert_eq(result.substring(0, 32), a)
+    assert_eq(result.substring(32, 64), b)
+}
+
+@test
+fn test_threshold_boundary_exact_65(): void {
+    // **Feature: string-concat-optimization, Property 4: 长度阈值分支正确性**
+    // **Validates: Requirements 2.1, 2.2**
+    // 总长度 = 65（> 64，XrStrBuf 路径）
+    let a = "a".repeat(33)
+    let b = "b".repeat(32)
+    let result = a + b
+    
+    assert_eq(result.length, 65)
+    assert_eq(result, a + b)
+    assert_eq(result.substring(0, 33), a)
+    assert_eq(result.substring(33, 65), b)
+}
+
+// ===== 属性测试：阈值分支正确性 =====
+
+@test
+fn test_property_threshold_branch_below(): void {
+    // **Feature: string-concat-optimization, Property 4: 长度阈值分支正确性**
+    // **Validates: Requirements 2.1, 2.2**
+    // 属性：对于任意 len(A) + len(B) < 64 的情况，拼接结果正确
+    
+    // 测试多种长度组合，确保都走栈上缓冲区路径
+    let test_lengths = [
+        [0, 0],     // 0
+        [1, 0],     // 1
+        [0, 1],     // 1
+        [1, 1],     // 2
+        [10, 10],   // 20
+        [20, 20],   // 40
+        [30, 30],   // 60
+        [31, 31],   // 62
+        [31, 32],   // 63
+        [32, 31],   // 63
+        [1, 62],    // 63
+        [62, 1],    // 63
+        [63, 0],    // 63
+        [0, 63]     // 63
+    ]
+    
+    for (let i = 0; i < test_lengths.length; i++) {
+        let len_a = test_lengths[i][0]
+        let len_b = test_lengths[i][1]
+        let a = "a".repeat(len_a)
+        let b = "b".repeat(len_b)
+        let result = a + b
+        
+        // 验证总长度 < 64
+        assert_eq(len_a + len_b < 64, true)
+        
+        // 验证结果长度
+        assert_eq(result.length, len_a + len_b)
+        
+        // 验证内容正确性
+        if (len_a > 0) {
+            assert_eq(result.substring(0, len_a), a)
+        }
+        if (len_b > 0) {
+            assert_eq(result.substring(len_a, len_a + len_b), b)
+        }
+    }
+}
+
+@test
+fn test_property_threshold_branch_at_and_above(): void {
+    // **Feature: string-concat-optimization, Property 4: 长度阈值分支正确性**
+    // **Validates: Requirements 2.1, 2.2**
+    // 属性：对于任意 len(A) + len(B) >= 64 的情况，拼接结果正确
+    
+    // 测试多种长度组合，确保都走 XrStrBuf 路径
+    let test_lengths = [
+        [32, 32],   // 64 (边界)
+        [33, 31],   // 64
+        [31, 33],   // 64
+        [64, 0],    // 64
+        [0, 64],    // 64
+        [32, 33],   // 65
+        [33, 32],   // 65
+        [50, 50],   // 100
+        [100, 100], // 200
+        [1, 63],    // 64
+        [63, 1],    // 64
+        [1, 100],   // 101
+        [100, 1]    // 101
+    ]
+    
+    for (let i = 0; i < test_lengths.length; i++) {
+        let len_a = test_lengths[i][0]
+        let len_b = test_lengths[i][1]
+        let a = "a".repeat(len_a)
+        let b = "b".repeat(len_b)
+        let result = a + b
+        
+        // 验证总长度 >= 64
+        assert_eq(len_a + len_b >= 64, true)
+        
+        // 验证结果长度
+        assert_eq(result.length, len_a + len_b)
+        
+        // 验证内容正确性
+        if (len_a > 0) {
+            assert_eq(result.substring(0, len_a), a)
+        }
+        if (len_b > 0) {
+            assert_eq(result.substring(len_a, len_a + len_b), b)
+        }
+    }
+}
+
+// ===== 阈值边界连续性测试 =====
+
+@test
+fn test_threshold_continuity(): void {
+    // **Feature: string-concat-optimization, Property 4: 长度阈值分支正确性**
+    // **Validates: Requirements 2.1, 2.2**
+    // 测试阈值边界附近的连续性：从 60 到 70 的所有长度
+    // 每个长度抽样几个分割点（0, 1, half, total-1, total）避免 O(n²)
+    
+    for (let total_len = 60; total_len <= 70; total_len++) {
+        let half = total_len / 2
+        let splits = [0, 1, half, total_len - 1, total_len]
+        for (let si = 0; si < splits.length; si++) {
+            let len_a = int(splits[si])
+            if (len_a < 0 || len_a > total_len) { continue }
+            let len_b = total_len - len_a
+            let a = "x".repeat(len_a)
+            let b = "y".repeat(len_b)
+            let result = a + b
+            
+            // 验证结果长度
+            assert_eq(result.length, total_len)
+            
+            // 验证内容
+            if (len_a > 0) {
+                assert_eq(result.substring(0, len_a), a)
+            }
+            if (len_b > 0) {
+                assert_eq(result.substring(len_a, total_len), b)
+            }
+        }
+    }
+}
+
+// ===== 不同字符内容测试 =====
+
+@test
+fn test_threshold_with_varied_content_below(): void {
+    // **Feature: string-concat-optimization, Property 4: 长度阈值分支正确性**
+    // **Validates: Requirements 2.1, 2.2**
+    // 测试不同字符内容在阈值以下的拼接
+    
+    let strings_a = ["hello", "world", "test", "abc", "12345"]
+    let strings_b = ["foo", "bar", "baz", "xyz", "67890"]
+    
+    for (let i = 0; i < strings_a.length; i++) {
+        for (let j = 0; j < strings_b.length; j++) {
+            let a = strings_a[i]
+            let b = strings_b[j]
+            let result = a + b
+            
+            // 这些组合都 < 64
+            assert_eq(a.length + b.length < 64, true)
+            assert_eq(result.length, a.length + b.length)
+            assert_eq(result, a + b)
+        }
+    }
+}
+
+@test
+fn test_threshold_with_varied_content_above(): void {
+    // **Feature: string-concat-optimization, Property 4: 长度阈值分支正确性**
+    // **Validates: Requirements 2.1, 2.2**
+    // 测试不同字符内容在阈值以上的拼接
+    
+    let long_prefix = "prefix_".repeat(10)  // 70 字符
+    let strings = ["a", "ab", "abc", "test", "hello world"]
+    
+    for (let i = 0; i < strings.length; i++) {
+        let a = long_prefix
+        let b = strings[i]
+        let result = a + b
+        
+        // 这些组合都 >= 64
+        assert_eq(a.length + b.length >= 64, true)
+        assert_eq(result.length, a.length + b.length)
+        assert_eq(result.startsWith(a), true)
+        assert_eq(result.endsWith(b), true)
+    }
+}
+
+// ===== 并发阈值边界测试 =====
+
+@test
+fn test_concurrent_threshold_boundary(): void {
+    // **Feature: string-concat-optimization, Property 4: 长度阈值分支正确性**
+    // **Validates: Requirements 2.1, 2.2**
+    // 多协程并发测试阈值边界
+    
+    fn concat_task(len_a: int, len_b: int): int {
+        let a = "a".repeat(len_a)
+        let b = "b".repeat(len_b)
+        let result = a + b
+        return result.length
+    }
+    
+    // 测试边界附近的长度组合
+    let test_cases = [
+        [31, 32],  // 63 (栈上缓冲区)
+        [32, 32],  // 64 (XrStrBuf)
+        [33, 32],  // 65 (XrStrBuf)
+        [30, 33],  // 63 (栈上缓冲区)
+        [30, 34],  // 64 (XrStrBuf)
+        [30, 35]   // 65 (XrStrBuf)
+    ]
+    
+    let tasks: Array<Task> = []
+    for (let i = 0; i < test_cases.length; i++) {
+        let len_a = test_cases[i][0]
+        let len_b = test_cases[i][1]
+        tasks.push(go concat_task(len_a, len_b))
+    }
+    
+    let results = await.all tasks
+    
+    for (let i = 0; i < results.length; i++) {
+        let expected_len = test_cases[i][0] + test_cases[i][1]
+        assert_eq(results[i], expected_len)
+    }
+}
+
+// ===== 极端情况测试 =====
+
+@test
+fn test_threshold_empty_strings(): void {
+    // **Feature: string-concat-optimization, Property 4: 长度阈值分支正确性**
+    // **Validates: Requirements 2.1, 2.2**
+    // 空字符串拼接（总长度 = 0，< 64）
+    
+    let result = "" + ""
+    assert_eq(result.length, 0)
+    assert_eq(result, "")
+}
+
+@test
+fn test_threshold_one_empty(): void {
+    // **Feature: string-concat-optimization, Property 4: 长度阈值分支正确性**
+    // **Validates: Requirements 2.1, 2.2**
+    // 一个空字符串的拼接
+    
+    // 短字符串 + 空
+    let short_a = "hello"
+    assert_eq(short_a + "", short_a)
+    assert_eq("" + short_a, short_a)
+    
+    // 长字符串 + 空
+    let long_a = "x".repeat(100)
+    assert_eq(long_a + "", long_a)
+    assert_eq("" + long_a, long_a)
+}
+
+@test
+fn test_threshold_single_char(): void {
+    // **Feature: string-concat-optimization, Property 4: 长度阈值分支正确性**
+    // **Validates: Requirements 2.1, 2.2**
+    // 单字符拼接
+    
+    // 两个单字符（总长度 = 2，< 64）
+    assert_eq("a" + "b", "ab")
+    
+    // 单字符 + 长字符串（总长度 >= 64）
+    let long_str = "x".repeat(63)
+    let result = "a" + long_str
+    assert_eq(result.length, 64)
+    assert_eq(result.charAt(0), "a")
+    assert_eq(result.substring(1, 64), long_str)
+}
+

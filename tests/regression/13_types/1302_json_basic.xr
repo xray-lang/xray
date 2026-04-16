@@ -1,0 +1,71 @@
+// 0510_json_basic.xr
+// 作者：xingleixu@gmail.com
+// 测试：Json 对象基础功能
+// ===== 匿名对象（自动允许扩展）=====
+@test
+fn test_anonymous_object(): void {
+    let user = { "name": "Alice", "age": 30 }
+    assert_eq(user.name, "Alice")
+    assert_eq(user.age, 30)
+}
+
+@test
+fn test_anonymous_object_dynamic_add(): void {
+    let obj = { "x": 1 }
+    obj.y = 2
+    // 动态添加字段
+    obj.z = 3
+    assert_eq(obj.x, 1)
+    assert_eq(obj.y, 2)
+    assert_eq(obj.z, 3)
+}
+
+@test
+fn test_empty_object(): void {
+    let obj = {}
+    obj.name = "test"
+    assert_eq(obj.name, "test")
+}
+
+@test
+fn test_nested_object(): void {
+    let person = { "name": "Bob", "address": { "city": "Shanghai", "zip": "200000" } }
+    assert_eq(person.name, "Bob")
+    assert_eq(person.address.city, "Shanghai")
+    assert_eq(person.address.zip, "200000")
+}
+
+// ===== Json 类型注解 =====
+@test
+fn test_json_type_annotation(): void {
+    let cfg: Json = { "port": 8080 }
+    cfg.host = "localhost"
+    // Json 允许动态添加
+    assert_eq(cfg.port, 8080)
+    assert_eq(cfg.host, "localhost")
+}
+
+@test
+fn test_json_return_type(): void {
+    fn createConfig(): Json {
+        return { "debug": true }
+    }
+    let c = createConfig()
+    c.level = "info"
+    assert_eq(c.debug, true)
+    assert_eq(c.level, "info")
+}
+
+// ===== 字段类型多样性 =====
+@test
+fn test_various_field_types(): void {
+    let obj = { "int_val": 42, "float_val": 3.14, "str_val": "hello", "bool_val": true, "null_val": null, "arr_val": [1, 2, 3] }
+    assert_eq(obj.int_val, 42)
+    assert_eq(obj.float_val, 3.14)
+    assert_eq(obj.str_val, "hello")
+    assert_eq(obj.bool_val, true)
+    assert_eq(obj.null_val, null)
+    assert_eq(obj.arr_val[0], 1)
+}
+
+print("json_basic: all tests passed")

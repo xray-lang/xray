@@ -1,0 +1,194 @@
+// 1422_datetime_calc.xr
+// Test: datetime arithmetic, comparison, timezone (dot-syntax API)
+
+import datetime
+
+// ============================================================
+// Part 1: Date addition
+// ============================================================
+
+@test
+fn test_add_days(): void {
+    let dt = datetime.create(2024, 6, 15, 12, 0, 0)
+    let result = dt.add(10, "days")
+    assert_eq(result.day(), 25)
+}
+
+@test
+fn test_add_hours(): void {
+    let dt = datetime.create(2024, 6, 15, 12, 0, 0)
+    let result = dt.add(5, "hours")
+    assert_eq(result.hour(), 17)
+}
+
+@test
+fn test_add_minutes(): void {
+    let dt = datetime.create(2024, 6, 15, 12, 0, 0)
+    let result = dt.add(30, "minutes")
+    assert_eq(result.minute(), 30)
+}
+
+@test
+fn test_add_seconds(): void {
+    let dt = datetime.create(2024, 6, 15, 12, 0, 0)
+    let result = dt.add(45, "seconds")
+    assert_eq(result.second(), 45)
+}
+
+// ============================================================
+// Part 2: Date subtraction (negative)
+// ============================================================
+
+@test
+fn test_subtract_days(): void {
+    let dt = datetime.create(2024, 6, 15, 12, 0, 0)
+    let result = dt.add(-5, "days")
+    assert_eq(result.day(), 10)
+}
+
+@test
+fn test_subtract_hours(): void {
+    let dt = datetime.create(2024, 6, 15, 12, 0, 0)
+    let result = dt.add(-2, "hours")
+    assert_eq(result.hour(), 10)
+}
+
+// ============================================================
+// Part 3: Date diff
+// ============================================================
+
+@test
+fn test_diff_one_day_seconds(): void {
+    let dt1 = datetime.create(2024, 6, 15, 12, 0, 0)
+    let dt2 = datetime.create(2024, 6, 16, 12, 0, 0)
+    let diff = dt1.diff(dt2, "seconds")
+    assert_eq(diff, -86400)
+}
+
+@test
+fn test_diff_one_day_minutes(): void {
+    let dt1 = datetime.create(2024, 6, 15, 12, 0, 0)
+    let dt2 = datetime.create(2024, 6, 16, 12, 0, 0)
+    let diff = dt1.diff(dt2, "minutes")
+    assert_eq(diff, -1440)
+}
+
+@test
+fn test_diff_one_day_hours(): void {
+    let dt1 = datetime.create(2024, 6, 15, 12, 0, 0)
+    let dt2 = datetime.create(2024, 6, 16, 12, 0, 0)
+    let diff = dt1.diff(dt2, "hours")
+    assert_eq(diff, -24)
+}
+
+@test
+fn test_diff_reverse(): void {
+    let dt1 = datetime.create(2024, 6, 16, 12, 0, 0)
+    let dt2 = datetime.create(2024, 6, 15, 12, 0, 0)
+    let diff = dt1.diff(dt2, "hours")
+    assert_eq(diff, 24)
+}
+
+// ============================================================
+// Part 4: Weekday
+// ============================================================
+
+@test
+fn test_weekday_range(): void {
+    let dt = datetime.create(2024, 6, 15)
+    let wd = dt.weekday()
+    assert_true(wd >= 0 && wd <= 6)
+}
+
+@test
+fn test_weekday_now(): void {
+    let dt = datetime.now()
+    let wd = dt.weekday()
+    assert_true(wd >= 0 && wd <= 6)
+}
+
+// ============================================================
+// Part 5: Timezone
+// ============================================================
+
+@test
+fn test_offset_reasonable(): void {
+    let offset = datetime.offset()
+    assert_true(offset >= -720 && offset <= 840)
+}
+
+@test
+fn test_to_utc(): void {
+    let local = datetime.now()
+    let utc = local.toUTC()
+    assert_true(utc.year() >= 2024)
+}
+
+@test
+fn test_to_local(): void {
+    let utc = datetime.utc()
+    let local = utc.toLocal()
+    assert_true(local.year() >= 2024)
+}
+
+// ============================================================
+// Part 6: Comparison (new feature)
+// ============================================================
+
+@test
+fn test_is_before(): void {
+    let dt1 = datetime.create(2024, 1, 1)
+    let dt2 = datetime.create(2024, 12, 31)
+    assert_true(dt1.isBefore(dt2))
+    assert_true(!dt2.isBefore(dt1))
+}
+
+@test
+fn test_is_after(): void {
+    let dt1 = datetime.create(2024, 12, 31)
+    let dt2 = datetime.create(2024, 1, 1)
+    assert_true(dt1.isAfter(dt2))
+    assert_true(!dt2.isAfter(dt1))
+}
+
+@test
+fn test_equals(): void {
+    let dt1 = datetime.create(2024, 6, 15, 12, 0, 0)
+    let dt2 = datetime.create(2024, 6, 15, 12, 0, 0)
+    assert_true(dt1.equals(dt2))
+}
+
+// ============================================================
+// Part 7: Utility (new features)
+// ============================================================
+
+@test
+fn test_is_leap_year(): void {
+    let dt2024 = datetime.create(2024, 1, 1)
+    assert_true(dt2024.isLeapYear())
+    let dt2023 = datetime.create(2023, 1, 1)
+    assert_true(!dt2023.isLeapYear())
+}
+
+@test
+fn test_days_in_month(): void {
+    let feb_leap = datetime.create(2024, 2, 1)
+    assert_eq(feb_leap.daysInMonth(), 29)
+    let feb_normal = datetime.create(2023, 2, 1)
+    assert_eq(feb_normal.daysInMonth(), 28)
+    let jan = datetime.create(2024, 1, 1)
+    assert_eq(jan.daysInMonth(), 31)
+}
+
+// ============================================================
+// Part 8: Month add with day clamping (bug fix)
+// ============================================================
+
+@test
+fn test_add_months_clamp(): void {
+    // Jan 31 + 1 month should be Feb 28/29, not March
+    let dt = datetime.create(2024, 1, 31)
+    let result = dt.add(1, "months")
+    assert_eq(result.month(), 2)
+    assert_eq(result.day(), 29)  // 2024 is leap year
+}

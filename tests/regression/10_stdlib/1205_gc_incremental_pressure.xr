@@ -1,0 +1,134 @@
+// Test incremental GC under allocation pressure
+// Verifies dual-bitmap design: alloc_marks stable during GC mark phase,
+// preventing live child objects from being overwritten by hole scanning.
+
+import gc
+
+// --- Test 1: Nested objects survive incremental GC ---
+// Parent objects reference child objects. During incremental GC,
+// child lines must not be treated as free holes.
+@test
+fn test_nested_object_survival(): void {
+    gc.disable()
+    let containers: Array<Json> = []
+    for (let i = 0; i < 200; i++) {
+        let inner_map = {"key" => "value_" + string(i), "idx" => i}
+        let inner_arr = [i, i * 2, i * 3]
+        containers.push({
+            "map" => inner_map,
+            "arr" => inner_arr,
+            "name" => "container_" + string(i)
+        })
+    }
+
+    // Force GC to run
+    gc.collect()
+
+    // Verify all nested data is intact
+    for (let i = 0; i < 200; i++) {
+        let c = containers[i]
+        assert_eq(c["map"]["idx"], i)
+        assert_eq(c["arr"][1], i * 2)
+        assert_eq(c["name"], "container_" + string(i))
+    }
+}
+
+// --- Test 2: Allocate during GC cycle ---
+// Create objects, trigger GC, then create more objects.
+// The new objects must not overwrite old live objects.
+@test
+fn test_alloc_interleaved_with_gc(): void {
+    gc.disable()
+    let phase1: Array<Json> = []
+    for (let i = 0; i < 100; i++) {
+        phase1.push({"id" => i, "data" => "phase1_" + string(i)})
+    }
+
+    gc.collect()
+
+    let phase2: Array<Json> = []
+    for (let i = 0; i < 100; i++) {
+        phase2.push({"id" => i + 100, "data" => "phase2_" + string(i)})
+    }
+
+    gc.collect()
+
+    // Verify both phases intact
+    for (let i = 0; i < 100; i++) {
+        assert_eq(phase1[i]["id"], i)
+        assert_eq(phase2[i]["id"], i + 100)
+    }
+}
+
+// --- Test 3: Deep reference chains ---
+// Build a linked-list-like structure. GC must traverse the full chain
+// and mark all lines before hole scanning can reclaim anything.
+@test
+fn test_deep_reference_chain(): void {
+    gc.disable()
+    let head = {"value" => 0, "next" => null}
+    let current = head
+    for (let i = 1; i < 50; i++) {
+        let node = {"value" => i, "next" => null}
+        current["next"] = node
+        current = node
+    }
+
+    gc.collect()
+
+    // Walk the chain and verify
+    current = head
+    let count = 0
+    while (current != null) {
+        assert_eq(current["value"], count)
+        current = current["next"]
+        count++
+    }
+    assert_eq(count, 50)
+}
+
+// --- Test 4: High churn with live roots ---
+// Rapidly create and discard temp objects while keeping a live set.
+// Exercises hole scanning after GC reclaims dead temp objects.
+@test
+fn test_high_churn_with_live_roots(): void {
+    gc.disable()
+    let live: Array<string> = []
+    for (let i = 0; i < 50; i++) {
+        live.push("persistent_" + string(i))
+    }
+
+    for (let round = 0; round < 20; round++) {
+        let temp: Array<Array<int>> = []
+        for (let j = 0; j < 200; j++) {
+            temp.push([j, j + 1, j + 2])
+        }
+        // temp goes out of scope
+    }
+
+    gc.collect()
+
+    // Live roots must survive all the churn
+    for (let i = 0; i < 50; i++) {
+        assert_eq(live[i], "persistent_" + string(i))
+    }
+}
+
+// --- Test 5: Multiple GC cycles ---
+// Run several full GC cycles with allocation in between.
+@test
+fn test_multiple_gc_cycles(): void {
+    gc.disable()
+    for (let cycle = 0; cycle < 10; cycle++) {
+        let data: Array<Json> = []
+        for (let i = 0; i < 100; i++) {
+            data.push({"cycle" => cycle, "idx" => i})
+        }
+        gc.collect()
+        // Verify last batch
+        assert_eq(data[99]["cycle"], cycle)
+        assert_eq(data[99]["idx"], 99)
+    }
+}
+
+print("All incremental GC pressure tests passed")

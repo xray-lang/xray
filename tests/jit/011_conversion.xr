@@ -1,0 +1,35 @@
+// EXPECTED: 5
+// EXPECTED: 5
+// EXPECTED: true
+// EXPECTED: false
+// Test: Type conversion (TOINT, TOFLOAT, TOBOOL)
+
+fn to_int(x: float) : int {
+    return int(x)
+}
+
+fn to_float(x: int) : float {
+    return float(x)
+}
+
+fn to_bool_true(x: int) : bool {
+    return bool(x)
+}
+
+fn to_bool_false(x: int) : bool {
+    return bool(x)
+}
+
+let i = 0
+while (i < 200) {
+    to_int(5.7)
+    to_float(5)
+    to_bool_true(1)
+    to_bool_false(0)
+    i = i + 1
+}
+
+print(to_int(5.7))
+print(to_float(5))
+print(to_bool_true(1))
+print(to_bool_false(0))

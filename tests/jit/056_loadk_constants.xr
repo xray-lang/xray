@@ -1,0 +1,30 @@
+// EXPECTED: 314
+// EXPECTED: hello constant
+// Test: Constant loading (LOADK, LOADI, LOADF, LOADTRUE, LOADFALSE, LOADNULL)
+
+fn use_constants() : int {
+    let a = 314
+    let b = 3.14
+    let c = true
+    let d = false
+    let e = null
+    let f = "hello constant"
+    if (c && !d && e == null) {
+        return a
+    }
+    return 0
+}
+
+fn get_str() {
+    return "hello constant"
+}
+
+let i = 0
+while (i < 200) {
+    use_constants()
+    get_str()
+    i = i + 1
+}
+
+print(use_constants())
+print(get_str())

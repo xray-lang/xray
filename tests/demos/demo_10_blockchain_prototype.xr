@@ -1,0 +1,275 @@
+// Blockchain Prototype
+// Demonstrates: How xray's concurrency primitives naturally map to
+//               blockchain concepts — consensus, transaction pool,
+//               block production, peer-to-peer communication
+//
+// This is a simplified in-process simulation showing xray's strengths
+// for distributed systems / blockchain research.
+
+import time
+import json
+import crypto
+
+// ===== Data Structures =====
+
+class Transaction {
+    from: string
+    to: string
+    amount: float
+    timestamp: int
+    hash: string
+
+    constructor(from: string, to: string, amount: float) {
+        this.from = from
+        this.to = to
+        this.amount = amount
+        this.timestamp = time.now()
+        this.hash = crypto.sha256(from + to + string(amount) + string(this.timestamp))
+    }
+
+    toString(): string {
+        return "${this.from} → ${this.to}: ${this.amount}"
+    }
+}
+
+class Block {
+    index: int
+    prevHash: string
+    transactions: Array<any>
+    timestamp: int
+    hash: string
+    nonce: int
+    producer: string
+
+    constructor(index: int, prevHash: string, txs, producer: string) {
+        this.index = index
+        this.prevHash = prevHash
+        this.transactions = txs
+        this.timestamp = time.now()
+        this.producer = producer
+        this.nonce = 0
+        this.hash = this.computeHash()
+    }
+
+    computeHash(): string {
+        let data = string(this.index) + this.prevHash +
+                   string(this.timestamp) + string(this.nonce) +
+                   this.producer
+        for (tx in this.transactions) {
+            data += tx.hash
+        }
+        return crypto.sha256(data)
+    }
+
+    toString(): string {
+        return "Block #${this.index} [${this.transactions.length} txs] by ${this.producer}"
+    }
+}
+
+// ===== Mempool — Transaction Pool (Channel-based) =====
+// Transactions flow through channels, naturally thread-safe
+
+fn mempoolManager(inCh, outCh, maxBatch) {
+    let pool = []
+
+    while (true) {
+        select {
+            tx from inCh => {
+                if (tx == null) { break }
+                pool.push(tx)
+
+                // When enough transactions, batch them out
+                if (pool.length >= maxBatch) {
+                    let batch = []
+                    for (let i = 0; i < maxBatch; i++) {
+                        batch.push(pool[i])
+                    }
+                    // Remove batched items
+                    let remaining = []
+                    for (let i = maxBatch; i < pool.length; i++) {
+                        remaining.push(pool[i])
+                    }
+                    pool = remaining
+                    outCh.send(batch)
+                }
+            }
+            after 50 => {
+                // Flush partial batch on timeout
+                if (pool.length > 0) {
+                    let batch = pool
+                    pool = []
+                    outCh.send(batch)
+                }
+            }
+        }
+    }
+}
+
+// ===== Block Producer — Simulates mining/validation =====
+
+fn blockProducer(name, batchCh, blockCh, chain) {
+    while (true) {
+        let batch = batchCh.recv()
+        if (batch == null) { break }
+
+        let prevHash = chain.length > 0 ?
+            chain[chain.length - 1].hash : "genesis"
+
+        let block = new Block(chain.length, prevHash, batch, name)
+
+        // Simulate PoW: find nonce (simplified)
+        while (!block.hash.startsWith("0")) {
+            block.nonce++
+            block.hash = block.computeHash()
+            if (block.nonce > 1000) { break }
+        }
+
+        blockCh.send(block)
+    }
+}
+
+// ===== Validator Nodes — Parallel consensus simulation =====
+// Each validator independently verifies and votes
+
+fn validator(id, blockCh, voteCh) {
+    while (true) {
+        let block = blockCh.recv()
+        if (block == null) { break }
+
+        // Verify: check hash integrity
+        let recomputed = block.computeHash()
+        let valid = (recomputed == block.hash)
+
+        // Verify: check all transactions have hashes
+        for (tx in block.transactions) {
+            if (tx.hash == null || tx.hash == "") {
+                valid = false
+            }
+        }
+
+        voteCh.send({
+            validator: id,
+            blockIndex: block.index,
+            approve: valid,
+            block: block
+        })
+    }
+}
+
+// ===== Transaction Generator =====
+
+fn txGenerator(ch, count) {
+    let accounts = ["Alice", "Bob", "Charlie", "Diana", "Eve"]
+
+    for (let i = 0; i < count; i++) {
+        let from = accounts[i % accounts.length]
+        let to = accounts[(i + 2) % accounts.length]
+        let amount = (i * 17 + 3) % 100 + 0.5
+
+        ch.send(new Transaction(from, to, amount))
+    }
+}
+
+// ===== Main: Run the blockchain simulation =====
+
+fn main() {
+    print("=== Blockchain Prototype ===")
+    print("Demonstrating xray's concurrency for distributed consensus\n")
+
+    const TX_COUNT = 20
+    const BATCH_SIZE = 5
+    const NUM_VALIDATORS = 3
+
+    // Channels — the communication backbone
+    const txCh = Channel(32)       // raw transactions
+    const batchCh = Channel(8)     // batched transactions
+    const blockCh = Channel(8)     // proposed blocks
+    const voteCh = Channel(16)     // validator votes
+
+    shared const chain = []        // the blockchain
+
+    let start = time.monotonic()
+
+    // 1. Generate transactions
+    print("Phase 1: Generating", TX_COUNT, "transactions...")
+    txGenerator(txCh, TX_COUNT)
+
+    // 2. Mempool batches transactions
+    print("Phase 2: Mempool batching (size=" + string(BATCH_SIZE) + ")...")
+    let mempoolTask = go mempoolManager(txCh, batchCh, BATCH_SIZE)
+
+    // 3. Wait for all batches, produce blocks, validate
+    let blocksProduced = 0
+    let expectedBatches = TX_COUNT / BATCH_SIZE
+    if (TX_COUNT % BATCH_SIZE > 0) { expectedBatches++ }
+
+    for (let b = 0; b < expectedBatches; b++) {
+        let batch = batchCh.recv()
+        if (batch == null) { break }
+
+        let prevHash = chain.length > 0 ?
+            chain[chain.length - 1].hash : "genesis"
+        let block = new Block(chain.length, prevHash, batch, "producer-0")
+
+        // Simple PoW
+        while (!block.hash.startsWith("0")) {
+            block.nonce++
+            block.hash = block.computeHash()
+            if (block.nonce > 1000) { break }
+        }
+
+        // Validate (simplified: check hash)
+        let recomputed = block.computeHash()
+        let valid = (recomputed == block.hash)
+
+        if (valid) {
+            chain.push(block)
+            blocksProduced++
+            print("  Block #" + string(block.index) +
+                  " | " + string(block.transactions.length) + " txs" +
+                  " | nonce=" + string(block.nonce) +
+                  " | hash=" + block.hash.slice(0, 12) + "...")
+        }
+    }
+
+    let elapsed = time.monotonic() - start
+
+    // 4. Report
+    print("\n--- Blockchain Stats ---")
+    print("Blocks produced:", blocksProduced)
+    print("Chain length:", chain.length)
+
+    let totalTxs = 0
+    for (b in chain) {
+        totalTxs += b.transactions.length
+    }
+    print("Total transactions:", totalTxs)
+    print("Time:", elapsed, "ms")
+
+    // Verify chain integrity
+    print("\n--- Chain Integrity ---")
+    let valid = true
+    for (let i = 1; i < chain.length; i++) {
+        if (chain[i].prevHash != chain[i - 1].hash) {
+            print("  BROKEN at block", i)
+            valid = false
+        }
+    }
+    if (valid) {
+        print("  Chain is valid (all prevHash links verified)")
+    }
+
+    // Show chain summary
+    print("\n--- Chain ---")
+    for (b in chain) {
+        let txSummary = b.transactions.map((tx) => tx.toString())
+        print("  " + b.toString())
+        for (ts in txSummary) {
+            print("    " + ts)
+        }
+    }
+
+    print("\nBlockchain prototype completed.")
+}
+
+main()

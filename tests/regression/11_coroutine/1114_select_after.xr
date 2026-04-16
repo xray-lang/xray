@@ -1,0 +1,35 @@
+// 测试 select after 超时分支
+
+@test
+fn test_select_after(): void {
+    shared const ch = Channel(1)
+    
+    // 当 channel 为空时，after 分支执行
+    select {
+        msg from ch => { print(msg) }
+        after 1000 => { print("timeout") }
+    }
+    
+    // 当有数据时，不执行 after
+    ch.trySend(42)
+    select {
+        msg from ch => { print(msg) }
+        after 1000 => { print("timeout") }
+    }
+    
+    // 空 channel + 较短超时
+    select {
+        msg from ch => { print(msg) }
+        after 0 => { print("immediate timeout") }
+    }
+    
+    print("done")
+}
+
+test_select_after()
+
+// 期望输出：
+// timeout
+// 42
+// immediate timeout
+// done

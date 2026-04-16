@@ -1,0 +1,80 @@
+// 测试5：并发 GC 压力测试
+// 作者：xingleixu@gmail.com
+// 
+// 验证：多协程并发执行时 GC 正确工作，无段错误
+print("========== 测试5：并发 GC 压力测试 ==========")
+
+fn test_many_short_lived_coros() {
+    // 创建大量短期协程，触发 GC
+    let count = 50
+    fn worker(id) {
+        // 分配一些内存
+        let arr = []
+        for (let i = 0; i < 10; i++) {
+            arr.push("item_" + id + "_" + i)
+        }
+        return arr.length
+    }
+    let tasks = []
+    for (let i = 0; i < count; i++) {
+        tasks.push(go worker(i))
+    }
+    // 等待所有协程完成并收集结果
+    let success = 0
+    for (task in tasks) {
+        let r = await task
+        if (r == 10) {
+            success = success + 1
+        }
+    }
+    print("成功协程数:", success, "/", count)
+    assert_eq(success, count)
+    print("✓ 短期协程压力测试通过")
+}
+
+fn test_nested_allocations() {
+    fn worker() {
+        // 创建嵌套数据结构
+        let data = []
+        for (let i = 0; i < 50; i++) {
+            let item = { "id" => i, "values" => [i * 1, i * 2, i * 3], "name" => "item_" + i }
+            data.push(item)
+        }
+        return data.length
+    }
+    // 启动 10 个协程
+    let t1 = go worker()
+    let t2 = go worker()
+    let t3 = go worker()
+    let t4 = go worker()
+    let t5 = go worker()
+    let t6 = go worker()
+    let t7 = go worker()
+    let t8 = go worker()
+    let t9 = go worker()
+    let t10 = go worker()
+    let r1 = await t1
+    let r2 = await t2
+    let r3 = await t3
+    let r4 = await t4
+    let r5 = await t5
+    let r6 = await t6
+    let r7 = await t7
+    let r8 = await t8
+    let r9 = await t9
+    let r10 = await t10
+    let total = r1 + r2 + r3 + r4 + r5
+    total = total + r6 + r7 + r8 + r9 + r10
+    print("嵌套分配总数:", total)
+    assert_eq(total, 10 * 50)
+    // 500
+    print("✓ 嵌套分配测试通过")
+}
+
+// 运行所有测试
+test_many_short_lived_coros()
+test_nested_allocations()
+// 注意：并行 Channel 压力测试暂时禁用
+// 原因：多线程 Channel 调度需要进一步优化
+print("
+🎉 测试5全部通过：并发 GC 正确！")

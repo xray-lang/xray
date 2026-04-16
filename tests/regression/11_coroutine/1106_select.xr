@@ -1,0 +1,41 @@
+// 测试 select 多路复用
+
+@test
+fn test_select(): void {
+    shared const ch1 = Channel(2)
+    shared const ch2 = Channel(2)
+    
+    // 向 ch1 发送数据
+    ch1.trySend(100)
+    
+    // select 从多个 channel 中接收
+    select {
+        msg from ch1 => { print(msg) }
+        msg from ch2 => { print(msg) }
+        _ => { print("no data") }
+    }
+    
+    // ch2 有数据时
+    ch2.trySend(200)
+    select {
+        msg from ch1 => { print(msg) }
+        msg from ch2 => { print(msg) }
+        _ => { print("no data") }
+    }
+    
+    // 都没有数据时（走 default）
+    select {
+        msg from ch1 => { print(msg) }
+        msg from ch2 => { print(msg) }
+        _ => { print("no data") }
+    }
+}
+
+test_select()
+print("done")
+
+// 期望输出：
+// 100
+// 200
+// no data
+// done

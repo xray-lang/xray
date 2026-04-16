@@ -1,0 +1,33 @@
+// EXPECTED: 100
+// EXPECTED: 100
+// EXPECTED: 100
+// Test: Json field write and read-back in hot loop (regression for nested3 crash)
+
+fn step(arr, n: int) : int {
+    let count = 0
+    let i = 0
+    while (i < n) {
+        let j = 0
+        while (j < arr.length) {
+            arr[j].x = arr[j].x + 1.0
+            count = count + 1
+            j = j + 1
+        }
+        i = i + 1
+    }
+    return count
+}
+
+let arr = [{ "x": 0.0 }, { "x": 0.0 }, { "x": 0.0 }]
+let i = 0
+while (i < 200) {
+    step(arr, 1)
+    i = i + 1
+}
+
+// After 200 iterations of step(arr,1), each x incremented 200 times
+let arr2 = [{ "x": 0.0 }, { "x": 0.0 }, { "x": 0.0 }]
+step(arr2, 100)
+print(int(arr2[0].x))
+print(int(arr2[1].x))
+print(int(arr2[2].x))

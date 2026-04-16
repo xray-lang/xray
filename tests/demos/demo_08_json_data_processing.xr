@@ -1,0 +1,210 @@
+// JSON Data Processing & Dynamic Objects
+// Demonstrates: Json type, dynamic fields, map/filter/reduce,
+//               data transformation, string templates, Reflect
+
+import json
+
+// ===== Data Source =====
+
+fn getSampleData() {
+    return [
+        { name: "Alice", age: 28, skills: ["Go", "Rust", "xray"], active: true },
+        { name: "Bob", age: 35, skills: ["Python", "Java"], active: false },
+        { name: "Charlie", age: 22, skills: ["xray", "TypeScript"], active: true },
+        { name: "Diana", age: 31, skills: ["C++", "xray", "Go"], active: true },
+        { name: "Eve", age: 26, skills: ["Kotlin", "Swift"], active: true },
+        { name: "Frank", age: 40, skills: ["xray"], active: false }
+    ]
+}
+
+// ===== Query & Transform =====
+
+fn demo_query() {
+    print("=== JSON Query & Transform ===")
+    let people = getSampleData()
+
+    // 1. Filter active members
+    let active = people.filter((p) => p.active)
+    print("Active members:", active.length)
+
+    // 2. Find xray developers
+    let xrayDevs = people.filter((p) => {
+        for (s in p.skills) {
+            if (s == "xray") { return true }
+        }
+        return false
+    })
+    print("xray developers:", xrayDevs.map((p) => p.name))
+
+    // 3. Age statistics
+    let ages = people.map((p) => p.age)
+    let totalAge = ages.reduce((a, b) => a + b, 0)
+    let avgAge = totalAge / people.length
+
+    let youngest = ages[0]
+    let oldest = ages[0]
+    for (a in ages) {
+        if (a < youngest) { youngest = a }
+        if (a > oldest) { oldest = a }
+    }
+
+    print("Age stats: avg=" + string(avgAge) +
+          " min=" + string(youngest) +
+          " max=" + string(oldest))
+
+    // 4. Group by activity
+    let grouped = { active: [], inactive: [] }
+    for (p in people) {
+        if (p.active) {
+            grouped.active.push(p.name)
+        } else {
+            grouped.inactive.push(p.name)
+        }
+    }
+    print("Active:", grouped.active)
+    print("Inactive:", grouped.inactive)
+}
+
+// ===== Dynamic Object Builder =====
+
+fn demo_dynamic_objects() {
+    print("\n=== Dynamic Object Builder ===")
+
+    // Build config dynamically
+    let config = {}
+    config.database = {
+        host: "localhost",
+        port: 5432,
+        name: "myapp"
+    }
+    config.cache = {
+        enabled: true,
+        ttl: 3600
+    }
+    config.features = ["auth", "logging", "metrics"]
+
+    print("Config:", json.stringify(config, 2))
+
+    // Deep access
+    print("DB host:", config.database.host)
+    print("Cache TTL:", config.cache.ttl)
+    print("Features:", config.features.length)
+}
+
+// ===== Data Transformation Pipeline =====
+
+fn demo_transform() {
+    print("\n=== Data Transformation ===")
+
+    let orders = [
+        { id: 1, items: [{ name: "Book", price: 29.99, qty: 2 }] },
+        { id: 2, items: [
+            { name: "Pen", price: 1.99, qty: 10 },
+            { name: "Notebook", price: 5.99, qty: 3 }
+        ]},
+        { id: 3, items: [{ name: "Laptop", price: 999.99, qty: 1 }] }
+    ]
+
+    // Calculate order totals
+    let summaries = orders.map((order) => {
+        let total = 0.0
+        let itemCount = 0
+        for (item in order.items) {
+            total += item.price * item.qty
+            itemCount += item.qty
+        }
+        return {
+            orderId: order.id,
+            total: total,
+            itemCount: itemCount
+        }
+    })
+
+    for (s in summaries) {
+        print("  Order #${s.orderId}: ${s.itemCount} items, total=$${s.total}")
+    }
+
+    // Grand total
+    let grandTotal = summaries.reduce((acc, s) => acc + s.total, 0.0)
+    print("Grand total: $" + string(grandTotal))
+}
+
+// ===== Nested Data with Null Safety =====
+
+fn demo_null_safety() {
+    print("\n=== Null Safety ===")
+
+    let response = {
+        status: 200,
+        data: {
+            user: { name: "Alice", address: null }
+        }
+    }
+
+    // Safe access with ?? operator
+    let city = response.data?.user?.address?.city ?? "Unknown"
+    print("City:", city)
+
+    let name = response.data?.user?.name ?? "Anonymous"
+    print("Name:", name)
+
+    // Conditional processing
+    let items = [null, "hello", null, "world", null]
+    let valid = items.filter((x) => x != null)
+    print("Valid items:", valid)
+}
+
+// ===== Schema Validation Pattern =====
+
+fn validateUser(data) {
+    let errors = []
+
+    if (data.name == null || data.name == "") {
+        errors.push("name is required")
+    }
+    if (data.age == null) {
+        errors.push("age is required")
+    } else if (data.age < 0 || data.age > 150) {
+        errors.push("age must be 0-150")
+    }
+    if (data.email == null) {
+        errors.push("email is required")
+    }
+
+    return {
+        valid: errors.length == 0,
+        errors: errors
+    }
+}
+
+fn demo_validation() {
+    print("\n=== Schema Validation ===")
+
+    let testCases = [
+        { name: "Alice", age: 28, email: "alice@test.com" },
+        { name: "", age: 28, email: "bob@test.com" },
+        { name: "Charlie", age: -5, email: null }
+    ]
+
+    for (tc in testCases) {
+        let result = validateUser(tc)
+        if (result.valid) {
+            print("  OK:", tc.name)
+        } else {
+            print("  FAIL:", json.stringify(tc), "→", result.errors)
+        }
+    }
+}
+
+// ===== Run =====
+
+fn main() {
+    demo_query()
+    demo_dynamic_objects()
+    demo_transform()
+    demo_null_safety()
+    demo_validation()
+    print("\nAll JSON demos completed.")
+}
+
+main()

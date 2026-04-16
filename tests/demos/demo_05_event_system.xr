@@ -1,0 +1,215 @@
+// Real-time Event System
+// Demonstrates: Select multiplexing, timers, pub/sub pattern,
+//               multiple channels, after timeout, default branch
+
+import time
+
+// ===== Event types =====
+
+enum EventType {
+    Click,
+    KeyPress,
+    Timer,
+    Network,
+    System
+}
+
+fn eventName(t) {
+    return match t {
+        EventType.Click => "Click",
+        EventType.KeyPress => "KeyPress",
+        EventType.Timer => "Timer",
+        EventType.Network => "Network",
+        EventType.System => "System",
+        _ => "Unknown"
+    }
+}
+
+// ===== Event Bus — Pub/Sub with channels =====
+
+fn createEventBus() {
+    const clickCh = Channel(16)
+    const keyCh = Channel(16)
+    const networkCh = Channel(16)
+    const systemCh = Channel(16)
+
+    return {
+        click: clickCh,
+        key: keyCh,
+        network: networkCh,
+        system: systemCh
+    }
+}
+
+// ===== Event Producers =====
+
+fn simulateClicks(ch, count) {
+    for (let i = 0; i < count; i++) {
+        time.sleep(25)
+        ch.send({ type: EventType.Click, x: i * 10, y: i * 5 })
+    }
+}
+
+fn simulateKeyPresses(ch, keys) {
+    for (key in keys) {
+        time.sleep(15)
+        ch.send({ type: EventType.KeyPress, key: key })
+    }
+}
+
+fn simulateNetwork(ch) {
+    let events = ["connected", "data_received", "data_received", "disconnected"]
+    for (evt in events) {
+        time.sleep(30)
+        ch.send({ type: EventType.Network, status: evt })
+    }
+}
+
+// ===== Event Consumer — Select multiplexing =====
+
+fn eventLoop(bus, doneCh) {
+    let stats = { click: 0, key: 0, network: 0, timeout: 0, total: 0 }
+    let running = true
+
+    while (running) {
+        select {
+            evt from bus.click => {
+                stats.click++
+                stats.total++
+                print("  [Click] at (" + string(evt.x) + "," + string(evt.y) + ")")
+            }
+            evt from bus.key => {
+                stats.key++
+                stats.total++
+                print("  [Key] pressed:", evt.key)
+            }
+            evt from bus.network => {
+                stats.network++
+                stats.total++
+                print("  [Network]", evt.status)
+            }
+            signal from doneCh => {
+                print("  [System] Shutdown signal received")
+                running = false
+            }
+            after 200 => {
+                stats.timeout++
+                print("  [Timeout] No events for 200ms, shutting down")
+                running = false
+            }
+        }
+    }
+
+    return stats
+}
+
+// ===== Heartbeat with periodic timer =====
+
+fn heartbeat(ch, interval, count) {
+    for (let i = 0; i < count; i++) {
+        time.sleep(interval)
+        ch.send({ type: EventType.Timer, tick: i + 1 })
+    }
+}
+
+fn demo_heartbeat() {
+    print("=== Heartbeat Demo ===")
+    const tickCh = Channel(8)
+    const dataCh = Channel(8)
+
+    go heartbeat(tickCh, 20, 5)
+
+    // Simulate some data arriving irregularly
+    go {
+        time.sleep(35)
+        dataCh.send("payload-A")
+        time.sleep(50)
+        dataCh.send("payload-B")
+    }
+
+    let ticks = 0
+    let data_count = 0
+    let done = false
+
+    while (!done) {
+        select {
+            t from tickCh => {
+                ticks++
+                print("  Heartbeat #" + string(t.tick))
+            }
+            d from dataCh => {
+                data_count++
+                print("  Data received:", d)
+            }
+            after 100 => {
+                print("  No activity, stopping.")
+                done = true
+            }
+        }
+    }
+
+    print("  Total heartbeats:", ticks, "| Data packets:", data_count)
+}
+
+// ===== Non-blocking poll with default =====
+
+fn demo_nonblocking_poll() {
+    print("\n=== Non-blocking Poll Demo ===")
+    const ch = Channel(4)
+
+    // Pre-fill some data
+    ch.trySend("msg-1")
+    ch.trySend("msg-2")
+
+    // Drain with non-blocking reads
+    let drained = 0
+    let keepGoing = true
+    while (keepGoing) {
+        select {
+            msg from ch => {
+                print("  Got:", msg)
+                drained++
+            }
+            _ => {
+                print("  Channel empty, drained", drained, "messages")
+                keepGoing = false
+            }
+        }
+    }
+}
+
+// ===== Main event loop demo =====
+
+fn demo_event_loop() {
+    print("\n=== Event Loop Demo ===")
+
+    let bus = createEventBus()
+    const doneCh = Channel(1)
+
+    // Start producers
+    scope {
+        go simulateClicks(bus.click, 3)
+        go simulateKeyPresses(bus.key, ["a", "b", "Enter"])
+        go simulateNetwork(bus.network)
+    }
+
+    // Run event loop (will timeout after producers finish)
+    let stats = eventLoop(bus, doneCh)
+
+    print("\n--- Event Stats ---")
+    print("  Click events:", stats.click)
+    print("  Key events:", stats.key)
+    print("  Network events:", stats.network)
+    print("  Total:", stats.total)
+}
+
+// ===== Run =====
+
+fn main() {
+    demo_heartbeat()
+    demo_nonblocking_poll()
+    demo_event_loop()
+    print("\nAll event demos completed.")
+}
+
+main()

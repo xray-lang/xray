@@ -1,0 +1,93 @@
+// Test io module extended functionality
+
+import io
+
+@test
+fn test_basic_file_ops(): void {
+    let tmp = io.tempFile() ?? ""
+    assert(io.exists(tmp))
+    io.writeFile(tmp, "hello\nworld\ntest")
+    assert_eq(io.readFile(tmp) ?? "", "hello\nworld\ntest")
+    let lines = io.readLines(tmp)
+    assert_eq(lines[0], "hello")
+    assert_eq(lines[1], "world")
+    io.remove(tmp)
+}
+
+@test
+fn test_file_info(): void {
+    let tmp = io.tempFile() ?? ""
+    io.writeFile(tmp, "test content")
+    let st = io.stat(tmp)
+    assert(st != null)
+    assert_eq(st.size, 12)
+    assert_eq(st.isFile, true)
+    assert(io.isFile(tmp))
+    assert(!io.isDir(tmp))
+    io.remove(tmp)
+}
+
+@test
+fn test_directory_ops(): void {
+    let tmpDir = io.tempDir() ?? ""
+    assert(io.isDir(tmpDir))
+    let nested = tmpDir + "/a/b/c"
+    io.mkdirp(nested)
+    assert(io.isDir(nested))
+    io.writeFile(tmpDir + "/file1.txt", "file1")
+    let entries = io.readDir(tmpDir)
+    assert(entries != null)
+    let allFiles = io.readDirRecursive(tmpDir)
+    assert(allFiles != null)
+    io.removeAll(tmpDir)
+    assert(!io.exists(tmpDir))
+}
+
+@test
+fn test_copy_and_move(): void {
+    let src = io.tempFile() ?? ""
+    io.writeFile(src, "copy test")
+    let dst = src + ".copy"
+    io.copyFile(src, dst)
+    assert(io.exists(dst))
+    assert_eq(io.readFile(dst) ?? "", "copy test")
+    let moved = src + ".moved"
+    io.rename(dst, moved)
+    assert(!io.exists(dst))
+    assert(io.exists(moved))
+    io.remove(src)
+    io.remove(moved)
+}
+
+@test
+fn test_touch_and_chmod(): void {
+    let tmp = io.tempFile() ?? ""
+    io.remove(tmp)
+    io.touch(tmp)
+    assert(io.exists(tmp))
+    assert_eq(io.fileSize(tmp), 0)
+    io.chmod(tmp, 420)
+    let st = io.stat(tmp)
+    assert_eq(st.mode, 420)
+    io.remove(tmp)
+}
+
+@test
+fn test_realpath(): void {
+    let cwd = io.cwd() ?? ""
+    let resolved = io.realpath(".") ?? ""
+    assert_eq(resolved, cwd)
+}
+
+@test
+fn test_chdir(): void {
+    let original = io.cwd() ?? ""
+    let tmpDir = io.tempDir() ?? ""
+    let tmpDirReal = io.realpath(tmpDir) ?? ""
+    io.chdir(tmpDir)
+    assert_eq(io.cwd() ?? "", tmpDirReal)
+    io.chdir(original)
+    io.removeAll(tmpDir)
+}
+
+print("All io extended tests passed")

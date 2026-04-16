@@ -1,0 +1,4 @@
+// 008_invalid_operator.xr
+// Expected: Compile error - invalid operator for type
+// Error should mention: operator, type
+let result = "hello" - "world"

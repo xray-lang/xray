@@ -1,0 +1,75 @@
+/*
+** 测试 Channel 带超时操作
+** 作者：xingleixu@gmail.com
+** 
+** 测试内容：
+** 1. ch.sendTimeout(value, timeout) - 带超时发送
+** 2. ch.recvTimeout(timeout) - 带超时接收
+*/
+
+// 测试 1：recvTimeout 立即成功（Channel 有数据）
+print("test1: recvTimeout with data")
+shared const ch1 = Channel(1)
+ch1.send(42)
+let result1, ok1 = ch1.recvTimeout(1000)
+print("  result:", result1, "ok:", ok1)  // expect: 42, true
+
+// 测试 2：recvTimeout 超时（Channel 无数据）
+print("test2: recvTimeout timeout")
+shared const ch2 = Channel(1)
+let result2, ok2 = ch2.recvTimeout(100)  // 100ms 超时
+if (!ok2) {
+    print("  timeout (null)")  // expect: timeout
+} else {
+    print("  got:", result2)
+}
+
+// 测试 3：sendTimeout 立即成功（Channel 有空间）
+print("test3: sendTimeout with space")
+shared const ch3 = Channel(1)
+let ok3 = ch3.sendTimeout(100, 1000)
+print("  success:", ok3)  // expect: true
+let v3 = ch3.recv()
+print("  value:", v3)  // expect: 100
+
+// 测试 4：sendTimeout 超时（Channel 满）
+print("test4: sendTimeout timeout")
+shared const ch4 = Channel(1)
+ch4.send(1)  // 填满 channel
+let ok4 = ch4.sendTimeout(2, 100)  // 100ms 超时
+print("  success:", ok4)  // expect: false（超时）
+
+// 测试 5：生产者-消费者带超时
+print("test5: producer-consumer with timeout")
+shared const ch5 = Channel(2)
+
+// 生产者
+let producer = go {
+    for (i in 1..4) {
+        let sent = ch5.sendTimeout(i, 500)
+        if (!sent) {
+            print("  producer timeout at", i)
+        }
+    }
+    ch5.close()
+}
+
+// 消费者（慢）
+let consumer = go {
+    let count = 0
+    while (true) {
+        let val, ok = ch5.recvTimeout(200)
+        if (!ok) {
+            break
+        }
+        print("  consumed:", val)
+        count++
+    }
+    return count
+}
+
+await producer
+let consumed = await consumer
+print("  total consumed:", consumed)
+
+print("all tests passed")

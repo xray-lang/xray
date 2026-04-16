@@ -1,0 +1,9 @@
+// index.xr
+// 作者：xingleixu@gmail.com
+// 测试：re-export 语法
+
+// 选择性 re-export
+export { getUser, getUserAge as getAge } from "./user"
+
+// 全量 re-export
+export * from "./product"

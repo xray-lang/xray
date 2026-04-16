@@ -1,0 +1,127 @@
+// 0513_json_computed_property.xr
+// 作者：xingleixu@gmail.com
+// 测试：对象字面量计算属性 { [expr]: value }
+
+// ===== 基本计算属性 =====
+
+@test
+fn test_basic_computed_property(): void {
+    let key = "name"
+    let obj = { [key]: "Alice" }
+    assert_eq(obj.name, "Alice")
+    assert_eq(obj["name"], "Alice")
+}
+
+@test
+fn test_computed_with_value_expr(): void {
+    let key = "sum"
+    let obj = { [key]: 1 + 2 + 3 }
+    assert_eq(obj.sum, 6)
+}
+
+// ===== 混合静态和计算属性 =====
+
+@test
+fn test_mixed_static_computed(): void {
+    let k = "dynamic"
+    let obj = { static_field: 1, [k]: 2 }
+    assert_eq(obj.static_field, 1)
+    assert_eq(obj.dynamic, 2)
+}
+
+@test
+fn test_multiple_computed(): void {
+    let k1 = "first"
+    let k2 = "second"
+    let obj = { [k1]: 1, [k2]: 2, third: 3 }
+    assert_eq(obj.first, 1)
+    assert_eq(obj.second, 2)
+    assert_eq(obj.third, 3)
+}
+
+@test
+fn test_computed_at_different_positions(): void {
+    let k = "middle"
+    let obj = { start: 0, [k]: 1, end: 2 }
+    assert_eq(obj.start, 0)
+    assert_eq(obj.middle, 1)
+    assert_eq(obj.end, 2)
+}
+
+// ===== 表达式作为键 =====
+
+@test
+fn test_concat_expression_key(): void {
+    let prefix = "user_"
+    let obj = { [prefix + "id"]: 123 }
+    assert_eq(obj["user_id"], 123)
+}
+
+@test
+fn test_complex_expression_key(): void {
+    let base = "field"
+    let idx = 1
+    let obj = { [base + "_" + string(idx)]: "value1" }
+    assert_eq(obj["field_1"], "value1")
+}
+
+// ===== 循环中创建计算属性 =====
+
+@test
+fn test_computed_in_function(): void {
+    fn makeObj(key: string, value: int): Json {
+        return { [key]: value }
+    }
+    
+    let obj1 = makeObj("a", 1)
+    let obj2 = makeObj("b", 2)
+    
+    assert_eq(obj1.a, 1)
+    assert_eq(obj2.b, 2)
+}
+
+@test
+fn test_computed_with_variable_keys(): void {
+    let keys = ["x", "y", "z"]
+    let values = [10, 20, 30]
+    
+    let obj0 = { [keys[0]]: values[0] }
+    let obj1 = { [keys[1]]: values[1] }
+    let obj2 = { [keys[2]]: values[2] }
+    
+    assert_eq(obj0.x, 10)
+    assert_eq(obj1.y, 20)
+    assert_eq(obj2.z, 30)
+}
+
+// ===== 嵌套对象中的计算属性 =====
+
+@test
+fn test_nested_computed(): void {
+    let inner_key = "data"
+    let outer_key = "container"
+    
+    let obj = {
+        [outer_key]: {
+            [inner_key]: "nested_value"
+        }
+    }
+    
+    assert_eq(obj.container.data, "nested_value")
+}
+
+// ===== 计算属性与后续动态添加 =====
+
+@test
+fn test_computed_then_dynamic_add(): void {
+    let k = "initial"
+    let obj = { [k]: 1 }
+    obj.added = 2
+    obj["another"] = 3
+    
+    assert_eq(obj.initial, 1)
+    assert_eq(obj.added, 2)
+    assert_eq(obj.another, 3)
+}
+
+print("json_computed_property: all tests passed")

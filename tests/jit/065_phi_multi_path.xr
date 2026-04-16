@@ -1,0 +1,34 @@
+// EXPECTED: 296
+// Test: Multiple control flow paths merging with phi (if/else if/else chains)
+
+fn score(x: int) : int {
+    if (x > 80) {
+        return 5
+    } else if (x > 60) {
+        return 4
+    } else if (x > 40) {
+        return 3
+    } else if (x > 20) {
+        return 2
+    } else {
+        return 1
+    }
+}
+
+fn total_score(n: int) : int {
+    let sum = 0
+    let i = 0
+    while (i < n) {
+        sum = sum + score(i)
+        i = i + 1
+    }
+    return sum
+}
+
+let j = 0
+while (j < 200) {
+    total_score(100)
+    j = j + 1
+}
+
+print(total_score(100))

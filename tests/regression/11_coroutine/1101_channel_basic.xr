@@ -1,0 +1,53 @@
+// 测试 Channel 创建和基本操作
+
+@test
+fn test_channel(): void {
+    // 创建缓冲 Channel（容量 3）
+    shared const ch = Channel(3)
+    print(ch != null)  // true
+    
+    // 非阻塞发送到缓冲区
+    let ok1 = ch.trySend(10)
+    let ok2 = ch.trySend(20)
+    let ok3 = ch.trySend(30)
+    print(ok1)  // true
+    print(ok2)  // true
+    print(ok3)  // true
+    
+    // 缓冲区已满，再次发送应失败
+    let ok4 = ch.trySend(40)
+    print(ok4)  // false
+    
+    // 非阻塞接收（返回多值）
+    let v1, ok1r = ch.tryRecv()
+    let v2, ok2r = ch.tryRecv()
+    let v3, ok3r = ch.tryRecv()
+    print(v1)  // 10
+    print(v2)  // 20
+    print(v3)  // 30
+    print(ok1r && ok2r && ok3r)  // true
+    
+    // 缓冲区为空，再次接收返回 ok=false
+    let v4, ok4r = ch.tryRecv()
+    print(ok4r)  // false
+    
+    // 关闭 Channel
+    ch.close()
+    
+    print("done")
+}
+
+test_channel()
+
+// 期望输出：
+// true
+// true
+// true
+// true
+// false
+// 10
+// 20
+// 30
+// true
+// false
+// done

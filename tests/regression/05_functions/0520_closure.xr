@@ -1,0 +1,231 @@
+// 0520_closure.xr
+// 作者：xingleixu@gmail.com
+// 测试：闭包
+
+// ===== 基础闭包 =====
+
+@test
+fn test_closure_basic(): void {
+    fn makeCounter(): fn(): int {
+        let count = 0
+        fn increment(): int {
+            count++
+            return count
+        }
+        return increment
+    }
+    
+    let counter = makeCounter()
+    assert_eq(counter(), 1)
+    assert_eq(counter(), 2)
+    assert_eq(counter(), 3)
+}
+
+@test
+fn test_closure_multiple_instances(): void {
+    fn makeCounter(): fn(): int {
+        let count = 0
+        fn increment(): int {
+            count++
+            return count
+        }
+        return increment
+    }
+    
+    let c1 = makeCounter()
+    let c2 = makeCounter()
+    
+    assert_eq(c1(), 1)
+    assert_eq(c1(), 2)
+    assert_eq(c2(), 1)  // 独立计数器
+    assert_eq(c1(), 3)
+    assert_eq(c2(), 2)
+}
+
+// ===== 参数捕获 =====
+
+@test
+fn test_capture_param(): void {
+    fn makeAdder(x: int): fn(int): int {
+        fn add(y: int): int {
+            return x + y
+        }
+        return add
+    }
+    
+    let add5 = makeAdder(5)
+    let add10 = makeAdder(10)
+    
+    assert_eq(add5(3), 8)
+    assert_eq(add10(3), 13)
+    assert_eq(add5(add10(1)), 16)
+}
+
+@test
+fn test_capture_multiple_params(): void {
+    fn makeRange(min: int, max: int): fn(int): bool {
+        fn isInRange(x: int): bool {
+            return x >= min && x <= max
+        }
+        return isInRange
+    }
+    
+    let inRange = makeRange(5, 10)
+    assert_eq(inRange(3), false)
+    assert_eq(inRange(5), true)
+    assert_eq(inRange(7), true)
+    assert_eq(inRange(10), true)
+    assert_eq(inRange(12), false)
+}
+
+// ===== 修改外层变量 =====
+
+@test
+fn test_modify_outer(): void {
+    let x = 10
+    
+    fn modify(): void {
+        x = 20
+    }
+    
+    assert_eq(x, 10)
+    modify()
+    assert_eq(x, 20)
+}
+
+@test
+fn test_accumulator(): void {
+    fn makeAccumulator(): fn(int): int {
+        let total = 0
+        fn add(n: int): int {
+            total += n
+            return total
+        }
+        return add
+    }
+    
+    let acc = makeAccumulator()
+    assert_eq(acc(5), 5)
+    assert_eq(acc(10), 15)
+    assert_eq(acc(3), 18)
+}
+
+// ===== 嵌套闭包 =====
+
+@test
+fn test_nested_closure(): void {
+    fn outer(x: int): fn(int): fn(int): int {
+        fn middle(y: int): fn(int): int {
+            fn inner(z: int): int {
+                return x + y + z
+            }
+            return inner
+        }
+        return middle
+    }
+    
+    let f = outer(1)(2)
+    assert_eq(f(3), 6)
+}
+
+@test
+fn test_deeply_nested(): void {
+    fn level1(a: int): fn(int): fn(int): fn(int): int {
+        fn level2(b: int): fn(int): fn(int): int {
+            fn level3(c: int): fn(int): int {
+                fn level4(d: int): int {
+                    return a + b + c + d
+                }
+                return level4
+            }
+            return level3
+        }
+        return level2
+    }
+    
+    let result = level1(1)(2)(3)(4)
+    assert_eq(result, 10)
+}
+
+// ===== 闭包工厂 =====
+
+@test
+fn test_multiplier_factory(): void {
+    fn createMultiplier(factor: int): fn(int): int {
+        fn multiply(x: int): int {
+            return x * factor
+        }
+        return multiply
+    }
+    
+    let double = createMultiplier(2)
+    let triple = createMultiplier(3)
+    
+    assert_eq(double(5), 10)
+    assert_eq(triple(5), 15)
+}
+
+@test
+fn test_greeting_factory(): void {
+    fn createGreeter(greeting: string): fn(string): string {
+        fn greet(name: string): string {
+            return greeting + ", " + name + "!"
+        }
+        return greet
+    }
+    
+    let hello = createGreeter("Hello")
+    let hi = createGreeter("Hi")
+    
+    assert_eq(hello("Alice"), "Hello, Alice!")
+    assert_eq(hi("Bob"), "Hi, Bob!")
+}
+
+// ===== 闭包与循环 =====
+
+@test
+fn test_closure_captures_value(): void {
+    let funcs: Array<fn(): int> = []
+    for (let i = 0; i < 3; i++) {
+        let val = i  // 每次循环创建新变量
+        fn capture(): int {
+            return val
+        }
+        funcs.push(capture)
+    }
+    
+    assert_eq(funcs[0](), 0)
+    assert_eq(funcs[1](), 1)
+    assert_eq(funcs[2](), 2)
+}
+
+// ===== 边界条件 =====
+
+@test
+fn test_closure_no_capture(): void {
+    fn outer(): fn(): int {
+        fn inner(): int {
+            return 42
+        }
+        return inner
+    }
+    
+    let f = outer()
+    assert_eq(f(), 42)
+}
+
+@test
+fn test_closure_capture_const(): void {
+    const VALUE = 100
+    
+    fn getClosure(): fn(): int {
+        fn inner(): int {
+            return VALUE
+        }
+        return inner
+    }
+    
+    let f = getClosure()
+    assert_eq(f(), 100)
+}
+

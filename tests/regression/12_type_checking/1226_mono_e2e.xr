@@ -1,0 +1,60 @@
+// Test: Monomorphization end-to-end
+// Expected: prints "ok"
+// Verifies that generic functions with explicit type args are
+// monomorphized correctly: cloned, type-substituted, and call sites rewritten.
+
+// === Basic identity monomorphization ===
+fn id<T>(x: T): T {
+    return x
+}
+
+// Explicit type args trigger monomorphization
+assert_eq(id<int>(42), 42)
+assert_eq(id<float>(3.14), 3.14)
+assert_eq(id<string>("hello"), "hello")
+
+// bool shares I64 rep with int (rep-dedup)
+assert_eq(id<bool>(true), true)
+
+// === Multi-type-parameter monomorphization ===
+fn pair<A, B>(a: A, b: B): (A, B) {
+    return a, b
+}
+
+let p1a, p1b = pair<int, float>(10, 2.5)
+assert_eq(p1a, 10)
+assert_eq(p1b, 2.5)
+
+let p2a, p2b = pair<string, int>("age", 30)
+assert_eq(p2a, "age")
+assert_eq(p2b, 30)
+
+// === Generic with computation ===
+fn add_one<T>(x: T): T {
+    return x + 1
+}
+
+assert_eq(add_one<int>(9), 10)
+assert_eq(add_one<float>(1.5), 2.5)
+
+// === Generic returning array ===
+fn wrap<T>(x: T): Array<T> {
+    return [x]
+}
+
+let wi = wrap<int>(77)
+assert_eq(wi[0], 77)
+assert_eq(wi.length, 1)
+
+let ws = wrap<string>("mono")
+assert_eq(ws[0], "mono")
+
+// === Nested generic calls ===
+assert_eq(id<int>(add_one<int>(99)), 100)
+
+// === Multiple calls to same monomorphized version ===
+assert_eq(id<int>(1), 1)
+assert_eq(id<int>(2), 2)
+assert_eq(id<int>(3), 3)
+
+print("ok")

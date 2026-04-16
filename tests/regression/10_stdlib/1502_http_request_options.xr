@@ -1,0 +1,29 @@
+// Test http request options object construction
+
+import http
+
+@test
+fn test_request_options_object(): void {
+    let options = {
+        url: "http://127.0.0.1:19998/test",
+        method: "POST",
+        headers: {
+            "Content-Type" => "application/json",
+            "X-Custom-Header" => "test-value"
+        },
+        body: '{"key": "value"}',
+        timeout: 5000
+    }
+    assert_eq(options.url, "http://127.0.0.1:19998/test")
+    assert_eq(options.method, "POST")
+    assert(options.headers != null)
+    assert_eq(options.body, '{"key": "value"}')
+    assert_eq(options.timeout, 5000)
+}
+
+@test
+fn test_request_api_exists(): void {
+    assert(http.request != null)
+}
+
+print("All http request options tests passed")

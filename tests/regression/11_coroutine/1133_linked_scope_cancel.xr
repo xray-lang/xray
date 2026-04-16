@@ -1,0 +1,66 @@
+// Test linked scope sibling cancellation: when one child fails,
+// all other children are cancelled and scope throws first error.
+
+fn failing(): int {
+    throw "child error"
+    return 0
+}
+
+fn ok(): int {
+    return 42
+}
+
+fn slow_ok(): int {
+    let x = 0
+    for (let i = 0; i < 100; i++) {
+        x = x + 1
+    }
+    return x
+}
+
+// Test 1: two children, one fails — sibling should be cancelled
+fn test_two_children() {
+    let caught = false
+    try {
+        linked scope {
+            go ok()
+            go failing()
+        }
+    } catch (e) {
+        caught = true
+    }
+    assert(caught, "linked scope should throw when child fails")
+}
+
+// Test 2: slow sibling + failing child
+fn test_slow_sibling() {
+    let caught = false
+    try {
+        linked scope {
+            go slow_ok()
+            go failing()
+        }
+    } catch (e) {
+        caught = true
+    }
+    assert(caught, "linked scope should throw even with slow sibling")
+}
+
+// Test 3: all success — no cancellation, no throw
+fn test_all_success() {
+    let caught = false
+    try {
+        linked scope {
+            go ok()
+            go ok()
+        }
+    } catch (e) {
+        caught = true
+    }
+    assert(!caught, "linked scope with all success should not throw")
+}
+
+test_two_children()
+test_slow_sibling()
+test_all_success()
+print("PASS")

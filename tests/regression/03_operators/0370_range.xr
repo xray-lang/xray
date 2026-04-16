@@ -1,0 +1,104 @@
+// 0370_range.xr
+// 作者：xingleixu@gmail.com
+// 测试：范围运算符
+
+// ===== 基本范围 =====
+
+@test
+fn test_basic_range(): void {
+    let sum = 0
+    for (i in 0..5) {
+        sum = sum + i
+    }
+    assert_eq(sum, 10)  // 0+1+2+3+4
+}
+
+@test
+fn test_range_start_one(): void {
+    let sum = 0
+    for (i in 1..5) {
+        sum = sum + i
+    }
+    assert_eq(sum, 10)  // 1+2+3+4
+}
+
+// ===== 范围边界 =====
+
+@test
+fn test_range_single(): void {
+    let count = 0
+    for (i in 0..1) {
+        count = count + 1
+    }
+    assert_eq(count, 1)
+}
+
+@test
+fn test_range_empty(): void {
+    let count = 0
+    for (i in 5..5) {
+        count = count + 1
+    }
+    assert_eq(count, 0)
+}
+
+// ===== 范围与变量 =====
+
+@test
+fn test_range_variable_end(): void {
+    let n = 5
+    let sum = 0
+    for (i in 0..n) {
+        sum = sum + i
+    }
+    assert_eq(sum, 10)
+}
+
+@test
+fn test_range_both_variables(): void {
+    let start = 2
+    let end = 6
+    let sum = 0
+    for (i in start..end) {
+        sum = sum + i
+    }
+    assert_eq(sum, 14)  // 2+3+4+5
+}
+
+// ===== 范围嵌套 =====
+
+@test
+fn test_nested_ranges(): void {
+    let count = 0
+    for (i in 0..3) {
+        for (j in 0..3) {
+            count = count + 1
+        }
+    }
+    assert_eq(count, 9)
+}
+
+// ===== 范围与数组 =====
+
+@test
+fn test_range_array_index(): void {
+    let arr = [10, 20, 30, 40, 50]
+    let sum = 0
+    for (i in 0..arr.length) {
+        sum = sum + arr[i]
+    }
+    assert_eq(sum, 150)
+}
+
+// ===== 范围计算 =====
+
+@test
+fn test_range_expression_end(): void {
+    let n = 3
+    let sum = 0
+    for (i in 0..(n * 2)) {
+        sum = sum + i
+    }
+    assert_eq(sum, 15)  // 0+1+2+3+4+5
+}
+

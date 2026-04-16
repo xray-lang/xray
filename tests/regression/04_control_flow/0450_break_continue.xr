@@ -1,0 +1,135 @@
+// 0450_break_continue.xr
+// 作者：xingleixu@gmail.com
+// 测试：break 和 continue 语句
+
+// ===== while 中的 break =====
+
+@test
+fn test_while_break(): void {
+    let i = 0
+    let sum = 0
+    while (i < 100) {
+        if (i >= 5) {
+            break
+        }
+        sum = sum + i
+        i = i + 1
+    }
+    assert_eq(sum, 10)  // 0+1+2+3+4
+    assert_eq(i, 5)
+}
+
+// ===== while 中的 continue =====
+
+@test
+fn test_while_continue(): void {
+    let i = 0
+    let sum = 0
+    while (i < 10) {
+        i = i + 1
+        if (i % 2 == 0) {
+            continue
+        }
+        sum = sum + i
+    }
+    assert_eq(sum, 25)  // 1+3+5+7+9
+}
+
+// ===== for 中的 break =====
+
+@test
+fn test_for_break(): void {
+    let sum = 0
+    for (i in 0..100) {
+        if (i >= 5) {
+            break
+        }
+        sum = sum + i
+    }
+    assert_eq(sum, 10)
+}
+
+// ===== for 中的 continue =====
+
+@test
+fn test_for_continue(): void {
+    let sum = 0
+    for (i in 0..10) {
+        if (i % 2 == 0) {
+            continue
+        }
+        sum = sum + i
+    }
+    assert_eq(sum, 25)  // 1+3+5+7+9
+}
+
+// ===== 嵌套循环 break =====
+
+@test
+fn test_nested_break(): void {
+    let count = 0
+    for (i in 0..5) {
+        for (j in 0..5) {
+            if (j >= 2) {
+                break
+            }
+            count = count + 1
+        }
+    }
+    assert_eq(count, 10)  // 5 * 2
+}
+
+// ===== 条件 break =====
+
+@test
+fn test_conditional_break(): void {
+    let arr = [1, 2, 3, -1, 4, 5]
+    let sum = 0
+    for (x in arr) {
+        if (x < 0) {
+            break
+        }
+        sum = sum + x
+    }
+    assert_eq(sum, 6)  // 1+2+3
+}
+
+// ===== 条件 continue =====
+
+@test
+fn test_conditional_continue(): void {
+    let arr = [1, -2, 3, -4, 5]
+    let sum = 0
+    for (x in arr) {
+        if (x < 0) {
+            continue
+        }
+        sum = sum + x
+    }
+    assert_eq(sum, 9)  // 1+3+5
+}
+
+// ===== break 后代码不执行 =====
+
+@test
+fn test_code_after_break(): void {
+    let executed = false
+    for (i in 0..10) {
+        break
+        executed = true
+    }
+    assert_eq(executed, false)
+}
+
+// ===== 空循环体中的 break =====
+
+@test
+fn test_immediate_break(): void {
+    let count = 0
+    while (true) {
+        count = count + 1
+        break
+    }
+    assert_eq(count, 1)
+}
+

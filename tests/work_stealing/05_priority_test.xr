@@ -1,0 +1,113 @@
+/*
+** 05_priority_test.xr - 优先级测试
+** 作者：xingleixu@gmail.com
+**
+** 测试目的：验证高优先级协程是否优先执行
+** 测试方法：同时启动不同优先级的协程，检查执行顺序
+*/
+import time
+print("========== 测试5：优先级测试 ==========")
+/* 测试参数 */
+const COROS_PER_PRIORITY = 10
+const WORK_ITERATIONS = 50000
+/* 增加工作量，让调度器有更多介入机会 */
+/* 记录完成顺序 */
+let completion_order = []
+let order_lock = false
+
+/* 简单的锁标志 */
+fn record_completion(priority_name, id) {
+    /* 等待锁释放 */
+    while (order_lock) {
+        yield
+    }
+    order_lock = true
+    completion_order.push({ "priority": priority_name, "id": id })
+    order_lock = false
+}
+
+/* 工作函数 - 依赖 reduction 自动抢占 */
+fn do_work(priority_name, id) {
+    let sum = 0
+    for (let i = 0; i < WORK_ITERATIONS; i++) {
+        sum = sum + i
+    }
+    record_completion(priority_name, id)
+    return sum
+}
+
+/* 启动不同优先级的协程 */
+print("启动协程（每个优先级 " + string(COROS_PER_PRIORITY) + " 个）...")
+let tasks = []
+/* 先启动高优先级 */
+print("  启动高优先级协程...")
+for (let i = 0; i < COROS_PER_PRIORITY; i++) {
+    let id = i
+    let task = go(priority: Coro.HIGH) do_work("high", id)
+    tasks.push(task)
+}
+/* 再启动普通优先级 */
+print("  启动普通优先级协程...")
+for (let i = 0; i < COROS_PER_PRIORITY; i++) {
+    let id = i
+    let task = go(priority: Coro.NORMAL) do_work("normal", id)
+    tasks.push(task)
+}
+/* 最后启动低优先级 */
+print("  启动低优先级协程...")
+for (let i = 0; i < COROS_PER_PRIORITY; i++) {
+    let id = i
+    let task = go(priority: Coro.LOW) do_work("low", id)
+    tasks.push(task)
+}
+/* 等待所有完成 */
+print("等待所有协程完成...")
+for (let i = 0; i < tasks.length; i++) {
+    await tasks[i]
+}
+/* 分析完成顺序 */
+print("
+完成顺序分析:")
+let high_positions = []
+let normal_positions = []
+let low_positions = []
+for (let i = 0; i < completion_order.length; i++) {
+    let item = completion_order[i]
+    if (item.priority == "high") {
+        high_positions.push(i)
+    } else if (item.priority == "normal") {
+        normal_positions.push(i)
+    } else {
+        low_positions.push(i)
+    }
+}
+
+/* 计算平均完成位置 */
+fn avg_position(positions) {
+    if (positions.length == 0) {
+        return 0
+    }
+    let sum = 0
+    for (let i = 0; i < positions.length; i++) {
+        sum = sum + positions[i]
+    }
+    return float(sum) / float(positions.length)
+}
+
+let high_avg = avg_position(high_positions)
+let normal_avg = avg_position(normal_positions)
+let low_avg = avg_position(low_positions)
+print("  高优先级平均完成位置: " + string(high_avg))
+print("  普通优先级平均完成位置: " + string(normal_avg))
+print("  低优先级平均完成位置: " + string(low_avg))
+/* 验证：高优先级应该平均位置较低（更早完成）*/
+let total_coros = COROS_PER_PRIORITY * 3
+print("
+总协程数: " + string(total_coros))
+print("完成记录数: " + string(completion_order.length))
+if (completion_order.length == total_coros) {
+    print("✓ 所有协程都完成了")
+} else {
+    print("⚠ 部分协程完成记录丢失")
+}
+print("========== 测试5 完成 ==========")

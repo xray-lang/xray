@@ -1,0 +1,23 @@
+// EXPECTED: 42
+// EXPECTED: 3.14
+// Test: Box/Unbox operations (BOX_I64, BOX_F64, UNBOX_I64, UNBOX_F64)
+
+fn pass_through_int(x: int) : int {
+    let arr = [x]
+    return arr[0]
+}
+
+fn pass_through_float(x: float) : float {
+    let arr = [x]
+    return arr[0]
+}
+
+let i = 0
+while (i < 200) {
+    pass_through_int(42)
+    pass_through_float(3.14)
+    i = i + 1
+}
+
+print(pass_through_int(42))
+print(pass_through_float(3.14))

@@ -1,0 +1,253 @@
+// 1180_base64_basic.xr - Base64 module basic tests
+
+import base64
+
+// ===== encode / decode =====
+
+@test
+fn test_encode_basic(): void {
+    let result = base64.encode("Hello, World!")
+    assert_eq(result, "SGVsbG8sIFdvcmxkIQ==")
+}
+
+@test
+fn test_decode_basic(): void {
+    let result = base64.decode("SGVsbG8sIFdvcmxkIQ==")
+    assert_eq(result, "Hello, World!")
+}
+
+@test
+fn test_roundtrip(): void {
+    let original = "xray language test 123!@#"
+    let encoded = base64.encode(original)
+    let decoded = base64.decode(encoded)
+    assert_eq(decoded, original)
+}
+
+@test
+fn test_encode_empty(): void {
+    let result = base64.encode("")
+    assert_eq(result, "")
+}
+
+@test
+fn test_decode_empty(): void {
+    let result = base64.decode("")
+    assert_eq(result, "")
+}
+
+@test
+fn test_encode_single_char(): void {
+    let result = base64.encode("A")
+    assert_eq(result, "QQ==")
+}
+
+@test
+fn test_encode_two_chars(): void {
+    let result = base64.encode("AB")
+    assert_eq(result, "QUI=")
+}
+
+@test
+fn test_encode_three_chars(): void {
+    let result = base64.encode("ABC")
+    assert_eq(result, "QUJD")
+}
+
+@test
+fn test_encode_chinese(): void {
+    let original = "你好世界"
+    let encoded = base64.encode(original)
+    let decoded = base64.decode(encoded)
+    assert_eq(decoded, original)
+}
+
+// ===== URL-safe encode / decode =====
+
+@test
+fn test_encode_url_basic(): void {
+    let original = "Hello, World!"
+    let encoded = base64.encodeUrl(original)
+    assert(encoded != null)
+    // URL-safe should not contain + or /
+    assert_eq(encoded.contains("+"), false)
+    assert_eq(encoded.contains("/"), false)
+    // Should not have padding =
+    assert_eq(encoded.contains("="), false)
+}
+
+@test
+fn test_decode_url_roundtrip(): void {
+    let original = "test data with special chars: +/="
+    let encoded = base64.encodeUrl(original)
+    let decoded = base64.decodeUrl(encoded)
+    assert_eq(decoded, original)
+}
+
+// ===== isValid =====
+
+@test
+fn test_is_valid_true(): void {
+    assert_eq(base64.isValid("SGVsbG8="), true)
+    assert_eq(base64.isValid("QUJD"), true)
+    assert_eq(base64.isValid("QQ=="), true)
+}
+
+@test
+fn test_is_valid_false(): void {
+    assert_eq(base64.isValid("not valid base64!!!"), false)
+}
+
+@test
+fn test_is_valid_empty(): void {
+    assert_eq(base64.isValid(""), true)
+}
+
+// ===== Decode error handling =====
+
+@test
+fn test_decode_invalid_chars(): void {
+    let result = base64.decode("!!!invalid!!!")
+    assert_eq(result, null)
+}
+
+@test
+fn test_decode_single_char(): void {
+    // Single base64 char (6 bits) cannot form a byte
+    let result = base64.decode("A")
+    assert_eq(result, null)
+}
+
+@test
+fn test_decode_excess_padding(): void {
+    // More than 2 padding chars is invalid
+    let result = base64.decode("Q===")
+    assert_eq(result, null)
+}
+
+// ===== isValid length validation =====
+
+@test
+fn test_is_valid_single_char(): void {
+    // len%4 == 1 after stripping padding is structurally invalid
+    assert_eq(base64.isValid("A"), false)
+}
+
+@test
+fn test_is_valid_excess_padding(): void {
+    assert_eq(base64.isValid("Q==="), false)
+}
+
+@test
+fn test_is_valid_two_chars(): void {
+    // len%4 == 2 is valid (encodes 1 byte)
+    assert_eq(base64.isValid("QQ"), true)
+}
+
+@test
+fn test_is_valid_three_chars(): void {
+    // len%4 == 3 is valid (encodes 2 bytes)
+    assert_eq(base64.isValid("QUI"), true)
+}
+
+// ===== URL-safe precise verification =====
+
+@test
+fn test_url_safe_encode_decode_precise(): void {
+    // Data that produces + and / in standard base64
+    let original = "subjects?_d"
+    let std_encoded = base64.encode(original)
+    let url_encoded = base64.encodeUrl(original)
+
+    // URL-safe roundtrip
+    let decoded = base64.decodeUrl(url_encoded)
+    assert_eq(decoded, original)
+
+    // Standard roundtrip
+    let decoded2 = base64.decode(std_encoded)
+    assert_eq(decoded2, original)
+}
+
+// ===== encodeBytes / decodeToBytes =====
+
+@test
+fn test_encode_bytes_basic(): void {
+    let bytes = Bytes(3)
+    bytes[0] = 72   // 'H'
+    bytes[1] = 101  // 'e'
+    bytes[2] = 108  // 'l'
+    let encoded = base64.encodeBytes(bytes)
+    assert_eq(encoded, "SGVs")
+}
+
+@test
+fn test_decode_to_bytes_basic(): void {
+    let bytes = base64.decodeToBytes("SGVs")
+    assert(bytes != null)
+    assert_eq(bytes.length, 3)
+    assert_eq(bytes[0], 72)
+    assert_eq(bytes[1], 101)
+    assert_eq(bytes[2], 108)
+}
+
+@test
+fn test_bytes_roundtrip(): void {
+    let original = Bytes(5)
+    original[0] = 0
+    original[1] = 127
+    original[2] = 255
+    original[3] = 1
+    original[4] = 128
+    let encoded = base64.encodeBytes(original)
+    let decoded = base64.decodeToBytes(encoded)
+    assert(decoded != null)
+    assert_eq(decoded.length, 5)
+    assert_eq(decoded[0], 0)
+    assert_eq(decoded[1], 127)
+    assert_eq(decoded[2], 255)
+    assert_eq(decoded[3], 1)
+    assert_eq(decoded[4], 128)
+}
+
+@test
+fn test_decode_to_bytes_invalid(): void {
+    let result = base64.decodeToBytes("!!!")
+    assert_eq(result, null)
+}
+
+@test
+fn test_encode_bytes_empty(): void {
+    let bytes = Bytes(0)
+    let encoded = base64.encodeBytes(bytes)
+    assert_eq(encoded, "")
+}
+
+// ===== Edge cases =====
+
+@test
+fn test_long_string(): void {
+    let original = "a"
+    let long = ""
+    for (let i = 0; i < 1000; i++) {
+        long = long + original
+    }
+    let encoded = base64.encode(long)
+    let decoded = base64.decode(encoded)
+    assert_eq(decoded, long)
+}
+
+@test
+fn test_binary_like_content(): void {
+    let original = "\t\n\r special chars"
+    let encoded = base64.encode(original)
+    let decoded = base64.decode(encoded)
+    assert_eq(decoded, original)
+}
+
+@test
+fn test_no_padding_decode(): void {
+    // "QQ" without padding should decode same as "QQ=="
+    let with_pad = base64.decode("QQ==")
+    let without_pad = base64.decode("QQ")
+    assert_eq(with_pad, without_pad)
+}

@@ -1,0 +1,5 @@
+// 004_readonly_const_keyword.xr
+// 错误测试：使用 const 关键字声明的只读字段
+// 期望错误：无法修改只读字段
+let cfg: {version,debug} = { "version": "1.0.0", "debug": false }
+cfg.version = "2.0.0"

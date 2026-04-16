@@ -1,0 +1,233 @@
+// 1411_url_parse.xr
+// Test: url module - parse, format, parseQuery, buildQuery,
+//       encodeForm, decodeForm, resolve, join, userinfo, IPv6
+
+import url
+
+// ============================================================
+// Part 1: URL Parsing (Json fields)
+// ============================================================
+
+@test
+fn test_parse_full_url(): void {
+    let r = url.parse("https://example.com:8080/path/to/page?foo=bar#section")
+    assert_eq(r.protocol, "https:")
+    assert_eq(r.hostname, "example.com")
+    assert_eq(r.port, "8080")
+    assert_eq(r.pathname, "/path/to/page")
+    assert_eq(r.search, "?foo=bar")
+    assert_eq(r.hash, "#section")
+    assert_eq(r.host, "example.com:8080")
+    assert_eq(r.origin, "https://example.com:8080")
+}
+
+@test
+fn test_parse_http_url(): void {
+    let r = url.parse("http://www.example.org/index.html")
+    assert_eq(r.protocol, "http:")
+    assert_eq(r.hostname, "www.example.org")
+    assert_eq(r.pathname, "/index.html")
+    assert_eq(r.port, "")
+}
+
+@test
+fn test_parse_with_query(): void {
+    let r = url.parse("https://api.example.com/search?q=hello&limit=10")
+    assert_eq(r.hostname, "api.example.com")
+    assert_eq(r.search, "?q=hello&limit=10")
+}
+
+@test
+fn test_parse_localhost(): void {
+    let r = url.parse("https://localhost")
+    assert_eq(r.hostname, "localhost")
+    assert_eq(r.pathname, "/")
+}
+
+@test
+fn test_parse_ip_with_port(): void {
+    let r = url.parse("http://127.0.0.1:3000/api/v1/users")
+    assert_eq(r.hostname, "127.0.0.1")
+    assert_eq(r.port, "3000")
+    assert_eq(r.pathname, "/api/v1/users")
+}
+
+@test
+fn test_parse_no_path(): void {
+    let r = url.parse("https://example.com")
+    assert_eq(r.hostname, "example.com")
+    assert_eq(r.pathname, "/")
+}
+
+@test
+fn test_parse_hash_only(): void {
+    let r = url.parse("https://example.com#top")
+    assert_eq(r.hash, "#top")
+}
+
+@test
+fn test_parse_query_only(): void {
+    let r = url.parse("https://example.com?key=value")
+    assert_eq(r.search, "?key=value")
+}
+
+// ============================================================
+// Part 2: Userinfo
+// ============================================================
+
+@test
+fn test_parse_userinfo(): void {
+    let r = url.parse("http://user:pass@example.com:8080/path")
+    assert_eq(r.username, "user")
+    assert_eq(r.password, "pass")
+    assert_eq(r.hostname, "example.com")
+    assert_eq(r.port, "8080")
+    assert_eq(r.pathname, "/path")
+}
+
+@test
+fn test_parse_username_only(): void {
+    let r = url.parse("http://admin@example.com/")
+    assert_eq(r.username, "admin")
+    assert_eq(r.password, "")
+    assert_eq(r.hostname, "example.com")
+}
+
+// ============================================================
+// Part 3: IPv6
+// ============================================================
+
+@test
+fn test_parse_ipv6(): void {
+    let r = url.parse("http://[::1]:8080/path")
+    assert_eq(r.hostname, "[::1]")
+    assert_eq(r.port, "8080")
+    assert_eq(r.pathname, "/path")
+}
+
+@test
+fn test_parse_ipv6_no_port(): void {
+    let r = url.parse("http://[2001:db8::1]/")
+    assert_eq(r.hostname, "[2001:db8::1]")
+    assert_eq(r.port, "")
+}
+
+// ============================================================
+// Part 4: format (round-trip)
+// ============================================================
+
+@test
+fn test_format_roundtrip(): void {
+    let orig = "https://example.com:8080/path?q=1#top"
+    let r = url.parse(orig)
+    let rebuilt = url.format(r)
+    assert_eq(rebuilt, orig)
+}
+
+@test
+fn test_format_with_userinfo(): void {
+    let orig = "http://user:pass@example.com/path"
+    let r = url.parse(orig)
+    let rebuilt = url.format(r)
+    assert_eq(rebuilt, orig)
+}
+
+// ============================================================
+// Part 5: parseQuery / buildQuery
+// ============================================================
+
+@test
+fn test_parse_query(): void {
+    let q = url.parseQuery("foo=bar&baz=qux")
+    assert_eq(q.foo, "bar")
+    assert_eq(q.baz, "qux")
+}
+
+@test
+fn test_parse_query_with_leading_question(): void {
+    let q = url.parseQuery("?name=hello&count=10")
+    assert_eq(q.name, "hello")
+    assert_eq(q.count, "10")
+}
+
+@test
+fn test_parse_query_encoded(): void {
+    let q = url.parseQuery("msg=hello+world&key=a%26b")
+    assert_eq(q.msg, "hello world")
+    assert_eq(q.key, "a&b")
+}
+
+@test
+fn test_build_query(): void {
+    let q = url.parseQuery("a=1&b=2")
+    let qs = url.buildQuery(q)
+    // Order may vary in hash map, just check both pairs exist
+    assert_true(qs.contains("a=1"))
+    assert_true(qs.contains("b=2"))
+}
+
+// ============================================================
+// Part 6: encodeForm / decodeForm
+// ============================================================
+
+@test
+fn test_encode_form_space(): void {
+    assert_eq(url.encodeForm("hello world"), "hello+world")
+}
+
+@test
+fn test_decode_form_plus(): void {
+    assert_eq(url.decodeForm("hello+world"), "hello world")
+}
+
+@test
+fn test_encode_decode_consistency(): void {
+    // RFC 3986: encode uses %20 for space, decode does NOT treat + as space
+    assert_eq(url.encode("a b"), "a%20b")
+    assert_eq(url.decode("a+b"), "a+b")  // + stays as +
+    assert_eq(url.decode("a%20b"), "a b")
+}
+
+// ============================================================
+// Part 7: resolve
+// ============================================================
+
+@test
+fn test_resolve_absolute_path(): void {
+    let result = url.resolve("https://example.com/a/b/c", "/new/path")
+    assert_eq(result, "https://example.com/new/path")
+}
+
+@test
+fn test_resolve_relative_path(): void {
+    let result = url.resolve("https://example.com/a/b/c", "d.html")
+    assert_eq(result, "https://example.com/a/b/d.html")
+}
+
+@test
+fn test_resolve_absolute_url(): void {
+    let result = url.resolve("https://example.com/a", "http://other.com/b")
+    assert_eq(result, "http://other.com/b")
+}
+
+// ============================================================
+// Part 8: join
+// ============================================================
+
+@test
+fn test_join_paths(): void {
+    let result = url.join("/api", "v1", "users")
+    assert_eq(result, "/api/v1/users")
+}
+
+@test
+fn test_join_trailing_slash(): void {
+    let result = url.join("/api/", "/v1/", "/users")
+    assert_eq(result, "/api/v1/users")
+}
+
+@test
+fn test_join_single(): void {
+    let result = url.join("/path")
+    assert_eq(result, "/path")
+}

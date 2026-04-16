@@ -1,0 +1,106 @@
+// Demo 3: 4x4 Matrix Operations
+// Scenario: 3D transform matrix math, zero allocation
+// Verify: fixed array [16]float in struct, in params, nested loop, return struct
+
+struct Mat4 {
+    data: [16]float
+}
+
+struct Vec4 {
+    x: float
+    y: float
+    z: float
+    w: float
+}
+
+// Matrix multiply (pure computation, zero allocation)
+fn mat4_mul(a: in Mat4, b: in Mat4): Mat4 {
+    let result = Mat4{}
+    for (i in 0..4) {
+        for (j in 0..4) {
+            let sum = 0.0
+            for (k in 0..4) {
+                sum = sum + a.data[i * 4 + k] * b.data[k * 4 + j]
+            }
+            result.data[i * 4 + j] = sum
+        }
+    }
+    return result
+}
+
+// Matrix * Vector
+fn mat4_transform(m: in Mat4, v: in Vec4): Vec4 {
+    return Vec4{
+        x: m.data[0]*v.x + m.data[1]*v.y + m.data[2]*v.z + m.data[3]*v.w,
+        y: m.data[4]*v.x + m.data[5]*v.y + m.data[6]*v.z + m.data[7]*v.w,
+        z: m.data[8]*v.x + m.data[9]*v.y + m.data[10]*v.z + m.data[11]*v.w,
+        w: m.data[12]*v.x + m.data[13]*v.y + m.data[14]*v.z + m.data[15]*v.w
+    }
+}
+
+// Build identity matrix
+fn mat4_identity(): Mat4 {
+    let m = Mat4{}
+    m.data[0] = 1.0
+    m.data[5] = 1.0
+    m.data[10] = 1.0
+    m.data[15] = 1.0
+    return m
+}
+
+// Build translation matrix
+fn mat4_translate(x: float, y: float, z: float): Mat4 {
+    let m = mat4_identity()
+    m.data[3] = x
+    m.data[7] = y
+    m.data[11] = z
+    return m
+}
+
+// Build scale matrix
+fn mat4_scale(sx: float, sy: float, sz: float): Mat4 {
+    let m = Mat4{}
+    m.data[0] = sx
+    m.data[5] = sy
+    m.data[10] = sz
+    m.data[15] = 1.0
+    return m
+}
+
+// --- Test ---
+
+// Test 1: Identity * anything = anything
+let id = mat4_identity()
+let t = mat4_translate(3.0, 4.0, 5.0)
+let result = mat4_mul(id, t)
+print(result.data[3])   // 3
+print(result.data[7])   // 4
+print(result.data[11])  // 5
+
+// Test 2: Translation * point
+let v = Vec4{x: 1.0, y: 2.0, z: 3.0, w: 1.0}
+let transformed = mat4_transform(t, v)
+print(transformed.x)  // 1 + 3 = 4
+print(transformed.y)  // 2 + 4 = 6
+print(transformed.z)  // 3 + 5 = 8
+print(transformed.w)  // 1
+
+// Test 3: Scale * point
+let s = mat4_scale(2.0, 3.0, 4.0)
+let scaled = mat4_transform(s, v)
+print(scaled.x)  // 2
+print(scaled.y)  // 6
+print(scaled.z)  // 12
+print(scaled.w)  // 1
+
+// Test 4: Compose translate then scale: S * T
+let st = mat4_mul(s, t)
+let composed = mat4_transform(st, Vec4{x: 0.0, y: 0.0, z: 0.0, w: 1.0})
+// S * T * [0,0,0,1] = S * [3,4,5,1] = [6,12,20,1]
+print(composed.x)  // 6
+print(composed.y)  // 12
+print(composed.z)  // 20
+
+// Test 5: fixed array .length
+let m = Mat4{}
+print(m.data.length)  // 16

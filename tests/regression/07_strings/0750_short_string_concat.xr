@@ -1,0 +1,333 @@
+// 0750_short_string_concat.xr
+// 作者：xingleixu@gmail.com
+// 
+// Property 3: 短字符串拼接正确性
+// Validates: Requirements 2.1, 2.2, 5.2
+//
+// 测试短字符串拼接优化的正确性：
+// - 拼接结果长度 < 64 字节时使用栈上缓冲区
+// - 拼接结果长度 >= 64 字节时使用 XrStrBuf
+// - 无论使用哪种路径，拼接结果都应该正确
+//
+// 属性：对于任意两个字符串 A 和 B，无论使用栈上缓冲区还是 XrStrBuf，
+//       拼接结果应该等于 A + B
+
+// ===== 短字符串拼接测试（栈上缓冲区路径）=====
+
+@test
+fn test_short_concat_basic(): void {
+    // **Feature: string-concat-optimization, Property 3: 短字符串拼接正确性**
+    // **Validates: Requirements 2.1, 2.2, 5.2**
+    // 基础短字符串拼接，总长度 < 64
+    let a = "hello"
+    let b = " world"
+    let result = a + b
+    assert_eq(result, "hello world")
+    assert_eq(result.length, 11)
+}
+
+@test
+fn test_short_concat_empty(): void {
+    // 空字符串拼接
+    assert_eq("" + "", "")
+    assert_eq("" + "test", "test")
+    assert_eq("test" + "", "test")
+}
+
+@test
+fn test_short_concat_single_char(): void {
+    // 单字符拼接
+    assert_eq("a" + "b", "ab")
+    assert_eq("x" + "y" + "z", "xyz")
+}
+
+@test
+fn test_short_concat_boundary_62(): void {
+    // 边界测试：总长度 = 62（< 64，使用栈上缓冲区）
+    let a = "a".repeat(31)
+    let b = "b".repeat(31)
+    let result = a + b
+    assert_eq(result.length, 62)
+    assert_eq(result.startsWith("a".repeat(31)), true)
+    assert_eq(result.endsWith("b".repeat(31)), true)
+}
+
+@test
+fn test_short_concat_boundary_63(): void {
+    // 边界测试：总长度 = 63（< 64，使用栈上缓冲区）
+    let a = "a".repeat(32)
+    let b = "b".repeat(31)
+    let result = a + b
+    assert_eq(result.length, 63)
+    assert_eq(result.startsWith("a".repeat(32)), true)
+    assert_eq(result.endsWith("b".repeat(31)), true)
+}
+
+// ===== 长字符串拼接测试（XrStrBuf 路径）=====
+
+@test
+fn test_long_concat_boundary_64(): void {
+    // 边界测试：总长度 = 64（>= 64，使用 XrStrBuf）
+    let a = "a".repeat(32)
+    let b = "b".repeat(32)
+    let result = a + b
+    assert_eq(result.length, 64)
+    assert_eq(result.startsWith("a".repeat(32)), true)
+    assert_eq(result.endsWith("b".repeat(32)), true)
+}
+
+@test
+fn test_long_concat_boundary_65(): void {
+    // 边界测试：总长度 = 65（> 64，使用 XrStrBuf）
+    let a = "a".repeat(33)
+    let b = "b".repeat(32)
+    let result = a + b
+    assert_eq(result.length, 65)
+    assert_eq(result.startsWith("a".repeat(33)), true)
+    assert_eq(result.endsWith("b".repeat(32)), true)
+}
+
+@test
+fn test_long_concat_large(): void {
+    // 大字符串拼接
+    let a = "x".repeat(100)
+    let b = "y".repeat(100)
+    let result = a + b
+    assert_eq(result.length, 200)
+    assert_eq(result.charAt(0), "x")
+    assert_eq(result.charAt(99), "x")
+    assert_eq(result.charAt(100), "y")
+    assert_eq(result.charAt(199), "y")
+}
+
+// ===== 属性测试：拼接正确性 =====
+
+@test
+fn test_property_concat_correctness_short(): void {
+    // 属性：对于任意短字符串，拼接结果应该正确
+    // 测试多种长度组合（总长度 < 64）
+    let test_cases = [
+        ["", ""],
+        ["a", ""],
+        ["", "b"],
+        ["a", "b"],
+        ["hello", "world"],
+        ["abc", "defgh"],
+        ["x".repeat(10), "y".repeat(10)],
+        ["a".repeat(20), "b".repeat(20)],
+        ["x".repeat(30), "y".repeat(30)],
+        ["a".repeat(31), "b".repeat(31)]
+    ]
+    
+    for (let i = 0; i < test_cases.length; i++) {
+        let a = test_cases[i][0]
+        let b = test_cases[i][1]
+        let result = a + b
+        
+        // 验证长度
+        assert_eq(result.length, a.length + b.length)
+        
+        // 验证内容：前半部分是 a，后半部分是 b
+        if (a.length > 0) {
+            assert_eq(result.substring(0, a.length), a)
+        }
+        if (b.length > 0) {
+            assert_eq(result.substring(a.length, a.length + b.length), b)
+        }
+    }
+}
+
+@test
+fn test_property_concat_correctness_long(): void {
+    // 属性：对于任意长字符串，拼接结果应该正确
+    // 测试多种长度组合（总长度 >= 64）
+    let test_cases = [
+        ["a".repeat(32), "b".repeat(32)],
+        ["x".repeat(50), "y".repeat(50)],
+        ["a".repeat(100), "b".repeat(100)],
+        ["x".repeat(10), "y".repeat(60)],
+        ["a".repeat(60), "b".repeat(10)]
+    ]
+    
+    for (let i = 0; i < test_cases.length; i++) {
+        let a = test_cases[i][0]
+        let b = test_cases[i][1]
+        let result = a + b
+        
+        // 验证长度
+        assert_eq(result.length, a.length + b.length)
+        
+        // 验证内容
+        assert_eq(result.substring(0, a.length), a)
+        assert_eq(result.substring(a.length, a.length + b.length), b)
+    }
+}
+
+@test
+fn test_property_concat_consistency(): void {
+    // 属性：无论使用哪种路径，相同输入应该产生相同结果
+    // 测试边界附近的拼接
+    
+    // 短字符串路径（总长度 63）
+    let short_a = "a".repeat(31)
+    let short_b = "b".repeat(32)
+    let short_result = short_a + short_b
+    
+    // 长字符串路径（总长度 64）
+    let long_a = "a".repeat(32)
+    let long_b = "b".repeat(32)
+    let long_result = long_a + long_b
+    
+    // 验证两种路径都产生正确结果
+    assert_eq(short_result.length, 63)
+    assert_eq(long_result.length, 64)
+    
+    // 验证内容正确性
+    assert_eq(short_result.startsWith(short_a), true)
+    assert_eq(short_result.endsWith(short_b), true)
+    assert_eq(long_result.startsWith(long_a), true)
+    assert_eq(long_result.endsWith(long_b), true)
+}
+
+// ===== 链式拼接测试 =====
+
+@test
+fn test_chained_concat_short(): void {
+    // 链式短字符串拼接
+    let result = "a" + "b" + "c" + "d" + "e"
+    assert_eq(result, "abcde")
+}
+
+@test
+fn test_chained_concat_mixed(): void {
+    // 链式拼接，从短到长
+    let result = "x"
+    for (let i = 0; i < 10; i++) {
+        result = result + "y".repeat(10)
+    }
+    assert_eq(result.length, 101)
+    assert_eq(result.charAt(0), "x")
+    assert_eq(result.charAt(100), "y")
+}
+
+// ===== 特殊字符测试 =====
+
+@test
+fn test_concat_with_special_chars(): void {
+    // 包含特殊字符的拼接
+    let a = "hello\n"
+    let b = "world\t"
+    let result = a + b
+    assert_eq(result, "hello\nworld\t")
+}
+
+@test
+fn test_concat_with_unicode(): void {
+    // Unicode 字符拼接
+    let a = "你好"
+    let b = "世界"
+    let result = a + b
+    assert_eq(result, "你好世界")
+}
+
+// ===== 循环拼接测试 =====
+
+@test
+fn test_loop_concat_short(): void {
+    // 循环中的短字符串拼接
+    let result = ""
+    for (let i = 0; i < 10; i++) {
+        result = result + "x"
+    }
+    assert_eq(result, "xxxxxxxxxx")
+    assert_eq(result.length, 10)
+}
+
+@test
+fn test_loop_concat_crossing_threshold(): void {
+    // 循环拼接，跨越阈值边界
+    let result = ""
+    for (let i = 0; i < 100; i++) {
+        result = result + "a"
+    }
+    assert_eq(result.length, 100)
+    assert_eq(result, "a".repeat(100))
+}
+
+// ===== 并发拼接测试 =====
+
+@test
+fn test_concurrent_short_concat(): void {
+    // 多协程并发短字符串拼接
+    fn short_concat_task(id: int): string {
+        let a = "task" + string(id)
+        let b = "_done"
+        return a + b
+    }
+    
+    let n = 20
+    let tasks: Array<Task> = []
+    for (let i = 0; i < n; i++) {
+        tasks.push(go short_concat_task(i))
+    }
+    
+    let results = await.all tasks
+    
+    for (let i = 0; i < n; i++) {
+        assert_eq(results[i], "task" + string(i) + "_done")
+    }
+}
+
+@test
+fn test_concurrent_long_concat(): void {
+    // 多协程并发长字符串拼接
+    fn long_concat_task(id: int): string {
+        let a = "x".repeat(50)
+        let b = "_id" + string(id) + "_" + "y".repeat(50)
+        return a + b
+    }
+    
+    let n = 20
+    let tasks: Array<Task> = []
+    for (let i = 0; i < n; i++) {
+        tasks.push(go long_concat_task(i))
+    }
+    
+    let results = await.all tasks
+    
+    for (let i = 0; i < n; i++) {
+        let result = results[i]
+        assert_eq(result.startsWith("x".repeat(50)), true)
+        assert_eq(result.contains("_id" + string(i) + "_"), true)
+        assert_eq(result.endsWith("y".repeat(50)), true)
+    }
+}
+
+@test
+fn test_concurrent_mixed_concat(): void {
+    // 多协程混合短长字符串拼接
+    fn mixed_concat_task(id: int): string {
+        // 偶数 id 使用短字符串，奇数 id 使用长字符串
+        if (id % 2 == 0) {
+            return "short_" + string(id)
+        } else {
+            return "x".repeat(50) + "_long_" + string(id) + "_" + "y".repeat(50)
+        }
+    }
+    
+    let n = 40
+    let tasks: Array<Task> = []
+    for (let i = 0; i < n; i++) {
+        tasks.push(go mixed_concat_task(i))
+    }
+    
+    let results = await.all tasks
+    
+    for (let i = 0; i < n; i++) {
+        if (i % 2 == 0) {
+            assert_eq(results[i], "short_" + string(i))
+        } else {
+            assert_eq(results[i].contains("_long_" + string(i) + "_"), true)
+        }
+    }
+}

@@ -1,0 +1,32 @@
+// 测试 go { block } 匿名闭包协程
+
+@test
+fn test_go_block(): void {
+    // 基本形式
+    let t1 = go {
+        return 100
+    }
+    print(await t1)  // 100
+    
+    // 多个匿名协程
+    let t2 = go {
+        return 200
+    }
+    let t3 = go {
+        return 300
+    }
+    
+    let results = await [t2, t3]
+    print(results[0])  // 200
+    print(results[1])  // 300
+    
+    print("done")
+}
+
+test_go_block()
+
+// 期望输出：
+// 100
+// 200
+// 300
+// done

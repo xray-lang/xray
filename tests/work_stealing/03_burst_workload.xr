@@ -1,0 +1,58 @@
+/*
+** 03_burst_workload.xr - 突发负载测试
+** 作者：xingleixu@gmail.com
+**
+** 测试目的：验证工作窃取在突发负载下的表现
+** 测试方法：一次性创建大量协程，测试工作窃取的响应能力
+*/
+import time
+print("========== 测试3：突发负载测试 ==========")
+/* 测试参数 */
+const BURST_SIZE = 500
+const WORK_ITERATIONS = 500
+/* 突发创建大量协程 */
+print("突发创建 " + string(BURST_SIZE) + " 个协程...")
+let start_time = time.monotonic()
+let tasks = []
+for (let i = 0; i < BURST_SIZE; i++) {
+    let id = i
+    let task = go fn() {
+        /* 每个协程做一些计算 */
+        let sum = 0
+        for (let j = 0; j < WORK_ITERATIONS; j++) {
+            sum = sum + j * id
+        }
+        return sum
+    }
+    tasks.push(task)
+}
+let create_time = time.monotonic() - start_time
+print("创建耗时: " + string(create_time) + " ms")
+/* 等待所有协程完成 */
+print("等待所有协程完成...")
+let wait_start = time.monotonic()
+for (let i = 0; i < tasks.length; i++) {
+    await tasks[i]
+}
+let wait_time = time.monotonic() - wait_start
+let total_time = time.monotonic() - start_time
+print("执行耗时: " + string(wait_time) + " ms")
+print("总耗时: " + string(total_time) + " ms")
+/* 计算吞吐量 */
+let throughput = float(BURST_SIZE) / (float(total_time) / 1000)
+print("吞吐量: " + string(int(throughput)) + " 协程/秒")
+/* 验证 */
+let all_done = true
+for (let i = 0; i < tasks.length; i++) {
+    if (!tasks[i].done) {
+        all_done = false
+        print("✗ 协程 " + string(i) + " 未完成")
+    }
+}
+if (all_done) {
+    print("
+✓ 突发负载测试通过：所有 " +     string(BURST_SIZE) + " 个协程都完成了")
+} else {
+    throw "突发负载测试失败"
+}
+print("========== 测试3 完成 ==========")

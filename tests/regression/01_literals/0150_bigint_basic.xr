@@ -1,0 +1,74 @@
+// 0150_bigint_basic.xr
+// 作者：xingleixu@gmail.com
+// 测试：BigInt 大整数字面量
+// ===== 基本字面量 =====
+@test
+fn test_zero_bigint(): void {
+    let a = 0n
+    assert_eq(a.toString(), "0")
+}
+
+@test
+fn test_small_bigint(): void {
+    let a = 123n
+    assert_eq(a.toString(), "123")
+}
+
+@test
+fn test_negative_bigint(): void {
+    let a = -456n
+    assert_eq(a.toString(), "-456")
+}
+
+// ===== 大整数 =====
+@test
+fn test_large_bigint(): void {
+    let a = 12345678901234567890n
+    assert_eq(a.toString(), "12345678901234567890")
+}
+
+@test
+fn test_very_large_bigint(): void {
+    let a = 99999999999999999999999999999999n
+    assert_eq(a.toString(), "99999999999999999999999999999999")
+}
+
+// ===== 下划线分隔符 =====
+@test
+fn test_underscore_separator(): void {
+    let a = 1000000000n
+    assert_eq(a.toString(), "1000000000")
+}
+
+// ===== 十六进制 =====
+@test
+fn test_hex_small(): void {
+    let a = 0xFFn
+    assert_eq(a.toString(), "255")
+}
+
+@test
+fn test_hex_large(): void {
+    let a = 0xFFFFFFFFFFFFFFFFn
+    assert_eq(a.toString(), "18446744073709551615")
+}
+
+// ===== 二进制 =====
+@test
+fn test_binary_small(): void {
+    let a = 0b1111n
+    assert_eq(a.toString(), "15")
+}
+
+@test
+fn test_binary_byte(): void {
+    let a = 0b11111111n
+    assert_eq(a.toString(), "255")
+}
+
+// ===== 八进制 =====
+@test
+fn test_octal(): void {
+    let a = 0o777n
+    assert_eq(a.toString(), "511")
+}

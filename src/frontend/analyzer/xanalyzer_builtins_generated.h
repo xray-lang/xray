@@ -1,0 +1,565 @@
+/*
+ * xray - Lightweight typed scripting with native concurrency
+ * https://www.xray-lang.org
+ *
+ * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
+ * Licensed under the MIT License
+ *
+ * xanalyzer_builtins_generated.h - Auto-generated builtin type declarations
+ */
+
+#ifndef XANALYZER_BUILTINS_GENERATED_H
+#define XANALYZER_BUILTINS_GENERATED_H
+
+#include "xanalyzer_builtins.h"
+
+// ======== C Module Declarations ========
+
+// base64 module functions
+static const XaBuiltinMember g_gen_base64_functions[] = {
+    {"encode", "(data: string): string", "Base64 encode", true, false},
+    {"decode", "(data: string): string?", "Base64 decode", true, false},
+    {"encodeUrl", "(data: string): string", "URL-safe base64 encode", true, false},
+    {"decodeUrl", "(data: string): string?", "URL-safe base64 decode", true, false},
+    {"encodeBytes", "(data: Array<uint8>): string", "Encode byte array to Base64", true, false},
+    {"decodeToBytes", "(data: string): Array<uint8>?", "Decode Base64 to byte array", true, false},
+    {"isValid", "(data: string): bool", "Check if valid base64", true, false},
+};
+#define GEN_BASE64_FUNCTION_COUNT 7
+
+// compress module functions
+static const XaBuiltinMember g_gen_compress_functions[] = {
+    {"gzip", "(data: string, level?: int): string?", "Gzip compress", true, false},
+    {"gunzip", "(data: string): string?", "Gzip decompress", true, false},
+    {"isGzip", "(data: string): bool", "Check if gzip data", true, false},
+    {"deflate", "(data: string, level?: int): string?", "Deflate compress", true, false},
+    {"inflate", "(data: string): string?", "Inflate decompress", true, false},
+    {"zlibCompress", "(data: string, level?: int): string?", "Zlib compress", true, false},
+    {"zlibDecompress", "(data: string): string?", "Zlib decompress", true, false},
+    {"isZlib", "(data: string): bool", "Check if zlib data", true, false},
+    {"crc32", "(data: string): int", "Compute CRC-32 checksum", true, false},
+    {"adler32", "(data: string): int", "Compute Adler-32 checksum", true, false},
+};
+#define GEN_COMPRESS_FUNCTION_COUNT 10
+
+// crypto module functions
+static const XaBuiltinMember g_gen_crypto_functions[] = {
+    {"md5", "(data: string): string", "Compute MD5 hash", true, false},
+    {"sha1", "(data: string): string", "Compute SHA-1 hash", true, false},
+    {"sha256", "(data: string): string", "Compute SHA-256 hash", true, false},
+    {"sha512", "(data: string): string", "Compute SHA-512 hash", true, false},
+    {"hmac", "(algo: string, key: string, data: string): string", "Compute HMAC", true, false},
+    {"randomBytes", "(n: int): string", "Generate random bytes", true, false},
+    {"uuid", "(): string", "Generate UUID v4", true, false},
+    {"encrypt", "(key: string, plaintext: string): string", "AES-256-CBC encrypt", true, false},
+    {"decrypt", "(key: string, ciphertext: string): string?", "AES-256-CBC decrypt", true, false},
+    {"timingSafeEqual", "(a: string, b: string): bool", "Constant-time string comparison", true, false},
+};
+#define GEN_CRYPTO_FUNCTION_COUNT 10
+
+// csv module functions
+static const XaBuiltinMember g_gen_csv_functions[] = {
+    {"parse", "(data: string, options?: Json): Array<Array<string>>", "Parse CSV string", true, false},
+    {"parseDetailed", "(data: string, options?: Json): Json", "Parse CSV with headers", true, false},
+    {"parseTsv", "(data: string): Array<Array<string>>", "Parse TSV string", true, false},
+    {"parseAuto", "(data: string): Array<Array<string>>", "Auto-detect delimiter and parse", true, false},
+    {"stringify", "(data: Array<Array<string>>, options?: Json): string", "Convert to CSV string", true, false},
+    {"parseFile", "(path: string, options?: Json): Array<Array<string>>", "Parse CSV file", true, false},
+    {"writeFile", "(path: string, data: Array<Array<string>>, options?: Json): bool", "Write CSV file", true, false},
+};
+#define GEN_CSV_FUNCTION_COUNT 7
+
+// datetime module functions
+static const XaBuiltinMember g_gen_datetime_functions[] = {
+    {"now", "(): DateTime", "Get current local datetime", true, false},
+    {"utc", "(): DateTime", "Get current UTC datetime", true, false},
+    {"create", "(year: int, month?: int, day?: int, hour?: int, minute?: int, second?: int): DateTime", "Create local datetime", true, false},
+    {"createUTC", "(year: int, month?: int, day?: int, hour?: int, minute?: int, second?: int): DateTime", "Create UTC datetime", true, false},
+    {"fromTimestamp", "(ts: int): DateTime", "Create datetime from Unix timestamp (seconds)", true, false},
+    {"fromTimestampMs", "(ts: int): DateTime", "Create datetime from Unix timestamp (milliseconds)", true, false},
+    {"parse", "(s: string, format?: string): DateTime?", "Parse datetime string", true, false},
+    {"offset", "(): int", "Get UTC offset in minutes", true, false},
+    {"format", "(pattern?: string): string", "Format datetime to string", true, false},
+    {"toISOString", "(): string", "Convert to ISO 8601 string", true, false},
+    {"year", "(): int", "Get year", true, false},
+    {"month", "(): int", "Get month (1-12)", true, false},
+    {"day", "(): int", "Get day (1-31)", true, false},
+    {"hour", "(): int", "Get hour (0-23)", true, false},
+    {"minute", "(): int", "Get minute (0-59)", true, false},
+    {"second", "(): int", "Get second (0-59)", true, false},
+    {"millisecond", "(): int", "Get millisecond (0-999)", true, false},
+    {"weekday", "(): int", "Get weekday (0=Sunday)", true, false},
+    {"yearday", "(): int", "Get day of year (1-366)", true, false},
+    {"timestamp", "(): int", "Get Unix timestamp (seconds)", true, false},
+    {"add", "(amount: int, unit: string): DateTime", "Add duration to datetime", true, false},
+    {"diff", "(other: DateTime, unit?: string): int", "Difference between datetimes", true, false},
+    {"toUTC", "(): DateTime", "Convert to UTC", true, false},
+    {"toLocal", "(): DateTime", "Convert to local time", true, false},
+    {"isBefore", "(other: DateTime): bool", "Check if before other datetime", true, false},
+    {"isAfter", "(other: DateTime): bool", "Check if after other datetime", true, false},
+    {"equals", "(other: DateTime): bool", "Check if equal to other datetime", true, false},
+    {"isLeapYear", "(): bool", "Check if leap year", true, false},
+    {"daysInMonth", "(): int", "Get days in current month", true, false},
+};
+#define GEN_DATETIME_FUNCTION_COUNT 29
+
+// encoding module functions
+static const XaBuiltinMember g_gen_encoding_functions[] = {
+    {"hexEncode", "(data: string): string", "Hex encode string to hex", true, false},
+    {"hexDecode", "(hex: string): Array<uint8>?", "Hex decode to bytes", true, false},
+    {"hexDecodeString", "(hex: string): string?", "Hex decode to string", true, false},
+    {"hexValid", "(hex: string): bool", "Check if valid hex string", true, false},
+    {"utf8Valid", "(data: string): bool", "Check if valid UTF-8", true, false},
+    {"utf8Count", "(data: string): int", "Count UTF-8 characters", true, false},
+    {"utf8ByteLength", "(data: string): int", "Get UTF-8 byte length", true, false},
+    {"utf16Encode", "(data: string, endian?: int): Array<uint8>", "UTF-16 encode to bytes", true, false},
+    {"utf16Decode", "(data: Bytes, endian?: int): string?", "UTF-16 decode to string", true, false},
+};
+#define GEN_ENCODING_FUNCTION_COUNT 9
+
+// gc module functions
+static const XaBuiltinMember g_gen_gc_functions[] = {
+    {"collect", "(): int", "Force full GC, return cycle count", true, false},
+    {"step", "(): bool", "Run one incremental GC step, return true if cycle completed", true, false},
+    {"disable", "(): void", "Disable automatic GC", true, false},
+    {"enable", "(): void", "Enable automatic GC", true, false},
+    {"isrunning", "(): bool", "Check if GC is enabled", true, false},
+    {"count", "(): float", "Get memory usage in KB", true, false},
+    {"countb", "(): int", "Get memory usage in bytes", true, false},
+    {"objects", "(): int", "Get total GC object count", true, false},
+    {"gccount", "(): int", "Get completed GC cycle count", true, false},
+    {"debt", "(): int", "Get current GC debt in bytes", true, false},
+    {"state", "(): string", "Get current GC state name", true, false},
+    {"info", "(): Map", "Get detailed GC info as Map", true, false},
+    {"timems", "(): float", "Get cumulative GC time in milliseconds", true, false},
+    {"fragmentation", "(): float", "Get heap fragmentation ratio (0.0-1.0)", true, false},
+    {"setpause", "(pause: int): int", "Set GC pause factor, return old value", true, false},
+    {"setstepmul", "(mul: int): int", "Set GC step multiplier, return old value", true, false},
+};
+#define GEN_GC_FUNCTION_COUNT 16
+
+// http.HttpResponse handle fields
+static const XaBuiltinHandleField g_gen_http_httpresponse_fields[] = {
+    {"status", "int", true},
+    {"statusText", "string", true},
+    {"headers", "Json", true},
+    {"body", "string", true},
+    {"error", "string", true},
+    {"ok", "bool", true},
+};
+
+// http.HttpRequest handle fields
+static const XaBuiltinHandleField g_gen_http_httprequest_fields[] = {
+    {"method", "string", true},
+    {"path", "string", true},
+    {"query", "Json", true},
+    {"headers", "Json", true},
+    {"contentLength", "int", true},
+    {"bodyOffset", "int", true},
+};
+
+// http.DownloadResult handle fields
+static const XaBuiltinHandleField g_gen_http_downloadresult_fields[] = {
+    {"status", "int", true},
+    {"downloaded", "int", true},
+    {"total", "int", true},
+    {"completed", "bool", true},
+    {"error", "string", true},
+};
+
+static const XaBuiltinHandle g_gen_http_handles[] = {
+    {"HttpResponse", g_gen_http_httpresponse_fields, 6},
+    {"HttpRequest", g_gen_http_httprequest_fields, 6},
+    {"DownloadResult", g_gen_http_downloadresult_fields, 5},
+};
+#define GEN_HTTP_HANDLE_COUNT 3
+
+// http module functions
+static const XaBuiltinMember g_gen_http_functions[] = {
+    {"get", "(url: string, options?: Json): HttpResponse", "HTTP GET request", true, false},
+    {"post", "(url: string, body?: string, options?: Json): HttpResponse", "HTTP POST request", true, false},
+    {"put", "(url: string, body?: string, options?: Json): HttpResponse", "HTTP PUT request", true, false},
+    {"delete", "(url: string, options?: Json): HttpResponse", "HTTP DELETE request", true, false},
+    {"request", "(method: string, url: string, options?: Json): HttpResponse", "Generic HTTP request", true, false},
+    {"urlEncode", "(s: string): string", "URL-encode a string", true, false},
+    {"urlDecode", "(s: string): string", "URL-decode a string", true, false},
+    {"route", "(method: string, path: string, handler: fn): void", "Register a route handler", true, false},
+    {"static", "(prefix: string, dir: string): void", "Serve static files from directory", true, false},
+    {"stopServer", "(): void", "Stop the HTTP server", true, false},
+    {"parseRequest", "(data: string): HttpRequest?", "Parse raw HTTP request data", true, false},
+    {"sendResponse", "(fd: int, status: int, headers: Json, body: string): int", "Send HTTP response on fd", true, false},
+    {"download", "(url: string, path: string, options?: Json): DownloadResult", "Download file from URL", true, false},
+    {"getContentLength", "(url: string): int", "Get content length of URL", true, false},
+    {"formDataNew", "(): Json", "Create new multipart form data", true, false},
+    {"formDataAppend", "(form: Json, name: string, value: string): void", "Append field to form data", true, false},
+    {"formDataAppendFile", "(form: Json, name: string, path: string, filename?: string): void", "Append file to form data", true, false},
+    {"formDataPost", "(url: string, form: Json, options?: Json): HttpResponse", "POST multipart form data", true, false},
+    {"setProxy", "(url: string): void", "Set HTTP proxy", true, false},
+    {"clearProxy", "(): void", "Clear HTTP proxy", true, false},
+    {"h2Get", "(url: string, options?: Json): HttpResponse", "HTTP/2 GET request", true, false},
+    {"h2Post", "(url: string, body?: string, options?: Json): HttpResponse", "HTTP/2 POST request", true, false},
+    {"h2Request", "(method: string, url: string, options?: Json): HttpResponse", "Generic HTTP/2 request", true, false},
+};
+#define GEN_HTTP_FUNCTION_COUNT 23
+
+// io.FileStat handle fields
+static const XaBuiltinHandleField g_gen_io_filestat_fields[] = {
+    {"size", "int", true},
+    {"mode", "int", true},
+    {"mtime", "int", true},
+    {"atime", "int", true},
+    {"ctime", "int", true},
+    {"uid", "int", true},
+    {"gid", "int", true},
+    {"isFile", "bool", true},
+    {"isDir", "bool", true},
+    {"isSymlink", "bool", true},
+};
+
+static const XaBuiltinHandle g_gen_io_handles[] = {
+    {"FileStat", g_gen_io_filestat_fields, 10},
+};
+#define GEN_IO_HANDLE_COUNT 1
+
+// io module functions
+static const XaBuiltinMember g_gen_io_functions[] = {
+    {"readFile", "(path: string): string?", "Read entire file as string", true, false},
+    {"readFileBytes", "(path: string): Array<uint8>?", "Read entire file as byte array", true, false},
+    {"writeFile", "(path: string, data: string): bool", "Write string to file", true, false},
+    {"writeFileBytes", "(path: string, data: Array<uint8>): bool", "Write byte array to file", true, false},
+    {"appendFile", "(path: string, data: string): bool", "Append string to file", true, false},
+    {"exists", "(path: string): bool", "Check if path exists", true, false},
+    {"isFile", "(path: string): bool", "Check if path is a file", true, false},
+    {"isDir", "(path: string): bool", "Check if path is a directory", true, false},
+    {"fileSize", "(path: string): int", "Get file size in bytes", true, false},
+    {"remove", "(path: string): bool", "Remove a file", true, false},
+    {"rename", "(old: string, new: string): bool", "Rename a file", true, false},
+    {"mkdir", "(path: string): bool", "Create directory", true, false},
+    {"readDir", "(path: string): Array<string>", "List directory entries", true, false},
+    {"cwd", "(): string", "Get current working directory", true, false},
+    {"chdir", "(path: string): bool", "Change working directory", true, false},
+    {"copyFile", "(src: string, dst: string): bool", "Copy a file", true, false},
+    {"readLines", "(path: string): Array<string>", "Read file as lines", true, false},
+    {"isSymlink", "(path: string): bool", "Check if path is a symlink", true, false},
+    {"stat", "(path: string): FileStat?", "Get file stat info", true, false},
+    {"mkdirp", "(path: string): bool", "Create directory recursively", true, false},
+    {"removeAll", "(path: string): bool", "Remove directory recursively", true, false},
+    {"chmod", "(path: string, mode: int): bool", "Change file permissions", true, false},
+    {"touch", "(path: string): bool", "Create or update file timestamp", true, false},
+    {"symlink", "(target: string, link: string): bool", "Create symbolic link", true, false},
+    {"readlink", "(path: string): string?", "Read symlink target", true, false},
+    {"realpath", "(path: string): string?", "Resolve to absolute path", true, false},
+    {"tempFile", "(): string?", "Create temporary file", true, false},
+    {"tempDir", "(): string?", "Create temporary directory", true, false},
+    {"readDirRecursive", "(path: string): Array<string>", "List directory entries recursively", true, false},
+};
+#define GEN_IO_FUNCTION_COUNT 29
+
+// json module functions
+static const XaBuiltinMember g_gen_json_functions[] = {
+    {"parse", "(s: string): unknown", "Parse JSON string", true, false},
+    {"stringify", "(value: unknown, indent?: int): string", "Convert value to JSON string", true, false},
+    {"isValid", "(s: string): bool", "Check if string is valid JSON", true, false},
+    {"typeof", "(value: unknown): string", "Get JSON type name", true, false},
+    {"tryParse", "(s: string): unknown", "Safe parse, returns {value, error}", true, false},
+    {"keys", "(obj: Json): Array<string>", "Get object keys", true, false},
+    {"values", "(obj: Json): Array<unknown>", "Get object values", true, false},
+};
+#define GEN_JSON_FUNCTION_COUNT 7
+
+// log module functions
+static const XaBuiltinMember g_gen_log_functions[] = {
+    {"debug", "(...args: unknown): void", "Log debug message", true, false},
+    {"info", "(...args: unknown): void", "Log info message", true, false},
+    {"warn", "(...args: unknown): void", "Log warning message", true, false},
+    {"error", "(...args: unknown): void", "Log error message", true, false},
+    {"fatal", "(...args: unknown): void", "Log fatal message", true, false},
+    {"setLevel", "(level: int): void", "Set log level", true, false},
+    {"setFormat", "(format: string): void", "Set log format", true, false},
+    {"setOutput", "(path: string): void", "Set log output file", true, false},
+    {"isEnabled", "(level: int): bool", "Check if log level enabled", true, false},
+    {"enableSource", "(enabled: bool): void", "Enable source location in logs", true, false},
+    {"enableAsync", "(enabled: bool): void", "Enable async logging", true, false},
+    {"flush", "(): void", "Flush log buffer", true, false},
+    {"child", "(...fields: unknown): unknown", "Create child logger", true, false},
+};
+#define GEN_LOG_FUNCTION_COUNT 13
+
+// math module functions
+static const XaBuiltinMember g_gen_math_functions[] = {
+    {"abs", "(x: float): float", "Absolute value (preserves int)", true, false},
+    {"floor", "(x: float): int", "Floor to integer", true, false},
+    {"ceil", "(x: float): int", "Ceiling to integer", true, false},
+    {"round", "(x: float): int", "Round to nearest integer", true, false},
+    {"sqrt", "(x: float): float", "Square root", true, false},
+    {"pow", "(base: float, exp: float): float", "Power", true, false},
+    {"sin", "(x: float): float", "Sine", true, false},
+    {"cos", "(x: float): float", "Cosine", true, false},
+    {"tan", "(x: float): float", "Tangent", true, false},
+    {"asin", "(x: float): float", "Arc sine", true, false},
+    {"acos", "(x: float): float", "Arc cosine", true, false},
+    {"atan", "(x: float): float", "Arc tangent", true, false},
+    {"atan2", "(y: float, x: float): float", "Arc tangent of y/x", true, false},
+    {"log", "(x: float): float", "Natural logarithm", true, false},
+    {"log10", "(x: float): float", "Base-10 logarithm", true, false},
+    {"log2", "(x: float): float", "Base-2 logarithm", true, false},
+    {"exp", "(x: float): float", "Exponential e^x", true, false},
+    {"min", "(...args: float): float", "Minimum (preserves int)", true, false},
+    {"max", "(...args: float): float", "Maximum (preserves int)", true, false},
+    {"clamp", "(x: float, min: float, max: float): float", "Clamp (preserves int)", true, false},
+    {"random", "(): float", "Random float in [0, 1)", true, false},
+    {"randomInt", "(min: int, max: int): int", "Random integer in [min, max]", true, false},
+    {"sign", "(x: float): int", "Sign of value (-1, 0, 1)", true, false},
+    {"sinh", "(x: float): float", "Hyperbolic sine", true, false},
+    {"cosh", "(x: float): float", "Hyperbolic cosine", true, false},
+    {"tanh", "(x: float): float", "Hyperbolic tangent", true, false},
+    {"hypot", "(x: float, y: float): float", "Hypotenuse sqrt(x*x+y*y)", true, false},
+    {"cbrt", "(x: float): float", "Cube root", true, false},
+    {"trunc", "(x: float): int", "Truncate toward zero", true, false},
+    {"fmod", "(x: float, y: float): float", "Floating-point remainder", true, false},
+    {"log1p", "(x: float): float", "log(1+x) accurate for small x", true, false},
+    {"expm1", "(x: float): float", "exp(x)-1 accurate for small x", true, false},
+    {"lerp", "(a: float, b: float, t: float): float", "Linear interpolation", true, false},
+    {"degToRad", "(deg: float): float", "Degrees to radians", true, false},
+    {"radToDeg", "(rad: float): float", "Radians to degrees", true, false},
+    {"isNaN", "(x: float): bool", "Check if NaN", true, false},
+    {"isFinite", "(x: float): bool", "Check if finite", true, false},
+};
+#define GEN_MATH_FUNCTION_COUNT 37
+
+// net.Connection handle fields
+static const XaBuiltinHandleField g_gen_net_connection_fields[] = {
+    {"fd", "int", true},
+    {"type", "string", true},
+    {"tls", "bool", true},
+};
+
+// net.Listener handle fields
+static const XaBuiltinHandleField g_gen_net_listener_fields[] = {
+    {"fd", "int", true},
+    {"type", "string", true},
+    {"port", "int", true},
+};
+
+// net.UdpSocket handle fields
+static const XaBuiltinHandleField g_gen_net_udpsocket_fields[] = {
+    {"fd", "int", true},
+    {"type", "string", true},
+};
+
+static const XaBuiltinHandle g_gen_net_handles[] = {
+    {"Connection", g_gen_net_connection_fields, 3},
+    {"Listener", g_gen_net_listener_fields, 3},
+    {"UdpSocket", g_gen_net_udpsocket_fields, 2},
+};
+#define GEN_NET_HANDLE_COUNT 3
+
+// net module functions
+static const XaBuiltinMember g_gen_net_functions[] = {
+    {"dial", "(host: string, port: int, timeout?: int): Json?", "Dial a TCP connection", true, false},
+    {"listen", "(port: int, backlog?: int): Json?", "Start listening on a port", true, false},
+    {"accept", "(listener: Json): Json?", "Accept a new connection", true, false},
+    {"read", "(conn: Json, maxlen?: int): string?", "Read data from connection", true, false},
+    {"write", "(conn: Json, data: string): int", "Write data to connection", true, false},
+    {"close", "(handle: Json): void", "Close a connection or listener", true, false},
+    {"fd", "(handle: Json): int", "Get fd from handle", true, false},
+    {"lookup", "(hostname: string): string?", "DNS lookup", true, false},
+    {"hasTLS", "(): bool", "Check if TLS support is available", true, false},
+    {"dialTLS", "(host: string, port: int, timeout?: int): Json?", "Dial a TLS connection", true, false},
+    {"upgradeTLS", "(conn: Json, hostname: string): Json?", "Upgrade connection to TLS", true, false},
+    {"udpBind", "(port: int, addr?: string): Json?", "Bind a UDP socket", true, false},
+    {"sendTo", "(handle: Json, data: string, host: string, port: int): int", "Send UDP datagram", true, false},
+    {"recvFrom", "(handle: Json, maxlen?: int): Json?", "Receive UDP datagram", true, false},
+    {"waitIO", "(fd: int, mode: int, timeout?: int): bool", "Wait for I/O ready", true, false},
+    {"closeFd", "(fd: int): void", "Close a file descriptor", true, false},
+    {"listenTcp", "(port: int): int", "Create TCP listen socket", true, false},
+    {"acceptFast", "(fd: int): int", "Non-blocking accept", true, false},
+    {"readFast", "(fd: int, maxlen: int): int", "Non-blocking read", true, false},
+    {"writeFast", "(fd: int, data: string, offset?: int): int", "Non-blocking write", true, false},
+    {"getReadBuffer", "(len: int): string?", "Get read buffer content", true, false},
+    {"connectStart", "(host: string, port: int): int", "Start non-blocking connect", true, false},
+    {"connectFinish", "(fd: int): int", "Check connect result", true, false},
+};
+#define GEN_NET_FUNCTION_COUNT 23
+
+// os module functions
+static const XaBuiltinMember g_gen_os_functions[] = {
+    {"getenv", "(name: string): string?", "Get environment variable", true, false},
+    {"setenv", "(name: string, value: string): bool", "Set environment variable", true, false},
+    {"unsetenv", "(name: string): bool", "Unset environment variable", true, false},
+    {"environ", "(): Map<string, string>", "Get all environment variables", true, false},
+    {"exit", "(code?: int): void", "Exit process", true, false},
+    {"getpid", "(): int", "Get process ID", true, false},
+    {"getcwd", "(): string", "Get current working directory", true, false},
+    {"chdir", "(path: string): bool", "Change working directory", true, false},
+    {"hostname", "(): string", "Get hostname", true, false},
+    {"tmpdir", "(): string", "Get temporary directory path", true, false},
+    {"username", "(): string?", "Get current user name", true, false},
+    {"homedir", "(): string?", "Get user home directory", true, false},
+    {"uid", "(): int", "Get user ID", true, false},
+    {"gid", "(): int", "Get group ID", true, false},
+    {"cpuCount", "(): int", "Get number of CPU cores", true, false},
+    {"totalMemory", "(): int", "Get total system memory in bytes", true, false},
+    {"freeMemory", "(): int", "Get available system memory in bytes", true, false},
+    {"uptime", "(): float", "Get system uptime in seconds", true, false},
+    {"loadavg", "(): Array<float>", "Get system load averages (1, 5, 15 min)", true, false},
+    {"ppid", "(): int", "Get parent process ID", true, false},
+    {"kill", "(pid: int, signal?: int): bool", "Send signal to process", true, false},
+    {"sleep", "(ms: int): void", "Sleep for milliseconds", true, false},
+    {"clock", "(): float", "Get process CPU time in seconds", true, false},
+    {"exec", "(cmd: string): Map<string, unknown>?", "Execute shell command", true, false},
+};
+#define GEN_OS_FUNCTION_COUNT 24
+
+// path module functions
+static const XaBuiltinMember g_gen_path_functions[] = {
+    {"join", "(...parts: string): string", "Join path segments", true, false},
+    {"dirname", "(path: string): string", "Get directory name", true, false},
+    {"basename", "(path: string): string", "Get base name", true, false},
+    {"extname", "(path: string): string", "Get file extension", true, false},
+    {"normalize", "(path: string): string", "Normalize path separators", true, false},
+    {"isAbsolute", "(path: string): bool", "Check if path is absolute", true, false},
+    {"resolve", "(...parts: string): string", "Resolve to absolute path", true, false},
+    {"relative", "(from: string, to: string): string", "Get relative path", true, false},
+    {"parse", "(path: string): Json", "Parse path into components", true, false},
+    {"format", "(obj: Json): string", "Format path from components", true, false},
+};
+#define GEN_PATH_FUNCTION_COUNT 10
+
+// regex module functions
+static const XaBuiltinMember g_gen_regex_functions[] = {
+    {"compile", "(pattern: string, flags?: string): Regex", "Compile a regex pattern", true, false},
+    {"test", "(pattern: Regex, s: string): bool", "Test if pattern matches string", true, false},
+    {"find", "(pattern: Regex, s: string): string?", "Find first match", true, false},
+    {"fullFind", "(pattern: Regex, s: string): Array<string>?", "Full match with captures", true, false},
+    {"count", "(pattern: Regex, s: string): int", "Count matches", true, false},
+    {"findAll", "(pattern: Regex, s: string): Array<string>", "Find all matches", true, false},
+    {"replace", "(pattern: Regex, s: string, replacement: string): string", "Replace first match", true, false},
+    {"replaceAll", "(pattern: Regex, s: string, replacement: string): string", "Replace all matches", true, false},
+    {"split", "(pattern: Regex, s: string): Array<string>", "Split by pattern", true, false},
+    {"escape", "(s: string): string", "Escape regex special chars", true, false},
+    {"isValid", "(pattern: string): bool", "Check if pattern is valid", true, false},
+};
+#define GEN_REGEX_FUNCTION_COUNT 11
+
+// time module functions
+static const XaBuiltinMember g_gen_time_functions[] = {
+    {"now", "(): int", "Current time in milliseconds since epoch", true, false},
+    {"clock", "(): int", "CPU clock time in milliseconds", true, false},
+    {"monotonic", "(): int", "Monotonic time in milliseconds", true, false},
+    {"nanos", "(): int", "Monotonic time in nanoseconds", true, false},
+    {"micros", "(): int", "Monotonic time in microseconds", true, false},
+    {"sleep", "(ms: int): void", "Sleep for milliseconds", true, false},
+};
+#define GEN_TIME_FUNCTION_COUNT 6
+
+// toml module functions
+static const XaBuiltinMember g_gen_toml_functions[] = {
+    {"parse", "(data: string): Json?", "Parse TOML string", true, false},
+    {"parseStrict", "(data: string): Json?", "Parse TOML strictly", true, false},
+    {"stringify", "(value: unknown): string", "Convert to TOML string", true, false},
+    {"parseFile", "(path: string): Json?", "Parse TOML file", true, false},
+    {"writeFile", "(path: string, value: Json): bool", "Write TOML file", true, false},
+};
+#define GEN_TOML_FUNCTION_COUNT 5
+
+// url module functions
+static const XaBuiltinMember g_gen_url_functions[] = {
+    {"encode", "(s: string): string", "RFC 3986 percent-encode", true, false},
+    {"decode", "(s: string): string", "RFC 3986 percent-decode", true, false},
+    {"encodeForm", "(s: string): string", "Form URL encode (space as +)", true, false},
+    {"decodeForm", "(s: string): string", "Form URL decode (+ as space)", true, false},
+    {"parse", "(url: string): Json", "Parse URL into Json object", true, false},
+    {"format", "(obj: Json): string", "Build URL string from Json components", true, false},
+    {"parseQuery", "(qs: string): Json", "Parse query string to Json", true, false},
+    {"buildQuery", "(obj: Json): string", "Build query string from Json", true, false},
+    {"resolve", "(base: string, relative: string): string", "Resolve relative URL", true, false},
+    {"join", "(...parts: string): string", "Join URL path segments", true, false},
+};
+#define GEN_URL_FUNCTION_COUNT 10
+
+// ws.WsConn handle fields
+static const XaBuiltinHandleField g_gen_ws_wsconn_fields[] = {
+    {"wsid", "int", true},
+    {"url", "string", false},
+    {"state", "string", false},
+};
+
+// ws.WsMessage handle fields
+static const XaBuiltinHandleField g_gen_ws_wsmessage_fields[] = {
+    {"data", "string", true},
+    {"binary", "bool", true},
+};
+
+static const XaBuiltinHandle g_gen_ws_handles[] = {
+    {"WsConn", g_gen_ws_wsconn_fields, 3},
+    {"WsMessage", g_gen_ws_wsmessage_fields, 2},
+};
+#define GEN_WS_HANDLE_COUNT 2
+
+// ws module functions
+static const XaBuiltinMember g_gen_ws_functions[] = {
+    {"connect", "(url: string, options?: Json): WsConn?", "Connect to a WebSocket server", true, false},
+    {"send", "(conn: WsConn, data: string, binary?: bool): bool", "Send data over WebSocket connection", true, false},
+    {"recv", "(conn: WsConn, timeout?: int): WsMessage?", "Receive data from WebSocket connection", true, false},
+    {"close", "(conn: WsConn, code?: int, reason?: string?): bool", "Close a WebSocket connection", true, false},
+    {"ping", "(conn: WsConn): bool", "Send a ping frame", true, false},
+    {"state", "(conn: WsConn): string", "Get connection state", true, false},
+    {"isOpen", "(conn: WsConn): bool", "Check if connection is open", true, false},
+};
+#define GEN_WS_FUNCTION_COUNT 7
+
+// xml module functions
+static const XaBuiltinMember g_gen_xml_functions[] = {
+    {"parse", "(data: string, options?: Json): Json?", "Parse XML string", true, false},
+    {"parseDetailed", "(data: string): Json?", "Parse XML with details", true, false},
+    {"parseFile", "(path: string): Json?", "Parse XML file", true, false},
+    {"stringify", "(node: Json, options?: Json): string", "Convert to XML string", true, false},
+    {"writeFile", "(path: string, node: Json): bool", "Write XML file", true, false},
+    {"document", "(): Json", "Create XML document node", true, false},
+    {"element", "(name: string, attrs?: Json): Json", "Create XML element node", true, false},
+    {"text", "(content: string): Json", "Create XML text node", true, false},
+    {"comment", "(content: string): Json", "Create XML comment node", true, false},
+    {"cdata", "(content: string): Json", "Create XML CDATA node", true, false},
+};
+#define GEN_XML_FUNCTION_COUNT 10
+
+// yaml module functions
+static const XaBuiltinMember g_gen_yaml_functions[] = {
+    {"parse", "(data: string): Json?", "Parse YAML string", true, false},
+    {"parseStrict", "(data: string): Json?", "Parse YAML strictly", true, false},
+    {"parseAll", "(data: string): Array<Json>", "Parse all YAML documents", true, false},
+    {"stringify", "(value: unknown): string", "Convert to YAML string", true, false},
+    {"parseFile", "(path: string): Json?", "Parse YAML file", true, false},
+    {"writeFile", "(path: string, value: Json): bool", "Write YAML file", true, false},
+};
+#define GEN_YAML_FUNCTION_COUNT 6
+
+// Module registry
+static const XaBuiltinModule g_gen_builtin_modules[] = {
+    {"base64", g_gen_base64_functions, GEN_BASE64_FUNCTION_COUNT, NULL, 0},
+    {"compress", g_gen_compress_functions, GEN_COMPRESS_FUNCTION_COUNT, NULL, 0},
+    {"crypto", g_gen_crypto_functions, GEN_CRYPTO_FUNCTION_COUNT, NULL, 0},
+    {"csv", g_gen_csv_functions, GEN_CSV_FUNCTION_COUNT, NULL, 0},
+    {"datetime", g_gen_datetime_functions, GEN_DATETIME_FUNCTION_COUNT, NULL, 0},
+    {"encoding", g_gen_encoding_functions, GEN_ENCODING_FUNCTION_COUNT, NULL, 0},
+    {"gc", g_gen_gc_functions, GEN_GC_FUNCTION_COUNT, NULL, 0},
+    {"http", g_gen_http_functions, GEN_HTTP_FUNCTION_COUNT, g_gen_http_handles, GEN_HTTP_HANDLE_COUNT},
+    {"io", g_gen_io_functions, GEN_IO_FUNCTION_COUNT, g_gen_io_handles, GEN_IO_HANDLE_COUNT},
+    {"json", g_gen_json_functions, GEN_JSON_FUNCTION_COUNT, NULL, 0},
+    {"log", g_gen_log_functions, GEN_LOG_FUNCTION_COUNT, NULL, 0},
+    {"math", g_gen_math_functions, GEN_MATH_FUNCTION_COUNT, NULL, 0},
+    {"net", g_gen_net_functions, GEN_NET_FUNCTION_COUNT, g_gen_net_handles, GEN_NET_HANDLE_COUNT},
+    {"os", g_gen_os_functions, GEN_OS_FUNCTION_COUNT, NULL, 0},
+    {"path", g_gen_path_functions, GEN_PATH_FUNCTION_COUNT, NULL, 0},
+    {"regex", g_gen_regex_functions, GEN_REGEX_FUNCTION_COUNT, NULL, 0},
+    {"time", g_gen_time_functions, GEN_TIME_FUNCTION_COUNT, NULL, 0},
+    {"toml", g_gen_toml_functions, GEN_TOML_FUNCTION_COUNT, NULL, 0},
+    {"url", g_gen_url_functions, GEN_URL_FUNCTION_COUNT, NULL, 0},
+    {"ws", g_gen_ws_functions, GEN_WS_FUNCTION_COUNT, g_gen_ws_handles, GEN_WS_HANDLE_COUNT},
+    {"xml", g_gen_xml_functions, GEN_XML_FUNCTION_COUNT, NULL, 0},
+    {"yaml", g_gen_yaml_functions, GEN_YAML_FUNCTION_COUNT, NULL, 0},
+};
+#define GEN_BUILTIN_MODULE_COUNT 22
+
+#endif // XANALYZER_BUILTINS_GENERATED_H

@@ -1,0 +1,37 @@
+/*
+** preempt_test.xr - 协程并发调度测试
+** 作者：xingleixu@gmail.com
+**
+** 测试目的：验证多个协程能够并发执行并通过 Channel 通信
+*/
+import time
+shared const WORKER_COUNT = 4
+shared const ITERATIONS = 3
+shared const resultCh = Channel(WORKER_COUNT)
+
+fn worker(id: int, ch: Channel<int>, iterations: int): void {
+    for (let i = 0; i < iterations; i++) {
+        time.sleep(5)
+    }
+    ch.send(id)
+}
+
+print("启动 " + string(WORKER_COUNT) + " 个协程...")
+for (let i = 0; i < WORKER_COUNT; i++) {
+    go worker(i, resultCh, ITERATIONS)
+}
+/* 收集所有结果 */
+let received = 0
+for (let i = 0; i < WORKER_COUNT; i++) {
+    let id, ok = resultCh.recv()
+    if (ok) {
+        received++
+        print("协程 " + string(id) + " 完成")
+    }
+}
+/* 验证 */
+if (received == WORKER_COUNT) {
+    print("调度测试通过：" + string(received) + "/" + string(WORKER_COUNT) + " 协程完成")
+} else {
+    throw "调度测试失败：只有 " + string(received) + " 个协程完成"
+}

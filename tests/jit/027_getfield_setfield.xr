@@ -1,0 +1,30 @@
+// EXPECTED: 10
+// EXPECTED: 20
+// EXPECTED: 99
+// Test: Object field access (GETFIELD, SETFIELD, GETFIELD_IC)
+
+fn get_x(obj) : int {
+    return obj.x
+}
+
+fn get_y(obj) : int {
+    return obj.y
+}
+
+fn set_x(obj, val: int) {
+    obj.x = val
+}
+
+let p = { "x": 10, "y": 20 }
+
+let i = 0
+while (i < 200) {
+    get_x(p)
+    get_y(p)
+    i = i + 1
+}
+
+print(get_x(p))
+print(get_y(p))
+set_x(p, 99)
+print(get_x(p))

@@ -1,0 +1,144 @@
+// 1161_os_extended.xr - OS module extended tests (user info, sysinfo, exec)
+
+import os
+
+// ===== User Information =====
+
+@test
+fn test_username(): void {
+    let name = os.username()
+    assert(name != null)
+    assert(name.length > 0)
+}
+
+@test
+fn test_homedir(): void {
+    let home = os.homedir()
+    assert(home != null)
+    assert(home.length > 0)
+}
+
+@test
+fn test_uid(): void {
+    let id = os.uid()
+    assert(id >= 0)
+}
+
+@test
+fn test_gid(): void {
+    let id = os.gid()
+    assert(id >= 0)
+}
+
+// ===== System Information =====
+
+@test
+fn test_cpuCount(): void {
+    let n = os.cpuCount()
+    assert(n >= 1)
+}
+
+@test
+fn test_totalMemory(): void {
+    let mem = os.totalMemory()
+    // At least 64MB
+    assert(mem > 64 * 1024 * 1024)
+}
+
+@test
+fn test_freeMemory(): void {
+    let mem = os.freeMemory()
+    assert(mem > 0)
+}
+
+@test
+fn test_uptime(): void {
+    let up = os.uptime()
+    // System must have been running for at least 1 second
+    assert(up > 1.0)
+}
+
+@test
+fn test_loadavg(): void {
+    let avg = os.loadavg()
+    assert(avg != null)
+    assert_eq(avg.length, 3)
+    // Load averages should be non-negative
+    assert(avg[0] >= 0.0)
+    assert(avg[1] >= 0.0)
+    assert(avg[2] >= 0.0)
+}
+
+// ===== Process & Signal =====
+
+@test
+fn test_ppid(): void {
+    let ppid = os.ppid()
+    assert(ppid > 0)
+}
+
+@test
+fn test_clock(): void {
+    let t = os.clock()
+    assert(t >= 0.0)
+}
+
+// ===== Process Execution =====
+
+@test
+fn test_exec_echo(): void {
+    let result = os.exec("echo hello")
+    assert(result != null)
+    let stdout = result.get("stdout")
+    assert_eq(stdout, "hello\n")
+    let code = result.get("exitCode")
+    assert_eq(code, 0)
+}
+
+@test
+fn test_exec_stderr(): void {
+    let result = os.exec("echo error_msg >&2")
+    assert(result != null)
+    let stderr = result.get("stderr")
+    assert_eq(stderr, "error_msg\n")
+    let code = result.get("exitCode")
+    assert_eq(code, 0)
+}
+
+@test
+fn test_exec_exit_code(): void {
+    let result = os.exec("exit 42")
+    assert(result != null)
+    let code = result.get("exitCode")
+    assert_eq(code, 42)
+}
+
+@test
+fn test_exec_command_output(): void {
+    let result = os.exec("printf 'abc'")
+    assert(result != null)
+    let stdout = result.get("stdout")
+    assert_eq(stdout, "abc")
+}
+
+// ===== Edge Cases =====
+
+@test
+fn test_setenv_return_value(): void {
+    let ok = os.setenv("XRAY_TEST_RET", "val")
+    assert_eq(ok, true)
+    os.unsetenv("XRAY_TEST_RET")
+}
+
+@test
+fn test_unsetenv_return_value(): void {
+    os.setenv("XRAY_TEST_UNSET", "val")
+    let ok = os.unsetenv("XRAY_TEST_UNSET")
+    assert_eq(ok, true)
+}
+
+@test
+fn test_chdir_invalid_path(): void {
+    let ok = os.chdir("/nonexistent_xray_test_path_12345")
+    assert_eq(ok, false)
+}

@@ -1,0 +1,115 @@
+// 0390_strict_equality.xr
+// 作者：xingleixu@gmail.com
+// 测试：严格相等运算符 === 和 !==
+// === 是引用相等（指针比较）
+// == 是值相等（深度比较）
+
+// ===== 数组引用相等 =====
+
+@test
+fn test_array_reference_equal(): void {
+    let a = [1, 2, 3]
+    let b = a  // 同一引用
+    assert_eq(a === b, true)
+    assert_eq(a !== b, false)
+}
+
+@test
+fn test_array_value_equal(): void {
+    let a = [1, 2, 3]
+    let b = [1, 2, 3]  // 不同引用，相同值
+    assert_eq(a == b, true)   // 值相等
+    assert_eq(a === b, false) // 引用不等
+}
+
+@test
+fn test_array_different(): void {
+    let a = [1, 2, 3]
+    let b = [1, 2, 4]
+    assert_eq(a == b, false)
+    assert_eq(a === b, false)
+}
+
+// ===== 对象引用相等 =====
+
+@test
+fn test_object_reference_equal(): void {
+    let obj = { x: 10, y: 20 }
+    let ref2 = obj
+    assert_eq(obj === ref2, true)
+}
+
+@test
+fn test_object_value_equal(): void {
+    let a = { x: 10, y: 20 }
+    let b = { x: 10, y: 20 }
+    assert_eq(a == b, true)   // 值相等
+    assert_eq(a === b, false) // 不同对象
+}
+
+// ===== 字符串（interning） =====
+
+@test
+fn test_string_interning(): void {
+    let a = "hello"
+    let b = "hello"
+    // 字符串 interning：相同字符串共享引用
+    assert_eq(a == b, true)
+    assert_eq(a === b, true)
+}
+
+// ===== 基本类型 =====
+
+@test
+fn test_int_equality(): void {
+    let a = 42
+    let b = 42
+    assert_eq(a == b, true)
+    assert_eq(a === b, true)  // 基本类型值即引用
+}
+
+@test
+fn test_null_equality(): void {
+    let a = null
+    let b = null
+    assert_eq(a == b, true)
+    assert_eq(a === b, true)
+}
+
+// ===== 类实例 =====
+
+class Point {
+    x: int
+    y: int
+    constructor(x, y) {
+        this.x = x
+        this.y = y
+    }
+}
+
+@test
+fn test_instance_reference_equal(): void {
+    let p1 = new Point(1, 2)
+    let p2 = p1
+    assert_eq(p1 === p2, true)
+}
+
+@test
+fn test_instance_different_objects(): void {
+    let p1 = new Point(1, 2)
+    let p2 = new Point(1, 2)
+    assert_eq(p1 === p2, false)  // 不同实例
+}
+
+// ===== !== 运算符 =====
+
+@test
+fn test_not_strict_equal(): void {
+    let a = [1, 2]
+    let b = [1, 2]
+    assert_eq(a !== b, true)   // 不同引用
+    
+    let c = a
+    assert_eq(a !== c, false)  // 同一引用
+}
+

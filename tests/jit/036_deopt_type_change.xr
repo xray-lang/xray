@@ -1,0 +1,20 @@
+// EXPECTED: 15
+// EXPECTED: hello world
+// Test: Deopt scenario - function called with different types triggers deopt
+
+fn add_generic(a, b) {
+    return a + b
+}
+
+// Warm up with ints to get JIT compiled
+let i = 0
+while (i < 200) {
+    add_generic(10, 5)
+    i = i + 1
+}
+
+// After JIT, call with int (should work via JIT or deopt)
+print(add_generic(10, 5))
+
+// Call with strings (type mismatch -> deopt to interpreter)
+print(add_generic("hello ", "world"))

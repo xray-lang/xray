@@ -1,0 +1,76 @@
+/*
+** 01_basic_stealing.xr - 基础工作窃取测试
+** 作者：xingleixu@gmail.com
+**
+** 测试目的：验证工作窃取的基本功能正确性
+** 测试方法：创建多个协程，验证所有协程都能执行完成
+*/
+import time
+print("========== 测试1：基础工作窃取 ==========")
+/* 测试参数 */
+const CORO_COUNT = 100
+const WORK_PER_CORO = 1000
+/* 结果收集 */
+let results = []
+let completed = 0
+
+/* 计算密集型工作函数 */
+fn compute_work(id, iterations) {
+    let sum = 0
+    for (let i = 0; i < iterations; i++) {
+        sum = sum + i * id
+    }
+    return sum
+}
+
+/* 启动多个协程 */
+print("启动 " + string(CORO_COUNT) + " 个协程...")
+let start_time = time.monotonic()
+let tasks = []
+for (let i = 0; i < CORO_COUNT; i++) {
+    let coro_id = i
+    let task = go fn() {
+        let result = compute_work(coro_id, WORK_PER_CORO)
+        return { "id": coro_id, "result": result }
+    }
+    tasks.push(task)
+}
+/* 等待所有协程完成 */
+print("等待所有协程完成...")
+for (let i = 0; i < tasks.length; i++) {
+    await tasks[i]
+    let r = tasks[i].result
+    results.push(r)
+    completed = completed + 1
+}
+let end_time = time.monotonic()
+let elapsed = end_time - start_time
+/* 验证结果 */
+print("完成协程数: " + string(completed))
+print("耗时: " + string(elapsed) + " ms")
+/* 检查所有协程都完成了 */
+if (completed == CORO_COUNT) {
+    print("✓ 基础工作窃取测试通过：所有协程都完成了")
+} else {
+    print("✗ 测试失败：有协程未完成")
+    throw "基础工作窃取测试失败"
+}
+/* 验证结果正确性 */
+let all_correct = true
+for (let i = 0; i < results.length; i++) {
+    let r = results[i]
+    let expected = 0
+    for (let j = 0; j < WORK_PER_CORO; j++) {
+        expected = expected + j * r.id
+    }
+    if (r.result != expected) {
+        print("✗ 协程 " + string(r.id) + " 结果错误")
+        all_correct = false
+    }
+}
+if (all_correct) {
+    print("✓ 所有协程计算结果正确")
+} else {
+    throw "计算结果验证失败"
+}
+print("========== 测试1 完成 ==========")

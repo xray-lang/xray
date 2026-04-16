@@ -1,0 +1,106 @@
+/*
+ * xray - Lightweight typed scripting with native concurrency
+ * https://www.xray-lang.org
+ *
+ * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
+ * Licensed under the MIT License
+ *
+ * xclass_system.c - Core class system initialization
+ *
+ * KEY CONCEPT:
+ *   Initialize builtin types: Object (root), containers, primitives, functions, Enum.
+ */
+
+#include "xclass_system.h"
+#include "xclass.h"
+#include "xclass_builder.h"
+#include "../../base/xchecks.h"
+#include "../xisolate_internal.h"
+#include "../../base/xmalloc.h"     
+#include "../value/xvalue.h"   
+#include "../../base/xhashmap.h"       
+#include "xreflect_registry.h"
+#include "xmethod.h"
+#include "xmap_builtins.h"
+#include "../object/xarray_class_init.h"
+#include "../object/xset_class_init.h"
+#include "xstringbuilder_builtins.h"
+#include "xslice_builtins.h"
+#include "../value/xtype_names.h"
+#include <stdio.h>
+#include <string.h>
+
+void xr_core_init(XrayIsolate *X) {
+    XR_DCHECK(X != NULL, "xr_core_init: NULL isolate");
+    X->core = (XrayCoreClasses*)xr_malloc(sizeof(XrayCoreClasses));
+    if (!X->core) {
+        fprintf(stderr, "Fatal: Failed to allocate core classes\n");
+        return;
+    }
+    memset(X->core, 0, sizeof(XrayCoreClasses));
+    
+    // Step 1: Create Object root class
+    X->core->objectClass = xr_class_new(X, CLASS_NAME_OBJECT, NULL);
+    
+    // Step 2: Create builtin type classes (all inherit from Object)
+    X->core->stringClass = xr_class_new(X, TYPE_NAME_STRING, X->core->objectClass);
+    X->core->arrayClass = xr_array_create_class(X, X->core->objectClass);
+    X->core->mapClass = xr_map_create_class(X, X->core->objectClass);
+    X->core->setClass = xr_set_create_class(X, X->core->objectClass);
+    
+    X->core->intClass = xr_class_new(X, TYPE_NAME_INT, X->core->objectClass);
+    X->core->floatClass = xr_class_new(X, TYPE_NAME_FLOAT, X->core->objectClass);
+    X->core->boolClass = xr_class_new(X, TYPE_NAME_BOOL, X->core->objectClass);
+    X->core->nullClass = xr_class_new(X, TYPE_NAME_NULL, X->core->objectClass);
+    X->core->bigintClass = xr_class_new(X, TYPE_NAME_BIGINT, X->core->objectClass);
+    
+    X->core->functionClass = xr_class_new(X, TYPE_NAME_FUNCTION, X->core->objectClass);
+    X->core->closureClass = xr_class_new(X, TYPE_NAME_CLOSURE, X->core->functionClass);
+    X->core->upvalueClass = xr_class_new(X, TYPE_NAME_UPVALUE, X->core->objectClass);
+    X->core->cfunctionClass = xr_class_new(X, TYPE_NAME_CFUNCTION, X->core->functionClass);
+    
+    X->core->enumClass = xr_class_new(X, CLASS_NAME_ENUM, X->core->objectClass);
+    xr_class_mark_abstract(X->core->enumClass);
+    
+    X->core->stringBuilderClass = xr_stringbuilder_create_class(X, X->core->objectClass);
+    xr_isolate_set_native_type_class(X, XR_TSTRINGBUILDER, X->core->stringBuilderClass);
+    X->core->arraySliceClass = xr_array_slice_create_class(X, X->core->objectClass);
+    
+    // Process class with fields
+    {
+        XrClassBuilder *builder = xr_class_builder_new(X, "Process", X->core->objectClass);
+        xr_class_builder_add_field(builder, "file", 0);
+        xr_class_builder_add_field(builder, "args", 0);
+        xr_class_builder_add_field(builder, "dir", 0);
+        X->core->processClass = xr_class_builder_finalize(builder);
+    }
+    
+    // Step 3: Register to reflection system
+    if (X->type_registry) {
+        xr_registry_register_class(X, X->core->objectClass);
+        xr_registry_register_class(X, X->core->stringClass);
+        xr_registry_register_class(X, X->core->arrayClass);
+        xr_registry_register_class(X, X->core->mapClass);
+        xr_registry_register_class(X, X->core->setClass);
+        xr_registry_register_class(X, X->core->intClass);
+        xr_registry_register_class(X, X->core->floatClass);
+        xr_registry_register_class(X, X->core->boolClass);
+        xr_registry_register_class(X, X->core->nullClass);
+        xr_registry_register_class(X, X->core->bigintClass);
+        xr_registry_register_class(X, X->core->functionClass);
+        xr_registry_register_class(X, X->core->closureClass);
+        xr_registry_register_class(X, X->core->upvalueClass);
+        xr_registry_register_class(X, X->core->cfunctionClass);
+        xr_registry_register_class(X, X->core->enumClass);
+        xr_registry_register_class(X, X->core->stringBuilderClass);
+        xr_registry_register_class(X, X->core->arraySliceClass);
+    }
+}
+
+void xr_core_free(XrayIsolate *X) {
+    if (!X || !X->core) return;
+    
+    // Core classes are GC-managed, just free the container
+    xr_free(X->core);
+    X->core = NULL;
+}

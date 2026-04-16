@@ -1,0 +1,162 @@
+// 0320_logical.xr
+// 作者：xingleixu@gmail.com
+// 测试：逻辑运算符
+
+// ===== AND (&&) =====
+
+@test
+fn test_and_truth_table(): void {
+    assert_eq(true && true, true)
+    assert_eq(true && false, false)
+    assert_eq(false && true, false)
+    assert_eq(false && false, false)
+}
+
+@test
+fn test_and_with_expressions(): void {
+    assert_eq((5 > 3) && (2 < 4), true)
+    assert_eq((5 > 3) && (2 > 4), false)
+}
+
+@test
+fn test_and_short_circuit(): void {
+    let called = false
+    fn sideEffect(): bool {
+        called = true
+        return true
+    }
+    
+    // false && ... 不会执行右侧
+    let result = false && sideEffect()
+    assert_eq(result, false)
+    assert_eq(called, false)
+}
+
+@test
+fn test_and_chain(): void {
+    assert_eq(true && true && true, true)
+    assert_eq(true && true && false, false)
+    assert_eq(true && false && true, false)
+}
+
+// ===== OR (||) =====
+
+@test
+fn test_or_truth_table(): void {
+    assert_eq(true || true, true)
+    assert_eq(true || false, true)
+    assert_eq(false || true, true)
+    assert_eq(false || false, false)
+}
+
+@test
+fn test_or_with_expressions(): void {
+    assert_eq((5 > 10) || (2 < 4), true)
+    assert_eq((5 > 10) || (2 > 4), false)
+}
+
+@test
+fn test_or_short_circuit(): void {
+    let called = false
+    fn sideEffect(): bool {
+        called = true
+        return true
+    }
+    
+    // true || ... 不会执行右侧
+    let result = true || sideEffect()
+    assert_eq(result, true)
+    assert_eq(called, false)
+}
+
+@test
+fn test_or_chain(): void {
+    assert_eq(false || false || true, true)
+    assert_eq(false || false || false, false)
+}
+
+// ===== NOT (!) =====
+
+@test
+fn test_not_basic(): void {
+    assert_eq(!true, false)
+    assert_eq(!false, true)
+}
+
+@test
+fn test_not_double(): void {
+    assert_eq(!!true, true)
+    assert_eq(!!false, false)
+}
+
+@test
+fn test_not_expression(): void {
+    assert_eq(!(5 > 3), false)
+    assert_eq(!(5 < 3), true)
+}
+
+@test
+fn test_not_truthy(): void {
+    assert_eq(!0, true)       // 0 是假
+    assert_eq(!1, false)      // 非零是真
+    assert_eq(!"", true)      // 空字符串是假
+    assert_eq(!"hi", false)   // 非空是真
+    assert_eq(!null, true)    // null 是假
+}
+
+// ===== 组合 =====
+
+@test
+fn test_and_or_combined(): void {
+    assert_eq(true && true || false, true)
+    assert_eq(false || true && true, true)
+    assert_eq((true || false) && true, true)
+}
+
+@test
+fn test_not_and(): void {
+    assert_eq(!(true && false), true)
+    assert_eq(!true && false, false)
+}
+
+@test
+fn test_not_or(): void {
+    assert_eq(!(true || false), false)
+    assert_eq(!true || false, false)
+    assert_eq(!false || true, true)
+}
+
+// ===== 优先级 =====
+
+@test
+fn test_precedence_not_highest(): void {
+    // ! 优先级最高
+    assert_eq(!true && true, false)
+    assert_eq(!false && true, true)
+}
+
+@test
+fn test_precedence_and_before_or(): void {
+    // && 优先级高于 ||
+    assert_eq(true || false && false, true)   // true || (false && false)
+    assert_eq(false || true && true, true)    // false || (true && true)
+}
+
+// ===== 边界条件 =====
+
+@test
+fn test_with_null(): void {
+    // && / || always return bool (not the original operand)
+    assert_eq(null || "default", true)
+    assert_eq("value" || "default", true)
+    assert_eq(null && "value", false)
+}
+
+@test
+fn test_complex_condition(): void {
+    let x = 5
+    let y = 10
+    assert_eq(x > 0 && y > 0 && x < y, true)
+    assert_eq(x < 0 || y < 0 || x > y, false)
+}
+

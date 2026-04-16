@@ -1,0 +1,156 @@
+// 0210_scope.xr
+// 作者：xingleixu@gmail.com
+// 测试：变量作用域
+// ===== 块作用域 =====
+@test
+fn test_block_scope_basic(): void {
+    let x = 1
+{
+        let y = 2
+        assert_eq(x, 1)
+        // 外层可见
+        assert_eq(y, 2)
+    }
+    assert_eq(x, 1)
+}
+
+@test
+fn test_nested_blocks(): void {
+    let a = 1
+{
+        let b = 2
+{
+            let c = 3
+            assert_eq(a + b + c, 6)
+        }
+        assert_eq(a + b, 3)
+    }
+    assert_eq(a, 1)
+}
+
+// ===== 变量遮蔽 =====
+@test
+fn test_shadow_same_scope_different_block(): void {
+    let x = 10
+{
+        let x = 20
+        // 遮蔽外层 x
+        assert_eq(x, 20)
+{
+            let x = 30
+            // 再次遮蔽
+            assert_eq(x, 30)
+        }
+        assert_eq(x, 20)
+    }
+    assert_eq(x, 10)
+}
+
+@test
+fn test_shadow_with_different_type(): void {
+    let x = 10
+    // int
+{
+        let x = "hello"
+        // string（遮蔽）
+        assert_eq(x, "hello")
+    }
+    assert_eq(x, 10)
+}
+
+// ===== 函数作用域 =====
+@test
+fn test_function_scope(): void {
+    let x = 100
+    fn inner(): int {
+        let x = 200
+        return x
+    }
+    assert_eq(inner(), 200)
+    assert_eq(x, 100)
+}
+
+@test
+fn test_closure_captures_outer(): void {
+    let x = 10
+    fn inner(): int {
+        return x
+    }
+    assert_eq(inner(), 10)
+}
+
+@test
+fn test_closure_modifies_outer(): void {
+    let x = 10
+    fn modify(): void {
+        x = 20
+    }
+    modify()
+    assert_eq(x, 20)
+}
+
+// ===== 循环作用域 =====
+@test
+fn test_for_loop_scope(): void {
+    let sum = 0
+    for (let i = 0; i < 3; i++) {
+        sum += i
+    }
+    assert_eq(sum, 3)
+}
+
+@test
+fn test_while_loop_scope(): void {
+    let i = 0
+    let sum = 0
+    while (i < 3) {
+        let temp = i * 2
+        sum += temp
+        i++
+    }
+    assert_eq(sum, 6)
+}
+
+// ===== if 作用域 =====
+@test
+fn test_if_scope(): void {
+    let result = 0
+    if (true) {
+        let x = 10
+        result = x
+    }
+    assert_eq(result, 10)
+}
+
+@test
+fn test_if_else_scope(): void {
+    let result = 0
+    let condition = false
+    if (condition) {
+        let x = 10
+        result = x
+    } else {
+        let y = 20
+        result = y
+    }
+    assert_eq(result, 20)
+}
+
+// ===== 边界条件 =====
+@test
+fn test_deeply_nested(): void {
+    let a = 1
+{
+        let b = 2
+{
+            let c = 3
+{
+                let d = 4
+{
+                    let e = 5
+                    assert_eq(a + b + c + d + e, 15)
+                }
+            }
+        }
+    }
+}

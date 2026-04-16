@@ -1,0 +1,96 @@
+// 协程系统综合示例
+
+// 生产者-消费者模式
+fn producer(ch: Channel<int>, id: int, count: int): int {
+    let i = 0
+    while (i < count) {
+        ch.trySend(id * 100 + i)
+        i++
+    }
+    return id
+}
+
+fn consumer(ch: Channel<int>, expected: int): int {
+    let received = 0
+    let i = 0
+    while (i < expected) {
+        let msg, ok = ch.tryRecv()
+        if (ok) {
+            received = received + 1
+        }
+        i++
+    }
+    return received
+}
+
+@test
+fn test_producer_consumer(): void {
+    shared const ch = Channel(10)
+    
+    // 启动多个生产者
+    let p1 = go producer(ch, 1, 3)
+    let p2 = go producer(ch, 2, 3)
+    
+    // 等待所有生产者完成
+    let producer_ids = await [p1, p2]
+    print(producer_ids[0])  // 1
+    print(producer_ids[1])  // 2
+    
+    // 消费者获取消息
+    let c1 = go consumer(ch, 6)
+    let received = await c1
+    print(received)  // 6
+}
+
+// 资源管理示例
+fn cleanup(name: string): void {
+    print(name)
+}
+
+@test
+fn test_defer(): void {
+    defer cleanup("resource1")
+    defer cleanup("resource2")
+    print("working")
+    // 函数结束时按 LIFO 执行 defer
+}
+
+// select 多路复用示例
+@test
+fn test_select(): void {
+    shared const ch1 = Channel(1)
+    shared const ch2 = Channel(1)
+    
+    ch1.trySend(100)
+    
+    select {
+        msg from ch1 => { print(msg) }
+        msg from ch2 => { print(msg) }
+        _ => { print("default") }
+    }
+}
+
+// 运行所有测试
+print("=== Producer-Consumer ===")
+test_producer_consumer()
+
+print("=== Defer ===")
+test_defer()
+
+print("=== Select ===")
+test_select()
+
+print("=== Done ===")
+
+// 期望输出：
+// === Producer-Consumer ===
+// 1
+// 2
+// 6
+// === Defer ===
+// working
+// resource2
+// resource1
+// === Select ===
+// 100
+// === Done ===

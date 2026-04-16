@@ -1,0 +1,94 @@
+/*
+** 02_fairness_test.xr - 工作窃取公平性测试
+** 作者：xingleixu@gmail.com
+**
+** 测试目的：验证工作窃取的公平性
+** 测试方法：启动多个计算密集型协程，检查执行次数是否均衡
+*/
+import time
+print("========== 测试2：工作窃取公平性 ==========")
+/* 测试参数 */
+const CORO_COUNT = 8
+const TEST_DURATION_MS = 200
+/* 每个协程的执行计数 */
+let counts = []
+for (let i = 0; i < CORO_COUNT; i++) {
+    counts.push(0)
+}
+let done = false
+/* 启动计算密集型协程 */
+print("启动 " + string(CORO_COUNT) + " 个计算密集型协程...")
+let tasks = []
+for (let i = 0; i < CORO_COUNT; i++) {
+    let idx = i
+    let task = go fn() {
+        while (!done) {
+            /* 模拟计算工作 */
+            let sum = 0
+            for (let j = 0; j < 100; j++) {
+                sum = sum + j
+            }
+            counts[idx] = counts[idx] + 1
+        }
+        return counts[idx]
+    }
+    tasks.push(task)
+}
+/* 等待测试时间 */
+print("运行 " + string(TEST_DURATION_MS) + " ms...")
+time.sleep(TEST_DURATION_MS)
+/* 停止所有协程 */
+done = true
+time.sleep(20)
+/* 给协程时间响应 done 标志 */
+/* 分析结果 */
+print("
+各协程执行次数:")
+let total = 0
+let min_count = counts[0]
+let max_count = counts[0]
+for (let i = 0; i < CORO_COUNT; i++) {
+    print("  协程 " + string(i) + ": " + string(counts[i]) + " 次")
+    total = total + counts[i]
+    if (counts[i] < min_count) {
+        min_count = counts[i]
+    }
+    if (counts[i] > max_count) {
+        max_count = counts[i]
+    }
+}
+let avg = total / CORO_COUNT
+print("
+统计:")
+print("  总执行次数: " + string(total))
+print("  平均: " + string(avg))
+print("  最小: " + string(min_count))
+print("  最大: " + string(max_count))
+/* 计算公平性指标 */
+let ratio = 1
+if (min_count > 0) {
+    ratio = float(max_count) / float(min_count)
+}
+print("  最大/最小比: " + string(ratio))
+/* 验证公平性：比例不应超过 10 倍 */
+if (ratio <= 10) {
+    print("
+✓ 公平性测试通过：执行次数相对均衡")
+} else {
+    print("
+⚠ 公平性警告：执行次数差异较大")
+}
+/* 验证所有协程都执行了 */
+let all_executed = true
+for (let i = 0; i < CORO_COUNT; i++) {
+    if (counts[i] == 0) {
+        all_executed = false
+        print("✗ 协程 " + string(i) + " 未执行")
+    }
+}
+if (all_executed) {
+    print("✓ 所有协程都获得了执行机会")
+} else {
+    throw "有协程未执行"
+}
+print("========== 测试2 完成 ==========")

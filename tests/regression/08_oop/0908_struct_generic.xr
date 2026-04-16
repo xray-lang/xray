@@ -1,0 +1,56 @@
+// Test: generic struct with monomorphization
+// Expected: generic struct works with type params, value semantics, methods
+
+struct Pair<A, B> {
+    first: A
+    second: B
+
+    toString(): string {
+        return "(${this.first}, ${this.second})"
+    }
+}
+
+// === int, string instantiation ===
+let p1 = Pair<int, string>{first: 42, second: "hello"}
+assert(p1.first == 42)
+assert(p1.second == "hello")
+assert(p1.toString() == "(42, hello)")
+
+// === Value semantics (deep copy) ===
+let p2 = p1
+p2.first = 99
+p2.second = "world"
+assert(p1.first == 42)
+assert(p1.second == "hello")
+assert(p2.first == 99)
+assert(p2.second == "world")
+
+// === float, bool instantiation ===
+let p3 = Pair<float, bool>{first: 3.14, second: true}
+assert(p3.first == 3.14)
+assert(p3.second == true)
+assert(p3.toString() == "(3.14, true)")
+
+// === Wrapper struct ===
+struct Wrapper<T> {
+    value: T
+    label: string
+
+    describe(): string {
+        return "${this.label}: ${this.value}"
+    }
+}
+
+let w1 = Wrapper<int>{value: 100, label: "score"}
+assert(w1.describe() == "score: 100")
+
+let w2 = Wrapper<string>{value: "Alice", label: "name"}
+assert(w2.describe() == "name: Alice")
+
+// === Value semantics on wrapper ===
+let w3 = w1
+w3.value = 200
+assert(w1.value == 100)
+assert(w3.value == 200)
+
+print("ok")

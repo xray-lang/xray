@@ -1,0 +1,15 @@
+// EXPECTED: 5050
+// Test: Tail call optimization (TAILCALL / LOOP_BACK) in JIT
+
+fn sum_tail(n: int, acc: int) : int {
+    if (n <= 0) { return acc }
+    return sum_tail(n - 1, acc + n)
+}
+
+let i = 0
+while (i < 200) {
+    sum_tail(100, 0)
+    i = i + 1
+}
+
+print(sum_tail(100, 0))

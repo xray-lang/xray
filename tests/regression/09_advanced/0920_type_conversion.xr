@@ -1,0 +1,95 @@
+// 0920_type_conversion.xr
+// 作者：xingleixu@gmail.com
+// 测试：类型转换
+
+// ===== 转为字符串 =====
+
+@test
+fn test_int_to_string(): void {
+    let x = 42
+    let s = string(x)
+    assert_eq(s, "42")
+    assert_eq(typeof(s), Type.string)
+}
+
+@test
+fn test_float_to_string(): void {
+    let x = 3.14
+    let s = string(x)
+    assert_eq(s.startsWith("3.14"), true)
+}
+
+@test
+fn test_bool_to_string(): void {
+    assert_eq(string(true), "true")
+    assert_eq(string(false), "false")
+}
+
+// ===== 转为整数 =====
+
+@test
+fn test_string_to_int(): void {
+    assert_eq(int("42"), 42)
+    assert_eq(int("-100"), -100)
+    assert_eq(int("0"), 0)
+}
+
+@test
+fn test_float_to_int(): void {
+    assert_eq(int(3.7), 3)
+    assert_eq(int(-2.9), -2)
+}
+
+@test
+fn test_bool_to_int(): void {
+    assert_eq(int(true), 1)
+    assert_eq(int(false), 0)
+}
+
+// ===== 转为浮点数 =====
+
+@test
+fn test_string_to_float(): void {
+    let f = float("3.14")
+    assert_eq(f > 3.13, true)
+    assert_eq(f < 3.15, true)
+}
+
+@test
+fn test_int_to_float(): void {
+    let f = float(42)
+    assert_eq(f, 42.0)
+}
+
+// ===== 转为布尔值 =====
+
+@test
+fn test_int_to_bool(): void {
+    assert_eq(bool(0), false)
+    assert_eq(bool(1), true)
+    assert_eq(bool(-1), true)
+}
+
+@test
+fn test_string_to_bool(): void {
+    assert_eq(bool(""), false)
+    assert_eq(bool("hello"), true)
+}
+
+@test
+fn test_null_to_bool(): void {
+    assert_eq(bool(null), false)
+}
+
+// ===== 数组转换 =====
+
+@test
+fn test_array_unique(): void {
+    let arr = [1, 2, 2, 3, 3, 3]
+    let s = #[1, 2, 3]  // 手动去重
+    assert_eq(s.length, 3)
+    assert_eq(s.has(1), true)
+    assert_eq(s.has(2), true)
+    assert_eq(s.has(3), true)
+}
+

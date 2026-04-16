@@ -1,0 +1,7 @@
+test1: fast task with timeout
+  result: 42
+test2: immediate completion
+  result: 42
+test3: already done task
+  result: 42
+all tests passed

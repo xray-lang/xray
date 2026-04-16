@@ -1,0 +1,340 @@
+import json
+
+// 1005_json_special.xr
+// 作者：xingleixu@gmail.com
+// 测试：JSON 特殊值和边界情况测试
+// 借鉴：simdjson 的特殊值测试
+
+// ===== null 值测试 =====
+
+@test
+fn test_null_standalone(): void {
+    assert_eq(json.parse("null"), null)
+}
+
+@test
+fn test_null_in_array(): void {
+    let arr = json.parse("[null, null, null]")
+    assert_eq(arr.length, 3)
+    assert_eq(arr[0], null)
+    assert_eq(arr[1], null)
+    assert_eq(arr[2], null)
+}
+
+@test
+fn test_null_in_object(): void {
+    let obj = json.parse("{\"value\": null}")
+    assert_eq(obj.value, null)
+}
+
+@test
+fn test_null_mixed(): void {
+    let data = json.parse("{\"a\": null, \"b\": 1, \"c\": null, \"d\": \"text\"}")
+    assert_eq(data.a, null)
+    assert_eq(data.b, 1)
+    assert_eq(data.c, null)
+    assert_eq(data.d, "text")
+}
+
+// ===== boolean 值测试 =====
+
+@test
+fn test_true_standalone(): void {
+    assert_eq(json.parse("true"), true)
+}
+
+@test
+fn test_false_standalone(): void {
+    assert_eq(json.parse("false"), false)
+}
+
+@test
+fn test_booleans_in_array(): void {
+    let arr = json.parse("[true, false, true, false]")
+    assert_eq(arr[0], true)
+    assert_eq(arr[1], false)
+    assert_eq(arr[2], true)
+    assert_eq(arr[3], false)
+}
+
+@test
+fn test_booleans_in_object(): void {
+    let obj = json.parse("{\"enabled\": true, \"disabled\": false}")
+    assert_eq(obj.enabled, true)
+    assert_eq(obj.disabled, false)
+}
+
+// ===== 空白处理测试 =====
+
+@test
+fn test_whitespace_before(): void {
+    assert_eq(json.parse("  42"), 42)
+    assert_eq(json.parse("\n42"), 42)
+    assert_eq(json.parse("\t42"), 42)
+    assert_eq(json.parse("\r\n42"), 42)
+}
+
+@test
+fn test_whitespace_after(): void {
+    assert_eq(json.parse("42  "), 42)
+    assert_eq(json.parse("42\n"), 42)
+    assert_eq(json.parse("42\t"), 42)
+}
+
+@test
+fn test_whitespace_both(): void {
+    assert_eq(json.parse("  42  "), 42)
+    assert_eq(json.parse("\n\t42\t\n"), 42)
+}
+
+@test
+fn test_whitespace_in_array(): void {
+    let arr = json.parse("[  1  ,  2  ,  3  ]")
+    assert_eq(arr.length, 3)
+    assert_eq(arr[0], 1)
+    assert_eq(arr[1], 2)
+    assert_eq(arr[2], 3)
+}
+
+@test
+fn test_whitespace_in_object(): void {
+    let obj = json.parse("{  \"key\"  :  \"value\"  }")
+    assert_eq(obj.key, "value")
+}
+
+@test
+fn test_multiline_json(): void {
+    let jsonStr = "{\n  \"name\": \"Alice\",\n  \"age\": 30\n}"
+    let obj = json.parse(jsonStr)
+    assert_eq(obj.name, "Alice")
+    assert_eq(obj.age, 30)
+}
+
+// ===== 空集合测试 =====
+
+@test
+fn test_empty_array(): void {
+    let arr = json.parse("[]")
+    assert_eq(arr.length, 0)
+}
+
+@test
+fn test_empty_object(): void {
+    let obj = json.parse("{}")
+    assert_eq(obj != null, true)
+}
+
+@test
+fn test_empty_string(): void {
+    let s = json.parse("\"\"")
+    assert_eq(s, "")
+    assert_eq(s.length, 0)
+}
+
+@test
+fn test_nested_empty(): void {
+    let data = json.parse("{\"arr\": [], \"obj\": {}, \"str\": \"\"}")
+    assert_eq(data.arr.length, 0)
+    assert_eq(data.str, "")
+}
+
+// ===== 数字零测试 =====
+
+@test
+fn test_zero_integer(): void {
+    assert_eq(json.parse("0"), 0)
+}
+
+@test
+fn test_zero_float(): void {
+    assert_eq(json.parse("0.0"), 0.0)
+}
+
+@test
+fn test_negative_zero(): void {
+    let nz = json.parse("-0")
+    assert_eq(nz, 0)  // -0 == 0
+}
+
+@test
+fn test_zero_exponent(): void {
+    assert_eq(json.parse("0e0"), 0.0)
+    assert_eq(json.parse("0e10"), 0.0)
+    assert_eq(json.parse("0e-10"), 0.0)
+}
+
+// ===== 特殊数字格式 =====
+
+@test
+fn test_integer_as_float(): void {
+    // 整数形式的浮点数
+    assert_eq(json.parse("1.0"), 1.0)
+    assert_eq(json.parse("100.0"), 100.0)
+}
+
+@test
+fn test_float_no_integer_part(): void {
+    // 小数部分开头
+    assert_eq(json.parse("0.5"), 0.5)
+    assert_eq(json.parse("0.123"), 0.123)
+}
+
+@test
+fn test_exponent_only(): void {
+    // 只有指数
+    assert_eq(json.parse("1e0"), 1.0)
+    assert_eq(json.parse("5E0"), 5.0)
+}
+
+// ===== stringify 特殊值 =====
+
+@test
+fn test_stringify_null(): void {
+    assert_eq(json.stringify(null), "null")
+}
+
+@test
+fn test_stringify_true(): void {
+    assert_eq(json.stringify(true), "true")
+}
+
+@test
+fn test_stringify_false(): void {
+    assert_eq(json.stringify(false), "false")
+}
+
+@test
+fn test_stringify_zero(): void {
+    assert_eq(json.stringify(0), "0")
+}
+
+@test
+fn test_stringify_empty_array(): void {
+    assert_eq(json.stringify([]), "[]")
+}
+
+@test
+fn test_stringify_empty_string(): void {
+    assert_eq(json.stringify(""), "\"\"")
+}
+
+// ===== keys 和 values 测试 =====
+
+@test
+fn test_keys_empty_object(): void {
+    let keys = json.keys("{}")
+    assert_eq(keys.length, 0)
+}
+
+@test
+fn test_keys_simple_object(): void {
+    let keys = json.keys(json.parse("{\"a\": 1, \"b\": 2, \"c\": 3}"))
+    assert_eq(keys.length, 3)
+    // 键顺序可能不确定，检查是否包含
+    let hasA = false
+    let hasB = false
+    let hasC = false
+    let i = 0
+    while (i < keys.length) {
+        if (keys[i] == "a") { hasA = true }
+        if (keys[i] == "b") { hasB = true }
+        if (keys[i] == "c") { hasC = true }
+        i++
+    }
+    assert_eq(hasA, true)
+    assert_eq(hasB, true)
+    assert_eq(hasC, true)
+}
+
+@test
+fn test_values_empty_object(): void {
+    let values = json.values("{}")
+    assert_eq(values.length, 0)
+}
+
+@test
+fn test_values_simple_object(): void {
+    let values = json.values(json.parse("{\"a\": 1, \"b\": 2, \"c\": 3}"))
+    assert_eq(values.length, 3)
+    // 检查是否包含所有值
+    let has1 = false
+    let has2 = false
+    let has3 = false
+    let i = 0
+    while (i < values.length) {
+        if (values[i] == 1) { has1 = true }
+        if (values[i] == 2) { has2 = true }
+        if (values[i] == 3) { has3 = true }
+        i++
+    }
+    assert_eq(has1, true)
+    assert_eq(has2, true)
+    assert_eq(has3, true)
+}
+
+// ===== BOM 处理测试 =====
+
+// 注意：BOM 是 UTF-8 编码的字节序标记 \xEF\xBB\xBF
+// xray 可能需要特殊处理或忽略
+
+// ===== 大数字精度测试 =====
+
+@test
+fn test_precision_integer(): void {
+    // Test integer precision within 48-bit range
+    let n = json.parse("123456789012345")
+    assert_eq(n, 123456789012345)
+}
+
+@test
+fn test_precision_float(): void {
+    // 测试浮点精度
+    let f = json.parse("1.2345678901234567")
+    // 浮点数精度有限，检查近似值
+    assert_eq(f > 1.23456, true)
+    assert_eq(f < 1.23457, true)
+}
+
+// ===== 格式化输出测试 =====
+
+@test
+fn test_stringify_indent(): void {
+    let obj = { name: "Alice", age: 30 }
+    let jsonStr = json.stringify(obj, 2)  // 2 空格缩进
+    assert_eq(jsonStr.contains("\n"), true)
+}
+
+@test
+fn test_stringify_no_indent(): void {
+    let obj = { name: "Alice", age: 30 }
+    let jsonStr = json.stringify(obj)  // 无缩进
+    // 紧凑格式不应包含多余空白
+    assert_eq(jsonStr.contains("Alice"), true)
+}
+
+// ===== 特殊字符串值 =====
+
+@test
+fn test_string_with_colon(): void {
+    let s = json.parse("\"key:value\"")
+    assert_eq(s, "key:value")
+}
+
+@test
+fn test_string_with_comma(): void {
+    let s = json.parse("\"a,b,c\"")
+    assert_eq(s, "a,b,c")
+}
+
+@test
+fn test_string_with_brackets(): void {
+    let s = json.parse("\"[1,2,3]\"")
+    assert_eq(s, "[1,2,3]")
+}
+
+@test
+fn test_string_with_braces(): void {
+    let s = json.parse("\"{key: value}\"")
+    assert_eq(s, "{key: value}")
+}
+

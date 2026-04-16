@@ -1,0 +1,56 @@
+/*
+ * Bytes slice tests
+ * Bytes() creates Array<uint8>, slicing uses standard array slice
+ */
+
+// ========== Basic slice ==========
+let bytes = Bytes(5)
+bytes[0] = 10
+bytes[1] = 20
+bytes[2] = 30
+bytes[3] = 40
+bytes[4] = 50
+print(bytes.length)  // 5
+
+let s1 = bytes[1:4]
+print(s1.length)  // 3
+print(s1[0])      // 20
+print(s1[1])      // 30
+print(s1[2])      // 40
+
+// ========== Slice boundaries ==========
+let b = Bytes(5)
+b[0] = 1
+b[1] = 2
+b[2] = 3
+b[3] = 4
+b[4] = 5
+
+// Omit start
+let s3 = b[:3]
+print(s3.length)  // 3
+
+// Omit end
+let s4 = b[2:]
+print(s4.length)  // 3
+
+// Full slice
+let s5 = b[:]
+print(s5.length)  // 5
+
+// Empty slice
+let s6 = b[2:2]
+print(s6.length)  // 0
+
+print("Bytes slice tests passed!")
+
+// expect: 5
+// expect: 3
+// expect: 20
+// expect: 30
+// expect: 40
+// expect: 3
+// expect: 3
+// expect: 5
+// expect: 0
+// expect: Bytes slice tests passed!

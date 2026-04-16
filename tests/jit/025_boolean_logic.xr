@@ -1,0 +1,37 @@
+// EXPECTED: false
+// EXPECTED: true
+// EXPECTED: true
+// EXPECTED: false
+// Test: Boolean/logical operations (NOT, AND via short-circuit, TEST/TESTSET)
+
+fn not_fn(x: bool) : bool {
+    return !x
+}
+
+fn both_positive(a: int, b: int) : bool {
+    if (a > 0) {
+        if (b > 0) {
+            return true
+        }
+    }
+    return false
+}
+
+fn either_zero(a: int, b: int) : bool {
+    if (a == 0) { return true }
+    if (b == 0) { return true }
+    return false
+}
+
+let i = 0
+while (i < 200) {
+    not_fn(true)
+    both_positive(1, 2)
+    either_zero(0, 5)
+    i = i + 1
+}
+
+print(not_fn(true))
+print(not_fn(false))
+print(both_positive(1, 2))
+print(both_positive(1, -2))

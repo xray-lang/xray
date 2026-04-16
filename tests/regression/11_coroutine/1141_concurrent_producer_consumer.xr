@@ -1,0 +1,37 @@
+// 测试生产者-消费者模型
+
+fn main(): void {
+    shared const ch = Channel(10)
+    
+    // 生产者发送数据
+    let i = 0
+    while (i < 3) {
+        ch.trySend(100 + i)
+        i = i + 1
+    }
+    i = 0
+    while (i < 3) {
+        ch.trySend(200 + i)
+        i = i + 1
+    }
+    
+    // 消费者接收数据（使用多值返回）
+    let v1, ok1 = ch.tryRecv()
+    let v2, ok2 = ch.tryRecv()
+    let v3, ok3 = ch.tryRecv()
+    let v4, ok4 = ch.tryRecv()
+    let v5, ok5 = ch.tryRecv()
+    let v6, ok6 = ch.tryRecv()
+    
+    print(v1)  // 100
+    print(v2)  // 101
+    print(v3)  // 102
+    print(v4)  // 200
+    print(v5)  // 201
+    print(v6)  // 202
+    print(ok1 && ok2 && ok3 && ok4 && ok5 && ok6)  // true
+    
+    print("done")
+}
+
+main()

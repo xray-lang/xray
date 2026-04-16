@@ -1,0 +1,180 @@
+// 0521_cell_upval.xr
+// Cell-mode mutable capture + flat upvalue regression tests.
+// Exercises: OP_CELL_NEW, OP_CELL_GET, OP_CELL_SET, OP_UPVAL_GET
+// JIT paths: XIR_ALLOC inline bump-pointer, LOAD_FIELD, STORE_FIELD
+
+// ===== Mutable capture via cell (counter pattern) =====
+
+@test
+fn test_cell_counter_basic(): void {
+    fn make(): fn(): int {
+        let n = 0
+        fn inc(): int {
+            n++
+            return n
+        }
+        return inc
+    }
+    let f = make()
+    assert_eq(f(), 1)
+    assert_eq(f(), 2)
+    assert_eq(f(), 3)
+}
+
+// ===== Two independent cells in one function =====
+
+@test
+fn test_two_cells(): void {
+    fn make(): fn(bool): int {
+        let a = 0
+        let b = 100
+        fn step(use_a: bool): int {
+            if (use_a) {
+                a++
+                return a
+            } else {
+                b--
+                return b
+            }
+        }
+        return step
+    }
+    let f = make()
+    assert_eq(f(true), 1)
+    assert_eq(f(false), 99)
+    assert_eq(f(true), 2)
+    assert_eq(f(false), 98)
+}
+
+// ===== Transitive capture (UPVAL_SRC_UPVAL) =====
+
+@test
+fn test_transitive_capture(): void {
+    fn outer(): fn(): int {
+        let x = 10
+        fn middle(): fn(): int {
+            fn inner(): int {
+                x += 5
+                return x
+            }
+            return inner
+        }
+        return middle()
+    }
+    let f = outer()
+    assert_eq(f(), 15)
+    assert_eq(f(), 20)
+}
+
+// ===== Const capture (no cell needed) =====
+
+@test
+fn test_const_capture(): void {
+    fn make(base: int): fn(int): int {
+        const FACTOR = 3
+        fn calc(x: int): int {
+            return base + x * FACTOR
+        }
+        return calc
+    }
+    let f = make(100)
+    assert_eq(f(1), 103)
+    assert_eq(f(10), 130)
+}
+
+// ===== Cell in loop — multiple closures sharing same cell =====
+
+@test
+fn test_cell_shared_by_closures(): void {
+    let count = 0
+    fn inc(): void { count++ }
+    fn dec(): void { count-- }
+    fn get(): int { return count }
+
+    inc()
+    inc()
+    inc()
+    assert_eq(get(), 3)
+    dec()
+    assert_eq(get(), 2)
+}
+
+// ===== Hot loop with cell get/set (JIT inline path) =====
+
+@test
+fn test_cell_hot_loop(): void {
+    fn make(): fn(int): int {
+        let total = 0
+        fn add(n: int): int {
+            total += n
+            return total
+        }
+        return add
+    }
+    let acc = make()
+    let sum = 0
+    for (let i = 1; i <= 100; i++) {
+        sum = acc(i)
+    }
+    assert_eq(sum, 5050)
+}
+
+// ===== Cell with different value types =====
+
+@test
+fn test_cell_string_value(): void {
+    fn make(): fn(string): string {
+        let result = ""
+        fn append(s: string): string {
+            result = result + s
+            return result
+        }
+        return append
+    }
+    let f = make()
+    assert_eq(f("a"), "a")
+    assert_eq(f("b"), "ab")
+    assert_eq(f("c"), "abc")
+}
+
+@test
+fn test_cell_float_value(): void {
+    fn make(): fn(float): float {
+        let total = 0.0
+        fn add(x: float): float {
+            total += x
+            return total
+        }
+        return add
+    }
+    let f = make()
+    assert_eq(f(1.5), 1.5)
+    assert_eq(f(2.5), 4.0)
+}
+
+// ===== Multiple independent closure instances =====
+
+@test
+fn test_many_instances(): void {
+    fn make(): fn(): int {
+        let n = 0
+        fn inc(): int {
+            n++
+            return n
+        }
+        return inc
+    }
+    let counters: Array<fn(): int> = []
+    for (let i = 0; i < 10; i++) {
+        counters.push(make())
+    }
+    // Each counter is independent
+    for (let i = 0; i < 10; i++) {
+        assert_eq(counters[i](), 1)
+    }
+    // Call first counter more times
+    assert_eq(counters[0](), 2)
+    assert_eq(counters[0](), 3)
+    // Others still at 1
+    assert_eq(counters[5](), 2)
+}

@@ -1,0 +1,125 @@
+// 0140_special_values.xr
+// 作者：xingleixu@gmail.com
+// 测试：特殊值和边界条件
+// ===== 整数边界 =====
+@test
+fn test_large_int(): void {
+    let big = 1000000000
+    assert_eq(big, 1000000000)
+}
+
+@test
+fn test_negative_large_int(): void {
+    let neg = -999999999
+    assert_eq(neg, -999999999)
+}
+
+@test
+fn test_int_overflow_behavior(): void {
+    let a = 2147483647
+    // max 32-bit
+    let b = a + 1
+    assert_eq(b > a, true)
+}
+
+// ===== 浮点特殊值 =====
+@test
+fn test_small_float(): void {
+    let small = 0.0001
+    assert_eq(small > 0, true)
+    assert_eq(small < 1, true)
+}
+
+@test
+fn test_negative_float(): void {
+    let neg = -0.5
+    assert_eq(neg < 0, true)
+}
+
+@test
+fn test_float_precision(): void {
+    let a = 0.1 + 0.2
+    // 浮点精度问题：0.1 + 0.2 != 0.3
+    assert_eq(a > 0.29, true)
+    assert_eq(a < 0.31, true)
+}
+
+// ===== 空值处理 =====
+@test
+fn test_null_comparison(): void {
+    let x = null
+    assert_eq(x == null, true)
+    assert_eq(x != null, false)
+}
+
+@test
+fn test_null_in_array(): void {
+    let arr = [1, null, 3]
+    assert_eq(arr[1], null)
+    assert_eq(arr.length, 3)
+}
+
+@test
+fn test_null_in_map(): void {
+    let m = { "key" => null }
+    assert_eq(m.get("key"), null)
+    assert_eq(m.has("key"), true)
+}
+
+// ===== 空字符串 =====
+@test
+fn test_empty_string(): void {
+    let s = ""
+    assert_eq(s.length, 0)
+    assert_eq(s == "", true)
+}
+
+@test
+fn test_whitespace_string(): void {
+    let s = "   "
+    assert_eq(s.length, 3)
+    assert_eq(s.trim(), "")
+}
+
+// ===== 空集合 =====
+@test
+fn test_empty_array(): void {
+    let arr: Array<int> = []
+    assert_eq(arr.length, 0)
+}
+
+@test
+fn test_empty_map(): void {
+    let m = #{}
+    assert_eq(m.length, 0)
+}
+
+@test
+fn test_empty_set(): void {
+    let s = #[]
+    assert_eq(s.length, 0)
+}
+
+// ===== 零值 =====
+@test
+fn test_zero_int(): void {
+    let x = 0
+    assert_eq(x == 0, true)
+    assert_eq(!x, true)
+}
+
+@test
+fn test_zero_float(): void {
+    let x = 0
+    assert_eq(x == 0, true)
+}
+
+// ===== 布尔边界 =====
+@test
+fn test_bool_in_arithmetic(): void {
+    // true 作为 1，false 作为 0
+    let t = true
+    let f = false
+    assert_eq(int(t), 1)
+    assert_eq(int(f), 0)
+}

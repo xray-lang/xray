@@ -1,0 +1,17 @@
+// EXPECTED: error: bad value
+// EXPECTED: finally ran
+// Test: Throw and finally in JIT
+
+fn validate(x: int) {
+    if (x < 0) {
+        throw "bad value"
+    }
+}
+
+try {
+    validate(-1)
+} catch (e) {
+    print("error: " + e)
+} finally {
+    print("finally ran")
+}

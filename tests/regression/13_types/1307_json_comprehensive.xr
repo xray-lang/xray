@@ -1,0 +1,194 @@
+// 0515_json_comprehensive.xr
+// 作者：xingleixu@gmail.com
+// 测试：Json 功能综合测试
+
+// ===== 实际应用场景：配置管理 =====
+
+@test
+fn test_config_management(): void {
+    // 可扩展配置类型
+    type AppConfig = { name: string, version: string, ... }
+    
+    let config: AppConfig = {
+        name: "MyApp",
+        version: "1.0.0"
+    }
+    
+    // 动态添加配置项
+    config.debug = true
+    config.logLevel = "info"
+    config.database = {
+        host: "localhost",
+        port: 3306
+    }
+    
+    assert_eq(config.name, "MyApp")
+    assert_eq(config.debug, true)
+    assert_eq(config.database.host, "localhost")
+}
+
+// ===== 实际应用场景：数据转换 =====
+
+@test
+fn test_data_transformation(): void {
+    // 原始数据
+    let rawData = {
+        user_name: "alice",
+        user_age: 25,
+        user_email: "alice@test.com"
+    }
+    
+    // 转换为新格式
+    let fields = ["name", "age", "email"]
+    let result = {}
+    
+    for (field in fields) {
+        let srcKey = "user_" + field
+        result[field] = rawData[srcKey]
+    }
+    
+    assert_eq(result.name, "alice")
+    assert_eq(result.age, 25)
+    assert_eq(result.email, "alice@test.com")
+}
+
+// ===== 实际应用场景：动态表单 =====
+
+@test
+fn test_dynamic_form(): void {
+    fn createFormData<T>(fields: Array<string>, values: Array<T>): Json {
+        let form = {}
+        for (i in 0..fields.length) {
+            form[fields[i]] = values[i]
+        }
+        return form
+    }
+    
+    let fieldNames = ["username", "password", "remember"]
+    let fieldValues = ["admin", "secret", true]
+    
+    let formData = createFormData(fieldNames, fieldValues)
+    
+    assert_eq(formData.username, "admin")
+    assert_eq(formData.password, "secret")
+    assert_eq(formData.remember, true)
+}
+
+// ===== 实际应用场景：API 响应处理 =====
+
+@test
+fn test_api_response(): void {
+    // 模拟 API 响应
+    let response = {
+        status: 200,
+        data: {
+            users: [
+                { id: 1, name: "Alice" },
+                { id: 2, name: "Bob" }
+            ],
+            total: 2
+        },
+        meta: {
+            requestId: "abc123"
+        }
+    }
+    
+    assert_eq(response.status, 200)
+    assert_eq(response.data.total, 2)
+    assert_eq(response.data.users[0].name, "Alice")
+    assert_eq(response.meta.requestId, "abc123")
+    
+    // 动态添加处理信息
+    response.processedAt = "2024-01-01"
+    assert_eq(response.processedAt, "2024-01-01")
+}
+
+// ===== 实际应用场景：对象工厂 =====
+
+@test
+fn test_object_factory(): void {
+    fn createEntity(type_name: string, id: int): Json {
+        let prefix = type_name + "_"
+        return {
+            [prefix + "id"]: id,
+            [prefix + "type"]: type_name,
+            created: true
+        }
+    }
+    
+    let user = createEntity("user", 1)
+    let order = createEntity("order", 100)
+    
+    assert_eq(user["user_id"], 1)
+    assert_eq(user["user_type"], "user")
+    assert_eq(user.created, true)
+    
+    assert_eq(order["order_id"], 100)
+    assert_eq(order["order_type"], "order")
+}
+
+// ===== 实际应用场景：计数器/聚合 =====
+
+@test
+fn test_word_count(): void {
+    let words = ["apple", "banana", "apple", "cherry", "banana", "apple"]
+    let counts = {}
+    
+    for (word in words) {
+        if (counts[word] == null) {
+            counts[word] = 1
+        } else {
+            counts[word] = counts[word] + 1
+        }
+    }
+    
+    assert_eq(counts.apple, 3)
+    assert_eq(counts.banana, 2)
+    assert_eq(counts.cherry, 1)
+}
+
+// ===== 实际应用场景：深层嵌套访问 =====
+
+@test
+fn test_deep_nesting(): void {
+    let data = {
+        level1: {
+            level2: {
+                level3: {
+                    value: "deep"
+                }
+            }
+        }
+    }
+    
+    // 静态访问
+    assert_eq(data.level1.level2.level3.value, "deep")
+    
+    // 动态访问
+    let k1 = "level1"
+    let k2 = "level2"
+    let k3 = "level3"
+    assert_eq(data[k1][k2][k3].value, "deep")
+}
+
+// ===== 严格类型与扩展类型对比 =====
+
+@test
+fn test_strict_vs_extensible(): void {
+    // 严格类型：只能有定义的字段
+    type StrictPoint = { x: int, y: int }
+    let sp: StrictPoint = { x: 1, y: 2 }
+    
+    // 可扩展类型：可以添加额外字段
+    type ExtensiblePoint = { x: int, y: int, ... }
+    let ep: ExtensiblePoint = { x: 1, y: 2 }
+    ep.z = 3
+    ep.label = "origin"
+    
+    assert_eq(sp.x, 1)
+    assert_eq(ep.x, 1)
+    assert_eq(ep.z, 3)
+    assert_eq(ep.label, "origin")
+}
+
+print("json_comprehensive: all tests passed")

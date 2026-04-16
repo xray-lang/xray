@@ -1,0 +1,13 @@
+=== defer 块语法测试 ===
+开始
+结束
+defer 块
+=== 多个 defer 块 ===
+执行中
+结束
+defer 2
+defer 1
+=== defer 混合测试 ===
+执行
+defer 块 A
+cleanup 函数

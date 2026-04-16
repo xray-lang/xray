@@ -1,0 +1,153 @@
+// 0830_getter_setter.xr
+// 作者：xingleixu@gmail.com
+// 测试：getter 和 setter
+// 新语法：使用 fn() 定义属性访问器
+
+// ===== 基本 getter =====
+
+class Circle {
+    _radius: float
+    
+    constructor(r) {
+        this._radius = r
+    }
+    
+    radius: float {
+        fn() { return this._radius }
+    }
+    
+    diameter: float {
+        fn() { return this._radius * 2 }
+    }
+    
+    area: float {
+        fn() { return 3.14159 * this._radius * this._radius }
+    }
+}
+
+@test
+fn test_basic_getter(): void {
+    let c = new Circle(5)
+    assert_eq(c.radius, 5)
+    assert_eq(c.diameter, 10)
+}
+
+@test
+fn test_computed_getter(): void {
+    let c = new Circle(2)
+    let area = c.area
+    assert_eq(area > 12, true)
+    assert_eq(area < 13, true)
+}
+
+// ===== 基本 setter =====
+
+class Temperature {
+    _celsius: float
+    
+    constructor(c) {
+        this._celsius = c
+    }
+    
+    celsius: float {
+        fn() { return this._celsius }
+        fn(value: float) { this._celsius = value }
+    }
+    
+    fahrenheit: float {
+        fn() { return this._celsius * 1.8 + 32 }
+        fn(value: float) { this._celsius = (value - 32) / 1.8 }
+    }
+}
+
+@test
+fn test_basic_setter(): void {
+    let t = new Temperature(0)
+    assert_eq(t.celsius, 0)
+    
+    t.celsius = 100
+    assert_eq(t.celsius, 100)
+}
+
+@test
+fn test_computed_setter(): void {
+    let t = new Temperature(0)
+    t.fahrenheit = 212
+    assert_eq(t.celsius, 100)
+}
+
+// ===== 验证 setter =====
+
+class Age {
+    _value: int
+    
+    constructor() {
+        this._value = 0
+    }
+    
+    value: int {
+        fn() { return this._value }
+        fn(v: int) {
+            if (v >= 0) {
+                this._value = v
+            }
+        }
+    }
+}
+
+@test
+fn test_validating_setter(): void {
+    let age = new Age()
+    age.value = 25
+    assert_eq(age.value, 25)
+    
+    age.value = -5  // 应该被忽略
+    assert_eq(age.value, 25)
+}
+
+// ===== 只读属性 =====
+
+class ReadOnly {
+    _secret: string
+    
+    constructor(s) {
+        this._secret = s
+    }
+    
+    secret: string {
+        fn() { return this._secret }
+    }
+}
+
+@test
+fn test_readonly_property(): void {
+    let r = new ReadOnly("password")
+    assert_eq(r.secret, "password")
+}
+
+// ===== getter 链式访问 =====
+
+class Box {
+    _width: int
+    _height: int
+    
+    constructor(w, h) {
+        this._width = w
+        this._height = h
+    }
+    
+    width: int { fn() { return this._width } }
+    height: int { fn() { return this._height } }
+    area: int { fn() { return this._width * this._height } }
+    perimeter: int { fn() { return 2 * (this._width + this._height) } }
+}
+
+@test
+fn test_multiple_getters(): void {
+    let box = new Box(3, 4)
+    assert_eq(box.width, 3)
+    assert_eq(box.height, 4)
+    assert_eq(box.area, 12)
+    assert_eq(box.perimeter, 14)
+}
+

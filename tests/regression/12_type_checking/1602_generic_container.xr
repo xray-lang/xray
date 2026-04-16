@@ -1,0 +1,44 @@
+// Test generic container type inference
+
+// Array element type propagation
+fn getFirst<T>(arr: Array<T>): T? {
+    if (arr.length > 0) {
+        return arr[0]
+    }
+    return null
+}
+
+// Test with arrays (no explicit type annotation)
+let intArr = [10, 20, 30]
+let firstInt = getFirst(intArr)
+print(firstInt)            // 10
+
+let strArr = ["x", "y", "z"]  
+let firstStr = getFirst(strArr)
+print(firstStr)            // "x"
+
+// Generic swap function
+fn swap<T>(arr: Array<T>, i: int, j: int): void {
+    let temp = arr[i]
+    arr[i] = arr[j]
+    arr[j] = temp
+}
+
+let nums = [1, 2, 3]
+swap(nums, 0, 2)
+print(nums)                // [3, 2, 1]
+
+// Generic contains function
+fn contains<T>(arr: Array<T>, target: T): bool {
+    for (item in arr) {
+        if (item == target) {
+            return true
+        }
+    }
+    return false
+}
+
+print(contains([1, 2, 3], 2))      // true
+print(contains(["a", "b"], "c"))   // false
+
+print("Generic container test completed")

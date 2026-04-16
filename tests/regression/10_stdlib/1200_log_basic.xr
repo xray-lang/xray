@@ -1,0 +1,57 @@
+// 1200_log_basic.xr - Log module tests
+
+import log
+
+// ===== Level constants =====
+
+@test
+fn test_log_level_constants(): void {
+    assert_eq(log.DEBUG, 10)
+    assert_eq(log.INFO, 20)
+    assert_eq(log.WARN, 30)
+    assert_eq(log.ERROR, 40)
+    assert_eq(log.FATAL, 50)
+}
+
+// ===== isEnabled =====
+
+@test
+fn test_is_enabled_default(): void {
+    // Default level is INFO
+    assert_eq(log.isEnabled(log.INFO), true)
+    assert_eq(log.isEnabled(log.ERROR), true)
+}
+
+@test
+fn test_set_level(): void {
+    log.setLevel(log.DEBUG)
+    assert_eq(log.isEnabled(log.DEBUG), true)
+    // Restore default
+    log.setLevel(log.INFO)
+}
+
+// ===== Log output (should not crash) =====
+
+@test
+fn test_log_functions(): void {
+    log.setLevel(log.DEBUG)
+    log.debug("debug message")
+    log.info("info message")
+    log.warn("warning message")
+    log.error("error message")
+    log.setLevel(log.INFO)
+}
+
+@test
+fn test_log_with_attrs(): void {
+    log.info("server started", "port", 8080, "host", "localhost")
+}
+
+// ===== Format =====
+
+@test
+fn test_log_json_format(): void {
+    log.setFormat("json")
+    log.info("json format test", "key", "value")
+    log.setFormat("text")
+}

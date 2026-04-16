@@ -1,0 +1,24 @@
+// EXPECTED: 30
+// Test: Nested ternary expressions (multiple phi nodes from jump threading)
+
+fn classify(x: int) : int {
+    return (x > 10) ? 3 : (x > 5) ? 2 : (x > 0) ? 1 : 0
+}
+
+fn sum_classes(n: int) : int {
+    let total = 0
+    let i = -5
+    while (i <= n) {
+        total = total + classify(i)
+        i = i + 1
+    }
+    return total
+}
+
+let j = 0
+while (j < 200) {
+    sum_classes(15)
+    j = j + 1
+}
+
+print(sum_classes(15))

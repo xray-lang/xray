@@ -1,0 +1,132 @@
+// Test coroutine error handling patterns
+// Covers: task.error, task.result, try-catch behavior, await.all errors,
+//         await.any, Coro.monitor error notification
+
+import time
+
+// ========== Pattern 1: Basic task.error / task.result ==========
+fn test_basic_error(): void {
+    let t1 = go {
+        let x = 1 / 0
+        return x
+    }
+    await t1
+    print("t1.done:", t1.done)
+    print("t1.error:", t1.error)
+    print("t1.result:", t1.result)
+
+    let t2 = go { return 42 }
+    let r = await t2
+    print("t2.done:", t2.done)
+    print("t2.error:", t2.error)
+    print("t2.result:", t2.result)
+    print("await result:", r)
+}
+
+// ========== Pattern 2: try-catch CANNOT catch coroutine errors ==========
+fn test_try_catch_cannot_catch(): void {
+    try {
+        let t = go {
+            throw "something went wrong"
+        }
+        let r = await t
+        print("await returned:", r)
+        print("t.error:", t.error)
+        print("catch was NOT triggered")
+    } catch (e) {
+        print("UNEXPECTED: caught:", e)
+    }
+}
+
+// ========== Pattern 3: try-catch CAN catch inside coroutine ==========
+fn test_try_catch_in_coro(): void {
+    let t = go {
+        try {
+            let x = 1 / 0
+            return x
+        } catch (e) {
+            return "caught: " + string(e)
+        }
+    }
+    let r = await t
+    print("result:", r)
+    print("t.error:", t.error)
+}
+
+// ========== Pattern 4: Manual error check after await ==========
+fn test_manual_error_check(): void {
+    fn risky_task(n: int): int {
+        if (n == 0) {
+            throw "cannot process zero"
+        }
+        return 100 / n
+    }
+
+    let t = go risky_task(0)
+    await t
+
+    if (t.error != null) {
+        print("Task failed:", t.error)
+    } else {
+        print("Task succeeded:", t.result)
+    }
+}
+
+// ========== Pattern 5: await.all with errors ==========
+fn test_await_all_with_errors(): void {
+    let tasks = [
+        go { return "ok-1" },
+        go { throw "fail-2" },
+        go { return "ok-3" }
+    ]
+
+    let results = await.all(tasks)
+    for (let i = 0; i < tasks.length; i++) {
+        let t = tasks[i]
+        if (t.error != null) {
+            print("  task[" + string(i) + "] FAILED:", t.error)
+        } else {
+            print("  task[" + string(i) + "] OK:", results[i])
+        }
+    }
+}
+
+// ========== Pattern 6: await.any - first success wins ==========
+fn test_await_any(): void {
+    let tasks = [
+        go { time.sleep(100); return "slow" },
+        go { return "fast" }
+    ]
+    let r = await.any(tasks)
+    print("First result:", r)
+}
+
+// ========== Pattern 7: Coro.monitor error notification ==========
+fn test_monitor_error(): void {
+    let t = go(name: "err-worker") {
+        time.sleep(10)
+        throw "worker crashed"
+    }
+
+    let ch = Coro.monitor("err-worker")
+    let reason = ch.recv()
+    print("Monitor reason:", reason)
+    print("task.error:", t.error)
+}
+
+// ========== Run all ==========
+print("--- Pattern 1 ---")
+test_basic_error()
+print("--- Pattern 2 ---")
+test_try_catch_cannot_catch()
+print("--- Pattern 3 ---")
+test_try_catch_in_coro()
+print("--- Pattern 4 ---")
+test_manual_error_check()
+print("--- Pattern 5 ---")
+test_await_all_with_errors()
+print("--- Pattern 6 ---")
+test_await_any()
+print("--- Pattern 7 ---")
+test_monitor_error()
+print("DONE")

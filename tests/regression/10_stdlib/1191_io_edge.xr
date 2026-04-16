@@ -1,0 +1,112 @@
+// 1191_io_edge.xr - IO module edge case tests
+
+import io
+
+// ===== Non-existent file =====
+
+@test
+fn test_read_nonexistent(): void {
+    let content = io.readFile("/tmp/xray_nonexistent_file_12345.txt")
+    assert_eq(content, null)
+}
+
+@test
+fn test_exists_nonexistent(): void {
+    assert_eq(io.exists("/tmp/xray_nonexistent_path_12345"), false)
+}
+
+@test
+fn test_is_file_nonexistent(): void {
+    assert_eq(io.isFile("/tmp/xray_nonexistent_12345"), false)
+}
+
+@test
+fn test_is_dir_nonexistent(): void {
+    assert_eq(io.isDir("/tmp/xray_nonexistent_12345"), false)
+}
+
+// ===== Empty file =====
+
+@test
+fn test_write_empty(): void {
+    let tmp = io.tempFile() ?? ""
+    io.writeFile(tmp, "")
+    assert_eq(io.fileSize(tmp), 0)
+    let content = io.readFile(tmp) ?? ""
+    assert_eq(content, "")
+    io.remove(tmp)
+}
+
+// ===== Overwrite =====
+
+@test
+fn test_overwrite_file(): void {
+    let tmp = io.tempFile() ?? ""
+    io.writeFile(tmp, "first content")
+    io.writeFile(tmp, "second")
+    assert_eq(io.readFile(tmp) ?? "", "second")
+    assert_eq(io.fileSize(tmp), 6)
+    io.remove(tmp)
+}
+
+// ===== Large content =====
+
+@test
+fn test_large_write_read(): void {
+    let tmp = io.tempFile() ?? ""
+    let data = ""
+    for (let i = 0; i < 100; i++) {
+        data = data + "line " + string(i) + "\n"
+    }
+    io.writeFile(tmp, data)
+    let content = io.readFile(tmp) ?? ""
+    assert_eq(content, data)
+    io.remove(tmp)
+}
+
+// ===== readDirRecursive =====
+
+@test
+fn test_read_dir_recursive(): void {
+    let tmpDir = io.tempDir() ?? ""
+    io.mkdirp(tmpDir + "/a/b")
+    io.writeFile(tmpDir + "/file1.txt", "1")
+    io.writeFile(tmpDir + "/a/file2.txt", "2")
+    io.writeFile(tmpDir + "/a/b/file3.txt", "3")
+    let all = io.readDirRecursive(tmpDir)
+    assert(all != null)
+    assert(all.length >= 3)
+    io.removeAll(tmpDir)
+}
+
+// ===== Remove non-existent =====
+
+@test
+fn test_remove_nonexistent(): void {
+    // Should not crash
+    io.remove("/tmp/xray_nonexistent_file_12345.txt")
+}
+
+// ===== readLines empty file =====
+
+@test
+fn test_read_lines_empty(): void {
+    let tmp = io.tempFile() ?? ""
+    io.writeFile(tmp, "")
+    let lines = io.readLines(tmp)
+    // Empty file may return empty array or array with one empty string
+    assert(lines != null)
+    io.remove(tmp)
+}
+
+// ===== readLines single line (no newline) =====
+
+@test
+fn test_read_lines_single(): void {
+    let tmp = io.tempFile() ?? ""
+    io.writeFile(tmp, "single line")
+    let lines = io.readLines(tmp)
+    assert(lines.length >= 1)
+    assert_eq(lines[0], "single line")
+    io.remove(tmp)
+}

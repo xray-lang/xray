@@ -1,0 +1,44 @@
+// 测试 select 发送分支
+
+@test
+fn test_select_send(): void {
+    shared const ch = Channel(2)
+    
+    // 发送分支：val to ch => ...
+    select {
+        100 to ch => { print("sent 100") }
+        _ => { print("send failed") }
+    }
+    
+    // 再发送一个
+    select {
+        200 to ch => { print("sent 200") }
+        _ => { print("send failed") }
+    }
+    
+    // 缓冲满了，发送失败
+    select {
+        300 to ch => { print("sent 300") }
+        _ => { print("buffer full") }
+    }
+    
+    // 接收并验证（使用多值返回）
+    let v1, ok1 = ch.tryRecv()
+    let v2, ok2 = ch.tryRecv()
+    print(v1)  // 100
+    print(v2)  // 200
+    print(ok1 && ok2)  // true
+    
+    print("done")
+}
+
+test_select_send()
+
+// 期望输出：
+// sent 100
+// sent 200
+// buffer full
+// 100
+// 200
+// true
+// done

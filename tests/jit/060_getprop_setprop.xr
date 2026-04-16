@@ -1,0 +1,23 @@
+// EXPECTED: 3
+// EXPECTED: world
+// Test: Property get/set (GETPROP, SETPROP) via dynamic key
+
+fn get_prop(obj, key) {
+    return obj[key]
+}
+
+fn set_prop(obj, key, val) {
+    obj[key] = val
+}
+
+let obj = { "a": 1, "b": 2, "c": 3 }
+
+let i = 0
+while (i < 200) {
+    get_prop(obj, "c")
+    i = i + 1
+}
+
+print(get_prop(obj, "c"))
+set_prop(obj, "d", "world")
+print(get_prop(obj, "d"))

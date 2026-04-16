@@ -1,0 +1,84 @@
+// Test regex module - compile, test, find, replace, split
+
+import regex
+
+// @test compile and test
+@test
+fn test_compile_and_test(): void {
+    let re = regex.compile("\\d+")
+    assert_eq(regex.test(re, "abc123"), true)
+    assert_eq(regex.test(re, "no digits"), false)
+}
+
+// @test find with positions
+@test
+fn test_find(): void {
+    let re = regex.compile("\\d+")
+    let result = regex.find(re, "abc123def")
+    assert(result != null)
+    assert_eq(result["start"], 3)
+    assert_eq(result["end"], 6)
+    assert_eq(result["groups"][0], "123")
+}
+
+// @test capture groups
+@test
+fn test_capture_groups(): void {
+    let re = regex.compile("(\\w+)@(\\w+)")
+    let result = regex.find(re, "contact: user@host.com")
+    assert(result != null)
+    let groups = result["groups"]
+    assert_eq(groups[0], "user@host")
+    assert_eq(groups[1], "user")
+    assert_eq(groups[2], "host")
+}
+
+// @test fullFind (entire string must match)
+@test
+fn test_full_find(): void {
+    let re = regex.compile("[a-z]+")
+    assert(regex.fullFind(re, "hello") != null)
+    assert_eq(regex.fullFind(re, "hello123"), null)
+}
+
+// @test replace (first occurrence)
+@test
+fn test_replace(): void {
+    let re = regex.compile("\\s+")
+    assert_eq(regex.replace(re, "hello   world", "_"), "hello_world")
+}
+
+// @test replaceAll
+@test
+fn test_replace_all(): void {
+    let re = regex.compile("\\s+")
+    assert_eq(regex.replaceAll(re, "a   b   c", "-"), "a-b-c")
+}
+
+// @test split
+@test
+fn test_split(): void {
+    let re = regex.compile(",\\s*")
+    let parts = regex.split(re, "a, b, c, d")
+    assert_eq(parts.length, 4)
+    assert_eq(parts[0], "a")
+    assert_eq(parts[1], "b")
+    assert_eq(parts[3], "d")
+}
+
+// @test escape
+@test
+fn test_escape(): void {
+    let escaped = regex.escape("a.b*c?")
+    assert(escaped.contains("\\."))
+    assert(escaped.contains("\\*"))
+}
+
+// @test isValid
+@test
+fn test_is_valid(): void {
+    assert_eq(regex.isValid("\\d+"), true)
+    assert_eq(regex.isValid("["), false)
+}
+
+print("All regex tests passed")

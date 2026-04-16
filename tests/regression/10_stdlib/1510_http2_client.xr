@@ -1,0 +1,24 @@
+// Test HTTP/2 client API existence
+
+import http
+
+@test
+fn test_h2_apis_exist(): void {
+    assert(http.h2Get != null)
+    assert(http.h2Post != null)
+    assert(http.h2Request != null)
+}
+
+@test
+fn test_h2_options_object(): void {
+    let opts = {
+        url: "https://example.com/api",
+        method: "POST",
+        headers: { "Content-Type" => "application/json" },
+        body: '{"key": "value"}'
+    }
+    assert_eq(opts.method, "POST")
+    assert(opts.headers != null)
+}
+
+print("All http2 client tests passed")

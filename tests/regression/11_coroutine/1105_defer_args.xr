@@ -1,0 +1,38 @@
+// 测试 defer 带参数
+
+fn cleanup(msg: string): void {
+    print(msg)
+}
+
+fn log_value(name: string, value: int): void {
+    print(name)
+    print(value)
+}
+
+@test
+fn test_defer_args(): void {
+    print("start")
+    
+    // defer 带单参数
+    defer cleanup("cleanup 1")
+    defer cleanup("cleanup 2")
+    
+    // defer 带多参数
+    defer log_value("result", 42)
+    
+    print("work done")
+    
+    // LIFO 执行：log_value -> cleanup 2 -> cleanup 1
+}
+
+test_defer_args()
+print("end")
+
+// 期望输出：
+// start
+// work done
+// result
+// 42
+// cleanup 2
+// cleanup 1
+// end

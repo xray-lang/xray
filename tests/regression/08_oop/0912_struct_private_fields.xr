@@ -1,0 +1,81 @@
+// Test: struct private fields and access control
+// Expected: private fields accessible within struct methods, not from outside
+
+struct Account {
+    private _balance: float = 0.0
+    name: string
+
+    deposit(amount: float): void {
+        this._balance = this._balance + amount
+    }
+
+    withdraw(amount: float): bool {
+        if (amount > this._balance) {
+            return false
+        }
+        this._balance = this._balance - amount
+        return true
+    }
+
+    balance(): float {
+        return this._balance
+    }
+}
+
+// === Public field access ===
+let acc = Account{name: "Alice"}
+assert(acc.name == "Alice")
+
+// === Private field access via method ===
+acc.deposit(100.0)
+assert(acc.balance() == 100.0)
+
+acc.deposit(50.0)
+assert(acc.balance() == 150.0)
+
+assert(acc.withdraw(30.0) == true)
+assert(acc.balance() == 120.0)
+
+assert(acc.withdraw(200.0) == false)
+assert(acc.balance() == 120.0)
+
+// === Value semantics with private fields ===
+let acc2 = acc
+acc2.deposit(1000.0)
+assert(acc.balance() == 120.0)
+assert(acc2.balance() == 1120.0)
+
+// === Struct with private + static ===
+struct Counter {
+    private _count: int = 0
+
+    increment(): void {
+        this._count = this._count + 1
+    }
+
+    count(): int {
+        return this._count
+    }
+
+    static zero(): Counter {
+        return Counter{}
+    }
+}
+
+let c = Counter.zero()
+c.increment()
+c.increment()
+c.increment()
+assert(c.count() == 3)
+
+// Value semantics: copy from static factory is independent
+let c2 = c
+c2.increment()
+assert(c.count() == 3)
+assert(c2.count() == 4)
+
+// Direct struct literal also works
+let c3 = Counter{}
+assert(c3.count() == 0)
+
+print("ok")

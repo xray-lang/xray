@@ -1,0 +1,62 @@
+// 综合测试：协程功能组合使用
+// 测试 Channel 参数传递、go/await、defer
+
+// 生产者：向 Channel 发送数据（使用类型注解）
+fn producer(ch: Channel<int>): string {
+    ch.trySend(1)
+    ch.trySend(2)
+    ch.trySend(3)
+    return "producer done"
+}
+
+// 消费者：从 Channel 接收数据（使用多值返回）
+fn consumer(ch: Channel<int>): int {
+    let sum = 0
+    let v1, ok1 = ch.tryRecv()
+    let v2, ok2 = ch.tryRecv()
+    let v3, ok3 = ch.tryRecv()
+    if (ok1) { sum = sum + v1 }
+    if (ok2) { sum = sum + v2 }
+    if (ok3) { sum = sum + v3 }
+    return sum
+}
+
+fn cleanup(): void { print("cleanup done") }
+
+@test
+fn test_combined(): void {
+    print("=== 协程综合测试 ===")
+    
+    // 1. 创建缓冲 Channel
+    shared const ch = Channel(5)
+    
+    // 2. defer 清理
+    defer cleanup()
+    
+    // 3. go/await + Channel 参数传递
+    let prod_task = go producer(ch)
+    let prod_result = await prod_task
+    print(prod_result)  // "producer done"
+    
+    let cons_task = go consumer(ch)
+    let sum = await cons_task
+    print(sum)  // 6
+    
+    // 4. cancelled 检查
+    print(cancelled())  // false
+    
+    // 5. 关闭 Channel
+    ch.close()
+    
+    print("=== 测试完成 ===")
+}
+
+test_combined()
+
+// 期望输出：
+// === 协程综合测试 ===
+// producer done
+// 6
+// false
+// === 测试完成 ===
+// cleanup done

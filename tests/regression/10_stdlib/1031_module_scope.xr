@@ -1,0 +1,38 @@
+// 1031_module_scope.xr
+// 作者：xingleixu@gmail.com
+// 测试：模块作用域隔离
+// 1. 不同模块的内部变量和函数互不干扰
+// 2. 同名的私有函数/变量不会冲突
+// 3. export 的函数能正确访问模块内部状态
+
+import "./modules/mod_a.xr" as a
+import "./modules/mod_b.xr" as b
+
+@test
+fn test_mod_a_works(): void {
+    let result = a.publicFn()
+    assert_eq(result, "A-helper-1.0")
+}
+
+@test
+fn test_mod_b_works(): void {
+    let result = b.publicFn()
+    assert_eq(result, "B-helper-2.0")
+}
+
+@test
+fn test_modules_independent(): void {
+    // 两个模块的内部状态互不干扰
+    let resultA = a.publicFn()
+    let resultB = b.publicFn()
+    assert_eq(resultA != resultB, true)
+}
+
+@test
+fn test_repeated_calls(): void {
+    // 多次调用确保状态正确
+    assert_eq(a.publicFn(), "A-helper-1.0")
+    assert_eq(b.publicFn(), "B-helper-2.0")
+    assert_eq(a.publicFn(), "A-helper-1.0")
+    assert_eq(b.publicFn(), "B-helper-2.0")
+}

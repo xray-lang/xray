@@ -1,0 +1,4 @@
+// 004_undefined_variable.xr
+// Expected: Compile error - undefined variable
+// Error should mention: undefined, not defined, unknown
+print(undefinedVar)

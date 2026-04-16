@@ -1,0 +1,30 @@
+// EXPECTED: true
+// EXPECTED: false
+// EXPECTED: true
+// EXPECTED: false
+// Test: Float comparison operators in JIT
+
+fn flt(a: float, b: float) : bool {
+    return a < b
+}
+
+fn fle(a: float, b: float) : bool {
+    return a <= b
+}
+
+fn feq(a: float, b: float) : bool {
+    return a == b
+}
+
+let i = 0
+while (i < 200) {
+    flt(1.5, 2.5)
+    fle(2.5, 2.5)
+    feq(2.5, 2.5)
+    i = i + 1
+}
+
+print(flt(1.5, 2.5))
+print(flt(2.5, 1.5))
+print(fle(2.5, 2.5))
+print(feq(2.5, 2.5))

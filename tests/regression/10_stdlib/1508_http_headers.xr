@@ -1,0 +1,44 @@
+// Test HTTP header map construction and access
+
+import http
+
+@test
+fn test_request_headers(): void {
+    let h = {
+        "Content-Type" => "application/json",
+        "Accept" => "*/*",
+        "User-Agent" => "xray-http/1.0",
+        "Authorization" => "Bearer token123"
+    }
+    assert_eq(h.get("Content-Type"), "application/json")
+    assert_eq(h.get("Accept"), "*/*")
+    assert_eq(h.get("Authorization"), "Bearer token123")
+}
+
+@test
+fn test_common_headers(): void {
+    let h = {
+        "Content-Type" => "text/html; charset=utf-8",
+        "Cache-Control" => "no-cache",
+        "Connection" => "keep-alive"
+    }
+    assert(h.get("Content-Type").indexOf("text/html") >= 0)
+    assert_eq(h.get("Cache-Control"), "no-cache")
+}
+
+@test
+fn test_empty_headers(): void {
+    let h = #{}
+    assert_eq(h.get("X-Not-Exist"), null)
+}
+
+@test
+fn test_multi_value_header_split(): void {
+    let header = "text/html, application/json, text/plain"
+    let values = header.split(", ")
+    assert_eq(values.length, 3)
+    assert_eq(values[0], "text/html")
+    assert_eq(values[2], "text/plain")
+}
+
+print("All http headers tests passed")

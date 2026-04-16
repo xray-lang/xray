@@ -1,0 +1,25 @@
+// Test: Enum operations in JIT
+// EXPECTED: 1
+// EXPECTED: 2
+// EXPECTED: Red
+// Test: Enum operations in JIT
+
+enum Color {
+    Red = 1,
+    Green = 2,
+    Blue = 3
+}
+
+fn get_val(c: Color) : int {
+    return c.value
+}
+
+let i = 0
+while (i < 200) {
+    get_val(Color.Red)
+    i = i + 1
+}
+
+print(get_val(Color.Red))
+print(get_val(Color.Green))
+print(Color.Red.name)

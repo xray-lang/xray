@@ -1,0 +1,10 @@
+test1: error isolation
+Division by zero
+[line ?] in error_task()
+[line 20] in script
+  done: true
+  result: null
+  has error: true
+test2: error does not affect other coroutines
+  result: 42
+all tests passed

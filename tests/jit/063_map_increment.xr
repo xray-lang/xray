@@ -1,0 +1,30 @@
+// EXPECTED: 3
+// EXPECTED: 2
+// EXPECTED: 1
+// Test: Map increment and advanced map operations in JIT
+
+fn count_chars(s: string) {
+    let counts = new Map()
+    let i = 0
+    while (i < s.length) {
+        let ch = s.substring(i, i + 1)
+        if (counts[ch] != null) {
+            counts[ch] = counts[ch] + 1
+        } else {
+            counts[ch] = 1
+        }
+        i = i + 1
+    }
+    return counts
+}
+
+let i = 0
+while (i < 200) {
+    count_chars("aabbc")
+    i = i + 1
+}
+
+let m = count_chars("aaabbc")
+print(m["a"])
+print(m["b"])
+print(m["c"])

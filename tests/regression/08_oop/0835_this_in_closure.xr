@@ -1,0 +1,72 @@
+/*
+ * 0835_this_in_closure.xr - 测试闭包中捕获 this
+ * 作者：xingleixu@gmail.com
+ * 
+ * 验证闭包可以正确捕获外层方法的 this 变量
+ */
+
+/* 测试1：基本的 this 捕获 */
+class Counter {
+    _count: int
+    
+    constructor() {
+        this._count = 0
+    }
+    
+    getIncrementer(): fn(): int {        return fn() {
+            this._count = this._count + 1
+            return this._count
+        }
+    }
+    
+    getCount(): int {        return this._count
+    }
+}
+
+let c = new Counter()
+let inc = c.getIncrementer()
+
+print("inc() = ${inc()}")  // expect: 1
+print("inc() = ${inc()}")  // expect: 2
+print("inc() = ${inc()}")  // expect: 3
+print("c.getCount() = ${c.getCount()}")  // expect: 3
+
+/* 测试2：多层嵌套闭包中的 this */
+class Nested {
+    _value: int
+    
+    constructor(v: int) {
+        this._value = v
+    }
+    
+    getDoubleWrapper(): fn(): fn(): int {        return fn() {
+            return fn() {
+                return this._value * 2
+            }
+        }
+    }
+}
+
+let n = new Nested(10)
+let outer = n.getDoubleWrapper()
+let inner = outer()
+print("inner() = ${inner()}")  // expect: 20
+
+/* 测试3：闭包中同时捕获 this 和其他变量 */
+class Adder {
+    _base: int
+    
+    constructor(base: int) {
+        this._base = base
+    }
+    
+    createAdder(offset: int): fn(int): int {        return fn(x) {            return this._base + offset + x
+        }
+    }
+}
+
+let adder = new Adder(100)
+let add50 = adder.createAdder(50)
+print("add50(10) = ${add50(10)}")  // expect: 160
+
+print("✅ 闭包捕获 this 测试全部通过")

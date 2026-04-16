@@ -1,0 +1,684 @@
+/*
+ * xray - Lightweight typed scripting with native concurrency
+ * https://www.xray-lang.org
+ *
+ * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
+ * Licensed under the MIT License
+ *
+ * os.c - Operating system interface module implementation
+ *
+ * KEY CONCEPT:
+ *   Native C implementation of OS operations: environment variables,
+ *   process control, and platform detection.
+ */
+
+#include "os.h"
+#include "../../include/xray_platform.h"
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <limits.h>
+
+#ifdef XR_PLATFORM_WINDOWS
+#include <process.h>
+#include <winsock2.h>
+#else
+#include <unistd.h>
+#include <pwd.h>
+#include <signal.h>
+#include <sys/wait.h>
+#endif
+
+#ifdef XR_PLATFORM_MACOS
+#include <sys/sysctl.h>
+#include <mach/mach.h>
+#endif
+
+#ifdef XR_PLATFORM_LINUX
+#include <sys/sysinfo.h>
+#endif
+
+// External: environ variable
+extern char **environ;
+
+/* ========== External Declarations ========== */
+
+extern XrValue xr_string_value(XrString *str);
+struct XrCoroutine;
+extern struct XrCoroutine* xr_current_coro(XrayIsolate *X);
+extern XrMap* xr_map_new(struct XrCoroutine *coro);
+extern void xr_map_set(XrMap *map, XrValue key, XrValue value);
+extern XrValue xr_value_from_map(XrMap *map);
+extern XrCFunction* xr_vm_cfunction_new(XrayIsolate *isolate, XrCFunctionPtr func, const char *name);
+extern XrValue xr_value_from_cfunction(XrCFunction *cfunc);
+extern XrArray* xr_array_new(struct XrCoroutine *coro);
+extern void xr_array_push(XrArray *arr, XrValue value);
+extern XrValue xr_value_from_array(XrArray *arr);
+
+/* ========== Windows Compatibility ========== */
+
+#ifdef XR_PLATFORM_WINDOWS
+#define os_setenv_impl(name, value)  _putenv_s(name, value)
+#define os_unsetenv_impl(name)       _putenv_s(name, "")
+#define os_getpid_impl()             _getpid()
+#define os_chdir_impl(path)          _chdir(path)
+#else
+#define os_setenv_impl(name, value)  setenv(name, value, 1)
+#define os_unsetenv_impl(name)       unsetenv(name)
+#define os_getpid_impl()             getpid()
+#define os_chdir_impl(path)          chdir(path)
+#endif
+
+/* ========== Helper Functions ========== */
+
+// Get string argument
+static const char* get_string_arg(XrValue v) {
+    if (!XR_IS_STRING(v)) return NULL;
+    return XR_TO_STRING(v)->data;
+}
+
+// Create string value
+static XrValue make_string(XrayIsolate *X, const char *s) {
+    if (!s) return xr_null();
+    XrString *str = xr_string_intern(X, s, strlen(s), 0);
+    return xr_string_value(str);
+}
+
+/* ========== Environment Variables ========== */
+
+// getenv(name) - Get environment variable
+static XrValue os_getenv(XrayIsolate *X, XrValue *args, int argc) {
+    if (argc < 1) return xr_null();
+    const char *name = get_string_arg(args[0]);
+    if (!name) return xr_null();
+    
+    const char *value = getenv(name);
+    if (!value) return xr_null();
+    
+    return make_string(X, value);
+}
+
+// setenv(name, value) - Set environment variable
+static XrValue os_setenv(XrayIsolate *X, XrValue *args, int argc) {
+    (void)X;
+    if (argc < 2) return xr_bool(false);
+    
+    const char *name = get_string_arg(args[0]);
+    const char *value = get_string_arg(args[1]);
+    if (!name || !value) return xr_bool(false);
+    
+    int result = os_setenv_impl(name, value);
+    return xr_bool(result == 0);
+}
+
+// unsetenv(name) - Delete environment variable
+static XrValue os_unsetenv(XrayIsolate *X, XrValue *args, int argc) {
+    (void)X;
+    if (argc < 1) return xr_bool(false);
+    
+    const char *name = get_string_arg(args[0]);
+    if (!name) return xr_bool(false);
+    
+    int result = os_unsetenv_impl(name);
+    return xr_bool(result == 0);
+}
+
+// environ() - Get all environment variables
+static XrValue os_environ(XrayIsolate *X, XrValue *args, int argc) {
+    (void)args; (void)argc;
+    
+    XrMap *map = xr_map_new(xr_current_coro(X));
+    if (!map) return xr_null();
+    
+    for (char **env = environ; *env != NULL; env++) {
+        char *eq = strchr(*env, '=');
+        if (!eq) continue;
+        
+        size_t name_len = eq - *env;
+        const char *value = eq + 1;
+        
+        // Directly intern with length — no temporary allocation needed
+        XrString *key_str = xr_string_intern(X, *env, name_len, 0);
+        XrValue key = xr_string_value(key_str);
+        XrValue val = make_string(X, value);
+        xr_map_set(map, key, val);
+    }
+    
+    return xr_value_from_map(map);
+}
+
+/* ========== Process Control ========== */
+
+// exit(code) - Exit program
+static XrValue os_exit(XrayIsolate *X, XrValue *args, int argc) {
+    (void)X;
+    
+    int code = 0;
+    if (argc >= 1 && XR_IS_INT(args[0])) {
+        code = (int)XR_TO_INT(args[0]);
+    }
+    
+    exit(code);
+    return xr_null();  // Never reached
+}
+
+// getpid() - Get process ID
+static XrValue os_getpid(XrayIsolate *X, XrValue *args, int argc) {
+    (void)X; (void)args; (void)argc;
+    return xr_int(os_getpid_impl());
+}
+
+// getcwd() - Get current working directory
+static XrValue os_getcwd(XrayIsolate *X, XrValue *args, int argc) {
+    (void)args; (void)argc;
+    
+    char buf[PATH_MAX];
+    if (getcwd(buf, sizeof(buf)) == NULL) {
+        return xr_null();
+    }
+    return make_string(X, buf);
+}
+
+// chdir(path) - Change working directory
+static XrValue os_chdir(XrayIsolate *X, XrValue *args, int argc) {
+    (void)X;
+    if (argc < 1) return xr_bool(false);
+    
+    const char *path = get_string_arg(args[0]);
+    if (!path) return xr_bool(false);
+    
+    return xr_bool(os_chdir_impl(path) == 0);
+}
+
+// hostname() - Get hostname
+static XrValue os_hostname(XrayIsolate *X, XrValue *args, int argc) {
+    (void)args; (void)argc;
+    
+    char buf[256];
+    if (gethostname(buf, sizeof(buf)) != 0) {
+        return xr_null();
+    }
+    return make_string(X, buf);
+}
+
+// tmpdir() - Get temporary directory
+static XrValue os_tmpdir(XrayIsolate *X, XrValue *args, int argc) {
+    (void)args; (void)argc;
+    
+    // Try to get from environment variables
+    const char *tmpdir = getenv("TMPDIR");
+    if (!tmpdir) tmpdir = getenv("TMP");
+    if (!tmpdir) tmpdir = getenv("TEMP");
+    if (!tmpdir) {
+#ifdef _WIN32
+        tmpdir = "C:\\Windows\\Temp";
+#else
+        tmpdir = "/tmp";
+#endif
+    }
+    
+    return make_string(X, tmpdir);
+}
+
+/* ========== User Information (P1) ========== */
+
+// username() - Get current user name
+static XrValue os_username(XrayIsolate *X, XrValue *args, int argc) {
+    (void)args; (void)argc;
+    
+#ifdef XR_PLATFORM_WINDOWS
+    char buf[256];
+    DWORD size = sizeof(buf);
+    if (GetUserNameA(buf, &size)) return make_string(X, buf);
+    return xr_null();
+#else
+    struct passwd *pw = getpwuid(getuid());
+    if (!pw) return xr_null();
+    return make_string(X, pw->pw_name);
+#endif
+}
+
+// homedir() - Get user home directory
+static XrValue os_homedir(XrayIsolate *X, XrValue *args, int argc) {
+    (void)args; (void)argc;
+    
+    const char *home = getenv("HOME");
+#ifdef XR_PLATFORM_WINDOWS
+    if (!home) home = getenv("USERPROFILE");
+    if (home) return make_string(X, home);
+    return xr_null();
+#else
+    if (home) return make_string(X, home);
+    struct passwd *pw = getpwuid(getuid());
+    if (!pw) return xr_null();
+    return make_string(X, pw->pw_dir);
+#endif
+}
+
+// uid() - Get user ID
+static XrValue os_uid(XrayIsolate *X, XrValue *args, int argc) {
+    (void)X; (void)args; (void)argc;
+#ifdef XR_PLATFORM_WINDOWS
+    return xr_int(0);
+#else
+    return xr_int(getuid());
+#endif
+}
+
+// gid() - Get group ID
+static XrValue os_gid(XrayIsolate *X, XrValue *args, int argc) {
+    (void)X; (void)args; (void)argc;
+#ifdef XR_PLATFORM_WINDOWS
+    return xr_int(0);
+#else
+    return xr_int(getgid());
+#endif
+}
+
+/* ========== System Information (P2) ========== */
+
+// cpuCount() - Get number of CPU cores
+static XrValue os_cpuCount(XrayIsolate *X, XrValue *args, int argc) {
+    (void)X; (void)args; (void)argc;
+    
+#ifdef XR_PLATFORM_WINDOWS
+    SYSTEM_INFO si;
+    GetSystemInfo(&si);
+    return xr_int(si.dwNumberOfProcessors);
+#else
+    long n = sysconf(_SC_NPROCESSORS_ONLN);
+    return xr_int(n > 0 ? n : 1);
+#endif
+}
+
+// totalMemory() - Get total system memory in bytes
+static XrValue os_totalMemory(XrayIsolate *X, XrValue *args, int argc) {
+    (void)X; (void)args; (void)argc;
+    
+#ifdef XR_PLATFORM_MACOS
+    int64_t memsize = 0;
+    size_t len = sizeof(memsize);
+    sysctlbyname("hw.memsize", &memsize, &len, NULL, 0);
+    return xr_int(memsize);
+#elif defined(XR_PLATFORM_LINUX)
+    struct sysinfo si;
+    if (sysinfo(&si) == 0) return xr_int((int64_t)si.totalram * si.mem_unit);
+    return xr_int(0);
+#else
+    return xr_int(0);
+#endif
+}
+
+// freeMemory() - Get available system memory in bytes
+static XrValue os_freeMemory(XrayIsolate *X, XrValue *args, int argc) {
+    (void)X; (void)args; (void)argc;
+    
+#ifdef XR_PLATFORM_MACOS
+    vm_statistics64_data_t vm_stat;
+    mach_msg_type_number_t count = HOST_VM_INFO64_COUNT;
+    if (host_statistics64(mach_host_self(), HOST_VM_INFO64,
+                          (host_info64_t)&vm_stat, &count) == KERN_SUCCESS) {
+        int64_t free_bytes = (int64_t)(vm_stat.free_count + vm_stat.inactive_count)
+                             * vm_page_size;
+        return xr_int(free_bytes);
+    }
+    return xr_int(0);
+#elif defined(XR_PLATFORM_LINUX)
+    struct sysinfo si;
+    if (sysinfo(&si) == 0) return xr_int((int64_t)si.freeram * si.mem_unit);
+    return xr_int(0);
+#else
+    return xr_int(0);
+#endif
+}
+
+// uptime() - Get system uptime in seconds
+static XrValue os_uptime(XrayIsolate *X, XrValue *args, int argc) {
+    (void)X; (void)args; (void)argc;
+    
+#ifdef XR_PLATFORM_MACOS
+    struct timeval boottime;
+    size_t len = sizeof(boottime);
+    if (sysctlbyname("kern.boottime", &boottime, &len, NULL, 0) == 0) {
+        time_t now = time(NULL);
+        return xr_float((double)(now - boottime.tv_sec));
+    }
+    return xr_float(0.0);
+#elif defined(XR_PLATFORM_LINUX)
+    struct sysinfo si;
+    if (sysinfo(&si) == 0) return xr_float((double)si.uptime);
+    return xr_float(0.0);
+#else
+    return xr_float(0.0);
+#endif
+}
+
+// loadavg() - Get system load averages (1, 5, 15 min)
+static XrValue os_loadavg(XrayIsolate *X, XrValue *args, int argc) {
+    (void)args; (void)argc;
+    
+    XrArray *arr = xr_array_new(xr_current_coro(X));
+    if (!arr) return xr_null();
+    
+#ifndef XR_PLATFORM_WINDOWS
+    double avg[3] = {0};
+    getloadavg(avg, 3);
+    xr_array_push(arr, xr_float(avg[0]));
+    xr_array_push(arr, xr_float(avg[1]));
+    xr_array_push(arr, xr_float(avg[2]));
+#else
+    xr_array_push(arr, xr_float(0.0));
+    xr_array_push(arr, xr_float(0.0));
+    xr_array_push(arr, xr_float(0.0));
+#endif
+    
+    return xr_value_from_array(arr);
+}
+
+/* ========== Process & Signal (P3) ========== */
+
+// ppid() - Get parent process ID
+static XrValue os_ppid(XrayIsolate *X, XrValue *args, int argc) {
+    (void)X; (void)args; (void)argc;
+#ifdef XR_PLATFORM_WINDOWS
+    return xr_int(0);
+#else
+    return xr_int(getppid());
+#endif
+}
+
+// kill(pid, signal) - Send signal to process
+static XrValue os_kill(XrayIsolate *X, XrValue *args, int argc) {
+    (void)X;
+    if (argc < 1) return xr_bool(false);
+    if (!XR_IS_INT(args[0])) return xr_bool(false);
+    
+    int pid = (int)XR_TO_INT(args[0]);
+    int sig = SIGTERM;  // default signal
+    if (argc >= 2 && XR_IS_INT(args[1])) {
+        sig = (int)XR_TO_INT(args[1]);
+    }
+    
+#ifdef XR_PLATFORM_WINDOWS
+    return xr_bool(false);
+#else
+    return xr_bool(kill(pid, sig) == 0);
+#endif
+}
+
+// sleep(ms) - Sleep for milliseconds
+static XrValue os_sleep(XrayIsolate *X, XrValue *args, int argc) {
+    (void)X;
+    if (argc < 1) return xr_null();
+    if (!XR_IS_INT(args[0])) return xr_null();
+    
+    int64_t ms = XR_TO_INT(args[0]);
+    if (ms <= 0) return xr_null();
+    
+#ifdef XR_PLATFORM_WINDOWS
+    Sleep((DWORD)ms);
+#else
+    struct timespec ts;
+    ts.tv_sec = ms / 1000;
+    ts.tv_nsec = (ms % 1000) * 1000000;
+    nanosleep(&ts, NULL);
+#endif
+    
+    return xr_null();
+}
+
+// clock() - Get process CPU time in seconds
+static XrValue os_clock(XrayIsolate *X, XrValue *args, int argc) {
+    (void)X; (void)args; (void)argc;
+    return xr_float((double)clock() / CLOCKS_PER_SEC);
+}
+
+/* ========== Process Execution (P0) ========== */
+
+#ifndef XR_PLATFORM_WINDOWS
+// Read all data from a file descriptor into a heap-allocated string
+static char* read_fd_to_string(int fd) {
+    size_t cap = 4096, len = 0;
+    char *buf = (char*)malloc(cap);
+    if (!buf) return NULL;
+    
+    ssize_t n;
+    while ((n = read(fd, buf + len, cap - len - 1)) > 0) {
+        len += n;
+        if (len + 1 >= cap) {
+            cap *= 2;
+            char *newbuf = (char*)realloc(buf, cap);
+            if (!newbuf) { free(buf); return NULL; }
+            buf = newbuf;
+        }
+    }
+    buf[len] = '\0';
+    return buf;
+}
+#endif
+
+// exec(cmd) - Execute shell command, return {stdout, stderr, exitCode}
+static XrValue os_exec(XrayIsolate *X, XrValue *args, int argc) {
+    if (argc < 1) return xr_null();
+    const char *cmd = get_string_arg(args[0]);
+    if (!cmd) return xr_null();
+    
+#ifdef XR_PLATFORM_WINDOWS
+    // Windows: simplified via _popen (stdout only)
+    FILE *fp = _popen(cmd, "r");
+    if (!fp) return xr_null();
+    
+    char buf[4096];
+    size_t len = 0, cap = 4096;
+    char *output = (char*)malloc(cap);
+    if (!output) { _pclose(fp); return xr_null(); }
+    
+    size_t n;
+    while ((n = fread(buf, 1, sizeof(buf), fp)) > 0) {
+        if (len + n >= cap) { cap *= 2; output = (char*)realloc(output, cap); }
+        memcpy(output + len, buf, n);
+        len += n;
+    }
+    output[len] = '\0';
+    int status = _pclose(fp);
+    
+    XrMap *map = xr_map_new(xr_current_coro(X));
+    xr_map_set(map, make_string(X, "stdout"), make_string(X, output));
+    xr_map_set(map, make_string(X, "stderr"), make_string(X, ""));
+    xr_map_set(map, make_string(X, "exitCode"), xr_int(status));
+    free(output);
+    return xr_value_from_map(map);
+#else
+    // Unix: fork + exec + pipe for both stdout and stderr
+    int stdout_pipe[2], stderr_pipe[2];
+    if (pipe(stdout_pipe) != 0) return xr_null();
+    if (pipe(stderr_pipe) != 0) {
+        close(stdout_pipe[0]); close(stdout_pipe[1]);
+        return xr_null();
+    }
+    
+    pid_t pid = fork();
+    if (pid < 0) {
+        close(stdout_pipe[0]); close(stdout_pipe[1]);
+        close(stderr_pipe[0]); close(stderr_pipe[1]);
+        return xr_null();
+    }
+    
+    if (pid == 0) {
+        // Child process
+        close(stdout_pipe[0]);
+        close(stderr_pipe[0]);
+        dup2(stdout_pipe[1], STDOUT_FILENO);
+        dup2(stderr_pipe[1], STDERR_FILENO);
+        close(stdout_pipe[1]);
+        close(stderr_pipe[1]);
+        execl("/bin/sh", "sh", "-c", cmd, (char*)NULL);
+        _exit(127);
+    }
+    
+    // Parent process
+    close(stdout_pipe[1]);
+    close(stderr_pipe[1]);
+    
+    char *stdout_buf = read_fd_to_string(stdout_pipe[0]);
+    char *stderr_buf = read_fd_to_string(stderr_pipe[0]);
+    close(stdout_pipe[0]);
+    close(stderr_pipe[0]);
+    
+    int status;
+    waitpid(pid, &status, 0);
+    int exit_code = WIFEXITED(status) ? WEXITSTATUS(status) : -1;
+    
+    XrMap *map = xr_map_new(xr_current_coro(X));
+    xr_map_set(map, make_string(X, "stdout"), make_string(X, stdout_buf ? stdout_buf : ""));
+    xr_map_set(map, make_string(X, "stderr"), make_string(X, stderr_buf ? stderr_buf : ""));
+    xr_map_set(map, make_string(X, "exitCode"), xr_int(exit_code));
+    
+    free(stdout_buf);
+    free(stderr_buf);
+    return xr_value_from_map(map);
+#endif
+}
+
+/* ========== Platform Information ========== */
+
+// Get operating system name
+static const char* get_platform(void) {
+#if defined(_WIN32) || defined(_WIN64)
+    return "windows";
+#elif defined(__APPLE__) && defined(__MACH__)
+    return "darwin";
+#elif defined(__linux__)
+    return "linux";
+#elif defined(__FreeBSD__)
+    return "freebsd";
+#elif defined(__OpenBSD__)
+    return "openbsd";
+#else
+    return "unknown";
+#endif
+}
+
+// Get processor architecture
+static const char* get_arch(void) {
+#if defined(__aarch64__) || defined(_M_ARM64)
+    return "arm64";
+#elif defined(__x86_64__) || defined(_M_X64)
+    return "x64";
+#elif defined(__i386__) || defined(_M_IX86)
+    return "x86";
+#elif defined(__arm__) || defined(_M_ARM)
+    return "arm";
+#else
+    return "unknown";
+#endif
+}
+
+/* ========== Module Loading ========== */
+
+// ========== Type Declarations (parsed by gen_stdlib_types.py) ==========
+
+#include "../../src/module/xbuiltin_decl.h"
+
+// @module os
+
+XR_DEFINE_BUILTIN(os_getenv, "getenv", "(name: string): string?", "Get environment variable")
+XR_DEFINE_BUILTIN(os_setenv, "setenv", "(name: string, value: string): bool", "Set environment variable")
+XR_DEFINE_BUILTIN(os_unsetenv, "unsetenv", "(name: string): bool", "Unset environment variable")
+XR_DEFINE_BUILTIN(os_environ, "environ", "(): Map<string, string>", "Get all environment variables")
+XR_DEFINE_BUILTIN(os_exit, "exit", "(code?: int): void", "Exit process")
+XR_DEFINE_BUILTIN(os_getpid, "getpid", "(): int", "Get process ID")
+XR_DEFINE_BUILTIN(os_getcwd, "getcwd", "(): string", "Get current working directory")
+XR_DEFINE_BUILTIN(os_chdir, "chdir", "(path: string): bool", "Change working directory")
+XR_DEFINE_BUILTIN(os_hostname, "hostname", "(): string", "Get hostname")
+XR_DEFINE_BUILTIN(os_tmpdir, "tmpdir", "(): string", "Get temporary directory path")
+
+// User information
+XR_DEFINE_BUILTIN(os_username, "username", "(): string?", "Get current user name")
+XR_DEFINE_BUILTIN(os_homedir, "homedir", "(): string?", "Get user home directory")
+XR_DEFINE_BUILTIN(os_uid, "uid", "(): int", "Get user ID")
+XR_DEFINE_BUILTIN(os_gid, "gid", "(): int", "Get group ID")
+
+// System information
+XR_DEFINE_BUILTIN(os_cpuCount, "cpuCount", "(): int", "Get number of CPU cores")
+XR_DEFINE_BUILTIN(os_totalMemory, "totalMemory", "(): int", "Get total system memory in bytes")
+XR_DEFINE_BUILTIN(os_freeMemory, "freeMemory", "(): int", "Get available system memory in bytes")
+XR_DEFINE_BUILTIN(os_uptime, "uptime", "(): float", "Get system uptime in seconds")
+XR_DEFINE_BUILTIN(os_loadavg, "loadavg", "(): Array<float>", "Get system load averages (1, 5, 15 min)")
+
+// Process & signal
+XR_DEFINE_BUILTIN(os_ppid, "ppid", "(): int", "Get parent process ID")
+XR_DEFINE_BUILTIN(os_kill, "kill", "(pid: int, signal?: int): bool", "Send signal to process")
+XR_DEFINE_BUILTIN(os_sleep, "sleep", "(ms: int): void", "Sleep for milliseconds")
+XR_DEFINE_BUILTIN(os_clock, "clock", "(): float", "Get process CPU time in seconds")
+
+// Process execution
+XR_DEFINE_BUILTIN(os_exec, "exec", "(cmd: string): Map<string, any>?", "Execute shell command")
+
+XrModule* xr_load_module_os(XrayIsolate *isolate) {
+    // 1. Create native module
+    XrModule *mod = xr_module_create_native(isolate, "os");
+    if (!mod) return NULL;
+    
+    // 2. Add exported functions
+    #define EXPORT_CFUNC(name_str, func_ptr) \
+        do { \
+            XrCFunction *cfunc = xr_vm_cfunction_new(isolate, func_ptr, name_str); \
+            XrValue fn_val = xr_value_from_cfunction(cfunc); \
+            xr_module_add_export(isolate, mod, name_str, fn_val); \
+        } while(0)
+    
+    // Environment variables
+    EXPORT_CFUNC("getenv", os_getenv);
+    EXPORT_CFUNC("setenv", os_setenv);
+    EXPORT_CFUNC("unsetenv", os_unsetenv);
+    EXPORT_CFUNC("environ", os_environ);
+    
+    // Process control
+    EXPORT_CFUNC("exit", os_exit);
+    EXPORT_CFUNC("getpid", os_getpid);
+    EXPORT_CFUNC("getcwd", os_getcwd);
+    EXPORT_CFUNC("chdir", os_chdir);
+    EXPORT_CFUNC("hostname", os_hostname);
+    EXPORT_CFUNC("tmpdir", os_tmpdir);
+    
+    // User information
+    EXPORT_CFUNC("username", os_username);
+    EXPORT_CFUNC("homedir", os_homedir);
+    EXPORT_CFUNC("uid", os_uid);
+    EXPORT_CFUNC("gid", os_gid);
+    
+    // System information
+    EXPORT_CFUNC("cpuCount", os_cpuCount);
+    EXPORT_CFUNC("totalMemory", os_totalMemory);
+    EXPORT_CFUNC("freeMemory", os_freeMemory);
+    EXPORT_CFUNC("uptime", os_uptime);
+    EXPORT_CFUNC("loadavg", os_loadavg);
+    
+    // Process & signal
+    EXPORT_CFUNC("ppid", os_ppid);
+    EXPORT_CFUNC("kill", os_kill);
+    EXPORT_CFUNC("sleep", os_sleep);
+    EXPORT_CFUNC("clock", os_clock);
+    
+    // Process execution
+    EXPORT_CFUNC("exec", os_exec);
+    
+    #undef EXPORT_CFUNC
+    
+    // 3. Add constants
+    xr_module_add_export(isolate, mod, "platform", make_string(isolate, get_platform()));
+    xr_module_add_export(isolate, mod, "arch", make_string(isolate, get_arch()));
+    
+#ifdef _WIN32
+    xr_module_add_export(isolate, mod, "sep", make_string(isolate, "\\"));
+    xr_module_add_export(isolate, mod, "eol", make_string(isolate, "\r\n"));
+#else
+    xr_module_add_export(isolate, mod, "sep", make_string(isolate, "/"));
+    xr_module_add_export(isolate, mod, "eol", make_string(isolate, "\n"));
+#endif
+    
+    // 4. Mark as loaded
+    mod->loaded = true;
+    return mod;
+}

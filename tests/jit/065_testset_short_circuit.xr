@@ -1,0 +1,27 @@
+// EXPECTED: hello
+// EXPECTED: 42
+// EXPECTED: default
+// EXPECTED: 10
+// Test: Short-circuit evaluation (TESTSET) and logical operators in JIT
+
+fn or_test(a, b) {
+    return a || b
+}
+
+fn and_test(a, b) {
+    return a && b
+}
+
+let i = 0
+while (i < 200) {
+    or_test(null, "hello")
+    or_test(42, "ignored")
+    and_test(true, 10)
+    and_test(false, 99)
+    i = i + 1
+}
+
+print(or_test(null, "hello"))
+print(or_test(42, "ignored"))
+print(or_test(null, "default"))
+print(and_test(true, 10))

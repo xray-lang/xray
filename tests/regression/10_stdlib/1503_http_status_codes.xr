@@ -1,0 +1,50 @@
+// Test HTTP status code classification logic
+
+import http
+
+fn isSuccess(status: int): bool { return status >= 200 && status < 300 }
+fn isRedirect(status: int): bool { return status >= 300 && status < 400 }
+fn isClientError(status: int): bool { return status >= 400 && status < 500 }
+fn isServerError(status: int): bool { return status >= 500 && status < 600 }
+
+@test
+fn test_2xx_success(): void {
+    assert(isSuccess(200))
+    assert(isSuccess(201))
+    assert(isSuccess(204))
+    assert(!isSuccess(199))
+    assert(!isSuccess(300))
+}
+
+@test
+fn test_3xx_redirect(): void {
+    assert(isRedirect(301))
+    assert(isRedirect(302))
+    assert(isRedirect(304))
+    assert(isRedirect(307))
+    assert(!isRedirect(299))
+    assert(!isRedirect(400))
+}
+
+@test
+fn test_4xx_client_error(): void {
+    assert(isClientError(400))
+    assert(isClientError(401))
+    assert(isClientError(403))
+    assert(isClientError(404))
+    assert(isClientError(429))
+    assert(!isClientError(399))
+    assert(!isClientError(500))
+}
+
+@test
+fn test_5xx_server_error(): void {
+    assert(isServerError(500))
+    assert(isServerError(502))
+    assert(isServerError(503))
+    assert(isServerError(504))
+    assert(!isServerError(499))
+    assert(!isServerError(600))
+}
+
+print("All http status code tests passed")

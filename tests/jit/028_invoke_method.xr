@@ -1,0 +1,35 @@
+// EXPECTED: 3
+// EXPECTED: HELLO
+// EXPECTED: 5
+// Test: Method invocation (INVOKE, INVOKE_BUILTIN, INVOKE_DIRECT)
+
+fn arr_len(arr) : int {
+    return arr.length
+}
+
+fn str_upper(s) {
+    return s.toUpperCase()
+}
+
+fn arr_push_and_len(n: int) : int {
+    let arr = []
+    let i = 0
+    while (i < n) {
+        arr.push(i)
+        i = i + 1
+    }
+    return arr.length
+}
+
+let a = [1, 2, 3]
+let i = 0
+while (i < 200) {
+    arr_len(a)
+    str_upper("hello")
+    arr_push_and_len(5)
+    i = i + 1
+}
+
+print(arr_len(a))
+print(str_upper("hello"))
+print(arr_push_and_len(5))

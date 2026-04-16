@@ -1,0 +1,11 @@
+{
+  "outdir": "/reports",
+  "servers": [
+    {
+      "agent": "xray",
+      "url": "ws://host.docker.internal:9100"
+    }
+  ],
+  "cases": ["1.*", "2.*", "3.*", "4.*", "5.*", "6.*", "7.*", "10.*"],
+  "exclude-cases": []
+}

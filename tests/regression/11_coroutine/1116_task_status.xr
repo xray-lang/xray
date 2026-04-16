@@ -1,0 +1,42 @@
+// 测试 task.done 和 task.cancelled 属性
+// 作者：xingleixu@gmail.com
+
+fn compute(x: int): int {
+    return x * 2
+}
+
+fn main(): void {
+    // 创建协程
+    let task = go compute(21)
+    
+    // 检查初始状态
+    print("before await:")
+    print("  done:", task.done)
+    print("  cancelled:", task.cancelled)
+    
+    // 等待完成
+    let result = await task
+    
+    // 检查完成状态
+    print("after await:")
+    print("  done:", task.done)
+    print("  result:", result)
+    
+    // 测试取消状态
+    let task2 = go compute(10)
+    task2.cancel()
+    
+    print("after cancel:")
+    print("  done:", task2.done)
+    print("  cancelled:", task2.cancelled)
+    
+    // await 已取消的协程
+    let result2 = await task2
+    print("  result:", result2)
+    
+    // 最终状态
+    print("final:")
+    print("  done:", task2.done)
+}
+
+main()

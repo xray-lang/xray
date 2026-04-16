@@ -1,0 +1,31 @@
+// EXPECTED: 30
+// EXPECTED: 120
+// EXPECTED: 25
+// Test: Function calls (CALL, CALL_STATIC, multi-param)
+
+fn add(a: int, b: int) : int {
+    return a + b
+}
+
+fn mul(a: int, b: int) : int {
+    return a * b
+}
+
+fn chain(a: int, b: int, c: int) : int {
+    return add(mul(a, b), c)
+}
+
+fn multi_param(a: int, b: int, c: int, d: int) : int {
+    return a + b + c + d
+}
+
+let i = 0
+while (i < 200) {
+    chain(2, 3, 4)
+    multi_param(1, 2, 3, 4)
+    i = i + 1
+}
+
+print(chain(2, 3, 24))
+print(mul(chain(2, 3, 4), 12))
+print(multi_param(4, 6, 7, 8))

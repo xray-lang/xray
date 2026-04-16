@@ -1,0 +1,26 @@
+// EXPECTED: 30
+// EXPECTED: 50
+// Test: Nested closures with multi-level upvalue capture
+
+fn outer(x: int) {
+    fn middle(y: int) {
+        fn inner(z: int) : int {
+            return x + y + z
+        }
+        return inner
+    }
+    return middle
+}
+
+let mid = outer(10)
+let inn = mid(20)
+
+let i = 0
+while (i < 200) {
+    inn(0)
+    i = i + 1
+}
+
+print(inn(0))
+let inn2 = outer(10)(20)
+print(inn2(20))

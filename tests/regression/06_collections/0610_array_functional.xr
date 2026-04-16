@@ -1,0 +1,227 @@
+// 0610_array_functional.xr
+// 作者：xingleixu@gmail.com
+// 测试：数组函数式方法
+// ===== map =====
+@test
+fn test_map_basic(): void {
+    let arr = [1, 2, 3, 4, 5]
+    let doubled = arr.map(fn(x) {
+        return x * 2
+    })
+    assert_eq(doubled.length, 5)
+    assert_eq(doubled[0], 2)
+    assert_eq(doubled[4], 10)
+}
+
+@test
+fn test_map_empty(): void {
+    let arr: Array<int> = []
+    let result = arr.map(fn(x) {
+        return x * 2
+    })
+    assert_eq(result.length, 0)
+}
+
+@test
+fn test_map_to_different_type(): void {
+    let arr = [1, 2, 3]
+    let strs = arr.map(fn(x) {
+        return x.toString()
+    })
+    assert_eq(strs[0], "1")
+    assert_eq(strs[1], "2")
+    assert_eq(strs[2], "3")
+}
+
+// ===== filter =====
+@test
+fn test_filter_basic(): void {
+    let arr = [1, 2, 3, 4, 5, 6]
+    let evens = arr.filter(fn(x) {
+        return x % 2 == 0
+    })
+    assert_eq(evens.length, 3)
+    assert_eq(evens[0], 2)
+    assert_eq(evens[1], 4)
+    assert_eq(evens[2], 6)
+}
+
+@test
+fn test_filter_none(): void {
+    let arr = [1, 3, 5, 7]
+    let evens = arr.filter(fn(x) {
+        return x % 2 == 0
+    })
+    assert_eq(evens.length, 0)
+}
+
+@test
+fn test_filter_all(): void {
+    let arr = [2, 4, 6, 8]
+    let evens = arr.filter(fn(x) {
+        return x % 2 == 0
+    })
+    assert_eq(evens.length, 4)
+}
+
+@test
+fn test_filter_empty(): void {
+    let arr: Array<int> = []
+    let result = arr.filter(fn(x) {
+        return true
+    })
+    assert_eq(result.length, 0)
+}
+
+// ===== reduce =====
+@test
+fn test_reduce_sum(): void {
+    let arr = [1, 2, 3, 4, 5]
+    let sum = arr.reduce(fn(acc, x) {
+        return acc + x
+    }, 0)
+    assert_eq(sum, 15)
+}
+
+@test
+fn test_reduce_product(): void {
+    let arr = [1, 2, 3, 4]
+    let product = arr.reduce(fn(acc, x) {
+        return acc * x
+    }, 1)
+    assert_eq(product, 24)
+}
+
+@test
+fn test_reduce_max(): void {
+    let arr = [3, 1, 4, 1, 5, 9, 2, 6]
+    let max = arr.reduce(fn(a, b) {
+        return a > b ? a : b
+    }, arr[0])
+    assert_eq(max, 9)
+}
+
+@test
+fn test_reduce_min(): void {
+    let arr = [3, 1, 4, 1, 5, 9, 2, 6]
+    let min = arr.reduce(fn(a, b) {
+        return a < b ? a : b
+    }, arr[0])
+    assert_eq(min, 1)
+}
+
+@test
+fn test_reduce_empty(): void {
+    let arr: Array<int> = []
+    let sum = arr.reduce(fn(acc, x) {
+        return acc + x
+    }, 0)
+    assert_eq(sum, 0)
+}
+
+@test
+fn test_reduce_single(): void {
+    let arr = [42]
+    let sum = arr.reduce(fn(acc, x) {
+        return acc + x
+    }, 0)
+    assert_eq(sum, 42)
+}
+
+// ===== forEach =====
+@test
+fn test_foreach_basic(): void {
+    let arr = [1, 2, 3]
+    let sum = 0
+    arr.forEach(fn(x) {
+        sum += x
+    })
+    assert_eq(sum, 6)
+}
+
+@test
+fn test_foreach_empty(): void {
+    let arr: Array<int> = []
+    let count = 0
+    arr.forEach(fn(x) {
+        count++
+    })
+    assert_eq(count, 0)
+}
+
+// ===== 链式调用 =====
+@test
+fn test_chain_map_filter(): void {
+    let arr = [1, 2, 3, 4, 5]
+    let result = arr.map(fn(x) {
+        return x * 2
+    }).filter(fn(x) {
+        return x > 5
+    })
+    // [6, 8, 10]
+    assert_eq(result.length, 3)
+    assert_eq(result[0], 6)
+}
+
+@test
+fn test_chain_filter_map(): void {
+    let arr = [1, 2, 3, 4, 5, 6]
+    let result = arr.filter(fn(x) {
+        return x % 2 == 0
+    }).map(fn(x) {
+        return x * x
+    })
+    // [4, 16, 36]
+    assert_eq(result.length, 3)
+    assert_eq(result[0], 4)
+    assert_eq(result[2], 36)
+}
+
+@test
+fn test_chain_map_filter_reduce(): void {
+    let arr = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+    let result = arr.filter(fn(x) {
+        return x % 2 == 0
+    }).map(fn(x) {
+        return x * 2
+    }).reduce(fn(a, b) {
+        return a + b
+    }, 0)
+    // 60
+    assert_eq(result, 60)
+}
+
+// ===== 实际应用 =====
+@test
+fn test_sum_of_squares(): void {
+    let arr = [1, 2, 3, 4]
+    let sumOfSquares = arr.map(fn(x) {
+        return x * x
+    }).reduce(fn(a, b) {
+        return a + b
+    }, 0)
+    assert_eq(sumOfSquares, 30)
+}
+
+@test
+fn test_count_matches(): void {
+    let words = ["apple", "banana", "apricot", "cherry"]
+    let startsWithA = words.filter(fn(w) {
+        return w.startsWith("a")
+    })
+    assert_eq(startsWithA.length, 2)
+}
+
+@test
+fn test_flatten_single_level(): void {
+    let nested = [[1, 2], [3, 4], [5, 6]]
+    let flat: Array<int> = []
+    for (arr in nested) {
+        for (x in arr) {
+            flat.push(x)
+        }
+    }
+    assert_eq(flat.length, 6)
+    assert_eq(flat[0], 1)
+    assert_eq(flat[5], 6)
+}

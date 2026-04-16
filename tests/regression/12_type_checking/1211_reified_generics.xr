@@ -1,0 +1,107 @@
+// Test reified generics - Reflect.elementType/keyType/valueType
+
+// === Test 1: Untyped containers default to "any" ===
+let arr = [1, 2, 3]
+assert_eq(Reflect.elementType(arr), "any")
+
+let map = {"a" => 1, "b" => 2}
+assert_eq(Reflect.keyType(map), "any")
+assert_eq(Reflect.valueType(map), "any")
+
+let set = Set()
+assert_eq(Reflect.elementType(set), "any")
+
+// === Test 2: Typed Array ===
+let int_arr: Array<int> = [10, 20, 30]
+assert_eq(Reflect.elementType(int_arr), "int")
+
+let float_arr: Array<float> = [1.0, 2.0]
+assert_eq(Reflect.elementType(float_arr), "float")
+
+let str_arr: Array<string> = ["hello", "world"]
+assert_eq(Reflect.elementType(str_arr), "string")
+
+let bool_arr: Array<bool> = [true, false]
+assert_eq(Reflect.elementType(bool_arr), "bool")
+
+// === Test 3: Empty typed containers ===
+let empty_int: Array<int> = []
+assert_eq(Reflect.elementType(empty_int), "int")
+
+// === Test 4: Non-container types return "any" ===
+assert_eq(Reflect.elementType(42), "any")
+assert_eq(Reflect.elementType("hello"), "any")
+assert_eq(Reflect.keyType(42), "any")
+assert_eq(Reflect.valueType("hello"), "any")
+
+// === Test 5: Slice preserves elem_tid ===
+let src: Array<int> = [1, 2, 3, 4, 5]
+let sliced = src[1:4]
+assert_eq(Reflect.elementType(sliced), "int")
+
+// === Test 6: Reflect.typeOf - full generic type strings ===
+assert_eq(Reflect.typeOf(int_arr), "Array<int>")
+assert_eq(Reflect.typeOf(float_arr), "Array<float>")
+assert_eq(Reflect.typeOf(str_arr), "Array<string>")
+assert_eq(Reflect.typeOf(arr), "Array")
+
+// Map typeOf
+let typed_map: Map<string, int> = {"x" => 1}
+assert_eq(Reflect.typeOf(typed_map), "Map<string, int>")
+assert_eq(Reflect.typeOf(map), "Map")
+
+// Set typeOf
+let typed_set: Set<string> = Set()
+assert_eq(Reflect.typeOf(typed_set), "Set<string>")
+assert_eq(Reflect.typeOf(set), "Set")
+
+// Non-container typeOf
+assert_eq(Reflect.typeOf(42), "int")
+assert_eq(Reflect.typeOf(3.14), "float")
+assert_eq(Reflect.typeOf("hello"), "string")
+assert_eq(Reflect.typeOf(true), "bool")
+assert_eq(Reflect.typeOf(null), "any")
+
+// === Test 7: Typed Array compact storage + operations ===
+int_arr.push(40)
+assert_eq(int_arr.length, 4)
+assert_eq(int_arr[3], 40)
+
+// Slice from typed array preserves typeOf
+assert_eq(Reflect.typeOf(sliced), "Array<int>")
+
+// === Test 8: User-defined generic class reified ===
+class Box<T> {
+    value: int
+    constructor(v) {
+        this.value = v
+    }
+}
+
+let int_box = new Box<int>(42)
+assert_eq(Reflect.typeOf(int_box), "Box<int>")
+
+let str_box = new Box<string>("hello")
+assert_eq(Reflect.typeOf(str_box), "Box<string>")
+
+// Non-generic instance
+let plain_box = new Box(99)
+assert_eq(Reflect.typeOf(plain_box), "Box")
+
+// Two type params
+class Pair<A, B> {
+    first: int
+    second: int
+    constructor(a, b) {
+        this.first = a
+        this.second = b
+    }
+}
+
+let pair = new Pair<int, string>(1, "one")
+assert_eq(Reflect.typeOf(pair), "Pair<int, string>")
+
+let plain_pair = new Pair(1, 2)
+assert_eq(Reflect.typeOf(plain_pair), "Pair")
+
+print("All reified generics tests passed!")

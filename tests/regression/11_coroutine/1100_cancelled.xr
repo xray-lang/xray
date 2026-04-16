@@ -1,0 +1,13 @@
+// 测试 cancelled() 表达式
+// 目前返回 false（尚未实现完整协程）
+
+@test
+fn test_cancelled(): void {
+    let is_cancelled = cancelled()
+    print(is_cancelled)  // 应输出 false
+}
+
+test_cancelled()
+
+// 期望输出：
+// false

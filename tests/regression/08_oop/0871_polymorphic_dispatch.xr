@@ -1,0 +1,122 @@
+// 0870_polymorphic_dispatch.xr
+// Tests: Polymorphic method dispatch correctness
+// Verifies IC-based devirtualization produces correct results
+
+class Animal {
+    name: string
+
+    constructor(name) {
+        this.name = name
+    }
+
+    speak(): string {
+        return this.name + " says ..."
+    }
+
+    legs(): int {
+        return 0
+    }
+}
+
+class Dog extends Animal {
+    constructor(name) {
+        super(name)
+    }
+
+    speak(): string {
+        return this.name + " says woof"
+    }
+
+    legs(): int {
+        return 4
+    }
+}
+
+class Cat extends Animal {
+    constructor(name) {
+        super(name)
+    }
+
+    speak(): string {
+        return this.name + " says meow"
+    }
+
+    legs(): int {
+        return 4
+    }
+}
+
+class Bird extends Animal {
+    constructor(name) {
+        super(name)
+    }
+
+    speak(): string {
+        return this.name + " says tweet"
+    }
+
+    legs(): int {
+        return 2
+    }
+}
+
+// Monomorphic call site: always Dog
+@test
+fn test_monomorphic_dispatch(): void {
+    let dog = new Dog("Rex")
+    let total = 0
+    for (let i = 0; i < 10; i++) {
+        total += dog.legs()
+    }
+    assert_eq(total, 40)
+    assert_eq(dog.speak(), "Rex says woof")
+}
+
+// Polymorphic call site: Dog and Cat
+@test
+fn test_polymorphic_dispatch(): void {
+    let animals = [new Dog("Rex"), new Cat("Whiskers"), new Dog("Buddy")]
+    let results: Array<string> = []
+    for (let i = 0; i < animals.length; i++) {
+        results.push(animals[i].speak())
+    }
+    assert_eq(results[0], "Rex says woof")
+    assert_eq(results[1], "Whiskers says meow")
+    assert_eq(results[2], "Buddy says woof")
+}
+
+// Megamorphic: Dog, Cat, Bird
+@test
+fn test_megamorphic_dispatch(): void {
+    let animals = [new Dog("D"), new Cat("C"), new Bird("B")]
+    let total_legs = 0
+    for (let i = 0; i < animals.length; i++) {
+        total_legs += animals[i].legs()
+    }
+    assert_eq(total_legs, 10)  // 4 + 4 + 2
+}
+
+// Method with side effects through virtual dispatch
+@test
+fn test_virtual_dispatch_with_state(): void {
+    let dog = new Dog("Max")
+    let results: Array<string> = []
+    for (let i = 0; i < 5; i++) {
+        results.push(dog.speak())
+    }
+    assert_eq(results.length, 5)
+    for (let i = 0; i < 5; i++) {
+        assert_eq(results[i], "Max says woof")
+    }
+}
+
+// Mixed dispatch: base class and derived
+@test
+fn test_base_and_derived(): void {
+    let base = new Animal("Generic")
+    let derived = new Dog("Specific")
+    assert_eq(base.speak(), "Generic says ...")
+    assert_eq(derived.speak(), "Specific says woof")
+    assert_eq(base.legs(), 0)
+    assert_eq(derived.legs(), 4)
+}

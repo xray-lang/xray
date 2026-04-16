@@ -1,0 +1,23 @@
+// EXPECTED: int
+// EXPECTED: float
+// EXPECTED: string
+// EXPECTED: bool
+// Test: Typeof operations in JIT
+
+fn type_name(x) {
+    return typename(x)
+}
+
+let i = 0
+while (i < 200) {
+    type_name(42)
+    type_name(3.14)
+    type_name("hello")
+    type_name(true)
+    i = i + 1
+}
+
+print(type_name(42))
+print(type_name(3.14))
+print(type_name("hello"))
+print(type_name(true))

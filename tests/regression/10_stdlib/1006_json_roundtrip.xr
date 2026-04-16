@@ -1,0 +1,340 @@
+import json
+
+// 1006_json_roundtrip.xr
+// 作者：xingleixu@gmail.com
+// 测试：JSON 往返测试（parse -> stringify -> parse）
+// 借鉴：simdjson 的往返一致性测试
+
+// ===== 基本类型往返 =====
+
+@test
+fn test_roundtrip_null(): void {
+    let original = null
+    let jsonStr = json.stringify(original)
+    let parsed = json.parse(jsonStr)
+    assert_eq(parsed, original)
+}
+
+@test
+fn test_roundtrip_true(): void {
+    let original = true
+    let jsonStr = json.stringify(original)
+    let parsed = json.parse(jsonStr)
+    assert_eq(parsed, original)
+}
+
+@test
+fn test_roundtrip_false(): void {
+    let original = false
+    let jsonStr = json.stringify(original)
+    let parsed = json.parse(jsonStr)
+    assert_eq(parsed, original)
+}
+
+@test
+fn test_roundtrip_integer(): void {
+    let original = 42
+    let jsonStr = json.stringify(original)
+    let parsed = json.parse(jsonStr)
+    assert_eq(parsed, original)
+}
+
+@test
+fn test_roundtrip_negative_integer(): void {
+    let original = -100
+    let jsonStr = json.stringify(original)
+    let parsed = json.parse(jsonStr)
+    assert_eq(parsed, original)
+}
+
+@test
+fn test_roundtrip_float(): void {
+    let original = 3.14159
+    let jsonStr = json.stringify(original)
+    let parsed = json.parse(jsonStr)
+    // 浮点数可能有精度损失，检查近似相等
+    assert_eq(parsed > 3.14, true)
+    assert_eq(parsed < 3.15, true)
+}
+
+@test
+fn test_roundtrip_string(): void {
+    let original = "Hello, World!"
+    let jsonStr = json.stringify(original)
+    let parsed = json.parse(jsonStr)
+    assert_eq(parsed, original)
+}
+
+@test
+fn test_roundtrip_empty_string(): void {
+    let original = ""
+    let jsonStr = json.stringify(original)
+    let parsed = json.parse(jsonStr)
+    assert_eq(parsed, original)
+}
+
+// ===== 数组往返 =====
+
+@test
+fn test_roundtrip_empty_array(): void {
+    let original: Array<int> = []
+    let jsonStr = json.stringify(original)
+    let parsed = json.parse(jsonStr)
+    assert_eq(parsed.length, 0)
+}
+
+@test
+fn test_roundtrip_integer_array(): void {
+    let original = [1, 2, 3, 4, 5]
+    let jsonStr = json.stringify(original)
+    let parsed = json.parse(jsonStr)
+    assert_eq(parsed.length, 5)
+    assert_eq(parsed[0], 1)
+    assert_eq(parsed[4], 5)
+}
+
+@test
+fn test_roundtrip_string_array(): void {
+    let original = ["a", "b", "c"]
+    let jsonStr = json.stringify(original)
+    let parsed = json.parse(jsonStr)
+    assert_eq(parsed.length, 3)
+    assert_eq(parsed[0], "a")
+    assert_eq(parsed[2], "c")
+}
+
+@test
+fn test_roundtrip_mixed_array(): void {
+    let original = [1, "two", true, null]
+    let jsonStr = json.stringify(original)
+    let parsed = json.parse(jsonStr)
+    assert_eq(parsed.length, 4)
+    assert_eq(parsed[0], 1)
+    assert_eq(parsed[1], "two")
+    assert_eq(parsed[2], true)
+    assert_eq(parsed[3], null)
+}
+
+@test
+fn test_roundtrip_nested_array(): void {
+    let original = [[1, 2], [3, 4]]
+    let jsonStr = json.stringify(original)
+    let parsed = json.parse(jsonStr)
+    assert_eq(parsed.length, 2)
+    assert_eq(parsed[0][0], 1)
+    assert_eq(parsed[1][1], 4)
+}
+
+// ===== 对象往返 =====
+
+@test
+fn test_roundtrip_empty_object(): void {
+    let original = {}
+    let jsonStr = json.stringify(original)
+    let parsed = json.parse(jsonStr)
+    assert_eq(parsed != null, true)
+}
+
+@test
+fn test_roundtrip_simple_object(): void {
+    let original = { name: "Alice", age: 30 }
+    let jsonStr = json.stringify(original)
+    let parsed = json.parse(jsonStr)
+    assert_eq(parsed.name, "Alice")
+    assert_eq(parsed.age, 30)
+}
+
+@test
+fn test_roundtrip_nested_object(): void {
+    let original = { user: { name: "Bob", profile: { city: "NYC" } } }
+    let jsonStr = json.stringify(original)
+    let parsed = json.parse(jsonStr)
+    assert_eq(parsed.user.name, "Bob")
+    assert_eq(parsed.user.profile.city, "NYC")
+}
+
+@test
+fn test_roundtrip_object_with_array(): void {
+    let original = { numbers: [1, 2, 3], active: true }
+    let jsonStr = json.stringify(original)
+    let parsed = json.parse(jsonStr)
+    assert_eq(parsed.numbers.length, 3)
+    assert_eq(parsed.numbers[0], 1)
+    assert_eq(parsed.active, true)
+}
+
+// ===== Unicode 往返 =====
+
+@test
+fn test_roundtrip_chinese(): void {
+    let original = "你好世界"
+    let jsonStr = json.stringify(original)
+    let parsed = json.parse(jsonStr)
+    assert_eq(parsed, original)
+}
+
+@test
+fn test_roundtrip_emoji(): void {
+    let original = "Hello 🌍"
+    let jsonStr = json.stringify(original)
+    let parsed = json.parse(jsonStr)
+    assert_eq(parsed, original)
+}
+
+@test
+fn test_roundtrip_mixed_unicode(): void {
+    let original = { greeting: "你好", emoji: "🎉", text: "Hello" }
+    let jsonStr = json.stringify(original)
+    let parsed = json.parse(jsonStr)
+    assert_eq(parsed.greeting, "你好")
+    assert_eq(parsed.text, "Hello")
+}
+
+// ===== 数字边界往返 =====
+
+@test
+fn test_roundtrip_zero(): void {
+    let original = 0
+    let jsonStr = json.stringify(original)
+    let parsed = json.parse(jsonStr)
+    assert_eq(parsed, 0)
+}
+
+@test
+fn test_roundtrip_large_integer(): void {
+    // Use max 48-bit integer (NaN Boxing limit)
+    let original = 140737488355327
+    let jsonStr = json.stringify(original)
+    let parsed = json.parse(jsonStr)
+    assert_eq(parsed, original)
+}
+
+@test
+fn test_roundtrip_small_float(): void {
+    let original = 0.000001
+    let jsonStr = json.stringify(original)
+    let parsed = json.parse(jsonStr)
+    // 检查近似相等
+    assert_eq(parsed > 0, true)
+    assert_eq(parsed < 0.00001, true)
+}
+
+@test
+fn test_roundtrip_scientific(): void {
+    let original = 1.5e10
+    let jsonStr = json.stringify(original)
+    let parsed = json.parse(jsonStr)
+    assert_eq(parsed, original)
+}
+
+// ===== 复杂结构往返 =====
+
+@test
+fn test_roundtrip_complex_structure(): void {
+    let original = {
+        id: 12345,
+        name: "Test User",
+        active: true,
+        score: 98.5,
+        tags: ["tag1", "tag2", "tag3"],
+        metadata: {
+            created: "2024-01-01",
+            updated: null
+        }
+    }
+    let jsonStr = json.stringify(original)
+    let parsed = json.parse(jsonStr)
+    
+    assert_eq(parsed.id, 12345)
+    assert_eq(parsed.name, "Test User")
+    assert_eq(parsed.active, true)
+    assert_eq(parsed.tags.length, 3)
+    assert_eq(parsed.tags[0], "tag1")
+    assert_eq(parsed.metadata.created, "2024-01-01")
+    assert_eq(parsed.metadata.updated, null)
+}
+
+@test
+fn test_roundtrip_array_of_objects(): void {
+    let original = [
+        { id: 1, name: "First" },
+        { id: 2, name: "Second" },
+        { id: 3, name: "Third" }
+    ]
+    let jsonStr = json.stringify(original)
+    let parsed = json.parse(jsonStr)
+    
+    assert_eq(parsed.length, 3)
+    assert_eq(parsed[0].id, 1)
+    assert_eq(parsed[0].name, "First")
+    assert_eq(parsed[2].id, 3)
+    assert_eq(parsed[2].name, "Third")
+}
+
+// ===== 双重往返测试 =====
+
+@test
+fn test_double_roundtrip(): void {
+    // parse -> stringify -> parse -> stringify
+    let json1 = "{\"a\": 1, \"b\": [2, 3]}"
+    let obj1 = json.parse(json1)
+    let json2 = json.stringify(obj1)
+    let obj2 = json.parse(json2)
+    let json3 = json.stringify(obj2)
+    let obj3 = json.parse(json3)
+    
+    assert_eq(obj3.a, 1)
+    assert_eq(obj3.b.length, 2)
+    assert_eq(obj3.b[0], 2)
+}
+
+// ===== 一致性测试 =====
+
+@test
+fn test_consistency_array(): void {
+    // 同样的数据，多次 stringify 应该得到相同结果
+    let data = [1, 2, 3]
+    let json1 = json.stringify(data)
+    let json2 = json.stringify(data)
+    assert_eq(json1, json2)
+}
+
+@test
+fn test_consistency_object(): void {
+    // 注意：对象键顺序可能不确定
+    let data = { a: 1 }
+    let json1 = json.stringify(data)
+    let json2 = json.stringify(data)
+    // 至少两次应该包含相同内容
+    assert_eq(json1.contains("a"), true)
+    assert_eq(json2.contains("a"), true)
+}
+
+// ===== 边界情况往返 =====
+
+@test
+fn test_roundtrip_deep_nesting(): void {
+    let original = [[[[[1]]]]]
+    let jsonStr = json.stringify(original)
+    let parsed = json.parse(jsonStr)
+    assert_eq(parsed[0][0][0][0][0], 1)
+}
+
+@test
+fn test_roundtrip_many_keys(): void {
+    let original = { a: 1, b: 2, c: 3, d: 4, e: 5 }
+    let jsonStr = json.stringify(original)
+    let parsed = json.parse(jsonStr)
+    assert_eq(parsed.a, 1)
+    assert_eq(parsed.e, 5)
+}
+
+@test
+fn test_roundtrip_long_string(): void {
+    let original = "x".repeat(100)
+    let jsonStr = json.stringify(original)
+    let parsed = json.parse(jsonStr)
+    assert_eq(parsed.length, 100)
+    assert_eq(parsed, original)
+}
+

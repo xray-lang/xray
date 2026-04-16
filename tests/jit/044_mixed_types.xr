@@ -1,0 +1,28 @@
+// EXPECTED: 15
+// EXPECTED: 7.5
+// EXPECTED: true
+// Test: Mixed int/float/bool operations in JIT
+
+fn int_to_float_calc(a: int, b: int) : float {
+    return float(a) / float(b)
+}
+
+fn float_to_int(x: float) : int {
+    return int(x)
+}
+
+fn compare_mixed(a: int, b: float) : bool {
+    return float(a) > b
+}
+
+let i = 0
+while (i < 200) {
+    int_to_float_calc(15, 2)
+    float_to_int(15.9)
+    compare_mixed(10, 5.5)
+    i = i + 1
+}
+
+print(float_to_int(15.9))
+print(int_to_float_calc(15, 2))
+print(compare_mixed(10, 5.5))

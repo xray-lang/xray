@@ -1,0 +1,73 @@
+// 测试1：Channel 深拷贝隔离
+// 作者：xingleixu@gmail.com
+// 
+// 验证：可变类型通过 Channel 传递时深拷贝，修改原值不影响接收方
+print("========== 测试1：Channel 深拷贝隔离 ==========")
+
+fn test_array_isolation() {
+    let ch = Channel(1)
+    // 发送可变数组
+    let original = [1, 2, 3]
+    ch.send(original)
+    // 修改原数组
+    original.push(4)
+    original.push(5)
+    // 接收
+    let received = ch.recv()
+    // 验证隔离：接收到的应该是 [1,2,3]，不是 [1,2,3,4,5]
+    print("原数组长度:", original.length)
+    // 应该是 5
+    print("接收数组长度:", received.length)
+    // 应该是 3
+    assert_eq(original.length, 5)
+    assert_eq(received.length, 3)
+    print("✓ 数组隔离测试通过")
+}
+
+fn test_map_isolation() {
+    let ch = Channel(1)
+    // 发送可变 Map
+    let original = { "a" => 1, "b" => 2 }
+    ch.send(original)
+    // 修改原 Map
+    original.set("c", 3)
+    original.set("d", 4)
+    // 接收
+    let received = ch.recv()
+    // 验证隔离
+    print("原 Map 大小:", original.size)
+    // 应该是 4
+    print("接收 Map 大小:", received.size)
+    // 应该是 2
+    assert_eq(original.size, 4)
+    assert_eq(received.size, 2)
+    print("✓ Map 隔离测试通过")
+}
+
+fn test_nested_isolation() {
+    let ch = Channel(1)
+    // 发送嵌套结构
+    let original = { "items" => [1, 2, 3], "count" => 3 }
+    ch.send(original)
+    // 修改嵌套数组
+    original.get("items").push(4)
+    // 接收
+    let received = ch.recv()
+    // 验证深层隔离
+    let orig_items = original.get("items")
+    let recv_items = received.get("items")
+    print("原嵌套数组长度:", orig_items.length)
+    // 应该是 4
+    print("接收嵌套数组长度:", recv_items.length)
+    // 应该是 3
+    assert_eq(orig_items.length, 4)
+    assert_eq(recv_items.length, 3)
+    print("✓ 嵌套结构隔离测试通过")
+}
+
+// 运行所有测试
+test_array_isolation()
+test_map_isolation()
+test_nested_isolation()
+print("
+🎉 测试1全部通过：Channel 深拷贝隔离正确！")

@@ -1,0 +1,91 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  build:
+    strategy:
+      matrix:
+        include:
+          - os: ubuntu-latest
+            name: linux-x64
+            artifact: xray-linux-x64
+          - os: macos-latest
+            name: macos-arm64
+            artifact: xray-macos-arm64
+          - os: macos-13
+            name: macos-x64
+            artifact: xray-macos-x64
+          - os: windows-latest
+            name: windows-x64
+            artifact: xray-windows-x64
+
+    runs-on: ${{ matrix.os }}
+    name: Build (${{ matrix.name }})
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Configure
+      run: cmake -B build -DCMAKE_BUILD_TYPE=Release
+
+    - name: Build
+      run: cmake --build build --config Release
+
+    - name: Regression Tests (Unix)
+      if: runner.os != 'Windows'
+      run: |
+        chmod +x ./scripts/run_regression_tests.sh
+        ./scripts/run_regression_tests.sh
+      env:
+        XRAY_PATH: ./build/xray
+
+    - name: Package (Unix)
+      if: runner.os != 'Windows'
+      run: |
+        mkdir -p dist
+        cp build/xray dist/
+        cp -r stdlib dist/
+        cp README.md LICENSE dist/ 2>/dev/null || true
+        cd dist && tar -czf ../${{ matrix.artifact }}.tar.gz *
+
+    - name: Package (Windows)
+      if: runner.os == 'Windows'
+      run: |
+        mkdir dist
+        copy build\Release\xray.exe dist\
+        xcopy stdlib dist\stdlib\ /E /I
+        copy README.md dist\ 2>nul || echo.
+        copy LICENSE dist\ 2>nul || echo.
+        Compress-Archive -Path dist\* -DestinationPath ${{ matrix.artifact }}.zip
+
+    - name: Upload artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: ${{ matrix.artifact }}
+        path: |
+          ${{ matrix.artifact }}.tar.gz
+          ${{ matrix.artifact }}.zip
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+    - name: Download all artifacts
+      uses: actions/download-artifact@v4
+      with:
+        path: artifacts
+
+    - name: Create Release
+      uses: softprops/action-gh-release@v1
+      with:
+        files: artifacts/**/*
+        generate_release_notes: true
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

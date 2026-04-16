@@ -1,0 +1,38 @@
+// EXPECTED: 15
+// EXPECTED: 5
+// EXPECTED: 20
+// EXPECTED: 27
+// Test: Immediate operand arithmetic (ADDI, SUBI, MULI)
+
+fn add5(x: int) : int {
+    return x + 5
+}
+
+fn sub5(x: int) : int {
+    return x - 5
+}
+
+fn mul2(x: int) : int {
+    return x * 2
+}
+
+fn compound(x: int) : int {
+    return (x + 3) * 2 - 1 + (x / 5)
+}
+
+let i = 0
+while (i < 200) {
+    add5(10)
+    sub5(10)
+    mul2(10)
+    compound(10)
+    i = i + 1
+}
+
+print(add5(10))
+print(sub5(10))
+print(mul2(10))
+// (10+3)*2-1+(10/5) = 13*2-1+2 = 27
+// Wait: let me recalculate - we want a deterministic answer
+// Just test the simple ones
+print(compound(10))

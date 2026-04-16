@@ -1,0 +1,88 @@
+// Test: Generic function with explicit type parameters
+// Expected: prints "ok"
+// Basic identity function
+fn identity<T>(x: T): T {
+    return x
+}
+
+// Test 1: Implicit type inference
+assert_eq(identity(42), 42)
+assert_eq(identity("hello"), "hello")
+assert_eq(identity(true), true)
+// Test 2: Explicit type parameter
+assert_eq(identity<int>(100), 100)
+assert_eq(identity<string>("world"), "world")
+assert_eq(identity<bool>(false), false)
+
+// Multiple type parameters
+fn makePair<A, B>(a: A, b: B): (A, B) {
+    return a, b
+}
+
+// Test 3: Multiple type params - implicit
+let p1a, p1b = makePair(1, "one")
+assert_eq(p1a, 1)
+assert_eq(p1b, "one")
+// Test 4: Multiple type params - explicit  
+let p2a, p2b = makePair<string, int>("age", 30)
+assert_eq(p2a, "age")
+assert_eq(p2b, 30)
+
+// Generic array functions
+fn first<T>(arr: Array<T>): T? {
+    if (arr.length > 0) {
+        return arr[0]
+    }
+    return null
+}
+
+fn last<T>(arr: Array<T>): T? {
+    if (arr.length > 0) {
+        return arr[arr.length - 1]
+    }
+    return null
+}
+
+// Test 5: Array functions
+assert_eq(first([1, 2, 3]), 1)
+assert_eq(last([1, 2, 3]), 3)
+assert_eq(first(["a", "b", "c"]), "a")
+assert_eq(last(["x", "y", "z"]), "z")
+assert_eq(first([]), null)
+
+// Higher-order generic functions
+fn apply<T, R>(x: T, f: fn(T): R): R {
+    return f(x)
+}
+
+// Test 6: Higher-order
+let doubled = apply(5, fn(n) {
+    return n * 2
+})
+assert_eq(doubled, 10)
+let length = apply("hello", fn(s) {
+    return s.length
+})
+assert_eq(length, 5)
+
+// Generic with array result
+fn wrap<T>(x: T): Array<T> {
+    return [x]
+}
+
+// Test 7: Wrap
+let intArr = wrap(42)
+assert_eq(intArr[0], 42)
+assert_eq(intArr.length, 1)
+let strArr = wrap("test")
+assert_eq(strArr[0], "test")
+
+// Nested generic calls
+fn double<T>(x: T): T {
+    return x
+}
+
+// Test 8: Nested calls
+let result = wrap(identity(99))
+assert_eq(result[0], 99)
+print("ok")

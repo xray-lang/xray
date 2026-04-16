@@ -1,0 +1,211 @@
+// 0760_concurrent_concat_property.xr
+// 作者：xingleixu@gmail.com
+// 
+// Property 5: 并发拼接正确性
+// Validates: Requirements 1.1, 5.1
+//
+// 属性：对于任意 N 个 Worker 并发执行字符串拼接，
+//       每个 Worker 的结果应该独立且正确，不受其他 Worker 影响
+//
+// 测试策略：
+// - 多个协程并发执行字符串拼接
+// - 验证每个协程的结果独立且正确
+// - 测试短字符串（栈上缓冲区）和长字符串（XrStrBuf）两种路径
+
+// ===== Property 5: 并发拼接正确性 =====
+
+@test
+fn test_property_concurrent_concat_short(): void {
+    // **Feature: string-concat-optimization, Property 5: 并发拼接正确性**
+    // **Validates: Requirements 1.1, 5.1**
+    // 属性：对于任意 N 个协程并发执行短字符串拼接，结果应独立且正确
+    
+    fn concat_task(id: int): string {
+        // 短字符串拼接（总长度 < 64）
+        let a = "prefix_" + string(id)
+        let b = "_suffix"
+        return a + b
+    }
+    
+    let n = 50
+    let tasks: Array<Task> = []
+    for (let i = 0; i < n; i++) {
+        tasks.push(go concat_task(i))
+    }
+    
+    let results = await.all tasks
+    
+    // 验证每个结果独立且正确
+    for (let i = 0; i < n; i++) {
+        let expected = "prefix_" + string(i) + "_suffix"
+        assert_eq(results[i], expected)
+    }
+}
+
+@test
+fn test_property_concurrent_concat_long(): void {
+    // **Feature: string-concat-optimization, Property 5: 并发拼接正确性**
+    // **Validates: Requirements 1.1, 5.1**
+    // 属性：对于任意 N 个协程并发执行长字符串拼接，结果应独立且正确
+    
+    fn concat_task(id: int): string {
+        // 长字符串拼接（总长度 >= 64）
+        let a = "x".repeat(40)
+        let b = "_id" + string(id) + "_"
+        let c = "y".repeat(40)
+        return a + b + c
+    }
+    
+    let n = 50
+    let tasks: Array<Task> = []
+    for (let i = 0; i < n; i++) {
+        tasks.push(go concat_task(i))
+    }
+    
+    let results = await.all tasks
+    
+    // 验证每个结果独立且正确
+    for (let i = 0; i < n; i++) {
+        let result = results[i]
+        assert_eq(result.startsWith("x".repeat(40)), true)
+        assert_eq(result.contains("_id" + string(i) + "_"), true)
+        assert_eq(result.endsWith("y".repeat(40)), true)
+    }
+}
+
+@test
+fn test_property_concurrent_concat_mixed(): void {
+    // **Feature: string-concat-optimization, Property 5: 并发拼接正确性**
+    // **Validates: Requirements 1.1, 5.1**
+    // 属性：对于任意 N 个协程混合执行短/长字符串拼接，结果应独立且正确
+    
+    fn concat_task(id: int): string {
+        if (id % 2 == 0) {
+            // 短字符串
+            return "short_" + string(id) + "_end"
+        } else {
+            // 长字符串
+            return "a".repeat(40) + "_long_" + string(id) + "_" + "b".repeat(40)
+        }
+    }
+    
+    let n = 40
+    let tasks: Array<Task> = []
+    for (let i = 0; i < n; i++) {
+        tasks.push(go concat_task(i))
+    }
+    
+    let results = await.all tasks
+    
+    // 验证每个结果独立且正确
+    for (let i = 0; i < n; i++) {
+        if (i % 2 == 0) {
+            assert_eq(results[i], "short_" + string(i) + "_end")
+        } else {
+            assert_eq(results[i].contains("_long_" + string(i) + "_"), true)
+        }
+    }
+}
+
+@test
+fn test_property_concurrent_concat_isolation(): void {
+    // **Feature: string-concat-optimization, Property 5: 并发拼接正确性**
+    // **Validates: Requirements 1.1, 5.1**
+    // 属性：每个协程的拼接操作应该完全隔离，不会相互干扰
+    
+    let chars = ["A", "B", "C", "D", "E", "F", "G", "H", "I", "J"]
+    
+    fn isolation_task(id: int, char: string): string {
+        // 使用唯一字符构建字符串
+        let prefix = char.repeat(30)
+        let middle = "_" + string(id) + "_"
+        let suffix = char.repeat(30)
+        return prefix + middle + suffix
+    }
+    
+    let n = 30
+    let tasks: Array<Task> = []
+    for (let i = 0; i < n; i++) {
+        let char = chars[i % 10]
+        tasks.push(go isolation_task(i, char))
+    }
+    
+    let results = await.all tasks
+    
+    // 验证每个结果只包含该协程的唯一字符
+    for (let i = 0; i < n; i++) {
+        let char = chars[i % 10]
+        let result = results[i]
+        
+        // 验证前缀
+        assert_eq(result.startsWith(char.repeat(30)), true)
+        // 验证后缀
+        assert_eq(result.endsWith(char.repeat(30)), true)
+        // 验证中间包含 id
+        assert_eq(result.contains("_" + string(i) + "_"), true)
+    }
+}
+
+@test
+fn test_property_concurrent_concat_threshold_boundary(): void {
+    // **Feature: string-concat-optimization, Property 5: 并发拼接正确性**
+    // **Validates: Requirements 1.1, 5.1**
+    // 属性：在阈值边界附近的并发拼接应该正确
+    
+    fn boundary_task(id: int): Array<int> {
+        // 根据 id 选择不同长度，跨越 64 字节阈值
+        let len = 30 + (id % 10)  // 30-39
+        let a = "a".repeat(len)
+        let b = "b".repeat(len)
+        // 总长度: 60-78，跨越 64 阈值
+        let result = a + b
+        return [result.length, len * 2]
+    }
+    
+    let n = 30
+    let tasks: Array<Task> = []
+    for (let i = 0; i < n; i++) {
+        tasks.push(go boundary_task(i))
+    }
+    
+    let results = await.all tasks
+    
+    // 验证每个结果长度正确
+    for (let i = 0; i < n; i++) {
+        let actual_len = results[i][0]
+        let expected_len = results[i][1]
+        assert_eq(actual_len, expected_len)
+    }
+}
+
+@test
+fn test_property_concurrent_concat_correctness(): void {
+    // **Feature: string-concat-optimization, Property 5: 并发拼接正确性**
+    // **Validates: Requirements 1.1, 5.1**
+    // 属性：并发拼接的结果应该与串行拼接的结果一致
+    
+    fn concat_task(id: int): string {
+        let a = "hello_" + string(id)
+        let b = "_world"
+        return a + b
+    }
+    
+    // 先串行计算期望结果
+    let expected: Array<string> = []
+    for (let i = 0; i < 30; i++) {
+        expected.push("hello_" + string(i) + "_world")
+    }
+    
+    // 并发执行
+    let tasks: Array<Task> = []
+    for (let i = 0; i < 30; i++) {
+        tasks.push(go concat_task(i))
+    }
+    
+    let results = await.all tasks
+    
+    // 验证并发结果与串行结果一致
+    for (let i = 0; i < 30; i++) {
+        assert_eq(results[i], expected[i])
+    }
+}

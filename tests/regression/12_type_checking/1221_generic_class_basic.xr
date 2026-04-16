@@ -1,0 +1,60 @@
+// Test: Basic generic class functionality
+// Expected: prints "ok"
+// Generic class with single type parameter
+class Box<T> {
+    value: T
+
+    constructor(v: T) {
+        this.value = v
+    }
+
+    get(): T {
+        return this.value
+    }
+}
+
+// Test 1: Box<int>
+let intBox: Box<int> = new Box<int>(42)
+assert_eq(intBox.value, 42)
+assert_eq(intBox.get(), 42)
+// Test 2: Box<string>
+let strBox: Box<string> = new Box<string>("hello")
+assert_eq(strBox.value, "hello")
+assert_eq(strBox.get(), "hello")
+// Test 3: Box<bool>
+let boolBox: Box<bool> = new Box<bool>(true)
+assert_eq(boolBox.value, true)
+
+// Generic class with two type parameters
+class Pair<K, V> {
+    key: K
+    value: V
+
+    constructor(k: K, v: V) {
+        this.key = k
+        this.value = v
+    }
+}
+
+// Test 4: Pair<string, int>
+let p1: Pair<string, int> = new Pair<string, int>("age", 30)
+assert_eq(p1.key, "age")
+assert_eq(p1.value, 30)
+// Test 5: Pair<int, string>
+let p2: Pair<int, string> = new Pair<int, string>(1, "one")
+assert_eq(p2.key, 1)
+assert_eq(p2.value, "one")
+// Test 6: Nested generic - Box<Box<int>>
+let innerBox: Box<int> = new Box<int>(100)
+let outerBox: Box<Box<int>> = new Box<Box<int>>(innerBox)
+assert_eq(outerBox.get().get(), 100)
+// Test 7: Array of generic class
+let boxes: Array<Box<int>> = [new Box<int>(1), new Box<int>(2), new Box<int>(3)]
+assert_eq(boxes[0].get(), 1)
+assert_eq(boxes[1].get(), 2)
+assert_eq(boxes[2].get(), 3)
+// Test 8: Box containing Pair
+let boxPair: Box<Pair<string, int>> = new Box<Pair<string, int>>(new Pair<string, int>("x", 99))
+assert_eq(boxPair.get().key, "x")
+assert_eq(boxPair.get().value, 99)
+print("ok")

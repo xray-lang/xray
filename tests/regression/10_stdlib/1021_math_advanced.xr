@@ -1,0 +1,193 @@
+// 1021_math_advanced.xr - Math module advanced tests
+// Tests functions not covered by 1020_math.xr
+
+import math
+
+// ===== Trigonometric: tan =====
+
+@test
+fn test_tan_zero(): void {
+    let t = math.tan(0)
+    assert(t > -0.01 && t < 0.01)
+}
+
+@test
+fn test_tan_pi_quarter(): void {
+    let t = math.tan(math.PI / 4)
+    assert(t > 0.99 && t < 1.01)
+}
+
+// ===== Inverse trigonometric =====
+
+@test
+fn test_asin(): void {
+    let result = math.asin(0)
+    assert(result > -0.01 && result < 0.01)
+
+    let result2 = math.asin(1)
+    assert(result2 > 1.56 && result2 < 1.58)  // PI/2
+}
+
+@test
+fn test_acos(): void {
+    let result = math.acos(1)
+    assert(result > -0.01 && result < 0.01)
+
+    let result2 = math.acos(0)
+    assert(result2 > 1.56 && result2 < 1.58)  // PI/2
+}
+
+@test
+fn test_atan(): void {
+    let result = math.atan(0)
+    assert(result > -0.01 && result < 0.01)
+
+    let result2 = math.atan(1)
+    assert(result2 > 0.78 && result2 < 0.79)  // PI/4
+}
+
+@test
+fn test_atan2(): void {
+    let result = math.atan2(0, 1)
+    assert(result > -0.01 && result < 0.01)
+
+    let result2 = math.atan2(1, 0)
+    assert(result2 > 1.56 && result2 < 1.58)  // PI/2
+
+    let result3 = math.atan2(1, 1)
+    assert(result3 > 0.78 && result3 < 0.79)  // PI/4
+}
+
+// ===== Logarithmic =====
+
+@test
+fn test_log(): void {
+    let result = math.log(1)
+    assert(result > -0.01 && result < 0.01)  // ln(1) = 0
+
+    let result2 = math.log(math.E)
+    assert(result2 > 0.99 && result2 < 1.01)  // ln(e) = 1
+}
+
+@test
+fn test_log10(): void {
+    let result = math.log10(1)
+    assert(result > -0.01 && result < 0.01)
+
+    let result2 = math.log10(100)
+    assert(result2 > 1.99 && result2 < 2.01)  // log10(100) = 2
+}
+
+@test
+fn test_log2(): void {
+    let result = math.log2(1)
+    assert(result > -0.01 && result < 0.01)
+
+    let result2 = math.log2(8)
+    assert(result2 > 2.99 && result2 < 3.01)  // log2(8) = 3
+}
+
+// ===== Exponential =====
+
+@test
+fn test_exp(): void {
+    let result = math.exp(0)
+    assert(result > 0.99 && result < 1.01)  // e^0 = 1
+
+    let result2 = math.exp(1)
+    assert(result2 > 2.71 && result2 < 2.72)  // e^1 = e
+}
+
+// ===== clamp =====
+
+@test
+fn test_clamp_within(): void {
+    assert_eq(math.clamp(5, 0, 10), 5)
+}
+
+@test
+fn test_clamp_below(): void {
+    assert_eq(math.clamp(-5, 0, 10), 0)
+}
+
+@test
+fn test_clamp_above(): void {
+    assert_eq(math.clamp(15, 0, 10), 10)
+}
+
+@test
+fn test_clamp_boundary(): void {
+    assert_eq(math.clamp(0, 0, 10), 0)
+    assert_eq(math.clamp(10, 0, 10), 10)
+}
+
+// ===== randomInt =====
+
+@test
+fn test_random_int_range(): void {
+    for (let i = 0; i < 20; i++) {
+        let r = math.randomInt(1, 10)
+        assert(r >= 1 && r <= 10)
+    }
+}
+
+@test
+fn test_random_int_same(): void {
+    for (let i = 0; i < 10; i++) {
+        let r = math.randomInt(5, 5)
+        assert_eq(r, 5)
+    }
+}
+
+// ===== sign =====
+
+@test
+fn test_sign_positive(): void {
+    assert_eq(math.sign(42), 1)
+    assert_eq(math.sign(0.5), 1)
+}
+
+@test
+fn test_sign_negative(): void {
+    assert_eq(math.sign(-42), -1)
+    assert_eq(math.sign(-0.5), -1)
+}
+
+@test
+fn test_sign_zero(): void {
+    assert_eq(math.sign(0), 0)
+}
+
+// ===== isNaN / isFinite =====
+
+@test
+fn test_isNaN(): void {
+    assert_eq(math.isNaN(math.NAN), true)
+    assert_eq(math.isNaN(0), false)
+    assert_eq(math.isNaN(3.14), false)
+    assert_eq(math.isNaN(math.INF), false)
+}
+
+@test
+fn test_isFinite(): void {
+    assert_eq(math.isFinite(42), true)
+    assert_eq(math.isFinite(3.14), true)
+    assert_eq(math.isFinite(math.INF), false)
+    assert_eq(math.isFinite(math.NAN), false)
+}
+
+// ===== Constants: INF, NAN =====
+
+@test
+fn test_inf_constant(): void {
+    assert(math.INF > 0)
+    assert(math.INF > 999999999)
+    assert_eq(math.isFinite(math.INF), false)
+}
+
+@test
+fn test_nan_constant(): void {
+    assert_eq(math.isNaN(math.NAN), true)
+    // NaN != NaN
+    assert_eq(math.NAN == math.NAN, false)
+}

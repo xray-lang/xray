@@ -1,0 +1,32 @@
+// Test standalone linked go error propagation (outside scope)
+
+fn failing(): int {
+    throw "linked child error"
+    return 0
+}
+
+fn slow_work(): int {
+    let x = 0
+    for (let i = 0; i < 1000; i++) {
+        x = x + 1
+    }
+    return x
+}
+
+// Test 1: linked go child fails → await returns null
+fn test_linked_go_fail() {
+    let t = linked go failing()
+    let r = await t
+    assert(r == null, "await of failed linked go should return null")
+}
+
+// Test 2: linked go child succeeds
+fn test_linked_go_success() {
+    let t = linked go slow_work()
+    let r = await t
+    assert(r == 1000, "await of successful linked go should return result")
+}
+
+test_linked_go_fail()
+test_linked_go_success()
+print("PASS")

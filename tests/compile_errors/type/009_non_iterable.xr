@@ -1,0 +1,8 @@
+// 009_non_iterable.xr
+// Expected: Compile error - iterating non-iterable
+// Error should mention: iterable, for-in
+let x = 42
+for (item in x) {
+    // ERROR: int is not iterable
+    print(item)
+}

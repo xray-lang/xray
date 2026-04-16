@@ -1,0 +1,71 @@
+// 0362_bigint_comparison.xr
+// BigInt comparison operators test
+
+@test
+fn test_bigint_equality(): void {
+    let a = 1000000000000n
+    let c = 1000000000000n
+    assert_eq(a == c, true)
+    assert_eq(a != c, false)
+}
+
+@test
+fn test_bigint_inequality(): void {
+    let a = 1000000000000n
+    let b = 2000000000000n
+    assert_eq(a != b, true)
+    assert_eq(a == b, false)
+}
+
+@test
+fn test_bigint_less_than(): void {
+    let a = 1000000000000n
+    let b = 2000000000000n
+    assert_eq(a < b, true)
+    assert_eq(b < a, false)
+}
+
+@test
+fn test_bigint_greater_than(): void {
+    let a = 1000000000000n
+    let b = 2000000000000n
+    assert_eq(b > a, true)
+    assert_eq(a > b, false)
+}
+
+@test
+fn test_bigint_less_equal(): void {
+    let a = 100n
+    let b = 100n
+    let c = 200n
+    assert_eq(a <= b, true)
+    assert_eq(a <= c, true)
+    assert_eq(c <= a, false)
+}
+
+@test
+fn test_bigint_greater_equal(): void {
+    let a = 100n
+    let b = 100n
+    let c = 50n
+    assert_eq(a >= b, true)
+    assert_eq(a >= c, true)
+    assert_eq(c >= a, false)
+}
+
+@test
+fn test_mixed_bigint_int_comparison(): void {
+    let big = 100n
+    let small = 50
+    assert_eq(big > small, true)
+    assert_eq(small < big, true)
+    assert_eq(big == 100, true)
+    assert_eq(100 == big, true)
+    assert_eq(big != 99, true)
+}
+
+@test
+fn test_bigint_type_annotation(): void {
+    let x: BigInt = 123n
+    assert_eq(x.toString(), "123")
+}

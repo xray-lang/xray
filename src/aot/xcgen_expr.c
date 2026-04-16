@@ -1,0 +1,1009 @@
+/*
+ * xray - Lightweight typed scripting with native concurrency
+ * https://www.xray-lang.org
+ *
+ * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
+ * Licensed under the MIT License
+ *
+ * xcgen_expr.c - AOT C code generator: expression/instruction translation
+ *
+ * KEY CONCEPT:
+ *   Translates individual XIR instructions into C statements.
+ *   Each XIR vreg maps to a C local variable (int64_t / double).
+ *   XIR constants are emitted as C literals.
+ *
+ * RELATED MODULES:
+ *   - xcgen.c: module-level orchestration
+ *   - xcgen_stmt.c: control flow (terminators, phi lowering)
+ */
+
+#include "xcgen.h"
+#include "../base/xchecks.h"
+#include "../runtime/value/xvalue.h"
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <inttypes.h>
+
+/* ========== Type Query ========== */
+
+// Get XIR type of a ref (vreg type or const type)
+uint8_t xcg_ref_type(XirFunc *func, XirRef ref) {
+    XR_DCHECK(func != NULL, "xcg_ref_type: func is NULL");
+    if (xir_ref_is_vreg(ref)) {
+        uint32_t idx = XIR_REF_INDEX(ref);
+        if (idx < func->nvreg) return func->vregs[idx].rep;
+    } else if (xir_ref_is_const(ref)) {
+        uint32_t idx = XIR_REF_INDEX(ref);
+        if (idx < func->nconst) return func->consts[idx].rep;
+    }
+    return XR_REP_TAGGED;
+}
+
+/* ========== Ref → C Expression ========== */
+
+void xcg_emit_ref(XcgenBuf *b, XirFunc *func, XirRef ref) {
+    XR_DCHECK(b != NULL, "xcg_emit_ref: b is NULL");
+    XR_DCHECK(func != NULL, "xcg_emit_ref: func is NULL");
+    switch (XIR_REF_KIND(ref)) {
+        case XIR_REF_VREG: {
+            uint32_t idx = XIR_REF_INDEX(ref);
+            // Inline constants: if vreg is defined by CONST_I64/CONST_F64
+            // AND vreg type matches (not tagged), emit literal directly
+            // to avoid cross-block use-before-def issues
+            if (idx < func->nvreg && func->vregs[idx].def) {
+                XirIns *def = func->vregs[idx].def;
+                uint8_t vtype = func->vregs[idx].rep;
+                if (def->op == XIR_CONST_I64 && vtype == XR_REP_I64 &&
+                    xir_ref_is_const(def->args[0])) {
+                    uint32_t ci = XIR_REF_INDEX(def->args[0]);
+                    if (ci < func->nconst) {
+                        xcgen_buf_printf(b, "INT64_C(%" PRId64 ")", func->consts[ci].val.i64);
+                        break;
+                    }
+                }
+                if (def->op == XIR_CONST_F64 && vtype == XR_REP_F64 &&
+                    xir_ref_is_const(def->args[0])) {
+                    uint32_t ci = XIR_REF_INDEX(def->args[0]);
+                    if (ci < func->nconst) {
+                        xcgen_buf_printf(b, "%.17g", func->consts[ci].val.f64);
+                        break;
+                    }
+                }
+            }
+            xcgen_buf_printf(b, "v%u", idx);
+            break;
+        }
+        case XIR_REF_CONST: {
+            uint32_t idx = XIR_REF_INDEX(ref);
+            if (idx < func->nconst) {
+                XirConst *c = &func->consts[idx];
+                if (c->rep == XR_REP_I64) {
+                    xcgen_buf_printf(b, "INT64_C(%" PRId64 ")", c->val.i64);
+                } else if (c->rep == XR_REP_F64) {
+                    xcgen_buf_printf(b, "%.17g", c->val.f64);
+                } else if (c->rep == XR_REP_STR) {
+                    // Emit escaped C string literal
+                    xcgen_buf_puts(b, "\"");
+                    const char *s = c->val.str.chars;
+                    for (uint32_t si = 0; si < c->val.str.len; si++) {
+                        char ch = s[si];
+                        switch (ch) {
+                            case '\\': xcgen_buf_puts(b, "\\\\"); break;
+                            case '"':  xcgen_buf_puts(b, "\\\""); break;
+                            case '\n': xcgen_buf_puts(b, "\\n"); break;
+                            case '\r': xcgen_buf_puts(b, "\\r"); break;
+                            case '\t': xcgen_buf_puts(b, "\\t"); break;
+                            case '\0': xcgen_buf_puts(b, "\\0"); break;
+                            default:   xcgen_buf_printf(b, "%c", ch); break;
+                        }
+                    }
+                    xcgen_buf_puts(b, "\"");
+                } else {
+                    xcgen_buf_printf(b, "(int64_t)0x%" PRIx64, (uint64_t)c->val.raw);
+                }
+            } else {
+                xcgen_buf_printf(b, "/* bad const %u */ 0", idx);
+            }
+            break;
+        }
+        default:
+            xcgen_buf_puts(b, "/* unknown ref */ 0");
+            break;
+    }
+}
+
+// Emit a ref as XrtValue, auto-boxing int64_t/double if needed
+static void xcg_emit_ref_as_tagged(XcgenBuf *b, XirFunc *func, XirRef ref) {
+    uint8_t t = xcg_ref_type(func, ref);
+    if (t == XR_REP_I64) {
+        xcgen_buf_puts(b, "xrt_box_int(");
+        xcg_emit_ref(b, func, ref);
+        xcgen_buf_puts(b, ")");
+    } else if (t == XR_REP_F64) {
+        xcgen_buf_puts(b, "xrt_box_float(");
+        xcg_emit_ref(b, func, ref);
+        xcgen_buf_puts(b, ")");
+    } else {
+        xcg_emit_ref(b, func, ref);
+    }
+}
+
+/* ========== Binary/Compare/Unary Operations ========== */
+
+// Emit a ref as a native numeric type, auto-unboxing XrtValue if needed
+static void xcg_emit_ref_as_native(XcgenBuf *b, XirFunc *func, XirRef ref, uint8_t target_type) {
+    uint8_t t = xcg_ref_type(func, ref);
+    bool is_tagged = (t == XR_REP_STR || t == XR_REP_PTR || t == XR_REP_TAGGED);
+    if (is_tagged) {
+        if (target_type == XR_REP_F64) {
+            xcgen_buf_puts(b, "xrt_unbox_float(");
+        } else {
+            xcgen_buf_puts(b, "xrt_unbox_int(");
+        }
+        xcg_emit_ref(b, func, ref);
+        xcgen_buf_puts(b, ")");
+    } else {
+        xcg_emit_ref(b, func, ref);
+    }
+}
+
+void xcg_emit_binary_op(XcgenBuf *b, XirFunc *func, XirIns *ins, const char *op) {
+    XR_DCHECK(b != NULL, "xcg_emit_binary_op: NULL buf");
+    XR_DCHECK(func != NULL, "xcg_emit_binary_op: NULL func");
+    uint8_t dst_type = xcg_ref_type(func, ins->dst);
+    xcgen_buf_printf(b, "    v%u = ", XIR_REF_INDEX(ins->dst));
+    xcg_emit_ref_as_native(b, func, ins->args[0], dst_type);
+    xcgen_buf_printf(b, " %s ", op);
+    xcg_emit_ref_as_native(b, func, ins->args[1], dst_type);
+    xcgen_buf_puts(b, ";\n");
+}
+
+void xcg_emit_compare_op(XcgenBuf *b, XirFunc *func, XirIns *ins, const char *op) {
+    XR_DCHECK(b != NULL, "xcg_emit_compare_op: NULL buf");
+    XR_DCHECK(func != NULL, "xcg_emit_compare_op: NULL func");
+    uint8_t ta = xcg_ref_type(func, ins->args[0]);
+    uint8_t tb = xcg_ref_type(func, ins->args[1]);
+    bool a_tagged = (ta == XR_REP_STR || ta == XR_REP_PTR || ta == XR_REP_TAGGED);
+
+    // ISNULL pattern: EQ/NE between TAGGED and constant 0 → tag check
+    if (a_tagged && (strcmp(op, "==") == 0 || strcmp(op, "!=") == 0)) {
+        bool b_is_zero = false;
+        if (xir_ref_is_const(ins->args[1])) {
+            uint32_t ci = XIR_REF_INDEX(ins->args[1]);
+            if (ci < func->nconst && func->consts[ci].val.i64 == 0)
+                b_is_zero = true;
+        } else if (tb == XR_REP_I64 && xir_ref_is_vreg(ins->args[1])) {
+            // Only treat I64 vreg as zero if its definition is CONST_I64(0).
+            // Use SSA def pointer for O(1) lookup instead of full scan.
+            uint32_t vi = XIR_REF_INDEX(ins->args[1]);
+            if (vi < func->nvreg && func->vregs[vi].def) {
+                XirIns *def = func->vregs[vi].def;
+                if (def->op == XIR_CONST_I64 && xir_ref_is_const(def->args[0])) {
+                    uint32_t ci2 = XIR_REF_INDEX(def->args[0]);
+                    if (ci2 < func->nconst && func->consts[ci2].val.i64 == 0)
+                        b_is_zero = true;
+                }
+            }
+        }
+        if (b_is_zero) {
+            xcgen_buf_printf(b, "    v%u = (int64_t)(", XIR_REF_INDEX(ins->dst));
+            xcg_emit_ref(b, func, ins->args[0]);
+            xcgen_buf_printf(b, ".tag %s XRT_TAG_NULL);\n", op);
+            return;
+        }
+    }
+
+    xcgen_buf_printf(b, "    v%u = (int64_t)(", XIR_REF_INDEX(ins->dst));
+    xcg_emit_ref_as_native(b, func, ins->args[0], XR_REP_I64);
+    xcgen_buf_printf(b, " %s ", op);
+    xcg_emit_ref_as_native(b, func, ins->args[1], XR_REP_I64);
+    xcgen_buf_puts(b, ");\n");
+}
+
+/* ========== Instruction Translation ========== */
+
+void xcg_emit_instruction(XcgenBuf *b, XirFunc *func, XirIns *ins,
+                           const char *self_name, XcgenModule *mod,
+                           XcgenFunc *cf) {
+    XR_DCHECK(b != NULL, "xcg_emit_instruction: b is NULL");
+    XR_DCHECK(func != NULL, "xcg_emit_instruction: func is NULL");
+    XR_DCHECK(ins != NULL, "xcg_emit_instruction: ins is NULL");
+    // Delegate call-related instructions to xcgen_call.c
+    if (xcg_emit_call_instruction(b, func, ins, self_name, mod, cf))
+        return;
+
+    uint32_t dst_idx = XIR_REF_INDEX(ins->dst);
+    const char *tagged_type = "XrValue";
+
+    switch (ins->op) {
+        // --- Arithmetic ---
+        case XIR_ADD:  xcg_emit_binary_op(b, func, ins, "+");  return;
+        case XIR_SUB:  xcg_emit_binary_op(b, func, ins, "-");  return;
+        case XIR_MUL:  xcg_emit_binary_op(b, func, ins, "*");  return;
+        case XIR_DIV:  xcg_emit_binary_op(b, func, ins, "/");  return;
+        case XIR_MOD:  xcg_emit_binary_op(b, func, ins, "%");  return;
+        case XIR_AND:  xcg_emit_binary_op(b, func, ins, "&");  return;
+        case XIR_OR:   xcg_emit_binary_op(b, func, ins, "|");  return;
+        case XIR_XOR:  xcg_emit_binary_op(b, func, ins, "^");  return;
+        case XIR_SHL:  xcg_emit_binary_op(b, func, ins, "<<"); return;
+        case XIR_SHR:  xcg_emit_binary_op(b, func, ins, ">>"); return;
+
+        case XIR_FADD: xcg_emit_binary_op(b, func, ins, "+");  return;
+        case XIR_FSUB: xcg_emit_binary_op(b, func, ins, "-");  return;
+        case XIR_FMUL: xcg_emit_binary_op(b, func, ins, "*");  return;
+        case XIR_FDIV: xcg_emit_binary_op(b, func, ins, "/");  return;
+
+        // --- Unary ---
+        case XIR_NEG:
+        case XIR_FNEG:
+            xcgen_buf_printf(b, "    v%u = -", dst_idx);
+            xcg_emit_ref(b, func, ins->args[0]);
+            xcgen_buf_puts(b, ";\n");
+            return;
+        case XIR_NOT:
+            xcgen_buf_printf(b, "    v%u = ~", dst_idx);
+            xcg_emit_ref(b, func, ins->args[0]);
+            xcgen_buf_puts(b, ";\n");
+            return;
+
+        // --- Type conversion ---
+        case XIR_I2F:
+            xcgen_buf_printf(b, "    v%u = (double)", dst_idx);
+            xcg_emit_ref(b, func, ins->args[0]);
+            xcgen_buf_puts(b, ";\n");
+            return;
+        case XIR_F2I:
+            xcgen_buf_printf(b, "    v%u = (int64_t)", dst_idx);
+            xcg_emit_ref(b, func, ins->args[0]);
+            xcgen_buf_puts(b, ";\n");
+            return;
+
+        // --- Integer comparison ---
+        case XIR_EQ:  xcg_emit_compare_op(b, func, ins, "=="); return;
+        case XIR_NE:  xcg_emit_compare_op(b, func, ins, "!="); return;
+        case XIR_LT:  xcg_emit_compare_op(b, func, ins, "<");  return;
+        case XIR_LE:  xcg_emit_compare_op(b, func, ins, "<="); return;
+        case XIR_GT:  xcg_emit_compare_op(b, func, ins, ">");  return;
+        case XIR_GE:  xcg_emit_compare_op(b, func, ins, ">="); return;
+
+        // --- Float comparison (result is int64_t 0/1) ---
+        case XIR_FEQ: xcg_emit_compare_op(b, func, ins, "=="); return;
+        case XIR_FNE: xcg_emit_compare_op(b, func, ins, "!="); return;
+        case XIR_FLT: xcg_emit_compare_op(b, func, ins, "<");  return;
+        case XIR_FLE: xcg_emit_compare_op(b, func, ins, "<="); return;
+
+        // --- Constants ---
+        case XIR_CONST_I64:
+        case XIR_CONST_F64:
+            xcgen_buf_printf(b, "    v%u = ", dst_idx);
+            xcg_emit_ref(b, func, ins->args[0]);
+            xcgen_buf_puts(b, ";\n");
+            return;
+        case XIR_CONST_PTR: {
+            // Check if this is a string literal (STR type vreg)
+            uint8_t vtype = XR_REP_PTR;
+            if (xir_ref_is_vreg(ins->dst)) {
+                uint32_t vi = XIR_REF_INDEX(ins->dst);
+                if (vi < func->nvreg) vtype = func->vregs[vi].rep;
+            }
+            if (vtype == XR_REP_STR) {
+                // String literal → xrt_box_str("...")
+                xcgen_buf_printf(b, "    v%u = xrt_box_str(", dst_idx);
+                xcg_emit_ref(b, func, ins->args[0]);
+                xcgen_buf_puts(b, ");\n");
+                cf->needs_runtime = true;
+            } else if (vtype == XR_REP_PTR || vtype == XR_REP_TAGGED) {
+                // Null pointer or object pointer → XrtValue null
+                int64_t raw = 0;
+                if (xir_ref_is_const(ins->args[0])) {
+                    uint32_t ci = XIR_REF_INDEX(ins->args[0]);
+                    if (ci < func->nconst) raw = func->consts[ci].val.i64;
+                }
+                if (raw == 0) {
+                    xcgen_buf_printf(b, "    v%u = (%s){.ptr=NULL,.tag=XRT_TAG_NULL};\n", dst_idx, tagged_type);
+                } else {
+                    xcgen_buf_printf(b, "    v%u = (%s){.ptr=(void*)0x%" PRIx64 ",.tag=XRT_TAG_PTR};\n",
+                                     dst_idx, tagged_type, (uint64_t)raw);
+                }
+                cf->needs_runtime = true;
+            } else {
+                xcgen_buf_printf(b, "    v%u = ", dst_idx);
+                xcg_emit_ref(b, func, ins->args[0]);
+                xcgen_buf_puts(b, ";\n");
+            }
+            return;
+        }
+
+        // --- Move ---
+        case XIR_MOV:
+            if (!xir_ref_is_none(ins->dst) && !xir_ref_is_none(ins->args[0])) {
+                uint8_t dst_t = xcg_ref_type(func, ins->dst);
+                uint8_t src_t = xcg_ref_type(func, ins->args[0]);
+                bool src_tagged = (src_t == XR_REP_STR || src_t == XR_REP_PTR || src_t == XR_REP_TAGGED);
+                bool dst_is_i64 = (dst_t == XR_REP_I64);
+                bool dst_is_f64 = (dst_t == XR_REP_F64);
+                bool dst_tagged = (dst_t == XR_REP_STR || dst_t == XR_REP_PTR || dst_t == XR_REP_TAGGED);
+                if (src_tagged && dst_is_i64) {
+                    xcgen_buf_printf(b, "    v%u = xrt_unbox_int(", dst_idx);
+                    xcg_emit_ref(b, func, ins->args[0]);
+                    xcgen_buf_puts(b, ");\n");
+                    cf->needs_runtime = true;
+                } else if (src_tagged && dst_is_f64) {
+                    xcgen_buf_printf(b, "    v%u = xrt_unbox_float(", dst_idx);
+                    xcg_emit_ref(b, func, ins->args[0]);
+                    xcgen_buf_puts(b, ");\n");
+                    cf->needs_runtime = true;
+                } else if (!src_tagged && dst_tagged && (src_t == XR_REP_I64)) {
+                    xcgen_buf_printf(b, "    v%u = xrt_box_int(", dst_idx);
+                    xcg_emit_ref(b, func, ins->args[0]);
+                    xcgen_buf_puts(b, ");\n");
+                    cf->needs_runtime = true;
+                } else if (!src_tagged && dst_tagged && (src_t == XR_REP_F64)) {
+                    xcgen_buf_printf(b, "    v%u = xrt_box_float(", dst_idx);
+                    xcg_emit_ref(b, func, ins->args[0]);
+                    xcgen_buf_puts(b, ");\n");
+                    cf->needs_runtime = true;
+                } else {
+                    xcgen_buf_printf(b, "    v%u = ", dst_idx);
+                    xcg_emit_ref(b, func, ins->args[0]);
+                    xcgen_buf_puts(b, ";\n");
+                }
+            }
+            return;
+
+        // --- Tagged value operations (BOX/UNBOX) ---
+        case XIR_BOX_I64:
+            xcgen_buf_printf(b, "    v%u = xrt_box_int(", dst_idx);
+            xcg_emit_ref(b, func, ins->args[0]);
+            xcgen_buf_puts(b, ");\n");
+            cf->needs_runtime = true;
+            return;
+        case XIR_BOX_F64:
+            xcgen_buf_printf(b, "    v%u = xrt_box_float(", dst_idx);
+            xcg_emit_ref(b, func, ins->args[0]);
+            xcgen_buf_puts(b, ");\n");
+            cf->needs_runtime = true;
+            return;
+        case XIR_UNBOX_I64:
+            xcgen_buf_printf(b, "    v%u = xrt_unbox_int(", dst_idx);
+            xcg_emit_ref(b, func, ins->args[0]);
+            xcgen_buf_puts(b, ");\n");
+            cf->needs_runtime = true;
+            return;
+        case XIR_UNBOX_F64:
+            xcgen_buf_printf(b, "    v%u = xrt_unbox_float(", dst_idx);
+            xcg_emit_ref(b, func, ins->args[0]);
+            xcgen_buf_puts(b, ");\n");
+            cf->needs_runtime = true;
+            return;
+        case XIR_TAG_LOAD:
+            xcgen_buf_printf(b, "    v%u = ((%s*)&v%u)->tag;\n",
+                             dst_idx, tagged_type, XIR_REF_INDEX(ins->args[0]));
+            cf->needs_runtime = true;
+            return;
+        case XIR_TAG_CHECK:
+            // Guard: if tag mismatch, abort (AOT has no deopt)
+            xcgen_buf_printf(b, "    if (((%s*)&v%u)->tag != ",
+                             tagged_type, XIR_REF_INDEX(ins->args[0]));
+            xcg_emit_ref(b, func, ins->args[1]);
+            xcgen_buf_puts(b, ") { __builtin_trap(); }\n");
+            cf->needs_runtime = true;
+            return;
+
+        // --- Runtime mixed-type operations ---
+        // Type-specialize: if operands are known I64/F64, emit native C ops.
+        // Otherwise fall back to xrt_* inline functions (which require XrtValue).
+        case XIR_RT_ADD: case XIR_RT_SUB: case XIR_RT_MUL:
+        case XIR_RT_DIV: case XIR_RT_MOD: {
+            uint8_t ta = xcg_ref_type(func, ins->args[0]);
+            uint8_t tb = xcg_ref_type(func, ins->args[1]);
+            if (ta == XR_REP_I64 && tb == XR_REP_I64) {
+                const char *op = ins->op == XIR_RT_ADD ? "+" :
+                                 ins->op == XIR_RT_SUB ? "-" :
+                                 ins->op == XIR_RT_MUL ? "*" :
+                                 ins->op == XIR_RT_DIV ? "/" : "%";
+                xcg_emit_binary_op(b, func, ins, op);
+            } else if ((ta == XR_REP_I64 || ta == XR_REP_F64) &&
+                       (tb == XR_REP_I64 || tb == XR_REP_F64)) {
+                const char *op = ins->op == XIR_RT_ADD ? "+" :
+                                 ins->op == XIR_RT_SUB ? "-" :
+                                 ins->op == XIR_RT_MUL ? "*" :
+                                 ins->op == XIR_RT_DIV ? "/" : "%";
+                xcg_emit_binary_op(b, func, ins, op);
+            } else {
+                const char *fn = ins->op == XIR_RT_ADD ? "xrt_add" :
+                                 ins->op == XIR_RT_SUB ? "xrt_sub" :
+                                 ins->op == XIR_RT_MUL ? "xrt_mul" :
+                                 ins->op == XIR_RT_DIV ? "xrt_div" : "xrt_mod";
+                xcgen_buf_printf(b, "    v%u = %s(", dst_idx, fn);
+                xcg_emit_ref_as_tagged(b, func, ins->args[0]);
+                xcgen_buf_puts(b, ", ");
+                xcg_emit_ref_as_tagged(b, func, ins->args[1]);
+                xcgen_buf_puts(b, ");\n");
+                cf->needs_runtime = true;
+            }
+            return;
+        }
+        case XIR_RT_UNM: {
+            uint8_t ta = xcg_ref_type(func, ins->args[0]);
+            if (ta == XR_REP_I64 || ta == XR_REP_F64) {
+                xcgen_buf_printf(b, "    v%u = -", dst_idx);
+                xcg_emit_ref(b, func, ins->args[0]);
+                xcgen_buf_puts(b, ";\n");
+            } else {
+                xcgen_buf_printf(b, "    v%u = xrt_neg(", dst_idx);
+                xcg_emit_ref(b, func, ins->args[0]);
+                xcgen_buf_puts(b, ");\n");
+                cf->needs_runtime = true;
+            }
+            return;
+        }
+        case XIR_RT_LT: case XIR_RT_LE: case XIR_RT_EQ: {
+            uint8_t ta = xcg_ref_type(func, ins->args[0]);
+            uint8_t tb = xcg_ref_type(func, ins->args[1]);
+            if ((ta == XR_REP_I64 || ta == XR_REP_F64) &&
+                (tb == XR_REP_I64 || tb == XR_REP_F64)) {
+                const char *op = ins->op == XIR_RT_LT ? "<" :
+                                 ins->op == XIR_RT_LE ? "<=" : "==";
+                xcg_emit_compare_op(b, func, ins, op);
+            } else {
+                const char *fn = ins->op == XIR_RT_LT ? "xrt_lt" :
+                                 ins->op == XIR_RT_LE ? "xrt_le" : "xrt_eq";
+                xcgen_buf_printf(b, "    v%u = %s(", dst_idx, fn);
+                xcg_emit_ref_as_tagged(b, func, ins->args[0]);
+                xcgen_buf_puts(b, ", ");
+                xcg_emit_ref_as_tagged(b, func, ins->args[1]);
+                xcgen_buf_puts(b, ");\n");
+                cf->needs_runtime = true;
+            }
+            return;
+        }
+
+        // --- Print ---
+        case XIR_RT_PRINT: {
+            // args[0]=value, args[1]=const(flags)
+            // flags: bit0=newline, bit1-2=slot_hint(0=ANY,1=I64,2=F64), bit3=add_space
+            int64_t flags = 0;
+            if (xir_ref_is_const(ins->args[1])) {
+                uint32_t ci = XIR_REF_INDEX(ins->args[1]);
+                if (ci < func->nconst) flags = func->consts[ci].val.i64;
+            }
+            int newline = (int)(flags & 1);
+            int slot_hint = (int)((flags >> 1) & 3);
+            int add_space = (int)((flags >> 3) & 1);
+
+            if (add_space)
+                xcgen_buf_puts(b, "    printf(\" \");\n");
+
+            uint8_t val_type = xcg_ref_type(func, ins->args[0]);
+            if (slot_hint == 1 || val_type == XR_REP_I64) {
+                // Known int64
+                xcgen_buf_printf(b, "    printf(\"%%lld%s\", (long long)",
+                                 newline ? "\\n" : "");
+                xcg_emit_ref(b, func, ins->args[0]);
+                xcgen_buf_puts(b, ");\n");
+            } else if (slot_hint == 2 || val_type == XR_REP_F64) {
+                // Known float64
+                xcgen_buf_printf(b, "    printf(\"%%g%s\", (double)",
+                                 newline ? "\\n" : "");
+                xcg_emit_ref(b, func, ins->args[0]);
+                xcgen_buf_puts(b, ");\n");
+            } else {
+                // Tagged value — use xrt_print
+                if (newline) {
+                    xcgen_buf_puts(b, "    xrt_println(");
+                } else {
+                    xcgen_buf_puts(b, "    xrt_print(");
+                }
+                xcg_emit_ref(b, func, ins->args[0]);
+                xcgen_buf_puts(b, ");\n");
+                cf->needs_runtime = true;
+            }
+            return;
+        }
+
+        // --- Array / Index runtime operations ---
+        case XIR_RT_ARRAY_NEW: {
+            xcgen_buf_printf(b, "    v%u = xrt_array_new(", dst_idx);
+            xcg_emit_ref(b, func, ins->args[0]);
+            xcgen_buf_puts(b, ");\n");
+            cf->needs_runtime = true;
+            return;
+        }
+        case XIR_RT_ARRAY_PUSH: {
+            uint8_t val_type = xcg_ref_type(func, ins->args[1]);
+            if (val_type == XR_REP_I64) {
+                xcgen_buf_puts(b, "    xrt_array_push_i(");
+                xcg_emit_ref(b, func, ins->args[0]);
+                xcgen_buf_puts(b, ", ");
+                xcg_emit_ref(b, func, ins->args[1]);
+                xcgen_buf_puts(b, ");\n");
+            } else if (val_type == XR_REP_F64) {
+                xcgen_buf_puts(b, "    xrt_array_push_f(");
+                xcg_emit_ref(b, func, ins->args[0]);
+                xcgen_buf_puts(b, ", ");
+                xcg_emit_ref(b, func, ins->args[1]);
+                xcgen_buf_puts(b, ");\n");
+            } else {
+                xcgen_buf_puts(b, "    xrt_array_push(");
+                xcg_emit_ref(b, func, ins->args[0]);
+                xcgen_buf_puts(b, ", ");
+                xcg_emit_ref_as_tagged(b, func, ins->args[1]);
+                xcgen_buf_puts(b, ");\n");
+            }
+            cf->needs_runtime = true;
+            return;
+        }
+        case XIR_RT_ARRAY_LEN: {
+            xcgen_buf_printf(b, "    v%u = xrt_array_len(", dst_idx);
+            xcg_emit_ref(b, func, ins->args[0]);
+            xcgen_buf_puts(b, ");\n");
+            cf->needs_runtime = true;
+            return;
+        }
+        case XIR_RT_INDEX_GET: {
+            xcgen_buf_printf(b, "    v%u = xrt_index_get(", dst_idx);
+            xcg_emit_ref_as_tagged(b, func, ins->args[0]);
+            xcgen_buf_puts(b, ", ");
+            xcg_emit_ref_as_tagged(b, func, ins->args[1]);
+            xcgen_buf_puts(b, ");\n");
+            cf->needs_runtime = true;
+            return;
+        }
+        case XIR_RT_INDEX_SET: {
+            // args[0]=obj, args[1]=key, dst=val
+            xcgen_buf_puts(b, "    xrt_index_set(");
+            xcg_emit_ref_as_tagged(b, func, ins->args[0]);
+            xcgen_buf_puts(b, ", ");
+            xcg_emit_ref_as_tagged(b, func, ins->args[1]);
+            xcgen_buf_puts(b, ", ");
+            xcg_emit_ref_as_tagged(b, func, ins->dst);
+            xcgen_buf_puts(b, ");\n");
+            cf->needs_runtime = true;
+            return;
+        }
+        case XIR_RT_MAP_NEW: {
+            xcgen_buf_printf(b, "    v%u = xrt_map_new(", dst_idx);
+            xcg_emit_ref(b, func, ins->args[0]);
+            xcgen_buf_puts(b, ");\n");
+            cf->needs_runtime = true;
+            return;
+        }
+        case XIR_RT_ISNULL: {
+            xcgen_buf_printf(b, "    v%u = (", dst_idx);
+            xcg_emit_ref(b, func, ins->args[0]);
+            xcgen_buf_puts(b, ".tag == XRT_TAG_NULL) ? 1 : 0;\n");
+            return;
+        }
+
+        // --- Memory / Field access ---
+
+        // Emit the prefix for a struct field access: either "vN->" (for struct-ptr params)
+        // or "((xrs_N*)vN.ptr)->" (for XrtValue holding a struct pointer).
+        // Returns true if the base vreg is a struct ptr param (arrow-style access).
+        #define EMIT_STRUCT_BASE(b_, st_, base_vi_, func_) do { \
+            bool _is_ptr_param = ((base_vi_) < (func_)->num_params); \
+            if (_is_ptr_param) { \
+                xcgen_buf_printf((b_), "(v%u)->", (base_vi_)); \
+            } else { \
+                xcgen_buf_printf((b_), "((%s*)v%u.ptr)->", (st_)->c_name, (base_vi_)); \
+            } \
+        } while(0)
+
+        case XIR_LOAD_FIELD: {
+            // args[0] = base ptr, args[1] = const(byte_offset)
+            int64_t offset = 0;
+            if (xir_ref_is_const(ins->args[1])) {
+                uint32_t ci = XIR_REF_INDEX(ins->args[1]);
+                if (ci < func->nconst) offset = func->consts[ci].val.i64;
+            }
+            // Check if base is a promoted struct
+            if (xir_ref_is_vreg(ins->args[0]) && cf->vreg_struct_id && mod->struct_reg) {
+                uint32_t base_vi = XIR_REF_INDEX(ins->args[0]);
+                int si = (base_vi < func->nvreg) ? cf->vreg_struct_id[base_vi] : -1;
+                if (si >= 0) {
+                    XcgenStruct *st = &mod->struct_reg->structs[si];
+                    int fi = xcgen_field_by_offset(st, offset);
+                    if (fi >= 0) {
+                        uint8_t dst_t = xcg_ref_type(func, ins->dst);
+                        uint8_t fc = st->fields[fi].c_type;  // 0=int64, 1=double, 2=XrtValue
+                        uint8_t fhint = st->fields[fi].val_hint_type;
+                        // Cast field to dst vreg type if mismatched.
+                        // When fc==2 (XrtValue) but val_hint says F64/I64, read native
+                        // member directly (.f or .i) to avoid inline unbox overhead.
+                        if (dst_t == XR_REP_F64 && fc == 2) {
+                            if (fhint == XR_REP_F64) {
+                                xcgen_buf_printf(b, "    v%u = ", dst_idx);
+                                EMIT_STRUCT_BASE(b, st, base_vi, func);
+                                xcgen_buf_printf(b, "%s.f;\n", st->fields[fi].name);
+                            } else {
+                                xcgen_buf_printf(b, "    v%u = xrt_unbox_float(", dst_idx);
+                                EMIT_STRUCT_BASE(b, st, base_vi, func);
+                                xcgen_buf_printf(b, "%s);\n", st->fields[fi].name);
+                            }
+                        } else if (dst_t == XR_REP_I64 && fc == 2 && fhint == XR_REP_I64) {
+                            xcgen_buf_printf(b, "    v%u = ", dst_idx);
+                            EMIT_STRUCT_BASE(b, st, base_vi, func);
+                            xcgen_buf_printf(b, "%s.i;\n", st->fields[fi].name);
+                        } else if (dst_t == XR_REP_I64 && fc == 1) {
+                            // double field → int64 dst: reinterpret bits
+                            xcgen_buf_printf(b, "    { double _tmp = ");
+                            EMIT_STRUCT_BASE(b, st, base_vi, func);
+                            xcgen_buf_printf(b, "%s; memcpy(&v%u, &_tmp, 8); }\n",
+                                             st->fields[fi].name, dst_idx);
+                        } else if (dst_t == XR_REP_I64 && fc == 2) {
+                            xcgen_buf_printf(b, "    v%u = xrt_unbox_int(", dst_idx);
+                            EMIT_STRUCT_BASE(b, st, base_vi, func);
+                            xcgen_buf_printf(b, "%s);\n", st->fields[fi].name);
+                        } else if ((dst_t == XR_REP_PTR || dst_t == XR_REP_TAGGED) && fc == 0) {
+                            xcgen_buf_printf(b, "    v%u = xrt_box_int(", dst_idx);
+                            EMIT_STRUCT_BASE(b, st, base_vi, func);
+                            xcgen_buf_printf(b, "%s);\n", st->fields[fi].name);
+                        } else if ((dst_t == XR_REP_PTR || dst_t == XR_REP_TAGGED) && fc == 1) {
+                            xcgen_buf_printf(b, "    v%u = xrt_box_float(", dst_idx);
+                            EMIT_STRUCT_BASE(b, st, base_vi, func);
+                            xcgen_buf_printf(b, "%s);\n", st->fields[fi].name);
+                        } else {
+                            xcgen_buf_printf(b, "    v%u = ", dst_idx);
+                            EMIT_STRUCT_BASE(b, st, base_vi, func);
+                            xcgen_buf_printf(b, "%s;\n", st->fields[fi].name);
+                        }
+                        return;
+                    }
+                }
+            }
+            // Fallback: raw byte offset access
+            // xrt_arc_alloc returns ptr past ARC header, so struct fields start at 0.
+            // XIR byte_offset = XIR_JSON_FIELDS_OFFSET(24) + field_idx*16, subtract 24.
+            {
+                uint8_t dst_t = xcg_ref_type(func, ins->dst);
+                uint8_t base_t = xcg_ref_type(func, ins->args[0]);
+                bool base_tagged = (base_t == XR_REP_PTR || base_t == XR_REP_TAGGED ||
+                                    base_t == XR_REP_STR);
+                const char *cast = (dst_t == XR_REP_F64) ? "double" : "int64_t";
+                int64_t adj_offset = offset - 24;  // subtract XIR_JSON_FIELDS_OFFSET
+                if (adj_offset < 0) adj_offset = 0;
+                xcgen_buf_printf(b, "    v%u = *(%s*)((char*)", dst_idx, cast);
+                if (base_tagged) {
+                    xcg_emit_ref(b, func, ins->args[0]);
+                    xcgen_buf_puts(b, ".ptr");
+                } else {
+                    xcg_emit_ref(b, func, ins->args[0]);
+                }
+                xcgen_buf_printf(b, " + %" PRId64 ");\n", adj_offset);
+            }
+            return;
+        }
+        case XIR_STORE_FIELD: {
+            // dst = const(byte_offset), args[0] = base ptr, args[1] = value
+            int64_t offset = 0;
+            if (xir_ref_is_const(ins->dst)) {
+                uint32_t ci = XIR_REF_INDEX(ins->dst);
+                if (ci < func->nconst) offset = func->consts[ci].val.i64;
+            }
+            // Check if base is a promoted struct
+            if (xir_ref_is_vreg(ins->args[0]) && cf->vreg_struct_id && mod->struct_reg) {
+                uint32_t base_vi = XIR_REF_INDEX(ins->args[0]);
+                int si = (base_vi < func->nvreg) ? cf->vreg_struct_id[base_vi] : -1;
+                if (si >= 0) {
+                    XcgenStruct *st = &mod->struct_reg->structs[si];
+                    int fi = xcgen_field_by_offset(st, offset);
+                    if (fi >= 0) {
+                        // ins->rep carries XrValue tag for STORE_FIELD
+                        // tag=0 means null store (from JSON_INIT_N)
+                        // calloc already zeroed the struct, so skip null stores
+                        if (ins->rep == 0) {
+                            return;
+                        }
+                        // Emit struct field store with proper type wrapping.
+                        // Use val_hint_type (semantic type) to avoid boxing calls when
+                        // c_type==2 (XrtValue) but the value is a known native float/int.
+                        uint8_t val_type = xcg_ref_type(func, ins->args[1]);
+                        uint8_t hint = st->fields[fi].val_hint_type;
+                        bool val_tagged = (val_type == XR_REP_PTR ||
+                                           val_type == XR_REP_TAGGED ||
+                                           val_type == XR_REP_STR);
+                        xcgen_buf_puts(b, "    ");
+                        EMIT_STRUCT_BASE(b, st, base_vi, func);
+                        xcgen_buf_printf(b, "%s = ", st->fields[fi].name);
+                        if (st->fields[fi].c_type == 1 && val_tagged) {
+                            // double field but value is XrtValue: unbox float
+                            xcgen_buf_puts(b, "xrt_unbox_float(");
+                            xcg_emit_ref(b, func, ins->args[1]);
+                            xcgen_buf_puts(b, ")");
+                        } else if (st->fields[fi].c_type == 0 && val_tagged) {
+                            // int64_t field but value is XrtValue: unbox int
+                            xcgen_buf_puts(b, "xrt_unbox_int(");
+                            xcg_emit_ref(b, func, ins->args[1]);
+                            xcgen_buf_puts(b, ")");
+                        } else if (st->fields[fi].c_type == 2 && val_type == XR_REP_F64) {
+                            // XrtValue field, native double value: use struct initializer
+                            // (avoids xrt_box_float function call overhead)
+                            xcgen_buf_printf(b, "(%s){.f = ", tagged_type);
+                            xcg_emit_ref(b, func, ins->args[1]);
+                            xcgen_buf_printf(b, ", .tag = %d}", XR_TAG_F64);
+                        } else if (st->fields[fi].c_type == 2 && val_type == XR_REP_I64) {
+                            // XrtValue field, native int64 value: use struct initializer
+                            xcgen_buf_printf(b, "(%s){.i = ", tagged_type);
+                            xcg_emit_ref(b, func, ins->args[1]);
+                            xcgen_buf_printf(b, ", .tag = %d}", XR_TAG_I64);
+                        } else if (st->fields[fi].c_type == 2 && val_tagged
+                                   && hint == XR_REP_F64) {
+                            // XrtValue field, tagged value but hint says it's float:
+                            // read .f directly without unbox call
+                            xcgen_buf_printf(b, "(%s){.f = ", tagged_type);
+                            xcg_emit_ref(b, func, ins->args[1]);
+                            xcgen_buf_printf(b, ".f, .tag = %d}", XR_TAG_F64);
+                        } else if (st->fields[fi].c_type == 2 && val_tagged
+                                   && hint == XR_REP_I64) {
+                            // XrtValue field, tagged value but hint says it's int:
+                            // read .i directly without unbox call
+                            xcgen_buf_printf(b, "(%s){.i = ", tagged_type);
+                            xcg_emit_ref(b, func, ins->args[1]);
+                            xcgen_buf_printf(b, ".i, .tag = %d}", XR_TAG_I64);
+                        } else {
+                            xcg_emit_ref(b, func, ins->args[1]);
+                        }
+                        xcgen_buf_puts(b, ";\n");
+                        return;
+                    }
+                }
+            }
+            // Fallback: raw byte offset access
+            // xrt_arc_alloc returns ptr past ARC header, subtract XIR_JSON_FIELDS_OFFSET(24).
+            {
+                int64_t adj_offset = offset - 24;
+                if (adj_offset < 0) adj_offset = 0;
+                uint8_t base_t = xcg_ref_type(func, ins->args[0]);
+                bool base_tagged = (base_t == XR_REP_PTR || base_t == XR_REP_TAGGED ||
+                                    base_t == XR_REP_STR);
+                uint8_t val_type = xcg_ref_type(func, ins->args[1]);
+                bool val_tagged = (val_type == XR_REP_PTR || val_type == XR_REP_TAGGED ||
+                                   val_type == XR_REP_STR);
+                if (val_tagged) {
+                    // XrtValue → unbox to double for float fields (best effort)
+                    xcgen_buf_puts(b, "    { double _fv = xrt_unbox_float(");
+                    xcg_emit_ref(b, func, ins->args[1]);
+                    xcgen_buf_puts(b, "); memcpy((char*)");
+                    if (base_tagged) {
+                        xcg_emit_ref(b, func, ins->args[0]);
+                        xcgen_buf_puts(b, ".ptr");
+                    } else {
+                        xcg_emit_ref(b, func, ins->args[0]);
+                    }
+                    xcgen_buf_printf(b, " + %" PRId64 ", &_fv, 8); }\n", adj_offset);
+                } else if (val_type == XR_REP_F64) {
+                    // float value → write as double
+                    xcgen_buf_puts(b, "    *(double*)((char*)");
+                    if (base_tagged) {
+                        xcg_emit_ref(b, func, ins->args[0]);
+                        xcgen_buf_puts(b, ".ptr");
+                    } else {
+                        xcg_emit_ref(b, func, ins->args[0]);
+                    }
+                    xcgen_buf_printf(b, " + %" PRId64 ") = ", adj_offset);
+                    xcg_emit_ref(b, func, ins->args[1]);
+                    xcgen_buf_puts(b, ";\n");
+                } else {
+                    xcgen_buf_puts(b, "    *(int64_t*)((char*)");
+                    if (base_tagged) {
+                        xcg_emit_ref(b, func, ins->args[0]);
+                        xcgen_buf_puts(b, ".ptr");
+                    } else {
+                        xcg_emit_ref(b, func, ins->args[0]);
+                    }
+                    xcgen_buf_printf(b, " + %" PRId64 ") = ", adj_offset);
+                    xcg_emit_ref(b, func, ins->args[1]);
+                    xcgen_buf_puts(b, ";\n");
+                }
+            }
+            return;
+        }
+
+        // --- Exception handling ---
+        case XIR_TRY_BEGIN:
+        case XIR_TRY_END:
+            // No-op in AOT: control flow already handled by goto
+            return;
+
+        case XIR_CATCH: {
+            // Read exception value from thread-local xrt_exception
+            xcgen_buf_printf(b, "    v%u = xrt_exception;\n", dst_idx);
+            cf->needs_exception = true;
+            return;
+        }
+
+        case XIR_THROW:
+            // Throw is translated as CALL_C(xr_jit_throw) + goto catch_block
+            // by the builder.
+            // If we see it here, emit abort for safety.
+            xcgen_buf_puts(b, "    abort(); /* unexpected throw */\n");
+            return;
+
+        // --- Closure upvalue access (direct xrt_closure_t, no VM dependency) ---
+        case XIR_LOAD_UPVAL: {
+            // args[0] = const(upval_index)
+            int64_t uv_idx = 0;
+            if (xir_ref_is_const(ins->args[0])) {
+                uint32_t ci = XIR_REF_INDEX(ins->args[0]);
+                if (ci < func->nconst) uv_idx = func->consts[ci].val.i64;
+            }
+            xcgen_buf_printf(b, "    v%u = xrt_cl->upvals[%d];\n",
+                             dst_idx, (int)uv_idx);
+            cf->needs_runtime = true;
+            cf->needs_closure_param = true;
+            return;
+        }
+        case XIR_STORE_UPVAL: {
+            // args[0] = const(upval_index), args[1] = value
+            // dst field may carry closure vreg ref (from OP_CLOSURE initialization)
+            int64_t uv_idx = 0;
+            if (xir_ref_is_const(ins->args[0])) {
+                uint32_t ci = XIR_REF_INDEX(ins->args[0]);
+                if (ci < func->nconst) uv_idx = func->consts[ci].val.i64;
+            }
+            if (xir_ref_is_vreg(ins->dst)) {
+                // Child closure upvalue initialization: set upval on the child closure
+                uint32_t cl_vreg = XIR_REF_INDEX(ins->dst);
+                xcgen_buf_printf(b, "    ((xrt_closure_t*)v%u.ptr)->upvals[%d] = ",
+                                 cl_vreg, (int)uv_idx);
+                xcg_emit_ref_as_tagged(b, func, ins->args[1]);
+                xcgen_buf_puts(b, ";\n");
+            } else {
+                // Writing to own closure's upvalue
+                xcgen_buf_printf(b, "    xrt_cl->upvals[%d] = ", (int)uv_idx);
+                xcg_emit_ref_as_tagged(b, func, ins->args[1]);
+                xcgen_buf_puts(b, ";\n");
+                cf->needs_closure_param = true;
+            }
+            cf->needs_runtime = true;
+            return;
+        }
+
+        // --- Guards (AOT: trap on failure, no deopt) ---
+        case XIR_GUARD_TAG:
+        case XIR_GUARD_CLASS:
+        case XIR_GUARD_NONNULL:
+        case XIR_DEOPT:
+            return;
+
+        // --- ARC retain/release (AOT mode: both are no-ops) ---
+        // In AOT mode, object lifetime is managed by the VM's GC.
+        // Individual retain/release calls are no-ops since GC handles
+        // object collection automatically.
+        // Skipping both eliminates unnecessary function call overhead.
+        case XIR_RETAIN:
+        case XIR_RELEASE:
+            return;
+
+        // --- GC barriers (no-op in AOT mode; ARC handles memory) ---
+        case XIR_BARRIER_FWD:
+        case XIR_BARRIER_BACK:
+            return;
+
+        // --- Raw memory load/store (struct native field access) ---
+        case XIR_LOAD: {
+            // dst = *((T*)args[0])  where T depends on rep
+            uint8_t dst_t = xcg_ref_type(func, ins->dst);
+            const char *cast = (dst_t == XR_REP_F64) ? "double" : "int64_t";
+            xcgen_buf_printf(b, "    v%u = *(%s*)(void*)(uintptr_t)", dst_idx, cast);
+            xcg_emit_ref(b, func, ins->args[0]);
+            xcgen_buf_puts(b, ";\n");
+            return;
+        }
+        case XIR_STORE: {
+            // *((T*)args[0]) = args[1]  where T depends on value rep
+            uint8_t val_t = xcg_ref_type(func, ins->args[1]);
+            const char *cast = (val_t == XR_REP_F64) ? "double" : "int64_t";
+            xcgen_buf_printf(b, "    *(%s*)(void*)(uintptr_t)", cast);
+            xcg_emit_ref(b, func, ins->args[0]);
+            xcgen_buf_puts(b, " = ");
+            xcg_emit_ref(b, func, ins->args[1]);
+            xcgen_buf_puts(b, ";\n");
+            return;
+        }
+        case XIR_LOAD8Z: {
+            // dst = (int64_t)*(uint8_t*)args[0]
+            xcgen_buf_printf(b, "    v%u = (int64_t)*(uint8_t*)(void*)(uintptr_t)", dst_idx);
+            xcg_emit_ref(b, func, ins->args[0]);
+            xcgen_buf_puts(b, ";\n");
+            return;
+        }
+        case XIR_LOAD8S: {
+            // dst = (int64_t)(int8_t)*(uint8_t*)args[0]
+            xcgen_buf_printf(b, "    v%u = (int64_t)(int8_t)*(uint8_t*)(void*)(uintptr_t)", dst_idx);
+            xcg_emit_ref(b, func, ins->args[0]);
+            xcgen_buf_puts(b, ";\n");
+            return;
+        }
+        case XIR_STORE8: {
+            // *(uint8_t*)args[0] = (uint8_t)args[1]
+            xcgen_buf_puts(b, "    *(uint8_t*)(void*)(uintptr_t)");
+            xcg_emit_ref(b, func, ins->args[0]);
+            xcgen_buf_puts(b, " = (uint8_t)");
+            xcg_emit_ref(b, func, ins->args[1]);
+            xcgen_buf_puts(b, ";\n");
+            return;
+        }
+        case XIR_LOAD16Z: {
+            // dst = (int64_t)*(uint16_t*)args[0]
+            xcgen_buf_printf(b, "    v%u = (int64_t)*(uint16_t*)(void*)(uintptr_t)", dst_idx);
+            xcg_emit_ref(b, func, ins->args[0]);
+            xcgen_buf_puts(b, ";\n");
+            return;
+        }
+        case XIR_LOAD16S: {
+            // dst = (int64_t)(int16_t)*(uint16_t*)args[0]
+            xcgen_buf_printf(b, "    v%u = (int64_t)(int16_t)*(uint16_t*)(void*)(uintptr_t)", dst_idx);
+            xcg_emit_ref(b, func, ins->args[0]);
+            xcgen_buf_puts(b, ";\n");
+            return;
+        }
+        case XIR_STORE16: {
+            // *(uint16_t*)args[0] = (uint16_t)args[1]
+            xcgen_buf_puts(b, "    *(uint16_t*)(void*)(uintptr_t)");
+            xcg_emit_ref(b, func, ins->args[0]);
+            xcgen_buf_puts(b, " = (uint16_t)");
+            xcg_emit_ref(b, func, ins->args[1]);
+            xcgen_buf_puts(b, ";\n");
+            return;
+        }
+        case XIR_LOAD32Z: {
+            // dst = (int64_t)*(uint32_t*)args[0]
+            xcgen_buf_printf(b, "    v%u = (int64_t)*(uint32_t*)(void*)(uintptr_t)", dst_idx);
+            xcg_emit_ref(b, func, ins->args[0]);
+            xcgen_buf_puts(b, ";\n");
+            return;
+        }
+        case XIR_STORE32: {
+            // *(uint32_t*)args[0] = (uint32_t)args[1]
+            xcgen_buf_puts(b, "    *(uint32_t*)(void*)(uintptr_t)");
+            xcg_emit_ref(b, func, ins->args[0]);
+            xcgen_buf_puts(b, " = (uint32_t)");
+            xcg_emit_ref(b, func, ins->args[1]);
+            xcgen_buf_puts(b, ";\n");
+            return;
+        }
+
+        case XIR_LOAD_F32: {
+            // dst = (double)*(float*)args[0]
+            xcgen_buf_printf(b, "    v%u = (double)*(float*)(void*)(uintptr_t)", dst_idx);
+            xcg_emit_ref(b, func, ins->args[0]);
+            xcgen_buf_puts(b, ";\n");
+            return;
+        }
+        case XIR_STORE_F32: {
+            // *(float*)args[0] = (float)args[1]
+            xcgen_buf_puts(b, "    *(float*)(void*)(uintptr_t)");
+            xcg_emit_ref(b, func, ins->args[0]);
+            xcgen_buf_puts(b, " = (float)");
+            xcg_emit_ref(b, func, ins->args[1]);
+            xcgen_buf_puts(b, ";\n");
+            return;
+        }
+
+        // --- Object allocation: use ARC malloc-based allocator ---
+        case XIR_ALLOC: {
+            // XIR_ALLOC: dst = xrt_arc_alloc(size_bytes)
+            // args[0] = size (const i64 or vreg i64)
+            if (!xir_ref_is_none(ins->dst)) {
+                xcgen_buf_printf(b, "    v%u = (%s){ .ptr = xrt_arc_alloc((size_t)(", dst_idx, tagged_type);
+                xcg_emit_ref(b, func, ins->args[0]);
+                xcgen_buf_puts(b, ")), .tag = XRT_TAG_PTR };\n");
+            }
+            return;
+        }
+
+        // --- No-ops in C ---
+        case XIR_SAFEPOINT:
+        case XIR_NOP:
+        case XIR_PHI:
+            return;
+
+        default:
+            xcgen_buf_printf(b, "    /* TODO: op %u (%s) */\n",
+                             ins->op, xir_op_name(ins->op));
+            return;
+    }
+}

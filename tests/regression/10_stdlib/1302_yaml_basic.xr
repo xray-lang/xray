@@ -1,0 +1,67 @@
+// 1302_yaml_basic.xr - YAML module tests
+
+import yaml
+
+// ===== Basic key-value =====
+
+@test
+fn test_parse_basic(): void {
+    let data = "name: Alice\nage: 30\nactive: true"
+    let obj = yaml.parse(data)
+    assert_eq(obj["name"], "Alice")
+    assert_eq(obj["age"], 30)
+    assert_eq(obj["active"], true)
+}
+
+// ===== Nested mapping =====
+
+@test
+fn test_parse_nested(): void {
+    let data = "server:\n  host: localhost\n  port: 8080"
+    let obj = yaml.parse(data)
+    let server = obj["server"]
+    assert_eq(server["host"], "localhost")
+    assert_eq(server["port"], 8080)
+}
+
+// ===== Flow sequence =====
+
+@test
+fn test_parse_flow_sequence(): void {
+    let data = "list: [1, 2, 3]"
+    let obj = yaml.parse(data)
+    let list = obj["list"]
+    assert_eq(list[0], 1)
+    assert_eq(list[2], 3)
+}
+
+// ===== Flow mapping =====
+
+@test
+fn test_parse_flow_mapping(): void {
+    let data = "map: {a: 1, b: 2}"
+    let obj = yaml.parse(data)
+    let map = obj["map"]
+    assert_eq(map["a"], 1)
+    assert_eq(map["b"], 2)
+}
+
+// ===== Quoted strings =====
+
+@test
+fn test_parse_quoted_strings(): void {
+    let data = "single: 'hello'\ndouble: \"world\""
+    let obj = yaml.parse(data)
+    assert_eq(obj["single"], "hello")
+    assert_eq(obj["double"], "world")
+}
+
+// ===== Stringify =====
+
+@test
+fn test_stringify(): void {
+    let config = {"name" => "xray", "version" => 1}
+    let result = yaml.stringify(config)
+    assert(result != null)
+    assert(result.length > 0)
+}

@@ -1,0 +1,67 @@
+// 1405_crypto_utils.xr
+// Test: crypto utility functions
+//
+// Coverage:
+//   - timingSafeEqual
+//   - Hash length validation for all algorithms
+
+import crypto
+
+// ============================================================
+// timingSafeEqual tests
+// ============================================================
+
+@test
+fn test_timing_safe_equal_same(): void {
+    assert_true(crypto.timingSafeEqual("hello", "hello"))
+}
+
+@test
+fn test_timing_safe_equal_different(): void {
+    assert_true(!crypto.timingSafeEqual("hello", "world"))
+}
+
+@test
+fn test_timing_safe_equal_different_length(): void {
+    assert_true(!crypto.timingSafeEqual("short", "longer string"))
+}
+
+@test
+fn test_timing_safe_equal_empty(): void {
+    assert_true(crypto.timingSafeEqual("", ""))
+}
+
+@test
+fn test_timing_safe_equal_hmac_verify(): void {
+    // Typical usage: verify HMAC
+    let expected = crypto.hmac("sha256", "secret", "data")
+    let actual = crypto.hmac("sha256", "secret", "data")
+    assert_true(crypto.timingSafeEqual(expected, actual))
+}
+
+@test
+fn test_timing_safe_equal_hmac_mismatch(): void {
+    let expected = crypto.hmac("sha256", "secret", "data")
+    let tampered = crypto.hmac("sha256", "secret", "tampered")
+    assert_true(!crypto.timingSafeEqual(expected, tampered))
+}
+
+// ============================================================
+// All hash lengths
+// ============================================================
+
+@test
+fn test_all_hash_lengths(): void {
+    assert_eq(crypto.md5("x").length, 32)
+    assert_eq(crypto.sha1("x").length, 40)
+    assert_eq(crypto.sha256("x").length, 64)
+    assert_eq(crypto.sha512("x").length, 128)
+}
+
+@test
+fn test_all_hmac_lengths(): void {
+    assert_eq(crypto.hmac("md5", "k", "d").length, 32)
+    assert_eq(crypto.hmac("sha1", "k", "d").length, 40)
+    assert_eq(crypto.hmac("sha256", "k", "d").length, 64)
+    assert_eq(crypto.hmac("sha512", "k", "d").length, 128)
+}

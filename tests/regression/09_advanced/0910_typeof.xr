@@ -1,0 +1,84 @@
+// 0910_typeof.xr
+// 作者：xingleixu@gmail.com
+// 测试：typeof 运算符
+
+// ===== 基本类型 =====
+
+@test
+fn test_typeof_int(): void {
+    let x = 42
+    assert_eq(typeof(x), Type.int)
+    // Bare literals without type context are NaN-boxed
+    assert_eq(typeof(0), Type.int)
+    assert_eq(typeof(-100), Type.int)
+}
+
+@test
+fn test_typeof_float(): void {
+    let x = 3.14
+    assert_eq(typeof(x), Type.float)
+    assert_eq(typeof(0.0), Type.float)
+}
+
+@test
+fn test_typeof_string(): void {
+    let s = "hello"
+    assert_eq(typeof(s), Type.string)
+    assert_eq(typeof(""), Type.string)
+}
+
+@test
+fn test_typeof_bool(): void {
+    assert_eq(typeof(true), Type.bool)
+    assert_eq(typeof(false), Type.bool)
+}
+
+@test
+fn test_typeof_null(): void {
+    assert_eq(typeof(null), Type.null)
+}
+
+// ===== 集合类型 =====
+
+@test
+fn test_typeof_array(): void {
+    let arr = [1, 2, 3]
+    assert_eq(typeof(arr), Type.Array)
+}
+
+@test
+fn test_typeof_map(): void {
+    let m = {"key" => "value"}
+    assert_eq(typeof(m), Type.Map)
+}
+
+@test
+fn test_typeof_set(): void {
+    let s = #[1, 2, 3]
+    assert_eq(typeof(s), Type.Set)
+}
+
+// ===== 函数类型 =====
+
+@test
+fn test_typeof_function(): void {
+    fn add(a: int, b: int): int { return a + b }
+    assert_eq(typeof(add), Type.function)
+    
+    let lambda = (x: int) => x * 2
+    assert_eq(typeof(lambda), Type.function)
+}
+
+// ===== 类实例 =====
+
+class MyClass {
+    value: int
+    constructor(v) { this.value = v }
+}
+
+@test
+fn test_typeof_instance(): void {
+    let obj = new MyClass(10)
+    assert_eq(typename(obj), "MyClass")
+}
+

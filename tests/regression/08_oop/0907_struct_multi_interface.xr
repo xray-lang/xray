@@ -1,0 +1,41 @@
+// Test: struct implementing multiple interfaces
+// Expected: struct can implement multiple interfaces simultaneously
+
+interface Printable {
+    toString(): string
+}
+
+interface Measurable {
+    measure(): int
+}
+
+struct Score implements Printable, Measurable {
+    value: int
+    label: string
+
+    toString(): string {
+        return "${this.label}: ${this.value}"
+    }
+
+    measure(): int {
+        return this.value
+    }
+}
+
+// === Direct usage ===
+let a = Score{value: 95, label: "Math"}
+let b = Score{value: 88, label: "English"}
+
+assert(a.toString() == "Math: 95")
+assert(b.toString() == "English: 88")
+assert(a.measure() == 95)
+assert(b.measure() == 88)
+
+// === Value semantics preserved ===
+let c = a
+c.value = 50
+assert(a.value == 95)
+assert(a.measure() == 95)
+assert(c.measure() == 50)
+
+print("ok")

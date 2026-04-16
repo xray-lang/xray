@@ -1,0 +1,29 @@
+// EXPECTED: 10
+// EXPECTED: hello
+// EXPECTED: 42
+// Test: Json object creation and field access in JIT
+
+fn make_point(x: int, y: int) : Json {
+    return { "x": x, "y": y }
+}
+
+fn get_x(p) : int {
+    return p.x
+}
+
+fn set_and_get(p, val: int) : int {
+    p.x = val
+    return p.x
+}
+
+let i = 0
+while (i < 200) {
+    let p = make_point(10, 20)
+    get_x(p)
+    i = i + 1
+}
+
+let p = make_point(10, 20)
+print(get_x(p))
+print({ "name": "hello" }.name)
+print(set_and_get(p, 42))

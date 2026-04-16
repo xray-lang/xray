@@ -1,0 +1,142 @@
+// 0640_array_methods.xr
+// 作者：xingleixu@gmail.com
+// 测试：数组方法扩展
+// ===== slice =====
+@test
+fn test_slice_basic(): void {
+    let arr = [1, 2, 3, 4, 5]
+    let s = arr.slice(1, 4)
+    assert_eq(s.length, 3)
+    assert_eq(s[0], 2)
+    assert_eq(s[2], 4)
+}
+
+@test
+fn test_slice_from_start(): void {
+    let arr = [1, 2, 3, 4, 5]
+    let s = arr.slice(0, 2)
+    assert_eq(s.length, 2)
+    assert_eq(s[0], 1)
+}
+
+@test
+fn test_slice_to_end(): void {
+    let arr = [1, 2, 3, 4, 5]
+    let s = arr.slice(3, 5)
+    assert_eq(s.length, 2)
+    assert_eq(s[1], 5)
+}
+
+// ===== concat =====
+@test
+fn test_concat_arrays(): void {
+    let a = [1, 2]
+    let b = [3, 4]
+    let c = a.concat(b)
+    assert_eq(c.length, 4)
+    assert_eq(c[0], 1)
+    assert_eq(c[3], 4)
+}
+
+// ===== find =====
+@test
+fn test_find_element(): void {
+    let arr = [10, 20, 30, 40]
+    let found = arr.find(fn(x) {
+        return x > 25
+    })
+    assert_eq(found, 30)
+}
+
+@test
+fn test_find_not_found(): void {
+    let arr = [1, 2, 3]
+    let found = arr.find(fn(x) {
+        return x > 100
+    })
+    assert_eq(found, null)
+}
+
+// ===== findIndex =====
+@test
+fn test_find_index(): void {
+    let arr = ["a", "b", "c", "d"]
+    let idx = arr.findIndex(fn(x) {
+        return x == "c"
+    })
+    assert_eq(idx, 2)
+}
+
+@test
+fn test_find_index_not_found(): void {
+    let arr = [1, 2, 3]
+    let idx = arr.findIndex(fn(x) {
+        return x > 100
+    })
+    assert_eq(idx, -1)
+}
+
+// ===== every =====
+@test
+fn test_every_true(): void {
+    let arr = [2, 4, 6, 8]
+    let result = arr.every(fn(x) {
+        return x % 2 == 0
+    })
+    assert_eq(result, true)
+}
+
+@test
+fn test_every_false(): void {
+    let arr = [2, 3, 4, 6]
+    let result = arr.every(fn(x) {
+        return x % 2 == 0
+    })
+    assert_eq(result, false)
+}
+
+// ===== some =====
+@test
+fn test_some_true(): void {
+    let arr = [1, 3, 5, 6]
+    let result = arr.some(fn(x) {
+        return x % 2 == 0
+    })
+    assert_eq(result, true)
+}
+
+@test
+fn test_some_false(): void {
+    let arr = [1, 3, 5, 7]
+    let result = arr.some(fn(x) {
+        return x % 2 == 0
+    })
+    assert_eq(result, false)
+}
+
+// ===== fill =====
+@test
+fn test_fill(): void {
+    let arr = [1, 2, 3, 4, 5]
+    arr.fill(0)
+    assert_eq(arr[0], 0)
+    assert_eq(arr[4], 0)
+}
+
+// ===== sort =====
+@test
+fn test_sort_numbers(): void {
+    let arr = [3, 1, 4, 1, 5, 9, 2, 6]
+    arr.sort()
+    assert_eq(arr[0], 1)
+    assert_eq(arr[1], 1)
+    assert_eq(arr[7], 9)
+}
+
+@test
+fn test_sort_strings(): void {
+    let arr = ["banana", "apple", "cherry"]
+    arr.sort()
+    assert_eq(arr[0], "apple")
+    assert_eq(arr[2], "cherry")
+}

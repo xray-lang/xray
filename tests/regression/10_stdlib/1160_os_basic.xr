@@ -1,0 +1,122 @@
+// 1160_os_basic.xr - OS module basic tests
+
+import os
+
+// ===== Constants =====
+
+@test
+fn test_platform(): void {
+    let p = os.platform
+    assert(p == "darwin" || p == "linux" || p == "windows")
+}
+
+@test
+fn test_arch(): void {
+    let a = os.arch
+    assert(a == "arm64" || a == "x64" || a == "x86")
+}
+
+@test
+fn test_sep(): void {
+    let s = os.sep
+    assert(s == "/" || s == "\\")
+}
+
+@test
+fn test_eol(): void {
+    let e = os.eol
+    assert(e == "\n" || e == "\r\n")
+}
+
+// ===== Environment Variables =====
+
+@test
+fn test_getenv_path(): void {
+    let path = os.getenv("PATH")
+    assert(path != null)
+    assert(path.length > 0)
+}
+
+@test
+fn test_getenv_nonexistent(): void {
+    let val = os.getenv("XRAY_TEST_NONEXISTENT_VAR_12345")
+    assert_eq(val, null)
+}
+
+@test
+fn test_setenv_getenv(): void {
+    os.setenv("XRAY_TEST_VAR", "hello_xray")
+    let val = os.getenv("XRAY_TEST_VAR")
+    assert_eq(val, "hello_xray")
+
+    // cleanup
+    os.unsetenv("XRAY_TEST_VAR")
+    let val2 = os.getenv("XRAY_TEST_VAR")
+    assert_eq(val2, null)
+}
+
+@test
+fn test_setenv_overwrite(): void {
+    os.setenv("XRAY_TEST_OW", "first")
+    assert_eq(os.getenv("XRAY_TEST_OW"), "first")
+
+    os.setenv("XRAY_TEST_OW", "second")
+    assert_eq(os.getenv("XRAY_TEST_OW"), "second")
+
+    os.unsetenv("XRAY_TEST_OW")
+}
+
+@test
+fn test_environ(): void {
+    let env = os.environ()
+    assert(env != null)
+    // PATH should exist in the environment
+    let path = env.get("PATH")
+    assert(path != null)
+}
+
+// ===== Process Info =====
+
+@test
+fn test_getpid(): void {
+    let pid = os.getpid()
+    assert(pid > 0)
+}
+
+@test
+fn test_getcwd(): void {
+    let cwd = os.getcwd()
+    assert(cwd != null)
+    assert(cwd.length > 0)
+}
+
+@test
+fn test_hostname(): void {
+    let h = os.hostname()
+    assert(h != null)
+    assert(h.length > 0)
+}
+
+@test
+fn test_tmpdir(): void {
+    let tmp = os.tmpdir()
+    assert(tmp != null)
+    assert(tmp.length > 0)
+}
+
+// ===== chdir =====
+
+@test
+fn test_chdir(): void {
+    let original = os.getcwd()
+    let tmp = os.tmpdir()
+
+    os.chdir(tmp)
+    let newCwd = os.getcwd()
+    // Should have changed (may differ due to symlink resolution)
+    assert(newCwd != null)
+
+    // Restore
+    os.chdir(original)
+    assert_eq(os.getcwd(), original)
+}

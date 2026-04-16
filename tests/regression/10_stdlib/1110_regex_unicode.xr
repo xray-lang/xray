@@ -1,0 +1,97 @@
+/**
+ * @file 1110_regex_unicode.xr
+ * @brief 正则 Unicode 字符类测试
+ * @author xingleixu@gmail.com
+ * 
+ * 测试 \p{...} 和 \P{...} Unicode 字符类支持
+ */
+
+import regex
+
+// \p{Han} - 匹配汉字
+@test
+fn test_p_han(): void {
+    let re = regex.compile("\\p{Han}+")
+    let result = regex.find(re, "Hello你好World世界")
+    assert_eq(result != null, true)
+    assert_eq(result["text"], "你好")
+}
+
+// \p{L} - 匹配所有字母（包括汉字）
+@test
+fn test_p_letter(): void {
+    let re = regex.compile("\\p{L}+")
+    let result = regex.find(re, "123abc")
+    assert_eq(result != null, true)
+    assert_eq(result["text"], "abc")
+}
+
+// \p{N} - 匹配数字
+@test
+fn test_p_number(): void {
+    let re = regex.compile("\\p{N}+")
+    let result = regex.find(re, "abc123def")
+    assert_eq(result != null, true)
+    assert_eq(result["text"], "123")
+}
+
+// \p{Latin} - 匹配拉丁字母
+@test
+fn test_p_latin(): void {
+    let re = regex.compile("\\p{Latin}+")
+    let result = regex.find(re, "你好HelloWorld")
+    assert_eq(result != null, true)
+    assert_eq(result["text"], "HelloWorld")
+}
+
+// \P{Han} - 匹配非汉字
+@test
+fn test_P_not_han(): void {
+    let re = regex.compile("\\P{Han}+")
+    let result = regex.find(re, "你好World")
+    assert_eq(result != null, true)
+    assert_eq(result["text"], "World")
+}
+
+// \p{ASCII} - 匹配 ASCII 字符
+@test
+fn test_p_ascii(): void {
+    let re = regex.compile("\\p{ASCII}+")
+    let result = regex.find(re, "Hello世界")
+    assert_eq(result != null, true)
+    assert_eq(result["text"], "Hello")
+}
+
+// \p{Hiragana} - 匹配平假名
+@test
+fn test_p_hiragana(): void {
+    let re = regex.compile("\\p{Hiragana}+")
+    let result = regex.find(re, "Helloひらがな世界")
+    assert_eq(result != null, true)
+    assert_eq(result["text"], "ひらがな")
+}
+
+// \p{Katakana} - 匹配片假名
+@test
+fn test_p_katakana(): void {
+    let re = regex.compile("\\p{Katakana}+")
+    let result = regex.find(re, "Helloカタカナ世界")
+    assert_eq(result != null, true)
+    assert_eq(result["text"], "カタカナ")
+}
+
+// 混合匹配
+@test
+fn test_unicode_mixed(): void {
+    let text = "abc你好123"
+    
+    // All letters (including CJK)
+    let re_l = regex.compile("\\p{L}+")
+    let result = regex.find(re_l, text)
+    assert_eq(result["text"], "abc你好")
+    
+    // 所有数字
+    let re_n = regex.compile("\\p{N}+")
+    result = regex.find(re_n, text)
+    assert_eq(result["text"], "123")
+}

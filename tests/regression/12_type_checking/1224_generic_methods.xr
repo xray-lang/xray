@@ -1,0 +1,90 @@
+// Test: Generic methods in classes
+// Expected: prints "ok"
+// Class with generic method
+class Container<T> {
+    items: Array<T>
+
+    constructor() {
+        this.items = []
+    }
+
+    add(item: T): void {
+        this.items.push(item)
+    }
+
+    wrap(item: T): Array<T> {
+        return [item]
+    }
+
+    pair(a: T, b: T): (T, T) {
+        return a, b
+    }
+}
+
+let c = new Container<int>()
+// Test 1: Typed add method
+c.add(42)
+c.add(100)
+c.add(7)
+assert_eq(c.items.length, 3)
+assert_eq(c.items[0], 42)
+assert_eq(c.items[1], 100)
+assert_eq(c.items[2], 7)
+// Test 2: Typed wrap method
+let wrapped = c.wrap(100)
+assert_eq(wrapped[0], 100)
+let sc = new Container<string>()
+let strWrapped = sc.wrap("test")
+assert_eq(strWrapped[0], "test")
+// Test 3: Pair method (multi-value return)
+let x, y = c.pair(10, 20)
+assert_eq(x, 10)
+assert_eq(y, 20)
+
+// Class with static generic method
+class Util {
+    static identity<T>(x: T): T {
+        return x
+    }
+
+    static swap<A, B>(pair: Array<int>): Array<int> {
+        return [pair[1], pair[0]]
+    }
+}
+
+// Test 4: Static generic method
+assert_eq(Util.identity(42), 42)
+assert_eq(Util.identity("hello"), "hello")
+let swapped = Util.swap([1, 2])
+assert_eq(swapped[0], 2)
+assert_eq(swapped[1], 1)
+
+// Generic class with generic method
+class Box<T> {
+    value: T
+
+    constructor(v: T) {
+        this.value = v
+    }
+
+    get(): T {
+        return this.value
+    }
+
+    transform<U>(f: fn(T): U): U {
+        return f(this.value)
+    }
+}
+
+// Test 5: Generic class with generic method
+let box: Box<int> = new Box<int>(10)
+assert_eq(box.get(), 10)
+let str = box.transform(fn(n) {
+    return "value: " + string(n)
+})
+assert_eq(str, "value: 10")
+let doubled = box.transform(fn(n) {
+    return n * 2
+})
+assert_eq(doubled, 20)
+print("ok")

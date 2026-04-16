@@ -1,0 +1,184 @@
+// 0930_practical.xr
+// 作者：xingleixu@gmail.com
+// 测试：实际应用场景
+
+// ===== 斐波那契数列 =====
+
+@test
+fn test_fibonacci(): void {
+    fn fib(n: int): int {
+        if (n <= 1) { return n }
+        return fib(n - 1) + fib(n - 2)
+    }
+    
+    assert_eq(fib(0), 0)
+    assert_eq(fib(1), 1)
+    assert_eq(fib(5), 5)
+    assert_eq(fib(10), 55)
+}
+
+// ===== 阶乘 =====
+
+@test
+fn test_factorial(): void {
+    fn fact(n: int): int {
+        if (n <= 1) { return 1 }
+        return n * fact(n - 1)
+    }
+    
+    assert_eq(fact(0), 1)
+    assert_eq(fact(1), 1)
+    assert_eq(fact(5), 120)
+}
+
+// ===== 质数判断 =====
+
+@test
+fn test_is_prime(): void {
+    fn isPrime(n: int): bool {
+        if (n < 2) { return false }
+        if (n == 2) { return true }
+        if (n % 2 == 0) { return false }
+        let i = 3
+        while (i * i <= n) {
+            if (n % i == 0) { return false }
+            i = i + 2
+        }
+        return true
+    }
+    
+    assert_eq(isPrime(2), true)
+    assert_eq(isPrime(3), true)
+    assert_eq(isPrime(4), false)
+    assert_eq(isPrime(17), true)
+    assert_eq(isPrime(18), false)
+}
+
+// ===== 最大公约数 =====
+
+@test
+fn test_gcd(): void {
+    fn gcd(a: int, b: int): int {
+        while (b != 0) {
+            let temp = b
+            b = a % b
+            a = temp
+        }
+        return a
+    }
+    
+    assert_eq(gcd(12, 8), 4)
+    assert_eq(gcd(17, 13), 1)
+    assert_eq(gcd(100, 25), 25)
+}
+
+// ===== 二分查找 =====
+
+@test
+fn test_binary_search(): void {
+    fn binarySearch(arr: Array<int>, target: int): int {
+        let low = 0
+        let high = arr.length - 1
+        while (low <= high) {
+            let mid = (low + high) / 2
+            if (arr[mid] == target) { return mid }
+            if (arr[mid] < target) {
+                low = mid + 1
+            } else {
+                high = mid - 1
+            }
+        }
+        return -1
+    }
+    
+    let arr = [1, 3, 5, 7, 9, 11, 13]
+    assert_eq(binarySearch(arr, 7), 3)
+    assert_eq(binarySearch(arr, 1), 0)
+    assert_eq(binarySearch(arr, 13), 6)
+    assert_eq(binarySearch(arr, 4), -1)
+}
+
+// ===== 冒泡排序 =====
+
+@test
+fn test_bubble_sort(): void {
+    fn bubbleSort(arr: Array<int>): Array<int> {
+        let n = arr.length
+        for (i in 0..n) {
+            for (j in 0..(n - i - 1)) {
+                if (arr[j] > arr[j + 1]) {
+                    let temp = arr[j]
+                    arr[j] = arr[j + 1]
+                    arr[j + 1] = temp
+                }
+            }
+        }
+        return arr
+    }
+    
+    let arr = [64, 34, 25, 12, 22, 11, 90]
+    bubbleSort(arr)
+    assert_eq(arr[0], 11)
+    assert_eq(arr[6], 90)
+}
+
+// ===== 字符串反转 =====
+
+@test
+fn test_reverse_string(): void {
+    fn reverse(s: string): string {
+        let result = ""
+        let i = s.length - 1
+        while (i >= 0) {
+            result = result + s.charAt(i)
+            i = i - 1
+        }
+        return result
+    }
+    
+    assert_eq(reverse("hello"), "olleh")
+    assert_eq(reverse("a"), "a")
+    assert_eq(reverse(""), "")
+}
+
+// ===== 计数器类 =====
+
+@test
+fn test_counter_class(): void {
+    class Counter {
+        value: int
+        constructor() { this.value = 0 }
+        inc(): void { this.value += 1 }        dec(): void { this.value -= 1 }        getValue(): int { return this.value }    }
+    
+    let c = new Counter()
+    c.inc()
+    c.inc()
+    c.inc()
+    c.dec()
+    assert_eq(c.getValue(), 2)
+}
+
+// ===== 栈实现 =====
+
+@test
+fn test_stack(): void {
+    class Stack {
+        items: Array<int>
+        constructor() { this.items = [] }
+        push(x: int): void { this.items.push(x) }
+        pop(): int? { return this.items.pop() }
+        peek(): int { return this.items[this.items.length - 1] }
+        isEmpty(): bool { return this.items.length == 0 }
+    }
+    
+    let s = new Stack()
+    assert_eq(s.isEmpty(), true)
+    s.push(1)
+    s.push(2)
+    s.push(3)
+    assert_eq(s.peek(), 3)
+    assert_eq(s.pop(), 3)
+    assert_eq(s.pop(), 2)
+    assert_eq(s.isEmpty(), false)
+}
+

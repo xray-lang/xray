@@ -1,0 +1,119 @@
+// Test: Swift-style space-sensitive generic disambiguation
+// Rule: foo<T>() is generic call, foo < T is comparison
+// Generic function definition
+fn identity<T>(x: T): T {
+    return x
+}
+
+fn compare(a: int, b: int): bool {
+    return a < b
+}
+
+// =============================================================================
+// Test 1: Generic call without space (should work)
+// =============================================================================
+let n1 = identity<int>(42)
+assert_eq(n1, 42)
+let s1 = identity<string>("hello")
+assert_eq(s1, "hello")
+// =============================================================================
+// Test 2: Comparison with space (should NOT be parsed as generic)
+// =============================================================================
+let a = 10
+let b = 20
+let c = 5
+// These should all be comparisons, not generic calls
+let cmp1 = a < b
+// true
+let cmp2 = b > a
+// true
+let cmp3 = a < b && c < a
+// true && true = true
+assert_eq(cmp1, true)
+assert_eq(cmp2, true)
+assert_eq(cmp3, true)
+
+// =============================================================================
+// Test 3: Multi-value return with comparison (the critical case)
+// =============================================================================
+fn getFirstComparison(): bool {
+    let x = 5
+    let y = 10
+    // With space, this is a comparison, not generic syntax
+    return x < y
+}
+
+fn getSecondComparison(): bool {
+    let z = 3
+    let x = 5
+    return z < x
+}
+
+let r1 = getFirstComparison()
+let r2 = getSecondComparison()
+assert_eq(r1, true)
+assert_eq(r2, true)
+
+// =============================================================================
+// Test 4: Function call with multiple comparison arguments
+// =============================================================================
+fn bothTrue(a: bool, b: bool): bool {
+    return a && b
+}
+
+let result = bothTrue(3 < 5, 10 > 7)
+// bothTrue(true, true)
+assert_eq(result, true)
+
+// =============================================================================
+// Test 5: Nested generic types (>> handling)
+// =============================================================================
+class Box<T> {
+    value: T
+
+    constructor(value: T) {
+        this.value = value
+    }
+
+    get(): T {
+        return this.value
+    }
+}
+
+// Nested generic - tests >> split handling
+let nested = new Box<Array<int>>([1, 2, 3])
+assert_eq(nested.get()[0], 1)
+// Double nested
+let deep = new Box<Box<int>>(new Box<int>(42))
+assert_eq(deep.get().get(), 42)
+
+// =============================================================================
+// Test 6: Generic method call
+// =============================================================================
+class Utils {
+    wrap<T>(item: T): Array<T> {
+        return [item]
+    }
+}
+
+let u = new Utils()
+let arr = u.wrap<int>(100)
+assert_eq(arr[0], 100)
+// =============================================================================
+// Test 7: Type inference (no explicit type args needed)
+// =============================================================================
+let inferred = identity(999)
+// Should infer int
+assert_eq(inferred, 999)
+let box = new Box(123)
+// Should infer Box<int>
+assert_eq(box.get(), 123)
+// =============================================================================
+// Test 8: Array literals with comparisons
+// =============================================================================
+let comparisons = [1 < 2, 3 > 2, 5 < 10]
+// [true, true, true]
+assert_eq(comparisons[0], true)
+assert_eq(comparisons[1], true)
+assert_eq(comparisons[2], true)
+print("All generic space-sensitivity tests passed!")

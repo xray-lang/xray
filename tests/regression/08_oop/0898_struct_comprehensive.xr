@@ -1,0 +1,92 @@
+// Test: comprehensive struct scenarios
+// Expected: struct creation, methods, arrays, return values
+
+struct Point {
+    x: float
+    y: float
+}
+
+// === Struct as return value ===
+fn make_point(x: float, y: float): Point {
+    return Point{x: x, y: y}
+}
+
+let p1 = make_point(100.0, 200.0)
+assert(p1.x == 100.0)
+assert(p1.y == 200.0)
+
+// === Struct in array ===
+let points = [Point{x: 1.0, y: 2.0}, Point{x: 3.0, y: 4.0}]
+assert(points[0].x == 1.0)
+assert(points[1].y == 4.0)
+
+// === Value copy from function return ===
+fn origin(): Point {
+    return Point{x: 0.0, y: 0.0}
+}
+
+let o1 = origin()
+let o2 = origin()
+o1.x = 99.0
+assert(o2.x == 0.0)
+
+// === Struct with method ===
+struct Rect {
+    x: float
+    y: float
+    w: float
+    h: float
+
+    area(): float {
+        return this.w * this.h
+    }
+}
+
+let r = Rect{x: 0.0, y: 0.0, w: 100.0, h: 50.0}
+assert(r.area() == 5000.0)
+
+// === Copy preserves methods ===
+let r2 = r
+r2.w = 200.0
+assert(r.area() == 5000.0)
+assert(r2.area() == 10000.0)
+
+// === Struct with int fields ===
+struct Color {
+    r: int
+    g: int
+    b: int
+}
+
+let red = Color{r: 255, g: 0, b: 0}
+let blue = Color{r: 0, g: 0, b: 255}
+let mix = red
+mix.b = blue.b
+assert(mix.r == 255)
+assert(mix.g == 0)
+assert(mix.b == 255)
+assert(red.b == 0)
+
+// === Chain of copies ===
+let base = Point{x: 0.0, y: 0.0}
+let a = base
+let b = a
+let c = b
+c.x = 42.0
+assert(base.x == 0.0)
+assert(a.x == 0.0)
+assert(b.x == 0.0)
+assert(c.x == 42.0)
+
+// === Struct literal reassignment ===
+let p = Point{x: 1.0, y: 2.0}
+p = Point{x: 10.0, y: 20.0}
+assert(p.x == 10.0)
+assert(p.y == 20.0)
+
+// === Typename preserved ===
+assert(typename(p1) == "Point")
+assert(typename(r) == "Rect")
+assert(typename(red) == "Color")
+
+print("ok")

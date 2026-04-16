@@ -1,0 +1,148 @@
+// 0130_bool_null.xr
+// 作者：xingleixu@gmail.com
+// 测试：布尔值和 null
+// ===== 布尔值基础 =====
+@test
+fn test_bool_true(): void {
+    assert_eq(true, true)
+    let b = true
+    assert_eq(b, true)
+}
+
+@test
+fn test_bool_false(): void {
+    assert_eq(false, false)
+    let b = false
+    assert_eq(b, false)
+}
+
+@test
+fn test_bool_equality(): void {
+    assert_eq(true == true, true)
+    assert_eq(false == false, true)
+    assert_eq(true == false, false)
+    assert_eq(true != false, true)
+}
+
+// ===== 布尔运算 =====
+@test
+fn test_bool_and(): void {
+    assert_eq(true && true, true)
+    assert_eq(true && false, false)
+    assert_eq(false && true, false)
+    assert_eq(false && false, false)
+}
+
+@test
+fn test_bool_or(): void {
+    assert_eq(true || true, true)
+    assert_eq(true || false, true)
+    assert_eq(false || true, true)
+    assert_eq(false || false, false)
+}
+
+@test
+fn test_bool_not(): void {
+    assert_eq(!true, false)
+    assert_eq(!false, true)
+    assert_eq(!!true, true)
+}
+
+// ===== null 基础 =====
+@test
+fn test_null_basic(): void {
+    let x = null
+    assert_eq(x, null)
+    assert_eq(x == null, true)
+}
+
+@test
+fn test_null_comparison(): void {
+    let x = null
+    let y = null
+    assert_eq(x == y, true)
+    assert_eq(x != null, false)
+}
+
+@test
+fn test_null_vs_value(): void {
+    let x = null
+    let y = 0
+    assert_eq(x == y, false)
+    assert_eq(x != y, true)
+}
+
+// ===== 真值判断 =====
+@test
+fn test_truthy_values(): void {
+    // 非零数字为真
+    if (1) {
+        assert(true)
+    } else {
+        assert(false)
+    }
+    if (-1) {
+        assert(true)
+    } else {
+        assert(false)
+    }
+    if (0.1) {
+        assert(true)
+    } else {
+        assert(false)
+    }
+    // 非空字符串为真
+    if ("hello") {
+        assert(true)
+    } else {
+        assert(false)
+    }
+}
+
+@test
+fn test_falsy_values(): void {
+    // 零为假
+    if (0) {
+        assert(false)
+    } else {
+        assert(true)
+    }
+    // false 为假
+    if (false) {
+        assert(false)
+    } else {
+        assert(true)
+    }
+    // null 为假
+    if (null) {
+        assert(false)
+    } else {
+        assert(true)
+    }
+    // 空字符串为假
+    if ("") {
+        assert(false)
+    } else {
+        assert(true)
+    }
+}
+
+// ===== 空值合并 =====
+@test
+fn test_nullish_coalesce(): void {
+    let x = null
+    assert_eq(x ?? "default", "default")
+    let y = "value"
+    assert_eq(y ?? "default", "value")
+    let z = 0
+    assert_eq(z ?? 100, 0)
+}
+
+// ===== 可选链 =====
+@test
+fn test_optional_chain(): void {
+    let obj = null
+    assert_eq(obj?.property, null)
+    let data = { "name": "test" }
+    assert_eq(data?.name, "test")
+}

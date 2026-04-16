@@ -1,0 +1,41 @@
+// EXPECTED: true
+// EXPECTED: false
+// EXPECTED: true
+// EXPECTED: false
+// EXPECTED: true
+// EXPECTED: false
+// EXPECTED: true
+// Test: Integer comparison operators in JIT
+
+fn lt(a: int, b: int) : bool {
+    return a < b
+}
+
+fn le(a: int, b: int) : bool {
+    return a <= b
+}
+
+fn eq(a: int, b: int) : bool {
+    return a == b
+}
+
+fn ne(a: int, b: int) : bool {
+    return a != b
+}
+
+let i = 0
+while (i < 200) {
+    lt(3, 5)
+    le(5, 5)
+    eq(5, 5)
+    ne(3, 5)
+    i = i + 1
+}
+
+print(lt(3, 5))
+print(lt(5, 3))
+print(le(5, 5))
+print(le(6, 5))
+print(eq(5, 5))
+print(eq(5, 6))
+print(ne(3, 5))

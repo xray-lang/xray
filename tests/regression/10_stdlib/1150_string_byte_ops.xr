@@ -1,0 +1,79 @@
+// 1150_string_byte_ops.xr - String byte-level operations
+
+// ===== byteAt =====
+
+@test
+fn test_byte_at(): void {
+    let s = "ACGT"
+    assert_eq(s.byteAt(0), "A")
+    assert_eq(s.byteAt(1), "C")
+    assert_eq(s.byteAt(2), "G")
+    assert_eq(s.byteAt(3), "T")
+}
+
+@test
+fn test_byte_at_out_of_bounds(): void {
+    let s = "ACGT"
+    assert_eq(s.byteAt(4), null)
+    assert_eq(s.byteAt(100), null)
+}
+
+// ===== reverseBytes =====
+
+@test
+fn test_reverse_bytes(): void {
+    assert_eq("ACGT".reverseBytes(), "TGCA")
+    assert_eq("Hello".reverseBytes(), "olleH")
+    assert_eq("".reverseBytes(), "")
+    assert_eq("A".reverseBytes(), "A")
+}
+
+// ===== byteAt vs charAt consistency =====
+
+@test
+fn test_byte_at_equals_char_at_ascii(): void {
+    let dna = "ACGTACGTACGT"
+    let i = 0
+    while (i < dna.byteLength) {
+        assert_eq(dna.charAt(i), dna.byteAt(i))
+        i = i + 1
+    }
+}
+
+@test
+fn test_reverse_bytes_equals_reverse_ascii(): void {
+    let dna = "ACGTACGTACGT"
+    assert_eq(dna.reverse(), dna.reverseBytes())
+}
+
+// ===== DNA reverse complement =====
+
+let COMP = {
+    "A" => "T", "T" => "A", "C" => "G", "G" => "C"
+}
+
+fn reverseComplement(seq: string): string {
+    let reversed = seq.reverseBytes()
+    let sb = new StringBuilder()
+    let j = 0
+    let len = seq.byteLength
+    while (j < len) {
+        let c = reversed.byteAt(j)
+        let comp = COMP[c]
+        if (comp != null) {
+            sb.append(comp)
+        } else {
+            sb.append(c)
+        }
+        j = j + 1
+    }
+    return sb.toString()
+}
+
+@test
+fn test_reverse_complement(): void {
+    assert_eq(reverseComplement("ACGT"), "ACGT")
+    assert_eq(reverseComplement("AAAA"), "TTTT")
+    assert_eq(reverseComplement("CCCC"), "GGGG")
+    assert_eq(reverseComplement("AACG"), "CGTT")
+}

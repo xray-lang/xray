@@ -1,0 +1,112 @@
+// 0395_inc_dec_bnot.xr
+// 作者：xingleixu@gmail.com
+// 测试：自增自减和按位取反
+
+// ===== 自增 ++ =====
+
+@test
+fn test_post_increment(): void {
+    let x = 5
+    x++
+    assert_eq(x, 6)
+}
+
+@test
+fn test_multiple_increment(): void {
+    let x = 0
+    x++
+    x++
+    x++
+    assert_eq(x, 3)
+}
+
+// ===== 自减 -- =====
+
+@test
+fn test_post_decrement(): void {
+    let x = 5
+    x--
+    assert_eq(x, 4)
+}
+
+@test
+fn test_multiple_decrement(): void {
+    let x = 10
+    x--
+    x--
+    x--
+    assert_eq(x, 7)
+}
+
+// ===== 混合使用 =====
+
+@test
+fn test_inc_dec_mixed(): void {
+    let x = 5
+    x++
+    x++
+    x--
+    assert_eq(x, 6)
+}
+
+// ===== 在循环中使用 =====
+
+@test
+fn test_inc_in_loop(): void {
+    let count = 0
+    let i = 0
+    while (i < 5) {
+        count++
+        i++
+    }
+    assert_eq(count, 5)
+}
+
+// ===== 浮点数自增自减 =====
+
+@test
+fn test_float_increment(): void {
+    let x = 1.5
+    x++
+    assert_eq(x, 2.5)
+}
+
+@test
+fn test_float_decrement(): void {
+    let x = 3.5
+    x--
+    assert_eq(x, 2.5)
+}
+
+// ===== 按位取反 ~ =====
+
+@test
+fn test_bitwise_not(): void {
+    assert_eq(~0, -1)
+    assert_eq(~1, -2)
+    assert_eq(~(-1), 0)
+}
+
+@test
+fn test_bitwise_not_patterns(): void {
+    // ~x = -(x+1)
+    assert_eq(~5, -6)
+    assert_eq(~10, -11)
+    assert_eq(~100, -101)
+}
+
+@test
+fn test_double_bitwise_not(): void {
+    let x = 42
+    assert_eq(~~x, x)
+}
+
+// ===== 按位取反在表达式中 =====
+
+@test
+fn test_bnot_in_expression(): void {
+    let x = 5
+    let y = ~x + 10
+    assert_eq(y, 4)  // -6 + 10 = 4
+}
+

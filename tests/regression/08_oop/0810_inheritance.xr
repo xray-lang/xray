@@ -1,0 +1,201 @@
+// 0810_inheritance.xr
+// 作者：xingleixu@gmail.com
+// 测试：类继承
+// 父类构造函数调用使用 Java 风格：super(args)
+
+// ===== 基础继承 =====
+
+class Animal {
+    name: string
+    
+    constructor(name) {
+        this.name = name
+    }
+    
+    speak(): void {        return this.name + " makes a sound"
+    }
+}
+
+class Dog extends Animal {
+    constructor(name) {
+        super(name)
+    }
+    
+    speak(): void {        return this.name + " barks"
+    }
+}
+
+@test
+fn test_basic_inheritance(): void {
+    let dog = new Dog("Buddy")
+    assert_eq(dog.name, "Buddy")
+    assert_eq(dog.speak(), "Buddy barks")
+}
+
+// ===== 方法重写 =====
+
+class Cat extends Animal {
+    constructor(name) {
+        super(name)
+    }
+    
+    speak(): void {        return this.name + " meows"
+    }
+}
+
+@test
+fn test_method_override(): void {
+    let cat = new Cat("Whiskers")
+    assert_eq(cat.speak(), "Whiskers meows")
+}
+
+// ===== 继承链 =====
+
+class Vehicle {
+    brand: string
+    
+    constructor(brand) {
+        this.brand = brand
+    }
+    
+    info(): void {        return this.brand
+    }
+
+    drive(): string {        return "test"
+    }
+
+    
+
+}
+
+class Car extends Vehicle {
+    model: string
+    
+    constructor(brand, model) {
+        super(brand)
+        this.model = model
+    }
+    
+    info(): void {        return this.brand + " " + this.model
+    }
+}
+
+@test
+fn test_multi_field_inheritance(): void {
+    let car = new Car("Toyota", "Camry")
+    
+    assert_eq(car.brand, "Toyota")
+    assert_eq(car.model, "Camry")
+    assert_eq(car.info(), "Toyota Camry")
+}
+
+// ===== 多态 =====
+
+@test
+fn test_polymorphism(): void {
+    let animal = new Animal("Generic")
+    let dog = new Dog("Rex")
+    
+    assert_eq(animal.speak(), "Generic makes a sound")
+    assert_eq(dog.speak(), "Rex barks")
+}
+
+// ===== 继承字段访问 =====
+
+class Base {
+    value: int
+    
+    constructor(v) {
+        this.value = v
+    }
+    
+    getValue(): void {        return this.value
+    }
+}
+
+class Derived extends Base {
+    extra: int
+    
+    constructor(v, e) {
+        super(v)
+        this.extra = e
+    }
+    
+    getSum(): void {        return this.value + this.extra
+    }
+}
+
+@test
+fn test_inherited_field_access(): void {
+    let d = new Derived(10, 5)
+    assert_eq(d.value, 10)
+    assert_eq(d.extra, 5)
+    assert_eq(d.getValue(), 10)
+    assert_eq(d.getSum(), 15)
+}
+
+// ===== super() 多参数 =====
+
+class Person {
+    name: string
+    age: int
+    
+    constructor(name: string, age: int) {
+        this.name = name
+        this.age = age
+    }
+    
+    info(): string {        return "${this.name}, ${this.age}"
+    }
+}
+
+class Student extends Person {
+    grade: int
+    
+    constructor(name: string, age: int, grade: int) {
+        super(name, age)
+        this.grade = grade
+    }
+    
+    info(): string {        // super.method() 未实现，使用组合方式
+        return "${this.name}, ${this.age}, grade ${this.grade}"
+    }
+}
+
+@test
+fn test_base_multi_params(): void {
+    let s = new Student("Alice", 18, 12)
+    assert_eq(s.name, "Alice")
+    assert_eq(s.age, 18)
+    assert_eq(s.grade, 12)
+}
+
+@test
+fn test_method_override_with_parent_fields(): void {
+    let s = new Student("Bob", 17, 11)
+    let info = s.info()
+    assert_eq(info.contains("Bob"), true)
+    assert_eq(info.contains("grade"), true)
+}
+
+// ===== super.method() 调用父类方法 =====
+
+class Bird extends Animal {
+    constructor(name) {
+        super(name)
+    }
+    
+    speak(): string {        return "Bird: " + this.name + " chirps"
+    }
+    
+    parentSpeak(): void {        return super.speak()
+    }
+}
+
+@test
+fn test_super_method_call(): void {
+    let bird = new Bird("Tweety")
+    assert_eq(bird.speak(), "Bird: Tweety chirps")
+    assert_eq(bird.parentSpeak(), "Tweety makes a sound")
+}
+

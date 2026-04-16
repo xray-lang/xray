@@ -1,0 +1,30 @@
+// Test: Nested loops in JIT (OSR + loop variable interaction)
+// EXPECTED: 100
+// EXPECTED: 1000
+// Test: Nested loops in JIT (OSR + loop variable interaction)
+
+fn nested_count(n: int) : int {
+    let count = 0
+    let i = 0
+    while (i < n) {
+        let j = 0
+        while (j < n) {
+            count = count + 1
+            j = j + 1
+        }
+        i = i + 1
+    }
+    return count
+}
+
+fn warmup() {
+    let i = 0
+    while (i < 200) {
+        nested_count(3)
+        i = i + 1
+    }
+}
+warmup()
+
+print(nested_count(10))
+print(nested_count(10) * 10)

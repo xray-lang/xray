@@ -1,0 +1,31 @@
+// Test: nested JIT deopt should not crash outer JIT function.
+// When a callee deopts (e.g. type mismatch), the outer JIT function
+// should continue normally via VM fallback, not propagate the deopt.
+//
+// Bug (P0.1): callee's deopt_id leaked to outer function's CBNZ check,
+// causing outer function to deopt with wrong deopt_id -> wrong recovery.
+
+fn polymorphic_callee(x: int | string): int {
+    if (typeof(x) == Type.string) {
+        return x.length
+    }
+    return x + 1
+}
+
+fn outer_caller(): int {
+    let sum = 0
+    for (let i = 0; i < 5; i++) {
+        sum = sum + polymorphic_callee(i)
+    }
+    // Call with string - callee may deopt, outer must survive
+    let len = polymorphic_callee("hello")
+    sum = sum + len
+    // Call back to int - must still work
+    sum = sum + polymorphic_callee(10)
+    return sum
+}
+
+let result = outer_caller()
+// sum = (0+1)+(1+1)+(2+1)+(3+1)+(4+1) + 5 + 11 = 1+2+3+4+5+5+11 = 31
+assert(result == 31, "nested deopt: expected 31, got " + result)
+print("nested JIT deopt test passed")
