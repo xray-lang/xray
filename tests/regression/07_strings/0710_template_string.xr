@@ -1,0 +1,97 @@
+// 0710_template_string.xr
+// 作者：xingleixu@gmail.com
+// 测试：模板字符串
+
+// ===== 基本插值 =====
+
+@test
+fn test_basic_interpolation(): void {
+    let name = "World"
+    let s = "Hello, ${name}!"
+    assert_eq(s, "Hello, World!")
+}
+
+@test
+fn test_number_interpolation(): void {
+    let x = 42
+    let s = "The answer is ${x}"
+    assert_eq(s, "The answer is 42")
+}
+
+// ===== 表达式插值 =====
+
+@test
+fn test_expression_interpolation(): void {
+    let a = 10
+    let b = 20
+    let s = "Sum: ${a + b}"
+    assert_eq(s, "Sum: 30")
+}
+
+@test
+fn test_method_call_interpolation(): void {
+    let name = "alice"
+    let s = "Hello, ${name.toUpperCase()}!"
+    assert_eq(s, "Hello, ALICE!")
+}
+
+// ===== 多变量插值 =====
+
+@test
+fn test_multi_variable(): void {
+    let first = "John"
+    let last = "Doe"
+    let age = 30
+    let s = "${first} ${last}, age ${age}"
+    assert_eq(s, "John Doe, age 30")
+}
+
+// ===== 嵌套引号 =====
+
+@test
+fn test_nested_quotes(): void {
+    let name = "test"
+    let s = 'He said "Hello, ${name}"'
+    assert_eq(s.contains("Hello"), true)
+}
+
+// ===== 空插值 =====
+
+@test
+fn test_empty_template(): void {
+    let s = ""
+    assert_eq(s, "")
+}
+
+@test
+fn test_no_interpolation(): void {
+    let s = "plain text"
+    assert_eq(s, "plain text")
+}
+
+// ===== 布尔和 null 插值 =====
+
+@test
+fn test_bool_interpolation(): void {
+    let flag = true
+    let s = "Flag is ${flag}"
+    assert_eq(s, "Flag is true")
+}
+
+@test
+fn test_null_interpolation(): void {
+    let x = null
+    let s = "Value is ${x}"
+    assert_eq(s, "Value is null")
+}
+
+// ===== 多行模板 =====
+
+@test
+fn test_multiline(): void {
+    let name = "Alice"
+    let s = "Hello,
+${name}!"
+    assert_eq(s.contains("Alice"), true)
+}
+

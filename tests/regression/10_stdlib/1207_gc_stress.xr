@@ -1,0 +1,248 @@
+// GC stress tests: cover all historical bug patterns and audit findings
+// Pattern A: cross-subsystem liveness disagreement (string pool, alloc_marks)
+// Pattern B: incremental/generational time window issues
+// Pattern C: special paths skipping common logic (large objects, JIT alloc)
+
+import gc
+
+// --- Test 1: String pool survival under GC pressure ---
+// Bug #4 pattern: interned strings must survive gc.collect()
+// Exercises: global string pool ACCESSED flag + markobject path
+@test
+fn test_string_pool_survival(): void {
+    let strings: Array<string> = []
+    for (let i = 0; i < 500; i++) {
+        strings.push("interned_str_" + string(i))
+    }
+
+    // Multiple GC cycles to trigger string pool sweep
+    for (let cycle = 0; cycle < 5; cycle++) {
+        gc.collect()
+        // Create garbage between cycles
+        for (let j = 0; j < 100; j++) {
+            let tmp = "temp_garbage_" + string(j) + "_" + string(cycle)
+        }
+    }
+
+    // All original strings must survive
+    for (let i = 0; i < 500; i++) {
+        assert_eq(strings[i], "interned_str_" + string(i))
+    }
+}
+
+// --- Test 2: Deep nested objects with string keys ---
+// Bug #4 + #2 pattern: string keys inside maps inside arrays
+// Exercises: traverse_map marking string keys + ACCESSED flag
+@test
+fn test_nested_string_key_survival(): void {
+    let data: Array<Json> = []
+    for (let i = 0; i < 200; i++) {
+        let m = {"val" => i * 3, "name" => "field_" + string(i)}
+        data.push(m)
+    }
+
+    gc.collect()
+
+    // Create churn to stress hole scanning
+    for (let j = 0; j < 500; j++) {
+        let tmp = [j, j + 1, j + 2]
+    }
+
+    gc.collect()
+
+    for (let i = 0; i < 200; i++) {
+        assert_eq(data[i]["val"], i * 3)
+        assert_eq(data[i]["name"], "field_" + string(i))
+    }
+}
+
+// --- Test 3: Closure upvalue survival ---
+// Exercises: traverse_closure + upvalue marking
+@test
+fn test_closure_upvalue_gc(): void {
+    let closures: Array<fn(): string> = []
+    for (let i = 0; i < 100; i++) {
+        let captured = "captured_" + string(i)
+        let arr = [i, i * 2]
+        closures.push(fn() {
+            return captured + "_" + string(arr[1])
+        })
+    }
+
+    gc.collect()
+
+    // Create garbage to push GC
+    for (let j = 0; j < 300; j++) {
+        let tmp = {"garbage" => j}
+    }
+
+    gc.collect()
+
+    for (let i = 0; i < 100; i++) {
+        assert_eq(closures[i](), "captured_" + string(i) + "_" + string(i * 2))
+    }
+}
+
+// --- Test 4: Rapid alloc-collect cycles ---
+// Bug #1 pattern: allocations interleaved with GC must not overwrite each other
+// Exercises: alloc_marks stability during mark phase
+@test
+fn test_rapid_alloc_collect(): void {
+    let survivors: Array<Array<Json>> = []
+    for (let cycle = 0; cycle < 20; cycle++) {
+        let batch: Array<Json> = []
+        for (let i = 0; i < 50; i++) {
+            batch.push({"c" => cycle, "i" => i, "s" => "v" + string(cycle) + "_" + string(i)})
+        }
+        gc.collect()
+        // Keep last batch alive
+        if (cycle >= 15) {
+            survivors.push(batch)
+        }
+    }
+
+    // Verify surviving batches
+    for (let si = 0; si < survivors.length; si++) {
+        let batch = survivors[si]
+        let expected_cycle = 15 + si
+        for (let i = 0; i < 50; i++) {
+            assert_eq(batch[i]["c"], expected_cycle)
+            assert_eq(batch[i]["i"], i)
+        }
+    }
+}
+
+// --- Test 5: Mixed container types under GC ---
+// Exercises: traverse completeness for Array, Map, Set, Json-like objects
+@test
+fn test_mixed_container_gc(): void {
+    let arr: Array<Array<int | string>> = []
+    let map = {}
+    let data: Array<Json> = []
+
+    for (let i = 0; i < 100; i++) {
+        arr.push([i, "a" + string(i)])
+        map["k" + string(i)] = {"nested" => i}
+        data.push({"arr" => arr[i], "map_key" => "k" + string(i)})
+    }
+
+    gc.collect()
+
+    // Create garbage
+    for (let j = 0; j < 500; j++) {
+        let tmp = [j, j]
+    }
+
+    gc.collect()
+
+    // Verify all containers intact
+    for (let i = 0; i < 100; i++) {
+        assert_eq(arr[i][0], i)
+        assert_eq(arr[i][1], "a" + string(i))
+        assert_eq(map["k" + string(i)]["nested"], i)
+        assert_eq(data[i]["arr"][0], i)
+    }
+}
+
+// --- Test 6: Long-lived + short-lived mix (generational pattern) ---
+// Bug #3 pattern: old generation objects referencing young objects
+// Exercises: remembered set / write barrier
+@test
+fn test_generational_cross_reference(): void {
+    // Create long-lived container
+    let long_lived: Array<Json> = []
+    for (let i = 0; i < 50; i++) {
+        long_lived.push({"id" => i, "children" => []})
+    }
+
+    gc.collect()
+
+    // Now add young objects as children of old objects
+    for (let round = 0; round < 10; round++) {
+        for (let i = 0; i < 50; i++) {
+            long_lived[i]["children"].push("round_" + string(round))
+        }
+
+        // Create garbage between rounds
+        for (let j = 0; j < 100; j++) {
+            let tmp = {"temp" => j}
+        }
+
+        gc.collect()
+    }
+
+    // Verify all children survived
+    for (let i = 0; i < 50; i++) {
+        assert_eq(long_lived[i]["children"].length, 10)
+        assert_eq(long_lived[i]["children"][0], "round_0")
+        assert_eq(long_lived[i]["children"][9], "round_9")
+    }
+}
+
+// --- Test 7: String concatenation churn ---
+// Heavy string allocation: tests interned string pool under extreme pressure
+@test
+fn test_string_concat_churn(): void {
+    let results: Array<string> = []
+    for (let i = 0; i < 100; i++) {
+        let s = ""
+        for (let j = 0; j < 10; j++) {
+            s = s + string(j)
+        }
+        results.push(s)
+
+        if (i % 20 == 0) {
+            gc.collect()
+        }
+    }
+
+    let expected = "0123456789"
+    for (let i = 0; i < 100; i++) {
+        assert_eq(results[i], expected)
+    }
+}
+
+// --- Test 8: Class instance field GC ---
+// Exercises: traverse_instance marking all fields
+@test
+fn test_instance_field_gc(): void {
+    class Node {
+        value: int
+        label: string
+        children: Array<int>
+
+        constructor(v: int, l: string) {
+            this.value = v
+            this.label = l
+            this.children = []
+        }
+    }
+
+    let nodes: Array<Node> = []
+    for (let i = 0; i < 100; i++) {
+        let n = new Node(i, "node_" + string(i))
+        if (i > 0) {
+            nodes[i - 1].children.push(n)
+        }
+        nodes.push(n)
+    }
+
+    gc.collect()
+
+    // Garbage storm
+    for (let j = 0; j < 500; j++) {
+        let tmp = new Node(j + 1000, "garbage")
+    }
+
+    gc.collect()
+
+    // Verify
+    for (let i = 0; i < 100; i++) {
+        assert_eq(nodes[i].value, i)
+        assert_eq(nodes[i].label, "node_" + string(i))
+    }
+    assert_eq(nodes[0].children.length, 1)
+    assert_eq(nodes[0].children[0].value, 1)
+}
+
+print("All GC stress tests passed")

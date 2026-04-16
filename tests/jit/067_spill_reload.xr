@@ -1,0 +1,29 @@
+// EXPECTED: 150
+// Test: Register pressure function to exercise spill/reload codegen
+// Many live variables simultaneously, all used in final return
+
+fn pressure(a: int, b: int) : int {
+    let v0 = a + 1
+    let v1 = b + 2
+    let v2 = v0 + v1
+    let v3 = v2 * 2
+    let v4 = v3 - v0
+    let v5 = v4 + v1
+    let v6 = v5 * v0
+    let v7 = v6 - v3
+    let v8 = v7 + v2
+    let v9 = v8 - v4
+    let v10 = v9 + v5
+    let v11 = v10 - v6
+    let v12 = v0 + v1 + v2 + v3 + v4 + v5
+    let v13 = v6 + v7 + v8 + v9 + v10 + v11
+    return v12 + v13
+}
+
+let i = 0
+while (i < 200) {
+    pressure(1, 2)
+    i = i + 1
+}
+
+print(pressure(1, 2))

@@ -1,0 +1,77 @@
+// 1430_net_basic.xr
+// 作者：xingleixu@gmail.com
+// 测试：net 库基本功能测试
+//
+// 覆盖功能：
+//   - DNS 解析 (lookup)
+//   - IPv4/IPv6 双栈支持
+
+import net
+
+// ============================================================
+// 第一部分：DNS 解析测试
+// ============================================================
+
+@test
+fn test_lookup_localhost(): void {
+    // 解析 localhost
+    let addr = net.lookup("localhost")
+    assert_true(addr != null)
+    // localhost 通常解析为 127.0.0.1 或 ::1
+    assert_true(addr == "127.0.0.1" || addr.startsWith("::"))
+}
+
+@test
+fn test_lookup_invalid_host(): void {
+    // 解析无效主机名应返回 null 或被 DNS 劫持返回 IP
+    // 某些 ISP/DNS 会对不存在的域名返回有效 IP（DNS hijacking）
+    let addr = net.lookup("this-host-does-not-exist-12345.invalid")
+    // 只验证不会崩溃，结果是 null 或字符串都可接受
+    assert_true(addr == null || typeof(addr) == Type.string)
+}
+
+// ============================================================
+// 第二部分：模块导入测试
+// ============================================================
+
+@test
+fn test_net_module_exists(): void {
+    // 验证 net 模块可以正常导入
+    assert_true(net != null)
+}
+
+@test
+fn test_net_dial_exists(): void {
+    // 验证 dial 函数存在
+    assert_true(net.dial != null)
+}
+
+@test
+fn test_net_lookup_exists(): void {
+    // 验证 lookup 函数存在
+    assert_true(net.lookup != null)
+}
+
+// ============================================================
+// 第三部分：IPv6 双栈支持验证
+// ============================================================
+
+@test
+fn test_lookup_ipv6_localhost(): void {
+    // localhost 支持 IPv6 解析
+    // 注意：结果可能是 IPv4 或 IPv6，取决于系统配置
+    let addr = net.lookup("localhost")
+    assert_true(addr != null)
+}
+
+@test
+fn test_lookup_returns_valid_address(): void {
+    // 验证返回的地址格式正确
+    let addr = net.lookup("localhost")
+    if (addr != null) {
+        // 地址应该是非空字符串
+        assert_true(addr.length > 0)
+        // 地址应该包含数字
+        assert_true(addr.contains(".") || addr.contains(":"))
+    }
+}

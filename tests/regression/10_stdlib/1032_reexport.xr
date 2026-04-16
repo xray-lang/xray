@@ -1,0 +1,32 @@
+// 1032_reexport.xr
+// 作者：xingleixu@gmail.com
+// 测试：re-export 语法
+// export { xxx } from "./file"
+// export { xxx as yyy } from "./file"
+// export * from "./file"
+
+import "./reexport_test" as lib
+
+@test
+fn test_reexport_named(): void {
+    // 测试选择性 re-export
+    let user = lib.getUser()
+    assert_eq(user, "Alice")
+}
+
+@test
+fn test_reexport_alias(): void {
+    // 测试带别名的 re-export
+    let age = lib.getAge()
+    assert_eq(age, 25)
+}
+
+@test
+fn test_reexport_all(): void {
+    // 测试全量 re-export
+    let product = lib.getProduct()
+    assert_eq(product, "iPhone")
+    
+    let price = lib.getPrice()
+    assert_eq(price, 999)
+}

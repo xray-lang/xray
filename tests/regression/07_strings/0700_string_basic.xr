@@ -1,0 +1,229 @@
+// 0700_string_basic.xr
+// 作者：xingleixu@gmail.com
+// 测试：字符串基础操作
+
+// ===== 长度 =====
+
+@test
+fn test_length(): void {
+    assert_eq("hello".length, 5)
+    assert_eq("".length, 0)
+    assert_eq("x".length, 1)
+    assert_eq("中文".length, 2)
+}
+
+// ===== 拼接 =====
+
+@test
+fn test_concat(): void {
+    assert_eq("hello" + " " + "world", "hello world")
+    assert_eq("" + "test", "test")
+    assert_eq("a" + "b" + "c", "abc")
+}
+
+@test
+fn test_concat_with_numbers(): void {
+    assert_eq("value: " + string(42), "value: 42")
+    assert_eq(string(10) + " items", "10 items")
+}
+
+// ===== charAt =====
+
+@test
+fn test_charAt(): void {
+    let s = "hello"
+    assert_eq(s.charAt(0), "h")
+    assert_eq(s.charAt(4), "o")
+}
+
+@test
+fn test_charAt_empty(): void {
+    let s = ""
+    assert_eq(s.charAt(0), null)
+}
+
+@test
+fn test_charAt_out_of_bounds(): void {
+    let s = "abc"
+    assert_eq(s.charAt(10), null)
+}
+
+// ===== substring =====
+
+@test
+fn test_substring(): void {
+    let s = "hello world"
+    assert_eq(s.substring(0, 5), "hello")
+    assert_eq(s.substring(6, 11), "world")
+    assert_eq(s.substring(0, 1), "h")
+}
+
+@test
+fn test_substring_full(): void {
+    let s = "test"
+    assert_eq(s.substring(0, 4), "test")
+}
+
+@test
+fn test_substring_empty(): void {
+    let s = "test"
+    assert_eq(s.substring(0, 0), "")
+    assert_eq(s.substring(2, 2), "")
+}
+
+// ===== indexOf =====
+
+@test
+fn test_indexOf(): void {
+    let s = "hello world"
+    assert_eq(s.indexOf("hello"), 0)
+    assert_eq(s.indexOf("world"), 6)
+    assert_eq(s.indexOf("o"), 4)
+    assert_eq(s.indexOf("xyz"), -1)
+}
+
+@test
+fn test_indexOf_empty(): void {
+    let s = "test"
+    assert_eq(s.indexOf(""), 0)
+}
+
+// ===== contains =====
+
+@test
+fn test_contains(): void {
+    let s = "hello world"
+    assert_eq(s.contains("hello"), true)
+    assert_eq(s.contains("world"), true)
+    assert_eq(s.contains("xyz"), false)
+}
+
+// ===== startsWith/endsWith =====
+
+@test
+fn test_startsWith(): void {
+    let s = "hello world"
+    assert_eq(s.startsWith("hello"), true)
+    assert_eq(s.startsWith("world"), false)
+    assert_eq(s.startsWith(""), true)
+}
+
+@test
+fn test_endsWith(): void {
+    let s = "hello world"
+    assert_eq(s.endsWith("world"), true)
+    assert_eq(s.endsWith("hello"), false)
+    assert_eq(s.endsWith(""), true)
+}
+
+// ===== trim =====
+
+@test
+fn test_trim(): void {
+    assert_eq("  hello  ".trim(), "hello")
+    assert_eq("hello".trim(), "hello")
+    assert_eq("   ".trim(), "")
+    assert_eq("".trim(), "")
+}
+
+@test
+fn test_trim_tabs_newlines(): void {
+    assert_eq("\t hello \n".trim(), "hello")
+}
+
+// ===== split =====
+
+@test
+fn test_split(): void {
+    let s = "a,b,c,d"
+    let parts = s.split(",")
+    assert_eq(parts.length, 4)
+    assert_eq(parts[0], "a")
+    assert_eq(parts[3], "d")
+}
+
+@test
+fn test_split_spaces(): void {
+    let s = "hello world test"
+    let words = s.split(" ")
+    assert_eq(words.length, 3)
+}
+
+@test
+fn test_split_no_delimiter(): void {
+    let s = "hello"
+    let parts = s.split(",")
+    assert_eq(parts.length, 1)
+    assert_eq(parts[0], "hello")
+}
+
+// ===== toUpperCase/toLowerCase =====
+
+@test
+fn test_toUpperCase(): void {
+    assert_eq("hello".toUpperCase(), "HELLO")
+    assert_eq("Hello World".toUpperCase(), "HELLO WORLD")
+    assert_eq("".toUpperCase(), "")
+}
+
+@test
+fn test_toLowerCase(): void {
+    assert_eq("HELLO".toLowerCase(), "hello")
+    assert_eq("Hello World".toLowerCase(), "hello world")
+    assert_eq("".toLowerCase(), "")
+}
+
+// ===== replace =====
+
+@test
+fn test_replace(): void {
+    let s = "hello world"
+    assert_eq(s.replace("world", "xray"), "hello xray")
+    assert_eq(s.replace("xyz", "abc"), "hello world")
+}
+
+@test
+fn test_replace_all(): void {
+    let s = "a-b-c-d"
+    assert_eq(s.replaceAll("-", "_"), "a_b_c_d")
+}
+
+// ===== repeat =====
+
+@test
+fn test_repeat(): void {
+    assert_eq("ab".repeat(3), "ababab")
+    assert_eq("x".repeat(5), "xxxxx")
+    assert_eq("test".repeat(0), "")
+    assert_eq("a".repeat(1), "a")
+}
+
+// ===== 比较 =====
+
+@test
+fn test_comparison(): void {
+    assert_eq("abc" == "abc", true)
+    assert_eq("abc" != "def", true)
+    assert_eq("abc" < "abd", true)
+    assert_eq("abc" > "abb", true)
+    assert_eq("a" < "b", true)
+}
+
+// ===== 边界条件 =====
+
+@test
+fn test_empty_string_operations(): void {
+    let s = ""
+    assert_eq(s.length, 0)
+    assert_eq(s.trim(), "")
+    assert_eq(s.toUpperCase(), "")
+    assert_eq(s.contains(""), true)
+}
+
+@test
+fn test_long_string(): void {
+    let s = "a".repeat(1000)
+    assert_eq(s.length, 1000)
+    assert_eq(s.charAt(500), "a")
+}
+

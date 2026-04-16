@@ -1,0 +1,101 @@
+// 测试6：生产者-消费者模式
+// 作者：xingleixu@gmail.com
+// 
+// 验证：经典并发模式正确工作
+print("========== 测试6：生产者-消费者模式 ==========")
+
+fn test_single_producer_consumer() {
+    let ch = Channel(5)
+    fn producer() {
+        for (let i = 0; i < 20; i++) {
+            ch.send(i)
+        }
+    }
+    fn consumer() {
+        let sum = 0
+        for (let i = 0; i < 20; i++) {
+            let val = ch.recv()
+            sum = sum + val
+        }
+        return sum
+    }
+    let prod = go producer()
+    let cons = go consumer()
+    await prod
+    let result = await cons
+    print("消费总和:", result)
+    // 0+1+2+...+19 = 190
+    assert_eq(result, 190)
+    print("✓ 单生产者-消费者测试通过")
+}
+
+fn test_multi_producer() {
+    let ch = Channel(10)
+    let results = Channel(1)
+    fn producer(id, count) {
+        for (let i = 0; i < count; i++) {
+            ch.send(id * 100 + i)
+        }
+    }
+    fn consumer(expected) {
+        let received = 0
+        while (received < expected) {
+            let val = ch.recv()
+            received = received + 1
+        }
+        return received
+    }
+    // 3 个生产者，每个发送 10 条
+    let p1 = go producer(1, 10)
+    let p2 = go producer(2, 10)
+    let p3 = go producer(3, 10)
+    // 1 个消费者，接收 30 条
+    let cons = go consumer(30)
+    await p1
+    await p2
+    await p3
+    let result = await cons
+    print("多生产者接收数:", result)
+    assert_eq(result, 30)
+    print("✓ 多生产者测试通过")
+}
+
+fn test_multi_consumer() {
+    let ch = Channel(20)
+    let results = Channel(3)
+    fn producer(count) {
+        for (let i = 0; i < count; i++) {
+            ch.send(i)
+        }
+    }
+    fn consumer(id) {
+        let count = 0
+        for (let i = 0; i < 10; i++) {
+            let val = ch.recv()
+            count = count + 1
+        }
+        results.send(count)
+        return count
+    }
+    // 1 个生产者发送 30 条
+    let prod = go producer(30)
+    // 3 个消费者，每个接收 10 条
+    let c1 = go consumer(1)
+    let c2 = go consumer(2)
+    let c3 = go consumer(3)
+    await prod
+    let r1 = await c1
+    let r2 = await c2
+    let r3 = await c3
+    let total = r1 + r2 + r3
+    print("多消费者总接收:", total)
+    assert_eq(total, 30)
+    print("✓ 多消费者测试通过")
+}
+
+// 运行所有测试
+test_single_producer_consumer()
+test_multi_producer()
+test_multi_consumer()
+print("
+🎉 测试6全部通过：生产者-消费者模式正确！")

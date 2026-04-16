@@ -1,0 +1,140 @@
+/**
+ * @file 1115_regex_advanced.xr
+ * @brief 正则高级功能测试
+ * @author xingleixu@gmail.com
+ * 
+ * 测试非贪婪量词、忽略大小写、多行模式等高级功能
+ */
+
+import regex
+
+// ========================================
+// 非贪婪量词测试
+// ========================================
+
+@test
+fn test_lazy_plus(): void {
+    let re = regex.compile("a+?")
+    let result = regex.find(re, "aaa")
+    assert_eq(result != null, true)
+    assert_eq(result["text"], "a")
+}
+
+@test
+fn test_lazy_star(): void {
+    let re = regex.compile("a*?")
+    let result = regex.find(re, "aaa")
+    assert_eq(result != null, true)
+    assert_eq(result["text"], "")
+}
+
+@test
+fn test_lazy_question(): void {
+    let re = regex.compile("a??")
+    let result = regex.find(re, "a")
+    assert_eq(result != null, true)
+    assert_eq(result["text"], "")
+}
+
+@test
+fn test_lazy_repeat(): void {
+    let re = regex.compile("a{2,}?")
+    let result = regex.find(re, "aaaa")
+    assert_eq(result != null, true)
+    assert_eq(result["text"], "aa")
+}
+
+@test
+fn test_greedy_plus(): void {
+    let re = regex.compile("a+")
+    let result = regex.find(re, "aaa")
+    assert_eq(result != null, true)
+    assert_eq(result["text"], "aaa")
+}
+
+@test
+fn test_greedy_star(): void {
+    let re = regex.compile("a*")
+    let result = regex.find(re, "aaa")
+    assert_eq(result != null, true)
+    assert_eq(result["text"], "aaa")
+}
+
+// ========================================
+// 忽略大小写测试
+// ========================================
+
+@test
+fn test_ignorecase_inline(): void {
+    let re = regex.compile("(?i)hello")
+    let result = regex.find(re, "HELLO World")
+    assert_eq(result != null, true)
+    assert_eq(result["text"], "HELLO")
+}
+
+@test
+fn test_ignorecase_flag(): void {
+    let re = regex.compile("hello", "i")
+    let result = regex.find(re, "HeLLo")
+    assert_eq(result != null, true)
+    assert_eq(result["text"], "HeLLo")
+}
+
+@test
+fn test_case_sensitive(): void {
+    let re = regex.compile("hello")
+    let result = regex.find(re, "HELLO")
+    assert_eq(result, null)
+}
+
+// ========================================
+// 多行模式测试
+// ========================================
+
+@test
+fn test_multiline_caret(): void {
+    let re = regex.compile("(?m)^world")
+    let result = regex.find(re, "hello\nworld")
+    assert_eq(result != null, true)
+    assert_eq(result["text"], "world")
+}
+
+@test
+fn test_multiline_dollar(): void {
+    let re = regex.compile("(?m)hello$")
+    let result = regex.find(re, "hello\nworld")
+    assert_eq(result != null, true)
+    assert_eq(result["text"], "hello")
+}
+
+// ========================================
+// DOTALL 模式测试
+// ========================================
+
+@test
+fn test_dotall(): void {
+    let re = regex.compile("(?s)a.b")
+    let result = regex.find(re, "a\nb")
+    assert_eq(result != null, true)
+    assert_eq(result["text"], "a\nb")
+}
+
+@test
+fn test_dot_no_newline(): void {
+    let re = regex.compile("a.b")
+    let result = regex.find(re, "a\nb")
+    assert_eq(result, null)
+}
+
+// ========================================
+// 组合标志测试
+// ========================================
+
+@test
+fn test_combined_flags(): void {
+    // (?im) 忽略大小写 + 多行
+    let re = regex.compile("(?im)^hello")
+    let result = regex.find(re, "world\nHELLO")
+    assert_eq(result != null, true)
+    assert_eq(result["text"], "HELLO")
+}

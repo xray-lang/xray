@@ -1,0 +1,99 @@
+// 0511_json_type_alias.xr
+// 作者：xingleixu@gmail.com
+// 测试：类型别名与对象类型
+
+// ===== 严格类型别名（不允许扩展）=====
+
+@test
+fn test_strict_type_alias(): void {
+    type Point = { x: int, y: int }
+    let p: Point = { x: 10, y: 20 }
+    assert_eq(p.x, 10)
+    assert_eq(p.y, 20)
+}
+
+@test
+fn test_strict_type_modify_existing(): void {
+    type Point2 = { x: int, y: int }
+    let p: Point2 = { x: 1, y: 2 }
+    p.x = 100      // 修改已有字段，允许
+    p.y = 200
+    assert_eq(p.x, 100)
+    assert_eq(p.y, 200)
+}
+
+// ===== 可扩展类型别名（使用 ... 语法）=====
+
+@test
+fn test_extensible_type_alias(): void {
+    type Config = { port: int, host: string, ... }
+    let cfg: Config = { port: 8080, host: "localhost" }
+    cfg.timeout = 30       // 允许添加
+    cfg.debug = true       // 允许添加
+    assert_eq(cfg.port, 8080)
+    assert_eq(cfg.host, "localhost")
+    assert_eq(cfg.timeout, 30)
+    assert_eq(cfg.debug, true)
+}
+
+@test
+fn test_extensible_type_with_any_extra(): void {
+    type Server = { id: int, ... }
+    let s: Server = { id: 1 }
+    s.name = "main"
+    s.status = "running"
+    s.metrics = { cpu: 0.5, mem: 0.8 }
+    assert_eq(s.id, 1)
+    assert_eq(s.name, "main")
+    assert_eq(s.status, "running")
+    assert_eq(s.metrics.cpu, 0.5)
+}
+
+// ===== 带 const 的只读字段 =====
+
+@test
+fn test_readonly_field(): void {
+    type User1 = { const id: int, name: string }
+    let u: User1 = { id: 1, name: "Alice" }
+    u.name = "Bob"       // 可修改普通字段
+    assert_eq(u.id, 1)
+    assert_eq(u.name, "Bob")
+}
+
+@test
+fn test_readonly_with_extensible(): void {
+    type Entity1 = { const id: int, name: string, ... }
+    let e: Entity1 = { id: 100, name: "test" }
+    e.extra = "data"     // 可以添加扩展字段
+    assert_eq(e.id, 100)
+    assert_eq(e.extra, "data")
+}
+
+// ===== 可选字段 =====
+
+@test
+fn test_optional_field(): void {
+    type Profile1 = { name: string, email?: string }
+    let p1: Profile1 = { name: "Alice" }
+    assert_eq(p1.name, "Alice")
+    
+    let p2: Profile1 = { name: "Bob", email: "bob@test.com" }
+    assert_eq(p2.email, "bob@test.com")
+}
+
+// ===== 嵌套类型别名 =====
+
+@test
+fn test_nested_type_alias(): void {
+    type Address = { city: string, zip: string }
+    type Person = { name: string, addr: Address }
+    
+    let p: Person = {
+        name: "Charlie",
+        addr: { city: "Beijing", zip: "100000" }
+    }
+    assert_eq(p.name, "Charlie")
+    assert_eq(p.addr.city, "Beijing")
+}
+
+print("json_type_alias: all tests passed")

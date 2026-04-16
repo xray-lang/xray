@@ -1,0 +1,23 @@
+// EXPECTED: 11
+// EXPECTED: 9
+// Test: Increment and decrement operators (INC, DEC)
+
+fn inc_test(x: int) : int {
+    x = x + 1
+    return x
+}
+
+fn dec_test(x: int) : int {
+    x = x - 1
+    return x
+}
+
+let i = 0
+while (i < 200) {
+    inc_test(10)
+    dec_test(10)
+    i = i + 1
+}
+
+print(inc_test(10))
+print(dec_test(10))

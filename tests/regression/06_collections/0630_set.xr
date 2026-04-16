@@ -1,0 +1,148 @@
+// 0630_set.xr
+// 作者：xingleixu@gmail.com
+// 测试：Set 集合
+// ===== 创建 =====
+@test
+fn test_set_literal(): void {
+    let s = #[1, 2, 3]
+    assert_eq(s.length, 3)
+}
+
+@test
+fn test_empty_set(): void {
+    let s = #[]
+    assert_eq(s.length, 0)
+}
+
+@test
+fn test_single_element(): void {
+    let s = #[42]
+    assert_eq(s.length, 1)
+}
+
+@test
+fn test_set_dedup(): void {
+    let s = #[1, 2, 2, 3, 3, 3]
+    assert_eq(s.length, 3)
+}
+
+// ===== 添加 =====
+@test
+fn test_add_new(): void {
+    let s = #[]
+    s.add(1)
+    s.add(2)
+    s.add(3)
+    assert_eq(s.length, 3)
+}
+
+@test
+fn test_add_duplicate(): void {
+    let s = #[1, 2]
+    s.add(2)
+    // 重复
+    assert_eq(s.length, 2)
+}
+
+// ===== 检查 =====
+@test
+fn test_has(): void {
+    let s = #[1, 2, 3]
+    assert_eq(s.has(2), true)
+    assert_eq(s.has(5), false)
+}
+
+@test
+fn test_has_empty(): void {
+    let s = #[]
+    assert_eq(s.has(1), false)
+}
+
+// ===== 删除 =====
+@test
+fn test_delete(): void {
+    let s = #[1, 2, 3]
+    s.delete(2)
+    assert_eq(s.length, 2)
+    assert_eq(s.has(2), false)
+    assert_eq(s.has(1), true)
+    assert_eq(s.has(3), true)
+}
+
+@test
+fn test_delete_missing(): void {
+    let s = #[1, 2]
+    s.delete(5)
+    // 不存在
+    assert_eq(s.length, 2)
+}
+
+// ===== 遍历 =====
+@test
+fn test_iterate(): void {
+    let s = #[1, 2, 3]
+    let sum = 0
+    for (x in s) {
+        sum += x
+    }
+    assert_eq(sum, 6)
+}
+
+@test
+fn test_iterate_empty(): void {
+    let s = #[]
+    let count = 0
+    for (x in s) {
+        count++
+    }
+    assert_eq(count, 0)
+}
+
+// ===== 清空 =====
+@test
+fn test_clear(): void {
+    let s = #[1, 2, 3]
+    s.clear()
+    assert_eq(s.length, 0)
+}
+
+// ===== 字符串元素 =====
+@test
+fn test_string_elements(): void {
+    let s = #["apple", "banana", "cherry"]
+    assert_eq(s.length, 3)
+    assert_eq(s.has("apple"), true)
+    assert_eq(s.has("grape"), false)
+}
+
+// ===== 转换为数组 =====
+@test
+fn test_to_array(): void {
+    let s = #[1, 2, 3]
+    let arr = s.toArray()
+    assert_eq(arr.length, 3)
+}
+
+// ===== 边界条件 =====
+@test
+fn test_many_elements(): void {
+    let s = #[]
+    for (let i = 0; i < 100; i++) {
+        s.add(i)
+    }
+    assert_eq(s.length, 100)
+    assert_eq(s.has(50), true)
+}
+
+@test
+fn test_add_and_delete(): void {
+    let s = #[]
+    s.add(1)
+    s.add(2)
+    s.delete(1)
+    s.add(3)
+    assert_eq(s.length, 2)
+    assert_eq(s.has(1), false)
+    assert_eq(s.has(2), true)
+    assert_eq(s.has(3), true)
+}

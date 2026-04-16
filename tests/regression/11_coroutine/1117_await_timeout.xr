@@ -1,0 +1,30 @@
+/*
+** 测试 await(timeout: N) 超时功能
+** 作者：xingleixu@gmail.com
+*/
+
+// 快速完成的任务
+fn fast_task(): int {
+    return 42
+}
+
+// 测试1：正常完成（在超时前完成）
+print("test1: fast task with timeout")
+let task1 = go fast_task()
+let result1 = await(timeout: 1000) task1
+print("  result:", result1)
+
+// 测试2：立即完成的任务
+print("test2: immediate completion")
+let task2 = go fast_task()
+let result2 = await(timeout: 100) task2
+print("  result:", result2)
+
+// 测试3：已完成的任务使用超时等待
+print("test3: already done task")
+let task3 = go fast_task()
+await task3  // 先等待完成
+let result3 = await(timeout: 100) task3  // 再用超时等待已完成的任务
+print("  result:", result3)
+
+print("all tests passed")

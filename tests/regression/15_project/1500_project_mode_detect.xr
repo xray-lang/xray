@@ -1,0 +1,10 @@
+// 1100_project_mode_detect.xr
+// 作者：xingleixu@gmail.com
+// 测试：工程模式基础功能
+// 这个测试放在有 xray.toml 的目录下运行
+
+print("Project mode test")
+print("Hello from project!")
+
+// expect: Project mode test
+// expect: Hello from project!

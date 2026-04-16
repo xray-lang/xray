@@ -1,0 +1,4 @@
+# xray JIT debugging configuration
+# Disable JIT crash handler when running under lldb
+# (crash handler intercepts SIGSEGV before lldb can, causing confusion)
+settings set target.env-vars XRAY_NO_JIT_CRASH_HANDLER=1

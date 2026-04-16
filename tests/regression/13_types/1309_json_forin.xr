@@ -1,0 +1,39 @@
+// Test Json for-in iteration
+// Expected output:
+// name = Alice
+// age = 30
+// city = Beijing
+// localhost
+// 8080
+// empty ok
+// count -> 42
+// label -> test
+// flag -> true
+// ALL TESTS PASSED
+
+// Test 1: Fast mode (static shape)
+let user = {name: "Alice", age: "30", city: "Beijing"}
+for (k, v in user) {
+    print(k + " = " + v)
+}
+
+// Test 2: Blank key (only value)
+let config = {host: "localhost", port: "8080"}
+for (_, v in config) {
+    print(v)
+}
+
+// Test 3: Empty Json
+let empty = {}
+for (k, v in empty) {
+    print("unreachable")
+}
+print("empty ok")
+
+// Test 4: Mixed value types
+let data = {count: 42, label: "test", flag: true}
+for (k, v in data) {
+    print(k + " -> " + string(v))
+}
+
+print("ALL TESTS PASSED")

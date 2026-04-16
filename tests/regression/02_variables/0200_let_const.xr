@@ -1,0 +1,114 @@
+// 0200_let_const.xr
+// 作者：xingleixu@gmail.com
+// 测试：变量声明 let 和 const
+// ===== let 基础 =====
+@test
+fn test_let_declaration(): void {
+    let x = 10
+    assert_eq(x, 10)
+}
+
+@test
+fn test_let_reassign(): void {
+    let x = 10
+    x = 20
+    assert_eq(x, 20)
+}
+
+@test
+fn test_let_multiple(): void {
+    let a = 1
+    let b = 2
+    let c = 3
+    assert_eq(a + b + c, 6)
+}
+
+@test
+fn test_let_different_types(): void {
+    let i = 42
+    let f = 3.14
+    let s = "hello"
+    let b = true
+    let n = null
+    assert_eq(i, 42)
+    assert_eq(f, 3.14)
+    assert_eq(s, "hello")
+    assert_eq(b, true)
+    assert_eq(n, null)
+}
+
+// ===== const 基础 =====
+@test
+fn test_const_declaration(): void {
+    const PI = 3.14159
+    assert_eq(PI, 3.14159)
+}
+
+@test
+fn test_const_string(): void {
+    const NAME = "xray"
+    assert_eq(NAME, "xray")
+}
+
+@test
+fn test_const_expression(): void {
+    const BASE = 10
+    const MULTIPLIED = BASE * 2
+    assert_eq(MULTIPLIED, 20)
+}
+
+// ===== 初始化 =====
+@test
+fn test_expression_init(): void {
+    let x = 5 + 3
+    assert_eq(x, 8)
+    let y = x * 2
+    assert_eq(y, 16)
+}
+
+@test
+fn test_function_call_init(): void {
+    fn getValue(): int {
+        return 42
+    }
+    let x = getValue()
+    assert_eq(x, 42)
+}
+
+// ===== 类型注解 =====
+@test
+fn test_type_annotation_int(): void {
+    let x: int = 100
+    assert_eq(x, 100)
+}
+
+@test
+fn test_type_annotation_float(): void {
+    let f: float = 2.5
+    assert_eq(f, 2.5)
+}
+
+@test
+fn test_type_annotation_string(): void {
+    let s: string = "typed"
+    assert_eq(s, "typed")
+}
+
+// ===== 边界条件 =====
+@test
+fn test_same_name_different_scope(): void {
+    let x = 10
+{
+        let x = 20
+        assert_eq(x, 20)
+    }
+    assert_eq(x, 10)
+}
+
+@test
+fn test_reassign_different_type(): void {
+    let x = 10
+    x = 20
+    // 同类型
+    assert_eq(x, 20)
+}

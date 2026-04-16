@@ -1,0 +1,32 @@
+// EXPECTED: hello world 42
+// EXPECTED: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+// Test: StringBuilder operations in JIT (STRBUF_NEW/APPEND/FINISH)
+
+fn build_str(a, b, c) : string {
+    let sb = new StringBuilder()
+    sb.append(a)
+    sb.append(" ")
+    sb.append(b)
+    sb.append(" ")
+    sb.append(c)
+    return sb.toString()
+}
+
+fn repeat_char(ch: string, n: int) : string {
+    let sb = new StringBuilder()
+    let i = 0
+    while (i < n) {
+        sb.append(ch)
+        i = i + 1
+    }
+    return sb.toString()
+}
+
+let i = 0
+while (i < 200) {
+    build_str("hello", "world", "42")
+    i = i + 1
+}
+
+print(build_str("hello", "world", "42"))
+print(repeat_char("a", 100))

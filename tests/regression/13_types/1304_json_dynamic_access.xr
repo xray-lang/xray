@@ -1,0 +1,101 @@
+// 0512_json_dynamic_access.xr
+// 作者：xingleixu@gmail.com
+// 测试：动态字段访问 obj[expr]
+// ===== 基本动态访问 =====
+@test
+fn test_dynamic_get(): void {
+    let obj = { "name": "Alice", "age": 30 }
+    let key = "name"
+    assert_eq(obj[key], "Alice")
+    let key2 = "age"
+    assert_eq(obj[key2], 30)
+}
+
+@test
+fn test_dynamic_set(): void {
+    let obj = { "x": 1 }
+    let key = "y"
+    obj[key] = 2
+    assert_eq(obj.y, 2)
+    assert_eq(obj["y"], 2)
+}
+
+@test
+fn test_dynamic_add_field(): void {
+    let obj = {}
+    let key = "newField"
+    obj[key] = "value"
+    assert_eq(obj.newField, "value")
+}
+
+// ===== 表达式作为键 =====
+@test
+fn test_expression_key_get(): void {
+    let obj = { "field_1": "one", "field_2": "two" }
+    let prefix = "field_"
+    assert_eq(obj[prefix + "1"], "one")
+    assert_eq(obj[prefix + "2"], "two")
+}
+
+@test
+fn test_expression_key_set(): void {
+    let obj = {}
+    let prefix = "user_"
+    obj[prefix + "name"] = "Alice"
+    obj[prefix + "age"] = 25
+    assert_eq(obj["user_name"], "Alice")
+    assert_eq(obj["user_age"], 25)
+}
+
+// ===== 循环中的动态访问 =====
+@test
+fn test_dynamic_in_loop(): void {
+    let obj = {}
+    let keys = ["a", "b", "c"]
+    let values = [1, 2, 3]
+    for (i in 0..3) {
+        obj[keys[i]] = values[i]
+    }
+    assert_eq(obj.a, 1)
+    assert_eq(obj.b, 2)
+    assert_eq(obj.c, 3)
+}
+
+@test
+fn test_dynamic_read_loop(): void {
+    let data = { "x": 10, "y": 20, "z": 30 }
+    let keys = ["x", "y", "z"]
+    let sum = 0
+    for (key in keys) {
+        sum = sum + data[key]
+    }
+    assert_eq(sum, 60)
+}
+
+// ===== 混合静态和动态访问 =====
+@test
+fn test_mixed_access(): void {
+    let obj = { "name": "test", "value": 42 }
+    // 静态访问
+    assert_eq(obj.name, "test")
+    // 动态访问同一字段
+    let key = "name"
+    assert_eq(obj[key], "test")
+    // 动态修改
+    obj[key] = "modified"
+    // 静态读取修改后的值
+    assert_eq(obj.name, "modified")
+}
+
+// ===== 嵌套对象动态访问 =====
+@test
+fn test_nested_dynamic_access(): void {
+    let data = { "user": { "name": "Alice", "role": "admin" }, "config": { "debug": true } }
+    let section = "user"
+    let field = "name"
+    assert_eq(data[section][field], "Alice")
+    data[section][field] = "Bob"
+    assert_eq(data.user.name, "Bob")
+}
+
+print("json_dynamic_access: all tests passed")

@@ -1,0 +1,26 @@
+// EXPECTED: 6765
+// EXPECTED: 832040
+// Test: Fibonacci via loop (heavy arithmetic + loop + variable swap)
+
+fn fib_loop(n: int) : int {
+    if (n <= 1) { return n }
+    let a = 0
+    let b = 1
+    let i = 2
+    while (i <= n) {
+        let tmp = a + b
+        a = b
+        b = tmp
+        i = i + 1
+    }
+    return b
+}
+
+let i = 0
+while (i < 200) {
+    fib_loop(20)
+    i = i + 1
+}
+
+print(fib_loop(20))
+print(fib_loop(30))

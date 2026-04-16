@@ -1,0 +1,122 @@
+// 0820_static.xr
+// 作者：xingleixu@gmail.com
+// 测试：静态成员
+
+// ===== 静态字段 =====
+
+class Counter {
+    static count: int = 0
+    
+    static increment(): void {
+        Counter.count = Counter.count + 1
+    }
+    
+    static getCount(): int {
+        return Counter.count
+    }
+}
+
+@test
+fn test_static_field(): void {
+    assert_eq(Counter.count, 0)
+    Counter.count = 5
+    assert_eq(Counter.count, 5)
+}
+
+@test
+fn test_static_method(): void {
+    Counter.count = 0
+    Counter.increment()
+    assert_eq(Counter.getCount(), 1)
+    Counter.increment()
+    assert_eq(Counter.getCount(), 2)
+}
+
+// ===== 静态常量 =====
+
+class MathConstants {
+    static PI: float = 3.14159
+    static E: float = 2.71828
+}
+
+@test
+fn test_static_constants(): void {
+    assert_eq(MathConstants.PI > 3.14, true)
+    assert_eq(MathConstants.E > 2.71, true)
+}
+
+// ===== 工厂模式 =====
+
+class Point {
+    x: int
+    y: int
+    
+    constructor(x, y) {
+        this.x = x
+        this.y = y
+    }
+    
+    static origin(): Point {
+        return new Point(0, 0)
+    }
+    
+    static fromPolar(r: float, theta: float): Point {
+        // 简化：只返回近似值
+        return new Point(r, 0)
+    }
+}
+
+@test
+fn test_factory_method(): void {
+    let p = Point.origin()
+    assert_eq(p.x, 0)
+    assert_eq(p.y, 0)
+}
+
+// ===== 混合静态和实例 =====
+
+class Item {
+    static nextId: int = 1
+    id: int
+    name: string
+    
+    constructor(name) {
+        this.id = Item.nextId
+        Item.nextId = Item.nextId + 1
+        this.name = name
+    }
+    
+    static resetId(): void {
+        Item.nextId = 1
+    }
+}
+
+@test
+fn test_mixed_static_instance(): void {
+    Item.resetId()
+    let a = new Item("Apple")
+    let b = new Item("Banana")
+    
+    assert_eq(a.id, 1)
+    assert_eq(b.id, 2)
+    assert_eq(Item.nextId, 3)
+}
+
+// ===== 静态方法调用静态方法 =====
+
+class Calculator {
+    static add(a: int, b: int): int {
+        return a + b
+    }
+    
+    static addThree(a: int, b: int, c: int): int {
+        return Calculator.add(Calculator.add(a, b), c)
+    }
+}
+
+@test
+fn test_static_call_static(): void {
+    assert_eq(Calculator.add(2, 3), 5)
+    assert_eq(Calculator.addThree(1, 2, 3), 6)
+}
+

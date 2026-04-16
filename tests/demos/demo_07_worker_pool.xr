@@ -1,0 +1,176 @@
+// Concurrent Worker Pool
+// Demonstrates: Producer-consumer, load balancing, graceful shutdown,
+//               shared state, channel-based coordination
+
+import time
+
+// ===== Job definition =====
+
+enum JobType {
+    Compute,
+    IO,
+    Transform
+}
+
+fn jobTypeName(t) {
+    return match t {
+        JobType.Compute => "Compute",
+        JobType.IO => "I/O",
+        JobType.Transform => "Transform",
+        _ => "Unknown"
+    }
+}
+
+// ===== Worker =====
+
+fn worker(id, jobCh, resultCh) {
+    let processed = 0
+
+    while (true) {
+        let job = jobCh.recv()
+        if (job == null) { break }
+
+        // Simulate different workloads
+        let result = match job.type {
+            JobType.Compute => {
+                // CPU-intensive: compute fibonacci
+                let n = job.payload % 20
+                let a = 0
+                let b = 1
+                for (let i = 0; i < n; i++) {
+                    let tmp = a + b
+                    a = b
+                    b = tmp
+                }
+                { value: b, duration: 0 }
+            },
+            JobType.IO => {
+                // I/O-bound: simulate network delay
+                time.sleep(2)
+                { value: "data-" + string(job.id), duration: 2 }
+            },
+            JobType.Transform => {
+                // Transform: string processing
+                let s = string(job.payload)
+                { value: s + "-transformed", duration: 0 }
+            },
+            _ => { value: null, duration: 0 }
+        }
+
+        processed++
+        resultCh.send({
+            jobId: job.id,
+            workerId: id,
+            type: job.type,
+            result: result.value
+        })
+    }
+
+    return processed
+}
+
+// ===== Job Dispatcher =====
+
+fn dispatcher(jobCh, totalJobs) {
+    for (let i = 0; i < totalJobs; i++) {
+        let jobType = match i % 3 {
+            0 => JobType.Compute,
+            1 => JobType.IO,
+            2 => JobType.Transform,
+            _ => JobType.Compute
+        }
+
+        jobCh.send({
+            id: i,
+            type: jobType,
+            payload: i * 7 + 13
+        })
+    }
+
+    // Signal: no more jobs
+    jobCh.close()
+}
+
+// ===== Result Collector =====
+
+fn collector(resultCh, expected) {
+    let results = []
+    let perWorker = {}
+
+    for (let i = 0; i < expected; i++) {
+        let r = resultCh.recv()
+        if (r == null) { break }
+        results.push(r)
+
+        let wKey = string(r.workerId)
+        if (perWorker[wKey] == null) {
+            perWorker[wKey] = 0
+        }
+        perWorker[wKey] = perWorker[wKey] + 1
+    }
+
+    return { results: results, perWorker: perWorker }
+}
+
+// ===== Main =====
+
+fn main() {
+    const NUM_WORKERS = 4
+    const NUM_JOBS = 50
+
+    print("=== Concurrent Worker Pool ===")
+    print("Workers:", NUM_WORKERS, "| Jobs:", NUM_JOBS)
+
+    const jobCh = Channel(16)
+    const resultCh = Channel(16)
+
+    let start = time.monotonic()
+
+    // Launch workers
+    let workers = []
+    for (let i = 0; i < NUM_WORKERS; i++) {
+        workers.push(go worker(i, jobCh, resultCh))
+    }
+
+    // Launch dispatcher
+    go dispatcher(jobCh, NUM_JOBS)
+
+    // Collect results
+    let stats = collector(resultCh, NUM_JOBS)
+
+    // Wait for all workers to finish
+    let totalProcessed = 0
+    for (w in workers) {
+        let count = await w
+        totalProcessed += count
+    }
+
+    let elapsed = time.monotonic() - start
+
+    // Report
+    print("\n--- Results ---")
+    print("Total jobs completed:", stats.results.length)
+    print("Total processed by workers:", totalProcessed)
+    print("Time:", elapsed, "ms")
+
+    if (elapsed > 0) {
+        print("Throughput:", int(NUM_JOBS / elapsed * 1000), "jobs/sec")
+    }
+
+    print("\n--- Load Distribution ---")
+    for (let i = 0; i < NUM_WORKERS; i++) {
+        let key = string(i)
+        let count = stats.perWorker[key] ?? 0
+        let bar = ""
+        for (let j = 0; j < count; j++) {
+            bar += "#"
+        }
+        print("  Worker", i, ":", count, "jobs", bar)
+    }
+
+    // Verify all jobs completed
+    assert_eq(stats.results.length, NUM_JOBS)
+    print("\nAll jobs completed successfully.")
+}
+
+main()

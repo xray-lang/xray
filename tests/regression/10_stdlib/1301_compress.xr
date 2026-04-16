@@ -1,0 +1,230 @@
+// 1301_compress.xr - Compress module tests
+
+import compress
+
+// ===== CRC32 =====
+
+@test
+fn test_crc32(): void {
+    let crc = compress.crc32("Hello")
+    assert(crc != 0)
+}
+
+@test
+fn test_crc32_deterministic(): void {
+    let crc1 = compress.crc32("Hello")
+    let crc2 = compress.crc32("Hello")
+    assert_eq(crc1, crc2)
+}
+
+// ===== Adler32 =====
+
+@test
+fn test_adler32(): void {
+    let adler = compress.adler32("Hello")
+    assert(adler != 0)
+}
+
+// ===== Gzip =====
+
+@test
+fn test_gzip_roundtrip(): void {
+    let data = "Hello, World! This is a test string for compression."
+    let compressed = compress.gzip(data) ?? ""
+    assert(compressed != null)
+    let decompressed = compress.gunzip(compressed) ?? ""
+    assert_eq(decompressed, data)
+}
+
+@test
+fn test_is_gzip(): void {
+    let data = "test data"
+    let compressed = compress.gzip(data) ?? ""
+    assert_eq(compress.isGzip(compressed ?? ""), true)
+    assert_eq(compress.isGzip(data ?? ""), false)
+}
+
+// ===== Deflate/Inflate =====
+
+@test
+fn test_deflate_inflate(): void {
+    let data = "Hello, World! This is a test string for compression."
+    let deflated = compress.deflate(data) ?? ""
+    assert(deflated != null)
+    let inflated = compress.inflate(deflated) ?? ""
+    assert_eq(inflated, data)
+}
+
+// ===== Zlib =====
+
+@test
+fn test_zlib_roundtrip(): void {
+    let data = "Hello, World! This is a test string for compression."
+    let compressed = compress.zlibCompress(data) ?? ""
+    assert(compressed != null)
+    assert_eq(compress.isZlib(compressed ?? ""), true)
+    let decompressed = compress.zlibDecompress(compressed) ?? ""
+    assert_eq(decompressed, data)
+}
+
+// ===== CRC32 known values =====
+
+@test
+fn test_crc32_known_value(): void {
+    // CRC32("123456789") = 0xCBF43926
+    let crc = compress.crc32("123456789")
+    assert_eq(crc, 3421780262)  // 0xCBF43926 as unsigned
+}
+
+@test
+fn test_crc32_empty(): void {
+    let crc = compress.crc32("")
+    assert_eq(crc, 0)
+}
+
+// ===== Adler32 known values =====
+
+@test
+fn test_adler32_known_value(): void {
+    // Adler32("Wikipedia") = 0x11E60398
+    let adler = compress.adler32("Wikipedia")
+    assert_eq(adler, 300286872)  // 0x11E60398
+}
+
+@test
+fn test_adler32_empty(): void {
+    let adler = compress.adler32("")
+    assert_eq(adler, 1)  // Initial value
+}
+
+// ===== Empty data roundtrip =====
+
+@test
+fn test_gzip_empty(): void {
+    let data = ""
+    let compressed = compress.gzip(data) ?? ""
+    assert(compressed != null)
+    let decompressed = compress.gunzip(compressed) ?? ""
+    assert_eq(decompressed, data)
+}
+
+@test
+fn test_deflate_empty(): void {
+    let data = ""
+    let deflated = compress.deflate(data) ?? ""
+    assert(deflated != null)
+    let inflated = compress.inflate(deflated) ?? ""
+    assert_eq(inflated, data)
+}
+
+@test
+fn test_zlib_empty(): void {
+    let data = ""
+    let compressed = compress.zlibCompress(data) ?? ""
+    assert(compressed != null)
+    let decompressed = compress.zlibDecompress(compressed) ?? ""
+    assert_eq(decompressed, data)
+}
+
+// ===== Large data roundtrip =====
+
+@test
+fn test_gzip_large_data(): void {
+    // Build a string > 64KB to trigger multi-pass LZ77
+    let big = ""
+    for (let i = 0; i < 500; i++) {
+        big = big + "The quick brown fox jumps over the lazy dog. "
+    }
+    let compressed = compress.gzip(big) ?? ""
+    assert(compressed != null)
+    let decompressed = compress.gunzip(compressed) ?? ""
+    assert_eq(decompressed, big)
+}
+
+@test
+fn test_deflate_large_data(): void {
+    let big = ""
+    for (let i = 0; i < 500; i++) {
+        big = big + "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789 "
+    }
+    let deflated = compress.deflate(big) ?? ""
+    assert(deflated != null)
+    let inflated = compress.inflate(deflated) ?? ""
+    assert_eq(inflated, big)
+}
+
+// ===== Compression levels =====
+
+@test
+fn test_gzip_level_zero(): void {
+    let data = "Hello, World! This is a test string for compression."
+    let level0 = compress.gzip(data, 0) ?? ""
+    let restored = compress.gunzip(level0) ?? ""
+    assert_eq(restored, data)
+}
+
+@test
+fn test_gzip_all_levels(): void {
+    let data = "Compress this text with different levels for testing."
+    for (let level = 0; level < 10; level++) {
+        let compressed = compress.gzip(data, level) ?? ""
+        assert(compressed != null)
+        let decompressed = compress.gunzip(compressed) ?? ""
+        assert_eq(decompressed, data)
+    }
+}
+
+@test
+fn test_deflate_all_levels(): void {
+    let data = "Deflate this text with different levels for testing."
+    for (let level = 0; level < 10; level++) {
+        let deflated = compress.deflate(data, level) ?? ""
+        assert(deflated != null)
+        let inflated = compress.inflate(deflated) ?? ""
+        assert_eq(inflated, data)
+    }
+}
+
+@test
+fn test_zlib_all_levels(): void {
+    let data = "Zlib compress this text with different levels for testing."
+    for (let level = 0; level < 10; level++) {
+        let compressed = compress.zlibCompress(data, level) ?? ""
+        assert(compressed != null)
+        assert_eq(compress.isZlib(compressed ?? ""), true)
+        let decompressed = compress.zlibDecompress(compressed) ?? ""
+        assert_eq(decompressed, data)
+    }
+}
+
+// ===== Detection on invalid data =====
+
+@test
+fn test_is_gzip_invalid(): void {
+    assert_eq(compress.isGzip(""), false)
+    assert_eq(compress.isGzip("x"), false)
+    assert_eq(compress.isGzip("hello world"), false)
+}
+
+@test
+fn test_is_zlib_invalid(): void {
+    assert_eq(compress.isZlib(""), false)
+    assert_eq(compress.isZlib("x"), false)
+    assert_eq(compress.isZlib("hello world"), false)
+}
+
+// ===== Binary data with repeated patterns =====
+
+@test
+fn test_gzip_repeated_pattern(): void {
+    let data = ""
+    for (let i = 0; i < 1000; i++) {
+        data = data + "AAAA"
+    }
+    let compressed = compress.gzip(data) ?? ""
+    assert(compressed != null)
+    // Repeated data should compress well
+    assert((compressed ?? "").length < data.length)
+    let decompressed = compress.gunzip(compressed) ?? ""
+    assert_eq(decompressed, data)
+}

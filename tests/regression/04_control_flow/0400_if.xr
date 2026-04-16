@@ -1,0 +1,257 @@
+// 0400_if.xr
+// 作者：xingleixu@gmail.com
+// 测试：if 条件语句
+
+// ===== 基础 if =====
+
+@test
+fn test_if_true(): void {
+    let result = 0
+    if (true) {
+        result = 1
+    }
+    assert_eq(result, 1)
+}
+
+@test
+fn test_if_false(): void {
+    let result = 0
+    if (false) {
+        result = 1
+    }
+    assert_eq(result, 0)
+}
+
+@test
+fn test_if_expression(): void {
+    let x = 10
+    let result = 0
+    if (x > 5) {
+        result = 1
+    }
+    assert_eq(result, 1)
+}
+
+// ===== if-else =====
+
+@test
+fn test_if_else_true(): void {
+    let result = ""
+    if (true) {
+        result = "yes"
+    } else {
+        result = "no"
+    }
+    assert_eq(result, "yes")
+}
+
+@test
+fn test_if_else_false(): void {
+    let result = ""
+    if (false) {
+        result = "yes"
+    } else {
+        result = "no"
+    }
+    assert_eq(result, "no")
+}
+
+@test
+fn test_if_else_expression(): void {
+    let x = 3
+    let result = ""
+    if (x > 5) {
+        result = "big"
+    } else {
+        result = "small"
+    }
+    assert_eq(result, "small")
+}
+
+// ===== if-else if-else =====
+
+@test
+fn test_elseif_first(): void {
+    let x = 1
+    let result = ""
+    if (x == 1) {
+        result = "one"
+    } else if (x == 2) {
+        result = "two"
+    } else {
+        result = "other"
+    }
+    assert_eq(result, "one")
+}
+
+@test
+fn test_elseif_second(): void {
+    let x = 2
+    let result = ""
+    if (x == 1) {
+        result = "one"
+    } else if (x == 2) {
+        result = "two"
+    } else {
+        result = "other"
+    }
+    assert_eq(result, "two")
+}
+
+@test
+fn test_elseif_else(): void {
+    let x = 3
+    let result = ""
+    if (x == 1) {
+        result = "one"
+    } else if (x == 2) {
+        result = "two"
+    } else {
+        result = "other"
+    }
+    assert_eq(result, "other")
+}
+
+@test
+fn test_multiple_elseif(): void {
+    let score = 75
+    let grade = ""
+    if (score >= 90) {
+        grade = "A"
+    } else if (score >= 80) {
+        grade = "B"
+    } else if (score >= 70) {
+        grade = "C"
+    } else if (score >= 60) {
+        grade = "D"
+    } else {
+        grade = "F"
+    }
+    assert_eq(grade, "C")
+}
+
+// ===== 嵌套 if =====
+
+@test
+fn test_nested_if(): void {
+    let x = 5
+    let y = 10
+    let result = ""
+    
+    if (x > 0) {
+        if (y > 5) {
+            result = "x>0, y>5"
+        } else {
+            result = "x>0, y<=5"
+        }
+    } else {
+        result = "x<=0"
+    }
+    assert_eq(result, "x>0, y>5")
+}
+
+@test
+fn test_deep_nested(): void {
+    let a = 1
+    let b = 2
+    let c = 3
+    let result = 0
+    
+    if (a > 0) {
+        if (b > 0) {
+            if (c > 0) {
+                result = a + b + c
+            }
+        }
+    }
+    assert_eq(result, 6)
+}
+
+// ===== 真值判断 =====
+
+@test
+fn test_truthy_number(): void {
+    let result = ""
+    if (1) { result = "truthy" } else { result = "falsy" }
+    assert_eq(result, "truthy")
+    
+    if (0) { result = "truthy" } else { result = "falsy" }
+    assert_eq(result, "falsy")
+}
+
+@test
+fn test_truthy_string(): void {
+    let result = ""
+    if ("hello") { result = "truthy" } else { result = "falsy" }
+    assert_eq(result, "truthy")
+    
+    if ("") { result = "truthy" } else { result = "falsy" }
+    assert_eq(result, "falsy")
+}
+
+@test
+fn test_truthy_null(): void {
+    let result = ""
+    if (null) { result = "truthy" } else { result = "falsy" }
+    assert_eq(result, "falsy")
+}
+
+// ===== 复合条件 =====
+
+@test
+fn test_and_condition(): void {
+    let x = 5
+    let y = 10
+    let result = false
+    if (x > 0 && y > 0) {
+        result = true
+    }
+    assert_eq(result, true)
+}
+
+@test
+fn test_or_condition(): void {
+    let x = -5
+    let y = 10
+    let result = false
+    if (x > 0 || y > 0) {
+        result = true
+    }
+    assert_eq(result, true)
+}
+
+@test
+fn test_not_condition(): void {
+    let flag = false
+    let result = 0
+    if (!flag) {
+        result = 1
+    }
+    assert_eq(result, 1)
+}
+
+// ===== 边界条件 =====
+
+@test
+fn test_empty_if_body(): void {
+    let x = 10
+    if (x < 5) {
+        // 空体
+    }
+    assert_eq(x, 10)  // 什么都没发生
+}
+
+@test
+fn test_if_only_once(): void {
+    let count = 0
+    let x = 10
+    
+    if (x > 5) {
+        count++
+    }
+    if (x > 3) {
+        count++
+    }
+    assert_eq(count, 2)
+}
+

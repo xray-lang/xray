@@ -1,0 +1,49 @@
+// EXPECTED: 8
+// EXPECTED: 14
+// EXPECTED: 6
+// EXPECTED: -11
+// EXPECTED: 40
+// EXPECTED: 2
+// Test: Bitwise operations (BAND, BOR, BXOR, BNOT, SHL, SHR)
+
+fn bitops(a: int, b: int) : int {
+    return a & b
+}
+
+fn bitor_fn(a: int, b: int) : int {
+    return a | b
+}
+
+fn bitxor(a: int, b: int) : int {
+    return a ^ b
+}
+
+fn bitnot(a: int) : int {
+    return ~a
+}
+
+fn shl(a: int, b: int) : int {
+    return a << b
+}
+
+fn shr(a: int, b: int) : int {
+    return a >> b
+}
+
+let i = 0
+while (i < 200) {
+    bitops(10, 12)
+    bitor_fn(10, 12)
+    bitxor(10, 12)
+    bitnot(10)
+    shl(10, 2)
+    shr(10, 2)
+    i = i + 1
+}
+
+print(bitops(10, 12))
+print(bitor_fn(10, 12))
+print(bitxor(10, 12))
+print(bitnot(10))
+print(shl(10, 2))
+print(shr(10, 2))

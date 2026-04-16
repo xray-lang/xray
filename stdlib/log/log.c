@@ -1,0 +1,1021 @@
+/*
+ * xray - Lightweight typed scripting with native concurrency
+ * https://www.xray-lang.org
+ *
+ * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
+ * Licensed under the MIT License
+ *
+ * log.c - Structured logging module implementation
+ *
+ * KEY CONCEPT:
+ *   High-performance structured logging with async write support.
+ *   Uses a mutex-based ring buffer for async mode to minimize latency.
+ */
+
+#include "log.h"
+#include "../../src/module/xmodule.h"
+#include "../../src/vm/xvm.h"
+#include "../../src/runtime/object/xstring.h"
+#include "../../src/runtime/object/xmap.h"
+#include "../../src/runtime/xisolate_internal.h"
+#include "../../src/runtime/xisolate_api.h"
+#include "../../src/runtime/gc/xalloc_unified.h"
+#include "../../src/runtime/object/xnative_type.h"
+#include <stdlib.h>
+#include <string.h>
+#include <time.h>
+#include <sys/time.h>
+#include <pthread.h>
+#include <stdarg.h>
+
+/* ========== Async Write Buffer ========== */
+
+#define ASYNC_QUEUE_SIZE   256
+
+typedef struct {
+    char *entries[ASYNC_QUEUE_SIZE];
+    int head;
+    int tail;
+    int count;
+    pthread_mutex_t mutex;
+    pthread_cond_t not_empty;
+    pthread_cond_t not_full;
+    pthread_cond_t drained;       // signaled when queue becomes empty
+    pthread_t thread;
+    bool running;
+    FILE *output;
+} AsyncLogQueue;
+
+static AsyncLogQueue g_async_queue = {0};
+static bool g_async_initialized = false;
+
+/* ========== Global Logger ========== */
+
+static XrLogger g_default_logger = {
+    .level = XR_LOG_INFO,
+    .format = XR_LOG_FORMAT_TEXT,
+    .output = NULL,  // Lazy init to stderr
+    .add_source = false,
+    .async_mode = false,
+    .json_ctx = NULL,
+    .json_ctx_len = 0,
+    .text_ctx = NULL,
+    .text_ctx_len = 0,
+    .parent = NULL
+};
+
+XrLogger* xr_log_default(void) {
+    if (g_default_logger.output == NULL) {
+        g_default_logger.output = stderr;
+    }
+    return &g_default_logger;
+}
+
+void xr_log_reset(void) {
+    // Close non-standard output
+    if (g_default_logger.output != NULL && 
+        g_default_logger.output != stderr && 
+        g_default_logger.output != stdout) {
+        fclose(g_default_logger.output);
+    }
+    
+    free(g_default_logger.json_ctx);
+    free(g_default_logger.text_ctx);
+    
+    g_default_logger.level = XR_LOG_INFO;
+    g_default_logger.format = XR_LOG_FORMAT_TEXT;
+    g_default_logger.output = stderr;
+    g_default_logger.add_source = false;
+    g_default_logger.async_mode = false;
+    g_default_logger.json_ctx = NULL;
+    g_default_logger.json_ctx_len = 0;
+    g_default_logger.text_ctx = NULL;
+    g_default_logger.text_ctx_len = 0;
+    g_default_logger.parent = NULL;
+}
+
+/* ========== Async Write Implementation ========== */
+
+// Background thread function
+static void* async_log_thread(void *arg) {
+    (void)arg;
+    AsyncLogQueue *q = &g_async_queue;
+    
+    while (1) {
+        pthread_mutex_lock(&q->mutex);
+        
+        // Wait for queue not empty or stop signal
+        while (q->count == 0 && q->running) {
+            pthread_cond_wait(&q->not_empty, &q->mutex);
+        }
+        
+        // Check if should exit
+        if (!q->running && q->count == 0) {
+            pthread_mutex_unlock(&q->mutex);
+            break;
+        }
+        
+        // Dequeue one entry
+        char *entry = q->entries[q->head];
+        q->entries[q->head] = NULL;
+        q->head = (q->head + 1) % ASYNC_QUEUE_SIZE;
+        q->count--;
+        
+        // Signal queue has space (and drained if empty)
+        pthread_cond_signal(&q->not_full);
+        if (q->count == 0) {
+            pthread_cond_broadcast(&q->drained);
+        }
+        pthread_mutex_unlock(&q->mutex);
+        
+        // Write log entry
+        if (entry) {
+            FILE *out = q->output ? q->output : stderr;
+            fputs(entry, out);
+            fflush(out);
+            free(entry);
+        }
+    }
+    
+    return NULL;
+}
+
+// Initialize async queue
+static void async_queue_init(FILE *output) {
+    if (g_async_initialized) return;
+    
+    AsyncLogQueue *q = &g_async_queue;
+    memset(q, 0, sizeof(AsyncLogQueue));
+    
+    pthread_mutex_init(&q->mutex, NULL);
+    pthread_cond_init(&q->not_empty, NULL);
+    pthread_cond_init(&q->not_full, NULL);
+    pthread_cond_init(&q->drained, NULL);
+    
+    q->output = output;
+    q->running = true;
+    
+    pthread_create(&q->thread, NULL, async_log_thread, NULL);
+    g_async_initialized = true;
+}
+
+// Stop async queue
+static void async_queue_stop(void) {
+    if (!g_async_initialized) return;
+    
+    AsyncLogQueue *q = &g_async_queue;
+    
+    pthread_mutex_lock(&q->mutex);
+    q->running = false;
+    pthread_cond_signal(&q->not_empty);
+    pthread_mutex_unlock(&q->mutex);
+    
+    pthread_join(q->thread, NULL);
+    
+    // Clean up remaining entries
+    for (int i = 0; i < ASYNC_QUEUE_SIZE; i++) {
+        if (q->entries[i]) {
+            free(q->entries[i]);
+            q->entries[i] = NULL;
+        }
+    }
+    
+    pthread_mutex_destroy(&q->mutex);
+    pthread_cond_destroy(&q->not_empty);
+    pthread_cond_destroy(&q->not_full);
+    pthread_cond_destroy(&q->drained);
+    
+    g_async_initialized = false;
+}
+
+// Write log entry asynchronously (takes ownership of msg, caller must not free)
+static void async_log_write(char *msg) {
+    if (!g_async_initialized) { free(msg); return; }
+    
+    AsyncLogQueue *q = &g_async_queue;
+    
+    pthread_mutex_lock(&q->mutex);
+    
+    // Wait for queue space
+    while (q->count >= ASYNC_QUEUE_SIZE && q->running) {
+        pthread_cond_wait(&q->not_full, &q->mutex);
+    }
+    
+    if (!q->running) {
+        pthread_mutex_unlock(&q->mutex);
+        free(msg);
+        return;
+    }
+    
+    // Enqueue (ownership transferred, no strdup needed)
+    q->entries[q->tail] = msg;
+    q->tail = (q->tail + 1) % ASYNC_QUEUE_SIZE;
+    q->count++;
+    
+    // Signal background thread
+    pthread_cond_signal(&q->not_empty);
+    pthread_mutex_unlock(&q->mutex);
+}
+
+// Flush async queue (blocks until complete)
+static void async_queue_flush(void) {
+    if (!g_async_initialized) return;
+    
+    AsyncLogQueue *q = &g_async_queue;
+    
+    // Wait for queue to drain using condvar (no busy-wait)
+    pthread_mutex_lock(&q->mutex);
+    while (q->count > 0 && q->running) {
+        pthread_cond_wait(&q->drained, &q->mutex);
+    }
+    pthread_mutex_unlock(&q->mutex);
+}
+
+/* ========== Dynamic Buffer ========== */
+
+typedef struct {
+    char *data;
+    int len;
+    int cap;
+} CtxBuf;
+
+static void ctxbuf_init(CtxBuf *b, int initial_cap) {
+    b->cap = initial_cap;
+    b->data = (char*)malloc(b->cap);
+    b->len = 0;
+    if (b->data) b->data[0] = '\0';
+}
+
+static void ctxbuf_ensure(CtxBuf *b, int extra) {
+    if (b->len + extra >= b->cap) {
+        while (b->len + extra >= b->cap) b->cap *= 2;
+        b->data = (char*)realloc(b->data, b->cap);
+    }
+}
+
+static void ctxbuf_append(CtxBuf *b, const char *s, int slen) {
+    ctxbuf_ensure(b, slen + 1);
+    memcpy(b->data + b->len, s, slen);
+    b->len += slen;
+    b->data[b->len] = '\0';
+}
+
+static void ctxbuf_putc(CtxBuf *b, char c) {
+    ctxbuf_ensure(b, 2);
+    b->data[b->len++] = c;
+    b->data[b->len] = '\0';
+}
+
+static void ctxbuf_printf(CtxBuf *b, const char *fmt, ...) __attribute__((format(printf, 2, 3)));
+static void ctxbuf_printf(CtxBuf *b, const char *fmt, ...) {
+    va_list ap;
+    va_start(ap, fmt);
+    int needed = vsnprintf(NULL, 0, fmt, ap);
+    va_end(ap);
+    if (needed <= 0) return;
+    ctxbuf_ensure(b, needed + 1);
+    va_start(ap, fmt);
+    b->len += vsnprintf(b->data + b->len, b->cap - b->len, fmt, ap);
+    va_end(ap);
+}
+
+/* ========== Helper Functions ========== */
+
+const char* xr_log_level_name(XrLogLevel level) {
+    switch (level) {
+        case XR_LOG_DEBUG: return "DEBUG";
+        case XR_LOG_INFO:  return "INFO";
+        case XR_LOG_WARN:  return "WARN";
+        case XR_LOG_ERROR: return "ERROR";
+        case XR_LOG_FATAL: return "FATAL";
+        default:           return "UNKNOWN";
+    }
+}
+
+XrLogLevel xr_log_level_parse(const char *name) {
+    if (strcasecmp(name, "debug") == 0) return XR_LOG_DEBUG;
+    if (strcasecmp(name, "info") == 0)  return XR_LOG_INFO;
+    if (strcasecmp(name, "warn") == 0)  return XR_LOG_WARN;
+    if (strcasecmp(name, "warning") == 0) return XR_LOG_WARN;
+    if (strcasecmp(name, "error") == 0) return XR_LOG_ERROR;
+    if (strcasecmp(name, "fatal") == 0) return XR_LOG_FATAL;
+    return XR_LOG_INFO;  // Default
+}
+
+// Get ISO 8601 timestamp
+static void get_timestamp(char *buf, size_t size) {
+    struct timeval tv;
+    gettimeofday(&tv, NULL);
+    
+    struct tm tm;
+    localtime_r(&tv.tv_sec, &tm);
+    
+    // Format: 2024-12-14T22:45:00.123
+    int len = (int)strftime(buf, size, "%Y-%m-%dT%H:%M:%S", &tm);
+    snprintf(buf + len, size - len, ".%03d", (int)(tv.tv_usec / 1000));
+}
+
+// Escape JSON string into CtxBuf
+static void write_json_string_buf(CtxBuf *b, const char *str) {
+    ctxbuf_putc(b, '"');
+    for (const char *p = str; *p; p++) {
+        switch (*p) {
+            case '"':  ctxbuf_append(b, "\\\"", 2); break;
+            case '\\': ctxbuf_append(b, "\\\\", 2); break;
+            case '\n': ctxbuf_append(b, "\\n", 2); break;
+            case '\r': ctxbuf_append(b, "\\r", 2); break;
+            case '\t': ctxbuf_append(b, "\\t", 2); break;
+            default:
+                if ((unsigned char)*p < 0x20) {
+                    char esc[8];
+                    int n = snprintf(esc, sizeof(esc), "\\u%04x", (unsigned char)*p);
+                    ctxbuf_append(b, esc, n);
+                } else {
+                    ctxbuf_putc(b, *p);
+                }
+        }
+    }
+    ctxbuf_putc(b, '"');
+}
+
+// Convert XrValue to string
+static const char* value_to_string(XrValue val, char *buf, size_t size) {
+    if (XR_IS_STRING(val)) {
+        return XR_STRING_CHARS(XR_TO_STRING(val));
+    } else if (XR_IS_INT(val)) {
+        snprintf(buf, size, "%lld", (long long)XR_TO_INT(val));
+        return buf;
+    } else if (XR_IS_FLOAT(val)) {
+        snprintf(buf, size, "%.6g", XR_TO_FLOAT(val));
+        return buf;
+    } else if (XR_IS_BOOL(val)) {
+        return XR_TO_BOOL(val) ? "true" : "false";
+    } else if (XR_IS_NULL(val)) {
+        return "null";
+    }
+    return "<object>";
+}
+
+// Check if string needs quoting (for Text format)
+static bool needs_quoting(const char *str) {
+    for (const char *p = str; *p; p++) {
+        if (*p == ' ' || *p == '"' || *p == '=' || *p == '\n' || *p == '\t') {
+            return true;
+        }
+    }
+    return false;
+}
+
+/* ========== Core Log Output ========== */
+
+// Get filename without path
+static const char* get_filename(const char *path) {
+    if (!path) return NULL;
+    const char *slash = strrchr(path, '/');
+    return slash ? slash + 1 : path;
+}
+
+void xr_log_write_ex(XrLogger *logger, XrLogLevel level, 
+                     const char *msg, XrValue *attrs, int nattrs,
+                     const char *source_file, int source_line) {
+    XR_DCHECK(msg != NULL, "xr_log_write_ex: NULL msg");
+    if (logger == NULL) {
+        logger = xr_log_default();
+    }
+    
+    // Level filtering
+    if (level < logger->level) {
+        return;
+    }
+    
+    // Build log line into CtxBuf (cross-platform, no open_memstream)
+    CtxBuf b;
+    ctxbuf_init(&b, 512);
+    if (!b.data) return;
+    
+    char timestamp[32];
+    get_timestamp(timestamp, sizeof(timestamp));
+    
+    // Get short filename
+    const char *filename = get_filename(source_file);
+    bool show_source = logger->add_source && source_line > 0;
+    
+    if (logger->format == XR_LOG_FORMAT_JSON) {
+        // JSON format output
+        ctxbuf_printf(&b, "{\"time\":\"%s\",\"level\":\"%s\"",
+                      timestamp, xr_log_level_name(level));
+        
+        // Source location
+        if (show_source) {
+            if (filename) {
+                ctxbuf_printf(&b, ",\"source\":\"%s:%d\"", filename, source_line);
+            } else {
+                ctxbuf_printf(&b, ",\"line\":%d", source_line);
+            }
+        }
+        
+        ctxbuf_append(&b, ",\"msg\":", 7);
+        write_json_string_buf(&b, msg);
+        
+        // Output inherited context
+        if (logger->json_ctx && logger->json_ctx_len > 0) {
+            ctxbuf_putc(&b, ',');
+            ctxbuf_append(&b, logger->json_ctx, logger->json_ctx_len);
+        }
+        
+        // Output attributes
+        char vbuf[64];
+        for (int i = 0; i < nattrs; i++) {
+            XrValue key = attrs[i * 2];
+            XrValue val = attrs[i * 2 + 1];
+            
+            const char *key_str = value_to_string(key, vbuf, sizeof(vbuf));
+            ctxbuf_printf(&b, ",\"%s\":", key_str);
+            
+            if (XR_IS_STRING(val)) {
+                write_json_string_buf(&b, XR_STRING_CHARS(XR_TO_STRING(val)));
+            } else if (XR_IS_INT(val)) {
+                ctxbuf_printf(&b, "%lld", (long long)XR_TO_INT(val));
+            } else if (XR_IS_FLOAT(val)) {
+                ctxbuf_printf(&b, "%.6g", XR_TO_FLOAT(val));
+            } else if (XR_IS_BOOL(val)) {
+                ctxbuf_append(&b, XR_TO_BOOL(val) ? "true" : "false",
+                              XR_TO_BOOL(val) ? 4 : 5);
+            } else if (XR_IS_NULL(val)) {
+                ctxbuf_append(&b, "null", 4);
+            } else {
+                write_json_string_buf(&b, "<object>");
+            }
+        }
+        
+        ctxbuf_append(&b, "}\n", 2);
+    } else {
+        // Text format output
+        if (show_source) {
+            if (filename) {
+                ctxbuf_printf(&b, "%s %-5s [%s:%d] %s", timestamp,
+                              xr_log_level_name(level), filename, source_line, msg);
+            } else {
+                ctxbuf_printf(&b, "%s %-5s [L%d] %s", timestamp,
+                              xr_log_level_name(level), source_line, msg);
+            }
+        } else {
+            ctxbuf_printf(&b, "%s %-5s %s", timestamp, xr_log_level_name(level), msg);
+        }
+        
+        // Output inherited context
+        if (logger->text_ctx && logger->text_ctx_len > 0) {
+            ctxbuf_putc(&b, ' ');
+            ctxbuf_append(&b, logger->text_ctx, logger->text_ctx_len);
+        }
+        
+        // Output attributes
+        char vbuf[64];
+        for (int i = 0; i < nattrs; i++) {
+            XrValue key = attrs[i * 2];
+            XrValue val = attrs[i * 2 + 1];
+            
+            const char *key_str = value_to_string(key, vbuf, sizeof(vbuf));
+            char val_buf[64];
+            const char *val_str = value_to_string(val, val_buf, sizeof(val_buf));
+            
+            if (needs_quoting(val_str)) {
+                ctxbuf_printf(&b, " %s=\"%s\"", key_str, val_str);
+            } else {
+                ctxbuf_printf(&b, " %s=%s", key_str, val_str);
+            }
+        }
+        
+        ctxbuf_putc(&b, '\n');
+    }
+    
+    // Async: transfer buffer ownership to queue; Sync: write and free
+    if (logger->async_mode && g_async_initialized) {
+        async_log_write(b.data);  // ownership transferred
+    } else {
+        FILE *out = logger->output ? logger->output : stderr;
+        fwrite(b.data, 1, b.len, out);
+        // Only flush for WARN+ level (P2-3: smart flush)
+        if (level >= XR_LOG_WARN) {
+            fflush(out);
+        }
+        free(b.data);
+    }
+}
+
+// Simplified version without source location
+void xr_log_write(XrLogger *logger, XrLogLevel level, 
+                  const char *msg, XrValue *attrs, int nattrs) {
+    xr_log_write_ex(logger, level, msg, attrs, nattrs, NULL, 0);
+}
+
+/* ========== VM Binding Functions ========== */
+
+// Extract message and attributes from args
+static void extract_log_args(XrValue *args, int nargs, 
+                             const char **msg, XrValue **attrs, int *nattrs) {
+    *msg = "";
+    *attrs = NULL;
+    *nattrs = 0;
+    
+    if (nargs < 1) return;
+    
+    // First arg is message
+    if (XR_IS_STRING(args[0])) {
+        *msg = XR_STRING_CHARS(XR_TO_STRING(args[0]));
+    }
+    
+    // Remaining args are key-value pairs
+    if (nargs > 1) {
+        *attrs = &args[1];
+        *nattrs = (nargs - 1) / 2;
+    }
+}
+
+// Get current source file and line number from VM frame stack
+static void get_source_location(XrayIsolate *isolate, const char **out_file, int *out_line) {
+    *out_file = NULL;
+    *out_line = 0;
+    if (!isolate || isolate->vm.frame_count == 0) return;
+    
+    // Walk frame stack to find first valid xray frame
+    for (int i = isolate->vm.frame_count - 1; i >= 0; i--) {
+        XrBcCallFrame *frame = &isolate->vm.frames[i];
+        if (!frame->closure || !frame->closure->proto) continue;
+        
+        XrProto *proto = frame->closure->proto;
+        
+        // Get line number from lineinfo
+        if (proto->lineinfo.count > 0 && frame->pc) {
+            int pc_offset = (int)(frame->pc - 1 - PROTO_CODE_BASE(proto));
+            if (pc_offset >= 0 && pc_offset < (int)proto->code.count) {
+                int line = PROTO_LINE(proto, pc_offset);
+                if (line > 0) {
+                    *out_line = line;
+                    *out_file = proto->source_file;
+                    return;
+                }
+            }
+        }
+    }
+}
+
+// Log output with source location
+static void log_with_source(XrayIsolate *isolate, XrLogLevel level,
+                            const char *msg, XrValue *attrs, int nattrs) {
+    const char *file = NULL;
+    int line = 0;
+    
+    XrLogger *logger = xr_log_default();
+    if (logger->add_source) {
+        get_source_location(isolate, &file, &line);
+    }
+    
+    xr_log_write_ex(NULL, level, msg, attrs, nattrs, file, line);
+}
+
+XrValue xr_log_debug(XrayIsolate *isolate, XrValue *args, int nargs) {
+    const char *msg;
+    XrValue *attrs;
+    int nattrs;
+    extract_log_args(args, nargs, &msg, &attrs, &nattrs);
+    log_with_source(isolate, XR_LOG_DEBUG, msg, attrs, nattrs);
+    return xr_null();
+}
+
+XrValue xr_log_info(XrayIsolate *isolate, XrValue *args, int nargs) {
+    const char *msg;
+    XrValue *attrs;
+    int nattrs;
+    extract_log_args(args, nargs, &msg, &attrs, &nattrs);
+    log_with_source(isolate, XR_LOG_INFO, msg, attrs, nattrs);
+    return xr_null();
+}
+
+XrValue xr_log_warn(XrayIsolate *isolate, XrValue *args, int nargs) {
+    const char *msg;
+    XrValue *attrs;
+    int nattrs;
+    extract_log_args(args, nargs, &msg, &attrs, &nattrs);
+    log_with_source(isolate, XR_LOG_WARN, msg, attrs, nattrs);
+    return xr_null();
+}
+
+XrValue xr_log_error(XrayIsolate *isolate, XrValue *args, int nargs) {
+    const char *msg;
+    XrValue *attrs;
+    int nattrs;
+    extract_log_args(args, nargs, &msg, &attrs, &nattrs);
+    log_with_source(isolate, XR_LOG_ERROR, msg, attrs, nattrs);
+    return xr_null();
+}
+
+XrValue xr_log_fatal(XrayIsolate *isolate, XrValue *args, int nargs) {
+    const char *msg;
+    XrValue *attrs;
+    int nattrs;
+    extract_log_args(args, nargs, &msg, &attrs, &nattrs);
+    log_with_source(isolate, XR_LOG_FATAL, msg, attrs, nattrs);
+    // Flush async queue before exit
+    if (g_async_initialized) async_queue_flush();
+    exit(1);
+    return xr_null();  // Unreachable
+}
+
+XrValue xr_log_enable_source(XrayIsolate *isolate, XrValue *args, int nargs) {
+    (void)isolate;
+    XrLogger *logger = xr_log_default();
+    
+    if (nargs >= 1 && XR_IS_BOOL(args[0])) {
+        logger->add_source = XR_TO_BOOL(args[0]);
+    } else {
+        // Toggle if no argument
+        logger->add_source = !logger->add_source;
+    }
+    
+    return xr_null();
+}
+
+XrValue xr_log_enable_async(XrayIsolate *isolate, XrValue *args, int nargs) {
+    (void)isolate;
+    XrLogger *logger = xr_log_default();
+    
+    bool enable = true;
+    if (nargs >= 1 && XR_IS_BOOL(args[0])) {
+        enable = XR_TO_BOOL(args[0]);
+    }
+    
+    if (enable && !logger->async_mode) {
+        // Enable async mode
+        async_queue_init(logger->output);
+        logger->async_mode = true;
+    } else if (!enable && logger->async_mode) {
+        // Disable async mode
+        async_queue_flush();
+        async_queue_stop();
+        logger->async_mode = false;
+    }
+    
+    return xr_null();
+}
+
+XrValue xr_log_flush(XrayIsolate *isolate, XrValue *args, int nargs) {
+    (void)isolate;
+    (void)args;
+    (void)nargs;
+    
+    XrLogger *logger = xr_log_default();
+    if (logger->async_mode) {
+        async_queue_flush();
+    }
+    
+    return xr_null();
+}
+
+XrValue xr_log_set_level(XrayIsolate *isolate, XrValue *args, int nargs) {
+    (void)isolate;
+    if (nargs < 1) {
+        fprintf(stderr, "log.setLevel() requires 1 argument\n");
+        return xr_null();
+    }
+    
+    XrLogger *logger = xr_log_default();
+    
+    if (XR_IS_INT(args[0])) {
+        logger->level = (XrLogLevel)XR_TO_INT(args[0]);
+    } else if (XR_IS_STRING(args[0])) {
+        logger->level = xr_log_level_parse(XR_STRING_CHARS(XR_TO_STRING(args[0])));
+    }
+    
+    return xr_null();
+}
+
+XrValue xr_log_set_format(XrayIsolate *isolate, XrValue *args, int nargs) {
+    (void)isolate;
+    if (nargs < 1 || !XR_IS_STRING(args[0])) {
+        fprintf(stderr, "log.setFormat() requires a string argument\n");
+        return xr_null();
+    }
+    
+    XrLogger *logger = xr_log_default();
+    const char *format = XR_STRING_CHARS(XR_TO_STRING(args[0]));
+    
+    if (strcasecmp(format, "json") == 0) {
+        logger->format = XR_LOG_FORMAT_JSON;
+    } else if (strcasecmp(format, "text") == 0) {
+        logger->format = XR_LOG_FORMAT_TEXT;
+    } else {
+        fprintf(stderr, "log.setFormat(): unknown format '%s', use 'json' or 'text'\n", format);
+    }
+    
+    return xr_null();
+}
+
+XrValue xr_log_set_output(XrayIsolate *isolate, XrValue *args, int nargs) {
+    (void)isolate;
+    if (nargs < 1 || !XR_IS_STRING(args[0])) {
+        fprintf(stderr, "log.setOutput() requires a string argument\n");
+        return xr_null();
+    }
+    
+    XrLogger *logger = xr_log_default();
+    const char *output = XR_STRING_CHARS(XR_TO_STRING(args[0]));
+    
+    // Close old file handle
+    if (logger->output != NULL && 
+        logger->output != stderr && 
+        logger->output != stdout) {
+        fclose(logger->output);
+    }
+    
+    if (strcasecmp(output, "stdout") == 0) {
+        logger->output = stdout;
+    } else if (strcasecmp(output, "stderr") == 0) {
+        logger->output = stderr;
+    } else {
+        // Open file
+        FILE *f = fopen(output, "a");
+        if (f == NULL) {
+            fprintf(stderr, "log.setOutput(): failed to open file '%s'\n", output);
+            logger->output = stderr;
+        } else {
+            logger->output = f;
+        }
+    }
+    
+    return xr_null();
+}
+
+XrValue xr_log_is_enabled(XrayIsolate *isolate, XrValue *args, int nargs) {
+    (void)isolate;
+    if (nargs < 1 || !XR_IS_INT(args[0])) {
+        return xr_bool(false);
+    }
+    
+    XrLogger *logger = xr_log_default();
+    XrLogLevel level = (XrLogLevel)XR_TO_INT(args[0]);
+    
+    return xr_bool(level >= logger->level);
+}
+
+/* ========== Child Logger Implementation ========== */
+
+static XrValue wrap_logger(XrayIsolate *X, XrLogger *logger) {
+    XrCoroutine *coro = xr_current_coro(X);
+    XrLoggerRef *ref = (XrLoggerRef*)xr_alloc(coro, sizeof(XrLoggerRef), XR_TLOGGER);
+    if (!ref) return xr_null();
+    ref->logger = logger;
+    return XR_FROM_PTR(ref);
+}
+
+static XrLogger* unwrap_logger(XrayIsolate *X, XrValue v) {
+    (void)X;
+    if (!XR_IS_PTR(v)) return NULL;
+    XrGCHeader *gc = (XrGCHeader*)XR_TO_PTR(v);
+    if (XR_GC_GET_TYPE(gc) != XR_TLOGGER) return NULL;
+    return ((XrLoggerRef*)gc)->logger;
+}
+
+// Create child logger
+static XrLogger* create_child_logger(XrLogger *parent, XrValue *attrs, int nattrs) {
+    XrLogger *child = (XrLogger*)malloc(sizeof(XrLogger));
+    if (!child) return NULL;
+    
+    // Inherit parent logger configuration
+    child->level = parent->level;
+    child->format = parent->format;
+    child->output = parent->output;
+    child->add_source = parent->add_source;
+    child->async_mode = parent->async_mode;
+    child->parent = parent;
+    
+    // Build JSON context: "key":"val","k2":123
+    CtxBuf jbuf;
+    ctxbuf_init(&jbuf, 256);
+    
+    // Build Text context: key=val k2=123
+    CtxBuf tbuf;
+    ctxbuf_init(&tbuf, 256);
+    
+    if (!jbuf.data || !tbuf.data) {
+        free(jbuf.data);
+        free(tbuf.data);
+        free(child);
+        return NULL;
+    }
+    
+    // Inherit parent context
+    if (parent->json_ctx && parent->json_ctx_len > 0) {
+        ctxbuf_append(&jbuf, parent->json_ctx, parent->json_ctx_len);
+    }
+    if (parent->text_ctx && parent->text_ctx_len > 0) {
+        ctxbuf_append(&tbuf, parent->text_ctx, parent->text_ctx_len);
+    }
+    
+    // Add new context attributes
+    char vbuf[64];
+    for (int i = 0; i < nattrs; i++) {
+        XrValue key = attrs[i * 2];
+        XrValue val = attrs[i * 2 + 1];
+        
+        const char *key_str = value_to_string(key, vbuf, sizeof(vbuf));
+        
+        // === JSON context ===
+        if (jbuf.len > 0) ctxbuf_putc(&jbuf, ',');
+        ctxbuf_putc(&jbuf, '"');
+        ctxbuf_append(&jbuf, key_str, (int)strlen(key_str));
+        ctxbuf_append(&jbuf, "\":", 2);
+        
+        if (XR_IS_STRING(val)) {
+            write_json_string_buf(&jbuf, XR_STRING_CHARS(XR_TO_STRING(val)));
+        } else if (XR_IS_INT(val)) {
+            char tmp[32]; int n = snprintf(tmp, sizeof(tmp), "%lld", (long long)XR_TO_INT(val));
+            ctxbuf_append(&jbuf, tmp, n);
+        } else if (XR_IS_FLOAT(val)) {
+            char tmp[32]; int n = snprintf(tmp, sizeof(tmp), "%.6g", XR_TO_FLOAT(val));
+            ctxbuf_append(&jbuf, tmp, n);
+        } else if (XR_IS_BOOL(val)) {
+            const char *s = XR_TO_BOOL(val) ? "true" : "false";
+            ctxbuf_append(&jbuf, s, (int)strlen(s));
+        } else {
+            ctxbuf_append(&jbuf, "null", 4);
+        }
+        
+        // === Text context ===
+        if (tbuf.len > 0) ctxbuf_putc(&tbuf, ' ');
+        ctxbuf_append(&tbuf, key_str, (int)strlen(key_str));
+        ctxbuf_putc(&tbuf, '=');
+        
+        char val_buf[64];
+        const char *val_str = value_to_string(val, val_buf, sizeof(val_buf));
+        if (needs_quoting(val_str)) {
+            ctxbuf_putc(&tbuf, '"');
+            ctxbuf_append(&tbuf, val_str, (int)strlen(val_str));
+            ctxbuf_putc(&tbuf, '"');
+        } else {
+            ctxbuf_append(&tbuf, val_str, (int)strlen(val_str));
+        }
+    }
+    
+    child->json_ctx = jbuf.data;
+    child->json_ctx_len = jbuf.len;
+    child->text_ctx = tbuf.data;
+    child->text_ctx_len = tbuf.len;
+    
+    return child;
+}
+
+XrValue xr_log_child(XrayIsolate *isolate, XrValue *args, int nargs) {
+    XrLogger *parent = xr_log_default();
+    XrLogger *child = create_child_logger(parent, args, nargs / 2);
+    if (!child) return xr_null();
+    return wrap_logger(isolate, child);
+}
+
+// Common implementation for child logger methods
+static XrValue logger_log_at(XrayIsolate *isolate, XrValue *args, int nargs, XrLogLevel level) {
+    if (nargs < 1) return xr_null();
+    XrLogger *logger = unwrap_logger(isolate, args[0]);
+    if (!logger) return xr_null();
+    
+    const char *msg = "";
+    if (nargs > 1 && XR_IS_STRING(args[1])) {
+        msg = XR_STRING_CHARS(XR_TO_STRING(args[1]));
+    }
+    
+    XrValue *attrs = (nargs > 2) ? &args[2] : NULL;
+    int nattrs = (nargs > 2) ? (nargs - 2) / 2 : 0;
+    
+    xr_log_write(logger, level, msg, attrs, nattrs);
+    return xr_null();
+}
+
+XrValue xr_logger_debug(XrayIsolate *X, XrValue *args, int n) { return logger_log_at(X, args, n, XR_LOG_DEBUG); }
+XrValue xr_logger_info(XrayIsolate *X, XrValue *args, int n)  { return logger_log_at(X, args, n, XR_LOG_INFO); }
+XrValue xr_logger_warn(XrayIsolate *X, XrValue *args, int n)  { return logger_log_at(X, args, n, XR_LOG_WARN); }
+XrValue xr_logger_error(XrayIsolate *X, XrValue *args, int n) { return logger_log_at(X, args, n, XR_LOG_ERROR); }
+
+XrValue xr_logger_fatal(XrayIsolate *X, XrValue *args, int n) {
+    logger_log_at(X, args, n, XR_LOG_FATAL);
+    // Flush async queue before exit
+    if (g_async_initialized) async_queue_flush();
+    exit(1);
+    return xr_null();
+}
+
+XrValue xr_logger_child(XrayIsolate *isolate, XrValue *args, int nargs) {
+    if (nargs < 1) return xr_null();
+    XrLogger *parent = unwrap_logger(isolate, args[0]);
+    if (!parent) return xr_null();
+    
+    XrValue *attrs = (nargs > 1) ? &args[1] : NULL;
+    int nattrs = (nargs > 1) ? (nargs - 1) / 2 : 0;
+    
+    XrLogger *child = create_child_logger(parent, attrs, nattrs);
+    if (!child) return xr_null();
+    return wrap_logger(isolate, child);
+}
+
+/* ========== GC Destroy ========== */
+
+// Called by GC when XrLoggerRef is collected
+void xr_gc_destroy_logger(XrGCHeader *obj, struct XrCoroGC *owning_gc) {
+    (void)owning_gc;
+    XrLoggerRef *ref = (XrLoggerRef*)obj;
+    if (ref->logger) {
+        free(ref->logger->json_ctx);
+        free(ref->logger->text_ctx);
+        free(ref->logger);
+        ref->logger = NULL;
+    }
+}
+
+/* ========== Module Loader ========== */
+
+// ========== Type Declarations (parsed by gen_stdlib_types.py) ==========
+
+#include "../../src/module/xbuiltin_decl.h"
+
+// @module log
+
+XR_DEFINE_BUILTIN(xr_log_debug, "debug", "(...args: any): void", "Log debug message")
+XR_DEFINE_BUILTIN(xr_log_info, "info", "(...args: any): void", "Log info message")
+XR_DEFINE_BUILTIN(xr_log_warn, "warn", "(...args: any): void", "Log warning message")
+XR_DEFINE_BUILTIN(xr_log_error, "error", "(...args: any): void", "Log error message")
+XR_DEFINE_BUILTIN(xr_log_fatal, "fatal", "(...args: any): void", "Log fatal message")
+XR_DEFINE_BUILTIN(xr_log_set_level, "setLevel", "(level: int): void", "Set log level")
+XR_DEFINE_BUILTIN(xr_log_set_format, "setFormat", "(format: string): void", "Set log format")
+XR_DEFINE_BUILTIN(xr_log_set_output, "setOutput", "(path: string): void", "Set log output file")
+XR_DEFINE_BUILTIN(xr_log_is_enabled, "isEnabled", "(level: int): bool", "Check if log level enabled")
+XR_DEFINE_BUILTIN(xr_log_enable_source, "enableSource", "(enabled: bool): void", "Enable source location in logs")
+XR_DEFINE_BUILTIN(xr_log_enable_async, "enableAsync", "(enabled: bool): void", "Enable async logging")
+XR_DEFINE_BUILTIN(xr_log_flush, "flush", "(): void", "Flush log buffer")
+XR_DEFINE_BUILTIN(xr_log_child, "child", "(...fields: any): any", "Create child logger")
+
+XrModule* xr_load_module_log(XrayIsolate *isolate) {
+    XrModule *module = xr_module_create_native(isolate, "log");
+    
+    // Export functions
+    extern XrCFunction* xr_vm_cfunction_new(XrayIsolate *isolate, XrCFunctionPtr func, const char *name);
+    extern XrValue xr_value_from_cfunction(XrCFunction *cfunc);
+    
+    #define EXPORT_CFUNC(name_str, func_ptr) \
+        do { \
+            XrCFunction *cfunc = xr_vm_cfunction_new(isolate, func_ptr, name_str); \
+            XrValue fn_val = xr_value_from_cfunction(cfunc); \
+            xr_module_add_export(isolate, module, name_str, fn_val); \
+        } while(0)
+    
+    // Log functions
+    EXPORT_CFUNC("debug", xr_log_debug);
+    EXPORT_CFUNC("info", xr_log_info);
+    EXPORT_CFUNC("warn", xr_log_warn);
+    EXPORT_CFUNC("error", xr_log_error);
+    EXPORT_CFUNC("fatal", xr_log_fatal);
+    
+    // Config functions
+    EXPORT_CFUNC("setLevel", xr_log_set_level);
+    EXPORT_CFUNC("setFormat", xr_log_set_format);
+    EXPORT_CFUNC("setOutput", xr_log_set_output);
+    EXPORT_CFUNC("isEnabled", xr_log_is_enabled);
+    EXPORT_CFUNC("enableSource", xr_log_enable_source);
+    EXPORT_CFUNC("enableAsync", xr_log_enable_async);
+    EXPORT_CFUNC("flush", xr_log_flush);
+    
+    // Child logger
+    EXPORT_CFUNC("child", xr_log_child);
+    
+    #undef EXPORT_CFUNC
+    
+    // Export constants
+    xr_module_add_export(isolate, module, "DEBUG", xr_int(XR_LOG_DEBUG));
+    xr_module_add_export(isolate, module, "INFO", xr_int(XR_LOG_INFO));
+    xr_module_add_export(isolate, module, "WARN", xr_int(XR_LOG_WARN));
+    xr_module_add_export(isolate, module, "ERROR", xr_int(XR_LOG_ERROR));
+    xr_module_add_export(isolate, module, "FATAL", xr_int(XR_LOG_FATAL));
+    
+    module->loaded = true;
+    
+    // Register Logger as native type for method dispatch via native_type_classes
+    static XrNativeMethod logger_methods[] = {
+        {"debug", xr_logger_debug, -1},
+        {"info",  xr_logger_info,  -1},
+        {"warn",  xr_logger_warn,  -1},
+        {"error", xr_logger_error, -1},
+        {"fatal", xr_logger_fatal, -1},
+        {"child", xr_logger_child, -1},
+        {NULL, NULL, 0}
+    };
+    
+    XrNativeTypeInfo logger_type_info = {
+        .name = "Logger",
+        .gc_type = XR_TLOGGER,
+        .methods = logger_methods,
+        .getters = NULL,
+        .static_methods = NULL
+    };
+    
+    xr_register_native_type(isolate, &logger_type_info);
+    
+    return module;
+}

@@ -1,0 +1,14 @@
+test1: main yield
+test1: after yield
+test2: step 1
+test2: step 2
+test2: step 3
+test2: result = done
+test3: worker 1 start
+test3: worker 1 end
+test3: worker 2 start
+test3: worker 2 end
+test3: all done
+test4: sum = 10
+test5: total = 3
+all tests passed

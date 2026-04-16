@@ -1,0 +1,37 @@
+// EXPECTED: Animal speaks
+// EXPECTED: Dog barks
+// EXPECTED: Animal speaks
+// Test: Super method invocation in JIT (SUPERINVOKE)
+
+class Animal {
+    speak() : string {
+        return "Animal speaks"
+    }
+}
+
+class Dog extends Animal {
+    speak() : string {
+        return "Dog barks"
+    }
+
+    parent_speak() : string {
+        return super.speak()
+    }
+}
+
+fn test_super() {
+    let d = new Dog()
+    print(d.parent_speak())
+    print(d.speak())
+    print(d.parent_speak())
+}
+
+let i = 0
+while (i < 200) {
+    let d = new Dog()
+    d.parent_speak()
+    d.speak()
+    i = i + 1
+}
+
+test_super()

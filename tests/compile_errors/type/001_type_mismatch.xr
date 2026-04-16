@@ -1,0 +1,4 @@
+// 001_type_mismatch.xr
+// Expected: Compile error - type mismatch
+// Error should mention: type mismatch, cannot assign
+let x: int = "hello"

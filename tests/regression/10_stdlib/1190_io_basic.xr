@@ -1,0 +1,167 @@
+// 1190_io_basic.xr - IO module basic tests
+
+import io
+
+// ===== Temp file + read/write =====
+
+@test
+fn test_temp_file(): void {
+    let tmp = io.tempFile()!
+    assert(tmp != null)
+    assert(io.exists(tmp))
+    io.remove(tmp)
+}
+
+@test
+fn test_write_read_file(): void {
+    let tmp = io.tempFile()!
+    io.writeFile(tmp, "hello\nworld\ntest")
+    let content = io.readFile(tmp)
+    assert_eq(content, "hello\nworld\ntest")
+    io.remove(tmp)
+}
+
+@test
+fn test_read_lines(): void {
+    let tmp = io.tempFile()!
+    io.writeFile(tmp, "line1\nline2\nline3")
+    let lines = io.readLines(tmp)
+    assert_eq(lines[0], "line1")
+    assert_eq(lines[1], "line2")
+    assert_eq(lines[2], "line3")
+    io.remove(tmp)
+}
+
+@test
+fn test_append_file(): void {
+    let tmp = io.tempFile()!
+    io.writeFile(tmp, "hello")
+    io.appendFile(tmp, " world")
+    let content = io.readFile(tmp)
+    assert_eq(content, "hello world")
+    io.remove(tmp)
+}
+
+// ===== File info =====
+
+@test
+fn test_file_stat(): void {
+    let tmp = io.tempFile()!
+    io.writeFile(tmp, "test content")
+    let st = io.stat(tmp)
+    assert(st != null)
+    assert_eq(st.size, 12)
+    assert_eq(st.isFile, true)
+    io.remove(tmp)
+}
+
+@test
+fn test_is_file(): void {
+    let tmp = io.tempFile()!
+    io.writeFile(tmp, "x")
+    assert_eq(io.isFile(tmp), true)
+    assert_eq(io.isDir(tmp), false)
+    io.remove(tmp)
+}
+
+@test
+fn test_file_size(): void {
+    let tmp = io.tempFile()!
+    io.writeFile(tmp, "12345")
+    assert_eq(io.fileSize(tmp), 5)
+    io.remove(tmp)
+}
+
+// ===== Directory operations =====
+
+@test
+fn test_mkdir_and_isdir(): void {
+    let tmpDir = io.tempDir()!
+    assert_eq(io.isDir(tmpDir), true)
+    io.removeAll(tmpDir)
+}
+
+@test
+fn test_mkdirp(): void {
+    let tmpDir = io.tempDir()!
+    let nested = tmpDir + "/a/b/c"
+    io.mkdirp(nested)
+    assert_eq(io.isDir(nested), true)
+    io.removeAll(tmpDir)
+}
+
+@test
+fn test_read_dir(): void {
+    let tmpDir = io.tempDir()!
+    io.writeFile(tmpDir + "/file1.txt", "f1")
+    io.writeFile(tmpDir + "/file2.txt", "f2")
+    let entries = io.readDir(tmpDir)
+    assert(entries != null)
+    assert(entries.length >= 2)
+    io.removeAll(tmpDir)
+}
+
+// ===== Copy and rename =====
+
+@test
+fn test_copy_file(): void {
+    let src = io.tempFile()!
+    io.writeFile(src, "copy test")
+    let dst = src + ".copy"
+    io.copyFile(src, dst)
+    assert_eq(io.exists(dst), true)
+    assert_eq(io.readFile(dst), "copy test")
+    io.remove(src)
+    io.remove(dst)
+}
+
+@test
+fn test_rename(): void {
+    let src = io.tempFile()!
+    io.writeFile(src, "rename test")
+    let dst = src + ".renamed"
+    io.rename(src, dst)
+    assert_eq(io.exists(src), false)
+    assert_eq(io.exists(dst), true)
+    assert_eq(io.readFile(dst), "rename test")
+    io.remove(dst)
+}
+
+// ===== Touch and chmod =====
+
+@test
+fn test_touch(): void {
+    let tmp = io.tempFile()!
+    io.remove(tmp)
+    io.touch(tmp)
+    assert_eq(io.exists(tmp), true)
+    assert_eq(io.fileSize(tmp), 0)
+    io.remove(tmp)
+}
+
+// ===== cwd / realpath =====
+
+@test
+fn test_cwd(): void {
+    let cwd = io.cwd()
+    assert(cwd != null)
+    assert(cwd.length > 0)
+}
+
+@test
+fn test_realpath(): void {
+    let cwd = io.cwd()
+    let resolved = io.realpath(".")
+    assert_eq(resolved, cwd)
+}
+
+// ===== removeAll =====
+
+@test
+fn test_remove_all(): void {
+    let tmpDir = io.tempDir()!
+    io.mkdirp(tmpDir + "/sub/dir")
+    io.writeFile(tmpDir + "/sub/file.txt", "data")
+    io.removeAll(tmpDir)
+    assert_eq(io.exists(tmpDir), false)
+}

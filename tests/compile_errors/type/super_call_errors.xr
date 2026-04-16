@@ -1,0 +1,73 @@
+// Test: super() call validation errors
+// Expected: Multiple compile errors for invalid super() usage
+// ===== Test 1: super() not first statement (XR2040) =====
+class Animal {
+    name: string
+
+    constructor(name) {
+        this.name = name
+    }
+}
+
+class Dog1 extends Animal {
+    breed: string
+
+    constructor(name, breed) {
+        this.breed = breed
+        // ERROR: this before super
+        super(name)
+    }
+}
+
+// ===== Test 2: this access before super() (XR2041) =====
+class Dog2 extends Animal {
+    breed: string
+
+    constructor(name, breed) {
+        let x = this.name
+        // ERROR: this before super
+        super(name)
+        this.breed = breed
+    }
+}
+
+// ===== Test 3: Missing super() call (XR2042) =====
+class Dog3 extends Animal {
+    breed: string
+
+    constructor(name, breed) {
+        // ERROR: missing super() call
+        this.breed = breed
+    }
+}
+
+// ===== Test 4: super() without parent class (XR2043) =====
+class Standalone {
+    value: int
+
+    constructor(v) {
+        super()
+        // ERROR: no parent class
+        this.value = v
+    }
+}
+
+// ===== Test 5: Correct usage (no errors) =====
+class Dog4 extends Animal {
+    breed: string
+
+    constructor(name, breed) {
+        super(name)
+        // OK: first statement
+        this.breed = breed
+    }
+}
+
+// ===== Test 6: No constructor with parent (OK - auto super) =====
+class Dog5 extends Animal {
+    bark() {
+        print("woof")
+    }
+}
+
+print("done")

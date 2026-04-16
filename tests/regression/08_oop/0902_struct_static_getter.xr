@@ -1,0 +1,55 @@
+// Test: struct static methods and getter/setter
+// Expected: static factory methods work, computed properties work
+
+struct Color {
+    r: int
+    g: int
+    b: int
+
+    // Computed property
+    hex(): string {
+        return "rgb(${this.r},${this.g},${this.b})"
+    }
+
+    // Static factory methods
+    static red(): Color {
+        return Color{r: 255, g: 0, b: 0}
+    }
+
+    static green(): Color {
+        return Color{r: 0, g: 255, b: 0}
+    }
+
+    static blue(): Color {
+        return Color{r: 0, g: 0, b: 255}
+    }
+}
+
+// === Static factory methods ===
+let r = Color.red()
+let g = Color.green()
+let b = Color.blue()
+
+assert(r.r == 255)
+assert(r.g == 0)
+assert(r.b == 0)
+
+assert(g.r == 0)
+assert(g.g == 255)
+assert(g.b == 0)
+
+assert(b.r == 0)
+assert(b.g == 0)
+assert(b.b == 255)
+
+// === Computed property ===
+assert(r.hex() == "rgb(255,0,0)")
+assert(g.hex() == "rgb(0,255,0)")
+
+// === Static result is independent copy ===
+let r2 = Color.red()
+r2.r = 128
+assert(r.r == 255)
+assert(r2.r == 128)
+
+print("ok")

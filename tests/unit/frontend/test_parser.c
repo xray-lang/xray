@@ -1,0 +1,442 @@
+/*
+ * xray - Lightweight typed scripting with native concurrency
+ * https://www.xray-lang.org
+ *
+ * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
+ * Licensed under the MIT License
+ *
+ * test_parser.c - Unit tests for parser (source → AST)
+ *
+ * KEY CONCEPT:
+ *   Verifies that the parser produces correct AST structure for various
+ *   language constructs: literals, expressions, statements, functions,
+ *   classes, error recovery, etc.
+ */
+
+#include "../test_framework.h"
+#include <string.h>
+#include <assert.h>
+
+#include "frontend/parser/xparse.h"
+#include "frontend/parser/xast_api.h"
+#include "frontend/parser/xast_types.h"
+#include "frontend/parser/xast_nodes.h"
+#include "xray.h"
+#include "runtime/xisolate_internal.h"
+
+/* ========== Test Infrastructure ========== */
+
+static XrayIsolate *X = NULL;
+
+static void setup(void) {
+    X = xray_isolate_new(NULL);
+    ASSERT_NOT_NULL(X);
+}
+
+static void teardown(void) {
+    if (X) {
+        xray_isolate_delete(X);
+        X = NULL;
+    }
+}
+
+/* Helper: parse source and assert success */
+static AstNode *parse_ok(const char *source) {
+    AstNode *ast = xr_parse(X, source);
+    assert(ast != NULL && "parse_ok: parse failed");
+    assert(ast->type == AST_PROGRAM);
+    return ast;
+}
+
+/* Helper: get first statement from program */
+static AstNode *first_stmt(AstNode *program) {
+    assert(program->as.program.count > 0 && "first_stmt: empty program");
+    return program->as.program.statements[0];
+}
+
+/* Helper: parse and return first statement */
+static AstNode *parse_first(const char *source) {
+    AstNode *program = parse_ok(source);
+    return first_stmt(program);
+}
+
+/* ========== Literal Tests ========== */
+
+TEST(parser_int_literal) {
+    setup();
+    AstNode *stmt = parse_first("42");
+    ASSERT_EQ_INT(stmt->type, AST_EXPR_STMT);
+    AstNode *expr = stmt->as.expr_stmt;
+    ASSERT_EQ_INT(expr->type, AST_LITERAL_INT);
+    ASSERT_EQ_INT((int)expr->as.literal.raw_value.int_val, 42);
+    teardown();
+}
+
+TEST(parser_float_literal) {
+    setup();
+    AstNode *stmt = parse_first("3.14");
+    ASSERT_EQ_INT(stmt->type, AST_EXPR_STMT);
+    AstNode *expr = stmt->as.expr_stmt;
+    ASSERT_EQ_INT(expr->type, AST_LITERAL_FLOAT);
+    ASSERT_TRUE(expr->as.literal.raw_value.float_val > 3.13 &&
+                expr->as.literal.raw_value.float_val < 3.15);
+    teardown();
+}
+
+TEST(parser_string_literal) {
+    setup();
+    AstNode *stmt = parse_first("\"hello\"");
+    ASSERT_EQ_INT(stmt->type, AST_EXPR_STMT);
+    AstNode *expr = stmt->as.expr_stmt;
+    ASSERT_EQ_INT(expr->type, AST_LITERAL_STRING);
+    ASSERT_STR_EQ(expr->as.literal.raw_value.string_val, "hello");
+    teardown();
+}
+
+TEST(parser_bool_literal) {
+    setup();
+    AstNode *stmt = parse_first("true");
+    ASSERT_EQ_INT(stmt->type, AST_EXPR_STMT);
+    AstNode *expr = stmt->as.expr_stmt;
+    ASSERT_EQ_INT(expr->type, AST_LITERAL_TRUE);
+    teardown();
+}
+
+TEST(parser_null_literal) {
+    setup();
+    AstNode *stmt = parse_first("null");
+    ASSERT_EQ_INT(stmt->type, AST_EXPR_STMT);
+    AstNode *expr = stmt->as.expr_stmt;
+    ASSERT_EQ_INT(expr->type, AST_LITERAL_NULL);
+    teardown();
+}
+
+/* ========== Expression Tests ========== */
+
+TEST(parser_binary_add) {
+    setup();
+    AstNode *stmt = parse_first("1 + 2");
+    ASSERT_EQ_INT(stmt->type, AST_EXPR_STMT);
+    AstNode *expr = stmt->as.expr_stmt;
+    ASSERT_EQ_INT(expr->type, AST_BINARY_ADD);
+    ASSERT_EQ_INT(expr->as.binary.left->type, AST_LITERAL_INT);
+    ASSERT_EQ_INT(expr->as.binary.right->type, AST_LITERAL_INT);
+    teardown();
+}
+
+TEST(parser_binary_precedence) {
+    setup();
+    // 1 + 2 * 3 should parse as 1 + (2 * 3)
+    AstNode *stmt = parse_first("1 + 2 * 3");
+    AstNode *expr = stmt->as.expr_stmt;
+    ASSERT_EQ_INT(expr->type, AST_BINARY_ADD);
+    ASSERT_EQ_INT(expr->as.binary.left->type, AST_LITERAL_INT);
+    ASSERT_EQ_INT(expr->as.binary.right->type, AST_BINARY_MUL);
+    teardown();
+}
+
+TEST(parser_unary_neg) {
+    setup();
+    AstNode *stmt = parse_first("-42");
+    AstNode *expr = stmt->as.expr_stmt;
+    ASSERT_EQ_INT(expr->type, AST_UNARY_NEG);
+    ASSERT_EQ_INT(expr->as.unary.operand->type, AST_LITERAL_INT);
+    teardown();
+}
+
+TEST(parser_unary_not) {
+    setup();
+    AstNode *stmt = parse_first("!true");
+    AstNode *expr = stmt->as.expr_stmt;
+    ASSERT_EQ_INT(expr->type, AST_UNARY_NOT);
+    ASSERT_EQ_INT(expr->as.unary.operand->type, AST_LITERAL_TRUE);
+    teardown();
+}
+
+TEST(parser_grouping) {
+    setup();
+    // (1 + 2) * 3 should parse as (1+2) * 3
+    AstNode *stmt = parse_first("(1 + 2) * 3");
+    AstNode *expr = stmt->as.expr_stmt;
+    ASSERT_EQ_INT(expr->type, AST_BINARY_MUL);
+    // left should be grouping containing add
+    AstNode *left = expr->as.binary.left;
+    ASSERT_EQ_INT(left->type, AST_GROUPING);
+    ASSERT_EQ_INT(left->as.grouping->type, AST_BINARY_ADD);
+    teardown();
+}
+
+TEST(parser_comparison) {
+    setup();
+    AstNode *stmt = parse_first("a == b");
+    AstNode *expr = stmt->as.expr_stmt;
+    ASSERT_EQ_INT(expr->type, AST_BINARY_EQ);
+    teardown();
+}
+
+TEST(parser_logical_and_or) {
+    setup();
+    // a && b || c should parse as (a && b) || c
+    AstNode *stmt = parse_first("a && b || c");
+    AstNode *expr = stmt->as.expr_stmt;
+    ASSERT_EQ_INT(expr->type, AST_BINARY_OR);
+    ASSERT_EQ_INT(expr->as.binary.left->type, AST_BINARY_AND);
+    teardown();
+}
+
+/* ========== Variable Declaration Tests ========== */
+
+TEST(parser_let_decl) {
+    setup();
+    AstNode *stmt = parse_first("let x = 10");
+    ASSERT_EQ_INT(stmt->type, AST_VAR_DECL);
+    ASSERT_STR_EQ(stmt->as.var_decl.name, "x");
+    ASSERT_NOT_NULL(stmt->as.var_decl.initializer);
+    ASSERT_EQ_INT(stmt->as.var_decl.initializer->type, AST_LITERAL_INT);
+    teardown();
+}
+
+TEST(parser_const_decl) {
+    setup();
+    AstNode *stmt = parse_first("const PI = 3.14");
+    ASSERT_EQ_INT(stmt->type, AST_CONST_DECL);
+    ASSERT_STR_EQ(stmt->as.var_decl.name, "PI");
+    ASSERT_NOT_NULL(stmt->as.var_decl.initializer);
+    teardown();
+}
+
+/* ========== Control Flow Tests ========== */
+
+TEST(parser_if_stmt) {
+    setup();
+    AstNode *stmt = parse_first("if (x > 0) {\n  print(x)\n}");
+    ASSERT_EQ_INT(stmt->type, AST_IF_STMT);
+    ASSERT_NOT_NULL(stmt->as.if_stmt.condition);
+    ASSERT_NOT_NULL(stmt->as.if_stmt.then_branch);
+    teardown();
+}
+
+TEST(parser_if_else) {
+    setup();
+    AstNode *stmt = parse_first("if (x > 0) {\n  print(1)\n} else {\n  print(0)\n}");
+    ASSERT_EQ_INT(stmt->type, AST_IF_STMT);
+    ASSERT_NOT_NULL(stmt->as.if_stmt.else_branch);
+    teardown();
+}
+
+TEST(parser_while_stmt) {
+    setup();
+    AstNode *stmt = parse_first("while (x > 0) {\n  x = x - 1\n}");
+    ASSERT_EQ_INT(stmt->type, AST_WHILE_STMT);
+    ASSERT_NOT_NULL(stmt->as.while_stmt.condition);
+    ASSERT_NOT_NULL(stmt->as.while_stmt.body);
+    teardown();
+}
+
+TEST(parser_for_stmt) {
+    setup();
+    AstNode *stmt = parse_first("for (let i = 0; i < 10; i++) {\n  print(i)\n}");
+    ASSERT_EQ_INT(stmt->type, AST_FOR_STMT);
+    ASSERT_NOT_NULL(stmt->as.for_stmt.initializer);
+    ASSERT_NOT_NULL(stmt->as.for_stmt.condition);
+    ASSERT_NOT_NULL(stmt->as.for_stmt.increment);
+    ASSERT_NOT_NULL(stmt->as.for_stmt.body);
+    teardown();
+}
+
+/* ========== Function Tests ========== */
+
+TEST(parser_function_decl) {
+    setup();
+    AstNode *stmt = parse_first("fn add(a: int, b: int): int {\n  return a + b\n}");
+    ASSERT_EQ_INT(stmt->type, AST_FUNCTION_DECL);
+    ASSERT_STR_EQ(stmt->as.function_decl.name, "add");
+    ASSERT_EQ_INT(stmt->as.function_decl.param_count, 2);
+    ASSERT_NOT_NULL(stmt->as.function_decl.body);
+    teardown();
+}
+
+TEST(parser_function_no_params) {
+    setup();
+    AstNode *stmt = parse_first("fn greet() {\n  print(\"hi\")\n}");
+    ASSERT_EQ_INT(stmt->type, AST_FUNCTION_DECL);
+    ASSERT_STR_EQ(stmt->as.function_decl.name, "greet");
+    ASSERT_EQ_INT(stmt->as.function_decl.param_count, 0);
+    teardown();
+}
+
+TEST(parser_return_stmt) {
+    setup();
+    AstNode *program = parse_ok("fn f(): int {\n  return 42\n}");
+    AstNode *fn = first_stmt(program);
+    ASSERT_EQ_INT(fn->type, AST_FUNCTION_DECL);
+    // body is a block
+    AstNode *body = fn->as.function_decl.body;
+    ASSERT_EQ_INT(body->type, AST_BLOCK);
+    ASSERT_TRUE(body->as.block.count > 0);
+    AstNode *ret = body->as.block.statements[0];
+    ASSERT_EQ_INT(ret->type, AST_RETURN_STMT);
+    teardown();
+}
+
+/* ========== Array Tests ========== */
+
+TEST(parser_array_literal) {
+    setup();
+    AstNode *stmt = parse_first("[1, 2, 3]");
+    AstNode *expr = stmt->as.expr_stmt;
+    ASSERT_EQ_INT(expr->type, AST_ARRAY_LITERAL);
+    ASSERT_EQ_INT(expr->as.array_literal.count, 3);
+    teardown();
+}
+
+TEST(parser_index_get) {
+    setup();
+    AstNode *stmt = parse_first("arr[0]");
+    AstNode *expr = stmt->as.expr_stmt;
+    ASSERT_EQ_INT(expr->type, AST_INDEX_GET);
+    teardown();
+}
+
+/* ========== Object/Map Tests ========== */
+
+TEST(parser_object_literal) {
+    setup();
+    // Object literal in assignment context (bare {} is parsed as block)
+    AstNode *stmt = parse_first("let obj = {a: 1, b: 2}");
+    ASSERT_EQ_INT(stmt->type, AST_VAR_DECL);
+    AstNode *init = stmt->as.var_decl.initializer;
+    ASSERT_NOT_NULL(init);
+    ASSERT_EQ_INT(init->type, AST_OBJECT_LITERAL);
+    ASSERT_EQ_INT(init->as.object_literal.count, 2);
+    teardown();
+}
+
+/* ========== Class Tests ========== */
+
+TEST(parser_class_decl) {
+    setup();
+    AstNode *stmt = parse_first(
+        "class Dog {\n"
+        "  name: string\n"
+        "  bark() {\n"
+        "    print(\"woof\")\n"
+        "  }\n"
+        "}"
+    );
+    ASSERT_EQ_INT(stmt->type, AST_CLASS_DECL);
+    ASSERT_STR_EQ(stmt->as.class_decl.name, "Dog");
+    teardown();
+}
+
+/* ========== Error Handling Tests ========== */
+
+TEST(parser_error_returns_null) {
+    setup();
+    // Unclosed brace should cause parse error
+    AstNode *ast = xr_parse(X, "fn f() {");
+    ASSERT_TRUE(ast == NULL);
+    teardown();
+}
+
+TEST(parser_empty_source) {
+    setup();
+    AstNode *ast = xr_parse(X, "");
+    ASSERT_NOT_NULL(ast);
+    ASSERT_EQ_INT(ast->type, AST_PROGRAM);
+    ASSERT_EQ_INT(ast->as.program.count, 0);
+    xr_ast_free(X, ast);
+    teardown();
+}
+
+/* ========== Multiple Statement Tests ========== */
+
+TEST(parser_multiple_stmts) {
+    setup();
+    AstNode *program = parse_ok(
+        "let x = 1\n"
+        "let y = 2\n"
+        "print(x + y)"
+    );
+    ASSERT_TRUE(program->as.program.count >= 3);
+    ASSERT_EQ_INT(program->as.program.statements[0]->type, AST_VAR_DECL);
+    ASSERT_EQ_INT(program->as.program.statements[1]->type, AST_VAR_DECL);
+    teardown();
+}
+
+/* ========== Call Expression Tests ========== */
+
+TEST(parser_call_expr) {
+    setup();
+    AstNode *stmt = parse_first("foo(1, 2, 3)");
+    AstNode *expr = stmt->as.expr_stmt;
+    ASSERT_EQ_INT(expr->type, AST_CALL_EXPR);
+    ASSERT_EQ_INT(expr->as.call_expr.arg_count, 3);
+    teardown();
+}
+
+TEST(parser_member_access) {
+    setup();
+    AstNode *stmt = parse_first("obj.field");
+    AstNode *expr = stmt->as.expr_stmt;
+    ASSERT_EQ_INT(expr->type, AST_MEMBER_ACCESS);
+    ASSERT_STR_EQ(expr->as.member_access.name, "field");
+    teardown();
+}
+
+/* ========== Main ========== */
+
+int main(void) {
+    RUN_TEST_SUITE("Parser Tests");
+
+    // Literals
+    RUN_TEST(parser_int_literal);
+    RUN_TEST(parser_float_literal);
+    RUN_TEST(parser_string_literal);
+    RUN_TEST(parser_bool_literal);
+    RUN_TEST(parser_null_literal);
+
+    // Expressions
+    RUN_TEST(parser_binary_add);
+    RUN_TEST(parser_binary_precedence);
+    RUN_TEST(parser_unary_neg);
+    RUN_TEST(parser_unary_not);
+    RUN_TEST(parser_grouping);
+    RUN_TEST(parser_comparison);
+    RUN_TEST(parser_logical_and_or);
+
+    // Variable declarations
+    RUN_TEST(parser_let_decl);
+    RUN_TEST(parser_const_decl);
+
+    // Control flow
+    RUN_TEST(parser_if_stmt);
+    RUN_TEST(parser_if_else);
+    RUN_TEST(parser_while_stmt);
+    RUN_TEST(parser_for_stmt);
+
+    // Functions
+    RUN_TEST(parser_function_decl);
+    RUN_TEST(parser_function_no_params);
+    RUN_TEST(parser_return_stmt);
+
+    // Collections
+    RUN_TEST(parser_array_literal);
+    RUN_TEST(parser_index_get);
+    RUN_TEST(parser_object_literal);
+
+    // Classes
+    RUN_TEST(parser_class_decl);
+
+    // Calls
+    RUN_TEST(parser_call_expr);
+    RUN_TEST(parser_member_access);
+
+    // Error handling
+    RUN_TEST(parser_error_returns_null);
+    RUN_TEST(parser_empty_source);
+    RUN_TEST(parser_multiple_stmts);
+
+    TEST_REPORT();
+    return TEST_EXIT();
+}

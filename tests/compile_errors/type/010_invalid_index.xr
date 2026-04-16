@@ -1,0 +1,5 @@
+// 010_invalid_index.xr
+// Expected: Compile error - invalid index type
+// Error should mention: index, type
+let arr = [1, 2, 3]
+let x = arr["hello"]

@@ -1,0 +1,20 @@
+// EXPECTED: 55
+// EXPECTED: 5050
+// Test: For loop (FORPREP/FORLOOP) in JIT
+
+fn sum_for(n: int) : int {
+    let s = 0
+    for (let i = 1; i <= n; i = i + 1) {
+        s = s + i
+    }
+    return s
+}
+
+let i = 0
+while (i < 200) {
+    sum_for(10)
+    i = i + 1
+}
+
+print(sum_for(10))
+print(sum_for(100))

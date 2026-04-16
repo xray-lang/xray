@@ -1,0 +1,118 @@
+/*
+ * test_self.xr - xray server + xray client self-test
+ *
+ * Tests server and client running together in coroutines.
+ * Follows same pattern as ws_server_client_test.xr.
+ */
+
+import ws
+import time
+
+print("=== xray Server + Client Self-Test ===")
+print("")
+
+let testResults = ""
+
+// Start echo server in background coroutine
+go fn() {
+    ws.serve(9102, fn(conn) {
+        while (ws.isOpen(conn)) {
+            let msg = ws.recv(conn, null)
+            if (msg == null || msg.error) {
+                break
+            }
+            if (msg.data) {
+                ws.send(conn, msg.data, null)
+            }
+        }
+    })
+}()
+
+// Wait for server to start
+time.sleep(300)
+
+// Run all tests in a single client coroutine
+go fn() {
+    let passed = 0
+    let failed = 0
+    let URL = "ws://127.0.0.1:9102"
+    
+    // I1: Basic local echo
+    let conn1 = ws.connect(URL, null)
+    if (conn1.error) {
+        print("  FAIL  I1 local echo -- " + conn1.error)
+        failed = failed + 1
+    } else {
+        ws.send(conn1, "hello self", null)
+        let resp = ws.recv(conn1, null)
+        if (resp != null && resp.data == "hello self") {
+            print("  PASS  I1 local echo")
+            passed = passed + 1
+        } else {
+            print("  FAIL  I1 local echo -- mismatch")
+            failed = failed + 1
+        }
+        ws.close(conn1, null, null)
+    }
+    
+    // I2: Multiple messages round-trip (20 messages)
+    let conn2 = ws.connect(URL, null)
+    if (conn2.error) {
+        print("  FAIL  I2 multi messages -- " + conn2.error)
+        failed = failed + 1
+    } else {
+        let count = 20
+        let success = 0
+        for (let i = 0; i < count; i = i + 1) {
+            let msg = "self-msg-" + i.toString()
+            ws.send(conn2, msg, null)
+            let resp = ws.recv(conn2, null)
+            if (resp != null && resp.data == msg) {
+                success = success + 1
+            }
+        }
+        ws.close(conn2, null, null)
+        if (success == count) {
+            print("  PASS  I2 multi messages (" + count.toString() + "/" + count.toString() + ")")
+            passed = passed + 1
+        } else {
+            print("  FAIL  I2 multi messages -- " + success.toString() + "/" + count.toString())
+            failed = failed + 1
+        }
+    }
+    
+    // I3: Sequential multi-client (3 connections one after another)
+    let allOk = true
+    for (let c = 0; c < 3; c = c + 1) {
+        let conn = ws.connect(URL, null)
+        if (conn.error) {
+            allOk = false
+            break
+        }
+        for (let i = 0; i < 5; i = i + 1) {
+            let msg = "client" + c.toString() + "-" + i.toString()
+            ws.send(conn, msg, null)
+            let resp = ws.recv(conn, null)
+            if (resp == null || resp.data != msg) {
+                allOk = false
+                break
+            }
+        }
+        ws.close(conn, null, null)
+    }
+    if (allOk) {
+        print("  PASS  I3 multi clients (3x5 messages)")
+        passed = passed + 1
+    } else {
+        print("  FAIL  I3 multi clients")
+        failed = failed + 1
+    }
+    
+    print("")
+    print("=== Results: " + passed.toString() + " passed, " + failed.toString() + " failed ===")
+    
+    ws.stopServer()
+}()
+
+// Wait for test to complete
+time.sleep(10000)

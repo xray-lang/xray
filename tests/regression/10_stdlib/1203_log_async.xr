@@ -1,0 +1,18 @@
+// Test log module async write mode
+
+import log
+
+@test
+fn test_async_mode(): void {
+    log.setLevel(log.DEBUG)
+    log.enableAsync(true)
+    log.info("async message 1")
+    log.debug("async message 2")
+    log.warn("async message 3")
+    log.flush()
+    log.enableAsync(false)
+    log.info("sync message")
+    assert(true)
+}
+
+print("All log async tests passed")

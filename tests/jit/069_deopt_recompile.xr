@@ -1,0 +1,31 @@
+// EXPECTED: 15
+// EXPECTED: 1.5
+// EXPECTED: hello world
+// EXPECTED: 30
+// Test: Multiple deopt cycles - function compiled, deopt'd, re-compiled
+
+fn flexible(a, b) {
+    return a + b
+}
+
+// Phase 1: warm up with int → JIT compiles for int
+let i = 0
+while (i < 200) {
+    flexible(10, 5)
+    i = i + 1
+}
+print(flexible(10, 5))
+
+// Phase 2: call with float → deopt
+print(flexible(1.0, 0.5))
+
+// Phase 3: call with string → another deopt
+print(flexible("hello ", "world"))
+
+// Phase 4: back to int → may re-JIT or stay interpreted
+i = 0
+while (i < 200) {
+    flexible(20, 10)
+    i = i + 1
+}
+print(flexible(20, 10))

@@ -1,0 +1,40 @@
+/*
+** 测试 await.all 语法
+** await.all [task1, task2, ...] 等待所有协程完成
+** 作者：xingleixu@gmail.com
+*/
+
+fn task1(): int {
+    return 10
+}
+
+fn task2(): int {
+    return 20
+}
+
+fn task3(): int {
+    return 30
+}
+
+// 测试1：await.all 基本用法
+print("test1: await.all basic")
+let t1 = go task1()
+let t2 = go task2()
+let t3 = go task3()
+
+let results = await.all [t1, t2, t3]
+print("  r0:", results[0])
+print("  r1:", results[1])
+print("  r2:", results[2])
+print("  sum:", results[0] + results[1] + results[2])
+
+// 测试2：await [tasks] 也是等待所有
+print("test2: await [tasks] syntax")
+let t4 = go task1()
+let t5 = go task2()
+
+let results2 = await [t4, t5]
+print("  r0:", results2[0])
+print("  r1:", results2[1])
+
+print("all tests passed")

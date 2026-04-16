@@ -1,0 +1,25 @@
+// EXPECTED: true
+// EXPECTED: false
+// EXPECTED: 0
+// Test: Null checking (ISNULL, ISNULL_SET) in JIT
+
+fn is_null(x) : bool {
+    return x == null
+}
+
+fn safe_get(x) : int {
+    if (x == null) { return 0 }
+    return x
+}
+
+let i = 0
+while (i < 200) {
+    is_null(null)
+    is_null(42)
+    safe_get(null)
+    i = i + 1
+}
+
+print(is_null(null))
+print(is_null(42))
+print(safe_get(null))

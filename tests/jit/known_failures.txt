@@ -1,0 +1,20 @@
+# JIT Differential Test Known Failures
+#
+# Lines starting with # are comments.
+# Each non-empty line is a relative path (from project root) of a test file
+# that has a known JIT-specific failure (CRASH, EXIT_DIFF, or OUTPUT_DIFF).
+#
+# These tests are expected to fail when running with --jit-force.
+# The CI script will treat them as "expected failures" and only flag
+# NEW failures that are not in this list.
+#
+# Update this file when:
+#   - A JIT bug is fixed → remove the corresponding line
+#   - A new known limitation is discovered → add the line with a comment
+#
+# Format: relative_path  # optional comment
+
+# Nested JIT deopt: --jit-force causes all functions to be JIT compiled,
+# callback deopt returns DEOPT_MARKER that outer JIT code mishandles (P0.1)
+tests/regression/07_strings/0741_context_buffer_isolation.xr
+tests/regression/10_stdlib/1207_gc_stress.xr

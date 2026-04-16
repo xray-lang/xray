@@ -1,0 +1,135 @@
+// 0570_hoisting.xr
+// Test: Function and class declaration hoisting at module level
+// Functions and classes can be called/used before their definition in source order.
+
+// ===== Basic function hoisting =====
+
+@test
+fn test_call_before_definition(): void {
+    let result = add(10, 20)
+    assert_eq(result, 30)
+}
+
+fn add(a: int, b: int): int {
+    return a + b
+}
+
+// ===== Mutual recursion =====
+
+@test
+fn test_mutual_recursion(): void {
+    assert_eq(isEven(4), true)
+    assert_eq(isEven(3), false)
+    assert_eq(isOdd(3), true)
+    assert_eq(isOdd(4), false)
+}
+
+fn isEven(n: int): bool {
+    if (n == 0) { return true }
+    return isOdd(n - 1)
+}
+
+fn isOdd(n: int): bool {
+    if (n == 0) { return false }
+    return isEven(n - 1)
+}
+
+// ===== Function references class defined after it =====
+
+fn createDog(name: string): Dog {
+    return new Dog(name)
+}
+
+class Dog {
+    name: string
+    constructor(name: string) {
+        this.name = name
+    }
+}
+
+@test
+fn test_fn_before_class(): void {
+    let d = createDog("Rex")
+    assert_eq(d.name, "Rex")
+}
+
+// ===== Class method calls function defined after it =====
+
+class Formatter {
+    format(s: string): string {
+        return addBrackets(s)
+    }
+}
+
+fn addBrackets(s: string): string {
+    return "[" + s + "]"
+}
+
+@test
+fn test_class_method_uses_later_fn(): void {
+    let f = new Formatter()
+    assert_eq(f.format("hello"), "[hello]")
+}
+
+// ===== Definition before call still works =====
+
+fn multiply(x: int, y: int): int {
+    return x * y
+}
+
+@test
+fn test_definition_before_call(): void {
+    assert_eq(multiply(3, 4), 12)
+}
+
+// ===== Function uses variable defined before it (upvalue) =====
+
+let factor = 10
+
+fn scaled(x: int): int {
+    return x * factor
+}
+
+@test
+fn test_fn_captures_variable(): void {
+    assert_eq(scaled(5), 50)
+}
+
+// ===== Block-level hoisting =====
+
+@test
+fn test_block_call_before_definition(): void {
+    let r = greetBlock("world")
+    assert_eq(r, "hello world")
+    
+    fn greetBlock(name: string): string {
+        return "hello " + name
+    }
+}
+
+@test
+fn test_block_closure_capture_with_hoisting(): void {
+    let x = 10
+    let result = getDoubled()
+    assert_eq(result, 20)
+    
+    fn getDoubled(): int {
+        return x * 2
+    }
+}
+
+@test
+fn test_block_mutual_recursion(): void {
+    assert_eq(blockEven(4), true)
+    assert_eq(blockEven(3), false)
+    
+    fn blockEven(n: int): bool {
+        if (n == 0) { return true }
+        return blockOdd(n - 1)
+    }
+    
+    fn blockOdd(n: int): bool {
+        if (n == 0) { return false }
+        return blockEven(n - 1)
+    }
+}

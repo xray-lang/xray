@@ -1,0 +1,53 @@
+// Test chr() global function - convert integer code point to character string
+
+// @test ASCII characters
+assert_eq(chr(65), "A")
+assert_eq(chr(97), "a")
+assert_eq(chr(48), "0")
+assert_eq(chr(32), " ")
+assert_eq(chr(10), "\n")
+assert_eq(chr(9), "\t")
+
+// @test printable ASCII range
+assert_eq(chr(33), "!")
+assert_eq(chr(64), "@")
+assert_eq(chr(90), "Z")
+assert_eq(chr(122), "z")
+assert_eq(chr(126), "~")
+
+// @test Unicode 2-byte characters (U+0080 - U+07FF)
+assert_eq(chr(169), "©")
+assert_eq(chr(246), "ö")
+
+// @test Unicode 3-byte characters (U+0800 - U+FFFF)
+assert_eq(chr(20013), "中")
+assert_eq(chr(19990), "世")
+assert_eq(chr(30028), "界")
+assert_eq(chr(8364), "€")
+
+// @test Unicode 4-byte characters (U+10000 - U+10FFFF)
+assert_eq(chr(128522), "😊")
+assert_eq(chr(127881), "🎉")
+
+// @test boundary values
+let del = chr(0x7F)
+assert_eq(del.ord(), 127)
+let first_2byte = chr(0x80)
+assert_eq(first_2byte.ord(), 128)
+
+// @test invalid code points return null
+assert_eq(chr(-1), null)
+assert_eq(chr(-100), null)
+assert_eq(chr(0x110000), null)
+
+// Non-integer inputs are now caught at compile time (type system prevents passing
+// wrong types to chr). Only valid int inputs are tested above.
+
+// @test chr + ord roundtrip
+let ch = chr(65)
+assert_eq(ch.ord(), 65)
+
+let ch2 = chr(20013)
+assert_eq(ch2.ord(), 20013)
+
+print("All chr() tests passed")

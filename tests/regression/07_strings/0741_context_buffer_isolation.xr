@@ -1,0 +1,310 @@
+// 0741_context_buffer_isolation.xr
+// 作者：xingleixu@gmail.com
+// 
+// Property 1: 执行上下文缓冲区隔离性
+// Validates: Requirements 1.1, 1.2
+//
+// 测试不同 XrVMContext 的 tmp_strbuf 是相互隔离的：
+// - 每个 Worker 有独立的 tmp_strbuf
+// - 并发字符串拼接不会相互干扰
+// - 缓冲区内容不会在不同上下文间泄漏
+//
+// 属性：对于任意两个不同的 XrVMContext，它们的 tmp_strbuf 指针应该指向不同的内存地址
+
+// ===== 测试1: 并发拼接隔离性 =====
+
+@test
+fn test_concurrent_concat_isolation(): void {
+    // 多个协程同时执行字符串拼接
+    // 每个协程的结果应该独立，不受其他协程影响
+    
+    fn concat_task(id: int): string {
+        // 执行多次拼接，构建唯一标识字符串
+        let result = "worker_" + string(id)
+        result = result + "_part1"
+        result = result + "_part2"
+        result = result + "_end"
+        return result
+    }
+    
+    let n = 50
+    let tasks: Array<Task> = []
+    for (let i = 0; i < n; i++) {
+        tasks.push(go concat_task(i))
+    }
+    
+    let results = await.all tasks
+    
+    // 验证每个结果都是独立且正确的
+    for (let i = 0; i < n; i++) {
+        let expected = "worker_" + string(i) + "_part1_part2_end"
+        assert_eq(results[i], expected)
+    }
+}
+
+// ===== 测试2: 长字符串并发隔离性 =====
+
+@test
+fn test_long_string_isolation(): void {
+    // 测试长字符串拼接（使用 XrStrBuf 路径）的隔离性
+    // 长字符串更容易暴露缓冲区共享问题
+    
+    fn long_concat_task(id: int): string {
+        // 构建长字符串，超过短字符串阈值 (64 字节)
+        let base = "x".repeat(40)
+        let result = base + "_id" + string(id) + "_" + base
+        return result
+    }
+    
+    let n = 50
+    let tasks: Array<Task> = []
+    for (let i = 0; i < n; i++) {
+        tasks.push(go long_concat_task(i))
+    }
+    
+    let results = await.all tasks
+    
+    // 验证每个结果
+    for (let i = 0; i < n; i++) {
+        // 验证长度正确
+        let id_str = string(i)
+        let expected_len = 40 + 3 + id_str.length + 1 + 40  // base + "_id" + id + "_" + base
+        assert_eq(results[i].length, expected_len)
+        
+        // 验证包含正确的 id
+        assert_eq(results[i].contains("_id" + string(i) + "_"), true)
+    }
+}
+
+// ===== 测试3: 交替拼接隔离性 =====
+
+@test
+fn test_interleaved_concat_isolation(): void {
+    // 测试交替执行拼接时的隔离性
+    // 模拟高并发场景下的缓冲区竞争
+    
+    fn interleaved_task(id: int): Array<string> {
+        let results: Array<string> = []
+        for (let i = 0; i < 10; i++) {
+            // 每次迭代都执行拼接
+            let s = "task" + string(id) + "_iter" + string(i)
+            results.push(s)
+        }
+        return results
+    }
+    
+    let n = 30
+    let tasks: Array<Task> = []
+    for (let i = 0; i < n; i++) {
+        tasks.push(go interleaved_task(i))
+    }
+    
+    let all_results = await.all tasks
+    
+    // 验证每个协程的每次迭代结果
+    for (let i = 0; i < n; i++) {
+        let results = all_results[i]
+        assert_eq(results.length, 10)
+        for (let j = 0; j < 10; j++) {
+            let expected = "task" + string(i) + "_iter" + string(j)
+            assert_eq(results[j], expected)
+        }
+    }
+}
+
+// ===== 测试4: 缓冲区内容不泄漏 =====
+
+@test
+fn test_buffer_content_no_leak(): void {
+    // 验证一个协程的缓冲区内容不会泄漏到另一个协程
+    // 使用唯一标记来检测泄漏
+    
+    fn marker_task(marker: string): string {
+        // 使用唯一标记构建字符串
+        let result = "<<" + marker + ">>"
+        result = result + "[[" + marker + "]]"
+        result = result + "{{" + marker + "}}"
+        return result
+    }
+    
+    let n = 50
+    let tasks: Array<Task> = []
+    let markers: Array<string> = []
+    for (let i = 0; i < n; i++) {
+        let marker = "UNIQUE_MARKER_" + string(i) + "_" + string(i * 7 % 100)
+        markers.push(marker)
+        tasks.push(go marker_task(marker))
+    }
+    
+    let results = await.all tasks
+    
+    // 验证每个结果只包含自己的标记
+    for (let i = 0; i < n; i++) {
+        let my_marker = markers[i]
+        let result = results[i]
+        
+        // 应该包含自己的标记
+        assert_eq(result.contains(my_marker), true)
+        
+        // 不应该包含其他协程的标记
+        for (let j = 0; j < n; j++) {
+            if (j != i) {
+                let other_marker = markers[j]
+                assert_eq(result.contains(other_marker), false)
+            }
+        }
+    }
+}
+
+// ===== 测试5: 主线程与协程隔离 =====
+
+@test
+fn test_main_thread_coro_isolation(): void {
+    // 验证主线程和协程的缓冲区是隔离的
+    
+    // 主线程执行拼接
+    let main_result = "main_" + "thread_" + "result"
+    
+    fn coro_task(): string {
+        // 协程执行拼接
+        return "coro_" + "thread_" + "result"
+    }
+    
+    let t = go coro_task()
+    
+    // 主线程继续拼接
+    main_result = main_result + "_extended"
+    
+    let coro_result = await t
+    
+    // 验证两者独立
+    assert_eq(main_result, "main_thread_result_extended")
+    assert_eq(coro_result, "coro_thread_result")
+    
+    // 确保没有交叉污染
+    assert_eq(main_result.contains("coro"), false)
+    assert_eq(coro_result.contains("main"), false)
+}
+
+// ===== 测试6: 高并发压力测试 =====
+
+@test
+fn test_high_concurrency_isolation(): void {
+    // 高并发场景下的隔离性测试
+    // 大量协程同时执行字符串拼接
+    
+    fn stress_task(id: int): string {
+        let result = ""
+        for (let i = 0; i < 20; i++) {
+            result = result + "s" + string(id) + "i" + string(i) + "_"
+        }
+        return result
+    }
+    
+    let n = 80
+    let tasks: Array<Task> = []
+    for (let i = 0; i < n; i++) {
+        tasks.push(go stress_task(i))
+    }
+    
+    let results = await.all tasks
+    
+    // 验证每个结果
+    for (let i = 0; i < n; i++) {
+        let result = results[i]
+        
+        // 验证包含所有预期的片段
+        for (let j = 0; j < 20; j++) {
+            let expected_part = "s" + string(i) + "i" + string(j) + "_"
+            assert_eq(result.contains(expected_part), true)
+        }
+        
+        // 验证不包含其他协程的片段（抽样检查）
+        if (i > 0) {
+            let other_part = "s" + string(i - 1) + "i0_"
+            assert_eq(result.contains(other_part), false)
+        }
+    }
+}
+
+// ===== 测试7: 混合长短字符串隔离 =====
+
+@test
+fn test_mixed_length_isolation(): void {
+    // 测试混合长短字符串拼接的隔离性
+    // 一些协程使用短字符串路径，一些使用长字符串路径
+    
+    fn mixed_task(id: int): string {
+        if (id % 2 == 0) {
+            // 短字符串路径
+            return "short_" + string(id)
+        } else {
+            // 长字符串路径
+            let base = "x".repeat(50)
+            return base + "_long_" + string(id) + "_" + base
+        }
+    }
+    
+    let n = 50
+    let tasks: Array<Task> = []
+    for (let i = 0; i < n; i++) {
+        tasks.push(go mixed_task(i))
+    }
+    
+    let results = await.all tasks
+    
+    // 验证每个结果
+    for (let i = 0; i < n; i++) {
+        if (i % 2 == 0) {
+            assert_eq(results[i], "short_" + string(i))
+        } else {
+            assert_eq(results[i].contains("_long_" + string(i) + "_"), true)
+            assert_eq(results[i].length > 100, true)
+        }
+    }
+}
+
+// ===== 属性测试: 随机并发隔离性 =====
+
+@test
+fn test_property_random_isolation(): void {
+    // 属性：对于任意数量的并发协程执行任意字符串拼接，
+    // 每个协程的结果应该只包含该协程产生的内容
+    
+    fn random_concat(seed: int): string {
+        // 使用 seed 生成确定性的拼接序列
+        // 使用唯一分隔符避免子串匹配问题
+        let result = "[seed" + string(seed) + "]_"
+        let count = (seed % 5) + 3
+        for (let i = 0; i < count; i++) {
+            result = result + "p" + string((seed * 7 + i) % 100) + "_"
+        }
+        result = result + "[end" + string(seed) + "]"
+        return result
+    }
+    
+    let n = 40
+    let tasks: Array<Task> = []
+    for (let i = 0; i < n; i++) {
+        tasks.push(go random_concat(i))
+    }
+    
+    let results = await.all tasks
+    
+    // 验证每个结果
+    for (let i = 0; i < n; i++) {
+        let result = results[i]
+        
+        // 应该以正确的 seed 开头和结尾
+        assert_eq(result.startsWith("[seed" + string(i) + "]_"), true)
+        assert_eq(result.endsWith("[end" + string(i) + "]"), true)
+        
+        // 不应该包含其他 seed 的标记
+        for (let j = 0; j < n; j++) {
+            if (j != i) {
+                assert_eq(result.contains("[seed" + string(j) + "]"), false)
+                assert_eq(result.contains("[end" + string(j) + "]"), false)
+            }
+        }
+    }
+}

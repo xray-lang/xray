@@ -1,0 +1,23 @@
+// EXPECTED: hello world
+// EXPECTED: 0
+// EXPECTED: hello
+// Test: String operations (CONCAT, TOSTRING, length)
+
+fn greet(name) {
+    return "hello " + name
+}
+
+fn str_len(s) : int {
+    return s.length
+}
+
+let i = 0
+while (i < 200) {
+    greet("world")
+    str_len("hello world")
+    i = i + 1
+}
+
+print(greet("world"))
+print(str_len("hello world"))
+print("hello")

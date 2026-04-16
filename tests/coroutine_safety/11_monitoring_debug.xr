@@ -1,0 +1,234 @@
+// 测试11：协程监控与调试
+// 作者：xingleixu@gmail.com
+// 
+// 验证：协程监控和调试能力
+// - 协程状态查询：done, cancelled, result, error
+// - 协程命名：便于调试识别
+// - 协程统计：数量、完成率等
+// - 错误传播：协程中的异常处理
+print("========== 测试11：协程监控与调试 ==========")
+
+// 测试1：协程状态查询
+fn test_coro_status_query() {
+    let ch = Channel(1)
+    fn task() {
+        ch.recv()
+        // 等待信号
+        return 42
+    }
+    let t = go task()
+    // 启动后，未完成
+    print("启动后 done:", t.done)
+    assert_eq(t.done, false)
+    assert_eq(t.cancelled, false)
+    // 发送信号让任务完成
+    ch.send(1)
+    await t
+    // 完成后
+    print("完成后 done:", t.done)
+    assert_eq(t.done, true)
+    print("✓ 协程状态查询测试通过")
+}
+
+// 测试2：协程取消状态
+fn test_coro_cancel_status() {
+    fn long_task() {
+        let count = 0
+        while (count < 1000000) {
+            count = count + 1
+            if (cancelled()) {
+                return "was cancelled"
+            }
+        }
+        return "completed"
+    }
+    let t = go long_task()
+    // 立即取消
+    t.cancel()
+    await t
+    print("取消状态:", t.cancelled)
+    assert_eq(t.cancelled, true)
+    print("✓ 协程取消状态测试通过")
+}
+
+// 测试3：协程命名（便于调试）
+fn test_coro_naming() {
+    fn worker(name) {
+        return "Hello from " + name
+    }
+    // 使用命名协程
+    let t1 = go(name: "worker-1") worker("Alice")
+    let t2 = go(name: "worker-2") worker("Bob")
+    let t3 = go(name: "data-processor") worker("Charlie")
+    let r1 = await t1
+    let r2 = await t2
+    let r3 = await t3
+    print("Worker 1 结果:", r1)
+    print("Worker 2 结果:", r2)
+    print("Data Processor 结果:", r3)
+    assert_eq(r1, "Hello from Alice")
+    assert_eq(r2, "Hello from Bob")
+    assert_eq(r3, "Hello from Charlie")
+    print("✓ 协程命名测试通过")
+}
+
+// 测试4：多协程状态批量查询
+fn test_batch_status_query() {
+    fn quick_task(id) {
+        return id * 10
+    }
+    // 创建多个协程
+    let t0 = go quick_task(0)
+    let t1 = go quick_task(1)
+    let t2 = go quick_task(2)
+    let t3 = go quick_task(3)
+    let t4 = go quick_task(4)
+    // 等待全部完成
+    let r0 = await t0
+    let r1 = await t1
+    let r2 = await t2
+    let r3 = await t3
+    let r4 = await t4
+    // 批量检查状态
+    let all_done = t0.done && t1.done && t2.done && t3.done && t4.done
+    print("所有协程完成:", all_done)
+    print("结果:", r0, r1, r2, r3, r4)
+    assert_eq(all_done, true)
+    assert_eq(r0, 0)
+    assert_eq(r1, 10)
+    assert_eq(r2, 20)
+    assert_eq(r3, 30)
+    assert_eq(r4, 40)
+    print("✓ 批量状态查询测试通过")
+}
+
+// 测试5：协程错误捕获
+fn test_coro_error_capture() {
+    fn failing_task() {
+        throw "Something went wrong!"
+    }
+    fn safe_task() {
+        return "success"
+    }
+    let fail = go failing_task()
+    let safe = go safe_task()
+    // 等待完成（错误不会传播到 await）
+    await fail
+    let safe_result = await safe
+    print("失败任务 done:", fail.done)
+    print("安全任务 result:", safe_result)
+    // 失败任务应该标记为完成
+    assert_eq(fail.done, true)
+    assert_eq(safe_result, "success")
+    print("✓ 协程错误捕获测试通过")
+}
+
+// 测试6：协程优先级（如果支持）
+fn test_coro_priority() {
+    let results = Channel(10)
+    fn task(id, priority) {
+        // 模拟工作
+        let sum = 0
+        for (let i = 0; i < 1000; i++) {
+            sum = sum + i
+        }
+        results.send(id)
+        return sum
+    }
+    // 启动不同"优先级"的任务（通过名称标识）
+    let low = go(name: "low-priority") task(1, 0)
+    let normal = go(name: "normal-priority") task(2, 1)
+    let high = go(name: "high-priority") task(3, 2)
+    await.all [low, normal, high]
+    // 收集完成顺序
+    let order = []
+    for (let i = 0; i < 3; i++) {
+        let id = results.tryRecv()
+        if (id != null) {
+            order.push(id)
+        }
+    }
+    print("完成顺序:", order)
+    assert_eq(order.length, 3)
+    print("✓ 协程优先级测试通过")
+}
+
+// 测试7：协程链式调用
+fn test_coro_chain() {
+    fn step1(x) {
+        return x + 1
+    }
+    fn step2(x) {
+        return x * 2
+    }
+    fn step3(x) {
+        return x - 3
+    }
+    // 链式执行
+    let t1 = go step1(10)
+    let r1 = await t1
+    let t2 = go step2(r1)
+    let r2 = await t2
+    let t3 = go step3(r2)
+    let r3 = await t3
+    // (10 + 1) * 2 - 3 = 19
+    print("链式结果:", r3)
+    assert_eq(r3, 19)
+    print("✓ 协程链式调用测试通过")
+}
+
+// 测试8：并发调试模式 - 追踪执行顺序
+fn test_execution_trace() {
+    let trace = Channel(20)
+    fn traced_task(id) {
+        trace.send({ "event" => "start", "id" => id })
+        // 模拟工作
+        let sum = 0
+        for (let i = 0; i < 100; i++) {
+            sum = sum + i
+        }
+        trace.send({ "event" => "end", "id" => id })
+        return sum
+    }
+    let t1 = go traced_task(1)
+    let t2 = go traced_task(2)
+    let t3 = go traced_task(3)
+    await.all [t1, t2, t3]
+    // 收集追踪事件
+    let events = []
+    for (let i = 0; i < 6; i++) {
+        let evt = trace.tryRecv()
+        if (evt != null) {
+            events.push(evt)
+        }
+    }
+    print("追踪事件数:", events.length)
+    // 验证每个任务有 start 和 end 事件
+    let starts = 0
+    let ends = 0
+    for (let i = 0; i < events.length; i++) {
+        let evt = events[i]
+        if (evt.get("event") == "start") {
+            starts = starts + 1
+        } else if (evt.get("event") == "end") {
+            ends = ends + 1
+        }
+    }
+    print("开始事件:", starts)
+    print("结束事件:", ends)
+    assert_eq(starts, 3)
+    assert_eq(ends, 3)
+    print("✓ 执行追踪测试通过")
+}
+
+// 运行所有测试
+test_coro_status_query()
+test_coro_cancel_status()
+test_coro_naming()
+test_batch_status_query()
+test_coro_error_capture()
+test_coro_priority()
+test_coro_chain()
+test_execution_trace()
+print("
+🎉 测试11全部通过：协程监控与调试正确！")

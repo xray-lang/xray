@@ -1,0 +1,12 @@
+before await:
+  done: true
+  cancelled: false
+after await:
+  done: true
+  result: 42
+after cancel:
+  done: true
+  cancelled: false
+  result: 20
+final:
+  done: true

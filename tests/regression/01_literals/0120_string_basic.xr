@@ -1,0 +1,119 @@
+// 0120_string_basic.xr
+// 作者：xingleixu@gmail.com
+// 测试：字符串字面量基础
+
+// ===== 正常路径 =====
+
+@test
+fn test_simple_string(): void {
+    let s = "hello"
+    assert_eq(s, "hello")
+}
+
+@test
+fn test_empty_string(): void {
+    let s = ""
+    assert_eq(s, "")
+    assert_eq(s.length, 0)
+}
+
+@test
+fn test_single_char(): void {
+    let s = "x"
+    assert_eq(s, "x")
+    assert_eq(s.length, 1)
+}
+
+@test
+fn test_spaces(): void {
+    let s = "hello world"
+    assert_eq(s, "hello world")
+    assert_eq(s.length, 11)
+}
+
+// ===== 转义序列 =====
+
+@test
+fn test_escape_newline(): void {
+    let s = "line1\nline2"
+    assert_eq(s.contains("\n"), true)
+}
+
+@test
+fn test_escape_tab(): void {
+    let s = "col1\tcol2"
+    assert_eq(s.contains("\t"), true)
+}
+
+@test
+fn test_escape_quote(): void {
+    let s = "say \"hello\""
+    assert_eq(s.contains("\""), true)
+}
+
+@test
+fn test_escape_backslash(): void {
+    let s = "path\\to\\file"
+    assert_eq(s.contains("\\"), true)
+}
+
+// ===== Unicode =====
+
+@test
+fn test_unicode_chinese(): void {
+    let s = "你好世界"
+    assert_eq(s, "你好世界")
+    assert_eq(s.length, 4)
+}
+
+@test
+fn test_unicode_emoji(): void {
+    let s = "hello 🌍"
+    assert_eq(s.contains("🌍"), true)
+}
+
+@test
+fn test_unicode_mixed(): void {
+    let s = "Hello 世界 🎉"
+    assert_eq(s.length > 5, true)
+}
+
+// ===== 模板字符串 =====
+
+@test
+fn test_template_basic(): void {
+    let name = "Alice"
+    let s = "Hello, ${name}!"
+    assert_eq(s, "Hello, Alice!")
+}
+
+@test
+fn test_template_expression(): void {
+    let a = 10
+    let b = 20
+    let s = "Sum: ${a + b}"
+    assert_eq(s, "Sum: 30")
+}
+
+@test
+fn test_template_nested(): void {
+    let x = 5
+    let s = "Value: ${x * 2} (doubled)"
+    assert_eq(s.contains("10"), true)
+}
+
+// ===== 边界条件 =====
+
+@test
+fn test_long_string(): void {
+    let s = "a".repeat(1000)
+    assert_eq(s.length, 1000)
+}
+
+@test
+fn test_whitespace_only(): void {
+    let s = "   "
+    assert_eq(s.length, 3)
+    assert_eq(s.trim(), "")
+}
+

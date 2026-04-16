@@ -1,0 +1,32 @@
+// Test: OSR with phi variable interactions across blocks
+// EXPECTED: 0
+// Test: OSR with PHI variables - regression test for bc_slot invalidation bug
+// This is the exact pattern that caused the nested3 crash
+
+fn step(arr, n: int) : int {
+    let count = 0
+    let i = 0
+    while (i < n) {
+        let j = 0
+        while (j < arr.length) {
+            arr[j].x = arr[j].x + 1.0
+            count = count + 1
+            j = j + 1
+        }
+        i = i + 1
+    }
+    return count
+}
+
+let arr = [{ "x": 0.0 }, { "x": 0.0 }, { "x": 0.0 }]
+let wrong = 0
+let iter = 0
+while (iter < 500) {
+    let a2 = [{ "x": 0.0 }, { "x": 0.0 }, { "x": 0.0 }]
+    let c = step(a2, 3)
+    if (c != 9) {
+        wrong = wrong + 1
+    }
+    iter = iter + 1
+}
+print(wrong)

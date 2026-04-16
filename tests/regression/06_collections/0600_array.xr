@@ -1,0 +1,201 @@
+// 0600_array.xr
+// 作者：xingleixu@gmail.com
+// 测试：数组基础
+// ===== 创建 =====
+@test
+fn test_array_literal(): void {
+    let arr = [1, 2, 3]
+    assert_eq(arr.length, 3)
+    assert_eq(arr[0], 1)
+    assert_eq(arr[1], 2)
+    assert_eq(arr[2], 3)
+}
+
+@test
+fn test_empty_array(): void {
+    let arr: Array<int> = []
+    assert_eq(arr.length, 0)
+    assert_eq(arr.isEmpty, true)
+}
+
+@test
+fn test_single_element(): void {
+    let arr = [42]
+    assert_eq(arr.length, 1)
+    assert_eq(arr[0], 42)
+}
+
+@test
+fn test_mixed_types(): void {
+    let arr = [1, "hello", 3.14, true, null]
+    assert_eq(arr.length, 5)
+    assert_eq(arr[0], 1)
+    assert_eq(arr[1], "hello")
+    assert_eq(arr[2], 3.14)
+    assert_eq(arr[3], true)
+    assert_eq(arr[4], null)
+}
+
+@test
+fn test_nested_array(): void {
+    let matrix = [[1, 2], [3, 4], [5, 6]]
+    assert_eq(matrix.length, 3)
+    assert_eq(matrix[0][0], 1)
+    assert_eq(matrix[1][1], 4)
+    assert_eq(matrix[2][0], 5)
+}
+
+// ===== 访问 =====
+@test
+fn test_index_access(): void {
+    let arr = [10, 20, 30, 40, 50]
+    assert_eq(arr[0], 10)
+    assert_eq(arr[2], 30)
+    assert_eq(arr[4], 50)
+}
+
+@test
+fn test_out_of_bounds(): void {
+    let arr = [1, 2, 3]
+    assert_eq(arr[100], null)
+    assert_eq(arr[-1], null)
+}
+
+@test
+fn test_dynamic_index(): void {
+    let arr = [10, 20, 30]
+    let i = 1
+    assert_eq(arr[i], 20)
+    assert_eq(arr[i + 1], 30)
+}
+
+// ===== 修改 =====
+@test
+fn test_index_assignment(): void {
+    let arr = [1, 2, 3]
+    arr[0] = 10
+    arr[2] = 30
+    assert_eq(arr[0], 10)
+    assert_eq(arr[1], 2)
+    assert_eq(arr[2], 30)
+}
+
+// ===== push/pop =====
+@test
+fn test_push(): void {
+    let arr: Array<int> = []
+    arr.push(1)
+    arr.push(2)
+    arr.push(3)
+    assert_eq(arr.length, 3)
+    assert_eq(arr[0], 1)
+    assert_eq(arr[2], 3)
+}
+
+@test
+fn test_pop(): void {
+    let arr = [1, 2, 3]
+    let last = arr.pop()
+    assert_eq(last, 3)
+    assert_eq(arr.length, 2)
+    last = arr.pop()
+    assert_eq(last, 2)
+    assert_eq(arr.length, 1)
+}
+
+@test
+fn test_pop_empty(): void {
+    let arr: Array<int> = []
+    let result = arr.pop()
+    assert_eq(result, null)
+    assert_eq(arr.length, 0)
+}
+
+// ===== shift/unshift =====
+@test
+fn test_shift(): void {
+    let arr = [1, 2, 3]
+    let first = arr.shift()
+    assert_eq(first, 1)
+    assert_eq(arr.length, 2)
+    assert_eq(arr[0], 2)
+}
+
+@test
+fn test_unshift(): void {
+    let arr = [2, 3]
+    arr.unshift(1)
+    assert_eq(arr[0], 1)
+    assert_eq(arr.length, 3)
+}
+
+@test
+fn test_shift_empty(): void {
+    let arr: Array<int> = []
+    let result = arr.shift()
+    assert_eq(result, null)
+}
+
+// ===== 查找 =====
+@test
+fn test_indexOf(): void {
+    let arr = ["a", "b", "c", "b"]
+    assert_eq(arr.indexOf("a"), 0)
+    assert_eq(arr.indexOf("b"), 1)
+    assert_eq(arr.indexOf("c"), 2)
+    assert_eq(arr.indexOf("d"), -1)
+}
+
+@test
+fn test_has(): void {
+    let arr = [1, 2, 3]
+    assert_eq(arr.has(2), true)
+    assert_eq(arr.has(5), false)
+}
+
+// ===== 转换 =====
+@test
+fn test_join(): void {
+    let arr = ["a", "b", "c"]
+    assert_eq(arr.join(","), "a,b,c")
+    assert_eq(arr.join("-"), "a-b-c")
+    assert_eq(arr.join(""), "abc")
+}
+
+@test
+fn test_reverse(): void {
+    let arr = [1, 2, 3, 4, 5]
+    arr.reverse()
+    assert_eq(arr[0], 5)
+    assert_eq(arr[4], 1)
+}
+
+@test
+fn test_clear(): void {
+    let arr = [1, 2, 3]
+    arr.clear()
+    assert_eq(arr.length, 0)
+    assert_eq(arr.isEmpty, true)
+}
+
+// ===== 边界条件 =====
+@test
+fn test_large_array(): void {
+    let arr: Array<int> = []
+    for (let i = 0; i < 100; i++) {
+        arr.push(i)
+    }
+    assert_eq(arr.length, 100)
+    assert_eq(arr[0], 0)
+    assert_eq(arr[99], 99)
+}
+
+@test
+fn test_array_of_arrays(): void {
+    let arr: Array<Array<int>> = []
+    arr.push([1, 2])
+    arr.push([3, 4])
+    assert_eq(arr.length, 2)
+    assert_eq(arr[0][0], 1)
+    assert_eq(arr[1][1], 4)
+}

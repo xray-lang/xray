@@ -1,0 +1,183 @@
+// Test enhanced gc module - covers new APIs and edge cases
+// Added after gc module optimization (P0-P3)
+
+import gc
+
+// @test gc.disable/enable pairing works
+@test
+fn test_gc_disable_enable(): void {
+    assert_eq(gc.isrunning(), true)
+    gc.disable()
+    assert_eq(gc.isrunning(), false)
+    gc.enable()
+    assert_eq(gc.isrunning(), true)
+}
+
+// @test gc.disable prevents GC from running
+@test
+fn test_gc_disable_prevents_gc(): void {
+    gc.disable()
+    let before_count = gc.gccount()
+    // Allocate a bunch of objects
+    let arr: Array<Json> = []
+    for (let i = 0; i < 500; i++) {
+        arr.push({"idx" => i, "data" => "item_" + string(i)})
+    }
+    // GC should not have run while disabled
+    let after_count = gc.gccount()
+    assert_eq(before_count, after_count)
+    gc.enable()
+}
+
+// @test gc.setpause returns old value
+@test
+fn test_gc_setpause_returns_old(): void {
+    let old1 = gc.setpause(150)
+    let old2 = gc.setpause(200)
+    assert_eq(old2, 150)
+    // Restore
+    gc.setpause(old1)
+}
+
+// @test gc.setstepmul returns old value
+@test
+fn test_gc_setstepmul_returns_old(): void {
+    let old1 = gc.setstepmul(300)
+    let old2 = gc.setstepmul(100)
+    assert_eq(old2, 300)
+    // Restore
+    gc.setstepmul(old1)
+}
+
+// @test gc.info contains expected keys
+@test
+fn test_gc_info_keys(): void {
+    let info = gc.info()
+    // Memory stats
+    assert(info["totalbytes"] >= 0)
+    assert(info["totalKB"] >= 0.0)
+    assert(info["marked"] >= 0)
+    // GC state
+    assert(info["state"].length > 0)
+    assert(info["gccount"] >= 0)
+    // Tuning
+    assert(info["pause"] > 0)
+    assert(info["stepmul"] > 0)
+    // Timing (new)
+    assert(info["gctimeMs"] >= 0.0)
+    assert(info["lastgctimeUs"] >= 0.0)
+    // Immix stats (new)
+    assert(info["blocks"] >= 0)
+    assert(info["freeblocks"] >= 0)
+    assert(info["recycleblocks"] >= 0)
+    assert(info["fullblocks"] >= 0)
+    assert(info["livelines"] >= 0)
+    assert(info["freelines"] >= 0)
+    // Monitoring
+    assert(info["finalizercount"] >= 0)
+    assert(info["finalizererrors"] >= 0)
+}
+
+// @test gc.collect updates timing stats
+@test
+fn test_gc_collect_updates_timing(): void {
+    gc.collect()
+    let info = gc.info()
+    // After at least one collect, lastgctimeUs should be > 0
+    assert(info["lastgctimeUs"] > 0.0)
+    assert(info["gctimeMs"] >= 0.0)
+}
+
+// @test gc.collect returns cycle count
+@test
+fn test_gc_collect_returns_count(): void {
+    let count1 = gc.collect()
+    let count2 = gc.collect()
+    assert(count2 > count1)
+}
+
+// @test gc.countb decreases after collect with dead objects
+@test
+fn test_gc_countb_decreases_after_collect(): void {
+    gc.collect()
+    let baseline = gc.countb()
+    // Create objects in a scope that makes them collectable
+    fn make_garbage(): void {
+        let temp: Array<Json> = []
+        for (let i = 0; i < 200; i++) {
+            temp.push({"garbage" => i})
+        }
+    }
+    make_garbage()
+    let after_alloc = gc.countb()
+    assert(after_alloc >= baseline)
+    gc.collect()
+    let after_gc = gc.countb()
+    // Memory should decrease (garbage was collected)
+    assert(after_gc <= after_alloc)
+}
+
+// @test gc.objects tracks allocations
+@test
+fn test_gc_objects_tracks_alloc(): void {
+    let before = gc.objects()
+    let arr: Array<Json> = []
+    for (let i = 0; i < 10; i++) {
+        arr.push({"k" => i})
+    }
+    let after = gc.objects()
+    assert(after > before)
+}
+
+// @test gc.fragmentation returns valid ratio
+@test
+fn test_gc_fragmentation(): void {
+    let frag = gc.fragmentation()
+    assert(frag >= 0.0)
+    assert(frag <= 1.0)
+}
+
+// @test gc.fragmentation changes after churn
+@test
+fn test_gc_fragmentation_after_churn(): void {
+    gc.collect()
+    let frag_before = gc.fragmentation()
+    // Create and discard lots of objects to cause fragmentation
+    for (let round = 0; round < 10; round++) {
+        let temp: Array<Array<int>> = []
+        for (let j = 0; j < 100; j++) {
+            temp.push([j, j + 1])
+        }
+    }
+    gc.collect()
+    let frag_after = gc.fragmentation()
+    // Both should be valid ratios
+    assert(frag_after >= 0.0)
+    assert(frag_after <= 1.0)
+}
+
+// @test gc.debt basic behavior
+@test
+fn test_gc_debt(): void {
+    gc.collect()
+    let debt_after_gc = gc.debt()
+    // After full GC, debt should be non-positive (budget remaining)
+    assert(debt_after_gc <= 0)
+}
+
+// @test gc.state returns valid state names
+@test
+fn test_gc_state_valid(): void {
+    let state = gc.state()
+    // State should be one of the valid GC states
+    let valid_states = ["PAUSE", "PROPAGATE", "ATOMIC", "SWEEP", "FINALIZE"]
+    let found = false
+    for (let i = 0; i < valid_states.length; i++) {
+        if (state == valid_states[i]) {
+            found = true
+        }
+    }
+    assert(found)
+}
+
+print("All enhanced gc tests passed")

@@ -1,0 +1,8 @@
+// 002_wrong_arg_type.xr
+// Expected: Compile error - wrong argument type
+// Error should mention: type mismatch, argument
+fn add(a: int, b: int): int {
+    return a + b
+}
+
+let result = add("hello", "world")

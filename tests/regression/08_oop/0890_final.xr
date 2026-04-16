@@ -1,0 +1,143 @@
+// 0890_final.xr
+// Test: final keyword for classes and methods
+
+// ===== Final class basic usage =====
+
+final class Config {
+    name: string
+    value: int
+
+    constructor(name, value) {
+        this.name = name
+        this.value = value
+    }
+
+    getName(): string {
+        return this.name
+    }
+}
+
+@test
+fn test_final_class_basic(): void {
+    let cfg = new Config("host", 8080)
+    assert_eq(cfg.name, "host")
+    assert_eq(cfg.value, 8080)
+    assert_eq(cfg.getName(), "host")
+}
+
+// ===== Final method =====
+
+class Base {
+    final greet(): string {
+        return "hello from Base"
+    }
+
+    normal(): string {
+        return "normal from Base"
+    }
+}
+
+class Child extends Base {
+    // Can override non-final method
+    normal(): string {
+        return "normal from Child"
+    }
+}
+
+@test
+fn test_final_method_normal_override(): void {
+    let b = new Base()
+    assert_eq(b.greet(), "hello from Base")
+    assert_eq(b.normal(), "normal from Base")
+
+    let c = new Child()
+    assert_eq(c.greet(), "hello from Base")
+    assert_eq(c.normal(), "normal from Child")
+}
+
+// ===== Final class with inheritance chain =====
+
+class Animal {
+    name: string
+
+    constructor(name) {
+        this.name = name
+    }
+
+    speak(): string {
+        return this.name + " makes a sound"
+    }
+}
+
+final class Cat extends Animal {
+    constructor(name) {
+        super(name)
+    }
+
+    speak(): string {
+        return this.name + " meows"
+    }
+}
+
+@test
+fn test_final_class_with_parent(): void {
+    let cat = new Cat("Kitty")
+    assert_eq(cat.speak(), "Kitty meows")
+    assert_eq(cat.name, "Kitty")
+}
+
+// ===== Final method with static =====
+
+class MathUtil {
+    static final pi(): float {
+        return 3.14159
+    }
+
+    static compute(x: float): float {
+        return x * 2.0
+    }
+}
+
+@test
+fn test_final_static_method(): void {
+    assert_eq(MathUtil.pi(), 3.14159)
+    assert_eq(MathUtil.compute(5.0), 10.0)
+}
+
+// ===== Final field =====
+
+class Settings {
+    final maxRetries: int = 3
+    timeout: int = 1000
+
+    constructor() {
+    }
+}
+
+@test
+fn test_final_field(): void {
+    let s = new Settings()
+    assert_eq(s.maxRetries, 3)
+    assert_eq(s.timeout, 1000)
+}
+
+// ===== Multiple modifiers combined =====
+
+class Service {
+    private final secret: string = "key123"
+    
+    final getSecret(): string {
+        return this.secret
+    }
+
+    normal(): string {
+        return "service"
+    }
+}
+
+@test
+fn test_combined_modifiers(): void {
+    let svc = new Service()
+    assert_eq(svc.getSecret(), "key123")
+    assert_eq(svc.normal(), "service")
+}

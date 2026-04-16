@@ -1,0 +1,54 @@
+/*
+** 1131_syscall_handoff.xr - P handoff test
+**
+** Verify coroutines don't starve when one coroutine blocks.
+** Spawns one slow coroutine (sleep) and multiple fast coroutines.
+** Fast coroutines should complete while slow one is sleeping.
+*/
+import time
+
+shared const FAST_COUNT = 8
+shared const resultCh = Channel(9)
+
+fn slow_worker(ch: Channel<string>): void {
+    time.sleep(200)
+    ch.send("slow done")
+}
+
+fn fast_worker(id: int, ch: Channel<string>): void {
+    let sum = 0
+    for (let i = 0; i < 100; i++) {
+        sum = sum + i
+    }
+    ch.send("fast " + string(id) + " done")
+}
+
+// Spawn slow coroutine first
+go slow_worker(resultCh)
+
+// Spawn fast coroutines
+for (let i = 0; i < FAST_COUNT; i++) {
+    go fast_worker(i, resultCh)
+}
+
+// Collect all results
+let fast_done = 0
+let slow_done = false
+for (let i = 0; i < FAST_COUNT + 1; i++) {
+    let msg, ok = resultCh.recv()
+    if (ok) {
+        if (msg == "slow done") {
+            slow_done = true
+        } else {
+            fast_done++
+        }
+    }
+}
+
+print("fast completed: " + string(fast_done))
+print("slow completed: " + string(slow_done))
+if (fast_done == FAST_COUNT && slow_done) {
+    print("handoff test passed")
+} else {
+    throw "handoff test failed"
+}

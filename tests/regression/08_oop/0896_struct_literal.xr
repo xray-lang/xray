@@ -1,0 +1,84 @@
+// Test: struct literal construction syntax
+// Expected: Point{x: 1.0, y: 2.0} creates initialized struct instance
+
+// === Basic struct ===
+struct Point {
+    x: float
+    y: float
+}
+
+// Struct literal with values
+let p = Point{x: 3.0, y: 4.0}
+assert(p.x == 3.0)
+assert(p.y == 4.0)
+
+// Struct literal with expressions
+let a = 10.0
+let p2 = Point{x: a + 1.0, y: a * 2.0}
+assert(p2.x == 11.0)
+assert(p2.y == 20.0)
+
+// Struct literal as function argument
+fn distance(pt: Point): float {
+    return pt.x * pt.x + pt.y * pt.y
+}
+assert(distance(Point{x: 3.0, y: 4.0}) == 25.0)
+
+// Struct literal in array
+let points = [Point{x: 1.0, y: 2.0}, Point{x: 3.0, y: 4.0}]
+assert(points[0].x == 1.0)
+assert(points[1].y == 4.0)
+
+// Struct with method + literal
+struct Vec2 {
+    x: float
+    y: float
+
+    mag_sq(): float {
+        return this.x * this.x + this.y * this.y
+    }
+}
+
+let v = Vec2{x: 3.0, y: 4.0}
+assert(v.mag_sq() == 25.0)
+
+// Struct literal assigned to existing variable
+let p3 = Point{x: 0.0, y: 0.0}
+p3 = Point{x: 5.0, y: 6.0}
+assert(p3.x == 5.0)
+assert(p3.y == 6.0)
+
+// Nested struct literal field values
+struct Rect {
+    x: float
+    y: float
+    w: float
+    h: float
+
+    area(): float {
+        return this.w * this.h
+    }
+}
+
+let r = Rect{x: 0.0, y: 0.0, w: 100.0, h: 50.0}
+assert(r.area() == 5000.0)
+assert(r.x == 0.0)
+assert(r.w == 100.0)
+
+// Struct literal with int fields
+struct Color {
+    r: int
+    g: int
+    b: int
+}
+
+let red = Color{r: 255, g: 0, b: 0}
+assert(red.r == 255)
+assert(red.g == 0)
+
+// Typename preserved
+assert(typename(p) == "Point")
+assert(typename(v) == "Vec2")
+assert(typename(r) == "Rect")
+
+print("ok")

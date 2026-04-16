@@ -1,0 +1,56 @@
+/*
+ * xray - Lightweight typed scripting with native concurrency
+ * https://www.xray-lang.org
+ *
+ * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
+ * Licensed under the MIT License
+ *
+ * encoding.h - Encoding conversion standard library
+ *
+ * KEY CONCEPT:
+ *   Hex and UTF-16 encoding/decoding. UTF-8 operations delegate to
+ *   the core xutf8.h module (no duplication).
+ *
+ * WHY THIS DESIGN:
+ *   - Hex encode/decode are encoding-specific, not needed in core
+ *   - UTF-16 is rarely needed in core, lives here as stdlib
+ *   - UTF-8 is core functionality, reused from src/object/xutf8.h
+ */
+
+#ifndef XR_STDLIB_ENCODING_H
+#define XR_STDLIB_ENCODING_H
+
+#include "../../src/module/xmodule.h"
+#include "../../src/vm/xvm.h"
+#include "../../src/runtime/object/xstring.h"
+#include "../../src/runtime/object/xutf8.h"
+#include "../../src/base/xsimd.h"
+
+/* ========== Hex Encoding/Decoding ========== */
+
+int xr_hex_encode(const uint8_t *data, size_t len, char *output);
+int xr_hex_decode(const char *hex, size_t len, uint8_t *output);
+bool xr_hex_valid(const char *hex, size_t len);
+
+/* ========== UTF-16 Encoding/Decoding ========== */
+
+typedef enum {
+    XR_UTF16_LE = 0,    // Little-endian
+    XR_UTF16_BE = 1     // Big-endian
+} XrUtf16Endian;
+
+int xr_utf16_encode(const uint8_t *utf8, size_t utf8_len,
+                    uint8_t *output, size_t out_cap, XrUtf16Endian endian);
+
+int xr_utf16_decode(const uint8_t *utf16, size_t utf16_len,
+                    uint8_t *output, size_t out_cap, XrUtf16Endian endian);
+
+int xr_utf16_encoded_len(const uint8_t *utf8, size_t utf8_len);
+
+int xr_utf8_decoded_len(const uint8_t *utf16, size_t utf16_len, XrUtf16Endian endian);
+
+/* ========== Module Loading ========== */
+
+XrModule* xr_load_module_encoding(XrayIsolate *isolate);
+
+#endif

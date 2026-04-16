@@ -1,0 +1,35 @@
+// EXPECTED: 210
+// Test: Register pressure - many live variables to trigger spill/reload
+
+fn many_vars(x: int) : int {
+    let a = x + 1
+    let b = x + 2
+    let c = x + 3
+    let d = x + 4
+    let e = x + 5
+    let f = x + 6
+    let g = x + 7
+    let h = x + 8
+    let i = x + 9
+    let j = x + 10
+    let k = x + 11
+    let l = x + 12
+    let m = x + 13
+    let n = x + 14
+    let o = x + 15
+    let p = x + 16
+    let q = x + 17
+    let r = x + 18
+    let s = x + 19
+    let t = x + 20
+    // All variables live at this point - forces spill
+    return a + b + c + d + e + f + g + h + i + j + k + l + m + n + o + p + q + r + s + t
+}
+
+let i = 0
+while (i < 200) {
+    many_vars(0)
+    i = i + 1
+}
+
+print(many_vars(0))

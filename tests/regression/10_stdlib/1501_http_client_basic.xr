@@ -1,0 +1,22 @@
+// Test http client API existence and error handling
+
+import http
+
+@test
+fn test_http_client_apis_exist(): void {
+    assert(http.get != null)
+    assert(http.post != null)
+    assert(http.put != null)
+    assert(http.delete != null)
+    assert(http.request != null)
+}
+
+@test
+fn test_http_server_apis_exist(): void {
+    assert(http.route != null)
+    assert(http.listen != null)
+    assert(http.urlEncode != null)
+    assert(http.urlDecode != null)
+}
+
+print("All http client basic tests passed")

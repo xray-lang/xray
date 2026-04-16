@@ -1,0 +1,42 @@
+// Test: NBody mini simulation (comprehensive JIT test)
+// EXPECTED: done
+// Test: N-body style simulation - float arithmetic + array + Json in hot loop
+
+fn nbody_step(bodies, dt: float) {
+    let n = bodies.length
+    let i = 0
+    while (i < n) {
+        let j = i + 1
+        while (j < n) {
+            let dx = bodies[i].x - bodies[j].x
+            let dy = bodies[i].y - bodies[j].y
+            let dist = dx * dx + dy * dy + 0.01
+            let f = 1.0 / dist
+            bodies[i].vx = bodies[i].vx - dx * f * dt
+            bodies[i].vy = bodies[i].vy - dy * f * dt
+            bodies[j].vx = bodies[j].vx + dx * f * dt
+            bodies[j].vy = bodies[j].vy + dy * f * dt
+            j = j + 1
+        }
+        i = i + 1
+    }
+    let k = 0
+    while (k < n) {
+        bodies[k].x = bodies[k].x + bodies[k].vx * dt
+        bodies[k].y = bodies[k].y + bodies[k].vy * dt
+        k = k + 1
+    }
+}
+
+let bodies = [
+    { "x": 0.0, "y": 0.0, "vx": 0.0, "vy": 0.0 },
+    { "x": 1.0, "y": 0.0, "vx": 0.0, "vy": 0.5 },
+    { "x": 0.0, "y": 1.0, "vx": -0.5, "vy": 0.0 }
+]
+
+let step = 0
+while (step < 1000) {
+    nbody_step(bodies, 0.01)
+    step = step + 1
+}
+print("done")

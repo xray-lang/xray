@@ -1,0 +1,89 @@
+/*
+ * ws_server_client_test.xr - WebSocket server + client integration test
+ * 
+ * Tests the coroutine-per-connection model:
+ * 1. Start server in one coroutine
+ * 2. Connect client in another coroutine
+ * 3. Exchange messages
+ * 4. Verify echo response
+ */
+
+import ws
+import time
+
+print("=== WebSocket Server/Client Integration Test ===")
+
+let testPassed = false
+
+// Server coroutine
+go fn() {
+    print("[Server] Starting on port 8766...")
+    
+    ws.serve(8766, fn(conn) {
+        print("[Server] Client connected")
+        
+        while (ws.isOpen(conn)) {
+            let msg = ws.recv(conn, null)
+            if (msg == null || msg.error) {
+                break
+            }
+            if (msg.data) {
+                print("[Server] Received: " + msg.data)
+                ws.send(conn, "Echo: " + msg.data, null)
+            }
+        }
+        
+        print("[Server] Client disconnected")
+    })
+}()
+
+// Wait for server to start
+time.sleep(100)
+
+// Client coroutine
+go fn() {
+    print("[Client] Connecting to ws://localhost:8766...")
+    
+    let conn = ws.connect("ws://localhost:8766", null)
+    if (conn.error) {
+        print("[Client] Connection error: " + conn.error)
+        ws.stopServer()
+        return
+    }
+    
+    print("[Client] Connected!")
+    
+    // Send test message
+    print("[Client] Sending: Hello Server!")
+    ws.send(conn, "Hello Server!", null)
+    
+    // Receive echo
+    let msg = ws.recv(conn, null)
+    if (msg != null && msg.data) {
+        print("[Client] Received: " + msg.data)
+        if (msg.data == "Echo: Hello Server!") {
+            print("[Client] Test PASSED!")
+            testPassed = true
+        } else {
+            print("[Client] Test FAILED - unexpected response")
+        }
+    } else {
+        print("[Client] Test FAILED - no response")
+    }
+    
+    // Close connection
+    ws.close(conn, null, null)
+    print("[Client] Disconnected")
+    
+    // Stop server
+    ws.stopServer()
+}()
+
+// Wait for test to complete
+time.sleep(2000)
+
+if (testPassed) {
+    print("\n=== ALL TESTS PASSED ===")
+} else {
+    print("\n=== TESTS FAILED ===")
+}

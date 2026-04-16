@@ -1,0 +1,182 @@
+// 1203_nullable_type.xr
+// Test nullable type checking and narrowing
+// All types can be nullable (int?, string?, etc.)
+// Nullable primitives use NaN-boxed storage to handle null.
+
+// ===== Nullable Type Annotation =====
+@test
+fn test_nullable_annotation(): void {
+    let x: int? = null
+    assert_eq(x, null)
+    x = 42
+    assert_eq(x, 42)
+}
+
+@test
+fn test_nullable_assignment(): void {
+    let x: int? = 10
+    assert_eq(x, 10)
+    x = null
+    assert_eq(x, null)
+}
+
+// ===== Null Check Narrowing =====
+@test
+fn test_null_check_if(): void {
+    let x: int? = 42
+    if (x != null) {
+        let y = x + 1
+        assert_eq(y, 43)
+    }
+}
+
+@test
+fn test_null_check_else(): void {
+    let x: int? = null
+    let result = 0
+    if (x == null) {
+        result = -1
+    } else {
+        result = x
+    }
+    assert_eq(result, -1)
+}
+
+@test
+fn test_null_coalescing(): void {
+    let x: int? = null
+    let y = x ?? 100
+    assert_eq(y, 100)
+    let z: int? = 50
+    let w = z ?? 100
+    assert_eq(w, 50)
+}
+
+// ===== Optional Chaining =====
+@test
+fn test_optional_chain_basic(): void {
+    class Person {
+        name: string
+
+        constructor(name: string) {
+            this.name = name
+        }
+    }
+    let p: Person? = null
+    // Optional chaining should return null if p is null
+    let name = p?.name
+    assert_eq(name, null)
+    p = Person("Alice")
+    name = p?.name
+    assert_eq(name, "Alice")
+}
+
+@test
+fn test_optional_chain_method(): void {
+    let arr: Array<int>? = null
+    let len = arr?.length
+    assert_eq(len, null)
+    arr = [1, 2, 3]
+    len = arr?.length
+    assert_eq(len, 3)
+}
+
+// ===== Function with Nullable Parameters =====
+@test
+fn test_nullable_param(): void {
+    fn greet(name: string?): string {
+        if (name == null) {
+            return "Hello, Guest"
+        }
+        return "Hello, " + name
+    }
+    assert_eq(greet(null), "Hello, Guest")
+    assert_eq(greet("Alice"), "Hello, Alice")
+}
+
+@test
+fn test_nullable_return(): void {
+    fn findIndex(arr: Array<int>, target: int): int? {
+        for (let i = 0; i < arr.length; i++) {
+            if (arr[i] == target) {
+                return i
+            }
+        }
+        return null
+    }
+    let arr = [10, 20, 30]
+    let idx = findIndex(arr, 20)
+    assert_eq(idx, 1)
+    idx = findIndex(arr, 99)
+    assert_eq(idx, null)
+}
+
+// ===== Nested Null Checks =====
+@test
+fn test_nested_nullable(): void {
+    class Address {
+        city: string
+
+        constructor(city: string) {
+            this.city = city
+        }
+    }
+    class Person {
+        address: Address?
+
+        constructor() {
+            this.address = null
+        }
+    }
+    let p = Person()
+    // Nested optional chain
+    let city = p.address?.city
+    assert_eq(city, null)
+    p.address = Address("Beijing")
+    city = p.address?.city
+    assert_eq(city, "Beijing")
+}
+
+// ===== Truthiness Narrowing =====
+@test
+fn test_truthiness_string(): void {
+    let s: string? = ""
+    // Empty string is falsy
+    if (s) {
+        assert(false)
+    }
+    s = "hello"
+    if (s) {
+        assert_eq(s.length, 5)
+    }
+}
+
+@test
+fn test_truthiness_number(): void {
+    let n: int? = 0
+    // 0 is falsy
+    if (n) {
+        assert(false)
+    }
+    n = 42
+    if (n) {
+        assert_eq(n + 1, 43)
+    }
+}
+
+// ===== Collection Nullable Elements =====
+@test
+fn test_array_nullable_elements(): void {
+    let arr = [1, null, 3]
+    assert_eq(arr[0], 1)
+    assert_eq(arr[1], null)
+    assert_eq(arr[2], 3)
+}
+
+@test
+fn test_map_nullable_values(): void {
+    let m = { "a" => 1, "b" => null }
+    assert_eq(m.get("a"), 1)
+    assert_eq(m.get("b"), null)
+    assert_eq(m.get("c"), null)
+}

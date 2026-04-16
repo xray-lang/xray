@@ -1,0 +1,42 @@
+// EXPECTED: 30
+// EXPECTED: 50
+// Test: Class creation and method calls in JIT
+
+class Point {
+    x: int
+    y: int
+
+    constructor(x, y) {
+        this.x = x
+        this.y = y
+    }
+
+    sum() : int {
+        return this.x + this.y
+    }
+
+    scale(factor: int) : int {
+        return (this.x + this.y) * factor
+    }
+}
+
+fn make_and_sum(a: int, b: int) : int {
+    let p = new Point(a, b)
+    return p.sum()
+}
+
+let i = 0
+while (i < 200) {
+    make_and_sum(10, 20)
+    i = i + 1
+}
+
+print(make_and_sum(10, 20))
+
+let p2 = new Point(20, 5)
+let i2 = 0
+while (i2 < 200) {
+    p2.scale(1)
+    i2 = i2 + 1
+}
+print(p2.scale(2))

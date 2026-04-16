@@ -1,0 +1,74 @@
+// 1301_toml_basic.xr - TOML module tests
+
+import toml
+
+// ===== Basic key-value =====
+
+@test
+fn test_parse_basic(): void {
+    let data = "name = \"Alice\"\nage = 30\nactive = true"
+    let obj = toml.parse(data)
+    assert_eq(obj["name"], "Alice")
+    assert_eq(obj["age"], 30)
+    assert_eq(obj["active"], true)
+}
+
+// ===== Table (section) =====
+
+@test
+fn test_parse_table(): void {
+    let data = "[server]\nhost = \"localhost\"\nport = 8080"
+    let obj = toml.parse(data)
+    assert_eq(obj["server"]["host"], "localhost")
+    assert_eq(obj["server"]["port"], 8080)
+}
+
+// ===== Array =====
+
+@test
+fn test_parse_array(): void {
+    let data = "ports = [80, 443, 8080]"
+    let obj = toml.parse(data)
+    assert_eq(obj["ports"][0], 80)
+    assert_eq(obj["ports"][2], 8080)
+}
+
+// ===== Inline table =====
+
+@test
+fn test_parse_inline_table(): void {
+    let data = "point = { x = 10, y = 20 }"
+    let obj = toml.parse(data)
+    assert_eq(obj["point"]["x"], 10)
+}
+
+// ===== Number formats =====
+
+@test
+fn test_parse_number_formats(): void {
+    let data = "hex = 0xDEADBEEF\noct = 0o755\nbin = 0b11010110"
+    let obj = toml.parse(data)
+    assert_eq(obj["hex"], 3735928559)
+    assert_eq(obj["oct"], 493)
+    assert_eq(obj["bin"], 214)
+}
+
+// ===== Stringify =====
+
+@test
+fn test_stringify(): void {
+    let config = {"name" => "xray", "version" => 1}
+    let result = toml.stringify(config)
+    assert(result != null)
+    assert(result.length > 0)
+}
+
+// ===== Nested tables =====
+
+@test
+fn test_parse_nested_table(): void {
+    let data = "[database]\n[database.primary]\nhost = \"db1\"\n[database.replica]\nhost = \"db2\""
+    let obj = toml.parse(data)
+    assert_eq(obj["database"]["primary"]["host"], "db1")
+    assert_eq(obj["database"]["replica"]["host"], "db2")
+}

@@ -1,0 +1,16 @@
+// EXPECTED: 0
+// Test: GC pressure in JIT - allocate many objects in hot loop
+
+fn alloc_heavy(n: int) : int {
+    let wrong = 0
+    let i = 0
+    while (i < n) {
+        let obj = { "x": i, "y": i * 2 }
+        if (obj.x != i) { wrong = wrong + 1 }
+        if (obj.y != i * 2) { wrong = wrong + 1 }
+        i = i + 1
+    }
+    return wrong
+}
+
+print(alloc_heavy(5000))

@@ -1,0 +1,58 @@
+// Test supervisor scope errors[] collection
+
+fn failing1(): int {
+    throw "error1"
+    return 0
+}
+
+fn failing2(): int {
+    throw "error2"
+    return 0
+}
+
+fn ok(): int {
+    return 42
+}
+
+// Test 1: supervisor scope collects all child errors
+fn test_errors_collected() {
+    let errors = supervisor scope {
+        go ok()
+        go failing1()
+        go failing2()
+    }
+    assert(errors.length > 0, "should have collected errors")
+}
+
+// Test 2: supervisor scope all success returns empty array
+fn test_no_errors() {
+    let errors = supervisor scope {
+        go ok()
+        go ok()
+    }
+    assert(errors.length == 0, "all success should return empty array")
+}
+
+// Test 3: supervisor scope single failure
+fn test_single_error() {
+    let errors = supervisor scope {
+        go failing1()
+    }
+    assert(errors.length == 1)
+    assert(errors[0] == "error1")
+}
+
+// Test 4: supervisor scope as statement (errors discarded)
+fn test_as_statement() {
+    supervisor scope {
+        go ok()
+        go failing1()
+    }
+    // No crash — errors silently collected and discarded
+}
+
+test_errors_collected()
+test_no_errors()
+test_single_error()
+test_as_statement()
+print("PASS")

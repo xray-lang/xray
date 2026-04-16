@@ -1,0 +1,84 @@
+// HTTP Microservice
+// Demonstrates: HTTP server, JSON handling, routing, concurrent request handling
+//
+// A simple REST API with multiple endpoints, JSON serialization,
+// and built-in concurrency (each connection = one coroutine).
+
+import http
+import json
+import time
+
+// ===== In-memory data store =====
+shared const store = {
+    users: [],
+    nextId: 1
+}
+
+// ===== Route handlers =====
+
+// GET /health — Health check
+fn healthHandler(req) {
+    return json.stringify({
+        status: "ok",
+        uptime: time.monotonic(),
+        version: "1.0.0"
+    })
+}
+
+// GET /users — List all users
+fn listUsersHandler(req) {
+    return json.stringify({
+        count: store.users.length,
+        data: store.users
+    })
+}
+
+// POST /users — Create a new user
+fn createUserHandler(req) {
+    let body = json.parse(req.body)
+    if (body == null || body.name == null) {
+        return http.response(400, json.stringify({ error: "name is required" }))
+    }
+
+    let user = {
+        id: store.nextId,
+        name: body.name,
+        email: body.email ?? "unknown",
+        createdAt: time.now()
+    }
+    store.nextId = store.nextId + 1
+    store.users.push(user)
+
+    return http.response(201, json.stringify(user))
+}
+
+// GET /stats — Server statistics
+fn statsHandler(req) {
+    let names = store.users.map((u) => u.name)
+    return json.stringify({
+        totalUsers: store.users.length,
+        userNames: names,
+        serverTime: time.now()
+    })
+}
+
+// ===== Start server =====
+fn main() {
+    print("=== xray HTTP Microservice ===")
+
+    http.route("GET", "/health", healthHandler)
+    http.route("GET", "/users", listUsersHandler)
+    http.route("POST", "/users", createUserHandler)
+    http.route("GET", "/stats", statsHandler)
+
+    print("Listening on http://127.0.0.1:8080")
+    print("Endpoints:")
+    print("  GET  /health  — Health check")
+    print("  GET  /users   — List users")
+    print("  POST /users   — Create user (JSON body: {name, email})")
+    print("  GET  /stats   — Statistics")
+
+    http.listen(8080)
+}
+
+main()

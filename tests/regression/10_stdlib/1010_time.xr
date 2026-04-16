@@ -1,0 +1,54 @@
+// 1010_time.xr
+// 作者：xingleixu@gmail.com
+// 测试：time 模块
+// 注意：所有时间单位统一为毫秒（milliseconds）
+
+import time
+
+// ===== time.now =====
+// 返回当前时间戳（毫秒）
+
+@test
+fn test_time_now(): void {
+    let t = time.now()
+    assert_eq(t > 0, true)
+    // 时间戳应该是一个很大的数（毫秒级）
+    assert_eq(t > 1000000000000, true)  // 大于 2001 年的时间戳
+}
+
+// ===== time.clock =====
+// 返回 CPU 时钟时间（毫秒）
+
+@test
+fn test_time_clock(): void {
+    let start = time.clock()
+    // 做一些简单计算
+    let sum = 0
+    for (i in 0..100) {
+        sum = sum + i
+    }
+    let end = time.clock()
+    assert_eq(end >= start, true)
+}
+
+// ===== time.monotonic =====
+// 返回单调递增时间（毫秒）
+
+@test
+fn test_time_monotonic(): void {
+    let t1 = time.monotonic()
+    let t2 = time.monotonic()
+    assert_eq(t2 >= t1, true)
+}
+
+// ===== time.sleep =====
+// 睡眠指定毫秒数
+
+@test
+fn test_time_sleep(): void {
+    let start = time.monotonic()
+    time.sleep(10)  // 睡眠 10 毫秒
+    let end = time.monotonic()
+    assert_eq(end >= start, true)
+}
+

@@ -1,0 +1,126 @@
+// 1420_datetime_basic.xr
+// Test: datetime basic functionality (dot-syntax API)
+
+import datetime
+
+// ============================================================
+// Part 1: Date creation
+// ============================================================
+
+@test
+fn test_create_full_date(): void {
+    let dt = datetime.create(2024, 12, 25, 10, 30, 45)
+    assert_eq(dt.year(), 2024)
+    assert_eq(dt.month(), 12)
+    assert_eq(dt.day(), 25)
+    assert_eq(dt.hour(), 10)
+    assert_eq(dt.minute(), 30)
+    assert_eq(dt.second(), 45)
+}
+
+@test
+fn test_create_unix_epoch(): void {
+    let dt = datetime.create(1970, 1, 1, 0, 0, 0)
+    assert_eq(dt.year(), 1970)
+    assert_eq(dt.month(), 1)
+    assert_eq(dt.day(), 1)
+}
+
+@test
+fn test_create_year_only(): void {
+    let dt = datetime.create(2000)
+    assert_eq(dt.year(), 2000)
+    assert_eq(dt.month(), 1)
+    assert_eq(dt.day(), 1)
+}
+
+@test
+fn test_create_year_month(): void {
+    let dt = datetime.create(2024, 6)
+    assert_eq(dt.year(), 2024)
+    assert_eq(dt.month(), 6)
+    assert_eq(dt.day(), 1)
+}
+
+// ============================================================
+// Part 2: Create from timestamp (UTC)
+// ============================================================
+
+@test
+fn test_from_timestamp_zero(): void {
+    let dt = datetime.fromTimestamp(0)
+    assert_eq(dt.year(), 1970)
+}
+
+@test
+fn test_from_timestamp_billion(): void {
+    let dt = datetime.fromTimestamp(1000000000)
+    assert_eq(dt.year(), 2001)
+    assert_eq(dt.month(), 9)
+    assert_eq(dt.day(), 9)
+}
+
+@test
+fn test_from_timestamp_recent(): void {
+    let dt = datetime.fromTimestamp(1700000000)
+    assert_eq(dt.year(), 2023)
+}
+
+// ============================================================
+// Part 3: Timestamp access
+// ============================================================
+
+@test
+fn test_timestamp_positive(): void {
+    let dt = datetime.create(2024, 1, 1)
+    let ts = dt.timestamp()
+    assert_true(ts > 0)
+}
+
+@test
+fn test_timestamp_roundtrip(): void {
+    let original_ts = 1700000000
+    let dt = datetime.fromTimestamp(original_ts)
+    let result_ts = dt.timestamp()
+    assert_eq(result_ts, original_ts)
+}
+
+// ============================================================
+// Part 4: Current time
+// ============================================================
+
+@test
+fn test_now_returns_valid_date(): void {
+    let dt = datetime.now()
+    assert_true(dt.year() >= 2024)
+}
+
+@test
+fn test_utc_returns_valid_date(): void {
+    let dt = datetime.utc()
+    assert_true(dt.year() >= 2024)
+}
+
+@test
+fn test_now_timestamp_positive(): void {
+    let dt = datetime.now()
+    let ts = dt.timestamp()
+    assert_true(ts > 1700000000)
+}
+
+// ============================================================
+// Part 5: Millisecond support
+// ============================================================
+
+@test
+fn test_millisecond_default_zero(): void {
+    let dt = datetime.create(2024, 6, 15)
+    assert_eq(dt.millisecond(), 0)
+}
+
+@test
+fn test_from_timestamp_ms(): void {
+    let dt = datetime.fromTimestampMs(1700000000123)
+    assert_eq(dt.timestamp(), 1700000000)
+    assert_eq(dt.millisecond(), 123)
+}

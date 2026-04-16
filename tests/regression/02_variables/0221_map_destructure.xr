@@ -1,0 +1,21 @@
+// 0221_map_destructure.xr
+// Map destructuring is no longer supported.
+// Use map["key"] instead. This test verifies the alternative pattern.
+
+let data = {"name" => "Alice", "age" => 30, "city" => "Beijing"}
+let n = data["name"]
+let a = data["age"]
+assert_eq(n, "Alice")
+assert_eq(a, 30)
+
+let c = data["city"]
+assert_eq(c, "Beijing")
+
+let person = {"first" => "John", "last" => "Doe", "id" => 123}
+let firstName = person["first"]
+let lastName = person["last"]
+let userId = person["id"]
+assert_eq(firstName, "John")
+assert_eq(lastName, "Doe")
+assert_eq(userId, 123)
+print("0221_map_destructure passed")

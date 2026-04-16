@@ -1,0 +1,240 @@
+// Functional Programming Patterns
+// Demonstrates: Closures, higher-order functions, function composition,
+//               partial application, pipelines, immutable data transforms
+
+// ===== Function Composition =====
+
+fn compose(f, g) {
+    return (x) => f(g(x))
+}
+
+fn pipe(fns) {
+    return (x) => {
+        let result = x
+        for (f in fns) {
+            result = f(result)
+        }
+        return result
+    }
+}
+
+// ===== Partial Application & Currying =====
+
+fn partial(f, first) {
+    return (second) => f(first, second)
+}
+
+fn curry3(f) {
+    return (a) => {
+        return (b) => {
+            return (c) => f(a, b, c)
+        }
+    }
+}
+
+// ===== Common Functional Utilities =====
+
+fn identity(x) { return x }
+fn constant(x) { return () => x }
+fn negate(pred) { return (x) => !pred(x) }
+
+fn memoize(f) {
+    let cache = {}
+    return (key) => {
+        let k = string(key)
+        if (cache[k] != null) {
+            return cache[k]
+        }
+        let result = f(key)
+        cache[k] = result
+        return result
+    }
+}
+
+// ===== Data Processing Pipeline =====
+
+fn demo_pipeline() {
+    print("=== Functional Pipeline ===")
+
+    let data = [
+        { name: "Alice", age: 28, dept: "Engineering" },
+        { name: "Bob", age: 35, dept: "Marketing" },
+        { name: "Charlie", age: 22, dept: "Engineering" },
+        { name: "Diana", age: 31, dept: "Engineering" },
+        { name: "Eve", age: 26, dept: "Marketing" },
+        { name: "Frank", age: 40, dept: "Sales" }
+    ]
+
+    // Filter: Engineering only
+    let engineers = data.filter((p) => p.dept == "Engineering")
+    print("Engineers:", engineers.length)
+
+    // Map: Extract names
+    let names = engineers.map((p) => p.name)
+    print("Names:", names)
+
+    // Reduce: Average age
+    let totalAge = engineers.reduce((acc, p) => acc + p.age, 0)
+    let avgAge = totalAge / engineers.length
+    print("Average age:", avgAge)
+
+    // Chain: filter → map → reduce in one flow
+    let seniorCount = data
+        .filter((p) => p.age >= 30)
+        .map((p) => p.name)
+        .reduce((acc, _) => acc + 1, 0)
+    print("Seniors (30+):", seniorCount)
+}
+
+// ===== Closure Patterns =====
+
+fn demo_closures() {
+    print("\n=== Closure Patterns ===")
+
+    // Counter factory
+    fn makeCounter(start: int, step: int) {
+        let value = start
+        return {
+            next: fn() {
+                let current = value
+                value += step
+                return current
+            },
+            reset: fn() { value = start },
+            peek: fn() { return value }
+        }
+    }
+
+    let counter = makeCounter(0, 2)
+    print("Counter:", counter.next(), counter.next(), counter.next())
+    print("Peek:", counter.peek())
+    counter.reset()
+    print("After reset:", counter.next())
+
+    // State machine with closures
+    fn makeToggle(initial: bool) {
+        let state = initial
+        return fn() {
+            state = !state
+            return state
+        }
+    }
+
+    let toggle = makeToggle(false)
+    print("Toggle:", toggle(), toggle(), toggle())
+}
+
+// ===== Higher-order Function Composition =====
+
+fn demo_composition() {
+    print("\n=== Function Composition ===")
+
+    fn double(x) { return x * 2 }
+    fn addTen(x) { return x + 10 }
+    fn square(x) { return x * x }
+    fn toString(x) { return "Result: " + string(x) }
+
+    // compose: right-to-left
+    let transform = compose(toString, compose(addTen, double))
+    print(transform(5))  // double(5)=10, addTen(10)=20, toString(20)
+
+    // pipe: left-to-right (more readable)
+    let pipeline = pipe([double, addTen, square, toString])
+    print(pipeline(3))   // double(3)=6, addTen(6)=16, square(16)=256
+}
+
+// ===== Partial Application =====
+
+fn demo_partial() {
+    print("\n=== Partial Application ===")
+
+    fn add(a, b) { return a + b }
+    fn multiply(a, b) { return a * b }
+    fn power(base, exp) {
+        let result = 1
+        for (let i = 0; i < exp; i++) { result *= base }
+        return result
+    }
+
+    let add5 = partial(add, 5)
+    let double = partial(multiply, 2)
+    let square = partial(power, 2)
+
+    print("add5(3):", add5(3))
+    print("double(7):", double(7))
+    print("2^10:", square(10))
+
+    // Currying
+    fn formatMsg(level, module, msg) {
+        return "[" + level + "] " + module + ": " + msg
+    }
+
+    let curriedLog = curry3(formatMsg)
+    let errorLog = curriedLog("ERROR")
+    let dbError = errorLog("Database")
+
+    print(dbError("Connection timeout"))
+    print(dbError("Query failed"))
+}
+
+// ===== Memoization =====
+
+fn demo_memoize() {
+    print("\n=== Memoization ===")
+
+    let callCount = 0
+
+    fn expensiveFib(n) {
+        callCount++
+        if (n <= 1) { return n }
+        return expensiveFib(n - 1) + expensiveFib(n - 2)
+    }
+
+    // Without memoize
+    callCount = 0
+    let r1 = expensiveFib(20)
+    print("fib(20) =", r1, "| calls:", callCount)
+
+    // With memoize (simple key-based)
+    let memo = memoize((n) => {
+        if (n <= 1) { return n }
+        return memo(n - 1) + memo(n - 2)
+    })
+
+    let r2 = memo(20)
+    print("memoized fib(20) =", r2)
+}
+
+// ===== Predicate Combinators =====
+
+fn demo_predicates() {
+    print("\n=== Predicate Combinators ===")
+
+    fn isEven(x) { return x % 2 == 0 }
+    fn isPositive(x) { return x > 0 }
+    let isOdd = negate(isEven)
+
+    let numbers = [-3, -2, -1, 0, 1, 2, 3, 4, 5]
+
+    let evenPositive = numbers
+        .filter(isEven)
+        .filter(isPositive)
+    print("Even & positive:", evenPositive)
+
+    let odds = numbers.filter(isOdd)
+    print("Odd numbers:", odds)
+}
+
+// ===== Run all =====
+
+fn main() {
+    demo_pipeline()
+    demo_closures()
+    demo_composition()
+    demo_partial()
+    demo_memoize()
+    demo_predicates()
+    print("\nAll functional patterns demonstrated.")
+}
+
+main()

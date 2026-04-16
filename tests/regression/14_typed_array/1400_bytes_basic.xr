@@ -1,0 +1,64 @@
+/*
+ * Bytes basic tests
+ * Bytes() now creates Array<uint8>
+ */
+
+// ========== Create Bytes ==========
+
+// Empty Bytes
+let b1 = Bytes()
+print(b1.length)  // 0
+
+// Specified length (initialized to 0)
+let b2 = Bytes(5)
+print(b2.length)  // 5
+print(b2[0])      // 0
+
+// Specified length and fill value
+let b3 = Bytes(3, 255)
+print(b3[0])  // 255
+print(b3[1])  // 255
+print(b3[2])  // 255
+
+// From array
+let b4 = Bytes([72, 101, 108, 108, 111])
+print(b4.length)  // 5
+
+// ========== Index get/set ==========
+
+let b5 = Bytes(3)
+b5[0] = 65   // 'A'
+b5[1] = 66   // 'B'
+b5[2] = 67   // 'C'
+print(b5[0])  // 65
+print(b5[1])  // 66
+print(b5[2])  // 67
+
+// ========== push ==========
+
+let b6 = Bytes()
+b6.push(88)  // 'X'
+b6.push(89)  // 'Y'
+b6.push(90)  // 'Z'
+print(b6.length)  // 3
+print(b6[0])      // 88
+print(b6[1])      // 89
+print(b6[2])      // 90
+
+print("Bytes basic tests passed!")
+
+// expect: 0
+// expect: 5
+// expect: 0
+// expect: 255
+// expect: 255
+// expect: 255
+// expect: 5
+// expect: 65
+// expect: 66
+// expect: 67
+// expect: 3
+// expect: 88
+// expect: 89
+// expect: 90
+// expect: Bytes basic tests passed!

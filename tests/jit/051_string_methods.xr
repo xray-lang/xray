@@ -1,0 +1,28 @@
+// EXPECTED: 0
+// EXPECTED: HELLO
+// EXPECTED: hello
+// Test: String method invocations in JIT
+
+fn str_ops(s) : int {
+    return s.length
+}
+
+fn to_upper(s) {
+    return s.toUpperCase()
+}
+
+fn to_lower(s) {
+    return s.toLowerCase()
+}
+
+let i = 0
+while (i < 200) {
+    str_ops("hello")
+    to_upper("hello")
+    to_lower("HELLO")
+    i = i + 1
+}
+
+print(str_ops("hello"))
+print(to_upper("hello"))
+print(to_lower("HELLO"))

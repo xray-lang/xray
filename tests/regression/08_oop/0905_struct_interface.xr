@@ -1,0 +1,58 @@
+// Test: struct implementing interface
+// Expected: struct methods fulfill interface contract, polymorphic dispatch works
+
+interface Shape {
+    area(): float
+    name(): string
+}
+
+struct Circle implements Shape {
+    radius: float
+
+    area(): float {
+        return 3.14159 * this.radius * this.radius
+    }
+
+    name(): string {
+        return "Circle"
+    }
+}
+
+struct Square implements Shape {
+    side: float
+
+    area(): float {
+        return this.side * this.side
+    }
+
+    name(): string {
+        return "Square"
+    }
+}
+
+// === Direct usage ===
+let c = Circle{radius: 5.0}
+assert(c.name() == "Circle")
+assert(c.area() > 78.0)
+
+let s = Square{side: 10.0}
+assert(s.name() == "Square")
+assert(s.area() == 100.0)
+
+// === Polymorphic dispatch via interface parameter ===
+fn describe(shape: Shape): string {
+    return "${shape.name()}: area=${shape.area()}"
+}
+
+let desc_c = describe(c)
+assert(desc_c == "Circle: area=78.53975")
+
+let desc_s = describe(s)
+assert(desc_s == "Square: area=100")
+
+// === Value semantics preserved with interface ===
+let c2 = c
+c2.radius = 1.0
+assert(c.radius == 5.0)
+
+print("ok")

@@ -1,0 +1,56 @@
+// Test task.link() / task.unlink() bidirectional association
+
+fn failing(): int {
+    throw "link error"
+    return 0
+}
+
+fn slow_work(): int {
+    let x = 0
+    for (let i = 0; i < 10000; i++) {
+        x = x + 1
+    }
+    return x
+}
+
+fn ok(): int {
+    return 42
+}
+
+// Test 1: task.link() — when one fails, linked peer gets cancelled
+fn test_link_cancel() {
+    let t1 = go slow_work()
+    let t2 = go failing()
+    t1.link(t2)
+    let r1 = await t1
+    let r2 = await t2
+    assert(r1 == null, "linked peer should be cancelled when other fails")
+}
+
+// Test 2: task.unlink() — basic API works without crash
+fn test_unlink() {
+    let t1 = go ok()
+    let t2 = go ok()
+    t1.link(t2)
+    t1.unlink(t2)
+    let r1 = await t1
+    let r2 = await t2
+    assert(r1 == 42, "unlinked tasks should complete normally")
+    assert(r2 == 42)
+}
+
+// Test 3: both succeed — link has no effect
+fn test_link_both_ok() {
+    let t1 = go ok()
+    let t2 = go ok()
+    t1.link(t2)
+    let r1 = await t1
+    let r2 = await t2
+    assert(r1 == 42)
+    assert(r2 == 42)
+}
+
+test_link_cancel()
+test_unlink()
+test_link_both_ok()
+print("PASS")

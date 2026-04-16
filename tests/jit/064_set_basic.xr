@@ -1,0 +1,25 @@
+// EXPECTED: 3
+// EXPECTED: true
+// EXPECTED: false
+// Test: Set creation and operations in JIT
+
+fn test_set() {
+    let s = new Set()
+    s.add(1)
+    s.add(2)
+    s.add(3)
+    s.add(2)  // duplicate, should not increase size
+    print(s.length)
+    print(s.has(2))
+    print(s.has(99))
+}
+
+let i = 0
+while (i < 200) {
+    let s = new Set()
+    s.add(i)
+    s.add(i + 1)
+    i = i + 1
+}
+
+test_set()

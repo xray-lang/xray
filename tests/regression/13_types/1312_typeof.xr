@@ -1,0 +1,44 @@
+/*
+** 0525_typeof.xr
+** typeof() 内置函数测试
+**
+** 作者：xingleixu@gmail.com
+**
+** 测试 typeof() 函数返回变量类型名称字符串
+*/
+// 测试基本类型
+assert_eq(typeof(123), Type.int)
+assert_eq(typeof(3.14), Type.float)
+assert_eq(typeof("hello"), Type.string)
+assert_eq(typeof(true), Type.bool)
+assert_eq(typeof(false), Type.bool)
+assert_eq(typeof(null), Type.null)
+// 测试容器类型
+let arr = [1, 2, 3]
+assert_eq(typeof(arr), Type.Array)
+let map = { "a" => 1 }
+assert_eq(typeof(map), Type.Map)
+let s = #[1, 2, 3]
+assert_eq(typeof(s), Type.Set)
+
+// 测试函数类型
+@test
+fn test_fn(): int {
+    return 42
+}
+
+assert_eq(typeof(test_fn), Type.function)
+// 测试闭包
+let closure = fn() {
+    return 1
+}
+assert_eq(typeof(closure), Type.function)
+// 测试变量类型
+let x = 10
+assert_eq(typeof(x), Type.int)
+let y = 3.14
+assert_eq(typeof(y), Type.float)
+// 测试表达式结果类型
+assert_eq(typeof(1 + 2), Type.int)
+assert_eq(typeof("a" + "b"), Type.string)
+print("typeof() 测试通过!")

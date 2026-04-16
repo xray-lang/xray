@@ -1,0 +1,92 @@
+// 1401_crypto_hmac.xr
+// 作者：xingleixu@gmail.com
+// 测试：crypto 库 HMAC 函数测试
+//
+// 覆盖功能：
+//   - HMAC-MD5
+//   - HMAC-SHA1
+//   - HMAC-SHA256
+
+import crypto
+
+// ============================================================
+// 第一部分：HMAC-SHA256 测试
+// ============================================================
+
+@test
+fn test_hmac_sha256_basic(): void {
+    // 基本 HMAC-SHA256 测试
+    let hmac = crypto.hmac("sha256", "key", "message")
+    assert_eq(hmac, "6e9ef29b75fffc5b7abae527d58fdadb2fe42e7219011976917343065f58ed4a")
+}
+
+@test
+fn test_hmac_sha256_empty_message(): void {
+    // 空消息的 HMAC-SHA256
+    let hmac = crypto.hmac("sha256", "key", "")
+    assert_eq(hmac, "5d5d139563c95b5967b9bd9a8c9b233a9dedb45072794cd232dc1b74832607d0")
+}
+
+@test
+fn test_hmac_sha256_complex_key(): void {
+    // 复杂密钥的 HMAC-SHA256
+    let hmac = crypto.hmac("sha256", "secret-key-123", "Hello World")
+    assert_eq(hmac, "89fac429360de35a309dce612ef0e31baf76e254b7127527081c126fef48dd9f")
+}
+
+@test
+fn test_hmac_sha256_long_data(): void {
+    // 长数据的 HMAC-SHA256
+    let hmac = crypto.hmac("sha256", "secret", "The quick brown fox jumps over the lazy dog")
+    assert_eq(hmac.length, 64)
+}
+
+// ============================================================
+// 第二部分：HMAC-SHA1 测试
+// ============================================================
+
+@test
+fn test_hmac_sha1_basic(): void {
+    // 基本 HMAC-SHA1 测试
+    let hmac = crypto.hmac("sha1", "key", "message")
+    assert_eq(hmac, "2088df74d5f2146b48146caf4965377e9d0be3a4")
+}
+
+@test
+fn test_hmac_sha1_empty_message(): void {
+    // 空消息的 HMAC-SHA1
+    let hmac = crypto.hmac("sha1", "key", "")
+    assert_eq(hmac, "f42bb0eeb018ebbd4597ae7213711ec60760843f")
+}
+
+@test
+fn test_hmac_sha1_length(): void {
+    // HMAC-SHA1 长度验证
+    let hmac = crypto.hmac("sha1", "secret", "data")
+    assert_eq(hmac.length, 40)
+}
+
+// ============================================================
+// 第三部分：HMAC-MD5 测试
+// ============================================================
+
+@test
+fn test_hmac_md5_basic(): void {
+    // 基本 HMAC-MD5 测试
+    let hmac = crypto.hmac("md5", "key", "message")
+    assert_eq(hmac, "4e4748e62b463521f6775fbf921234b5")
+}
+
+@test
+fn test_hmac_md5_empty_message(): void {
+    // 空消息的 HMAC-MD5
+    let hmac = crypto.hmac("md5", "key", "")
+    assert_eq(hmac, "63530468a04e386459855da0063b6596")
+}
+
+@test
+fn test_hmac_md5_length(): void {
+    // HMAC-MD5 长度验证
+    let hmac = crypto.hmac("md5", "secret", "data")
+    assert_eq(hmac.length, 32)
+}

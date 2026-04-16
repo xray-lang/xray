@@ -1,0 +1,59 @@
+// Test: Generic Channel types
+// Expected: prints "ok"
+// Basic Channel<T> type annotation
+shared const intCh: Channel<int> = Channel(5)
+shared const strCh: Channel<string> = Channel(5)
+// Send and receive int
+intCh.send(42)
+intCh.send(100)
+let v1 = intCh.recv()
+let v2 = intCh.recv()
+assert_eq(v1, 42)
+assert_eq(v2, 100)
+// Send and receive string
+strCh.send("hello")
+strCh.send("world")
+let s1 = strCh.recv()
+let s2 = strCh.recv()
+assert_eq(s1, "hello")
+assert_eq(s2, "world")
+// Channel with Array
+shared const arrCh: Channel<Array<int>> = Channel(2)
+arrCh.send([1, 2, 3])
+arrCh.send([4, 5, 6])
+let arr1 = arrCh.recv()
+let arr2 = arrCh.recv()
+assert_eq(arr1[0], 1)
+assert_eq(arr2[2], 6)
+// tryRecv with generic channel
+shared const tryCh: Channel<int> = Channel(1)
+// Empty channel
+let val1, ok1 = tryCh.tryRecv()
+assert(!ok1)
+// With value
+tryCh.send(999)
+let val2, ok2 = tryCh.tryRecv()
+assert(ok2)
+assert_eq(val2, 999)
+// trySend with generic channel
+shared const smallCh: Channel<string> = Channel(1)
+let sent1 = smallCh.trySend("first")
+assert(sent1)
+// Channel is full
+let sent2 = smallCh.trySend("second")
+assert(!sent2)
+// Receive and try again
+let recv = smallCh.recv()
+assert_eq(recv, "first")
+// Optional value in channel
+shared const optCh: Channel<int?> = Channel(3)
+optCh.send(42)
+optCh.send(null)
+optCh.send(100)
+let o1 = optCh.recv()
+let o2 = optCh.recv()
+let o3 = optCh.recv()
+assert_eq(o1, 42)
+assert_eq(o2, null)
+assert_eq(o3, 100)
+print("ok")

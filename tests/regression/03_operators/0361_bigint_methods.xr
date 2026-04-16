@@ -1,0 +1,111 @@
+// 0361_bigint_methods.xr
+// 作者：xingleixu@gmail.com
+// 测试：BigInt 内置方法
+
+// ===== toString() =====
+
+@test
+fn test_toString_large(): void {
+    let a = 12345678901234567890n
+    assert_eq(a.toString(), "12345678901234567890")
+}
+
+@test
+fn test_toString_negative(): void {
+    let a = -123n
+    assert_eq(a.toString(), "-123")
+}
+
+// ===== abs() =====
+
+@test
+fn test_abs_negative(): void {
+    let a = -999n
+    assert_eq(a.abs().toString(), "999")
+}
+
+@test
+fn test_abs_positive(): void {
+    let a = 123n
+    assert_eq(a.abs().toString(), "123")
+}
+
+@test
+fn test_abs_zero(): void {
+    let a = 0n
+    assert_eq(a.abs().toString(), "0")
+}
+
+// ===== sign() =====
+
+@test
+fn test_sign_positive(): void {
+    let a = 100n
+    assert_eq(a.sign(), 1)
+}
+
+@test
+fn test_sign_negative(): void {
+    let a = -50n
+    assert_eq(a.sign(), -1)
+}
+
+@test
+fn test_sign_zero(): void {
+    let a = 0n
+    assert_eq(a.sign(), 0)
+}
+
+// ===== isZero() =====
+
+@test
+fn test_isZero_true(): void {
+    let a = 0n
+    assert_eq(a.isZero(), true)
+}
+
+@test
+fn test_isZero_false(): void {
+    let a = 100n
+    assert_eq(a.isZero(), false)
+}
+
+// ===== isNegative() =====
+
+@test
+fn test_isNegative_true(): void {
+    let a = -50n
+    assert_eq(a.isNegative(), true)
+}
+
+@test
+fn test_isNegative_false(): void {
+    let a = 100n
+    assert_eq(a.isNegative(), false)
+}
+
+@test
+fn test_isNegative_zero(): void {
+    let a = 0n
+    assert_eq(a.isNegative(), false)
+}
+
+// ===== isPositive() =====
+
+@test
+fn test_isPositive_true(): void {
+    let a = 100n
+    assert_eq(a.isPositive(), true)
+}
+
+@test
+fn test_isPositive_false(): void {
+    let a = -50n
+    assert_eq(a.isPositive(), false)
+}
+
+@test
+fn test_isPositive_zero(): void {
+    let a = 0n
+    assert_eq(a.isPositive(), false)
+}

@@ -1,0 +1,91 @@
+// Demo 2: 2D AABB Collision Detection
+// Scenario: axis-aligned bounding box overlap test + entity movement
+// Verify: nested struct, in/ref params, boolean expressions, struct method
+
+struct Vec2 {
+    x: float
+    y: float
+}
+
+struct AABB {
+    min: Vec2
+    max: Vec2
+}
+
+struct Entity {
+    id: int
+    bounds: AABB
+    vel: Vec2
+}
+
+// AABB overlap test (pure value computation, zero allocation)
+fn aabb_overlaps(a: in AABB, b: in AABB): bool {
+    return a.min.x <= b.max.x && a.max.x >= b.min.x &&
+           a.min.y <= b.max.y && a.max.y >= b.min.y
+}
+
+// Move entity and update bounding box
+fn move_entity(e: ref Entity, dt: float): void {
+    e.bounds.min.x = e.bounds.min.x + e.vel.x * dt
+    e.bounds.min.y = e.bounds.min.y + e.vel.y * dt
+    e.bounds.max.x = e.bounds.max.x + e.vel.x * dt
+    e.bounds.max.y = e.bounds.max.y + e.vel.y * dt
+}
+
+// --- Test ---
+
+// Create two entities
+let e1 = Entity{
+    id: 1,
+    bounds: AABB{
+        min: Vec2{x: 0.0, y: 0.0},
+        max: Vec2{x: 10.0, y: 10.0}
+    },
+    vel: Vec2{x: 5.0, y: 0.0}
+}
+
+let e2 = Entity{
+    id: 2,
+    bounds: AABB{
+        min: Vec2{x: 15.0, y: 0.0},
+        max: Vec2{x: 25.0, y: 10.0}
+    },
+    vel: Vec2{x: -5.0, y: 0.0}
+}
+
+// Initially no overlap (gap of 5 units)
+print(aabb_overlaps(e1.bounds, e2.bounds))  // false
+
+// Move both entities toward each other (dt=0.5 => each moves 2.5)
+move_entity(e1, 0.5)
+move_entity(e2, 0.5)
+print(e1.bounds.max.x)  // 12.5
+print(e2.bounds.min.x)  // 12.5
+
+// Exactly touching — overlaps should be true (<=)
+print(aabb_overlaps(e1.bounds, e2.bounds))  // true
+
+// Move more — clear overlap
+move_entity(e1, 0.5)
+move_entity(e2, 0.5)
+print(e1.bounds.max.x)  // 15
+print(e2.bounds.min.x)  // 10
+print(aabb_overlaps(e1.bounds, e2.bounds))  // true
+
+// Test non-overlapping on Y axis
+let e3 = Entity{
+    id: 3,
+    bounds: AABB{
+        min: Vec2{x: 0.0, y: 100.0},
+        max: Vec2{x: 10.0, y: 110.0}
+    },
+    vel: Vec2{x: 0.0, y: 0.0}
+}
+print(aabb_overlaps(e1.bounds, e3.bounds))  // false (Y doesn't overlap)
+
+// Verify entity id preserved through mutation
+print(e1.id)  // 1
+print(e2.id)  // 2
+
+// Verify struct field counts
+print(Reflect.fieldCount(e1))  // 3 (id, bounds, vel)

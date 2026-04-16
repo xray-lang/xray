@@ -1,0 +1,15 @@
+/*
+ * test_https.xr - Test HTTPS (TLS) connectivity
+ */
+
+import http
+
+print("Testing HTTPS...")
+
+let resp = http.get("https://httpbin.org/get")
+if (resp.error) {
+    print("Error: " + resp.error)
+} else {
+    print("Success! Status: " + resp.status.toString())
+    print("Body length: " + resp.body.length.toString())
+}

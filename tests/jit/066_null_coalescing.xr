@@ -1,0 +1,26 @@
+// EXPECTED: 42
+// EXPECTED: hello
+// EXPECTED: 0
+// Test: Null coalescing operator (??) and ISNULL_SET in JIT
+
+fn coalesce(a, default_val) {
+    return a ?? default_val
+}
+
+fn safe_get(obj, key: string, default_val) {
+    let v = obj[key]
+    return v ?? default_val
+}
+
+let i = 0
+while (i < 200) {
+    coalesce(null, 42)
+    coalesce("hello", "ignored")
+    i = i + 1
+}
+
+print(coalesce(null, 42))
+print(coalesce("hello", "ignored"))
+
+let m = { "a": 0, "b": null }
+print(safe_get(m, "a", -1))

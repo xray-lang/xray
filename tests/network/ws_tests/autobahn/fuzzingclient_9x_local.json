@@ -1,0 +1,11 @@
+{
+  "outdir": "./reports_9x",
+  "servers": [
+    {
+      "agent": "xray",
+      "url": "ws://127.0.0.1:9100"
+    }
+  ],
+  "cases": ["9.*"],
+  "exclude-cases": []
+}

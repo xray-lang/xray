@@ -1,0 +1,561 @@
+/*
+ * xray - Lightweight typed scripting with native concurrency
+ * https://www.xray-lang.org
+ *
+ * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
+ * Licensed under the MIT License
+ *
+ * dns.c - DNS resolver implementation
+ *
+ * KEY CONCEPT:
+ *   LRU cache (256 entries) with 5-minute TTL. Round-robin for
+ *   load balancing, failover support via xr_dns_dial().
+ */
+
+#include "dns.h"
+#include "../../src/base/xhash.h"
+#include "../../src/coro/xasync.h"
+#include <stdlib.h>
+#include <string.h>
+#include <pthread.h>
+#include <netdb.h>
+#include <sys/time.h>
+#include <sys/socket.h>
+#include <netinet/in.h>
+#include <netinet/tcp.h>
+#include <arpa/inet.h>
+#include <unistd.h>
+#include <fcntl.h>
+#include <errno.h>
+
+/* ========== Constants ========== */
+
+#define DNS_CACHE_SIZE      256              // Max cache entries
+#define DNS_TTL_MS          (5 * 60 * 1000)  // 5 minute TTL
+
+/* ========== Cache Entry (dual-stack) ========== */
+
+typedef struct XrDnsCacheEntry {
+    char *hostname;
+    XrSockAddr addrs[XR_DNS_MAX_ADDRS];      // Mixed IPv4/IPv6
+    int addr_count;
+    int current_idx;                          // Round-robin index
+    uint64_t expire_time;
+    struct XrDnsCacheEntry *hash_next;        // Hash bucket chain
+    struct XrDnsCacheEntry *lru_next;         // LRU: toward tail (older)
+    struct XrDnsCacheEntry *lru_prev;         // LRU: toward head (newer)
+} XrDnsCacheEntry;
+
+/* ========== Async Request ========== */
+
+struct XrDnsRequest {
+    char *hostname;
+    XrSockAddr addr;
+    XrDnsStatus status;
+    pthread_mutex_t mutex;
+    pthread_cond_t cond;
+    int refcount;
+};
+
+/* ========== Global State ========== */
+
+static struct {
+    XrDnsCacheEntry *cache_head;    // LRU head (most recent)
+    XrDnsCacheEntry *cache_tail;    // LRU tail (least recent)
+    XrDnsCacheEntry *cache_hash[DNS_CACHE_SIZE];
+    int cache_count;
+    pthread_mutex_t cache_mutex;
+    bool initialized;
+} g_dns;
+
+/* ========== Utility Functions ========== */
+
+static uint64_t get_time_ms(void)
+{
+    struct timeval tv;
+    gettimeofday(&tv, NULL);
+    return (uint64_t)tv.tv_sec * 1000 + tv.tv_usec / 1000;
+}
+
+static unsigned int hash_hostname(const char *hostname)
+{
+    uint32_t h = xr_hash_bytes(hostname, strlen(hostname));
+    return h % DNS_CACHE_SIZE;
+}
+
+/* ========== Cache Operations ========== */
+
+static XrDnsCacheEntry* cache_find_locked(const char *hostname)
+{
+    unsigned int idx = hash_hostname(hostname);
+    XrDnsCacheEntry *entry = g_dns.cache_hash[idx];
+    
+    while (entry) {
+        if (strcmp(entry->hostname, hostname) == 0) {
+            return entry;
+        }
+        entry = entry->hash_next;
+    }
+    return NULL;
+}
+
+static void cache_move_to_front_locked(XrDnsCacheEntry *entry)
+{
+    if (entry == g_dns.cache_head) return;
+    
+    // Remove from LRU list
+    if (entry->lru_prev) entry->lru_prev->lru_next = entry->lru_next;
+    if (entry->lru_next) entry->lru_next->lru_prev = entry->lru_prev;
+    if (entry == g_dns.cache_tail) g_dns.cache_tail = entry->lru_prev;
+    
+    // Insert at LRU head
+    entry->lru_prev = NULL;
+    entry->lru_next = g_dns.cache_head;
+    if (g_dns.cache_head) g_dns.cache_head->lru_prev = entry;
+    g_dns.cache_head = entry;
+    if (!g_dns.cache_tail) g_dns.cache_tail = entry;
+}
+
+static void cache_insert_locked(const char *hostname, XrSockAddr *addrs, int addr_count)
+{
+    unsigned int idx = hash_hostname(hostname);
+    
+    // Check if exists
+    XrDnsCacheEntry *entry = cache_find_locked(hostname);
+    if (entry) {
+        entry->addr_count = addr_count < XR_DNS_MAX_ADDRS ? addr_count : XR_DNS_MAX_ADDRS;
+        memcpy(entry->addrs, addrs, sizeof(XrSockAddr) * entry->addr_count);
+        entry->expire_time = get_time_ms() + DNS_TTL_MS;
+        cache_move_to_front_locked(entry);
+        return;
+    }
+    
+    // Evict LRU if cache full
+    if (g_dns.cache_count >= DNS_CACHE_SIZE && g_dns.cache_tail) {
+        XrDnsCacheEntry *old = g_dns.cache_tail;
+        unsigned int old_idx = hash_hostname(old->hostname);
+        
+        // Remove from hash chain (may be non-head node)
+        XrDnsCacheEntry **pp = &g_dns.cache_hash[old_idx];
+        while (*pp && *pp != old) {
+            pp = &(*pp)->hash_next;
+        }
+        if (*pp) *pp = old->hash_next;
+        
+        // Remove from LRU tail
+        if (old->lru_prev) old->lru_prev->lru_next = NULL;
+        g_dns.cache_tail = old->lru_prev;
+        if (g_dns.cache_head == old) g_dns.cache_head = NULL;
+        
+        free(old->hostname);
+        free(old);
+        g_dns.cache_count--;
+    }
+    
+    // Create new entry
+    entry = (XrDnsCacheEntry*)malloc(sizeof(XrDnsCacheEntry));
+    entry->hostname = strdup(hostname);
+    entry->addr_count = addr_count < XR_DNS_MAX_ADDRS ? addr_count : XR_DNS_MAX_ADDRS;
+    memcpy(entry->addrs, addrs, sizeof(XrSockAddr) * entry->addr_count);
+    entry->current_idx = 0;
+    entry->expire_time = get_time_ms() + DNS_TTL_MS;
+    
+    // Insert into hash chain
+    entry->hash_next = g_dns.cache_hash[idx];
+    g_dns.cache_hash[idx] = entry;
+    
+    // Insert at LRU head
+    entry->lru_prev = NULL;
+    entry->lru_next = g_dns.cache_head;
+    if (g_dns.cache_head) g_dns.cache_head->lru_prev = entry;
+    g_dns.cache_head = entry;
+    if (!g_dns.cache_tail) g_dns.cache_tail = entry;
+    
+    g_dns.cache_count++;
+}
+
+// Round-robin: get next address from cache
+static bool cache_lookup(const char *hostname, XrSockAddr *addr, XrAddrFamily family)
+{
+    pthread_mutex_lock(&g_dns.cache_mutex);
+    
+    XrDnsCacheEntry *entry = cache_find_locked(hostname);
+    if (entry && entry->addr_count > 0) {
+        uint64_t now = get_time_ms();
+        if (now < entry->expire_time) {
+            // Filter by address family if specified
+            if (family == XR_AF_UNSPEC) {
+                *addr = entry->addrs[entry->current_idx];
+                entry->current_idx = (entry->current_idx + 1) % entry->addr_count;
+            } else {
+                // Find matching address family
+                sa_family_t target = (family == XR_AF_INET) ? AF_INET : AF_INET6;
+                int start = entry->current_idx;
+                int found = -1;
+                for (int i = 0; i < entry->addr_count; i++) {
+                    int idx = (start + i) % entry->addr_count;
+                    if (entry->addrs[idx].family == target) {
+                        found = idx;
+                        break;
+                    }
+                }
+                if (found < 0) {
+                    pthread_mutex_unlock(&g_dns.cache_mutex);
+                    return false;
+                }
+                *addr = entry->addrs[found];
+                entry->current_idx = (found + 1) % entry->addr_count;
+            }
+            cache_move_to_front_locked(entry);
+            pthread_mutex_unlock(&g_dns.cache_mutex);
+            return true;
+        }
+    }
+    
+    pthread_mutex_unlock(&g_dns.cache_mutex);
+    return false;
+}
+
+// Get all addresses from cache
+static int cache_lookup_all(const char *hostname, XrSockAddr *addrs, int max_addrs, XrAddrFamily family)
+{
+    pthread_mutex_lock(&g_dns.cache_mutex);
+    
+    XrDnsCacheEntry *entry = cache_find_locked(hostname);
+    if (entry && entry->addr_count > 0) {
+        uint64_t now = get_time_ms();
+        if (now < entry->expire_time) {
+            int count = 0;
+            for (int i = 0; i < entry->addr_count && count < max_addrs; i++) {
+                if (family == XR_AF_UNSPEC) {
+                    addrs[count++] = entry->addrs[i];
+                } else {
+                    sa_family_t target = (family == XR_AF_INET) ? AF_INET : AF_INET6;
+                    if (entry->addrs[i].family == target) {
+                        addrs[count++] = entry->addrs[i];
+                    }
+                }
+            }
+            if (count > 0) {
+                cache_move_to_front_locked(entry);
+            }
+            pthread_mutex_unlock(&g_dns.cache_mutex);
+            return count;
+        }
+    }
+    
+    pthread_mutex_unlock(&g_dns.cache_mutex);
+    return 0;
+}
+
+/* ========== DNS Resolution ========== */
+
+// Resolve all addresses and cache
+static int do_resolve_all(const char *hostname, XrSockAddr *addrs, int max_addrs, XrAddrFamily family)
+{
+    struct addrinfo hints, *res, *rp;
+    memset(&hints, 0, sizeof(hints));
+    
+    // Set address family
+    switch (family) {
+        case XR_AF_INET:
+            hints.ai_family = AF_INET;
+            break;
+        case XR_AF_INET6:
+            hints.ai_family = AF_INET6;
+            break;
+        default:
+            hints.ai_family = AF_UNSPEC;  // Resolve both IPv4 and IPv6
+            break;
+    }
+    hints.ai_socktype = SOCK_STREAM;
+    
+    int err = getaddrinfo(hostname, NULL, &hints, &res);
+    if (err != 0 || !res) {
+        return 0;
+    }
+    
+    // Collect addresses (IPv4 first, then IPv6)
+    int count = 0;
+    
+    // First pass: collect IPv4
+    if (family == XR_AF_UNSPEC || family == XR_AF_INET) {
+        for (rp = res; rp != NULL && count < max_addrs; rp = rp->ai_next) {
+            if (rp->ai_family == AF_INET) {
+                addrs[count].family = AF_INET;
+                memcpy(&addrs[count].addr.v4, rp->ai_addr, sizeof(struct sockaddr_in));
+                count++;
+            }
+        }
+    }
+    
+    // Second pass: collect IPv6
+    if (family == XR_AF_UNSPEC || family == XR_AF_INET6) {
+        for (rp = res; rp != NULL && count < max_addrs; rp = rp->ai_next) {
+            if (rp->ai_family == AF_INET6) {
+                addrs[count].family = AF_INET6;
+                memcpy(&addrs[count].addr.v6, rp->ai_addr, sizeof(struct sockaddr_in6));
+                count++;
+            }
+        }
+    }
+    
+    freeaddrinfo(res);
+    
+    if (count > 0) {
+        // Update cache
+        pthread_mutex_lock(&g_dns.cache_mutex);
+        cache_insert_locked(hostname, addrs, count);
+        pthread_mutex_unlock(&g_dns.cache_mutex);
+    }
+    
+    return count;
+}
+
+// Resolve single address
+static bool do_resolve(const char *hostname, XrSockAddr *addr, XrAddrFamily family)
+{
+    XrSockAddr addrs[XR_DNS_MAX_ADDRS];
+    int count = do_resolve_all(hostname, addrs, XR_DNS_MAX_ADDRS, family);
+    if (count > 0) {
+        *addr = addrs[0];
+        return true;
+    }
+    return false;
+}
+
+
+/* ========== Public API ========== */
+
+void xr_dns_init(void)
+{
+    if (g_dns.initialized) return;
+    
+    memset(&g_dns, 0, sizeof(g_dns));
+    pthread_mutex_init(&g_dns.cache_mutex, NULL);
+    g_dns.initialized = true;
+}
+
+void xr_dns_shutdown(void)
+{
+    if (!g_dns.initialized) return;
+    
+    // Clear cache
+    xr_dns_cache_clear();
+    pthread_mutex_destroy(&g_dns.cache_mutex);
+    g_dns.initialized = false;
+}
+
+bool xr_dns_resolve(const char *hostname, XrSockAddr *addr, XrAddrFamily family)
+{
+    // Validate parameters
+    if (!hostname || !hostname[0] || !addr) {
+        return false;
+    }
+    
+    // Check cache first
+    if (cache_lookup(hostname, addr, family)) {
+        return true;
+    }
+    
+    // Synchronous resolution
+    return do_resolve(hostname, addr, family);
+}
+
+/* ========== XrAsyncPool Integration ========== */
+
+// Async task data
+typedef struct {
+    char hostname[256];
+    XrAddrFamily family;
+    XrSockAddr addr;
+    bool success;
+} XrDnsAsyncData;
+
+// Async execution function (runs in async thread)
+static void dns_async_invoke(void *data) {
+    XrDnsAsyncData *d = (XrDnsAsyncData *)data;
+    d->success = do_resolve(d->hostname, &d->addr, d->family);
+}
+
+/*
+ * Async DNS resolve using XrAsyncPool:
+ * 1. Check cache first, return immediately if hit
+ * 2. Submit task to async pool on cache miss
+ * 3. Coroutine suspends until async thread completes
+ * 4. Coroutine resumes with result
+ */
+bool xr_dns_resolve_on_async(XrAsyncPool *pool, struct XrCoroutine *coro, 
+                              int worker_id, const char *hostname, 
+                              XrSockAddr *addr, XrAddrFamily family)
+{
+    if (!g_dns.initialized) {
+        xr_dns_init();
+    }
+    
+    // Check cache first
+    if (cache_lookup(hostname, addr, family)) {
+        return true;
+    }
+    
+    // Fall back to sync resolve if no async pool
+    if (!pool) {
+        return do_resolve(hostname, addr, family);
+    }
+    
+    // Create async task data
+    XrDnsAsyncData *data = (XrDnsAsyncData *)malloc(sizeof(XrDnsAsyncData));
+    if (!data) {
+        return do_resolve(hostname, addr, family);
+    }
+    
+    strncpy(data->hostname, hostname, sizeof(data->hostname) - 1);
+    data->hostname[sizeof(data->hostname) - 1] = '\0';
+    data->family = family;
+    data->success = false;
+    
+    // Create async job
+    XrAsyncJob *job = xr_async_job_create(coro, worker_id, dns_async_invoke, data);
+    if (!job) {
+        free(data);
+        return do_resolve(hostname, addr, family);
+    }
+    
+    // Submit job (coroutine will suspend)
+    xr_async_submit(pool, job);
+    
+    // Note: coroutine suspended, code below runs after resume
+    // Result available via coro->async_result
+    
+    return true;  // Task submitted
+}
+
+void xr_dns_cache_clear(void)
+{
+    pthread_mutex_lock(&g_dns.cache_mutex);
+    
+    XrDnsCacheEntry *entry = g_dns.cache_head;
+    while (entry) {
+        XrDnsCacheEntry *next = entry->lru_next;
+        free(entry->hostname);
+        free(entry);
+        entry = next;
+    }
+    
+    memset(g_dns.cache_hash, 0, sizeof(g_dns.cache_hash));
+    g_dns.cache_head = NULL;
+    g_dns.cache_tail = NULL;
+    g_dns.cache_count = 0;
+    
+    pthread_mutex_unlock(&g_dns.cache_mutex);
+}
+
+void xr_dns_prefetch(const char *hostname)
+{
+    // Warm up cache with sync resolve
+    XrSockAddr addr;
+    do_resolve(hostname, &addr, XR_AF_UNSPEC);
+}
+
+int xr_dns_resolve_all(const char *hostname, XrSockAddr *addrs, int max_addrs, XrAddrFamily family)
+{
+    // Check cache first
+    int count = cache_lookup_all(hostname, addrs, max_addrs, family);
+    if (count > 0) {
+        return count;
+    }
+    
+    // Synchronous resolution
+    return do_resolve_all(hostname, addrs, max_addrs, family);
+}
+
+// Non-blocking connect with timeout
+static int connect_with_timeout(int fd, struct sockaddr *addr, socklen_t addrlen, int timeout_ms)
+{
+    // Set non-blocking
+    int flags = fcntl(fd, F_GETFL, 0);
+    if (flags < 0) return -1;
+    fcntl(fd, F_SETFL, flags | O_NONBLOCK);
+    
+    int ret = connect(fd, addr, addrlen);
+    if (ret == 0) {
+        fcntl(fd, F_SETFL, flags);
+        return 0;
+    }
+    
+    if (errno != EINPROGRESS) {
+        return -1;
+    }
+    
+    // Wait for connection
+    fd_set wfds;
+    FD_ZERO(&wfds);
+    FD_SET(fd, &wfds);
+    
+    struct timeval tv;
+    tv.tv_sec = timeout_ms / 1000;
+    tv.tv_usec = (timeout_ms % 1000) * 1000;
+    
+    ret = select(fd + 1, NULL, &wfds, NULL, &tv);
+    if (ret <= 0) {
+        return -1;
+    }
+    
+    // Check connection result
+    int error = 0;
+    socklen_t len = sizeof(error);
+    if (getsockopt(fd, SOL_SOCKET, SO_ERROR, &error, &len) < 0 || error != 0) {
+        return -1;
+    }
+    
+    // Restore blocking
+    fcntl(fd, F_SETFL, flags);
+    return 0;
+}
+
+int xr_dns_dial(const char *hostname, int port, int timeout_ms)
+{
+    // Get all addresses (IPv4/IPv6)
+    XrSockAddr addrs[XR_DNS_MAX_ADDRS];
+    int addr_count = xr_dns_resolve_all(hostname, addrs, XR_DNS_MAX_ADDRS, XR_AF_UNSPEC);
+    if (addr_count == 0) {
+        return -1;
+    }
+    
+    // Timeout per IP
+    int per_ip_timeout = timeout_ms / addr_count;
+    if (per_ip_timeout < 1000) per_ip_timeout = 1000;  // Min 1 second
+    
+    // Try each address
+    for (int i = 0; i < addr_count; i++) {
+        int af = addrs[i].family;
+        int fd = socket(af, SOCK_STREAM, 0);
+        if (fd < 0) continue;
+        
+        // TCP_NODELAY for low latency
+        int flag = 1;
+        setsockopt(fd, IPPROTO_TCP, TCP_NODELAY, &flag, sizeof(flag));
+        
+        struct sockaddr *sa;
+        socklen_t sa_len;
+        
+        if (af == AF_INET) {
+            addrs[i].addr.v4.sin_port = htons(port);
+            sa = (struct sockaddr*)&addrs[i].addr.v4;
+            sa_len = sizeof(struct sockaddr_in);
+        } else {
+            addrs[i].addr.v6.sin6_port = htons(port);
+            sa = (struct sockaddr*)&addrs[i].addr.v6;
+            sa_len = sizeof(struct sockaddr_in6);
+        }
+        
+        if (connect_with_timeout(fd, sa, sa_len, per_ip_timeout) == 0) {
+            return fd;  // Success
+        }
+        
+        close(fd);
+    }
+    
+    return -1;  // All addresses failed
+}
+

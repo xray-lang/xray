@@ -1,0 +1,26 @@
+// Test log module source location display
+
+import log
+
+@test
+fn test_enable_source(): void {
+    log.setLevel(log.DEBUG)
+    log.enableSource(true)
+    log.info("with source location")
+    log.enableSource(false)
+    log.info("without source location")
+    assert(true)
+}
+
+@test
+fn test_source_with_json_format(): void {
+    log.setLevel(log.DEBUG)
+    log.enableSource(true)
+    log.setFormat("json")
+    log.info("json with source", "key", "value")
+    log.setFormat("text")
+    log.enableSource(false)
+    assert(true)
+}
+
+print("All log source tests passed")

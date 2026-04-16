@@ -1,0 +1,48 @@
+/*
+ * ws_echo_server.xr - High-performance WebSocket echo server for benchmarking
+ *
+ * Usage:
+ *   ./build-release/xray tests/network/ws_echo_server.xr
+ *
+ * Then run benchmark:
+ *   python3 tests/network/ws_bench.py ws://localhost:8765
+ *
+ * Or use wscat:
+ *   wscat -c ws://localhost:8765
+ */
+
+import ws
+
+print("=== WebSocket Echo Server (Benchmark Mode) ===")
+print("Port: 8765")
+print("Waiting for connections...")
+print("")
+print("To benchmark, run:")
+print("  python3 tests/network/ws_bench.py ws://localhost:8765")
+print("")
+print("Press Ctrl+C to stop")
+print("")
+
+let connectionCount = 0
+let messageCount = 0
+
+ws.serve(8765, fn(conn) {
+    connectionCount = connectionCount + 1
+    let connId = connectionCount
+    
+    // Echo loop - minimal overhead for max performance
+    while (ws.isOpen(conn)) {
+        let msg = ws.recv(conn, null)
+        if (msg == null || msg.error) {
+            break
+        }
+        if (msg.data) {
+            messageCount = messageCount + 1
+            // Echo back with prefix
+            ws.send(conn, "Echo: " + msg.data, null)
+        }
+    }
+})
+
+print("Server stopped. Total connections: " + connectionCount.toString())
+print("Total messages processed: " + messageCount.toString())

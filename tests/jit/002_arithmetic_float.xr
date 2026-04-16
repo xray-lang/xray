@@ -1,0 +1,42 @@
+// EXPECTED: 8.5
+// EXPECTED: 1.5
+// EXPECTED: 17.5
+// EXPECTED: 2
+// EXPECTED: -5
+// Test: Float arithmetic operations in JIT-compiled function
+
+fn fadd(a: float, b: float) : float {
+    return a + b
+}
+
+fn fsub(a: float, b: float) : float {
+    return a - b
+}
+
+fn fmul(a: float, b: float) : float {
+    return a * b
+}
+
+fn fdiv(a: float, b: float) : float {
+    return a / b
+}
+
+fn fneg(a: float) : float {
+    return -a
+}
+
+let i = 0
+while (i < 200) {
+    fadd(5.0, 3.5)
+    fsub(5.0, 3.5)
+    fmul(5.0, 3.5)
+    fdiv(5.0, 2.5)
+    fneg(5.0)
+    i = i + 1
+}
+
+print(fadd(5.0, 3.5))
+print(fsub(5.0, 3.5))
+print(fmul(5.0, 3.5))
+print(fdiv(5.0, 2.5))
+print(fneg(5.0))

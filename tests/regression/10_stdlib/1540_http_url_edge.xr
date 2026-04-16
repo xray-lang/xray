@@ -1,0 +1,94 @@
+// 1540_http_url_edge.xr - HTTP URL encode/decode edge cases
+
+import http
+
+// ===== Basic roundtrip =====
+
+@test
+fn test_url_encode_decode_roundtrip(): void {
+    let original = "hello world"
+    let encoded = http.urlEncode(original)
+    let decoded = http.urlDecode(encoded)
+    assert_eq(decoded, original)
+}
+
+// ===== Special characters =====
+
+@test
+fn test_url_encode_special(): void {
+    let encoded = http.urlEncode("a+b=c&d")
+    assert(encoded.contains("%"))
+    let decoded = http.urlDecode(encoded)
+    assert_eq(decoded, "a+b=c&d")
+}
+
+@test
+fn test_url_encode_symbols(): void {
+    let original = "!@#$%^&*()_+-=[]{}|;':\",./<>?"
+    let encoded = http.urlEncode(original)
+    let decoded = http.urlDecode(encoded)
+    assert_eq(decoded, original)
+}
+
+// ===== Chinese characters =====
+
+@test
+fn test_url_encode_chinese(): void {
+    let original = "你好世界"
+    let encoded = http.urlEncode(original)
+    assert(encoded.contains("%"))
+    let decoded = http.urlDecode(encoded)
+    assert_eq(decoded, original)
+}
+
+// ===== Pure ASCII (no encoding needed) =====
+
+@test
+fn test_url_encode_ascii_passthrough(): void {
+    let ascii = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"
+    let encoded = http.urlEncode(ascii)
+    assert_eq(encoded, ascii)
+}
+
+// ===== Empty string =====
+
+@test
+fn test_url_encode_empty(): void {
+    let encoded = http.urlEncode("")
+    assert(encoded == null || encoded == "")
+}
+
+@test
+fn test_url_decode_empty(): void {
+    let decoded = http.urlDecode("")
+    assert(decoded == null || decoded == "")
+}
+
+// ===== Space encoding =====
+
+@test
+fn test_url_encode_space(): void {
+    let encoded = http.urlEncode("hello world")
+    assert_eq(encoded, "hello%20world")
+}
+
+// ===== Double encoding prevention =====
+
+@test
+fn test_url_decode_percent(): void {
+    let decoded = http.urlDecode("hello%20world")
+    assert_eq(decoded, "hello world")
+}
+
+// ===== Long string =====
+
+@test
+fn test_url_encode_long(): void {
+    let original = ""
+    for (let i = 0; i < 50; i++) {
+        original = original + "param" + string(i) + "=value" + string(i) + "&"
+    }
+    let encoded = http.urlEncode(original)
+    let decoded = http.urlDecode(encoded)
+    assert_eq(decoded, original)
+}

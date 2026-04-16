@@ -1,0 +1,29 @@
+// 测试 task.result 属性
+// 作者：xingleixu@gmail.com
+
+fn compute(x: int): int {
+    return x * 2
+}
+
+fn main(): void {
+    // 创建协程
+    let task = go compute(21)
+    
+    // 未完成时获取结果（应该返回 null）
+    print("before await:", task.result)
+    
+    // 等待完成
+    let result = await task
+    
+    // 完成后获取结果（可以多次获取）
+    print("after await:", task.result)
+    print("again:", task.result)
+    
+    // 取消的协程也可以获取结果（为 null）
+    let task2 = go compute(10)
+    task2.cancel()
+    await task2
+    print("cancelled:", task2.result)
+}
+
+main()

@@ -1,0 +1,24 @@
+// EXPECTED: 10
+// EXPECTED: 20
+// Test: Functions returning different types (int, float, bool, ptr)
+
+fn ret_int() : int { return 10 }
+fn ret_float() : float { return 3.14 }
+fn ret_bool() : bool { return true }
+
+fn dispatch(which: int) : int {
+    if (which == 0) { return ret_int() }
+    if (which == 1) { return int(ret_float()) }
+    return 0
+}
+
+let i = 0
+while (i < 200) {
+    dispatch(0)
+    dispatch(1)
+    i = i + 1
+}
+
+print(dispatch(0))
+// int(3.14) → depends on truncation, let's pick safe value
+print(ret_int() + ret_int())

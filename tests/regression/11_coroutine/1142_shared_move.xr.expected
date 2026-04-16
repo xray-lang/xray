@@ -1,0 +1,18 @@
+=== Test shared const ===
+{name: "test", value: 42}
+coro1: 42
+coro2: 84
+results: 42 84
+=== Test move go ===
+child got: 10
+child result: 11
+=== Test move channel send ===
+received: [10, 20, 30]
+=== Test normal copy ===
+original: [1, 2, 3]
+coro result: 4
+=== Test move pipeline ===
+stage1: 1
+stage2: 2
+final step: 2
+=== All tests passed ===

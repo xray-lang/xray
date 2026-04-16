@@ -1,0 +1,59 @@
+/*
+** 作者：xingleixu@gmail.com
+** 测试 defer {} 块语法
+*/
+
+print("=== defer 块语法测试 ===")
+
+@test
+fn test_simple(): void {
+    print("开始")
+    
+    defer {
+        print("defer 块")
+    }
+    
+    print("结束")
+}
+
+test_simple()
+
+// 测试多个 defer 块（LIFO 顺序）
+print("=== 多个 defer 块 ===")
+
+@test
+fn test_multi(): void {
+    defer {
+        print("defer 1")
+    }
+    
+    print("执行中")
+    
+    defer {
+        print("defer 2")
+    }
+    
+    print("结束")
+}
+
+test_multi()
+
+// 测试 defer 块与普通 defer 混合
+print("=== defer 混合测试 ===")
+
+fn cleanup(): void {
+    print("cleanup 函数")
+}
+
+@test
+fn test_mixed(): void {
+    defer cleanup()
+    
+    defer {
+        print("defer 块 A")
+    }
+    
+    print("执行")
+}
+
+test_mixed()

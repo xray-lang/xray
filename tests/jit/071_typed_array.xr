@@ -1,0 +1,38 @@
+// EXPECTED: 10
+// EXPECTED: 45
+// EXPECTED: 5
+// Test: Typed array operations in JIT (TARRAY_GET/SET/PUSH)
+
+fn sum_typed(arr: Array<int>) : int {
+    let sum = 0
+    let i = 0
+    while (i < arr.length) {
+        sum = sum + arr[i]
+        i = i + 1
+    }
+    return sum
+}
+
+fn fill_array(n: int) : Array<int> {
+    let arr: Array<int> = []
+    let i = 0
+    while (i < n) {
+        arr.push(i)
+        i = i + 1
+    }
+    return arr
+}
+
+let i = 0
+while (i < 200) {
+    fill_array(10)
+    sum_typed([1, 2, 3, 4, 5])
+    i = i + 1
+}
+
+let a = fill_array(10)
+print(a.length)
+print(sum_typed(a))
+
+let b: Array<int> = [1, 2, 3, 4, 5]
+print(sum_typed(b))

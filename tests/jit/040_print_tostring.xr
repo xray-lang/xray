@@ -1,0 +1,30 @@
+// EXPECTED: 42
+// EXPECTED: 3.14
+// EXPECTED: true
+// EXPECTED: null
+// Test: Print and toString for various types in JIT
+
+fn identity_int(x: int) : int {
+    return x
+}
+
+fn identity_float(x: float) : float {
+    return x
+}
+
+fn identity_bool(x: bool) : bool {
+    return x
+}
+
+let i = 0
+while (i < 200) {
+    identity_int(1)
+    identity_float(1.0)
+    identity_bool(true)
+    i = i + 1
+}
+
+print(identity_int(42))
+print(identity_float(3.14))
+print(identity_bool(true))
+print(null)

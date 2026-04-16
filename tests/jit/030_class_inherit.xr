@@ -1,0 +1,52 @@
+// EXPECTED: 78.5
+// EXPECTED: 200
+// Test: Class inheritance and method override in JIT
+
+class Shape {
+    area() : float {
+        return 0.0
+    }
+}
+
+class Circle extends Shape {
+    r: float
+
+    constructor(r) {
+        this.r = r
+    }
+
+    area() : float {
+        return 3.14 * this.r * this.r
+    }
+}
+
+class Rect extends Shape {
+    w: int
+    h: int
+
+    constructor(w, h) {
+        this.w = w
+        this.h = h
+    }
+
+    area() : int {
+        return this.w * this.h
+    }
+}
+
+fn calc_area(shape) {
+    return shape.area()
+}
+
+let c = new Circle(5.0)
+let r = new Rect(10, 20)
+
+let i = 0
+while (i < 200) {
+    calc_area(c)
+    calc_area(r)
+    i = i + 1
+}
+
+print(calc_area(c))
+print(calc_area(r))

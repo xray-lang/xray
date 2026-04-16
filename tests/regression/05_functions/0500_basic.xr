@@ -1,0 +1,196 @@
+// 0500_basic.xr
+// 作者：xingleixu@gmail.com
+// 测试：函数基础
+
+// ===== 简单函数 =====
+
+@test
+fn test_simple_function(): void {
+    fn greet(): string {
+        return "hello"
+    }
+    assert_eq(greet(), "hello")
+}
+
+@test
+fn test_function_no_return(): void {
+    let result = 0
+    fn setResult(): void {
+        result = 42
+    }
+    setResult()
+    assert_eq(result, 42)
+}
+
+// ===== 参数 =====
+
+@test
+fn test_single_param(): void {
+    fn double(x: int): int {
+        return x * 2
+    }
+    assert_eq(double(5), 10)
+}
+
+@test
+fn test_multiple_params(): void {
+    fn add(a: int, b: int): int {
+        return a + b
+    }
+    assert_eq(add(3, 5), 8)
+}
+
+@test
+fn test_many_params(): void {
+    fn sum(a: int, b: int, c: int, d: int, e: int): int {
+        return a + b + c + d + e
+    }
+    assert_eq(sum(1, 2, 3, 4, 5), 15)
+}
+
+// ===== 返回值 =====
+
+@test
+fn test_return_int(): void {
+    fn getInt(): int { return 42 }
+    assert_eq(getInt(), 42)
+}
+
+@test
+fn test_return_float(): void {
+    fn getFloat(): float { return 3.14 }
+    assert_eq(getFloat(), 3.14)
+}
+
+@test
+fn test_return_string(): void {
+    fn getString(): string { return "hello" }
+    assert_eq(getString(), "hello")
+}
+
+@test
+fn test_return_bool(): void {
+    fn getBool(): bool { return true }
+    assert_eq(getBool(), true)
+}
+
+@test
+fn test_return_null(): void {
+    fn getNull(): int? { return null }
+    assert_eq(getNull(), null)
+}
+
+@test
+fn test_return_array(): void {
+    fn getArray(): Array<int> { return [1, 2, 3] }
+    let arr = getArray()
+    assert_eq(arr.length, 3)
+}
+
+// ===== 提前返回 =====
+
+@test
+fn test_early_return(): void {
+    fn check(x: int): string {
+        if (x > 10) {
+            return "big"
+        }
+        return "small"
+    }
+    assert_eq(check(15), "big")
+    assert_eq(check(5), "small")
+}
+
+@test
+fn test_multiple_returns(): void {
+    fn classify(x: int): string {
+        if (x < 0) { return "negative" }
+        if (x == 0) { return "zero" }
+        return "positive"
+    }
+    assert_eq(classify(-5), "negative")
+    assert_eq(classify(0), "zero")
+    assert_eq(classify(5), "positive")
+}
+
+// ===== 局部变量 =====
+
+@test
+fn test_local_variables(): void {
+    fn compute(x: int): int {
+        let a = x * 2
+        let b = a + 10
+        return b
+    }
+    assert_eq(compute(5), 20)
+}
+
+@test
+fn test_shadow_outer(): void {
+    let x = 100
+    fn inner(): int {
+        let x = 10
+        return x
+    }
+    assert_eq(inner(), 10)
+    assert_eq(x, 100)  // 外层不变
+}
+
+// ===== 函数调用表达式 =====
+
+@test
+fn test_call_in_expression(): void {
+    fn double(x: int): int { return x * 2 }
+    
+    let result = double(5) + double(3)
+    assert_eq(result, 16)
+}
+
+@test
+fn test_nested_call(): void {
+    fn double(x: int): int { return x * 2 }
+    
+    let result = double(double(3))
+    assert_eq(result, 12)
+}
+
+@test
+fn test_call_as_argument(): void {
+    fn add(a: int, b: int): int { return a + b }
+    fn double(x: int): int { return x * 2 }
+    
+    let result = add(double(2), double(3))
+    assert_eq(result, 10)  // 4 + 6
+}
+
+// ===== 函数作为条件 =====
+
+@test
+fn test_function_as_condition(): void {
+    fn isPositive(x: int): bool { return x > 0 }
+    
+    let result = ""
+    if (isPositive(5)) {
+        result = "yes"
+    } else {
+        result = "no"
+    }
+    assert_eq(result, "yes")
+}
+
+// ===== 边界条件 =====
+
+@test
+fn test_empty_function(): void {
+    fn empty(): void { }
+    let result = empty()
+    assert_eq(result, null)
+}
+
+@test
+fn test_return_only(): void {
+    fn returnOnly(): void { return }
+    let result = returnOnly()
+    assert_eq(result, null)
+}
+

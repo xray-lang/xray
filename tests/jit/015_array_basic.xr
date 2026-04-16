@@ -1,0 +1,42 @@
+// EXPECTED: 1
+// EXPECTED: 3
+// EXPECTED: 15
+// EXPECTED: 99
+// EXPECTED: 4
+// Test: Array basic operations (NEWARRAY, INDEX_GET, INDEX_SET, ARRAY_LEN, ARRAY_PUSH)
+
+fn array_get(arr, idx: int) : int {
+    return arr[idx]
+}
+
+fn array_set(arr, idx: int, val: int) {
+    arr[idx] = val
+}
+
+fn array_sum(arr) : int {
+    let s = 0
+    let i = 0
+    while (i < arr.length) {
+        s = s + arr[i]
+        i = i + 1
+    }
+    return s
+}
+
+let a = [1, 2, 3]
+let i = 0
+while (i < 200) {
+    array_get(a, 0)
+    array_sum(a)
+    i = i + 1
+}
+
+print(array_get(a, 0))
+print(array_get(a, 2))
+
+let b = [1, 2, 3, 4, 5]
+print(array_sum(b))
+
+array_set(b, 0, 99)
+print(b[0])
+print(b.length - 1)

@@ -1,0 +1,29 @@
+// Test task.error property
+// Author: xingleixu@gmail.com
+
+fn bad(): int {
+    let x = 1 / 0
+    return x
+}
+
+fn good(): int {
+    return 42
+}
+
+fn main(): void {
+    // Error task
+    let t1 = go bad()
+    await t1
+    print("t1.done:", t1.done)
+    print("t1.error:", t1.error)
+    print("t1.result:", t1.result)
+
+    // Good task
+    let t2 = go good()
+    let r = await t2
+    print("t2.done:", t2.done)
+    print("t2.error:", t2.error)
+    print("t2.result:", t2.result)
+}
+
+main()

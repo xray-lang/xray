@@ -1,0 +1,88 @@
+// 0560_method_chaining.xr
+// 作者：xingleixu@gmail.com
+// 测试：方法链式调用
+
+// ===== 数组方法链 =====
+
+@test
+fn test_array_filter_map(): void {
+    let arr = [1, 2, 3, 4, 5, 6]
+    let result = arr.filter((x) => x % 2 == 0).map((x) => x * 2)
+    assert_eq(result.length, 3)
+    assert_eq(result[0], 4)
+    assert_eq(result[1], 8)
+    assert_eq(result[2], 12)
+}
+
+@test
+fn test_array_map_filter(): void {
+    let arr = [1, 2, 3, 4, 5]
+    let result = arr.map((x) => x * 2).filter((x) => x > 5)
+    assert_eq(result.length, 3)
+    assert_eq(result[0], 6)
+}
+
+// ===== 字符串方法链 =====
+
+@test
+fn test_string_chain(): void {
+    let s = "  Hello World  "
+    let result = s.trim().toLowerCase()
+    assert_eq(result, "hello world")
+}
+
+@test
+fn test_string_split_join(): void {
+    let s = "a,b,c"
+    let parts = s.split(",")
+    assert_eq(parts.length, 3)
+    assert_eq(parts[0], "a")
+}
+
+// ===== 类方法链 =====
+
+class Builder {
+    value: string
+    
+    constructor() {
+        this.value = ""
+    }
+    
+    add(s: string): string {
+        this.value += s
+        return this
+    }
+    
+    build(): int {
+        return this.value
+    }
+}
+
+@test
+fn test_builder_chain(): void {
+    let b = new Builder()
+    let result = b.add("Hello").add(" ").add("World").build()
+    assert_eq(result, "Hello World")
+}
+
+@test
+fn test_multiple_chain(): void {
+    let b = new Builder()
+    b.add("a")
+    b.add("b")
+    b.add("c")
+    assert_eq(b.build(), "abc")
+}
+
+// ===== 复杂链式调用 =====
+
+@test
+fn test_array_complex_chain(): void {
+    let numbers = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+    let sum = 0
+    numbers.filter((x) => x % 2 == 0).forEach((x) => {
+        sum += x
+    })
+    assert_eq(sum, 30)  // 2+4+6+8+10
+}
+

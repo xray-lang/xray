@@ -1,0 +1,31 @@
+// Test: Nested array access in JIT
+// EXPECTED: 6
+// EXPECTED: 15
+// Test: Nested array access in JIT
+
+fn matrix_sum(mat) : int {
+    let sum = 0
+    let i = 0
+    while (i < mat.length) {
+        let row = mat[i]
+        let j = 0
+        while (j < row.length) {
+            sum = sum + row[j]
+            j = j + 1
+        }
+        i = i + 1
+    }
+    return sum
+}
+
+let m1 = [[1, 2], [3]]
+let m2 = [[1, 2, 3], [4, 5]]
+
+let i = 0
+while (i < 200) {
+    matrix_sum(m1)
+    i = i + 1
+}
+
+print(matrix_sum(m1))
+print(matrix_sum(m2))

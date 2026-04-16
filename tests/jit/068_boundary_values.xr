@@ -1,0 +1,39 @@
+// EXPECTED: 9223372036854775807
+// EXPECTED: -9223372036854775807
+// EXPECTED: 0
+// EXPECTED: -1
+// EXPECTED: true
+// EXPECTED: true
+// Test: Boundary values - INT64 extremes, zero, boolean edge cases
+
+fn identity_int(x: int) : int {
+    return x
+}
+
+fn is_zero(x: int) : bool {
+    return x == 0
+}
+
+fn is_negative(x: int) : bool {
+    return x < 0
+}
+
+fn negate(x: int) : int {
+    return -x
+}
+
+let i = 0
+while (i < 200) {
+    identity_int(9223372036854775807)
+    identity_int(-9223372036854775807)
+    is_zero(0)
+    negate(1)
+    i = i + 1
+}
+
+print(identity_int(9223372036854775807))
+print(identity_int(-9223372036854775807))
+print(identity_int(0))
+print(negate(1))
+print(is_zero(0))
+print(is_negative(-1))

@@ -1,0 +1,34 @@
+// EXPECTED: 25
+// EXPECTED: 100
+// EXPECTED: 10
+// Test: Small functions that should be inlined by JIT optimizer
+
+fn square(x: int) : int {
+    return x * x
+}
+
+fn double(x: int) : int {
+    return x + x
+}
+
+fn abs_val(x: int) : int {
+    if (x < 0) { return -x }
+    return x
+}
+
+fn combined(a: int, b: int) : int {
+    return square(a) + double(b)
+}
+
+let i = 0
+while (i < 500) {
+    square(i)
+    double(i)
+    abs_val(i - 250)
+    combined(i, i)
+    i = i + 1
+}
+
+print(square(5))
+print(combined(6, 32))
+print(abs_val(-10))

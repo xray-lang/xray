@@ -1,0 +1,115 @@
+// 测试7：广播模式（零拷贝）
+// 作者：xingleixu@gmail.com
+// 
+// 验证：const 数据广播到多个协程，零拷贝高效共享
+print("========== 测试7：广播模式 ==========")
+
+fn test_simple_broadcast() {
+    // 广播同一消息给多个 worker
+    let ch1 = Channel(1)
+    let ch2 = Channel(1)
+    let ch3 = Channel(1)
+    let channels = [ch1, ch2, ch3]
+    let count = 3
+    // const 消息（零拷贝）
+    const message = { "type" => "broadcast", "data" => [1, 2, 3, 4, 5] }
+    fn worker(ch) {
+        let msg = ch.recv()
+        return msg.get("data").length
+    }
+    // 启动 workers
+    let t1 = go worker(ch1)
+    let t2 = go worker(ch2)
+    let t3 = go worker(ch3)
+    // 广播消息
+    ch1.send(message)
+    ch2.send(message)
+    ch3.send(message)
+    let r1 = await t1
+    let r2 = await t2
+    let r3 = await t3
+    // 验证所有 worker 收到正确消息
+    let success = 0
+    if (r1 == 5) {
+        success = success + 1
+    }
+    if (r2 == 5) {
+        success = success + 1
+    }
+    if (r3 == 5) {
+        success = success + 1
+    }
+    print("成功接收广播:", success, "/", count)
+    assert_eq(success, count)
+    print("✓ 简单广播测试通过")
+}
+
+fn test_config_broadcast() {
+    // 广播配置给所有 worker
+    const config = { "server" => "localhost", "port" => 8080, "timeout" => 5000, "retries" => 3 }
+    let results = Channel(4)
+    fn worker(cfg) {
+        let port = cfg.get("port")
+        results.send(port)
+        return port
+    }
+    let t1 = go worker(config)
+    let t2 = go worker(config)
+    let t3 = go worker(config)
+    let t4 = go worker(config)
+    await t1
+    await t2
+    await t3
+    await t4
+    // 验证所有 worker 使用相同配置
+    for (let i = 0; i < 4; i++) {
+        let port = results.recv()
+        assert_eq(port, 8080)
+    }
+    print("✓ 配置广播测试通过")
+}
+
+fn test_large_data_broadcast() {
+    // 广播大数据（零拷贝避免 N 次复制）
+    let data_arr = []
+    for (let i = 0; i < 100; i++) {
+        data_arr.push(i)
+    }
+    const large_data = data_arr
+    let results = Channel(4)
+    fn worker(data) {
+        let sum = 0
+        for (item in data) {
+            sum = sum + item
+        }
+        results.send(sum)
+        return sum
+    }
+    let t1 = go worker(large_data)
+    let t2 = go worker(large_data)
+    let t3 = go worker(large_data)
+    let t4 = go worker(large_data)
+    await t1
+    await t2
+    await t3
+    await t4
+    // 0+1+2+...+99 = 4950
+    let expected_sum = 4950
+    let correct = 0
+    for (let i = 0; i < 4; i++) {
+        let sum = results.recv()
+        if (sum == expected_sum) {
+            correct = correct + 1
+        }
+    }
+    print("大数据广播正确数:", correct, "/ 4")
+    assert_eq(correct, 4)
+    print("✓ 大数据广播测试通过")
+}
+
+// 运行所有测试
+test_simple_broadcast()
+test_config_broadcast()
+test_large_data_broadcast()
+print("
+🎉 测试7全部通过：广播模式正确！")

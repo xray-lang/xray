@@ -1,0 +1,52 @@
+// Test net module - API existence and non-I/O functionality
+
+import net
+
+// @test module exports exist
+@test
+fn test_net_core_apis(): void {
+    assert(net.dial != null)
+    assert(net.listen != null)
+    assert(net.accept != null)
+    assert(net.read != null)
+    assert(net.write != null)
+    assert(net.close != null)
+    assert(net.lookup != null)
+    assert(net.fd != null)
+}
+
+// @test TLS APIs exist
+@test
+fn test_net_tls_apis(): void {
+    assert(net.hasTLS != null)
+    let tls = net.hasTLS()
+    assert(typeof(tls) == Type.bool)
+}
+
+// @test UDP APIs exist
+@test
+fn test_net_udp_apis(): void {
+    assert(net.udpBind != null)
+    assert(net.sendTo != null)
+    assert(net.recvFrom != null)
+}
+
+// @test DNS lookup - multiple calls consistent
+@test
+fn test_lookup_consistent(): void {
+    let a1 = net.lookup("localhost")
+    let a2 = net.lookup("localhost")
+    assert_eq(a1, a2)
+}
+
+// @test DNS lookup - returns string or null
+@test
+fn test_lookup_type(): void {
+    let addr = net.lookup("localhost")
+    if (addr != null) {
+        assert_eq(typeof(addr), Type.string)
+        assert(addr.length > 0)
+    }
+}
+
+print("All net extended tests passed")

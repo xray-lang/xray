@@ -1,0 +1,108 @@
+// 测试4：闭包 upvalue 隔离
+// 作者：xingleixu@gmail.com
+// 
+// 验证：闭包捕获的 upvalue 在协程间正确隔离
+print("========== 测试4：闭包 upvalue 隔离 ==========")
+
+fn test_closure_capture() {
+    let counter = 0
+    fn increment() {
+        counter = counter + 1
+        return counter
+    }
+    // 在主协程中调用
+    print("主协程 increment:", increment())
+    // 1
+    print("主协程 increment:", increment())
+    // 2
+    assert_eq(counter, 2)
+    print("✓ 闭包捕获测试通过")
+}
+
+fn test_closure_in_go() {
+    let result_ch = Channel(1)
+    fn make_adder(base) {
+        // 返回闭包，捕获 base
+        return fn(x) {
+            return base + x
+        }
+    }
+    let add10 = make_adder(10)
+    fn worker() {
+        let r = add10(5)
+        // 应该返回 15
+        result_ch.send(r)
+    }
+    let task = go worker()
+    await task
+    let result = result_ch.recv()
+    print("闭包协程结果:", result)
+    assert_eq(result, 15)
+    print("✓ 协程中闭包测试通过")
+}
+
+fn test_multiple_closures() {
+    let results = Channel(3)
+    fn make_multiplier(factor) {
+        return fn(x) {
+            return x * factor
+        }
+    }
+    let double = make_multiplier(2)
+    let triple = make_multiplier(3)
+    let quadruple = make_multiplier(4)
+    fn worker1() {
+        results.send(double(10))
+    }
+    fn worker2() {
+        results.send(triple(10))
+    }
+    fn worker3() {
+        results.send(quadruple(10))
+    }
+    let t1 = go worker1()
+    let t2 = go worker2()
+    let t3 = go worker3()
+    await [t1, t2, t3]
+    let r1 = results.recv()
+    let r2 = results.recv()
+    let r3 = results.recv()
+    print("结果:", r1, r2, r3)
+    // 结果顺序可能不同，检查总和
+    let sum = r1 + r2 + r3
+    assert_eq(sum, 20 + 30 + 40)
+    // 90
+    print("✓ 多闭包测试通过")
+}
+
+fn test_nested_closure() {
+    let ch = Channel(1)
+    fn outer(a) {
+        fn middle(b) {
+            fn inner(c) {
+                return a + b + c
+            }
+            return inner
+        }
+        return middle
+    }
+    let f = outer(1)(2)
+    // 返回 inner，捕获 a=1, b=2
+    fn worker() {
+        ch.send(f(3))
+    }
+    let task = go worker()
+    await task
+    let result = ch.recv()
+    print("嵌套闭包结果:", result)
+    assert_eq(result, 6)
+    print("✓ 嵌套闭包测试通过")
+}
+
+// 运行所有测试
+test_closure_capture()
+test_closure_in_go()
+test_multiple_closures()
+test_nested_closure()
+print("
+🎉 测试4全部通过：闭包 upvalue 正确！")

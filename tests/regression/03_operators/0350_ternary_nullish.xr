@@ -1,0 +1,162 @@
+// 0350_ternary_nullish.xr
+// 作者：xingleixu@gmail.com
+// 测试：三元运算符和空值处理
+
+// ===== 三元运算符基础 =====
+
+@test
+fn test_ternary_true(): void {
+    let result = true ? "yes" : "no"
+    assert_eq(result, "yes")
+}
+
+@test
+fn test_ternary_false(): void {
+    let result = false ? "yes" : "no"
+    assert_eq(result, "no")
+}
+
+@test
+fn test_ternary_expression(): void {
+    let x = 10
+    let result = x > 5 ? "big" : "small"
+    assert_eq(result, "big")
+    
+    result = x > 20 ? "big" : "small"
+    assert_eq(result, "small")
+}
+
+@test
+fn test_ternary_numbers(): void {
+    let x = 5
+    let max = x > 10 ? x : 10
+    assert_eq(max, 10)
+    
+    let min = x < 10 ? x : 10
+    assert_eq(min, 5)
+}
+
+// ===== 嵌套三元 =====
+
+@test
+fn test_ternary_nested(): void {
+    let score = 85
+    let grade = score >= 90 ? "A" : score >= 80 ? "B" : score >= 70 ? "C" : "D"
+    assert_eq(grade, "B")
+}
+
+@test
+fn test_ternary_in_expression(): void {
+    let x = 5
+    let result = 10 + (x > 0 ? x : 0)
+    assert_eq(result, 15)
+}
+
+// ===== 空值合并 (??) =====
+
+@test
+fn test_nullish_with_null(): void {
+    let x = null
+    assert_eq(x ?? "default", "default")
+}
+
+@test
+fn test_nullish_with_value(): void {
+    let x = "value"
+    assert_eq(x ?? "default", "value")
+}
+
+@test
+fn test_nullish_with_zero(): void {
+    let x = 0
+    assert_eq(x ?? 100, 0)  // 0 不是 null/undefined
+}
+
+@test
+fn test_nullish_with_false(): void {
+    let x = false
+    assert_eq(x ?? true, false)  // false 不是 null
+}
+
+@test
+fn test_nullish_with_empty_string(): void {
+    let x = ""
+    assert_eq(x ?? "default", "")  // 空字符串不是 null
+}
+
+@test
+fn test_nullish_chain(): void {
+    let a = null
+    let b = null
+    let c = "value"
+    assert_eq(a ?? b ?? c, "value")
+}
+
+// ===== 可选链 (?.) =====
+
+@test
+fn test_optional_chain_null(): void {
+    let obj = null
+    assert_eq(obj?.name, null)
+}
+
+@test
+fn test_optional_chain_value(): void {
+    let obj = { name: "Alice", age: 30 }
+    assert_eq(obj?.name, "Alice")
+    assert_eq(obj?.age, 30)
+}
+
+@test
+fn test_optional_chain_nested(): void {
+    let data = { user: { name: "Bob" } }
+    assert_eq(data?.user?.name, "Bob")
+    
+    let empty = null
+    assert_eq(empty?.user?.name, null)
+}
+
+// 注意：可选链方法调用语法暂不支持
+
+// ===== 组合使用 =====
+
+@test
+fn test_optional_with_nullish(): void {
+    let obj = null
+    assert_eq(obj?.name ?? "unknown", "unknown")
+    
+    let data = { name: "Alice" }
+    assert_eq(data?.name ?? "unknown", "Alice")
+}
+
+@test
+fn test_ternary_with_nullish(): void {
+    let value = null
+    let result = value != null ? value : "default"
+    assert_eq(result, "default")
+    
+    // 等价于
+    assert_eq(value ?? "default", "default")
+}
+
+// ===== 边界条件 =====
+
+@test
+fn test_deeply_nested_optional(): void {
+    let obj = { a: { b: { c: { d: 42 } } } }
+    assert_eq(obj?.a?.b?.c?.d, 42)
+}
+
+@test
+fn test_short_circuit(): void {
+    let count = 0
+    fn increment(): null {
+        count++
+        return null
+    }
+    
+    let result = increment() ?? "default"
+    assert_eq(result, "default")
+    assert_eq(count, 1)  // 函数被调用一次
+}
+

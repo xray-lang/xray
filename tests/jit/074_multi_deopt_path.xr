@@ -1,0 +1,30 @@
+// EXPECTED: 3
+// EXPECTED: 3.0
+// EXPECTED: ab
+// EXPECTED: null
+// Test: Deopt at different code positions within same function
+
+fn process(x) {
+    if (x == null) {
+        return null
+    }
+    if (typename(x) == "string") {
+        return x + x.substring(1, 2)
+    }
+    if (typename(x) == "float") {
+        return x + x
+    }
+    return x + x - x
+}
+
+// Warm up with int
+let i = 0
+while (i < 200) {
+    process(i)
+    i = i + 1
+}
+
+print(process(3))
+print(process(1.5))
+print(process("a"))
+print(process(null))

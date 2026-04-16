@@ -1,0 +1,567 @@
+// Decentralized Oracle Network
+// ============================================================
+// Multiple oracle nodes independently fetch off-chain data, publish
+// via cluster pub/sub, and reach consensus through threshold aggregation.
+// Smart contracts query aggregated prices via cluster.call RPC.
+//
+// Cluster API used:
+//   cluster.publish("oracle.price.ETH-USD", data)  — publish raw data feeds
+//   cluster.subscribe("oracle.price.>")    — collect feeds from all oracles
+//   cluster.channel("aggregation", 128)    — aggregation pipeline channel
+//   cluster.serve("query_price")           — RPC: smart contract queries price
+//   cluster.serve("register_oracle")       — RPC: register as data provider
+//   cluster.call("query_price", params)    — query aggregated price
+//   cluster.monitor("*")                   — detect oracle node failures
+//   cluster.info()                         — network diagnostics
+//
+// Architecture:
+//   ┌──────────┐  publish   ┌─────────────┐  subscribe   ┌──────────┐
+//   │ Oracle-1 │──────────→ │             │ ←──────────  │ Consumer │
+//   │ (ETH,BTC)│            │  Aggregator │              │ (DApp)   │
+//   ├──────────┤  publish   │    Node     │  query_price ├──────────┤
+//   │ Oracle-2 │──────────→ │             │ ←─────────── │ DeFi     │
+//   │ (ETH,BTC)│            │ threshold=3 │              │ Protocol │
+//   ├──────────┤  publish   │             │              └──────────┘
+//   │ Oracle-3 │──────────→ │             │
+//   │ (ETH,BTC)│            └─────────────┘
+//   └──────────┘     monitor("*")
+//
+// Run:
+//   ./build/xray cluster_oracle_network.xr -- --name aggregator --port 9401 --role aggregator
+//   ./build/xray cluster_oracle_network.xr -- --name oracle-1 --port 9402 --join 127.0.0.1:9401 --role oracle
+//   ./build/xray cluster_oracle_network.xr -- --name oracle-2 --port 9403 --join 127.0.0.1:9401 --role oracle
+//   ./build/xray cluster_oracle_network.xr -- --name oracle-3 --port 9404 --join 127.0.0.1:9401 --role oracle
+//   ./build/xray cluster_oracle_network.xr -- --name dapp --port 9405 --join 127.0.0.1:9401 --role consumer
+
+import cluster
+import crypto
+import time
+import json
+
+// ===== Configuration =====
+
+fn parseArgs() {
+    let config = {
+        name: "aggregator",
+        port: 9401,
+        secret: "oracle-secret",
+        role: "aggregator",
+        join_host: null,
+        join_port: 0
+    }
+    let args = sys.args()
+    for (let i = 0; i < args.length; i++) {
+        match args[i] {
+            "--name" => { config.name = args[i + 1]; i++ },
+            "--port" => { config.port = int(args[i + 1]); i++ },
+            "--role" => { config.role = args[i + 1]; i++ },
+            "--join" => {
+                let parts = args[i + 1].split(":")
+                config.join_host = parts[0]
+                config.join_port = int(parts[1])
+                i++
+            },
+            _ => {}
+        }
+    }
+    return config
+}
+
+// ===== Oracle Data Types =====
+
+enum DataSource {
+    Binance,
+    Coinbase,
+    Kraken,
+    Chainlink,
+    UniswapV3
+}
+
+fn sourceName(s) {
+    return match s {
+        DataSource.Binance => "Binance",
+        DataSource.Coinbase => "Coinbase",
+        DataSource.Kraken => "Kraken",
+        DataSource.Chainlink => "Chainlink",
+        DataSource.UniswapV3 => "UniswapV3",
+        _ => "Unknown"
+    }
+}
+
+// ===== Aggregation State =====
+
+shared const aggregator = {
+    // Registered oracle nodes
+    oracles: {},           // oracleName -> { registered, reputation, reports }
+
+    // Price feeds: pair -> { submissions: [...], aggregatedPrice, lastUpdate }
+    feeds: {},
+
+    // Configuration
+    threshold: 3,          // Minimum oracle submissions for valid aggregation
+    maxDeviation: 0.05,    // 5% max deviation from median (outlier filter)
+    roundInterval: 5000,   // Aggregation round interval (ms)
+    roundNumber: 0
+}
+
+fn initFeed(pair) {
+    if (aggregator.feeds[pair] == null) {
+        aggregator.feeds[pair] = {
+            pair: pair,
+            submissions: [],
+            aggregatedPrice: 0.0,
+            lastUpdate: 0,
+            round: 0,
+            history: []
+        }
+    }
+}
+
+// ===== Aggregation Algorithm =====
+// Median + outlier removal + weighted average by reputation
+
+fn aggregatePrice(pair) {
+    let feed = aggregator.feeds[pair]
+    if (feed == null) { return null }
+
+    let submissions = feed.submissions
+    if (submissions.length < aggregator.threshold) {
+        return null  // Not enough data points
+    }
+
+    // Sort by price
+    let prices = submissions.map((s) => s.price)
+    for (let i = 0; i < prices.length; i++) {
+        for (let j = i + 1; j < prices.length; j++) {
+            if (prices[j] < prices[i]) {
+                let tmp = prices[i]
+                prices[i] = prices[j]
+                prices[j] = tmp
+            }
+        }
+    }
+
+    // Compute median
+    let mid = prices.length / 2
+    let median = prices.length % 2 == 0 ?
+        (prices[mid - 1] + prices[mid]) / 2.0 :
+        prices[mid]
+
+    // Filter outliers: remove submissions > maxDeviation from median
+    let validSubmissions = submissions.filter((s) => {
+        let deviation = math.abs(s.price - median) / median
+        return deviation <= aggregator.maxDeviation
+    })
+
+    if (validSubmissions.length < aggregator.threshold) {
+        return null  // Too many outliers
+    }
+
+    // Weighted average by oracle reputation
+    let totalWeight = 0.0
+    let weightedSum = 0.0
+    for (s in validSubmissions) {
+        let oracle = aggregator.oracles[s.oracle]
+        let reputation = oracle != null ? oracle.reputation : 1.0
+        weightedSum += s.price * reputation
+        totalWeight += reputation
+    }
+
+    let aggregatedPrice = totalWeight > 0 ? weightedSum / totalWeight : median
+
+    // Update feed
+    feed.aggregatedPrice = aggregatedPrice
+    feed.lastUpdate = time.now()
+    feed.round = aggregator.roundNumber
+    feed.history.push({
+        round: aggregator.roundNumber,
+        price: aggregatedPrice,
+        sources: validSubmissions.length,
+        timestamp: time.now()
+    })
+
+    // Keep history bounded
+    if (feed.history.length > 100) {
+        feed.history = feed.history.slice(feed.history.length - 100)
+    }
+
+    return {
+        pair: pair,
+        price: aggregatedPrice,
+        median: median,
+        sources: validSubmissions.length,
+        outliers: submissions.length - validSubmissions.length,
+        round: aggregator.roundNumber,
+        timestamp: time.now()
+    }
+}
+
+// ===== Aggregator Node Services =====
+
+// Register oracle service
+fn registerOracleService() {
+    let reqCh = cluster.serve("register_oracle")
+    print("[Aggregator] register_oracle service ready")
+
+    while (true) {
+        let req = reqCh.recv()
+        if (req == null) { break }
+
+        let name = req.args.name
+        let sources = req.args.sources ?? []
+
+        aggregator.oracles[name] = {
+            registered: time.now(),
+            reputation: 1.0,
+            reports: 0,
+            sources: sources,
+            lastReport: 0
+        }
+
+        print("[Oracle Registered]", name, "| sources:", sources)
+        cluster.reply(req, { ok: true, oracleId: name })
+    }
+}
+
+// Price query service (for smart contracts / DApps)
+fn queryPriceService() {
+    let reqCh = cluster.serve("query_price")
+    print("[Aggregator] query_price service ready")
+
+    while (true) {
+        let req = reqCh.recv()
+        if (req == null) { break }
+
+        let pair = req.args.pair
+        let feed = aggregator.feeds[pair]
+
+        if (feed == null || feed.aggregatedPrice == 0.0) {
+            cluster.reply(req, {
+                ok: false,
+                error: "no data for " + pair
+            })
+            continue
+        }
+
+        // Check freshness
+        let age = time.now() - feed.lastUpdate
+        let isFresh = age < aggregator.roundInterval * 3
+
+        cluster.reply(req, {
+            ok: true,
+            pair: pair,
+            price: feed.aggregatedPrice,
+            round: feed.round,
+            lastUpdate: feed.lastUpdate,
+            fresh: isFresh,
+            sources: feed.submissions.length
+        })
+    }
+}
+
+// Collect oracle submissions via pub/sub
+fn oracleSubmissionCollector() {
+    let sub = cluster.subscribe("oracle.price.>")
+    print("[Aggregator] Subscribed to oracle.price.>")
+
+    while (true) {
+        let msg = sub.recv()
+        if (msg == null) { break }
+
+        let pair = msg.pair
+        initFeed(pair)
+
+        let feed = aggregator.feeds[pair]
+
+        // Remove old submission from same oracle (keep latest)
+        feed.submissions = feed.submissions.filter(
+            (s) => s.oracle != msg.oracle
+        )
+
+        // Add new submission
+        feed.submissions.push({
+            oracle: msg.oracle,
+            price: msg.price,
+            source: msg.source,
+            timestamp: msg.timestamp,
+            signature: msg.signature
+        })
+
+        // Update oracle reputation
+        let oracle = aggregator.oracles[msg.oracle]
+        if (oracle != null) {
+            oracle.reports++
+            oracle.lastReport = time.now()
+        }
+    }
+}
+
+// Periodic aggregation round
+fn aggregationRoundLoop() {
+    print("[Aggregator] Aggregation loop started (interval:",
+          aggregator.roundInterval, "ms)")
+
+    while (true) {
+        time.sleep(aggregator.roundInterval)
+        aggregator.roundNumber++
+
+        let pairs = ["ETH-USD", "BTC-USD"]
+
+        for (pair in pairs) {
+            let result = aggregatePrice(pair)
+            if (result == null) { continue }
+
+            print("[Round #" + string(result.round) + "]",
+                  pair, ":", result.price,
+                  "| median:", result.median,
+                  "| sources:", result.sources,
+                  "| outliers:", result.outliers)
+
+            // Publish aggregated price for all subscribers
+            cluster.publish("aggregated.price." + pair, result)
+        }
+
+        // Clear old submissions for next round
+        for (pair in pairs) {
+            let feed = aggregator.feeds[pair]
+            if (feed != null) {
+                // Keep submissions from last 2 rounds only
+                let cutoff = time.now() - aggregator.roundInterval * 2
+                feed.submissions = feed.submissions.filter(
+                    (s) => s.timestamp > cutoff
+                )
+            }
+        }
+    }
+}
+
+// Oracle health monitor
+fn oracleHealthMonitor() {
+    let monCh = cluster.monitor("*")
+
+    while (true) {
+        let disconnected = monCh.recv()
+        if (disconnected == null) { break }
+
+        print("[ALERT] Oracle node disconnected:", disconnected)
+
+        // Degrade reputation of disconnected oracle
+        let oracle = aggregator.oracles[disconnected]
+        if (oracle != null) {
+            oracle.reputation *= 0.5  // Halve reputation on disconnect
+            print("[Reputation] Degraded", disconnected, "→", oracle.reputation)
+        }
+
+        // Check if we still have enough oracles
+        let activeCount = 0
+        for (name in aggregator.oracles) {
+            let o = aggregator.oracles[name]
+            if (o != null && o.reputation > 0.1) {
+                activeCount++
+            }
+        }
+
+        if (activeCount < aggregator.threshold) {
+            print("[CRITICAL] Active oracles (", activeCount,
+                  ") below threshold (", aggregator.threshold, ")")
+            print("[CRITICAL] Price feeds may become stale!")
+        }
+    }
+}
+
+// ===== Oracle Node: Data Provider =====
+
+fn oracleDataFeed(config) {
+    time.sleep(1500)
+
+    // Register with aggregator
+    let reg = cluster.call("register_oracle", {
+        name: config.name,
+        sources: ["Binance", "Coinbase"]
+    })
+    if (reg == null || !reg.ok) {
+        print("[Oracle] Registration failed")
+        return
+    }
+    print("[Oracle] Registered as", config.name)
+
+    // Simulate price feeds with realistic variation
+    let basePrices = {
+        "ETH-USD": 3500.0,
+        "BTC-USD": 65000.0
+    }
+
+    let tick = 0
+    while (true) {
+        time.sleep(2000 + (tick % 3) * 500)
+
+        for (pair in ["ETH-USD", "BTC-USD"]) {
+            let basePrice = basePrices[pair]
+
+            // Simulate price with random walk + noise
+            // Each oracle sees slightly different prices (different sources)
+            let oracleOffset = config.name.hashCode() % 100 - 50
+            let tickNoise = ((tick * 13 + oracleOffset) % 200 - 100) * 0.01
+            let price = basePrice * (1.0 + tickNoise / 100.0)
+
+            // Sign the data point
+            let dataPoint = {
+                oracle: config.name,
+                pair: pair,
+                price: price,
+                source: "Binance",
+                timestamp: time.now(),
+                round: tick
+            }
+            dataPoint.signature = crypto.sha256(
+                json.stringify(dataPoint) + config.name
+            )
+
+            // Publish via cluster pub/sub
+            cluster.publish("oracle.price." + pair, dataPoint)
+        }
+
+        tick++
+
+        if (tick % 10 == 0) {
+            print("[Oracle", config.name + "] Published", tick, "data points")
+        }
+    }
+}
+
+// ===== Consumer Node: DApp / Smart Contract =====
+
+fn consumerQueryLoop(config) {
+    time.sleep(5000)  // Wait for data to accumulate
+    print("[DApp] Starting price queries")
+
+    let queryCount = 0
+    while (queryCount < 50) {
+        time.sleep(3000)
+
+        // Query ETH price
+        let ethPrice = cluster.call("query_price", { pair: "ETH-USD" })
+        if (ethPrice != null && ethPrice.ok) {
+            print("[DApp Query] ETH-USD:", ethPrice.price,
+                  "| round:", ethPrice.round,
+                  "| sources:", ethPrice.sources,
+                  "| fresh:", ethPrice.fresh)
+        }
+
+        // Query BTC price
+        let btcPrice = cluster.call("query_price", { pair: "BTC-USD" })
+        if (btcPrice != null && btcPrice.ok) {
+            print("[DApp Query] BTC-USD:", btcPrice.price,
+                  "| round:", btcPrice.round)
+        }
+
+        queryCount++
+    }
+}
+
+fn consumerPriceFeed(config) {
+    let sub = cluster.subscribe("aggregated.price.>")
+    let priceHistory = {}
+
+    print("[DApp] Subscribed to aggregated price feed")
+
+    while (true) {
+        let tick = sub.recv()
+        if (tick == null) { break }
+
+        if (priceHistory[tick.pair] == null) {
+            priceHistory[tick.pair] = []
+        }
+        priceHistory[tick.pair].push(tick.price)
+
+        // Compute simple volatility
+        let history = priceHistory[tick.pair]
+        if (history.length >= 5) {
+            let recent = history.slice(history.length - 5)
+            let avg = recent.reduce((a, b) => a + b, 0.0) / recent.length
+            let variance = recent.reduce(
+                (a, p) => a + (p - avg) * (p - avg), 0.0
+            ) / recent.length
+            let volatility = variance ** 0.5
+
+            print("[Price Feed]", tick.pair, ":", tick.price,
+                  "| volatility:", volatility,
+                  "| sources:", tick.sources)
+        }
+    }
+}
+
+// ===== Status Reporter =====
+
+fn statusReporter(config) {
+    while (true) {
+        time.sleep(15000)
+
+        print("\n--- Oracle Network Status:", config.name, "---")
+        print("  Role:", config.role)
+        print("  Peers:", cluster.nodes())
+
+        if (config.role == "aggregator") {
+            print("  Round:", aggregator.roundNumber)
+            print("  Registered oracles:", json.stringify(
+                Object.keys(aggregator.oracles).length
+            ))
+            for (pair in ["ETH-USD", "BTC-USD"]) {
+                let feed = aggregator.feeds[pair]
+                if (feed != null) {
+                    print("  ", pair, ":", feed.aggregatedPrice,
+                          "| submissions:", feed.submissions.length,
+                          "| rounds:", feed.history.length)
+                }
+            }
+        }
+        print("---\n")
+    }
+}
+
+// ===== Main =====
+
+fn main() {
+    let config = parseArgs()
+
+    print("=== Decentralized Oracle Network ===")
+    print("Name:", config.name, "| Role:", config.role)
+
+    cluster.start(config.name, config.port, config.secret)
+
+    if (config.join_host != null) {
+        cluster.join(config.join_host, config.join_port)
+        print("[Cluster] Joined", config.join_host + ":" + string(config.join_port))
+    }
+
+    match config.role {
+        "aggregator" => {
+            scope {
+                go registerOracleService()
+                go queryPriceService()
+                go oracleSubmissionCollector()
+                go aggregationRoundLoop()
+                go oracleHealthMonitor()
+                go statusReporter(config)
+            }
+        },
+        "oracle" => {
+            scope {
+                go oracleDataFeed(config)
+                go statusReporter(config)
+            }
+        },
+        "consumer" => {
+            scope {
+                go consumerQueryLoop(config)
+                go consumerPriceFeed(config)
+                go statusReporter(config)
+            }
+        },
+        _ => {
+            print("Unknown role:", config.role)
+        }
+    }
+}
+
+main()

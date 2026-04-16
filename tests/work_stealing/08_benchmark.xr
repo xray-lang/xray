@@ -1,0 +1,114 @@
+/*
+** 08_benchmark.xr - 性能基准测试
+** 作者：xingleixu@gmail.com
+**
+** 测试目的：测量工作窃取的性能指标
+** 测试方法：运行多轮测试，统计吞吐量和延迟
+*/
+import time
+print("========== 测试8：性能基准测试 ==========")
+
+/* 基准1：协程创建+执行吞吐量 */
+fn benchmark_throughput(coro_count, work_size) {
+    let start = time.monotonic()
+    let tasks = []
+    for (let i = 0; i < coro_count; i++) {
+        let id = i
+        let task = go fn() {
+            let sum = 0
+            for (let j = 0; j < work_size; j++) {
+                sum = sum + j
+            }
+            return sum
+        }
+        tasks.push(task)
+    }
+    for (let i = 0; i < tasks.length; i++) {
+        await tasks[i]
+    }
+    let elapsed = time.monotonic() - start
+    return { "count": coro_count, "elapsed": elapsed }
+}
+
+/* 基准2：协程切换延迟 */
+fn benchmark_switch_latency(iterations) {
+    let ch = Channel(1)
+    /* ping-pong 协程 */
+    let pong = go fn() {
+        for (let i = 0; i < iterations; i++) {
+            let v = ch.recv()
+            ch.send(v + 1)
+        }
+    }
+    let start = time.monotonic()
+    for (let i = 0; i < iterations; i++) {
+        ch.send(i)
+        ch.recv()
+    }
+    let elapsed = time.monotonic() - start
+    await pong
+    return { "iterations": iterations, "elapsed": elapsed }
+}
+
+/* 基准3：并行加速比 */
+fn benchmark_speedup(work_size) {
+    /* 串行执行 */
+    let serial_start = time.monotonic()
+    let serial_sum = 0
+    for (let i = 0; i < 4; i++) {
+        for (let j = 0; j < work_size; j++) {
+            serial_sum = serial_sum + j
+        }
+    }
+    let serial_time = time.monotonic() - serial_start
+    /* 并行执行 */
+    let parallel_start = time.monotonic()
+    let tasks = []
+    for (let i = 0; i < 4; i++) {
+        let task = go fn() {
+            let sum = 0
+            for (let j = 0; j < work_size; j++) {
+                sum = sum + j
+            }
+            return sum
+        }
+        tasks.push(task)
+    }
+    let parallel_sum = 0
+    for (let i = 0; i < tasks.length; i++) {
+        await tasks[i]
+        parallel_sum = parallel_sum + tasks[i].result
+    }
+    let parallel_time = time.monotonic() - parallel_start
+    return { "serial_time": serial_time, "parallel_time": parallel_time, "speedup": float(serial_time) / float(parallel_time) }
+}
+
+/* 运行基准测试 */
+print("
+[基准1] 协程吞吐量测试")
+print("─────────────────────────────────────")
+let configs = [{ "count": 100, "work": 100 }, { "count": 500, "work": 100 }, { "count": 1000, "work": 100 }, { "count": 100, "work": 1000 }]
+for (let i = 0; i < configs.length; i++) {
+    let cfg = configs[i]
+    let result = benchmark_throughput(cfg.count, cfg.work)
+    let throughput = float(result.count) / (float(result.elapsed) / 1000)
+    print("  协程数=" + string(cfg.count) + ", 工作量=" + string(cfg.work) + " → " + string(int(throughput)) + " 协程/秒, 耗时=" + string(result.elapsed) + "ms")
+}
+print("
+[基准2] 协程切换延迟测试")
+print("─────────────────────────────────────")
+let switch_result = benchmark_switch_latency(1000)
+let latency_us = (float(switch_result.elapsed) * 1000) / float(switch_result.iterations * 2)
+print("  Ping-Pong 迭代: " + string(switch_result.iterations))
+print("  总耗时: " + string(switch_result.elapsed) + " ms")
+print("  平均切换延迟: " + string(latency_us) + " μs")
+print("
+[基准3] 并行加速比测试")
+print("─────────────────────────────────────")
+let speedup_result = benchmark_speedup(100000)
+print("  串行耗时: " + string(speedup_result.serial_time) + " ms")
+print("  并行耗时: " + string(speedup_result.parallel_time) + " ms")
+print("  加速比: " + string(speedup_result.speedup) + "x")
+print("
+✓ 性能基准测试完成")
+print("========== 测试8 完成 ==========")

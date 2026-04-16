@@ -1,0 +1,28 @@
+// 测试 scope 块
+
+@test
+fn test_scope(): void {
+    let x = 1
+    
+    // scope 创建新的词法作用域
+    scope {
+        let x = 10  // 遮蔽外部的 x
+        print(x)    // 10
+        
+        let y = 20
+        print(y)    // 20
+    }
+    
+    // 外部 x 不受影响
+    print(x)  // 1
+    
+    print("done")
+}
+
+test_scope()
+
+// 期望输出：
+// 10
+// 20
+// 1
+// done

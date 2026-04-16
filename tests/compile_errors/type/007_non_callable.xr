@@ -1,0 +1,5 @@
+// 007_non_callable.xr
+// Expected: Compile error - calling non-callable
+// Error should mention: not callable, not a function
+let x = 42
+x()

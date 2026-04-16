@@ -1,0 +1,20 @@
+// EXPECTED: 5050
+// Test: Map operations in loop (MAP_SET, MAP_GET, MAP_INCREMENT)
+
+fn build_map(n: int) : int {
+    let m = {}
+    let i = 1
+    while (i <= n) {
+        m["sum"] = (m["sum"] == null) ? i : m["sum"] + i
+        i = i + 1
+    }
+    return m["sum"]
+}
+
+let i = 0
+while (i < 200) {
+    build_map(10)
+    i = i + 1
+}
+
+print(build_map(100))

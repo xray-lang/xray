@@ -1,0 +1,27 @@
+--- Pattern 1 ---
+t1.done: true
+t1.error: division by zero
+t1.result: null
+t2.done: true
+t2.error: null
+t2.result: 42
+await result: 42
+--- Pattern 2 ---
+await returned: null
+t.error: something went wrong
+catch was NOT triggered
+--- Pattern 3 ---
+result: caught: Error: division by zero
+t.error: null
+--- Pattern 4 ---
+Task failed: cannot process zero
+--- Pattern 5 ---
+  task[0] OK: ok-1
+  task[1] FAILED: fail-2
+  task[2] OK: ok-3
+--- Pattern 6 ---
+First result: fast
+--- Pattern 7 ---
+Monitor reason: error
+task.error: worker crashed
+DONE

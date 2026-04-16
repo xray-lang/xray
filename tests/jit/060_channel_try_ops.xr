@@ -1,0 +1,33 @@
+// EXPECTED: sent
+// EXPECTED: 42
+// EXPECTED: true
+// EXPECTED: closed
+// Test: Channel non-blocking operations in JIT (TRY_SEND/TRY_RECV/CLOSE/IS_CLOSED)
+
+fn channel_ops() {
+    let ch = new Channel(1)
+
+    // Try send to buffered channel (should succeed)
+    ch.trySend(42)
+    print("sent")
+
+    // Try recv
+    let val = ch.tryRecv()
+    print(val)
+
+    // Close and check
+    ch.close()
+    print(ch.isClosed())
+    print("closed")
+}
+
+let i = 0
+while (i < 200) {
+    let c = new Channel(1)
+    c.trySend(i)
+    c.tryRecv()
+    c.close()
+    i = i + 1
+}
+
+channel_ops()

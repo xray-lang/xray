@@ -1,0 +1,52 @@
+// EXPECTED: 15
+// EXPECTED: 5
+// EXPECTED: 50
+// EXPECTED: 2
+// EXPECTED: 0
+// EXPECTED: -10
+// EXPECTED: 3
+// Test: Integer arithmetic operations in JIT-compiled function
+
+fn calc(a: int, b: int) : int {
+    return a + b
+}
+
+fn sub(a: int, b: int) : int {
+    return a - b
+}
+
+fn mul(a: int, b: int) : int {
+    return a * b
+}
+
+fn div(a: int, b: int) : int {
+    return a / b
+}
+
+fn mod(a: int, b: int) : int {
+    return a % b
+}
+
+fn neg(a: int) : int {
+    return -a
+}
+
+// Warm up for JIT
+let i = 0
+while (i < 200) {
+    calc(10, 5)
+    sub(10, 5)
+    mul(10, 5)
+    div(10, 5)
+    mod(10, 5)
+    neg(10)
+    i = i + 1
+}
+
+print(calc(10, 5))
+print(sub(10, 5))
+print(mul(10, 5))
+print(div(10, 5))
+print(mod(10, 5))
+print(neg(10))
+print(mod(10, 7))

@@ -1,0 +1,205 @@
+/*
+ * ws_concurrent_test.xr - WebSocket 并发性能测试
+ * 
+ * 测试多个并发 WebSocket 连接的性能
+ */
+
+import ws
+import time
+
+print("=== WebSocket 并发性能测试 ===")
+print("")
+
+// 测试服务器
+const TEST_URL = "wss://ws.postman-echo.com/raw"
+
+/* 配置参数 */
+const CONCURRENT_CONNECTIONS = 10   // 并发连接数
+const MESSAGES_PER_CONNECTION = 5   // 每个连接发送的消息数
+
+/* 单个连接的测试任务 */
+fn connectionTask(id, ch) {
+    let result = {
+        id: id,
+        connected: false,
+        messagesSent: 0,
+        messagesReceived: 0,
+        errorCount: 0
+    }
+    
+    // 连接
+    let conn = ws.connect(TEST_URL)
+    if (conn.error) {
+        result.errorCount = result.errorCount + 1
+        ch <- result
+        return
+    }
+    
+    result.connected = true
+    
+    // 发送和接收消息
+    for (i in 0..MESSAGES_PER_CONNECTION) {
+        let msg = "Conn" + id.toString() + "-Msg" + i.toString()
+        
+        let sent = ws.send(conn, msg)
+        if (sent) {
+            result.messagesSent = result.messagesSent + 1
+            
+            let resp = ws.recv(conn)
+            if (resp.data == msg) {
+                result.messagesReceived = result.messagesReceived + 1
+            } else if (resp.error) {
+                result.errorCount = result.errorCount + 1
+            }
+        } else {
+            result.errorCount = result.errorCount + 1
+        }
+    }
+    
+    // 关闭连接
+    ws.close(conn)
+    
+    ch <- result
+}
+
+/* 顺序测试（基准对照） */
+fn runSequentialTest() {
+    print("[顺序测试] 运行 " + CONCURRENT_CONNECTIONS.toString() + " 个连接（顺序执行）...")
+    
+    let startTime = time.now()
+    let successConn = 0
+    let successMsg = 0
+    
+    for (i in 0..CONCURRENT_CONNECTIONS) {
+        let conn = ws.connect(TEST_URL)
+        if (conn.error) {
+            continue
+        }
+        successConn = successConn + 1
+        
+        for (j in 0..MESSAGES_PER_CONNECTION) {
+            let msg = "Seq" + i.toString() + "-" + j.toString()
+            ws.send(conn, msg)
+            let resp = ws.recv(conn)
+            if (resp.data == msg) {
+                successMsg = successMsg + 1
+            }
+        }
+        
+        ws.close(conn)
+    }
+    
+    let elapsed = time.now() - startTime
+    
+    print("  完成连接: " + successConn.toString() + "/" + CONCURRENT_CONNECTIONS.toString())
+    print("  完成消息: " + successMsg.toString() + "/" + (CONCURRENT_CONNECTIONS * MESSAGES_PER_CONNECTION).toString())
+    print("  耗时: " + elapsed.toString() + "ms")
+    print("")
+    
+    return elapsed
+}
+
+/* 并发测试 */
+fn runConcurrentTest() {
+    print("[并发测试] 运行 " + CONCURRENT_CONNECTIONS.toString() + " 个连接（并发执行）...")
+    
+    let ch = Channel(CONCURRENT_CONNECTIONS)
+    let startTime = time.now()
+    
+    // 启动所有并发任务
+    for (i in 0..CONCURRENT_CONNECTIONS) {
+        go connectionTask(i, ch)
+    }
+    
+    // 收集结果
+    let successConn = 0
+    let successMsg = 0
+    let totalErrors = 0
+    
+    for (i in 0..CONCURRENT_CONNECTIONS) {
+        let result = <-ch
+        if (result.connected) {
+            successConn = successConn + 1
+        }
+        successMsg = successMsg + result.messagesReceived
+        totalErrors = totalErrors + result.errorCount
+    }
+    
+    let elapsed = time.now() - startTime
+    
+    print("  完成连接: " + successConn.toString() + "/" + CONCURRENT_CONNECTIONS.toString())
+    print("  完成消息: " + successMsg.toString() + "/" + (CONCURRENT_CONNECTIONS * MESSAGES_PER_CONNECTION).toString())
+    print("  耗时: " + elapsed.toString() + "ms")
+    
+    if (totalErrors > 0) {
+        print("  错误数: " + totalErrors.toString())
+    }
+    print("")
+    
+    return elapsed
+}
+
+/* 压力测试 - 快速创建大量连接 */
+fn runStressTest() {
+    print("[压力测试] 快速创建多个连接...")
+    
+    let connections = []
+    let startTime = time.now()
+    let successCount = 0
+    
+    // 快速创建连接
+    for (i in 0..20) {
+        let conn = ws.connect(TEST_URL)
+        if (!conn.error) {
+            connections.push(conn)
+            successCount = successCount + 1
+        }
+    }
+    
+    let connectTime = time.now() - startTime
+    print("  创建 " + successCount.toString() + " 个连接耗时: " + connectTime.toString() + "ms")
+    
+    // 向所有连接发送消息
+    let sendStart = time.now()
+    for (conn in connections) {
+        ws.send(conn, "stress test message")
+    }
+    let sendTime = time.now() - sendStart
+    print("  发送 " + connections.length.toString() + " 条消息耗时: " + sendTime.toString() + "ms")
+    
+    // 关闭所有连接
+    let closeStart = time.now()
+    for (conn in connections) {
+        ws.close(conn)
+    }
+    let closeTime = time.now() - closeStart
+    print("  关闭 " + connections.length.toString() + " 个连接耗时: " + closeTime.toString() + "ms")
+    print("")
+}
+
+/* 主测试 */
+fn main() {
+    // 先进行顺序测试作为基准
+    let seqTime = runSequentialTest()
+    
+    // 并发测试
+    let concTime = runConcurrentTest()
+    
+    // 压力测试
+    runStressTest()
+    
+    // 打印对比结果
+    print("=== 性能对比 ===")
+    print("顺序执行: " + seqTime.toString() + "ms")
+    print("并发执行: " + concTime.toString() + "ms")
+    
+    if (concTime > 0 && seqTime > concTime) {
+        let speedup = seqTime / concTime
+        print("加速比: " + speedup.toString() + "x")
+    }
+    
+    print("")
+    print("测试完成!")
+}
+
+main()

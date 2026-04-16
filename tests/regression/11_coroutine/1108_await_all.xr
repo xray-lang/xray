@@ -1,0 +1,36 @@
+// 测试 await.all - 等待所有协程完成
+
+fn compute(n: int): int {
+    return n * n
+}
+
+@test
+fn test_await_all(): void {
+    // 创建多个协程
+    let t1 = go compute(2)
+    let t2 = go compute(3)
+    let t3 = go compute(4)
+    
+    // await.all 等待所有协程，返回结果数组
+    let results = await [t1, t2, t3]
+    
+    // 打印结果
+    print(results[0])  // 4
+    print(results[1])  // 9
+    print(results[2])  // 16
+    
+    // 计算总和
+    let sum = results[0] + results[1] + results[2]
+    print(sum)  // 29
+    
+    print("done")
+}
+
+test_await_all()
+
+// 期望输出：
+// 4
+// 9
+// 16
+// 29
+// done

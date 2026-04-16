@@ -1,0 +1,71 @@
+// 测试2：Channel const 零拷贝共享
+// 作者：xingleixu@gmail.com
+// 
+// 验证：const 类型通过 Channel 传递时零拷贝，多个接收者共享同一数据
+print("========== 测试2：Channel const 零拷贝共享 ==========")
+
+fn test_const_string() {
+    let ch = Channel(1)
+    // const 字符串（天生不可变）
+    const msg = "Hello, World!"
+    ch.send(msg)
+    let received = ch.recv()
+    print("发送:", msg)
+    print("接收:", received)
+    assert_eq(received, "Hello, World!")
+    print("✓ const 字符串测试通过")
+}
+
+fn test_const_array() {
+    let ch = Channel(1)
+    // const 数组
+    const data = [1, 2, 3, 4, 5]
+    ch.send(data)
+    let received = ch.recv()
+    print("发送长度:", data.length)
+    print("接收长度:", received.length)
+    assert_eq(received.length, 5)
+    assert_eq(received[0], 1)
+    assert_eq(received[4], 5)
+    print("✓ const 数组测试通过")
+}
+
+fn test_const_map() {
+    let ch = Channel(1)
+    // const Map
+    const config = { "host" => "localhost", "port" => 8080 }
+    ch.send(config)
+    let received = ch.recv()
+    print("发送 host:", config.get("host"))
+    print("接收 host:", received.get("host"))
+    assert_eq(received.get("host"), "localhost")
+    assert_eq(received.get("port"), 8080)
+    print("✓ const Map 测试通过")
+}
+
+fn test_primitive_types() {
+    let ch = Channel(5)
+    // 基本类型（天生不可变）
+    let num = 42
+    let pi = 3.14159
+    let flag = true
+    ch.send(num)
+    ch.send(pi)
+    ch.send(flag)
+    ch.send(null)
+    ch.send("literal string")
+    assert_eq(ch.recv(), 42)
+    assert_eq(ch.recv(), 3.14159)
+    assert_eq(ch.recv(), true)
+    assert_eq(ch.recv(), null)
+    assert_eq(ch.recv(), "literal string")
+    print("✓ 基本类型测试通过")
+}
+
+// 运行所有测试
+test_const_string()
+test_const_array()
+test_const_map()
+test_primitive_types()
+print("
+🎉 测试2全部通过：Channel const 零拷贝正确！")

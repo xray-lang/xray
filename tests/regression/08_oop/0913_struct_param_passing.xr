@@ -1,0 +1,55 @@
+// Test: struct parameter passing modes (value / in / ref)
+
+struct Vec2 {
+    x: float = 0.0
+    y: float = 0.0
+}
+
+// === Value passing (default): callee gets a copy ===
+fn move_value(v: Vec2): Vec2 {
+    v.x = v.x + 10.0
+    v.y = v.y + 20.0
+    return v
+}
+
+let a = Vec2{x: 1.0, y: 2.0}
+let b = move_value(a)
+assert(a.x == 1.0)   // original unchanged (value copy)
+assert(a.y == 2.0)
+assert(b.x == 11.0)  // returned modified copy
+assert(b.y == 22.0)
+
+// === in passing: readonly reference, no copy ===
+fn length_sq(v: in Vec2): float {
+    return v.x * v.x + v.y * v.y
+}
+
+let c = Vec2{x: 3.0, y: 4.0}
+assert(length_sq(c) == 25.0)
+
+// === ref passing: mutable reference, caller sees changes ===
+fn translate(v: ref Vec2, dx: float, dy: float): void {
+    v.x = v.x + dx
+    v.y = v.y + dy
+}
+
+let d = Vec2{x: 1.0, y: 2.0}
+translate(d, 5.0, 10.0)
+assert(d.x == 6.0)   // caller sees mutation
+assert(d.y == 12.0)
+
+// === Mixed: value + in + ref in same function ===
+fn add_to(target: ref Vec2, src: in Vec2): void {
+    target.x = target.x + src.x
+    target.y = target.y + src.y
+}
+
+let e = Vec2{x: 10.0, y: 20.0}
+let f = Vec2{x: 3.0, y: 7.0}
+add_to(e, f)
+assert(e.x == 13.0)
+assert(e.y == 27.0)
+assert(f.x == 3.0)   // in param unchanged
+assert(f.y == 7.0)
+
+print("ok")

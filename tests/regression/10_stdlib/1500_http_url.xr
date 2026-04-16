@@ -1,0 +1,49 @@
+// Test http.urlEncode / http.urlDecode
+
+import http
+
+@test
+fn test_url_encode_space(): void {
+    assert_eq(http.urlEncode("hello world"), "hello%20world")
+}
+
+@test
+fn test_url_encode_unicode(): void {
+    assert_eq(http.urlEncode("name=张三&age=20"), "name%3D%E5%BC%A0%E4%B8%89%26age%3D20")
+}
+
+@test
+fn test_url_encode_plus(): void {
+    assert_eq(http.urlEncode("a+b=c"), "a%2Bb%3Dc")
+}
+
+@test
+fn test_url_decode_space(): void {
+    assert_eq(http.urlDecode("hello%20world"), "hello world")
+}
+
+@test
+fn test_url_decode_unicode(): void {
+    assert_eq(http.urlDecode("name%3D%E5%BC%A0%E4%B8%89%26age%3D20"), "name=张三&age=20")
+}
+
+@test
+fn test_url_roundtrip_special(): void {
+    let special = "!@#$%^&*()_+-=[]{}|;':\",./<>?"
+    let encoded = http.urlEncode(special)
+    assert_eq(http.urlDecode(encoded), special)
+}
+
+@test
+fn test_url_encode_empty(): void {
+    let e = http.urlEncode("")
+    assert(e == null || e == "")
+}
+
+@test
+fn test_url_encode_pure_ascii(): void {
+    let ascii = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"
+    assert_eq(http.urlEncode(ascii), ascii)
+}
+
+print("All http url tests passed")

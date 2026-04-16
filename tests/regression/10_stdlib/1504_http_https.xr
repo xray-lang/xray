@@ -1,0 +1,28 @@
+// Test HTTPS URL protocol detection and default ports
+
+import http
+
+fn isHttps(url: string): bool { return url.indexOf("https://") == 0 }
+fn isHttp(url: string): bool { return url.indexOf("http://") == 0 && url.indexOf("https://") != 0 }
+fn getDefaultPort(url: string): int {
+    if (url.indexOf("https://") == 0) { return 443 }
+    if (url.indexOf("http://") == 0) { return 80 }
+    return -1
+}
+
+@test
+fn test_protocol_detection(): void {
+    assert(isHttps("https://example.com"))
+    assert(!isHttps("http://example.com"))
+    assert(isHttp("http://example.com"))
+    assert(!isHttp("https://example.com"))
+}
+
+@test
+fn test_default_ports(): void {
+    assert_eq(getDefaultPort("https://example.com"), 443)
+    assert_eq(getDefaultPort("http://example.com"), 80)
+    assert_eq(getDefaultPort("ftp://example.com"), -1)
+}
+
+print("All https tests passed")

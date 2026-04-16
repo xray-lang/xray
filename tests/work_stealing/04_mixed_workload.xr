@@ -1,0 +1,85 @@
+/*
+** 04_mixed_workload.xr - 混合负载测试
+** 作者：xingleixu@gmail.com
+**
+** 测试目的：验证工作窃取在混合负载下的表现
+** 测试方法：同时运行计算密集型和 IO 密集型协程
+*/
+import time
+print("========== 测试4：混合负载测试 ==========")
+/* 测试参数 */
+const CPU_COROS = 20
+const IO_COROS = 20
+const CPU_WORK = 2000
+const IO_SLEEP_MS = 10
+
+/* 计算密集型协程 */
+fn cpu_intensive(id) {
+    let sum = 0
+    for (let i = 0; i < CPU_WORK; i++) {
+        sum = sum + i * id
+    }
+    return { "type": "cpu", "id": id, "result": sum }
+}
+
+/* IO 密集型协程（模拟 IO 等待）*/
+fn io_intensive(id) {
+    time.sleep(IO_SLEEP_MS)
+    return { "type": "io", "id": id, "result": id * 100 }
+}
+
+/* 启动混合协程 */
+print("启动 " + string(CPU_COROS) + " 个 CPU 密集型 + " + string(IO_COROS) + " 个 IO 密集型协程...")
+let start_time = time.monotonic()
+let tasks = []
+/* CPU 密集型 */
+for (let i = 0; i < CPU_COROS; i++) {
+    let id = i
+    let task = go cpu_intensive(id)
+    tasks.push(task)
+}
+/* IO 密集型 */
+for (let i = 0; i < IO_COROS; i++) {
+    let id = i + CPU_COROS
+    let task = go io_intensive(id)
+    tasks.push(task)
+}
+/* 等待所有完成 */
+print("等待所有协程完成...")
+let cpu_completed = 0
+let io_completed = 0
+for (let i = 0; i < tasks.length; i++) {
+    await tasks[i]
+    let r = tasks[i].result
+    if (r.type == "cpu") {
+        cpu_completed = cpu_completed + 1
+    } else {
+        io_completed = io_completed + 1
+    }
+}
+let total_time = time.monotonic() - start_time
+/* 结果 */
+print("
+结果:")
+print("  CPU 密集型完成: " + string(cpu_completed))
+print("  IO 密集型完成: " + string(io_completed))
+print("  总耗时: " + string(total_time) + " ms")
+/* 验证 */
+if (cpu_completed == CPU_COROS && io_completed == IO_COROS) {
+    print("
+✓ 混合负载测试通过")
+} else {
+    print("
+✗ 测试失败")
+    throw "混合负载测试失败"
+}
+/* 性能分析：总时间应该接近 IO 等待时间，而不是 CPU + IO */
+let expected_sequential = (CPU_COROS * 10) + (IO_COROS * IO_SLEEP_MS)
+print("  串行预估耗时: ~" + string(expected_sequential) + " ms")
+print("  实际耗时: " + string(total_time) + " ms")
+if (total_time < expected_sequential) {
+    let speedup = float(expected_sequential) / float(total_time)
+    print("  并行加速比: " + string(speedup) + "x")
+    print("✓ 并行执行有效")
+}
+print("========== 测试4 完成 ==========")

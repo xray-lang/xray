@@ -1,0 +1,223 @@
+import json
+
+// 1001_json_number.xr
+// 作者：xingleixu@gmail.com
+// 测试：JSON 数字解析边界测试
+// 借鉴：simdjson 的 powers_of_two, small_integers, nines 测试
+
+// ===== 小整数测试（-1024 到 1024）=====
+
+@test
+fn test_small_integers(): void {
+    // 正整数
+    assert_eq(json.parse("0"), 0)
+    assert_eq(json.parse("1"), 1)
+    assert_eq(json.parse("10"), 10)
+    assert_eq(json.parse("100"), 100)
+    assert_eq(json.parse("1000"), 1000)
+    assert_eq(json.parse("1024"), 1024)
+    
+    // 负整数
+    assert_eq(json.parse("-1"), -1)
+    assert_eq(json.parse("-10"), -10)
+    assert_eq(json.parse("-100"), -100)
+    assert_eq(json.parse("-1000"), -1000)
+    assert_eq(json.parse("-1024"), -1024)
+}
+
+@test
+fn test_integer_boundaries(): void {
+    // 32 位整数边界
+    assert_eq(json.parse("2147483647"), 2147483647)      // INT32_MAX
+    assert_eq(json.parse("-2147483648"), -2147483648)    // INT32_MIN
+    
+    // 超过 32 位的整数
+    assert_eq(json.parse("2147483648"), 2147483648)      // INT32_MAX + 1
+    assert_eq(json.parse("-2147483649"), -2147483649)    // INT32_MIN - 1
+}
+
+@test
+fn test_large_integers(): void {
+    // Full 64-bit integer range (Tagged Union)
+    assert_eq(json.parse("140737488355327"), 140737488355327)
+    assert_eq(json.parse("-140737488355327"), -140737488355327)
+    
+    // Large integers within int64 range are parsed as int64
+    let large = json.parse("9007199254740992")
+    assert_eq(typeof(large), Type.int)
+    assert_eq(large, 9007199254740992)
+}
+
+// ===== 浮点数测试 =====
+
+@test
+fn test_simple_floats(): void {
+    assert_eq(json.parse("0.0"), 0.0)
+    assert_eq(json.parse("1.0"), 1.0)
+    assert_eq(json.parse("-1.0"), -1.0)
+    assert_eq(json.parse("3.14"), 3.14)
+    assert_eq(json.parse("-3.14"), -3.14)
+}
+
+@test
+fn test_float_precision(): void {
+    // 测试浮点精度（借鉴 simdjson 的 nines 测试）
+    assert_eq(json.parse("0.1"), 0.1)
+    assert_eq(json.parse("0.01"), 0.01)
+    assert_eq(json.parse("0.001"), 0.001)
+    assert_eq(json.parse("0.0001"), 0.0001)
+    assert_eq(json.parse("0.00001"), 0.00001)
+}
+
+@test
+fn test_negative_zero(): void {
+    // 负零
+    let nz = json.parse("-0.0")
+    assert_eq(nz, 0.0)  // -0.0 == 0.0 在数值上相等
+}
+
+// ===== 科学计数法测试 =====
+
+@test
+fn test_scientific_notation_positive_exp(): void {
+    assert_eq(json.parse("1e0"), 1.0)
+    assert_eq(json.parse("1e1"), 10.0)
+    assert_eq(json.parse("1e2"), 100.0)
+    assert_eq(json.parse("1e3"), 1000.0)
+    assert_eq(json.parse("1e10"), 1e10)
+}
+
+@test
+fn test_scientific_notation_negative_exp(): void {
+    assert_eq(json.parse("1e-1"), 0.1)
+    assert_eq(json.parse("1e-2"), 0.01)
+    assert_eq(json.parse("1e-3"), 0.001)
+    assert_eq(json.parse("1e-6"), 1e-6)
+    assert_eq(json.parse("1e-10"), 1e-10)
+}
+
+@test
+fn test_scientific_notation_uppercase(): void {
+    // 大写 E
+    assert_eq(json.parse("1E2"), 100.0)
+    assert_eq(json.parse("1E-2"), 0.01)
+    assert_eq(json.parse("2.5E3"), 2500.0)
+}
+
+@test
+fn test_scientific_notation_with_plus(): void {
+    // 显式正号
+    assert_eq(json.parse("1e+2"), 100.0)
+    assert_eq(json.parse("1E+2"), 100.0)
+    assert_eq(json.parse("5e+0"), 5.0)
+}
+
+@test
+fn test_scientific_notation_complex(): void {
+    // 复杂科学计数法
+    assert_eq(json.parse("-1.23e4"), -12300.0)
+    assert_eq(json.parse("1.23e-4"), 0.000123)
+    assert_eq(json.parse("-1.23e-4"), -0.000123)
+    assert_eq(json.parse("1.5e10"), 1.5e10)
+}
+
+// ===== 边界值测试 =====
+
+@test
+fn test_very_small_floats(): void {
+    // 非常小的浮点数
+    assert_eq(json.parse("1e-100"), 1e-100)
+    assert_eq(json.parse("1e-200"), 1e-200)
+    assert_eq(json.parse("1e-300"), 1e-300)
+}
+
+@test
+fn test_very_large_floats(): void {
+    // 非常大的浮点数
+    assert_eq(json.parse("1e100"), 1e100)
+    assert_eq(json.parse("1e200"), 1e200)
+    assert_eq(json.parse("1e300"), 1e300)
+}
+
+@test
+fn test_max_precision_integers(): void {
+    // Full 64-bit int range (Tagged Union)
+    let n = json.parse("72057594037927935")
+    assert_eq(typeof(n), Type.int)
+    assert_eq(n, 72057594037927935)
+}
+
+// ===== 特殊格式测试 =====
+
+@test
+fn test_leading_zeros_in_fraction(): void {
+    // 小数部分前导零
+    assert_eq(json.parse("1.0001"), 1.0001)
+    assert_eq(json.parse("1.00001"), 1.00001)
+    assert_eq(json.parse("0.000001"), 0.000001)
+}
+
+@test
+fn test_trailing_zeros(): void {
+    // 尾随零
+    assert_eq(json.parse("1.00"), 1.0)
+    assert_eq(json.parse("1.000"), 1.0)
+    assert_eq(json.parse("10.0"), 10.0)
+}
+
+@test
+fn test_nines_pattern(): void {
+    // Large integer nines pattern: beyond 48-bit, parsed as float
+    let n1 = json.parse("9999999999999999999")
+    assert_eq(typeof(n1), Type.float)
+    assert_eq(n1 > 9e18, true)
+    // Float nines patterns
+    let n2 = json.parse("999999999999999999.9")
+    assert_eq(n2 > 9e17, true)
+    let n3 = json.parse("99999999999999999.99")
+    assert_eq(n3 > 9e16, true)
+    let n4 = json.parse("0.9999999999999999999")
+    assert_eq(n4 > 0.999, true)
+    assert_eq(n4 <= 1.0, true)
+}
+
+// ===== 数组中的数字 =====
+
+@test
+fn test_numbers_in_array(): void {
+    let arr = json.parse("[1, 2.5, -3, 1e10, -1.5e-3]")
+    assert_eq(arr.length, 5)
+    assert_eq(arr[0], 1)
+    assert_eq(arr[1], 2.5)
+    assert_eq(arr[2], -3)
+    assert_eq(arr[3], 1e10)
+    assert_eq(arr[4], -1.5e-3)
+}
+
+// ===== 对象中的数字 =====
+
+@test
+fn test_numbers_in_object(): void {
+    let obj = json.parse("{\"intVal\": 42, \"floatVal\": 3.14, \"sci\": 1e10, \"neg\": -100}")
+    assert_eq(obj.intVal, 42)
+    assert_eq(obj.floatVal, 3.14)
+    assert_eq(obj.sci, 1e10)
+    assert_eq(obj.neg, -100)
+}
+
+// ===== 边界溢出测试（应返回 Infinity 或特殊处理）=====
+
+@test
+fn test_overflow_to_infinity(): void {
+    // 超大指数应该返回 Infinity
+    let inf = json.parse("1e309")
+    assert_eq(inf > 1e308, true)  // 应该是 Infinity
+}
+
+@test
+fn test_underflow_to_zero(): void {
+    // 超小指数应该返回 0
+    let zero = json.parse("1e-400")
+    assert_eq(zero, 0.0)
+}
+

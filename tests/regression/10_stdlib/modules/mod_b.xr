@@ -1,0 +1,25 @@
+/*
+** mod_b.xr
+** 模块冲突测试 - 模块 B
+**
+** 作者：xingleixu@gmail.com
+** 
+** 测试：模块内部函数和变量不会与其他模块冲突
+** 这里故意使用与 mod_a 相同的内部变量名和函数名
+*/
+
+/* 私有变量（与 mod_a 同名）*/
+let _internal = "B"
+const _VERSION = "2.0"
+
+/* 私有函数（与 mod_a 同名）*/
+fn _helper(): string {
+    return _internal + "-helper"
+}
+
+/* 导出函数 */
+fn publicFn(): string {
+    return _helper() + "-" + _VERSION
+}
+
+export publicFn

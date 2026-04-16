@@ -1,0 +1,153 @@
+// 1202_generic_inference.xr
+// Test generic type inference
+// ===== Array Generic Inference =====
+@test
+fn test_array_type_annotation(): void {
+    let arr: Array<int> = [1, 2, 3]
+    assert_eq(arr.length, 3)
+    arr.push(4)
+    assert_eq(arr.length, 4)
+}
+
+@test
+fn test_array_infer_from_elements(): void {
+    // Type should be inferred as Array<int>
+    let arr = [1, 2, 3]
+    arr.push(4)
+    assert_eq(arr[3], 4)
+}
+
+@test
+fn test_array_empty_with_annotation(): void {
+    let arr: Array<string> = []
+    arr.push("hello")
+    arr.push("world")
+    assert_eq(arr.length, 2)
+}
+
+// ===== Map Generic Inference =====
+@test
+fn test_map_type_annotation(): void {
+    let m: Map<string, int> = #{}
+    m.set("a", 1)
+    m.set("b", 2)
+    assert_eq(m.get("a"), 1)
+    assert_eq(m.length, 2)
+}
+
+@test
+fn test_map_infer_from_literal(): void {
+    let m = { "name" => "Alice", "city" => "Beijing" }
+    assert_eq(m.get("name"), "Alice")
+}
+
+// ===== Set Generic Inference =====
+@test
+fn test_set_type_annotation(): void {
+    let s: Set<int> = #[]
+    s.add(1)
+    s.add(2)
+    s.add(1)
+    // duplicate
+    assert_eq(s.length, 2)
+}
+
+@test
+fn test_set_infer_from_literal(): void {
+    let s = #[1, 2, 3]
+    assert(s.has(1))
+    assert(!s.has(4))
+}
+
+// ===== Channel Generic Inference =====
+@test
+fn test_channel_basic(): void {
+    shared const ch = Channel(1)
+    ch.send(42)
+    let val = ch.recv()
+    assert_eq(val, 42)
+}
+
+// ===== Container Method Return Types =====
+@test
+fn test_array_map_return_type(): void {
+    let arr = [1, 2, 3]
+    let doubled = arr.map(fn(x) {
+        return x * 2
+    })
+    // doubled should be Array<int>
+    assert_eq(typeof(doubled), Type.Array)
+    assert_eq(doubled[0], 2)
+}
+
+@test
+fn test_array_filter_return_type(): void {
+    let arr = ["apple", "banana", "cherry"]
+    let filtered = arr.filter(fn(s) {
+        return s.length > 5
+    })
+    // filtered should be Array<string>
+    assert_eq(typeof(filtered), Type.Array)
+    assert_eq(filtered.length, 2)
+}
+
+@test
+fn test_array_slice_return_type(): void {
+    let arr = [1, 2, 3, 4, 5]
+    let sliced = arr[1:4]
+    assert_eq(typeof(sliced), Type.Array)
+    assert_eq(sliced.length, 3)
+}
+
+@test
+fn test_map_keys_return_type(): void {
+    let m = { "a" => 1, "b" => 2 }
+    let keys = m.keys()
+    assert_eq(typeof(keys), Type.Array)
+}
+
+@test
+fn test_map_values_return_type(): void {
+    let m = { "a" => 1, "b" => 2 }
+    let values = m.values()
+    assert_eq(typeof(values), Type.Array)
+}
+
+// ===== Nested Generic Types =====
+@test
+fn test_array_of_arrays(): void {
+    let matrix: Array<Array<int>> = [[1, 2], [3, 4]]
+    assert_eq(matrix[0][0], 1)
+    assert_eq(matrix[1][1], 4)
+}
+
+@test
+fn test_map_of_arrays(): void {
+    let groups = { "odd" => [1, 3, 5], "even" => [2, 4, 6] }
+    assert_eq(groups.get("odd")[0], 1)
+    assert_eq(groups.get("even")[2], 6)
+}
+
+// ===== Generic Function Calls =====
+@test
+fn test_array_concat(): void {
+    let a = [1, 2]
+    let b = [3, 4]
+    let c = a.concat(b)
+    assert_eq(c.length, 4)
+    assert_eq(c[2], 3)
+}
+
+@test
+fn test_array_indexOf(): void {
+    let arr = ["a", "b", "c"]
+    assert_eq(arr.indexOf("b"), 1)
+    assert_eq(arr.indexOf("z"), -1)
+}
+
+@test
+fn test_array_includes(): void {
+    let arr = [1, 2, 3]
+    assert(arr.includes(2))
+    assert(!arr.includes(5))
+}

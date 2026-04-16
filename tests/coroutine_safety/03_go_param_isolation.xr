@@ -1,0 +1,75 @@
+// 测试3：协程参数隔离
+// 作者：xingleixu@gmail.com
+// 
+// 验证：协程启动时参数正确传递，修改原值不影响协程内部
+print("========== 测试3：协程参数隔离 ==========")
+
+fn test_primitive_param() {
+    fn worker(n) {
+        // 协程内部使用参数
+        return n * 2
+    }
+    let value = 21
+    let task = go worker(value)
+    // 修改原值
+    value = 100
+    let result = await task
+    // 协程应该使用原始值 21
+    print("原值（已修改）:", value)
+    print("协程结果:", result)
+    assert_eq(result, 42)
+    // 21 * 2 = 42，不是 200
+    print("✓ 基本类型参数测试通过")
+}
+
+fn test_const_array_param() {
+    fn worker(data) {
+        // 只读操作
+        let sum = 0
+        for (item in data) {
+            sum = sum + item
+        }
+        return sum
+    }
+    const arr = [1, 2, 3, 4, 5]
+    let task = go worker(arr)
+    let result = await task
+    print("数组:", arr)
+    print("协程求和结果:", result)
+    assert_eq(result, 15)
+    // 1+2+3+4+5 = 15
+    print("✓ const 数组参数测试通过")
+}
+
+fn test_multiple_params() {
+    fn worker(a, b, c) {
+        return a + b + c
+    }
+    let task = go worker(10, 20, 30)
+    let result = await task
+    print("多参数结果:", result)
+    assert_eq(result, 60)
+    print("✓ 多参数测试通过")
+}
+
+fn test_string_param() {
+    fn worker(name) {
+        return "Hello, " + name + "!"
+    }
+    let msg = "World"
+    let task = go worker(msg)
+    // 修改原字符串引用
+    msg = "Changed"
+    let result = await task
+    print("结果:", result)
+    assert_eq(result, "Hello, World!")
+    print("✓ 字符串参数测试通过")
+}
+
+// 运行所有测试
+test_primitive_param()
+test_const_array_param()
+test_multiple_params()
+test_string_param()
+print("
+🎉 测试3全部通过：协程参数隔离正确！")

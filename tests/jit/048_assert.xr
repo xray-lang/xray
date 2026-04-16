@@ -1,0 +1,17 @@
+// EXPECTED: all passed
+// Test: Assert operations in JIT
+
+fn check_math(a: int, b: int) {
+    assert(a + b == a + b)
+    assert_eq(a + b, a + b)
+    assert_ne(a, b)
+}
+
+let i = 0
+while (i < 200) {
+    check_math(3, 5)
+    i = i + 1
+}
+
+check_math(10, 20)
+print("all passed")

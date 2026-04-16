@@ -1,0 +1,46 @@
+// EXPECTED: 0
+// EXPECTED: 5
+// EXPECTED: 5
+// Test: Class static fields and methods in JIT
+
+class Counter {
+    static count: int = 0
+
+    static increment() {
+        Counter.count = Counter.count + 1
+    }
+
+    static getCount() : int {
+        return Counter.count
+    }
+
+    static reset() {
+        Counter.count = 0
+    }
+}
+
+print(Counter.getCount())
+
+let i = 0
+while (i < 5) {
+    Counter.increment()
+    i = i + 1
+}
+
+print(Counter.getCount())
+
+// Warm up for JIT
+Counter.reset()
+i = 0
+while (i < 200) {
+    Counter.increment()
+    i = i + 1
+}
+Counter.reset()
+i = 0
+while (i < 5) {
+    Counter.increment()
+    i = i + 1
+}
+
+print(Counter.getCount())

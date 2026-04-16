@@ -1,0 +1,30 @@
+// EXPECTED: positive
+// EXPECTED: zero
+// EXPECTED: negative
+// Test: If/else control flow in JIT
+
+fn classify(x: int) : int {
+    if (x > 0) {
+        return 1
+    } else if (x == 0) {
+        return 0
+    } else {
+        return -1
+    }
+}
+
+let i = 0
+while (i < 200) {
+    classify(10)
+    classify(0)
+    classify(-5)
+    i = i + 1
+}
+
+let r1 = classify(10)
+let r2 = classify(0)
+let r3 = classify(-5)
+
+if (r1 == 1) { print("positive") }
+if (r2 == 0) { print("zero") }
+if (r3 == -1) { print("negative") }

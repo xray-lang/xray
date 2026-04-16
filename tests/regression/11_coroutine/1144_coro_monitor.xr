@@ -1,0 +1,61 @@
+// Test: Coro.whereis and Coro.monitor for named coroutine lifecycle monitoring
+
+import time
+
+// ========== Test 1: Coro.whereis for named coroutine ==========
+fn worker1(): int {
+    time.sleep(50)
+    return 42
+}
+
+let t1 = go(name: "test-worker-1") worker1()
+
+// Named coroutine should be findable
+let found = Coro.whereis("test-worker-1")
+print(found)  // expect: true
+
+// Non-existent name should return false
+let notfound = Coro.whereis("no-such-coro")
+print(notfound)  // expect: false
+
+let r1 = await t1
+print(r1)  // expect: 42
+
+// After completion, should no longer be findable
+let gone = Coro.whereis("test-worker-1")
+print(gone)  // expect: false
+
+// ========== Test 2: Coro.monitor basic ==========
+fn worker2(): string {
+    time.sleep(30)
+    return "done"
+}
+
+let t2 = go(name: "test-worker-2") worker2()
+let ch = Coro.monitor("test-worker-2")
+
+// Wait for exit notification
+let reason = ch.recv()
+print(reason)  // expect: normal
+
+// ========== Test 3: monitor non-existent coroutine ==========
+let ch2 = Coro.monitor("does-not-exist")
+let reason2 = ch2.recv()
+print(reason2)  // expect: noproc
+
+// ========== Test 4: monitor already completed coroutine ==========
+fn worker3(): int {
+    return 100
+}
+
+let t3 = go(name: "test-worker-3") worker3()
+let r3 = await t3
+print(r3)  // expect: 100
+
+// Coroutine already done
+time.sleep(10)
+let ch3 = Coro.monitor("test-worker-3")
+let reason3 = ch3.recv()
+print(reason3)  // expect: noproc
+
+print("all tests passed")  // expect: all tests passed

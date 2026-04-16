@@ -1,0 +1,79 @@
+// Demo 1: ECS Particle System
+// Scenario: update particles with position, velocity, lifecycle
+// Verify: nested struct, in/ref params, struct field mutation, loop
+
+struct Vec3 {
+    x: float
+    y: float
+    z: float
+}
+
+struct Particle {
+    pos: Vec3
+    vel: Vec3
+    life: float
+    mass: float
+}
+
+// Update a single particle: apply gravity and integrate position
+fn update_particle(p: ref Particle, dt: float, gravity: in Vec3): void {
+    if (p.life <= 0.0) { return }
+
+    // Apply gravity to velocity
+    p.vel.x = p.vel.x + gravity.x * dt
+    p.vel.y = p.vel.y + gravity.y * dt
+    p.vel.z = p.vel.z + gravity.z * dt
+
+    // Integrate position
+    p.pos.x = p.pos.x + p.vel.x * dt
+    p.pos.y = p.pos.y + p.vel.y * dt
+    p.pos.z = p.pos.z + p.vel.z * dt
+
+    // Decay life
+    p.life = p.life - dt
+}
+
+// Create a particle at given position with upward velocity
+fn make_particle(px: float, py: float, pz: float, speed: float): Particle {
+    return Particle{
+        pos: Vec3{x: px, y: py, z: pz},
+        vel: Vec3{x: 0.0, y: speed, z: 0.0},
+        life: 2.0,
+        mass: 1.0
+    }
+}
+
+// --- Test ---
+
+let gravity = Vec3{x: 0.0, y: -9.8, z: 0.0}
+let dt = 0.1
+
+// Create particle going upward
+let p1 = make_particle(0.0, 10.0, 0.0, 20.0)
+print(p1.pos.y)   // 10
+print(p1.vel.y)   // 20
+
+// Simulate 5 steps
+update_particle(p1, dt, gravity)
+print(p1.pos.y)   // 10 + (20 - 0.98) * 0.1 ≈ 11.902
+print(p1.vel.y)   // 20 - 0.98 = 19.02
+
+update_particle(p1, dt, gravity)
+update_particle(p1, dt, gravity)
+update_particle(p1, dt, gravity)
+update_particle(p1, dt, gravity)
+
+print(p1.life)    // 2.0 - 0.5 = 1.5
+
+// Test dead particle (life <= 0) should not move
+let p2 = Particle{
+    pos: Vec3{x: 5.0, y: 5.0, z: 5.0},
+    vel: Vec3{x: 1.0, y: 1.0, z: 1.0},
+    life: 0.0,
+    mass: 1.0
+}
+update_particle(p2, dt, gravity)
+print(p2.pos.x)  // 5 (unchanged, dead particle)
+
+// Test Vec3 struct size
+print(Reflect.fieldCount(p1))  // 4 (pos, vel, life, mass)

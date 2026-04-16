@@ -1,0 +1,215 @@
+// 1302_toml_advanced.xr - TOML advanced feature tests
+
+import toml
+
+// ===== Multiline basic string =====
+
+@test
+fn test_multiline_basic_string(): void {
+    let data = "desc = \"\"\"\nHello\nWorld\"\"\""
+    let obj = toml.parse(data) ?? {}
+    assert_eq(obj["desc"], "Hello\nWorld")
+}
+
+// ===== Literal string =====
+
+@test
+fn test_literal_string(): void {
+    let data = "path = 'C:\\Users\\Alice'"
+    let obj = toml.parse(data) ?? {}
+    assert_eq(obj["path"], "C:\\Users\\Alice")
+}
+
+// ===== Multiline literal string =====
+
+@test
+fn test_multiline_literal_string(): void {
+    let data = "text = '''\nno escapes \\n here\n'''"
+    let obj = toml.parse(data) ?? {}
+    assert(obj["text"].length > 0)
+}
+
+// ===== Array of tables =====
+
+@test
+fn test_array_of_tables(): void {
+    let data = "[[products]]\nname = \"Hammer\"\nsku = 738594937\n\n[[products]]\nname = \"Nail\"\nsku = 284758393"
+    let obj = toml.parse(data) ?? {}
+    assert_eq(obj["products"][0]["name"], "Hammer")
+    assert_eq(obj["products"][1]["name"], "Nail")
+    assert_eq(obj["products"][0]["sku"], 738594937)
+}
+
+// ===== Escape sequences =====
+
+@test
+fn test_escape_sequences(): void {
+    let data = "s = \"tab\\there\\nnewline\""
+    let obj = toml.parse(data) ?? {}
+    assert(obj["s"].length > 0)
+}
+
+// ===== Unicode escape =====
+
+@test
+fn test_unicode_escape(): void {
+    let data = "heart = \"\\u2764\""
+    let obj = toml.parse(data) ?? {}
+    assert(obj["heart"].length > 0)
+}
+
+// ===== Dotted keys =====
+
+@test
+fn test_dotted_keys(): void {
+    let data = "fruit.name = \"apple\"\nfruit.color = \"red\""
+    let obj = toml.parse(data) ?? {}
+    assert_eq(obj["fruit"]["name"], "apple")
+    assert_eq(obj["fruit"]["color"], "red")
+}
+
+// ===== Inline table with dotted keys =====
+
+@test
+fn test_inline_table_dotted_keys(): void {
+    let data = "point = { position.x = 1, position.y = 2 }"
+    let obj = toml.parse(data) ?? {}
+    assert_eq(obj["point"]["position"]["x"], 1)
+    assert_eq(obj["point"]["position"]["y"], 2)
+}
+
+// ===== Special float values =====
+
+@test
+fn test_special_floats(): void {
+    let data = "pos_inf = inf\nneg_inf = -inf\nnot_a_num = nan"
+    let obj = toml.parse(data) ?? {}
+    assert(obj["pos_inf"] > 0)
+    assert(obj["neg_inf"] < 0)
+}
+
+// ===== Negative numbers =====
+
+@test
+fn test_negative_numbers(): void {
+    let data = "temp = -17\noffset = -0.5"
+    let obj = toml.parse(data) ?? {}
+    assert_eq(obj["temp"], -17)
+    assert_eq(obj["offset"], -0.5)
+}
+
+// ===== Float serialization with decimal point =====
+
+@test
+fn test_float_decimal_point(): void {
+    let config = {"value" => 1.0}
+    let result = toml.stringify(config)
+    // Float must have decimal point in TOML
+    assert(result.length > 0)
+    let reparsed = toml.parse(result) ?? {}
+    assert_eq(typeof(reparsed["value"]), Type.float)
+}
+
+// ===== Stringify roundtrip =====
+
+@test
+fn test_stringify_roundtrip(): void {
+    let original = {"name" => "xray", "version" => 2, "enabled" => true}
+    let toml_str = toml.stringify(original)
+    let parsed = toml.parse(toml_str) ?? {}
+    assert_eq(parsed["name"], "xray")
+    assert_eq(parsed["version"], 2)
+    assert_eq(parsed["enabled"], true)
+}
+
+// ===== Stringify nested table roundtrip =====
+
+@test
+fn test_stringify_nested_roundtrip(): void {
+    let data = "[server]\nhost = \"localhost\"\nport = 8080"
+    let obj = toml.parse(data) ?? {}
+    let toml_str = toml.stringify(obj)
+    let reparsed = toml.parse(toml_str) ?? {}
+    assert_eq(reparsed["server"]["host"], "localhost")
+    assert_eq(reparsed["server"]["port"], 8080)
+}
+
+// ===== parseStrict mode =====
+
+@test
+fn test_parse_strict(): void {
+    let data = "name = \"Alice\"\nage = 30"
+    let result = toml.parseStrict(data) ?? {}
+    assert_eq(result["data"]["name"], "Alice")
+    assert(result["errors"].length == 0)
+    assert(result["meta"]["lines"] > 0)
+    assert(result["meta"]["keys"] > 0)
+}
+
+// ===== Duplicate key detection =====
+
+@test
+fn test_duplicate_key_strict(): void {
+    let data = "name = \"Alice\"\nname = \"Bob\""
+    let result = toml.parseStrict(data) ?? {}
+    // Should detect duplicate key error
+    assert(result["errors"].length > 0)
+}
+
+// ===== Empty input =====
+
+@test
+fn test_empty_input(): void {
+    let obj = toml.parse("") ?? {}
+    assert(obj != null)
+}
+
+// ===== Comments =====
+
+@test
+fn test_comments(): void {
+    let data = "# This is a comment\nkey = \"value\" # inline comment"
+    let obj = toml.parse(data) ?? {}
+    assert_eq(obj["key"], "value")
+}
+
+// ===== Boolean at end of input =====
+
+@test
+fn test_bool_at_end(): void {
+    let data = "flag = true"
+    let obj = toml.parse(data) ?? {}
+    assert_eq(obj["flag"], true)
+    
+    let data2 = "flag = false"
+    let obj2 = toml.parse(data2)
+    assert_eq(obj2["flag"], false)
+}
+
+// ===== Datetime =====
+
+@test
+fn test_datetime(): void {
+    let data = "created = 2024-01-15T10:30:00Z"
+    let obj = toml.parse(data) ?? {}
+    assert_eq(obj["created"], "2024-01-15T10:30:00Z")
+}
+
+// ===== Datetime with space separator =====
+
+@test
+fn test_datetime_space(): void {
+    let data = "created = 1979-05-27 07:32:00"
+    let obj = toml.parse(data) ?? {}
+    assert_eq(obj["created"], "1979-05-27 07:32:00")
+}
+
+// ===== Underscore in numbers =====
+
+@test
+fn test_underscore_numbers(): void {
+    let data = "big = 1_000_000\nhex = 0xFF_FF"
+    let obj = toml.parse(data) ?? {}
+    assert_eq(obj["big"], 1000000)
+    assert_eq(obj["hex"], 65535)
+}

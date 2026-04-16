@@ -1,0 +1,34 @@
+// EXPECTED: 15
+// EXPECTED: 120
+// Test: Array iteration and manipulation in JIT loop
+
+fn sum_array(arr) : int {
+    let s = 0
+    let i = 0
+    while (i < arr.length) {
+        s = s + arr[i]
+        i = i + 1
+    }
+    return s
+}
+
+fn product_array(arr) : int {
+    let p = 1
+    let i = 0
+    while (i < arr.length) {
+        p = p * arr[i]
+        i = i + 1
+    }
+    return p
+}
+
+let a = [1, 2, 3, 4, 5]
+let i = 0
+while (i < 200) {
+    sum_array(a)
+    product_array(a)
+    i = i + 1
+}
+
+print(sum_array(a))
+print(product_array(a))

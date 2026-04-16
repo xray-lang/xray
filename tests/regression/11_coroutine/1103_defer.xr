@@ -1,0 +1,32 @@
+// 测试 defer 语句
+// defer 延迟执行函数调用，按 LIFO 顺序
+
+fn cleanup1(): void { print("cleanup 1") }
+fn cleanup2(): void { print("cleanup 2") }
+fn cleanup3(): void { print("cleanup 3") }
+
+@test
+fn test_defer(): void {
+    print("start")
+    
+    // 注册 defer（后注册的先执行）
+    defer cleanup1()
+    defer cleanup2()
+    defer cleanup3()
+    
+    print("work done")
+    
+    // 函数返回时执行 defer
+    // 顺序：cleanup3 -> cleanup2 -> cleanup1
+}
+
+test_defer()
+print("end")
+
+// 期望输出：
+// start
+// work done
+// cleanup 3
+// cleanup 2
+// cleanup 1
+// end

@@ -1,0 +1,160 @@
+/*
+ * xray - Lightweight typed scripting with native concurrency
+ * https://www.xray-lang.org
+ *
+ * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
+ * Licensed under the MIT License
+ *
+ * xreflect_cache.c - Per-class reflection cache
+ *
+ * KEY CONCEPT:
+ *   Pre-creates all Field/Method wrappers on first access.
+ *   Subsequent queries return cached objects (50-100x speedup).
+ */
+
+#include "../../base/xchecks.h"
+#include "../gc/xgc.h"
+#include "xreflect_cache.h"
+#include "xreflect_internal.h"
+#include "../xisolate_api.h"
+#include "../../base/xmalloc.h"
+#include "../object/xarray.h"
+
+/* ========== Cache Creation ========== */
+
+XrReflectCache* xr_reflect_cache_create(XrayIsolate *X, XrClass *klass) {
+    if (!X || !klass) return NULL;
+    
+    XrReflectCache *cache = (XrReflectCache*)XR_ALLOCATE(XrReflectCache);
+    if (!cache) return NULL;
+    
+    xr_gc_header_init_type(&cache->gc, XR_TBLOB);
+    
+    cache->owner = klass;
+    cache->field_count = klass->field_count;
+    cache->method_count = klass->method_count;
+    cache->initialized = false;
+    
+    // Pre-create Field wrappers
+    if (klass->field_count > 0) {
+        cache->field_wrappers = (XrValue*)xr_malloc(sizeof(XrValue) * klass->field_count);
+        if (!cache->field_wrappers) {
+            xr_free(cache);
+            return NULL;
+        }
+        
+        for (int i = 0; i < klass->field_count; i++) {
+            FieldWrapper *wrapper = (FieldWrapper*)XR_ALLOCATE(FieldWrapper);
+            if (!wrapper) {
+                xr_free(cache->field_wrappers);
+                xr_free(cache);
+                return NULL;
+            }
+            
+            XrClass *fieldClass = xr_isolate_get_core_classes(X) ? xr_isolate_get_core_classes(X)->fieldClass : NULL;
+            (void)fieldClass;
+            xr_gc_header_init_type(&wrapper->gc, XR_TBLOB);
+            
+            wrapper->metadata.owner = klass;
+            wrapper->metadata.field_index = i;
+            
+            cache->field_wrappers[i] = wrapper_to_value(wrapper);
+        }
+    } else {
+        cache->field_wrappers = NULL;
+    }
+    
+    // Pre-create Method wrappers
+    if (klass->method_count > 0) {
+        cache->method_wrappers = (XrValue*)xr_malloc(sizeof(XrValue) * klass->method_count);
+        if (!cache->method_wrappers) {
+            if (cache->field_wrappers) xr_free(cache->field_wrappers);
+            xr_free(cache);
+            return NULL;
+        }
+        
+        for (int i = 0; i < klass->method_count; i++) {
+            MethodWrapper *wrapper = (MethodWrapper*)XR_ALLOCATE(MethodWrapper);
+            if (!wrapper) {
+                xr_free(cache->method_wrappers);
+                if (cache->field_wrappers) xr_free(cache->field_wrappers);
+                xr_free(cache);
+                return NULL;
+            }
+            
+            XrClass *methodClass = xr_isolate_get_core_classes(X) ? xr_isolate_get_core_classes(X)->methodClass : NULL;
+            (void)methodClass;
+            xr_gc_header_init_type(&wrapper->gc, XR_TBLOB);
+            
+            wrapper->metadata.owner = klass;
+            wrapper->metadata.method_index = i;
+            
+            cache->method_wrappers[i] = wrapper_to_value(wrapper);
+        }
+    } else {
+        cache->method_wrappers = NULL;
+    }
+    
+    cache->initialized = true;
+    return cache;
+}
+
+void xr_reflect_cache_free(XrReflectCache *cache) {
+    if (!cache) return;
+    
+    if (cache->field_wrappers) {
+        xr_free(cache->field_wrappers);
+        cache->field_wrappers = NULL;
+    }
+    
+    if (cache->method_wrappers) {
+        xr_free(cache->method_wrappers);
+        cache->method_wrappers = NULL;
+    }
+    
+    xr_free(cache);
+}
+
+/* ========== Cache Access ========== */
+
+XrValue xr_reflect_cache_get_field(XrReflectCache *cache, int field_index) {
+    if (!cache || !cache->initialized) return xr_null();
+    if (field_index < 0 || field_index >= cache->field_count) return xr_null();
+    
+    return cache->field_wrappers[field_index];
+}
+
+XrValue xr_reflect_cache_get_method(XrReflectCache *cache, int method_index) {
+    if (!cache || !cache->initialized) return xr_null();
+    if (method_index < 0 || method_index >= cache->method_count) return xr_null();
+    
+    return cache->method_wrappers[method_index];
+}
+
+XrArray* xr_reflect_cache_get_all_fields(XrayIsolate *X, XrReflectCache *cache) {
+    XR_DCHECK(X != NULL, "reflect_cache_get_all_fields: NULL isolate");
+    if (!cache || !cache->initialized) return NULL;
+    
+    XrArray *array = xr_array_new(xr_current_coro(X));
+    if (!array) return NULL;
+    
+    for (int i = 0; i < cache->field_count; i++) {
+        xr_array_push(array, cache->field_wrappers[i]);
+    }
+    
+    return array;
+}
+
+XrArray* xr_reflect_cache_get_all_methods(XrayIsolate *X, XrReflectCache *cache) {
+    XR_DCHECK(X != NULL, "reflect_cache_get_all_methods: NULL isolate");
+    if (!cache || !cache->initialized) return NULL;
+    
+    XrArray *array = xr_array_new(xr_current_coro(X));
+    if (!array) return NULL;
+    
+    for (int i = 0; i < cache->method_count; i++) {
+        xr_array_push(array, cache->method_wrappers[i]);
+    }
+    
+    return array;
+}

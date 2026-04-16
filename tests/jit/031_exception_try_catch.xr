@@ -1,0 +1,34 @@
+// EXPECTED: caught
+// EXPECTED: 42
+// EXPECTED: done
+// Test: Try-catch exception handling in JIT
+
+fn may_throw(x: int) : int {
+    if (x < 0) {
+        throw "negative"
+    }
+    return x
+}
+
+fn safe_call(x: int) {
+    try {
+        let r = may_throw(x)
+        print(r)
+    } catch (e) {
+        print("caught")
+    }
+}
+
+let i = 0
+while (i < 200) {
+    try {
+        may_throw(1)
+    } catch (e) {
+        // ignore
+    }
+    i = i + 1
+}
+
+safe_call(-1)
+safe_call(42)
+print("done")

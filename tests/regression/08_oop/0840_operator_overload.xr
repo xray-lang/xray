@@ -1,0 +1,153 @@
+// 0840_operator_overload.xr
+// 作者：xingleixu@gmail.com
+// 测试：运算符重载
+
+// ===== 加法运算符 =====
+
+class Vector2 {
+    x: float
+    y: float
+    
+    constructor(x, y) {
+        this.x = x
+        this.y = y
+    }
+    
+    operator+(other: Vector2): Vector2 {
+        return new Vector2(this.x + other.x, this.y + other.y)
+    }
+    
+    operator-(other: Vector2): Vector2 {
+        return new Vector2(this.x - other.x, this.y - other.y)
+    }
+    
+    operator*(scalar: float): Vector2 {
+        return new Vector2(this.x * scalar, this.y * scalar)
+    }
+    
+    operator==(other: Vector2): bool {
+        return this.x == other.x && this.y == other.y
+    }
+}
+
+@test
+fn test_operator_add(): void {
+    let a = new Vector2(1, 2)
+    let b = new Vector2(3, 4)
+    let c = a + b
+    assert_eq(c.x, 4)
+    assert_eq(c.y, 6)
+}
+
+@test
+fn test_operator_sub(): void {
+    let a = new Vector2(5, 7)
+    let b = new Vector2(2, 3)
+    let c = a - b
+    assert_eq(c.x, 3)
+    assert_eq(c.y, 4)
+}
+
+@test
+fn test_operator_mul(): void {
+    let v = new Vector2(2, 3)
+    let scaled = v * 2
+    assert_eq(scaled.x, 4)
+    assert_eq(scaled.y, 6)
+}
+
+@test
+fn test_operator_eq(): void {
+    let a = new Vector2(1, 2)
+    let b = new Vector2(1, 2)
+    let c = new Vector2(3, 4)
+    assert_eq(a == b, true)
+    assert_eq(a == c, false)
+}
+
+// ===== 下标运算符 =====
+
+class Matrix {
+    data: Array<int>
+    
+    constructor() {
+        this.data = [0, 0, 0, 0]
+    }
+    
+    operator[](index: int): int {
+        return this.data[index]
+    }
+    
+    operator[]=(index: int, value: int): void {
+        this.data[index] = value
+    }
+}
+
+@test
+fn test_subscript_get(): void {
+    let m = new Matrix()
+    m.data[0] = 10
+    m.data[1] = 20
+    assert_eq(m[0], 10)
+    assert_eq(m[1], 20)
+}
+
+@test
+fn test_subscript_set(): void {
+    let m = new Matrix()
+    m[0] = 100
+    m[1] = 200
+    assert_eq(m.data[0], 100)
+    assert_eq(m.data[1], 200)
+}
+
+// ===== 比较运算符 =====
+
+class Money {
+    amount: int
+    
+    constructor(amount) {
+        this.amount = amount
+    }
+    
+    operator<(other: Money): bool {
+        return this.amount < other.amount
+    }
+    
+    operator<=(other: Money): bool {
+        return this.amount <= other.amount
+    }
+    
+    operator>(other: Money): bool {
+        return this.amount > other.amount
+    }
+    
+    operator>=(other: Money): bool {
+        return this.amount >= other.amount
+    }
+}
+
+@test
+fn test_comparison_operators(): void {
+    let a = new Money(100)
+    let b = new Money(200)
+    
+    assert_eq(a < b, true)
+    assert_eq(a <= b, true)
+    assert_eq(b > a, true)
+    assert_eq(b >= a, true)
+}
+
+// ===== 链式运算 =====
+
+@test
+fn test_chained_operations(): void {
+    let a = new Vector2(1, 1)
+    let b = new Vector2(2, 2)
+    let c = new Vector2(3, 3)
+    
+    let result = a + b + c
+    assert_eq(result.x, 6)
+    assert_eq(result.y, 6)
+}
+

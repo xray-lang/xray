@@ -1,0 +1,40 @@
+// EXPECTED: 336
+// Test: Extreme register pressure — 25+ simultaneously live variables
+// Forces register spilling with all variables used in final expression
+
+fn extreme(a: int, b: int) : int {
+    let v0  = a + 1
+    let v1  = b + 2
+    let v2  = a + 3
+    let v3  = b + 4
+    let v4  = a + 5
+    let v5  = b + 6
+    let v6  = a + 7
+    let v7  = b + 8
+    let v8  = a + 9
+    let v9  = b + 10
+    let v10 = a + 11
+    let v11 = b + 12
+    let v12 = a + 13
+    let v13 = b + 14
+    let v14 = a + 15
+    let v15 = b + 16
+    let v16 = a + 17
+    let v17 = b + 18
+    let v18 = a + 19
+    let v19 = b + 20
+    let v20 = a + 21
+    let v21 = b + 22
+    let v22 = a + 23
+    let v23 = b + 24
+    // All 24 variables live at this point
+    return v0 + v1 + v2 + v3 + v4 + v5 + v6 + v7 + v8 + v9 + v10 + v11 + v12 + v13 + v14 + v15 + v16 + v17 + v18 + v19 + v20 + v21 + v22 + v23
+}
+
+let i = 0
+while (i < 200) {
+    extreme(1, 2)
+    i = i + 1
+}
+
+print(extreme(1, 2))

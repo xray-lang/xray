@@ -1,0 +1,36 @@
+// Test linked go as expressions and task.monitor() API
+
+fn ok(): int {
+    return 42
+}
+
+// Test 1: linked go as expression returns Task
+fn test_linked_go_expr() {
+    let t = linked go ok()
+    let r = await t
+    assert(r == 42, "linked go should return result via await")
+}
+
+// Test 2: go + task.monitor() delivers task via Channel on completion
+fn test_go_with_monitor() {
+    let t = go ok()
+    let mon = t.monitor()
+    let completed_task = mon.recv()
+    assert(completed_task.done, "monitored task should be done")
+    assert(completed_task.result == 42, "task.monitor() should deliver task with result")
+}
+
+// Test 3: linked go inside linked scope
+fn test_linked_go_in_scope() {
+    let result = 0
+    linked scope {
+        let t = linked go ok()
+        result = await t
+    }
+    assert(result == 42, "linked go in linked scope should work")
+}
+
+test_linked_go_expr()
+test_go_with_monitor()
+test_linked_go_in_scope()
+print("PASS")

@@ -1,0 +1,41 @@
+/*
+ * ws_server_test.xr - WebSocket server test
+ * 
+ * Run this server, then connect with a WebSocket client to test.
+ * Example: wscat -c ws://localhost:8765
+ */
+
+import ws
+
+print("=== WebSocket Server Test ===")
+
+// Echo server: sends back whatever it receives
+ws.serve(8765, fn(conn) {
+    print("Client connected!")
+    
+    // Echo loop
+    while (ws.isOpen(conn)) {
+        let msg = ws.recv(conn, null)
+        if (msg == null) {
+            print("recv returned null")
+            break
+        }
+        if (msg.error) {
+            print("Recv error: " + msg.error)
+            break
+        }
+        if (msg.data) {
+            print("Received: " + msg.data)
+            // Echo back
+            let ok = ws.send(conn, "Echo: " + msg.data, null)
+            if (!ok) {
+                print("Send failed")
+                break
+            }
+        }
+    }
+    
+    print("Client disconnected")
+})
+
+print("Server stopped")

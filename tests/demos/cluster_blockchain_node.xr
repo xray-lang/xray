@@ -1,0 +1,392 @@
+// Distributed Blockchain Node
+// ============================================================
+// A complete blockchain node built on xray's cluster primitives.
+// Each node runs independently; multiple nodes form a P2P network.
+//
+// Cluster API used:
+//   cluster.start(name, port, secret)  — bootstrap node
+//   cluster.join(host, port)           — connect to peers
+//   cluster.serve("tx_submit")         — RPC: accept transactions
+//   cluster.serve("block_query")       — RPC: query blocks
+//   cluster.call("tx_submit", tx)      — submit tx to any node
+//   cluster.reply(req, result)         — reply to RPC caller
+//   cluster.channel("mempool", 256)    — distributed transaction pool
+//   cluster.publish("block.new", blk)  — broadcast new blocks
+//   cluster.subscribe("block.>")       — receive block broadcasts
+//   cluster.monitor("*")              — detect node failures
+//   cluster.info()                     — cluster diagnostics
+//
+// Run 3 nodes:
+//   ./build/xray cluster_blockchain_node.xr -- --name node-A --port 9001
+//   ./build/xray cluster_blockchain_node.xr -- --name node-B --port 9002 --join 127.0.0.1:9001
+//   ./build/xray cluster_blockchain_node.xr -- --name node-C --port 9003 --join 127.0.0.1:9001
+
+import cluster
+import crypto
+import time
+import json
+
+// ===== Configuration =====
+
+fn parseArgs() {
+    let config = {
+        name: "node-A",
+        port: 9001,
+        secret: "blockchain-secret",
+        join_host: null,
+        join_port: 0,
+        is_miner: true
+    }
+
+    let args = sys.args()
+    for (let i = 0; i < args.length; i++) {
+        match args[i] {
+            "--name" => { config.name = args[i + 1]; i++ },
+            "--port" => { config.port = int(args[i + 1]); i++ },
+            "--join" => {
+                let parts = args[i + 1].split(":")
+                config.join_host = parts[0]
+                config.join_port = int(parts[1])
+                i++
+            },
+            _ => {}
+        }
+    }
+    return config
+}
+
+// ===== Blockchain Data Structures =====
+
+fn createTransaction(from: string, to: string, amount: float, data: string) {
+    let tx = {
+        from: from,
+        to: to,
+        amount: amount,
+        data: data,
+        timestamp: time.now(),
+        nonce: int(time.monotonic() * 1000) % 999999
+    }
+    tx.hash = crypto.sha256(
+        tx.from + tx.to + string(tx.amount) + string(tx.timestamp) + string(tx.nonce)
+    )
+    return tx
+}
+
+fn createBlock(index: int, prevHash: string, txs, producer: string) {
+    let block = {
+        index: index,
+        prevHash: prevHash,
+        transactions: txs,
+        producer: producer,
+        timestamp: time.now(),
+        nonce: 0,
+        hash: ""
+    }
+    block.hash = computeBlockHash(block)
+    return block
+}
+
+fn computeBlockHash(block) {
+    let data = string(block.index) + block.prevHash +
+               string(block.timestamp) + string(block.nonce) + block.producer
+    for (tx in block.transactions) {
+        data += tx.hash
+    }
+    return crypto.sha256(data)
+}
+
+// ===== Blockchain State =====
+
+shared const state = {
+    chain: [],
+    pendingTxs: [],
+    accounts: {},
+    blockHeight: 0
+}
+
+fn genesisBlock() {
+    return createBlock(0, "0000000000000000", [], "genesis")
+}
+
+fn getLatestBlock() {
+    if (state.chain.length == 0) { return null }
+    return state.chain[state.chain.length - 1]
+}
+
+fn isValidBlock(block) {
+    let latest = getLatestBlock()
+    if (latest == null) { return block.index == 0 }
+    if (block.index != latest.index + 1) { return false }
+    if (block.prevHash != latest.hash) { return false }
+    let recomputed = computeBlockHash(block)
+    if (recomputed != block.hash) { return false }
+    return true
+}
+
+fn applyBlock(block) {
+    for (tx in block.transactions) {
+        // Update account balances
+        if (state.accounts[tx.from] == null) {
+            state.accounts[tx.from] = 1000.0  // initial balance
+        }
+        if (state.accounts[tx.to] == null) {
+            state.accounts[tx.to] = 0.0
+        }
+        state.accounts[tx.from] -= tx.amount
+        state.accounts[tx.to] += tx.amount
+    }
+    state.chain.push(block)
+    state.blockHeight = block.index
+}
+
+// ===== Service: Transaction Submission RPC =====
+// Other nodes call cluster.call("tx_submit", tx) to submit transactions
+
+fn txSubmitService() {
+    let reqCh = cluster.serve("tx_submit")
+    print("[Service] tx_submit registered")
+
+    while (true) {
+        let req = reqCh.recv()
+        if (req == null) { break }
+
+        let tx = req.args
+        if (tx == null || tx.hash == null) {
+            cluster.reply(req, { ok: false, error: "invalid transaction" })
+            continue
+        }
+
+        // Add to local pending pool
+        state.pendingTxs.push(tx)
+        print("[TX]", tx.from, "→", tx.to, ":", tx.amount)
+
+        // Forward to distributed mempool channel
+        let mempool = cluster.channel("mempool", 256)
+        mempool.trySend(tx)
+
+        cluster.reply(req, { ok: true, hash: tx.hash })
+    }
+}
+
+// ===== Service: Block Query RPC =====
+// Query blockchain state: cluster.call("block_query", {type: "height"})
+
+fn blockQueryService() {
+    let reqCh = cluster.serve("block_query")
+    print("[Service] block_query registered")
+
+    while (true) {
+        let req = reqCh.recv()
+        if (req == null) { break }
+
+        let query = req.args
+        let result = match query.type {
+            "height" => { height: state.blockHeight },
+            "block" => {
+                let idx = query.index ?? state.blockHeight
+                if (idx >= 0 && idx < state.chain.length) {
+                    state.chain[idx]
+                } else {
+                    { error: "block not found" }
+                }
+            },
+            "balance" => {
+                let addr = query.address ?? ""
+                { address: addr, balance: state.accounts[addr] ?? 0.0 }
+            },
+            "chain" => {
+                {
+                    height: state.blockHeight,
+                    blocks: state.chain.length,
+                    accounts: state.accounts
+                }
+            },
+            _ => { error: "unknown query type" }
+        }
+
+        cluster.reply(req, result)
+    }
+}
+
+// ===== Block Producer =====
+// Collects transactions from mempool, creates blocks, broadcasts via pub/sub
+
+fn blockProducer(nodeName) {
+    let mempool = cluster.channel("mempool", 256)
+    let batchSize = 5
+    let blockInterval = 3000  // ms
+
+    print("[Miner] Block producer started (interval:", blockInterval, "ms)")
+
+    while (true) {
+        // Collect transactions
+        let txBatch = []
+        let deadline = time.monotonic() + blockInterval
+
+        while (txBatch.length < batchSize && time.monotonic() < deadline) {
+            select {
+                tx from mempool => {
+                    txBatch.push(tx)
+                }
+                after 500 => {
+                    // Check deadline
+                }
+            }
+        }
+
+        if (txBatch.length == 0) { continue }
+
+        // Create new block
+        let latest = getLatestBlock()
+        let prevHash = latest != null ? latest.hash : "0000000000000000"
+        let block = createBlock(state.blockHeight + 1, prevHash, txBatch, nodeName)
+
+        // Simple PoW: find hash starting with "0"
+        while (!block.hash.startsWith("0")) {
+            block.nonce++
+            block.hash = computeBlockHash(block)
+            if (block.nonce > 5000) { break }
+        }
+
+        // Apply locally
+        if (isValidBlock(block)) {
+            applyBlock(block)
+            print("[Block #" + string(block.index) + "]",
+                  block.transactions.length, "txs | nonce:", block.nonce,
+                  "| hash:", block.hash.slice(0, 16) + "...")
+
+            // Broadcast to all nodes via pub/sub
+            cluster.publish("block.new", {
+                block: block,
+                producer: nodeName
+            })
+        }
+    }
+}
+
+// ===== Block Receiver =====
+// Subscribes to block broadcasts from other nodes
+
+fn blockReceiver(nodeName) {
+    let blockSub = cluster.subscribe("block.>")
+    print("[Sync] Subscribed to block.> broadcasts")
+
+    while (true) {
+        let msg = blockSub.recv()
+        if (msg == null) { break }
+
+        // Skip own blocks
+        if (msg.producer == nodeName) { continue }
+
+        let block = msg.block
+        if (isValidBlock(block)) {
+            applyBlock(block)
+            print("[Sync] Accepted block #" + string(block.index),
+                  "from", msg.producer,
+                  "| txs:", block.transactions.length)
+        } else {
+            print("[Sync] Rejected invalid block from", msg.producer)
+        }
+    }
+}
+
+// ===== Node Monitor =====
+// Watches for peer disconnections using cluster.monitor
+
+fn nodeMonitor() {
+    // Monitor ALL nodes with wildcard "*"
+    let monCh = cluster.monitor("*")
+    print("[Monitor] Watching all peer nodes")
+
+    while (true) {
+        let disconnected = monCh.recv()
+        if (disconnected == null) { break }
+
+        print("[ALERT] Node disconnected:", disconnected)
+        print("[ALERT] Active peers:", cluster.nodes())
+
+        // In a real system: trigger view change, re-election, etc.
+    }
+}
+
+// ===== Periodic Status Reporter =====
+
+fn statusReporter(nodeName) {
+    while (true) {
+        time.sleep(10000)
+
+        let info = cluster.info()
+        let peers = cluster.nodes()
+
+        print("\n--- Node Status:", nodeName, "---")
+        print("  Block height:", state.blockHeight)
+        print("  Chain length:", state.chain.length)
+        print("  Pending TXs:", state.pendingTxs.length)
+        print("  Active peers:", peers)
+        print("  Accounts:", json.stringify(state.accounts))
+        print("---\n")
+    }
+}
+
+// ===== Transaction Generator (for demo/testing) =====
+
+fn demoTxGenerator(nodeName) {
+    let accounts = ["Alice", "Bob", "Charlie", "Diana", "Eve"]
+    let txCount = 0
+
+    time.sleep(2000)  // Wait for cluster to stabilize
+
+    while (txCount < 50) {
+        time.sleep(500)
+
+        let from = accounts[txCount % accounts.length]
+        let to = accounts[(txCount + 2) % accounts.length]
+        let amount = (txCount * 7 + 3) % 50 + 1.0
+
+        let tx = createTransaction(from, to, amount, "transfer")
+
+        // Submit via cluster RPC (could go to any node!)
+        let result = cluster.call("tx_submit", tx)
+        if (result != null && result.ok) {
+            txCount++
+        }
+    }
+
+    print("[Demo] Generated", txCount, "transactions")
+}
+
+// ===== Main =====
+
+fn main() {
+    let config = parseArgs()
+
+    print("=== xray Blockchain Node ===")
+    print("Name:", config.name)
+    print("Port:", config.port)
+
+    // Initialize genesis block
+    applyBlock(genesisBlock())
+
+    // Start cluster
+    cluster.start(config.name, config.port, config.secret)
+    print("[Cluster] Started on port", config.port)
+
+    // Join peer if specified
+    if (config.join_host != null) {
+        cluster.join(config.join_host, config.join_port)
+        print("[Cluster] Joined", config.join_host + ":" + string(config.join_port))
+    }
+
+    // Launch all subsystems concurrently
+    scope {
+        go txSubmitService()        // RPC: accept transactions
+        go blockQueryService()      // RPC: query blockchain
+        go blockProducer(config.name)   // Mine/produce blocks
+        go blockReceiver(config.name)   // Receive blocks from peers
+        go nodeMonitor()            // Watch for peer failures
+        go statusReporter(config.name)  // Periodic status
+        go demoTxGenerator(config.name) // Demo: generate test transactions
+    }
+}
+
+main()

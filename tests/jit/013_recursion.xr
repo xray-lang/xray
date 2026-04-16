@@ -1,0 +1,25 @@
+// EXPECTED: 120
+// EXPECTED: 55
+// EXPECTED: 1
+// Test: Recursive function calls in JIT
+
+fn factorial(n: int) : int {
+    if (n <= 1) { return 1 }
+    return n * factorial(n - 1)
+}
+
+fn fib(n: int) : int {
+    if (n <= 1) { return n }
+    return fib(n - 1) + fib(n - 2)
+}
+
+let i = 0
+while (i < 200) {
+    factorial(5)
+    fib(10)
+    i = i + 1
+}
+
+print(factorial(5))
+print(fib(10))
+print(factorial(1))

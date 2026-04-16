@@ -1,0 +1,391 @@
+// 0651_nested_higher_order_combo.xr
+// Author: xingleixu@gmail.com
+// Test: Nested higher-order function combinations (reduce+findIndex, map+filter+reduce, etc.)
+// Regression: any-type inline bug, nested closure capture
+
+// ===== reduce nested findIndex =====
+
+@test
+fn test_reduce_nested_findIndex(): void {
+    let data = [[10, 20, 30], [40, 50, 60], [70, 80, 90]]
+    // For each row, find index of element > 25, then sum those indices
+    let indexSum = data.reduce(fn(acc, row) {
+        let idx = row.findIndex(fn(x) { return x > 25 })
+        return acc + idx
+    }, 0)
+    // row0: idx=2 (30>25), row1: idx=0 (40>25), row2: idx=0 (70>25) => 2+0+0=2
+    assert_eq(indexSum, 2)
+}
+
+@test
+fn test_findIndex_with_nested_reduce(): void {
+    let matrix = [[1, 2, 3], [10, 20, 30], [4, 5, 6]]
+    // Find first row where sum > 20
+    let idx = matrix.findIndex(fn(row) {
+        return row.reduce(fn(a, b) { return a + b }, 0) > 20
+    })
+    assert_eq(idx, 1)
+}
+
+@test
+fn test_findIndex_with_nested_every(): void {
+    let groups = [[2, 4, 6], [1, 3, 5], [8, 10, 12]]
+    // Find first group where all elements are even
+    let idx = groups.findIndex(fn(g) {
+        return g.every(fn(x) { return x % 2 == 0 })
+    })
+    assert_eq(idx, 0)
+
+    // Find first group where all elements > 5
+    let idx2 = groups.findIndex(fn(g) {
+        return g.every(fn(x) { return x > 5 })
+    })
+    assert_eq(idx2, 2)
+}
+
+// ===== map + reduce combination =====
+
+@test
+fn test_map_then_reduce_nested(): void {
+    let students = [
+        { name: "Alice", scores: [85, 90, 95] },
+        { name: "Bob", scores: [70, 75, 80] },
+        { name: "Carol", scores: [90, 92, 94] }
+    ]
+    // Calculate average score per student, then find max average
+    let averages = students.map(fn(s) {
+        let total = s.scores.reduce(fn(a, b) { return a + b }, 0)
+        return total / s.scores.length
+    })
+    assert_eq(averages[0], 90)
+    assert_eq(averages[1], 75)
+    assert_eq(averages[2], 92)
+
+    let maxAvg = averages.reduce(fn(a, b) {
+        if (a > b) { return a }
+        return b
+    }, 0)
+    assert_eq(maxAvg, 92)
+}
+
+// ===== filter + map + reduce pipeline =====
+
+@test
+fn test_filter_map_reduce_pipeline(): void {
+    let data = [
+        { category: "A", values: [1, 2, 3] },
+        { category: "B", values: [10, 20] },
+        { category: "A", values: [4, 5] },
+        { category: "B", values: [30] }
+    ]
+    // Sum all values from category "A"
+    let totalA = data.filter(fn(d) {
+        return d.category == "A"
+    }).map(fn(d): int {
+        return d.values.reduce(fn(a, b): int { return a + b }, 0)
+    }).reduce(fn(a, b): int { return a + b }, 0)
+    assert_eq(totalA, 15)
+}
+
+// ===== Nested map producing nested arrays =====
+
+@test
+fn test_nested_map_with_filter(): void {
+    let matrix = [[1, 2, 3, 4], [5, 6, 7, 8], [9, 10, 11, 12]]
+    let result = matrix.map(fn(row) {
+        return row.filter(fn(x) { return x % 2 == 0 }).map(fn(x) { return x * x })
+    })
+    // row0: [4, 16], row1: [36, 64], row2: [100, 144]
+    assert_eq(result[0][0], 4)
+    assert_eq(result[0][1], 16)
+    assert_eq(result[1][0], 36)
+    assert_eq(result[2][1], 144)
+}
+
+// ===== forEach nested with side effects =====
+
+@test
+fn test_nested_forEach_with_accumulation(): void {
+    let data = [[1, 2], [3, 4], [5, 6]]
+    let products: Array<int> = []
+    data.forEach(fn(row) {
+        row.forEach(fn(x) {
+            products.push(x * x)
+        })
+    })
+    assert_eq(products.length, 6)
+    assert_eq(products[0], 1)
+    assert_eq(products[3], 16)
+    assert_eq(products[5], 36)
+}
+
+// ===== some/every nested =====
+
+@test
+fn test_some_with_nested_some(): void {
+    let matrix = [[1, 3, 5], [2, 4, 6], [7, 9, 11]]
+    // Is there any row that has at least one element divisible by 4?
+    let result = matrix.some(fn(row) {
+        return row.some(fn(x) { return x % 4 == 0 })
+    })
+    assert_eq(result, true)
+}
+
+@test
+fn test_every_with_nested_filter(): void {
+    let groups = [[2, 4, 6], [8, 10, 12], [14, 16, 18]]
+    // Check: every group, after filtering >5, has at least 2 elements
+    let result = groups.every(fn(g) {
+        return g.filter(fn(x) { return x > 5 }).length >= 2
+    })
+    // group0 filter: [6] => length=1 => false
+    assert_eq(result, false)
+}
+
+// ===== reduce building complex structure =====
+
+@test
+fn test_reduce_build_nested_map(): void {
+    let entries = [
+        { group: "fruit", item: "apple" },
+        { group: "veg", item: "carrot" },
+        { group: "fruit", item: "banana" },
+        { group: "veg", item: "pea" }
+    ]
+    // Group by category
+    let grouped = entries.reduce(fn(acc, e) {
+        if (acc[e.group] == null) {
+            acc[e.group] = []
+        }
+        acc[e.group].push(e.item)
+        return acc
+    }, {})
+    assert_eq(grouped.fruit.length, 2)
+    assert_eq(grouped.veg.length, 2)
+    assert_eq(grouped.fruit[0], "apple")
+    assert_eq(grouped.veg[1], "pea")
+}
+
+// ===== Chain with closure capturing loop variable =====
+
+@test
+fn test_higher_order_with_for_loop(): void {
+    let results: Array<int> = []
+    for (let i = 0; i < 3; i++) {
+        let arr = [1, 2, 3]
+        let sum = arr.map(fn(x) { return x + i }).reduce(fn(a, b) { return a + b }, 0)
+        results.push(sum)
+    }
+    // i=0: 1+2+3=6, i=1: 2+3+4=9, i=2: 3+4+5=12
+    assert_eq(results[0], 6)
+    assert_eq(results[1], 9)
+    assert_eq(results[2], 12)
+}
+
+// ===== map + findIndex + reduce cross-combination =====
+
+@test
+fn test_map_findIndex_reduce_combo(): void {
+    let data = [[5, 1, 3], [2, 8, 4], [7, 6, 9]]
+
+    // Map each row to its max value via reduce
+    let maxValues = data.map(fn(row) {
+        return row.reduce(fn(a, b) {
+            if (a > b) { return a }
+            return b
+        }, 0)
+    })
+    assert_eq(maxValues[0], 5)
+    assert_eq(maxValues[1], 8)
+    assert_eq(maxValues[2], 9)
+
+    // findIndex on reduce results — tests any-type value comparison
+    let idx = maxValues.findIndex(fn(v) { return v > 8 })
+    assert_eq(idx, 2)
+}
+
+// ===== findIndex with inline reduce in callback =====
+
+@test
+fn test_findIndex_inline_reduce(): void {
+    let data = [[5, 1, 3], [2, 8, 4], [7, 6, 9]]
+    // Find first row where reduce(max) > 8
+    let idx = data.findIndex(fn(row) {
+        let mx = row.reduce(fn(a, b) {
+            if (a > b) { return a }
+            return b
+        }, 0)
+        return mx > 8
+    })
+    assert_eq(idx, 2)
+}
+
+// ===== Deep nesting: 4 levels of higher-order =====
+
+@test
+fn test_four_level_nesting(): void {
+    let data = [[[1, 2], [3, 4]], [[5, 6], [7, 8]]]
+    let flat_sum = data.reduce(fn(total, plane) {
+        return total + plane.reduce(fn(subtotal, row) {
+            return subtotal + row.reduce(fn(a, b) {
+                return a + b
+            }, 0)
+        }, 0)
+    }, 0)
+    assert_eq(flat_sum, 36)
+}
+
+// ===== map(reduce) + findIndex chain (call_status bug regression) =====
+
+@test
+fn test_map_reduce_findIndex_chain(): void {
+    let rows = [[3, 7, 2], [1, 1, 1], [10, 20, 30]]
+    let sums = rows.map(fn(r) {
+        return r.reduce(fn(a, b) { return a + b }, 0)
+    })
+    // sums = [12, 3, 60]
+    assert_eq(sums[0], 12)
+    assert_eq(sums[1], 3)
+    assert_eq(sums[2], 60)
+    let idx = sums.findIndex(fn(s) { return s > 50 })
+    assert_eq(idx, 2)
+}
+
+// ===== map + filter + findIndex + every cross combination =====
+
+@test
+fn test_multi_method_chain(): void {
+    let data = [[1, 2, 3, 4, 5], [10, 20, 30], [7, 8]]
+    // For each row: filter evens, then check if all evens > 5
+    let results = data.map(fn(row) {
+        let evens = row.filter(fn(x) { return x % 2 == 0 })
+        let allBig = evens.every(fn(x) { return x > 5 })
+        return allBig
+    })
+    // row0 evens: [2,4] -> every>5 = false
+    // row1 evens: [10,20,30] -> every>5 = true
+    // row2 evens: [8] -> every>5 = true
+    assert_eq(results[0], false)
+    assert_eq(results[1], true)
+    assert_eq(results[2], true)
+}
+
+// ===== Nested some with map =====
+
+@test
+fn test_nested_some_with_map(): void {
+    let matrix = [[1, 2, 3], [4, 5, 6], [7, 8, 9]]
+    // Does any row, when doubled, contain a value > 15?
+    let found = matrix.some(fn(row) {
+        let doubled = row.map(fn(x) { return x * 2 })
+        return doubled.some(fn(x) { return x > 15 })
+    })
+    // row2 doubled: [14,16,18] -> 16>15 = true
+    assert_eq(found, true)
+}
+
+// ===== reduce building array of arrays =====
+
+@test
+fn test_reduce_builds_grouped_arrays(): void {
+    let nums = [1, 2, 3, 4, 5, 6, 7, 8, 9]
+    // Group into chunks of 3
+    let seed: Array<int> = []
+    let chunks = nums.reduce(fn(acc, val) {
+        let last = acc[acc.length - 1]
+        if (last.length < 3) {
+            last.push(val)
+        } else {
+            acc.push([val])
+        }
+        return acc
+    }, [seed])
+    assert_eq(chunks.length, 3)
+    assert_eq(chunks[0].length, 3)
+    assert_eq(chunks[0][0], 1)
+    assert_eq(chunks[1][0], 4)
+    assert_eq(chunks[2][2], 9)
+}
+
+// ===== filter + map + reduce + findIndex interleaved in loop =====
+
+@test
+fn test_interleaved_in_loop(): void {
+    let datasets = [
+        [5, 12, 3, 8, 1],
+        [20, 15, 10, 5, 25],
+        [1, 1, 1, 1, 100]
+    ]
+    let summaries: Array<string> = []
+    for (let i = 0; i < datasets.length; i++) {
+        let d = datasets[i]
+        let big = d.filter(fn(x) { return x >= 10 })
+        let doubled = big.map(fn(x) { return x * 2 })
+        let total = doubled.reduce(fn(a, b) { return a + b }, 0)
+        let firstBig = d.findIndex(fn(x) { return x >= 10 })
+        summaries.push("total=${total},first=${firstBig}")
+    }
+    // d0: big=[12],doubled=[24],total=24,first=1
+    // d1: big=[20,15,10,25],doubled=[40,30,20,50],total=140,first=0
+    // d2: big=[100],doubled=[200],total=200,first=4
+    assert_eq(summaries[0], "total=24,first=1")
+    assert_eq(summaries[1], "total=140,first=0")
+    assert_eq(summaries[2], "total=200,first=4")
+}
+
+// ===== 5-level deep nesting: map(map(filter(reduce))) =====
+
+@test
+fn test_five_level_deep(): void {
+    let data = [[[1, 2, 3], [4, 5, 6]], [[7, 8, 9], [10, 11, 12]]]
+    // For each plane: for each row: filter odd, sum, collect
+    let result = data.map(fn(plane) {
+        return plane.map(fn(row) {
+            let odds = row.filter(fn(x) { return x % 2 != 0 })
+            return odds.reduce(fn(a, b) { return a + b }, 0)
+        })
+    })
+    // plane0: [1+3=4, 5=5], plane1: [7+9=16, 11=11]
+    assert_eq(result[0][0], 4)
+    assert_eq(result[0][1], 5)
+    assert_eq(result[1][0], 16)
+    assert_eq(result[1][1], 11)
+}
+
+// ===== Stress: large array with chained operations =====
+
+@test
+fn test_stress_large_chain(): void {
+    let arr: Array<int> = []
+    for (let i = 0; i < 500; i++) { arr.push(i) }
+    let result = arr
+        .filter(fn(x) { return x % 3 == 0 })
+        .map(fn(x) { return x * x })
+        .filter(fn(x) { return x > 100 })
+        .reduce(fn(a, b) { return a + b }, 0)
+    // Multiples of 3: 0,3,6,...,498 (167 values)
+    // Squared and > 100: 12^2=144,...,498^2
+    // Sum of x^2 for x = 12,15,...,498
+    assert(result > 10000000)
+}
+
+// ===== forEach nested with index tracking =====
+
+@test
+fn test_forEach_with_index_accumulator(): void {
+    let matrix = [[10, 20, 30], [40, 50, 60]]
+    let indexed: Array<string> = []
+    let rowIdx = 0
+    matrix.forEach(fn(row) {
+        let colIdx = 0
+        row.forEach(fn(val) {
+            indexed.push("[${rowIdx},${colIdx}]=${val}")
+            colIdx = colIdx + 1
+        })
+        rowIdx = rowIdx + 1
+    })
+    assert_eq(indexed.length, 6)
+    assert_eq(indexed[0], "[0,0]=10")
+    assert_eq(indexed[3], "[1,0]=40")
+    assert_eq(indexed[5], "[1,2]=60")
+}

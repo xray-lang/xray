@@ -1,0 +1,5 @@
+// 005_invalid_member.xr
+// Expected: Compile error - invalid member access
+// Error should mention: member, property, does not exist
+let s = "hello"
+let x = s.nonexistent()

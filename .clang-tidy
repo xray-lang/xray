@@ -1,0 +1,91 @@
+# Xray Language - Clang-Tidy Configuration
+# Static analysis for bug detection and code quality
+# Version: clang-tidy 14+
+
+---
+# Check categories:
+# - bugprone-*: Common bug patterns
+# - clang-analyzer-*: Clang static analyzer checks
+# - misc-*: Miscellaneous checks
+# - performance-*: Performance-related checks
+# - portability-*: Portability issues
+# - readability-*: Code readability (selective)
+
+Checks: >
+  -*,
+  bugprone-*,
+  clang-analyzer-*,
+  misc-*,
+  performance-*,
+  portability-*,
+  readability-misleading-indentation,
+  readability-redundant-*,
+  readability-simplify-*,
+  -bugprone-easily-swappable-parameters,
+  -bugprone-reserved-identifier,
+  -bugprone-assignment-in-if-condition,
+  -clang-analyzer-security.insecureAPI.DeprecatedOrUnsafeBufferHandling,
+  -misc-no-recursion,
+  -misc-unused-parameters,
+
+# Treat these as errors (will fail CI)
+WarningsAsErrors: >
+  bugprone-use-after-move,
+  bugprone-double-free,
+  bugprone-undefined-memory-manipulation,
+  clang-analyzer-core.NullDereference,
+  clang-analyzer-core.UndefinedBinaryOperatorResult,
+  clang-analyzer-unix.Malloc,
+
+# Header filter: only analyze project headers, not system headers
+HeaderFilterRegex: '.*/(src|stdlib|include)/.*\.h$'
+
+# Format style for fix suggestions
+FormatStyle: file
+
+# Check options
+CheckOptions:
+  # Performance checks
+  - key: performance-unnecessary-value-param.AllowedTypes
+    value: ''
+  
+  # Naming conventions (informational only)
+  - key: readability-identifier-naming.FunctionCase
+    value: lower_case
+  - key: readability-identifier-naming.VariableCase
+    value: lower_case
+  - key: readability-identifier-naming.MacroDefinitionCase
+    value: UPPER_CASE
+  - key: readability-identifier-naming.TypedefCase
+    value: lower_case
+  - key: readability-identifier-naming.TypedefSuffix
+    value: '_t'
+  - key: readability-identifier-naming.EnumCase
+    value: UPPER_CASE
+  
+  # Bugprone settings
+  - key: bugprone-argument-comment.StrictMode
+    value: 'false'
+  - key: bugprone-assert-side-effect.AssertMacros
+    value: 'XR_ASSERT,XR_CHECK,XR_DCHECK'
+  - key: bugprone-sizeof-expression.WarnOnSizeOfConstant
+    value: 'true'
+  - key: bugprone-sizeof-expression.WarnOnSizeOfIntegerExpression
+    value: 'true'
+  
+  # Misc settings
+  - key: misc-throw-by-value-catch-by-reference.CheckThrowTemporaries
+    value: 'true'
+  
+  # Clang-analyzer settings
+  - key: clang-analyzer-core.CallAndMessage.ArgPointeeInitializedness
+    value: 'true'
+  - key: clang-analyzer-deadcode.DeadStores.WarnForDeadNestedAssignments
+    value: 'true'
+
+# System headers are excluded by default
+SystemHeaders: false
+
+# Use colors in output
+UseColor: true
+...

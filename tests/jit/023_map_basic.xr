@@ -1,0 +1,43 @@
+// EXPECTED: 1
+// EXPECTED: 3
+// EXPECTED: 42
+// Test: Map operations (NEWMAP, MAP_GET, MAP_SET, MAP_GETK)
+
+fn map_ops() : int {
+    let m = {}
+    m["a"] = 1
+    m["b"] = 2
+    m["c"] = 3
+    return m["a"]
+}
+
+fn map_count() : int {
+    let m = {}
+    m["x"] = 10
+    m["y"] = 20
+    m["z"] = 30
+    let count = 0
+    if (m["x"] != null) { count = count + 1 }
+    if (m["y"] != null) { count = count + 1 }
+    if (m["z"] != null) { count = count + 1 }
+    return count
+}
+
+fn map_update() : int {
+    let m = {}
+    m["key"] = 10
+    m["key"] = 42
+    return m["key"]
+}
+
+let i = 0
+while (i < 200) {
+    map_ops()
+    map_count()
+    map_update()
+    i = i + 1
+}
+
+print(map_ops())
+print(map_count())
+print(map_update())

@@ -1,0 +1,30 @@
+/*
+ * xray_echo_server.xr - WebSocket echo server for functional testing
+ *
+ * Echoes back any message received (text or binary).
+ * Default port: 9100
+ */
+
+import ws
+
+let port = 9100
+if (process.args.length > 0) {
+    port = int(process.args[0])
+}
+
+print("=== WebSocket Echo Server (Pure Benchmark) ===")
+print("Port: " + port.toString())
+print("Mode: pure echo (zero-copy)")
+print("")
+
+ws.serve(port, fn(conn) {
+    while (ws.isOpen(conn)) {
+        let msg = ws.recv(conn, null)
+        if (msg == null || msg.error) {
+            break
+        }
+        if (msg.data != null) {
+            ws.send(conn, msg.data, msg.binary)
+        }
+    }
+})

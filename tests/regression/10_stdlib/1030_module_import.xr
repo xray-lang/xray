@@ -1,0 +1,43 @@
+// 1030_module_import.xr
+// 作者：xingleixu@gmail.com
+// 测试：模块导入
+
+import time
+
+// ===== time 模块函数 =====
+
+@test
+fn test_time_now(): void {
+    let t = time.now()
+    assert_eq(t > 0, true)
+}
+
+@test
+fn test_time_clock(): void {
+    let c = time.clock()
+    assert_eq(c >= 0, true)
+}
+
+@test
+fn test_time_milliseconds(): void {
+    // time.now() returns milliseconds since epoch
+    let ms = time.now()
+    assert_eq(ms > 0, true)
+}
+
+@test
+fn test_time_monotonic(): void {
+    let m1 = time.monotonic()
+    let m2 = time.monotonic()
+    assert_eq(m2 >= m1, true)
+}
+
+// ===== 模块属性访问 =====
+
+@test
+fn test_module_method_call(): void {
+    let t1 = time.now()
+    let t2 = time.now()
+    assert_eq(t2 >= t1, true)
+}
+

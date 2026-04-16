@@ -1,0 +1,28 @@
+// EXPECTED: 55
+// Test: Map with multiple keys in loop (tests map_set/get with different keys)
+
+fn build(n: int) : int {
+    let m = {}
+    let i = 1
+    while (i <= n) {
+        let key = "k" + i
+        m[key] = i
+        i = i + 1
+    }
+    let total = 0
+    let j = 1
+    while (j <= n) {
+        let key = "k" + j
+        total = total + m[key]
+        j = j + 1
+    }
+    return total
+}
+
+let j = 0
+while (j < 200) {
+    build(10)
+    j = j + 1
+}
+
+print(build(10))

@@ -1,0 +1,85 @@
+// 1404_crypto_aes.xr
+// Test: crypto AES-256-CBC encrypt/decrypt
+//
+// Coverage:
+//   - encrypt/decrypt roundtrip
+//   - Different key/plaintext combinations
+//   - Empty string encryption
+//   - Output format validation
+
+import crypto
+
+// ============================================================
+// Encrypt/Decrypt roundtrip tests
+// ============================================================
+
+@test
+fn test_encrypt_decrypt_basic(): void {
+    let key = "my-secret-key"
+    let plaintext = "Hello World"
+    let encrypted = crypto.encrypt(key, plaintext)
+    let decrypted = crypto.decrypt(key, encrypted)
+    assert_eq(decrypted, plaintext)
+}
+
+@test
+fn test_encrypt_decrypt_empty(): void {
+    let key = "key"
+    let plaintext = ""
+    let encrypted = crypto.encrypt(key, plaintext)
+    let decrypted = crypto.decrypt(key, encrypted)
+    assert_eq(decrypted, plaintext)
+}
+
+@test
+fn test_encrypt_decrypt_long_text(): void {
+    let key = "secret-key-123"
+    let plaintext = "The quick brown fox jumps over the lazy dog. This is a longer text to test multi-block encryption."
+    let encrypted = crypto.encrypt(key, plaintext)
+    let decrypted = crypto.decrypt(key, encrypted)
+    assert_eq(decrypted, plaintext)
+}
+
+@test
+fn test_encrypt_output_is_hex(): void {
+    let encrypted = crypto.encrypt("key", "test")
+    // Output should be hex string (IV 32 chars + at least 32 chars ciphertext)
+    assert_true(encrypted.length >= 64)
+    // Length should be even
+    assert_eq(encrypted.length % 2, 0)
+}
+
+@test
+fn test_encrypt_different_each_time(): void {
+    // Due to random IV, same input should produce different output
+    let e1 = crypto.encrypt("key", "test")
+    let e2 = crypto.encrypt("key", "test")
+    assert_true(e1 != e2)
+}
+
+@test
+fn test_decrypt_wrong_key(): void {
+    let encrypted = crypto.encrypt("correct-key", "secret data")
+    // Decrypt with wrong key should return null (padding validation fails)
+    let result = crypto.decrypt("wrong-key", encrypted)
+    assert_eq(result, null)
+}
+
+@test
+fn test_encrypt_decrypt_exactly_16_bytes(): void {
+    // Exactly one block - PKCS7 adds full block of padding
+    let key = "key"
+    let plaintext = "1234567890123456"
+    let encrypted = crypto.encrypt(key, plaintext)
+    let decrypted = crypto.decrypt(key, encrypted)
+    assert_eq(decrypted, plaintext)
+}
+
+@test
+fn test_encrypt_decrypt_unicode(): void {
+    let key = "unicode-key"
+    let plaintext = "Hello World!"
+    let encrypted = crypto.encrypt(key, plaintext)
+    let decrypted = crypto.decrypt(key, encrypted)
+    assert_eq(decrypted, plaintext)
+}

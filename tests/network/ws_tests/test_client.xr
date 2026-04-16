@@ -1,0 +1,137 @@
+/*
+ * test_client.xr - Test xray as WebSocket client against Python echo server
+ *
+ * Expects Python echo server running on ws://127.0.0.1:9101
+ */
+
+import ws
+import time
+
+let URL = "ws://127.0.0.1:9101"
+let passed = 0
+let failed = 0
+
+fn report(name, ok, detail) {
+    if (ok) {
+        passed = passed + 1
+        print("  PASS  " + name)
+    } else {
+        failed = failed + 1
+        print("  FAIL  " + name + " -- " + (detail ?? ""))
+    }
+}
+
+// C1: Basic ws:// connect
+fn test_connect() {
+    let conn = ws.connect(URL, null)
+    if (conn.error) {
+        report("C1 connect", false, conn.error)
+        return
+    }
+    let open = ws.isOpen(conn)
+    ws.close(conn, null, null)
+    report("C1 connect", open, null)
+}
+
+// C2: Text echo
+fn test_text_echo() {
+    let conn = ws.connect(URL, null)
+    if (conn.error) {
+        report("C2 text echo", false, conn.error)
+        return
+    }
+    let msg = "Hello from xray client!"
+    ws.send(conn, msg, null)
+    let resp = ws.recv(conn, null)
+    let ok = resp != null && resp.data == msg
+    ws.close(conn, null, null)
+    report("C2 text echo", ok, ok ? null : "mismatch")
+}
+
+// C3: Multiple messages
+fn test_multiple_messages() {
+    let conn = ws.connect(URL, null)
+    if (conn.error) {
+        report("C3 multiple messages", false, conn.error)
+        return
+    }
+    let count = 10
+    let success = 0
+    for (let i = 0; i < count; i = i + 1) {
+        let msg = "msg-" + i.toString()
+        ws.send(conn, msg, null)
+        let resp = ws.recv(conn, null)
+        if (resp != null && resp.data == msg) {
+            success = success + 1
+        }
+    }
+    ws.close(conn, null, null)
+    report("C3 multiple messages", success == count,
+           success.toString() + "/" + count.toString())
+}
+
+// C4: State API
+fn test_state_api() {
+    let conn = ws.connect(URL, null)
+    if (conn.error) {
+        report("C4 state API", false, conn.error)
+        return
+    }
+    let s1 = ws.state(conn) == "open"
+    let s2 = ws.isOpen(conn)
+    let s3 = !ws.hasError(conn)
+    ws.close(conn, null, null)
+    let ok = s1 && s2 && s3
+    report("C4 state API", ok, null)
+}
+
+// C5: Close changes state
+fn test_close_state() {
+    let conn = ws.connect(URL, null)
+    if (conn.error) {
+        report("C5 close state", false, conn.error)
+        return
+    }
+    ws.close(conn, null, null)
+    let s = ws.state(conn)
+    let ok = s == "closed" && !ws.isOpen(conn)
+    report("C5 close state", ok, "state=" + s)
+}
+
+// C6: Connection failure
+fn test_connection_failure() {
+    let conn = ws.connect("ws://127.0.0.1:19999", null)
+    let ok = conn.error != null
+    report("C6 connection failure", ok, ok ? null : "should have error")
+}
+
+// C7: Ping
+fn test_ping() {
+    let conn = ws.connect(URL, null)
+    if (conn.error) {
+        report("C7 ping", false, conn.error)
+        return
+    }
+    let ok = ws.ping(conn)
+    // Verify echo still works after ping
+    ws.send(conn, "after-ping", null)
+    let resp = ws.recv(conn, null)
+    let echo_ok = resp != null && resp.data == "after-ping"
+    ws.close(conn, null, null)
+    report("C7 ping", ok && echo_ok, null)
+}
+
+print("=== Testing xray WebSocket Client ===")
+print("Target: " + URL)
+print("")
+
+test_connect()
+test_text_echo()
+test_multiple_messages()
+test_state_api()
+test_close_state()
+test_connection_failure()
+test_ping()
+
+print("")
+print("=== Results: " + passed.toString() + " passed, " + failed.toString() + " failed ===")

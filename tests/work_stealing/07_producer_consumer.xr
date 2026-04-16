@@ -1,0 +1,88 @@
+/*
+** 07_producer_consumer.xr - 生产者消费者测试
+** 作者：xingleixu@gmail.com
+**
+** 测试目的：验证工作窃取在生产者-消费者模式下的表现
+*/
+import time
+print("========== 测试7：生产者消费者测试 ==========")
+/* 测试参数 */
+const PRODUCER_COUNT = 2
+const CONSUMER_COUNT = 2
+const ITEMS_PER_PRODUCER = 20
+/* Channel（shared const 声明用于跨协程共享）*/
+shared const data_ch = Channel(100)
+shared const done_ch = Channel(10)
+
+/* 生产者：发送数据后发送完成信号 */
+fn producer(id, items_count) {
+    let count = 0
+    for (let i = 0; i < items_count; i++) {
+        data_ch.trySend(id * 1000 + i)
+        count = count + 1
+    }
+    done_ch.trySend(1)
+    return count
+}
+
+/* 消费者：接收数据直到收到足够的完成信号 */
+fn consumer(id, total_items) {
+    let count = 0
+    while (count < total_items) {
+        let item = data_ch.tryRecv()
+        if (item != null) {
+            count = count + 1
+        } else {
+            yield
+        }
+    }
+    return count
+}
+
+/* 启动 */
+print("启动 " + string(PRODUCER_COUNT) + " 个生产者, " + string(CONSUMER_COUNT) + " 个消费者...")
+let start_time = time.monotonic()
+let producers = []
+let consumers = []
+/* 先启动消费者（每个消费预期处理一半数据）*/
+let total = PRODUCER_COUNT * ITEMS_PER_PRODUCER
+let per_consumer = total / CONSUMER_COUNT
+for (let i = 0; i < CONSUMER_COUNT; i++) {
+    let task = go consumer(i, per_consumer)
+    consumers.push(task)
+}
+/* 再启动生产者 */
+for (let i = 0; i < PRODUCER_COUNT; i++) {
+    let task = go producer(i, ITEMS_PER_PRODUCER)
+    producers.push(task)
+}
+/* 等待所有生产者完成 */
+let total_produced = 0
+for (let i = 0; i < producers.length; i++) {
+    let result = await producers[i]
+    total_produced = total_produced + result
+}
+print("所有生产者完成，已生产: " + string(total_produced))
+/* 等待所有消费者完成 */
+let total_consumed = 0
+for (let i = 0; i < consumers.length; i++) {
+    let result = await consumers[i]
+    total_consumed = total_consumed + result
+}
+let elapsed = time.monotonic() - start_time
+/* 结果 */
+print("
+结果:")
+print("  生产数量: " + string(total_produced))
+print("  消费数量: " + string(total_consumed))
+print("  耗时: " + string(elapsed) + " ms")
+/* 验证 */
+let expected = PRODUCER_COUNT * ITEMS_PER_PRODUCER
+if (total_produced == expected && total_consumed == expected) {
+    print("
+✓ 生产者消费者测试通过")
+} else {
+    print("
+✗ 测试失败")
+}
+print("========== 测试7 完成 ==========")

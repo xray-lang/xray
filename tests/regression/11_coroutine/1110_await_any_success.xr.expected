@@ -1,0 +1,7 @@
+test1: single success
+  result: 42
+test2: multiple success, returns first
+  result: 42
+test3: await.any comparison
+  result: 42
+done

@@ -1,0 +1,104 @@
+// 0650_object_literal.xr
+// 作者：xingleixu@gmail.com
+// 测试：对象字面量（Json/Struct 统一类型）
+// ===== 基本对象 =====
+@test
+fn test_basic_object(): void {
+    let point = { "x": 10, "y": 20 }
+    assert_eq(point.x, 10)
+    assert_eq(point.y, 20)
+}
+
+@test
+fn test_object_field_modify(): void {
+    let point = { "x": 10, "y": 20 }
+    point.x = 100
+    point.y = 200
+    assert_eq(point.x, 100)
+    assert_eq(point.y, 200)
+}
+
+// ===== 多字段对象 =====
+@test
+fn test_multi_field_object(): void {
+    let person = { "name": "Alice", "age": 25, "active": true }
+    assert_eq(person.name, "Alice")
+    assert_eq(person.age, 25)
+    assert_eq(person.active, true)
+}
+
+@test
+fn test_object_field_update(): void {
+    let person = { "name": "Bob", "age": 30 }
+    person.age = 31
+    assert_eq(person.age, 31)
+}
+
+// ===== 嵌套对象 =====
+@test
+fn test_nested_object(): void {
+    let rect = { "origin": { "x": 0, "y": 0 }, "size": { "width": 100, "height": 50 } }
+    assert_eq(rect.origin.x, 0)
+    assert_eq(rect.origin.y, 0)
+    assert_eq(rect.size.width, 100)
+    assert_eq(rect.size.height, 50)
+}
+
+@test
+fn test_nested_object_modify(): void {
+    let rect = { "origin": { "x": 0, "y": 0 }, "size": { "width": 100, "height": 50 } }
+    rect.origin.x = 10
+    rect.size.width = 200
+    assert_eq(rect.origin.x, 10)
+    assert_eq(rect.size.width, 200)
+}
+
+// ===== 单字段对象 =====
+@test
+fn test_single_field_object(): void {
+    let single = { "value": 42 }
+    assert_eq(single.value, 42)
+    single.value = 99
+    assert_eq(single.value, 99)
+}
+
+// ===== 不同类型值 =====
+@test
+fn test_mixed_types(): void {
+    let data = { "count": 100, "ratio": 0.5, "name": "test", "flag": true, "empty": null }
+    assert_eq(data.count, 100)
+    assert_eq(data.ratio, 0.5)
+    assert_eq(data.name, "test")
+    assert_eq(data.flag, true)
+    assert_eq(data.empty, null)
+}
+
+// ===== 对象作为函数参数 =====
+@test
+fn test_object_as_param(): void {
+    fn getX(p: Json): int {
+        return p.x
+    }
+    let point = { "x": 42, "y": 0 }
+    assert_eq(getX(point), 42)
+}
+
+// ===== 对象作为返回值 =====
+@test
+fn test_object_as_return(): void {
+    fn makePoint(x: int, y: int): Json {
+        return { "x": x, "y": y }
+    }
+    let p = makePoint(3, 4)
+    assert_eq(p.x, 3)
+    assert_eq(p.y, 4)
+}
+
+// ===== 对象数组 =====
+@test
+fn test_object_array(): void {
+    let points = [{ "x": 0, "y": 0 }, { "x": 1, "y": 1 }, { "x": 2, "y": 2 }]
+    assert_eq(points.length, 3)
+    assert_eq(points[0].x, 0)
+    assert_eq(points[2].y, 2)
+}
