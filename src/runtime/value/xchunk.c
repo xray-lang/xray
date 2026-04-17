@@ -15,22 +15,18 @@
 #include "xchunk.h"
 #include "../object/xstring.h"
 #include "../../base/xmalloc.h"
-#include "../../jit/xir_feedback.h"
+#include "xtype_feedback.h"
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
-#include "../../vm/xdebug.h"
+#include "xopcode_info.h"
 #include "../../base/xchecks.h"
 
 void xr_ic_method_table_free(struct XrICMethodTable *table);
 void xr_ic_field_table_free(struct XrICFieldTable *table);
 void xr_blueprint_free(struct XrBlueprint *bp);
 
-// Get opcode name
-// Delegates to full opcode table in xdebug.c
-const char *xr_opcode_name(OpCode op) {
-    return xr_debug_opcode_name(op);
-}
+// xr_opcode_name is implemented in runtime/value/xopcode_info.c.
 
 // ========== Constant Table Operations ==========
 
@@ -62,7 +58,7 @@ int xr_valuearray_add(ValueArray *array, XrValue value) {
             return i;  // Found duplicate with same type, return existing index
         }
     }
-    
+
     // Add new constant
     return DYNARRAY_ADD(array, value, XrValue);
 }
@@ -75,7 +71,7 @@ XrProto *xr_vm_proto_new(void) {
     if (proto == NULL) {
         return NULL;
     }
-    
+
     // Initialize all dynamic arrays
     DYNARRAY_INIT(&proto->code, XrInstruction);
     xr_valuearray_init(&proto->constants);
@@ -83,12 +79,12 @@ XrProto *xr_vm_proto_new(void) {
     DYNARRAY_INIT(&proto->upvalues, UpvalInfo);
     DYNARRAY_INIT(&proto->lineinfo, int);
     DYNARRAY_INIT(&proto->locvars, XrLocVar);
-    
+
     // Initialize per-function symbol table
     proto->symbols = NULL;
     proto->symbol_count = 0;
     proto->symbol_capacity = 0;
-    
+
     // Initialize function info
     proto->name = NULL;
     proto->return_type = NULL;
@@ -103,11 +99,11 @@ XrProto *xr_vm_proto_new(void) {
     proto->raw_constants = NULL;
     proto->raw_constant_count = 0;
     proto->raw_constant_capacity = 0;
-    
+
     // Initialize test attributes
     proto->test_attr = 0;       // ATTR_NONE
     proto->test_timeout = 0;
-    
+
     // Initialize JIT/AOT metadata
     proto->bb_leaders = NULL;
     proto->bb_leaders_size = 0;
@@ -115,7 +111,7 @@ XrProto *xr_vm_proto_new(void) {
     proto->is_recursive = 0;
     proto->loop_headers = NULL;
     proto->loop_header_count = 0;
-    
+
     // Initialize type pipeline
     proto->param_types = NULL;
     proto->param_types_count = 0;
@@ -140,7 +136,7 @@ XrProto *xr_vm_proto_new(void) {
     proto->is_coro_safe = false;
     proto->min_params = 0;
     proto->blueprint = NULL;
-    
+
     return proto;
 }
 
@@ -149,14 +145,14 @@ void xr_vm_proto_free(XrProto *proto) {
     if (proto == NULL) {
         return;
     }
-    
+
     // Free nested functions (recursive)
     int proto_count = DYNARRAY_COUNT(&proto->protos);
     for (int i = 0; i < proto_count; i++) {
         XrProto *child = DYNARRAY_GET(&proto->protos, i, XrProto*);
         xr_vm_proto_free(child);
     }
-    
+
     // Free all dynamic arrays
     DYNARRAY_FREE(&proto->code);
     xr_valuearray_free(&proto->constants);
@@ -164,25 +160,25 @@ void xr_vm_proto_free(XrProto *proto) {
     DYNARRAY_FREE(&proto->upvalues);
     DYNARRAY_FREE(&proto->lineinfo);
     DYNARRAY_FREE(&proto->locvars);
-    
+
     // Free return type string
     if (proto->return_type != NULL) {
         xr_free(proto->return_type);
         proto->return_type = NULL;
     }
-    
+
     // Free per-function symbol table
     if (proto->symbols != NULL) {
         xr_free(proto->symbols);
         proto->symbols = NULL;
     }
-    
+
     // Free raw constant pool
     if (proto->raw_constants != NULL) {
         xr_free(proto->raw_constants);
         proto->raw_constants = NULL;
     }
-    
+
     // Free JIT/AOT metadata
     if (proto->bb_leaders != NULL) {
         xr_free(proto->bb_leaders);
@@ -192,7 +188,7 @@ void xr_vm_proto_free(XrProto *proto) {
         xr_free(proto->loop_headers);
         proto->loop_headers = NULL;
     }
-    
+
     // Free type pipeline
     if (proto->param_types != NULL) {
         xr_free(proto->param_types);
@@ -215,7 +211,7 @@ void xr_vm_proto_free(XrProto *proto) {
         xfb_destroy(proto->type_feedback);
         proto->type_feedback = NULL;
     }
-    
+
     // Free inline caches
     if (proto->ic_methods != NULL) {
         xr_ic_method_table_free(proto->ic_methods);
@@ -241,7 +237,7 @@ void xr_vm_proto_free(XrProto *proto) {
         free(proto->deopt_table);
         proto->deopt_table = NULL;
     }
-    
+
     // Free XrProto itself
     xr_free(proto);
 }
@@ -258,7 +254,7 @@ int xr_proto_add_symbol(XrProto *proto, int32_t global_symbol) {
             return i;
         }
     }
-    
+
     // Grow if needed
     if (proto->symbol_count >= proto->symbol_capacity) {
         int new_cap = proto->symbol_capacity < 8 ? 8 : proto->symbol_capacity * 2;
@@ -270,17 +266,17 @@ int xr_proto_add_symbol(XrProto *proto, int32_t global_symbol) {
         proto->symbols = new_buf;
         proto->symbol_capacity = new_cap;
     }
-    
+
     int local_idx = proto->symbol_count;
     proto->symbols[local_idx] = global_symbol;
     proto->symbol_count++;
-    
+
     if (local_idx >= 255) {
         fprintf(stderr, "WARNING: function '%s' uses %d unique symbols (>254)\n",
                 proto->name ? (const char*)proto->name->data : "<anonymous>",
                 local_idx + 1);
     }
-    
+
     return local_idx;
 }
 
@@ -290,7 +286,7 @@ void xr_vm_proto_write(XrProto *proto, XrInstruction inst, int line) {
     XR_DCHECK(line >= 0, "proto_write: negative line number");
     // Add instruction
     DYNARRAY_ADD(&proto->code, inst, XrInstruction);
-    
+
     // Record line number
     DYNARRAY_ADD(&proto->lineinfo, line, int);
 }
@@ -310,7 +306,7 @@ int xr_proto_add_raw_constant(XrProto *proto, uint64_t value) {
     for (int i = 0; i < proto->raw_constant_count; i++) {
         if (proto->raw_constants[i] == value) return i;
     }
-    
+
     // Grow if needed
     if (proto->raw_constant_count >= proto->raw_constant_capacity) {
         int new_cap = proto->raw_constant_capacity < 8 ? 8 : proto->raw_constant_capacity * 2;
@@ -319,7 +315,7 @@ int xr_proto_add_raw_constant(XrProto *proto, uint64_t value) {
         proto->raw_constants = new_buf;
         proto->raw_constant_capacity = new_cap;
     }
-    
+
     int idx = proto->raw_constant_count;
     proto->raw_constants[idx] = value;
     proto->raw_constant_count++;
@@ -341,7 +337,7 @@ int xr_vm_proto_add_upvalue(XrProto *proto, uint8_t index, uint8_t storage_mode,
     XR_DCHECK(proto != NULL, "proto_add_upvalue: NULL proto");
     // No dedup here: dedup is done at compiler level in scope_add_upvalue.
     // proto->upvalues must stay in 1-to-1 correspondence with XrCompiler->upvalues[].
-    
+
     // Add new upvalue
     UpvalInfo new_uv = {
         .index = index,

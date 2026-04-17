@@ -8,10 +8,10 @@
  * xvalue_print.c - Value printing and dump
  *
  * KEY CONCEPT:
- *   xr_value_fprint/print/println delegate to vm_value_to_string()
+ *   xr_value_fprint/print/println delegate to xr_value_to_string()
  *   for unified output. xr_value_dump provides indented pretty-print
  *   for container types (Array, Map, Set, Json, Instance), also
- *   delegating leaf types to vm_value_to_string().
+ *   delegating leaf types to xr_value_to_string().
  */
 
 #include "xvalue_print.h"
@@ -31,21 +31,21 @@
 #include <time.h>
 
 #include "../xstdlib_bridge.h"
-#include "../../vm/xvm_internal.h"
+#include "xvalue_format.h"
 
 // Max recursion depth for dump functions
 #define XR_PRINT_MAX_DEPTH   5
 
 // ========== Core Implementation ==========
 
-// Delegate to vm_value_to_string for unified formatting
+// Delegate to xr_value_to_string for unified formatting
 
 // Print value to file stream
-// Delegates to vm_value_to_string for consistent output across print/toString/string+
+// Delegates to xr_value_to_string for consistent output across print/toString/string+
 void xr_value_fprint(FILE *stream, XrValue value) {
     XrayIsolate *X = xray_isolate_current();
     if (X) {
-        XrString *str = vm_value_to_string(X, value);
+        XrString *str = xr_value_to_string(X, value);
         fprintf(stream, "%s", str->data);
     } else {
         // Fallback when no isolate (early init or shutdown)
@@ -109,7 +109,7 @@ static void dump_array(XrArray *arr, DumpContext *ctx) {
         printf("]");
         return;
     }
-    
+
     ctx->depth++;
     for (int32_t i = 0; i < count; i++) {
         if (i > 0) printf(",");
@@ -138,7 +138,7 @@ static void dump_map(XrMap *map, DumpContext *ctx) {
         if (!XR_MAP_NODE_EMPTY(node)) {
             if (output > 0) printf(",");
             dump_newline(ctx);
-            
+
             // Print key
             dump_value_internal(node->key, ctx);
             printf(" => ");
@@ -161,7 +161,7 @@ static void dump_set(XrSet *set, DumpContext *ctx) {
         printf("]");
         return;
     }
-    
+
     ctx->depth++;
     size_t output = 0;
     for (size_t i = 0; i < set->capacity; i++) {
@@ -185,27 +185,27 @@ static void dump_json(XrJson *json, DumpContext *ctx) {
         printf("}");
         return;
     }
-    
+
     XrShape *shape = xr_json_shape(json);
     if (!shape) {
         printf("}");
         return;
     }
-    
+
     // Fields stored in fields[] array
     XrayIsolate *X = xray_isolate_current();
     XrSymbolTable *table = X ? (XrSymbolTable*)xr_isolate_get_symbol_table(X) : NULL;
-    
+
     if (shape->field_count == 0) {
         printf("}");
         return;
     }
-    
+
     ctx->depth++;
     for (uint16_t i = 0; i < shape->field_count; i++) {
         if (i > 0) printf(",");
         dump_newline(ctx);
-        
+
         // Field name
         const char *name = NULL;
         if (table && shape->field_symbols) {
@@ -216,7 +216,7 @@ static void dump_json(XrJson *json, DumpContext *ctx) {
         } else {
             printf("field%d: ", i);
         }
-        
+
         // Field value
         XrValue fval = xr_json_get_field_any(json, i);
         dump_value_internal(fval, ctx);
@@ -233,24 +233,24 @@ static void dump_instance(XrInstance *inst, DumpContext *ctx) {
         printf("<instance>");
         return;
     }
-    
+
     printf("%s {", cls->name ? cls->name : "<anonymous>");
-    
+
     if (cls->field_count == 0) {
         printf("}");
         return;
     }
-    
+
     ctx->depth++;
     for (uint16_t i = 0; i < cls->field_count; i++) {
         if (cls->fields[i].flags & XR_FIELD_STATIC) continue;
-        
+
         if (i > 0) printf(",");
         dump_newline(ctx);
-        
+
         const char *name = cls->fields[i].name;
         printf("%s: ", name ? name : "?");
-        
+
         XrValue field_val = xr_instance_get_field_fast(inst, i);
         dump_value_internal(field_val, ctx);
     }
@@ -261,19 +261,19 @@ static void dump_instance(XrInstance *inst, DumpContext *ctx) {
 
 // Recursively print value
 // Container types (Array, Map, Set, Json, Instance) use indented formatting.
-// All other types delegate to vm_value_to_string for consistent output.
+// All other types delegate to xr_value_to_string for consistent output.
 static void dump_value_internal(XrValue value, DumpContext *ctx) {
     if (ctx->depth > XR_PRINT_MAX_DEPTH) {
         printf("...");
         return;
     }
-    
+
     // Strings in dump always have quotes
     if (XR_IS_STRING(value)) {
         printf("\"%s\"", XR_TO_STRING(value)->data);
         return;
     }
-    
+
     // Container types: indented formatting
     if (XR_IS_PTR(value)) {
         XrGCHeader *gc = (XrGCHeader*)XR_TO_PTR(value);
@@ -309,11 +309,11 @@ static void dump_value_internal(XrValue value, DumpContext *ctx) {
             break;
         }
     }
-    
-    // All other types: delegate to vm_value_to_string, with inline fallback
+
+    // All other types: delegate to xr_value_to_string, with inline fallback
     XrayIsolate *X = xray_isolate_current();
     if (X) {
-        XrString *str = vm_value_to_string(X, value);
+        XrString *str = xr_value_to_string(X, value);
         printf("%s", str->data);
     } else if (XR_IS_INT(value)) {
         printf("%lld", (long long)XR_TO_INT(value));
@@ -333,7 +333,7 @@ static void dump_value_internal(XrValue value, DumpContext *ctx) {
 void xr_value_dump(XrValue value, int indent) {
     if (indent < 0) indent = 0;
     if (indent > 8) indent = 8;
-    
+
     DumpContext ctx = { .indent = indent, .depth = 0 };
     dump_value_internal(value, &ctx);
     printf("\n");

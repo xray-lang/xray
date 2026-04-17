@@ -9,7 +9,7 @@
  */
 
 #include "xtype.h"
-#include "../../frontend/analyzer/xanalyzer_symbol.h"
+#include "../class/xclass_info.h"
 #include "xtype_pool.h"
 #include "../../base/xmalloc.h"
 #include "../../base/xchecks.h"
