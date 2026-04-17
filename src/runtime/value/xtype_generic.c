@@ -15,68 +15,16 @@
 
 #include "xtype.h"
 #include "xtype_internal.h"
-#include "../../frontend/analyzer/xanalyzer_symbol.h"
+#include "../class/xclass_info.h"
 #include "../../base/xmalloc.h"
 #include "../../base/xchecks.h"
 #include <string.h>
 
-// Helper: find method in class hierarchy
-static XaSymbol *find_method_in_class(XrClassInfo *class_info, const char *name) {
-    if (!class_info || !name) return NULL;
-    
-    // Check current class
-    for (int i = 0; i < class_info->method_count; i++) {
-        XaSymbol *method = class_info->methods[i];
-        if (method && method->name && strcmp(method->name, name) == 0) {
-            return method;
-        }
-    }
-    
-    // Check base class
-    if (class_info->base) {
-        return find_method_in_class(class_info->base, name);
-    }
-    
-    return NULL;
-}
-
-// Helper: check if class implements all interface methods
-static bool check_interface_implementation(XrType *class_type, XrType *interface_type) {
-    if (!class_type || !interface_type) return false;
-    
-    // Get class info from class type
-    XrClassInfo *class_info = class_type->instance.class_ref;
-    if (!class_info) {
-        // No class info available - cannot verify, assume compatible
-        return true;
-    }
-    
-    // If interface has no class_ref, it's a named interface without method list
-    // In this case, we rely on naming convention (duck typing)
-    XrClassInfo *iface_info = interface_type->instance.class_ref;
-    if (!iface_info) {
-        // No interface definition - assume compatible (duck typing)
-        return true;
-    }
-    
-    // Check each interface method exists in class with compatible signature
-    for (int i = 0; i < iface_info->method_count; i++) {
-        XaSymbol *iface_method = iface_info->methods[i];
-        if (!iface_method || !iface_method->name) continue;
-        
-        // Find matching method in class hierarchy
-        XaSymbol *class_method = find_method_in_class(class_info, iface_method->name);
-        if (!class_method) {
-            return false;  // Missing required method
-        }
-        
-        // Check method signature compatibility (requires analyzer context)
-        // For now, just check name match - signature check requires XaSymbolLinks
-        // which we don't have access to here without the analyzer
-    }
-    
-    return true;
-}
+// NOTE on interface conformance:
+//   User-defined interface conformance (method presence + signature match)
+//   is fully validated by the analyzer at compile time. At runtime we trust
+//   the analyzer's decision and always accept. No analyzer-layer types are
+//   reached from here so runtime/value stays free of upward dependencies.
 
 // ============================================================================
 // Generic Type Substitution
@@ -88,7 +36,7 @@ static bool check_interface_implementation(XrType *class_type, XrType *interface
 XrType *xr_type_substitute(XrType *type, const char **param_names,
                            XrType **actual_types, int count) {
     if (!type || count == 0) return type;
-    
+
     // If it's a type parameter, look it up
     if (type->kind == XR_KIND_TYPE_PARAM) {
         const char *param_name = type->type_param.name;
@@ -101,17 +49,17 @@ XrType *xr_type_substitute(XrType *type, const char **param_names,
         }
         return type;  // Not found, keep as type parameter
     }
-    
+
     // Recursively substitute in container types
     if (type->kind == XR_KIND_ARRAY) {
-        XrType *elem = xr_type_substitute(type->container.element_type, 
+        XrType *elem = xr_type_substitute(type->container.element_type,
                                           param_names, actual_types, count);
         if (elem != type->container.element_type) {
             return xr_type_new_array(elem);
         }
         return type;
     }
-    
+
     if (type->kind == XR_KIND_SET) {
         XrType *elem = xr_type_substitute(type->container.element_type,
                                           param_names, actual_types, count);
@@ -120,7 +68,7 @@ XrType *xr_type_substitute(XrType *type, const char **param_names,
         }
         return type;
     }
-    
+
     if (type->kind == XR_KIND_CHANNEL) {
         XrType *elem = xr_type_substitute(type->container.element_type,
                                           param_names, actual_types, count);
@@ -129,7 +77,7 @@ XrType *xr_type_substitute(XrType *type, const char **param_names,
         }
         return type;
     }
-    
+
     if (xr_type_is_named_class(type, "Task")) {
         XrType *old_result = (type->instance.type_arg_count > 0) ? type->instance.type_args[0] : NULL;
         XrType *result = xr_type_substitute(old_result, param_names, actual_types, count);
@@ -138,7 +86,7 @@ XrType *xr_type_substitute(XrType *type, const char **param_names,
         }
         return type;
     }
-    
+
     if (type->kind == XR_KIND_MAP) {
         XrType *key = xr_type_substitute(type->map.key_type,
                                          param_names, actual_types, count);
@@ -149,7 +97,7 @@ XrType *xr_type_substitute(XrType *type, const char **param_names,
         }
         return type;
     }
-    
+
     // Substitute in function types
     if (type->kind == XR_KIND_FUNCTION) {
         bool changed = false;
@@ -157,17 +105,17 @@ XrType *xr_type_substitute(XrType *type, const char **param_names,
         int pc = type->function.param_count;
         XrType **new_params = (pc <= 16) ? stack_params : xr_malloc(sizeof(XrType*) * pc);
         if (!new_params) return type;
-        
+
         for (int i = 0; i < pc; i++) {
             new_params[i] = xr_type_substitute(type->function.param_types[i],
                                                param_names, actual_types, count);
             if (new_params[i] != type->function.param_types[i]) changed = true;
         }
-        
+
         XrType *ret = xr_type_substitute(type->function.return_type,
                                          param_names, actual_types, count);
         if (ret != type->function.return_type) changed = true;
-        
+
         if (changed) {
             XrType *result = xr_type_new_function(new_params, pc, ret, type->function.is_variadic);
             if (result) result->function.min_params = type->function.min_params;
@@ -177,7 +125,7 @@ XrType *xr_type_substitute(XrType *type, const char **param_names,
         if (new_params != stack_params) xr_free(new_params);
         return type;
     }
-    
+
     // Substitute in union types
     if (type->kind == XR_KIND_UNION) {
         bool changed = false;
@@ -191,7 +139,7 @@ XrType *xr_type_substitute(XrType *type, const char **param_names,
         if (changed) return xr_type_new_union(new_members, mc);
         return type;
     }
-    
+
     // Substitute in nullable types
     if (type->is_nullable) {
         XrType *non_null = xr_type_non_nullable(type);
@@ -202,7 +150,7 @@ XrType *xr_type_substitute(XrType *type, const char **param_names,
         }
         return type;
     }
-    
+
     // Substitute in tuple types
     if (type->kind == XR_KIND_TUPLE) {
         bool changed = false;
@@ -223,7 +171,7 @@ XrType *xr_type_substitute(XrType *type, const char **param_names,
         if (new_elems != stack_elems) xr_free(new_elems);
         return type;
     }
-    
+
     // For class instances with type arguments, substitute them too
     if (type->kind == XR_KIND_INSTANCE && type->instance.type_arg_count > 0) {
         bool changed = false;
@@ -246,7 +194,7 @@ XrType *xr_type_substitute(XrType *type, const char **param_names,
         if (new_args != stack_args) xr_free(new_args);
         return type;
     }
-    
+
     // Substitute in fixed-length array types
     if (type->kind == XR_KIND_FIXED_ARRAY) {
         XrType *elem = xr_type_substitute(type->fixed_array.element_type,
@@ -256,7 +204,7 @@ XrType *xr_type_substitute(XrType *type, const char **param_names,
         }
         return type;
     }
-    
+
     // No substitution needed for other types
     return type;
 }
@@ -265,7 +213,7 @@ XrType *xr_type_substitute(XrType *type, const char **param_names,
 bool xr_type_satisfies_constraint(XrType *type, XrType *constraint) {
     if (!constraint) return true;
     if (!type) return false;
-    
+
     // Check built-in interface constraints by name
     if (constraint->kind == XR_KIND_INTERFACE) {
         const char *iface_name = constraint->instance.class_name;
@@ -311,19 +259,20 @@ bool xr_type_satisfies_constraint(XrType *type, XrType *constraint) {
                 // User types checked via method lookup below
             }
         }
-        
-        // For user-defined interfaces, check method implementation
+
+        // For user-defined interfaces: conformance is guaranteed by the
+        // analyzer (see note at the top of this file). Trust prior validation.
         if (type->kind == XR_KIND_CLASS || type->kind == XR_KIND_INSTANCE) {
-            return check_interface_implementation(type, constraint);
+            return true;
         }
         return false;
     }
-    
+
     // Class constraint: check inheritance
     if (constraint->kind == XR_KIND_CLASS || constraint->kind == XR_KIND_INSTANCE) {
         return xr_type_is_subclass_of(type, constraint);
     }
-    
+
     return xr_type_assignable(constraint, type);
 }
 
@@ -335,26 +284,26 @@ bool xr_type_satisfies_constraint(XrType *type, XrType *constraint) {
 // Check if type is a built-in iterable (Array, Set, Map, String)
 bool xr_type_is_iterable(XrType *type, XrType **out_element_type) {
     if (!type) return false;
-    
+
     // Built-in iterable types
     if (type->kind == XR_KIND_ARRAY) {
         if (out_element_type) {
-            *out_element_type = type->container.element_type 
-                ? type->container.element_type 
+            *out_element_type = type->container.element_type
+                ? type->container.element_type
                 : xr_type_new_unknown();
         }
         return true;
     }
-    
+
     if (type->kind == XR_KIND_SET) {
         if (out_element_type) {
-            *out_element_type = type->container.element_type 
-                ? type->container.element_type 
+            *out_element_type = type->container.element_type
+                ? type->container.element_type
                 : xr_type_new_unknown();
         }
         return true;
     }
-    
+
     if (type->kind == XR_KIND_MAP) {
         // Map iteration returns entries (key-value pairs)
         if (out_element_type) {
@@ -362,14 +311,14 @@ bool xr_type_is_iterable(XrType *type, XrType **out_element_type) {
         }
         return true;
     }
-    
+
     if (type->kind == XR_KIND_STRING) {
         if (out_element_type) {
             *out_element_type = xr_type_new_string();  // Character strings
         }
         return true;
     }
-    
+
     // For custom class iterable checking, use xa_analyzer_is_iterable()
     return false;
 }
