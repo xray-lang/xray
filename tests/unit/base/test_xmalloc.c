@@ -103,6 +103,60 @@ TEST(grow_capacity_macro) {
     ASSERT_EQ_INT(XR_GROW_CAPACITY(16), 32);
 }
 
+TEST(xr_realloc_macro_grow_ok) {
+    int *arr = (int *)xr_malloc(4 * sizeof(int));
+    ASSERT_NOT_NULL(arr);
+    for (int i = 0; i < 4; i++) arr[i] = i + 1;
+
+    bool ok = XR_REALLOC(arr, 16 * sizeof(int));
+    ASSERT_TRUE(ok);
+    ASSERT_NOT_NULL(arr);
+    ASSERT_EQ_INT(arr[0], 1);
+    ASSERT_EQ_INT(arr[3], 4);
+    for (int i = 4; i < 16; i++) arr[i] = i * 10;
+    ASSERT_EQ_INT(arr[15], 150);
+
+    xr_free(arr);
+}
+
+TEST(xr_realloc_macro_from_null) {
+    int *arr = NULL;
+    bool ok = XR_REALLOC(arr, 8 * sizeof(int));
+    ASSERT_TRUE(ok);
+    ASSERT_NOT_NULL(arr);
+    arr[0] = 42;
+    ASSERT_EQ_INT(arr[0], 42);
+    xr_free(arr);
+}
+
+TEST(xr_realloc_macro_struct_field) {
+    typedef struct { int *data; size_t cap; } Vec;
+    Vec v = {NULL, 0};
+
+    bool ok = XR_REALLOC(v.data, 8 * sizeof(int));
+    ASSERT_TRUE(ok);
+    ASSERT_NOT_NULL(v.data);
+    v.data[7] = 99;
+    ASSERT_EQ_INT(v.data[7], 99);
+
+    ok = XR_REALLOC(v.data, 32 * sizeof(int));
+    ASSERT_TRUE(ok);
+    ASSERT_EQ_INT(v.data[7], 99);
+
+    xr_free(v.data);
+}
+
+TEST(xr_realloc_macro_zero_size_is_free) {
+    int *arr = (int *)xr_malloc(4 * sizeof(int));
+    ASSERT_NOT_NULL(arr);
+
+    bool ok = XR_REALLOC(arr, 0);
+    ASSERT_TRUE(ok);
+    // arr is now whatever realloc returned for size 0; typically NULL.
+    // Assigning NULL via xr_free below is safe.
+    xr_free(arr);
+}
+
 /* ========== Debug Tracking Tests ========== */
 
 #if XR_DEBUG
@@ -162,6 +216,10 @@ int main(void) {
     RUN_TEST(grow_array_macro);
     RUN_TEST(allocate_macro);
     RUN_TEST(grow_capacity_macro);
+    RUN_TEST(xr_realloc_macro_grow_ok);
+    RUN_TEST(xr_realloc_macro_from_null);
+    RUN_TEST(xr_realloc_macro_struct_field);
+    RUN_TEST(xr_realloc_macro_zero_size_is_free);
 
 #if XR_DEBUG
     RUN_TEST_SUITE("Debug Tracking");
