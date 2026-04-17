@@ -193,8 +193,8 @@ _Static_assert(offsetof(XrValue, heap_type)             == XIR_XRVALUE_HEAP_TYPE
 _Static_assert(offsetof(XrValue, i)                     == XIR_XRVALUE_PAYLOAD_OFFSET,   "XrValue payload offset mismatch");
 
 // XrClosure / XrCell checks
-#include "../vm/xvm_state_frame.h"
-#include "../vm/xcontext.h"
+#include "../runtime/xexec_frame.h"
+#include "../runtime/closure/xcell.h"
 _Static_assert(offsetof(XrClosure, proto)               == XIR_CLOSURE_PROTO_OFFSET,     "Closure.proto offset mismatch");
 
 // JIT suspend state struct layout must match the old int64_t[40] layout

@@ -5,33 +5,34 @@
  * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
  * Licensed under the MIT License
  *
- * xir_feedback.h - Runtime type feedback for profile-guided compilation
+ * xtype_feedback.h - Runtime type feedback for profile-guided compilation
  *
  * KEY CONCEPT:
  *   Collects runtime type information at function call boundaries.
  *   Both JIT and future AOT compilers consume this data for specialization.
  *   Lightweight design: ~3-5 instructions per call, <2% overhead.
  *
+ * LAYERING:
+ *   Lives at runtime/value. It is a per-XrProto profile written by the VM
+ *   and read by JIT/AOT consumers — strictly runtime data, never a jit-only
+ *   concept. Placing it here eliminates the runtime -> jit upward include
+ *   previously caused by xchunk.c destroying feedback from xir_feedback.h.
+ *
  * WHY THIS DESIGN:
  *   - Does NOT depend on XRAY_HAS_JIT — always compiled, all platforms
  *   - Profile collection is a shared foundation; JIT/AOT are consumers
  *   - Bitmask accumulation (OR) instead of enum lattice (simpler than V8)
  *   - Stability detection via consecutive-stable sampling
- *
- * RELATED MODULES:
- *   - xir_jit.c: reads feedback for JIT eligibility + specialization
- *   - xir_builder.c: reads feedback for slot_type initialization
- *   - xvm.c: writes feedback at OP_CALL/CALLSELF/RETURN
  */
 
-#ifndef XIR_FEEDBACK_H
-#define XIR_FEEDBACK_H
+#ifndef XTYPE_FEEDBACK_H
+#define XTYPE_FEEDBACK_H
 
-#include "../runtime/value/xvalue.h"
+#include "xvalue.h"
 #include <stdint.h>
 #include <stdbool.h>
 #include <string.h>
-#include "../base/xdefs.h"
+#include "../../base/xdefs.h"
 
 /* ========== Type Feedback Flags (bitmask, OR-accumulated) ========== */
 
@@ -76,8 +77,8 @@ static inline uint8_t xfb_value_type_flag(XrValue val) {
     switch (tag) {
         case XR_TAG_NULL:  return XFB_TYPE_NULL;
         case XR_TAG_BOOL:  return XFB_TYPE_BOOL;
-        case XR_TAG_I64: return XFB_TYPE_INT;
-        case XR_TAG_F64: return XFB_TYPE_FLOAT;
+        case XR_TAG_I64:   return XFB_TYPE_INT;
+        case XR_TAG_F64:   return XFB_TYPE_FLOAT;
         case XR_TAG_PTR:   return XFB_TYPE_OBJECT;
         default:           return XFB_TYPE_OBJECT;
     }
@@ -113,7 +114,7 @@ static inline void xfb_record_return(XirTypeFeedback *fb, XrValue val) {
     }
 }
 
-/* ========== API (implemented in xir_feedback.c) ========== */
+/* ========== API (implemented in xtype_feedback.c) ========== */
 
 // Allocate and initialize a new TypeFeedback (zero-filled)
 XR_FUNC XirTypeFeedback *xfb_create(void);
@@ -124,10 +125,10 @@ XR_FUNC void xfb_destroy(XirTypeFeedback *fb);
 // Check if a specific arg_type is monomorphic (single type)
 XR_FUNC bool xfb_is_monomorphic(uint8_t type_flags);
 
-// Convert feedback type flags to XrSlotType equivalent
+// Convert feedback bitmask → XrSlotType (for JIT/AOT specialization)
 XR_FUNC uint8_t xfb_to_slot_type(uint8_t type_flags);
 
 // Debug: print feedback summary
 XR_FUNC void xfb_dump(const XirTypeFeedback *fb, int nparams, const char *func_name);
 
-#endif // XIR_FEEDBACK_H
+#endif // XTYPE_FEEDBACK_H

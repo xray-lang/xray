@@ -25,7 +25,7 @@
 
 #include "xir_tfa.h"
 #include "../base/xchecks.h"
-#include "xir_feedback.h"
+#include "../runtime/value/xtype_feedback.h"
 #include "../runtime/value/xchunk.h"
 #include "../runtime/value/xslot_type.h"
 #include "../runtime/value/xtype.h"
