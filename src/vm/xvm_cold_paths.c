@@ -15,6 +15,7 @@
 
 #include "xvm_cold_paths.h"
 #include "../base/xchecks.h"
+#include "../base/xmalloc.h"
 #include "../runtime/value/xstruct_layout.h"
 #include "xvm_checks.h"
 #include "xdebug.h"
@@ -296,7 +297,7 @@ int vm_invoke_task_handle(XrayIsolate *isolate,
             xr_channel_notify_send(ch, xr_value_from_task(task));
         } else {
             // Task still running: register completion listener
-            XrCompletionNode *cn = (XrCompletionNode *)calloc(1, sizeof(XrCompletionNode));
+            XrCompletionNode *cn = (XrCompletionNode *)xr_calloc(1, sizeof(XrCompletionNode));
             if (cn) {
                 cn->type = XR_COMPLETION_CHANNEL;
                 cn->as.channel = ch;

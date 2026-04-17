@@ -997,7 +997,7 @@ AstNode *xr_parse_type_alias_declaration(Parser *parser) {
 
     // Parse alias name
     xr_parser_consume(parser, TK_NAME, "expected type name after 'type'");
-    char *alias_name = strndup(parser->previous.start, parser->previous.length);
+    char *alias_name = xr_strndup(parser->previous.start, parser->previous.length);
 
     // Expect '='
     xr_parser_consume(parser, TK_ASSIGN, "expected '=' in type alias definition");
@@ -1005,7 +1005,7 @@ AstNode *xr_parse_type_alias_declaration(Parser *parser) {
     // Pre-register with NULL to block recursive self-reference (type A = A)
     if (!xa_scope_define_type_alias(parser->type_scope, alias_name, NULL)) {
         xr_parser_error(parser, "duplicate type alias definition");
-        free(alias_name);
+        xr_free(alias_name);
         return NULL;
     }
 
@@ -1013,7 +1013,7 @@ AstNode *xr_parse_type_alias_declaration(Parser *parser) {
     XrType *type_definition = xr_parse_type_annotation(parser);
     if (!type_definition) {
         xr_parser_error(parser, "invalid type definition");
-        free(alias_name);
+        xr_free(alias_name);
         return NULL;
     }
 
@@ -1029,7 +1029,7 @@ AstNode *xr_parse_type_alias_declaration(Parser *parser) {
         node->compile_type = type_definition;
     }
 
-    free(alias_name);
+    xr_free(alias_name);
     return node;
 }
 

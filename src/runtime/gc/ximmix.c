@@ -36,7 +36,8 @@ static void free_aligned_block(char *data) {
 #if defined(_WIN32)
     _aligned_free(data);
 #else
-    free(data);
+    // posix_memalign paired with libc free is the documented contract.
+    free(data);  // xr:allow-raw-alloc
 #endif
 }
 

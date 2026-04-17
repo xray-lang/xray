@@ -21,6 +21,7 @@
 #include "xir_builder_internal.h"
 #include "../base/xchecks.h"
 #include "../base/xlog.h"
+#include "../base/xmalloc.h"
 #include "xir_printer.h"
 
 // AOT sentinel: used as fn_ptr marker for builtin method invocation
@@ -209,10 +210,8 @@ int builder_add_deopt_info(XirBuilder *b, uint32_t bc_pc) {
     if (func->ndeopt >= func->deopt_cap) {
         uint32_t new_cap = func->deopt_cap ? func->deopt_cap * 2 : 16;
         if (new_cap > XIR_MAX_DEOPT_POINTS) new_cap = XIR_MAX_DEOPT_POINTS;
-        XirDeoptInfo *new_arr = (XirDeoptInfo *)realloc(
-            func->deopt_infos, new_cap * sizeof(XirDeoptInfo));
-        if (!new_arr) return -1;
-        func->deopt_infos = new_arr;
+        if (!XR_REALLOC(func->deopt_infos, new_cap * sizeof(XirDeoptInfo)))
+            return -1;
         func->deopt_cap = new_cap;
     }
 
@@ -2538,8 +2537,9 @@ static XirFunc *build_from_proto_impl(XrProto *proto,
                             ? orig_entry->id : preheader->id;
             if (max_id >= b.block_defs_size) {
                 uint32_t new_size = max_id + 8;
-                b.block_defs = (BraunBlockDef *)realloc(b.block_defs,
-                    new_size * sizeof(BraunBlockDef));
+                XR_REALLOC_OR_ABORT(b.block_defs,
+                                    new_size * sizeof(BraunBlockDef),
+                                    "xir_builder block_defs grow");
                 memset(&b.block_defs[b.block_defs_size], 0,
                     (new_size - b.block_defs_size) * sizeof(BraunBlockDef));
                 b.block_defs_size = new_size;

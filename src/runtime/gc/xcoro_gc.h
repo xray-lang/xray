@@ -83,6 +83,7 @@
 #include <stdbool.h>
 #include <string.h>
 #include "../../base/xdefs.h"
+#include "../../base/xmalloc.h"
 #include "ximmix.h"
 #include "xgc_internal.h"
 
@@ -180,7 +181,7 @@ static inline void xr_gclist_init(XrGCGrayList *list) {
 
 static inline void xr_gclist_destroy(XrGCGrayList *list) {
     if (list->items) {
-        free(list->items);
+        xr_free(list->items);
         list->items = NULL;
     }
     list->count = 0;
@@ -190,7 +191,7 @@ static inline void xr_gclist_destroy(XrGCGrayList *list) {
 static inline void xr_gclist_push(XrGCGrayList *list, XrGCHeader *obj) {
     if (list->count >= list->capacity) {
         int newcap = list->capacity ? list->capacity * 2 : XR_GRAYLIST_INIT_CAP;
-        XrGCHeader **newp = (XrGCHeader**)realloc(list->items, newcap * sizeof(XrGCHeader*));
+        XrGCHeader **newp = (XrGCHeader**)xr_realloc(list->items, newcap * sizeof(XrGCHeader*));
         if (!newp) {
             // OOM during GC: abort to avoid silent data loss
             fprintf(stderr, "[GC] fatal: gray list realloc failed (OOM)\n");
@@ -226,7 +227,7 @@ static inline void xr_gclist_absorb(XrGCGrayList *dst, XrGCGrayList *src) {
     if (total > dst->capacity) {
         int newcap = dst->capacity ? dst->capacity : XR_GRAYLIST_INIT_CAP;
         while (newcap < total) newcap *= 2;
-        XrGCHeader **newp = (XrGCHeader**)realloc(dst->items, newcap * sizeof(XrGCHeader*));
+        XrGCHeader **newp = (XrGCHeader**)xr_realloc(dst->items, newcap * sizeof(XrGCHeader*));
         if (!newp) return;
         dst->items = newp;
         dst->capacity = newcap;

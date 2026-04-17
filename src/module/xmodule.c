@@ -115,7 +115,7 @@ XrModule* xr_module_create_native(XrayIsolate *isolate, const char *name) {
     XrModule *module = (XrModule*)xr_gc_alloc(xr_isolate_get_gc(isolate), sizeof(XrModule), XR_TMODULE);
     xr_gc_header_init_type(&module->gc, XR_TMODULE);
 
-    module->name = strdup(name);
+    module->name = xr_strdup(name);
     module->path = NULL;
     module->module_type = MODULE_TYPE_NATIVE;
 
@@ -139,8 +139,8 @@ XrModule* xr_module_create_script(XrayIsolate *isolate, const char *name, const 
     XrModule *module = (XrModule*)xr_gc_alloc(xr_isolate_get_gc(isolate), sizeof(XrModule), XR_TMODULE);
     xr_gc_header_init_type(&module->gc, XR_TMODULE);
 
-    module->name = strdup(name);
-    module->path = strdup(path);
+    module->name = xr_strdup(name);
+    module->path = xr_strdup(path);
     module->module_type = MODULE_TYPE_SCRIPT;
 
     module_init_exports(module);
@@ -285,7 +285,7 @@ static XrModuleRegistry* create_registry(void) {
 
     registry->native_loaders = xr_hashmap_new();
     registry->loaded_modules = xr_hashmap_new();
-    registry->stdlib_path = strdup("stdlib");
+    registry->stdlib_path = xr_strdup("stdlib");
 
     // Project config (optional)
     registry->project = NULL;
@@ -369,18 +369,18 @@ void xr_module_system_init_with_script(XrayIsolate *isolate, const char *script_
     // Try to load project config (for package management)
     if (script_path && !registry->project) {
         // Get script directory
-        char *dir = strdup(script_path);
+        char *dir = xr_strdup(script_path);
         char *last_slash = strrchr(dir, '/');
         if (last_slash) {
             *last_slash = '\0';
         } else {
-            free(dir);
-            dir = strdup(".");
+            xr_free(dir);
+            dir = xr_strdup(".");
         }
 
         // Try to load project config
         registry->project = xr_project_load(isolate, dir);
-        free(dir);
+        xr_free(dir);
     }
 }
 
@@ -435,7 +435,7 @@ char* xr_module_resolve_path(XrayIsolate *isolate, const char *module_name) {
 
     // 1. Absolute path: return directly
     if (module_name[0] == '/') {
-        return strdup(module_name);
+        return xr_strdup(module_name);
     }
 
     // Get current module directory (prefer path of currently executing module)
@@ -473,15 +473,15 @@ char* xr_module_resolve_path(XrayIsolate *isolate, const char *module_name) {
             const char *ext = strrchr(module_name, '.');
             if (ext && strcmp(ext, ".xr") == 0) {
                 snprintf(path, sizeof(path), "%s/%s", script_dir, module_name);
-                if (access(path, F_OK) == 0) return strdup(path);
+                if (access(path, F_OK) == 0) return xr_strdup(path);
             } else {
                 // First try path.xr
                 snprintf(path, sizeof(path), "%s/%s.xr", script_dir, module_name);
-                if (access(path, F_OK) == 0) return strdup(path);
+                if (access(path, F_OK) == 0) return xr_strdup(path);
 
                 // Then try path/index.xr (directory entry)
                 snprintf(path, sizeof(path), "%s/%s/index.xr", script_dir, module_name);
-                if (access(path, F_OK) == 0) return strdup(path);
+                if (access(path, F_OK) == 0) return xr_strdup(path);
             }
         }
         return NULL;  // Not found, return NULL
@@ -499,12 +499,12 @@ char* xr_module_resolve_path(XrayIsolate *isolate, const char *module_name) {
                 // Full implementation needs to read xray.lock or scan version directories
                 snprintf(path, sizeof(path), "%s/.xray/packages/%s/%s/latest/src/main.xr",
                          home, owner, name);
-                if (access(path, F_OK) == 0) return strdup(path);
+                if (access(path, F_OK) == 0) return xr_strdup(path);
 
                 // Try other entry file names
                 snprintf(path, sizeof(path), "%s/.xray/packages/%s/%s/latest/main.xr",
                          home, owner, name);
-                if (access(path, F_OK) == 0) return strdup(path);
+                if (access(path, F_OK) == 0) return xr_strdup(path);
             }
         }
     }
@@ -512,14 +512,14 @@ char* xr_module_resolve_path(XrayIsolate *isolate, const char *module_name) {
     // 4. Current script directory: <script_dir>/<name>.xr
     if (script_dir) {
         snprintf(path, sizeof(path), "%s/%s.xr", script_dir, module_name);
-        if (access(path, F_OK) == 0) return strdup(path);
+        if (access(path, F_OK) == 0) return xr_strdup(path);
     }
 
     // 5. Standard library: stdlib/<name>/<name>.xr
     if (registry && registry->stdlib_path) {
         snprintf(path, sizeof(path), "%s/%s/%s.xr",
                  registry->stdlib_path, module_name, module_name);
-        if (access(path, F_OK) == 0) return strdup(path);
+        if (access(path, F_OK) == 0) return xr_strdup(path);
     }
 
     return NULL;

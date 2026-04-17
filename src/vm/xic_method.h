@@ -24,6 +24,7 @@
 #include "../runtime/value/xvalue.h"
 #include "../runtime/class/xclass.h"
 #include "../runtime/class/xmethod.h"
+#include "../base/xmalloc.h"
 #include <stdint.h>
 #include <stdbool.h>
 #include <stdlib.h>
@@ -57,7 +58,7 @@ typedef struct XrICMethod {
     uint8_t   is_megamorphic; // once set, skip IC and use direct lookup
     uint32_t  total_count;    // total invocations at this call site (always-on)
     XrMegaCache *mega_cache;  // lazily allocated on megamorphic transition
-    
+
 #ifndef NDEBUG
     int debug_instruction_offset;
 #endif
@@ -99,7 +100,7 @@ static inline XrMethod* xr_ic_method_lookup(
     // Megamorphic: hash cache lookup
     if (cache->is_megamorphic) {
         cache->total_count++;
-        
+
         XrMegaCache *mc = cache->mega_cache;
         if (mc) {
             unsigned h = ((uintptr_t)klass >> 4) & XR_MEGA_CACHE_MASK;
@@ -111,7 +112,7 @@ static inline XrMethod* xr_ic_method_lookup(
                 if (mc->keys[idx] == NULL) break;  // empty slot = miss
             }
         }
-        
+
         // Mega cache miss: full lookup and insert
         XrMethod *method = xr_class_lookup_method(klass, symbol);
         if (method && mc) {
@@ -127,7 +128,7 @@ static inline XrMethod* xr_ic_method_lookup(
         }
         return method;
     }
-    
+
     // Scan existing entries for class match
     int n = cache->count;
     for (int i = 0; i < n; i++) {
@@ -140,18 +141,18 @@ static inline XrMethod* xr_ic_method_lookup(
             return cache->entries[i].method;
         }
     }
-    
+
     // Cache miss: full lookup
     XrMethod *method = xr_class_lookup_method(klass, symbol);
-    
+
 #ifdef XR_DEBUG_INLINE_CACHE
     cache->misses++;
 #endif
-    
+
     if (method == NULL) return NULL;
-    
+
     cache->total_count++;
-    
+
     // Add entry if space available, otherwise go megamorphic
     if (n < XR_IC_POLY_MAX) {
         cache->entries[n].klass = klass;
@@ -161,7 +162,7 @@ static inline XrMethod* xr_ic_method_lookup(
     } else {
         cache->is_megamorphic = 1;
         // Allocate mega cache and seed with existing poly entries
-        cache->mega_cache = (XrMegaCache*)calloc(1, sizeof(XrMegaCache));
+        cache->mega_cache = (XrMegaCache*)xr_calloc(1, sizeof(XrMegaCache));
         if (cache->mega_cache) {
             // Seed existing poly entries into hash cache
             for (int j = 0; j < XR_IC_POLY_MAX; j++) {
@@ -191,7 +192,7 @@ static inline XrMethod* xr_ic_method_lookup(
             }
         }
     }
-    
+
     return method;
 }
 

@@ -86,7 +86,7 @@ void xr_jit_barrier_back(XrCoroutine *coro, void *container) {
 // Reset vm_ctx execution state (stack/frames pointers already set during allocation)
 void xr_coro_sync_vm_ctx(XrCoroutine *coro, XrayIsolate *X) {
     if (!coro) return;
-    
+
     // Targeted field resets instead of memset (avoids zeroing preserved pointers)
     XrVMContext *ctx = &coro->vm_ctx;
     ctx->stack_top = ctx->stack;
@@ -124,7 +124,7 @@ static bool coro_init_common(XrCoroutine *coro, XrayIsolate *X,
 XrCoroutine *xr_coro_create_bootstrap(XrayIsolate *X) {
     XR_DCHECK(X != NULL, "coro_create_bootstrap: NULL isolate");
     XrCoroutine *coro = NULL;
-    
+
     if (X->sys_heap) {
         coro = xr_sysheap_alloc_coro(X->sys_heap);
     } else {
@@ -135,17 +135,17 @@ XrCoroutine *xr_coro_create_bootstrap(XrayIsolate *X) {
         }
     }
     if (!coro) return NULL;
-    
+
     // New object: ensure NULL pointers for coro_init_common
     coro->vm_ctx.stack = NULL;
     coro->vm_ctx.frames = NULL;
     coro->coro_gc = NULL;
-    
+
     // Common initialization (flags, stack/frames, field resets, timer, GC fields, vm_ctx sync, ID)
     if (!coro_init_common(coro, X, "main", true)) {
         return NULL;
     }
-    
+
     // Main coroutine needs coro_gc immediately (GC API, init-phase allocations)
     // Use main-specific config: larger threshold, slower GC (long-lived coroutine)
     if (!coro->coro_gc) {
@@ -157,7 +157,7 @@ XrCoroutine *xr_coro_create_bootstrap(XrayIsolate *X) {
         coro->coro_gc = xr_coro_gc_create(coro, &main_config);
         if (!coro->coro_gc) return NULL;
     }
-    
+
     // Bootstrap-specific: mark as main coroutine
     coro->flags |= XR_CORO_FLG_MAIN;
     coro->entry_type = XR_CORO_ENTRY_CLOSURE;
@@ -170,7 +170,7 @@ XrCoroutine *xr_coro_create_bootstrap(XrayIsolate *X) {
     coro->spawn_line = 0;
     coro->spawn_file = NULL;
     coro->pending_spawn = NULL;
-    
+
     return coro;
 }
 
@@ -383,7 +383,7 @@ static bool coro_init_common(XrCoroutine *coro, XrayIsolate *X,
 
 // Create VM coroutine (GC managed)
 // Optimization: try to get stack and frames from pool
-XrCoroutine *xr_coro_create(XrayIsolate *X, XrClosure *closure, 
+XrCoroutine *xr_coro_create(XrayIsolate *X, XrClosure *closure,
                             XrValue *args, int arg_count,
                             const char *name, const char *file, int line) {
     XR_DCHECK(X != NULL, "coro_create: NULL isolate");
@@ -396,7 +396,7 @@ XrCoroutine *xr_coro_create(XrayIsolate *X, XrClosure *closure,
         xr_runtime_error(X, "coroutine limit exceeded (%d)", XR_MAX_COROUTINES);
         return NULL;
     }
-    
+
     // Allocate: try pool first, then system heap
     XrCoroutine *coro = NULL;
     XrRuntime *runtime = (XrRuntime *)X->vm.runtime;
@@ -421,15 +421,15 @@ XrCoroutine *xr_coro_create(XrayIsolate *X, XrClosure *closure,
             coro->coro_gc = NULL;
         }
     }
-    
+
     // Common initialization (flags, coro_gc, stack/frames, field resets, timer, GC, ID)
     if (!coro_init_common(coro, X, name, true)) {
         return NULL;
     }
-    
+
     // Closure-specific: entry type
     coro->entry_type = XR_CORO_ENTRY_CLOSURE;
-    
+
     // Share parent's closure directly — no copy needed.
     // Compiler-enforced is_coro_safe guarantees all upvalues are shared const
     // (closed immediately, value in upvalue->closed, independent of any stack).
@@ -438,7 +438,7 @@ XrCoroutine *xr_coro_create(XrayIsolate *X, XrClosure *closure,
     coro->entry.closure = closure;
     coro->source_file = file;
     coro->source_line = line;
-    
+
     // Deep copy args to coroutine private heap (cross-coroutine safe)
     coro->arg_count = arg_count;
     if (arg_count <= 4) {
@@ -458,13 +458,13 @@ XrCoroutine *xr_coro_create(XrayIsolate *X, XrClosure *closure,
     } else {
         coro->args = NULL;
     }
-    
+
     // Async stack trace: parent pointer + caller-provided file/line.
     // vm_go pre-computes these from the current frame, so no redundant frame walk here.
     coro->parent_coro = (XrCoroutine *)X->vm.current_coro;
     coro->spawn_file = file;
     coro->spawn_line = line;
-    
+
     return coro;
 }
 
@@ -477,7 +477,7 @@ XrCoroutine *xr_coro_create_cfunc(XrayIsolate *X, XrCFuncResult (*cfunc)(XrayIso
     if (sched && sched->coro_count >= XR_MAX_COROUTINES) {
         return NULL;
     }
-    
+
     // Allocate: try pool first, then system heap
     XrCoroutine *coro = NULL;
     XrRuntime *runtime = (XrRuntime *)X->vm.runtime;
@@ -501,18 +501,18 @@ XrCoroutine *xr_coro_create_cfunc(XrayIsolate *X, XrCFuncResult (*cfunc)(XrayIso
             coro->coro_gc = NULL;
         }
     }
-    
+
     // Common initialization (flags, coro_gc, stack/frames, field resets, timer, GC, ID)
     if (!coro_init_common(coro, X, name, true)) {
         return NULL;
     }
-    
+
     // CFunc-specific: entry type
     coro->entry_type = XR_CORO_ENTRY_CFUNC;
     coro->entry.cfunc = cfunc;
     coro->source_file = NULL;
     coro->source_line = 0;
-    
+
     // Copy args (no deep copy needed for C function args)
     coro->arg_count = argc;
     if (argc > 0 && args) {
@@ -530,7 +530,7 @@ XrCoroutine *xr_coro_create_cfunc(XrayIsolate *X, XrCFuncResult (*cfunc)(XrayIso
     } else {
         coro->args = NULL;
     }
-    
+
     return coro;
 }
 
@@ -542,7 +542,7 @@ XrCoroutine *xr_coro_create_native(XrayIsolate *X, void (*func)(void*), void *ar
     if (sched && sched->coro_count >= XR_MAX_COROUTINES) {
         return NULL;
     }
-    
+
     // Allocate: try pool first, then system heap
     XrCoroutine *coro = NULL;
     XrRuntime *runtime = (XrRuntime *)X->vm.runtime;
@@ -566,12 +566,12 @@ XrCoroutine *xr_coro_create_native(XrayIsolate *X, void (*func)(void*), void *ar
             coro->coro_gc = NULL;
         }
     }
-    
+
     // Common initialization (flags, field resets, timer, GC, ID; no stack/frames)
     if (!coro_init_common(coro, X, name, false)) {
         return NULL;
     }
-    
+
     // Native-specific: entry type
     coro->entry_type = XR_CORO_ENTRY_NATIVE;
     coro->entry.native.func = func;
@@ -580,7 +580,7 @@ XrCoroutine *xr_coro_create_native(XrayIsolate *X, void (*func)(void*), void *ar
     coro->source_line = 0;
     coro->arg_count = 0;
     coro->args = NULL;
-    
+
     return coro;
 }
 
@@ -589,7 +589,7 @@ XrCoroutine *xr_coro_create_native(XrayIsolate *X, void (*func)(void*), void *ar
 // Add coroutine to scheduler queue
 void xr_coro_spawn(XrayIsolate *X, XrCoroutine *coro) {
     if (!X || !coro) return;
-    
+
     // Use multi-core Runtime
     XrRuntime *runtime = (XrRuntime *)X->vm.runtime;
     if (runtime) {
@@ -613,14 +613,14 @@ void xr_coro_release_heap(XrCoroutine *coro) {
 // Falls back to full release if no Worker context or pool is full.
 void xr_coro_release_resources(XrCoroutine *coro) {
     if (!coro) return;
-    
+
     // Destroy coro_gc (Immix heap) — use atomic exchange to prevent
     // double-free race with early release in xr_coro_run_on_worker
     {
         XrCoroGC *gc = __atomic_exchange_n(&coro->coro_gc, NULL, __ATOMIC_ACQ_REL);
         if (gc) xr_coro_gc_destroy(gc);
     }
-    
+
     // Try to recycle: keep stack/frames, put into Worker local pool
     XrWorker *worker = xr_current_worker();
     if (worker && coro->vm_ctx.stack && coro->vm_ctx.frames &&
@@ -649,7 +649,7 @@ void xr_coro_release_resources(XrCoroutine *coro) {
         if (coro->vm_ctx.struct_areas) {
             for (int i = 0; i < coro->vm_ctx.struct_areas_cap; i++) {
                 if (coro->vm_ctx.struct_areas[i]) {
-                    free(coro->vm_ctx.struct_areas[i]);
+                    xr_free(coro->vm_ctx.struct_areas[i]);
                     coro->vm_ctx.struct_areas[i] = NULL;
                     coro->vm_ctx.struct_area_caps[i] = 0;
                 }
@@ -664,7 +664,7 @@ void xr_coro_release_resources(XrCoroutine *coro) {
         worker->p.local_free_count++;
         return;
     }
-    
+
     // Release stack+frames
     if (coro->vm_ctx.stack) {
         if (coro->gc_flags & 0x0001) {
@@ -708,17 +708,17 @@ void xr_coro_release_resources(XrCoroutine *coro) {
     // Per-frame struct storage
     if (coro->vm_ctx.struct_areas) {
         for (int i = 0; i < coro->vm_ctx.struct_areas_cap; i++) {
-            if (coro->vm_ctx.struct_areas[i]) free(coro->vm_ctx.struct_areas[i]);
+            if (coro->vm_ctx.struct_areas[i]) xr_free(coro->vm_ctx.struct_areas[i]);
         }
-        free(coro->vm_ctx.struct_areas);
-        free(coro->vm_ctx.struct_area_caps);
+        xr_free(coro->vm_ctx.struct_areas);
+        xr_free(coro->vm_ctx.struct_area_caps);
         coro->vm_ctx.struct_areas = NULL;
         coro->vm_ctx.struct_area_caps = NULL;
         coro->vm_ctx.struct_areas_cap = 0;
     }
     // Struct return arena
     if (coro->vm_ctx.struct_ret_arena) {
-        free(coro->vm_ctx.struct_ret_arena);
+        xr_free(coro->vm_ctx.struct_ret_arena);
         coro->vm_ctx.struct_ret_arena = NULL;
         coro->vm_ctx.struct_ret_arena_used = 0;
         coro->vm_ctx.struct_ret_arena_cap = 0;
@@ -735,7 +735,7 @@ void xr_coro_release_resources(XrCoroutine *coro) {
 // Note: coroutine itself freed by GC, only free internally allocated arrays
 void xr_coro_free(XrCoroutine *coro) {
     if (!coro) return;
-    
+
     // Free GC context — atomic exchange to prevent double-free race
     {
         XrCoroGC *gc = __atomic_exchange_n(&coro->coro_gc, NULL, __ATOMIC_ACQ_REL);
@@ -770,17 +770,17 @@ void xr_coro_free(XrCoroutine *coro) {
     // Per-frame struct storage
     if (coro->vm_ctx.struct_areas) {
         for (int i = 0; i < coro->vm_ctx.struct_areas_cap; i++) {
-            if (coro->vm_ctx.struct_areas[i]) free(coro->vm_ctx.struct_areas[i]);
+            if (coro->vm_ctx.struct_areas[i]) xr_free(coro->vm_ctx.struct_areas[i]);
         }
-        free(coro->vm_ctx.struct_areas);
-        free(coro->vm_ctx.struct_area_caps);
+        xr_free(coro->vm_ctx.struct_areas);
+        xr_free(coro->vm_ctx.struct_area_caps);
         coro->vm_ctx.struct_areas = NULL;
         coro->vm_ctx.struct_area_caps = NULL;
         coro->vm_ctx.struct_areas_cap = 0;
     }
     // Struct return arena
     if (coro->vm_ctx.struct_ret_arena) {
-        free(coro->vm_ctx.struct_ret_arena);
+        xr_free(coro->vm_ctx.struct_ret_arena);
         coro->vm_ctx.struct_ret_arena = NULL;
         coro->vm_ctx.struct_ret_arena_used = 0;
         coro->vm_ctx.struct_ret_arena_cap = 0;
@@ -791,13 +791,13 @@ void xr_coro_free(XrCoroutine *coro) {
         xr_free(coro->ext);
         coro->ext = NULL;
     }
-    
+
     // Only free non-inline args (allocated when >2 args)
     if (coro->args && coro->args != coro->inline_args) {
         xr_free(coro->args);
         coro->args = NULL;
     }
-    
+
     // Coroutine object itself freed by GC, no need for xr_free(coro)
 }
 
@@ -807,14 +807,14 @@ void xr_coro_recycle_local(XrWorker *worker, XrCoroutine *coro) {
     if (!worker || !coro) return;
     XR_DCHECK(xr_coro_flags_has(coro, XR_CORO_FLG_DONE), "recycle_local: coro not done");
     XR_DCHECK(!coro->coro_gc || !coro->coro_gc->in_gc, "recycle_local: GC active during recycle");
-    
+
  // Cancel timer using cross-worker cancellation
     // This handles both local (direct) and cross-worker (async queue) cancellation
     if (coro->ext && atomic_load_explicit(&coro->ext->timer_active, memory_order_relaxed)) {
         xr_worker_cancel_timer(worker, coro);
         // Note: ext->timer_active is set to false inside xr_worker_cancel_timer
     }
-    
+
     // Reset GC context (bulk free all Immix blocks, reset state)
     // This is the key optimization for coroutine pool!
     // xr_immix_reset frees all blocks (including per-block local_allgc lists)
@@ -834,13 +834,13 @@ void xr_coro_recycle_local(XrWorker *worker, XrCoroutine *coro) {
     if (coro->vm_ctx.stack) {
         coro->vm_ctx.stack[0] = xr_null();
     }
-    
+
     // Free non-inline args
     if (coro->args && coro->args != coro->inline_args) {
         xr_free(coro->args);
     }
     coro->args = NULL;
-    
+
     // Thorough reset: zero all fields that coro_init_common would memset.
     // This allows coro_init_common to skip the 640B memset for recycled coros.
     coro->entry_type = XR_CORO_ENTRY_CLOSURE;
@@ -893,7 +893,7 @@ void xr_coro_recycle_local(XrWorker *worker, XrCoroutine *coro) {
     coro->gc_flags |= XR_CORO_GC_RECYCLED_CLEAN;
     XR_DCHECK(coro->coro_gc == NULL || coro->coro_gc->gcstate == XGC_PAUSE,
               "recycle_local: GC not in PAUSE state");
-    
+
     // Add to Worker local free list (lock-free, only this Worker accesses)
     if (worker->p.local_free_count < XR_CORO_LOCAL_FREE_MAX) {
         coro->next = worker->p.local_free_list;
@@ -914,7 +914,7 @@ void xr_coro_recycle_local(XrWorker *worker, XrCoroutine *coro) {
 // Initialize scheduler
 void xr_sched_init(XrScheduler *sched) {
     if (!sched) return;
-    
+
     // Initialize multi-level priority queues
     for (int i = 0; i < XR_CORO_PRIORITY_COUNT; i++) {
         sched->ready_head[i] = NULL;
@@ -924,7 +924,7 @@ void xr_sched_init(XrScheduler *sched) {
     sched->coro_count = 0;
     sched->next_id = 1;
     sched->total_created = 0;
-    
+
     // Initialize scope
     sched->current_scope = NULL;
 
@@ -938,13 +938,13 @@ void xr_sched_init(XrScheduler *sched) {
 // Destroy scheduler
 void xr_sched_destroy(XrScheduler *sched) {
     if (!sched) return;
-    
+
     // Coroutines managed by GC, just clear list refs
     for (int i = 0; i < XR_CORO_PRIORITY_COUNT; i++) {
         sched->ready_head[i] = NULL;
         sched->ready_tail[i] = NULL;
     }
-    
+
     sched->current = NULL;
     sched->coro_count = 0;
 
@@ -959,16 +959,16 @@ void xr_sched_destroy(XrScheduler *sched) {
 // Add coroutine to ready queue tail (select queue by priority)
 void xr_sched_enqueue(XrScheduler *sched, XrCoroutine *coro) {
     if (!sched || !coro) return;
-    
+
     xr_coro_flags_clear(coro, XR_CORO_FLG_BLOCKED | XR_CORO_FLG_RUNNING);
     xr_coro_flags_set(coro, XR_CORO_FLG_READY);
     coro->next = NULL;
-    
+
     // Select queue by priority (from flags)
     int prio = xr_coro_get_priority(xr_coro_flags_load(coro));
     if (prio < 0) prio = 0;
     if (prio >= XR_CORO_PRIORITY_COUNT) prio = XR_CORO_PRIORITY_COUNT - 1;
-    
+
     if (sched->ready_tail[prio]) {
         sched->ready_tail[prio]->next = coro;
         sched->ready_tail[prio] = coro;
@@ -983,12 +983,12 @@ void xr_sched_enqueue(XrScheduler *sched, XrCoroutine *coro) {
 // Note: don't decrement coro_count, coroutine still active (just not in ready queue)
 void xr_sched_remove(XrScheduler *sched, XrCoroutine *target) {
     if (!sched || !target) return;
-    
+
     // Search all priority queues
     for (int prio = 0; prio < XR_CORO_PRIORITY_COUNT; prio++) {
         XrCoroutine *prev = NULL;
         XrCoroutine *coro = sched->ready_head[prio];
-        
+
         while (coro) {
             if (coro == target) {
                 // Found, remove from queue
@@ -1013,23 +1013,23 @@ void xr_sched_remove(XrScheduler *sched, XrCoroutine *target) {
 // Dequeue coroutine from ready queue (high to low priority)
 XrCoroutine *xr_sched_dequeue(XrScheduler *sched) {
     if (!sched) return NULL;
-    
+
     // Search from high to low priority
     for (int prio = XR_CORO_PRIORITY_COUNT - 1; prio >= 0; prio--) {
         if (sched->ready_head[prio]) {
             XrCoroutine *coro = sched->ready_head[prio];
             sched->ready_head[prio] = coro->next;
-            
+
             if (!sched->ready_head[prio]) {
                 sched->ready_tail[prio] = NULL;
             }
-            
+
             coro->next = NULL;
             sched->coro_count--;
             return coro;
         }
     }
-    
+
     return NULL;
 }
 
@@ -1045,49 +1045,49 @@ XrCoroutine *xr_sched_dequeue(XrScheduler *sched) {
 // 2. If no normal waiters, wake select waiters
 XrCoroutine *xr_runtime_wake_channel(XrayIsolate *X, void *channel, bool wake_sender) {
     if (!X || !channel) return NULL;
-    
+
     XrRuntime *runtime = (XrRuntime *)X->vm.runtime;
     if (!runtime) return NULL;
-    
+
     // traverse all Workers to find Channel (cross-Worker scenario)
     XrWorker *current = xr_current_worker();
-    
+
     // Step 1: try to wake normal waiters
     if (current) {
         XrCoroutine *coro = xr_worker_wake_one(current, channel, wake_sender);
         if (coro) return coro;
     }
-    
+
     for (int i = 0; i < runtime->worker_count; i++) {
         XrWorker *worker = &runtime->workers[i];
         if (worker == current) continue;
         XrCoroutine *coro = xr_worker_wake_one(worker, channel, wake_sender);
         if (coro) return coro;
     }
-    
+
     // Step 2: try to wake select waiters (event-driven)
     if (current) {
         XrCoroutine *coro = xr_worker_wake_select(current, channel);
         if (coro) return coro;
     }
-    
+
     for (int i = 0; i < runtime->worker_count; i++) {
         XrWorker *worker = &runtime->workers[i];
         if (worker == current) continue;
         XrCoroutine *coro = xr_worker_wake_select(worker, channel);
         if (coro) return coro;
     }
-    
+
     return NULL;
 }
 
 // Wake all coroutines waiting on Channel (for Channel close)
 void xr_runtime_wake_channel_all(XrayIsolate *X, void *channel) {
     if (!X || !channel) return;
-    
+
     XrRuntime *runtime = (XrRuntime *)X->vm.runtime;
     if (!runtime) return;
-    
+
     // traverse all Workers to wake
     for (int i = 0; i < runtime->worker_count; i++) {
         xr_worker_wake_all(&runtime->workers[i], channel);
@@ -1109,13 +1109,13 @@ static __attribute__((unused)) const char *format_coro_id(XrCoroutine *coro, cha
 // Print deadlock diagnosis info (simplified: blocked queue managed by Runtime)
 static __attribute__((unused)) void xr_sched_print_deadlock(XrScheduler *sched) {
     if (!sched) return;
-    
+
     int ready_count = 0;
     for (int prio = 0; prio < XR_CORO_PRIORITY_COUNT; prio++) {
         XrCoroutine *r = sched->ready_head[prio];
         while (r) { ready_count++; r = r->next; }
     }
-    
+
     fprintf(stderr, "\n");
     fprintf(stderr, "========================================\n");
     fprintf(stderr, "Coroutine Deadlock Detection Report\n");
@@ -1131,38 +1131,38 @@ static __attribute__((unused)) void xr_sched_print_deadlock(XrScheduler *sched) 
 void xr_gc_traverse_coroutine(XrGC *gc, XrGCHeader *obj) {
     XrCoroutine *coro = (XrCoroutine *)obj;
     if (!coro) return;
-    
+
     // Mark closure (only for CLOSURE entry type)
     if (coro->entry_type == XR_CORO_ENTRY_CLOSURE && coro->entry.closure) {
         xr_gc_mark_object(gc, (XrGCHeader *)coro->entry.closure);
     }
-    
+
     // Mark values in args array
     for (int i = 0; i < coro->arg_count; i++) {
         xr_gc_markvalue(gc, coro->args[i]);
     }
-    
+
     // Mark values in stack
     int stack_size = (int)(coro->vm_ctx.stack_top - coro->vm_ctx.stack);
     for (int i = 0; i < stack_size; i++) {
         xr_gc_markvalue(gc, coro->vm_ctx.stack[i]);
     }
-    
+
     // Mark closures in frames
     for (int i = 0; i < coro->vm_ctx.frame_count; i++) {
         if (coro->vm_ctx.frames[i].closure) {
             xr_gc_mark_object(gc, (XrGCHeader *)coro->vm_ctx.frames[i].closure);
         }
     }
-    
+
     // Mark result, error, and pending_closure_result
     xr_gc_markvalue(gc, coro->result);
     xr_gc_markvalue(gc, coro->error);
     xr_gc_markvalue(gc, coro->pending_closure_result);
-    
+
     // Mark send value
     xr_gc_markvalue(gc, coro->send_value);
-    
+
     // Mark task (GC-allocated via xr_alloc with XR_TTASK)
     if (coro->task) {
         xr_gc_mark_object(gc, (XrGCHeader *)coro->task);
@@ -1183,7 +1183,7 @@ void xr_gc_destroy_coroutine(XrGCHeader *obj, struct XrCoroGC *owning_gc) {
 // 3. Clear blocked state
 void xr_coro_cancel(XrCoroutine *coro) {
     if (!coro || xr_coro_flags_has(coro, XR_CORO_FLG_DONE)) return;
-    
+
     // Cancel timer if active (e.g. time.sleep)
     if (coro->ext && atomic_load_explicit(&coro->ext->timer_active, memory_order_relaxed)) {
         XrWorker *worker = xr_current_worker();
@@ -1193,11 +1193,11 @@ void xr_coro_cancel(XrCoroutine *coro) {
             atomic_store_explicit(&coro->ext->timer_active, false, memory_order_relaxed);
         }
     }
-    
+
     // Set cancelled and done flags
     xr_coro_flags_set(coro, XR_CORO_FLG_CANCELLED | XR_CORO_FLG_DONE);
     xr_coro_flags_clear(coro, XR_CORO_FLG_BLOCKED | XR_CORO_FLG_RUNNING | XR_CORO_FLG_READY);
-    
+
     // Clear blocked info
     coro->wait_channel = NULL;
     coro->result = xr_null();
@@ -1211,14 +1211,14 @@ void xr_coro_cancel(XrCoroutine *coro) {
 // fallback to runtime/sched globals for main thread.
 void xr_scope_add_coro(XrScheduler *sched, XrCoroutine *coro, XrCoroutine *parent) {
     if (!coro) return;
-    
+
     XrScopeContext *scope = NULL;
-    
+
     // Per-coroutine scope (preferred)
     if (parent) {
         scope = parent->current_scope;
     }
-    
+
     // Fallback: Runtime global (main thread)
     if (!scope) {
         XrWorker *worker = xr_current_worker();
@@ -1226,18 +1226,18 @@ void xr_scope_add_coro(XrScheduler *sched, XrCoroutine *coro, XrCoroutine *paren
             scope = worker->p.runtime->current_scope;
         }
     }
-    
+
     // Fallback: Scheduler global
     if (!scope && sched) {
         scope = sched->current_scope;
     }
-    
+
     if (!scope) return;  // Not in scope
-    
+
     // Record belonging scope (decrement count on complete)
     coro->parent_scope = scope;
     atomic_fetch_add(&scope->count, 1);
-    
+
     // Set waiter on task (scope wake coordination lives on Task)
     if (parent && coro->task) {
         atomic_fetch_add(&parent->wait_count, 1);
@@ -1258,12 +1258,12 @@ void xr_scope_add_coro(XrScheduler *sched, XrCoroutine *coro, XrCoroutine *paren
 // - Coroutines have independent stacks/frames, no global VM lock
 void xr_multicore_init(XrayIsolate *X, int num_workers) {
     if (!X) return;
-    
+
     XrRuntime *runtime = xr_runtime_create(X, num_workers);
     if (runtime) {
         X->vm.runtime = runtime;
         X->vm.multicore_enabled = true;
-        
+
         // Start Worker threads
         xr_runtime_start(runtime);
     }
@@ -1272,15 +1272,15 @@ void xr_multicore_init(XrayIsolate *X, int num_workers) {
 // Destroy multi-core runtime
 void xr_multicore_destroy(XrayIsolate *X) {
     if (!X || !X->vm.runtime) return;
-    
+
     XrRuntime *runtime = (XrRuntime *)X->vm.runtime;
-    
+
     // Stop Runtime (if started)
     xr_runtime_stop(runtime);
-    
+
     // Free resources
     xr_runtime_destroy(runtime);
-    
+
     X->vm.runtime = NULL;
     X->vm.multicore_enabled = false;
 }
@@ -1288,7 +1288,7 @@ void xr_multicore_destroy(XrayIsolate *X) {
 // xr_current_coro - Get current coroutine
 XrCoroutine *xr_current_coro(XrayIsolate *X) {
     if (!X) return NULL;
-    
+
     XrWorker *worker = xr_current_worker();
     if (worker && worker->m && worker->m->current_coro) {
         return worker->m->current_coro;
@@ -1303,7 +1303,7 @@ XrCoroutine *xr_current_coro(XrayIsolate *X) {
 // next=true puts into runnext for priority execution
 void xr_coro_ready(XrayIsolate *X, XrCoroutine *gp, bool next) {
     if (!X || !gp) return;
-    
+
     // CAS loop: atomically BLOCKED -> READY (prevents double-wake)
     uint32_t old_flags = xr_coro_flags_load(gp);
     for (;;) {
@@ -1317,10 +1317,10 @@ void xr_coro_ready(XrayIsolate *X, XrCoroutine *gp, bool next) {
         }
         // CAS failed, old_flags updated, retry
     }
-    
+
     XrRuntime *runtime = (XrRuntime *)X->vm.runtime;
     if (!runtime) return;
-    
+
     XrWorker *worker = xr_current_worker();
     if (worker && next) {
         // LIFO slot: woken coroutine runs immediately on current worker (DFS style)
@@ -1338,7 +1338,7 @@ void xr_coro_ready(XrayIsolate *X, XrCoroutine *gp, bool next) {
         }
         return;
     }
-    
+
     // Wake one idle worker
     xr_runtime_wake_idle_worker(runtime);
 }
@@ -1349,7 +1349,7 @@ void xr_coro_ready(XrayIsolate *X, XrCoroutine *gp, bool next) {
 // This function handles scope count decrement and delegates to xr_task_wake_waiter.
 void xr_coro_wake_waiter(XrayIsolate *X, XrCoroutine *coro) {
     if (!X || !coro) return;
-    
+
     // Decrement scope count (if created in scope)
     XrScopeContext *scope = coro->parent_scope;
     if (scope) {
@@ -1413,7 +1413,7 @@ void xr_coro_wake_waiter(XrayIsolate *X, XrCoroutine *coro) {
         atomic_fetch_sub(&scope->count, 1);
         coro->parent_scope = NULL;
     }
-    
+
     // Delegate to xr_task_wake_waiter (all go creates Task)
     if (coro->task) {
         xr_task_wake_waiter(X, coro->task);

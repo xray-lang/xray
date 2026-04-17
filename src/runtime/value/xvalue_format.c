@@ -189,7 +189,7 @@ void xr_value_to_strbuf(XrayIsolate *isolate, XrStrBuf *sb, XrValue val, int dep
         char *s = xr_bigint_to_string((XrBigInt *)gc);
         if (s) {
             xr_strbuf_append_cstr(sb, s, strlen(s));
-            free(s);
+            xr_free(s);
         } else {
             xr_strbuf_append_cstr(sb, "<BigInt>", 8);
         }

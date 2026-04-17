@@ -1268,16 +1268,16 @@ AstNode *xr_parse_assignment(Parser *parser, AstNode *left) {
     // Member assignment: obj.field = value
     else if (left->type == AST_MEMBER_ACCESS) {
         AstNode *object = left->as.member_access.object;
-        char *member = strdup(left->as.member_access.name);
+        char *member = xr_strdup(left->as.member_access.name);
 
         AstNode *value = xr_parse_expression(parser);
         AstNode *node = xr_ast_member_set(parser->X, object, member, value, line);
 
         // Don't free - arena handles it (member is strdup'd from arena string)
         if (!xr_isolate_get_current_arena(parser->X)) {
-            free(left->as.member_access.name);
+            xr_free(left->as.member_access.name);
             xr_free(left);
-            free(member);
+            xr_free(member);
         }
 
         return node;
@@ -1322,17 +1322,17 @@ AstNode *xr_parse_compound_assignment(Parser *parser, AstNode *left) {
 
     if (left->type == AST_VARIABLE) {
         // Variable compound assignment: x += 10
-        char *var_name = strdup(left->as.variable.name);
+        char *var_name = xr_strdup(left->as.variable.name);
         xr_ast_free(parser->X, left);
 
         AstNode *right = xr_parse_expression(parser);
         AstNode *compound_assignment = xr_ast_compound_assignment(parser->X, var_name, op_token, right, line);
-        free(var_name);
+        xr_free(var_name);
         return compound_assignment;
     } else if (left->type == AST_MEMBER_ACCESS) {
         // Member compound assignment: this.field += 10
         AstNode *object = left->as.member_access.object;
-        char *member_name = strdup(left->as.member_access.name);
+        char *member_name = xr_strdup(left->as.member_access.name);
 
         left->as.member_access.object = NULL;  // Prevent freeing
         xr_ast_free(parser->X, left);
@@ -1340,7 +1340,7 @@ AstNode *xr_parse_compound_assignment(Parser *parser, AstNode *left) {
         AstNode *right = xr_parse_expression(parser);
         AstNode *compound_assignment = xr_ast_member_compound_assignment(
             parser->X, object, member_name, op_token, right, line);
-        free(member_name);
+        xr_free(member_name);
         return compound_assignment;
     } else {
         xr_parser_error(parser, "compound assignment only for variables or member access");
@@ -1405,7 +1405,7 @@ AstNode *xr_parse_postfix_inc_dec(Parser *parser, AstNode *left) {
         return NULL;
     }
 
-    char *var_name = strdup(left->as.variable.name);
+    char *var_name = xr_strdup(left->as.variable.name);
     xr_ast_free(parser->X, left);
 
     AstNode *node;
@@ -1415,7 +1415,7 @@ AstNode *xr_parse_postfix_inc_dec(Parser *parser, AstNode *left) {
         node = xr_ast_dec(parser->X, var_name, line);
     }
 
-    free(var_name);
+    xr_free(var_name);
     return node;
 }
 

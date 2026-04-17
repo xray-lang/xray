@@ -26,6 +26,7 @@
  */
 
 #include "xcgen.h"
+#include "../base/xmalloc.h"
 #include "../base/xchecks.h"
 #include "../runtime/value/xchunk.h"
 #include "../runtime/value/xtype.h"
@@ -62,12 +63,14 @@ static void load_call_args_from_pool(XirFunc *func, XirIns *ins, XcgenFunc *cf) 
     if (vi >= func->nvreg) return;
     XirVReg *vreg = &func->vregs[vi];
     if (vreg->call_nargs == 0) return;
-    // Ensure capacity
+    // Ensure capacity (aborts on OOM — consistent with the xr_malloc /
+    // xr_free pair that owns cf->call_args elsewhere in xcgen).
     int needed = (int)vreg->call_nargs;
     if (needed > cf->call_args_cap) {
         int new_cap = cf->call_args_cap;
         while (new_cap < needed) new_cap *= 2;
-        cf->call_args = (XirRef *)realloc(cf->call_args, new_cap * sizeof(XirRef));
+        XR_REALLOC_OR_ABORT(cf->call_args, new_cap * sizeof(XirRef),
+                            "xcgen cf->call_args");
         for (int k = cf->call_args_cap; k < new_cap; k++)
             cf->call_args[k] = XIR_NONE;
         cf->call_args_cap = new_cap;

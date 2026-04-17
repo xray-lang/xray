@@ -16,6 +16,7 @@
 
 #include "xir_builder_internal.h"
 #include "../base/xchecks.h"
+#include "../base/xmalloc.h"
 #include "../runtime/value/xstruct_layout.h"
 
 /*
@@ -56,8 +57,9 @@ static XirRef builder_emit_cps_suspend(
                     ? suspend_blk->id : cont_blk->id;
     if (max_id >= b->block_defs_size) {
         uint32_t new_size = max_id + 8;
-        b->block_defs = (BraunBlockDef *)realloc(b->block_defs,
-            new_size * sizeof(BraunBlockDef));
+        XR_REALLOC_OR_ABORT(b->block_defs,
+                            new_size * sizeof(BraunBlockDef),
+                            "xir_builder_misc block_defs grow");
         memset(&b->block_defs[b->block_defs_size], 0,
             (new_size - b->block_defs_size) * sizeof(BraunBlockDef));
         b->block_defs_size = new_size;
