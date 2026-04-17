@@ -21,8 +21,10 @@
 #define XANALYZER_SYMBOL_H
 
 #include "../../runtime/value/xtype.h"
+#include "../../runtime/class/xclass_info.h"
 #include "../../base/xdefs.h"
 #include "../../base/xhashmap.h"
+#include "../../base/xlocation.h"
 
 // Symbol kinds
 typedef enum XaSymbolKind {
@@ -61,16 +63,7 @@ typedef enum XaJitCertainty {
     XA_JIT_PROVEN = 3,      // Proven invariant (e.g. const literal), no guard needed
 } XaJitCertainty;
 
-// Source location
-typedef struct XrLocation {
-    const char *file;       // File path
-    uint32_t line;          // 1-indexed line number
-    uint32_t column;        // 1-indexed column number
-    uint32_t end_line;      // End line (for ranges)
-    uint32_t end_column;    // End column
-} XrLocation;
-
-// Forward declarations
+// Forward declarations (XrLocation/XrClassInfo/XaMethodSlot live in base/runtime layers)
 typedef struct XaSymbol XaSymbol;
 typedef struct XaScope XaScope;
 typedef struct XaSymbolLinks XaSymbolLinks;
@@ -90,54 +83,54 @@ struct XaSymbolLinks {
     XrType *type;               // Computed type (NULL = not computed)
     XrType *declared_type;      // Explicitly declared type (from annotation)
     bool type_computed;         // Has type computation been attempted
-    
+
     // Definite assignment tracking
     bool is_definitely_assigned; // true if variable has been assigned a value
-    
+
     // Move state for shared let variables (Move semantics)
     XaMoveState move_state;     // Current ownership state
     uint32_t moved_line;        // Line where variable was moved (for error message)
     uint32_t moved_column;      // Column where variable was moved
-    
+
     // For functions
     XrType **param_types;
     const char **param_names;   // Parameter names (for inlay hints)
     int param_count;
     XrType *return_type;
     bool return_type_inferred;
-    
+
     // Call-site inferred parameter types (for unannotated params)
     // Populated by xa_visit_call when callee has unannotated parameters.
     // NULL entry = not yet observed; non-NULL = inferred type from call-site.
     // If two call sites provide incompatible types, entry is set to 'any' (conflict).
     XrType **inferred_param_types;
     int inferred_param_count;
-    
+
     // For generic functions/classes
     const char **type_param_names;   // Type parameter names (e.g., "T", "U")
     XrType **type_param_constraints; // Constraints (e.g., Comparable), NULL if none
     int type_param_count;
-    
+
     // For classes
     struct XrClassInfo *class_info;
-    
+
     // For enum symbols (XA_SYM_ENUM)
     const char **enum_member_names;  // Enum member names (for exhaustiveness checking)
     int enum_member_count;
-    
+
     // For module symbols (XA_SYM_MODULE)
     const char *module_name;    // Actual module name (may differ from variable name due to alias)
-    
+
     // File ownership (for multi-file support)
     const char *file_path;      // File where this symbol is defined
-    
+
     // JIT/AOT metadata
     XaTypeStability type_stability;  // How stable is this variable's type
     XaJitCertainty jit_certainty;    // How confident is the type info
     int assign_count;                // Number of assignments (for stability)
     bool is_const_foldable;          // const with literal init, can inline
     bool is_loop_variable;           // Defined/mutated inside a loop
-    
+
     // Reference tracking (for LSP Find References)
     XaRefLocation *references;  // List of usage locations
     int ref_count;
@@ -149,7 +142,7 @@ struct XaSymbol {
     XaSymbolKind kind;          // Symbol kind
     uint32_t id;                // Unique ID (for symbol registry / LSP)
     XrLocation location;        // Definition location
-    
+
     // Modifiers
     bool is_const;              // const declaration
     bool is_exported;           // export modifier
@@ -158,14 +151,14 @@ struct XaSymbol {
     bool is_shared;             // shared variable
     bool is_builtin;            // built-in type member (Array.push, etc.)
     uint8_t passing_mode;       // XR_PARAM_VALUE / XR_PARAM_IN / XR_PARAM_REF (for parameters)
-    
+
     // Parent references
     XaScope *scope;             // Containing scope
     XaSymbol *parent;           // Parent symbol (for methods/fields)
-    
+
     // For type aliases: direct type storage (avoids analyzer dependency)
     void *alias_type;           // XrType* for type aliases
-    
+
     // Inline type information (replaces separate XaSymbolLinks + intmap lookup)
     XaSymbolLinks links;
 };
@@ -186,70 +179,22 @@ struct XaScope {
     XaScope **children;         // Child scopes
     int child_count;
     int child_capacity;
-    
+
     // Symbols in this scope (hash map: name -> XaSymbol*)
     void *symbols;              // XrHashMap internally
-    
+
     // For function scopes
     XaSymbol *function_symbol;  // The function this scope belongs to
-    
+
     // For class scopes
     XaSymbol *class_symbol;     // The class this scope belongs to
-    
+
     // AST node association (for LSP rename, go-to-definition, etc.)
     void *ast_node;             // AstNode* that created this scope
 };
 
-// Virtual method slot for JIT devirtualization
-typedef struct XaMethodSlot {
-    const char *name;           // Method name
-    XaSymbol *symbol;           // Method symbol
-    bool is_overridden;         // Overridden by a subclass
-    bool is_final;              // No subclass overrides (safe for direct call)
-    int vtable_index;           // Slot index in vtable (-1 if not virtual)
-} XaMethodSlot;
-
-// Class information
-struct XrClassInfo {
-    const char *name;
-    const char *base_name;      // Base class name (for deferred linking)
-    XrClassInfo *base;          // Base class (NULL if none, linked after collect)
-    
-    XaScope *scope;             // Class body scope
-    
-    // Members (computed from scope)
-    XaSymbol **fields;
-    int field_count;
-    XaSymbol **methods;
-    int method_count;
-    XaSymbol **static_fields;
-    int static_field_count;
-    XaSymbol **static_methods;
-    int static_method_count;
-    
-    // O(1) member lookup (name -> XaSymbol*, own members only; inherited via base chain)
-    XrHashMap *members_map;
-    
-    // Constructor info (set during class collection)
-    bool has_constructor;               // true if class explicitly defines a constructor
-    int constructor_required_params;    // number of params without default values
-    XrType **constructor_params;
-    int constructor_param_count;
-    
-    // Virtual method table (built in Pass 1.5 for JIT devirtualization)
-    XaMethodSlot *vtable;       // Virtual method slots (NULL if not built)
-    int vtable_size;            // Number of vtable entries
-    bool has_subclass;          // true if any class extends this one
-    
-    // Struct layout (VALUE_TYPE only, computed by analyzer)
-    struct XrStructLayout *struct_layout;  // NULL for class, set for struct
-    
-    // Implemented interfaces (populated from 'implements' clause)
-    const char **interface_names;
-    int interface_count;
-    
-    XrLocation location;
-};
+// XrClassInfo and XaMethodSlot are defined in runtime/class/xclass_info.h
+// (included above). Their APIs remain in this header.
 
 // API: Set symbol ID counter (called by XaAnalyzer before analysis)
 // This eliminates global state - each analyzer has its own counter
@@ -292,7 +237,7 @@ XR_FUNC XaSymbol *xa_class_info_lookup_member(XrClassInfo *info, const char *nam
 
 // API: Function signature helpers (integrated into XaSymbolLinks)
 XR_FUNC void xa_symbol_links_set_function_sig(XaSymbolLinks *links, XrType **param_types,
-                                       const char **param_names, int param_count, 
+                                       const char **param_names, int param_count,
                                        XrType *return_type);
 XR_FUNC XrType *xa_symbol_links_get_return_type(XaSymbolLinks *links);
 XR_FUNC XrType **xa_symbol_links_get_param_types(XaSymbolLinks *links, int *count);
@@ -300,7 +245,7 @@ XR_FUNC const char **xa_symbol_links_get_param_names(XaSymbolLinks *links, int *
 XR_FUNC bool xa_symbol_is_function(XaSymbol *symbol);
 
 // API: Generic type parameters
-XR_FUNC void xa_symbol_links_set_type_params(XaSymbolLinks *links, 
+XR_FUNC void xa_symbol_links_set_type_params(XaSymbolLinks *links,
                                       const char **names, XrType **constraints, int count);
 XR_FUNC int xa_symbol_links_get_type_param_count(XaSymbolLinks *links);
 XR_FUNC const char *xa_symbol_links_get_type_param_name(XaSymbolLinks *links, int index);

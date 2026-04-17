@@ -15,8 +15,8 @@
 
 #include "xdap_debug.h"
 #include "../../runtime/xisolate_api.h"
-#include "../../vm/xvm_state.h"
-#include "../../vm/xvm_state_frame.h"
+#include "../../runtime/xexec_state.h"
+#include "../../runtime/xexec_frame.h"
 #include "../../runtime/value/xvalue.h"
 #include "../../runtime/value/xchunk.h"
 #include "../../runtime/object/xstring.h"

@@ -14,7 +14,7 @@
 #include "xcoroutine.h"
 #include "../base/xchecks.h"
 #include "xworker.h"
-#include "../vm/xvm_state.h"
+#include "xexec_state.h"
 #include "xproc.h"
 #include "../runtime/xisolate_api.h"
 #include <stdio.h>

@@ -30,7 +30,7 @@
 #include <stdatomic.h>
 #include <stdbool.h>
 #include <stdint.h>
-#include "../vm/xvm_state_frame.h"
+#include "xexec_frame.h"
 #include "../runtime/xvm_call.h"
 #include "../base/xplatform.h"
 

@@ -124,7 +124,7 @@ XR_FUNC void xr_coro_pool_print_stats(XrCoroStructPool *pool);
  * Eliminates repeated slab setup code across xcoro_pool.c and xworker.c.
  */
 #include "xcoroutine.h"
-#include "../vm/xvm_state_frame.h"
+#include "xexec_frame.h"
 static inline void xr_coro_init_from_slab(struct XrCoroutine *coro,
                                            XrCoroPoolBlock *block,
                                            uint32_t local_idx) {

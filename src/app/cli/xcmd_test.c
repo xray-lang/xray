@@ -29,7 +29,7 @@
 #include "xray_isolate.h"
 #include "../../api/xtest_runner.h"
 #include "../../runtime/xisolate_api.h"
-#include "../../vm/xvm_state.h"
+#include "../../runtime/xexec_state.h"
 #include "../../module/xmodule.h"
 #include "../../vm/xvm_internal.h"
 #include "../../coro/xcoroutine.h"
@@ -130,7 +130,7 @@ static XrClosure *find_closure_for_proto(XrayIsolate *X, XrProto *target_proto) 
 static XrClosure *get_test_closure(XrayIsolate *X, XrProto *proto) {
     XrClosure *closure = find_closure_for_proto(X, proto);
     if (!closure)
-        closure = xr_vm_closure_new(X, proto, xr_isolate_get_main_coro(X));
+        closure = xr_closure_new(X, proto, xr_isolate_get_main_coro(X));
     return closure;
 }
 

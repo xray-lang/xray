@@ -49,7 +49,7 @@ static inline XrCoroutine* xr_test_init_coro(XrayIsolate *X) {
     proto->source_file = "<test>";
     
     // Create closure from proto
-    XrClosure *closure = xr_vm_closure_new(X, proto, NULL);
+    XrClosure *closure = xr_closure_new(X, proto, NULL);
     if (!closure) {
         xr_dynarray_free(&proto->code);
         xr_free(proto);

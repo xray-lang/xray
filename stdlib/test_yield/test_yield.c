@@ -28,7 +28,7 @@
 #include "../../src/coro/xyieldable.h"
 #include "../../src/coro/xcoroutine.h"
 #include "../../src/module/xmodule.h"
-#include "../../src/vm/xvm_state_frame.h"
+#include "../../src/runtime/xexec_frame.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>

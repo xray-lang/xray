@@ -21,7 +21,7 @@
 #include "../../src/runtime/object/xmap.h"
 #include "../../src/runtime/object/xstring.h"
 #include "../../src/runtime/value/xvalue.h"
-#include "../../src/vm/xvm_state_frame.h"
+#include "../../src/runtime/xexec_frame.h"
 #include "../../src/coro/xcoroutine.h"
 #include "../../src/runtime/xisolate_api.h"
 #include "../../src/runtime/gc/xalloc_unified.h"

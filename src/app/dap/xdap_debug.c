@@ -13,10 +13,10 @@
 #include "xdap_debug.h"
 #include "../../runtime/xisolate_api.h"
 #include "../../runtime/xisolate_internal.h"
-#include "../../vm/xvm_state.h"
+#include "../../runtime/xexec_state.h"
 #include "../../base/xhash.h"
 #include "../../runtime/xray_debug_hooks.h"
-#include "../../vm/xvm_state_frame.h"
+#include "../../runtime/xexec_frame.h"
 #include "../../runtime/value/xvalue.h"
 #include "../../runtime/value/xchunk.h"
 #include "../../runtime/value/xtype_names.h"
@@ -1622,7 +1622,7 @@ bool xr_debug_hot_reload(XrayIsolate *isolate, const char *path) {
 static char *format_instruction(XrProto *proto, int offset) {
     XrInstruction inst = PROTO_CODE(proto, offset);
     OpCode op = GET_OPCODE(inst);
-    const char *name = xr_debug_opcode_name(op);
+    const char *name = xr_opcode_name(op);
     
     char buf[256];
     uint8_t a = GETARG_A(inst);

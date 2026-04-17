@@ -24,7 +24,7 @@
 #include "xcoroutine.h"
 #include "xworker.h"
 #include "../base/xchecks.h"
-#include "../vm/xvm_state_frame.h"
+#include "xexec_frame.h"
 #include "../runtime/value/xchunk.h"
 #include "../runtime/gc/xcoro_gc.h"
 #include "../runtime/xisolate_internal.h"

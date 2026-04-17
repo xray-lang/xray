@@ -18,7 +18,7 @@
 #include "xray_isolate.h"
 #include "../base/xmalloc.h"
 #include "../runtime/xisolate_api.h"
-#include "../vm/xvm_state.h"
+#include "xexec_state.h"
 #include "../runtime/value/xchunk.h"
 #include "../runtime/value/xslot_type.h"
 #include "../runtime/value/xtype.h"

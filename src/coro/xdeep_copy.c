@@ -23,7 +23,7 @@
 #include "../runtime/class/xinstance.h"
 #include "xcoroutine.h"
 #include "../runtime/xisolate_api.h"
-#include "../vm/xcontext.h"
+#include "../runtime/closure/xcell.h"
 #include "../base/xmalloc.h"
 #include <stdlib.h>
 #include <string.h>
