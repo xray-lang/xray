@@ -248,6 +248,10 @@ void xr_vm_proto_free(XrProto *proto) {
 int xr_proto_add_symbol(XrProto *proto, int32_t global_symbol) {
     XR_DCHECK(proto != NULL, "proto_add_symbol: NULL proto");
     XR_DCHECK(global_symbol >= 0, "proto_add_symbol: negative symbol id");
+    XR_DCHECK(proto->symbol_count >= 0, "proto_add_symbol: negative count");
+    XR_DCHECK(proto->symbol_capacity >= 0, "proto_add_symbol: negative capacity");
+    XR_DCHECK(proto->symbol_count <= proto->symbol_capacity,
+              "proto_add_symbol: count > capacity");
     // Dedup: check if already registered
     for (int i = 0; i < proto->symbol_count; i++) {
         if (proto->symbols[i] == global_symbol) {
@@ -302,6 +306,12 @@ int xr_vm_proto_add_constant(XrProto *proto, XrValue value) {
 // Returns constant index
 int xr_proto_add_raw_constant(XrProto *proto, uint64_t value) {
     XR_DCHECK(proto != NULL, "proto_add_raw_constant: NULL proto");
+    XR_DCHECK(proto->raw_constant_count >= 0,
+              "proto_add_raw_constant: negative count");
+    XR_DCHECK(proto->raw_constant_capacity >= 0,
+              "proto_add_raw_constant: negative capacity");
+    XR_DCHECK(proto->raw_constant_count <= proto->raw_constant_capacity,
+              "proto_add_raw_constant: count > capacity");
     // Dedup check
     for (int i = 0; i < proto->raw_constant_count; i++) {
         if (proto->raw_constants[i] == value) return i;
