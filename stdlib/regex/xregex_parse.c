@@ -73,7 +73,7 @@ static void ast_cc_add_range(XrArena *arena, XrAstNode *node, uint8_t lo, uint8_
         XrCharRange *new_ranges = (XrCharRange*)xr_arena_alloc(
             arena, new_cap * sizeof(XrCharRange));
         if (node->cc.ranges) {
-            memcpy(new_ranges, node->cc.ranges, 
+            memcpy(new_ranges, node->cc.ranges,
                    node->cc.count * sizeof(XrCharRange));
         }
         node->cc.ranges = new_ranges;
@@ -208,8 +208,9 @@ static void parser_error(XrParser *p, XrRegexError code, const char *msg) {
 static void parser_add_capture_name(XrParser *p, int index, const char *name) {
     if (p->names_count >= p->names_cap) {
         int new_cap = p->names_cap ? p->names_cap * 2 : 8;
-        p->capture_names = (char**)xr_re_realloc(
-            p->capture_names, new_cap * sizeof(char*));
+        XR_REALLOC_OR_ABORT(p->capture_names,
+                            (size_t)new_cap * sizeof(char*),
+                            "regex capture_names grow");
         // Initialize newly allocated space to NULL
         for (int i = p->names_cap; i < new_cap; i++) {
             p->capture_names[i] = NULL;
@@ -242,11 +243,11 @@ static XrAstNode* parse_escape(XrParser *p) {
         parser_error(p, XR_RE_ERR_INVALID_ESCAPE, "trailing backslash");
         return NULL;
     }
-    
+
     XrArena *arena = &p->ast_arena;
     char c = peek(p);
     advance(p);
-    
+
     switch (c) {
         // Simple escapes
         case 'n': return ast_literal_char(arena, '\n');
@@ -256,7 +257,7 @@ static XrAstNode* parse_escape(XrParser *p) {
         case 'v': return ast_literal_char(arena, '\v');
         case 'a': return ast_literal_char(arena, '\a');
         case '0': return ast_literal_char(arena, '\0');
-        
+
         // Metacharacter escapes
         case '\\':
         case '.':
@@ -273,7 +274,7 @@ static XrAstNode* parse_escape(XrParser *p) {
         case '^':
         case '$':
             return ast_literal_char(arena, c);
-        
+
         // Predefined character classes
         case 'd': {
             XrAstNode *cc = ast_char_class(arena);
@@ -324,13 +325,13 @@ static XrAstNode* parse_escape(XrParser *p) {
             ast_cc_add_range(arena, cc, '\v', '\v');
             return cc;
         }
-        
+
         // Assertions
         case 'A': return ast_empty_match(arena, XR_EMPTY_BEGIN_TEXT);
         case 'z': return ast_empty_match(arena, XR_EMPTY_END_TEXT);
         case 'b': return ast_empty_match(arena, XR_EMPTY_WORD_BOUNDARY);
         case 'B': return ast_empty_match(arena, XR_EMPTY_NOT_WORD_BOUND);
-        
+
         // Hexadecimal \xNN
         case 'x': {
             int h1 = hex_digit(peek(p));
@@ -347,54 +348,54 @@ static XrAstNode* parse_escape(XrParser *p) {
             advance(p);
             return ast_literal_char(arena, (char)((h1 << 4) | h2));
         }
-        
+
         // Unicode property \p{...} and \P{...}
         case 'p':
         case 'P': {
             bool negated = (c == 'P');
-            
+
             if (peek(p) != '{') {
                 parser_error(p, XR_RE_ERR_INVALID_ESCAPE, "\\p or \\P must be followed by {");
                 return NULL;
             }
             advance(p);  // skip '{'
-            
+
             // Record property name start position
             const char *name_start = p->p;
             int name_len = 0;
-            
+
             // Read property name until '}'
             while (!at_end(p) && peek(p) != '}') {
                 advance(p);
                 name_len++;
             }
-            
+
             if (at_end(p) || peek(p) != '}') {
                 parser_error(p, XR_RE_ERR_INVALID_ESCAPE, "unclosed \\p{...}");
                 return NULL;
             }
             advance(p);  // skip '}'
-            
+
             if (name_len == 0) {
                 parser_error(p, XR_RE_ERR_INVALID_ESCAPE, "empty property name in \\p{}");
                 return NULL;
             }
-            
+
             // Lookup Unicode property
             XrUnicodeProperty prop = xr_unicode_property_lookup(name_start, name_len);
             if (prop == XR_UP_INVALID) {
                 parser_error(p, XR_RE_ERR_INVALID_ESCAPE, "unknown Unicode property");
                 return NULL;
             }
-            
+
             // Create character class node, set Unicode property
             XrAstNode *cc = ast_char_class(arena);
             cc->cc.negated = negated;
             ast_cc_set_unicode_prop(cc, (uint32_t)prop);
-            
+
             return cc;
         }
-        
+
         default:
             parser_error(p, XR_RE_ERR_INVALID_ESCAPE, "invalid escape sequence");
             return NULL;
@@ -409,10 +410,10 @@ static XrAstNode* parse_escape(XrParser *p) {
 // Return character value, -1 for error
 static int parse_cc_char(XrParser *p) {
     if (at_end(p)) return -1;
-    
+
     char c = peek(p);
     advance(p);
-    
+
     if (c == '\\') {
         if (at_end(p)) {
             parser_error(p, XR_RE_ERR_INVALID_ESCAPE, "trailing backslash in char class");
@@ -444,7 +445,7 @@ static int parse_cc_char(XrParser *p) {
                 return e;
         }
     }
-    
+
     return (unsigned char)c;
 }
 
@@ -452,25 +453,25 @@ static int parse_cc_char(XrParser *p) {
 static XrAstNode* parse_char_class(XrParser *p) {
     XrArena *arena = &p->ast_arena;
     XrAstNode *cc = ast_char_class(arena);
-    
+
     // Negated?
     if (match(p, '^')) {
         cc->cc.negated = true;
     }
-    
+
     // Special case: ] at beginning is literal
     if (peek(p) == ']') {
         ast_cc_add_range(arena, cc, ']', ']');
         advance(p);
     }
-    
+
     while (!at_end(p) && peek(p) != ']') {
         int c1 = parse_cc_char(p);
         if (c1 < 0) {
             xr_regex_ast_free(cc);
             return NULL;
         }
-        
+
         // Check if it's a range a-z
         if (peek(p) == '-' && peek_next(p) != ']') {
             advance(p);  // skip '-'
@@ -489,13 +490,13 @@ static XrAstNode* parse_char_class(XrParser *p) {
             ast_cc_add_range(arena, cc, (uint8_t)c1, (uint8_t)c1);
         }
     }
-    
+
     if (!match(p, ']')) {
         parser_error(p, XR_RE_ERR_UNMATCHED_BRACKET, "unclosed character class");
         xr_regex_ast_free(cc);
         return NULL;
     }
-    
+
     return cc;
 }
 
@@ -521,7 +522,7 @@ static int parse_number(XrParser *p) {
 static bool parse_repeat_range(XrParser *p, int *min, int *max) {
     *min = parse_number(p);
     if (*min < 0) return false;
-    
+
     if (match(p, ',')) {
         if (peek(p) == '}') {
             *max = -1;  // {n,}
@@ -536,12 +537,12 @@ static bool parse_repeat_range(XrParser *p, int *min, int *max) {
     } else {
         *max = *min;  // {n}
     }
-    
+
     if (!match(p, '}')) {
         parser_error(p, XR_RE_ERR_SYNTAX, "expected '}'");
         return false;
     }
-    
+
     return true;
 }
 
@@ -556,7 +557,7 @@ static XrAstNode* parse_group(XrParser *p) {
     bool capturing = true;
     char *name = NULL;
     XrRegexFlags saved_flags = p->flags;
-    
+
     if (match(p, '?')) {
         // Check inline flags (?i), (?m), (?s), (?ims) etc.
         bool has_flags = false;
@@ -582,7 +583,7 @@ static XrAstNode* parse_group(XrParser *p) {
                 break;
             }
         }
-        
+
         if (has_flags) {
             if (match(p, ')')) {
                 // Only set flags (?i) - permanently affects following content
@@ -638,14 +639,14 @@ static XrAstNode* parse_group(XrParser *p) {
             return NULL;
         }
     }
-    
+
     // Parse group content
     XrAstNode *expr = parse_expr(p);
     if (!expr) {
         xr_re_free(name);
         return NULL;
     }
-    
+
     if (!match(p, ')')) {
         parser_error(p, XR_RE_ERR_UNMATCHED_PAREN, "unclosed group");
         xr_regex_ast_free(expr);
@@ -653,10 +654,10 @@ static XrAstNode* parse_group(XrParser *p) {
         p->flags = saved_flags;
         return NULL;
     }
-    
+
     // Restore flags (scope limited to group)
     p->flags = saved_flags;
-    
+
     if (capturing) {
         int index = p->capture_index++;
         const char *cap_name = NULL;
@@ -668,7 +669,7 @@ static XrAstNode* parse_group(XrParser *p) {
         }
         return ast_capture(&p->ast_arena, expr, index, cap_name);
     }
-    
+
     xr_re_free(name);
     return expr;
 }
@@ -676,23 +677,23 @@ static XrAstNode* parse_group(XrParser *p) {
 // Parse atom (single matching unit)
 static XrAstNode* parse_atom(XrParser *p) {
     if (at_end(p)) return NULL;
-    
+
     char c = peek(p);
-    
+
     switch (c) {
         case '(':
             advance(p);
             return parse_group(p);
-            
+
         case '[':
             advance(p);
             return parse_char_class(p);
-            
+
         case '.': {
             advance(p);
             return ast_any(&p->ast_arena, (p->flags & XR_RE_DOTALL) != 0);
         }
-            
+
         case '^': {
             advance(p);
             XrArena *a = &p->ast_arena;
@@ -701,7 +702,7 @@ static XrAstNode* parse_atom(XrParser *p) {
             }
             return ast_empty_match(a, XR_EMPTY_BEGIN_TEXT);
         }
-            
+
         case '$': {
             advance(p);
             XrArena *a = &p->ast_arena;
@@ -710,11 +711,11 @@ static XrAstNode* parse_atom(XrParser *p) {
             }
             return ast_empty_match(a, XR_EMPTY_END_TEXT);
         }
-            
+
         case '\\':
             advance(p);
             return parse_escape(p);
-            
+
         // These characters are invalid at atom position
         case '|':
         case ')':
@@ -723,7 +724,7 @@ static XrAstNode* parse_atom(XrParser *p) {
         case '?':
         case '{':
             return NULL;
-            
+
         default:
             // Literal character
             advance(p);
@@ -735,11 +736,11 @@ static XrAstNode* parse_atom(XrParser *p) {
 static XrAstNode* parse_quantified(XrParser *p) {
     XrAstNode *atom = parse_atom(p);
     if (!atom) return NULL;
-    
+
     // Check quantifier
     int min = 1, max = 1;
     bool has_quantifier = false;
-    
+
     switch (peek(p)) {
         case '*':
             advance(p);
@@ -765,20 +766,20 @@ static XrAstNode* parse_quantified(XrParser *p) {
             has_quantifier = true;
             break;
     }
-    
+
     if (!has_quantifier) return atom;
-    
+
     // Check non-greedy modifier
     bool greedy = true;
     if (match(p, '?')) {
         greedy = false;
     }
-    
+
     // If global setting is non-greedy, invert
     if (p->flags & XR_RE_UNGREEDY) {
         greedy = !greedy;
     }
-    
+
     return ast_repeat(&p->ast_arena, atom, min, max, greedy);
 }
 
@@ -786,7 +787,7 @@ static XrAstNode* parse_quantified(XrParser *p) {
 static XrAstNode* parse_concat(XrParser *p) {
     XrArena *arena = &p->ast_arena;
     XrAstNode *concat = ast_concat(arena);
-    
+
     while (!at_end(p) && peek(p) != '|' && peek(p) != ')') {
         XrAstNode *item = parse_quantified(p);
         if (!item) {
@@ -798,7 +799,7 @@ static XrAstNode* parse_concat(XrParser *p) {
         }
         ast_list_add(arena, concat, item);
     }
-    
+
     // Simplify: if only one child, return child itself
     if (concat->list.count == 0) {
         xr_regex_ast_free(concat);
@@ -811,7 +812,7 @@ static XrAstNode* parse_concat(XrParser *p) {
         xr_regex_ast_free(concat);
         return child;
     }
-    
+
     return concat;
 }
 
@@ -819,13 +820,13 @@ static XrAstNode* parse_concat(XrParser *p) {
 static XrAstNode* parse_expr(XrParser *p) {
     XrAstNode *left = parse_concat(p);
     if (!left) return NULL;
-    
+
     if (peek(p) != '|') return left;
-    
+
     XrArena *arena = &p->ast_arena;
     XrAstNode *alt = ast_alt(arena);
     ast_list_add(arena, alt, left);
-    
+
     while (match(p, '|')) {
         XrAstNode *right = parse_concat(p);
         if (!right) {
@@ -839,7 +840,7 @@ static XrAstNode* parse_expr(XrParser *p) {
         }
         ast_list_add(arena, alt, right);
     }
-    
+
     // Simplify: if only one branch
     if (alt->list.count == 1) {
         XrAstNode *child = alt->list.children[0];
@@ -848,7 +849,7 @@ static XrAstNode* parse_expr(XrParser *p) {
         xr_regex_ast_free(alt);
         return child;
     }
-    
+
     return alt;
 }
 
@@ -867,22 +868,22 @@ XrAstNode* xr_regex_parse(const char *pattern, XrRegexFlags flags, XrParser *par
     parser->names_count = 0;
     parser->names_cap = 0;
     parser->error = XR_RE_OK;
-    
+
     // Initialize AST Arena (4KB is enough for most regexes)
     xr_arena_init(&parser->ast_arena, 4096);
-    
+
     XrAstNode *ast = parse_expr(parser);
-    
+
     if (!ast && parser->error == XR_RE_OK) {
         // Empty pattern
         ast = ast_new(&parser->ast_arena, XR_AST_EMPTY);
     }
-    
+
     if (ast && !at_end(parser)) {
         parser_error(parser, XR_RE_ERR_SYNTAX, "unexpected character");
         ast = NULL;
     }
-    
+
     return ast;
 }
 
@@ -900,18 +901,18 @@ void xr_regex_ast_dump(XrAstNode *node, int indent) {
         printf("(null)\n");
         return;
     }
-    
+
     print_indent(indent);
-    
+
     switch (node->type) {
         case XR_AST_EMPTY:
             printf("EMPTY\n");
             break;
-            
+
         case XR_AST_LITERAL:
             printf("LITERAL \"%.*s\"\n", node->literal.len, node->literal.str);
             break;
-            
+
         case XR_AST_CHAR_CLASS:
             printf("CHAR_CLASS%s [", node->cc.negated ? " (negated)" : "");
             for (int i = 0; i < node->cc.count; i++) {
@@ -924,33 +925,33 @@ void xr_regex_ast_dump(XrAstNode *node, int indent) {
             }
             printf("]\n");
             break;
-            
+
         case XR_AST_ANY:
             printf("ANY%s\n", node->any_dotall ? " (dotall)" : "");
             break;
-            
+
         case XR_AST_CONCAT:
             printf("CONCAT\n");
             for (int i = 0; i < node->list.count; i++) {
                 xr_regex_ast_dump(node->list.children[i], indent + 1);
             }
             break;
-            
+
         case XR_AST_ALT:
             printf("ALT\n");
             for (int i = 0; i < node->list.count; i++) {
                 xr_regex_ast_dump(node->list.children[i], indent + 1);
             }
             break;
-            
+
         case XR_AST_REPEAT:
-            printf("REPEAT {%d,%d} %s\n", 
+            printf("REPEAT {%d,%d} %s\n",
                    node->repeat.min,
                    node->repeat.max,
                    node->repeat.greedy ? "greedy" : "lazy");
             xr_regex_ast_dump(node->repeat.child, indent + 1);
             break;
-            
+
         case XR_AST_CAPTURE:
             printf("CAPTURE %d", node->capture.index);
             if (node->capture.name) {
@@ -959,7 +960,7 @@ void xr_regex_ast_dump(XrAstNode *node, int indent) {
             printf("\n");
             xr_regex_ast_dump(node->capture.child, indent + 1);
             break;
-            
+
         case XR_AST_EMPTY_MATCH:
             printf("EMPTY_MATCH flags=0x%x\n", node->empty_flags);
             break;

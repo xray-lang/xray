@@ -58,11 +58,11 @@ XrRegex* xr_regex_compile_ex(const char *pattern, XrRegexFlags flags,
         }
         return NULL;
     }
-    
+
     // 1. Parse
     XrParser parser;
     XrAstNode *ast = xr_regex_parse(pattern, flags, &parser);
-    
+
     if (parser.error != XR_RE_OK) {
         if (error) *error = parser.error;
         if (error_pos) *error_pos = parser.error_pos;
@@ -80,13 +80,13 @@ XrRegex* xr_regex_compile_ex(const char *pattern, XrRegexFlags flags,
         }
         return NULL;
     }
-    
+
     // 2. Compile (using parsed flags, including inline flags like (?i))
     XrProg *prog = xr_regex_compile_prog(ast, parser.flags);
-    
+
     // Free AST arena (free all AST nodes at once)
     xr_arena_destroy(&parser.ast_arena);
-    
+
     if (!prog) {
         if (error) *error = XR_RE_ERR_NOMEM;
         if (error_msg && msg_size > 0) {
@@ -101,28 +101,28 @@ XrRegex* xr_regex_compile_ex(const char *pattern, XrRegexFlags flags,
         }
         return NULL;
     }
-    
+
     // Transfer capture group name ownership
     prog->capture_names = parser.capture_names;
     parser.capture_names = NULL;
-    
+
     // 3. Create regex object
     XrRegex *re = (XrRegex*)xr_re_alloc(sizeof(XrRegex));
     re->pattern = xr_re_strdup(pattern);
     re->flags = flags;
     re->prog = prog;
-    
+
     // 4. Create DFA if safe (no position-dependent assertions, no Unicode properties)
     bool dfa_safe = !prog->has_empty_width && prog->unicode_range_count == 0;
     re->dfa = dfa_safe ? xr_dfa_new(prog) : NULL;
-    
+
     if (error) *error = XR_RE_OK;
     return re;
 }
 
 void xr_regex_free(XrRegex *re) {
     if (!re) return;
-    
+
     xr_re_free(re->pattern);
     xr_prog_free(re->prog);
     if (re->dfa) {
@@ -145,7 +145,7 @@ int xr_regex_capture_count(const XrRegex *re) {
 
 int xr_regex_named_group(const XrRegex *re, const char *name) {
     if (!re || !name || !re->prog->capture_names) return -1;
-    
+
     for (int i = 0; i < re->prog->capture_count; i++) {
         if (re->prog->capture_names[i] &&
             strcmp(re->prog->capture_names[i], name) == 0) {
@@ -170,11 +170,11 @@ const char* xr_regex_group_name(const XrRegex *re, int index) {
  */
 static void captures_to_match(const char **caps, int cap_count, XrMatch *match) {
     match->group_count = cap_count + 1;  // Full match
-    
+
     // groups[0] is full match
     match->groups[0].start = caps[0];
     match->groups[0].end = caps[1];
-    
+
     // Handle named capture groups
     for (int i = 0; i < cap_count && i < XR_RE_MAX_CAPTURES - 1; i++) {
         match->groups[i + 1].start = caps[i * 2 + 2];
@@ -185,7 +185,7 @@ static void captures_to_match(const char **caps, int cap_count, XrMatch *match) 
 bool xr_regex_test(const XrRegex *re, const char *text, int len) {
     if (!re || !text) return false;
     if (len < 0) len = (int)strlen(text);
-    
+
     // Try DFA acceleration (created at compile time, thread-safe)
     if (re->dfa) {
         int result = xr_dfa_search(re->dfa, text, len, NULL, NULL);
@@ -194,12 +194,12 @@ bool xr_regex_test(const XrRegex *re, const char *text, int len) {
         }
         // result < 0: DFA failed, fall back to NFA
     }
-    
+
     // Fall back to NFA
     const char *caps[XR_RE_MAX_CAPTURES * 2] = {0};
     caps[0] = text;
     caps[1] = NULL;
-    
+
     return xr_nfa_search(re->prog, text, len, caps, 2);
 }
 
@@ -212,20 +212,20 @@ bool xr_regex_match_at(const XrRegex *re, const char *text, int len,
     if (!re || !text) return false;
     if (len < 0) len = (int)strlen(text);
     if (start_pos < 0 || start_pos > len) return false;
-    
+
     int cap_count = re->prog->capture_count;
     int ncaps = (cap_count + 1) * 2;  // +1 for full match
-    
+
     const char *caps[XR_RE_MAX_CAPTURES * 2];
     memset(caps, 0, sizeof(caps));
-    
-    bool found = xr_nfa_search(re->prog, text + start_pos, len - start_pos, 
+
+    bool found = xr_nfa_search(re->prog, text + start_pos, len - start_pos,
                                 caps, ncaps);
-    
+
     if (found && match) {
         captures_to_match(caps, cap_count, match);
     }
-    
+
     return found;
 }
 
@@ -233,27 +233,27 @@ bool xr_regex_full_match(const XrRegex *re, const char *text, int len,
                          XrMatch *match) {
     if (!re || !text) return false;
     if (len < 0) len = (int)strlen(text);
-    
+
     int cap_count = re->prog->capture_count;
     int ncaps = (cap_count + 1) * 2;
-    
+
     const char *caps[XR_RE_MAX_CAPTURES * 2];
     memset(caps, 0, sizeof(caps));
-    
+
     // Use anchored match
     bool found = xr_nfa_match(re->prog, text, len, caps, ncaps);
-    
+
     // Check if full match
     if (found) {
         if (caps[0] != text || caps[1] != text + len) {
             found = false;
         }
     }
-    
+
     if (found && match) {
         captures_to_match(caps, cap_count, match);
     }
-    
+
     return found;
 }
 
@@ -263,32 +263,32 @@ bool xr_regex_full_match(const XrRegex *re, const char *text, int len,
 
 XrMatchIter* xr_regex_iter_new(const XrRegex *re, const char *text, int len) {
     if (!re || !text) return NULL;
-    
+
     XrMatchIter *iter = (XrMatchIter*)xr_re_alloc(sizeof(XrMatchIter));
     iter->re = re;
     iter->text = text;
     iter->len = (len < 0) ? (int)strlen(text) : len;
     iter->pos = 0;
     iter->done = false;
-    
+
     return iter;
 }
 
 bool xr_regex_iter_next(XrMatchIter *iter, XrMatch *match) {
     if (!iter || iter->done) return false;
-    
+
     if (iter->pos > iter->len) {
         iter->done = true;
         return false;
     }
-    
+
     XrMatch m;
     // xr_regex_match_at internally calls xr_nfa_search, searching the entire remaining text
     // If it returns false, there are no more matches, no need to continue trying
     if (xr_regex_match_at(iter->re, iter->text, iter->len, iter->pos, &m)) {
         // Found match
         if (match) *match = m;
-        
+
         // Move position to match end
         int match_end = (int)(m.groups[0].end - iter->text);
         if (match_end == iter->pos) {
@@ -297,10 +297,10 @@ bool xr_regex_iter_next(XrMatchIter *iter, XrMatch *match) {
         } else {
             iter->pos = match_end;
         }
-        
+
         return true;
     }
-    
+
     // No more matches
     iter->done = true;
     return false;
@@ -328,20 +328,20 @@ void xr_regex_iter_free(XrMatchIter *iter) {
 int xr_regex_count(const XrRegex *re, const char *text, int len) {
     if (!re || !text) return 0;
     if (len < 0) len = (int)strlen(text);
-    
+
     // Use DFA if available (created at compile time)
     XrDFA *dfa = re->dfa;
     bool use_dfa = (dfa != NULL);
-    
+
     int count = 0;
     const char *p = text;
     const char *end = text + len;
-    
+
     while (p <= end) {
         const char *match_start = NULL;
         const char *match_end = NULL;
         bool found = false;
-        
+
         if (use_dfa) {
             int result = xr_dfa_search(dfa, p, end - p, &match_start, &match_end);
             if (result > 0) {
@@ -350,7 +350,7 @@ int xr_regex_count(const XrRegex *re, const char *text, int len) {
                 use_dfa = false;  // DFA failed, fall back to NFA
             }
         }
-        
+
         if (!found && !use_dfa) {
             const char *caps[2] = {NULL, NULL};
             found = xr_nfa_search(re->prog, p, end - p, caps, 2);
@@ -359,11 +359,11 @@ int xr_regex_count(const XrRegex *re, const char *text, int len) {
                 match_end = caps[1];
             }
         }
-        
+
         if (!found) break;
-        
+
         count++;
-        
+
         // Handle empty match: advance by one UTF-8 character
         if (match_end == match_start) {
             p = match_start + xr_re_utf8_charlen(match_start, end);
@@ -371,7 +371,7 @@ int xr_regex_count(const XrRegex *re, const char *text, int len) {
             p = match_end;
         }
     }
-    
+
     return count;
 }
 
@@ -392,30 +392,32 @@ XrMatch* xr_regex_find_all(const XrRegex *re, const char *text, int len,
         if (out_count) *out_count = 0;
         return NULL;
     }
-    
+
     // Initial capacity
     int capacity = 16;
     if (limit > 0 && limit < capacity) capacity = limit;
-    
+
     XrMatch *matches = (XrMatch*)xr_re_alloc(capacity * sizeof(XrMatch));
     int count = 0;
     int pos = 0;
-    
+
     while (pos <= len) {
         if (limit > 0 && count >= limit) break;
-        
+
         XrMatch m;
         if (!xr_regex_match_at(re, text, len, pos, &m)) break;
-        
+
         // Expand capacity
         if (count >= capacity) {
             capacity *= 2;
             if (limit > 0 && capacity > limit) capacity = limit;
-            matches = (XrMatch*)xr_re_realloc(matches, capacity * sizeof(XrMatch));
+            XR_REALLOC_OR_ABORT(matches,
+                                (size_t)capacity * sizeof(XrMatch),
+                                "regex find_all matches grow");
         }
-        
+
         matches[count++] = m;
-        
+
         // Calculate next position
         int match_end = (int)(m.groups[0].end - text);
         if (match_end == pos) {
@@ -424,7 +426,7 @@ XrMatch* xr_regex_find_all(const XrRegex *re, const char *text, int len,
             pos = match_end;
         }
     }
-    
+
     if (out_count) *out_count = count;
     return matches;
 }
@@ -455,7 +457,7 @@ static void dynbuf_init(XrDynBuf *buf, size_t initial_cap) {
 static inline void dynbuf_ensure(XrDynBuf *buf, size_t extra) {
     if (buf->len + extra > buf->cap) {
         while (buf->len + extra > buf->cap) buf->cap *= 2;
-        buf->data = (char*)xr_re_realloc(buf->data, buf->cap);
+        XR_REALLOC_OR_ABORT(buf->data, buf->cap, "regex dynbuf grow");
     }
 }
 
@@ -656,11 +658,11 @@ int xr_regex_split(const XrRegex *re, const char *text, int len,
     if (!re || !text || !parts || max_parts <= 0) return 0;
     if (len < 0) len = (int)strlen(text);
     if (limit == 0) limit = -1;
-    
+
     int count = 0;
     const char *p = text;
     const char *end = text + len;
-    
+
     XrMatchIter *iter = xr_regex_iter_new(re, text, len);
     if (!iter) {
         // Cannot create iterator, return entire string
@@ -668,29 +670,29 @@ int xr_regex_split(const XrRegex *re, const char *text, int len,
         parts[0].len = len;
         return 1;
     }
-    
+
     XrMatch match;
     while (xr_regex_iter_next(iter, &match)) {
         if (limit > 0 && count >= limit - 1) break;
         if (count >= max_parts) break;
-        
+
         // Add separator prefix
         parts[count].str = p;
         parts[count].len = (int)(match.groups[0].start - p);
         count++;
-        
+
         p = match.groups[0].end;
     }
-    
+
     xr_regex_iter_free(iter);
-    
+
     // Add remaining part
     if (count < max_parts && p <= end) {
         parts[count].str = p;
         parts[count].len = (int)(end - p);
         count++;
     }
-    
+
     return count;
 }
 
@@ -701,12 +703,12 @@ int xr_regex_split(const XrRegex *re, const char *text, int len,
 int xr_regex_escape(const char *text, int len, char *out, size_t out_size) {
     if (!text || !out || out_size == 0) return -1;
     if (len < 0) len = (int)strlen(text);
-    
+
     const char *p = text;
     const char *end = text + len;
     char *o = out;
     char *oend = out + out_size - 1;
-    
+
     while (p < end && o < oend) {
         char c = *p++;
         // Escape special characters
@@ -716,7 +718,7 @@ int xr_regex_escape(const char *text, int len, char *out, size_t out_size) {
         }
         *o++ = c;
     }
-    
+
     *o = '\0';
     return (int)(o - out);
 }
@@ -746,12 +748,12 @@ void xr_regex_dump(const XrRegex *re) {
         printf("(null regex)\n");
         return;
     }
-    
+
     printf("=== Regex ===\n");
     printf("Pattern: %s\n", re->pattern);
     printf("Flags: 0x%x\n", re->flags);
     printf("Captures: %d\n", re->prog->capture_count);
-    
+
     if (re->prog->capture_names) {
         for (int i = 0; i < re->prog->capture_count; i++) {
             if (re->prog->capture_names[i]) {
@@ -759,7 +761,7 @@ void xr_regex_dump(const XrRegex *re) {
             }
         }
     }
-    
+
     printf("\n");
     xr_prog_dump(re->prog);
 }
