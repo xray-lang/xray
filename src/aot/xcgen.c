@@ -654,16 +654,22 @@ static void xcgen_compile_function_body(XcgenModule *mod, XcgenFunc *cf) {
     const char *ret_type = xcg_c_type_for_xrtype(
         func->proto ? func->proto->return_type_info : NULL);
 
-    // Block reachability analysis
+    // Block reachability analysis.
+    // Use a stack buffer for small functions, heap for larger ones. The
+    // explicit is_heap flags are required so that the subsequent xr_free()
+    // calls can never touch the stack buffer (defensive against refactors
+    // and required to pass clang-analyzer-unix.Malloc).
     bool reachable_buf[256];
-    bool *reachable = (func->nblk <= 256) ? reachable_buf : xr_calloc(func->nblk, 1);
+    bool reachable_is_heap = (func->nblk > 256);
+    bool *reachable = reachable_is_heap ? xr_calloc(func->nblk, 1) : reachable_buf;
     if (!reachable) return;
     compute_reachable(func, reachable);
 
-    // Vreg usage analysis
+    // Vreg usage analysis (same stack/heap split pattern).
     bool used_buf[512];
-    bool *used = (func->nvreg <= 512) ? used_buf : xr_calloc(func->nvreg, 1);
-    if (!used) { if (func->nblk > 256) xr_free(reachable); return; }
+    bool used_is_heap = (func->nvreg > 512);
+    bool *used = used_is_heap ? xr_calloc(func->nvreg, 1) : used_buf;
+    if (!used) { if (reachable_is_heap) xr_free(reachable); return; }
     compute_used_vregs(func, reachable, used);
     cf->used_vregs = used;
 
@@ -821,9 +827,10 @@ static void xcgen_compile_function_body(XcgenModule *mod, XcgenFunc *cf) {
     xcgen_buf_free(&locals);
     xcgen_buf_free(&stmts);
 
-    // Free heap-allocated analysis buffers if used
-    if (func->nblk > 256) xr_free(reachable);
-    if (func->nvreg > 512) xr_free(used);
+    // Free heap-allocated analysis buffers if used. The explicit flags
+    // mirror the allocation site above and prevent freeing the stack buffer.
+    if (reachable_is_heap) xr_free(reachable);
+    if (used_is_heap) xr_free(used);
 }
 
 XcgenFunc *xcgen_compile_func(XcgenModule *mod, XirFunc *xfunc, const char *c_name) {
