@@ -82,7 +82,7 @@ static XirRef builder_emit_cps_suspend(
     }
 
     // Write suspend_result to result slot
-    braun_write_var(b, suspend_blk->id, result_slot, suspend_result);
+    builder_set_slot_in_block(b, suspend_blk->id, result_slot, suspend_result);
 
     *out_suspend_blk = suspend_blk;
     *out_cont_blk = cont_blk;
@@ -218,7 +218,7 @@ bool xir_translate_misc_ops(XirBuilder *b, XirBlock **cur_blk,
                 b->ops_skipped++;
                 return true;
             }
-            
+
             // Get expected type id from constant pool
             XrValue type_val = PROTO_CONST_FAST(b->proto, kc);
             int expected_tid = XR_IS_INT(type_val) ? (int)XR_TO_INT(type_val) : 0;
@@ -398,7 +398,7 @@ bool xir_translate_misc_ops(XirBuilder *b, XirBlock **cur_blk,
             int a = GETARG_A(inst);
             int rb = GETARG_B(inst);
             int kc = GETARG_C(inst);
-            
+
             // Bounds check for constant pool
             if (kc >= PROTO_CONST_COUNT(b->proto)) {
                 b->ops_skipped++;
@@ -1090,7 +1090,7 @@ bool xir_translate_misc_ops(XirBuilder *b, XirBlock **cur_blk,
                 XirRef off1 = xir_const_i64(b->func, (int64_t)(JIT_CALL_ARGS_OFFSET + 8));
                 XirRef ok = xir_emit_unary(b->func, blk, XIR_LOAD_CORO,
                                            XR_REP_I64, off1);
-                braun_write_var(b, blk->id, a + 1, ok);
+                builder_set_slot_in_block(b, blk->id, a + 1, ok);
                 builder_tag_vreg(b, ok, VTAG_BOOL, 0);
             }
 
@@ -1105,7 +1105,7 @@ bool xir_translate_misc_ops(XirBuilder *b, XirBlock **cur_blk,
                 XirRef one_c = xir_const_i64(b->func, 1);
                 XirRef one_v = xir_emit_unary(b->func, suspend_blk, XIR_CONST_I64,
                                               XR_REP_I64, one_c);
-                braun_write_var(b, suspend_blk->id, a + 1, one_v);
+                builder_set_slot_in_block(b, suspend_blk->id, a + 1, one_v);
             }
 
             builder_finalize_cps_suspend(b, suspend_blk, cont_blk, cur_blk);

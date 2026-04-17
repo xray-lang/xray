@@ -14,7 +14,7 @@
 #include "xir_builder.h"
 #include "xir_blueprint.h"
 #include "xir_fold.h"
-#include "xir_feedback.h"
+#include "../runtime/value/xtype_feedback.h"
 #include "../runtime/value/xchunk.h"
 #include "../runtime/value/xslot_type.h"
 #include "../runtime/value/xtype.h"
@@ -84,10 +84,10 @@ XR_FUNC void builder_tag_from_slot(XirBuilder *b, XirRef ref, int dest_slot);
 // Tag a vreg as boolean result. Use this for all ops that produce 0/1.
 #define builder_tag_bool(b, ref) builder_tag_vreg((b), (ref), XRVREG_TAG_BOOL, 0)
 XR_FUNC void builder_set_slot(XirBuilder *b, int reg, XirRef ref);
+XR_FUNC void builder_set_slot_in_block(XirBuilder *b, uint32_t blk_id, int slot, XirRef ref);
 XR_FUNC void builder_emit_shape_guard(XirBuilder *b, XirBlock *blk, XirRef obj, struct XrShape *shape, uint32_t pc);
 XR_FUNC uint8_t ref_xir_type(XirFunc *func, XirRef ref);
 XR_FUNC uint8_t ref_vtag(XirFunc *func, XirRef ref);
-XR_FUNC void braun_write_var(XirBuilder *b, uint32_t blk_id, int slot, XirRef ref);
 XR_FUNC XirRef braun_read_var(XirBuilder *b, uint32_t blk_id, int slot);
 XR_FUNC void braun_seal_block(XirBuilder *b, XirBlock *blk);
 

@@ -398,7 +398,7 @@ static void builder_cleanup(XirBuilder *b) {
 }
 
 // Forward declarations for Braun SSA (defined after slot helpers)
-void braun_write_var(XirBuilder *b, uint32_t blk_id, int slot, XirRef ref);
+static void braun_write_var(XirBuilder *b, uint32_t blk_id, int slot, XirRef ref);
 XirRef braun_read_var(XirBuilder *b, uint32_t blk_id, int slot);
 
 /* ========== Slot Access Helpers ========== */
@@ -534,6 +534,23 @@ void builder_set_slot(XirBuilder *b, int reg, XirRef ref) {
     }
 }
 
+// Write a slot in a specific block (cross-block variant of builder_set_slot).
+// Used for parameter initialization, CPS suspend results, and other cases
+// where we need to define a variable in a block other than the current one.
+void builder_set_slot_in_block(XirBuilder *b, uint32_t blk_id,
+                                int slot, XirRef ref) {
+    braun_write_var(b, blk_id, slot, ref);
+    if (xir_ref_is_vreg(ref)) {
+        uint32_t vi = XIR_REF_INDEX(ref);
+        if (vi < b->func->nvreg) {
+            if (b->func->vregs[vi].bc_slot < 0)
+                b->func->vregs[vi].bc_slot = (int16_t)slot;
+            if (slot >= 0 && slot < 256)
+                b->slot_map[slot] = ref;
+        }
+    }
+}
+
 // Emit GUARD_SHAPE for slot_shape fast paths.
 // The guard includes a null check (CBZ → deopt) and shape_id comparison.
 // GVN/CSE will eliminate redundant guards on the same object within a block.
@@ -572,8 +589,8 @@ uint8_t ref_vtag(XirFunc *func, XirRef ref) {
 XirRef braun_read_var(XirBuilder *b, uint32_t blk_id, int slot);
 static XirRef braun_read_var_recursive(XirBuilder *b, uint32_t blk_id, int slot);
 
-// Write a variable definition in a specific block
-void braun_write_var(XirBuilder *b, uint32_t blk_id, int slot, XirRef ref) {
+// Write a variable definition in a specific block (internal — use builder_set_slot_in_block)
+static void braun_write_var(XirBuilder *b, uint32_t blk_id, int slot, XirRef ref) {
     XR_DCHECK(b != NULL, "braun_write_var: NULL builder");
     XR_DCHECK_BOUNDS(slot, 256, "braun_write_var: slot out of range");
     if (blk_id < b->block_defs_size) {
@@ -1036,7 +1053,7 @@ static void translate_binop_const(XirBuilder *b, XirBlock *blk,
     int a = GETARG_A(inst);
     int ra_b = GETARG_B(inst);
     int kc = GETARG_C(inst);
-    
+
     // Safety check: bounds check for constant pool access
     if (kc >= PROTO_CONST_COUNT(b->proto)) {
         b->ops_skipped++;
@@ -1090,16 +1107,16 @@ static void translate_binop_const(XirBuilder *b, XirBlock *blk,
 static bool translate_instruction(XirBuilder *b, XirBlock **cur_blk, uint32_t pc) {
     // Bounds check: verify PC is within code array
     if (pc >= (uint32_t)PROTO_CODE_COUNT(b->proto)) {
-        xr_log_debug("jit", "PC %u out of bounds (max %d)", 
+        xr_log_debug("jit", "PC %u out of bounds (max %d)",
                 pc, PROTO_CODE_COUNT(b->proto));
         b->ops_skipped++;
         return true;
     }
-    
+
     XrInstruction inst = PROTO_CODE(b->proto, pc);
     OpCode op = GET_OPCODE(inst);
     XirBlock *blk = *cur_blk;
-    
+
     // Safety check: verify proto has valid symbol table
     if (b->proto->symbols == NULL && b->proto->symbol_count > 0) {
         xr_log_debug("jit", "invalid proto: symbols=NULL but symbol_count=%d at pc=%u",
@@ -1136,7 +1153,7 @@ static bool translate_instruction(XirBuilder *b, XirBlock **cur_blk, uint32_t pc
         case OP_LOADK: {
             int a = GETARG_A(inst);
             int bx = GETARG_Bx(inst);
-            
+
             // Bounds check for constant pool access
             if (bx >= PROTO_CONST_COUNT(b->proto)) {
                 xr_log_debug("jit", "constant index %d out of bounds (max %d) in OP_LOADK",
@@ -1144,7 +1161,7 @@ static bool translate_instruction(XirBuilder *b, XirBlock **cur_blk, uint32_t pc
                 b->ops_skipped++;
                 return true;
             }
-            
+
             XrValue kval = PROTO_CONST_FAST(b->proto, bx);
             XirRef v;
             if (XR_IS_INT(kval)) {
@@ -1912,7 +1929,7 @@ static bool translate_instruction(XirBuilder *b, XirBlock **cur_blk, uint32_t pc
             int ra_a = GETARG_A(inst);
             int kb = GETARG_B(inst);
             int k = GETARG_C(inst);
-            
+
             // Bounds check for constant pool
             if (kb >= PROTO_CONST_COUNT(b->proto)) {
                 b->ops_skipped++;
@@ -2465,7 +2482,7 @@ static XirFunc *build_from_proto_impl(XrProto *proto,
     // builder_set_slot was called before braun_init; now sync to block_defs)
     for (int i = 0; i < proto->numparams; i++) {
         if (!xir_ref_is_none(b.slot_map[i]))
-            braun_write_var(&b, b.cur_blk_id, i, b.slot_map[i]);
+            builder_set_slot_in_block(&b, b.cur_blk_id, i, b.slot_map[i]);
     }
 
     // Pre-add back-edge predecessors for ALL loops so phi narg is correct
@@ -2531,7 +2548,7 @@ static XirFunc *build_from_proto_impl(XrProto *proto,
             // Write param defs to preheader using FINAL ids (after swap)
             for (int s = 0; s < proto->numparams; s++) {
                 if (!xir_ref_is_none(b.slot_map[s]))
-                    braun_write_var(&b, preheader->id, s, b.slot_map[s]);
+                    builder_set_slot_in_block(&b, preheader->id, s, b.slot_map[s]);
             }
             // Clear entry block defs (Braun will create incomplete phis)
             memset(&b.block_defs[orig_entry->id], 0, sizeof(BraunBlockDef));

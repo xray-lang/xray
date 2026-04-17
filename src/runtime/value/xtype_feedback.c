@@ -5,7 +5,7 @@
  * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
  * Licensed under the MIT License
  *
- * xir_feedback.c - Runtime type feedback for profile-guided compilation
+ * xtype_feedback.c - Runtime type feedback for profile-guided compilation
  *
  * KEY CONCEPT:
  *   Provides allocation, analysis, and debug utilities for type feedback.
@@ -17,10 +17,10 @@
  *   - Slot type conversion bridges feedback bitmask → XrSlotType for JIT/AOT
  */
 
-#include "xir_feedback.h"
-#include "../base/xchecks.h"
-#include "../base/xmalloc.h"
-#include "../runtime/value/xslot_type.h"
+#include "xtype_feedback.h"
+#include "../../base/xchecks.h"
+#include "../../base/xmalloc.h"
+#include "xslot_type.h"
 #include <stdio.h>
 
 /* ========== Allocation ========== */
