@@ -235,7 +235,7 @@ XrVMResult xr_vm_interpret_proto(XrayIsolate *isolate, XrProto *proto) {
     XR_DCHECK(proto != NULL, "vm_interpret_proto: NULL proto");
     // Create top-level closure on main coroutine's Immix heap
     XrCoroutine *main_coro = (XrCoroutine*)isolate->main_coro;
-    XrClosure *closure = xr_vm_closure_new(isolate, proto, main_coro);
+    XrClosure *closure = xr_closure_new(isolate, proto, main_coro);
     if (closure == NULL) {
         return XR_VM_RUNTIME_ERROR;
     }
@@ -272,7 +272,7 @@ XrVMResult xr_vm_execute_module(XrayIsolate *isolate, XrProto *proto) {
     XrWorker *_mod_worker = xr_current_worker();
     XrCoroutine *_mod_coro = (_mod_worker && _mod_worker->m->vm_ctx.current_coro)
         ? (XrCoroutine *)_mod_worker->m->vm_ctx.current_coro : NULL;
-    XrClosure *closure = xr_vm_closure_new(isolate, proto, _mod_coro);
+    XrClosure *closure = xr_closure_new(isolate, proto, _mod_coro);
     if (closure == NULL) {
         return XR_VM_RUNTIME_ERROR;
     }

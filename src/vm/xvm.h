@@ -67,7 +67,7 @@
 #include "../runtime/value/xchunk.h"
 #include "../runtime/value/xvalue.h"
 #include "../base/xhashmap.h"
-#include "xvm_state_frame.h"
+#include "../runtime/xexec_frame.h"
 #include "../base/xconstants.h"
 #include "../runtime/xvm_call.h"
 #include <stdbool.h>
@@ -91,9 +91,7 @@ XR_FUNC XrCFunction *xr_vm_yieldable_cfunction_new(XrayIsolate *isolate, XrYield
 XR_FUNC void xr_vm_cfunction_free(XrCFunction *cfunc);
 
 /* ========== Closure API ========== */
-
-XR_FUNC XrClosure *xr_vm_closure_new(XrayIsolate *isolate, XrProto *proto,
-                             struct XrCoroutine *coro);
+/* Closure creation is declared in runtime/closure/xclosure.h. */
 
 /* ========== Runtime Error ========== */
 

@@ -19,6 +19,7 @@
 #include "xic_method.h"
 #include "xic_field_table.h"
 #include "../runtime/value/xvalue_print.h"
+#include "../runtime/value/xvalue_format.h"
 #include "../base/xmalloc.h"
 #include "../runtime/object/xstring.h"
 #include "../runtime/object/xarray.h"
@@ -60,40 +61,40 @@
 static inline bool vm_is_falsey(XrValue value) {
     // null is falsy
     if (XR_IS_NULL(value)) return true;
-    
+
     // bool: payload 0=false (falsy), 1=true (truthy)
     if (XR_IS_BOOL(value)) return value.i == 0;
-    
+
     // 0 is falsy
     if (XR_IS_INT(value)) return XR_TO_INT(value) == 0;
-    
+
     // 0.0 is falsy
     if (XR_IS_FLOAT(value)) return XR_TO_FLOAT(value) == 0.0;
-    
+
     // Empty string is falsy
     if (XR_IS_STRING(value)) {
         XrString *str = XR_TO_STRING(value);
         return str->length == 0;
     }
-    
+
     // Empty array is falsy
     if (XR_IS_ARRAY(value)) {
         XrArray *arr = XR_TO_ARRAY(value);
         return arr->length == 0;
     }
-    
+
     // Empty map is falsy
     if (XR_IS_MAP(value)) {
         XrMap *map = XR_TO_MAP(value);
         return map->count == 0;
     }
-    
+
     // Empty set is falsy
     if (XR_IS_SET(value)) {
         XrSet *set = XR_TO_SET(value);
         return set->count == 0;
     }
-    
+
     // Everything else is truthy
     return false;
 }
@@ -117,11 +118,11 @@ static inline bool vm_is_truthy(XrValue value) {
 
 /*
 ** XR_DEBUG_REGS - Enable register bounds checking
-** 
+**
 ** Enable in debug builds to catch register overflow issues early:
 **   - New frame base must be outside current frame
 **   - Register access must be within current frame bounds
-** 
+**
 ** Enable via: cmake -DXR_DEBUG_REGS=1 or uncomment below
 */
 // #define XR_DEBUG_REGS
@@ -187,19 +188,10 @@ static inline bool vm_is_truthy(XrValue value) {
 // VM constants now in core/xconstants.h (included via xvm.h)
 
 
-/* ========== Builtin Method Dispatch ========== */
-typedef XrValue (*MethodHandler)(XrayIsolate *isolate, XrValue receiver, XrValue *args, int argc);
-
-/* ========== Bound Method ========== */
-typedef struct XrBoundMethod {
-    XrGCHeader gc;
-    XrValue receiver;
-    MethodHandler handler;  // direct function pointer, zero-dispatch call
-} XrBoundMethod;
-XR_FUNC XrBoundMethod* xr_bound_method_new(XrayIsolate *isolate, XrValue receiver, MethodHandler handler);
-XR_FUNC XrValue xr_value_from_bound_method(XrBoundMethod *bm);
-XR_FUNC XrBoundMethod* xr_value_to_bound_method(XrValue v);
-XR_FUNC bool xr_value_is_bound_method(XrValue v);
+/* Builtin method dispatch & bound method definitions:
+ * see runtime/closure/xbound_method.h (included below via the runtime closure layer).
+ */
+#include "../runtime/closure/xbound_method.h"
 
 // BoundMethod handler lookup (implemented in xvm_builtins.c)
 XR_FUNC MethodHandler xr_map_get_handler(int symbol);
@@ -230,9 +222,7 @@ XR_FUNC const char* xr_vm_get_local_name(XrProto *proto, int reg, int pc);
 // C function operations
 XR_FUNC void xr_vm_cfunction_free(XrCFunction *cfunc);
 
-// Closure operations
-XR_FUNC XrClosure *xr_vm_closure_new(XrayIsolate *isolate, XrProto *proto,
-                             struct XrCoroutine *coro);
+// Closure operations: see runtime/closure/xclosure.h
 
 // VM initialization and cleanup
 XR_FUNC void xr_vm_vm_init(XrayIsolate *isolate);
@@ -247,7 +237,7 @@ XR_FUNC bool xr_vm_is_truthy(XrValue value);
 XR_FUNC XrValue xr_vm_call_closure(XrayIsolate *isolate, XrClosure *closure, XrValue *args, int nargs);
 
 // Extended closure call (supports blocking return, for coroutines)
-XR_FUNC XrValue xr_vm_call_closure_ex(XrayIsolate *isolate, XrClosure *closure, 
+XR_FUNC XrValue xr_vm_call_closure_ex(XrayIsolate *isolate, XrClosure *closure,
                                XrValue *args, int nargs, XrVMResult *out_result);
 
 // VM execution
@@ -265,15 +255,15 @@ XR_FUNC void xr_vm_throw_exception(XrayIsolate *isolate, XrValue exception);
 static inline void vm_push_frame(XrayIsolate *isolate, XrBcCallFrame **frame_ptr,
                                  XrClosure *closure, XrValue *base) {
     CHECK_FRAME_OVERFLOW(isolate);
-    
+
     XrBcCallFrame *new_frame = &isolate->vm.frames[isolate->vm.frame_count++];
     new_frame->closure = closure;
     new_frame->pc = PROTO_CODE_BASE(closure->proto);
     new_frame->base_offset = (int)(base - isolate->vm.stack);
-    
+
     // Critical: must update stack_top
     isolate->vm.stack_top = base + closure->proto->maxstacksize;
-    
+
     *frame_ptr = new_frame;
 }
 
@@ -281,12 +271,12 @@ static inline void vm_push_frame(XrayIsolate *isolate, XrBcCallFrame **frame_ptr
 
 /*
 ** Create new frame for method call (unified entry point)
-** 
+**
 ** Calling convention:
 **   caller: R[a]=return_value, R[a+1]=this, R[a+2+]=args
 **   callee: R[0]=this, R[1+]=args
 **   Return value written to ci->base - 1 = caller.R[a]
-** 
+**
 ** @param isolate     VM instance
 ** @param ci          Current call frame (for bounds checking)
 ** @param caller_base Caller's base pointer
@@ -302,22 +292,22 @@ static inline XrBcCallFrame* vm_create_method_frame(
     XrClosure *closure
 ) {
     XrValue *new_base = caller_base + a + 1;
-    
+
     CHECK_FRAME_OVERFLOW(isolate);
     CHECK_FRAME_BOUNDARY(isolate, ci, new_base);
-    
+
     XrBcCallFrame *new_frame = &isolate->vm.frames[isolate->vm.frame_count++];
     new_frame->closure = closure;
     new_frame->pc = PROTO_CODE_BASE(closure->proto);
     new_frame->base_offset = (int)(new_base - isolate->vm.stack);
     new_frame->u.l.pending_operator_check = false;
-    
+
     return new_frame;
 }
 
 /*
 ** Create new frame for regular function call
-** 
+**
 ** Calling convention:
 **   caller: R[func]=function_object, R[func+1+]=args
 **   callee: R[0]=arg1, R[1]=arg2...
@@ -331,23 +321,23 @@ static inline XrBcCallFrame* vm_create_function_frame(
     XrClosure *closure
 ) {
     XrValue *new_base = caller_base + func_reg + 1;
-    
+
     CHECK_FRAME_OVERFLOW(isolate);
     CHECK_FRAME_BOUNDARY(isolate, ci, new_base);
-    
+
     XrBcCallFrame *new_frame = &isolate->vm.frames[isolate->vm.frame_count++];
     new_frame->closure = closure;
     new_frame->pc = PROTO_CODE_BASE(closure->proto);
     new_frame->base_offset = (int)(new_base - isolate->vm.stack);
     new_frame->u.l.pending_operator_check = false;
-    
+
     return new_frame;
 }
 
 // Get safe stack start for C closure call (avoid frame overlap)
 static inline XrValue* vm_get_safe_stack_start(XrayIsolate *isolate) {
     XrValue *safe_start = isolate->vm.stack_top;
-    
+
     if (isolate->vm.frame_count > 0) {
         XrBcCallFrame *current = &isolate->vm.frames[isolate->vm.frame_count - 1];
         if (current->closure && current->closure->proto) {
@@ -357,12 +347,11 @@ static inline XrValue* vm_get_safe_stack_start(XrayIsolate *isolate) {
             }
         }
     }
-    
+
     return safe_start;
 }
 
-// Type conversion
-XR_FUNC XrString* vm_value_to_string(XrayIsolate *isolate, XrValue val);
+// Type conversion: xr_value_to_string declared in runtime/value/xvalue_format.h.
 
 // Arithmetic operations
 XR_FUNC XrValue vm_add_operation(XrayIsolate *isolate, XrValue left, XrValue right);
@@ -399,7 +388,7 @@ XR_FUNC XrVMResult run(XrayIsolate *isolate, XrVMContext *vm_ctx);
 // Type definitions moved to runtime/coroutine/xcoroutine.h
 
 // VM Coroutine API
-XR_FUNC XrCoroutine *xr_coro_create(XrayIsolate *X, XrClosure *closure, 
+XR_FUNC XrCoroutine *xr_coro_create(XrayIsolate *X, XrClosure *closure,
                             XrValue *args, int arg_count,
                             const char *name, const char *file, int line);
 

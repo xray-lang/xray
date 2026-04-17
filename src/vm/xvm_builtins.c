@@ -110,15 +110,15 @@ XrValue map_method_call_by_symbol(XrayIsolate *isolate, XrMap *map, int symbol, 
     XR_DCHECK(map != NULL, "map_dispatch: NULL map");
     XR_DCHECK(XR_GC_GET_TYPE(&map->gc) == XR_TMAP, "map_dispatch: object is not a map");
     XrValue receiver = xr_value_from_map(map);
-    
+
     bool is_weak = (map->flags & XR_MAP_FLAG_WEAK) != 0;
-    
+
     // Method dispatch
     if (symbol == SYMBOL_IS_EMPTY) return map_is_empty_handler(isolate, receiver, args, argc);
     if (symbol == SYMBOL_HAS) return map_has_handler(isolate, receiver, args, argc);
     if (symbol == SYMBOL_GET) return map_get_handler(isolate, receiver, args, argc);
     if (symbol == SYMBOL_DELETE) return map_delete_handler(isolate, receiver, args, argc);
-    
+
     if (symbol == SYMBOL_SET) {
         // WeakMap: key must be a GC object (not int/float/string/bool/null)
         if (is_weak && argc >= 1 && !XR_VALUE_NEEDS_GC(args[0])) {
@@ -127,7 +127,7 @@ XrValue map_method_call_by_symbol(XrayIsolate *isolate, XrMap *map, int symbol, 
         }
         return map_set_handler(isolate, receiver, args, argc);
     }
-    
+
     // WeakMap: block enumeration methods
     if (is_weak) {
         if (symbol == SYMBOL_KEYS || symbol == SYMBOL_VALUES ||
@@ -137,13 +137,13 @@ XrValue map_method_call_by_symbol(XrayIsolate *isolate, XrMap *map, int symbol, 
             return XR_NOTFOUND;
         }
     }
-    
+
     if (symbol == SYMBOL_HAS_VALUE_MAP) return map_has_value_handler(isolate, receiver, args, argc);
     if (symbol == SYMBOL_CLEAR) return map_clear_handler(isolate, receiver, args, argc);
     if (symbol == SYMBOL_KEYS) return map_keys_handler(isolate, receiver, args, argc);
     if (symbol == SYMBOL_VALUES) return map_values_handler(isolate, receiver, args, argc);
     if (symbol == SYMBOL_ENTRIES) return map_entries_handler(isolate, receiver, args, argc);
-    
+
     // Iterator method
     if (symbol == SYMBOL_ITERATOR) {
         return xr_null();
@@ -158,9 +158,9 @@ XrValue map_method_call_by_symbol(XrayIsolate *isolate, XrMap *map, int symbol, 
     // toString fallback
     if (symbol == SYMBOL_TOSTRING) {
         XrValue map_val = XR_FROM_PTR(map);
-        return xr_string_value(vm_value_to_string(isolate, map_val));
+        return xr_string_value(xr_value_to_string(isolate, map_val));
     }
-    
+
     // Method not found — caller (OP_INVOKE_BUILTIN) throws catchable error
     return XR_NOTFOUND;
 }
@@ -176,13 +176,13 @@ XrValue json_method_call_by_symbol(XrayIsolate *isolate, XrJson *json, int symbo
         XrIterator *iter = xr_iterator_new_from_json(coro, json, isolate);
         return iter ? xr_value_from_iterator(iter) : xr_null();
     }
-    
+
     // toString fallback
     if (symbol == SYMBOL_TOSTRING) {
         XrValue json_val = xr_json_value(json);
-        return xr_string_value(vm_value_to_string(isolate, json_val));
+        return xr_string_value(xr_value_to_string(isolate, json_val));
     }
-    
+
     // All other methods removed: use Json.xxx(obj) static methods instead
     return XR_NOTFOUND;
 }
@@ -194,14 +194,14 @@ static XrValue string_charat_handler(XrayIsolate *isolate, XrValue receiver, XrV
     if (argc < 1) return xr_null();
     XrString *str = XR_TO_STRING(receiver);
     xr_Integer index = XR_TO_INT(args[0]);
-    
+
     // Handle negative index: -1 means last character
     if (index < 0) {
         size_t char_len = xr_string_char_length(str);
         index = (xr_Integer)char_len + index;
         if (index < 0) return xr_null();  // Out of bounds
     }
-    
+
     // Use Unicode character index
     XrString *result = xr_string_char_at_unicode(isolate, str, (size_t)index);
     return result ? xr_string_value(result) : xr_null();
@@ -242,7 +242,7 @@ static XrValue string_indexof_handler(XrayIsolate *isolate, XrValue receiver, Xr
     (void)isolate;
     if (argc < 1 || !XR_IS_STRING(args[0])) return xr_int(-1);
     XrString *str = XR_TO_STRING(receiver);
-    XrString *substr = vm_value_to_string(isolate, args[0]);
+    XrString *substr = xr_value_to_string(isolate, args[0]);
     return xr_int(xr_string_index_of(isolate, str, substr));
 }
 
@@ -250,7 +250,7 @@ static XrValue string_contains_handler(XrayIsolate *isolate, XrValue receiver, X
     (void)isolate;
     if (argc < 1 || !XR_IS_STRING(args[0])) return xr_bool(0);
     XrString *str = XR_TO_STRING(receiver);
-    XrString *substr = vm_value_to_string(isolate, args[0]);
+    XrString *substr = xr_value_to_string(isolate, args[0]);
     return xr_bool(xr_string_has(isolate, str, substr));
 }
 
@@ -258,7 +258,7 @@ static XrValue string_startswith_handler(XrayIsolate *isolate, XrValue receiver,
     (void)isolate;
     if (argc < 1 || !XR_IS_STRING(args[0])) return xr_bool(0);
     XrString *str = XR_TO_STRING(receiver);
-    XrString *prefix = vm_value_to_string(isolate, args[0]);
+    XrString *prefix = xr_value_to_string(isolate, args[0]);
     return xr_bool(xr_string_starts_with(isolate, str, prefix));
 }
 
@@ -266,7 +266,7 @@ static XrValue string_endswith_handler(XrayIsolate *isolate, XrValue receiver, X
     (void)isolate;
     if (argc < 1 || !XR_IS_STRING(args[0])) return xr_bool(0);
     XrString *str = XR_TO_STRING(receiver);
-    XrString *suffix = vm_value_to_string(isolate, args[0]);
+    XrString *suffix = xr_value_to_string(isolate, args[0]);
     return xr_bool(xr_string_ends_with(isolate, str, suffix));
 }
 
@@ -309,7 +309,7 @@ static XrValue string_pad_start_handler(XrayIsolate *isolate, XrValue receiver, 
     XrString *str = XR_TO_STRING(receiver);
     if (argc < 1) return xr_string_value(str);
     size_t target_len = (size_t)XR_TO_INT(args[0]);
-    XrString *pad_str = (argc >= 2 && XR_IS_STRING(args[1])) ? vm_value_to_string(isolate, args[1]) : NULL;
+    XrString *pad_str = (argc >= 2 && XR_IS_STRING(args[1])) ? xr_value_to_string(isolate, args[1]) : NULL;
     XrString *result = xr_string_pad_start(isolate, str, target_len, pad_str);
     return result ? xr_string_value(result) : xr_string_value(str);
 }
@@ -318,7 +318,7 @@ static XrValue string_pad_end_handler(XrayIsolate *isolate, XrValue receiver, Xr
     XrString *str = XR_TO_STRING(receiver);
     if (argc < 1) return xr_string_value(str);
     size_t target_len = (size_t)XR_TO_INT(args[0]);
-    XrString *pad_str = (argc >= 2 && XR_IS_STRING(args[1])) ? vm_value_to_string(isolate, args[1]) : NULL;
+    XrString *pad_str = (argc >= 2 && XR_IS_STRING(args[1])) ? xr_value_to_string(isolate, args[1]) : NULL;
     XrString *result = xr_string_pad_end(isolate, str, target_len, pad_str);
     return result ? xr_string_value(result) : xr_string_value(str);
 }
@@ -326,7 +326,7 @@ static XrValue string_pad_end_handler(XrayIsolate *isolate, XrValue receiver, Xr
 static XrValue string_last_index_of_handler(XrayIsolate *isolate, XrValue receiver, XrValue *args, int argc) {
     XrString *str = XR_TO_STRING(receiver);
     if (argc < 1 || !XR_IS_STRING(args[0])) return xr_int(-1);
-    XrString *substr = vm_value_to_string(isolate, args[0]);
+    XrString *substr = xr_value_to_string(isolate, args[0]);
     xr_Integer result = xr_string_last_index_of(isolate, str, substr);
     return xr_int(result);
 }
@@ -339,7 +339,7 @@ static XrValue string_split_handler(XrayIsolate *isolate, XrValue receiver, XrVa
         return xr_value_from_array(arr);
     }
     if (!XR_IS_STRING(args[0])) return xr_null();
-    XrString *delimiter = vm_value_to_string(isolate, args[0]);
+    XrString *delimiter = xr_value_to_string(isolate, args[0]);
     XrArray *result = xr_string_split(isolate, str, delimiter);
     return result ? xr_value_from_array(result) : xr_null();
 }
@@ -350,8 +350,8 @@ static XrValue string_replace_handler(XrayIsolate *isolate, XrValue receiver, Xr
     if (argc < 2 || !XR_IS_STRING(args[0]) || !XR_IS_STRING(args[1])) {
         return xr_string_value(str);
     }
-    XrString *old_str = vm_value_to_string(isolate, args[0]);
-    XrString *new_str = vm_value_to_string(isolate, args[1]);
+    XrString *old_str = xr_value_to_string(isolate, args[0]);
+    XrString *new_str = xr_value_to_string(isolate, args[1]);
     XrString *result = xr_string_replace(isolate, str, old_str, new_str);
     return result ? xr_string_value(result) : xr_string_value(str);
 }
@@ -362,8 +362,8 @@ static XrValue string_replaceall_handler(XrayIsolate *isolate, XrValue receiver,
     if (argc < 2 || !XR_IS_STRING(args[0]) || !XR_IS_STRING(args[1])) {
         return xr_string_value(str);
     }
-    XrString *old_str = vm_value_to_string(isolate, args[0]);
-    XrString *new_str = vm_value_to_string(isolate, args[1]);
+    XrString *old_str = xr_value_to_string(isolate, args[0]);
+    XrString *new_str = xr_value_to_string(isolate, args[1]);
     XrString *result = xr_string_replace_all(isolate, str, old_str, new_str);
     return result ? xr_string_value(result) : xr_string_value(str);
 }
@@ -381,12 +381,12 @@ static XrValue string_concat_handler(XrayIsolate *isolate, XrValue receiver, XrV
     (void)isolate;
     XrString *str = XR_TO_STRING(receiver);
     if (argc < 1) return xr_string_value(str);
-    
+
     // Concatenate all arguments
     XrString *result = str;
     for (int i = 0; i < argc; i++) {
         if (XR_IS_STRING(args[i])) {
-            XrString *other = vm_value_to_string(isolate, args[i]);
+            XrString *other = xr_value_to_string(isolate, args[i]);
             result = xr_string_concat(isolate, result, other);
             if (!result) return xr_string_value(str);
         }
@@ -446,7 +446,7 @@ static XrValue string_translate_handler(XrayIsolate *isolate, XrValue receiver, 
 static XrValue string_has_handler(XrayIsolate *isolate, XrValue receiver, XrValue *args, int argc) {
     if (argc < 1 || !XR_IS_STRING(args[0])) return xr_bool(0);
     XrString *str = XR_TO_STRING(receiver);
-    XrString *substr = vm_value_to_string(isolate, args[0]);
+    XrString *substr = xr_value_to_string(isolate, args[0]);
     return xr_bool(xr_string_has(isolate, str, substr));
 }
 
@@ -454,20 +454,20 @@ static XrValue string_has_handler(XrayIsolate *isolate, XrValue receiver, XrValu
 static XrValue string_toint_handler(XrayIsolate *isolate, XrValue receiver, XrValue *args, int argc) {
     (void)isolate; (void)args; (void)argc;
     XrString *str = XR_TO_STRING(receiver);
-    
+
     // Skip leading whitespace
     const char *p = str->data;
     while (*p == ' ' || *p == '\t' || *p == '\n' || *p == '\r') p++;
-    
+
     // Parse integer
     char *end;
     long long value = strtoll(p, &end, 10);
-    
+
     // Check if valid number
     if (end == p) {
         return xr_null();  // Parse failed, return null
     }
-    
+
     return xr_int((xr_Integer)value);
 }
 
@@ -475,20 +475,20 @@ static XrValue string_toint_handler(XrayIsolate *isolate, XrValue receiver, XrVa
 static XrValue string_tofloat_handler(XrayIsolate *isolate, XrValue receiver, XrValue *args, int argc) {
     (void)isolate; (void)args; (void)argc;
     XrString *str = XR_TO_STRING(receiver);
-    
+
     // Skip leading whitespace
     const char *p = str->data;
     while (*p == ' ' || *p == '\t' || *p == '\n' || *p == '\r') p++;
-    
+
     // Parse float
     char *end;
     double value = strtod(p, &end);
-    
+
     // Check if valid number
     if (end == p) {
         return xr_null();  // Parse failed, return null
     }
-    
+
     return xr_float(value);
 }
 
@@ -531,23 +531,23 @@ static XrValue string_ord_handler(XrayIsolate *isolate, XrValue receiver, XrValu
 // match(regex) - regex match, return match result array or null
 static XrValue string_match_handler(XrayIsolate *isolate, XrValue receiver, XrValue *args, int argc) {
     if (argc < 1) return xr_null();
-    
+
     XrString *str = XR_TO_STRING(receiver);
-    
+
     // Check if argument is regex
     if (!xr_value_is_regex(args[0])) {
         return xr_null();
     }
-    
+
     XrRegex *re = xr_value_to_regex(args[0]);
     if (!re) return xr_null();
-    
+
     // Execute match
     XrMatch match;
     bool found = xr_regex_match(re, str->data, (int)str->length, &match);
-    
+
     if (!found) return xr_null();
-    
+
     // Return match result array
     XrArray *result = xr_array_new(xr_current_coro(isolate));
     for (int i = 0; i < match.group_count; i++) {
@@ -559,7 +559,7 @@ static XrValue string_match_handler(XrayIsolate *isolate, XrValue receiver, XrVa
             xr_array_push(result, xr_null());
         }
     }
-    
+
     return xr_value_from_array(result);
 }
 
@@ -570,7 +570,7 @@ XrValue string_method_call_by_symbol(XrayIsolate *isolate, XrString *str, int sy
     XR_DCHECK(XR_GC_GET_TYPE(&str->gc) == XR_TSTRING, "string_dispatch: object is not a string");
     // Keep heap form to avoid SSO→promote round-trip in handlers
     XrValue receiver = XR_FROM_PTR(str);
-    
+
     // Method dispatch
 
     if (symbol == SYMBOL_IS_EMPTY) return string_is_empty_handler(isolate, receiver, args, argc);
@@ -601,11 +601,11 @@ XrValue string_method_call_by_symbol(XrayIsolate *isolate, XrString *str, int sy
     if (symbol == SYMBOL_BYTE_AT) return string_byte_at_handler(isolate, receiver, args, argc);
     if (symbol == SYMBOL_TRANSLATE) return string_translate_handler(isolate, receiver, args, argc);
     if (symbol == SYMBOL_TRANSLATE_BYTES) return string_translate_bytes_handler(isolate, receiver, args, argc);
-    
+
     // Type conversion methods
     if (symbol == SYMBOL_TOINT) return string_toint_handler(isolate, receiver, args, argc);
     if (symbol == SYMBOL_TOFLOAT) return string_tofloat_handler(isolate, receiver, args, argc);
-    
+
     // Character classification methods
     if (symbol == SYMBOL_IS_LETTER) return string_is_letter_handler(isolate, receiver, args, argc);
     if (symbol == SYMBOL_IS_NUMBER) return string_is_number_handler(isolate, receiver, args, argc);
@@ -613,10 +613,10 @@ XrValue string_method_call_by_symbol(XrayIsolate *isolate, XrString *str, int sy
     if (symbol == SYMBOL_IS_WHITESPACE) return string_is_whitespace_handler(isolate, receiver, args, argc);
     if (symbol == SYMBOL_ORD) return string_ord_handler(isolate, receiver, args, argc);
     if (symbol == SYMBOL_MATCH) return string_match_handler(isolate, receiver, args, argc);
-    
+
     // toString - return self
     if (symbol == SYMBOL_TOSTRING) return xr_string_value(str);
-    
+
     // Method not found — caller (OP_INVOKE_BUILTIN) throws catchable error
     return XR_NOTFOUND;
 }
@@ -637,7 +637,7 @@ static XrValue array_join_handler(XrayIsolate *isolate, XrValue receiver, XrValu
     if (argc < 1 || !XR_IS_STRING(args[0])) {
         return xr_string_value(xr_string_intern(isolate, "", 0, 0));
     }
-    XrString *delimiter = vm_value_to_string(isolate, args[0]);
+    XrString *delimiter = xr_value_to_string(isolate, args[0]);
     XrString *result = xr_array_join(isolate, array, delimiter);
     return result ? xr_string_value(result) : xr_null();
 }
@@ -739,11 +739,11 @@ XrValue array_method_call_by_symbol(XrayIsolate *isolate, XrArray *array, int sy
     XR_DCHECK(XR_GC_GET_TYPE(&array->gc) == XR_TARRAY || XR_GC_GET_TYPE(&array->gc) == XR_TARRAY_SLICE,
               "array_dispatch: object is not an array");
     XrValue receiver = xr_value_from_array(array);
-    
+
     // Method dispatch
     if (symbol == SYMBOL_IS_EMPTY) return array_is_empty_handler(isolate, receiver, args, argc);
     if (symbol == SYMBOL_HAS) return array_has_handler(isolate, receiver, args, argc);
-    
+
     // Inline push optimization - eliminate function call overhead
     if (symbol == SYMBOL_PUSH) {
         if (argc >= 1) {
@@ -767,7 +767,7 @@ XrValue array_method_call_by_symbol(XrayIsolate *isolate, XrArray *array, int sy
         // Return this for chaining: arr.push(1).push(2)
         return receiver;
     }
-    
+
     if (symbol == SYMBOL_POP) return array_pop_handler(isolate, receiver, args, argc);
     if (symbol == SYMBOL_SHIFT) return array_shift_handler(isolate, receiver, args, argc);
     if (symbol == SYMBOL_UNSHIFT) return array_unshift_handler(isolate, receiver, args, argc);
@@ -775,7 +775,7 @@ XrValue array_method_call_by_symbol(XrayIsolate *isolate, XrArray *array, int sy
     if (symbol == SYMBOL_JOIN) return array_join_handler(isolate, receiver, args, argc);
     if (symbol == SYMBOL_REVERSE) return array_reverse_handler(isolate, receiver, args, argc);
     if (symbol == SYMBOL_CLEAR) return array_clear_handler(isolate, receiver, args, argc);
-    
+
     // slice(start, end?) - return new sub-array (bulk memcpy)
     if (symbol == SYMBOL_SLICE) {
         int len = (int)array->length;
@@ -813,7 +813,7 @@ XrValue array_method_call_by_symbol(XrayIsolate *isolate, XrArray *array, int sy
         }
         return xr_value_from_array(result ? result : xr_array_new(xr_current_coro(isolate)));
     }
-    
+
     // concat(other) - return new merged array (bulk memcpy)
     if (symbol == SYMBOL_CONCAT) {
         // Calculate total capacity
@@ -849,13 +849,13 @@ XrValue array_method_call_by_symbol(XrayIsolate *isolate, XrArray *array, int sy
         }
         return xr_value_from_array(result);
     }
-    
+
     // Higher-order functions - runtime calls
     if (symbol == SYMBOL_FOREACH) return array_foreach_handler(isolate, receiver, args, argc);
     if (symbol == SYMBOL_FILTER) return array_filter_handler(isolate, receiver, args, argc);
     if (symbol == SYMBOL_MAP_METHOD) return array_map_handler(isolate, receiver, args, argc);
     if (symbol == SYMBOL_REDUCE) return array_reduce_handler(isolate, receiver, args, argc);
-    
+
     if (symbol == SYMBOL_FIND) {
         if (argc < 1) return xr_null();
         struct XrClosure *cb = (struct XrClosure*)XR_TO_PTR(args[0]);
@@ -893,18 +893,18 @@ XrValue array_method_call_by_symbol(XrayIsolate *isolate, XrArray *array, int sy
         xr_array_sort(isolate, array, cmp);
         return receiver;
     }
-    
+
     // includes(value) - check if array contains value, return bool
     if (symbol == SYMBOL_INCLUDES) {
         if (argc < 1) return xr_bool(false);
         return xr_bool(xr_array_has(array, args[0]));
     }
-    
+
     // toString fallback
     if (symbol == SYMBOL_TOSTRING) {
-        return xr_string_value(vm_value_to_string(isolate, receiver));
+        return xr_string_value(xr_value_to_string(isolate, receiver));
     }
-    
+
     // Method not found — caller (OP_INVOKE_BUILTIN) throws catchable error
     return XR_NOTFOUND;
 }
@@ -1014,14 +1014,14 @@ XrValue set_method_call_by_symbol(XrayIsolate *isolate, XrSet *set, int symbol, 
     XR_DCHECK(set != NULL, "set_dispatch: NULL set");
     XR_DCHECK(XR_GC_GET_TYPE(&set->gc) == XR_TSET, "set_dispatch: object is not a set");
     XrValue receiver = xr_value_from_set(set);
-    
+
     bool is_weak = (set->flags & XR_SET_FLAG_WEAK) != 0;
-    
+
     // Method dispatch
     if (symbol == SYMBOL_HAS) return set_has_handler(isolate, receiver, args, argc);
     if (symbol == SYMBOL_DELETE) return set_delete_handler(isolate, receiver, args, argc);
     if (symbol == SYMBOL_IS_EMPTY) return set_is_empty_handler(isolate, receiver, args, argc);
-    
+
     if (symbol == SYMBOL_ADD) {
         // WeakSet: value must be a GC object (not int/float/string/bool/null)
         if (is_weak && argc >= 1 && !XR_VALUE_NEEDS_GC(args[0])) {
@@ -1030,7 +1030,7 @@ XrValue set_method_call_by_symbol(XrayIsolate *isolate, XrSet *set, int symbol, 
         }
         return set_add_handler(isolate, receiver, args, argc);
     }
-    
+
     // WeakSet: block enumeration and set-algebra methods
     if (is_weak) {
         if (symbol == SYMBOL_CLEAR || symbol == SYMBOL_UNION ||
@@ -1041,9 +1041,9 @@ XrValue set_method_call_by_symbol(XrayIsolate *isolate, XrSet *set, int symbol, 
             return XR_NOTFOUND;
         }
     }
-    
+
     if (symbol == SYMBOL_CLEAR) return set_clear_handler(isolate, receiver, args, argc);
-    
+
     // Set operations - call handlers directly
     if (symbol == SYMBOL_UNION) return set_union_handler(isolate, receiver, args, argc);
     if (symbol == SYMBOL_INTERSECTION) return set_intersection_handler(isolate, receiver, args, argc);
@@ -1052,19 +1052,19 @@ XrValue set_method_call_by_symbol(XrayIsolate *isolate, XrSet *set, int symbol, 
     if (symbol == SYMBOL_IS_SUBSET) return set_is_subset_handler(isolate, receiver, args, argc);
     if (symbol == SYMBOL_IS_SUPERSET) return set_is_superset_handler(isolate, receiver, args, argc);
     if (symbol == SYMBOL_TO_ARRAY) return set_to_array_handler(isolate, receiver, args, argc);
-    
+
     // Iterator method
     if (symbol == SYMBOL_ITERATOR) {
         XrIterator *iter = xr_iterator_new_from_set(xr_current_coro(isolate), set);
         return iter ? xr_value_from_iterator(iter) : xr_null();
     }
-    
+
     // toString fallback
     if (symbol == SYMBOL_TOSTRING) {
         XrValue set_val = XR_FROM_PTR(set);
-        return xr_string_value(vm_value_to_string(isolate, set_val));
+        return xr_string_value(xr_value_to_string(isolate, set_val));
     }
-    
+
     // Method not found — caller (OP_INVOKE_BUILTIN) throws catchable error
     return XR_NOTFOUND;
 }
@@ -1077,7 +1077,7 @@ XrValue set_method_call_by_symbol(XrayIsolate *isolate, XrSet *set, int symbol, 
 XrValue float_method_call_by_symbol(XrayIsolate *isolate, xr_Number value, int symbol, XrValue *args, int argc) {
     XR_DCHECK(isolate != NULL, "float_dispatch: NULL isolate");
     (void)args; (void)argc;  // Most methods don't need extra args
-    
+
     // toString - convert to string
     if (symbol == SYMBOL_TOSTRING) {
         char buffer[64];
@@ -1085,7 +1085,7 @@ XrValue float_method_call_by_symbol(XrayIsolate *isolate, xr_Number value, int s
         XrString *str = xr_string_intern(isolate, buffer, (size_t)len, 0);
         return xr_string_value(str);
     }
-    
+
     // toFixed(decimals) - format with fixed decimal places
     if (symbol == SYMBOL_TOFIXED) {
         int decimals = (argc >= 1 && XR_IS_INT(args[0])) ? (int)XR_TO_INT(args[0]) : 0;
@@ -1096,27 +1096,27 @@ XrValue float_method_call_by_symbol(XrayIsolate *isolate, xr_Number value, int s
         XrString *str = xr_string_intern(isolate, buffer, (size_t)len, 0);
         return xr_string_value(str);
     }
-    
+
     // floor - round down
     if (symbol == SYMBOL_FLOOR) {
         return xr_int((xr_Integer)floor(value));
     }
-    
+
     // ceil - round up
     if (symbol == SYMBOL_CEIL) {
         return xr_int((xr_Integer)ceil(value));
     }
-    
+
     // round - round to nearest
     if (symbol == SYMBOL_ROUND) {
         return xr_int((xr_Integer)round(value));
     }
-    
+
     // abs - absolute value
     if (symbol == SYMBOL_ABS) {
         return xr_float(fabs(value));
     }
-    
+
     // sqrt - square root
     if (symbol == SYMBOL_SQRT) {
         if (value < 0) {
@@ -1124,12 +1124,12 @@ XrValue float_method_call_by_symbol(XrayIsolate *isolate, xr_Number value, int s
         }
         return xr_float(sqrt(value));
     }
-    
+
     // toInt - truncate to integer
     if (symbol == SYMBOL_TOINT) {
         return xr_int((xr_Integer)value);
     }
-    
+
     // pow(exponent) - power operation
     if (symbol == SYMBOL_POW) {
         if (argc < 1) return xr_float(value);
@@ -1143,7 +1143,7 @@ XrValue float_method_call_by_symbol(XrayIsolate *isolate, xr_Number value, int s
         }
         return xr_float(pow(value, exponent));
     }
-    
+
     // Method not found — caller (OP_INVOKE_BUILTIN) throws catchable error
     return XR_NOTFOUND;
 }
@@ -1154,7 +1154,7 @@ XrValue float_method_call_by_symbol(XrayIsolate *isolate, xr_Number value, int s
 XrValue int_method_call_by_symbol(XrayIsolate *isolate, xr_Integer value, int symbol, XrValue *args, int argc) {
     XR_DCHECK(isolate != NULL, "int_dispatch: NULL isolate");
     (void)args; (void)argc;
-    
+
     // toString - convert to string
     if (symbol == SYMBOL_TOSTRING) {
         char buffer[32];
@@ -1162,18 +1162,18 @@ XrValue int_method_call_by_symbol(XrayIsolate *isolate, xr_Integer value, int sy
         XrString *str = xr_string_intern(isolate, buffer, (size_t)len, 0);
         return xr_string_value(str);
     }
-    
+
     // abs - absolute value
     if (symbol == SYMBOL_ABS) {
         return xr_int(value < 0 ? -value : value);
     }
-    
+
     // toBigInt - convert to BigInt
     if (symbol == SYMBOL_TOBIGINT) {
         XrBigInt *result = xr_bigint_new(xr_current_coro(isolate), value);
         return XR_FROM_PTR(result);
     }
-    
+
     // max(other) - return the larger value
     if (symbol == SYMBOL_MAX) {
         if (argc < 1) return xr_int(value);
@@ -1188,7 +1188,7 @@ XrValue int_method_call_by_symbol(XrayIsolate *isolate, xr_Integer value, int sy
         }
         return xr_int(value);
     }
-    
+
     // min(other) - return the smaller value
     if (symbol == SYMBOL_MIN) {
         if (argc < 1) return xr_int(value);
@@ -1203,12 +1203,12 @@ XrValue int_method_call_by_symbol(XrayIsolate *isolate, xr_Integer value, int sy
         }
         return xr_int(value);
     }
-    
+
     // toFloat - convert to float
     if (symbol == SYMBOL_TOFLOAT) {
         return xr_float((xr_Number)value);
     }
-    
+
     // toHex - convert to hexadecimal string
     if (symbol == SYMBOL_TOHEX) {
         char buffer[32];
@@ -1221,13 +1221,13 @@ XrValue int_method_call_by_symbol(XrayIsolate *isolate, xr_Integer value, int sy
         XrString *str = xr_string_intern(isolate, buffer, (size_t)len, 0);
         return xr_string_value(str);
     }
-    
+
     // Math methods (delegate to Float)
-    if (symbol == SYMBOL_FLOOR || symbol == SYMBOL_CEIL || 
+    if (symbol == SYMBOL_FLOOR || symbol == SYMBOL_CEIL ||
         symbol == SYMBOL_ROUND || symbol == SYMBOL_SQRT || symbol == SYMBOL_POW) {
         return float_method_call_by_symbol(isolate, (xr_Number)value, symbol, args, argc);
     }
-    
+
     // Method not found — caller (OP_INVOKE_BUILTIN) throws catchable error
     return XR_NOTFOUND;
 }
@@ -1242,7 +1242,7 @@ XrValue bool_method_call_by_symbol(XrayIsolate *isolate, bool value, int symbol)
             ? xr_string_value(xr_string_intern(isolate, "true", 4, 0))
             : xr_string_value(xr_string_intern(isolate, "false", 5, 0));
     }
-    
+
     // Method not found — caller (OP_INVOKE_BUILTIN) throws catchable error
     return XR_NOTFOUND;
 }
@@ -1254,7 +1254,7 @@ XrValue bigint_method_call_by_symbol(XrayIsolate *isolate, XrBigInt *bigint, int
     XR_DCHECK(isolate != NULL, "bigint_dispatch: NULL isolate");
     XR_DCHECK(bigint != NULL, "bigint_dispatch: NULL bigint");
     (void)args; (void)argc;
-    
+
     // toString - convert to string
     if (symbol == SYMBOL_TOSTRING) {
         char *str = xr_bigint_to_string(bigint);
@@ -1263,13 +1263,13 @@ XrValue bigint_method_call_by_symbol(XrayIsolate *isolate, XrBigInt *bigint, int
         free(str);
         return xr_string_value(result);
     }
-    
+
     // abs - absolute value
     if (symbol == SYMBOL_ABS) {
         XrBigInt *result = xr_bigint_abs(xr_current_coro(isolate), bigint);
         return XR_FROM_PTR(result);
     }
-    
+
     // sign - sign value (-1, 0, 1)
     if (symbol == SYMBOL_SIGN) {
         if (xr_bigint_is_zero(bigint)) {
@@ -1277,22 +1277,22 @@ XrValue bigint_method_call_by_symbol(XrayIsolate *isolate, XrBigInt *bigint, int
         }
         return xr_int(bigint->sign);
     }
-    
+
     // isZero - check if zero
     if (symbol == SYMBOL_ISZERO) {
         return xr_bool(xr_bigint_is_zero(bigint));
     }
-    
+
     // isNegative - check if negative
     if (symbol == SYMBOL_ISNEGATIVE) {
         return xr_bool(bigint->sign < 0 && !xr_bigint_is_zero(bigint));
     }
-    
+
     // isPositive - check if positive
     if (symbol == SYMBOL_ISPOSITIVE) {
         return xr_bool(bigint->sign > 0 && !xr_bigint_is_zero(bigint));
     }
-    
+
     // toInt - convert to regular integer (returns null on overflow)
     if (symbol == SYMBOL_TOINT) {
         bool overflow = false;
@@ -1300,32 +1300,18 @@ XrValue bigint_method_call_by_symbol(XrayIsolate *isolate, XrBigInt *bigint, int
         if (overflow) return xr_null();
         return xr_int(value);
     }
-    
+
     // toFloat - convert to float
     if (symbol == SYMBOL_TOFLOAT) {
         double value = xr_bigint_to_double(bigint);
         return xr_float(value);
     }
-    
+
     // Method not found — caller (OP_INVOKE_BUILTIN) throws catchable error
     return XR_NOTFOUND;
 }
 
-// Create bound method value
-XrValue xr_value_from_bound_method(XrBoundMethod *bm) {
-    return XR_FROM_PTR(bm);
-}
-
-// Check if value is bound method
-bool xr_value_is_bound_method(XrValue v) {
-    return XR_IS_BOUND_METHOD(v);
-}
-
-// Extract bound method from value
-XrBoundMethod* xr_value_to_bound_method(XrValue v) {
-    if (!XR_IS_BOUND_METHOD(v)) return NULL;
-    return (XrBoundMethod*)XR_TO_PTR(v);
-}
+// Bound method value helpers now live in runtime/closure/xbound_method.c.
 
 /* ========== DateTime Method Dispatch ========== */
 
@@ -1334,122 +1320,122 @@ XrValue datetime_method_call_by_symbol(XrayIsolate *isolate, void *dt, int symbo
     XR_DCHECK(isolate != NULL, "datetime_dispatch: NULL isolate");
     XrDateTime *datetime = (XrDateTime*)dt;
     (void)args; (void)argc;
-    
+
     // format(pattern) - format datetime
     if (symbol == SYMBOL_FORMAT) {
         const char *pattern = XR_DATETIME_DEFAULT_FORMAT;
         if (argc > 0 && XR_IS_STRING(args[0])) {
-            pattern = vm_value_to_string(isolate, args[0])->data;
+            pattern = xr_value_to_string(isolate, args[0])->data;
         }
         char buf[256];
         int len = xr_datetime_format(datetime, pattern, buf, sizeof(buf));
         return xr_string_value(xr_string_intern(isolate, buf, (size_t)len, 0));
     }
-    
+
     // year() - get year
     if (symbol == SYMBOL_YEAR) {
         return xr_int(xr_datetime_year(datetime));
     }
-    
+
     // month() - get month
     if (symbol == SYMBOL_MONTH) {
         return xr_int(xr_datetime_month(datetime));
     }
-    
+
     // day() - get day
     if (symbol == SYMBOL_DAY) {
         return xr_int(xr_datetime_day(datetime));
     }
-    
+
     // hour() - get hour
     if (symbol == SYMBOL_HOUR) {
         return xr_int(xr_datetime_hour(datetime));
     }
-    
+
     // minute() - get minute
     if (symbol == SYMBOL_MINUTE) {
         return xr_int(xr_datetime_minute(datetime));
     }
-    
+
     // second() - get second
     if (symbol == SYMBOL_SECOND) {
         return xr_int(xr_datetime_second(datetime));
     }
-    
+
     // weekday() - get weekday
     if (symbol == SYMBOL_WEEKDAY) {
         return xr_int(xr_datetime_weekday(datetime));
     }
-    
+
     // timestamp() - get timestamp
     if (symbol == SYMBOL_TIMESTAMP) {
         return xr_int(datetime->timestamp);
     }
-    
+
     // toUTC() - convert to UTC
     if (symbol == SYMBOL_TO_UTC) {
         XrDateTime *utc_dt = xr_datetime_to_utc(isolate, datetime);
         return utc_dt ? xr_datetime_value(utc_dt) : xr_null();
     }
-    
+
     // toLocal() - convert to local time
     if (symbol == SYMBOL_TO_LOCAL) {
         XrDateTime *local_dt = xr_datetime_to_local(isolate, datetime);
         return local_dt ? xr_datetime_value(local_dt) : xr_null();
     }
-    
+
     // millisecond() - get millisecond
     if (symbol == SYMBOL_MILLISECOND) {
         return xr_int(xr_datetime_millisecond(datetime));
     }
-    
+
     // yearday() - get day of year
     if (symbol == SYMBOL_YEARDAY) {
         return xr_int(xr_datetime_yearday(datetime));
     }
-    
+
     // isBefore(other) - compare
     if (symbol == SYMBOL_IS_BEFORE) {
         if (argc < 1 || !XR_IS_DATETIME(args[0])) return XR_FALSE_VAL;
         return xr_datetime_is_before(datetime, XR_TO_DATETIME(args[0])) ? XR_TRUE_VAL : XR_FALSE_VAL;
     }
-    
+
     // isAfter(other) - compare
     if (symbol == SYMBOL_IS_AFTER) {
         if (argc < 1 || !XR_IS_DATETIME(args[0])) return XR_FALSE_VAL;
         return xr_datetime_is_after(datetime, XR_TO_DATETIME(args[0])) ? XR_TRUE_VAL : XR_FALSE_VAL;
     }
-    
+
     // equals(other) - compare
     if (symbol == SYMBOL_EQUALS) {
         if (argc < 1 || !XR_IS_DATETIME(args[0])) return XR_FALSE_VAL;
         return xr_datetime_equals(datetime, XR_TO_DATETIME(args[0])) ? XR_TRUE_VAL : XR_FALSE_VAL;
     }
-    
+
     // isLeapYear() - check leap year
     if (symbol == SYMBOL_IS_LEAP_YEAR) {
         return xr_datetime_is_leap_year(datetime) ? XR_TRUE_VAL : XR_FALSE_VAL;
     }
-    
+
     // daysInMonth() - get days in month
     if (symbol == SYMBOL_DAYS_IN_MONTH) {
         return xr_int(xr_datetime_days_in_month(datetime));
     }
-    
+
     // toISOString() - ISO 8601 format
     if (symbol == SYMBOL_TO_ISO_STRING) {
         char buf[64];
         int len = xr_datetime_to_iso_string(datetime, buf, sizeof(buf));
         return xr_string_value(xr_string_intern(isolate, buf, (size_t)len, 0));
     }
-    
+
     // toString() - convert to string
     if (symbol == SYMBOL_TOSTRING) {
         char buf[256];
         int len = xr_datetime_format(datetime, XR_DATETIME_DEFAULT_FORMAT, buf, sizeof(buf));
         return xr_string_value(xr_string_intern(isolate, buf, (size_t)len, 0));
     }
-    
+
     // Method not found — caller (OP_INVOKE_BUILTIN) throws catchable error
     return XR_NOTFOUND;
 }
@@ -1574,16 +1560,16 @@ XrValue xr_enum_get_member_handler(XrayIsolate *isolate, XrValue receiver, XrVal
     (void)isolate;
     if (argc < 1 || !XR_IS_INT(args[0])) return xr_null();
     if (!XR_IS_PTR(receiver)) return xr_null();
-    
+
     XrGCHeader *gc = (XrGCHeader*)XR_TO_PTR(receiver);
     if (XR_GC_GET_TYPE(gc) != XR_TENUM_TYPE) return xr_null();
-    
+
     XrEnumType *enum_type = (XrEnumType*)gc;
     int index = XR_TO_INT(args[0]);
-    
+
     if (index < 0 || index >= (int)enum_type->member_count) {
         return xr_null();
     }
-    
+
     return XR_FROM_PTR(enum_type->members[index].instance);
 }
