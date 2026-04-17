@@ -20,6 +20,31 @@
 #include "../analyzer/xanalyzer_symbol.h"
 #include "../xdiag_fmt.h"
 
+/* ========== Local Cleanup Helpers ========== */
+
+// Release a XrGenericParam* array and its owned heap strings.
+// Safe to call with NULL array (no-op) or partial count (cleans up
+// exactly `count` entries).
+static void free_generic_params(XrGenericParam **type_params, int count) {
+    if (!type_params) return;
+    for (int i = 0; i < count; i++) {
+        if (!type_params[i]) continue;
+        xr_free((char *)type_params[i]->name);
+        xr_free(type_params[i]);
+    }
+    xr_free(type_params);
+}
+
+// Release a XrParamNode* array using the canonical per-node free.
+// See xr_param_node_free for per-field ownership semantics.
+static void free_param_nodes(XrayIsolate *X, XrParamNode **params, int count) {
+    if (!params) return;
+    for (int i = 0; i < count; i++) {
+        if (params[i]) xr_param_node_free(X, params[i]);
+    }
+    xr_free(params);
+}
+
 /* ========== Function Parsing ========== */
 
 // Parse single attribute: @test, @test(skip), @test(timeout: 30), etc.
@@ -187,7 +212,7 @@ AstNode *xr_parse_function_declaration(Parser *parser) {
             if (param_count >= param_capacity) {
                 param_capacity = param_capacity == 0 ? 4 : param_capacity * 2;
                 XrParamNode ** _new_params = (XrParamNode **)xr_realloc(params, sizeof(XrParamNode *) * param_capacity);
-                if (!_new_params) return NULL;
+                if (!_new_params) goto fail;
                 params = _new_params;
 
             }
@@ -206,7 +231,7 @@ AstNode *xr_parse_function_declaration(Parser *parser) {
 
                 if (xr_parser_check(parser, TK_COMMA)) {
                     xr_parser_error(parser, "rest parameter must be last");
-                    return NULL;
+                    goto fail;
                 }
                 break;
             }
@@ -216,12 +241,7 @@ AstNode *xr_parse_function_declaration(Parser *parser) {
                 XrDestructurePattern *pattern = xr_parse_destructure_pattern(parser);
                 if (!pattern) {
                     xr_parser_error(parser, "failed to parse destructure parameter");
-                    for (int i = 0; i < param_count; i++) {
-                        xr_param_node_free(parser->X, params[i]);
-                    }
-                    xr_free(params);
-                    xr_free(func_name);
-                    return NULL;
+                    goto fail;
                 }
 
                 // Generate temp name for destructure param
@@ -276,7 +296,8 @@ AstNode *xr_parse_function_declaration(Parser *parser) {
                     }
                 } else if (seen_default) {
                     xr_parser_error(parser, "required parameter cannot follow optional parameter");
-                    return NULL;
+                    params[param_count++] = param;
+                    goto fail;
                 } else {
                     required_count++;
                 }
@@ -329,7 +350,7 @@ AstNode *xr_parse_function_declaration(Parser *parser) {
             if (block->count >= block->capacity) {
                 block->capacity = block->capacity == 0 ? 4 : block->capacity * 2;
                 AstNode ** _new_block_statements = (AstNode **)xr_realloc(block->statements, sizeof(AstNode *) * block->capacity);
-                if (!_new_block_statements) return NULL;
+                if (!_new_block_statements) goto fail;
                 block->statements = _new_block_statements;
 
             }
@@ -361,6 +382,17 @@ AstNode *xr_parse_function_declaration(Parser *parser) {
     xr_free(func_name);
 
     return func_decl;
+
+fail:
+    // Release everything the parser still owns locally. type_params and
+    // params have not yet been transferred to the AST on this path.
+    if (type_param_count > 0) {
+        parser->type_scope = saved_scope;
+    }
+    free_generic_params(type_params, type_param_count);
+    free_param_nodes(parser->X, params, param_count);
+    xr_free(func_name);
+    return NULL;
 }
 
 // Parse function call: add(1, 2)
@@ -415,11 +447,19 @@ AstNode *xr_parse_array_literal(Parser *parser) {
             if (count >= capacity) {
                 capacity *= 2;
                 AstNode ** _new_keys = (AstNode **)xr_realloc(keys, sizeof(AstNode *) * capacity);
-                if (!_new_keys) return NULL;
+                if (!_new_keys) {
+                    xr_free(keys);
+                    xr_free(values);
+                    return NULL;
+                }
                 keys = _new_keys;
 
                 AstNode ** _new_values = (AstNode **)xr_realloc(values, sizeof(AstNode *) * capacity);
-                if (!_new_values) return NULL;
+                if (!_new_values) {
+                    xr_free(keys);
+                    xr_free(values);
+                    return NULL;
+                }
                 values = _new_values;
 
             }
@@ -539,15 +579,30 @@ AstNode *xr_parse_object_literal(Parser *parser) {
         if (count >= capacity) {
             capacity = capacity == 0 ? 4 : capacity * 2;
             AstNode ** _new_keys = (AstNode **)xr_realloc(keys, sizeof(AstNode *) * capacity);
-            if (!_new_keys) return NULL;
+            if (!_new_keys) {
+                xr_free(keys);
+                xr_free(values);
+                xr_free(computed);
+                return NULL;
+            }
             keys = _new_keys;
 
             AstNode ** _new_values = (AstNode **)xr_realloc(values, sizeof(AstNode *) * capacity);
-            if (!_new_values) return NULL;
+            if (!_new_values) {
+                xr_free(keys);
+                xr_free(values);
+                xr_free(computed);
+                return NULL;
+            }
             values = _new_values;
 
             bool * _new_computed = (bool *)xr_realloc(computed, sizeof(bool) * capacity);
-            if (!_new_computed) return NULL;
+            if (!_new_computed) {
+                xr_free(keys);
+                xr_free(values);
+                xr_free(computed);
+                return NULL;
+            }
             computed = _new_computed;
 
         }
@@ -705,11 +760,19 @@ AstNode *xr_parse_empty_map_literal(Parser *parser) {
         if (count >= capacity) {
             capacity = capacity == 0 ? 4 : capacity * 2;
             AstNode ** _new_keys = (AstNode **)xr_realloc(keys, sizeof(AstNode *) * capacity);
-            if (!_new_keys) return NULL;
+            if (!_new_keys) {
+                xr_free(keys);
+                xr_free(values);
+                return NULL;
+            }
             keys = _new_keys;
 
             AstNode ** _new_values = (AstNode **)xr_realloc(values, sizeof(AstNode *) * capacity);
-            if (!_new_values) return NULL;
+            if (!_new_values) {
+                xr_free(keys);
+                xr_free(values);
+                return NULL;
+            }
             values = _new_values;
 
         }
@@ -857,13 +920,14 @@ AstNode *xr_parse_member_access(Parser *parser, AstNode *object) {
         return NULL;
     }
 
-    // Copy member name
+    // Copy member name (xr_ast_member_access deep-copies, so release our copy)
     char *member_name = (char *)xr_malloc(name_len + 1);
     strncpy(member_name, name, name_len);
     member_name[name_len] = '\0';
 
-    // Create member access node
-    return xr_ast_member_access(parser->X, object, member_name, line);
+    AstNode *node = xr_ast_member_access(parser->X, object, member_name, line);
+    xr_free(member_name);
+    return node;
 }
 
 /*
@@ -892,7 +956,10 @@ AstNode *xr_parse_return_statement(Parser *parser) {
         if (count >= capacity) {
             capacity = (capacity == 0) ? 4 : capacity * 2;
             AstNode** _new_values = (AstNode**)xr_realloc(values, sizeof(AstNode*) * capacity);
-            if (!_new_values) return NULL;
+            if (!_new_values) {
+                xr_free(values);
+                return NULL;
+            }
             values = _new_values;
 
         }
@@ -1433,11 +1500,15 @@ AstNode *xr_parse_try_statement(Parser *parser) {
     // Need at least catch or finally
     if (!catch_body && !finally_body) {
         xr_parser_error(parser, "try statement requires catch or finally block");
+        xr_free((char *)catch_var);
         return NULL;
     }
 
-    return xr_ast_try_catch(parser->X, try_body, catch_var, catch_var_line, catch_var_column,
-                            catch_body, finally_body, line);
+    // xr_ast_try_catch deep-copies catch_var via ast_strdup.
+    AstNode *node = xr_ast_try_catch(parser->X, try_body, catch_var, catch_var_line, catch_var_column,
+                                     catch_body, finally_body, line);
+    xr_free((char *)catch_var);
+    return node;
 }
 
 /*
