@@ -36,6 +36,31 @@ static char* token_to_string(Token *token) {
     return str;
 }
 
+/* ========== Local Cleanup Helpers ========== */
+
+// Release a XrGenericParam* array and the heap strings that back each
+// param->name. XrType constraints come from the shared type pool and are
+// NOT freed here.
+static void oop_free_generic_params(XrGenericParam **type_params, int count) {
+    if (!type_params) return;
+    for (int i = 0; i < count; i++) {
+        if (!type_params[i]) continue;
+        xr_free((char *)type_params[i]->name);
+        xr_free(type_params[i]);
+    }
+    xr_free(type_params);
+}
+
+// Release an array of strdup'd C strings (e.g. `implements` interface
+// name list). Safe on NULL or partial count.
+static void oop_free_string_array(char **arr, int count) {
+    if (!arr) return;
+    for (int i = 0; i < count; i++) {
+        xr_free(arr[i]);
+    }
+    xr_free(arr);
+}
+
 /* ========== Class Declaration Parsing ========== */
 
 // Parse class declaration
@@ -131,6 +156,17 @@ AstNode *xr_parse_class_declaration(Parser *parser) {
     if (xr_parser_check(parser, TK_COLON)) {
         xr_parser_error_at_current(parser,
             "use 'extends' instead of ':' for class inheritance, e.g. class Dog extends Animal");
+        // Release every local heap state we own: AST is not built on this
+        // path so ownership is not transferred. Also restore type_scope so
+        // the rest of the file continues to parse in the outer scope.
+        if (type_param_count > 0) {
+            parser->type_scope = saved_scope;
+        }
+        oop_free_generic_params(type_params, type_param_count);
+        xr_free(class_name);
+        xr_free(super_name);
+        xr_free(super_module);
+        oop_free_string_array(interfaces, interface_count);
         return NULL;
     }
 
@@ -597,15 +633,15 @@ AstNode *xr_parse_method_declaration(Parser *parser, const char *name,
             if (param_count >= param_capacity) {
                 param_capacity = param_capacity == 0 ? 4 : param_capacity * 2;
                 char** _new_parameters = (char**)xr_realloc(parameters, sizeof(XrType*) * param_capacity);
-                if (!_new_parameters) return NULL;
+                if (!_new_parameters) goto fail;
                 parameters = _new_parameters;
 
                 XrType** _new_param_types = (XrType**)xr_realloc(param_types, sizeof(XrType*) * param_capacity);
-                if (!_new_param_types) return NULL;
+                if (!_new_param_types) goto fail;
                 param_types = _new_param_types;
 
                 uint8_t* _new_modes = (uint8_t*)xr_realloc(param_passing_modes, sizeof(uint8_t) * param_capacity);
-                if (!_new_modes) return NULL;
+                if (!_new_modes) goto fail;
                 param_passing_modes = _new_modes;
 
             }
@@ -666,6 +702,28 @@ AstNode *xr_parse_method_declaration(Parser *parser, const char *name,
     method_node->as.method_decl.type_param_count = type_param_count;
 
     return method_node;
+
+fail:
+    // Release the heap state we still own locally. XrType pointers come
+    // from the type pool and are not freed here. `name` was heap-allocated
+    // by our caller (xr_parse_field_declaration) but ownership is only
+    // transferred on success; on failure we consume it here.
+    xr_free((char *)name);
+    if (type_param_names) {
+        for (int i = 0; i < type_param_count; i++) {
+            xr_free(type_param_names[i]);
+        }
+        xr_free(type_param_names);
+    }
+    if (parameters) {
+        for (int i = 0; i < param_count; i++) {
+            xr_free(parameters[i]);
+        }
+        xr_free(parameters);
+    }
+    xr_free(param_types);
+    xr_free(param_passing_modes);
+    return NULL;
 }
 
 /* ========== New Expression Parsing ========== */
@@ -771,9 +829,13 @@ AstNode *xr_parse_new_expression(Parser *parser) {
 
     xr_parser_consume(parser, TK_RPAREN, "expected ')' to end argument list");
 
-    // Create new expression node
-    return xr_ast_new_expr(parser->X, module_name, class_name, arguments, arg_count,
-                           type_args, type_arg_count, line);
+    // Create new expression node. xr_ast_new_expr takes ownership of
+    // class_name / arguments / type_args, but deep-copies module_name,
+    // so release our copy of module_name here.
+    AstNode *node = xr_ast_new_expr(parser->X, module_name, class_name, arguments, arg_count,
+                                    type_args, type_arg_count, line);
+    xr_free(module_name);
+    return node;
 }
 
 /* ========== This Expression Parsing ========== */
@@ -1058,7 +1120,7 @@ AstNode *xr_parse_operator_method(Parser *parser, bool is_private, bool is_stati
     if (xr_parser_check(parser, TK_RPAREN)) {
         if (expected_params > 0 && op_token != TK_MINUS && op_token != TK_NOT && op_token != TK_INC && op_token != TK_DEC) {
             xr_parser_error(parser, "operator method requires parameters");
-            return NULL;
+            goto fail;
         }
         // Unary operators (expected_params == 0) can have no parameters
         xr_parser_consume(parser, TK_RPAREN, "expected ')' to end parameter list");
@@ -1088,7 +1150,7 @@ AstNode *xr_parse_operator_method(Parser *parser, bool is_private, bool is_stati
     if (expected_params == 2) {
         if (!xr_parser_match(parser, TK_COMMA)) {
             xr_parser_error(parser, "operator []= requires 2 parameters");
-            return NULL;
+            goto fail;
         }
 
         // Parse second parameter
@@ -1108,7 +1170,7 @@ AstNode *xr_parse_operator_method(Parser *parser, bool is_private, bool is_stati
         // Should not have more parameters
         if (xr_parser_match(parser, TK_COMMA)) {
             xr_parser_error(parser, "too many parameters for operator method");
-            return NULL;
+            goto fail;
         }
 
         xr_parser_consume(parser, TK_RPAREN, "expected ')' to end parameter list");
@@ -1148,6 +1210,19 @@ AstNode *xr_parse_operator_method(Parser *parser, bool is_private, bool is_stati
     method->as.method_decl.op_type = op_type_val;  // set specific operator type
 
     return method;
+
+fail:
+    // Release the operator-method state we still own. XrType entries are
+    // shared via the type pool and are NOT freed here.
+    xr_free(name);
+    if (parameters) {
+        for (int i = 0; i < param_count; i++) {
+            xr_free(parameters[i]);
+        }
+        xr_free(parameters);
+    }
+    xr_free(param_types);
+    return NULL;
 }
 
 /* ========== Property Accessor Parsing (New Syntax) ========== */
@@ -1389,11 +1464,17 @@ AstNode *xr_parse_interface_method(Parser *parser) {
             if (param_count >= param_capacity) {
                 param_capacity = param_capacity == 0 ? 4 : param_capacity * 2;
                 char** _new_parameters = (char**)xr_realloc(parameters, sizeof(XrType*) * param_capacity);
-                if (!_new_parameters) return NULL;
+                if (!_new_parameters) {
+                    xr_free(param_name);
+                    goto fail;
+                }
                 parameters = _new_parameters;
 
                 XrType** _new_param_types = (XrType**)xr_realloc(param_types, sizeof(XrType*) * param_capacity);
-                if (!_new_param_types) return NULL;
+                if (!_new_param_types) {
+                    xr_free(param_name);
+                    goto fail;
+                }
                 param_types = _new_param_types;
 
             }
@@ -1415,10 +1496,24 @@ AstNode *xr_parse_interface_method(Parser *parser) {
     // Interface method signature ends with semicolon (optional)
     xr_parser_match(parser, TK_SEMICOLON);  // optional semicolon
 
-    // Create interface method signature node
+    // Create interface method signature node. xr_ast_interface_method
+    // takes ownership of method_name, parameters[] and param_types[].
     return xr_ast_interface_method(parser->X, method_name,
                                     parameters, param_types, param_count,
                                     return_type, line);
+
+fail:
+    // On OOM we still own method_name and any accumulated parameter names.
+    // XrType pointers are shared via the type pool and are not freed here.
+    xr_free(method_name);
+    if (parameters) {
+        for (int i = 0; i < param_count; i++) {
+            xr_free(parameters[i]);
+        }
+        xr_free(parameters);
+    }
+    xr_free(param_types);
+    return NULL;
 }
 
 /* ========== Enum Declaration Parsing ========== */
@@ -1508,9 +1603,10 @@ AstNode *xr_parse_enum_declaration(Parser *parser) {
             member_value = xr_parse_expression(parser);
         }
 
-        // Create enum member node
+        // Create enum member node (xr_ast_enum_member deep-copies member_name)
         AstNode *member = xr_ast_enum_member(parser->X, member_name,
                                              member_value, parser->previous.line);
+        xr_free(member_name);
 
         XR_PARSE_PUSH(members, member_count, member_capacity, member);
 
@@ -1529,9 +1625,14 @@ AstNode *xr_parse_enum_declaration(Parser *parser) {
 
     xr_parser_consume(parser, TK_RBRACE, "expected '}' to end enum body");
 
-    // Create enum declaration AST node
-    return xr_ast_enum_decl(parser->X, enum_name, type_hint,
-                            members, member_count, line);
+    // Create enum declaration AST node (xr_ast_enum_decl deep-copies both
+    // enum_name and type_hint, and copies the members array contents).
+    AstNode *node = xr_ast_enum_decl(parser->X, enum_name, type_hint,
+                                     members, member_count, line);
+    xr_free(enum_name);
+    xr_free(type_hint);
+    xr_free(members);
+    return node;
 }
 
 /* ========== Static Constructor Parsing ========== */
