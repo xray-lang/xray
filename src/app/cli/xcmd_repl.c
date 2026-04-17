@@ -72,7 +72,7 @@ static bool terminal_supports_color(void) {
 static char* get_history_file(void) {
     const char *home = getenv("HOME");
     if (!home) return NULL;
-    
+
     char *path = (char*)xr_malloc(512);
     snprintf(path, 512, "%s/%s", home, REPL_HISTORY_FILE);
     return path;
@@ -93,7 +93,7 @@ static void print_colored(ReplState *state, const char *color, const char *text)
 // Print welcome message
 static void print_welcome(ReplState *state) {
     printf("\n");
-    
+
     if (state->use_color) {
         printf("  %s----------------------------------------%s\n", CLR_BLUE, CLR_RESET);
         printf("  %s%s* Xray%s %sv%d.%d.%d%s\n",
@@ -108,7 +108,7 @@ static void print_welcome(ReplState *state) {
         printf("  ----------------------------------------\n");
         printf("  Type .help for commands, .exit to quit\n");
     }
-    
+
     printf("\n");
 }
 
@@ -242,10 +242,10 @@ static void print_help(ReplState *state, const char *topic) {
         print_help_brief(state);
         return;
     }
-    
+
     // Skip leading spaces
     while (*topic == ' ') topic++;
-    
+
     if (strcmp(topic, "syntax") == 0) {
         print_help_syntax(state);
     } else if (strcmp(topic, "types") == 0) {
@@ -276,13 +276,13 @@ static bool is_input_complete(ReplState *state) {
 // Append to buffer
 static void append_to_buffer(ReplState *state, const char *line) {
     size_t len = strlen(line);
-    
+
     // Ensure capacity
     if (state->buffer_len + len + 2 >= state->buffer_size) {
         state->buffer_size *= 2;
         state->buffer = (char*)xr_realloc(state->buffer, state->buffer_size);
     }
-    
+
     // Append
     if (state->buffer_len > 0) {
         state->buffer[state->buffer_len++] = '\n';
@@ -315,15 +315,16 @@ static void execute_code(ReplState *state, const char *code) {
     if (!proto) {
         return;  // compile error already reported
     }
-    
+
     // Track proto for later cleanup (closures reference sub-protos)
     if (state->proto_count >= state->proto_capacity) {
         state->proto_capacity *= 2;
-        state->protos = xr_realloc(state->protos,
-                                state->proto_capacity * sizeof(XrProto*));
+        XR_REALLOC_OR_ABORT(state->protos,
+                            (size_t)state->proto_capacity * sizeof(XrProto*),
+                            "repl protos grow");
     }
     state->protos[state->proto_count++] = proto;
-    
+
     // Execute on persistent runtime
     xr_execute(state->isolate, proto);
 }
@@ -335,17 +336,17 @@ static void cmd_load(ReplState *state, const char *filename) {
         printf("Usage: .load <filename>\n");
         return;
     }
-    
+
     // Skip leading spaces
     while (*filename == ' ') filename++;
-    
+
     char *source = cli_read_file(filename);
     if (!source) {
         print_colored(state, CLR_RED, "Error: ");
         printf("cannot open file '%s'\n", filename);
         return;
     }
-    
+
     printf("Loading %s...\n", filename);
     execute_code(state, source);
     xr_free(source);
@@ -358,15 +359,15 @@ static void cmd_time(ReplState *state, const char *expr) {
         printf("Usage: .time <expression>\n");
         return;
     }
-    
+
     // Skip leading spaces
     while (*expr == ' ') expr++;
-    
+
     double start = get_time_ms();
     execute_code(state, expr);
     double end = get_time_ms();
-    
-    printf("%s%.3f ms%s\n", 
+
+    printf("%s%.3f ms%s\n",
            state->use_color ? CLR_GRAY : "",
            end - start,
            state->use_color ? CLR_RESET : "");
@@ -379,7 +380,7 @@ static bool handle_command(ReplState *state, const char *input) {
     if (strcmp(input, ".exit") == 0 || strcmp(input, ".quit") == 0) {
         return false;  // Special handling, exit from main loop
     }
-    
+
     // .help [topic]
     if (strcmp(input, ".help") == 0) {
         print_help(state, NULL);
@@ -389,14 +390,14 @@ static bool handle_command(ReplState *state, const char *input) {
         print_help(state, input + 6);
         return true;
     }
-    
+
     // .clear
     if (strcmp(input, ".clear") == 0) {
         clear_screen();
         print_welcome(state);
         return true;
     }
-    
+
     // .reset
     if (strcmp(input, ".reset") == 0) {
         repl_free_protos(state);
@@ -411,19 +412,19 @@ static bool handle_command(ReplState *state, const char *input) {
         print_colored(state, CLR_GREEN, "Environment reset\n");
         return true;
     }
-    
+
     // .load <file>
     if (strncmp(input, ".load", 5) == 0) {
         cmd_load(state, input + 5);
         return true;
     }
-    
+
     // .time <expr>
     if (strncmp(input, ".time", 5) == 0) {
         cmd_time(state, input + 5);
         return true;
     }
-    
+
 #ifdef HAS_READLINE
     // .history
     if (strcmp(input, ".history") == 0) {
@@ -442,7 +443,7 @@ static bool handle_command(ReplState *state, const char *input) {
         return true;
     }
 #endif
-    
+
     // Unknown command
     if (input[0] == '.') {
         print_colored(state, CLR_RED, "Unknown command: ");
@@ -450,7 +451,7 @@ static bool handle_command(ReplState *state, const char *input) {
         printf("Type .help for available commands\n");
         return true;
     }
-    
+
     return false;
 }
 
@@ -459,7 +460,7 @@ static bool handle_command(ReplState *state, const char *input) {
 // so it can correctly calculate visible prompt width for cursor positioning.
 static const char* get_prompt(ReplState *state, bool is_continuation) {
     static char prompt[128];
-    
+
     if (is_continuation) {
         if (state->use_color) {
             snprintf(prompt, sizeof(prompt),
@@ -475,14 +476,14 @@ static const char* get_prompt(ReplState *state, bool is_continuation) {
             snprintf(prompt, sizeof(prompt), "xray> ");
         }
     }
-    
+
     return prompt;
 }
 
 // Read one line of input
 static char* read_line(ReplState *state, bool is_continuation) {
     const char *prompt = get_prompt(state, is_continuation);
-    
+
 #ifdef HAS_READLINE
     char *line = readline(prompt);
     // Only add single-line (non-continuation) input to history here.
@@ -494,18 +495,18 @@ static char* read_line(ReplState *state, bool is_continuation) {
 #else
     printf("%s", prompt);
     fflush(stdout);
-    
+
     static char buffer[REPL_BUFFER_SIZE];
     if (fgets(buffer, sizeof(buffer), stdin) == NULL) {
         return NULL;
     }
-    
+
     // Remove newline
     size_t len = strlen(buffer);
     if (len > 0 && buffer[len-1] == '\n') {
         buffer[len-1] = '\0';
     }
-    
+
     return xr_strdup(buffer);
 #endif
 }
@@ -538,7 +539,7 @@ static struct option repl_long_options[] = {
 int cmd_repl(int argc, char **argv) {
     ReplState state = {0};
     state.use_color = terminal_supports_color();
-    
+
     // Parse arguments with getopt_long
     optind = 1;
     int opt;
@@ -549,25 +550,25 @@ int cmd_repl(int argc, char **argv) {
             default: print_repl_help(); return 1;
         }
     }
-    
+
     // Initialize buffer
     state.buffer_size = REPL_BUFFER_SIZE;
     state.buffer = (char*)xr_malloc(state.buffer_size);
     state.buffer[0] = '\0';
     state.buffer_len = 0;
-    
+
     // Initialize proto tracking
     state.proto_capacity = REPL_PROTO_INITIAL_CAP;
     state.protos = (XrProto**)xr_malloc(state.proto_capacity * sizeof(XrProto*));
     state.proto_count = 0;
-    
+
     // Setup SIGINT handler
     struct sigaction sa;
     sa.sa_handler = repl_sigint_handler;
     sa.sa_flags = 0;
     sigemptyset(&sa.sa_mask);
     sigaction(SIGINT, &sa, NULL);
-    
+
     // Load history
 #ifdef HAS_READLINE
     char *history_file = get_history_file();
@@ -575,7 +576,7 @@ int cmd_repl(int argc, char **argv) {
         read_history(history_file);
     }
 #endif
-    
+
     // Create Isolate + Runtime (persistent across inputs for GC safety)
     state.isolate = cli_create_isolate();
     if (!state.isolate) {
@@ -584,10 +585,10 @@ int cmd_repl(int argc, char **argv) {
         return 1;
     }
     xr_multicore_init(state.isolate, 0);
-    
+
     // Print welcome
     print_welcome(&state);
-    
+
     // REPL main loop
     while (1) {
         // Check interrupt flag
@@ -600,10 +601,10 @@ int cmd_repl(int argc, char **argv) {
                 printf("\n");
             }
         }
-        
+
         bool is_continuation = state.buffer_len > 0;
         char *line = read_line(&state, is_continuation);
-        
+
         // Check interrupt during read
         if (g_repl_interrupted) {
             g_repl_interrupted = 0;
@@ -612,7 +613,7 @@ int cmd_repl(int argc, char **argv) {
             reset_buffer(&state);
             continue;
         }
-        
+
         // EOF (Ctrl+D)
         if (!line) {
             if (state.buffer_len > 0) {
@@ -623,7 +624,7 @@ int cmd_repl(int argc, char **argv) {
             printf("\n");
             break;
         }
-        
+
         // Empty line
         if (strlen(line) == 0) {
             if (state.buffer_len > 0) {
@@ -632,32 +633,32 @@ int cmd_repl(int argc, char **argv) {
             xr_free(line);
             continue;
         }
-        
+
         // Check exit command
-        if (state.buffer_len == 0 && 
+        if (state.buffer_len == 0 &&
             (strcmp(line, ".exit") == 0 || strcmp(line, ".quit") == 0)) {
             xr_free(line);
             break;
         }
-        
+
         // Handle built-in commands (only in non-multi-line mode)
         if (state.buffer_len == 0 && line[0] == '.') {
             handle_command(&state, line);
             xr_free(line);
             continue;
         }
-        
+
         // Append to buffer
         append_to_buffer(&state, line);
         xr_free(line);
-        
+
         // Check if input is complete
         if (is_input_complete(&state)) {
             execute_code(&state, state.buffer);
             reset_buffer(&state);
         }
     }
-    
+
     // Save history
 #ifdef HAS_READLINE
     if (history_file) {
@@ -665,10 +666,10 @@ int cmd_repl(int argc, char **argv) {
         xr_free(history_file);
     }
 #endif
-    
+
     // Restore default SIGINT handler
     signal(SIGINT, SIG_DFL);
-    
+
     // Cleanup
     printf("Bye!\n");
     repl_free_protos(&state);
@@ -676,6 +677,6 @@ int cmd_repl(int argc, char **argv) {
     xray_isolate_delete(state.isolate);
     xr_free(state.protos);
     xr_free(state.buffer);
-    
+
     return 0;
 }

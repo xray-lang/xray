@@ -66,11 +66,11 @@ static uint64_t hash_ast_node(AstNode *node, uint64_t hash) {
         hash *= XR_FNV64_PRIME;
         return hash;
     }
-    
+
     // Hash node type
     hash ^= (uint64_t)node->type;
     hash *= XR_FNV64_PRIME;
-    
+
     // Hash based on node type
     switch (node->type) {
         case AST_LITERAL_INT:
@@ -99,7 +99,7 @@ static uint64_t hash_ast_node(AstNode *node, uint64_t hash) {
             break;
         case AST_CALL_EXPR:
             hash = hash_ast_node(node->as.call_expr.callee, hash);
-            hash = hash_node_list(node->as.call_expr.arguments, 
+            hash = hash_node_list(node->as.call_expr.arguments,
                                   node->as.call_expr.arg_count, hash);
             break;
         case AST_MEMBER_ACCESS:
@@ -115,7 +115,7 @@ static uint64_t hash_ast_node(AstNode *node, uint64_t hash) {
             hash = hash_ast_node(node->as.assignment.value, hash);
             break;
         case AST_BLOCK:
-            hash = hash_node_list(node->as.block.statements, 
+            hash = hash_node_list(node->as.block.statements,
                                   node->as.block.count, hash);
             break;
         case AST_IF_STMT:
@@ -134,7 +134,7 @@ static uint64_t hash_ast_node(AstNode *node, uint64_t hash) {
             hash = hash_ast_node(node->as.for_stmt.body, hash);
             break;
         case AST_RETURN_STMT:
-            hash = hash_node_list(node->as.return_stmt.values, 
+            hash = hash_node_list(node->as.return_stmt.values,
                                   node->as.return_stmt.value_count, hash);
             break;
         case AST_FUNCTION_DECL:
@@ -147,14 +147,14 @@ static uint64_t hash_ast_node(AstNode *node, uint64_t hash) {
             hash = hash_ast_node(node->as.function_decl.body, hash);
             break;
         case AST_PROGRAM:
-            hash = hash_node_list(node->as.program.statements, 
+            hash = hash_node_list(node->as.program.statements,
                                   node->as.program.count, hash);
             break;
         default:
             // For other node types, just use type (already hashed above)
             break;
     }
-    
+
     return hash;
 }
 
@@ -171,24 +171,24 @@ uint64_t xa_hash_ast_block(AstNode *block) {
 static XaDependencyGraph *dep_graph_new(void) {
     XaDependencyGraph *g = xr_calloc(1, sizeof(XaDependencyGraph));
     if (!g) return NULL;
-    
+
     g->bucket_count = INITIAL_BUCKET_COUNT;
     g->forward = xr_calloc(g->bucket_count, sizeof(XaDependency*));
     g->reverse = xr_calloc(g->bucket_count, sizeof(XaDependency*));
-    
+
     if (!g->forward || !g->reverse) {
         xr_free(g->forward);
         xr_free(g->reverse);
         xr_free(g);
         return NULL;
     }
-    
+
     return g;
 }
 
 static void dep_graph_free(XaDependencyGraph *g) {
     if (!g) return;
-    
+
     // Free forward edges
     for (int i = 0; i < g->bucket_count; i++) {
         XaDependency *dep = g->forward[i];
@@ -198,7 +198,7 @@ static void dep_graph_free(XaDependencyGraph *g) {
             dep = next;
         }
     }
-    
+
     // Reverse edges point to same nodes, already freed
     xr_free(g->forward);
     xr_free(g->reverse);
@@ -207,9 +207,9 @@ static void dep_graph_free(XaDependencyGraph *g) {
 
 void xa_dep_add(XaIncrementalCtx *ctx, uint32_t from, uint32_t to, XaDepKind kind) {
     if (!ctx || !ctx->deps) return;
-    
+
     XaDependencyGraph *g = ctx->deps;
-    
+
     // Check if already exists
     int bucket = from % g->bucket_count;
     XaDependency *dep = g->forward[bucket];
@@ -219,19 +219,19 @@ void xa_dep_add(XaIncrementalCtx *ctx, uint32_t from, uint32_t to, XaDepKind kin
         }
         dep = dep->next;
     }
-    
+
     // Add new dependency
     dep = xr_malloc(sizeof(XaDependency));
     if (!dep) return;
-    
+
     dep->from_id = from;
     dep->to_id = to;
     dep->kind = kind;
-    
+
     // Add to forward list
     dep->next = g->forward[bucket];
     g->forward[bucket] = dep;
-    
+
     // Add to reverse list (create a separate node for reverse lookup)
     XaDependency *rev = xr_malloc(sizeof(XaDependency));
     if (rev) {
@@ -242,15 +242,15 @@ void xa_dep_add(XaIncrementalCtx *ctx, uint32_t from, uint32_t to, XaDepKind kin
         rev->next = g->reverse[rev_bucket];
         g->reverse[rev_bucket] = rev;
     }
-    
+
     g->edge_count++;
 }
 
 void xa_dep_remove_symbol(XaIncrementalCtx *ctx, uint32_t symbol_id) {
     if (!ctx || !ctx->deps) return;
-    
+
     XaDependencyGraph *g = ctx->deps;
-    
+
     // Remove from forward (where symbol is the source)
     int bucket = symbol_id % g->bucket_count;
     XaDependency **pp = &g->forward[bucket];
@@ -264,7 +264,7 @@ void xa_dep_remove_symbol(XaIncrementalCtx *ctx, uint32_t symbol_id) {
             pp = &(*pp)->next;
         }
     }
-    
+
     // Remove from reverse (where symbol is the target)
     bucket = symbol_id % g->bucket_count;
     pp = &g->reverse[bucket];
@@ -282,13 +282,13 @@ void xa_dep_remove_symbol(XaIncrementalCtx *ctx, uint32_t symbol_id) {
 void xa_dep_get_dependents(XaIncrementalCtx *ctx, uint32_t symbol_id,
                            uint32_t **out_ids, int *out_count) {
     if (!ctx || !ctx->deps || !out_ids || !out_count) return;
-    
+
     *out_ids = NULL;
     *out_count = 0;
-    
+
     XaDependencyGraph *g = ctx->deps;
     int bucket = symbol_id % g->bucket_count;
-    
+
     // Count dependents
     int count = 0;
     XaDependency *dep = g->reverse[bucket];
@@ -296,13 +296,13 @@ void xa_dep_get_dependents(XaIncrementalCtx *ctx, uint32_t symbol_id,
         if (dep->to_id == symbol_id) count++;
         dep = dep->next;
     }
-    
+
     if (count == 0) return;
-    
+
     // Allocate and fill
     *out_ids = xr_malloc(sizeof(uint32_t) * count);
     if (!*out_ids) return;
-    
+
     int idx = 0;
     dep = g->reverse[bucket];
     while (dep && idx < count) {
@@ -320,7 +320,7 @@ void xa_dep_get_dependents(XaIncrementalCtx *ctx, uint32_t symbol_id,
 
 XaFileCache *xa_cache_get_file(XaIncrementalCtx *ctx, const char *path) {
     if (!ctx || !path) return NULL;
-    
+
     XaFileCache *fc = ctx->file_caches;
     while (fc) {
         if (fc->path && strcmp(fc->path, path) == 0) {
@@ -334,21 +334,21 @@ XaFileCache *xa_cache_get_file(XaIncrementalCtx *ctx, const char *path) {
 static XaFileCache *cache_get_or_create_file(XaIncrementalCtx *ctx, const char *path) {
     XaFileCache *fc = xa_cache_get_file(ctx, path);
     if (fc) return fc;
-    
+
     fc = xr_calloc(1, sizeof(XaFileCache));
     if (!fc) return NULL;
-    
+
     fc->path = xr_strdup(path);
     fc->next = ctx->file_caches;
     ctx->file_caches = fc;
     ctx->file_count++;
-    
+
     return fc;
 }
 
 XaBlockCache *xa_cache_get_block(XaFileCache *file, uint32_t symbol_id) {
     if (!file) return NULL;
-    
+
     XaBlockCache *bc = file->blocks;
     while (bc) {
         if (bc->symbol_id == symbol_id) {
@@ -364,10 +364,10 @@ void xa_cache_update_block(XaIncrementalCtx *ctx, const char *path,
                            uint32_t start_line, uint32_t end_line,
                            XrType *inferred_type) {
     if (!ctx || !path) return;
-    
+
     XaFileCache *fc = cache_get_or_create_file(ctx, path);
     if (!fc) return;
-    
+
     // Find or create block cache
     XaBlockCache *bc = xa_cache_get_block(fc, symbol_id);
     if (!bc) {
@@ -378,7 +378,7 @@ void xa_cache_update_block(XaIncrementalCtx *ctx, const char *path,
         fc->blocks = bc;
         fc->block_count++;
     }
-    
+
     bc->content_hash = hash;
     bc->start_line = start_line;
     bc->end_line = end_line;
@@ -387,10 +387,10 @@ void xa_cache_update_block(XaIncrementalCtx *ctx, const char *path,
 
 void xa_cache_invalidate_file(XaIncrementalCtx *ctx, const char *path) {
     if (!ctx || !path) return;
-    
+
     XaFileCache *fc = xa_cache_get_file(ctx, path);
     if (!fc) return;
-    
+
     // Free all block caches
     XaBlockCache *bc = fc->blocks;
     while (bc) {
@@ -410,24 +410,24 @@ void xa_cache_invalidate_file(XaIncrementalCtx *ctx, const char *path) {
 XaIncrementalCtx *xa_incremental_new(void) {
     XaIncrementalCtx *ctx = xr_calloc(1, sizeof(XaIncrementalCtx));
     if (!ctx) return NULL;
-    
+
     ctx->deps = dep_graph_new();
     if (!ctx->deps) {
         xr_free(ctx);
         return NULL;
     }
-    
+
     ctx->dirty_capacity = 32;
     ctx->dirty_symbols = xr_malloc(sizeof(uint32_t) * ctx->dirty_capacity);
-    
+
     return ctx;
 }
 
 void xa_incremental_free(XaIncrementalCtx *ctx) {
     if (!ctx) return;
-    
+
     dep_graph_free(ctx->deps);
-    
+
     // Free file caches
     XaFileCache *fc = ctx->file_caches;
     while (fc) {
@@ -442,7 +442,7 @@ void xa_incremental_free(XaIncrementalCtx *ctx) {
         xr_free(fc);
         fc = next;
     }
-    
+
     xr_free(ctx->dirty_symbols);
     xr_free(ctx);
 }
@@ -455,7 +455,7 @@ void xa_incremental_free(XaIncrementalCtx *ctx) {
 static void collect_functions(AstNode *node, uint32_t **ids, int *count, int *capacity,
                               XaAnalyzer *analyzer) {
     if (!node) return;
-    
+
     if (node->type == AST_FUNCTION_DECL) {
         const char *name = node->as.function_decl.name;
         if (name) {
@@ -470,7 +470,7 @@ static void collect_functions(AstNode *node, uint32_t **ids, int *count, int *ca
         }
         return;  // Don't recurse into nested functions for now
     }
-    
+
     if (node->type == AST_PROGRAM) {
         for (int i = 0; i < node->as.program.count; i++) {
             collect_functions(node->as.program.statements[i], ids, count, capacity, analyzer);
@@ -490,26 +490,26 @@ static void collect_functions(AstNode *node, uint32_t **ids, int *count, int *ca
 XaChangeSet *xa_detect_changes(XaIncrementalCtx *ctx, XaAnalyzer *analyzer,
                                const char *file, AstNode *old_ast, AstNode *new_ast) {
     if (!ctx || !analyzer || !file) return NULL;
-    
+
     XaChangeSet *cs = xr_calloc(1, sizeof(XaChangeSet));
     if (!cs) return NULL;
-    
+
     // Collect function IDs from both ASTs
     uint32_t *old_ids = NULL;
     int old_count = 0, old_cap = 0;
     collect_functions(old_ast, &old_ids, &old_count, &old_cap, analyzer);
-    
+
     uint32_t *new_ids = NULL;
     int new_count = 0, new_cap = 0;
     collect_functions(new_ast, &new_ids, &new_count, &new_cap, analyzer);
-    
+
     // Simple comparison: mark all as modified for now
     // A more sophisticated implementation would compare hashes
     cs->modified_symbols = new_ids;
     cs->modified_count = new_count;
-    
+
     xr_free(old_ids);
-    
+
     return cs;
 }
 
@@ -530,21 +530,22 @@ static void add_dirty(XaIncrementalCtx *ctx, uint32_t id) {
     for (int i = 0; i < ctx->dirty_count; i++) {
         if (ctx->dirty_symbols[i] == id) return;
     }
-    
+
     // Add to dirty set
     if (ctx->dirty_count >= ctx->dirty_capacity) {
         ctx->dirty_capacity *= 2;
-        ctx->dirty_symbols = xr_realloc(ctx->dirty_symbols, 
-                                          sizeof(uint32_t) * ctx->dirty_capacity);
+        XR_REALLOC_OR_ABORT(ctx->dirty_symbols,
+                            sizeof(uint32_t) * (size_t)ctx->dirty_capacity,
+                            "incremental dirty_symbols grow");
     }
     ctx->dirty_symbols[ctx->dirty_count++] = id;
 }
 
 void xa_propagate_dirty(XaIncrementalCtx *ctx, XaChangeSet *changes) {
     if (!ctx || !changes) return;
-    
+
     ctx->dirty_count = 0;
-    
+
     // Add directly changed symbols
     for (int i = 0; i < changes->modified_count; i++) {
         add_dirty(ctx, changes->modified_symbols[i]);
@@ -552,16 +553,16 @@ void xa_propagate_dirty(XaIncrementalCtx *ctx, XaChangeSet *changes) {
     for (int i = 0; i < changes->removed_count; i++) {
         add_dirty(ctx, changes->removed_symbols[i]);
     }
-    
+
     // Propagate to dependents (BFS)
     int processed = 0;
     while (processed < ctx->dirty_count) {
         uint32_t sym_id = ctx->dirty_symbols[processed++];
-        
+
         uint32_t *dependents = NULL;
         int dep_count = 0;
         xa_dep_get_dependents(ctx, sym_id, &dependents, &dep_count);
-        
+
         for (int i = 0; i < dep_count; i++) {
             add_dirty(ctx, dependents[i]);
         }
@@ -576,21 +577,21 @@ void xa_propagate_dirty(XaIncrementalCtx *ctx, XaChangeSet *changes) {
 void xa_incremental_update(XaAnalyzer *analyzer, XaIncrementalCtx *incr,
                            const char *file, AstNode *ast) {
     if (!analyzer || !file || !ast) return;
-    
+
     // Get file cache
     XaFileCache *fc = xa_cache_get_file(incr, file);
-    
+
     // Calculate file hash
     // For now, we use a simple approach - full re-analysis with caching
     // TODO: Implement true incremental parsing
-    
+
     if (!fc) {
         // New file - full analysis
         incr->full_analyses++;
         xa_analyzer_analyze(analyzer, file, (XrAstNode*)ast);
         return;
     }
-    
+
     // File exists - check if content changed
     uint64_t new_hash = xa_hash_ast_block(ast);
     if (fc->file_hash == new_hash) {
@@ -598,11 +599,11 @@ void xa_incremental_update(XaAnalyzer *analyzer, XaIncrementalCtx *incr,
         incr->skipped_functions++;
         return;
     }
-    
+
     // Content changed - update
     incr->incremental_updates++;
     fc->file_hash = new_hash;
-    
+
     // For now, do full re-analysis but track statistics
     // Future: only re-analyze modified functions
     xa_analyzer_update(analyzer, file, (XrAstNode*)ast);

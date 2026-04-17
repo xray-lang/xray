@@ -43,11 +43,11 @@ XaSymbol *xa_symbol_new(const char *name, XaSymbolKind kind) {
     XR_DCHECK(name != NULL, "xa_symbol_new: name is NULL");
     XaSymbol *sym = xr_calloc(1, sizeof(XaSymbol));
     if (!sym) return NULL;
-    
+
     sym->name = name ? xr_strdup(name) : NULL;
     sym->kind = kind;
     sym->id = next_symbol_id();
-    
+
     return sym;
 }
 
@@ -80,10 +80,10 @@ void xa_symbol_free(XaSymbol *symbol) {
 // Add a reference to symbol links
 void xa_symbol_add_ref(XaSymbolLinks *links, uint32_t line, uint32_t col, uint32_t end_col, bool is_write) {
     if (!links) return;
-    
+
     XaRefLocation *ref = xr_malloc(sizeof(XaRefLocation));
     if (!ref) return;
-    
+
     ref->line = line;
     ref->column = col;
     ref->end_column = end_col;
@@ -108,38 +108,40 @@ XaScope *xa_scope_new(XaScopeKind kind, XaScope *parent) {
     XR_DCHECK(kind >= 0, "scope_new: invalid scope kind");
     XaScope *scope = xr_calloc(1, sizeof(XaScope));
     if (!scope) return NULL;
-    
+
     scope->kind = kind;
     scope->parent = parent;
     scope->symbols = xr_hashmap_new();
-    
+
     // Add to parent's children
     if (parent) {
         if (parent->child_count >= parent->child_capacity) {
             int new_cap = parent->child_capacity == 0 ? 4 : parent->child_capacity * 2;
-            parent->children = xr_realloc(parent->children, sizeof(XaScope*) * new_cap);
+            XR_REALLOC_OR_ABORT(parent->children,
+                                sizeof(XaScope*) * (size_t)new_cap,
+                                "scope children grow");
             parent->child_capacity = new_cap;
         }
         parent->children[parent->child_count++] = scope;
         XR_DCHECK(parent->child_count <= parent->child_capacity, "scope_new: child_count > child_capacity");
     }
-    
+
     return scope;
 }
 
 // Free a scope (and its children)
 void xa_scope_free(XaScope *scope) {
     if (!scope) return;
-    
+
     // Free children first
     for (int i = 0; i < scope->child_count; i++) {
         xa_scope_free(scope->children[i]);
     }
     if (scope->children) xr_free(scope->children);
-    
+
     // Free symbol map
     xr_hashmap_free(scope->symbols);
-    
+
     xr_free(scope);
 }
 
@@ -203,7 +205,7 @@ XaScope *xa_scope_find_definition(XaScope *scope, const char *name) {
 static XaScope *find_scope_by_node_recursive(XaScope *scope, void *ast_node) {
     if (!scope) return NULL;
     if (scope->ast_node == ast_node) return scope;
-    
+
     for (int i = 0; i < scope->child_count; i++) {
         XaScope *found = find_scope_by_node_recursive(scope->children[i], ast_node);
         if (found) return found;
@@ -283,7 +285,7 @@ void xa_class_info_add_method(XrClassInfo *info, XaSymbol *method) {
 // Look up member in class (searches base classes too)
 XaSymbol *xa_class_info_lookup_member(XrClassInfo *info, const char *name) {
     if (!info || !name) return NULL;
-    
+
     // O(1) hash lookup for own members
     if (info->members_map) {
         XaSymbol *found = (XaSymbol *)xr_hashmap_get(info->members_map, name);
@@ -303,27 +305,27 @@ XaSymbol *xa_class_info_lookup_member(XrClassInfo *info, const char *name) {
             if (strcmp(info->static_methods[i]->name, name) == 0) return info->static_methods[i];
         }
     }
-    
+
     // Walk base class chain
     if (info->base) {
         return xa_class_info_lookup_member(info->base, name);
     }
-    
+
     return NULL;
 }
 
 // Function signature helpers
 void xa_symbol_links_set_function_sig(XaSymbolLinks *links, XrType **param_types,
-                                       const char **param_names, int param_count, 
+                                       const char **param_names, int param_count,
                                        XrType *return_type) {
     if (!links) return;
-    
+
     // Free old param types
     if (links->param_types) {
         xr_free(links->param_types);
         links->param_types = NULL;
     }
-    
+
     // Free old param names
     if (links->param_names) {
         for (int i = 0; i < links->param_count; i++) {
@@ -332,7 +334,7 @@ void xa_symbol_links_set_function_sig(XaSymbolLinks *links, XrType **param_types
         xr_free(links->param_names);
         links->param_names = NULL;
     }
-    
+
     // Copy param types
     if (param_count > 0 && param_types) {
         links->param_types = xr_malloc(sizeof(XrType*) * param_count);
@@ -340,7 +342,7 @@ void xa_symbol_links_set_function_sig(XaSymbolLinks *links, XrType **param_types
             memcpy(links->param_types, param_types, sizeof(XrType*) * param_count);
         }
     }
-    
+
     // Copy param names
     if (param_count > 0 && param_names) {
         links->param_names = xr_malloc(sizeof(char*) * param_count);
@@ -350,7 +352,7 @@ void xa_symbol_links_set_function_sig(XaSymbolLinks *links, XrType **param_types
             }
         }
     }
-    
+
     links->param_count = param_count;
     links->return_type = return_type;
 }
@@ -383,14 +385,14 @@ bool xa_symbol_is_function(XaSymbol *symbol) {
 }
 
 // Set generic type parameters for a function/class
-void xa_symbol_links_set_type_params(XaSymbolLinks *links, 
+void xa_symbol_links_set_type_params(XaSymbolLinks *links,
                                       const char **names, XrType **constraints, int count) {
     if (!links || count <= 0) return;
-    
+
     links->type_param_count = count;
     links->type_param_names = xr_malloc(sizeof(const char*) * count);
     links->type_param_constraints = xr_malloc(sizeof(XrType*) * count);
-    
+
     for (int i = 0; i < count; i++) {
         links->type_param_names[i] = names[i] ? xr_strdup(names[i]) : NULL;
         links->type_param_constraints[i] = constraints ? constraints[i] : NULL;
@@ -427,16 +429,16 @@ static void collect_symbol_cb(const char *key, void *value, void *userdata) {
 XaSymbol **xa_scope_get_all_symbols(XaScope *scope, int *count) {
     *count = 0;
     if (!scope || !scope->symbols) return NULL;
-    
+
     uint32_t n = xr_hashmap_count((XrHashMap*)scope->symbols);
     if (n == 0) return NULL;
-    
+
     XaSymbol **result = xr_malloc(sizeof(XaSymbol*) * n);
     if (!result) return NULL;
-    
+
     struct SymbolCollectCtx ctx = { result, 0 };
     xr_hashmap_foreach((XrHashMap*)scope->symbols, collect_symbol_cb, &ctx);
-    
+
     *count = ctx.idx;
     return result;
 }
@@ -444,12 +446,12 @@ XaSymbol **xa_scope_get_all_symbols(XaScope *scope, int *count) {
 // Lookup symbol by ID — O(1) via registry, fallback to O(n) scan
 XaSymbol *xa_scope_lookup_by_id(XaScope *scope, uint32_t id) {
     if (id == 0) return NULL;
-    
+
     // Fast path: O(1) registry lookup
     if (g_symbol_registry) {
         return (XaSymbol*)xr_intmap_get(g_symbol_registry, id);
     }
-    
+
     // Slow fallback (should not happen when analyzer is active)
     if (!scope || !scope->symbols) return NULL;
     XrHashMap *map = (XrHashMap*)scope->symbols;
@@ -467,27 +469,27 @@ XaSymbol *xa_scope_lookup_by_id(XaScope *scope, uint32_t id) {
 // Type alias helpers
 XaSymbol *xa_scope_define_type_alias(XaScope *scope, const char *name, void *type) {
     if (!scope || !name) return NULL;
-    
+
     // Check if already exists
     XaSymbol *existing = xa_scope_lookup_local(scope, name);
     if (existing) return NULL;  // Already defined
-    
+
     // Create type alias symbol
     XaSymbol *sym = xa_symbol_new(name, XA_SYM_TYPE_ALIAS);
     if (!sym) return NULL;
-    
+
     sym->alias_type = type;  // Store type directly in symbol
     xa_scope_add_symbol(scope, sym);
-    
+
     return sym;
 }
 
 void *xa_scope_resolve_type_alias(XaScope *scope, const char *name) {
     if (!scope || !name) return NULL;
-    
+
     XaSymbol *sym = xa_scope_lookup(scope, name);
     if (!sym || sym->kind != XA_SYM_TYPE_ALIAS) return NULL;
-    
+
     return sym->alias_type;
 }
 

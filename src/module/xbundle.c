@@ -45,17 +45,17 @@ typedef struct {
 static char* read_file_content(const char *path) {
     FILE *f = fopen(path, "r");
     if (!f) return NULL;
-    
+
     fseek(f, 0, SEEK_END);
     long size = ftell(f);
     fseek(f, 0, SEEK_SET);
-    
+
     char *content = xr_malloc(size + 1);
     if (!content) {
         fclose(f);
         return NULL;
     }
-    
+
     size_t read = fread(content, 1, size, f);
     content[read] = '\0';
     fclose(f);
@@ -72,12 +72,12 @@ static char* get_dir_path(const char *file_path) {
 
 static char* resolve_module_path(const char *base_dir, const char *module_name) {
     char path[512];
-    
+
     // Absolute path
     if (module_name[0] == '/') {
         return xr_strdup(module_name);
     }
-    
+
     // Relative path
     if (strncmp(module_name, "./", 2) == 0 || strncmp(module_name, "../", 3) == 0) {
         // Check if .xr extension exists
@@ -87,7 +87,7 @@ static char* resolve_module_path(const char *base_dir, const char *module_name) 
         } else {
             snprintf(path, sizeof(path), "%s/%s.xr", base_dir, module_name);
         }
-        
+
         // Check if file exists
         FILE *f = fopen(path, "r");
         if (f) {
@@ -95,7 +95,7 @@ static char* resolve_module_path(const char *base_dir, const char *module_name) 
             char *real = realpath(path, NULL);
             return real ? real : xr_strdup(path);
         }
-        
+
         // Try directory entry
         snprintf(path, sizeof(path), "%s/%s/index.xr", base_dir, module_name);
         f = fopen(path, "r");
@@ -105,7 +105,7 @@ static char* resolve_module_path(const char *base_dir, const char *module_name) 
             return real ? real : xr_strdup(path);
         }
     }
-    
+
     // Stdlib or package: not bundled (loaded at runtime)
     return NULL;
 }
@@ -114,14 +114,14 @@ static char* resolve_module_path(const char *base_dir, const char *module_name) 
 static char* resolve_package_path(const char *package_name) {
     const char *home = getenv("HOME");
     if (!home) return NULL;
-    
+
     char owner[64], name[64];
     if (sscanf(package_name, "%63[^/]/%63s", owner, name) != 2) {
         return NULL;
     }
-    
+
     char path[512];
-    
+
     // Try latest/src/main.xr
     snprintf(path, sizeof(path), "%s/.xray/packages/%s/%s/latest/src/main.xr", home, owner, name);
     FILE *f = fopen(path, "r");
@@ -130,7 +130,7 @@ static char* resolve_package_path(const char *package_name) {
         char *real = realpath(path, NULL);
         return real ? real : xr_strdup(path);
     }
-    
+
     // Try latest/main.xr
     snprintf(path, sizeof(path), "%s/.xray/packages/%s/%s/latest/main.xr", home, owner, name);
     f = fopen(path, "r");
@@ -139,19 +139,21 @@ static char* resolve_package_path(const char *package_name) {
         char *real = realpath(path, NULL);
         return real ? real : xr_strdup(path);
     }
-    
+
     return NULL;
 }
 
-static void bundle_add_entry(XrBundle *bundle, const char *path, 
+static void bundle_add_entry(XrBundle *bundle, const char *path,
                              const uint8_t *bc, size_t bc_size) {
     if (bundle->count >= bundle->capacity) {
         int new_cap = bundle->capacity * 2;
         if (new_cap < 16) new_cap = 16;
-        bundle->entries = xr_realloc(bundle->entries, new_cap * sizeof(XrBundleEntry));
+        XR_REALLOC_OR_ABORT(bundle->entries,
+                            (size_t)new_cap * sizeof(XrBundleEntry),
+                            "bundle entries grow");
         bundle->capacity = new_cap;
     }
-    
+
     XrBundleEntry *entry = &bundle->entries[bundle->count++];
     entry->path = xr_strdup(path);
     entry->bc = xr_malloc(bc_size);
@@ -168,11 +170,13 @@ static void add_external_dep(XrExternalDeps *deps, const char *name) {
     for (int i = 0; i < deps->count; i++) {
         if (strcmp(deps->deps[i], name) == 0) return;
     }
-    
+
     if (deps->count >= deps->capacity) {
         int new_cap = deps->capacity * 2;
         if (new_cap < 8) new_cap = 8;
-        deps->deps = xr_realloc(deps->deps, new_cap * sizeof(char*));
+        XR_REALLOC_OR_ABORT(deps->deps,
+                            (size_t)new_cap * sizeof(char*),
+                            "bundle external deps grow");
         deps->capacity = new_cap;
     }
     deps->deps[deps->count++] = xr_strdup(name);
@@ -180,18 +184,18 @@ static void add_external_dep(XrExternalDeps *deps, const char *name) {
 
 static void visit_node(BundleContext *ctx, AstNode *node, const char *current_dir) {
     if (!node) return;
-    
+
     // Check if this is an import statement
     if (node->type == AST_IMPORT_STMT) {
         const char *module_name = node->as.import_stmt.module_name;
         ImportType import_type = node->as.import_stmt.import_type;
-        
+
         // Collect stdlib dependency
         if (import_type == IMPORT_STDLIB) {
             add_external_dep(&ctx->bundle->stdlib, module_name);
             return;
         }
-        
+
         // Collect third-party package dependency
         if (import_type == IMPORT_PACKAGE) {
             // Static bundle mode: try to bundle third-party package
@@ -200,14 +204,14 @@ static void visit_node(BundleContext *ctx, AstNode *node, const char *current_di
                 if (pkg_path) {
                     if (!xr_hashmap_has(ctx->visited, pkg_path)) {
                         xr_hashmap_set(ctx->visited, pkg_path, (void*)1);
-                        
+
                         char *source = read_file_content(pkg_path);
                         if (source) {
                             AstNode *ast = xr_parse_with_source(ctx->X, source, pkg_path);
                             if (ast) {
                                 char *pkg_dir = get_dir_path(pkg_path);
                                 collect_imports_from_ast(ctx, ast, pkg_dir);
-                                
+
                                 XrProto *proto = xr_compile_ast_with_source(ctx->X, ast, pkg_path);
                                 if (proto) {
                                     size_t bc_size;
@@ -232,7 +236,7 @@ static void visit_node(BundleContext *ctx, AstNode *node, const char *current_di
             add_external_dep(&ctx->bundle->packages, module_name);
             return;
         }
-        
+
         // Only process file and directory imports
         if (import_type == IMPORT_FILE || import_type == IMPORT_DIR) {
             char *resolved = resolve_module_path(current_dir, module_name);
@@ -240,7 +244,7 @@ static void visit_node(BundleContext *ctx, AstNode *node, const char *current_di
                 // Check if already processed
                 if (!xr_hashmap_has(ctx->visited, resolved)) {
                     xr_hashmap_set(ctx->visited, resolved, (void*)1);
-                    
+
                     // Recursively process dependencies
                     char *source = read_file_content(resolved);
                     if (source) {
@@ -248,10 +252,10 @@ static void visit_node(BundleContext *ctx, AstNode *node, const char *current_di
                         if (ast) {
                             // Get module directory
                             char *module_dir = get_dir_path(resolved);
-                            
+
                             // Recursively collect dependencies
                             collect_imports_from_ast(ctx, ast, module_dir);
-                            
+
                             // Compile and add to bundle
                             XrProto *proto = xr_compile_ast_with_source(ctx->X, ast, resolved);
                             if (proto) {
@@ -262,7 +266,7 @@ static void visit_node(BundleContext *ctx, AstNode *node, const char *current_di
                                     xr_free(bc);
                                 }
                             }
-                            
+
                             xr_ast_free(ctx->X, ast);
                             xr_free(module_dir);
                         }
@@ -274,7 +278,7 @@ static void visit_node(BundleContext *ctx, AstNode *node, const char *current_di
         }
         return;
     }
-    
+
     // Recursively traverse child nodes
     switch (node->type) {
         case AST_PROGRAM:
@@ -282,53 +286,53 @@ static void visit_node(BundleContext *ctx, AstNode *node, const char *current_di
                 visit_node(ctx, node->as.program.statements[i], current_dir);
             }
             break;
-            
+
         case AST_BLOCK:
             for (int i = 0; i < node->as.block.count; i++) {
                 visit_node(ctx, node->as.block.statements[i], current_dir);
             }
             break;
-            
+
         case AST_IF_STMT:
             visit_node(ctx, node->as.if_stmt.condition, current_dir);
             visit_node(ctx, node->as.if_stmt.then_branch, current_dir);
             visit_node(ctx, node->as.if_stmt.else_branch, current_dir);
             break;
-            
+
         case AST_WHILE_STMT:
             visit_node(ctx, node->as.while_stmt.condition, current_dir);
             visit_node(ctx, node->as.while_stmt.body, current_dir);
             break;
-            
+
         case AST_FOR_STMT:
             visit_node(ctx, node->as.for_stmt.initializer, current_dir);
             visit_node(ctx, node->as.for_stmt.condition, current_dir);
             visit_node(ctx, node->as.for_stmt.increment, current_dir);
             visit_node(ctx, node->as.for_stmt.body, current_dir);
             break;
-            
+
         case AST_FUNCTION_DECL:
             visit_node(ctx, node->as.function_decl.body, current_dir);
             break;
-            
+
         case AST_CLASS_DECL:
             for (int i = 0; i < node->as.class_decl.method_count; i++) {
                 visit_node(ctx, node->as.class_decl.methods[i], current_dir);
             }
             break;
-            
+
         case AST_STRUCT_DECL:
             for (int i = 0; i < node->as.struct_decl.method_count; i++) {
                 visit_node(ctx, node->as.struct_decl.methods[i], current_dir);
             }
             break;
-            
+
         case AST_TRY_CATCH:
             visit_node(ctx, node->as.try_catch.try_body, current_dir);
             visit_node(ctx, node->as.try_catch.catch_body, current_dir);
             visit_node(ctx, node->as.try_catch.finally_body, current_dir);
             break;
-            
+
         default:
             // Other node types don't contain imports
             break;
@@ -347,24 +351,24 @@ XrBundle* xr_bundle_create(XrayIsolate *X, const char *entry_file) {
 
 XrBundle* xr_bundle_create_ex(XrayIsolate *X, const char *entry_file, XrBundleFlags flags) {
     if (!X || !entry_file) return NULL;
-    
+
     // Read entry file
     char *source = read_file_content(entry_file);
     if (!source) {
         xr_log_warning("bundle", "cannot read entry file: %s", entry_file);
         return NULL;
     }
-    
+
     // Get absolute path
     char *abs_path = realpath(entry_file, NULL);
     if (!abs_path) {
         abs_path = xr_strdup(entry_file);
     }
-    
+
     // Create bundle result
     XrBundle *bundle = xr_calloc(1, sizeof(XrBundle));
     bundle->entry_path = xr_strdup(abs_path);
-    
+
     // Create context
     BundleContext ctx = {
         .X = X,
@@ -373,14 +377,14 @@ XrBundle* xr_bundle_create_ex(XrayIsolate *X, const char *entry_file, XrBundleFl
         .base_dir = get_dir_path(abs_path),
         .flags = flags
     };
-    
+
     // Mark entry file as visited
     xr_hashmap_set(ctx.visited, abs_path, (void*)1);
-    
+
     // Parse entry file
     AstNode *ast = xr_parse_with_source(X, source, abs_path);
     xr_free(source);
-    
+
     if (!ast) {
         xr_log_warning("bundle", "failed to parse entry file: %s", entry_file);
         xr_hashmap_free(ctx.visited);
@@ -389,10 +393,10 @@ XrBundle* xr_bundle_create_ex(XrayIsolate *X, const char *entry_file, XrBundleFl
         xr_bundle_free(bundle);
         return NULL;
     }
-    
+
     // Collect all dependencies
     collect_imports_from_ast(&ctx, ast, ctx.base_dir);
-    
+
     // Compile entry file and add to bundle (placed last to ensure dependencies come first)
     XrProto *proto = xr_compile_ast_with_source(X, ast, abs_path);
     if (proto) {
@@ -403,12 +407,12 @@ XrBundle* xr_bundle_create_ex(XrayIsolate *X, const char *entry_file, XrBundleFl
             xr_free(bc);
         }
     }
-    
+
     xr_ast_free(X, ast);
     xr_hashmap_free(ctx.visited);
     xr_free(ctx.base_dir);
     xr_free(abs_path);
-    
+
     return bundle;
 }
 
@@ -424,7 +428,7 @@ static void free_external_deps(XrExternalDeps *deps) {
 
 void xr_bundle_free(XrBundle *bundle) {
     if (!bundle) return;
-    
+
     for (int i = 0; i < bundle->count; i++) {
         xr_free((void*)bundle->entries[i].path);
         xr_free((void*)bundle->entries[i].bc);
@@ -438,37 +442,37 @@ void xr_bundle_free(XrBundle *bundle) {
 
 char* xr_bundle_to_c_source(XrBundle *bundle, const char *var_prefix) {
     if (!bundle || bundle->count == 0) return NULL;
-    
+
     const char *prefix = var_prefix ? var_prefix : "xr_app";
-    
+
     // Estimate output size
     size_t total_bc = 0;
     for (int i = 0; i < bundle->count; i++) {
         total_bc += bundle->entries[i].bc_size;
     }
     size_t buf_size = total_bc * 6 + bundle->count * 512 + 4096;
-    
+
     char *output = xr_malloc(buf_size);
     if (!output) return NULL;
     char *p = output;
     char *end = output + buf_size;
-    
+
 #define EMIT(...) do { \
     int _n = snprintf(p, (size_t)(end - p), __VA_ARGS__); \
     if (_n > 0) p += _n; \
 } while(0)
-    
+
     // Header
     EMIT("/* Auto-generated by xray build */\n\n");
     EMIT("#include <stdint.h>\n");
     EMIT("#include <stddef.h>\n\n");
-    
+
     // Bytecode for each module
     for (int i = 0; i < bundle->count; i++) {
         const XrBundleEntry *e = &bundle->entries[i];
         EMIT("/* Module: %s */\n", e->path);
         EMIT("static const uint8_t %s_mod%d_bc[%zu] = {\n", prefix, i, e->bc_size);
-        
+
         for (size_t j = 0; j < e->bc_size; j++) {
             if (j % 12 == 0) EMIT("    ");
             EMIT("0x%02x", e->bc[j]);
@@ -478,7 +482,7 @@ char* xr_bundle_to_c_source(XrBundle *bundle, const char *var_prefix) {
         }
         EMIT("};\n\n");
     }
-    
+
     // Module table
     EMIT("/* Module table */\n");
     EMIT("typedef struct {\n");
@@ -486,19 +490,19 @@ char* xr_bundle_to_c_source(XrBundle *bundle, const char *var_prefix) {
     EMIT("    const uint8_t *bc;\n");
     EMIT("    size_t size;\n");
     EMIT("} XrEmbeddedModule;\n\n");
-    
+
     EMIT("const int %s_module_count = %d;\n\n", prefix, bundle->count);
-    
+
     EMIT("const XrEmbeddedModule %s_modules[%d] = {\n", prefix, bundle->count);
     for (int i = 0; i < bundle->count; i++) {
         const XrBundleEntry *e = &bundle->entries[i];
         EMIT("    {\"%s\", %s_mod%d_bc, %zu},\n", e->path, prefix, i, e->bc_size);
     }
     EMIT("};\n\n");
-    
+
     // Entry module index (last one)
     EMIT("const int %s_entry_index = %d;\n\n", prefix, bundle->count - 1);
-    
+
     // Lookup function
     EMIT("/* Find embedded module */\n");
     EMIT("const uint8_t* %s_find_module(const char *path, size_t *out_size) {\n", prefix);
@@ -510,8 +514,8 @@ char* xr_bundle_to_c_source(XrBundle *bundle, const char *var_prefix) {
     EMIT("    }\n");
     EMIT("    return NULL;\n");
     EMIT("}\n");
-    
+
 #undef EMIT
-    
+
     return output;
 }

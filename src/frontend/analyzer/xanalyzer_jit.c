@@ -43,8 +43,9 @@ static void add_func_summary(XaJitMetadata *meta, XaFuncSummary *summary) {
     XR_DCHECK(summary != NULL, "add_func_summary: NULL summary");
     if (meta->func_count >= meta->func_capacity) {
         int new_cap = meta->func_capacity ? meta->func_capacity * 2 : 16;
-        meta->func_summaries = xr_realloc(meta->func_summaries,
-                                           new_cap * sizeof(XaFuncSummary));
+        XR_REALLOC_OR_ABORT(meta->func_summaries,
+                            (size_t)new_cap * sizeof(XaFuncSummary),
+                            "analyzer_jit func_summaries grow");
         meta->func_capacity = new_cap;
     }
     meta->func_summaries[meta->func_count++] = *summary;
@@ -55,8 +56,9 @@ static void add_var_hint(XaJitMetadata *meta, XaVarHint *hint) {
     XR_DCHECK(hint != NULL, "add_var_hint: NULL hint");
     if (meta->var_count >= meta->var_capacity) {
         int new_cap = meta->var_capacity ? meta->var_capacity * 2 : 32;
-        meta->var_hints = xr_realloc(meta->var_hints,
-                                      new_cap * sizeof(XaVarHint));
+        XR_REALLOC_OR_ABORT(meta->var_hints,
+                            (size_t)new_cap * sizeof(XaVarHint),
+                            "analyzer_jit var_hints grow");
         meta->var_capacity = new_cap;
     }
     meta->var_hints[meta->var_count++] = *hint;
