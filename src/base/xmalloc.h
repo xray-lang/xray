@@ -147,6 +147,62 @@ static inline void xr_mem_dump_stats(void) {}
 #define XR_FREE_ARRAY(type, pointer) \
     xr_free(pointer)
 
+/*
+ * Safe realloc that avoids leaking the original buffer on OOM.
+ *
+ * Usage:
+ *     if (!XR_REALLOC(buf, new_size)) {
+ *         // handle OOM; `buf` still points to the valid original buffer
+ *         return ERROR;
+ *     }
+ *     // buf now points to the new (possibly larger) buffer
+ *
+ * Arguments:
+ *     ptr_lvalue  A simple lvalue (variable or struct field). Must not have
+ *                 side effects, as it is referenced twice by the macro.
+ *     size        New size in bytes.
+ *
+ * Returns (as a boolean expression):
+ *     true  - reallocation succeeded and ptr_lvalue was updated,
+ *     false - reallocation failed; ptr_lvalue is unchanged so the caller
+ *             can still free the original buffer later.
+ *
+ * Rationale:
+ *     The common idiom `p = xr_realloc(p, n)` silently leaks `p` when the
+ *     allocator returns NULL. XR_REALLOC enforces the tmp-swap pattern at
+ *     every call site so OOM is observable and non-destructive.
+ *
+ * Notes:
+ *     size == 0 is treated as successful free semantics: ptr_lvalue becomes
+ *     whatever xr_realloc returns (NULL on most implementations).
+ */
+#define XR_REALLOC(ptr_lvalue, size)                                        \
+    __extension__ ({                                                        \
+        size_t _xr_sz = (size);                                             \
+        void *_xr_tmp = xr_realloc((ptr_lvalue), _xr_sz);                   \
+        bool _xr_ok = (_xr_tmp != NULL) || (_xr_sz == 0);                   \
+        if (_xr_ok) (ptr_lvalue) = _xr_tmp;                                 \
+        _xr_ok;                                                             \
+    })
+
+/*
+ * XR_REALLOC_OR_ABORT — shortcut for the common "cannot propagate OOM"
+ * case: performs XR_REALLOC and aborts with a diagnostic message if the
+ * allocation fails. Use this inside internal / void-returning helpers
+ * where a proper error propagation path would require a larger refactor.
+ *
+ * Prefer XR_REALLOC in new code whenever the caller can meaningfully
+ * recover from or report the failure.
+ */
+#define XR_REALLOC_OR_ABORT(ptr_lvalue, size, msg)                          \
+    do {                                                                    \
+        if (!XR_REALLOC((ptr_lvalue), (size))) {                            \
+            fprintf(stderr, "[FATAL] %s:%d: xr_realloc OOM: %s\n",          \
+                    __FILE__, __LINE__, (msg));                             \
+            abort();                                                        \
+        }                                                                   \
+    } while (0)
+
 #define XR_ALLOCATE(type) \
     ((type*)xr_malloc(sizeof(type)))
 
