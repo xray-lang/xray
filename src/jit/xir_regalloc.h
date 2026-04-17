@@ -123,9 +123,11 @@ XR_FUNC XraResult *xra_run(XirFunc *func);
 // Free register allocation result
 XR_FUNC void xra_result_free(XraResult *r);
 
-// Core query: find register at exact RA position
+// Core query: find register at exact RA position.
+// All xra_* query helpers tolerate r == NULL to simplify callers that may
+// operate on functions for which register allocation was skipped or failed.
 static inline int8_t xra_reg_at_pos(const XraResult *r, uint32_t vreg, int32_t pos) {
-    if (vreg >= r->nvreg) return -1;
+    if (!r || vreg >= r->nvreg) return -1;
     const XraVRegAlloc *va = &r->valloc[vreg];
     for (uint16_t i = 0; i < va->nseg; i++) {
         if (va->segs[i].start <= pos && pos < va->segs[i].end)
@@ -136,21 +138,21 @@ static inline int8_t xra_reg_at_pos(const XraResult *r, uint32_t vreg, int32_t p
 
 // Convenience: register at block start (most common codegen query)
 static inline int8_t xra_vreg_reg_at(const XraResult *r, uint32_t blk_id, uint32_t vreg) {
-    if (blk_id >= r->nblk || !r->blk_start) return -1;
+    if (!r || blk_id >= r->nblk || !r->blk_start) return -1;
     return xra_reg_at_pos(r, vreg, r->blk_start[blk_id]);
 }
 
 /* Register at block end — needed for edge copies where the source vreg
  * may be defined mid-block (e.g. loop increment before back-edge). */
 static inline int8_t xra_vreg_reg_at_end(const XraResult *r, uint32_t blk_id, uint32_t vreg) {
-    if (blk_id >= r->nblk || !r->blk_end) return -1;
+    if (!r || blk_id >= r->nblk || !r->blk_end) return -1;
     int32_t end = r->blk_end[blk_id];
     return xra_reg_at_pos(r, vreg, end > 0 ? end - 1 : 0);
 }
 
 // Look up spill slot for vreg. Returns XRA_SPILL_NONE/-2 if not spilled.
 static inline int16_t xra_vreg_spill(const XraResult *r, uint32_t vreg) {
-    if (vreg >= r->nvreg) return XRA_SPILL_NONE;
+    if (!r || vreg >= r->nvreg) return XRA_SPILL_NONE;
     return r->valloc[vreg].spill;
 }
 
@@ -159,7 +161,7 @@ static inline int16_t xra_vreg_spill(const XraResult *r, uint32_t vreg) {
  * (assigned == -1), allowing callers to distinguish "live but spilled"
  * from "dead (no segment covers pos)". */
 static inline bool xra_vreg_live_at(const XraResult *r, uint32_t vreg, int32_t pos) {
-    if (vreg >= r->nvreg) return false;
+    if (!r || vreg >= r->nvreg) return false;
     const XraVRegAlloc *va = &r->valloc[vreg];
     for (uint16_t i = 0; i < va->nseg; i++) {
         if (va->segs[i].start <= pos && pos < va->segs[i].end)
@@ -170,7 +172,7 @@ static inline bool xra_vreg_live_at(const XraResult *r, uint32_t vreg, int32_t p
 
 // First assigned register for vreg (any segment). Used for prologue params.
 static inline int8_t xra_vreg_first_reg(const XraResult *r, uint32_t vreg) {
-    if (vreg >= r->nvreg) return -1;
+    if (!r || vreg >= r->nvreg) return -1;
     const XraVRegAlloc *va = &r->valloc[vreg];
     for (uint16_t i = 0; i < va->nseg; i++)
         if (va->segs[i].assigned >= 0) return va->segs[i].assigned;
