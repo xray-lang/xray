@@ -63,7 +63,7 @@ const char *xr_mono_type_tag(XrType *t) {
 }
 
 char *xr_mono_mangle(const char *name, XrType **type_args, int count) {
-    if (!name || count <= 0 || !type_args) return strdup(name ? name : "");
+    if (!name || count <= 0 || !type_args) return xr_strdup(name ? name : "");
 
     // Calculate buffer size: name + '$' + tags joined by '_'
     size_t len = strlen(name) + 1; // name + '$'
@@ -74,7 +74,7 @@ char *xr_mono_mangle(const char *name, XrType **type_args, int count) {
     len += 1; // null terminator
 
     char *buf = (char *)xr_malloc(len);
-    if (!buf) return strdup(name);
+    if (!buf) return xr_strdup(name);
 
     char *p = buf;
     size_t remaining = len;
@@ -213,7 +213,7 @@ XrType *xr_mono_type_substitute(XrType *type, XrMonoTypeMap *map, int map_count)
 /* ========== AST Clone ========== */
 
 static char *clone_str(const char *s) {
-    return s ? strdup(s) : NULL;
+    return s ? xr_strdup(s) : NULL;
 }
 
 static AstNode **clone_node_array(AstNode **arr, int count,
@@ -752,7 +752,7 @@ void xa_mono_collector_init(XaMonoCollector *c) {
 void xa_mono_collector_free(XaMonoCollector *c) {
     XR_DCHECK(c != NULL, "xa_mono_collector_free: NULL collector");
     for (int i = 0; i < c->count; i++) {
-        free((void *)c->instances[i].generic_name);
+        xr_free((void *)c->instances[i].generic_name);
         xr_free((void *)c->instances[i].mangled_name);
     }
     xr_free(c->instances);
@@ -814,7 +814,7 @@ const char *xa_mono_collector_add(XaMonoCollector *c, const char *generic_name,
     }
 
     XaMonoInstance *inst = &c->instances[c->count++];
-    inst->generic_name = strdup(generic_name);
+    inst->generic_name = xr_strdup(generic_name);
     inst->type_args = type_args;
     inst->type_arg_count = type_arg_count;
     inst->mangled_name = xr_mono_mangle(generic_name, type_args, type_arg_count);
@@ -1149,8 +1149,8 @@ static void rewrite_call_sites(AstNode *node, XaGenericRegistry *registry,
                     collector, fn_name, call->type_args, call->type_arg_count);
                 if (mangled) {
                     // Replace callee variable name
-                    free(call->callee->as.variable.name);
-                    call->callee->as.variable.name = strdup(mangled);
+                    xr_free(call->callee->as.variable.name);
+                    call->callee->as.variable.name = xr_strdup(mangled);
                     // Clear type args (no longer generic call)
                     call->type_args = NULL;
                     call->type_arg_count = 0;
@@ -1173,8 +1173,8 @@ static void rewrite_call_sites(AstNode *node, XaGenericRegistry *registry,
                 const char *mangled = xa_mono_collector_lookup(
                     collector, ne->class_name, ne->type_args, ne->type_arg_count);
                 if (mangled) {
-                    free(ne->class_name);
-                    ne->class_name = strdup(mangled);
+                    xr_free(ne->class_name);
+                    ne->class_name = xr_strdup(mangled);
                     ne->type_args = NULL;
                     ne->type_arg_count = 0;
                 }
@@ -1194,8 +1194,8 @@ static void rewrite_call_sites(AstNode *node, XaGenericRegistry *registry,
                 const char *mangled = xa_mono_collector_lookup(
                     collector, sl->struct_name, sl->type_args, sl->type_arg_count);
                 if (mangled) {
-                    free(sl->struct_name);
-                    sl->struct_name = strdup(mangled);
+                    xr_free(sl->struct_name);
+                    sl->struct_name = xr_strdup(mangled);
                     sl->type_args = NULL;
                     sl->type_arg_count = 0;
                 }
@@ -1341,18 +1341,18 @@ static void inject_mono_decls(AstNode *root, XaGenericRegistry *registry,
 
         // Rename cloned function/class to mangled name
         if (cloned->type == AST_FUNCTION_DECL) {
-            free(cloned->as.function_decl.name);
-            cloned->as.function_decl.name = strdup(inst->mangled_name);
+            xr_free(cloned->as.function_decl.name);
+            cloned->as.function_decl.name = xr_strdup(inst->mangled_name);
             cloned->as.function_decl.type_param_count = 0;
             cloned->as.function_decl.type_params = NULL;
         } else if (cloned->type == AST_CLASS_DECL) {
-            free(cloned->as.class_decl.name);
-            cloned->as.class_decl.name = strdup(inst->mangled_name);
+            xr_free(cloned->as.class_decl.name);
+            cloned->as.class_decl.name = xr_strdup(inst->mangled_name);
             cloned->as.class_decl.type_param_count = 0;
             cloned->as.class_decl.type_params = NULL;
         } else if (cloned->type == AST_STRUCT_DECL) {
-            free(cloned->as.struct_decl.name);
-            cloned->as.struct_decl.name = strdup(inst->mangled_name);
+            xr_free(cloned->as.struct_decl.name);
+            cloned->as.struct_decl.name = xr_strdup(inst->mangled_name);
             cloned->as.struct_decl.type_param_count = 0;
             cloned->as.struct_decl.type_params = NULL;
         }

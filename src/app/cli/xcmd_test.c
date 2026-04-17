@@ -74,22 +74,24 @@ static void file_result_add_failure(XrTestFileResult *r, const char *test_name,
                                     const char *message, XrTestStatus status) {
     if (r->failure_count >= r->failure_cap) {
         r->failure_cap = r->failure_cap == 0 ? 8 : r->failure_cap * 2;
-        r->failures = realloc(r->failures, r->failure_cap * sizeof(XrTestFailureRecord));
+        XR_REALLOC_OR_ABORT(r->failures,
+                            r->failure_cap * sizeof(XrTestFailureRecord),
+                            "xcmd_test failures grow");
     }
     XrTestFailureRecord *rec = &r->failures[r->failure_count++];
-    rec->file = strdup(r->filepath);
-    rec->test_name = strdup(test_name ? test_name : "<anonymous>");
-    rec->message = strdup(message ? message : "");
+    rec->file = xr_strdup(r->filepath);
+    rec->test_name = xr_strdup(test_name ? test_name : "<anonymous>");
+    rec->message = xr_strdup(message ? message : "");
     rec->status = status;
 }
 
 static void file_result_free(XrTestFileResult *r) {
     for (int i = 0; i < r->failure_count; i++) {
-        free(r->failures[i].file);
-        free(r->failures[i].test_name);
-        free(r->failures[i].message);
+        xr_free(r->failures[i].file);
+        xr_free(r->failures[i].test_name);
+        xr_free(r->failures[i].message);
     }
-    free(r->failures);
+    xr_free(r->failures);
 }
 
 /* ========== Display Helpers ========== */
@@ -388,7 +390,7 @@ cleanup_suite:
 cleanup_ast:
     xr_ast_free(X, ast);
 cleanup_source:
-    free(source);
+    xr_free(source);
 cleanup_isolate:
     xr_multicore_destroy(X);
     xray_isolate_delete(X);
@@ -405,14 +407,15 @@ typedef struct {
 static void filelist_add(XrFileList *fl, const char *path) {
     if (fl->count >= fl->capacity) {
         fl->capacity = fl->capacity == 0 ? 64 : fl->capacity * 2;
-        fl->paths = realloc(fl->paths, fl->capacity * sizeof(char *));
+        XR_REALLOC_OR_ABORT(fl->paths, fl->capacity * sizeof(char *),
+                            "xcmd_test filelist grow");
     }
-    fl->paths[fl->count++] = strdup(path);
+    fl->paths[fl->count++] = xr_strdup(path);
 }
 
 static void filelist_free(XrFileList *fl) {
-    for (int i = 0; i < fl->count; i++) free(fl->paths[i]);
-    free(fl->paths);
+    for (int i = 0; i < fl->count; i++) xr_free(fl->paths[i]);
+    xr_free(fl->paths);
 }
 
 static int cmp_strings(const void *a, const void *b) {
@@ -446,15 +449,17 @@ static void collect_files_recursive(const char *path, XrFileList *fl) {
         if (S_ISDIR(st.st_mode)) {
             if (ndir >= dcap) {
                 dcap = dcap == 0 ? 16 : dcap * 2;
-                subdirs = realloc(subdirs, dcap * sizeof(char *));
+                XR_REALLOC_OR_ABORT(subdirs, dcap * sizeof(char *),
+                                    "xcmd_test subdirs grow");
             }
-            subdirs[ndir++] = strdup(filepath);
+            subdirs[ndir++] = xr_strdup(filepath);
         } else if (S_ISREG(st.st_mode) && cli_is_xr_file(entry->d_name)) {
             if (nfile >= fcap) {
                 fcap = fcap == 0 ? 16 : fcap * 2;
-                xrfiles = realloc(xrfiles, fcap * sizeof(char *));
+                XR_REALLOC_OR_ABORT(xrfiles, fcap * sizeof(char *),
+                                    "xcmd_test xrfiles grow");
             }
-            xrfiles[nfile++] = strdup(filepath);
+            xrfiles[nfile++] = xr_strdup(filepath);
         }
     }
     closedir(dir);
@@ -462,11 +467,11 @@ static void collect_files_recursive(const char *path, XrFileList *fl) {
     if (nfile > 1) qsort(xrfiles, nfile, sizeof(char *), cmp_strings);
     if (ndir > 1) qsort(subdirs, ndir, sizeof(char *), cmp_strings);
 
-    for (int i = 0; i < nfile; i++) { filelist_add(fl, xrfiles[i]); free(xrfiles[i]); }
-    free(xrfiles);
+    for (int i = 0; i < nfile; i++) { filelist_add(fl, xrfiles[i]); xr_free(xrfiles[i]); }
+    xr_free(xrfiles);
 
-    for (int i = 0; i < ndir; i++) { collect_files_recursive(subdirs[i], fl); free(subdirs[i]); }
-    free(subdirs);
+    for (int i = 0; i < ndir; i++) { collect_files_recursive(subdirs[i], fl); xr_free(subdirs[i]); }
+    xr_free(subdirs);
 }
 
 /* ========== Parallel Execution ========== */

@@ -26,6 +26,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include "../base/xchecks.h"
+#include "../base/xmalloc.h"
 
 #define XIR_BSET_BITS 64
 
@@ -39,11 +40,11 @@ typedef struct {
 static inline void xir_bset_init(XirBSet *bs, uint32_t max_bits) {
     bs->nw = (max_bits + XIR_BSET_BITS - 1) / XIR_BSET_BITS;
     if (bs->nw == 0) bs->nw = 1;
-    bs->w = (uint64_t *)calloc(bs->nw, sizeof(uint64_t));
+    bs->w = (uint64_t *)xr_calloc(bs->nw, sizeof(uint64_t));
 }
 
 static inline void xir_bset_free(XirBSet *bs) {
-    free(bs->w);
+    xr_free(bs->w);
     bs->w = NULL;
     bs->nw = 0;
 }

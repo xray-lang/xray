@@ -228,13 +228,13 @@ void xr_vm_proto_free(XrProto *proto) {
         proto->struct_layouts = NULL;
     }
 
-    // Free JIT runtime allocations
+    // Free JIT runtime allocations (allocated via xr_malloc in jit pipeline)
     if (proto->osr_entries != NULL) {
-        free(proto->osr_entries);
+        xr_free(proto->osr_entries);
         proto->osr_entries = NULL;
     }
     if (proto->deopt_table != NULL) {
-        free(proto->deopt_table);
+        xr_free(proto->deopt_table);
         proto->deopt_table = NULL;
     }
 

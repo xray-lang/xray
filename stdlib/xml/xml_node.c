@@ -28,15 +28,7 @@ void xml_write_config_init(XmlWriteConfig *config) {
 }
 
 // ========== Internal helpers ==========
-
-static char* xr_strndup(const char *s, size_t n) {
-    char *copy = (char*)xr_malloc(n + 1);
-    if (copy) {
-        memcpy(copy, s, n);
-        copy[n] = '\0';
-    }
-    return copy;
-}
+// xr_strndup now lives in base/xmalloc.h
 
 static XmlNode* xml_node_alloc(XmlNodeType type) {
     XmlNode *node = (XmlNode*)xr_calloc(1, sizeof(XmlNode));

@@ -40,22 +40,18 @@ static bool expand_pool(XrCoroDebugPool *pool) {
     if (new_capacity <= pool->capacity) {
         return false;  // Already at max capacity
     }
-    
-    XrCoroDebugInfo *new_entries = realloc(
-        pool->entries, 
-        new_capacity * sizeof(XrCoroDebugInfo)
-    );
-    if (!new_entries) {
+
+    if (!XR_REALLOC(pool->entries,
+                    new_capacity * sizeof(XrCoroDebugInfo))) {
         return false;
     }
-    
+
     // Zero new portion
-    memset(new_entries + pool->capacity, 0, 
+    memset(pool->entries + pool->capacity, 0,
            (new_capacity - pool->capacity) * sizeof(XrCoroDebugInfo));
-    
-    pool->entries = new_entries;
+
     pool->capacity = new_capacity;
-    
+
     return true;
 }
 
@@ -63,39 +59,39 @@ static bool expand_pool(XrCoroDebugPool *pool) {
 
 bool xr_coro_debug_pool_init(XrCoroDebugPool *pool, uint32_t capacity) {
     if (!pool) return false;
-    
+
     memset(pool, 0, sizeof(XrCoroDebugPool));
-    
+
     if (capacity == 0) {
         capacity = XR_DEBUG_POOL_INIT_SIZE;
     }
-    
+
     pool->entries = xr_calloc(capacity, sizeof(XrCoroDebugInfo));
     if (!pool->entries) {
         return false;
     }
-    
+
     pool->capacity = capacity;
     atomic_store(&pool->count, 0);
-    
+
     if (pthread_mutex_init(&pool->expand_lock, NULL) != 0) {
         xr_free(pool->entries);
         pool->entries = NULL;
         return false;
     }
-    
+
     pool->initialized = true;
     return true;
 }
 
 void xr_coro_debug_pool_destroy(XrCoroDebugPool *pool) {
     if (!pool || !pool->initialized) return;
-    
+
     if (pool->entries) {
         xr_free(pool->entries);
         pool->entries = NULL;
     }
-    
+
     pthread_mutex_destroy(&pool->expand_lock);
     pool->initialized = false;
 }
@@ -109,14 +105,14 @@ uint32_t xr_coro_debug_register(XrCoroDebugPool *pool,
     if (!pool || !pool->initialized) {
         return XR_DEBUG_IDX_INVALID;
     }
-    
+
     // Atomic index allocation
     uint32_t idx = atomic_fetch_add(&pool->count, 1);
-    
+
     // Check if expansion needed
     if (idx >= pool->capacity) {
         pthread_mutex_lock(&pool->expand_lock);
-        
+
         // Double check
         if (idx >= pool->capacity) {
             if (!expand_pool(pool)) {
@@ -126,17 +122,17 @@ uint32_t xr_coro_debug_register(XrCoroDebugPool *pool,
                 return XR_DEBUG_IDX_INVALID;
             }
         }
-        
+
         pthread_mutex_unlock(&pool->expand_lock);
     }
-    
+
     // Fill debug info
     XrCoroDebugInfo *info = &pool->entries[idx];
     info->name = name;
     info->source_file = file;
     info->source_line = line;
     info->create_time_ns = get_time_ns();
-    
+
     return idx;
 }
 
@@ -144,11 +140,11 @@ XrCoroDebugInfo* xr_coro_debug_get(XrCoroDebugPool *pool, uint32_t idx) {
     if (!pool || !pool->initialized) {
         return NULL;
     }
-    
+
     if (idx == XR_DEBUG_IDX_INVALID || idx >= atomic_load(&pool->count)) {
         return NULL;
     }
-    
+
     return &pool->entries[idx];
 }
 

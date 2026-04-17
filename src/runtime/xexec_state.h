@@ -23,6 +23,7 @@
 #include "xexec_frame.h"
 #include "../base/xconstants.h"
 #include "../base/xchecks.h"
+#include "../base/xmalloc.h"
 
 /* ========== Constructor Call Stack Entry ========== */
 
@@ -46,7 +47,7 @@ typedef struct XrSharedArray {
 // Initialize shared array
 static inline void xr_shared_array_init(XrSharedArray *arr) {
     arr->capacity = XR_SHARED_INITIAL_CAPACITY;
-    arr->data = (XrValue *)malloc(arr->capacity * sizeof(XrValue));
+    arr->data = (XrValue *)xr_malloc(arr->capacity * sizeof(XrValue));
     XR_CHECK(arr->data != NULL, "shared array allocation failed");
     arr->count = 0;
     arr->free_list = -1;
@@ -58,7 +59,7 @@ static inline void xr_shared_array_init(XrSharedArray *arr) {
 // Free shared array
 static inline void xr_shared_array_free(XrSharedArray *arr) {
     if (arr->data) {
-        free(arr->data);
+        xr_free(arr->data);
         arr->data = NULL;
     }
     arr->capacity = 0;
@@ -75,7 +76,7 @@ static inline void xr_shared_array_ensure(XrSharedArray *arr, int index) {
         new_cap *= XR_SHARED_GROW_FACTOR;
     }
 
-    XrValue *new_data = (XrValue *)realloc(arr->data, new_cap * sizeof(XrValue));
+    XrValue *new_data = (XrValue *)xr_realloc(arr->data, new_cap * sizeof(XrValue));
     XR_CHECK(new_data != NULL, "shared array reallocation failed");
     arr->data = new_data;
     for (int i = arr->capacity; i < new_cap; i++) {

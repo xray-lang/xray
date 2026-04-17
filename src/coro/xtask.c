@@ -33,6 +33,7 @@
 #include "../runtime/gc/xcoro_gc.h"
 #include "../runtime/object/xarray.h"
 #include "../base/xchecks.h"
+#include "../base/xmalloc.h"
 #include <string.h>
 #include <stdlib.h>
 
@@ -241,7 +242,7 @@ void xr_task_fail_with_propagation(XrTask *task, XrValue error) {
 /* ========== Bidirectional Link API ========== */
 
 static void add_link_entry(XrTask *task, XrTask *peer) {
-    XrTaskLink *entry = (XrTaskLink *)calloc(1, sizeof(XrTaskLink));
+    XrTaskLink *entry = (XrTaskLink *)xr_calloc(1, sizeof(XrTaskLink));
     if (!entry) return;
     entry->peer = peer;
     entry->next = task->links;
@@ -254,7 +255,7 @@ static void remove_link_entry(XrTask *task, XrTask *peer) {
         if ((*pp)->peer == peer) {
             XrTaskLink *rm = *pp;
             *pp = rm->next;
-            free(rm);
+            xr_free(rm);
             return;
         }
         pp = &(*pp)->next;
@@ -404,7 +405,7 @@ void xr_task_fire_completion(XrTask *task) {
             // Will be implemented in onComplete API
             break;
         }
-        free(node);
+        xr_free(node);
         node = next;
     }
 }
@@ -415,20 +416,20 @@ void xr_gc_destroy_task(XrGCHeader *obj, struct XrCoroGC *owning_gc) {
     (void)owning_gc;
     XrTask *task = (XrTask *)obj;
 
-    // Free calloc'd bidirectional link entries
+    // Free xr_calloc'd bidirectional link entries
     XrTaskLink *lk = task->links;
     while (lk) {
         XrTaskLink *next = lk->next;
-        free(lk);
+        xr_free(lk);
         lk = next;
     }
     task->links = NULL;
 
-    // Free calloc'd completion listeners (unfired, e.g. task cancelled before monitor read)
+    // Free xr_calloc'd completion listeners (unfired, e.g. task cancelled before monitor read)
     XrCompletionNode *cn = task->on_completion;
     while (cn) {
         XrCompletionNode *next = cn->next;
-        free(cn);
+        xr_free(cn);
         cn = next;
     }
     task->on_completion = NULL;

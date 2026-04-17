@@ -217,6 +217,19 @@ static inline char* xr_strdup(const char *s) {
     return copy;
 }
 
+static inline char* xr_strndup(const char *s, size_t n) {
+    if (!s) return NULL;
+    // Match strndup semantics: copy at most n bytes, stop at NUL.
+    size_t len = 0;
+    while (len < n && s[len]) len++;
+    char *copy = (char*)xr_malloc(len + 1);
+    if (copy) {
+        memcpy(copy, s, len);
+        copy[len] = '\0';
+    }
+    return copy;
+}
+
 // Function pointer wrapper (macros don't have addresses)
 static inline void* xr_malloc_fn(size_t size) { return xr_malloc(size); }
 

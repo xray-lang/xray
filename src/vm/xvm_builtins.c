@@ -1260,7 +1260,7 @@ XrValue bigint_method_call_by_symbol(XrayIsolate *isolate, XrBigInt *bigint, int
         char *str = xr_bigint_to_string(bigint);
         if (!str) return xr_null();
         XrString *result = xr_string_intern(isolate, str, strlen(str), 0);
-        free(str);
+        xr_free(str);
         return xr_string_value(result);
     }
 

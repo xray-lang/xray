@@ -30,6 +30,7 @@
 #include "xir_coalesce.h"
 #include "xir_blueprint.h"
 #include "../base/xchecks.h"
+#include "../base/xmalloc.h"
 
 /* ========== Register Allocator (live-range aware) ========== */
 
@@ -48,9 +49,8 @@ const A64Reg alloc_fp_regs[MAX_FP_REGS] = {
 void add_cs_patch(CodegenCtx *ctx, uint8_t pair) {
     if (ctx->ncs_patches >= ctx->cs_patches_cap) {
         uint32_t new_cap = ctx->cs_patches_cap * 2;
-        CsPatch *p = (CsPatch *)realloc(ctx->cs_patches, new_cap * sizeof(CsPatch));
-        if (!p) return;
-        ctx->cs_patches = p;
+        XR_REALLOC_OR_ABORT(ctx->cs_patches, new_cap * sizeof(CsPatch),
+                            "codegen cs_patches grow");
         ctx->cs_patches_cap = new_cap;
     }
     ctx->cs_patches[ctx->ncs_patches].idx = ctx->buf.count;
@@ -61,9 +61,8 @@ void add_cs_patch(CodegenCtx *ctx, uint8_t pair) {
 void add_patch(CodegenCtx *ctx, PatchType type, uint32_t target_blk, A64Reg reg) {
     if (ctx->npatch >= ctx->patches_cap) {
         uint32_t new_cap = ctx->patches_cap * 2;
-        BranchPatch *p = (BranchPatch *)realloc(ctx->patches, new_cap * sizeof(BranchPatch));
-        if (!p) return;
-        ctx->patches = p;
+        XR_REALLOC_OR_ABORT(ctx->patches, new_cap * sizeof(BranchPatch),
+                            "codegen branch patches grow");
         ctx->patches_cap = new_cap;
     }
     BranchPatch *p = &ctx->patches[ctx->npatch++];
