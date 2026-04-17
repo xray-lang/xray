@@ -96,43 +96,43 @@ static const struct {
 // Encode integer (RFC 7541 5.1)
 static int hpack_encode_int(uint8_t *buf, size_t buf_len, uint64_t value, int prefix_bits) {
     if (buf_len == 0) return -1;
-    
+
     int max_prefix = (1 << prefix_bits) - 1;
-    
+
     if (value < (uint64_t)max_prefix) {
         buf[0] |= (uint8_t)value;
         return 1;
     }
-    
+
     buf[0] |= max_prefix;
     value -= max_prefix;
     int len = 1;
-    
+
     while (value >= 128 && len < (int)buf_len) {
         buf[len++] = (uint8_t)((value & 0x7f) | 0x80);
         value >>= 7;
     }
-    
+
     if (len >= (int)buf_len) return -1;
     buf[len++] = (uint8_t)value;
-    
+
     return len;
 }
 
 // Decode integer
 static int hpack_decode_int(const uint8_t *buf, size_t buf_len, uint64_t *value, int prefix_bits) {
     if (buf_len == 0) return -1;
-    
+
     int max_prefix = (1 << prefix_bits) - 1;
     *value = buf[0] & max_prefix;
-    
+
     if (*value < (uint64_t)max_prefix) {
         return 1;
     }
-    
+
     int shift = 0;
     size_t i = 1;
-    
+
     while (i < buf_len) {
         *value += ((uint64_t)(buf[i] & 0x7f)) << shift;
         if ((buf[i] & 0x80) == 0) {
@@ -141,7 +141,7 @@ static int hpack_decode_int(const uint8_t *buf, size_t buf_len, uint64_t *value,
         shift += 7;
         i++;
     }
-    
+
     return -1;  // Incomplete
 }
 
@@ -152,29 +152,29 @@ static int hpack_encode_string(uint8_t *buf, size_t buf_len, const char *str, si
     buf[0] = 0;  // Not using Huffman
     int int_len = hpack_encode_int(buf, buf_len, str_len, 7);
     if (int_len < 0) return -1;
-    
+
     if ((size_t)int_len + str_len > buf_len) return -1;
-    
+
     memcpy(buf + int_len, str, str_len);
     return int_len + (int)str_len;
 }
 
 // Decode string
-static int hpack_decode_string(const uint8_t *buf, size_t buf_len, 
+static int hpack_decode_string(const uint8_t *buf, size_t buf_len,
                                char **str, size_t *str_len) {
     if (buf_len == 0) return -1;
-    
+
     bool huffman = (buf[0] & 0x80) != 0;
     uint64_t len;
     int int_len = hpack_decode_int(buf, buf_len, &len, 7);
     if (int_len < 0) return -1;
-    
+
     if ((size_t)int_len + len > buf_len) return -1;
-    
+
     *str_len = (size_t)len;
     *str = (char*)malloc(len + 1);
     if (!*str) return -1;
-    
+
     if (huffman) {
         // Simplified: Huffman not implemented yet, just copy
         memcpy(*str, buf + int_len, len);
@@ -182,7 +182,7 @@ static int hpack_decode_string(const uint8_t *buf, size_t buf_len,
         memcpy(*str, buf + int_len, len);
     }
     (*str)[len] = '\0';
-    
+
     return int_len + (int)len;
 }
 
@@ -208,11 +208,11 @@ void xr_hpack_free(XrHpackTable *table) {
 }
 
 // Add entry to dynamic table
-static void hpack_table_add(XrHpackTable *table, 
+static void hpack_table_add(XrHpackTable *table,
                             const char *name, size_t name_len,
                             const char *value, size_t value_len) {
     size_t entry_size = name_len + value_len + 32;  // RFC 7541: 32 bytes overhead
-    
+
     // Evict old entries until enough space
     while (table->size + entry_size > table->max_size && table->entries) {
         // Remove last entry
@@ -230,17 +230,17 @@ static void hpack_table_add(XrHpackTable *table,
             *pp = NULL;
         }
     }
-    
+
     if (entry_size > table->max_size) {
         // Entry too large, clear table
         xr_hpack_free(table);
         return;
     }
-    
+
     // Create new entry
     XrHpackEntry *entry = (XrHpackEntry*)calloc(1, sizeof(XrHpackEntry));
     if (!entry) return;
-    
+
     entry->name = (char*)malloc(name_len + 1);
     entry->value = (char*)malloc(value_len + 1);
     if (!entry->name || !entry->value) {
@@ -249,15 +249,15 @@ static void hpack_table_add(XrHpackTable *table,
         free(entry);
         return;
     }
-    
+
     memcpy(entry->name, name, name_len);
     entry->name[name_len] = '\0';
     entry->name_len = name_len;
-    
+
     memcpy(entry->value, value, value_len);
     entry->value[value_len] = '\0';
     entry->value_len = value_len;
-    
+
     // Insert at table head
     entry->next = table->entries;
     table->entries = entry;
@@ -269,7 +269,7 @@ static void hpack_table_add(XrHpackTable *table,
 static XrHpackEntry* hpack_table_get(XrHpackTable *table, int index) {
     index -= HPACK_STATIC_TABLE_SIZE + 1;
     if (index < 0) return NULL;
-    
+
     XrHpackEntry *entry = table->entries;
     while (entry && index > 0) {
         entry = entry->next;
@@ -280,27 +280,27 @@ static XrHpackEntry* hpack_table_get(XrHpackTable *table, int index) {
 
 /* ========== HPACK Encoding ========== */
 
-int xr_hpack_encode(XrHpackTable *table, 
+int xr_hpack_encode(XrHpackTable *table,
                     const char *name, size_t name_len,
                     const char *value, size_t value_len,
                     uint8_t *buf, size_t buf_len) {
     (void)table;
     // Simplified: use literal without indexing
     if (buf_len < 1) return -1;
-    
+
     buf[0] = 0x00;  // Literal without indexing, new name
     int total = 1;
-    
+
     // Encode name
     int len = hpack_encode_string(buf + total, buf_len - total, name, name_len);
     if (len < 0) return -1;
     total += len;
-    
+
     // Encode value
     len = hpack_encode_string(buf + total, buf_len - total, value, value_len);
     if (len < 0) return -1;
     total += len;
-    
+
     return total;
 }
 
@@ -313,20 +313,20 @@ int xr_hpack_decode(XrHpackTable *table,
                                     void *user_data),
                     void *user_data) {
     size_t pos = 0;
-    
+
     while (pos < buf_len) {
         uint8_t b = buf[pos];
         char *name = NULL, *value = NULL;
         size_t name_len = 0, value_len = 0;
         bool add_to_table = false;
-        
+
         if (b & 0x80) {
             // Indexed header field (RFC 7541 6.1)
             uint64_t index;
             int len = hpack_decode_int(buf + pos, buf_len - pos, &index, 7);
             if (len < 0) return -1;
             pos += len;
-            
+
             if (index <= HPACK_STATIC_TABLE_SIZE) {
                 name = (char*)hpack_static_table[index].name;
                 name_len = strlen(name);
@@ -340,16 +340,16 @@ int xr_hpack_decode(XrHpackTable *table,
                 value = entry->value;
                 value_len = entry->value_len;
             }
-            
+
             if (callback) callback(name, name_len, value, value_len, user_data);
-            
+
         } else if (b & 0x40) {
             // Literal with incremental indexing (RFC 7541 6.2.1)
             uint64_t index;
             int len = hpack_decode_int(buf + pos, buf_len - pos, &index, 6);
             if (len < 0) return -1;
             pos += len;
-            
+
             if (index == 0) {
                 // New name
                 len = hpack_decode_string(buf + pos, buf_len - pos, &name, &name_len);
@@ -364,20 +364,20 @@ int xr_hpack_decode(XrHpackTable *table,
                 name = strdup(entry->name);
                 name_len = entry->name_len;
             }
-            
+
             len = hpack_decode_string(buf + pos, buf_len - pos, &value, &value_len);
             if (len < 0) { free(name); return -1; }
             pos += len;
-            
+
             add_to_table = true;
             if (callback) callback(name, name_len, value, value_len, user_data);
-            
+
             if (add_to_table) {
                 hpack_table_add(table, name, name_len, value, value_len);
             }
             free(name);
             free(value);
-            
+
         } else if (b & 0x20) {
             // Dynamic table size update (RFC 7541 6.3)
             uint64_t new_size;
@@ -385,7 +385,7 @@ int xr_hpack_decode(XrHpackTable *table,
             if (len < 0) return -1;
             pos += len;
             table->max_size = new_size;
-            
+
         } else {
             // Literal without indexing (RFC 7541 6.2.2/6.2.3)
             uint64_t index;
@@ -393,7 +393,7 @@ int xr_hpack_decode(XrHpackTable *table,
             int len = hpack_decode_int(buf + pos, buf_len - pos, &index, prefix);
             if (len < 0) return -1;
             pos += len;
-            
+
             if (index == 0) {
                 len = hpack_decode_string(buf + pos, buf_len - pos, &name, &name_len);
                 if (len < 0) return -1;
@@ -407,17 +407,17 @@ int xr_hpack_decode(XrHpackTable *table,
                 name = strdup(entry->name);
                 name_len = entry->name_len;
             }
-            
+
             len = hpack_decode_string(buf + pos, buf_len - pos, &value, &value_len);
             if (len < 0) { free(name); return -1; }
             pos += len;
-            
+
             if (callback) callback(name, name_len, value, value_len, user_data);
             free(name);
             free(value);
         }
     }
-    
+
     return 0;
 }
 
@@ -450,26 +450,26 @@ void xr_h2_write_frame_header(uint8_t *buf, const XrH2FrameHeader *header) {
 XrH2Conn* xr_h2_conn_new_client(int fd, void *tls_conn) {
     XrH2Conn *conn = (XrH2Conn*)calloc(1, sizeof(XrH2Conn));
     if (!conn) return NULL;
-    
+
     conn->fd = fd;
     conn->tls_conn = tls_conn;
     conn->is_client = true;
     conn->next_stream_id = 1;  // Client uses odd stream IDs
     conn->connection_window = XR_H2_DEFAULT_INITIAL_WINDOW_SIZE;
-    
+
     // Default settings
     conn->local_settings[XR_H2_SETTINGS_HEADER_TABLE_SIZE] = XR_H2_DEFAULT_HEADER_TABLE_SIZE;
     conn->local_settings[XR_H2_SETTINGS_ENABLE_PUSH] = 0;  // Client disables push
     conn->local_settings[XR_H2_SETTINGS_MAX_CONCURRENT_STREAMS] = XR_H2_DEFAULT_MAX_CONCURRENT_STREAMS;
     conn->local_settings[XR_H2_SETTINGS_INITIAL_WINDOW_SIZE] = XR_H2_DEFAULT_INITIAL_WINDOW_SIZE;
     conn->local_settings[XR_H2_SETTINGS_MAX_FRAME_SIZE] = XR_H2_DEFAULT_MAX_FRAME_SIZE;
-    
+
     memcpy(conn->remote_settings, conn->local_settings, sizeof(conn->local_settings));
-    
+
     // Initialize HPACK tables
     xr_hpack_init(&conn->encoder_table, XR_H2_DEFAULT_HEADER_TABLE_SIZE);
     xr_hpack_init(&conn->decoder_table, XR_H2_DEFAULT_HEADER_TABLE_SIZE);
-    
+
     // Allocate receive buffer
     conn->recv_cap = 16384;
     conn->recv_buf = (char*)malloc(conn->recv_cap);
@@ -477,19 +477,19 @@ XrH2Conn* xr_h2_conn_new_client(int fd, void *tls_conn) {
         free(conn);
         return NULL;
     }
-    
+
     return conn;
 }
 
 void xr_h2_conn_free(XrH2Conn *conn) {
     if (!conn) return;
-    
+
     xr_hpack_free(&conn->encoder_table);
     xr_hpack_free(&conn->decoder_table);
-    
+
     // Free stream hash table
     xr_h2_stream_hash_free(&conn->stream_hash);
-    
+
     free(conn->recv_buf);
     free(conn);
 }
@@ -502,14 +502,14 @@ static int h2_send(XrH2Conn *conn, const void *buf, size_t len) {
 
 int xr_h2_conn_init(XrH2Conn *conn) {
     if (!conn) return -1;
-    
+
     // Send connection preface
     if (conn->is_client) {
         if (h2_send(conn, XR_HTTP2_PREFACE, XR_HTTP2_PREFACE_LEN) < 0) {
             return -1;
         }
     }
-    
+
     // Send SETTINGS
     return xr_h2_send_settings(conn);
 }
@@ -518,7 +518,7 @@ int xr_h2_send_settings(XrH2Conn *conn) {
     uint8_t frame[XR_H2_FRAME_HEADER_SIZE + 36];
     uint8_t *payload = frame + XR_H2_FRAME_HEADER_SIZE;
     int payload_len = 0;
-    
+
     // Encode settings parameters
     #define ADD_SETTING(id, val) do { \
         payload[payload_len++] = ((id) >> 8) & 0xFF; \
@@ -528,17 +528,17 @@ int xr_h2_send_settings(XrH2Conn *conn) {
         payload[payload_len++] = ((val) >> 8) & 0xFF; \
         payload[payload_len++] = (val) & 0xFF; \
     } while(0)
-    
+
     ADD_SETTING(XR_H2_SETTINGS_MAX_CONCURRENT_STREAMS, conn->local_settings[XR_H2_SETTINGS_MAX_CONCURRENT_STREAMS]);
     ADD_SETTING(XR_H2_SETTINGS_INITIAL_WINDOW_SIZE, conn->local_settings[XR_H2_SETTINGS_INITIAL_WINDOW_SIZE]);
     ADD_SETTING(XR_H2_SETTINGS_MAX_FRAME_SIZE, conn->local_settings[XR_H2_SETTINGS_MAX_FRAME_SIZE]);
-    
+
     if (conn->is_client) {
         ADD_SETTING(XR_H2_SETTINGS_ENABLE_PUSH, 0);
     }
-    
+
     #undef ADD_SETTING
-    
+
     // Write frame header
     XrH2FrameHeader header = {
         .length = payload_len,
@@ -547,7 +547,7 @@ int xr_h2_send_settings(XrH2Conn *conn) {
         .stream_id = 0
     };
     xr_h2_write_frame_header(frame, &header);
-    
+
     conn->settings_sent = true;
     return h2_send(conn, frame, XR_H2_FRAME_HEADER_SIZE + payload_len);
 }
@@ -632,18 +632,18 @@ void xr_h2_stream_hash_free(XrH2StreamHash *hash) {
 
 XrH2Stream* xr_h2_stream_new(XrH2Conn *conn) {
     if (!conn) return NULL;
-    
+
     XrH2Stream *stream = (XrH2Stream*)calloc(1, sizeof(XrH2Stream));
     if (!stream) return NULL;
-    
+
     stream->id = conn->next_stream_id;
     conn->next_stream_id += 2;  // Skip even numbers (server push)
     stream->state = XR_H2_STREAM_IDLE;
     stream->window_size = conn->remote_settings[XR_H2_SETTINGS_INITIAL_WINDOW_SIZE];
-    
+
     // Add to stream hash table
     xr_h2_stream_hash_add(&conn->stream_hash, stream);
-    
+
     return stream;
 }
 
@@ -677,28 +677,28 @@ static void h2_header_callback(const char *name, size_t name_len,
 // Receive and process frame
 int xr_h2_recv(XrH2Conn *conn) {
     if (!conn) return -1;
-    
+
     // Receive frame header
     uint8_t frame_header[XR_H2_FRAME_HEADER_SIZE];
     int n = h2_recv(conn, frame_header, XR_H2_FRAME_HEADER_SIZE);
     if (n != XR_H2_FRAME_HEADER_SIZE) return -1;
-    
+
     XrH2FrameHeader header;
     xr_h2_parse_frame_header(frame_header, &header);
-    
+
     // Receive frame payload
     uint8_t *payload = NULL;
     if (header.length > 0) {
         payload = (uint8_t*)malloc(header.length);
         if (!payload) return -1;
-        
+
         n = h2_recv(conn, payload, header.length);
         if (n != (int)header.length) {
             free(payload);
             return -1;
         }
     }
-    
+
     // Process frame
     int result = 0;
     switch (header.type) {
@@ -716,7 +716,7 @@ int xr_h2_recv(XrH2Conn *conn) {
                 xr_h2_send_settings_ack(conn);
             }
             break;
-            
+
         case XR_H2_FRAME_HEADERS: {
             XrH2Stream *stream = xr_h2_get_stream(conn, header.stream_id);
             if (!stream) {
@@ -736,7 +736,7 @@ int xr_h2_recv(XrH2Conn *conn) {
             }
             break;
         }
-        
+
         case XR_H2_FRAME_DATA: {
             XrH2Stream *stream = xr_h2_get_stream(conn, header.stream_id);
             if (stream && payload && header.length > 0) {
@@ -760,17 +760,17 @@ int xr_h2_recv(XrH2Conn *conn) {
             }
             break;
         }
-        
+
         case XR_H2_FRAME_GOAWAY:
             conn->goaway_received = true;
             break;
-            
+
         case XR_H2_FRAME_PING:
             if (!(header.flags & XR_H2_FLAG_ACK)) {
                 xr_h2_send_ping(conn, payload, true);
             }
             break;
-            
+
         case XR_H2_FRAME_RST_STREAM: {
             XrH2Stream *stream = xr_h2_get_stream(conn, header.stream_id);
             if (stream) {
@@ -779,7 +779,7 @@ int xr_h2_recv(XrH2Conn *conn) {
             }
             break;
         }
-        
+
         case XR_H2_FRAME_WINDOW_UPDATE:
             // Update window size
             if (header.stream_id == 0) {
@@ -795,11 +795,11 @@ int xr_h2_recv(XrH2Conn *conn) {
                 }
             }
             break;
-            
+
         default:
             break;
     }
-    
+
     free(payload);
     return result;
 }
@@ -811,11 +811,13 @@ int xr_h2_send_headers(XrH2Conn *conn, XrH2Stream *stream,
                        const char **values, const size_t *value_lens,
                        int count, bool end_stream) {
     if (!conn || !stream) return -1;
-    
-    // Encode headers
-    uint8_t headers_buf[16384];
+
+    // Encode headers. Zero-initialise so that analyzers can prove the
+    // subsequent memcpy only reads bytes that were written by
+    // xr_hpack_encode; the cost is negligible compared to the network I/O.
+    uint8_t headers_buf[16384] = {0};
     int headers_len = 0;
-    
+
     for (int i = 0; i < count; i++) {
         int len = xr_hpack_encode(&conn->encoder_table,
                                    names[i], name_lens[i],
@@ -825,7 +827,7 @@ int xr_h2_send_headers(XrH2Conn *conn, XrH2Stream *stream,
         if (len < 0) return -1;
         headers_len += len;
     }
-    
+
     // Send HEADERS frame
     uint8_t frame[XR_H2_FRAME_HEADER_SIZE + 16384];
     XrH2FrameHeader header = {
@@ -835,8 +837,10 @@ int xr_h2_send_headers(XrH2Conn *conn, XrH2Stream *stream,
         .stream_id = stream->id
     };
     xr_h2_write_frame_header(frame, &header);
-    memcpy(frame + XR_H2_FRAME_HEADER_SIZE, headers_buf, headers_len);
-    
+    if (headers_len > 0) {
+        memcpy(frame + XR_H2_FRAME_HEADER_SIZE, headers_buf, (size_t)headers_len);
+    }
+
     stream->state = XR_H2_STREAM_OPEN;
     return h2_send(conn, frame, XR_H2_FRAME_HEADER_SIZE + headers_len);
 }
@@ -845,13 +849,13 @@ int xr_h2_send_headers(XrH2Conn *conn, XrH2Stream *stream,
 int xr_h2_recv_stream_data(XrH2Conn *conn, XrH2Stream *stream,
                             char **out_data, size_t *out_len) {
     if (!conn || !stream) return -1;
-    
+
     // Receive until stream closes
     while (stream->state != XR_H2_STREAM_STATE_CLOSED &&
            stream->state != XR_H2_STREAM_HALF_CLOSED_REMOTE) {
         if (xr_h2_recv(conn) < 0) return -1;
     }
-    
+
     // Copy response body
     if (out_data && stream->data_buf && stream->data_len > 0) {
         *out_data = (char*)malloc(stream->data_len + 1);
@@ -861,22 +865,22 @@ int xr_h2_recv_stream_data(XrH2Conn *conn, XrH2Stream *stream,
             if (out_len) *out_len = stream->data_len;
         }
     }
-    
+
     return 0;
 }
 
 int xr_h2_send_data(XrH2Conn *conn, XrH2Stream *stream,
                     const void *data, size_t len, bool end_stream) {
     if (!conn || !stream) return -1;
-    
+
     // Send in fragments (respecting frame size limit)
     size_t max_frame = conn->remote_settings[XR_H2_SETTINGS_MAX_FRAME_SIZE];
     size_t sent = 0;
-    
+
     while (sent < len) {
         size_t chunk = len - sent;
         if (chunk > max_frame) chunk = max_frame;
-        
+
         uint8_t frame[XR_H2_FRAME_HEADER_SIZE];
         XrH2FrameHeader header = {
             .length = (uint32_t)chunk,
@@ -885,17 +889,17 @@ int xr_h2_send_data(XrH2Conn *conn, XrH2Stream *stream,
             .stream_id = stream->id
         };
         xr_h2_write_frame_header(frame, &header);
-        
+
         if (h2_send(conn, frame, XR_H2_FRAME_HEADER_SIZE) < 0) return -1;
         if (h2_send(conn, (const char*)data + sent, chunk) < 0) return -1;
-        
+
         sent += chunk;
     }
-    
+
     if (end_stream) {
         stream->state = XR_H2_STREAM_HALF_CLOSED_LOCAL;
     }
-    
+
     return (int)sent;
 }
 
@@ -908,7 +912,7 @@ int xr_h2_send_goaway(XrH2Conn *conn, uint32_t last_stream_id, XrH2ErrorCode err
         .stream_id = 0
     };
     xr_h2_write_frame_header(frame, &header);
-    
+
     uint8_t *payload = frame + XR_H2_FRAME_HEADER_SIZE;
     payload[0] = (last_stream_id >> 24) & 0x7F;
     payload[1] = (last_stream_id >> 16) & 0xFF;
@@ -918,7 +922,7 @@ int xr_h2_send_goaway(XrH2Conn *conn, uint32_t last_stream_id, XrH2ErrorCode err
     payload[5] = (error >> 16) & 0xFF;
     payload[6] = (error >> 8) & 0xFF;
     payload[7] = error & 0xFF;
-    
+
     conn->goaway_sent = true;
     return h2_send(conn, frame, XR_H2_FRAME_HEADER_SIZE + 8);
 }
@@ -932,13 +936,13 @@ int xr_h2_send_window_update(XrH2Conn *conn, uint32_t stream_id, uint32_t increm
         .stream_id = stream_id
     };
     xr_h2_write_frame_header(frame, &header);
-    
+
     uint8_t *payload = frame + XR_H2_FRAME_HEADER_SIZE;
     payload[0] = (increment >> 24) & 0x7F;
     payload[1] = (increment >> 16) & 0xFF;
     payload[2] = (increment >> 8) & 0xFF;
     payload[3] = increment & 0xFF;
-    
+
     return h2_send(conn, frame, XR_H2_FRAME_HEADER_SIZE + 4);
 }
 
@@ -947,11 +951,11 @@ int xr_h2_send_window_update(XrH2Conn *conn, uint32_t stream_id, uint32_t increm
 XrH2Conn* xr_h2_conn_new(int fd, void *tls_conn, bool is_client) {
     XrH2Conn *conn = (XrH2Conn*)calloc(1, sizeof(XrH2Conn));
     if (!conn) return NULL;
-    
+
     conn->fd = fd;
     conn->tls_conn = tls_conn;
     conn->is_client = is_client;
-    
+
     // Initialize settings to default values
     conn->local_settings[XR_H2_SETTINGS_HEADER_TABLE_SIZE] = XR_H2_DEFAULT_HEADER_TABLE_SIZE;
     conn->local_settings[XR_H2_SETTINGS_ENABLE_PUSH] = 0;
@@ -959,15 +963,15 @@ XrH2Conn* xr_h2_conn_new(int fd, void *tls_conn, bool is_client) {
     conn->local_settings[XR_H2_SETTINGS_INITIAL_WINDOW_SIZE] = XR_H2_DEFAULT_INITIAL_WINDOW_SIZE;
     conn->local_settings[XR_H2_SETTINGS_MAX_FRAME_SIZE] = XR_H2_DEFAULT_MAX_FRAME_SIZE;
     conn->local_settings[XR_H2_SETTINGS_MAX_HEADER_LIST_SIZE] = XR_H2_DEFAULT_MAX_HEADER_LIST_SIZE;
-    
+
     memcpy(conn->remote_settings, conn->local_settings, sizeof(conn->remote_settings));
-    
+
     xr_hpack_init(&conn->encoder_table, XR_H2_DEFAULT_HEADER_TABLE_SIZE);
     xr_hpack_init(&conn->decoder_table, XR_H2_DEFAULT_HEADER_TABLE_SIZE);
-    
+
     conn->next_stream_id = is_client ? 1 : 2;
     conn->connection_window = XR_H2_DEFAULT_INITIAL_WINDOW_SIZE;
-    
+
     conn->recv_cap = 65536;
     conn->recv_buf = (char*)malloc(conn->recv_cap);
     if (!conn->recv_buf) {
@@ -976,7 +980,7 @@ XrH2Conn* xr_h2_conn_new(int fd, void *tls_conn, bool is_client) {
         free(conn);
         return NULL;
     }
-    
+
     return conn;
 }
 
@@ -984,14 +988,14 @@ XrH2Conn* xr_h2_conn_new(int fd, void *tls_conn, bool is_client) {
 
 int xr_h2_set_priority(XrH2Conn *conn, XrH2Stream *stream, const XrH2Priority *priority) {
     if (!conn || !stream || !priority) return -1;
-    
+
     stream->priority = *priority;
     return xr_h2_send_priority(conn, stream->id, priority);
 }
 
 int xr_h2_send_priority(XrH2Conn *conn, uint32_t stream_id, const XrH2Priority *priority) {
     if (!conn || !priority) return -1;
-    
+
     uint8_t frame[XR_H2_FRAME_HEADER_SIZE + 5];
     XrH2FrameHeader header = {
         .length = 5,
@@ -1000,17 +1004,17 @@ int xr_h2_send_priority(XrH2Conn *conn, uint32_t stream_id, const XrH2Priority *
         .stream_id = stream_id
     };
     xr_h2_write_frame_header(frame, &header);
-    
+
     uint8_t *payload = frame + XR_H2_FRAME_HEADER_SIZE;
     uint32_t dep = priority->dependency;
     if (priority->exclusive) dep |= 0x80000000;
-    
+
     payload[0] = (dep >> 24) & 0xFF;
     payload[1] = (dep >> 16) & 0xFF;
     payload[2] = (dep >> 8) & 0xFF;
     payload[3] = dep & 0xFF;
     payload[4] = priority->weight - 1;  // weight 1-256 -> 0-255
-    
+
     return h2_send(conn, frame, XR_H2_FRAME_HEADER_SIZE + 5);
 }
 
@@ -1018,16 +1022,16 @@ int xr_h2_send_priority(XrH2Conn *conn, uint32_t stream_id, const XrH2Priority *
 
 int xr_h2_cancel_stream(XrH2Conn *conn, XrH2Stream *stream, XrH2ErrorCode error) {
     if (!conn || !stream) return -1;
-    
+
     stream->cancelled = true;
     stream->state = XR_H2_STREAM_STATE_CLOSED;
-    
+
     return xr_h2_send_rst_stream(conn, stream->id, error);
 }
 
 int xr_h2_send_rst_stream(XrH2Conn *conn, uint32_t stream_id, XrH2ErrorCode error) {
     if (!conn) return -1;
-    
+
     uint8_t frame[XR_H2_FRAME_HEADER_SIZE + 4];
     XrH2FrameHeader header = {
         .length = 4,
@@ -1036,13 +1040,13 @@ int xr_h2_send_rst_stream(XrH2Conn *conn, uint32_t stream_id, XrH2ErrorCode erro
         .stream_id = stream_id
     };
     xr_h2_write_frame_header(frame, &header);
-    
+
     uint8_t *payload = frame + XR_H2_FRAME_HEADER_SIZE;
     payload[0] = (error >> 24) & 0xFF;
     payload[1] = (error >> 16) & 0xFF;
     payload[2] = (error >> 8) & 0xFF;
     payload[3] = error & 0xFF;
-    
+
     return h2_send(conn, frame, XR_H2_FRAME_HEADER_SIZE + 4);
 }
 
@@ -1053,11 +1057,12 @@ int xr_h2_send_trailers(XrH2Conn *conn, XrH2Stream *stream,
                          const char **values, const size_t *value_lens,
                          int count) {
     if (!conn || !stream) return -1;
-    
-    // Encode trailer headers
-    uint8_t headers_buf[16384];
+
+    // Encode trailer headers (zero-init for analyzer friendliness; see
+    // xr_h2_send_headers for rationale).
+    uint8_t headers_buf[16384] = {0};
     int headers_len = 0;
-    
+
     for (int i = 0; i < count; i++) {
         int len = xr_hpack_encode(&conn->encoder_table,
                                    names[i], name_lens[i],
@@ -1067,7 +1072,7 @@ int xr_h2_send_trailers(XrH2Conn *conn, XrH2Stream *stream,
         if (len < 0) return -1;
         headers_len += len;
     }
-    
+
     // Send HEADERS frame with END_STREAM
     uint8_t frame[XR_H2_FRAME_HEADER_SIZE + 16384];
     XrH2FrameHeader header = {
@@ -1077,8 +1082,10 @@ int xr_h2_send_trailers(XrH2Conn *conn, XrH2Stream *stream,
         .stream_id = stream->id
     };
     xr_h2_write_frame_header(frame, &header);
-    memcpy(frame + XR_H2_FRAME_HEADER_SIZE, headers_buf, headers_len);
-    
+    if (headers_len > 0) {
+        memcpy(frame + XR_H2_FRAME_HEADER_SIZE, headers_buf, (size_t)headers_len);
+    }
+
     stream->state = XR_H2_STREAM_HALF_CLOSED_LOCAL;
     return h2_send(conn, frame, XR_H2_FRAME_HEADER_SIZE + headers_len);
 }
@@ -1087,7 +1094,7 @@ int xr_h2_send_trailers(XrH2Conn *conn, XrH2Stream *stream,
 
 int xr_h2_send_ping(XrH2Conn *conn, const uint8_t data[8], bool ack) {
     if (!conn) return -1;
-    
+
     uint8_t frame[XR_H2_FRAME_HEADER_SIZE + 8];
     XrH2FrameHeader header = {
         .length = 8,
@@ -1096,13 +1103,13 @@ int xr_h2_send_ping(XrH2Conn *conn, const uint8_t data[8], bool ack) {
         .stream_id = 0
     };
     xr_h2_write_frame_header(frame, &header);
-    
+
     if (data) {
         memcpy(frame + XR_H2_FRAME_HEADER_SIZE, data, 8);
     } else {
         memset(frame + XR_H2_FRAME_HEADER_SIZE, 0, 8);
     }
-    
+
     return h2_send(conn, frame, XR_H2_FRAME_HEADER_SIZE + 8);
 }
 
@@ -1110,35 +1117,35 @@ int xr_h2_send_ping(XrH2Conn *conn, const uint8_t data[8], bool ack) {
 
 int xr_h2_upgrade_from_http1(XrH2Conn *conn, const char *settings_payload, size_t len) {
     if (!conn) return -1;
-    
+
     // Parse Base64 encoded SETTINGS
     (void)settings_payload;
     (void)len;
-    
+
     // Send server connection preface
     if (!conn->is_client) {
         if (xr_h2_send_settings(conn) < 0) return -1;
     }
-    
+
     conn->settings_sent = true;
     return 0;
 }
 
 int xr_h2_start_h2c(XrH2Conn *conn) {
     if (!conn) return -1;
-    
+
     // h2c Prior Knowledge: send connection preface directly
     if (conn->is_client) {
         if (h2_send(conn, XR_HTTP2_PREFACE, XR_HTTP2_PREFACE_LEN) < 0) {
             return -1;
         }
     }
-    
+
     // Send SETTINGS frame
     if (xr_h2_send_settings(conn) < 0) {
         return -1;
     }
-    
+
     conn->settings_sent = true;
     return 0;
 }
