@@ -61,7 +61,7 @@
 
 #include <stdatomic.h>
 #include "../base/xconstants.h"
-#include "../vm/xvm_state_frame.h" // XrBcCallFrame, XrClosure, XrValue
+#include "xexec_frame.h" // XrBcCallFrame, XrClosure, XrValue
 #include "xcoro_flags.h"
 #include "xtimer_wheel.h"
 

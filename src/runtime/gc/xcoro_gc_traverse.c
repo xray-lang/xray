@@ -9,7 +9,7 @@
  */
 
 #include "xcoro_gc_traverse.h"
-#include "../../vm/xcontext.h"
+#include "../closure/xcell.h"
 #include "../../base/xchecks.h"
 #include "../value/xslot_type.h"
 #include "../object/xarray.h"
@@ -22,7 +22,7 @@
 #include "../class/xclass.h"
 #include "../class/xinstance.h"
 #include "../../module/xmodule.h"
-#include "../../vm/xvm_state_frame.h"
+#include "../../runtime/xexec_frame.h"
 #include "../../coro/xtask.h"
 
 /* ========== Array Traversal ========== */

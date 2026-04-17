@@ -21,7 +21,7 @@
 #include "../runtime/value/xvalue.h"
 #include "../runtime/object/xstring.h"
 #include "../runtime/xisolate_api.h"
-#include "../vm/xvm_state.h"
+#include "xexec_state.h"
 #include <string.h>
 
 /* ========== Hash Table Internals ========== */

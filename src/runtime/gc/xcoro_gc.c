@@ -22,14 +22,14 @@
 #include "xsystem_heap.h"
 #include "../object/xstring.h"
 #include "../xisolate_api.h"
-#include "../../vm/xvm_state.h"
+#include "../../runtime/xexec_state.h"
 #include "../value/xstruct_layout.h"
 #include "../class/xclass.h"
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
 #include "../../base/xmalloc.h"
-#include "../../jit/xir_codegen.h"  // XrStackMapTable, XrStackMapEntry
+#include "xstackmap.h"  // XrStackMapTable, XrStackMapEntry
 
 /* ========== Helper Functions ========== */
 
@@ -85,36 +85,36 @@ XrCoroGC* xr_coro_gc_create(struct XrCoroutine *coro, const XrCoroGCConfig *conf
         gc = (XrCoroGC*)xr_malloc(sizeof(XrCoroGC));
     }
     if (!gc) return NULL;
-    
+
     memset(gc, 0, sizeof(XrCoroGC));
-    
+
     // Initialize Immix heap
     xr_immix_init(&gc->immix);
-    
+
     // Gray lists need explicit init (sets items=NULL which memset already did,
     // but xr_gclist_init is the canonical initializer)
     xr_gclist_init(&gc->gray);
     xr_gclist_init(&gc->grayagain);
     xr_gclist_init(&gc->weak);
-    
+
     // Non-zero fields only (everything else is 0/NULL from memset)
     gc->currentwhite = XGC_WHITE0;
-    
-    int64_t threshold = (config && config->gc_threshold > 0) 
-        ? (int64_t)config->gc_threshold 
+
+    int64_t threshold = (config && config->gc_threshold > 0)
+        ? (int64_t)config->gc_threshold
         : (int64_t)XR_SPAWN_CORO_GC_THRESHOLD;
     gc->GCdebt = -threshold;
-    
-    gc->gc_pause = config && config->gc_pause > 0 
-        ? config->gc_pause 
+
+    gc->gc_pause = config && config->gc_pause > 0
+        ? config->gc_pause
         : XR_SPAWN_CORO_GC_PAUSE;
-    gc->gc_stepmul = config && config->gc_stepmul > 0 
-        ? config->gc_stepmul 
+    gc->gc_stepmul = config && config->gc_stepmul > 0
+        ? config->gc_stepmul
         : XR_SPAWN_CORO_GC_STEPMUL;
-    
+
     gc->gc_mode = XGC_MODE_GEN;
     gc->owner = coro;
-    
+
     return gc;
 }
 
@@ -181,20 +181,20 @@ static void gc_decref_all_shared(XrCoroGC *gc) {
 void xr_coro_gc_destroy(XrCoroGC *gc) {
     if (!gc) return;
     XR_DCHECK(!gc->in_gc, "gc_destroy called during GC");
-    
+
     gc_free_root_callbacks(gc);
     gc_finalize_immix_objects(gc);
     xr_immix_destroy(&gc->immix);
     gc_free_large_objects(gc);
-    
+
     xr_gclist_destroy(&gc->gray);
     xr_gclist_destroy(&gc->grayagain);
     xr_gclist_destroy(&gc->weak);
-    
+
     gc_decref_all_shared(gc);
     if (gc->shared_refs) xr_free(gc->shared_refs);
     if (gc->prev_shared_refs) xr_free(gc->prev_shared_refs);
-    
+
     // Recycle to per-Worker free list instead of xr_free()
     XrWorker *w = xr_current_worker();
     if (w && w->p.gc_free_count < 256) {
@@ -260,10 +260,10 @@ XrGCHeader* xr_coro_gc_newobj(XrCoroGC *gc, uint8_t type, size_t size) {
     XR_DCHECK(type < XGC_MAX_TYPES, "invalid GC type");
     XR_DCHECK(size >= sizeof(XrGCHeader), "alloc size too small for GC header");
     XR_DCHECK(gc->owner != NULL, "GC has no owner coroutine");
-    
+
     size_t total = XGC_ALIGN(size);
     XrGCHeader *obj;
-    
+
     if (total > XR_LARGE_OBJECT_THRESHOLD) {
         obj = (XrGCHeader*)xr_malloc(total);
         if (!obj) return NULL;
@@ -272,7 +272,7 @@ XrGCHeader* xr_coro_gc_newobj(XrCoroGC *gc, uint8_t type, size_t size) {
     } else {
         obj = (XrGCHeader*)xr_immix_alloc(&gc->immix, total);
         if (!obj) return NULL;
-        
+
         // Link to per-block local_allgc (cache-friendly sweep)
         XrImmixBlock *block = XR_IMMIX_BLOCK_FROM_PTR(obj);
         obj->gc_next = block->local_allgc;
@@ -281,7 +281,7 @@ XrGCHeader* xr_coro_gc_newobj(XrCoroGC *gc, uint8_t type, size_t size) {
         block->alloc_bytes += (int64_t)total;
         if (xr_gc_needs_finalize(type))
             block->has_finalizers = 1;
-        
+
         // Mark alloc_marks so allocator knows this line is occupied
         xr_immix_mark_alloc_lines_fast(obj, total);
         // NOTE: Do NOT advance mark_cursor here. JIT inline allocs bump
@@ -290,20 +290,20 @@ XrGCHeader* xr_coro_gc_newobj(XrCoroGC *gc, uint8_t type, size_t size) {
         // free. flush_marks (called in slow path) will batch-mark from
         // mark_cursor to cursor, covering both JIT and interpreter allocs.
     }
-    
+
     obj->type = type;
     obj->extra = 0;
     obj->objsize = (uint32_t)total;
-    
+
     // New objects born with currentwhite (in young blocks or large list)
     // INVARIANT 3: new objects carry currentwhite
     obj->marked = gc->currentwhite;
     XR_DCHECK(xr_gc_iswhite(obj), "new object must be white");
-    
+
     gc->totalbytes += (int64_t)total;
     gc->object_count++;
     XR_DCHECK(gc->totalbytes >= 0, "totalbytes underflow");
-    
+
     if (gc->gc_disabled == 0) {
         gc->GCdebt += (int64_t)total;
         gc->alloc_since_gc += total;
@@ -312,7 +312,7 @@ XrGCHeader* xr_coro_gc_newobj(XrCoroGC *gc, uint8_t type, size_t size) {
             gc->gc_requested = 1;
         }
     }
-    
+
     return obj;
 }
 
@@ -521,14 +521,14 @@ static void mark_coro_roots(XrCoroGC *gc) {
     XR_DCHECK(gc != NULL, "mark_coro_roots: NULL gc");
     struct XrCoroutine *coro = gc->owner;
     if (!coro) return;
-    
+
     // vm_ctx is the single source of truth for stack/frames
     XrValue *stack_top = coro->vm_ctx.stack_top;
     size_t actual_size = stack_top ? (size_t)(stack_top - coro->vm_ctx.stack) : 0;
-    
+
     int frame_count = coro->vm_ctx.frame_count;
     XrBcCallFrame *frames = coro->vm_ctx.frames;
-    
+
     if (frames && frame_count > 0) {
         // Extend actual_size to cover every Xray frame's full register file.
         // stack_top is often not updated before GC safepoints, and the topmost
@@ -550,17 +550,17 @@ static void mark_coro_roots(XrCoroGC *gc) {
             actual_size = (size_t)top_frame->base_offset;
         }
     }
-    
+
     // Per-frame stack scanning: zero extra memory, single pass.
     // Slots partitioned by frame boundaries so each slot is scanned exactly once.
     if (coro->vm_ctx.stack && actual_size > 0) {
         XrValue *stack = coro->vm_ctx.stack;
-        
+
         if (frames && frame_count > 0) {
             for (int fi = 0; fi < frame_count; fi++) {
                 XrBcCallFrame *f = &frames[fi];
                 size_t base = f->base_offset;
-                
+
                 // Frame extent: [base, frame_end)
                 size_t frame_end;
                 if (fi + 1 < frame_count) {
@@ -579,14 +579,14 @@ static void mark_coro_roots(XrCoroGC *gc) {
                 }
                 if (frame_end > actual_size) frame_end = actual_size;
                 if (base >= frame_end) continue;
-                
+
                 // C frames or missing proto: conservative scan
                 if ((f->call_status & XR_CALL_C) || !f->closure || !f->closure->proto) {
                     for (size_t i = base; i < frame_end; i++)
                         xr_coro_gc_markvalue(gc, stack[i]);
                     continue;
                 }
-                
+
                 // Conservative scan: always mark all slots.
                 // Typed scan is unsafe because registers are reused across
                 // scopes — a slot typed I64 at compile time may hold a GC
@@ -594,7 +594,7 @@ static void mark_coro_roots(XrCoroGC *gc) {
                 for (size_t i = base; i < frame_end; i++)
                     xr_coro_gc_markvalue(gc, stack[i]);
             }
-            
+
             // Slots before frame[0].base_offset (e.g. varargs area)
             if (frames[0].base_offset > 0) {
                 for (size_t i = 0; i < (size_t)frames[0].base_offset && i < actual_size; i++)
@@ -606,16 +606,16 @@ static void mark_coro_roots(XrCoroGC *gc) {
                 xr_coro_gc_markvalue(gc, stack[i]);
         }
     }
-    
+
     // Mark string pointers inside struct fields (struct data is raw bytes,
     // not XrValues, so normal stack scanning doesn't reach them)
     mark_struct_string_fields(gc, &coro->vm_ctx);
-    
+
     // Mark entry closure
     if (coro->entry_type == XR_CORO_ENTRY_CLOSURE && coro->entry.closure) {
         xr_coro_gc_markobject(gc, (XrGCHeader*)coro->entry.closure);
     }
-    
+
     // Mark shared array values (main coroutine only).
     // Shared variables (OP_SETSHARED) reference objects on main_coro's GC heap.
     // Without this, GC would collect them after stack reset (e.g. between @test runs).
@@ -627,24 +627,24 @@ static void mark_coro_roots(XrCoroGC *gc) {
             }
         }
     }
-    
+
     // Mark task: allocated on executor's heap via xr_alloc(executor, ..., XR_TTASK).
     // Without this root, per-coro GC collects the task while the coroutine runs,
     // causing use-after-free in worker_handle_vm_result → xr_task_complete.
     if (coro->task) {
         xr_coro_gc_markobject(gc, (XrGCHeader*)coro->task);
     }
-    
+
     // Mark coroutine result/error/pending_closure_result
     xr_coro_gc_markvalue(gc, coro->result);
     xr_coro_gc_markvalue(gc, coro->error);
     xr_coro_gc_markvalue(gc, coro->pending_closure_result);
-    
+
     // Mark send_value: kept alive while coroutine is blocked on channel send
     if (coro->wait_channel && coro->wait_send) {
         xr_coro_gc_markvalue(gc, coro->send_value);
     }
-    
+
     // Mark pending cfunc_result in call frames
     if (frames) {
         for (int i = 0; i < frame_count; i++) {
@@ -658,7 +658,7 @@ static void mark_coro_roots(XrCoroGC *gc) {
             // frame->context removed: context chain no longer used.
         }
     }
-    
+
     // Mark current JIT frame's closure and proto as GC roots.
     // jit_ctx->call_closure is not a spill slot and not tracked by safepoint
     // bitmaps, so it must be rooted explicitly.  Without this, a GC triggered
@@ -841,7 +841,7 @@ static void propagatemark(XrCoroGC *gc) {
     // State can be PROPAGATE, ATOMIC, or PAUSE (youngcollection path)
     XrGCHeader *obj = xr_gclist_pop(&gc->gray);
     if (!obj) return;
-    
+
     // INVARIANT 2: object was gray (on gray list), now becomes black
     if (!xr_gc_isgray(obj)) {
         fprintf(stderr, "[GC-DIAG] propagate: obj=%p type=%d marked=0x%02x objsize=%u "
@@ -908,15 +908,15 @@ static int sweep_block(XrCoroGC *gc, XrImmixBlock *block) {
     uint8_t live_has_fin = 0;
     uint8_t live_has_black = 0;  // track BLACK survivors for next cycle's fast path
     XrGCHeader **p = &block->local_allgc;
-    
+
     while (*p) {
         XrGCHeader *curr = *p;
         uint8_t marked = curr->marked;
-        
+
         if ((marked & XGC_WHITEBITS) == deadwhite) {
             // Dead object: unlink from per-block list
             *p = curr->gc_next;
-            
+
             if (xr_gc_needs_finalize(curr->type)) {
                 XrGCDestroyFn destroy = get_destroy_func(curr->type);
                 if (destroy) {
@@ -924,7 +924,7 @@ static int sweep_block(XrCoroGC *gc, XrImmixBlock *block) {
                     gc->finalizer_count++;
                 }
             }
-            
+
             gc->totalbytes -= curr->objsize;
             gc->object_count--;
         } else {
@@ -935,28 +935,28 @@ static int sweep_block(XrCoroGC *gc, XrImmixBlock *block) {
                 // GEN mode: track BLACK survivors so next minor GC skips fast path
                 live_has_black = 1;
             }
-            
+
             int first = XR_IMMIX_LINE_INDEX(curr);
             int last  = XR_IMMIX_LINE_INDEX((char*)curr + curr->objsize - 1);
             for (int l = first; l <= last; l++)
                 XR_IMMIX_LINE_SET(new_marks, l);
-            
+
             live_count++;
             live_bytes += curr->objsize;
             if (xr_gc_needs_finalize(curr->type))
                 live_has_fin = 1;
-            
+
             p = &curr->gc_next;
         }
     }
-    
+
     block->alloc_count = live_count;
     block->alloc_bytes = live_bytes;
     block->has_finalizers = live_has_fin;
     block->has_black = live_has_black;
     block->alloc_marks[0] = new_marks[0];
     block->alloc_marks[1] = new_marks[1];
-    
+
     uint64_t w0 = new_marks[0] & ~1ULL;
     uint64_t w1 = new_marks[1];
     return __builtin_popcountll(w0) + __builtin_popcountll(w1);
@@ -980,11 +980,11 @@ static void sweeplargeobjects(XrCoroGC *gc) {
     XR_DCHECK(gc != NULL, "sweeplargeobjects: NULL gc");
     uint8_t deadwhite = gc->currentwhite ^ XGC_WHITEBITS;
     XrGCHeader **p = &gc->large_objects;
-    
+
     while (*p) {
         XrGCHeader *curr = *p;
         uint8_t marked = curr->marked;
-        
+
         if ((marked & XGC_WHITEBITS) == deadwhite) {
             if (xr_gc_needs_finalize(curr->type)) {
                 XrGCDestroyFn destroy = get_destroy_func(curr->type);
@@ -1018,12 +1018,12 @@ static void clearweaktables(XrCoroGC *gc) {
     XR_DCHECK(gc != NULL, "clearweaktables: NULL gc");
     for (int wi = 0; wi < gc->weak.count; wi++) {
         XrGCHeader *obj = gc->weak.items[wi];
-        
+
         if (obj->type == XR_TMAP) {
             // WeakMap: chained hash, scan node[] array
             struct XrMap *map = (struct XrMap*)obj;
             uint32_t size = 1u << map->lsizenode;
-            
+
             for (uint32_t i = 0; i < size; i++) {
                 XrMapNode *n = &map->node[i];
                 if (n->key_tt != 0) {
@@ -1043,7 +1043,7 @@ static void clearweaktables(XrCoroGC *gc) {
             // WeakSet: open addressing, scan entries[] array
             struct XrSet *set = (struct XrSet*)obj;
             if (!set->entries) continue;
-            
+
             for (uint32_t i = 0; i < set->capacity; i++) {
                 XrSetEntry *e = &set->entries[i];
                 if (e->state >= XR_SET_VALID) {
@@ -1074,21 +1074,21 @@ static void atomic(XrCoroGC *gc) {
     //    re-scan, they become deadwhite after the flip and get swept while
     //    still live on the stack. (Same as Lua's markobject(g, L) in atomic.)
     mark_coro_roots(gc);
-    
+
     // 2. Process grayagain list (objects modified during mark phase)
     xr_gclist_absorb(&gc->gray, &gc->grayagain);
     propagateall(gc);
-    
+
     // 3. Clear dead keys from weak tables (before flipping white)
     clearweaktables(gc);
-    
+
     // 4. Flip white color (INVARIANT 3)
     uint8_t old_white = gc->currentwhite;
     gc->currentwhite ^= XGC_WHITEBITS;
     XR_DCHECK(gc->currentwhite != old_white, "white flip failed");
     XR_DCHECK((gc->currentwhite & XGC_WHITEBITS) != 0, "currentwhite has no white bits");
     (void)old_white;
-    
+
     // 5. Initialize block-level sweep state
     gc->sweep_phase = 0;
     gc->sweep_block = gc->immix.full_blocks;
@@ -1108,15 +1108,15 @@ static void setpause(XrCoroGC *gc) {
     // Calculate allocation rate (bytes per ms) for this cycle
     uint64_t cycle_time_ms = gc->last_gc_time_ns / 1000000;
     if (cycle_time_ms == 0) cycle_time_ms = 1;
-    
+
     uint64_t alloc_rate = gc->alloc_since_gc / cycle_time_ms;
     gc->alloc_since_gc = 0;  // Reset for next cycle
-    
+
     // Adaptive pause: adjust based on allocation rate
     // High allocation rate -> lower pause (more aggressive GC)
     // Low allocation rate -> higher pause (less frequent GC)
     int adaptive_pause = gc->gc_pause;
-    
+
     if (alloc_rate > 10000) {
         // High pressure: >10KB/ms, reduce pause
         adaptive_pause = gc->gc_pause * 80 / 100;
@@ -1126,10 +1126,10 @@ static void setpause(XrCoroGC *gc) {
         adaptive_pause = gc->gc_pause * 150 / 100;
         if (adaptive_pause > XGC_MAX_PAUSE) adaptive_pause = XGC_MAX_PAUSE;
     }
-    
+
     // Calculate threshold: marked * (pause / 100)
     int64_t threshold = gc->GCmarked * adaptive_pause / 100;
-    
+
     // Debt = threshold - current, negative means "wait this much before next GC"
     int64_t debt = threshold - gc->totalbytes;
     if (debt < 0) debt = 0;
@@ -1165,7 +1165,7 @@ static void youngcollection(XrCoroGC *gc) {
     // 1. Mark roots
     gc->GCmarked = 0;
     mark_coro_roots(gc);
-    
+
     // 2. Process remembered set: old-block objects that may point to young objects.
     //
     // Key insight: after propagateall, objects become BLACK. We leave them
@@ -1190,7 +1190,7 @@ static void youngcollection(XrCoroGC *gc) {
             xr_gclist_push(&gc->gray, obj);
         }
         propagateall(gc);
-        
+
         // Rebuild: keep unique old-block objects (REM_2), skip duplicates
         int new_count = 0;
         for (int i = 0; i < rcount; i++) {
@@ -1210,13 +1210,13 @@ static void youngcollection(XrCoroGC *gc) {
         }
         gc->grayagain.count = new_count;
     }
-    
+
     // 3. Clear weak tables
     clearweaktables(gc);
-    
+
     // 4. Flip white
     gc->currentwhite ^= XGC_WHITEBITS;
-    
+
     // 5. Sweep young blocks + classify in single pass.
     // sweep_block updates alloc_marks; use those directly to classify blocks.
     {
@@ -1224,7 +1224,7 @@ static void youngcollection(XrCoroGC *gc) {
         XrImmixBlock *new_recycle = NULL;
         XrImmixBlock *new_free    = gc->immix.free_blocks;
         int64_t promoted_bytes = 0;
-        
+
         // Helper macro: sweep block then classify based on live line count
         #define SWEEP_AND_CLASSIFY(blk) do {                                    \
             int live = sweep_block(gc, (blk));                                  \
@@ -1252,7 +1252,7 @@ static void youngcollection(XrCoroGC *gc) {
                 new_full = (blk);                                               \
             }                                                                   \
         } while(0)
-        
+
         // Process full_blocks and recycle_blocks
         XrImmixBlock *ylists[] = { gc->immix.full_blocks, gc->immix.recycle_blocks };
         for (int li = 0; li < 2; li++) {
@@ -1268,29 +1268,29 @@ static void youngcollection(XrCoroGC *gc) {
             gc->immix.current_block = NULL;
         }
         #undef SWEEP_AND_CLASSIFY
-        
+
         gc->immix.full_blocks = new_full;
         gc->immix.recycle_blocks = new_recycle;
         gc->immix.free_blocks = new_free;
         gc->immix.cursor = NULL;
         gc->immix.limit = NULL;
-        
+
         gc->young_promoted += promoted_bytes;
     }
-    
+
     // 6. Sweep large objects
     sweeplargeobjects(gc);
-    
+
     // 8. Decref shared objects no longer referenced after this collection
     gc_shared_refs_end(gc);
-    
+
     xr_gc_verify_invariants(gc);
 
     XR_DCHECK(gc->totalbytes >= 0, "youngcollection: totalbytes negative after sweep");
-    
+
     // 9. Keep gcstate = PROPAGATE so write barriers stay active between minor GCs
     gc->gcstate = XGC_PROPAGATE;
-    
+
     // 10. Statistics
     uint64_t elapsed = xr_gc_time_ns() - t0;
     gc->last_gc_time_ns = elapsed;
@@ -1308,7 +1308,7 @@ static void minor2inc(XrCoroGC *gc) {
     XR_DCHECK(gc->gc_mode == XGC_MODE_GEN, "minor2inc: not in GEN mode");
     gc->gc_mode = XGC_MODE_INC;
     gc->GCest = gc->totalbytes;
-    
+
     // Merge old blocks into full_blocks (they'll be swept in the full GC)
     while (gc->immix.old_blocks) {
         XrImmixBlock *b = gc->immix.old_blocks;
@@ -1318,7 +1318,7 @@ static void minor2inc(XrCoroGC *gc) {
         gc->immix.full_blocks = b;
     }
     gc->immix.old_block_count = 0;
-    
+
     // Reset all object colors to current white for fresh mark-sweep
     uint8_t newcolor = gc->currentwhite & XGC_WHITEBITS;
     XrImmixBlock *lists[] = { gc->immix.full_blocks, gc->immix.recycle_blocks, gc->immix.current_block };
@@ -1349,7 +1349,7 @@ static void atomic2gen(XrCoroGC *gc) {
     gc->gc_mode = XGC_MODE_GEN;
     gc->young_promoted = 0;
     gc->GCest = gc->totalbytes;
-    
+
     // Move all surviving blocks to old_blocks
     XrImmixBlock *blists[] = { gc->immix.full_blocks, gc->immix.recycle_blocks, gc->immix.current_block };
     for (int i = 0; i < 3; i++) {
@@ -1380,11 +1380,11 @@ static void atomic2gen(XrCoroGC *gc) {
     gc->immix.current_block = NULL;
     gc->immix.cursor = NULL;
     gc->immix.limit = NULL;
-    
+
     // Set large objects to black
     for (XrGCHeader *obj = gc->large_objects; obj; obj = obj->gc_next)
         xr_gc_set2black(obj);
-    
+
     // Recount total blocks
     {
         size_t old_cnt = 0, free_cnt = 0;
@@ -1394,7 +1394,7 @@ static void atomic2gen(XrCoroGC *gc) {
         gc->immix.total_blocks = old_cnt + free_cnt;
         gc->immix.total_block_bytes = gc->immix.total_blocks * XR_IMMIX_BLOCK_SIZE;
     }
-    
+
     xr_gclist_reset(&gc->grayagain);
 }
 
@@ -1408,14 +1408,14 @@ static void entergen(XrCoroGC *gc) {
     gc->gcstate = XGC_PAUSE;
     xr_gclist_reset(&gc->gray);
     xr_gclist_reset(&gc->grayagain);
-    
+
     markroots(gc);
     gc->gcstate = XGC_PROPAGATE;
     propagateall(gc);
     XR_DCHECK(gc->gray.count == 0, "entergen: gray list not empty after propagateall");
     gc->gcstate = XGC_ATOMIC;
     atomic(gc);
-    
+
     // Sweep everything
     sweep_blocklist(gc, gc->immix.full_blocks);
     sweep_blocklist(gc, gc->immix.recycle_blocks);
@@ -1423,10 +1423,10 @@ static void entergen(XrCoroGC *gc) {
         sweep_block(gc, gc->immix.current_block);
     sweeplargeobjects(gc);
     xr_immix_reclaim(&gc->immix);
-    
+
     // Complete sweep → PAUSE before transitioning to generational mode
     gc->gcstate = XGC_PAUSE;
-    
+
     // Transition all surviving objects/blocks to old
     atomic2gen(gc);
     gc->gcstate = XGC_PROPAGATE;
@@ -1457,10 +1457,10 @@ static bool check_minor_to_major(XrCoroGC *gc) {
 
 void xr_coro_gc_step(XrCoroGC *gc) {
     if (!gc || gc->in_gc || gc->gc_disabled > 0) return;
-    
+
     gc->in_gc = 1;
     XR_DCHECK(gc->gcstate <= XGC_SWEEP, "gc_step entry: invalid GC state");
-    
+
     // Generational mode: run minor collection (non-incremental)
     if (gc->gc_mode == XGC_MODE_GEN) {
         // First GC in gen mode: must run entergen to do initial full mark-sweep
@@ -1471,9 +1471,9 @@ void xr_coro_gc_step(XrCoroGC *gc) {
             gc->in_gc = 0;
             return;
         }
-        
+
         youngcollection(gc);
-        
+
         if (check_minor_to_major(gc)) {
             minor2inc(gc);
             entergen(gc);
@@ -1481,11 +1481,11 @@ void xr_coro_gc_step(XrCoroGC *gc) {
         } else {
             setminordebt(gc);
         }
-        
+
         gc->in_gc = 0;
         return;
     }
-    
+
     // Incremental mode (also used as major GC)
     XR_DCHECK(gc->gcstate <= XGC_SWEEP, "gc_step: invalid GC state");
     switch (gc->gcstate) {
@@ -1494,7 +1494,7 @@ void xr_coro_gc_step(XrCoroGC *gc) {
             markroots(gc);
             gc->gcstate = XGC_PROPAGATE;
             break;
-            
+
         case XGC_PROPAGATE: {
             int prop_count = 5 + gc->gc_stepmul / 20;
             if (gc->gray.count > 0) {
@@ -1506,13 +1506,13 @@ void xr_coro_gc_step(XrCoroGC *gc) {
             }
             break;
         }
-            
+
         case XGC_ATOMIC: {
             atomic(gc);
             gc->gcstate = XGC_SWEEP;
             break;
         }
-            
+
         case XGC_SWEEP: {
             sweep_blocklist(gc, gc->immix.full_blocks);
             sweep_blocklist(gc, gc->immix.recycle_blocks);
@@ -1521,14 +1521,14 @@ void xr_coro_gc_step(XrCoroGC *gc) {
             }
             sweeplargeobjects(gc);
             xr_immix_reclaim(&gc->immix);
-            
+
             uint64_t elapsed = xr_gc_time_ns() - gc->gc_cycle_start_ns;
             gc->last_gc_time_ns = elapsed;
             gc->gc_time_ns += elapsed;
-            
+
             // Decref shared objects no longer referenced
             gc_shared_refs_end(gc);
-            
+
             gc->gcstate = XGC_PAUSE;
             gc->gc_count++;
             setpause(gc);
@@ -1536,7 +1536,7 @@ void xr_coro_gc_step(XrCoroGC *gc) {
             break;
         }
     }
-    
+
     gc->in_gc = 0;
 }
 
@@ -1545,37 +1545,37 @@ void xr_coro_gc_step(XrCoroGC *gc) {
 void xr_coro_gc_fullgc(XrCoroGC *gc) {
     if (!gc) return;
     XR_DCHECK(!gc->in_gc, "fullgc: re-entry during GC");
-    
+
     uint64_t t0 = xr_gc_time_ns();
     uint8_t saved_mode = gc->gc_mode;
     gc->gc_disabled++;
-    
+
     // Switch to incremental mode for full collection
     if (gc->gc_mode == XGC_MODE_GEN) {
         minor2inc(gc);
         XR_DCHECK(gc->gc_mode == XGC_MODE_INC, "fullgc: minor2inc didn't switch to INC");
     }
-    
+
     // Abort any pending cycle (we're about to do a full fresh cycle)
     gc->gcstate = XGC_PAUSE;
     xr_gclist_reset(&gc->gray);
     xr_gclist_reset(&gc->grayagain);
-    
-    
+
+
     // PAUSE -> PROPAGATE: mark roots
     markroots(gc);
     gc->gcstate = XGC_PROPAGATE;
-    
+
     // PROPAGATE: mark all reachable objects
     while (gc->gray.count > 0) {
         propagatemark(gc);
     }
     XR_DCHECK(gc->gray.count == 0, "fullgc: gray list not empty after propagateall");
-    
+
     // ATOMIC: process grayagain, flip white
     gc->gcstate = XGC_ATOMIC;
     atomic(gc);
-    
+
     // SWEEP: sweep all blocks (old blocks were merged by minor2inc)
     gc->gcstate = XGC_SWEEP;
     sweep_blocklist(gc, gc->immix.full_blocks);
@@ -1585,10 +1585,10 @@ void xr_coro_gc_fullgc(XrCoroGC *gc) {
     }
     sweeplargeobjects(gc);
     xr_immix_reclaim(&gc->immix);
-    
+
     // Decref shared objects no longer referenced
     gc_shared_refs_end(gc);
-    
+
     // Record cycle timing
     uint64_t elapsed = xr_gc_time_ns() - t0;
     gc->last_gc_time_ns = elapsed;
@@ -1596,7 +1596,7 @@ void xr_coro_gc_fullgc(XrCoroGC *gc) {
     gc->gcstate = XGC_PAUSE;
     gc->gc_count++;
     XR_DCHECK(gc->totalbytes >= 0, "fullgc: totalbytes negative after sweep");
-    
+
     // Return to generational mode if that was the original mode
     if (saved_mode == XGC_MODE_GEN) {
         atomic2gen(gc);
@@ -1604,14 +1604,14 @@ void xr_coro_gc_fullgc(XrCoroGC *gc) {
     } else {
         setpause(gc);
     }
-    
+
     xr_gc_verify_invariants(gc);
 
     // NOTE: global string pool sweep removed from per-coroutine fullgc.
     // xr_global_pool_sweep is a global operation but ACCESSED flags are only
     // set by the current coroutine's mark phase. Other coroutines' live strings
     // would be incorrectly freed. Pool cleanup happens at isolate shutdown.
-    
+
     gc->gc_disabled--;
 }
 
@@ -1619,10 +1619,10 @@ void xr_coro_gc_fullgc(XrCoroGC *gc) {
 
 int xr_coro_gc_register_root(XrCoroGC *gc, XrCoroGCRootCallback callback, void *userdata) {
     if (!gc || !callback) return -1;
-    
+
     XrCoroGCRootEntry *entry = (XrCoroGCRootEntry*)xr_malloc(sizeof(XrCoroGCRootEntry));
     if (!entry) return -1;
-    
+
     entry->callback = callback;
     entry->userdata = userdata;
     entry->next = gc->root_callbacks;
@@ -1632,7 +1632,7 @@ int xr_coro_gc_register_root(XrCoroGC *gc, XrCoroGCRootCallback callback, void *
 
 int xr_coro_gc_unregister_root(XrCoroGC *gc, XrCoroGCRootCallback callback, void *userdata) {
     if (!gc || !callback) return -1;
-    
+
     XrCoroGCRootEntry **pp = &gc->root_callbacks;
     while (*pp) {
         XrCoroGCRootEntry *entry = *pp;
@@ -1734,7 +1734,7 @@ void xr_coro_gc_print_stats(XrCoroGC *gc) {
         printf("XrCoroGC: NULL\n");
         return;
     }
-    
+
     printf("=== XrCoroGC (Incremental Immix) ===\n");
     printf("GC state:     %s\n", xr_gc_state_name(gc->gcstate));
     printf("Total bytes:  %lld\n", (long long)gc->totalbytes);
@@ -1744,7 +1744,7 @@ void xr_coro_gc_print_stats(XrCoroGC *gc) {
     printf("GC pause:     %d%%\n", gc->gc_pause);
     printf("GC stepmul:   %d\n", gc->gc_stepmul);
     printf("Current white: %s\n", gc->currentwhite == XGC_WHITE0 ? "WHITE0" : "WHITE1");
-    
+
     XrImmixStats istats;
     xr_immix_get_stats(&gc->immix, &istats);
     printf("Immix blocks:   %zu (full=%zu recycle=%zu free=%zu)\n",
@@ -1753,7 +1753,7 @@ void xr_coro_gc_print_stats(XrCoroGC *gc) {
     printf("Immix memory:   %zu bytes\n", istats.total_bytes);
     printf("Immix lines:    live=%zu free=%zu\n",
            istats.live_lines, istats.free_lines);
-    
+
     size_t obj_count = 0;
     XrImmixBlock *plists[] = {
         gc->immix.full_blocks,
@@ -1768,12 +1768,12 @@ void xr_coro_gc_print_stats(XrCoroGC *gc) {
         if (i == 2) break;
     }
     printf("Object count:   %zu\n", obj_count);
-    
+
     size_t large_count = 0;
     for (XrGCHeader *obj = gc->large_objects; obj; obj = obj->gc_next)
         large_count++;
     printf("Large objects:  %zu\n", large_count);
-    
+
     printf("=====================================\n");
 }
 
@@ -1851,31 +1851,31 @@ bool xr_coro_gc_grow_stack(struct XrCoroutine *coro, int extra_slots) {
     if (!coro || !coro->vm_ctx.stack) return false;
     XR_DCHECK(extra_slots > 0, "grow_stack: non-positive extra_slots");
     XR_DCHECK(coro->vm_ctx.stack_capacity > 0, "grow_stack: zero stack_capacity");
-    
+
     int new_capacity = coro->vm_ctx.stack_capacity + extra_slots;
     if (new_capacity > 1024 * 1024) return false;
-    
+
     // Check if stack and frames are in a combined allocation block.
     // If frames pointer is right after the stack, they share one malloc.
     char *stack_end = (char*)coro->vm_ctx.stack + sizeof(XrValue) * coro->vm_ctx.stack_capacity;
     bool combined = ((char*)coro->vm_ctx.frames == stack_end);
-    
+
     // Check if stack is from arena slab (gc_flags bit 0)
     bool slab_stack = (coro->gc_flags & 0x0001) != 0;
-    
+
     if (combined) {
         // Split: allocate new separate stack, copy data
         XrValue *new_stack = (XrValue*)xr_malloc(sizeof(XrValue) * new_capacity);
         if (!new_stack) return false;
         memcpy(new_stack, coro->vm_ctx.stack, sizeof(XrValue) * coro->vm_ctx.stack_capacity);
         memset(new_stack + coro->vm_ctx.stack_capacity, 0, sizeof(XrValue) * extra_slots);
-        
+
         // Allocate separate frames, copy from old combined block
         XrBcCallFrame *new_frames = (XrBcCallFrame*)xr_malloc(
             sizeof(XrBcCallFrame) * coro->vm_ctx.frame_capacity);
         if (!new_frames) { xr_free(new_stack); return false; }
         memcpy(new_frames, coro->vm_ctx.frames, sizeof(XrBcCallFrame) * coro->vm_ctx.frame_count);
-        
+
         // Free old block only if it was malloc'd (not from arena slab)
         if (!slab_stack) {
             xr_free(coro->vm_ctx.stack);
@@ -1904,7 +1904,7 @@ bool xr_coro_gc_grow_stack(struct XrCoroutine *coro, int extra_slots) {
             coro->vm_ctx.stack_capacity = new_capacity;
         }
     }
-    
+
     if (coro->vm_ctx.frame_count + 8 >= coro->vm_ctx.frame_capacity) {
         int new_frame_cap = coro->vm_ctx.frame_capacity * 2;
         // If frames were from slab (now split out in combined path above),
@@ -1928,6 +1928,6 @@ bool xr_coro_gc_grow_stack(struct XrCoroutine *coro, int extra_slots) {
         }
         coro->vm_ctx.frame_capacity = new_frame_cap;
     }
-    
+
     return true;
 }

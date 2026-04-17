@@ -146,7 +146,7 @@ int xr_execute(XrayIsolate *isolate, XrProto *proto) {
         return -1;
     }
     
-    XrClosure *closure = xr_vm_closure_new(isolate, proto, main_coro);
+    XrClosure *closure = xr_closure_new(isolate, proto, main_coro);
     if (!closure) {
         xr_log_warning("vm", "failed to create main closure");
         return -1;

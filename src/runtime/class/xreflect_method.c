@@ -15,7 +15,7 @@
 #include "../xisolate_api.h"
 #include "../xvm_call.h"
 #include "../value/xchunk.h"
-#include "../../vm/xvm_state_frame.h"
+#include "../../runtime/xexec_frame.h"
 #include "../object/xstring.h"
 #include <ctype.h>
 #include <string.h>

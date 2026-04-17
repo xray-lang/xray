@@ -39,7 +39,7 @@ typedef struct XrSet XrSet;
 typedef struct XrString XrString;
 typedef struct XrClass XrClass;
 typedef struct XrInstance XrInstance;
-typedef struct XrClosure Closure;
+typedef struct XrClosure XrClosure;
 typedef struct XrProto XrProto;
 typedef struct Upvalue Upvalue;
 
@@ -102,8 +102,7 @@ XRAY_API XrString* xray_string_new(XrayIsolate *X, const char *str, size_t len);
 // Create instance of a class
 XR_FUNC XrInstance* xr_instance_new(XrayIsolate *X, XrClass *klass);
 
-// Create closure from function prototype
-XR_FUNC Closure* xr_closure_new(XrayIsolate *X, XrProto *proto);
+// Closure creation is declared in runtime/closure/xclosure.h.
 
 /* ========== Array Operations ========== */
 
@@ -181,7 +180,7 @@ XR_FUNC double xr_to_float(XrValue val);
 XR_FUNC XrString* xr_to_string(XrValue val);
 XR_FUNC XrArray* xr_to_array(XrValue val);
 XR_FUNC XrMap* xr_to_map(XrValue val);
-XR_FUNC Closure* xr_to_closure(XrValue val);
+XR_FUNC XrClosure* xr_to_closure(XrValue val);
 
 /* ========== Value Construction ========== */
 XR_FUNC XrValue xr_value_null(void);

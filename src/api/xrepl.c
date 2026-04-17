@@ -22,7 +22,7 @@
 #include "../frontend/parser/xast_api.h"
 #include "../frontend/lexer/xlex.h"
 #include "../runtime/value/xchunk.h"
-#include "../vm/xvm_state.h"
+#include "../runtime/xexec_state.h"
 #include "../base/xmalloc.h"
 #include "../base/xdynarray.h"
 #include <stdio.h>
