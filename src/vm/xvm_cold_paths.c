@@ -28,7 +28,7 @@
 #include "../runtime/object/xutf8.h"
 #include "../runtime/value/xslot_type.h"
 #include "../runtime/value/xtype.h"
-#include "../jit/xir_feedback.h"
+#include "../runtime/value/xtype_feedback.h"
 #include "../coro/xcoro_pool.h"
 #include "../coro/xtask.h"
 #include "../coro/xdeep_copy.h"
@@ -250,7 +250,7 @@ int vm_invoke_channel(XrayIsolate *isolate, XrVMContext *vm_ctx,
 
     // toString fallback for Channel
     if (method_symbol == SYMBOL_TOSTRING) {
-        base[a] = xr_string_value(vm_value_to_string(isolate, base[a + 1]));
+        base[a] = xr_string_value(xr_value_to_string(isolate, base[a + 1]));
         return VM_COLD_BREAK;
     }
 
@@ -331,7 +331,7 @@ int vm_invoke_task_handle(XrayIsolate *isolate,
         return VM_COLD_BREAK;
     }
     if (method_symbol == SYMBOL_TOSTRING) {
-        base[a] = xr_string_value(vm_value_to_string(isolate, receiver));
+        base[a] = xr_string_value(xr_value_to_string(isolate, receiver));
         return VM_COLD_BREAK;
     }
     VM_COLD_THROW(frame, pc, XR_ERR_TYPE_NO_METHOD,
@@ -356,7 +356,7 @@ int vm_invoke_coro_handle(XrayIsolate *isolate,
         return VM_COLD_BREAK;
     }
     if (method_symbol == SYMBOL_TOSTRING) {
-        base[a] = xr_string_value(vm_value_to_string(isolate, receiver));
+        base[a] = xr_string_value(xr_value_to_string(isolate, receiver));
         return VM_COLD_BREAK;
     }
     VM_COLD_THROW(frame, pc, XR_ERR_TYPE_NO_METHOD,
@@ -1609,7 +1609,7 @@ int vm_getprop_type_dispatch(XrayIsolate *isolate, XrVMContext *vm_ctx,
             return VM_COLD_BREAK;
         }
         // Slow path: promote SSO to heap for bound method creation
-        XrString *str = vm_value_to_string(isolate, obj);
+        XrString *str = xr_value_to_string(isolate, obj);
         (void)str;
         if (prop_symbol == SYMBOL_HAS) {
             XrBoundMethod *bm = xr_bound_method_new(isolate, obj, xr_string_get_handler(SYMBOL_HAS));
@@ -2121,7 +2121,7 @@ int vm_go(XrayIsolate *isolate, XrVMContext *vm_ctx,
         int name_idx = GETARG_Bx(next_inst);
         XrValue name_val = PROTO_CONSTANT(frame->closure->proto, name_idx);
         if (XR_IS_STRING(name_val))
-            coro_name = vm_value_to_string(isolate, name_val)->data;
+            coro_name = xr_value_to_string(isolate, name_val)->data;
         pc++;
         next_inst = *pc;
     }
@@ -2191,7 +2191,7 @@ int vm_go_invoke(XrayIsolate *isolate, XrVMContext *vm_ctx,
         XrMap *map = XR_TO_MAP(receiver);
         result = map_method_call_by_symbol(isolate, map, method_symbol, &base[a + 2], nargs);
     } else if (XR_IS_STRING(receiver)) {
-        XrString *str = vm_value_to_string(isolate, receiver);
+        XrString *str = xr_value_to_string(isolate, receiver);
         result = string_method_call_by_symbol(isolate, str, method_symbol, &base[a + 2], nargs);
     } else if (XR_IS_PTR(receiver)) {
         uint8_t gc_type = XR_HEAP_TYPE(receiver);
@@ -2270,7 +2270,7 @@ int vm_spawn_cont(XrayIsolate *isolate, XrVMContext *vm_ctx,
         int name_idx = GETARG_Bx(next_inst);
         XrValue name_val = PROTO_CONSTANT(frame->closure->proto, name_idx);
         if (XR_IS_STRING(name_val))
-            coro_name = vm_value_to_string(isolate, name_val)->data;
+            coro_name = xr_value_to_string(isolate, name_val)->data;
         pc++;
         next_inst = *pc;
     }

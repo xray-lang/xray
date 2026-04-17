@@ -5,30 +5,25 @@
  * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
  * Licensed under the MIT License
  *
- * xvm_state_frame.h - VM execution state types
+ * xexec_frame.h - Runtime execution state types (call frame, exception
+ *                  handler, per-coroutine VM context, C-function registry)
  *
  * KEY CONCEPT:
- *   Core types for VM execution state used by XrayIsolate.
- *   Placed in core layer to avoid backends circular dependencies.
+ *   These types model the *runtime* execution state. The VM interpreter
+ *   (src/vm/) and JIT engine (src/jit/) read and write these structures but
+ *   do not own them; Isolate and Coroutine hold them directly. Lives at the
+ *   runtime layer so GC, reflection and error handling never reverse-include
+ *   into vm/.
  */
 
-#ifndef XVM_STATE_FRAME_H
-#define XVM_STATE_FRAME_H
+#ifndef XEXEC_FRAME_H
+#define XEXEC_FRAME_H
 
 #include <stdint.h>
 #include <stdbool.h>
-#include "../runtime/value/xvalue.h"
-#include "../runtime/value/xchunk.h"
-
-/* ========== Closure Object ========== */
-
-// Function + captured environment (flat upvalue model)
-typedef struct XrClosure {
-    XrGCHeader gc;
-    XrProto *proto;              // compiled function prototype
-    uint16_t upval_count;        // number of entries in upvals[]
-    XrValue upvals[];            // flat upvalue array (const values + cell refs)
-} XrClosure;
+#include "value/xvalue.h"
+#include "value/xchunk.h"
+#include "closure/xclosure.h"
 
 /* ========== Call Frame ========== */
 
@@ -127,22 +122,22 @@ typedef struct XrVMContext {
     XrValue *stack;             // stack base
     XrValue *stack_top;         // current top (next free slot)
     int stack_capacity;
-    
+
     // Call stack
     XrBcCallFrame *frames;      // call frame array
     int frame_count;            // current depth
     int frame_capacity;
     int module_base_frame;      // module boundary for error trace
-    
+
     // Exception handling
     XrExceptionHandler *handlers;  // handler stack
     int handler_count;
     int handler_capacity;
     XrValue current_exception;  // active exception being handled
-    
+
     // Closure support
     void *current_coro;         // owning coroutine (XrCoroutine*)
-    
+
     // Execution control
     uint32_t instruction_count; // for preemptive scheduling
     bool preempt_pending;       // yield at next safe point
@@ -150,12 +145,12 @@ typedef struct XrVMContext {
     bool trace_execution;       // debug: trace opcodes
     struct XrStrBuf *tmp_strbuf;// scratch buffer for string ops
     XrayIsolate *isolate;       // parent isolate
-    
+
     // Per-frame struct storage (lazy-allocated, grows with frame depth)
     uint8_t **struct_areas;     // struct data pointers per frame
     uint16_t *struct_area_caps; // allocated capacity per frame
     int struct_areas_cap;       // number of slots in struct_areas/struct_area_caps
-    
+
     // Struct return arena: when a method returns a struct_ref pointing to its
     // own struct_area (about-to-be-reused), the data is copied here.
     // Arena grows but never shrinks, so all struct_ref pointers remain valid.
@@ -185,4 +180,4 @@ typedef struct XrVMContext {
 #define VMCTX_GLOBAL_COUNT(ctx)     (VMCTX_ISOLATE(ctx)->vm.builtin_count)
 #define VMCTX_STRINGS(ctx)          (VMCTX_ISOLATE(ctx)->vm.strings_map)
 
-#endif // XVM_STATE_FRAME_H
+#endif // XEXEC_FRAME_H

@@ -32,8 +32,8 @@
 #include "class/xclass.h"
 #include "gc/xgc.h"  // GC core definitions
 // Instance/Json pools removed, using per-coroutine heap
-#include "../vm/xvm_state_frame.h"  // VM state types (XrBcCallFrame, etc.)
-#include "../vm/xvm_state.h"  // XrVMState - VM execution state
+#include "../runtime/xexec_frame.h"  // VM state types (XrBcCallFrame, etc.)
+#include "../runtime/xexec_state.h"  // XrVMState - VM execution state
 #include "object/xnative_type.h"  // XR_NATIVE_TYPE_MAX
 
 /* ========== Thread Local Storage ========== */

@@ -24,8 +24,7 @@ XR_FUNC void xr_disassemble_proto(XrProto *proto, const char *name);
 // Disassemble single instruction, returns next instruction offset
 XR_FUNC int xr_disassemble_instruction(XrProto *proto, int offset);
 
-// Get opcode name string
-XR_FUNC const char *xr_debug_opcode_name(OpCode op);
+// Opcode name lookup now lives in runtime/value/xopcode_info.h (xr_opcode_name).
 
 /* ========== Debug Output ========== */
 
