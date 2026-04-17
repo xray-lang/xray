@@ -151,7 +151,9 @@ static bool is_remat(XirFunc *f, uint32_t v) {
 static void ctx_track(LsCtx *ctx, LsRange *r) {
     if (ctx->nall >= ctx->all_cap) {
         ctx->all_cap *= 2;
-        ctx->all_ranges = xr_realloc(ctx->all_ranges, ctx->all_cap * sizeof(LsRange *));
+        XR_REALLOC_OR_ABORT(ctx->all_ranges,
+                            ctx->all_cap * sizeof(LsRange *),
+                            "regalloc ctx_track");
     }
     ctx->all_ranges[ctx->nall++] = r;
 }
@@ -184,7 +186,9 @@ static void ls_list_add(LsList *l, LsRange *r) {
     XR_DCHECK(r != NULL, "ls_list_add: NULL range");
     if (l->len >= l->cap) {
         l->cap = l->cap ? l->cap * 2 : 16;
-        l->items = xr_realloc(l->items, l->cap * sizeof(LsRange *));
+        XR_REALLOC_OR_ABORT(l->items,
+                            l->cap * sizeof(LsRange *),
+                            "regalloc ls_list_add");
     }
     l->items[l->len++] = r;
 }
@@ -1411,7 +1415,9 @@ static void connect_ranges(LsCtx *ctx, XraResult *res) {
 
             if (n >= cap) {
                 cap *= 2;
-                moves = xr_realloc(moves, cap * sizeof(XraGapMove));
+                XR_REALLOC_OR_ABORT(moves,
+                                    cap * sizeof(XraGapMove),
+                                    "regalloc connect_ranges moves");
             }
             XraGapMove *gm = &moves[n++];
             gm->gap_blk = ctx->func->blocks[bi]->id;

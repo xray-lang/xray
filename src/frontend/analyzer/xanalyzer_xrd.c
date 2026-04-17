@@ -71,55 +71,57 @@ static const char *read_to_eol(const char *p, char *buf, size_t buf_size) {
 // Parse handle fields from "{ const fd: int, const type: string }"
 static XaBuiltinHandleField *parse_handle_fields(const char *p, int *out_count) {
     *out_count = 0;
-    
+
     // Skip to opening brace
     while (*p && *p != '{') p++;
     if (*p != '{') return NULL;
     p++;
-    
+
     // Count commas to estimate field count
     int cap = 8;
     XaBuiltinHandleField *fields = xr_calloc(cap, sizeof(XaBuiltinHandleField));
     if (!fields) return NULL;
-    
+
     int count = 0;
     while (*p && *p != '}') {
         p = skip_ws(p);
         if (*p == ',' || *p == '}') { if (*p == ',') p++; continue; }
-        
+
         bool is_const = false;
         if (strncmp(p, "const ", 6) == 0) {
             is_const = true;
             p += 6;
             p = skip_ws(p);
         }
-        
+
         char name[64];
         p = read_ident(p, name, sizeof(name));
         p = skip_ws(p);
-        
+
         if (*p == ':') p++;
         p = skip_ws(p);
-        
+
         char type_str[64];
         p = read_ident(p, type_str, sizeof(type_str));
-        
+
         if (name[0] && type_str[0]) {
             if (count >= cap) {
                 cap *= 2;
-                fields = xr_realloc(fields, cap * sizeof(XaBuiltinHandleField));
+                XR_REALLOC_OR_ABORT(fields,
+                                    (size_t)cap * sizeof(XaBuiltinHandleField),
+                                    "xrd fields grow");
             }
             fields[count].name = xrd_strdup(name);
             fields[count].type_str = xrd_strdup(type_str);
             fields[count].is_const = is_const;
             count++;
         }
-        
+
         // Skip comma
         p = skip_ws(p);
         if (*p == ',') p++;
     }
-    
+
     *out_count = count;
     return fields;
 }
@@ -130,16 +132,16 @@ static XrdModule *parse_xrd_content(const char *content, const char *module_name
     XR_DCHECK(module_name != NULL, "parse_xrd_content: NULL module_name");
     XrdModule *xrd = xr_calloc(1, sizeof(XrdModule));
     if (!xrd) return NULL;
-    
+
     xrd->module.name = xrd_strdup(module_name);
     xrd->name_buf = (char *)xrd->module.name;
-    
+
     // Pre-allocate arrays
     xrd->function_cap = 32;
     xrd->functions = xr_calloc(xrd->function_cap, sizeof(XaBuiltinMember));
     xrd->handle_cap = 8;
     xrd->handles = xr_calloc(xrd->handle_cap, sizeof(XaBuiltinHandle));
-    
+
     const char *p = content;
     while (*p) {
         // Skip blank lines and comments
@@ -150,57 +152,61 @@ static XrdModule *parse_xrd_content(const char *content, const char *module_name
             if (*p) p++;
             continue;
         }
-        
+
         // Parse "type Name = { ... }"
         if (strncmp(p, "type ", 5) == 0) {
             p += 5;
             p = skip_ws(p);
-            
+
             char handle_name[64];
             p = read_ident(p, handle_name, sizeof(handle_name));
             p = skip_ws(p);
-            
+
             if (*p == '=') p++;
             p = skip_ws(p);
-            
+
             int field_count = 0;
             XaBuiltinHandleField *fields = parse_handle_fields(p, &field_count);
-            
+
             if (fields && field_count > 0) {
                 int idx = xrd->module.handle_count;
                 if (idx >= xrd->handle_cap) {
                     xrd->handle_cap *= 2;
-                    xrd->handles = xr_realloc(xrd->handles, xrd->handle_cap * sizeof(XaBuiltinHandle));
+                    XR_REALLOC_OR_ABORT(xrd->handles,
+                                        (size_t)xrd->handle_cap * sizeof(XaBuiltinHandle),
+                                        "xrd handles grow");
                 }
                 xrd->handles[idx].name = xrd_strdup(handle_name);
                 xrd->handles[idx].fields = fields;
                 xrd->handles[idx].field_count = field_count;
                 xrd->module.handle_count++;
             }
-            
+
             // Skip to next line
             while (*p && *p != '\n') p++;
             if (*p) p++;
             continue;
         }
-        
+
         // Parse "export fn name(...): type"
         if (strncmp(p, "export fn ", 10) == 0) {
             p += 10;
             p = skip_ws(p);
-            
+
             char func_name[64];
             p = read_ident(p, func_name, sizeof(func_name));
-            
+
             // Rest of line is the signature
             char sig[256];
             p = read_to_eol(p, sig, sizeof(sig));
-            
+
             if (func_name[0] && sig[0]) {
                 int idx = xrd->module.function_count;
                 if (idx >= xrd->function_cap) {
                     xrd->function_cap *= 2;
-                    xrd->functions = xr_realloc(xrd->functions, xrd->function_cap * sizeof(XaBuiltinMember));
+                    XR_REALLOC_OR_ABORT(xrd->functions,
+                                        (size_t)xrd->function_cap * sizeof(XaBuiltinMember),
+                                        "xrd functions grow");
                 }
                 xrd->functions[idx].name = xrd_strdup(func_name);
                 xrd->functions[idx].signature = xrd_strdup(sig);
@@ -209,16 +215,16 @@ static XrdModule *parse_xrd_content(const char *content, const char *module_name
                 xrd->functions[idx].is_static = false;
                 xrd->module.function_count++;
             }
-            
+
             if (*p) p++;
             continue;
         }
-        
+
         // Skip unknown lines
         while (*p && *p != '\n') p++;
         if (*p) p++;
     }
-    
+
     xrd->module.functions = xrd->functions;
     xrd->module.handles = xrd->handles;
     return xrd;
@@ -228,19 +234,19 @@ static XrdModule *parse_xrd_content(const char *content, const char *module_name
 static char *read_file_content(const char *path) {
     FILE *f = fopen(path, "r");
     if (!f) return NULL;
-    
+
     fseek(f, 0, SEEK_END);
     long size = ftell(f);
     fseek(f, 0, SEEK_SET);
-    
+
     if (size <= 0 || size > 1024 * 1024) { // Max 1MB
         fclose(f);
         return NULL;
     }
-    
+
     char *buf = xr_malloc(size + 1);
     if (!buf) { fclose(f); return NULL; }
-    
+
     size_t nread = fread(buf, 1, size, f);
     buf[nread] = '\0';
     fclose(f);
@@ -249,10 +255,10 @@ static char *read_file_content(const char *path) {
 
 const XaBuiltinModule *xa_xrd_load_file(const char *xrd_path) {
     if (!xrd_path) return NULL;
-    
+
     char *content = read_file_content(xrd_path);
     if (!content) return NULL;
-    
+
     // Extract module name from filename
     const char *slash = strrchr(xrd_path, '/');
     const char *base = slash ? slash + 1 : xrd_path;
@@ -263,7 +269,7 @@ const XaBuiltinModule *xa_xrd_load_file(const char *xrd_path) {
         i++;
     }
     mod_name[i] = '\0';
-    
+
     // Check if already loaded
     for (XrdModule *m = g_xrd_modules; m; m = m->next) {
         if (strcmp(m->module.name, mod_name) == 0) {
@@ -271,10 +277,10 @@ const XaBuiltinModule *xa_xrd_load_file(const char *xrd_path) {
             return &m->module;
         }
     }
-    
+
     XrdModule *xrd = parse_xrd_content(content, mod_name);
     xr_free(content);
-    
+
     if (!xrd || (xrd->module.function_count == 0 && xrd->module.handle_count == 0)) {
         if (xrd) {
             xr_free(xrd->functions);
@@ -284,34 +290,34 @@ const XaBuiltinModule *xa_xrd_load_file(const char *xrd_path) {
         }
         return NULL;
     }
-    
+
     // Add to linked list
     xrd->next = g_xrd_modules;
     g_xrd_modules = xrd;
-    
+
     return &xrd->module;
 }
 
 const XaBuiltinModule *xa_xrd_find_module(const char *module_name,
                                            const char *script_dir) {
     if (!module_name) return NULL;
-    
+
     // Check if already loaded
     for (XrdModule *m = g_xrd_modules; m; m = m->next) {
         if (strcmp(m->module.name, module_name) == 0) {
             return &m->module;
         }
     }
-    
+
     char path[1024];
-    
+
     // 1. Search in script directory
     if (script_dir && script_dir[0]) {
         snprintf(path, sizeof(path), "%s/%s.xrd", script_dir, module_name);
         const XaBuiltinModule *mod = xa_xrd_load_file(path);
         if (mod) return mod;
     }
-    
+
     // 2. Search $XRAY_TYPEPATH
     const char *typepath = getenv("XRAY_TYPEPATH");
     if (typepath && typepath[0]) {
@@ -319,7 +325,7 @@ const XaBuiltinModule *xa_xrd_find_module(const char *module_name,
         char pathbuf[4096];
         strncpy(pathbuf, typepath, sizeof(pathbuf) - 1);
         pathbuf[sizeof(pathbuf) - 1] = '\0';
-        
+
         char *saveptr = NULL;
         char *dir = strtok_r(pathbuf, ":", &saveptr);
         while (dir) {
@@ -329,7 +335,7 @@ const XaBuiltinModule *xa_xrd_find_module(const char *module_name,
             dir = strtok_r(NULL, ":", &saveptr);
         }
     }
-    
+
     return NULL;
 }
 
@@ -337,7 +343,7 @@ void xa_xrd_cleanup(void) {
     XrdModule *m = g_xrd_modules;
     while (m) {
         XrdModule *next = m->next;
-        
+
         // Free function strings
         for (int i = 0; i < m->module.function_count; i++) {
             xr_free((void *)m->functions[i].name);
@@ -345,7 +351,7 @@ void xa_xrd_cleanup(void) {
             xr_free((void *)m->functions[i].doc);
         }
         xr_free(m->functions);
-        
+
         // Free handle strings
         for (int i = 0; i < m->module.handle_count; i++) {
             xr_free((void *)m->handles[i].name);
@@ -356,7 +362,7 @@ void xa_xrd_cleanup(void) {
             xr_free((void *)m->handles[i].fields);
         }
         xr_free(m->handles);
-        
+
         xr_free(m->name_buf);
         xr_free(m);
         m = next;

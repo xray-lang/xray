@@ -320,7 +320,9 @@ uint32_t xir_coalesce(XirFunc *func) {
 
             if (nmov >= mov_cap) {
                 mov_cap *= 2;
-                movs = xr_realloc(movs, mov_cap * sizeof(CoalesceMove));
+                XR_REALLOC_OR_ABORT(movs,
+                                    mov_cap * sizeof(CoalesceMove),
+                                    "coalesce movs grow");
             }
             movs[nmov++] = (CoalesceMove){
                 .dst_vreg = dv, .src_vreg = sv,

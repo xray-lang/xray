@@ -41,21 +41,21 @@ static const char *token_modifier_names[] = {
 // Get semantic tokens legend
 XrJsonValue *xlsp_semantic_tokens_legend(void) {
     XrJsonValue *legend = xlsp_json_new_object();
-    
+
     // Token types
     XrJsonValue *types = xlsp_json_new_array();
     for (int i = 0; i < XLSP_TOKEN_COUNT; i++) {
         xlsp_json_array_push(types, xlsp_json_new_string(token_type_names[i]));
     }
     xlsp_json_object_set(legend, "tokenTypes", types);
-    
+
     // Token modifiers
     XrJsonValue *modifiers = xlsp_json_new_array();
     for (int i = 0; i < 10; i++) {
         xlsp_json_array_push(modifiers, xlsp_json_new_string(token_modifier_names[i]));
     }
     xlsp_json_object_set(legend, "tokenModifiers", modifiers);
-    
+
     return legend;
 }
 
@@ -68,13 +68,15 @@ static XlspSemanticTokensResult *result_new(void) {
 }
 
 // Add token to result
-static void result_add(XlspSemanticTokensResult *r, int line, int start, 
+static void result_add(XlspSemanticTokensResult *r, int line, int start,
                        int length, XlspSemanticTokenType type, int mods) {
     if (r->count >= r->capacity) {
         r->capacity *= 2;
-        r->tokens = xr_realloc(r->tokens, r->capacity * sizeof(XlspSemanticToken));
+        XR_REALLOC_OR_ABORT(r->tokens,
+                            (size_t)r->capacity * sizeof(XlspSemanticToken),
+                            "lsp semantic_tokens grow");
     }
-    
+
     XlspSemanticToken *t = &r->tokens[r->count++];
     t->line = line;
     t->start_char = start;
@@ -108,22 +110,22 @@ typedef struct {
 // Determine token type for a variable reference based on analyzer info
 static XlspSemanticTokenType get_var_token_type(SemanticTokenContext *ctx, const char *name, int *out_mods) {
     *out_mods = 0;
-    
+
     if (!ctx->analyzer || !ctx->current_scope) {
         return XLSP_TOKEN_VARIABLE;
     }
-    
+
     // Look up symbol in current scope chain
     XaSymbol *sym = xa_scope_lookup(ctx->current_scope, name);
     if (!sym) {
         return XLSP_TOKEN_VARIABLE;
     }
-    
+
     // Set modifiers
     if (sym->is_const) *out_mods |= XLSP_MOD_READONLY;
     if (sym->is_static) *out_mods |= XLSP_MOD_STATIC;
     if (sym->is_builtin) *out_mods |= XLSP_MOD_DEFAULT_LIBRARY;
-    
+
     // Determine type based on symbol kind
     switch (sym->kind) {
         case XA_SYM_FUNCTION:
@@ -161,9 +163,9 @@ static XaScope *find_child_scope(XaScope *parent, void *ast_node) {
 // Collect tokens from AST with analyzer context
 static void collect_tokens_ast(SemanticTokenContext *ctx, AstNode *node) {
     if (!node) return;
-    
+
     XlspSemanticTokensResult *result = ctx->result;
-    
+
     switch (node->type) {
         case AST_PROGRAM: {
             // Enter global scope
@@ -176,12 +178,12 @@ static void collect_tokens_ast(SemanticTokenContext *ctx, AstNode *node) {
             }
             break;
         }
-        
+
         case AST_BLOCK: {
             XaScope *saved = ctx->current_scope;
             XaScope *block_scope = find_child_scope(ctx->current_scope, node);
             if (block_scope) ctx->current_scope = block_scope;
-            
+
             int count = node->as.block.count;
             for (int i = 0; i < count; i++) {
                 collect_tokens_ast(ctx, node->as.block.statements[i]);
@@ -189,7 +191,7 @@ static void collect_tokens_ast(SemanticTokenContext *ctx, AstNode *node) {
             ctx->current_scope = saved;
             break;
         }
-        
+
         case AST_VAR_DECL:
         case AST_CONST_DECL: {
             const char *name = node->as.var_decl.name;
@@ -199,13 +201,13 @@ static void collect_tokens_ast(SemanticTokenContext *ctx, AstNode *node) {
                     mods |= XLSP_MOD_READONLY;
                 }
                 int col = node->column > 0 ? node->column - 1 : 0;
-                result_add(result, node->line - 1, col, strlen(name), 
+                result_add(result, node->line - 1, col, strlen(name),
                            XLSP_TOKEN_VARIABLE, mods);
             }
             collect_tokens_ast(ctx, node->as.var_decl.initializer);
             break;
         }
-        
+
         case AST_FUNCTION_DECL: {
             FunctionDeclNode *fn = &node->as.function_decl;
             if (fn->name) {
@@ -214,12 +216,12 @@ static void collect_tokens_ast(SemanticTokenContext *ctx, AstNode *node) {
                 result_add(result, node->line - 1, col, strlen(fn->name),
                            XLSP_TOKEN_FUNCTION, mods);
             }
-            
+
             // Enter function scope
             XaScope *saved = ctx->current_scope;
             XaScope *fn_scope = find_child_scope(ctx->current_scope, node);
             if (fn_scope) ctx->current_scope = fn_scope;
-            
+
             // Parameters
             for (int i = 0; i < fn->param_count; i++) {
                 XrParamNode *p = fn->params[i];
@@ -229,20 +231,20 @@ static void collect_tokens_ast(SemanticTokenContext *ctx, AstNode *node) {
                 result_add(result, param_line, param_col, strlen(p->name),
                            XLSP_TOKEN_PARAMETER, XLSP_MOD_DECLARATION);
             }
-            
+
             collect_tokens_ast(ctx, fn->body);
             ctx->current_scope = saved;
             break;
         }
-        
+
         case AST_FUNCTION_EXPR: {
             FunctionDeclNode *fn = &node->as.function_expr;
-            
+
             // Enter function scope
             XaScope *saved = ctx->current_scope;
             XaScope *fn_scope = find_child_scope(ctx->current_scope, node);
             if (fn_scope) ctx->current_scope = fn_scope;
-            
+
             // Parameters
             for (int i = 0; i < fn->param_count; i++) {
                 XrParamNode *p = fn->params[i];
@@ -252,12 +254,12 @@ static void collect_tokens_ast(SemanticTokenContext *ctx, AstNode *node) {
                 result_add(result, param_line, param_col, strlen(p->name),
                            XLSP_TOKEN_PARAMETER, XLSP_MOD_DECLARATION);
             }
-            
+
             collect_tokens_ast(ctx, fn->body);
             ctx->current_scope = saved;
             break;
         }
-        
+
         case AST_CLASS_DECL:
         case AST_STRUCT_DECL: {
             ClassDeclNode *cls = &node->as.class_decl;
@@ -268,17 +270,17 @@ static void collect_tokens_ast(SemanticTokenContext *ctx, AstNode *node) {
                 result_add(result, node->line - 1, col, strlen(cls->name),
                            XLSP_TOKEN_CLASS, mods);
             }
-            
+
             // Enter class scope
             XaScope *saved = ctx->current_scope;
             XaScope *cls_scope = find_child_scope(ctx->current_scope, node);
             if (cls_scope) ctx->current_scope = cls_scope;
-            
+
             // Fields
             for (int i = 0; i < cls->field_count; i++) {
                 collect_tokens_ast(ctx, cls->fields[i]);
             }
-            
+
             // Methods
             for (int i = 0; i < cls->method_count; i++) {
                 AstNode *method = cls->methods[i];
@@ -290,12 +292,12 @@ static void collect_tokens_ast(SemanticTokenContext *ctx, AstNode *node) {
                         result_add(result, method->line - 1, col, strlen(m->name),
                                    XLSP_TOKEN_METHOD, mods);
                     }
-                    
+
                     // Method parameters and body
                     XaScope *method_saved = ctx->current_scope;
                     XaScope *method_scope = find_child_scope(ctx->current_scope, method);
                     if (method_scope) ctx->current_scope = method_scope;
-                    
+
                     for (int j = 0; j < m->param_count; j++) {
                         XrParamNode *p = m->params[j];
                         if (!p || !p->name) continue;
@@ -304,16 +306,16 @@ static void collect_tokens_ast(SemanticTokenContext *ctx, AstNode *node) {
                         result_add(result, param_line, param_col, strlen(p->name),
                                    XLSP_TOKEN_PARAMETER, XLSP_MOD_DECLARATION);
                     }
-                    
+
                     collect_tokens_ast(ctx, m->body);
                     ctx->current_scope = method_saved;
                 }
             }
-            
+
             ctx->current_scope = saved;
             break;
         }
-        
+
         case AST_ENUM_DECL: {
             EnumDeclNode *en = &node->as.enum_decl;
             if (en->name) {
@@ -335,7 +337,7 @@ static void collect_tokens_ast(SemanticTokenContext *ctx, AstNode *node) {
             }
             break;
         }
-        
+
         case AST_INTERFACE_DECL: {
             InterfaceDeclNode *iface = &node->as.interface_decl;
             if (iface->name) {
@@ -357,7 +359,7 @@ static void collect_tokens_ast(SemanticTokenContext *ctx, AstNode *node) {
             }
             break;
         }
-        
+
         case AST_VARIABLE: {
             const char *name = node->as.variable.name;
             if (name) {
@@ -368,7 +370,7 @@ static void collect_tokens_ast(SemanticTokenContext *ctx, AstNode *node) {
             }
             break;
         }
-        
+
         case AST_ASSIGNMENT: {
             const char *name = node->as.assignment.name;
             if (name) {
@@ -381,10 +383,10 @@ static void collect_tokens_ast(SemanticTokenContext *ctx, AstNode *node) {
             collect_tokens_ast(ctx, node->as.assignment.value);
             break;
         }
-        
+
         case AST_CALL_EXPR: {
             AstNode *callee = node->as.call_expr.callee;
-            
+
             // Handle callee specially - it's being called as a function
             if (callee) {
                 if (callee->type == AST_VARIABLE) {
@@ -419,14 +421,14 @@ static void collect_tokens_ast(SemanticTokenContext *ctx, AstNode *node) {
                     collect_tokens_ast(ctx, callee);
                 }
             }
-            
+
             // Arguments
             for (int i = 0; i < node->as.call_expr.arg_count; i++) {
                 collect_tokens_ast(ctx, node->as.call_expr.arguments[i]);
             }
             break;
         }
-        
+
         case AST_MEMBER_ACCESS: {
             collect_tokens_ast(ctx, node->as.member_access.object);
             const char *name = node->as.member_access.name;
@@ -437,17 +439,17 @@ static void collect_tokens_ast(SemanticTokenContext *ctx, AstNode *node) {
             }
             break;
         }
-        
+
         case AST_FOR_IN_STMT: {
             ForInStmtNode *fi = &node->as.for_in_stmt;
-            
+
             // Loop variable (item or key depending on is_keyvalue)
             if (fi->item_name) {
                 int col = node->column > 0 ? node->column - 1 : 0;
                 result_add(result, node->line - 1, col, strlen(fi->item_name),
                            XLSP_TOKEN_VARIABLE, XLSP_MOD_DECLARATION);
             }
-            
+
             // Value variable in key-value iteration (for k, v in map)
             if (fi->is_keyvalue && fi->value_name) {
                 // Value is after item in "for key, value in ..."
@@ -455,35 +457,35 @@ static void collect_tokens_ast(SemanticTokenContext *ctx, AstNode *node) {
                 result_add(result, node->line - 1, col, strlen(fi->value_name),
                            XLSP_TOKEN_VARIABLE, XLSP_MOD_DECLARATION);
             }
-            
+
             collect_tokens_ast(ctx, fi->collection);
-            
+
             // Enter loop scope
             XaScope *saved = ctx->current_scope;
             XaScope *loop_scope = find_child_scope(ctx->current_scope, node);
             if (loop_scope) ctx->current_scope = loop_scope;
-            
+
             collect_tokens_ast(ctx, fi->body);
             ctx->current_scope = saved;
             break;
         }
-        
+
         case AST_IF_STMT:
             collect_tokens_ast(ctx, node->as.if_stmt.condition);
             collect_tokens_ast(ctx, node->as.if_stmt.then_branch);
             collect_tokens_ast(ctx, node->as.if_stmt.else_branch);
             break;
-            
+
         case AST_WHILE_STMT:
             collect_tokens_ast(ctx, node->as.while_stmt.condition);
             collect_tokens_ast(ctx, node->as.while_stmt.body);
             break;
-            
+
         case AST_FOR_STMT: {
             XaScope *saved = ctx->current_scope;
             XaScope *for_scope = find_child_scope(ctx->current_scope, node);
             if (for_scope) ctx->current_scope = for_scope;
-            
+
             collect_tokens_ast(ctx, node->as.for_stmt.initializer);
             collect_tokens_ast(ctx, node->as.for_stmt.condition);
             collect_tokens_ast(ctx, node->as.for_stmt.increment);
@@ -491,45 +493,45 @@ static void collect_tokens_ast(SemanticTokenContext *ctx, AstNode *node) {
             ctx->current_scope = saved;
             break;
         }
-        
+
         case AST_TRY_CATCH: {
             TryCatchNode *tc = &node->as.try_catch;
             collect_tokens_ast(ctx, tc->try_body);
-            
+
             // Catch variable
             if (tc->catch_var && tc->catch_var_line > 0) {
                 int col = tc->catch_var_column > 0 ? tc->catch_var_column - 1 : 0;
                 result_add(result, tc->catch_var_line - 1, col, strlen(tc->catch_var),
                            XLSP_TOKEN_PARAMETER, XLSP_MOD_DECLARATION);
             }
-            
+
             XaScope *saved = ctx->current_scope;
             XaScope *catch_scope = find_child_scope(ctx->current_scope, tc->catch_body);
             if (catch_scope) ctx->current_scope = catch_scope;
-            
+
             collect_tokens_ast(ctx, tc->catch_body);
             ctx->current_scope = saved;
-            
+
             collect_tokens_ast(ctx, tc->finally_body);
             break;
         }
-        
+
         case AST_RETURN_STMT:
             for (int i = 0; i < node->as.return_stmt.value_count; i++) {
                 collect_tokens_ast(ctx, node->as.return_stmt.values[i]);
             }
             break;
-            
+
         case AST_EXPR_STMT:
             collect_tokens_ast(ctx, node->as.expr_stmt);
             break;
-            
+
         case AST_PRINT_STMT:
             for (int i = 0; i < node->as.print_stmt.expr_count; i++) {
                 collect_tokens_ast(ctx, node->as.print_stmt.exprs[i]);
             }
             break;
-        
+
         // Binary expressions
         case AST_BINARY_ADD:
         case AST_BINARY_SUB:
@@ -550,37 +552,37 @@ static void collect_tokens_ast(SemanticTokenContext *ctx, AstNode *node) {
             collect_tokens_ast(ctx, node->as.binary.left);
             collect_tokens_ast(ctx, node->as.binary.right);
             break;
-        
+
         // Unary expressions
         case AST_UNARY_NEG:
         case AST_UNARY_NOT:
         case AST_UNARY_BNOT:
             collect_tokens_ast(ctx, node->as.unary.operand);
             break;
-        
+
         case AST_INDEX_GET:
             collect_tokens_ast(ctx, node->as.index_get.array);
             collect_tokens_ast(ctx, node->as.index_get.index);
             break;
-        
+
         case AST_INDEX_SET:
             collect_tokens_ast(ctx, node->as.index_set.array);
             collect_tokens_ast(ctx, node->as.index_set.index);
             collect_tokens_ast(ctx, node->as.index_set.value);
             break;
-        
+
         case AST_TERNARY:
             collect_tokens_ast(ctx, node->as.ternary.condition);
             collect_tokens_ast(ctx, node->as.ternary.true_expr);
             collect_tokens_ast(ctx, node->as.ternary.false_expr);
             break;
-        
+
         case AST_ARRAY_LITERAL:
             for (int i = 0; i < node->as.array_literal.count; i++) {
                 collect_tokens_ast(ctx, node->as.array_literal.elements[i]);
             }
             break;
-            
+
         case AST_NEW_EXPR: {
             // Constructor call: new ClassName(...)
             const char *name = node->as.new_expr.class_name;
@@ -594,7 +596,7 @@ static void collect_tokens_ast(SemanticTokenContext *ctx, AstNode *node) {
             }
             break;
         }
-        
+
         case AST_ENUM_ACCESS: {
             // Enum.Member
             const char *enum_name = node->as.enum_access.enum_name;
@@ -605,12 +607,12 @@ static void collect_tokens_ast(SemanticTokenContext *ctx, AstNode *node) {
                            XLSP_TOKEN_ENUM, 0);
             }
             if (member_name) {
-                result_add(result, node->line - 1, col + strlen(enum_name) + 1, 
+                result_add(result, node->line - 1, col + strlen(enum_name) + 1,
                            strlen(member_name), XLSP_TOKEN_ENUM_MEMBER, XLSP_MOD_READONLY);
             }
             break;
         }
-            
+
         default:
             break;
     }
@@ -619,9 +621,9 @@ static void collect_tokens_ast(SemanticTokenContext *ctx, AstNode *node) {
 // Analyze document for semantic tokens
 XlspSemanticTokensResult *xlsp_analyze_semantic_tokens(XrLspDocument *doc) {
     XlspSemanticTokensResult *result = result_new();
-    
+
     if (!doc || !doc->content) return result;
-    
+
     // Use AST if available
     if (doc->ast) {
         SemanticTokenContext ctx = {
@@ -629,20 +631,20 @@ XlspSemanticTokensResult *xlsp_analyze_semantic_tokens(XrLspDocument *doc) {
             .analyzer = doc->server ? doc->server->workspace_analyzer : NULL,
             .current_scope = NULL
         };
-        
+
         // Initialize scope from analyzer if available
         if (ctx.analyzer) {
             ctx.current_scope = ctx.analyzer->global_scope;
         }
-        
+
         collect_tokens_ast(&ctx, doc->ast);
     }
-    
+
     // Sort tokens by position
     if (result->count > 1) {
         qsort(result->tokens, result->count, sizeof(XlspSemanticToken), compare_tokens);
     }
-    
+
     return result;
 }
 
@@ -655,7 +657,7 @@ uint32_t *xlsp_semantic_tokens_encode_raw(XlspSemanticTokensResult *result, int 
     int total = result->count * 5;
     uint32_t *data = xr_malloc(sizeof(uint32_t) * total);
     int prev_line = 0, prev_char = 0;
-    
+
     for (int i = 0; i < result->count; i++) {
         XlspSemanticToken *t = &result->tokens[i];
         int delta_line = t->line - prev_line;
@@ -677,27 +679,27 @@ uint32_t *xlsp_semantic_tokens_encode_raw(XlspSemanticTokensResult *result, int 
 XrJsonValue *xlsp_semantic_tokens_encode(XlspSemanticTokensResult *result) {
     XrJsonValue *response = xlsp_json_new_object();
     XrJsonValue *data = xlsp_json_new_array();
-    
+
     int prev_line = 0;
     int prev_char = 0;
-    
+
     for (int i = 0; i < result->count; i++) {
         XlspSemanticToken *t = &result->tokens[i];
-        
+
         // Delta encoding
         int delta_line = t->line - prev_line;
         int delta_char = (delta_line == 0) ? (t->start_char - prev_char) : t->start_char;
-        
+
         xlsp_json_array_push(data, xlsp_json_new_number(delta_line));
         xlsp_json_array_push(data, xlsp_json_new_number(delta_char));
         xlsp_json_array_push(data, xlsp_json_new_number(t->length));
         xlsp_json_array_push(data, xlsp_json_new_number(t->type));
         xlsp_json_array_push(data, xlsp_json_new_number(t->modifiers));
-        
+
         prev_line = t->line;
         prev_char = t->start_char;
     }
-    
+
     xlsp_json_object_set(response, "data", data);
     return response;
 }

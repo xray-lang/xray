@@ -63,29 +63,29 @@ static XrJsonValue *parse_bool(JsonParser *p) {
 
 static XrJsonValue *parse_number(JsonParser *p) {
     const char *start = p->pos;
-    
+
     if (*p->pos == '-') p->pos++;
-    
+
     if (p->pos >= p->end || !isdigit((unsigned char)*p->pos)) {
         p->pos = start;
         return NULL;
     }
-    
+
     while (p->pos < p->end && isdigit((unsigned char)*p->pos)) p->pos++;
-    
+
     if (p->pos < p->end && *p->pos == '.') {
         p->pos++;
         while (p->pos < p->end && isdigit((unsigned char)*p->pos)) p->pos++;
     }
-    
+
     if (p->pos < p->end && (*p->pos == 'e' || *p->pos == 'E')) {
         p->pos++;
         if (p->pos < p->end && (*p->pos == '+' || *p->pos == '-')) p->pos++;
         while (p->pos < p->end && isdigit((unsigned char)*p->pos)) p->pos++;
     }
-    
+
     double value = strtod(start, NULL);
-    
+
     XrJsonValue *v = alloc_value(XR_JSON_NUMBER);
     if (v) v->as.number = value;
     return v;
@@ -124,13 +124,13 @@ static inline uint32_t surrogate_to_codepoint(uint16_t high, uint16_t low) {
 static char *parse_string_content(JsonParser *p) {
     if (p->pos >= p->end || *p->pos != '"') return NULL;
     p->pos++;  // skip opening quote
-    
+
     // JSON decoded string is never longer than encoded form,
     // so input length is a safe upper bound (no first-pass needed)
     size_t max_len = (size_t)(p->end - p->pos);
     char *result = xr_malloc(max_len + 1);
     if (!result) return NULL;
-    
+
     char *dst = result;
     while (p->pos < p->end && *p->pos != '"') {
         if (*p->pos == '\\' && p->pos + 1 < p->end) {
@@ -152,7 +152,7 @@ static char *parse_string_content(JsonParser *p) {
                         *dst++ = 'u';
                         break;
                     }
-                    
+
                     uint16_t u1;
                     if (!parse_hex4(p->pos, &u1)) {
                         // Invalid hex, copy as-is
@@ -160,13 +160,13 @@ static char *parse_string_content(JsonParser *p) {
                         break;
                     }
                     p->pos += 4;
-                    
+
                     uint32_t codepoint;
-                    
+
                     // Check for UTF-16 surrogate pair
                     if (is_high_surrogate(u1)) {
                         // Expect \uDCxx low surrogate
-                        if (p->pos + 6 <= p->end && 
+                        if (p->pos + 6 <= p->end &&
                             p->pos[0] == '\\' && p->pos[1] == 'u') {
                             uint16_t u2;
                             if (parse_hex4(p->pos + 2, &u2) && is_low_surrogate(u2)) {
@@ -187,7 +187,7 @@ static char *parse_string_content(JsonParser *p) {
                         // BMP character, direct mapping
                         codepoint = u1;
                     }
-                    
+
                     // Encode codepoint to UTF-8
                     int written = xr_utf8_encode(codepoint, dst);
                     if (written > 0) {
@@ -209,18 +209,18 @@ static char *parse_string_content(JsonParser *p) {
         }
     }
     *dst = '\0';
-    
+
     if (p->pos < p->end && *p->pos == '"') {
         p->pos++;  // skip closing quote
     }
-    
+
     return result;
 }
 
 static XrJsonValue *parse_string(JsonParser *p) {
     char *str = parse_string_content(p);
     if (!str) return NULL;
-    
+
     XrJsonValue *v = alloc_value(XR_JSON_STRING);
     if (v) {
         v->as.string = str;
@@ -233,21 +233,21 @@ static XrJsonValue *parse_string(JsonParser *p) {
 static XrJsonValue *parse_array(JsonParser *p) {
     if (p->pos >= p->end || *p->pos != '[') return NULL;
     p->pos++;
-    
+
     XrJsonValue *arr = alloc_value(XR_JSON_ARRAY);
     if (!arr) return NULL;
-    
+
     arr->as.array.capacity = 8;
     arr->as.array.items = xr_malloc(arr->as.array.capacity * sizeof(XrJsonValue*));
     arr->as.array.count = 0;
-    
+
     skip_whitespace(p);
-    
+
     if (p->pos < p->end && *p->pos == ']') {
         p->pos++;
         return arr;
     }
-    
+
     while (p->pos < p->end) {
         skip_whitespace(p);
         XrJsonValue *item = parse_value(p);
@@ -255,14 +255,15 @@ static XrJsonValue *parse_array(JsonParser *p) {
             xlsp_json_free(arr);
             return NULL;
         }
-        
+
         if (arr->as.array.count >= arr->as.array.capacity) {
             arr->as.array.capacity *= 2;
-            arr->as.array.items = xr_realloc(arr->as.array.items,
-                arr->as.array.capacity * sizeof(XrJsonValue*));
+            XR_REALLOC_OR_ABORT(arr->as.array.items,
+                (size_t)arr->as.array.capacity * sizeof(XrJsonValue*),
+                "json parse_array items grow");
         }
         arr->as.array.items[arr->as.array.count++] = item;
-        
+
         skip_whitespace(p);
         if (p->pos < p->end && *p->pos == ',') {
             p->pos++;
@@ -274,37 +275,37 @@ static XrJsonValue *parse_array(JsonParser *p) {
             return NULL;
         }
     }
-    
+
     return arr;
 }
 
 static XrJsonValue *parse_object(JsonParser *p) {
     if (p->pos >= p->end || *p->pos != '{') return NULL;
     p->pos++;
-    
+
     XrJsonValue *obj = alloc_value(XR_JSON_OBJECT);
     if (!obj) return NULL;
-    
+
     obj->as.object.capacity = 8;
     obj->as.object.members = xr_malloc(obj->as.object.capacity * sizeof(XrJsonMember));
     obj->as.object.count = 0;
-    
+
     skip_whitespace(p);
-    
+
     if (p->pos < p->end && *p->pos == '}') {
         p->pos++;
         return obj;
     }
-    
+
     while (p->pos < p->end) {
         skip_whitespace(p);
-        
+
         char *key = parse_string_content(p);
         if (!key) {
             xlsp_json_free(obj);
             return NULL;
         }
-        
+
         skip_whitespace(p);
         if (p->pos >= p->end || *p->pos != ':') {
             xr_free(key);
@@ -312,7 +313,7 @@ static XrJsonValue *parse_object(JsonParser *p) {
             return NULL;
         }
         p->pos++;
-        
+
         skip_whitespace(p);
         XrJsonValue *value = parse_value(p);
         if (!value) {
@@ -320,16 +321,17 @@ static XrJsonValue *parse_object(JsonParser *p) {
             xlsp_json_free(obj);
             return NULL;
         }
-        
+
         if (obj->as.object.count >= obj->as.object.capacity) {
             obj->as.object.capacity *= 2;
-            obj->as.object.members = xr_realloc(obj->as.object.members,
-                obj->as.object.capacity * sizeof(XrJsonMember));
+            XR_REALLOC_OR_ABORT(obj->as.object.members,
+                (size_t)obj->as.object.capacity * sizeof(XrJsonMember),
+                "json parse_object members grow");
         }
         obj->as.object.members[obj->as.object.count].key = key;
         obj->as.object.members[obj->as.object.count].value = value;
         obj->as.object.count++;
-        
+
         skip_whitespace(p);
         if (p->pos < p->end && *p->pos == ',') {
             p->pos++;
@@ -341,14 +343,14 @@ static XrJsonValue *parse_object(JsonParser *p) {
             return NULL;
         }
     }
-    
+
     return obj;
 }
 
 static XrJsonValue *parse_value(JsonParser *p) {
     skip_whitespace(p);
     if (p->pos >= p->end) return NULL;
-    
+
     switch (*p->pos) {
         case 'n': return parse_null(p);
         case 't':
@@ -366,19 +368,19 @@ static XrJsonValue *parse_value(JsonParser *p) {
 
 XrJsonValue *xlsp_json_parse(const char *json, size_t len) {
     if (!json || len == 0) return NULL;
-    
+
     JsonParser p = {
         .src = json,
         .end = json + len,
         .pos = json
     };
-    
+
     return parse_value(&p);
 }
 
 void xlsp_json_free(XrJsonValue *value) {
     if (!value) return;
-    
+
     switch (value->type) {
         case XR_JSON_STRING:
             xr_free(value->as.string);
@@ -399,26 +401,26 @@ void xlsp_json_free(XrJsonValue *value) {
         default:
             break;
     }
-    
+
     xr_free(value);
 }
 
 XrJsonValue *xlsp_json_clone(XrJsonValue *value) {
     if (!value) return NULL;
-    
+
     switch (value->type) {
         case XR_JSON_NULL:
             return xlsp_json_new_null();
-            
+
         case XR_JSON_BOOL:
             return xlsp_json_new_bool(value->as.boolean);
-            
+
         case XR_JSON_NUMBER:
             return xlsp_json_new_number(value->as.number);
-            
+
         case XR_JSON_STRING:
             return xlsp_json_new_string(value->as.string);
-            
+
         case XR_JSON_ARRAY: {
             XrJsonValue *arr = xlsp_json_new_array();
             for (int i = 0; i < value->as.array.count; i++) {
@@ -429,7 +431,7 @@ XrJsonValue *xlsp_json_clone(XrJsonValue *value) {
             }
             return arr;
         }
-        
+
         case XR_JSON_OBJECT: {
             XrJsonValue *obj = xlsp_json_new_object();
             for (int i = 0; i < value->as.object.count; i++) {
@@ -440,7 +442,7 @@ XrJsonValue *xlsp_json_clone(XrJsonValue *value) {
             }
             return obj;
         }
-        
+
         default:
             return NULL;
     }
@@ -448,7 +450,7 @@ XrJsonValue *xlsp_json_clone(XrJsonValue *value) {
 
 XrJsonValue *xlsp_json_get(XrJsonValue *obj, const char *key) {
     if (!obj || obj->type != XR_JSON_OBJECT || !key) return NULL;
-    
+
     for (int i = 0; i < obj->as.object.count; i++) {
         if (strcmp(obj->as.object.members[i].key, key) == 0) {
             return obj->as.object.members[i].value;
@@ -574,18 +576,19 @@ XrJsonValue *xlsp_json_new_object(void) {
 
 void xlsp_json_array_push(XrJsonValue *arr, XrJsonValue *value) {
     if (!arr || arr->type != XR_JSON_ARRAY || !value) return;
-    
+
     if (arr->as.array.count >= arr->as.array.capacity) {
         arr->as.array.capacity *= 2;
-        arr->as.array.items = xr_realloc(arr->as.array.items,
-            arr->as.array.capacity * sizeof(XrJsonValue*));
+        XR_REALLOC_OR_ABORT(arr->as.array.items,
+            (size_t)arr->as.array.capacity * sizeof(XrJsonValue*),
+            "json array_push items grow");
     }
     arr->as.array.items[arr->as.array.count++] = value;
 }
 
 void xlsp_json_object_set(XrJsonValue *obj, const char *key, XrJsonValue *value) {
     if (!obj || obj->type != XR_JSON_OBJECT || !key || !value) return;
-    
+
     // Check if key exists
     for (int i = 0; i < obj->as.object.count; i++) {
         if (strcmp(obj->as.object.members[i].key, key) == 0) {
@@ -594,12 +597,13 @@ void xlsp_json_object_set(XrJsonValue *obj, const char *key, XrJsonValue *value)
             return;
         }
     }
-    
+
     // Add new member
     if (obj->as.object.count >= obj->as.object.capacity) {
         obj->as.object.capacity *= 2;
-        obj->as.object.members = xr_realloc(obj->as.object.members,
-            obj->as.object.capacity * sizeof(XrJsonMember));
+        XR_REALLOC_OR_ABORT(obj->as.object.members,
+            (size_t)obj->as.object.capacity * sizeof(XrJsonMember),
+            "json object_set members grow");
     }
     obj->as.object.members[obj->as.object.count].key = xr_strdup(key);
     obj->as.object.members[obj->as.object.count].value = value;
@@ -608,12 +612,13 @@ void xlsp_json_object_set(XrJsonValue *obj, const char *key, XrJsonValue *value)
 
 void xlsp_json_object_set_new(XrJsonValue *obj, const char *key, XrJsonValue *value) {
     if (!obj || obj->type != XR_JSON_OBJECT || !key || !value) return;
-    
+
     // Direct append without checking for existing key
     if (obj->as.object.count >= obj->as.object.capacity) {
         obj->as.object.capacity *= 2;
-        obj->as.object.members = xr_realloc(obj->as.object.members,
-            obj->as.object.capacity * sizeof(XrJsonMember));
+        XR_REALLOC_OR_ABORT(obj->as.object.members,
+            (size_t)obj->as.object.capacity * sizeof(XrJsonMember),
+            "json object_set_new members grow");
     }
     obj->as.object.members[obj->as.object.count].key = xr_strdup(key);
     obj->as.object.members[obj->as.object.count].value = value;
@@ -637,7 +642,7 @@ static void sb_init(StringBuilder *sb) {
 static void sb_append(StringBuilder *sb, const char *str, size_t len) {
     if (sb->len + len + 1 > sb->cap) {
         while (sb->len + len + 1 > sb->cap) sb->cap *= 2;
-        sb->buf = xr_realloc(sb->buf, sb->cap);
+        XR_REALLOC_OR_ABORT(sb->buf, sb->cap, "json sb_append buf grow");
     }
     memcpy(sb->buf + sb->len, str, len);
     sb->len += len;
@@ -684,9 +689,9 @@ static void stringify_value(StringBuilder *sb, XrJsonValue *v) {
         sb_append_str(sb, "null");
         return;
     }
-    
+
     char buf[64];
-    
+
     switch (v->type) {
         case XR_JSON_NULL:
             sb_append_str(sb, "null");

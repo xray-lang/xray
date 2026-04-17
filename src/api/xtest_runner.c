@@ -27,7 +27,7 @@ static void suite_add_test(XrTestSuite *suite, XrProto *proto, int idx, Attribut
         suite->test_capacity = suite->test_capacity == 0 ? 8 : suite->test_capacity * 2;
         suite->tests = (XrTestFunc *)xr_realloc(suite->tests, sizeof(XrTestFunc) * suite->test_capacity);
     }
-    
+
     XrTestFunc *func = &suite->tests[suite->test_count++];
     func->proto = proto;
     func->closure_idx = idx;
@@ -78,51 +78,51 @@ XrTestSuite* xr_test_discover(XrProto *proto, const char *suite_name) {
     XrTestSuite *suite = (XrTestSuite *)xr_malloc(sizeof(XrTestSuite));
     memset(suite, 0, sizeof(XrTestSuite));
     suite->name = suite_name;
-    
+
     // Scan nested protos (function definitions)
     int proto_count = PROTO_PROTO_COUNT(proto);
     for (int i = 0; i < proto_count; i++) {
         XrProto *child = PROTO_PROTO(proto, i);
-        
+
         if (child->test_attr != ATTR_NONE) {
             AttributeKind attr = (AttributeKind)child->test_attr;
-            
+
             switch (attr) {
                 case ATTR_TEST:
                 case ATTR_TEST_SKIP:
                 case ATTR_TEST_TIMEOUT:
                     suite_add_test(suite, child, i, attr, child->test_timeout);
                     break;
-                    
+
                 case ATTR_BEFORE_EACH:
                     suite_add_hook(&suite->before_each, &suite->before_each_count, child, i);
                     break;
-                    
+
                 case ATTR_AFTER_EACH:
                     suite_add_hook(&suite->after_each, &suite->after_each_count, child, i);
                     break;
-                    
+
                 case ATTR_BEFORE_ALL:
                     suite_add_hook(&suite->before_all, &suite->before_all_count, child, i);
                     break;
-                    
+
                 case ATTR_AFTER_ALL:
                     suite_add_hook(&suite->after_all, &suite->after_all_count, child, i);
                     break;
-                    
+
                 default:
                     break;
             }
         }
     }
-    
+
     // Allocate results array
     if (suite->test_count > 0) {
         size_t size = suite->test_count * sizeof(XrTestResult);
         suite->results = (XrTestResult *)xr_malloc(size);
         memset(suite->results, 0, size);
     }
-    
+
     return suite;
 }
 
@@ -135,8 +135,9 @@ void xr_test_runner_add_failure(XrTestRunner *runner, const char *file,
     if (runner->failure_record_count >= runner->failure_record_capacity) {
         runner->failure_record_capacity = runner->failure_record_capacity == 0
             ? 8 : runner->failure_record_capacity * 2;
-        runner->failure_records = xr_realloc(runner->failure_records,
-            runner->failure_record_capacity * sizeof(XrTestFailureRecord));
+        XR_REALLOC_OR_ABORT(runner->failure_records,
+            runner->failure_record_capacity * sizeof(XrTestFailureRecord),
+            "test_runner failure_records grow");
     }
     XrTestFailureRecord *rec = &runner->failure_records[runner->failure_record_count++];
     const char *f = file ? file : "<unknown>";
@@ -221,13 +222,13 @@ void xr_test_print_report(XrTestRunner *runner) {
 
 void xr_test_suite_free(XrTestSuite *suite) {
     if (!suite) return;
-    
+
     if (suite->tests) xr_free(suite->tests);
     if (suite->before_each) xr_free(suite->before_each);
     if (suite->after_each) xr_free(suite->after_each);
     if (suite->before_all) xr_free(suite->before_all);
     if (suite->after_all) xr_free(suite->after_all);
     if (suite->results) xr_free(suite->results);
-    
+
     xr_free(suite);
 }

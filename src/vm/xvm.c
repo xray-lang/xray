@@ -41,7 +41,7 @@
 #endif // ========== Includes ==========
 
 #include "xvm_internal.h"
-#include "xcontext.h"
+#include "../runtime/closure/xcell.h"
 #include "../base/xchecks.h"
 #include "xvm_checks.h"
 #include "xdebug.h"
@@ -78,7 +78,7 @@
 #include "../runtime/value/xstruct_layout.h"
 #include "../runtime/xray_debug.h"
 #include "../runtime/xisolate_api.h"
-#include "../jit/xir_feedback.h"
+#include "../runtime/value/xtype_feedback.h"
 #ifdef XRAY_HAS_JIT
 #include "../jit/xir_jit.h"
 #endif
@@ -100,20 +100,7 @@
   #endif
 #endif // ========== Builtin Method Symbol System ==========
 
-/* ========== Bound Method Implementation ========== */
-
-XrBoundMethod *xr_bound_method_new(XrayIsolate *isolate, XrValue receiver, MethodHandler handler) {
-    XR_DCHECK(isolate != NULL, "bound_method_new: NULL isolate");
-    XrBoundMethod *bm = (XrBoundMethod*)xr_gc_alloc(&isolate->gc, sizeof(XrBoundMethod), XR_TBOUND_METHOD);
-    if (!bm) return NULL;
-    xr_gc_header_init_type(&bm->gc, XR_TBOUND_METHOD);
-    bm->receiver = receiver;
-    bm->handler = handler;
-    return bm;
-}
-
-
-
+/* Bound method implementation lives in runtime/closure/xbound_method.c. */
 
 /* ========== VM Instruction Dispatch ========== */
 
@@ -672,8 +659,8 @@ startfunc:
                         vmbreak;
                     }
                     // Slow path: one operand needs toString conversion
-                    XrString *str_b = vm_value_to_string(isolate, vb);
-                    XrString *str_c = vm_value_to_string(isolate, vc);
+                    XrString *str_b = xr_value_to_string(isolate, vb);
+                    XrString *str_c = xr_value_to_string(isolate, vc);
                     size_t total_len = str_b->length + str_c->length;
 
                     if (total_len < XR_SHORT_STRING_THRESHOLD) {
@@ -845,7 +832,7 @@ startfunc:
                 }
                 // String repeat: string * int or int * string
                 if (XR_IS_STRING(vb) && XR_IS_INT(vc)) {
-                    XrString *str = vm_value_to_string(isolate, vb);
+                    XrString *str = xr_value_to_string(isolate, vb);
                     xr_Integer count = XR_TO_INT(vc);
                     XrString *result = xr_string_repeat(isolate, str, count);
                     R(a) = result ? xr_string_value(result) : xr_null();
@@ -853,7 +840,7 @@ startfunc:
                 }
                 if (XR_IS_INT(vb) && XR_IS_STRING(vc)) {
                     xr_Integer count = XR_TO_INT(vb);
-                    XrString *str = vm_value_to_string(isolate, vc);
+                    XrString *str = xr_value_to_string(isolate, vc);
                     XrString *result = xr_string_repeat(isolate, str, count);
                     R(a) = result ? xr_string_value(result) : xr_null();
                     vmbreak;
@@ -1241,7 +1228,7 @@ startfunc:
                 } else if (XR_IS_FLOAT(vb)) {
                     xr_stringbuilder_append_float(sb, XR_TO_FLOAT(vb));
                 } else {
-                    XrString *str = vm_value_to_string(isolate, vb);
+                    XrString *str = xr_value_to_string(isolate, vb);
                     xr_stringbuilder_append_str(sb, str);
                 }
                 vmbreak;
@@ -1575,7 +1562,7 @@ startfunc:
             double nb = XR_IS_INT(vb) ? (double)XR_TO_INT(vb) : XR_TO_FLOAT(vb); \
             cond = na float_op nb; \
         } else if (XR_IS_STRING(va) && XR_IS_STRING(vb)) { \
-            cond = xr_string_compare(vm_value_to_string(isolate, va), vm_value_to_string(isolate, vb)) str_cmp_op 0; \
+            cond = xr_string_compare(xr_value_to_string(isolate, va), xr_value_to_string(isolate, vb)) str_cmp_op 0; \
         } else { \
             if (k_flag == 0) pc++; \
             vmbreak; \
@@ -1981,7 +1968,7 @@ startfunc:
                 int a = GETARG_A(i);
                 int bx = GETARG_Bx(i);
                 XrProto *proto = PROTO_PROTO(cl->proto, bx);
-                XrClosure *closure = xr_vm_closure_new(isolate, proto,
+                XrClosure *closure = xr_closure_new(isolate, proto,
                     (XrCoroutine *)vm_ctx->current_coro);
                 int nuv = DYNARRAY_COUNT(&proto->upvalues);
                 for (int j = 0; j < nuv; j++) {
@@ -2102,8 +2089,8 @@ startfunc:
                     }
                 }
 
-                // Default print: use unified vm_value_to_string
-                XrString *print_str = vm_value_to_string(isolate, val);
+                // Default print: use unified xr_value_to_string
+                XrString *print_str = xr_value_to_string(isolate, val);
                 printf("%s", print_str->data);
                 if (newline) printf("\n");
 
@@ -2233,7 +2220,7 @@ startfunc:
                 } else if (slot_hint == 2) {
                     // Raw F64: format directly
                     val = XR_FROM_FLOAT(R(b).f);
-                    R(a) = xr_string_value(vm_value_to_string(isolate, val));
+                    R(a) = xr_string_value(xr_value_to_string(isolate, val));
                     vmbreak;
                 }
 
@@ -2244,7 +2231,7 @@ startfunc:
                     // null propagation: string(null) → null
                     R(a) = xr_null();
                 } else {
-                    R(a) = xr_string_value(vm_value_to_string(isolate, val));
+                    R(a) = xr_string_value(xr_value_to_string(isolate, val));
                 }
                 vmbreak;
             }
@@ -4346,7 +4333,7 @@ startfunc:
 
                 // Handle toString print: if toString call returned, print result
                 if (tostring_flags) {
-                    XrString *ts = vm_value_to_string(isolate, ret_result);
+                    XrString *ts = xr_value_to_string(isolate, ret_result);
                     printf("%s", ts->data);
                     if (tostring_flags & 0x02) printf("\n");
                 }
@@ -4543,7 +4530,7 @@ startfunc:
 
                 // Handle toString print
                 if (tostring_flags) {
-                    XrString *ts = vm_value_to_string(isolate, ret_val);
+                    XrString *ts = xr_value_to_string(isolate, ret_val);
                     printf("%s", ts->data);
                     if (tostring_flags & 0x02) printf("\n");
                 }
@@ -5159,7 +5146,7 @@ startfunc:
                     } else if (method_symbol == SYMBOL_NEXT) {
                         R(a) = xr_iterator_next(iter);
                     } else if (method_symbol == SYMBOL_TOSTRING) {
-                        R(a) = xr_string_value(vm_value_to_string(isolate, receiver));
+                        R(a) = xr_string_value(xr_value_to_string(isolate, receiver));
                     } else {
                         XrSymbolTable *sym_table = (XrSymbolTable*)isolate->symbol_table;
                         const char *mname = xr_symbol_get_name_in_table(sym_table, method_symbol);
@@ -5198,7 +5185,7 @@ startfunc:
                 /* === String builtin methods === */
                 invoke_string:
                 if (XR_IS_STRING(receiver)) {
-                    XrString *str = vm_value_to_string(isolate, receiver);
+                    XrString *str = xr_value_to_string(isolate, receiver);
                     R(a) = string_method_call_by_symbol(isolate, str, method_symbol, &R(a + 2), nargs);
                     if (unlikely(XR_IS_NOTFOUND(R(a)))) {
                         XrSymbolTable *_st = (XrSymbolTable*)isolate->symbol_table;
@@ -5345,7 +5332,7 @@ startfunc:
                 if (XR_IS_RANGE(receiver)) {
                     XrRange *rng = xr_value_to_range(receiver);
                     if (method_symbol == SYMBOL_TOSTRING) {
-                        R(a) = xr_string_value(vm_value_to_string(isolate, receiver));
+                        R(a) = xr_string_value(xr_value_to_string(isolate, receiver));
                         vmbreak;
                     } else if (method_symbol == SYMBOL_TO_ARRAY) {
                         R(a) = xr_range_to_array(VM_CURRENT_CORO, rng);
@@ -5395,7 +5382,7 @@ startfunc:
                         } else {
                             // Universal toString fallback for basic types
                             if (method_symbol == SYMBOL_TOSTRING) {
-                                R(a) = xr_string_value(vm_value_to_string(isolate, receiver));
+                                R(a) = xr_string_value(xr_value_to_string(isolate, receiver));
                                 vmbreak;
                             }
                             // Basic type method not found - show type and method name
@@ -5425,7 +5412,7 @@ startfunc:
                             }
                         }
                         if (method_symbol == SYMBOL_TOSTRING) {
-                            R(a) = xr_string_value(vm_value_to_string(isolate, receiver));
+                            R(a) = xr_string_value(xr_value_to_string(isolate, receiver));
                             vmbreak;
                         }
                         XrSymbolTable *st = (XrSymbolTable*)isolate->symbol_table;
@@ -5448,7 +5435,7 @@ startfunc:
                     if (!xr_value_is_instance(receiver)) {
                         // Universal toString fallback for any remaining type
                         if (method_symbol == SYMBOL_TOSTRING) {
-                            R(a) = xr_string_value(vm_value_to_string(isolate, receiver));
+                            R(a) = xr_string_value(xr_value_to_string(isolate, receiver));
                             vmbreak;
                         }
                         VM_RUNTIME_ERROR(XR_ERR_TYPE_NO_METHOD, "method '%s' called on non-instance", method_name_chars);
@@ -5629,7 +5616,7 @@ startfunc:
                     XrArray *array = XR_TO_ARRAY(receiver);
                     R(a) = array_method_call_by_symbol(isolate, array, method_symbol, args, nargs);
                 } else if (XR_IS_STRING(receiver)) {
-                    XrString *str = vm_value_to_string(isolate, receiver);
+                    XrString *str = xr_value_to_string(isolate, receiver);
                     R(a) = string_method_call_by_symbol(isolate, str, method_symbol, args, nargs);
                 } else if (XR_IS_SET(receiver)) {
                     XrSet *set = XR_TO_SET(receiver);
@@ -5665,7 +5652,7 @@ startfunc:
                         }
                     }
                     if (method_symbol == SYMBOL_TOSTRING) {
-                        R(a) = xr_string_value(vm_value_to_string(isolate, receiver));
+                        R(a) = xr_string_value(xr_value_to_string(isolate, receiver));
                         vmbreak;
                     }
                     XrSymbolTable *st = (XrSymbolTable*)isolate->symbol_table;
@@ -5687,14 +5674,14 @@ startfunc:
                             }
                         }
                         if (method_symbol == SYMBOL_TOSTRING) {
-                            R(a) = xr_string_value(vm_value_to_string(isolate, receiver));
+                            R(a) = xr_string_value(xr_value_to_string(isolate, receiver));
                             vmbreak;
                         }
                         VM_RUNTIME_ERROR(XR_ERR_TYPE_NO_METHOD, "slice type has no such method (symbol %d)", method_symbol);
                     }
                     // Universal toString fallback for all other heap types
                     if (method_symbol == SYMBOL_TOSTRING) {
-                        R(a) = xr_string_value(vm_value_to_string(isolate, receiver));
+                        R(a) = xr_string_value(xr_value_to_string(isolate, receiver));
                         vmbreak;
                     }
                     VM_RUNTIME_ERROR(XR_ERR_TYPE_NO_METHOD, "this type does not support builtin method call");
@@ -5707,7 +5694,7 @@ startfunc:
                 } else {
                     // Universal toString fallback
                     if (method_symbol == SYMBOL_TOSTRING) {
-                        R(a) = xr_string_value(vm_value_to_string(isolate, receiver));
+                        R(a) = xr_string_value(xr_value_to_string(isolate, receiver));
                     } else {
                         VM_RUNTIME_ERROR(XR_ERR_TYPE_NO_METHOD, "this type does not support builtin method call");
                     }
@@ -6358,8 +6345,8 @@ startfunc:
                         fprintf(stderr, "\n");
                         fprintf(stderr, "ASSERTION FAILED at %s\n", loc_str);
                         fprintf(stderr, "  assert_eq() values are not equal\n");
-                        fprintf(stderr, "    actual:   %s\n", vm_value_to_string(isolate, actual)->data);
-                        fprintf(stderr, "    expected: %s\n\n", vm_value_to_string(isolate, expect)->data);
+                        fprintf(stderr, "    actual:   %s\n", xr_value_to_string(isolate, actual)->data);
+                        fprintf(stderr, "    expected: %s\n\n", xr_value_to_string(isolate, expect)->data);
                     }
                     VM_RUNTIME_ERROR(0, "assertion failed at %s: values not equal", loc_str);
                 }
@@ -6387,7 +6374,7 @@ startfunc:
                         fprintf(stderr, "\n");
                         fprintf(stderr, "ASSERTION FAILED at %s\n", loc_str);
                         fprintf(stderr, "  assert_ne() values should not be equal\n");
-                        fprintf(stderr, "    value: %s\n\n", vm_value_to_string(isolate, actual)->data);
+                        fprintf(stderr, "    value: %s\n\n", xr_value_to_string(isolate, actual)->data);
                     }
                     VM_RUNTIME_ERROR(0, "assertion failed at %s: values should not be equal", loc_str);
                 }
@@ -6409,8 +6396,8 @@ startfunc:
                 XrValue flags_val = K(c);
 
                 // Get pattern and flags strings
-                XrString *pattern_str = vm_value_to_string(isolate, pattern_val);
-                XrString *flags_str = vm_value_to_string(isolate, flags_val);
+                XrString *pattern_str = xr_value_to_string(isolate, pattern_val);
+                XrString *flags_str = xr_value_to_string(isolate, flags_val);
                 const char *pattern = pattern_str->data;
                 const char *flags = flags_str->data;
 
@@ -7038,8 +7025,9 @@ startfunc:
                 // Capacity expansion check
                 while (isolate->vm.defer_count + needed > isolate->vm.defer_capacity) {
                     isolate->vm.defer_capacity *= 2;
-                    isolate->vm.defer_stack = xr_realloc(isolate->vm.defer_stack,
-                        sizeof(XrValue) * isolate->vm.defer_capacity);
+                    XR_REALLOC_OR_ABORT(isolate->vm.defer_stack,
+                        sizeof(XrValue) * (size_t)isolate->vm.defer_capacity,
+                        "vm defer_stack grow");
                 }
 
                 // Push to defer stack: closure + arg count + args
