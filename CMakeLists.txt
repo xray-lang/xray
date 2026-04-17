@@ -264,6 +264,7 @@ set(XRAY_COMMON_INCLUDES
     ${CMAKE_CURRENT_SOURCE_DIR}/src/runtime/gc
     ${CMAKE_CURRENT_SOURCE_DIR}/src/runtime/object
     ${CMAKE_CURRENT_SOURCE_DIR}/src/runtime/class
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/runtime/closure
     ${CMAKE_CURRENT_SOURCE_DIR}/src/runtime/symbol
     ${CMAKE_CURRENT_SOURCE_DIR}/src/coro
     ${CMAKE_CURRENT_SOURCE_DIR}/src/frontend
@@ -292,6 +293,7 @@ file(GLOB RUNTIME_VALUE_SRC "src/runtime/value/*.c")
 file(GLOB RUNTIME_GC_SRC "src/runtime/gc/*.c")
 file(GLOB RUNTIME_OBJECT_SRC "src/runtime/object/*.c")
 file(GLOB RUNTIME_CLASS_SRC "src/runtime/class/*.c")
+file(GLOB RUNTIME_CLOSURE_SRC "src/runtime/closure/*.c")
 file(GLOB RUNTIME_SYMBOL_SRC "src/runtime/symbol/*.c")
 file(GLOB CORO_SRC "src/coro/*.c")
 
@@ -388,6 +390,7 @@ set(CORE_ALL_SOURCES
     ${RUNTIME_GC_SRC}
     ${RUNTIME_OBJECT_SRC}
     ${RUNTIME_CLASS_SRC}
+    ${RUNTIME_CLOSURE_SRC}
     ${RUNTIME_SYMBOL_SRC}
     ${CORO_SRC}
     ${FRONTEND_LEXER_SRC}
