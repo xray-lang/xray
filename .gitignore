@@ -30,6 +30,7 @@ luac.out
 .idea/
 .crossnote/
 .cursor/
+.windsurf/
 *.swp
 *.swo
 *~
