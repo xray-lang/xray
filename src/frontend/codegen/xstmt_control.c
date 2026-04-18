@@ -76,9 +76,9 @@ static void emit_ret_json_checktype(XrCompilerContext *ctx, XrCompiler *compiler
 
 /*
  * Compile return statement.
- * 
+ *
  * Supports multi-value return: return a, b, c
- * 
+ *
  * Handling:
  * - No return value: return
  * - Single value return: return expr (preserve tail call optimization)
@@ -91,23 +91,23 @@ void compile_return(XrCompilerContext *ctx, XrCompiler *compiler, ReturnStmtNode
         xr_compiler_error(ctx, compiler, "Cannot return from top-level code");
         return;
     }
-    
+
     int nret = node->value_count;
-    
+
     // No return value
     if (nret == 0) {
         emit_return(compiler->emitter, 0, 0);
         return;
     }
-    
+
     // Single value return: preserve tail call optimization
     if (nret == 1) {
         AstNode *value = node->values[0];
-        
+
         // Detect tail call: if return expression is function call, this is tail position
         if (value->type == AST_CALL_EXPR) {
             CallExprNode *call = (CallExprNode *)&value->as;
-            
+
             // Method calls: enable tail call for user-defined class methods.
             // Safe patterns: this.method() and ClassName.staticMethod().
             // Builtin type methods (String, Array, etc.) are NOT in class_registry,
@@ -165,13 +165,13 @@ void compile_return(XrCompilerContext *ctx, XrCompiler *compiler, ReturnStmtNode
         }
         return;
     }
-    
+
     // Multi-value return: put all return values into consecutive registers
     int base_reg = xreg_alloc_temp(compiler->regalloc);
-    
+
     // Protect consecutive register region to prevent reuse when compiling subsequent expressions
     int protect_id = xreg_protect_begin(compiler->regalloc, base_reg, nret, "multi_return");
-    
+
     // Compile first return value to base_reg
     XrExprDesc expr0 = xr_compile_expr(ctx, compiler, node->values[0]);
     int reg0 = xexpr_to_anyreg(ctx, compiler, &expr0);
@@ -179,13 +179,13 @@ void compile_return(XrCompilerContext *ctx, XrCompiler *compiler, ReturnStmtNode
         emit_move(compiler->emitter, base_reg, reg0);
         reg_free(compiler, reg0);
     }
-    
+
     // Compile subsequent return values to consecutive registers
     for (int i = 1; i < nret; i++) {
         int target_reg = base_reg + i;
         // Ensure allocated registers are consecutive
         xreg_alloc_temp(compiler->regalloc);
-        
+
         XrExprDesc expr = xr_compile_expr(ctx, compiler, node->values[i]);
         int reg = xexpr_to_anyreg(ctx, compiler, &expr);
         if (reg != target_reg) {
@@ -193,12 +193,12 @@ void compile_return(XrCompilerContext *ctx, XrCompiler *compiler, ReturnStmtNode
             reg_free(compiler, reg);
         }
     }
-    
+
     xreg_protect_end(compiler->regalloc, protect_id);
-    
+
     // Emit multi-value return instruction
     emit_return(compiler->emitter, base_reg, nret);
-    
+
     // Release consecutive registers
     for (int i = 0; i < nret; i++) {
         xreg_free_temp(compiler->regalloc, base_reg + i);
@@ -209,11 +209,11 @@ void compile_return(XrCompilerContext *ctx, XrCompiler *compiler, ReturnStmtNode
 
 /*
  * Compile if statement.
- * 
+ *
  * Optimization:
  * - If condition is comparison expression, generate conditional jump directly
  * - Avoid generating intermediate boolean value
- * 
+ *
  * Generated code (optimized path):
  *   CMP/CMPI <condition>
  *   JMP else_branch
@@ -229,32 +229,32 @@ void compile_if(XrCompilerContext *ctx, XrCompiler *compiler, IfStmtNode *node) 
     XR_DCHECK(node != NULL, "compile_if: NULL node");
     // Optimization: directly compile comparison expression to conditional jump
     AstNodeType cond_type = node->condition->type;
-    
+
     if (cond_type == AST_BINARY_LE || cond_type == AST_BINARY_LT ||
         cond_type == AST_BINARY_GT || cond_type == AST_BINARY_GE ||
         cond_type == AST_BINARY_EQ || cond_type == AST_BINARY_NE) {
-        
+
         // Directly compile comparison and conditional jump
         BinaryNode *cmp = (BinaryNode *)&node->condition->as;
-        
-        int rb, rc = -1;
-        OpCode op;
+
+        int rb = 0, rc = -1;
+        OpCode op = OP_LT;
         int k = 0;
         bool use_immediate = false;
         int imm_value = 0;
-        
+
         // Optimization: check if right operand is small integer constant
         if (cmp->right->type == AST_LITERAL_INT) {
             LiteralNode *lit = (LiteralNode *)&cmp->right->as;
             xr_Integer value = XR_TO_INT(xr_int(lit->raw_value.int_val));
-            
+
             if (value >= -128 && value <= 127) {
                 XrExprDesc left_expr = xr_compile_expr(ctx, compiler, cmp->left);
                 rb = xexpr_to_anyreg_readonly(ctx, compiler, &left_expr);
                 rb = xexpr_ensure_boxed(ctx, compiler, &left_expr, rb);
                 use_immediate = true;
                 imm_value = (int)value;
-                
+
                 switch (cond_type) {
                     case AST_BINARY_EQ: op = OP_EQI; break;
                     case AST_BINARY_NE: op = OP_EQI; k = 1; break;
@@ -266,56 +266,56 @@ void compile_if(XrCompilerContext *ctx, XrCompiler *compiler, IfStmtNode *node) 
                 }
             }
         }
-        
+
         // null comparison optimization: use OP_ISNULL to avoid constant loading
         if (!use_immediate && cmp->right->type == AST_LITERAL_NULL &&
             (cond_type == AST_BINARY_EQ || cond_type == AST_BINARY_NE)) {
-            
+
             XrExprDesc left_expr = xr_compile_expr(ctx, compiler, cmp->left);
             rb = xexpr_to_anyreg_readonly(ctx, compiler, &left_expr);
-            
+
             /* OP_ISNULL A k: if (R[A] == null) != k then PC++ (skip next JMP)
-             * 
+             *
              * if (x == null): enter then when x is null
              *   - k=0: if (is_null) != 0 then skip JMP (enter then), else JMP to else
-             * 
+             *
              * if (x != null): enter then when x is not null
              *   - k=1: if (is_null) != 1 then skip JMP (enter then), else JMP to else
              */
             k = (cond_type == AST_BINARY_NE) ? 1 : 0;
-            
+
             // Emit OP_ISNULL instruction and jump
             emit_abc(compiler->emitter, OP_ISNULL, rb, k, 0);
             int else_jump = emit_jump(compiler->emitter, OP_JMP);
-            
+
             // Compile then branch
             xr_compile_statement(ctx, compiler, node->then_branch);
-            
+
             // If has else, skip else branch
             int end_jump = -1;
             if (node->else_branch != NULL) {
                 end_jump = emit_jump(compiler->emitter, OP_JMP);
             }
-            
+
             // Patch else jump
             patch_jump(compiler->emitter, else_jump, -1);
-            
+
             // Compile else branch
             if (node->else_branch != NULL) {
                 xr_compile_statement(ctx, compiler, node->else_branch);
                 patch_jump(compiler->emitter, end_jump, -1);
             }
-            
+
             return;  // Return directly, skip subsequent processing
         }
-        
+
         if (!use_immediate) {
             // Generic path: compile both operands
             XrExprDesc left_expr = xr_compile_expr(ctx, compiler, cmp->left);
             rb = xexpr_to_anyreg_readonly(ctx, compiler, &left_expr);
             XrExprDesc right_expr = xr_compile_expr(ctx, compiler, cmp->right);
             rc = xexpr_to_anyreg_readonly(ctx, compiler, &right_expr);
-            
+
             rb = xexpr_ensure_boxed(ctx, compiler, &left_expr, rb);
             rc = xexpr_ensure_boxed(ctx, compiler, &right_expr, rc);
             switch (cond_type) {
@@ -328,7 +328,7 @@ void compile_if(XrCompilerContext *ctx, XrCompiler *compiler, IfStmtNode *node) 
                 default: op = OP_LT; break;
             }
         }
-        
+
         // Emit comparison instruction
         if (use_immediate) {
             uint8_t c_val = (uint8_t)(imm_value & 0xFF);
@@ -336,26 +336,26 @@ void compile_if(XrCompilerContext *ctx, XrCompiler *compiler, IfStmtNode *node) 
         } else {
             emit_abc(compiler->emitter, op, rb, rc, k);
         }
-        
+
         int else_jump = emit_jump(compiler->emitter, OP_JMP);
-        
+
         reg_free(compiler, rb);
         if (rc >= 0) {
             reg_free(compiler, rc);
         }
-        
+
         // Compile then branch
         xr_compile_statement(ctx, compiler, node->then_branch);
-        
+
         // If has else, skip else branch
         int end_jump = -1;
         if (node->else_branch != NULL) {
             end_jump = emit_jump(compiler->emitter, OP_JMP);
         }
-        
+
         // Patch else jump
         patch_jump(compiler->emitter, else_jump, -1);
-        
+
         // Compile else branch
         if (node->else_branch != NULL) {
             xr_compile_statement(ctx, compiler, node->else_branch);
@@ -365,25 +365,25 @@ void compile_if(XrCompilerContext *ctx, XrCompiler *compiler, IfStmtNode *node) 
         // Normal expression: compile to boolean then test
         XrExprDesc cond_expr = xr_compile_expr(ctx, compiler, node->condition);
         int cond_reg = xexpr_to_anyreg(ctx, compiler, &cond_expr);
-        
+
         emit_abc(compiler->emitter, OP_TEST, cond_reg, 0, 0);
         int then_jump = emit_jump(compiler->emitter, OP_JMP);
         reg_free(compiler, cond_reg);
-        
+
         // Compile then branch
         xr_compile_statement(ctx, compiler, node->then_branch);
-        
+
         // Skip else branch
         int else_jump = emit_jump(compiler->emitter, OP_JMP);
-        
+
         // Patch then_jump
         patch_jump(compiler->emitter, then_jump, -1);
-        
+
         // Compile else branch (if any)
         if (node->else_branch != NULL) {
             xr_compile_statement(ctx, compiler, node->else_branch);
         }
-        
+
         // Patch else_jump
         patch_jump(compiler->emitter, else_jump, -1);
     }

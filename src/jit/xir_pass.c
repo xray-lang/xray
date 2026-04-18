@@ -251,7 +251,7 @@ void xir_pass_const_prop(XirFunc *func) {
 
             // Float binary folding
             if (a0_f && a1_f) {
-                double fresult;
+                double fresult = 0;
                 bool ffolded = true;
                 switch (ins->op) {
                     case XIR_FADD: fresult = f0 + f1; break;
@@ -273,7 +273,7 @@ void xir_pass_const_prop(XirFunc *func) {
                     continue;
                 }
                 // Float comparison → i64 result
-                int64_t cmp_result;
+                int64_t cmp_result = 0;
                 bool cmp_folded = true;
                 switch (ins->op) {
                     case XIR_FEQ: cmp_result = (f0 == f1) ? 1 : 0; break;
@@ -466,7 +466,7 @@ void xir_pass_const_prop(XirFunc *func) {
             }
 
             // Both operands are known i64 constants — fold
-            int64_t result;
+            int64_t result = 0;
             bool folded = true;
 
             switch (ins->op) {
@@ -692,7 +692,7 @@ static bool gvn_assoc_const(XirFunc *func, XirIns *ins,
 
     // Identify which arg is a constant vreg, which is a non-const vreg
     int const_slot = -1;
-    int64_t k2;
+    int64_t k2 = 0;
     for (int a = 0; a < 2; a++) {
         int64_t val;
         if (gvn_get_const_i64(func, ins->args[a], &val)) {
@@ -710,7 +710,7 @@ static bool gvn_assoc_const(XirFunc *func, XirIns *ins,
     XirIns *vdef = func->vregs[vidx].def;
     if (!vdef || vdef->op != op) return false;
 
-    int64_t k1;
+    int64_t k1 = 0;
     int inner_const_slot = -1;
     for (int a = 0; a < 2; a++) {
         if (gvn_get_const_i64(func, vdef->args[a], &k1)) {

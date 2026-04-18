@@ -46,7 +46,7 @@ static bool is_concat_node(AstNode *node) {
 
 /*
  * Collect all operands in a string concatenation chain.
- * 
+ *
  * Example: a + b + c + d
  * AST structure:
  *        +
@@ -56,9 +56,9 @@ static bool is_concat_node(AstNode *node) {
  *    +   c
  *   / \
  *  a   b
- * 
+ *
  * Collection order: [a, b, c, d] (left to right, depth first)
- * 
+ *
  * @param node Current node
  * @param operands Operand array (output parameter)
  * @param count Current operand count (input/output parameter)
@@ -69,36 +69,36 @@ static bool collect_concat_operands(AstNode *node, AstNode **operands, int *coun
     if (!node) {
         return false;
     }
-    
+
     // If it's an ADD node, recursively collect
     if (is_concat_node(node)) {
         BinaryNode *binary = &node->as.binary;
-        
+
         // First collect left subtree
         if (!collect_concat_operands(binary->left, operands, count, max_count)) {
             return false;
         }
-        
+
         // Then collect right subtree
         if (!collect_concat_operands(binary->right, operands, count, max_count)) {
             return false;
         }
-        
+
         return true;
     }
-    
+
     // Not an ADD node, treat as leaf operand
     if (*count >= max_count) {
         return false;  // Exceeded maximum count
     }
-    
+
     operands[(*count)++] = node;
     return true;
 }
 
 /*
  * Compile string concatenation chain (optimized version with type awareness).
- * 
+ *
  * Strategy:
  * 1. Collect all operands into array
  * 2. Type-aware optimization:
@@ -107,13 +107,13 @@ static bool collect_concat_operands(AstNode *node, AstNode **operands, int *coun
  *    - All variables/expressions -> conservative strategy, don't use CONCAT
  * 3. Compile all operands to consecutive registers
  * 4. Generate STRBUF_NEW + STRBUF_APPEND*N + STRBUF_FINISH sequence
- * 
+ *
  * Advantages:
  * - merge all operands at once
  * - Reduce intermediate string objects
  * - Reduce instruction count
  * - Fix bug where numeric addition incorrectly used CONCAT
- * 
+ *
  * @return Result register (first operand's register), -1 means don't use CONCAT
  */
 static int compile_concat_chain(XrCompilerContext *ctx, XrCompiler *compiler, AstNode *node) {
@@ -122,24 +122,24 @@ static int compile_concat_chain(XrCompilerContext *ctx, XrCompiler *compiler, As
     // Collect all operands
     AstNode *operands[255];  // B field 8 bits, max 255 operands
     int count = 0;
-    
+
     if (!collect_concat_operands(node, operands, &count, 255)) {
         // Collection failed (exceeded 255), fall back to normal compilation
         return -1;
     }
-    
+
     if (count < 2) {
         // Less than 2 operands, don't need CONCAT
         return -1;
     }
-    
+
     // === Type-aware optimization: check if CONCAT should be used ===
     bool has_string_literal = false;  // Has string literal
     bool has_only_numbers = true;     // All number literals
-    
+
     for (int i = 0; i < count; i++) {
         AstNodeType t = operands[i]->type;
-        
+
         // Check for string literal
         if (t == AST_LITERAL_STRING) {
             has_string_literal = true;
@@ -154,14 +154,14 @@ static int compile_concat_chain(XrCompilerContext *ctx, XrCompiler *compiler, As
             has_only_numbers = false;
         }
     }
-    
+
     // === Decision rules ===
-    
+
     // Rule 1: All number literals -> don't use CONCAT, fall back to normal ADD
     if (has_only_numbers) {
         return -1;  // Let regular ADD/ADDI instructions handle
     }
-    
+
     // Rule 2: No string literal -> check type info via get_expr_type
     // (uses Codegen local info which is more reliable than raw AST compile_type)
     if (!has_string_literal) {
@@ -177,7 +177,7 @@ static int compile_concat_chain(XrCompilerContext *ctx, XrCompiler *compiler, As
             return -1;  // Truly unknown types, let ADD handle at runtime
         }
     }
-    
+
     // Rule 3: check if all operands are confirmed string for CONCAT optimization
     bool all_confirmed_string = true;
     for (int i = 0; i < count; i++) {
@@ -187,18 +187,18 @@ static int compile_concat_chain(XrCompilerContext *ctx, XrCompiler *compiler, As
             all_confirmed_string = false;
         }
     }
-    
+
     // If any operand is unknown type, fall back to OP_ADD for runtime type checking
     if (!all_confirmed_string) {
         return -1;
     }
-    
+
     // All operands confirmed string, use STRBUF sequence:
     // STRBUF_NEW R[buf]; STRBUF_APPEND R[buf] R[op_i]; ...; STRBUF_FINISH R[buf]
-    
+
     int buf_reg = reg_alloc(ctx, compiler);
     emit_abc(compiler->emitter, OP_STRBUF_NEW, buf_reg, 0, 0);
-    
+
     for (int i = 0; i < count; i++) {
         XrExprDesc expr = xr_compile_expr(ctx, compiler, operands[i]);
         int op_reg = xexpr_to_anyreg(ctx, compiler, &expr);
@@ -207,9 +207,9 @@ static int compile_concat_chain(XrCompilerContext *ctx, XrCompiler *compiler, As
             reg_free(compiler, op_reg);
         }
     }
-    
+
     emit_abc(compiler->emitter, OP_STRBUF_FINISH, buf_reg, 0, 0);
-    
+
     return buf_reg;
 }
 
@@ -217,13 +217,13 @@ static int compile_concat_chain(XrCompilerContext *ctx, XrCompiler *compiler, As
 
 /*
  * Compile logical AND (&&) - using jump list optimization.
- * 
+ *
  * Short-circuit evaluation: if left operand is false, don't evaluate right operand.
- * 
+ *
  * Optimization strategy:
  * 1. Use jump list to manage multiple jumps to false branch
  * 2. Support chained && operation (a && b && c) optimization
- * 
+ *
  * Generated code:
  *   rb = <left>
  *   TESTSET rb, rb, 1     ; if false then skip
@@ -237,43 +237,43 @@ static int compile_concat_chain(XrCompilerContext *ctx, XrCompiler *compiler, As
  */
 int compile_and(XrCompilerContext *ctx, XrCompiler *compiler, BinaryNode *node) {
     int false_list = NO_JUMP;  // False jump list
-    
+
     // Compile left operand
     XrExprDesc left_expr = xr_compile_expr(ctx, compiler, node->left);
     int rb = xexpr_to_anyreg(ctx, compiler, &left_expr);
-    
+
     // Test left operand: if false, jump
     emit_abc(compiler->emitter, OP_TESTSET, rb, rb, 0);
     int jump = emit_jump(compiler->emitter, OP_JMP);
     false_list = jump;  // Initialize false list
-    
+
     // Compile right operand
     XrExprDesc right_expr = xr_compile_expr(ctx, compiler, node->right);
     int rc = xexpr_to_anyreg(ctx, compiler, &right_expr);
-    
+
     // Move result to rb, then convert to bool (NOT+NOT)
     emit_move(compiler->emitter, rb, rc);
     emit_abc(compiler->emitter, OP_NOT, rb, rb, 0);
     emit_abc(compiler->emitter, OP_NOT, rb, rb, 0);
-    
+
     // Set freereg = rb + 1, reclaim rc
     xreg_set_freereg(compiler->regalloc, rb + 1);
-    
+
     // Patch false jump list (jump to current position)
     patch_jump_list(compiler->emitter, false_list, -1);
-    
+
     return rb;
 }
 
 /*
  * Compile logical OR (||) - using jump list optimization.
- * 
+ *
  * Short-circuit evaluation: if left operand is true, don't evaluate right operand.
- * 
+ *
  * Optimization strategy:
  * 1. Use jump list to manage multiple jumps to true branch
  * 2. Support chained || operation (a || b || c) optimization
- * 
+ *
  * Generated code:
  *   rb = <left>
  *   TESTSET rb, rb, 0     ; if true then skip
@@ -287,31 +287,31 @@ int compile_and(XrCompilerContext *ctx, XrCompiler *compiler, BinaryNode *node) 
  */
 int compile_or(XrCompilerContext *ctx, XrCompiler *compiler, BinaryNode *node) {
     int true_list = NO_JUMP;  // True jump list
-    
+
     // Compile left operand
     XrExprDesc left_expr = xr_compile_expr(ctx, compiler, node->left);
     int rb = xexpr_to_anyreg(ctx, compiler, &left_expr);
-    
+
     // Test left operand: if true, jump
     emit_abc(compiler->emitter, OP_TESTSET, rb, rb, 1);
     int jump = emit_jump(compiler->emitter, OP_JMP);
     true_list = jump;  // Initialize true list
-    
+
     // Compile right operand
     XrExprDesc right_expr = xr_compile_expr(ctx, compiler, node->right);
     int rc = xexpr_to_anyreg(ctx, compiler, &right_expr);
-    
+
     // Move result to rb, then convert to bool (NOT+NOT)
     emit_move(compiler->emitter, rb, rc);
     emit_abc(compiler->emitter, OP_NOT, rb, rb, 0);
     emit_abc(compiler->emitter, OP_NOT, rb, rb, 0);
-    
+
     // Set freereg = rb + 1, reclaim rc
     xreg_set_freereg(compiler->regalloc, rb + 1);
-    
+
     // Patch true jump list (jump to current position)
     patch_jump_list(compiler->emitter, true_list, -1);
-    
+
     return rb;
 }
 
@@ -319,12 +319,12 @@ int compile_or(XrCompilerContext *ctx, XrCompiler *compiler, BinaryNode *node) {
 
 /*
  * Compile binary expression (returns XrExprDesc).
- * 
+ *
  * True RELOC implementation:
  * - Emit instruction with A=0 (target register pending)
  * - Return XEXPR_RELOC, record instruction PC
  * - Allocate target register and write back on discharge
- * 
+ *
  * This avoids MOVE instruction in `var x = a + b` scenario.
  */
 XrExprDesc compile_binary(XrCompilerContext *ctx, XrCompiler *compiler, BinaryNode *node, AstNodeType type) {
@@ -333,7 +333,7 @@ XrExprDesc compile_binary(XrCompilerContext *ctx, XrCompiler *compiler, BinaryNo
     XR_DCHECK(node != NULL, "compile_binary: NULL node");
     XrExprDesc e = {0};
     xexpr_init(&e, XEXPR_VOID, -1);
-    
+
     // Early type inference for inst_types propagation.
     // Arithmetic ops on known-type operands produce known-type results.
     XrType *result_ct = NULL;
@@ -347,7 +347,7 @@ XrExprDesc compile_binary(XrCompilerContext *ctx, XrCompiler *compiler, BinaryNo
             else if ((li || lf) && (ri || rf)) result_ct = (XrType *)xr_type_new_float();
         }
     }
-    
+
     // ===== Logical operations need short-circuit evaluation, keep old implementation =====
     if (type == AST_BINARY_AND) {
         int reg = compile_and(ctx, compiler, node);
@@ -361,13 +361,13 @@ XrExprDesc compile_binary(XrCompilerContext *ctx, XrCompiler *compiler, BinaryNo
         e.compile_type = result_ct;
         return e;
     }
-    
+
     // ===== Optimization 0: STRBUF batch string concatenation =====
     if (type == AST_BINARY_ADD) {
         AstNode temp_node;
         temp_node.type = type;
         temp_node.as.binary = *node;
-        
+
         int concat_result = compile_concat_chain(ctx, compiler, &temp_node);
         if (concat_result >= 0) {
             // CONCAT already allocated target register, return TEMP
@@ -376,34 +376,34 @@ XrExprDesc compile_binary(XrCompilerContext *ctx, XrCompiler *compiler, BinaryNo
             return e;
         }
     }
-    
+
     // ===== Optimization 0b: string repeat OP_STR_REPEAT =====
     // Detect pattern: string * int or int * string
     if (type == AST_BINARY_MUL) {
-        bool is_str_mul_int = (node->left->type == AST_LITERAL_STRING && 
+        bool is_str_mul_int = (node->left->type == AST_LITERAL_STRING &&
                                node->right->type == AST_LITERAL_INT);
-        bool is_int_mul_str = (node->left->type == AST_LITERAL_INT && 
+        bool is_int_mul_str = (node->left->type == AST_LITERAL_INT &&
                                node->right->type == AST_LITERAL_STRING);
-        
+
         if (is_str_mul_int || is_int_mul_str) {
             // Compile string and integer to registers
             AstNode *str_node = is_str_mul_int ? node->left : node->right;
             AstNode *int_node = is_str_mul_int ? node->right : node->left;
-            
+
             XrExprDesc str_e = xr_compile_expr(ctx, compiler, str_node);
             int rb = xexpr_to_anyreg_readonly(ctx, compiler, &str_e);
-            
+
             XrExprDesc int_e = xr_compile_expr(ctx, compiler, int_node);
             int rc = xexpr_to_anyreg_readonly(ctx, compiler, &int_e);
-            
+
             // Emit OP_STR_REPEAT, A=0 pending relocation
             int pc = emit_abc(compiler->emitter, OP_STR_REPEAT, 0, rb, rc);
-            
+
             e.kind = XEXPR_RELOC;
             e.u.pc = pc;
             return e;
         }
-        
+
         // Runtime detection: left operand type is STRING
         XrType *left_ct = get_expr_type(ctx, compiler, node->left);
         XrType *right_ct = get_expr_type(ctx, compiler, node->right);
@@ -411,14 +411,14 @@ XrExprDesc compile_binary(XrCompilerContext *ctx, XrCompiler *compiler, BinaryNo
         bool left_is_int = left_ct && (left_ct->kind == XR_KIND_INT);
         bool right_is_string = right_ct && (right_ct->kind == XR_KIND_STRING);
         bool right_is_int = right_ct && (right_ct->kind == XR_KIND_INT);
-        
+
         if (left_is_string && right_is_int) {
             XrExprDesc str_e = xr_compile_expr(ctx, compiler, node->left);
             int rb = xexpr_to_anyreg_readonly(ctx, compiler, &str_e);
-            
+
             XrExprDesc int_e = xr_compile_expr(ctx, compiler, node->right);
             int rc = xexpr_to_anyreg_readonly(ctx, compiler, &int_e);
-            
+
             int pc = emit_abc(compiler->emitter, OP_STR_REPEAT, 0, rb, rc);
             e.kind = XEXPR_RELOC;
             e.u.pc = pc;
@@ -428,24 +428,24 @@ XrExprDesc compile_binary(XrCompilerContext *ctx, XrCompiler *compiler, BinaryNo
             // int * string form, swap order
             XrExprDesc str_e = xr_compile_expr(ctx, compiler, node->right);
             int rb = xexpr_to_anyreg_readonly(ctx, compiler, &str_e);
-            
+
             XrExprDesc int_e = xr_compile_expr(ctx, compiler, node->left);
             int rc = xexpr_to_anyreg_readonly(ctx, compiler, &int_e);
-            
+
             int pc = emit_abc(compiler->emitter, OP_STR_REPEAT, 0, rb, rc);
             e.kind = XEXPR_RELOC;
             e.u.pc = pc;
             return e;
         }
     }
-    
+
     // ===== Optimization 1: constant folding =====
     if ((node->left->type == AST_LITERAL_INT || node->left->type == AST_LITERAL_FLOAT) &&
         (node->right->type == AST_LITERAL_INT || node->right->type == AST_LITERAL_FLOAT)) {
-        
+
         LiteralNode *left_lit = (LiteralNode *)&node->left->as;
         LiteralNode *right_lit = (LiteralNode *)&node->right->as;
-        
+
         TokenType op_token;
         switch (type) {
             case AST_BINARY_ADD: op_token = TK_PLUS; break;
@@ -455,16 +455,16 @@ XrExprDesc compile_binary(XrCompilerContext *ctx, XrCompiler *compiler, BinaryNo
             case AST_BINARY_MOD: op_token = TK_PERCENT; break;
             default: op_token = TK_EOF; break;
         }
-        
+
         if (op_token != TK_EOF) {
-            XrValue left_val = (node->left->type == AST_LITERAL_INT) ? 
-                xr_int(left_lit->raw_value.int_val) : 
+            XrValue left_val = (node->left->type == AST_LITERAL_INT) ?
+                xr_int(left_lit->raw_value.int_val) :
                 xr_float(left_lit->raw_value.float_val);
-            
-            XrValue right_val = (node->right->type == AST_LITERAL_INT) ? 
-                xr_int(right_lit->raw_value.int_val) : 
+
+            XrValue right_val = (node->right->type == AST_LITERAL_INT) ?
+                xr_int(right_lit->raw_value.int_val) :
                 xr_float(right_lit->raw_value.float_val);
-            
+
             XrValue result;
             if (xr_opt_fold_binary(op_token, left_val, right_val, &result)) {
                 // Folding succeeded! Emit LOADK, A=0 pending relocation
@@ -477,7 +477,7 @@ XrExprDesc compile_binary(XrCompilerContext *ctx, XrCompiler *compiler, BinaryNo
             }
         }
     }
-    
+
     // ===== Const propagation: resolve const variables to literals in-place =====
     // Macro-like expansion: replace AST_VARIABLE with AST_LITERAL_INT/FLOAT
     // so all downstream optimizations (MULI, MULK, commutative swap, fold) work automatically
@@ -514,7 +514,7 @@ XrExprDesc compile_binary(XrCompilerContext *ctx, XrCompiler *compiler, BinaryNo
             }
         }
     }
-    
+
     // ===== Commutative swap: move constant to right for ADDI/MULI/ADDK/MULK =====
     if ((type == AST_BINARY_ADD || type == AST_BINARY_MUL) &&
         (node->left->type == AST_LITERAL_INT || node->left->type == AST_LITERAL_FLOAT) &&
@@ -523,16 +523,16 @@ XrExprDesc compile_binary(XrCompilerContext *ctx, XrCompiler *compiler, BinaryNo
         node->left = node->right;
         node->right = tmp;
     }
-    
+
     // ===== Optimization 2: immediate operand optimization (small integer: -128~127) =====
     if (node->right->type == AST_LITERAL_INT) {
         LiteralNode *lit = (LiteralNode *)&node->right->as;
         xr_Integer value = lit->raw_value.int_val;
-        
+
         if (value >= -128 && value <= 127) {
-            OpCode op;
+            OpCode op = (OpCode)0;
             bool use_optimized = true;
-            
+
             // Exclude string multiplication (handled by OP_STR_REPEAT)
             if (type == AST_BINARY_MUL) {
                 XrType *left_ct_imm = get_expr_type(ctx, compiler, node->left);
@@ -540,21 +540,21 @@ XrExprDesc compile_binary(XrCompilerContext *ctx, XrCompiler *compiler, BinaryNo
                     use_optimized = false;
                 }
             }
-            
+
             switch (type) {
                 case AST_BINARY_ADD: op = OP_ADDI; break;
                 case AST_BINARY_SUB: op = OP_SUBI; break;
                 case AST_BINARY_MUL: op = OP_MULI; break;
                 default: use_optimized = false; break;
             }
-            
+
             if (use_optimized) {
                 XrExprDesc left_e = xr_compile_expr(ctx, compiler, node->left);
                 int rb = xexpr_to_anyreg_readonly(ctx, compiler, &left_e);
-                
+
                 uint8_t c_val = (uint8_t)((int)value & 0xFF);
                 int pc = emit_abc(compiler->emitter, op, 0, rb, c_val);
-                
+
                 e.kind = XEXPR_RELOC;
                 e.u.pc = pc;
                 e.compile_type = result_ct;
@@ -562,13 +562,13 @@ XrExprDesc compile_binary(XrCompilerContext *ctx, XrCompiler *compiler, BinaryNo
             }
         }
     }
-    
+
     // ===== Optimization 3: constant table optimization (ADDK/SUBK/MULK/DIVK) =====
     // Right operand is numeric constant (float or integer out of immediate range)
     if (node->right->type == AST_LITERAL_INT || node->right->type == AST_LITERAL_FLOAT) {
-        OpCode op;
+        OpCode op = (OpCode)0;
         bool use_k_op = true;
-        
+
         switch (type) {
             case AST_BINARY_ADD: op = OP_ADDK; break;
             case AST_BINARY_SUB: op = OP_SUBK; break;
@@ -576,34 +576,34 @@ XrExprDesc compile_binary(XrCompilerContext *ctx, XrCompiler *compiler, BinaryNo
             case AST_BINARY_DIV: op = OP_DIVK; break;
             default: use_k_op = false; break;
         }
-        
+
         if (use_k_op) {
             // Compile left operand to register
             XrExprDesc left_e = xr_compile_expr(ctx, compiler, node->left);
             int rb = xexpr_to_anyreg_readonly(ctx, compiler, &left_e);
-            
+
             // Add constant to constant table
             LiteralNode *lit = (LiteralNode *)&node->right->as;
             XrValue kval = (node->right->type == AST_LITERAL_INT) ?
                 xr_int(lit->raw_value.int_val) :
                 xr_float(lit->raw_value.float_val);
             int kidx = xr_vm_proto_add_constant(compiler->proto, kval);
-            
+
             // Emit ADDK/SUBK/MULK/DIVK, A=0 pending relocation
             int pc = emit_abc(compiler->emitter, op, 0, rb, kidx);
-            
+
             e.kind = XEXPR_RELOC;
             e.u.pc = pc;
             e.compile_type = result_ct;
             return e;
         }
     }
-    
+
     // ===== Generic path: true RELOC implementation =====
-    
+
     XrType *left_ct = get_expr_type(ctx, compiler, node->left);
     XrType *right_ct = get_expr_type(ctx, compiler, node->right);
-    
+
     // ===== Strict type checking for + operator =====
     // Rules: same types only, exception: int+float promotes to float
     // string+string → STRBUF sequence, numeric+numeric → OP_ADD
@@ -615,28 +615,28 @@ XrExprDesc compile_binary(XrCompilerContext *ctx, XrCompiler *compiler, BinaryNo
         bool right_num = XR_TYPE_IS_INT(right_ct) || XR_TYPE_IS_FLOAT(right_ct);
         bool left_unknown = (left_ct->kind == XR_KIND_UNKNOWN);
         bool right_unknown = (right_ct->kind == XR_KIND_UNKNOWN);
-        
+
         // string + string → STRBUF sequence (two-operand fallback)
         if (left_str && right_str) {
             int buf_reg = reg_alloc(ctx, compiler);
             emit_abc(compiler->emitter, OP_STRBUF_NEW, buf_reg, 0, 0);
-            
+
             XrExprDesc left_e = xr_compile_expr(ctx, compiler, node->left);
             int rb_s = xexpr_to_anyreg(ctx, compiler, &left_e);
             emit_abc(compiler->emitter, OP_STRBUF_APPEND, buf_reg, rb_s, 0);
             if (rb_s != buf_reg) reg_free(compiler, rb_s);
-            
+
             XrExprDesc right_e = xr_compile_expr(ctx, compiler, node->right);
             int rc_s = xexpr_to_anyreg(ctx, compiler, &right_e);
             emit_abc(compiler->emitter, OP_STRBUF_APPEND, buf_reg, rc_s, 0);
             if (rc_s != buf_reg) reg_free(compiler, rc_s);
-            
+
             emit_abc(compiler->emitter, OP_STRBUF_FINISH, buf_reg, 0, 0);
             xexpr_init(&e, XEXPR_TEMP, buf_reg);
             e.compile_type = (XrType *)xr_type_new_string();
             return e;
         }
-        
+
         // string + non-string or non-string + string → compile error
         // (except when either side is unknown — that's runtime's problem)
         if ((left_str && !right_str && !right_unknown) ||
@@ -647,7 +647,7 @@ XrExprDesc compile_binary(XrCompilerContext *ctx, XrCompiler *compiler, BinaryNo
             e.kind = XEXPR_VOID;
             return e;
         }
-        
+
         // numeric + non-numeric (non-unknown, non-string) → compile error
         if ((left_num && !right_num && !right_unknown && !right_str) ||
             (!left_num && !left_unknown && !left_str && right_num)) {
@@ -657,17 +657,17 @@ XrExprDesc compile_binary(XrCompilerContext *ctx, XrCompiler *compiler, BinaryNo
             return e;
         }
     }
-    
+
     // Compile operands to registers
     XrExprDesc left_e = xr_compile_expr(ctx, compiler, node->left);
     int rb = xexpr_to_anyreg_readonly(ctx, compiler, &left_e);
     XrExprDesc right_e = xr_compile_expr(ctx, compiler, node->right);
     int rc = xexpr_to_anyreg_readonly(ctx, compiler, &right_e);
-    
+
     // Ensure tagged format for generic instructions
     rb = ensure_boxed(ctx, compiler, &left_e, rb);
     rc = ensure_boxed(ctx, compiler, &right_e, rc);
-    
+
     OpCode op;
     switch (type) {
         case AST_BINARY_ADD:    op = OP_ADD; break;
@@ -680,16 +680,16 @@ XrExprDesc compile_binary(XrCompilerContext *ctx, XrCompiler *compiler, BinaryNo
         case AST_BINARY_BXOR:   op = OP_BXOR; break;
         case AST_BINARY_LSHIFT: op = OP_SHL; break;
         case AST_BINARY_RSHIFT: op = OP_SHR; break;
-        
+
         default:
             xr_log_warning("compiler", "unknown binary operator: %d", type);
             xr_compiler_error(ctx, compiler, "Unknown binary operator");
             e.kind = XEXPR_VOID;
             return e;
     }
-    
+
     int pc = emit_abc(compiler->emitter, op, 0, rb, rc);
-    
+
     e.kind = XEXPR_RELOC;
     e.u.pc = pc;
     e.compile_type = result_ct;
@@ -700,12 +700,12 @@ XrExprDesc compile_binary(XrCompilerContext *ctx, XrCompiler *compiler, BinaryNo
 
 /*
  * Internal implementation: compile comparison operation (returns register).
- * 
+ *
  * Optimization strategy:
  * 1. Constant folding: two constants directly compute result
  * 2. Use immediate comparison when right operand is small integer (e.g. x < 10)
  * 3. Generic path uses normal comparison instruction
- * 
+ *
  * This function still returns int (register), for Phase 3 migration transition.
  */
 static int compile_comparison_internal(XrCompilerContext *ctx, XrCompiler *compiler, BinaryNode *node, AstNodeType type) {
@@ -713,7 +713,7 @@ static int compile_comparison_internal(XrCompilerContext *ctx, XrCompiler *compi
     // Check if using same operator inside operator method
     if (ctx->current_operator != NULL) {
         const char *op_name = NULL;
-        
+
         // Determine currently used operator
         switch (type) {
             case AST_BINARY_EQ: op_name = "=="; break;
@@ -726,12 +726,12 @@ static int compile_comparison_internal(XrCompilerContext *ctx, XrCompiler *compi
             case AST_BINARY_NE_STRICT: op_name = "!=="; break;
             default: break;
         }
-        
+
         // If using == inside operator== (but not ===), emit warning
         if (op_name != NULL && strcmp(ctx->current_operator, op_name) == 0) {
             // Using === is safe, no warning needed
             if (type != AST_BINARY_EQ_STRICT && type != AST_BINARY_NE_STRICT) {
-                fprintf(stderr, 
+                fprintf(stderr,
                     "\033[33mWarning\033[0m: Using %s inside operator%s may cause infinite recursion\n"
                     "  Suggestion: Use %s%s for reference comparison, or ensure recursion is intentional\n",
                     ctx->current_operator,
@@ -741,23 +741,23 @@ static int compile_comparison_internal(XrCompilerContext *ctx, XrCompiler *compi
             }
         }
     }
-    
+
     // ===== Optimization 1: constant folding =====
     if ((node->left->type == AST_LITERAL_INT || node->left->type == AST_LITERAL_FLOAT) &&
         (node->right->type == AST_LITERAL_INT || node->right->type == AST_LITERAL_FLOAT)) {
-        
+
         LiteralNode *left_lit = (LiteralNode *)&node->left->as;
         LiteralNode *right_lit = (LiteralNode *)&node->right->as;
-        
+
         // Convert to XrValue
-        XrValue left_val = (node->left->type == AST_LITERAL_INT) ? 
-            xr_int(left_lit->raw_value.int_val) : 
+        XrValue left_val = (node->left->type == AST_LITERAL_INT) ?
+            xr_int(left_lit->raw_value.int_val) :
             xr_float(left_lit->raw_value.float_val);
-        
-        XrValue right_val = (node->right->type == AST_LITERAL_INT) ? 
-            xr_int(right_lit->raw_value.int_val) : 
+
+        XrValue right_val = (node->right->type == AST_LITERAL_INT) ?
+            xr_int(right_lit->raw_value.int_val) :
             xr_float(right_lit->raw_value.float_val);
-        
+
         // Convert AST type to Token type
         TokenType op_token;
         switch (type) {
@@ -771,7 +771,7 @@ static int compile_comparison_internal(XrCompilerContext *ctx, XrCompiler *compi
             case AST_BINARY_GE: op_token = TK_GE; break;
             default: op_token = TK_EOF; break;
         }
-        
+
         // Try constant folding
         XrValue result;
         if (op_token != TK_EOF && xr_opt_fold_comparison(op_token, left_val, right_val, &result)) {
@@ -786,49 +786,49 @@ static int compile_comparison_internal(XrCompilerContext *ctx, XrCompiler *compi
             return dst;
         }
     }
-    
+
     // ===== Optimization 2: null comparison optimization =====
     // Use OP_ISNULL_SET: R[A] = (R[B] == null), single instruction
-    if (node->right->type == AST_LITERAL_NULL && 
+    if (node->right->type == AST_LITERAL_NULL &&
         (type == AST_BINARY_EQ || type == AST_BINARY_NE ||
          type == AST_BINARY_EQ_STRICT || type == AST_BINARY_NE_STRICT)) {
-        
+
         // Compile left operand
         XrExprDesc left_e = xr_compile_expr(ctx, compiler, node->left);
         int rb = xexpr_to_anyreg_readonly(ctx, compiler, &left_e);
-        
+
         // Allocate result register
         int ra = reg_alloc(ctx, compiler);
-        
+
         // Use OP_ISNULL_SET: R[ra] = (R[rb] == null)
         emit_abc(compiler->emitter, OP_ISNULL_SET, ra, rb, 0);
-        
+
         // For != null, negate the result
         if (type == AST_BINARY_NE || type == AST_BINARY_NE_STRICT) {
             emit_abc(compiler->emitter, OP_NOT, ra, ra, 0);
         }
-        
+
         xreg_set_freereg(compiler->regalloc, ra + 1);
         return ra;
     }
-    
+
     // ===== Optimization 3: immediate comparison =====
     // Optimization: if right operand is small integer constant, use immediate comparison instruction
     if (node->right->type == AST_LITERAL_INT) {
         LiteralNode *lit = (LiteralNode *)&node->right->as;
         xr_Integer value = lit->raw_value.int_val;
-        
+
         // Small integer range
         if (value >= -128 && value <= 127) {
             XrExprDesc left_e = xr_compile_expr(ctx, compiler, node->left);
             int rb = xexpr_to_anyreg_readonly(ctx, compiler, &left_e);
             // BOX if typed operand (immediate comparisons expect tagged)
             rb = ensure_boxed(ctx, compiler, &left_e, rb);
-            
+
             // Select comparison instruction
             OpCode op_imm;
             bool negate = false;
-            
+
             switch (type) {
                 case AST_BINARY_EQ:
                 case AST_BINARY_EQ_STRICT:
@@ -856,48 +856,48 @@ static int compile_comparison_internal(XrCompilerContext *ctx, XrCompiler *compi
                 default:
                     goto general_path;
             }
-            
+
             // Allocate result register
             int ra = reg_alloc(ctx, compiler);
-            
+
             // Format: CMP_IMM R[rb] imm 1 (using emit_absc wrapper)
             // ABsC format: A=rb, B=(int)value (full value), sC=1
             uint8_t c_imm = (uint8_t)((int)value & 0xFF);
             emit_abc(compiler->emitter, op_imm, rb, c_imm, 1);
-            
+
             // Jump when comparison is true
             int true_jump = emit_jump(compiler->emitter, OP_JMP);
-            
+
             // Comparison is false: load corresponding value
             if (negate) {
                 emit_loadtrue(compiler->emitter, ra);
             } else {
                 emit_loadfalse(compiler->emitter, ra);
             }
-            
+
             // Skip true branch
             int end_jump = emit_jump(compiler->emitter, OP_JMP);
-            
+
             // Patch true jump
             patch_jump(compiler->emitter, true_jump, -1);
-            
+
             // Comparison is true: load corresponding value
             if (negate) {
                 emit_loadfalse(compiler->emitter, ra);
             } else {
                 emit_loadtrue(compiler->emitter, ra);
             }
-            
+
             // Patch end jump
             patch_jump(compiler->emitter, end_jump, -1);
-            
+
             // Set freereg = ra + 1, reclaim rb
             xreg_set_freereg(compiler->regalloc, ra + 1);
-            
+
             return ra;
         }
     }
-    
+
 general_path:
     // Generic path: use OP_CMP_* instruction to directly generate Bool value
     {
@@ -920,17 +920,17 @@ general_path:
             case AST_BINARY_LE: op = OP_CMP_LE; break;
             case AST_BINARY_GT: op = OP_CMP_LT; { int tmp = rb; rb = rc; rc = tmp; } break;
             case AST_BINARY_GE: op = OP_CMP_LE; { int tmp = rb; rb = rc; rc = tmp; } break;
-            
+
             default:
                 xr_log_warning("compiler", "unknown comparison operator: %d", type);
                 xr_compiler_error(ctx, compiler, "Unknown comparison operator");
                 return -1;
         }
-        
+
         int ra = reg_alloc(ctx, compiler);
         emit_abc(compiler->emitter, op, ra, rb, rc);
         xreg_set_freereg(compiler->regalloc, ra + 1);
-        
+
         return ra;
     }
 }
@@ -952,11 +952,11 @@ XrExprDesc compile_comparison(XrCompilerContext *ctx, XrCompiler *compiler, Bina
  */
 XrExprDesc compile_is_expr(XrCompilerContext *ctx, XrCompiler *compiler, IsExprNode *node) {
     XrExprDesc e = {0};
-    
+
     // Compile the expression to check
     XrExprDesc expr = xr_compile_expr(ctx, compiler, node->expr);
     int src_reg = xexpr_to_anyreg(ctx, compiler, &expr);
-    
+
     // Get the type kind as XrTypeId constant
     int type_kind = -1;  // -1 means unknown type (always false)
     if (node->type) {
@@ -972,19 +972,19 @@ XrExprDesc compile_is_expr(XrCompilerContext *ctx, XrCompiler *compiler, IsExprN
         else if (t->kind == XR_KIND_CLASS || t->kind == XR_KIND_INSTANCE) type_kind = XR_TID_INSTANCE;
         else if (t->kind == XR_KIND_FUNCTION) type_kind = XR_TID_FUNCTION;
     }
-    
+
     // Add type constant
     int type_const = xr_vm_proto_add_constant(compiler->proto, xr_int(type_kind));
-    
+
     // Allocate destination register
     int dest_reg = reg_alloc(ctx, compiler);
-    
+
     // Emit OP_IS instruction
     emit_abc(compiler->emitter, OP_IS, dest_reg, src_reg, type_const);
-    
+
     // Free source register
     reg_free(compiler, src_reg);
-    
+
     xexpr_init(&e, XEXPR_TEMP, dest_reg);
     return e;
 }
@@ -998,38 +998,38 @@ static int compile_ternary_internal(XrCompilerContext *ctx, XrCompiler *compiler
     // Compile condition expression
     XrExprDesc cond_expr = xr_compile_expr(ctx, compiler, node->condition);
     int cond_reg = xexpr_to_anyreg(ctx, compiler, &cond_expr);
-    
+
     // Test condition, if false skip true branch
     emit_abc(compiler->emitter, OP_TEST, cond_reg, 0, 0);
     int else_jump = emit_jump(compiler->emitter, OP_JMP);
     reg_free(compiler, cond_reg);
-    
+
     // Compile true expression
     XrExprDesc true_expr = xr_compile_expr(ctx, compiler, node->true_expr);
     int true_reg = xexpr_to_anyreg(ctx, compiler, &true_expr);
-    
+
     // Allocate result register
     int result_reg = reg_alloc(ctx, compiler);
     emit_move(compiler->emitter, result_reg, true_reg);
     reg_free(compiler, true_reg);
-    
+
     // Skip else branch
     int end_jump = emit_jump(compiler->emitter, OP_JMP);
-    
+
     // Patch else jump
     patch_jump(compiler->emitter, else_jump, -1);
-    
+
     // Compile false expression
     XrExprDesc false_expr = xr_compile_expr(ctx, compiler, node->false_expr);
     int false_reg = xexpr_to_anyreg(ctx, compiler, &false_expr);
-    
+
     // Move result to result register
     emit_move(compiler->emitter, result_reg, false_reg);
     reg_free(compiler, false_reg);
-    
+
     // Patch end jump
     patch_jump(compiler->emitter, end_jump, -1);
-    
+
     return result_reg;
 }
 
@@ -1048,7 +1048,7 @@ XrExprDesc compile_ternary(XrCompilerContext *ctx, XrCompiler *compiler, Ternary
 
 /*
  * Internal implementation: compile nullish coalescing (returns register)
- * 
+ *
  * Optimization: If compile-time type analysis proves left operand is non-nullable,
  * skip the null check entirely and just return the left operand.
  */
@@ -1071,11 +1071,11 @@ static int compile_nullish_coalesce_internal(XrCompilerContext *ctx, XrCompiler 
         XrExprDesc left_expr = xr_compile_expr(ctx, compiler, node->left);
         return xexpr_to_anyreg(ctx, compiler, &left_expr);
     }
-    
+
     // Compile left operand
     XrExprDesc left_expr = xr_compile_expr(ctx, compiler, node->left);
     int left_reg = xexpr_to_anyreg(ctx, compiler, &left_expr);
-    
+
     /* Check if null.
      * OP_EQK A B k: if (R[A] == K[B]) != k then PC++
      * When k=1:
@@ -1086,28 +1086,28 @@ static int compile_nullish_coalesce_internal(XrCompilerContext *ctx, XrCompiler 
     int null_const = xr_vm_proto_add_constant(compiler->proto, null_val);
     emit_abc(compiler->emitter, OP_EQK, left_reg, null_const, 1);
     int use_default_jump = emit_jump(compiler->emitter, OP_JMP);
-    
+
     // Left operand is not null, use left operand
     int result_reg = reg_alloc(ctx, compiler);
     emit_move(compiler->emitter, result_reg, left_reg);
     reg_free(compiler, left_reg);
-    
+
     int end_jump = emit_jump(compiler->emitter, OP_JMP);
-    
+
     // Patch use_default jump
     patch_jump(compiler->emitter, use_default_jump, -1);
-    
+
     // Compile right operand (default value)
     XrExprDesc right_expr = xr_compile_expr(ctx, compiler, node->right);
     int right_reg = xexpr_to_anyreg(ctx, compiler, &right_expr);
-    
+
     // Move result to result register
     emit_move(compiler->emitter, result_reg, right_reg);
     reg_free(compiler, right_reg);
-    
+
     // Patch end jump
     patch_jump(compiler->emitter, end_jump, -1);
-    
+
     return result_reg;
 }
 
@@ -1126,7 +1126,7 @@ XrExprDesc compile_nullish_coalesce(XrCompilerContext *ctx, XrCompiler *compiler
 
 /*
  * Internal implementation: compile optional chaining (returns register)
- * 
+ *
  * Optimization: If compile-time type analysis proves object is non-nullable,
  * skip the null check and generate direct property/index access.
  */
@@ -1140,7 +1140,7 @@ static int compile_optional_chain_internal(XrCompilerContext *ctx, XrCompiler *c
         XrExprDesc obj_expr = xr_compile_expr(ctx, compiler, node->object);
         int obj_reg = xexpr_to_anyreg(ctx, compiler, &obj_expr);
         int result_reg = reg_alloc(ctx, compiler);
-        
+
         if (node->chain_type == 0) {
             int global_sym = xr_symbol_register_in_table(
                 (XrSymbolTable*)xr_isolate_get_symbol_table(ctx->X), node->name);
@@ -1152,15 +1152,15 @@ static int compile_optional_chain_internal(XrCompilerContext *ctx, XrCompiler *c
             emit_abc(compiler->emitter, OP_INDEX_GET, result_reg, obj_reg, index_reg);
             reg_free(compiler, index_reg);
         }
-        
+
         xreg_set_freereg(compiler->regalloc, result_reg + 1);
         return result_reg;
     }
-    
+
     // Compile object expression
     XrExprDesc obj_expr = xr_compile_expr(ctx, compiler, node->object);
     int obj_reg = xexpr_to_anyreg(ctx, compiler, &obj_expr);
-    
+
     /* Check if object is null.
      * OP_EQK A B k: if (R[A] == K[B]) != k then PC++
      * When k=1:
@@ -1171,10 +1171,10 @@ static int compile_optional_chain_internal(XrCompilerContext *ctx, XrCompiler *c
     int null_const = xr_vm_proto_add_constant(compiler->proto, null_val);
     emit_abc(compiler->emitter, OP_EQK, obj_reg, null_const, 1);
     int return_null_jump = emit_jump(compiler->emitter, OP_JMP);
-    
+
     // Object is not null, execute access
     int result_reg = reg_alloc(ctx, compiler);
-    
+
     if (node->chain_type == 0) {
         /* Property access: obj?.prop
          * Note: OP_GETPROP's C parameter is symbol, not constant index
@@ -1195,20 +1195,20 @@ static int compile_optional_chain_internal(XrCompilerContext *ctx, XrCompiler *c
         xr_compiler_error(ctx, compiler, "Optional chain method call not yet implemented");
         return result_reg;
     }
-    
+
     xreg_set_freereg(compiler->regalloc, result_reg + 1);
-    
+
     int end_jump = emit_jump(compiler->emitter, OP_JMP);
-    
+
     // Patch return_null jump
     patch_jump(compiler->emitter, return_null_jump, -1);
-    
+
     // Return null
     emit_loadnull(compiler->emitter, result_reg);
-    
+
     // Patch end jump
     patch_jump(compiler->emitter, end_jump, -1);
-    
+
     return result_reg;
 }
 
