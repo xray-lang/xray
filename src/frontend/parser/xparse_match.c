@@ -26,12 +26,12 @@
 static AstNode *parse_pattern(Parser *parser) {
     XR_DCHECK(parser != NULL, "parse_pattern: NULL parser");
     int line = parser->current.line;
-    
+
     // Wildcard pattern
     if (xr_parser_match(parser, TK_UNDERSCORE)) {
             return xr_ast_pattern_wildcard(parser->X, line);
     }
-    
+
     // Parse first value (may be literal or enum access)
     // Use PREC_CALL to support member access expressions (e.g. HttpStatus.OK)
     AstNode *first = xr_parse_precedence(parser, PREC_CALL);
@@ -39,7 +39,7 @@ static AstNode *parse_pattern(Parser *parser) {
         xr_parser_error(parser, "expected pattern");
         return NULL;
     }
-    
+
     // Check if range pattern
     if (xr_parser_match(parser, TK_RANGE)) {
         // Range pattern: 1..10
@@ -50,17 +50,17 @@ static AstNode *parse_pattern(Parser *parser) {
         }
         return xr_ast_pattern_range(parser->X, first, end, line);
     }
-    
+
     // Check if multi-value pattern
     if (xr_parser_check(parser, TK_COMMA)) {
         // Multi-value pattern: 1, 2, 3
         AstNode **patterns = (AstNode **)xr_malloc(sizeof(AstNode *) * 16);
         int count = 0;
         int capacity = 16;
-        
+
         // First pattern
         patterns[count++] = xr_ast_pattern_literal(parser->X, first, line);
-        
+
         // Subsequent patterns
         while (xr_parser_match(parser, TK_COMMA) && !xr_parser_check(parser, TK_ARROW)) {
             if (count >= capacity) {
@@ -70,7 +70,7 @@ static AstNode *parse_pattern(Parser *parser) {
                 patterns = _new_patterns;
 
             }
-            
+
             AstNode *value = xr_parse_precedence(parser, PREC_CALL);
             if (!value) {
                 xr_parser_error(parser, "expected pattern value");
@@ -78,10 +78,10 @@ static AstNode *parse_pattern(Parser *parser) {
             }
             patterns[count++] = xr_ast_pattern_literal(parser->X, value, line);
         }
-        
+
         return xr_ast_pattern_multi(parser->X, patterns, count, line);
     }
-    
+
     // Single literal pattern
     return xr_ast_pattern_literal(parser->X, first, line);
 }
@@ -95,33 +95,33 @@ static AstNode *parse_pattern(Parser *parser) {
 static AstNode *parse_match_arm(Parser *parser) {
     XR_DCHECK(parser != NULL, "parse_match_arm: NULL parser");
     int line = parser->current.line;
-    
+
     // Parse pattern
     AstNode *pattern = parse_pattern(parser);
     if (!pattern) {
         return NULL;
     }
-    
+
     // Optional guard condition: if (expr)
     AstNode *guard = NULL;
     if (xr_parser_match(parser, TK_IF)) {
         // Consume left paren
         xr_parser_consume(parser, TK_LPAREN, "expected '(' after if");
-        
+
         // Parse guard condition expression
         guard = xr_parse_expression(parser);
         if (!guard) {
             xr_parser_error(parser, "expected guard condition expression");
             return NULL;
         }
-        
+
         // Consume right paren
         xr_parser_consume(parser, TK_RPAREN, "expected ')' after guard condition");
     }
-    
+
     // Consume arrow
     xr_parser_consume(parser, TK_ARROW, "expected '=>' after pattern");
-    
+
     // Parse arm body
     AstNode *body = NULL;
     if (xr_parser_match(parser, TK_LBRACE)) {
@@ -131,12 +131,12 @@ static AstNode *parse_match_arm(Parser *parser) {
         // Single expression
         body = xr_parse_expression(parser);
     }
-    
+
     if (!body) {
         xr_parser_error(parser, "expected expression or code block");
         return NULL;
     }
-    
+
     return xr_ast_match_arm(parser->X, pattern, guard, body, line);
 }
 
@@ -151,22 +151,22 @@ static AstNode *parse_match_arm(Parser *parser) {
 AstNode *xr_parse_match_expr(Parser *parser) {
     XR_DCHECK(parser != NULL, "parse_match_expr: NULL parser");
     int line = parser->previous.line;  // match keyword already consumed
-    
+
     // Parse match expression
     AstNode *expr = xr_parse_expression(parser);
     if (!expr) {
         xr_parser_error(parser, "expected match expression");
         return NULL;
     }
-    
+
     // Consume '{'
     xr_parser_consume(parser, TK_LBRACE, "expected '{' after match expression");
-    
+
     // Parse all arms
     AstNode **arms = (AstNode **)xr_malloc(sizeof(AstNode *) * 16);
     int arm_count = 0;
     int capacity = 16;
-    
+
     while (!xr_parser_check(parser, TK_RBRACE) && !xr_parser_check(parser, TK_EOF)) {
         // Expand capacity
         if (arm_count >= capacity) {
@@ -176,12 +176,12 @@ AstNode *xr_parse_match_expr(Parser *parser) {
             arms = _new_arms;
 
         }
-        
+
         // Parse one arm
         AstNode *arm = parse_match_arm(parser);
         if (!arm) {
             // Error recovery: skip to next arm or }
-            while (!xr_parser_check(parser, TK_COMMA) && 
+            while (!xr_parser_check(parser, TK_COMMA) &&
                    !xr_parser_check(parser, TK_RBRACE) &&
                    !xr_parser_check(parser, TK_EOF)) {
                 xr_parser_advance(parser);
@@ -191,24 +191,29 @@ AstNode *xr_parse_match_expr(Parser *parser) {
             }
             continue;
         }
-        
+
         arms[arm_count++] = arm;
-        
+
         // Optional comma
         if (xr_parser_check(parser, TK_COMMA)) {
             xr_parser_advance(parser);
         }
     }
-    
+
     // Consume '}'
     xr_parser_consume(parser, TK_RBRACE, "expected '}' at end of match expression");
-    
+    int match_end_line   = parser->previous.line;
+    int match_end_column = parser->previous.column + 1;
+
     // Check if at least one arm
     if (arm_count == 0) {
         xr_parser_error(parser, "match expression requires at least one arm");
         xr_free(arms);
         return NULL;
     }
-    
-    return xr_ast_match_expr(parser->X, expr, arms, arm_count, line);
+
+    AstNode *node = xr_ast_match_expr(parser->X, expr, arms, arm_count, line);
+    node->end_line   = match_end_line;
+    node->end_column = match_end_column;
+    return node;
 }

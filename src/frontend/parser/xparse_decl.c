@@ -367,7 +367,9 @@ AstNode *xr_parse_function_declaration(Parser *parser) {
 
     AstNode *func_decl = xr_ast_function_decl(parser->X, func_name,
                                               params, param_count, body, line);
-    func_decl->column = name_column;
+    func_decl->column     = name_column;
+    func_decl->end_line   = body->end_line;
+    func_decl->end_column = body->end_column;
 
     func_decl->as.function_decl.return_type = return_type;
     func_decl->as.function_decl.required_count = required_count;
@@ -1350,6 +1352,13 @@ AstNode *xr_parse_declaration(Parser *parser) {
 
                 AstNode *decl = xr_ast_var_decl(parser->X, first_name, initializer, false, saved_line);
                 decl->column = saved_column;
+                if (initializer && initializer->end_line > 0) {
+                    decl->end_line   = initializer->end_line;
+                    decl->end_column = initializer->end_column;
+                } else {
+                    decl->end_line   = saved_line;
+                    decl->end_column = saved_column + (int)strlen(first_name);
+                }
                 decl->as.var_decl.type_annotation = var_type;  // Set type annotation
                 xr_free(first_name);
                 return decl;
@@ -1413,8 +1422,9 @@ AstNode *xr_parse_declaration(Parser *parser) {
         char *name = (char*)xr_malloc(parser->previous.length + 1);
         memcpy(name, parser->previous.start, parser->previous.length);
         name[parser->previous.length] = '\0';
-        int line = parser->previous.line;
+        int line   = parser->previous.line;
         int column = parser->previous.column;
+        int name_length = parser->previous.length;
 
         // Parse optional type annotation (: Type)
         XrType *type_annotation = NULL;
@@ -1429,6 +1439,13 @@ AstNode *xr_parse_declaration(Parser *parser) {
         AstNode *decl = xr_ast_var_decl_with_mode(parser->X, name, initializer,
                                                    is_const, XR_STORAGE_SHARED, line);
         decl->column = column;
+        if (initializer && initializer->end_line > 0) {
+            decl->end_line   = initializer->end_line;
+            decl->end_column = initializer->end_column;
+        } else {
+            decl->end_line   = line;
+            decl->end_column = column + name_length;
+        }
         decl->as.var_decl.type_annotation = type_annotation;
         xr_free(name);
         return decl;
@@ -1507,6 +1524,13 @@ AstNode *xr_parse_try_statement(Parser *parser) {
     // xr_ast_try_catch deep-copies catch_var via ast_strdup.
     AstNode *node = xr_ast_try_catch(parser->X, try_body, catch_var, catch_var_line, catch_var_column,
                                      catch_body, finally_body, line);
+    // Span ends at the last block present (finally > catch > try).
+    AstNode *last_block = finally_body ? finally_body
+                        : (catch_body ? catch_body : try_body);
+    if (last_block) {
+        node->end_line   = last_block->end_line;
+        node->end_column = last_block->end_column;
+    }
     xr_free((char *)catch_var);
     return node;
 }

@@ -516,7 +516,12 @@ static AstNode *parse_scope_body(Parser *parser, uint8_t scope_mode) {
     // Parse block content
     AstNode *body = xr_parse_block(parser);
 
-    return xr_ast_scope_block(parser->X, body, scope_mode, line);
+    AstNode *node = xr_ast_scope_block(parser->X, body, scope_mode, line);
+    if (body) {
+        node->end_line   = body->end_line;
+        node->end_column = body->end_column;
+    }
+    return node;
 }
 
 AstNode *xr_parse_scope_block(Parser *parser) {

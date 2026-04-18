@@ -691,11 +691,23 @@ typedef struct CancelledExprNode {
     int placeholder;
 } CancelledExprNode;
 
-// AST node common structure
+// AST node common structure.
+//
+// Source location contract (all 1-indexed; 0 means "not set"):
+//   (line, column)         — node start. For declaration nodes this is the
+//                            identifier's position, not the keyword, so the
+//                            LSP can use it directly as selectionRange.
+//   (end_line, end_column) — exclusive end of the node. For block-bodied
+//                            declarations this is the position just past the
+//                            closing brace. Parsers are responsible for
+//                            filling these; LSP treats 0 as a hard error
+//                            (caught by XR_DCHECK in release-asserts builds).
 struct AstNode {
     AstNodeType type;
     int line;
     int column;                   // 1-indexed column number (for LSP)
+    int end_line;                 // 1-indexed end line, 0 = unset
+    int end_column;               // 1-indexed exclusive end column, 0 = unset
     struct XrType *compile_type;  // Unified type system (XrType)
     XrTrivia *leading_comments;   // Comments before this node (for formatter)
 
