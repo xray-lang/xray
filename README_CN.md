@@ -1,3 +1,5 @@
+[English](README.md) | [**中文**](README_CN.md)
+
 # Xray
 
 静态类型脚本语言，内建原生并发，用 C 实现。
