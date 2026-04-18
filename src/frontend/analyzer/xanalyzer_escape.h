@@ -5,21 +5,24 @@
  * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
  * Licensed under the MIT License
  *
- * xanalyzer_escape.h - Escape analysis pass
+ * xanalyzer_escape.h - Coroutine sharing validation pass
  *
  * KEY CONCEPT:
- *   Validates coroutine sharing rules and sets VarDeclNode.is_escaped
- *   for legitimate `move` uses on `shared let` variables. Under the
- *   explicit-sharing model, implicit auto-promotion is REJECTED:
- *   variables captured by go closures or moved across coroutine
- *   boundaries must be declared `shared` by the user.
+ *   Validates the explicit-sharing model for coroutine boundaries.
+ *   This pass is purely diagnostic: it emits compile errors for
+ *   disallowed patterns and does not mutate the AST.
  *
- * WHY THIS DESIGN:
- *   - No implicit allocation-site changes: what you write is what you get
- *   - Violations produce compile errors (not silent upgrades)
- *   - Function-local analysis only (no cross-function inference)
- *   - `move` with a plain `let` is rejected (must be `shared let`)
- *   - Non-shared captured variable in go closure is rejected
+ * RULES ENFORCED:
+ *   - Plain `let x` captured by a go closure           -> ERROR
+ *     (must be passed via argument or declared `shared const`)
+ *   - Mutable `shared let x` captured by a go closure  -> ERROR
+ *     (only `shared const` may be captured; `shared let` is move-only)
+ *   - `move x` where `x` is a plain `let`              -> ERROR
+ *     (move requires `shared let`)
+ *   - `move x` where `x` is `const` / `shared const`   -> handled by
+ *     xa_visit_move_expr in the type checker
+ *
+ * Function-local analysis only (no cross-function inference).
  */
 
 #ifndef XANALYZER_ESCAPE_H

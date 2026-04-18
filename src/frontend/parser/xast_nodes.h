@@ -58,20 +58,20 @@ typedef struct XrAttribute {
 // Destructuring pattern structure (flat only, no nesting)
 typedef struct XrDestructurePattern {
     PatternType type;
-    
+
     union {
         struct {
             struct XrDestructurePattern **elements;
             int element_count;
         } array;
-        
+
         struct {
             char **field_names;
             struct XrDestructurePattern **patterns;
             int field_count;
             bool use_shorthand;
         } object;
-        
+
         struct {
             char *name;
             XrType *type;
@@ -113,7 +113,6 @@ typedef struct VarDeclNode {
     AstNode *initializer;
     bool is_const;
     uint8_t storage_mode;       // 0=normal, 1=shared
-    bool is_escaped;            // set by escape analysis: auto-promote to shared
     XrType *type_annotation;
 } VarDeclNode;
 
@@ -557,7 +556,7 @@ typedef struct ExportStmtNode {
     char *export_name;          // Single export name (declaration style)
     char **export_names;        // Export name list (list style: export a, b)
     int export_count;           // Export count
-    
+
     // Re-export support
     char *from_path;            // Source module path (e.g. "./user")
     ReexportMember *reexport_members;   // Re-export member list
@@ -699,7 +698,7 @@ struct AstNode {
     int column;                   // 1-indexed column number (for LSP)
     struct XrType *compile_type;  // Unified type system (XrType)
     XrTrivia *leading_comments;   // Comments before this node (for formatter)
-    
+
     union {
         LiteralNode literal;
         BinaryNode binary;
