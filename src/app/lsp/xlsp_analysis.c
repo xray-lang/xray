@@ -30,6 +30,7 @@
 
 // Static analyzer
 #include "../../frontend/analyzer/xanalyzer.h"
+#include "../../frontend/analyzer/xanalyzer_escape.h"
 #include "../../runtime/value/xtype.h"
 
 // AST formatter
@@ -371,6 +372,37 @@ void xlsp_parse_document(XrLspDocument *doc, XrLspServer *server) {
         xa_analyzer_update_incremental(server->workspace_analyzer, doc->uri,
                                         (XrAstNode*)ast, doc->content_hash);
         lsp_log("parse_document: incremental update done");
+
+        // Run coroutine sharing validation (emits E0363 diagnostics for
+        // illegal `go` captures and `move` targets under the explicit
+        // sharing model). The pass is pure diagnostic, no AST mutation.
+        xa_escape_analyze((AstNode*)ast, server->workspace_analyzer);
+
+        // Drain analyzer diagnostics into this file's diagnostic array.
+        // The analyzer's list is cleared at the next update_incremental,
+        // so we must capture them now.
+        int a_count = 0;
+        XaDiagnostic *a_list = xa_analyzer_get_diagnostics(
+            server->workspace_analyzer, &a_count);
+        for (XaDiagnostic *d = a_list; d; d = d->next) {
+            if (!d->message || d->code == 0) continue;
+            // Only include diagnostics for this file (analyzer is shared
+            // across the workspace). Location.file may be NULL if the
+            // analyzer did not tag it; in that case, assume current file.
+            if (d->location.file && doc->uri &&
+                strcmp(d->location.file, doc->uri) != 0) {
+                continue;
+            }
+            int line = d->location.line > 0 ? d->location.line - 1 : 0;
+            int col = d->location.column > 0 ? d->location.column - 1 : 0;
+            // LSP severity: 1=Error, 2=Warning, 3=Info, 4=Hint
+            int sev = (d->severity == XR_DIAG_SEV_WARNING) ? 2 :
+                      (d->severity == XR_DIAG_SEV_INFO)    ? 3 :
+                      (d->severity == XR_DIAG_SEV_HINT)    ? 4 : 1;
+            XrJsonValue *diag = make_diagnostic(line, col, line, col + 1,
+                                                sev, d->message);
+            xlsp_json_array_push(error_ctx.diagnostics, diag);
+        }
 
         // Check for cross-file dependencies that need re-analysis
         int dirty_count = 0;
