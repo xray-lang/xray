@@ -81,13 +81,13 @@ struct Parser {
     struct XrArena *arena;  // Optional arena for AST allocation (NULL = use malloc)
     XaScope *type_scope;    // Scope for type aliases (uses XA_SYM_TYPE_ALIAS)
     const char *source_file; // Source file path (for error reporting)
-    
+
     // Error callback (for LSP)
     XrParseErrorCallback error_callback;
     void *error_callback_data;
     int error_count;        // Number of errors collected
     int max_errors;         // Max errors before stopping (0 = unlimited)
-    
+
     // Allow bare container types (Array, Map, Set, Channel) without generic params.
     // Set temporarily by 'is'/'as' parsers where runtime type checks don't need
     // element type info.
@@ -114,7 +114,7 @@ XR_FUNC AstNode *xr_parse_with_trivia(XrayIsolate *X, const char *source, const 
 // source: source code string
 // source_file: source file path (for error reporting, can be NULL)
 // arena: optional arena for AST allocation (NULL = use malloc)
-XR_FUNC void xr_parser_init(Parser *parser, XrayIsolate *X, const char *source, 
+XR_FUNC void xr_parser_init(Parser *parser, XrayIsolate *X, const char *source,
                     const char *source_file, struct XrArena *arena);
 
 // Set error callback for LSP integration
@@ -265,10 +265,13 @@ XR_FUNC AstNode *xr_parse_field_declaration(Parser *parser, bool *is_method_out)
 // Parse method declaration
 // greet() { ... } or constructor(name) { ... }
 //
-// @param name method name
+// @param name         method name (already parsed)
+// @param name_line    1-indexed line of the identifier token
+// @param name_column  1-indexed column of the identifier token
 // @param is_private whether private
 // @param is_static whether static
-XR_FUNC AstNode *xr_parse_method_declaration(Parser *parser, const char *name, 
+XR_FUNC AstNode *xr_parse_method_declaration(Parser *parser, const char *name,
+                                     int name_line, int name_column,
                                      bool is_private, bool is_static, bool is_abstract);
 
 // Parse operator method declaration

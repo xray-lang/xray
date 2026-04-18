@@ -1425,8 +1425,9 @@ AstNode *xr_parse_single_var_declaration(Parser *parser, int is_const) {
     char *name = (char *)xr_malloc(parser->previous.length + 1);
     memcpy(name, parser->previous.start, parser->previous.length);
     name[parser->previous.length] = '\0';
-    int line = parser->previous.line;
+    int line   = parser->previous.line;
     int column = parser->previous.column;
+    int name_length = parser->previous.length;
 
     XrType *type_annotation = NULL;
     AstNode *initializer = NULL;
@@ -1446,6 +1447,14 @@ AstNode *xr_parse_single_var_declaration(Parser *parser, int is_const) {
     // let variables can be uninitialized
     AstNode *node = xr_ast_var_decl(parser->X, name, initializer, is_const, line);
     node->column = column;
+    // End span extends to the initializer when present; otherwise just the name.
+    if (initializer && initializer->end_line > 0) {
+        node->end_line   = initializer->end_line;
+        node->end_column = initializer->end_column;
+    } else {
+        node->end_line   = line;
+        node->end_column = column + name_length;
+    }
     node->as.var_decl.type_annotation = type_annotation;
     xr_free(name);
     return node;
@@ -1503,6 +1512,12 @@ AstNode *xr_parse_block(Parser *parser) {
     }
 
     xr_parser_consume(parser, TK_RBRACE, "expected '}' to close block");
+
+    // Record closing `}` location (exclusive end). `parser->previous` now
+    // points to the consumed `}`; its column is 1-indexed, so the exclusive
+    // end column is column + 1.
+    block->end_line   = parser->previous.line;
+    block->end_column = parser->previous.column + 1;
 
     return block;
 }

@@ -20,10 +20,6 @@
 
 typedef struct AstNode AstNode;
 
-// Find the last line of an AST node recursively
-// Handles: block, function, class, method, if, while, for, try/catch, match
-XR_FUNC int xlsp_get_node_end_line(AstNode *node);
-
 // Check if character is valid in an identifier
 static inline bool xlsp_is_ident_char(char c) {
     return c == '_' ||

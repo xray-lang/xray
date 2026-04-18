@@ -245,6 +245,8 @@ AstNode *xr_parse_class_declaration(Parser *parser) {
     }
 
     xr_parser_consume(parser, TK_RBRACE, "expected '}' to end class body");
+    int end_line   = parser->previous.line;
+    int end_column = parser->previous.column + 1;  // exclusive, past '}'
 
     // Restore type_scope after parsing class body
     if (type_param_count > 0) {
@@ -255,7 +257,9 @@ AstNode *xr_parse_class_declaration(Parser *parser) {
     AstNode *class_node = xr_ast_class_decl(parser->X, class_name, super_name,
                                              fields, field_count,
                                              methods, method_count, line);
-    class_node->column = name_column;
+    class_node->column     = name_column;
+    class_node->end_line   = end_line;
+    class_node->end_column = end_column;
 
     // Set superclass module (supports extends module.Class syntax)
     class_node->as.class_decl.super_module = super_module;
@@ -443,6 +447,8 @@ AstNode *xr_parse_struct_declaration(Parser *parser) {
     }
 
     xr_parser_consume(parser, TK_RBRACE, "expected '}' to end struct body");
+    int struct_end_line   = parser->previous.line;
+    int struct_end_column = parser->previous.column + 1;
 
     // Restore type_scope after parsing struct body
     if (type_param_count > 0) {
@@ -453,7 +459,9 @@ AstNode *xr_parse_struct_declaration(Parser *parser) {
     AstNode *struct_node = xr_ast_struct_decl(parser->X, struct_name,
                                               fields, field_count,
                                               methods, method_count, line);
-    struct_node->column = name_column;
+    struct_node->column     = name_column;
+    struct_node->end_line   = struct_end_line;
+    struct_node->end_column = struct_end_column;
     struct_node->as.struct_decl.interfaces = interfaces;
     struct_node->as.struct_decl.interface_count = interface_count;
     struct_node->as.struct_decl.type_params = type_params;
@@ -523,22 +531,34 @@ AstNode *xr_parse_field_declaration(Parser *parser, bool *is_method_out) {
     char *name = NULL;
     bool is_constructor = false;
 
+    int name_line = 0;
+    int name_column = 0;
+    int name_length = 0;
+
     if (xr_parser_match(parser, TK_CONSTRUCTOR)) {
         // 'constructor' keyword
         is_constructor = true;
         name = (char*)xr_malloc(sizeof(XR_KEYWORD_CONSTRUCTOR));
         strcpy(name, XR_KEYWORD_CONSTRUCTOR);
+        name_line   = parser->previous.line;
+        name_column = parser->previous.column;
+        name_length = (int)(sizeof(XR_KEYWORD_CONSTRUCTOR) - 1);
     } else {
         // Normal name
         xr_parser_consume(parser, TK_NAME, "expected field or method name");
         name = token_to_string(&parser->previous);
+        name_line   = parser->previous.line;
+        name_column = parser->previous.column;
+        name_length = parser->previous.length;
     }
 
     // Distinguish field and method: check for '(' or '<' (generic) or override modifier
     if (xr_parser_check(parser, TK_LPAREN) || xr_parser_check(parser, TK_LT) || is_constructor || is_override) {
         // Method: has parameter list or generic type params or override modifier
         *is_method_out = true;
-        AstNode *method = xr_parse_method_declaration(parser, name, is_private, is_static, is_abstract);
+        AstNode *method = xr_parse_method_declaration(parser, name,
+                                                      name_line, name_column,
+                                                      is_private, is_static, is_abstract);
         if (method) method->as.method_decl.is_final = is_final;
         return method;
     } else {
@@ -574,8 +594,19 @@ AstNode *xr_parse_field_declaration(Parser *parser, bool *is_method_out) {
 
         AstNode *field = xr_ast_field_decl(parser->X, name, field_type,
                                 is_private, is_static,
-                                initializer, line);
-        if (field) field->as.field_decl.is_final = is_final;
+                                initializer, name_line);
+        if (field) {
+            field->as.field_decl.is_final = is_final;
+            field->column = name_column;
+            // End span: to end of initializer if present, else just the name.
+            if (initializer && initializer->end_line > 0) {
+                field->end_line   = initializer->end_line;
+                field->end_column = initializer->end_column;
+            } else {
+                field->end_line   = name_line;
+                field->end_column = name_column + name_length;
+            }
+        }
         return field;
     }
 }
@@ -586,13 +617,16 @@ AstNode *xr_parse_field_declaration(Parser *parser, bool *is_method_out) {
 // Syntax:
 //   greet(name: string): void { ... }
 //   constructor(x: int, y: int) { ... }
-// @param name method name (already parsed)
+// @param name method name (already parsed by caller)
+// @param name_line  1-indexed line of the identifier token
+// @param name_column 1-indexed column of the identifier token
 // @param is_private whether private
 // @param is_static whether static
 AstNode *xr_parse_method_declaration(Parser *parser, const char *name,
+                                     int name_line, int name_column,
                                      bool is_private, bool is_static, bool is_abstract) {
     XR_DCHECK(parser != NULL, "parse_method_declaration: NULL parser");
-    int line = parser->previous.line;
+    int line = name_line;
 
     // Check if this is a constructor
     bool is_constructor = (strcmp(name, XR_KEYWORD_CONSTRUCTOR) == 0);
@@ -692,6 +726,17 @@ AstNode *xr_parse_method_declaration(Parser *parser, const char *name,
                               return_type, body,
                               is_constructor, is_static, is_private,
                               false, false, line);          // is_getter, is_setter
+
+    method_node->column = name_column;
+    if (body && body->end_line > 0) {
+        // Normal method: end is body's closing brace.
+        method_node->end_line   = body->end_line;
+        method_node->end_column = body->end_column;
+    } else {
+        // Abstract method: no body — span is the identifier token.
+        method_node->end_line   = name_line;
+        method_node->end_column = name_column + (int)strlen(name);
+    }
 
     // Set whether this is an abstract method
     method_node->as.method_decl.is_abstract = is_abstract;
@@ -906,6 +951,10 @@ AstNode *xr_parse_super_expression(Parser *parser) {
 AstNode *xr_parse_operator_method(Parser *parser, bool is_private, bool is_static) {
     XR_DCHECK(parser != NULL, "parse_operator_method: NULL parser");
     int line = parser->previous.line;
+
+    // Capture operator-token position for later LSP ranges.
+    int name_line   = parser->current.line;
+    int name_column = parser->current.column;
 
     // Parse operator symbol
     TokenType op_token = parser->current.type;
@@ -1205,6 +1254,15 @@ AstNode *xr_parse_operator_method(Parser *parser, bool is_private, bool is_stati
                                         false,  // is_setter
                                         line);
 
+    method->column = name_column;
+    if (body && body->end_line > 0) {
+        method->end_line   = body->end_line;
+        method->end_column = body->end_column;
+    } else {
+        method->end_line   = name_line;
+        method->end_column = name_column + (int)strlen(name);
+    }
+
     // Set operator flags
     method->as.method_decl.is_operator = true;  // mark as operator method
     method->as.method_decl.op_type = op_type_val;  // set specific operator type
@@ -1311,6 +1369,16 @@ static AstNode *xr_parse_property_accessors(Parser *parser, const char *name,
                                                    false, is_static, is_private,
                                                    is_getter, !is_getter, line);
 
+        method_node->column     = 1;  // property accessors are synthetic — column
+                                      //   mirrors the declaration line (safe 1)
+        if (body && body->end_line > 0) {
+            method_node->end_line   = body->end_line;
+            method_node->end_column = body->end_column;
+        } else {
+            method_node->end_line   = line;
+            method_node->end_column = 1 + (int)strlen(method_name);
+        }
+
         if (is_getter) {
             if (getter_node != NULL) {
                 xr_parser_error(parser, "property can only have one getter (fn with no params)");
@@ -1363,6 +1431,7 @@ AstNode *xr_parse_interface_declaration(Parser *parser) {
     // Parse interface name
     xr_parser_consume(parser, TK_NAME, "expected interface name");
     char *interface_name = token_to_string(&parser->previous);
+    int name_column = parser->previous.column;
 
     // Parse extends clause (optional, interface can extend multiple interfaces)
     char **extends = NULL;
@@ -1409,11 +1478,17 @@ AstNode *xr_parse_interface_declaration(Parser *parser) {
     }
 
     xr_parser_consume(parser, TK_RBRACE, "expected '}' to end interface body");
+    int if_end_line   = parser->previous.line;
+    int if_end_column = parser->previous.column + 1;
 
     // Create interface declaration AST node
-    return xr_ast_interface_decl(parser->X, interface_name,
-                                 extends, extends_count,
-                                 methods, method_count, line);
+    AstNode *node = xr_ast_interface_decl(parser->X, interface_name,
+                                          extends, extends_count,
+                                          methods, method_count, line);
+    node->column     = name_column;
+    node->end_line   = if_end_line;
+    node->end_column = if_end_column;
+    return node;
 }
 
 // Parse interface method signature
@@ -1531,6 +1606,7 @@ AstNode *xr_parse_enum_declaration(Parser *parser) {
     // Parse enum name
     xr_parser_consume(parser, TK_NAME, "expected enum name");
     char *enum_name = token_to_string(&parser->previous);
+    int name_column = parser->previous.column;
 
     // Parse type hint (optional): int, string, float, bool
     char *type_hint = NULL;
@@ -1594,7 +1670,10 @@ AstNode *xr_parse_enum_declaration(Parser *parser) {
 
         // Parse member name
         xr_parser_consume(parser, TK_NAME, "expected enum member name");
-        char *member_name = token_to_string(&parser->previous);
+        char *member_name  = token_to_string(&parser->previous);
+        int   member_line  = parser->previous.line;
+        int   member_col   = parser->previous.column;
+        int   member_name_len = parser->previous.length;
 
         // Parse member value (optional)
         AstNode *member_value = NULL;
@@ -1603,9 +1682,19 @@ AstNode *xr_parse_enum_declaration(Parser *parser) {
             member_value = xr_parse_expression(parser);
         }
 
-        // Create enum member node (xr_ast_enum_member deep-copies member_name)
+        // Create enum member node (xr_ast_enum_member deep-copies member_name).
+        // Source span: identifier only (cheap and always valid; extends to the
+        // value expression when present).
         AstNode *member = xr_ast_enum_member(parser->X, member_name,
-                                             member_value, parser->previous.line);
+                                             member_value, member_line);
+        member->column     = member_col;
+        if (member_value && member_value->end_line > 0) {
+            member->end_line   = member_value->end_line;
+            member->end_column = member_value->end_column;
+        } else {
+            member->end_line   = member_line;
+            member->end_column = member_col + member_name_len;
+        }
         xr_free(member_name);
 
         XR_PARSE_PUSH(members, member_count, member_capacity, member);
@@ -1624,11 +1713,16 @@ AstNode *xr_parse_enum_declaration(Parser *parser) {
     }
 
     xr_parser_consume(parser, TK_RBRACE, "expected '}' to end enum body");
+    int enum_end_line   = parser->previous.line;
+    int enum_end_column = parser->previous.column + 1;
 
     // Create enum declaration AST node (xr_ast_enum_decl deep-copies both
     // enum_name and type_hint, and copies the members array contents).
     AstNode *node = xr_ast_enum_decl(parser->X, enum_name, type_hint,
                                      members, member_count, line);
+    node->column     = name_column;
+    node->end_line   = enum_end_line;
+    node->end_column = enum_end_column;
     xr_free(enum_name);
     xr_free(type_hint);
     xr_free(members);
@@ -1645,6 +1739,7 @@ AstNode *xr_parse_enum_declaration(Parser *parser) {
 // @param is_private whether private (usually not allowed for static constructor, but parameter kept)
 AstNode *xr_parse_static_constructor(Parser *parser, bool is_private) {
     int line = parser->previous.line;
+    int name_column = parser->previous.column;  // column of 'constructor' keyword
 
     // Static constructor cannot have parameters
     xr_parser_consume(parser, TK_LPAREN, "expected '('");
@@ -1684,6 +1779,15 @@ AstNode *xr_parse_static_constructor(Parser *parser, bool is_private) {
                               true,   // is static
                               is_private,
                               false, false, line);
+
+    method_node->column = name_column;
+    if (body && body->end_line > 0) {
+        method_node->end_line   = body->end_line;
+        method_node->end_column = body->end_column;
+    } else {
+        method_node->end_line   = line;
+        method_node->end_column = name_column + (int)strlen("<clinit>");
+    }
 
     // Mark as static constructor
     method_node->as.method_decl.is_static_constructor = true;

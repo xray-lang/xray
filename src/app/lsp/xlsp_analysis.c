@@ -914,24 +914,90 @@ static void extract_symbols(XrLspDocument *doc, SymbolTable *table) {
     }
 }
 
-// xlsp_get_node_end_line() now in xlsp_ast_utils.c
-
-// Helper: create a DocumentSymbol JSON object
+// Create a DocumentSymbol JSON object.
+//
+// `full_range` must fully contain `selection_range` — this is enforced by the
+// LSP spec and validated by VS Code. Both ranges come directly from AST
+// location fields (line, column, end_line, end_column) so there is no guessing
+// or clamping here: the AST is the single source of truth.
 static XrJsonValue *create_doc_symbol(const char *name, int kind,
-                                       int line, int col, int end_line, int end_col) {
+                                       XrLspRange full_range,
+                                       XrLspRange selection_range) {
+    XR_DCHECK(name != NULL, "create_doc_symbol: NULL name");
+
     XrJsonValue *symbol = xlsp_json_new_object();
     xlsp_json_object_set(symbol, "name", xlsp_json_new_string(name));
     xlsp_json_object_set(symbol, "kind", xlsp_json_new_number(kind));
-
     xlsp_json_object_set(symbol, "range",
-        xlsp_json_make_range(line, col, end_line, end_col));
+        xlsp_json_make_range(full_range.start.line, full_range.start.character,
+                             full_range.end.line,   full_range.end.character));
     xlsp_json_object_set(symbol, "selectionRange",
-        xlsp_json_make_range(line, col, line, col + (int)strlen(name)));
-
+        xlsp_json_make_range(selection_range.start.line, selection_range.start.character,
+                             selection_range.end.line,   selection_range.end.character));
     return symbol;
 }
 
-// Build nested document symbols from AST
+// Compute the two ranges expected by DocumentSymbol from an AST declaring
+// node. AST contract:
+//   (node->line, node->column)            — identifier start (1-indexed)
+//   (node->end_line, node->end_column)    — declaration end, exclusive
+//                                            (1-indexed; `.end_column` points
+//                                             to one past the closing token)
+//
+// Converts to LSP's 0-indexed coordinates.
+//
+// Preconditions (checked by parser): node->line >= 1, node->column >= 1,
+// node->end_line >= node->line, and when end_line == line:
+// end_column >= column + strlen(name).
+static void ast_decl_ranges(const AstNode *node, const char *name,
+                            XrLspRange *full_range,
+                            XrLspRange *selection_range) {
+    XR_DCHECK(node != NULL && name != NULL, "ast_decl_ranges: NULL arg");
+    XR_DCHECK(node->line >= 1 && node->column >= 1,
+              "ast_decl_ranges: node missing identifier location");
+    XR_DCHECK(node->end_line >= node->line,
+              "ast_decl_ranges: end_line precedes start line");
+
+    int start_line = node->line - 1;
+    int start_col  = node->column - 1;
+    int name_len   = (int)strlen(name);
+
+    selection_range->start.line      = start_line;
+    selection_range->start.character = start_col;
+    selection_range->end.line        = start_line;
+    selection_range->end.character   = start_col + name_len;
+
+    full_range->start.line      = start_line;
+    full_range->start.character = start_col;
+    full_range->end.line        = node->end_line - 1;
+    full_range->end.character   = (node->end_column > 0) ? node->end_column - 1 : 0;
+
+    XR_DCHECK(
+        full_range->end.line > full_range->start.line ||
+        (full_range->end.line == full_range->start.line &&
+         full_range->end.character >= selection_range->end.character),
+        "ast_decl_ranges: selectionRange not contained in fullRange");
+}
+
+// Emit a DocumentSymbol for a declaring node. Returns NULL if the node has
+// incomplete source-location information (in which case the symbol is quietly
+// dropped — we would rather hide one bad entry than reject the whole
+// response).
+static XrJsonValue *emit_decl_symbol(const AstNode *node, const char *name, int kind) {
+    if (!node || !name || node->line < 1 || node->column < 1 || node->end_line < 1) {
+        return NULL;
+    }
+    XrLspRange full_range, selection_range;
+    ast_decl_ranges(node, name, &full_range, &selection_range);
+    return create_doc_symbol(name, kind, full_range, selection_range);
+}
+
+// Build nested document symbols from AST.
+//
+// Every decl node is expected to carry an accurate (line, column,
+// end_line, end_column) span recorded by the parser — see the contract on
+// `AstNode`. This function is therefore pure projection: no heuristics, no
+// range guessing.
 static void build_nested_symbols(AstNode *node, XrJsonValue *symbols) {
     if (!node) return;
 
@@ -942,126 +1008,96 @@ static void build_nested_symbols(AstNode *node, XrJsonValue *symbols) {
             }
             break;
 
-        case AST_FUNCTION_DECL:
-            if (node->as.function_decl.name) {
-                int end_line = xlsp_get_node_end_line(node) - 1;
-                XrJsonValue *sym = create_doc_symbol(
-                    node->as.function_decl.name, LSP_SYMBOL_FUNCTION,
-                    node->line - 1, 0, end_line, 0);
-                xlsp_json_array_push(symbols, sym);
-            }
+        case AST_FUNCTION_DECL: {
+            XrJsonValue *sym = emit_decl_symbol(node,
+                node->as.function_decl.name, LSP_SYMBOL_FUNCTION);
+            if (sym) xlsp_json_array_push(symbols, sym);
             break;
+        }
 
-        case AST_VAR_DECL:
-            if (node->as.var_decl.name) {
-                int kind = node->as.var_decl.is_const ?
-                          LSP_SYMBOL_CONSTANT : LSP_SYMBOL_VARIABLE;
-                XrJsonValue *sym = create_doc_symbol(
-                    node->as.var_decl.name, kind,
-                    node->line - 1, 0, node->line - 1,
-                    (int)strlen(node->as.var_decl.name));
-                xlsp_json_array_push(symbols, sym);
-            }
+        case AST_VAR_DECL: {
+            int kind = node->as.var_decl.is_const
+                     ? LSP_SYMBOL_CONSTANT : LSP_SYMBOL_VARIABLE;
+            XrJsonValue *sym = emit_decl_symbol(node, node->as.var_decl.name, kind);
+            if (sym) xlsp_json_array_push(symbols, sym);
             break;
+        }
 
-        case AST_CONST_DECL:
-            if (node->as.var_decl.name) {
-                XrJsonValue *sym = create_doc_symbol(
-                    node->as.var_decl.name, LSP_SYMBOL_CONSTANT,
-                    node->line - 1, 0, node->line - 1,
-                    (int)strlen(node->as.var_decl.name));
-                xlsp_json_array_push(symbols, sym);
-            }
+        case AST_CONST_DECL: {
+            XrJsonValue *sym = emit_decl_symbol(node,
+                node->as.var_decl.name, LSP_SYMBOL_CONSTANT);
+            if (sym) xlsp_json_array_push(symbols, sym);
             break;
+        }
 
         case AST_CLASS_DECL:
-        case AST_STRUCT_DECL:
-            if (node->as.class_decl.name) {
-                int cls_end = xlsp_get_node_end_line(node) - 1;
-                XrJsonValue *sym = create_doc_symbol(
-                    node->as.class_decl.name, LSP_SYMBOL_CLASS,
-                    node->line - 1, 0, cls_end, 0);
+        case AST_STRUCT_DECL: {
+            XrJsonValue *sym = emit_decl_symbol(node,
+                node->as.class_decl.name, LSP_SYMBOL_CLASS);
+            if (!sym) break;
 
-                // Build children array for methods and fields
-                XrJsonValue *children = xlsp_json_new_array();
+            XrJsonValue *children = xlsp_json_new_array();
 
-                // Add fields as children
-                for (int i = 0; i < node->as.class_decl.field_count; i++) {
-                    AstNode *field = node->as.class_decl.fields[i];
-                    if (field && field->type == AST_FIELD_DECL &&
-                        field->as.field_decl.name) {
-                        XrJsonValue *child = create_doc_symbol(
-                            field->as.field_decl.name, LSP_SYMBOL_FIELD,
-                            field->line - 1, 0, field->line - 1,
-                            (int)strlen(field->as.field_decl.name));
-                        xlsp_json_array_push(children, child);
-                    }
+            for (int i = 0; i < node->as.class_decl.field_count; i++) {
+                AstNode *field = node->as.class_decl.fields[i];
+                if (field && field->type == AST_FIELD_DECL) {
+                    XrJsonValue *child = emit_decl_symbol(field,
+                        field->as.field_decl.name, LSP_SYMBOL_FIELD);
+                    if (child) xlsp_json_array_push(children, child);
                 }
-
-                // Add methods as children
-                for (int i = 0; i < node->as.class_decl.method_count; i++) {
-                    AstNode *method = node->as.class_decl.methods[i];
-                    if (method && method->type == AST_METHOD_DECL &&
-                        method->as.method_decl.name) {
-                        int kind = method->as.method_decl.is_constructor ?
-                                  LSP_SYMBOL_CONSTRUCTOR : LSP_SYMBOL_METHOD;
-                        int meth_end = xlsp_get_node_end_line(method) - 1;
-                        XrJsonValue *child = create_doc_symbol(
-                            method->as.method_decl.name, kind,
-                            method->line - 1, 0, meth_end, 0);
-                        xlsp_json_array_push(children, child);
-                    }
-                }
-
-                if (xlsp_json_array_len(children) > 0) {
-                    xlsp_json_object_set(sym, "children", children);
-                } else {
-                    xlsp_json_free(children);
-                }
-                xlsp_json_array_push(symbols, sym);
             }
-            break;
 
-        case AST_INTERFACE_DECL:
-            if (node->as.interface_decl.name) {
-                XrJsonValue *sym = create_doc_symbol(
-                    node->as.interface_decl.name, LSP_SYMBOL_INTERFACE,
-                    node->line - 1, 0, node->line - 1,
-                    (int)strlen(node->as.interface_decl.name));
-                xlsp_json_array_push(symbols, sym);
+            for (int i = 0; i < node->as.class_decl.method_count; i++) {
+                AstNode *method = node->as.class_decl.methods[i];
+                if (method && method->type == AST_METHOD_DECL) {
+                    int kind = method->as.method_decl.is_constructor
+                             ? LSP_SYMBOL_CONSTRUCTOR : LSP_SYMBOL_METHOD;
+                    XrJsonValue *child = emit_decl_symbol(method,
+                        method->as.method_decl.name, kind);
+                    if (child) xlsp_json_array_push(children, child);
+                }
             }
+
+            if (xlsp_json_array_len(children) > 0) {
+                xlsp_json_object_set(sym, "children", children);
+            } else {
+                xlsp_json_free(children);
+            }
+            xlsp_json_array_push(symbols, sym);
             break;
+        }
 
-        case AST_ENUM_DECL:
-            if (node->as.enum_decl.name) {
-                XrJsonValue *sym = create_doc_symbol(
-                    node->as.enum_decl.name, LSP_SYMBOL_ENUM,
-                    node->line - 1, 0, node->line - 1,
-                    (int)strlen(node->as.enum_decl.name));
+        case AST_INTERFACE_DECL: {
+            XrJsonValue *sym = emit_decl_symbol(node,
+                node->as.interface_decl.name, LSP_SYMBOL_INTERFACE);
+            if (sym) xlsp_json_array_push(symbols, sym);
+            break;
+        }
 
-                // Build children array for enum members
+        case AST_ENUM_DECL: {
+            XrJsonValue *sym = emit_decl_symbol(node,
+                node->as.enum_decl.name, LSP_SYMBOL_ENUM);
+            if (!sym) break;
+
+            if (node->as.enum_decl.members) {
                 XrJsonValue *children = xlsp_json_new_array();
-                if (!node->as.enum_decl.members) break;
                 for (int i = 0; i < node->as.enum_decl.member_count; i++) {
                     AstNode *member = node->as.enum_decl.members[i];
-                    if (member && member->type == AST_ENUM_MEMBER &&
-                        member->as.enum_member.name) {
-                        XrJsonValue *child = create_doc_symbol(
-                            member->as.enum_member.name, LSP_SYMBOL_ENUM_MEMBER,
-                            member->line - 1, 0, member->line - 1,
-                            (int)strlen(member->as.enum_member.name));
-                        xlsp_json_array_push(children, child);
+                    if (member && member->type == AST_ENUM_MEMBER) {
+                        XrJsonValue *child = emit_decl_symbol(member,
+                            member->as.enum_member.name, LSP_SYMBOL_ENUM_MEMBER);
+                        if (child) xlsp_json_array_push(children, child);
                     }
                 }
-
                 if (xlsp_json_array_len(children) > 0) {
                     xlsp_json_object_set(sym, "children", children);
                 } else {
                     xlsp_json_free(children);
                 }
-                xlsp_json_array_push(symbols, sym);
             }
+            xlsp_json_array_push(symbols, sym);
             break;
+        }
 
         case AST_EXPORT_STMT:
             if (node->as.export_stmt.declaration) {
@@ -1087,15 +1123,40 @@ XrJsonValue *xlsp_analyze_document_symbols(XrLspDocument *doc) {
         return symbols;
     }
 
-    // Fallback to flat symbol table for documents without AST
+    // Fallback to flat symbol table for documents without AST.
+    // The lexer-only path already produces a (line, col, end_line, end_col)
+    // span per entry in 0-indexed form.
     SymbolTable table;
     symbol_table_init(&table);
     extract_symbols_lexer(doc, &table);
 
     for (int i = 0; i < table.count; i++) {
         SymbolEntry *entry = &table.entries[i];
+        int name_len = (int)strlen(entry->name);
+
+        XrLspRange selection_range = {
+            .start = { entry->line, entry->start_char },
+            .end   = { entry->line, entry->start_char + name_len },
+        };
+        // Ensure fullRange covers the identifier (lexer path may return an
+        // end column before the identifier's end when the symbol is followed
+        // by no initializer; clamp locally to keep the invariant).
+        int full_end_line = entry->end_line;
+        int full_end_col  = entry->end_char;
+        if (full_end_line < entry->line) {
+            full_end_line = entry->line;
+            full_end_col  = entry->start_char + name_len;
+        } else if (full_end_line == entry->line &&
+                   full_end_col < entry->start_char + name_len) {
+            full_end_col = entry->start_char + name_len;
+        }
+        XrLspRange full_range = {
+            .start = { entry->line, entry->start_char },
+            .end   = { full_end_line, full_end_col },
+        };
+
         XrJsonValue *sym = create_doc_symbol(entry->name, entry->kind,
-            entry->line, entry->start_char, entry->end_line, entry->end_char);
+                                             full_range, selection_range);
         xlsp_json_array_push(symbols, sym);
     }
 
