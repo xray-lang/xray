@@ -9,6 +9,7 @@
  */
 
 #include "xlsp_server.h"
+#include "xray_version.h"
 #include <stdio.h>
 #include <string.h>
 
@@ -24,7 +25,7 @@ static void print_usage(const char *prog) {
 }
 
 static void print_version(void) {
-    fprintf(stderr, "xray-lsp version 0.1.0\n");
+    fprintf(stderr, "xray-lsp version %s\n", XRAY_VERSION_STRING);
 }
 
 int main(int argc, char *argv[]) {
@@ -46,17 +47,17 @@ int main(int argc, char *argv[]) {
         print_usage(argv[0]);
         return 1;
     }
-    
+
     // Create and run server
     XrLspServer *server = xlsp_server_new();
     if (!server) {
         fprintf(stderr, "Failed to create LSP server\n");
         return 1;
     }
-    
+
     int result = xlsp_server_run(server);
-    
+
     xlsp_server_free(server);
-    
+
     return result;
 }

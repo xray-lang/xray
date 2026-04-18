@@ -28,6 +28,7 @@
 #include "../../base/xhash.h"
 #include "../../runtime/object/xutf8.h"
 #include "../../base/xpoll.h"  // Cross-platform poll abstraction
+#include "xray_version.h"
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
@@ -101,7 +102,7 @@ static const char *get_log_path(XrLspServer *server) {
         }
         return env_path;
     }
-    
+
     // 2. Config from xray.toml
     if (server && server->config.log_path) {
         if (server->config.log_path[0] == '\0') {
@@ -112,14 +113,14 @@ static const char *get_log_path(XrLspServer *server) {
         }
         return server->config.log_path;
     }
-    
+
     // 3. Default path
     return XLSP_DEFAULT_LOG_PATH;
 }
 
 void lsp_log(const char *fmt, ...) {
     XrLspServer *server = tls_server;
-    
+
     // Open log file on first call (per-server)
     if (server && !server->log_file && !server->log_file_checked) {
         server->log_file_checked = true;
@@ -131,10 +132,10 @@ void lsp_log(const char *fmt, ...) {
             }
         }
     }
-    
+
     va_list args;
     va_start(args, fmt);
-    
+
     // Print to stderr (unless disabled in config)
     bool log_to_stderr = !server || server->config.log_to_stderr;
     if (log_to_stderr) {
@@ -146,7 +147,7 @@ void lsp_log(const char *fmt, ...) {
         fflush(stderr);
         va_end(args_copy);
     }
-    
+
     // Also log to file with timestamp
     FILE *log_file = server ? server->log_file : NULL;
     if (log_file) {
@@ -154,13 +155,13 @@ void lsp_log(const char *fmt, ...) {
         struct tm *tm_info = localtime(&now);
         char time_buf[32];
         strftime(time_buf, sizeof(time_buf), "%H:%M:%S", tm_info);
-        
+
         fprintf(log_file, "[%s] ", time_buf);
         vfprintf(log_file, fmt, args);
         fprintf(log_file, "\n");
         fflush(log_file);
     }
-    
+
     va_end(args);
 }
 
@@ -233,7 +234,7 @@ static XrLspDocument *doc_table_get(XrLspDocTable *table, const char *uri) {
 static void doc_table_resize(XrLspDocTable *table, int new_size) {
     if (!table || new_size <= table->bucket_count) return;
     if (new_size > DOC_TABLE_MAX_SIZE) new_size = DOC_TABLE_MAX_SIZE;
-    
+
     // Allocate new bucket array
     XrLspDocBucket **new_buckets = xr_calloc(new_size, sizeof(XrLspDocBucket*));
     if (!new_buckets) {
@@ -241,49 +242,49 @@ static void doc_table_resize(XrLspDocTable *table, int new_size) {
         lsp_log("Warning: Failed to resize doc table to %d buckets", new_size);
         return;
     }
-    
+
     // Rehash all existing entries
     int rehashed = 0;
     for (int i = 0; i < table->bucket_count; i++) {
         XrLspDocBucket *bucket = table->buckets[i];
         while (bucket) {
             XrLspDocBucket *next = bucket->next;
-            
+
             // Compute new hash with new bucket count
             uint32_t new_hash = hash_uri(bucket->doc->uri) % new_size;
-            
+
             // Insert into new bucket array (prepend to chain)
             bucket->next = new_buckets[new_hash];
             new_buckets[new_hash] = bucket;
             rehashed++;
-            
+
             bucket = next;
         }
     }
-    
+
     // Replace old buckets with new ones
     xr_free(table->buckets);
     table->buckets = new_buckets;
     table->bucket_count = new_size;
-    
+
     lsp_log("Doc table resized: %d buckets, %d documents", new_size, rehashed);
 }
 
 // Check if table needs resize (load factor > 75%)
 static inline bool doc_table_needs_resize(XrLspDocTable *table) {
     // Using integer math: doc_count * 4 > bucket_count * 3
-    return table->doc_count * DOC_TABLE_LOAD_FACTOR_DEN > 
+    return table->doc_count * DOC_TABLE_LOAD_FACTOR_DEN >
            table->bucket_count * DOC_TABLE_LOAD_FACTOR_NUM;
 }
 
 static void doc_table_put(XrLspDocTable *table, XrLspDocument *doc) {
     if (!table || !doc || !doc->uri) return;
-    
+
     // Check if resize is needed before insertion
     if (doc_table_needs_resize(table) && table->bucket_count < DOC_TABLE_MAX_SIZE) {
         doc_table_resize(table, table->bucket_count * 2);
     }
-    
+
     uint32_t hash = hash_uri(doc->uri) % table->bucket_count;
     XrLspDocBucket *bucket = xr_malloc(sizeof(XrLspDocBucket));
     if (!bucket) {
@@ -329,13 +330,13 @@ static void doc_table_remove(XrLspDocTable *table, const char *uri) {
 XrLspServer *xlsp_server_new(void) {
     XrLspServer *server = xr_calloc(1, sizeof(XrLspServer));
     if (!server) return NULL;
-    
+
     server->transport = xlsp_transport_stdio();
     if (!server->transport) {
         xr_free(server);
         return NULL;
     }
-    
+
     // Create isolate for parsing
     XrayIsolateParams params;
     xray_isolate_params_init(&params);
@@ -345,7 +346,7 @@ XrLspServer *xlsp_server_new(void) {
     if (!server->isolate) {
         lsp_log("Warning: Failed to create isolate, parser features limited");
     }
-    
+
     // Enable all capabilities by default
     server->capabilities.completion = true;
     server->capabilities.hover = true;
@@ -354,7 +355,7 @@ XrLspServer *xlsp_server_new(void) {
     server->capabilities.document_symbol = true;
     server->capabilities.formatting = true;
     server->capabilities.rename = true;
-    
+
     // Create document hash table
     server->doc_table = doc_table_new();
     if (!server->doc_table) {
@@ -363,19 +364,19 @@ XrLspServer *xlsp_server_new(void) {
         xr_free(server);
         return NULL;
     }
-    
+
     // Create workspace-level analyzer (unified index for all cross-file features)
     server->workspace_analyzer = xa_analyzer_new();
     if (!server->workspace_analyzer) {
         lsp_log("Warning: Failed to create workspace analyzer");
     }
-    
+
     // Create background task system
     server->async = xlsp_async_new();
     if (!server->async) {
         lsp_log("Warning: Failed to create async worker, background tasks disabled");
     }
-    
+
     // Default configuration
     server->config.diagnostic_debounce_ms = 300;
     server->config.diagnostics_enabled = true;
@@ -386,79 +387,79 @@ XrLspServer *xlsp_server_new(void) {
     server->config.analysis_type_checking = true;
     server->config.inlay_hints_type_annotations = true;
     server->config.inlay_hints_parameter_names = true;
-    
+
     // Logging defaults
     server->config.log_path = NULL;       // NULL = use default path
     server->config.log_to_stderr = true;  // Always log to stderr by default
     server->config.log_level = 2;         // Info level
-    
+
     // Load default ignore patterns
     xlsp_config_load_defaults(&server->config);
-    
+
     return server;
 }
 
 void xlsp_server_free(XrLspServer *server) {
     if (!server) return;
-    
+
     // Free document hash table (frees all documents)
     if (server->doc_table) {
         doc_table_free(server->doc_table);
     }
-    
+
     xr_free(server->root_uri);
     xr_free(server->root_path);
-    
+
     // Free workspace folders
     for (int i = 0; i < server->workspace_folder_count; i++) {
         xr_free(server->workspace_folders[i].uri);
         xr_free(server->workspace_folders[i].name);
         xr_free(server->workspace_folders[i].path);
     }
-    
+
     xlsp_transport_free(server->transport);
-    
+
     if (server->workspace_analyzer) {
         xa_analyzer_free(server->workspace_analyzer);
     }
-    
+
     if (server->async) {
         xlsp_async_free(server->async);
     }
-    
+
     // Free parallel index pool
     if (server->index_pool) {
         xlsp_index_pool_free(server->index_pool);
     }
-    
+
     if (server->isolate) {
         xray_isolate_delete(server->isolate);
     }
-    
+
     // Free method dispatch table
     free_method_table(server);
-    
+
     // Close log file
     if (server->log_file) {
         fclose(server->log_file);
     }
-    
+
     // Free exports cache (handled by xlsp_imports)
     xlsp_free_exports_cache(server);
-    
+
     // Free ignore patterns
     xlsp_config_free_ignores(&server->config);
-    
+
     // Free log path
     if (server->config.log_path) {
         xr_free(server->config.log_path);
     }
-    
+
     if (server->index_progress_token) {
         xr_free(server->index_progress_token);
         server->index_progress_token = NULL;
     }
-    
+
     xr_free(server);
 }
 
@@ -467,18 +468,18 @@ static bool build_line_index(XrLspDocument *doc) {
     xr_free(doc->line_offsets);
     doc->line_offsets = NULL;
     doc->line_count = 0;
-    
+
     // Count lines
     int line_count = 1;
     for (size_t i = 0; i < doc->length; i++) {
         if (doc->content[i] == '\n') line_count++;
     }
-    
+
     doc->line_offsets = xr_malloc(line_count * sizeof(uint32_t));
     if (!doc->line_offsets) return false;
-    
+
     doc->line_count = line_count;
-    
+
     // Build index
     doc->line_offsets[0] = 0;
     int line = 1;
@@ -494,29 +495,29 @@ XrLspDocument *xlsp_document_open(XrLspServer *server, const char *uri,
                                    const char *text, int version) {
     XrLspDocument *doc = xr_calloc(1, sizeof(XrLspDocument));
     if (!doc) return NULL;
-    
+
     doc->uri = xr_strdup(uri);
     if (!doc->uri) {
         xr_free(doc);
         return NULL;
     }
-    
+
     doc->content = xr_strdup(text);
     if (!doc->content) {
         xr_free(doc->uri);
         xr_free(doc);
         return NULL;
     }
-    
+
     doc->length = strlen(text);
     doc->version = version;
     doc->server = server;
     doc->dirty = true;
     doc->content_hash = XLSP_CONTENT_HASH_UNINITIALIZED;
-    
+
     // Initialize document arena (64KB initial size)
     xr_arena_init(&doc->arena, 64 * 1024);
-    
+
     if (!build_line_index(doc)) {
         xr_arena_destroy(&doc->arena);
         xr_free(doc->content);
@@ -524,24 +525,24 @@ XrLspDocument *xlsp_document_open(XrLspServer *server, const char *uri,
         xr_free(doc);
         return NULL;
     }
-    
+
     // Add to document hash table (O(1) lookup)
     doc_table_put(server->doc_table, doc);
-    
+
     lsp_log("Opened document: %s (%zu bytes)", uri, doc->length);
-    
+
     return doc;
 }
 
 void xlsp_document_change(XrLspDocument *doc, XrLspRange *range,
                           const char *text) {
     if (!doc || !text) return;
-    
+
     if (!range) {
         // Full document sync
         char *new_content = xr_strdup(text);
         if (!new_content) return;  // Keep old content on failure
-        
+
         xr_free(doc->content);
         doc->content = new_content;
         doc->length = strlen(text);
@@ -551,20 +552,20 @@ void xlsp_document_change(XrLspDocument *doc, XrLspRange *range,
         uint32_t end = xlsp_position_to_offset(doc, range->end);
         size_t text_len = strlen(text);
         size_t new_len = doc->length - (end - start) + text_len;
-        
+
         char *new_content = xr_malloc(new_len + 1);
         if (!new_content) return;  // Keep old content on failure
-        
+
         memcpy(new_content, doc->content, start);
         memcpy(new_content + start, text, text_len);
         memcpy(new_content + start + text_len, doc->content + end, doc->length - end);
         new_content[new_len] = '\0';
-        
+
         xr_free(doc->content);
         doc->content = new_content;
         doc->length = new_len;
     }
-    
+
     // Update content hash for change detection
     doc->content_hash = xlsp_content_hash(doc->content, doc->length);
     doc->dirty = true;
@@ -585,54 +586,54 @@ XrLspDocument *xlsp_document_get_or_load(XrLspServer *server, const char *uri) {
     // First check if already open
     XrLspDocument *doc = doc_table_get(server->doc_table, uri);
     if (doc) return doc;
-    
+
     const char *path = xlsp_uri_to_path(uri);
-    
+
     // Try to load from disk
     FILE *f = fopen(path, "r");
     if (!f) return NULL;
-    
+
     fseek(f, 0, SEEK_END);
     long size = ftell(f);
     fseek(f, 0, SEEK_SET);
-    
+
     char *content = xr_malloc(size + 1);
     if (!content) {
         fclose(f);
         return NULL;
     }
-    
+
     size_t read_size = fread(content, 1, size, f);
     content[read_size] = '\0';
     fclose(f);
-    
+
     // Create temporary document (not added to doc_table)
     doc = xr_calloc(1, sizeof(XrLspDocument));
     if (!doc) {
         xr_free(content);
         return NULL;
     }
-    
+
     doc->uri = xr_strdup(uri);
     if (!doc->uri) {
         xr_free(content);
         xr_free(doc);
         return NULL;
     }
-    
+
     doc->content = content;
     doc->length = read_size;
     doc->version = 0;
     doc->server = server;
     doc->dirty = true;
     doc->content_hash = XLSP_CONTENT_HASH_UNINITIALIZED;
-    
+
     // Build line index (ignore failure - document still usable without it)
     build_line_index(doc);
-    
+
     // Parse document
     xlsp_parse_document(doc, server);
-    
+
     lsp_log("On-demand loaded: %s", path);
     return doc;
 }
@@ -654,9 +655,9 @@ uint32_t xlsp_position_to_offset(XrLspDocument *doc, XrLspPosition pos) {
     if ((int)pos.line >= doc->line_count) {
         return doc->length;
     }
-    
+
     uint32_t line_start = doc->line_offsets[pos.line];
-    
+
     // Calculate line length (bytes until next line or end of document)
     uint32_t line_end;
     if ((int)pos.line + 1 < doc->line_count) {
@@ -669,11 +670,11 @@ uint32_t xlsp_position_to_offset(XrLspDocument *doc, XrLspPosition pos) {
         line_end = doc->length;
     }
     uint32_t line_len = line_end - line_start;
-    
+
     // Convert UTF-16 code unit offset to byte offset within the line
     size_t byte_offset_in_line = xr_utf8_utf16_to_byte_offset(
         doc->content + line_start, line_len, pos.character);
-    
+
     uint32_t offset = line_start + (uint32_t)byte_offset_in_line;
     if (offset > doc->length) offset = doc->length;
     return offset;
@@ -682,7 +683,7 @@ uint32_t xlsp_position_to_offset(XrLspDocument *doc, XrLspPosition pos) {
 XrLspPosition xlsp_offset_to_position(XrLspDocument *doc, uint32_t offset) {
     XrLspPosition pos = {0, 0};
     if (!doc || !doc->line_offsets) return pos;
-    
+
     // Binary search for line
     int lo = 0, hi = doc->line_count - 1;
     while (lo < hi) {
@@ -693,9 +694,9 @@ XrLspPosition xlsp_offset_to_position(XrLspDocument *doc, uint32_t offset) {
             hi = mid - 1;
         }
     }
-    
+
     pos.line = lo;
-    
+
     // Calculate line length for UTF-16 conversion
     uint32_t line_start = doc->line_offsets[lo];
     uint32_t line_end;
@@ -708,12 +709,12 @@ XrLspPosition xlsp_offset_to_position(XrLspDocument *doc, uint32_t offset) {
         line_end = doc->length;
     }
     uint32_t line_len = line_end - line_start;
-    
+
     // Convert byte offset within line to UTF-16 code units
     uint32_t byte_offset_in_line = offset - line_start;
     pos.character = (uint32_t)xr_utf8_byte_to_utf16_offset(
         doc->content + line_start, line_len, byte_offset_in_line);
-    
+
     return pos;
 }
 
@@ -723,11 +724,11 @@ static void send_response(XrLspServer *server, int64_t id, XrJsonValue *result) 
     xlsp_json_object_set(resp, "jsonrpc", xlsp_json_new_string("2.0"));
     xlsp_json_object_set(resp, "id", xlsp_json_new_number(id));
     xlsp_json_object_set(resp, "result", result ? result : xlsp_json_new_null());
-    
+
     size_t len;
     char *json = xlsp_json_stringify(resp, &len);
     xlsp_transport_write(server->transport, json, len);
-    
+
     xr_free(json);
     xlsp_json_free(resp);
 }
@@ -737,16 +738,16 @@ static void send_error(XrLspServer *server, int64_t id, int code, const char *me
     XrJsonValue *resp = xlsp_json_new_object();
     xlsp_json_object_set(resp, "jsonrpc", xlsp_json_new_string("2.0"));
     xlsp_json_object_set(resp, "id", xlsp_json_new_number(id));
-    
+
     XrJsonValue *error = xlsp_json_new_object();
     xlsp_json_object_set(error, "code", xlsp_json_new_number(code));
     xlsp_json_object_set(error, "message", xlsp_json_new_string(message));
     xlsp_json_object_set(resp, "error", error);
-    
+
     size_t len;
     char *json = xlsp_json_stringify(resp, &len);
     xlsp_transport_write(server->transport, json, len);
-    
+
     xr_free(json);
     xlsp_json_free(resp);
 }
@@ -759,11 +760,11 @@ static void send_notification(XrLspServer *server, const char *method, XrJsonVal
     if (params) {
         xlsp_json_object_set(notif, "params", params);
     }
-    
+
     size_t len;
     char *json = xlsp_json_stringify(notif, &len);
     xlsp_transport_write(server->transport, json, len);
-    
+
     xr_free(json);
     xlsp_json_free(notif);
 }
@@ -777,11 +778,11 @@ static void send_request(XrLspServer *server, const char *method, XrJsonValue *p
     if (params) {
         xlsp_json_object_set(req, "params", params);
     }
-    
+
     size_t len;
     char *json = xlsp_json_stringify(req, &len);
     xlsp_transport_write(server->transport, json, len);
-    
+
     xr_free(json);
     xlsp_json_free(req);
 }
@@ -793,14 +794,14 @@ static void send_request(XrLspServer *server, const char *method, XrJsonValue *p
 // Add a pending request to track (ring buffer: O(1) insert)
 static void pending_request_add(XrLspServer *server, int64_t id, const char *method) {
     XlspPendingRequests *pending = &server->pending_requests;
-    
+
     // Write at head position (overwrites oldest if full)
     int slot = pending->head;
     pending->requests[slot].id = id;
     pending->requests[slot].method = method;
     pending->requests[slot].cancelled = false;
     pending->requests[slot].start_time = get_monotonic_ms();
-    
+
     pending->head = (pending->head + 1) % MAX_PENDING_REQUESTS;
     if (pending->count < MAX_PENDING_REQUESTS) {
         pending->count++;
@@ -810,7 +811,7 @@ static void pending_request_add(XrLspServer *server, int64_t id, const char *met
 // Remove a pending request (when completed)
 static void pending_request_remove(XrLspServer *server, int64_t id) {
     XlspPendingRequests *pending = &server->pending_requests;
-    
+
     for (int i = 0; i < pending->count; i++) {
         if (pending->requests[i].id == id) {
             pending->requests[i].id = 0;
@@ -824,7 +825,7 @@ static void pending_request_remove(XrLspServer *server, int64_t id) {
 // Check if a request was cancelled
 static bool pending_request_is_cancelled(XrLspServer *server, int64_t id) {
     XlspPendingRequests *pending = &server->pending_requests;
-    
+
     for (int i = 0; i < pending->count; i++) {
         if (pending->requests[i].id == id) {
             return pending->requests[i].cancelled;
@@ -837,18 +838,18 @@ static bool pending_request_is_cancelled(XrLspServer *server, int64_t id) {
 static bool pending_request_cancel(XrLspServer *server, int64_t id) {
     XlspPendingRequests *pending = &server->pending_requests;
     bool found = false;
-    
+
     for (int i = 0; i < pending->count; i++) {
         if (pending->requests[i].id == id) {
             pending->requests[i].cancelled = true;
-            lsp_log("Request %lld (%s) marked as cancelled", 
-                    (long long)id, 
+            lsp_log("Request %lld (%s) marked as cancelled",
+                    (long long)id,
                     pending->requests[i].method ? pending->requests[i].method : "unknown");
             found = true;
             break;
         }
     }
-    
+
     // Also cancel any background tasks associated with this request
     if (server->async) {
         int async_cancelled = xlsp_async_cancel_request(server->async, id);
@@ -856,29 +857,29 @@ static bool pending_request_cancel(XrLspServer *server, int64_t id) {
             lsp_log("Cancelled %d background tasks for request %lld", async_cancelled, (long long)id);
         }
     }
-    
+
     if (!found) {
         lsp_log("Request %lld not found for cancellation", (long long)id);
     }
-    
+
     return found;
 }
 
 // Handle $/cancelRequest notification
 static void handle_cancel_request(XrLspServer *server, XrJsonValue *params) {
     if (!params) return;
-    
+
     // Get the id to cancel (can be number or string)
     XrJsonValue *id_val = xlsp_json_get(params, "id");
     if (!id_val) return;
-    
+
     int64_t id = 0;
     if (id_val->type == XR_JSON_NUMBER) {
         id = (int64_t)id_val->as.number;
     } else if (id_val->type == XR_JSON_STRING) {
         id = atoll(id_val->as.string);
     }
-    
+
     if (id != 0) {
         pending_request_cancel(server, id);
     }
@@ -890,12 +891,12 @@ static void handle_cancel_request(XrLspServer *server, XrJsonValue *params) {
 // Publish diagnostics for a document
 static void publish_diagnostics(XrLspServer *server, XrLspDocument *doc) {
     XrJsonValue *diagnostics = xlsp_analyze_diagnostics(doc);
-    
+
     XrJsonValue *params = xlsp_json_new_object();
     xlsp_json_object_set(params, "uri", xlsp_json_new_string(doc->uri));
     xlsp_json_object_set(params, "version", xlsp_json_new_number(doc->version));
     xlsp_json_object_set(params, "diagnostics", diagnostics);
-    
+
     send_notification(server, "textDocument/publishDiagnostics", params);
 }
 
@@ -906,20 +907,20 @@ static void publish_diagnostics(XrLspServer *server, XrLspDocument *doc) {
 static int progress_token_counter = 0;
 
 // Begin progress reporting (with optional cancellation support)
-static char *progress_begin_ex(XrLspServer *server, const char *title, 
+static char *progress_begin_ex(XrLspServer *server, const char *title,
                                const char *message, bool cancellable) {
     char token[32];
     snprintf(token, sizeof(token), "xlsp-progress-%d", ++progress_token_counter);
-    
+
     // Create progress token
     XrJsonValue *create_params = xlsp_json_new_object();
     xlsp_json_object_set(create_params, "token", xlsp_json_new_string(token));
     send_request(server, "window/workDoneProgress/create", create_params);
-    
+
     // Send begin notification
     XrJsonValue *params = xlsp_json_new_object();
     xlsp_json_object_set(params, "token", xlsp_json_new_string(token));
-    
+
     XrJsonValue *value = xlsp_json_new_object();
     xlsp_json_object_set(value, "kind", xlsp_json_new_string("begin"));
     xlsp_json_object_set(value, "title", xlsp_json_new_string(title));
@@ -929,26 +930,26 @@ static char *progress_begin_ex(XrLspServer *server, const char *title,
     xlsp_json_object_set(value, "cancellable", xlsp_json_new_bool(cancellable));
     xlsp_json_object_set(value, "percentage", xlsp_json_new_number(0));
     xlsp_json_object_set(params, "value", value);
-    
+
     send_notification(server, "$/progress", params);
-    
+
     return xr_strdup(token);
 }
 
 // Begin progress reporting (public API, with cancellation support)
-char *xlsp_progress_begin(XrLspServer *server, const char *title, 
+char *xlsp_progress_begin(XrLspServer *server, const char *title,
                           const char *message, bool cancellable) {
     return progress_begin_ex(server, title, message, cancellable);
 }
 
 // Report progress (public API)
-void xlsp_progress_report(XrLspServer *server, const char *token, 
+void xlsp_progress_report(XrLspServer *server, const char *token,
                           const char *message, int percentage) {
     if (!server || !token) return;
-    
+
     XrJsonValue *params = xlsp_json_new_object();
     xlsp_json_object_set(params, "token", xlsp_json_new_string(token));
-    
+
     XrJsonValue *value = xlsp_json_new_object();
     xlsp_json_object_set(value, "kind", xlsp_json_new_string("report"));
     if (message) {
@@ -958,24 +959,24 @@ void xlsp_progress_report(XrLspServer *server, const char *token,
         xlsp_json_object_set(value, "percentage", xlsp_json_new_number(percentage));
     }
     xlsp_json_object_set(params, "value", value);
-    
+
     send_notification(server, "$/progress", params);
 }
 
 // End progress reporting (public API)
 void xlsp_progress_end(XrLspServer *server, const char *token, const char *message) {
     if (!server || !token) return;
-    
+
     XrJsonValue *params = xlsp_json_new_object();
     xlsp_json_object_set(params, "token", xlsp_json_new_string(token));
-    
+
     XrJsonValue *value = xlsp_json_new_object();
     xlsp_json_object_set(value, "kind", xlsp_json_new_string("end"));
     if (message) {
         xlsp_json_object_set(value, "message", xlsp_json_new_string(message));
     }
     xlsp_json_object_set(params, "value", value);
-    
+
     send_notification(server, "$/progress", params);
 }
 
@@ -990,7 +991,7 @@ static void schedule_diagnostics(XrLspServer *server, XrLspDocument *doc) {
     uint64_t now = get_monotonic_ms();
     doc->last_change_time = now;
     doc->diagnostic_deadline = now + DIAGNOSTIC_DEBOUNCE_MS;
-    
+
     // Add to pending queue (avoid duplicates)
     for (int i = 0; i < server->pending_diag_count; i++) {
         if (server->pending_diag[i] == doc) return;
@@ -1004,10 +1005,10 @@ static void schedule_diagnostics(XrLspServer *server, XrLspDocument *doc) {
 // O(K) where K = pending count, instead of O(N) full table scan.
 static void flush_pending_diagnostics(XrLspServer *server) {
     if (server->pending_diag_count == 0) return;
-    
+
     uint64_t now = get_monotonic_ms();
     int write = 0;
-    
+
     for (int i = 0; i < server->pending_diag_count; i++) {
         XrLspDocument *doc = server->pending_diag[i];
         if (doc && doc->diagnostic_deadline > 0 && now >= doc->diagnostic_deadline) {
@@ -1133,33 +1134,33 @@ static const LspMethodEntry *find_method(XrLspServer *server, const char *method
 // Handle incoming message
 static void handle_message(XrLspServer *server, XrJsonValue *msg) {
     init_method_table(server);
-    
+
     const char *method = xlsp_json_get_string(msg, "method");
     XrJsonValue *params = xlsp_json_get(msg, "params");
     XrJsonValue *id_val = xlsp_json_get(msg, "id");
-    
+
     bool is_request = (id_val != NULL);
     int64_t id = is_request ? (int64_t)id_val->as.number : 0;
-    
+
     if (!method) {
         if (is_request) {
             send_error(server, id, -32600, "Invalid Request");
         }
         return;
     }
-    
+
     // Handle $/cancelRequest specially (it's a notification)
     if (strcmp(method, "$/cancelRequest") == 0) {
         handle_cancel_request(server, params);
         return;
     }
-    
+
     // Handle window/workDoneProgress/cancel (cancellation from progress UI)
     if (strcmp(method, "window/workDoneProgress/cancel") == 0) {
         // Mark indexing as cancelled if token matches
         if (params) {
             const char *token = xlsp_json_get_string(params, "token");
-            if (token && server->index_progress_token && 
+            if (token && server->index_progress_token &&
                 strcmp(token, server->index_progress_token) == 0) {
                 lsp_log("Workspace indexing cancelled by user");
                 server->index_cancelled = true;
@@ -1167,14 +1168,14 @@ static void handle_message(XrLspServer *server, XrJsonValue *msg) {
         }
         return;
     }
-    
+
     lsp_log("Received: %s (id=%lld)", method, (long long)id);
-    
+
     // Track pending requests for cancellation
     if (is_request) {
         pending_request_add(server, id, method);
     }
-    
+
     // O(1) method lookup
     const LspMethodEntry *entry = find_method(server, method);
     if (entry) {
@@ -1219,9 +1220,9 @@ static XlspPollCtx g_index_ctx = {2};
 int xlsp_server_run(XrLspServer *server) {
     // Set thread-local server for logging
     xlsp_set_log_server(server);
-    
+
     lsp_log("xray Language Server starting...");
-    
+
     // Initialize poll subsystem
     XrPoll poll;
     if (xr_poll_init(&poll) < 0) {
@@ -1229,7 +1230,7 @@ int xlsp_server_run(XrLspServer *server) {
         // Fall back to blocking mode (original behavior)
         goto fallback_blocking;
     }
-    
+
     // Register stdin for reading
     int stdin_fd = xlsp_transport_get_fd(server->transport);
     if (stdin_fd >= 0) {
@@ -1237,7 +1238,7 @@ int xlsp_server_run(XrLspServer *server) {
             lsp_log("Failed to add stdin to poll");
         }
     }
-    
+
     // Register async task notification fd
     if (server->async) {
         int async_fd = xlsp_async_get_notify_fd(server->async);
@@ -1247,7 +1248,7 @@ int xlsp_server_run(XrLspServer *server) {
             }
         }
     }
-    
+
     // Register index pool notification fd
     if (server->index_pool) {
         int index_fd = xlsp_index_pool_get_notify_fd(server->index_pool);
@@ -1257,35 +1258,35 @@ int xlsp_server_run(XrLspServer *server) {
             }
         }
     }
-    
+
     lsp_log("Event loop initialized with poll");
-    
+
     // Event-driven main loop
     while (!server->shutdown_requested) {
         XrPollEvent events[8];
         int n = xr_poll_wait(&poll, events, 8, 100);  // 100ms timeout
-        
+
         if (n < 0) {
             lsp_log("Poll error, continuing...");
             continue;
         }
-        
+
         bool stdin_ready = false;
         bool async_ready = false;
         bool index_ready = false;
-        
+
         // Determine which sources are ready
         for (int i = 0; i < n; i++) {
             XlspPollCtx *ctx = (XlspPollCtx *)events[i].user_data;
             if (!ctx) continue;
-            
+
             switch (ctx->type) {
                 case 0: stdin_ready = true; break;
                 case 1: async_ready = true; break;
                 case 2: index_ready = true; break;
             }
         }
-        
+
         // Process async task completions
         if (async_ready && server->async) {
             int completed = xlsp_async_poll(server->async);
@@ -1293,22 +1294,22 @@ int xlsp_server_run(XrLspServer *server) {
                 lsp_log("Processed %d background tasks", completed);
             }
         }
-        
+
         // Process parallel indexing results
         if (index_ready) {
             xlsp_workspace_poll_index_results(server);
         }
-        
+
         // Process stdin messages
         if (stdin_ready) {
             size_t len;
             bool would_block;
             char *msg_str = xlsp_transport_try_read(server->transport, &len, &would_block);
-            
+
             if (msg_str) {
                 XrJsonValue *msg = xlsp_json_parse(msg_str, len);
                 xr_free(msg_str);
-                
+
                 if (msg) {
                     handle_message(server, msg);
                     xlsp_json_free(msg);
@@ -1321,7 +1322,7 @@ int xlsp_server_run(XrLspServer *server) {
                 break;
             }
         }
-        
+
         // Also process any pending background work even without events
         // (timeout case: n == 0)
         if (n == 0) {
@@ -1331,11 +1332,11 @@ int xlsp_server_run(XrLspServer *server) {
             }
             xlsp_workspace_poll_index_results(server);
         }
-        
+
         // Check debounced diagnostic deadlines (every loop iteration)
         flush_pending_diagnostics(server);
     }
-    
+
     xr_poll_destroy(&poll);
     lsp_log("Server shutting down");
     return server->shutdown_requested ? 0 : 1;
@@ -1351,32 +1352,32 @@ fallback_blocking:
                 lsp_log("Processed %d background tasks", completed);
             }
         }
-        
+
         // Process parallel indexing results
         xlsp_workspace_poll_index_results(server);
-        
+
         size_t len;
         char *msg_str = xlsp_transport_read(server->transport, &len);
         if (!msg_str) {
             lsp_log("EOF or read error, exiting");
             break;
         }
-        
+
         XrJsonValue *msg = xlsp_json_parse(msg_str, len);
         xr_free(msg_str);
-        
+
         if (!msg) {
             lsp_log("Failed to parse JSON message");
             continue;
         }
-        
+
         handle_message(server, msg);
         xlsp_json_free(msg);
-        
+
         // Check debounced diagnostic deadlines
         flush_pending_diagnostics(server);
     }
-    
+
     lsp_log("Server shutting down");
     return server->shutdown_requested ? 0 : 1;
 }
@@ -1389,12 +1390,12 @@ static XrJsonValue *handle_initialize(XrLspServer *server, XrJsonValue *params) 
     if (root_uri) {
         server->root_uri = xr_strdup(root_uri);
     }
-    
+
     const char *root_path = xlsp_json_get_string(params, "rootPath");
     if (root_path) {
         server->root_path = xr_strdup(root_path);
     }
-    
+
     // Handle workspace folders from initialize request
     XrJsonValue *folders = xlsp_json_get_array(params, "workspaceFolders");
     if (folders) {
@@ -1412,7 +1413,7 @@ static XrJsonValue *handle_initialize(XrLspServer *server, XrJsonValue *params) 
         }
         lsp_log("Initialized with %d workspace folders", server->workspace_folder_count);
     }
-    
+
     // Try to load project-specific ignore patterns from xray.toml
     if (server->root_path) {
         if (xlsp_config_load_from_toml(&server->config, server->root_path)) {
@@ -1424,19 +1425,19 @@ static XrJsonValue *handle_initialize(XrLspServer *server, XrJsonValue *params) 
             lsp_log("Loaded LSP config from xray.toml");
         }
     }
-    
+
     lsp_log("Initializing with root: %s", root_uri ? root_uri : "(none)");
-    
+
     // Build capabilities response
     XrJsonValue *result = xlsp_json_new_object();
     XrJsonValue *capabilities = xlsp_json_new_object();
-    
+
     // Text document sync (incremental)
     XrJsonValue *textDocSync = xlsp_json_new_object();
     xlsp_json_object_set_new(textDocSync, "openClose", xlsp_json_new_bool(true));
     xlsp_json_object_set_new(textDocSync, "change", xlsp_json_new_number(LSP_SYNC_INCREMENTAL));
     xlsp_json_object_set_new(capabilities, "textDocumentSync", textDocSync);
-    
+
     // Completion
     if (server->capabilities.completion) {
         XrJsonValue *completion = xlsp_json_new_object();
@@ -1449,39 +1450,39 @@ static XrJsonValue *handle_initialize(XrLspServer *server, XrJsonValue *params) 
     } else {
         lsp_log("completionProvider DISABLED");
     }
-    
+
     // Hover
     if (server->capabilities.hover) {
         xlsp_json_object_set_new(capabilities, "hoverProvider", xlsp_json_new_bool(true));
     }
-    
+
     // Definition
     if (server->capabilities.definition) {
         xlsp_json_object_set_new(capabilities, "definitionProvider", xlsp_json_new_bool(true));
     }
-    
+
     // References
     if (server->capabilities.references) {
         xlsp_json_object_set_new(capabilities, "referencesProvider", xlsp_json_new_bool(true));
     }
-    
+
     // Document symbol
     if (server->capabilities.document_symbol) {
         xlsp_json_object_set_new(capabilities, "documentSymbolProvider", xlsp_json_new_bool(true));
     }
-    
+
     // Rename
     if (server->capabilities.rename) {
         XrJsonValue *rename = xlsp_json_new_object();
         xlsp_json_object_set_new(rename, "prepareProvider", xlsp_json_new_bool(true));
         xlsp_json_object_set_new(capabilities, "renameProvider", rename);
     }
-    
+
     // Formatting
     if (server->capabilities.formatting) {
         xlsp_json_object_set_new(capabilities, "documentFormattingProvider", xlsp_json_new_bool(true));
         xlsp_json_object_set_new(capabilities, "documentRangeFormattingProvider", xlsp_json_new_bool(true));
-        
+
         // On-type formatting (auto-indent on } and newline)
         XrJsonValue *onType = xlsp_json_new_object();
         xlsp_json_object_set_new(onType, "firstTriggerCharacter", xlsp_json_new_string("}"));
@@ -1491,7 +1492,7 @@ static XrJsonValue *handle_initialize(XrLspServer *server, XrJsonValue *params) 
         xlsp_json_object_set_new(onType, "moreTriggerCharacter", moreTriggers);
         xlsp_json_object_set_new(capabilities, "documentOnTypeFormattingProvider", onType);
     }
-    
+
     // Signature help
     XrJsonValue *sigHelp = xlsp_json_new_object();
     XrJsonValue *sigTriggers = xlsp_json_new_array();
@@ -1499,7 +1500,7 @@ static XrJsonValue *handle_initialize(XrLspServer *server, XrJsonValue *params) 
     xlsp_json_array_push(sigTriggers, xlsp_json_new_string(","));
     xlsp_json_object_set_new(sigHelp, "triggerCharacters", sigTriggers);
     xlsp_json_object_set_new(capabilities, "signatureHelpProvider", sigHelp);
-    
+
     // Semantic tokens
     XrJsonValue *semTokens = xlsp_json_new_object();
     xlsp_json_object_set_new(semTokens, "legend", xlsp_semantic_tokens_legend());
@@ -1508,17 +1509,17 @@ static XrJsonValue *handle_initialize(XrLspServer *server, XrJsonValue *params) 
     xlsp_json_object_set_new(semTokens, "full", semFull);
     xlsp_json_object_set_new(semTokens, "range", xlsp_json_new_bool(true));
     xlsp_json_object_set_new(capabilities, "semanticTokensProvider", semTokens);
-    
+
     // Inlay hints
     xlsp_json_object_set_new(capabilities, "inlayHintProvider", xlsp_json_new_bool(true));
-    
+
     // CodeLens
     xlsp_json_object_set_new(capabilities, "codeLensProvider",
         xlsp_json_new_object());  // empty object = supported, no resolve
-    
+
     // Folding range
     xlsp_json_object_set_new(capabilities, "foldingRangeProvider", xlsp_json_new_bool(true));
-    
+
     // Code actions
     XrJsonValue *codeAction = xlsp_json_new_object();
     XrJsonValue *codeActionKinds = xlsp_json_new_array();
@@ -1526,28 +1527,28 @@ static XrJsonValue *handle_initialize(XrLspServer *server, XrJsonValue *params) 
     xlsp_json_array_push(codeActionKinds, xlsp_json_new_string("source.organizeImports"));
     xlsp_json_object_set_new(codeAction, "codeActionKinds", codeActionKinds);
     xlsp_json_object_set_new(capabilities, "codeActionProvider", codeAction);
-    
+
     // Document highlight
     xlsp_json_object_set_new(capabilities, "documentHighlightProvider", xlsp_json_new_bool(true));
-    
+
     // Workspace symbol
     xlsp_json_object_set_new(capabilities, "workspaceSymbolProvider", xlsp_json_new_bool(true));
-    
+
     // Selection range
     xlsp_json_object_set_new(capabilities, "selectionRangeProvider", xlsp_json_new_bool(true));
-    
+
     // Document link
     xlsp_json_object_set_new(capabilities, "documentLinkProvider", xlsp_json_new_bool(true));
-    
+
     // Call hierarchy
     xlsp_json_object_set_new(capabilities, "callHierarchyProvider", xlsp_json_new_bool(true));
-    
+
     // Type hierarchy
     xlsp_json_object_set_new(capabilities, "typeHierarchyProvider", xlsp_json_new_bool(true));
-    
+
     // Implementation
     xlsp_json_object_set_new(capabilities, "implementationProvider", xlsp_json_new_bool(true));
-    
+
     // Workspace capabilities
     XrJsonValue *workspace = xlsp_json_new_object();
     XrJsonValue *workspaceFolders = xlsp_json_new_object();
@@ -1555,52 +1556,52 @@ static XrJsonValue *handle_initialize(XrLspServer *server, XrJsonValue *params) 
     xlsp_json_object_set_new(workspaceFolders, "changeNotifications", xlsp_json_new_bool(true));
     xlsp_json_object_set_new(workspace, "workspaceFolders", workspaceFolders);
     xlsp_json_object_set_new(capabilities, "workspace", workspace);
-    
+
     xlsp_json_object_set_new(result, "capabilities", capabilities);
-    
+
     // Server info
     XrJsonValue *serverInfo = xlsp_json_new_object();
     xlsp_json_object_set_new(serverInfo, "name", xlsp_json_new_string("xray-lsp"));
-    xlsp_json_object_set_new(serverInfo, "version", xlsp_json_new_string("0.1.0"));
+    xlsp_json_object_set_new(serverInfo, "version", xlsp_json_new_string(XRAY_VERSION_STRING));
     xlsp_json_object_set_new(result, "serverInfo", serverInfo);
-    
+
     server->initialized = true;
-    
+
     return result;
 }
 
 static void handle_initialized(XrLspServer *server, XrJsonValue *params) {
     (void)params;
     lsp_log("Client initialized");
-    
+
     // Register for file watching via client/registerCapability
     // Watch for .xr files changes (create, modify, delete)
     XrJsonValue *reg_params = xlsp_json_new_object();
     XrJsonValue *registrations = xlsp_json_new_array();
-    
+
     XrJsonValue *registration = xlsp_json_new_object();
     xlsp_json_object_set_new(registration, "id", xlsp_json_new_string("xray-file-watcher"));
     xlsp_json_object_set_new(registration, "method", xlsp_json_new_string("workspace/didChangeWatchedFiles"));
-    
+
     XrJsonValue *reg_options = xlsp_json_new_object();
     XrJsonValue *watchers = xlsp_json_new_array();
-    
+
     // Watch all .xr files
     XrJsonValue *watcher = xlsp_json_new_object();
     xlsp_json_object_set_new(watcher, "globPattern", xlsp_json_new_string("**/*.xr"));
     xlsp_json_object_set_new(watcher, "kind", xlsp_json_new_number(LSP_WATCH_ALL));
     xlsp_json_array_push(watchers, watcher);
-    
+
     xlsp_json_object_set_new(reg_options, "watchers", watchers);
     xlsp_json_object_set_new(registration, "registerOptions", reg_options);
     xlsp_json_array_push(registrations, registration);
     xlsp_json_object_set_new(reg_params, "registrations", registrations);
-    
+
     // Send registration request (LSP spec requires this to be a request, not notification)
     send_request(server, "client/registerCapability", reg_params);
-    
+
     lsp_log("Registered file watcher for **/*.xr");
-    
+
     // Start background workspace indexing if we have a root path
     if (server->root_path) {
         xlsp_workspace_start_background_index(server, server->root_path);
@@ -1630,35 +1631,35 @@ static void handle_exit(XrLspServer *server, XrJsonValue *params) {
 static void handle_did_change_watched_files(XrLspServer *server, XrJsonValue *params) {
     XrJsonValue *changes = xlsp_json_get_array(params, "changes");
     if (!changes) return;
-    
+
     int change_count = xlsp_json_array_len(changes);
     lsp_log("Received %d file change events", change_count);
-    
+
     for (int i = 0; i < change_count; i++) {
         XrJsonValue *change = xlsp_json_array_get(changes, i);
         const char *uri = xlsp_json_get_string(change, "uri");
         int type = (int)xlsp_json_get_int(change, "type");
-        
+
         if (!uri) continue;
-        
+
         lsp_log("File change: %s (type=%d)", uri, type);
-        
+
         // Get document if it's open
         XrLspDocument *doc = xlsp_document_get(server, uri);
-        
+
         switch (type) {
             case FILE_CHANGE_CREATED:
             case FILE_CHANGE_CHANGED: {
                 const char *path = xlsp_uri_to_path(uri);
-                
+
                 // Invalidate exports cache for this file
                 xlsp_exports_cache_remove(server, path);
-                
+
                 // Re-index the file in workspace analyzer (for unopened files)
                 if (!doc) {
                     xlsp_workspace_index_file(server, uri, path);
                 }
-                
+
                 // If document is open, re-parse and publish diagnostics
                 if (doc) {
                     doc->dirty = true;
@@ -1667,16 +1668,16 @@ static void handle_did_change_watched_files(XrLspServer *server, XrJsonValue *pa
                 }
                 break;
             }
-                
+
             case FILE_CHANGE_DELETED:
                 // Remove from exports cache
                 xlsp_exports_cache_remove(server, xlsp_uri_to_path(uri));
-                
+
                 // If document was open, it will be handled by didClose
                 break;
         }
     }
-    
+
     // Re-publish diagnostics for all open documents that import changed files
     // This ensures cross-file errors are updated
     // (For simplicity, we don't track import dependencies here)
@@ -1692,16 +1693,16 @@ static void add_workspace_folder(XrLspServer *server, const char *uri, const cha
         lsp_log("Warning: Maximum workspace folders reached");
         return;
     }
-    
+
     int idx = server->workspace_folder_count++;
     server->workspace_folders[idx].uri = xr_strdup(uri);
     server->workspace_folders[idx].name = name ? xr_strdup(name) : xr_strdup("");
-    
+
     const char *path = xlsp_uri_to_path(uri);
     server->workspace_folders[idx].path = xr_strdup(path);
-    
+
     lsp_log("Added workspace folder: %s (%s)", name ? name : uri, path);
-    
+
     // Start indexing this folder
     xlsp_workspace_start_background_index(server, path);
 }
@@ -1711,11 +1712,11 @@ static void remove_workspace_folder(XrLspServer *server, const char *uri) {
     for (int i = 0; i < server->workspace_folder_count; i++) {
         if (strcmp(server->workspace_folders[i].uri, uri) == 0) {
             lsp_log("Removed workspace folder: %s", server->workspace_folders[i].name);
-            
+
             xr_free(server->workspace_folders[i].uri);
             xr_free(server->workspace_folders[i].name);
             xr_free(server->workspace_folders[i].path);
-            
+
             // Shift remaining folders
             for (int j = i; j < server->workspace_folder_count - 1; j++) {
                 server->workspace_folders[j] = server->workspace_folders[j + 1];
@@ -1729,7 +1730,7 @@ static void remove_workspace_folder(XrLspServer *server, const char *uri) {
 static void handle_did_change_workspace_folders(XrLspServer *server, XrJsonValue *params) {
     XrJsonValue *event = xlsp_json_get_object(params, "event");
     if (!event) return;
-    
+
     // Handle removed folders
     XrJsonValue *removed = xlsp_json_get_array(event, "removed");
     if (removed) {
@@ -1742,7 +1743,7 @@ static void handle_did_change_workspace_folders(XrLspServer *server, XrJsonValue
             }
         }
     }
-    
+
     // Handle added folders
     XrJsonValue *added = xlsp_json_get_array(event, "added");
     if (added) {
@@ -1756,7 +1757,7 @@ static void handle_did_change_workspace_folders(XrLspServer *server, XrJsonValue
             }
         }
     }
-    
+
     lsp_log("Workspace folders updated: %d total", server->workspace_folder_count);
 }
 
@@ -1766,11 +1767,11 @@ static void handle_did_change_workspace_folders(XrLspServer *server, XrJsonValue
 
 static void apply_configuration(XrLspServer *server, XrJsonValue *settings) {
     if (!settings) return;
-    
+
     // Get xray settings section
     XrJsonValue *xray = xlsp_json_get_object(settings, "xray");
     if (!xray) return;
-    
+
     // Diagnostic settings
     XrJsonValue *diagnostics = xlsp_json_get_object(xray, "diagnostics");
     if (diagnostics) {
@@ -1781,7 +1782,7 @@ static void apply_configuration(XrLspServer *server, XrJsonValue *settings) {
             server->config.diagnostic_debounce_ms = (int)xlsp_json_get_int(diagnostics, "debounceMs");
         }
     }
-    
+
     // Completion settings
     XrJsonValue *completion = xlsp_json_get_object(xray, "completion");
     if (completion) {
@@ -1792,7 +1793,7 @@ static void apply_configuration(XrLspServer *server, XrJsonValue *settings) {
             server->config.completion_max_items = (int)xlsp_json_get_int(completion, "maxItems");
         }
     }
-    
+
     // Format settings
     XrJsonValue *format = xlsp_json_get_object(xray, "format");
     if (format) {
@@ -1803,7 +1804,7 @@ static void apply_configuration(XrLspServer *server, XrJsonValue *settings) {
             server->config.format_insert_spaces = xlsp_json_get_bool(format, "insertSpaces");
         }
     }
-    
+
     // Analysis settings
     XrJsonValue *analysis = xlsp_json_get_object(xray, "analysis");
     if (analysis) {
@@ -1811,7 +1812,7 @@ static void apply_configuration(XrLspServer *server, XrJsonValue *settings) {
             server->config.analysis_type_checking = xlsp_json_get_bool(analysis, "typeChecking");
         }
     }
-    
+
     // Inlay hints settings
     XrJsonValue *inlay_hints = xlsp_json_get_object(xray, "inlayHints");
     if (inlay_hints) {
@@ -1822,7 +1823,7 @@ static void apply_configuration(XrLspServer *server, XrJsonValue *settings) {
             server->config.inlay_hints_parameter_names = xlsp_json_get_bool(inlay_hints, "parameterNames");
         }
     }
-    
+
     lsp_log("Configuration updated: debounce=%dms, diagnostics=%s, typeChecking=%s",
             server->config.diagnostic_debounce_ms,
             server->config.diagnostics_enabled ? "on" : "off",
@@ -1837,11 +1838,11 @@ static void handle_did_change_configuration(XrLspServer *server, XrJsonValue *pa
 static void handle_did_open(XrLspServer *server, XrJsonValue *params) {
     XrJsonValue *textDocument = xlsp_json_get_object(params, "textDocument");
     if (!textDocument) return;
-    
+
     const char *uri = xlsp_json_get_string(textDocument, "uri");
     const char *text = xlsp_json_get_string(textDocument, "text");
     int version = (int)xlsp_json_get_int(textDocument, "version");
-    
+
     if (uri && text) {
         XrLspDocument *doc = xlsp_document_open(server, uri, text, version);
         if (doc) {
@@ -1855,28 +1856,28 @@ static void handle_did_open(XrLspServer *server, XrJsonValue *params) {
 static void handle_did_change(XrLspServer *server, XrJsonValue *params) {
     XrJsonValue *textDocument = xlsp_json_get_object(params, "textDocument");
     if (!textDocument) return;
-    
+
     const char *uri = xlsp_json_get_string(textDocument, "uri");
     XrLspDocument *doc = xlsp_document_get(server, uri);
     if (!doc) return;
-    
+
     doc->version = (int)xlsp_json_get_int(textDocument, "version");
-    
+
     XrJsonValue *changes = xlsp_json_get_array(params, "contentChanges");
     if (!changes) return;
-    
+
     int change_count = xlsp_json_array_len(changes);
     for (int i = 0; i < change_count; i++) {
         XrJsonValue *change = xlsp_json_array_get(changes, i);
         const char *text = xlsp_json_get_string(change, "text");
         XrJsonValue *range_obj = xlsp_json_get_object(change, "range");
-        
+
         if (text) {
             if (range_obj) {
                 // Incremental change
                 XrJsonValue *start = xlsp_json_get_object(range_obj, "start");
                 XrJsonValue *end = xlsp_json_get_object(range_obj, "end");
-                
+
                 XrLspRange range = {
                     .start = {
                         .line = (uint32_t)xlsp_json_get_int(start, "line"),
@@ -1894,14 +1895,14 @@ static void handle_did_change(XrLspServer *server, XrJsonValue *params) {
             }
         }
     }
-    
+
     // Track previous error state to detect recovery
     bool had_error_before = doc->parse_error;
-    
+
     // Re-parse document after change
     lsp_log("didChange: parsing %s", uri);
     xlsp_parse_document(doc, server);
-    
+
     // If document recovered from error, trigger re-analysis of dependent documents
     if (had_error_before && !doc->parse_error) {
         lsp_log("didChange: document recovered from error, triggering dependent re-analysis");
@@ -1922,7 +1923,7 @@ static void handle_did_change(XrLspServer *server, XrJsonValue *params) {
             }
         }
     }
-    
+
     // Schedule debounced diagnostics (waits 300ms for more changes)
     schedule_diagnostics(server, doc);
     lsp_log("didChange: diagnostics scheduled");
@@ -1931,7 +1932,7 @@ static void handle_did_change(XrLspServer *server, XrJsonValue *params) {
 static void handle_did_close(XrLspServer *server, XrJsonValue *params) {
     XrJsonValue *textDocument = xlsp_json_get_object(params, "textDocument");
     if (!textDocument) return;
-    
+
     const char *uri = xlsp_json_get_string(textDocument, "uri");
     if (uri) {
         xlsp_document_close(server, uri);
@@ -1946,27 +1947,27 @@ static XrJsonValue *handle_completion(XrLspServer *server, XrJsonValue *params) 
         lsp_log("handle_completion: missing textDocument or position");
         return xlsp_json_new_null();
     }
-    
+
     const char *uri = xlsp_json_get_string(textDocument, "uri");
     XrLspDocument *doc = xlsp_document_get(server, uri);
     if (!doc) return xlsp_json_new_null();
-    
+
     XrLspPosition pos = {
         .line = (uint32_t)xlsp_json_get_int(position, "line"),
         .character = (uint32_t)xlsp_json_get_int(position, "character")
     };
-    
+
     lsp_log("handle_completion: uri=%s, line=%d, char=%d", uri, pos.line, pos.character);
-    
+
     XrJsonValue *items = xlsp_analyze_completion(server, doc, pos);
-    
+
     int item_count = items ? xlsp_json_array_len(items) : 0;
     lsp_log("handle_completion: returning %d items", item_count);
-    
+
     XrJsonValue *result = xlsp_json_new_object();
     xlsp_json_object_set(result, "isIncomplete", xlsp_json_new_bool(false));
     xlsp_json_object_set(result, "items", items);
-    
+
     return result;
 }
 
@@ -1974,24 +1975,24 @@ static XrJsonValue *handle_completion(XrLspServer *server, XrJsonValue *params) 
 static XrJsonValue *handle_completion_resolve(XrLspServer *server, XrJsonValue *params) {
     XrJsonValue *data = xlsp_json_get_object(params, "data");
     if (!data) return xlsp_json_clone(params);
-    
+
     const char *uri = xlsp_json_get_string(data, "uri");
     const char *name = xlsp_json_get_string(params, "label");
-    
+
     XrJsonValue *result = xlsp_json_clone(params);
     if (!name) return result;
-    
+
     XaAnalyzer *analyzer = server ? server->workspace_analyzer : NULL;
     char doc_str[XLSP_MAX_PATH];
     int len = 0;
     bool resolved = false;
-    
+
     // Try analyzer for real type information
     if (analyzer) {
         XaSymbol *sym = xa_analyzer_lookup(analyzer, name);
         if (sym) {
             XaSymbolLinks *links = xa_analyzer_get_links(analyzer, sym);
-            
+
             if (sym->kind == XA_SYM_FUNCTION || sym->kind == XA_SYM_METHOD) {
                 len = snprintf(doc_str, sizeof(doc_str), "```xray\nfn %s(", name);
                 if (links && links->param_count > 0) {
@@ -2020,7 +2021,7 @@ static XrJsonValue *handle_completion_resolve(XrLspServer *server, XrJsonValue *
             }
         }
     }
-    
+
     // Fallback: generic documentation from symbol table
     if (!resolved && uri) {
         XrLspDocument *doc = xlsp_document_get(server, uri);
@@ -2029,14 +2030,14 @@ static XrJsonValue *handle_completion_resolve(XrLspServer *server, XrJsonValue *
             resolved = true;
         }
     }
-    
+
     if (resolved) {
         XrJsonValue *documentation = xlsp_json_new_object();
         xlsp_json_object_set(documentation, "kind", xlsp_json_new_string("markdown"));
         xlsp_json_object_set(documentation, "value", xlsp_json_new_string(doc_str));
         xlsp_json_object_set(result, "documentation", documentation);
     }
-    
+
     return result;
 }
 
@@ -2044,27 +2045,27 @@ static XrJsonValue *handle_hover(XrLspServer *server, XrJsonValue *params) {
     XrJsonValue *textDocument = xlsp_json_get_object(params, "textDocument");
     XrJsonValue *position = xlsp_json_get_object(params, "position");
     if (!textDocument || !position) return xlsp_json_new_null();
-    
+
     const char *uri = xlsp_json_get_string(textDocument, "uri");
     XrLspDocument *doc = xlsp_document_get(server, uri);
     if (!doc) return xlsp_json_new_null();
-    
+
     XrLspPosition pos = {
         .line = (uint32_t)xlsp_json_get_int(position, "line"),
         .character = (uint32_t)xlsp_json_get_int(position, "character")
     };
-    
+
     return xlsp_analyze_hover(server, doc, pos);
 }
 
 static XrJsonValue *handle_document_symbol(XrLspServer *server, XrJsonValue *params) {
     XrJsonValue *textDocument = xlsp_json_get_object(params, "textDocument");
     if (!textDocument) return xlsp_json_new_array();
-    
+
     const char *uri = xlsp_json_get_string(textDocument, "uri");
     XrLspDocument *doc = xlsp_document_get(server, uri);
     if (!doc) return xlsp_json_new_array();
-    
+
     return xlsp_analyze_document_symbols(doc);
 }
 
@@ -2072,16 +2073,16 @@ static XrJsonValue *handle_definition(XrLspServer *server, XrJsonValue *params) 
     XrJsonValue *textDocument = xlsp_json_get_object(params, "textDocument");
     XrJsonValue *position = xlsp_json_get_object(params, "position");
     if (!textDocument || !position) return xlsp_json_new_null();
-    
+
     const char *uri = xlsp_json_get_string(textDocument, "uri");
     XrLspDocument *doc = xlsp_document_get(server, uri);
     if (!doc) return xlsp_json_new_null();
-    
+
     XrLspPosition pos = {
         .line = (uint32_t)xlsp_json_get_int(position, "line"),
         .character = (uint32_t)xlsp_json_get_int(position, "character")
     };
-    
+
     return xlsp_analyze_definition(server, doc, pos);
 }
 
@@ -2089,16 +2090,16 @@ static XrJsonValue *handle_references(XrLspServer *server, XrJsonValue *params) 
     XrJsonValue *textDocument = xlsp_json_get_object(params, "textDocument");
     XrJsonValue *position = xlsp_json_get_object(params, "position");
     if (!textDocument || !position) return xlsp_json_new_array();
-    
+
     const char *uri = xlsp_json_get_string(textDocument, "uri");
     XrLspDocument *doc = xlsp_document_get(server, uri);
     if (!doc) return xlsp_json_new_array();
-    
+
     XrLspPosition pos = {
         .line = (uint32_t)xlsp_json_get_int(position, "line"),
         .character = (uint32_t)xlsp_json_get_int(position, "character")
     };
-    
+
     return xlsp_analyze_references(server, doc, pos);
 }
 
@@ -2107,16 +2108,16 @@ static XrJsonValue *handle_rename(XrLspServer *server, XrJsonValue *params) {
     XrJsonValue *position = xlsp_json_get_object(params, "position");
     const char *new_name = xlsp_json_get_string(params, "newName");
     if (!textDocument || !position || !new_name) return xlsp_json_new_null();
-    
+
     const char *uri = xlsp_json_get_string(textDocument, "uri");
     XrLspDocument *doc = xlsp_document_get(server, uri);
     if (!doc) return xlsp_json_new_null();
-    
+
     XrLspPosition pos = {
         .line = (uint32_t)xlsp_json_get_int(position, "line"),
         .character = (uint32_t)xlsp_json_get_int(position, "character")
     };
-    
+
     return xlsp_analyze_rename(server, doc, pos, new_name);
 }
 
@@ -2124,27 +2125,27 @@ static XrJsonValue *handle_prepare_rename(XrLspServer *server, XrJsonValue *para
     XrJsonValue *textDocument = xlsp_json_get_object(params, "textDocument");
     XrJsonValue *position = xlsp_json_get_object(params, "position");
     if (!textDocument || !position) return xlsp_json_new_null();
-    
+
     const char *uri = xlsp_json_get_string(textDocument, "uri");
     XrLspDocument *doc = xlsp_document_get(server, uri);
     if (!doc) return xlsp_json_new_null();
-    
+
     XrLspPosition pos = {
         .line = (uint32_t)xlsp_json_get_int(position, "line"),
         .character = (uint32_t)xlsp_json_get_int(position, "character")
     };
-    
+
     return xlsp_analyze_prepare_rename(doc, pos);
 }
 
 static XrJsonValue *handle_formatting(XrLspServer *server, XrJsonValue *params) {
     XrJsonValue *textDocument = xlsp_json_get_object(params, "textDocument");
     if (!textDocument) return xlsp_json_new_array();
-    
+
     const char *uri = xlsp_json_get_string(textDocument, "uri");
     XrLspDocument *doc = xlsp_document_get(server, uri);
     if (!doc) return xlsp_json_new_array();
-    
+
     return xlsp_analyze_format(doc);
 }
 
@@ -2152,14 +2153,14 @@ static XrJsonValue *handle_range_formatting(XrLspServer *server, XrJsonValue *pa
     XrJsonValue *textDocument = xlsp_json_get_object(params, "textDocument");
     XrJsonValue *range_obj = xlsp_json_get_object(params, "range");
     if (!textDocument || !range_obj) return xlsp_json_new_array();
-    
+
     const char *uri = xlsp_json_get_string(textDocument, "uri");
     XrLspDocument *doc = xlsp_document_get(server, uri);
     if (!doc) return xlsp_json_new_array();
-    
+
     XrJsonValue *start = xlsp_json_get_object(range_obj, "start");
     XrJsonValue *end = xlsp_json_get_object(range_obj, "end");
-    
+
     XrLspRange range = {
         .start = {
             .line = (uint32_t)xlsp_json_get_int(start, "line"),
@@ -2170,7 +2171,7 @@ static XrJsonValue *handle_range_formatting(XrLspServer *server, XrJsonValue *pa
             .character = (uint32_t)xlsp_json_get_int(end, "character")
         }
     };
-    
+
     return xlsp_analyze_format_range(doc, range);
 }
 
@@ -2180,19 +2181,19 @@ static XrJsonValue *handle_on_type_formatting(XrLspServer *server, XrJsonValue *
     XrJsonValue *position = xlsp_json_get_object(params, "position");
     const char *ch = xlsp_json_get_string(params, "ch");
     if (!textDocument || !position || !ch) return xlsp_json_new_array();
-    
+
     const char *uri = xlsp_json_get_string(textDocument, "uri");
     XrLspDocument *doc = xlsp_document_get(server, uri);
     if (!doc || !doc->content) return xlsp_json_new_array();
-    
+
     int line = xlsp_json_get_int(position, "line");
     XrJsonValue *edits = xlsp_json_new_array();
-    
+
     // Get formatting options
     XrJsonValue *options = xlsp_json_get_object(params, "options");
     int tab_size = options ? (int)xlsp_json_get_int(options, "tabSize") : 4;
     if (tab_size <= 0) tab_size = 4;
-    
+
     // Get the current line content
     const char *line_start = doc->content;
     int cur_line = 0;
@@ -2202,7 +2203,7 @@ static XrJsonValue *handle_on_type_formatting(XrLspServer *server, XrJsonValue *
     }
     const char *line_end = line_start;
     while (*line_end && *line_end != '\n') line_end++;
-    
+
     if (ch[0] == '}') {
         // Count brace nesting up to this line to determine correct indent
         int depth = 0;
@@ -2225,7 +2226,7 @@ static XrJsonValue *handle_on_type_formatting(XrLspServer *server, XrJsonValue *
         // } closes one level, so indent at depth-1
         if (depth > 0) depth--;
         int target_indent = depth * tab_size;
-        
+
         // Calculate current indent on this line
         int current_indent = 0;
         const char *cp = line_start;
@@ -2233,7 +2234,7 @@ static XrJsonValue *handle_on_type_formatting(XrLspServer *server, XrJsonValue *
             current_indent += (*cp == '\t') ? tab_size : 1;
             cp++;
         }
-        
+
         if (current_indent != target_indent) {
             // Replace existing whitespace with correct indent
             int ws_chars = (int)(cp - line_start);
@@ -2241,7 +2242,7 @@ static XrJsonValue *handle_on_type_formatting(XrLspServer *server, XrJsonValue *
             int n = target_indent < (int)sizeof(indent_str) - 1 ? target_indent : (int)sizeof(indent_str) - 1;
             memset(indent_str, ' ', n);
             indent_str[n] = '\0';
-            
+
             XrJsonValue *edit = xlsp_json_new_object();
             xlsp_json_object_set(edit, "range",
                 xlsp_json_make_range(line, 0, line, ws_chars));
@@ -2251,7 +2252,7 @@ static XrJsonValue *handle_on_type_formatting(XrLspServer *server, XrJsonValue *
     } else if (ch[0] == '\n') {
         // Auto-indent: match previous line's indent, +1 level if prev ends with {
         if (line <= 0) return edits;
-        
+
         // Find previous line start
         const char *prev_line_start = doc->content;
         cur_line = 0;
@@ -2259,25 +2260,25 @@ static XrJsonValue *handle_on_type_formatting(XrLspServer *server, XrJsonValue *
             if (*prev_line_start == '\n') cur_line++;
             prev_line_start++;
         }
-        
+
         int prev_indent = 0;
         const char *pp = prev_line_start;
         while (*pp && *pp != '\n' && (*pp == ' ' || *pp == '\t')) {
             prev_indent += (*pp == '\t') ? tab_size : 1;
             pp++;
         }
-        
+
         // Check if prev line ends with {
         const char *prev_end = prev_line_start;
         while (*prev_end && *prev_end != '\n') prev_end++;
         const char *last_non_ws = prev_end - 1;
         while (last_non_ws > prev_line_start && (*last_non_ws == ' ' || *last_non_ws == '\t' || *last_non_ws == '\r'))
             last_non_ws--;
-        
+
         int target_indent = prev_indent;
         if (last_non_ws >= prev_line_start && *last_non_ws == '{')
             target_indent += tab_size;
-        
+
         // Check current line indent
         int current_indent = 0;
         const char *cp = line_start;
@@ -2285,14 +2286,14 @@ static XrJsonValue *handle_on_type_formatting(XrLspServer *server, XrJsonValue *
             current_indent += (*cp == '\t') ? tab_size : 1;
             cp++;
         }
-        
+
         if (current_indent != target_indent) {
             int ws_chars = (int)(cp - line_start);
             char indent_str[256];
             int n = target_indent < (int)sizeof(indent_str) - 1 ? target_indent : (int)sizeof(indent_str) - 1;
             memset(indent_str, ' ', n);
             indent_str[n] = '\0';
-            
+
             XrJsonValue *edit = xlsp_json_new_object();
             xlsp_json_object_set(edit, "range",
                 xlsp_json_make_range(line, 0, line, ws_chars));
@@ -2301,7 +2302,7 @@ static XrJsonValue *handle_on_type_formatting(XrLspServer *server, XrJsonValue *
         }
     }
     // For ';' we don't do anything special yet
-    
+
     return edits;
 }
 
@@ -2383,10 +2384,10 @@ static void add_code_lens(XrJsonValue *lenses, const char *name, int line,
     // -1 to exclude the definition itself
     int refs = ref_table_get(ref_table, name) - 1;
     if (refs < 0) refs = 0;
-    
+
     char title[128];
     snprintf(title, sizeof(title), "%d reference%s", refs, refs == 1 ? "" : "s");
-    
+
     XrJsonValue *lens = xlsp_json_new_object();
     xlsp_json_object_set(lens, "range", xlsp_json_make_range(line, 0, line, 0));
     XrJsonValue *cmd = xlsp_json_new_object();
@@ -2400,23 +2401,23 @@ static void add_code_lens(XrJsonValue *lenses, const char *name, int line,
 static void collect_code_lens(AstNode *node, XrJsonValue *lenses,
                                RefCountTable *ref_table) {
     if (!node) return;
-    
+
     if (node->type == AST_FUNCTION_DECL && node->as.function_decl.name) {
         int line = node->line > 0 ? node->line - 1 : 0;
         add_code_lens(lenses, node->as.function_decl.name, line, ref_table);
     }
-    
+
     if ((node->type == AST_CLASS_DECL || node->type == AST_STRUCT_DECL) && node->as.class_decl.name) {
         int line = node->line > 0 ? node->line - 1 : 0;
         add_code_lens(lenses, node->as.class_decl.name, line, ref_table);
-        
+
         // Also add lenses for class methods
         for (int i = 0; i < node->as.class_decl.method_count; i++) {
             collect_code_lens(node->as.class_decl.methods[i], lenses, ref_table);
         }
         return;  // Don't recurse into children again
     }
-    
+
     // Recurse into children
     if (node->type == AST_PROGRAM || node->type == AST_BLOCK) {
         int count = (node->type == AST_PROGRAM) ? node->as.program.count : node->as.block.count;
@@ -2430,18 +2431,18 @@ static void collect_code_lens(AstNode *node, XrJsonValue *lenses,
 static XrJsonValue *handle_code_lens(XrLspServer *server, XrJsonValue *params) {
     XrJsonValue *textDocument = xlsp_json_get_object(params, "textDocument");
     if (!textDocument) return xlsp_json_new_array();
-    
+
     const char *uri = xlsp_json_get_string(textDocument, "uri");
     XrLspDocument *doc = xlsp_document_get(server, uri);
     if (!doc || !doc->ast) return xlsp_json_new_array();
-    
+
     // Single-pass: build name→count table, then O(1) lookup per symbol
     RefCountTable ref_table;
     build_ref_count_table(doc->content, &ref_table);
-    
+
     XrJsonValue *lenses = xlsp_json_new_array();
     collect_code_lens(doc->ast, lenses, &ref_table);
-    
+
     ref_table_free(&ref_table);
     return lenses;
 }
@@ -2450,29 +2451,29 @@ static XrJsonValue *handle_signature_help(XrLspServer *server, XrJsonValue *para
     XrJsonValue *textDocument = xlsp_json_get_object(params, "textDocument");
     XrJsonValue *position = xlsp_json_get_object(params, "position");
     if (!textDocument || !position) return xlsp_json_new_null();
-    
+
     const char *uri = xlsp_json_get_string(textDocument, "uri");
     XrLspDocument *doc = xlsp_document_get(server, uri);
     if (!doc) return xlsp_json_new_null();
-    
+
     XrLspPosition pos = {
         .line = (uint32_t)xlsp_json_get_int(position, "line"),
         .character = (uint32_t)xlsp_json_get_int(position, "character")
     };
-    
+
     return xlsp_analyze_signature_help(doc, pos);
 }
 
 static XrJsonValue *handle_semantic_tokens_full(XrLspServer *server, XrJsonValue *params) {
     XrJsonValue *textDocument = xlsp_json_get_object(params, "textDocument");
     if (!textDocument) return xlsp_json_new_null();
-    
+
     const char *uri = xlsp_json_get_string(textDocument, "uri");
     XrLspDocument *doc = xlsp_document_get(server, uri);
     if (!doc) return xlsp_json_new_null();
-    
+
     XlspSemanticTokensResult *result = xlsp_analyze_semantic_tokens(doc);
-    
+
     // Cache raw tokens for delta support
     int raw_count = 0;
     uint32_t *raw = xlsp_semantic_tokens_encode_raw(result, &raw_count);
@@ -2480,19 +2481,19 @@ static XrJsonValue *handle_semantic_tokens_full(XrLspServer *server, XrJsonValue
     doc->prev_sem_tokens = raw;
     doc->prev_sem_token_count = raw_count;
     doc->sem_token_result_id++;
-    
+
     // Build response with resultId
     XrJsonValue *response = xlsp_json_new_object();
     char rid[32];
     snprintf(rid, sizeof(rid), "%u", doc->sem_token_result_id);
     xlsp_json_object_set(response, "resultId", xlsp_json_new_string(rid));
-    
+
     XrJsonValue *data = xlsp_json_new_array();
     for (int i = 0; i < raw_count; i++) {
         xlsp_json_array_push(data, xlsp_json_new_number(raw[i]));
     }
     xlsp_json_object_set(response, "data", data);
-    
+
     xlsp_semantic_tokens_free(result);
     return response;
 }
@@ -2500,23 +2501,23 @@ static XrJsonValue *handle_semantic_tokens_full(XrLspServer *server, XrJsonValue
 static XrJsonValue *handle_semantic_tokens_delta(XrLspServer *server, XrJsonValue *params) {
     XrJsonValue *textDocument = xlsp_json_get_object(params, "textDocument");
     if (!textDocument) return xlsp_json_new_null();
-    
+
     const char *uri = xlsp_json_get_string(textDocument, "uri");
     XrLspDocument *doc = xlsp_document_get(server, uri);
     if (!doc) return xlsp_json_new_null();
-    
+
     // Compute new tokens
     XlspSemanticTokensResult *result = xlsp_analyze_semantic_tokens(doc);
     int new_count = 0;
     uint32_t *new_data = xlsp_semantic_tokens_encode_raw(result, &new_count);
     xlsp_semantic_tokens_free(result);
-    
+
     // Take ownership of old cached data before updating
     uint32_t *old_data = doc->prev_sem_tokens;
     int old_count = doc->prev_sem_token_count;
     doc->prev_sem_tokens = NULL;
     doc->prev_sem_token_count = 0;
-    
+
     // Update cache with copy of new data
     if (new_data && new_count > 0) {
         doc->prev_sem_tokens = xr_malloc(sizeof(uint32_t) * new_count);
@@ -2525,10 +2526,10 @@ static XrJsonValue *handle_semantic_tokens_delta(XrLspServer *server, XrJsonValu
         doc->prev_sem_token_count = new_count;
     }
     doc->sem_token_result_id++;
-    
+
     char rid[32];
     snprintf(rid, sizeof(rid), "%u", doc->sem_token_result_id);
-    
+
     // If no previous data, return full response
     if (!old_data || old_count == 0) {
         XrJsonValue *response = xlsp_json_new_object();
@@ -2541,31 +2542,31 @@ static XrJsonValue *handle_semantic_tokens_delta(XrLspServer *server, XrJsonValu
         xr_free(new_data);
         return response;
     }
-    
+
     // Compute delta: find first and last differing positions
     int min_len = old_count < new_count ? old_count : new_count;
     int first_diff = 0;
     while (first_diff < min_len && old_data[first_diff] == new_data[first_diff])
         first_diff++;
-    
+
     // Align to token boundary (5 values per token)
     first_diff = (first_diff / 5) * 5;
-    
+
     int old_tail_match = 0;
     while (old_tail_match < (old_count - first_diff) &&
            old_tail_match < (new_count - first_diff) &&
            old_data[old_count - 1 - old_tail_match] == new_data[new_count - 1 - old_tail_match])
         old_tail_match++;
     old_tail_match = (old_tail_match / 5) * 5;
-    
+
     int del_count = old_count - first_diff - old_tail_match;
     int ins_count = new_count - first_diff - old_tail_match;
     if (del_count < 0) del_count = 0;
     if (ins_count < 0) ins_count = 0;
-    
+
     XrJsonValue *response = xlsp_json_new_object();
     xlsp_json_object_set(response, "resultId", xlsp_json_new_string(rid));
-    
+
     XrJsonValue *edits_arr = xlsp_json_new_array();
     if (del_count > 0 || ins_count > 0) {
         XrJsonValue *edit = xlsp_json_new_object();
@@ -2580,7 +2581,7 @@ static XrJsonValue *handle_semantic_tokens_delta(XrLspServer *server, XrJsonValu
         xlsp_json_array_push(edits_arr, edit);
     }
     xlsp_json_object_set(response, "edits", edits_arr);
-    
+
     xr_free(old_data);
     xr_free(new_data);
     return response;
@@ -2590,11 +2591,11 @@ static XrJsonValue *handle_semantic_tokens_range(XrLspServer *server, XrJsonValu
     XrJsonValue *textDocument = xlsp_json_get_object(params, "textDocument");
     XrJsonValue *range_obj = xlsp_json_get_object(params, "range");
     if (!textDocument) return xlsp_json_new_null();
-    
+
     const char *uri = xlsp_json_get_string(textDocument, "uri");
     XrLspDocument *doc = xlsp_document_get(server, uri);
     if (!doc) return xlsp_json_new_null();
-    
+
     int range_start_line = 0, range_end_line = 0x7FFFFFFF;
     if (range_obj) {
         XrJsonValue *start = xlsp_json_get_object(range_obj, "start");
@@ -2602,13 +2603,13 @@ static XrJsonValue *handle_semantic_tokens_range(XrLspServer *server, XrJsonValu
         if (start) range_start_line = xlsp_json_get_int(start, "line");
         if (end) range_end_line = xlsp_json_get_int(end, "line");
     }
-    
+
     XlspSemanticTokensResult *all = xlsp_analyze_semantic_tokens(doc);
     if (!all || all->count == 0) {
         xlsp_semantic_tokens_free(all);
         return xlsp_json_new_null();
     }
-    
+
     // Filter tokens to requested range
     XlspSemanticTokensResult filtered = { .tokens = all->tokens, .count = 0, .capacity = 0 };
     XlspSemanticToken *buf = xr_malloc(sizeof(XlspSemanticToken) * all->count);
@@ -2618,11 +2619,11 @@ static XrJsonValue *handle_semantic_tokens_range(XrLspServer *server, XrJsonValu
         }
     }
     filtered.tokens = buf;
-    
+
     XrJsonValue *response = xlsp_semantic_tokens_encode(&filtered);
     xr_free(buf);
     xlsp_semantic_tokens_free(all);
-    
+
     return response;
 }
 
@@ -2630,14 +2631,14 @@ static XrJsonValue *handle_inlay_hint(XrLspServer *server, XrJsonValue *params) 
     XrJsonValue *textDocument = xlsp_json_get_object(params, "textDocument");
     XrJsonValue *range_obj = xlsp_json_get_object(params, "range");
     if (!textDocument || !range_obj) return xlsp_json_new_array();
-    
+
     const char *uri = xlsp_json_get_string(textDocument, "uri");
     XrLspDocument *doc = xlsp_document_get(server, uri);
     if (!doc) return xlsp_json_new_array();
-    
+
     XrJsonValue *start = xlsp_json_get_object(range_obj, "start");
     XrJsonValue *end = xlsp_json_get_object(range_obj, "end");
-    
+
     XrLspRange range = {
         .start = {
             .line = (uint32_t)xlsp_json_get_int(start, "line"),
@@ -2648,7 +2649,7 @@ static XrJsonValue *handle_inlay_hint(XrLspServer *server, XrJsonValue *params) 
             .character = (uint32_t)xlsp_json_get_int(end, "character")
         }
     };
-    
+
     return xlsp_analyze_inlay_hints(server, doc, range);
 }
 
