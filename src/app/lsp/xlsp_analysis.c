@@ -304,6 +304,16 @@ static void index_imports_on_demand(XrLspServer *server, AstNode *ast, const cha
 void xlsp_parse_document(XrLspDocument *doc, XrLspServer *server) {
     if (!doc || !doc->content || !server) return;
 
+    // Short-circuit: if the document is not dirty and we already hold
+    // a valid AST + cached diagnostics, there is nothing to do. This
+    // path fires on redundant publishes (e.g. didChange with identical
+    // content after xlsp_document_change's hash guard, or re-entries
+    // from workspace re-index), and shaves the full parse + analyze
+    // pipeline off of every such call.
+    if (!doc->dirty && doc->ast && doc->cached_diagnostics) {
+        return;
+    }
+
     lsp_log("parse_document: start %s", doc->uri ? doc->uri : "(null)");
     XrayIsolate *isolate = server->isolate;
 
