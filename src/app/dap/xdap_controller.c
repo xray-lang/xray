@@ -190,10 +190,15 @@ void xdap_controller_pause(XdapController *ctrl) {
     }
 }
 
+// Atomic restart: build a fresh isolate *before* tearing down the old
+// one. If the new launch fails (bad program path, OOM, etc.) we roll
+// back to the previous session so the user's debugging context is
+// preserved — they can retry the restart or manually terminate.
 bool xdap_controller_restart(XdapController *ctrl) {
     if (!ctrl || !ctrl->program_path) return false;
 
-    // Save program info before cleanup
+    // 1. Snapshot program info as independent copies. `launch()` will
+    //    strdup them again, so we release these locals when done.
     char *program = xr_strdup(ctrl->program_path);
     if (!program) return false;
 
@@ -204,43 +209,48 @@ bool xdap_controller_restart(XdapController *ctrl) {
         if (!args_copy) { xr_free(program); return false; }
         for (int i = 0; i < arg_count; i++) {
             args_copy[i] = xr_strdup(ctrl->program_args[i]);
+            if (!args_copy[i]) {
+                for (int j = 0; j < i; j++) xr_free(args_copy[j]);
+                xr_free(args_copy);
+                xr_free(program);
+                return false;
+            }
         }
     }
 
-    // Cleanup current session
-    if (ctrl->isolate) {
-        xr_debug_free(ctrl->isolate);
-        xr_multicore_destroy(ctrl->isolate);
-        xray_free(ctrl->isolate);
-        ctrl->isolate = NULL;
-    }
-    ctrl->debug_proto = NULL;
+    // 2. Park the old session on the stack. `launch()` overwrites these
+    //    fields unconditionally, so we MUST null them first — otherwise
+    //    the `ctrl->program_path = xr_strdup(...)` at the top of launch
+    //    would silently leak our snapshot.
+    XrayIsolate *old_isolate      = ctrl->isolate;
+    XrProto     *old_debug_proto  = ctrl->debug_proto;
+    char        *old_program_path = ctrl->program_path;
+    char       **old_program_args = ctrl->program_args;
+    int          old_arg_count    = ctrl->arg_count;
 
-    // Reset state
-    ctrl->program_launched = false;
-    ctrl->stopped_coro = NULL;
-    ctrl->stopped_coro_id = 0;
-    ctrl->stopped_path = NULL;
-    ctrl->stopped_line = 0;
-    ctrl->step_mode = XDAP_CMD_NONE;
+    ctrl->isolate       = NULL;
+    ctrl->debug_proto   = NULL;
+    ctrl->program_path  = NULL;
+    ctrl->program_args  = NULL;
+    ctrl->arg_count     = 0;
+
+    // Also clear any stopped-session pointers now — whether restart
+    // succeeds or fails, the old stop point is no longer meaningful.
+    ctrl->program_launched  = false;
+    ctrl->stopped_coro      = NULL;
+    ctrl->stopped_coro_id   = 0;
+    ctrl->stopped_path      = NULL;
+    ctrl->stopped_line      = 0;
+    ctrl->step_mode         = XDAP_CMD_NONE;
     atomic_store(&ctrl->cmd_pending, false);
 
-    // Free old program info
-    xr_free(ctrl->program_path);
-    ctrl->program_path = NULL;
-    if (ctrl->program_args) {
-        for (int i = 0; i < ctrl->arg_count; i++) {
-            xr_free(ctrl->program_args[i]);
-        }
-        xr_free(ctrl->program_args);
-        ctrl->program_args = NULL;
-    }
-    ctrl->arg_count = 0;
-
-    // Re-launch with saved info
+    // 3. Build the new isolate. At this point the old one is still
+    //    intact in `old_isolate`; we have not touched its memory.
     bool ok = xdap_controller_launch(ctrl, program, args_copy, arg_count, false);
 
-    // Free temporary copies
+    // 4. Release the local copies — launch either succeeded (and has
+    //    its own strdup'd copies) or failed (and any partial state is
+    //    cleaned up in the rollback path below).
     xr_free(program);
     if (args_copy) {
         for (int i = 0; i < arg_count; i++) xr_free(args_copy[i]);
@@ -248,11 +258,45 @@ bool xdap_controller_restart(XdapController *ctrl) {
     }
 
     if (ok) {
-        ctrl->vm_state = XDAP_VM_RUNNING;
+        // 5a. Success — now (and only now) is it safe to free the
+        //     old isolate and its program info.
+        if (old_isolate) {
+            xr_debug_free(old_isolate);
+            xr_multicore_destroy(old_isolate);
+            xray_free(old_isolate);
+        }
+        xr_free(old_program_path);
+        if (old_program_args) {
+            for (int i = 0; i < old_arg_count; i++) xr_free(old_program_args[i]);
+            xr_free(old_program_args);
+        }
+
+        ctrl->vm_state  = XDAP_VM_RUNNING;
         ctrl->configured = true;
+        return true;
     }
 
-    return ok;
+    // 5b. Failure — `launch()` may have partially populated ctrl->*
+    //     (e.g. program_path set but isolate creation failed at line
+    //     117). Tear down anything it left behind, then put the old
+    //     session back in place so the DAP UI keeps a live target.
+    xr_free(ctrl->program_path);
+    if (ctrl->program_args) {
+        for (int i = 0; i < ctrl->arg_count; i++) xr_free(ctrl->program_args[i]);
+        xr_free(ctrl->program_args);
+    }
+    if (ctrl->isolate) {
+        xr_debug_free(ctrl->isolate);
+        xr_multicore_destroy(ctrl->isolate);
+        xray_free(ctrl->isolate);
+    }
+
+    ctrl->isolate       = old_isolate;
+    ctrl->debug_proto   = old_debug_proto;
+    ctrl->program_path  = old_program_path;
+    ctrl->program_args  = old_program_args;
+    ctrl->arg_count     = old_arg_count;
+    return false;
 }
 
 void xdap_controller_terminate(XdapController *ctrl) {

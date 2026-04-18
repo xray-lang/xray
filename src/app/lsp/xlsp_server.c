@@ -410,6 +410,10 @@ XrLspServer *xlsp_server_new(void) {
     return server;
 }
 
+// Forward decl — definition lives alongside the rest of the request-id
+// helpers further down the file.
+static void xlsp_request_id_free(XlspRequestId *id);
+
 void xlsp_server_free(XrLspServer *server) {
     if (!server) return;
 
@@ -469,6 +473,14 @@ void xlsp_server_free(XrLspServer *server) {
     if (server->index_progress_token) {
         xr_free(server->index_progress_token);
         server->index_progress_token = NULL;
+    }
+
+    // Release any still-live string ids in the pending-request ring
+    // buffer. After a clean shutdown the ring is usually empty, but
+    // abrupt disconnects can leave entries behind; failing to free
+    // their owned strings would leak on exit.
+    for (int i = 0; i < MAX_PENDING_REQUESTS; i++) {
+        xlsp_request_id_free(&server->pending_requests.requests[i].id);
     }
 
     xr_free(server);
@@ -577,9 +589,16 @@ void xlsp_document_change(XrLspDocument *doc, XrLspRange *range,
         doc->length = new_len;
     }
 
-    // Update content hash for change detection
-    doc->content_hash = xlsp_content_hash(doc->content, doc->length);
-    doc->dirty = true;
+    // Hash-based change detection: rapid keystrokes often produce a
+    // didChange that arrives with identical bytes (e.g. edit + undo
+    // within the debounce window). Skipping the reparse on a hash
+    // match keeps the analyzer idle and lets the main loop stay
+    // responsive.
+    uint64_t new_hash = xlsp_content_hash(doc->content, doc->length);
+    if (new_hash != doc->content_hash) {
+        doc->content_hash = new_hash;
+        doc->dirty = true;
+    }
     build_line_index(doc);  // Ignore failure - line_offsets may be NULL
 }
 
@@ -591,6 +610,14 @@ void xlsp_document_close(XrLspServer *server, const char *uri) {
 XrLspDocument *xlsp_document_get(XrLspServer *server, const char *uri) {
     return doc_table_get(server->doc_table, uri);
 }
+
+// Upper bound on files we are willing to pull into memory for
+// on-demand analysis (Go-to-Definition targets, import resolution,
+// background indexing). LSP spec carries no such limit, but we enforce
+// one to avoid accidentally loading huge generated artifacts (minified
+// JS-in-text, massive test fixtures, binary blobs mistyped as .xr) —
+// all of which would OOM the server long before they parsed.
+#define XLSP_MAX_DOCUMENT_BYTES (50u * 1024u * 1024u)  // 50 MiB
 
 // Get or load document on-demand (for unopened files like Go to Definition targets)
 XrLspDocument *xlsp_document_get_or_load(XrLspServer *server, const char *uri) {
@@ -608,13 +635,24 @@ XrLspDocument *xlsp_document_get_or_load(XrLspServer *server, const char *uri) {
     long size = ftell(f);
     fseek(f, 0, SEEK_SET);
 
-    char *content = xr_malloc(size + 1);
+    if (size < 0) {
+        fclose(f);
+        return NULL;
+    }
+    if ((size_t)size >= XLSP_MAX_DOCUMENT_BYTES) {
+        lsp_log("Refusing to load %s: %ld bytes exceeds %u-byte limit",
+                path, size, XLSP_MAX_DOCUMENT_BYTES);
+        fclose(f);
+        return NULL;
+    }
+
+    char *content = xr_malloc((size_t)size + 1);
     if (!content) {
         fclose(f);
         return NULL;
     }
 
-    size_t read_size = fread(content, 1, size, f);
+    size_t read_size = fread(content, 1, (size_t)size, f);
     content[read_size] = '\0';
     fclose(f);
 
@@ -729,11 +767,105 @@ XrLspPosition xlsp_offset_to_position(XrLspDocument *doc, uint32_t offset) {
     return pos;
 }
 
-// Send a JSON-RPC response
-static void send_response(XrLspServer *server, int64_t id, XrJsonValue *result) {
+// ---------------------------------------------------------------------------
+// Request id (JSON-RPC 2.0: number | string)
+// ---------------------------------------------------------------------------
+
+// Parse the "id" field of an incoming message. Returns a value-typed
+// XlspRequestId whose string variant (if any) is xr_strdup'd and must be
+// released via xlsp_request_id_free. A missing / null id yields kind
+// XLSP_ID_NONE, which the caller uses to distinguish notifications.
+static XlspRequestId parse_request_id(XrJsonValue *msg) {
+    XlspRequestId id = { .kind = XLSP_ID_NONE, .as.number = 0 };
+    XrJsonValue *v = xlsp_json_get(msg, "id");
+    if (!v) return id;
+    if (v->type == XR_JSON_NUMBER) {
+        id.kind = XLSP_ID_NUMBER;
+        id.as.number = v->as.number;
+    } else if (v->type == XR_JSON_STRING) {
+        id.kind = XLSP_ID_STRING;
+        id.as.string = xr_strdup(v->as.string ? v->as.string : "");
+        if (!id.as.string) {
+            // OOM — downgrade to NONE so the caller treats it as a
+            // notification. The client will probably time out, but we
+            // never crash or fabricate a wrong id.
+            id.kind = XLSP_ID_NONE;
+        }
+    }
+    // XR_JSON_NULL, bool, array, object → treated as NONE. Per spec null
+    // id is reserved; clients should not use it. Logging would be noisy.
+    return id;
+}
+
+static void xlsp_request_id_free(XlspRequestId *id) {
+    if (!id) return;
+    if (id->kind == XLSP_ID_STRING) {
+        xr_free(id->as.string);
+        id->as.string = NULL;
+    }
+    id->kind = XLSP_ID_NONE;
+}
+
+static XlspRequestId xlsp_request_id_clone(const XlspRequestId *src) {
+    XlspRequestId dst = { .kind = XLSP_ID_NONE, .as.number = 0 };
+    if (!src) return dst;
+    dst.kind = src->kind;
+    if (src->kind == XLSP_ID_NUMBER) {
+        dst.as.number = src->as.number;
+    } else if (src->kind == XLSP_ID_STRING) {
+        dst.as.string = xr_strdup(src->as.string ? src->as.string : "");
+        if (!dst.as.string) dst.kind = XLSP_ID_NONE;
+    }
+    return dst;
+}
+
+static bool xlsp_request_id_equals(const XlspRequestId *a, const XlspRequestId *b) {
+    if (!a || !b) return false;
+    if (a->kind != b->kind) return false;
+    switch (a->kind) {
+        case XLSP_ID_NUMBER: return a->as.number == b->as.number;
+        case XLSP_ID_STRING:
+            return a->as.string && b->as.string &&
+                   strcmp(a->as.string, b->as.string) == 0;
+        case XLSP_ID_NONE:   return true;  // both notifications (rare)
+    }
+    return false;
+}
+
+// Build the JSON id value for a response / request. Returns a JSON
+// value (null for XLSP_ID_NONE — used only for error responses that
+// have to be emitted before we could parse the id).
+static XrJsonValue *xlsp_request_id_to_json(const XlspRequestId *id) {
+    if (!id || id->kind == XLSP_ID_NONE) return xlsp_json_new_null();
+    if (id->kind == XLSP_ID_NUMBER) return xlsp_json_new_number(id->as.number);
+    return xlsp_json_new_string(id->as.string ? id->as.string : "");
+}
+
+// Short debug label, used for log messages only. Returns a pointer into
+// a static buffer (single-threaded caller assumed: lsp_log is only ever
+// called from the main loop or a thread that already holds tls_server).
+static const char *xlsp_request_id_debug(const XlspRequestId *id) {
+    static _Thread_local char buf[64];
+    if (!id || id->kind == XLSP_ID_NONE) return "<notif>";
+    if (id->kind == XLSP_ID_NUMBER) {
+        snprintf(buf, sizeof(buf), "%.0f", id->as.number);
+    } else {
+        snprintf(buf, sizeof(buf), "\"%s\"",
+                 id->as.string ? id->as.string : "");
+    }
+    return buf;
+}
+
+// ---------------------------------------------------------------------------
+// Response / error emitters
+// ---------------------------------------------------------------------------
+
+// Send a JSON-RPC response echoing back the client's id exactly.
+static void send_response(XrLspServer *server, const XlspRequestId *id,
+                          XrJsonValue *result) {
     XrJsonValue *resp = xlsp_json_new_object();
     xlsp_json_object_set(resp, "jsonrpc", xlsp_json_new_string("2.0"));
-    xlsp_json_object_set(resp, "id", xlsp_json_new_number(id));
+    xlsp_json_object_set(resp, "id", xlsp_request_id_to_json(id));
     xlsp_json_object_set(resp, "result", result ? result : xlsp_json_new_null());
 
     size_t len;
@@ -744,11 +876,12 @@ static void send_response(XrLspServer *server, int64_t id, XrJsonValue *result) 
     xlsp_json_free(resp);
 }
 
-// Send a JSON-RPC error response
-static void send_error(XrLspServer *server, int64_t id, int code, const char *message) {
+// Send a JSON-RPC error response, mirroring the client's id shape.
+static void send_error(XrLspServer *server, const XlspRequestId *id,
+                       int code, const char *message) {
     XrJsonValue *resp = xlsp_json_new_object();
     xlsp_json_object_set(resp, "jsonrpc", xlsp_json_new_string("2.0"));
-    xlsp_json_object_set(resp, "id", xlsp_json_new_number(id));
+    xlsp_json_object_set(resp, "id", xlsp_request_id_to_json(id));
 
     XrJsonValue *error = xlsp_json_new_object();
     xlsp_json_object_set(error, "code", xlsp_json_new_number(code));
@@ -802,12 +935,20 @@ static void send_request(XrLspServer *server, const char *method, XrJsonValue *p
 // Request Cancellation Support ($/cancelRequest)
 // ============================================================================
 
-// Add a pending request to track (ring buffer: O(1) insert)
-static void pending_request_add(XrLspServer *server, int64_t id, const char *method) {
+// Add a pending request to track (ring buffer: O(1) insert).
+// Takes ownership of *id (moves it into the slot). `method` is a static
+// string from the dispatch table and is stored by reference.
+static void pending_request_add(XrLspServer *server, XlspRequestId id,
+                                const char *method) {
     XlspPendingRequests *pending = &server->pending_requests;
 
-    // Write at head position (overwrites oldest if full)
+    // Write at head position (overwrites oldest if full). If we're
+    // about to overwrite a still-live slot that holds an owned string
+    // id, release it first so we don't leak.
     int slot = pending->head;
+    if (pending->count == MAX_PENDING_REQUESTS) {
+        xlsp_request_id_free(&pending->requests[slot].id);
+    }
     pending->requests[slot].id = id;
     pending->requests[slot].method = method;
     pending->requests[slot].cancelled = false;
@@ -819,13 +960,12 @@ static void pending_request_add(XrLspServer *server, int64_t id, const char *met
     }
 }
 
-// Remove a pending request (when completed)
-static void pending_request_remove(XrLspServer *server, int64_t id) {
+// Remove a pending request (when completed).
+static void pending_request_remove(XrLspServer *server, const XlspRequestId *id) {
     XlspPendingRequests *pending = &server->pending_requests;
-
     for (int i = 0; i < pending->count; i++) {
-        if (pending->requests[i].id == id) {
-            pending->requests[i].id = 0;
+        if (xlsp_request_id_equals(&pending->requests[i].id, id)) {
+            xlsp_request_id_free(&pending->requests[i].id);
             pending->requests[i].method = NULL;
             pending->requests[i].cancelled = false;
             break;
@@ -833,46 +973,50 @@ static void pending_request_remove(XrLspServer *server, int64_t id) {
     }
 }
 
-// Check if a request was cancelled
-static bool pending_request_is_cancelled(XrLspServer *server, int64_t id) {
+// Check if a request was cancelled.
+static bool pending_request_is_cancelled(XrLspServer *server, const XlspRequestId *id) {
     XlspPendingRequests *pending = &server->pending_requests;
-
     for (int i = 0; i < pending->count; i++) {
-        if (pending->requests[i].id == id) {
+        if (xlsp_request_id_equals(&pending->requests[i].id, id)) {
             return pending->requests[i].cancelled;
         }
     }
     return false;
 }
 
-// Mark a request as cancelled (also cancels associated background tasks)
-static bool pending_request_cancel(XrLspServer *server, int64_t id) {
+// Mark a request as cancelled (also cancels associated background tasks).
+// The async subsystem still keys tasks by int64_t request id — string
+// ids cannot be propagated there without a wider refactor, so for now
+// we only cancel async tasks for numeric ids. VS Code always uses
+// numeric ids so this covers 100% of today's real traffic.
+static bool pending_request_cancel(XrLspServer *server, const XlspRequestId *id) {
     XlspPendingRequests *pending = &server->pending_requests;
     bool found = false;
 
     for (int i = 0; i < pending->count; i++) {
-        if (pending->requests[i].id == id) {
+        if (xlsp_request_id_equals(&pending->requests[i].id, id)) {
             pending->requests[i].cancelled = true;
-            lsp_log("Request %lld (%s) marked as cancelled",
-                    (long long)id,
+            lsp_log("Request %s (%s) marked as cancelled",
+                    xlsp_request_id_debug(id),
                     pending->requests[i].method ? pending->requests[i].method : "unknown");
             found = true;
             break;
         }
     }
 
-    // Also cancel any background tasks associated with this request
-    if (server->async) {
-        int async_cancelled = xlsp_async_cancel_request(server->async, id);
+    if (server->async && id && id->kind == XLSP_ID_NUMBER) {
+        int async_cancelled = xlsp_async_cancel_request(server->async,
+                                                        (int64_t)id->as.number);
         if (async_cancelled > 0) {
-            lsp_log("Cancelled %d background tasks for request %lld", async_cancelled, (long long)id);
+            lsp_log("Cancelled %d background tasks for request %s",
+                    async_cancelled, xlsp_request_id_debug(id));
         }
     }
 
     if (!found) {
-        lsp_log("Request %lld not found for cancellation", (long long)id);
+        lsp_log("Request %s not found for cancellation",
+                xlsp_request_id_debug(id));
     }
-
     return found;
 }
 
@@ -880,20 +1024,13 @@ static bool pending_request_cancel(XrLspServer *server, int64_t id) {
 static void handle_cancel_request(XrLspServer *server, XrJsonValue *params) {
     if (!params) return;
 
-    // Get the id to cancel (can be number or string)
-    XrJsonValue *id_val = xlsp_json_get(params, "id");
-    if (!id_val) return;
+    // params itself carries the id to cancel, same number-or-string
+    // shape as an original request's id.
+    XlspRequestId target = parse_request_id(params);
+    if (target.kind == XLSP_ID_NONE) return;
 
-    int64_t id = 0;
-    if (id_val->type == XR_JSON_NUMBER) {
-        id = (int64_t)id_val->as.number;
-    } else if (id_val->type == XR_JSON_STRING) {
-        id = atoll(id_val->as.string);
-    }
-
-    if (id != 0) {
-        pending_request_cancel(server, id);
-    }
+    pending_request_cancel(server, &target);
+    xlsp_request_id_free(&target);
 }
 
 // LSP error codes
@@ -1155,27 +1292,48 @@ static const LspMethodEntry *find_method(XrLspServer *server, const char *method
     return NULL;
 }
 
-// Handle incoming message
+// Handle incoming message.
+//
+// Request vs notification: per JSON-RPC 2.0 a request has an `id` member
+// that is a number or a string; a notification has no `id`. We honour
+// both `id` shapes, echo them back verbatim in responses, and use them
+// as the cancellation key.
 static void handle_message(XrLspServer *server, XrJsonValue *msg) {
     init_method_table(server);
 
     const char *method = xlsp_json_get_string(msg, "method");
     XrJsonValue *params = xlsp_json_get(msg, "params");
-    XrJsonValue *id_val = xlsp_json_get(msg, "id");
 
-    bool is_request = (id_val != NULL);
-    int64_t id = is_request ? (int64_t)id_val->as.number : 0;
+    XlspRequestId id = parse_request_id(msg);
+    bool is_request = (id.kind != XLSP_ID_NONE);
 
     if (!method) {
         if (is_request) {
-            send_error(server, id, -32600, "Invalid Request");
+            send_error(server, &id, -32600, "Invalid Request");
         }
+        xlsp_request_id_free(&id);
         return;
     }
 
     // Handle $/cancelRequest specially (it's a notification)
     if (strcmp(method, "$/cancelRequest") == 0) {
         handle_cancel_request(server, params);
+        xlsp_request_id_free(&id);
+        return;
+    }
+
+    // LSP spec: once `shutdown` was received, only `shutdown` and
+    // `exit` remain legal. Reject requests with -32002 and silently
+    // drop notifications (including $/cancelRequest handled above so
+    // clients can still cancel outstanding work during teardown).
+    if (server->shutdown_received &&
+        strcmp(method, "shutdown") != 0 &&
+        strcmp(method, "exit") != 0) {
+        if (is_request) {
+            send_error(server, &id, -32002, "Server is shutting down");
+        }
+        lsp_log("Dropping '%s' after shutdown", method);
+        xlsp_request_id_free(&id);
         return;
     }
 
@@ -1190,14 +1348,20 @@ static void handle_message(XrLspServer *server, XrJsonValue *msg) {
                 server->index_cancelled = true;
             }
         }
+        xlsp_request_id_free(&id);
         return;
     }
 
-    lsp_log("Received: %s (id=%lld)", method, (long long)id);
+    lsp_log("Received: %s (id=%s)", method, xlsp_request_id_debug(&id));
 
-    // Track pending requests for cancellation
+    // Track pending requests for cancellation. Ownership of the id's
+    // string (if any) moves into the ring buffer on success; we keep
+    // a cloned copy here so we can still identify the slot when the
+    // call returns.
+    XlspRequestId id_for_slot = { .kind = XLSP_ID_NONE, .as.number = 0 };
     if (is_request) {
-        pending_request_add(server, id, method);
+        id_for_slot = xlsp_request_id_clone(&id);
+        pending_request_add(server, id_for_slot, method);
     }
 
     // O(1) method lookup
@@ -1205,31 +1369,37 @@ static void handle_message(XrLspServer *server, XrJsonValue *msg) {
     if (entry) {
         if (entry->request_handler) {
             // Check if already cancelled before executing
-            if (pending_request_is_cancelled(server, id)) {
-                lsp_log("Request %lld was cancelled before execution", (long long)id);
-                send_error(server, id, LSP_ERROR_REQUEST_CANCELLED, "Request cancelled");
+            if (pending_request_is_cancelled(server, &id)) {
+                lsp_log("Request %s was cancelled before execution",
+                        xlsp_request_id_debug(&id));
+                send_error(server, &id, LSP_ERROR_REQUEST_CANCELLED,
+                           "Request cancelled");
             } else {
                 XrJsonValue *result = entry->request_handler(server, params);
                 // Check if cancelled during execution
-                if (pending_request_is_cancelled(server, id)) {
-                    lsp_log("Request %lld was cancelled during execution", (long long)id);
-                    send_error(server, id, LSP_ERROR_REQUEST_CANCELLED, "Request cancelled");
+                if (pending_request_is_cancelled(server, &id)) {
+                    lsp_log("Request %s was cancelled during execution",
+                            xlsp_request_id_debug(&id));
+                    send_error(server, &id, LSP_ERROR_REQUEST_CANCELLED,
+                               "Request cancelled");
                     if (result) xlsp_json_free(result);
                 } else {
-                    send_response(server, id, result);
+                    send_response(server, &id, result);
                 }
             }
-            pending_request_remove(server, id);
+            pending_request_remove(server, &id);
         } else if (entry->notification_handler) {
             entry->notification_handler(server, params);
         }
     } else {
         if (is_request) {
-            send_error(server, id, -32601, "Method not found");
-            pending_request_remove(server, id);
+            send_error(server, &id, -32601, "Method not found");
+            pending_request_remove(server, &id);
         }
         lsp_log("Unhandled method: %s", method);
     }
+
+    xlsp_request_id_free(&id);
 }
 
 // Context identifiers for poll events
@@ -1247,12 +1417,15 @@ int xlsp_server_run(XrLspServer *server) {
 
     lsp_log("xray Language Server starting...");
 
-    // Initialize poll subsystem
+    // Initialize poll subsystem. xr_poll has backends for kqueue, epoll,
+    // IOCP and select, so failure here means OOM or a kernel subsystem
+    // catastrophe — there is no useful blocking fallback (the main loop
+    // also has to wake on async task completions, index pool results
+    // and diagnostic debounce timers, all of which are poll-driven).
     XrPoll poll;
     if (xr_poll_init(&poll) < 0) {
-        lsp_log("Failed to initialize poll, falling back to blocking mode");
-        // Fall back to blocking mode (original behavior)
-        goto fallback_blocking;
+        lsp_log("FATAL: xr_poll_init failed (OOM?); server cannot start");
+        return 1;
     }
 
     // Register stdin for reading
@@ -1285,8 +1458,10 @@ int xlsp_server_run(XrLspServer *server) {
 
     lsp_log("Event loop initialized with poll");
 
-    // Event-driven main loop
-    while (!server->shutdown_requested) {
+    // Event-driven main loop — runs until `exit` notification arrives.
+    // Receiving `shutdown` alone does NOT stop the loop: the spec
+    // requires us to stay up and reject subsequent requests.
+    while (!server->exit_received) {
         XrPollEvent events[8];
         int n = xr_poll_wait(&poll, events, 8, 100);  // 100ms timeout
 
@@ -1363,47 +1538,8 @@ int xlsp_server_run(XrLspServer *server) {
 
     xr_poll_destroy(&poll);
     lsp_log("Server shutting down");
-    return server->shutdown_requested ? 0 : 1;
-
-fallback_blocking:
-    // Original blocking implementation (fallback)
-    lsp_log("Using blocking I/O mode");
-    while (!server->shutdown_requested) {
-        // Process any completed background tasks
-        if (server->async) {
-            int completed = xlsp_async_poll(server->async);
-            if (completed > 0) {
-                lsp_log("Processed %d background tasks", completed);
-            }
-        }
-
-        // Process parallel indexing results
-        xlsp_workspace_poll_index_results(server);
-
-        size_t len;
-        char *msg_str = xlsp_transport_read(server->transport, &len);
-        if (!msg_str) {
-            lsp_log("EOF or read error, exiting");
-            break;
-        }
-
-        XrJsonValue *msg = xlsp_json_parse(msg_str, len);
-        xr_free(msg_str);
-
-        if (!msg) {
-            lsp_log("Failed to parse JSON message");
-            continue;
-        }
-
-        handle_message(server, msg);
-        xlsp_json_free(msg);
-
-        // Check debounced diagnostic deadlines
-        flush_pending_diagnostics(server);
-    }
-
-    lsp_log("Server shutting down");
-    return server->shutdown_requested ? 0 : 1;
+    // Spec: exit with 0 iff `shutdown` arrived before `exit`, else 1.
+    return server->shutdown_received ? 0 : 1;
 }
 
 // ============== Handler Implementations ==============
@@ -1645,14 +1781,20 @@ static void handle_initialized(XrLspServer *server, XrJsonValue *params) {
 static XrJsonValue *handle_shutdown(XrLspServer *server, XrJsonValue *params) {
     (void)params;
     lsp_log("Shutdown requested");
-    server->shutdown_requested = true;
+    // Per LSP spec: shutdown is a request, not an exit trigger. We
+    // flush state, reply with null, then wait for the mandatory
+    // `exit` notification. After this point handle_message will
+    // reject everything except `shutdown`/`exit` with -32002.
+    server->shutdown_received = true;
     return xlsp_json_new_null();
 }
 
 static void handle_exit(XrLspServer *server, XrJsonValue *params) {
     (void)params;
     lsp_log("Exit notification received");
-    server->shutdown_requested = true;
+    // Only `exit` drops us out of xlsp_server_run. A process-wide
+    // exit code of 0 vs 1 is decided later based on shutdown_received.
+    server->exit_received = true;
 }
 
 // File change types (LSP spec)

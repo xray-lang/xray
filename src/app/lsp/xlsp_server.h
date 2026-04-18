@@ -21,6 +21,7 @@
 #include "xray_isolate.h"
 #include "../../base/xarena.h"
 #include <stdbool.h>
+#include <stdio.h>     // FILE *log_file in XrLspServer
 
 // Forward declarations
 typedef struct XrLspDocument XrLspDocument;
@@ -113,10 +114,28 @@ typedef struct XrLspIndexPool XrLspIndexPool;
 // Maximum pending requests to track (for cancellation support)
 #define MAX_PENDING_REQUESTS 64
 
+// JSON-RPC 2.0 request id. The spec allows either a number OR a string
+// (null is reserved and we treat it as "notification"). Existing LSP
+// clients like VS Code always use integers, but correctness-wise we
+// MUST echo back the exact shape the client sent us.
+typedef enum {
+    XLSP_ID_NONE = 0,   // Notification (no id field / id == null)
+    XLSP_ID_NUMBER,     // Integer or real id
+    XLSP_ID_STRING,     // String id (owned, xr_free on clear)
+} XlspRequestIdKind;
+
+typedef struct XlspRequestId {
+    XlspRequestIdKind kind;
+    union {
+        double number;
+        char  *string;  // xr_strdup'd when kind == XLSP_ID_STRING
+    } as;
+} XlspRequestId;
+
 // Pending request entry (for $/cancelRequest support)
 typedef struct XlspPendingRequest {
-    int64_t id;                 // Request ID
-    const char *method;         // Method name (for logging)
+    XlspRequestId id;           // Request id (number or string, owned)
+    const char *method;         // Method name (static, for logging)
     bool cancelled;             // Whether this request was cancelled
     uint64_t start_time;        // Start time (monotonic ms)
 } XlspPendingRequest;
@@ -194,9 +213,14 @@ struct XrLspServer {
     // Workspace-level static analyzer (unified index for all cross-file features)
     XaAnalyzer *workspace_analyzer;
 
-    // Server state
+    // Server state — the LSP lifecycle is a strict state machine:
+    //   (pre-init) -> initialized -> shutdown_received -> exit_received
+    // After `shutdown` we must keep the process alive and only reply
+    // to `shutdown`/`exit`; all other requests are rejected with
+    // -32002 (InvalidRequest). Only `exit` tears down the event loop.
     bool initialized;
-    bool shutdown_requested;
+    bool shutdown_received;
+    bool exit_received;
 
     // Workspace info (primary/root workspace)
     char *root_uri;

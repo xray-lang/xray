@@ -5,193 +5,282 @@
  * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
  * Licensed under the MIT License
  *
- * xlsp_transport.c - LSP transport layer implementation
+ * xlsp_transport.c - LSP transport layer (stdio, non-blocking)
+ *
+ * Uses a fd-based, truly non-blocking incremental frame parser. stdin
+ * is set O_NONBLOCK; each call to xlsp_transport_try_read() drains
+ * whatever bytes the kernel has buffered, appends them to read_buf,
+ * then checks whether a whole LSP frame (header + N body bytes) has
+ * arrived yet. Partial frames stay in the buffer until the next call.
+ *
+ * This matches the DAP transport layer byte-for-byte (see
+ * xdap_transport.c) so that both adapters share the same correctness
+ * guarantees and the same portability story.
  */
 
 #include "xlsp_transport.h"
+#include "../../base/xmalloc.h"
+#include "../../base/xchecks.h"
 #include <stdlib.h>
 #include <string.h>
 #include <ctype.h>
-#include <stdbool.h>
-#include <unistd.h>
-#include <fcntl.h>
+#include <stdio.h>
 #include <errno.h>
+#include <time.h>    // nanosleep, struct timespec
 
 #ifdef _WIN32
 #include <io.h>
-#define STDIN_FILENO 0
+#include <winsock2.h>
+#define STDIN_FILENO  0
+#define STDOUT_FILENO 1
+typedef int ssize_t;  // MSVC / MinGW
 #else
-#include <sys/select.h>
-#include "../../base/xmalloc.h"
+#include <unistd.h>
+#include <fcntl.h>
 #endif
 
-#define INITIAL_BUFFER_SIZE 4096
-#define HEADER_BUFFER_SIZE 256
-#define PARTIAL_HEADER_SIZE 1024
+#define INITIAL_BUF_SIZE 4096
+
+// ---------------------------------------------------------------------------
+// Platform helpers (mirror xdap_transport.c)
+// ---------------------------------------------------------------------------
+
+static int set_nonblock(int fd) {
+#ifdef _WIN32
+    // Windows console stdin does not honour O_NONBLOCK via the CRT.
+    // When the IDE launches us over a pipe (which VS Code does) the
+    // pipe still behaves synchronously on Win32 — a proper fix needs
+    // an OVERLAPPED read path via IOCP. That's out of scope for the
+    // initial macOS/Linux rollout; we return success so higher layers
+    // keep working, accepting occasional read() blocks on Windows until
+    // the IOCP path lands alongside xpoll_iocp.
+    (void)fd;
+    return 0;
+#else
+    int flags = fcntl(fd, F_GETFL, 0);
+    if (flags < 0) return -1;
+    return fcntl(fd, F_SETFL, flags | O_NONBLOCK);
+#endif
+}
+
+// Returns: > 0 bytes read, 0 = would-block (no data yet),
+//          < 0 = EOF / fatal error.
+static ssize_t read_nonblock(int fd, char *buf, size_t len) {
+#ifdef _WIN32
+    int n = _read(fd, buf, (unsigned)len);
+    if (n < 0) {
+        // errno==EAGAIN on pipes set non-blocking; we also treat
+        // EINTR as "try again later" so the main loop can tick.
+        if (errno == EAGAIN || errno == EINTR) return 0;
+        return -1;
+    }
+    if (n == 0) return -1;  // EOF
+    return n;
+#else
+    ssize_t n = read(fd, buf, len);
+    if (n < 0) {
+        if (errno == EAGAIN || errno == EWOULDBLOCK) return 0;
+        if (errno == EINTR) return 0;
+        return -1;
+    }
+    if (n == 0) return -1;  // EOF
+    return n;
+#endif
+}
+
+// Blocking retry loop; used only for outgoing frames. Returns total
+// bytes written on success, -1 on unrecoverable error.
+static ssize_t write_all(int fd, const char *buf, size_t len) {
+    size_t total = 0;
+    while (total < len) {
+#ifdef _WIN32
+        int n = _write(fd, buf + total, (unsigned)(len - total));
+        if (n < 0) {
+            if (errno == EAGAIN || errno == EINTR) continue;
+            return -1;
+        }
+#else
+        ssize_t n = write(fd, buf + total, len - total);
+        if (n < 0) {
+            if (errno == EINTR) continue;
+            if (errno == EAGAIN || errno == EWOULDBLOCK) {
+                // Back-pressure on pipe; brief yield rather than spin.
+                struct timespec ts = {0, 100000};  // 100 us
+                nanosleep(&ts, NULL);
+                continue;
+            }
+            return -1;
+        }
+        if (n == 0) return -1;
+#endif
+        total += (size_t)n;
+    }
+    return (ssize_t)total;
+}
+
+static bool ensure_capacity(char **buf, size_t *cap, size_t needed) {
+    if (*cap >= needed) return true;
+    size_t new_cap = *cap ? *cap * 2 : INITIAL_BUF_SIZE;
+    while (new_cap < needed) new_cap *= 2;
+    char *tmp = *buf;
+    if (!XR_REALLOC(tmp, new_cap)) return false;
+    *buf = tmp;
+    *cap = new_cap;
+    return true;
+}
+
+// Scan read_buf for "\r\n\r\n"; if found, cache header_end and return
+// the Content-Length value. Returns -1 when the header block is still
+// incomplete (the caller will try again on the next drain).
+static int parse_header(XrLspTransport *t) {
+    char *end = strstr(t->read_buf, "\r\n\r\n");
+    if (!end) return -1;
+
+    t->header_end = (size_t)(end - t->read_buf) + 4;
+
+    char *cl = strcasestr(t->read_buf, "Content-Length:");
+    if (!cl || cl >= end) return -1;
+
+    cl += strlen("Content-Length:");
+    while (*cl && isspace((unsigned char)*cl)) cl++;
+
+    int n = atoi(cl);
+    return n >= 0 ? n : -1;
+}
+
+// ---------------------------------------------------------------------------
+// Public API
+// ---------------------------------------------------------------------------
 
 XrLspTransport *xlsp_transport_stdio(void) {
     XrLspTransport *t = xr_calloc(1, sizeof(XrLspTransport));
     if (!t) return NULL;
 
-    t->in = stdin;
-    t->out = stdout;
-    t->buffer_size = INITIAL_BUFFER_SIZE;
-    t->read_buffer = xr_malloc(t->buffer_size);
-    t->in_fd = STDIN_FILENO;
-
-    // Partial message state
-    t->partial_header = NULL;
-    t->partial_len = 0;
+    t->read_fd  = STDIN_FILENO;
+    t->write_fd = STDOUT_FILENO;
     t->pending_content_length = -1;
 
-    // Disable buffering for stdout to ensure messages are sent immediately
+    t->read_buf = xr_malloc(INITIAL_BUF_SIZE);
+    if (!t->read_buf) {
+        xr_free(t);
+        return NULL;
+    }
+    t->read_cap = INITIAL_BUF_SIZE;
+
+    // stdin → non-blocking (no-op on _WIN32 for now, see set_nonblock).
+    set_nonblock(t->read_fd);
+
+    // stdout must be unbuffered so responses hit the IDE immediately.
     setvbuf(stdout, NULL, _IONBF, 0);
 
+    t->connected = true;
     return t;
 }
 
 void xlsp_transport_free(XrLspTransport *t) {
     if (!t) return;
-    xr_free(t->read_buffer);
-    xr_free(t->partial_header);
+    // stdin/stdout intentionally not closed; they outlive the server.
+    xr_free(t->read_buf);
     xr_free(t);
 }
 
-// Get input file descriptor for polling
 int xlsp_transport_get_fd(XrLspTransport *t) {
-    if (!t) return -1;
-    return t->in_fd;
+    return t ? t->read_fd : -1;
 }
 
-// Check if there's data available to read (non-blocking)
-int xlsp_transport_has_data(XrLspTransport *t) {
-    if (!t || t->in_fd < 0) return -1;
-
-#ifdef _WIN32
-    // Windows: use _kbhit or PeekNamedPipe
-    // Simplified: assume data is available
-    return 1;
-#else
-    fd_set fds;
-    struct timeval tv = {0, 0};  // Non-blocking
-
-    FD_ZERO(&fds);
-    FD_SET(t->in_fd, &fds);
-
-    int ret = select(t->in_fd + 1, &fds, NULL, NULL, &tv);
-    if (ret < 0) {
-        if (errno == EINTR) return 0;
-        return -1;
-    }
-
-    return ret > 0 ? 1 : 0;
-#endif
+bool xlsp_transport_is_connected(XrLspTransport *t) {
+    return t && t->connected;
 }
 
-// Parse Content-Length from headers
-static int parse_content_length(const char *header_line) {
-    const char *prefix = "Content-Length:";
-    size_t prefix_len = strlen(prefix);
-
-    if (strncasecmp(header_line, prefix, prefix_len) != 0) {
-        return -1;
-    }
-
-    const char *value = header_line + prefix_len;
-    while (*value && isspace((unsigned char)*value)) value++;
-
-    return atoi(value);
-}
-
-char *xlsp_transport_read(XrLspTransport *t, size_t *out_len) {
-    char header_line[HEADER_BUFFER_SIZE];
-    int content_length = -1;
-
-    // Read headers until empty line
-    while (1) {
-        if (!fgets(header_line, sizeof(header_line), t->in)) {
-            return NULL;  // EOF or error
-        }
-
-        // Remove trailing \r\n
-        size_t len = strlen(header_line);
-        while (len > 0 && (header_line[len-1] == '\n' || header_line[len-1] == '\r')) {
-            header_line[--len] = '\0';
-        }
-
-        // Empty line = end of headers
-        if (len == 0) {
-            break;
-        }
-
-        // Parse Content-Length
-        int cl = parse_content_length(header_line);
-        if (cl >= 0) {
-            content_length = cl;
-        }
-    }
-
-    if (content_length < 0) {
-        return NULL;  // No Content-Length header
-    }
-
-    // Ensure buffer is large enough. XR_REALLOC preserves t->read_buffer on
-    // OOM so the previous (smaller) buffer stays owned by `t` and can be
-    // freed via xr_transport_free later.
-    if ((size_t)content_length + 1 > t->buffer_size) {
-        size_t new_size = (size_t)content_length + 1;
-        if (!XR_REALLOC(t->read_buffer, new_size)) {
-            return NULL;
-        }
-        t->buffer_size = new_size;
-    }
-
-    // Read content
-    size_t total_read = 0;
-    while (total_read < (size_t)content_length) {
-        size_t n = fread(t->read_buffer + total_read, 1,
-                        content_length - total_read, t->in);
-        if (n == 0) {
-            return NULL;  // EOF or error
-        }
-        total_read += n;
-    }
-
-    t->read_buffer[content_length] = '\0';
-
-    // Return a copy
-    char *result = xr_malloc(content_length + 1);
-    if (!result) return NULL;
-    memcpy(result, t->read_buffer, content_length + 1);
-
-    if (out_len) *out_len = content_length;
-    return result;
-}
-
-void xlsp_transport_write(XrLspTransport *t, const char *json, size_t len) {
-    fprintf(t->out, "Content-Length: %zu\r\n\r\n", len);
-    fwrite(json, 1, len, t->out);
-    fflush(t->out);
-}
-
-// Try to read one LSP message without blocking
-// This is a simplified implementation that checks for data availability
-// before doing a blocking read
 char *xlsp_transport_try_read(XrLspTransport *t, size_t *out_len, bool *would_block) {
-    if (!t) {
+    XR_DCHECK(t != NULL, "xlsp_transport_try_read: NULL transport");
+    if (!t || !t->connected) {
         if (would_block) *would_block = false;
         return NULL;
     }
 
-    // Check if there's data available
-    int has_data = xlsp_transport_has_data(t);
-    if (has_data <= 0) {
-        if (would_block) *would_block = (has_data == 0);
+    // Reserve room for one more chunk plus a terminating NUL (so
+    // strstr/strcasestr stay safe on arbitrary byte input).
+    if (!ensure_capacity(&t->read_buf, &t->read_cap, t->read_len + 1024 + 1)) {
+        // OOM — treat as fatal. Subsequent try_read() returns EOF.
+        t->connected = false;
+        if (would_block) *would_block = false;
         return NULL;
     }
 
-    // Data is available, do a normal blocking read
-    // (which should return quickly since data is available)
-    if (would_block) *would_block = false;
-    return xlsp_transport_read(t, out_len);
+    ssize_t n = read_nonblock(t->read_fd,
+                              t->read_buf + t->read_len,
+                              t->read_cap - t->read_len - 1);
+    if (n < 0) {
+        // EOF or fatal error
+        t->connected = false;
+        if (would_block) *would_block = false;
+        return NULL;
+    }
+    t->read_len += (size_t)n;
+    t->read_buf[t->read_len] = '\0';
+
+    // Parse header lazily — re-run until we successfully capture the
+    // Content-Length. After that, pending_content_length stays set
+    // until we hand the frame to the caller.
+    if (t->pending_content_length < 0) {
+        t->pending_content_length = parse_header(t);
+    }
+
+    if (t->pending_content_length >= 0) {
+        size_t total_needed = t->header_end + (size_t)t->pending_content_length;
+
+        if (t->read_len >= total_needed) {
+            int content_len = t->pending_content_length;
+
+            char *body = xr_malloc((size_t)content_len + 1);
+            if (!body) {
+                // OOM here is recoverable — we'll surface would_block
+                // so the caller retries later when memory frees up.
+                if (would_block) *would_block = true;
+                return NULL;
+            }
+            memcpy(body, t->read_buf + t->header_end, (size_t)content_len);
+            body[content_len] = '\0';
+
+            // Slide the remainder of the buffer down so the next frame
+            // starts at offset 0.
+            size_t remaining = t->read_len - total_needed;
+            if (remaining > 0) {
+                memmove(t->read_buf, t->read_buf + total_needed, remaining);
+            }
+            t->read_len = remaining;
+            t->read_buf[t->read_len] = '\0';
+
+            // Reset parser state for the next frame.
+            t->pending_content_length = -1;
+            t->header_end = 0;
+
+            if (out_len)      *out_len = (size_t)content_len;
+            if (would_block)  *would_block = false;
+            return body;
+        }
+    }
+
+    // No complete frame yet — tell the event loop to poll again.
+    if (would_block) *would_block = true;
+    return NULL;
+}
+
+void xlsp_transport_write(XrLspTransport *t, const char *json, size_t len) {
+    XR_DCHECK(t != NULL, "xlsp_transport_write: NULL transport");
+    if (!t || !t->connected) return;
+
+    char header[64];
+    int header_len = snprintf(header, sizeof(header),
+                              "Content-Length: %zu\r\n\r\n", len);
+    XR_DCHECK(header_len > 0 && header_len < (int)sizeof(header),
+              "Content-Length header overflow");
+
+    if (write_all(t->write_fd, header, (size_t)header_len) < 0 ||
+        write_all(t->write_fd, json, len) < 0) {
+        // Broken pipe; mark transport dead so try_read() eventually
+        // surfaces EOF to the main loop.
+        t->connected = false;
+    }
 }
