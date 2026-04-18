@@ -28,7 +28,11 @@
  */
 
 #include "xanalyzer_escape.h"
+#include "xanalyzer.h"
 #include "../../base/xchecks.h"
+#include "../../runtime/xerror.h"
+#include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 /* ========== Scope Stack for Name Resolution ========== */
@@ -52,7 +56,26 @@ typedef struct {
     int func_boundary;          // scope depth at current function entry
     bool in_go_closure;         // true when inside a go-spawned closure body
     int go_scope_boundary;      // scope depth where go closure starts (captures below this are outer)
+    XaAnalyzer *analyzer;       // optional: for emitting diagnostics
+    const char *file_path;      // source file path for diagnostic locations
 } EaContext;
+
+/*
+ * Emit an analyzer diagnostic if an analyzer handle is attached.
+ * Location is derived from the offending AST node (fallback: decl node).
+ */
+static void ea_emit_error(EaContext *ctx, AstNode *loc_node, int code,
+                          const char *fmt, const char *name) {
+    if (!ctx->analyzer || !loc_node) return;
+    char msg[512];
+    snprintf(msg, sizeof(msg), fmt, name, name, name);
+    XrLocation loc = {
+        .file = ctx->file_path,
+        .line = loc_node->line,
+        .column = loc_node->column,
+    };
+    xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, code, msg, &loc);
+}
 
 static void ea_push_scope(EaContext *ctx) {
     if (ctx->depth + 1 >= EA_MAX_SCOPE_DEPTH) return;
@@ -117,22 +140,42 @@ static void ea_register_params(EaContext *ctx, FunctionDeclNode *fn) {
 }
 
 /*
- * Search for a variable in scopes OUTSIDE the go closure boundary.
- * If found and it is mutable (non-const) and non-shared, mark as escaped.
- * const variables are safe for coroutines (is_coro_safe allows const upvalues).
+ * Look up a variable captured by a go closure and enforce the explicit
+ * sharing model: mutable non-shared captures are rejected (no auto-promote).
+ *
+ *   - const              -> allowed (immutable, compile-time safe)
+ *   - shared let/const   -> allowed (user declared the sharing intent)
+ *   - function parameter -> allowed (deep-copied by call site)
+ *   - plain let          -> ERROR (must declare shared or pass via arg)
  */
-static void ea_mark_capture_for_go(EaContext *ctx, const char *name) {
+static void ea_mark_capture_for_go(EaContext *ctx, AstNode *ref_node,
+                                   const char *name) {
     for (int d = ctx->go_scope_boundary - 1; d >= 0; d--) {
         EaScope *scope = &ctx->scopes[d];
         for (int i = scope->count - 1; i >= 0; i--) {
             if (scope->vars[i].name && strcmp(scope->vars[i].name, name) == 0) {
                 AstNode *decl = scope->vars[i].decl_node;
-                if (!decl) return;  // param or loop var — not promotable
+                if (!decl) return;  // param or loop var — always safe (arg-passed/local)
                 if (decl->type != AST_VAR_DECL && decl->type != AST_CONST_DECL) return;
                 VarDeclNode *vd = &decl->as.var_decl;
-                if (vd->storage_mode == XR_STORAGE_SHARED) return;
-                if (vd->is_const) return;  // const upvalues are coro_safe
-                vd->is_escaped = true;
+                if (vd->storage_mode == XR_STORAGE_SHARED) {
+                    // shared let capture is still forbidden (mutable shared state);
+                    // shared const capture is the only legal shared capture.
+                    if (vd->is_const) return;
+                    ea_emit_error(ctx, ref_node, XR_ERR_ANALYZE_CLOSURE_CAPTURE,
+                        "go closure cannot capture mutable 'shared let' variable '%s'\n"
+                        "hint: pass it through an argument with 'move': go worker(move %s)",
+                        name);
+                    return;
+                }
+                if (vd->is_const) return;  // const upvalues are coro-safe
+                // Plain let captured by go closure — reject instead of silently promoting.
+                ea_emit_error(ctx, ref_node, XR_ERR_ANALYZE_CLOSURE_CAPTURE,
+                    "go closure cannot capture mutable variable '%s'\n"
+                    "hint: use one of the following:\n"
+                    "  1. pass through argument: go worker(%s)  // deep-copied\n"
+                    "  2. declare as 'shared const %s = ...' for concurrent reads",
+                    name);
                 return;
             }
         }
@@ -145,18 +188,28 @@ static void ea_walk(EaContext *ctx, AstNode *node);
 static void ea_walk_statements(EaContext *ctx, AstNode **stmts, int count);
 
 /*
- * Mark a variable as escaped given a move expression's inner variable name.
- * Only marks if the declaration is found within the current function scope
- * and is not already explicitly shared.
+ * Enforce the explicit sharing model for `move var` arguments:
+ *   - shared let    -> allowed (the intended use case); already shared storage
+ *   - shared const  -> ERROR at move check time (xa_visit_move_expr)
+ *   - plain let     -> ERROR here: require explicit `shared let` declaration
+ *   - const         -> ERROR at move check time (xa_visit_move_expr)
  */
-static void ea_mark_escaped(EaContext *ctx, const char *var_name) {
+static void ea_mark_escaped(EaContext *ctx, AstNode *ref_node,
+                            const char *var_name) {
     AstNode *decl = ea_lookup_var(ctx, var_name);
     if (!decl) return;
     if (decl->type != AST_VAR_DECL && decl->type != AST_CONST_DECL) return;
     VarDeclNode *vd = &decl->as.var_decl;
-    // Already explicitly shared — no need to mark
+    // Already explicitly shared — legal; no action required here.
     if (vd->storage_mode == XR_STORAGE_SHARED) return;
-    vd->is_escaped = true;
+    // const is handled elsewhere (xa_visit_move_expr rejects move of const).
+    if (vd->is_const) return;
+    // Plain let with `move` — reject; `move` is only valid on `shared let`.
+    ea_emit_error(ctx, ref_node, XR_ERR_ANALYZE_CLOSURE_CAPTURE,
+        "'move' requires '%s' to be declared as 'shared let'\n"
+        "hint: change the declaration to 'shared let %s = ...' or drop 'move' "
+        "to rely on deep-copy semantics",
+        var_name);
 }
 
 /*
@@ -170,7 +223,7 @@ static void ea_check_move_args(EaContext *ctx, AstNode **args, int arg_count) {
         if (arg->type == AST_MOVE_EXPR) {
             AstNode *inner = arg->as.move_expr.expr;
             if (inner && inner->type == AST_VARIABLE) {
-                ea_mark_escaped(ctx, inner->as.variable.name);
+                ea_mark_escaped(ctx, arg, inner->as.variable.name);
             }
         }
         // Also walk the argument (it may contain nested expressions)
@@ -527,7 +580,7 @@ static void ea_walk(EaContext *ctx, AstNode *node) {
         if (ctx->in_go_closure) {
             const char *name = node->as.variable.name;
             if (name && !ea_is_local_name(ctx, name)) {
-                ea_mark_capture_for_go(ctx, name);
+                ea_mark_capture_for_go(ctx, node, name);
             }
         }
         break;
@@ -556,7 +609,7 @@ static void ea_walk_statements(EaContext *ctx, AstNode **stmts, int count) {
 
 /* ========== Public API ========== */
 
-void xa_escape_analyze(AstNode *ast) {
+void xa_escape_analyze(AstNode *ast, XaAnalyzer *analyzer) {
     if (!ast) return;
 
     EaContext ctx;
@@ -565,6 +618,8 @@ void xa_escape_analyze(AstNode *ast) {
     ctx.func_boundary = 0;
     ctx.in_go_closure = false;
     ctx.go_scope_boundary = 0;
+    ctx.analyzer = analyzer;
+    ctx.file_path = NULL;
     ctx.scopes[0].count = 0;
 
     ea_walk(&ctx, ast);

@@ -194,9 +194,9 @@ static void emit_json_checktype(XrCompilerContext *ctx, XrCompiler *compiler,
 
 /*
  * Compile expression statement.
- * 
+ *
  * When expression is used as statement, result is discarded.
- * 
+ *
  * Special handling: assignment, member set, index set.
  */
 void compile_expr_stmt(XrCompilerContext *ctx, XrCompiler *compiler, AstNode *expr) {
@@ -208,37 +208,37 @@ void compile_expr_stmt(XrCompilerContext *ctx, XrCompiler *compiler, AstNode *ex
         compile_assignment(ctx, compiler, &expr->as.assignment);
         return;
     }
-    
+
     // Handle compound assignment statements (they are not expressions)
     if (expr->type == AST_COMPOUND_ASSIGNMENT) {
         compile_compound_assignment(ctx, compiler, &expr->as.compound_assignment);
         return;
     }
-    
+
     // Handle increment statement
     if (expr->type == AST_INC) {
         compile_inc(ctx, compiler, &expr->as.inc);
         return;
     }
-    
+
     // Handle decrement statement
     if (expr->type == AST_DEC) {
         compile_dec(ctx, compiler, &expr->as.dec);
         return;
     }
-    
+
     // Handle member set statement
     if (expr->type == AST_MEMBER_SET) {
         compile_member_set(ctx, compiler, &expr->as.member_set);
         return;
     }
-    
+
     // Handle index set statement
     if (expr->type == AST_INDEX_SET) {
         compile_index_set(ctx, compiler, &expr->as.index_set);
         return;
     }
-    
+
     // Optimization: await as statement (no return value) → set C=1 to skip deep copy
     if (expr->type == AST_AWAIT_EXPR) {
         AwaitExprNode *await_node = &expr->as.await_expr;
@@ -274,12 +274,12 @@ void compile_expr_stmt(XrCompilerContext *ctx, XrCompiler *compiler, AstNode *ex
 
     // Other expression statements
     XrExprDesc e = xr_compile_expr(ctx, compiler, expr);
-    
+
     // Fix: VOID expressions (like push with no return value) don't need register allocation
     if (e.kind == XEXPR_VOID) {
         return;
     }
-    
+
     int reg = xexpr_to_anyreg(ctx, compiler, &e);
     reg_free(compiler, reg);
 }
@@ -288,39 +288,39 @@ void compile_expr_stmt(XrCompilerContext *ctx, XrCompiler *compiler, AstNode *ex
 
 /*
  * Try to extract compile-time constant value.
- * 
+ *
  * If expression is literal or constant expression, returns true and fills out_value.
  * Otherwise returns false.
  */
 static bool try_extract_comptime_value(AstNode *expr, ComptimeValue *out_value) {
     if (expr == NULL) return false;
-    
+
     switch (expr->type) {
         case AST_LITERAL_INT:
             out_value->type = COMPTIME_INT;
             out_value->as.int_val = expr->as.literal.raw_value.int_val;
             return true;
-            
+
         case AST_LITERAL_FLOAT:
             out_value->type = COMPTIME_FLOAT;
             out_value->as.float_val = expr->as.literal.raw_value.float_val;
             return true;
-            
+
         case AST_LITERAL_TRUE:
             out_value->type = COMPTIME_BOOL;
             out_value->as.bool_val = true;
             return true;
-            
+
         case AST_LITERAL_FALSE:
             out_value->type = COMPTIME_BOOL;
             out_value->as.bool_val = false;
             return true;
-            
+
         case AST_LITERAL_STRING:
             out_value->type = COMPTIME_STRING;
             out_value->as.string_val = NULL;  // String value not stored for now
             return true;
-            
+
         case AST_RANGE: {
             // Range expression: check if start and end are both integer constants
             RangeNode *range = &expr->as.range;
@@ -333,7 +333,7 @@ static bool try_extract_comptime_value(AstNode *expr, ComptimeValue *out_value) 
             }
             return false;
         }
-            
+
         default:
             return false;
     }
@@ -341,7 +341,7 @@ static bool try_extract_comptime_value(AstNode *expr, ComptimeValue *out_value) 
 
 /*
  * Compile variable declaration.
- * 
+ *
  * Handles local and global variables.
  * Supports compile-time constant auto-inference.
  */
@@ -354,10 +354,10 @@ void compile_var_decl(XrCompilerContext *ctx, XrCompiler *compiler, VarDeclNode 
         xr_compiler_error(ctx, compiler, "Variable '%s' must have a type annotation or initializer", node->name);
         return;
     }
-    
+
     // Create string
     XrString *name_str = xr_compile_time_intern(ctx->X, node->name, strlen(node->name));
-    
+
     // Check if variable already defined in current scope (forbid redefinition, allow shadowing)
     XrLocalInfo *existing = compiler_get_local_by_name(compiler, node->name);
     if (existing && existing->depth == compiler->scope_depth && !existing->is_hoisted) {
@@ -367,10 +367,22 @@ void compile_var_decl(XrCompilerContext *ctx, XrCompiler *compiler, VarDeclNode 
             return;
         }
     }
-    
+
     /* ========== shared variable unified handling (any scope) ========== */
     bool is_channel = (node->initializer && node->initializer->type == AST_CHANNEL_NEW);
-    
+
+    /* Channel must be declared with const (not let) so the handle cannot be
+     * reassigned while other coroutines hold references to the same channel.
+     * This is enforced regardless of storage mode because Channel has its own
+     * refcount + system-heap semantics. */
+    if (is_channel && !node->is_const) {
+        xr_compiler_error(ctx, compiler,
+            "Channel must be declared with 'const', not 'let'\n"
+            "hint: change 'let %s = Channel(...)' to 'const %s = Channel(...)'",
+            node->name, node->name);
+        return;
+    }
+
     // Check if variable already defined (top-level scope)
     // Skip for shared/Channel/escaped variables: they may have been pre-registered in Phase 1 hoisting
     if (compiler->scope_depth == 0 && node->storage_mode != XR_STORAGE_SHARED &&
@@ -390,11 +402,11 @@ void compile_var_decl(XrCompilerContext *ctx, XrCompiler *compiler, VarDeclNode 
         // Channel no longer requires shared const — can be declared as let/const.
         // Channel objects are allocated on system heap (shared) with refcount,
         // and should be passed to coroutines via arguments (deep_copy does incref).
-        
+
         // Allocate shared_array index (reuse if pre-registered in Phase 1 hoisting)
         int shared_index = shared_get_or_add(ctx, compiler, name_str);
         shared_set_const(ctx, shared_index, node->is_const);
-        
+
         // shared const constant inlining optimization: compile-time eval and register to constant table
         if (node->is_const && node->initializer) {
             XrConstEvalResult result = xr_const_eval_with_ctx(ctx, node->initializer);
@@ -408,7 +420,7 @@ void compile_var_decl(XrCompilerContext *ctx, XrCompiler *compiler, VarDeclNode 
                 }
             }
         }
-        
+
         int reg = reg_alloc(ctx, compiler);
         if (node->initializer) {
             // Set storage mode, elem_type and object type context
@@ -424,18 +436,18 @@ void compile_var_decl(XrCompilerContext *ctx, XrCompiler *compiler, VarDeclNode 
                 if ((ta->kind == XR_KIND_JSON) && !ta->object.allow_extension && ta->object.field_count > 0)
                     ctx->current_object_type = ta;
             }
-            
+
             XrExprDesc expr = xr_compile_expr(ctx, compiler, node->initializer);
             xexpr_to_specific_reg(ctx, compiler, &expr, reg);
-            
+
             ctx->current_storage_mode = old_storage_mode;
             ctx->current_elem_tid = old_elem_type;
             ctx->current_key_tid = old_key_tid;
             ctx->current_object_type = old_object_type;
-            
+
             // Non-direct creation types need conversion to system heap
             AstNodeType init_type = node->initializer->type;
-            bool is_direct = (init_type == AST_ARRAY_LITERAL || 
+            bool is_direct = (init_type == AST_ARRAY_LITERAL ||
                              init_type == AST_MAP_LITERAL ||
                              init_type == AST_SET_LITERAL ||
                              init_type == AST_OBJECT_LITERAL ||
@@ -449,7 +461,7 @@ void compile_var_decl(XrCompilerContext *ctx, XrCompiler *compiler, VarDeclNode 
         }
         emit_abx(compiler->emitter, OP_SETSHARED, reg, shared_index);
         reg_free(compiler, reg);
-        
+
         // Store type info in shared variable table for type inference
         if (is_channel) {
             // Use type annotation if available (e.g., Channel<int>), otherwise Channel<unknown>
@@ -463,10 +475,10 @@ void compile_var_decl(XrCompilerContext *ctx, XrCompiler *compiler, VarDeclNode 
         }
         return;
     }
-    
+
     if (compiler->scope_depth == 0) {
         // Top-level scope
-        
+
         // const constant inlining optimization: use constant folding for compile-time eval
         if (node->is_const && node->initializer) {
             XrConstEvalResult result = xr_const_eval_with_ctx(ctx, node->initializer);
@@ -481,7 +493,7 @@ void compile_var_decl(XrCompilerContext *ctx, XrCompiler *compiler, VarDeclNode 
                 }
             }
         }
-        
+
         /* Module system optimization: module-level variables (let and const) compiled as local.
          * Condition: type == FUNCTION_SCRIPT and NOT in REPL mode.
          * REPL mode: top-level vars must be shared to persist across inputs.
@@ -500,7 +512,7 @@ void compile_var_decl(XrCompilerContext *ctx, XrCompiler *compiler, VarDeclNode 
             }
             local->is_const = node->is_const;
             local->storage_mode = node->storage_mode;
-            
+
             // Type inference
             if (node->type_annotation) {
                 local_set_compile_type(local, node->type_annotation);
@@ -510,7 +522,7 @@ void compile_var_decl(XrCompilerContext *ctx, XrCompiler *compiler, VarDeclNode 
                 if (ct && (ct->kind == XR_KIND_NULL)) ct = NULL;
                 local_set_compile_type(local, ct);
             }
-            
+
             // If variable is already cellified (hoisted capture), redirect init to temp
             int m_init_reg = local->reg;
             bool m_needs_cell_set = false;
@@ -518,7 +530,7 @@ void compile_var_decl(XrCompilerContext *ctx, XrCompiler *compiler, VarDeclNode 
                 m_init_reg = reg_alloc(ctx, compiler);
                 m_needs_cell_set = true;
             }
-            
+
             // Compile initializer expression
             if (node->initializer) {
                 uint8_t old_storage_mode = ctx->current_storage_mode;
@@ -534,14 +546,14 @@ void compile_var_decl(XrCompilerContext *ctx, XrCompiler *compiler, VarDeclNode 
                     if ((ta->kind == XR_KIND_JSON) && !ta->object.allow_extension && ta->object.field_count > 0)
                         ctx->current_object_type = ta;
                 }
-                
+
                 XrExprDesc expr = xr_compile_expr(ctx, compiler, node->initializer);
                 xexpr_to_specific_reg(ctx, compiler, &expr, m_init_reg);
                 emit_box_if_raw(compiler->emitter, m_init_reg, &expr);
-                
+
                 // Json→concrete runtime type check
                 emit_json_checktype(ctx, compiler, m_init_reg, node->type_annotation, node->initializer);
-                
+
                 // Struct value semantics: copy-on-assign
                 if (local->compile_type && local->compile_type->is_value_type) {
                     AstNodeType init_type = node->initializer->type;
@@ -549,7 +561,7 @@ void compile_var_decl(XrCompilerContext *ctx, XrCompiler *compiler, VarDeclNode 
                         emit_value_copy(ctx, compiler, m_init_reg, m_init_reg, local->compile_type);
                     }
                 }
-                
+
                 ctx->current_storage_mode = old_storage_mode;
                 ctx->current_elem_tid = old_elem_type;
                 ctx->current_object_type = old_object_type;
@@ -569,17 +581,17 @@ void compile_var_decl(XrCompilerContext *ctx, XrCompiler *compiler, VarDeclNode 
             }
             return;  // Handled as local variable
         }
-        
+
         // Non-module top-level (e.g. REPL) - use global variable
         if (node->initializer && node->initializer->type == AST_LITERAL_INT) {
-            
+
             LiteralNode *lit = (LiteralNode *)&node->initializer->as;
             xr_Integer value = lit->raw_value.int_val;
-            
+
             // Create XrExprDesc
             XrExprDesc expr;
             xexpr_init(&expr, XEXPR_VOID, -1);
-            
+
             // Small integer uses LOADI - AsBx format!
             if (value >= -MAXARG_sBx && value <= MAXARG_sBx) {
                 // LOADI is AsBx format, A=0 temporarily, sBx=value
@@ -587,24 +599,24 @@ void compile_var_decl(XrCompilerContext *ctx, XrCompiler *compiler, VarDeclNode 
                 expr.kind = XEXPR_RELOC;
                 expr.u.pc = pc;
                 expr.reg = -1;
-                
+
                 // Successfully generated RELOC expression
             } else {
                 XrValue val = xr_int(value);
                 int kidx = xr_vm_proto_add_constant(compiler->proto, val);
                 int pc = emit_abx(compiler->emitter, OP_LOADK, 0, kidx);
-                
+
                 expr.kind = XEXPR_RELOC;
                 expr.u.pc = pc;
                 expr.reg = -1;
             }
-            
+
             // Allocate temp register and discharge
             int reg = reg_alloc(ctx, compiler);
-            
+
             // Discharge to specific register, trigger instruction writeback
             xexpr_to_specific_reg(ctx, compiler, &expr, reg);
-            
+
             int shared_index = shared_get_or_add(ctx, compiler, name_str);
             shared_set_const(ctx, shared_index, node->is_const);
             emit_abx(compiler->emitter, OP_SETSHARED, reg, shared_index);
@@ -627,12 +639,12 @@ void compile_var_decl(XrCompilerContext *ctx, XrCompiler *compiler, VarDeclNode 
         }
     } else {
         // Local variable
-        
+
         // Static type optimization: infer type from annotation or initializer
         XrType *inferred_compile_type = NULL;
         XrType *xr_type_for_local = NULL;
-        
-        
+
+
         if (node->type_annotation) {
             // Has explicit type annotation (node->type_annotation is XrType*)
             xr_type_for_local = node->type_annotation;
@@ -646,7 +658,7 @@ void compile_var_decl(XrCompilerContext *ctx, XrCompiler *compiler, VarDeclNode 
             }
             xr_type_for_local = inferred_compile_type;
         }
-        
+
         // Unified type compatibility check for variable initialization with type annotation
         if (node->type_annotation && node->initializer && inferred_compile_type) {
             if (inferred_compile_type->kind != XR_KIND_UNKNOWN) {
@@ -667,14 +679,14 @@ void compile_var_decl(XrCompilerContext *ctx, XrCompiler *compiler, VarDeclNode 
                 }
             }
         }
-        
+
         /* Register reuse optimization: for function calls, compile first then define variable.
-         * 
+         *
          * Problem:
          *   scope_define_local() allocates local_reg = R[N]
          *   Then compiling function call allocates func_reg = R[N+1]
          *   CALL return value is in R[N+1], needs MOVE to R[N]
-         * 
+         *
          * Optimization:
          *   Compile function call first, get result register expr_reg = R[N]
          *   Then define local variable to use R[N] directly
@@ -709,7 +721,7 @@ void compile_var_decl(XrCompilerContext *ctx, XrCompiler *compiler, VarDeclNode 
             // Compile function call first
             XrExprDesc expr = xr_compile_expr(ctx, compiler, node->initializer);
             int expr_reg = expr.reg;
-            
+
             // Define local variable, specify using expression result's register
             XrLocalInfo *local = scope_define_local_reg(ctx, compiler, name_str, expr_reg);
             local_set_compile_type(local, xr_type_for_local);
@@ -731,7 +743,7 @@ void compile_var_decl(XrCompilerContext *ctx, XrCompiler *compiler, VarDeclNode 
             // No MOVE needed, register already set correctly
             return;
         }
-        
+
         /* Define local variable (only call once).
          * Note: shared variables and Channel already handled at the beginning.
          */
@@ -748,7 +760,7 @@ void compile_var_decl(XrCompilerContext *ctx, XrCompiler *compiler, VarDeclNode 
         local_set_compile_type(local, xr_type_for_local);
         local->is_const = node->is_const;
         local->storage_mode = node->storage_mode;
-        
+
         // Try to extract compile-time constant value (only valid for const declarations)
         if (node->is_const && node->initializer) {
             if (!try_extract_comptime_value(node->initializer, &local->comptime)) {
@@ -763,9 +775,9 @@ void compile_var_decl(XrCompilerContext *ctx, XrCompiler *compiler, VarDeclNode 
         } else {
             local->comptime.type = COMPTIME_NONE;
         }
-        
+
         int local_reg = local->reg;
-        
+
         // If variable is already cellified, or will be cellified during initializer
         // compilation (captured mutable, or captured hoisted const), compile initializer
         // to a temp register so we don't overwrite the cell ref in local_reg.
@@ -777,7 +789,7 @@ void compile_var_decl(XrCompilerContext *ctx, XrCompiler *compiler, VarDeclNode 
             init_reg = reg_alloc(ctx, compiler);
             needs_cell_set = true;
         }
-        
+
         /* ========== Test relocatable expression ========== */
         // Uninitialized variable, default to null
         if (!node->initializer) {
@@ -787,13 +799,13 @@ void compile_var_decl(XrCompilerContext *ctx, XrCompiler *compiler, VarDeclNode 
         else if (node->initializer->type == AST_LITERAL_INT) {
             LiteralNode *lit = (LiteralNode *)&node->initializer->as;
             xr_Integer value = lit->raw_value.int_val;
-            
+
             // Rematerialization optimization: mark small integer constant as rematerializable
             if (!needs_cell_set && value >= -MAXARG_sBx && value <= MAXARG_sBx) {
                 local->can_rematerialize = true;
                 local->remat_value = value;
             }
-            
+
             // Create XrExprDesc — use XEXPR_INT for deferred discharge
             XrExprDesc expr;
             xexpr_init_int(&expr, value);
@@ -816,13 +828,13 @@ void compile_var_decl(XrCompilerContext *ctx, XrCompiler *compiler, VarDeclNode 
                 if ((ta->kind == XR_KIND_JSON) && !ta->object.allow_extension && ta->object.field_count > 0)
                     ctx->current_object_type = ta;
             }
-            
+
             // Compile initializer expression
             XrExprDesc expr = xr_compile_expr(ctx, compiler, node->initializer);
-            
+
             // Register reuse optimization: function call return value directly as local variable.
             if (!needs_cell_set) {
-                if ((expr.kind == XEXPR_CALL || expr.kind == XEXPR_TEMP) && 
+                if ((expr.kind == XEXPR_CALL || expr.kind == XEXPR_TEMP) &&
                     expr.reg >= 0 && expr.reg == local_reg) {
                     // Expression result is exactly in local_reg, perfect reuse
                 } else {
@@ -845,7 +857,7 @@ void compile_var_decl(XrCompilerContext *ctx, XrCompiler *compiler, VarDeclNode 
                     emit_value_copy(ctx, compiler, local_reg, local_reg, local->compile_type);
                 }
             }
-            
+
             // Restore context
             ctx->current_storage_mode = old_storage_mode;
             ctx->current_elem_tid = old_elem_type;
@@ -885,7 +897,7 @@ void compile_var_decl(XrCompilerContext *ctx, XrCompiler *compiler, VarDeclNode 
 
 /*
  * Compile print statement (supports multiple arguments).
- * 
+ *
  * print(a, b, c) compiles to:
  *   OP_PRINT R[a] 0 0    // first arg, no space, no newline
  *   OP_PRINT R[b] 1 0    // second arg, space before, no newline
@@ -911,26 +923,26 @@ void compile_print(XrCompilerContext *ctx, XrCompiler *compiler, PrintNode *node
         reg_free(compiler, reg);
         return;
     }
-    
+
     // Compile and print each expression
     for (int i = 0; i < node->expr_count; i++) {
         XrExprDesc expr = xr_compile_expr(ctx, compiler, node->exprs[i]);
-        
+
         // C: bit0=newline, bit1-2=slot_hint (0=ANY, 1=I64, 2=F64)
         int slot_hint = 0;
         if (xexpr_is_raw_i64(&expr))      slot_hint = 1;
         else if (xexpr_is_raw_f64(&expr)) slot_hint = 2;
-        
+
         // Typed values: readonly (no BOX), hint tells VM the raw type
         // Any values: anyreg (auto-BOX if needed)
         int reg = (slot_hint != 0)
             ? xexpr_to_anyreg_readonly(ctx, compiler, &expr)
             : xexpr_to_anyreg(ctx, compiler, &expr);
-        
+
         int add_space = (i > 0) ? 1 : 0;
         int newline = (i == node->expr_count - 1) ? 1 : 0;
         int c_field = newline | (slot_hint << 1);
-        
+
         emit_abc(compiler->emitter, OP_PRINT, reg, add_space, c_field);
         reg_free(compiler, reg);
     }
@@ -940,7 +952,7 @@ void compile_print(XrCompilerContext *ctx, XrCompiler *compiler, PrintNode *node
 
 /*
  * Compile assignment statement.
- * 
+ *
  * Handles local variables, upvalue, and global variable assignment.
  */
 void compile_assignment(XrCompilerContext *ctx, XrCompiler *compiler, AssignmentNode *node) {
@@ -949,14 +961,14 @@ void compile_assignment(XrCompilerContext *ctx, XrCompiler *compiler, Assignment
     XR_DCHECK(node != NULL, "compile_assignment: NULL node");
     // Create string
     XrString *name_str = xr_compile_time_intern(ctx->X, node->name, strlen(node->name));
-    
+
     // Check if trying to overwrite constant (including fn-declared functions and const variables)
     XrLocalInfo *local_info = compiler_get_local_by_name(compiler, node->name);
     if (local_info && local_info->is_const) {
         xr_compiler_error(ctx, compiler, "Cannot modify constant '%s'", node->name);
         return;
     }
-    
+
     // Check shared constant (considering lexical scope)
     // Skip if local variable exists: local shadows shared
     int shared_index = shared_get_in_scope(ctx, compiler, name_str);
@@ -964,13 +976,13 @@ void compile_assignment(XrCompilerContext *ctx, XrCompiler *compiler, Assignment
         xr_compiler_error(ctx, compiler, "Cannot modify shared const '%s'", node->name);
         return;
     }
-    
+
     // Builtins are read-only, cannot be assigned
     if (!local_info && shared_index < 0 && builtin_get(ctx, name_str) >= 0) {
         xr_compiler_error(ctx, compiler, "Cannot assign to built-in '%s'", node->name);
         return;
     }
-    
+
     // First lookup variable, then decide how to compile expression
     int local = scope_resolve_local(compiler, name_str);
     if (local >= 0) {
@@ -1005,7 +1017,7 @@ void compile_assignment(XrCompilerContext *ctx, XrCompiler *compiler, Assignment
                 }
             }
         }
-        
+
         if (local_info && local_info->is_cellified) {
             // Cellified local: write through existing cell (CELL_SET).
             // Must NOT overwrite the cell ref in R[local].
@@ -1044,7 +1056,7 @@ void compile_assignment(XrCompilerContext *ctx, XrCompiler *compiler, Assignment
         // Non-local variable: normal compilation (xexpr_to_anyreg auto-BOXes typed values)
         XrExprDesc expr = xr_compile_expr(ctx, compiler, node->value);
         int value_reg = xexpr_to_anyreg(ctx, compiler, &expr);
-        
+
         int upvalue = scope_resolve_upvalue(ctx, compiler, name_str);
         if (upvalue >= 0) {
             // Upvalue assignment: UPVAL_GET (cell ref) + CELL_SET
@@ -1062,13 +1074,13 @@ void compile_assignment(XrCompilerContext *ctx, XrCompiler *compiler, Assignment
             } else {
                 int global_index = builtin_get(ctx, name_str);
                 if (global_index < 0) {
-                    xr_compiler_error(ctx, compiler, 
-                        "Undefined variable '%s', use 'let %s = ...' to define first", 
+                    xr_compiler_error(ctx, compiler,
+                        "Undefined variable '%s', use 'let %s = ...' to define first",
                         name_str->data, name_str->data);
                     reg_free(compiler, value_reg);
                     return;
                 }
-                xr_compiler_error(ctx, compiler, 
+                xr_compiler_error(ctx, compiler,
                     "Cannot assign to built-in '%s'", name_str->data);
                 reg_free(compiler, value_reg);
             }
@@ -1112,7 +1124,7 @@ void compile_compound_assignment(XrCompilerContext *ctx, XrCompiler *compiler, C
     bool is_arithmetic = (binary_op == OP_ADD || binary_op == OP_SUB ||
                           binary_op == OP_MUL || binary_op == OP_DIV ||
                           binary_op == OP_MOD);
-    
+
     // Check if member access compound assignment (this.field += value)
     if (node->object != NULL) {
         /* === Member access compound assignment ===
@@ -1122,43 +1134,43 @@ void compile_compound_assignment(XrCompilerContext *ctx, XrCompiler *compiler, C
          * 3. Execute binary operation: R[member] = R[member] op R[value]
          * 4. Write back member value
          */
-        
+
         // Compile object expression
         XrExprDesc obj_expr = xr_compile_expr(ctx, compiler, node->object);
         int obj_reg = xexpr_to_anyreg(ctx, compiler, &obj_expr);
-        
+
         // Member name symbol index
         int global_sym = xr_symbol_register_in_table(
             (XrSymbolTable*)xr_isolate_get_symbol_table(ctx->X), node->name);
         int local_sym = emitter_add_symbol(compiler->emitter, global_sym);
-        
+
         // Allocate temp register to store member value
         int member_reg = reg_alloc(ctx, compiler);
-        
+
         // Read current member value: R[member_reg] = R[obj_reg].prop
         emit_abc(compiler->emitter, OP_GETPROP, member_reg, obj_reg, local_sym);
-        
+
         // Compile right-side expression
         XrExprDesc value_expr = xr_compile_expr(ctx, compiler, node->value);
         int value_reg = xexpr_to_anyreg(ctx, compiler, &value_expr);
-        
+
         // R[member_reg] = R[member_reg] op R[value_reg]
         emit_abc(compiler->emitter, binary_op, member_reg, member_reg, value_reg);
-        
+
         // Write back member value: R[obj_reg].prop = R[member_reg]
         emit_abc(compiler->emitter, OP_SETPROP, obj_reg, local_sym, member_reg);
-        
+
         // Free registers
         reg_free(compiler, value_reg);
         reg_free(compiler, member_reg);
         reg_free(compiler, obj_reg);
         return;
     }
-    
+
     /* === Normal variable compound assignment === */
     // Create string
     XrString *name_str = xr_compile_time_intern(ctx->X, node->name, strlen(node->name));
-    
+
     // Lookup variable and determine type
     int local = scope_resolve_local(compiler, name_str);
     int upvalue = -1;
@@ -1167,7 +1179,7 @@ void compile_compound_assignment(XrCompilerContext *ctx, XrCompiler *compiler, C
     int var_reg = -1;
     bool need_writeback = false;
     XrLocalInfo *ca_info = (local >= 0) ? compiler_get_local_by_name(compiler, node->name) : NULL;
-    
+
     if (local >= 0) {
         // Type compatibility check for compound assignment
         if (ca_info && ca_info->compile_type && XR_TYPE_IS_INT(ca_info->compile_type) && is_arithmetic) {
@@ -1223,15 +1235,15 @@ void compile_compound_assignment(XrCompilerContext *ctx, XrCompiler *compiler, C
             }
         }
     }
-    
+
     // Compile right-side expression
     XrExprDesc value_expr = xr_compile_expr(ctx, compiler, node->value);
     int value_reg = xexpr_to_anyreg(ctx, compiler, &value_expr);
-    
+
     value_reg = xexpr_ensure_boxed(ctx, compiler, &value_expr, value_reg);
     // R[var_reg] = R[var_reg] op R[value_reg]
     emit_abc(compiler->emitter, binary_op, var_reg, var_reg, value_reg);
-    
+
     // If needed, write back variable
     if (need_writeback) {
         if (local >= 0 && ca_info && ca_info->is_cellified) {
@@ -1250,7 +1262,7 @@ void compile_compound_assignment(XrCompilerContext *ctx, XrCompiler *compiler, C
         }
         reg_free(compiler, var_reg);
     }
-    
+
     reg_free(compiler, value_reg);
 }
 
@@ -1265,14 +1277,14 @@ void compile_inc(XrCompilerContext *ctx, XrCompiler *compiler, IncDecNode *node)
     XR_DCHECK(compiler != NULL, "compile_inc: NULL compiler");
     XR_DCHECK(node != NULL, "compile_inc: NULL node");
     XrString *name_str = xr_compile_time_intern(ctx->X, node->name, strlen(node->name));
-    
+
     int local = scope_resolve_local(compiler, name_str);
     int upvalue = -1;
     int shared_index = -1;
     int global_index = -1;
     int var_reg = -1;
     bool need_writeback = false;
-    
+
     XrLocalInfo *local_info = (local >= 0) ? compiler_get_local_by_name(compiler, node->name) : NULL;
     if (local >= 0) {
         if (local_info && local_info->is_cellified) {
@@ -1310,9 +1322,9 @@ void compile_inc(XrCompilerContext *ctx, XrCompiler *compiler, IncDecNode *node)
             }
         }
     }
-    
+
     emit_abc(compiler->emitter, OP_ADDI, var_reg, var_reg, 1);
-    
+
     if (need_writeback) {
         if (local >= 0 && local_info && local_info->is_cellified) {
             emit_abc(compiler->emitter, OP_CELL_SET, local, var_reg, 0);
@@ -1340,14 +1352,14 @@ void compile_dec(XrCompilerContext *ctx, XrCompiler *compiler, IncDecNode *node)
     XR_DCHECK(compiler != NULL, "compile_dec: NULL compiler");
     XR_DCHECK(node != NULL, "compile_dec: NULL node");
     XrString *name_str = xr_compile_time_intern(ctx->X, node->name, strlen(node->name));
-    
+
     int local = scope_resolve_local(compiler, name_str);
     int upvalue = -1;
     int shared_index = -1;
     int global_index = -1;
     int var_reg = -1;
     bool need_writeback = false;
-    
+
     XrLocalInfo *local_info_dec = (local >= 0) ? compiler_get_local_by_name(compiler, node->name) : NULL;
     if (local >= 0) {
         if (local_info_dec && local_info_dec->is_cellified) {
@@ -1385,9 +1397,9 @@ void compile_dec(XrCompilerContext *ctx, XrCompiler *compiler, IncDecNode *node)
             }
         }
     }
-    
+
     emit_abc(compiler->emitter, OP_SUBI, var_reg, var_reg, 1);
-    
+
     if (need_writeback) {
         if (local >= 0 && local_info_dec && local_info_dec->is_cellified) {
             emit_abc(compiler->emitter, OP_CELL_SET, local, var_reg, 0);

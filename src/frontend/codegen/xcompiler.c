@@ -68,16 +68,16 @@ int compiler_get_local_count(XrCompiler *compiler) {
 // Linear scan from back to front (handles shadowing automatically)
 XrLocalInfo* compiler_get_local_by_name(XrCompiler *compiler, const char *name) {
     if (name == NULL) return NULL;
-    
+
     for (int i = compiler->local_count - 1; i >= 0; i--) {
         XrLocalInfo *local = compiler_get_local_at(compiler, i);
         if (local == NULL || local->name == NULL) continue;
-        
+
         if (strcmp(local->name->data, name) == 0) {
             return local;
         }
     }
-    
+
     return NULL;
 }
 
@@ -91,13 +91,13 @@ void xr_compiler_error(XrCompilerContext *ctx, XrCompiler *compiler, const char 
     }
     compiler->panic_mode = true;
     compiler->had_error = true;
-    
+
     char msg[512];
     va_list args;
     va_start(args, format);
     vsnprintf(msg, sizeof(msg), format, args);
     va_end(args);
-    
+
     xr_diag_print(
         XR_DIAG_ERROR, 0, msg,
         ctx->source_file,
@@ -125,13 +125,13 @@ int reg_alloc_next(XrCompilerContext *ctx, XrCompiler *compiler) {
         xr_compiler_error(ctx, compiler, "XRegAlloc not initialized");
         return 0;
     }
-    
+
     int reg = xreg_alloc_next(compiler->regalloc);
     if (reg < 0) {
         xr_compiler_error(ctx, compiler, "Failed to allocate next register");
         return 0;
     }
-    
+
     return reg;
 }
 
@@ -140,7 +140,7 @@ int reg_reserve_n(XrCompiler *compiler, int n) {
     if (!compiler->regalloc) {
         return -1;
     }
-    
+
     return xreg_reserve(compiler->regalloc, n);
 }
 
@@ -152,24 +152,24 @@ int compile_expr_to_next_reg(XrCompilerContext *ctx, XrCompiler *compiler, AstNo
     XR_DCHECK(compiler != NULL, "compile_expr_to_next_reg: NULL compiler");
     XR_DCHECK(expr != NULL, "compile_expr_to_next_reg: NULL expr");
     int next_reg = xreg_get_freereg(compiler->regalloc);
-    
+
     // Temporarily bump freereg so expr can use higher registers
     int temp_freereg = next_reg + 1;
     xreg_set_freereg(compiler->regalloc, temp_freereg);
-    
+
     int expr_reg = xr_compile_expression(ctx, compiler, expr);
-    
+
     if (expr_reg != next_reg) {
         emit_move(compiler->emitter, next_reg, expr_reg);
     }
-    
+
     xreg_set_freereg(compiler->regalloc, next_reg + 1);
-    
+
     return next_reg;
 }
 
 // Compile argument list to consecutive registers starting at base_reg
-int compile_args_to_base(XrCompilerContext *ctx, XrCompiler *compiler, 
+int compile_args_to_base(XrCompilerContext *ctx, XrCompiler *compiler,
                          AstNode **args, int arg_count, int base_reg) {
     XR_DCHECK(base_reg >= 0, "compile_args_to_base: negative base_reg");
     XR_DCHECK(arg_count >= 0, "compile_args_to_base: negative arg_count");
@@ -178,11 +178,11 @@ int compile_args_to_base(XrCompilerContext *ctx, XrCompiler *compiler,
     if (arg_count > 1) {
         protect_id = xreg_protect_begin(compiler->regalloc, base_reg, arg_count, "compile_args");
     }
-    
+
     for (int i = 0; i < arg_count; i++) {
         int target_reg = base_reg + i;
         xreg_set_freereg(compiler->regalloc, target_reg + 1);
-        
+
         if (args[i]) {
             XrExprDesc expr = xr_compile_expr(ctx, compiler, args[i]);
             xexpr_to_specific_reg(ctx, compiler, &expr, target_reg);
@@ -197,11 +197,11 @@ int compile_args_to_base(XrCompilerContext *ctx, XrCompiler *compiler,
             emit_loadnull(compiler->emitter, target_reg);
         }
     }
-    
+
     if (protect_id >= 0) {
         xreg_protect_end(compiler->regalloc, protect_id);
     }
-    
+
     xreg_set_freereg(compiler->regalloc, base_reg + arg_count);
     return base_reg + arg_count;
 }
@@ -210,14 +210,14 @@ int compile_args_to_base(XrCompilerContext *ctx, XrCompiler *compiler,
 int compile_exprs_consecutive(XrCompilerContext *ctx, XrCompiler *compiler,
                               AstNode **exprs, int count, const char *reason) {
     if (count <= 0) return -1;
-    
+
     int base_reg = xreg_get_freereg(compiler->regalloc);
     int protect_id = xreg_protect_begin(compiler->regalloc, base_reg, count, reason);
-    
+
     for (int i = 0; i < count; i++) {
         int target_reg = base_reg + i;
         xreg_set_freereg(compiler->regalloc, target_reg + 1);
-        
+
         if (exprs[i]) {
             XrExprDesc expr = xr_compile_expr(ctx, compiler, exprs[i]);
             xexpr_to_specific_reg(ctx, compiler, &expr, target_reg);
@@ -225,10 +225,10 @@ int compile_exprs_consecutive(XrCompilerContext *ctx, XrCompiler *compiler,
             emit_loadnull(compiler->emitter, target_reg);
         }
     }
-    
+
     xreg_protect_end(compiler->regalloc, protect_id);
     xreg_set_freereg(compiler->regalloc, base_reg + count);
-    
+
     return base_reg;
 }
 
@@ -250,17 +250,17 @@ void scope_begin(XrCompiler *compiler) {
     XR_DCHECK(compiler != NULL, "scope_begin: NULL compiler");
     XR_DCHECK(compiler->scope_depth >= 0, "scope_begin: negative scope_depth");
     compiler->scope_depth++;
-    
+
     if (compiler->block_depth >= XR_MAX_BLOCK_DEPTH) {
         xr_log_warning("compiler", "block nesting too deep (max %d)", XR_MAX_BLOCK_DEPTH);
         return;
     }
-    
+
     XrBlockCnt *bl = &compiler->block_stack[compiler->block_depth++];
     bl->local_end_on_entry = compiler->regalloc ? xreg_get_local_end(compiler->regalloc) : 0;
     bl->scope_depth = compiler->scope_depth;
     bl->is_loop = false;
-    
+
     // Invariant check: freereg >= local_end
     if (compiler->regalloc) {
         int freereg = xreg_get_freereg(compiler->regalloc);
@@ -279,35 +279,35 @@ void scope_end(XrCompilerContext *ctx, XrCompiler *compiler) {
         xr_log_warning("compiler", "scope_end without matching scope_begin");
         return;
     }
-    
+
     XrBlockCnt *bl = &compiler->block_stack[compiler->block_depth - 1];
-    
+
     if (bl->scope_depth != compiler->scope_depth) {
         xr_log_warning("compiler", "scope_end depth mismatch: expected %d, got %d",
                 bl->scope_depth, compiler->scope_depth);
     }
-    
+
     compiler->scope_depth--;
-    
+
     // Release local variables in current scope
     while (compiler->local_count > 0) {
         XrLocalInfo *local = compiler_get_local_at(compiler, compiler->local_count - 1);
         if (local->depth <= compiler->scope_depth) {
             break;
         }
-        
+
         compiler->local_count--;
     }
-    
+
     xr_local_list_pop_above_depth(&compiler->local_list, compiler->scope_depth);
     compiler->local_count = compiler->local_list.count;
-    
+
     // Restore local_end to block entry value
     if (compiler->regalloc) {
         xreg_set_local_end(compiler->regalloc, bl->local_end_on_entry);
         xreg_set_freereg(compiler->regalloc, bl->local_end_on_entry);
     }
-    
+
     if (compiler->regalloc) {
         int local_end = xreg_get_local_end(compiler->regalloc);
         if (local_end != bl->local_end_on_entry) {
@@ -315,7 +315,7 @@ void scope_end(XrCompilerContext *ctx, XrCompiler *compiler) {
                     bl->local_end_on_entry, local_end);
         }
     }
-    
+
     compiler->block_depth--;
 }
 
@@ -373,13 +373,13 @@ XrLocalInfo* scope_define_local(XrCompilerContext *ctx, XrCompiler *compiler, Xr
         return NULL;
     }
     XR_DCHECK(reg < XREG_MAX, "scope_define_local: register exceeds max");
-    
+
     XrLocalInfo *local = scope_init_local_info(compiler, name, reg);
 
     // local_end = next available register number (not variable count)
     if (compiler->regalloc) {
         xreg_set_local_end(compiler->regalloc, reg + 1);
-        
+
         if (xreg_get_freereg(compiler->regalloc) <= reg) {
             xreg_set_freereg(compiler->regalloc, reg + 1);
         }
@@ -405,7 +405,7 @@ XrLocalInfo* scope_define_local_reg(XrCompilerContext *ctx, XrCompiler *compiler
 // For variables: also checks Codegen's local info (which has native_width for raw slots).
 XrType* get_expr_type(XrCompilerContext *ctx, XrCompiler *compiler, AstNode *expr) {
     if (!expr || !compiler) return NULL;
-    
+
     // Primary: Analyzer's cached result on AST node
     if (expr->compile_type) {
         XrType *ct = expr->compile_type;
@@ -423,7 +423,7 @@ XrType* get_expr_type(XrCompilerContext *ctx, XrCompiler *compiler, AstNode *exp
             return ct;
         }
     }
-    
+
     // Variable lookup: Codegen's local/shared type info (has native_width, Channel type)
     if (expr->type == AST_VARIABLE) {
         VariableNode *var = &expr->as.variable;
@@ -479,19 +479,19 @@ static int scope_add_upvalue(XrCompilerContext *ctx, XrCompiler *compiler,
                               bool is_const, XrString *name, uint8_t slot_type,
                               uint8_t source) {
     int upvalue_count = PROTO_UPVAL_COUNT(compiler->proto);
-    
+
     for (int i = 0; i < upvalue_count; i++) {
         XrUpvalueDesc *upvalue = &compiler->upvalues[i];
         if (upvalue->source == source && upvalue->index == index) {
             return i;
         }
     }
-    
+
     if (upvalue_count >= UINT8_MAX) {
         xr_compiler_error(ctx, compiler, "Too many upvalues");
         return 0;
     }
-    
+
     compiler->upvalues[upvalue_count].index         = index;
     compiler->upvalues[upvalue_count].type_info     = compile_type;
     compiler->upvalues[upvalue_count].storage_mode  = storage_mode;
@@ -499,7 +499,7 @@ static int scope_add_upvalue(XrCompilerContext *ctx, XrCompiler *compiler,
     compiler->upvalues[upvalue_count].source        = source;
     compiler->upvalues[upvalue_count].is_const      = is_const;
     compiler->upvalues[upvalue_count].name          = name;
-    
+
     xr_vm_proto_add_upvalue(compiler->proto, (uint8_t)index,
                             storage_mode, is_const, slot_type,
                             source, compile_type);
@@ -515,7 +515,7 @@ int scope_resolve_upvalue(XrCompilerContext *ctx, XrCompiler *compiler, XrString
     if (compiler->enclosing == NULL) {
         return -1;
     }
-    
+
     XrCompiler *enclosing = compiler->enclosing;
     XrLocalInfo *local_info = compiler_get_local_by_name(enclosing, name->data);
     if (local_info) {
@@ -538,7 +538,7 @@ int scope_resolve_upvalue(XrCompilerContext *ctx, XrCompiler *compiler, XrString
                                   uv_const, name, uv_slot,
                                   UPVAL_SRC_REG);
     }
-    
+
     // Transitive capture: variable is an upvalue in enclosing function.
     // ALL transitive captures are BY_VALUE via SRC_UPVAL.
     int upvalue_idx = scope_resolve_upvalue(ctx, enclosing, name);
@@ -549,7 +549,7 @@ int scope_resolve_upvalue(XrCompilerContext *ctx, XrCompiler *compiler, XrString
                                   outer_uv->is_const, outer_uv->name, outer_uv->slot_type,
                                   UPVAL_SRC_UPVAL);
     }
-    
+
     return -1;
 }
 
@@ -573,48 +573,48 @@ void xr_compiler_init(XrCompilerContext *ctx, XrCompiler *compiler, XrFunctionTy
     compiler->loop_scope = 0;
     compiler->break_count = 0;
     compiler->continue_count = 0;
-    
+
     // Initialize BCE (Bounds Check Elimination) info
     compiler->bce_loop_var = NULL;
     compiler->bce_limit_var = NULL;
     compiler->bce_loop_var_reg = -1;
     compiler->had_error = false;
     compiler->panic_mode = false;
-    
+
     compiler->arena = &ctx->arena;
     compiler->inst_type_buf = NULL;
     compiler->inst_type_cap = 0;
     compiler->struct_area_offset = 0;
     compiler->declared_return_type = NULL;
     xr_local_list_init(&compiler->local_list);
-    
+
     compiler->regalloc = xreg_new();
     if (!compiler->regalloc) {
         xr_log_warning("compiler", "failed to create register allocator");
         compiler->had_error = true;
     }
-    
+
     compiler->emitter = emitter_new(ctx, compiler->proto, compiler->regalloc);
     if (!compiler->emitter) {
         xr_log_warning("compiler", "failed to create emitter");
         compiler->had_error = true;
     }
-    
+
     #ifdef XR_DEBUG_REGALLOC_VERBOSE
     if (compiler->regalloc) {
         xreg_set_debug(compiler->regalloc, true);
     }
     #endif
-    
+
     #ifdef XR_DEBUG_EMITTER
     if (compiler->emitter) {
         emitter_set_debug(compiler->emitter, true);
     }
     #endif
-    
+
     compiler->globals = ctx->global_vars;
     compiler->global_count = &ctx->global_var_count;
-    
+
     ctx->current = compiler;
 
 }
@@ -656,7 +656,7 @@ XrProto *xr_compiler_end(XrCompilerContext *ctx, XrCompiler *compiler) {
 
     XrProto *proto = compiler->proto;
     ctx->current = compiler->enclosing;
-    
+
     if (compiler->emitter) {
         #ifdef XR_DEBUG_EMITTER
         emitter_print_stats(compiler->emitter);
@@ -664,7 +664,7 @@ XrProto *xr_compiler_end(XrCompilerContext *ctx, XrCompiler *compiler) {
         emitter_free(compiler->emitter);
         compiler->emitter = NULL;
     }
-    
+
     if (compiler->regalloc) {
         #ifdef XR_DEBUG_REGALLOC
         xreg_print_stats(compiler->regalloc);
@@ -673,17 +673,17 @@ XrProto *xr_compiler_end(XrCompilerContext *ctx, XrCompiler *compiler) {
         xreg_free(compiler->regalloc);
         compiler->regalloc = NULL;
     }
-    
+
     // Struct native storage: record size (allocated independently per call frame)
     if (compiler->struct_area_offset > 0) {
         proto->struct_area_size = compiler->struct_area_offset;
     }
-    
+
     if (compiler->had_error) {
         xr_vm_proto_free(proto);
         return NULL;
     }
-    
+
     // Generate param_types: per-parameter XrType* (authoritative source).
     // Parameters are always alive at function end, so compile_type is available.
     {
@@ -736,7 +736,7 @@ XrProto *xr_compiler_end(XrCompilerContext *ctx, XrCompiler *compiler) {
     xr_fusion_optimize(proto);
     xr_inline_detect_indirect_recursion(proto);
     xr_inline_mark_candidates(proto);
-    
+
     // Collect loop headers for JIT/AOT (OSR entry points) — single pass
     {
         int code_count = PROTO_CODE_COUNT(proto);
@@ -772,21 +772,21 @@ XrProto *xr_compiler_end(XrCompilerContext *ctx, XrCompiler *compiler) {
             }
         }
     }
-    
+
     // Generate basic block leader bitmap for JIT CFG construction
     {
         int code_count = PROTO_CODE_COUNT(proto);
         if (code_count > 0) {
             int bitmap_bytes = (code_count + 7) / 8;
             uint8_t *bm = (uint8_t *)xr_calloc(bitmap_bytes, 1);
-            
+
             // PC 0 is always a leader
             bm[0] |= 1;
-            
+
             for (int pc = 0; pc < code_count; pc++) {
                 XrInstruction inst = PROTO_CODE(proto, pc);
                 OpCode op = GET_OPCODE(inst);
-                
+
                 switch (op) {
                     case OP_JMP: {
                         int sj = GETARG_sJ(inst);
@@ -806,7 +806,7 @@ XrProto *xr_compiler_end(XrCompilerContext *ctx, XrCompiler *compiler) {
                         if (pc + 1 < code_count)
                             bm[(pc + 1) / 8] |= (1 << ((pc + 1) % 8));
                         break;
-                    
+
                     // Conditional instructions: both paths are leaders
                     case OP_EQ: case OP_EQK: case OP_EQI:
                     case OP_LT: case OP_LTI: case OP_LE: case OP_LEI:
@@ -816,17 +816,17 @@ XrProto *xr_compiler_end(XrCompilerContext *ctx, XrCompiler *compiler) {
                         if (pc + 2 < code_count)
                             bm[(pc + 2) / 8] |= (1 << ((pc + 2) % 8));
                         break;
-                    
+
                     default:
                         break;
                 }
             }
-            
+
             proto->bb_leaders = bm;
             proto->bb_leaders_size = bitmap_bytes;
         }
     }
-    
+
     // Generate Blueprint: compiler-provided JIT metadata (per-instruction types,
     // loop live maps). Must be after bb_leaders, loop_headers, and param_types
     // are all populated. Blueprint.inst_info is the single source of truth for
@@ -859,7 +859,7 @@ XrProto *xr_compiler_end(XrCompilerContext *ctx, XrCompiler *compiler) {
         }
     }
     proto->is_coro_safe = is_safe;
-    
+
     return proto;
 }
 
@@ -874,7 +874,7 @@ int xr_compile_expression(XrCompilerContext *ctx, XrCompiler *compiler, AstNode 
         xr_compiler_error(ctx, compiler, "NULL expression node");
         return reg_alloc(ctx, compiler);
     }
-    
+
     XrExprDesc e = xr_compile_expr(ctx, compiler, node);
     return xexpr_to_anyreg(ctx, compiler, &e);
 }
@@ -888,80 +888,80 @@ void xr_compile_statement(XrCompilerContext *ctx, XrCompiler *compiler, AstNode 
     if (node == NULL) {
         return;
     }
-    
+
     ctx->current_line = node->line;
-    
+
     switch (node->type) {
         case AST_EXPR_STMT:
             compile_expr_stmt(ctx, compiler, node->as.expr_stmt);
             break;
-        
+
         case AST_PRINT_STMT:
             compile_print(ctx, compiler, &node->as.print_stmt);
             break;
-        
+
         case AST_VAR_DECL:
         case AST_CONST_DECL:
             compile_var_decl(ctx, compiler, &node->as.var_decl);
             break;
-        
+
         case AST_DESTRUCTURE_DECL:
             compile_destructure_decl(ctx, compiler, &node->as.destructure_decl);
             break;
-        
+
         case AST_MULTI_VAR_DECL:
             compile_multi_var_decl(ctx, compiler, &node->as.multi_var_decl);
             break;
-        
+
         case AST_MULTI_ASSIGN:
             compile_multi_assign(ctx, compiler, &node->as.multi_assign);
             break;
-        
+
         case AST_ASSIGNMENT:
             compile_assignment(ctx, compiler, &node->as.assignment);
             break;
-        
+
         case AST_COMPOUND_ASSIGNMENT:
             compile_compound_assignment(ctx, compiler, &node->as.compound_assignment);
             break;
-        
+
         case AST_INC:
             compile_inc(ctx, compiler, &node->as.inc);
             break;
-        
+
         case AST_DEC:
             compile_dec(ctx, compiler, &node->as.dec);
             break;
-        
+
         case AST_DESTRUCTURE_ASSIGN:
             compile_destructure_assign(ctx, compiler, &node->as.destructure_assign);
             break;
-        
+
         case AST_IF_STMT:
             compile_if(ctx, compiler, &node->as.if_stmt);
             break;
-        
+
         // Control flow
         case AST_WHILE_STMT:
             compile_while(ctx, compiler, &node->as.while_stmt);
             break;
-        
+
         case AST_FOR_STMT:
             compile_for(ctx, compiler, &node->as.for_stmt);
             break;
-        
+
         case AST_FOR_IN_STMT:
             compile_for_in(ctx, compiler, &node->as.for_in_stmt);
             break;
-        
+
         case AST_FUNCTION_DECL:
             compile_function(ctx, compiler, &node->as.function_decl);
             break;
-        
+
         case AST_RETURN_STMT:
             compile_return(ctx, compiler, &node->as.return_stmt);
             break;
-        
+
         case AST_BREAK_STMT:
             if (compiler->loop_depth == 0) {
                 xr_compiler_error(ctx, compiler, "Cannot use 'break' outside of loop");
@@ -972,7 +972,7 @@ void xr_compile_statement(XrCompilerContext *ctx, XrCompiler *compiler, AstNode 
                 }
             }
             break;
-        
+
         case AST_CONTINUE_STMT:
             if (compiler->loop_depth == 0) {
                 xr_compiler_error(ctx, compiler, "Cannot use 'continue' outside of loop");
@@ -983,11 +983,11 @@ void xr_compile_statement(XrCompilerContext *ctx, XrCompiler *compiler, AstNode 
                 }
             }
             break;
-        
+
         case AST_INDEX_SET:
             compile_index_set(ctx, compiler, &node->as.index_set);
             break;
-        
+
         case AST_BLOCK: {
             BlockNode *block = &node->as.block;
             scope_begin(compiler);
@@ -1057,7 +1057,7 @@ void xr_compile_statement(XrCompilerContext *ctx, XrCompiler *compiler, AstNode 
             scope_end(ctx, compiler);
             break;
         }
-        
+
         case AST_PROGRAM: {
             ProgramNode *program = &node->as.program;
             // Phase 1: Hoist all declaration names (register slots only)
@@ -1200,7 +1200,7 @@ void xr_compile_statement(XrCompilerContext *ctx, XrCompiler *compiler, AstNode 
                     break;
                 default: break;
                 }
-                
+
                 // REPL auto-display: emit OP_DUMP for last expression statement
                 if (ctx->repl_mode && i == last_idx && stmt->type == AST_EXPR_STMT) {
                     AstNode *expr = stmt->as.expr_stmt;
@@ -1219,66 +1219,66 @@ void xr_compile_statement(XrCompilerContext *ctx, XrCompiler *compiler, AstNode 
                         continue;
                     }
                 }
-                
+
                 xr_compile_statement(ctx, compiler, stmt);
             }
             break;
         }
-        
+
         // OOP type definitions
         case AST_CLASS_DECL:
             compile_class(ctx, compiler, &node->as.class_decl);
             break;
-        
+
         case AST_STRUCT_DECL:
             ctx->is_compiling_struct = true;
             compile_class(ctx, compiler, &node->as.struct_decl);
             ctx->is_compiling_struct = false;
             break;
-        
+
         case AST_INTERFACE_DECL:
             compile_interface(ctx, compiler, &node->as.interface_decl);
             break;
-        
+
         case AST_ENUM_DECL:
             compile_enum_decl(ctx, compiler, &node->as.enum_decl);
             break;
-        
+
         case AST_MEMBER_SET:
             compile_member_set(ctx, compiler, &node->as.member_set);
             break;
-        
+
         // Exception handling
         case AST_TRY_CATCH:
             compile_try_catch(ctx, compiler, &node->as.try_catch);
             break;
-        
+
         case AST_THROW_STMT:
             compile_throw(ctx, compiler, &node->as.throw_stmt);
             break;
-        
+
         // Module system
         case AST_IMPORT_STMT:
             compile_import(ctx, compiler, &node->as.import_stmt);
             break;
-        
+
         case AST_EXPORT_STMT:
             compile_export(ctx, compiler, &node->as.export_stmt);
             break;
-        
+
         // Coroutine statements
         case AST_DEFER_STMT:
             compile_defer_stmt(ctx, compiler, &node->as.defer_stmt);
             break;
-        
+
         case AST_SELECT_STMT:
             compile_select_stmt(ctx, compiler, &node->as.select_stmt);
             break;
-        
+
         case AST_SCOPE_BLOCK:
             compile_scope_block(ctx, compiler, &node->as.scope_block, -1);
             break;
-        
+
         case AST_GO_EXPR: {
             // linked go / monitored go dispatched as statement from context keyword path
             int target = reg_alloc(ctx, compiler);
@@ -1286,20 +1286,20 @@ void xr_compile_statement(XrCompilerContext *ctx, XrCompiler *compiler, AstNode 
             reg_free(compiler, target);
             break;
         }
-        
+
         case AST_YIELD_STMT:
             EMIT_ABC(ctx, compiler, OP_YIELD, 0, 0, 0);
             break;
-        
+
         case AST_TYPE_ALIAS:
             // Type alias is compile-time only, no code generation
             break;
-        
+
         default:
             xr_compiler_error(ctx, compiler, "Unsupported statement type: %d", node->type);
             break;
     }
-    
+
     // Reset freereg after each statement (release temp registers)
     if (compiler->regalloc) {
         int local_end = xreg_get_local_end(compiler->regalloc);
@@ -1365,17 +1365,17 @@ int shared_get_in_scope(XrCompilerContext *ctx, XrCompiler *compiler, XrString *
     int best_index = -1;
     int best_func = -1;
     int best_scope = -1;
-    
+
     for (int i = 0; i < ctx->shared_var_count; i++) {
         if (ctx->shared_vars[i].name != NULL &&
             strcmp(ctx->shared_vars[i].name->data, name->data) == 0) {
             int var_func = ctx->shared_vars[i].function_depth;
             int var_scope = ctx->shared_vars[i].scope_depth;
-            
+
             // Only visible if in same or outer function context
             if (var_func <= current_func) {
                 // Prefer innermost function, then innermost scope
-                if (var_func > best_func || 
+                if (var_func > best_func ||
                     (var_func == best_func && var_scope > best_scope && var_scope <= current_scope)) {
                     best_index = i;
                     best_func = var_func;
@@ -1421,12 +1421,12 @@ int shared_add(XrCompilerContext *ctx, XrCompiler *compiler, XrString *name) {
         if (ctx->repl_mode) {
             return existing;
         }
-        xr_compiler_error(ctx, compiler, 
-            "shared variable '%s' already defined in current scope", 
+        xr_compiler_error(ctx, compiler,
+            "shared variable '%s' already defined in current scope",
             name->data);
         return existing;
     }
-    
+
     if (ctx->shared_var_count >= ctx->shared_var_capacity) {
         int new_capacity = ctx->shared_var_capacity * 2;
         XrSharedVar *new_vars = (XrSharedVar*)xr_realloc(ctx->shared_vars,
@@ -1443,7 +1443,7 @@ int shared_add(XrCompilerContext *ctx, XrCompiler *compiler, XrString *name) {
         ctx->shared_vars = new_vars;
         ctx->shared_var_capacity = new_capacity;
     }
-    
+
     int index = ctx->shared_var_count++;
     ctx->shared_vars[index].name = name;
     ctx->shared_vars[index].index = index;
@@ -1451,7 +1451,7 @@ int shared_add(XrCompilerContext *ctx, XrCompiler *compiler, XrString *name) {
     ctx->shared_vars[index].function_depth = get_function_depth(compiler);
     ctx->shared_vars[index].is_const = false;
     ctx->shared_vars[index].state = SHARED_STATE_OWNED;
-    
+
     return index;
 }
 
@@ -1461,7 +1461,7 @@ int shared_get_or_add(XrCompilerContext *ctx, XrCompiler *compiler, XrString *na
     if (index >= 0) {
         return index;
     }
-    
+
     if (ctx->shared_var_count >= ctx->shared_var_capacity) {
         int new_capacity = ctx->shared_var_capacity * 2;
         XrSharedVar *new_vars = (XrSharedVar*)xr_realloc(ctx->shared_vars,
@@ -1482,7 +1482,7 @@ int shared_get_or_add(XrCompilerContext *ctx, XrCompiler *compiler, XrString *na
         ctx->shared_vars = new_vars;
         ctx->shared_var_capacity = new_capacity;
     }
-    
+
     index = ctx->shared_var_count++;
     ctx->shared_vars[index].name = name;
     ctx->shared_vars[index].index = index;
@@ -1493,7 +1493,7 @@ int shared_get_or_add(XrCompilerContext *ctx, XrCompiler *compiler, XrString *na
     ctx->shared_vars[index].compile_type = NULL;
     ctx->shared_vars[index].moved_line = 0;
     ctx->shared_vars[index].moved_column = 0;
-    
+
     return index;
 }
 
@@ -1563,18 +1563,18 @@ XrProto *xr_compile(XrCompilerContext *ctx, AstNode *ast) {
     XR_DCHECK(ast != NULL, "xr_compile: NULL ast");
     // Save initial global variable offset (for module compilation)
     int initial_global_offset = ctx->global_var_count;
-    
+
     for (int i = 0; i < MAX_GLOBALS; i++) {
         ctx->global_vars[i].name = NULL;
         ctx->global_vars[i].index = -1;
     }
-    
+
     ctx->global_var_count = initial_global_offset;
-    
+
     // Phase 1: Type inference
     if (ctx->analyzer) {
         xa_analyzer_analyze(ctx->analyzer, NULL, ast);
-        
+
         // Report all analyzer diagnostics (errors halt compilation, warnings are informational)
         int diag_count = 0;
         XaDiagnostic *diagnostics = xa_analyzer_get_diagnostics(ctx->analyzer, &diag_count);
@@ -1589,10 +1589,12 @@ XrProto *xr_compile(XrCompilerContext *ctx, AstNode *ast) {
                     error_count++;
                     xr_diag_print(XR_DIAG_ERROR, d->code, d->message,
                                   file, d->location.line, col, 0, NULL, NULL);
+                    d->reported = true;
                 } else if (d->severity == XR_DIAG_SEV_WARNING) {
                     warning_count++;
                     xr_diag_print(XR_DIAG_WARNING, d->code, d->message,
                                   file, d->location.line, col, 0, NULL, NULL);
+                    d->reported = true;
                 }
             }
             if (error_count > 0) {
@@ -1601,37 +1603,81 @@ XrProto *xr_compile(XrCompilerContext *ctx, AstNode *ast) {
             }
         }
     }
-    
+
     // Monomorphization pass: clone generic functions/structs for each concrete type combination
     xa_mono_pass(ast);
-    
+
     // Post-mono: re-analyze monomorphized declarations to compute struct layouts
     if (ctx->analyzer) {
         xa_analyzer_analyze(ctx->analyzer, NULL, ast);
     }
-    
-    // Escape analysis: mark variables used in 'move' within go/ch.send
-    // as escaped so codegen allocates them on global heap automatically
-    xa_escape_analyze(ast);
-    
+
+    // Mark all pre-escape diagnostics as reported so the post-escape scan
+    // only picks up entries freshly emitted by the escape pass. (Post-mono
+    // re-analysis can produce benign duplicates we do not want to re-print.)
+    if (ctx->analyzer) {
+        int pre_diag_count = 0;
+        XaDiagnostic *pre = xa_analyzer_get_diagnostics(ctx->analyzer, &pre_diag_count);
+        for (XaDiagnostic *d = pre; d; d = d->next) {
+            d->reported = true;
+        }
+    }
+
+    // Escape analysis: enforce explicit sharing rules for go closure
+    // captures and `move` arguments. Emits diagnostics via the analyzer.
+    xa_escape_analyze(ast, ctx->analyzer);
+
+    // Re-check analyzer diagnostics after escape pass (errors abort compile)
+    if (ctx->analyzer) {
+        int post_diag_count = 0;
+        XaDiagnostic *post_diagnostics =
+            xa_analyzer_get_diagnostics(ctx->analyzer, &post_diag_count);
+        int post_error_count = 0;
+        int post_warning_count = 0;
+        for (XaDiagnostic *d = post_diagnostics; d; d = d->next) {
+            if (d->code == 0) continue;
+            // Only print diagnostics that were added by the escape pass.
+            // Pre-existing ones were already printed above.
+            if (d->reported) continue;
+            const char *file = d->location.file ? d->location.file : ctx->source_file;
+            int col = d->location.column > 0 ? d->location.column : 1;
+            if (d->severity == XR_DIAG_SEV_ERROR) {
+                post_error_count++;
+                xr_diag_print(XR_DIAG_ERROR, d->code, d->message,
+                              file, d->location.line, col, 0, NULL, NULL);
+                d->reported = true;
+            } else if (d->severity == XR_DIAG_SEV_WARNING) {
+                post_warning_count++;
+                xr_diag_print(XR_DIAG_WARNING, d->code, d->message,
+                              file, d->location.line, col, 0, NULL, NULL);
+                d->reported = true;
+            }
+        }
+        if (post_error_count > 0) {
+            xr_diag_print_summary(ctx->source_file, post_error_count,
+                                  post_warning_count, 0);
+            return NULL;
+        }
+    }
+
     // Code generation
     XrCompiler compiler;
     xr_compiler_init(ctx, &compiler, FUNCTION_SCRIPT);
-    
+
     compiler.globals = ctx->global_vars;
     compiler.global_count = &ctx->global_var_count;
-    
+
     xr_compile_statement(ctx, &compiler, ast);
-    
+
     compiler.proto->num_globals = ctx->global_var_count;
-    
+
     // Propagate nested compilation errors to current compiler
     if (ctx->had_error) {
         compiler.had_error = true;
     }
-    
+
     XrProto *proto = xr_compiler_end(ctx, &compiler);
-    
+
     return proto;
 }
 
