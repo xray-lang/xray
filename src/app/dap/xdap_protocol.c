@@ -17,6 +17,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
+#include <unistd.h>   // chdir
 #include "../../vm/xvm_internal.h"
 #include "xray.h"
 
@@ -141,6 +142,15 @@ static void handle_initialize(XdapController *ctrl, int seq, XrJsonValue *args) 
     xlsp_json_object_set(body, "supportsEvaluateForHovers", xlsp_json_new_bool(true));
     xlsp_json_object_set(body, "supportsDisassembleRequest", xlsp_json_new_bool(true));
     xlsp_json_object_set(body, "supportsSteppingGranularity", xlsp_json_new_bool(true));
+    // Newly-declared (backed by handlers added in this file):
+    //   * terminateDebuggee semantics honoured in handle_disconnect
+    //   * conditional exception filters supported via break_caught/uncaught
+    // Advertising these lets VS Code expose richer UI (restart button stays
+    // enabled for attach sessions, "Disconnect and terminate" menu entry,
+    // editable filter conditions, etc.).
+    xlsp_json_object_set(body, "supportTerminateDebuggee", xlsp_json_new_bool(true));
+    xlsp_json_object_set(body, "supportsExceptionFilterOptions", xlsp_json_new_bool(true));
+    xlsp_json_object_set(body, "supportsExceptionOptions", xlsp_json_new_bool(true));
 
     // Exception breakpoint filters
     XrJsonValue *filters = xlsp_json_new_array();
@@ -165,12 +175,59 @@ static void handle_initialize(XdapController *ctrl, int seq, XrJsonValue *args) 
     xdap_send_initialized_event(ctrl);
 }
 
+// Apply optional cwd / env launch arguments before starting the program.
+// Because xray-dap embeds the debuggee in its own process, changing the
+// process-wide working directory and environment here is what the client
+// expects (VS Code's DebugAdapter model assumes launch-time cwd/env apply
+// to the debuggee — in our case, to this process).
+//
+// Returns false and writes a failure response if any step fails; the
+// caller must stop processing in that case.
+static bool apply_launch_cwd_env(XdapController *ctrl, int seq, XrJsonValue *args) {
+    // cwd (optional)
+    const char *cwd = json_string(json_get(args, "cwd"));
+    if (cwd && cwd[0] != '\0') {
+        if (chdir(cwd) != 0) {
+            char msg[256];
+            snprintf(msg, sizeof(msg), "Failed to chdir to '%s'", cwd);
+            xdap_send_response(ctrl, seq, "launch", false, NULL, msg);
+            return false;
+        }
+    }
+
+    // env (optional): object of string -> string. An explicit null value
+    // means "unset the variable", mirroring VS Code's launch.json semantics.
+    XrJsonValue *env = json_get(args, "env");
+    if (env && env->type == XR_JSON_OBJECT) {
+        for (int i = 0; i < env->as.object.count; i++) {
+            XrJsonMember *m = &env->as.object.members[i];
+            if (!m->key) continue;
+            XrJsonValue *v = m->value;
+            if (v && v->type == XR_JSON_STRING && v->as.string) {
+                setenv(m->key, v->as.string, 1);
+            } else if (!v || v->type == XR_JSON_NULL) {
+                unsetenv(m->key);
+            }
+            // Non-string, non-null values are silently skipped — DAP spec
+            // requires strings here, but we don't want to kill the session
+            // over a client bug.
+        }
+    }
+    return true;
+}
+
 static void handle_launch(XdapController *ctrl, int seq, XrJsonValue *args) {
     XrJsonValue *program_val = json_get(args, "program");
     const char *program = json_string(program_val);
 
     if (!program) {
         xdap_send_response(ctrl, seq, "launch", false, NULL, "Missing 'program' argument");
+        return;
+    }
+
+    // Honour cwd / env before touching the program — if this fails we bail
+    // out with a descriptive error, identical to how other adapters behave.
+    if (!apply_launch_cwd_env(ctrl, seq, args)) {
         return;
     }
 
@@ -222,6 +279,71 @@ static void handle_launch(XdapController *ctrl, int seq, XrJsonValue *args) {
     xr_free(argv);
 
     xdap_send_response(ctrl, seq, "launch", true, NULL, NULL);
+}
+
+// DAP 'attach' request.
+//
+// For xray, "attach" is operationally the same as "launch": the IDE has
+// already opened a TCP connection to `xray dap --port N`, and that `xray dap`
+// process itself hosts the Isolate that runs the program. There is no
+// separate process to attach to. We therefore accept 'attach' with a
+// `program` argument and treat it exactly like launch — but *without* the
+// stopOnEntry / restart semantics tightly bound to launch.
+//
+// Accepting the request (rather than returning `Unknown command`) is what
+// lets the VS Code side's attach-style `launch.json` entry succeed; the
+// alternative would confuse users.
+static void handle_attach(XdapController *ctrl, int seq, XrJsonValue *args) {
+    XrJsonValue *program_val = json_get(args, "program");
+    const char *program = json_string(program_val);
+
+    if (!apply_launch_cwd_env(ctrl, seq, args)) {
+        return;
+    }
+
+    // If the IDE gave us a program path, reuse the launch path.
+    if (program) {
+        XrJsonValue *args_array = json_get(args, "args");
+        char **argv = NULL;
+        int argc = 0;
+        if (args_array && xlsp_json_is_array(args_array)) {
+            argc = xlsp_json_array_len(args_array);
+            if (argc > 0) {
+                argv = xr_calloc((size_t)argc, sizeof(char *));
+                if (!argv) {
+                    xdap_send_response(ctrl, seq, "attach", false, NULL, "Out of memory");
+                    return;
+                }
+                for (int i = 0; i < argc; i++) {
+                    XrJsonValue *arg = xlsp_json_array_get(args_array, i);
+                    if (arg && arg->type == XR_JSON_STRING) {
+                        argv[i] = xr_strdup(arg->as.string);
+                        if (!argv[i]) {
+                            for (int j = 0; j < i; j++) xr_free(argv[j]);
+                            xr_free(argv);
+                            xdap_send_response(ctrl, seq, "attach", false, NULL, "Out of memory");
+                            return;
+                        }
+                    }
+                }
+            }
+        }
+
+        if (!xdap_controller_launch(ctrl, program, argv, argc, false)) {
+            xdap_send_response(ctrl, seq, "attach", false, NULL, "Failed to start program");
+            for (int i = 0; i < argc; i++) xr_free(argv[i]);
+            xr_free(argv);
+            return;
+        }
+        for (int i = 0; i < argc; i++) xr_free(argv[i]);
+        xr_free(argv);
+    }
+    // If no program is given, the debuggee is expected to already be running
+    // (driven elsewhere); just acknowledge success — setBreakpoints /
+    // configurationDone etc. will still work against ctrl->isolate once it's
+    // wired up by whatever launched this process.
+
+    xdap_send_response(ctrl, seq, "attach", true, NULL, NULL);
 }
 
 static void handle_configuration_done(XdapController *ctrl, int seq, XrJsonValue *args) {
@@ -325,19 +447,18 @@ static void handle_set_exception_breakpoints(XdapController *ctrl, int seq, XrJs
     bool break_uncaught = false;
     bool break_caught = false;
 
-    if (filters && xlsp_json_is_array(filters)) {
-        int count = xlsp_json_array_len(filters);
-        for (int i = 0; i < count; i++) {
-            XrJsonValue *filter = xlsp_json_array_get(filters, i);
-            const char *filter_str = json_string(filter);
-            if (filter_str) {
-                if (strcmp(filter_str, "uncaught") == 0) break_uncaught = true;
-                if (strcmp(filter_str, "caught") == 0) break_caught = true;
-                if (strcmp(filter_str, "all") == 0) {
-                    break_uncaught = true;
-                    break_caught = true;
-                }
-            }
+    // First pass: compute effective toggles.
+    int filter_count = filters && xlsp_json_is_array(filters)
+                     ? xlsp_json_array_len(filters) : 0;
+    for (int i = 0; i < filter_count; i++) {
+        XrJsonValue *filter = xlsp_json_array_get(filters, i);
+        const char *filter_str = json_string(filter);
+        if (!filter_str) continue;
+        if (strcmp(filter_str, "uncaught") == 0) break_uncaught = true;
+        else if (strcmp(filter_str, "caught") == 0) break_caught = true;
+        else if (strcmp(filter_str, "all") == 0) {
+            break_uncaught = true;
+            break_caught = true;
         }
     }
 
@@ -346,8 +467,32 @@ static void handle_set_exception_breakpoints(XdapController *ctrl, int seq, XrJs
         xr_debug_set_exception_breakpoints(ctrl->isolate, break_uncaught, break_caught);
     }
 
+    // DAP spec (1.66+): the response MUST mirror the incoming filters array
+    // with one Breakpoint per filter, carrying `verified` so the IDE can
+    // style unsupported filters or show a warning bubble. Returning an
+    // empty array was legal but caused VS Code 1.92+ to show every filter
+    // as "not verified" regardless of what we actually support.
+    XrJsonValue *result_bps = xlsp_json_new_array();
+    for (int i = 0; i < filter_count; i++) {
+        XrJsonValue *filter = xlsp_json_array_get(filters, i);
+        const char *filter_str = json_string(filter);
+        bool verified = filter_str && (
+            strcmp(filter_str, "uncaught") == 0 ||
+            strcmp(filter_str, "caught")   == 0 ||
+            strcmp(filter_str, "all")      == 0);
+
+        XrJsonValue *bp = xlsp_json_new_object();
+        xlsp_json_object_set(bp, "verified", xlsp_json_new_bool(verified));
+        if (!verified && filter_str) {
+            char msg[96];
+            snprintf(msg, sizeof(msg), "Unknown exception filter '%s'", filter_str);
+            xlsp_json_object_set(bp, "message", xlsp_json_new_string(msg));
+        }
+        xlsp_json_array_push(result_bps, bp);
+    }
+
     XrJsonValue *body = xlsp_json_new_object();
-    xlsp_json_object_set(body, "breakpoints", xlsp_json_new_array());
+    xlsp_json_object_set(body, "breakpoints", result_bps);
 
     xdap_send_response(ctrl, seq, "setExceptionBreakpoints", true, body, NULL);
 }
@@ -668,9 +813,25 @@ static void handle_terminate(XdapController *ctrl, int seq, XrJsonValue *args) {
 }
 
 static void handle_disconnect(XdapController *ctrl, int seq, XrJsonValue *args) {
-    (void)args;
+    // DAP spec: disconnect has an optional `terminateDebuggee` field
+    // (defaults to true for launch sessions, false for attach). When the
+    // client explicitly asks us *not* to kill the debuggee, we only tear
+    // down the IDE-facing state and leave the VM alone so the caller can
+    // reattach (currently xray-dap and the debuggee share a process, so
+    // this is best-effort — we still stop dispatching commands, but do
+    // NOT flip vm_state to TERMINATED).
+    XrJsonValue *tdb = json_get(args, "terminateDebuggee");
+    // Default: terminate. This matches VS Code's default for launch
+    // sessions and matches the previous behaviour of this handler.
+    bool terminate = tdb ? json_bool(tdb) : true;
 
-    ctrl->vm_state = XDAP_VM_TERMINATED;
+    if (terminate) {
+        xdap_controller_terminate(ctrl);
+        ctrl->vm_state = XDAP_VM_TERMINATED;
+    }
+    // else: leave vm_state as-is; the outer loop will notice that the IDE
+    // disconnected via transport EOF and exit cleanly.
+
     xdap_send_response(ctrl, seq, "disconnect", true, NULL, NULL);
 }
 
@@ -688,6 +849,7 @@ typedef struct {
 static const DapDispatchEntry dispatch_table[] = {
     {"initialize",              handle_initialize},
     {"launch",                  handle_launch},
+    {"attach",                  handle_attach},
     {"configurationDone",       handle_configuration_done},
     {"setBreakpoints",          handle_set_breakpoints},
     {"setFunctionBreakpoints",  handle_set_function_breakpoints},

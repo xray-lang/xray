@@ -83,31 +83,40 @@ typedef struct XrLspAsync {
     // Worker thread
     pthread_t worker;
     _Atomic bool running;
-    
+
     // Pending task queue (main -> worker)
     XrLspTaskQueue pending;
     pthread_mutex_t pending_mutex;
     pthread_cond_t pending_cond;
-    
+
     // Completed task queue (worker -> main)
     XrLspTaskQueue completed;
-    
+
     // Currently running task (for cancellation)
     // Protected by current_task_mutex to prevent TOCTOU race conditions
     XrLspTask *current_task;
     pthread_mutex_t current_task_mutex;
-    
+
     // Notification pipe (worker -> main)
     int notify_fd[2];  // [0]=read, [1]=write
-    
+
     // Task ID generator
     _Atomic uint64_t next_task_id;
-    
+
     // Statistics
     _Atomic int pending_count;
     _Atomic int completed_count;
     _Atomic uint64_t total_tasks;
     _Atomic uint64_t cancelled_tasks;
+
+    // Optional per-thread init hook, run once inside the worker thread
+    // right after it starts. xlsp_server uses this to install the
+    // thread-local logging server pointer so tasks dispatched on the worker
+    // can write into the same log file as the main loop. The field is
+    // written exactly once (before pthread_create) and read exactly once
+    // (at the top of worker_thread), so no synchronisation is required.
+    void (*thread_init)(void *ctx);
+    void *thread_init_ctx;
 } XrLspAsync;
 
 // Initialize/destroy async system
@@ -119,7 +128,7 @@ XR_FUNC void xlsp_async_free(XrLspAsync *async);
 XR_FUNC uint64_t xlsp_async_submit(XrLspAsync *async, XrLspTask *task);
 
 // Create task with extended options
-XR_FUNC XrLspTask *xlsp_task_new(XrLspTaskFn execute, XrLspCompleteFn complete, 
+XR_FUNC XrLspTask *xlsp_task_new(XrLspTaskFn execute, XrLspCompleteFn complete,
                           void *data, XrLspTaskPriority priority);
 XR_FUNC XrLspTask *xlsp_task_new_ex(XrLspTaskFn execute, XrLspCompleteFn complete,
                              void *data, XrLspTaskPriority priority,

@@ -37,8 +37,12 @@
 #include <unistd.h>
 #include <sys/time.h>
 #include "../../base/xmalloc.h"
+#include "../../base/xchecks.h"
 
-// Diagnostic debounce interval
+// Fallback diagnostic debounce interval (ms). The live value is
+// server->config.diagnostic_debounce_ms, which is populated from
+// xray.toml / workspace/didChangeConfiguration. This constant is used
+// only before the server has finished initialising.
 #define DIAGNOSTIC_DEBOUNCE_MS 300
 
 // Get monotonic time in milliseconds
@@ -375,6 +379,13 @@ XrLspServer *xlsp_server_new(void) {
     server->async = xlsp_async_new();
     if (!server->async) {
         lsp_log("Warning: Failed to create async worker, background tasks disabled");
+    } else {
+        // Ensure the worker thread shares the same log file / stderr routing
+        // as the main loop — otherwise every lsp_log() call from a task would
+        // see tls_server == NULL and go to stderr only, bypassing the log
+        // file entirely (see the comment in XrLspAsync::thread_init).
+        server->async->thread_init = (void (*)(void *))xlsp_set_log_server;
+        server->async->thread_init_ctx = server;
     }
 
     // Default configuration
@@ -904,13 +915,14 @@ static void publish_diagnostics(XrLspServer *server, XrLspDocument *doc) {
 // Progress Reporting
 // ============================================================================
 
-static int progress_token_counter = 0;
-
-// Begin progress reporting (with optional cancellation support)
+// Begin progress reporting (with optional cancellation support).
+// The token counter lives on the server (see XrLspServer::progress_token_counter)
+// so that multiple concurrent XrLspServer instances do not collide on token names.
 static char *progress_begin_ex(XrLspServer *server, const char *title,
                                const char *message, bool cancellable) {
+    XR_DCHECK(server != NULL, "progress_begin_ex: NULL server");
     char token[32];
-    snprintf(token, sizeof(token), "xlsp-progress-%d", ++progress_token_counter);
+    snprintf(token, sizeof(token), "xlsp-progress-%d", ++server->progress_token_counter);
 
     // Create progress token
     XrJsonValue *create_params = xlsp_json_new_object();
@@ -990,7 +1002,10 @@ void xlsp_progress_end(XrLspServer *server, const char *token, const char *messa
 static void schedule_diagnostics(XrLspServer *server, XrLspDocument *doc) {
     uint64_t now = get_monotonic_ms();
     doc->last_change_time = now;
-    doc->diagnostic_deadline = now + DIAGNOSTIC_DEBOUNCE_MS;
+    int debounce_ms = server->config.diagnostic_debounce_ms > 0
+                    ? server->config.diagnostic_debounce_ms
+                    : DIAGNOSTIC_DEBOUNCE_MS;
+    doc->diagnostic_deadline = now + (uint64_t)debounce_ms;
 
     // Add to pending queue (avoid duplicates)
     for (int i = 0; i < server->pending_diag_count; i++) {
@@ -1103,6 +1118,15 @@ static void init_method_table(XrLspServer *server) {
     for (size_t i = 0; i < LSP_METHOD_COUNT; i++) {
         uint32_t h = method_hash(lsp_methods[i].method);
         MethodHashEntry *e = xr_malloc(sizeof(MethodHashEntry));
+        if (!e) {
+            // Under OOM we bail on partial initialisation — find_method will
+            // return NULL for any method not yet linked, which handle_message
+            // reports to the client as -32601 (MethodNotFound). Leaving
+            // method_table_initialized = false lets a future successful call
+            // retry once memory pressure clears.
+            lsp_log("[fatal] init_method_table: xr_malloc failed at i=%zu\n", i);
+            return;
+        }
         e->entry = &lsp_methods[i];
         e->next = server->method_hash_table[h];
         server->method_hash_table[h] = e;
@@ -1556,6 +1580,14 @@ static XrJsonValue *handle_initialize(XrLspServer *server, XrJsonValue *params) 
     xlsp_json_object_set_new(workspaceFolders, "changeNotifications", xlsp_json_new_bool(true));
     xlsp_json_object_set_new(workspace, "workspaceFolders", workspaceFolders);
     xlsp_json_object_set_new(capabilities, "workspace", workspace);
+
+    // Position encoding (LSP 3.17 general capability).
+    // We operate on UTF-16 code units throughout xlsp_position_to_offset /
+    // xlsp_offset_to_position, so declare that explicitly — clients that
+    // advertised UTF-8 / UTF-32 then fall back to UTF-16, and we avoid
+    // silent mismatches for files containing astral-plane characters.
+    xlsp_json_object_set_new(capabilities, "positionEncoding",
+                             xlsp_json_new_string("utf-16"));
 
     xlsp_json_object_set_new(result, "capabilities", capabilities);
 
