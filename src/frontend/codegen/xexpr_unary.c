@@ -29,7 +29,7 @@
 
 /*
  * Internal implementation: compile unary expression (returns register)
- * 
+ *
  * Optimization strategy:
  * - If operand is literal, calculate result at compile time (constant folding)
  * - Otherwise generate runtime instruction
@@ -38,14 +38,14 @@ static int compile_unary_internal(XrCompilerContext *ctx, XrCompiler *compiler, 
     XR_DCHECK(ctx != NULL, "compile_unary: NULL ctx");
     XR_DCHECK(compiler != NULL, "compile_unary: NULL compiler");
     // ===== Constant Folding Optimization =====
-    if (node->operand->type == AST_LITERAL_INT || 
+    if (node->operand->type == AST_LITERAL_INT ||
         node->operand->type == AST_LITERAL_FLOAT ||
         node->operand->type == AST_LITERAL_TRUE ||
         node->operand->type == AST_LITERAL_FALSE ||
         node->operand->type == AST_LITERAL_NULL) {
-        
+
         LiteralNode *lit = (LiteralNode *)&node->operand->as;
-        
+
         // Map AST node type to Token type
         TokenType op_token;
         switch (type) {
@@ -54,11 +54,11 @@ static int compile_unary_internal(XrCompilerContext *ctx, XrCompiler *compiler, 
             case AST_UNARY_BNOT: op_token = TK_TILDE; break;
             default: op_token = TK_EOF; break;
         }
-        
+
         // Constant folding
         if (op_token != TK_EOF) {
             // Convert LiteralNode to XrValue
-            XrValue operand_val;
+            XrValue operand_val = xr_null();
             switch (node->operand->type) {
                 case AST_LITERAL_INT:
                     operand_val = xr_int(lit->raw_value.int_val);
@@ -78,7 +78,7 @@ static int compile_unary_internal(XrCompilerContext *ctx, XrCompiler *compiler, 
                 default:
                     break;  // Don't fold, use general path
             }
-            
+
             // Try constant folding
             XrValue result;
             if (node->operand->type >= AST_LITERAL_INT && node->operand->type <= AST_LITERAL_NULL &&
@@ -92,12 +92,12 @@ static int compile_unary_internal(XrCompilerContext *ctx, XrCompiler *compiler, 
             }
         }
     }
-    
+
     // ===== General Path =====
     XrExprDesc operand_expr = xr_compile_expr(ctx, compiler, node->operand);
     int rb = xexpr_to_anyreg(ctx, compiler, &operand_expr);
     int ra = reg_alloc(ctx, compiler);
-    
+
     OpCode op;
     XrType *result_type = NULL;
     switch (type) {
@@ -109,13 +109,13 @@ static int compile_unary_internal(XrCompilerContext *ctx, XrCompiler *compiler, 
             xr_compiler_error(ctx, compiler, "Unknown unary operator");
             return ra;
     }
-    
+
     // Emit instruction
     emit_abc(compiler->emitter, op, ra, rb, 0);
-    
+
     // Set freereg = ra + 1, reclaim rb
     xreg_set_freereg(compiler->regalloc, ra + 1);
-    
+
     if (out_compile_type) *out_compile_type = result_type;
     return ra;
 }
@@ -131,12 +131,12 @@ XrExprDesc compile_unary(XrCompilerContext *ctx, XrCompiler *compiler, UnaryNode
     XR_DCHECK(compiler != NULL, "compile_unary: NULL compiler");
     XrExprDesc e = {0};
     xexpr_init_void(&e);
-    
+
     XrType *ct = NULL;
     int reg = compile_unary_internal(ctx, compiler, node, type, &ct);
     xexpr_init(&e, XEXPR_TEMP, reg);
     e.compile_type = ct;
-    
+
     // Infer compile_type: !x→bool, -x→operand type, ~x→int
     if (type == AST_UNARY_NOT) {
         e.compile_type = xr_type_new_bool();

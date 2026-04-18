@@ -3442,7 +3442,7 @@ XrJitResult xr_jit_rt_add(XrCoroutine *coro, int64_t extra_arg) {
     }
     // Float promotion
     {
-        double nb, nc;
+        double nb = 0, nc = 0;
         if (XR_TONUMBER(vb, nb) && XR_TONUMBER(vc, nc)) {
             XrValue r; r.descriptor = 0; r.tag = XR_TAG_F64;
             r.f = nb + nc;
@@ -3474,7 +3474,7 @@ XrJitResult xr_jit_rt_sub(XrCoroutine *coro, int64_t extra_arg) {
         r.i = (int64_t)((uint64_t)XR_TO_INT(vb) - (uint64_t)XR_TO_INT(vc));
         return XR_JIT_RESULT(r);
     }
-    double nb, nc;
+    double nb = 0, nc = 0;
     if (XR_TONUMBER(vb, nb) && XR_TONUMBER(vc, nc)) {
         XrValue r; r.descriptor = 0; r.tag = XR_TAG_F64;
         r.f = nb - nc;
@@ -3495,7 +3495,7 @@ XrJitResult xr_jit_rt_mul(XrCoroutine *coro, int64_t extra_arg) {
         r.i = (int64_t)((uint64_t)XR_TO_INT(vb) * (uint64_t)XR_TO_INT(vc));
         return XR_JIT_RESULT(r);
     }
-    double nb, nc;
+    double nb = 0, nc = 0;
     if (XR_TONUMBER(vb, nb) && XR_TONUMBER(vc, nc)) {
         XrValue r; r.descriptor = 0; r.tag = XR_TAG_F64;
         r.f = nb * nc;
@@ -3512,7 +3512,7 @@ XrJitResult xr_jit_rt_div(XrCoroutine *coro, int64_t extra_arg) {
     XrValue vc = jit_value_from_tag(coro->jit_ctx->call_args[1],
                                      coro->jit_ctx->call_arg_tags[1]);
     // Division always produces float
-    double nb, nc;
+    double nb = 0, nc = 0;
     if (XR_TONUMBER(vb, nb) && XR_TONUMBER(vc, nc)) {
         if (nc == 0.0) {
             XrValue exc = xr_exception_newf(coro->isolate,
@@ -3549,7 +3549,7 @@ XrJitResult xr_jit_rt_mod(XrCoroutine *coro, int64_t extra_arg) {
         r.i = b % c;
         return XR_JIT_RESULT(r);
     }
-    double nb, nc;
+    double nb = 0, nc = 0;
     if (XR_TONUMBER(vb, nb) && XR_TONUMBER(vc, nc)) {
         if (nc == 0.0) {
             XrValue exc = xr_exception_newf(coro->isolate,

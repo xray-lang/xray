@@ -175,7 +175,7 @@ static bool fold_int_binary(XirFunc *func, XirBlock *blk,
 
     // Rule 4: constant folding (both operands known)
     if (a_const && b_const) {
-        int64_t r;
+        int64_t r = 0;
         bool ok = true;
         switch (op) {
         case XIR_ADD: r = va + vb; break;
@@ -250,7 +250,7 @@ static bool fold_float_binary(XirFunc *func, XirBlock *blk,
 
     // Rule 3: constant folding (both operands known)
     if (a_const && b_const) {
-        double r;
+        double r = 0;
         bool ok = true;
         switch (op) {
         case XIR_FADD: r = va + vb; break;
@@ -267,7 +267,7 @@ static bool fold_float_binary(XirFunc *func, XirBlock *blk,
             return true;
         }
         // Float comparison -> i64 result
-        int64_t cr;
+        int64_t cr = 0;
         bool cmp_ok = true;
         switch (op) {
         case XIR_FEQ: cr = (va == vb) ? 1 : 0; break;

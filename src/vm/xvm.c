@@ -206,11 +206,14 @@ XrVMResult run(XrayIsolate *isolate, XrVMContext *vm_ctx) {
     #define VM_TRACE            (vm_ctx->trace_execution)
 
     /* ========== Local Variable Cache ========== */
-    register XrInstruction *pc;
+    // Defensive zero-init: startfunc label reached before these are assigned
+    // on the initial entry, and VM_RUNTIME_ERROR at the entry check uses
+    // pc/ci for error reporting. Prevents -Wconditional-uninitialized.
+    register XrInstruction *pc = NULL;
     register XrValue *base;
     XrValue *k;
     XrClosure *cl;
-    XrBcCallFrame *ci;
+    XrBcCallFrame *ci = NULL;
     XrInstruction i;
     int invoke_is_tail = 0; // shared flag: OP_INVOKE_TAIL sets 1, OP_INVOKE sets 0
     XrBcCallFrame *frame;
@@ -622,7 +625,7 @@ startfunc:
                 }
                 // Mixed/extended numeric addition
                 {
-                    double nb, nc;
+                    double nb = 0, nc = 0;
                     if (XR_TONUMBER(vb, nb) && XR_TONUMBER(vc, nc)) {
                         XR_SET_FLOAT(R(a), nb + nc);
                         vmbreak;
@@ -743,7 +746,7 @@ startfunc:
                 }
                 // Mixed/extended numeric subtraction
                 {
-                    double nb, nc;
+                    double nb = 0, nc = 0;
                     if (XR_TONUMBER(vb, nb) && XR_TONUMBER(vc, nc)) {
                         XR_SET_FLOAT(R(a), nb - nc);
                         vmbreak;
@@ -819,7 +822,7 @@ startfunc:
                 }
                 // Mixed/extended numeric multiplication
                 {
-                    double nb, nc;
+                    double nb = 0, nc = 0;
                     if (XR_TONUMBER(vb, nb) && XR_TONUMBER(vc, nc)) {
                         XR_SET_FLOAT(R(a), nb * nc);
                         vmbreak;
@@ -897,7 +900,7 @@ startfunc:
                 }
                 // Float/mixed multiplication
                 {
-                    double nb, nc;
+                    double nb = 0, nc = 0;
                     if (XR_TONUMBER(vb, nb) && XR_TONUMBER(vc, nc)) {
                         XR_SET_FLOAT(R(a), nb * nc);
                         vmbreak;
@@ -4918,6 +4921,10 @@ startfunc:
                 int b = GETARG_B(i);
                 int nargs = GETARG_C(i);
 
+                // Declared here (before all invoke_* labels) so jumps past
+                // the assignment below still observe a deterministic NULL.
+                const char *method_name_chars = NULL;
+
                 // receiver at R[a+1] (new calling convention)
                 XrValue receiver = R(a + 1);
 
@@ -5307,9 +5314,10 @@ startfunc:
                     }
                 }
 
-                // Class/Instance method call path
+                // Class/Instance method call path.
+                // method_name_chars is declared at the top of invoke_dispatch
+                // so every `goto invoke_*` sibling label observes NULL.
                 invoke_class_or_instance: ;
-                const char *method_name_chars = NULL;
                 if (xr_value_is_class(receiver) || xr_value_is_instance(receiver)) {
                     // Get method name only when needed
                     XrSymbolTable *sym_table = (XrSymbolTable*)isolate->symbol_table;

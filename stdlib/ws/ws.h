@@ -117,49 +117,50 @@ typedef struct XrWebSocket {
     int fd;                         // Socket file descriptor
     bool is_server;                 // true if server-side connection (no masking on send)
     struct XrayIsolate *isolate;    // Isolate for coroutine-aware I/O
-    
+
     // URL info
     char *host;
     int port;
     char *path;
     bool is_secure;                 // wss://
-    
+
     // Protocol
     char *protocol;                 // Negotiated subprotocol
     char *sec_key;                  // Sec-WebSocket-Key
-    
+
     // Configuration
     XrWsConfig config;
-    
+
     // Flat read buffer (inline, no indirection)
     char *rbuf;                   // heap-allocated read buffer
     int rbuf_off;                 // consumed offset (data at rbuf+rbuf_off)
     int rbuf_len;                 // valid data bytes from rbuf_off
     int rbuf_cap;                 // allocated capacity
-    
+
     // Message buffer (dynamic, allocated per-frame based on payload size)
     char *msg_buf;                // dynamically allocated for large payloads
     size_t msg_buf_size;          // allocated capacity
     size_t msg_buf_len;           // bytes filled
     size_t msg_remaining;         // remaining bytes to read for current frame
-    
+
     // Current frame state (for multi-read frames)
     bool frame_in_progress;       // true if reading a frame payload
     bool frame_fin;               // FIN bit of current frame
     XrWsOpcode frame_opcode;      // opcode of current frame
     bool frame_masked;            // masked flag
+    bool frame_rsv1;              // RSV1 bit (permessage-deflate compressed flag)
     unsigned char frame_mask[4];  // mask key
-    
+
     // Fragment message buffer (for fragmented messages across frames)
     char *frag_buf;
     size_t frag_buf_size;
     size_t frag_buf_len;
     XrWsOpcode frag_opcode;
-    
+
     // TLS (if enabled)
     void *tls_conn;
     void *tls_ctx;
-    
+
     // Partial send tracking (for non-blocking writev resume)
     size_t send_offset;             // offset into payload for partial send resume
     bool send_header_sent;          // true if frame header already sent
@@ -169,7 +170,7 @@ typedef struct XrWebSocket {
     int wbuf_len;                   // valid data bytes
     int wbuf_cap;                   // allocated capacity
     bool corked;                    // true if corked (writes go to wbuf)
-    
+
     // Embedded message (avoids calloc per recv)
     XrWsMessage last_msg;
 

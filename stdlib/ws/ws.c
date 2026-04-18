@@ -156,10 +156,10 @@ static char* generate_sec_key(void) {
 static char* compute_accept_key(const char *sec_key) {
     char concat[128];
     snprintf(concat, sizeof(concat), "%s%s", sec_key, WS_GUID);
-    
+
     unsigned char hash[20];
     SHA1((unsigned char*)concat, strlen(concat), hash);
-    
+
     return xr_base64_encode(hash, 20, NULL);
 }
 
@@ -169,9 +169,9 @@ static int parse_ws_url(const char *url, char **host, int *port, char **path, bo
     *path = NULL;
     *port = 80;
     *secure = false;
-    
+
     const char *p = url;
-    
+
     if (strncmp(p, "wss://", 6) == 0) {
         *secure = true;
         *port = 443;
@@ -181,26 +181,26 @@ static int parse_ws_url(const char *url, char **host, int *port, char **path, bo
     } else {
         return -1;
     }
-    
+
     // Extract host
     const char *host_start = p;
     while (*p && *p != ':' && *p != '/' && *p != '?') p++;
     *host = strndup(host_start, p - host_start);
-    
+
     // Extract port
     if (*p == ':') {
         p++;
         *port = atoi(p);
         while (*p && *p != '/' && *p != '?') p++;
     }
-    
+
     // Extract path
     if (*p == '/' || *p == '?') {
         *path = strdup(p);
     } else {
         *path = strdup("/");
     }
-    
+
     return 0;
 }
 
@@ -237,7 +237,7 @@ static ssize_t ws_recv_timeout(XrWebSocket *ws, void *buf, size_t len, int timeo
 static int ws_send_all(XrWebSocket *ws, const void *buf, size_t len) {
     const char *p = (const char*)buf;
     size_t sent = 0;
-    
+
     while (sent < len) {
         ssize_t n;
         if (ws->is_secure && ws->tls_conn) {
@@ -266,10 +266,10 @@ static int ws_send_all(XrWebSocket *ws, const void *buf, size_t len) {
 static size_t build_frame_header(char *header, XrWsOpcode opcode, size_t payload_len,
                                   bool mask, unsigned char *mask_key, bool rsv1) {
     char *p = header;
-    
+
     // First byte: FIN + RSV1 + opcode
     *p++ = (char)(0x80 | (rsv1 ? 0x40 : 0x00) | (opcode & 0x0F));
-    
+
     // Second byte: MASK + payload length
     if (payload_len > 65535) {
         *p++ = (char)(mask ? 0xFF : 0x7F);
@@ -289,26 +289,26 @@ static size_t build_frame_header(char *header, XrWsOpcode opcode, size_t payload
     } else {
         *p++ = (char)((mask ? 0x80 : 0x00) | (payload_len & 0x7F));
     }
-    
+
     // Masking key
     if (mask) {
         xr_random_bytes(mask_key, 4);
         memcpy(p, mask_key, 4);
         p += 4;
     }
-    
+
     return (size_t)(p - header);
 }
 
 // Apply XOR mask to data (in-place for send buffer, or to dest for zero-copy)
-static void apply_mask(const unsigned char *src, unsigned char *dst, 
+static void apply_mask(const unsigned char *src, unsigned char *dst,
                        size_t len, const unsigned char *mask_key) {
     // Optimize: process 8 bytes at a time when possible
     size_t i = 0;
-    
+
     // Process 8 bytes at a time (unroll for performance)
     if (len >= 8) {
-        uint64_t mask64 = ((uint64_t)mask_key[0]) | 
+        uint64_t mask64 = ((uint64_t)mask_key[0]) |
                           ((uint64_t)mask_key[1] << 8) |
                           ((uint64_t)mask_key[2] << 16) |
                           ((uint64_t)mask_key[3] << 24) |
@@ -316,14 +316,14 @@ static void apply_mask(const unsigned char *src, unsigned char *dst,
                           ((uint64_t)mask_key[1] << 40) |
                           ((uint64_t)mask_key[2] << 48) |
                           ((uint64_t)mask_key[3] << 56);
-        
+
         for (; i + 8 <= len; i += 8) {
             uint64_t *dst64 = (uint64_t*)(dst + i);
             const uint64_t *src64 = (const uint64_t*)(src + i);
             *dst64 = *src64 ^ mask64;
         }
     }
-    
+
     // Process remaining bytes
     for (; i < len; i++) {
         dst[i] = src[i] ^ mask_key[i % 4];
@@ -365,9 +365,9 @@ static int ws_send_frame_writev(XrWebSocket *ws, XrWsOpcode opcode,
     char header[WS_MAX_HEADER_SIZE];
     unsigned char mask_key[4] = {0};
     bool mask = !ws->is_server;  // Client must mask
-    
+
     size_t header_len = build_frame_header(header, opcode, len, mask, mask_key, false);
-    
+
     if (!mask) {
         // Server: zero-copy send with writev
         struct iovec iov[2];
@@ -375,16 +375,16 @@ static int ws_send_frame_writev(XrWebSocket *ws, XrWsOpcode opcode,
         iov[0].iov_len = header_len;
         iov[1].iov_base = (void*)data;
         iov[1].iov_len = len;
-        
+
         size_t total = header_len + len;
         size_t sent = 0;
-        
+
         while (sent < total) {
             ssize_t n;
             if (ws->is_secure && ws->tls_conn) {
                 // TLS doesn't support writev directly, fall back to buffered send
                 if (sent < header_len) {
-                    n = xr_tls_conn_write((XrTlsConn*)ws->tls_conn, 
+                    n = xr_tls_conn_write((XrTlsConn*)ws->tls_conn,
                                           header + sent, header_len - sent);
                     if (n > 0) { sent += n; continue; }
                 } else {
@@ -406,7 +406,7 @@ static int ws_send_frame_writev(XrWebSocket *ws, XrWsOpcode opcode,
                 }
                 n = writev(ws->fd, iov, iov[0].iov_len > 0 ? 2 : 1);
             }
-            
+
             if (n < 0) {
                 if (errno == EAGAIN || errno == EWOULDBLOCK) {
                     // Non-blocking: would block, need to wait
@@ -422,35 +422,35 @@ static int ws_send_frame_writev(XrWebSocket *ws, XrWsOpcode opcode,
         }
         return 0;
     }
-    
+
     // Client: need to mask data, use pooled buffer
     size_t frame_len = header_len + len;
     char *frame = NULL;
     char stack_buf[WS_STACK_THRESHOLD];
     bool use_stack = (frame_len <= sizeof(stack_buf));
-    
+
     if (use_stack) {
         frame = stack_buf;
     } else {
         frame = ws_buffer_alloc(frame_len);
         if (!frame) return -1;
     }
-    
+
     // Copy header
     memcpy(frame, header, header_len);
-    
+
     // Apply mask to payload
-    apply_mask((const unsigned char*)data, (unsigned char*)(frame + header_len), 
+    apply_mask((const unsigned char*)data, (unsigned char*)(frame + header_len),
                len, mask_key);
-    
+
     // Send
     int ret = ws_send_all(ws, frame, frame_len);
-    
+
     // Free buffer
     if (!use_stack) {
         ws_buffer_free(frame, frame_len);
     }
-    
+
     return ret;
 }
 
@@ -465,14 +465,14 @@ typedef struct {
 int xr_ws_send_frame_try(XrWebSocket *ws, XrWsOpcode opcode,
                           const void *data, size_t len) {
     if (!ws || ws->state != WS_STATE_OPEN) return -1;
-    
+
     // Build header on stack
     char header[WS_MAX_HEADER_SIZE];
     unsigned char mask_key[4] = {0};
     bool mask = !ws->is_server;
-    
+
     size_t header_len = build_frame_header(header, opcode, len, mask, mask_key, false);
-    
+
     // Cork mode: append frame to wbuf, no syscall
     if (ws->corked && !mask) {
         size_t frame_len = header_len + len;
@@ -490,7 +490,7 @@ int xr_ws_send_frame_try(XrWebSocket *ws, XrWsOpcode opcode,
         ws->wbuf_len += (int)frame_len;
         return 0;
     }
-    
+
     if (!mask) {
         // Server: send header + payload
         // TLS path: always blocking (TLS has its own buffering)
@@ -501,7 +501,7 @@ int xr_ws_send_frame_try(XrWebSocket *ws, XrWsOpcode opcode,
             }
             return 0;
         }
-        
+
         // Resume partial send from previous non-blocking attempt
         if (ws->send_header_sent) {
             const char *p = (const char*)data + ws->send_offset;
@@ -519,9 +519,9 @@ int xr_ws_send_frame_try(XrWebSocket *ws, XrWsOpcode opcode,
             }
             return -2;
         }
-        
+
         size_t total = header_len + len;
-        
+
         // Fast path: small frame → stack memcpy + single send (no iov overhead)
         if (total <= WS_STACK_THRESHOLD) {
             char sbuf[WS_STACK_THRESHOLD];
@@ -543,55 +543,55 @@ int xr_ws_send_frame_try(XrWebSocket *ws, XrWsOpcode opcode,
             ws->send_offset = data_sent;
             return -2;
         }
-        
+
         // Large frame: writev header + payload
         struct iovec iov[2];
         iov[0].iov_base = header;
         iov[0].iov_len = header_len;
         iov[1].iov_base = (void*)data;
         iov[1].iov_len = len;
-        
+
         ssize_t n = writev(ws->fd, iov, 2);
         if (n < 0) {
             if (errno == EAGAIN || errno == EWOULDBLOCK) n = 0;
             else return -1;
         }
         if ((size_t)n >= total) return 0;
-        
+
         // Partial send: finish header (tiny), then handle payload
         size_t sent = (size_t)n;
         if (sent < header_len) {
             if (ws_send_all(ws, header + sent, header_len - sent) < 0) return -1;
             sent = header_len;
         }
-        
+
         size_t data_sent = sent - header_len;
         if (data_sent >= len) return 0;
         ws->send_header_sent = true;
         ws->send_offset = data_sent;
         return -2;
     }
-    
+
     // Client: need to mask - use pooled buffer
     size_t frame_len = header_len + len;
     char *frame = NULL;
     char stack_buf[WS_STACK_THRESHOLD];
     bool use_stack = (frame_len <= sizeof(stack_buf));
-    
+
     if (use_stack) {
         frame = stack_buf;
     } else {
         frame = ws_buffer_alloc(frame_len);
         if (!frame) return -1;
     }
-    
+
     // Build frame
     memcpy(frame, header, header_len);
     if (data && len > 0) {
         apply_mask((const unsigned char*)data, (unsigned char*)(frame + header_len),
                    len, mask_key);
     }
-    
+
     // Try non-blocking send
     ssize_t n;
     if (ws->is_secure && ws->tls_conn) {
@@ -599,7 +599,7 @@ int xr_ws_send_frame_try(XrWebSocket *ws, XrWsOpcode opcode,
     } else {
         n = send(ws->fd, frame, frame_len, 0);
     }
-    
+
     if (n < 0) {
         if (errno == EAGAIN || errno == EWOULDBLOCK) {
             // Complete send with blocking helper (masked buffer can't be rebuilt)
@@ -613,7 +613,7 @@ int xr_ws_send_frame_try(XrWebSocket *ws, XrWsOpcode opcode,
         if (!use_stack) ws_buffer_free(frame, frame_len);
         return -1;
     }
-    
+
     if ((size_t)n < frame_len) {
         // Partial send: complete remaining with blocking helper
         // Can't return -2 because masked buffer would be freed and rebuilt
@@ -625,7 +625,7 @@ int xr_ws_send_frame_try(XrWebSocket *ws, XrWsOpcode opcode,
         if (!use_stack) ws_buffer_free(frame, frame_len);
         return 0;
     }
-    
+
     if (!use_stack) ws_buffer_free(frame, frame_len);
     return 0;
 }
@@ -644,19 +644,19 @@ static int ws_frag_ensure_capacity(XrWebSocket *ws, size_t needed) {
     // Always need at least 1 byte for null terminator
     if (needed == 0) needed = 1;
     if (ws->frag_buf && ws->frag_buf_size >= needed) return 0;
-    
+
     // Calculate new size with exponential growth
     size_t new_size = ws->frag_buf_size;
     if (new_size < WS_FRAG_MIN_SIZE) new_size = WS_FRAG_MIN_SIZE;
-    
+
     while (new_size < needed) {
         new_size = new_size * WS_FRAG_GROW_FACTOR;
     }
-    
+
     // Realloc with new capacity
     char *new_buf = (char*)realloc(ws->frag_buf, new_size + 1);
     if (!new_buf) return -1;
-    
+
     ws->frag_buf = new_buf;
     ws->frag_buf_size = new_size;
     return 0;
@@ -665,9 +665,9 @@ static int ws_frag_ensure_capacity(XrWebSocket *ws, size_t needed) {
 // Append data to fragment buffer (optimized)
 static int ws_frag_append(XrWebSocket *ws, const char *data, size_t len) {
     size_t needed = ws->frag_buf_len + len;
-    
+
     if (ws_frag_ensure_capacity(ws, needed) < 0) return -1;
-    
+
     memcpy(ws->frag_buf + ws->frag_buf_len, data, len);
     ws->frag_buf_len = needed;
     ws->frag_buf[needed] = '\0';
@@ -679,7 +679,7 @@ static int ws_frag_start(XrWebSocket *ws, XrWsOpcode opcode, const char *data, s
     // Reset length but keep buffer if large enough
     ws->frag_buf_len = 0;
     ws->frag_opcode = opcode;
-    
+
     if (ws_frag_ensure_capacity(ws, len) < 0) {
         // Fallback: allocate new buffer
         if (ws->frag_buf) free(ws->frag_buf);
@@ -690,7 +690,7 @@ static int ws_frag_start(XrWebSocket *ws, XrWsOpcode opcode, const char *data, s
         }
         ws->frag_buf_size = len;
     }
-    
+
     memcpy(ws->frag_buf, data, len);
     ws->frag_buf_len = len;
     ws->frag_buf[len] = '\0';
@@ -703,7 +703,7 @@ static void ws_frag_complete(XrWebSocket *ws, XrWsMessage *msg) {
     msg->data = ws->frag_buf;
     msg->len = ws->frag_buf_len;
     msg->is_text = (ws->frag_opcode == WS_OPCODE_TEXT);
-    
+
     // Transfer ownership, reset fragment state
     ws->frag_buf = NULL;
     ws->frag_buf_size = 0;
@@ -721,17 +721,17 @@ static int send_close_frame(XrWebSocket *ws, const void *data, size_t len, bool 
     // Max frame: 2 (header) + 4 (mask) + 125 (payload) = 131
     char buf[131];
     char *p = buf;
-    
+
     *p++ = (char)(0x80 | WS_OPCODE_CLOSE);
     *p++ = (char)((mask ? 0x80 : 0x00) | (len & 0x7F));
-    
+
     unsigned char mask_key[4] = {0};
     if (mask) {
         xr_random_bytes(mask_key, 4);
         memcpy(p, mask_key, 4);
         p += 4;
     }
-    
+
     if (data && len > 0) {
         if (mask) {
             const unsigned char *src = (const unsigned char*)data;
@@ -744,7 +744,7 @@ static int send_close_frame(XrWebSocket *ws, const void *data, size_t len, bool 
         }
         p += len;
     }
-    
+
     return ws_send_all(ws, buf, (size_t)(p - buf));
 }
 
@@ -756,39 +756,39 @@ static int parse_frame_header(const char *buf, size_t buf_len,
                                unsigned char *mask_key,
                                size_t *header_len, bool *rsv1) {
     if (buf_len < 2) return 0;  // Need more data
-    
+
     const unsigned char *p = (const unsigned char*)buf;
-    
+
     // RSV1 is allowed for permessage-deflate; RSV2/RSV3 are protocol errors
     *rsv1 = (p[0] & 0x40) != 0;
     if (p[0] & 0x30) {
         return -1;  // Protocol error: RSV2 or RSV3 set
     }
-    
+
     *fin = (p[0] & 0x80) != 0;
     *opcode = (XrWsOpcode)(p[0] & 0x0F);
     *masked = (p[1] & 0x80) != 0;
-    
+
     // RFC 6455 Section 5.2: reserved opcodes (0x3-0x7, 0xB-0xF) MUST fail
     uint8_t op = (uint8_t)*opcode;
     if ((op >= 0x3 && op <= 0x7) || (op >= 0xB && op <= 0xF)) {
         return -1;  // Protocol error: reserved opcode
     }
-    
+
     // RFC 6455 Section 5.5: control frames MUST NOT be fragmented (FIN=1)
     bool is_control = (op & 0x8) != 0;
     if (is_control && !*fin) {
         return -1;  // Protocol error: fragmented control frame
     }
-    
+
     uint64_t len = p[1] & 0x7F;
     size_t hdr_len = 2;
-    
+
     // RFC 6455 Section 5.5: control frame payload MUST be 125 bytes or less
     if (is_control && len > 125) {
         return -1;  // Protocol error: control frame payload too large
     }
-    
+
     if (len == 126) {
         if (buf_len < 4) return 0;
         len = ((uint64_t)p[2] << 8) | p[3];
@@ -805,13 +805,13 @@ static int parse_frame_header(const char *buf, size_t buf_len,
         }
         hdr_len = 10;
     }
-    
+
     if (*masked) {
         if (buf_len < hdr_len + 4) return 0;
         memcpy(mask_key, buf + hdr_len, 4);
         hdr_len += 4;
     }
-    
+
     *payload_len = len;
     *header_len = hdr_len;
     return 1;
@@ -830,23 +830,23 @@ void xr_ws_config_init(XrWsConfig *config) {
 
 XrWebSocket* xr_ws_new(const XrWsConfig *config) {
     if (!config || !config->url) return NULL;
-    
+
     XrWebSocket *ws = (XrWebSocket*)calloc(1, sizeof(XrWebSocket));
     if (!ws) return NULL;
-    
+
     ws->state = WS_STATE_CLOSED;
     ws->fd = -1;
-    
+
     // Parse URL
     if (parse_ws_url(config->url, &ws->host, &ws->port, &ws->path, &ws->is_secure) < 0) {
         free(ws);
         return NULL;
     }
-    
+
     // Copy config
     ws->config = *config;
     ws->config.url = strdup(config->url);
-    
+
     // Initialize buffer state (rbuf lazy-allocated on first recv)
     ws->rbuf = NULL;
     ws->rbuf_off = 0;
@@ -865,17 +865,17 @@ XrWebSocket* xr_ws_new(const XrWsConfig *config) {
     ws->wbuf_len = 0;
     ws->wbuf_cap = 0;
     ws->corked = false;
-    
+
     return ws;
 }
 
 void xr_ws_free(XrWebSocket *ws) {
     if (!ws) return;
-    
+
     if (ws->state == WS_STATE_OPEN) {
         xr_ws_close(ws, WS_CLOSE_GOING_AWAY, NULL);
     }
-    
+
     // Clean up TLS resources (may already be freed by xr_ws_close)
     if (ws->tls_conn) {
         xr_tls_conn_close((XrTlsConn*)ws->tls_conn);
@@ -886,14 +886,14 @@ void xr_ws_free(XrWebSocket *ws) {
         xr_tls_context_free((XrTlsContext*)ws->tls_ctx);
         ws->tls_ctx = NULL;
     }
-    
+
     if (ws->fd >= 0) close(ws->fd);
-    
+
     free(ws->rbuf);
     ws->rbuf = NULL;
     free(ws->wbuf);
     ws->wbuf = NULL;
-    
+
     free(ws->host);
     free(ws->path);
     free(ws->protocol);
@@ -908,25 +908,25 @@ void xr_ws_free(XrWebSocket *ws) {
 XrWsError xr_ws_connect(XrWebSocket *ws) {
     if (!ws) return WS_ERR_URL;
     if (ws->state == WS_STATE_OPEN) return WS_OK;
-    
+
     XrWsError err = WS_OK;
     char *accept_key = NULL;
     ws->state = WS_STATE_CONNECTING;
-    
+
     // DNS resolution (with cache, IPv4/IPv6 dual-stack)
     XrSockAddr resolved_addr;
     if (!xr_dns_resolve(ws->host, &resolved_addr, XR_AF_UNSPEC)) {
         err = WS_ERR_DNS;
         goto fail_early;
     }
-    
+
     // Create socket
     ws->fd = socket(resolved_addr.family, SOCK_STREAM, 0);
     if (ws->fd < 0) {
         err = WS_ERR_CONNECT;
         goto fail_early;
     }
-    
+
     // Set TCP_NODELAY + low-latency options
     int flag = 1;
     setsockopt(ws->fd, IPPROTO_TCP, TCP_NODELAY, &flag, sizeof(flag));
@@ -937,7 +937,7 @@ XrWsError xr_ws_connect(XrWebSocket *ws) {
 #ifdef SO_NOSIGPIPE
     setsockopt(ws->fd, SOL_SOCKET, SO_NOSIGPIPE, &flag, sizeof(flag));
 #endif
-    
+
     // Connect
     struct sockaddr *sa;
     socklen_t sa_len;
@@ -950,37 +950,37 @@ XrWsError xr_ws_connect(XrWebSocket *ws) {
         sa = (struct sockaddr*)&resolved_addr.addr.v6;
         sa_len = sizeof(struct sockaddr_in6);
     }
-    
+
     if (connect(ws->fd, sa, sa_len) < 0) {
         err = WS_ERR_CONNECT;
         goto fail_cleanup;
     }
-    
+
     // Establish TLS connection if wss://
     if (ws->is_secure) {
         XrTlsContext *tls_ctx = xr_tls_context_new_client();
         if (!tls_ctx) { err = WS_ERR_CONNECT; goto fail_cleanup; }
         ws->tls_ctx = tls_ctx;
-        
+
         XrTlsConn *tls_conn = xr_tls_conn_new(tls_ctx, ws->fd);
         if (!tls_conn) { err = WS_ERR_CONNECT; goto fail_cleanup; }
         ws->tls_conn = tls_conn;
-        
+
         xr_tls_conn_set_hostname(tls_conn, ws->host);
-        
+
         XrTlsError tls_err = xr_tls_conn_handshake_client(tls_conn);
         if (tls_err != XR_TLS_OK) { err = WS_ERR_HANDSHAKE; goto fail_cleanup; }
     }
-    
+
     // Generate Sec-WebSocket-Key
     ws->sec_key = generate_sec_key();
     if (!ws->sec_key) { err = WS_ERR_MEMORY; goto fail_cleanup; }
-    
+
     // Build handshake request (bounds-checked)
     char request[2048];
     size_t req_cap = sizeof(request);
     size_t req_len = 0;
-    
+
     #define WS_APPEND(fmt, ...) do { \
         int _n = snprintf(request + req_len, req_cap - req_len, fmt, ##__VA_ARGS__); \
         if (_n < 0 || req_len + (size_t)_n >= req_cap) { \
@@ -988,7 +988,7 @@ XrWsError xr_ws_connect(XrWebSocket *ws) {
         } \
         req_len += (size_t)_n; \
     } while(0)
-    
+
     WS_APPEND("GET %s HTTP/1.1\r\n", ws->path);
     WS_APPEND("Host: %s", ws->host);
     if ((ws->is_secure && ws->port != 443) || (!ws->is_secure && ws->port != 80)) {
@@ -1001,11 +1001,11 @@ XrWsError xr_ws_connect(XrWebSocket *ws) {
     WS_APPEND("Sec-WebSocket-Version: 13\r\n");
     WS_APPEND("Sec-WebSocket-Extensions: permessage-deflate; "
               "client_no_context_takeover; server_no_context_takeover\r\n");
-    
+
     for (int i = 0; i + 1 < ws->config.header_count; i += 2) {
         WS_APPEND("%s: %s\r\n", ws->config.headers[i], ws->config.headers[i + 1]);
     }
-    
+
     if (ws->config.subprotocols && ws->config.subprotocol_count > 0) {
         WS_APPEND("Sec-WebSocket-Protocol: ");
         for (int i = 0; i < ws->config.subprotocol_count; i++) {
@@ -1014,22 +1014,22 @@ XrWsError xr_ws_connect(XrWebSocket *ws) {
         }
         WS_APPEND("\r\n");
     }
-    
+
     WS_APPEND("\r\n");
     #undef WS_APPEND
-    
+
     // Send handshake request
     if (ws_send_all(ws, request, req_len) < 0) {
         err = WS_ERR_SEND;
         goto fail_cleanup;
     }
-    
+
     // Receive handshake response
     char response[4096];
     size_t resp_len = 0;
-    
+
     while (resp_len < sizeof(response) - 1) {
-        ssize_t n = ws_recv_timeout(ws, response + resp_len, 
+        ssize_t n = ws_recv_timeout(ws, response + resp_len,
                                      sizeof(response) - 1 - resp_len,
                                      ws->config.connect_timeout_ms);
         if (n <= 0) { err = WS_ERR_RECV; goto fail_cleanup; }
@@ -1037,17 +1037,17 @@ XrWsError xr_ws_connect(XrWebSocket *ws) {
         response[resp_len] = '\0';
         if (strstr(response, "\r\n\r\n")) break;
     }
-    
+
     // Validate response
     if (strncmp(response, "HTTP/1.1 101", 12) != 0) {
         err = WS_ERR_HANDSHAKE;
         goto fail_cleanup;
     }
-    
+
     // Validate Sec-WebSocket-Accept
     accept_key = compute_accept_key(ws->sec_key);
     if (!accept_key) { err = WS_ERR_MEMORY; goto fail_cleanup; }
-    
+
     char *accept_header = strstr(response, "Sec-WebSocket-Accept:");
     if (!accept_header || !strstr(accept_header, accept_key)) {
         err = WS_ERR_HANDSHAKE;
@@ -1060,16 +1060,16 @@ XrWsError xr_ws_connect(XrWebSocket *ws) {
         ws->deflate_enabled = true;
         ws->deflate_no_context = true; // we requested no_context_takeover
     }
-    
+
     // Set socket non-blocking for coroutine-aware I/O
     int flags = fcntl(ws->fd, F_GETFL, 0);
     if (flags >= 0) {
         fcntl(ws->fd, F_SETFL, flags | O_NONBLOCK);
     }
-    
+
     // Connection successful
     ws->state = WS_STATE_OPEN;
-    
+
     return WS_OK;
 
 fail_cleanup:
@@ -1094,19 +1094,19 @@ fail_early:
 
 XrWsError xr_ws_close(XrWebSocket *ws, int code, const char *reason) {
     if (!ws || ws->state == WS_STATE_CLOSED) return WS_OK;
-    
+
     if (ws->state == WS_STATE_OPEN) {
         ws->state = WS_STATE_CLOSING;
-        
+
         // Send close frame
         char close_data[128];
         size_t close_len = 0;
-        
+
         if (code > 0) {
             close_data[0] = (char)((code >> 8) & 0xFF);
             close_data[1] = (char)(code & 0xFF);
             close_len = 2;
-            
+
             if (reason) {
                 size_t reason_len = strlen(reason);
                 if (reason_len > sizeof(close_data) - 2) {
@@ -1116,18 +1116,18 @@ XrWsError xr_ws_close(XrWebSocket *ws, int code, const char *reason) {
                 close_len += reason_len;
             }
         }
-        
+
         // RFC 6455: Client MUST mask, server MUST NOT mask
         bool mask = !ws->is_server;
-        
+
         send_close_frame(ws, close_data, close_len, mask);
-        
+
         ws->close_code = code;
         if (reason) {
             ws->close_reason = strdup(reason);
         }
     }
-    
+
     // Close TLS connection first
     if (ws->tls_conn) {
         xr_tls_conn_close((XrTlsConn*)ws->tls_conn);
@@ -1138,14 +1138,14 @@ XrWsError xr_ws_close(XrWebSocket *ws, int code, const char *reason) {
         xr_tls_context_free((XrTlsContext*)ws->tls_ctx);
         ws->tls_ctx = NULL;
     }
-    
+
     if (ws->fd >= 0) {
         close(ws->fd);
         ws->fd = -1;
     }
-    
+
     ws->state = WS_STATE_CLOSED;
-    
+
     return WS_OK;
 }
 
@@ -1194,7 +1194,7 @@ static int ws_send_frame_compressed(XrWebSocket *ws, XrWsOpcode opcode,
 XrWsError xr_ws_send_text(XrWebSocket *ws, const char *text, size_t len) {
     if (!ws || ws->state != WS_STATE_OPEN) return WS_ERR_CLOSED;
     if (!text) return WS_ERR_SEND;
-    
+
     if (len == 0) len = strlen(text);
 
     int ret;
@@ -1203,7 +1203,7 @@ XrWsError xr_ws_send_text(XrWebSocket *ws, const char *text, size_t len) {
     } else {
         ret = ws_send_frame_writev(ws, WS_OPCODE_TEXT, text, len);
     }
-    
+
     return ret < 0 ? WS_ERR_SEND : WS_OK;
 }
 
@@ -1217,38 +1217,38 @@ XrWsError xr_ws_send_binary(XrWebSocket *ws, const void *data, size_t len) {
     } else {
         ret = ws_send_frame_writev(ws, WS_OPCODE_BINARY, data, len);
     }
-    
+
     return ret < 0 ? WS_ERR_SEND : WS_OK;
 }
 
 XrWsError xr_ws_ping(XrWebSocket *ws) {
     if (!ws || ws->state != WS_STATE_OPEN) return WS_ERR_CLOSED;
-    
+
     // Use optimized send for control frame
     int ret = ws_send_frame_writev(ws, WS_OPCODE_PING, NULL, 0);
-    
+
     return ret < 0 ? WS_ERR_SEND : WS_OK;
 }
 
 XrWsError xr_ws_pong(XrWebSocket *ws, const void *data, size_t len) {
     if (!ws || ws->state != WS_STATE_OPEN) return WS_ERR_CLOSED;
-    
+
     // Use optimized send for control frame
     int ret = ws_send_frame_writev(ws, WS_OPCODE_PONG, data, len);
-    
+
     return ret < 0 ? WS_ERR_SEND : WS_OK;
 }
 
 XrWsMessage* xr_ws_recv(XrWebSocket *ws) {
     if (!ws || ws->state != WS_STATE_OPEN) return NULL;
-    
+
     while (1) {
         bool need_more = false;
         XrWsMessage *msg = xr_ws_recv_try(ws, &need_more);
-        
+
         if (msg) return msg;
         if (ws->state != WS_STATE_OPEN) return NULL;
-        
+
         if (need_more) {
             // Wait for data with poll
             struct pollfd pfd = { .fd = ws->fd, .events = POLLIN };
@@ -1301,6 +1301,11 @@ XrWsMessage* xr_ws_recv_try(XrWebSocket *ws, bool *need_more) {
     if (need_more) *need_more = false;
     if (!ws || ws->state != WS_STATE_OPEN) return NULL;
 
+    // Declared at function scope so `goto read_payload` (bypasses parse_header)
+    // and the subsequent process_frame path read a deterministic value.
+    // Fast path later overwrites this to true when the payload lives in rbuf.
+    bool payload_inplace = false;
+
     // Auto-ping / pong-timeout check (skipped when ping_interval_ms == 0)
     if (ws->config.ping_interval_ms > 0 && !ws->frame_in_progress) {
         uint64_t now = ws_now_ms();
@@ -1342,13 +1347,13 @@ parse_header:;
     // Parse frame header directly from rbuf (zero-copy, no spill)
     char *rp = ws->rbuf + ws->rbuf_off;
 
-    bool fin;
-    XrWsOpcode opcode;
-    bool masked;
-    uint64_t payload_len;
-    unsigned char mask_key[4];
-    size_t header_len;
-    bool frame_rsv1;
+    bool fin = false;
+    XrWsOpcode opcode = (XrWsOpcode)0;
+    bool masked = false;
+    uint64_t payload_len = 0;
+    unsigned char mask_key[4] = {0};
+    size_t header_len = 0;
+    bool frame_rsv1 = false;
 
     int parsed = parse_frame_header(rp, (size_t)ws->rbuf_len,
                                     &fin, &opcode, &masked, &payload_len,
@@ -1406,12 +1411,14 @@ parse_header:;
     ws->frame_fin = fin;
     ws->frame_opcode = opcode;
     ws->frame_masked = masked;
+    ws->frame_rsv1 = frame_rsv1;
     if (masked) memcpy(ws->frame_mask, mask_key, 4);
 
     // Payload processing
     char *payload;
     size_t payload_len_actual;
-    bool payload_inplace = false;
+    // payload_inplace declared at function scope above; reset for new frame.
+    payload_inplace = false;
 
     // Fast path: payload fits entirely in rbuf -> in-place unmask, no malloc
     if (payload_len > 0 && payload_len <= (size_t)ws->rbuf_len) {
@@ -1457,7 +1464,7 @@ read_payload:
             ws->msg_remaining -= copy;
             ws_rbuf_consume(ws, (int)copy);
         }
-        
+
         if (ws->msg_remaining == 0) break;
 
         // Large payload: recv directly into msg_buf, bypassing rbuf
@@ -1644,8 +1651,10 @@ process_frame:
         msg->is_text = (ws->frame_opcode == WS_OPCODE_TEXT);
     }
 
-    // permessage-deflate: decompress if RSV1 was set on the data frame
-    if (frame_rsv1 && ws->deflate_enabled && msg->data && msg->len > 0) {
+    // permessage-deflate: decompress if RSV1 was set on the data frame.
+    // Read from ws->frame_rsv1 because we may have re-entered via the
+    // `goto read_payload` path which skips the local `frame_rsv1` decl.
+    if (ws->frame_rsv1 && ws->deflate_enabled && msg->data && msg->len > 0) {
         uint8_t *decompressed = NULL;
         size_t decompressed_len = 0;
         if (xr_ws_deflate_decompress((const uint8_t *)msg->data, msg->len,
@@ -1709,7 +1718,7 @@ int xr_ws_uncork(XrWebSocket *ws) {
 
 int xr_ws_poll(XrWebSocket *ws, int timeout_ms) {
     if (!ws || ws->state != WS_STATE_OPEN) return -1;
-    
+
     struct pollfd pfd = { .fd = ws->fd, .events = POLLIN };
     return poll(&pfd, 1, timeout_ms);
 }
@@ -1789,58 +1798,58 @@ static const char* ws_find_header(const char *headers, const char *name) {
 
 bool xr_ws_is_upgrade_request(const char *request_headers) {
     if (!request_headers) return false;
-    
+
     const char *upgrade = ws_find_header(request_headers, "Upgrade");
     if (!upgrade) return false;
-    
+
     // Extract header value and check for "websocket" (case-insensitive)
     const char *val = upgrade + 8;  // strlen("Upgrade:")
     while (*val == ' ' || *val == '\t') val++;
-    
+
     const char *line_end = strchr(val, '\r');
     if (!line_end) line_end = strchr(val, '\n');
     if (!line_end) return false;
-    
+
     size_t val_len = line_end - val;
     char buf[256];
     if (val_len >= sizeof(buf)) return false;
     memcpy(buf, val, val_len);
     buf[val_len] = '\0';
-    
+
     for (char *c = buf; *c; c++) {
         if (*c >= 'A' && *c <= 'Z') *c += 32;
     }
-    
+
     return strstr(buf, "websocket") != NULL;
 }
 
 char* xr_ws_get_sec_key(const char *request_headers) {
     if (!request_headers) return NULL;
-    
+
     const char *key_header = ws_find_header(request_headers, "Sec-WebSocket-Key");
     if (!key_header) return NULL;
-    
+
     // Skip header name + ':'
     key_header += 18;  // strlen("Sec-WebSocket-Key:")
     while (*key_header == ' ' || *key_header == '\t') key_header++;
-    
+
     // Find end of line
     const char *line_end = strchr(key_header, '\r');
     if (!line_end) line_end = strchr(key_header, '\n');
     if (!line_end) return NULL;
-    
+
     size_t key_len = line_end - key_header;
     char *key = (char*)malloc(key_len + 1);
     if (!key) return NULL;
-    
+
     memcpy(key, key_header, key_len);
     key[key_len] = '\0';
-    
+
     // Trim trailing whitespace
     while (key_len > 0 && (key[key_len-1] == ' ' || key[key_len-1] == '\t')) {
         key[--key_len] = '\0';
     }
-    
+
     return key;
 }
 
@@ -1848,21 +1857,21 @@ int xr_ws_send_upgrade_response(int fd, const char *sec_key,
                                 const char *protocol,
                                 bool deflate_ok) {
     if (fd < 0 || !sec_key) return -1;
-    
+
     // Calculate Sec-WebSocket-Accept
     char concat[128];
     snprintf(concat, sizeof(concat), "%s%s", sec_key, WS_GUID);
-    
+
     unsigned char hash[20];
     SHA1((unsigned char*)concat, strlen(concat), hash);
-    
+
     char *accept_key = xr_base64_encode(hash, 20, NULL);
     if (!accept_key) return -1;
-    
+
     // Build response
     char response[1024];
     int len;
-    
+
     const char *ext_hdr = deflate_ok
         ? "Sec-WebSocket-Extensions: permessage-deflate; "
           "server_no_context_takeover; client_no_context_takeover\r\n"
@@ -1888,9 +1897,9 @@ int xr_ws_send_upgrade_response(int fd, const char *sec_key,
             "\r\n",
             accept_key, ext_hdr);
     }
-    
+
     xr_free(accept_key);
-    
+
     // Send response (retry loop for partial writes)
     size_t total_sent = 0;
     while (total_sent < (size_t)len) {
@@ -1910,14 +1919,14 @@ int xr_ws_send_upgrade_response(int fd, const char *sec_key,
 
 XrWebSocket* xr_ws_upgrade(struct XrayIsolate *isolate, int fd, const char *request_headers) {
     if (fd < 0 || !request_headers) return NULL;
-    
+
     // Check if upgrade request
     if (!xr_ws_is_upgrade_request(request_headers)) return NULL;
-    
+
     // Get Sec-WebSocket-Key
     char *sec_key = xr_ws_get_sec_key(request_headers);
     if (!sec_key) return NULL;
-    
+
     // Check if client offered permessage-deflate
     bool client_deflate = (strstr(request_headers, "permessage-deflate") != NULL);
 
@@ -1926,14 +1935,14 @@ XrWebSocket* xr_ws_upgrade(struct XrayIsolate *isolate, int fd, const char *requ
         free(sec_key);
         return NULL;
     }
-    
+
     // Create WebSocket connection object
     XrWebSocket *ws = (XrWebSocket*)calloc(1, sizeof(XrWebSocket));
     if (!ws) {
         free(sec_key);
         return NULL;
     }
-    
+
     ws->fd = fd;
     ws->state = WS_STATE_OPEN;
     ws->sec_key = sec_key;
@@ -1941,14 +1950,14 @@ XrWebSocket* xr_ws_upgrade(struct XrayIsolate *isolate, int fd, const char *requ
     ws->isolate = isolate; // Store isolate for coroutine-aware I/O
     ws->deflate_enabled = client_deflate;
     ws->deflate_no_context = true;
-    
+
     // Socket should already be non-blocking from the accept, but ensure it
     // (Required for coroutine-aware I/O with netpoll)
     int flags = fcntl(fd, F_GETFL, 0);
     if (flags >= 0) {
         fcntl(fd, F_SETFL, flags | O_NONBLOCK);
     }
-    
+
     // Disable Nagle's algorithm + low-latency write wakeup
     int nodelay = 1;
     setsockopt(fd, IPPROTO_TCP, TCP_NODELAY, &nodelay, sizeof(nodelay));
@@ -1960,7 +1969,7 @@ XrWebSocket* xr_ws_upgrade(struct XrayIsolate *isolate, int fd, const char *requ
     int nosig = 1;
     setsockopt(fd, SOL_SOCKET, SO_NOSIGPIPE, &nosig, sizeof(nosig));
 #endif
-    
+
     // Initialize buffer state (rbuf lazy-allocated on first recv)
     ws->rbuf = NULL;
     ws->rbuf_off = 0;
@@ -1979,9 +1988,9 @@ XrWebSocket* xr_ws_upgrade(struct XrayIsolate *isolate, int fd, const char *requ
     ws->wbuf_len = 0;
     ws->wbuf_cap = 0;
     ws->corked = false;
-    
+
     // Set default config
     xr_ws_config_init(&ws->config);
-    
+
     return ws;
 }
