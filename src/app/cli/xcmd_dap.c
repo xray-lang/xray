@@ -20,6 +20,7 @@
 #include "../dap/xdap_controller.h"
 #include "../dap/xdap_transport.h"
 #include "../dap/xdap_protocol.h"
+#include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -33,6 +34,9 @@ static void print_dap_usage(void) {
     fprintf(stderr, "  --port <port>   Start TCP server on port (0 for random)\n");
     fprintf(stderr, "  --help          Show this help\n");
     fprintf(stderr, "\n");
+    fprintf(stderr, "Environment:\n");
+    fprintf(stderr, "  XRAY_DAP_PORT   Default TCP port if --port is not passed\n");
+    fprintf(stderr, "\n");
     fprintf(stderr, "Without options, uses stdio transport for IDE extension.\n");
     fprintf(stderr, "\n");
     fprintf(stderr, "Remote debugging example:\n");
@@ -42,7 +46,8 @@ static void print_dap_usage(void) {
 
 int cmd_dap(int argc, char **argv) {
     int tcp_port = -1;  // -1 means use stdio
-    
+    bool port_set_by_arg = false;
+
     // Parse arguments
     for (int i = 0; i < argc; i++) {
         if (strcmp(argv[i], "--port") == 0) {
@@ -54,15 +59,32 @@ int cmd_dap(int argc, char **argv) {
                 fprintf(stderr, "Error: invalid port number '%s'\n", argv[i]);
                 return 1;
             }
+            port_set_by_arg = true;
         } else if (strcmp(argv[i], "--help") == 0 || strcmp(argv[i], "-h") == 0) {
             print_dap_usage();
             return 0;
         }
     }
-    
+
+    // Env var fallback: XRAY_DAP_PORT only kicks in when --port was not
+    // passed. This is the same tiered precedence we use for XRAY_LSP_LOG
+    // in the language server (explicit flag > env > default).
+    if (!port_set_by_arg) {
+        const char *env_port = getenv("XRAY_DAP_PORT");
+        if (env_port && env_port[0] != '\0') {
+            int env_tcp_port;
+            if (!cli_parse_port(env_port, &env_tcp_port)) {
+                fprintf(stderr,
+                        "Error: invalid XRAY_DAP_PORT='%s'\n", env_port);
+                return 1;
+            }
+            tcp_port = env_tcp_port;
+        }
+    }
+
     // Create transport
     XdapTransport *transport;
-    
+
     if (tcp_port >= 0) {
         // TCP transport for remote debugging
         transport = xdap_transport_tcp_server(tcp_port);
@@ -78,7 +100,7 @@ int cmd_dap(int argc, char **argv) {
             return 1;
         }
     }
-    
+
     // Create controller
     XdapController *ctrl = xdap_controller_new(transport);
     if (!ctrl) {
@@ -86,13 +108,13 @@ int cmd_dap(int argc, char **argv) {
         xdap_transport_free(transport);
         return 1;
     }
-    
+
     // Run main loop
     int result = xdap_run(ctrl);
-    
+
     // Cleanup
     xdap_controller_free(ctrl);
-    
+
     return result;
 }
 
