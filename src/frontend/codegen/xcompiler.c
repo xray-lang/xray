@@ -1003,7 +1003,7 @@ void xr_compile_statement(XrCompilerContext *ctx, XrCompiler *compiler, AstNode 
                 if ((s->type == AST_VAR_DECL || s->type == AST_CONST_DECL) && s->as.var_decl.name) {
                     VarDeclNode *vd = &s->as.var_decl;
                     bool is_ch = (vd->initializer && vd->initializer->type == AST_CHANNEL_NEW);
-                    if (vd->storage_mode == XR_STORAGE_SHARED || is_ch || vd->is_escaped) {
+                    if (vd->storage_mode == XR_STORAGE_SHARED || is_ch) {
                         XrString *ns = xr_compile_time_intern(ctx->X, vd->name, strlen(vd->name));
                         int si = shared_get_in_scope(ctx, compiler, ns);
                         if (si < 0) {
@@ -1084,7 +1084,7 @@ void xr_compile_statement(XrCompilerContext *ctx, XrCompiler *compiler, AstNode 
                     vd = &s->as.export_stmt.declaration->as.var_decl;
                 }
                 bool is_ch_decl = (vd && vd->initializer && vd->initializer->type == AST_CHANNEL_NEW);
-                if (vd && vd->name && (vd->storage_mode == XR_STORAGE_SHARED || is_ch_decl || vd->is_escaped)) {
+                if (vd && vd->name && (vd->storage_mode == XR_STORAGE_SHARED || is_ch_decl)) {
                     // Pre-register shared/Channel variables so fn bodies in Phase 2
                     // can resolve references to them via GETSHARED.
                     XrString *ns = xr_compile_time_intern(ctx->X, vd->name, strlen(vd->name));
@@ -1103,7 +1103,6 @@ void xr_compile_statement(XrCompilerContext *ctx, XrCompiler *compiler, AstNode 
                         shared_set_type(ctx, si, ch_type);
                     }
                 } else if (vd && vd->name && vd->storage_mode != XR_STORAGE_SHARED &&
-                    !vd->is_escaped &&
                     compiler->type == FUNCTION_SCRIPT && !is_repl_top_level(ctx, compiler)) {
                     XrString *name_str = xr_compile_time_intern(ctx->X, vd->name, strlen(vd->name));
                     XrLocalInfo *existing = compiler_get_local_by_name(compiler, vd->name);

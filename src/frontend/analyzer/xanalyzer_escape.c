@@ -5,26 +5,17 @@
  * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
  * Licensed under the MIT License
  *
- * xanalyzer_escape.c - Escape analysis pass
+ * xanalyzer_escape.c - Coroutine sharing validation pass
  *
  * KEY CONCEPT:
- *   Walks the AST to find variables that must be allocated on the
- *   global heap (shared). Two patterns trigger escape:
- *   1. 'move var' in go/ch.send arguments
- *   2. Mutable variables captured by inline go closures
- *      (go fn() { use(var) }() — var auto-promoted to shared)
+ *   Walks the AST with a scope stack and rejects patterns that violate
+ *   the explicit-sharing model. See xanalyzer_escape.h for the rule set.
  *
  * WHY THIS DESIGN:
  *   - Single-pass AST walk with a scope stack for name resolution
- *   - 'move var' in go/ch.send context triggers escape
- *   - Inline go closures: captured mutable non-shared variables
- *     are auto-promoted so is_coro_safe becomes true
- *   - Deep copy (without move) does not require escape promotion
- *   - const captures are safe (is_coro_safe allows const upvalues)
- *
- * RELATED MODULES:
- *   - xstmt_simple.c: reads is_escaped to decide shared vs local alloc
- *   - xcompiler.c: block hoisting reads is_escaped for shared pre-registration
+ *   - Pure diagnostic (no AST mutation, no auto-promote)
+ *   - Function-local: captures outside the current function body are
+ *     analyzed against the enclosing scope stack
  */
 
 #include "xanalyzer_escape.h"

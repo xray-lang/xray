@@ -384,9 +384,9 @@ void compile_var_decl(XrCompilerContext *ctx, XrCompiler *compiler, VarDeclNode 
     }
 
     // Check if variable already defined (top-level scope)
-    // Skip for shared/Channel/escaped variables: they may have been pre-registered in Phase 1 hoisting
+    // Skip for shared/Channel variables: they may have been pre-registered in Phase 1 hoisting
     if (compiler->scope_depth == 0 && node->storage_mode != XR_STORAGE_SHARED &&
-        !is_channel && !node->is_escaped &&
+        !is_channel &&
         shared_get_in_scope(ctx, compiler, name_str) >= 0) {
         // REPL mode: allow redefinition (shared_add handles reuse)
         if (!ctx->repl_mode) {
@@ -394,14 +394,14 @@ void compile_var_decl(XrCompilerContext *ctx, XrCompiler *compiler, VarDeclNode 
             return;
         }
     }
-    // Shared path: explicit 'shared', Channel auto-promotion, or escape analysis
-    // - shared: always global heap (user-specified performance hint)
+    // Shared path: explicit 'shared' declaration or Channel initializer.
+    // - shared: always global heap (user-declared sharing intent)
     // - Channel: always system-heap allocated with refcount
-    // - is_escaped: variable used in 'move' within go/ch.send (auto-promoted)
-    if (node->storage_mode == XR_STORAGE_SHARED || is_channel || node->is_escaped) {
-        // Channel no longer requires shared const — can be declared as let/const.
-        // Channel objects are allocated on system heap (shared) with refcount,
-        // and should be passed to coroutines via arguments (deep_copy does incref).
+    if (node->storage_mode == XR_STORAGE_SHARED || is_channel) {
+        // Channel objects are allocated on system heap (shared) with refcount.
+        // Channels must be `const` (enforced above) — they are the only
+        // cross-coroutine value that does not require an explicit `shared`
+        // qualifier. Passed to coroutines via arguments (deep_copy does incref).
 
         // Allocate shared_array index (reuse if pre-registered in Phase 1 hoisting)
         int shared_index = shared_get_or_add(ctx, compiler, name_str);
