@@ -51,7 +51,7 @@ void xr_registry_init(XrayIsolate *X) {
     XR_DCHECK(X != NULL, "registry_init: NULL isolate");
     XrTypeRegistry *registry = (XrTypeRegistry*)xr_malloc(sizeof(XrTypeRegistry));
     if (!registry) {
-        fprintf(stderr, "Failed to allocate XrTypeRegistry\n");
+        xr_log_warning("reflect", "Failed to allocate XrTypeRegistry");
         return;
     }
     

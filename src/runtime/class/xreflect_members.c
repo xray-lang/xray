@@ -27,6 +27,7 @@
  */
 
 #include "xreflect_internal.h"
+#include "../../base/xlog.h"
 #include "../../base/xchecks.h"
 #include "xclass.h"
 #include "xmethod.h"
@@ -133,7 +134,7 @@ XrValue xr_field_getDeclaringType(XrayIsolate *X, XrValue *args, int nargs) {
 XrValue xr_field_get(XrayIsolate *isolate, XrValue *args, int nargs) {
     (void)isolate;
     if (nargs < 2) {
-        fprintf(stderr, "Field.get: requires 2 arguments\n");
+        xr_log_warning("reflect", "Field.get: requires 2 arguments");
         return xr_null();
     }
 
@@ -142,7 +143,7 @@ XrValue xr_field_get(XrayIsolate *isolate, XrValue *args, int nargs) {
 
     if (!field || !field->owner) return xr_null();
     if (!XR_IS_INSTANCE(instance)) {
-        fprintf(stderr, "Field.get: argument must be an instance\n");
+        xr_log_warning("reflect", "Field.get: argument must be an instance");
         return xr_null();
     }
 
@@ -152,7 +153,7 @@ XrValue xr_field_get(XrayIsolate *isolate, XrValue *args, int nargs) {
 XrValue xr_field_set(XrayIsolate *isolate, XrValue *args, int nargs) {
     (void)isolate;
     if (nargs < 3) {
-        fprintf(stderr, "Field.set: requires 3 arguments\n");
+        xr_log_warning("reflect", "Field.set: requires 3 arguments");
         return xr_null();
     }
 
@@ -162,7 +163,7 @@ XrValue xr_field_set(XrayIsolate *isolate, XrValue *args, int nargs) {
 
     if (!field || !field->owner) return xr_null();
     if (!XR_IS_INSTANCE(instance)) {
-        fprintf(stderr, "Field.set: argument must be an instance\n");
+        xr_log_warning("reflect", "Field.set: argument must be an instance");
         return xr_null();
     }
 
@@ -173,7 +174,7 @@ XrValue xr_field_set(XrayIsolate *isolate, XrValue *args, int nargs) {
 XrValue xr_field_getStatic(XrayIsolate *isolate, XrValue *args, int nargs) {
     (void)isolate;
     if (nargs < 1) {
-        fprintf(stderr, "Field.getStatic: requires 1 argument\n");
+        xr_log_warning("reflect", "Field.getStatic: requires 1 argument");
         return xr_null();
     }
 
@@ -184,7 +185,7 @@ XrValue xr_field_getStatic(XrayIsolate *isolate, XrValue *args, int nargs) {
     XrFieldDescriptor *desc = &klass->fields[field->field_index];
 
     if (!(desc->flags & XR_FIELD_STATIC)) {
-        fprintf(stderr, "Field.getStatic: field is not static\n");
+        xr_log_warning("reflect", "Field.getStatic: field is not static");
         return xr_null();
     }
 
@@ -199,7 +200,7 @@ XrValue xr_field_getStatic(XrayIsolate *isolate, XrValue *args, int nargs) {
 XrValue xr_field_setStatic(XrayIsolate *isolate, XrValue *args, int nargs) {
     (void)isolate;
     if (nargs < 2) {
-        fprintf(stderr, "Field.setStatic: requires 2 arguments\n");
+        xr_log_warning("reflect", "Field.setStatic: requires 2 arguments");
         return xr_null();
     }
 
@@ -212,7 +213,7 @@ XrValue xr_field_setStatic(XrayIsolate *isolate, XrValue *args, int nargs) {
     XrFieldDescriptor *desc = &klass->fields[field->field_index];
 
     if (!(desc->flags & XR_FIELD_STATIC)) {
-        fprintf(stderr, "Field.setStatic: field is not static\n");
+        xr_log_warning("reflect", "Field.setStatic: field is not static");
         return xr_null();
     }
 
@@ -268,14 +269,14 @@ XrValue xr_method_getIsAbstract(XrayIsolate *X, XrValue *args, int nargs) {
 XrValue xr_constructor_newInstance(XrayIsolate *isolate, XrValue *args, int nargs) {
     XR_DCHECK(isolate != NULL, "constructor_newInstance: NULL isolate");
     if (nargs < 1) {
-        fprintf(stderr, "Constructor.newInstance: requires at least 1 argument\n");
+        xr_log_warning("reflect", "Constructor.newInstance: requires at least 1 argument");
         return xr_null();
     }
 
     XrMethodMetadata *ctor = xr_get_method_metadata(args[0]);
 
     if (!ctor || !ctor->owner) {
-        fprintf(stderr, "Constructor.newInstance: invalid constructor\n");
+        xr_log_warning("reflect", "Constructor.newInstance: invalid constructor");
         return xr_null();
     }
 
@@ -294,7 +295,7 @@ XrValue xr_constructor_newInstance(XrayIsolate *isolate, XrValue *args, int narg
     }
 
     if (arg_count + 1 > 256) {
-        fprintf(stderr, "Constructor.newInstance: too many arguments (%d), max 255\n", arg_count);
+        xr_log_warning("reflect", "Constructor.newInstance: too many arguments (%d), max 255", arg_count);
         return xr_null();
     }
 

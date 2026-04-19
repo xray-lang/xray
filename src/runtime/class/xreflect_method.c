@@ -9,6 +9,7 @@
  */
 
 #include "../../base/xchecks.h"
+#include "../../base/xlog.h"
 #include "../gc/xgc.h"
 #include "xreflect_internal.h"
 #include "xreflect_registry.h"
@@ -221,7 +222,7 @@ XrValue xr_method_getParameters(XrayIsolate *isolate, XrValue *args, int nargs) 
 XrValue xr_method_invoke(XrayIsolate *isolate, XrValue *args, int nargs) {
     XR_DCHECK(isolate != NULL, "method_invoke: NULL isolate");
     if (nargs < 2) {
-        fprintf(stderr, "Method.invoke: requires at least 2 arguments\n");
+        xr_log_warning("reflect", "Method.invoke: requires at least 2 arguments");
         return xr_null();
     }
     
@@ -229,7 +230,7 @@ XrValue xr_method_invoke(XrayIsolate *isolate, XrValue *args, int nargs) {
     XrValue instance = args[1];
     
     if (!method || !method->owner) {
-        fprintf(stderr, "Method.invoke: invalid method\n");
+        xr_log_warning("reflect", "Method.invoke: invalid method");
         return xr_null();
     }
     
@@ -244,7 +245,7 @@ XrValue xr_method_invoke(XrayIsolate *isolate, XrValue *args, int nargs) {
     }
     
     if (arg_count + 1 > 256) {
-        fprintf(stderr, "Method.invoke: too many arguments (%d), max 255\n", arg_count);
+        xr_log_warning("reflect", "Method.invoke: too many arguments (%d), max 255", arg_count);
         return xr_null();
     }
     
@@ -269,7 +270,7 @@ XrValue xr_method_invoke(XrayIsolate *isolate, XrValue *args, int nargs) {
         case XMETHOD_CLOSURE: {
             XrClosure *closure = xr_method->as.closure;
             if (!closure) {
-                fprintf(stderr, "Method.invoke: closure is null\n");
+                xr_log_warning("reflect", "Method.invoke: closure is null");
                 return xr_null();
             }
             
@@ -277,7 +278,7 @@ XrValue xr_method_invoke(XrayIsolate *isolate, XrValue *args, int nargs) {
         }
         
         default: {
-            fprintf(stderr, "Method.invoke: unsupported method type\n");
+            xr_log_warning("reflect", "Method.invoke: unsupported method type");
             return xr_null();
         }
     }
@@ -286,20 +287,20 @@ XrValue xr_method_invoke(XrayIsolate *isolate, XrValue *args, int nargs) {
 XrValue xr_method_invokeStatic(XrayIsolate *isolate, XrValue *args, int nargs) {
     XR_DCHECK(isolate != NULL, "method_invokeStatic: NULL isolate");
     if (nargs < 1) {
-        fprintf(stderr, "Method.invokeStatic: requires at least 1 argument\n");
+        xr_log_warning("reflect", "Method.invokeStatic: requires at least 1 argument");
         return xr_null();
     }
     
     XrMethodMetadata *method = get_method_metadata_internal(args[0]);
     if (!method || !method->owner) {
-        fprintf(stderr, "Method.invokeStatic: invalid method\n");
+        xr_log_warning("reflect", "Method.invokeStatic: invalid method");
         return xr_null();
     }
     
     XrMethod *xr_method = &method->owner->methods[method->method_index];
     
     if (!xr_method_is_static(xr_method)) {
-        fprintf(stderr, "Method.invokeStatic: method is not static\n");
+        xr_log_warning("reflect", "Method.invokeStatic: method is not static");
         return xr_null();
     }
     
@@ -312,7 +313,7 @@ XrValue xr_method_invokeStatic(XrayIsolate *isolate, XrValue *args, int nargs) {
     }
     
     if (arg_count > 256) {
-        fprintf(stderr, "Method.invokeStatic: too many arguments (%d), max 256\n", arg_count);
+        xr_log_warning("reflect", "Method.invokeStatic: too many arguments (%d), max 256", arg_count);
         return xr_null();
     }
     
@@ -335,7 +336,7 @@ XrValue xr_method_invokeStatic(XrayIsolate *isolate, XrValue *args, int nargs) {
         case XMETHOD_CLOSURE: {
             XrClosure *closure = xr_method->as.closure;
             if (!closure) {
-                fprintf(stderr, "Method.invokeStatic: closure is null\n");
+                xr_log_warning("reflect", "Method.invokeStatic: closure is null");
                 return xr_null();
             }
             
@@ -343,7 +344,7 @@ XrValue xr_method_invokeStatic(XrayIsolate *isolate, XrValue *args, int nargs) {
         }
         
         default: {
-            fprintf(stderr, "Method.invokeStatic: unsupported method type\n");
+            xr_log_warning("reflect", "Method.invokeStatic: unsupported method type");
             return xr_null();
         }
     }
