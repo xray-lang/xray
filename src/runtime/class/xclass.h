@@ -276,32 +276,9 @@ static inline bool xr_class_is_field_private(const XrClass *cls, int index) {
     return false;
 }
 
-// Check if method is private
-static inline bool xr_class_is_method_private(const XrClass *cls, int symbol) {
-    if (!cls || !cls->method_symbol_to_index || symbol < 0 || symbol >= cls->method_map_capacity) {
-        return false;
-    }
-    int idx = cls->method_symbol_to_index[symbol];
-    if (idx < 0 || idx >= cls->method_count) {
-        return false;
-    }
-    if (cls->methods[idx].type == XMETHOD_NONE) {
-        return false;
-    }
-    return (cls->methods[idx].flags & XMETHOD_FLAG_PRIVATE) != 0;
-}
-
-// Check if class has method (ignoring access control)
-static inline bool xr_class_has_method_by_symbol(const XrClass *cls, int symbol) {
-    if (!cls || !cls->method_symbol_to_index || symbol < 0 || symbol >= cls->method_map_capacity) {
-        return false;
-    }
-    int idx = cls->method_symbol_to_index[symbol];
-    if (idx < 0 || idx >= cls->method_count) {
-        return false;
-    }
-    return cls->methods[idx].type != XMETHOD_NONE;
-}
+// xr_class_is_method_private / xr_class_has_method_by_symbol were never
+// reached from anywhere outside this header; their work is covered by
+// xr_class_lookup_method + a flags check on the returned XrMethod.
 
 /* ========== Helper Functions ========== */
 
@@ -370,15 +347,9 @@ XR_FUNC bool xr_class_can_instantiate(XrClass *cls);
 XR_FUNC void xr_class_inherit_abstract_methods(XrClass *child, XrClass *parent);
 XR_FUNC bool xr_class_is_abstract_method(XrClass *cls, int method_symbol);
 
-/* ========== Static Method Access ========== */
-
-// Get static method count
-static inline uint16_t xr_class_get_static_method_count(XrClass *cls) {
-    return cls ? cls->static_method_count : 0;
-}
-
-// Static and instance methods stored together
-// Use xr_class_lookup_method() for all methods
-// Check method->flags & XMETHOD_FLAG_STATIC for static methods
+// NOTE: static and instance methods share the same methods[] array.
+// Discriminate via method->flags & XMETHOD_FLAG_STATIC. There is
+// deliberately no dedicated "static method count" accessor; the
+// static count is already a struct field on XrClass.
 
 #endif // XCLASS_H
