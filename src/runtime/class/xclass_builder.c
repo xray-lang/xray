@@ -9,6 +9,7 @@
  */
 
 #include "xclass_builder.h"
+#include "xclass_builder_internal.h"
 #include "../../base/xchecks.h"
 #include "../../base/xlog.h"
 #include "xclass.h"
