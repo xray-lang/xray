@@ -172,6 +172,23 @@ int xr_io_listen(const char *addr, int port, int backlog);
 XrIOConn* xr_io_accept(int listen_fd);
 
 /*
+ * Accept + server-side TLS handshake (coroutine-friendly).
+ *
+ * listen_fd: Listening socket.
+ * ctx:       Server TLS context built with xr_tls_context_new_server
+ *            (plus optional CA bundle for mTLS). Must outlive every
+ *            returned XrIOConn; freeing it earlier is use-after-free.
+ *
+ * Performs the plain xr_io_accept() first, then wraps the accepted fd
+ * with `ctx` and drives SSL_accept to completion. On any failure the
+ * fd is closed and NULL is returned — the caller never sees a
+ * half-wrapped XrIOConn.
+ *
+ * Returns: coroutine-ready XrIOConn on success, NULL otherwise.
+ */
+XrIOConn* xr_io_accept_tls_with_ctx(int listen_fd, XrTlsContext *ctx);
+
+/*
  * Wrap an existing file descriptor into an XrIOConn.
  * Caller is responsible for fd lifecycle before this call.
  * Sets non-blocking mode and TCP_NODELAY automatically.

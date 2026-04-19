@@ -133,6 +133,7 @@ typedef struct XrClusterNode {
     // Output queue (async writes via dedicated writer coroutine)
     XrOutputQueue    outq;
     _Atomic(bool)    writer_running;  // writer loop control
+    _Atomic(bool)    reader_running;  // frame-processing reader loop control
 
     // Metrics
     XrNodeMetrics    metrics;
@@ -200,6 +201,18 @@ XR_FUNC void xr_cluster_node_start_writer(XrClusterNode *node, struct XrayIsolat
 
 // Writer loop function (runs as native coroutine)
 XR_FUNC void xr_cluster_node_writer_loop(void *arg);
+
+/* ========== Reader Coroutine ========== */
+
+// Start the frame-processing reader coroutine for a connected node.
+// Must be called after handshake completes. Owns the node for the
+// duration of its lifetime: once the peer disconnects the reader frees
+// the node and removes it from the cluster.
+//
+// Safe to call twice — the second call is a no-op if the reader is
+// already running for this node.
+XR_FUNC void xr_cluster_node_start_reader(struct XrCluster *cluster,
+                                           XrClusterNode *node);
 
 /* ========== Output Queue Helpers ========== */
 

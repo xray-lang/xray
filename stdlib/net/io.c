@@ -550,6 +550,35 @@ XrIOConn* xr_io_accept(int listen_fd)
     return conn;
 }
 
+XrIOConn* xr_io_accept_tls_with_ctx(int listen_fd, XrTlsContext *ctx)
+{
+    if (!ctx) return NULL;
+
+    // Do the plaintext accept first. This also yields the coroutine if
+    // no client is pending and sets the accepted fd non-blocking so the
+    // TLS handshake can drive through xr_socket_read/write.
+    XrIOConn *conn = xr_io_accept(listen_fd);
+    if (!conn) return NULL;
+
+    conn->tls = xr_tls_conn_new(ctx, conn->fd);
+    if (!conn->tls) {
+        xr_io_close(conn);
+        return NULL;
+    }
+
+    // SNI on the server side is handled by OpenSSL's callback if the
+    // operator configured one on `ctx`. We only drive the handshake.
+    XrTlsError tls_err = xr_tls_conn_handshake_server(conn->tls);
+    if (tls_err != XR_TLS_OK) {
+        conn->last_error = XR_NERR_TLS;
+        xr_io_close(conn);
+        return NULL;
+    }
+
+    conn->is_tls = true;
+    return conn;
+}
+
 XrIOConn* xr_io_conn_from_fd(int fd, int timeout_ms)
 {
     if (fd < 0) return NULL;

@@ -520,6 +520,68 @@ void xr_cluster_node_start_writer(XrClusterNode *node, XrayIsolate *X) {
     }
 }
 
+/*
+ * Frame-processing reader coroutine.
+ *
+ * Ownership contract:
+ *   - The reader does NOT own the XrClusterNode struct. It runs until
+ *     the peer disconnects (recv_frame returns -1) or the cluster is
+ *     stopped (c->running cleared).
+ *   - Cleanup of the node (remove from cluster list, mark dead, fire
+ *     monitors, free struct) happens in the heartbeat thread's
+ *     xr_cluster_check_heartbeats path when phi/missed-heartbeat
+ *     thresholds trip. That thread already owns the removal lock
+ *     discipline; duplicating it in the reader would race against
+ *     writer_running teardown.
+ *
+ * We therefore just exit the frame loop on disconnect, letting the
+ * heartbeat thread garbage-collect the node. This also means outbound
+ * sends that race with the disconnect will eventually notice the
+ * writer coroutine failing and back off via the normal reconnect API.
+ */
+typedef struct XrReaderContext {
+    struct XrCluster *cluster;
+    XrClusterNode    *node;
+} XrReaderContext;
+
+static void cluster_reader_loop(void *arg) {
+    XrReaderContext *ctx = (XrReaderContext *)arg;
+    if (!ctx) return;
+
+    XrCluster *cluster = ctx->cluster;
+    XrClusterNode *node = ctx->node;
+
+    /* Released after we capture cluster/node — the context itself
+     * lives only long enough to hand the two pointers over. */
+    xr_free(ctx);
+
+    if (cluster && node) {
+        xr_cluster_process_node(cluster, node);
+    }
+
+    if (node) atomic_store(&node->reader_running, false);
+}
+
+void xr_cluster_node_start_reader(struct XrCluster *cluster, XrClusterNode *node) {
+    if (!cluster || !node || !cluster->isolate) return;
+    if (atomic_load(&node->reader_running)) return;
+
+    XrReaderContext *ctx = (XrReaderContext *)xr_malloc(sizeof(XrReaderContext));
+    if (!ctx) return;
+    ctx->cluster = cluster;
+    ctx->node    = node;
+
+    atomic_store(&node->reader_running, true);
+    XrCoroutine *coro = xr_coro_create_native(cluster->isolate, cluster_reader_loop,
+                                               ctx, "cluster_reader");
+    if (coro) {
+        xr_coro_spawn(cluster->isolate, coro);
+    } else {
+        atomic_store(&node->reader_running, false);
+        xr_free(ctx);
+    }
+}
+
 /* ========== Slow Consumer Detection ========== */
 
 bool xr_cluster_node_is_slow(XrClusterNode *node) {

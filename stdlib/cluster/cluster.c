@@ -60,6 +60,83 @@ static void *cluster_heartbeat_thread(void *arg) {
     return NULL;
 }
 
+/* ========== Accept Loop ==========
+ *
+ * Runs as a native coroutine spawned from xr_cluster_start_ex. Handles
+ * every inbound peer: coroutine-friendly accept, optional TLS wrap,
+ * cluster handshake, then spawns writer+reader coroutines for the new
+ * node. Terminates when the listen fd is closed by xr_cluster_stop.
+ *
+ * The loop is intentionally forgiving of per-connection failures —
+ * one bad peer (handshake timeout, wrong secret, expired cert) must
+ * not take down the whole accept path. Only a fd-level failure
+ * (EBADF from a closed listen_fd) exits the loop.
+ */
+static void cluster_accept_loop(void *arg) {
+    XrCluster *c = (XrCluster *)arg;
+    if (!c) {
+        return;
+    }
+
+    /* Bind the worker thread's tls_isolate so xr_io_accept /
+     * xr_io_read / xr_io_write inside this coroutine can resolve a
+     * runtime to yield against. Same pattern as stdlib/ws uses for
+     * its upgrade coroutine. */
+    xr_io_set_isolate(c->isolate);
+
+    atomic_store(&c->accept_running, true);
+
+    while (atomic_load(&c->running)) {
+        XrIOConn *conn = NULL;
+
+        if (c->tls_enabled && c->tls_server_ctx) {
+            conn = xr_io_accept_tls_with_ctx(c->listen_fd, c->tls_server_ctx);
+        } else if (c->tls_enabled && !c->tls_server_ctx) {
+            /* Operator asked for TLS but never supplied a cert+key. A
+             * silent plaintext fallback would be a loud security hole;
+             * refuse the whole accept path instead. The startup logs
+             * already surfaced this via build_cluster_tls. */
+            break;
+        } else {
+            conn = xr_io_accept(c->listen_fd);
+        }
+
+        if (!conn) {
+            /* accept() failure can mean (a) listen fd closed by stop
+             * (clean exit) or (b) transient errno=EMFILE / ECONNABORTED.
+             * The running flag distinguishes the two — if we are still
+             * running, sleep briefly to avoid spinning on resource
+             * exhaustion then retry. */
+            if (!atomic_load(&c->running)) break;
+            struct timespec ts = { .tv_sec = 0, .tv_nsec = 10 * 1000 * 1000 };
+            nanosleep(&ts, NULL);
+            continue;
+        }
+
+        /* Server-side handshake. On failure the conn is closed and no
+         * XrClusterNode is created — we just drop the peer. */
+        XrClusterNode *node = xr_cluster_node_accept(c, conn);
+        if (!node) {
+            xr_io_close(conn);
+            continue;
+        }
+
+        /* Tombstone check: reject nodes that were recently dead. They
+         * must wait out the tombstone window before rejoining. */
+        if (xr_cluster_is_dead(c, node->name)) {
+            xr_cluster_node_free(node);
+            continue;
+        }
+
+        xr_cluster_add_node(c, node);
+        xr_cluster_node_start_writer(node, c->isolate);
+        xr_cluster_node_start_reader(c, node);
+        if (c->on_node_added) c->on_node_added(node->name);
+    }
+
+    atomic_store(&c->accept_running, false);
+}
+
 /* ========== Cluster Lifecycle ========== */
 
 int xr_cluster_start(XrayIsolate *X, const char *name,
@@ -192,6 +269,20 @@ int xr_cluster_start_ex(XrayIsolate *X, const char *name,
         c->heartbeat_thread_started = true;
     }
 
+    /*
+     * Spawn the inbound-accept coroutine. Failure here is non-fatal
+     * for outbound-only deployments (think: edge nodes that only
+     * initiate to a central core), but we still surface it via the
+     * accept_coro_spawned flag so xr_cluster_stop does not wait for
+     * something that never ran.
+     */
+    XrCoroutine *accept_coro = xr_coro_create_native(X, cluster_accept_loop,
+                                                     c, "cluster_accept");
+    if (accept_coro) {
+        xr_coro_spawn(X, accept_coro);
+        c->accept_coro_spawned = true;
+    }
+
     return 0;
 }
 
@@ -199,6 +290,33 @@ void xr_cluster_stop(XrCluster *c) {
     if (!c) return;
 
     atomic_store(&c->running, false);
+
+    /*
+     * Close the listen socket early so the accept coroutine wakes up
+     * with EBADF on its next accept() and observes running=false at
+     * the top of its loop. Doing this before node teardown below
+     * prevents a race where a freshly accepted peer would race against
+     * the cleanup sweep.
+     */
+    if (c->listen_fd >= 0) {
+        close(c->listen_fd);
+        c->listen_fd = -1;
+    }
+
+    /*
+     * Wait (bounded) for the accept coroutine to exit before tearing
+     * down cluster state it still references. 1s is enough for the
+     * netpoll wake + a single loop iteration; if we miss the window
+     * we proceed anyway — the coro checks c->running at the top and
+     * we already closed listen_fd, so at worst it observes a stale
+     * isolate pointer and a failed accept and bails out.
+     */
+    if (c->accept_coro_spawned) {
+        for (int i = 0; i < 100 && atomic_load(&c->accept_running); i++) {
+            usleep(10 * 1000);
+        }
+        c->accept_coro_spawned = false;
+    }
 
     // Stop LAN discovery thread (checks c->running)
     xr_cluster_discovery_stop(c);
@@ -223,12 +341,6 @@ void xr_cluster_stop(XrCluster *c) {
     c->nodes = NULL;
     c->node_count = 0;
     xr_spinlock_unlock(&c->nodes_lock);
-
-    // Close listen socket
-    if (c->listen_fd >= 0) {
-        close(c->listen_fd);
-        c->listen_fd = -1;
-    }
 
     // Free channel registry
     xr_spinlock_lock(&c->channels_lock);
@@ -385,8 +497,13 @@ int xr_cluster_join(XrCluster *c, const char *host, uint16_t port) {
 
     xr_cluster_add_node(c, node);
 
-    // Start dedicated writer coroutine for async I/O
+    /* Spawn the async writer AND the frame-processing reader. Both are
+     * required for a bidirectional link — pre-P14 the reader was never
+     * started, which meant inbound RPC responses and heartbeats went
+     * unnoticed and the peer was torn down by the phi detector within
+     * two heartbeat intervals. */
     xr_cluster_node_start_writer(node, c->isolate);
+    xr_cluster_node_start_reader(c, node);
 
     return 0;
 }
