@@ -20,6 +20,7 @@
 #include "../../src/runtime/object/xstring.h"
 #include "../../src/runtime/object/xjson.h"
 #include "../../src/base/xmalloc.h"
+#include "../common_parser.h"
 #include <stdio.h>
 #include <string.h>
 #include <ctype.h>
@@ -60,7 +61,10 @@ static void ensure_buf_cap(char **buf, size_t *cap, size_t needed) {
     if (*cap >= needed) return;
     size_t new_cap = *cap ? *cap * 2 : 64;
     while (new_cap < needed) new_cap *= 2;
-    *buf = (char*)xr_realloc(*buf, new_cap);
+    // Abort on OOM: previously the raw xr_realloc leaked the original
+    // buffer on failure and the next buf_append_char would dereference
+    // the NULL result.
+    XR_REALLOC_OR_ABORT(*buf, new_cap, "xml parser buffer grow");
     *cap = new_cap;
 }
 
@@ -78,39 +82,24 @@ static void buf_append(char **buf, size_t *len, size_t *cap, const char *s, size
 // ========== Error handling ==========
 
 static void add_error(XmlParser *parser, XmlErrorType type, const char *msg) {
-    XrMap *err = xr_map_new(xr_current_coro(parser->isolate));
-
     const char *type_str = "Unknown";
     switch (type) {
-        case XML_ERROR_UNEXPECTED_EOF: type_str = "UnexpectedEOF"; break;
-        case XML_ERROR_INVALID_TAG:    type_str = "InvalidTag"; break;
-        case XML_ERROR_MISMATCHED_TAG: type_str = "MismatchedTag"; break;
-        case XML_ERROR_INVALID_ATTR:   type_str = "InvalidAttr"; break;
-        case XML_ERROR_INVALID_ENTITY: type_str = "InvalidEntity"; break;
-        case XML_ERROR_INVALID_COMMENT:type_str = "InvalidComment"; break;
-        case XML_ERROR_INVALID_CDATA:  type_str = "InvalidCData"; break;
-        case XML_ERROR_MAX_DEPTH:      type_str = "MaxDepthExceeded"; break;
+        case XML_ERROR_UNEXPECTED_EOF:  type_str = "UnexpectedEOF";    break;
+        case XML_ERROR_INVALID_TAG:     type_str = "InvalidTag";       break;
+        case XML_ERROR_MISMATCHED_TAG:  type_str = "MismatchedTag";    break;
+        case XML_ERROR_INVALID_ATTR:    type_str = "InvalidAttr";      break;
+        case XML_ERROR_INVALID_ENTITY:  type_str = "InvalidEntity";    break;
+        case XML_ERROR_INVALID_COMMENT: type_str = "InvalidComment";   break;
+        case XML_ERROR_INVALID_CDATA:   type_str = "InvalidCData";     break;
+        case XML_ERROR_MAX_DEPTH:       type_str = "MaxDepthExceeded"; break;
         default: break;
     }
-
-    XrayIsolate *X = parser->isolate;
-    XrValue key, val;
-
-    key = xr_string_value(xr_string_intern(X, "type", 4, 0));
-    val = xr_string_value(xr_string_intern(X, type_str, strlen(type_str), 0));
-    xr_map_set(err, key, val);
-
-    key = xr_string_value(xr_string_intern(X, "line", 4, 0));
-    xr_map_set(err, key, xr_int(parser->line));
-
-    key = xr_string_value(xr_string_intern(X, "column", 6, 0));
-    xr_map_set(err, key, xr_int(parser->column));
-
-    key = xr_string_value(xr_string_intern(X, "message", 7, 0));
-    val = xr_string_value(xr_string_intern(X, msg, strlen(msg), 0));
-    xr_map_set(err, key, val);
-
-    xr_array_push(parser->errors, xr_value_from_map(err));
+    xrs_error_push(parser->isolate, parser->errors,
+                   type_str,
+                   /*line=*/parser->line,
+                   /*row=*/-1,
+                   /*column=*/parser->column,
+                   msg);
 }
 
 // ========== Entity decoding ==========
@@ -139,26 +128,66 @@ static int utf8_encode(uint32_t cp, char *out) {
     return 0;
 }
 
+// Known XML-predefined + common HTML5 named entities. XML 1.0 only
+// mandates the first five, but real-world documents (especially those
+// produced by HTML-to-XML converters or XHTML pipelines) routinely use
+// the HTML5 set. Keeping the table small here trades a few dozen bytes
+// for greatly improved interoperability; unknown names still fall
+// through and are emitted verbatim so strict XML workflows are not
+// affected.
+static const struct { const char *name; uint8_t name_len; uint32_t cp; } NAMED_ENTITIES[] = {
+    // --- XML 1.0 predefined (must stay at the top for common-case speed) ---
+    { "lt",    2, '<'    },
+    { "gt",    2, '>'    },
+    { "amp",   3, '&'    },
+    { "quot",  4, '"'    },
+    { "apos",  4, '\''   },
+    // --- HTML5 common set ---
+    { "nbsp",  4, 0x00A0 },
+    { "copy",  4, 0x00A9 },
+    { "reg",   3, 0x00AE },
+    { "trade", 5, 0x2122 },
+    { "hellip",6, 0x2026 },
+    { "ndash", 5, 0x2013 },
+    { "mdash", 5, 0x2014 },
+    { "lsquo", 5, 0x2018 },
+    { "rsquo", 5, 0x2019 },
+    { "ldquo", 5, 0x201C },
+    { "rdquo", 5, 0x201D },
+    { "laquo", 5, 0x00AB },
+    { "raquo", 5, 0x00BB },
+    { "middot",6, 0x00B7 },
+    { "bull",  4, 0x2022 },
+    { "sect",  4, 0x00A7 },
+    { "para",  4, 0x00B6 },
+    { "deg",   3, 0x00B0 },
+    { "plusmn",6, 0x00B1 },
+    { "times", 5, 0x00D7 },
+    { "divide",6, 0x00F7 },
+    { "euro",  4, 0x20AC },
+    { "pound", 5, 0x00A3 },
+    { "yen",   3, 0x00A5 },
+    { "cent",  4, 0x00A2 },
+};
+
 // Decode named/numeric entity after '&'. Returns consumed chars (excluding &;).
 // out must have at least 4 bytes. out_len receives bytes written.
 static int decode_entity(const char *s, size_t len, char *out, int *out_len) {
     *out_len = 0;
 
-    // Named entities: portable byte comparison
-    if (len >= 2 && s[0] == 'l' && s[1] == 't') {
-        out[0] = '<'; *out_len = 1; return 2;
-    }
-    if (len >= 2 && s[0] == 'g' && s[1] == 't') {
-        out[0] = '>'; *out_len = 1; return 2;
-    }
-    if (len >= 3 && s[0] == 'a' && s[1] == 'm' && s[2] == 'p') {
-        out[0] = '&'; *out_len = 1; return 3;
-    }
-    if (len >= 4 && s[0] == 'q' && s[1] == 'u' && s[2] == 'o' && s[3] == 't') {
-        out[0] = '"'; *out_len = 1; return 4;
-    }
-    if (len >= 4 && s[0] == 'a' && s[1] == 'p' && s[2] == 'o' && s[3] == 's') {
-        out[0] = '\''; *out_len = 1; return 4;
+    // Named entity lookup via small linear scan. Entries are short and
+    // the most-frequent names sit at the front, so this stays branch-
+    // predictor friendly for the hot path ('lt', 'gt', 'amp', ...).
+    // NOTE: the caller passes len == distance between '&' and ';' so we
+    // must match the *entire* name to avoid false positives such as
+    // mapping "&ltxyz;" -> '<' (which happened previously because the
+    // old code checked only the two-byte prefix).
+    for (size_t i = 0; i < sizeof(NAMED_ENTITIES) / sizeof(NAMED_ENTITIES[0]); i++) {
+        uint8_t n = NAMED_ENTITIES[i].name_len;
+        if (len == n && memcmp(s, NAMED_ENTITIES[i].name, n) == 0) {
+            *out_len = utf8_encode(NAMED_ENTITIES[i].cp, out);
+            return n;
+        }
     }
 
     // Numeric entity &#xxx; or &#xXXX;

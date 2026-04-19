@@ -24,7 +24,7 @@ void xml_parse_config_init(XmlParseConfig *config) {
 void xml_write_config_init(XmlWriteConfig *config) {
     config->indent = 0;
     config->declaration = true;
-    config->encoding = "UTF-8";
+    memcpy(config->encoding, "UTF-8", 6);
 }
 
 // ========== Internal helpers ==========
@@ -109,12 +109,14 @@ void xml_node_set_attr(XmlNode *node,
         }
     }
 
-    // Grow array if needed
+    // Grow array if needed. On OOM we abort — a partial attribute table
+    // (silently dropping an attribute without any error signal) would
+    // produce very hard-to-diagnose corruption downstream.
     if (node->attr_count >= node->attr_cap) {
         int new_cap = node->attr_cap ? node->attr_cap * 2 : 4;
-        XmlAttr *na = (XmlAttr*)xr_realloc(node->attrs, new_cap * sizeof(XmlAttr));
-        if (!na) return;
-        node->attrs = na;
+        XR_REALLOC_OR_ABORT(node->attrs,
+                            (size_t)new_cap * sizeof(XmlAttr),
+                            "xml attr array grow");
         node->attr_cap = new_cap;
     }
 

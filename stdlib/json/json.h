@@ -29,6 +29,7 @@
 #ifndef XR_STDLIB_JSON_H
 #define XR_STDLIB_JSON_H
 
+#include "../../src/base/xdefs.h"
 #include "../../src/module/xmodule.h"
 #include "../../src/vm/xvm.h"
 
@@ -43,12 +44,14 @@
  *   - keys(obj)                Get all keys of object
  *   - values(obj)              Get all values of object
  */
-XrModule* xr_load_module_json(XrayIsolate *isolate);
+XR_FUNC XrModule* xr_load_module_json(XrayIsolate *isolate);
 
-// Public API: serialize XrValue to JSON C-string (caller must free)
-char* xr_json_stringify_to_cstr(XrayIsolate *X, XrValue val, size_t *out_len);
+// Public API: serialize XrValue to JSON C-string.
+// The returned buffer is allocated via xr_malloc; caller must release
+// with xr_free (NOT the libc free).
+XR_FUNC char* xr_json_stringify_to_cstr(XrayIsolate *X, XrValue val, size_t *out_len);
 
 // Public API: parse JSON C-string to XrValue (returns xr_null() on error)
-XrValue xr_json_parse_from_cstr(XrayIsolate *X, const char *json_str, size_t len);
+XR_FUNC XrValue xr_json_parse_from_cstr(XrayIsolate *X, const char *json_str, size_t len);
 
 #endif

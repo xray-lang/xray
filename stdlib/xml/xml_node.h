@@ -21,6 +21,7 @@
 #ifndef XR_STDLIB_XML_NODE_H
 #define XR_STDLIB_XML_NODE_H
 
+#include "../../src/base/xdefs.h"
 #include <stddef.h>
 #include <stdbool.h>
 
@@ -98,32 +99,33 @@ typedef struct {
 typedef struct {
     int indent;              // Indent spaces, 0 = compact
     bool declaration;
-    const char *encoding;    // Encoding declaration
+    char encoding[32];       // Encoding declaration (NUL-terminated, copied
+                             // from caller to stay valid across GC)
 } XmlWriteConfig;
 
 // ========== Configuration ==========
 
-void xml_parse_config_init(XmlParseConfig *config);
-void xml_write_config_init(XmlWriteConfig *config);
+XR_FUNC void xml_parse_config_init(XmlParseConfig *config);
+XR_FUNC void xml_write_config_init(XmlWriteConfig *config);
 
 // ========== Node creation (xr_malloc, caller must free) ==========
 
-XmlDocument* xml_document_new(void);
-XmlNode* xml_element_new(const char *tag, size_t tag_len);
-XmlNode* xml_text_new(const char *text, size_t len);
-XmlNode* xml_comment_new(const char *text, size_t len);
-XmlNode* xml_cdata_new(const char *text, size_t len);
+XR_FUNC XmlDocument* xml_document_new(void);
+XR_FUNC XmlNode* xml_element_new(const char *tag, size_t tag_len);
+XR_FUNC XmlNode* xml_text_new(const char *text, size_t len);
+XR_FUNC XmlNode* xml_comment_new(const char *text, size_t len);
+XR_FUNC XmlNode* xml_cdata_new(const char *text, size_t len);
 
 // ========== Node manipulation ==========
 
-void xml_node_append_child(XmlNode *parent, XmlNode *child);
-void xml_node_set_attr(XmlNode *node,
-                       const char *name, size_t name_len,
-                       const char *value, size_t value_len);
+XR_FUNC void xml_node_append_child(XmlNode *parent, XmlNode *child);
+XR_FUNC void xml_node_set_attr(XmlNode *node,
+                               const char *name, size_t name_len,
+                               const char *value, size_t value_len);
 
 // ========== Cleanup ==========
 
-void xml_node_free(XmlNode *node);
-void xml_document_free(XmlDocument *doc);
+XR_FUNC void xml_node_free(XmlNode *node);
+XR_FUNC void xml_document_free(XmlDocument *doc);
 
 #endif

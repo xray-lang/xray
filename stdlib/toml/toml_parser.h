@@ -20,6 +20,7 @@
 #ifndef XR_STDLIB_TOML_PARSER_H
 #define XR_STDLIB_TOML_PARSER_H
 
+#include "../../src/base/xdefs.h"
 #include "../../src/runtime/xisolate_internal.h"
 #include "../../src/runtime/object/xarray.h"
 #include "../../src/runtime/object/xmap.h"
@@ -87,30 +88,30 @@ typedef struct {
 
 typedef struct {
     XrayIsolate *isolate;
-    
+
     // Input data
     const char *data;
     size_t len;
     size_t pos;
-    
+
     // Position tracking
     int line;
     int column;
-    
+
     // State machine
     TomlState state;
-    
+
     // Current parsing context
     XrMap *root;                  // Root table
     XrMap *current_table;         // Current table
     XrArray *current_key_path;    // Current key path
-    
+
     // Configuration
     TomlConfig config;
-    
+
     // Result
     TomlResult result;
-    
+
     // Temporary buffer
     char *temp_buf;
     size_t temp_len;
@@ -120,19 +121,19 @@ typedef struct {
 // ========== API ==========
 
 // Initialize parser configuration with default values
-void toml_config_init(TomlConfig *config);
+XR_FUNC void toml_config_init(TomlConfig *config);
 
 // Extract configuration from Json object
-void toml_config_from_json(XrayIsolate *X, TomlConfig *config, XrJson *json);
+XR_FUNC void toml_config_from_json(XrayIsolate *X, TomlConfig *config, XrJson *json);
 
 // Initialize parser
-void toml_parser_init(TomlParser *parser, XrayIsolate *isolate,
-                      const char *data, size_t len, TomlConfig *config);
+XR_FUNC void toml_parser_init(TomlParser *parser, XrayIsolate *isolate,
+                              const char *data, size_t len, TomlConfig *config);
 
 // Execute parsing
-TomlResult toml_parser_parse(TomlParser *parser);
+XR_FUNC TomlResult toml_parser_parse(TomlParser *parser);
 
 // Cleanup parser
-void toml_parser_cleanup(TomlParser *parser);
+XR_FUNC void toml_parser_cleanup(TomlParser *parser);
 
 #endif

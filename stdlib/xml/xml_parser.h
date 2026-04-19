@@ -18,6 +18,7 @@
 #ifndef XR_STDLIB_XML_PARSER_H
 #define XR_STDLIB_XML_PARSER_H
 
+#include "../../src/base/xdefs.h"
 #include "xml_node.h"
 
 struct XrayIsolate;
@@ -109,15 +110,15 @@ typedef struct {
 
 // ========== API ==========
 
-void xml_parser_init(XmlParser *parser, struct XrayIsolate *X,
-                     const char *data, size_t len,
-                     XmlParseConfig *config);
+XR_FUNC void xml_parser_init(XmlParser *parser, struct XrayIsolate *X,
+                             const char *data, size_t len,
+                             XmlParseConfig *config);
 
-XmlParseResult xml_parser_parse(XmlParser *parser);
+XR_FUNC XmlParseResult xml_parser_parse(XmlParser *parser);
 
-void xml_parser_cleanup(XmlParser *parser);
+XR_FUNC void xml_parser_cleanup(XmlParser *parser);
 
-void xml_config_from_json(struct XrayIsolate *X, XmlParseConfig *config,
-                          struct XrJson *json);
+XR_FUNC void xml_config_from_json(struct XrayIsolate *X, XmlParseConfig *config,
+                                  struct XrJson *json);
 
 #endif

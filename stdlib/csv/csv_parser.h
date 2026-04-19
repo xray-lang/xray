@@ -18,6 +18,7 @@
 #ifndef XR_STDLIB_CSV_PARSER_H
 #define XR_STDLIB_CSV_PARSER_H
 
+#include "../../src/base/xdefs.h"
 #include "../../src/runtime/xisolate_internal.h"
 #include "../../src/runtime/object/xarray.h"
 #include "../../src/runtime/object/xmap.h"
@@ -59,20 +60,31 @@ typedef struct {
     char delimiter;           // Field separator, default ','
     char quote_char;          // Quote character, default '"'
     char escape_char;         // Escape character, default '"'
-    
+
     bool header;              // First row is header
     XrArray *columns;         // Custom column names
-    
+
     bool dynamic_typing;      // Auto type conversion
     bool trim_fields;         // Trim field whitespace
     bool skip_empty_lines;    // Skip empty lines
-    
-    const char *comments;     // Comment prefix
+
+    // Owned NUL-terminated comment prefix. Previously this was a bare
+    // `const char *` copied from the caller's XrString which left a
+    // dangling pointer if the Json argument (or the interned string it
+    // contained) was reclaimed before parse finished. The fixed-size
+    // buffer keeps the config self-contained at negligible cost.
+    char comments[16];
+    bool has_comments;
     int skip_rows;            // Skip first N rows
     int max_rows;             // Parse at most N rows, 0 = unlimited
-    
+
     bool relax_quotes;        // Relaxed quote mode
     bool relax_columns;       // Allow column count mismatch
+
+    // Line terminator used by stringify(). Not consulted by the parser
+    // (which transparently accepts any CR/LF mix). Defaults to "\n";
+    // callers that need RFC 4180 compliance can opt in with "\r\n".
+    char linebreak[3];
 } CsvConfig;
 
 /* ========== Parse Metadata ========== */
@@ -98,31 +110,31 @@ typedef struct {
 
 typedef struct {
     XrayIsolate *isolate;
-    
+
     // Input data (no copy)
     const char *data;
     size_t len;
     size_t pos;
-    
+
     // State machine
     CsvParseState state;
-    
+
     // Current field
     size_t field_start;
     bool field_quoted;
-    
+
     // Current row
     XrArray *current_row;
     int current_row_num;
     int current_col_num;
     int expected_columns;
-    
+
     // Config
     CsvConfig config;
-    
+
     // Result
     CsvResult result;
-    
+
     // Temp buffer (used for escape handling)
     char *temp_buf;
     size_t temp_len;
@@ -138,25 +150,25 @@ extern XrValue xr_value_from_map(XrMap *map);
 /* ========== API ========== */
 
 // Initialize parser config to defaults
-void csv_config_init(CsvConfig *config);
+XR_FUNC void csv_config_init(CsvConfig *config);
 
 // Extract config from Json object
-void csv_config_from_json(XrayIsolate *X, CsvConfig *config, XrJson *json);
+XR_FUNC void csv_config_from_json(XrayIsolate *X, CsvConfig *config, XrJson *json);
 
 // Initialize parser
-void csv_parser_init(CsvParser *parser, XrayIsolate *isolate, 
-                     const char *data, size_t len, CsvConfig *config);
+XR_FUNC void csv_parser_init(CsvParser *parser, XrayIsolate *isolate,
+                             const char *data, size_t len, CsvConfig *config);
 
 // Execute parsing
-void csv_parser_parse(CsvParser *parser);
+XR_FUNC void csv_parser_parse(CsvParser *parser);
 
 // Cleanup parser
-void csv_parser_cleanup(CsvParser *parser);
+XR_FUNC void csv_parser_cleanup(CsvParser *parser);
 
 // Auto-detect delimiter
-char csv_detect_delimiter(const char *data, size_t len);
+XR_FUNC char csv_detect_delimiter(const char *data, size_t len);
 
 // Auto type conversion
-XrValue csv_convert_value(XrayIsolate *isolate, const char *field, size_t len);
+XR_FUNC XrValue csv_convert_value(XrayIsolate *isolate, const char *field, size_t len);
 
 #endif
