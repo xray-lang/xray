@@ -66,7 +66,7 @@ static void* resize_array(void *array, int *capacity, size_t elem_size) {
 
 /* ========== Builder Creation ========== */
 
-XrClassBuilder* xr_class_builder_new(XrayIsolate *isolate, 
+XrClassBuilder* xr_class_builder_new(XrayIsolate *isolate,
                                       const char *name,
                                       XrClass *super) {
     XR_DCHECK(isolate != NULL, "class_builder_new: NULL isolate");
@@ -75,51 +75,51 @@ XrClassBuilder* xr_class_builder_new(XrayIsolate *isolate,
         xr_log_warning("class", "class_builder_new: invalid arguments");
         return NULL;
     }
-    
+
     XrClassBuilder *builder = (XrClassBuilder*)xr_malloc(sizeof(XrClassBuilder));
     if (builder == NULL) {
         xr_log_warning("class", "class_builder_new: failed to allocate builder");
         return NULL;
     }
-    
+
     memset(builder, 0, sizeof(XrClassBuilder));
     xr_gc_header_init_type(&builder->gc, XR_TCLASS_BUILDER);
-    
+
     builder->isolate = isolate;
     builder->name = xr_strdup(name);
     builder->super = super;
     builder->finalized = false;
-    
+
     builder->field_capacity = INITIAL_FIELD_CAPACITY;
-    builder->fields = (XrFieldBuildItem*)xr_calloc(builder->field_capacity, 
+    builder->fields = (XrFieldBuildItem*)xr_calloc(builder->field_capacity,
                                                     sizeof(XrFieldBuildItem));
-    
+
     builder->method_capacity = INITIAL_METHOD_CAPACITY;
-    builder->methods = (XrMethodBuildItem*)xr_calloc(builder->method_capacity, 
+    builder->methods = (XrMethodBuildItem*)xr_calloc(builder->method_capacity,
                                                       sizeof(XrMethodBuildItem));
-    
+
     builder->static_field_capacity = INITIAL_STATIC_FIELD_CAPACITY;
     builder->static_fields = (XrStaticFieldBuildItem*)xr_calloc(
         builder->static_field_capacity, sizeof(XrStaticFieldBuildItem));
-    
+
     builder->static_method_capacity = INITIAL_STATIC_METHOD_CAPACITY;
     builder->static_methods = (XrMethodBuildItem*)xr_calloc(
         builder->static_method_capacity, sizeof(XrMethodBuildItem));
-    
+
     builder->interface_capacity = INITIAL_INTERFACE_CAPACITY;
-    builder->interfaces = (XrClass**)xr_calloc(builder->interface_capacity, 
+    builder->interfaces = (XrClass**)xr_calloc(builder->interface_capacity,
                                                 sizeof(XrClass*));
-    
+
     builder->abstract_method_capacity = INITIAL_ABSTRACT_METHOD_CAPACITY;
-    builder->abstract_methods = (int*)xr_calloc(builder->abstract_method_capacity, 
+    builder->abstract_methods = (int*)xr_calloc(builder->abstract_method_capacity,
                                                  sizeof(int));
-    
+
     if (!builder->fields || !builder->methods || !builder->static_fields ||
         !builder->interfaces || !builder->abstract_methods) {
         xr_class_builder_destroy(builder);
         return NULL;
     }
-    
+
     return builder;
 }
 
@@ -140,30 +140,30 @@ int xr_class_builder_add_field(XrClassBuilder *builder,
                                 uint32_t flags) {
     XR_DCHECK(builder != NULL, "add_field: NULL builder");
     ENSURE_NOT_FINALIZED(builder);
-    
+
     if (name == NULL) {
         xr_log_warning("class", "add_field: invalid arguments");
         return -1;
     }
-    
+
     if (xr_class_builder_has_field(builder, name)) {
         xr_log_warning("class", "add_field: duplicate field '%s'", name);
         return -1;
     }
-    
+
     if (builder->field_count >= builder->field_capacity) {
         builder->fields = (XrFieldBuildItem*)resize_array(
             builder->fields, &builder->field_capacity, sizeof(XrFieldBuildItem));
         if (builder->fields == NULL) return -1;
     }
-    
+
     XrFieldBuildItem *item = &builder->fields[builder->field_count];
     item->name = xr_strdup(name);
     item->symbol = xr_symbol_lookup_or_insert(builder->isolate, name);
     item->default_value = xr_null();
     item->flags = flags;
     item->offset = 0;
-    
+
     builder->field_count++;
     XR_DCHECK(builder->field_count <= builder->field_capacity, "add_field: count > capacity");
     return 0;
@@ -188,23 +188,23 @@ int xr_class_builder_add_method(XrClassBuilder *builder,
                                  uint32_t flags) {
     XR_DCHECK(builder != NULL, "add_method: NULL builder");
     ENSURE_NOT_FINALIZED(builder);
-    
+
     if (name == NULL) {
         xr_log_warning("class", "add_method: invalid arguments");
         return -1;
     }
-    
+
     if (xr_class_builder_has_method(builder, name)) {
         xr_log_warning("class", "add_method: duplicate method '%s'", name);
         return -1;
     }
-    
+
     if (builder->method_count >= builder->method_capacity) {
         builder->methods = (XrMethodBuildItem*)resize_array(
             builder->methods, &builder->method_capacity, sizeof(XrMethodBuildItem));
         if (builder->methods == NULL) return -1;
     }
-    
+
     XrMethodBuildItem *item = &builder->methods[builder->method_count];
     item->name = xr_strdup(name);
     item->symbol = xr_symbol_lookup_or_insert(builder->isolate, name);
@@ -213,7 +213,7 @@ int xr_class_builder_add_method(XrClassBuilder *builder,
     item->param_count = param_count;
     item->flags = flags;
     item->op_type = 0;
-    
+
     builder->method_count++;
     XR_DCHECK(builder->method_count <= builder->method_capacity, "add_method: count > capacity");
     return 0;
@@ -228,18 +228,18 @@ int xr_class_builder_add_method_closure(XrClassBuilder *builder,
                                          uint8_t op_type) {
     XR_DCHECK(builder != NULL, "add_method_closure: NULL builder");
     ENSURE_NOT_FINALIZED(builder);
-    
+
     if (name == NULL) {
         xr_log_warning("class", "add_method_closure: invalid arguments");
         return -1;
     }
-    
+
     if (builder->method_count >= builder->method_capacity) {
         builder->methods = (XrMethodBuildItem*)resize_array(
             builder->methods, &builder->method_capacity, sizeof(XrMethodBuildItem));
         if (builder->methods == NULL) return -1;
     }
-    
+
     XrMethodBuildItem *item = &builder->methods[builder->method_count];
     item->name = xr_strdup(name);
     item->symbol = xr_symbol_lookup_or_insert(builder->isolate, name);
@@ -248,7 +248,7 @@ int xr_class_builder_add_method_closure(XrClassBuilder *builder,
     item->param_count = param_count;
     item->flags = flags;
     item->op_type = op_type;
-    
+
     builder->method_count++;
     return 0;
 }
@@ -261,25 +261,25 @@ int xr_class_builder_add_static_field(XrClassBuilder *builder,
                                        uint32_t flags) {
     XR_DCHECK(builder != NULL, "add_static_field: NULL builder");
     ENSURE_NOT_FINALIZED(builder);
-    
+
     if (name == NULL) {
         xr_log_warning("class", "add_static_field: invalid arguments");
         return -1;
     }
-    
+
     if (builder->static_field_count >= builder->static_field_capacity) {
         builder->static_fields = (XrStaticFieldBuildItem*)resize_array(
-            builder->static_fields, &builder->static_field_capacity, 
+            builder->static_fields, &builder->static_field_capacity,
             sizeof(XrStaticFieldBuildItem));
         if (builder->static_fields == NULL) return -1;
     }
-    
+
     XrStaticFieldBuildItem *item = &builder->static_fields[builder->static_field_count];
     item->name = xr_strdup(name);
     item->symbol = xr_symbol_lookup_or_insert(builder->isolate, name);
     item->value = value;
     item->flags = flags;
-    
+
     builder->static_field_count++;
     return 0;
 }
@@ -293,19 +293,19 @@ int xr_class_builder_add_static_method(XrClassBuilder *builder,
                                         uint32_t flags) {
     XR_DCHECK(builder != NULL, "add_static_method: NULL builder");
     ENSURE_NOT_FINALIZED(builder);
-    
+
     if (name == NULL) {
         xr_log_warning("class", "add_static_method: invalid arguments");
         return -1;
     }
-    
+
     if (builder->static_method_count >= builder->static_method_capacity) {
         builder->static_methods = (XrMethodBuildItem*)resize_array(
-            builder->static_methods, &builder->static_method_capacity, 
+            builder->static_methods, &builder->static_method_capacity,
             sizeof(XrMethodBuildItem));
         if (builder->static_methods == NULL) return -1;
     }
-    
+
     XrMethodBuildItem *item = &builder->static_methods[builder->static_method_count];
     item->name = xr_strdup(name);
     item->symbol = xr_symbol_lookup_or_insert(builder->isolate, name);
@@ -314,7 +314,7 @@ int xr_class_builder_add_static_method(XrClassBuilder *builder,
     item->param_count = param_count;
     item->op_type = 0;
     item->flags = flags | XMETHOD_FLAG_STATIC;
-    
+
     builder->static_method_count++;
     return 0;
 }
@@ -326,19 +326,19 @@ int xr_class_builder_add_static_method_closure(XrClassBuilder *builder,
                                                 uint32_t flags) {
     XR_DCHECK(builder != NULL, "add_static_method_closure: NULL builder");
     ENSURE_NOT_FINALIZED(builder);
-    
+
     if (name == NULL) {
         xr_log_warning("class", "add_static_method_closure: invalid arguments");
         return -1;
     }
-    
+
     if (builder->static_method_count >= builder->static_method_capacity) {
         builder->static_methods = (XrMethodBuildItem*)resize_array(
-            builder->static_methods, &builder->static_method_capacity, 
+            builder->static_methods, &builder->static_method_capacity,
             sizeof(XrMethodBuildItem));
         if (builder->static_methods == NULL) return -1;
     }
-    
+
     XrMethodBuildItem *item = &builder->static_methods[builder->static_method_count];
     item->name = xr_strdup(name);
     item->symbol = xr_symbol_lookup_or_insert(builder->isolate, name);
@@ -347,7 +347,7 @@ int xr_class_builder_add_static_method_closure(XrClassBuilder *builder,
     item->param_count = param_count;
     item->op_type = 0;
     item->flags = flags | XMETHOD_FLAG_STATIC;
-    
+
     builder->static_method_count++;
     return 0;
 }
@@ -358,21 +358,21 @@ int xr_class_builder_add_interface(XrClassBuilder *builder,
                                     XrClass *interface) {
     XR_DCHECK(builder != NULL, "add_interface: NULL builder");
     ENSURE_NOT_FINALIZED(builder);
-    
+
     if (interface == NULL) {
         xr_log_warning("class", "add_interface: invalid interface");
         return -1;
     }
-    
+
     if (builder->interface_count >= builder->interface_capacity) {
         builder->interfaces = (XrClass**)resize_array(
             builder->interfaces, &builder->interface_capacity, sizeof(XrClass*));
         if (builder->interfaces == NULL) return -1;
     }
-    
+
     builder->interfaces[builder->interface_count] = interface;
     builder->interface_count++;
-    
+
     return 0;
 }
 
@@ -382,17 +382,17 @@ int xr_class_builder_add_abstract_method(XrClassBuilder *builder,
                                           int method_symbol) {
     XR_DCHECK(builder != NULL, "add_abstract_method: NULL builder");
     ENSURE_NOT_FINALIZED(builder);
-    
+
     if (builder->abstract_method_count >= builder->abstract_method_capacity) {
         builder->abstract_methods = (int*)resize_array(
             builder->abstract_methods, &builder->abstract_method_capacity, sizeof(int));
         if (builder->abstract_methods == NULL) return -1;
     }
-    
+
     builder->abstract_methods[builder->abstract_method_count] = method_symbol;
     builder->abstract_method_count++;
     builder->flags |= XR_CLASS_ABSTRACT;
-    
+
     return 0;
 }
 
@@ -409,15 +409,15 @@ void xr_class_builder_set_flags(XrClassBuilder *builder, uint32_t flags) {
 uint16_t xr_class_builder_calculate_instance_size(const XrClassBuilder *builder) {
     XR_DCHECK(builder != NULL, "calculate_instance_size: NULL builder");
     uint16_t size = sizeof(XrGCHeader);
-    
+
     if (builder->super != NULL) {
         size = builder->super->instance_size;
     }
-    
+
     for (int i = 0; i < builder->field_count; i++) {
         size += sizeof(void*);
     }
-    
+
     return size;
 }
 
@@ -427,19 +427,19 @@ static int find_method_in_parent_vtable(XrClass *parent_class, int symbol) {
     if (!parent_class || !parent_class->vtable) {
         return -1;
     }
-    
+
     for (int i = 0; i < parent_class->vtable_size; i++) {
         if (parent_class->vtable[i] && parent_class->vtable[i]->symbol == symbol) {
             return i;
         }
     }
-    
+
     return -1;
 }
 
 int xr_class_builder_generate_vtable(XrClassBuilder *builder, XrClass *cls) {
     (void)builder;
-    
+
     if (cls->super && cls->super->vtable) {
         cls->vtable_size = cls->super->vtable_size;
         cls->vtable = (XrMethod**)xr_malloc(cls->vtable_size * sizeof(XrMethod*));
@@ -447,7 +447,7 @@ int xr_class_builder_generate_vtable(XrClassBuilder *builder, XrClass *cls) {
             xr_log_warning("class", "generate_vtable: failed to allocate vtable");
             return -1;
         }
-        
+
         memcpy(cls->vtable, cls->super->vtable, cls->vtable_size * sizeof(XrMethod*));
         cls->own_method_start = cls->super->vtable_size;
     } else {
@@ -455,17 +455,17 @@ int xr_class_builder_generate_vtable(XrClassBuilder *builder, XrClass *cls) {
         cls->vtable_size = 0;
         cls->own_method_start = 0;
     }
-    
+
     for (int i = 0; i < cls->method_count; i++) {
         XrMethod *method = &cls->methods[i];
-        
+
         if (method->flags & XMETHOD_FLAG_STATIC) {
             method->vtable_index = -1;
             continue;
         }
-        
+
         int parent_vtable_idx = find_method_in_parent_vtable(cls->super, method->symbol);
-        
+
         if (parent_vtable_idx >= 0) {
             cls->vtable[parent_vtable_idx] = method;
             method->vtable_index = parent_vtable_idx;
@@ -475,13 +475,13 @@ int xr_class_builder_generate_vtable(XrClassBuilder *builder, XrClass *cls) {
             if (!cls->vtable) {
                 return -1;
             }
-            
+
             cls->vtable[cls->vtable_size] = method;
             method->vtable_index = cls->vtable_size;
             cls->vtable_size++;
         }
     }
-    
+
     return 0;
 }
 
@@ -496,12 +496,12 @@ XrClass* xr_class_builder_finalize(XrClassBuilder *builder) {
         xr_log_warning("class", "finalize: NULL builder");
         return NULL;
     }
-    
+
     if (builder->finalized) {
         xr_log_warning("class", "finalize: already finalized");
         return NULL;
     }
-    
+
     // Allocate class object from system heap (not GC-managed)
     XrClass *cls = NULL;
     if (builder->isolate && xr_isolate_get_sys_heap(builder->isolate)) {
@@ -514,18 +514,18 @@ XrClass* xr_class_builder_finalize(XrClassBuilder *builder) {
         xr_log_warning("class", "finalize: failed to allocate class");
         return NULL;
     }
-    
+
     memset(cls, 0, sizeof(XrClass));
-    
+
     // Initialize GC header
     xr_gc_header_init_type(&cls->gc, XR_TCLASS);
-    
+
     /* ========== Basic Info ========== */
     cls->name = builder->name;
     builder->name = NULL;
     cls->super = builder->super;
     cls->flags = builder->flags;
-    
+
     /* ========== Primary Supers Array (JDK optimization) ========== */
     if (cls->super == NULL) {
         // Root class
@@ -537,7 +537,7 @@ XrClass* xr_class_builder_finalize(XrClassBuilder *builder) {
     } else {
         // Inherit parent's primary supers
         cls->depth = cls->super->depth + 1;
-        
+
         if (cls->depth < 8) {
             for (int i = 0; i <= cls->super->depth; i++) {
                 cls->primary_supers[i] = cls->super->primary_supers[i];
@@ -547,29 +547,37 @@ XrClass* xr_class_builder_finalize(XrClassBuilder *builder) {
                 cls->primary_supers[i] = NULL;
             }
         } else {
-            // Depth >= 8: fallback to linear search (rare)
-            XrClass *c = cls->super;
-            for (int i = 7; i >= 0 && c != NULL; i--) {
-                cls->primary_supers[i] = c;
-                c = c->super;
+            // Depth >= 8: keep the 8 shallowest ancestors in
+            // [Object, parent1, ..., parent7] order so that instanceof's
+            // O(1) primary_supers[target->depth] lookup remains correct
+            // for any target with depth < 8. Deeper targets fall back to
+            // linear scan (to be replaced by secondary supers hash in P10).
+            XrClass *chain[256];
+            int n = 0;
+            for (XrClass *c = cls; c != NULL && n < 256; c = c->super) {
+                chain[n++] = c;
+            }
+            // chain[n-1] is Object, chain[0] is cls itself.
+            for (int i = 0; i < 8 && n - 1 - i >= 0; i++) {
+                cls->primary_supers[i] = chain[n - 1 - i];
             }
         }
     }
-    
+
     /* ========== Field Descriptors ========== */
     // cls->fields stores only this class's declared fields
     // cls->field_count includes all inherited instance fields
     // cls->own_field_count is this class's declared field count
     int own_instance_fields = builder->field_count;
     int total_own_fields = builder->field_count + builder->static_field_count;
-    
+
     // Calculate total instance fields including inherited
     int parent_instance_field_count = 0;
     if (builder->super != NULL) {
         parent_instance_field_count = xr_class_instance_field_count(builder->super);
     }
     int total_instance_field_count = parent_instance_field_count + own_instance_fields;
-    
+
     if (total_own_fields > 0) {
         cls->fields = (XrFieldDescriptor*)xr_malloc(
             total_own_fields * sizeof(XrFieldDescriptor));
@@ -577,51 +585,51 @@ XrClass* xr_class_builder_finalize(XrClassBuilder *builder) {
             xr_free(cls);
             return NULL;
         }
-        
+
         // Calculate instance field offset
         uint16_t offset = sizeof(XrGCHeader);
         if (builder->super != NULL) {
             offset = builder->super->instance_size;
         }
-        
+
         // Add instance fields
         for (int i = 0; i < builder->field_count; i++) {
             XrFieldBuildItem *item = &builder->fields[i];
             XrFieldDescriptor *desc = &cls->fields[i];
-            
+
             desc->name = item->name;
             desc->type_name = NULL;
             desc->symbol = item->symbol;
             desc->offset = offset;
             desc->flags = item->flags;
             desc->static_slot = -1;  // Not a static field
-            
+
             offset += sizeof(void*);
-            
+
             item->name = NULL;
         }
-        
+
         // Add static field descriptors
         for (int i = 0; i < builder->static_field_count; i++) {
             XrStaticFieldBuildItem *item = &builder->static_fields[i];
             XrFieldDescriptor *desc = &cls->fields[builder->field_count + i];
-            
+
             desc->name = item->name;
             desc->type_name = NULL;
             desc->symbol = item->symbol;
             desc->offset = 0;
             desc->flags = item->flags | XR_FIELD_STATIC;
             desc->static_slot = (int16_t)i;  // Pre-computed static slot index
-            
+
             item->name = NULL;
         }
-        
+
         // field_count = all instance fields (inherited) + static fields
         // own_field_count = this class's declared fields
         cls->field_count = total_instance_field_count + builder->static_field_count;
         cls->own_field_count = total_own_fields;
         cls->instance_size = offset;
-        
+
         // Allocate field default values array
         if (total_instance_field_count > 0) {
             cls->field_default_values = (XrValue*)xr_malloc(
@@ -646,7 +654,7 @@ XrClass* xr_class_builder_finalize(XrClassBuilder *builder) {
         cls->own_field_count = 0;
         cls->instance_size = (builder->super != NULL) ? builder->super->instance_size : sizeof(XrGCHeader);
     }
-    
+
     // Generate field symbol-to-index map
     if (cls->own_field_count > 0) {
         int max_symbol = 0;
@@ -655,7 +663,7 @@ XrClass* xr_class_builder_finalize(XrClassBuilder *builder) {
                 max_symbol = cls->fields[i].symbol;
             }
         }
-        
+
         cls->field_map_capacity = max_symbol + 1;
         cls->field_symbol_to_index = (int*)xr_malloc(cls->field_map_capacity * sizeof(int));
         if (cls->field_symbol_to_index != NULL) {
@@ -674,7 +682,7 @@ XrClass* xr_class_builder_finalize(XrClassBuilder *builder) {
             }
         }
     }
-    
+
     /* ========== Instance Methods + Static Methods (flattened) ========== */
     // Flatten parent instance methods into this class's methods[] array.
     // Layout: [inherited_methods... | own_methods... | static_methods...]
@@ -683,7 +691,7 @@ XrClass* xr_class_builder_finalize(XrClassBuilder *builder) {
     if (builder->super != NULL) {
         parent_instance_method_count = builder->super->method_count;
     }
-    
+
     // Count how many own methods are overrides vs truly new
     // O(n) using parent's symbol-to-index table
     int override_count = 0;
@@ -697,11 +705,11 @@ XrClass* xr_class_builder_finalize(XrClassBuilder *builder) {
             }
         }
     }
-    
+
     int new_own_count = builder->method_count - override_count;
     int flat_instance_count = parent_instance_method_count + new_own_count;
     int total_method_count = flat_instance_count + builder->static_method_count;
-    
+
     if (total_method_count > 0) {
         cls->methods = (XrMethod*)xr_malloc(
             total_method_count * sizeof(XrMethod));
@@ -709,7 +717,7 @@ XrClass* xr_class_builder_finalize(XrClassBuilder *builder) {
             xr_class_free(cls);
             return NULL;
         }
-        
+
         // Step 1: Copy parent instance methods (shallow copy)
         for (int i = 0; i < parent_instance_method_count; i++) {
             XrMethod *src = &builder->super->methods[i];
@@ -720,12 +728,12 @@ XrClass* xr_class_builder_finalize(XrClassBuilder *builder) {
                 dst->name = xr_strdup(src->name);
             }
         }
-        
+
         // Step 2: Apply own instance methods (override or append)
         int append_idx = parent_instance_method_count;
         for (int i = 0; i < builder->method_count; i++) {
             XrMethodBuildItem *item = &builder->methods[i];
-            
+
             // Check if this overrides a parent method (O(1) via symbol table)
             int override_slot = -1;
             if (builder->super && builder->super->method_symbol_to_index
@@ -736,7 +744,7 @@ XrClass* xr_class_builder_finalize(XrClassBuilder *builder) {
                     override_slot = idx;
                 }
             }
-            
+
             XrMethod *method;
             if (override_slot >= 0) {
                 method = &cls->methods[override_slot];
@@ -747,7 +755,7 @@ XrClass* xr_class_builder_finalize(XrClassBuilder *builder) {
             } else {
                 method = &cls->methods[append_idx++];
             }
-            
+
             method->type = item->method_type;
             switch (item->method_type) {
                 case XMETHOD_PRIMITIVE:
@@ -764,23 +772,23 @@ XrClass* xr_class_builder_finalize(XrClassBuilder *builder) {
                     method->as.closure = NULL;
                     break;
             }
-            
+
             method->flags = item->flags & (XMETHOD_FLAG_PRIVATE | XMETHOD_FLAG_STATIC | XMETHOD_FLAG_CONSTRUCTOR | XMETHOD_FLAG_ABSTRACT | XMETHOD_FLAG_FINAL);
-            
+
             method->op_type = item->op_type;
             method->symbol = item->symbol;
             method->name = item->name;
             method->param_count = item->param_count;
             method->vtable_index = -1;
-            
+
             item->name = NULL;
         }
-        
+
         cls->method_count = flat_instance_count;
-        
+
         xr_class_builder_generate_vtable(builder, cls);
     }
-    
+
     /* ========== Static Fields ========== */
     if (builder->static_field_count > 0) {
         cls->static_field_values = (XrValue*)xr_malloc(
@@ -789,21 +797,21 @@ XrClass* xr_class_builder_finalize(XrClassBuilder *builder) {
             xr_class_free(cls);
             return NULL;
         }
-        
+
         for (int i = 0; i < builder->static_field_count; i++) {
             cls->static_field_values[i] = builder->static_fields[i].value;
         }
-        
+
         cls->static_field_count = builder->static_field_count;
     }
-    
+
     /* ========== Static Methods ========== */
     // Methods array already allocated above with total_method_count capacity
     if (builder->static_method_count > 0) {
         for (int i = 0; i < builder->static_method_count; i++) {
             XrMethodBuildItem *item = &builder->static_methods[i];
             XrMethod *method = &cls->methods[flat_instance_count + i];
-            
+
             method->type = item->method_type;
             switch (item->method_type) {
                 case XMETHOD_PRIMITIVE:
@@ -820,22 +828,22 @@ XrClass* xr_class_builder_finalize(XrClassBuilder *builder) {
                     method->as.closure = NULL;
                     break;
             }
-            
+
             method->flags = (item->flags & (XMETHOD_FLAG_PRIVATE | XMETHOD_FLAG_ABSTRACT | XMETHOD_FLAG_FINAL)) | XMETHOD_FLAG_STATIC;
-            
+
             method->op_type = item->op_type;
             method->symbol = item->symbol;
             method->name = item->name;
             method->param_count = item->param_count;
             method->vtable_index = -1;
-            
+
             item->name = NULL;
         }
-        
+
         cls->method_count = total_method_count;
         cls->static_method_count = builder->static_method_count;
     }
-    
+
     /* ========== Interfaces ========== */
     if (builder->interface_count > 0) {
         cls->interfaces = (XrClass**)xr_malloc(
@@ -846,7 +854,7 @@ XrClass* xr_class_builder_finalize(XrClassBuilder *builder) {
             cls->interface_count = builder->interface_count;
         }
     }
-    
+
     /* ========== Abstract Methods ========== */
     if (builder->abstract_method_count > 0) {
         cls->abstract_methods = (int*)xr_malloc(
@@ -857,9 +865,9 @@ XrClass* xr_class_builder_finalize(XrClassBuilder *builder) {
             cls->abstract_method_count = builder->abstract_method_count;
         }
     }
-    
+
     xr_class_build_itable(cls);
-    
+
     // Generate method symbol-to-index map
     if (cls->method_count > 0) {
         int max_symbol = 0;
@@ -868,17 +876,17 @@ XrClass* xr_class_builder_finalize(XrClassBuilder *builder) {
                 max_symbol = cls->methods[i].symbol;
             }
         }
-        
+
         cls->method_map_capacity = max_symbol + 1;
         cls->method_symbol_to_index = (int*)xr_malloc(
             cls->method_map_capacity * sizeof(int)
         );
-        
+
         if (cls->method_symbol_to_index != NULL) {
             for (int i = 0; i < cls->method_map_capacity; i++) {
                 cls->method_symbol_to_index[i] = -1;
             }
-            
+
             for (int i = 0; i < cls->method_count; i++) {
                 int symbol = cls->methods[i].symbol;
                 if (symbol >= 0 && symbol < cls->method_map_capacity) {
@@ -887,12 +895,12 @@ XrClass* xr_class_builder_finalize(XrClassBuilder *builder) {
             }
         }
     }
-    
+
     xr_class_compute_operator_flags(cls);
-    
+
     builder->finalized = true;
     xr_class_builder_destroy(builder);
-    
+
     return cls;
 }
 
@@ -900,35 +908,35 @@ XrClass* xr_class_builder_finalize(XrClassBuilder *builder) {
 
 void xr_class_builder_destroy(XrClassBuilder *builder) {
     if (builder == NULL) return;
-    
+
     if (builder->fields != NULL) {
         for (int i = 0; i < builder->field_count; i++) {
             xr_free(builder->fields[i].name);
         }
         xr_free(builder->fields);
     }
-    
+
     if (builder->methods != NULL) {
         for (int i = 0; i < builder->method_count; i++) {
             xr_free(builder->methods[i].name);
         }
         xr_free(builder->methods);
     }
-    
+
     if (builder->static_fields != NULL) {
         for (int i = 0; i < builder->static_field_count; i++) {
             xr_free(builder->static_fields[i].name);
         }
         xr_free(builder->static_fields);
     }
-    
+
     if (builder->static_methods != NULL) {
         for (int i = 0; i < builder->static_method_count; i++) {
             xr_free(builder->static_methods[i].name);
         }
         xr_free(builder->static_methods);
     }
-    
+
     xr_free(builder->interfaces);
     xr_free(builder->abstract_methods);
     xr_free(builder->name);

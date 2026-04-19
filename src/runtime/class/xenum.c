@@ -214,7 +214,9 @@ XrEnumValue* xr_enum_from_value(XrEnumType *enum_type, XrValue value) {
         if (XR_IS_INT(value) && XR_IS_INT(member_val)) {
             equals = (XR_TO_INT(value) == XR_TO_INT(member_val));
         } else if (XR_IS_STRING(value) && XR_IS_STRING(member_val)) {
-            equals = (XR_TO_STRING(value) == XR_TO_STRING(member_val));
+            // Cannot rely on pointer equality: user input may carry a
+            // non-interned XrString even though enum members are interned.
+            equals = xr_string_equal(XR_TO_STRING(value), XR_TO_STRING(member_val));
         } else if (XR_IS_FLOAT(value) && XR_IS_FLOAT(member_val)) {
             equals = (XR_TO_FLOAT(value) == XR_TO_FLOAT(member_val));
         } else if (XR_IS_BOOL(value) && XR_IS_BOOL(member_val)) {
