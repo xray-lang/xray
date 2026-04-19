@@ -219,47 +219,13 @@ XR_FUNC uint32_t xr_symbol_to_op_flag(int symbol);
 // Compute operator overload flags for class (call once after class creation)
 XR_FUNC void xr_class_compute_operator_flags(XrClass *cls);
 
-/* ========== Class Builder API (compile time) ========== */
+/* ========== Class Builder ========== */
 
-/*
- * Class builder - Used only at compile/load time
- *
- * Lifecycle:
- *   1. xr_class_builder_new()      - Create builder
- *   2. xr_class_builder_add_xxx()  - Add fields/methods/interfaces
- *   3. xr_class_builder_finalize() - Freeze into immutable class
- *
- * NOTE: Builder is destroyed after finalize, returned class is immutable
- */
+// The full XrClassBuilder API lives in xclass_builder.h. Callers that
+// only need to talk to existing classes should not have to pull that
+// header in, so xclass.h exposes nothing more than the opaque handle
+// and the finalize entry point needed by a few build-time hooks.
 typedef struct XrClassBuilder XrClassBuilder;
-
-XR_FUNC XrClassBuilder* xr_class_builder_new(XrayIsolate *isolate,
-                                      const char *name,
-                                      XrClass *super);
-
-XR_FUNC int xr_class_builder_add_field(XrClassBuilder *builder,
-                                const char *name,
-                                uint32_t flags);
-
-XR_FUNC int xr_class_builder_add_method(XrClassBuilder *builder,
-                                 const char *name,
-                                 XrCFunctionPtr impl,
-                                 int param_count,
-                                 uint32_t flags);
-
-XR_FUNC int xr_class_builder_add_static_field(XrClassBuilder *builder,
-                                       const char *name,
-                                       XrValue value,
-                                       uint32_t flags);
-
-XR_FUNC int xr_class_builder_add_interface(XrClassBuilder *builder,
-                                    XrClass *interface);
-
-XR_FUNC int xr_class_builder_add_abstract_method(XrClassBuilder *builder,
-                                          int method_symbol);
-
-// Finalize builder and return immutable class (builder is destroyed)
-XR_FUNC XrClass* xr_class_builder_finalize(XrClassBuilder *builder);
 
 /* ========== Runtime API (read-only) ========== */
 
