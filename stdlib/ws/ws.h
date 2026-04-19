@@ -203,6 +203,18 @@ XR_FUNC XrWebSocket* xr_ws_new(const XrWsConfig *config);
 // Free WebSocket
 XR_FUNC void xr_ws_free(XrWebSocket *ws);
 
+/*
+ * Bind the WebSocket to a XrayIsolate for coroutine-aware I/O.
+ * When set, blocking send/recv paths yield via netpoll instead of
+ * falling back to poll(5s). Callers (typically ws_binding) must invoke
+ * this right after xr_ws_new so the subsequent xr_ws_connect / xr_ws_send
+ * paths can cooperate with the scheduler.
+ *
+ * Passing NULL restores the legacy blocking fallback behaviour.
+ * Server-side connections are bound automatically in xr_ws_upgrade.
+ */
+XR_FUNC void xr_ws_set_isolate(XrWebSocket *ws, struct XrayIsolate *X);
+
 // Connect to server
 XR_FUNC XrWsError xr_ws_connect(XrWebSocket *ws);
 
