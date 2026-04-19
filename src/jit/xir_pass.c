@@ -1841,6 +1841,71 @@ void xir_pass_dse(XirFunc *func) {
     xir_func_invalidate_alias(fn);                       \
 } while (0)
 
+/* ========== FixedPoint pipeline driver ==========
+ *
+ * Cheap IR checksum: combines each block's terminator, instruction
+ * count, vreg count and first/last opcode into a 64-bit FNV-1a hash.
+ * Two consecutive rounds of the pass list that leave the checksum
+ * unchanged are treated as a fixed point.  The checksum is coarse on
+ * purpose — we only need a "did anything change?" signal, not a
+ * deep-equal comparison.
+ */
+static uint64_t fixedpoint_checksum(XirFunc *func) {
+    uint64_t h = 1469598103934665603ull;
+    #define MIX(x) do { h ^= (uint64_t)(x); h *= 1099511628211ull; } while (0)
+    MIX(func->nvreg);
+    MIX(func->nblk);
+    for (uint32_t bi = 0; bi < func->nblk; bi++) {
+        XirBlock *blk = func->blocks[bi];
+        if (!blk) { MIX(0xBADB10Cu); continue; }
+        MIX(blk->id);
+        MIX(blk->nins);
+        MIX(blk->jmp.type);
+        MIX(blk->jmp.arg);
+        if (blk->nins > 0) {
+            MIX(blk->ins[0].op);
+            MIX(blk->ins[blk->nins - 1].op);
+        }
+        uint32_t nphi = 0;
+        for (XirPhi *p = blk->phis; p; p = p->next) nphi++;
+        MIX(nphi);
+    }
+    #undef MIX
+    return h;
+}
+
+/* Invoke a single pass descriptor, honouring its flags. */
+static void fixedpoint_invoke(XirFunc *func, XrProto *proto,
+                              const XirPassDesc *d) {
+    if (d->flags & XIR_PASS_NEEDS_PROTO) {
+        if (d->fn.p) d->fn.p(func, proto);
+    } else {
+        if (d->fn.v) d->fn.v(func);
+    }
+    if (!(d->flags & XIR_PASS_NO_RESET)) XIR_RESET_ANALYSIS(func);
+}
+
+XirPipelineStats xir_run_fixedpoint(XirFunc *func, XrProto *proto,
+                                     const XirPassDesc *passes,
+                                     uint32_t npass, uint32_t max_rounds) {
+    XirPipelineStats st = { 0, 0, 0 };
+    if (!func || !passes || npass == 0 || max_rounds == 0) return st;
+
+    for (uint32_t round = 0; round < max_rounds; round++) {
+        uint64_t before = fixedpoint_checksum(func);
+        for (uint32_t i = 0; i < npass; i++) {
+            fixedpoint_invoke(func, proto, &passes[i]);
+            st.invocations++;
+        }
+        st.rounds_run = round + 1;
+        if (fixedpoint_checksum(func) == before) {
+            st.converged = 1;
+            break;
+        }
+    }
+    return st;
+}
+
 /*
  * Auto-verify macros: run xir_verify_cfg after every pass in debug builds.
  * Inspired by Dart VM's FlowGraphChecker which runs after each compiler pass
@@ -1888,102 +1953,155 @@ static uint32_t xir_count_se_(XirFunc *fn) {
 #define XIR_RUN_PASS_STRICT_SE(fn, pass) XIR_RUN_PASS(fn, pass)
 #endif
 
+/* ========== Declarative pipeline groups ==========
+ *
+ * Each group corresponds to a logical phase of the historical
+ * pipeline.  Groups are driven by xir_run_fixedpoint with a modest
+ * round cap so cross-pass interactions (e.g. SCCP exposing a
+ * canonicalize opportunity that exposes more CSE) reach a stable
+ * point before we move on.  The max_rounds values are engineering
+ * compromises: higher values buy more optimisation at measurable
+ * compile-time cost; the current settings were picked to keep
+ * compile time on par with the legacy linear pipeline while giving
+ * the new algorithms room to converge.
+ */
+
+/* Canonicalising group: runs at every optimisation level to fold
+ * constants, propagate types, drop dead code.  SCCP subsumes the
+ * legacy const_prop / branch_simp / remove_unreachable triple. */
+static const XirPassDesc PG_CANON[] = {
+    { "select_rep",   { .v = xir_pass_select_rep   }, XIR_PASS_SKIP_CFG_VERIFY },
+    { "sccp",         { .v = xir_pass_sccp         }, 0 },
+    { "type_prop",    { .v = xir_pass_type_prop    }, XIR_PASS_SKIP_CFG_VERIFY },
+    { "specialize",   { .v = xir_pass_specialize   }, 0 },
+    { "canonicalize", { .v = xir_pass_canonicalize }, 0 },
+    { "dce",          { .v = xir_pass_dce          }, XIR_PASS_VERIFY_SE },
+};
+
+/* Basic-level local cleanups: per-block CSE, simple copy folding,
+ * escape-analysis (block-local), store-to-load forwarding. */
+static const XirPassDesc PG_BASIC[] = {
+    { "cse",             { .v = xir_pass_cse             }, XIR_PASS_VERIFY_SE },
+    { "store_to_load",   { .v = xir_pass_store_to_load   }, 0 },
+    { "escape_analysis", { .v = xir_pass_escape_analysis }, 0 },
+    { "phi_simp",        { .v = xir_pass_phi_simp        }, 0 },
+    { "copy_prop",       { .v = xir_pass_copy_prop       }, XIR_PASS_VERIFY_SE },
+    { "dce",             { .v = xir_pass_dce             }, XIR_PASS_VERIFY_SE },
+};
+
+/* Loop and cross-block optimisations.  Ordered so SCCP sees the
+ * results of GVN/LICM, and canon + type_prop fire again before
+ * ifconvert / phi_simp. */
+static const XirPassDesc PG_LOOP[] = {
+    { "licm",          { .v = xir_pass_licm          }, 0 },
+    { "elim_guards",   { .v = xir_pass_elim_guards   }, 0 },
+    { "gvn",           { .v = xir_pass_gvn           }, XIR_PASS_VERIFY_SE },
+    { "gcm",           { .v = xir_pass_gcm           }, 0 },
+    { "propjnz",       { .v = xir_pass_propjnz       }, 0 },
+    { "store_to_load", { .v = xir_pass_store_to_load }, 0 },
+    { "dse",           { .v = xir_pass_dse           }, 0 },
+    { "sccp",          { .v = xir_pass_sccp          }, 0 },
+    { "type_prop",     { .v = xir_pass_type_prop     }, 0 },
+    { "specialize",    { .v = xir_pass_specialize    }, 0 },
+    { "elim_guards",   { .v = xir_pass_elim_guards   }, 0 },
+    { "ifconvert",     { .v = xir_pass_ifconvert     }, 0 },
+    { "phi_simp",      { .v = xir_pass_phi_simp      }, 0 },
+    { "copy_prop",     { .v = xir_pass_copy_prop     }, XIR_PASS_VERIFY_SE },
+};
+
+/* Final cleanup after all heavy optimisation: canon + alloc sink +
+ * escape (second go) + DCE. */
+static const XirPassDesc PG_CLEANUP[] = {
+    { "canonicalize",    { .v = xir_pass_canonicalize    }, 0 },
+    { "alloc_sink",      { .v = xir_pass_alloc_sink      }, 0 },
+    { "escape_analysis", { .v = xir_pass_escape_analysis }, 0 },
+    { "dce",             { .v = xir_pass_dce             }, XIR_PASS_VERIFY_SE },
+};
+
+static const XirPassDesc PG_RANGE[] = {
+    { "insert_redefines",     { .v = xir_pass_insert_redefines     }, 0 },
+    { "range_analysis",       { .v = xir_pass_range_analysis       }, 0 },
+    { "dce",                  { .v = xir_pass_dce                  }, XIR_PASS_VERIFY_SE },
+    { "split_critical_edges", { .v = xir_pass_split_critical_edges }, 0 },
+};
+
+#define XIR_PIPELINE_SIZE(arr) (uint32_t)(sizeof(arr) / sizeof((arr)[0]))
+
+/* Cached pipeline-verbose toggle (XRAY_JIT_PIPELINE_VERBOSE).  Read
+ * once on first use; suitable for debugging / tuning runs where
+ * users opt in via environment variable. */
+static int pipeline_verbose_cached = -1;
+static bool pipeline_verbose(void) {
+    if (pipeline_verbose_cached < 0)
+        pipeline_verbose_cached = getenv("XRAY_JIT_PIPELINE_VERBOSE") ? 1 : 0;
+    return pipeline_verbose_cached != 0;
+}
+
+/* Thin wrapper around xir_run_fixedpoint that logs stats when the
+ * pipeline-verbose toggle is on.  Keeps xir_run_pipeline_ex free of
+ * instrumentation clutter. */
+static void run_group(const char *group_name, XirFunc *func, XrProto *proto,
+                      const XirPassDesc *passes, uint32_t npass,
+                      uint32_t max_rounds) {
+    XirPipelineStats s = xir_run_fixedpoint(func, proto, passes, npass, max_rounds);
+    if (pipeline_verbose()) {
+        fprintf(stderr,
+                "[jit-pipe] %-7s func=%s passes=%u rounds=%u invocations=%u%s\n",
+                group_name,
+                func->name ? func->name : "?",
+                npass, s.rounds_run, s.invocations,
+                s.converged ? " converged" : " max-rounds");
+    }
+}
+
 void xir_run_pipeline_ex(XirFunc *func, XirOptLevel opt, XrProto *proto) {
     if (!func) return;
 
-    // --- Phase 0: Initial type analysis ---
-    // select_rep / type_prop / DCE do not modify CFG structure —
-    // use NOCFG variant because builder may leave pred lists slightly
-    // inconsistent (fixed by rebuild_preds before CFG passes).
-    XIR_RUN_PASS_NOCFG(func, xir_pass_select_rep);
-    XIR_RUN_PASS_NOCFG(func, xir_pass_type_prop);       // TypeProp round 1
-    XIR_RUN_PASS_NOCFG(func, xir_pass_dce);  // Phase 0 DCE: no CFG yet, skip SE check
+    /* Phase 0: initial type/rep analysis + DCE.  Runs even at
+     * -O0 because the rest of the compiler expects vreg
+     * representations to be resolved. */
+    run_group("canon", func, proto, PG_CANON, XIR_PIPELINE_SIZE(PG_CANON), 3);
 
     if (opt >= XIR_OPT_BASIC) {
-        /* --- Phase 1: SCCP + CFG cleanup ---
-         *
-         * SCCP subsumes the old const_prop + branch_simp +
-         * remove_unreachable triple: it folds constants, simplifies
-         * constant-conditioned branches, and kills blocks reachable
-         * only through those branches in one fixed-point pass.  The
-         * remaining CFG fix-ups (merge_blocks / rebuild_preds)
-         * handle post-SCCP chain collapsing. */
-        XIR_RUN_PASS(func, xir_pass_sccp);
-        xir_pass_merge_blocks(func);
         xir_rebuild_preds(func);
         xir_verify_cfg(func);
         xir_verify_types(func);
-
-        /* type_prop now iterates to a fixed point internally (Phase
-         * 3.2), so a single call here replaces the historical
-         * "round 2" re-run. */
-        XIR_RUN_PASS(func, xir_pass_specialize);          // Specialize RT_* with proven types
-        XIR_RUN_PASS(func, xir_pass_canonicalize);
-        XIR_RUN_PASS_STRICT_SE(func, xir_pass_cse);
-        XIR_RUN_PASS(func, xir_pass_store_to_load);
-        XIR_RUN_PASS(func, xir_pass_escape_analysis);
-        XIR_RUN_PASS(func, xir_pass_phi_simp);
-        XIR_RUN_PASS_STRICT_SE(func, xir_pass_copy_prop);
-        XIR_RUN_PASS_STRICT_SE(func, xir_pass_dce);
+        run_group("basic", func, proto, PG_BASIC, XIR_PIPELINE_SIZE(PG_BASIC), 3);
     }
 
     if (opt >= XIR_OPT_FULL) {
-        /* --- Phase 2: Inlining + post-inline type refinement --- */
         if (proto) {
-            XIR_RUN_PASS2(func, xir_pass_auto_inline, proto);
-            /* SCCP again picks up constants exposed by the inliner
-             * (e.g. the callee's return expression becoming a
-             * literal); type_prop then re-specialises once. */
-            XIR_RUN_PASS(func, xir_pass_sccp);
-            XIR_RUN_PASS(func, xir_pass_type_prop);
-            XIR_RUN_PASS(func, xir_pass_specialize);
-            XIR_RUN_PASS(func, xir_pass_canonicalize);
-            XIR_RUN_PASS_STRICT_SE(func, xir_pass_dce);
+            xir_pass_auto_inline(func, proto);
+            XIR_RESET_ANALYSIS(func);
+            /* Re-canon once post-inline so the loop group below sees
+             * the callee's constants / types. */
+            run_group("post-inline", func, proto, PG_CANON,
+                      XIR_PIPELINE_SIZE(PG_CANON), 2);
         }
 
-        /* --- Phase 3: Loop optimisations --- */
-        XIR_RUN_PASS(func, xir_pass_licm);
-        XIR_RUN_PASS(func, xir_pass_elim_guards);
-        XIR_RUN_PASS_STRICT_SE(func, xir_pass_gvn);
-        XIR_RUN_PASS(func, xir_pass_gcm);
-        XIR_RUN_PASS(func, xir_pass_propjnz);
-        XIR_RUN_PASS(func, xir_pass_store_to_load);
-        XIR_RUN_PASS(func, xir_pass_dse);
-        /* After GVN / LICM may have exposed new constants, run SCCP
-         * followed by a single type_prop pass.  type_prop is
-         * fixed-point internal so one call is sufficient. */
-        XIR_RUN_PASS(func, xir_pass_sccp);
-        XIR_RUN_PASS(func, xir_pass_type_prop);
-        XIR_RUN_PASS(func, xir_pass_specialize);
-        XIR_RUN_PASS(func, xir_pass_elim_guards);
-        XIR_RUN_PASS(func, xir_pass_ifconvert);
-        XIR_RUN_PASS(func, xir_pass_phi_simp);
-        XIR_RUN_PASS_STRICT_SE(func, xir_pass_copy_prop);
+        run_group("loop", func, proto, PG_LOOP, XIR_PIPELINE_SIZE(PG_LOOP), 3);
 
-        /* --- Phase 4: CFG cleanup + final optimisations --- */
-        XIR_RUN_PASS(func, xir_pass_sccp);
+        /* CFG cleanup between the heavy and the range-analysis
+         * phases keeps subsequent checks on a well-formed CFG. */
         xir_pass_merge_blocks(func);
         xir_rebuild_preds(func);
         xir_verify_cfg(func);
         xir_verify_types(func);
-        XIR_RUN_PASS(func, xir_pass_canonicalize);
-        XIR_RUN_PASS(func, xir_pass_alloc_sink);
-        XIR_RUN_PASS(func, xir_pass_escape_analysis);
-        XIR_RUN_PASS_STRICT_SE(func, xir_pass_dce);
 
-        /* --- Phase 5: Range analysis + bounds check elimination --- */
-        XIR_RUN_PASS(func, xir_pass_insert_redefines);   // Flow-sensitive type narrowing
-        XIR_RUN_PASS(func, xir_pass_range_analysis);
-        XIR_RUN_PASS_STRICT_SE(func, xir_pass_dce);
-        XIR_RUN_PASS(func, xir_pass_split_critical_edges);
+        run_group("cleanup", func, proto, PG_CLEANUP,
+                  XIR_PIPELINE_SIZE(PG_CLEANUP), 2);
+        run_group("range", func, proto, PG_RANGE,
+                  XIR_PIPELINE_SIZE(PG_RANGE), 2);
     }
 
-    // Block reordering: minimize taken branches by greedy fall-through chaining
-    XIR_RUN_PASS_NOCFG(func, xir_pass_reorder_blocks);
-
-    // Write barriers are always inserted (after optimization), then redundant ones eliminated
-    XIR_RUN_PASS(func, xir_insert_write_barriers);
-    XIR_RUN_PASS(func, xir_pass_elim_write_barriers);
+    /* Trailing housekeeping: block reordering + write barriers.
+     * These are deterministic and run exactly once. */
+    xir_pass_reorder_blocks(func);
+    XIR_RESET_ANALYSIS(func);
+    xir_insert_write_barriers(func);
+    XIR_RESET_ANALYSIS(func);
+    xir_pass_elim_write_barriers(func);
+    XIR_RESET_ANALYSIS(func);
 }
 
 void xir_run_pipeline(XirFunc *func, XirOptLevel opt) {
