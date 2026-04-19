@@ -85,7 +85,7 @@ typedef enum {
     OP_LOADNULL, // R[A] = ... = R[A+B] = null
     OP_LOADTRUE, // R[A] = true
     OP_LOADFALSE, // R[A] = false
-    
+
     /* === Arithmetic === */
     OP_ADD, // R[A] = R[B] + R[C]
     OP_ADDI, // R[A] = R[B] + sC (immediate)
@@ -102,12 +102,12 @@ typedef enum {
     OP_MODK, // R[A] = R[B] % K[C]
     OP_UNM, // R[A] = -R[B]
     OP_NOT, // R[A] = not R[B]
-    
+
     /* === String Buffer === */
     OP_STRBUF_NEW, // R[A] = new_strbuf()
     OP_STRBUF_APPEND, // strbuf(R[A]).append(R[B])
     OP_STRBUF_FINISH, // R[A] = strbuf(R[A]).to_string()
-    
+
     /* === Bitwise === */
     OP_BAND, // R[A] = R[B] & R[C]
     OP_BOR, // R[A] = R[B] | R[C]
@@ -115,7 +115,7 @@ typedef enum {
     OP_BNOT, // R[A] = ~R[B]
     OP_SHL, // R[A] = R[B] << R[C]
     OP_SHR, // R[A] = R[B] >> R[C]
-    
+
     /* === Comparison === */
     OP_EQ, // if (R[A] == R[B]) != k then PC++
     OP_EQK, // if (R[A] == K[B]) != k then PC++
@@ -124,7 +124,7 @@ typedef enum {
     OP_LTI, // if (R[A] < sB) != k then PC++
     OP_LE, // if (R[A] <= R[B]) != k then PC++
     OP_LEI, // if (R[A] <= sB) != k then PC++
-    
+
     /* === Comparison (expression) === */
     OP_CMP_EQ, // R[A] = (R[B] == R[C]) ? true : false (deep compare)
     OP_CMP_NE, // R[A] = (R[B] != R[C]) ? true : false (deep compare)
@@ -136,7 +136,7 @@ typedef enum {
     OP_CHECKTYPE, // assert R[A] is Type[K(B)]; throw TypeError if not (Json→concrete coercion)
     OP_ISNULL, // if (R[A] == null) != k then PC++
     OP_ISNULL_SET, // R[A] = (R[B] == null)
-    
+
     /* === Control Flow === */
     OP_JMP, // PC += sJ
     OP_TEST, // if (R[A]) != k then PC++
@@ -149,7 +149,7 @@ typedef enum {
     OP_RETURN, // return R[A]...R[A+B-2]
     OP_RETURN0, // return (no values) - fast path
     OP_RETURN1, // return R[A] (single value) - fast path
-    
+
     /* === Container Creation === */
     OP_NEWARRAY, // R[A] = [], B=capacity hint
     OP_NEWMAP, // R[A] = #{}, B=capacity hint
@@ -157,7 +157,7 @@ typedef enum {
     OP_NEWSTRINGBUILDER, // R[A] = new StringBuilder()
     OP_NEWRANGE, // R[A] = Range(R[B], R[C]) - lazy integer range
     OP_RANGE_UNPACK, // R[A]=start, R[A+1]=end, R[A+2]=step from Range R[B]
-    
+
     /* === Array Operations === */
     OP_ARRAY_GET, // R[A] = R[B]:Array[R[C]]
     OP_ARRAY_GETC, // R[A] = R[B]:Array[C]
@@ -166,57 +166,56 @@ typedef enum {
     OP_ARRAY_PUSH, // R[A]:Array.push(R[B])
     OP_ARRAY_LEN, // R[A] = len(R[B]:Array)
     OP_ARRAY_INIT, // R[A][1..B] = R[A+1..A+B] - batch init
-    
+
     /* === Map Operations === */
     OP_MAP_GET, // R[A] = R[B]:Map[R[C]]
     OP_MAP_GETK, // R[A] = R[B]:Map[K[C]]
     OP_MAP_SET, // R[A]:Map[R[B]] = R[C]
     OP_MAP_SETK, // R[A]:Map[K[B]] = R[C]
-    
+
     /* === Generic Index === */
     OP_INDEX_GET, // R[A] = R[B][R[C]] - runtime dispatch
     OP_INDEX_SET, // R[A][R[B]] = R[C] - runtime dispatch
-    
+
     /* === Slice === */
     OP_SLICE, // R[A] = R[B][R[C]:R[C+1]], -1=omitted
-    
+
     /* === Closure & Upvalues (flat capture model) === */
     OP_CLOSURE, // R[A] = closure(PROTO[Bx]), populate upvals[] from descriptors
     OP_UPVAL_GET, // R[A] = cl->upvals[B] (flat upvalue read)
     OP_CELL_NEW, // R[A] = new_cell(R[A]) — wrap value in heap-allocated cell
     OP_CELL_GET, // R[A] = cell_deref(R[B]) — read cell value
     OP_CELL_SET, // cell_store(R[A], R[B]) — write cell value
-    
+
     /* === OOP - Class Building === */
     OP_CLASS_CREATE_FROM_DESCRIPTOR, // R[A] = Class.from_descriptor(K[Bx])
     OP_CLINIT_CALL, // call R[A] class static constructor <clinit>
-    
+
     /* === OOP - Class Operations === */
-    OP_INHERIT, // R[A].super = R[B]
     OP_GETPROP, // R[A] = R[B].K[C]
     OP_SETPROP, // R[A].K[B] = R[C]
     OP_GETSUPER, // R[A] = R[B].super.K[C]
     OP_INVOKE, // R[A] = R[B]:method(...) - VTable dispatch
     OP_INVOKE_TAIL, // tail call: R[A+1]:method(...) reuse frame
     OP_SUPERINVOKE, // super.method(...)
-    
+
     /* === OOP - Optimized Instructions === */
     OP_INVOKE_DIRECT, // R[A] = R[B]:methods[C](...) - direct call (type known)
     OP_INVOKE_BUILTIN, // R[A] = R[A+1]:builtin_method[B](args)
-    
+
     /* === OOP - Runtime Support === */
     OP_ABSTRACT_ERROR, // abstract method call error
     OP_SET_STORAGE_CTX, // set storage context A=mode (0=normal,1=shared)
-    
+
     /* === Shared Conversion === */
     OP_TO_SHARED, // R[A] = to_shared(R[B])
     OP_MAP_SETKS, // R[A].fields[0..B-1] = R[A+1]..R[A+B] - batch set
-    
+
     /* === Instance Field Access (O(1)) === */
     OP_GETFIELD, // R[A] = R[B]:Instance.fields[C]
     OP_SETFIELD, // R[A]:Instance.fields[B] = R[C]
     OP_GETFIELD_IC, // R[A] = R[B].K[C] - inline cache
-    
+
     /* === Json Dynamic Object === */
     OP_NEWJSON, // R[A] = new Json(K[Bx]:Shape)
     OP_JSON_GET, // R[A] = R[B].fields[C]
@@ -226,10 +225,10 @@ typedef enum {
     OP_JSON_INIT, // R[A].fields[B] = R[C] - init
     OP_JSON_INIT_I, // R[A].fields[B] = SignedC - init with immediate int
     OP_JSON_INIT_N, // R[A].fields[B] = null - init with null
-    
+
     /* === Builtin Globals (read-only, 18 predefined slots) === */
     OP_GETBUILTIN, // R[A] = builtins[Bx]
-    
+
     /* === Builtin Functions === */
     OP_PRINT, // print(R[A]), B=add_space, C=newline
     OP_TYPEOF, // R[A] = typeof(R[B]) → returns int (XrTypeId)
@@ -241,52 +240,52 @@ typedef enum {
     OP_TOBOOL, // R[A] = bool(R[B])
     OP_COPY, // R[A] = copy(R[B])
     OP_CHR, // R[A] = chr(R[B])
-    
+
     /* === Enum Operations === */
     OP_ENUM_ACCESS, // R[A] = R[B].variant[R[A+1]]
     OP_ENUM_CONVERT, // R[A] = enum_convert(R[B], R[A+1])
     OP_ENUM_NAME, // R[A] = enum_name(R[B])
-    
+
     /* === Exception Handling === */
     OP_TRY, // set exception handler: try { ... }
     OP_CATCH, // catch exception: catch (e) { ... }
     OP_FINALLY, // finally block: finally { ... }
     OP_END_TRY, // end try-catch block
     OP_THROW, // throw exception: throw R[A]
-    
+
     /* === Register Spill === */
     OP_SPILL, // S[A] = R[B] - spill register to slot
     OP_RELOAD, // R[A] = S[B] - reload from slot
-    
+
     /* === Box/Unbox (typed storage ↔ tagged boundary) === */
     OP_BOX_I64, // R[A] = XR_FROM_INT(R[B].i)
     OP_BOX_F64, // R[A] = XR_FROM_FLOAT(R[B].f)
     OP_UNBOX_I64, // R[A].i = XR_TO_INT(R[B])
     OP_UNBOX_F64, // R[A].f = XR_TO_FLOAT(R[B])
-    
+
     /* === Unchecked Array Access (loop optimization) === */
     OP_ARRAY_GET_NOCHECK, // R[A] = R[B]:Array[R[C]] - proven safe
-    
+
     /* === Map Counter === */
     OP_MAP_INCREMENT, // R[A]:Map[R[B]]++ - set to 1 if not exists
-    
+
     /* === String Optimization === */
     OP_SUBSTRING, // R[A] = R[B].substring(R[C], R[C+1])
     OP_STR_REPEAT, // R[A] = R[B] * R[C] - string repeat
-    
+
     /* === Module System === */
     OP_IMPORT, // R[A] = import(K[Bx])
     OP_EXPORT, // export(K[A], R[B])
     OP_EXPORT_ALL, // export * from R[A]
-    
+
     /* === Assertion (test framework) === */
     OP_ASSERT, // if !R[A] then throw AssertError(K[B]); C=1: assert_false (negate)
     OP_ASSERT_EQ, // if R[A] != R[B] then throw AssertError(K[C])
     OP_ASSERT_NE, // if R[A] == R[B] then throw AssertError(K[C])
-    
+
     /* === Regex Literal === */
     OP_REGEX_COMPILE, // R[A] = regex.compile(K[B], K[C])
-    
+
     /* === Coroutine === */
     OP_GO, // R[A] = go R[B](R[B+1]..R[B+C]), C=arg count
     OP_GO_INVOKE, // R[A] = go R[B].method(args), B=symbol, C=arg_count
@@ -303,7 +302,7 @@ typedef enum {
     OP_GET_LOCAL, // R[A] = Coro.getLocal(R[B])
     OP_SET_PRIORITY, // Coro.setPriority(R[A], R[B])
     OP_CORO_CTRL, // coroutine monitoring: A=result/arg, B=arg2, C=sub_op
-    
+
     /* === Channel === */
     OP_CHAN_NEW, // R[A] = Channel(B), B=buffer size (0=unbuffered)
     OP_CHAN_NEW_NAMED, // R[A] = Channel(R[B], R[C]) - Named Channel, B=size reg, C=name reg
@@ -315,31 +314,31 @@ typedef enum {
     OP_CHAN_RECV_TIMEOUT, // R[A] = R[B].recv(timeout: R[C]) -> null on timeout
     OP_CHAN_CLOSE, // R[A].close()
     OP_CHAN_IS_CLOSED, // R[A] = R[B].isClosed()
-    
+
     /* === Select === */
     OP_SELECT_START, // start select block
     OP_SELECT_CASE, // add case: A=type(0=recv,1=send), B=channel, C=value/target
     OP_SELECT_END, // execute select
-    
+
     /* === Defer === */
     OP_DEFER, // defer R[A]
-    
+
     /* === Bytes === */
     OP_BYTES_NEW, // R[A] = Bytes(R[A+1..A+B]), B=arg count
-    
+
     /* === Structured Concurrency === */
     OP_SCOPE_ENTER, // enter scope
     OP_SCOPE_EXIT, // exit scope, wait for child coroutines
-    
+
     /* === Coroutine-friendly === */
     OP_SLEEP, // time.sleep(R[A]) - yields CPU
     OP_TIME_AFTER, // R[A] = time.after(R[B]) - timer channel
     OP_SELECT_BLOCK, // select block wait: A=channel array base, B=count
-    
+
     /* === Shared Variables === */
     OP_GETSHARED, // R[A] = shared_array[Bx]
     OP_SETSHARED, // shared_array[Bx] = R[A]
-    
+
     /* === Typed Compact Storage (raw in, raw out, zero BOX/UNBOX) === */
     OP_TARRAY_GET, // R[A].i = R[B]:TypedArray[R[C]] (raw output)
     OP_TARRAY_GETC, // R[A].i = R[B]:TypedArray[C] (constant index)
@@ -362,7 +361,7 @@ typedef enum {
 
     /* === Placeholder === */
     OP_NOP, // no-op
-    
+
 } OpCode;
 
 // Opcode count (instruction encoding uses 8-bit opcode field, max 256)
@@ -501,7 +500,7 @@ typedef struct XrProto {
     XrDynArray lineinfo;    // line number info
     XrDynArray locvars;     // local variable names
     const char *source_file; // source file path
-    
+
     /*
      * Per-function symbol table: maps local index (0-254) to global SymbolId.
      * Instructions encode local indices in 8-bit B/C fields.
@@ -515,7 +514,7 @@ typedef struct XrProto {
     int32_t *symbols;       // local-to-global symbol mapping
     int symbol_count;       // number of symbols used
     int symbol_capacity;    // allocated capacity
-    
+
     XrString *name;         // function name
     char *return_type;      // return type (NULL = unspecified)
     int maxstacksize;       // max stack (register) size
@@ -540,17 +539,17 @@ typedef struct XrProto {
 
     struct XrICMethodTable *ic_methods;  // method call IC table
     struct XrICFieldTable *ic_fields;    // field access IC table
-    
+
     uint8_t test_attr;      // test attribute type
     int test_timeout;       // test timeout (seconds)
     bool is_coro_safe;      // safe to call in coroutine
-    
+
     // Raw constant pool (uint64_t[]) for native-width values (int64/float64)
     // Used by OP_LOADK_RAW to load raw 64-bit values without tagged union
     uint64_t *raw_constants;
     int raw_constant_count;
     int raw_constant_capacity;
-    
+
     /*
      * JIT/AOT metadata: type information preserved from compile-time analysis.
      *

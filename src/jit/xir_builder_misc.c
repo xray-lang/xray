@@ -770,7 +770,6 @@ bool xir_translate_misc_ops(XirBuilder *b, XirBlock **cur_blk,
         case OP_GETSUPER:
         case OP_SUPERINVOKE:
         case OP_CLASS_CREATE_FROM_DESCRIPTOR:
-        case OP_INHERIT:
         case OP_CLINIT_CALL:
         /* === Channel (non-blocking) === */
         case OP_CHAN_NEW: {

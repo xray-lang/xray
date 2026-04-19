@@ -182,7 +182,6 @@ static const JitOpcodeSupport jit_op_support_table[NUM_OPCODES] = {
     /* === Class / Struct === */
     [OP_CLASS_CREATE_FROM_DESCRIPTOR] = JIT_OP_SUPPORTED,
     [OP_CLINIT_CALL]       = JIT_OP_SUPPORTED,
-    [OP_INHERIT]           = JIT_OP_SUPPORTED,
     [OP_GETSUPER]          = JIT_OP_SUPPORTED,
     [OP_NEW_STRUCT]        = JIT_OP_SUPPORTED,
     [OP_STRUCT_GET]        = JIT_OP_SUPPORTED,

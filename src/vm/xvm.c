@@ -4640,16 +4640,6 @@ startfunc:
                 goto startfunc;
             }
 
-            vmcase(OP_INHERIT) {
-                // OP_INHERIT: set inheritance relationship
-                int a = GETARG_A(i);
-                int b = GETARG_B(i);
-                XrClass *subclass = xr_value_to_class(R(a));
-                XrClass *superclass = xr_value_to_class(R(b));
-                xr_class_set_super(subclass, superclass);
-                vmbreak;
-            }
-
             // Abstract method support
             vmcase(OP_ABSTRACT_ERROR) {
                 // OP_ABSTRACT_ERROR: abstract method call error
