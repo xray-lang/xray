@@ -4575,14 +4575,24 @@ startfunc:
             ** ======================================================== */
 
             vmcase(OP_CLASS_CREATE_FROM_DESCRIPTOR) {
-                // OP_CLASS_CREATE_FROM_DESCRIPTOR: create class from descriptor
+                // R[A] optionally holds a runtime-resolved super class
+                // (for `extends` whose parent comes from a local, upvalue
+                // or imported module member). The codegen side computes
+                // the parent into R[A] before this instruction; a non-
+                // class value (nil) means "fall back to descriptor-
+                // encoded resolution".
                 int a = GETARG_A(i);
                 int bx = GETARG_Bx(i);
                 XrValue desc_val = k[bx];
                 XrClassDescriptor *desc = (XrClassDescriptor*)XR_TO_PTR(desc_val);
                 XrProto *proto = cl->proto;
-                // Pass cl and base for method closure upvalue capture
-                XrClass *cls = xr_class_from_descriptor(isolate, desc, proto, cl, base, vm_ctx);
+                XrClass *super_override = NULL;
+                XrValue super_slot = R(a);
+                if (XR_IS_CLASS(super_slot)) {
+                    super_override = XR_TO_CLASS(super_slot);
+                }
+                XrClass *cls = xr_class_from_descriptor(isolate, desc, proto, cl, base,
+                                                        vm_ctx, super_override);
                 R(a) = XR_FROM_PTR(cls);
                 vmbreak;
             }

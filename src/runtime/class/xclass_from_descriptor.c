@@ -66,7 +66,7 @@ static XrMethodType determine_method_type(const XrMethodDescriptorEntry *method)
 
 XrClass* xr_class_from_descriptor(XrayIsolate *isolate, const XrClassDescriptor *desc,
                                    XrProto *proto, XrClosure *cl, XrValue *base,
-                                   XrVMContext *vm_ctx) {
+                                   XrVMContext *vm_ctx, XrClass *super_override) {
     if (!isolate || !desc) {
         xr_log_warning("class", "from_descriptor: invalid parameters");
         return NULL;
@@ -78,9 +78,13 @@ XrClass* xr_class_from_descriptor(XrayIsolate *isolate, const XrClassDescriptor 
         return NULL;
     }
 
-    // Resolve super class
+    // Resolve super class. An explicit override from the VM (for parents
+    // resolved dynamically through local/upvalue/module-member expressions)
+    // always wins over the descriptor-encoded paths.
     XrClass *super = NULL;
-    if (desc->super_name && strlen(desc->super_name) > 0) {
+    if (super_override != NULL) {
+        super = super_override;
+    } else if (desc->super_name && strlen(desc->super_name) > 0) {
         if (desc->super_global_index >= 0) {
             if (desc->super_global_index < xr_isolate_get_vm_state(isolate)->builtin_count) {
                 XrValue super_val = xr_isolate_get_vm_state(isolate)->builtins[desc->super_global_index];

@@ -691,10 +691,82 @@ static void compile_class_with_descriptor(
         return;
     }
 
-    // 5. Allocate class register
+    // 5. Allocate class register. This same register is used as the
+    //    super-class override slot for OP_CLASS_CREATE_FROM_DESCRIPTOR:
+    //    codegen computes the parent (if any) into class_reg first, the
+    //    VM consumes R[A] as the explicit super when it is a class value
+    //    and writes the newly created class back into R[A].
     int class_reg = reg_alloc(ctx, compiler);
 
-    // 6. Generate single instruction
+    // 5a. Pre-compute super override into class_reg for parents that
+    //     cannot be resolved via the descriptor's super_name path
+    //     (module.Class, or parents bound as local/upvalue by import).
+    //     For same-module `extends Class` or no inheritance at all the
+    //     descriptor carries the super name and we only need to make
+    //     sure class_reg holds a non-class sentinel so the VM falls
+    //     back to descriptor resolution.
+    bool super_via_reg = false;
+    if (node->super_name != NULL) {
+        if (node->super_module != NULL) {
+            // Module member access form: extends module.Class
+            XrString *module_name = xr_compile_time_intern(ctx->X, node->super_module, strlen(node->super_module));
+
+            XrLocalInfo *mlocal = compiler_get_local_by_name(compiler, node->super_module);
+            if (mlocal) {
+                EMIT_ABC(ctx, compiler, OP_MOVE, class_reg, mlocal->reg, 0);
+            } else {
+                int upvalue_idx = scope_resolve_upvalue(ctx, compiler, module_name);
+                if (upvalue_idx >= 0) {
+                    emit_abc(compiler->emitter, OP_UPVAL_GET, class_reg, upvalue_idx, 0);
+                } else {
+                    int si = shared_get_in_scope(ctx, compiler, module_name);
+                    if (si >= 0) {
+                        EMIT_ABX(ctx, compiler, OP_GETSHARED, class_reg, si);
+                    } else {
+                        int gi = builtin_get(ctx, module_name);
+                        if (gi >= 0) {
+                            EMIT_ABX(ctx, compiler, OP_GETBUILTIN, class_reg, gi);
+                        }
+                    }
+                }
+            }
+
+            int global_sym = xr_symbol_register_in_table(
+                (XrSymbolTable*)xr_isolate_get_symbol_table(ctx->X), node->super_name);
+            int local_sym = xr_proto_add_symbol(compiler->proto, global_sym);
+            EMIT_ABC(ctx, compiler, OP_GETPROP, class_reg, class_reg, local_sym);
+            super_via_reg = true;
+        } else {
+            // Simple form: extends Class — only local/upvalue parents
+            // require runtime override; same-module names are resolved
+            // by the descriptor itself.
+            XrString *super_name = xr_compile_time_intern(ctx->X, node->super_name, strlen(node->super_name));
+            XrLocalInfo *slocal = compiler_get_local_by_name(compiler, node->super_name);
+
+            if (slocal) {
+                EMIT_ABC(ctx, compiler, OP_MOVE, class_reg, slocal->reg, 0);
+                super_via_reg = true;
+            } else {
+                int upvalue_idx = scope_resolve_upvalue(ctx, compiler, super_name);
+                if (upvalue_idx >= 0) {
+                    emit_abc(compiler->emitter, OP_UPVAL_GET, class_reg, upvalue_idx, 0);
+                    super_via_reg = true;
+                }
+                // Shared/builtin parents: leave class_reg uninitialised
+                // and let descriptor->super_name drive the lookup.
+            }
+        }
+    }
+
+    // 5b. When no runtime super was written, ensure class_reg is a
+    //     non-class sentinel so R[A] does not leak a stale class from
+    //     an earlier instruction into the super-override path.
+    if (!super_via_reg) {
+        EMIT_ABC(ctx, compiler, OP_LOADNULL, class_reg, 0, 0);
+    }
+
+    // 6. Create the class. R[A] is consumed as super-override input and
+    //    then overwritten with the freshly built class.
     EMIT_ABX(ctx, compiler, OP_CLASS_CREATE_FROM_DESCRIPTOR, class_reg, desc_idx);
 
     /*
@@ -726,80 +798,6 @@ static void compile_class_with_descriptor(
     } else {
         // Other non-module top-level: use shared variable
         EMIT_ABX(ctx, compiler, OP_SETSHARED, class_reg, class_global_idx);
-    }
-
-    // 8. Handle inheritance
-    if (node->super_name != NULL) {
-        int super_reg = reg_alloc(ctx, compiler);
-
-        if (node->super_module != NULL) {
-            // Module member access form: extends module.Class
-            // First load module (priority: local variable, then upvalue, finally global)
-            XrString *module_name = xr_compile_time_intern(ctx->X, node->super_module, strlen(node->super_module));
-
-            // Find local variable
-            XrLocalInfo *local = compiler_get_local_by_name(compiler, node->super_module);
-            if (local) {
-                EMIT_ABC(ctx, compiler, OP_MOVE, super_reg, local->reg, 0);
-            } else {
-                // Find upvalue
-                int upvalue_idx = scope_resolve_upvalue(ctx, compiler, module_name);
-                if (upvalue_idx >= 0) {
-                    // Module names are always const, direct UPVAL_GET
-                    emit_abc(compiler->emitter, OP_UPVAL_GET, super_reg, upvalue_idx, 0);
-                } else {
-                    // Fallback: check shared, then predefined globals
-                    int si = shared_get_in_scope(ctx, compiler, module_name);
-                    if (si >= 0) {
-                        EMIT_ABX(ctx, compiler, OP_GETSHARED, super_reg, si);
-                    } else {
-                        int gi = builtin_get(ctx, module_name);
-                        if (gi >= 0) {
-                            EMIT_ABX(ctx, compiler, OP_GETBUILTIN, super_reg, gi);
-                        }
-                    }
-                }
-            }
-
-            // Then get class member (OP_GETPROP uses symbol not constant index)
-            int global_sym = xr_symbol_register_in_table((XrSymbolTable*)xr_isolate_get_symbol_table(ctx->X), node->super_name);
-            int local_sym = xr_proto_add_symbol(compiler->proto, global_sym);
-            EMIT_ABC(ctx, compiler, OP_GETPROP, super_reg, super_reg, local_sym);
-        } else {
-            /*
-             * Simple form: extends Class
-             * Parent may come from import (local/upvalue) or same module definition (global)
-             */
-            XrString *super_name = xr_compile_time_intern(ctx->X, node->super_name, strlen(node->super_name));
-            XrLocalInfo *local = compiler_get_local_by_name(compiler, node->super_name);
-
-            if (local) {
-                // Parent is local variable (from import)
-                EMIT_ABC(ctx, compiler, OP_MOVE, super_reg, local->reg, 0);
-            } else {
-                int upvalue_idx = scope_resolve_upvalue(ctx, compiler, super_name);
-                if (upvalue_idx >= 0) {
-                    // Parent class name is always const, direct UPVAL_GET
-                    emit_abc(compiler->emitter, OP_UPVAL_GET, super_reg, upvalue_idx, 0);
-                } else {
-                    // Parent is shared variable (same module definition)
-                    int si = shared_get_in_scope(ctx, compiler, super_name);
-                    if (si >= 0) {
-                        EMIT_ABX(ctx, compiler, OP_GETSHARED, super_reg, si);
-                    } else {
-                        int gi = builtin_get(ctx, super_name);
-                        if (gi >= 0) {
-                            EMIT_ABX(ctx, compiler, OP_GETBUILTIN, super_reg, gi);
-                        }
-                    }
-                }
-            }
-        }
-
-        // Set inheritance relationship
-        EMIT_ABC(ctx, compiler, OP_INHERIT, class_reg, super_reg, 0);
-
-        reg_free(compiler, super_reg);
     }
 
     // 9. Call static constructor (if any)

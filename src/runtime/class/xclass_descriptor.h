@@ -63,35 +63,35 @@ typedef struct XrClassDescriptor {
     const char *super_name;
     int32_t super_global_index;
     uint32_t flags;
-    
+
     /* ========== Fields ========== */
     XrFieldDescriptorEntry *instance_fields;
     uint32_t instance_field_count;
-    
+
     XrFieldDescriptorEntry *static_fields;
     uint32_t static_field_count;
-    
+
     /* ========== Methods ========== */
     XrMethodDescriptorEntry *instance_methods;
     uint32_t instance_method_count;
-    
+
     XrMethodDescriptorEntry *static_methods;
     uint32_t static_method_count;
-    
+
     /* ========== Interfaces ========== */
     XrInterfaceDescriptorEntry *interfaces;
     uint8_t interface_count;
-    
+
     /* ========== Abstract Methods ========== */
     const char **abstract_method_names;
     uint8_t abstract_method_count;
-    
+
     /* ========== Static Constructor ========== */
     int32_t clinit_proto_index;
-    
+
     /* ========== Struct Native Storage ========== */
     struct XrStructLayout *struct_layout;  // NULL for class, set for struct
-    
+
     /* ========== Metadata ========== */
     uint32_t descriptor_version;
     uint32_t checksum;
@@ -109,8 +109,19 @@ XR_FUNC void xr_class_descriptor_print(const XrClassDescriptor *descriptor, bool
 
 // Forward declarations via xforward_decl.h
 
-XR_FUNC XrClass* xr_class_from_descriptor(XrayIsolate *isolate, const XrClassDescriptor *descriptor, 
+/*
+ * Create an immutable XrClass from a descriptor.
+ *
+ * super_override, if non-NULL, takes precedence over any super information
+ * encoded in the descriptor (super_global_index / super_name). The VM uses
+ * this path to pass a runtime-resolved parent class (for `extends` whose
+ * parent lives in a local / upvalue / imported module member) so that
+ * inheritance is established in a single instruction without a follow-up
+ * OP_INHERIT. When super_override is NULL the function falls back to
+ * descriptor-encoded resolution.
+ */
+XR_FUNC XrClass* xr_class_from_descriptor(XrayIsolate *isolate, const XrClassDescriptor *descriptor,
                                    XrProto *proto, struct XrClosure *cl, XrValue *base,
-                                   XrVMContext *vm_ctx);
+                                   XrVMContext *vm_ctx, XrClass *super_override);
 
 #endif // XCLASS_DESCRIPTOR_H
