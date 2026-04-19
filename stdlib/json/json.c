@@ -21,6 +21,7 @@
 #include <errno.h>
 
 #include "../common_writer.h"
+#include "../common_parser.h"
 #include "../../src/base/xmalloc.h"
 
 /* ========== Runtime Object Headers ========== */
@@ -44,7 +45,11 @@ extern XrValue xr_json_value(XrJson *json);
 
 /* ========== JSON Parser ========== */
 
-#define JSON_MAX_DEPTH 512
+// Defer to the stdlib-wide default (256) set in common_parser.h so JSON,
+// YAML, TOML and XML all refuse the same pathological input depth. The
+// legacy 512 was an outlier from pre-P4 days and made the depth guard
+// effectively twice as deep as every other module.
+#define JSON_MAX_DEPTH XR_STDLIB_MAX_DEPTH
 
 typedef struct {
     XrayIsolate *isolate;

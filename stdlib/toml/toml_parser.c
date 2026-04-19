@@ -112,6 +112,7 @@ void toml_parser_init(TomlParser *parser, XrayIsolate *isolate,
     parser->root = xr_map_new(xr_current_coro(isolate));
     parser->current_table = parser->root;
     parser->current_key_path = xr_array_new(xr_current_coro(isolate));
+    parser->defined_tables = xr_map_new(xr_current_coro(isolate));
 
     if (config) {
         parser->config = *config;
@@ -810,7 +811,55 @@ static void set_nested_value(TomlParser *parser, XrMap *root,
     }
 }
 
+// Join the array-of-XrString keys into a dotted path string using the
+// parser's reusable temp buffer. Returns the NUL-terminated path; the
+// buffer lives until the next buf_reset / ensure_buf_cap call, so the
+// caller must consume it before any other buffer operation.
+static const char* build_table_path(TomlParser *parser, XrArray *keys) {
+    buf_reset(parser);
+    int n = keys->length;
+    for (int i = 0; i < n; i++) {
+        XrValue v = xr_array_get(keys, i);
+        if (!XR_IS_STRING(v)) continue;
+        XrString *s = XR_TO_STRING(v);
+        if (i > 0) buf_append_char(parser, '.');
+        ensure_buf_cap(parser, parser->temp_len + s->length + 1);
+        memcpy(parser->temp_buf + parser->temp_len, s->data, s->length);
+        parser->temp_len += s->length;
+    }
+    ensure_buf_cap(parser, parser->temp_len + 1);
+    parser->temp_buf[parser->temp_len] = '\0';
+    return parser->temp_buf;
+}
+
+// Record a standard-header path into the defined_tables set.
+// Returns true if this was the first time we saw it, false if the
+// header is a duplicate of a previous `[path]` declaration.
+static bool mark_table_defined(TomlParser *parser, XrArray *keys) {
+    const char *path = build_table_path(parser, keys);
+    XrString *pkey = xr_string_intern(parser->isolate, path,
+                                      parser->temp_len, 0);
+    XrValue key = xr_string_value(pkey);
+    if (!XR_IS_NULL(xr_map_get(parser->defined_tables, key, NULL))) {
+        return false;  // already seen
+    }
+    xr_map_set(parser->defined_tables, key, xr_bool(true));
+    return true;
+}
+
 static XrMap* get_or_create_table(TomlParser *parser, XrArray *keys) {
+    // Duplicate-header detection (TOML spec §Table): two `[same.path]`
+    // headers in the same document are an error. Dotted-key implicit
+    // tables are intentionally NOT recorded in defined_tables, so
+    // `a.b = 1` followed by `[a]` remains legal.
+    if (!mark_table_defined(parser, keys)) {
+        add_error(parser, TOML_ERROR_DUPLICATE_KEY,
+                  "Table already defined");
+        // Return the existing leaf so subsequent key/value lines still
+        // land in a sensible place and the rest of the document keeps
+        // parsing; the error has already been recorded.
+    }
+
     XrMap *current = parser->root;
     int count = keys->length;
 

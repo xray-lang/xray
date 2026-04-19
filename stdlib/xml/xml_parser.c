@@ -223,10 +223,18 @@ static int decode_entity(const char *s, size_t len, char *out, int *out_len) {
     return 0;
 }
 
-// In-place entity decoding for a buffer
-static void decode_entities_inplace(char *buf, size_t *len) {
+// In-place entity decoding for a buffer.
+// When `parser->config.validate_entities` is true, any `&name;` form
+// whose name is neither in the NAMED_ENTITIES table nor a valid
+// numeric reference is reported via add_error(INVALID_ENTITY) and left
+// in the output verbatim so the caller can still inspect the offending
+// bytes. Passing parser == NULL preserves the legacy best-effort
+// behaviour used by tests and internal callers that have no XmlParser
+// context.
+static void decode_entities_inplace(XmlParser *parser, char *buf, size_t *len) {
     size_t src_len = *len;
     size_t r = 0, w = 0;
+    const bool strict = parser && parser->config.validate_entities;
 
     while (r < src_len) {
         if (buf[r] == '&') {
@@ -235,12 +243,26 @@ static void decode_entities_inplace(char *buf, size_t *len) {
             if (j < src_len && buf[j] == ';') {
                 char decoded[4];
                 int decoded_len;
-                int consumed = decode_entity(buf + r + 1, j - r - 1, decoded, &decoded_len);
+                int consumed = decode_entity(buf + r + 1, j - r - 1,
+                                             decoded, &decoded_len);
                 if (consumed > 0 && decoded_len > 0) {
                     memcpy(buf + w, decoded, decoded_len);
                     w += decoded_len;
                     r = j + 1;
                     continue;
+                }
+                // Name form `&xxx;` but not recognised. Surface the
+                // diagnostic in strict mode; either way the raw
+                // sequence is copied through so downstream code does
+                // not silently mutate.
+                if (strict) {
+                    char msg[96];
+                    size_t name_len = j - (r + 1);
+                    if (name_len > 64) name_len = 64;
+                    snprintf(msg, sizeof(msg),
+                             "Unknown entity reference '&%.*s;'",
+                             (int)name_len, buf + r + 1);
+                    add_error(parser, XML_ERROR_INVALID_ENTITY, msg);
                 }
             }
         }
@@ -254,7 +276,7 @@ static void decode_entities_inplace(char *buf, size_t *len) {
 static void flush_text(XmlParser *parser) {
     if (parser->text_len == 0) return;
 
-    decode_entities_inplace(parser->text_buf, &parser->text_len);
+    decode_entities_inplace(parser, parser->text_buf, &parser->text_len);
 
     if (!parser->config.preserve_whitespace) {
         bool all_ws = true;
@@ -282,7 +304,7 @@ static void flush_attr(XmlParser *parser) {
     size_t val_len = parser->attr_value_len;
 
     if (val_len > 0 && parser->attr_value_buf) {
-        decode_entities_inplace(parser->attr_value_buf, &val_len);
+        decode_entities_inplace(parser, parser->attr_value_buf, &val_len);
     }
 
     xml_node_set_attr(parser->current,

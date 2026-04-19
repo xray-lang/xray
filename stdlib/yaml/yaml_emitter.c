@@ -15,6 +15,7 @@
 #include "../../src/runtime/symbol/xsymbol_table.h"
 #include "../../src/base/xmalloc.h"
 #include "../common_writer.h"
+#include "../common_parser.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -24,9 +25,22 @@
 // ========== Serialization Configuration ==========
 
 typedef struct {
-    int indent;           // Indentation spaces, default 2
-    int flow_level;       // Depth > flow_level uses flow style, default -1 (disabled)
-    int line_width;       // Line width limit, default 80
+    int indent;       // Indentation spaces, default 2
+    int flow_level;   // Depth > flow_level uses flow style, default -1 (disabled)
+
+    // Intended maximum output line width in characters (default 80).
+    //
+    // NOTE: currently reserved — the emitter does not yet wrap flow
+    // sequences / mappings nor fold long plain scalars. The parameter
+    // is kept in the API and YamlEmitConfig struct so existing callers
+    // continue to compile, and so we have a stable place to hook a
+    // future implementation (track chars-since-last-newline in
+    // `current_line_len`, then emit a newline + continuation indent
+    // once the running count passes `line_width`).
+    //
+    // If you are relying on wrap behaviour, do not rely on this field
+    // today; file an issue so we can prioritise the implementation.
+    int line_width;
 } YamlEmitConfig;
 
 // ========== Output Buffer ==========
@@ -431,6 +445,18 @@ static void emit_json(YamlEmitter *e, XrJson *json, int level, bool flow_mode) {
 // ========== Value Output ==========
 
 static void emit_value(YamlEmitter *e, XrValue val, int level, bool flow_mode) {
+    // Cycle / pathological-depth guard. YAML's emitter does not (yet)
+    // track anchors / aliases for graph-shaped inputs, so a user Map
+    // that references itself would otherwise recurse through
+    // emit_map -> emit_value -> emit_map ... until the C stack
+    // overflows. Instead emit a null at the cut-off: the output is
+    // truncated but the process stays alive and the error is locally
+    // observable. XR_STDLIB_MAX_DEPTH matches the parser default so a
+    // document we just emitted is always re-parseable.
+    if (level >= XR_STDLIB_MAX_DEPTH) {
+        emit_str(e, "null");
+        return;
+    }
     if (XR_IS_NULL(val)) {
         emit_str(e, "null");
     } else if (XR_IS_BOOL(val)) {
