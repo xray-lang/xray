@@ -28,6 +28,7 @@
 #include "../../src/base/xdefs.h"
 #include "../../src/coro/xchannel.h"
 #include "../../src/module/xmodule.h"
+#include "../net/tls.h"
 
 #include <stdint.h>
 #include <stdbool.h>
@@ -146,6 +147,28 @@ typedef struct XrCluster {
 
     // LAN auto-discovery (NULL if not enabled)
     XrClusterDiscovery *discovery;
+
+    /*
+     * Optional inter-node TLS wrap (see xr_cluster_start_ex).
+     *
+     *   tls_enabled     — flip to turn on TLS for outgoing connections and,
+     *                     when the server accept path is wired up, to wrap
+     *                     incoming fds as well.
+     *   tls_client_ctx  — used by xr_cluster_node_connect when TLS is on.
+     *                     Built at start_ex time with caller-supplied CA
+     *                     bundle, optional client cert/key (for mTLS), and
+     *                     optional verify_peer toggle.
+     *   tls_server_ctx  — used by the (currently dormant) server accept
+     *                     handler. NULL if the operator did not supply a
+     *                     cert+key pair; accept loops should refuse TLS
+     *                     traffic in that case.
+     *
+     * These fields stay NULL/false in the legacy xr_cluster_start path, so
+     * plain-TCP clusters see no behavioural change.
+     */
+    bool                tls_enabled;
+    XrTlsContext       *tls_client_ctx;
+    XrTlsContext       *tls_server_ctx;
 } XrCluster;
 
 /* ========== Cluster Lifecycle API ========== */
@@ -154,6 +177,51 @@ typedef struct XrCluster {
 // config contains: name, port, secret
 XR_FUNC int xr_cluster_start(struct XrayIsolate *X, const char *name,
                       uint16_t port, const char *secret);
+
+/*
+ * TLS options for xr_cluster_start_ex.
+ *
+ *   enabled          — master switch. When false the other fields are
+ *                      ignored and the cluster reverts to plain TCP.
+ *
+ *   ca_file          — path to a PEM bundle used to verify peer
+ *                      certificates. Pass NULL to fall back on the
+ *                      system trust store (TLS contexts are created
+ *                      with SSL_CTX_set_default_verify_paths by
+ *                      default). If the path ends in '/' it is
+ *                      interpreted as a directory (OpenSSL CApath).
+ *
+ *   cert_file,
+ *   key_file         — optional server certificate and private key in
+ *                      PEM format. Supplying both enables mTLS /
+ *                      inbound TLS accept. Leaving them NULL builds a
+ *                      client-only cluster (still useful: outgoing
+ *                      join traffic is encrypted).
+ *
+ *   insecure         — disable peer certificate verification. Set true
+ *                      only for development / self-signed sandboxes.
+ *                      This is a loaded footgun in production and
+ *                      should be logged by callers.
+ *
+ * All string pointers are borrowed for the duration of the call; the
+ * contents are copied into OpenSSL contexts that live until
+ * xr_cluster_stop.
+ */
+typedef struct XrClusterTlsOptions {
+    bool        enabled;
+    const char *ca_file;
+    const char *cert_file;
+    const char *key_file;
+    bool        insecure;
+} XrClusterTlsOptions;
+
+/*
+ * Start a cluster with explicit TLS options. Passing `tls == NULL` is
+ * equivalent to xr_cluster_start (plain TCP, legacy behaviour).
+ */
+XR_FUNC int xr_cluster_start_ex(struct XrayIsolate *X, const char *name,
+                                uint16_t port, const char *secret,
+                                const XrClusterTlsOptions *tls);
 
 // Connect to a remote node (host:port)
 XR_FUNC int xr_cluster_join(XrCluster *c, const char *host, uint16_t port);

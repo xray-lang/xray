@@ -56,27 +56,44 @@ XrNetpoll* xr_io_get_netpoll(void);
 
 /*
  * Create TCP connection (coroutine-friendly)
- * 
+ *
  * host: Hostname or IP
  * port: Port number
  * timeout_ms: Connection timeout (milliseconds)
- * 
+ *
  * Returns: Connection context, NULL on failure
- * 
+ *
  * Note: This function auto-yields until connection completes or times out
  */
 XrIOConn* xr_io_connect(const char *host, int port, int timeout_ms);
 
 /*
  * Create TLS connection (coroutine-friendly)
- * 
+ *
  * host: Hostname (used for SNI)
  * port: Port number
  * timeout_ms: Connection timeout
- * 
+ *
  * Returns: Connection context, NULL on failure
  */
 XrIOConn* xr_io_connect_tls(const char *host, int port, int timeout_ms);
+
+/*
+ * Create TLS connection using a caller-supplied TLS context.
+ *
+ * Unlike xr_io_connect_tls which binds the connection to the global
+ * g_io.tls_ctx (system-default trust store), this variant lets modules
+ * pin a per-service context — e.g. a cluster node with a private CA or
+ * mTLS client certificate configured on `ctx`.
+ *
+ * Ownership of `ctx` stays with the caller. The context must outlive
+ * every returned XrIOConn; freeing it earlier is use-after-free.
+ *
+ * Returns: coroutine-ready XrIOConn on success, NULL on connect /
+ * handshake / verify failure.
+ */
+XrIOConn* xr_io_connect_tls_with_ctx(XrTlsContext *ctx, const char *host,
+                                      int port, int timeout_ms);
 
 // Close connection
 void xr_io_close(XrIOConn *conn);
@@ -85,13 +102,13 @@ void xr_io_close(XrIOConn *conn);
 
 /*
  * Read data (coroutine-friendly)
- * 
+ *
  * conn: Connection context
  * buf: Buffer
  * len: Expected read length
- * 
+ *
  * Returns: Actual bytes read, 0=closed, -1=error
- * 
+ *
  * Note: This function auto-yields until data available or timeout
  */
 int xr_io_read(XrIOConn *conn, void *buf, size_t len);
@@ -104,11 +121,11 @@ int xr_io_read_full(XrIOConn *conn, void *buf, size_t len);
 
 /*
  * Write data (coroutine-friendly)
- * 
+ *
  * conn: Connection context
  * buf: Data
  * len: Length
- * 
+ *
  * Returns: Actual bytes written, -1=error
  */
 int xr_io_write(XrIOConn *conn, const void *buf, size_t len);
@@ -134,22 +151,22 @@ int xr_io_writev(XrIOConn *conn, const struct iovec *iov, int iovcnt);
 
 /*
  * Create listening socket
- * 
+ *
  * addr: Bind address (NULL or "0.0.0.0" for all interfaces)
  * port: Port number
  * backlog: Connection queue length
- * 
+ *
  * Returns: Listen fd, -1 on failure
  */
 int xr_io_listen(const char *addr, int port, int backlog);
 
 /*
  * Accept connection (coroutine-friendly)
- * 
+ *
  * listen_fd: Listening socket
- * 
+ *
  * Returns: New connection context, NULL on failure
- * 
+ *
  * Note: This function auto-yields until new connection arrives
  */
 XrIOConn* xr_io_accept(int listen_fd);

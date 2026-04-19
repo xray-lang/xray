@@ -64,6 +64,68 @@ static void *cluster_heartbeat_thread(void *arg) {
 
 int xr_cluster_start(XrayIsolate *X, const char *name,
                       uint16_t port, const char *secret) {
+    // Legacy entry point: plain TCP, no TLS. Forwards to the extended
+    // implementation so both paths share one code flow.
+    return xr_cluster_start_ex(X, name, port, secret, NULL);
+}
+
+/*
+ * Build the per-cluster TLS contexts from XrClusterTlsOptions.
+ * Returns 0 on success. On failure any partially-allocated contexts are
+ * freed and the corresponding XrCluster fields are left NULL.
+ *
+ * We keep the helper private to cluster.c because the resulting contexts
+ * are owned by XrCluster; exposing creation would invite double-free
+ * foot-guns from embedders. Callers get policy via XrClusterTlsOptions
+ * instead of raw SSL_CTX * handles.
+ */
+static int build_cluster_tls(XrCluster *c, const XrClusterTlsOptions *opts) {
+    // Client context covers outgoing xr_cluster_join / reconnect traffic.
+    XrTlsContext *client_ctx = xr_tls_context_new_client();
+    if (!client_ctx) return -1;
+
+    if (opts->ca_file) {
+        if (xr_tls_context_load_ca(client_ctx, opts->ca_file) != 0) {
+            xr_tls_context_free(client_ctx);
+            return -1;
+        }
+    }
+    if (opts->insecure) {
+        // Disable peer verification. Noisy on purpose — a failing mutual
+        // auth rollout should be visible in the startup logs of every
+        // affected node rather than silently downgrade.
+        xr_tls_context_set_verify(client_ctx, false);
+    }
+    c->tls_client_ctx = client_ctx;
+
+    // Server context is optional: only builds when cert+key supplied.
+    // When absent, the (dormant) accept path should refuse TLS traffic
+    // rather than silently accept plaintext.
+    if (opts->cert_file && opts->key_file) {
+        XrTlsContext *server_ctx =
+            xr_tls_context_new_server(opts->cert_file, opts->key_file);
+        if (!server_ctx) {
+            xr_tls_context_free(client_ctx);
+            c->tls_client_ctx = NULL;
+            return -1;
+        }
+        // A server context that also verifies the peer cert yields
+        // mutual TLS. Cluster's threat model makes peer-as-attacker
+        // plausible (one compromised node), so default to verify on.
+        if (!opts->insecure && opts->ca_file) {
+            xr_tls_context_load_ca(server_ctx, opts->ca_file);
+            xr_tls_context_set_verify(server_ctx, true);
+        }
+        c->tls_server_ctx = server_ctx;
+    }
+
+    c->tls_enabled = true;
+    return 0;
+}
+
+int xr_cluster_start_ex(XrayIsolate *X, const char *name,
+                         uint16_t port, const char *secret,
+                         const XrClusterTlsOptions *tls) {
     if (X->cluster) return -1; // already running
 
     XrCluster *c = (XrCluster *)xr_calloc(1, sizeof(XrCluster));
@@ -76,6 +138,18 @@ int xr_cluster_start(XrayIsolate *X, const char *name,
         strncpy(c->secret, secret, sizeof(c->secret) - 1);
     }
     c->isolate = X;
+
+    // TLS bootstrap — must run before xr_io_listen so the accept loop (when
+    // it is wired up) sees a ready server_ctx. Failures here are fatal to
+    // startup: operators who asked for TLS explicitly would rather see a
+    // loud error than silently fall back to plaintext.
+    if (tls && tls->enabled) {
+        if (build_cluster_tls(c, tls) != 0) {
+            xr_secure_wipe(c->secret, sizeof(c->secret));
+            xr_free(c);
+            return -1;
+        }
+    }
 
     xr_spinlock_init(&c->nodes_lock);
     xr_spinlock_init(&c->channels_lock);
@@ -100,6 +174,11 @@ int xr_cluster_start(XrayIsolate *X, const char *name,
     // Start listening
     c->listen_fd = xr_io_listen(NULL, port, 128);
     if (c->listen_fd < 0) {
+        // Release TLS contexts that build_cluster_tls may have created
+        // before the listen failure so we do not leak OpenSSL handles.
+        if (c->tls_client_ctx) xr_tls_context_free(c->tls_client_ctx);
+        if (c->tls_server_ctx) xr_tls_context_free(c->tls_server_ctx);
+        xr_secure_wipe(c->secret, sizeof(c->secret));
         xr_free(c);
         return -1;
     }
@@ -221,6 +300,19 @@ void xr_cluster_stop(XrCluster *c) {
     // Free dynamic tombstones
     xr_free(c->tombstones);
     c->tombstones = NULL;
+
+    // Release TLS contexts built in xr_cluster_start_ex. Freeing happens
+    // after xr_cluster_node_free loops so no node writer coroutine can
+    // still be dereferencing conn->tls which points into these contexts.
+    if (c->tls_client_ctx) {
+        xr_tls_context_free(c->tls_client_ctx);
+        c->tls_client_ctx = NULL;
+    }
+    if (c->tls_server_ctx) {
+        xr_tls_context_free(c->tls_server_ctx);
+        c->tls_server_ctx = NULL;
+    }
+    c->tls_enabled = false;
 
     // Scrub the shared secret before freeing the struct.
     xr_secure_wipe(c->secret, sizeof(c->secret));
@@ -497,7 +589,20 @@ void xr_cluster_remove_all_subscribers_for_node(XrCluster *c, XrClusterNode *nod
 
 /* ========== xray Function Bindings ========== */
 
-// cluster.start(config) - config is Json with {name, port, secret}
+// cluster.start(config) - config is Json with {name, port, secret, tls?}
+//
+// The optional `tls` sub-object maps 1:1 onto XrClusterTlsOptions:
+//     tls: {
+//         enabled: true,
+//         caFile:   "/etc/xray/ca.pem",
+//         certFile: "/etc/xray/node.crt",
+//         keyFile:  "/etc/xray/node.key",
+//         insecure: false
+//     }
+// Missing keys fall back to the struct's zero-initialised defaults (off /
+// NULL). The strings stay borrowed from the Json for the duration of this
+// call — cluster_start_ex copies them into OpenSSL contexts before it
+// returns, so no lifetime surprise.
 static XrValue cluster_start(XrayIsolate *X, XrValue *args, int argc) {
     if (argc < 1 || !XR_IS_JSON(args[0])) return xr_null();
 
@@ -515,7 +620,39 @@ static XrValue cluster_start(XrayIsolate *X, XrValue *args, int argc) {
         secret = XR_TO_STRING(v_secret)->data;
     }
 
-    int rc = xr_cluster_start(X, name->data, port, secret);
+    // Optional TLS block. Absent or non-object → plain TCP (legacy path).
+    XrClusterTlsOptions tls_opts;
+    memset(&tls_opts, 0, sizeof(tls_opts));
+    const XrClusterTlsOptions *tls_ptr = NULL;
+
+    XrValue v_tls = xr_json_get_by_key(X, config, "tls");
+    if (XR_IS_JSON(v_tls)) {
+        XrJson *tls_cfg = (XrJson *)XR_TO_PTR(v_tls);
+
+        XrValue v_enabled = xr_json_get_by_key(X, tls_cfg, "enabled");
+        if (XR_IS_BOOL(v_enabled)) {
+            tls_opts.enabled = XR_TO_BOOL(v_enabled);
+        } else {
+            // Treat a bare `tls: {...}` with no explicit `enabled` as on;
+            // operators who went to the trouble of populating the block
+            // almost always mean "use it".
+            tls_opts.enabled = true;
+        }
+
+        XrValue v_ca   = xr_json_get_by_key(X, tls_cfg, "caFile");
+        XrValue v_cert = xr_json_get_by_key(X, tls_cfg, "certFile");
+        XrValue v_key  = xr_json_get_by_key(X, tls_cfg, "keyFile");
+        XrValue v_ins  = xr_json_get_by_key(X, tls_cfg, "insecure");
+
+        if (XR_IS_STRING(v_ca))   tls_opts.ca_file   = XR_TO_STRING(v_ca)->data;
+        if (XR_IS_STRING(v_cert)) tls_opts.cert_file = XR_TO_STRING(v_cert)->data;
+        if (XR_IS_STRING(v_key))  tls_opts.key_file  = XR_TO_STRING(v_key)->data;
+        if (XR_IS_BOOL(v_ins))    tls_opts.insecure  = XR_TO_BOOL(v_ins);
+
+        tls_ptr = &tls_opts;
+    }
+
+    int rc = xr_cluster_start_ex(X, name->data, port, secret, tls_ptr);
     return xr_bool(rc == 0);
 }
 

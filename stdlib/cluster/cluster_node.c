@@ -552,8 +552,19 @@ int xr_cluster_node_connect(XrCluster *cluster, XrClusterNode *node) {
 
     node->state = XR_NODE_CONNECTING;
 
-    // TCP connect (coroutine-friendly)
-    node->conn = xr_io_connect(node->host, node->port, 10000);
+    // Connect (coroutine-friendly). When TLS is enabled on the cluster we
+    // use the per-cluster client context so the node validates the peer
+    // against the operator-supplied CA instead of the global system trust
+    // store — this also makes pinned-CA + mTLS deployments possible.
+    // Falls back to the legacy plain-TCP path when TLS is disabled so no
+    // existing deployments are disrupted.
+    if (cluster->tls_enabled && cluster->tls_client_ctx) {
+        node->conn = xr_io_connect_tls_with_ctx(cluster->tls_client_ctx,
+                                                node->host, node->port,
+                                                10000);
+    } else {
+        node->conn = xr_io_connect(node->host, node->port, 10000);
+    }
     if (!node->conn) {
         node->state = XR_NODE_IDLE;
         return -1;

@@ -56,6 +56,21 @@ void xr_tls_context_free(XrTlsContext *ctx);
 // Set whether to verify certificates (client)
 void xr_tls_context_set_verify(XrTlsContext *ctx, bool verify);
 
+/*
+ * Load a PEM CA bundle used to verify the peer's certificate chain.
+ *
+ * ca_file: path to a PEM file. If the path points to a directory, OpenSSL
+ *          is asked to use it as CApath instead. Passing NULL resets the
+ *          context to the system default verify paths.
+ *
+ * Returns 0 on success, -1 on error (invalid ctx, unreadable file, etc.).
+ *
+ * Typical use: per-cluster / per-service root of trust, e.g. a private CA
+ * issued to the cluster nodes. Without this call the context relies on
+ * SSL_CTX_set_default_verify_paths() (system trust store).
+ */
+int xr_tls_context_load_ca(XrTlsContext *ctx, const char *ca_file);
+
 /* ========== TLS Connection Management ========== */
 
 // Create a TLS connection (wrap an already connected socket)
