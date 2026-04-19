@@ -76,6 +76,59 @@ XR_FUNC void xir_run_pipeline(XirFunc *func, XirOptLevel opt);
 // Extended pipeline with caller proto (enables auto-inlining at -O2)
 XR_FUNC void xir_run_pipeline_ex(XirFunc *func, XirOptLevel opt, XrProto *proto);
 
+/* ========== Declarative Pipeline Driver ==========
+ *
+ * xir_run_fixedpoint runs a sequence of passes repeatedly until no
+ * more IR changes are observed (cheap FNV-1a checksum over every
+ * block's instruction count, terminator and vreg count) or the
+ * caller-supplied round cap is hit.  Passes are described by
+ * XirPassDesc records so callers do not assemble a hand-written
+ * chain of XIR_RUN_PASS macros anymore.
+ *
+ * The driver treats each pass as opaque and invokes
+ * XIR_RESET_ANALYSIS internally, matching the legacy macro behaviour.
+ * Pass names are purely for logging (jit->verbose).
+ */
+
+typedef void (*XirPassFnVoid)(XirFunc *func);
+typedef void (*XirPassFnProto)(XirFunc *func, XrProto *proto);
+
+/* Flags describing per-pass properties.  Currently advisory only;
+ * used to drive logging and to pick the right verify macro
+ * equivalent.  Future: fine-grained cache invalidation. */
+#define XIR_PASS_NONE          0u
+#define XIR_PASS_VERIFY_SE     (1u << 0)   // DCE/CSE/GVN/copy_prop: SE count must not drop
+#define XIR_PASS_NEEDS_PROTO   (1u << 1)   // pass takes (func, proto)
+#define XIR_PASS_SKIP_CFG_VERIFY (1u << 2) // builder may leave pred lists dirty pre-CFG
+#define XIR_PASS_NO_RESET      (1u << 3)   // pass does not touch IR (purely analysis)
+
+typedef struct XirPassDesc {
+    const char    *name;
+    union {
+        XirPassFnVoid  v;      // used when !NEEDS_PROTO
+        XirPassFnProto p;      // used when NEEDS_PROTO
+    } fn;
+    uint32_t       flags;
+} XirPassDesc;
+
+typedef struct XirPipelineStats {
+    uint32_t rounds_run;          // number of complete sweeps performed
+    uint32_t invocations;         // sum of passes executed across all rounds
+    uint32_t converged;           // non-zero if driver stopped on convergence
+} XirPipelineStats;
+
+/*
+ * Run |passes| to a fixed-point on |func|, at most |max_rounds|
+ * sweeps.  Returns per-run statistics so callers / tests can reason
+ * about convergence behaviour.  Proto is optional; passes with
+ * XIR_PASS_NEEDS_PROTO receive it, others ignore it.
+ */
+XR_FUNC XirPipelineStats xir_run_fixedpoint(XirFunc *func,
+                                             XrProto *proto,
+                                             const XirPassDesc *passes,
+                                             uint32_t npass,
+                                             uint32_t max_rounds);
+
 /* ========== Individual Pass API ========== */
 
 // Dead Code Elimination: remove instructions whose results are unused
