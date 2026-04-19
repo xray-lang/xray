@@ -15,6 +15,7 @@
 #include "cluster.h"
 #include "cluster_channel.h"
 #include "cluster_serial.h"
+#include "../crypto/crypto.h"  // xr_secure_wipe
 #include "../net/io.h"
 #include "../../src/runtime/xisolate_internal.h"
 #include "../../src/runtime/object/xstring.h"
@@ -105,7 +106,7 @@ int xr_cluster_start(XrayIsolate *X, const char *name,
 
     atomic_store(&c->running, true);
     X->cluster = c;
-    xr_cluster_channel_install_hooks();
+    xr_cluster_channel_install_hooks(X);
 
     // Start heartbeat thread
     if (pthread_create(&c->heartbeat_thread, NULL, cluster_heartbeat_thread, c) == 0) {
@@ -129,8 +130,8 @@ void xr_cluster_stop(XrCluster *c) {
         c->heartbeat_thread_started = false;
     }
 
-    // Uninstall distributed channel hooks
-    xr_cluster_channel_uninstall_hooks();
+    // Uninstall distributed channel hooks (per-isolate)
+    xr_cluster_channel_uninstall_hooks(c->isolate);
 
     // Close all node connections
     xr_spinlock_lock(&c->nodes_lock);
@@ -220,6 +221,9 @@ void xr_cluster_stop(XrCluster *c) {
     // Free dynamic tombstones
     free(c->tombstones);
     c->tombstones = NULL;
+
+    // Scrub the shared secret before freeing the struct.
+    xr_secure_wipe(c->secret, sizeof(c->secret));
 
     if (c->isolate) c->isolate->cluster = NULL;
     free(c);

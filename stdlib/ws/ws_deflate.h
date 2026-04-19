@@ -23,7 +23,7 @@
 /*
  * Compress payload for permessage-deflate.
  * Uses raw deflate + Z_SYNC_FLUSH, strips trailing 0x00 0x00 0xff 0xff.
- * Caller must free(*out) when done.
+ * Caller must xr_free(*out) when done.
  * Returns 0 on success, -1 on error.
  */
 int xr_ws_deflate_compress(const uint8_t *in, size_t in_len,
@@ -31,11 +31,17 @@ int xr_ws_deflate_compress(const uint8_t *in, size_t in_len,
 
 /*
  * Decompress permessage-deflate payload.
+ *
+ * max_out: hard upper bound on decompressed size (zip-bomb guard).
+ *          If decompression would exceed this, returns -1.
+ *          Pass 0 for no bound (not recommended on untrusted input).
+ *
  * Appends 0x00 0x00 0xff 0xff trailer before inflating.
- * Caller must free(*out) when done.
- * Returns 0 on success, -1 on error.
+ * Caller must xr_free(*out) when done.
+ * Returns 0 on success, -1 on error or bomb-limit exceeded.
  */
 int xr_ws_deflate_decompress(const uint8_t *in, size_t in_len,
+                             size_t max_out,
                              uint8_t **out, size_t *out_len);
 
 #endif // XR_WS_DEFLATE_H

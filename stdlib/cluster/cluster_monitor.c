@@ -61,24 +61,43 @@ XrChannel *xr_cluster_monitor_node(XrayIsolate *X, const char *node_name) {
 void xr_cluster_fire_monitors(XrCluster *c, const char *node_name) {
     if (!c || !node_name) return;
 
+    /*
+     * Collect matching notify_ch pointers under the lock, deliver outside.
+     * Rationale: xr_channel_try_send wakes waiters that may run user
+     * callbacks (e.g. a supervisor that calls cluster.monitor on another
+     * node), which would recursively grab monitors_lock.
+     *
+     * 64 notifications per disconnect is way more than any realistic
+     * monitor set; overflow is dropped, matching the at-most-once spirit.
+     */
+    #define XR_MON_FIRE_MAX 64
+    struct XrChannel *targets[XR_MON_FIRE_MAX];
+    int target_count = 0;
+
     xr_spinlock_lock(&c->monitors_lock);
     XrNodeMonitor *m = c->monitors;
-    while (m) {
+    while (m && target_count < XR_MON_FIRE_MAX) {
         // Match specific name or wildcard "*"
         if (strcmp(m->node_name, "*") == 0 ||
             strcmp(m->node_name, node_name) == 0) {
             if (m->notify_ch && !xr_channel_is_closed(m->notify_ch)) {
-                // Send node name as string value
-                XrString *str = xr_string_intern(c->isolate, node_name,
-                    (uint32_t)strlen(node_name), 0);
-                if (str) {
-                    xr_channel_try_send(m->notify_ch, xr_string_value(str));
-                }
+                targets[target_count++] = m->notify_ch;
             }
         }
         m = m->next;
     }
     xr_spinlock_unlock(&c->monitors_lock);
+
+    // Intern the node_name once, reuse across deliveries
+    XrString *str = xr_string_intern(c->isolate, node_name,
+                                     (uint32_t)strlen(node_name), 0);
+    if (!str) return;
+    XrValue name_val = xr_string_value(str);
+
+    for (int i = 0; i < target_count; i++) {
+        xr_channel_try_send(targets[i], name_val);
+    }
+    #undef XR_MON_FIRE_MAX
 }
 
 /* ========== Remote Coroutine Monitor ========== */

@@ -432,7 +432,7 @@ void xr_sha512(const uint8_t *data, size_t len, uint8_t digest[64]) {
 
 /* ========== Secure Memory Wipe ========== */
 
-static void secure_wipe(void *ptr, size_t len) {
+void xr_secure_wipe(void *ptr, size_t len) {
 #if defined(__APPLE__)
     memset_s(ptr, len, 0, len);
 #elif defined(__GLIBC__)
@@ -492,11 +492,11 @@ static void hmac_compute(HashFn hash, int block_size, int digest_size,
     memcpy(outer_buf + block_size, inner, digest_size);
     hash(outer_buf, outer_len, digest);
 
-    secure_wipe(k, sizeof(k));
-    secure_wipe(ipad, sizeof(ipad));
-    secure_wipe(opad, sizeof(opad));
-    secure_wipe(inner, sizeof(inner));
-    secure_wipe(outer_buf, sizeof(outer_buf));
+    xr_secure_wipe(k, sizeof(k));
+    xr_secure_wipe(ipad, sizeof(ipad));
+    xr_secure_wipe(opad, sizeof(opad));
+    xr_secure_wipe(inner, sizeof(inner));
+    xr_secure_wipe(outer_buf, sizeof(outer_buf));
 }
 
 static void hash_md5_wrapper(const uint8_t *data, size_t len, uint8_t *digest) {
@@ -973,8 +973,8 @@ static XrValue crypto_encrypt(XrayIsolate *isolate, XrValue *args, int nargs) {
 
     XrValue result = xr_string_value(xr_string_new(isolate, hex, (uint32_t)hex_len));
 
-    secure_wipe(aes_key, sizeof(aes_key));
-    secure_wipe(&ctx, sizeof(ctx));
+    xr_secure_wipe(aes_key, sizeof(aes_key));
+    xr_secure_wipe(&ctx, sizeof(ctx));
     if (padded != stack_plain) free(padded);
     if (cipher != stack_cipher) free(cipher);
     if (hex != stack_hex) free(hex);
@@ -1042,8 +1042,8 @@ static XrValue crypto_decrypt(XrayIsolate *isolate, XrValue *args, int nargs) {
         bad |= (uint8_t)((~cmp) & (b ^ pad));
     }
     if (bad) {
-        secure_wipe(aes_key, sizeof(aes_key));
-        secure_wipe(&ctx, sizeof(ctx));
+        xr_secure_wipe(aes_key, sizeof(aes_key));
+        xr_secure_wipe(&ctx, sizeof(ctx));
         if (raw != stack_raw) free(raw);
         if (plain != stack_plain) free(plain);
         return xr_null();
@@ -1052,8 +1052,8 @@ static XrValue crypto_decrypt(XrayIsolate *isolate, XrValue *args, int nargs) {
 
     XrValue result = xr_string_value(xr_string_new(isolate, (const char*)plain, (uint32_t)plain_len));
 
-    secure_wipe(aes_key, sizeof(aes_key));
-    secure_wipe(&ctx, sizeof(ctx));
+    xr_secure_wipe(aes_key, sizeof(aes_key));
+    xr_secure_wipe(&ctx, sizeof(ctx));
     if (raw != stack_raw) free(raw);
     if (plain != stack_plain) free(plain);
     return result;
@@ -1123,14 +1123,14 @@ extern XrValue xr_value_from_cfunction(XrCFunction *cfunc);
 XrModule* xr_load_module_crypto(XrayIsolate *isolate) {
     XrModule *mod = xr_module_create_native(isolate, "crypto");
     if (!mod) return NULL;
-    
+
     #define EXPORT_CFUNC(name_str, func_ptr) \
         do { \
             XrCFunction *cfunc = xr_vm_cfunction_new(isolate, func_ptr, name_str); \
             XrValue fn_val = xr_value_from_cfunction(cfunc); \
             xr_module_add_export(isolate, mod, name_str, fn_val); \
         } while(0)
-    
+
     EXPORT_CFUNC("md5", crypto_md5);
     EXPORT_CFUNC("sha1", crypto_sha1);
     EXPORT_CFUNC("sha256", crypto_sha256);
@@ -1141,9 +1141,9 @@ XrModule* xr_load_module_crypto(XrayIsolate *isolate) {
     EXPORT_CFUNC("encrypt", crypto_encrypt);
     EXPORT_CFUNC("decrypt", crypto_decrypt);
     EXPORT_CFUNC("timingSafeEqual", crypto_timing_safe_equal);
-    
+
     #undef EXPORT_CFUNC
-    
+
     mod->loaded = true;
     return mod;
 }
