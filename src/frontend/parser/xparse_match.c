@@ -54,7 +54,7 @@ static AstNode *parse_pattern(Parser *parser) {
     // Check if multi-value pattern
     if (xr_parser_check(parser, TK_COMMA)) {
         // Multi-value pattern: 1, 2, 3
-        AstNode **patterns = (AstNode **)xr_malloc(sizeof(AstNode *) * 16);
+        AstNode **patterns = (AstNode **)ast_alloc_array(parser->X, sizeof(AstNode *), 16);
         int count = 0;
         int capacity = 16;
 
@@ -64,9 +64,11 @@ static AstNode *parse_pattern(Parser *parser) {
         // Subsequent patterns
         while (xr_parser_match(parser, TK_COMMA) && !xr_parser_check(parser, TK_ARROW)) {
             if (count >= capacity) {
+                int old_capacity = capacity;
                 capacity *= 2;
-                AstNode ** _new_patterns = (AstNode **)xr_realloc(patterns, sizeof(AstNode *) * capacity);
-                if (!_new_patterns) return NULL;
+                AstNode **_new_patterns = (AstNode **)ast_alloc_array(
+                    parser->X, sizeof(AstNode *), (size_t)capacity);
+                if (old_capacity > 0 && patterns) memcpy(_new_patterns, patterns, sizeof(AstNode *) * (size_t)old_capacity);
                 patterns = _new_patterns;
 
             }
@@ -163,16 +165,18 @@ AstNode *xr_parse_match_expr(Parser *parser) {
     xr_parser_consume(parser, TK_LBRACE, "expected '{' after match expression");
 
     // Parse all arms
-    AstNode **arms = (AstNode **)xr_malloc(sizeof(AstNode *) * 16);
+    AstNode **arms = (AstNode **)ast_alloc_array(parser->X, sizeof(AstNode *), 16);
     int arm_count = 0;
     int capacity = 16;
 
     while (!xr_parser_check(parser, TK_RBRACE) && !xr_parser_check(parser, TK_EOF)) {
         // Expand capacity
         if (arm_count >= capacity) {
+            int old_capacity = capacity;
             capacity *= 2;
-            AstNode ** _new_arms = (AstNode **)xr_realloc(arms, sizeof(AstNode *) * capacity);
-            if (!_new_arms) return NULL;
+            AstNode **_new_arms = (AstNode **)ast_alloc_array(
+                parser->X, sizeof(AstNode *), (size_t)capacity);
+            if (old_capacity > 0 && arms) memcpy(_new_arms, arms, sizeof(AstNode *) * (size_t)old_capacity);
             arms = _new_arms;
 
         }
@@ -208,7 +212,6 @@ AstNode *xr_parse_match_expr(Parser *parser) {
     // Check if at least one arm
     if (arm_count == 0) {
         xr_parser_error(parser, "match expression requires at least one arm");
-        xr_free(arms);
         return NULL;
     }
 

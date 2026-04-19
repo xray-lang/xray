@@ -80,10 +80,17 @@ typedef struct XrDestructurePattern {
 } XrDestructurePattern;
 
 // Program node
+// arena: owns all AST memory for this program (set by xr_parse_*).
+//        When owns_arena is true, xr_ast_free destroys it.
+//        When false (e.g. xr_parse_recoverable with caller-provided arena),
+//        xr_ast_free is a no-op.
+struct XrArena;
 typedef struct ProgramNode {
     AstNode **statements;
     int count;
     int capacity;
+    struct XrArena *arena;
+    bool owns_arena;
 } ProgramNode;
 
 // print statement node

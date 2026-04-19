@@ -26,11 +26,13 @@ static AstNode *xr_parse_property_accessors(Parser *parser, const char *name,
                                             XrType *field_type,
                                             bool is_private, bool is_static, int line);
 
-// Helper: copy Token text to string
-static char* token_to_string(Token *token) {
+// Helper: copy Token text to a string allocated from the parser arena.
+// The returned buffer lives for the full parse lifetime and is bulk-freed
+// when the owning program node is destroyed.
+static char* token_to_string(Parser *parser, Token *token) {
     if (!token || token->length == 0) return NULL;
 
-    char *str = (char*)xr_malloc(token->length + 1);
+    char *str = (char *)ast_alloc(parser->X, (size_t)token->length + 1);
     memcpy(str, token->start, token->length);
     str[token->length] = '\0';
     return str;
@@ -38,27 +40,17 @@ static char* token_to_string(Token *token) {
 
 /* ========== Local Cleanup Helpers ========== */
 
-// Release a XrGenericParam* array and the heap strings that back each
-// param->name. XrType constraints come from the shared type pool and are
-// NOT freed here.
-static void oop_free_generic_params(XrGenericParam **type_params, int count) {
-    if (!type_params) return;
-    for (int i = 0; i < count; i++) {
-        if (!type_params[i]) continue;
-        xr_free((char *)type_params[i]->name);
-        xr_free(type_params[i]);
-    }
-    xr_free(type_params);
+// All parser allocations now go through the parse arena; individual frees
+// are no-ops. Arena destroy at parse end (or on error via
+// xr_parse_discard_arena) releases every string, param, and array
+// allocated during parsing.
+
+static inline void oop_free_generic_params(XrGenericParam **type_params, int count) {
+    (void)type_params; (void)count;
 }
 
-// Release an array of strdup'd C strings (e.g. `implements` interface
-// name list). Safe on NULL or partial count.
-static void oop_free_string_array(char **arr, int count) {
-    if (!arr) return;
-    for (int i = 0; i < count; i++) {
-        xr_free(arr[i]);
-    }
-    xr_free(arr);
+static inline void oop_free_string_array(char **arr, int count) {
+    (void)arr; (void)count;
 }
 
 /* ========== Class Declaration Parsing ========== */
@@ -75,7 +67,7 @@ AstNode *xr_parse_class_declaration(Parser *parser) {
 
     // Parse class name
     xr_parser_consume(parser, TK_NAME, "expected class name");
-    char *class_name = token_to_string(&parser->previous);
+    char *class_name = token_to_string(parser, &parser->previous);
     int name_column = parser->previous.column;
 
     // Parse generic type parameters <T, U: Constraint>
@@ -88,9 +80,7 @@ AstNode *xr_parse_class_declaration(Parser *parser) {
             xr_parser_consume(parser, TK_NAME, "expected type parameter name");
             Token param_token = parser->previous;
 
-            char *param_name = (char *)xr_malloc(param_token.length + 1);
-            memcpy(param_name, param_token.start, param_token.length);
-            param_name[param_token.length] = '\0';
+            char *param_name = token_to_string(parser, &param_token);
 
             // Parse optional constraint <T: Interface>
             XrType *constraint = NULL;
@@ -98,10 +88,10 @@ AstNode *xr_parse_class_declaration(Parser *parser) {
                 constraint = xr_parse_type_annotation(parser);
             }
 
-            XrGenericParam *gp = (XrGenericParam *)xr_malloc(sizeof(XrGenericParam));
+            XrGenericParam *gp = (XrGenericParam *)ast_alloc(parser->X, sizeof(XrGenericParam));
             gp->name = param_name;
             gp->constraint = constraint;
-            XR_PARSE_PUSH(type_params, type_param_count, type_param_capacity, gp);
+            XR_PARSE_PUSH(parser, type_params, type_param_count, type_param_capacity, gp);
 
         } while (xr_parser_match(parser, TK_COMMA));
 
@@ -125,13 +115,13 @@ AstNode *xr_parse_class_declaration(Parser *parser) {
     char *super_module = NULL;
     if (xr_parser_match(parser, TK_EXTENDS)) {
         xr_parser_consume(parser, TK_NAME, "expected superclass name");
-        char *first_name = token_to_string(&parser->previous);
+        char *first_name = token_to_string(parser, &parser->previous);
 
         // Check for module.Class form
         if (xr_parser_match(parser, TK_DOT)) {
             xr_parser_consume(parser, TK_NAME, "expected class name after '.'");
             super_module = first_name;
-            super_name = token_to_string(&parser->previous);
+            super_name = token_to_string(parser, &parser->previous);
         } else {
             super_name = first_name;
         }
@@ -145,9 +135,9 @@ AstNode *xr_parse_class_declaration(Parser *parser) {
     if (xr_parser_match(parser, TK_IMPLEMENTS)) {
         do {
             xr_parser_consume(parser, TK_NAME, "expected interface name");
-            char *interface_name = token_to_string(&parser->previous);
+            char *interface_name = token_to_string(parser, &parser->previous);
 
-            XR_PARSE_PUSH(interfaces, interface_count, interface_capacity, interface_name);
+            XR_PARSE_PUSH(parser, interfaces, interface_count, interface_capacity, interface_name);
 
         } while (xr_parser_match(parser, TK_COMMA));
     }
@@ -163,9 +153,6 @@ AstNode *xr_parse_class_declaration(Parser *parser) {
             parser->type_scope = saved_scope;
         }
         oop_free_generic_params(type_params, type_param_count);
-        xr_free(class_name);
-        xr_free(super_name);
-        xr_free(super_module);
         oop_free_string_array(interfaces, interface_count);
         return NULL;
     }
@@ -226,7 +213,7 @@ AstNode *xr_parse_class_declaration(Parser *parser) {
         AstNode *member = xr_parse_field_declaration(parser, &is_method);
 
         if (is_method) {
-            XR_PARSE_PUSH(methods, method_count, method_capacity, member);
+            XR_PARSE_PUSH(parser, methods, method_count, method_capacity, member);
 
             // Check for paired setter (property accessor block case)
             if (member->type == AST_METHOD_DECL &&
@@ -237,10 +224,10 @@ AstNode *xr_parse_class_declaration(Parser *parser) {
                 member->as.method_decl.base_args = NULL;
                 setter->as.method_decl.base_arg_count = 0;  // restore normal value
 
-                XR_PARSE_PUSH(methods, method_count, method_capacity, setter);
+                XR_PARSE_PUSH(parser, methods, method_count, method_capacity, setter);
             }
         } else {
-            XR_PARSE_PUSH(fields, field_count, field_capacity, member);
+            XR_PARSE_PUSH(parser, fields, field_count, field_capacity, member);
         }
     }
 
@@ -294,7 +281,7 @@ AstNode *xr_parse_struct_declaration(Parser *parser) {
 
     // Parse struct name
     xr_parser_consume(parser, TK_NAME, "expected struct name");
-    char *struct_name = token_to_string(&parser->previous);
+    char *struct_name = token_to_string(parser, &parser->previous);
     int name_column = parser->previous.column;
 
     // Parse generic type parameters <T, U: Constraint>
@@ -307,19 +294,17 @@ AstNode *xr_parse_struct_declaration(Parser *parser) {
             xr_parser_consume(parser, TK_NAME, "expected type parameter name");
             Token param_token = parser->previous;
 
-            char *param_name = (char *)xr_malloc(param_token.length + 1);
-            memcpy(param_name, param_token.start, param_token.length);
-            param_name[param_token.length] = '\0';
+            char *param_name = token_to_string(parser, &param_token);
 
             XrType *constraint = NULL;
             if (xr_parser_match(parser, TK_COLON)) {
                 constraint = xr_parse_type_annotation(parser);
             }
 
-            XrGenericParam *gp = (XrGenericParam *)xr_malloc(sizeof(XrGenericParam));
+            XrGenericParam *gp = (XrGenericParam *)ast_alloc(parser->X, sizeof(XrGenericParam));
             gp->name = param_name;
             gp->constraint = constraint;
-            XR_PARSE_PUSH(type_params, type_param_count, type_param_capacity, gp);
+            XR_PARSE_PUSH(parser, type_params, type_param_count, type_param_capacity, gp);
 
         } while (xr_parser_match(parser, TK_COMMA));
 
@@ -350,9 +335,9 @@ AstNode *xr_parse_struct_declaration(Parser *parser) {
     if (xr_parser_match(parser, TK_IMPLEMENTS)) {
         do {
             xr_parser_consume(parser, TK_NAME, "expected interface name");
-            char *interface_name = token_to_string(&parser->previous);
+            char *interface_name = token_to_string(parser, &parser->previous);
 
-            XR_PARSE_PUSH(interfaces, interface_count, interface_capacity, interface_name);
+            XR_PARSE_PUSH(parser, interfaces, interface_count, interface_capacity, interface_name);
 
         } while (xr_parser_match(parser, TK_COMMA));
     }
@@ -429,7 +414,7 @@ AstNode *xr_parse_struct_declaration(Parser *parser) {
         AstNode *member = xr_parse_field_declaration(parser, &is_method);
 
         if (is_method) {
-            XR_PARSE_PUSH(methods, method_count, method_capacity, member);
+            XR_PARSE_PUSH(parser, methods, method_count, method_capacity, member);
 
             // Check for paired setter (property accessor block case)
             if (member->type == AST_METHOD_DECL &&
@@ -439,10 +424,10 @@ AstNode *xr_parse_struct_declaration(Parser *parser) {
                 member->as.method_decl.base_args = NULL;
                 setter->as.method_decl.base_arg_count = 0;
 
-                XR_PARSE_PUSH(methods, method_count, method_capacity, setter);
+                XR_PARSE_PUSH(parser, methods, method_count, method_capacity, setter);
             }
         } else {
-            XR_PARSE_PUSH(fields, field_count, field_capacity, member);
+            XR_PARSE_PUSH(parser, fields, field_count, field_capacity, member);
         }
     }
 
@@ -538,7 +523,7 @@ AstNode *xr_parse_field_declaration(Parser *parser, bool *is_method_out) {
     if (xr_parser_match(parser, TK_CONSTRUCTOR)) {
         // 'constructor' keyword
         is_constructor = true;
-        name = (char*)xr_malloc(sizeof(XR_KEYWORD_CONSTRUCTOR));
+        name = (char*)ast_alloc(parser->X, sizeof(XR_KEYWORD_CONSTRUCTOR));
         strcpy(name, XR_KEYWORD_CONSTRUCTOR);
         name_line   = parser->previous.line;
         name_column = parser->previous.column;
@@ -546,7 +531,7 @@ AstNode *xr_parse_field_declaration(Parser *parser, bool *is_method_out) {
     } else {
         // Normal name
         xr_parser_consume(parser, TK_NAME, "expected field or method name");
-        name = token_to_string(&parser->previous);
+        name = token_to_string(parser, &parser->previous);
         name_line   = parser->previous.line;
         name_column = parser->previous.column;
         name_length = parser->previous.length;
@@ -640,7 +625,7 @@ AstNode *xr_parse_method_declaration(Parser *parser, const char *name,
         do {
             // Parse type parameter name
             xr_parser_consume(parser, TK_NAME, "expected type parameter name");
-            XR_PARSE_PUSH(type_param_names, type_param_count, type_param_capacity, token_to_string(&parser->previous));
+            XR_PARSE_PUSH(parser, type_param_names, type_param_count, type_param_capacity, token_to_string(parser, &parser->previous));
 
             // Skip optional constraint <T: Interface> (for now)
             if (xr_parser_match(parser, TK_COLON)) {
@@ -663,26 +648,36 @@ AstNode *xr_parse_method_declaration(Parser *parser, const char *name,
 
     if (!xr_parser_check(parser, TK_RPAREN)) {
         do {
-            // Extend arrays
+            // Extend arrays (arena grow - old buffers are bulk-released)
             if (param_count >= param_capacity) {
+                int old_capacity = param_capacity;
                 param_capacity = param_capacity == 0 ? 4 : param_capacity * 2;
-                char** _new_parameters = (char**)xr_realloc(parameters, sizeof(XrType*) * param_capacity);
-                if (!_new_parameters) goto fail;
+
+                char **_new_parameters = (char **)ast_alloc_array(
+                    parser->X, sizeof(char *), (size_t)param_capacity);
+                if (old_capacity > 0 && parameters) {
+                    memcpy(_new_parameters, parameters, sizeof(char *) * (size_t)old_capacity);
+                }
                 parameters = _new_parameters;
 
-                XrType** _new_param_types = (XrType**)xr_realloc(param_types, sizeof(XrType*) * param_capacity);
-                if (!_new_param_types) goto fail;
+                XrType **_new_param_types = (XrType **)ast_alloc_array(
+                    parser->X, sizeof(XrType *), (size_t)param_capacity);
+                if (old_capacity > 0 && param_types) {
+                    memcpy(_new_param_types, param_types, sizeof(XrType *) * (size_t)old_capacity);
+                }
                 param_types = _new_param_types;
 
-                uint8_t* _new_modes = (uint8_t*)xr_realloc(param_passing_modes, sizeof(uint8_t) * param_capacity);
-                if (!_new_modes) goto fail;
+                uint8_t *_new_modes = (uint8_t *)ast_alloc_array(
+                    parser->X, sizeof(uint8_t), (size_t)param_capacity);
+                if (old_capacity > 0 && param_passing_modes) {
+                    memcpy(_new_modes, param_passing_modes, sizeof(uint8_t) * (size_t)old_capacity);
+                }
                 param_passing_modes = _new_modes;
-
             }
 
             // Parse parameter name
             xr_parser_consume(parser, TK_NAME, "expected parameter name");
-            parameters[param_count] = token_to_string(&parser->previous);
+            parameters[param_count] = token_to_string(parser, &parser->previous);
             param_passing_modes[param_count] = XR_PARAM_VALUE;
 
             // Parse parameter type with optional in/ref modifier
@@ -753,21 +748,14 @@ fail:
     // from the type pool and are not freed here. `name` was heap-allocated
     // by our caller (xr_parse_field_declaration) but ownership is only
     // transferred on success; on failure we consume it here.
-    xr_free((char *)name);
     if (type_param_names) {
         for (int i = 0; i < type_param_count; i++) {
-            xr_free(type_param_names[i]);
         }
-        xr_free(type_param_names);
     }
     if (parameters) {
         for (int i = 0; i < param_count; i++) {
-            xr_free(parameters[i]);
         }
-        xr_free(parameters);
     }
-    xr_free(param_types);
-    xr_free(param_passing_modes);
     return NULL;
 }
 
@@ -790,7 +778,7 @@ AstNode *xr_parse_new_expression(Parser *parser) {
     char *class_name = NULL;
 
     if (xr_parser_match(parser, TK_NAME)) {
-        char *first_name = token_to_string(&parser->previous);
+        char *first_name = token_to_string(parser, &parser->previous);
 
         // Check if it's module.Class form
         if (xr_parser_match(parser, TK_DOT)) {
@@ -798,31 +786,27 @@ AstNode *xr_parse_new_expression(Parser *parser) {
             module_name = first_name;
 
             if (xr_parser_match(parser, TK_NAME)) {
-                class_name = token_to_string(&parser->previous);
+                class_name = token_to_string(parser, &parser->previous);
             } else {
                 xr_parser_error_expected_name(parser, "expected class name");
-                class_name = strdup(TYPE_NAME_NULL);
+                class_name = ast_strdup(parser->X, TYPE_NAME_NULL);
             }
         } else {
             // Just a normal class name
             class_name = first_name;
         }
     } else if (xr_parser_match(parser, TK_TYPE_ARRAY)) {
-        class_name = (char*)xr_malloc(6);
-        strcpy(class_name, "Array");
+        class_name = ast_strdup(parser->X, "Array");
     } else if (xr_parser_match(parser, TK_TYPE_MAP)) {
-        class_name = (char*)xr_malloc(4);
-        strcpy(class_name, "Map");
+        class_name = ast_strdup(parser->X, "Map");
     } else if (xr_parser_match(parser, TK_TYPE_SET)) {
-        class_name = (char*)xr_malloc(4);
-        strcpy(class_name, "Set");
+        class_name = ast_strdup(parser->X, "Set");
     } else if (xr_parser_match(parser, TK_TYPE_CHANNEL)) {
-        class_name = (char*)xr_malloc(8);
-        strcpy(class_name, "Channel");
+        class_name = ast_strdup(parser->X, "Channel");
     } else {
         // Support other built-in type names as new target
         xr_parser_error_expected_name(parser, "expected class name or type name");
-        class_name = strdup(TYPE_NAME_NULL);
+        class_name = ast_strdup(parser->X, TYPE_NAME_NULL);
     }
 
     // Parse optional generic type parameters: new Box<int>(...)
@@ -868,7 +852,7 @@ AstNode *xr_parse_new_expression(Parser *parser) {
 
     if (!xr_parser_check(parser, TK_RPAREN)) {
         do {
-            XR_PARSE_PUSH(arguments, arg_count, arg_capacity, xr_parse_expression(parser));
+            XR_PARSE_PUSH(parser, arguments, arg_count, arg_capacity, xr_parse_expression(parser));
         } while (xr_parser_match(parser, TK_COMMA));
     }
 
@@ -879,7 +863,6 @@ AstNode *xr_parse_new_expression(Parser *parser) {
     // so release our copy of module_name here.
     AstNode *node = xr_ast_new_expr(parser->X, module_name, class_name, arguments, arg_count,
                                     type_args, type_arg_count, line);
-    xr_free(module_name);
     return node;
 }
 
@@ -913,7 +896,7 @@ AstNode *xr_parse_super_expression(Parser *parser) {
     if (xr_parser_match(parser, TK_DOT)) {
         // super.method()
         xr_parser_consume(parser, TK_NAME, "expected method name");
-        method_name = token_to_string(&parser->previous);
+        method_name = token_to_string(parser, &parser->previous);
 
         // Parse parameter list
         xr_parser_consume(parser, TK_LPAREN, "expected '(' to start argument list");
@@ -932,7 +915,7 @@ AstNode *xr_parse_super_expression(Parser *parser) {
 
     if (!xr_parser_check(parser, TK_RPAREN)) {
         do {
-            XR_PARSE_PUSH(arguments, arg_count, arg_capacity, xr_parse_expression(parser));
+            XR_PARSE_PUSH(parser, arguments, arg_count, arg_capacity, xr_parse_expression(parser));
         } while (xr_parser_match(parser, TK_COMMA));
     }
 
@@ -967,87 +950,71 @@ AstNode *xr_parse_operator_method(Parser *parser, bool is_private, bool is_stati
     switch (op_token) {
         // Arithmetic operators
         case TK_PLUS:
-            name = (char*)xr_malloc(2);
-            strcpy(name, "+");
+            name = ast_strdup(parser->X, "+");
             op_type_val = OPTYPE_ADD;
             break;
         case TK_MINUS:
-            name = (char*)xr_malloc(2);
-            strcpy(name, "-");
+            name = ast_strdup(parser->X, "-");
             op_type_val = OPTYPE_SUB;  // default to binary, adjusted later based on param count
             break;
         case TK_STAR:
-            name = (char*)xr_malloc(2);
-            strcpy(name, "*");
+            name = ast_strdup(parser->X, "*");
             op_type_val = OPTYPE_MUL;
             break;
         case TK_SLASH:
-            name = (char*)xr_malloc(2);
-            strcpy(name, "/");
+            name = ast_strdup(parser->X, "/");
             op_type_val = OPTYPE_DIV;
             break;
         case TK_PERCENT:
-            name = (char*)xr_malloc(2);
-            strcpy(name, "%");
+            name = ast_strdup(parser->X, "%");
             op_type_val = OPTYPE_MOD;
             break;
         // Bitwise operators
         case TK_AMP:
-            name = (char*)xr_malloc(2);
-            strcpy(name, "&");
+            name = ast_strdup(parser->X, "&");
             op_type_val = OPTYPE_BAND;
             break;
         case TK_PIPE:
-            name = (char*)xr_malloc(2);
-            strcpy(name, "|");
+            name = ast_strdup(parser->X, "|");
             op_type_val = OPTYPE_BOR;
             break;
         case TK_CARET:
-            name = (char*)xr_malloc(2);
-            strcpy(name, "^");
+            name = ast_strdup(parser->X, "^");
             op_type_val = OPTYPE_BXOR;
             break;
         case TK_TILDE:
-            name = (char*)xr_malloc(2);
-            strcpy(name, "~");
+            name = ast_strdup(parser->X, "~");
             op_type_val = OPTYPE_UNARY;  // unary operator
             expected_params = 0;  // unary operator needs no extra params
             break;
         case TK_NOT:
-            name = (char*)xr_malloc(2);
-            strcpy(name, "!");
+            name = ast_strdup(parser->X, "!");
             op_type_val = OPTYPE_UNARY;  // unary operator
             expected_params = 0;  // unary operator needs no extra params
             break;
         // Comparison operators
         case TK_EQ:
-            name = (char*)xr_malloc(3);
-            strcpy(name, "==");
+            name = ast_strdup(parser->X, "==");
             op_type_val = OPTYPE_EQ;
             break;
         case TK_NE:
-            name = (char*)xr_malloc(3);
-            strcpy(name, "!=");
+            name = ast_strdup(parser->X, "!=");
             op_type_val = OPTYPE_NE;
             break;
         case TK_LT:
-            name = (char*)xr_malloc(2);
-            strcpy(name, "<");
+            name = ast_strdup(parser->X, "<");
             op_type_val = OPTYPE_LT;
             break;
         case TK_LE:
-            name = (char*)xr_malloc(3);
-            strcpy(name, "<=");
+            name = ast_strdup(parser->X, "<=");
             op_type_val = OPTYPE_LE;
             break;
         case TK_GT:
-            name = (char*)xr_malloc(2);
-            strcpy(name, ">");
+            name = ast_strdup(parser->X, ">");
             op_type_val = OPTYPE_GT;
             break;
         case TK_GE:
-            name = (char*)xr_malloc(3);
-            strcpy(name, ">=");
+            name = ast_strdup(parser->X, ">=");
             op_type_val = OPTYPE_GE;
             break;
 
@@ -1060,13 +1027,11 @@ AstNode *xr_parse_operator_method(Parser *parser, bool is_private, bool is_stati
             }
             // Check for = sign (operator []=)
             if (xr_parser_match(parser, TK_ASSIGN)) {
-                name = (char*)xr_malloc(4);
-                strcpy(name, "[]=");
+                name = ast_strdup(parser->X, "[]=");
                 expected_params = 2;  // []= needs 2 params: index + value
                 op_type_val = OPTYPE_SUBSCRIPT_SET;
             } else {
-                name = (char*)xr_malloc(3);
-                strcpy(name, "[]");
+                name = ast_strdup(parser->X, "[]");
                 expected_params = 1;  // [] needs 1 param: index
                 op_type_val = OPTYPE_SUBSCRIPT;
             }
@@ -1074,77 +1039,63 @@ AstNode *xr_parse_operator_method(Parser *parser, bool is_private, bool is_stati
 
         // Shift operators
         case TK_LSHIFT:
-            name = (char*)xr_malloc(3);
-            strcpy(name, "<<");
+            name = ast_strdup(parser->X, "<<");
             op_type_val = OPTYPE_BAND;  // reuse bitwise type
             break;
         case TK_RSHIFT:
-            name = (char*)xr_malloc(3);
-            strcpy(name, ">>");
+            name = ast_strdup(parser->X, ">>");
             op_type_val = OPTYPE_BAND;  // reuse bitwise type
             break;
 
         // Compound assignment operators
         case TK_PLUS_ASSIGN:
-            name = (char*)xr_malloc(3);
-            strcpy(name, "+=");
+            name = ast_strdup(parser->X, "+=");
             op_type_val = OPTYPE_ADD;  // reuse add type
             break;
         case TK_MINUS_ASSIGN:
-            name = (char*)xr_malloc(3);
-            strcpy(name, "-=");
+            name = ast_strdup(parser->X, "-=");
             op_type_val = OPTYPE_SUB;  // reuse sub type
             break;
         case TK_MUL_ASSIGN:
-            name = (char*)xr_malloc(3);
-            strcpy(name, "*=");
+            name = ast_strdup(parser->X, "*=");
             op_type_val = OPTYPE_MUL;  // reuse mul type
             break;
         case TK_DIV_ASSIGN:
-            name = (char*)xr_malloc(3);
-            strcpy(name, "/=");
+            name = ast_strdup(parser->X, "/=");
             op_type_val = OPTYPE_DIV;  // reuse div type
             break;
         case TK_MOD_ASSIGN:
-            name = (char*)xr_malloc(3);
-            strcpy(name, "%=");
+            name = ast_strdup(parser->X, "%=");
             op_type_val = OPTYPE_MOD;  // reuse mod type
             break;
         case TK_AND_ASSIGN:
-            name = (char*)xr_malloc(3);
-            strcpy(name, "&=");
+            name = ast_strdup(parser->X, "&=");
             op_type_val = OPTYPE_BAND;  // reuse bitwise and type
             break;
         case TK_OR_ASSIGN:
-            name = (char*)xr_malloc(3);
-            strcpy(name, "|=");
+            name = ast_strdup(parser->X, "|=");
             op_type_val = OPTYPE_BOR;  // reuse bitwise or type
             break;
         case TK_XOR_ASSIGN:
-            name = (char*)xr_malloc(3);
-            strcpy(name, "^=");
+            name = ast_strdup(parser->X, "^=");
             op_type_val = OPTYPE_BXOR;  // reuse bitwise xor type
             break;
         case TK_LSHIFT_ASSIGN:
-            name = (char*)xr_malloc(4);
-            strcpy(name, "<<=");
+            name = ast_strdup(parser->X, "<<=");
             op_type_val = OPTYPE_BAND;  // reuse bitwise type
             break;
         case TK_RSHIFT_ASSIGN:
-            name = (char*)xr_malloc(4);
-            strcpy(name, ">>=");
+            name = ast_strdup(parser->X, ">>=");
             op_type_val = OPTYPE_BAND;  // reuse bitwise type
             break;
 
         // Increment/decrement operators
         case TK_INC:
-            name = (char*)xr_malloc(3);
-            strcpy(name, "++");
+            name = ast_strdup(parser->X, "++");
             op_type_val = OPTYPE_UNARY;  // treat as unary operator
             break;
         case TK_DEC:
-            name = (char*)xr_malloc(3);
-            strcpy(name, "--");
+            name = ast_strdup(parser->X, "--");
             op_type_val = OPTYPE_UNARY;  // treat as unary operator
             break;
 
@@ -1178,13 +1129,13 @@ AstNode *xr_parse_operator_method(Parser *parser, bool is_private, bool is_stati
         param_count = 0;
         // Go directly to return type parsing, no goto needed
     } else {
-        // Allocate parameter arrays
-        parameters = (char**)xr_malloc(sizeof(char*) * expected_params);
-        param_types = (XrType**)xr_malloc(sizeof(XrType*) * expected_params);
+        // Allocate parameter arrays in the parse arena
+        parameters = (char **)ast_alloc_array(parser->X, sizeof(char *), (size_t)expected_params);
+        param_types = (XrType **)ast_alloc_array(parser->X, sizeof(XrType *), (size_t)expected_params);
 
     // Parse first parameter
     xr_parser_consume(parser, TK_NAME, "expected parameter name");
-    parameters[0] = token_to_string(&parser->previous);
+    parameters[0] = token_to_string(parser, &parser->previous);
 
     // Parse parameter type (optional) - use full type annotation parser
     if (xr_parser_match(parser, TK_COLON)) {
@@ -1204,7 +1155,7 @@ AstNode *xr_parse_operator_method(Parser *parser, bool is_private, bool is_stati
 
         // Parse second parameter
         xr_parser_consume(parser, TK_NAME, "expected parameter name");
-        parameters[1] = token_to_string(&parser->previous);
+        parameters[1] = token_to_string(parser, &parser->previous);
 
         // Parse second parameter type (optional) - use full type annotation parser
         if (xr_parser_match(parser, TK_COLON)) {
@@ -1272,14 +1223,10 @@ AstNode *xr_parse_operator_method(Parser *parser, bool is_private, bool is_stati
 fail:
     // Release the operator-method state we still own. XrType entries are
     // shared via the type pool and are NOT freed here.
-    xr_free(name);
     if (parameters) {
         for (int i = 0; i < param_count; i++) {
-            xr_free(parameters[i]);
         }
-        xr_free(parameters);
     }
-    xr_free(param_types);
     return NULL;
 }
 
@@ -1321,11 +1268,11 @@ static AstNode *xr_parse_property_accessors(Parser *parser, const char *name,
 
         if (!xr_parser_check(parser, TK_RPAREN)) {
             // Has parameters = setter
-            parameters = (char**)xr_malloc(sizeof(char*));
-            param_types = (XrType**)xr_malloc(sizeof(XrType*));
+            parameters = (char**)ast_alloc(parser->X, sizeof(char*));
+            param_types = (XrType**)ast_alloc(parser->X, sizeof(XrType*));
 
             xr_parser_consume(parser, TK_NAME, "expected parameter name");
-            parameters[0] = token_to_string(&parser->previous);
+            parameters[0] = token_to_string(parser, &parser->previous);
 
             // Parse parameter type (optional)
             if (xr_parser_match(parser, TK_COLON)) {
@@ -1359,7 +1306,7 @@ static AstNode *xr_parse_property_accessors(Parser *parser, const char *name,
         // Construct method name: get:xxx or set:xxx
         bool is_getter = (param_count == 0);
         size_t name_len = strlen(name) + 5;
-        char *method_name = (char*)xr_malloc(name_len);
+        char *method_name = (char *)ast_alloc(parser->X, name_len);
         snprintf(method_name, name_len, "%s:%s", is_getter ? "get" : "set", name);
 
         // Create method declaration node
@@ -1430,7 +1377,7 @@ AstNode *xr_parse_interface_declaration(Parser *parser) {
 
     // Parse interface name
     xr_parser_consume(parser, TK_NAME, "expected interface name");
-    char *interface_name = token_to_string(&parser->previous);
+    char *interface_name = token_to_string(parser, &parser->previous);
     int name_column = parser->previous.column;
 
     // Parse extends clause (optional, interface can extend multiple interfaces)
@@ -1441,9 +1388,9 @@ AstNode *xr_parse_interface_declaration(Parser *parser) {
     if (xr_parser_match(parser, TK_EXTENDS)) {
         do {
             xr_parser_consume(parser, TK_NAME, "expected interface name");
-            char *parent_name = token_to_string(&parser->previous);
+            char *parent_name = token_to_string(parser, &parser->previous);
 
-            XR_PARSE_PUSH(extends, extends_count, extends_capacity, parent_name);
+            XR_PARSE_PUSH(parser, extends, extends_count, extends_capacity, parent_name);
 
         } while (xr_parser_match(parser, TK_COMMA));
     }
@@ -1474,7 +1421,7 @@ AstNode *xr_parse_interface_declaration(Parser *parser) {
             continue;
         }
 
-        XR_PARSE_PUSH(methods, method_count, method_capacity, method);
+        XR_PARSE_PUSH(parser, methods, method_count, method_capacity, method);
     }
 
     xr_parser_consume(parser, TK_RBRACE, "expected '}' to end interface body");
@@ -1500,7 +1447,7 @@ AstNode *xr_parse_interface_method(Parser *parser) {
 
     // Parse method name
     xr_parser_consume(parser, TK_NAME, "expected method name");
-    char *method_name = token_to_string(&parser->previous);
+    char *method_name = token_to_string(parser, &parser->previous);
 
     // Parse parameter list
     xr_parser_consume(parser, TK_LPAREN, "expected '('");
@@ -1514,7 +1461,7 @@ AstNode *xr_parse_interface_method(Parser *parser) {
         do {
             // Parameter name
             xr_parser_consume(parser, TK_NAME, "expected parameter name");
-            char *param_name = token_to_string(&parser->previous);
+            char *param_name = token_to_string(parser, &parser->previous);
 
             // Parameter type (required in interface method signatures)
             xr_parser_consume(parser, TK_COLON, "expected ':'");
@@ -1529,29 +1476,30 @@ AstNode *xr_parse_interface_method(Parser *parser) {
             } else if (xr_parser_match(parser, TK_BOOL)) {
                 param_type = xr_type_new_bool();
             } else if (xr_parser_match(parser, TK_NAME)) {
-                param_type = xr_type_new_class(token_to_string(&parser->previous));
+                param_type = xr_type_new_class(token_to_string(parser, &parser->previous));
             } else {
                 xr_parser_error(parser, "expected parameter type");
                 param_type = xr_type_new_unknown();
             }
 
-            // Add to parameters array
+            // Add to parameters array (arena grow - old buffers released by arena)
             if (param_count >= param_capacity) {
+                int old_capacity = param_capacity;
                 param_capacity = param_capacity == 0 ? 4 : param_capacity * 2;
-                char** _new_parameters = (char**)xr_realloc(parameters, sizeof(XrType*) * param_capacity);
-                if (!_new_parameters) {
-                    xr_free(param_name);
-                    goto fail;
+
+                char **_new_parameters = (char **)ast_alloc_array(
+                    parser->X, sizeof(char *), (size_t)param_capacity);
+                if (old_capacity > 0 && parameters) {
+                    memcpy(_new_parameters, parameters, sizeof(char *) * (size_t)old_capacity);
                 }
                 parameters = _new_parameters;
 
-                XrType** _new_param_types = (XrType**)xr_realloc(param_types, sizeof(XrType*) * param_capacity);
-                if (!_new_param_types) {
-                    xr_free(param_name);
-                    goto fail;
+                XrType **_new_param_types = (XrType **)ast_alloc_array(
+                    parser->X, sizeof(XrType *), (size_t)param_capacity);
+                if (old_capacity > 0 && param_types) {
+                    memcpy(_new_param_types, param_types, sizeof(XrType *) * (size_t)old_capacity);
                 }
                 param_types = _new_param_types;
-
             }
             parameters[param_count] = param_name;
             param_types[param_count] = param_type;
@@ -1580,14 +1528,10 @@ AstNode *xr_parse_interface_method(Parser *parser) {
 fail:
     // On OOM we still own method_name and any accumulated parameter names.
     // XrType pointers are shared via the type pool and are not freed here.
-    xr_free(method_name);
     if (parameters) {
         for (int i = 0; i < param_count; i++) {
-            xr_free(parameters[i]);
         }
-        xr_free(parameters);
     }
-    xr_free(param_types);
     return NULL;
 }
 
@@ -1605,7 +1549,7 @@ AstNode *xr_parse_enum_declaration(Parser *parser) {
 
     // Parse enum name
     xr_parser_consume(parser, TK_NAME, "expected enum name");
-    char *enum_name = token_to_string(&parser->previous);
+    char *enum_name = token_to_string(parser, &parser->previous);
     int name_column = parser->previous.column;
 
     // Parse type hint (optional): int, string, float, bool
@@ -1613,24 +1557,24 @@ AstNode *xr_parse_enum_declaration(Parser *parser) {
     if (xr_parser_match(parser, TK_COLON)) {
         // Support type keywords (uppercase) and plain identifiers (lowercase)
         if (xr_parser_match(parser, TK_INT)) {
-            type_hint = strdup(TYPE_NAME_INT);
+            type_hint = ast_strdup(parser->X, TYPE_NAME_INT);
         } else if (xr_parser_match(parser, TK_STRING)) {
-            type_hint = strdup(TYPE_NAME_STRING);
+            type_hint = ast_strdup(parser->X, TYPE_NAME_STRING);
         } else if (xr_parser_match(parser, TK_FLOAT)) {
-            type_hint = strdup(TYPE_NAME_FLOAT);
+            type_hint = ast_strdup(parser->X, TYPE_NAME_FLOAT);
         } else if (xr_parser_match(parser, TK_BOOL)) {
-            type_hint = strdup(TYPE_NAME_BOOL);
+            type_hint = ast_strdup(parser->X, TYPE_NAME_BOOL);
         } else if (xr_parser_match(parser, TK_NAME)) {
             // Support lowercase type names
             Token t = parser->previous;
             if (t.length == 3 && memcmp(t.start, "int", 3) == 0) {
-                type_hint = strdup(TYPE_NAME_INT);
+                type_hint = ast_strdup(parser->X, TYPE_NAME_INT);
             } else if (t.length == 6 && memcmp(t.start, "string", 6) == 0) {
-                type_hint = strdup(TYPE_NAME_STRING);
+                type_hint = ast_strdup(parser->X, TYPE_NAME_STRING);
             } else if (t.length == 5 && memcmp(t.start, "float", 5) == 0) {
-                type_hint = strdup(TYPE_NAME_FLOAT);
+                type_hint = ast_strdup(parser->X, TYPE_NAME_FLOAT);
             } else if (t.length == 4 && memcmp(t.start, "bool", 4) == 0) {
-                type_hint = strdup(TYPE_NAME_BOOL);
+                type_hint = ast_strdup(parser->X, TYPE_NAME_BOOL);
             } else {
                 xr_parser_error(parser, "enum type must be int, string, float or bool");
             }
@@ -1670,7 +1614,7 @@ AstNode *xr_parse_enum_declaration(Parser *parser) {
 
         // Parse member name
         xr_parser_consume(parser, TK_NAME, "expected enum member name");
-        char *member_name  = token_to_string(&parser->previous);
+        char *member_name  = token_to_string(parser, &parser->previous);
         int   member_line  = parser->previous.line;
         int   member_col   = parser->previous.column;
         int   member_name_len = parser->previous.length;
@@ -1695,9 +1639,8 @@ AstNode *xr_parse_enum_declaration(Parser *parser) {
             member->end_line   = member_line;
             member->end_column = member_col + member_name_len;
         }
-        xr_free(member_name);
 
-        XR_PARSE_PUSH(members, member_count, member_capacity, member);
+        XR_PARSE_PUSH(parser, members, member_count, member_capacity, member);
 
         // Comma separator (optional, can be omitted after last member)
         if (!xr_parser_check(parser, TK_RBRACE)) {
@@ -1723,9 +1666,6 @@ AstNode *xr_parse_enum_declaration(Parser *parser) {
     node->column     = name_column;
     node->end_line   = enum_end_line;
     node->end_column = enum_end_column;
-    xr_free(enum_name);
-    xr_free(type_hint);
-    xr_free(members);
     return node;
 }
 

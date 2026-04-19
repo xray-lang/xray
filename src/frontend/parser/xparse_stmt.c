@@ -146,7 +146,7 @@ AstNode *xr_parse_for_in_statement(Parser *parser) {
         return NULL;
     }
     xr_parser_advance(parser);
-    char *first_name = (char *)xr_malloc(parser->previous.length + 1);
+    char *first_name = (char *)ast_alloc(parser->X, (size_t)parser->previous.length + 1);
     memcpy(first_name, parser->previous.start, parser->previous.length);
     first_name[parser->previous.length] = '\0';
 
@@ -160,12 +160,11 @@ AstNode *xr_parse_for_in_statement(Parser *parser) {
         // Support _ as blank identifier in key-value pattern
         if (parser->current.type != TK_NAME && parser->current.type != TK_UNDERSCORE) {
             xr_parser_error_expected_name(parser, "expected value variable name");
-            xr_free(first_name);
             return NULL;
         }
         xr_parser_advance(parser);
 
-        second_name = (char *)xr_malloc(parser->previous.length + 1);
+        second_name = (char *)ast_alloc(parser->X, (size_t)parser->previous.length + 1);
         memcpy(second_name, parser->previous.start, parser->previous.length);
         second_name[parser->previous.length] = '\0';
     }
@@ -187,8 +186,6 @@ AstNode *xr_parse_for_in_statement(Parser *parser) {
 
     if (!xr_parser_check(parser, TK_LBRACE)) {
         xr_parser_error_at_current(parser, "for-in statement requires braces { }");
-        xr_free(first_name);
-        if (second_name) xr_free(second_name);
         return NULL;
     }
     xr_parser_advance(parser);
