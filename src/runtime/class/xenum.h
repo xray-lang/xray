@@ -21,8 +21,9 @@
 // Singleton enum member (e.g., Status.Success)
 typedef struct XrEnumValue {
     XrGCHeader gc;
-    char *enum_name;
-    char *member_name;
+    // Both names are interned in the isolate's symbol table; not owned.
+    const char *enum_name;
+    const char *member_name;
     XrValue raw_value;
     uint32_t member_index;
 } XrEnumValue;
@@ -30,21 +31,21 @@ typedef struct XrEnumValue {
 // Enum type metadata (immutable at runtime)
 typedef struct XrEnumType {
     XrGCHeader gc;
-    char *name;
+    const char *name;   // Interned in symbol table; not owned.
     int base_type;
     uint32_t member_count;
     struct XrClass *enum_class;
-    
+
     struct XrEnumMember {
-        char *name;
+        const char *name;   // Interned in symbol table; not owned.
         int symbol;
         XrValue value;
         XrEnumValue *instance;
     } *members;
-    
+
     int *symbol_to_index;    // symbol -> member index
     int symbol_map_capacity;
-    
+
     /* Reverse lookup optimization (Lua table array-part inspired)
      * Tier 1: contiguous int (0,1,2... or N,N+1,...) → direct index
      * Tier 2: sparse int with bounded range → sparse array
