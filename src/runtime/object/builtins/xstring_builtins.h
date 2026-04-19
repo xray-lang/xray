@@ -11,8 +11,8 @@
 #ifndef XSTRING_BUILTINS_H
 #define XSTRING_BUILTINS_H
 
-#include "../value/xvalue.h"
-#include "../base/xdefs.h"
+#include "xvalue.h"
+#include "xdefs.h"
 
 
 // Global String constructor

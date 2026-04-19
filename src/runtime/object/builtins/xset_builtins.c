@@ -11,14 +11,14 @@
  *   Global Set constructor and static methods.
  */
 
-#include "../../base/xchecks.h"
-#include "../gc/xgc.h"
+#include "xchecks.h"
+#include "xgc.h"
 #include "xset_builtins.h"
-#include "../xisolate_api.h"
-#include "../object/xset.h"
-#include "../object/xarray.h"
-#include "../object/xstring.h"
-#include "../value/xvalue.h"
+#include "xisolate_api.h"
+#include "xset.h"
+#include "xarray.h"
+#include "xstring.h"
+#include "xvalue.h"
 #include <stdio.h>
 
 // Set() or Set(array) - create empty set or from array

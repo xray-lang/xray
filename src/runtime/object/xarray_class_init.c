@@ -13,7 +13,7 @@
 
 #include "xarray_class_init.h"
 #include "../../base/xchecks.h"
-#include "../class/xarray_builtins.h"
+#include "builtins/xarray_builtins.h"
 #include "../class/xclass.h"
 #include "../class/xclass_builder.h"
 #include "../xisolate_api.h"
@@ -26,10 +26,10 @@ XrClass* xr_array_create_class(XrayIsolate *X, XrClass *objectClass) {
         fprintf(stderr, "[Array] ERROR: Failed to create class builder\n");
         return NULL;
     }
-    
+
     // Static constructor
     xr_class_builder_add_static_method(builder, XR_KEYWORD_CONSTRUCTOR,
         (XrCFunctionPtr)xr_builtin_array_construct, 0, 0);
-    
+
     return xr_class_builder_finalize(builder);
 }

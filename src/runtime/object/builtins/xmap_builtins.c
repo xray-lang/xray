@@ -12,17 +12,17 @@
  */
 
 #include "xmap_builtins.h"
-#include "../../base/xchecks.h"
-#include "../object/xmap_instance_methods.h"
-#include "../gc/xgc.h"
-#include "../object/xarray.h"  // Must be before xmap.h for XrArray definition
-#include "../object/xmap.h"
-#include "../value/xvalue.h"
+#include "xchecks.h"
+#include "xmap_instance_methods.h"
+#include "xgc.h"
+#include "xarray.h"  // Must be before xmap.h for XrArray definition
+#include "xmap.h"
+#include "xvalue.h"
 #include "xclass.h"
 #include "xclass_builder.h"
 #include "xmethod.h"
-#include "../symbol/xsymbol_table.h"
-#include "../xisolate_api.h"
+#include "xsymbol_table.h"
+#include "xisolate_api.h"
 #include "xclass_system.h"
 #include <stdio.h>
 

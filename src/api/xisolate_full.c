@@ -36,7 +36,7 @@
 #include "../runtime/xstdlib_bridge.h"
 #include "xrepl.h"
 #include "../runtime/class/xreflect_api.h"
-#include "../runtime/class/xclass_json_api.h"
+#include "../runtime/object/builtins/xjson_builtins.h"
 #include "../runtime/symbol/xsymbol_table.h"
 #include "../base/xmalloc.h"
 #include "../base/xglobal_indices.h"

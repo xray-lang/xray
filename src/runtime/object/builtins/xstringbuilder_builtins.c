@@ -12,15 +12,15 @@
  *   Supports chained calls: sb.append("a").append("b")
  */
 
-#include "../../base/xchecks.h"
-#include "../gc/xgc.h"
+#include "xchecks.h"
+#include "xgc.h"
 #include "xstringbuilder_builtins.h"
-#include "../object/xstringbuilder.h"
-#include "../object/xstring.h"
-#include "../value/xvalue.h"
+#include "xstringbuilder.h"
+#include "xstring.h"
+#include "xvalue.h"
 #include "xclass.h"
 #include "xclass_builder.h"
-#include "../xisolate_api.h"
+#include "xisolate_api.h"
 #include "xclass_system.h"
 #include <stdio.h>
 #include <string.h>

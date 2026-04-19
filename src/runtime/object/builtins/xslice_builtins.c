@@ -12,18 +12,18 @@
  *   Slices are views into underlying arrays without copying data.
  */
 
-#include "../../base/xchecks.h"
-#include "../gc/xgc.h"
+#include "xchecks.h"
+#include "xgc.h"
 #include "xslice_builtins.h"
 #include "xclass_system.h"
-#include "../object/xslice.h"
-#include "../object/xarray.h"
-#include "../object/xstring.h"
+#include "xslice.h"
+#include "xarray.h"
+#include "xstring.h"
 #include "xclass.h"
 #include "xmethod.h"
-#include "../symbol/xsymbol_table.h"
-#include "../xisolate_api.h"
-#include "../xvm_call.h"
+#include "xsymbol_table.h"
+#include "xisolate_api.h"
+#include "xvm_call.h"
 #include <stdio.h>
 
 /* ========== ArraySlice Methods ========== */

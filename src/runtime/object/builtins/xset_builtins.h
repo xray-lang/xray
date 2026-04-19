@@ -11,8 +11,8 @@
 #ifndef XSET_BUILTINS_H
 #define XSET_BUILTINS_H
 
-#include "../value/xvalue.h"
-#include "../base/xdefs.h"
+#include "xvalue.h"
+#include "xdefs.h"
 
 // Global Set constructor
 XR_FUNC XrValue xr_builtin_set_construct(XrayIsolate *isolate, XrValue *args, int nargs);
