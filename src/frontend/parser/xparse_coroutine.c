@@ -67,16 +67,14 @@ static AstNode *parse_go_body(Parser *parser, uint8_t link_mode) {
                 Token str_token = parser->current;
                 xr_parser_advance(parser);
 
-                // Copy string (use malloc, name persists). If a previous
-                // 'name:' option already allocated, free it before overwriting.
+                // Copy string into the parse arena; subsequent 'name:' options
+                // simply overwrite the pointer (old buffers are bulk-released
+                // with the arena).
                 int str_len = str_token.length - 2;  // Remove quotes
-                char *str_copy = (char *)xr_malloc(str_len + 1);
-                if (str_copy) {
-                    memcpy(str_copy, str_token.start + 1, str_len);
-                    str_copy[str_len] = '\0';
-                    xr_free(name);
-                    name = str_copy;
-                }
+                char *str_copy = (char *)ast_alloc(parser->X, (size_t)str_len + 1);
+                memcpy(str_copy, str_token.start + 1, str_len);
+                str_copy[str_len] = '\0';
+                name = str_copy;
             }
             // Check if 'priority' option
             else if (opt_name.length == 8 && memcmp(opt_name.start, "priority", 8) == 0) {
@@ -128,7 +126,6 @@ static AstNode *parse_go_body(Parser *parser, uint8_t link_mode) {
     return xr_ast_go_expr(parser->X, expr, name, priority, link_mode, line);
 
 fail:
-    xr_free(name);
     return NULL;
 }
 
@@ -326,7 +323,7 @@ AstNode *xr_parse_select_statement(Parser *parser) {
     AstNode **cases = NULL;
     int case_count = 0;
     int case_capacity = 8;
-    cases = (AstNode**)xr_malloc(sizeof(AstNode*) * case_capacity);
+    cases = (AstNode **)ast_alloc_array(parser->X, sizeof(AstNode *), (size_t)case_capacity);
 
     while (!xr_parser_check(parser, TK_RBRACE) && !xr_parser_check(parser, TK_EOF)) {
         AstNode *case_node = NULL;
@@ -337,7 +334,6 @@ AstNode *xr_parse_select_statement(Parser *parser) {
             // default case
             if (!xr_parser_match(parser, TK_ARROW)) {
                 xr_parser_error(parser, "expected '=>' after _");
-                xr_free(cases);
                 return NULL;
             }
 
@@ -356,7 +352,6 @@ AstNode *xr_parse_select_statement(Parser *parser) {
             AstNode *first_expr = xr_parse_precedence(parser, PREC_CALL);
             if (!first_expr) {
                 xr_parser_error(parser, "expected select case expression");
-                xr_free(cases);
                 return NULL;
             }
 
@@ -367,7 +362,6 @@ AstNode *xr_parse_select_statement(Parser *parser) {
                 // first_expr should be variable name
                 if (first_expr->type != AST_VARIABLE) {
                     xr_parser_error(parser, "expected variable name before 'from'");
-                    xr_free(cases);
                     return NULL;
                 }
                 char *var_name = first_expr->as.variable.name;
@@ -376,14 +370,12 @@ AstNode *xr_parse_select_statement(Parser *parser) {
                 AstNode *channel = xr_parse_precedence(parser, PREC_CALL);
                 if (!channel) {
                     xr_parser_error(parser, "expected channel expression");
-                    xr_free(cases);
                     return NULL;
                 }
 
                 // Expect '=>'
                 if (!xr_parser_match(parser, TK_ARROW)) {
                     xr_parser_error(parser, "expected '=>' after channel");
-                    xr_free(cases);
                     return NULL;
                 }
 
@@ -407,14 +399,12 @@ AstNode *xr_parse_select_statement(Parser *parser) {
                 AstNode *channel = xr_parse_precedence(parser, PREC_CALL);
                 if (!channel) {
                     xr_parser_error(parser, "expected channel expression");
-                    xr_free(cases);
                     return NULL;
                 }
 
                 // Expect '=>'
                 if (!xr_parser_match(parser, TK_ARROW)) {
                     xr_parser_error(parser, "expected '=>' after channel");
-                    xr_free(cases);
                     return NULL;
                 }
 
@@ -433,12 +423,10 @@ AstNode *xr_parse_select_statement(Parser *parser) {
                 if (first_expr->type == AST_VARIABLE &&
                     strcmp(first_expr->as.variable.name, "after") == 0) {
                     xr_parser_error(parser, "after requires timeout expression, format: after 1000 => ...");
-                    xr_free(cases);
                     return NULL;
                 }
                 // Possibly after ms => ... form, first_expr is number
                 xr_parser_error(parser, "expected 'from' or 'to' in select case");
-                xr_free(cases);
                 return NULL;
 
             } else if (first_expr->type == AST_VARIABLE &&
@@ -448,14 +436,12 @@ AstNode *xr_parse_select_statement(Parser *parser) {
                 AstNode *timeout_expr = xr_parse_precedence(parser, PREC_CALL);
                 if (!timeout_expr) {
                     xr_parser_error(parser, "expected timeout expression after 'after'");
-                    xr_free(cases);
                     return NULL;
                 }
 
                 // Expect '=>'
                 if (!xr_parser_match(parser, TK_ARROW)) {
                     xr_parser_error(parser, "expected '=>' after timeout expression");
-                    xr_free(cases);
                     return NULL;
                 }
 
@@ -472,13 +458,12 @@ AstNode *xr_parse_select_statement(Parser *parser) {
 
             } else {
                 xr_parser_error(parser, "expected 'from', 'to' or 'after' in select case");
-                xr_free(cases);
                 return NULL;
             }
         }
 
         if (case_node) {
-            XR_PARSE_PUSH(cases, case_count, case_capacity, case_node);
+            XR_PARSE_PUSH(parser, cases, case_count, case_capacity, case_node);
         }
 
         // Optional comma separator
@@ -488,12 +473,10 @@ AstNode *xr_parse_select_statement(Parser *parser) {
     // Expect '}'
     if (!xr_parser_match(parser, TK_RBRACE)) {
         xr_parser_error(parser, "expected '}' to close select block");
-        xr_free(cases);
         return NULL;
     }
 
     AstNode *result = xr_ast_select_stmt(parser->X, cases, case_count, line);
-    xr_free(cases);
     return result;
 }
 

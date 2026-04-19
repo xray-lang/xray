@@ -19,8 +19,8 @@
 #include <stdlib.h>
 #include <string.h>
 
-static char* copy_token_string(Token *token) {
-    char *str = (char*)xr_malloc(token->length + 1);
+static char* copy_token_string(Parser *parser, Token *token) {
+    char *str = (char *)ast_alloc(parser->X, (size_t)token->length + 1);
     memcpy(str, token->start, token->length);
     str[token->length] = '\0';
     return str;
@@ -36,9 +36,11 @@ XrDestructurePattern* xr_parse_array_pattern(Parser *parser) {
 
     while (!xr_parser_check(parser, TK_RBRACKET) && !xr_parser_check(parser, TK_EOF)) {
         if (count >= capacity) {
+            int old_capacity = capacity;
             capacity = (capacity == 0) ? 4 : capacity * 2;
-            XrDestructurePattern** _new_elements = (XrDestructurePattern**)xr_realloc(elements, sizeof(XrDestructurePattern*) * capacity);
-            if (!_new_elements) return NULL;
+            XrDestructurePattern **_new_elements = (XrDestructurePattern **)ast_alloc_array(
+                parser->X, sizeof(XrDestructurePattern *), (size_t)capacity);
+            if (old_capacity > 0 && elements) memcpy(_new_elements, elements, sizeof(XrDestructurePattern *) * (size_t)old_capacity);
             elements = _new_elements;
 
         }
@@ -56,9 +58,8 @@ XrDestructurePattern* xr_parse_array_pattern(Parser *parser) {
         }
         // Identifier
         else if (xr_parser_match(parser, TK_NAME)) {
-            char *name = copy_token_string(&parser->previous);
+            char *name = copy_token_string(parser, &parser->previous);
             elements[count++] = xr_pattern_identifier(parser->X, name, NULL);
-            xr_free(name);
         }
         else {
             xr_parser_error_expected_name(parser, "expected identifier or '_' in array destructuring");
@@ -89,13 +90,16 @@ XrDestructurePattern* xr_parse_object_pattern(Parser *parser) {
 
     while (!xr_parser_check(parser, TK_RBRACE) && !xr_parser_check(parser, TK_EOF)) {
         if (count >= capacity) {
+            int old_capacity = capacity;
             capacity = (capacity == 0) ? 4 : capacity * 2;
-            char** _new_field_names = (char**)xr_realloc(field_names, sizeof(char*) * capacity);
-            if (!_new_field_names) return NULL;
+            char **_new_field_names = (char **)ast_alloc_array(
+                parser->X, sizeof(char *), (size_t)capacity);
+            if (old_capacity > 0 && field_names) memcpy(_new_field_names, field_names, sizeof(char *) * (size_t)old_capacity);
             field_names = _new_field_names;
 
-            XrDestructurePattern** _new_patterns = (XrDestructurePattern**)xr_realloc(patterns, sizeof(XrDestructurePattern*) * capacity);
-            if (!_new_patterns) return NULL;
+            XrDestructurePattern **_new_patterns = (XrDestructurePattern **)ast_alloc_array(
+                parser->X, sizeof(XrDestructurePattern *), (size_t)capacity);
+            if (old_capacity > 0 && patterns) memcpy(_new_patterns, patterns, sizeof(XrDestructurePattern *) * (size_t)old_capacity);
             patterns = _new_patterns;
 
         }
@@ -105,13 +109,12 @@ XrDestructurePattern* xr_parse_object_pattern(Parser *parser) {
             return NULL;
         }
 
-        char *field = copy_token_string(&parser->previous);
+        char *field = copy_token_string(parser, &parser->previous);
 
         // Reject renaming syntax: {name: alias}
         if (xr_parser_check(parser, TK_COLON)) {
             xr_parser_error(parser, "renaming in destructuring is not supported; "
                             "variable name must match field name");
-            xr_free(field);
             return NULL;
         }
 

@@ -16,18 +16,31 @@
 
 #include "xparse.h"
 #include "../../base/xmalloc.h"
+#include "../../base/xarena.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include "../../base/xdefs.h"
 
-// Dynamic array push macro - eliminates repeated grow-and-append pattern
-// Usage: XR_PARSE_PUSH(arr, count, cap, item)
-// arr: pointer to array, count: current count, cap: current capacity, item: value to push
-#define XR_PARSE_PUSH(arr, count, cap, item) do { \
+// Arena-mandatory allocation helpers used by all parser/AST factory code.
+// The current arena must be installed on the Isolate before parsing.
+// A missing arena is a programming error and aborts via XR_CHECK.
+XR_FUNC void *ast_alloc(XrayIsolate *X, size_t size);
+XR_FUNC void *ast_alloc_array(XrayIsolate *X, size_t elem_size, size_t count);
+XR_FUNC char *ast_strdup(XrayIsolate *X, const char *s);
+
+// Arena-based dynamic array grow: doubles capacity and copies into the arena.
+// No original memory is freed (arena does bulk release).
+// `parser` argument provides access to parser->X (Isolate) for allocation.
+#define XR_PARSE_PUSH(parser, arr, count, cap, item) do { \
     if ((count) >= (cap)) { \
-        (cap) = (cap) == 0 ? 4 : (cap) * 2; \
-        (arr) = xr_realloc((arr), sizeof(*(arr)) * (cap)); \
+        int _new_cap = (cap) == 0 ? 4 : (cap) * 2; \
+        void *_new_arr = ast_alloc_array((parser)->X, sizeof(*(arr)), (size_t)_new_cap); \
+        if ((arr) != NULL && (count) > 0) { \
+            memcpy(_new_arr, (arr), sizeof(*(arr)) * (size_t)(count)); \
+        } \
+        (arr) = _new_arr; \
+        (cap) = _new_cap; \
     } \
     (arr)[(count)++] = (item); \
 } while (0)
