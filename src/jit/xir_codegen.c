@@ -271,7 +271,7 @@ uint32_t record_safepoint(CodegenCtx *ctx) {
             // (where caller-saved regs are not directly accessible).
             if (ctx->xra && v < ctx->xra->nvreg && ctx->xra->valloc[v].spill >= 0) {
                 int16_t slot = ctx->xra->valloc[v].spill;
-                if (slot >= 0 && slot < 32)
+                if (slot >= 0 && slot < XIR_MAX_SPILL_SLOTS)
                     spill_bitmap |= (1u << slot);
             }
             continue;
@@ -283,7 +283,7 @@ uint32_t record_safepoint(CodegenCtx *ctx) {
         if (ctx->xra && v < ctx->xra->nvreg && ctx->xra->valloc[v].spill >= 0
             && xra_vreg_live_at(ctx->xra, v, pos)) {
             int16_t slot = ctx->xra->valloc[v].spill;
-            if (slot >= 0 && slot < 32) {
+            if (slot >= 0 && slot < XIR_MAX_SPILL_SLOTS) {
                 spill_bitmap |= (1u << slot);
             }
         }
@@ -2166,7 +2166,7 @@ static void emit_resume_entry(CodegenCtx *ctx, XirCodegenResult *result) {
     // suspend_state.spill[0..nspill-1].  Copy them to the new frame.
     {
         uint32_t ns = ctx->xra ? ctx->xra->nspill : 0;
-        if (ns > 16) ns = 16;
+        if (ns > XIR_SUSPEND_SPILL_MAX) ns = XIR_SUSPEND_SPILL_MAX;
         for (uint32_t s = 0; s < ns; s++) {
             int32_t regs_off  = XIR_CORO_SUSPEND_REGS_OFFSET + XIR_SUSPEND_SPILL_OFF + (int32_t)s * 8;
             int32_t frame_off = SPILL_BASE + (int32_t)s * 8;
@@ -2295,6 +2295,18 @@ XirCodegenResult xir_codegen_arm64(XirFunc *func, XirCodeAlloc *alloc) {
 
     // Run register allocation
     ctx.xra = xra_run(func);
+
+    /* LSRA may refuse compilation (e.g. when spill slot count exceeds the
+     * GC stack-map bitmap width or the XrCoroutine suspend-bridge capacity).
+     * Abort codegen before emitting any instructions so the interpreter
+     * keeps executing this function. */
+    if (ctx.xra && ctx.xra->had_error) {
+        result.error = "regalloc refused: spill slot limit exceeded";
+        xr_free(ctx.patches);
+        xr_free(ctx.cs_patches);
+        xra_result_free(ctx.xra);
+        return result;
+    }
 
     // Allocate gap-move override array (initialized per-block)
     if (ctx.xra && ctx.xra->nvreg > 0) {

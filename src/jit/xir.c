@@ -158,9 +158,8 @@ XirBlock *xir_func_add_block(XirFunc *func, const char *label) {
     // Add to func
     if (func->nblk >= func->blk_cap) {
         uint32_t new_cap = func->blk_cap * 2;
-        XirBlock **new_arr = (XirBlock **)xr_realloc(func->blocks, new_cap * sizeof(XirBlock *));
-        if (!new_arr) return NULL;
-        func->blocks = new_arr;
+        if (!XR_REALLOC(func->blocks, new_cap * sizeof(XirBlock *)))
+            return NULL;
         func->blk_cap = new_cap;
     }
     func->blocks[func->nblk++] = blk;
@@ -265,11 +264,11 @@ static XirIns *block_grow_ins(XirFunc *func, XirBlock *blk) {
 // Grow vreg array if needed
 static void func_grow_vregs(XirFunc *func) {
     if (func->nvreg >= func->vreg_cap) {
-        uint32_t new_cap = func->vreg_cap * 2;
-        XirVReg *new_arr = (XirVReg *)xr_realloc(func->vregs, new_cap * sizeof(XirVReg));
-        if (!new_arr) return;
-        memset(new_arr + func->vreg_cap, 0, (new_cap - func->vreg_cap) * sizeof(XirVReg));
-        func->vregs = new_arr;
+        uint32_t old_cap = func->vreg_cap;
+        uint32_t new_cap = old_cap * 2;
+        XR_REALLOC_OR_ABORT(func->vregs, new_cap * sizeof(XirVReg),
+                            "xir func_grow_vregs");
+        memset(func->vregs + old_cap, 0, (new_cap - old_cap) * sizeof(XirVReg));
         func->vreg_cap = new_cap;
     }
 }
@@ -384,10 +383,8 @@ uint32_t xir_func_add_call_args(XirFunc *func, const XirRef *args, uint16_t narg
     // Grow if needed
     while (func->call_arg_pool_used + nargs > func->call_arg_pool_cap) {
         uint32_t new_cap = func->call_arg_pool_cap * 2;
-        XirRef *new_pool = (XirRef *)xr_realloc(func->call_arg_pool,
-                                                  new_cap * sizeof(XirRef));
-        if (!new_pool) return 0;
-        func->call_arg_pool = new_pool;
+        if (!XR_REALLOC(func->call_arg_pool, new_cap * sizeof(XirRef)))
+            return 0;
         func->call_arg_pool_cap = new_cap;
     }
 
@@ -456,9 +453,8 @@ static XirRef add_const(XirFunc *func, XirConstVal val, uint8_t type) {
     // Not found — insert new constant
     if (func->nconst >= func->const_cap) {
         uint32_t new_cap = func->const_cap * 2;
-        XirConst *new_arr = (XirConst *)xr_realloc(func->consts, new_cap * sizeof(XirConst));
-        if (!new_arr) return XIR_NONE;
-        func->consts = new_arr;
+        if (!XR_REALLOC(func->consts, new_cap * sizeof(XirConst)))
+            return XIR_NONE;
         func->const_cap = new_cap;
     }
 
@@ -493,9 +489,8 @@ fallback_linear:
     }
     if (func->nconst >= func->const_cap) {
         uint32_t new_cap = func->const_cap * 2;
-        XirConst *new_arr = (XirConst *)xr_realloc(func->consts, new_cap * sizeof(XirConst));
-        if (!new_arr) return XIR_NONE;
-        func->consts = new_arr;
+        if (!XR_REALLOC(func->consts, new_cap * sizeof(XirConst)))
+            return XIR_NONE;
         func->const_cap = new_cap;
     }
     uint32_t fi = func->nconst++;
@@ -783,13 +778,17 @@ void xir_rebuild_vreg_defs(XirFunc *func) {
 }
 
 bool xir_dominates(uint32_t *idom, uint32_t a, uint32_t b) {
-    uint32_t limit = 256;
-    while (b != a && limit-- > 0) {
+    // Walk the idom chain from b up to entry.  The entry node is its own
+    // immediate dominator (idom[0] == 0) which serves as the sentinel — we
+    // stop as soon as b reaches 0.  A non-entry node pointing to itself would
+    // indicate corrupt idom data, so we defend against it.
+    while (b != a) {
         if (b == 0) return (a == 0);
-        b = idom[b];
-        if (b == UINT32_MAX) return false;
+        uint32_t next = idom[b];
+        if (next == UINT32_MAX || next == b) return false;
+        b = next;
     }
-    return (b == a);
+    return true;
 }
 
 bool xir_op_has_side_effect(uint16_t op) {

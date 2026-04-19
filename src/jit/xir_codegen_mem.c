@@ -1145,7 +1145,7 @@ bool xir_emit_mem_ops(CodegenCtx *ctx, XirIns *ins, A64Reg rd) {
             // is uninitialized; these values bridge the old and new frames.
             {
                 uint32_t ns = ctx->xra ? ctx->xra->nspill : 0;
-                if (ns > 16) ns = 16;  // spill[16] max
+                if (ns > XIR_SUSPEND_SPILL_MAX) ns = XIR_SUSPEND_SPILL_MAX;
                 for (uint32_t s = 0; s < ns; s++) {
                     int32_t frame_off = SPILL_BASE + (int32_t)s * 8;
                     int32_t regs_off  = XIR_SUSPEND_SPILL_OFF + (int32_t)s * 8;

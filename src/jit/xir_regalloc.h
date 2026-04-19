@@ -33,6 +33,21 @@
 #define XRA_MAX_GP_REGS   22
 #define XRA_MAX_FP_REGS   16
 
+/*
+ * Maximum number of spill slots a single JIT function may use.
+ *
+ * This is the single source of truth shared by LSRA, codegen, and the
+ * ARM64 target descriptor.  It is upper-bounded by the width of the GC
+ * stack-map spill bitmap (see XrStackMapEntry::spill_bitmap, 32 bits):
+ * slots beyond bit 31 could not be reported to GC, so a PTR vreg spilled
+ * there would be missed during stack scanning and cause use-after-free.
+ *
+ * If regalloc needs more than this many slots for a function, LSRA sets
+ * XraResult::had_error = true and codegen refuses compilation, letting
+ * the interpreter continue executing that function.
+ */
+#define XIR_MAX_SPILL_SLOTS 32
+
 // Spill slot special values
 #define XRA_SPILL_NONE   (-1)
 #define XRA_SPILL_REMAT  (-2)
@@ -99,6 +114,12 @@ typedef struct {
     uint32_t nblk; // max_blk_id + 1
     uint32_t nspill;
     uint32_t callee_saved; // bitmask of callee-saved regs used
+
+    // Graceful compilation refusal: set by LSRA when register allocation
+    // cannot produce valid code for this function (e.g. spill slot count
+    // exceeds XIR_MAX_SPILL_SLOTS).  Codegen must check this before
+    // emitting any code and abort compilation with a diagnostic error.
+    bool had_error;
 } XraResult;
 
 /*

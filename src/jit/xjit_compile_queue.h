@@ -29,9 +29,17 @@
 #include <pthread.h>
 #include "../base/xdefs.h"
 #include "xir_code_alloc.h"
+#include "../runtime/value/xtype_feedback.h"
 
 typedef struct XrProto XrProto;
 typedef struct XirJitState XirJitState;
+struct XrShape;
+
+/* Maximum number of enclosing-proto SETSHARED entries captured into a
+ * background compile task.  Functions referenced past this are simply
+ * not elevated to CALL_KNOWN — JIT falls back to CALL_C, which is a
+ * slower but fully correct path. */
+#define XJIT_BG_SHARED_CAP  32
 
 /* ========== Background Compile Result ========== */
 
@@ -51,18 +59,34 @@ typedef struct XirBgResult {
 
 /* ========== Compile Task ========== */
 
-// Snapshot of compilation inputs, safe for background thread consumption.
-typedef struct XirCompileTask {
+/*
+ * Snapshot of every mutable input the background compiler needs.
+ *
+ * The main thread populates this struct when it enqueues a task, while
+ * the bg thread only reads from it.  Crucially this means the bg thread
+ * never races against concurrent main-thread mutations of
+ * proto->type_feedback, which in turn lets us drop the old pattern of
+ * temporarily NULL-ing out proto->type_feedback during compilation.
+ *
+ * Only |proto| itself is dereferenced from the bg thread, and only for
+ * fields that are immutable after creation (bytecode, constants, etc.).
+ */
+typedef struct XirBgTask {
     XrProto *proto;             // target proto (immutable after creation)
     bool     is_recompile;      // Tier 1 → Tier 2 recompilation
-} XirCompileTask;
+    bool     has_feedback;      // feedback_snapshot is valid
+    XirTypeFeedback feedback_snapshot;
+    int      nshared;           // number of valid shared_protos entries
+    XrProto *shared_protos[XJIT_BG_SHARED_CAP];
+    struct XrShape *shape_hint; // dominant-shape hint for param PTR shaping
+} XirBgTask;
 
 /* ========== SPSC Ring Buffer ========== */
 
 #define XJIT_QUEUE_CAPACITY 64  // power of 2
 
 typedef struct XirCompileQueue {
-    XirCompileTask tasks[XJIT_QUEUE_CAPACITY];
+    XirBgTask tasks[XJIT_QUEUE_CAPACITY];
     _Atomic uint32_t head;      // written by producer (main thread)
     _Atomic uint32_t tail;      // written by consumer (bg thread)
 
@@ -90,9 +114,10 @@ XR_FUNC void xjit_queue_init(XirCompileQueue *q, XirJitState *jit);
 // Shutdown: signal background thread to exit and join.
 XR_FUNC void xjit_queue_destroy(XirCompileQueue *q);
 
-// Enqueue a proto for background compilation (non-blocking).
+// Enqueue a pre-populated snapshot for background compilation (non-blocking).
 // Returns true if enqueued, false if queue is full (caller should compile sync).
-XR_FUNC bool xjit_queue_push(XirCompileQueue *q, XrProto *proto, bool is_recompile);
+// |task| is copied into the ring buffer; the caller retains ownership.
+XR_FUNC bool xjit_queue_push(XirCompileQueue *q, const XirBgTask *task);
 
 // Install all pending compiled code (called from main thread at OP_CALL).
 // Atomically moves bg_result data into proto fields and sets jit_entry.

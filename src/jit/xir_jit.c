@@ -30,6 +30,7 @@
 #include "xir_printer.h"
 #include "../runtime/value/xchunk.h"
 #include "xir_opcode_support.h"
+#include "xir_eligibility.h"
 #include "../runtime/value/xslot_type.h"
 #include "../runtime/value/xtype.h"
 #include "../runtime/object/xstring.h"
@@ -163,240 +164,6 @@ void xir_jit_destroy(XirJitState *jit) {
     xr_free(jit);
 }
 
-/* ========== Eligibility Check ========== */
-
-static bool check_slot_type_eligible(uint8_t st) {
-    return st == XR_SLOT_I64 || st == XR_SLOT_F64 ||
-           st == XR_SLOT_BOOL || st == XR_SLOT_PTR;
-}
-
-bool is_jit_eligible(XrProto *proto, bool verbose) {
-    const char *name = (proto && proto->name) ? XR_STRING_CHARS(proto->name) : "?";
-
-    if (!proto) return false;
-
-    // Must have bb_leaders for CFG construction
-    if (!proto->bb_leaders) {
-        if (verbose) fprintf(stderr, "[JIT] skip %s: no bb_leaders\n", name);
-        return false;
-    }
-
-    // Complexity guard: oversized functions stay in interpreter.
-    // Derived from max_vregs (bytecode-to-vreg ratio ~1:0.25, so limit = max_vregs * 4).
-    int max_bc = xir_current_target ? xir_current_target->max_vregs * 4 : 2048;
-    if (proto->code.count > max_bc) {
-        if (verbose) fprintf(stderr, "[JIT] skip %s: too many bytecodes (%d, limit %d)\n",
-                             name, proto->code.count, max_bc);
-        return false;
-    }
-
-    // No vararg functions
-    if (proto->is_vararg) {
-        if (verbose) fprintf(stderr, "[JIT] skip %s: vararg function\n", name);
-        return false;
-    }
-
-    // Max 16 upvalues (closures supported)
-    if (PROTO_UPVAL_COUNT(proto) > 16) {
-        if (verbose) fprintf(stderr, "[JIT] skip %s: too many upvalues (%d)\n", name, (int)PROTO_UPVAL_COUNT(proto));
-        return false;
-    }
-
-    // Max 8 params
-    if (proto->numparams > 8) {
-        if (verbose) fprintf(stderr, "[JIT] skip %s: too many params (%d)\n", name, proto->numparams);
-        return false;
-    }
-
-    // Too many deopt failures — exponential backoff retry (never permanently banned)
-    if (proto->deopt_count > 3) {
-        uint32_t backoff = proto->deopt_backoff ? proto->deopt_backoff : 10;
-        uint32_t current = proto->call_count;
-        if (current - proto->deopt_reset_at < backoff) {
-            if (verbose) fprintf(stderr, "[JIT] skip %s: deopt backoff (%d/%d)\n",
-                                 name, current - proto->deopt_reset_at, backoff);
-            return false;
-        }
-        // Backoff elapsed: give one retry, double interval for next failure
-        proto->deopt_count = 0;
-        proto->deopt_reset_at = current;
-        proto->deopt_backoff = backoff * 2 < 10000 ? backoff * 2 : 10000;
-        if (verbose) fprintf(stderr, "[JIT] retry %s after backoff (next=%u)\n",
-                             name, proto->deopt_backoff);
-    }
-
-    // Source 1: param_types (authoritative per-parameter types)
-    if (proto->param_types) {
-        for (int i = 0; i < proto->numparams; i++) {
-            uint8_t gc = (i < proto->param_types_count && proto->param_types[i])
-                ? xr_type_to_slot_type(proto->param_types[i]) : XR_SLOT_ANY;
-            if (!check_slot_type_eligible(gc)) {
-                if (verbose) fprintf(stderr, "[JIT] skip %s: param %d has ineligible slot_type %d\n", name, i, gc);
-                return false;
-            }
-        }
-    }
-    // Source 2: runtime profile feedback (stable monomorphic types)
-    else if (proto->type_feedback && proto->type_feedback->stable) {
-        XirTypeFeedback *fb = proto->type_feedback;
-        for (int i = 0; i < proto->numparams; i++) {
-            if (!xfb_is_monomorphic(fb->arg_types[i])) {
-                if (verbose) fprintf(stderr, "[JIT] skip %s: param %d not monomorphic in feedback\n", name, i);
-                return false;
-            }
-            uint8_t st = xfb_to_slot_type(fb->arg_types[i]);
-            if (!check_slot_type_eligible(st)) {
-                if (verbose) fprintf(stderr, "[JIT] skip %s: param %d feedback type %d ineligible\n", name, i, st);
-                return false;
-            }
-        }
-    }
-    // No type info at all — not eligible (unless zero params)
-    else {
-        if (proto->numparams > 0) {
-            if (verbose) fprintf(stderr, "[JIT] skip %s: %d params but no type info (no param_types, no feedback)\n", name, proto->numparams);
-            return false;
-        }
-    }
-
-    // Only JIT functions with typed return values that xir_jit_call can reconstruct.
-    // Promote feedback return type to return_type_info if not set.
-    if (!proto->return_type_info && proto->type_feedback && proto->type_feedback->stable) {
-        uint8_t fb_ret = xfb_to_slot_type(proto->type_feedback->return_type);
-        if (fb_ret != XR_SLOT_ANY) {
-            proto->return_type_info = xr_slot_type_to_type(fb_ret);
-        }
-    }
-    uint8_t rt = proto->return_type_info
-        ? xr_type_to_slot_type(proto->return_type_info) : XR_SLOT_ANY;
-    // XR_SLOT_ANY is allowed: void functions and untyped returns
-    // xir_jit_call handles ANY return with safe fallback (i64 payload)
-    if (rt != XR_SLOT_ANY && rt != XR_SLOT_I64 && rt != XR_SLOT_F64 &&
-        rt != XR_SLOT_PTR && rt != XR_SLOT_BOOL) {
-        if (verbose) fprintf(stderr, "[JIT] skip %s: return type %d (unsupported)\n", name, rt);
-        return false;
-    }
-
-    // Whitelist scan: reject functions containing any opcode without a JIT translation.
-    int code_len = proto->code.count;
-    for (int ci = 0; ci < code_len; ci++) {
-        XrInstruction ins = PROTO_CODE(proto, ci);
-        OpCode op = GET_OPCODE(ins);
-        switch (op) {
-            // Control flow
-            case OP_NOP:
-            case OP_JMP:
-            case OP_TEST: case OP_TESTSET:
-            case OP_LT:   case OP_LE:   case OP_EQ:
-            case OP_LTI:  case OP_LEI:  case OP_EQI:
-            case OP_EQK:
-            case OP_ISNULL: case OP_ISNULL_SET:
-            case OP_RETURN0: case OP_RETURN1: case OP_RETURN:
-            // Load / move
-            case OP_LOADI: case OP_LOADF: case OP_LOADK:
-            case OP_LOADTRUE: case OP_LOADFALSE: case OP_LOADNULL:
-            case OP_MOVE:
-            // Arithmetic
-            case OP_ADD:  case OP_SUB:  case OP_MUL:  case OP_DIV:  case OP_MOD:
-            case OP_ADDI: case OP_SUBI: case OP_MULI:
-            case OP_ADDK: case OP_SUBK: case OP_MULK: case OP_DIVK: case OP_MODK:
-            case OP_UNM:
-            // Bitwise
-            case OP_BAND: case OP_BOR: case OP_BXOR: case OP_BNOT:
-            case OP_SHL:  case OP_SHR:
-            // Comparison (expr form)
-            case OP_CMP_LT: case OP_CMP_LE: case OP_CMP_EQ: case OP_CMP_NE:
-            case OP_CMP_EQ_STRICT: case OP_CMP_NE_STRICT:
-            // Box / unbox
-            case OP_BOX_I64: case OP_BOX_F64:
-            case OP_UNBOX_I64: case OP_UNBOX_F64:
-            // Conversion
-            case OP_TOINT: case OP_TOFLOAT: case OP_TOBOOL:
-            // Closures / upvalues / cells
-            case OP_UPVAL_GET: case OP_CLOSURE:
-            case OP_CELL_NEW: case OP_CELL_GET: case OP_CELL_SET:
-            // Object / JSON
-            case OP_GETFIELD: case OP_SETFIELD:
-            case OP_GETPROP:
-            case OP_NEWJSON:
-            case OP_JSON_GET:   case OP_JSON_SET:   case OP_JSON_GETK:
-            case OP_JSON_INIT:  case OP_JSON_INIT_I: case OP_JSON_INIT_N:
-            case OP_TFIELD_GET: case OP_TFIELD_SET:
-            // Array operations
-            case OP_NEWARRAY:
-            case OP_INDEX_GET:       case OP_INDEX_SET:
-            case OP_ARRAY_GET:       case OP_ARRAY_GETC:
-            case OP_ARRAY_GET_NOCHECK:
-            case OP_ARRAY_SET:       case OP_ARRAY_SETC:
-            case OP_ARRAY_PUSH:      case OP_ARRAY_INIT:
-            case OP_ARRAY_LEN:
-            case OP_TARRAY_GET:      case OP_TARRAY_GETC:
-            case OP_TARRAY_PUSH:     case OP_TARRAY_SET:
-            // Channel (non-blocking + blocking)
-            case OP_CHAN_NEW: case OP_CHAN_CLOSE: case OP_CHAN_IS_CLOSED:
-            case OP_CHAN_TRY_SEND: case OP_CHAN_TRY_RECV:
-            case OP_CHAN_SEND: case OP_CHAN_RECV:
-            // Function calls
-            case OP_CALL: case OP_CALL_STATIC: case OP_CALL_KEEP:
-            case OP_CALLSELF: case OP_TAILCALL:
-            case OP_INVOKE: case OP_INVOKE_BUILTIN:
-            case OP_INVOKE_DIRECT: case OP_INVOKE_TAIL:
-            case OP_SUPERINVOKE:
-            // Property write
-            case OP_SETPROP:
-            // Shared / global variables
-            case OP_GETSHARED: case OP_SETSHARED:
-            case OP_GETBUILTIN:
-            // String operations
-            case OP_TOSTRING:
-            case OP_STRBUF_NEW: case OP_STRBUF_APPEND: case OP_STRBUF_FINISH:
-            case OP_SUBSTRING: case OP_STR_REPEAT: case OP_CHR:
-            // Map operations
-            case OP_NEWMAP: case OP_NEWSET:
-            case OP_MAP_GET: case OP_MAP_GETK:
-            case OP_MAP_SET: case OP_MAP_SETK: case OP_MAP_SETKS:
-            case OP_MAP_INCREMENT:
-            // Class / struct operations
-            case OP_CLASS_CREATE_FROM_DESCRIPTOR: case OP_CLINIT_CALL:
-            case OP_GETSUPER:
-            case OP_NEW_STRUCT: case OP_STRUCT_GET: case OP_STRUCT_SET: case OP_STRUCT_COPY:
-            case OP_GETFIELD_IC: case OP_JSON_SETK:
-            case OP_SET_STORAGE_CTX: case OP_TO_SHARED:
-            // Assertions
-            case OP_ASSERT: case OP_ASSERT_EQ: case OP_ASSERT_NE:
-            // Exception handling
-            case OP_END_TRY: case OP_FINALLY:
-            // Loop optimization
-            case OP_LOOP_BACK:
-            // Spill / reload
-            case OP_SPILL: case OP_RELOAD:
-            // Range / slice
-            case OP_NEWRANGE: case OP_RANGE_UNPACK: case OP_SLICE:
-            case OP_NEWSTRINGBUILDER:
-            // Enum
-            case OP_ENUM_ACCESS: case OP_ENUM_CONVERT: case OP_ENUM_NAME:
-            // Misc
-            case OP_NOT: case OP_IS: case OP_CHECKTYPE:
-            case OP_TYPEOF: case OP_TYPENAME:
-            case OP_PRINT: case OP_DUMP:
-            case OP_COPY: case OP_ABSTRACT_ERROR:
-            case OP_REGEX_COMPILE:
-            case OP_IMPORT: case OP_EXPORT: case OP_EXPORT_ALL:
-            case OP_THROW: case OP_TRY: case OP_CATCH:
-            // Structured concurrency
-            case OP_SCOPE_ENTER: case OP_SCOPE_EXIT: case OP_SPAWN_CONT:
-            // Await
-            case OP_AWAIT:
-                break;  // supported — continue scanning
-            default:
-                if (verbose) fprintf(stderr, "[JIT] skip %s: NYI opcode %d at pc=%d\n", name, op, ci);
-                return false;  // unsupported opcode → reject JIT
-        }
-    }
-
-    return true;
-}
-
 /* ========== Compilation ========== */
 
 // Recompilation threshold: after this many executions at Tier 1,
@@ -483,11 +250,55 @@ bool xir_jit_try_compile(XirJitState *jit, XrProto *proto) {
         // Already queued or compiled by bg thread → skip
         if (atomic_load_explicit(&proto->jit_entry_pending, memory_order_acquire))
             return false;
+
+        /* Build a self-contained task snapshot on the main thread so the bg
+         * worker never has to race-read mutable proto fields. Every input
+         * the pipeline needs (feedback, shared_protos, shape_hint) is
+         * captured here by value. */
+        XirBgTask task;
+        memset(&task, 0, sizeof(task));
+        task.proto        = proto;
+        task.is_recompile = is_recompile;
+
+        if (proto->type_feedback) {
+            // Copy the feedback struct (POD, ~16 bytes); main thread may
+            // keep mutating the original via xfb_record_arg afterwards.
+            task.feedback_snapshot = *proto->type_feedback;
+            task.has_feedback = true;
+        }
+
+        /* shared_protos: enables CALL_KNOWN for module-level fn references
+         * via GETSHARED.  Truncate to XJIT_BG_SHARED_CAP (rare overflow
+         * simply falls back to CALL_C, still correct). */
+        int nshared = 0;
+        XrProto **tmp = jit_build_shared_protos(proto, &nshared);
+        if (tmp) {
+            int n = nshared < XJIT_BG_SHARED_CAP ? nshared : XJIT_BG_SHARED_CAP;
+            for (int i = 0; i < n; i++) task.shared_protos[i] = tmp[i];
+            task.nshared = n;
+            xr_free(tmp);
+        }
+
+        /* shape_hint: only bother passing it when the proto has a PTR
+         * parameter that could actually benefit. */
+        if (jit->dominant_shape) {
+            for (int i = 0; i < proto->numparams; i++) {
+                uint8_t gc = XR_SLOT_ANY;
+                if (proto->param_types && i < proto->param_types_count &&
+                    proto->param_types[i])
+                    gc = xr_type_to_slot_type(proto->param_types[i]);
+                if (gc == XR_SLOT_PTR) {
+                    task.shape_hint = (struct XrShape *)jit->dominant_shape;
+                    break;
+                }
+            }
+        }
+
         // Set sentinel (0x1) to prevent duplicate queue entries from OSR triggers.
         // bg thread replaces this with the actual XirBgResult* when done.
         atomic_store_explicit(&proto->jit_entry_pending,
                               (void *)(uintptr_t)1, memory_order_release);
-        if (xjit_queue_push(jit->bg_queue, proto, is_recompile)) {
+        if (xjit_queue_push(jit->bg_queue, &task)) {
             return false;  // enqueued, VM will interpret
         }
         // Queue full → clear sentinel, return false (NEVER fall through
