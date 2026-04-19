@@ -127,7 +127,6 @@ static const XrOpCodeInfo opcode_table[NUM_OPCODES] = {
     [OP_CLINIT_CALL]            = {"CLINIT_CALL",          FMT_A,    "call static init <clinit>"},
 
     // OOP - Class operations
-    [OP_INHERIT]    = {"INHERIT",    FMT_ABC,   "R[A].super = R[B]"},
     [OP_GETPROP]    = {"GETPROP",    FMT_ABC,   "R[A] = R[B].K[C]"},
     [OP_SETPROP]    = {"SETPROP",    FMT_ABC,   "R[A].K[B] = R[C]"},
     [OP_GETSUPER]   = {"GETSUPER",   FMT_ABC,   "R[A] = R[B].super.K[C]"},

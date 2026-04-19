@@ -358,7 +358,7 @@ bool is_jit_eligible(XrProto *proto, bool verbose) {
             case OP_MAP_INCREMENT:
             // Class / struct operations
             case OP_CLASS_CREATE_FROM_DESCRIPTOR: case OP_CLINIT_CALL:
-            case OP_INHERIT: case OP_GETSUPER:
+            case OP_GETSUPER:
             case OP_NEW_STRUCT: case OP_STRUCT_GET: case OP_STRUCT_SET: case OP_STRUCT_COPY:
             case OP_GETFIELD_IC: case OP_JSON_SETK:
             case OP_SET_STORAGE_CTX: case OP_TO_SHARED:
