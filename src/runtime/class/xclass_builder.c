@@ -14,6 +14,8 @@
 #include "../../base/xlog.h"
 #include "xclass.h"
 #include "xmethod.h"
+#include "xreflect_cache.h"
+#include "xreflect_registry.h"
 #include "../object/xstring.h"
 #include "../xerror.h"
 #include "../../base/xmalloc.h"
@@ -912,6 +914,35 @@ XrClass* xr_class_builder_finalize(XrClassBuilder *builder) {
     xr_class_build_itable(cls);
 
     xr_class_compute_operator_flags(cls);
+
+    // Eagerly populate the two optional per-class caches that the
+    // reflection layer used to fill in lazily. Both are best-effort:
+    // on allocation failure we fall back to the old lazy path the
+    // read sites already handle (they tolerate NULL). For every class
+    // that finalises cleanly, reflect_cache and type_metadata are now
+    // guaranteed non-NULL on return, which eliminates the race that
+    // existed when two coroutines reflected the same class at once.
+    if (builder->isolate != NULL) {
+        if (cls->reflect_cache == NULL) {
+            XrReflectCache *rcache = xr_reflect_cache_create(builder->isolate, cls);
+            if (rcache != NULL) {
+                cls->reflect_cache = rcache;
+            } else {
+                xr_log_warning("class",
+                               "finalize: reflect_cache allocation failed for '%s'",
+                               cls->name ? cls->name : "<anonymous>");
+            }
+        }
+        if (cls->type_metadata == NULL
+            && xr_isolate_get_type_registry(builder->isolate) != NULL) {
+            // xr_registry_register_class is idempotent: if the class was
+            // already registered by a prior path it returns the existing
+            // metadata without producing a duplicate warning. The cache
+            // of metadata back onto cls->type_metadata happens inside
+            // xr_registry_register_type.
+            (void)xr_registry_register_class(builder->isolate, cls);
+        }
+    }
 
     builder->finalized = true;
     xr_class_builder_destroy(builder);
