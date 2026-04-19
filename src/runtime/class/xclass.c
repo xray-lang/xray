@@ -407,7 +407,8 @@ int xr_class_verify_interface(XrClass *cls, XrClass *iface,
 int xr_class_build_itable(XrClass *cls) {
     if (!cls) return -1;
 
-    // Free existing itable
+    // Free existing itable (including per-entry methods[] and per-entry
+    // method_symbol_to_index maps that a previous build may have left).
     if (cls->itable) {
         for (int i = 0; i < cls->itable_size; i++) {
             if (cls->itable[i].methods) {
@@ -429,9 +430,12 @@ int xr_class_build_itable(XrClass *cls) {
     cls->itable_size = cls->interface_count;
     cls->itable = (XrItableEntry*)xr_malloc(cls->itable_size * sizeof(XrItableEntry));
     if (!cls->itable) {
+        cls->itable_size = 0;
         return -1;
     }
     memset(cls->itable, 0, cls->itable_size * sizeof(XrItableEntry));
+
+    int result = 0;
 
     for (int i = 0; i < cls->interface_count; i++) {
         XrClass *iface = cls->interfaces[i];
@@ -443,7 +447,13 @@ int xr_class_build_itable(XrClass *cls) {
         if (iface->method_count > 0) {
             cls->itable[i].methods = (XrMethod**)xr_malloc(
                 iface->method_count * sizeof(XrMethod*));
-            if (!cls->itable[i].methods) return -1;
+            if (!cls->itable[i].methods) {
+                // methods[] alloc failed -> unwind every itable entry built
+                // so far. Centralised in the `fail` label so we never mix
+                // a "half-built" itable into cls on the error path.
+                result = -1;
+                goto fail;
+            }
 
             // Resolve each interface method via the class's
             // symbol-to-index table. method_symbol_to_index is populated
@@ -471,7 +481,9 @@ int xr_class_build_itable(XrClass *cls) {
             // Build the per-entry symbol -> slot map so the runtime
             // dispatch path xr_class_lookup_interface_method_by_symbol
             // can jump directly to a slot instead of walking the
-            // methods[] array.
+            // methods[] array. A map allocation failure is tolerated
+            // here -- lookup_by_symbol handles the NULL-map case with
+            // a direct "entry has no map => return NULL" fallback.
             if (max_symbol >= 0) {
                 int cap = max_symbol + 1;
                 int *map = (int*)xr_malloc(cap * sizeof(int));
@@ -491,6 +503,26 @@ int xr_class_build_itable(XrClass *cls) {
     }
 
     return 0;
+
+fail:
+    // Release every partial entry and the itable array itself so the
+    // class is left with (itable == NULL, itable_size == 0) just like
+    // the pre-build state -- xr_class_free and a future retry of
+    // build_itable both see a clean slate.
+    for (int i = 0; i < cls->itable_size; i++) {
+        if (cls->itable[i].methods) {
+            xr_free(cls->itable[i].methods);
+            cls->itable[i].methods = NULL;
+        }
+        if (cls->itable[i].method_symbol_to_index) {
+            xr_free(cls->itable[i].method_symbol_to_index);
+            cls->itable[i].method_symbol_to_index = NULL;
+        }
+    }
+    xr_free(cls->itable);
+    cls->itable = NULL;
+    cls->itable_size = 0;
+    return result;
 }
 
 /* ========== Abstract Class Support ========== */

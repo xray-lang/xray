@@ -497,11 +497,15 @@ int xr_class_builder_generate_vtable(XrClassBuilder *builder, XrClass *cls) {
             cls->vtable[parent_vtable_idx] = method;
             method->vtable_index = parent_vtable_idx;
         } else {
-            cls->vtable = (XrMethod**)xr_realloc(cls->vtable,
-                                                      (cls->vtable_size + 1) * sizeof(XrMethod*));
-            if (!cls->vtable) {
+            // Route realloc through a temporary so a failed grow does not
+            // overwrite cls->vtable with NULL and leak the previous buffer
+            // (required by docs/rules/c-coding-standards.md).
+            XrMethod **new_vtable = (XrMethod**)xr_realloc(cls->vtable,
+                (cls->vtable_size + 1) * sizeof(XrMethod*));
+            if (!new_vtable) {
                 return -1;
             }
+            cls->vtable = new_vtable;
 
             cls->vtable[cls->vtable_size] = method;
             method->vtable_index = cls->vtable_size;
@@ -610,7 +614,13 @@ XrClass* xr_class_builder_finalize(XrClassBuilder *builder) {
         cls->fields = (XrFieldDescriptor*)xr_malloc(
             total_own_fields * sizeof(XrFieldDescriptor));
         if (cls->fields == NULL) {
-            xr_free(cls);
+            // Route through xr_class_free even though only the cls
+            // header has been touched so far: keeps every allocation
+            // failure path in finalize symmetric and lets future
+            // additions (e.g. extra early-init fields) piggy-back on
+            // the same cleanup hook without having to remember to
+            // upgrade the old manual xr_free(cls) call.
+            xr_class_free(cls);
             return NULL;
         }
 
@@ -802,7 +812,15 @@ XrClass* xr_class_builder_finalize(XrClassBuilder *builder) {
 
         cls->method_count = flat_instance_count;
 
-        xr_class_builder_generate_vtable(builder, cls);
+        // vtable generation is allowed to fail (OOM); if it does, the
+        // partially-populated class would lose dispatch but keep its
+        // methods[], which is confusing. Roll back to a clean "failed
+        // class_new" error so the caller can bail out symmetrically
+        // with every other allocation failure path in finalize.
+        if (xr_class_builder_generate_vtable(builder, cls) != 0) {
+            xr_class_free(cls);
+            return NULL;
+        }
     }
 
     /* ========== Static Fields ========== */
