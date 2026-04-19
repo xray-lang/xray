@@ -666,7 +666,7 @@ typedef struct {
 
 /* ========== Function-level IR Container ========== */
 
-typedef struct {
+typedef struct XirFunc {
     const char *name;    // function name (debug)
 
     // Basic blocks

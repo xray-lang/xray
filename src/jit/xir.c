@@ -16,6 +16,7 @@
 #include "xir_domtree.h"
 #include "xir_looptree.h"
 #include "xir_alias.h"
+#include "xir_defuse.h"
 #include "../base/xchecks.h"
 #include "../base/xmalloc.h"
 #include <string.h>

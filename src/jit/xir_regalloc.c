@@ -315,16 +315,35 @@ static int32_t next_use_after(const LsRange *r, int32_t pos) {
 /* ========== Intersection ========== */
 
 static int32_t first_isect(const LsRange *a, const LsRange *b) {
-    /* Use overall range bounds [range_start, range_end) for intersection.
-     * A range occupies its register for the full duration including holes.
-     * Without this, another range allocated to the same register during a
-     * hole would overwrite the value, corrupting it when the range resumes.
-     * Proper hole-aware register reuse requires range splitting (future). */
-    int32_t a_s = range_start(a), a_e = range_end(a);
-    int32_t b_s = range_start(b), b_e = range_end(b);
-    if (a_s >= a_e || b_s >= b_e) return INT32_MAX;
-    if (a_s < b_e && b_s < a_e)
-        return (a_s > b_s) ? a_s : b_s;
+    /* Hole-aware intersection.
+     *
+     * Both ranges expose their live extent as a sorted, non-overlapping
+     * linked list of LsInterval records.  A range is only live during
+     * its intervals; the gaps between intervals are "holes" during
+     * which the register is logically free.  Treating the whole
+     * [range_start, range_end) span as live (the previous conservative
+     * behaviour) prevented two ranges from sharing a register whenever
+     * they overlapped at the outer bounds but never simultaneously at
+     * any real live point.
+     *
+     * The scan below walks both lists in a merge-style fashion and
+     * returns the first position where an A-interval and a B-interval
+     * actually overlap.  Complexity is O(|A| + |B|) in the number of
+     * interval fragments; these lists are small for typical functions
+     * (one-to-three intervals per vreg), so the extra work is
+     * negligible compared to the correctness win for wide phi ranges
+     * and post-split tails. */
+    const LsInterval *ia = a->first_iv;
+    const LsInterval *ib = b->first_iv;
+    while (ia && ib) {
+        if (ia->start < ib->end && ib->start < ia->end) {
+            return (ia->start > ib->start) ? ia->start : ib->start;
+        }
+        /* Advance whichever list finishes earlier so we make
+         * monotonic progress through the timeline. */
+        if (ia->end <= ib->start) ia = ia->next;
+        else                      ib = ib->next;
+    }
     return INT32_MAX;
 }
 

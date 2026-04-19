@@ -145,7 +145,7 @@ static SccpVal ref_value(SccpCtx *ctx, XirRef ref) {
         uint32_t ci = XIR_REF_INDEX(ref);
         if (ci >= func->nconst) { v.kind = SCCP_BOT; return v; }
         XirConst *c = &func->consts[ci];
-        switch (c->type) {
+        switch (c->rep) {
             case XR_REP_I64: v.kind = SCCP_CONST_I64; v.i64 = c->val.i64; break;
             case XR_REP_F64: v.kind = SCCP_CONST_F64; v.f64 = c->val.f64; break;
             case XR_REP_PTR: v.kind = SCCP_CONST_PTR; v.ptr = c->val.ptr; break;
