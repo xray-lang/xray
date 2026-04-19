@@ -49,7 +49,7 @@ static uint8_t get_typed_array_elem_slot_for_set(XrCompilerContext *ctx, AstNode
 
 /*
  * Compile index assignment statement
- * 
+ *
  * a[b] = c -> INDEX_SET a, b, c
  */
 void compile_index_set(XrCompilerContext *ctx, XrCompiler *compiler, IndexSetNode *node) {
@@ -59,22 +59,24 @@ void compile_index_set(XrCompilerContext *ctx, XrCompiler *compiler, IndexSetNod
     if (ctx->analyzer && node->array) {
         XrType *arr_type = xa_analyzer_infer_expr_type(ctx->analyzer, node->array);
         if (arr_type && xr_type_is_const(arr_type) && !xr_type_is_inherently_immutable(arr_type)) {
-            fprintf(stderr, "[Compile Error] Line %d: cannot modify elements of const container\n", 
-                    node->array->line);
-            ctx->had_error = true;
+            int saved_line = ctx->current_line;
+            ctx->current_line = node->array->line;
+            xr_compiler_error(ctx, compiler,
+                              "cannot modify elements of const container");
+            ctx->current_line = saved_line;
             return;
         }
     }
-    
+
     // Compile array expression - use readonly version to avoid redundant MOVE
     XrExprDesc arr_expr = xr_compile_expr(ctx, compiler, node->array);
     int array_reg = xexpr_to_anyreg_readonly(ctx, compiler, &arr_expr);
-    
+
     // Optimization: use OP_ARRAY_SETC for integer literal index (e.g. arr[0] = v)
     if (node->index->type == AST_LITERAL_INT) {
         LiteralNode *lit = (LiteralNode *)&node->index->as;
         int64_t idx = lit->raw_value.int_val;
-        
+
         // B parameter only has 8 bits (0-255), check range
         if (idx >= 0 && idx <= 255) {
             uint8_t elem_slot = get_typed_array_elem_slot_for_set(ctx, node->array);
@@ -93,16 +95,16 @@ void compile_index_set(XrCompilerContext *ctx, XrCompiler *compiler, IndexSetNod
             // Compile value expression
             XrExprDesc val_expr = xr_compile_expr(ctx, compiler, node->value);
             int value_reg = xexpr_to_anyreg(ctx, compiler, &val_expr);
-            
+
             // OP_ARRAY_SETC A B C: R[A][B] = R[C]
             emit_abc(compiler->emitter, OP_ARRAY_SETC, array_reg, (int)idx, value_reg);
-            
+
             reg_free(compiler, value_reg);
             reg_free(compiler, array_reg);
             return;
         }
     }
-    
+
     // Optimization: use OP_MAP_SETK for string literal key (e.g. map["key"] = v)
     if (node->index->type == AST_LITERAL_STRING) {
         LiteralNode *lit = (LiteralNode *)&node->index->as;
@@ -110,23 +112,23 @@ void compile_index_set(XrCompilerContext *ctx, XrCompiler *compiler, IndexSetNod
         // Use interned string, share same object with Map key
         XrString *key_str = xr_compile_time_intern(ctx->X, str_val, strlen(str_val));
         int key_const = xr_vm_proto_add_constant(compiler->proto, xr_string_value(key_str));
-        
+
         // Compile value expression
         XrExprDesc val_expr = xr_compile_expr(ctx, compiler, node->value);
         int value_reg = xexpr_to_anyreg(ctx, compiler, &val_expr);
-        
+
         // OP_MAP_SETK A B C: R[A][K[B]] = R[C]
         emit_abc(compiler->emitter, OP_MAP_SETK, array_reg, key_const, value_reg);
-        
+
         reg_free(compiler, value_reg);
         reg_free(compiler, array_reg);
         return;
     }
-    
+
     // General path: compile index expression
     XrExprDesc idx_expr = xr_compile_expr(ctx, compiler, node->index);
     int index_reg = xexpr_to_anyreg_readonly(ctx, compiler, &idx_expr);
-    
+
     // Typed array fast path: OP_TARRAY_SET (raw in, no BOX)
     {
         uint8_t elem_slot = get_typed_array_elem_slot_for_set(ctx, node->array);
@@ -140,14 +142,14 @@ void compile_index_set(XrCompilerContext *ctx, XrCompiler *compiler, IndexSetNod
             return;
         }
     }
-    
+
     // Compile value expression
     XrExprDesc val_expr = xr_compile_expr(ctx, compiler, node->value);
     int value_reg = xexpr_to_anyreg(ctx, compiler, &val_expr);
-    
+
     // Use generic INDEX_SET instruction
     emit_abc(compiler->emitter, OP_INDEX_SET, array_reg, index_reg, value_reg);
-    
+
     reg_free(compiler, index_reg);
     reg_free(compiler, value_reg);
     reg_free(compiler, array_reg);
@@ -158,7 +160,7 @@ void compile_index_set(XrCompilerContext *ctx, XrCompiler *compiler, IndexSetNod
 /*
  * Check if there are readonly fields in member access chain
  * e.g. user.profile.avatar: if profile is const, return true
- * 
+ *
  * @param ctx       Compiler context
  * @param compiler  Compiler
  * @param expr      Access expression
@@ -166,34 +168,34 @@ void compile_index_set(XrCompilerContext *ctx, XrCompiler *compiler, IndexSetNod
  * @param out_type  Output: type name containing the field
  * @return          true if there are readonly fields in access chain
  */
-static bool check_readonly_chain(XrCompilerContext *ctx, XrCompiler *compiler, 
-                                  AstNode *expr, 
+static bool check_readonly_chain(XrCompilerContext *ctx, XrCompiler *compiler,
+                                  AstNode *expr,
                                   const char **out_field, const char **out_type) {
     if (expr->type != AST_MEMBER_ACCESS) {
         return false;
     }
-    
+
     MemberAccessNode *member = &expr->as.member_access;
-    
+
     // Get object type
     XrType *obj_type = NULL;
-    
+
     if (member->object->compile_type) {
         obj_type = (XrType*)(member->object->compile_type);
     } else if (ctx->analyzer && member->object->type == AST_VARIABLE) {
         const char *var_name = member->object->as.variable.name;
         obj_type = xa_analyzer_lookup_var(ctx->analyzer, var_name);
     }
-    
+
     // Check if current field is readonly (const modified)
     if (obj_type && obj_type->kind == XR_KIND_JSON) {
         for (int i = 0; i < obj_type->object.field_count; i++) {
             if (obj_type->object.field_names[i] &&
                 strcmp(obj_type->object.field_names[i], member->name) == 0) {
-                if (obj_type->object.field_readonly && 
+                if (obj_type->object.field_readonly &&
                     obj_type->object.field_readonly[i]) {
                     *out_field = member->name;
-                    *out_type = obj_type->object.type_name ? 
+                    *out_type = obj_type->object.type_name ?
                                 obj_type->object.type_name : "object";
                     return true;
                 }
@@ -201,16 +203,16 @@ static bool check_readonly_chain(XrCompilerContext *ctx, XrCompiler *compiler,
             }
         }
     }
-    
+
     // Recursively check parent access
     return check_readonly_chain(ctx, compiler, member->object, out_field, out_type);
 }
 
 /*
  * Compile member assignment statement
- * 
+ *
  * obj.member = value -> SETPROP obj, symbol, value
- * 
+ *
  * Optimization paths (by priority):
  * 1. this.field -> SETFIELD_FAST (in class method)
  * 2. struct.field -> STRUCT_SET (Struct type)
@@ -238,35 +240,35 @@ void compile_member_set(XrCompilerContext *ctx, XrCompiler *compiler, MemberSetN
     const char *readonly_field = NULL;
     const char *readonly_type = NULL;
     if (check_readonly_chain(ctx, compiler, node->object, &readonly_field, &readonly_type)) {
-        xr_compiler_error(ctx, compiler, 
-            "cannot modify subfield of '%s.%s': '%s' is readonly (const modified)", 
+        xr_compiler_error(ctx, compiler,
+            "cannot modify subfield of '%s.%s': '%s' is readonly (const modified)",
             readonly_type, readonly_field, readonly_field);
         return;
     }
-    
+
     // Optimization 1: check if this.field access (in class method)
-    if (ctx->current_class_desc != NULL && 
+    if (ctx->current_class_desc != NULL &&
         node->object->type == AST_THIS_EXPR &&
         ctx->class_registry) {
-        
+
         // Use ClassInfo which already has correct field indices (including parent offset)
         XrClassDescriptor *desc = ctx->current_class_desc;
         ClassInfo *class_info = xr_class_registry_lookup(ctx->class_registry, desc->class_name);
         int field_idx = class_info ? xr_class_find_instance_field_index(class_info, node->member) : -1;
-        
+
         if (field_idx >= 0) {
             XrExprDesc obj_expr = xr_compile_expr(ctx, compiler, node->object);
             int obj_reg = xexpr_to_anyreg_readonly(ctx, compiler, &obj_expr);
             XrExprDesc val_expr = xr_compile_expr(ctx, compiler, node->value);
             int value_reg = xexpr_to_anyreg(ctx, compiler, &val_expr);
-            
+
             // Struct: native field write
             if (class_info && class_info->struct_layout) {
                 emit_abc(compiler->emitter, OP_STRUCT_SET, obj_reg, field_idx, value_reg);
                 reg_free(compiler, value_reg);
                 return;
             }
-            
+
             // Class instance: heap field write
             uint8_t fst = class_info ?
                 xr_class_get_field_slot_type(class_info, node->member) : 0;
@@ -283,10 +285,10 @@ void compile_member_set(XrCompilerContext *ctx, XrCompiler *compiler, MemberSetN
             return;
         }
     }
-    
+
     // Optimization 2: Struct field access (compile-time type inference)
     XrType *obj_type = NULL;
-    
+
     // Prefer expression node's compile_type (convert XrType* to XrType*)
     if (node->object->compile_type) {
         obj_type = (XrType*)(node->object->compile_type);
@@ -308,7 +310,7 @@ void compile_member_set(XrCompilerContext *ctx, XrCompiler *compiler, MemberSetN
             obj_type = xa_analyzer_lookup_var(ctx->analyzer, var_name);
         }
     }
-    
+
     // CT_JSON (unified object type): decide behavior based on allow_extension
     if (obj_type && obj_type->kind == XR_KIND_JSON) {
         int field_idx = -1;
@@ -324,19 +326,19 @@ void compile_member_set(XrCompilerContext *ctx, XrCompiler *compiler, MemberSetN
                 static_idx++;
             }
         }
-        
+
         if (field_idx >= 0) {
             // Check if field is readonly (const modified)
-            if (obj_type->object.field_readonly && 
+            if (obj_type->object.field_readonly &&
                 obj_type->object.field_readonly[field_idx]) {
                 const char *type_name = obj_type->object.type_name;
                 if (!type_name) type_name = "object";
-                xr_compiler_error(ctx, compiler, 
-                    "cannot modify readonly field '%s.%s' (const modified)", 
+                xr_compiler_error(ctx, compiler,
+                    "cannot modify readonly field '%s.%s' (const modified)",
                     type_name, node->member);
                 return;
             }
-            
+
             // Strict type alias (allow_extension=false): shape is stable,
             // safe to use OP_TFIELD_SET for typed primitive fields
             if (!obj_type->object.allow_extension && obj_type->object.field_types) {
@@ -360,13 +362,13 @@ void compile_member_set(XrCompilerContext *ctx, XrCompiler *compiler, MemberSetN
                     return;
                 }
             }
-            
+
             // Known field: use OP_JSON_SET (O(1) direct index)
             XrExprDesc obj_expr = xr_compile_expr(ctx, compiler, node->object);
             int obj_reg = xexpr_to_anyreg_readonly(ctx, compiler, &obj_expr);
             XrExprDesc val_expr = xr_compile_expr(ctx, compiler, node->value);
             int value_reg = xexpr_to_anyreg(ctx, compiler, &val_expr);
-            
+
             emit_abc(compiler->emitter, OP_JSON_SET, obj_reg, field_idx, value_reg);
             reg_free(compiler, value_reg);
             reg_free(compiler, obj_reg);
@@ -377,7 +379,7 @@ void compile_member_set(XrCompilerContext *ctx, XrCompiler *compiler, MemberSetN
             int obj_reg = xexpr_to_anyreg_readonly(ctx, compiler, &obj_expr);
             XrExprDesc val_expr = xr_compile_expr(ctx, compiler, node->value);
             int value_reg = xexpr_to_anyreg(ctx, compiler, &val_expr);
-            
+
             int global_sym = xr_symbol_register_in_table((XrSymbolTable*)xr_isolate_get_symbol_table(ctx->X), node->member);
             int local_sym = emitter_add_symbol(compiler->emitter, global_sym);
             emit_abc(compiler->emitter, OP_JSON_SETK, obj_reg, local_sym, value_reg);
@@ -388,13 +390,13 @@ void compile_member_set(XrCompilerContext *ctx, XrCompiler *compiler, MemberSetN
             // Disallow extension (strict type): not allowed to add new field
             const char *type_name = obj_type->object.type_name;
             if (!type_name) type_name = "type";
-            xr_compiler_error(ctx, compiler, 
-                "type '%s' does not allow adding field '%s'", 
+            xr_compiler_error(ctx, compiler,
+                "type '%s' does not allow adding field '%s'",
                 type_name, node->member);
             return;
         }
     }
-    
+
     /*
      * Optimization 3: user-defined class instance field access (compile-time type inference)
      * Design: type is inferred via get_expr_type() at let declaration and saved to local->compile_type
@@ -402,7 +404,7 @@ void compile_member_set(XrCompilerContext *ctx, XrCompiler *compiler, MemberSetN
      */
     if (ctx->class_registry && node->object->type == AST_VARIABLE) {
         const char *var_name = node->object->as.variable.name;
-        
+
         // Get compile-time type info from local variable
         XrLocalInfo *local = compiler_get_local_by_name(compiler, var_name);
         if (local && local->compile_type) {
@@ -421,7 +423,7 @@ void compile_member_set(XrCompilerContext *ctx, XrCompiler *compiler, MemberSetN
                             break;
                         }
                     }
-                    
+
                     if (field_idx >= 0) {
                         XrExprDesc obj_expr = xr_compile_expr(ctx, compiler, node->object);
                         int obj_reg = xexpr_to_anyreg_readonly(ctx, compiler, &obj_expr);
@@ -435,7 +437,7 @@ void compile_member_set(XrCompilerContext *ctx, XrCompiler *compiler, MemberSetN
                             reg_free(compiler, obj_reg);
                             return;
                         }
-                        
+
                         // Class instance: heap field write
                         uint8_t fst = xr_class_get_field_slot_type(class_info, node->member);
                         if (fst == 7 || fst == 10) { // XR_SLOT_I64 or XR_SLOT_F64
@@ -453,7 +455,7 @@ void compile_member_set(XrCompilerContext *ctx, XrCompiler *compiler, MemberSetN
             }
         }
     }
-    
+
     /*
      * Optimization 4: Nested struct field write via member access chain
      * Handles: r.origin.x = 99.0 where r.origin returns a nested struct_ref
@@ -482,16 +484,16 @@ void compile_member_set(XrCompilerContext *ctx, XrCompiler *compiler, MemberSetN
     // Fallback path: compile object expression - use readonly version to avoid redundant MOVE
     XrExprDesc obj_expr = xr_compile_expr(ctx, compiler, node->object);
     int obj_reg = xexpr_to_anyreg_readonly(ctx, compiler, &obj_expr);
-    
+
     // Compile value expression
     XrExprDesc val_expr = xr_compile_expr(ctx, compiler, node->value);
     int value_reg = xexpr_to_anyreg(ctx, compiler, &val_expr);
-    
+
     // Use SETPROP (symbol lookup via per-function symbol table)
     int global_sym = xr_symbol_register_in_table((XrSymbolTable*)xr_isolate_get_symbol_table(ctx->X), node->member);
     int local_sym = emitter_add_symbol(compiler->emitter, global_sym);
     emit_abc(compiler->emitter, OP_SETPROP, obj_reg, local_sym, value_reg);
-    
+
     // Free registers (consistent with other optimization paths)
     reg_free(compiler, value_reg);
     reg_free(compiler, obj_reg);

@@ -105,8 +105,7 @@ static int compile_unary_internal(XrCompilerContext *ctx, XrCompiler *compiler, 
         case AST_UNARY_NOT:  op = OP_NOT; break;
         case AST_UNARY_BNOT: op = OP_BNOT; break;
         default:
-            fprintf(stderr, "[Unary] Unknown unary operator: %d\n", type);
-            xr_compiler_error(ctx, compiler, "Unknown unary operator");
+            xr_compiler_error(ctx, compiler, "unknown unary operator: %d", type);
             return ra;
     }
 

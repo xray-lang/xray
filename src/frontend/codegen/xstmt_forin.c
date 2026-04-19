@@ -20,6 +20,7 @@
 #include "xemit.h"
 #include "xexpr.h"
 #include "xexpr_desc.h"
+#include "../xdiag_fmt.h"
 #include "../../runtime/symbol/xsymbol_table.h"
 #include "../../runtime/value/xtype.h"
 #include "../analyzer/xanalyzer.h"
@@ -30,9 +31,9 @@ static void compile_for_in_single(XrCompilerContext *ctx, XrCompiler *compiler, 
 static void compile_for_in_keyvalue(XrCompilerContext *ctx, XrCompiler *compiler, ForInStmtNode *node);
 static void compile_for_in_array_single(XrCompilerContext *ctx, XrCompiler *compiler, ForInStmtNode *node);
 static void compile_for_in_enum_single(XrCompilerContext *ctx, XrCompiler *compiler, ForInStmtNode *node);
-static void compile_for_in_range(XrCompilerContext *ctx, XrCompiler *compiler, ForInStmtNode *node, 
+static void compile_for_in_range(XrCompilerContext *ctx, XrCompiler *compiler, ForInStmtNode *node,
                                   int64_t start, int64_t end);
-static void compile_for_in_range_dynamic(XrCompilerContext *ctx, XrCompiler *compiler, 
+static void compile_for_in_range_dynamic(XrCompilerContext *ctx, XrCompiler *compiler,
                                           ForInStmtNode *node, RangeNode *range);
 static void compile_for_in_range_object(XrCompilerContext *ctx, XrCompiler *compiler, ForInStmtNode *node);
 static void compile_for_in_lazy_iterator(XrCompilerContext *ctx, XrCompiler *compiler, ForInStmtNode *node, const char *iter_method);
@@ -47,15 +48,15 @@ static bool is_channel_type(XrType *ct) {
 
 /*
  * Compile for-in loop.
- * 
+ *
  * for (item in collection) { body }
- * 
+ *
  * Desugars to traditional for loop (Array only):
  * for (let __idx = 0; __idx < collection.size; __idx++) {
  *     let item = collection[__idx]
  *     <body>
  * }
- * 
+ *
  * Note: Set, Map etc. require manual iterator usage.
  */
 void compile_for_in(XrCompilerContext *ctx, XrCompiler *compiler, ForInStmtNode *node) {
@@ -89,7 +90,7 @@ static void compile_for_in_single(XrCompilerContext *ctx, XrCompiler *compiler, 
     // Optimization 1: Detect direct range loop for (i in 0..N)
     if (node->collection->type == AST_RANGE) {
         RangeNode *range = &node->collection->as.range;
-        
+
         // If start and end are both integer constants, use FORLOOP optimization
         if (range->start->type == AST_LITERAL_INT &&
             range->end->type == AST_LITERAL_INT) {
@@ -98,18 +99,18 @@ static void compile_for_in_single(XrCompilerContext *ctx, XrCompiler *compiler, 
             compile_for_in_range(ctx, compiler, node, start, end_val);
             return;
         }
-        
+
         // Optimization 1.5: Dynamic range loop for (i in a..b), bounds are variables or expressions
         compile_for_in_range_dynamic(ctx, compiler, node, range);
         return;
     }
-    
+
     /* Optimization 2: Detect compile-time constant range variable.
      * Example: const range = 0..100; for (i in range) {...}
      */
     if (node->collection->type == AST_VARIABLE) {
         const char *var_name = node->collection->as.variable.name;
-        
+
         // Check if variable is compile-time range constant
         for (int i = compiler->local_list.count - 1; i >= 0; i--) {
             XrLocalInfo *local = compiler->local_list.items[i];
@@ -125,52 +126,52 @@ static void compile_for_in_single(XrCompilerContext *ctx, XrCompiler *compiler, 
             }
         }
     }
-    
+
     // Detect collection type (for enum iteration)
     bool is_enum = false;
     if (node->collection->type == AST_VARIABLE) {
         is_enum = xr_compiler_ctx_is_enum_type(ctx, node->collection->as.variable.name);
     }
-    
+
     if (is_enum) {
         // Enum type: use special desugaring logic
         compile_for_in_enum_single(ctx, compiler, node);
         return;
     }
-    
+
     // Check collection type for Range, Map, Set, Channel
     XrType *collection_type = get_expr_type(ctx, compiler, node->collection);
-    
+
     // Optimization 3: Range object → RANGE_UNPACK + FORPREP/FORLOOP
     if (xr_type_is_named_class(collection_type, "Range")) {
         compile_for_in_range_object(ctx, compiler, node);
         return;
     }
-    
+
     if (is_channel_type(collection_type)) {
         compile_for_in_channel(ctx, compiler, node);
         return;
     }
-    
+
     // Map single-var: lazy iterator (no intermediate array allocation)
     if (collection_type && (collection_type->kind == XR_KIND_MAP)) {
         compile_for_in_lazy_iterator(ctx, compiler, node, "entriesIterator");
         return;
     }
-    
+
     // Set single-var: lazy iterator (no intermediate array allocation)
     if (collection_type && (collection_type->kind == XR_KIND_SET)) {
         compile_for_in_lazy_iterator(ctx, compiler, node, "iterator");
         return;
     }
-    
+
     // String: for (ch in str) -> index-based iteration with caching
     // VM OP_INDEX_GET natively supports string character indexing
     if (collection_type && (collection_type->kind == XR_KIND_STRING)) {
         compile_for_in_array_single(ctx, compiler, node);
         return;
     }
-    
+
     // Check if collection is a custom iterable class (has iterator() method)
     // Case 1: Direct constructor call: for (i in Range(1, 4))
     if (ctx->analyzer && node->collection->type == AST_CALL_EXPR) {
@@ -190,7 +191,7 @@ static void compile_for_in_single(XrCompilerContext *ctx, XrCompiler *compiler, 
             }
         }
     }
-    
+
     // Case 2: Variable holding a class instance: let r = Range(1, 4); for (i in r)
     if (ctx->analyzer) {
         const char *class_name = NULL;
@@ -219,21 +220,27 @@ static void compile_for_in_single(XrCompilerContext *ctx, XrCompiler *compiler, 
             }
         }
     }
-    
+
     // Case 3: collection_type is a class (from type inference) - assume custom iterator
     if (collection_type && (collection_type->kind == XR_KIND_CLASS || collection_type->kind == XR_KIND_INSTANCE)) {
         compile_for_in_custom_iterator(ctx, compiler, node);
         return;
     }
-    
+
     // Compile-time warning for known non-iterable types
     if (collection_type && collection_type->kind != XR_KIND_ARRAY &&
         collection_type->kind != XR_KIND_UNKNOWN) {
-        fprintf(stderr, "warning: for-in over non-iterable type (kind=%d) at line %d, "
-                "falling back to array iteration\n",
-                collection_type->kind, node->collection->line);
+        char msg[192];
+        snprintf(msg, sizeof(msg),
+                 "for-in over non-iterable type (kind=%d), "
+                 "falling back to array iteration",
+                 collection_type->kind);
+        xr_diag_print(XR_DIAG_WARNING, 0, msg,
+                      ctx->source_file, node->collection->line,
+                      ctx->current_column > 0 ? ctx->current_column : 1,
+                      0, NULL, NULL);
     }
-    
+
     // Default: Array type desugaring logic (for Array type or unknown type)
     compile_for_in_array_single(ctx, compiler, node);
 }
@@ -683,7 +690,7 @@ static void compile_for_in_keyvalue_v3(XrCompilerContext *ctx, XrCompiler *compi
  * Compile for-in key-value mode.
  * for (key, value in map) {...}
  * Direct bytecode generation + lazy Iterator.
- * 
+ *
  * Implementation:
  *   1. Create Iterator object: let __iter = map.entriesIterator()
  *   2. While loop: while (__iter.hasNext())
@@ -697,7 +704,7 @@ static void compile_for_in_keyvalue(XrCompilerContext *ctx, XrCompiler *compiler
 
 /*
  * Compile for-in using iterator protocol with a specified iterator method.
- * 
+ *
  * Desugars to:
  *   let __iter = collection.<iter_method>()
  *   while (__iter.hasNext()) {
@@ -709,35 +716,35 @@ static void compile_for_in_lazy_iterator(XrCompilerContext *ctx, XrCompiler *com
     XR_DCHECK(ctx != NULL, "compile_for_in_lazy_iterator: NULL ctx");
     XR_DCHECK(compiler != NULL, "compile_for_in_lazy_iterator: NULL compiler");
     int line = node->collection->line;
-    
+
     // Unique iterator variable name for nested loop support
     static int iter_counter = 0;
     char iter_name[32];
     snprintf(iter_name, sizeof(iter_name), "__for_iter_%d", iter_counter++);
-    
+
     // 1. Build: let __iter_N = collection.<iter_method>()
-    AstNode *iter_call = xr_ast_call_expr(ctx->X, 
+    AstNode *iter_call = xr_ast_call_expr(ctx->X,
         xr_ast_member_access(ctx->X, node->collection, iter_method, line),
         NULL, 0, line);
     AstNode *iter_decl = xr_ast_var_decl(ctx->X, iter_name, iter_call, false, line);
-    
+
     // 2. Build condition: __iter_N.hasNext()
     AstNode *iter_var = xr_ast_variable(ctx->X, iter_name, line);
     AstNode *has_next_call = xr_ast_call_expr(ctx->X,
         xr_ast_member_access(ctx->X, iter_var, "hasNext", line),
         NULL, 0, line);
-    
+
     // 3. Build: let item = __iter_N.next()
     AstNode *iter_var2 = xr_ast_variable(ctx->X, iter_name, line);
     AstNode *next_call = xr_ast_call_expr(ctx->X,
         xr_ast_member_access(ctx->X, iter_var2, "next", line),
         NULL, 0, line);
     AstNode *item_decl = xr_ast_var_decl(ctx->X, node->item_name, next_call, false, line);
-    
+
     // 4. Build new loop body: { let item = __iter.next(); <original body statements> }
     AstNode *new_body = xr_ast_block(ctx->X, line);
     xr_ast_block_add(ctx->X, new_body, item_decl);
-    
+
     // Add original body statements
     if (node->body->type == AST_BLOCK) {
         BlockNode *block = &node->body->as.block;
@@ -747,15 +754,15 @@ static void compile_for_in_lazy_iterator(XrCompilerContext *ctx, XrCompiler *com
     } else {
         xr_ast_block_add(ctx->X, new_body, node->body);
     }
-    
+
     // 5. Build while loop: while (__iter.hasNext()) { ... }
     AstNode *while_node = xr_ast_while_stmt(ctx->X, has_next_call, new_body, line);
-    
+
     // 6. Build outer block: { let __iter = ...; while (...) { ... } }
     AstNode *outer_block = xr_ast_block(ctx->X, line);
     xr_ast_block_add(ctx->X, outer_block, iter_decl);
     xr_ast_block_add(ctx->X, outer_block, while_node);
-    
+
     // 7. Compile the desugared code
     xr_compile_statement(ctx, compiler, outer_block);
 }
@@ -770,7 +777,7 @@ static void compile_for_in_custom_iterator(XrCompilerContext *ctx, XrCompiler *c
 /*
  * Compile for-in loop over Channel.
  * for (item in ch) { body }
- * 
+ *
  * Desugars to:
  *   let __ch = ch              // Cache channel reference (important for shared vars)
  *   while (true) {
@@ -788,26 +795,26 @@ static void compile_for_in_channel(XrCompilerContext *ctx, XrCompiler *compiler,
     XR_DCHECK(ctx != NULL, "compile_for_in_channel: NULL ctx");
     XR_DCHECK(compiler != NULL, "compile_for_in_channel: NULL compiler");
     int line = node->collection->line;
-    
+
     // 0. Build: let __ch = ch (cache channel reference, critical for shared variables)
     AstNode *ch_var = xr_ast_variable(ctx->X, "__chan_ref", line);
     AstNode *ch_decl = xr_ast_var_decl(ctx->X, "__chan_ref", node->collection, false, line);
-    
+
     // Compile the channel cache declaration first
     xr_compile_statement(ctx, compiler, ch_decl);
-    
+
     // Set Channel type for __chan_ref (required for method call optimization)
     XrString *ref_name = xr_compile_time_intern(ctx->X, "__chan_ref", 11);
     XrLocalInfo *ref_local = compiler_get_local_by_name(compiler, ref_name->data);
     if (ref_local) {
         ref_local->compile_type = xr_type_new_channel(xr_type_new_unknown());
     }
-    
+
     // 1. Build: let __val, __ok = __ch.tryRecv()
     AstNode *tryrecv_call = xr_ast_call_expr(ctx->X,
         xr_ast_member_access(ctx->X, ch_var, "tryRecv", line),
         NULL, 0, line);
-    
+
     // Multi-value declaration: let __val, __ok = __ch.tryRecv()
     char **names = xr_malloc(2 * sizeof(char*));
     names[0] = strdup("__chan_val");
@@ -815,36 +822,36 @@ static void compile_for_in_channel(XrCompilerContext *ctx, XrCompiler *compiler,
     AstNode **values = xr_malloc(1 * sizeof(AstNode*));
     values[0] = tryrecv_call;
     AstNode *multi_decl = xr_ast_multi_var_decl(ctx->X, names, 2, values, 1, false, line);
-    
+
     // 2. Build condition for inner if: !__ok
     AstNode *ok_var = xr_ast_variable(ctx->X, "__chan_ok", line);
     AstNode *not_ok = xr_ast_unary(ctx->X, AST_UNARY_NOT, ok_var, line);
-    
+
     // 3. Build inner condition: __ch.isClosed()
     AstNode *ch_var2 = xr_ast_variable(ctx->X, "__chan_ref", line);
     AstNode *is_closed_call = xr_ast_call_expr(ctx->X,
         xr_ast_member_access(ctx->X, ch_var2, "isClosed", line),
         NULL, 0, line);
-    
+
     // 4. Build break statement for when channel is closed
     AstNode *break_stmt = xr_ast_break_stmt(ctx->X, line);
-    
+
     // 5. Build if (ch.isClosed()) break
     AstNode *inner_if = xr_ast_if_stmt(ctx->X, is_closed_call, break_stmt, NULL, line);
-    
+
     // 6. Build yield statement
     AstNode *yield_stmt = xr_ast_yield_stmt(ctx->X, line);
-    
+
     // 7. Build continue statement
     AstNode *continue_stmt = xr_ast_continue_stmt(ctx->X, line);
-    
+
     // 8. Build if (!__ok) { if (ch.isClosed()) break; yield; continue }
     AstNode *not_ok_body = xr_ast_block(ctx->X, line);
     xr_ast_block_add(ctx->X, not_ok_body, inner_if);
     xr_ast_block_add(ctx->X, not_ok_body, yield_stmt);
     xr_ast_block_add(ctx->X, not_ok_body, continue_stmt);
     AstNode *not_ok_if = xr_ast_if_stmt(ctx->X, not_ok, not_ok_body, NULL, line);
-    
+
     // 9. Build: let item = __val (skip if blank identifier _)
     bool is_blank = (node->item_name[0] == '_' && node->item_name[1] == '\0');
     AstNode *item_decl = NULL;
@@ -852,7 +859,7 @@ static void compile_for_in_channel(XrCompilerContext *ctx, XrCompiler *compiler,
         AstNode *val_var = xr_ast_variable(ctx->X, "__chan_val", line);
         item_decl = xr_ast_var_decl(ctx->X, node->item_name, val_var, false, line);
     }
-    
+
     // 10. Build while body: { let __val, __ok = ...; if (!__ok) {...}; let item = __val; <original body> }
     AstNode *while_body = xr_ast_block(ctx->X, line);
     xr_ast_block_add(ctx->X, while_body, multi_decl);
@@ -860,7 +867,7 @@ static void compile_for_in_channel(XrCompilerContext *ctx, XrCompiler *compiler,
     if (item_decl) {
         xr_ast_block_add(ctx->X, while_body, item_decl);
     }
-    
+
     // Add original body statements
     if (node->body->type == AST_BLOCK) {
         BlockNode *block = &node->body->as.block;
@@ -870,11 +877,11 @@ static void compile_for_in_channel(XrCompilerContext *ctx, XrCompiler *compiler,
     } else {
         xr_ast_block_add(ctx->X, while_body, node->body);
     }
-    
+
     // 11. Build while (true) { ... }
     AstNode *true_literal = xr_ast_literal_bool(ctx->X, true, line);
     AstNode *while_stmt = xr_ast_while_stmt(ctx->X, true_literal, while_body, line);
-    
+
     // 12. Compile the desugared code
     xr_compile_statement(ctx, compiler, while_stmt);
 }

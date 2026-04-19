@@ -23,6 +23,7 @@
 #include "xemit.h"
 #include "xoptimize.h"
 #include "xexpr_desc.h"
+#include "../xdiag_fmt.h"
 #include "../../runtime/symbol/xsymbol_table.h"
 #include "../../runtime/value/xtype.h"
 #include "../../runtime/value/xslot_type.h"
@@ -731,13 +732,18 @@ static int compile_comparison_internal(XrCompilerContext *ctx, XrCompiler *compi
         if (op_name != NULL && strcmp(ctx->current_operator, op_name) == 0) {
             // Using === is safe, no warning needed
             if (type != AST_BINARY_EQ_STRICT && type != AST_BINARY_NE_STRICT) {
-                fprintf(stderr,
-                    "\033[33mWarning\033[0m: Using %s inside operator%s may cause infinite recursion\n"
-                    "  Suggestion: Use %s%s for reference comparison, or ensure recursion is intentional\n",
+                char msg[256];
+                snprintf(msg, sizeof(msg),
+                    "using %s inside operator%s may cause infinite recursion; "
+                    "use %s%s for reference comparison, or ensure recursion is intentional",
                     ctx->current_operator,
                     op_name,
                     op_name,
                     (type == AST_BINARY_EQ || type == AST_BINARY_NE) ? "=" : "");
+                xr_diag_print(XR_DIAG_WARNING, 0, msg,
+                              ctx->source_file, ctx->current_line,
+                              ctx->current_column > 0 ? ctx->current_column : 1,
+                              0, NULL, NULL);
             }
         }
     }

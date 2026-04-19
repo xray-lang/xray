@@ -1395,12 +1395,12 @@ void xa_mono_pass(AstNode *root) {
 
     // Debug: print mono stats if XRAY_MONO_DEBUG is set
     if (getenv("XRAY_MONO_DEBUG")) {
-        fprintf(stderr, "[mono] %d generic decls, %d mono instances:\n",
-                registry.count, collector.count);
+        xr_log_debug("mono", "%d generic decls, %d mono instances",
+                     registry.count, collector.count);
         for (int i = 0; i < collector.count; i++) {
             XaMonoInstance *inst = &collector.instances[i];
-            fprintf(stderr, "  %s → %s (rep_sig=0x%08x)\n",
-                    inst->generic_name, inst->mangled_name, inst->rep_signature);
+            xr_log_debug("mono", "  %s -> %s (rep_sig=0x%08x)",
+                         inst->generic_name, inst->mangled_name, inst->rep_signature);
         }
     }
 

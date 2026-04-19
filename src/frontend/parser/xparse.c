@@ -17,6 +17,7 @@
 #include "xparse_internal.h"
 #include "../../base/xarena.h"
 #include "../../base/xchecks.h"
+#include "../../base/xlog.h"
 #include "../../runtime/xisolate_api.h"
 #include "../analyzer/xanalyzer_symbol.h"
 #include "../xdiag_fmt.h"
@@ -894,7 +895,7 @@ AstNode *xr_parse_with_trivia(XrayIsolate *X, const char *source, const char *so
 // Errors are reported via callback
 AstNode *xr_parse_recoverable(Parser *parser) {
     if (!parser || !parser->X) {
-        fprintf(stderr, "[xray-lsp] parse_recoverable: invalid parser\n");
+        xr_log_warning("parser", "parse_recoverable: invalid parser");
         return NULL;
     }
 
@@ -906,7 +907,7 @@ AstNode *xr_parse_recoverable(Parser *parser) {
 
     AstNode *program = xr_ast_program(parser->X);
     if (!program) {
-        fprintf(stderr, "[xray-lsp] parse_recoverable: failed to create program node\n");
+        xr_log_warning("parser", "parse_recoverable: failed to create program node");
         xr_isolate_set_current_arena(parser->X, saved_arena);
         return NULL;
     }
