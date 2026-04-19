@@ -14,8 +14,8 @@
 #ifndef XARRAY_BUILTINS_H
 #define XARRAY_BUILTINS_H
 
-#include "../value/xvalue.h"
-#include "../base/xdefs.h"
+#include "xvalue.h"
+#include "xdefs.h"
 
 // Global Array constructor
 XR_FUNC XrValue xr_builtin_array_construct(XrayIsolate *isolate, XrValue *args, int nargs);

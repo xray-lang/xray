@@ -12,11 +12,11 @@
  */
 
 #include "xstring_builtins.h"
-#include "../../base/xchecks.h"
-#include "../xisolate_api.h"
-#include "../object/xstring.h"
-#include "../object/xarray.h"
-#include "../value/xvalue.h"
+#include "xchecks.h"
+#include "xisolate_api.h"
+#include "xstring.h"
+#include "xarray.h"
+#include "xvalue.h"
 #include <stdio.h>
 #include <string.h>
 

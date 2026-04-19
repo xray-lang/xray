@@ -14,8 +14,8 @@
 #ifndef XSLICE_BUILTINS_H
 #define XSLICE_BUILTINS_H
 
-#include "../value/xvalue.h"
-#include "../base/xdefs.h"
+#include "xvalue.h"
+#include "xdefs.h"
 
 
 /* ========== ArraySlice Methods ========== */

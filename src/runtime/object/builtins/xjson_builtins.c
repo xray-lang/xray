@@ -5,7 +5,7 @@
  * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
  * Licensed under the MIT License
  *
- * xclass_json_api.c - Json utility class (static methods only)
+ * xjson_builtins.c - Json utility class (static methods only)
  *
  * KEY CONCEPT:
  *   Json objects have no instance methods to avoid name conflicts
@@ -20,19 +20,19 @@
  *     entirely for user data.
  */
 
-#include "xclass_json_api.h"
-#include "../../base/xchecks.h"
+#include "xjson_builtins.h"
+#include "xchecks.h"
 #include "xclass.h"
 #include "xclass_builder.h"
 #include "xclass_system.h"
-#include "../xisolate_api.h"
+#include "xisolate_api.h"
 #include "xreflect_registry.h"
-#include "../object/xjson.h"
-#include "../object/xmap.h"
-#include "../object/xarray.h"
-#include "../object/xstring.h"
-#include "../../coro/xcoroutine.h"
-#include "../symbol/xsymbol_table.h"
+#include "xjson.h"
+#include "xmap.h"
+#include "xarray.h"
+#include "xstring.h"
+#include "xcoroutine.h"
+#include "xsymbol_table.h"
 #include <string.h>
 
 /* ========== Static Method Implementations ========== */

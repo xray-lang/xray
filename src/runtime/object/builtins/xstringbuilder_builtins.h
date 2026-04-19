@@ -11,8 +11,8 @@
 #ifndef XSTRINGBUILDER_BUILTINS_H
 #define XSTRINGBUILDER_BUILTINS_H
 
-#include "../value/xvalue.h"
-#include "../base/xdefs.h"
+#include "xvalue.h"
+#include "xdefs.h"
 
 // Constructor
 XR_FUNC XrValue xr_builtin_stringbuilder_new(XrayIsolate *isolate, XrValue *args, int nargs);

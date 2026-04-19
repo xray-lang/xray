@@ -5,7 +5,7 @@
  * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
  * Licensed under the MIT License
  *
- * xclass_json_api.h - Json utility class (static methods only)
+ * xjson_builtins.h - Json utility class (static methods only)
  *
  * KEY CONCEPT:
  *   Json objects have no instance methods to avoid name conflicts
@@ -13,13 +13,13 @@
  *   static methods (e.g. Json.keys(obj), Json.has(obj, "key")).
  */
 
-#ifndef XCLASS_JSON_API_H
-#define XCLASS_JSON_API_H
+#ifndef XJSON_BUILTINS_H
+#define XJSON_BUILTINS_H
 
-#include "../xisolate_api.h"
-#include "../value/xvalue.h"
-#include "../base/xdefs.h"
+#include "xisolate_api.h"
+#include "xvalue.h"
+#include "xdefs.h"
 
 XR_FUNC void xr_json_api_init(XrayIsolate *X);
 
-#endif // XCLASS_JSON_API_H
+#endif // XJSON_BUILTINS_H

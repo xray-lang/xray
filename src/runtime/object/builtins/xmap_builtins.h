@@ -11,8 +11,8 @@
 #ifndef XMAP_BUILTINS_H
 #define XMAP_BUILTINS_H
 
-#include "../value/xvalue.h"
-#include "../base/xdefs.h"
+#include "xvalue.h"
+#include "xdefs.h"
 
 // Global Map constructor
 XR_FUNC XrValue xr_builtin_map_construct(XrayIsolate *isolate, XrValue *args, int nargs);

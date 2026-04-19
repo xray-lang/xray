@@ -12,14 +12,14 @@
  */
 
 #include "xarray_builtins.h"
-#include "../../base/xchecks.h"
-#include "../xisolate_api.h"
-#include "../gc/xgc.h"
-#include "../object/xarray.h"
-#include "../object/xstring.h"
-#include "../object/xset.h"
-#include "../object/xmap.h"
-#include "../value/xvalue.h"
+#include "xchecks.h"
+#include "xisolate_api.h"
+#include "xgc.h"
+#include "xarray.h"
+#include "xstring.h"
+#include "xset.h"
+#include "xmap.h"
+#include "xvalue.h"
 #include <stdio.h>
 
 // Array() - empty array
