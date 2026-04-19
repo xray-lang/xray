@@ -745,244 +745,285 @@ void xir_insert_arc_releases(XirFunc *func) {
  *      - LOAD_FIELD(alloc, off) → result = field_vreg[idx]
  *      - ALLOC → NOP (DCE will remove)
  */
-void xir_pass_escape_analysis(XirFunc *func) {
-    if (!func) return;
+/*
+ * Maximum number of XrValue slots a single ALLOC may have before we
+ * refuse scalar replacement.  Bounded for two reasons:
+ *  1. We materialise one vreg per field in place; large allocations
+ *     would inflate the register pressure dramatically.
+ *  2. Deep heap shapes nearly always escape anyway, so the gain from
+ *     replacing them is marginal.
+ * The value is an engineering compromise, not a correctness limit.
+ */
+#define EA_MAX_SCALAR_FIELDS 64
 
-    #define EA_MAX_ALLOC  16
-    #define EA_MAX_FIELDS 32
+typedef struct {
+    XirRef   ref;           // ALLOC result vreg
+    uint32_t blk;            // containing block index
+    uint32_t ins_idx;        // instruction index in that block
+    int32_t  alloc_size;     // allocation size
+    int32_t  base_offset;    // field base offset (GC header size)
+    int32_t  nfields;        // XrValue slot count
+    bool     escapes;        // final escape verdict
+} EaAlloc;
+
+/*
+ * Collect every XIR_ALLOC in the function, allocating on the heap so
+ * there is no EA_MAX_ALLOC cap.  Returns number of entries; |*out|
+ * receives the heap array (caller frees).
+ */
+static uint32_t ea_collect_allocs(XirFunc *func, EaAlloc **out) {
+    uint32_t cap = 16, n = 0;
+    EaAlloc *arr = (EaAlloc *)xr_malloc(cap * sizeof(EaAlloc));
+    if (!arr) { *out = NULL; return 0; }
 
     for (uint32_t bi = 0; bi < func->nblk; bi++) {
         XirBlock *blk = func->blocks[bi];
-        if (!blk || blk->nins == 0) continue;
-
-        // Pass 1: find XIR_ALLOC instructions in this block
-        struct {
-            XirRef ref;           // alloc result vreg
-            uint32_t ins_idx;     // instruction index
-            int32_t  alloc_size;  // allocation size
-            int32_t  base_offset; // field base offset (GC header size)
-            int      nfields;     // number of fields
-            bool     escapes;     // does it escape?
-        } allocs[EA_MAX_ALLOC];
-        uint32_t nalloc = 0;
-
-        for (uint32_t i = 0; i < blk->nins && nalloc < EA_MAX_ALLOC; i++) {
+        if (!blk) continue;
+        for (uint32_t i = 0; i < blk->nins; i++) {
             XirIns *ins = &blk->ins[i];
             if (ins->op != XIR_ALLOC) continue;
             if (xir_ref_is_none(ins->dst) || !xir_ref_is_vreg(ins->dst)) continue;
 
-            // Decode allocation size from args[1]
             int32_t asize = 0;
             if (xir_ref_is_const(ins->args[1])) {
                 uint32_t ci = XIR_REF_INDEX(ins->args[1]);
                 if (ci < func->nconst)
                     asize = (int32_t)func->consts[ci].val.i64;
             }
-            if (asize <= 16 || asize > 16 + EA_MAX_FIELDS * 16) continue;
+            if (asize <= 16 || asize > 16 + EA_MAX_SCALAR_FIELDS * 16) continue;
 
-            int nf = (asize - 16) / 16;  // (size - GC_HEADER) / sizeof(XrValue)
-            allocs[nalloc].ref = ins->dst;
-            allocs[nalloc].ins_idx = i;
-            allocs[nalloc].alloc_size = asize;
-            allocs[nalloc].base_offset = 16;  // XIR_GC_HEADER_SIZE
-            allocs[nalloc].nfields = nf;
-            allocs[nalloc].escapes = false;
-            nalloc++;
+            if (n >= cap) {
+                cap *= 2;
+                XR_REALLOC_OR_ABORT(arr, cap * sizeof(EaAlloc),
+                                    "EA allocs");
+            }
+            arr[n].ref         = ins->dst;
+            arr[n].blk         = bi;
+            arr[n].ins_idx     = i;
+            arr[n].alloc_size  = asize;
+            arr[n].base_offset = 16;
+            arr[n].nfields     = (asize - 16) / 16;
+            arr[n].escapes     = false;
+            n++;
         }
-        if (nalloc == 0) continue;
+    }
+    *out = arr;
+    return n;
+}
 
-        // Pass 2: check for escapes
-        // 2a: escapes via successor phi
+/*
+ * Mark every allocation in |allocs| that escapes the current
+ * function.  Walks the function once:
+ *   - every instruction's args are inspected; a use that is neither a
+ *     same-object LOAD_FIELD/STORE_FIELD/GUARD_SHAPE/BARRIER_FWD at
+ *     args[0] escapes the allocation.
+ *   - RET of an alloc vreg escapes.
+ *   - A block's alloc being a PHI argument in any successor escapes.
+ *   - A call_arg_pool reference to an alloc escapes.
+ */
+static void ea_mark_escapes(XirFunc *func, EaAlloc *allocs, uint32_t nalloc) {
+    if (nalloc == 0) return;
+
+    /* Build a quick alloc-ref → index map via a flat nvreg-sized table.
+     * Allocs are identified by their dst vreg, which fits in an index
+     * lookup without any hashing.  UINT32_MAX = not an ALLOC. */
+    uint32_t *ref_to_alloc = (uint32_t *)xr_malloc(func->nvreg * sizeof(uint32_t));
+    if (!ref_to_alloc) return;
+    for (uint32_t v = 0; v < func->nvreg; v++) ref_to_alloc[v] = UINT32_MAX;
+    for (uint32_t j = 0; j < nalloc; j++) {
+        uint32_t v = XIR_REF_INDEX(allocs[j].ref);
+        if (v < func->nvreg) ref_to_alloc[v] = j;
+    }
+
+    #define ESC_IF_ALLOC(ref) do {                              \
+        if (xir_ref_is_vreg(ref)) {                              \
+            uint32_t _v = XIR_REF_INDEX(ref);                    \
+            if (_v < func->nvreg) {                              \
+                uint32_t _j = ref_to_alloc[_v];                  \
+                if (_j != UINT32_MAX) allocs[_j].escapes = true; \
+            }                                                    \
+        }                                                        \
+    } while (0)
+
+    /* Instruction-level scan: any use outside the "self as obj
+     * argument of field ops" whitelist escapes. */
+    for (uint32_t bi = 0; bi < func->nblk; bi++) {
+        XirBlock *blk = func->blocks[bi];
+        if (!blk) continue;
+        for (uint32_t i = 0; i < blk->nins; i++) {
+            XirIns *ins = &blk->ins[i];
+            for (int a = 0; a < 2; a++) {
+                XirRef arg = ins->args[a];
+                if (!xir_ref_is_vreg(arg)) continue;
+                uint32_t v = XIR_REF_INDEX(arg);
+                if (v >= func->nvreg) continue;
+                uint32_t j = ref_to_alloc[v];
+                if (j == UINT32_MAX) continue;
+
+                /* Whitelisted non-escaping uses: obj slot of
+                 * LOAD_FIELD / STORE_FIELD / GUARD_SHAPE / BARRIER_FWD. */
+                if (a == 0 && (ins->op == XIR_LOAD_FIELD ||
+                               ins->op == XIR_STORE_FIELD ||
+                               ins->op == XIR_GUARD_SHAPE ||
+                               ins->op == XIR_BARRIER_FWD))
+                    continue;
+                allocs[j].escapes = true;
+            }
+        }
+
+        /* RET of an alloc vreg escapes. */
+        if (blk->jmp.type == XIR_JMP_RET)
+            ESC_IF_ALLOC(blk->jmp.arg);
+
+        /* PHI arg in any successor escapes the value across the edge. */
         XirBlock *succs[2] = { blk->s1, blk->s2 };
         for (int si = 0; si < 2; si++) {
             XirBlock *succ = succs[si];
             if (!succ) continue;
-            for (XirPhi *phi = succ->phis; phi; phi = phi->next) {
-                for (uint32_t pi = 0; pi < phi->narg; pi++) {
-                    XirRef pa = phi->args[pi];
-                    if (!xir_ref_is_vreg(pa)) continue;
-                    for (uint32_t j = 0; j < nalloc; j++) {
-                        if (allocs[j].ref == pa) allocs[j].escapes = true;
-                    }
-                }
-            }
-        }
-
-        // 2b: escapes via RET
-        if (blk->jmp.type == XIR_JMP_RET && !xir_ref_is_none(blk->jmp.arg)) {
-            XirRef rv = blk->jmp.arg;
-            for (uint32_t j = 0; j < nalloc; j++) {
-                if (allocs[j].ref == rv) allocs[j].escapes = true;
-            }
-        }
-
-        // 2c: escapes via instruction uses (anything other than LOAD_FIELD/STORE_FIELD on self)
-        for (uint32_t i = 0; i < blk->nins; i++) {
-            XirIns *ins = &blk->ins[i];
-            for (uint32_t j = 0; j < nalloc; j++) {
-                if (allocs[j].escapes) continue;
-                XirRef aref = allocs[j].ref;
-
-                // Check args[0] and args[1]
-                for (int a = 0; a < 2; a++) {
-                    XirRef arg = ins->args[a];
-                    if (!xir_ref_is_vreg(arg) || arg != aref) continue;
-
-                    // LOAD_FIELD: alloc as obj (args[0]) is OK
-                    if (ins->op == XIR_LOAD_FIELD && a == 0) continue;
-                    // STORE_FIELD: alloc as obj (args[0]) is OK
-                    //              alloc as val (args[1]) means it escapes into another object
-                    if (ins->op == XIR_STORE_FIELD && a == 0) continue;
-                    // GUARD_SHAPE: alloc as obj (args[0]) is OK
-                    if (ins->op == XIR_GUARD_SHAPE && a == 0) continue;
-                    // BARRIER_FWD: alloc as parent (args[0]) is OK for non-escaping
-                    if (ins->op == XIR_BARRIER_FWD && a == 0) continue;
-
-                    // Everything else: escape
-                    allocs[j].escapes = true;
-                }
-            }
-        }
-
-        // 2d: check if alloc is used in any other block (conservative)
-        for (uint32_t j = 0; j < nalloc; j++) {
-            if (allocs[j].escapes) continue;
-            for (uint32_t ob = 0; ob < func->nblk && !allocs[j].escapes; ob++) {
-                if (ob == bi) continue;
-                XirBlock *other = func->blocks[ob];
-                if (!other) continue;
-                for (uint32_t k = 0; k < other->nins && !allocs[j].escapes; k++) {
-                    XirIns *oi = &other->ins[k];
-                    if ((xir_ref_is_vreg(oi->args[0]) && oi->args[0] == allocs[j].ref) ||
-                        (xir_ref_is_vreg(oi->args[1]) && oi->args[1] == allocs[j].ref))
-                        allocs[j].escapes = true;
-                }
-                if (!allocs[j].escapes && !xir_ref_is_none(other->jmp.arg) &&
-                    other->jmp.arg == allocs[j].ref)
-                    allocs[j].escapes = true;
-            }
-        }
-
-        // 2e: escapes via call_arg_pool (CALL_C/CALL_KNOWN arguments)
-        // CALL_C instructions pass actual arguments through call_arg_pool,
-        // not through ins->args[]. Without this check, allocs passed to
-        // C helpers (e.g. cell passed to closure_set_upval) are missed.
-        if (func->call_arg_pool) {
-            for (uint32_t v = 0; v < func->nvreg; v++) {
-                if (func->vregs[v].call_nargs == 0) continue;
-                uint32_t start = func->vregs[v].call_arg_start;
-                for (uint16_t a = 0; a < func->vregs[v].call_nargs; a++) {
-                    XirRef ref = func->call_arg_pool[start + a];
-                    if (!xir_ref_is_vreg(ref)) continue;
-                    for (uint32_t j2 = 0; j2 < nalloc; j2++) {
-                        if (allocs[j2].ref == ref) allocs[j2].escapes = true;
-                    }
-                }
-            }
-        }
-
-        // Pass 3: scalar replacement for non-escaping allocs
-        for (uint32_t j = 0; j < nalloc; j++) {
-            if (allocs[j].escapes) continue;
-
-            int nf = allocs[j].nfields;
-            int base = allocs[j].base_offset;
-            XirRef aref = allocs[j].ref;
-
-            // Create a vreg for each field (init xr_tag to null = field default)
-            XirRef field_vregs[EA_MAX_FIELDS];
-            for (int f = 0; f < nf; f++) {
-                field_vregs[f] = xir_new_vreg(func, XR_REP_I64);
-                // vtag stays VTAG_TAGGED (default from xir_new_vreg)
-            }
-
-            // Replace STORE_FIELD and LOAD_FIELD on this alloc
-            for (uint32_t i = 0; i < blk->nins; i++) {
-                XirIns *ins = &blk->ins[i];
-
-                if (ins->op == XIR_STORE_FIELD &&
-                    xir_ref_is_vreg(ins->args[0]) && ins->args[0] == aref) {
-                    // Decode field index from dst (byte offset constant)
-                    int32_t off = 0;
-                    if (xir_ref_is_const(ins->dst)) {
-                        uint32_t ci = XIR_REF_INDEX(ins->dst);
-                        if (ci < func->nconst)
-                            off = (int32_t)func->consts[ci].val.i64;
-                    }
-                    int fidx = (off - base) / 16;
-                    if (fidx >= 0 && fidx < nf) {
-                        // Propagate value's xr_tag to field vreg
-                        XirRef val_ref = ins->args[1];
-                        if (xir_ref_is_vreg(val_ref)) {
-                            uint32_t svi = XIR_REF_INDEX(val_ref);
-                            uint32_t dvi = XIR_REF_INDEX(field_vregs[fidx]);
-                            if (svi < func->nvreg && dvi < func->nvreg) {
-                                force_vreg_vtag(func, dvi, type_kind_to_vtag(xir_ref_ctype(func, val_ref).kind));
-                                func->vregs[dvi].heap_type = func->vregs[svi].heap_type;
-                            }
-                        }
-                        // Replace STORE_FIELD with MOV val → field_vreg[fidx]
-                        ins->op = XIR_MOV;
-                        ins->rep = XR_REP_I64;
-                        ins->dst = field_vregs[fidx];
-                        ins->args[0] = ins->args[1];  // value
-                        ins->args[1] = XIR_NONE;
-                        ins->flags = 0;
-                    }
-                }
-
-                if (ins->op == XIR_LOAD_FIELD &&
-                    xir_ref_is_vreg(ins->args[0]) && ins->args[0] == aref) {
-                    // Decode field index from args[1] (byte offset constant)
-                    int32_t off = 0;
-                    if (xir_ref_is_const(ins->args[1])) {
-                        uint32_t ci = XIR_REF_INDEX(ins->args[1]);
-                        if (ci < func->nconst)
-                            off = (int32_t)func->consts[ci].val.i64;
-                    }
-                    int fidx = (off - base) / 16;
-                    if (fidx >= 0 && fidx < nf) {
-                        // Replace LOAD_FIELD with MOV field_vreg[fidx] → dst
-                        ins->op = XIR_MOV;
-                        ins->rep = XR_REP_I64;
-                        ins->args[0] = field_vregs[fidx];
-                        ins->args[1] = XIR_NONE;
-                    }
-                }
-
-                // Remove GUARD_SHAPE on this alloc (shape is known at compile time)
-                if (ins->op == XIR_GUARD_SHAPE &&
-                    xir_ref_is_vreg(ins->args[0]) && ins->args[0] == aref) {
-                    ins->op = XIR_NOP;
-                    ins->dst = XIR_NONE;
-                    ins->args[0] = XIR_NONE;
-                    ins->args[1] = XIR_NONE;
-                    ins->flags = 0;
-                }
-
-                // Remove BARRIER_FWD on this alloc (no heap object → no barrier needed)
-                if (ins->op == XIR_BARRIER_FWD &&
-                    xir_ref_is_vreg(ins->args[0]) && ins->args[0] == aref) {
-                    ins->op = XIR_NOP;
-                    ins->dst = XIR_NONE;
-                    ins->args[0] = XIR_NONE;
-                    ins->args[1] = XIR_NONE;
-                    ins->flags = 0;
-                }
-            }
-
-            // Convert ALLOC to NOP (DCE will clean up)
-            XirIns *alloc_ins = &blk->ins[allocs[j].ins_idx];
-            alloc_ins->op = XIR_NOP;
-            alloc_ins->dst = XIR_NONE;
-            alloc_ins->args[0] = XIR_NONE;
-            alloc_ins->args[1] = XIR_NONE;
-            alloc_ins->flags = 0;
+            for (XirPhi *phi = succ->phis; phi; phi = phi->next)
+                for (uint32_t pi = 0; pi < phi->narg; pi++)
+                    ESC_IF_ALLOC(phi->args[pi]);
         }
     }
 
-    #undef EA_MAX_ALLOC
-    #undef EA_MAX_FIELDS
+    /* CALL arguments travel through call_arg_pool — scan them once. */
+    if (func->call_arg_pool) {
+        for (uint32_t v = 0; v < func->nvreg; v++) {
+            if (func->vregs[v].call_nargs == 0) continue;
+            uint32_t start = func->vregs[v].call_arg_start;
+            for (uint16_t a = 0; a < func->vregs[v].call_nargs; a++)
+                ESC_IF_ALLOC(func->call_arg_pool[start + a]);
+        }
+    }
+
+    #undef ESC_IF_ALLOC
+    xr_free(ref_to_alloc);
+}
+
+/*
+ * Scalar-replace a single non-escaping allocation.  Still block-local
+ * — a full cross-block Mem2Reg would need Phi insertion at dom-tree
+ * frontiers and is intentionally deferred.  Returns true when the
+ * ALLOC was fully eliminated.
+ */
+static bool ea_scalar_replace(XirFunc *func, const EaAlloc *a) {
+    XirBlock *blk = func->blocks[a->blk];
+    if (!blk) return false;
+
+    int nf = a->nfields;
+    int base = a->base_offset;
+    XirRef aref = a->ref;
+
+    /* One synthetic vreg per field slot, bound to the XrValue-sized
+     * storage the original ALLOC would have covered. */
+    XirRef *field_vregs = (XirRef *)xr_malloc((size_t)nf * sizeof(XirRef));
+    if (!field_vregs) return false;
+    for (int f = 0; f < nf; f++)
+        field_vregs[f] = xir_new_vreg(func, XR_REP_I64);
+
+    for (uint32_t i = 0; i < blk->nins; i++) {
+        XirIns *ins = &blk->ins[i];
+
+        if (ins->op == XIR_STORE_FIELD &&
+            xir_ref_is_vreg(ins->args[0]) && ins->args[0] == aref) {
+            int32_t off = 0;
+            if (xir_ref_is_const(ins->dst)) {
+                uint32_t ci = XIR_REF_INDEX(ins->dst);
+                if (ci < func->nconst)
+                    off = (int32_t)func->consts[ci].val.i64;
+            }
+            int fidx = (off - base) / 16;
+            if (fidx >= 0 && fidx < nf) {
+                XirRef val_ref = ins->args[1];
+                if (xir_ref_is_vreg(val_ref)) {
+                    uint32_t svi = XIR_REF_INDEX(val_ref);
+                    uint32_t dvi = XIR_REF_INDEX(field_vregs[fidx]);
+                    if (svi < func->nvreg && dvi < func->nvreg) {
+                        force_vreg_vtag(func, dvi,
+                            type_kind_to_vtag(xir_ref_ctype(func, val_ref).kind));
+                        func->vregs[dvi].heap_type = func->vregs[svi].heap_type;
+                    }
+                }
+                ins->op = XIR_MOV;
+                ins->rep = XR_REP_I64;
+                ins->dst = field_vregs[fidx];
+                ins->args[0] = ins->args[1];
+                ins->args[1] = XIR_NONE;
+                ins->flags = 0;
+            }
+        }
+
+        if (ins->op == XIR_LOAD_FIELD &&
+            xir_ref_is_vreg(ins->args[0]) && ins->args[0] == aref) {
+            int32_t off = 0;
+            if (xir_ref_is_const(ins->args[1])) {
+                uint32_t ci = XIR_REF_INDEX(ins->args[1]);
+                if (ci < func->nconst)
+                    off = (int32_t)func->consts[ci].val.i64;
+            }
+            int fidx = (off - base) / 16;
+            if (fidx >= 0 && fidx < nf) {
+                ins->op = XIR_MOV;
+                ins->rep = XR_REP_I64;
+                ins->args[0] = field_vregs[fidx];
+                ins->args[1] = XIR_NONE;
+            }
+        }
+
+        /* Object identity is gone, so the guard and the write barrier
+         * are both vacuous on the materialised scalar form. */
+        if (ins->op == XIR_GUARD_SHAPE &&
+            xir_ref_is_vreg(ins->args[0]) && ins->args[0] == aref) {
+            ins->op = XIR_NOP;
+            ins->dst = XIR_NONE;
+            ins->args[0] = XIR_NONE;
+            ins->args[1] = XIR_NONE;
+            ins->flags = 0;
+        }
+        if (ins->op == XIR_BARRIER_FWD &&
+            xir_ref_is_vreg(ins->args[0]) && ins->args[0] == aref) {
+            ins->op = XIR_NOP;
+            ins->dst = XIR_NONE;
+            ins->args[0] = XIR_NONE;
+            ins->args[1] = XIR_NONE;
+            ins->flags = 0;
+        }
+    }
+
+    /* Retire the original ALLOC; DCE will remove the NOP later. */
+    XirIns *alloc_ins = &blk->ins[a->ins_idx];
+    alloc_ins->op = XIR_NOP;
+    alloc_ins->dst = XIR_NONE;
+    alloc_ins->args[0] = XIR_NONE;
+    alloc_ins->args[1] = XIR_NONE;
+    alloc_ins->flags = 0;
+
+    xr_free(field_vregs);
+    return true;
+}
+
+void xir_pass_escape_analysis(XirFunc *func) {
+    if (!func) return;
+
+    EaAlloc *allocs = NULL;
+    uint32_t nalloc = ea_collect_allocs(func, &allocs);
+    if (nalloc == 0) { xr_free(allocs); return; }
+
+    /* Single function-wide escape-set computation.  Cost is
+     *   O(ninstr * args) + O(call_arg_pool) + O(nphi)
+     * which beats the previous O(nalloc * nblk^2) Pass 2d handily. */
+    ea_mark_escapes(func, allocs, nalloc);
+
+    /* Block-local scalar replacement for survivors.  Cross-block
+     * Mem2Reg is the obvious next step; it requires dom-frontier phi
+     * insertion and will land in a follow-up once we have the general
+     * helpers for it. */
+    for (uint32_t j = 0; j < nalloc; j++) {
+        if (!allocs[j].escapes)
+            (void)ea_scalar_replace(func, &allocs[j]);
+    }
+
+    xr_free(allocs);
 }
 
 /*
@@ -2027,9 +2068,9 @@ static uint8_t meet_vtag(uint8_t a, uint8_t b) {
  *   - PHI meet with type lattice widening
  *   - ALLOC with heap_type extraction
  */
-void xir_pass_type_prop(XirFunc *func) {
-    if (!func || func->nblk == 0) return;
-
+/* One forward scan of the type lattice.  Wrapped by xir_pass_type_prop
+ * below which iterates until no vreg type changes. */
+static void type_prop_scan_once(XirFunc *func) {
     XrType *t_int   = xr_type_new_int();
     XrType *t_float = xr_type_new_float();
     XrType *t_bool  = xr_type_new_bool();
@@ -2533,6 +2574,42 @@ void xir_pass_type_prop(XirFunc *func) {
                 break;
             }
         }
+    }
+}
+
+/*
+ * FNV-1a hash of every vreg's (xrtype, ctype.kind, heap_type).  The
+ * hash collapses to the same value iff no refinement was made during
+ * the last scan, which lets xir_pass_type_prop detect convergence in
+ * O(nvreg) without threading return values through hundreds of
+ * setter call sites.
+ */
+static uint64_t type_prop_checksum(XirFunc *func) {
+    uint64_t h = 1469598103934665603ull;
+    for (uint32_t v = 0; v < func->nvreg; v++) {
+        uintptr_t t = (uintptr_t)func->vregs[v].xrtype;
+        uint8_t   k = 0;
+        uint16_t  ht = func->vregs[v].heap_type;
+        if (func->vregs[v].def)
+            k = (uint8_t)func->vregs[v].def->ctype.kind;
+        h ^= (uint64_t)t; h *= 1099511628211ull;
+        h ^= k;            h *= 1099511628211ull;
+        h ^= ht;           h *= 1099511628211ull;
+    }
+    return h;
+}
+
+/* Worklist-style driver: iterate scan_once until the type state
+ * stops changing.  In practice two or three rounds suffice even on
+ * deeply chained IR; the cap guards against pathological input. */
+#define TYPE_PROP_MAX_ROUNDS 6
+
+void xir_pass_type_prop(XirFunc *func) {
+    if (!func || func->nblk == 0) return;
+    for (int round = 0; round < TYPE_PROP_MAX_ROUNDS; round++) {
+        uint64_t before = type_prop_checksum(func);
+        type_prop_scan_once(func);
+        if (type_prop_checksum(func) == before) break;
     }
 }
 

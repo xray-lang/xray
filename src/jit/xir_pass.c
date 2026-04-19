@@ -14,7 +14,9 @@
 
 #include "xir_pass_internal.h"
 #include "xir_pass_limits.h"
+#include "xir_pass_sccp.h"
 #include "xir_looptree.h"
+#include "xir_domtree.h"
 #include "xir_alias.h"
 #include "../base/xchecks.h"
 #include "../base/xmalloc.h"
@@ -776,24 +778,27 @@ typedef struct {
 void xir_pass_gvn(XirFunc *func) {
     if (!func || func->nblk < 2) return;
 
-    uint32_t *idom = xir_func_get_idom(func);
-    if (!idom) return;
+    const XirDomTree *dt = xir_func_get_domtree(func);
+    if (!dt) return;
 
-    // Dynamic table size based on total instruction count (~50% load factor)
+    /* Dynamic table size: one slot per ~half an instruction so the load
+     * factor stays around 50%.  Floored at GVN_MIN_TABLE so tiny
+     * functions still have probe room.  The old GVN_MAX_TABLE ceiling
+     * is gone — the function-level hard cap XIR_MAX_FUNC_TOTAL_INS
+     * already bounds worst-case allocation upstream. */
     uint32_t total_ins = 0;
     for (uint32_t bi = 0; bi < func->nblk; bi++) total_ins += func->blocks[bi]->nins;
     uint32_t gvn_tsize = GVN_MIN_TABLE;
-    while (gvn_tsize < GVN_MAX_TABLE && gvn_tsize < total_ins * 2) gvn_tsize <<= 1;
+    while (gvn_tsize < total_ins * 2) gvn_tsize <<= 1;
     uint32_t gvn_tmask = gvn_tsize - 1;
 
     GvnEntry *table = (GvnEntry *)xr_calloc(gvn_tsize, sizeof(GvnEntry));
     if (!table) return;
 
-    // Build def-use chains for associative constant folding
-    XirDefUse du;
-    memset(&du, 0, sizeof(du));
-    xir_defuse_build(&du, func);
-    bool has_du = (du.nvreg > 0);
+    /* Pull the def-use chain from the function's shared cache (Phase
+     * 2.3) rather than building a local throwaway copy. */
+    const XirDefUse *du = xir_func_get_defuse(func);
+    bool has_du = (du && du->nvreg > 0);
 
     for (uint32_t bi = 0; bi < func->nblk; bi++) {
         XirBlock *blk = func->blocks[bi];
@@ -808,7 +813,7 @@ void xir_pass_gvn(XirFunc *func) {
             gvn_normalize(ins);
 
             // Try associative constant folding: (a+K1)+K2 → a+(K1+K2)
-            if (has_du) gvn_assoc_const(func, ins, &du);
+            if (has_du) gvn_assoc_const(func, ins, du);
 
             uint32_t h = cse_hash(ins->op, ins->args[0], ins->args[1]);
             uint32_t slot = h & gvn_tmask;
@@ -830,8 +835,10 @@ void xir_pass_gvn(XirFunc *func) {
 
                 if (e->key == h && e->op == ins->op &&
                     e->arg0 == ins->args[0] && e->arg1 == ins->args[1]) {
-                    // Match: replace only if defining block dominates current
-                    if (xir_dominates(idom, e->def_blk, bi)) {
+                    /* Match: replace with the existing result only
+                     * when the earlier definition dominates us.  The
+                     * cached dominator tree answers this in O(1). */
+                    if (xir_dom_covers(dt, e->def_blk, bi)) {
                         ins->op = XIR_MOV;
                         ins->args[0] = e->result;
                         ins->args[1] = XIR_NONE;
@@ -842,7 +849,6 @@ void xir_pass_gvn(XirFunc *func) {
         }
     }
 
-    if (has_du) xir_defuse_free(&du);
     xr_free(table);
 }
 
@@ -864,9 +870,6 @@ void xir_pass_gvn(XirFunc *func) {
  * different allocation sites.
  */
 
-#define S2L_TABLE_SIZE 32
-#define S2L_TABLE_MASK (S2L_TABLE_SIZE - 1)
-
 typedef struct {
     XirRef   obj;       // object pointer vreg
     int64_t  offset;    // field byte offset
@@ -876,6 +879,12 @@ typedef struct {
     uint32_t store_blk; // block index of the store (for DSE)
     uint32_t store_idx; // instruction index of the store (for DSE)
 } S2lEntry;
+
+typedef struct {
+    S2lEntry *entries;
+    uint32_t  size;     // power-of-two capacity
+    uint32_t  mask;     // size - 1
+} S2lTable;
 
 // Helper: extract constant i64 offset from a LOAD_FIELD/STORE_FIELD ref
 static bool s2l_get_offset(XirFunc *func, XirRef ref, int64_t *out) {
@@ -887,17 +896,16 @@ static bool s2l_get_offset(XirFunc *func, XirRef ref, int64_t *out) {
 }
 
 // Invalidate all entries (after calls, unknown stores, etc.)
-static void s2l_kill_all(S2lEntry *table) {
-    for (int i = 0; i < S2L_TABLE_SIZE; i++)
-        table[i].valid = false;
+static void s2l_kill_all(S2lTable *t) {
+    memset(t->entries, 0, t->size * sizeof(S2lEntry));
 }
 
 // Look up (obj, offset) in the S2L table. Returns value vreg or XIR_NONE.
-static XirRef s2l_lookup(S2lEntry *table, XirRef obj, int64_t offset) {
-    uint32_t h = ((uint32_t)obj * 31 + (uint32_t)offset) & S2L_TABLE_MASK;
-    for (uint32_t probe = 0; probe < S2L_TABLE_SIZE; probe++) {
-        uint32_t idx = (h + probe) & S2L_TABLE_MASK;
-        S2lEntry *e = &table[idx];
+static XirRef s2l_lookup(const S2lTable *t, XirRef obj, int64_t offset) {
+    uint32_t h = ((uint32_t)obj * 31 + (uint32_t)offset) & t->mask;
+    for (uint32_t probe = 0; probe < t->size; probe++) {
+        uint32_t idx = (h + probe) & t->mask;
+        S2lEntry *e = &t->entries[idx];
         if (!e->valid) return XIR_NONE;
         if (e->obj == obj && e->offset == offset)
             return e->value;
@@ -906,11 +914,11 @@ static XirRef s2l_lookup(S2lEntry *table, XirRef obj, int64_t offset) {
 }
 
 // Look up full entry (for DSE: need to check is_store). Returns NULL if not found.
-static S2lEntry *s2l_find(S2lEntry *table, XirRef obj, int64_t offset) {
-    uint32_t h = ((uint32_t)obj * 31 + (uint32_t)offset) & S2L_TABLE_MASK;
-    for (uint32_t probe = 0; probe < S2L_TABLE_SIZE; probe++) {
-        uint32_t idx = (h + probe) & S2L_TABLE_MASK;
-        S2lEntry *e = &table[idx];
+static S2lEntry *s2l_find(S2lTable *t, XirRef obj, int64_t offset) {
+    uint32_t h = ((uint32_t)obj * 31 + (uint32_t)offset) & t->mask;
+    for (uint32_t probe = 0; probe < t->size; probe++) {
+        uint32_t idx = (h + probe) & t->mask;
+        S2lEntry *e = &t->entries[idx];
         if (!e->valid) return NULL;
         if (e->obj == obj && e->offset == offset)
             return e;
@@ -919,12 +927,12 @@ static S2lEntry *s2l_find(S2lEntry *table, XirRef obj, int64_t offset) {
 }
 
 // Insert or update (obj, offset) → value in the S2L table.
-static void s2l_insert(S2lEntry *table, XirRef obj, int64_t offset,
+static void s2l_insert(S2lTable *t, XirRef obj, int64_t offset,
                        XirRef value, bool is_store, uint32_t blk, uint32_t idx) {
-    uint32_t h = ((uint32_t)obj * 31 + (uint32_t)offset) & S2L_TABLE_MASK;
-    for (uint32_t probe = 0; probe < S2L_TABLE_SIZE; probe++) {
-        uint32_t slot = (h + probe) & S2L_TABLE_MASK;
-        S2lEntry *e = &table[slot];
+    uint32_t h = ((uint32_t)obj * 31 + (uint32_t)offset) & t->mask;
+    for (uint32_t probe = 0; probe < t->size; probe++) {
+        uint32_t slot = (h + probe) & t->mask;
+        S2lEntry *e = &t->entries[slot];
         if (!e->valid || (e->obj == obj && e->offset == offset)) {
             e->obj = obj;
             e->offset = offset;
@@ -936,14 +944,41 @@ static void s2l_insert(S2lEntry *table, XirRef obj, int64_t offset,
             return;
         }
     }
-    // Table full — don't insert (conservative)
+    /* Table full — rarely hit because size is provisioned for the
+     * function's actual store/load count plus padding.  Conservative
+     * drop is safe: worst case we miss a forwarding opportunity. */
+}
+
+/* Decide how large the hash table should be for this function.
+ * Pick the next power of two above (nstore+nload)*2 to keep the load
+ * factor around 50%; floor at 32 so tiny functions still have room
+ * for probing.  Max capped at the central XIR_MAX_FUNC_TOTAL_INS to
+ * bound worst-case allocation. */
+static uint32_t s2l_table_size(XirFunc *func) {
+    uint32_t fields = 0;
+    for (uint32_t bi = 0; bi < func->nblk; bi++) {
+        XirBlock *blk = func->blocks[bi];
+        if (!blk) continue;
+        for (uint32_t i = 0; i < blk->nins; i++) {
+            uint16_t op = blk->ins[i].op;
+            if (op == XIR_LOAD_FIELD || op == XIR_STORE_FIELD) fields++;
+        }
+    }
+    uint32_t target = fields * 2u;
+    uint32_t size = 32;
+    while (size < target) size <<= 1;
+    if (size > XIR_MAX_FUNC_TOTAL_INS) size = XIR_MAX_FUNC_TOTAL_INS;
+    return size;
 }
 
 void xir_pass_store_to_load(XirFunc *func) {
     if (!func || func->nblk == 0) return;
 
-    S2lEntry table[S2L_TABLE_SIZE];
-    memset(table, 0, sizeof(table));
+    S2lTable t;
+    t.size = s2l_table_size(func);
+    t.mask = t.size - 1;
+    t.entries = (S2lEntry *)xr_calloc(t.size, sizeof(S2lEntry));
+    if (!t.entries) return;
 
     for (uint32_t bi = 0; bi < func->nblk; bi++) {
         XirBlock *blk = func->blocks[bi];
@@ -960,7 +995,7 @@ void xir_pass_store_to_load(XirFunc *func) {
                 carry_forward = true;
         }
         if (!carry_forward)
-            memset(table, 0, sizeof(table));
+            s2l_kill_all(&t);
 
         for (uint32_t i = 0; i < blk->nins; i++) {
             XirIns *ins = &blk->ins[i];
@@ -974,7 +1009,7 @@ void xir_pass_store_to_load(XirFunc *func) {
                      * with no intervening load, the prior store is dead.
                      * Works both intra-block and cross-block (when the
                      * S2L table was carried forward from a predecessor). */
-                    S2lEntry *prev = s2l_find(table, obj, offset);
+                    S2lEntry *prev = s2l_find(&t, obj, offset);
                     if (prev && prev->is_store) {
                         XirBlock *dead_blk = NULL;
                         if (prev->store_blk == bi) {
@@ -990,7 +1025,7 @@ void xir_pass_store_to_load(XirFunc *func) {
                             dead->args[1] = XIR_NONE;
                         }
                     }
-                    s2l_insert(table, obj, offset, ins->args[1],
+                    s2l_insert(&t, obj, offset, ins->args[1],
                                true, bi, i);
                 }
                 continue;
@@ -1003,7 +1038,7 @@ void xir_pass_store_to_load(XirFunc *func) {
                 if (!xir_ref_is_vreg(ins->dst)) continue;
                 if (!s2l_get_offset(func, ins->args[1], &offset)) continue;
 
-                XirRef fwd = s2l_lookup(table, obj, offset);
+                XirRef fwd = s2l_lookup(&t, obj, offset);
                 if (!xir_ref_is_none(fwd)) {
                     // Forward: replace LOAD_FIELD with MOV from stored/loaded value
                     ins->op = XIR_MOV;
@@ -1012,7 +1047,7 @@ void xir_pass_store_to_load(XirFunc *func) {
                 }
                 /* Record this load result for load-load forwarding.
                  * Mark as non-store so DSE won't kill the prior store. */
-                s2l_insert(table, obj, offset,
+                s2l_insert(&t, obj, offset,
                            xir_ref_is_none(fwd) ? ins->dst : fwd,
                            false, bi, i);
                 continue;
@@ -1027,10 +1062,12 @@ void xir_pass_store_to_load(XirFunc *func) {
                 ins->op == XIR_STORE || ins->op == XIR_ALLOC ||
                 ins->op == XIR_STORE_CORO ||
                 (ins->flags & XIR_FLAG_SIDE_EFFECT)) {
-                s2l_kill_all(table);
+                s2l_kill_all(&t);
             }
         }
     }
+
+    xr_free(t.entries);
 }
 
 /* ========== If-Conversion ========== */
@@ -1092,10 +1129,23 @@ static XirRef ifconv_phi_arg(XirPhi *phi, XirBlock *pred, XirBlock *joinblk) {
     return XIR_NONE;
 }
 
+/* Maximum number of inner iterations.  Each round collapses one level
+ * of diamond nesting into the parent block, so three rounds suffice
+ * for the two-deep nested diamond shapes we care about in practice
+ * without risking unbounded growth on pathological inputs. */
+#define IFCONV_MAX_ROUNDS 3
+
 void xir_pass_ifconvert(XirFunc *func) {
     if (!func || func->nblk < 3) return;
 
-    for (uint32_t bi = 0; bi < func->nblk; bi++) {
+    /* Iterate to a local fixed-point so a successful outer conversion
+     * exposes the next level of nesting inside the now-flattened
+     * parent block.  The previous single-pass version required the
+     * whole pipeline to re-run ifconvert for every nesting level. */
+    for (int round = 0; round < IFCONV_MAX_ROUNDS; round++) {
+      bool converted_any = false;
+
+      for (uint32_t bi = 0; bi < func->nblk; bi++) {
         XirBlock *ifblk = func->blocks[bi];
 
         // Must be a conditional branch
@@ -1176,6 +1226,10 @@ void xir_pass_ifconvert(XirFunc *func) {
         joinblk->npred = 1;
         joinblk->preds[0] = ifblk;
         joinblk->phis = NULL;
+        converted_any = true;
+      }
+
+      if (!converted_any) break;
     }
 }
 
@@ -1237,6 +1291,39 @@ static uint32_t licm_block_index(XirFunc *func, const XirBlock *blk) {
     for (uint32_t i = 0; i < func->nblk; i++)
         if (func->blocks[i] == blk) return i;
     return UINT32_MAX;
+}
+
+/*
+ * Return true when |a| and |b| can be *proved* to refer to distinct
+ * objects based on provenance alone.
+ *
+ * We are conservative on purpose: absence of proof never implies
+ * aliasing in the caller, only that the caller must fall back to the
+ * usual pessimistic assumption.  Cases we currently handle:
+ *
+ *   1. Two FRESH_ALLOC vregs pointing at *different* ALLOC sites:
+ *      the GC allocator produces a new object per site, so their
+ *      identities cannot coincide.
+ *   2. A FRESH_ALLOC against a PARAM: an object born in this
+ *      function's scope cannot be an incoming argument.
+ */
+static bool licm_definitely_no_alias(XirFunc *func, XirRef a, XirRef b) {
+    if (a == b) return false;
+    const XirAliasInfo *ia = xir_func_get_alias(func, a);
+    const XirAliasInfo *ib = xir_func_get_alias(func, b);
+    if (!ia || !ib) return false;
+
+    if (ia->source == XIR_ALIAS_FRESH_ALLOC &&
+        ib->source == XIR_ALIAS_FRESH_ALLOC)
+        return ia->origin != ib->origin;
+
+    if ((ia->source == XIR_ALIAS_FRESH_ALLOC &&
+         ib->source == XIR_ALIAS_PARAM) ||
+        (ib->source == XIR_ALIAS_FRESH_ALLOC &&
+         ia->source == XIR_ALIAS_PARAM))
+        return true;
+
+    return false;
 }
 
 void xir_pass_licm(XirFunc *func) {
@@ -1349,7 +1436,18 @@ void xir_pass_licm(XirFunc *func) {
                                 }
                             }
                             for (uint32_t s = 0; s < nstores; s++) {
-                                if (stores[s].obj != obj) continue;
+                                if (stores[s].obj != obj) {
+                                    /* Different vreg: only safe to
+                                     * ignore when alias analysis
+                                     * proves the two origins must be
+                                     * distinct.  Otherwise it could
+                                     * still be the same object
+                                     * reached through a different
+                                     * vreg. */
+                                    if (licm_definitely_no_alias(func,
+                                            stores[s].obj, obj)) continue;
+                                    has_alias = true; break;
+                                }
                                 if (!stores[s].has_offset || !load_has_off) {
                                     has_alias = true; break;
                                 }
@@ -1633,8 +1731,6 @@ void xir_pass_canonicalize(XirFunc *func) {
  * the same location is tracked, the current store is dead.
  */
 
-#define DSE_MAX_TRACKED XIR_DSE_MAX_TRACKED
-
 typedef struct {
     XirRef   obj;
     XirRef   offset;  // const ref for byte offset
@@ -1644,11 +1740,26 @@ typedef struct {
 void xir_pass_dse(XirFunc *func) {
     if (!func) return;
 
+    /* Reusable heap buffer: grows once and is recycled across blocks,
+     * so we pay the allocation cost at most O(log) times per function
+     * regardless of how many blocks contain STORE_FIELD. */
+    DseEntry *tracked = NULL;
+    uint32_t  tracked_cap = 0;
+
     for (uint32_t bi = 0; bi < func->nblk; bi++) {
         XirBlock *blk = func->blocks[bi];
         if (!blk || blk->nins == 0) continue;
 
-        DseEntry tracked[DSE_MAX_TRACKED];
+        /* Worst case: every instruction in this block is a store to a
+         * distinct (obj, offset), so the tracker never exceeds
+         * blk->nins entries. */
+        if (blk->nins > tracked_cap) {
+            uint32_t new_cap = tracked_cap ? tracked_cap : 32;
+            while (new_cap < blk->nins) new_cap <<= 1;
+            XR_REALLOC_OR_ABORT(tracked, new_cap * sizeof(DseEntry),
+                                "DSE tracked stores");
+            tracked_cap = new_cap;
+        }
         uint32_t ntracked = 0;
 
         // Backward scan: track stores from the end
@@ -1702,20 +1813,19 @@ void xir_pass_dse(XirFunc *func) {
                     ins->args[1] = XIR_NONE;
                     ins->flags = 0;
                 } else {
-                    // Track this store as the latest to (obj, offset)
-                    if (ntracked < DSE_MAX_TRACKED) {
-                        tracked[ntracked].obj = sobj;
-                        tracked[ntracked].offset = soff;
-                        tracked[ntracked].ins_idx = (uint32_t)i;
-                        ntracked++;
-                    }
+                    // Track this store as the latest to (obj, offset).
+                    // Capacity is guaranteed >= blk->nins so no overflow.
+                    tracked[ntracked].obj = sobj;
+                    tracked[ntracked].offset = soff;
+                    tracked[ntracked].ins_idx = (uint32_t)i;
+                    ntracked++;
                 }
             }
         }
     }
-}
 
-#undef DSE_MAX_TRACKED
+    xr_free(tracked);
+}
 
 /* ========== Pipeline Runner ========== */
 
@@ -1790,17 +1900,23 @@ void xir_run_pipeline_ex(XirFunc *func, XirOptLevel opt, XrProto *proto) {
     XIR_RUN_PASS_NOCFG(func, xir_pass_dce);  // Phase 0 DCE: no CFG yet, skip SE check
 
     if (opt >= XIR_OPT_BASIC) {
-        // --- Phase 1: Constant propagation + CFG cleanup ---
-        XIR_RUN_PASS_NOCFG(func, xir_pass_const_prop);
-        xir_pass_branch_simp(func);
-        xir_pass_remove_unreachable(func);
+        /* --- Phase 1: SCCP + CFG cleanup ---
+         *
+         * SCCP subsumes the old const_prop + branch_simp +
+         * remove_unreachable triple: it folds constants, simplifies
+         * constant-conditioned branches, and kills blocks reachable
+         * only through those branches in one fixed-point pass.  The
+         * remaining CFG fix-ups (merge_blocks / rebuild_preds)
+         * handle post-SCCP chain collapsing. */
+        XIR_RUN_PASS(func, xir_pass_sccp);
         xir_pass_merge_blocks(func);
         xir_rebuild_preds(func);
         xir_verify_cfg(func);
         xir_verify_types(func);
 
-        // Re-propagate types after const_prop removed unreachable code
-        XIR_RUN_PASS(func, xir_pass_type_prop);          // TypeProp round 2
+        /* type_prop now iterates to a fixed point internally (Phase
+         * 3.2), so a single call here replaces the historical
+         * "round 2" re-run. */
         XIR_RUN_PASS(func, xir_pass_specialize);          // Specialize RT_* with proven types
         XIR_RUN_PASS(func, xir_pass_canonicalize);
         XIR_RUN_PASS_STRICT_SE(func, xir_pass_cse);
@@ -1812,16 +1928,20 @@ void xir_run_pipeline_ex(XirFunc *func, XirOptLevel opt, XrProto *proto) {
     }
 
     if (opt >= XIR_OPT_FULL) {
-        // --- Phase 2: Inlining + post-inline type refinement ---
+        /* --- Phase 2: Inlining + post-inline type refinement --- */
         if (proto) {
             XIR_RUN_PASS2(func, xir_pass_auto_inline, proto);
-            XIR_RUN_PASS(func, xir_pass_type_prop);      // TypeProp round 3 (post-inline)
-            XIR_RUN_PASS(func, xir_pass_specialize);      // Specialize RT_* post-inline
+            /* SCCP again picks up constants exposed by the inliner
+             * (e.g. the callee's return expression becoming a
+             * literal); type_prop then re-specialises once. */
+            XIR_RUN_PASS(func, xir_pass_sccp);
+            XIR_RUN_PASS(func, xir_pass_type_prop);
+            XIR_RUN_PASS(func, xir_pass_specialize);
             XIR_RUN_PASS(func, xir_pass_canonicalize);
             XIR_RUN_PASS_STRICT_SE(func, xir_pass_dce);
         }
 
-        // --- Phase 3: Loop optimizations ---
+        /* --- Phase 3: Loop optimisations --- */
         XIR_RUN_PASS(func, xir_pass_licm);
         XIR_RUN_PASS(func, xir_pass_elim_guards);
         XIR_RUN_PASS_STRICT_SE(func, xir_pass_gvn);
@@ -1829,16 +1949,19 @@ void xir_run_pipeline_ex(XirFunc *func, XirOptLevel opt, XrProto *proto) {
         XIR_RUN_PASS(func, xir_pass_propjnz);
         XIR_RUN_PASS(func, xir_pass_store_to_load);
         XIR_RUN_PASS(func, xir_pass_dse);
-        XIR_RUN_PASS(func, xir_pass_type_prop);          // TypeProp round 4 (post-GVN/LICM)
-        XIR_RUN_PASS(func, xir_pass_specialize);          // Specialize RT_* post-GVN
-        XIR_RUN_PASS(func, xir_pass_elim_guards);        // Re-run with refined types
+        /* After GVN / LICM may have exposed new constants, run SCCP
+         * followed by a single type_prop pass.  type_prop is
+         * fixed-point internal so one call is sufficient. */
+        XIR_RUN_PASS(func, xir_pass_sccp);
+        XIR_RUN_PASS(func, xir_pass_type_prop);
+        XIR_RUN_PASS(func, xir_pass_specialize);
+        XIR_RUN_PASS(func, xir_pass_elim_guards);
         XIR_RUN_PASS(func, xir_pass_ifconvert);
         XIR_RUN_PASS(func, xir_pass_phi_simp);
         XIR_RUN_PASS_STRICT_SE(func, xir_pass_copy_prop);
 
-        // --- Phase 4: CFG cleanup + final optimizations ---
-        xir_pass_branch_simp(func);
-        xir_pass_remove_unreachable(func);
+        /* --- Phase 4: CFG cleanup + final optimisations --- */
+        XIR_RUN_PASS(func, xir_pass_sccp);
         xir_pass_merge_blocks(func);
         xir_rebuild_preds(func);
         xir_verify_cfg(func);
@@ -1848,8 +1971,7 @@ void xir_run_pipeline_ex(XirFunc *func, XirOptLevel opt, XrProto *proto) {
         XIR_RUN_PASS(func, xir_pass_escape_analysis);
         XIR_RUN_PASS_STRICT_SE(func, xir_pass_dce);
 
-        // --- Phase 5: Range analysis + bounds check elimination ---
-        XIR_RUN_PASS(func, xir_pass_type_prop);          // TypeProp round 5 (pre-range)
+        /* --- Phase 5: Range analysis + bounds check elimination --- */
         XIR_RUN_PASS(func, xir_pass_insert_redefines);   // Flow-sensitive type narrowing
         XIR_RUN_PASS(func, xir_pass_range_analysis);
         XIR_RUN_PASS_STRICT_SE(func, xir_pass_dce);
