@@ -89,331 +89,35 @@ void xr_class_compute_operator_flags(XrClass *cls) {
 
 /* ========== Class Object Implementation ========== */
 
-static XrClass* xr_class_new_single(XrayIsolate *X, const char *name) {
-    XR_DCHECK(name != NULL, "Class name must not be NULL");
-
-    XrClass *cls = XR_ALLOCATE(XrClass);
-    if (!cls) return NULL;
-
-    // Zero all fields first; XR_ALLOCATE (xr_malloc) does not clear memory.
-    // Fields like field_default_values / struct_layout / reflect_cache /
-    // type_metadata would otherwise hold garbage and trip xr_class_free.
-    memset(cls, 0, sizeof(*cls));
-
-    xr_gc_header_init_type(&cls->gc, XR_TCLASS);
-    // Class/field/method names are interned in the isolate's symbol table.
-    // The returned pointer is stable for the isolate's lifetime and must
-    // not be freed by us. Fall back to the raw literal only when no
-    // isolate is available (e.g. very early bootstrap) so the field
-    // remains usable for debug prints.
-    cls->name = X ? xr_symbol_intern(X, name) : name;
-    if (!cls->name) cls->name = name;
-
-    // Root class: primary_supers[0] == self, depth == 0
-    cls->primary_supers[0] = cls;
-    cls->instance_size = sizeof(XrGCHeader);
-
-    return cls;
-}
-
 XrClass* xr_class_new(XrayIsolate *X, const char *name, XrClass *super) {
     XR_DCHECK(name != NULL, "Class name must not be NULL");
 
-    XrClass *cls = xr_class_new_single(X, name);
-    if (!cls) return NULL;
-
-    if (super) {
-        xr_class_set_super(cls, super);
+    // xr_class_new used to allocate a raw XrClass by hand and then, when a
+    // super was given, patch the inheritance in place via xr_class_set_super
+    // -- a ~280-line operation that re-flattened fields / methods / vtable
+    // after the class had already been assembled with the wrong parent.
+    //
+    // The descriptor path already produces the correct class in one shot
+    // through the builder. Bare classes used by core init (Object, String,
+    // Int ...) and by enum creation are structurally equivalent to the
+    // output of "empty builder + finalize", so we funnel everything
+    // through the same code path.
+    //
+    // Callers remain responsible for reflection registration; xr_core_init
+    // batches it for the builtin classes and xr_enum_type_new registers
+    // each enum class right after construction.
+    XrClassBuilder *builder = xr_class_builder_new(X, name, super);
+    if (!builder) {
+        xr_log_warning("class", "class_new: builder allocation failed for '%s'", name);
+        return NULL;
     }
-
-    // NOTE: callers are responsible for reflection registration. The core
-    // isolate init does that in a batch after all builtin classes are ready
-    // (see xr_core_init). Enum creation calls xr_registry_register_class()
-    // directly right after this returns.
-    return cls;
+    return xr_class_builder_finalize(builder);
 }
 
-// Set superclass (establish inheritance)
-void xr_class_set_super(XrClass *subclass, XrClass *superclass) {
-    if (!subclass || !superclass) return;
-
-    // Cannot inherit from a final class
-    if (superclass->flags & XR_CLASS_FINAL) {
-        xr_log_warning("class", "class '%s' cannot inherit from final class '%s'",
-                       subclass->name ? subclass->name : "<anonymous>",
-                       superclass->name ? superclass->name : "<anonymous>");
-        return;
-    }
-
-    subclass->super = superclass;
-
-    // Mark parent as having subclasses (CHA devirtualization)
-    superclass->flags |= XR_CLASS_HAS_SUBCLASSES;
-
-    // Inherit parent's operator flags
-    subclass->operator_flags |= superclass->operator_flags;
-
-    // Update primary supers array
-    subclass->depth = superclass->depth + 1;
-
-    if (subclass->depth < 8) {
-        for (int i = 0; i <= superclass->depth; i++) {
-            subclass->primary_supers[i] = superclass->primary_supers[i];
-        }
-        subclass->primary_supers[subclass->depth] = subclass;
-        for (int i = subclass->depth + 1; i < 8; i++) {
-            subclass->primary_supers[i] = NULL;
-        }
-    } else {
-        // Depth >= 8: keep the 8 shallowest ancestors in
-        // [Object, parent1, ..., parent7] order so that instanceof's
-        // O(1) lookup remains correct for any target with depth < 8.
-        // Deeper targets fall back to linear scan in xr_class_instanceof
-        // (will be replaced by a secondary supers hash in P10).
-        XrClass *chain[256];
-        int n = 0;
-        for (XrClass *c = subclass; c != NULL && n < 256; c = c->super) {
-            chain[n++] = c;
-        }
-        // chain[n-1] is Object, chain[0] is subclass itself.
-        for (int i = 0; i < 8 && n - 1 - i >= 0; i++) {
-            subclass->primary_supers[i] = chain[n - 1 - i];
-        }
-    }
-
-    // Update field layout
-    int parent_instance_field_count = xr_class_instance_field_count(superclass);
-    int own_instance_fields = subclass->own_field_count - subclass->static_field_count;
-    int old_instance_field_count = xr_class_instance_field_count(subclass);
-
-    subclass->field_count = parent_instance_field_count + subclass->own_field_count;
-
-    // Resize field_default_values when inherited fields increase the total
-    int new_instance_field_count = parent_instance_field_count + own_instance_fields;
-    if (new_instance_field_count > old_instance_field_count) {
-        XrValue *new_defaults = (XrValue*)xr_malloc(
-            new_instance_field_count * sizeof(XrValue));
-        if (new_defaults) {
-            // Parent slots: copy from superclass defaults or null
-            for (int i = 0; i < parent_instance_field_count; i++) {
-                new_defaults[i] = (superclass->field_default_values && i < (int)xr_class_instance_field_count(superclass))
-                    ? superclass->field_default_values[i] : xr_null();
-            }
-            // Own slots: copy from old defaults or null
-            for (int i = 0; i < own_instance_fields; i++) {
-                int new_idx = parent_instance_field_count + i;
-                new_defaults[new_idx] = (subclass->field_default_values && i < old_instance_field_count)
-                    ? subclass->field_default_values[i] : xr_null();
-            }
-            if (subclass->field_default_values)
-                xr_free(subclass->field_default_values);
-            subclass->field_default_values = new_defaults;
-        }
-    }
-
-    // Rebuild symbol mapping
-    if (subclass->field_symbol_to_index && subclass->own_field_count > 0) {
-        for (int i = 0; i < subclass->field_map_capacity; i++) {
-            subclass->field_symbol_to_index[i] = -1;
-        }
-
-        int field_base_index = parent_instance_field_count;
-        for (int i = 0; i < own_instance_fields; i++) {
-            int global_idx = field_base_index + i;
-            subclass->field_symbol_to_index[subclass->fields[i].symbol] = global_idx;
-        }
-
-        int total_instance_fields = parent_instance_field_count + own_instance_fields;
-        for (int i = 0; i < subclass->static_field_count; i++) {
-            int field_idx = own_instance_fields + i;
-            subclass->field_symbol_to_index[subclass->fields[field_idx].symbol] =
-                total_instance_fields + i;
-        }
-    }
-
-    subclass->instance_size = superclass->instance_size + own_instance_fields * sizeof(void*);
-
-    // Flatten parent instance methods into subclass methods[] array.
-    // At this point, subclass->methods[] may only contain own methods (from CLASS_FROM_DESC
-    // with Object as placeholder super). Now rebuild with the real superclass.
-    {
-        int parent_mc = superclass->method_count;  // parent instance methods (flattened)
-        int own_mc = subclass->method_count;        // current own methods
-        int own_static = subclass->static_method_count;
-
-        // Count overrides (O(n) via parent's symbol-to-index table)
-        int override_cnt = 0;
-        if (superclass->method_symbol_to_index) {
-            int cap = superclass->method_map_capacity;
-            for (int i = 0; i < own_mc; i++) {
-                if (subclass->methods[i].flags & XMETHOD_FLAG_STATIC) continue;
-                int sym = subclass->methods[i].symbol;
-                if (sym >= 0 && sym < cap && superclass->method_symbol_to_index[sym] >= 0
-                    && superclass->method_symbol_to_index[sym] < parent_mc) {
-                    override_cnt++;
-                }
-            }
-        }
-
-        // Count own non-static methods that are NOT overrides
-        int own_instance = 0;
-        for (int i = 0; i < own_mc; i++) {
-            if (!(subclass->methods[i].flags & XMETHOD_FLAG_STATIC)) own_instance++;
-        }
-        int new_own = own_instance - override_cnt;
-        int flat_count = parent_mc + new_own;
-        int total = flat_count + own_static;
-
-        if (total > 0 && parent_mc > 0) {
-            // Save own methods to temp buffer
-            XrMethod *own_methods = (XrMethod*)xr_malloc(own_mc * sizeof(XrMethod));
-            memcpy(own_methods, subclass->methods, own_mc * sizeof(XrMethod));
-
-            // Reallocate methods array for flattened layout
-            XrMethod *new_methods = (XrMethod*)xr_malloc(total * sizeof(XrMethod));
-
-            // Step 1: shallow-copy parent instance methods.
-            // Method names are interned (owned by the symbol table), so
-            // we share the pointer instead of duplicating.
-            for (int i = 0; i < parent_mc; i++) {
-                new_methods[i] = superclass->methods[i];
-            }
-
-            // Step 2: apply own instance methods (override or append)
-            int append_idx = parent_mc;
-            for (int i = 0; i < own_mc; i++) {
-                if (own_methods[i].flags & XMETHOD_FLAG_STATIC) continue;
-
-                // O(1) override lookup via parent's symbol table
-                int slot = -1;
-                if (superclass->method_symbol_to_index) {
-                    int sym = own_methods[i].symbol;
-                    if (sym >= 0 && sym < superclass->method_map_capacity) {
-                        int idx = superclass->method_symbol_to_index[sym];
-                        if (idx >= 0 && idx < parent_mc) slot = idx;
-                    }
-                }
-
-                if (slot >= 0) {
-                    // Override: inherited name is interned; no free needed.
-                    new_methods[slot] = own_methods[i];
-                } else {
-                    new_methods[append_idx] = own_methods[i];
-                    append_idx++;
-                }
-            }
-
-            // Step 3: copy static methods at the end
-            int static_idx = flat_count;
-            for (int i = 0; i < own_mc; i++) {
-                if (own_methods[i].flags & XMETHOD_FLAG_STATIC) {
-                    new_methods[static_idx++] = own_methods[i];
-                }
-            }
-
-            xr_free(subclass->methods);
-            subclass->methods = new_methods;
-            subclass->method_count = flat_count;
-            // static_method_count stays the same
-
-            xr_free(own_methods);
-
-            // Rebuild method_symbol_to_index
-            if (subclass->method_symbol_to_index) {
-                xr_free(subclass->method_symbol_to_index);
-                subclass->method_symbol_to_index = NULL;
-            }
-            int all_count = flat_count + own_static;
-            if (all_count > 0) {
-                int max_sym = 0;
-                for (int i = 0; i < all_count; i++) {
-                    if (subclass->methods[i].symbol > max_sym)
-                        max_sym = subclass->methods[i].symbol;
-                }
-                subclass->method_map_capacity = max_sym + 1;
-                subclass->method_symbol_to_index = (int*)xr_malloc(
-                    subclass->method_map_capacity * sizeof(int));
-                for (int i = 0; i < subclass->method_map_capacity; i++)
-                    subclass->method_symbol_to_index[i] = -1;
-                for (int i = 0; i < all_count; i++) {
-                    int sym = subclass->methods[i].symbol;
-                    if (sym >= 0 && sym < subclass->method_map_capacity)
-                        subclass->method_symbol_to_index[sym] = i;
-                }
-            }
-        }
-    }
-
-    // Rebuild vtable (inherit from parent)
-    if (subclass->vtable) {
-        xr_free(subclass->vtable);
-        subclass->vtable = NULL;
-        subclass->vtable_size = 0;
-    }
-
-    if (superclass->vtable && superclass->vtable_size > 0) {
-        subclass->vtable_size = superclass->vtable_size;
-        subclass->vtable = (XrMethod**)xr_malloc(subclass->vtable_size * sizeof(XrMethod*));
-        memcpy(subclass->vtable, superclass->vtable, subclass->vtable_size * sizeof(XrMethod*));
-        subclass->own_method_start = superclass->vtable_size;
-    } else {
-        subclass->own_method_start = 0;
-    }
-
-    // Process subclass methods (override or add)
-    for (int i = 0; i < subclass->method_count; i++) {
-        XrMethod *method = &subclass->methods[i];
-
-        if (method->flags & XMETHOD_FLAG_STATIC) {
-            method->vtable_index = -1;
-            continue;
-        }
-
-        int parent_vtable_idx = -1;
-        if (superclass->vtable) {
-            for (int j = 0; j < superclass->vtable_size; j++) {
-                if (superclass->vtable[j] && superclass->vtable[j]->symbol == method->symbol) {
-                    parent_vtable_idx = j;
-                    break;
-                }
-            }
-        }
-
-        if (parent_vtable_idx >= 0) {
-            // Cannot override a final method
-            XrMethod *parent_method = superclass->vtable[parent_vtable_idx];
-            if (parent_method && (parent_method->flags & XMETHOD_FLAG_FINAL)) {
-                xr_log_warning("class",
-                               "method '%s' in class '%s' cannot override final method from '%s'",
-                               method->name ? method->name : "<unknown>",
-                               subclass->name ? subclass->name : "<anonymous>",
-                               superclass->name ? superclass->name : "<anonymous>");
-                continue;
-            }
-            // Override parent method
-            subclass->vtable[parent_vtable_idx] = method;
-            method->vtable_index = parent_vtable_idx;
-        } else {
-            // New method: extend vtable
-            if (subclass->vtable) {
-                XrMethod **new_vt = (XrMethod**)xr_realloc(subclass->vtable, (subclass->vtable_size + 1) * sizeof(XrMethod*));
-                if (!new_vt) continue;
-                subclass->vtable = new_vt;
-            } else {
-                subclass->vtable = (XrMethod**)xr_malloc(sizeof(XrMethod*));
-                if (!subclass->vtable) continue;
-            }
-            subclass->vtable[subclass->vtable_size] = method;
-            method->vtable_index = subclass->vtable_size;
-            subclass->vtable_size++;
-        }
-    }
-
-    // Rebuild ITable (if interfaces exist)
-    xr_class_build_itable(subclass);
-
-    xr_class_inherit_abstract_methods(subclass, superclass);
-}
+// xr_class_set_super has been removed. All inheritance is established in
+// one shot at build time via xr_class_builder_finalize; there is no
+// longer a supported API for patching a class's super link after the
+// class has been frozen.
 
 const XrFieldDescriptor* xr_class_get_field(const XrClass *cls, int index) {
     if (!cls || index < 0 || index >= cls->field_count) {
@@ -619,9 +323,13 @@ XrClass* xr_interface_new(XrayIsolate *X, const char *name) {
     XR_DCHECK(X != NULL, "interface_new: NULL isolate");
     XR_DCHECK(name != NULL, "Interface name must not be NULL");
 
-    XrClass *iface = xr_class_new_single(X, name);
-    iface->flags |= XR_CLASS_INTERFACE;
-
+    // Interfaces are just bare classes flagged as XR_CLASS_INTERFACE.
+    // Build them through the same path as any other class so there is a
+    // single code path for the (name + super) + finalize pipeline.
+    XrClassBuilder *builder = xr_class_builder_new(X, name, NULL);
+    if (!builder) return NULL;
+    XrClass *iface = xr_class_builder_finalize(builder);
+    if (iface) iface->flags |= XR_CLASS_INTERFACE;
     return iface;
 }
 
