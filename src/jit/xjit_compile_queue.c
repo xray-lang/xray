@@ -27,6 +27,7 @@
 #include "xir_codegen.h"
 #include "xir_code_alloc.h"
 #include "xir_tfa.h"
+#include "xir_eligibility.h"
 #include "../runtime/value/xchunk.h"
 #include "../runtime/value/xslot_type.h"
 #include "../runtime/object/xstring.h"
@@ -35,48 +36,45 @@
 #include "../base/xchecks.h"
 #include <string.h>
 
-/* ========== Forward declarations ========== */
-
-// Defined in xir_jit.c — reused by background thread
-extern XR_FUNC bool is_jit_eligible(XrProto *proto, bool verbose);
-
 /* ========== Background compilation (single task) ========== */
 
-// Run the full compilation pipeline for one proto.
+// Run the full compilation pipeline for one proto using a pre-snapshotted task.
 // Called from the background thread. All allocations use xr_malloc.
 // On success, publishes result via atomic store to proto->jit_entry_pending.
-static void bg_compile_one(XirCompileQueue *q, XrProto *proto, bool is_recompile) {
+//
+// IMPORTANT: this function must never write back to |proto|; every field it
+// needs is already present in |task| or is a truly immutable proto field
+// (bytecode array, constants pool, child protos, etc.).
+static void bg_compile_one(XirCompileQueue *q, const XirBgTask *task) {
     XirJitState *jit = q->jit;
-    if (!proto || !jit) return;
+    if (!task || !task->proto || !jit) return;
+
+    XrProto *proto = task->proto;
+    bool is_recompile = task->is_recompile;
 
     // Skip if already compiled at target level
     if (!is_recompile && proto->jit_entry) return;
     if (is_recompile && proto->jit_opt_level >= XIR_OPT_FULL) return;
 
-    // Eligibility check (pure read of proto fields, thread-safe)
+    // Eligibility re-check: the main thread already ran this, but a
+    // concurrent deopt may have bumped deopt_count in between; re-checking
+    // here keeps eligibility a read-only query and costs very little.
     if (!is_jit_eligible(proto, false)) return;
 
-    // Build shared_protos mapping (reads enclosing proto chain, immutable)
-    // NOTE: we call the internal helper from xir_jit.c
-    // For simplicity, pass NULL shared_protos in background mode.
-    // CALL_KNOWN for shared functions is a nice-to-have but not required
-    // for correctness; the builder falls back to CALL_C.
-    int nshared = 0;
-    XrProto **shared_protos = NULL;
-
-    // Build XIR from bytecode.
-    // Pass NULL isolate — class registry internals use dynarrays that are
-    // not safe for concurrent access from the bg thread.
-    // Suppress type_feedback for the ENTIRE compilation pipeline (build +
-    // optimize + codegen). Pipeline passes may read proto->type_feedback,
-    // and the main thread concurrently writes to it via xfb_record_arg.
-    struct XirTypeFeedback *saved_fb = proto->type_feedback;
-    proto->type_feedback = NULL;  // benign race: main thread skips recording
-
-    XirFunc *func = xir_build_from_proto_jit(proto, shared_protos, nshared,
-                                              NULL, NULL);
+    /* Build XIR from the immutable proto bytecode.
+     *
+     * - shared_protos come from the task snapshot: builder can emit
+     *   CALL_KNOWN for module-level fn calls without touching shared state.
+     * - shape_hint also comes from the snapshot, captured on the main
+     *   thread from dominant_shape analysis.
+     * - NULL isolate: class-registry dynarrays are not safe for bg
+     *   concurrent access; builder works in a bg-safe subset. */
+    XrProto **shared_protos = task->nshared > 0
+        ? (XrProto **)task->shared_protos : NULL;
+    XirFunc *func = xir_build_from_proto_jit(proto, shared_protos,
+                                              task->nshared,
+                                              task->shape_hint, NULL);
     if (!func) {
-        proto->type_feedback = saved_fb;  // restore on early exit
         xr_log_warning("jit-bg", "builder failed for %s",
                 proto->name ? XR_STRING_CHARS(proto->name) : "?");
         return;
@@ -85,7 +83,6 @@ static void bg_compile_one(XirCompileQueue *q, XrProto *proto, bool is_recompile
     // Guard: reject oversized functions
     if (func->nvreg > 512) {
         xir_func_destroy(func);
-        proto->type_feedback = saved_fb;
         return;
     }
 
@@ -97,8 +94,6 @@ static void bg_compile_one(XirCompileQueue *q, XrProto *proto, bool is_recompile
     // This eliminates data races with the main thread's sync/recompile
     // path which uses jit->code_alloc concurrently.
     XirCodegenResult res = xir_codegen_arm64(func, &q->bg_code_alloc);
-    // Restore type_feedback now that all proto reads are done
-    proto->type_feedback = saved_fb;
     if (!res.success) {
         xr_log_warning("jit-bg", "codegen failed for %s",
                 proto->name ? XR_STRING_CHARS(proto->name) : "?");
@@ -183,10 +178,13 @@ static void *bg_thread_main(void *arg) {
             uint32_t head = atomic_load_explicit(&q->head, memory_order_acquire);
             if (tail == head) break;
 
-            XirCompileTask task = q->tasks[tail & (XJIT_QUEUE_CAPACITY - 1)];
+            // Copy the snapshot out of the ring buffer first so the slot can
+            // be reclaimed before we start compiling (important when the
+            // main thread is producing faster than we can drain).
+            XirBgTask task = q->tasks[tail & (XJIT_QUEUE_CAPACITY - 1)];
             atomic_store_explicit(&q->tail, tail + 1, memory_order_release);
 
-            bg_compile_one(q, task.proto, task.is_recompile);
+            bg_compile_one(q, &task);
         }
     }
 
@@ -245,8 +243,8 @@ void xjit_queue_destroy(XirCompileQueue *q) {
     pthread_cond_destroy(&q->cond);
 }
 
-bool xjit_queue_push(XirCompileQueue *q, XrProto *proto, bool is_recompile) {
-    if (!q || !q->started || !proto) return false;
+bool xjit_queue_push(XirCompileQueue *q, const XirBgTask *task) {
+    if (!q || !q->started || !task || !task->proto) return false;
 
     uint32_t head = atomic_load_explicit(&q->head, memory_order_relaxed);
     uint32_t tail = atomic_load_explicit(&q->tail, memory_order_acquire);
@@ -254,11 +252,9 @@ bool xjit_queue_push(XirCompileQueue *q, XrProto *proto, bool is_recompile) {
     // Full check
     if (head - tail >= XJIT_QUEUE_CAPACITY) return false;
 
-    // Write task
-    q->tasks[head & (XJIT_QUEUE_CAPACITY - 1)] = (XirCompileTask){
-        .proto = proto,
-        .is_recompile = is_recompile,
-    };
+    // Copy the task snapshot into the ring buffer slot (bg thread sees a
+    // self-contained view and never has to re-read mutable proto fields).
+    q->tasks[head & (XJIT_QUEUE_CAPACITY - 1)] = *task;
     atomic_store_explicit(&q->head, head + 1, memory_order_release);
 
     // Wake background thread

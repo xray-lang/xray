@@ -41,7 +41,6 @@
 
 #define JIT_FRAME_BASE  176
 #define SPILL_BASE      176
-#define MAX_SPILL_SLOTS 64
 
 /* ========== Branch Patching ========== */
 

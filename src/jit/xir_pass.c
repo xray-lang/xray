@@ -757,7 +757,6 @@ static bool gvn_assoc_const(XirFunc *func, XirIns *ins,
 
 #define GVN_MIN_TABLE  128
 #define GVN_MAX_TABLE  2048
-#define GVN_MAX_BLOCKS 256
 
 typedef struct {
     uint32_t key;       // hash; 0 = empty
@@ -770,7 +769,6 @@ typedef struct {
 
 void xir_pass_gvn(XirFunc *func) {
     if (!func || func->nblk < 2) return;
-    if (func->nblk > GVN_MAX_BLOCKS) return;
 
     uint32_t *idom = xir_func_get_idom(func);
     if (!idom) return;
@@ -1223,6 +1221,45 @@ static bool licm_ref_outside(XirRef ref, uint32_t *db, uint32_t nv,
     return (d < lo || d > hi);
 }
 
+/*
+ * Find a true preheader for a natural loop.
+ *
+ * A preheader is the unique predecessor of |header| that lives outside the
+ * loop body [hdr_bi, lat_bi].  If zero or more than one such predecessor
+ * exists, the loop has no single preheader in this CFG shape and LICM
+ * must skip it (a later pass may synthesise one by edge splitting).
+ *
+ * The previous implementation assumed preheader_bi == header_bi - 1, which
+ * is only true when the block array happens to be laid out that way — a
+ * fragile coincidence easily broken by any block reordering optimisation.
+ *
+ * Returns true + writes |*out_bi| on success; returns false otherwise.
+ */
+static bool licm_find_preheader(XirFunc *func, uint32_t hdr_bi,
+                                 uint32_t lat_bi, uint32_t *out_bi) {
+    XirBlock *header = func->blocks[hdr_bi];
+    uint32_t found = UINT32_MAX;
+    for (uint32_t p = 0; p < header->npred; p++) {
+        XirBlock *cand = header->preds[p];
+        if (!cand) continue;
+        // Locate candidate's index in the block array.
+        uint32_t ci = UINT32_MAX;
+        for (uint32_t k = 0; k < func->nblk; k++) {
+            if (func->blocks[k] == cand) { ci = k; break; }
+        }
+        if (ci == UINT32_MAX) continue;
+        // Skip predecessors that are themselves inside the loop (latch etc.).
+        if (ci >= hdr_bi && ci <= lat_bi) continue;
+        // A second out-of-loop predecessor disqualifies the CFG from having
+        // a single preheader.
+        if (found != UINT32_MAX) return false;
+        found = ci;
+    }
+    if (found == UINT32_MAX) return false;
+    *out_bi = found;
+    return true;
+}
+
 void xir_pass_licm(XirFunc *func) {
     if (!func || func->nblk < 2 || func->nvreg == 0) return;
 
@@ -1244,9 +1281,13 @@ void xir_pass_licm(XirFunc *func) {
             if (header_bi >= bi) continue;
             if (header_bi == 0) continue;
             if (nloops >= LICM_MAX_LOOPS) break;
+            uint32_t preh_bi = 0;
+            // Skip loops that do not have a single clear preheader;
+            // inserting one is the job of a future edge-splitting pass.
+            if (!licm_find_preheader(func, header_bi, bi, &preh_bi)) continue;
             loops[nloops].header_bi = header_bi;
             loops[nloops].latch_bi = bi;
-            loops[nloops].preheader_bi = header_bi - 1;
+            loops[nloops].preheader_bi = preh_bi;
             nloops++;
         }
     }

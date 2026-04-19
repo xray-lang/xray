@@ -30,6 +30,7 @@
 #include "xir_regalloc.h"
 #include "../base/xchecks.h"
 #include "../base/xmalloc.h"
+#include "../coro/xcoroutine.h"  // XIR_SUSPEND_SPILL_MAX (suspend-bridge capacity)
 #include <stdlib.h>
 #include <string.h>
 
@@ -91,9 +92,6 @@ typedef struct LsRange {
     struct LsRange *next_sibling, *parent;
 } LsRange;
 
-// Spill slot reuse: track end position of each allocated slot
-#define MAX_SPILL_SLOTS 256
-
 // Dynamic list for Active/Inactive tracking
 typedef struct {
     LsRange **items;
@@ -111,8 +109,8 @@ typedef struct {
     LsRange **all_ranges;
     uint32_t  nall, all_cap;
     int16_t   next_spill;
-    int32_t   slot_end[MAX_SPILL_SLOTS]; // last-end position per slot
-    bool      slot_is_ptr[MAX_SPILL_SLOTS]; // true if slot last used by PTR vreg
+    int32_t   slot_end[XIR_MAX_SPILL_SLOTS]; // last-end position per slot
+    bool      slot_is_ptr[XIR_MAX_SPILL_SLOTS]; // true if slot last used by PTR vreg
 
     // Active/Inactive state machine
     LsList   active; // ranges assigned + covering current pos
@@ -937,12 +935,12 @@ static void assign_spill_slot(LsCtx *ctx, LsRange *r) {
         if (ctx->bundle_spill[bid] != XRA_SPILL_NONE) {
             r->spill = ctx->bundle_spill[bid];
             // Assert type compatibility: bundle members share rep
-            XR_DCHECK(r->spill >= MAX_SPILL_SLOTS ||
+            XR_DCHECK(r->spill >= XIR_MAX_SPILL_SLOTS ||
                       ctx->slot_is_ptr[r->spill] ==
                       (ctx->func->vregs[r->vreg].rep == XR_REP_PTR),
                       "bundle spill slot type mismatch (PTR vs non-PTR)");
             int32_t rend = range_end(r);
-            if (r->spill >= 0 && r->spill < MAX_SPILL_SLOTS &&
+            if (r->spill >= 0 && r->spill < XIR_MAX_SPILL_SLOTS &&
                 rend > ctx->slot_end[r->spill])
                 ctx->slot_end[r->spill] = rend;
             return;
@@ -956,7 +954,7 @@ static void assign_spill_slot(LsCtx *ctx, LsRange *r) {
     bool is_ptr = r->vreg < ctx->nvreg &&
                   ctx->func->vregs[r->vreg].rep == XR_REP_PTR;
     int32_t rstart = range_start(r);
-    for (int16_t s = 0; s < ctx->next_spill && s < MAX_SPILL_SLOTS; s++) {
+    for (int16_t s = 0; s < ctx->next_spill && s < XIR_MAX_SPILL_SLOTS; s++) {
         if (ctx->slot_end[s] <= rstart && ctx->slot_is_ptr[s] == is_ptr) {
             r->spill = s;
             int32_t rend = range_end(r);
@@ -970,7 +968,7 @@ static void assign_spill_slot(LsCtx *ctx, LsRange *r) {
     {
         int16_t slot = ctx->next_spill++;
         r->spill = slot;
-        if (slot < MAX_SPILL_SLOTS) {
+        if (slot < XIR_MAX_SPILL_SLOTS) {
             ctx->slot_end[slot] = range_end(r);
             ctx->slot_is_ptr[slot] = is_ptr;
         }
@@ -1033,8 +1031,12 @@ static int wl_cmp(const void *a, const void *b) {
 
 static void wl_insert(LsRange ***wl, uint32_t *len, uint32_t *cap, LsRange *r) {
     if (*len >= *cap) {
-        *cap *= 2;
-        *wl = xr_realloc(*wl, (*cap) * sizeof(LsRange *));
+        uint32_t new_cap = (*cap) * 2;
+        LsRange **buf = *wl;
+        XR_REALLOC_OR_ABORT(buf, new_cap * sizeof(LsRange *),
+                            "regalloc wl_insert");
+        *wl = buf;
+        *cap = new_cap;
     }
     uint32_t i = *len;
     while (i > 0 && wl_cmp(&r, &(*wl)[i - 1]) < 0) {
@@ -1546,6 +1548,27 @@ XraResult *xra_run(XirFunc *func) {
     res->nspill = (uint32_t)ctx.next_spill;
     res->callee_saved = compute_callee_saved(&ctx);
     compute_blk_masks(&ctx, res);
+
+    /* Spill-slot capacity check.
+     *
+     * Two independent upper bounds must hold:
+     *   1. res->nspill <= XIR_MAX_SPILL_SLOTS:
+     *      Slots beyond bit 31 cannot be reported to GC via the 32-bit
+     *      spill_bitmap, so a PTR spilled there would be invisible during
+     *      stack scanning and could lead to use-after-free.
+     *   2. If the function contains any XIR_SUSPEND, also:
+     *        res->nspill <= XIR_SUSPEND_SPILL_MAX
+     *      because the suspend/resume path bridges old→new frame spill
+     *      values through XrCoroutine::jit_suspend_state.spill[], whose
+     *      capacity is fixed by the runtime struct layout.
+     *
+     * When either bound is exceeded we refuse to produce valid code for
+     * this function; codegen will check had_error and abort compilation
+     * with a diagnostic, letting the interpreter continue executing. */
+    if (res->nspill > XIR_MAX_SPILL_SLOTS)
+        res->had_error = true;
+    if (func->nsuspend > 0 && res->nspill > XIR_SUSPEND_SPILL_MAX)
+        res->had_error = true;
 
 #ifndef NDEBUG
     /* V1: Regalloc overlap verifier.

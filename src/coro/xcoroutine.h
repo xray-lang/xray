@@ -241,6 +241,22 @@ typedef struct XrCoroExt {
 
 /* ========== XrCoroutine - Coroutine Object ========== */
 
+/*
+ * Capacity of XrCoroutine::jit_suspend_state.spill[].
+ *
+ * Single source of truth consumed by JIT codegen and LSRA eligibility:
+ *   - codegen stores/restores at most this many spill slots across a
+ *     SUSPEND/RESUME transition;
+ *   - a function containing an AWAIT/SUSPEND that requires more spill
+ *     slots than this must be refused JIT compilation (otherwise the
+ *     extra slots would be lost across the suspend bridge).
+ *
+ * If this value is raised, the _Static_assert in xir_offsets.h that checks
+ * XIR_SUSPEND_SPILL_OFF also needs to be revisited because sizeof the
+ * containing struct changes.
+ */
+#define XIR_SUSPEND_SPILL_MAX 15
+
 typedef struct XrCoroutine {
     /* ================================================================
      * HOT ZONE (first 64 bytes) — accessed every schedule/yield cycle
@@ -320,14 +336,14 @@ typedef struct XrCoroutine {
      *   +120  callee_saved[8]   x20-x27 (callee-saved, for cross-worker resume)
      *   +184  result            await/channel return value slot
      *   +192  result_tag        XR_TAG_* for result (written alongside result by waker)
-     *   +200  spill[15]         spill slots bridging old→new stack frame
+     *   +200  spill[XIR_SUSPEND_SPILL_MAX] spill slots bridging old→new stack frame
      */
     struct {
         int64_t caller_saved[15];   // x1-x15
         int64_t callee_saved[8];    // x20-x27
         int64_t result;             // await/channel result (written by block helper or waker)
         int64_t result_tag;         // XR_TAG_* for result (resume writes to runtime_tags)
-        int64_t spill[15];          // spill slots (old frame → suspend → new frame)
+        int64_t spill[XIR_SUSPEND_SPILL_MAX]; // spill slots (old frame → suspend → new frame)
     } jit_suspend_state;
 
     /* === Identity (set once at creation, cold path) === */

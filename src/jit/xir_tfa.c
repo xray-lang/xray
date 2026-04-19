@@ -74,31 +74,31 @@ void tfa_free(TfaState *tfa) {
 /* ========== Growth Helpers ========== */
 
 static bool tfa_grow_summaries(TfaState *tfa) {
-    uint32_t new_cap = tfa->summary_cap * 2;
-    TfaSummary *new_arr = (TfaSummary *)xr_realloc(tfa->summaries, new_cap * sizeof(TfaSummary));
-    if (!new_arr) return false;
-    memset(new_arr + tfa->summary_cap, 0, (new_cap - tfa->summary_cap) * sizeof(TfaSummary));
-    tfa->summaries = new_arr;
+    uint32_t old_cap = tfa->summary_cap;
+    uint32_t new_cap = old_cap * 2;
+    if (!XR_REALLOC(tfa->summaries, new_cap * sizeof(TfaSummary)))
+        return false;
+    memset(tfa->summaries + old_cap, 0, (new_cap - old_cap) * sizeof(TfaSummary));
     tfa->summary_cap = new_cap;
     return true;
 }
 
 static bool tfa_grow_calls(TfaState *tfa) {
-    uint32_t new_cap = tfa->call_cap * 2;
-    TfaCallSite *new_arr = (TfaCallSite *)xr_realloc(tfa->calls, new_cap * sizeof(TfaCallSite));
-    if (!new_arr) return false;
-    memset(new_arr + tfa->call_cap, 0, (new_cap - tfa->call_cap) * sizeof(TfaCallSite));
-    tfa->calls = new_arr;
+    uint32_t old_cap = tfa->call_cap;
+    uint32_t new_cap = old_cap * 2;
+    if (!XR_REALLOC(tfa->calls, new_cap * sizeof(TfaCallSite)))
+        return false;
+    memset(tfa->calls + old_cap, 0, (new_cap - old_cap) * sizeof(TfaCallSite));
     tfa->call_cap = new_cap;
     return true;
 }
 
 static bool tfa_grow_worklist(TfaState *tfa) {
-    uint32_t new_cap = tfa->worklist_cap * 2;
-    TfaSummary **new_arr = (TfaSummary **)xr_realloc(tfa->worklist, new_cap * sizeof(TfaSummary *));
-    if (!new_arr) return false;
-    memset(new_arr + tfa->worklist_cap, 0, (new_cap - tfa->worklist_cap) * sizeof(TfaSummary *));
-    tfa->worklist = new_arr;
+    uint32_t old_cap = tfa->worklist_cap;
+    uint32_t new_cap = old_cap * 2;
+    if (!XR_REALLOC(tfa->worklist, new_cap * sizeof(TfaSummary *)))
+        return false;
+    memset(tfa->worklist + old_cap, 0, (new_cap - old_cap) * sizeof(TfaSummary *));
     tfa->worklist_cap = new_cap;
     return true;
 }
@@ -700,9 +700,8 @@ void tfa_analyze_module(TfaState *tfa, XrProto *main_proto) {
             if (child && !tfa_lookup(tfa, child)) {
                 if (sp >= stack_cap) {
                     uint32_t new_cap = stack_cap * 2;
-                    XrProto **new_stack = (XrProto **)xr_realloc(stack, new_cap * sizeof(XrProto *));
-                    if (!new_stack) break;
-                    stack = new_stack;
+                    if (!XR_REALLOC(stack, new_cap * sizeof(XrProto *)))
+                        break;
                     stack_cap = new_cap;
                 }
                 stack[sp++] = child;
