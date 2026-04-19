@@ -75,7 +75,7 @@ struct XrChannel *xr_cluster_topic_subscribe(XrayIsolate *X,
     XrCluster *c = (XrCluster *)X->cluster;
     if (!c || !pattern) return NULL;
 
-    XrTopicSubscription *sub = (XrTopicSubscription *)calloc(1, sizeof(XrTopicSubscription));
+    XrTopicSubscription *sub = (XrTopicSubscription *)xr_calloc(1, sizeof(XrTopicSubscription));
     if (!sub) return NULL;
 
     strncpy(sub->pattern, pattern, XR_TOPIC_PATTERN_MAX);
@@ -83,7 +83,7 @@ struct XrChannel *xr_cluster_topic_subscribe(XrayIsolate *X,
 
     // Buffered channel for receiving published values
     XrChannel *ch = xr_channel_new(X, 64);
-    if (!ch) { free(sub); return NULL; }
+    if (!ch) { xr_free(sub); return NULL; }
     sub->notify_ch = ch;
 
     uint32_t bucket = str_hash_topic(pattern) % XR_CLUSTER_TOPIC_BUCKETS;
@@ -127,7 +127,7 @@ void xr_cluster_topic_unsubscribe(XrCluster *c, const char *pattern) {
             *pp = found->next;
             c->topic_sub_count--;
             if (found->notify_ch) xr_channel_close(found->notify_ch);
-            free(found);
+            xr_free(found);
             break;
         }
         pp = &(*pp)->next;

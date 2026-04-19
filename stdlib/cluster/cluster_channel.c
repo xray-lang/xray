@@ -70,7 +70,7 @@ static int dist_send(XrChannel *ch, XrValue value, XrCoroutine *coro) {
     size_t frame_size = 4 + 1 + 1 + strlen(dc->name) + sbuf.len;
     uint8_t stack_frame[4096];
     uint8_t *frame = (frame_size + 16 <= sizeof(stack_frame))
-        ? stack_frame : (uint8_t *)malloc(frame_size + 16);
+        ? stack_frame : (uint8_t *)xr_malloc(frame_size + 16);
     if (!frame) {
         xr_serial_buf_free(&sbuf);
         return XR_CHAN_CLOSED;
@@ -81,12 +81,12 @@ static int dist_send(XrChannel *ch, XrValue value, XrCoroutine *coro) {
     xr_serial_buf_free(&sbuf);
 
     if (flen < 0) {
-        if (frame != stack_frame) free(frame);
+        if (frame != stack_frame) xr_free(frame);
         return XR_CHAN_CLOSED;
     }
 
     int rc = xr_cluster_node_enqueue(dc->owner_node, frame, (uint32_t)flen);
-    if (frame != stack_frame) free(frame);
+    if (frame != stack_frame) xr_free(frame);
 
     return (rc == 0) ? XR_CHAN_OK : XR_CHAN_CLOSED;
 }
@@ -249,12 +249,14 @@ static XrChannelDistHooks cluster_dist_hooks = {
     .on_select_exit   = dist_on_select_exit,
 };
 
-void xr_cluster_channel_install_hooks(void) {
-    xr_channel_dist_hooks = &cluster_dist_hooks;
+void xr_cluster_channel_install_hooks(XrayIsolate *X) {
+    if (!X) return;
+    X->channel_dist_hooks = &cluster_dist_hooks;
 }
 
-void xr_cluster_channel_uninstall_hooks(void) {
-    xr_channel_dist_hooks = NULL;
+void xr_cluster_channel_uninstall_hooks(XrayIsolate *X) {
+    if (!X) return;
+    X->channel_dist_hooks = NULL;
 }
 
 /* ========== Incoming Frame Handlers ========== */
@@ -327,7 +329,7 @@ void xr_cluster_channel_push_to_subscribers(XrCluster *c, const char *name) {
     size_t frame_size = 4 + 1 + 1 + strlen(name) + sbuf.len;
     uint8_t stack_frame[4096];
     uint8_t *frame = (frame_size + 16 <= sizeof(stack_frame))
-        ? stack_frame : (uint8_t *)malloc(frame_size + 16);
+        ? stack_frame : (uint8_t *)xr_malloc(frame_size + 16);
     if (!frame) {
         xr_serial_buf_free(&sbuf);
         return;
@@ -340,7 +342,7 @@ void xr_cluster_channel_push_to_subscribers(XrCluster *c, const char *name) {
     if (flen > 0) {
         xr_cluster_node_enqueue(target_node, frame, (uint32_t)flen);
     }
-    if (frame != stack_frame) free(frame);
+    if (frame != stack_frame) xr_free(frame);
 }
 
 int xr_cluster_channel_handle_push(XrCluster *c, const char *channel_name,

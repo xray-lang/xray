@@ -23,6 +23,8 @@
 #include <stdint.h>
 #include <stddef.h>
 #include <stdbool.h>
+#include "../../src/base/xdefs.h"
+#include "../../src/base/xmalloc.h"
 
 /* ========== Frame Types ========== */
 
@@ -158,48 +160,48 @@ typedef struct {
  *
  * Returns: Total bytes written (5 + payload_len)
  */
-int xr_frame_write(uint8_t *buf, uint8_t frame_type,
+XR_FUNC int xr_frame_write(uint8_t *buf, uint8_t frame_type,
                    const uint8_t *payload, uint32_t payload_len);
 
 /*
  * Encode handshake request into output buffer.
  * Returns total frame size, or -1 on error.
  */
-int xr_frame_encode_handshake_req(uint8_t *buf, size_t buf_size,
+XR_FUNC int xr_frame_encode_handshake_req(uint8_t *buf, size_t buf_size,
                                    const XrFrameHandshakeReq *req);
 
-int xr_frame_encode_handshake_ack(uint8_t *buf, size_t buf_size,
+XR_FUNC int xr_frame_encode_handshake_ack(uint8_t *buf, size_t buf_size,
                                    const XrFrameHandshakeAck *ack);
 
-int xr_frame_encode_handshake_done(uint8_t *buf, size_t buf_size,
+XR_FUNC int xr_frame_encode_handshake_done(uint8_t *buf, size_t buf_size,
                                     const XrFrameHandshakeDone *done);
 
-int xr_frame_encode_heartbeat(uint8_t *buf, size_t buf_size,
+XR_FUNC int xr_frame_encode_heartbeat(uint8_t *buf, size_t buf_size,
                                uint8_t type, int64_t timestamp);
 
-int xr_frame_encode_channel_send(uint8_t *buf, size_t buf_size,
+XR_FUNC int xr_frame_encode_channel_send(uint8_t *buf, size_t buf_size,
                                   const char *channel_name,
                                   const uint8_t *value_data, uint32_t value_len);
 
-int xr_frame_encode_channel_close(uint8_t *buf, size_t buf_size,
+XR_FUNC int xr_frame_encode_channel_close(uint8_t *buf, size_t buf_size,
                                    const char *channel_name);
 
-int xr_frame_encode_service_call(uint8_t *buf, size_t buf_size,
+XR_FUNC int xr_frame_encode_service_call(uint8_t *buf, size_t buf_size,
                                   uint64_t request_id,
                                   const char *service_name,
                                   const uint8_t *args_data, uint32_t args_len);
 
-int xr_frame_encode_service_reply(uint8_t *buf, size_t buf_size,
+XR_FUNC int xr_frame_encode_service_reply(uint8_t *buf, size_t buf_size,
                                    uint64_t request_id, bool is_error,
                                    const uint8_t *result_data, uint32_t result_len);
 
-int xr_frame_encode_channel_subscribe(uint8_t *buf, size_t buf_size,
+XR_FUNC int xr_frame_encode_channel_subscribe(uint8_t *buf, size_t buf_size,
                                        const char *channel_name);
 
-int xr_frame_encode_channel_unsubscribe(uint8_t *buf, size_t buf_size,
+XR_FUNC int xr_frame_encode_channel_unsubscribe(uint8_t *buf, size_t buf_size,
                                          const char *channel_name);
 
-int xr_frame_encode_channel_push(uint8_t *buf, size_t buf_size,
+XR_FUNC int xr_frame_encode_channel_push(uint8_t *buf, size_t buf_size,
                                   const char *channel_name,
                                   const uint8_t *value_data, uint32_t value_len);
 
@@ -210,40 +212,40 @@ int xr_frame_encode_channel_push(uint8_t *buf, size_t buf_size,
  * Returns payload length (excluding 4-byte header), or -1 on error.
  * frame_type is written on success.
  */
-int xr_frame_read_header(const uint8_t *data, size_t data_len,
+XR_FUNC int xr_frame_read_header(const uint8_t *data, size_t data_len,
                           uint8_t *frame_type, uint32_t *payload_len);
 
-int xr_frame_decode_handshake_req(const uint8_t *payload, uint32_t len,
+XR_FUNC int xr_frame_decode_handshake_req(const uint8_t *payload, uint32_t len,
                                    XrFrameHandshakeReq *req);
 
-int xr_frame_decode_handshake_ack(const uint8_t *payload, uint32_t len,
+XR_FUNC int xr_frame_decode_handshake_ack(const uint8_t *payload, uint32_t len,
                                    XrFrameHandshakeAck *ack);
 
-int xr_frame_decode_handshake_done(const uint8_t *payload, uint32_t len,
+XR_FUNC int xr_frame_decode_handshake_done(const uint8_t *payload, uint32_t len,
                                     XrFrameHandshakeDone *done);
 
-int xr_frame_decode_heartbeat(const uint8_t *payload, uint32_t len,
+XR_FUNC int xr_frame_decode_heartbeat(const uint8_t *payload, uint32_t len,
                                int64_t *timestamp);
 
-int xr_frame_decode_channel_send(const uint8_t *payload, uint32_t len,
+XR_FUNC int xr_frame_decode_channel_send(const uint8_t *payload, uint32_t len,
                                   XrFrameChannelSend *out);
 
-int xr_frame_decode_channel_close(const uint8_t *payload, uint32_t len,
+XR_FUNC int xr_frame_decode_channel_close(const uint8_t *payload, uint32_t len,
                                    char *channel_name, size_t name_size);
 
-int xr_frame_decode_service_call(const uint8_t *payload, uint32_t len,
+XR_FUNC int xr_frame_decode_service_call(const uint8_t *payload, uint32_t len,
                                   XrFrameServiceCall *out);
 
-int xr_frame_decode_service_reply(const uint8_t *payload, uint32_t len,
+XR_FUNC int xr_frame_decode_service_reply(const uint8_t *payload, uint32_t len,
                                    XrFrameServiceReply *out);
 
-int xr_frame_decode_channel_subscribe(const uint8_t *payload, uint32_t len,
+XR_FUNC int xr_frame_decode_channel_subscribe(const uint8_t *payload, uint32_t len,
                                        XrFrameChannelSubscribe *out);
 
-int xr_frame_decode_channel_unsubscribe(const uint8_t *payload, uint32_t len,
+XR_FUNC int xr_frame_decode_channel_unsubscribe(const uint8_t *payload, uint32_t len,
                                          char *channel_name, size_t name_size);
 
-int xr_frame_decode_channel_push(const uint8_t *payload, uint32_t len,
+XR_FUNC int xr_frame_decode_channel_push(const uint8_t *payload, uint32_t len,
                                   XrFrameChannelPush *out);
 
 /* ========== Coroutine Monitor Frames ========== */
@@ -253,16 +255,16 @@ int xr_frame_decode_channel_push(const uint8_t *payload, uint32_t len,
 
 #define XR_CORO_NAME_MAX  127
 
-int xr_frame_encode_coro_monitor(uint8_t *buf, size_t buf_size,
+XR_FUNC int xr_frame_encode_coro_monitor(uint8_t *buf, size_t buf_size,
                                   uint8_t frame_type, const char *coro_name);
 
-int xr_frame_encode_coro_exit(uint8_t *buf, size_t buf_size,
+XR_FUNC int xr_frame_encode_coro_exit(uint8_t *buf, size_t buf_size,
                                const char *coro_name, const char *reason);
 
-int xr_frame_decode_coro_monitor(const uint8_t *payload, uint32_t len,
+XR_FUNC int xr_frame_decode_coro_monitor(const uint8_t *payload, uint32_t len,
                                   char *coro_name, size_t name_size);
 
-int xr_frame_decode_coro_exit(const uint8_t *payload, uint32_t len,
+XR_FUNC int xr_frame_decode_coro_exit(const uint8_t *payload, uint32_t len,
                                char *coro_name, size_t name_size,
                                char *reason, size_t reason_size);
 
@@ -270,9 +272,11 @@ int xr_frame_decode_coro_exit(const uint8_t *payload, uint32_t len,
 
 /*
  * Stack-first frame buffer with heap fallback.
- * Eliminates the repeated stack_buf[4096] / malloc pattern.
+ * Eliminates the repeated stack_buf[4096] / xr_malloc pattern.
+ *
+ * NOTE: Always check fb->data for NULL after init when `needed` exceeds
+ * the stack slot, since xr_malloc may fail under memory pressure.
  */
-#include <stdlib.h>
 
 typedef struct {
     uint8_t  stack[4096];
@@ -285,14 +289,14 @@ static inline void xr_frame_buf_init(XrFrameBuf *fb, size_t needed) {
         fb->data = fb->stack;
         fb->heap = false;
     } else {
-        fb->data = (uint8_t *)malloc(needed);
+        fb->data = (uint8_t *)xr_malloc(needed);
         fb->heap = true;
     }
 }
 
 static inline void xr_frame_buf_free(XrFrameBuf *fb) {
     if (fb->heap && fb->data) {
-        free(fb->data);
+        xr_free(fb->data);
         fb->data = NULL;
     }
 }

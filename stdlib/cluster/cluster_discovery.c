@@ -257,7 +257,7 @@ int xr_cluster_discovery_start(XrCluster *c) {
     if (!c || !atomic_load(&c->running)) return -1;
     if (c->discovery) return -1; // already started
 
-    XrClusterDiscovery *disc = (XrClusterDiscovery *)calloc(1, sizeof(*disc));
+    XrClusterDiscovery *disc = (XrClusterDiscovery *)xr_calloc(1, sizeof(*disc));
     if (!disc) return -1;
 
     disc->cluster = c;
@@ -273,7 +273,7 @@ int xr_cluster_discovery_start(XrCluster *c) {
     // Create multicast socket
     disc->mcast_fd = create_mcast_socket(disc->mcast_port);
     if (disc->mcast_fd < 0) {
-        free(disc);
+        xr_free(disc);
         return -1;
     }
 
@@ -283,7 +283,7 @@ int xr_cluster_discovery_start(XrCluster *c) {
     if (pthread_create(&disc->thread, NULL, discovery_thread_func, disc) != 0) {
         close(disc->mcast_fd);
         c->discovery = NULL;
-        free(disc);
+        xr_free(disc);
         return -1;
     }
     disc->thread_started = true;
@@ -314,5 +314,5 @@ void xr_cluster_discovery_stop(XrCluster *c) {
     }
 
     c->discovery = NULL;
-    free(disc);
+    xr_free(disc);
 }

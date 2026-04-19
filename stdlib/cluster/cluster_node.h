@@ -23,6 +23,7 @@
 
 #include "cluster_proto.h"
 #include "../net/io.h"
+#include "../../src/base/xdefs.h"
 #include "../../src/coro/xchannel.h"
 
 #include <stdint.h>
@@ -149,95 +150,95 @@ struct XrCluster;
 /* ========== Node Management API ========== */
 
 // Create a new node entry (not yet connected)
-XrClusterNode *xr_cluster_node_new(const char *name, const char *host, uint16_t port);
+XR_FUNC XrClusterNode *xr_cluster_node_new(const char *name, const char *host, uint16_t port);
 
 // Free a node and its resources
-void xr_cluster_node_free(XrClusterNode *node);
+XR_FUNC void xr_cluster_node_free(XrClusterNode *node);
 
 // Connect to a remote node (TCP + handshake)
 // Returns 0 on success, -1 on error. Coroutine-friendly (may yield).
-int xr_cluster_node_connect(struct XrCluster *cluster, XrClusterNode *node);
+XR_FUNC int xr_cluster_node_connect(struct XrCluster *cluster, XrClusterNode *node);
 
 // Accept an incoming connection and perform server-side handshake
 // Returns a new XrClusterNode on success, NULL on error.
-XrClusterNode *xr_cluster_node_accept(struct XrCluster *cluster, XrIOConn *conn);
+XR_FUNC XrClusterNode *xr_cluster_node_accept(struct XrCluster *cluster, XrIOConn *conn);
 
 // Enqueue a pre-built frame for async writing. Thread-safe.
 // Returns 0 on success, -1 if queue full (backpressure).
-int xr_cluster_node_enqueue(XrClusterNode *node,
+XR_FUNC int xr_cluster_node_enqueue(XrClusterNode *node,
                              const uint8_t *data, uint32_t len);
 
 // Send a frame via output queue (encode + enqueue).
 // Returns 0 on success, -1 on error/backpressure.
-int xr_cluster_node_send_frame(XrClusterNode *node, uint8_t frame_type,
+XR_FUNC int xr_cluster_node_send_frame(XrClusterNode *node, uint8_t frame_type,
                                 const uint8_t *payload, uint32_t payload_len);
 
 // Send a frame synchronously (bypassing output queue).
 // Used only during handshake before writer coroutine starts.
-int xr_cluster_node_send_frame_sync(XrClusterNode *node, uint8_t frame_type,
+XR_FUNC int xr_cluster_node_send_frame_sync(XrClusterNode *node, uint8_t frame_type,
                                      const uint8_t *payload, uint32_t payload_len);
 
 // Read a single frame from a node connection
 // Returns frame type, writes payload into provided buffer.
 // Returns -1 on error/disconnect.
-int xr_cluster_node_recv_frame(XrClusterNode *node,
+XR_FUNC int xr_cluster_node_recv_frame(XrClusterNode *node,
                                 uint8_t *frame_type_out,
                                 uint8_t *buf, uint32_t buf_size,
                                 uint32_t *payload_len_out);
 
 // Send heartbeat ping
-int xr_cluster_node_send_ping(XrClusterNode *node);
+XR_FUNC int xr_cluster_node_send_ping(XrClusterNode *node);
 
 // Close node connection gracefully
-void xr_cluster_node_close(XrClusterNode *node);
+XR_FUNC void xr_cluster_node_close(XrClusterNode *node);
 
 /* ========== Writer Coroutine ========== */
 
 // Start the dedicated writer coroutine for a connected node.
 // Must be called after handshake completes.
-void xr_cluster_node_start_writer(XrClusterNode *node, struct XrayIsolate *X);
+XR_FUNC void xr_cluster_node_start_writer(XrClusterNode *node, struct XrayIsolate *X);
 
 // Writer loop function (runs as native coroutine)
-void xr_cluster_node_writer_loop(void *arg);
+XR_FUNC void xr_cluster_node_writer_loop(void *arg);
 
 /* ========== Output Queue Helpers ========== */
 
-void xr_outq_init(XrOutputQueue *q);
-void xr_outq_destroy(XrOutputQueue *q);
-int  xr_outq_push(XrOutputQueue *q, const uint8_t *data, uint32_t len);
-int  xr_outq_push_nocopy(XrOutputQueue *q, uint8_t *data, uint32_t len);
-XrOutFrame *xr_outq_pop(XrOutputQueue *q);
-XrOutFrame *xr_outq_pop_all(XrOutputQueue *q);
+XR_FUNC void xr_outq_init(XrOutputQueue *q);
+XR_FUNC void xr_outq_destroy(XrOutputQueue *q);
+XR_FUNC int  xr_outq_push(XrOutputQueue *q, const uint8_t *data, uint32_t len);
+XR_FUNC int  xr_outq_push_nocopy(XrOutputQueue *q, uint8_t *data, uint32_t len);
+XR_FUNC XrOutFrame *xr_outq_pop(XrOutputQueue *q);
+XR_FUNC XrOutFrame *xr_outq_pop_all(XrOutputQueue *q);
 
 /* ========== Phi Accrual Failure Detector ========== */
 
-void   xr_phi_init(XrPhiDetector *det);
-void   xr_phi_record_heartbeat(XrPhiDetector *det, int64_t now_ms);
-double xr_phi_value(XrPhiDetector *det, int64_t now_ms);
+XR_FUNC void   xr_phi_init(XrPhiDetector *det);
+XR_FUNC void   xr_phi_record_heartbeat(XrPhiDetector *det, int64_t now_ms);
+XR_FUNC double xr_phi_value(XrPhiDetector *det, int64_t now_ms);
 
 /* ========== Slow Consumer Detection ========== */
 
-bool xr_cluster_node_is_slow(XrClusterNode *node);
+XR_FUNC bool xr_cluster_node_is_slow(XrClusterNode *node);
 
 /* ========== Pending Request API ========== */
 
 // Register a pending request. Returns the response Channel to block on.
 // Caller must recv from the returned Channel to get the response payload.
-struct XrChannel *xr_cluster_node_add_pending(
+XR_FUNC struct XrChannel *xr_cluster_node_add_pending(
     XrClusterNode *node, uint64_t request_id, struct XrayIsolate *X);
 
 // Find and remove a pending request by request_id.
 // Returns the response Channel, or NULL if not found.
-struct XrChannel *xr_cluster_node_take_pending(
+XR_FUNC struct XrChannel *xr_cluster_node_take_pending(
     XrClusterNode *node, uint64_t request_id);
 
 /* ========== Handshake Helpers ========== */
 
 // Compute SHA-256 proof: SHA256(secret + nonce)
-void xr_cluster_compute_proof(const char *secret, const uint8_t *nonce,
+XR_FUNC void xr_cluster_compute_proof(const char *secret, const uint8_t *nonce,
                                uint8_t *proof_out);
 
 // Get current monotonic time in milliseconds
-int64_t xr_cluster_now_ms(void);
+XR_FUNC int64_t xr_cluster_now_ms(void);
 
 #endif

@@ -19,6 +19,7 @@
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
+#include "../../src/base/xdefs.h"
 #include "../net/xneterror.h"
 
 #ifndef XR_VALUE_DEFINED
@@ -194,72 +195,72 @@ typedef struct XrWebSocket {
 /* ========== Core API ========== */
 
 // Initialize configuration with defaults
-void xr_ws_config_init(XrWsConfig *config);
+XR_FUNC void xr_ws_config_init(XrWsConfig *config);
 
 // Create WebSocket connection
-XrWebSocket* xr_ws_new(const XrWsConfig *config);
+XR_FUNC XrWebSocket* xr_ws_new(const XrWsConfig *config);
 
 // Free WebSocket
-void xr_ws_free(XrWebSocket *ws);
+XR_FUNC void xr_ws_free(XrWebSocket *ws);
 
 // Connect to server
-XrWsError xr_ws_connect(XrWebSocket *ws);
+XR_FUNC XrWsError xr_ws_connect(XrWebSocket *ws);
 
 // Close connection
-XrWsError xr_ws_close(XrWebSocket *ws, int code, const char *reason);
+XR_FUNC XrWsError xr_ws_close(XrWebSocket *ws, int code, const char *reason);
 
 // Send text message
-XrWsError xr_ws_send_text(XrWebSocket *ws, const char *text, size_t len);
+XR_FUNC XrWsError xr_ws_send_text(XrWebSocket *ws, const char *text, size_t len);
 
 // Send binary message
-XrWsError xr_ws_send_binary(XrWebSocket *ws, const void *data, size_t len);
+XR_FUNC XrWsError xr_ws_send_binary(XrWebSocket *ws, const void *data, size_t len);
 
 // Send Ping
-XrWsError xr_ws_ping(XrWebSocket *ws);
+XR_FUNC XrWsError xr_ws_ping(XrWebSocket *ws);
 
 // Send Pong
-XrWsError xr_ws_pong(XrWebSocket *ws, const void *data, size_t len);
+XR_FUNC XrWsError xr_ws_pong(XrWebSocket *ws, const void *data, size_t len);
 
 // Receive message (blocking)
 // Returns: received message (caller must free), NULL on error or close
-XrWsMessage* xr_ws_recv(XrWebSocket *ws);
+XR_FUNC XrWsMessage* xr_ws_recv(XrWebSocket *ws);
 
 // Receive message (non-blocking, for yieldable integration)
 // Returns: received message, or NULL if:
 //   - error/close: ws->state != WS_STATE_OPEN
 //   - need more data: *need_more = true
 // This function never blocks - returns immediately
-XrWsMessage* xr_ws_recv_try(XrWebSocket *ws, bool *need_more);
+XR_FUNC XrWsMessage* xr_ws_recv_try(XrWebSocket *ws, bool *need_more);
 
 // Send frame (non-blocking, for yieldable integration)
 // Returns: 0 = complete, -1 = error, -2 = would block (need to wait for write)
-int xr_ws_send_frame_try(XrWebSocket *ws, XrWsOpcode opcode,
+XR_FUNC int xr_ws_send_frame_try(XrWebSocket *ws, XrWsOpcode opcode,
                           const void *data, size_t len);
 
 // Cork: buffer subsequent send_frame_try calls into wbuf (no syscall)
-void xr_ws_cork(XrWebSocket *ws);
+XR_FUNC void xr_ws_cork(XrWebSocket *ws);
 
 // Uncork: flush wbuf with single send, return to direct-send mode
 // Returns: 0 = complete, -1 = error, -2 = would block
-int xr_ws_uncork(XrWebSocket *ws);
+XR_FUNC int xr_ws_uncork(XrWebSocket *ws);
 
 // Poll events (non-blocking)
 // timeout_ms: timeout in milliseconds, 0 returns immediately, -1 waits forever
 // Returns: 0 no event, 1 has event, -1 error
-int xr_ws_poll(XrWebSocket *ws, int timeout_ms);
+XR_FUNC int xr_ws_poll(XrWebSocket *ws, int timeout_ms);
 
 // Free message
-void xr_ws_message_free(XrWsMessage *msg);
+XR_FUNC void xr_ws_message_free(XrWsMessage *msg);
 
 // Recycle message: return heap-allocated data back to ws->msg_buf for reuse
 // Avoids malloc/free per frame in echo-style hot loops
-void xr_ws_message_recycle(XrWebSocket *ws, XrWsMessage *msg);
+XR_FUNC void xr_ws_message_recycle(XrWebSocket *ws, XrWsMessage *msg);
 
 // Get state
-XrWsState xr_ws_get_state(XrWebSocket *ws);
+XR_FUNC XrWsState xr_ws_get_state(XrWebSocket *ws);
 
 // Get error description
-const char* xr_ws_error_string(XrWsError err);
+XR_FUNC const char* xr_ws_error_string(XrWsError err);
 
 /* ========== WebSocket Server API ========== */
 
@@ -268,19 +269,19 @@ const char* xr_ws_error_string(XrWsError err);
 // request_headers: HTTP request headers (containing Upgrade, Sec-WebSocket-Key, etc.)
 // isolate: XrayIsolate for coroutine-aware I/O (can be NULL for non-coroutine use)
 // Returns: upgraded WebSocket connection, NULL on failure
-XrWebSocket* xr_ws_upgrade(struct XrayIsolate *isolate, int fd, const char *request_headers);
+XR_FUNC XrWebSocket* xr_ws_upgrade(struct XrayIsolate *isolate, int fd, const char *request_headers);
 
 // Check if HTTP request is a WebSocket upgrade request
 // Returns: true if it is a WebSocket upgrade request
-bool xr_ws_is_upgrade_request(const char *request_headers);
+XR_FUNC bool xr_ws_is_upgrade_request(const char *request_headers);
 
 // Get Sec-WebSocket-Key (extract from request headers)
 // Returns: key string (caller must free), NULL if not found
-char* xr_ws_get_sec_key(const char *request_headers);
+XR_FUNC char* xr_ws_get_sec_key(const char *request_headers);
 
 // Send WebSocket upgrade response
 // Returns: 0 on success, -1 on failure
-int xr_ws_send_upgrade_response(int fd, const char *sec_key,
+XR_FUNC int xr_ws_send_upgrade_response(int fd, const char *sec_key,
                                 const char *protocol, bool deflate_ok);
 
 /*
@@ -288,7 +289,7 @@ int xr_ws_send_upgrade_response(int fd, const char *sec_key,
  * Used by HTTP server to upgrade in-place when a WS route matches.
  * Returns xr_null() on failure.
  */
-XrValue xr_ws_upgrade_and_wrap(struct XrayIsolate *X, int fd,
+XR_FUNC XrValue xr_ws_upgrade_and_wrap(struct XrayIsolate *X, int fd,
                                 const char *request_headers);
 
 /* ========== Module API ========== */
@@ -297,6 +298,6 @@ struct XrayIsolate;
 struct XrModule;
 
 // Load WebSocket module
-struct XrModule* xr_load_module_ws(struct XrayIsolate *isolate);
+XR_FUNC struct XrModule* xr_load_module_ws(struct XrayIsolate *isolate);
 
 #endif

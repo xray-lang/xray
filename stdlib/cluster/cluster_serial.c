@@ -39,7 +39,7 @@
 #define SERIAL_BUF_INIT_CAP 256
 
 void xr_serial_buf_init(XrSerialBuf *buf) {
-    buf->data = (uint8_t *)malloc(SERIAL_BUF_INIT_CAP);
+    buf->data = (uint8_t *)xr_malloc(SERIAL_BUF_INIT_CAP);
     buf->len = 0;
     buf->cap = SERIAL_BUF_INIT_CAP;
     buf->error = (buf->data == NULL);
@@ -47,7 +47,7 @@ void xr_serial_buf_init(XrSerialBuf *buf) {
 
 void xr_serial_buf_free(XrSerialBuf *buf) {
     if (buf->data) {
-        free(buf->data);
+        xr_free(buf->data);
         buf->data = NULL;
     }
     buf->len = 0;
@@ -58,7 +58,7 @@ static void buf_ensure(XrSerialBuf *buf, size_t need) {
     if (buf->error || buf->len + need <= buf->cap) return;
     size_t new_cap = buf->cap * 2;
     while (new_cap < buf->len + need) new_cap *= 2;
-    uint8_t *new_data = (uint8_t *)realloc(buf->data, new_cap);
+    uint8_t *new_data = (uint8_t *)xr_realloc(buf->data, new_cap);
     if (!new_data) {
         buf->error = true;
         return;
@@ -519,12 +519,12 @@ static int decode_value(XrSerialReader *r, XrValue *out) {
             // Set field by key name (heap alloc for long keys)
             char stack_key[256];
             char *key_buf = (klen < sizeof(stack_key))
-                ? stack_key : (char *)malloc(klen + 1);
+                ? stack_key : (char *)xr_malloc(klen + 1);
             if (!key_buf) { r->depth--; return -1; }
             memcpy(key_buf, kdata, klen);
             key_buf[klen] = '\0';
             xr_json_set_by_key(r->X, json, key_buf, val);
-            if (key_buf != stack_key) free(key_buf);
+            if (key_buf != stack_key) xr_free(key_buf);
         }
         r->depth--;
         *out = xr_json_value(json);

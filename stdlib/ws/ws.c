@@ -14,6 +14,7 @@
 #include "ws.h"
 #include "ws_deflate.h"
 #include "../../include/xray_platform.h"
+#include "../../src/base/xmalloc.h"
 #include "../../src/runtime/object/xutf8.h"
 #include "../base64/base64.h"
 #include "../net/io.h"
@@ -106,7 +107,7 @@ static inline char* ws_buffer_alloc(size_t size) {
         return buf;
     }
     size_t alloc_size = (cls >= 0) ? ws_pool_sizes[cls] : size;
-    return (char*)malloc(alloc_size);
+    return (char*)xr_malloc(alloc_size);
 }
 
 static inline void ws_buffer_free(char *buf, size_t size) {
@@ -117,14 +118,14 @@ static inline void ws_buffer_free(char *buf, size_t size) {
         ws_pool.classes[cls].count++;
         return;
     }
-    free(buf);
+    xr_free(buf);
 }
 
 /* ========== Per-connection flat read buffer ========== */
 
 static inline bool ws_rbuf_ensure(XrWebSocket *ws) {
     if (ws->rbuf) return true;
-    ws->rbuf = (char *)malloc(WS_RBUF_INIT_CAP);
+    ws->rbuf = (char *)xr_malloc(WS_RBUF_INIT_CAP);
     if (!ws->rbuf) return false;
     ws->rbuf_off = 0;
     ws->rbuf_len = 0;
@@ -185,7 +186,7 @@ static int parse_ws_url(const char *url, char **host, int *port, char **path, bo
     // Extract host
     const char *host_start = p;
     while (*p && *p != ':' && *p != '/' && *p != '?') p++;
-    *host = strndup(host_start, p - host_start);
+    *host = xr_strndup(host_start, p - host_start);
 
     // Extract port
     if (*p == ':') {
@@ -196,9 +197,9 @@ static int parse_ws_url(const char *url, char **host, int *port, char **path, bo
 
     // Extract path
     if (*p == '/' || *p == '?') {
-        *path = strdup(p);
+        *path = xr_strdup(p);
     } else {
-        *path = strdup("/");
+        *path = xr_strdup("/");
     }
 
     return 0;
@@ -480,7 +481,7 @@ int xr_ws_send_frame_try(XrWebSocket *ws, XrWsOpcode opcode,
         if (need > ws->wbuf_cap) {
             int newcap = ws->wbuf_cap ? ws->wbuf_cap : 4096;
             while (newcap < need) newcap *= 2;
-            char *nb = (char *)realloc(ws->wbuf, newcap);
+            char *nb = (char *)xr_realloc(ws->wbuf, newcap);
             if (!nb) return -1;
             ws->wbuf = nb;
             ws->wbuf_cap = newcap;
@@ -654,7 +655,7 @@ static int ws_frag_ensure_capacity(XrWebSocket *ws, size_t needed) {
     }
 
     // Realloc with new capacity
-    char *new_buf = (char*)realloc(ws->frag_buf, new_size + 1);
+    char *new_buf = (char*)xr_realloc(ws->frag_buf, new_size + 1);
     if (!new_buf) return -1;
 
     ws->frag_buf = new_buf;
@@ -682,8 +683,8 @@ static int ws_frag_start(XrWebSocket *ws, XrWsOpcode opcode, const char *data, s
 
     if (ws_frag_ensure_capacity(ws, len) < 0) {
         // Fallback: allocate new buffer
-        if (ws->frag_buf) free(ws->frag_buf);
-        ws->frag_buf = (char*)malloc(len + 1);
+        if (ws->frag_buf) xr_free(ws->frag_buf);
+        ws->frag_buf = (char*)xr_malloc(len + 1);
         if (!ws->frag_buf) {
             ws->frag_buf_size = 0;
             return -1;
@@ -831,7 +832,7 @@ void xr_ws_config_init(XrWsConfig *config) {
 XrWebSocket* xr_ws_new(const XrWsConfig *config) {
     if (!config || !config->url) return NULL;
 
-    XrWebSocket *ws = (XrWebSocket*)calloc(1, sizeof(XrWebSocket));
+    XrWebSocket *ws = (XrWebSocket*)xr_calloc(1, sizeof(XrWebSocket));
     if (!ws) return NULL;
 
     ws->state = WS_STATE_CLOSED;
@@ -839,13 +840,13 @@ XrWebSocket* xr_ws_new(const XrWsConfig *config) {
 
     // Parse URL
     if (parse_ws_url(config->url, &ws->host, &ws->port, &ws->path, &ws->is_secure) < 0) {
-        free(ws);
+        xr_free(ws);
         return NULL;
     }
 
     // Copy config
     ws->config = *config;
-    ws->config.url = strdup(config->url);
+    ws->config.url = xr_strdup(config->url);
 
     // Initialize buffer state (rbuf lazy-allocated on first recv)
     ws->rbuf = NULL;
@@ -889,20 +890,20 @@ void xr_ws_free(XrWebSocket *ws) {
 
     if (ws->fd >= 0) close(ws->fd);
 
-    free(ws->rbuf);
+    xr_free(ws->rbuf);
     ws->rbuf = NULL;
-    free(ws->wbuf);
+    xr_free(ws->wbuf);
     ws->wbuf = NULL;
 
-    free(ws->host);
-    free(ws->path);
-    free(ws->protocol);
+    xr_free(ws->host);
+    xr_free(ws->path);
+    xr_free(ws->protocol);
     xr_free(ws->sec_key);
-    free(ws->msg_buf);
-    free(ws->frag_buf);
-    free(ws->close_reason);
-    free((void*)ws->config.url);
-    free(ws);
+    xr_free(ws->msg_buf);
+    xr_free(ws->frag_buf);
+    xr_free(ws->close_reason);
+    xr_free((void*)ws->config.url);
+    xr_free(ws);
 }
 
 XrWsError xr_ws_connect(XrWebSocket *ws) {
@@ -1124,7 +1125,7 @@ XrWsError xr_ws_close(XrWebSocket *ws, int code, const char *reason) {
 
         ws->close_code = code;
         if (reason) {
-            ws->close_reason = strdup(reason);
+            ws->close_reason = xr_strdup(reason);
         }
     }
 
@@ -1437,8 +1438,8 @@ parse_header:;
     // Slow path: allocate msg_buf for payload
     if (payload_len > 0) {
         if (ws->msg_buf_size < payload_len) {
-            free(ws->msg_buf);
-            ws->msg_buf = (char*)malloc(payload_len + 1);
+            xr_free(ws->msg_buf);
+            ws->msg_buf = (char*)xr_malloc(payload_len + 1);
             if (!ws->msg_buf) {
                 ws->msg_buf_size = 0;
                 ws->state = WS_STATE_CLOSED;
@@ -1647,7 +1648,7 @@ process_frame:
             ws->msg_buf = NULL;
             ws->msg_buf_size = 0;
         } else {
-            msg->data = (char *)calloc(1, 1);
+            msg->data = (char *)xr_calloc(1, 1);
         }
         msg->len = payload_len_actual;
         msg->is_text = (ws->frame_opcode == WS_OPCODE_TEXT);
@@ -1691,7 +1692,7 @@ process_frame:
     // RFC 6455 Section 5.6: text frames MUST be valid UTF-8
     if (msg->is_text && msg->len > 0) {
         if (!xr_utf8_validate(msg->data, msg->len)) {
-            if (!msg->_data_inplace) free(msg->data);
+            if (!msg->_data_inplace) xr_free(msg->data);
             msg->data = NULL;
             msg->_data_inplace = false;
             if (ws->state == WS_STATE_OPEN) {
@@ -1748,11 +1749,11 @@ int xr_ws_poll(XrWebSocket *ws, int timeout_ms) {
 void xr_ws_message_free(XrWsMessage *msg) {
     if (!msg) return;
     if (!msg->_data_inplace) {
-        free(msg->data);
+        xr_free(msg->data);
     }
     msg->data = NULL;
     msg->_data_inplace = false;
-    if (!msg->_no_free) free(msg);
+    if (!msg->_no_free) xr_free(msg);
 }
 
 void xr_ws_message_recycle(XrWebSocket *ws, XrWsMessage *msg) {
@@ -1768,11 +1769,11 @@ void xr_ws_message_recycle(XrWebSocket *ws, XrWsMessage *msg) {
         ws->msg_buf_size = msg->len + 1;
     } else if (msg->len + 1 > ws->msg_buf_size) {
         // Incoming buffer is larger — swap to keep the bigger one
-        free(ws->msg_buf);
+        xr_free(ws->msg_buf);
         ws->msg_buf = msg->data;
         ws->msg_buf_size = msg->len + 1;
     } else {
-        free(msg->data);
+        xr_free(msg->data);
     }
     msg->data = NULL;
 }
@@ -1861,7 +1862,7 @@ char* xr_ws_get_sec_key(const char *request_headers) {
     if (!line_end) return NULL;
 
     size_t key_len = line_end - key_header;
-    char *key = (char*)malloc(key_len + 1);
+    char *key = (char*)xr_malloc(key_len + 1);
     if (!key) return NULL;
 
     memcpy(key, key_header, key_len);
@@ -1954,14 +1955,14 @@ XrWebSocket* xr_ws_upgrade(struct XrayIsolate *isolate, int fd, const char *requ
 
     // Send upgrade response (with deflate if client offered)
     if (xr_ws_send_upgrade_response(fd, sec_key, NULL, client_deflate) < 0) {
-        free(sec_key);
+        xr_free(sec_key);
         return NULL;
     }
 
     // Create WebSocket connection object
-    XrWebSocket *ws = (XrWebSocket*)calloc(1, sizeof(XrWebSocket));
+    XrWebSocket *ws = (XrWebSocket*)xr_calloc(1, sizeof(XrWebSocket));
     if (!ws) {
-        free(sec_key);
+        xr_free(sec_key);
         return NULL;
     }
 

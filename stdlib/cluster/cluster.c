@@ -66,7 +66,7 @@ int xr_cluster_start(XrayIsolate *X, const char *name,
                       uint16_t port, const char *secret) {
     if (X->cluster) return -1; // already running
 
-    XrCluster *c = (XrCluster *)calloc(1, sizeof(XrCluster));
+    XrCluster *c = (XrCluster *)xr_calloc(1, sizeof(XrCluster));
     if (!c) return -1;
 
     strncpy(c->self_name, name, XR_NODE_NAME_MAX);
@@ -89,7 +89,7 @@ int xr_cluster_start(XrayIsolate *X, const char *name,
     c->max_missed_heartbeats = 3;
     // Dynamic tombstone array
     c->tombstone_cap = 16;
-    c->tombstones = calloc((size_t)c->tombstone_cap, sizeof(c->tombstones[0]));
+    c->tombstones = xr_calloc((size_t)c->tombstone_cap, sizeof(c->tombstones[0]));
     c->tombstone_count = 0;
     c->on_node_added = NULL;
     c->on_node_removed = NULL;
@@ -100,7 +100,7 @@ int xr_cluster_start(XrayIsolate *X, const char *name,
     // Start listening
     c->listen_fd = xr_io_listen(NULL, port, 128);
     if (c->listen_fd < 0) {
-        free(c);
+        xr_free(c);
         return -1;
     }
 
@@ -157,7 +157,7 @@ void xr_cluster_stop(XrCluster *c) {
         XrDistChannel *dc = c->channel_buckets[i];
         while (dc) {
             XrDistChannel *next = dc->next;
-            free(dc);
+            xr_free(dc);
             dc = next;
         }
         c->channel_buckets[i] = NULL;
@@ -171,7 +171,7 @@ void xr_cluster_stop(XrCluster *c) {
         XrServiceEntry *se = c->service_buckets[i];
         while (se) {
             XrServiceEntry *next = se->next;
-            free(se);
+            xr_free(se);
             se = next;
         }
         c->service_buckets[i] = NULL;
@@ -185,7 +185,7 @@ void xr_cluster_stop(XrCluster *c) {
         XrTopicSubscription *sub = c->topic_buckets[i];
         while (sub) {
             XrTopicSubscription *next = sub->next;
-            free(sub);
+            xr_free(sub);
             sub = next;
         }
         c->topic_buckets[i] = NULL;
@@ -199,7 +199,7 @@ void xr_cluster_stop(XrCluster *c) {
         XrNodeMonitor *mon = c->monitors;
         while (mon) {
             XrNodeMonitor *next = mon->next;
-            free(mon);
+            xr_free(mon);
             mon = next;
         }
         c->monitors = NULL;
@@ -212,21 +212,21 @@ void xr_cluster_stop(XrCluster *c) {
         XrRemoteCoroMonitor *rm = c->remote_coro_monitors;
         while (rm) {
             XrRemoteCoroMonitor *next = rm->next;
-            free(rm);
+            xr_free(rm);
             rm = next;
         }
         c->remote_coro_monitors = NULL;
     }
 
     // Free dynamic tombstones
-    free(c->tombstones);
+    xr_free(c->tombstones);
     c->tombstones = NULL;
 
     // Scrub the shared secret before freeing the struct.
     xr_secure_wipe(c->secret, sizeof(c->secret));
 
     if (c->isolate) c->isolate->cluster = NULL;
-    free(c);
+    xr_free(c);
 }
 
 bool xr_cluster_is_running(XrCluster *c) {
@@ -304,7 +304,7 @@ int xr_cluster_join(XrCluster *c, const char *host, uint16_t port) {
 void xr_cluster_register_channel(XrCluster *c, const char *name, struct XrChannel *ch) {
     if (!c || !name || !ch) return;
 
-    XrDistChannel *dc = (XrDistChannel *)calloc(1, sizeof(XrDistChannel));
+    XrDistChannel *dc = (XrDistChannel *)xr_calloc(1, sizeof(XrDistChannel));
     if (!dc) return;
 
     strncpy(dc->name, name, XR_CHANNEL_NAME_MAX);
@@ -362,7 +362,7 @@ void xr_cluster_unregister_channel(XrCluster *c, const char *name) {
                 dc->channel->dist = NULL;
                 dc->channel->name = NULL;
             }
-            free(dc);
+            xr_free(dc);
             break;
         }
         pp = &(*pp)->next;
@@ -376,7 +376,7 @@ XrChannel *xr_cluster_register_service(XrayIsolate *X, const char *name) {
     XrCluster *c = (XrCluster *)X->cluster;
     if (!c || !name) return NULL;
 
-    XrServiceEntry *se = (XrServiceEntry *)calloc(1, sizeof(XrServiceEntry));
+    XrServiceEntry *se = (XrServiceEntry *)xr_calloc(1, sizeof(XrServiceEntry));
     if (!se) return NULL;
 
     strncpy(se->name, name, XR_SERVICE_NAME_MAX);
@@ -385,7 +385,7 @@ XrChannel *xr_cluster_register_service(XrayIsolate *X, const char *name) {
     // Create a buffered channel for incoming requests
     se->request_ch = xr_channel_new(X, 64);
     if (!se->request_ch) {
-        free(se);
+        xr_free(se);
         return NULL;
     }
 
@@ -680,7 +680,7 @@ static XrValue cluster_reply_fn(XrayIsolate *X, XrValue *args, int argc) {
     size_t frame_size = 4 + 1 + 8 + 1 + sbuf.len;
     uint8_t stack_frame[4096];
     uint8_t *frame = (frame_size + 16 <= sizeof(stack_frame))
-        ? stack_frame : (uint8_t *)malloc(frame_size + 16);
+        ? stack_frame : (uint8_t *)xr_malloc(frame_size + 16);
     if (!frame) {
         xr_serial_buf_free(&sbuf);
         return xr_bool(0);
@@ -692,12 +692,12 @@ static XrValue cluster_reply_fn(XrayIsolate *X, XrValue *args, int argc) {
     xr_serial_buf_free(&sbuf);
 
     if (flen < 0) {
-        if (frame != stack_frame) free(frame);
+        if (frame != stack_frame) xr_free(frame);
         return xr_bool(0);
     }
 
     int rc = xr_cluster_node_enqueue(target, frame, (uint32_t)flen);
-    if (frame != stack_frame) free(frame);
+    if (frame != stack_frame) xr_free(frame);
     return xr_bool(rc == 0);
 }
 
@@ -772,7 +772,7 @@ static XrValue cluster_call_fn(XrayIsolate *X, XrValue *args, int argc) {
     size_t frame_size = 4 + 1 + 8 + 1 + strlen(service_name->data) + sbuf.len;
     uint8_t stack_frame[4096];
     uint8_t *frame = (frame_size + 16 <= sizeof(stack_frame))
-        ? stack_frame : (uint8_t *)malloc(frame_size + 16);
+        ? stack_frame : (uint8_t *)xr_malloc(frame_size + 16);
     if (!frame) {
         xr_serial_buf_free(&sbuf);
         return xr_null();
@@ -784,13 +784,13 @@ static XrValue cluster_call_fn(XrayIsolate *X, XrValue *args, int argc) {
     xr_serial_buf_free(&sbuf);
 
     if (flen < 0) {
-        if (frame != stack_frame) free(frame);
+        if (frame != stack_frame) xr_free(frame);
         xr_cluster_node_take_pending(target, req_id); // cleanup
         return xr_null();
     }
 
     int rc = xr_cluster_node_enqueue(target, frame, (uint32_t)flen);
-    if (frame != stack_frame) free(frame);
+    if (frame != stack_frame) xr_free(frame);
     if (rc != 0) {
         xr_cluster_node_take_pending(target, req_id);
         return xr_null();
@@ -839,7 +839,7 @@ void xr_cluster_process_node(XrCluster *c, XrClusterNode *node) {
     if (!c || !node) return;
 
     // Heap-allocated receive buffer (avoid 64KB on coroutine stack)
-    uint8_t *recv_buf = (uint8_t *)malloc(65536);
+    uint8_t *recv_buf = (uint8_t *)xr_malloc(65536);
     if (!recv_buf) return;
     uint8_t frame_type;
     uint32_t payload_len;
@@ -1064,7 +1064,7 @@ void xr_cluster_process_node(XrCluster *c, XrClusterNode *node) {
             // Check if we already know this channel
             if (!xr_cluster_find_channel(c, ch_name)) {
                 // Create a proxy channel entry with local buffer for push model
-                XrDistChannel *dc = (XrDistChannel *)calloc(1, sizeof(XrDistChannel));
+                XrDistChannel *dc = (XrDistChannel *)xr_calloc(1, sizeof(XrDistChannel));
                 if (dc) {
                     strncpy(dc->name, ch_name, XR_CHANNEL_NAME_MAX);
                     dc->is_owner = false;
@@ -1164,7 +1164,7 @@ void xr_cluster_process_node(XrCluster *c, XrClusterNode *node) {
     }
 
     // Node disconnected — cleanup subscribers before monitors
-    free(recv_buf);
+    xr_free(recv_buf);
     xr_cluster_remove_all_subscribers_for_node(c, node);
     xr_cluster_fire_monitors(c, node->name);
     if (c->on_node_removed) c->on_node_removed(node->name);

@@ -85,8 +85,8 @@ void xr_outq_destroy(XrOutputQueue *q) {
     XrOutFrame *f = q->head;
     while (f) {
         XrOutFrame *next = f->next;
-        if (f->owned) free(f->data);
-        free(f);
+        if (f->owned) xr_free(f->data);
+        xr_free(f);
         f = next;
     }
     q->head = q->tail = NULL;
@@ -125,10 +125,10 @@ static void outq_enqueue_locked(XrOutputQueue *q, XrOutFrame *f) {
 int xr_outq_push(XrOutputQueue *q, const uint8_t *data, uint32_t len) {
     if (atomic_load(&q->is_full)) return -1;
 
-    XrOutFrame *f = (XrOutFrame *)malloc(sizeof(XrOutFrame));
+    XrOutFrame *f = (XrOutFrame *)xr_malloc(sizeof(XrOutFrame));
     if (!f) return -1;
-    f->data = (uint8_t *)malloc(len);
-    if (!f->data) { free(f); return -1; }
+    f->data = (uint8_t *)xr_malloc(len);
+    if (!f->data) { xr_free(f); return -1; }
     memcpy(f->data, data, len);
     f->len = len;
     f->owned = true;
@@ -145,7 +145,7 @@ int xr_outq_push(XrOutputQueue *q, const uint8_t *data, uint32_t len) {
 int xr_outq_push_nocopy(XrOutputQueue *q, uint8_t *data, uint32_t len) {
     if (atomic_load(&q->is_full)) return -1;
 
-    XrOutFrame *f = (XrOutFrame *)malloc(sizeof(XrOutFrame));
+    XrOutFrame *f = (XrOutFrame *)xr_malloc(sizeof(XrOutFrame));
     if (!f) return -1;
     f->data = data;
     f->len = len;
@@ -243,7 +243,7 @@ double xr_phi_value(XrPhiDetector *det, int64_t now_ms) {
 /* ========== Node Lifecycle ========== */
 
 XrClusterNode *xr_cluster_node_new(const char *name, const char *host, uint16_t port) {
-    XrClusterNode *node = (XrClusterNode *)calloc(1, sizeof(XrClusterNode));
+    XrClusterNode *node = (XrClusterNode *)xr_calloc(1, sizeof(XrClusterNode));
     if (!node) return NULL;
 
     if (name) {
@@ -285,10 +285,10 @@ void xr_cluster_node_free(XrClusterNode *node) {
     while (pr) {
         XrPendingRequest *next = pr->next;
         if (pr->response_ch) xr_channel_close(pr->response_ch);
-        free(pr);
+        xr_free(pr);
         pr = next;
     }
-    free(node);
+    xr_free(node);
 }
 
 void xr_cluster_node_close(XrClusterNode *node) {
@@ -310,17 +310,17 @@ int xr_cluster_node_send_frame_sync(XrClusterNode *node, uint8_t frame_type,
     uint32_t frame_size = 4 + 1 + payload_len;
     uint8_t stack_buf[4096];
     uint8_t *frame = (frame_size <= sizeof(stack_buf))
-        ? stack_buf : (uint8_t *)malloc(frame_size);
+        ? stack_buf : (uint8_t *)xr_malloc(frame_size);
     if (!frame) return -1;
 
     int wrote = xr_frame_write(frame, frame_type, payload, payload_len);
     if (wrote < 0) {
-        if (frame != stack_buf) free(frame);
+        if (frame != stack_buf) xr_free(frame);
         return -1;
     }
 
     int rc = xr_io_write_all(node->conn, frame, (size_t)wrote);
-    if (frame != stack_buf) free(frame);
+    if (frame != stack_buf) xr_free(frame);
     if (rc == wrote) {
         atomic_fetch_add(&node->metrics.frames_sent, 1);
         atomic_fetch_add(&node->metrics.bytes_sent, (uint64_t)wrote);
@@ -353,12 +353,12 @@ int xr_cluster_node_send_frame(XrClusterNode *node, uint8_t frame_type,
         return xr_cluster_node_enqueue(node, stack_buf, (uint32_t)wrote);
     } else {
         // Large frame: encode to heap, transfer ownership (zero-copy)
-        uint8_t *frame = (uint8_t *)malloc(frame_size);
+        uint8_t *frame = (uint8_t *)xr_malloc(frame_size);
         if (!frame) return -1;
         int wrote = xr_frame_write(frame, frame_type, payload, payload_len);
-        if (wrote < 0) { free(frame); return -1; }
+        if (wrote < 0) { xr_free(frame); return -1; }
         int rc = xr_outq_push_nocopy(&node->outq, frame, (uint32_t)wrote);
-        if (rc != 0) { free(frame); return -1; }
+        if (rc != 0) { xr_free(frame); return -1; }
         return 0;
     }
 }
@@ -442,8 +442,8 @@ void xr_cluster_node_writer_loop(void *arg) {
 
                 // Free the batch
                 for (int i = 0; i < count; i++) {
-                    if (ptrs[i]->owned) free(ptrs[i]->data);
-                    free(ptrs[i]);
+                    if (ptrs[i]->owned) xr_free(ptrs[i]->data);
+                    xr_free(ptrs[i]);
                 }
             }
 #else
@@ -458,8 +458,8 @@ void xr_cluster_node_writer_loop(void *arg) {
                 } else {
                     atomic_fetch_add(&node->metrics.send_errors, 1);
                 }
-                if (f->owned) free(f->data);
-                free(f);
+                if (f->owned) xr_free(f->data);
+                xr_free(f);
                 f = next;
             }
 #endif
@@ -468,8 +468,8 @@ void xr_cluster_node_writer_loop(void *arg) {
             XrOutFrame *f = batch;
             while (f) {
                 XrOutFrame *next = f->next;
-                if (f->owned) free(f->data);
-                free(f);
+                if (f->owned) xr_free(f->data);
+                xr_free(f);
                 f = next;
             }
         }
@@ -680,13 +680,13 @@ XrChannel *xr_cluster_node_add_pending(XrClusterNode *node, uint64_t request_id,
     XR_DCHECK(X != NULL, "isolate must not be NULL");
     if (!node || !X) return NULL;
 
-    XrPendingRequest *pr = (XrPendingRequest *)calloc(1, sizeof(XrPendingRequest));
+    XrPendingRequest *pr = (XrPendingRequest *)xr_calloc(1, sizeof(XrPendingRequest));
     if (!pr) return NULL;
 
     // Create a buffered(1) channel so sender doesn't block
     XrChannel *ch = xr_channel_new(X, 1);
     if (!ch) {
-        free(pr);
+        xr_free(pr);
         return NULL;
     }
 
@@ -697,7 +697,7 @@ XrChannel *xr_cluster_node_add_pending(XrClusterNode *node, uint64_t request_id,
     xr_spinlock_lock(&node->pending_lock);
     if (node->pending_count >= XR_MAX_PENDING_REQUESTS) {
         xr_spinlock_unlock(&node->pending_lock);
-        free(pr);
+        xr_free(pr);
         return NULL;
     }
     pr->next = node->pending_first;
@@ -720,7 +720,7 @@ XrChannel *xr_cluster_node_take_pending(XrClusterNode *node, uint64_t request_id
             node->pending_count--;
             XrChannel *ch = pr->response_ch;
             xr_spinlock_unlock(&node->pending_lock);
-            free(pr);
+            xr_free(pr);
             return ch;
         }
         pp = &(*pp)->next;

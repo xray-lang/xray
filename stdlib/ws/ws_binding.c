@@ -18,6 +18,7 @@
  */
 
 #include "ws.h"
+#include "../../src/base/xmalloc.h"
 #include "../../src/module/xmodule.h"
 #include "../../src/vm/xvm.h"
 #include "../../src/runtime/object/xstring.h"
@@ -171,18 +172,18 @@ typedef struct XrWsContext {
     _Atomic int conn_count;     // Active connection count
     int max_conns;              // Max connections (0 = unlimited)
     pthread_mutex_t conn_mutex; // Protects conn_array grow/store/remove
-    
+
     // Free-list for ID recycling (protected by conn_mutex)
     int *free_ids;              // Stack of recycled IDs
     int free_count;             // Number of recycled IDs
     int free_capacity;          // Capacity of free_ids array
-    
+
     // Statistics (atomic for multi-worker safety)
     _Atomic uint64_t total_msgs_sent;
     _Atomic uint64_t total_msgs_recv;
     _Atomic uint64_t total_bytes_sent;
     _Atomic uint64_t total_bytes_recv;
-    
+
     // Per-isolate cached SymbolIds (immutable after init, no sync needed)
     SymbolId sym_wsid;
     SymbolId sym_data;
@@ -191,11 +192,11 @@ typedef struct XrWsContext {
     SymbolId sym_state;
     SymbolId sym_url;
     SymbolId sym_is_svr;
-    
+
     // Per-isolate cached Shapes (immutable after init, no sync needed)
     XrShape *shape_recv_ok;   // fields: [data, binary]
     XrShape *shape_recv_err;  // fields: [error]
-    
+
     // Server state
     int listen_fd;              // Listen socket fd (-1 if not listening)
     volatile bool server_running;
@@ -212,7 +213,7 @@ static void ws_ctx_init_cache(XrayIsolate *X, XrWsContext *ctx) {
     ctx->sym_state  = xr_symbol_register_in_table(table, "state");
     ctx->sym_url    = xr_symbol_register_in_table(table, "url");
     ctx->sym_is_svr = xr_symbol_register_in_table(table, "_isServer");
-    
+
     // P5: Build Shape transition chains for recv result
     XrShape *base = xr_shape_new(X, 4);
     if (base) {
@@ -230,45 +231,45 @@ static void ws_ctx_init_cache(XrayIsolate *X, XrWsContext *ctx) {
 // Get or create per-isolate WebSocket context
 static XrWsContext* get_ws_context(XrayIsolate *X) {
     if (!X || !X->module_registry) return NULL;
-    
+
     XrModuleRegistry *registry = (XrModuleRegistry*)X->module_registry;
     if (!registry->loaded_modules) return NULL;
-    
+
     XrModule *mod = (XrModule*)xr_hashmap_get((XrHashMap*)registry->loaded_modules, "ws");
     if (!mod) return NULL;
-    
+
     XrWsContext *ctx = (XrWsContext*)mod->native_handle;
     if (!ctx) {
-        ctx = (XrWsContext*)calloc(1, sizeof(XrWsContext));
+        ctx = (XrWsContext*)xr_calloc(1, sizeof(XrWsContext));
         if (!ctx) return NULL;
-        
-        ctx->conn_array = (XrWebSocket**)calloc(WS_CONN_INIT_CAP, sizeof(XrWebSocket*));
+
+        ctx->conn_array = (XrWebSocket**)xr_calloc(WS_CONN_INIT_CAP, sizeof(XrWebSocket*));
         if (!ctx->conn_array) {
-            free(ctx);
+            xr_free(ctx);
             return NULL;
         }
         ctx->array_capacity = WS_CONN_INIT_CAP;
         atomic_store(&ctx->next_id, 1);
         pthread_mutex_init(&ctx->conn_mutex, NULL);
-        
-        ctx->free_ids = (int*)malloc(WS_CONN_INIT_CAP * sizeof(int));
+
+        ctx->free_ids = (int*)xr_malloc(WS_CONN_INIT_CAP * sizeof(int));
         ctx->free_capacity = ctx->free_ids ? WS_CONN_INIT_CAP : 0;
         ctx->free_count = 0;
-        
+
         ctx->listen_fd = -1;
         ctx->server_running = false;
-        
+
         ws_ctx_init_cache(X, ctx);
         mod->native_handle = ctx;
     }
-    
+
     return ctx;
 }
 
 // Free WebSocket module context
 void xr_ws_module_context_free(XrWsContext *ctx) {
     if (!ctx) return;
-    
+
     if (ctx->conn_array) {
         for (int i = 0; i < ctx->array_capacity; i++) {
             XrWebSocket *ws = ctx->conn_array[i];
@@ -277,12 +278,12 @@ void xr_ws_module_context_free(XrWsContext *ctx) {
                 xr_ws_free(ws);
             }
         }
-        free(ctx->conn_array);
+        xr_free(ctx->conn_array);
     }
-    
-    free(ctx->free_ids);
+
+    xr_free(ctx->free_ids);
     pthread_mutex_destroy(&ctx->conn_mutex);
-    free(ctx);
+    xr_free(ctx);
 }
 
 // Grow connection array when needed
@@ -290,7 +291,7 @@ static bool ws_conn_array_grow(XrWsContext *ctx, int needed_id) {
     if (needed_id < ctx->array_capacity) return true;
     int new_cap = ctx->array_capacity;
     while (new_cap <= needed_id) new_cap *= 2;
-    XrWebSocket **new_arr = (XrWebSocket**)realloc(ctx->conn_array,
+    XrWebSocket **new_arr = (XrWebSocket**)xr_realloc(ctx->conn_array,
                                                     new_cap * sizeof(XrWebSocket*));
     if (!new_arr) return false;
     memset(new_arr + ctx->array_capacity, 0,
@@ -303,26 +304,26 @@ static bool ws_conn_array_grow(XrWsContext *ctx, int needed_id) {
 static int store_ws(XrayIsolate *X, XrWebSocket *ws) {
     XrWsContext *ctx = get_ws_context(X);
     if (!ctx) return -1;
-    
+
     int id;
-    
+
     // Mutex protects conn_array grow + store + free-list (multi-worker safety)
     pthread_mutex_lock(&ctx->conn_mutex);
-    
+
     // Try recycling a free ID first
     if (ctx->free_count > 0) {
         id = ctx->free_ids[--ctx->free_count];
     } else {
         id = atomic_fetch_add(&ctx->next_id, 1);
     }
-    
+
     if (!ws_conn_array_grow(ctx, id)) {
         pthread_mutex_unlock(&ctx->conn_mutex);
         return -1;
     }
     ctx->conn_array[id] = ws;
     pthread_mutex_unlock(&ctx->conn_mutex);
-    
+
     atomic_fetch_add(&ctx->conn_count, 1);
     return id;
 }
@@ -342,7 +343,7 @@ static void remove_ws(XrWsContext *ctx, int id) {
         ctx->free_ids[ctx->free_count++] = id;
     } else if (ctx->free_capacity > 0) {
         int new_cap = ctx->free_capacity * 2;
-        int *new_ids = (int*)realloc(ctx->free_ids, new_cap * sizeof(int));
+        int *new_ids = (int*)xr_realloc(ctx->free_ids, new_cap * sizeof(int));
         if (new_ids) {
             ctx->free_ids = new_ids;
             ctx->free_capacity = new_cap;
@@ -365,24 +366,24 @@ static void remove_ws(XrWsContext *ctx, int id) {
  */
 static XrValue ws_connect(XrayIsolate *X, XrValue *args, int argc) {
     if (argc < 1) return xr_null();
-    
+
     XrWsContext *ctx = get_ws_context(X);
     if (!ctx) return xr_null();
-    
+
     size_t url_len;
     const char *url = get_string_arg(args[0], &url_len);
     if (!url) return xr_null();
-    
+
     // Copy URL
-    char *url_copy = (char*)malloc(url_len + 1);
+    char *url_copy = (char*)xr_malloc(url_len + 1);
     memcpy(url_copy, url, url_len);
     url_copy[url_len] = '\0';
-    
+
     // Create config
     XrWsConfig config;
     xr_ws_config_init(&config);
     config.url = url_copy;
-    
+
     // Parse options from args[1] if provided
     if (argc >= 2 && XR_IS_PTR(args[1])) {
         XrJson *opts = (XrJson*)XR_TO_PTR(args[1]);
@@ -398,23 +399,23 @@ static XrValue ws_connect(XrayIsolate *X, XrValue *args, int argc) {
             if (XR_IS_INT(v)) config.max_message_size = (size_t)XR_TO_INT(v);
         }
     }
-    
+
     // Create WebSocket
     XrWebSocket *ws = xr_ws_new(&config);
-    free(url_copy);
-    
+    xr_free(url_copy);
+
     XrJson *result = xr_json_new(xr_current_coro(X), 4);
-    
+
     if (!ws) {
         xr_json_set(X, result, ctx->sym_wsid, xr_int(-1));
         xr_json_set(X, result, ctx->sym_error, make_cstring(X, "Failed to create WebSocket"));
         xr_json_set(X, result, ctx->sym_state, make_cstring(X, "closed"));
         return xr_json_value(result);
     }
-    
+
     // Connect
     XrWsError err = xr_ws_connect(ws);
-    
+
     if (err != WS_OK) {
         xr_json_set(X, result, ctx->sym_wsid, xr_int(-1));
         xr_json_set(X, result, ctx->sym_error, make_cstring(X, xr_ws_error_string(err)));
@@ -422,14 +423,14 @@ static XrValue ws_connect(XrayIsolate *X, XrValue *args, int argc) {
         xr_ws_free(ws);
         return xr_json_value(result);
     }
-    
+
     // Store connection (no limit)
     int id = store_ws(X, ws);
-    
+
     xr_json_set(X, result, ctx->sym_wsid, xr_int(id));
     xr_json_set(X, result, ctx->sym_url, make_string(X, url, url_len));
     xr_json_set(X, result, ctx->sym_state, make_cstring(X, "open"));
-    
+
     return xr_json_value(result);
 }
 
@@ -450,15 +451,15 @@ static XrCFuncResult ws_send_step(XrayIsolate *X, WsSendState *state, XrValue *r
 // Continuation for send
 static XrCFuncResult ws_send_continue(XrayIsolate *X, int status, void *ctx, XrValue *result) {
     WsSendState *state = (WsSendState *)ctx;
-    
+
     // Handle timeout/cancel
     if (status == XR_RESUME_TIMEOUT || status == XR_RESUME_CANCELLED) {
-        if (state->data_owned && state->data) free(state->data);
-        free(state);
+        if (state->data_owned && state->data) xr_free(state->data);
+        xr_free(state);
         *result = xr_bool(false);
         return XR_CFUNC_DONE;
     }
-    
+
     return ws_send_step(X, state, result);
 }
 
@@ -467,34 +468,34 @@ static XrCFuncResult ws_send_step(XrayIsolate *X, WsSendState *state, XrValue *r
     XrWsContext *ctx = get_ws_context(X);
     XrWebSocket *ws = get_ws_from_ctx(ctx, state->ws_id);
     if (!ws || xr_ws_get_state(ws) != WS_STATE_OPEN) {
-        if (state->data_owned && state->data) free(state->data);
-        free(state);
+        if (state->data_owned && state->data) xr_free(state->data);
+        xr_free(state);
         *result = xr_bool(false);
         return XR_CFUNC_DONE;
     }
-    
+
     XrWsOpcode opcode = state->binary ? WS_OPCODE_BINARY : WS_OPCODE_TEXT;
     int ret = xr_ws_send_frame_try(ws, opcode, state->data, state->len);
-    
+
     if (ret == 0) {
         if (ctx) {
             ctx->total_msgs_sent++;
             ctx->total_bytes_sent += state->len;
         }
-        if (state->data_owned && state->data) free(state->data);
-        free(state);
+        if (state->data_owned && state->data) xr_free(state->data);
+        xr_free(state);
         *result = xr_bool(true);
         return XR_CFUNC_DONE;
     }
-    
+
     if (ret == -2) {
         // Would block - yield and wait for write
         return xr_yield_for_io(X, ws->fd, XR_WAIT_WRITE, 5000, ws_send_continue, state, result);
     }
-    
+
     // Error
-    if (state->data_owned && state->data) free(state->data);
-    free(state);
+    if (state->data_owned && state->data) xr_free(state->data);
+    xr_free(state);
     *result = xr_bool(false);
     return XR_CFUNC_DONE;
 }
@@ -508,50 +509,50 @@ static XrCFuncResult ws_send_yieldable(XrayIsolate *X, XrValue *args, int argc, 
         *result = xr_bool(false);
         return XR_CFUNC_DONE;
     }
-    
+
     // Get connection
     if (!XR_IS_JSON(args[0])) {
         *result = xr_bool(false);
         return XR_CFUNC_DONE;
     }
-    
+
     XrWsContext *ctx = get_ws_context(X);
     if (!ctx) {
         *result = xr_bool(false);
         return XR_CFUNC_DONE;
     }
-    
+
     XrJson *conn = (XrJson*)XR_TO_PTR(args[0]);
     XrValue id_val = xr_json_get(conn, ctx->sym_wsid);
-    
+
     if (!XR_IS_INT(id_val)) {
         *result = xr_bool(false);
         return XR_CFUNC_DONE;
     }
-    
+
     int id = (int)XR_TO_INT(id_val);
     XrWebSocket *ws = get_ws_from_ctx(ctx, id);
-    
+
     if (!ws || xr_ws_get_state(ws) != WS_STATE_OPEN) {
         *result = xr_bool(false);
         return XR_CFUNC_DONE;
     }
-    
+
     size_t msg_len;
     const char *msg = get_data_arg(args[1], &msg_len);
     if (!msg) {
         *result = xr_bool(false);
         return XR_CFUNC_DONE;
     }
-    
+
     bool binary = false;
     if (argc >= 3 && XR_IS_BOOL(args[2])) {
         binary = XR_TO_BOOL(args[2]);
     }
-    
+
     XrWsOpcode opcode = binary ? WS_OPCODE_BINARY : WS_OPCODE_TEXT;
     int ret = xr_ws_send_frame_try(ws, opcode, msg, msg_len);
-    
+
     if (ret == 0) {
         ctx->total_msgs_sent++;
         ctx->total_bytes_sent += msg_len;
@@ -561,28 +562,28 @@ static XrCFuncResult ws_send_yieldable(XrayIsolate *X, XrValue *args, int argc, 
         *result = xr_bool(true);
         return XR_CFUNC_DONE;
     }
-    
+
     if (ret == -1) {
         // Error
         *result = xr_bool(false);
         return XR_CFUNC_DONE;
     }
-    
+
 #if WS_PROFILE
     ws_prof_send_slow++;
 #endif
 
     // Would block - need to yield. Copy data since original may be invalid after yield
-    WsSendState *state = (WsSendState *)malloc(sizeof(WsSendState));
+    WsSendState *state = (WsSendState *)xr_malloc(sizeof(WsSendState));
     if (!state) {
         *result = xr_bool(false);
         return XR_CFUNC_ERROR;
     }
-    
+
     state->ws_id = id;
-    state->data = (char*)malloc(msg_len);
+    state->data = (char*)xr_malloc(msg_len);
     if (!state->data) {
-        free(state);
+        xr_free(state);
         *result = xr_bool(false);
         return XR_CFUNC_ERROR;
     }
@@ -590,7 +591,7 @@ static XrCFuncResult ws_send_yieldable(XrayIsolate *X, XrValue *args, int argc, 
     state->len = msg_len;
     state->binary = binary;
     state->data_owned = true;
-    
+
     return xr_yield_for_io(X, ws->fd, XR_WAIT_WRITE, 5000, ws_send_continue, state, result);
 }
 
@@ -611,15 +612,15 @@ typedef struct WsRecvState {
 // NOTE: No XrValue parameters - all values must be reconstructed to be GC-safe
 static XrValue make_recv_result(XrayIsolate *X, XrWsContext *ctx, XrWebSocket *ws, XrWsMessage *msg) {
     XrCoroutine *coro = xr_current_coro(X);
-    
-    
+
+
     if (!msg) {
         // P5: Error result with pre-cached Shape (fast-mode, 1 field)
         XrJson *result = (ctx && ctx->shape_recv_err)
             ? xr_json_new_with_shape(coro, ctx->shape_recv_err)
             : xr_json_new(coro, 4);
         if (!result) return xr_null();
-        
+
         const char *err_msg = (!ws || xr_ws_get_state(ws) != WS_STATE_OPEN)
             ? "Connection closed" : "Receive failed";
         if (ctx && ctx->shape_recv_err)
@@ -628,7 +629,7 @@ static XrValue make_recv_result(XrayIsolate *X, XrWsContext *ctx, XrWebSocket *w
             xr_json_set(X, result, ctx ? ctx->sym_error : 0, make_cstring(X, err_msg));
         return xr_json_value(result);
     }
-    
+
     // P5: Success result with pre-cached Shape (fast-mode, 2 fields: data, binary)
     XrJson *result = (ctx && ctx->shape_recv_ok)
         ? xr_json_new_with_shape(coro, ctx->shape_recv_ok)
@@ -637,7 +638,7 @@ static XrValue make_recv_result(XrayIsolate *X, XrWsContext *ctx, XrWebSocket *w
         xr_ws_message_free(msg);
         return xr_null();
     }
-    
+
     XrValue data_val;
     if (msg->is_text) {
         data_val = make_string(X, msg->data, msg->len);
@@ -649,7 +650,7 @@ static XrValue make_recv_result(XrayIsolate *X, XrWsContext *ctx, XrWebSocket *w
         }
         data_val = bytes_arr ? xr_value_from_array(bytes_arr) : xr_null();
     }
-    
+
     if (ctx && ctx->shape_recv_ok) {
         xr_json_set_field(result, 0, data_val);               // fields[0] = data
         xr_json_set_field(result, 1, xr_bool(!msg->is_text)); // fields[1] = binary
@@ -658,7 +659,7 @@ static XrValue make_recv_result(XrayIsolate *X, XrWsContext *ctx, XrWebSocket *w
         xr_json_set(X, result, ctx ? ctx->sym_binary : 0, xr_bool(!msg->is_text));
     }
     xr_ws_message_free(msg);
-    
+
     return xr_json_value(result);
 }
 
@@ -668,16 +669,16 @@ static XrCFuncResult ws_recv_step(XrayIsolate *X, WsRecvState *state, XrValue *r
 // Continuation function for ws.recv (matches XrContinuation signature)
 static XrCFuncResult ws_recv_continue(XrayIsolate *X, int status, void *cont_ctx, XrValue *result) {
     WsRecvState *state = (WsRecvState *)cont_ctx;
-    
+
     if (status == XR_RESUME_TIMEOUT || status == XR_RESUME_CANCELLED) {
         XrWsContext *ctx = get_ws_context(X);
         XrJson *res = xr_json_new(xr_current_coro(X), 4);
         xr_json_set(X, res, ctx ? ctx->sym_error : 0, make_cstring(X, "Timeout"));
         *result = xr_json_value(res);
-        free(state);
+        xr_free(state);
         return XR_CFUNC_DONE;
     }
-    
+
     return ws_recv_step(X, state, result);
 }
 
@@ -687,35 +688,35 @@ static XrCFuncResult ws_recv_step(XrayIsolate *X, WsRecvState *state, XrValue *r
     XrWebSocket *ws = get_ws_from_ctx(ctx, state->ws_id);
     if (!ws) {
         *result = make_recv_result(X, ctx, NULL, NULL);
-        free(state);
+        xr_free(state);
         return XR_CFUNC_DONE;
     }
-    
+
     if (xr_ws_get_state(ws) != WS_STATE_OPEN) {
         *result = make_recv_result(X, ctx, ws, NULL);
-        free(state);
+        xr_free(state);
         return XR_CFUNC_DONE;
     }
-    
+
     bool need_more = false;
     XrWsMessage *msg = xr_ws_recv_try(ws, &need_more);
-    
+
     if (msg) {
         if (ctx) {
             ctx->total_msgs_recv++;
             ctx->total_bytes_recv += msg->len;
         }
         *result = make_recv_result(X, ctx, ws, msg);
-        free(state);
+        xr_free(state);
         return XR_CFUNC_DONE;
     }
-    
+
     if (!need_more) {
         *result = make_recv_result(X, ctx, ws, NULL);
-        free(state);
+        xr_free(state);
         return XR_CFUNC_DONE;
     }
-    
+
     return xr_yield_for_io(X, ws->fd, XR_WAIT_READ, state->timeout_ms, ws_recv_continue, state, result);
 }
 
@@ -736,38 +737,38 @@ static XrCFuncResult ws_recv_yieldable(XrayIsolate *X, XrValue *args, int argc, 
         *result = xr_null();
         return XR_CFUNC_ERROR;
     }
-    
+
     XrWsContext *ctx = get_ws_context(X);
     if (!ctx) {
         *result = xr_null();
         return XR_CFUNC_ERROR;
     }
-    
+
     XrJson *conn = (XrJson*)XR_TO_PTR(args[0]);
     XrValue id_val = xr_json_get(conn, ctx->sym_wsid);
-    
+
     if (!XR_IS_INT(id_val)) {
         XrJson *res = xr_json_new(xr_current_coro(X), 4);
         xr_json_set(X, res, ctx->sym_error, make_cstring(X, "Invalid connection object"));
         *result = xr_json_value(res);
         return XR_CFUNC_DONE;
     }
-    
+
     int id = (int)XR_TO_INT(id_val);
     XrWebSocket *ws = get_ws_from_ctx(ctx, id);
-    
+
     if (!ws) {
         XrJson *res = xr_json_new(xr_current_coro(X), 4);
         xr_json_set(X, res, ctx->sym_error, make_cstring(X, "Connection not found"));
         *result = xr_json_value(res);
         return XR_CFUNC_DONE;
     }
-    
+
     // Fast path: try recv without allocating state or yielding
     if (xr_ws_get_state(ws) == WS_STATE_OPEN) {
         bool need_more = false;
         XrWsMessage *msg = xr_ws_recv_try(ws, &need_more);
-        
+
         if (msg) {
             ctx->total_msgs_recv++;
             ctx->total_bytes_recv += msg->len;
@@ -781,7 +782,7 @@ static XrCFuncResult ws_recv_yieldable(XrayIsolate *X, XrValue *args, int argc, 
 #endif
             return XR_CFUNC_DONE;
         }
-        
+
         if (!need_more) {
             *result = make_recv_result(X, ctx, ws, NULL);
             return XR_CFUNC_DONE;
@@ -790,7 +791,7 @@ static XrCFuncResult ws_recv_yieldable(XrayIsolate *X, XrValue *args, int argc, 
         *result = make_recv_result(X, ctx, ws, NULL);
         return XR_CFUNC_DONE;
     }
-    
+
 #if WS_PROFILE
     ws_prof_recv_slow++;
 #endif
@@ -800,17 +801,17 @@ static XrCFuncResult ws_recv_yieldable(XrayIsolate *X, XrValue *args, int argc, 
     }
 
     // Slow path: no data available, allocate state and yield to kqueue
-    WsRecvState *state = (WsRecvState *)malloc(sizeof(WsRecvState));
+    WsRecvState *state = (WsRecvState *)xr_malloc(sizeof(WsRecvState));
     if (!state) {
         XrJson *res = xr_json_new(xr_current_coro(X), 4);
         xr_json_set(X, res, ctx->sym_error, make_cstring(X, "Out of memory"));
         *result = xr_json_value(res);
         return XR_CFUNC_ERROR;
     }
-    
+
     state->ws_id = id;
     state->timeout_ms = timeout_ms;
-    
+
     return xr_yield_for_io(X, ws->fd, XR_WAIT_READ, state->timeout_ms, ws_recv_continue, state, result);
 }
 
@@ -822,17 +823,17 @@ static XrCFuncResult ws_recvdata_continue(XrayIsolate *X, int status, void *cont
 
     if (status == XR_RESUME_TIMEOUT || status == XR_RESUME_CANCELLED ||
         status == XR_RESUME_ERROR) {
-        free(state);
+        xr_free(state);
         *result = xr_null();
         return XR_CFUNC_DONE;
     }
 
     XrWsContext *ctx = get_ws_context(X);
-    if (!ctx) { free(state); *result = xr_null(); return XR_CFUNC_DONE; }
+    if (!ctx) { xr_free(state); *result = xr_null(); return XR_CFUNC_DONE; }
 
     XrWebSocket *ws = get_ws_from_ctx(ctx, state->ws_id);
     if (!ws || xr_ws_get_state(ws) != WS_STATE_OPEN) {
-        free(state);
+        xr_free(state);
         *result = xr_null();
         return XR_CFUNC_DONE;
     }
@@ -844,11 +845,11 @@ static XrCFuncResult ws_recvdata_continue(XrayIsolate *X, int status, void *cont
         ctx->total_bytes_recv += msg->len;
         *result = make_string(X, msg->data, msg->len);
         xr_ws_message_free(msg);
-        free(state);
+        xr_free(state);
         return XR_CFUNC_DONE;
     }
     if (!need_more) {
-        free(state);
+        xr_free(state);
         *result = xr_null();
         return XR_CFUNC_DONE;
     }
@@ -903,7 +904,7 @@ static XrCFuncResult ws_recvdata(XrayIsolate *X, XrValue *args, int argc, XrValu
         timeout_ms = XR_TO_INT(args[1]);
     }
 
-    WsRecvState *state = (WsRecvState *)malloc(sizeof(WsRecvState));
+    WsRecvState *state = (WsRecvState *)xr_malloc(sizeof(WsRecvState));
     if (!state) { *result = xr_null(); return XR_CFUNC_ERROR; }
     state->ws_id = id;
     state->timeout_ms = timeout_ms;
@@ -919,37 +920,37 @@ static XrCFuncResult ws_recvdata(XrayIsolate *X, XrValue *args, int argc, XrValu
  */
 static XrValue ws_close(XrayIsolate *X, XrValue *args, int argc) {
     if (argc < 1) return xr_bool(false);
-    
+
     XrWsContext *ctx = get_ws_context(X);
     if (!ctx) return xr_bool(false);
-    
+
     if (!XR_IS_JSON(args[0])) return xr_bool(false);
-    
+
     XrJson *conn = (XrJson*)XR_TO_PTR(args[0]);
     XrValue id_val = xr_json_get(conn, ctx->sym_wsid);
-    
+
     if (!XR_IS_INT(id_val)) {
         return xr_bool(false);
     }
-    
+
     int id = (int)XR_TO_INT(id_val);
     XrWebSocket *ws = get_ws_from_ctx(ctx, id);
-    
+
     if (!ws) {
         return xr_bool(false);
     }
-    
+
     int code = WS_CLOSE_NORMAL;
     const char *reason = NULL;
-    
+
     if (argc >= 2 && XR_IS_INT(args[1])) {
         code = (int)XR_TO_INT(args[1]);
     }
-    
+
     if (argc >= 3 && XR_IS_STRING(args[2])) {
         reason = get_string_arg(args[2], NULL);
     }
-    
+
     // CRITICAL: Clean up netpoll registration BEFORE closing the socket.
     // This prevents stale XrPollDesc from being reused when the fd is recycled by the OS.
     // Without this, the next connection using the same fd number would inherit
@@ -965,15 +966,15 @@ static XrValue ws_close(XrayIsolate *X, XrValue *args, int argc) {
             }
         }
     }
-    
+
     // xr_ws_close sends close frame if state is OPEN, otherwise no-op
     xr_ws_close(ws, code, reason);
     xr_ws_free(ws);
     remove_ws(ctx, id);
-    
+
     xr_json_set(X, conn, ctx->sym_state, make_cstring(X, "closed"));
     xr_json_set(X, conn, ctx->sym_wsid, xr_int(-1));
-    
+
     return xr_bool(true);
 }
 
@@ -986,18 +987,18 @@ static XrValue ws_ping(XrayIsolate *X, XrValue *args, int argc) {
     if (argc < 1 || !XR_IS_JSON(args[0])) {
         return xr_bool(false);
     }
-    
+
     XrWsContext *ctx = get_ws_context(X);
     if (!ctx) return xr_bool(false);
-    
+
     XrJson *conn = (XrJson*)XR_TO_PTR(args[0]);
     XrValue id_val = xr_json_get(conn, ctx->sym_wsid);
-    
+
     if (!XR_IS_INT(id_val)) return xr_bool(false);
-    
+
     XrWebSocket *ws = get_ws_from_ctx(ctx, (int)XR_TO_INT(id_val));
     if (!ws) return xr_bool(false);
-    
+
     return xr_bool(xr_ws_ping(ws) == WS_OK);
 }
 
@@ -1010,18 +1011,18 @@ static XrValue ws_state(XrayIsolate *X, XrValue *args, int argc) {
     if (argc < 1 || !XR_IS_JSON(args[0])) {
         return make_cstring(X, "closed");
     }
-    
+
     XrWsContext *ctx = get_ws_context(X);
     if (!ctx) return make_cstring(X, "closed");
-    
+
     XrJson *conn = (XrJson*)XR_TO_PTR(args[0]);
     XrValue id_val = xr_json_get(conn, ctx->sym_wsid);
-    
+
     if (!XR_IS_INT(id_val)) return make_cstring(X, "closed");
-    
+
     XrWebSocket *ws = get_ws_from_ctx(ctx, (int)XR_TO_INT(id_val));
     if (!ws) return make_cstring(X, "closed");
-    
+
     switch (xr_ws_get_state(ws)) {
         case WS_STATE_CONNECTING: return make_cstring(X, "connecting");
         case WS_STATE_OPEN:       return make_cstring(X, "open");
@@ -1040,18 +1041,18 @@ static XrValue ws_is_open(XrayIsolate *X, XrValue *args, int argc) {
     if (argc < 1 || !XR_IS_JSON(args[0])) {
         return xr_bool(false);
     }
-    
+
     XrWsContext *ctx = get_ws_context(X);
     if (!ctx) return xr_bool(false);
-    
+
     XrJson *conn = (XrJson*)XR_TO_PTR(args[0]);
     XrValue id_val = xr_json_get(conn, ctx->sym_wsid);
-    
+
     if (!XR_IS_INT(id_val)) return xr_bool(false);
-    
+
     XrWebSocket *ws = get_ws_from_ctx(ctx, (int)XR_TO_INT(id_val));
     if (!ws) return xr_bool(false);
-    
+
     return xr_bool(xr_ws_get_state(ws) == WS_STATE_OPEN);
 }
 
@@ -1063,17 +1064,17 @@ static XrValue ws_is_open(XrayIsolate *X, XrValue *args, int argc) {
  */
 static XrValue ws_wrap_server_conn(XrayIsolate *X, XrWebSocket *ws) {
     if (!ws) return xr_null();
-    
+
     XrWsContext *ctx = get_ws_context(X);
     if (!ctx) return xr_null();
-    
+
     int id = store_ws(X, ws);
-    
+
     XrJson *result = xr_json_new(xr_current_coro(X), 4);
     xr_json_set(X, result, ctx->sym_wsid, xr_int(id));
     xr_json_set(X, result, ctx->sym_state, make_cstring(X, "open"));
     xr_json_set(X, result, ctx->sym_is_svr, xr_bool(true));
-    
+
     return xr_json_value(result);
 }
 
@@ -1125,16 +1126,16 @@ static XrCFuncResult ws_echo_conn_init(XrayIsolate *X, XrValue *args,
 
     int fd = (int)XR_TO_INT(args[0]);
 
-    WsEchoConnCtx *ctx = (WsEchoConnCtx *)calloc(1, sizeof(WsEchoConnCtx));
+    WsEchoConnCtx *ctx = (WsEchoConnCtx *)xr_calloc(1, sizeof(WsEchoConnCtx));
     if (!ctx) { close(fd); return XR_CFUNC_DONE; }
 
     ctx->X = X;
     ctx->fd = fd;
     ctx->runtime = (XrRuntime *)X->vm.runtime;
-    ctx->upgrade_buf = (char *)malloc(WS_UPGRADE_BUF_SIZE);
+    ctx->upgrade_buf = (char *)xr_malloc(WS_UPGRADE_BUF_SIZE);
     if (!ctx->upgrade_buf) {
         close(fd);
-        free(ctx);
+        xr_free(ctx);
         return XR_CFUNC_DONE;
     }
     ctx->upgrade_buf_used = 0;
@@ -1177,7 +1178,7 @@ static XrCFuncResult ws_echo_conn_upgrade_cont(XrayIsolate *X, int status,
 
     // Upgrade to WebSocket
     ctx->ws = xr_ws_upgrade(X, ctx->fd, ctx->upgrade_buf);
-    free(ctx->upgrade_buf);
+    xr_free(ctx->upgrade_buf);
     ctx->upgrade_buf = NULL;
     if (!ctx->ws) goto cleanup;
 
@@ -1195,7 +1196,7 @@ static XrCFuncResult ws_echo_conn_upgrade_cont(XrayIsolate *X, int status,
     return ws_echo_conn_loop(X, XR_RESUME_IO_READY, ctx, result);
 
 fail:
-    free(ctx->upgrade_buf);
+    xr_free(ctx->upgrade_buf);
 cleanup:
     {
         XrRuntime *rt = (XrRuntime *)X->vm.runtime;
@@ -1205,7 +1206,7 @@ cleanup:
         }
     }
     close(ctx->fd);
-    free(ctx);
+    xr_free(ctx);
     return XR_CFUNC_DONE;
 }
 
@@ -1281,7 +1282,7 @@ cleanup:
         xr_ws_close(ctx->ws, WS_CLOSE_NORMAL, NULL);
         xr_ws_free(ctx->ws);
     }
-    free(ctx);
+    xr_free(ctx);
     return XR_CFUNC_DONE;
 }
 
@@ -1323,17 +1324,17 @@ static XrCFuncResult ws_conn_init(XrayIsolate *X, XrValue *args,
 
     int fd = (int)XR_TO_INT(args[0]);
 
-    WsConnCtx *ctx = (WsConnCtx *)calloc(1, sizeof(WsConnCtx));
+    WsConnCtx *ctx = (WsConnCtx *)xr_calloc(1, sizeof(WsConnCtx));
     if (!ctx) { close(fd); return XR_CFUNC_DONE; }
 
     ctx->X = X;
     ctx->fd = fd;
     ctx->handler = (XrClosure *)XR_TO_PTR(args[1]);
     ctx->runtime = (XrRuntime *)X->vm.runtime;
-    ctx->upgrade_buf = (char *)malloc(WS_UPGRADE_BUF_SIZE);
+    ctx->upgrade_buf = (char *)xr_malloc(WS_UPGRADE_BUF_SIZE);
     if (!ctx->upgrade_buf) {
         close(fd);
-        free(ctx);
+        xr_free(ctx);
         return XR_CFUNC_DONE;
     }
     ctx->upgrade_buf_used = 0;
@@ -1378,7 +1379,7 @@ static XrCFuncResult ws_conn_upgrade_cont(XrayIsolate *X, int status,
     // Upgrade to WebSocket
     {
         XrWebSocket *ws = xr_ws_upgrade(X, ctx->fd, ctx->upgrade_buf);
-        free(ctx->upgrade_buf);
+        xr_free(ctx->upgrade_buf);
         ctx->upgrade_buf = NULL;
         if (!ws) goto cleanup;
 
@@ -1395,7 +1396,7 @@ static XrCFuncResult ws_conn_upgrade_cont(XrayIsolate *X, int status,
     }
 
 fail:
-    free(ctx->upgrade_buf);
+    xr_free(ctx->upgrade_buf);
 cleanup:
     {
         XrRuntime *rt = (XrRuntime *)X->vm.runtime;
@@ -1405,7 +1406,7 @@ cleanup:
         }
     }
     close(ctx->fd);
-    free(ctx);
+    xr_free(ctx);
     return XR_CFUNC_DONE;
 }
 
@@ -1438,7 +1439,7 @@ static XrCFuncResult ws_conn_handler_done(XrayIsolate *X, int status,
         }
     }
 
-    free(ctx);
+    xr_free(ctx);
     return XR_CFUNC_DONE;
 }
 
@@ -1460,7 +1461,7 @@ static XrCFuncResult ws_serve_listen_init(XrayIsolate *X, XrValue *args,
     (void)result;
     if (argc < 2 || !XR_IS_INT(args[0])) return XR_CFUNC_DONE;
 
-    WsServeListenCtx *ctx = (WsServeListenCtx *)calloc(1, sizeof(WsServeListenCtx));
+    WsServeListenCtx *ctx = (WsServeListenCtx *)xr_calloc(1, sizeof(WsServeListenCtx));
     if (!ctx) return XR_CFUNC_DONE;
 
     ctx->X = X;
@@ -1482,7 +1483,7 @@ static XrCFuncResult ws_serve_listen_cont(XrayIsolate *X, int status,
 
     XrWsContext *ws_ctx = get_ws_context(X);
     if (!ws_ctx || !ws_ctx->server_running || status != XR_RESUME_IO_READY) {
-        free(ctx);
+        xr_free(ctx);
         return XR_CFUNC_DONE;
     }
 
@@ -1550,7 +1551,7 @@ static XrCFuncResult ws_echo_listen_init(XrayIsolate *X, XrValue *args,
     (void)result;
     if (argc < 1 || !XR_IS_INT(args[0])) return XR_CFUNC_DONE;
 
-    WsEchoListenCtx *ctx = (WsEchoListenCtx *)calloc(1, sizeof(WsEchoListenCtx));
+    WsEchoListenCtx *ctx = (WsEchoListenCtx *)xr_calloc(1, sizeof(WsEchoListenCtx));
     if (!ctx) return XR_CFUNC_DONE;
 
     ctx->X = X;
@@ -1571,7 +1572,7 @@ static XrCFuncResult ws_echo_listen_cont(XrayIsolate *X, int status,
 
     XrWsContext *ws_ctx = get_ws_context(X);
     if (!ws_ctx || !ws_ctx->server_running || status != XR_RESUME_IO_READY) {
-        free(ctx);
+        xr_free(ctx);
         return XR_CFUNC_DONE;
     }
 
@@ -1821,7 +1822,7 @@ XrModule* xr_load_module_ws(XrayIsolate *isolate) {
     // 1. Create Native module
     XrModule *mod = xr_module_create_native(isolate, "ws");
     if (!mod) return NULL;
-    
+
     // 2. Add exported functions using macro (same pattern as http module)
     #define EXPORT_CFUNC(name_str, func_ptr) \
         do { \
@@ -1829,7 +1830,7 @@ XrModule* xr_load_module_ws(XrayIsolate *isolate) {
             XrValue fn_val = xr_value_from_cfunction(cfunc); \
             xr_module_add_export(isolate, mod, name_str, fn_val); \
         } while(0)
-    
+
     // SLOW C function (blocking I/O, immediate P/M handoff)
     #define EXPORT_SLOW_CFUNC(name_str, func_ptr) \
         do { \
@@ -1838,21 +1839,21 @@ XrModule* xr_load_module_ws(XrayIsolate *isolate) {
             XrValue fn_val = xr_value_from_cfunction(cfunc); \
             xr_module_add_export(isolate, mod, name_str, fn_val); \
         } while(0)
-    
+
     // Yieldable function registration macro
     #define EXPORT_YIELDABLE(name_str, func_ptr) \
         do { \
             struct XrCFunction *cfunc = xr_vm_yieldable_cfunction_new(isolate, func_ptr, name_str); \
             xr_module_add_export(isolate, mod, name_str, xr_value_from_cfunction(cfunc)); \
         } while(0)
-    
+
 #if WS_PROFILE
     if (!ws_prof_registered) {
         signal(SIGUSR1, ws_prof_signal);
         ws_prof_registered = 1;
     }
 #endif
-    
+
     // WebSocket client functions (directly exported, no script wrapper needed)
     EXPORT_SLOW_CFUNC("connect", ws_connect);
     EXPORT_YIELDABLE("send", ws_send_yieldable);
@@ -1861,20 +1862,20 @@ XrModule* xr_load_module_ws(XrayIsolate *isolate) {
     EXPORT_CFUNC("ping", ws_ping);
     EXPORT_CFUNC("state", ws_state);
     EXPORT_CFUNC("isOpen", ws_is_open);
-    
+
     // High-performance variants (recvData returns string directly, no Json wrapper)
     EXPORT_YIELDABLE("recvData", ws_recvdata);
     EXPORT_YIELDABLE("sendData", ws_send_yieldable);
-    
+
     // WebSocket server (pure C, no script layer needed)
     EXPORT_YIELDABLE("serve", ws_serve_yieldable);
     EXPORT_YIELDABLE("echoServe", ws_echo_serve_yieldable);
     EXPORT_CFUNC("stopServer", ws_stop_server);
     EXPORT_CFUNC("isServerRunning", ws_is_server_running);
-    
+
     #undef EXPORT_CFUNC
     #undef EXPORT_SLOW_CFUNC
     #undef EXPORT_YIELDABLE
-    
+
     return mod;
 }

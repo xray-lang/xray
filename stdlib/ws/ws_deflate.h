@@ -19,6 +19,7 @@
 #include <stddef.h>
 #include <stdint.h>
 #include <stdbool.h>
+#include "../../src/base/xdefs.h"
 
 /*
  * Compress payload for permessage-deflate.
@@ -26,7 +27,7 @@
  * Caller must xr_free(*out) when done.
  * Returns 0 on success, -1 on error.
  */
-int xr_ws_deflate_compress(const uint8_t *in, size_t in_len,
+XR_FUNC int xr_ws_deflate_compress(const uint8_t *in, size_t in_len,
                            uint8_t **out, size_t *out_len);
 
 /*
@@ -40,7 +41,7 @@ int xr_ws_deflate_compress(const uint8_t *in, size_t in_len,
  * Caller must xr_free(*out) when done.
  * Returns 0 on success, -1 on error or bomb-limit exceeded.
  */
-int xr_ws_deflate_decompress(const uint8_t *in, size_t in_len,
+XR_FUNC int xr_ws_deflate_decompress(const uint8_t *in, size_t in_len,
                              size_t max_out,
                              uint8_t **out, size_t *out_len);
 

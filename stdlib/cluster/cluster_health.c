@@ -208,7 +208,7 @@ void xr_cluster_mark_dead(XrCluster *c, const char *name) {
     // Grow dynamic array if needed
     if (c->tombstone_count >= c->tombstone_cap) {
         int new_cap = c->tombstone_cap * 2;
-        void *new_arr = realloc(c->tombstones, (size_t)new_cap * sizeof(c->tombstones[0]));
+        void *new_arr = xr_realloc(c->tombstones, (size_t)new_cap * sizeof(c->tombstones[0]));
         if (new_arr) {
             c->tombstones = new_arr;
             c->tombstone_cap = new_cap;
