@@ -433,18 +433,32 @@ uint16_t xr_class_builder_calculate_instance_size(const XrClassBuilder *builder)
 
 /* ========== VTable Generation ========== */
 
+// Locate the parent's vtable slot for `symbol` in O(1): the parent's
+// method_symbol_to_index table maps a symbol to its slot in
+// parent->methods[], and each method already caches its vtable slot in
+// method->vtable_index. The previous linear scan across the parent's
+// vtable has no reason to exist anymore.
 static int find_method_in_parent_vtable(XrClass *parent_class, int symbol) {
-    if (!parent_class || !parent_class->vtable) {
+    if (!parent_class || !parent_class->vtable || symbol < 0) {
         return -1;
     }
 
-    for (int i = 0; i < parent_class->vtable_size; i++) {
-        if (parent_class->vtable[i] && parent_class->vtable[i]->symbol == symbol) {
-            return i;
-        }
+    if (!parent_class->method_symbol_to_index
+        || symbol >= parent_class->method_map_capacity) {
+        return -1;
     }
 
-    return -1;
+    int method_idx = parent_class->method_symbol_to_index[symbol];
+    if (method_idx < 0 || method_idx >= parent_class->method_count) {
+        return -1;
+    }
+
+    int vtable_idx = parent_class->methods[method_idx].vtable_index;
+    if (vtable_idx < 0 || vtable_idx >= parent_class->vtable_size) {
+        return -1;
+    }
+
+    return vtable_idx;
 }
 
 int xr_class_builder_generate_vtable(XrClassBuilder *builder, XrClass *cls) {
@@ -863,9 +877,10 @@ XrClass* xr_class_builder_finalize(XrClassBuilder *builder) {
         }
     }
 
-    xr_class_build_itable(cls);
-
-    // Generate method symbol-to-index map
+    // Generate method symbol-to-index map BEFORE build_itable so that
+    // the itable resolver can do an O(1) symbol -> method slot lookup
+    // instead of a linear scan across cls->methods for every interface
+    // method.
     if (cls->method_count > 0) {
         int max_symbol = 0;
         for (int i = 0; i < cls->method_count; i++) {
@@ -892,6 +907,8 @@ XrClass* xr_class_builder_finalize(XrClassBuilder *builder) {
             }
         }
     }
+
+    xr_class_build_itable(cls);
 
     xr_class_compute_operator_flags(cls);
 
