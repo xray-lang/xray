@@ -215,6 +215,13 @@ void xr_bytes_to_hex(const uint8_t *bytes, size_t len, char *output);
 // Returns: number of bytes written, or -1 on error (invalid hex or buffer too small)
 int xr_hex_to_bytes(const char *hex, uint8_t *output, size_t max_len);
 
+// Securely wipe a memory region so the compiler cannot elide it.
+// Uses explicit_bzero / memset_s / SecureZeroMemory where available,
+// falling back to a volatile write loop.
+// Use this to scrub keys, nonces, and handshake proofs before the
+// buffer falls out of scope.
+void xr_secure_wipe(void *ptr, size_t len);
+
 /* ========== Module Loading ========== */
 
 // Load crypto module and register all functions

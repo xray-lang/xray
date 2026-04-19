@@ -56,6 +56,9 @@ void xr_cluster_compute_proof(const char *secret, const uint8_t *nonce,
     memcpy(input, secret, secret_len);
     memcpy(input + secret_len, nonce, XR_NONCE_SIZE);
     xr_sha256(input, total, proof_out);
+    // Scrub the composed (secret || nonce) buffer so the cluster shared
+    // secret does not linger on the stack after handshake returns.
+    xr_secure_wipe(input, sizeof(input));
 }
 
 /* ========== Output Queue ========== */

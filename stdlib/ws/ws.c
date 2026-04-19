@@ -1149,14 +1149,17 @@ XrWsError xr_ws_close(XrWebSocket *ws, int code, const char *reason) {
     return WS_OK;
 }
 
-// Send a compressed frame: deflate payload, set RSV1 bit
+// Send a compressed frame: deflate payload, set RSV1 bit.
+// On compression failure this reports an error rather than falling back
+// to an uncompressed frame: the peer negotiated deflate and expects RSV1=1,
+// so sending a raw frame would be a protocol error on the wire.
 static int ws_send_frame_compressed(XrWebSocket *ws, XrWsOpcode opcode,
                                      const void *data, size_t len) {
     uint8_t *compressed = NULL;
     size_t compressed_len = 0;
     if (xr_ws_deflate_compress((const uint8_t *)data, len,
                                &compressed, &compressed_len) != 0) {
-        return ws_send_frame_writev(ws, opcode, data, len); // fallback
+        return -1;
     }
 
     // Build header with RSV1 bit set
@@ -1178,16 +1181,15 @@ static int ws_send_frame_compressed(XrWebSocket *ws, XrWsOpcode opcode,
     } else {
         // Client: mask then send
         size_t frame_len = header_len + compressed_len;
-        char *frame = (char *)malloc(frame_len);
-        if (!frame) { free(compressed); return -1; }
+        char *frame = (char *)xr_malloc(frame_len);
+        if (!frame) { xr_free(compressed); return -1; }
         memcpy(frame, header, header_len);
-        for (size_t i = 0; i < compressed_len; i++) {
-            frame[header_len + i] = (char)(compressed[i] ^ mask_key[i & 3]);
-        }
+        apply_mask(compressed, (unsigned char *)(frame + header_len),
+                   compressed_len, mask_key);
         ret = ws_send_all(ws, frame, frame_len) < 0 ? -1 : 0;
-        free(frame);
+        xr_free(frame);
     }
-    free(compressed);
+    xr_free(compressed);
     return ret;
 }
 
@@ -1657,12 +1659,32 @@ process_frame:
     if (ws->frame_rsv1 && ws->deflate_enabled && msg->data && msg->len > 0) {
         uint8_t *decompressed = NULL;
         size_t decompressed_len = 0;
+        // Zip-bomb guard: bound decompressed output by max_message_size.
+        // RFC 7692 has no transport-level size limit, so we reuse the WS
+        // frame budget which is also the fragmented-message limit.
+        size_t max_out = ws->config.max_message_size;
+        if (max_out == 0) max_out = WS_DEFAULT_MAX_MESSAGE_SIZE;
         if (xr_ws_deflate_decompress((const uint8_t *)msg->data, msg->len,
+                                     max_out,
                                      &decompressed, &decompressed_len) == 0) {
-            if (!msg->_data_inplace) free(msg->data);
+            if (!msg->_data_inplace) xr_free(msg->data);
             msg->data = (char *)decompressed;
             msg->len = decompressed_len;
             msg->_data_inplace = false;
+        } else {
+            // Decompression failed or exceeded size budget.
+            // Treat as protocol / policy error and close connection.
+            if (!msg->_data_inplace) xr_free(msg->data);
+            msg->data = NULL;
+            msg->len = 0;
+            msg->_data_inplace = false;
+            if (ws->state == WS_STATE_OPEN) {
+                char cd[2] = {(WS_CLOSE_TOO_LARGE >> 8) & 0xFF, WS_CLOSE_TOO_LARGE & 0xFF};
+                send_close_frame(ws, cd, 2, !ws->is_server);
+            }
+            ws->close_code = WS_CLOSE_TOO_LARGE;
+            ws->state = WS_STATE_CLOSED;
+            return NULL;
         }
     }
 

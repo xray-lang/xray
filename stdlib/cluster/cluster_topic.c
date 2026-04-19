@@ -19,8 +19,8 @@
 #include "../../src/coro/xchannel.h"
 #include "../../src/runtime/xisolate_internal.h"
 #include "../../src/base/xhash.h"
+#include "../../src/base/xmalloc.h"
 
-#include <stdlib.h>
 #include <string.h>
 
 static inline uint32_t str_hash_topic(const char *s) {
@@ -157,16 +157,51 @@ void xr_cluster_topic_unsubscribe(XrCluster *c, const char *pattern) {
 void xr_cluster_topic_deliver_local(XrCluster *c, const char *topic, XrValue value) {
     if (!c || !topic) return;
 
+    /*
+     * Collect matching notify_ch pointers under the lock, deliver outside.
+     *
+     * Why: xr_channel_try_send wakes select() waiters, which may run user
+     * callbacks that re-enter cluster.publish / cluster.subscribe. If we
+     * called try_send under topics_lock, that re-entry would recursively
+     * acquire the same lock -> deadlock (spinlock) or corruption.
+     *
+     * Budget: 256 matches per publish is plenty for typical topologies;
+     * overflow is silently dropped (at-most-once semantics).
+     */
+    #define XR_TOPIC_DELIVER_INLINE 32
+    #define XR_TOPIC_DELIVER_MAX    256
+    struct XrChannel *inline_targets[XR_TOPIC_DELIVER_INLINE];
+    struct XrChannel **targets = inline_targets;
+    int target_count = 0;
+    int target_cap = XR_TOPIC_DELIVER_INLINE;
+
     xr_spinlock_lock(&c->topics_lock);
 
     // Fast path: exact match via hash lookup
     uint32_t exact_bucket = str_hash_topic(topic) % XR_CLUSTER_TOPIC_BUCKETS;
     XrTopicSubscription *sub = c->topic_buckets[exact_bucket];
     while (sub) {
-        if (strcmp(sub->pattern, topic) == 0) {
-            if (sub->notify_ch && !xr_channel_is_closed(sub->notify_ch)) {
-                xr_channel_try_send(sub->notify_ch, value);
+        if (strcmp(sub->pattern, topic) == 0 &&
+            sub->notify_ch && !xr_channel_is_closed(sub->notify_ch)) {
+            if (target_count >= target_cap) {
+                if (target_cap >= XR_TOPIC_DELIVER_MAX) goto collect_done;
+                int new_cap = target_cap * 2;
+                if (new_cap > XR_TOPIC_DELIVER_MAX) new_cap = XR_TOPIC_DELIVER_MAX;
+                struct XrChannel **grown;
+                if (targets == inline_targets) {
+                    grown = (struct XrChannel **)xr_malloc(
+                        (size_t)new_cap * sizeof(*grown));
+                    if (grown) memcpy(grown, targets,
+                                      (size_t)target_count * sizeof(*grown));
+                } else {
+                    grown = (struct XrChannel **)xr_realloc(
+                        targets, (size_t)new_cap * sizeof(*grown));
+                }
+                if (!grown) goto collect_done;
+                targets = grown;
+                target_cap = new_cap;
             }
+            targets[target_count++] = sub->notify_ch;
         }
         sub = sub->next;
     }
@@ -178,15 +213,47 @@ void xr_cluster_topic_deliver_local(XrCluster *c, const char *topic, XrValue val
             // Skip exact patterns (already handled above)
             bool has_wildcard = (strchr(sub->pattern, '*') != NULL ||
                                  strchr(sub->pattern, '>') != NULL);
-            if (has_wildcard && xr_topic_match(sub->pattern, topic)) {
-                if (sub->notify_ch && !xr_channel_is_closed(sub->notify_ch)) {
-                    xr_channel_try_send(sub->notify_ch, value);
+            if (has_wildcard && xr_topic_match(sub->pattern, topic) &&
+                sub->notify_ch && !xr_channel_is_closed(sub->notify_ch)) {
+                if (target_count >= target_cap) {
+                    if (target_cap >= XR_TOPIC_DELIVER_MAX) goto collect_done;
+                    int new_cap = target_cap * 2;
+                    if (new_cap > XR_TOPIC_DELIVER_MAX) new_cap = XR_TOPIC_DELIVER_MAX;
+                    struct XrChannel **grown;
+                    if (targets == inline_targets) {
+                        grown = (struct XrChannel **)xr_malloc(
+                            (size_t)new_cap * sizeof(*grown));
+                        if (grown) memcpy(grown, targets,
+                                          (size_t)target_count * sizeof(*grown));
+                    } else {
+                        grown = (struct XrChannel **)xr_realloc(
+                            targets, (size_t)new_cap * sizeof(*grown));
+                    }
+                    if (!grown) goto collect_done;
+                    targets = grown;
+                    target_cap = new_cap;
                 }
+                targets[target_count++] = sub->notify_ch;
             }
             sub = sub->next;
         }
     }
+
+collect_done:
     xr_spinlock_unlock(&c->topics_lock);
+
+    // Deliver to collected targets outside the lock. Safe now:
+    // - try_send may wake select() waiters and trigger re-entry
+    // - the subscription table can be freely mutated in response
+    for (int i = 0; i < target_count; i++) {
+        // Channel may have been closed by another thread between collection
+        // and delivery; try_send handles closed channels gracefully.
+        xr_channel_try_send(targets[i], value);
+    }
+
+    if (targets != inline_targets) xr_free(targets);
+    #undef XR_TOPIC_DELIVER_INLINE
+    #undef XR_TOPIC_DELIVER_MAX
 }
 
 void xr_cluster_topic_handle_publish(XrCluster *c, const char *topic,
