@@ -19,6 +19,7 @@
 #include "xclass_lookup.h"
 #include "../../base/xmalloc.h"
 #include "../../base/xchecks.h"
+#include "../../base/xlog.h"
 #include "../xisolate_api.h"
 #include "xclass_system.h"
 #include "xreflect_registry.h"
@@ -60,16 +61,16 @@ uint32_t xr_symbol_to_op_flag(int symbol) {
     if (symbol == SYMBOL_OP_INC) return XR_OP_INC_FLAG;
     if (symbol == SYMBOL_OP_DEC) return XR_OP_DEC_FLAG;
     if (symbol == SYMBOL_OP_NOT) return XR_OP_NOT_FLAG;
-    
+
     return 0;
 }
 
 // Compute operator overload flags (call once after class creation)
 void xr_class_compute_operator_flags(XrClass *cls) {
     if (!cls) return;
-    
+
     cls->operator_flags = 0;
-    
+
     // Inherit parent's operator flags
     if (cls->super) {
         cls->operator_flags = cls->super->operator_flags;
@@ -77,7 +78,7 @@ void xr_class_compute_operator_flags(XrClass *cls) {
     if (cls->methods && cls->method_count > 0) {
         for (int i = 0; i < cls->method_count; i++) {
             XrMethod *method = &cls->methods[i];
-            
+
             if (method->type == XMETHOD_NONE) {
                 continue;
             }
@@ -94,102 +95,65 @@ void xr_class_compute_operator_flags(XrClass *cls) {
 static XrClass* xr_class_new_single(XrayIsolate *X, const char *name) {
     (void)X;
     XR_DCHECK(name != NULL, "Class name must not be NULL");
-    
+
     XrClass *cls = XR_ALLOCATE(XrClass);
+    if (!cls) return NULL;
+
+    // Zero all fields first; XR_ALLOCATE (xr_malloc) does not clear memory.
+    // Fields like field_default_values / struct_layout / reflect_cache /
+    // type_metadata would otherwise hold garbage and trip xr_class_free.
+    memset(cls, 0, sizeof(*cls));
+
     xr_gc_header_init_type(&cls->gc, XR_TCLASS);
     cls->name = xr_strdup(name);
-    cls->super = NULL;
-    
-    // Initialize primary supers array (root class)
-    cls->depth = 0;
+
+    // Root class: primary_supers[0] == self, depth == 0
     cls->primary_supers[0] = cls;
-    for (int i = 1; i < 8; i++) {
-        cls->primary_supers[i] = NULL;
-    }
-    
-    // Field definition
-    cls->fields = NULL;
-    cls->field_count = 0;
-    cls->own_field_count = 0;
     cls->instance_size = sizeof(XrGCHeader);
-    cls->field_symbol_to_index = NULL;
-    cls->field_map_capacity = 0;
-    
-    // Methods
-    cls->methods = NULL;
-    cls->method_count = 0;
-    cls->vtable = NULL;
-    cls->vtable_size = 0;
-    cls->own_method_start = 0;
-    
-    // Static fields
-    cls->static_field_values = NULL;
-    cls->static_field_count = 0;
-    
-    // Method symbol mapping
-    cls->method_symbol_to_index = NULL;
-    cls->method_map_capacity = 0;
-    
-    // Interfaces
-    cls->interfaces = NULL;
-    cls->interface_count = 0;
-    
-    // ITable
-    cls->itable = NULL;
-    cls->itable_size = 0;
-    
-    // Abstract methods
-    cls->abstract_methods = NULL;
-    cls->abstract_method_count = 0;
-    
-    // Flags
-    cls->flags = 0;
-    
-    cls->operator_flags = 0;
-    
+
     return cls;
 }
 
 XrClass* xr_class_new(XrayIsolate *X, const char *name, XrClass *super) {
     XR_DCHECK(name != NULL, "Class name must not be NULL");
-    
+
     XrClass *cls = xr_class_new_single(X, name);
-    
+
     // Register to reflection system
     if (X && xr_isolate_get_type_registry(X)) {
         xr_registry_register_class(X, cls);
     }
-    
+
     if (super) {
         xr_class_set_super(cls, super);
     }
-    
+
     return cls;
 }
 
 // Set superclass (establish inheritance)
 void xr_class_set_super(XrClass *subclass, XrClass *superclass) {
     if (!subclass || !superclass) return;
-    
+
     // Cannot inherit from a final class
     if (superclass->flags & XR_CLASS_FINAL) {
-        fprintf(stderr, "Error: class '%s' cannot inherit from final class '%s'\n",
-                subclass->name ? subclass->name : "<anonymous>",
-                superclass->name ? superclass->name : "<anonymous>");
+        xr_log_warning("class", "class '%s' cannot inherit from final class '%s'",
+                       subclass->name ? subclass->name : "<anonymous>",
+                       superclass->name ? superclass->name : "<anonymous>");
         return;
     }
-    
+
     subclass->super = superclass;
-    
+
     // Mark parent as having subclasses (CHA devirtualization)
     superclass->flags |= XR_CLASS_HAS_SUBCLASSES;
-    
+
     // Inherit parent's operator flags
     subclass->operator_flags |= superclass->operator_flags;
-    
+
     // Update primary supers array
     subclass->depth = superclass->depth + 1;
-    
+
     if (subclass->depth < 8) {
         for (int i = 0; i <= superclass->depth; i++) {
             subclass->primary_supers[i] = superclass->primary_supers[i];
@@ -199,21 +163,29 @@ void xr_class_set_super(XrClass *subclass, XrClass *superclass) {
             subclass->primary_supers[i] = NULL;
         }
     } else {
-        // Depth >= 8: fill first 7 ancestors
-        XrClass *c = superclass;
-        for (int i = 7; i >= 0 && c != NULL; i--) {
-            subclass->primary_supers[i] = c;
-            c = c->super;
+        // Depth >= 8: keep the 8 shallowest ancestors in
+        // [Object, parent1, ..., parent7] order so that instanceof's
+        // O(1) lookup remains correct for any target with depth < 8.
+        // Deeper targets fall back to linear scan in xr_class_instanceof
+        // (will be replaced by a secondary supers hash in P10).
+        XrClass *chain[256];
+        int n = 0;
+        for (XrClass *c = subclass; c != NULL && n < 256; c = c->super) {
+            chain[n++] = c;
+        }
+        // chain[n-1] is Object, chain[0] is subclass itself.
+        for (int i = 0; i < 8 && n - 1 - i >= 0; i++) {
+            subclass->primary_supers[i] = chain[n - 1 - i];
         }
     }
-    
+
     // Update field layout
     int parent_instance_field_count = xr_class_instance_field_count(superclass);
     int own_instance_fields = subclass->own_field_count - subclass->static_field_count;
     int old_instance_field_count = xr_class_instance_field_count(subclass);
-    
+
     subclass->field_count = parent_instance_field_count + subclass->own_field_count;
-    
+
     // Resize field_default_values when inherited fields increase the total
     int new_instance_field_count = parent_instance_field_count + own_instance_fields;
     if (new_instance_field_count > old_instance_field_count) {
@@ -236,29 +208,29 @@ void xr_class_set_super(XrClass *subclass, XrClass *superclass) {
             subclass->field_default_values = new_defaults;
         }
     }
-    
+
     // Rebuild symbol mapping
     if (subclass->field_symbol_to_index && subclass->own_field_count > 0) {
         for (int i = 0; i < subclass->field_map_capacity; i++) {
             subclass->field_symbol_to_index[i] = -1;
         }
-        
+
         int field_base_index = parent_instance_field_count;
         for (int i = 0; i < own_instance_fields; i++) {
             int global_idx = field_base_index + i;
             subclass->field_symbol_to_index[subclass->fields[i].symbol] = global_idx;
         }
-        
+
         int total_instance_fields = parent_instance_field_count + own_instance_fields;
         for (int i = 0; i < subclass->static_field_count; i++) {
             int field_idx = own_instance_fields + i;
-            subclass->field_symbol_to_index[subclass->fields[field_idx].symbol] = 
+            subclass->field_symbol_to_index[subclass->fields[field_idx].symbol] =
                 total_instance_fields + i;
         }
     }
-    
+
     subclass->instance_size = superclass->instance_size + own_instance_fields * sizeof(void*);
-    
+
     // Flatten parent instance methods into subclass methods[] array.
     // At this point, subclass->methods[] may only contain own methods (from CLASS_FROM_DESC
     // with Object as placeholder super). Now rebuild with the real superclass.
@@ -266,7 +238,7 @@ void xr_class_set_super(XrClass *subclass, XrClass *superclass) {
         int parent_mc = superclass->method_count;  // parent instance methods (flattened)
         int own_mc = subclass->method_count;        // current own methods
         int own_static = subclass->static_method_count;
-        
+
         // Count overrides (O(n) via parent's symbol-to-index table)
         int override_cnt = 0;
         if (superclass->method_symbol_to_index) {
@@ -280,7 +252,7 @@ void xr_class_set_super(XrClass *subclass, XrClass *superclass) {
                 }
             }
         }
-        
+
         // Count own non-static methods that are NOT overrides
         int own_instance = 0;
         for (int i = 0; i < own_mc; i++) {
@@ -289,15 +261,15 @@ void xr_class_set_super(XrClass *subclass, XrClass *superclass) {
         int new_own = own_instance - override_cnt;
         int flat_count = parent_mc + new_own;
         int total = flat_count + own_static;
-        
+
         if (total > 0 && parent_mc > 0) {
             // Save own methods to temp buffer
             XrMethod *own_methods = (XrMethod*)xr_malloc(own_mc * sizeof(XrMethod));
             memcpy(own_methods, subclass->methods, own_mc * sizeof(XrMethod));
-            
+
             // Reallocate methods array for flattened layout
             XrMethod *new_methods = (XrMethod*)xr_malloc(total * sizeof(XrMethod));
-            
+
             // Step 1: copy parent instance methods
             for (int i = 0; i < parent_mc; i++) {
                 new_methods[i] = superclass->methods[i];
@@ -305,12 +277,12 @@ void xr_class_set_super(XrClass *subclass, XrClass *superclass) {
                     new_methods[i].name = xr_strdup(superclass->methods[i].name);
                 }
             }
-            
+
             // Step 2: apply own instance methods (override or append)
             int append_idx = parent_mc;
             for (int i = 0; i < own_mc; i++) {
                 if (own_methods[i].flags & XMETHOD_FLAG_STATIC) continue;
-                
+
                 // O(1) override lookup via parent's symbol table
                 int slot = -1;
                 if (superclass->method_symbol_to_index) {
@@ -320,7 +292,7 @@ void xr_class_set_super(XrClass *subclass, XrClass *superclass) {
                         if (idx >= 0 && idx < parent_mc) slot = idx;
                     }
                 }
-                
+
                 if (slot >= 0) {
                     // Override: free inherited name, replace
                     if (new_methods[slot].name) xr_free((void*)new_methods[slot].name);
@@ -331,7 +303,7 @@ void xr_class_set_super(XrClass *subclass, XrClass *superclass) {
                     append_idx++;
                 }
             }
-            
+
             // Step 3: copy static methods at the end
             int static_idx = flat_count;
             for (int i = 0; i < own_mc; i++) {
@@ -339,14 +311,14 @@ void xr_class_set_super(XrClass *subclass, XrClass *superclass) {
                     new_methods[static_idx++] = own_methods[i];
                 }
             }
-            
+
             xr_free(subclass->methods);
             subclass->methods = new_methods;
             subclass->method_count = flat_count;
             // static_method_count stays the same
-            
+
             xr_free(own_methods);
-            
+
             // Rebuild method_symbol_to_index
             if (subclass->method_symbol_to_index) {
                 xr_free(subclass->method_symbol_to_index);
@@ -372,14 +344,14 @@ void xr_class_set_super(XrClass *subclass, XrClass *superclass) {
             }
         }
     }
-    
+
     // Rebuild vtable (inherit from parent)
     if (subclass->vtable) {
         xr_free(subclass->vtable);
         subclass->vtable = NULL;
         subclass->vtable_size = 0;
     }
-    
+
     if (superclass->vtable && superclass->vtable_size > 0) {
         subclass->vtable_size = superclass->vtable_size;
         subclass->vtable = (XrMethod**)xr_malloc(subclass->vtable_size * sizeof(XrMethod*));
@@ -388,16 +360,16 @@ void xr_class_set_super(XrClass *subclass, XrClass *superclass) {
     } else {
         subclass->own_method_start = 0;
     }
-    
+
     // Process subclass methods (override or add)
     for (int i = 0; i < subclass->method_count; i++) {
         XrMethod *method = &subclass->methods[i];
-        
+
         if (method->flags & XMETHOD_FLAG_STATIC) {
             method->vtable_index = -1;
             continue;
         }
-        
+
         int parent_vtable_idx = -1;
         if (superclass->vtable) {
             for (int j = 0; j < superclass->vtable_size; j++) {
@@ -407,15 +379,16 @@ void xr_class_set_super(XrClass *subclass, XrClass *superclass) {
                 }
             }
         }
-        
+
         if (parent_vtable_idx >= 0) {
             // Cannot override a final method
             XrMethod *parent_method = superclass->vtable[parent_vtable_idx];
             if (parent_method && (parent_method->flags & XMETHOD_FLAG_FINAL)) {
-                fprintf(stderr, "Error: method '%s' in class '%s' cannot override final method from '%s'\n",
-                        method->name ? method->name : "<unknown>",
-                        subclass->name ? subclass->name : "<anonymous>",
-                        superclass->name ? superclass->name : "<anonymous>");
+                xr_log_warning("class",
+                               "method '%s' in class '%s' cannot override final method from '%s'",
+                               method->name ? method->name : "<unknown>",
+                               subclass->name ? subclass->name : "<anonymous>",
+                               superclass->name ? superclass->name : "<anonymous>");
                 continue;
             }
             // Override parent method
@@ -436,10 +409,10 @@ void xr_class_set_super(XrClass *subclass, XrClass *superclass) {
             subclass->vtable_size++;
         }
     }
-    
+
     // Rebuild ITable (if interfaces exist)
     xr_class_build_itable(subclass);
-    
+
     xr_class_inherit_abstract_methods(subclass, superclass);
 }
 
@@ -453,21 +426,21 @@ const XrFieldDescriptor* xr_class_get_field(const XrClass *cls, int index) {
 
 int xr_class_lookup_field_by_name(XrClass *cls, const char *name) {
     if (!cls || !name) return -1;
-    
+
     for (int i = 0; i < cls->field_count; i++) {
-        if (cls->fields && cls->fields[i].name && 
+        if (cls->fields && cls->fields[i].name &&
             strcmp(cls->fields[i].name, name) == 0) {
             return i;
         }
     }
-    
+
     return -1;
 }
 
 // O(1) lookup + O(depth) recursive parent lookup
 int xr_class_lookup_field(XrClass *cls, int symbol) {
     if (!cls || symbol < 0) return -1;
-    
+
     // O(1) symbol mapping lookup
     if (cls->field_symbol_to_index && cls->field_map_capacity > 0) {
         if (symbol >= 0 && symbol < cls->field_map_capacity) {
@@ -477,32 +450,32 @@ int xr_class_lookup_field(XrClass *cls, int symbol) {
             }
         }
     }
-    
+
     // Recursive parent lookup
     if (cls->super) {
         return xr_class_lookup_field(cls->super, symbol);
     }
-    
+
     return -1;
 }
 
 // Method lookup by symbol
 XrMethod* xr_class_lookup_method(XrClass *cls, int symbol) {
     if (!cls || symbol < 0) return NULL;
-    
+
     // Fast path: O(1) symbol mapping
     if (cls->method_symbol_to_index && symbol < cls->method_map_capacity) {
         int method_idx = cls->method_symbol_to_index[symbol];
-        
+
         if (method_idx >= 0 && method_idx < cls->method_count) {
             XrMethod *method = &cls->methods[method_idx];
-            
+
             if (method->symbol == symbol && method->type != XMETHOD_NONE) {
                 // VTable optimization for closure methods only
                 // Primitive methods don't use vtable dispatch
                 if (method->type != XMETHOD_PRIMITIVE &&
-                    method->vtable_index >= 0 && 
-                    cls->vtable && 
+                    method->vtable_index >= 0 &&
+                    cls->vtable &&
                     method->vtable_index < cls->vtable_size) {
                     XrMethod *vtable_method = cls->vtable[method->vtable_index];
                     if (vtable_method && vtable_method->type != XMETHOD_NONE) {
@@ -513,16 +486,16 @@ XrMethod* xr_class_lookup_method(XrClass *cls, int symbol) {
             }
         }
     }
-    
+
     // Fallback: O(n) traversal
     for (int i = 0; i < cls->method_count; i++) {
         if (cls->methods[i].symbol == symbol && cls->methods[i].type != XMETHOD_NONE) {
             XrMethod *method = &cls->methods[i];
-            
+
             // VTable optimization for closure methods only
             if (method->type != XMETHOD_PRIMITIVE &&
-                method->vtable_index >= 0 && 
-                cls->vtable && 
+                method->vtable_index >= 0 &&
+                cls->vtable &&
                 method->vtable_index < cls->vtable_size) {
                 XrMethod *vtable_method = cls->vtable[method->vtable_index];
                 if (vtable_method && vtable_method->type != XMETHOD_NONE) {
@@ -532,12 +505,12 @@ XrMethod* xr_class_lookup_method(XrClass *cls, int symbol) {
             return method;
         }
     }
-    
+
     // Recursive parent lookup
     if (cls->super) {
         return xr_class_lookup_method(cls->super, symbol);
     }
-    
+
     return NULL;
 }
 
@@ -549,12 +522,12 @@ XrClass* xr_value_get_class(XrayIsolate *X, XrValue value) {
     if (XR_IS_PTR(value)) {
         XrGCHeader *gc = (XrGCHeader*)XR_TO_PTR(value);
         XrObjType type = XR_GC_GET_TYPE(gc);
-        
+
         if (type == XR_TINSTANCE) {
             XrInstance *inst = (XrInstance*)gc;
             return inst->klass;
         }
-        
+
         if (type == XR_TENUM_VALUE) {
             XrEnumValue *ev = (XrEnumValue*)gc;
             if (ev->enum_name) {
@@ -564,12 +537,12 @@ XrClass* xr_value_get_class(XrayIsolate *X, XrValue value) {
             XrayCoreClasses *core = xr_isolate_get_core_classes(X);
             return core ? core->enumClass : NULL;
         }
-        
+
         if (type == XR_TENUM_TYPE) {
             XrEnumType *et = (XrEnumType*)gc;
             return et->enum_class;
         }
-        
+
         XrayCoreClasses *_core = xr_isolate_get_core_classes(X);
         if (_core) {
             switch (type) {
@@ -581,15 +554,15 @@ XrClass* xr_value_get_class(XrayIsolate *X, XrValue value) {
                     break;
             }
         }
-        
+
         return NULL;
     }
-    
+
     XrayCoreClasses *core = xr_isolate_get_core_classes(X);
     if (!core) {
         return NULL;
     }
-    
+
     if (XR_IS_INT(value)) {
         return core->intClass;
     }
@@ -602,11 +575,11 @@ XrClass* xr_value_get_class(XrayIsolate *X, XrValue value) {
     if (XR_IS_NULL(value)) {
         return core->nullClass;
     }
-    
+
     if (XR_IS_PTR(value)) {
         XrGCHeader *gc = (XrGCHeader*)XR_TO_PTR(value);
         XrObjType type = XR_GC_GET_TYPE(gc);
-        
+
         switch (type) {
             case XR_TARRAY_SLICE:
                 return core->arraySliceClass;
@@ -614,7 +587,7 @@ XrClass* xr_value_get_class(XrayIsolate *X, XrValue value) {
                 break;
         }
     }
-    
+
     return NULL;
 }
 
@@ -626,13 +599,13 @@ void xr_class_print(XrClass *cls) {
         printf("null class\n");
         return;
     }
-    
+
     printf("Class %s", cls->name);
     if (cls->super) {
         printf(" extends %s", cls->super->name);
     }
     printf(" {\n");
-    
+
     printf("  Fields (%d):\n", cls->field_count);
     for (int i = 0; i < cls->field_count; i++) {
         if (cls->fields && cls->fields[i].name) {
@@ -643,7 +616,7 @@ void xr_class_print(XrClass *cls) {
             printf("\n");
         }
     }
-    
+
     int method_count = 0;
     for (int i = 0; i < cls->method_count; i++) {
         if (cls->methods[i].type != XMETHOD_NONE) method_count++;
@@ -662,33 +635,33 @@ void xr_class_print(XrClass *cls) {
 XrClass* xr_interface_new(XrayIsolate *X, const char *name) {
     XR_DCHECK(X != NULL, "interface_new: NULL isolate");
     XR_DCHECK(name != NULL, "Interface name must not be NULL");
-    
+
     XrClass *iface = xr_class_new_single(X, name);
     iface->flags |= XR_CLASS_INTERFACE;
-    
+
     return iface;
 }
 
 bool xr_class_implements_interface(XrClass *cls, const char *interface_name) {
     if (!cls || !interface_name) return false;
-    
+
     for (int i = 0; i < cls->interface_count; i++) {
-        if (cls->interfaces[i] && cls->interfaces[i]->name && 
+        if (cls->interfaces[i] && cls->interfaces[i]->name &&
             strcmp(cls->interfaces[i]->name, interface_name) == 0) {
             return true;
         }
     }
-    
+
     if (cls->super) {
         return xr_class_implements_interface(cls->super, interface_name);
     }
-    
+
     return false;
 }
 
 bool xr_class_has_method(XrClass *cls, int method_symbol) {
     if (!cls || method_symbol < 0) return false;
-    
+
     XrMethod *method = xr_class_lookup_method(cls, method_symbol);
     return (method != NULL && method->type != XMETHOD_NONE);
 }
@@ -696,7 +669,7 @@ bool xr_class_has_method(XrClass *cls, int method_symbol) {
 // Fast interface check (pointer compare, walks inheritance chain)
 bool xr_class_implements_interface_fast(XrClass *cls, XrClass *iface) {
     if (!cls || !iface || !(iface->flags & XR_CLASS_INTERFACE)) return false;
-    
+
     for (XrClass *cur = cls; cur != NULL; cur = cur->super) {
         for (int i = 0; i < cur->interface_count; i++) {
             if (cur->interfaces[i] == iface) {
@@ -707,21 +680,21 @@ bool xr_class_implements_interface_fast(XrClass *cls, XrClass *iface) {
     return false;
 }
 
-int xr_class_verify_interface(XrClass *cls, XrClass *iface, 
+int xr_class_verify_interface(XrClass *cls, XrClass *iface,
                                char **errors, int max_errors) {
     if (!cls || !iface) return 0;
     if (!(iface->flags & XR_CLASS_INTERFACE)) return 0;
-    
+
     int satisfied_count = 0;
     int error_count = 0;
-    
+
     for (int i = 0; i < iface->method_count; i++) {
         XrMethod *iface_method = &iface->methods[i];
-        
+
         if (iface_method->type == XMETHOD_NONE) {
             continue;
         }
-        
+
         if (xr_class_has_method(cls, iface_method->symbol)) {
             satisfied_count++;
         } else {
@@ -731,7 +704,7 @@ int xr_class_verify_interface(XrClass *cls, XrClass *iface,
             }
         }
     }
-    
+
     return satisfied_count;
 }
 
@@ -739,7 +712,7 @@ int xr_class_verify_interface(XrClass *cls, XrClass *iface,
 
 int xr_class_build_itable(XrClass *cls) {
     if (!cls) return -1;
-    
+
     // Free existing itable
     if (cls->itable) {
         for (int i = 0; i < cls->itable_size; i++) {
@@ -751,33 +724,33 @@ int xr_class_build_itable(XrClass *cls) {
         cls->itable = NULL;
         cls->itable_size = 0;
     }
-    
+
     if (!cls->interfaces || cls->interface_count == 0) {
         return 0;
     }
-    
+
     cls->itable_size = cls->interface_count;
     cls->itable = (XrItableEntry*)xr_malloc(cls->itable_size * sizeof(XrItableEntry));
     if (!cls->itable) {
         return -1;
     }
-    
+
     for (int i = 0; i < cls->interface_count; i++) {
         XrClass *iface = cls->interfaces[i];
         if (!iface) continue;
-        
+
         cls->itable[i].interface = iface;
         cls->itable[i].method_count = iface->method_count;
-        
+
         if (iface->method_count > 0) {
             cls->itable[i].methods = (XrMethod**)xr_malloc(
                 iface->method_count * sizeof(XrMethod*));
             if (!cls->itable[i].methods) return -1;
-            
+
             for (int j = 0; j < iface->method_count; j++) {
                 XrMethod *iface_method = &iface->methods[j];
                 XrMethod *impl = NULL;
-                
+
                 for (int k = 0; k < cls->method_count; k++) {
                     if (cls->methods[k].symbol == iface_method->symbol) {
                         impl = &cls->methods[k];
@@ -790,7 +763,7 @@ int xr_class_build_itable(XrClass *cls) {
             cls->itable[i].methods = NULL;
         }
     }
-    
+
     return 0;
 }
 
@@ -803,7 +776,7 @@ void xr_class_mark_abstract(XrClass *cls) {
 
 void xr_class_add_abstract_method(XrClass *cls, int method_symbol) {
     if (!cls || method_symbol < 0) return;
-    
+
     int new_count = cls->abstract_method_count + 1;
     int *new_methods = (int*)xr_realloc(cls->abstract_methods, sizeof(int) * new_count);
     if (!new_methods) return;
@@ -815,32 +788,32 @@ void xr_class_add_abstract_method(XrClass *cls, int method_symbol) {
 // Check if class can be instantiated (not abstract and all abstract methods implemented)
 bool xr_class_can_instantiate(XrClass *cls) {
     if (!cls) return false;
-    
+
     if (cls->flags & XR_CLASS_ABSTRACT) return false;
-    
+
     for (int i = 0; i < cls->abstract_method_count; i++) {
         int symbol = cls->abstract_methods[i];
         XrMethod *method = xr_class_lookup_method(cls, symbol);
-        
-        if (!method || method->type == XMETHOD_NONE || 
+
+        if (!method || method->type == XMETHOD_NONE ||
             xr_method_is_abstract(method)) {
             return false;
         }
     }
-    
+
     return true;
 }
 
 // Inherit abstract methods from parent
 void xr_class_inherit_abstract_methods(XrClass *child, XrClass *parent) {
     if (!child || !parent) return;
-    
+
     if (parent->abstract_method_count == 0) return;
-    
+
     for (int i = 0; i < parent->abstract_method_count; i++) {
         int symbol = parent->abstract_methods[i];
         XrMethod *child_method = xr_class_lookup_method(child, symbol);
-        
+
         if (!child_method || child_method->type == XMETHOD_NONE ||
             xr_method_is_abstract(child_method)) {
             xr_class_add_abstract_method(child, symbol);
@@ -850,13 +823,13 @@ void xr_class_inherit_abstract_methods(XrClass *child, XrClass *parent) {
 
 bool xr_class_is_abstract_method(XrClass *cls, int method_symbol) {
     if (!cls || method_symbol < 0) return false;
-    
+
     for (int i = 0; i < cls->abstract_method_count; i++) {
         if (cls->abstract_methods[i] == method_symbol) {
             return true;
         }
     }
-    
+
     return false;
 }
 
@@ -865,21 +838,21 @@ bool xr_instance_of(void *obj, const XrClass *target) {
     if (obj == NULL || target == NULL) {
         return false;
     }
-    
+
     XrGCHeader *gc = (XrGCHeader*)obj;
     XrObjType type = XR_GC_GET_TYPE(gc);
-    
+
     if (type != XR_TINSTANCE) {
         return false;
     }
-    
+
     XrInstance *inst = (XrInstance*)obj;
     XrClass *obj_class = inst->klass;
-    
+
     if (obj_class == NULL) {
         return false;
     }
-    
+
     return xr_class_instanceof(obj_class, target);
 }
 
@@ -890,7 +863,7 @@ XrMethod* xr_class_lookup_interface_method(XrClass *cls, XrClass *iface, int met
     if (!cls || !iface || !cls->itable || method_index < 0) {
         return NULL;
     }
-    
+
     for (int i = 0; i < cls->itable_size; i++) {
         if (cls->itable[i].interface == iface) {
             if (method_index < cls->itable[i].method_count) {
@@ -899,7 +872,7 @@ XrMethod* xr_class_lookup_interface_method(XrClass *cls, XrClass *iface, int met
             return NULL;
         }
     }
-    
+
     return NULL;
 }
 
@@ -908,7 +881,7 @@ XrMethod* xr_class_lookup_interface_method_by_symbol(XrClass *cls, XrClass *ifac
     if (!cls || !iface || !cls->itable) {
         return NULL;
     }
-    
+
     for (int i = 0; i < cls->itable_size; i++) {
         if (cls->itable[i].interface == iface) {
             for (int j = 0; j < cls->itable[i].method_count; j++) {
@@ -920,7 +893,7 @@ XrMethod* xr_class_lookup_interface_method_by_symbol(XrClass *cls, XrClass *ifac
             return NULL;
         }
     }
-    
+
     return NULL;
 }
 
@@ -930,55 +903,55 @@ XrMethod* xr_class_lookup_interface_method_by_symbol(XrClass *cls, XrClass *ifac
  */
 void xr_class_free(XrClass *cls) {
     if (!cls) return;
-    
+
     // Free method table
     if (cls->methods) {
         xr_free(cls->methods);
         cls->methods = NULL;
     }
-    
+
     // Free method symbol lookup table
     if (cls->method_symbol_to_index) {
         xr_free(cls->method_symbol_to_index);
         cls->method_symbol_to_index = NULL;
     }
-    
+
     // Free instance fields table
     if (cls->fields) {
         xr_free(cls->fields);
         cls->fields = NULL;
     }
-    
+
     // Free field symbol lookup table
     if (cls->field_symbol_to_index) {
         xr_free(cls->field_symbol_to_index);
         cls->field_symbol_to_index = NULL;
     }
-    
+
     // Free field default values
     if (cls->field_default_values) {
         xr_free(cls->field_default_values);
         cls->field_default_values = NULL;
     }
-    
+
     // Free vtable
     if (cls->vtable) {
         xr_free(cls->vtable);
         cls->vtable = NULL;
     }
-    
+
     // Free static field values
     if (cls->static_field_values) {
         xr_free(cls->static_field_values);
         cls->static_field_values = NULL;
     }
-    
+
     // Free interface list
     if (cls->interfaces) {
         xr_free(cls->interfaces);
         cls->interfaces = NULL;
     }
-    
+
     // Free itable entries
     if (cls->itable) {
         for (int i = 0; i < cls->itable_size; i++) {
@@ -989,21 +962,21 @@ void xr_class_free(XrClass *cls) {
         xr_free(cls->itable);
         cls->itable = NULL;
     }
-    
+
     // Free abstract method indices
     if (cls->abstract_methods) {
         xr_free(cls->abstract_methods);
         cls->abstract_methods = NULL;
     }
-    
+
     // Free reflection cache
     if (cls->reflect_cache) {
         xr_reflect_cache_free(cls->reflect_cache);
         cls->reflect_cache = NULL;
     }
-    
+
     // Class name is interned string, not freed here
-    
+
     xr_free(cls);
 }
 
