@@ -31,14 +31,14 @@
 
 /*
  * Compile literal expression (returns XrExprDesc)
- * 
+ *
  * Optimization strategy:
  * - null/bool: use dedicated instructions (LOADNULL/LOADTRUE/LOADFALSE)
  * - small integer: use immediate instruction (LOADI)
  * - large integer/float/string: use constant pool (LOADK)
- * 
+ *
  * All literals return XEXPR_RELOC, supporting relocatability
- * 
+ *
  * @return Expression descriptor
  */
 XrExprDesc compile_literal(XrCompilerContext *ctx, XrCompiler *compiler, LiteralNode *node) {
@@ -48,7 +48,7 @@ XrExprDesc compile_literal(XrCompilerContext *ctx, XrCompiler *compiler, Literal
     XrExprDesc e = {0};
     xexpr_init(&e, XEXPR_VOID, -1);
     int pc;
-    
+
     // Use new LiteralKind enum
     switch (node->kind) {
         case LITERAL_KIND_NULL:
@@ -57,7 +57,7 @@ XrExprDesc compile_literal(XrCompilerContext *ctx, XrCompiler *compiler, Literal
             e.kind = XEXPR_RELOC;
             e.u.pc = pc;
             break;
-        
+
         case LITERAL_KIND_BOOL:
             // boolean constant: A=0 pending relocation
             if (node->raw_value.bool_val) {
@@ -69,10 +69,10 @@ XrExprDesc compile_literal(XrCompilerContext *ctx, XrCompiler *compiler, Literal
             e.u.pc = pc;
             e.compile_type = xr_type_new_bool();
             break;
-        
+
         case LITERAL_KIND_INT: {
             int64_t ival = node->raw_value.int_val;
-            
+
             if (ival >= -MAXARG_sBx && ival <= MAXARG_sBx) {
                 // Small integer: LOADI (AsBx format)
                 pc = emit_asbx(compiler->emitter, OP_LOADI, 0, (int)ival);
@@ -89,7 +89,7 @@ XrExprDesc compile_literal(XrCompilerContext *ctx, XrCompiler *compiler, Literal
             e.compile_type = xr_type_new_int();
             break;
         }
-        
+
         case LITERAL_KIND_FLOAT: {
             // float: A=0 pending relocation
             XrValue val = xr_float(node->raw_value.float_val);
@@ -100,7 +100,7 @@ XrExprDesc compile_literal(XrCompilerContext *ctx, XrCompiler *compiler, Literal
             e.compile_type = xr_type_new_float();
             break;
         }
-        
+
         case LITERAL_KIND_BIGINT: {
             // BigInt: compile-time constant, allocate on global GC
             const char *str = node->raw_value.bigint_val;
@@ -112,7 +112,7 @@ XrExprDesc compile_literal(XrCompilerContext *ctx, XrCompiler *compiler, Literal
             e.u.pc = pc;
             break;
         }
-        
+
         case LITERAL_KIND_STRING: {
             /*
              * String: A=0 pending relocation
@@ -129,7 +129,7 @@ XrExprDesc compile_literal(XrCompilerContext *ctx, XrCompiler *compiler, Literal
             e.compile_type = xr_type_new_string();
             break;
         }
-        
+
         case LITERAL_KIND_REGEX: {
             /*
              * Regex literal: compile to OP_REGEX_COMPILE instruction
@@ -140,28 +140,27 @@ XrExprDesc compile_literal(XrCompilerContext *ctx, XrCompiler *compiler, Literal
              */
             const char *pattern = node->raw_value.regex.pattern;
             const char *flags = node->raw_value.regex.flags;
-            
+
             // Add pattern and flags to constant pool
             XrString *pattern_str = xr_compile_time_intern(ctx->X, pattern, strlen(pattern));
             XrString *flags_str = xr_compile_time_intern(ctx->X, flags, strlen(flags));
-            
+
             int pattern_idx = xr_vm_proto_add_constant(compiler->proto, xr_string_value(pattern_str));
             int flags_idx = xr_vm_proto_add_constant(compiler->proto, xr_string_value(flags_str));
-            
+
             pc = emit_abc(compiler->emitter, OP_REGEX_COMPILE, 0, pattern_idx, flags_idx);
             e.kind = XEXPR_RELOC;
             e.u.pc = pc;
             break;
         }
-        
+
         default:
-            fprintf(stderr, "[Literal] Unsupported literal kind: %d\n", node->kind);
-            xr_compiler_error(ctx, compiler, "Unsupported literal kind");
+            xr_compiler_error(ctx, compiler, "unsupported literal kind: %d", node->kind);
             // Error case: return VOID
             e.kind = XEXPR_VOID;
             break;
     }
-    
+
     return e;
 }
 
