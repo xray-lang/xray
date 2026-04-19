@@ -28,6 +28,7 @@
  */
 
 #include "xir_regalloc.h"
+#include "xir_looptree.h"
 #include "../base/xchecks.h"
 #include "../base/xmalloc.h"
 #include "../coro/xcoroutine.h"  // XIR_SUSPEND_SPILL_MAX (suspend-bridge capacity)
@@ -901,8 +902,8 @@ static LsRange *split_between(LsCtx *ctx, LsRange *r, int32_t from, int32_t to) 
         int32_t bs = ctx->blk_start[i];
         if (bs <= from || bs >= to) continue;
 
-        int depth = ctx->func->blocks[i]->loop_depth;
-        if (depth < 0) depth = 0;
+        int depth = (int)xir_block_loop_depth(ctx->func,
+                                                ctx->func->blocks[i]->id);
 
         if (sp < 0 || depth < best_depth || (depth == best_depth && bs > sp)) {
             sp = bs;

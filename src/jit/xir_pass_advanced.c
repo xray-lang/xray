@@ -14,6 +14,8 @@
  */
 
 #include "xir_pass_internal.h"
+#include "xir_pass_limits.h"
+#include "xir_looptree.h"
 #include "../base/xchecks.h"
 
 // Forward declarations for type helpers used across passes
@@ -1243,7 +1245,7 @@ void xir_pass_auto_inline(XirFunc *func, XrProto *caller_proto) {
                 if (callee_depth >= max_callee_depth) continue;
 
                 // Loop-depth bonus: calls inside loops are more profitable
-                int depth_mult = (blk->loop_depth > 0) ? 2 : 1;
+                int depth_mult = (xir_block_loop_depth(func, blk->id) > 0) ? 2 : 1;
 
                 // Multi-tier inline decision with loop bonus and depth penalty.
                 // effective_size doubles per existing inline of this callee,
@@ -1622,8 +1624,8 @@ void xir_pass_propjnz(XirFunc *func) {
  */
 
 #define GCM_NOBID UINT32_MAX
-#define GCM_MAX_BLOCKS 512
-#define GCM_MAX_VREGS  512
+#define GCM_MAX_BLOCKS XIR_GCM_MAX_BLOCKS
+#define GCM_MAX_VREGS  XIR_GCM_MAX_VREGS
 
 static bool gcm_is_pinned(uint16_t op) {
     return !xir_op_is_pure(op);
@@ -1787,13 +1789,13 @@ void xir_pass_gcm(XirFunc *func) {
 
         // Walk from late up to early, find best loop depth
         uint32_t best_bid = l;
-        int best_depth = func->blocks[l]->loop_depth;
+        int best_depth = (int)xir_block_loop_depth(func, func->blocks[l]->id);
         uint32_t cur = l;
         uint32_t limit = nblk;
         while (cur != e && limit-- > 0) {
             cur = idom[cur];
             if (cur >= nblk) break;
-            int ld = func->blocks[cur]->loop_depth;
+            int ld = (int)xir_block_loop_depth(func, func->blocks[cur]->id);
             if (ld < best_depth) {
                 best_depth = ld;
                 best_bid = cur;
@@ -2745,8 +2747,8 @@ void xir_pass_elim_write_barriers(XirFunc *func) {
  *   Phase 4: Eliminate redundant GUARD_BOUNDS (constant + symbolic)
  */
 
-#define RA_MAX_VALUES 512
-#define RA_MAX_ROUNDS 4
+#define RA_MAX_VALUES XIR_RA_MAX_VALUES
+#define RA_MAX_ROUNDS XIR_RA_MAX_ROUNDS
 
 typedef struct {
     int64_t lo;        // inclusive lower bound

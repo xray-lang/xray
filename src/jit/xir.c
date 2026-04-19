@@ -13,6 +13,9 @@
  */
 
 #include "xir.h"
+#include "xir_domtree.h"
+#include "xir_looptree.h"
+#include "xir_alias.h"
 #include "../base/xchecks.h"
 #include "../base/xmalloc.h"
 #include <string.h>
@@ -122,7 +125,9 @@ void xir_func_destroy(XirFunc *func) {
         xr_free(func->arena);
     }
     xr_free(func->deopt_infos);
-    xr_free(func->idom);
+    xir_func_invalidate_loops(func);  // also invalidates the dom-tree
+    xir_func_invalidate_defuse(func);
+    xir_func_invalidate_alias(func);
     xr_free(func->blocks);
     xr_free(func->vregs);
     xr_free(func->consts);
@@ -735,27 +740,18 @@ void xir_compute_idom(XirFunc *func, uint32_t *idom, uint32_t nblk) {
 }
 
 uint32_t *xir_func_get_idom(XirFunc *func) {
-    if (!func || func->nblk == 0) return NULL;
-    if (func->idom) return func->idom;
-
-    func->idom = (uint32_t *)xr_malloc(func->nblk * sizeof(uint32_t));
-    if (!func->idom) return NULL;
-    xir_compute_idom(func, func->idom, func->nblk);
-
-    // Populate block->idom pointers for passes that use them
-    for (uint32_t i = 0; i < func->nblk; i++) {
-        if (func->idom[i] != UINT32_MAX && func->idom[i] < func->nblk)
-            func->blocks[i]->idom = func->blocks[func->idom[i]];
-    }
-    return func->idom;
+    /* Legacy accessor retained for passes that still want the raw idom[]
+     * array.  Internally it delegates to the dominator-tree cache, so
+     * there is a single computation path and a single invalidation
+     * point.  The returned pointer is owned by the cache — callers must
+     * not free it and must not rely on it staying live across
+     * xir_func_invalidate_domtree(). */
+    const XirDomTree *dt = xir_func_get_domtree(func);
+    return dt ? dt->idom : NULL;
 }
 
 void xir_func_invalidate_idom(XirFunc *func) {
-    if (!func) return;
-    if (func->idom) {
-        xr_free(func->idom);
-        func->idom = NULL;
-    }
+    xir_func_invalidate_domtree(func);
 }
 
 void xir_rebuild_vreg_defs(XirFunc *func) {

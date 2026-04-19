@@ -19,6 +19,7 @@
 
 #include "xir_coalesce.h"
 #include "xir_bset.h"
+#include "xir_looptree.h"
 #include "../base/xmalloc.h"
 #include <stdlib.h>
 #include <string.h>
@@ -303,8 +304,7 @@ uint32_t xir_coalesce(XirFunc *func) {
         XirBlock *blk = func->blocks[bi];
         if (!blk) continue;
 
-        int depth = blk->loop_depth;
-        if (depth < 0) depth = 0;
+        uint32_t depth = xir_block_loop_depth(func, blk->id);
         if (depth > 10) depth = 10;
         uint32_t w = 1u << depth;
         for (uint32_t ii = 0; ii < blk->nins; ii++) {
