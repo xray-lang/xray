@@ -142,6 +142,22 @@ typedef struct XrCluster {
     pthread_t         heartbeat_thread;
     bool              heartbeat_thread_started;
 
+    /*
+     * Inbound-accept coroutine state.
+     *
+     *   accept_coro_spawned — true once xr_cluster_start_ex successfully
+     *                         spawned the accept coroutine. Prevents
+     *                         double-spawn and lets xr_cluster_stop know
+     *                         whether to wait for it at teardown.
+     *   accept_running      — flipped to false by the coro on exit so
+     *                         xr_cluster_stop can spin-wait briefly and
+     *                         avoid tearing down node state while the
+     *                         accept path is still inside
+     *                         xr_cluster_node_accept.
+     */
+    bool              accept_coro_spawned;
+    _Atomic(bool)     accept_running;
+
     // Remote coroutine monitors (linked list)
     XrRemoteCoroMonitor *remote_coro_monitors;
 
@@ -151,17 +167,18 @@ typedef struct XrCluster {
     /*
      * Optional inter-node TLS wrap (see xr_cluster_start_ex).
      *
-     *   tls_enabled     — flip to turn on TLS for outgoing connections and,
-     *                     when the server accept path is wired up, to wrap
-     *                     incoming fds as well.
+     *   tls_enabled     — flip to turn on TLS for every inbound and
+     *                     outbound cluster connection.
      *   tls_client_ctx  — used by xr_cluster_node_connect when TLS is on.
      *                     Built at start_ex time with caller-supplied CA
      *                     bundle, optional client cert/key (for mTLS), and
      *                     optional verify_peer toggle.
-     *   tls_server_ctx  — used by the (currently dormant) server accept
-     *                     handler. NULL if the operator did not supply a
-     *                     cert+key pair; accept loops should refuse TLS
-     *                     traffic in that case.
+     *   tls_server_ctx  — used by cluster_accept_loop to wrap inbound fds
+     *                     via xr_io_accept_tls_with_ctx. NULL if the
+     *                     operator did not supply a cert+key pair; in
+     *                     that case tls_enabled + NULL tls_server_ctx
+     *                     causes the accept loop to refuse all inbound
+     *                     connections rather than silently downgrade.
      *
      * These fields stay NULL/false in the legacy xr_cluster_start path, so
      * plain-TCP clusters see no behavioural change.

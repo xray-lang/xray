@@ -156,6 +156,7 @@ int xr_cluster_reconnect(XrCluster *c, const char *host, uint16_t port,
             }
             xr_cluster_add_node(c, node);
             xr_cluster_node_start_writer(node, c->isolate);
+            xr_cluster_node_start_reader(c, node);
             if (c->on_node_added) c->on_node_added(node->name);
             return 0;
         }
@@ -241,6 +242,7 @@ void xr_cluster_handle_node_info(XrCluster *c, const uint8_t *payload, uint32_t 
         if (new_node && xr_cluster_node_connect(c, new_node) == 0) {
             xr_cluster_add_node(c, new_node);
             xr_cluster_node_start_writer(new_node, c->isolate);
+            xr_cluster_node_start_reader(c, new_node);
             if (c->on_node_added) c->on_node_added(new_node->name);
         } else if (new_node) {
             xr_cluster_node_free(new_node);
