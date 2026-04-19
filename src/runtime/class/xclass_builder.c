@@ -83,7 +83,6 @@ XrClassBuilder* xr_class_builder_new(XrayIsolate *isolate,
     }
 
     memset(builder, 0, sizeof(XrClassBuilder));
-    xr_gc_header_init_type(&builder->gc, XR_TCLASS_BUILDER);
 
     builder->isolate = isolate;
     builder->name = xr_strdup(name);

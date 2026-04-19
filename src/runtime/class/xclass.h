@@ -79,69 +79,69 @@ typedef struct XrItableEntry {
  */
 struct XrClass {
     XrGCHeader gc;
-    
+
     /* === Memory Management === */
     struct XrArena *arena;
-    
+
     /* === Basic Info (immutable) === */
     const char *name;
     struct XrClass *super;
-    
+
     /* === Type Check Optimization === */
     // Primary supers array: [0]=Object, [1]=parent1, ..., [depth]=self
     struct XrClass *primary_supers[8];
     uint8_t depth;                     // Inheritance depth (Object=0, max 7)
-    
+
     /* === Field Definition === */
     XrFieldDescriptor *fields;
     XrValue *field_default_values;
     uint16_t field_count;              // Total fields (including inherited)
     uint16_t own_field_count;          // Own fields (excluding inherited)
     uint16_t instance_size;            // Instance size in bytes
-    
+
     // Field lookup: Symbol -> index
     int *field_symbol_to_index;
     int field_map_capacity;
-    
+
     /* === Method Table === */
     XrMethod *methods;                 // All methods (instance + static)
     uint16_t method_count;
     uint16_t static_method_count;
-    
+
     // Method lookup: Symbol -> index (O(1))
     int *method_symbol_to_index;
     int method_map_capacity;
-    
+
     /* === VTable === */
     XrMethod **vtable;
     uint16_t vtable_size;
     uint16_t own_method_start;         // Start index of own methods in vtable
-    
+
     /* === Static Fields === */
     XrValue *static_field_values;
     uint16_t static_field_count;
-    
+
     /* === Interfaces === */
     struct XrClass **interfaces;
     uint8_t interface_count;
-    
+
     /* === ITable === */
     XrItableEntry *itable;
     uint8_t itable_size;
-    
+
     /* === Abstract Methods === */
     int *abstract_methods;             // Abstract method Symbol list
     uint8_t abstract_method_count;
-    
+
     /* === Flags === */
     uint16_t flags;
-    
+
     /* === Struct Layout (VALUE_TYPE only) === */
     struct XrStructLayout *struct_layout;  // NULL for class, set for struct
-    
+
     /* === Operator Overload Flags === */
     uint32_t operator_flags;
-    
+
     /* === Reflection Cache === */
     struct XrReflectCache *reflect_cache;  // Per-class, lazy creation
     struct XrTypeMetadata *type_metadata;  // Cached, set on first registry lookup
@@ -186,7 +186,7 @@ struct XrClass {
 
 // Special operators
 #define XR_OP_INDEX_FLAG     (1U << 17)  // []
-#define XR_OP_INDEX_SET_FLAG (1U << 18)  // []= 
+#define XR_OP_INDEX_SET_FLAG (1U << 18)  // []=
 #define XR_OP_INC_FLAG       (1U << 19)  // ++
 #define XR_OP_DEC_FLAG       (1U << 20)  // --
 #define XR_OP_NOT_FLAG       (1U << 21)  // !
@@ -224,7 +224,7 @@ XR_FUNC void xr_class_compute_operator_flags(XrClass *cls);
  */
 typedef struct XrClassBuilder XrClassBuilder;
 
-XR_FUNC XrClassBuilder* xr_class_builder_new(XrayIsolate *isolate, 
+XR_FUNC XrClassBuilder* xr_class_builder_new(XrayIsolate *isolate,
                                       const char *name,
                                       XrClass *super);
 
@@ -274,11 +274,6 @@ static inline const char* xr_class_get_name(XrClass *cls) {
 
 // Lookup method by symbol, returns NULL if not found
 XR_FUNC XrMethod* xr_class_lookup_method(XrClass *cls, int symbol);
-
-// Get method C function pointer, returns NULL if not found
-XR_FUNC XrCFunctionPtr xr_class_get_method(const XrClass *cls, int symbol);
-
-XR_FUNC XrValue xr_class_get_static_field(const XrClass *cls, int index);
 
 // NOTE: No add/set/modify API! All modifications via XrClassBuilder.
 
@@ -339,16 +334,16 @@ static inline bool xr_class_instanceof(const XrClass *cls, const XrClass *target
     if (cls == NULL || target == NULL) {
         return false;
     }
-    
+
     if (cls == target) {
         return true;
     }
-    
+
     // O(1) lookup via primary_supers
     if (target->depth < 8) {
         return cls->primary_supers[target->depth] == target;
     }
-    
+
     // Fallback to linear search for depth >= 8 (rare)
     const XrClass *c = cls->super;
     while (c != NULL) {
@@ -357,7 +352,7 @@ static inline bool xr_class_instanceof(const XrClass *cls, const XrClass *target
         }
         c = c->super;
     }
-    
+
     return false;
 }
 
@@ -374,7 +369,7 @@ XR_FUNC bool xr_class_implements_interface(XrClass *cls, const char *interface_n
 XR_FUNC bool xr_class_implements_interface_fast(XrClass *cls, XrClass *iface);
 
 // Returns count of satisfied methods (equals interface method count if fully satisfied)
-XR_FUNC int xr_class_verify_interface(XrClass *cls, XrClass *iface, 
+XR_FUNC int xr_class_verify_interface(XrClass *cls, XrClass *iface,
                                char **errors, int max_errors);
 
 XR_FUNC bool xr_class_has_method(XrClass *cls, int method_symbol);

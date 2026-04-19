@@ -29,9 +29,6 @@
 #include <stdio.h>
 #include <string.h>
 
-#define DEBUG_VTABLE 0
-#define DEBUG_CLASS 0
-
 /* ========== Operator Flag Mapping ========== */
 
 // Map operator symbol to flag (linear search, 22 operators max)
@@ -118,16 +115,16 @@ XrClass* xr_class_new(XrayIsolate *X, const char *name, XrClass *super) {
     XR_DCHECK(name != NULL, "Class name must not be NULL");
 
     XrClass *cls = xr_class_new_single(X, name);
-
-    // Register to reflection system
-    if (X && xr_isolate_get_type_registry(X)) {
-        xr_registry_register_class(X, cls);
-    }
+    if (!cls) return NULL;
 
     if (super) {
         xr_class_set_super(cls, super);
     }
 
+    // NOTE: callers are responsible for reflection registration. The core
+    // isolate init does that in a batch after all builtin classes are ready
+    // (see xr_core_init). Enum creation calls xr_registry_register_class()
+    // directly right after this returns.
     return cls;
 }
 
@@ -459,11 +456,15 @@ int xr_class_lookup_field(XrClass *cls, int symbol) {
     return -1;
 }
 
-// Method lookup by symbol
+// Method lookup by symbol.
+// Precondition: every class built through the builder has
+// method_symbol_to_index populated for any symbol it declares. Classes
+// created via xr_class_new() that have no methods leave the mapping NULL;
+// in that case we fall through to super. There is no O(n) sweep: if a
+// symbol is absent from the mapping, it is absent from this class.
 XrMethod* xr_class_lookup_method(XrClass *cls, int symbol) {
     if (!cls || symbol < 0) return NULL;
 
-    // Fast path: O(1) symbol mapping
     if (cls->method_symbol_to_index && symbol < cls->method_map_capacity) {
         int method_idx = cls->method_symbol_to_index[symbol];
 
@@ -471,8 +472,8 @@ XrMethod* xr_class_lookup_method(XrClass *cls, int symbol) {
             XrMethod *method = &cls->methods[method_idx];
 
             if (method->symbol == symbol && method->type != XMETHOD_NONE) {
-                // VTable optimization for closure methods only
-                // Primitive methods don't use vtable dispatch
+                // VTable optimization for closure methods only;
+                // primitive methods do not use vtable dispatch.
                 if (method->type != XMETHOD_PRIMITIVE &&
                     method->vtable_index >= 0 &&
                     cls->vtable &&
@@ -487,26 +488,6 @@ XrMethod* xr_class_lookup_method(XrClass *cls, int symbol) {
         }
     }
 
-    // Fallback: O(n) traversal
-    for (int i = 0; i < cls->method_count; i++) {
-        if (cls->methods[i].symbol == symbol && cls->methods[i].type != XMETHOD_NONE) {
-            XrMethod *method = &cls->methods[i];
-
-            // VTable optimization for closure methods only
-            if (method->type != XMETHOD_PRIMITIVE &&
-                method->vtable_index >= 0 &&
-                cls->vtable &&
-                method->vtable_index < cls->vtable_size) {
-                XrMethod *vtable_method = cls->vtable[method->vtable_index];
-                if (vtable_method && vtable_method->type != XMETHOD_NONE) {
-                    return vtable_method;
-                }
-            }
-            return method;
-        }
-    }
-
-    // Recursive parent lookup
     if (cls->super) {
         return xr_class_lookup_method(cls->super, symbol);
     }

@@ -16,6 +16,7 @@
 #include "../symbol/xsymbol_table.h"
 #include "../gc/xgc_internal.h"
 #include "xclass.h"
+#include "xreflect_registry.h"
 #include "xclass_system.h"
 #include <string.h>
 #include <stdlib.h>
@@ -49,6 +50,12 @@ XrEnumType* xr_enum_type_new(XrayIsolate *X, const char *name, int base_type,
     XrClass *enum_base = core ? core->enumClass : NULL;
     XrClass *enum_class = xr_class_new(X, name, enum_base);
     enum_type->enum_class = enum_class;
+
+    // xr_class_new no longer auto-registers; enum classes must opt in so
+    // that reflection (Type.getTypeByName, etc.) can see them.
+    if (enum_class && xr_isolate_get_type_registry(X)) {
+        xr_registry_register_class(X, enum_class);
+    }
 
     enum_type->name = xr_strdup(name);
     enum_type->base_type = base_type;

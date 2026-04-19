@@ -342,15 +342,10 @@ XR_FUNC struct XrSet* xr_value_to_set(XrValue v);
 
 struct XrClass;
 struct XrInstance;
-struct XrClassBuilder;
 
 XR_FUNC XrValue xr_value_from_class(struct XrClass *cls);
 XR_FUNC bool xr_value_is_class(XrValue v);
 XR_FUNC struct XrClass* xr_value_to_class(XrValue v);
-
-XR_FUNC XrValue xr_value_from_class_builder(struct XrClassBuilder *builder);
-XR_FUNC bool xr_value_is_class_builder(XrValue v);
-XR_FUNC struct XrClassBuilder* xr_value_to_class_builder(XrValue v);
 
 XR_FUNC XrValue xr_value_from_instance(struct XrInstance *inst);
 XR_FUNC bool xr_value_is_instance(XrValue v);
