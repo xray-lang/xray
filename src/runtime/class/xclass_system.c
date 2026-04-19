@@ -12,6 +12,7 @@
  */
 
 #include "xclass_system.h"
+#include "../../base/xlog.h"
 #include "xclass.h"
 #include "xclass_builder.h"
 #include "../../base/xchecks.h"
@@ -34,7 +35,7 @@ void xr_core_init(XrayIsolate *X) {
     XR_DCHECK(X != NULL, "xr_core_init: NULL isolate");
     X->core = (XrayCoreClasses*)xr_malloc(sizeof(XrayCoreClasses));
     if (!X->core) {
-        fprintf(stderr, "Fatal: Failed to allocate core classes\n");
+        xr_log_warning("class", "Fatal: Failed to allocate core classes");
         return;
     }
     memset(X->core, 0, sizeof(XrayCoreClasses));

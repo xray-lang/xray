@@ -9,6 +9,7 @@
  */
 
 #include "../../base/xchecks.h"
+#include "../../base/xlog.h"
 #include "../gc/xgc.h"
 #include "xreflect_internal.h"
 #include "../xisolate_api.h"
@@ -25,7 +26,7 @@
 XrValue xr_type_getFields(XrayIsolate *isolate, XrValue *args, int nargs) {
     XR_DCHECK(isolate != NULL, "type_getFields: NULL isolate");
     if (nargs < 1) {
-        fprintf(stderr, "Type.getFields: requires this argument\n");
+        xr_log_warning("reflect", "Type.getFields: requires this argument");
         return xr_null();
     }
 
@@ -52,7 +53,7 @@ XrValue xr_type_getFields(XrayIsolate *isolate, XrValue *args, int nargs) {
 XrValue xr_type_getDeclaredFields(XrayIsolate *isolate, XrValue *args, int nargs) {
     XR_DCHECK(isolate != NULL, "type_getDeclaredFields: NULL isolate");
     if (nargs < 1) {
-        fprintf(stderr, "Type.getDeclaredFields: requires this argument\n");
+        xr_log_warning("reflect", "Type.getDeclaredFields: requires this argument");
         return xr_null();
     }
 
@@ -85,12 +86,12 @@ XrValue xr_type_getDeclaredFields(XrayIsolate *isolate, XrValue *args, int nargs
 XrValue xr_type_getField(XrayIsolate *isolate, XrValue *args, int nargs) {
     XR_DCHECK(isolate != NULL, "type_getField: NULL isolate");
     if (nargs < 2) {
-        fprintf(stderr, "Type.getField: requires 2 arguments\n");
+        xr_log_warning("reflect", "Type.getField: requires 2 arguments");
         return xr_null();
     }
 
     if (!XR_IS_STRING(args[1])) {
-        fprintf(stderr, "Type.getField: argument must be string\n");
+        xr_log_warning("reflect", "Type.getField: argument must be string");
         return xr_null();
     }
 
@@ -132,7 +133,7 @@ XrValue xr_type_getField(XrayIsolate *isolate, XrValue *args, int nargs) {
 XrValue xr_type_getMethods(XrayIsolate *isolate, XrValue *args, int nargs) {
     XR_DCHECK(isolate != NULL, "type_getMethods: NULL isolate");
     if (nargs < 1) {
-        fprintf(stderr, "Type.getMethods: requires this argument\n");
+        xr_log_warning("reflect", "Type.getMethods: requires this argument");
         return xr_null();
     }
 
@@ -169,7 +170,7 @@ XrValue xr_type_getMethods(XrayIsolate *isolate, XrValue *args, int nargs) {
 XrValue xr_type_getDeclaredMethods(XrayIsolate *isolate, XrValue *args, int nargs) {
     XR_DCHECK(isolate != NULL, "type_getDeclaredMethods: NULL isolate");
     if (nargs < 1) {
-        fprintf(stderr, "Type.getDeclaredMethods: requires this argument\n");
+        xr_log_warning("reflect", "Type.getDeclaredMethods: requires this argument");
         return xr_null();
     }
 
@@ -211,12 +212,12 @@ XrValue xr_type_getDeclaredMethods(XrayIsolate *isolate, XrValue *args, int narg
 XrValue xr_type_getMethod(XrayIsolate *isolate, XrValue *args, int nargs) {
     XR_DCHECK(isolate != NULL, "type_getMethod: NULL isolate");
     if (nargs < 2) {
-        fprintf(stderr, "Type.getMethod: requires 2 arguments\n");
+        xr_log_warning("reflect", "Type.getMethod: requires 2 arguments");
         return xr_null();
     }
 
     if (!XR_IS_STRING(args[1])) {
-        fprintf(stderr, "Type.getMethod: argument must be string\n");
+        xr_log_warning("reflect", "Type.getMethod: argument must be string");
         return xr_null();
     }
 
@@ -253,7 +254,7 @@ XrValue xr_type_getMethod(XrayIsolate *isolate, XrValue *args, int nargs) {
 XrValue xr_type_getConstructor(XrayIsolate *isolate, XrValue *args, int nargs) {
     XR_DCHECK(isolate != NULL, "type_getConstructor: NULL isolate");
     if (nargs < 1) {
-        fprintf(stderr, "Type.getConstructor: requires this argument\n");
+        xr_log_warning("reflect", "Type.getConstructor: requires this argument");
         return xr_null();
     }
 
@@ -281,7 +282,7 @@ XrValue xr_type_getConstructor(XrayIsolate *isolate, XrValue *args, int nargs) {
 XrValue xr_type_newInstance(XrayIsolate *isolate, XrValue *args, int nargs) {
     XR_DCHECK(isolate != NULL, "type_newInstance: NULL isolate");
     if (nargs < 1) {
-        fprintf(stderr, "Type.newInstance: requires this argument\n");
+        xr_log_warning("reflect", "Type.newInstance: requires this argument");
         return xr_null();
     }
 
@@ -296,7 +297,7 @@ XrValue xr_type_newInstance(XrayIsolate *isolate, XrValue *args, int nargs) {
 XrValue xr_type_newInstanceWith(XrayIsolate *isolate, XrValue *args, int nargs) {
     XR_DCHECK(isolate != NULL, "type_newInstanceWith: NULL isolate");
     if (nargs < 2) {
-        fprintf(stderr, "Type.newInstanceWith: requires 2 arguments\n");
+        xr_log_warning("reflect", "Type.newInstanceWith: requires 2 arguments");
         return xr_null();
     }
 
@@ -352,7 +353,7 @@ XrValue xr_type_newInstanceWith(XrayIsolate *isolate, XrValue *args, int nargs) 
 XrValue xr_type_isSubtypeOf(XrayIsolate *isolate, XrValue *args, int nargs) {
     (void)isolate;
     if (nargs < 2) {
-        fprintf(stderr, "Type.isSubtypeOf: requires 2 arguments\n");
+        xr_log_warning("reflect", "Type.isSubtypeOf: requires 2 arguments");
         return xr_bool(false);
     }
 
@@ -369,7 +370,7 @@ XrValue xr_type_isSubtypeOf(XrayIsolate *isolate, XrValue *args, int nargs) {
 XrValue xr_type_isAssignableFrom(XrayIsolate *isolate, XrValue *args, int nargs) {
     (void)isolate;
     if (nargs < 2) {
-        fprintf(stderr, "Type.isAssignableFrom: requires 2 arguments\n");
+        xr_log_warning("reflect", "Type.isAssignableFrom: requires 2 arguments");
         return xr_bool(false);
     }
 
@@ -386,7 +387,7 @@ XrValue xr_type_isAssignableFrom(XrayIsolate *isolate, XrValue *args, int nargs)
 XrValue xr_type_implements(XrayIsolate *isolate, XrValue *args, int nargs) {
     (void)isolate;
     if (nargs < 2) {
-        fprintf(stderr, "Type.implements: requires 2 arguments\n");
+        xr_log_warning("reflect", "Type.implements: requires 2 arguments");
         return xr_bool(false);
     }
 

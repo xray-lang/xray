@@ -9,6 +9,7 @@
  */
 
 #include "../../base/xchecks.h"
+#include "../../base/xlog.h"
 #include "../gc/xgc.h"
 #include "xreflect_internal.h"
 #include "xreflect_registry.h"
@@ -118,7 +119,7 @@ XrParameterMetadata* xr_get_parameter_metadata(XrValue param_obj) {
 XrValue xr_reflect_getType(XrayIsolate *isolate, XrValue *args, int nargs) {
     XR_DCHECK(isolate != NULL, "reflect_getType: NULL isolate");
     if (nargs < 1) {
-        fprintf(stderr, "Reflect.getType: requires 1 argument\n");
+        xr_log_warning("reflect", "Reflect.getType: requires 1 argument");
         return xr_null();
     }
     
@@ -138,7 +139,7 @@ XrValue xr_reflect_getType(XrayIsolate *isolate, XrValue *args, int nargs) {
     if (!meta) {
         meta = xr_registry_register_class(X, klass);
         if (!meta) {
-            fprintf(stderr, "Reflect.getType: failed to register class '%s'\n", klass->name);
+            xr_log_warning("reflect", "Reflect.getType: failed to register class '%s'", klass->name);
             return xr_null();
         }
     }
@@ -149,12 +150,12 @@ XrValue xr_reflect_getType(XrayIsolate *isolate, XrValue *args, int nargs) {
 XrValue xr_reflect_getTypeByName(XrayIsolate *isolate, XrValue *args, int nargs) {
     XR_DCHECK(isolate != NULL, "reflect_getTypeByName: NULL isolate");
     if (nargs < 1) {
-        fprintf(stderr, "Reflect.getTypeByName: requires 1 argument\n");
+        xr_log_warning("reflect", "Reflect.getTypeByName: requires 1 argument");
         return xr_null();
     }
     
     if (!XR_IS_STRING(args[0])) {
-        fprintf(stderr, "Reflect.getTypeByName: argument must be string\n");
+        xr_log_warning("reflect", "Reflect.getTypeByName: argument must be string");
         return xr_null();
     }
     
@@ -196,7 +197,7 @@ XrValue xr_reflect_getAllTypes(XrayIsolate *isolate, XrValue *args, int nargs) {
 XrValue xr_reflect_isInstance(XrayIsolate *isolate, XrValue *args, int nargs) {
     XR_DCHECK(isolate != NULL, "reflect_isInstance: NULL isolate");
     if (nargs < 2) {
-        fprintf(stderr, "Reflect.isInstance: requires 2 arguments\n");
+        xr_log_warning("reflect", "Reflect.isInstance: requires 2 arguments");
         return xr_bool(false);
     }
     
@@ -215,12 +216,12 @@ XrValue xr_reflect_isInstance(XrayIsolate *isolate, XrValue *args, int nargs) {
 XrValue xr_reflect_isInstanceOf(XrayIsolate *isolate, XrValue *args, int nargs) {
     XR_DCHECK(isolate != NULL, "reflect_isInstanceOf: NULL isolate");
     if (nargs < 2) {
-        fprintf(stderr, "Reflect.isInstanceOf: requires 2 arguments\n");
+        xr_log_warning("reflect", "Reflect.isInstanceOf: requires 2 arguments");
         return xr_bool(false);
     }
     
     if (!XR_IS_STRING(args[1])) {
-        fprintf(stderr, "Reflect.isInstanceOf: second argument must be string\n");
+        xr_log_warning("reflect", "Reflect.isInstanceOf: second argument must be string");
         return xr_bool(false);
     }
     
