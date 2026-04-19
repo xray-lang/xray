@@ -58,11 +58,20 @@ typedef struct XrFieldDescriptor {
 
 /* ========== ITable Entry ========== */
 
-// Interface table entry for interface method dispatch
+// Interface table entry for interface method dispatch.
+//
+// method_symbol_to_index[] is a per-entry reverse map from method
+// symbol -> index into methods[]. It is allocated lazily by
+// xr_class_build_itable and sized by the highest symbol the entry
+// references (method_map_capacity). lookup_by_symbol uses it for O(1)
+// dispatch; when it is NULL (e.g. empty interface) the symbol lookup
+// simply returns NULL.
 typedef struct XrItableEntry {
     struct XrClass *interface;
     XrMethod **methods;
     uint16_t method_count;
+    int *method_symbol_to_index;
+    int method_map_capacity;
 } XrItableEntry;
 
 /* ========== Class Object ========== */
@@ -381,7 +390,11 @@ XR_FUNC bool xr_class_has_method(XrClass *cls, int method_symbol);
 // Build ITable from class's interfaces array
 XR_FUNC int xr_class_build_itable(XrClass *cls);
 
-// O(n) where n = interface count
+// Both lookups first locate the itable entry in O(n_interfaces)
+// (typically < 5), then:
+//   - lookup_interface_method: O(1) direct index into methods[].
+//   - lookup_interface_method_by_symbol: O(1) via the entry's
+//     method_symbol_to_index map built in xr_class_build_itable.
 XR_FUNC XrMethod* xr_class_lookup_interface_method(XrClass *cls, XrClass *iface, int method_index);
 XR_FUNC XrMethod* xr_class_lookup_interface_method_by_symbol(XrClass *cls, XrClass *iface, int method_symbol);
 

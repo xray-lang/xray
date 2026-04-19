@@ -31,35 +31,37 @@
 
 /* ========== Operator Flag Mapping ========== */
 
-// Map operator symbol to flag (linear search, 22 operators max)
+// Map an operator method symbol to its class-level operator_flags bit.
+// Written as a dense switch so the compiler emits a jump table instead
+// of the 22 sequential compares the old chain produced.
 uint32_t xr_symbol_to_op_flag(int symbol) {
-    if (symbol <= 0) {
-        return 0;
-    }
-    if (symbol == SYMBOL_OP_ADD) return XR_OP_ADD_FLAG;
-    if (symbol == SYMBOL_OP_SUB) return XR_OP_SUB_FLAG;
-    if (symbol == SYMBOL_OP_MUL) return XR_OP_MUL_FLAG;
-    if (symbol == SYMBOL_OP_DIV) return XR_OP_DIV_FLAG;
-    if (symbol == SYMBOL_OP_MOD) return XR_OP_MOD_FLAG;
-    if (symbol == SYMBOL_OP_EQ) return XR_OP_EQ_FLAG;
-    if (symbol == SYMBOL_OP_NE) return XR_OP_NE_FLAG;
-    if (symbol == SYMBOL_OP_LT) return XR_OP_LT_FLAG;
-    if (symbol == SYMBOL_OP_LE) return XR_OP_LE_FLAG;
-    if (symbol == SYMBOL_OP_GT) return XR_OP_GT_FLAG;
-    if (symbol == SYMBOL_OP_GE) return XR_OP_GE_FLAG;
-    if (symbol == SYMBOL_OP_BAND) return XR_OP_BAND_FLAG;
-    if (symbol == SYMBOL_OP_BOR) return XR_OP_BOR_FLAG;
-    if (symbol == SYMBOL_OP_BXOR) return XR_OP_BXOR_FLAG;
-    if (symbol == SYMBOL_OP_BNOT) return XR_OP_BNOT_FLAG;
-    if (symbol == SYMBOL_OP_LSHIFT) return XR_OP_LSHIFT_FLAG;
-    if (symbol == SYMBOL_OP_RSHIFT) return XR_OP_RSHIFT_FLAG;
-    if (symbol == SYMBOL_OP_INDEX) return XR_OP_INDEX_FLAG;
-    if (symbol == SYMBOL_OP_INDEX_SET) return XR_OP_INDEX_SET_FLAG;
-    if (symbol == SYMBOL_OP_INC) return XR_OP_INC_FLAG;
-    if (symbol == SYMBOL_OP_DEC) return XR_OP_DEC_FLAG;
-    if (symbol == SYMBOL_OP_NOT) return XR_OP_NOT_FLAG;
+    if (symbol <= 0) return 0;
 
-    return 0;
+    switch (symbol) {
+        case SYMBOL_OP_ADD:       return XR_OP_ADD_FLAG;
+        case SYMBOL_OP_SUB:       return XR_OP_SUB_FLAG;
+        case SYMBOL_OP_MUL:       return XR_OP_MUL_FLAG;
+        case SYMBOL_OP_DIV:       return XR_OP_DIV_FLAG;
+        case SYMBOL_OP_MOD:       return XR_OP_MOD_FLAG;
+        case SYMBOL_OP_EQ:        return XR_OP_EQ_FLAG;
+        case SYMBOL_OP_NE:        return XR_OP_NE_FLAG;
+        case SYMBOL_OP_LT:        return XR_OP_LT_FLAG;
+        case SYMBOL_OP_LE:        return XR_OP_LE_FLAG;
+        case SYMBOL_OP_GT:        return XR_OP_GT_FLAG;
+        case SYMBOL_OP_GE:        return XR_OP_GE_FLAG;
+        case SYMBOL_OP_BAND:      return XR_OP_BAND_FLAG;
+        case SYMBOL_OP_BOR:       return XR_OP_BOR_FLAG;
+        case SYMBOL_OP_BXOR:      return XR_OP_BXOR_FLAG;
+        case SYMBOL_OP_BNOT:      return XR_OP_BNOT_FLAG;
+        case SYMBOL_OP_LSHIFT:    return XR_OP_LSHIFT_FLAG;
+        case SYMBOL_OP_RSHIFT:    return XR_OP_RSHIFT_FLAG;
+        case SYMBOL_OP_INDEX:     return XR_OP_INDEX_FLAG;
+        case SYMBOL_OP_INDEX_SET: return XR_OP_INDEX_SET_FLAG;
+        case SYMBOL_OP_INC:       return XR_OP_INC_FLAG;
+        case SYMBOL_OP_DEC:       return XR_OP_DEC_FLAG;
+        case SYMBOL_OP_NOT:       return XR_OP_NOT_FLAG;
+        default:                  return 0;
+    }
 }
 
 // Compute operator overload flags (call once after class creation)
@@ -410,6 +412,9 @@ int xr_class_build_itable(XrClass *cls) {
             if (cls->itable[i].methods) {
                 xr_free(cls->itable[i].methods);
             }
+            if (cls->itable[i].method_symbol_to_index) {
+                xr_free(cls->itable[i].method_symbol_to_index);
+            }
         }
         xr_free(cls->itable);
         cls->itable = NULL;
@@ -425,6 +430,7 @@ int xr_class_build_itable(XrClass *cls) {
     if (!cls->itable) {
         return -1;
     }
+    memset(cls->itable, 0, cls->itable_size * sizeof(XrItableEntry));
 
     for (int i = 0; i < cls->interface_count; i++) {
         XrClass *iface = cls->interfaces[i];
@@ -438,17 +444,45 @@ int xr_class_build_itable(XrClass *cls) {
                 iface->method_count * sizeof(XrMethod*));
             if (!cls->itable[i].methods) return -1;
 
+            // Resolve each interface method via the class's
+            // symbol-to-index table. method_symbol_to_index is populated
+            // by the builder for every class with at least one method,
+            // so this is O(1) per slot; the previous inner loop was
+            // O(cls->method_count) per interface method.
+            int max_symbol = -1;
             for (int j = 0; j < iface->method_count; j++) {
                 XrMethod *iface_method = &iface->methods[j];
                 XrMethod *impl = NULL;
 
-                for (int k = 0; k < cls->method_count; k++) {
-                    if (cls->methods[k].symbol == iface_method->symbol) {
-                        impl = &cls->methods[k];
-                        break;
+                int sym = iface_method->symbol;
+                if (cls->method_symbol_to_index && sym >= 0
+                    && sym < cls->method_map_capacity) {
+                    int idx = cls->method_symbol_to_index[sym];
+                    if (idx >= 0 && idx < cls->method_count) {
+                        impl = &cls->methods[idx];
                     }
                 }
+
                 cls->itable[i].methods[j] = impl;
+                if (sym > max_symbol) max_symbol = sym;
+            }
+
+            // Build the per-entry symbol -> slot map so the runtime
+            // dispatch path xr_class_lookup_interface_method_by_symbol
+            // can jump directly to a slot instead of walking the
+            // methods[] array.
+            if (max_symbol >= 0) {
+                int cap = max_symbol + 1;
+                int *map = (int*)xr_malloc(cap * sizeof(int));
+                if (map) {
+                    for (int k = 0; k < cap; k++) map[k] = -1;
+                    for (int j = 0; j < iface->method_count; j++) {
+                        int sym = iface->methods[j].symbol;
+                        if (sym >= 0 && sym < cap) map[sym] = j;
+                    }
+                    cls->itable[i].method_symbol_to_index = map;
+                    cls->itable[i].method_map_capacity = cap;
+                }
             }
         } else {
             cls->itable[i].methods = NULL;
@@ -567,22 +601,27 @@ XrMethod* xr_class_lookup_interface_method(XrClass *cls, XrClass *iface, int met
     return NULL;
 }
 
-// Lookup by symbol when method index is unknown at compile time
+// Lookup by symbol when method index is unknown at compile time.
+//
+// Outer scan over the itable is still O(n_interfaces) -- typically
+// < 5 -- but the inner slot lookup is O(1) through the entry's
+// method_symbol_to_index map built by xr_class_build_itable.
 XrMethod* xr_class_lookup_interface_method_by_symbol(XrClass *cls, XrClass *iface, int method_symbol) {
-    if (!cls || !iface || !cls->itable) {
+    if (!cls || !iface || !cls->itable || method_symbol < 0) {
         return NULL;
     }
 
     for (int i = 0; i < cls->itable_size; i++) {
-        if (cls->itable[i].interface == iface) {
-            for (int j = 0; j < cls->itable[i].method_count; j++) {
-                XrMethod *method = cls->itable[i].methods[j];
-                if (method && method->symbol == method_symbol) {
-                    return method;
-                }
-            }
+        XrItableEntry *entry = &cls->itable[i];
+        if (entry->interface != iface) continue;
+
+        if (!entry->method_symbol_to_index
+            || method_symbol >= entry->method_map_capacity) {
             return NULL;
         }
+        int idx = entry->method_symbol_to_index[method_symbol];
+        if (idx < 0 || idx >= entry->method_count) return NULL;
+        return entry->methods[idx];
     }
 
     return NULL;
@@ -643,11 +682,14 @@ void xr_class_free(XrClass *cls) {
         cls->interfaces = NULL;
     }
 
-    // Free itable entries
+    // Free itable entries (methods[] and per-entry symbol map).
     if (cls->itable) {
         for (int i = 0; i < cls->itable_size; i++) {
             if (cls->itable[i].methods) {
                 xr_free(cls->itable[i].methods);
+            }
+            if (cls->itable[i].method_symbol_to_index) {
+                xr_free(cls->itable[i].method_symbol_to_index);
             }
         }
         xr_free(cls->itable);
