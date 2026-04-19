@@ -56,6 +56,13 @@ typedef struct XrStdlibXmlKeys {
     XrValue attrs;
     XrValue children;
     XrValue text;
+
+    // Optional extra keys used by the basic namespace surface exposed
+    // on element nodes. `namespaces` holds a Map<prefix -> URI>
+    // (empty-prefix key "" represents the default namespace). Scripts
+    // can derive `prefix`/`localName` by splitting `tag` on ':'.
+    XrValue namespaces;
+
     struct XrString *str_element;
     struct XrString *str_text;
     struct XrString *str_comment;

@@ -535,11 +535,18 @@ static void stringify_array(JsonWriter *w, XrArray *arr) {
     writer_char(w, ']');
 }
 
-// Stringify Map
+// Stringify Map.
+//
+// NOTE: ordering. XrMap is a chained hash table (xmap.h) and does not
+// track insertion order. We iterate node slots in index order, which
+// is deterministic for a given map instance but unrelated to the order
+// entries were inserted. Scripts that need insertion-preserving
+// round-trip should build their object via XrJson (shape-backed, which
+// `stringify_json` preserves exactly). This limitation is documented
+// in docs/analysis/stdlib_serialization.md §2.1.7.
 static void stringify_map(JsonWriter *w, XrMap *map) {
     writer_char(w, '{');
 
-    // Iterate over Map hash table
     size_t output_count = 0;
     w->depth++;
 
@@ -548,27 +555,41 @@ static void stringify_map(JsonWriter *w, XrMap *map) {
 
     for (uint32_t i = 0; i < size; i++) {
         XrMapNode *node = xr_map_node(map, i);
+        if (node->key_tt == 0) continue;
 
-        // key_tt > 0 indicates valid key
-        if (node->key_tt > 0) {
-            if (output_count > 0) writer_char(w, ',');
-            writer_newline(w);
-
-            // Key must be string
-            if (XR_IS_STRING(node->key)) {
-                XrString *key = XR_TO_STRING(node->key);
-                stringify_string(w, key->data, key->length);
-            } else {
-                // Non-string key fallback
-                writer_str(w, "\"<key>\"");
+        // Keys must be JSON-representable. Strings are emitted
+        // verbatim; integers are stringified (acceptable per common
+        // JSON-as-config usage). Any other key type (float, array,
+        // map, instance) is skipped — previously we emitted the
+        // placeholder `"<key>"`, which silently collides on read-back
+        // and is worse than losing the entry.
+        char intkey_buf[32];
+        const char *key_ptr = NULL;
+        size_t key_len = 0;
+        if (XR_IS_STRING(node->key)) {
+            XrString *key = XR_TO_STRING(node->key);
+            key_ptr = key->data;
+            key_len = key->length;
+        } else if (XR_IS_INT(node->key)) {
+            int n = snprintf(intkey_buf, sizeof(intkey_buf),
+                             "%lld", (long long)XR_TO_INT(node->key));
+            if (n > 0) {
+                key_ptr = intkey_buf;
+                key_len = (size_t)n;
             }
-
-            writer_char(w, ':');
-            if (w->indent > 0) writer_char(w, ' ');
-
-            stringify_value(w, node->value);
-            output_count++;
+        } else {
+            continue;  // skip entries with non-stringifiable keys
         }
+
+        if (output_count > 0) writer_char(w, ',');
+        writer_newline(w);
+
+        stringify_string(w, key_ptr, key_len);
+        writer_char(w, ':');
+        if (w->indent > 0) writer_char(w, ' ');
+
+        stringify_value(w, node->value);
+        output_count++;
     }
 
     w->depth--;
@@ -819,6 +840,7 @@ typedef struct {
     const char *ptr;
     int depth;
     bool ok;
+    bool strict;   // RFC 8259 strict mode: reject bare control chars (< 0x20)
 } JsonValidator;
 
 static void validate_skip_ws(JsonValidator *v) {
@@ -831,6 +853,13 @@ static void validate_string(JsonValidator *v) {
     if (*v->ptr != '"') { v->ok = false; return; }
     v->ptr++;
     while (*v->ptr && *v->ptr != '"') {
+        unsigned char c = (unsigned char)*v->ptr;
+        // RFC 8259 §7: unescaped bytes <= 0x1F inside a string are
+        // forbidden. The previous validator silently accepted them so
+        // `isValid("\"\\x01\"")` returned true. Under the new strict
+        // flag we flag those while keeping the legacy non-strict path
+        // permissive for existing callers.
+        if (v->strict && c < 0x20) { v->ok = false; return; }
         if (*v->ptr == '\\') {
             v->ptr++;
             if (!*v->ptr) { v->ok = false; return; }
@@ -937,15 +966,26 @@ static void validate_value(JsonValidator *v) {
     v->depth--;
 }
 
-// isValid(str) - Check if string is valid JSON (zero allocation)
+// isValid(str, opts?) - Check if string is valid JSON (zero allocation).
+// opts.strict (bool, default false): when true, additionally reject
+// unescaped control bytes (< 0x20) inside strings, matching RFC 8259 §7.
 static XrValue json_is_valid(XrayIsolate *X, XrValue *args, int argc) {
-    (void)X;
     if (argc < 1 || !XR_IS_STRING(args[0])) {
         return xr_bool(false);
     }
 
+    bool strict = false;
+    if (argc >= 2) {
+        if (XR_IS_BOOL(args[1])) {
+            strict = XR_TO_BOOL(args[1]);
+        } else if (xr_value_is_json(args[1])) {
+            XrValue sv = xr_json_get_by_key(X, xr_value_to_json(args[1]), "strict");
+            if (XR_IS_BOOL(sv)) strict = XR_TO_BOOL(sv);
+        }
+    }
+
     XrString *str = XR_TO_STRING(args[0]);
-    JsonValidator v = { .ptr = str->data, .depth = 0, .ok = true };
+    JsonValidator v = { .ptr = str->data, .depth = 0, .ok = true, .strict = strict };
 
     validate_value(&v);
     if (!v.ok) return xr_bool(false);
@@ -966,21 +1006,34 @@ static XrValue json_type_of(XrayIsolate *X, XrValue *args, int argc) {
     XrValue val = args[0];
     const char *type;
 
-    // If argument is a string, parse it as JSON and return the type
+    // If argument is a string, parse it as JSON and return the type.
+    // The previous implementation looked only at the first non-space
+    // byte, so `typeOf("truefalse")` reported "boolean". We now run
+    // the zero-allocation validator first and only then classify; any
+    // junk after the prefix token collapses to "invalid".
     if (XR_IS_STRING(val)) {
         XrString *str = XR_TO_STRING(val);
         const char *s = str->data;
-        // Skip whitespace
-        while (*s == ' ' || *s == '\t' || *s == '\n' || *s == '\r') s++;
 
-        if (*s == 'n' && strncmp(s, "null", 4) == 0) type = "null";
-        else if (*s == 't' && strncmp(s, "true", 4) == 0) type = "boolean";
-        else if (*s == 'f' && strncmp(s, "false", 5) == 0) type = "boolean";
-        else if (*s == '"') type = "string";
-        else if (*s == '[') type = "array";
-        else if (*s == '{') type = "object";
-        else if (*s == '-' || (*s >= '0' && *s <= '9')) type = "number";
-        else type = "invalid";
+        // Skip leading whitespace for dispatch without mutating `s` for
+        // the validator (which handles whitespace itself).
+        const char *first = s;
+        while (*first == ' ' || *first == '\t' || *first == '\n' || *first == '\r') first++;
+
+        JsonValidator v = { .ptr = s, .depth = 0, .ok = true, .strict = false };
+        validate_value(&v);
+        if (v.ok) {
+            validate_skip_ws(&v);
+            if (*v.ptr != '\0') v.ok = false;
+        }
+        if (!v.ok) {
+            type = "invalid";
+        } else if (*first == 'n') type = "null";
+        else if (*first == 't' || *first == 'f') type = "boolean";
+        else if (*first == '"') type = "string";
+        else if (*first == '[') type = "array";
+        else if (*first == '{') type = "object";
+        else type = "number";
     } else if (XR_IS_NULL(val)) {
         type = "null";
     } else if (XR_IS_BOOL(val)) {

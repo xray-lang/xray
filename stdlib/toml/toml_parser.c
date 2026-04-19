@@ -34,6 +34,34 @@ static bool fast_parse_int(const char *s, size_t len, int64_t *result) {
 
 // ========== Helper Functions ==========
 
+// Forward declaration so add_expect_error can call add_error, which is
+// defined a few lines below.
+static void add_error(TomlParser *parser, TomlErrorType type, const char *msg);
+
+// Format a "Expected X but got Y" syntax diagnostic. Keeps the human
+// context visible in long files where "Expected ']'" alone is not
+// enough to locate the offending token. If the input is at EOF we say
+// so explicitly rather than printing whatever `PEEK()` happens to
+// return. The message is still routed through add_error so every
+// syntax site ends up in the errors array with a consistent schema.
+static void add_expect_error(TomlParser *parser, const char *expected) {
+    char buf[128];
+    if (parser->pos >= parser->len) {
+        snprintf(buf, sizeof(buf),
+                 "Expected %s but reached end of input", expected);
+    } else {
+        unsigned char c = (unsigned char)parser->data[parser->pos];
+        if (c >= 0x20 && c < 0x7F) {
+            snprintf(buf, sizeof(buf),
+                     "Expected %s but got '%c'", expected, c);
+        } else {
+            snprintf(buf, sizeof(buf),
+                     "Expected %s but got byte 0x%02X", expected, c);
+        }
+    }
+    add_error(parser, TOML_ERROR_SYNTAX, buf);
+}
+
 static void add_error(TomlParser *parser, TomlErrorType type, const char *msg) {
     const char *type_str = "Unknown";
     switch (type) {
@@ -617,7 +645,7 @@ static XrValue parse_array(TomlParser *parser) {
             continue;
         }
 
-        add_error(parser, TOML_ERROR_SYNTAX, "Expected ',' or ']'");
+        add_expect_error(parser, "',' or ']'");
         break;
     }
 
@@ -646,7 +674,7 @@ static XrValue parse_inline_table(TomlParser *parser) {
         skip_ws(parser);
 
         if (AT_END() || PEEK() != '=') {
-            add_error(parser, TOML_ERROR_SYNTAX, "Expected '='");
+            add_expect_error(parser, "'='");
             break;
         }
         ADVANCE();
@@ -670,7 +698,7 @@ static XrValue parse_inline_table(TomlParser *parser) {
             continue;
         }
 
-        add_error(parser, TOML_ERROR_SYNTAX, "Expected ',' or '}'");
+        add_expect_error(parser, "',' or '}'");
         break;
     }
 
@@ -958,7 +986,7 @@ TomlResult toml_parser_parse(TomlParser *parser) {
             skip_ws(parser);
 
             if (AT_END() || PEEK() != ']') {
-                add_error(parser, TOML_ERROR_SYNTAX, "Expected ']'");
+                add_expect_error(parser, "']'");
                 skip_to_eol(parser);
                 continue;
             }
@@ -966,7 +994,7 @@ TomlResult toml_parser_parse(TomlParser *parser) {
 
             if (is_array_table) {
                 if (AT_END() || PEEK() != ']') {
-                    add_error(parser, TOML_ERROR_SYNTAX, "Expected ']]'");
+                    add_expect_error(parser, "']]'");
                     skip_to_eol(parser);
                     continue;
                 }
@@ -985,7 +1013,7 @@ TomlResult toml_parser_parse(TomlParser *parser) {
         skip_ws(parser);
 
         if (AT_END() || PEEK() != '=') {
-            add_error(parser, TOML_ERROR_SYNTAX, "Expected '='");
+            add_expect_error(parser, "'='");
             skip_to_eol(parser);
             continue;
         }

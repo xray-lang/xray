@@ -26,6 +26,7 @@ extern struct XrArray* xr_json_keys(XrayIsolate *X, struct XrJson *json);
 #include "../../src/runtime/object/xjson.h"
 #include "../../src/base/xmalloc.h"
 #include "../common_writer.h"
+#include "../common_io.h"
 #include "../stdlib_cache.h"
 #include <stdio.h>
 #include <string.h>
@@ -52,11 +53,12 @@ static XmlKeys* xml_keys_get(XrayIsolate *X) {
     XrStdlibCache *c = xr_stdlib_cache_get(X);
     XmlKeys *k = &c->xml_keys;
     if (k->ready) return k;
-    k->type     = xr_string_value(xr_string_intern(X, "type", 4, 0));
-    k->tag      = xr_string_value(xr_string_intern(X, "tag", 3, 0));
-    k->attrs    = xr_string_value(xr_string_intern(X, "attrs", 5, 0));
-    k->children = xr_string_value(xr_string_intern(X, "children", 8, 0));
-    k->text     = xr_string_value(xr_string_intern(X, "text", 4, 0));
+    k->type       = xr_string_value(xr_string_intern(X, "type", 4, 0));
+    k->tag        = xr_string_value(xr_string_intern(X, "tag", 3, 0));
+    k->attrs      = xr_string_value(xr_string_intern(X, "attrs", 5, 0));
+    k->children   = xr_string_value(xr_string_intern(X, "children", 8, 0));
+    k->text       = xr_string_value(xr_string_intern(X, "text", 4, 0));
+    k->namespaces = xr_string_value(xr_string_intern(X, "namespaces", 10, 0));
     k->str_element  = xr_string_intern(X, "element", 7, 0);
     k->str_text     = xr_string_intern(X, "text", 4, 0);
     k->str_comment  = xr_string_intern(X, "comment", 7, 0);
@@ -117,6 +119,7 @@ static XrValue node_to_map_r(XrayIsolate *X, XmlNode *node, XmlKeys *k, int dept
         case XML_NODE_COMMENT:  type_str = "comment"; break;
         case XML_NODE_CDATA:    type_str = "cdata"; break;
         case XML_NODE_DOCUMENT: type_str = "document"; break;
+        case XML_NODE_PI:       type_str = "pi"; break;
         default: break;
     }
     xr_map_set(map, k->type,
@@ -128,15 +131,38 @@ static XrValue node_to_map_r(XrayIsolate *X, XmlNode *node, XmlKeys *k, int dept
                        xr_string_value(xr_string_intern(X, node->tag, node->tag_len, 0)));
         }
 
-        // Build attrs map from XmlAttr array
+        // Build attrs map from XmlAttr array. In parallel, split out
+        // `xmlns` / `xmlns:prefix` declarations into a dedicated
+        // `namespaces` Map so script callers have a usable namespace
+        // surface (prefix -> URI). Namespace attrs are retained in the
+        // generic `attrs` map too so existing scripts that read them
+        // raw keep working — doc §2.4.5 requested at least basic
+        // namespace recording.
         XrMap *attr_map = xr_map_new(xr_current_coro(X));
+        XrMap *ns_map = NULL;  // lazy; most elements declare no xmlns
         for (int i = 0; i < node->attr_count; i++) {
             XmlAttr *a = &node->attrs[i];
             XrValue akey = xr_string_value(xr_string_intern(X, a->name, a->name_len, 0));
             XrValue aval = xr_string_value(xr_string_intern(X, a->value, a->value_len, 0));
             xr_map_set(attr_map, akey, aval);
+
+            // Detect xmlns declarations. `xmlns="uri"` goes under key "".
+            // `xmlns:prefix="uri"` goes under "prefix".
+            if (a->name_len >= 5 && memcmp(a->name, "xmlns", 5) == 0
+                && (a->name_len == 5 || a->name[5] == ':')) {
+                if (!ns_map) {
+                    ns_map = xr_map_new(xr_current_coro(X));
+                }
+                const char *pfx = (a->name_len == 5) ? "" : a->name + 6;
+                size_t pfxlen  = (a->name_len == 5) ? 0  : a->name_len - 6;
+                XrValue nkey = xr_string_value(xr_string_intern(X, pfx, pfxlen, 0));
+                xr_map_set(ns_map, nkey, aval);
+            }
         }
         xr_map_set(map, k->attrs, xr_value_from_map(attr_map));
+        if (ns_map) {
+            xr_map_set(map, k->namespaces, xr_value_from_map(ns_map));
+        }
 
         XrArray *children = xr_array_new(xr_current_coro(X));
         for (XmlNode *child = node->first_child; child; child = child->next_sibling) {
@@ -400,31 +426,24 @@ static XrValue xml_parse_detailed(XrayIsolate *X, XrValue *args, int argc) {
     return xr_value_from_map(output);
 }
 
+// parseFile. Synchronous; see stdlib/common_io.h for the P9 async plan.
 static XrValue xml_parse_file(XrayIsolate *X, XrValue *args, int argc) {
     if (argc < 1 || !XR_IS_STRING(args[0])) return xr_null();
 
     XrString *path = XR_TO_STRING(args[0]);
 
-    FILE *f = fopen(path->data, "rb");
-    if (!f) return xr_null();
-
-    fseek(f, 0, SEEK_END);
-    long size = ftell(f);
-    if (size < 0) { fclose(f); return xr_null(); }
-    fseek(f, 0, SEEK_SET);
-
-    char *content = (char*)xr_malloc((size_t)size + 1);
-    if (!content) { fclose(f); return xr_null(); }
-    size_t read_size = fread(content, 1, (size_t)size, f);
-    content[read_size] = '\0';
-    fclose(f);
+    char *content = NULL;
+    size_t content_len = 0;
+    if (!xrs_file_read_all_sync(path->data, &content, &content_len)) {
+        return xr_null();
+    }
 
     XmlParseConfig config;
     if (argc >= 2) extract_config(X, args[1], &config);
     else xml_parse_config_init(&config);
 
     XmlParser parser;
-    xml_parser_init(&parser, X, content, read_size, &config);
+    xml_parser_init(&parser, X, content, content_len, &config);
     XmlParseResult result = xml_parser_parse(&parser);
     xml_parser_cleanup(&parser);
     xr_free(content);
@@ -466,6 +485,7 @@ static XrValue xml_stringify_fn(XrayIsolate *X, XrValue *args, int argc) {
     return xr_string_value(result);
 }
 
+// writeFile. Synchronous; see stdlib/common_io.h for the P9 async plan.
 static XrValue xml_write_file(XrayIsolate *X, XrValue *args, int argc) {
     if (argc < 2 || !XR_IS_STRING(args[0])) return xr_bool(false);
 
@@ -477,12 +497,7 @@ static XrValue xml_write_file(XrayIsolate *X, XrValue *args, int argc) {
     if (!XR_IS_STRING(xml_str)) return xr_bool(false);
     XrString *str = XR_TO_STRING(xml_str);
 
-    FILE *f = fopen(path->data, "wb");
-    if (!f) return xr_bool(false);
-    fwrite(str->data, 1, str->length, f);
-    fclose(f);
-
-    return xr_bool(true);
+    return xr_bool(xrs_file_write_all_sync(path->data, str->data, str->length));
 }
 
 // document(): create empty document Map

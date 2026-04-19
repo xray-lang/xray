@@ -28,6 +28,24 @@ extern void yaml_skip_to_eol(YamlParser *p);
 extern void yaml_skip_newline(YamlParser *p);
 extern void yaml_skip_empty_lines(YamlParser *p);
 extern int yaml_count_indent(YamlParser *p);
+extern bool yaml_indent_has_tab(YamlParser *p, int indent);
+
+// Forward declare so line-indent check can reuse the strict path.
+static void yaml_add_error(YamlParser *p, const char *type, const char *message);
+
+// Count indent and, if followed by a tab, surface a YAML 1.2 §6.1
+// violation via the strict-mode error list. The parse continues at the
+// reported indent so the rest of the document keeps flowing — the
+// error is observable via parseStrict().errors.
+static int yaml_line_indent(YamlParser *p) {
+    int n = yaml_count_indent(p);
+    if (yaml_indent_has_tab(p, n)) {
+        yaml_add_error(p, "tab_indent",
+            "tab characters must not be used for indentation "
+            "(YAML 1.2 §6.1)");
+    }
+    return n;
+}
 
 // ========== Configuration Initialization ==========
 
@@ -538,7 +556,7 @@ static XrValue parse_block_sequence(YamlParser *p, int seq_indent) {
             yaml_skip_empty_lines(p);
             if (p->ptr >= p->end) break;
 
-            int indent = yaml_count_indent(p);
+            int indent = yaml_line_indent(p);
             if (indent < seq_indent) break;
 
             p->ptr += indent;
@@ -595,7 +613,7 @@ static XrValue parse_block_mapping(YamlParser *p, int map_indent) {
             yaml_skip_empty_lines(p);
             if (p->ptr >= p->end) break;
 
-            current_indent = yaml_count_indent(p);
+            current_indent = yaml_line_indent(p);
             if (current_indent < map_indent) break;
 
             p->ptr += current_indent;
@@ -935,7 +953,7 @@ static XrValue parse_document(YamlParser *p) {
 
     if (p->ptr >= p->end) return xr_null();
 
-    int indent = yaml_count_indent(p);
+    int indent = yaml_line_indent(p);
     return parse_value(p, indent);
 }
 

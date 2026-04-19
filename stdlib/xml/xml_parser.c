@@ -479,6 +479,11 @@ XmlParseResult xml_parser_parse(XmlParser *parser) {
                         parser->state = XML_STATE_TEXT;
                     }
                 } else if (c == '?') {
+                    // Reset text buffer to capture PI content (target +
+                    // payload). Emitted as an XML_NODE_PI child node on
+                    // `?>` below, so scripts that care about processing
+                    // instructions no longer lose them.
+                    parser->text_len = 0;
                     parser->state = XML_STATE_PI;
                     ADVANCE();
                 } else if (isalpha((unsigned char)c) || c == '_') {
@@ -678,10 +683,25 @@ XmlParseResult xml_parser_parse(XmlParser *parser) {
             case XML_STATE_PI:
                 if (c == '?' && parser->pos + 1 < parser->len &&
                     parser->data[parser->pos + 1] == '>') {
+                    // Close the PI: produce an XML_NODE_PI child on the
+                    // current element (or the document root) so the
+                    // instruction survives the parse. The XML decl
+                    // `<?xml ...?>` itself hits the same path but is
+                    // harmless: the root attaches it as a leading PI,
+                    // which serialise-back reproduces faithfully.
+                    if (parser->text_len > 0 && parser->current) {
+                        XmlNode *pi = xml_pi_new(parser->text_buf,
+                                                 parser->text_len);
+                        if (pi) xml_node_append_child(parser->current, pi);
+                    }
+                    parser->text_len = 0;
                     parser->pos += 2;
                     parser->column += 2;
                     parser->state = XML_STATE_TEXT;
                 } else {
+                    // Accumulate PI body byte-by-byte.
+                    buf_append_char(&parser->text_buf, &parser->text_len,
+                                    &parser->text_cap, c);
                     ADVANCE();
                 }
                 break;

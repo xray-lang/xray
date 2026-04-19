@@ -82,6 +82,15 @@ void csv_config_from_json(XrayIsolate *X, CsvConfig *config, XrJson *json) {
         config->columns = XR_TO_ARRAY(val);
     }
 
+    // nullStrings: override the default empty/null detection.
+    // Passing `[]` explicitly disables null-detection (literal "null"
+    // cells stay as strings); omitting the option keeps the built-in
+    // defaults ("", "null", "NULL").
+    val = xr_json_get_by_key(X, json, "nullStrings");
+    if (XR_IS_ARRAY(val)) {
+        config->null_strings = XR_TO_ARRAY(val);
+    }
+
     // dynamicTyping
     val = xr_json_get_by_key(X, json, "dynamicTyping");
     if (XR_IS_BOOL(val)) {
@@ -457,10 +466,38 @@ static void finish_field(CsvParser *parser) {
         trim_field(&field_data, &field_len);
     }
 
-    // Create value
+    // Create value.
+    //
+    // When dynamic_typing is active we additionally honour
+    // config.null_strings: any field whose string form exactly matches
+    // one of those entries is coerced to `xr_null()`. The default
+    // behaviour (when the caller did not pass `nullStrings`) preserves
+    // the legacy semantics — empty string maps to null via
+    // csv_convert_value; every other literal stays untouched. Callers
+    // that want to preserve the empty-string distinction can pass
+    // `nullStrings: []` to disable null coercion entirely.
     XrValue val;
     if (parser->config.dynamic_typing) {
-        val = csv_convert_value(parser->isolate, field_data, field_len);
+        XrArray *ns = parser->config.null_strings;
+        bool nulled = false;
+        if (ns) {
+            int nscount = ns->length;
+            for (int i = 0; i < nscount; i++) {
+                XrValue nv = xr_array_get(ns, i);
+                if (!XR_IS_STRING(nv)) continue;
+                XrString *ss = XR_TO_STRING(nv);
+                if (ss->length == field_len
+                    && (field_len == 0
+                        || memcmp(ss->data, field_data, field_len) == 0)) {
+                    val = xr_null();
+                    nulled = true;
+                    break;
+                }
+            }
+        }
+        if (!nulled) {
+            val = csv_convert_value(parser->isolate, field_data, field_len);
+        }
     } else {
         XrString *str = xr_string_intern(parser->isolate, field_data, field_len, 0);
         val = xr_string_value(str);
