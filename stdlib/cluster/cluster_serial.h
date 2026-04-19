@@ -21,6 +21,7 @@
 #ifndef XR_CLUSTER_SERIAL_H
 #define XR_CLUSTER_SERIAL_H
 
+#include "../../src/base/xdefs.h"
 #include "../../src/runtime/value/xvalue.h"
 #include <stdint.h>
 #include <stddef.h>
@@ -64,8 +65,8 @@ typedef struct {
     bool     error;  // set on allocation failure
 } XrSerialBuf;
 
-void xr_serial_buf_init(XrSerialBuf *buf);
-void xr_serial_buf_free(XrSerialBuf *buf);
+XR_FUNC void xr_serial_buf_init(XrSerialBuf *buf);
+XR_FUNC void xr_serial_buf_free(XrSerialBuf *buf);
 
 /* ========== Encode API ========== */
 
@@ -76,7 +77,7 @@ void xr_serial_buf_free(XrSerialBuf *buf);
  *
  * The isolate is needed for Json → JSON string conversion.
  */
-int xr_cluster_encode(struct XrayIsolate *X, XrValue value, XrSerialBuf *buf);
+XR_FUNC int xr_cluster_encode(struct XrayIsolate *X, XrValue value, XrSerialBuf *buf);
 
 /* ========== Decode API ========== */
 
@@ -91,7 +92,7 @@ typedef struct {
     struct XrayIsolate *X;
 } XrSerialReader;
 
-void xr_serial_reader_init(XrSerialReader *r, struct XrayIsolate *X,
+XR_FUNC void xr_serial_reader_init(XrSerialReader *r, struct XrayIsolate *X,
                             const uint8_t *data, size_t len);
 
 /*
@@ -100,7 +101,7 @@ void xr_serial_reader_init(XrSerialReader *r, struct XrayIsolate *X,
  * Returns: 0 on success, -1 on error (corrupt data, depth overflow)
  * Decoded value is written to *out.
  */
-int xr_cluster_decode(XrSerialReader *r, XrValue *out);
+XR_FUNC int xr_cluster_decode(XrSerialReader *r, XrValue *out);
 
 /* ========== Convenience Wrappers ========== */
 

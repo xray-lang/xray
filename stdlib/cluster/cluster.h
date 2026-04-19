@@ -25,6 +25,7 @@
 #include "cluster_node.h"
 #include "cluster_proto.h"
 #include "cluster_discovery.h"
+#include "../../src/base/xdefs.h"
 #include "../../src/coro/xchannel.h"
 #include "../../src/module/xmodule.h"
 
@@ -151,84 +152,84 @@ typedef struct XrCluster {
 
 // Initialize and start the cluster node
 // config contains: name, port, secret
-int xr_cluster_start(struct XrayIsolate *X, const char *name,
+XR_FUNC int xr_cluster_start(struct XrayIsolate *X, const char *name,
                       uint16_t port, const char *secret);
 
 // Connect to a remote node (host:port)
-int xr_cluster_join(XrCluster *c, const char *host, uint16_t port);
+XR_FUNC int xr_cluster_join(XrCluster *c, const char *host, uint16_t port);
 
 // Stop the cluster and close all connections
-void xr_cluster_stop(XrCluster *c);
+XR_FUNC void xr_cluster_stop(XrCluster *c);
 
 // Check if cluster is running
-bool xr_cluster_is_running(XrCluster *c);
+XR_FUNC bool xr_cluster_is_running(XrCluster *c);
 
 // Get self node name
-const char *xr_cluster_self_name(XrCluster *c);
+XR_FUNC const char *xr_cluster_self_name(XrCluster *c);
 
 /* ========== Node Query API ========== */
 
 // Find a node by name (must hold nodes_lock or accept stale reads)
-XrClusterNode *xr_cluster_find_node(XrCluster *c, const char *name);
+XR_FUNC XrClusterNode *xr_cluster_find_node(XrCluster *c, const char *name);
 
 // Add a connected node to the cluster
-void xr_cluster_add_node(XrCluster *c, XrClusterNode *node);
+XR_FUNC void xr_cluster_add_node(XrCluster *c, XrClusterNode *node);
 
 // Remove a node from the cluster
-void xr_cluster_remove_node(XrCluster *c, XrClusterNode *node);
+XR_FUNC void xr_cluster_remove_node(XrCluster *c, XrClusterNode *node);
 
 /* ========== Named Channel Registry ========== */
 
 // Register a Named Channel (called when Channel(N, "name") is created)
-void xr_cluster_register_channel(XrCluster *c, const char *name, struct XrChannel *ch);
+XR_FUNC void xr_cluster_register_channel(XrCluster *c, const char *name, struct XrChannel *ch);
 
 // Lookup a Named Channel by name
-XrDistChannel *xr_cluster_find_channel(XrCluster *c, const char *name);
+XR_FUNC XrDistChannel *xr_cluster_find_channel(XrCluster *c, const char *name);
 
 // Unregister a Named Channel
-void xr_cluster_unregister_channel(XrCluster *c, const char *name);
+XR_FUNC void xr_cluster_unregister_channel(XrCluster *c, const char *name);
 
 /* ========== Service Registry ========== */
 
 // Register a service (returns request channel)
-struct XrChannel *xr_cluster_register_service(struct XrayIsolate *X,
+XR_FUNC struct XrChannel *xr_cluster_register_service(struct XrayIsolate *X,
                                                const char *name);
 
 // Find a service by name
-XrServiceEntry *xr_cluster_find_service(XrCluster *c, const char *name);
+XR_FUNC XrServiceEntry *xr_cluster_find_service(XrCluster *c, const char *name);
 
 /* ========== Frame Processing ========== */
 
 // Process incoming frames from a connected node (runs in a coroutine)
-void xr_cluster_process_node(XrCluster *c, XrClusterNode *node);
+XR_FUNC void xr_cluster_process_node(XrCluster *c, XrClusterNode *node);
 
 /* ========== Health & Robustness ========== */
 
 // Check all nodes for heartbeat timeout, disconnect dead ones
-void xr_cluster_check_heartbeats(XrCluster *c);
+XR_FUNC void xr_cluster_check_heartbeats(XrCluster *c);
 
 // Send heartbeat pings to all connected nodes
-void xr_cluster_send_heartbeats(XrCluster *c);
+XR_FUNC void xr_cluster_send_heartbeats(XrCluster *c);
 
 // Reconnect to a node with exponential backoff
 // base_ms: initial delay (default 500), max_ms: cap (default 30000)
-int xr_cluster_reconnect(XrCluster *c, const char *host, uint16_t port,
+XR_FUNC int xr_cluster_reconnect(XrCluster *c, const char *host, uint16_t port,
                           int base_ms, int max_ms, int max_attempts);
 
 // Gossip: send NODE_INFO to a peer (list of known nodes)
-void xr_cluster_gossip_to_node(XrCluster *c, XrClusterNode *node);
+XR_FUNC void xr_cluster_gossip_to_node(XrCluster *c, XrClusterNode *node);
 
 // Handle incoming NODE_INFO gossip frame
-void xr_cluster_handle_node_info(XrCluster *c, const uint8_t *payload, uint32_t len);
+XR_FUNC void xr_cluster_handle_node_info(XrCluster *c, const uint8_t *payload, uint32_t len);
 
 // Dead node tombstone management
-void xr_cluster_mark_dead(XrCluster *c, const char *name);
-bool xr_cluster_is_dead(XrCluster *c, const char *name);
-void xr_cluster_sweep_tombstones(XrCluster *c, int64_t max_age_ms);
+XR_FUNC void xr_cluster_mark_dead(XrCluster *c, const char *name);
+XR_FUNC bool xr_cluster_is_dead(XrCluster *c, const char *name);
+XR_FUNC void xr_cluster_sweep_tombstones(XrCluster *c, int64_t max_age_ms);
 
 // Set node event callbacks
-void xr_cluster_on_node_added(XrCluster *c, void (*cb)(const char *name));
-void xr_cluster_on_node_removed(XrCluster *c, void (*cb)(const char *name));
+XR_FUNC void xr_cluster_on_node_added(XrCluster *c, void (*cb)(const char *name));
+XR_FUNC void xr_cluster_on_node_removed(XrCluster *c, void (*cb)(const char *name));
 
 /* ========== Node Monitor (CSP-style fault detection) ========== */
 
@@ -240,10 +241,10 @@ typedef struct XrNodeMonitor {
 
 // Monitor a specific node. Returns a Channel that receives the node name
 // as a string when that node disconnects. Use "*" to monitor all nodes.
-struct XrChannel *xr_cluster_monitor_node(struct XrayIsolate *X, const char *node_name);
+XR_FUNC struct XrChannel *xr_cluster_monitor_node(struct XrayIsolate *X, const char *node_name);
 
 // Fire monitors for a disconnected node (called internally)
-void xr_cluster_fire_monitors(XrCluster *c, const char *node_name);
+XR_FUNC void xr_cluster_fire_monitors(XrCluster *c, const char *node_name);
 
 /* ========== Topic Pub/Sub ========== */
 
@@ -257,26 +258,26 @@ typedef struct XrTopicSubscription {
 // Supports wildcard: "*" matches one segment, ">" matches remaining segments.
 // Example: "events.*" matches "events.user" but not "events.user.login"
 //          "events.>" matches "events.user" and "events.user.login"
-struct XrChannel *xr_cluster_topic_subscribe(struct XrayIsolate *X,
+XR_FUNC struct XrChannel *xr_cluster_topic_subscribe(struct XrayIsolate *X,
                                               const char *pattern);
 
 // Unsubscribe from a topic pattern
-void xr_cluster_topic_unsubscribe(XrCluster *c, const char *pattern);
+XR_FUNC void xr_cluster_topic_unsubscribe(XrCluster *c, const char *pattern);
 
 // Publish a value to a topic. Delivers to all matching local subscriptions
 // and forwards to all connected nodes.
-int xr_cluster_topic_publish(struct XrayIsolate *X,
+XR_FUNC int xr_cluster_topic_publish(struct XrayIsolate *X,
                               const char *topic, XrValue value);
 
 // Handle incoming TOPIC_PUBLISH frame from a remote node
-void xr_cluster_topic_handle_publish(XrCluster *c, const char *topic,
+XR_FUNC void xr_cluster_topic_handle_publish(XrCluster *c, const char *topic,
                                       const uint8_t *value_data, uint32_t value_len);
 
 // Deliver to local subscribers matching the topic
-void xr_cluster_topic_deliver_local(XrCluster *c, const char *topic, XrValue value);
+XR_FUNC void xr_cluster_topic_deliver_local(XrCluster *c, const char *topic, XrValue value);
 
 // Check if a pattern matches a topic string
-bool xr_topic_match(const char *pattern, const char *topic);
+XR_FUNC bool xr_topic_match(const char *pattern, const char *topic);
 
 /* ========== Remote Coroutine Monitoring ========== */
 
@@ -291,26 +292,26 @@ typedef struct XrRemoteCoroMonitor {
 // Monitor a coroutine on a remote node. Returns a Channel that receives
 // exit reason string when the remote coroutine terminates.
 // cluster.monitor("node_name", "coro_name")
-struct XrChannel *xr_cluster_monitor_coro(struct XrayIsolate *X,
+XR_FUNC struct XrChannel *xr_cluster_monitor_coro(struct XrayIsolate *X,
                                            const char *node_name,
                                            const char *coro_name);
 
 // Handle incoming CORO_EXIT frame from a remote node
-void xr_cluster_handle_coro_exit(XrCluster *c, const char *coro_name, const char *reason);
+XR_FUNC void xr_cluster_handle_coro_exit(XrCluster *c, const char *coro_name, const char *reason);
 
 // Handle incoming CORO_MONITOR request from a remote node
-void xr_cluster_handle_coro_monitor(XrCluster *c, struct XrClusterNode *node,
+XR_FUNC void xr_cluster_handle_coro_monitor(XrCluster *c, struct XrClusterNode *node,
                                      const char *coro_name);
 
 /* ========== Subscriber Management (for select push model) ========== */
 
-void xr_cluster_add_subscriber(XrCluster *c, const char *channel_name, XrClusterNode *node);
-void xr_cluster_remove_subscriber(XrCluster *c, const char *channel_name, XrClusterNode *node);
-void xr_cluster_remove_all_subscribers_for_node(XrCluster *c, XrClusterNode *node);
+XR_FUNC void xr_cluster_add_subscriber(XrCluster *c, const char *channel_name, XrClusterNode *node);
+XR_FUNC void xr_cluster_remove_subscriber(XrCluster *c, const char *channel_name, XrClusterNode *node);
+XR_FUNC void xr_cluster_remove_all_subscribers_for_node(XrCluster *c, XrClusterNode *node);
 
 /* ========== Module Registration ========== */
 
-XrModule *xr_load_module_cluster(struct XrayIsolate *isolate);
+XR_FUNC XrModule *xr_load_module_cluster(struct XrayIsolate *isolate);
 
 /* ========== Cluster Info API ========== */
 

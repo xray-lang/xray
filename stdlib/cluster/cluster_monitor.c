@@ -35,7 +35,7 @@ XrChannel *xr_cluster_monitor_node(XrayIsolate *X, const char *node_name) {
     XrCluster *c = (XrCluster *)X->cluster;
     if (!c || !node_name) return NULL;
 
-    XrNodeMonitor *m = (XrNodeMonitor *)calloc(1, sizeof(XrNodeMonitor));
+    XrNodeMonitor *m = (XrNodeMonitor *)xr_calloc(1, sizeof(XrNodeMonitor));
     if (!m) return NULL;
 
     strncpy(m->node_name, node_name, XR_NODE_NAME_MAX);
@@ -44,7 +44,7 @@ XrChannel *xr_cluster_monitor_node(XrayIsolate *X, const char *node_name) {
     // Buffered(8) channel for notifications
     XrChannel *ch = xr_channel_new(X, 8);
     if (!ch) {
-        free(m);
+        xr_free(m);
         return NULL;
     }
     m->notify_ch = ch;
@@ -117,7 +117,7 @@ XrChannel *xr_cluster_monitor_coro(XrayIsolate *X,
     if (!ch) return NULL;
 
     // Register in remote_coro_monitors list
-    XrRemoteCoroMonitor *mon = (XrRemoteCoroMonitor *)calloc(1, sizeof(XrRemoteCoroMonitor));
+    XrRemoteCoroMonitor *mon = (XrRemoteCoroMonitor *)xr_calloc(1, sizeof(XrRemoteCoroMonitor));
     if (!mon) return NULL;
     strncpy(mon->node_name, node_name, XR_NODE_NAME_MAX);
     strncpy(mon->coro_name, coro_name, XR_CORO_NAME_MAX);
@@ -172,7 +172,7 @@ static void coro_monitor_fwd_loop(void *arg) {
         }
     }
 
-    free(ctx);
+    xr_free(ctx);
 }
 
 void xr_cluster_handle_coro_monitor(XrCluster *c, XrClusterNode *node, const char *coro_name) {
@@ -197,7 +197,7 @@ void xr_cluster_handle_coro_monitor(XrCluster *c, XrClusterNode *node, const cha
 
     // Create a forwarding coroutine that blocks on mon_ch and sends
     // CORO_EXIT frame when the monitored coroutine terminates.
-    XrCoroMonitorFwd *ctx = (XrCoroMonitorFwd *)malloc(sizeof(XrCoroMonitorFwd));
+    XrCoroMonitorFwd *ctx = (XrCoroMonitorFwd *)xr_malloc(sizeof(XrCoroMonitorFwd));
     if (!ctx) return;
     ctx->mon_ch = mon_ch;
     ctx->node = node;
@@ -209,7 +209,7 @@ void xr_cluster_handle_coro_monitor(XrCluster *c, XrClusterNode *node, const cha
     if (fwd) {
         xr_coro_spawn(c->isolate, fwd);
     } else {
-        free(ctx);
+        xr_free(ctx);
     }
 }
 
@@ -229,7 +229,7 @@ void xr_cluster_handle_coro_exit(XrCluster *c, const char *coro_name, const char
 
             // Remove from list
             *pp = mon->next;
-            free(mon);
+            xr_free(mon);
         } else {
             pp = &mon->next;
         }

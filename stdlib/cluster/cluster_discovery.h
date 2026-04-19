@@ -26,6 +26,7 @@
 #include <stdint.h>
 #include <stdbool.h>
 #include <pthread.h>
+#include "../../src/base/xdefs.h"
 
 // Multicast defaults
 #define XR_DISCOVERY_MCAST_GROUP   "239.42.42.42"
@@ -55,11 +56,11 @@ typedef struct XrClusterDiscovery {
  *   2. Receives announces from other nodes and auto-joins them
  * Returns 0 on success, -1 on error.
  */
-int xr_cluster_discovery_start(struct XrCluster *c);
+XR_FUNC int xr_cluster_discovery_start(struct XrCluster *c);
 
 /*
  * Stop discovery and close multicast socket.
  */
-void xr_cluster_discovery_stop(struct XrCluster *c);
+XR_FUNC void xr_cluster_discovery_stop(struct XrCluster *c);
 
 #endif
