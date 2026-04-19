@@ -19,84 +19,18 @@
 #include <xray_isolate.h>
 #include <stdbool.h>
 
-/* ========== Build Item Containers ========== */
-
-typedef struct XrFieldBuildItem {
-    const char *name;   // Interned in symbol table; not owned.
-    int symbol;
-    XrValue default_value;
-    uint32_t flags;
-    uint16_t offset;         // Computed on finalize
-} XrFieldBuildItem;
-
-typedef struct XrMethodBuildItem {
-    const char *name;   // Interned in symbol table; not owned.
-    int symbol;
-    XrMethodType method_type;    // CLOSURE/PRIMITIVE/GETTER/SETTER/OPERATOR
-    union {
-        XrCFunctionPtr primitive;
-        XrClosure *closure;
-    } impl;
-    int param_count;
-    uint32_t flags;
-    uint8_t op_type;             // for operator methods
-} XrMethodBuildItem;
-
-typedef struct XrStaticFieldBuildItem {
-    const char *name;   // Interned in symbol table; not owned.
-    int symbol;
-    XrValue value;
-    uint32_t flags;
-} XrStaticFieldBuildItem;
-
-/* ========== Class Builder Structure ========== */
-
 /*
- * Lifecycle:
- *   1. xr_class_builder_new()      - Create
- *   2. xr_class_builder_add_xxx()  - Add members
- *   3. xr_class_builder_finalize() - Freeze into immutable class, destroy builder
+ * XrClassBuilder is an opaque, transient scratchpad used at class
+ * build time. The full layout (struct XrClassBuilder plus the
+ * XrFieldBuildItem / XrMethodBuildItem / XrStaticFieldBuildItem
+ * scaffolding) lives in xclass_builder_internal.h and must not be
+ * accessed from outside the class/ subsystem.
+ *
+ * Callers only ever deal with the handle returned by
+ * xr_class_builder_new(), feed it through the add_* helpers below,
+ * and finish with xr_class_builder_finalize(), which frees the
+ * builder and hands back an immutable XrClass.
  */
-struct XrClassBuilder {
-    // Basic info
-    XrayIsolate *isolate;
-    const char *name;   // Interned in symbol table; not owned.
-    XrClass *super;
-
-    // Fields (dynamic array)
-    XrFieldBuildItem *fields;
-    int field_count;
-    int field_capacity;
-
-    // Methods (dynamic array)
-    XrMethodBuildItem *methods;
-    int method_count;
-    int method_capacity;
-
-    // Static fields (dynamic array)
-    XrStaticFieldBuildItem *static_fields;
-    int static_field_count;
-    int static_field_capacity;
-
-    // Static methods (dynamic array)
-    XrMethodBuildItem *static_methods;
-    int static_method_count;
-    int static_method_capacity;
-
-    // Interfaces (dynamic array)
-    XrClass **interfaces;
-    int interface_count;
-    int interface_capacity;
-
-    // Abstract methods (dynamic array)
-    int *abstract_methods;
-    int abstract_method_count;
-    int abstract_method_capacity;
-
-    // Flags
-    uint32_t flags;
-    bool finalized;
-};
 
 /* ========== Builder API ========== */
 
