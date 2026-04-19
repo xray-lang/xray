@@ -63,8 +63,21 @@ typedef enum {
 // Handshake nonce size
 #define XR_NONCE_SIZE  16
 
-// SHA-256 digest size
+// HMAC-SHA256 digest size used for handshake proofs.
 #define XR_PROOF_SIZE  32
+
+/*
+ * Cluster handshake protocol version.
+ *
+ *   v1 — proof = SHA256(secret || nonce); no length prefix, no MAC.
+ *   v2 — proof = HMAC-SHA256(key = secret, data = nonce). Current.
+ *
+ * Versions are mutually incompatible on the wire. A peer advertising a
+ * different XR_CLUSTER_HANDSHAKE_VERSION is rejected during the REQ/ACK
+ * exchange; this is intentional since a mixed cluster would silently
+ * fail proof validation with no useful error otherwise.
+ */
+#define XR_CLUSTER_HANDSHAKE_VERSION  2
 
 // Max node name length
 #define XR_NODE_NAME_MAX  63

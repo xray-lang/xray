@@ -46,19 +46,49 @@ int64_t xr_cluster_now_ms(void) {
 
 /* ========== Proof Computation ========== */
 
+/*
+ * proof = HMAC-SHA256(key = secret, data = nonce)
+ *
+ * The previous v1 scheme used SHA256(secret || nonce) which has two
+ * issues compared to a MAC:
+ *
+ *   1. It is not a keyed MAC — just a prefixed hash. An attacker who
+ *      learns a proof / nonce pair cannot forge, but any subtle hash
+ *      misuse (e.g. length extension on variant constructions) is a
+ *      gun pointed at our own foot.
+ *   2. The concatenation is ambiguous: `secret="ab", nonce="cd"` and
+ *      `secret="abc", nonce="d"` hash to the same digest. We limit the
+ *      secret length so this is not exploitable today, but future
+ *      variable-length secrets or nonce formats would re-introduce the
+ *      hazard.
+ *
+ * HMAC-SHA256 eliminates both. xr_hmac_sha256 already owns the 64-byte
+ * scratch buffer internally so we no longer stage `secret || nonce` on
+ * the stack — the caller's secret never leaves the HMAC inner context.
+ */
 void xr_cluster_compute_proof(const char *secret, const uint8_t *nonce,
                                uint8_t *proof_out) {
-    // proof = SHA256(secret || nonce)
-    // secret max 63B + nonce 16B = 79B max, safe for stack
     size_t secret_len = strlen(secret);
-    size_t total = secret_len + XR_NONCE_SIZE;
-    uint8_t input[80];
-    memcpy(input, secret, secret_len);
-    memcpy(input + secret_len, nonce, XR_NONCE_SIZE);
-    xr_sha256(input, total, proof_out);
-    // Scrub the composed (secret || nonce) buffer so the cluster shared
-    // secret does not linger on the stack after handshake returns.
-    xr_secure_wipe(input, sizeof(input));
+    xr_hmac_sha256((const uint8_t *)secret, secret_len,
+                   nonce, XR_NONCE_SIZE,
+                   proof_out);
+}
+
+/*
+ * Constant-time buffer comparison for handshake proofs.
+ *
+ * memcmp short-circuits on the first byte mismatch, leaking partial
+ * information via timing. For 32-byte proofs the signal is tiny but we
+ * have nothing to gain from being sloppy on the security boundary.
+ * Keep this as a translation-unit static since the rest of cluster has
+ * no other constant-time needs right now.
+ */
+static int cluster_proof_equal(const uint8_t *a, const uint8_t *b) {
+    uint8_t diff = 0;
+    for (size_t i = 0; i < XR_PROOF_SIZE; i++) {
+        diff |= (uint8_t)(a[i] ^ b[i]);
+    }
+    return diff == 0;
 }
 
 /* ========== Output Queue ========== */
@@ -534,7 +564,7 @@ int xr_cluster_node_connect(XrCluster *cluster, XrClusterNode *node) {
     // Step 1: Send HANDSHAKE_REQ
     XrFrameHandshakeReq req;
     memset(&req, 0, sizeof(req));
-    req.version = 1;
+    req.version = XR_CLUSTER_HANDSHAKE_VERSION;
     strncpy(req.name, cluster->self_name, XR_NODE_NAME_MAX);
     xr_random_bytes(req.nonce, XR_NONCE_SIZE);
     req.flags = 0x01;
@@ -561,16 +591,17 @@ int xr_cluster_node_connect(XrCluster *cluster, XrClusterNode *node) {
 
     XrFrameHandshakeAck ack;
     if (xr_frame_decode_handshake_ack(recv_buf, payload_len, &ack) != 0 ||
-        ack.version != 1) {
+        ack.version != XR_CLUSTER_HANDSHAKE_VERSION) {
         xr_cluster_node_close(node);
         node->state = XR_NODE_IDLE;
         return -1;
     }
 
-    // Verify proof_b = SHA256(secret + nonce_a)
+    // Verify proof_b = HMAC-SHA256(secret, nonce_a). Constant-time compare
+    // to avoid leaking information about the first mismatching byte.
     uint8_t expected_proof[XR_PROOF_SIZE];
     xr_cluster_compute_proof(cluster->secret, req.nonce, expected_proof);
-    if (memcmp(ack.proof, expected_proof, XR_PROOF_SIZE) != 0) {
+    if (!cluster_proof_equal(ack.proof, expected_proof)) {
         xr_cluster_node_close(node);
         node->state = XR_NODE_IDLE;
         return -1;
@@ -581,7 +612,7 @@ int xr_cluster_node_connect(XrCluster *cluster, XrClusterNode *node) {
     node->name[XR_NODE_NAME_MAX] = '\0';
     node->flags = ack.flags;
 
-    // Step 3: Send HANDSHAKE_DONE with proof_a = SHA256(secret + nonce_b)
+    // Step 3: Send HANDSHAKE_DONE with proof_a = HMAC-SHA256(secret, nonce_b)
     XrFrameHandshakeDone done;
     xr_cluster_compute_proof(cluster->secret, ack.nonce, done.proof);
 
@@ -622,14 +653,14 @@ XrClusterNode *xr_cluster_node_accept(XrCluster *cluster, XrIOConn *conn) {
 
     XrFrameHandshakeReq req;
     if (xr_frame_decode_handshake_req(recv_buf, payload_len, &req) != 0 ||
-        req.version != 1) {
+        req.version != XR_CLUSTER_HANDSHAKE_VERSION) {
         return NULL;
     }
 
     // Step 2: Send HANDSHAKE_ACK
     XrFrameHandshakeAck ack;
     memset(&ack, 0, sizeof(ack));
-    ack.version = 1;
+    ack.version = XR_CLUSTER_HANDSHAKE_VERSION;
     strncpy(ack.name, cluster->self_name, XR_NODE_NAME_MAX);
     xr_random_bytes(ack.nonce, XR_NONCE_SIZE);
     xr_cluster_compute_proof(cluster->secret, req.nonce, ack.proof);
@@ -653,10 +684,10 @@ XrClusterNode *xr_cluster_node_accept(XrCluster *cluster, XrIOConn *conn) {
         return NULL;
     }
 
-    // Verify proof_a = SHA256(secret + nonce_b)
+    // Verify proof_a = HMAC-SHA256(secret, nonce_b). Constant-time compare.
     uint8_t expected_proof[XR_PROOF_SIZE];
     xr_cluster_compute_proof(cluster->secret, ack.nonce, expected_proof);
-    if (memcmp(done.proof, expected_proof, XR_PROOF_SIZE) != 0) {
+    if (!cluster_proof_equal(done.proof, expected_proof)) {
         return NULL;
     }
 
