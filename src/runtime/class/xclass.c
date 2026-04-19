@@ -13,6 +13,7 @@
  */
 
 #include "xclass.h"
+#include "xclass_builder.h"
 #include "xinstance.h"
 #include "xmethod.h"
 #include "xenum.h"
