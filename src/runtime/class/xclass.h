@@ -279,11 +279,13 @@ XR_FUNC XrMethod* xr_class_lookup_method(XrClass *cls, int symbol);
 
 /* ========== Direct Class API ========== */
 
-// Create class directly (used by builtin class initialization)
+// Create a bare class (no fields, no methods, no interfaces). Internally
+// this is a thin wrapper over XrClassBuilder; the returned object is
+// already finalised and immutable. Use the builder directly when members
+// need to be installed.
 XR_FUNC XrClass* xr_class_new(XrayIsolate *X, const char *name, XrClass *super);
 XR_FUNC void xr_class_mark_abstract(XrClass *cls);
 XR_FUNC void xr_class_add_abstract_method(XrClass *cls, int method_symbol);
-XR_FUNC void xr_class_set_super(XrClass *subclass, XrClass *superclass);
 
 XR_FUNC void xr_class_free(XrClass *cls);
 
