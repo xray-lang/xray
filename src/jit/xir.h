@@ -493,12 +493,8 @@ typedef struct XirBlock {
     uint32_t npred;
     uint32_t pred_cap;
 
-    // Dominator tree (computed by pass)
-    struct XirBlock *idom;        // immediate dominator
-
     // Ordering
     uint32_t rpo_id;              // reverse post-order index
-    int      loop_depth;          // nesting depth (0 = not in loop)
 
     // Flags
     bool     visited;             // traversal scratch
@@ -710,7 +706,10 @@ typedef struct {
     uint32_t      deopt_cap;
 
     // Cached analysis results (lazily computed, invalidated on CFG change)
-    uint32_t  *idom;         // immediate dominator array [nblk], NULL = not computed
+    struct XirDomTree  *domtree;   // see xir_domtree.h
+    struct XirLoopInfo *loopinfo;  // see xir_looptree.h
+    struct XirDefUse   *defuse;    // see xir_defuse.h
+    void               *alias;     // opaque AliasTable *, see xir_alias.c
 
     // Call argument pool: flat array of XirRef for all CALL instructions.
     // Each CALL dst vreg has (call_arg_start, call_nargs) pointing into this pool.
@@ -830,16 +829,21 @@ static inline XirType xir_ref_ctype(XirFunc *func, XirRef ref) {
 
 // Compute immediate dominators using Cooper's algorithm.
 // idom[] must be pre-allocated with nblk entries.
+// (Primarily a building block for xir_domtree.c — most callers should
+// instead go through xir_func_get_domtree().)
 XR_FUNC void xir_compute_idom(XirFunc *func, uint32_t *idom, uint32_t nblk);
 
 // Check if block 'a' dominates block 'b' using idom[] array.
+// For O(1) queries use xir_dom_covers() against a cached XirDomTree.
 XR_FUNC bool xir_dominates(uint32_t *idom, uint32_t a, uint32_t b);
 
-// Lazily compute and cache idom in func->idom. Returns cached array.
-// Also populates block->idom pointers.
+// Legacy accessor returning the cached idom[] pointer.  Internally
+// delegates to xir_func_get_domtree(); the array is owned by the
+// cache and must not be freed.
 XR_FUNC uint32_t *xir_func_get_idom(XirFunc *func);
 
-// Invalidate cached idom (call after CFG modifications).
+// Invalidate the dom-tree cache.  Alias of xir_func_invalidate_domtree
+// kept for ease of migration.
 XR_FUNC void xir_func_invalidate_idom(XirFunc *func);
 
 // Rebuild vreg.def pointers by scanning all instructions.

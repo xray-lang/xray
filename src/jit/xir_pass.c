@@ -13,7 +13,11 @@
  */
 
 #include "xir_pass_internal.h"
+#include "xir_pass_limits.h"
+#include "xir_looptree.h"
+#include "xir_alias.h"
 #include "../base/xchecks.h"
+#include "../base/xmalloc.h"
 
 /* ========== Dead Code Elimination ========== */
 
@@ -553,8 +557,10 @@ swap_args: {
  * Only pure instructions (no side effects, no memory ops) are candidates.
  */
 
-#define CSE_MIN_TABLE  64
-#define CSE_MAX_TABLE  1024
+/* Table sizing bounds come from xir_pass_limits.h; aliased here for
+ * readability of the local CSE code. */
+#define CSE_MIN_TABLE  XIR_CSE_MIN_TABLE
+#define CSE_MAX_TABLE  XIR_CSE_MAX_TABLE
 
 typedef struct {
     uint32_t key;       // hash of (op, arg0, arg1); 0 = empty slot
@@ -755,8 +761,8 @@ static bool gvn_assoc_const(XirFunc *func, XirIns *ins,
     return true;
 }
 
-#define GVN_MIN_TABLE  128
-#define GVN_MAX_TABLE  2048
+#define GVN_MIN_TABLE  XIR_GVN_MIN_TABLE
+#define GVN_MAX_TABLE  XIR_GVN_MAX_TABLE
 
 typedef struct {
     uint32_t key;       // hash; 0 = empty
@@ -1051,8 +1057,8 @@ void xir_pass_store_to_load(XirFunc *func) {
  *   - no side-effecting or pinned instructions in then/else
  */
 
-#define IFCONV_MAX_INS 2
-#define IFCONV_MAX_PHIS 2
+#define IFCONV_MAX_INS  XIR_IFCONV_MAX_INS
+#define IFCONV_MAX_PHIS XIR_IFCONV_MAX_PHIS
 
 static bool ifconv_ok_branch(XirBlock *blk) {
     int n = 0;
@@ -1178,22 +1184,19 @@ void xir_pass_ifconvert(XirFunc *func) {
 /*
  * Enhanced LICM: nested loop support + iterative chain-invariant hoisting.
  *
- * 1. Collect all natural loops via back-edges, sort innermost-first.
- * 2. Compute loop_depth for spill cost weighting.
- * 3. Per loop: iterate hoisting until fixed-point so chain-invariants
- *    (v1=a+b hoisted, then v2=v1+c) propagate correctly.
- * 4. Safe preheader insertion via xir_emit_raw (auto-grows capacity).
+ * Drives off the cached XirLoopInfo (xir_looptree.h), so it no longer
+ * assumes any particular block-array layout, no longer maintains its
+ * own fixed-size LicmLoop[] array, and no longer writes to the (now
+ * deleted) XirBlock::loop_depth field.  The central pass budget
+ * XIR_LICM_MAX_ITERATIONS bounds chain-invariant propagation; every
+ * other storage structure grows dynamically.
  */
 
-#define LICM_MAX_LOOPS      32
-#define LICM_MAX_STORE_OBJS 32
-#define LICM_MAX_ITERATIONS  4
-
 typedef struct {
-    uint32_t header_bi;
-    uint32_t latch_bi;
-    uint32_t preheader_bi;
-} LicmLoop;
+    XirRef   obj;
+    int64_t  offset;
+    bool     has_offset;
+} LicmStoreInfo;
 
 static void licm_build_def_block(XirFunc *func, uint32_t *db, uint32_t nv) {
     memset(db, 0xFF, nv * sizeof(uint32_t));
@@ -1212,184 +1215,129 @@ static void licm_build_def_block(XirFunc *func, uint32_t *db, uint32_t nv) {
     }
 }
 
-static bool licm_ref_outside(XirRef ref, uint32_t *db, uint32_t nv,
-                              uint32_t lo, uint32_t hi) {
+/*
+ * Returns true if |ref| is defined outside the currently processed
+ * loop (or is not a vreg at all).  |in_loop| is a per-block bitmap
+ * marking body membership; the def-block of the vreg is looked up in
+ * |db|.
+ */
+static bool licm_ref_outside(XirRef ref, const uint32_t *db, uint32_t nv,
+                              const uint8_t *in_loop, uint32_t nblk) {
     if (!xir_ref_is_vreg(ref)) return true;
     uint32_t idx = XIR_REF_INDEX(ref);
     if (idx >= nv) return false;
     uint32_t d = db[idx];
-    return (d < lo || d > hi);
+    if (d == UINT32_MAX || d >= nblk) return true;
+    return !in_loop[d];
 }
 
-/*
- * Find a true preheader for a natural loop.
- *
- * A preheader is the unique predecessor of |header| that lives outside the
- * loop body [hdr_bi, lat_bi].  If zero or more than one such predecessor
- * exists, the loop has no single preheader in this CFG shape and LICM
- * must skip it (a later pass may synthesise one by edge splitting).
- *
- * The previous implementation assumed preheader_bi == header_bi - 1, which
- * is only true when the block array happens to be laid out that way — a
- * fragile coincidence easily broken by any block reordering optimisation.
- *
- * Returns true + writes |*out_bi| on success; returns false otherwise.
- */
-static bool licm_find_preheader(XirFunc *func, uint32_t hdr_bi,
-                                 uint32_t lat_bi, uint32_t *out_bi) {
-    XirBlock *header = func->blocks[hdr_bi];
-    uint32_t found = UINT32_MAX;
-    for (uint32_t p = 0; p < header->npred; p++) {
-        XirBlock *cand = header->preds[p];
-        if (!cand) continue;
-        // Locate candidate's index in the block array.
-        uint32_t ci = UINT32_MAX;
-        for (uint32_t k = 0; k < func->nblk; k++) {
-            if (func->blocks[k] == cand) { ci = k; break; }
-        }
-        if (ci == UINT32_MAX) continue;
-        // Skip predecessors that are themselves inside the loop (latch etc.).
-        if (ci >= hdr_bi && ci <= lat_bi) continue;
-        // A second out-of-loop predecessor disqualifies the CFG from having
-        // a single preheader.
-        if (found != UINT32_MAX) return false;
-        found = ci;
-    }
-    if (found == UINT32_MAX) return false;
-    *out_bi = found;
-    return true;
+/* Look up a block's index in func->blocks[] (linear but only used
+ * during body-bitmap setup, so per-loop cost is bounded). */
+static uint32_t licm_block_index(XirFunc *func, const XirBlock *blk) {
+    for (uint32_t i = 0; i < func->nblk; i++)
+        if (func->blocks[i] == blk) return i;
+    return UINT32_MAX;
 }
 
 void xir_pass_licm(XirFunc *func) {
     if (!func || func->nblk < 2 || func->nvreg == 0) return;
 
-    uint32_t nv = func->nvreg;
+    const XirLoopInfo *loops = xir_func_get_loops(func);
+    if (!loops || loops->nloop == 0) return;
 
-    // Phase 1: Collect natural loops via back-edges
-    LicmLoop loops[LICM_MAX_LOOPS];
-    uint32_t nloops = 0;
+    uint32_t nv   = func->nvreg;
+    uint32_t nblk = func->nblk;
 
-    for (uint32_t bi = 0; bi < func->nblk; bi++) {
-        XirBlock *blk = func->blocks[bi];
-        XirBlock *targets[2] = { blk->s1, blk->s2 };
-        for (int t = 0; t < 2; t++) {
-            if (!targets[t]) continue;
-            uint32_t header_bi = UINT32_MAX;
-            for (uint32_t j = 0; j < func->nblk; j++) {
-                if (func->blocks[j] == targets[t]) { header_bi = j; break; }
-            }
-            if (header_bi >= bi) continue;
-            if (header_bi == 0) continue;
-            if (nloops >= LICM_MAX_LOOPS) break;
-            uint32_t preh_bi = 0;
-            // Skip loops that do not have a single clear preheader;
-            // inserting one is the job of a future edge-splitting pass.
-            if (!licm_find_preheader(func, header_bi, bi, &preh_bi)) continue;
-            loops[nloops].header_bi = header_bi;
-            loops[nloops].latch_bi = bi;
-            loops[nloops].preheader_bi = preh_bi;
-            nloops++;
-        }
-    }
-    if (nloops == 0) return;
-
-    // Sort innermost-first (smaller span = inner loop)
-    for (uint32_t i = 1; i < nloops; i++) {
-        LicmLoop tmp = loops[i];
-        uint32_t span = tmp.latch_bi - tmp.header_bi;
-        uint32_t j = i;
-        while (j > 0 &&
-               (loops[j-1].latch_bi - loops[j-1].header_bi) > span) {
-            loops[j] = loops[j-1];
-            j--;
-        }
-        loops[j] = tmp;
-    }
-
-    // Phase 2: Compute loop_depth for each block
-    for (uint32_t bi = 0; bi < func->nblk; bi++)
-        func->blocks[bi]->loop_depth = 0;
-    for (uint32_t li = 0; li < nloops; li++)
-        for (uint32_t bi = loops[li].header_bi; bi <= loops[li].latch_bi; bi++)
-            func->blocks[bi]->loop_depth++;
-
-    // Phase 3: Build def_block map
     uint32_t *def_block = (uint32_t *)xr_malloc(nv * sizeof(uint32_t));
-    if (!def_block) return;
+    uint8_t  *in_loop   = (uint8_t *)xr_malloc(nblk * sizeof(uint8_t));
+    if (!def_block || !in_loop) { xr_free(def_block); xr_free(in_loop); return; }
     licm_build_def_block(func, def_block, nv);
 
-    // Phase 4: Process each loop with iterative hoisting
-    for (uint32_t li = 0; li < nloops; li++) {
-        uint32_t hdr = loops[li].header_bi;
-        uint32_t lat = loops[li].latch_bi;
-        uint32_t preh = loops[li].preheader_bi;
-        XirBlock *preheader = func->blocks[preh];
+    /* all_loops is already sorted innermost-first by xir_looptree, so
+     * naive iteration processes the deepest loops before their parents
+     * — a prerequisite for chain-invariant propagation. */
+    for (uint32_t li = 0; li < loops->nloop; li++) {
+        XirLoop *L = loops->all_loops[li];
+        if (!L->preheader) continue;          // no unique preheader → skip
 
-        /* Collect (obj, offset) pairs written by STORE_FIELD in loop body.
-         * Track both precise (obj,offset) pairs and imprecise obj-only entries
-         * (when offset is not a constant). */
-        typedef struct { XirRef obj; int64_t offset; bool has_offset; } StoreInfo;
-        StoreInfo store_info[LICM_MAX_STORE_OBJS];
-        uint32_t nstore_info = 0;
-        for (uint32_t bi = hdr; bi <= lat; bi++) {
-            XirBlock *lb = func->blocks[bi];
-            for (uint32_t i = 0; i < lb->nins; i++) {
-                if (lb->ins[i].op == XIR_STORE_FIELD &&
-                    xir_ref_is_vreg(lb->ins[i].args[0])) {
-                    XirRef obj = lb->ins[i].args[0];
-                    int64_t off = 0;
-                    bool has_off = false;
-                    if (!xir_ref_is_none(lb->ins[i].dst) &&
-                        xir_ref_is_const(lb->ins[i].dst)) {
-                        uint32_t ci = XIR_REF_INDEX(lb->ins[i].dst);
-                        if (ci < func->nconst) {
-                            off = func->consts[ci].val.i64;
-                            has_off = true;
-                        }
+        /* Rebuild the body bitmap from XirLoop::body[]. */
+        memset(in_loop, 0, nblk);
+        for (uint32_t i = 0; i < L->nbody; i++) {
+            uint32_t bi = licm_block_index(func, L->body[i]);
+            if (bi != UINT32_MAX) in_loop[bi] = 1;
+        }
+
+        uint32_t preh_bi = licm_block_index(func, L->preheader);
+        if (preh_bi == UINT32_MAX) continue;
+        XirBlock *preheader = L->preheader;
+
+        /* Collect (obj, offset) pairs stored in the loop body so we
+         * can decide whether a LOAD_FIELD is aliased.  Heap-allocated
+         * with growth to avoid the old LICM_MAX_STORE_OBJS cap. */
+        LicmStoreInfo *stores = NULL;
+        uint32_t nstores = 0, store_cap = 0;
+
+        for (uint32_t i = 0; i < L->nbody; i++) {
+            XirBlock *lb = L->body[i];
+            for (uint32_t k = 0; k < lb->nins; k++) {
+                XirIns *ins = &lb->ins[k];
+                if (ins->op != XIR_STORE_FIELD ||
+                    !xir_ref_is_vreg(ins->args[0])) continue;
+                XirRef obj = ins->args[0];
+                int64_t off = 0;
+                bool has_off = false;
+                if (!xir_ref_is_none(ins->dst) && xir_ref_is_const(ins->dst)) {
+                    uint32_t ci = XIR_REF_INDEX(ins->dst);
+                    if (ci < func->nconst) {
+                        off = func->consts[ci].val.i64;
+                        has_off = true;
                     }
-                    // Deduplicate
-                    bool found = false;
-                    for (uint32_t s = 0; s < nstore_info; s++) {
-                        if (store_info[s].obj == obj &&
-                            store_info[s].has_offset == has_off &&
-                            (!has_off || store_info[s].offset == off)) {
-                            found = true; break;
-                        }
-                    }
-                    if (!found && nstore_info < LICM_MAX_STORE_OBJS)
-                        store_info[nstore_info++] = (StoreInfo){obj, off, has_off};
                 }
+                bool duplicate = false;
+                for (uint32_t s = 0; s < nstores; s++) {
+                    if (stores[s].obj == obj &&
+                        stores[s].has_offset == has_off &&
+                        (!has_off || stores[s].offset == off)) {
+                        duplicate = true; break;
+                    }
+                }
+                if (duplicate) continue;
+                if (nstores >= store_cap) {
+                    store_cap = store_cap ? store_cap * 2 : 8;
+                    XR_REALLOC_OR_ABORT(stores,
+                                        store_cap * sizeof(LicmStoreInfo),
+                                        "licm stores");
+                }
+                stores[nstores++] = (LicmStoreInfo){obj, off, has_off};
             }
         }
 
-        // Iterate until fixed-point (chain-invariant propagation)
-        for (int iter = 0; iter < LICM_MAX_ITERATIONS; iter++) {
+        /* Iterative hoisting: when a chain-invariant is promoted, its
+         * dependents become hoistable on the next round. */
+        for (int iter = 0; iter < XIR_LICM_MAX_ITERATIONS; iter++) {
             bool hoisted_any = false;
 
-            for (uint32_t bi = hdr; bi <= lat; bi++) {
-                XirBlock *loop_blk = func->blocks[bi];
+            for (uint32_t i = 0; i < L->nbody; i++) {
+                XirBlock *loop_blk = L->body[i];
+                if (loop_blk == preheader) continue;
                 uint32_t write = 0;
 
-                for (uint32_t i = 0; i < loop_blk->nins; i++) {
-                    XirIns *ins = &loop_blk->ins[i];
+                for (uint32_t k = 0; k < loop_blk->nins; k++) {
+                    XirIns *ins = &loop_blk->ins[k];
                     bool can_hoist = false;
 
                     if (xir_op_is_pure(ins->op) && xir_ref_is_vreg(ins->dst)) {
                         can_hoist = true;
                         for (int a = 0; a < 2; a++) {
                             if (!licm_ref_outside(ins->args[a], def_block,
-                                                  nv, hdr, lat)) {
-                                can_hoist = false;
-                                break;
+                                                  nv, in_loop, nblk)) {
+                                can_hoist = false; break;
                             }
                         }
                     } else if (ins->op == XIR_LOAD_FIELD &&
                                xir_ref_is_vreg(ins->dst)) {
                         XirRef obj = ins->args[0];
-                        if (licm_ref_outside(obj, def_block, nv, hdr, lat)) {
-                            /* Check if any loop store aliases this load.
-                             * Precise: only block if same (obj, offset).
-                             * Imprecise store (no offset) blocks all loads from obj. */
+                        if (licm_ref_outside(obj, def_block, nv, in_loop, nblk)) {
                             bool has_alias = false;
                             int64_t load_off = 0;
                             bool load_has_off = false;
@@ -1400,12 +1348,12 @@ void xir_pass_licm(XirFunc *func) {
                                     load_has_off = true;
                                 }
                             }
-                            for (uint32_t s = 0; s < nstore_info; s++) {
-                                if (store_info[s].obj != obj) continue;
-                                if (!store_info[s].has_offset || !load_has_off) {
+                            for (uint32_t s = 0; s < nstores; s++) {
+                                if (stores[s].obj != obj) continue;
+                                if (!stores[s].has_offset || !load_has_off) {
                                     has_alias = true; break;
                                 }
-                                if (store_info[s].offset == load_off) {
+                                if (stores[s].offset == load_off) {
                                     has_alias = true; break;
                                 }
                             }
@@ -1416,17 +1364,11 @@ void xir_pass_licm(XirFunc *func) {
                                ins->op == XIR_GUARD_NONNULL ||
                                ins->op == XIR_GUARD_CLASS ||
                                ins->op == XIR_GUARD_KLASS) {
-                        /* Guard hoisting: guards are safe to hoist because
-                         * failing earlier (in preheader) is semantically
-                         * equivalent to failing inside the loop — both
-                         * trigger deoptimization. Only hoist when all args
-                         * are loop-invariant. */
                         can_hoist = true;
                         for (int a = 0; a < 2; a++) {
                             if (!licm_ref_outside(ins->args[a], def_block,
-                                                  nv, hdr, lat)) {
-                                can_hoist = false;
-                                break;
+                                                  nv, in_loop, nblk)) {
+                                can_hoist = false; break;
                             }
                         }
                     }
@@ -1437,12 +1379,11 @@ void xir_pass_licm(XirFunc *func) {
                         preheader->ins[preheader->nins - 1].flags = ins->flags;
                         if (xir_ref_is_vreg(ins->dst)) {
                             uint32_t di = XIR_REF_INDEX(ins->dst);
-                            if (di < nv) def_block[di] = preh;
+                            if (di < nv) def_block[di] = preh_bi;
                         }
                         hoisted_any = true;
                     } else {
-                        if (write != i)
-                            loop_blk->ins[write] = loop_blk->ins[i];
+                        if (write != k) loop_blk->ins[write] = loop_blk->ins[k];
                         write++;
                     }
                 }
@@ -1451,9 +1392,12 @@ void xir_pass_licm(XirFunc *func) {
 
             if (!hoisted_any) break;
         }
+
+        xr_free(stores);
     }
 
     xr_free(def_block);
+    xr_free(in_loop);
 }
 
 /* ========== Canonicalize ========== */
@@ -1689,7 +1633,7 @@ void xir_pass_canonicalize(XirFunc *func) {
  * the same location is tracked, the current store is dead.
  */
 
-#define DSE_MAX_TRACKED 32
+#define DSE_MAX_TRACKED XIR_DSE_MAX_TRACKED
 
 typedef struct {
     XirRef   obj;
@@ -1775,6 +1719,18 @@ void xir_pass_dse(XirFunc *func) {
 
 /* ========== Pipeline Runner ========== */
 
+/* After every pass we rebuild vreg.def pointers and drop the cached
+ * dominator / loop / def-use analyses so the next consumer sees a
+ * coherent snapshot.  Phase 2 introduced these caches; invalidating
+ * them blindly is correct (later phases can add a change-tracker for
+ * finer-grained invalidation). */
+#define XIR_RESET_ANALYSIS(fn) do {                      \
+    xir_rebuild_vreg_defs(fn);                           \
+    xir_func_invalidate_loops(fn); /* transitively dom */ \
+    xir_func_invalidate_defuse(fn);                      \
+    xir_func_invalidate_alias(fn);                       \
+} while (0)
+
 /*
  * Auto-verify macros: run xir_verify_cfg after every pass in debug builds.
  * Inspired by Dart VM's FlowGraphChecker which runs after each compiler pass
@@ -1795,17 +1751,17 @@ static uint32_t xir_count_se_(XirFunc *fn) {
     return n;
 }
 
-#define XIR_RUN_PASS(fn, pass)       do { pass(fn); xir_rebuild_vreg_defs(fn); xir_verify_cfg(fn); xir_verify_types(fn); } while(0)
-#define XIR_RUN_PASS2(fn, pass, arg) do { pass(fn, arg); xir_rebuild_vreg_defs(fn); xir_verify_cfg(fn); xir_verify_types(fn); } while(0)
+#define XIR_RUN_PASS(fn, pass)       do { pass(fn); XIR_RESET_ANALYSIS(fn); xir_verify_cfg(fn); xir_verify_types(fn); } while(0)
+#define XIR_RUN_PASS2(fn, pass, arg) do { pass(fn, arg); XIR_RESET_ANALYSIS(fn); xir_verify_cfg(fn); xir_verify_types(fn); } while(0)
 // For passes that do NOT modify CFG — skip cfg verify (builder may leave
 // pred lists inconsistent until rebuild_preds normalizes them).
-#define XIR_RUN_PASS_NOCFG(fn, pass) do { pass(fn); xir_rebuild_vreg_defs(fn); xir_verify_types(fn); } while(0)
+#define XIR_RUN_PASS_NOCFG(fn, pass) do { pass(fn); XIR_RESET_ANALYSIS(fn); xir_verify_types(fn); } while(0)
 
 /* Strict SE variant: for passes that must NOT remove side-effect instructions
  * (DCE, CSE, GVN, copy_prop). Asserts SE count is non-decreasing. */
 #define XIR_RUN_PASS_STRICT_SE(fn, pass) do { \
     uint32_t _se_pre = xir_count_se_(fn); \
-    pass(fn); xir_rebuild_vreg_defs(fn); \
+    pass(fn); XIR_RESET_ANALYSIS(fn); \
     xir_verify_cfg(fn); xir_verify_types(fn); \
     uint32_t _se_post = xir_count_se_(fn); \
     if (_se_post < _se_pre) { \
@@ -1816,9 +1772,9 @@ static uint32_t xir_count_se_(XirFunc *fn) {
 } while(0)
 
 #else
-#define XIR_RUN_PASS(fn, pass)       do { pass(fn); xir_rebuild_vreg_defs(fn); } while(0)
-#define XIR_RUN_PASS2(fn, pass, arg) do { pass(fn, arg); xir_rebuild_vreg_defs(fn); } while(0)
-#define XIR_RUN_PASS_NOCFG(fn, pass) do { pass(fn); xir_rebuild_vreg_defs(fn); } while(0)
+#define XIR_RUN_PASS(fn, pass)       do { pass(fn); XIR_RESET_ANALYSIS(fn); } while(0)
+#define XIR_RUN_PASS2(fn, pass, arg) do { pass(fn, arg); XIR_RESET_ANALYSIS(fn); } while(0)
+#define XIR_RUN_PASS_NOCFG(fn, pass) do { pass(fn); XIR_RESET_ANALYSIS(fn); } while(0)
 #define XIR_RUN_PASS_STRICT_SE(fn, pass) XIR_RUN_PASS(fn, pass)
 #endif
 

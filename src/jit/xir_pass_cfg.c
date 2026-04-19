@@ -14,6 +14,7 @@
  */
 
 #include "xir_pass_internal.h"
+#include "xir_looptree.h"
 #include "../base/xchecks.h"
 
 /* ========== Copy Propagation ========== */
@@ -1304,13 +1305,15 @@ void xir_pass_reorder_blocks(XirFunc *func) {
             }
         }
 
-        // No successor available — pick unplaced block with highest loop_depth
+        // No successor available — pick unplaced block with highest loop depth
         if (!next) {
             int best_depth = -1;
             uint32_t best_idx = 0;
             for (uint32_t i = 0; i < n; i++) {
-                if (!placed[i] && func->blocks[i]->loop_depth > best_depth) {
-                    best_depth = func->blocks[i]->loop_depth;
+                if (placed[i]) continue;
+                int d = (int)xir_block_loop_depth(func, func->blocks[i]->id);
+                if (d > best_depth) {
+                    best_depth = d;
                     best_idx = i;
                 }
             }

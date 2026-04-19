@@ -23,6 +23,40 @@
 #include "xir.h"
 #include "../base/xdefs.h"
 
+/* ========== Pass Change Tracker ==========
+ *
+ * Fine-grained "what did this pass actually do?" record, intended
+ * for the next-generation pipeline driver that wants to skip
+ * rebuilding analyses the pass did not affect.  Phase 2 sets up the
+ * type and the cooperating XIR_RESET_ANALYSIS in xir_pass.c; Phase 3
+ * will wire individual passes to return it so the driver can replace
+ * the current "invalidate everything" hook with precise decisions.
+ *
+ * Existing void-returning passes still work — the driver simply
+ * treats their output as "assume worst", invalidating every cache.
+ */
+typedef struct XirPassChange {
+    bool cfg_changed;        // block/edge/terminator topology was altered
+    bool vreg_defs_changed;  // instructions were added, deleted, or moved
+    bool ins_changed;        // instruction args / flags rewritten in place
+    uint32_t n_ins_removed;  // fine-grained counters used by heuristics
+    uint32_t n_ins_added;
+    uint32_t n_vregs_dead;
+} XirPassChange;
+
+/* Sentinel: "nothing changed" — shorthand for passes that early-exit. */
+static inline XirPassChange xir_pass_no_change(void) {
+    return (XirPassChange){ false, false, false, 0, 0, 0 };
+}
+
+/* Sentinel: "everything changed" — matches the conservative reset the
+ * pipeline performs for legacy void passes.  Convenient for new
+ * passes that touch mutation but have not yet grown fine-grained
+ * bookkeeping. */
+static inline XirPassChange xir_pass_change_all(void) {
+    return (XirPassChange){ true, true, true, 0, 0, 0 };
+}
+
 // Forward declaration
 typedef struct XrProto XrProto;
 

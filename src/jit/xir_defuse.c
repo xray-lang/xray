@@ -179,3 +179,21 @@ void xir_defuse_free(XirDefUse *du) {
     xr_free(du->count);
     memset(du, 0, sizeof(*du));
 }
+
+const XirDefUse *xir_func_get_defuse(XirFunc *func) {
+    if (!func || func->nvreg == 0) return NULL;
+    if (func->defuse) return func->defuse;
+
+    XirDefUse *du = (XirDefUse *)xr_calloc(1, sizeof(XirDefUse));
+    if (!du) return NULL;
+    xir_defuse_build(du, func);
+    func->defuse = du;
+    return du;
+}
+
+void xir_func_invalidate_defuse(XirFunc *func) {
+    if (!func || !func->defuse) return;
+    xir_defuse_free(func->defuse);
+    xr_free(func->defuse);
+    func->defuse = NULL;
+}

@@ -58,11 +58,31 @@ typedef struct {
  * Build def-use chains for all vregs in func.
  * The result is a snapshot of current IR state; if IR is modified,
  * call xir_defuse_free() and rebuild.
+ *
+ * For most passes, prefer xir_func_get_defuse() below — it returns a
+ * cached result that is reused across passes and invalidated
+ * automatically by XIR_RUN_PASS when IR is mutated.
  */
 XR_FUNC void xir_defuse_build(XirDefUse *du, XirFunc *func);
 
 // Release all memory held by a XirDefUse result
 XR_FUNC void xir_defuse_free(XirDefUse *du);
+
+/*
+ * Lazy cache accessor: return the XirDefUse attached to |func|,
+ * building it on first access.  The tree is owned by the function
+ * and must not be freed by callers.  Returns NULL only when the
+ * function has no vregs at all.
+ */
+XR_FUNC const XirDefUse *xir_func_get_defuse(XirFunc *func);
+
+/*
+ * Drop the cached def-use so the next xir_func_get_defuse() rebuilds
+ * from scratch.  Safe to call when nothing is cached.  Called by the
+ * XIR_RUN_PASS harness after every pass so mutated IR is guaranteed
+ * to produce a fresh chain on next access.
+ */
+XR_FUNC void xir_func_invalidate_defuse(XirFunc *func);
 
 // Query: number of uses for vreg v
 static inline uint32_t xir_defuse_nuses(const XirDefUse *du, uint32_t v) {
