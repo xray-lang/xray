@@ -413,6 +413,10 @@ static XrValue ws_connect(XrayIsolate *X, XrValue *args, int argc) {
         return xr_json_value(result);
     }
 
+    // Bind the scheduler isolate so xr_ws_connect / send / recv cooperate
+    // with netpoll instead of blocking the worker on poll(5000).
+    xr_ws_set_isolate(ws, X);
+
     // Connect
     XrWsError err = xr_ws_connect(ws);
 

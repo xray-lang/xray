@@ -15,6 +15,7 @@
 #include "ws_deflate.h"
 #include "../../include/xray_platform.h"
 #include "../../src/base/xmalloc.h"
+#include "../../src/coro/xsocket.h"
 #include "../../src/runtime/object/xutf8.h"
 #include "../base64/base64.h"
 #include "../net/io.h"
@@ -205,21 +206,46 @@ static int parse_ws_url(const char *url, char **host, int *port, char **path, bo
     return 0;
 }
 
-// Raw recv (TLS-aware)
-// Note: xr_socket_read returns -2 for "need yield" which is not compatible
-// with WebSocket's internal loop. Use raw recv for now.
-// TODO: Refactor to use xr_socket_read_try + proper yieldable integration
+/*
+ * Raw recv (TLS-aware).
+ *
+ * When xr_ws_set_isolate() has bound a XrayIsolate, non-TLS reads go through
+ * xr_socket_read which yields the current coroutine on EAGAIN via netpoll
+ * instead of blocking the worker thread. This removes the legacy 5s
+ * poll() fallback that used to freeze the worker on slow peers.
+ *
+ * The TLS path keeps using xr_tls_conn_read — that function already checks
+ * xr_io_get_isolate() internally, so set_isolate() callers must also invoke
+ * xr_io_set_isolate() before entering any TLS handshake / read path (done
+ * in xr_ws_connect).
+ */
 static ssize_t ws_raw_recv(XrWebSocket *ws, void *buf, size_t len) {
-    // Use TLS read if secure connection
     if (ws->is_secure && ws->tls_conn) {
         return xr_tls_conn_read((XrTlsConn*)ws->tls_conn, buf, len);
     }
-    // Use raw recv - websocket recv loop handles EAGAIN with select
+    if (ws->isolate) {
+        int n = xr_socket_read(ws->isolate, ws->fd, (char *)buf, len);
+        return (ssize_t)n;
+    }
     return recv(ws->fd, buf, len, 0);
 }
 
-// recv with timeout (for client handshake where timeout is important)
+/*
+ * recv with timeout.
+ *
+ * Used by the client handshake where a bounded wait is required even if
+ * no scheduler is plugged in. When an isolate is bound we rely on
+ * xr_socket_read to yield; the explicit poll() timeout is only honoured
+ * for the legacy blocking path (no isolate).
+ *
+ * NOTE: once xr_ws_set_isolate is wired up for client bindings the
+ * timeout_ms argument becomes informational — cancellation will come
+ * from scheduler deadlines rather than poll(2).
+ */
 static ssize_t ws_recv_timeout(XrWebSocket *ws, void *buf, size_t len, int timeout_ms) {
+    if (ws->isolate) {
+        return ws_raw_recv(ws, buf, len);
+    }
     if (timeout_ms > 0) {
         struct pollfd pfd = { .fd = ws->fd, .events = POLLIN };
         int ret = poll(&pfd, 1, timeout_ms);
@@ -232,9 +258,18 @@ static ssize_t ws_recv_timeout(XrWebSocket *ws, void *buf, size_t len, int timeo
     return ws_raw_recv(ws, buf, len);
 }
 
-// Send all data (TLS-aware)
-// Note: Same as recv, xr_socket_write's -2 return value is not compatible.
-// TODO: Refactor to use proper yieldable integration
+/*
+ * Send all data (TLS-aware).
+ *
+ * With a bound isolate, plain-TCP sends route through xr_socket_write which
+ * auto-yields on EAGAIN via netpoll. The legacy poll(5000) fallback was
+ * replaced because it blocked the worker thread on backpressure, starving
+ * every other coroutine sharing the worker.
+ *
+ * The TLS path is unchanged: xr_tls_conn_write already yields via
+ * xr_socket_read/write internally when an isolate has been installed through
+ * xr_io_set_isolate.
+ */
 static int ws_send_all(XrWebSocket *ws, const void *buf, size_t len) {
     const char *p = (const char*)buf;
     size_t sent = 0;
@@ -243,9 +278,12 @@ static int ws_send_all(XrWebSocket *ws, const void *buf, size_t len) {
         ssize_t n;
         if (ws->is_secure && ws->tls_conn) {
             n = xr_tls_conn_write((XrTlsConn*)ws->tls_conn, p + sent, len - sent);
+        } else if (ws->isolate) {
+            n = xr_socket_write(ws->isolate, ws->fd, p + sent, len - sent);
         } else {
             n = send(ws->fd, p + sent, len - sent, 0);
             if (n < 0 && (errno == EAGAIN || errno == EWOULDBLOCK)) {
+                // Legacy fallback when no isolate is bound (non-coroutine use).
                 struct pollfd pfd = { .fd = ws->fd, .events = POLLOUT };
                 if (poll(&pfd, 1, 5000) > 0) {
                     continue;
@@ -870,6 +908,19 @@ XrWebSocket* xr_ws_new(const XrWsConfig *config) {
     return ws;
 }
 
+void xr_ws_set_isolate(XrWebSocket *ws, struct XrayIsolate *X) {
+    // Bind the WS connection to the caller's coroutine scheduler so every
+    // plain-TCP / TLS I/O path that looks up the current isolate (either
+    // directly via ws->isolate or through xr_io_get_isolate) finds one.
+    // We also update the global thread-local tls_isolate here so the net/tls
+    // helper routines (xr_tls_conn_handshake_client etc.) can yield.
+    if (!ws) return;
+    ws->isolate = X;
+    if (X) {
+        xr_io_set_isolate(X);
+    }
+}
+
 void xr_ws_free(XrWebSocket *ws) {
     if (!ws) return;
 
@@ -913,6 +964,14 @@ XrWsError xr_ws_connect(XrWebSocket *ws) {
     XrWsError err = WS_OK;
     char *accept_key = NULL;
     ws->state = WS_STATE_CONNECTING;
+
+    // Ensure the TLS and xr_io helper routines can locate the scheduler.
+    // xr_tls_conn_handshake_client / xr_tls_conn_read etc. all resolve the
+    // current isolate via xr_io_get_isolate(); without this, a stalled TLS
+    // peer would spin the worker thread instead of yielding.
+    if (ws->isolate) {
+        xr_io_set_isolate(ws->isolate);
+    }
 
     // DNS resolution (with cache, IPv4/IPv6 dual-stack)
     XrSockAddr resolved_addr;
