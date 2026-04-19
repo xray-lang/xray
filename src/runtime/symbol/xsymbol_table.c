@@ -244,7 +244,7 @@ static void builtin_hash_init(void) {
 SymbolId xr_builtin_symbol_from_name(const char *name) {
     if (!name) return SYMBOL_INVALID;
     if (!builtin_hash_ready) builtin_hash_init();
-    
+
     uint32_t slot = builtin_hash_fn(name) & (BUILTIN_HASH_SIZE - 1);
     while (builtin_hash[slot].name != NULL) {
         if (strcmp(builtin_hash[slot].name, name) == 0) {
@@ -259,5 +259,14 @@ const char* xr_symbol_get_name_by_id(void *isolate, int symbol_id) {
     if (!isolate) return NULL;
     XrSymbolTable *table = (XrSymbolTable*)xr_isolate_get_symbol_table(isolate);
     return xr_symbol_get_name_in_table(table, (SymbolId)symbol_id);
+}
+
+const char* xr_symbol_intern(void *isolate, const char *name) {
+    if (!isolate || !name) return NULL;
+    XrSymbolTable *table = (XrSymbolTable*)xr_isolate_get_symbol_table(isolate);
+    if (!table) return NULL;
+    SymbolId id = xr_symbol_register_in_table(table, name);
+    if (id == SYMBOL_INVALID) return NULL;
+    return xr_symbol_get_name_in_table(table, id);
 }
 

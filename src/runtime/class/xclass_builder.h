@@ -22,7 +22,7 @@
 /* ========== Build Item Containers ========== */
 
 typedef struct XrFieldBuildItem {
-    char *name;
+    const char *name;   // Interned in symbol table; not owned.
     int symbol;
     XrValue default_value;
     uint32_t flags;
@@ -30,7 +30,7 @@ typedef struct XrFieldBuildItem {
 } XrFieldBuildItem;
 
 typedef struct XrMethodBuildItem {
-    char *name;
+    const char *name;   // Interned in symbol table; not owned.
     int symbol;
     XrMethodType method_type;    // CLOSURE/PRIMITIVE/GETTER/SETTER/OPERATOR
     union {
@@ -43,7 +43,7 @@ typedef struct XrMethodBuildItem {
 } XrMethodBuildItem;
 
 typedef struct XrStaticFieldBuildItem {
-    char *name;
+    const char *name;   // Interned in symbol table; not owned.
     int symbol;
     XrValue value;
     uint32_t flags;
@@ -60,7 +60,7 @@ typedef struct XrStaticFieldBuildItem {
 struct XrClassBuilder {
     // Basic info
     XrayIsolate *isolate;
-    char *name;
+    const char *name;   // Interned in symbol table; not owned.
     XrClass *super;
 
     // Fields (dynamic array)

@@ -90,7 +90,6 @@ void xr_class_compute_operator_flags(XrClass *cls) {
 /* ========== Class Object Implementation ========== */
 
 static XrClass* xr_class_new_single(XrayIsolate *X, const char *name) {
-    (void)X;
     XR_DCHECK(name != NULL, "Class name must not be NULL");
 
     XrClass *cls = XR_ALLOCATE(XrClass);
@@ -102,7 +101,13 @@ static XrClass* xr_class_new_single(XrayIsolate *X, const char *name) {
     memset(cls, 0, sizeof(*cls));
 
     xr_gc_header_init_type(&cls->gc, XR_TCLASS);
-    cls->name = xr_strdup(name);
+    // Class/field/method names are interned in the isolate's symbol table.
+    // The returned pointer is stable for the isolate's lifetime and must
+    // not be freed by us. Fall back to the raw literal only when no
+    // isolate is available (e.g. very early bootstrap) so the field
+    // remains usable for debug prints.
+    cls->name = X ? xr_symbol_intern(X, name) : name;
+    if (!cls->name) cls->name = name;
 
     // Root class: primary_supers[0] == self, depth == 0
     cls->primary_supers[0] = cls;
@@ -267,12 +272,11 @@ void xr_class_set_super(XrClass *subclass, XrClass *superclass) {
             // Reallocate methods array for flattened layout
             XrMethod *new_methods = (XrMethod*)xr_malloc(total * sizeof(XrMethod));
 
-            // Step 1: copy parent instance methods
+            // Step 1: shallow-copy parent instance methods.
+            // Method names are interned (owned by the symbol table), so
+            // we share the pointer instead of duplicating.
             for (int i = 0; i < parent_mc; i++) {
                 new_methods[i] = superclass->methods[i];
-                if (superclass->methods[i].name) {
-                    new_methods[i].name = xr_strdup(superclass->methods[i].name);
-                }
             }
 
             // Step 2: apply own instance methods (override or append)
@@ -291,10 +295,8 @@ void xr_class_set_super(XrClass *subclass, XrClass *superclass) {
                 }
 
                 if (slot >= 0) {
-                    // Override: free inherited name, replace
-                    if (new_methods[slot].name) xr_free((void*)new_methods[slot].name);
+                    // Override: inherited name is interned; no free needed.
                     new_methods[slot] = own_methods[i];
-                    // own_methods[i].name ownership transferred, don't free
                 } else {
                     new_methods[append_idx] = own_methods[i];
                     append_idx++;

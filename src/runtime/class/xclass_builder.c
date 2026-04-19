@@ -28,12 +28,27 @@ typedef struct XrClosure XrClosure;
 
 /* ========== Helpers ========== */
 
-// Lookup or insert symbol
-static inline int xr_symbol_lookup_or_insert(XrayIsolate *isolate, const char *name) {
-    XrSymbolTable *table = (XrSymbolTable*)xr_isolate_get_symbol_table(isolate);
-    int sym = xr_symbol_lookup_in_table(table, name);
-    if (sym > 0) return sym;
-    return xr_symbol_register_in_table(table, name);
+// Resolve a name through the symbol table once, returning both the
+// SymbolId and the interned (stable) name pointer. All field/method
+// name storage in the class module goes through this intern pool; the
+// char* returned here must never be freed by callers.
+static inline void xr_builder_intern_name(XrClassBuilder *builder,
+                                          const char *name,
+                                          int *out_symbol,
+                                          const char **out_name) {
+    XrSymbolTable *table = (XrSymbolTable*)xr_isolate_get_symbol_table(builder->isolate);
+    SymbolId id = xr_symbol_register_in_table(table, name);
+    *out_symbol = (id == SYMBOL_INVALID) ? 0 : (int)id;
+    *out_name = (id == SYMBOL_INVALID)
+        ? name  // fall back to caller-owned literal; rare failure path
+        : xr_symbol_get_name_in_table(table, id);
+}
+
+// Return a stable interned pointer for a class name (no symbol id needed).
+static inline const char* xr_builder_intern_class_name(XrClassBuilder *builder,
+                                                       const char *name) {
+    const char *interned = xr_symbol_intern(builder->isolate, name);
+    return interned ? interned : name;
 }
 
 /* ========== Initial Capacities ========== */
@@ -85,7 +100,9 @@ XrClassBuilder* xr_class_builder_new(XrayIsolate *isolate,
     memset(builder, 0, sizeof(XrClassBuilder));
 
     builder->isolate = isolate;
-    builder->name = xr_strdup(name);
+    // Class name is interned; ownership belongs to the symbol table, not
+    // the builder. Finalize copies this pointer into cls->name as-is.
+    builder->name = xr_builder_intern_class_name(builder, name);
     builder->super = super;
     builder->finalized = false;
 
@@ -157,8 +174,7 @@ int xr_class_builder_add_field(XrClassBuilder *builder,
     }
 
     XrFieldBuildItem *item = &builder->fields[builder->field_count];
-    item->name = xr_strdup(name);
-    item->symbol = xr_symbol_lookup_or_insert(builder->isolate, name);
+    xr_builder_intern_name(builder, name, &item->symbol, &item->name);
     item->default_value = xr_null();
     item->flags = flags;
     item->offset = 0;
@@ -205,8 +221,7 @@ int xr_class_builder_add_method(XrClassBuilder *builder,
     }
 
     XrMethodBuildItem *item = &builder->methods[builder->method_count];
-    item->name = xr_strdup(name);
-    item->symbol = xr_symbol_lookup_or_insert(builder->isolate, name);
+    xr_builder_intern_name(builder, name, &item->symbol, &item->name);
     item->method_type = XMETHOD_PRIMITIVE;
     item->impl.primitive = impl;
     item->param_count = param_count;
@@ -240,8 +255,7 @@ int xr_class_builder_add_method_closure(XrClassBuilder *builder,
     }
 
     XrMethodBuildItem *item = &builder->methods[builder->method_count];
-    item->name = xr_strdup(name);
-    item->symbol = xr_symbol_lookup_or_insert(builder->isolate, name);
+    xr_builder_intern_name(builder, name, &item->symbol, &item->name);
     item->method_type = method_type;
     item->impl.closure = closure;
     item->param_count = param_count;
@@ -274,8 +288,7 @@ int xr_class_builder_add_static_field(XrClassBuilder *builder,
     }
 
     XrStaticFieldBuildItem *item = &builder->static_fields[builder->static_field_count];
-    item->name = xr_strdup(name);
-    item->symbol = xr_symbol_lookup_or_insert(builder->isolate, name);
+    xr_builder_intern_name(builder, name, &item->symbol, &item->name);
     item->value = value;
     item->flags = flags;
 
@@ -306,8 +319,7 @@ int xr_class_builder_add_static_method(XrClassBuilder *builder,
     }
 
     XrMethodBuildItem *item = &builder->static_methods[builder->static_method_count];
-    item->name = xr_strdup(name);
-    item->symbol = xr_symbol_lookup_or_insert(builder->isolate, name);
+    xr_builder_intern_name(builder, name, &item->symbol, &item->name);
     item->method_type = XMETHOD_PRIMITIVE;
     item->impl.primitive = impl;
     item->param_count = param_count;
@@ -339,8 +351,7 @@ int xr_class_builder_add_static_method_closure(XrClassBuilder *builder,
     }
 
     XrMethodBuildItem *item = &builder->static_methods[builder->static_method_count];
-    item->name = xr_strdup(name);
-    item->symbol = xr_symbol_lookup_or_insert(builder->isolate, name);
+    xr_builder_intern_name(builder, name, &item->symbol, &item->name);
     item->method_type = XMETHOD_CLOSURE;
     item->impl.closure = closure;
     item->param_count = param_count;
@@ -520,8 +531,9 @@ XrClass* xr_class_builder_finalize(XrClassBuilder *builder) {
     xr_gc_header_init_type(&cls->gc, XR_TCLASS);
 
     /* ========== Basic Info ========== */
+    // builder->name points at an interned string owned by the symbol
+    // table, so cls shares the pointer without any transfer semantics.
     cls->name = builder->name;
-    builder->name = NULL;
     cls->super = builder->super;
     cls->flags = builder->flags;
 
@@ -591,7 +603,8 @@ XrClass* xr_class_builder_finalize(XrClassBuilder *builder) {
             offset = builder->super->instance_size;
         }
 
-        // Add instance fields
+        // Add instance fields. Names are interned; sharing the pointer
+        // is correct and no ownership transfer bookkeeping is required.
         for (int i = 0; i < builder->field_count; i++) {
             XrFieldBuildItem *item = &builder->fields[i];
             XrFieldDescriptor *desc = &cls->fields[i];
@@ -604,8 +617,6 @@ XrClass* xr_class_builder_finalize(XrClassBuilder *builder) {
             desc->static_slot = -1;  // Not a static field
 
             offset += sizeof(void*);
-
-            item->name = NULL;
         }
 
         // Add static field descriptors
@@ -619,8 +630,6 @@ XrClass* xr_class_builder_finalize(XrClassBuilder *builder) {
             desc->offset = 0;
             desc->flags = item->flags | XR_FIELD_STATIC;
             desc->static_slot = (int16_t)i;  // Pre-computed static slot index
-
-            item->name = NULL;
         }
 
         // field_count = all instance fields (inherited) + static fields
@@ -717,15 +726,11 @@ XrClass* xr_class_builder_finalize(XrClassBuilder *builder) {
             return NULL;
         }
 
-        // Step 1: Copy parent instance methods (shallow copy)
+        // Step 1: Copy parent instance methods (shallow copy). Method
+        // names are interned in the symbol table, so the child shares
+        // the same pointer with no allocation or free needed.
         for (int i = 0; i < parent_instance_method_count; i++) {
-            XrMethod *src = &builder->super->methods[i];
-            XrMethod *dst = &cls->methods[i];
-            *dst = *src;
-            // Name string is shared with parent, duplicate to own
-            if (src->name) {
-                dst->name = xr_strdup(src->name);
-            }
+            cls->methods[i] = builder->super->methods[i];
         }
 
         // Step 2: Apply own instance methods (override or append)
@@ -746,11 +751,8 @@ XrClass* xr_class_builder_finalize(XrClassBuilder *builder) {
 
             XrMethod *method;
             if (override_slot >= 0) {
+                // Override in place. Inherited name is interned; no free.
                 method = &cls->methods[override_slot];
-                // Free the inherited name before replacing
-                if (method->name) {
-                    xr_free((void*)method->name);
-                }
             } else {
                 method = &cls->methods[append_idx++];
             }
@@ -779,8 +781,6 @@ XrClass* xr_class_builder_finalize(XrClassBuilder *builder) {
             method->name = item->name;
             method->param_count = item->param_count;
             method->vtable_index = -1;
-
-            item->name = NULL;
         }
 
         cls->method_count = flat_instance_count;
@@ -835,8 +835,6 @@ XrClass* xr_class_builder_finalize(XrClassBuilder *builder) {
             method->name = item->name;
             method->param_count = item->param_count;
             method->vtable_index = -1;
-
-            item->name = NULL;
         }
 
         cls->method_count = total_method_count;
@@ -908,36 +906,13 @@ XrClass* xr_class_builder_finalize(XrClassBuilder *builder) {
 void xr_class_builder_destroy(XrClassBuilder *builder) {
     if (builder == NULL) return;
 
-    if (builder->fields != NULL) {
-        for (int i = 0; i < builder->field_count; i++) {
-            xr_free(builder->fields[i].name);
-        }
-        xr_free(builder->fields);
-    }
-
-    if (builder->methods != NULL) {
-        for (int i = 0; i < builder->method_count; i++) {
-            xr_free(builder->methods[i].name);
-        }
-        xr_free(builder->methods);
-    }
-
-    if (builder->static_fields != NULL) {
-        for (int i = 0; i < builder->static_field_count; i++) {
-            xr_free(builder->static_fields[i].name);
-        }
-        xr_free(builder->static_fields);
-    }
-
-    if (builder->static_methods != NULL) {
-        for (int i = 0; i < builder->static_method_count; i++) {
-            xr_free(builder->static_methods[i].name);
-        }
-        xr_free(builder->static_methods);
-    }
-
+    // All name fields below point into the symbol table's intern pool and
+    // must not be freed here; only the dynamic arrays themselves are ours.
+    xr_free(builder->fields);
+    xr_free(builder->methods);
+    xr_free(builder->static_fields);
+    xr_free(builder->static_methods);
     xr_free(builder->interfaces);
     xr_free(builder->abstract_methods);
-    xr_free(builder->name);
     xr_free(builder);
 }

@@ -32,8 +32,10 @@ XrEnumValue* xr_enum_value_new(XrayIsolate *X, const char *enum_name,
     XrEnumValue *enum_val = (XrEnumValue*)xr_gc_alloc(xr_isolate_get_gc(X), sizeof(XrEnumValue), XR_TENUM_VALUE);
     if (!enum_val) return NULL;
 
-    enum_val->enum_name = xr_strdup(enum_name);
-    enum_val->member_name = xr_strdup(member_name);
+    // Names are interned via the isolate's symbol table, so the pointer
+    // is stable for the life of the isolate and must not be freed.
+    enum_val->enum_name = xr_symbol_intern(X, enum_name);
+    enum_val->member_name = xr_symbol_intern(X, member_name);
     enum_val->raw_value = raw_value;
     enum_val->member_index = index;
 
@@ -57,7 +59,7 @@ XrEnumType* xr_enum_type_new(XrayIsolate *X, const char *name, int base_type,
         xr_registry_register_class(X, enum_class);
     }
 
-    enum_type->name = xr_strdup(name);
+    enum_type->name = xr_symbol_intern(X, name);
     enum_type->base_type = base_type;
     enum_type->member_count = count;
 
@@ -72,7 +74,7 @@ XrEnumType* xr_enum_type_new(XrayIsolate *X, const char *name, int base_type,
         sizeof(*enum_type->members) * count);
 
     for (int i = 0; i < count; i++) {
-        enum_type->members[i].name = xr_strdup(member_names[i]);
+        enum_type->members[i].name = xr_symbol_intern(X, member_names[i]);
         enum_type->members[i].symbol = -1;
         enum_type->members[i].value = member_values[i];
         enum_type->members[i].instance = xr_enum_value_new(
@@ -247,21 +249,20 @@ const char* xr_enum_value_name(XrEnumValue *enum_val) {
 
 void xr_enum_value_free(XrEnumValue *enum_val) {
     if (!enum_val) return;
-    xr_free(enum_val->enum_name);
-    xr_free(enum_val->member_name);
+    // enum_name / member_name are interned (symbol table owns them).
     xr_free(enum_val);
 }
 
 void xr_enum_type_free(XrEnumType *enum_type) {
     if (!enum_type) return;
     for (uint32_t i = 0; i < enum_type->member_count; i++) {
-        xr_free(enum_type->members[i].name);
+        // members[i].name is interned; not owned.
         xr_enum_value_free(enum_type->members[i].instance);
     }
     xr_free(enum_type->members);
     xr_free(enum_type->symbol_to_index);
     xr_free(enum_type->value_to_index);
-    xr_free(enum_type->name);
+    // enum_type->name is interned; not owned.
     xr_free(enum_type);
 }
 
