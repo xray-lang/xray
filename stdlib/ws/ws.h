@@ -283,6 +283,44 @@ XR_FUNC const char* xr_ws_error_string(XrWsError err);
 // Returns: upgraded WebSocket connection, NULL on failure
 XR_FUNC XrWebSocket* xr_ws_upgrade(struct XrayIsolate *isolate, int fd, const char *request_headers);
 
+/*
+ * Optional policy knobs for xr_ws_upgrade_ex.
+ *
+ * allowed_origins:
+ *   NULL-terminated array of Origin strings. When set, the upgrade is
+ *   rejected with HTTP 403 unless the client's Origin header exactly
+ *   matches one of the entries. NULL disables the check (legacy
+ *   behaviour). A single "*" entry matches any non-empty origin.
+ *
+ * server_protocols:
+ *   NULL-terminated, ordered list of subprotocols the server supports.
+ *   When set, xr_ws_upgrade_ex walks the client's Sec-WebSocket-Protocol
+ *   offer and picks the first name shared with this list. That name is
+ *   echoed back in the 101 response and stored in `ws->protocol`. If no
+ *   overlap exists, the upgrade completes without a subprotocol (same
+ *   behaviour as today). Leaving this NULL disables negotiation.
+ *
+ * All string arrays are borrowed — the caller must keep them alive for
+ * the duration of the xr_ws_upgrade_ex call.
+ */
+typedef struct XrWsUpgradeOptions {
+    const char **allowed_origins;
+    const char **server_protocols;
+} XrWsUpgradeOptions;
+
+/*
+ * Extended upgrade with Origin policy and subprotocol picker.
+ * See XrWsUpgradeOptions. Passing `opts == NULL` is equivalent to
+ * xr_ws_upgrade (no policy).
+ *
+ * On Origin rejection this sends an HTTP 403 response and returns NULL;
+ * on any other failure it also returns NULL but no response is sent
+ * (the socket is left untouched for the caller to close).
+ */
+XR_FUNC XrWebSocket* xr_ws_upgrade_ex(struct XrayIsolate *isolate, int fd,
+                                       const char *request_headers,
+                                       const XrWsUpgradeOptions *opts);
+
 // Check if HTTP request is a WebSocket upgrade request
 // Returns: true if it is a WebSocket upgrade request
 XR_FUNC bool xr_ws_is_upgrade_request(const char *request_headers);
@@ -290,6 +328,18 @@ XR_FUNC bool xr_ws_is_upgrade_request(const char *request_headers);
 // Get Sec-WebSocket-Key (extract from request headers)
 // Returns: key string (caller must free), NULL if not found
 XR_FUNC char* xr_ws_get_sec_key(const char *request_headers);
+
+/*
+ * Pick the first subprotocol the client offered that the server also
+ * supports. `server_protocols` is a NULL-terminated array ordered by
+ * server preference; the client offer is parsed from the request's
+ * Sec-WebSocket-Protocol header as a comma-separated list.
+ *
+ * Returns an xr_strdup'd name on match (caller frees) or NULL if no
+ * overlap exists or the client sent no offer.
+ */
+XR_FUNC char* xr_ws_pick_subprotocol(const char *request_headers,
+                                      const char **server_protocols);
 
 // Send WebSocket upgrade response
 // Returns: 0 on success, -1 on failure

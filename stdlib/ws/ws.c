@@ -60,6 +60,13 @@ static uint64_t ws_now_ms(void) {
 // Default max message size (can be configured per-connection)
 #define WS_DEFAULT_MAX_MESSAGE_SIZE  (16 * 1024 * 1024)  // 16MB
 
+/* ========== Header parsing helpers (shared by client + server) ========== */
+
+static const char* ws_find_header(const char *headers, const char *name);
+static bool ws_get_header_value(const char *headers, const char *name,
+                                 char *out, size_t out_size);
+static bool ws_header_list_has_token(const char *value, const char *token);
+
 /* ========== Thread-local storage ========== */
 
 #ifndef XR_THREAD_LOCAL
@@ -1104,21 +1111,41 @@ XrWsError xr_ws_connect(XrWebSocket *ws) {
         goto fail_cleanup;
     }
 
-    // Validate Sec-WebSocket-Accept
+    // Validate Sec-WebSocket-Accept with strict exact-match against the
+    // full trimmed header value. The old `strstr(response, accept_key)` was
+    // a substring scan over the whole response; any header whose value
+    // happened to contain the base64 digest (e.g. custom diagnostic echo,
+    // proxy inserted fields) would have been accepted (W-12).
     accept_key = compute_accept_key(ws->sec_key);
     if (!accept_key) { err = WS_ERR_MEMORY; goto fail_cleanup; }
 
-    char *accept_header = strstr(response, "Sec-WebSocket-Accept:");
-    if (!accept_header || !strstr(accept_header, accept_key)) {
+    char accept_val[64];
+    if (!ws_get_header_value(response, "Sec-WebSocket-Accept",
+                              accept_val, sizeof(accept_val))) {
+        err = WS_ERR_HANDSHAKE;
+        goto fail_cleanup;
+    }
+    if (strcmp(accept_val, accept_key) != 0) {
         err = WS_ERR_HANDSHAKE;
         goto fail_cleanup;
     }
     xr_free(accept_key);
+    accept_key = NULL;
 
-    // Check if server accepted permessage-deflate
-    if (strstr(response, "permessage-deflate")) {
-        ws->deflate_enabled = true;
-        ws->deflate_no_context = true; // we requested no_context_takeover
+    // Parse Sec-WebSocket-Extensions to detect permessage-deflate. The old
+    // `strstr(response, "permessage-deflate")` also triggered on cookie
+    // values, custom headers, error strings — even if the server did not
+    // actually negotiate the extension (W-13). Now we walk the header's
+    // comma-separated token list and match only the `name` part.
+    {
+        char ext_val[512];
+        if (ws_get_header_value(response, "Sec-WebSocket-Extensions",
+                                 ext_val, sizeof(ext_val))) {
+            if (ws_header_list_has_token(ext_val, "permessage-deflate")) {
+                ws->deflate_enabled = true;
+                ws->deflate_no_context = true; // we requested no_context_takeover
+            }
+        }
     }
 
     // Set socket non-blocking for coroutine-aware I/O
@@ -1878,6 +1905,72 @@ static const char* ws_find_header(const char *headers, const char *name) {
     return NULL;
 }
 
+/*
+ * Copy the value of `name` from an HTTP header blob into `out` (bounded,
+ * NUL-terminated, trimmed). Returns true if header was found and fit.
+ *
+ * Used to replace the previous `strstr(response, "...")` pattern that
+ * accepted a substring appearing anywhere in the message, including
+ * inside another header's value (W-12 / W-13).
+ */
+static bool ws_get_header_value(const char *headers, const char *name,
+                                 char *out, size_t out_size) {
+    if (!headers || !name || !out || out_size == 0) return false;
+    const char *h = ws_find_header(headers, name);
+    if (!h) return false;
+    h += strlen(name);
+    if (*h != ':') return false;
+    h++;
+    while (*h == ' ' || *h == '\t') h++;
+
+    const char *end = strchr(h, '\r');
+    if (!end) end = strchr(h, '\n');
+    if (!end) end = h + strlen(h);
+
+    // Trim trailing whitespace.
+    while (end > h && (end[-1] == ' ' || end[-1] == '\t')) end--;
+
+    size_t len = (size_t)(end - h);
+    if (len >= out_size) return false;
+    memcpy(out, h, len);
+    out[len] = '\0';
+    return true;
+}
+
+/*
+ * Case-insensitive match of a token within a comma-separated extension /
+ * subprotocol header value. Each token is `name[; params...]`; we only
+ * compare the `name` part and ignore surrounding whitespace.
+ *
+ * Example: ws_header_list_has("chat, permessage-deflate; client_no_context_takeover",
+ *                             "permessage-deflate") → true
+ *
+ * This replaces naïve `strstr` scans that would falsely match when the
+ * token name appears inside another header's value (W-13).
+ */
+static bool ws_header_list_has_token(const char *value, const char *token) {
+    if (!value || !token) return false;
+    size_t token_len = strlen(token);
+    const char *p = value;
+    while (*p) {
+        while (*p == ' ' || *p == '\t' || *p == ',') p++;
+        if (!*p) return false;
+        const char *tok = p;
+        while (*p && *p != ',' && *p != ';') p++;
+        const char *tok_end = p;
+        while (tok_end > tok && (tok_end[-1] == ' ' || tok_end[-1] == '\t')) {
+            tok_end--;
+        }
+        size_t len = (size_t)(tok_end - tok);
+        if (len == token_len && strncasecmp(tok, token, token_len) == 0) {
+            return true;
+        }
+        // Skip params up to next comma.
+        while (*p && *p != ',') p++;
+    }
+    return false;
+}
+
 bool xr_ws_is_upgrade_request(const char *request_headers) {
     if (!request_headers) return false;
 
@@ -1999,22 +2092,134 @@ int xr_ws_send_upgrade_response(int fd, const char *sec_key,
     return 0;
 }
 
-XrWebSocket* xr_ws_upgrade(struct XrayIsolate *isolate, int fd, const char *request_headers) {
+/*
+ * Extract the `name` part of each comma-separated token in a subprotocol
+ * header value. Used by xr_ws_pick_subprotocol; RFC 6455 requires that
+ * the server picks one name from the client's offer list, case-sensitive.
+ */
+static bool ws_origin_allowed(const char *origin, const char **allowlist) {
+    if (!allowlist || !allowlist[0]) return true;
+    if (!origin || !origin[0]) {
+        // No Origin sent by client. Reject when an allowlist is configured
+        // to avoid non-browser clients bypassing the policy; callers who
+        // want to accept missing Origin can opt in via "*".
+        for (const char **p = allowlist; *p; p++) {
+            if (strcmp(*p, "*") == 0) return true;
+        }
+        return false;
+    }
+    for (const char **p = allowlist; *p; p++) {
+        if (strcmp(*p, "*") == 0) return true;
+        if (strcmp(*p, origin) == 0) return true;
+    }
+    return false;
+}
+
+/*
+ * Send a minimal HTTP error response (used for Origin rejection) then
+ * return. Caller is responsible for closing fd.
+ */
+static void ws_send_simple_response(int fd, int status, const char *reason) {
+    char resp[256];
+    int n = snprintf(resp, sizeof(resp),
+                      "HTTP/1.1 %d %s\r\n"
+                      "Content-Length: 0\r\n"
+                      "Connection: close\r\n"
+                      "\r\n",
+                      status, reason ? reason : "");
+    if (n > 0) {
+        ssize_t w = write(fd, resp, (size_t)n);
+        (void)w;
+    }
+}
+
+char* xr_ws_pick_subprotocol(const char *request_headers,
+                              const char **server_protocols) {
+    if (!request_headers || !server_protocols || !server_protocols[0]) {
+        return NULL;
+    }
+    char offer[512];
+    if (!ws_get_header_value(request_headers, "Sec-WebSocket-Protocol",
+                              offer, sizeof(offer))) {
+        return NULL;
+    }
+    // Walk the client's offer in order; RFC 6455 lets the server freely
+    // pick any one of the offered names, but clients typically list them
+    // by preference so we honour that.
+    const char *p = offer;
+    while (*p) {
+        while (*p == ' ' || *p == '\t' || *p == ',') p++;
+        if (!*p) break;
+        const char *tok = p;
+        while (*p && *p != ',' && *p != ';') p++;
+        const char *tok_end = p;
+        while (tok_end > tok && (tok_end[-1] == ' ' || tok_end[-1] == '\t')) {
+            tok_end--;
+        }
+        size_t len = (size_t)(tok_end - tok);
+        for (const char **sp = server_protocols; *sp; sp++) {
+            size_t sp_len = strlen(*sp);
+            if (sp_len == len && memcmp(tok, *sp, len) == 0) {
+                return xr_strndup(tok, len);
+            }
+        }
+        while (*p && *p != ',') p++;
+    }
+    return NULL;
+}
+
+XrWebSocket* xr_ws_upgrade_ex(struct XrayIsolate *isolate, int fd,
+                               const char *request_headers,
+                               const XrWsUpgradeOptions *opts) {
     if (fd < 0 || !request_headers) return NULL;
 
     // Check if upgrade request
     if (!xr_ws_is_upgrade_request(request_headers)) return NULL;
 
+    // Origin allowlist check (W-18). Cross-origin browser attacks are the
+    // main threat model here: a malicious page can open wss://victim.tld
+    // and replay the user's cookies. Callers that want to keep the legacy
+    // "allow all" behaviour leave opts->allowed_origins NULL.
+    if (opts && opts->allowed_origins) {
+        char origin_val[256];
+        const char *origin = NULL;
+        if (ws_get_header_value(request_headers, "Origin",
+                                 origin_val, sizeof(origin_val))) {
+            origin = origin_val;
+        }
+        if (!ws_origin_allowed(origin, opts->allowed_origins)) {
+            ws_send_simple_response(fd, 403, "Forbidden");
+            return NULL;
+        }
+    }
+
     // Get Sec-WebSocket-Key
     char *sec_key = xr_ws_get_sec_key(request_headers);
     if (!sec_key) return NULL;
 
-    // Check if client offered permessage-deflate
-    bool client_deflate = (strstr(request_headers, "permessage-deflate") != NULL);
+    // Check if client offered permessage-deflate — walk the extensions
+    // header token list instead of doing a substring scan over the whole
+    // request blob (W-13).
+    bool client_deflate = false;
+    {
+        char ext_val[512];
+        if (ws_get_header_value(request_headers, "Sec-WebSocket-Extensions",
+                                 ext_val, sizeof(ext_val))) {
+            client_deflate = ws_header_list_has_token(ext_val, "permessage-deflate");
+        }
+    }
 
-    // Send upgrade response (with deflate if client offered)
-    if (xr_ws_send_upgrade_response(fd, sec_key, NULL, client_deflate) < 0) {
+    // Subprotocol negotiation (W-19).
+    char *picked_proto = NULL;
+    if (opts && opts->server_protocols) {
+        picked_proto = xr_ws_pick_subprotocol(request_headers,
+                                              opts->server_protocols);
+    }
+
+    // Send upgrade response (with deflate + picked subprotocol if any)
+    if (xr_ws_send_upgrade_response(fd, sec_key, picked_proto, client_deflate) < 0) {
         xr_free(sec_key);
+        xr_free(picked_proto);
         return NULL;
     }
 
@@ -2022,12 +2227,14 @@ XrWebSocket* xr_ws_upgrade(struct XrayIsolate *isolate, int fd, const char *requ
     XrWebSocket *ws = (XrWebSocket*)xr_calloc(1, sizeof(XrWebSocket));
     if (!ws) {
         xr_free(sec_key);
+        xr_free(picked_proto);
         return NULL;
     }
 
     ws->fd = fd;
     ws->state = WS_STATE_OPEN;
     ws->sec_key = sec_key;
+    ws->protocol = picked_proto; // transferred ownership; freed by xr_ws_free
     ws->is_server = true;  // Server-side connection: no masking on send
     ws->isolate = isolate; // Store isolate for coroutine-aware I/O
     ws->deflate_enabled = client_deflate;
@@ -2075,4 +2282,11 @@ XrWebSocket* xr_ws_upgrade(struct XrayIsolate *isolate, int fd, const char *requ
     xr_ws_config_init(&ws->config);
 
     return ws;
+}
+
+XrWebSocket* xr_ws_upgrade(struct XrayIsolate *isolate, int fd,
+                            const char *request_headers) {
+    // Thin wrapper preserving the legacy "no Origin / no subprotocol"
+    // behaviour; new callers should use xr_ws_upgrade_ex directly.
+    return xr_ws_upgrade_ex(isolate, fd, request_headers, NULL);
 }
