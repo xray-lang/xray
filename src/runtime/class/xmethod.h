@@ -49,30 +49,21 @@ typedef enum {
  */
 typedef struct XrMethod {
     XrMethodType type;
-    
+
     union {
         struct XrClosure* closure;    // CLOSURE/GETTER/SETTER/OPERATOR
         XrCFunctionPtr primitive;     // PRIMITIVE
     } as;
-    
+
     uint8_t flags;
     uint8_t op_type;           // Valid only when type==OPERATOR
     int32_t symbol;
-    
+
     const char *name;
     uint8_t param_count;
-    
+
     int32_t vtable_index;      // -1 if not in vtable
 } XrMethod;
-
-/* ========== Method Creation ========== */
-
-XR_FUNC XrMethod xr_method_from_closure(struct XrClosure* closure, uint8_t flags);
-XR_FUNC XrMethod xr_method_from_primitive(XrCFunctionPtr primitive, uint8_t flags);
-XR_FUNC XrMethod xr_method_from_getter(struct XrClosure* getter_closure, bool is_private);
-XR_FUNC XrMethod xr_method_from_setter(struct XrClosure* setter_closure, bool is_private);
-XR_FUNC XrMethod xr_method_from_operator(struct XrClosure* operator_closure, 
-                                  uint8_t op_type, bool is_private);
 
 /* ========== Property Accessors (inline) ========== */
 

@@ -57,7 +57,7 @@ bool xr_value_deep_eq(XrValue a, XrValue b) {
         }
         return true;
     }
-    
+
     // Different tags
     if (a.tag != b.tag) {
         // Mixed int/float comparison
@@ -69,7 +69,7 @@ bool xr_value_deep_eq(XrValue a, XrValue b) {
         }
         return false;
     }
-    
+
     // Same tag, different value
     switch (a.tag) {
         case XR_TAG_NULL:  return true;
@@ -84,14 +84,14 @@ bool xr_value_deep_eq(XrValue a, XrValue b) {
         default:
             return a.i == b.i;
     }
-    
+
 deep_compare: {
         XrGCHeader *gc_a = (XrGCHeader*)a.ptr;
         XrGCHeader *gc_b = (XrGCHeader*)b.ptr;
         if (gc_a == gc_b) return true;
         if (!gc_a || !gc_b) return false;
         if (XR_GC_GET_TYPE(gc_a) != XR_GC_GET_TYPE(gc_b)) return false;
-        
+
         if (XR_GC_GET_TYPE(gc_a) == XR_TSTRING) {
             XrString *str_a = (XrString*)gc_a;
             XrString *str_b = (XrString*)gc_b;
@@ -137,7 +137,7 @@ static const XrTypeId gctype_to_typeid[XR_TCONTEXT + 1] = {
     [XR_TSET]            = XR_TID_SET,
     [XR_TMAP]            = XR_TID_MAP,
     [XR_TCLASS]          = XR_TID_FUNCTION,
-    [XR_TCLASS_BUILDER]  = XR_TID_NULL,
+    [XR_TCLASS_BUILDER_UNUSED] = XR_TID_NULL,
     [XR_TINSTANCE]       = XR_TID_INSTANCE,
     [XR_TBOUND_METHOD]   = XR_TID_BOUND_METHOD,
     [XR_TENUM_TYPE]      = XR_TID_ENUM_TYPE,
@@ -292,7 +292,6 @@ DEFINE_VALUE_OPS_WITH_MACRO(module, XR_IS_MODULE, struct XrModule)
 
 /* ========== OOP Value Operations ========== */
 DEFINE_VALUE_OPS_WITH_TYPE(class, XR_TCLASS, struct XrClass)
-DEFINE_VALUE_OPS_WITH_TYPE(class_builder, XR_TCLASS_BUILDER, struct XrClassBuilder)
 DEFINE_VALUE_OPS_WITH_TYPE(instance, XR_TINSTANCE, struct XrInstance)
 
 /* ========== Function Value Operations ========== */
@@ -321,12 +320,12 @@ static bool xr_json_equals_deep(XrValue a, XrValue b) {
     XrJson *ja = xr_value_to_json(a);
     XrJson *jb = xr_value_to_json(b);
     if (!ja || !jb) return false;
-    
+
     // Compare field count and content
     XrShape *sa = xr_json_shape(ja);
     XrShape *sb = xr_json_shape(jb);
     if (sa->field_count != sb->field_count) return false;
-    
+
     for (int i = 0; i < sa->field_count; i++) {
         SymbolId sym_a = sa->field_symbols[i];
         int idx_b = -1;
@@ -337,7 +336,7 @@ static bool xr_json_equals_deep(XrValue a, XrValue b) {
             }
         }
         if (idx_b < 0) return false;
-        
+
         if (!xr_value_deep_eq(ja->fields[i], jb->fields[idx_b])) {
             return false;
         }
@@ -351,9 +350,9 @@ static bool xr_array_equals_deep(XrValue a, XrValue b) {
     XrArray *aa = xr_value_to_array(a);
     XrArray *ab = xr_value_to_array(b);
     if (!aa || !ab) return false;
-    
+
     if (aa->length != ab->length) return false;
-    
+
     for (int i = 0; i < aa->length; i++) {
         if (!xr_value_deep_eq(xr_array_get_element(aa, i), xr_array_get_element(ab, i))) {
             return false;
@@ -368,20 +367,20 @@ static bool xr_map_equals_deep(XrValue a, XrValue b) {
     XrMap *ma = xr_value_to_map(a);
     XrMap *mb = xr_value_to_map(b);
     if (!ma || !mb) return false;
-    
+
     if (ma->count != mb->count) return false;
-    
+
     // Iterate all nodes in ma, check if same key-value exists in mb
     uint32_t size = xr_map_sizenode(ma);
     for (uint32_t i = 0; i < size; i++) {
         XrMapNode *node = xr_map_node(ma, i);
         if (XR_MAP_NODE_EMPTY(node)) continue;
-        
+
         // Find same key in mb
         bool found = false;
         XrValue val_b = xr_map_get(mb, node->key, &found);
         if (!found) return false;
-        
+
         // Compare values recursively
         if (!xr_value_deep_eq(node->value, val_b)) {
             return false;

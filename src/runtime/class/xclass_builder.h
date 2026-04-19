@@ -58,43 +58,41 @@ typedef struct XrStaticFieldBuildItem {
  *   3. xr_class_builder_finalize() - Freeze into immutable class, destroy builder
  */
 struct XrClassBuilder {
-    XrGCHeader gc;
-    
     // Basic info
     XrayIsolate *isolate;
     char *name;
     XrClass *super;
-    
+
     // Fields (dynamic array)
     XrFieldBuildItem *fields;
     int field_count;
     int field_capacity;
-    
+
     // Methods (dynamic array)
     XrMethodBuildItem *methods;
     int method_count;
     int method_capacity;
-    
+
     // Static fields (dynamic array)
     XrStaticFieldBuildItem *static_fields;
     int static_field_count;
     int static_field_capacity;
-    
+
     // Static methods (dynamic array)
     XrMethodBuildItem *static_methods;
     int static_method_count;
     int static_method_capacity;
-    
+
     // Interfaces (dynamic array)
     XrClass **interfaces;
     int interface_count;
     int interface_capacity;
-    
+
     // Abstract methods (dynamic array)
     int *abstract_methods;
     int abstract_method_count;
     int abstract_method_capacity;
-    
+
     // Flags
     uint32_t flags;
     bool finalized;
@@ -102,7 +100,7 @@ struct XrClassBuilder {
 
 /* ========== Builder API ========== */
 
-XR_FUNC XrClassBuilder* xr_class_builder_new(XrayIsolate *isolate, 
+XR_FUNC XrClassBuilder* xr_class_builder_new(XrayIsolate *isolate,
                                       const char *name,
                                       XrClass *super);
 

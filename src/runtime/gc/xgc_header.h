@@ -73,7 +73,7 @@ typedef enum {
     XR_TSET,
     XR_TMAP,
     XR_TCLASS,
-    XR_TCLASS_BUILDER,
+    XR_TCLASS_BUILDER_UNUSED,  // Reserved slot, keep enum values stable
     XR_TINSTANCE,
     XR_TBOUND_METHOD,
     XR_TENUM_TYPE,
