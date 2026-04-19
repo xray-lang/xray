@@ -106,6 +106,14 @@ typedef struct {
     XrMap *current_table;         // Current table
     XrArray *current_key_path;    // Current key path
 
+    // Set of table header paths explicitly declared via `[a.b]` syntax.
+    // Used to diagnose duplicate `[a] ... [a]` declarations. The map is
+    // keyed by the joined dotted path (e.g. "a.b.c") -> xr_bool(true);
+    // membership is a simple presence check. Implicit intermediate
+    // tables created via dotted keys are NOT inserted here, so
+    // `a.b = 1` followed by `[a]` stays legal.
+    XrMap *defined_tables;
+
     // Configuration
     TomlConfig config;
 

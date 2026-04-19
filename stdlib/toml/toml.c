@@ -48,7 +48,15 @@ XrValue xr_toml_parse(XrayIsolate *X, const char *data, size_t len) {
 typedef struct {
     XrSerWriter sw;       // shared buffer: sw.data / sw.len / sw.cap
     XrayIsolate *isolate;
+
+    // Requested indentation (0 = flat). NOTE: currently reserved — the
+    // writer emits flat TOML regardless. TOML files are mostly line
+    // oriented so the visual benefit of indentation is limited; still,
+    // the parameter is kept in the public API so scripts that already
+    // pass `indent` continue to compile. A future change can consume
+    // this field in `write_table` to prefix nested-table entries.
     int indent;
+
     int depth;            // nesting depth for stringify cycle guard
 } TomlWriter;
 

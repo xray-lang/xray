@@ -34,7 +34,11 @@ extern int yaml_count_indent(YamlParser *p);
 void yaml_config_init(YamlConfig *config) {
     config->safe = true;
     config->allow_duplicate_keys = false;
-    config->max_depth = 64;
+    // Default depth is the stdlib-wide XR_STDLIB_MAX_DEPTH so YAML keeps
+    // the same safety envelope as JSON / TOML / XML. Callers that need a
+    // stricter limit for untrusted input can still lower it via the
+    // maxDepth config field.
+    config->max_depth = XR_STDLIB_MAX_DEPTH;
 }
 
 void yaml_config_from_json(XrayIsolate *X, YamlConfig *config, XrJson *json) {
