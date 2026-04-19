@@ -25,6 +25,8 @@ extern struct XrArray* xr_json_keys(XrayIsolate *X, struct XrJson *json);
 #include "../../src/runtime/object/xstring.h"
 #include "../../src/runtime/object/xjson.h"
 #include "../../src/base/xmalloc.h"
+#include "../common_writer.h"
+#include "../stdlib_cache.h"
 #include <stdio.h>
 #include <string.h>
 
@@ -36,21 +38,20 @@ extern XrValue xr_value_from_map(XrMap *map);
 
 // ========== Cached intern key strings ==========
 
-typedef struct {
-    XrValue type;
-    XrValue tag;
-    XrValue attrs;
-    XrValue children;
-    XrValue text;
-    // Interned type name strings for O(1) pointer comparison
-    XrString *str_element;
-    XrString *str_text;
-    XrString *str_comment;
-    XrString *str_cdata;
-    XrString *str_document;
-} XmlKeys;
+// The raw struct was moved into stdlib_cache.h so that every xml.c
+// binding shares a single per-isolate copy. We still expose XmlKeys as
+// a local typedef for readability inside this file, pointing at the
+// cached storage.
+typedef XrStdlibXmlKeys XmlKeys;
 
-static void xml_keys_init(XrayIsolate *X, XmlKeys *k) {
+// Ensure the isolate's XML key cache is populated (idempotent).
+// Returns a pointer to the shared cache entry. Costs one branch after
+// the first call; previously every binding did O(5) xr_string_intern()
+// hashing on every invocation.
+static XmlKeys* xml_keys_get(XrayIsolate *X) {
+    XrStdlibCache *c = xr_stdlib_cache_get(X);
+    XmlKeys *k = &c->xml_keys;
+    if (k->ready) return k;
     k->type     = xr_string_value(xr_string_intern(X, "type", 4, 0));
     k->tag      = xr_string_value(xr_string_intern(X, "tag", 3, 0));
     k->attrs    = xr_string_value(xr_string_intern(X, "attrs", 5, 0));
@@ -61,6 +62,8 @@ static void xml_keys_init(XrayIsolate *X, XmlKeys *k) {
     k->str_comment  = xr_string_intern(X, "comment", 7, 0);
     k->str_cdata    = xr_string_intern(X, "cdata", 5, 0);
     k->str_document = xr_string_intern(X, "document", 8, 0);
+    k->ready = true;
+    return k;
 }
 
 // ========== Helper functions ==========
@@ -85,7 +88,16 @@ static void extract_write_config(XrayIsolate *X, XrValue config_val, XmlWriteCon
         if (XR_IS_BOOL(val)) config->declaration = XR_TO_BOOL(val);
 
         val = xr_json_get_by_key(X, json, "encoding");
-        if (XR_IS_STRING(val)) config->encoding = XR_TO_STRING(val)->data;
+        if (XR_IS_STRING(val)) {
+            // Copy into the owned buffer so the config stays valid after
+            // the caller's XrString is reclaimed by GC.
+            XrString *enc = XR_TO_STRING(val);
+            size_t n = enc->length < sizeof(config->encoding) - 1
+                     ? enc->length
+                     : sizeof(config->encoding) - 1;
+            memcpy(config->encoding, enc->data, n);
+            config->encoding[n] = '\0';
+        }
     }
 }
 
@@ -142,63 +154,45 @@ static XrValue node_to_map_r(XrayIsolate *X, XmlNode *node, XmlKeys *k, int dept
 }
 
 static XrValue node_to_map(XrayIsolate *X, XmlNode *node) {
-    XmlKeys k;
-    xml_keys_init(X, &k);
-    return node_to_map_r(X, node, &k, 0);
+    XmlKeys *k = xml_keys_get(X);
+    return node_to_map_r(X, node, k, 0);
 }
 
 // ========== XML serialization ==========
 
 typedef struct {
-    char *buf;
-    size_t len;
-    size_t cap;
+    XrSerWriter sw;     // shared byte buffer (sw.data / sw.len / sw.cap)
     int indent;
     int level;
 } XmlWriter;
 
-static void xw_init(XmlWriter *w, int indent, size_t hint) {
-    w->cap = hint > 256 ? hint : 256;
-    w->buf = (char*)xr_malloc(w->cap);
-    if (!w->buf) { w->cap = 0; w->len = 0; return; }
-    w->len = 0;
+static inline void xw_init(XmlWriter *w, int indent, size_t hint) {
+    xr_serw_init(&w->sw, hint > 256 ? hint : 256);
     w->indent = indent;
     w->level = 0;
 }
 
-static void xw_ensure(XmlWriter *w, size_t extra) {
-    size_t needed = w->len + extra;
-    if (needed < w->cap) return;
-    while (w->cap <= needed) w->cap *= 2;
-    char *nb = (char*)xr_realloc(w->buf, w->cap);
-    if (!nb) return;
-    w->buf = nb;
+static inline void xw_free(XmlWriter *w) {
+    xr_serw_free(&w->sw);
 }
 
-static void xw_append(XmlWriter *w, const char *s, size_t n) {
-    xw_ensure(w, n);
-    memcpy(w->buf + w->len, s, n);
-    w->len += n;
+static inline void xw_append(XmlWriter *w, const char *s, size_t n) {
+    xr_serw_append(&w->sw, s, n);
 }
 
-static void xw_str(XmlWriter *w, const char *s) {
-    xw_append(w, s, strlen(s));
+static inline void xw_str(XmlWriter *w, const char *s) {
+    xr_serw_str(&w->sw, s);
 }
 
-static void xw_char(XmlWriter *w, char c) {
-    xw_ensure(w, 1);
-    w->buf[w->len++] = c;
+static inline void xw_char(XmlWriter *w, char c) {
+    xr_serw_char(&w->sw, c);
 }
 
-static void xw_indent(XmlWriter *w) {
-    if (w->indent <= 0) return;
-    int n = w->level * w->indent;
-    xw_ensure(w, n);
-    memset(w->buf + w->len, ' ', n);
-    w->len += n;
+static inline void xw_indent(XmlWriter *w) {
+    xr_serw_indent(&w->sw, w->level, w->indent);
 }
 
-static void xw_newline(XmlWriter *w) {
+static inline void xw_newline(XmlWriter *w) {
     if (w->indent > 0) xw_char(w, '\n');
 }
 
@@ -370,8 +364,7 @@ static XrValue xml_parse_fn(XrayIsolate *X, XrValue *args, int argc) {
 }
 
 static XrValue xml_parse_detailed(XrayIsolate *X, XrValue *args, int argc) {
-    XmlKeys k;
-    xml_keys_init(X, &k);
+    XmlKeys *k = xml_keys_get(X);
 
     if (argc < 1 || !XR_IS_STRING(args[0])) {
         XrMap *out = xr_map_new(xr_current_coro(X));
@@ -393,7 +386,7 @@ static XrValue xml_parse_detailed(XrayIsolate *X, XrValue *args, int argc) {
     XrMap *output = xr_map_new(xr_current_coro(X));
     XrValue key_doc = xr_string_value(xr_string_intern(X, "doc", 3, 0));
     if (result.doc && result.doc->root) {
-        xr_map_set(output, key_doc, node_to_map_r(X, result.doc->root, &k, 0));
+        xr_map_set(output, key_doc, node_to_map_r(X, result.doc->root, k, 0));
     } else {
         xr_map_set(output, key_doc, xr_null());
     }
@@ -465,12 +458,11 @@ static XrValue xml_stringify_fn(XrayIsolate *X, XrValue *args, int argc) {
         xw_newline(&writer);
     }
 
-    XmlKeys k;
-    xml_keys_init(X, &k);
-    serialize_map_node(&writer, X, node, &k, 0);
+    XmlKeys *k = xml_keys_get(X);
+    serialize_map_node(&writer, X, node, k, 0);
 
-    XrString *result = xr_string_intern(X, writer.buf, writer.len, 0);
-    xr_free(writer.buf);
+    XrString *result = xr_string_intern(X, writer.sw.data, writer.sw.len, 0);
+    xw_free(&writer);
     return xr_string_value(result);
 }
 
@@ -497,13 +489,12 @@ static XrValue xml_write_file(XrayIsolate *X, XrValue *args, int argc) {
 static XrValue xml_document_fn(XrayIsolate *X, XrValue *args, int argc) {
     (void)args; (void)argc;
 
-    XmlKeys k;
-    xml_keys_init(X, &k);
+    XmlKeys *k = xml_keys_get(X);
 
     XrMap *map = xr_map_new(xr_current_coro(X));
-    xr_map_set(map, k.type,
+    xr_map_set(map, k->type,
                xr_string_value(xr_string_intern(X, "document", 8, 0)));
-    xr_map_set(map, k.children, xr_value_from_array(xr_array_new(xr_current_coro(X))));
+    xr_map_set(map, k->children, xr_value_from_array(xr_array_new(xr_current_coro(X))));
     return xr_value_from_map(map);
 }
 
@@ -513,13 +504,12 @@ static XrValue xml_element_fn(XrayIsolate *X, XrValue *args, int argc) {
 
     XrString *tag = XR_TO_STRING(args[0]);
 
-    XmlKeys k;
-    xml_keys_init(X, &k);
+    XmlKeys *k = xml_keys_get(X);
 
     XrMap *map = xr_map_new(xr_current_coro(X));
-    xr_map_set(map, k.type,
+    xr_map_set(map, k->type,
                xr_string_value(xr_string_intern(X, "element", 7, 0)));
-    xr_map_set(map, k.tag, xr_string_value(tag));
+    xr_map_set(map, k->tag, xr_string_value(tag));
 
     // attrs: copy from Json argument or create empty
     if (argc >= 2 && xr_value_is_json(args[1])) {
@@ -537,12 +527,12 @@ static XrValue xml_element_fn(XrayIsolate *X, XrValue *args, int argc) {
                 }
             }
         }
-        xr_map_set(map, k.attrs, xr_value_from_map(attr_map));
+        xr_map_set(map, k->attrs, xr_value_from_map(attr_map));
     } else {
-        xr_map_set(map, k.attrs, xr_value_from_map(xr_map_new(xr_current_coro(X))));
+        xr_map_set(map, k->attrs, xr_value_from_map(xr_map_new(xr_current_coro(X))));
     }
 
-    xr_map_set(map, k.children, xr_value_from_array(xr_array_new(xr_current_coro(X))));
+    xr_map_set(map, k->children, xr_value_from_array(xr_array_new(xr_current_coro(X))));
     return xr_value_from_map(map);
 }
 
@@ -550,13 +540,12 @@ static XrValue xml_element_fn(XrayIsolate *X, XrValue *args, int argc) {
 static XrValue xml_text_fn(XrayIsolate *X, XrValue *args, int argc) {
     if (argc < 1 || !XR_IS_STRING(args[0])) return xr_null();
 
-    XmlKeys k;
-    xml_keys_init(X, &k);
+    XmlKeys *k = xml_keys_get(X);
 
     XrMap *map = xr_map_new(xr_current_coro(X));
-    xr_map_set(map, k.type,
+    xr_map_set(map, k->type,
                xr_string_value(xr_string_intern(X, "text", 4, 0)));
-    xr_map_set(map, k.text, args[0]);
+    xr_map_set(map, k->text, args[0]);
     return xr_value_from_map(map);
 }
 
@@ -564,13 +553,12 @@ static XrValue xml_text_fn(XrayIsolate *X, XrValue *args, int argc) {
 static XrValue xml_comment_fn(XrayIsolate *X, XrValue *args, int argc) {
     if (argc < 1 || !XR_IS_STRING(args[0])) return xr_null();
 
-    XmlKeys k;
-    xml_keys_init(X, &k);
+    XmlKeys *k = xml_keys_get(X);
 
     XrMap *map = xr_map_new(xr_current_coro(X));
-    xr_map_set(map, k.type,
+    xr_map_set(map, k->type,
                xr_string_value(xr_string_intern(X, "comment", 7, 0)));
-    xr_map_set(map, k.text, args[0]);
+    xr_map_set(map, k->text, args[0]);
     return xr_value_from_map(map);
 }
 
@@ -578,13 +566,12 @@ static XrValue xml_comment_fn(XrayIsolate *X, XrValue *args, int argc) {
 static XrValue xml_cdata_fn(XrayIsolate *X, XrValue *args, int argc) {
     if (argc < 1 || !XR_IS_STRING(args[0])) return xr_null();
 
-    XmlKeys k;
-    xml_keys_init(X, &k);
+    XmlKeys *k = xml_keys_get(X);
 
     XrMap *map = xr_map_new(xr_current_coro(X));
-    xr_map_set(map, k.type,
+    xr_map_set(map, k->type,
                xr_string_value(xr_string_intern(X, "cdata", 5, 0)));
-    xr_map_set(map, k.text, args[0]);
+    xr_map_set(map, k->text, args[0]);
     return xr_value_from_map(map);
 }
 

@@ -38,6 +38,7 @@
 #include "../../src/runtime/object/xarray.h"
 #include "../../src/runtime/object/xjson.h"
 #include "../../src/runtime/gc/xgc_internal.h"
+#include "../../src/base/xmalloc.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -47,7 +48,7 @@
 /* ========== External Declarations ========== */
 
 // C function coroutine creation (supports Yieldable I/O)
-extern XrCoroutine *xr_coro_create_cfunc(XrayIsolate *X, 
+extern XrCoroutine *xr_coro_create_cfunc(XrayIsolate *X,
     XrCFuncResult (*cfunc)(XrayIsolate*, XrValue*, int, XrValue*),
     XrValue *args, int argc, const char *name);
 
@@ -122,12 +123,12 @@ static const char* get_string_arg(XrValue v, size_t *out_len) {
 // Get string field from Json
 static const char* get_json_string(XrayIsolate *X, XrJson *json, const char *key, size_t *out_len) {
     XrValue val = xr_json_get_by_key(X, json, key);
-    
+
     if (!XR_IS_STRING(val)) {
         if (out_len) *out_len = 0;
         return NULL;
     }
-    
+
     XrString *s = XR_TO_STRING(val);
     if (out_len) *out_len = s->length;
     return s->data;
@@ -136,7 +137,7 @@ static const char* get_json_string(XrayIsolate *X, XrJson *json, const char *key
 // Get int field from Json
 static int64_t get_json_int(XrayIsolate *X, XrJson *json, const char *key, int64_t default_val) {
     XrValue val = xr_json_get_by_key(X, json, key);
-    
+
     if (XR_IS_INT(val)) return XR_TO_INT(val);
     if (XR_IS_FLOAT(val)) return (int64_t)XR_TO_FLOAT(val);
     return default_val;
@@ -146,15 +147,15 @@ static int64_t get_json_int(XrayIsolate *X, XrJson *json, const char *key, int64
 static XrValue result_to_json(XrayIsolate *X, XrHttpResult *result) {
     // Create response object (dictionary mode for flexible field names)
     XrJson *json = xr_json_new(xr_current_coro(X), 8);
-    
+
     // status
     xr_json_set_by_key(X, json, "status", xr_int(result->status_code));
-    
+
     // statusText
     if (result->status_text) {
         xr_json_set_by_key(X, json, "statusText", make_cstring(X, result->status_text));
     }
-    
+
     // headers - Shape transition for flexible header names
     XrJson *headers_json = xr_json_new(xr_current_coro(X), 16);
     for (int i = 0; i < result->header_count; i++) {
@@ -163,32 +164,32 @@ static XrValue result_to_json(XrayIsolate *X, XrHttpResult *result) {
         char *header_name = (char*)malloc(h->name_len + 1);
         memcpy(header_name, h->name, h->name_len);
         header_name[h->name_len] = '\0';
-        
-        xr_json_set_by_key(X, headers_json, header_name, 
+
+        xr_json_set_by_key(X, headers_json, header_name,
                            make_string(X, h->value, h->value_len));
         free(header_name);
     }
     xr_json_set_by_key(X, json, "headers", xr_json_value(headers_json));
-    
+
     // body
     if (result->body && result->body_len > 0) {
         xr_json_set_by_key(X, json, "body", make_string(X, result->body, result->body_len));
     } else {
         xr_json_set_by_key(X, json, "body", make_cstring(X, ""));
     }
-    
+
     // error
     if (result->error != XR_HTTP_OK) {
         xr_json_set_by_key(X, json, "error", make_cstring(X, xr_http_error_string(result->error)));
     } else {
         xr_json_set_by_key(X, json, "error", xr_null());
     }
-    
+
     // ok
-    xr_json_set_by_key(X, json, "ok", xr_bool(result->error == XR_HTTP_OK && 
-                                               result->status_code >= 200 && 
+    xr_json_set_by_key(X, json, "ok", xr_bool(result->error == XR_HTTP_OK &&
+                                               result->status_code >= 200 &&
                                                result->status_code < 300));
-    
+
     return xr_json_value(json);
 }
 
@@ -200,24 +201,24 @@ static XrValue http_get(XrayIsolate *X, XrValue *args, int argc) {
         fprintf(stderr, "http.get() requires 1 argument\n");
         return xr_null();
     }
-    
+
     size_t url_len;
     const char *url = get_string_arg(args[0], &url_len);
     if (!url) {
         fprintf(stderr, "http.get() argument must be a string\n");
         return xr_null();
     }
-    
+
     // URL copy (stack allocation optimization)
     URL_COPY_BEGIN(url, url_len)
-    
+
     XrValue ret;
-    
+
     // Synchronous call
     XrHttpResult result = xr_http_get(X, url_copy);
     ret = result_to_json(X, &result);
     xr_http_result_free(&result);
-    
+
     URL_COPY_END();
     return ret;
 }
@@ -228,36 +229,36 @@ static XrValue http_post(XrayIsolate *X, XrValue *args, int argc) {
         fprintf(stderr, "http.post() requires at least 1 argument\n");
         return xr_null();
     }
-    
+
     size_t url_len;
     const char *url = get_string_arg(args[0], &url_len);
     if (!url) {
         fprintf(stderr, "http.post() first argument must be a string\n");
         return xr_null();
     }
-    
+
     const char *body = NULL;
     size_t body_len = 0;
     if (argc >= 2 && XR_IS_STRING(args[1])) {
         body = get_string_arg(args[1], &body_len);
     }
-    
+
     const char *content_type = "application/json";
     if (argc >= 3 && XR_IS_STRING(args[2])) {
         size_t ct_len;
         content_type = get_string_arg(args[2], &ct_len);
     }
-    
+
     // URL copy (stack allocation optimization)
     URL_COPY_BEGIN(url, url_len)
-    
+
     XrValue ret;
-    
+
     // Synchronous call
     XrHttpResult result = xr_http_post(X, url_copy, body, body_len, content_type);
     ret = result_to_json(X, &result);
     xr_http_result_free(&result);
-    
+
     URL_COPY_END();
     return ret;
 }
@@ -268,33 +269,33 @@ static XrValue http_put(XrayIsolate *X, XrValue *args, int argc) {
         fprintf(stderr, "http.put() requires at least 1 argument\n");
         return xr_null();
     }
-    
+
     size_t url_len;
     const char *url = get_string_arg(args[0], &url_len);
     if (!url) {
         fprintf(stderr, "http.put() first argument must be a string\n");
         return xr_null();
     }
-    
+
     const char *body = NULL;
     size_t body_len = 0;
     if (argc >= 2 && XR_IS_STRING(args[1])) {
         body = get_string_arg(args[1], &body_len);
     }
-    
+
     const char *content_type = "application/json";
     if (argc >= 3 && XR_IS_STRING(args[2])) {
         size_t ct_len;
         content_type = get_string_arg(args[2], &ct_len);
     }
-    
+
     // URL copy (stack allocation optimization)
     URL_COPY_BEGIN(url, url_len)
-    
+
     XrHttpResult result = xr_http_put(X, url_copy, body, body_len, content_type);
     XrValue ret = result_to_json(X, &result);
     xr_http_result_free(&result);
-    
+
     URL_COPY_END();
     return ret;
 }
@@ -305,21 +306,21 @@ static XrValue http_delete(XrayIsolate *X, XrValue *args, int argc) {
         fprintf(stderr, "http.delete() requires 1 argument\n");
         return xr_null();
     }
-    
+
     size_t url_len;
     const char *url = get_string_arg(args[0], &url_len);
     if (!url) {
         fprintf(stderr, "http.delete() argument must be a string\n");
         return xr_null();
     }
-    
+
     // URL copy (stack allocation optimization)
     URL_COPY_BEGIN(url, url_len)
-    
+
     XrHttpResult result = xr_http_delete(X, url_copy);
     XrValue ret = result_to_json(X, &result);
     xr_http_result_free(&result);
-    
+
     URL_COPY_END();
     return ret;
 }
@@ -331,15 +332,15 @@ static XrValue http_request(XrayIsolate *X, XrValue *args, int argc) {
         fprintf(stderr, "http.request() requires 1 argument\n");
         return xr_null();
     }
-    
+
     // Check argument type: must be Json
     if (!xr_value_is_json(args[0])) {
         fprintf(stderr, "http.request() argument must be a Json object\n");
         return xr_null();
     }
-    
+
     XrJson *options = xr_value_to_json(args[0]);
-    
+
     // Get URL
     size_t url_len;
     const char *url = get_json_string(X, options, "url", &url_len);
@@ -347,22 +348,22 @@ static XrValue http_request(XrayIsolate *X, XrValue *args, int argc) {
         fprintf(stderr, "http.request() requires 'url' field\n");
         return xr_null();
     }
-    
+
     // URL copy (stack allocation optimization)
     URL_COPY_BEGIN(url, url_len)
-    
+
     // Initialize config
     XrHttpRequestConfig config;
     xr_http_request_config_init(&config);
     config.url = url_copy;
-    
+
     // Get method
     size_t method_len;
     const char *method = get_json_string(X, options, "method", &method_len);
     if (method && method_len > 0) {
         config.method = xr_http_method_from_string(method, method_len);
     }
-    
+
     // Get body
     size_t body_len;
     const char *body = get_json_string(X, options, "body", &body_len);
@@ -370,16 +371,16 @@ static XrValue http_request(XrayIsolate *X, XrValue *args, int argc) {
         config.body = body;
         config.body_len = body_len;
     }
-    
+
     // Get timeout
     config.timeout_ms = (int)get_json_int(X, options, "timeout", XR_HTTP_DEFAULT_TIMEOUT);
-    
+
     // Get headers (supports Json, Dictionary, and Map types)
     XrValue headers_val = xr_json_get_by_key(X, options, "headers");
-    
+
     XrHttpHeader *custom_headers = NULL;
     int custom_header_count = 0;
-    
+
     if (xr_value_is_map(headers_val)) {
         // Map type: iterate Map directly
         XrMap *headers_map = xr_value_to_map(headers_val);
@@ -387,7 +388,7 @@ static XrValue http_request(XrayIsolate *X, XrValue *args, int argc) {
             custom_header_count = headers_map->count;
             if (custom_header_count > 0) {
                 custom_headers = (XrHttpHeader*)malloc(sizeof(XrHttpHeader) * custom_header_count);
-                
+
                 int idx = 0;
                 uint32_t map_size = xr_map_sizenode(headers_map);
                 for (uint32_t i = 0; i < map_size && idx < custom_header_count; i++) {
@@ -410,18 +411,18 @@ static XrValue http_request(XrayIsolate *X, XrValue *args, int argc) {
     } else if (xr_value_is_json(headers_val)) {
         XrJson *headers_json = xr_value_to_json(headers_val);
         XrShape *shape = xr_json_shape(headers_json);
-        
+
         if (shape && shape->field_count > 0) {
             // Fast mode: iterate Shape fields
             XrSymbolTable *symtab = (XrSymbolTable*)X->symbol_table;
             custom_header_count = shape->field_count;
             custom_headers = (XrHttpHeader*)malloc(sizeof(XrHttpHeader) * custom_header_count);
-            
+
             int idx = 0;
             for (uint16_t i = 0; i < shape->field_count; i++) {
                 SymbolId sym = shape->field_symbols[i];
                 XrValue val = xr_json_get_field_any(headers_json, i);
-                
+
                 // Get field name from Symbol table
                 const char *field_name = xr_symbol_get_name_in_table(symtab, sym);
                 if (field_name && XR_IS_STRING(val)) {
@@ -435,11 +436,11 @@ static XrValue http_request(XrayIsolate *X, XrValue *args, int argc) {
             }
             custom_header_count = idx;
         }
-        
+
         config.headers = custom_headers;
         config.header_count = custom_header_count;
     }
-    
+
     // Check stream option
     XrValue stream_val = xr_json_get_by_key(X, options, "stream");
     if (XR_IS_BOOL(stream_val) && XR_TO_BOOL(stream_val)) {
@@ -447,7 +448,7 @@ static XrValue http_request(XrayIsolate *X, XrValue *args, int argc) {
     }
 
     XrValue ret;
-    
+
     // Synchronous call
     XrHttpResult result = xr_http_request(X, &config);
 
@@ -494,11 +495,11 @@ static XrValue http_request(XrayIsolate *X, XrValue *args, int argc) {
         ret = result_to_json(X, &result);
         xr_http_result_free(&result);
     }
-    
+
     // Cleanup
     URL_COPY_END();
     if (custom_headers) free(custom_headers);
-    
+
     return ret;
 }
 
@@ -559,18 +560,18 @@ static XrValue http_url_encode(XrayIsolate *X, XrValue *args, int argc) {
     if (argc < 1 || !XR_IS_STRING(args[0])) {
         return xr_null();
     }
-    
+
     XrString *input = XR_TO_STRING(args[0]);
     const char *src = input->data;
     size_t src_len = input->length;
-    
+
     // Estimate output size (worst case: each char becomes %XX)
     size_t out_cap = src_len * 3 + 1;
     char *out = (char*)malloc(out_cap);
     char *p = out;
-    
+
     static const char hex[] = "0123456789ABCDEF";
-    
+
     for (size_t i = 0; i < src_len; i++) {
         unsigned char c = src[i];
         if ((c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') ||
@@ -582,7 +583,7 @@ static XrValue http_url_encode(XrayIsolate *X, XrValue *args, int argc) {
             *p++ = hex[c & 0x0F];
         }
     }
-    
+
     XrValue result = make_string(X, out, p - out);
     free(out);
     return result;
@@ -593,14 +594,14 @@ static XrValue http_url_decode(XrayIsolate *X, XrValue *args, int argc) {
     if (argc < 1 || !XR_IS_STRING(args[0])) {
         return xr_null();
     }
-    
+
     XrString *input = XR_TO_STRING(args[0]);
     const char *src = input->data;
     size_t src_len = input->length;
-    
+
     char *out = (char*)malloc(src_len + 1);
     char *p = out;
-    
+
     for (size_t i = 0; i < src_len; i++) {
         if (src[i] == '%' && i + 2 < src_len) {
             // Parse %XX
@@ -623,7 +624,7 @@ static XrValue http_url_decode(XrayIsolate *X, XrValue *args, int argc) {
         }
         *p++ = src[i];
     }
-    
+
     XrValue result = make_string(X, out, p - out);
     free(out);
     return result;
@@ -636,65 +637,65 @@ static XrValue http_url_decode(XrayIsolate *X, XrValue *args, int argc) {
 // Get HTTP context (stored in module's native_handle)
 XrHttpContext* xr_http_get_context(XrayIsolate *X) {
     if (!X || !X->module_registry) return NULL;
-    
+
     // Get http module from registry
     XrModuleRegistry *registry = (XrModuleRegistry*)X->module_registry;
     XrModule *mod = NULL;
     if (registry->loaded_modules) {
         mod = (XrModule*)xr_hashmap_get(registry->loaded_modules, "http");
     }
-    
+
     if (!mod) return NULL;
-    
+
     // Get context from native_handle
     XrHttpContext *ctx = (XrHttpContext*)mod->native_handle;
     if (!ctx) {
         // First access, create context
         ctx = (XrHttpContext*)calloc(1, sizeof(XrHttpContext));
         ctx->cookie_jar_enabled = true;  // Cookie enabled by default
-        
+
         // Initialize per-isolate server config defaults
         atomic_init(&ctx->max_conns, HTTP_DEFAULT_MAX_CONNS);
         atomic_init(&ctx->max_requests_per_conn, 0);
         atomic_init(&ctx->idle_timeout_ms, HTTP_DEFAULT_IDLE_TIMEOUT_MS);
         atomic_init(&ctx->read_timeout_ms, HTTP_DEFAULT_READ_TIMEOUT_MS);
         atomic_init(&ctx->current_conns, 0);
-        
+
         mod->native_handle = ctx;
     }
-    
+
     return ctx;
 }
 
 // Free HTTP module context
 void xr_http_module_context_free(XrHttpContext *ctx) {
     if (!ctx) return;
-    
+
     // Free HTTP server
     if (ctx->server) {
         xr_http_server_free(ctx->server);
         ctx->server = NULL;
     }
-    
+
     // Free form data
     if (ctx->form_data) {
         xr_form_data_free(ctx->form_data);
         ctx->form_data = NULL;
     }
-    
+
     // Free Cookie Jar
     if (ctx->cookie_jar) {
         xr_cookie_jar_free(ctx->cookie_jar);
         ctx->cookie_jar = NULL;
     }
-    
+
     // Free proxy config
     if (ctx->proxy) {
         xr_proxy_config_free(ctx->proxy);
         free(ctx->proxy);
         ctx->proxy = NULL;
     }
-    
+
     // Free no_proxy list
     for (int i = 0; i < ctx->no_proxy_count; i++) {
         free(ctx->no_proxy[i]);
@@ -702,13 +703,13 @@ void xr_http_module_context_free(XrHttpContext *ctx) {
     free(ctx->no_proxy);
     ctx->no_proxy = NULL;
     ctx->no_proxy_count = 0;
-    
+
     // Free HTTP/2 server
     if (ctx->h2_server) {
         xr_h2_server_free(ctx->h2_server);
         ctx->h2_server = NULL;
     }
-    
+
     // Free per-isolate connection pools
     if (ctx->conn_pool) {
         xr_conn_pool_destroy(ctx->conn_pool);
@@ -719,7 +720,7 @@ void xr_http_module_context_free(XrHttpContext *ctx) {
         xr_h2_pool_destroy(ctx->h2_client_pool);
         ctx->h2_client_pool = NULL;
     }
-    
+
     // NOTE: WebSocket connections are now managed by the separate 'ws' module
 
     // Close any active streaming responses
@@ -731,7 +732,7 @@ void xr_http_module_context_free(XrHttpContext *ctx) {
             ctx->streams[i] = NULL;
         }
     }
-    
+
     free(ctx);
 }
 
@@ -742,7 +743,7 @@ static XrValue http_route(XrayIsolate *X, XrValue *args, int argc) {
     if (argc < 3 || !ctx) {
         return xr_null();
     }
-    
+
     // Auto-create global server instance
     if (!ctx->server) {
         ctx->server = xr_http_server_new(X);
@@ -751,27 +752,27 @@ static XrValue http_route(XrayIsolate *X, XrValue *args, int argc) {
             return xr_null();
         }
     }
-    
+
     // Get method
     size_t method_len;
     const char *method_str = get_string_arg(args[0], &method_len);
     if (!method_str) return xr_null();
-    
+
     XrHttpMethod method = xr_http_method_from_string(method_str, method_len);
-    
+
     // Get path
     size_t path_len;
     const char *path = get_string_arg(args[1], &path_len);
     if (!path) return xr_null();
-    
+
     // Copy path (needs persistence, will be owned by router)
     char *path_copy = (char*)malloc(path_len + 1);
     memcpy(path_copy, path, path_len);
     path_copy[path_len] = '\0';
-    
+
     // Check third argument type
     XrValue handler_arg = args[2];
-    
+
     if (XR_IS_CLOSURE(handler_arg)) {
         // Closure callback - register dynamic route
         XrClosure *closure = (XrClosure*)XR_TO_PTR(handler_arg);
@@ -785,8 +786,8 @@ static XrValue http_route(XrayIsolate *X, XrValue *args, int argc) {
             char *response_copy = (char*)malloc(response_len + 1);
             memcpy(response_copy, response, response_len);
             response_copy[response_len] = '\0';
-            
-            xr_http_server_static(ctx->server, method, path_copy, 
+
+            xr_http_server_static(ctx->server, method, path_copy,
                                    response_copy, response_len);
         } else {
             free(path_copy);
@@ -799,7 +800,9 @@ static XrValue http_route(XrayIsolate *X, XrValue *args, int argc) {
             xr_http_server_static(ctx->server, method, path_copy,
                                    json_str, json_len);
         } else {
-            free(json_str);
+            // json_str was produced by xr_json_stringify_to_cstr which
+            // allocates via xr_malloc; release through xr_free.
+            xr_free(json_str);
             free(path_copy);
         }
     } else {
@@ -808,7 +811,7 @@ static XrValue http_route(XrayIsolate *X, XrValue *args, int argc) {
         fprintf(stderr, "http.route() handler must be a function, string, or Json\n");
         return xr_null();
     }
-    
+
     return xr_null();
 }
 
@@ -818,7 +821,7 @@ static XrValue http_static(XrayIsolate *X, XrValue *args, int argc) {
     if (argc < 3 || !ctx) {
         return xr_null();
     }
-    
+
     // Auto-create global server instance
     if (!ctx->server) {
         ctx->server = xr_http_server_new(X);
@@ -827,24 +830,24 @@ static XrValue http_static(XrayIsolate *X, XrValue *args, int argc) {
             return xr_null();
         }
     }
-    
+
     // Get method
     size_t method_len;
     const char *method_str = get_string_arg(args[0], &method_len);
     if (!method_str) return xr_null();
-    
+
     XrHttpMethod method = xr_http_method_from_string(method_str, method_len);
-    
+
     // Get path
     size_t path_len;
     const char *path = get_string_arg(args[1], &path_len);
     if (!path) return xr_null();
-    
+
     // Copy path (needs persistence)
     char *path_copy = (char*)malloc(path_len + 1);
     memcpy(path_copy, path, path_len);
     path_copy[path_len] = '\0';
-    
+
     // Get response content
     size_t response_len;
     const char *response = get_string_arg(args[2], &response_len);
@@ -852,16 +855,16 @@ static XrValue http_static(XrayIsolate *X, XrValue *args, int argc) {
         free(path_copy);
         return xr_null();
     }
-    
+
     // Copy response content
     char *response_copy = (char*)malloc(response_len + 1);
     memcpy(response_copy, response, response_len);
     response_copy[response_len] = '\0';
-    
+
     // Register static route (pre-built response)
-    xr_router_add_static(ctx->server->router, method, path_copy, 
+    xr_router_add_static(ctx->server->router, method, path_copy,
                          response_copy, response_len);
-    
+
     return xr_null();
 }
 
@@ -911,7 +914,7 @@ static XrValue http_set_conn_handler(XrayIsolate *X, XrValue *args, int argc) {
     if (argc < 1 || !ctx) {
         return xr_null();
     }
-    
+
     // Auto-create global server instance
     if (!ctx->server) {
         ctx->server = xr_http_server_new(X);
@@ -920,10 +923,10 @@ static XrValue http_set_conn_handler(XrayIsolate *X, XrValue *args, int argc) {
             return xr_null();
         }
     }
-    
+
     if (XR_IS_CLOSURE(args[0])) {
         XrClosure *closure = (XrClosure*)XR_TO_PTR(args[0]);
-        
+
         /*
          * Check if closure has upvalues.
          * HTTP callback closures should not have mutable upvalues because:
@@ -936,10 +939,10 @@ static XrValue http_set_conn_handler(XrayIsolate *X, XrValue *args, int argc) {
             fprintf(stderr, "         HTTP callback should not capture external variables\n");
             // Still allow setting, but warn
         }
-        
+
         ctx->server->conn_handler_closure = closure;
     }
-    
+
     return xr_null();
 }
 
@@ -963,12 +966,12 @@ static XrValue http_get_conn_handler(XrayIsolate *X, XrValue *args, int argc) {
 // http.stopServer() -> void
 static XrValue http_stop_server(XrayIsolate *X, XrValue *args, int argc) {
     (void)args; (void)argc;
-    
+
     XrHttpContext *ctx = xr_http_get_context(X);
     if (ctx && ctx->server) {
         xr_http_server_stop(ctx->server);
     }
-    
+
     return xr_null();
 }
 
@@ -978,69 +981,69 @@ static XrValue http_stop_server(XrayIsolate *X, XrValue *args, int argc) {
 // High-performance parsing, returns array to avoid JSON overhead
 static XrValue http_parse_request_fast(XrayIsolate *X, XrValue *args, int argc) {
     if (argc < 1) return xr_null();
-    
+
     int fd = XR_IS_INT(args[0]) ? (int)XR_TO_INT(args[0]) : -1;
     if (fd < 0) return xr_null();
-    
+
     // Read request data
     char buf[4096];
     int n = xr_socket_read(X, fd, buf, sizeof(buf) - 1);
     if (n <= 0) return xr_null();
     buf[n] = '\0';
-    
+
     // Parse request line
     char *line_end = strstr(buf, "\r\n");
     if (!line_end) return xr_null();
     *line_end = '\0';
-    
+
     // Parse "GET /path HTTP/1.1"
     char *method_end = strchr(buf, ' ');
     if (!method_end) return xr_null();
     *method_end = '\0';
-    
+
     char *path_start = method_end + 1;
     char *path_end = strchr(path_start, ' ');
     if (!path_end) return xr_null();
     *path_end = '\0';
-    
+
     // Check keep-alive
     bool keep_alive = true;
     char *conn = strstr(line_end + 2, "Connection:");
     if (conn) {
         if (strstr(conn, "close")) keep_alive = false;
     }
-    
+
     // Return array [method, path, keepAlive]
     XrArray *arr = xr_array_new(xr_current_coro(X));
     xr_array_push(arr, xr_string_value(xr_string_new(X, buf, method_end - buf)));
     xr_array_push(arr, xr_string_value(xr_string_new(X, path_start, path_end - path_start)));
     xr_array_push(arr, xr_bool(keep_alive));
-    
+
     return XR_FROM_PTR(arr);
 }
 
 // http.sendResponse(fd, body, status?) -> bool (high-performance)
 static XrValue http_send_response_fast(XrayIsolate *X, XrValue *args, int argc) {
     if (argc < 2) return xr_bool(false);
-    
+
     int fd = XR_IS_INT(args[0]) ? (int)XR_TO_INT(args[0]) : -1;
     if (fd < 0) return xr_bool(false);
-    
+
     size_t body_len;
     const char *body = get_string_arg(args[1], &body_len);
     if (!body) {
         body = "";
         body_len = 0;
     }
-    
+
     int status = (argc >= 3 && XR_IS_INT(args[2])) ? (int)XR_TO_INT(args[2]) : 200;
-    
+
     // Build response
     char header[256];
-    const char *status_text = (status == 200) ? "OK" : 
-                              (status == 404) ? "Not Found" : 
+    const char *status_text = (status == 200) ? "OK" :
+                              (status == 404) ? "Not Found" :
                               (status == 500) ? "Internal Server Error" : "OK";
-    
+
     int header_len = snprintf(header, sizeof(header),
         "HTTP/1.1 %d %s\r\n"
         "Content-Type: text/plain\r\n"
@@ -1048,16 +1051,16 @@ static XrValue http_send_response_fast(XrayIsolate *X, XrValue *args, int argc) 
         "Connection: keep-alive\r\n"
         "\r\n",
         status, status_text, body_len);
-    
+
     // Send header + body
     int n1 = xr_socket_write(X, fd, header, header_len);
     if (n1 <= 0) return xr_bool(false);
-    
+
     if (body_len > 0) {
         int n2 = xr_socket_write(X, fd, body, body_len);
         if (n2 <= 0) return xr_bool(false);
     }
-    
+
     return xr_bool(true);
 }
 
@@ -1066,12 +1069,12 @@ static XrValue http_send_response_fast(XrayIsolate *X, XrValue *args, int argc) 
 // http.download(url, path) -> Json (streaming download to local file)
 static XrValue http_download(XrayIsolate *X, XrValue *args, int argc) {
     if (argc < 2) return xr_null();
-    
+
     size_t url_len, path_len;
     const char *url = get_string_arg(args[0], &url_len);
     const char *path = get_string_arg(args[1], &path_len);
     if (!url || !path) return xr_null();
-    
+
     // URL/Path copy (stack allocation optimization)
     URL_COPY_BEGIN(url, url_len)
     char _path_stack_buf[URL_STACK_SIZE];
@@ -1085,13 +1088,13 @@ static XrValue http_download(XrayIsolate *X, XrValue *args, int argc) {
     }
     memcpy(path_copy, path, path_len);
     path_copy[path_len] = '\0';
-    
+
     // Execute download
     XrStreamResult result = xr_http_download(url_copy, path_copy, NULL, NULL);
-    
+
     URL_COPY_END();
     if (_path_need_free) free(path_copy);
-    
+
     // Build return result
     XrJson *json = xr_json_new(xr_current_coro(X), 8);
     xr_json_set_by_key(X, json, "status", xr_int(result.status_code));
@@ -1101,25 +1104,25 @@ static XrValue http_download(XrayIsolate *X, XrValue *args, int argc) {
     if (result.error_msg) {
         xr_json_set_by_key(X, json, "error", make_cstring(X, result.error_msg));
     }
-    
+
     xr_stream_result_free(&result);
-    
+
     return xr_json_value(json);
 }
 
 // http.getContentLength(url) -> int (HEAD request for file size)
 static XrValue http_get_content_length(XrayIsolate *X, XrValue *args, int argc) {
     if (argc < 1) return xr_int(-1);
-    
+
     size_t url_len;
     const char *url = get_string_arg(args[0], &url_len);
     if (!url) return xr_int(-1);
-    
+
     // URL copy (stack allocation optimization)
     URL_COPY_BEGIN(url, url_len)
     long long size = xr_http_get_content_length(X, url_copy);
     URL_COPY_END();
-    
+
     return xr_int(size);
 }
 
@@ -1131,13 +1134,13 @@ static XrValue http_get_content_length(XrayIsolate *X, XrValue *args, int argc) 
 static XrValue http_form_data_new(XrayIsolate *X, XrValue *args, int argc) {
     XrHttpContext *ctx = xr_http_get_context(X);
     if (!ctx) return xr_bool(false);
-    
+
     if (ctx->form_data) {
         xr_form_data_free(ctx->form_data);
     }
     ctx->form_data = xr_form_data_new();
     if (!ctx->form_data) return xr_bool(false);
-    
+
     // Optional: override max total size
     if (argc >= 1 && XR_IS_INT(args[0])) {
         int64_t v = XR_TO_INT(args[0]);
@@ -1148,7 +1151,7 @@ static XrValue http_form_data_new(XrayIsolate *X, XrValue *args, int argc) {
         int64_t v = XR_TO_INT(args[1]);
         ctx->form_data->max_file_size = (v <= 0) ? 0 : (size_t)v;
     }
-    
+
     return xr_bool(true);
 }
 
@@ -1156,20 +1159,20 @@ static XrValue http_form_data_new(XrayIsolate *X, XrValue *args, int argc) {
 static XrValue http_form_data_append(XrayIsolate *X, XrValue *args, int argc) {
     XrHttpContext *ctx = xr_http_get_context(X);
     if (argc < 2 || !ctx || !ctx->form_data) return xr_null();
-    
+
     size_t name_len, value_len;
     const char *name = get_string_arg(args[0], &name_len);
     const char *value = get_string_arg(args[1], &value_len);
     if (!name || !value) return xr_null();
-    
+
     // Need null-terminated string
     char *name_copy = (char*)malloc(name_len + 1);
     memcpy(name_copy, name, name_len);
     name_copy[name_len] = '\0';
-    
+
     xr_form_data_append(ctx->form_data, name_copy, value, value_len);
     free(name_copy);
-    
+
     return xr_null();
 }
 
@@ -1177,24 +1180,24 @@ static XrValue http_form_data_append(XrayIsolate *X, XrValue *args, int argc) {
 static XrValue http_form_data_append_file(XrayIsolate *X, XrValue *args, int argc) {
     XrHttpContext *ctx = xr_http_get_context(X);
     if (argc < 2 || !ctx || !ctx->form_data) return xr_bool(false);
-    
+
     size_t name_len, path_len;
     const char *name = get_string_arg(args[0], &name_len);
     const char *path = get_string_arg(args[1], &path_len);
     if (!name || !path) return xr_bool(false);
-    
+
     char *name_copy = (char*)malloc(name_len + 1);
     char *path_copy = (char*)malloc(path_len + 1);
     memcpy(name_copy, name, name_len);
     memcpy(path_copy, path, path_len);
     name_copy[name_len] = '\0';
     path_copy[path_len] = '\0';
-    
+
     int ret = xr_form_data_append_file_path(ctx->form_data, name_copy, path_copy);
-    
+
     free(name_copy);
     free(path_copy);
-    
+
     return xr_bool(ret == 0);
 }
 
@@ -1202,35 +1205,35 @@ static XrValue http_form_data_append_file(XrayIsolate *X, XrValue *args, int arg
 static XrValue http_form_data_post(XrayIsolate *X, XrValue *args, int argc) {
     XrHttpContext *ctx = xr_http_get_context(X);
     if (argc < 1 || !ctx || !ctx->form_data) return xr_null();
-    
+
     size_t url_len;
     const char *url = get_string_arg(args[0], &url_len);
     if (!url) return xr_null();
-    
+
     // URL copy (stack allocation optimization)
     URL_COPY_BEGIN(url, url_len)
-    
+
     // Build form data
     char *body = NULL;
     size_t body_len = 0;
     char *content_type = NULL;
-    
+
     if (xr_form_data_build(ctx->form_data, &body, &body_len, &content_type) < 0) {
         URL_COPY_END();
         return xr_null();
     }
-    
+
     // Send POST request
     XrHttpResult result = xr_http_post(X, url_copy, body, body_len, content_type);
-    
+
     URL_COPY_END();
     free(body);
     free(content_type);
-    
+
     // Clean up form data
     xr_form_data_free(ctx->form_data);
     ctx->form_data = NULL;
-    
+
     // Build return result
     XrJson *json = xr_json_new(xr_current_coro(X), 4);
     xr_json_set_by_key(X, json, "status", xr_int(result.status_code));
@@ -1238,7 +1241,7 @@ static XrValue http_form_data_post(XrayIsolate *X, XrValue *args, int argc) {
         xr_json_set_by_key(X, json, "body", make_string(X, result.body, result.body_len));
     }
     xr_http_result_free(&result);
-    
+
     return xr_json_value(json);
 }
 
@@ -1247,16 +1250,16 @@ static XrValue http_form_data_post(XrayIsolate *X, XrValue *args, int argc) {
 // http.setProxy(url) -> void (format: http://[user:pass@]host:port)
 static XrValue http_set_proxy(XrayIsolate *X, XrValue *args, int argc) {
     if (argc < 1) return xr_null();
-    
+
     size_t url_len;
     const char *url = get_string_arg(args[0], &url_len);
     if (!url) return xr_null();
-    
+
     // URL copy (stack allocation optimization)
     URL_COPY_BEGIN(url, url_len)
     xr_set_proxy(X, url_copy);
     URL_COPY_END();
-    
+
     return xr_null();
 }
 
@@ -1352,19 +1355,19 @@ XrModule* xr_load_module_http(XrayIsolate *isolate) {
     // 1. Create Native module
     XrModule *mod = xr_module_create_native(isolate, "http");
     if (!mod) return NULL;
-    
+
     // 2. Add exported functions
     extern XrCFunction* xr_vm_cfunction_new(XrayIsolate *isolate, XrCFunctionPtr func, const char *name);
     extern XrCFunction* xr_vm_yieldable_cfunction_new(XrayIsolate *isolate, XrYieldableCFunctionPtr func, const char *name);
     extern XrValue xr_value_from_cfunction(XrCFunction *cfunc);
-    
+
     #define EXPORT_CFUNC(name_str, func_ptr) \
         do { \
             XrCFunction *cfunc = xr_vm_cfunction_new(isolate, func_ptr, name_str); \
             XrValue fn_val = xr_value_from_cfunction(cfunc); \
             xr_module_add_export(isolate, mod, name_str, fn_val); \
         } while(0)
-    
+
     #define EXPORT_SLOW_CFUNC(name_str, func_ptr) \
         do { \
             XrCFunction *cfunc = xr_vm_cfunction_new(isolate, func_ptr, name_str); \
@@ -1372,25 +1375,25 @@ XrModule* xr_load_module_http(XrayIsolate *isolate) {
             XrValue fn_val = xr_value_from_cfunction(cfunc); \
             xr_module_add_export(isolate, mod, name_str, fn_val); \
         } while(0)
-    
+
     #define EXPORT_YIELDABLE_CFUNC(name_str, func_ptr) \
         do { \
             XrCFunction *cfunc = xr_vm_yieldable_cfunction_new(isolate, func_ptr, name_str); \
             XrValue fn_val = xr_value_from_cfunction(cfunc); \
             xr_module_add_export(isolate, mod, name_str, fn_val); \
         } while(0)
-    
+
     // HTTP client methods (blocking I/O, mark SLOW for immediate P/M handoff)
     EXPORT_SLOW_CFUNC("get", http_get);
     EXPORT_SLOW_CFUNC("post", http_post);
     EXPORT_SLOW_CFUNC("put", http_put);
     EXPORT_SLOW_CFUNC("delete", http_delete);
     EXPORT_SLOW_CFUNC("request", http_request);
-    
+
     // Utility functions
     EXPORT_CFUNC("urlEncode", http_url_encode);
     EXPORT_CFUNC("urlDecode", http_url_decode);
-    
+
     // Server functions (per-connection coroutine, singleton mode)
     EXPORT_CFUNC("route", http_route);
     EXPORT_CFUNC("static", http_static);
@@ -1404,27 +1407,27 @@ XrModule* xr_load_module_http(XrayIsolate *isolate) {
     EXPORT_SLOW_CFUNC("readChunk", http_read_chunk);
     EXPORT_CFUNC("closeStream", http_close_stream);
     EXPORT_CFUNC("stopServer", http_stop_server);
-    
+
     // Modular high-performance API (public)
     EXPORT_CFUNC("parseRequest", http_parse_request_fast);
     EXPORT_CFUNC("sendResponse", http_send_response_fast);
-    
+
     // Streaming download (blocking I/O)
     EXPORT_SLOW_CFUNC("download", http_download);
     EXPORT_CFUNC("getContentLength", http_get_content_length);
-    
+
     // Multipart form
     EXPORT_CFUNC("formDataNew", http_form_data_new);
     EXPORT_CFUNC("formDataAppend", http_form_data_append);
     EXPORT_CFUNC("formDataAppendFile", http_form_data_append_file);
     EXPORT_CFUNC("formDataPost", http_form_data_post);
-    
+
     // Proxy settings
     EXPORT_CFUNC("setProxy", http_set_proxy);
     EXPORT_CFUNC("clearProxy", http_clear_proxy);
-    
+
     // NOTE: WebSocket functions moved to separate 'ws' module
-    
+
     // HTTP/2 client functions
     extern XrValue h2_get(XrayIsolate *X, XrValue *args, int argc);
     extern XrValue h2_post(XrayIsolate *X, XrValue *args, int argc);
@@ -1432,7 +1435,7 @@ XrModule* xr_load_module_http(XrayIsolate *isolate) {
     EXPORT_CFUNC("h2Get", h2_get);
     EXPORT_CFUNC("h2Post", h2_post);
     EXPORT_CFUNC("h2Request", h2_request);
-    
+
     // HTTP/2 server functions
     extern XrValue h2_create_server(XrayIsolate *X, XrValue *args, int argc);
     extern XrValue h2_server_listen(XrayIsolate *X, XrValue *args, int argc);
@@ -1442,9 +1445,9 @@ XrModule* xr_load_module_http(XrayIsolate *isolate) {
     EXPORT_CFUNC("h2Listen", h2_server_listen);
     EXPORT_CFUNC("h2Stop", h2_server_stop);
     EXPORT_CFUNC("h2Push", h2_push);
-    
+
     #undef EXPORT_CFUNC
-    
+
     // 3. Mark as loaded
     mod->loaded = true;
     return mod;

@@ -36,6 +36,7 @@
 #include "../../src/runtime/gc/xgc_internal.h"
 #include "../../src/base/xchecks.h"
 #include "../../src/base/xarena.h"
+#include "../../src/base/xmalloc.h"
 #include "../net/xnetbuf.h"
 #include "../ws/ws.h"
 #include <stdio.h>
@@ -309,10 +310,10 @@ static HttpRawResponse process_handler_result_raw(XrayIsolate *X, XrValue result
     char *json_str = xr_json_stringify_to_cstr(X, result, &json_len);
     if (json_str && json_len > 0) {
         HttpRawResponse resp = format_response_raw(200, "application/json", json_str, json_len);
-        free(json_str);
+        xr_free(json_str);
         return resp;
     }
-    if (json_str) free(json_str);
+    if (json_str) xr_free(json_str);
     return format_response_raw(200, NULL, "", 0);
 }
 
@@ -1165,7 +1166,7 @@ XrValue xr_http_response_impl(XrayIsolate *X, XrValue *args, int argc) {
             if (json_str) {
                 content_type = "application/json; charset=utf-8";
                 XrValue resp = format_response(X, status, content_type, json_str, body_len);
-                free(json_str);
+                xr_free(json_str);
                 return resp;
             }
         }

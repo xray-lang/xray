@@ -45,10 +45,11 @@
 #ifndef XR_STDLIB_CSV_H
 #define XR_STDLIB_CSV_H
 
+#include "../../src/base/xdefs.h"
 #include "../../src/module/xmodule.h"
 #include "../../src/vm/xvm.h"
 
 // Load csv module
-XrModule* xr_load_module_csv(XrayIsolate *isolate);
+XR_FUNC XrModule* xr_load_module_csv(XrayIsolate *isolate);
 
 #endif

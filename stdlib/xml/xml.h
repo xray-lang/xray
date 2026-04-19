@@ -43,10 +43,11 @@
 #ifndef XR_STDLIB_XML_H
 #define XR_STDLIB_XML_H
 
+#include "../../src/base/xdefs.h"
 #include "../../src/module/xmodule.h"
 #include "../../src/vm/xvm.h"
 
 // Load xml module
-XrModule* xr_load_module_xml(XrayIsolate *isolate);
+XR_FUNC XrModule* xr_load_module_xml(XrayIsolate *isolate);
 
 #endif

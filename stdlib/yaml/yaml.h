@@ -42,21 +42,22 @@
 #ifndef XR_STDLIB_YAML_H
 #define XR_STDLIB_YAML_H
 
+#include "../../src/base/xdefs.h"
 #include "../../src/module/xmodule.h"
 #include "../../src/vm/xvm.h"
 
 // Parse YAML string (single document)
-XrValue xr_yaml_parse(XrayIsolate *isolate, const char *data, size_t len);
+XR_FUNC XrValue xr_yaml_parse(XrayIsolate *isolate, const char *data, size_t len);
 
 // Parse YAML string (multi-document)
 // Returns: Array, each element is a document
-XrValue xr_yaml_parse_all(XrayIsolate *isolate, const char *data, size_t len);
+XR_FUNC XrValue xr_yaml_parse_all(XrayIsolate *isolate, const char *data, size_t len);
 
 // Serialize to YAML string
 // indent: number of spaces for indentation, default 2
-XrValue xr_yaml_stringify(XrayIsolate *isolate, XrValue value, int indent);
+XR_FUNC XrValue xr_yaml_stringify(XrayIsolate *isolate, XrValue value, int indent);
 
 // Load yaml module
-XrModule* xr_load_module_yaml(XrayIsolate *isolate);
+XR_FUNC XrModule* xr_load_module_yaml(XrayIsolate *isolate);
 
 #endif

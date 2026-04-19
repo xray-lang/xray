@@ -19,6 +19,7 @@
 #ifndef XR_STDLIB_YAML_PARSER_H
 #define XR_STDLIB_YAML_PARSER_H
 
+#include "../../src/base/xdefs.h"
 #include "../../src/runtime/xisolate_internal.h"
 #include "../../src/runtime/object/xarray.h"
 #include "../../src/runtime/object/xmap.h"
@@ -50,7 +51,10 @@ typedef struct {
 
 // ========== Anchor Storage ==========
 
-#define YAML_MAX_ANCHORS 64
+// Initial anchor table capacity; grows dynamically. The previous fixed
+// 64-entry limit failed silently for Kubernetes / Helm manifests that
+// routinely exceed it. See yaml_parser_init / save_anchor.
+#define YAML_ANCHOR_INIT_CAPACITY 16
 
 typedef struct {
     char name[64];
@@ -61,29 +65,30 @@ typedef struct {
 
 typedef struct {
     XrayIsolate *isolate;
-    
+
     // Input data
     const char *data;
     const char *ptr;
     const char *end;
-    
+
     // Position tracking
     int line;
     int col;
-    
+
     // Configuration
     YamlConfig config;
-    
-    // Anchor table
-    YamlAnchor anchors[YAML_MAX_ANCHORS];
+
+    // Anchor table (grown via xr_malloc / XR_REALLOC_OR_ABORT)
+    YamlAnchor *anchors;
     int anchor_count;
-    
+    int anchor_capacity;
+
     // Current nesting depth
     int depth;
-    
+
     // Error message
     char error[256];
-    
+
     // Result
     YamlResult result;
 } YamlParser;
@@ -97,25 +102,25 @@ extern XrValue xr_value_from_map(XrMap *map);
 // ========== API ==========
 
 // Initialize parse config with defaults
-void yaml_config_init(YamlConfig *config);
+XR_FUNC void yaml_config_init(YamlConfig *config);
 
 // Extract config from Json object
-void yaml_config_from_json(XrayIsolate *X, YamlConfig *config, XrJson *json);
+XR_FUNC void yaml_config_from_json(XrayIsolate *X, YamlConfig *config, XrJson *json);
 
 // Initialize parser
-void yaml_parser_init(YamlParser *parser, XrayIsolate *isolate,
-                      const char *data, size_t len, YamlConfig *config);
+XR_FUNC void yaml_parser_init(YamlParser *parser, XrayIsolate *isolate,
+                              const char *data, size_t len, YamlConfig *config);
 
 // Parse single document
-XrValue yaml_parser_parse(YamlParser *parser);
+XR_FUNC XrValue yaml_parser_parse(YamlParser *parser);
 
 // Parse all documents
-XrArray* yaml_parser_parse_all(YamlParser *parser);
+XR_FUNC XrArray* yaml_parser_parse_all(YamlParser *parser);
 
 // Strict mode parsing
-YamlResult yaml_parser_parse_strict(YamlParser *parser);
+XR_FUNC YamlResult yaml_parser_parse_strict(YamlParser *parser);
 
 // Cleanup parser
-void yaml_parser_cleanup(YamlParser *parser);
+XR_FUNC void yaml_parser_cleanup(YamlParser *parser);
 
 #endif
