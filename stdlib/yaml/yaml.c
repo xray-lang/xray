@@ -14,6 +14,7 @@
 #include "yaml.h"
 #include "yaml_parser.h"
 #include "../../src/base/xmalloc.h"
+#include "../common_io.h"
 #include <stdio.h>
 #include <string.h>
 
@@ -169,33 +170,27 @@ static XrValue yaml_stringify(XrayIsolate *X, XrValue *args, int argc) {
     return yaml_emit(X, args[0], indent, flow_level, line_width);
 }
 
-// parseFile(path)
+// parseFile(path). Currently synchronous — see stdlib/common_io.h for
+// the P9 async-migration plan; this binding will switch to yieldable
+// semantics once the shared file helper gains an async variant.
 static XrValue yaml_parse_file(XrayIsolate *X, XrValue *args, int argc) {
     if (argc < 1 || !XR_IS_STRING(args[0])) {
         return xr_null();
     }
     XrString *path = XR_TO_STRING(args[0]);
 
-    FILE *f = fopen(path->data, "rb");
-    if (!f) return xr_null();
+    char *content = NULL;
+    size_t content_len = 0;
+    if (!xrs_file_read_all_sync(path->data, &content, &content_len)) {
+        return xr_null();
+    }
 
-    fseek(f, 0, SEEK_END);
-    long size = ftell(f);
-    if (size < 0) { fclose(f); return xr_null(); }
-    fseek(f, 0, SEEK_SET);
-
-    char *content = (char*)xr_malloc(size + 1);
-    if (!content) { fclose(f); return xr_null(); }
-    size_t read_size = fread(content, 1, size, f);
-    content[read_size] = '\0';
-    fclose(f);
-
-    XrValue result = xr_yaml_parse(X, content, read_size);
+    XrValue result = xr_yaml_parse(X, content, content_len);
     xr_free(content);
     return result;
 }
 
-// writeFile(path, value)
+// writeFile(path, value). Synchronous; see parseFile note above.
 static XrValue yaml_write_file(XrayIsolate *X, XrValue *args, int argc) {
     if (argc < 2 || !XR_IS_STRING(args[0])) {
         return xr_bool(false);
@@ -206,11 +201,7 @@ static XrValue yaml_write_file(XrayIsolate *X, XrValue *args, int argc) {
     if (!XR_IS_STRING(yaml_str)) return xr_bool(false);
     XrString *str = XR_TO_STRING(yaml_str);
 
-    FILE *f = fopen(path->data, "wb");
-    if (!f) return xr_bool(false);
-    fwrite(str->data, 1, str->length, f);
-    fclose(f);
-    return xr_bool(true);
+    return xr_bool(xrs_file_write_all_sync(path->data, str->data, str->length));
 }
 
 // ========== Module Loading ===========

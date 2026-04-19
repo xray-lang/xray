@@ -65,10 +65,15 @@ void yaml_skip_to_eol(YamlParser *p) {
     size_t remaining = p->end - p->ptr;
     if (remaining >= 16) {
         const char *found = yaml_simd_find_newline(p->ptr, remaining);
+        // SIMD path used to bypass column tracking, so any error
+        // reported after `# comment` on a long line had a stale `col`.
+        // Track bytes skipped so diagnostics stay accurate.
+        p->col += (int)(found - p->ptr);
         p->ptr = found;
     } else {
         while (p->ptr < p->end && *p->ptr != '\n' && *p->ptr != '\r') {
             p->ptr++;
+            p->col++;
         }
     }
 }
@@ -87,15 +92,15 @@ void yaml_skip_newline(YamlParser *p) {
 void yaml_skip_empty_lines(YamlParser *p) {
     while (p->ptr < p->end) {
         const char *line_start = p->ptr;
-        
+
         while (p->ptr < p->end && (*p->ptr == ' ' || *p->ptr == '\t')) {
             p->ptr++;
         }
-        
+
         if (p->ptr < p->end && *p->ptr == '#') {
             yaml_skip_to_eol(p);
         }
-        
+
         if (p->ptr < p->end && (*p->ptr == '\n' || *p->ptr == '\r')) {
             if (*p->ptr == '\r') p->ptr++;
             if (p->ptr < p->end && *p->ptr == '\n') p->ptr++;
@@ -116,4 +121,12 @@ int yaml_count_indent(YamlParser *p) {
         indent++;
     }
     return indent;
+}
+
+// Return true if the byte at (p->ptr + indent) is a tab, i.e. the user
+// tried to indent the line with tabs (YAML 1.2 §6.1 forbids that).
+// Caller decides whether to raise an error.
+bool yaml_indent_has_tab(YamlParser *p, int indent) {
+    const char *scan = p->ptr + indent;
+    return scan < p->end && *scan == '\t';
 }

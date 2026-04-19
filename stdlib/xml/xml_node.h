@@ -115,6 +115,7 @@ XR_FUNC XmlNode* xml_element_new(const char *tag, size_t tag_len);
 XR_FUNC XmlNode* xml_text_new(const char *text, size_t len);
 XR_FUNC XmlNode* xml_comment_new(const char *text, size_t len);
 XR_FUNC XmlNode* xml_cdata_new(const char *text, size_t len);
+XR_FUNC XmlNode* xml_pi_new(const char *text, size_t len);
 
 // ========== Node manipulation ==========
 

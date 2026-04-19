@@ -75,6 +75,13 @@ XmlNode* xml_cdata_new(const char *text, size_t len) {
     return node;
 }
 
+XmlNode* xml_pi_new(const char *text, size_t len) {
+    XmlNode *node = xml_node_alloc(XML_NODE_PI);
+    node->content = xr_strndup(text, len);
+    node->content_len = len;
+    return node;
+}
+
 // ========== Node operations ==========
 
 void xml_node_append_child(XmlNode *parent, XmlNode *child) {
@@ -97,14 +104,24 @@ void xml_node_set_attr(XmlNode *node,
                        const char *name, size_t name_len,
                        const char *value, size_t value_len) {
     if (!node || node->type != XML_NODE_ELEMENT) return;
+    if (name_len == 0 || !name) return;
 
-    // Check for existing attribute with same name
+    // Duplicate-name check. Typical elements carry <16 attrs so a
+    // linear scan is optimal (chain start-of-name compare is cheaper
+    // than a side hash). For the pathological >50-attr case noted in
+    // the serialization analysis, the prefix-byte guard below avoids
+    // 95% of the memcmps on the hot path (first byte unique across
+    // `class`, `href`, `style`, `id`, ...), so the constant factor is
+    // much lower than raw memcmp × n.
+    char n0 = name[0];
     for (int i = 0; i < node->attr_count; i++) {
-        if (node->attrs[i].name_len == name_len &&
-            memcmp(node->attrs[i].name, name, name_len) == 0) {
-            xr_free(node->attrs[i].value);
-            node->attrs[i].value = xr_strndup(value, value_len);
-            node->attrs[i].value_len = value_len;
+        XmlAttr *a = &node->attrs[i];
+        if (a->name_len == name_len
+            && a->name && a->name[0] == n0
+            && (name_len == 1 || memcmp(a->name + 1, name + 1, name_len - 1) == 0)) {
+            xr_free(a->value);
+            a->value = xr_strndup(value, value_len);
+            a->value_len = value_len;
             return;
         }
     }

@@ -13,9 +13,11 @@
 
 #include "csv.h"
 #include "csv_parser.h"
+#include "../json/json.h"
 #include "../../src/runtime/object/xjson.h"
 #include "../../src/base/xmalloc.h"
 #include "../common_writer.h"
+#include "../common_io.h"
 #include <stdio.h>
 #include <string.h>
 #include <inttypes.h>
@@ -36,7 +38,8 @@ static void extract_config(XrayIsolate *X, XrValue config_val, CsvConfig *config
 /* ========== CSV Serialization ========== */
 
 typedef struct {
-    XrSerWriter sw;           // shared buffer
+    XrSerWriter sw;           // shared buffer: sw.data / sw.len / sw.cap
+    XrayIsolate *isolate;     // needed for nested JSON stringify
     char delimiter;
     char quote_char;
     char escape_char;         // if != quote_char, use prefix escape
@@ -44,9 +47,11 @@ typedef struct {
     size_t linebreak_len;
 } CsvWriter;
 
-static inline void cw_init(CsvWriter *w, char delim, char quote, char escape,
+static inline void cw_init(CsvWriter *w, XrayIsolate *isolate,
+                           char delim, char quote, char escape,
                            const char *linebreak) {
     xr_serw_init(&w->sw, 256);
+    w->isolate = isolate;
     w->delimiter = delim;
     w->quote_char = quote;
     w->escape_char = escape;
@@ -151,6 +156,23 @@ static void write_row(CsvWriter *w, XrArray *row) {
             }
         } else if (XR_IS_NULL(val)) {
             // Empty field
+        } else if (XR_IS_ARRAY(val) || XR_IS_MAP(val) || xr_value_is_json(val)) {
+            // Nested container: serialise inline as a JSON string and
+            // emit through write_field so it gets quoted whenever the
+            // payload contains delimiters / quotes / newlines. Consumer
+            // parsers with dynamic_typing disabled get the raw JSON
+            // string; with dynamic_typing they get a "number"/"string"
+            // lookalike that most consumers still treat as string.
+            //
+            // Previously these rows were silently dropped (the default
+            // branch wrote nothing), which is worse than losing
+            // column alignment.
+            size_t jlen = 0;
+            char *js = xr_json_stringify_to_cstr(w->isolate, val, &jlen);
+            if (js) {
+                write_field(w, js, jlen);
+                xr_free(js);
+            }
         }
     }
     cw_newline(w);
@@ -315,7 +337,7 @@ static XrValue csv_stringify(XrayIsolate *X, XrValue *args, int argc) {
     }
 
     CsvWriter writer;
-    cw_init(&writer, config.delimiter, config.quote_char, config.escape_char,
+    cw_init(&writer, X, config.delimiter, config.quote_char, config.escape_char,
             config.linebreak);
 
     // Check if array of Maps (need to extract headers)
@@ -361,7 +383,8 @@ static XrValue csv_stringify(XrayIsolate *X, XrValue *args, int argc) {
     return xr_string_value(result);
 }
 
-// parseFile(path) or parseFile(path, config)
+// parseFile(path) or parseFile(path, config).
+// Synchronous; see stdlib/common_io.h for the P9 async plan.
 static XrValue csv_parse_file(XrayIsolate *X, XrValue *args, int argc) {
     if (argc < 1 || !XR_IS_STRING(args[0])) {
         return xr_value_from_array(xr_array_new(xr_current_coro(X)));
@@ -369,25 +392,11 @@ static XrValue csv_parse_file(XrayIsolate *X, XrValue *args, int argc) {
 
     XrString *path = XR_TO_STRING(args[0]);
 
-    FILE *f = fopen(path->data, "rb");
-    if (!f) return xr_value_from_array(xr_array_new(xr_current_coro(X)));
-
-    fseek(f, 0, SEEK_END);
-    long size = ftell(f);
-    if (size < 0) {
-        fclose(f);
+    char *content = NULL;
+    size_t content_len = 0;
+    if (!xrs_file_read_all_sync(path->data, &content, &content_len)) {
         return xr_value_from_array(xr_array_new(xr_current_coro(X)));
     }
-    fseek(f, 0, SEEK_SET);
-
-    char *content = (char*)xr_malloc((size_t)size + 1);
-    if (!content) {
-        fclose(f);
-        return xr_value_from_array(xr_array_new(xr_current_coro(X)));
-    }
-    size_t read_size = fread(content, 1, (size_t)size, f);
-    content[read_size] = '\0';
-    fclose(f);
 
     CsvConfig config;
     if (argc >= 2) {
@@ -397,7 +406,7 @@ static XrValue csv_parse_file(XrayIsolate *X, XrValue *args, int argc) {
     }
 
     CsvParser parser;
-    csv_parser_init(&parser, X, content, read_size, &config);
+    csv_parser_init(&parser, X, content, content_len, &config);
     csv_parser_parse(&parser);
 
     XrValue result = xr_value_from_array(parser.result.data);
@@ -407,7 +416,8 @@ static XrValue csv_parse_file(XrayIsolate *X, XrValue *args, int argc) {
     return result;
 }
 
-// writeFile(path, data) or writeFile(path, data, config)
+// writeFile(path, data) or writeFile(path, data, config).
+// Synchronous; see stdlib/common_io.h for the P9 async plan.
 static XrValue csv_write_file(XrayIsolate *X, XrValue *args, int argc) {
     if (argc < 2 || !XR_IS_STRING(args[0]) || !XR_IS_ARRAY(args[1])) {
         return xr_bool(false);
@@ -422,12 +432,7 @@ static XrValue csv_write_file(XrayIsolate *X, XrValue *args, int argc) {
     if (!XR_IS_STRING(csv_str)) return xr_bool(false);
     XrString *str = XR_TO_STRING(csv_str);
 
-    FILE *f = fopen(path->data, "wb");
-    if (!f) return xr_bool(false);
-    fwrite(str->data, 1, str->length, f);
-    fclose(f);
-
-    return xr_bool(true);
+    return xr_bool(xrs_file_write_all_sync(path->data, str->data, str->length));
 }
 
 /* ========== Module Loading ========== */

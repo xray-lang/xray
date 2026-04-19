@@ -68,6 +68,15 @@ typedef struct {
     bool trim_fields;         // Trim field whitespace
     bool skip_empty_lines;    // Skip empty lines
 
+    // When dynamic_typing is true, any field whose string form matches
+    // one of these values is returned as null instead of the default
+    // (empty string -> null only). The default list is ["", "null",
+    // "NULL"] so a literal `null` cell becomes xr_null(); callers that
+    // need to preserve literal "null" text should pass `nullStrings:
+    // []` to disable matching entirely. Matching is case-sensitive
+    // (pass both casings if needed).
+    XrArray *null_strings;    // GC-rooted; borrowed, not owned
+
     // Owned NUL-terminated comment prefix. Previously this was a bare
     // `const char *` copied from the caller's XrString which left a
     // dangling pointer if the Json argument (or the interned string it
