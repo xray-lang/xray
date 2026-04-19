@@ -14,6 +14,7 @@
 
 #include "cluster.h"
 #include "cluster_node.h"
+#include "../../include/xray_platform.h"  /* xr_random_bytes */
 
 #include <stdlib.h>
 #include <string.h>
@@ -82,6 +83,50 @@ void xr_cluster_send_heartbeats(XrCluster *c) {
     xr_spinlock_unlock(&c->nodes_lock);
 }
 
+/*
+ * Return a jittered backoff in [base/2, base*3/2) using a uniform
+ * random sample. Jitter prevents "thundering herd" reconnects when
+ * many nodes lose the same peer at the same instant — every retryer
+ * picks an independent delay rather than all hammering the target on
+ * identical millisecond boundaries.
+ *
+ * We draw 4 bytes from the platform CSPRNG. That is overkill for
+ * jitter but keeps us on the same RNG we already trust for handshake
+ * nonces, so there is one less quality tier in the codebase.
+ */
+static int jittered_backoff_ms(int base_ms) {
+    if (base_ms <= 1) return base_ms;
+    uint8_t rnd[4];
+    xr_random_bytes(rnd, sizeof(rnd));
+    uint32_t r = ((uint32_t)rnd[0] << 24) | ((uint32_t)rnd[1] << 16) |
+                 ((uint32_t)rnd[2] << 8)  | (uint32_t)rnd[3];
+    /* span = base_ms, offset = base_ms/2. Result is in [base/2, 3*base/2). */
+    int span = base_ms;
+    int offset = base_ms / 2;
+    int jitter = (int)(r % (uint32_t)span);
+    return offset + jitter;
+}
+
+/*
+ * Sleep in small slices so an xr_cluster_stop() landing during backoff
+ * is observed within XR_RECONNECT_SLICE_MS rather than after the full
+ * (possibly 30s) delay. Any caller that wants true coroutine-friendly
+ * reconnect should issue the retries from a coroutine and yield between
+ * attempts; this function is documented as synchronous.
+ */
+#define XR_RECONNECT_SLICE_MS 100
+static void interruptible_sleep_ms(XrCluster *c, int ms) {
+    while (ms > 0 && atomic_load(&c->running)) {
+        int chunk = ms > XR_RECONNECT_SLICE_MS ? XR_RECONNECT_SLICE_MS : ms;
+        struct timespec ts = {
+            .tv_sec  = chunk / 1000,
+            .tv_nsec = (chunk % 1000) * 1000000L
+        };
+        nanosleep(&ts, NULL);
+        ms -= chunk;
+    }
+}
+
 int xr_cluster_reconnect(XrCluster *c, const char *host, uint16_t port,
                           int base_ms, int max_ms, int max_attempts) {
     if (!c) return -1;
@@ -90,7 +135,14 @@ int xr_cluster_reconnect(XrCluster *c, const char *host, uint16_t port,
     if (max_ms <= 0) max_ms = 30000;
     if (max_attempts <= 0) max_attempts = 10;
 
-    int delay_ms = base_ms;
+    /*
+     * Decorrelated-jitter-ish backoff: we grow the ceiling exponentially
+     * (delay_ceiling *= 2, capped at max_ms) but actually sleep for a
+     * jittered value drawn inside that ceiling. This is the pattern AWS
+     * SDK recommends for reconnect loops; it balances per-attempt
+     * variance with bounded total retry time.
+     */
+    int delay_ceiling = base_ms;
     for (int attempt = 0; attempt < max_attempts; attempt++) {
         if (!atomic_load(&c->running)) return -1;
 
@@ -98,7 +150,6 @@ int xr_cluster_reconnect(XrCluster *c, const char *host, uint16_t port,
         if (!node) return -1;
 
         if (xr_cluster_node_connect(c, node) == 0) {
-            // Check tombstone
             if (xr_cluster_is_dead(c, node->name)) {
                 xr_cluster_node_free(node);
                 return -1;
@@ -111,14 +162,12 @@ int xr_cluster_reconnect(XrCluster *c, const char *host, uint16_t port,
 
         xr_cluster_node_free(node);
 
-        // Exponential backoff with jitter
-        struct timespec ts = {
-            .tv_sec = delay_ms / 1000,
-            .tv_nsec = (delay_ms % 1000) * 1000000L
-        };
-        nanosleep(&ts, NULL);
-        delay_ms = delay_ms * 2;
-        if (delay_ms > max_ms) delay_ms = max_ms;
+        int sleep_ms = jittered_backoff_ms(delay_ceiling);
+        if (sleep_ms > max_ms) sleep_ms = max_ms;
+        interruptible_sleep_ms(c, sleep_ms);
+
+        delay_ceiling *= 2;
+        if (delay_ceiling > max_ms) delay_ceiling = max_ms;
     }
     return -1;
 }
