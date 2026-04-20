@@ -80,7 +80,7 @@ void xr_coro_registry_init(XrCoroRegistry *reg) {
     reg->count = 0;
     reg->entries = (XrCoroRegEntry *)xr_calloc(reg->capacity, sizeof(XrCoroRegEntry));
     XR_CHECK(reg->entries != NULL, "coro registry init allocation failed");
-    xr_spinlock_init(&reg->lock);
+    xr_mutex_init(&reg->lock);
 }
 
 void xr_coro_registry_destroy(XrCoroRegistry *reg) {
@@ -101,7 +101,7 @@ void xr_coro_registry_destroy(XrCoroRegistry *reg) {
 bool xr_coro_registry_register(XrCoroRegistry *reg, const char *name, XrCoroutine *coro) {
     if (!reg || !name || !coro) return false;
 
-    xr_spinlock_lock(&reg->lock);
+    xr_mutex_lock(&reg->lock);
 
     // Grow if load factor exceeded
     if (reg->count * 100 >= reg->capacity * XR_CORO_REG_LOAD_FACTOR) {
@@ -113,7 +113,7 @@ bool xr_coro_registry_register(XrCoroRegistry *reg, const char *name, XrCoroutin
 
     if (reg->entries[idx].hash != 0) {
         // Name already taken
-        xr_spinlock_unlock(&reg->lock);
+        xr_mutex_unlock(&reg->lock);
         return false;
     }
 
@@ -123,14 +123,14 @@ bool xr_coro_registry_register(XrCoroRegistry *reg, const char *name, XrCoroutin
     reg->count++;
     XR_DCHECK(reg->count <= reg->capacity, "registry_register: count > capacity");
 
-    xr_spinlock_unlock(&reg->lock);
+    xr_mutex_unlock(&reg->lock);
     return true;
 }
 
 void xr_coro_registry_unregister(XrCoroRegistry *reg, const char *name) {
     if (!reg || !name) return;
 
-    xr_spinlock_lock(&reg->lock);
+    xr_mutex_lock(&reg->lock);
 
     uint32_t h = hash_name(name);
     uint32_t idx = registry_find_slot(reg, name, h);
@@ -162,13 +162,13 @@ void xr_coro_registry_unregister(XrCoroRegistry *reg, const char *name) {
         }
     }
 
-    xr_spinlock_unlock(&reg->lock);
+    xr_mutex_unlock(&reg->lock);
 }
 
 XrCoroutine *xr_coro_registry_whereis(XrCoroRegistry *reg, const char *name) {
     if (!reg || !name) return NULL;
 
-    xr_spinlock_lock(&reg->lock);
+    xr_mutex_lock(&reg->lock);
 
     uint32_t h = hash_name(name);
     uint32_t idx = registry_find_slot(reg, name, h);
@@ -178,7 +178,7 @@ XrCoroutine *xr_coro_registry_whereis(XrCoroRegistry *reg, const char *name) {
         result = reg->entries[idx].coro;
     }
 
-    xr_spinlock_unlock(&reg->lock);
+    xr_mutex_unlock(&reg->lock);
     return result;
 }
 
@@ -191,14 +191,14 @@ XrChannel *xr_coro_monitor(XrayIsolate *X, XrCoroRegistry *reg, const char *name
     XrChannel *ch = xr_channel_new(X, 1);
     if (!ch) return NULL;
 
-    xr_spinlock_lock(&reg->lock);
+    xr_mutex_lock(&reg->lock);
 
     uint32_t h = hash_name(name);
     uint32_t idx = registry_find_slot(reg, name, h);
 
     if (reg->entries[idx].hash == 0) {
         // Coroutine not found — send immediate "noproc" notification
-        xr_spinlock_unlock(&reg->lock);
+        xr_mutex_unlock(&reg->lock);
         XrString *s = xr_string_new(X, "noproc", 6);
         xr_channel_try_send(ch, s ? xr_string_value(s) : xr_null());
         return ch;
@@ -208,7 +208,7 @@ XrChannel *xr_coro_monitor(XrayIsolate *X, XrCoroRegistry *reg, const char *name
 
     // Check if already done
     if (xr_coro_flags_has(coro, XR_CORO_FLG_DONE)) {
-        xr_spinlock_unlock(&reg->lock);
+        xr_mutex_unlock(&reg->lock);
         XrString *s = xr_string_new(X, "noproc", 6);
         xr_channel_try_send(ch, s ? xr_string_value(s) : xr_null());
         return ch;
@@ -223,17 +223,17 @@ XrChannel *xr_coro_monitor(XrayIsolate *X, XrCoroRegistry *reg, const char *name
     mon->next = ext->watched_by;
     ext->watched_by = mon;
 
-    xr_spinlock_unlock(&reg->lock);
+    xr_mutex_unlock(&reg->lock);
     return ch;
 }
 
 void xr_coro_demonitor(XrCoroRegistry *reg, XrCoroutine *coro, XrChannel *ch) {
     if (!reg || !coro || !ch) return;
 
-    xr_spinlock_lock(&reg->lock);
+    xr_mutex_lock(&reg->lock);
 
     // Walk watched_by list and remove matching entry
-    if (!coro->ext) { xr_spinlock_unlock(&reg->lock); return; }
+    if (!coro->ext) { xr_mutex_unlock(&reg->lock); return; }
     XrCoroMonitor **pp = &coro->ext->watched_by;
     while (*pp) {
         if ((*pp)->channel == ch) {
@@ -245,7 +245,7 @@ void xr_coro_demonitor(XrCoroRegistry *reg, XrCoroutine *coro, XrChannel *ch) {
         pp = &(*pp)->next;
     }
 
-    xr_spinlock_unlock(&reg->lock);
+    xr_mutex_unlock(&reg->lock);
 }
 
 void xr_coro_notify_monitors(XrayIsolate *X, XrCoroRegistry *reg, XrCoroutine *coro, const char *reason) {
@@ -255,10 +255,10 @@ void xr_coro_notify_monitors(XrayIsolate *X, XrCoroRegistry *reg, XrCoroutine *c
     // Detach the list under lock, then send notifications outside lock
     XrCoroMonitor *mon = NULL;
     if (reg) {
-        xr_spinlock_lock(&reg->lock);
+        xr_mutex_lock(&reg->lock);
         mon = coro->ext->watched_by;
         coro->ext->watched_by = NULL;
-        xr_spinlock_unlock(&reg->lock);
+        xr_mutex_unlock(&reg->lock);
     } else {
         mon = coro->ext->watched_by;
         coro->ext->watched_by = NULL;

@@ -13,6 +13,7 @@
  */
 
 #include "xworker_internal.h"
+#include "xcoro_tuning.h"
 #include "xtask.h"
 #include "xdeep_copy.h"
 #include "../base/xchecks.h"
@@ -195,12 +196,7 @@ void xr_worker_inbox_enqueue(XrRuntime *runtime, int target_id, XrCoroutine *cor
     }
 }
 
-// Balance check interval (milliseconds)
-#define XR_BALANCE_CHECK_INTERVAL_MS 100
-
-// Migration threshold multiplier: emigrate when queue > 2x average
-#define XR_MIGRATION_THRESHOLD_MULTIPLIER 2
-
+// Balance tuning constants moved to xcoro_tuning.h
 // xr_check_balance moved to xbalance.c
 
 // try_immigrate - Per-priority pull from high-load Worker
@@ -231,7 +227,7 @@ static void try_immigrate(XrWorker *worker) {
 // Used by both worker_loop and xr_handoff_thread_entry to avoid duplication.
 
 // Drain MPSC inbox into P's local run queue, maintaining global inbox counter.
-static void worker_drain_inbox(XrWorker *worker) {
+XR_FUNC void worker_drain_inbox(XrWorker *worker) {
     XrCoroutine *list = xr_mpsc_drain(&worker->p.inbox);
     int count = 0;
     while (list) {
@@ -247,7 +243,7 @@ static void worker_drain_inbox(XrWorker *worker) {
 }
 
 // Poll all I/O sources and drain MPSC inbox into P's local run queue.
-static void worker_poll_sources(XrWorker *worker) {
+XR_FUNC void worker_poll_sources(XrWorker *worker) {
     XrRuntime *runtime = worker->p.runtime;
     XrProc *p = &worker->p;
 
@@ -365,7 +361,7 @@ static inline bool worker_blocked_post_check(XrRuntime *runtime, XrCoroutine *co
  *
  * Returns true if coro was already re-readied (caller must not touch it further).
  */
-static inline bool worker_process_blocked(XrWorker *worker, XrCoroutine *coro) {
+XR_FUNC bool worker_process_blocked(XrWorker *worker, XrCoroutine *coro) {
     XrRuntime *runtime = worker->p.runtime;
 
     // Race check: already woken by channel sender/closer
@@ -511,11 +507,11 @@ static bool worker_handle_vm_result(XrWorker *worker, XrCoroutine *coro, XrVMRes
 // Also implements BLOCKED fast re-dispatch: when a coro blocks on channel
 // and the LIFO slot has a just-woken coro, execute it inline without
 // returning to worker_loop (avoids scheduling overhead for ping-pong patterns).
-static void worker_exec_with_cont_stealing(XrWorker *worker, XrCoroutine *coro) {
+XR_FUNC void worker_exec_with_cont_stealing(XrWorker *worker, XrCoroutine *coro) {
     XrMachine *m = worker->m;
     XrProc *p = &worker->p;
     XrVMResult result;
-    int fast_dispatch_budget = 64;  // Limit consecutive fast dispatches for fairness
+    int fast_dispatch_budget = XR_FAST_DISPATCH_BUDGET;
 
 cont_exec:
     // Invariant: coro must not be NULL or DONE when entering execution
@@ -929,9 +925,7 @@ void xr_worker_cancel_timer(XrWorker *current_worker, XrCoroutine *coro) {
     }
 }
 
-// Max consecutive LIFO slot pops before flushing to run queue.
-// Prevents starvation in ping-pong workloads.
-#define XR_MAX_LIFO_POLLS 3
+// XR_MAX_LIFO_POLLS moved to xcoro_tuning.h (cross-file tuning knob)
 
 // Worker pop from local queue (Chase-Lev deque)
 //
@@ -1413,10 +1407,9 @@ void *worker_loop(void *arg) {
                 }
 
                 if (worker->m->spinning) {
-                    #define XR_SPIN_COUNT 20
                     int64_t cached_now = xr_monotonic_ticks();
 
-                    for (int spin = 0; spin < XR_SPIN_COUNT && !coro; spin++) {
+                    for (int spin = 0; spin < XR_WORKER_SPIN_COUNT && !coro; spin++) {
                         if (!atomic_load(running_ptr)) {
                             goto exit_loop;
                         }
@@ -1729,7 +1722,7 @@ void xr_runtime_ensure_workers(XrRuntime *runtime) {
     // and ASan instrumentation which greatly inflates stack frame sizes.
     pthread_attr_t attr;
     pthread_attr_init(&attr);
-    pthread_attr_setstacksize(&attr, 8 * 1024 * 1024);  // 8MB
+    pthread_attr_setstacksize(&attr, XR_WORKER_STACK_BYTES);
 
     // Create Worker 1~N threads (Worker 0 runs on main thread)
     for (int i = 1; i < runtime->worker_count; i++) {
@@ -2519,9 +2512,7 @@ handle_result:
 }
 
 // ========== Coroutine Object Pool (ref Go gFree) ==========
-
-// Batch size for stealing from / returning to global free list
-#define XR_CORO_BATCH_SIZE 32
+// XR_CORO_BATCH_SIZE / XR_ARENA_BATCH_SIZE moved to xcoro_tuning.h
 
 // Get coroutine object from pool (per-Worker + batch steal)
 XrCoroutine *xr_coro_pool_get(XrRuntime *runtime) {
@@ -2592,7 +2583,6 @@ XrCoroutine *xr_coro_pool_get(XrRuntime *runtime) {
             }
 
             // Claim a batch of arena slots (single atomic for N coroutines)
-            #define XR_ARENA_BATCH_SIZE 64
             XrCoroPoolBlock *block = pool->current_block;
             if (block) {
                 uint32_t global_base = atomic_fetch_add(&pool->alloc_idx, XR_ARENA_BATCH_SIZE);

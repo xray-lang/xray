@@ -60,7 +60,7 @@ typedef struct XrCoroRegistry {
     XrCoroRegEntry *entries;
     uint32_t capacity;
     uint32_t count;
-    XrSpinlock lock;
+    XrMutex lock;
 } XrCoroRegistry;
 
 /* ========== Registry API ========== */
