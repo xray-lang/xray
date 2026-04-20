@@ -32,6 +32,16 @@
 #include <sys/uio.h>
 #endif
 
+/*
+ * xr_socket_read lives in src/coro/xsocket.h. We cannot pull that
+ * header here because it drags include/xray_platform.h, which defines
+ * `static inline void xr_random_bytes(...)` — conflicts with
+ * stdlib/crypto/crypto.h's `int xr_random_bytes(...)` already included
+ * above. Forward-declare just the one entry point we need; the real
+ * signature is checked at link time against xsocket.c.
+ */
+extern int xr_socket_read(struct XrayIsolate *X, int fd, char *buf, size_t len);
+
 // xr_coro_create_native is not declared in any header
 extern struct XrCoroutine *xr_coro_create_native(struct XrayIsolate *X, void (*func)(void*), void *arg,
                                                   const char *name);
@@ -105,10 +115,39 @@ void xr_outq_init(XrOutputQueue *q) {
     int rc = pipe(q->notify_pipe);
     XR_DCHECK(rc == 0, "pipe() failed for writer notification");
     if (rc != 0) { q->notify_pipe[0] = q->notify_pipe[1] = -1; }
-    // Write end non-blocking: enqueue never blocks if pipe is full
+    /*
+     * Both ends non-blocking:
+     *   - Write end: enqueue (outq_notify) never blocks even if the
+     *     pipe already has pending bytes.
+     *   - Read end: the writer coroutine drains via xr_socket_read,
+     *     which requires a non-blocking fd so it can suspend via
+     *     netpoll instead of pinning the worker thread in a raw
+     *     read(2) syscall.
+     */
     if (q->notify_pipe[1] >= 0)
         fcntl(q->notify_pipe[1], F_SETFL, O_NONBLOCK);
+    if (q->notify_pipe[0] >= 0)
+        fcntl(q->notify_pipe[0], F_SETFL, O_NONBLOCK);
     xr_mutex_init(&q->lock);
+}
+
+/*
+ * Close the writer-facing side of the notify pipe early. Used by
+ * xr_cluster_node_free to wake any coroutine yielded on
+ * xr_socket_read(notify_pipe[0]) with a clean EOF before we tear
+ * down the rest of the node state. Calling this multiple times is
+ * safe — it guards on the fd being >= 0.
+ *
+ * This is split out from xr_outq_destroy specifically because the
+ * destroy path wants to close the *read* end only after the writer
+ * coroutine has exited; closing the read end while netpoll still
+ * has the fd registered is a use-after-close on the PollDesc.
+ */
+void xr_outq_close_write_end(XrOutputQueue *q) {
+    if (q->notify_pipe[1] >= 0) {
+        close(q->notify_pipe[1]);
+        q->notify_pipe[1] = -1;
+    }
 }
 
 void xr_outq_destroy(XrOutputQueue *q) {
@@ -122,9 +161,11 @@ void xr_outq_destroy(XrOutputQueue *q) {
     q->head = q->tail = NULL;
     q->total_bytes = 0;
     q->frame_count = 0;
-    // Close notification pipe
-    if (q->notify_pipe[0] >= 0) close(q->notify_pipe[0]);
+    // Close both ends. Write end may already be -1 from an earlier
+    // xr_outq_close_write_end during writer teardown; close is
+    // idempotent against our own -1 guard.
     if (q->notify_pipe[1] >= 0) close(q->notify_pipe[1]);
+    if (q->notify_pipe[0] >= 0) close(q->notify_pipe[0]);
     q->notify_pipe[0] = q->notify_pipe[1] = -1;
 }
 
@@ -294,6 +335,7 @@ XrClusterNode *xr_cluster_node_new(const char *name, const char *host, uint16_t 
     xr_mutex_init(&node->pending_lock);
     xr_outq_init(&node->outq);
     atomic_store(&node->writer_running, false);
+    atomic_store(&node->writer_exited, false);
     xr_phi_init(&node->phi);
     node->next = NULL;
     return node;
@@ -302,12 +344,46 @@ XrClusterNode *xr_cluster_node_new(const char *name, const char *host, uint16_t 
 void xr_cluster_node_free(XrClusterNode *node) {
     if (!node) return;
 
-    // Stop writer coroutine first
+    /*
+     * Teardown sequence — order matters because the writer coroutine
+     * may be yielded inside xr_socket_read(notify_pipe[0]):
+     *
+     *   1. Clear writer_running so any writer iteration after the
+     *      next wake observes the stop signal.
+     *   2. Close the write end of notify_pipe (via the dedicated
+     *      xr_outq_close_write_end helper). xr_socket_read on the
+     *      read end then returns 0 (EOF), wakes the coroutine, the
+     *      loop breaks, and the writer sets writer_exited.
+     *   3. Close the peer socket. Any in-flight send fails cleanly;
+     *      the writer loop's early checks on node->conn bail out.
+     *   4. Spin-wait (bounded) for writer_exited. If the writer was
+     *      never spawned (e.g. failed start_writer, or a pre-connect
+     *      free path from cluster_join / reconnect), writer_exited
+     *      stays false but writer_running is already false, so the
+     *      wait is a no-op aside from the bounded timeout.
+     *   5. xr_outq_destroy — safe now because the writer has stopped
+     *      dereferencing notify_pipe[0]; closing pipe[0] here will
+     *      not race the netpoll PollDesc for that fd.
+     *   6. Free pending requests and the node struct.
+     *
+     * The bounded wait is 500ms total at 1ms granularity; in the
+     * common case the writer exits within the first or second poll.
+     * If we truly time out (pathological scheduler starvation) we
+     * proceed anyway — the kernel's fd close will eventually wake
+     * any stuck reader with EBADF.
+     */
     atomic_store(&node->writer_running, false);
-
+    xr_outq_close_write_end(&node->outq);
     xr_cluster_node_close(node);
 
-    // Free output queue
+    if (node->isolate) {
+        // Writer was spawned — wait for the exit flag it flips on return.
+        for (int i = 0; i < 500 && !atomic_load(&node->writer_exited); i++) {
+            struct timespec ts = { .tv_sec = 0, .tv_nsec = 1 * 1000 * 1000 };
+            nanosleep(&ts, NULL);
+        }
+    }
+
     xr_outq_destroy(&node->outq);
 
     // Free pending requests across every bucket chain. No lock needed
@@ -433,15 +509,49 @@ void xr_cluster_node_writer_loop(void *arg) {
     XrClusterNode *node = (XrClusterNode *)arg;
     if (!node) return;
 
+    /*
+     * Bind the worker's thread-local isolate so xr_socket_read (and
+     * any downstream xr_io_write the batch path invokes) can resolve a
+     * runtime to yield against. node->isolate was recorded in
+     * xr_cluster_node_start_writer; NULL here just means we skip the
+     * coroutine-friendly drain and fall back to a raw nonblocking read
+     * (which returns EAGAIN and spins — acceptable in the degraded
+     * path since it implies the node was never properly attached).
+     */
+    if (node->isolate) xr_io_set_isolate(node->isolate);
+
     while (atomic_load(&node->writer_running) &&
            node->state == XR_NODE_CONNECTED && node->conn) {
 
         // Pop all queued frames in one lock acquisition
         XrOutFrame *batch = xr_outq_pop_all(&node->outq);
         if (!batch) {
-            // Blocking read on pipe — wakes when data enqueued
+            /*
+             * Drain the notify pipe. xr_socket_read on a non-blocking
+             * fd suspends the coroutine via netpoll when no byte is
+             * ready — unlike the original raw read(2), this does NOT
+             * pin the worker thread. The coroutine wakes either when
+             * outq_notify writes a byte (new frame queued) or when
+             * the read end is closed during node teardown. A short
+             * drain buffer is fine because the wake signal is just a
+             * level trigger; if multiple notifies coalesced into one
+             * wake we'll pop the batch in the next iteration.
+             */
             uint8_t drain[64];
-            (void)read(node->outq.notify_pipe[0], drain, sizeof(drain));
+            int pipe_fd = node->outq.notify_pipe[0];
+            int n;
+            if (node->isolate) {
+                n = xr_socket_read(node->isolate, pipe_fd,
+                                   (char *)drain, sizeof(drain));
+            } else {
+                n = (int)read(pipe_fd, drain, sizeof(drain));
+            }
+            // EOF (pipe[1] closed during teardown) or unrecoverable
+            // error: break the loop; writer_running will soon flip.
+            if (n == 0) break;
+            // n < 0 with EAGAIN/timeout just means "no frames yet" —
+            // the caller will observe writer_running/state at the top
+            // of the loop. Positive n is normal drain progress.
             continue;
         }
 
@@ -509,12 +619,24 @@ void xr_cluster_node_writer_loop(void *arg) {
             }
         }
     }
+
+    /*
+     * Announce exit to xr_cluster_node_free so its teardown wait on
+     * writer_exited can proceed to xr_outq_destroy. Must be the very
+     * last statement in this function — once the flag is set, the
+     * caller may close notify_pipe[0] at any time and any further
+     * dereference of node->outq would be a use-after-close.
+     */
+    atomic_store(&node->writer_exited, true);
 }
 
 void xr_cluster_node_start_writer(XrClusterNode *node, XrayIsolate *X) {
     if (!node || !X) return;
     if (atomic_load(&node->writer_running)) return; // already started
 
+    // Record the isolate so the writer loop can drive xr_socket_read
+    // on notify_pipe[0] (coroutine-aware suspend instead of thread block).
+    node->isolate = X;
     atomic_store(&node->writer_running, true);
     XrCoroutine *coro = xr_coro_create_native(X, xr_cluster_node_writer_loop,
                                                node, "cluster_writer");
