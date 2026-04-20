@@ -49,11 +49,11 @@ XrChannel *xr_cluster_monitor_node(XrayIsolate *X, const char *node_name) {
     }
     m->notify_ch = ch;
 
-    xr_spinlock_lock(&c->monitors_lock);
+    xr_mutex_lock(&c->monitors_lock);
     m->next = c->monitors;
     c->monitors = m;
     c->monitor_count++;
-    xr_spinlock_unlock(&c->monitors_lock);
+    xr_mutex_unlock(&c->monitors_lock);
 
     return ch;
 }
@@ -74,7 +74,7 @@ void xr_cluster_fire_monitors(XrCluster *c, const char *node_name) {
     struct XrChannel *targets[XR_MON_FIRE_MAX];
     int target_count = 0;
 
-    xr_spinlock_lock(&c->monitors_lock);
+    xr_mutex_lock(&c->monitors_lock);
     XrNodeMonitor *m = c->monitors;
     while (m && target_count < XR_MON_FIRE_MAX) {
         // Match specific name or wildcard "*"
@@ -86,7 +86,7 @@ void xr_cluster_fire_monitors(XrCluster *c, const char *node_name) {
         }
         m = m->next;
     }
-    xr_spinlock_unlock(&c->monitors_lock);
+    xr_mutex_unlock(&c->monitors_lock);
 
     // Intern the node_name once, reuse across deliveries
     XrString *str = xr_string_intern(c->isolate, node_name,
@@ -123,10 +123,10 @@ XrChannel *xr_cluster_monitor_coro(XrayIsolate *X,
     strncpy(mon->coro_name, coro_name, XR_CORO_NAME_MAX);
     mon->notify_ch = ch;
 
-    xr_spinlock_lock(&c->monitors_lock);
+    xr_mutex_lock(&c->monitors_lock);
     mon->next = c->remote_coro_monitors;
     c->remote_coro_monitors = mon;
-    xr_spinlock_unlock(&c->monitors_lock);
+    xr_mutex_unlock(&c->monitors_lock);
 
     // Send CORO_MONITOR frame to remote node
     uint8_t buf[256];
@@ -217,7 +217,7 @@ void xr_cluster_handle_coro_exit(XrCluster *c, const char *coro_name, const char
     // Received CORO_EXIT from remote node — notify local monitors
     if (!c || !c->isolate) return;
 
-    xr_spinlock_lock(&c->monitors_lock);
+    xr_mutex_lock(&c->monitors_lock);
     XrRemoteCoroMonitor **pp = &c->remote_coro_monitors;
     while (*pp) {
         XrRemoteCoroMonitor *mon = *pp;
@@ -234,5 +234,5 @@ void xr_cluster_handle_coro_exit(XrCluster *c, const char *coro_name, const char
             pp = &mon->next;
         }
     }
-    xr_spinlock_unlock(&c->monitors_lock);
+    xr_mutex_unlock(&c->monitors_lock);
 }

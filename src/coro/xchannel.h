@@ -39,8 +39,10 @@
  *
  *   INVARIANT 5 (Lock discipline): All mutations to buffer state
  *   (buf_count, send_idx, recv_idx) and wait queues (sendq, recvq)
- *   must be performed under the channel spinlock. The lock is held
- *   for short durations only (no blocking operations under lock).
+ *   must be performed under the channel mutex (XrMutex). The lock
+ *   is held for short durations only (no blocking operations under
+ *   lock). XrMutex is an adaptive 3-state lock (active spin -> yield
+ *   -> futex sleep) and degrades to a single CAS under no contention.
  *
  *   INVARIANT 6 (Distributed hooks): When dist != NULL, all send/
  *   recv/close operations are routed through xr_channel_dist_hooks.
@@ -68,11 +70,6 @@ typedef struct XrScheduler XrScheduler;
 /* ========== Channel Lock ========== */
 
 #include "../base/xmutex.h"
-
-typedef XrMutex XrSpinlock;
-#define xr_spinlock_init(l)   xr_mutex_init(l)
-#define xr_spinlock_lock(l)   xr_mutex_lock(l)
-#define xr_spinlock_unlock(l) xr_mutex_unlock(l)
 
 /* ========== Wait Queue ========== */
 
@@ -126,29 +123,29 @@ XR_DATA XrChannelDistHooks *xr_channel_dist_hooks;
 
 typedef struct XrChannel {
     XrGCHeader gc_header;
-    
+
     /* === Buffer (ring buffer for buffered channels) === */
     XrValue *buffer;          // NULL for unbuffered
     uint32_t buf_size;        // 0 for unbuffered
     uint32_t buf_count;       // Current item count
     uint32_t send_idx;        // Next write position
     uint32_t recv_idx;        // Next read position
-    
+
     /* === Wait Queues === */
     XrWaitQueue sendq;        // Blocked senders
     XrWaitQueue recvq;        // Blocked receivers
-    
+
     /* === State (atomic) === */
     _Atomic(bool) closed;
-    XrSpinlock lock;
-    
+    XrMutex lock;
+
     /* === Timer Channel === */
     _Atomic(bool) is_timer;
     int64_t timer_timeout_ms;
     int64_t timer_start_ticks;
     _Atomic(bool) timer_fired;
     uint8_t elem_tid;           // XrTypeId: element type for reified generics (0=any)
-    
+
     /* === Distributed Channel (cluster) === */
     void *dist;               // Opaque pointer to cluster dist context (NULL = local)
     const char *name;         // Named Channel identifier (NULL = anonymous)

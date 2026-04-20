@@ -88,11 +88,11 @@ struct XrChannel *xr_cluster_topic_subscribe(XrayIsolate *X,
 
     uint32_t bucket = str_hash_topic(pattern) % XR_CLUSTER_TOPIC_BUCKETS;
 
-    xr_spinlock_lock(&c->topics_lock);
+    xr_mutex_lock(&c->topics_lock);
     sub->next = c->topic_buckets[bucket];
     c->topic_buckets[bucket] = sub;
     c->topic_sub_count++;
-    xr_spinlock_unlock(&c->topics_lock);
+    xr_mutex_unlock(&c->topics_lock);
 
     // Broadcast subscription to all connected nodes
     uint8_t name_len = (uint8_t)strlen(pattern);
@@ -100,7 +100,7 @@ struct XrChannel *xr_cluster_topic_subscribe(XrayIsolate *X,
     payload[0] = name_len;
     memcpy(payload + 1, pattern, name_len);
 
-    xr_spinlock_lock(&c->nodes_lock);
+    xr_mutex_lock(&c->nodes_lock);
     XrClusterNode *node = c->nodes;
     while (node) {
         if (node->state == XR_NODE_CONNECTED) {
@@ -109,7 +109,7 @@ struct XrChannel *xr_cluster_topic_subscribe(XrayIsolate *X,
         }
         node = node->next;
     }
-    xr_spinlock_unlock(&c->nodes_lock);
+    xr_mutex_unlock(&c->nodes_lock);
 
     return ch;
 }
@@ -119,7 +119,7 @@ void xr_cluster_topic_unsubscribe(XrCluster *c, const char *pattern) {
 
     uint32_t bucket = str_hash_topic(pattern) % XR_CLUSTER_TOPIC_BUCKETS;
 
-    xr_spinlock_lock(&c->topics_lock);
+    xr_mutex_lock(&c->topics_lock);
     XrTopicSubscription **pp = &c->topic_buckets[bucket];
     while (*pp) {
         if (strcmp((*pp)->pattern, pattern) == 0) {
@@ -132,7 +132,7 @@ void xr_cluster_topic_unsubscribe(XrCluster *c, const char *pattern) {
         }
         pp = &(*pp)->next;
     }
-    xr_spinlock_unlock(&c->topics_lock);
+    xr_mutex_unlock(&c->topics_lock);
 
     // Broadcast unsubscription
     uint8_t name_len = (uint8_t)strlen(pattern);
@@ -140,7 +140,7 @@ void xr_cluster_topic_unsubscribe(XrCluster *c, const char *pattern) {
     payload[0] = name_len;
     memcpy(payload + 1, pattern, name_len);
 
-    xr_spinlock_lock(&c->nodes_lock);
+    xr_mutex_lock(&c->nodes_lock);
     XrClusterNode *node = c->nodes;
     while (node) {
         if (node->state == XR_NODE_CONNECTED) {
@@ -149,7 +149,7 @@ void xr_cluster_topic_unsubscribe(XrCluster *c, const char *pattern) {
         }
         node = node->next;
     }
-    xr_spinlock_unlock(&c->nodes_lock);
+    xr_mutex_unlock(&c->nodes_lock);
 }
 
 /* ========== Deliver & Publish ========== */
@@ -163,7 +163,7 @@ void xr_cluster_topic_deliver_local(XrCluster *c, const char *topic, XrValue val
      * Why: xr_channel_try_send wakes select() waiters, which may run user
      * callbacks that re-enter cluster.publish / cluster.subscribe. If we
      * called try_send under topics_lock, that re-entry would recursively
-     * acquire the same lock -> deadlock (spinlock) or corruption.
+     * acquire the same mutex and deadlock the coroutine.
      *
      * Budget: 256 matches per publish is plenty for typical topologies;
      * overflow is silently dropped (at-most-once semantics).
@@ -175,7 +175,7 @@ void xr_cluster_topic_deliver_local(XrCluster *c, const char *topic, XrValue val
     int target_count = 0;
     int target_cap = XR_TOPIC_DELIVER_INLINE;
 
-    xr_spinlock_lock(&c->topics_lock);
+    xr_mutex_lock(&c->topics_lock);
 
     // Fast path: exact match via hash lookup
     uint32_t exact_bucket = str_hash_topic(topic) % XR_CLUSTER_TOPIC_BUCKETS;
@@ -238,9 +238,8 @@ void xr_cluster_topic_deliver_local(XrCluster *c, const char *topic, XrValue val
             sub = sub->next;
         }
     }
-
 collect_done:
-    xr_spinlock_unlock(&c->topics_lock);
+    xr_mutex_unlock(&c->topics_lock);
 
     // Deliver to collected targets outside the lock. Safe now:
     // - try_send may wake select() waiters and trigger re-entry
@@ -299,7 +298,7 @@ int xr_cluster_topic_publish(XrayIsolate *X, const char *topic, XrValue value) {
     xr_serial_buf_free(&sbuf);
 
     // Forward to all connected nodes
-    xr_spinlock_lock(&c->nodes_lock);
+    xr_mutex_lock(&c->nodes_lock);
     XrClusterNode *node = c->nodes;
     while (node) {
         if (node->state == XR_NODE_CONNECTED) {
@@ -308,7 +307,7 @@ int xr_cluster_topic_publish(XrayIsolate *X, const char *topic, XrValue value) {
         }
         node = node->next;
     }
-    xr_spinlock_unlock(&c->nodes_lock);
+    xr_mutex_unlock(&c->nodes_lock);
 
     xr_frame_buf_free(&fb);
     return 0;

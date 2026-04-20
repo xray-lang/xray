@@ -92,22 +92,22 @@ typedef struct XrCluster {
     // Connected nodes (linked list, protected by nodes_lock)
     XrClusterNode    *nodes;
     int               node_count;
-    XrSpinlock        nodes_lock;
+    XrMutex        nodes_lock;
 
     // Named Channel registry (hash table, protected by channels_lock)
     XrDistChannel    *channel_buckets[XR_CLUSTER_CHANNEL_BUCKETS];
     int               channel_count;
-    XrSpinlock        channels_lock;
+    XrMutex        channels_lock;
 
     // Service registry (hash table)
     XrServiceEntry   *service_buckets[XR_CLUSTER_SERVICE_BUCKETS];
     int               service_count;
-    XrSpinlock        services_lock;
+    XrMutex        services_lock;
 
     // Topic Pub/Sub registry (hash table of subscriptions)
     struct XrTopicSubscription *topic_buckets[XR_CLUSTER_TOPIC_BUCKETS];
     int               topic_sub_count;
-    XrSpinlock        topics_lock;
+    XrMutex        topics_lock;
 
     // Request ID counter for service calls
     _Atomic(uint64_t) next_request_id;
@@ -124,7 +124,7 @@ typedef struct XrCluster {
     }                *tombstones;        // dynamic array
     int               tombstone_count;
     int               tombstone_cap;
-    XrSpinlock        dead_nodes_lock;
+    XrMutex        dead_nodes_lock;
 
     // Node event callbacks
     void (*on_node_added)(const char *name);
@@ -133,7 +133,7 @@ typedef struct XrCluster {
     // Node monitors (CSP-style: Channel receives notification on disconnect)
     struct XrNodeMonitor *monitors;
     int               monitor_count;
-    XrSpinlock        monitors_lock;
+    XrMutex        monitors_lock;
 
     // Running state
     _Atomic(bool)     running;

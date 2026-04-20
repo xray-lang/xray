@@ -64,7 +64,7 @@ typedef struct XrOutputQueue {
     int64_t     low_watermark;    // backpressure off (default 1MB)
     _Atomic(bool) is_full;        // above high watermark
     int         notify_pipe[2];   // pipe for writer wakeup (-1 if unavailable)
-    XrSpinlock  lock;
+    XrMutex  lock;
 } XrOutputQueue;
 
 /* ========== Node Metrics ========== */
@@ -128,7 +128,7 @@ typedef struct XrClusterNode {
     // Pending request table (protected by pending_lock)
     XrPendingRequest *pending_first;
     int               pending_count;
-    XrSpinlock        pending_lock;
+    XrMutex        pending_lock;
 
     // Output queue (async writes via dedicated writer coroutine)
     XrOutputQueue    outq;

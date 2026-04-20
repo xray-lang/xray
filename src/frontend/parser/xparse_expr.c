@@ -601,6 +601,7 @@ AstNode *xr_parse_fn_expression(Parser *parser) {
                 param->type = xr_parse_type_annotation(parser);
             }
 
+
             XR_PARSE_PUSH(parser, params, param_count, param_capacity, param);
         } while (xr_parser_match(parser, TK_COMMA));
     }
