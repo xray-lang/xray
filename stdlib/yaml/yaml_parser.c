@@ -63,20 +63,9 @@ void yaml_config_from_json(XrayIsolate *X, YamlConfig *config, XrJson *json) {
     yaml_config_init(config);
     if (!json) return;
 
-    XrValue val = xr_json_get_by_key(X, json, "safe");
-    if (XR_IS_BOOL(val)) {
-        config->safe = XR_TO_BOOL(val);
-    }
-
-    val = xr_json_get_by_key(X, json, "allowDuplicateKeys");
-    if (XR_IS_BOOL(val)) {
-        config->allow_duplicate_keys = XR_TO_BOOL(val);
-    }
-
-    val = xr_json_get_by_key(X, json, "maxDepth");
-    if (XR_IS_INT(val)) {
-        config->max_depth = (int)XR_TO_INT(val);
-    }
+    xrs_cfg_get_bool(X, json, "safe",               &config->safe);
+    xrs_cfg_get_bool(X, json, "allowDuplicateKeys", &config->allow_duplicate_keys);
+    xrs_cfg_get_int (X, json, "maxDepth",           &config->max_depth);
 }
 
 // ========== Parser Initialization ==========

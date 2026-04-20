@@ -34,31 +34,51 @@ static void poll_cache_init(XrPollCache *cache) {
 }
 
 // Cleanup cache pool (drain all cached descriptors)
+//
+// WHY THIS DESIGN (destroy mutex/cond before free):
+//   Each cached pd has a pthread_mutex/cond initialized exactly once by
+//   xr_poll_cache_alloc's "new allocation" branch. Before freeing the
+//   underlying memory we must destroy them to avoid leaking kernel
+//   objects (on Linux these wrap futex state, on macOS they wrap ulock).
 static void poll_cache_cleanup(XrPollCache *cache) {
     XrPollDesc *pd = atomic_exchange_explicit(&cache->head, NULL, memory_order_acquire);
     while (pd) {
         XrPollDesc *next = pd->link;
+        pthread_cond_destroy(&pd->block_cond);
+        pthread_mutex_destroy(&pd->block_mu);
         xr_free(pd);
         pd = next;
     }
 }
 
 // Allocate pollDesc (lock-free Treiber stack pop)
+//
+// INVARIANT: block_mu and block_cond are initialized EXACTLY ONCE — on
+// first allocation from xr_calloc. Recycled pds (popped from the
+// Treiber stack) keep their already-initialized mutex/cond. Calling
+// pthread_mutex_init twice on the same mutex is explicit UB per POSIX,
+// and caused a latent kernel-object bug prior to this fix.
 XrPollDesc *xr_poll_cache_alloc(XrPollCache *cache) {
     XrPollDesc *pd;
+    bool is_new = false;
     do {
         pd = atomic_load_explicit(&cache->head, memory_order_acquire);
         if (!pd) {
-            // Cache empty, allocate new
+            // Cache empty, allocate new and initialize mutex/cond ONCE
             pd = (XrPollDesc *)xr_calloc(1, sizeof(XrPollDesc));
+            if (pd) {
+                pthread_mutex_init(&pd->block_mu, NULL);
+                pthread_cond_init(&pd->block_cond, NULL);
+                is_new = true;
+            }
             break;
         }
     } while (!atomic_compare_exchange_weak_explicit(
         &cache->head, &pd, pd->link,
         memory_order_acq_rel, memory_order_acquire));
-    
+
     if (pd) {
-        // Initialize
+        // Reset all scalar fields except the (already-initialized) mutex/cond.
         pd->link = NULL;
         pd->fd = -1;
         atomic_store(&pd->fdseq, 0);
@@ -72,12 +92,11 @@ XrPollDesc *xr_poll_cache_alloc(XrPollCache *cache) {
         pd->wrun = false;
         pd->rt_storage.slot = XR_TW_SLOT_INACTIVE;
         pd->wt_storage.slot = XR_TW_SLOT_INACTIVE;
-        pthread_mutex_init(&pd->block_mu, NULL);
-        pthread_cond_init(&pd->block_cond, NULL);
         pd->user_data = NULL;
         pd->netpoll = NULL;
+        (void)is_new;  // currently informational; reserved for future asserts
     }
-    
+
     return pd;
 }
 
@@ -85,7 +104,7 @@ XrPollDesc *xr_poll_cache_alloc(XrPollCache *cache) {
 void xr_poll_cache_free(XrPollCache *cache, XrPollDesc *pd) {
     // Increment sequence to invalidate stale notifications
     atomic_fetch_add(&pd->fdseq, 1);
-    
+
     XrPollDesc *old_head;
     do {
         old_head = atomic_load_explicit(&cache->head, memory_order_relaxed);
@@ -107,9 +126,9 @@ static void ready_list_init(XrReadyList *list) {
 // Add coroutine to ready list (using sched_link)
 static void ready_list_push(XrReadyList *list, struct XrCoroutine *coro) {
     if (!coro) return;
-    
+
     coro->sched_link = NULL;  // New node's next is NULL
-    
+
     if (list->tail) {
         // Link to tail
         list->tail->sched_link = coro;
@@ -134,40 +153,40 @@ static void ready_list_push(XrReadyList *list, struct XrCoroutine *coro) {
 bool xr_netpoll_block(XrPollDesc *pd, int mode, XrayIsolate *X) {
     (void)X;
     _Atomic uintptr_t *gpp = (mode == XR_POLL_READ) ? &pd->rg : &pd->wg;
-    
+
     // CAS state machine: consume ready or set wait
     for (;;) {
         uintptr_t old = atomic_load(gpp);
-        
+
         if (old == XR_PD_READY) {
             if (atomic_compare_exchange_strong(gpp, &old, XR_PD_NIL)) {
                 return true;
             }
             continue;
         }
-        
+
         if (old == XR_PD_NIL) {
             if (atomic_compare_exchange_strong(gpp, &old, XR_PD_WAIT)) {
                 break;
             }
             continue;
         }
-        
+
         return false;
     }
-    
+
     if (atomic_load(&pd->closing)) {
         uintptr_t old = atomic_exchange(gpp, XR_PD_NIL);
         return old == XR_PD_READY;
     }
-    
+
     // Wait on condition variable instead of busy-wait
     pthread_mutex_lock(&pd->block_mu);
     while (atomic_load(gpp) == XR_PD_WAIT && !atomic_load(&pd->closing)) {
         pthread_cond_wait(&pd->block_cond, &pd->block_mu);
     }
     pthread_mutex_unlock(&pd->block_mu);
-    
+
     uintptr_t old = atomic_exchange(gpp, XR_PD_NIL);
     return old == XR_PD_READY;
 }
@@ -177,20 +196,20 @@ bool xr_netpoll_block(XrPollDesc *pd, int mode, XrayIsolate *X) {
 // Also signals condition variable for threads blocked in xr_netpoll_block
 struct XrCoroutine *xr_netpoll_unblock(XrPollDesc *pd, int mode, bool io_ready) {
     _Atomic uintptr_t *gpp = (mode == XR_POLL_READ) ? &pd->rg : &pd->wg;
-    
+
     for (;;) {
         uintptr_t old = atomic_load(gpp);
-        
+
         if (old == XR_PD_READY) {
             return NULL;
         }
-        
+
         if (old == XR_PD_NIL && !io_ready) {
             return NULL;
         }
-        
+
         uintptr_t new_val = io_ready ? XR_PD_READY : XR_PD_NIL;
-        
+
         if (atomic_compare_exchange_strong(gpp, &old, new_val)) {
             if (old == XR_PD_WAIT) {
                 // Thread may be blocked in pthread_cond_wait, signal it
@@ -216,15 +235,15 @@ void xr_netpoll_ready(XrReadyList *list, XrPollDesc *pd, int mode) {
     XR_DCHECK(pd != NULL, "netpoll_ready: NULL pd");
     struct XrCoroutine *rg = NULL;
     struct XrCoroutine *wg = NULL;
-    
+
     if (mode & XR_POLL_READ) {
         rg = xr_netpoll_unblock(pd, XR_POLL_READ, true);
     }
-    
+
     if (mode & XR_POLL_WRITE) {
         wg = xr_netpoll_unblock(pd, XR_POLL_WRITE, true);
     }
-    
+
     if (rg) ready_list_push(list, rg);
     if (wg) ready_list_push(list, wg);
 }
@@ -234,17 +253,21 @@ void xr_netpoll_ready(XrReadyList *list, XrPollDesc *pd, int mode) {
 // Create wakeup pipe
 static int create_wakeup_pipe(int pipe_fds[2]) {
 #ifdef _WIN32
-    // Windows uses socketpair or event
-    return -1;  // TODO
+    // Windows: a full IOCP-based wakeup integration is tracked separately
+    // (see xnetpoll_iocp.c which is not yet wired into netpoll_default_ops).
+    // Fail-fast here instead of silently returning -1 — callers that try to
+    // initialize netpoll on Windows will see a clear error rather than an
+    // ambiguous runtime hang.
+    #error "Windows netpoll wakeup pipe not implemented; wire xnetpoll_iocp.c or build without networking"
 #else
     if (pipe(pipe_fds) < 0) {
         return -1;
     }
-    
+
     // Set non-blocking
     fcntl(pipe_fds[0], F_SETFL, O_NONBLOCK);
     fcntl(pipe_fds[1], F_SETFL, O_NONBLOCK);
-    
+
     return 0;
 #endif
 }
@@ -629,23 +652,23 @@ int xr_netpoll_wait(XrNetpoll *np, XrPollDesc *pd, int mode, XrayIsolate *X) {
     if (atomic_load(&pd->closing)) {
         return XR_POLL_ERR_CLOSING;
     }
-    
+
     // Increment waiter count
     atomic_fetch_add(&np->waiters, 1);
-    
+
     // Block wait (supports coroutine suspend)
     bool ready = xr_netpoll_block(pd, mode, X);
-    
+
     // Decrement waiter count
     atomic_fetch_sub(&np->waiters, 1);
-    
+
     if (!ready) {
         if (atomic_load(&pd->closing)) {
             return XR_POLL_ERR_CLOSING;
         }
         return XR_POLL_ERR_TIMEOUT;
     }
-    
+
     return XR_POLL_OK;
 }
 
@@ -673,11 +696,11 @@ void xr_netpoll_deadline_impl(XrPollDesc *pd, uintptr_t seq, bool read) {
     XR_DCHECK(pd != NULL, "netpoll_deadline_impl: NULL pd");
     _Atomic uintptr_t *gpp = read ? &pd->rg : &pd->wg;
     _Atomic uintptr_t *seqp = read ? &pd->rseq : &pd->wseq;
-    
+
     if (atomic_load(seqp) != seq) {
         return;
     }
-    
+
     if (read) {
         pd->rd = -1;
         pd->rrun = false;
@@ -685,15 +708,15 @@ void xr_netpoll_deadline_impl(XrPollDesc *pd, uintptr_t seq, bool read) {
         pd->wd = -1;
         pd->wrun = false;
     }
-    
+
     // Try to wake waiting coroutine
     for (;;) {
         uintptr_t old = atomic_load(gpp);
-        
+
         if (old == XR_PD_NIL || old == XR_PD_READY) {
             return;
         }
-        
+
         if (old == XR_PD_WAIT) {
             if (atomic_compare_exchange_weak(gpp, &old, XR_PD_NIL)) {
                 // Signal condition variable for threads in xr_netpoll_block
@@ -704,15 +727,15 @@ void xr_netpoll_deadline_impl(XrPollDesc *pd, uintptr_t seq, bool read) {
             }
             continue;
         }
-        
+
         // old is coroutine pointer, wake it
         if (atomic_compare_exchange_weak(gpp, &old, XR_PD_NIL)) {
             XrCoroutine *coro = (XrCoroutine *)old;
             xr_coro_resume_store(coro, XR_RESUME_TIMEOUT);
-            
+
             xr_coro_flags_clear(coro, XR_CORO_FLG_BLOCKED);
             xr_coro_flags_set(coro, XR_CORO_FLG_READY);
-            
+
             // Add coroutine to Worker->p.inbox for scheduling
             XrWorker *current_worker = xr_current_worker();
             if (current_worker && current_worker->p.runtime) {
@@ -723,7 +746,7 @@ void xr_netpoll_deadline_impl(XrPollDesc *pd, uintptr_t seq, bool read) {
                 }
                 xr_worker_inbox_enqueue(rt, target_id, coro);
             }
-            
+
             return;
         }
     }
@@ -739,32 +762,32 @@ void xr_netpoll_deadline_impl(XrPollDesc *pd, uintptr_t seq, bool read) {
 // Cross-worker safety: timer wheel operations (set/cancel) MUST only be
 // called from the owner worker. If coroutine migrated to a different worker,
 // skip timer operations - the I/O proceeds without timer-based timeout.
-void xr_netpoll_set_deadline(XrNetpoll *np, XrPollDesc *pd, int64_t deadline, 
+void xr_netpoll_set_deadline(XrNetpoll *np, XrPollDesc *pd, int64_t deadline,
                               int mode, XrTimerWheel *tw) {
     (void)np;
     (void)tw;  // Ignore passed tw, use bound Worker's Timer Wheel
-    
+
     // bind fd to current Worker on first I/O
     xr_netpoll_bind_worker(pd);
     XrTimerWheel *bound_tw = xr_netpoll_get_timer_wheel(pd);
-    
+
     // Check if we're on the owner worker (timer ops require owner exclusivity)
     XrWorker *current = xr_current_worker();
     bool is_owner = current && (current->p.id == pd->owner_worker_id);
-    
+
     if (mode & XR_POLL_READ) {
         // Increment sequence to invalidate old read timer callbacks
         uintptr_t seq = atomic_fetch_add(&pd->rseq, 1) + 1;
-        
+
         pd->rd = deadline;
-        
+
         if (is_owner) {
             // Same worker: direct timer cancel + set (safe)
             if (pd->rrun && bound_tw) {
                 xr_twheel_cancel_timer(bound_tw, &pd->rt_storage);
                 pd->rrun = false;
             }
-            
+
             if (deadline > 0 && bound_tw) {
                 pd->rseq_saved = seq;
                 pd->rt = &pd->rt_storage;
@@ -775,20 +798,20 @@ void xr_netpoll_set_deadline(XrNetpoll *np, XrPollDesc *pd, int64_t deadline,
         }
         // Cross-worker: skip timer ops (embedded node still in owner's wheel)
     }
-    
+
     if (mode & XR_POLL_WRITE) {
         // Increment sequence to invalidate old write timer callbacks
         uintptr_t seq = atomic_fetch_add(&pd->wseq, 1) + 1;
-        
+
         pd->wd = deadline;
-        
+
         if (is_owner) {
             // Same worker: direct timer cancel + set (safe)
             if (pd->wrun && bound_tw) {
                 xr_twheel_cancel_timer(bound_tw, &pd->wt_storage);
                 pd->wrun = false;
             }
-            
+
             if (deadline > 0 && bound_tw) {
                 pd->wseq_saved = seq;
                 pd->wt = &pd->wt_storage;
@@ -806,26 +829,26 @@ void xr_netpoll_set_deadline(XrNetpoll *np, XrPollDesc *pd, int64_t deadline,
 // Bind fd to current Worker
 int xr_netpoll_bind_worker(XrPollDesc *pd) {
     if (!pd) return -1;
-    
+
     // Already bound, return directly
     if (pd->owner_worker_id >= 0) {
         return pd->owner_worker_id;
     }
-    
+
     // Bind to current Worker
     XrWorker *worker = xr_current_worker();
     if (worker) {
         pd->owner_worker_id = worker->p.id;
         return worker->p.id;
     }
-    
+
     return -1;
 }
 
 // Get Timer Wheel bound to fd
 XrTimerWheel *xr_netpoll_get_timer_wheel(XrPollDesc *pd) {
     XrWorker *worker = NULL;
-    
+
     // Prefer bound Worker
     if (pd && pd->owner_worker_id >= 0) {
         XrWorker *current = xr_current_worker();
@@ -836,12 +859,12 @@ XrTimerWheel *xr_netpoll_get_timer_wheel(XrPollDesc *pd) {
             }
         }
     }
-    
+
     // If not bound, use current Worker
     if (!worker) {
         worker = xr_current_worker();
     }
-    
+
     return worker ? worker->p.timer_wheel : NULL;
 }
 
@@ -852,20 +875,20 @@ XrTimerWheel *xr_netpoll_get_timer_wheel(XrPollDesc *pd) {
 void xr_netpoll_deferred_free(XrNetpoll *np, XrPollDesc *pd) {
     if (!pd) return;
     (void)np;
-    
+
     XrWorker *current = xr_current_worker();
     if (!current) {
         // No worker context (shutdown?), free directly
         xr_poll_cache_free(&np->cache, pd);
         return;
     }
-    
+
     XrRuntime *rt = current->p.runtime;
     if (!rt || pd->owner_worker_id < 0 || pd->owner_worker_id >= rt->worker_count) {
         xr_poll_cache_free(&np->cache, pd);
         return;
     }
-    
+
     // Push onto owner worker's deferred free stack (lock-free CAS loop)
     XrProc *owner_p = &rt->workers[pd->owner_worker_id].p;
     void *old_head = atomic_load_explicit(&owner_p->deferred_free_head, memory_order_relaxed);
@@ -880,10 +903,10 @@ void xr_netpoll_deferred_free(XrNetpoll *np, XrPollDesc *pd) {
 // Called by owner worker during poll cycle — single consumer, no lock needed.
 void xr_netpoll_drain_deferred(XrNetpoll *np, XrProc *p) {
     if (!p || !np) return;
-    
+
     // Atomic swap to get entire list (O(1))
     void *head = atomic_exchange_explicit(&p->deferred_free_head, NULL, memory_order_acquire);
-    
+
     // Walk list and free each PollDesc
     XrPollDesc *pd = (XrPollDesc *)head;
     while (pd) {

@@ -582,8 +582,8 @@ XrClass* xr_class_builder_finalize(XrClassBuilder *builder) {
             // Depth >= 8: keep the 8 shallowest ancestors in
             // [Object, parent1, ..., parent7] order so that instanceof's
             // O(1) primary_supers[target->depth] lookup remains correct
-            // for any target with depth < 8. Deeper targets fall back to
-            // linear scan (to be replaced by secondary supers hash in P10).
+            // for any target with depth < 8. Deeper targets fall through
+            // to the secondary supers hash built below.
             XrClass *chain[256];
             int n = 0;
             for (XrClass *c = cls; c != NULL && n < 256; c = c->super) {
@@ -592,6 +592,29 @@ XrClass* xr_class_builder_finalize(XrClassBuilder *builder) {
             // chain[n-1] is Object, chain[0] is cls itself.
             for (int i = 0; i < 8 && n - 1 - i >= 0; i++) {
                 cls->primary_supers[i] = chain[n - 1 - i];
+            }
+
+            // Build the secondary supers hash: every ancestor (including
+            // cls itself) becomes a slot keyed by its XrClass* identity.
+            // Capacity is rounded up to the next power of two that gives
+            // a load factor <= 0.5 so the linear-probe chain stays short.
+            // Hash allocation failure is non-fatal -- instanceof's
+            // fallback branch walks the super chain by hand in that case.
+            uint16_t cap = 16;
+            while (cap < (uint16_t)(n * 2)) cap <<= 1;
+            cls->secondary_supers_hash =
+                (XrClass**)xr_calloc(cap, sizeof(XrClass*));
+            if (cls->secondary_supers_hash != NULL) {
+                cls->secondary_supers_capacity = cap;
+                uint32_t mask = (uint32_t)cap - 1;
+                for (int i = 0; i < n; i++) {
+                    XrClass *c = chain[i];
+                    uint32_t h = xr_hash_int((int64_t)(uintptr_t)c) & mask;
+                    while (cls->secondary_supers_hash[h] != NULL) {
+                        h = (h + 1) & mask;
+                    }
+                    cls->secondary_supers_hash[h] = c;
+                }
             }
         }
     }

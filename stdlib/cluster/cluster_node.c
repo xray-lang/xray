@@ -289,7 +289,7 @@ XrClusterNode *xr_cluster_node_new(const char *name, const char *host, uint16_t 
     node->last_heartbeat_sent = 0;
     node->last_heartbeat_recv = 0;
     node->missed_heartbeats = 0;
-    node->pending_first = NULL;
+    memset(node->pending_buckets, 0, sizeof(node->pending_buckets));
     node->pending_count = 0;
     xr_mutex_init(&node->pending_lock);
     xr_outq_init(&node->outq);
@@ -310,13 +310,18 @@ void xr_cluster_node_free(XrClusterNode *node) {
     // Free output queue
     xr_outq_destroy(&node->outq);
 
-    // Free pending requests
-    XrPendingRequest *pr = node->pending_first;
-    while (pr) {
-        XrPendingRequest *next = pr->next;
-        if (pr->response_ch) xr_channel_close(pr->response_ch);
-        xr_free(pr);
-        pr = next;
+    // Free pending requests across every bucket chain. No lock needed
+    // here: xr_cluster_node_free runs only after readers and writers
+    // have observed the stopped state and exited, so the table is quiesced.
+    for (int i = 0; i < XR_PENDING_BUCKETS; i++) {
+        XrPendingRequest *pr = node->pending_buckets[i];
+        while (pr) {
+            XrPendingRequest *next = pr->next;
+            if (pr->response_ch) xr_channel_close(pr->response_ch);
+            xr_free(pr);
+            pr = next;
+        }
+        node->pending_buckets[i] = NULL;
     }
     xr_free(node);
 }
@@ -798,14 +803,21 @@ XrChannel *xr_cluster_node_add_pending(XrClusterNode *node, uint64_t request_id,
     pr->response_ch = ch;
     pr->next = NULL;
 
+    /* Bucket selection uses low bits of request_id. Request IDs are
+     * monotonic atomic integers (see XrCluster.next_request_id), so
+     * the low bits are uniformly distributed even without mixing —
+     * no hash function needed. `& (BUCKETS - 1)` requires a power-of-two
+     * XR_PENDING_BUCKETS and saves a div on the hot path. */
+    uint32_t bucket = (uint32_t)(request_id & (XR_PENDING_BUCKETS - 1));
+
     xr_mutex_lock(&node->pending_lock);
     if (node->pending_count >= XR_MAX_PENDING_REQUESTS) {
         xr_mutex_unlock(&node->pending_lock);
         xr_free(pr);
         return NULL;
     }
-    pr->next = node->pending_first;
-    node->pending_first = pr;
+    pr->next = node->pending_buckets[bucket];
+    node->pending_buckets[bucket] = pr;
     node->pending_count++;
     xr_mutex_unlock(&node->pending_lock);
 
@@ -815,8 +827,10 @@ XrChannel *xr_cluster_node_add_pending(XrClusterNode *node, uint64_t request_id,
 XrChannel *xr_cluster_node_take_pending(XrClusterNode *node, uint64_t request_id) {
     if (!node) return NULL;
 
+    uint32_t bucket = (uint32_t)(request_id & (XR_PENDING_BUCKETS - 1));
+
     xr_mutex_lock(&node->pending_lock);
-    XrPendingRequest **pp = &node->pending_first;
+    XrPendingRequest **pp = &node->pending_buckets[bucket];
     while (*pp) {
         if ((*pp)->request_id == request_id) {
             XrPendingRequest *pr = *pp;

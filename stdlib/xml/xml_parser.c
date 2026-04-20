@@ -353,19 +353,10 @@ void xml_config_from_json(XrayIsolate *X, XmlParseConfig *config, XrJson *json) 
     xml_parse_config_init(config);
     if (!json) return;
 
-    XrValue val;
-
-    val = xr_json_get_by_key(X, json, "preserveWhitespace");
-    if (XR_IS_BOOL(val)) config->preserve_whitespace = XR_TO_BOOL(val);
-
-    val = xr_json_get_by_key(X, json, "preserveComments");
-    if (XR_IS_BOOL(val)) config->preserve_comments = XR_TO_BOOL(val);
-
-    val = xr_json_get_by_key(X, json, "preserveCData");
-    if (XR_IS_BOOL(val)) config->preserve_cdata = XR_TO_BOOL(val);
-
-    val = xr_json_get_by_key(X, json, "validateEntities");
-    if (XR_IS_BOOL(val)) config->validate_entities = XR_TO_BOOL(val);
+    xrs_cfg_get_bool(X, json, "preserveWhitespace", &config->preserve_whitespace);
+    xrs_cfg_get_bool(X, json, "preserveComments",   &config->preserve_comments);
+    xrs_cfg_get_bool(X, json, "preserveCData",      &config->preserve_cdata);
+    xrs_cfg_get_bool(X, json, "validateEntities",   &config->validate_entities);
 }
 
 // ========== Helper: create element and push depth ==========

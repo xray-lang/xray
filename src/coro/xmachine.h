@@ -145,11 +145,22 @@ typedef struct XrMachine {
 
     /* === M Linked Lists === */
     struct XrMachine *all_link;     // Global all-M list
-    struct XrMachine *idle_link;   // Idle M list link
+    struct XrMachine *idle_link;   // Idle list link (shared by idle_worker_list
+                                    // OR idle_m_head at any moment — see xworker.h)
+
+    /* === Idle-stack guard (Phase 4.1) ===
+     * Prevents the same M from being pushed twice onto idle_worker_list.
+     * Set to true by idle_worker_push CAS, cleared by idle_worker_pop.
+     * This is required because we removed idle_worker_remove (a lock-free
+     * O(1) mid-list removal is not implementable without hazard pointers),
+     * so a self-woken M stays in the list until a subsequent wake_idle_worker
+     * pops it. Without this flag, the M would be pushed a second time at its
+     * next park and form a cycle. */
+    _Atomic bool in_idle_worker_list;
 
     /* === Runtime back pointer === */
     struct XrRuntime *runtime;
-    
+
     /* === Thread Reuse (handoff M keeps thread alive) === */
     _Atomic bool has_thread;   // true if M has a parked thread waiting for next_p
 } XrMachine;

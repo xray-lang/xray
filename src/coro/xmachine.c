@@ -45,6 +45,7 @@ void xr_machine_init(XrMachine *m, int id, struct XrRuntime *runtime) {
     m->current_coro = NULL;
     m->all_link = NULL;
     m->idle_link = NULL;
+    atomic_store(&m->in_idle_worker_list, false);
     atomic_store(&m->heartbeat, 0);
 
     // Initialize VM storage
@@ -110,18 +111,29 @@ void xr_unpark_m(XrMachine *m) {
 
 // ========== Idle M Management ==========
 
+// Phase 4.1: idle_m_head is a lock-free Treiber stack.
+//
+// ABA safety: XrMachine instances are never freed during runtime lifetime
+// (allocated in a grow-only array keyed by handoff count). idle_link is
+// shared with idle_worker_list but the two are mutually exclusive — an M
+// is on idle_m_head only after handoff has unbound it from its Worker
+// (see xr_handoff_thread_entry).
 XrMachine *xr_get_idle_m(struct XrRuntime *runtime) {
     if (!runtime) return NULL;
 
-    pthread_mutex_lock(&runtime->sched_lock);
-    XrMachine *m = runtime->idle_m_head;
-    if (m) {
-        runtime->idle_m_head = m->idle_link;
-        m->idle_link = NULL;
-        atomic_fetch_sub(&runtime->idle_m_count, 1);
+    for (int retry = 0; retry < 8; retry++) {
+        XrMachine *head = atomic_load_explicit(&runtime->idle_m_head, memory_order_acquire);
+        if (!head) return NULL;
+        XrMachine *next = head->idle_link;
+        if (atomic_compare_exchange_weak_explicit(
+                &runtime->idle_m_head, &head, next,
+                memory_order_acq_rel, memory_order_acquire)) {
+            head->idle_link = NULL;
+            atomic_fetch_sub_explicit(&runtime->idle_m_count, 1, memory_order_relaxed);
+            return head;
+        }
     }
-    pthread_mutex_unlock(&runtime->sched_lock);
-    return m;
+    return NULL;
 }
 
 void xr_put_idle_m(struct XrRuntime *runtime, XrMachine *m) {
@@ -129,11 +141,14 @@ void xr_put_idle_m(struct XrRuntime *runtime, XrMachine *m) {
 
     atomic_store(&m->state, M_PARKED);
 
-    pthread_mutex_lock(&runtime->sched_lock);
-    m->idle_link = runtime->idle_m_head;
-    runtime->idle_m_head = m;
-    atomic_fetch_add(&runtime->idle_m_count, 1);
-    pthread_mutex_unlock(&runtime->sched_lock);
+    XrMachine *head;
+    do {
+        head = atomic_load_explicit(&runtime->idle_m_head, memory_order_relaxed);
+        m->idle_link = head;
+    } while (!atomic_compare_exchange_weak_explicit(
+        &runtime->idle_m_head, &head, m,
+        memory_order_release, memory_order_relaxed));
+    atomic_fetch_add_explicit(&runtime->idle_m_count, 1, memory_order_relaxed);
 }
 
 // Start or wake an M to run P.
@@ -149,12 +164,12 @@ void xr_startm(struct XrProc *p, bool spinning) {
     if (m) {
         m->spinning = spinning;
         atomic_store(&m->state, M_RUNNING);
-        
+
         // Set next_p before signaling (thread checks this after waking)
         m->next_p = p;
         atomic_store_explicit(&m->park_state, XR_PARK_WOKEN, memory_order_release);
         xr_park_futex_wake(&m->park_state);
-        
+
         if (atomic_load(&m->has_thread)) {
             // Thread reuse: parked thread will wake and process next_p
             return;

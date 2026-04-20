@@ -47,14 +47,14 @@ static void sysmon_check(XrRuntime *runtime) {
     for (int i = 0; i < runtime->worker_count; i++) {
         XrWorker *w = &runtime->workers[i];
         XrMachine *wm = w->m;
-        
+
         // Skip workers with no bound M (M is blocked in syscall, handoff in progress)
         if (!wm) {
             runtime->sysmon_state[i].stuck_since_us = 0;
             runtime->sysmon_state[i].warned = false;
             continue;
         }
-        
+
         uint64_t hb = atomic_load_explicit(&wm->heartbeat, memory_order_relaxed);
 
         // P_SYSCALL/P_HANDOFF: M is in syscall or handoff M is running
@@ -186,7 +186,7 @@ static void sysmon_assist(XrRuntime *runtime) {
 void *sysmon_thread_func(void *arg) {
     XrRuntime *runtime = (XrRuntime *)arg;
     int idle_rounds = 0;
-    
+
     while (atomic_load(&runtime->running)) {
         // Adaptive interval: 2ms when active workers exist, up to 10ms when all idle
         int active = atomic_load_explicit(&runtime->active_workers, memory_order_relaxed);
@@ -229,13 +229,13 @@ int xr_runtime_next_coro_id(XrRuntime *runtime) {
 // 4. When main coroutine completes, worker_loop internally sets runtime->running = false
 int xr_main_thread_run(XrayIsolate *X, XrCoroutine *main_coro) {
     if (!X || !main_coro) return -1;
-    
+
     XrRuntime *runtime = (XrRuntime *)X->vm.runtime;
     if (!runtime) return -1;
-    
+
     // Main thread reuses Worker 0
     XrWorker *worker = &runtime->workers[0];
-    
+
     // Re-entry support (REPL): if runtime was stopped by previous main coro completion,
     // rejoin dead threads and restart state for next run.
     if (!atomic_load(&runtime->running)) {
@@ -247,23 +247,23 @@ int xr_main_thread_run(XrayIsolate *X, XrCoroutine *main_coro) {
                 if (wm) pthread_join(wm->thread, NULL);
             }
         }
-        
+
         // Reset state for next run (threads created lazily on next spawn)
         atomic_store(&runtime->started_workers, 0);
         atomic_store(&runtime->exited_workers, 0);
         atomic_store(&runtime->threads_started, false);
         atomic_store(&runtime->running, true);
     }
-    
+
  // Initialize main thread Worker's Timer Wheel (owner is worker 0)
     if (!worker->p.timer_wheel) {
         worker->p.timer_wheel = xr_timer_wheel_create(runtime, 0);  // Worker 0 owns this
         worker->p.last_timer_tick = xr_monotonic_ticks();
     }
-    
+
     // Ensure vm_ctx.isolate is set correctly
     worker->m->vm_ctx.isolate = X;
-    
+
     // put main coroutine into Worker 0's local queue (no global queue)
     // Clear stale execution state from previous run (DONE, RUNNING, BLOCKED, etc.)
     // xr_coro_flags_set is atomic OR — without clearing first, old DONE flag persists
@@ -274,26 +274,28 @@ int xr_main_thread_run(XrayIsolate *X, XrCoroutine *main_coro) {
     xr_coro_flags_set(main_coro, XR_CORO_FLG_READY | XR_CORO_FLG_MAIN);
     atomic_store_explicit(&main_coro->affinity_p, 0, memory_order_relaxed);  // main coroutine bound to Worker 0
     xr_worker_push(worker, main_coro);
-    
+
     // Directly call worker_loop, reuse unified scheduling logic
     // worker_loop internally detects main coroutine completion and sets runtime->running = false
     worker_loop(worker);
-    
+
     // Wake all sleeping Workers so they can observe running=false and exit
     for (int i = 0; i < runtime->worker_count; i++) {
         worker_unpark(&runtime->workers[i]);
     }
 
-    // Wake idle M threads parked in handoff_thread_entry
+    // Wake idle M threads parked in handoff_thread_entry.
+    //
+    // Lock-free traversal (Phase 4.1): idle_m_head is a Treiber stack. We
+    // snapshot the head and walk forward; any M pushed concurrently will
+    // observe runtime->running=false on its next check anyway.
     {
-        pthread_mutex_lock(&runtime->sched_lock);
-        XrMachine *idle = runtime->idle_m_head;
+        XrMachine *idle = atomic_load_explicit(&runtime->idle_m_head, memory_order_acquire);
         while (idle) {
             atomic_store_explicit(&idle->park_state, XR_PARK_WOKEN, memory_order_release);
             xr_park_futex_wake(&idle->park_state);
             idle = idle->idle_link;
         }
-        pthread_mutex_unlock(&runtime->sched_lock);
     }
 
     // Join worker threads before returning — prevents use-after-free when
@@ -307,11 +309,11 @@ int xr_main_thread_run(XrayIsolate *X, XrCoroutine *main_coro) {
         // Mark threads as joined so next run doesn't double-join
         atomic_store(&runtime->threads_started, false);
     }
-    
+
     // Cleanup TLS
     tls_current_worker = NULL;
     tls_current_machine = NULL;
-    
+
     return 0;
 }
 
@@ -321,37 +323,37 @@ int xr_main_thread_run(XrayIsolate *X, XrCoroutine *main_coro) {
 // Returns 0 if stopped again (breakpoint/step), 1 if program ended.
 int xr_debug_resume_vm(XrayIsolate *X, XrCoroutine *coro) {
     if (!X || !coro) return -1;
-    
+
     XrRuntime *runtime = (XrRuntime *)X->vm.runtime;
     if (!runtime) return -1;
-    
+
     XrWorker *worker = &runtime->workers[0];
-    
+
     // Restart runtime
     atomic_store(&runtime->running, true);
-    
+
     // Ensure TLS is set
     tls_current_worker = worker;
-    
+
     // Set resume status to indicate debug resumption (skip unroll)
     xr_coro_resume_store(coro, XR_RESUME_DEBUG);
-    
+
     // Use standard coroutine run mechanism with debug flag
     XrVMResult result = xr_coro_run_on_worker(worker, coro);
-    
+
     atomic_store(&runtime->running, false);
-    
+
     switch (result) {
         case XR_VM_OK:
             return 1;  // Program ended
-            
+
         case XR_VM_DEBUG_BREAK:
             return 0;  // Stopped at breakpoint/step
-            
+
         case XR_VM_YIELD:
         case XR_VM_BLOCKED:
             return 0;  // Treat as stopped for debugging
-            
+
         default:
             return 1;  // Program ended (with error)
     }
@@ -368,15 +370,15 @@ int xr_debug_resume_vm(XrayIsolate *X, XrCoroutine *coro) {
 void xr_worker_block_select(XrWorker *worker, XrCoroutine *coro,
                             void **channels, int count) {
     if (!worker || !coro || !channels || count <= 0) return;
-    
+
     // Add coroutine to each channel's select queue
     for (int i = 0; i < count; i++) {
         void *channel = channels[i];
         if (!channel) continue;
-        
+
         XrBlockedBucket *bucket = worker_blocked_bucket_find_or_create(worker, channel);
         if (!bucket) continue;
-        
+
         // Add to select queue tail (use next pointer, as only in one queue)
         // Note: since coroutine may be in multiple bucket's select queues,
         // we use linear traversal, don't directly use list pointer
@@ -391,12 +393,12 @@ void xr_worker_block_select(XrWorker *worker, XrCoroutine *coro,
             bucket->select_tail = coro;
         }
     }
-    
+
     // Add to Worker's linear blocked queue (for traversal)
     worker_blocked_list_add(worker, coro);
     worker->p.blocked_count++;
     worker->p.select_waiter_count++;  // Increment select waiter count
-    
+
     // Set coroutine state
     xr_coro_flags_clear(coro, XR_CORO_FLG_READY);
     xr_coro_flags_set(coro, XR_CORO_FLG_BLOCKED | XR_CORO_WAIT_SELECT);
@@ -411,15 +413,15 @@ void xr_worker_block_select(XrWorker *worker, XrCoroutine *coro,
 // 4. Return the woken coroutine
 XrCoroutine *xr_worker_wake_select(XrWorker *worker, void *channel) {
     if (!worker || !channel) return NULL;
-    
+
     // Fast path: no select waiters, skip traversal
     if (worker->p.select_waiter_count == 0) return NULL;
-    
+
     // Traverse all blocked coroutines in Worker
     XrCoroutine *coro = worker->p.blocked_head;
     while (coro) {
         XrCoroutine *next = coro->next;
-        
+
         // Check if select waiting
         XrSelectWait *sw = coro->select_wait;
         if (sw && !atomic_load(&sw->triggered)) {
@@ -431,28 +433,28 @@ XrCoroutine *xr_worker_wake_select(XrWorker *worker, void *channel) {
                     if (atomic_compare_exchange_strong(&sw->triggered, &expected, true)) {
                         // Record ready case index
                         coro->select_ready_case = i;
-                        
+
                         // Remove from blocked queue
                         xr_worker_unblock_select(worker, coro);
-                        
+
                         // Set wake state
                         xr_coro_resume_store(coro, XR_RESUME_CHANNEL);
                         xr_coro_flags_clear(coro, XR_CORO_FLG_BLOCKED | XR_CORO_WAIT_MASK);
                         xr_coro_flags_set(coro, XR_CORO_FLG_READY);
-                        
+
                         // Add to ready queue
                         xr_worker_push(worker, coro);
-                        
+
                         return coro;
                     }
                     break;  // Already woken by another channel
                 }
             }
         }
-        
+
         coro = next;
     }
-    
+
     return NULL;
 }
 
@@ -464,12 +466,13 @@ XrCoroutine *xr_worker_wake_select(XrWorker *worker, void *channel) {
 // 3. Cleanup select_wait structure
 void xr_worker_unblock_select(XrWorker *worker, XrCoroutine *coro) {
     if (!worker || !coro) return;
-    
+
     XrSelectWait *sw = coro->select_wait;
     if (!sw) return;
-    
+
     // Notify dist channels about exiting select (unsubscribe from push model)
-    XrChannelDistHooks *dhooks = xr_channel_dist_hooks;
+    // Hooks live on XrayIsolate; fetch via coro->isolate to avoid global state.
+    XrChannelDistHooks *dhooks = (coro && coro->isolate) ? coro->isolate->channel_dist_hooks : NULL;
     if (dhooks && dhooks->on_select_exit) {
         for (int i = 0; i < sw->case_count; i++) {
             XrChannel *ch = (XrChannel *)sw->cases[i].channel;
@@ -478,7 +481,7 @@ void xr_worker_unblock_select(XrWorker *worker, XrCoroutine *coro) {
             }
         }
     }
-    
+
     // Remove from first channel's select queue
     if (sw->case_count > 0 && sw->cases[0].channel) {
         void *channel = sw->cases[0].channel;
@@ -504,12 +507,12 @@ void xr_worker_unblock_select(XrWorker *worker, XrCoroutine *coro) {
             }
         }
     }
-    
+
     // Remove from Worker's linear blocked queue
     worker_blocked_list_remove(worker, coro);
     worker->p.blocked_count--;
     worker->p.select_waiter_count--;  // Decrement select waiter count
-    
+
     // Cleanup list pointers
     coro->next = NULL;
     coro->prev = NULL;

@@ -17,6 +17,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+#include <pthread.h>
 #include <arpa/inet.h>
 
 /* ========== HPACK Static Table (RFC 7541 Appendix A) ========== */
@@ -145,6 +146,165 @@ static int hpack_decode_int(const uint8_t *buf, size_t buf_len, uint64_t *value,
     return -1;  // Incomplete
 }
 
+/* ========== HPACK Huffman Decoding (RFC 7541 Section 5.2 / Appendix B) ========== */
+
+// Static Huffman code table, indexed by symbol (0..255) plus EOS at 256.
+// Source: RFC 7541 Appendix B, verbatim.
+typedef struct { uint32_t code; uint8_t bits; } HpackHuffmanEntry;
+static const HpackHuffmanEntry hpack_huffman_table[257] = {
+    /*   0 */ {0x1ff8, 13},      {0x7fffd8, 23},    {0xfffffe2, 28},   {0xfffffe3, 28},
+    /*   4 */ {0xfffffe4, 28},   {0xfffffe5, 28},   {0xfffffe6, 28},   {0xfffffe7, 28},
+    /*   8 */ {0xfffffe8, 28},   {0xffffea, 24},    {0x3ffffffc, 30},  {0xfffffe9, 28},
+    /*  12 */ {0xfffffea, 28},   {0x3ffffffd, 30},  {0xfffffeb, 28},   {0xfffffec, 28},
+    /*  16 */ {0xfffffed, 28},   {0xfffffee, 28},   {0xfffffef, 28},   {0xffffff0, 28},
+    /*  20 */ {0xffffff1, 28},   {0xffffff2, 28},   {0x3ffffffe, 30},  {0xffffff3, 28},
+    /*  24 */ {0xffffff4, 28},   {0xffffff5, 28},   {0xffffff6, 28},   {0xffffff7, 28},
+    /*  28 */ {0xffffff8, 28},   {0xffffff9, 28},   {0xffffffa, 28},   {0xffffffb, 28},
+    /*  32 */ {0x14, 6},         {0x3f8, 10},       {0x3f9, 10},       {0xffa, 12},
+    /*  36 */ {0x1ff9, 13},      {0x15, 6},         {0xf8, 8},         {0x7fa, 11},
+    /*  40 */ {0x3fa, 10},       {0x3fb, 10},       {0xf9, 8},         {0x7fb, 11},
+    /*  44 */ {0xfa, 8},         {0x16, 6},         {0x17, 6},         {0x18, 6},
+    /*  48 */ {0x0, 5},          {0x1, 5},          {0x2, 5},          {0x19, 6},
+    /*  52 */ {0x1a, 6},         {0x1b, 6},         {0x1c, 6},         {0x1d, 6},
+    /*  56 */ {0x1e, 6},         {0x1f, 6},         {0x5c, 7},         {0xfb, 8},
+    /*  60 */ {0x7ffc, 15},      {0x20, 6},         {0xffb, 12},       {0x3fc, 10},
+    /*  64 */ {0x1ffa, 13},      {0x21, 6},         {0x5d, 7},         {0x5e, 7},
+    /*  68 */ {0x5f, 7},         {0x60, 7},         {0x61, 7},         {0x62, 7},
+    /*  72 */ {0x63, 7},         {0x64, 7},         {0x65, 7},         {0x66, 7},
+    /*  76 */ {0x67, 7},         {0x68, 7},         {0x69, 7},         {0x6a, 7},
+    /*  80 */ {0x6b, 7},         {0x6c, 7},         {0x6d, 7},         {0x6e, 7},
+    /*  84 */ {0x6f, 7},         {0x70, 7},         {0x71, 7},         {0x72, 7},
+    /*  88 */ {0xfc, 8},         {0x73, 7},         {0xfd, 8},         {0x1ffb, 13},
+    /*  92 */ {0x7fff0, 19},     {0x1ffc, 13},      {0x3ffc, 14},      {0x22, 6},
+    /*  96 */ {0x7ffd, 15},      {0x3, 5},          {0x23, 6},         {0x4, 5},
+    /* 100 */ {0x24, 6},         {0x5, 5},          {0x25, 6},         {0x26, 6},
+    /* 104 */ {0x27, 6},         {0x6, 5},          {0x74, 7},         {0x75, 7},
+    /* 108 */ {0x28, 6},         {0x29, 6},         {0x2a, 6},         {0x7, 5},
+    /* 112 */ {0x2b, 6},         {0x76, 7},         {0x2c, 6},         {0x8, 5},
+    /* 116 */ {0x9, 5},          {0x2d, 6},         {0x77, 7},         {0x78, 7},
+    /* 120 */ {0x79, 7},         {0x7a, 7},         {0x7b, 7},         {0x7ffe, 15},
+    /* 124 */ {0x7fc, 11},       {0x3ffd, 14},      {0x1ffd, 13},      {0xffffffc, 28},
+    /* 128 */ {0xfffe6, 20},     {0x3fffd2, 22},    {0xfffe7, 20},     {0xfffe8, 20},
+    /* 132 */ {0x3fffd3, 22},    {0x3fffd4, 22},    {0x3fffd5, 22},    {0x7fffd9, 23},
+    /* 136 */ {0x3fffd6, 22},    {0x7fffda, 23},    {0x7fffdb, 23},    {0x7fffdc, 23},
+    /* 140 */ {0x7fffdd, 23},    {0x7fffde, 23},    {0xffffeb, 24},    {0x7fffdf, 23},
+    /* 144 */ {0xffffec, 24},    {0xffffed, 24},    {0x3fffd7, 22},    {0x7fffe0, 23},
+    /* 148 */ {0xffffee, 24},    {0x7fffe1, 23},    {0x7fffe2, 23},    {0x7fffe3, 23},
+    /* 152 */ {0x7fffe4, 23},    {0x1fffdc, 21},    {0x3fffd8, 22},    {0x7fffe5, 23},
+    /* 156 */ {0x3fffd9, 22},    {0x7fffe6, 23},    {0x7fffe7, 23},    {0xffffef, 24},
+    /* 160 */ {0x3fffda, 22},    {0x1fffdd, 21},    {0xfffe9, 20},     {0x3fffdb, 22},
+    /* 164 */ {0x3fffdc, 22},    {0x7fffe8, 23},    {0x7fffe9, 23},    {0x1fffde, 21},
+    /* 168 */ {0x7fffea, 23},    {0x3fffdd, 22},    {0x3fffde, 22},    {0xfffff0, 24},
+    /* 172 */ {0x1fffdf, 21},    {0x3fffdf, 22},    {0x7fffeb, 23},    {0x7fffec, 23},
+    /* 176 */ {0x1fffe0, 21},    {0x1fffe1, 21},    {0x3fffe0, 22},    {0x1fffe2, 21},
+    /* 180 */ {0x7fffed, 23},    {0x3fffe1, 22},    {0x7fffee, 23},    {0x7fffef, 23},
+    /* 184 */ {0xfffea, 20},     {0x3fffe2, 22},    {0x3fffe3, 22},    {0x3fffe4, 22},
+    /* 188 */ {0x7ffff0, 23},    {0x3fffe5, 22},    {0x3fffe6, 22},    {0x7ffff1, 23},
+    /* 192 */ {0x3ffffe0, 26},   {0x3ffffe1, 26},   {0xfffeb, 20},     {0x7fff1, 19},
+    /* 196 */ {0x3fffe7, 22},    {0x7ffff2, 23},    {0x3fffe8, 22},    {0x1ffffec, 25},
+    /* 200 */ {0x3ffffe2, 26},   {0x3ffffe3, 26},   {0x3ffffe4, 26},   {0x7ffffde, 27},
+    /* 204 */ {0x7ffffdf, 27},   {0x3ffffe5, 26},   {0xfffff1, 24},    {0x1ffffed, 25},
+    /* 208 */ {0x7fff2, 19},     {0x1fffe3, 21},    {0x3ffffe6, 26},   {0x7ffffe0, 27},
+    /* 212 */ {0x7ffffe1, 27},   {0x3ffffe7, 26},   {0x7ffffe2, 27},   {0xfffff2, 24},
+    /* 216 */ {0x1fffe4, 21},    {0x1fffe5, 21},    {0x3ffffe8, 26},   {0x3ffffe9, 26},
+    /* 220 */ {0xffffffd, 28},   {0x7ffffe3, 27},   {0x7ffffe4, 27},   {0x7ffffe5, 27},
+    /* 224 */ {0xfffec, 20},     {0xfffff3, 24},    {0xfffed, 20},     {0x1fffe6, 21},
+    /* 228 */ {0x3fffe9, 22},    {0x1fffe7, 21},    {0x1fffe8, 21},    {0x7ffff3, 23},
+    /* 232 */ {0x3fffea, 22},    {0x3fffeb, 22},    {0x1ffffee, 25},   {0x1ffffef, 25},
+    /* 236 */ {0xfffff4, 24},    {0xfffff5, 24},    {0x3ffffea, 26},   {0x7ffff4, 23},
+    /* 240 */ {0x3ffffeb, 26},   {0x7ffffe6, 27},   {0x3ffffec, 26},   {0x3ffffed, 26},
+    /* 244 */ {0x7ffffe7, 27},   {0x7ffffe8, 27},   {0x7ffffe9, 27},   {0x7ffffea, 27},
+    /* 248 */ {0x7ffffeb, 27},   {0xffffffe, 28},   {0x7ffffec, 27},   {0x7ffffed, 27},
+    /* 252 */ {0x7ffffee, 27},   {0x7ffffef, 27},   {0x7fffff0, 27},   {0x3ffffee, 26},
+    /* 256 EOS */ {0x3fffffff, 30}
+};
+
+// Huffman decoding trie. Internal nodes have sym == -1; leaves carry the
+// symbol value. Root lives at index 0. Built once at first decode via
+// pthread_once so we pay the ~513-node construction cost exactly once per
+// process.
+typedef struct { int16_t left; int16_t right; int16_t sym; } HpackHuffmanNode;
+#define HPACK_HUFFMAN_TREE_CAP 1024  // 2 * 257 leaves = 514 nodes upper bound
+static HpackHuffmanNode hpack_huffman_tree[HPACK_HUFFMAN_TREE_CAP];
+static int hpack_huffman_tree_size = 0;
+static pthread_once_t hpack_huffman_once = PTHREAD_ONCE_INIT;
+
+static void hpack_huffman_init(void) {
+    hpack_huffman_tree[0].left = -1;
+    hpack_huffman_tree[0].right = -1;
+    hpack_huffman_tree[0].sym = -1;
+    hpack_huffman_tree_size = 1;
+
+    for (int sym = 0; sym <= 256; sym++) {
+        uint32_t code = hpack_huffman_table[sym].code;
+        int bits = hpack_huffman_table[sym].bits;
+        int cur = 0;
+        for (int b = bits - 1; b >= 0; b--) {
+            int bit = (code >> b) & 1;
+            int16_t *child = bit ? &hpack_huffman_tree[cur].right
+                                 : &hpack_huffman_tree[cur].left;
+            if (*child < 0) {
+                if (hpack_huffman_tree_size >= HPACK_HUFFMAN_TREE_CAP) return;
+                int16_t idx = (int16_t)hpack_huffman_tree_size++;
+                hpack_huffman_tree[idx].left = -1;
+                hpack_huffman_tree[idx].right = -1;
+                hpack_huffman_tree[idx].sym = -1;
+                *child = idx;
+            }
+            cur = *child;
+        }
+        hpack_huffman_tree[cur].sym = (int16_t)sym;
+    }
+}
+
+// Decode a Huffman-encoded byte string (RFC 7541 5.2).
+// Returns 0 on success, -1 on any decoding error:
+//   - invalid code (no matching symbol)
+//   - explicit EOS symbol in data (RFC 7541 5.2 forbids)
+//   - padding longer than 7 bits
+//   - padding not a strict prefix of the EOS code (i.e. not all 1-bits)
+//   - output buffer too small
+static int hpack_decode_huffman(const uint8_t *src, size_t src_len,
+                                char *dst, size_t dst_cap, size_t *dst_len) {
+    pthread_once(&hpack_huffman_once, hpack_huffman_init);
+
+    int cur = 0;                // current trie node
+    size_t out = 0;             // bytes written to dst
+    bool pad_all_ones = true;   // true while we've seen only 1-bits since last symbol
+    int  pad_bits = 0;          // bits consumed since last emitted symbol
+
+    for (size_t i = 0; i < src_len; i++) {
+        uint8_t byte = src[i];
+        for (int b = 7; b >= 0; b--) {
+            int bit = (byte >> b) & 1;
+            int16_t next = bit ? hpack_huffman_tree[cur].right
+                               : hpack_huffman_tree[cur].left;
+            if (next < 0) return -1;  // Invalid code path
+            cur = next;
+            pad_bits++;
+            if (!bit) pad_all_ones = false;
+
+            int16_t sym = hpack_huffman_tree[cur].sym;
+            if (sym < 0) continue;     // Internal node, keep walking
+            if (sym == 256) return -1; // Explicit EOS in data is forbidden
+            if (out >= dst_cap) return -1;
+            dst[out++] = (char)(uint8_t)sym;
+
+            cur = 0;
+            pad_bits = 0;
+            pad_all_ones = true;
+        }
+    }
+    // End-of-input: any residual walked bits are padding. RFC 7541 5.2 requires
+    // padding to be <= 7 bits AND equal to the MSBs of the EOS code (all ones).
+    if (cur != 0) {
+        if (pad_bits > 7) return -1;
+        if (!pad_all_ones) return -1;
+    }
+    if (dst_len) *dst_len = out;
+    return 0;
+}
+
 /* ========== HPACK String Encoding/Decoding ========== */
 
 // Encode string (without Huffman)
@@ -159,7 +319,7 @@ static int hpack_encode_string(uint8_t *buf, size_t buf_len, const char *str, si
     return int_len + (int)str_len;
 }
 
-// Decode string
+// Decode string (RFC 7541 5.2)
 static int hpack_decode_string(const uint8_t *buf, size_t buf_len,
                                char **str, size_t *str_len) {
     if (buf_len == 0) return -1;
@@ -171,17 +331,28 @@ static int hpack_decode_string(const uint8_t *buf, size_t buf_len,
 
     if ((size_t)int_len + len > buf_len) return -1;
 
-    *str_len = (size_t)len;
-    *str = (char*)malloc(len + 1);
-    if (!*str) return -1;
-
     if (huffman) {
-        // Simplified: Huffman not implemented yet, just copy
-        memcpy(*str, buf + int_len, len);
+        // Huffman-encoded. Shortest code is 5 bits, so each input byte expands
+        // to at most 8/5 = 1.6 output bytes; allocate 2x for safety headroom.
+        size_t max_out = (size_t)len * 2 + 1;
+        char *out = (char*)malloc(max_out);
+        if (!out) return -1;
+        size_t decoded_len = 0;
+        if (hpack_decode_huffman(buf + int_len, (size_t)len,
+                                 out, max_out - 1, &decoded_len) != 0) {
+            free(out);
+            return -1;
+        }
+        out[decoded_len] = '\0';
+        *str = out;
+        *str_len = decoded_len;
     } else {
+        *str_len = (size_t)len;
+        *str = (char*)malloc(len + 1);
+        if (!*str) return -1;
         memcpy(*str, buf + int_len, len);
+        (*str)[len] = '\0';
     }
-    (*str)[len] = '\0';
 
     return int_len + (int)len;
 }
@@ -726,9 +897,28 @@ int xr_h2_recv(XrH2Conn *conn) {
                     xr_h2_stream_hash_add(&conn->stream_hash, stream);
                 }
             }
+            // RFC 7540 6.2: strip optional Pad Length + Exclusive/Stream-Dep/
+            // Weight fields before the Header Block Fragment. Without this the
+            // HPACK decoder sees the priority/padding bytes as literal header
+            // bytes and produces garbage (or returns -1, silently dropping all
+            // headers including :status).
+            const uint8_t *hdr_ptr = payload;
+            uint32_t hdr_len = header.length;
+            if (header.flags & XR_H2_FLAG_PADDED) {
+                if (hdr_len < 1) { result = -1; break; }
+                uint32_t pad_len = hdr_ptr[0];
+                if (pad_len + 1 > hdr_len) { result = -1; break; }
+                hdr_ptr += 1;
+                hdr_len -= 1 + pad_len;
+            }
+            if (header.flags & XR_H2_FLAG_PRIORITY) {
+                if (hdr_len < 5) { result = -1; break; }
+                hdr_ptr += 5;
+                hdr_len -= 5;
+            }
             // Decode HPACK headers to extract :status pseudo-header
-            if (stream && payload && header.length > 0) {
-                xr_hpack_decode(&conn->decoder_table, payload, header.length,
+            if (stream && hdr_ptr && hdr_len > 0) {
+                xr_hpack_decode(&conn->decoder_table, hdr_ptr, hdr_len,
                                 h2_header_callback, stream);
             }
             if (stream && header.flags & XR_H2_FLAG_END_STREAM) {
@@ -739,21 +929,41 @@ int xr_h2_recv(XrH2Conn *conn) {
 
         case XR_H2_FRAME_DATA: {
             XrH2Stream *stream = xr_h2_get_stream(conn, header.stream_id);
-            if (stream && payload && header.length > 0) {
-                // Append data to stream buffer
-                size_t new_len = stream->data_len + header.length;
+            // RFC 7540 6.1: if PADDED flag set, first octet is Pad Length and
+            // the last `pad_len` octets are padding that must NOT be delivered
+            // to the application. Prior code pass-through made HTTP body carry
+            // trailing garbage whenever the peer padded (e.g. HTTP/2 clients
+            // that anti-fingerprint via random padding).
+            const uint8_t *data_ptr = payload;
+            uint32_t data_len = header.length;
+            if (header.flags & XR_H2_FLAG_PADDED) {
+                if (data_len < 1) { result = -1; break; }
+                uint32_t pad_len = data_ptr[0];
+                if (pad_len + 1 > data_len) { result = -1; break; }
+                data_ptr += 1;
+                data_len -= 1 + pad_len;
+            }
+            if (stream && data_ptr && data_len > 0) {
+                // Append data to stream buffer. Use a temporary pointer so the
+                // original stream->data_buf is preserved on realloc failure.
+                size_t new_len = stream->data_len + data_len;
                 char *new_buf = (char*)realloc(stream->data_buf, new_len + 1);
-                if (new_buf) {
-                    memcpy(new_buf + stream->data_len, payload, header.length);
-                    new_buf[new_len] = '\0';
-                    stream->data_buf = new_buf;
-                    stream->data_len = new_len;
+                if (!new_buf) {
+                    // Propagate OOM instead of silently dropping body bytes.
+                    result = -1;
+                    break;
                 }
+                memcpy(new_buf + stream->data_len, data_ptr, data_len);
+                new_buf[new_len] = '\0';
+                stream->data_buf = new_buf;
+                stream->data_len = new_len;
             }
             if (stream && header.flags & XR_H2_FLAG_END_STREAM) {
                 stream->state = XR_H2_STREAM_HALF_CLOSED_REMOTE;
             }
-            // Send WINDOW_UPDATE
+            // RFC 7540 6.9.1: flow-control accounts for the *entire* DATA
+            // payload including Pad Length and padding octets, not just the
+            // useful body bytes. So credit back header.length, not data_len.
             if (header.length > 0) {
                 xr_h2_send_window_update(conn, 0, header.length);
                 xr_h2_send_window_update(conn, header.stream_id, header.length);

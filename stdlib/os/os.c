@@ -13,7 +13,10 @@
  */
 
 #include "os.h"
+#include "../common.h"
 #include "../../include/xray_platform.h"
+#include "../../src/base/xmalloc.h"
+#include "../../src/base/xchecks.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -43,14 +46,11 @@ extern char **environ;
 
 /* ========== External Declarations ========== */
 
-extern XrValue xr_string_value(XrString *str);
 struct XrCoroutine;
 extern struct XrCoroutine* xr_current_coro(XrayIsolate *X);
 extern XrMap* xr_map_new(struct XrCoroutine *coro);
 extern void xr_map_set(XrMap *map, XrValue key, XrValue value);
 extern XrValue xr_value_from_map(XrMap *map);
-extern XrCFunction* xr_vm_cfunction_new(XrayIsolate *isolate, XrCFunctionPtr func, const char *name);
-extern XrValue xr_value_from_cfunction(XrCFunction *cfunc);
 extern XrArray* xr_array_new(struct XrCoroutine *coro);
 extern void xr_array_push(XrArray *arr, XrValue value);
 extern XrValue xr_value_from_array(XrArray *arr);
@@ -71,18 +71,10 @@ extern XrValue xr_value_from_array(XrArray *arr);
 
 /* ========== Helper Functions ========== */
 
-// Get string argument
-static const char* get_string_arg(XrValue v) {
-    if (!XR_IS_STRING(v)) return NULL;
-    return XR_TO_STRING(v)->data;
-}
-
-// Create string value
-static XrValue make_string(XrayIsolate *X, const char *s) {
-    if (!s) return xr_null();
-    XrString *str = xr_string_intern(X, s, strlen(s), 0);
-    return xr_string_value(str);
-}
+// String argument accessor and interned-string constructor come from
+// <common.h>: xrs_string_arg() / xrs_string_value_c().
+#define get_string_arg(v)         xrs_string_arg((v), NULL)
+#define make_string(iso, cstr)    xrs_string_value_c((iso), (cstr))
 
 /* ========== Environment Variables ========== */
 
@@ -91,10 +83,10 @@ static XrValue os_getenv(XrayIsolate *X, XrValue *args, int argc) {
     if (argc < 1) return xr_null();
     const char *name = get_string_arg(args[0]);
     if (!name) return xr_null();
-    
+
     const char *value = getenv(name);
     if (!value) return xr_null();
-    
+
     return make_string(X, value);
 }
 
@@ -102,11 +94,11 @@ static XrValue os_getenv(XrayIsolate *X, XrValue *args, int argc) {
 static XrValue os_setenv(XrayIsolate *X, XrValue *args, int argc) {
     (void)X;
     if (argc < 2) return xr_bool(false);
-    
+
     const char *name = get_string_arg(args[0]);
     const char *value = get_string_arg(args[1]);
     if (!name || !value) return xr_bool(false);
-    
+
     int result = os_setenv_impl(name, value);
     return xr_bool(result == 0);
 }
@@ -115,10 +107,10 @@ static XrValue os_setenv(XrayIsolate *X, XrValue *args, int argc) {
 static XrValue os_unsetenv(XrayIsolate *X, XrValue *args, int argc) {
     (void)X;
     if (argc < 1) return xr_bool(false);
-    
+
     const char *name = get_string_arg(args[0]);
     if (!name) return xr_bool(false);
-    
+
     int result = os_unsetenv_impl(name);
     return xr_bool(result == 0);
 }
@@ -126,24 +118,24 @@ static XrValue os_unsetenv(XrayIsolate *X, XrValue *args, int argc) {
 // environ() - Get all environment variables
 static XrValue os_environ(XrayIsolate *X, XrValue *args, int argc) {
     (void)args; (void)argc;
-    
+
     XrMap *map = xr_map_new(xr_current_coro(X));
     if (!map) return xr_null();
-    
+
     for (char **env = environ; *env != NULL; env++) {
         char *eq = strchr(*env, '=');
         if (!eq) continue;
-        
+
         size_t name_len = eq - *env;
         const char *value = eq + 1;
-        
+
         // Directly intern with length — no temporary allocation needed
         XrString *key_str = xr_string_intern(X, *env, name_len, 0);
         XrValue key = xr_string_value(key_str);
         XrValue val = make_string(X, value);
         xr_map_set(map, key, val);
     }
-    
+
     return xr_value_from_map(map);
 }
 
@@ -152,12 +144,12 @@ static XrValue os_environ(XrayIsolate *X, XrValue *args, int argc) {
 // exit(code) - Exit program
 static XrValue os_exit(XrayIsolate *X, XrValue *args, int argc) {
     (void)X;
-    
+
     int code = 0;
     if (argc >= 1 && XR_IS_INT(args[0])) {
         code = (int)XR_TO_INT(args[0]);
     }
-    
+
     exit(code);
     return xr_null();  // Never reached
 }
@@ -171,7 +163,7 @@ static XrValue os_getpid(XrayIsolate *X, XrValue *args, int argc) {
 // getcwd() - Get current working directory
 static XrValue os_getcwd(XrayIsolate *X, XrValue *args, int argc) {
     (void)args; (void)argc;
-    
+
     char buf[PATH_MAX];
     if (getcwd(buf, sizeof(buf)) == NULL) {
         return xr_null();
@@ -183,28 +175,40 @@ static XrValue os_getcwd(XrayIsolate *X, XrValue *args, int argc) {
 static XrValue os_chdir(XrayIsolate *X, XrValue *args, int argc) {
     (void)X;
     if (argc < 1) return xr_bool(false);
-    
+
     const char *path = get_string_arg(args[0]);
     if (!path) return xr_bool(false);
-    
+
     return xr_bool(os_chdir_impl(path) == 0);
 }
 
 // hostname() - Get hostname
 static XrValue os_hostname(XrayIsolate *X, XrValue *args, int argc) {
     (void)args; (void)argc;
-    
+
     char buf[256];
+#ifdef XR_PLATFORM_WINDOWS
+    // gethostname() on Windows lives in Winsock and requires WSAStartup()
+    // to have been called; otherwise it returns WSANOTINITIALISED. We
+    // initialise on demand (idempotent via WSACleanup pair), so this works
+    // for embedded callers that have not spun up the networking stack yet.
+    WSADATA wsa;
+    int wsa_ok = (WSAStartup(MAKEWORD(2, 2), &wsa) == 0);
+    int rc = gethostname(buf, sizeof(buf));
+    if (wsa_ok) WSACleanup();
+    if (rc != 0) return xr_null();
+#else
     if (gethostname(buf, sizeof(buf)) != 0) {
         return xr_null();
     }
+#endif
     return make_string(X, buf);
 }
 
 // tmpdir() - Get temporary directory
 static XrValue os_tmpdir(XrayIsolate *X, XrValue *args, int argc) {
     (void)args; (void)argc;
-    
+
     // Try to get from environment variables
     const char *tmpdir = getenv("TMPDIR");
     if (!tmpdir) tmpdir = getenv("TMP");
@@ -216,7 +220,7 @@ static XrValue os_tmpdir(XrayIsolate *X, XrValue *args, int argc) {
         tmpdir = "/tmp";
 #endif
     }
-    
+
     return make_string(X, tmpdir);
 }
 
@@ -225,7 +229,7 @@ static XrValue os_tmpdir(XrayIsolate *X, XrValue *args, int argc) {
 // username() - Get current user name
 static XrValue os_username(XrayIsolate *X, XrValue *args, int argc) {
     (void)args; (void)argc;
-    
+
 #ifdef XR_PLATFORM_WINDOWS
     char buf[256];
     DWORD size = sizeof(buf);
@@ -241,7 +245,7 @@ static XrValue os_username(XrayIsolate *X, XrValue *args, int argc) {
 // homedir() - Get user home directory
 static XrValue os_homedir(XrayIsolate *X, XrValue *args, int argc) {
     (void)args; (void)argc;
-    
+
     const char *home = getenv("HOME");
 #ifdef XR_PLATFORM_WINDOWS
     if (!home) home = getenv("USERPROFILE");
@@ -280,7 +284,7 @@ static XrValue os_gid(XrayIsolate *X, XrValue *args, int argc) {
 // cpuCount() - Get number of CPU cores
 static XrValue os_cpuCount(XrayIsolate *X, XrValue *args, int argc) {
     (void)X; (void)args; (void)argc;
-    
+
 #ifdef XR_PLATFORM_WINDOWS
     SYSTEM_INFO si;
     GetSystemInfo(&si);
@@ -294,7 +298,7 @@ static XrValue os_cpuCount(XrayIsolate *X, XrValue *args, int argc) {
 // totalMemory() - Get total system memory in bytes
 static XrValue os_totalMemory(XrayIsolate *X, XrValue *args, int argc) {
     (void)X; (void)args; (void)argc;
-    
+
 #ifdef XR_PLATFORM_MACOS
     int64_t memsize = 0;
     size_t len = sizeof(memsize);
@@ -312,7 +316,7 @@ static XrValue os_totalMemory(XrayIsolate *X, XrValue *args, int argc) {
 // freeMemory() - Get available system memory in bytes
 static XrValue os_freeMemory(XrayIsolate *X, XrValue *args, int argc) {
     (void)X; (void)args; (void)argc;
-    
+
 #ifdef XR_PLATFORM_MACOS
     vm_statistics64_data_t vm_stat;
     mach_msg_type_number_t count = HOST_VM_INFO64_COUNT;
@@ -335,7 +339,7 @@ static XrValue os_freeMemory(XrayIsolate *X, XrValue *args, int argc) {
 // uptime() - Get system uptime in seconds
 static XrValue os_uptime(XrayIsolate *X, XrValue *args, int argc) {
     (void)X; (void)args; (void)argc;
-    
+
 #ifdef XR_PLATFORM_MACOS
     struct timeval boottime;
     size_t len = sizeof(boottime);
@@ -356,10 +360,10 @@ static XrValue os_uptime(XrayIsolate *X, XrValue *args, int argc) {
 // loadavg() - Get system load averages (1, 5, 15 min)
 static XrValue os_loadavg(XrayIsolate *X, XrValue *args, int argc) {
     (void)args; (void)argc;
-    
+
     XrArray *arr = xr_array_new(xr_current_coro(X));
     if (!arr) return xr_null();
-    
+
 #ifndef XR_PLATFORM_WINDOWS
     double avg[3] = {0};
     getloadavg(avg, 3);
@@ -371,7 +375,7 @@ static XrValue os_loadavg(XrayIsolate *X, XrValue *args, int argc) {
     xr_array_push(arr, xr_float(0.0));
     xr_array_push(arr, xr_float(0.0));
 #endif
-    
+
     return xr_value_from_array(arr);
 }
 
@@ -392,13 +396,13 @@ static XrValue os_kill(XrayIsolate *X, XrValue *args, int argc) {
     (void)X;
     if (argc < 1) return xr_bool(false);
     if (!XR_IS_INT(args[0])) return xr_bool(false);
-    
+
     int pid = (int)XR_TO_INT(args[0]);
     int sig = SIGTERM;  // default signal
     if (argc >= 2 && XR_IS_INT(args[1])) {
         sig = (int)XR_TO_INT(args[1]);
     }
-    
+
 #ifdef XR_PLATFORM_WINDOWS
     return xr_bool(false);
 #else
@@ -411,10 +415,10 @@ static XrValue os_sleep(XrayIsolate *X, XrValue *args, int argc) {
     (void)X;
     if (argc < 1) return xr_null();
     if (!XR_IS_INT(args[0])) return xr_null();
-    
+
     int64_t ms = XR_TO_INT(args[0]);
     if (ms <= 0) return xr_null();
-    
+
 #ifdef XR_PLATFORM_WINDOWS
     Sleep((DWORD)ms);
 #else
@@ -423,7 +427,7 @@ static XrValue os_sleep(XrayIsolate *X, XrValue *args, int argc) {
     ts.tv_nsec = (ms % 1000) * 1000000;
     nanosleep(&ts, NULL);
 #endif
-    
+
     return xr_null();
 }
 
@@ -439,17 +443,19 @@ static XrValue os_clock(XrayIsolate *X, XrValue *args, int argc) {
 // Read all data from a file descriptor into a heap-allocated string
 static char* read_fd_to_string(int fd) {
     size_t cap = 4096, len = 0;
-    char *buf = (char*)malloc(cap);
+    char *buf = (char*)xr_malloc(cap);
     if (!buf) return NULL;
-    
+
     ssize_t n;
     while ((n = read(fd, buf + len, cap - len - 1)) > 0) {
-        len += n;
+        len += (size_t)n;
         if (len + 1 >= cap) {
-            cap *= 2;
-            char *newbuf = (char*)realloc(buf, cap);
-            if (!newbuf) { free(buf); return NULL; }
-            buf = newbuf;
+            size_t new_cap = cap * 2;
+            if (!XR_REALLOC(buf, new_cap)) {
+                xr_free(buf);
+                return NULL;
+            }
+            cap = new_cap;
         }
     }
     buf[len] = '\0';
@@ -462,31 +468,49 @@ static XrValue os_exec(XrayIsolate *X, XrValue *args, int argc) {
     if (argc < 1) return xr_null();
     const char *cmd = get_string_arg(args[0]);
     if (!cmd) return xr_null();
-    
+
 #ifdef XR_PLATFORM_WINDOWS
     // Windows: simplified via _popen (stdout only)
     FILE *fp = _popen(cmd, "r");
     if (!fp) return xr_null();
-    
+
     char buf[4096];
     size_t len = 0, cap = 4096;
-    char *output = (char*)malloc(cap);
+    char *output = (char*)xr_malloc(cap);
     if (!output) { _pclose(fp); return xr_null(); }
-    
+
     size_t n;
     while ((n = fread(buf, 1, sizeof(buf), fp)) > 0) {
-        if (len + n >= cap) { cap *= 2; output = (char*)realloc(output, cap); }
+        if (len + n + 1 >= cap) {
+            size_t new_cap = cap * 2;
+            while (len + n + 1 >= new_cap) new_cap *= 2;
+            if (!XR_REALLOC(output, new_cap)) {
+                xr_free(output);
+                _pclose(fp);
+                return xr_null();
+            }
+            cap = new_cap;
+        }
         memcpy(output + len, buf, n);
         len += n;
     }
     output[len] = '\0';
-    int status = _pclose(fp);
-    
+    // _pclose returns the same wait-style encoding as _cwait/_spawn, so the
+    // exit code lives in the low-order byte only when the child terminated
+    // normally. Treat negative values (close itself failed) as -1.
+    int raw_status = _pclose(fp);
+    int exit_code = raw_status;
+    if (raw_status < 0) {
+        exit_code = -1;
+    } else {
+        exit_code = raw_status & 0xFF;
+    }
+
     XrMap *map = xr_map_new(xr_current_coro(X));
     xr_map_set(map, make_string(X, "stdout"), make_string(X, output));
     xr_map_set(map, make_string(X, "stderr"), make_string(X, ""));
-    xr_map_set(map, make_string(X, "exitCode"), xr_int(status));
-    free(output);
+    xr_map_set(map, make_string(X, "exitCode"), xr_int(exit_code));
+    xr_free(output);
     return xr_value_from_map(map);
 #else
     // Unix: fork + exec + pipe for both stdout and stderr
@@ -496,14 +520,14 @@ static XrValue os_exec(XrayIsolate *X, XrValue *args, int argc) {
         close(stdout_pipe[0]); close(stdout_pipe[1]);
         return xr_null();
     }
-    
+
     pid_t pid = fork();
     if (pid < 0) {
         close(stdout_pipe[0]); close(stdout_pipe[1]);
         close(stderr_pipe[0]); close(stderr_pipe[1]);
         return xr_null();
     }
-    
+
     if (pid == 0) {
         // Child process
         close(stdout_pipe[0]);
@@ -515,27 +539,27 @@ static XrValue os_exec(XrayIsolate *X, XrValue *args, int argc) {
         execl("/bin/sh", "sh", "-c", cmd, (char*)NULL);
         _exit(127);
     }
-    
+
     // Parent process
     close(stdout_pipe[1]);
     close(stderr_pipe[1]);
-    
+
     char *stdout_buf = read_fd_to_string(stdout_pipe[0]);
     char *stderr_buf = read_fd_to_string(stderr_pipe[0]);
     close(stdout_pipe[0]);
     close(stderr_pipe[0]);
-    
+
     int status;
     waitpid(pid, &status, 0);
     int exit_code = WIFEXITED(status) ? WEXITSTATUS(status) : -1;
-    
+
     XrMap *map = xr_map_new(xr_current_coro(X));
     xr_map_set(map, make_string(X, "stdout"), make_string(X, stdout_buf ? stdout_buf : ""));
     xr_map_set(map, make_string(X, "stderr"), make_string(X, stderr_buf ? stderr_buf : ""));
     xr_map_set(map, make_string(X, "exitCode"), xr_int(exit_code));
-    
-    free(stdout_buf);
-    free(stderr_buf);
+
+    xr_free(stdout_buf);
+    xr_free(stderr_buf);
     return xr_value_from_map(map);
 #endif
 }
@@ -616,60 +640,52 @@ XR_DEFINE_BUILTIN(os_clock, "clock", "(): float", "Get process CPU time in secon
 XR_DEFINE_BUILTIN(os_exec, "exec", "(cmd: string): Map<string, any>?", "Execute shell command")
 
 XrModule* xr_load_module_os(XrayIsolate *isolate) {
+    XR_DCHECK(isolate != NULL, "xr_load_module_os: NULL isolate");
+
     // 1. Create native module
     XrModule *mod = xr_module_create_native(isolate, "os");
     if (!mod) return NULL;
-    
+
     // 2. Add exported functions
-    #define EXPORT_CFUNC(name_str, func_ptr) \
-        do { \
-            XrCFunction *cfunc = xr_vm_cfunction_new(isolate, func_ptr, name_str); \
-            XrValue fn_val = xr_value_from_cfunction(cfunc); \
-            xr_module_add_export(isolate, mod, name_str, fn_val); \
-        } while(0)
-    
-    // Environment variables
-    EXPORT_CFUNC("getenv", os_getenv);
-    EXPORT_CFUNC("setenv", os_setenv);
-    EXPORT_CFUNC("unsetenv", os_unsetenv);
-    EXPORT_CFUNC("environ", os_environ);
-    
+    XRS_EXPORT(mod, isolate, "getenv", os_getenv);
+    XRS_EXPORT(mod, isolate, "setenv", os_setenv);
+    XRS_EXPORT(mod, isolate, "unsetenv", os_unsetenv);
+    XRS_EXPORT(mod, isolate, "environ", os_environ);
+
     // Process control
-    EXPORT_CFUNC("exit", os_exit);
-    EXPORT_CFUNC("getpid", os_getpid);
-    EXPORT_CFUNC("getcwd", os_getcwd);
-    EXPORT_CFUNC("chdir", os_chdir);
-    EXPORT_CFUNC("hostname", os_hostname);
-    EXPORT_CFUNC("tmpdir", os_tmpdir);
-    
+    XRS_EXPORT(mod, isolate, "exit", os_exit);
+    XRS_EXPORT(mod, isolate, "getpid", os_getpid);
+    XRS_EXPORT(mod, isolate, "getcwd", os_getcwd);
+    XRS_EXPORT(mod, isolate, "chdir", os_chdir);
+    XRS_EXPORT(mod, isolate, "hostname", os_hostname);
+    XRS_EXPORT(mod, isolate, "tmpdir", os_tmpdir);
+
     // User information
-    EXPORT_CFUNC("username", os_username);
-    EXPORT_CFUNC("homedir", os_homedir);
-    EXPORT_CFUNC("uid", os_uid);
-    EXPORT_CFUNC("gid", os_gid);
-    
+    XRS_EXPORT(mod, isolate, "username", os_username);
+    XRS_EXPORT(mod, isolate, "homedir", os_homedir);
+    XRS_EXPORT(mod, isolate, "uid", os_uid);
+    XRS_EXPORT(mod, isolate, "gid", os_gid);
+
     // System information
-    EXPORT_CFUNC("cpuCount", os_cpuCount);
-    EXPORT_CFUNC("totalMemory", os_totalMemory);
-    EXPORT_CFUNC("freeMemory", os_freeMemory);
-    EXPORT_CFUNC("uptime", os_uptime);
-    EXPORT_CFUNC("loadavg", os_loadavg);
-    
+    XRS_EXPORT(mod, isolate, "cpuCount", os_cpuCount);
+    XRS_EXPORT(mod, isolate, "totalMemory", os_totalMemory);
+    XRS_EXPORT(mod, isolate, "freeMemory", os_freeMemory);
+    XRS_EXPORT(mod, isolate, "uptime", os_uptime);
+    XRS_EXPORT(mod, isolate, "loadavg", os_loadavg);
+
     // Process & signal
-    EXPORT_CFUNC("ppid", os_ppid);
-    EXPORT_CFUNC("kill", os_kill);
-    EXPORT_CFUNC("sleep", os_sleep);
-    EXPORT_CFUNC("clock", os_clock);
-    
+    XRS_EXPORT(mod, isolate, "ppid", os_ppid);
+    XRS_EXPORT(mod, isolate, "kill", os_kill);
+    XRS_EXPORT(mod, isolate, "sleep", os_sleep);
+    XRS_EXPORT(mod, isolate, "clock", os_clock);
+
     // Process execution
-    EXPORT_CFUNC("exec", os_exec);
-    
-    #undef EXPORT_CFUNC
-    
+    XRS_EXPORT(mod, isolate, "exec", os_exec);
+
     // 3. Add constants
     xr_module_add_export(isolate, mod, "platform", make_string(isolate, get_platform()));
     xr_module_add_export(isolate, mod, "arch", make_string(isolate, get_arch()));
-    
+
 #ifdef _WIN32
     xr_module_add_export(isolate, mod, "sep", make_string(isolate, "\\"));
     xr_module_add_export(isolate, mod, "eol", make_string(isolate, "\r\n"));
@@ -677,7 +693,7 @@ XrModule* xr_load_module_os(XrayIsolate *isolate) {
     xr_module_add_export(isolate, mod, "sep", make_string(isolate, "/"));
     xr_module_add_export(isolate, mod, "eol", make_string(isolate, "\n"));
 #endif
-    
+
     // 4. Mark as loaded
     mod->loaded = true;
     return mod;

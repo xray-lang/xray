@@ -116,8 +116,8 @@ typedef struct XrChannelDistHooks {
     void (*on_select_exit)(struct XrChannel *ch);
 } XrChannelDistHooks;
 
-// Global hook pointer, set by cluster module at startup. NULL = local only.
-XR_DATA XrChannelDistHooks *xr_channel_dist_hooks;
+// Hooks live on XrayIsolate (see XrayIsolate::channel_dist_hooks in
+// xisolate_internal.h). Install/uninstall via xr_cluster_channel_install_hooks.
 
 /* ========== Channel Structure ========== */
 
@@ -149,6 +149,9 @@ typedef struct XrChannel {
     /* === Distributed Channel (cluster) === */
     void *dist;               // Opaque pointer to cluster dist context (NULL = local)
     const char *name;         // Named Channel identifier (NULL = anonymous)
+
+    /* === Owner Isolate (for dist hook dispatch + stats) === */
+    struct XrayIsolate *isolate;  // Set at xr_channel_new
 } XrChannel;
 
 /* ========== Channel API ========== */
@@ -181,8 +184,9 @@ XR_FUNC XrChanResult xr_channel_recv(XrChannel *ch, XrValue *out, struct XrCorou
 
 /* ========== Diagnostics ========== */
 
-// Get global channel close count (for leak detection)
-XR_FUNC uint64_t xr_channel_get_close_count(void);
+// Get channel close count for this isolate (for leak detection).
+// Reads from XrSystemHeap::stats.channel_close_count.
+XR_FUNC uint64_t xr_channel_get_close_count(struct XrayIsolate *X);
 
 /* ========== Channel Value Macros ========== */
 

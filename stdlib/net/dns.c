@@ -8,8 +8,11 @@
  * dns.c - DNS resolver implementation
  *
  * KEY CONCEPT:
- *   LRU cache (256 entries) with 5-minute TTL. Round-robin for
- *   load balancing, failover support via xr_dns_dial().
+ *   LRU cache (256 entries) with 5-minute TTL. Round-robin across
+ *   resolved IPs for load balancing. Higher-level failover (retry on
+ *   remaining IPs after a connect() failure) is implemented by the
+ *   connection pool in stdlib/net/conn_pool.c; this keeps DNS a pure
+ *   name-resolution layer with no socket I/O of its own.
  */
 
 #include "dns.h"
@@ -89,7 +92,7 @@ static XrDnsCacheEntry* cache_find_locked(const char *hostname)
 {
     unsigned int idx = hash_hostname(hostname);
     XrDnsCacheEntry *entry = g_dns.cache_hash[idx];
-    
+
     while (entry) {
         if (strcmp(entry->hostname, hostname) == 0) {
             return entry;
@@ -102,12 +105,12 @@ static XrDnsCacheEntry* cache_find_locked(const char *hostname)
 static void cache_move_to_front_locked(XrDnsCacheEntry *entry)
 {
     if (entry == g_dns.cache_head) return;
-    
+
     // Remove from LRU list
     if (entry->lru_prev) entry->lru_prev->lru_next = entry->lru_next;
     if (entry->lru_next) entry->lru_next->lru_prev = entry->lru_prev;
     if (entry == g_dns.cache_tail) g_dns.cache_tail = entry->lru_prev;
-    
+
     // Insert at LRU head
     entry->lru_prev = NULL;
     entry->lru_next = g_dns.cache_head;
@@ -119,7 +122,7 @@ static void cache_move_to_front_locked(XrDnsCacheEntry *entry)
 static void cache_insert_locked(const char *hostname, XrSockAddr *addrs, int addr_count)
 {
     unsigned int idx = hash_hostname(hostname);
-    
+
     // Check if exists
     XrDnsCacheEntry *entry = cache_find_locked(hostname);
     if (entry) {
@@ -129,29 +132,29 @@ static void cache_insert_locked(const char *hostname, XrSockAddr *addrs, int add
         cache_move_to_front_locked(entry);
         return;
     }
-    
+
     // Evict LRU if cache full
     if (g_dns.cache_count >= DNS_CACHE_SIZE && g_dns.cache_tail) {
         XrDnsCacheEntry *old = g_dns.cache_tail;
         unsigned int old_idx = hash_hostname(old->hostname);
-        
+
         // Remove from hash chain (may be non-head node)
         XrDnsCacheEntry **pp = &g_dns.cache_hash[old_idx];
         while (*pp && *pp != old) {
             pp = &(*pp)->hash_next;
         }
         if (*pp) *pp = old->hash_next;
-        
+
         // Remove from LRU tail
         if (old->lru_prev) old->lru_prev->lru_next = NULL;
         g_dns.cache_tail = old->lru_prev;
         if (g_dns.cache_head == old) g_dns.cache_head = NULL;
-        
+
         free(old->hostname);
         free(old);
         g_dns.cache_count--;
     }
-    
+
     // Create new entry
     entry = (XrDnsCacheEntry*)malloc(sizeof(XrDnsCacheEntry));
     entry->hostname = strdup(hostname);
@@ -159,18 +162,18 @@ static void cache_insert_locked(const char *hostname, XrSockAddr *addrs, int add
     memcpy(entry->addrs, addrs, sizeof(XrSockAddr) * entry->addr_count);
     entry->current_idx = 0;
     entry->expire_time = get_time_ms() + DNS_TTL_MS;
-    
+
     // Insert into hash chain
     entry->hash_next = g_dns.cache_hash[idx];
     g_dns.cache_hash[idx] = entry;
-    
+
     // Insert at LRU head
     entry->lru_prev = NULL;
     entry->lru_next = g_dns.cache_head;
     if (g_dns.cache_head) g_dns.cache_head->lru_prev = entry;
     g_dns.cache_head = entry;
     if (!g_dns.cache_tail) g_dns.cache_tail = entry;
-    
+
     g_dns.cache_count++;
 }
 
@@ -178,7 +181,7 @@ static void cache_insert_locked(const char *hostname, XrSockAddr *addrs, int add
 static bool cache_lookup(const char *hostname, XrSockAddr *addr, XrAddrFamily family)
 {
     pthread_mutex_lock(&g_dns.cache_mutex);
-    
+
     XrDnsCacheEntry *entry = cache_find_locked(hostname);
     if (entry && entry->addr_count > 0) {
         uint64_t now = get_time_ms();
@@ -211,7 +214,7 @@ static bool cache_lookup(const char *hostname, XrSockAddr *addr, XrAddrFamily fa
             return true;
         }
     }
-    
+
     pthread_mutex_unlock(&g_dns.cache_mutex);
     return false;
 }
@@ -220,7 +223,7 @@ static bool cache_lookup(const char *hostname, XrSockAddr *addr, XrAddrFamily fa
 static int cache_lookup_all(const char *hostname, XrSockAddr *addrs, int max_addrs, XrAddrFamily family)
 {
     pthread_mutex_lock(&g_dns.cache_mutex);
-    
+
     XrDnsCacheEntry *entry = cache_find_locked(hostname);
     if (entry && entry->addr_count > 0) {
         uint64_t now = get_time_ms();
@@ -243,7 +246,7 @@ static int cache_lookup_all(const char *hostname, XrSockAddr *addrs, int max_add
             return count;
         }
     }
-    
+
     pthread_mutex_unlock(&g_dns.cache_mutex);
     return 0;
 }
@@ -255,7 +258,7 @@ static int do_resolve_all(const char *hostname, XrSockAddr *addrs, int max_addrs
 {
     struct addrinfo hints, *res, *rp;
     memset(&hints, 0, sizeof(hints));
-    
+
     // Set address family
     switch (family) {
         case XR_AF_INET:
@@ -269,46 +272,59 @@ static int do_resolve_all(const char *hostname, XrSockAddr *addrs, int max_addrs
             break;
     }
     hints.ai_socktype = SOCK_STREAM;
-    
+
     int err = getaddrinfo(hostname, NULL, &hints, &res);
     if (err != 0 || !res) {
         return 0;
     }
-    
-    // Collect addresses (IPv4 first, then IPv6)
+
+    // Collect addresses split by family first, then interleave into
+    // the output in IPv6 → IPv4 alternating order (RFC 8305 §4).
+    // Rationale: when both families resolve, Happy-Eyeballs-style
+    // callers want to attempt IPv6 first but fall over quickly to IPv4
+    // if v6 is broken. Interleaving gives them that behaviour even with
+    // purely serial connect attempts.
+    XrSockAddr v6[XR_DNS_MAX_ADDRS];
+    XrSockAddr v4[XR_DNS_MAX_ADDRS];
+    int n6 = 0, n4 = 0;
+
+    for (rp = res; rp != NULL; rp = rp->ai_next) {
+        if (rp->ai_family == AF_INET6 &&
+            (family == XR_AF_UNSPEC || family == XR_AF_INET6) &&
+            n6 < XR_DNS_MAX_ADDRS) {
+            v6[n6].family = AF_INET6;
+            memcpy(&v6[n6].addr.v6, rp->ai_addr, sizeof(struct sockaddr_in6));
+            n6++;
+        } else if (rp->ai_family == AF_INET &&
+                   (family == XR_AF_UNSPEC || family == XR_AF_INET) &&
+                   n4 < XR_DNS_MAX_ADDRS) {
+            v4[n4].family = AF_INET;
+            memcpy(&v4[n4].addr.v4, rp->ai_addr, sizeof(struct sockaddr_in));
+            n4++;
+        }
+    }
+
     int count = 0;
-    
-    // First pass: collect IPv4
-    if (family == XR_AF_UNSPEC || family == XR_AF_INET) {
-        for (rp = res; rp != NULL && count < max_addrs; rp = rp->ai_next) {
-            if (rp->ai_family == AF_INET) {
-                addrs[count].family = AF_INET;
-                memcpy(&addrs[count].addr.v4, rp->ai_addr, sizeof(struct sockaddr_in));
-                count++;
-            }
+    int i6 = 0, i4 = 0;
+    while (count < max_addrs && (i6 < n6 || i4 < n4)) {
+        if (i6 < n6) {
+            addrs[count++] = v6[i6++];
+            if (count >= max_addrs) break;
+        }
+        if (i4 < n4) {
+            addrs[count++] = v4[i4++];
         }
     }
-    
-    // Second pass: collect IPv6
-    if (family == XR_AF_UNSPEC || family == XR_AF_INET6) {
-        for (rp = res; rp != NULL && count < max_addrs; rp = rp->ai_next) {
-            if (rp->ai_family == AF_INET6) {
-                addrs[count].family = AF_INET6;
-                memcpy(&addrs[count].addr.v6, rp->ai_addr, sizeof(struct sockaddr_in6));
-                count++;
-            }
-        }
-    }
-    
+
     freeaddrinfo(res);
-    
+
     if (count > 0) {
         // Update cache
         pthread_mutex_lock(&g_dns.cache_mutex);
         cache_insert_locked(hostname, addrs, count);
         pthread_mutex_unlock(&g_dns.cache_mutex);
     }
-    
+
     return count;
 }
 
@@ -330,7 +346,7 @@ static bool do_resolve(const char *hostname, XrSockAddr *addr, XrAddrFamily fami
 void xr_dns_init(void)
 {
     if (g_dns.initialized) return;
-    
+
     memset(&g_dns, 0, sizeof(g_dns));
     pthread_mutex_init(&g_dns.cache_mutex, NULL);
     g_dns.initialized = true;
@@ -339,7 +355,7 @@ void xr_dns_init(void)
 void xr_dns_shutdown(void)
 {
     if (!g_dns.initialized) return;
-    
+
     // Clear cache
     xr_dns_cache_clear();
     pthread_mutex_destroy(&g_dns.cache_mutex);
@@ -352,12 +368,12 @@ bool xr_dns_resolve(const char *hostname, XrSockAddr *addr, XrAddrFamily family)
     if (!hostname || !hostname[0] || !addr) {
         return false;
     }
-    
+
     // Check cache first
     if (cache_lookup(hostname, addr, family)) {
         return true;
     }
-    
+
     // Synchronous resolution
     return do_resolve(hostname, addr, family);
 }
@@ -385,55 +401,55 @@ static void dns_async_invoke(void *data) {
  * 3. Coroutine suspends until async thread completes
  * 4. Coroutine resumes with result
  */
-bool xr_dns_resolve_on_async(XrAsyncPool *pool, struct XrCoroutine *coro, 
-                              int worker_id, const char *hostname, 
+bool xr_dns_resolve_on_async(XrAsyncPool *pool, struct XrCoroutine *coro,
+                              int worker_id, const char *hostname,
                               XrSockAddr *addr, XrAddrFamily family)
 {
     if (!g_dns.initialized) {
         xr_dns_init();
     }
-    
+
     // Check cache first
     if (cache_lookup(hostname, addr, family)) {
         return true;
     }
-    
+
     // Fall back to sync resolve if no async pool
     if (!pool) {
         return do_resolve(hostname, addr, family);
     }
-    
+
     // Create async task data
     XrDnsAsyncData *data = (XrDnsAsyncData *)malloc(sizeof(XrDnsAsyncData));
     if (!data) {
         return do_resolve(hostname, addr, family);
     }
-    
+
     strncpy(data->hostname, hostname, sizeof(data->hostname) - 1);
     data->hostname[sizeof(data->hostname) - 1] = '\0';
     data->family = family;
     data->success = false;
-    
+
     // Create async job
     XrAsyncJob *job = xr_async_job_create(coro, worker_id, dns_async_invoke, data);
     if (!job) {
         free(data);
         return do_resolve(hostname, addr, family);
     }
-    
+
     // Submit job (coroutine will suspend)
     xr_async_submit(pool, job);
-    
+
     // Note: coroutine suspended, code below runs after resume
     // Result available via coro->async_result
-    
+
     return true;  // Task submitted
 }
 
 void xr_dns_cache_clear(void)
 {
     pthread_mutex_lock(&g_dns.cache_mutex);
-    
+
     XrDnsCacheEntry *entry = g_dns.cache_head;
     while (entry) {
         XrDnsCacheEntry *next = entry->lru_next;
@@ -441,12 +457,12 @@ void xr_dns_cache_clear(void)
         free(entry);
         entry = next;
     }
-    
+
     memset(g_dns.cache_hash, 0, sizeof(g_dns.cache_hash));
     g_dns.cache_head = NULL;
     g_dns.cache_tail = NULL;
     g_dns.cache_count = 0;
-    
+
     pthread_mutex_unlock(&g_dns.cache_mutex);
 }
 
@@ -464,98 +480,19 @@ int xr_dns_resolve_all(const char *hostname, XrSockAddr *addrs, int max_addrs, X
     if (count > 0) {
         return count;
     }
-    
+
     // Synchronous resolution
     return do_resolve_all(hostname, addrs, max_addrs, family);
 }
 
-// Non-blocking connect with timeout
-static int connect_with_timeout(int fd, struct sockaddr *addr, socklen_t addrlen, int timeout_ms)
-{
-    // Set non-blocking
-    int flags = fcntl(fd, F_GETFL, 0);
-    if (flags < 0) return -1;
-    fcntl(fd, F_SETFL, flags | O_NONBLOCK);
-    
-    int ret = connect(fd, addr, addrlen);
-    if (ret == 0) {
-        fcntl(fd, F_SETFL, flags);
-        return 0;
-    }
-    
-    if (errno != EINPROGRESS) {
-        return -1;
-    }
-    
-    // Wait for connection
-    fd_set wfds;
-    FD_ZERO(&wfds);
-    FD_SET(fd, &wfds);
-    
-    struct timeval tv;
-    tv.tv_sec = timeout_ms / 1000;
-    tv.tv_usec = (timeout_ms % 1000) * 1000;
-    
-    ret = select(fd + 1, NULL, &wfds, NULL, &tv);
-    if (ret <= 0) {
-        return -1;
-    }
-    
-    // Check connection result
-    int error = 0;
-    socklen_t len = sizeof(error);
-    if (getsockopt(fd, SOL_SOCKET, SO_ERROR, &error, &len) < 0 || error != 0) {
-        return -1;
-    }
-    
-    // Restore blocking
-    fcntl(fd, F_SETFL, flags);
-    return 0;
-}
-
-int xr_dns_dial(const char *hostname, int port, int timeout_ms)
-{
-    // Get all addresses (IPv4/IPv6)
-    XrSockAddr addrs[XR_DNS_MAX_ADDRS];
-    int addr_count = xr_dns_resolve_all(hostname, addrs, XR_DNS_MAX_ADDRS, XR_AF_UNSPEC);
-    if (addr_count == 0) {
-        return -1;
-    }
-    
-    // Timeout per IP
-    int per_ip_timeout = timeout_ms / addr_count;
-    if (per_ip_timeout < 1000) per_ip_timeout = 1000;  // Min 1 second
-    
-    // Try each address
-    for (int i = 0; i < addr_count; i++) {
-        int af = addrs[i].family;
-        int fd = socket(af, SOCK_STREAM, 0);
-        if (fd < 0) continue;
-        
-        // TCP_NODELAY for low latency
-        int flag = 1;
-        setsockopt(fd, IPPROTO_TCP, TCP_NODELAY, &flag, sizeof(flag));
-        
-        struct sockaddr *sa;
-        socklen_t sa_len;
-        
-        if (af == AF_INET) {
-            addrs[i].addr.v4.sin_port = htons(port);
-            sa = (struct sockaddr*)&addrs[i].addr.v4;
-            sa_len = sizeof(struct sockaddr_in);
-        } else {
-            addrs[i].addr.v6.sin6_port = htons(port);
-            sa = (struct sockaddr*)&addrs[i].addr.v6;
-            sa_len = sizeof(struct sockaddr_in6);
-        }
-        
-        if (connect_with_timeout(fd, sa, sa_len, per_ip_timeout) == 0) {
-            return fd;  // Success
-        }
-        
-        close(fd);
-    }
-    
-    return -1;  // All addresses failed
-}
+// Removed: connect_with_timeout() + xr_dns_dial().
+//
+// These used select() (fd > 1024 UB + FD_SETSIZE limit) and, on success,
+// reset the fd back to blocking mode, which defeated any caller that
+// wanted to keep using netpoll afterwards. They also had zero in-tree
+// consumers — conn_pool.c does its own connect via coro_tcp_connect.
+//
+// Connection-level failover across DNS-resolved IPs now lives in
+// conn_pool.c::create_connection (see docs/analysis TODO-P12 for the
+// plan to upgrade that to parallel Happy Eyeballs v2 RFC 8305).
 

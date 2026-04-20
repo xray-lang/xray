@@ -8,20 +8,21 @@
  * io.c - File I/O standard library implementation
  *
  * KEY CONCEPT:
- *   Provides sync file operations with optional async execution via XrAsyncPool.
- *   Large file operations can be offloaded to avoid blocking Worker threads.
+ *   Synchronous filesystem wrappers. Blocking syscalls will be routed through
+ *   XrAsyncPool in a follow-up change; for now, callers on a Worker thread
+ *   should expect them to stall the current coroutine.
  */
 
 #include "io.h"
-#include "../../src/coro/xasync.h"
+#include "../common.h"
+#include "../stdlib_cache.h"
 #include "../../src/runtime/object/xjson.h"
 #include "../../src/runtime/object/xshape.h"
 #include "../../src/runtime/symbol/xsymbol_table.h"
 #include "../../src/runtime/xisolate_api.h"
 #include "../../src/runtime/object/xarray.h"
-#include "../../src/runtime/object/xstring.h"
-#include "../../src/runtime/value/xvalue.h"
 #include "../../src/base/xmalloc.h"
+#include "../../src/base/xchecks.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -46,45 +47,42 @@ extern struct XrCoroutine* xr_current_coro(XrayIsolate *X);
 
 /* ========== Helper Functions ========== */
 
-// Get string argument
-static const char* get_string_arg(XrValue v) {
-    if (!XR_IS_STRING(v)) return NULL;
-    return XR_TO_STRING(v)->data;
-}
-
-// Create string value
-static XrValue make_string(XrayIsolate *X, const char *s) {
-    if (!s) return xr_null();
-    XrString *str = xr_string_intern(X, s, strlen(s), 0);
-    return xr_string_value(str);
-}
+// Unified string helpers live in <common.h>.
+#define get_string_arg(v)        xrs_string_arg((v), NULL)
+#define make_string(iso, cstr)   xrs_string_value_c((iso), (cstr))
 
 /* ========== File Read/Write ========== */
+
+// Upper bound for a single in-memory read. The binding exposes the file as
+// either an XrString (whose length field is uint32) or an XrArray (int32
+// length field) — either way we cannot surface a buffer larger than INT32_MAX
+// bytes. Callers needing >2 GiB inputs must stream the file manually.
+#define IO_MAX_READ_BYTES  ((long)INT32_MAX)
 
 // readFile(path) - Read file content
 static XrValue io_readFile(XrayIsolate *X, XrValue *args, int argc) {
     if (argc < 1) return xr_null();
     const char *path = get_string_arg(args[0]);
     if (!path) return xr_null();
-    
+
     FILE *f = fopen(path, "rb");
     if (!f) return xr_null();
-    
+
     fseek(f, 0, SEEK_END);
     long size = ftell(f);
-    if (size < 0) { fclose(f); return xr_null(); }
+    if (size < 0 || size > IO_MAX_READ_BYTES) { fclose(f); return xr_null(); }
     fseek(f, 0, SEEK_SET);
-    
-    char *buf = (char*)xr_malloc(size + 1);
+
+    char *buf = (char*)xr_malloc((size_t)size + 1);
     if (!buf) {
         fclose(f);
         return xr_null();
     }
-    
-    size_t read_size = fread(buf, 1, size, f);
+
+    size_t read_size = fread(buf, 1, (size_t)size, f);
     buf[read_size] = '\0';
     fclose(f);
-    
+
     XrString *str = xr_string_intern(X, buf, read_size, 0);
     xr_free(buf);
     return xr_string_value(str);
@@ -95,25 +93,25 @@ static XrValue io_readFileBytes(XrayIsolate *X, XrValue *args, int argc) {
     if (argc < 1) return xr_null();
     const char *path = get_string_arg(args[0]);
     if (!path) return xr_null();
-    
+
     FILE *f = fopen(path, "rb");
     if (!f) return xr_null();
-    
+
     fseek(f, 0, SEEK_END);
     long size = ftell(f);
-    if (size < 0) { fclose(f); return xr_null(); }
+    if (size < 0 || size > IO_MAX_READ_BYTES) { fclose(f); return xr_null(); }
     fseek(f, 0, SEEK_SET);
-    
+
     XrArray *arr = xr_array_bytes_new(xr_current_coro(X), (int32_t)size);
     if (!arr) {
         fclose(f);
         return xr_null();
     }
-    
-    size_t read_size = fread(arr->data, 1, size, f);
+
+    size_t read_size = fread(arr->data, 1, (size_t)size, f);
     fclose(f);
     arr->length = (int32_t)read_size;
-    
+
     return xr_value_from_array(arr);
 }
 
@@ -121,21 +119,21 @@ static XrValue io_readFileBytes(XrayIsolate *X, XrValue *args, int argc) {
 static XrValue io_writeFileBytes(XrayIsolate *X, XrValue *args, int argc) {
     (void)X;
     if (argc < 2) return xr_bool(false);
-    
+
     const char *path = get_string_arg(args[0]);
     if (!path) return xr_bool(false);
-    
+
     // Accept Array<uint8>
     if (!xr_value_is_array(args[1])) return xr_bool(false);
     XrArray *arr = xr_value_to_array(args[1]);
     if (!arr || arr->elem_type != XR_ELEM_U8) return xr_bool(false);
-    
+
     FILE *f = fopen(path, "wb");
     if (!f) return xr_bool(false);
-    
+
     size_t written = fwrite(arr->data, 1, arr->length, f);
     fclose(f);
-    
+
     return xr_bool(written == (size_t)arr->length);
 }
 
@@ -143,17 +141,17 @@ static XrValue io_writeFileBytes(XrayIsolate *X, XrValue *args, int argc) {
 static XrValue io_writeFile(XrayIsolate *X, XrValue *args, int argc) {
     (void)X;
     if (argc < 2) return xr_bool(false);
-    
+
     const char *path = get_string_arg(args[0]);
     if (!path || !XR_IS_STRING(args[1])) return xr_bool(false);
-    
+
     XrString *str = XR_TO_STRING(args[1]);
     FILE *f = fopen(path, "wb");
     if (!f) return xr_bool(false);
-    
+
     size_t written = fwrite(str->data, 1, str->length, f);
     fclose(f);
-    
+
     return xr_bool(written == str->length);
 }
 
@@ -161,17 +159,17 @@ static XrValue io_writeFile(XrayIsolate *X, XrValue *args, int argc) {
 static XrValue io_appendFile(XrayIsolate *X, XrValue *args, int argc) {
     (void)X;
     if (argc < 2) return xr_bool(false);
-    
+
     const char *path = get_string_arg(args[0]);
     if (!path || !XR_IS_STRING(args[1])) return xr_bool(false);
-    
+
     XrString *str = XR_TO_STRING(args[1]);
     FILE *f = fopen(path, "ab");
     if (!f) return xr_bool(false);
-    
+
     size_t written = fwrite(str->data, 1, str->length, f);
     fclose(f);
-    
+
     return xr_bool(written == str->length);
 }
 
@@ -183,7 +181,7 @@ static XrValue io_exists(XrayIsolate *X, XrValue *args, int argc) {
     if (argc < 1) return xr_bool(false);
     const char *path = get_string_arg(args[0]);
     if (!path) return xr_bool(false);
-    
+
     struct stat st;
     return xr_bool(stat(path, &st) == 0);
 }
@@ -194,7 +192,7 @@ static XrValue io_isFile(XrayIsolate *X, XrValue *args, int argc) {
     if (argc < 1) return xr_bool(false);
     const char *path = get_string_arg(args[0]);
     if (!path) return xr_bool(false);
-    
+
     struct stat st;
     if (stat(path, &st) != 0) return xr_bool(false);
     return xr_bool(S_ISREG(st.st_mode));
@@ -206,7 +204,7 @@ static XrValue io_isDir(XrayIsolate *X, XrValue *args, int argc) {
     if (argc < 1) return xr_bool(false);
     const char *path = get_string_arg(args[0]);
     if (!path) return xr_bool(false);
-    
+
     struct stat st;
     if (stat(path, &st) != 0) return xr_bool(false);
     return xr_bool(S_ISDIR(st.st_mode));
@@ -218,7 +216,7 @@ static XrValue io_fileSize(XrayIsolate *X, XrValue *args, int argc) {
     if (argc < 1) return xr_int(-1);
     const char *path = get_string_arg(args[0]);
     if (!path) return xr_int(-1);
-    
+
     struct stat st;
     if (stat(path, &st) != 0) return xr_int(-1);
     return xr_int(st.st_size);
@@ -232,7 +230,7 @@ static XrValue io_remove(XrayIsolate *X, XrValue *args, int argc) {
     if (argc < 1) return xr_bool(false);
     const char *path = get_string_arg(args[0]);
     if (!path) return xr_bool(false);
-    
+
     return xr_bool(remove(path) == 0);
 }
 
@@ -240,11 +238,11 @@ static XrValue io_remove(XrayIsolate *X, XrValue *args, int argc) {
 static XrValue io_rename(XrayIsolate *X, XrValue *args, int argc) {
     (void)X;
     if (argc < 2) return xr_bool(false);
-    
+
     const char *old_path = get_string_arg(args[0]);
     const char *new_path = get_string_arg(args[1]);
     if (!old_path || !new_path) return xr_bool(false);
-    
+
     return xr_bool(rename(old_path, new_path) == 0);
 }
 
@@ -254,7 +252,7 @@ static XrValue io_mkdir(XrayIsolate *X, XrValue *args, int argc) {
     if (argc < 1) return xr_bool(false);
     const char *path = get_string_arg(args[0]);
     if (!path) return xr_bool(false);
-    
+
     return xr_bool(mkdir(path, 0755) == 0);
 }
 
@@ -263,16 +261,16 @@ static XrValue io_readDir(XrayIsolate *X, XrValue *args, int argc) {
     if (argc < 1) return xr_null();
     const char *path = get_string_arg(args[0]);
     if (!path) return xr_null();
-    
+
     DIR *dir = opendir(path);
     if (!dir) return xr_null();
-    
+
     XrArray *arr = xr_array_new(xr_current_coro(X));
     if (!arr) {
         closedir(dir);
         return xr_null();
     }
-    
+
     struct dirent *entry;
     while ((entry = readdir(dir)) != NULL) {
         // Skip . and ..
@@ -282,7 +280,7 @@ static XrValue io_readDir(XrayIsolate *X, XrValue *args, int argc) {
         XrValue name = make_string(X, entry->d_name);
         xr_array_push(arr, name);
     }
-    
+
     closedir(dir);
     return xr_value_from_array(arr);
 }
@@ -290,7 +288,7 @@ static XrValue io_readDir(XrayIsolate *X, XrValue *args, int argc) {
 // cwd() - Get current working directory
 static XrValue io_cwd(XrayIsolate *X, XrValue *args, int argc) {
     (void)args; (void)argc;
-    
+
     char buf[PATH_MAX];
     if (getcwd(buf, sizeof(buf)) == NULL) {
         return xr_null();
@@ -306,7 +304,7 @@ static XrValue io_chdir(XrayIsolate *X, XrValue *args, int argc) {
     if (argc < 1) return xr_bool(false);
     const char *path = get_string_arg(args[0]);
     if (!path) return xr_bool(false);
-    
+
     return xr_bool(chdir(path) == 0);
 }
 
@@ -314,11 +312,11 @@ static XrValue io_chdir(XrayIsolate *X, XrValue *args, int argc) {
 static XrValue io_copyFile(XrayIsolate *X, XrValue *args, int argc) {
     (void)X;
     if (argc < 2) return xr_bool(false);
-    
+
     const char *src = get_string_arg(args[0]);
     const char *dst = get_string_arg(args[1]);
     if (!src || !dst) return xr_bool(false);
-    
+
 #ifdef __APPLE__
     // macOS: use fcopyfile for kernel-level copy (zero-copy when possible)
     int src_fd = open(src, O_RDONLY);
@@ -337,21 +335,35 @@ static XrValue io_copyFile(XrayIsolate *X, XrValue *args, int argc) {
     if (fstat(src_fd, &st) < 0) { close(src_fd); return xr_bool(false); }
     int dst_fd = open(dst, O_WRONLY | O_CREAT | O_TRUNC, 0644);
     if (dst_fd < 0) { close(src_fd); return xr_bool(false); }
+    // sendfile(2) on Linux may transfer fewer bytes than requested, either
+    // because it is interrupted by a signal or because the underlying file
+    // system throttled the write. Loop until we have copied the entire
+    // source length or hit an unrecoverable error.
     off_t offset = 0;
-    ssize_t sent = sendfile(dst_fd, src_fd, &offset, st.st_size);
+    off_t remaining = st.st_size;
+    int sendfile_ok = 1;
+    while (remaining > 0) {
+        ssize_t sent = sendfile(dst_fd, src_fd, &offset, remaining);
+        if (sent <= 0) {
+            if (sent < 0 && errno == EINTR) continue;
+            sendfile_ok = 0;
+            break;
+        }
+        remaining -= sent;
+    }
     close(src_fd);
     close(dst_fd);
-    return xr_bool(sent == st.st_size);
+    return xr_bool(sendfile_ok && remaining == 0);
 #else
     FILE *fsrc = fopen(src, "rb");
     if (!fsrc) return xr_bool(false);
-    
+
     FILE *fdst = fopen(dst, "wb");
     if (!fdst) {
         fclose(fsrc);
         return xr_bool(false);
     }
-    
+
     char buf[65536];
     size_t n;
     while ((n = fread(buf, 1, sizeof(buf), fsrc)) > 0) {
@@ -361,7 +373,7 @@ static XrValue io_copyFile(XrayIsolate *X, XrValue *args, int argc) {
             return xr_bool(false);
         }
     }
-    
+
     fclose(fsrc);
     fclose(fdst);
     return xr_bool(true);
@@ -373,16 +385,19 @@ static XrValue io_readLines(XrayIsolate *X, XrValue *args, int argc) {
     if (argc < 1) return xr_null();
     const char *path = get_string_arg(args[0]);
     if (!path) return xr_null();
-    
+
     FILE *f = fopen(path, "r");
     if (!f) return xr_null();
-    
+
     XrArray *arr = xr_array_new(xr_current_coro(X));
     if (!arr) {
         fclose(f);
         return xr_null();
     }
-    
+
+    // getline() allocates via the libc allocator; we must release with free()
+    // (the matching deallocator), not xr_free. This is the single documented
+    // exception to the xr_malloc/xr_free symmetry rule.
     char *line = NULL;
     size_t cap = 0;
     ssize_t len;
@@ -394,8 +409,8 @@ static XrValue io_readLines(XrayIsolate *X, XrValue *args, int argc) {
         XrString *str = xr_string_intern(X, line, (size_t)len, 0);
         xr_array_push(arr, xr_string_value(str));
     }
-    free(line);
-    
+    free(line);  // libc-owned buffer, see comment above
+
     fclose(f);
     return xr_value_from_array(arr);
 }
@@ -406,37 +421,45 @@ static XrValue io_isSymlink(XrayIsolate *X, XrValue *args, int argc) {
     if (argc < 1) return xr_bool(false);
     const char *path = get_string_arg(args[0]);
     if (!path) return xr_bool(false);
-    
+
     struct stat st;
     if (lstat(path, &st) != 0) return xr_bool(false);
     return xr_bool(S_ISLNK(st.st_mode));
 }
 
-// Compact Shape for stat result (Level 0: all primitives, GC skips entirely)
-static XrShape *shape_stat_result = NULL;
-
+// Compact Shape for stat result (Level 0: all primitives, GC skips entirely).
+//
+// SymbolIds are allocated per-isolate, so the shape must live on the
+// isolate's stdlib cache rather than on process-global state. Building it
+// lazily means the cost is paid exactly once per isolate and the shape is
+// reused by every subsequent io.stat() call in that isolate.
 enum {
     STAT_SIZE_IDX = 0, STAT_MODE_IDX, STAT_MTIME_IDX, STAT_ATIME_IDX,
     STAT_CTIME_IDX, STAT_UID_IDX, STAT_GID_IDX,
     STAT_ISFILE_IDX, STAT_ISDIR_IDX, STAT_ISSYMLINK_IDX
 };
 
-// Called once per isolate during module load.
-// Must rebuild every time because SymbolIds are per-isolate.
-static void io_ensure_stat_shape(XrayIsolate *X) {
-    const char *names[] = {
+// Lazily construct the stat() result shape for the given isolate and stash
+// it in the per-isolate stdlib cache. Returns NULL on shape-allocation OOM.
+static XrShape* io_get_stat_shape(XrayIsolate *X) {
+    XrStdlibCache *cache = xr_stdlib_cache_get(X);
+    if (!cache) return NULL;
+    if (cache->io_stat_shape) return cache->io_stat_shape;
+
+    static const char *const names[] = {
         "size", "mode", "mtime", "atime", "ctime",
         "uid", "gid", "isFile", "isDir", "isSymlink"
     };
     XrShape *shape = xr_shape_new(X, 10);
-    if (!shape) return;
+    if (!shape) return NULL;
     XrSymbolTable *table = (XrSymbolTable*)xr_isolate_get_symbol_table(X);
     for (int i = 0; i < 10; i++) {
         SymbolId sym = xr_symbol_register_in_table(table, names[i]);
         shape = xr_shape_transition(X, shape, sym);
-        if (!shape) return;
+        if (!shape) return NULL;
     }
-    shape_stat_result = shape;
+    cache->io_stat_shape = shape;
+    return shape;
 }
 
 // stat(path) - Get file stat info
@@ -445,19 +468,21 @@ static XrValue io_stat(XrayIsolate *X, XrValue *args, int argc) {
     if (argc < 1) return xr_null();
     const char *path = get_string_arg(args[0]);
     if (!path) return xr_null();
-    
+
     struct stat st;
     if (stat(path, &st) != 0) return xr_null();
-    
+
     // Use lstat to detect symlink (stat follows symlinks, lstat does not)
     struct stat lst;
     bool is_symlink = (lstat(path, &lst) == 0) && S_ISLNK(lst.st_mode);
-    
+
     extern XrValue xr_json_value(XrJson *json);
-    
-    XrJson *obj = xr_json_new_with_shape(xr_current_coro(X), shape_stat_result);
+
+    XrShape *shape = io_get_stat_shape(X);
+    if (!shape) return xr_null();
+    XrJson *obj = xr_json_new_with_shape(xr_current_coro(X), shape);
     if (!obj) return xr_null();
-    
+
     obj->fields[STAT_SIZE_IDX]      = xr_int((int64_t)st.st_size);
     obj->fields[STAT_MODE_IDX]      = xr_int((int64_t)(st.st_mode & 0777));
     obj->fields[STAT_MTIME_IDX]     = xr_int((int64_t)st.st_mtime);
@@ -468,37 +493,42 @@ static XrValue io_stat(XrayIsolate *X, XrValue *args, int argc) {
     obj->fields[STAT_ISFILE_IDX]    = xr_bool(S_ISREG(st.st_mode));
     obj->fields[STAT_ISDIR_IDX]     = xr_bool(S_ISDIR(st.st_mode));
     obj->fields[STAT_ISSYMLINK_IDX] = xr_bool(is_symlink);
-    
+
     return xr_json_value(obj);
 }
 
-// mkdirp(path) - Recursively create directory
+// mkdirp(path) - Recursively create directory.
+// Reject empty paths up-front: the previous implementation wrote to
+// tmp[-1] when handed "".
 static XrValue io_mkdirp(XrayIsolate *X, XrValue *args, int argc) {
     (void)X;
     if (argc < 1) return xr_bool(false);
     const char *path = get_string_arg(args[0]);
-    if (!path) return xr_bool(false);
-    
+    if (!path || path[0] == '\0') return xr_bool(false);
+
     char tmp[PATH_MAX];
-    char *p = NULL;
-    size_t len;
-    
-    snprintf(tmp, sizeof(tmp), "%s", path);
-    len = strlen(tmp);
-    if (tmp[len - 1] == '/') tmp[len - 1] = 0;
-    
-    for (p = tmp + 1; *p; p++) {
+    size_t len = strnlen(path, sizeof(tmp));
+    if (len == 0 || len >= sizeof(tmp)) return xr_bool(false);
+    memcpy(tmp, path, len);
+    tmp[len] = '\0';
+    if (tmp[len - 1] == '/') tmp[len - 1] = '\0';
+
+    for (char *p = tmp + 1; *p; p++) {
         if (*p == '/') {
-            *p = 0;
+            *p = '\0';
             mkdir(tmp, 0755);
             *p = '/';
         }
     }
-    
+
     return xr_bool(mkdir(tmp, 0755) == 0 || errno == EEXIST);
 }
 
-// removeAll helper callback
+// removeAll helper callback.
+// FTW_PHYS is passed to nftw so that symlinks are *not* followed — the
+// callback therefore only observes entries inside the originally supplied
+// subtree, and remove() here will unlink the link itself instead of
+// traversing out of tree.
 static int remove_callback(const char *fpath, const struct stat *sb,
                           int typeflag, struct FTW *ftwbuf) {
     (void)sb; (void)typeflag; (void)ftwbuf;
@@ -511,7 +541,7 @@ static XrValue io_removeAll(XrayIsolate *X, XrValue *args, int argc) {
     if (argc < 1) return xr_bool(false);
     const char *path = get_string_arg(args[0]);
     if (!path) return xr_bool(false);
-    
+
     // Use nftw to recursively traverse and remove
     int ret = nftw(path, remove_callback, 64, FTW_DEPTH | FTW_PHYS);
     return xr_bool(ret == 0);
@@ -524,7 +554,7 @@ static XrValue io_chmod(XrayIsolate *X, XrValue *args, int argc) {
     const char *path = get_string_arg(args[0]);
     if (!path) return xr_bool(false);
     if (!XR_IS_INT(args[1])) return xr_bool(false);
-    
+
     mode_t mode = (mode_t)XR_TO_INT(args[1]);
     return xr_bool(chmod(path, mode) == 0);
 }
@@ -535,10 +565,10 @@ static XrValue io_touch(XrayIsolate *X, XrValue *args, int argc) {
     if (argc < 1) return xr_bool(false);
     const char *path = get_string_arg(args[0]);
     if (!path) return xr_bool(false);
-    
+
     // Try to update timestamp
     if (utime(path, NULL) == 0) return xr_bool(true);
-    
+
     // File doesn't exist, create empty file
     FILE *f = fopen(path, "a");
     if (!f) return xr_bool(false);
@@ -553,7 +583,7 @@ static XrValue io_symlink(XrayIsolate *X, XrValue *args, int argc) {
     const char *target = get_string_arg(args[0]);
     const char *path = get_string_arg(args[1]);
     if (!target || !path) return xr_bool(false);
-    
+
     return xr_bool(symlink(target, path) == 0);
 }
 
@@ -562,7 +592,7 @@ static XrValue io_readlink(XrayIsolate *X, XrValue *args, int argc) {
     if (argc < 1) return xr_null();
     const char *path = get_string_arg(args[0]);
     if (!path) return xr_null();
-    
+
     char buf[PATH_MAX];
     ssize_t len = readlink(path, buf, sizeof(buf) - 1);
     if (len < 0) return xr_null();
@@ -575,30 +605,50 @@ static XrValue io_realpath(XrayIsolate *X, XrValue *args, int argc) {
     if (argc < 1) return xr_null();
     const char *path = get_string_arg(args[0]);
     if (!path) return xr_null();
-    
+
     char resolved[PATH_MAX];
     if (realpath(path, resolved) == NULL) return xr_null();
     return make_string(X, resolved);
 }
 
+// Determine the directory used for xray-generated temporary entries. Honours
+// TMPDIR / TMP / TEMP before falling back to /tmp or the Windows temp path.
+static const char* io_tempdir_root(void) {
+    const char *d = getenv("TMPDIR");
+    if (!d || !d[0]) d = getenv("TMP");
+    if (!d || !d[0]) d = getenv("TEMP");
+    if (!d || !d[0]) {
+#ifdef _WIN32
+        d = "C:\\Windows\\Temp";
+#else
+        d = "/tmp";
+#endif
+    }
+    return d;
+}
+
 // tempFile() - Create temporary file, return path
 static XrValue io_tempFile(XrayIsolate *X, XrValue *args, int argc) {
     (void)args; (void)argc;
-    
-    char template[] = "/tmp/xray_XXXXXX";
-    int fd = mkstemp(template);
+
+    char tpl[PATH_MAX];
+    int n = snprintf(tpl, sizeof(tpl), "%s/xray_XXXXXX", io_tempdir_root());
+    if (n <= 0 || n >= (int)sizeof(tpl)) return xr_null();
+    int fd = mkstemp(tpl);
     if (fd < 0) return xr_null();
     close(fd);
-    return make_string(X, template);
+    return make_string(X, tpl);
 }
 
 // tempDir() - Create temporary directory, return path
 static XrValue io_tempDir(XrayIsolate *X, XrValue *args, int argc) {
     (void)args; (void)argc;
-    
-    char template[] = "/tmp/xray_XXXXXX";
-    if (mkdtemp(template) == NULL) return xr_null();
-    return make_string(X, template);
+
+    char tpl[PATH_MAX];
+    int n = snprintf(tpl, sizeof(tpl), "%s/xray_XXXXXX", io_tempdir_root());
+    if (n <= 0 || n >= (int)sizeof(tpl)) return xr_null();
+    if (mkdtemp(tpl) == NULL) return xr_null();
+    return make_string(X, tpl);
 }
 
 // readDirRecursive helper struct
@@ -611,34 +661,44 @@ typedef struct {
     size_t base_len;
 } ReadDirCtx;
 
-// readDirRecursive helper function
+// readDirRecursive helper function.
+// Skips entries whose composed full path does not fit into PATH_MAX instead
+// of silently truncating, and descends only into real directories (symlinks
+// are intentionally not followed, mirroring POSIX `find -xdev` semantics).
 static void read_dir_recursive_impl(ReadDirCtx *ctx, const char *path, int depth) {
     if (depth >= READ_DIR_MAX_DEPTH) return;
     DIR *dir = opendir(path);
     if (!dir) return;
-    
+
     struct dirent *entry;
     while ((entry = readdir(dir)) != NULL) {
         if (strcmp(entry->d_name, ".") == 0 || strcmp(entry->d_name, "..") == 0) {
             continue;
         }
-        
+
         char fullpath[PATH_MAX];
-        snprintf(fullpath, sizeof(fullpath), "%s/%s", path, entry->d_name);
-        
+        int wrote = snprintf(fullpath, sizeof(fullpath), "%s/%s", path, entry->d_name);
+        if (wrote <= 0 || wrote >= (int)sizeof(fullpath)) {
+            // Entry would overflow PATH_MAX; skip rather than report a
+            // truncated path to the caller.
+            continue;
+        }
+
         // Add relative path
         const char *relpath = fullpath + ctx->base_len;
         if (*relpath == '/') relpath++;
         XrValue name = make_string(ctx->X, relpath);
         xr_array_push(ctx->arr, name);
-        
-        // Recursively enter subdirectory
+
+        // Recursively enter real subdirectories only (lstat never follows
+        // symlinks, which prevents accidental escape via bind mounts or
+        // malicious link chains).
         struct stat st;
         if (lstat(fullpath, &st) == 0 && S_ISDIR(st.st_mode)) {
             read_dir_recursive_impl(ctx, fullpath, depth + 1);
         }
     }
-    
+
     closedir(dir);
 }
 
@@ -647,180 +707,19 @@ static XrValue io_readDirRecursive(XrayIsolate *X, XrValue *args, int argc) {
     if (argc < 1) return xr_null();
     const char *path = get_string_arg(args[0]);
     if (!path) return xr_null();
-    
+
     XrArray *arr = xr_array_new(xr_current_coro(X));
     if (!arr) return xr_null();
-    
+
     ReadDirCtx ctx = {
         .X = X,
         .arr = arr,
         .base = path,
         .base_len = strlen(path)
     };
-    
+
     read_dir_recursive_impl(&ctx, path, 0);
     return xr_value_from_array(arr);
-}
-
-/* ========== XrAsyncPool Integration ========== */
-
-// Async read file data
-typedef struct {
-    char path[PATH_MAX];
-    char *content;
-    size_t size;
-    bool success;
-} XrIoReadData;
-
-// Async write file data
-typedef struct {
-    char path[PATH_MAX];
-    char *content;
-    size_t size;
-    bool append;
-    bool success;
-} XrIoWriteData;
-
-// Async read executor (runs in async thread)
-static void io_async_read_invoke(void *data) {
-    XrIoReadData *d = (XrIoReadData *)data;
-    d->success = false;
-    d->content = NULL;
-    d->size = 0;
-    
-    FILE *f = fopen(d->path, "rb");
-    if (!f) return;
-    
-    fseek(f, 0, SEEK_END);
-    long size = ftell(f);
-    fseek(f, 0, SEEK_SET);
-    
-    char *buf = (char *)malloc(size + 1);
-    if (!buf) {
-        fclose(f);
-        return;
-    }
-    
-    size_t read_size = fread(buf, 1, size, f);
-    buf[read_size] = '\0';
-    fclose(f);
-    
-    d->content = buf;
-    d->size = read_size;
-    d->success = true;
-}
-
-// Async write executor (runs in async thread)
-static void io_async_write_invoke(void *data) {
-    XrIoWriteData *d = (XrIoWriteData *)data;
-    d->success = false;
-    
-    FILE *f = fopen(d->path, d->append ? "ab" : "wb");
-    if (!f) return;
-    
-    size_t written = fwrite(d->content, 1, d->size, f);
-    fclose(f);
-    
-    d->success = (written == d->size);
-}
-
-// xr_io_read_on_async - Read file via XrAsyncPool
-// Falls back to sync read if no async pool
-bool xr_io_read_on_async(XrAsyncPool *pool, struct XrCoroutine *coro,
-                          int worker_id, const char *path,
-                          char **content, size_t *size) {
-    if (!path || !content || !size) return false;
-    
-    // No async pool, sync read
-    if (!pool) {
-        FILE *f = fopen(path, "rb");
-        if (!f) return false;
-        
-        fseek(f, 0, SEEK_END);
-        long file_size = ftell(f);
-        fseek(f, 0, SEEK_SET);
-        
-        char *buf = (char *)malloc(file_size + 1);
-        if (!buf) {
-            fclose(f);
-            return false;
-        }
-        
-        *size = fread(buf, 1, file_size, f);
-        buf[*size] = '\0';
-        fclose(f);
-        
-        *content = buf;
-        return true;
-    }
-    
-    // Create async task data
-    XrIoReadData *data = (XrIoReadData *)malloc(sizeof(XrIoReadData));
-    if (!data) return false;
-    
-    strncpy(data->path, path, sizeof(data->path) - 1);
-    data->path[sizeof(data->path) - 1] = '\0';
-    data->content = NULL;
-    data->size = 0;
-    data->success = false;
-    
-    // Create async job
-    XrAsyncJob *job = xr_async_job_create(coro, worker_id, io_async_read_invoke, data);
-    if (!job) {
-        free(data);
-        return false;
-    }
-    
-    // Submit job
-    xr_async_submit(pool, job);
-    return true;
-}
-
-// xr_io_write_on_async - Write file via XrAsyncPool
-bool xr_io_write_on_async(XrAsyncPool *pool, struct XrCoroutine *coro,
-                           int worker_id, const char *path,
-                           const char *content, size_t size, bool append) {
-    if (!path || !content) return false;
-    
-    // No async pool, sync write
-    if (!pool) {
-        FILE *f = fopen(path, append ? "ab" : "wb");
-        if (!f) return false;
-        
-        size_t written = fwrite(content, 1, size, f);
-        fclose(f);
-        return written == size;
-    }
-    
-    // Create async task data
-    XrIoWriteData *data = (XrIoWriteData *)malloc(sizeof(XrIoWriteData));
-    if (!data) return false;
-    
-    strncpy(data->path, path, sizeof(data->path) - 1);
-    data->path[sizeof(data->path) - 1] = '\0';
-    
-    // Copy content (async thread needs independent copy)
-    data->content = (char *)malloc(size);
-    if (!data->content) {
-        free(data);
-        return false;
-    }
-    memcpy(data->content, content, size);
-    data->size = size;
-    data->append = append;
-    data->success = false;
-    
-    // Create async job
-    XrAsyncJob *job = xr_async_job_create(coro, worker_id, io_async_write_invoke, data);
-    if (!job) {
-        free(data->content);
-        free(data);
-        return false;
-    }
-    
-    // Submit job
-    xr_async_submit(pool, job);
-    return true;
 }
 
 /* ========== Module Loading ========== */
@@ -863,63 +762,52 @@ XR_DEFINE_BUILTIN(io_tempDir, "tempDir", "(): string?", "Create temporary direct
 XR_DEFINE_BUILTIN(io_readDirRecursive, "readDirRecursive", "(path: string): Array<string>", "List directory entries recursively")
 
 XrModule* xr_load_module_io(XrayIsolate *isolate) {
-    // Create native module
+    XR_DCHECK(isolate != NULL, "xr_load_module_io: NULL isolate");
+
     XrModule *mod = xr_module_create_native(isolate, "io");
     if (!mod) return NULL;
-    
-    // Initialize stat shape once at module load (thread-safe)
-    io_ensure_stat_shape(isolate);
-    
-    // Add exported functions
-    extern XrCFunction* xr_vm_cfunction_new(XrayIsolate *isolate, XrCFunctionPtr func, const char *name);
-    extern XrValue xr_value_from_cfunction(XrCFunction *cfunc);
-    
-    #define EXPORT_CFUNC(name_str, func_ptr) \
-        do { \
-            XrCFunction *cfunc = xr_vm_cfunction_new(isolate, func_ptr, name_str); \
-            XrValue fn_val = xr_value_from_cfunction(cfunc); \
-            xr_module_add_export(isolate, mod, name_str, fn_val); \
-        } while(0)
-    
+
+    // The stat() result shape is now built lazily per-isolate from
+    // io_get_stat_shape() on first call, so no explicit pre-init is needed
+    // at module-load time.
+
     // File read/write
-    EXPORT_CFUNC("readFile", io_readFile);
-    EXPORT_CFUNC("readFileBytes", io_readFileBytes);
-    EXPORT_CFUNC("writeFile", io_writeFile);
-    EXPORT_CFUNC("writeFileBytes", io_writeFileBytes);
-    EXPORT_CFUNC("appendFile", io_appendFile);
-    
+    XRS_EXPORT(mod, isolate, "readFile", io_readFile);
+    XRS_EXPORT(mod, isolate, "readFileBytes", io_readFileBytes);
+    XRS_EXPORT(mod, isolate, "writeFile", io_writeFile);
+    XRS_EXPORT(mod, isolate, "writeFileBytes", io_writeFileBytes);
+    XRS_EXPORT(mod, isolate, "appendFile", io_appendFile);
+
     // File checks
-    EXPORT_CFUNC("exists", io_exists);
-    EXPORT_CFUNC("isFile", io_isFile);
-    EXPORT_CFUNC("isDir", io_isDir);
-    EXPORT_CFUNC("fileSize", io_fileSize);
-    
+    XRS_EXPORT(mod, isolate, "exists", io_exists);
+    XRS_EXPORT(mod, isolate, "isFile", io_isFile);
+    XRS_EXPORT(mod, isolate, "isDir", io_isDir);
+    XRS_EXPORT(mod, isolate, "fileSize", io_fileSize);
+
     // File operations
-    EXPORT_CFUNC("remove", io_remove);
-    EXPORT_CFUNC("rename", io_rename);
-    EXPORT_CFUNC("mkdir", io_mkdir);
-    EXPORT_CFUNC("readDir", io_readDir);
-    EXPORT_CFUNC("cwd", io_cwd);
-    
+    XRS_EXPORT(mod, isolate, "remove", io_remove);
+    XRS_EXPORT(mod, isolate, "rename", io_rename);
+    XRS_EXPORT(mod, isolate, "mkdir", io_mkdir);
+    XRS_EXPORT(mod, isolate, "readDir", io_readDir);
+    XRS_EXPORT(mod, isolate, "cwd", io_cwd);
+
     // Extended functions
-    EXPORT_CFUNC("chdir", io_chdir);
-    EXPORT_CFUNC("copyFile", io_copyFile);
-    EXPORT_CFUNC("readLines", io_readLines);
-    EXPORT_CFUNC("isSymlink", io_isSymlink);
-    EXPORT_CFUNC("stat", io_stat);
-    EXPORT_CFUNC("mkdirp", io_mkdirp);
-    EXPORT_CFUNC("removeAll", io_removeAll);
-    EXPORT_CFUNC("chmod", io_chmod);
-    EXPORT_CFUNC("touch", io_touch);
-    EXPORT_CFUNC("symlink", io_symlink);
-    EXPORT_CFUNC("readlink", io_readlink);
-    EXPORT_CFUNC("realpath", io_realpath);
-    EXPORT_CFUNC("tempFile", io_tempFile);
-    EXPORT_CFUNC("tempDir", io_tempDir);
-    EXPORT_CFUNC("readDirRecursive", io_readDirRecursive);
-    
-    #undef EXPORT_CFUNC
-    
+    XRS_EXPORT(mod, isolate, "chdir", io_chdir);
+    XRS_EXPORT(mod, isolate, "copyFile", io_copyFile);
+    XRS_EXPORT(mod, isolate, "readLines", io_readLines);
+    XRS_EXPORT(mod, isolate, "isSymlink", io_isSymlink);
+    XRS_EXPORT(mod, isolate, "stat", io_stat);
+    XRS_EXPORT(mod, isolate, "mkdirp", io_mkdirp);
+    XRS_EXPORT(mod, isolate, "removeAll", io_removeAll);
+    XRS_EXPORT(mod, isolate, "chmod", io_chmod);
+    XRS_EXPORT(mod, isolate, "touch", io_touch);
+    XRS_EXPORT(mod, isolate, "symlink", io_symlink);
+    XRS_EXPORT(mod, isolate, "readlink", io_readlink);
+    XRS_EXPORT(mod, isolate, "realpath", io_realpath);
+    XRS_EXPORT(mod, isolate, "tempFile", io_tempFile);
+    XRS_EXPORT(mod, isolate, "tempDir", io_tempDir);
+    XRS_EXPORT(mod, isolate, "readDirRecursive", io_readDirRecursive);
+
     // Mark as loaded
     mod->loaded = true;
     return mod;

@@ -22,6 +22,7 @@
 
 #include "../value/xvalue.h"
 #include "../value/xtype.h"
+#include "../../base/xhash.h"
 #include "../../base/xhashmap.h"
 #include "../gc/xgc_header.h"
 #include <stdbool.h>
@@ -97,9 +98,23 @@ struct XrClass {
     struct XrClass *super;
 
     /* === Type Check Optimization === */
-    // Primary supers array: [0]=Object, [1]=parent1, ..., [depth]=self
+    // Primary supers array: [0]=Object, [1]=parent1, ..., [depth]=self.
+    // Lets xr_class_instanceof do an O(1) array probe whenever the
+    // target's depth fits in this window (depth < 8 is by far the
+    // common case).
     struct XrClass *primary_supers[8];
-    uint8_t depth;                     // Inheritance depth (Object=0, max 7)
+    uint8_t depth;                     // Inheritance depth (Object=0)
+
+    // Secondary supers, populated only when depth >= 8. Open-addressing
+    // hash table keyed by the ancestor XrClass* identity; capacity is a
+    // power of two so the modulus is a single `& (cap - 1)`. NULL entries
+    // mark empty slots (there are no deletions).
+    //
+    // Allocation failure is tolerated: instanceof falls back to the
+    // old linear super-chain walk when secondary_supers_hash is NULL,
+    // so callers never need to special-case that path.
+    struct XrClass **secondary_supers_hash;
+    uint16_t secondary_supers_capacity;
 
     /* === Field Definition === */
     XrFieldDescriptor *fields;
@@ -282,8 +297,19 @@ static inline bool xr_class_is_field_private(const XrClass *cls, int index) {
 
 /* ========== Helper Functions ========== */
 
-// Check if cls is subclass of target (or same class)
-// O(1) for depth < 8 using primary_supers array
+// Check if cls is subclass of target (or same class).
+//
+// Three tiers, each O(1) on its own inputs:
+//   1. cls == target  -- identity
+//   2. target->depth < 8
+//        -> cls->primary_supers[target->depth] == target
+//      This covers the overwhelmingly common case (the xray stdlib
+//      and every builtin type live here).
+//   3. target->depth >= 8
+//        -> probe cls->secondary_supers_hash (open addressing,
+//           capacity is power-of-two so the modulus is a mask).
+//      Falls back to a linear xs super-chain walk if the hash could
+//      not be allocated at finalize time.
 static inline bool xr_class_instanceof(const XrClass *cls, const XrClass *target) {
     if (cls == NULL || target == NULL) {
         return false;
@@ -293,12 +319,23 @@ static inline bool xr_class_instanceof(const XrClass *cls, const XrClass *target
         return true;
     }
 
-    // O(1) lookup via primary_supers
     if (target->depth < 8) {
         return cls->primary_supers[target->depth] == target;
     }
 
-    // Fallback to linear search for depth >= 8 (rare)
+    if (cls->secondary_supers_hash != NULL
+        && cls->secondary_supers_capacity > 0) {
+        uint32_t mask = (uint32_t)cls->secondary_supers_capacity - 1;
+        uint32_t h = xr_hash_int((int64_t)(uintptr_t)target) & mask;
+        for (;;) {
+            struct XrClass *slot = cls->secondary_supers_hash[h];
+            if (slot == target) return true;
+            if (slot == NULL) return false;
+            h = (h + 1) & mask;
+        }
+    }
+
+    // Fallback: hash table was not built (allocation failure path).
     const XrClass *c = cls->super;
     while (c != NULL) {
         if (c == target) {

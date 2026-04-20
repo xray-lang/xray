@@ -106,7 +106,11 @@ typedef struct {
     struct XrArray *errors;
 } XmlParser;
 
-#define XML_MAX_DEPTH 256
+// Use the stdlib-wide nesting cap so every parser (JSON/YAML/TOML/XML/CSV)
+// agrees on what constitutes a pathologically deep document. Include
+// `common_parser.h` before this file so XR_STDLIB_MAX_DEPTH is available.
+#include "../common_parser.h"
+#define XML_MAX_DEPTH XR_STDLIB_MAX_DEPTH
 
 // ========== API ==========
 

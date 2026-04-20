@@ -39,6 +39,7 @@
 #include "../runtime/object/builtins/xjson_builtins.h"
 #include "../runtime/symbol/xsymbol_table.h"
 #include "../base/xmalloc.h"
+#include "../../stdlib/stdlib_cache.h"
 #include "../base/xglobal_indices.h"
 #include <stdio.h>
 #include <string.h>
@@ -142,6 +143,11 @@ static int isolate_init_full(XrayIsolate *isolate) {
 /* ========== Full Cleanup Callback ========== */
 
 static void isolate_cleanup_full(XrayIsolate *isolate) {
+
+    // Stdlib per-isolate cache. Must be freed before the module registry so
+    // any XrShape it holds is released while the owning isolate state is
+    // still intact.
+    xr_stdlib_cache_free(isolate);
 
     if (isolate->source_cache) {
         xr_source_cache_free(isolate->source_cache);

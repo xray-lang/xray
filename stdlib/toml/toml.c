@@ -21,6 +21,7 @@
 
 #include "../common_writer.h"
 #include "../common_io.h"
+#include "../common_parser.h"
 #include "../datetime/datetime.h"
 #include "../../src/base/xmalloc.h"
 #include "../../src/runtime/value/xvalue.h"
@@ -61,7 +62,10 @@ typedef struct {
     int depth;            // nesting depth for stringify cycle guard
 } TomlWriter;
 
-#define TOML_STRINGIFY_MAX_DEPTH 256
+// Share the stdlib-wide nesting cap so parse and stringify always agree
+// on what is "too deep"; a tree the TOML parser accepted will serialize
+// without hitting this ceiling.
+#define TOML_STRINGIFY_MAX_DEPTH XR_STDLIB_MAX_DEPTH
 
 static inline void tw_init(TomlWriter *w, XrayIsolate *isolate, int indent) {
     xr_serw_init(&w->sw, 256);
@@ -456,10 +460,7 @@ static XrValue toml_stringify(XrayIsolate *X, XrValue *args, int argc) {
 
     if (argc >= 2 && xr_value_is_json(args[1])) {
         XrJson *json = xr_value_to_json(args[1]);
-        XrValue val = xr_json_get_by_key(X, json, "indent");
-        if (XR_IS_INT(val)) {
-            indent = (int)XR_TO_INT(val);
-        }
+        xrs_cfg_get_int(X, json, "indent", &indent);
     } else if (argc >= 2 && XR_IS_INT(args[1])) {
         indent = (int)XR_TO_INT(args[1]);
     }

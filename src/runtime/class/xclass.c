@@ -741,6 +741,13 @@ void xr_class_free(XrClass *cls) {
         cls->reflect_cache = NULL;
     }
 
+    // Free secondary supers hash (only allocated when depth >= 8).
+    if (cls->secondary_supers_hash) {
+        xr_free(cls->secondary_supers_hash);
+        cls->secondary_supers_hash = NULL;
+        cls->secondary_supers_capacity = 0;
+    }
+
     // Class name is interned string, not freed here
 
     xr_free(cls);

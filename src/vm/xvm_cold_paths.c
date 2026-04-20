@@ -986,7 +986,7 @@ int vm_coro_ctrl(XrayIsolate *isolate, XrVMContext *vm_ctx,
         int active_count = xr_runtime_active_coros(runtime);
         uint64_t total_created = 0;
         for (int _si = 0; _si < runtime->worker_count; _si++)
-            total_created += runtime->workers[_si].p.spawned_count;
+            total_created += runtime->workers[_si].p.stats.spawned_count;
 
         for (int wi = 0; wi < runtime->worker_count; wi++) {
             XrWorker *w = &runtime->workers[wi];
@@ -2893,7 +2893,7 @@ int vm_select_block(XrayIsolate *isolate, XrVMContext *vm_ctx,
     }
 
     // Notify dist channels about entering select (subscribe for push model)
-    XrChannelDistHooks *dhooks = xr_channel_dist_hooks;
+    XrChannelDistHooks *dhooks = isolate ? isolate->channel_dist_hooks : NULL;
     if (dhooks && dhooks->on_select_enter) {
         for (int ci = 0; ci < ch_count; ci++) {
             if (!channels[ci]) continue;

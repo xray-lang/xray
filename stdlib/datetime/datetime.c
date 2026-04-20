@@ -14,14 +14,15 @@
  */
 
 #include "datetime.h"
+#include "../common.h"
+#include "../ctxbuf.h"
 #include "../../include/xray_platform.h"
-#include "../../src/runtime/value/xvalue.h"
-#include "../../src/runtime/object/xstring.h"
 #include "../../src/runtime/xisolate_internal.h"
 #include "../../src/runtime/gc/xgc.h"
+#include "../../src/base/xchecks.h"
 #include <string.h>
-#include <stdlib.h>
 #include <stdio.h>
+#include <inttypes.h>
 
 #define XR_INT(n) XR_FROM_INT(n)
 
@@ -33,6 +34,7 @@
 
 static XrDateTime* datetime_alloc(XrayIsolate *isolate) {
     XrDateTime *dt = (XrDateTime*)xr_gc_alloc(&isolate->gc, sizeof(XrDateTime), XR_TDATETIME);
+    if (!dt) return NULL;
     dt->timestamp = 0;
     dt->milliseconds = 0;
     dt->tz_offset = 0;
@@ -154,17 +156,31 @@ XrDateTime* xr_datetime_from_timestamp_ms(XrayIsolate *isolate, int64_t timestam
 /* ========== Parse API ========== */
 
 XrDateTime* xr_datetime_parse(XrayIsolate *isolate, const char *str, const char *format) {
+    if (!str) return NULL;
+
     int year = 0, month = 1, day = 1, hour = 0, minute = 0, second = 0, ms = 0;
 
+    // Split the input into (date, time, tz) by anchoring on 'T' or ' '
+    // first. The previous implementation looked backwards for '+' or '-'
+    // and could mis-interpret the '-' used as a date separator in short
+    // strings such as "2024-01-15".
+    const char *date_end = str;
+    while (*date_end && *date_end != 'T' && *date_end != ' ') date_end++;
+    const char *time_part = NULL;
+    if (*date_end == 'T' || *date_end == ' ') {
+        time_part = date_end + 1;
+    }
+
     if (!format || strcmp(format, "ISO8601") == 0 || strcmp(format, "iso") == 0) {
-        if (sscanf(str, "%d-%d-%dT%d:%d:%d", &year, &month, &day, &hour, &minute, &second) >= 3 ||
-            sscanf(str, "%d-%d-%d %d:%d:%d", &year, &month, &day, &hour, &minute, &second) >= 3 ||
-            sscanf(str, "%d/%d/%d %d:%d:%d", &year, &month, &day, &hour, &minute, &second) >= 3) {
-        } else {
-            return NULL;
-        }
-        // Parse milliseconds (.123)
-        const char *dot = strchr(str, '.');
+        int parsed = sscanf(str, "%d-%d-%dT%d:%d:%d", &year, &month, &day, &hour, &minute, &second);
+        if (parsed < 3) parsed = sscanf(str, "%d-%d-%d %d:%d:%d", &year, &month, &day, &hour, &minute, &second);
+        if (parsed < 3) parsed = sscanf(str, "%d/%d/%d %d:%d:%d", &year, &month, &day, &hour, &minute, &second);
+        if (parsed < 3) return NULL;
+
+        // Parse milliseconds (.123) but only when the fractional part
+        // follows the time-of-day, never the date. Without this scoping a
+        // pattern like "1.2.3" could accidentally contribute to ms.
+        const char *dot = time_part ? strchr(time_part, '.') : NULL;
         if (dot && dot[1] >= '0' && dot[1] <= '9') {
             int digits = 0;
             ms = 0;
@@ -192,25 +208,23 @@ XrDateTime* xr_datetime_parse(XrayIsolate *isolate, const char *str, const char 
         }
     }
 
-    // Parse timezone offset: Z, +HH:MM, -HH:MM
+    // Parse timezone offset: Z, +HH:MM, -HH:MM. Look only inside the time
+    // portion so date separators can never masquerade as the offset sign.
     int is_utc = 0;
     int tz_offset_min = 0;
-    const char *tz = str + strlen(str) - 1;
-    // Scan backwards for timezone indicator
-    while (tz > str && (*tz == ' ' || *tz == '\0')) tz--;
-    
-    if (*tz == 'Z') {
-        is_utc = 1;
-    } else {
-        // Look for +HH:MM or -HH:MM pattern
-        const char *p = strrchr(str, '+');
-        if (!p) p = strrchr(str, '-');
-        // Make sure it's a timezone offset, not date separator
-        if (p && p > str + 10) {
+    if (time_part) {
+        const char *scan = time_part;
+        const char *tz_marker = NULL;
+        while (*scan) {
+            if (*scan == 'Z') { is_utc = 1; break; }
+            if (*scan == '+' || *scan == '-') { tz_marker = scan; break; }
+            scan++;
+        }
+        if (tz_marker) {
             int tz_h = 0, tz_m = 0;
-            if (sscanf(p + 1, "%d:%d", &tz_h, &tz_m) >= 1) {
+            if (sscanf(tz_marker + 1, "%d:%d", &tz_h, &tz_m) >= 1) {
                 tz_offset_min = tz_h * 60 + tz_m;
-                if (*p == '-') tz_offset_min = -tz_offset_min;
+                if (*tz_marker == '-') tz_offset_min = -tz_offset_min;
                 is_utc = 1;
             }
         }
@@ -228,13 +242,16 @@ XrDateTime* xr_datetime_parse(XrayIsolate *isolate, const char *str, const char 
     time_t t;
     if (is_utc) {
         t = datetime_mktime(&tm, 1);
-        // Adjust for timezone offset in the parsed string
+        if (t == (time_t)-1) return NULL;
+        // Adjust for the timezone offset carried by the parsed string.
         t -= tz_offset_min * 60;
     } else {
         t = mktime(&tm);
+        if (t == (time_t)-1) return NULL;
     }
 
     XrDateTime *dt = datetime_alloc(isolate);
+    if (!dt) return NULL;
     dt->timestamp = (int64_t)t;
     dt->milliseconds = ms;
     dt->tz_offset = is_utc ? 0 : xr_datetime_local_offset();
@@ -265,41 +282,45 @@ int xr_datetime_format(XrDateTime *dt, const char *pattern, char *buf, size_t bu
     struct tm tm;
     xr_datetime_to_tm(dt, &tm);
 
-    char temp[512];
-    size_t ti = 0;
+    // Build into an XrCtxBuf so the full formatted output is produced even
+    // for very long patterns. We then memcpy the prefix that fits into the
+    // caller-provided fixed-size slot, keeping the legacy API contract.
+    XrCtxBuf out; xr_ctxbuf_init(&out, 64);
     const char *p = pattern;
 
-    while (*p && ti < sizeof(temp) - 10) {
+    while (*p) {
         if (strncmp(p, "YYYY", 4) == 0) {
-            ti += snprintf(temp + ti, sizeof(temp) - ti, "%04d", tm.tm_year + 1900);
+            xr_ctxbuf_appendf(&out, "%04d", tm.tm_year + 1900);
             p += 4;
         } else if (strncmp(p, "MM", 2) == 0 && p[2] != 'M') {
-            ti += snprintf(temp + ti, sizeof(temp) - ti, "%02d", tm.tm_mon + 1);
+            xr_ctxbuf_appendf(&out, "%02d", tm.tm_mon + 1);
             p += 2;
         } else if (strncmp(p, "DD", 2) == 0) {
-            ti += snprintf(temp + ti, sizeof(temp) - ti, "%02d", tm.tm_mday);
+            xr_ctxbuf_appendf(&out, "%02d", tm.tm_mday);
             p += 2;
         } else if (strncmp(p, "HH", 2) == 0) {
-            ti += snprintf(temp + ti, sizeof(temp) - ti, "%02d", tm.tm_hour);
+            xr_ctxbuf_appendf(&out, "%02d", tm.tm_hour);
             p += 2;
         } else if (strncmp(p, "mm", 2) == 0) {
-            ti += snprintf(temp + ti, sizeof(temp) - ti, "%02d", tm.tm_min);
+            xr_ctxbuf_appendf(&out, "%02d", tm.tm_min);
             p += 2;
         } else if (strncmp(p, "ss", 2) == 0) {
-            ti += snprintf(temp + ti, sizeof(temp) - ti, "%02d", tm.tm_sec);
+            xr_ctxbuf_appendf(&out, "%02d", tm.tm_sec);
             p += 2;
         } else if (strncmp(p, "SSS", 3) == 0) {
-            ti += snprintf(temp + ti, sizeof(temp) - ti, "%03d", dt->milliseconds);
+            xr_ctxbuf_appendf(&out, "%03d", dt->milliseconds);
             p += 3;
         } else {
-            temp[ti++] = *p++;
+            xr_ctxbuf_putc(&out, *p++);
         }
     }
-    temp[ti] = '\0';
 
-    size_t len = ti < buf_size - 1 ? ti : buf_size - 1;
-    memcpy(buf, temp, len);
-    buf[len] = '\0';
+    size_t len = out.len < buf_size - 1 ? out.len : buf_size - 1;
+    if (buf_size > 0) {
+        if (out.data) memcpy(buf, out.data, len);
+        buf[len] = '\0';
+    }
+    xr_ctxbuf_free(&out);
     return (int)len;
 }
 
@@ -498,35 +519,42 @@ int64_t xr_datetime_diff(XrDateTime *dt1, XrDateTime *dt2, const char *unit) {
 
 /* ========== Timezone API ========== */
 
+// Copy every user-visible field explicitly instead of doing a raw memcpy
+// past the GC header: the old byte-level copy silently broke every time
+// XrGCHeader changed layout, and produced subtle aliasing issues when the
+// GC added mark bits to the header.
+static void datetime_copy_fields(XrDateTime *dst, const XrDateTime *src) {
+    dst->timestamp    = src->timestamp;
+    dst->milliseconds = src->milliseconds;
+    dst->tz_offset    = src->tz_offset;
+    dst->is_utc       = src->is_utc;
+}
+
 XrDateTime* xr_datetime_to_utc(XrayIsolate *isolate, XrDateTime *dt) {
-    if (dt->is_utc) {
-        XrDateTime *result = datetime_alloc(isolate);
-        memcpy((char*)result + sizeof(XrGCHeader),
-               (char*)dt + sizeof(XrGCHeader),
-               sizeof(XrDateTime) - sizeof(XrGCHeader));
-        return result;
-    }
     XrDateTime *result = datetime_alloc(isolate);
-    result->timestamp = dt->timestamp;
-    result->milliseconds = dt->milliseconds;
-    result->tz_offset = 0;
-    result->is_utc = 1;
+    if (!result) return NULL;
+    if (dt->is_utc) {
+        datetime_copy_fields(result, dt);
+    } else {
+        result->timestamp    = dt->timestamp;
+        result->milliseconds = dt->milliseconds;
+        result->tz_offset    = 0;
+        result->is_utc       = 1;
+    }
     return result;
 }
 
 XrDateTime* xr_datetime_to_local(XrayIsolate *isolate, XrDateTime *dt) {
-    if (!dt->is_utc) {
-        XrDateTime *result = datetime_alloc(isolate);
-        memcpy((char*)result + sizeof(XrGCHeader),
-               (char*)dt + sizeof(XrGCHeader),
-               sizeof(XrDateTime) - sizeof(XrGCHeader));
-        return result;
-    }
     XrDateTime *result = datetime_alloc(isolate);
-    result->timestamp = dt->timestamp;
-    result->milliseconds = dt->milliseconds;
-    result->tz_offset = xr_datetime_local_offset();
-    result->is_utc = 0;
+    if (!result) return NULL;
+    if (!dt->is_utc) {
+        datetime_copy_fields(result, dt);
+    } else {
+        result->timestamp    = dt->timestamp;
+        result->milliseconds = dt->milliseconds;
+        result->tz_offset    = xr_datetime_local_offset();
+        result->is_utc       = 0;
+    }
     return result;
 }
 
@@ -609,9 +637,36 @@ static XrValue dt_format(XrayIsolate *isolate, XrValue *args, int nargs) {
     if (nargs > 1 && XR_IS_STRING(args[1])) {
         pattern = XR_STRING_CHARS(XR_TO_STRING(args[1]));
     }
-    char buf[256];
-    int len = xr_datetime_format(dt, pattern, buf, sizeof(buf));
-    return xr_string_value(xr_string_new(isolate, buf, len));
+
+    // Build into a dynamic buffer so long custom patterns (e.g. embedding
+    // localized strings) are never silently truncated.
+    XrCtxBuf out; xr_ctxbuf_init(&out, 64);
+    struct tm tm;
+    xr_datetime_to_tm(dt, &tm);
+    for (const char *p = pattern; *p; ) {
+        if (strncmp(p, "YYYY", 4) == 0) {
+            xr_ctxbuf_appendf(&out, "%04d", tm.tm_year + 1900); p += 4;
+        } else if (strncmp(p, "MM", 2) == 0 && p[2] != 'M') {
+            xr_ctxbuf_appendf(&out, "%02d", tm.tm_mon + 1); p += 2;
+        } else if (strncmp(p, "DD", 2) == 0) {
+            xr_ctxbuf_appendf(&out, "%02d", tm.tm_mday); p += 2;
+        } else if (strncmp(p, "HH", 2) == 0) {
+            xr_ctxbuf_appendf(&out, "%02d", tm.tm_hour); p += 2;
+        } else if (strncmp(p, "mm", 2) == 0) {
+            xr_ctxbuf_appendf(&out, "%02d", tm.tm_min); p += 2;
+        } else if (strncmp(p, "ss", 2) == 0) {
+            xr_ctxbuf_appendf(&out, "%02d", tm.tm_sec); p += 2;
+        } else if (strncmp(p, "SSS", 3) == 0) {
+            xr_ctxbuf_appendf(&out, "%03d", dt->milliseconds); p += 3;
+        } else {
+            xr_ctxbuf_putc(&out, *p++);
+        }
+    }
+    XrValue v = xr_string_value(xr_string_new(isolate,
+                                              out.data ? out.data : "",
+                                              out.len));
+    xr_ctxbuf_free(&out);
+    return v;
 }
 
 static XrValue dt_to_iso(XrayIsolate *isolate, XrValue *args, int nargs) {
@@ -741,11 +796,6 @@ static XrValue dt_days_in_month(XrayIsolate *isolate, XrValue *args, int nargs) 
     return XR_INT(xr_datetime_days_in_month(XR_TO_DATETIME(args[0])));
 }
 
-/* ========== External Declarations ========== */
-
-extern XrCFunction* xr_vm_cfunction_new(XrayIsolate *isolate, XrCFunctionPtr func, const char *name);
-extern XrValue xr_value_from_cfunction(XrCFunction *cfunc);
-
 #include "../../src/runtime/object/xnative_type.h"
 
 /* ========== DateTime Native Type Method Table ========== */
@@ -778,11 +828,6 @@ static XrNativeMethod datetime_getters[] = {
     {"timestamp",   (XrCFunctionPtr)dt_timestamp,   1},
     {NULL, NULL, 0}
 };
-
-#define ADD_FUNC(name, fn) do { \
-    XrCFunction *cf = xr_vm_cfunction_new(isolate, fn, name); \
-    xr_module_add_export(isolate, mod, name, xr_value_from_cfunction(cf)); \
-} while(0)
 
 // ========== Type Declarations (parsed by gen_stdlib_types.py) ==========
 
@@ -823,6 +868,8 @@ XR_DEFINE_BUILTIN(dt_is_leap_year, "isLeapYear", "(): bool", "Check if leap year
 XR_DEFINE_BUILTIN(dt_days_in_month, "daysInMonth", "(): int", "Get days in current month")
 
 XrModule* xr_load_module_datetime(XrayIsolate *isolate) {
+    XR_DCHECK(isolate != NULL, "xr_load_module_datetime: NULL isolate");
+
     // Register DateTime native type
     XrNativeTypeInfo dt_info = {
         .name = "DateTime",
@@ -832,19 +879,20 @@ XrModule* xr_load_module_datetime(XrayIsolate *isolate) {
         .static_methods = NULL,
     };
     xr_register_native_type(isolate, &dt_info);
-    
+
     // Create module — only factory functions exported
     XrModule *mod = xr_module_create_native(isolate, "datetime");
-    ADD_FUNC("now", dt_now);
-    ADD_FUNC("utc", dt_utc);
-    ADD_FUNC("create", dt_create);
-    ADD_FUNC("createUTC", dt_create_utc);
-    ADD_FUNC("fromTimestamp", dt_from_timestamp);
-    ADD_FUNC("fromTimestampMs", dt_from_timestamp_ms);
-    ADD_FUNC("parse", dt_parse);
-    ADD_FUNC("offset", dt_offset);
-    
+    if (!mod) return NULL;
+
+    XRS_EXPORT(mod, isolate, "now", dt_now);
+    XRS_EXPORT(mod, isolate, "utc", dt_utc);
+    XRS_EXPORT(mod, isolate, "create", dt_create);
+    XRS_EXPORT(mod, isolate, "createUTC", dt_create_utc);
+    XRS_EXPORT(mod, isolate, "fromTimestamp", dt_from_timestamp);
+    XRS_EXPORT(mod, isolate, "fromTimestampMs", dt_from_timestamp_ms);
+    XRS_EXPORT(mod, isolate, "parse", dt_parse);
+    XRS_EXPORT(mod, isolate, "offset", dt_offset);
+
+    mod->loaded = true;
     return mod;
 }
-
-#undef ADD_FUNC

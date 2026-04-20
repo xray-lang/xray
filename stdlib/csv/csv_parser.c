@@ -49,35 +49,24 @@ void csv_config_from_json(XrayIsolate *X, CsvConfig *config, XrJson *json) {
     csv_config_init(config);
     if (!json) return;
 
-    // delimiter
-    XrValue val = xr_json_get_by_key(X, json, "delimiter");
-    if (XR_IS_STRING(val)) {
-        XrString *s = XR_TO_STRING(val);
-        if (s->length > 0) config->delimiter = s->data[0];
-    }
+    // Scalar fields routed through the shared config readers; they
+    // silently no-op on missing / wrong-type values, preserving the
+    // defaults already installed by csv_config_init().
+    xrs_cfg_get_char(X, json, "delimiter",      &config->delimiter);
+    xrs_cfg_get_char(X, json, "quoteChar",      &config->quote_char);
+    xrs_cfg_get_char(X, json, "escapeChar",     &config->escape_char);
+    xrs_cfg_get_bool(X, json, "header",         &config->header);
+    xrs_cfg_get_bool(X, json, "dynamicTyping",  &config->dynamic_typing);
+    xrs_cfg_get_bool(X, json, "trimFields",     &config->trim_fields);
+    xrs_cfg_get_bool(X, json, "skipEmptyLines", &config->skip_empty_lines);
+    xrs_cfg_get_bool(X, json, "relaxQuotes",    &config->relax_quotes);
+    xrs_cfg_get_bool(X, json, "relaxColumns",   &config->relax_columns);
+    xrs_cfg_get_int (X, json, "skipRows",       &config->skip_rows);
+    xrs_cfg_get_int (X, json, "maxRows",        &config->max_rows);
 
-    // quoteChar
-    val = xr_json_get_by_key(X, json, "quoteChar");
-    if (XR_IS_STRING(val)) {
-        XrString *s = XR_TO_STRING(val);
-        if (s->length > 0) config->quote_char = s->data[0];
-    }
-
-    // escapeChar
-    val = xr_json_get_by_key(X, json, "escapeChar");
-    if (XR_IS_STRING(val)) {
-        XrString *s = XR_TO_STRING(val);
-        if (s->length > 0) config->escape_char = s->data[0];
-    }
-
-    // header
-    val = xr_json_get_by_key(X, json, "header");
-    if (XR_IS_BOOL(val)) {
-        config->header = XR_TO_BOOL(val);
-    }
-
-    // columns
-    val = xr_json_get_by_key(X, json, "columns");
+    // columns: user-supplied header list stays as a live XrArray ref so
+    // the parser can index into it without copying.
+    XrValue val = xr_json_get_by_key(X, json, "columns");
     if (XR_IS_ARRAY(val)) {
         config->columns = XR_TO_ARRAY(val);
     }
@@ -91,37 +80,15 @@ void csv_config_from_json(XrayIsolate *X, CsvConfig *config, XrJson *json) {
         config->null_strings = XR_TO_ARRAY(val);
     }
 
-    // dynamicTyping
-    val = xr_json_get_by_key(X, json, "dynamicTyping");
-    if (XR_IS_BOOL(val)) {
-        config->dynamic_typing = XR_TO_BOOL(val);
-    }
+    // comments — fixed-buffer copy (parser keeps a private copy so
+    // config stays valid after the caller's XrJson is released).
+    size_t n = xrs_cfg_get_fixed_str(X, json, "comments",
+                                     config->comments,
+                                     sizeof(config->comments));
+    config->has_comments = (n > 0);
 
-    // trimFields
-    val = xr_json_get_by_key(X, json, "trimFields");
-    if (XR_IS_BOOL(val)) {
-        config->trim_fields = XR_TO_BOOL(val);
-    }
-
-    // skipEmptyLines
-    val = xr_json_get_by_key(X, json, "skipEmptyLines");
-    if (XR_IS_BOOL(val)) {
-        config->skip_empty_lines = XR_TO_BOOL(val);
-    }
-
-    // comments - copied into the owned buffer so config stays valid
-    // after the caller's XrJson is released.
-    val = xr_json_get_by_key(X, json, "comments");
-    if (XR_IS_STRING(val)) {
-        XrString *s = XR_TO_STRING(val);
-        size_t n = s->length < sizeof(config->comments) - 1
-                 ? s->length : sizeof(config->comments) - 1;
-        memcpy(config->comments, s->data, n);
-        config->comments[n] = '\0';
-        config->has_comments = (n > 0);
-    }
-
-    // linebreak ("\n" / "\r\n"); used by stringify only.
+    // linebreak ("\n" / "\r\n"); used by stringify only. Needs the
+    // custom length guard (1..2 chars) so keep the explicit inline.
     val = xr_json_get_by_key(X, json, "linebreak");
     if (XR_IS_STRING(val)) {
         XrString *s = XR_TO_STRING(val);
@@ -129,30 +96,6 @@ void csv_config_from_json(XrayIsolate *X, CsvConfig *config, XrJson *json) {
             memcpy(config->linebreak, s->data, s->length);
             config->linebreak[s->length] = '\0';
         }
-    }
-
-    // skipRows
-    val = xr_json_get_by_key(X, json, "skipRows");
-    if (XR_IS_INT(val)) {
-        config->skip_rows = (int)XR_TO_INT(val);
-    }
-
-    // maxRows
-    val = xr_json_get_by_key(X, json, "maxRows");
-    if (XR_IS_INT(val)) {
-        config->max_rows = (int)XR_TO_INT(val);
-    }
-
-    // relaxQuotes
-    val = xr_json_get_by_key(X, json, "relaxQuotes");
-    if (XR_IS_BOOL(val)) {
-        config->relax_quotes = XR_TO_BOOL(val);
-    }
-
-    // relaxColumns
-    val = xr_json_get_by_key(X, json, "relaxColumns");
-    if (XR_IS_BOOL(val)) {
-        config->relax_columns = XR_TO_BOOL(val);
     }
 }
 

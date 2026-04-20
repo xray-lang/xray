@@ -118,7 +118,7 @@ void xr_http_request_config_init(XrHttpRequestConfig *config);
 
 /*
  * Execute HTTP request
- * 
+ *
  * @param X       Isolate instance (for Cookie/proxy context)
  * @param config  Request config
  * @return        XrHttpResult (caller must call xr_http_result_free to free)
@@ -197,26 +197,10 @@ bool xr_http_context_is_cancelled(XrHttpReqContext *ctx);
  */
 void xr_http_context_free(XrHttpReqContext *ctx);
 
-/* ========== HTTP/1.1 Keep-Alive Connection Pool ========== */
-
-/*
- * Initialize global connection pool
- */
-void xr_http_pool_init(void);
-
-/*
- * Cleanup global connection pool
- */
-void xr_http_pool_cleanup(void);
-
-/*
- * Set connection pool max connections
- */
-void xr_http_pool_set_max_conns(int max_conns);
-
-/*
- * Set connection pool idle timeout
- */
-void xr_http_pool_set_idle_timeout(int timeout_ms);
+// HTTP connection pool is managed per-Isolate via XrHttpContext.conn_pool
+// (see http.h). There is no global pool — each Isolate owns its own pool,
+// lazily created on the first HTTP request and destroyed when the Isolate
+// tears down. Pool tuning (max_conns, idle_timeout) is done through the
+// underlying XrConnPool API directly if needed.
 
 #endif

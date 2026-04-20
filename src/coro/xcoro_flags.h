@@ -228,6 +228,36 @@ static inline uint8_t xr_flag_to_state(uint32_t flag_bit) {
     _ok; \
 })
 
+/* ========== State Transition Helpers ==========
+ *
+ * These thin wrappers make the intent of each state-machine edge explicit
+ * at call sites that previously used raw xr_coro_flags_swap(...) with a
+ * hand-rolled (clear_mask, set_mask) pair.  They preserve the exact memory
+ * ordering of xr_coro_flags_swap (release on state, relaxed clear, release
+ * set), so they are drop-in replacements.
+ *
+ * Transitions are named after the Go-scheduler style "<from>_to_<to>":
+ *   - scheduled_to_running : dequeue + begin execution
+ *                           (clears both READY and BLOCKED since the coro
+ *                           may be woken from either path).
+ *   - running_to_ready     : voluntary yield / preemption
+ *   - running_to_blocked   : channel send/recv/await wait point
+ *   - blocked_to_ready     : I/O wake, channel wake, timer fire
+ *
+ * CALLERS SHOULD PREFER THESE over direct xr_coro_flags_swap.
+ */
+#define xr_coro_transition_to_running(coro) \
+    xr_coro_flags_swap((coro), XR_CORO_FLG_READY | XR_CORO_FLG_BLOCKED, XR_CORO_FLG_RUNNING)
+
+#define xr_coro_transition_to_ready(coro) \
+    xr_coro_flags_swap((coro), XR_CORO_FLG_RUNNING, XR_CORO_FLG_READY)
+
+#define xr_coro_transition_to_blocked(coro) \
+    xr_coro_flags_swap((coro), XR_CORO_FLG_RUNNING, XR_CORO_FLG_BLOCKED)
+
+#define xr_coro_transition_wake(coro) \
+    xr_coro_flags_swap((coro), XR_CORO_FLG_BLOCKED, XR_CORO_FLG_READY)
+
 /* ========== Priority Operations ========== */
 
 static inline int xr_coro_get_priority(uint32_t flags) {
