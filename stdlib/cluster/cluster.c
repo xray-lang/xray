@@ -1689,7 +1689,16 @@ static XrValue cluster_info_fn(XrayIsolate *X, XrValue *args, int argc) {
                 xr_json_set_by_key(X, nj, "port", xr_int(node->port));
                 xr_json_set_by_key(X, nj, "state", xr_int(node->state));
 
-                // Metrics
+                /*
+                 * Per-node metrics snapshot. All counters are
+                 * atomic _Atomic(uint64_t) so the load is wait-free
+                 * and consistent per-field (no struct-level tearing
+                 * because each load is independent). A
+                 * whole-metrics-block observation is NOT atomic —
+                 * bytes_sent may advance after frames_sent is read,
+                 * producing a momentarily-impossible ratio; the
+                 * tradeoff is acceptable for a diagnostic JSON.
+                 */
                 xr_json_set_by_key(X, nj, "frames_sent",
                     xr_int((int64_t)atomic_load(&node->metrics.frames_sent)));
                 xr_json_set_by_key(X, nj, "frames_recv",
@@ -1698,6 +1707,17 @@ static XrValue cluster_info_fn(XrayIsolate *X, XrValue *args, int argc) {
                     xr_int((int64_t)atomic_load(&node->metrics.bytes_sent)));
                 xr_json_set_by_key(X, nj, "bytes_recv",
                     xr_int((int64_t)atomic_load(&node->metrics.bytes_recv)));
+                // send_errors: writev short/fail counter — high values
+                // flag a slow or lossy link; correlate with the slow
+                // flag below.
+                xr_json_set_by_key(X, nj, "send_errors",
+                    xr_int((int64_t)atomic_load(&node->metrics.send_errors)));
+                // slow_consumer_events: total times this peer hit the
+                // high watermark (4 MiB by default) since start. Each
+                // event corresponds to one outq_bytes >= high_watermark
+                // transition in cluster_node.
+                xr_json_set_by_key(X, nj, "slow_consumer_events",
+                    xr_int((int64_t)atomic_load(&node->metrics.slow_consumer_events)));
                 xr_json_set_by_key(X, nj, "rtt_ms",
                     xr_int(node->metrics.last_rtt_ms));
                 xr_json_set_by_key(X, nj, "outq_bytes",
@@ -1707,11 +1727,15 @@ static XrValue cluster_info_fn(XrayIsolate *X, XrValue *args, int argc) {
                 xr_json_set_by_key(X, nj, "slow",
                     xr_bool(xr_cluster_node_is_slow(node)));
 
-                // Phi value
+                // Phi accrual failure-detector score. Higher = more
+                // likely dead. Threshold for "kill" is set by
+                // cluster policy in cluster_health.c.
                 int64_t now = xr_cluster_now_ms();
                 double phi = xr_phi_value(&node->phi, now);
                 xr_json_set_by_key(X, nj, "phi",
                     xr_float(phi));
+                xr_json_set_by_key(X, nj, "missed_heartbeats",
+                    xr_int((int64_t)node->missed_heartbeats));
 
                 xr_array_push(node_arr, xr_json_value(nj));
             }
@@ -1721,10 +1745,59 @@ static XrValue cluster_info_fn(XrayIsolate *X, XrValue *args, int argc) {
         xr_json_set_by_key(X, info, "nodes", xr_value_from_array(node_arr));
     }
 
-    // Channel count
+    // Registries — best-effort counts. Each is guarded by its own
+    // mutex under normal operation; a cross-registry snapshot is
+    // intentionally lock-free here because info() is a diagnostic
+    // endpoint and bounded staleness is preferable to global locking.
     xr_json_set_by_key(X, info, "channels", xr_int(c->channel_count));
-    // Service count
     xr_json_set_by_key(X, info, "services", xr_int(c->service_count));
+    xr_json_set_by_key(X, info, "topic_subs", xr_int(c->topic_sub_count));
+
+    /*
+     * Tombstone snapshot — number of nodes in the recently-dead
+     * table. A non-zero value across successive calls means we have
+     * peers that left the cluster within the past
+     * XR_TOMBSTONE_WINDOW_MS (see cluster_health.c) and will be
+     * refused if they try to rejoin. Useful for correlating "split
+     * brain" scenarios.
+     */
+    xr_mutex_lock(&c->dead_nodes_lock);
+    xr_json_set_by_key(X, info, "dead_nodes", xr_int(c->tombstone_count));
+    xr_mutex_unlock(&c->dead_nodes_lock);
+
+    /*
+     * Expose the operator-configurable heartbeat knobs so ops can
+     * sanity-check the live cluster against their YAML without
+     * shelling into the node. These fields are rarely changed at
+     * runtime but live at the XrCluster level so a snapshot is
+     * trivially consistent.
+     */
+    xr_json_set_by_key(X, info, "heartbeat_interval_ms",
+        xr_int(c->heartbeat_interval_ms));
+    xr_json_set_by_key(X, info, "heartbeat_timeout_ms",
+        xr_int(c->heartbeat_timeout_ms));
+    xr_json_set_by_key(X, info, "max_missed_heartbeats",
+        xr_int(c->max_missed_heartbeats));
+
+    /*
+     * TLS posture — one integer encoded as a small bitmap so a
+     * single field tells the observer what security guarantees are
+     * actually in force:
+     *
+     *   bit 0 (1): tls_enabled          — operator set tls.enabled
+     *   bit 1 (2): has client context   — outbound uses TLS
+     *   bit 2 (4): has server context   — inbound accepts TLS
+     *
+     * A mis-configured cluster (tls_enabled=true but no cert) shows
+     * up as value 1: enabled but no contexts — useful because the
+     * accept loop refuses all inbound in that state, and this field
+     * lets the operator notice.
+     */
+    int tls_posture = 0;
+    if (c->tls_enabled)    tls_posture |= 1;
+    if (c->tls_client_ctx) tls_posture |= 2;
+    if (c->tls_server_ctx) tls_posture |= 4;
+    xr_json_set_by_key(X, info, "tls", xr_int(tls_posture));
 
     return xr_json_value(info);
 }
