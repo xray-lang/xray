@@ -583,8 +583,77 @@ void xr_cluster_topic_deliver_local(XrCluster *c, const char *topic, XrValue val
     if (e.grown_alloc) xr_free(e.targets);
 }
 
-void xr_cluster_topic_handle_publish(XrCluster *c, const char *topic,
-                                      const uint8_t *value_data, uint32_t value_len) {
+/*
+ * Build the wire-format payload shared by both the local publish
+ * path (xr_cluster_topic_publish) and the forwarding path
+ * (xr_cluster_topic_handle_publish). Layout:
+ *
+ *   [topic_len 1B] [topic ...] [value_data ...] [hop_limit 1B]
+ *
+ * The hop_limit byte is appended AT THE END so older nodes that
+ * key their decoder off topic_len + value-segment interpret the
+ * trailing byte as part of value_data and ignore it harmlessly.
+ * Newer nodes detect presence of the hop byte via "1 + topic_len +
+ * value_len + 1 == payload_len" and parse it out before decoding.
+ *
+ * Returns 0 on success, -1 on alloc failure. On success the caller
+ * owns fb and must free with xr_frame_buf_free.
+ */
+static int topic_build_publish_frame(XrayIsolate *X,
+                                      const char *topic,
+                                      const XrValue *value,
+                                      uint8_t hop_limit,
+                                      XrFrameBuf *fb_out) {
+    if (!topic || !value || !fb_out) return -1;
+
+    XrSerialBuf sbuf;
+    xr_serial_buf_init(&sbuf);
+    if (xr_cluster_encode(X, *value, &sbuf) != 0) {
+        xr_serial_buf_free(&sbuf);
+        return -1;
+    }
+
+    uint8_t topic_len = (uint8_t)strlen(topic);
+    uint32_t payload_len = 1 + topic_len + (uint32_t)sbuf.len + 1;
+    xr_frame_buf_init(fb_out, payload_len);
+    if (!fb_out->data) {
+        xr_serial_buf_free(&sbuf);
+        return -1;
+    }
+    fb_out->data[0] = topic_len;
+    memcpy(fb_out->data + 1, topic, topic_len);
+    memcpy(fb_out->data + 1 + topic_len, sbuf.data, sbuf.len);
+    fb_out->data[1 + topic_len + sbuf.len] = hop_limit;
+    xr_serial_buf_free(&sbuf);
+
+    return (int)payload_len;
+}
+
+/*
+ * Send the already-built TOPIC_PUBLISH frame to every connected peer
+ * except `exclude` (used for split-horizon forwarding). Caller owns
+ * the XrFrameBuf and is responsible for freeing it.
+ */
+static void topic_broadcast_frame(XrCluster *c,
+                                   XrClusterNode *exclude,
+                                   const uint8_t *payload,
+                                   uint32_t payload_len) {
+    xr_mutex_lock(&c->nodes_lock);
+    XrClusterNode *node = c->nodes;
+    while (node) {
+        if (node != exclude && node->state == XR_NODE_CONNECTED) {
+            xr_cluster_node_send_frame(node, XR_FRAME_TOPIC_PUBLISH,
+                                        payload, payload_len);
+        }
+        node = node->next;
+    }
+    xr_mutex_unlock(&c->nodes_lock);
+}
+
+void xr_cluster_topic_handle_publish(XrCluster *c, XrClusterNode *from,
+                                      const char *topic,
+                                      const uint8_t *value_data, uint32_t value_len,
+                                      uint8_t hop_limit) {
     if (!c || !topic) return;
 
     // Decode the value
@@ -592,8 +661,46 @@ void xr_cluster_topic_handle_publish(XrCluster *c, const char *topic,
     if (xr_cluster_decode_value(c->isolate, value_data, value_len, &value) != 0)
         return;
 
-    // Deliver to local subscribers only (don't re-forward to avoid loops)
+    // Deliver to every matching local subscription — this happens
+    // regardless of hop_limit because we are the intended recipient.
     xr_cluster_topic_deliver_local(c, topic, value);
+
+    /*
+     * Controlled flooding. If hop_limit == 0 the originator (or a
+     * previous hop) has decided this frame should not propagate
+     * further, or the sender was an old pre-P17 node that didn't
+     * emit the hop byte at all — either way, stop here.
+     *
+     * Otherwise re-forward to every connected peer EXCEPT `from`
+     * (split-horizon) with hop_limit - 1. This is NOT loop-free on
+     * graphs with cycles longer than the hop limit, but three
+     * things bound the damage:
+     *
+     *   1. Every hop decrements; after XR_TOPIC_DEFAULT_HOP_LIMIT
+     *      hops the frame dies naturally.
+     *   2. Split-horizon eliminates the 2-hop A→B→A loop entirely.
+     *   3. Duplicate delivery on triangular meshes (A→B→C→A) is
+     *      tolerated by design — subscribers see at-most the value
+     *      a few times rather than unbounded times.
+     *
+     * A proper fix would cache a recent message-id set per cluster
+     * and drop duplicates; tracked as a separate item.
+     */
+    if (hop_limit == 0) return;
+
+    uint8_t next_hop = (uint8_t)(hop_limit - 1);
+
+    // Re-serialize with the decremented hop byte. We cannot simply
+    // forward the original payload buffer because the trailing
+    // hop_limit byte needs to be updated; rebuilding is cheap
+    // compared to the encode that would otherwise be required.
+    XrFrameBuf fb;
+    int payload_len = topic_build_publish_frame(c->isolate, topic, &value,
+                                                 next_hop, &fb);
+    if (payload_len < 0) return;
+
+    topic_broadcast_frame(c, from, fb.data, (uint32_t)payload_len);
+    xr_frame_buf_free(&fb);
 }
 
 int xr_cluster_topic_publish(XrayIsolate *X, const char *topic, XrValue value) {
@@ -603,40 +710,20 @@ int xr_cluster_topic_publish(XrayIsolate *X, const char *topic, XrValue value) {
     // Deliver to local subscribers first
     xr_cluster_topic_deliver_local(c, topic, value);
 
-    // Serialize value
-    XrSerialBuf sbuf;
-    xr_serial_buf_init(&sbuf);
-    if (xr_cluster_encode(X, value, &sbuf) != 0) {
-        xr_serial_buf_free(&sbuf);
-        return -1;
-    }
-
-    // Build TOPIC_PUBLISH payload: [topic_len 1B] [topic ...] [value_data ...]
-    uint8_t topic_len = (uint8_t)strlen(topic);
-    uint32_t payload_len = 1 + topic_len + (uint32_t)sbuf.len;
+    /*
+     * Build wire frame with the cluster-wide default hop limit. Each
+     * downstream node decrements before forwarding further; see the
+     * detailed comment on XR_TOPIC_DEFAULT_HOP_LIMIT in
+     * cluster_proto.h for the depth-vs-damage trade-off.
+     */
     XrFrameBuf fb;
-    xr_frame_buf_init(&fb, payload_len);
-    if (!fb.data) {
-        xr_serial_buf_free(&sbuf);
-        return -1;
-    }
-    fb.data[0] = topic_len;
-    memcpy(fb.data + 1, topic, topic_len);
-    memcpy(fb.data + 1 + topic_len, sbuf.data, sbuf.len);
-    xr_serial_buf_free(&sbuf);
+    int payload_len = topic_build_publish_frame(X, topic, &value,
+                                                 XR_TOPIC_DEFAULT_HOP_LIMIT, &fb);
+    if (payload_len < 0) return -1;
 
-    // Forward to all connected nodes
-    xr_mutex_lock(&c->nodes_lock);
-    XrClusterNode *node = c->nodes;
-    while (node) {
-        if (node->state == XR_NODE_CONNECTED) {
-            xr_cluster_node_send_frame(node, XR_FRAME_TOPIC_PUBLISH,
-                                        fb.data, payload_len);
-        }
-        node = node->next;
-    }
-    xr_mutex_unlock(&c->nodes_lock);
-
+    // Forward to all connected nodes (no split-horizon — we are the
+    // origin, so every peer is a valid destination).
+    topic_broadcast_frame(c, NULL, fb.data, (uint32_t)payload_len);
     xr_frame_buf_free(&fb);
     return 0;
 }
