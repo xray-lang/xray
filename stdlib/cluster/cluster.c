@@ -32,32 +32,127 @@
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+#include <fcntl.h>
+#include <errno.h>
 
 // xr_coro_create_native is not declared in any public header
 extern struct XrCoroutine *xr_coro_create_native(struct XrayIsolate *X, void (*func)(void*), void *arg,
                                                   const char *name);
 
+/*
+ * xr_socket_read / xr_socket_set_read_timeout live in
+ * src/coro/xsocket.h. We cannot pull that header in here because it
+ * includes include/xray_platform.h which defines
+ * `static inline void xr_random_bytes(...)`, and stdlib/crypto/crypto.h
+ * (already included above for xr_secure_wipe) exposes
+ * `int xr_random_bytes(...)` — the two cannot coexist. Forward-declare
+ * just the two entry points we need; the real signatures are checked
+ * at link time against the canonical definitions in xsocket.c.
+ */
+extern int xr_socket_read(struct XrayIsolate *X, int fd, char *buf, size_t len);
+extern void xr_socket_set_read_timeout(struct XrayIsolate *X, int fd, int timeout_ms);
+
 static inline uint32_t str_hash(const char *s) {
     return xr_hash_bytes(s, strlen(s));
 }
 
-/* ========== Heartbeat Thread ========== */
+/* ========== Interruptible Sleep Helper ========== */
 
-static void *cluster_heartbeat_thread(void *arg) {
+/*
+ * Block the current coroutine for up to `ms` milliseconds, returning
+ * early (false) as soon as xr_cluster_stop closes the stop_pipe.
+ *
+ * We deliberately avoid nanosleep / usleep here because every cluster
+ * coroutine (heartbeat, accept retry, reconnect backoff, discovery
+ * tick) runs on a worker thread; a syscall sleep would block that
+ * worker from scheduling any other coroutine for the full window.
+ *
+ * Strategy:
+ *   1. Program a read deadline on stop_pipe[0] via the netpoll timer
+ *      wheel — this is the same machinery that drives socket read
+ *      timeouts, so it folds cleanly into the existing scheduler.
+ *   2. Call xr_socket_read on stop_pipe[0]. The coroutine yields
+ *      until one of three things happens:
+ *        a. deadline expires   → return > 0 never satisfied, read
+ *                                 returns -1; we interpret as
+ *                                 "normal sleep elapsed".
+ *        b. stop_pipe[1] closes → read returns 0 (EOF); shutdown.
+ *        c. stop writes a byte → read returns > 0; shutdown. (We do
+ *                                 not currently write bytes, but the
+ *                                 helper tolerates it for future
+ *                                 targeted wake-ups.)
+ *   3. Clear the deadline so the next sleep sees a fresh deadline.
+ *
+ * Fallback: if stop_pipe was never set up (pipe() failed at start_ex)
+ * we nanosleep in small slices and honour c->running. Cluster still
+ * runs; it just loses the "wake-immediately on stop" property.
+ */
+bool xr_cluster_sleep_interruptible(XrCluster *c, int ms) {
+    if (!c) return false;
+    if (!atomic_load(&c->running)) return false;
+    if (ms <= 0) return atomic_load(&c->running);
+
+    int rfd = c->stop_pipe[0];
+    if (rfd < 0 || !c->isolate) {
+        // Fallback: slice-poll running every 50ms. Still blocks the
+        // worker, but this path is only reached on a pipe() failure
+        // at start_ex, which is rare enough to accept the degradation.
+        const int slice_ms = 50;
+        while (ms > 0 && atomic_load(&c->running)) {
+            int chunk = ms > slice_ms ? slice_ms : ms;
+            struct timespec ts = {
+                .tv_sec  = chunk / 1000,
+                .tv_nsec = (chunk % 1000) * 1000000L
+            };
+            nanosleep(&ts, NULL);
+            ms -= chunk;
+        }
+        return atomic_load(&c->running);
+    }
+
+    xr_socket_set_read_timeout(c->isolate, rfd, ms);
+    char byte;
+    int n = xr_socket_read(c->isolate, rfd, &byte, 1);
+    xr_socket_set_read_timeout(c->isolate, rfd, 0);  // clear deadline
+
+    if (n == 0)  return false;            // EOF — stop closed write end
+    if (n > 0)   return false;            // targeted wake (treat as stop)
+    // n < 0 → deadline fired or error; either way the sleep window is over.
+    return atomic_load(&c->running);
+}
+
+/* ========== Heartbeat Coroutine ========== */
+
+/*
+ * Drive xr_cluster_send_heartbeats + xr_cluster_check_heartbeats at a
+ * steady cadence. Runs as a native coroutine on the normal worker
+ * pool so the cluster stays on one scheduling model end-to-end — no
+ * more stray pthread with its own sleep granularity.
+ *
+ * Ticks at heartbeat_interval_ms / 2 (capped at 500ms min) so that
+ * phi-accrual has at least two samples per interval and stop-latency
+ * is bounded.
+ */
+static void cluster_heartbeat_coro(void *arg) {
     XrCluster *c = (XrCluster *)arg;
+    if (!c) return;
+
+    xr_io_set_isolate(c->isolate);
+    atomic_store(&c->heartbeat_running, true);
+
     /* Use half the heartbeat interval for check frequency.
      * This ensures we detect dead nodes within ~1.5x the interval. */
     int sleep_ms = c->heartbeat_interval_ms / 2;
     if (sleep_ms < 500) sleep_ms = 500;
 
     while (atomic_load(&c->running)) {
-        usleep((useconds_t)sleep_ms * 1000);
-        if (!atomic_load(&c->running)) break;
+        if (!xr_cluster_sleep_interruptible(c, sleep_ms)) break;
 
         xr_cluster_send_heartbeats(c);
         xr_cluster_check_heartbeats(c);
     }
-    return NULL;
+
+    atomic_store(&c->heartbeat_running, false);
 }
 
 /* ========== Accept Loop ==========
@@ -105,11 +200,16 @@ static void cluster_accept_loop(void *arg) {
             /* accept() failure can mean (a) listen fd closed by stop
              * (clean exit) or (b) transient errno=EMFILE / ECONNABORTED.
              * The running flag distinguishes the two — if we are still
-             * running, sleep briefly to avoid spinning on resource
-             * exhaustion then retry. */
+             * running, back off briefly so we do not hotloop on
+             * EMFILE (the kernel keeps POLLIN armed because a socket
+             * is still pending, so a plain retry would spin).
+             *
+             * We yield via xr_cluster_sleep_interruptible instead of
+             * nanosleep so that a concurrent xr_cluster_stop() wakes
+             * us immediately rather than after the full 10ms, and —
+             * more importantly — so we never pin the worker thread. */
             if (!atomic_load(&c->running)) break;
-            struct timespec ts = { .tv_sec = 0, .tv_nsec = 10 * 1000 * 1000 };
-            nanosleep(&ts, NULL);
+            if (!xr_cluster_sleep_interruptible(c, 10)) break;
             continue;
         }
 
@@ -273,12 +373,38 @@ int xr_cluster_start_ex(XrayIsolate *X, const char *name,
     }
 
     atomic_store(&c->running, true);
+
+    /*
+     * Stop-signalling pipe. Failure here is non-fatal — the
+     * interruptible-sleep helper falls back to a sliced nanosleep so
+     * the cluster still functions, just without wake-immediately-on-stop
+     * semantics. We mark the fds -1 so the helper can detect the
+     * degraded mode.
+     */
+    c->stop_pipe[0] = -1;
+    c->stop_pipe[1] = -1;
+    if (pipe(c->stop_pipe) == 0) {
+        fcntl(c->stop_pipe[0], F_SETFL, O_NONBLOCK);
+        fcntl(c->stop_pipe[1], F_SETFL, O_NONBLOCK);
+    } else {
+        c->stop_pipe[0] = c->stop_pipe[1] = -1;
+    }
+
     X->cluster = c;
     xr_cluster_channel_install_hooks(X);
 
-    // Start heartbeat thread
-    if (pthread_create(&c->heartbeat_thread, NULL, cluster_heartbeat_thread, c) == 0) {
-        c->heartbeat_thread_started = true;
+    /*
+     * Spawn the heartbeat coroutine. It drives send_heartbeats +
+     * check_heartbeats and now lives on the normal worker pool
+     * instead of a dedicated pthread — same cadence, same work, but
+     * shares scheduling and liveness tracking with the rest of the
+     * cluster machinery.
+     */
+    XrCoroutine *hb_coro = xr_coro_create_native(X, cluster_heartbeat_coro,
+                                                 c, "cluster_heartbeat");
+    if (hb_coro) {
+        xr_coro_spawn(X, hb_coro);
+        c->heartbeat_coro_spawned = true;
     }
 
     /*
@@ -304,6 +430,19 @@ void xr_cluster_stop(XrCluster *c) {
     atomic_store(&c->running, false);
 
     /*
+     * Close the write end of stop_pipe first. Every coroutine inside
+     * xr_cluster_sleep_interruptible is yielded on a read(2) against
+     * stop_pipe[0]; EOF wakes them immediately regardless of how far
+     * into a deadline they had gotten. We leave the read end open
+     * until after every user has observed EOF so no one hits a
+     * half-closed EBADF race.
+     */
+    if (c->stop_pipe[1] >= 0) {
+        close(c->stop_pipe[1]);
+        c->stop_pipe[1] = -1;
+    }
+
+    /*
      * Close the listen socket early so the accept coroutine wakes up
      * with EBADF on its next accept() and observes running=false at
      * the top of its loop. Doing this before node teardown below
@@ -322,22 +461,34 @@ void xr_cluster_stop(XrCluster *c) {
      * we proceed anyway — the coro checks c->running at the top and
      * we already closed listen_fd, so at worst it observes a stale
      * isolate pointer and a failed accept and bails out.
+     *
+     * We poll with a short nanosleep (not xr_cluster_sleep_interruptible)
+     * because this runs in the embedder thread that called stop(), not
+     * in a coroutine — we cannot yield the scheduler from here.
      */
     if (c->accept_coro_spawned) {
         for (int i = 0; i < 100 && atomic_load(&c->accept_running); i++) {
-            usleep(10 * 1000);
+            struct timespec ts = { .tv_sec = 0, .tv_nsec = 10 * 1000 * 1000 };
+            nanosleep(&ts, NULL);
         }
         c->accept_coro_spawned = false;
     }
 
+    /*
+     * Same bounded wait for the heartbeat coroutine. Its teardown
+     * order matters: send_heartbeats touches c->nodes, so we must let
+     * the coro exit before the nodes_lock / nodes sweep below.
+     */
+    if (c->heartbeat_coro_spawned) {
+        for (int i = 0; i < 100 && atomic_load(&c->heartbeat_running); i++) {
+            struct timespec ts = { .tv_sec = 0, .tv_nsec = 10 * 1000 * 1000 };
+            nanosleep(&ts, NULL);
+        }
+        c->heartbeat_coro_spawned = false;
+    }
+
     // Stop LAN discovery thread (checks c->running)
     xr_cluster_discovery_stop(c);
-
-    // Join heartbeat thread (it checks c->running each iteration)
-    if (c->heartbeat_thread_started) {
-        pthread_join(c->heartbeat_thread, NULL);
-        c->heartbeat_thread_started = false;
-    }
 
     // Uninstall distributed channel hooks (per-isolate)
     xr_cluster_channel_uninstall_hooks(c->isolate);
@@ -429,6 +580,17 @@ void xr_cluster_stop(XrCluster *c) {
 
     // Scrub the shared secret before freeing the struct.
     xr_secure_wipe(c->secret, sizeof(c->secret));
+
+    /*
+     * Close the read end of stop_pipe last — after every user
+     * (heartbeat coro, accept coro, discovery coro, reconnect helper)
+     * has exited. Doing it earlier would risk a use-after-close on a
+     * coroutine that had not yet observed EOF on pipe[1].
+     */
+    if (c->stop_pipe[0] >= 0) {
+        close(c->stop_pipe[0]);
+        c->stop_pipe[0] = -1;
+    }
 
     if (c->isolate) c->isolate->cluster = NULL;
     xr_free(c);

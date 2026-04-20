@@ -150,23 +150,24 @@ static int jittered_backoff_ms(int base_ms) {
 }
 
 /*
- * Sleep in small slices so an xr_cluster_stop() landing during backoff
- * is observed within XR_RECONNECT_SLICE_MS rather than after the full
- * (possibly 30s) delay. Any caller that wants true coroutine-friendly
- * reconnect should issue the retries from a coroutine and yield between
- * attempts; this function is documented as synchronous.
+ * Sleep in a way that yields the coroutine rather than pinning the
+ * worker thread, and that wakes immediately when xr_cluster_stop
+ * closes the cluster's stop_pipe. Behaviour:
+ *   - If called from a coroutine while the cluster is running,
+ *     delegates to xr_cluster_sleep_interruptible which drives a
+ *     read(2) + timer-wheel deadline on stop_pipe[0]. Worker stays
+ *     free to run other coroutines.
+ *   - If stop_pipe was never provisioned (rare — pipe() failure at
+ *     start_ex), falls back to a 100ms nanosleep slice loop inside
+ *     xr_cluster_sleep_interruptible so stop-latency is still
+ *     bounded.
+ *
+ * Callers should treat the function as synchronous to their control
+ * flow (backoff elapsed, now retry); the coroutine-yield behaviour
+ * is an implementation detail.
  */
-#define XR_RECONNECT_SLICE_MS 100
 static void interruptible_sleep_ms(XrCluster *c, int ms) {
-    while (ms > 0 && atomic_load(&c->running)) {
-        int chunk = ms > XR_RECONNECT_SLICE_MS ? XR_RECONNECT_SLICE_MS : ms;
-        struct timespec ts = {
-            .tv_sec  = chunk / 1000,
-            .tv_nsec = (chunk % 1000) * 1000000L
-        };
-        nanosleep(&ts, NULL);
-        ms -= chunk;
-    }
+    (void)xr_cluster_sleep_interruptible(c, ms);
 }
 
 int xr_cluster_reconnect(XrCluster *c, const char *host, uint16_t port,
