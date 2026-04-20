@@ -153,9 +153,35 @@ typedef struct XrCluster {
     // Running state
     _Atomic(bool)     running;
 
-    // Heartbeat thread (drives send_heartbeats + check_heartbeats)
-    pthread_t         heartbeat_thread;
-    bool              heartbeat_thread_started;
+    /*
+     * Stop-signalling pipe for coroutine-friendly interruptible sleep.
+     *
+     * Every long-lived cluster coroutine that needs to poll periodically
+     * (heartbeat, accept retry on EMFILE, reconnect backoff, discovery
+     * tick) uses xr_cluster_sleep_interruptible(c, ms) which reads from
+     * stop_pipe[0] with a read deadline. xr_cluster_stop closes
+     * stop_pipe[1] early, turning every outstanding read into an
+     * immediate EOF so no coroutine is ever stuck in a per-thread
+     * nanosleep/usleep that blocks its worker. Both ends non-blocking.
+     *
+     * Both ends set to -1 when unavailable (pipe() failure during
+     * start_ex); the helper then falls back to a straight nanosleep
+     * so cluster still functions — just not interruptible.
+     */
+    int               stop_pipe[2];
+
+    /*
+     * Heartbeat coroutine — spawned in xr_cluster_start_ex, yields via
+     * xr_cluster_sleep_interruptible between ticks, observes running
+     * (+ EOF on stop_pipe) to exit.
+     *
+     * heartbeat_running is flipped to false by the coroutine on exit so
+     * xr_cluster_stop can wait briefly before freeing the cluster
+     * state the coroutine still references. Lives in the same style as
+     * accept_coro_spawned / accept_running below.
+     */
+    bool              heartbeat_coro_spawned;
+    _Atomic(bool)     heartbeat_running;
 
     /*
      * Inbound-accept coroutine state.
@@ -263,6 +289,32 @@ XR_FUNC void xr_cluster_stop(XrCluster *c);
 
 // Check if cluster is running
 XR_FUNC bool xr_cluster_is_running(XrCluster *c);
+
+/*
+ * Coroutine-friendly interruptible sleep.
+ *
+ * Sleeps for up to `ms` milliseconds or until xr_cluster_stop signals
+ * shutdown. Intended for use inside cluster-owned native coroutines
+ * (heartbeat, accept retry, reconnect backoff, discovery tick) that
+ * need periodic wake-up without blocking the worker thread with
+ * nanosleep/usleep.
+ *
+ * Mechanism: reads from the cluster's stop_pipe[0] with a read
+ * deadline set via xr_socket_set_read_timeout. xr_cluster_stop closes
+ * stop_pipe[1] early so every outstanding read returns EOF
+ * immediately. Each worker's netpoll integration unblocks the
+ * coroutine on deadline even if no data arrives.
+ *
+ * Returns:
+ *   true  — the full `ms` elapsed normally (continue looping)
+ *   false — the cluster was stopped or stop_pipe is unavailable
+ *           (caller should exit its loop)
+ *
+ * Falls back to a plain nanosleep if stop_pipe was never set up
+ * (pipe() failed at start_ex); the cluster is still functional in
+ * that case, just not interruptible on the sleep boundary.
+ */
+XR_FUNC bool xr_cluster_sleep_interruptible(XrCluster *c, int ms);
 
 // Get self node name
 XR_FUNC const char *xr_cluster_self_name(XrCluster *c);
