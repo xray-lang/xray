@@ -81,11 +81,11 @@ XR_FUNC void xr_vm_gc_mark_roots(XrayIsolate *isolate);
 // - No Context abstraction layer needed
 struct XrayIsolate {
     /* ========== Common State ========== */
-    
+
     // Core object system
     XrayCoreClasses *core;             // Core classes (Object, Class, String, etc.)
     XrTypeRegistry *type_registry;     // Type registry for reflection
-    
+
     // Memory management - Per-Coroutine GC
     // - Runtime objects allocated on coroutine-private heap
     // - System objects (coroutines, classes, modules) on system heap
@@ -93,59 +93,59 @@ struct XrayIsolate {
     XrGC gc;                           // GC instance (manages fixedgc list only)
     struct XrSystemHeap *sys_heap;     // System heap (coroutine pool, class Arena)
     XrMemoryTracker *memory_tracker;     // Memory allocation tracker
-    
+
     // Main coroutine (unified GC architecture)
     // - All coroutines (including main) use XrCoroGC + XrCoroHeap
     // - Main coroutine: large heap (4MB), deferred GC (max_gen_gcs=100)
     // - O(1) heap release on program exit
     struct XrCoroutine *main_coro;     // Main coroutine (owns large heap GC)
-    
+
     // Global state
     XrGlobalsTable *globals;           // Dynamic global variables table
     XrGlobalStringPool *global_string_pool;  // Global string pool (read-only)
-    
+
     // Type system
     XrTypeInferContext *type_infer_context;  // Type inference context
     XrTypeTable *type_table;           // Compiler type table
     struct XrTypePool *analyzer_pool;  // Static analyzer type pool (multi-instance safe)
-    
+
     // Symbol system
     XrSymbolTable *symbol_table;       // Per-Isolate symbol table
-    
+
     // Configuration
     XrayIsolateParams params;          // Creation parameters
     XrayConfig *config;                // Global configuration
     void *userdata;                    // User data pointer
     uint32_t init_flags;               // Which subsystems were initialized (XR_INIT_*)
-    
+
     // Global object (simplified: embedded directly in Isolate)
     XrGlobalObject *global_object;     // Global object
-    
+
     // Module system
     XrModuleRegistry *module_registry; // Module registry
     XrModule *current_module;          // Currently loading module (for export collection)
-    
+
     // Storage mode context (for class instance shared)
     uint8_t current_storage_mode;      // 0=normal, 1=shared
-    
+
     // Test mode: suppress [Uncaught Exception] stderr output
     bool suppress_exception_print;
-    
+
     // Current arena for AST allocation (set by parser, NULL = use malloc)
     struct XrArena *current_arena;
-    
+
     // Native type mapping table
     XrClass *native_type_classes[XR_NATIVE_TYPE_MAX];  // GC type ID -> XrClass mapping
-    
+
     // Dynamic native type registry
     void *native_type_registry;        // XrNativeTypeRegistry* for third-party libs
-    
+
     /* ========== VM Engine State ========== */
-    
+
     // VM state uses independent type XrVMState (defined in xr_vm_state.h)
     // Embedded directly in Isolate for zero-overhead access
     XrVMState vm;
-    
+
     /* ========== Unified VM Context (multi-core support) ========== */
     // vm_ctx provides unified execution context access interface
     //
@@ -154,21 +154,42 @@ struct XrayIsolate {
     //
     // run() accesses execution state via vm_ctx for single/multi-thread unification
     XrVMContext vm_ctx;
-    
+
     /* ========== Debug Info (placed after VM to avoid stack pollution) ========== */
-    
+
     // Source code cache (for error display)
     struct XrSourceCache *source_cache;
-    
+
     /* ========== REPL State ========== */
     struct XrReplSymbolTable *repl_symbols;  // persistent symbol table for REPL incremental mode
-    
+
     /* ========== Debug State (DAP integration) ========== */
     void *debug_state;  // XrDebugState* for debugger integration
     void *debug_hooks;  // XrDebugHooks* for VM callback interface
 
     /* ========== Cluster (optional, enabled with XR_HAS_CLUSTER) ========== */
     void *cluster;      // XrCluster* (stdlib/cluster), NULL if not started
+
+    /*
+     * Distributed channel hook vtable. Populated by
+     * xr_cluster_channel_install_hooks when the cluster module starts;
+     * reset to NULL by xr_cluster_channel_uninstall_hooks. Kept as
+     * `void *` so that the core header avoids a dependency on the
+     * coroutine-subsystem struct XrChannelDistHooks — callers cast via
+     * the cluster/coro accessor sites that already pull in
+     * xchannel.h. NULL means "no cluster attached, route through
+     * in-process channels only".
+     */
+    void *channel_dist_hooks;  // XrChannelDistHooks*
+
+    /* ========== stdlib per-isolate cache ========== */
+    // Opaque pointer owned by stdlib/stdlib_cache.h. Holds memoised
+    // values that reference per-isolate symbol IDs (e.g. the XrShape
+    // built once by io.stat() and the interned error-map keys shared by
+    // json/yaml/toml/xml/csv parsers). Kept as `void *` here so stdlib
+    // types don't leak into the core header; cast via the accessor
+    // functions in `stdlib/stdlib_cache.h`.
+    void *stdlib_cache;  // XrStdlibCache* (stdlib/stdlib_cache.h), lazily allocated
 };
 
 /* ========== VM State Access ========== */
