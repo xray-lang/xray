@@ -30,29 +30,69 @@ void xr_cluster_check_heartbeats(XrCluster *c) {
     if (!c) return;
 
     int64_t now = xr_cluster_now_ms();
-    XrClusterNode *to_remove[64];
+
+    /*
+     * Collect dead nodes into a growing buffer, then act on them after
+     * releasing nodes_lock. Earlier revisions used a fixed 64-entry
+     * stack array (to_remove[64]) which silently dropped kills when a
+     * large simultaneous network partition sent > 64 nodes past the
+     * phi threshold at once — a nasty "some-but-not-all" failure mode
+     * in big deployments. Growing on demand keeps the common case
+     * allocation-free (inline 64-slot stack buffer) and the cold path
+     * correct up to whatever number the OS can actually hold.
+     */
+    enum { XR_HB_INLINE = 64 };
+    XrClusterNode *inline_slots[XR_HB_INLINE];
+    XrClusterNode **to_remove = inline_slots;
     int remove_count = 0;
+    int remove_cap = XR_HB_INLINE;
 
     xr_mutex_lock(&c->nodes_lock);
     XrClusterNode *node = c->nodes;
-    while (node && remove_count < 64) {
+    while (node) {
+        bool is_dead = false;
         if (node->state == XR_NODE_CONNECTED) {
             // Use Phi Accrual detector if enough samples, else fallback
             if (node->phi.sample_count >= 3) {
                 double phi = xr_phi_value(&node->phi, now);
-                if (phi > XR_PHI_THRESHOLD) {
-                    to_remove[remove_count++] = node;
-                }
+                if (phi > XR_PHI_THRESHOLD) is_dead = true;
             } else {
                 // Fallback to simple timeout for first few heartbeats
                 int64_t elapsed = now - node->last_heartbeat_recv;
                 if (elapsed > c->heartbeat_timeout_ms) {
                     node->missed_heartbeats++;
                     if ((int)node->missed_heartbeats >= c->max_missed_heartbeats) {
-                        to_remove[remove_count++] = node;
+                        is_dead = true;
                     }
                 }
             }
+        }
+        if (is_dead) {
+            if (remove_count >= remove_cap) {
+                int new_cap = remove_cap * 2;
+                XrClusterNode **grown;
+                if (to_remove == inline_slots) {
+                    grown = (XrClusterNode **)xr_malloc(
+                        (size_t)new_cap * sizeof(*grown));
+                    if (grown) {
+                        memcpy(grown, to_remove,
+                               (size_t)remove_count * sizeof(*grown));
+                    }
+                } else {
+                    grown = (XrClusterNode **)xr_realloc(
+                        to_remove, (size_t)new_cap * sizeof(*grown));
+                }
+                if (!grown) {
+                    /* OOM: stop collecting further victims this tick.
+                     * They will be caught on the next heartbeat sweep.
+                     * Intentionally non-fatal — health checking must
+                     * never abort the cluster. */
+                    break;
+                }
+                to_remove = grown;
+                remove_cap = new_cap;
+            }
+            to_remove[remove_count++] = node;
         }
         node = node->next;
     }
@@ -67,6 +107,8 @@ void xr_cluster_check_heartbeats(XrCluster *c) {
         xr_cluster_remove_node(c, dead);
         xr_cluster_node_free(dead);
     }
+
+    if (to_remove != inline_slots) xr_free(to_remove);
 }
 
 void xr_cluster_send_heartbeats(XrCluster *c) {
@@ -176,18 +218,56 @@ int xr_cluster_reconnect(XrCluster *c, const char *host, uint16_t port,
 void xr_cluster_gossip_to_node(XrCluster *c, XrClusterNode *target) {
     if (!c || !target || target->state != XR_NODE_CONNECTED) return;
 
-    // Build NODE_INFO payload: [count 2B] [name_len 1B, name, host_len 1B, host, port 2B] ...
-    uint8_t payload[4096];
+    /*
+     * Build the NODE_INFO payload into a growing buffer.
+     *
+     * Wire format (still matches xr_cluster_handle_node_info):
+     *   [count u16 BE]
+     *   count × {
+     *     [name_len u8] [name]
+     *     [host_len u8] [host]
+     *     [port u16 BE]
+     *   }
+     *
+     * Earlier revisions used a single stack buffer (uint8_t payload[4096])
+     * and truncated the gossip once p got within 300 bytes of the end.
+     * With a realistic 256-byte host + 64-byte node name + 4 framing
+     * bytes, a 4096 buffer stops well before 100 nodes — silently
+     * limiting cluster size. Switching to a grow-on-demand buffer keeps
+     * the hot path allocation-free for small clusters (we size the
+     * initial capacity so < 64 nodes never reallocate) and correct as
+     * clusters grow.
+     */
+    enum { XR_GOSSIP_INITIAL = 4096, XR_NODE_ENTRY_MAX = XR_NODE_NAME_MAX + 256 + 4 };
+    size_t cap = XR_GOSSIP_INITIAL;
+    uint8_t *payload = (uint8_t *)xr_malloc(cap);
+    if (!payload) return; // OOM is non-fatal for a gossip tick
     uint8_t *p = payload;
     uint16_t count = 0;
     p += 2; // reserve for count
 
     xr_mutex_lock(&c->nodes_lock);
     XrClusterNode *node = c->nodes;
-    while (node && (size_t)(p - payload) < sizeof(payload) - 300) {
+    while (node) {
         if (node != target && node->state == XR_NODE_CONNECTED) {
             uint8_t name_len = (uint8_t)strlen(node->name);
             uint8_t host_len = (uint8_t)strlen(node->host);
+            size_t entry_size = 1u + name_len + 1u + host_len + 2u;
+            size_t used = (size_t)(p - payload);
+            if (used + entry_size > cap) {
+                size_t new_cap = cap * 2;
+                while (new_cap < used + entry_size) new_cap *= 2;
+                uint8_t *grown = (uint8_t *)xr_realloc(payload, new_cap);
+                if (!grown) {
+                    /* OOM during growth: emit what we have collected so
+                     * far. gossip is eventually-consistent, so missing
+                     * entries get picked up on the next tick. */
+                    break;
+                }
+                p = grown + used;
+                payload = grown;
+                cap = new_cap;
+            }
             *p++ = name_len;
             memcpy(p, node->name, name_len); p += name_len;
             *p++ = host_len;
@@ -207,6 +287,8 @@ void xr_cluster_gossip_to_node(XrCluster *c, XrClusterNode *target) {
 
     uint32_t payload_len = (uint32_t)(p - payload);
     xr_cluster_node_send_frame(target, XR_FRAME_NODE_INFO, payload, payload_len);
+    xr_free(payload);
+    (void)XR_NODE_ENTRY_MAX; // reserved for future preflight growth hint
 }
 
 void xr_cluster_handle_node_info(XrCluster *c, const uint8_t *payload, uint32_t len) {

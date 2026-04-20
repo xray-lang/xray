@@ -176,8 +176,9 @@ static int build_cluster_tls(XrCluster *c, const XrClusterTlsOptions *opts) {
     c->tls_client_ctx = client_ctx;
 
     // Server context is optional: only builds when cert+key supplied.
-    // When absent, the (dormant) accept path should refuse TLS traffic
-    // rather than silently accept plaintext.
+    // When absent, cluster_accept_loop refuses inbound TLS traffic outright
+    // rather than silently downgrading to plaintext (see the
+    // `tls_enabled && !tls_server_ctx` branch in cluster_accept_loop).
     if (opts->cert_file && opts->key_file) {
         XrTlsContext *server_ctx =
             xr_tls_context_new_server(opts->cert_file, opts->key_file);
