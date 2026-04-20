@@ -25,7 +25,7 @@
 
 #include <stdint.h>
 #include <stdbool.h>
-#include <pthread.h>
+#include <stdatomic.h>
 #include "../../src/base/xdefs.h"
 
 // Multicast defaults
@@ -40,13 +40,21 @@ struct XrCluster;
 
 // Discovery state
 typedef struct XrClusterDiscovery {
-    int               mcast_fd; // multicast UDP socket
-    uint16_t          mcast_port; // multicast port (default 47200)
-    int               interval_ms; // announce interval
-    pthread_t         thread;
-    bool              thread_started;
+    int               mcast_fd;     // multicast UDP socket (non-blocking)
+    uint16_t          mcast_port;   // multicast port (default 47200)
+    int               interval_ms;  // announce interval
     struct XrCluster *cluster;
     uint64_t          cluster_hash; // hash of secret for filtering
+    /*
+     * Discovery runs as a native coroutine on the main worker pool.
+     * coro_spawned is set in xr_cluster_discovery_start after
+     * xr_coro_spawn succeeds; coro_exited is flipped by the coro
+     * itself as its last statement so xr_cluster_discovery_stop can
+     * spin-wait for clean teardown before closing mcast_fd (whose
+     * PollDesc the coro may still hold via netpoll).
+     */
+    bool              coro_spawned;
+    _Atomic(bool)     coro_exited;
 } XrClusterDiscovery;
 
 /*

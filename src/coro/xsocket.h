@@ -66,6 +66,23 @@ XR_FUNC void xr_socket_set_read_timeout(struct XrayIsolate *X, int fd, int timeo
 // Set write timeout (milliseconds, 0 = no timeout)
 XR_FUNC void xr_socket_set_write_timeout(struct XrayIsolate *X, int fd, int timeout_ms);
 
+/*
+ * Wait until fd is readable or the deadline fires, without consuming
+ * any bytes. Intended for datagram sockets (UDP, raw) where an
+ * xr_socket_read into a small buffer would truncate the datagram per
+ * POSIX recv semantics. Also useful when a caller wants to peek at
+ * fd state before deciding which read buffer size to allocate.
+ *
+ * timeout_ms > 0 arms a deadline via the timer wheel. timeout_ms == 0
+ * waits indefinitely until readable (not recommended).
+ *
+ * Returns:
+ *   > 0 — fd is readable (caller should recvfrom / read as needed)
+ *     0 — deadline fired without data
+ *   < 0 — error (e.g. fd closed during wait, netpoll registration failure)
+ */
+XR_FUNC int xr_socket_wait_readable(struct XrayIsolate *X, int fd, int timeout_ms);
+
 // ========== Utility Functions ==========
 
 // Set socket to non-blocking mode

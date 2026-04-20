@@ -24,6 +24,7 @@
 #include "cluster_discovery.h"
 #include "cluster.h"
 #include "cluster_node.h"
+#include "../net/io.h"
 #include "../../src/base/xhash.h"
 
 #include <stdlib.h>
@@ -35,7 +36,22 @@
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #include <fcntl.h>
-#include <poll.h>
+
+/*
+ * Forward-declare the two xsocket entry points we need. We cannot
+ * include src/coro/xsocket.h here because its include chain pulls in
+ * include/xray_platform.h whose `static inline void xr_random_bytes`
+ * clashes with stdlib/crypto/crypto.h's non-static declaration (same
+ * collision that forced the workaround in cluster.c and
+ * cluster_node.c). Link-time checks enforce signature agreement
+ * against xsocket.c's canonical definitions.
+ */
+extern int xr_socket_wait_readable(struct XrayIsolate *X, int fd, int timeout_ms);
+
+// xr_coro_create_native is not declared in any public header
+extern struct XrCoroutine *xr_coro_create_native(struct XrayIsolate *X, void (*func)(void*), void *arg,
+                                                  const char *name);
+extern void xr_coro_spawn(struct XrayIsolate *X, struct XrCoroutine *coro);
 
 /* ========== Announce Packet ========== */
 
@@ -180,9 +196,38 @@ static bool should_connect(XrCluster *c, const char *name) {
     return true;
 }
 
-static void *discovery_thread_func(void *arg) {
+/*
+ * Native coroutine body — one tick = send an announce, then drain any
+ * announces that arrive during the interval window.
+ *
+ * Flow of each tick:
+ *   1. sendto() on the non-blocking mcast_fd (datagram; success here
+ *      just means "enqueued to kernel"). Errors are ignored because
+ *      LAN discovery is best-effort and a failed send just retries
+ *      on the next tick.
+ *   2. xr_socket_wait_readable yields the coroutine until either
+ *      mcast_fd becomes POLLIN-ready or the interval_ms deadline
+ *      fires. The worker thread is free to run other coroutines
+ *      during the wait — unlike the original pthread which blocked in
+ *      poll().
+ *   3. On readable, recvfrom() drains every pending datagram in a
+ *      non-blocking loop. Using xr_socket_wait_readable (which does
+ *      not consume bytes) instead of xr_socket_read preserves the
+ *      full UDP datagram — an xr_socket_read with a 1-byte buffer
+ *      would truncate the datagram and drop 99 bytes of announce
+ *      payload per POSIX recv semantics.
+ *
+ * Exit contract: disc->coro_exited is flipped true as the last
+ * statement so xr_cluster_discovery_stop can spin-wait for clean
+ * teardown before closing mcast_fd (whose PollDesc the coro still
+ * holds via netpoll until exit).
+ */
+static void discovery_coro(void *arg) {
     XrClusterDiscovery *disc = (XrClusterDiscovery *)arg;
+    if (!disc) return;
     XrCluster *c = disc->cluster;
+
+    xr_io_set_isolate(c->isolate);
 
     struct sockaddr_in mcast_addr;
     memset(&mcast_addr, 0, sizeof(mcast_addr));
@@ -194,61 +239,101 @@ static void *discovery_thread_func(void *arg) {
     int announce_len = build_announce(announce_buf, sizeof(announce_buf),
                                       c->self_name, c->listen_port,
                                       disc->cluster_hash);
-    if (announce_len < 0) return NULL;
-
-    struct pollfd pfd;
-    pfd.fd = disc->mcast_fd;
-    pfd.events = POLLIN;
+    if (announce_len < 0) {
+        atomic_store(&disc->coro_exited, true);
+        return;
+    }
 
     while (atomic_load(&c->running)) {
-        // Send announce
-        sendto(disc->mcast_fd, announce_buf, (size_t)announce_len, 0,
-               (struct sockaddr *)&mcast_addr, sizeof(mcast_addr));
+        // Send announce (best-effort; kernel-enqueue failures ignored).
+        (void)sendto(disc->mcast_fd, announce_buf, (size_t)announce_len, 0,
+                     (struct sockaddr *)&mcast_addr, sizeof(mcast_addr));
 
-        // Poll for incoming announces (up to interval_ms)
+        /*
+         * Wait for announces up to interval_ms, yielding via netpoll.
+         * On POLLIN we drain every queued datagram with recvfrom
+         * (EAGAIN means the socket is dry; we go back to waiting for
+         * the remainder of the interval).
+         *
+         * Each individual wait is capped at SLICE_MS so the coro
+         * observes c->running=false (set by xr_cluster_stop) within a
+         * bounded latency. Without this cap, a ~3 s interval would
+         * delay clean cluster shutdown by up to a full interval.
+         */
+        const int SLICE_MS = 500;
         int remaining_ms = disc->interval_ms;
         while (remaining_ms > 0 && atomic_load(&c->running)) {
-            int poll_ms = remaining_ms > 500 ? 500 : remaining_ms;
-            int ret = poll(&pfd, 1, poll_ms);
-            remaining_ms -= poll_ms;
+            int wait_ms = remaining_ms < SLICE_MS ? remaining_ms : SLICE_MS;
 
-            if (ret <= 0) continue;
-            if (!(pfd.revents & POLLIN)) continue;
+            int64_t t0_ns = 0;
+            {
+                struct timespec ts;
+                clock_gettime(CLOCK_MONOTONIC, &ts);
+                t0_ns = (int64_t)ts.tv_sec * 1000000000LL + ts.tv_nsec;
+            }
 
-            // Read incoming announce
-            uint8_t recv_buf[ANNOUNCE_MAX_SIZE];
-            struct sockaddr_in sender;
-            socklen_t sender_len = sizeof(sender);
-            ssize_t n = recvfrom(disc->mcast_fd, recv_buf, sizeof(recv_buf), 0,
-                                 (struct sockaddr *)&sender, &sender_len);
-            if (n <= 0) continue;
+            int r = xr_socket_wait_readable(c->isolate, disc->mcast_fd,
+                                            wait_ms);
 
-            char peer_name[XR_NODE_NAME_MAX + 1];
-            uint16_t peer_port;
-            uint64_t peer_hash;
+            // Deduct the elapsed portion of the deadline so partial
+            // wakes (early POLLIN) do not inflate total wait time.
+            {
+                struct timespec ts;
+                clock_gettime(CLOCK_MONOTONIC, &ts);
+                int64_t t1_ns = (int64_t)ts.tv_sec * 1000000000LL + ts.tv_nsec;
+                int elapsed_ms = (int)((t1_ns - t0_ns) / 1000000LL);
+                if (elapsed_ms < 0) elapsed_ms = 0;
+                remaining_ms -= elapsed_ms;
+            }
 
-            if (parse_announce(recv_buf, (size_t)n,
-                               peer_name, sizeof(peer_name),
-                               &peer_port, &peer_hash) != 0) {
+            if (r < 0) {
+                // Error — most likely fd closed during stop. Break the
+                // inner loop; the outer running check will bail out.
+                break;
+            }
+            if (r == 0) {
+                // Slice deadline fired with no data. Fall through to
+                // the top of the inner while to check running flag
+                // and remaining budget — do NOT break, we may still
+                // have interval_ms left to spend.
                 continue;
             }
 
-            // Filter: must be same cluster (same secret hash)
-            if (peer_hash != disc->cluster_hash) continue;
+            // POLLIN: drain every queued datagram non-blockingly.
+            for (;;) {
+                uint8_t recv_buf[ANNOUNCE_MAX_SIZE];
+                struct sockaddr_in sender;
+                socklen_t sender_len = sizeof(sender);
+                ssize_t n = recvfrom(disc->mcast_fd, recv_buf,
+                                     sizeof(recv_buf), 0,
+                                     (struct sockaddr *)&sender, &sender_len);
+                if (n <= 0) break;
 
-            // Check if we should connect
-            if (!should_connect(c, peer_name)) continue;
+                char peer_name[XR_NODE_NAME_MAX + 1];
+                uint16_t peer_port;
+                uint64_t peer_hash;
+                if (parse_announce(recv_buf, (size_t)n,
+                                   peer_name, sizeof(peer_name),
+                                   &peer_port, &peer_hash) != 0) {
+                    continue;
+                }
 
-            // Resolve sender IP to string for join
-            char host[INET_ADDRSTRLEN];
-            inet_ntop(AF_INET, &sender.sin_addr, host, sizeof(host));
+                // Filter: must be same cluster (same secret hash).
+                if (peer_hash != disc->cluster_hash) continue;
 
-            // Auto-join (TCP connect + handshake)
-            xr_cluster_join(c, host, peer_port);
+                if (!should_connect(c, peer_name)) continue;
+
+                // Resolve sender IP → dotted-quad for xr_cluster_join.
+                char host[INET_ADDRSTRLEN];
+                inet_ntop(AF_INET, &sender.sin_addr, host, sizeof(host));
+
+                // Auto-join (TCP connect + handshake).
+                xr_cluster_join(c, host, peer_port);
+            }
         }
     }
 
-    return NULL;
+    atomic_store(&disc->coro_exited, true);
 }
 
 /* ========== Public API ========== */
@@ -278,15 +363,24 @@ int xr_cluster_discovery_start(XrCluster *c) {
     }
 
     c->discovery = disc;
+    atomic_store(&disc->coro_exited, false);
 
-    // Spawn discovery thread
-    if (pthread_create(&disc->thread, NULL, discovery_thread_func, disc) != 0) {
+    /*
+     * Spawn discovery as a native coroutine on the worker pool, not a
+     * dedicated pthread. Benefits match the heartbeat refactor in
+     * Phase 6b.1: no private scheduling, no thread-block on poll(),
+     * one isolate stop_pipe to wake every background task.
+     */
+    XrCoroutine *coro = xr_coro_create_native(c->isolate, discovery_coro,
+                                              disc, "cluster_discovery");
+    if (!coro) {
         close(disc->mcast_fd);
         c->discovery = NULL;
         xr_free(disc);
         return -1;
     }
-    disc->thread_started = true;
+    xr_coro_spawn(c->isolate, coro);
+    disc->coro_spawned = true;
 
     return 0;
 }
@@ -296,10 +390,21 @@ void xr_cluster_discovery_stop(XrCluster *c) {
 
     XrClusterDiscovery *disc = c->discovery;
 
-    // Thread exits when c->running becomes false (set by xr_cluster_stop)
-    if (disc->thread_started) {
-        pthread_join(disc->thread, NULL);
-        disc->thread_started = false;
+    /*
+     * Spin-wait (bounded 1s) for the discovery coroutine to flip
+     * coro_exited before closing mcast_fd. Closing the fd while the
+     * coro is yielded inside xr_socket_wait_readable would dangle a
+     * PollDesc entry in netpoll — the coro's blocked state references
+     * mcast_fd's pd. 100 × 10ms = 1s is ample headroom for the
+     * interval tick (3s) to observe c->running=false via the
+     * per-inner-loop check.
+     */
+    if (disc->coro_spawned) {
+        for (int i = 0; i < 100 && !atomic_load(&disc->coro_exited); i++) {
+            struct timespec ts = { .tv_sec = 0, .tv_nsec = 10 * 1000 * 1000 };
+            nanosleep(&ts, NULL);
+        }
+        disc->coro_spawned = false;
     }
 
     if (disc->mcast_fd >= 0) {
