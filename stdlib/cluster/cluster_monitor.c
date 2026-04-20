@@ -31,6 +31,37 @@ extern struct XrCoroutine *xr_coro_create_native(struct XrayIsolate *X, void (*f
 
 /* ========== Node Monitor (CSP-style) ========== */
 
+/*
+ * Register a node-down monitor and return the notification channel.
+ *
+ * Delivery policy — AT-MOST-ONCE (buffered(8), drop on overflow):
+ *
+ *   - The returned channel has a fixed capacity of 8. Each
+ *     xr_cluster_fire_monitors invocation pushes ONE message (the
+ *     dead node's name) via try_send. If the channel is full at
+ *     that instant, the notification is DROPPED silently.
+ *
+ *   - This matters under "flap" scenarios: if the same peer goes
+ *     down, reconnects, and dies again 9+ times before the script
+ *     drained the channel, the 10th death event is lost. In
+ *     practice applications drain the channel in a tight loop from
+ *     a dedicated supervisor coroutine, so the window for overflow
+ *     is narrow and losing "yet another" identical notification is
+ *     acceptable.
+ *
+ *   - Applications that cannot tolerate drops should EITHER
+ *     (a) drain the channel synchronously inside their supervisor
+ *     loop so the buffer never fills, OR
+ *     (b) combine the monitor with cluster_info() so the current
+ *     dead set can be queried on each notification and any missed
+ *     deaths are recovered.
+ *
+ * Capacity 8 was chosen to be large enough that a supervisor
+ * running at normal scheduling cadence never loses notifications,
+ * while small enough that a wedged supervisor cannot accumulate
+ * unbounded memory. Callers that need a larger buffer can subscribe
+ * to cluster_info() metrics instead.
+ */
 XrChannel *xr_cluster_monitor_node(XrayIsolate *X, const char *node_name) {
     XrCluster *c = (XrCluster *)X->cluster;
     if (!c || !node_name) return NULL;
@@ -41,7 +72,8 @@ XrChannel *xr_cluster_monitor_node(XrayIsolate *X, const char *node_name) {
     strncpy(m->node_name, node_name, XR_NODE_NAME_MAX);
     m->node_name[XR_NODE_NAME_MAX] = '\0';
 
-    // Buffered(8) channel for notifications
+    // Buffered(8) channel for notifications — see comment above for
+    // the drop-on-overflow policy rationale.
     XrChannel *ch = xr_channel_new(X, 8);
     if (!ch) {
         xr_free(m);

@@ -261,6 +261,25 @@ void xr_cluster_channel_uninstall_hooks(XrayIsolate *X) {
 
 /* ========== Incoming Frame Handlers ========== */
 
+/*
+ * Deliver a remotely-sent value into an Owner channel's local buffer.
+ *
+ * Return codes map 1:1 to distinct failure modes so the proxy path
+ * on the sending node can bubble a useful error to script code:
+ *
+ *   0              — enqueued successfully
+ *  -1 (NO_CHANNEL) — no matching owner registration (lookup failure)
+ *  -1 (DECODE)     — decode_value failed (bad wire frame)
+ *   1 (FULL)       — channel buffer at capacity; the sender's
+ *                    chan.send() should surface this as "buffer full"
+ *                    rather than "closed". The proxy side reads this
+ *                    and can (a) retry with backpressure, (b) fail
+ *                    loudly, or (c) map to a distinct XR_CHAN_FULL
+ *                    script-level code.
+ *
+ * Callers that only care about success/failure can keep treating
+ * any non-zero return as an error.
+ */
 int xr_cluster_channel_handle_send(XrCluster *c, const char *channel_name,
                                     const uint8_t *value_data, uint32_t value_len) {
     if (!c) return -1;
@@ -273,10 +292,15 @@ int xr_cluster_channel_handle_send(XrCluster *c, const char *channel_name,
     if (xr_cluster_decode_value(c->isolate, value_data, value_len, &value) != 0)
         return -1;
 
-    // Write directly into the Owner channel's local buffer
+    // Write directly into the Owner channel's local buffer.
+    // try_send failure here specifically means "buffer full" — the
+    // channel is alive (we just looked it up) and xr_channel_try_send
+    // does not fail for any other reason on a live channel. We
+    // return +1 (not -1) so the caller can distinguish this from the
+    // "unknown channel / decode error" cases above.
     XrChannel *ch = dc->channel;
     if (!xr_channel_try_send(ch, value)) {
-        return -1;
+        return 1;
     }
 
     // After writing to Owner buffer, push to subscribers if any
@@ -289,6 +313,29 @@ int xr_cluster_channel_handle_send(XrCluster *c, const char *channel_name,
 
 /* ========== Push Model (for Proxy Channel select support) ========== */
 
+/*
+ * Push-to-subscribers delivery policy — AT-MOST-ONCE.
+ *
+ * This function pops one value from the Owner channel's local buffer
+ * and forwards it to one round-robin-selected subscriber node. If
+ * serialization fails mid-way, the value is DROPPED with no retry
+ * and no indication to the original sender. This matches the
+ * distributed-channel semantics documented in cluster.xr and is
+ * consistent with Erlang / Go / NATS core pub-sub:
+ *
+ *   - A successful chan.send() on the sender means the owner's
+ *     local buffer accepted the value — NOT that any subscriber
+ *     received it.
+ *
+ *   - Subscriber-fanout failures (serialization OOM, transient
+ *     network drop, subscriber dead) are silent. Script code that
+ *     needs at-least-once semantics must layer its own ack on top
+ *     (e.g. a response channel or a per-message sequence number).
+ *
+ * Callers that want to detect dropped pushes should monitor the
+ * cluster_info() metrics counters (frames_sent vs subscriber count)
+ * rather than the chan.send() return value.
+ */
 void xr_cluster_channel_push_to_subscribers(XrCluster *c, const char *name) {
     if (!c || !name) return;
 
@@ -306,7 +353,9 @@ void xr_cluster_channel_push_to_subscribers(XrCluster *c, const char *name) {
     xr_serial_buf_init(&sbuf);
     if (xr_cluster_encode(c->isolate, val, &sbuf) != 0) {
         xr_serial_buf_free(&sbuf);
-        // Put back? No — at-most-once semantics, data is lost
+        // Drop per at-most-once policy documented above — no retry,
+        // no error surface. Callers that need at-least-once must
+        // add their own ack / reply channel.
         return;
     }
 

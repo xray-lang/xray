@@ -14,6 +14,26 @@
  *   The trie stores subs at the node for their final segment; wildcard
  *   children handle "*" (single segment) and a per-node gt_subs list
  *   handles ">" (remaining segments).
+ *
+ * WILDCARD SEMANTICS (match NATS exactly):
+ *
+ *   "*"  — matches EXACTLY ONE segment.
+ *            "events.*"   matches "events.user", "events.click"
+ *            "events.*"   does NOT match "events" (too few segments)
+ *            "events.*"   does NOT match "events.user.login" (too many)
+ *
+ *   ">"  — matches ONE OR MORE remaining segments (trailing only).
+ *            "events.>"   matches "events.user", "events.user.login"
+ *            "events.>"   does NOT match "events" (requires >= 1 more
+ *                         segment — this is the subtle rule that
+ *                         surprises users familiar with MQTT's "#"
+ *                         wildcard, which matches zero-or-more)
+ *
+ *   Mixed wildcards in one pattern are legal; ">" must be the final
+ *   token (the parser rejects patterns where ">" is not last).
+ *
+ *   Segment separator is '.'. Empty segments ("a..b") are accepted by
+ *   the parser but unlikely to match real topics; avoid them.
  */
 
 #include "cluster.h"
