@@ -146,9 +146,28 @@ typedef struct XrClusterNode {
     int               pending_count;
     XrMutex        pending_lock;
 
+    /*
+     * Isolate pointer — set when the node is attached to a cluster
+     * (xr_cluster_node_start_writer, xr_cluster_node_start_reader). The
+     * writer coroutine needs it to drive xr_socket_read on the
+     * notify_pipe so it can suspend via netpoll instead of pinning a
+     * worker in a raw read(2). NULL until writer start-up; never
+     * re-bound thereafter.
+     */
+    struct XrayIsolate *isolate;
+
     // Output queue (async writes via dedicated writer coroutine)
     XrOutputQueue    outq;
     _Atomic(bool)    writer_running;  // writer loop control
+    /*
+     * Flipped true by the writer coroutine as its very last action
+     * before returning, so xr_cluster_node_free can spin-wait until
+     * the writer has stopped dereferencing node->outq before calling
+     * xr_outq_destroy (which closes the read end of notify_pipe, a
+     * fd the writer may still have registered with netpoll). Starts
+     * false for fresh nodes and for nodes whose writer never spawned.
+     */
+    _Atomic(bool)    writer_exited;
     _Atomic(bool)    reader_running;  // frame-processing reader loop control
 
     // Metrics
@@ -234,6 +253,16 @@ XR_FUNC void xr_cluster_node_start_reader(struct XrCluster *cluster,
 
 XR_FUNC void xr_outq_init(XrOutputQueue *q);
 XR_FUNC void xr_outq_destroy(XrOutputQueue *q);
+
+/*
+ * Close only the write end of the notify pipe so a writer
+ * coroutine yielded on xr_socket_read(notify_pipe[0]) observes EOF
+ * and exits cleanly. Must be paired with xr_outq_destroy (which
+ * closes the read end) in the teardown sequence; called from
+ * xr_cluster_node_free before the writer-drain wait.
+ */
+XR_FUNC void xr_outq_close_write_end(XrOutputQueue *q);
+
 XR_FUNC int  xr_outq_push(XrOutputQueue *q, const uint8_t *data, uint32_t len);
 XR_FUNC int  xr_outq_push_nocopy(XrOutputQueue *q, uint8_t *data, uint32_t len);
 XR_FUNC XrOutFrame *xr_outq_pop(XrOutputQueue *q);
