@@ -980,7 +980,13 @@ XrWsError xr_ws_connect(XrWebSocket *ws) {
         xr_io_set_isolate(ws->isolate);
     }
 
-    // DNS resolution (with cache, IPv4/IPv6 dual-stack)
+    // DNS resolution (with cache, IPv4/IPv6 dual-stack).
+    // NOTE: xr_dns_resolve is still synchronous — it calls getaddrinfo
+    // which blocks the worker thread until the resolver returns.
+    // Async DNS would need a resolver pool or c-ares integration and
+    // is tracked as a separate item; WS and cluster share the same
+    // getaddrinfo dependency today so improving here would be a net
+    // improvement only when the full resolver path is revamped.
     XrSockAddr resolved_addr;
     if (!xr_dns_resolve(ws->host, &resolved_addr, XR_AF_UNSPEC)) {
         err = WS_ERR_DNS;
@@ -1005,6 +1011,34 @@ XrWsError xr_ws_connect(XrWebSocket *ws) {
     setsockopt(ws->fd, SOL_SOCKET, SO_NOSIGPIPE, &flag, sizeof(flag));
 #endif
 
+    /*
+     * Make the socket non-blocking BEFORE connect(). The old code
+     * called connect() blocking and only set O_NONBLOCK after the
+     * WS handshake finished (see the post-handshake fcntl below),
+     * which meant every WS client connect pinned the worker thread
+     * for the full TCP handshake + connect_timeout_ms — a problem
+     * under high concurrency or unreachable hosts.
+     *
+     * The new flow:
+     *   1. O_NONBLOCK on the fd.
+     *   2. connect() returns -1 with EINPROGRESS for the common case
+     *      (remote handshake in flight) or 0 on instant success
+     *      (loopback, already-established).
+     *   3. When EINPROGRESS, we yield via xr_socket_wait_writable —
+     *      the coroutine suspends, the worker picks up other work,
+     *      and netpoll wakes us when the socket is writable or the
+     *      connect_timeout_ms deadline fires.
+     *   4. Readable-via-SO_ERROR check distinguishes genuine
+     *      success from an async connect failure (ECONNREFUSED,
+     *      EHOSTUNREACH, etc.).
+     */
+    {
+        int nb_flags = fcntl(ws->fd, F_GETFL, 0);
+        if (nb_flags >= 0) {
+            (void)fcntl(ws->fd, F_SETFL, nb_flags | O_NONBLOCK);
+        }
+    }
+
     // Connect
     struct sockaddr *sa;
     socklen_t sa_len;
@@ -1018,9 +1052,53 @@ XrWsError xr_ws_connect(XrWebSocket *ws) {
         sa_len = sizeof(struct sockaddr_in6);
     }
 
-    if (connect(ws->fd, sa, sa_len) < 0) {
+    int cret = connect(ws->fd, sa, sa_len);
+    if (cret < 0 && errno != EINPROGRESS) {
+        // Immediate failure (e.g. ECONNREFUSED on loopback). No point
+        // yielding — report and bail.
         err = WS_ERR_CONNECT;
         goto fail_cleanup;
+    }
+
+    if (cret < 0) {
+        /*
+         * EINPROGRESS path: yield until socket is writable or we hit
+         * the per-config connect_timeout_ms. Falls back to a plain
+         * blocking wait only if no isolate was bound — in practice
+         * ws_binding always binds the isolate right after xr_ws_new.
+         */
+        int connect_timeout = ws->config.connect_timeout_ms > 0
+                                ? ws->config.connect_timeout_ms
+                                : 10000; // match cluster default
+
+        if (ws->isolate) {
+            int wr = xr_socket_wait_writable(ws->isolate, ws->fd, connect_timeout);
+            if (wr <= 0) {
+                // 0 = deadline fired; < 0 = netpoll / fd error.
+                err = (wr == 0) ? WS_ERR_TIMEOUT : WS_ERR_CONNECT;
+                goto fail_cleanup;
+            }
+        } else {
+            // No scheduler bound — degrade to a single poll() slice so
+            // we at least honour the timeout. This path exists only
+            // for legacy callers that forget to call xr_ws_set_isolate.
+            struct pollfd pfd = { .fd = ws->fd, .events = POLLOUT };
+            int pr = poll(&pfd, 1, connect_timeout);
+            if (pr <= 0) {
+                err = (pr == 0) ? WS_ERR_TIMEOUT : WS_ERR_CONNECT;
+                goto fail_cleanup;
+            }
+        }
+
+        // The socket became writable — pull SO_ERROR to distinguish
+        // async-success from async-failure (peer RST after SYN etc.).
+        int so_error = 0;
+        socklen_t so_len = sizeof(so_error);
+        if (getsockopt(ws->fd, SOL_SOCKET, SO_ERROR,
+                       &so_error, &so_len) < 0 || so_error != 0) {
+            err = WS_ERR_CONNECT;
+            goto fail_cleanup;
+        }
     }
 
     // Establish TLS connection if wss://
@@ -1148,9 +1226,18 @@ XrWsError xr_ws_connect(XrWebSocket *ws) {
         }
     }
 
-    // Set socket non-blocking for coroutine-aware I/O
+    /*
+     * Re-assert O_NONBLOCK defensively. The socket was already set
+     * non-blocking before the TCP connect() in the updated client
+     * flow (see the pre-connect fcntl block above), so this is
+     * normally a no-op. Kept in place because some TLS client
+     * libraries (rare) temporarily toggle the flag during their
+     * own SSL_connect plumbing; re-arming here guarantees the
+     * post-handshake read/write paths consistently yield via
+     * netpoll instead of blocking the worker thread.
+     */
     int flags = fcntl(ws->fd, F_GETFL, 0);
-    if (flags >= 0) {
+    if (flags >= 0 && !(flags & O_NONBLOCK)) {
         fcntl(ws->fd, F_SETFL, flags | O_NONBLOCK);
     }
 
