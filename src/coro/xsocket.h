@@ -83,6 +83,24 @@ XR_FUNC void xr_socket_set_write_timeout(struct XrayIsolate *X, int fd, int time
  */
 XR_FUNC int xr_socket_wait_readable(struct XrayIsolate *X, int fd, int timeout_ms);
 
+/*
+ * Wait until fd is writable or the deadline fires, without writing
+ * any bytes. Symmetric counterpart to xr_socket_wait_readable — uses
+ * the same netpoll + timer-wheel primitives with XR_POLL_WRITE.
+ *
+ * Primary use case: coroutine-friendly non-blocking TCP connect.
+ * After an EINPROGRESS connect(), a writable event on the socket
+ * signals the connection has either succeeded (check SO_ERROR == 0)
+ * or failed with a specific errno. Same pattern is used inside
+ * stdlib/net/io.c's xr_io_connect for the cluster path.
+ *
+ * Return codes mirror the reader variant:
+ *   > 0 — fd is writable (caller should check SO_ERROR / proceed)
+ *     0 — deadline fired
+ *   < 0 — error (fd closed during wait, netpoll registration failed)
+ */
+XR_FUNC int xr_socket_wait_writable(struct XrayIsolate *X, int fd, int timeout_ms);
+
 // ========== Utility Functions ==========
 
 // Set socket to non-blocking mode

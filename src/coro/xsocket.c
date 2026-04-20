@@ -360,6 +360,44 @@ int xr_socket_wait_readable(XrayIsolate *X, int fd, int timeout_ms) {
     return ready ? 1 : 0;
 }
 
+/*
+ * Write-side counterpart to xr_socket_wait_readable. Implementation
+ * is literally identical except for XR_POLL_READ → XR_POLL_WRITE —
+ * netpoll stores rseq/wseq deadlines independently, so the write
+ * deadline arm/clear does not disturb any concurrent read wait on
+ * the same fd.
+ */
+int xr_socket_wait_writable(XrayIsolate *X, int fd, int timeout_ms) {
+    if (!X || fd < 0) return -1;
+
+    XrRuntime *runtime = (XrRuntime *)X->vm.runtime;
+    if (!runtime) return -1;
+
+    XrPollDesc *pd = xr_netpoll_open(&runtime->netpoll, fd);
+    if (!pd) return -1;
+
+    if (timeout_ms > 0) {
+        struct timespec ts;
+        clock_gettime(CLOCK_MONOTONIC, &ts);
+        int64_t deadline = (int64_t)ts.tv_sec * 1000000000LL + ts.tv_nsec
+                         + (int64_t)timeout_ms * 1000000LL;
+        XrTimerWheel *tw = NULL;
+        XrWorker *worker = xr_current_worker();
+        if (worker) tw = worker->p.timer_wheel;
+        xr_netpoll_set_deadline(&runtime->netpoll, pd, deadline,
+                                XR_POLL_WRITE, tw);
+    }
+
+    bool ready = xr_netpoll_block(pd, XR_POLL_WRITE, X);
+
+    if (timeout_ms > 0) {
+        xr_netpoll_set_deadline(&runtime->netpoll, pd, 0,
+                                XR_POLL_WRITE, NULL);
+    }
+
+    return ready ? 1 : 0;
+}
+
 // Set write timeout
 void xr_socket_set_write_timeout(XrayIsolate *X, int fd, int timeout_ms) {
     if (!X || fd < 0) return;
