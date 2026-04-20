@@ -1415,6 +1415,27 @@ XrWsError xr_ws_pong(XrWebSocket *ws, const void *data, size_t len) {
     return ret < 0 ? WS_ERR_SEND : WS_OK;
 }
 
+/*
+ * Blocking-style recv wrapper around xr_ws_recv_try. Originally this
+ * looped poll(POLLIN, 100ms) until a full frame was assembled — that
+ * pinned the worker thread for the whole wait window and, worse, the
+ * 100ms cap made it behave like a busy poll when data arrived right
+ * after the timeout fired.
+ *
+ * The new body yields via xr_socket_wait_readable when an isolate is
+ * bound (the common case — every binding and upgrade path calls
+ * xr_ws_set_isolate), so the worker is free to run other coroutines
+ * until POLLIN or the slice deadline fires. The slice is kept at
+ * 100ms so callers still see bounded latency if application-level
+ * state changes (e.g. ws->state being flipped by a concurrent
+ * xr_ws_close) need to be observed.
+ *
+ * Legacy callers that never bound an isolate fall back to the
+ * original poll() slice so behaviour is preserved — only the
+ * coroutine-bound path gets the win. xr_ws_recv is deprecated in
+ * favour of the yieldable xr_ws_recv_try + scheduler-level retry,
+ * but remains wired for C-only consumers.
+ */
 XrWsMessage* xr_ws_recv(XrWebSocket *ws) {
     if (!ws || ws->state != WS_STATE_OPEN) return NULL;
 
@@ -1425,15 +1446,25 @@ XrWsMessage* xr_ws_recv(XrWebSocket *ws) {
         if (msg) return msg;
         if (ws->state != WS_STATE_OPEN) return NULL;
 
-        if (need_more) {
-            // Wait for data with poll
+        if (!need_more) continue;
+
+        if (ws->isolate) {
+            int wr = xr_socket_wait_readable(ws->isolate, ws->fd, 100);
+            if (wr < 0) {
+                // fd closed or netpoll error — treat as abnormal close.
+                xr_ws_close(ws, WS_CLOSE_ABNORMAL, NULL);
+                return NULL;
+            }
+            // wr == 0 (slice timeout) or wr > 0 (POLLIN) both fall
+            // through to the next xr_ws_recv_try iteration.
+        } else {
+            // Legacy non-coroutine path: keep the original poll slice.
             struct pollfd pfd = { .fd = ws->fd, .events = POLLIN };
             int ret = poll(&pfd, 1, 100);  // 100ms timeout
             if (ret < 0 && errno != EINTR) {
                 xr_ws_close(ws, WS_CLOSE_ABNORMAL, NULL);
                 return NULL;
             }
-            // Continue loop to retry
         }
     }
 }

@@ -19,6 +19,31 @@
  *
  *   cluster_hash = FNV-1a 64-bit of the shared secret, used to filter
  *   announces from different clusters without revealing the secret.
+ *
+ * BYTE-ORDER NOTE — DELIBERATELY LITTLE-ENDIAN.
+ *
+ * The cluster handshake / data protocol in cluster_proto.c uses
+ * big-endian (network byte order) per the usual TCP convention.
+ * Discovery announces are *intentionally* little-endian because:
+ *
+ *   1. LAN discovery runs only on IPv4/IPv6 multicast within a
+ *      single broadcast domain — there is no cross-WAN interop
+ *      requirement, so "network byte order" brings no portability
+ *      benefit.
+ *
+ *   2. Every platform we ship on (x86, x86_64, ARM64 little-endian
+ *      mode) is LE natively, so `memcpy(&u32, buf, 4)` is a single
+ *      aligned load. Big-endian would add htonl/ntohl overhead on
+ *      the hot send/parse path for zero gain.
+ *
+ *   3. Announces never leave the LAN: the IP_MULTICAST_TTL is
+ *      hard-coded to 1 (see create_mcast_socket below), so an
+ *      announce cannot reach a BE-only box over the wire.
+ *
+ * Do NOT "fix" this by switching to BE — the codebase is
+ * consistent in documenting LE here so new developers can grep for
+ * the rationale. Future protocol additions to this datagram should
+ * stay LE for the same reasons.
  */
 
 #include "cluster_discovery.h"
