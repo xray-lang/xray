@@ -18,23 +18,21 @@
  */
 
 #include "url.h"
-#include "../../src/runtime/value/xvalue.h"
-#include "../../src/runtime/object/xstring.h"
+#include "../common.h"
+#include "../ctxbuf.h"
 #include "../../src/runtime/object/xjson.h"
 #include "../../src/runtime/object/xmap.h"
 #include "../../src/coro/xcoroutine.h"
 #include "../../src/runtime/xisolate_internal.h"
 #include "../../src/runtime/symbol/xsymbol_table.h"
 #include "../../src/base/xmalloc.h"
+#include "../../src/base/xchecks.h"
 #include <string.h>
 #include <stdio.h>
-#include <ctype.h>
 #include <stdarg.h>
 
 /* ========== External Declarations ========== */
 
-extern XrCFunction* xr_vm_cfunction_new(XrayIsolate *isolate, XrCFunctionPtr func, const char *name);
-extern XrValue xr_value_from_cfunction(XrCFunction *cfunc);
 extern struct XrCoroutine* xr_current_coro(XrayIsolate *X);
 
 /* ========== Helpers ========== */
@@ -48,8 +46,14 @@ static int hex_digit(char c) {
     return -1;
 }
 
+// RFC 3986: unreserved = ALPHA / DIGIT / '-' / '.' / '_' / '~'
+// isalnum() is locale-sensitive (Turkish 'I' bug, etc.), so we test the
+// ASCII ranges explicitly.
 static inline bool is_unreserved(unsigned char c) {
-    return isalnum(c) || c == '-' || c == '_' || c == '.' || c == '~';
+    return (c >= 'A' && c <= 'Z') ||
+           (c >= 'a' && c <= 'z') ||
+           (c >= '0' && c <= '9') ||
+           c == '-' || c == '_' || c == '.' || c == '~';
 }
 
 static XrValue make_str(XrayIsolate *X, const char *s, size_t len) {
@@ -62,15 +66,12 @@ static XrValue make_cstr(XrayIsolate *X, const char *s) {
     return xr_string_value(xr_string_intern(X, s, strlen(s), 0));
 }
 
-// Safe snprintf wrapper: clamps n to buf_size
-static int safe_append(char *buf, size_t buf_size, int n, const char *fmt, ...) {
-    if ((size_t)n >= buf_size) return n;
-    va_list ap;
-    va_start(ap, fmt);
-    int written = vsnprintf(buf + n, buf_size - n, fmt, ap);
-    va_end(ap);
-    if (written < 0) return n;
-    return n + written;
+// Finalize an XrCtxBuf into a pooled XrValue and release the buffer. Used
+// as a single exit step from the url_* binding helpers.
+static XrValue ctxbuf_to_value(XrayIsolate *X, XrCtxBuf *b) {
+    XrValue v = make_str(X, b->data ? b->data : "", (int)b->len);
+    xr_ctxbuf_free(b);
+    return v;
 }
 
 /* ========== RFC 3986 Encoding/Decoding ========== */
@@ -357,10 +358,28 @@ static XrValue url_parse_fn(XrayIsolate *X, XrValue *args, int nargs) {
         parts.hostname ? make_str(X, parts.hostname, parts.hostname_len)
                        : make_cstr(X, ""));
 
-    // port: "8080" or ""
-    xr_json_set_by_key(X, json, "port",
-        parts.port ? make_str(X, parts.port, parts.port_len)
-                   : make_cstr(X, ""));
+    // port: "8080" or "". The parser accepts any byte sequence between the
+    // hostname colon and the path separator, so validate that the captured
+    // substring is a decimal number in the IANA-legal range [0, 65535].
+    // Anything else is surfaced as an empty port, mirroring how browsers
+    // treat "http://host:abc/" (the colon is ignored).
+    bool port_is_valid = false;
+    if (parts.port && parts.port_len > 0 && parts.port_len <= 5) {
+        uint32_t port_val = 0;
+        port_is_valid = true;
+        for (size_t i = 0; i < parts.port_len; i++) {
+            char c = parts.port[i];
+            if (c < '0' || c > '9') { port_is_valid = false; break; }
+            port_val = port_val * 10 + (uint32_t)(c - '0');
+        }
+        if (port_is_valid && port_val > 65535) port_is_valid = false;
+    }
+    if (port_is_valid) {
+        xr_json_set_by_key(X, json, "port",
+            make_str(X, parts.port, parts.port_len));
+    } else {
+        xr_json_set_by_key(X, json, "port", make_cstr(X, ""));
+    }
 
     // pathname: "/path/to/page" or "/"
     if (parts.pathname && parts.pathname_len > 0) {
@@ -389,35 +408,31 @@ static XrValue url_parse_fn(XrayIsolate *X, XrValue *args, int nargs) {
                        : make_cstr(X, ""));
 
     // Derived: host = hostname[:port]
-    char host_buf[512];
-    int host_len;
+    XrCtxBuf host_buf; xr_ctxbuf_init(&host_buf, 64);
     if (parts.port && parts.port_len > 0) {
-        host_len = snprintf(host_buf, sizeof(host_buf), "%.*s:%.*s",
+        xr_ctxbuf_appendf(&host_buf, "%.*s:%.*s",
             (int)parts.hostname_len, parts.hostname ? parts.hostname : "",
             (int)parts.port_len, parts.port);
     } else {
-        host_len = snprintf(host_buf, sizeof(host_buf), "%.*s",
+        xr_ctxbuf_appendf(&host_buf, "%.*s",
             (int)parts.hostname_len, parts.hostname ? parts.hostname : "");
     }
-    if (host_len < 0) host_len = 0;
-    if (host_len >= (int)sizeof(host_buf)) host_len = sizeof(host_buf) - 1;
-    xr_json_set_by_key(X, json, "host", make_str(X, host_buf, host_len));
+    xr_json_set_by_key(X, json, "host", make_str(X, host_buf.data, (int)host_buf.len));
 
     // Derived: origin = protocol + "//" + host
-    char origin_buf[1024];
-    int origin_len = 0;
+    XrCtxBuf origin_buf; xr_ctxbuf_init(&origin_buf, 64);
     if (parts.protocol && parts.protocol_len > 0) {
-        origin_len = snprintf(origin_buf, sizeof(origin_buf), "%.*s//%.*s",
+        xr_ctxbuf_appendf(&origin_buf, "%.*s//%.*s",
             (int)parts.protocol_len, parts.protocol,
-            host_len, host_buf);
+            (int)host_buf.len, host_buf.data ? host_buf.data : "");
     } else {
-        origin_len = snprintf(origin_buf, sizeof(origin_buf), "%.*s",
-            host_len, host_buf);
+        xr_ctxbuf_appendf(&origin_buf, "%.*s",
+            (int)host_buf.len, host_buf.data ? host_buf.data : "");
     }
-    if (origin_len < 0) origin_len = 0;
-    if (origin_len >= (int)sizeof(origin_buf)) origin_len = sizeof(origin_buf) - 1;
-    xr_json_set_by_key(X, json, "origin", make_str(X, origin_buf, origin_len));
+    xr_json_set_by_key(X, json, "origin", make_str(X, origin_buf.data, (int)origin_buf.len));
 
+    xr_ctxbuf_free(&host_buf);
+    xr_ctxbuf_free(&origin_buf);
     return xr_json_value(json);
 }
 
@@ -434,49 +449,48 @@ static XrValue url_format_fn(XrayIsolate *X, XrValue *args, int nargs) {
     XrValue username = xr_json_get_by_key(X, json, "username");
     XrValue password = xr_json_get_by_key(X, json, "password");
 
-    char buf[4096];
-    int n = 0;
+    XrCtxBuf buf; xr_ctxbuf_init(&buf, 128);
 
     // protocol
     if (XR_IS_STRING(protocol) && XR_TO_STRING(protocol)->length > 0) {
-        n = safe_append(buf, sizeof(buf), n, "%s//", XR_TO_STRING(protocol)->data);
+        xr_ctxbuf_appendf(&buf, "%s//", XR_TO_STRING(protocol)->data);
     }
 
     // userinfo
     if (XR_IS_STRING(username) && XR_TO_STRING(username)->length > 0) {
-        n = safe_append(buf, sizeof(buf), n, "%s", XR_TO_STRING(username)->data);
+        xr_ctxbuf_append_cstr(&buf, XR_TO_STRING(username)->data);
         if (XR_IS_STRING(password) && XR_TO_STRING(password)->length > 0) {
-            n = safe_append(buf, sizeof(buf), n, ":%s", XR_TO_STRING(password)->data);
+            xr_ctxbuf_appendf(&buf, ":%s", XR_TO_STRING(password)->data);
         }
-        n = safe_append(buf, sizeof(buf), n, "@");
+        xr_ctxbuf_putc(&buf, '@');
     }
 
     // hostname
     if (XR_IS_STRING(hostname) && XR_TO_STRING(hostname)->length > 0) {
-        n = safe_append(buf, sizeof(buf), n, "%s", XR_TO_STRING(hostname)->data);
+        xr_ctxbuf_append_cstr(&buf, XR_TO_STRING(hostname)->data);
     }
 
     // port
     if (XR_IS_STRING(port) && XR_TO_STRING(port)->length > 0) {
-        n = safe_append(buf, sizeof(buf), n, ":%s", XR_TO_STRING(port)->data);
+        xr_ctxbuf_appendf(&buf, ":%s", XR_TO_STRING(port)->data);
     }
 
     // pathname
     if (XR_IS_STRING(pathname) && XR_TO_STRING(pathname)->length > 0) {
-        n = safe_append(buf, sizeof(buf), n, "%s", XR_TO_STRING(pathname)->data);
+        xr_ctxbuf_append_cstr(&buf, XR_TO_STRING(pathname)->data);
     }
 
     // search
     if (XR_IS_STRING(search) && XR_TO_STRING(search)->length > 0) {
-        n = safe_append(buf, sizeof(buf), n, "%s", XR_TO_STRING(search)->data);
+        xr_ctxbuf_append_cstr(&buf, XR_TO_STRING(search)->data);
     }
 
     // hash
     if (XR_IS_STRING(hash) && XR_TO_STRING(hash)->length > 0) {
-        n = safe_append(buf, sizeof(buf), n, "%s", XR_TO_STRING(hash)->data);
+        xr_ctxbuf_append_cstr(&buf, XR_TO_STRING(hash)->data);
     }
 
-    return make_str(X, buf, n);
+    return ctxbuf_to_value(X, &buf);
 }
 
 static XrValue url_parse_query_fn(XrayIsolate *X, XrValue *args, int nargs) {
@@ -523,25 +537,36 @@ static XrValue url_parse_query_fn(XrayIsolate *X, XrValue *args, int nargs) {
         }
 
         if (key_len > 0) {
-            // Decode key
+            // Decode key. Almost all query-string keys fit comfortably in a
+            // small stack buffer; only fall back to xr_malloc for oversize
+            // keys, and abort loudly on OOM so the caller does not silently
+            // receive a partial map. (Previously the entry was dropped.)
             int dk = xr_url_decode_form(key_start, key_len, dec_buf, len + 1);
-            char *key_copy = xr_malloc(dk + 1);
-            if (key_copy) {
+            char key_small[256];
+            char *key_copy = NULL;
+            bool key_heap = false;
+            if (dk + 1 <= (int)sizeof(key_small)) {
+                memcpy(key_small, dec_buf, dk);
+                key_small[dk] = '\0';
+                key_copy = key_small;
+            } else {
+                key_copy = xr_malloc((size_t)dk + 1);
+                XR_CHECK(key_copy != NULL, "url.parseQuery: OOM allocating key buffer");
                 memcpy(key_copy, dec_buf, dk);
                 key_copy[dk] = '\0';
-
-                // Decode value
-                XrValue val;
-                if (val_start) {
-                    int dv = xr_url_decode_form(val_start, val_len, dec_buf, len + 1);
-                    val = make_str(X, dec_buf, dv);
-                } else {
-                    val = make_cstr(X, "");
-                }
-
-                xr_json_set_by_key(X, json, key_copy, val);
-                xr_free(key_copy);
+                key_heap = true;
             }
+
+            XrValue val;
+            if (val_start) {
+                int dv = xr_url_decode_form(val_start, val_len, dec_buf, len + 1);
+                val = make_str(X, dec_buf, dv);
+            } else {
+                val = make_cstr(X, "");
+            }
+
+            xr_json_set_by_key(X, json, key_copy, val);
+            if (key_heap) xr_free(key_copy);
         }
 
         p = amp ? amp + 1 : end;
@@ -549,6 +574,17 @@ static XrValue url_parse_query_fn(XrayIsolate *X, XrValue *args, int nargs) {
 
     xr_free(dec_buf);
     return xr_json_value(json);
+}
+
+// Percent-encode `src` into `buf`, growing it as needed. The worst-case
+// expansion for form-encoding is 3x (each byte becomes "%HH") so the
+// reservation headroom below is exact.
+static void ctxbuf_append_url_form(XrCtxBuf *buf, const char *src, size_t src_len) {
+    if (src_len == 0) return;
+    xr_ctxbuf_reserve(buf, src_len * 3);
+    int written = xr_url_encode_form(src, src_len, buf->data + buf->len, buf->cap - buf->len);
+    if (written > 0) buf->len += (size_t)written;
+    buf->data[buf->len] = '\0';
 }
 
 static XrValue url_build_query_fn(XrayIsolate *X, XrValue *args, int nargs) {
@@ -559,30 +595,27 @@ static XrValue url_build_query_fn(XrayIsolate *X, XrValue *args, int nargs) {
     if (!shape || shape->field_count == 0) return make_cstr(X, "");
 
     XrSymbolTable *st = X->symbol_table;
-    char buf[4096];
-    int n = 0;
-    char enc_buf[1024];
+    XrCtxBuf buf; xr_ctxbuf_init(&buf, 128);
 
     for (uint16_t i = 0; i < shape->field_count; i++) {
         const char *key_name = xr_symbol_get_name_in_table(st, shape->field_symbols[i]);
         if (!key_name) continue;
 
-        if (n > 0 && (size_t)n < sizeof(buf)) buf[n++] = '&';
+        if (buf.len > 0) xr_ctxbuf_putc(&buf, '&');
 
-        int ek = xr_url_encode_form(key_name, strlen(key_name), enc_buf, sizeof(enc_buf));
-        n = safe_append(buf, sizeof(buf), n, "%.*s", ek, enc_buf);
+        ctxbuf_append_url_form(&buf, key_name, strlen(key_name));
 
         XrValue val = xr_json_get_field_any(json, i);
         if (XR_IS_STRING(val)) {
             XrString *vs = XR_TO_STRING(val);
-            int ev = xr_url_encode_form(XR_STRING_CHARS(vs), vs->length, enc_buf, sizeof(enc_buf));
-            n = safe_append(buf, sizeof(buf), n, "=%.*s", ev, enc_buf);
+            xr_ctxbuf_putc(&buf, '=');
+            ctxbuf_append_url_form(&buf, XR_STRING_CHARS(vs), vs->length);
         } else if (!XR_IS_NULL(val)) {
-            n = safe_append(buf, sizeof(buf), n, "=");
+            xr_ctxbuf_putc(&buf, '=');
         }
     }
 
-    return make_str(X, buf, n);
+    return ctxbuf_to_value(X, &buf);
 }
 
 // RFC 3986 §5.2.4: Remove dot segments from path in-place
@@ -591,7 +624,7 @@ static int remove_dot_segments(char *path, int len) {
     char *out = path;
     char *in = path;
     char *end = path + len;
-    
+
     while (in < end) {
         // A: ../  or  ./
         if (in + 3 <= end && in[0] == '.' && in[1] == '.' && in[2] == '/') {
@@ -633,99 +666,127 @@ static int remove_dot_segments(char *path, int len) {
     return (int)(out - path);
 }
 
+// Emit `scheme://authority` prefix from the parsed base URL into `out`.
+// Used to share the header-construction logic across every branch of the
+// RFC 3986 §5.3 reference-resolution algorithm implemented below.
+static void url_emit_base_authority(XrCtxBuf *out, const UrlParts *bp) {
+    if (bp->protocol && bp->protocol_len > 0) {
+        xr_ctxbuf_appendf(out, "%.*s//", (int)bp->protocol_len, bp->protocol);
+    }
+    if (bp->hostname && bp->hostname_len > 0) {
+        xr_ctxbuf_append(out, bp->hostname, bp->hostname_len);
+    }
+    if (bp->port && bp->port_len > 0) {
+        xr_ctxbuf_appendf(out, ":%.*s", (int)bp->port_len, bp->port);
+    }
+}
+
+// Faithful implementation of RFC 3986 §5.3 "Reference Resolution". Handles
+// the reference-transforming rules from §5.2.2 including fragment-only
+// references, empty paths, and the query-retention corner cases that the
+// previous ad-hoc implementation silently mishandled.
 static XrValue url_resolve_fn(XrayIsolate *X, XrValue *args, int nargs) {
     if (nargs < 2 || !XR_IS_STRING(args[0]) || !XR_IS_STRING(args[1]))
         return XR_NULL_VAL;
 
     XrString *base_str = XR_TO_STRING(args[0]);
-    XrString *rel_str = XR_TO_STRING(args[1]);
+    XrString *rel_str  = XR_TO_STRING(args[1]);
     const char *base = XR_STRING_CHARS(base_str);
-    const char *rel = XR_STRING_CHARS(rel_str);
-    size_t rel_len = rel_str->length;
+    const char *rel  = XR_STRING_CHARS(rel_str);
+    size_t rel_len   = rel_str->length;
 
-    // If relative is absolute URL (has scheme), return as-is
+    // If the reference already has a scheme (scheme://...), it is treated
+    // as an absolute URI per §5.2.2 step 1 and returned unchanged.
     const char *colon = memchr(rel, ':', rel_len);
     if (colon && colon + 2 < rel + rel_len && colon[1] == '/' && colon[2] == '/') {
         return args[1];
     }
 
-    // Parse base URL
     UrlParts bp;
     url_parse_internal(base, base_str->length, &bp);
 
-    char result[4096];
-    int n = 0;
+    // Split the reference into path / ?query / #fragment segments so each
+    // component can be assembled independently.
+    const char *rel_hash = memchr(rel, '#', rel_len);
+    size_t rel_hash_len  = rel_hash ? (size_t)((rel + rel_len) - rel_hash) : 0;
+    size_t rel_no_hash_len = rel_hash ? (size_t)(rel_hash - rel) : rel_len;
 
-    if (rel_len > 0 && rel[0] == '/') {
-        // Protocol-relative or absolute path
-        if (rel_len > 1 && rel[1] == '/') {
-            // Protocol-relative: //host/path
-            if (bp.protocol && bp.protocol_len > 0) {
-                n = safe_append(result, sizeof(result), n, "%.*s%.*s",
-                    (int)bp.protocol_len, bp.protocol,
-                    (int)rel_len, rel);
-            } else {
-                return args[1];
-            }
-        } else {
-            // Absolute path: /path
-            if (bp.protocol && bp.protocol_len > 0) {
-                n = safe_append(result, sizeof(result), n, "%.*s//",
-                    (int)bp.protocol_len, bp.protocol);
-            }
-            if (bp.hostname && bp.hostname_len > 0) {
-                n = safe_append(result, sizeof(result), n, "%.*s",
-                    (int)bp.hostname_len, bp.hostname);
-            }
-            if (bp.port && bp.port_len > 0) {
-                n = safe_append(result, sizeof(result), n, ":%.*s",
-                    (int)bp.port_len, bp.port);
-            }
-            n = safe_append(result, sizeof(result), n, "%.*s", (int)rel_len, rel);
-        }
-    } else {
-        // Relative path: merge with base
+    const char *rel_query = memchr(rel, '?', rel_no_hash_len);
+    size_t rel_query_len = 0;
+    size_t rel_path_len  = rel_no_hash_len;
+    if (rel_query) {
+        rel_query_len = (size_t)((rel + rel_no_hash_len) - rel_query);
+        rel_path_len  = (size_t)(rel_query - rel);
+    }
+
+    XrCtxBuf result; xr_ctxbuf_init(&result, 128);
+
+    if (rel_len > 1 && rel[0] == '/' && rel[1] == '/') {
+        // Network-path reference: "//host/...": keep base scheme only.
         if (bp.protocol && bp.protocol_len > 0) {
-            n = safe_append(result, sizeof(result), n, "%.*s//",
-                (int)bp.protocol_len, bp.protocol);
+            xr_ctxbuf_appendf(&result, "%.*s", (int)bp.protocol_len, bp.protocol);
         }
-        if (bp.hostname && bp.hostname_len > 0) {
-            n = safe_append(result, sizeof(result), n, "%.*s",
-                (int)bp.hostname_len, bp.hostname);
-        }
-        if (bp.port && bp.port_len > 0) {
-            n = safe_append(result, sizeof(result), n, ":%.*s",
-                (int)bp.port_len, bp.port);
-        }
-
-        // Find last '/' in base pathname
+        xr_ctxbuf_append(&result, rel, rel_len);
+    } else if (rel_path_len > 0 && rel[0] == '/') {
+        // Absolute-path reference: keep base authority, take reference path.
+        url_emit_base_authority(&result, &bp);
+        xr_ctxbuf_append(&result, rel, rel_path_len);
+        if (rel_query)    xr_ctxbuf_append(&result, rel_query, rel_query_len);
+        if (rel_hash)     xr_ctxbuf_append(&result, rel_hash,  rel_hash_len);
+    } else if (rel_path_len == 0) {
+        // Empty-path reference (query-only and/or fragment-only).
+        url_emit_base_authority(&result, &bp);
         if (bp.pathname && bp.pathname_len > 0) {
+            xr_ctxbuf_append(&result, bp.pathname, bp.pathname_len);
+        }
+        if (rel_query) {
+            xr_ctxbuf_append(&result, rel_query, rel_query_len);
+        } else if (bp.search && bp.search_len > 0) {
+            // Preserve base query when the reference has none. (§5.2.2: if
+            // reference.query is defined, use it; otherwise use base.query.)
+            xr_ctxbuf_append(&result, bp.search, bp.search_len);
+        }
+        if (rel_hash) xr_ctxbuf_append(&result, rel_hash, rel_hash_len);
+    } else {
+        // Relative-path reference: merge base path with reference path.
+        url_emit_base_authority(&result, &bp);
+
+        size_t merge_prefix = 0;
+        if (bp.pathname && bp.pathname_len > 0) {
+            // Merge rule from §5.2.3: retain everything in base.path up to
+            // and including the last '/'. If base has no path separators
+            // we start from scratch with a single leading '/'.
             const char *last_slash = NULL;
             for (size_t i = bp.pathname_len; i > 0; i--) {
                 if (bp.pathname[i - 1] == '/') { last_slash = &bp.pathname[i - 1]; break; }
             }
             if (last_slash) {
-                n = safe_append(result, sizeof(result), n, "%.*s/",
-                    (int)(last_slash - bp.pathname), bp.pathname);
+                merge_prefix = (size_t)(last_slash - bp.pathname + 1);
+                xr_ctxbuf_append(&result, bp.pathname, merge_prefix);
             } else {
-                n = safe_append(result, sizeof(result), n, "/");
+                xr_ctxbuf_putc(&result, '/');
             }
         } else {
-            n = safe_append(result, sizeof(result), n, "/");
+            xr_ctxbuf_putc(&result, '/');
         }
-        n = safe_append(result, sizeof(result), n, "%.*s", (int)rel_len, rel);
+        (void)merge_prefix;
+        xr_ctxbuf_append(&result, rel, rel_path_len);
+        if (rel_query) xr_ctxbuf_append(&result, rel_query, rel_query_len);
+        if (rel_hash)  xr_ctxbuf_append(&result, rel_hash,  rel_hash_len);
     }
 
-    // Apply remove_dot_segments to the path portion of result
-    n = remove_dot_segments(result, n);
-    return make_str(X, result, n);
+    // Apply remove_dot_segments to the path portion of the resolved URI.
+    // The helper works in-place and never grows, so operating directly on
+    // the buffer storage is safe.
+    int new_len = remove_dot_segments(result.data, (int)result.len);
+    result.len = (size_t)(new_len > 0 ? new_len : 0);
+    return ctxbuf_to_value(X, &result);
 }
 
 static XrValue url_join_fn(XrayIsolate *X, XrValue *args, int nargs) {
     if (nargs < 1) return make_cstr(X, "");
 
-    char buf[4096];
-    int n = 0;
+    XrCtxBuf buf; xr_ctxbuf_init(&buf, 128);
 
     for (int i = 0; i < nargs; i++) {
         if (!XR_IS_STRING(args[i])) continue;
@@ -735,17 +796,18 @@ static XrValue url_join_fn(XrayIsolate *X, XrValue *args, int nargs) {
         if (seg_len == 0) continue;
 
         // Remove trailing slash from current result
-        if (n > 0 && buf[n - 1] == '/') n--;
+        if (buf.len > 0 && buf.data[buf.len - 1] == '/') buf.len--;
 
         // Add separator if needed
-        if (n > 0 && seg[0] != '/') {
-            n = safe_append(buf, sizeof(buf), n, "/");
+        if (buf.len > 0 && seg[0] != '/') {
+            xr_ctxbuf_putc(&buf, '/');
         }
 
-        n = safe_append(buf, sizeof(buf), n, "%.*s", (int)seg_len, seg);
+        xr_ctxbuf_append(&buf, seg, seg_len);
     }
 
-    return make_str(X, buf, n);
+    if (buf.data) buf.data[buf.len] = '\0';
+    return ctxbuf_to_value(X, &buf);
 }
 
 /* ========== Type Declarations (parsed by gen_stdlib_types.py) ========== */
@@ -767,23 +829,23 @@ XR_DEFINE_BUILTIN(url_join_fn, "join", "(...parts: string): string", "Join URL p
 
 /* ========== Module Registration ========== */
 
-static void register_fn(XrayIsolate *X, XrModule *mod, XrCFunctionPtr func, const char *name) {
-    XrCFunction *fn = xr_vm_cfunction_new(X, func, name);
-    xr_module_add_export(X, mod, name, xr_value_from_cfunction(fn));
-}
-
 XrModule* xr_load_module_url(XrayIsolate *X) {
+    XR_DCHECK(X != NULL, "xr_load_module_url: NULL isolate");
+
     XrModule *mod = xr_module_create_native(X, "url");
-    register_fn(X, mod, url_encode_fn,       "encode");
-    register_fn(X, mod, url_decode_fn,       "decode");
-    register_fn(X, mod, url_encode_form_fn,  "encodeForm");
-    register_fn(X, mod, url_decode_form_fn,  "decodeForm");
-    register_fn(X, mod, url_parse_fn,        "parse");
-    register_fn(X, mod, url_format_fn,       "format");
-    register_fn(X, mod, url_parse_query_fn,  "parseQuery");
-    register_fn(X, mod, url_build_query_fn,  "buildQuery");
-    register_fn(X, mod, url_resolve_fn,      "resolve");
-    register_fn(X, mod, url_join_fn,         "join");
+    if (!mod) return NULL;
+
+    XRS_EXPORT(mod, X, "encode",     url_encode_fn);
+    XRS_EXPORT(mod, X, "decode",     url_decode_fn);
+    XRS_EXPORT(mod, X, "encodeForm", url_encode_form_fn);
+    XRS_EXPORT(mod, X, "decodeForm", url_decode_form_fn);
+    XRS_EXPORT(mod, X, "parse",      url_parse_fn);
+    XRS_EXPORT(mod, X, "format",     url_format_fn);
+    XRS_EXPORT(mod, X, "parseQuery", url_parse_query_fn);
+    XRS_EXPORT(mod, X, "buildQuery", url_build_query_fn);
+    XRS_EXPORT(mod, X, "resolve",    url_resolve_fn);
+    XRS_EXPORT(mod, X, "join",       url_join_fn);
+
     mod->loaded = true;
     return mod;
 }

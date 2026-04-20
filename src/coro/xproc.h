@@ -33,12 +33,31 @@
 #include "xmpsc_queue.h"
 #include "xcoroutine.h"
 #include "xnetpoll.h" // XrLocalPoll
+#include "../base/xplatform.h" // XR_CACHE_LINE
 
 // Forward declarations
 struct XrMachine;
 struct XrTimerWheel;
 struct XrRuntime;
 struct XrCStackPool;
+
+/* ========== Per-P Statistics (cache-line aligned) ========== */
+
+// XrProcStats — owner-written per-Worker counters, aggregated by
+// xr_runtime_print_stats and coro leak detection.
+//
+// Alignment: the whole sub-struct lives on its own cache line(s) inside
+// XrProc so that owner-only writes to these counters never dirty lines
+// shared with lifo_slot / runq / cont_deque that other workers may be
+// concurrently reading during work-stealing.
+typedef struct XrProcStats {
+    uint64_t executed_count;       // Coros the owner has dispatched
+    uint64_t stolen_count;         // Coros the owner has stolen from peers
+    uint64_t yielded_count;        // Voluntary yields
+    uint64_t cont_steal_count;     // Continuations stolen (owner as stealer)
+    uint64_t completed_count;      // Coros that finished (replaces global)
+    uint64_t spawned_count;        // Coros spawned by this worker
+} XrProcStats __attribute__((aligned(XR_CACHE_LINE)));
 
 /* ========== Run Queue (Chase-Lev deque + overflow) ========== */
 
@@ -135,7 +154,7 @@ typedef struct XrProc {
 
     /* === Deferred Free Queue (MPSC Treiber stack for cross-worker PollDesc) === */
     _Atomic(void *) deferred_free_head;
-    
+
     /* === Handoff Signaling === */
     _Atomic bool handoff_exit;     // Signal handoff M to release P
 
@@ -148,17 +167,24 @@ typedef struct XrProc {
 
     /* === Adaptive Poll Skip (I/O load feedback) === */
     uint32_t io_poll_ewma;         // EWMA of I/O event frequency (0-256 fixed-point, 256=always busy)
-    
+
     /* === Per-Worker Active Coro Counter (replaces global atomic active_coros) === */
     int local_active_coros;
 
-    /* === Statistics === */
-    uint64_t executed_count;
-    uint64_t stolen_count;
-    uint64_t yielded_count;
-    uint64_t cont_steal_count;     // Continuations stolen by other workers
-    uint64_t completed_count;      // Per-Worker completed coros (avoids global atomic)
-    uint64_t spawned_count;        // Per-Worker spawned coros (avoids global atomic)
+    /* === Statistics (cache-line isolated) ===
+     *
+     * Phase 4.4: all owner-written counters are grouped into XrProcStats
+     * and aligned to XR_CACHE_LINE. This moves them onto dedicated cache
+     * lines away from hot per-P scheduler fields (lifo_slot / runq) and
+     * the potentially cross-worker-written cont_deque, eliminating a
+     * subtle false-sharing source observed at high steal rates.
+     *
+     * All fields are written by the owner only. Stats aggregation
+     * (xr_runtime_print_stats etc.) reads across workers; reads may see
+     * a torn 64-bit value on some ABIs but that is acceptable because
+     * stats are best-effort display-only.
+     */
+    XrProcStats stats;
     uint32_t rng_state;
 
     /* === Per-Worker JIT Scratch Space ===

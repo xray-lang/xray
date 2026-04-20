@@ -979,8 +979,7 @@ static XrValue json_is_valid(XrayIsolate *X, XrValue *args, int argc) {
         if (XR_IS_BOOL(args[1])) {
             strict = XR_TO_BOOL(args[1]);
         } else if (xr_value_is_json(args[1])) {
-            XrValue sv = xr_json_get_by_key(X, xr_value_to_json(args[1]), "strict");
-            if (XR_IS_BOOL(sv)) strict = XR_TO_BOOL(sv);
+            xrs_cfg_get_bool(X, xr_value_to_json(args[1]), "strict", &strict);
         }
     }
 

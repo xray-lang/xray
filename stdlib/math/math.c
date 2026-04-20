@@ -13,21 +13,51 @@
  */
 
 #include "math.h"
+#include "../common.h"
 #include <math.h>
-#include <stdlib.h>
 #include <stdint.h>
 #include <stdbool.h>
 #include <float.h>
 #include "../../include/xray_platform.h"
+#include "../../src/base/xchecks.h"
+
+// Portability: MSVC/<math.h> does not define M_PI/M_E unless _USE_MATH_DEFINES
+// is set at the translation-unit level. Provide the standard constants here
+// so this file compiles cleanly on every supported toolchain.
+#ifndef M_PI
+#define M_PI    3.14159265358979323846
+#endif
+#ifndef M_E
+#define M_E     2.71828182845904523536
+#endif
+#ifndef M_LN2
+#define M_LN2   0.69314718055994530942
+#endif
+#ifndef M_LN10
+#define M_LN10  2.30258509299404568402
+#endif
+#ifndef M_LOG2E
+#define M_LOG2E 1.44269504088896340736
+#endif
+#ifndef M_LOG10E
+#define M_LOG10E 0.43429448190325182765
+#endif
+#ifndef M_SQRT2
+#define M_SQRT2 1.41421356237309504880
+#endif
 
 // Safe range for double-to-int64 cast: [INT64_MIN, INT64_MAX]
 #define DOUBLE_FITS_INT64(d) \
     ((d) >= (double)INT64_MIN && (d) < (double)INT64_MAX + 1.0)
 
+// Return a NaN for non-numeric inputs instead of silently clamping to 0.
+// `math.sqrt("foo")` previously produced `sqrt(0) == 0`, which hid bugs at
+// the call site. NaN propagation makes the failure observable and matches
+// the standard IEEE-754 contract.
 static double get_number(XrValue v) {
     if (XR_IS_INT(v)) return (double)XR_TO_INT(v);
     if (XR_IS_FLOAT(v)) return XR_TO_FLOAT(v);
-    return 0.0;
+    return NAN;
 }
 
 /* ========== Basic Math ========== */
@@ -432,59 +462,49 @@ XR_DEFINE_BUILTIN(math_isFinite, "isFinite", "(x: float): bool", "Check if finit
 /* ========== Module Loading ========== */
 
 XrModule* xr_load_module_math(XrayIsolate *isolate) {
+    XR_DCHECK(isolate != NULL, "xr_load_module_math: NULL isolate");
+
     XrModule *mod = xr_module_create_native(isolate, "math");
     if (!mod) return NULL;
-    
-    extern XrCFunction* xr_vm_cfunction_new(XrayIsolate *isolate, XrCFunctionPtr func, const char *name);
-    extern XrValue xr_value_from_cfunction(XrCFunction *cfunc);
-    
-    #define EXPORT_CFUNC(name_str, func_ptr) \
-        do { \
-            XrCFunction *cfunc = xr_vm_cfunction_new(isolate, func_ptr, name_str); \
-            XrValue fn_val = xr_value_from_cfunction(cfunc); \
-            xr_module_add_export(isolate, mod, name_str, fn_val); \
-        } while(0)
-    
-    EXPORT_CFUNC("abs", math_abs);
-    EXPORT_CFUNC("floor", math_floor);
-    EXPORT_CFUNC("ceil", math_ceil);
-    EXPORT_CFUNC("round", math_round);
-    EXPORT_CFUNC("sqrt", math_sqrt);
-    EXPORT_CFUNC("pow", math_pow);
-    EXPORT_CFUNC("sin", math_sin);
-    EXPORT_CFUNC("cos", math_cos);
-    EXPORT_CFUNC("tan", math_tan);
-    EXPORT_CFUNC("asin", math_asin);
-    EXPORT_CFUNC("acos", math_acos);
-    EXPORT_CFUNC("atan", math_atan);
-    EXPORT_CFUNC("atan2", math_atan2);
-    EXPORT_CFUNC("log", math_log);
-    EXPORT_CFUNC("log10", math_log10);
-    EXPORT_CFUNC("log2", math_log2);
-    EXPORT_CFUNC("exp", math_exp);
-    EXPORT_CFUNC("min", math_min);
-    EXPORT_CFUNC("max", math_max);
-    EXPORT_CFUNC("clamp", math_clamp);
-    EXPORT_CFUNC("random", math_random);
-    EXPORT_CFUNC("randomInt", math_randomInt);
-    EXPORT_CFUNC("sign", math_sign);
-    EXPORT_CFUNC("sinh", math_sinh);
-    EXPORT_CFUNC("cosh", math_cosh);
-    EXPORT_CFUNC("tanh", math_tanh);
-    EXPORT_CFUNC("hypot", math_hypot);
-    EXPORT_CFUNC("cbrt", math_cbrt);
-    EXPORT_CFUNC("trunc", math_trunc);
-    EXPORT_CFUNC("fmod", math_fmod);
-    EXPORT_CFUNC("log1p", math_log1p);
-    EXPORT_CFUNC("expm1", math_expm1);
-    EXPORT_CFUNC("lerp", math_lerp);
-    EXPORT_CFUNC("degToRad", math_degToRad);
-    EXPORT_CFUNC("radToDeg", math_radToDeg);
-    EXPORT_CFUNC("isNaN", math_isNaN);
-    EXPORT_CFUNC("isFinite", math_isFinite);
-    
-    #undef EXPORT_CFUNC
-    
+
+    XRS_EXPORT(mod, isolate, "abs", math_abs);
+    XRS_EXPORT(mod, isolate, "floor", math_floor);
+    XRS_EXPORT(mod, isolate, "ceil", math_ceil);
+    XRS_EXPORT(mod, isolate, "round", math_round);
+    XRS_EXPORT(mod, isolate, "sqrt", math_sqrt);
+    XRS_EXPORT(mod, isolate, "pow", math_pow);
+    XRS_EXPORT(mod, isolate, "sin", math_sin);
+    XRS_EXPORT(mod, isolate, "cos", math_cos);
+    XRS_EXPORT(mod, isolate, "tan", math_tan);
+    XRS_EXPORT(mod, isolate, "asin", math_asin);
+    XRS_EXPORT(mod, isolate, "acos", math_acos);
+    XRS_EXPORT(mod, isolate, "atan", math_atan);
+    XRS_EXPORT(mod, isolate, "atan2", math_atan2);
+    XRS_EXPORT(mod, isolate, "log", math_log);
+    XRS_EXPORT(mod, isolate, "log10", math_log10);
+    XRS_EXPORT(mod, isolate, "log2", math_log2);
+    XRS_EXPORT(mod, isolate, "exp", math_exp);
+    XRS_EXPORT(mod, isolate, "min", math_min);
+    XRS_EXPORT(mod, isolate, "max", math_max);
+    XRS_EXPORT(mod, isolate, "clamp", math_clamp);
+    XRS_EXPORT(mod, isolate, "random", math_random);
+    XRS_EXPORT(mod, isolate, "randomInt", math_randomInt);
+    XRS_EXPORT(mod, isolate, "sign", math_sign);
+    XRS_EXPORT(mod, isolate, "sinh", math_sinh);
+    XRS_EXPORT(mod, isolate, "cosh", math_cosh);
+    XRS_EXPORT(mod, isolate, "tanh", math_tanh);
+    XRS_EXPORT(mod, isolate, "hypot", math_hypot);
+    XRS_EXPORT(mod, isolate, "cbrt", math_cbrt);
+    XRS_EXPORT(mod, isolate, "trunc", math_trunc);
+    XRS_EXPORT(mod, isolate, "fmod", math_fmod);
+    XRS_EXPORT(mod, isolate, "log1p", math_log1p);
+    XRS_EXPORT(mod, isolate, "expm1", math_expm1);
+    XRS_EXPORT(mod, isolate, "lerp", math_lerp);
+    XRS_EXPORT(mod, isolate, "degToRad", math_degToRad);
+    XRS_EXPORT(mod, isolate, "radToDeg", math_radToDeg);
+    XRS_EXPORT(mod, isolate, "isNaN", math_isNaN);
+    XRS_EXPORT(mod, isolate, "isFinite", math_isFinite);
+
     // Constants
     xr_module_add_export(isolate, mod, "PI", xr_float(M_PI));
     xr_module_add_export(isolate, mod, "E", xr_float(M_E));
@@ -500,7 +520,7 @@ XrModule* xr_load_module_math(XrayIsolate *isolate) {
     xr_module_add_export(isolate, mod, "MAX_FLOAT", xr_float(DBL_MAX));
     xr_module_add_export(isolate, mod, "INF", xr_float(INFINITY));
     xr_module_add_export(isolate, mod, "NAN", xr_float(NAN));
-    
+
     mod->loaded = true;
     return mod;
 }

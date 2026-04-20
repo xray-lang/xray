@@ -32,7 +32,7 @@
 XrCopyKind xr_value_copy_kind(XrValue value) {
     if (XR_IS_NUM(value) || XR_IS_BOOL(value) || XR_IS_NULL(value)) return XR_COPY_IMMEDIATE;
     if (!XR_IS_PTR(value)) return XR_COPY_IMMEDIATE;
-    
+
     uint8_t type = XR_HEAP_TYPE(value);
     switch (type) {
         case XR_TSTRING: return XR_COPY_SHARED;
@@ -44,10 +44,15 @@ XrCopyKind xr_value_copy_kind(XrValue value) {
     }
 }
 
-#define SEEN_BUCKET_COUNT 32
+// Initial bucket count. Seen hash dynamically grows (Phase 7.3) when the
+// live entry count crosses 75% load factor — avoids O(N) chain traversals
+// on deep graphs (10K+ shared objects).
+#define SEEN_BUCKET_INIT 32
+#define SEEN_LOAD_NUM    3
+#define SEEN_LOAD_DEN    4  // grow when count >= bucket_count * 3/4
 
-static inline int seen_hash(void *ptr) {
-    return (int)(xr_hash_int((int)(uintptr_t)ptr) % SEEN_BUCKET_COUNT);
+static inline int seen_hash_n(void *ptr, int bucket_count) {
+    return (int)(xr_hash_int((int)(uintptr_t)ptr) % (unsigned int)bucket_count);
 }
 
 void xr_copy_context_init(XrCopyContext *ctx, struct XrayIsolate *X, struct XrGC *dst_gc) {
@@ -87,8 +92,8 @@ void xr_copy_context_cleanup(XrCopyContext *ctx) {
 }
 
 static XrValue xr_copy_context_lookup(XrCopyContext *ctx, void *src) {
-    if (!ctx->buckets) return XR_NULL_VAL;
-    int idx = seen_hash(src);
+    if (!ctx->buckets || ctx->bucket_count == 0) return XR_NULL_VAL;
+    int idx = seen_hash_n(src, ctx->bucket_count);
     for (XrSeenEntry *e = ctx->buckets[idx]; e; e = e->next) {
         if (e->src == src) return e->dst;
     }
@@ -108,17 +113,53 @@ static inline XrSeenEntry *seen_arena_alloc(XrCopyContext *ctx) {
     return &a->entries[a->used++];
 }
 
-static void xr_copy_context_record(XrCopyContext *ctx, void *src, XrValue dst) {
-    if (!ctx->buckets) {
-        ctx->buckets = (XrSeenEntry **)xr_calloc(SEEN_BUCKET_COUNT, sizeof(XrSeenEntry *));
-        if (!ctx->buckets) return;
-        ctx->bucket_count = SEEN_BUCKET_COUNT;
+// Grow seen-hash buckets to double capacity and rehash in place.
+// Arena entries are kept intact (their next pointers are just rewired).
+// Returns true on success; on failure the context keeps the old table.
+static bool seen_hash_grow(XrCopyContext *ctx) {
+    int new_count = ctx->bucket_count ? ctx->bucket_count * 2 : SEEN_BUCKET_INIT;
+    XrSeenEntry **new_buckets = (XrSeenEntry **)xr_calloc(
+        (size_t)new_count, sizeof(XrSeenEntry *));
+    if (!new_buckets) return false;
+
+    // Walk existing arena blocks and rehash every entry. We iterate arena
+    // (not old buckets) so we don't depend on the old bucket ordering; any
+    // entry recorded so far sits in the arena blocks.
+    for (XrSeenArena *a = ctx->arena_head; a; a = a->next) {
+        for (int i = 0; i < a->used; i++) {
+            XrSeenEntry *e = &a->entries[i];
+            int idx = seen_hash_n(e->src, new_count);
+            e->next = new_buckets[idx];
+            new_buckets[idx] = e;
+        }
     }
+
+    if (ctx->buckets) xr_free(ctx->buckets);
+    ctx->buckets = new_buckets;
+    ctx->bucket_count = new_count;
+    return true;
+}
+
+static void xr_copy_context_record(XrCopyContext *ctx, void *src, XrValue dst) {
+    // Lazy init.
+    if (!ctx->buckets) {
+        ctx->buckets = (XrSeenEntry **)xr_calloc(SEEN_BUCKET_INIT, sizeof(XrSeenEntry *));
+        if (!ctx->buckets) return;
+        ctx->bucket_count = SEEN_BUCKET_INIT;
+    }
+
+    // Grow before insert if load factor would exceed 75%. objects_copied
+    // is bumped by callers after each record() so it matches live entries.
+    if (ctx->bucket_count > 0 &&
+        ctx->objects_copied * SEEN_LOAD_DEN >= ctx->bucket_count * SEEN_LOAD_NUM) {
+        (void)seen_hash_grow(ctx);  // failure is non-fatal: fall through.
+    }
+
     XrSeenEntry *entry = seen_arena_alloc(ctx);
     if (!entry) return;
     entry->src = src;
     entry->dst = dst;
-    int idx = seen_hash(src);
+    int idx = seen_hash_n(src, ctx->bucket_count);
     entry->next = ctx->buckets[idx];
     ctx->buckets[idx] = entry;
 }
@@ -127,11 +168,11 @@ static XrValue xr_deep_copy_array_with_ctx(XrCopyContext *ctx, XrArray *array) {
     if (!array || !ctx->dst_gc) return XR_NULL_VAL;
     XrValue cached = xr_copy_context_lookup(ctx, array);
     if (!XR_IS_NULL(cached)) return cached;
-    
+
     int32_t length = array->length;
     XrArray *new_arr = (XrArray *)copy_ctx_alloc(ctx, sizeof(XrArray), XR_TARRAY);
     if (!new_arr) return XR_NULL_VAL;
-    
+
     new_arr->length = length;
     new_arr->capacity = length > 0 ? length : XR_ARRAY_INIT_CAPACITY;
     XR_DCHECK(new_arr->length <= new_arr->capacity, "deep_copy_array: length > capacity");
@@ -142,7 +183,7 @@ static XrValue xr_deep_copy_array_with_ctx(XrCopyContext *ctx, XrArray *array) {
     new_arr->has_gc_ptrs = array->has_gc_ptrs;
     new_arr->data_on_gc_heap = 0;  // data allocated via xr_malloc (system heap)
     memset(new_arr->_pad, 0, sizeof(new_arr->_pad));
-    
+
     size_t alloc_size = (size_t)new_arr->elem_size * new_arr->capacity;
     if (new_arr->capacity > 0) {
         new_arr->data = xr_malloc(alloc_size);
@@ -156,11 +197,11 @@ static XrValue xr_deep_copy_array_with_ctx(XrCopyContext *ctx, XrArray *array) {
     } else {
         new_arr->data = NULL;
     }
-    
+
     XrValue result = XR_FROM_PTR(new_arr);
     xr_copy_context_record(ctx, array, result);
     ctx->objects_copied++;
-    
+
     if (array->elem_type == XR_ELEM_ANY) {
         // Deep copy each element
         XrValue *src = (XrValue*)array->data;
@@ -177,15 +218,15 @@ static XrValue xr_deep_copy_map_with_ctx(XrCopyContext *ctx, XrMap *map) {
     if (!map || !ctx->dst_gc) return XR_NULL_VAL;
     XrValue cached = xr_copy_context_lookup(ctx, map);
     if (!XR_IS_NULL(cached)) return cached;
-    
+
     XrMap *new_map = (XrMap *)copy_ctx_alloc(ctx, sizeof(XrMap), XR_TMAP);
     if (!new_map) return XR_NULL_VAL;
-    
+
     new_map->count = 0;
     new_map->flags = 0;
     new_map->key_tid = map->key_tid;
     new_map->value_tid = map->value_tid;
-    
+
     if (xr_map_isdummy(map)) {
         new_map->lsizenode = 0;
         new_map->node = &xr_map_dummynode;
@@ -193,22 +234,22 @@ static XrValue xr_deep_copy_map_with_ctx(XrCopyContext *ctx, XrMap *map) {
         new_map->flags |= XR_MAP_FLAG_DUMMY;
         return XR_FROM_PTR(new_map);
     }
-    
+
     uint32_t size = xr_map_sizenode(map);
     new_map->lsizenode = map->lsizenode;
     new_map->node = (XrMapNode *)xr_malloc(sizeof(XrMapNode) * size);
     if (!new_map->node) return XR_NULL_VAL;
-    
+
     for (uint32_t i = 0; i < size; i++) {
         new_map->node[i].key_tt = XR_MAP_NODE_NIL_KEY;
         new_map->node[i].next = 0;
     }
     new_map->lastfree = &new_map->node[size - 1];
-    
+
     XrValue result = XR_FROM_PTR(new_map);
     xr_copy_context_record(ctx, map, result);
     ctx->objects_copied++;
-    
+
     for (uint32_t i = 0; i < size; i++) {
         XrMapNode *node = &map->node[i];
         if (!XR_MAP_NODE_EMPTY(node)) {
@@ -224,18 +265,18 @@ static XrValue xr_deep_copy_closure_with_ctx(XrCopyContext *ctx, XrClosure *clos
     if (!closure || !ctx->dst_gc) return XR_NULL_VAL;
     XrValue cached = xr_copy_context_lookup(ctx, closure);
     if (!XR_IS_NULL(cached)) return cached;
-    
+
     size_t alloc_size = sizeof(XrClosure) + closure->upval_count * sizeof(XrValue);
     XrClosure *new_closure = (XrClosure *)copy_ctx_alloc(ctx, alloc_size, XR_TFUNCTION);
     if (!new_closure) return XR_NULL_VAL;
-    
+
     new_closure->proto = closure->proto;
     new_closure->upval_count = closure->upval_count;
-    
+
     XrValue result = XR_FROM_PTR(new_closure);
     xr_copy_context_record(ctx, closure, result);
     ctx->objects_copied++;
-    
+
     // Deep copy flat upvals (cells and values)
     for (int i = 0; i < closure->upval_count; i++) {
         new_closure->upvals[i] = xr_deep_copy_with_ctx(ctx, closure->upvals[i]);
@@ -246,32 +287,32 @@ static XrValue xr_deep_copy_closure_with_ctx(XrCopyContext *ctx, XrClosure *clos
 // Deep copy a Context object and its parent chain
 static XrValue deep_copy_context_chain(XrCopyContext *ctx, XrContext *src_context) {
     if (!src_context) return XR_NULL_VAL;
-    
+
     XrValue cached = xr_copy_context_lookup(ctx, src_context);
     if (!XR_IS_NULL(cached)) return cached;
-    
+
     size_t size = sizeof(XrContext) + src_context->slot_count * sizeof(XrValue);
     XrContext *new_ctx = (XrContext *)copy_ctx_alloc(ctx, size, XR_TCONTEXT);
     if (!new_ctx) return XR_NULL_VAL;
-    
+
     new_ctx->slot_count = src_context->slot_count;
     new_ctx->parent = NULL;
-    
+
     XrValue result = XR_FROM_PTR(new_ctx);
     xr_copy_context_record(ctx, src_context, result);
     ctx->objects_copied++;
-    
+
     // Deep copy parent chain
     if (src_context->parent) {
         XrValue parent_val = deep_copy_context_chain(ctx, src_context->parent);
         new_ctx->parent = XR_IS_NULL(parent_val) ? NULL : (XrContext*)parent_val.ptr;
     }
-    
+
     // Deep copy all slots
     for (int i = 0; i < src_context->slot_count; i++) {
         new_ctx->slots[i] = xr_deep_copy_with_ctx(ctx, src_context->slots[i]);
     }
-    
+
     return result;
 }
 
@@ -279,12 +320,12 @@ static XrValue xr_deep_copy_set_with_ctx(XrCopyContext *ctx, XrSet *set) {
     if (!set || !ctx->dst_gc) return XR_NULL_VAL;
     XrValue cached = xr_copy_context_lookup(ctx, set);
     if (!XR_IS_NULL(cached)) return cached;
-    
+
     XrSet *new_set = (XrSet *)copy_ctx_alloc(ctx, sizeof(XrSet), XR_TSET);
     if (!new_set) return XR_NULL_VAL;
     xr_set_init_inplace(new_set);
     new_set->elem_tid = set->elem_tid;
-    
+
     XrValue result = XR_FROM_PTR(new_set);
     xr_copy_context_record(ctx, set, result);
     ctx->objects_copied++;
@@ -300,26 +341,26 @@ static XrValue xr_deep_copy_instance_with_ctx(XrCopyContext *ctx, XrInstance *in
     if (!inst || !ctx->dst_gc) return XR_NULL_VAL;
     XrValue cached = xr_copy_context_lookup(ctx, inst);
     if (!XR_IS_NULL(cached)) return cached;
-    
+
     XrClass *cls = inst->klass;
     uint32_t field_count = xr_class_instance_field_count(cls);
-    
+
     XrInstance *new_inst = (XrInstance *)copy_ctx_alloc(ctx, xr_instance_size(cls), XR_TINSTANCE);
     if (!new_inst) return XR_NULL_VAL;
     xr_instance_init_inplace(new_inst, cls);
     // Propagate reified type args from gc.extra
     new_inst->gc.extra = (new_inst->gc.extra & 0x01) | (inst->gc.extra & ~0x01);
-    
+
     XrValue result = XR_FROM_PTR(new_inst);
     xr_copy_context_record(ctx, inst, result);
     ctx->objects_copied++;
-    
+
     // Fast path: flat-copyable struct — memcpy all fields at once
     if ((cls->flags & XR_CLASS_FLAT_COPYABLE) && field_count > 0) {
         memcpy(new_inst->fields, inst->fields, sizeof(XrValue) * field_count);
         return result;
     }
-    
+
     for (uint32_t i = 0; i < field_count; i++) {
         new_inst->fields[i] = xr_deep_copy_with_ctx(ctx, inst->fields[i]);
     }
@@ -330,26 +371,26 @@ static XrValue xr_deep_copy_json_with_ctx(XrCopyContext *ctx, XrJson *json) {
     if (!json || !ctx->dst_gc) return XR_NULL_VAL;
     XrValue cached = xr_copy_context_lookup(ctx, json);
     if (!XR_IS_NULL(cached)) return cached;
-    
+
     XrShape *shape = xr_json_shape(json);
     int field_count = shape->field_count;
-    
+
     size_t size = xr_json_size(shape->in_object_capacity);
     XrJson *new_json = (XrJson *)copy_ctx_alloc(ctx, size, XR_TJSON);
     if (!new_json) return XR_NULL_VAL;
     xr_json_init_inplace(new_json, shape);
-    
+
     XrValue result = XR_FROM_PTR(new_json);
     xr_copy_context_record(ctx, json, result);
     ctx->objects_copied++;
-    
+
     // Fast path: compact value-layout (no GC pointers, no overflow) → memcpy fields
     if (shape->is_value_layout && !json->overflow) {
         uint16_t n = (field_count < shape->in_object_capacity) ? field_count : shape->in_object_capacity;
         memcpy(new_json->fields, json->fields, n * sizeof(XrValue));
         return result;
     }
-    
+
     // Copy in-object fields
     uint16_t in_obj = shape->in_object_capacity;
     uint16_t n = (field_count < in_obj) ? field_count : in_obj;
@@ -385,7 +426,7 @@ XrValue xr_deep_copy_with_ctx(XrCopyContext *ctx, XrValue value) {
     XrGCHeader *obj = XR_VALUE_GCPTR(value);
     if (!obj) return value;
     if (XR_GC_IS_SHARED(obj)) { xr_shared_incref(obj); return value; }
-    
+
     uint8_t type = XR_GC_GET_TYPE(obj);
     switch (type) {
         case XR_TSTRING: return value;

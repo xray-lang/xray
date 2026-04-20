@@ -1,0 +1,56 @@
+// 0815_deep_inheritance.xr
+// 作者：xingleixu@gmail.com
+// 测试：深继承链（> 8 层）与 instanceof 正确性
+//
+// xclass 的 primary_supers 只存前 8 层祖先；深度 >= 8 的继承层级
+// 走 secondary_supers_hash 做 O(1) 身份查找。这个测试同时覆盖
+// primary 窗口和 secondary 窗口，并额外验证方法解析顺序。
+
+class L0 {
+    tag(): string { return "L0" }
+}
+class L1 extends L0 {}
+class L2 extends L1 {}
+class L3 extends L2 {}
+class L4 extends L3 {}
+class L5 extends L4 {}
+class L6 extends L5 {}
+class L7 extends L6 {}
+class L8 extends L7 {}              // first level that only the secondary hash can resolve
+class L9 extends L8 {
+    tag(): string { return "L9" }
+}
+class L10 extends L9 {}
+class L11 extends L10 {}
+class L12 extends L11 {}
+
+@test
+fn test_instanceof_primary_window(): void {
+    let x = new L7()
+    assert(x is L0)
+    assert(x is L3)
+    assert(x is L7)
+}
+
+@test
+fn test_instanceof_secondary_window(): void {
+    let x = new L12()
+    // Depth > 8: must fall into the secondary supers hash.
+    assert(x is L12)
+    assert(x is L10)
+    assert(x is L9)
+    assert(x is L8)
+    // Depth < 8 ancestors still resolved by primary_supers.
+    assert(x is L7)
+    assert(x is L3)
+    assert(x is L0)
+}
+
+@test
+fn test_method_dispatch_through_deep_chain(): void {
+    // L9 overrides tag(), L10..L12 inherit it through the deep chain.
+    let a = new L7()
+    let b = new L12()
+    assert_eq(a.tag(), "L0")
+    assert_eq(b.tag(), "L9")
+}

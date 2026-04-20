@@ -5,11 +5,12 @@
  * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
  * Licensed under the MIT License
  *
- * io.h - File I/O standard library with async thread pool support
+ * io.h - File I/O standard library
  *
  * KEY CONCEPT:
- *   Provides file read/write and directory operations.
- *   Core read/write operations support async execution via XrAsyncPool.
+ *   Provides file read/write and directory operations. All calls are
+ *   synchronous at the moment; a future revision will offload blocking
+ *   filesystem syscalls to XrAsyncPool.
  */
 
 #ifndef XR_STDLIB_IO_H
@@ -17,12 +18,6 @@
 
 #include "../../src/module/xmodule.h"
 #include "../../src/vm/xvm.h"
-#include <stdbool.h>
-#include <stddef.h>
-
-// Forward declarations
-struct XrAsyncPool;
-struct XrCoroutine;
 
 /*
  * Load io module
@@ -69,22 +64,5 @@ struct XrCoroutine;
  *   - tempDir()                   Create temporary directory
  */
 XrModule* xr_load_module_io(XrayIsolate *isolate);
-
-/* ========== XrAsyncPool Integration ========== */
-
-// Async file read via XrAsyncPool
-// Falls back to sync read if pool is NULL
-// Returns: true if success or task submitted
-// NOTE: Caller is responsible for freeing *content
-bool xr_io_read_on_async(struct XrAsyncPool *pool, struct XrCoroutine *coro,
-                          int worker_id, const char *path,
-                          char **content, size_t *size);
-
-// Async file write via XrAsyncPool
-// Falls back to sync write if pool is NULL
-// Returns: true if success or task submitted
-bool xr_io_write_on_async(struct XrAsyncPool *pool, struct XrCoroutine *coro,
-                           int worker_id, const char *path,
-                           const char *content, size_t size, bool append);
 
 #endif

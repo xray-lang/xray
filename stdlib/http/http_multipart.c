@@ -12,40 +12,51 @@
  */
 
 #include "http_multipart.h"
+#include "xray_platform.h"  // xr_random_bytes (CSPRNG)
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <time.h>
 
 /* ========== Internal Functions ========== */
 
-// Generate random boundary string
+// Generate random boundary string using CSPRNG.
+//
+// Security: RFC 2046 boundaries must be unpredictable enough that an attacker
+// cannot embed a forged "--boundary" line inside multipart body and tear the
+// form apart. rand()+srand(time(NULL)) produces identical boundaries within
+// a 1-second window and is non-cryptographic; use xr_random_bytes instead
+// (arc4random_buf on macOS, getrandom() on Linux, BCryptGenRandom on Win).
+//
+// Layout: "----XrayFormBoundary" (20 bytes) + 16 random alphanumeric chars
+// Alphabet size 62, so entropy ~= 16 * log2(62) ~= 95 bits.
+// Modulo bias over 62 on uniform bytes is negligible for this purpose.
 static char* generate_boundary(void) {
     static const char charset[] = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+    const size_t charset_len = sizeof(charset) - 1;  // 62
     char *boundary = (char*)malloc(48);
     if (!boundary) return NULL;
-    
+
     strcpy(boundary, "----XrayFormBoundary");
-    
-    // Add random suffix
-    srand((unsigned int)time(NULL));
-    for (int i = 20; i < 36; i++) {
-        boundary[i] = charset[rand() % (sizeof(charset) - 1)];
+
+    unsigned char rnd[16];
+    xr_random_bytes(rnd, sizeof(rnd));
+    for (int i = 0; i < 16; i++) {
+        boundary[20 + i] = charset[rnd[i] % charset_len];
     }
     boundary[36] = '\0';
-    
+
     return boundary;
 }
 
 // Guess MIME type
 static const char* guess_mime_type(const char *filename) {
     if (!filename) return "application/octet-stream";
-    
+
     const char *ext = strrchr(filename, '.');
     if (!ext) return "application/octet-stream";
-    
+
     ext++;  // Skip dot
-    
+
     // Common MIME types
     if (strcasecmp(ext, "txt") == 0) return "text/plain";
     if (strcasecmp(ext, "html") == 0 || strcasecmp(ext, "htm") == 0) return "text/html";
@@ -65,7 +76,7 @@ static const char* guess_mime_type(const char *filename) {
     if (strcasecmp(ext, "mp3") == 0) return "audio/mpeg";
     if (strcasecmp(ext, "mp4") == 0) return "video/mp4";
     if (strcasecmp(ext, "webm") == 0) return "video/webm";
-    
+
     return "application/octet-stream";
 }
 
@@ -83,7 +94,7 @@ XrFormData* xr_form_data_new(void) {
 
 void xr_form_data_free(XrFormData *form) {
     if (!form) return;
-    
+
     XrFormField *field = form->fields;
     while (field) {
         XrFormField *next = field->next;
@@ -95,7 +106,7 @@ void xr_form_data_free(XrFormData *form) {
         free(field);
         field = next;
     }
-    
+
     free(form->boundary);
     free(form);
 }
@@ -105,23 +116,23 @@ void xr_form_data_append(XrFormData *form,
                           const char *value,
                           size_t value_len) {
     if (!form || !name) return;
-    
+
     // Enforce total size limit (0 = no limit)
     if (form->max_total_size > 0 && form->total_size + value_len > form->max_total_size) return;
-    
+
     XrFormField *field = (XrFormField*)calloc(1, sizeof(XrFormField));
     if (!field) return;
-    
+
     field->type = XR_FORM_FIELD_TEXT;
     field->name = strdup(name);
-    
+
     if (value && value_len > 0) {
         field->value = (char*)malloc(value_len + 1);
         memcpy(field->value, value, value_len);
         field->value[value_len] = '\0';
         field->value_len = value_len;
     }
-    
+
     // Add to end of list
     if (!form->fields) {
         form->fields = field;
@@ -141,23 +152,23 @@ void xr_form_data_append_file(XrFormData *form,
                                const void *data,
                                size_t size) {
     if (!form || !name || !data || size == 0) return;
-    
+
     // Enforce per-file and total size limits (0 = no limit)
     if (form->max_file_size > 0 && size > form->max_file_size) return;
     if (form->max_total_size > 0 && form->total_size + size > form->max_total_size) return;
-    
+
     XrFormField *field = (XrFormField*)calloc(1, sizeof(XrFormField));
     if (!field) return;
-    
+
     field->type = XR_FORM_FIELD_FILE;
     field->name = strdup(name);
     field->filename = filename ? strdup(filename) : strdup("file");
     field->content_type = strdup(content_type ? content_type : guess_mime_type(filename));
-    
+
     field->file_data = (char*)malloc(size);
     memcpy(field->file_data, data, size);
     field->file_size = size;
-    
+
     // Add to end of list
     if (!form->fields) {
         form->fields = field;
@@ -174,54 +185,54 @@ int xr_form_data_append_file_path(XrFormData *form,
                                    const char *name,
                                    const char *filepath) {
     if (!form || !name || !filepath) return -1;
-    
+
     // Open file
     FILE *fp = fopen(filepath, "rb");
     if (!fp) return -1;
-    
+
     // Get file size
     fseek(fp, 0, SEEK_END);
     long size = ftell(fp);
     fseek(fp, 0, SEEK_SET);
-    
+
     if (size <= 0) {
         fclose(fp);
         return -1;
     }
-    
+
     if (form->max_file_size > 0 && (size_t)size > form->max_file_size) {
         fclose(fp);
         return -1;
     }
-    
+
     if (form->max_total_size > 0 && form->total_size + (size_t)size > form->max_total_size) {
         fclose(fp);
         return -1;
     }
-    
+
     // Read file content
     char *data = (char*)malloc(size);
     if (!data) {
         fclose(fp);
         return -1;
     }
-    
+
     if (fread(data, 1, size, fp) != (size_t)size) {
         fclose(fp);
         free(data);
         return -1;
     }
     fclose(fp);
-    
+
     // Extract filename
     const char *filename = strrchr(filepath, '/');
     if (!filename) filename = strrchr(filepath, '\\');
     filename = filename ? filename + 1 : filepath;
-    
+
     // Add file field
     xr_form_data_append_file(form, name, filename, NULL, data, size);
     free(data);
-    
+
     return 0;
 }
 
@@ -230,7 +241,7 @@ int xr_form_data_build(XrFormData *form,
                         size_t *out_len,
                         char **content_type) {
     if (!form || !out || !out_len) return -1;
-    
+
     // Calculate buffer size
     size_t buf_size = 1024;
     XrFormField *field = form->fields;
@@ -243,21 +254,21 @@ int xr_form_data_build(XrFormData *form,
         }
         field = field->next;
     }
-    
+
     char *buf = (char*)malloc(buf_size);
     if (!buf) return -1;
-    
+
     char *p = buf;
-    
+
     // Build each field
     field = form->fields;
     while (field) {
         // Boundary
         p += sprintf(p, "--%s\r\n", form->boundary);
-        
+
         if (field->type == XR_FORM_FIELD_TEXT) {
             // Text field
-            p += sprintf(p, "Content-Disposition: form-data; name=\"%s\"\r\n\r\n", 
+            p += sprintf(p, "Content-Disposition: form-data; name=\"%s\"\r\n\r\n",
                         field->name);
             if (field->value && field->value_len > 0) {
                 memcpy(p, field->value, field->value_len);
@@ -268,34 +279,34 @@ int xr_form_data_build(XrFormData *form,
             p += sprintf(p, "Content-Disposition: form-data; name=\"%s\"; filename=\"%s\"\r\n",
                         field->name, field->filename);
             p += sprintf(p, "Content-Type: %s\r\n\r\n", field->content_type);
-            
+
             if (field->file_data && field->file_size > 0) {
                 memcpy(p, field->file_data, field->file_size);
                 p += field->file_size;
             }
         }
-        
+
         p += sprintf(p, "\r\n");
         field = field->next;
     }
-    
+
     // End boundary
     p += sprintf(p, "--%s--\r\n", form->boundary);
-    
+
     *out = buf;
     *out_len = p - buf;
-    
+
     // Build Content-Type
     if (content_type) {
         *content_type = xr_form_data_content_type(form);
     }
-    
+
     return 0;
 }
 
 char* xr_form_data_content_type(XrFormData *form) {
     if (!form || !form->boundary) return NULL;
-    
+
     size_t len = 64 + strlen(form->boundary);
     char *ct = (char*)malloc(len);
     if (ct) {

@@ -62,22 +62,27 @@ typedef struct XrCoroPoolBlock {
 //
 // Allocation strategy:
 //   1. Fast path: from pre-allocated array (lock-free atomic)
-//   2. Recycle path: from free list (requires lock)
-//   3. Expansion path: allocate new memory block
+//   2. Recycle path: from free list (lock-free Treiber stack)
+//   3. Expansion path: allocate new memory block (protected by grow_lock)
+//
+// Phase 4.2: free_list changed from mutex-protected list to a lock-free
+// Treiber stack. Link chains via coroutine->next (re-used; cleared
+// immediately on pop by memset). ABA: a popped coroutine runs user code
+// before being freed, so the re-push window is long enough that real
+// ABA pressure requires sustained sub-μs churn — not observed so far.
 typedef struct XrCoroStructPool {
-    XrCoroPoolBlock *blocks;          // Pre-allocated block list
-    XrCoroPoolBlock *current_block;   // Current allocation block
-    _Atomic uint32_t alloc_idx;       // Current block alloc index (lock-free fast path)
-    struct XrCoroutine *free_list;    // Free list (recycled coroutines)
-    pthread_mutex_t free_lock;        // Free list lock (mutex for macOS compat)
-    
+    XrCoroPoolBlock *blocks;                   // Pre-allocated block list
+    XrCoroPoolBlock *current_block;            // Current allocation block
+    _Atomic uint32_t alloc_idx;                // Current block alloc index (lock-free fast path)
+    _Atomic(struct XrCoroutine *) free_list;   // Lock-free recycled coroutines (Treiber stack)
+
     // Statistics (atomic: accessed from lock-free fast path by multiple threads)
     _Atomic uint64_t total_alloc;     // Total allocations
     _Atomic uint64_t fast_alloc;      // Fast path allocations
     _Atomic uint64_t free_alloc;      // Free list allocations
     _Atomic uint64_t total_free;      // Total frees
-    
-    pthread_mutex_t pool_lock;        // Pool lock (for expansion)
+
+    pthread_mutex_t grow_lock;        // Protects block-list growth only (low-frequency path)
     bool initialized;                  // Initialized flag
 } XrCoroStructPool;
 

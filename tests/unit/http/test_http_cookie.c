@@ -61,8 +61,7 @@ TEST(cookie_parse_samesite) {
         "example.com", "/"
     );
     ASSERT_NOT_NULL(c);
-    ASSERT_TRUE(c->same_site_strict);
-    ASSERT_FALSE(c->same_site_lax);
+    ASSERT_EQ_INT(c->same_site, XR_SAMESITE_STRICT);
     xr_cookie_free(c);
 
     c = xr_cookie_parse(
@@ -70,8 +69,30 @@ TEST(cookie_parse_samesite) {
         "example.com", "/"
     );
     ASSERT_NOT_NULL(c);
-    ASSERT_FALSE(c->same_site_strict);
-    ASSERT_TRUE(c->same_site_lax);
+    ASSERT_EQ_INT(c->same_site, XR_SAMESITE_LAX);
+    xr_cookie_free(c);
+
+    // SameSite=None requires Secure (RFC 6265bis §4.1.2.7 hardening).
+    // Without Secure the cookie MUST be rejected.
+    c = xr_cookie_parse(
+        "pref=x; SameSite=None",
+        "example.com", "/"
+    );
+    ASSERT_NULL(c);
+
+    c = xr_cookie_parse(
+        "pref=x; SameSite=None; Secure",
+        "example.com", "/"
+    );
+    ASSERT_NOT_NULL(c);
+    ASSERT_EQ_INT(c->same_site, XR_SAMESITE_NONE);
+    ASSERT_TRUE(c->secure);
+    xr_cookie_free(c);
+
+    // No SameSite attribute → UNSPECIFIED (caller may default to Lax).
+    c = xr_cookie_parse("pref=x", "example.com", "/");
+    ASSERT_NOT_NULL(c);
+    ASSERT_EQ_INT(c->same_site, XR_SAMESITE_UNSPECIFIED);
     xr_cookie_free(c);
 }
 

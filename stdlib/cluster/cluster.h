@@ -79,8 +79,9 @@ typedef struct XrRemoteCoroMonitor XrRemoteCoroMonitor;
 
 #define XR_CLUSTER_CHANNEL_BUCKETS 64
 #define XR_CLUSTER_SERVICE_BUCKETS 16
-#define XR_CLUSTER_TOPIC_BUCKETS   32
 #define XR_TOPIC_PATTERN_MAX       127
+
+struct XrTopicTrieNode;  // forward decl — definition in cluster_topic.c
 
 typedef struct XrCluster {
     char              self_name[XR_NODE_NAME_MAX + 1];
@@ -104,8 +105,22 @@ typedef struct XrCluster {
     int               service_count;
     XrMutex        services_lock;
 
-    // Topic Pub/Sub registry (hash table of subscriptions)
-    struct XrTopicSubscription *topic_buckets[XR_CLUSTER_TOPIC_BUCKETS];
+    /*
+     * Topic Pub/Sub registry.
+     *
+     * Route lookups go through a NATS-style segment trie (see
+     * cluster_topic.c) instead of the old flat hash of subscriptions.
+     * The trie makes publish() cost O(topic_depth) instead of
+     * O(total_subscriptions) — critical for services that maintain
+     * thousands of subscriptions of which only a handful match any
+     * given message. The root node is embedded to keep the hot path
+     * a single dereference.
+     *
+     * topic_root is always live between start_ex and stop; stop
+     * recursively destroys the tree and resets it back to an empty
+     * root.
+     */
+    struct XrTopicTrieNode *topic_root;   // trie root; NULL before init
     int               topic_sub_count;
     XrMutex        topics_lock;
 
@@ -363,6 +378,17 @@ XR_FUNC void xr_cluster_topic_deliver_local(XrCluster *c, const char *topic, XrV
 
 // Check if a pattern matches a topic string
 XR_FUNC bool xr_topic_match(const char *pattern, const char *topic);
+
+/*
+ * Topic trie lifecycle. xr_cluster_topics_init must be called once
+ * after topics_lock is initialised and before any subscribe path is
+ * exposed. xr_cluster_topics_destroy closes every subscriber channel,
+ * recursively frees the trie, and resets topic_root to NULL — call it
+ * exactly once from xr_cluster_stop (the function tolerates a NULL
+ * root, so double-stop is safe).
+ */
+XR_FUNC int  xr_cluster_topics_init(XrCluster *c);
+XR_FUNC void xr_cluster_topics_destroy(XrCluster *c);
 
 /* ========== Remote Coroutine Monitoring ========== */
 

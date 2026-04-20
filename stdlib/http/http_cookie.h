@@ -25,6 +25,23 @@ typedef struct XrayIsolate XrayIsolate;
 
 /* ========== Cookie Structure ========== */
 
+// SameSite attribute values (RFC 6265bis §4.1.2.7).
+//   UNSPECIFIED = no SameSite attribute in Set-Cookie. Modern browsers
+//                 treat this as Lax by default; the jar preserves it as
+//                 its own bucket so callers can tell "explicit Lax" apart
+//                 from "server didn't set one".
+//   NONE        = cross-site traffic allowed. Servers MUST send this
+//                 together with Secure; a Set-Cookie without Secure is
+//                 rejected during parsing.
+//   LAX         = same-site + top-level navigation GETs.
+//   STRICT      = same-site only.
+typedef enum {
+    XR_SAMESITE_UNSPECIFIED = 0,
+    XR_SAMESITE_NONE,
+    XR_SAMESITE_LAX,
+    XR_SAMESITE_STRICT,
+} XrSameSite;
+
 typedef struct XrHttpCookie {
     char *name;             // Cookie name
     char *value;            // Cookie value
@@ -33,9 +50,8 @@ typedef struct XrHttpCookie {
     time_t expires;         // Expiration time (0 = session cookie)
     bool secure;            // HTTPS only
     bool http_only;         // No JS access
-    bool same_site_strict;  // SameSite=Strict
-    bool same_site_lax;     // SameSite=Lax
-    
+    XrSameSite same_site;   // SameSite attribute (RFC 6265bis)
+
     struct XrHttpCookie *next;  // Next in linked list
 } XrHttpCookie;
 
@@ -54,7 +70,7 @@ typedef struct XrCookieJar {
  * Parse Set-Cookie header
  * Returns: new cookie (caller must free)
  */
-XrHttpCookie* xr_cookie_parse(const char *set_cookie_header, 
+XrHttpCookie* xr_cookie_parse(const char *set_cookie_header,
                                const char *request_domain,
                                const char *request_path);
 
@@ -105,7 +121,7 @@ void xr_cookie_jar_add_from_response(XrCookieJar *jar,
  * Get Cookie header value for specified URL
  * Returns: newly allocated string "name1=value1; name2=value2" (caller must free)
  */
-char* xr_cookie_jar_get_header(XrCookieJar *jar, 
+char* xr_cookie_jar_get_header(XrCookieJar *jar,
                                 const char *domain,
                                 const char *path,
                                 bool is_secure);

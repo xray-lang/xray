@@ -107,9 +107,24 @@ typedef struct XrPhiDetector {
 typedef struct XrPendingRequest {
     uint64_t request_id;
     struct XrChannel *response_ch;      // Unbuffered channel, caller blocks on recv
-    struct XrPendingRequest *next;
+    struct XrPendingRequest *next;      // chain pointer within its bucket
 } XrPendingRequest;
 
+/*
+ * Request-id table sizing.
+ *
+ *   XR_PENDING_BUCKETS      — number of chains in the hash. Power of two
+ *                             so `id & (BUCKETS - 1)` is a single AND.
+ *                             32 keeps the array a single cache line on
+ *                             64-bit (32 * 8 = 256 bytes) while giving
+ *                             avg chain length 8 at saturation (256 /
+ *                             32), a 32x lookup speedup versus the old
+ *                             singly-linked list.
+ *   XR_MAX_PENDING_REQUESTS — global backpressure cap; the same 256 we
+ *                             enforced before the hash upgrade. RPC
+ *                             slots still bound memory per node.
+ */
+#define XR_PENDING_BUCKETS      32
 #define XR_MAX_PENDING_REQUESTS 256
 
 /* ========== Cluster Node ========== */
@@ -125,8 +140,9 @@ typedef struct XrClusterNode {
     uint32_t      flags;
     uint32_t      missed_heartbeats;
 
-    // Pending request table (protected by pending_lock)
-    XrPendingRequest *pending_first;
+    // Pending request table: per-bucket chaining keyed by request_id.
+    // See XR_PENDING_BUCKETS above for sizing rationale.
+    XrPendingRequest *pending_buckets[XR_PENDING_BUCKETS];
     int               pending_count;
     XrMutex        pending_lock;
 

@@ -67,10 +67,10 @@ void xr_proc_init(XrProc *p, int id, struct XrRuntime *runtime) {
     p->yield_streak = 0;
 
     // Statistics
-    p->executed_count = 0;
-    p->stolen_count = 0;
-    p->yielded_count = 0;
-    p->cont_steal_count = 0;
+    p->stats.executed_count = 0;
+    p->stats.stolen_count = 0;
+    p->stats.yielded_count = 0;
+    p->stats.cont_steal_count = 0;
     // RNG seed set later when runtime is fully initialized
 
     p->idle_link = NULL;
@@ -187,18 +187,25 @@ void xr_proc_push(XrProc *p, XrCoroutine *coro) {
 
 // ========== Idle P Management ==========
 
+// Phase 4.1: idle P list is a lock-free Treiber stack.
+// ABA: XrProc is 1:1 with Worker and never freed during runtime lifetime.
+// idle_p_count is kept as a separate atomic for heuristics only.
 XrProc *xr_get_idle_p(struct XrRuntime *runtime) {
     if (!runtime) return NULL;
 
-    pthread_mutex_lock(&runtime->sched_lock);
-    XrProc *p = runtime->idle_p_head;
-    if (p) {
-        runtime->idle_p_head = p->idle_link;
-        p->idle_link = NULL;
-        atomic_fetch_sub(&runtime->idle_p_count, 1);
+    for (int retry = 0; retry < 8; retry++) {
+        XrProc *head = atomic_load_explicit(&runtime->idle_p_head, memory_order_acquire);
+        if (!head) return NULL;
+        XrProc *next = head->idle_link;
+        if (atomic_compare_exchange_weak_explicit(
+                &runtime->idle_p_head, &head, next,
+                memory_order_acq_rel, memory_order_acquire)) {
+            head->idle_link = NULL;
+            atomic_fetch_sub_explicit(&runtime->idle_p_count, 1, memory_order_relaxed);
+            return head;
+        }
     }
-    pthread_mutex_unlock(&runtime->sched_lock);
-    return p;
+    return NULL;
 }
 
 void xr_put_idle_p(struct XrRuntime *runtime, XrProc *p) {
@@ -207,9 +214,12 @@ void xr_put_idle_p(struct XrRuntime *runtime, XrProc *p) {
     atomic_store(&p->status, P_IDLE);
     atomic_store(&p->current_m, NULL);
 
-    pthread_mutex_lock(&runtime->sched_lock);
-    p->idle_link = runtime->idle_p_head;
-    runtime->idle_p_head = p;
-    atomic_fetch_add(&runtime->idle_p_count, 1);
-    pthread_mutex_unlock(&runtime->sched_lock);
+    XrProc *head;
+    do {
+        head = atomic_load_explicit(&runtime->idle_p_head, memory_order_relaxed);
+        p->idle_link = head;
+    } while (!atomic_compare_exchange_weak_explicit(
+        &runtime->idle_p_head, &head, p,
+        memory_order_release, memory_order_relaxed));
+    atomic_fetch_add_explicit(&runtime->idle_p_count, 1, memory_order_relaxed);
 }

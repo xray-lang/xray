@@ -27,6 +27,7 @@ extern struct XrArray* xr_json_keys(XrayIsolate *X, struct XrJson *json);
 #include "../../src/base/xmalloc.h"
 #include "../common_writer.h"
 #include "../common_io.h"
+#include "../common_parser.h"
 #include "../stdlib_cache.h"
 #include <stdio.h>
 #include <string.h>
@@ -80,32 +81,23 @@ static void extract_config(XrayIsolate *X, XrValue config_val, XmlParseConfig *c
 
 static void extract_write_config(XrayIsolate *X, XrValue config_val, XmlWriteConfig *config) {
     xml_write_config_init(config);
-    if (xr_value_is_json(config_val)) {
-        XrJson *json = xr_value_to_json(config_val);
+    if (!xr_value_is_json(config_val)) return;
+    XrJson *json = xr_value_to_json(config_val);
 
-        XrValue val = xr_json_get_by_key(X, json, "indent");
-        if (XR_IS_INT(val)) config->indent = (int)XR_TO_INT(val);
-
-        val = xr_json_get_by_key(X, json, "declaration");
-        if (XR_IS_BOOL(val)) config->declaration = XR_TO_BOOL(val);
-
-        val = xr_json_get_by_key(X, json, "encoding");
-        if (XR_IS_STRING(val)) {
-            // Copy into the owned buffer so the config stays valid after
-            // the caller's XrString is reclaimed by GC.
-            XrString *enc = XR_TO_STRING(val);
-            size_t n = enc->length < sizeof(config->encoding) - 1
-                     ? enc->length
-                     : sizeof(config->encoding) - 1;
-            memcpy(config->encoding, enc->data, n);
-            config->encoding[n] = '\0';
-        }
-    }
+    xrs_cfg_get_int (X, json, "indent",      &config->indent);
+    xrs_cfg_get_bool(X, json, "declaration", &config->declaration);
+    // Fixed-buffer copy keeps config valid after caller's XrString is
+    // reclaimed by GC.
+    xrs_cfg_get_fixed_str(X, json, "encoding",
+                          config->encoding, sizeof(config->encoding));
 }
 
 // ========== XmlNode to Map (with depth limit) ==========
+//
+// Aliased to the stdlib-wide cap (XR_STDLIB_MAX_DEPTH == 256) so every
+// parse / stringify / serialize path uses the same nesting envelope.
 
-#define NODE_TO_MAP_MAX_DEPTH 256
+#define NODE_TO_MAP_MAX_DEPTH XR_STDLIB_MAX_DEPTH
 
 static XrValue node_to_map_r(XrayIsolate *X, XmlNode *node, XmlKeys *k, int depth) {
     if (!node || depth > NODE_TO_MAP_MAX_DEPTH) return xr_null();
@@ -245,8 +237,9 @@ static void xw_escape_attr(XmlWriter *w, const char *s, size_t len) {
     }
 }
 
-// Serialize Map node (with depth limit)
-#define SERIALIZE_MAX_DEPTH 256
+// Serialize Map node (with depth limit). Matches the stdlib-wide cap so
+// round-tripping a freshly-parsed tree never fails at serialization.
+#define SERIALIZE_MAX_DEPTH XR_STDLIB_MAX_DEPTH
 
 static void serialize_map_node(XmlWriter *w, XrayIsolate *X, XrMap *map,
                                XmlKeys *k, int depth) {

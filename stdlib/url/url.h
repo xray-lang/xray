@@ -27,22 +27,23 @@
 #ifndef XR_STDLIB_URL_H
 #define XR_STDLIB_URL_H
 
+#include "../../src/base/xdefs.h"
 #include "../../src/module/xmodule.h"
 #include "../../src/vm/xvm.h"
 
 // ========== URL Encoding (C-level API) ==========
 
 // RFC 3986 percent-encode: preserves unreserved chars (A-Z a-z 0-9 - _ . ~)
-int xr_url_encode(const char *str, size_t len, char *buf, size_t buf_size);
+XR_FUNC int xr_url_encode(const char *str, size_t len, char *buf, size_t buf_size);
 
 // RFC 3986 percent-decode: does NOT treat '+' as space
-int xr_url_decode(const char *str, size_t len, char *buf, size_t buf_size);
+XR_FUNC int xr_url_decode(const char *str, size_t len, char *buf, size_t buf_size);
 
 // Form encode: like RFC 3986 but space → '+'
-int xr_url_encode_form(const char *str, size_t len, char *buf, size_t buf_size);
+XR_FUNC int xr_url_encode_form(const char *str, size_t len, char *buf, size_t buf_size);
 
 // Form decode: like RFC 3986 but '+' → space
-int xr_url_decode_form(const char *str, size_t len, char *buf, size_t buf_size);
+XR_FUNC int xr_url_decode_form(const char *str, size_t len, char *buf, size_t buf_size);
 
 // ========== Module Loading ==========
 

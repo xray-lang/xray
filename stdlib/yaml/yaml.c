@@ -15,6 +15,7 @@
 #include "yaml_parser.h"
 #include "../../src/base/xmalloc.h"
 #include "../common_io.h"
+#include "../common_parser.h"
 #include <stdio.h>
 #include <string.h>
 
@@ -148,21 +149,9 @@ static XrValue yaml_stringify(XrayIsolate *X, XrValue *args, int argc) {
 
     if (argc >= 2 && xr_value_is_json(args[1])) {
         XrJson *json = xr_value_to_json(args[1]);
-
-        XrValue val = xr_json_get_by_key(X, json, "indent");
-        if (XR_IS_INT(val)) {
-            indent = (int)XR_TO_INT(val);
-        }
-
-        val = xr_json_get_by_key(X, json, "flowLevel");
-        if (XR_IS_INT(val)) {
-            flow_level = (int)XR_TO_INT(val);
-        }
-
-        val = xr_json_get_by_key(X, json, "lineWidth");
-        if (XR_IS_INT(val)) {
-            line_width = (int)XR_TO_INT(val);
-        }
+        xrs_cfg_get_int(X, json, "indent",    &indent);
+        xrs_cfg_get_int(X, json, "flowLevel", &flow_level);
+        xrs_cfg_get_int(X, json, "lineWidth", &line_width);
     } else if (argc >= 2 && XR_IS_INT(args[1])) {
         indent = (int)XR_TO_INT(args[1]);
     }

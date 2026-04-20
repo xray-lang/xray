@@ -114,15 +114,8 @@ void toml_config_from_json(XrayIsolate *X, TomlConfig *config, XrJson *json) {
     toml_config_init(config);
     if (!json) return;
 
-    XrValue val = xr_json_get_by_key(X, json, "strict");
-    if (XR_IS_BOOL(val)) {
-        config->strict = XR_TO_BOOL(val);
-    }
-
-    val = xr_json_get_by_key(X, json, "allowDuplicateKeys");
-    if (XR_IS_BOOL(val)) {
-        config->allow_duplicate_keys = XR_TO_BOOL(val);
-    }
+    xrs_cfg_get_bool(X, json, "strict",             &config->strict);
+    xrs_cfg_get_bool(X, json, "allowDuplicateKeys", &config->allow_duplicate_keys);
 }
 
 void toml_parser_init(TomlParser *parser, XrayIsolate *isolate,

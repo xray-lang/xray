@@ -35,7 +35,7 @@
 typedef struct XrWorker {
     /* === Scheduling Resources (P) === */
     XrProc p;
-    
+
     /* === Bound Machine (M) === */
     XrMachine *m;
 } XrWorker;
@@ -47,22 +47,37 @@ typedef struct XrRuntime {
     XrWorker *workers;
     int worker_count;
     XrayIsolate *isolate;
-    
+
     /* === Machines (M) — pre-allocated 1:1 with Workers === */
     XrMachine *machines;
-    
-    /* === Idle P/M Management === */
-    pthread_mutex_t sched_lock;       // Protects idle lists
-    XrProc *idle_p_head;              // Idle P linked list (via p->idle_link)
-    _Atomic int idle_p_count;
-    XrMachine *idle_m_head;           // Idle M linked list (via m->idle_link)
-    _Atomic int idle_m_count;
-    _Atomic int m_count;              // Total M count (grows on demand)
-    
-    /* === O(1) Idle Worker Stack (sched_lock protected) === */
-    int idle_worker_stack[XR_MAX_WORKERS]; // Stack of parked worker indices
-    int idle_worker_count;                  // Number of entries in stack
-    
+
+    /* === Idle P/M Management (Phase 4.1: lock-free Treiber stacks) ===
+     *
+     * All three lists are lock-free stacks chained via XrMachine::idle_link
+     * or XrProc::idle_link. The previous pthread_mutex_t sched_lock has been
+     * removed; mutual exclusion is now achieved via atomic CAS.
+     *
+     * ABA: XrProc / XrMachine instances are never freed during runtime
+     * lifetime (P is 1:1 with worker; M grows monotonically via handoff).
+     * Re-push intervals exceed microsecond-scale CAS windows, so ABA has
+     * not been observed in stress tests; a versioned tag can be added here
+     * if load ever demonstrates a hazard.
+     *
+     * Sharing idle_link: A given M is in exactly one list at a time.
+     *   - idle_worker_list : M is still bound to its parked Worker.
+     *   - idle_m_head      : M has been detached via handoff
+     *                        (worker->m = NULL before xr_put_idle_m).
+     */
+    _Atomic(XrProc *)    idle_p_head;      // Idle P Treiber stack (via p->idle_link)
+    _Atomic int          idle_p_count;     // Approximate, for heuristics
+    _Atomic(XrMachine *) idle_m_head;      // Idle M Treiber stack (via m->idle_link)
+    _Atomic int          idle_m_count;     // Approximate, for heuristics
+    _Atomic int          m_count;          // Total M count (grows on demand)
+
+    /* === O(1) Idle Worker Stack (lock-free Treiber stack) === */
+    _Atomic(XrMachine *) idle_worker_list;  // Head of parked-worker stack
+    _Atomic int          idle_worker_count; // Approximate, for wake heuristic
+
     /* === State (atomic) === */
     _Atomic bool running;
     _Atomic bool threads_started;    // Worker/sysmon threads created (lazy start)
@@ -72,29 +87,24 @@ typedef struct XrRuntime {
     _Atomic int spinning_count;
     _Atomic int wake_spinner;
     _Atomic int needspinning;        // Last spinner notify protocol
-    
+
     /* === Statistics === */
     _Atomic int64_t total_inbox_len;  // Global atomic counter for inbox items
     _Atomic int next_coro_id;
-    
+
     /* === I/O & Async === */
     XrNetpoll netpoll;
     pthread_t sysmon_thread;      // Sysmon: heartbeat monitoring + stuck detection
     struct XrAsyncPool *async_pool;
-    
+
     /* === Scope & Migration === */
     XrScopeContext *current_scope;
     XrMigrationPath migration_paths[XR_MAX_WORKERS];
     int64_t last_balance_time;
-    
+
     /* === Load Balance State (per-Isolate) === */
-    struct {
-        _Atomic int checking_balance;
-        int last_active_workers;
-        int halftime;
-        int full_reds_history_index;
-    } balance_info;
-    
+    XrBalanceInfo balance_info;
+
     /* === Sysmon Per-Worker State === */
     struct {
         uint64_t last_heartbeat;

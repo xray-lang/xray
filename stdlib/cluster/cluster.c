@@ -235,6 +235,17 @@ int xr_cluster_start_ex(XrayIsolate *X, const char *name,
     xr_mutex_init(&c->topics_lock);
     atomic_store(&c->next_request_id, 1);
 
+    /* Topic routing trie — allocated eagerly so subscribe never has to
+     * worry about a NULL root under the lock. Failure here is fatal to
+     * start: pub/sub is a first-class feature, not a best-effort add-on. */
+    if (xr_cluster_topics_init(c) != 0) {
+        if (c->tls_client_ctx) xr_tls_context_free(c->tls_client_ctx);
+        if (c->tls_server_ctx) xr_tls_context_free(c->tls_server_ctx);
+        xr_secure_wipe(c->secret, sizeof(c->secret));
+        xr_free(c);
+        return -1;
+    }
+
     c->heartbeat_interval_ms = 5000;
     c->heartbeat_timeout_ms = 15000;
     c->max_missed_heartbeats = 3;
@@ -370,19 +381,8 @@ void xr_cluster_stop(XrCluster *c) {
     c->service_count = 0;
     xr_mutex_unlock(&c->services_lock);
 
-    // Free topic subscriptions
-    xr_mutex_lock(&c->topics_lock);
-    for (int i = 0; i < XR_CLUSTER_TOPIC_BUCKETS; i++) {
-        XrTopicSubscription *sub = c->topic_buckets[i];
-        while (sub) {
-            XrTopicSubscription *next = sub->next;
-            xr_free(sub);
-            sub = next;
-        }
-        c->topic_buckets[i] = NULL;
-    }
-    c->topic_sub_count = 0;
-    xr_mutex_unlock(&c->topics_lock);
+    // Free topic subscriptions (recursive trie teardown lives in cluster_topic.c)
+    xr_cluster_topics_destroy(c);
 
     // Free node monitors
     xr_mutex_lock(&c->monitors_lock);

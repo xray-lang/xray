@@ -76,11 +76,11 @@ void xr_dns_shutdown(void);
 // Synchronous DNS resolve (cached + round-robin)
 bool xr_dns_resolve(const char *hostname, XrSockAddr *addr, XrAddrFamily family);
 
-// Get all IPs for hostname (for failover scenarios)
+// Get all IPs for hostname (for failover scenarios).
+// Addresses are returned with IPv6/IPv4 interleaved (RFC 8305 §4
+// destination address sorting) so callers that try them in order get
+// coarse-grained Happy Eyeballs behaviour for free.
 int xr_dns_resolve_all(const char *hostname, XrSockAddr *addrs, int max_addrs, XrAddrFamily family);
-
-// Connect with automatic failover across all resolved IPs
-int xr_dns_dial(const char *hostname, int port, int timeout_ms);
 
 // Async DNS resolve (coroutine-friendly)
 // Returns true if cache hit or task submitted
