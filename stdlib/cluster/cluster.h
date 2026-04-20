@@ -421,9 +421,26 @@ XR_FUNC void xr_cluster_topic_unsubscribe(XrCluster *c, const char *pattern);
 XR_FUNC int xr_cluster_topic_publish(struct XrayIsolate *X,
                               const char *topic, XrValue value);
 
-// Handle incoming TOPIC_PUBLISH frame from a remote node
-XR_FUNC void xr_cluster_topic_handle_publish(XrCluster *c, const char *topic,
-                                      const uint8_t *value_data, uint32_t value_len);
+/*
+ * Handle incoming TOPIC_PUBLISH frame from a remote node.
+ *
+ *   from       — the XrClusterNode the frame arrived from, used for
+ *                split-horizon so we never echo the frame back to
+ *                its sender. NULL is legal (locally-injected test
+ *                frames etc.) but in production always non-NULL.
+ *   hop_limit  — the hop count encoded in the frame's trailing byte.
+ *                0 means "deliver locally only, do not re-forward"
+ *                (backward-compat with pre-P17 nodes that do not
+ *                emit the hop byte). Non-zero causes a decrement
+ *                and a re-send to every other connected peer.
+ *
+ * The value is delivered to local subscribers regardless of hop_limit.
+ */
+XR_FUNC void xr_cluster_topic_handle_publish(XrCluster *c,
+                                      struct XrClusterNode *from,
+                                      const char *topic,
+                                      const uint8_t *value_data, uint32_t value_len,
+                                      uint8_t hop_limit);
 
 // Deliver to local subscribers matching the topic
 XR_FUNC void xr_cluster_topic_deliver_local(XrCluster *c, const char *topic, XrValue value);

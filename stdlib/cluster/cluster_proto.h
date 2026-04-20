@@ -99,6 +99,37 @@ typedef enum {
  */
 #define XR_CLUSTER_HANDSHAKE_TIMEOUT_MS  5000
 
+/*
+ * Default hop-limit for TOPIC_PUBLISH frames that cross node
+ * boundaries via the controlled-flooding forwarder (see
+ * xr_cluster_topic_handle_publish in cluster_topic.c).
+ *
+ * A hop_limit byte is appended to every outgoing TOPIC_PUBLISH
+ * payload. The originating publisher starts with
+ * XR_TOPIC_DEFAULT_HOP_LIMIT; each receiving node delivers locally
+ * and, if hop_limit > 0, re-forwards with (hop_limit - 1) to every
+ * connected peer EXCEPT the one the frame arrived on (split
+ * horizon).
+ *
+ * Hop-count = 3 covers every realistic mesh depth we care about:
+ *   0 hops — publisher's own direct subscribers
+ *   1 hop  — peers directly connected to publisher
+ *   2 hops — peers of peers (two-tier cluster)
+ *   3 hops — three-tier (edge → region → core + one more)
+ *
+ * Bumping this on both sides is backward-incompatible (new nodes
+ * will re-forward more aggressively). Lowering to 1 effectively
+ * reverts to the pre-P17 "publisher must directly connect to every
+ * subscriber" behaviour.
+ *
+ * The wire format sends the limit as a trailing byte so old (no-hop)
+ * payloads parse unchanged on new code (missing byte → limit 0 →
+ * no further forwarding). Old nodes reading new payloads ignore
+ * the extra trailing byte because the decoder keys off topic_len,
+ * not payload_len.
+ */
+#define XR_TOPIC_DEFAULT_HOP_LIMIT  3
+
 // Max node name length
 #define XR_NODE_NAME_MAX  63
 
