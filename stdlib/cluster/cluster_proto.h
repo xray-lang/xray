@@ -79,6 +79,26 @@ typedef enum {
  */
 #define XR_CLUSTER_HANDSHAKE_VERSION  2
 
+/*
+ * Wall-clock deadline for the full handshake exchange (in ms).
+ *
+ * Applied symmetrically to the client and server handshake paths via
+ * xr_socket_set_read_timeout / xr_socket_set_write_timeout on the
+ * conn's fd. Without it a malicious or simply slow peer could connect
+ * and then sit silent, pinning:
+ *   - the caller of xr_cluster_node_connect on the client side, and
+ *   - the entire cluster_accept_loop on the server side (which
+ *     processes one handshake inline per accepted socket).
+ *
+ * 5 s is loose enough for pathologically slow networks yet tight
+ * enough to keep the accept path responsive under a stall attack.
+ * Applies to the whole handshake (REQ send, ACK receive, DONE send)
+ * rather than per-frame because each timer-wheel arming overwrites
+ * the previous deadline on the same fd; we set it once at handshake
+ * start and clear it on completion.
+ */
+#define XR_CLUSTER_HANDSHAKE_TIMEOUT_MS  5000
+
 // Max node name length
 #define XR_NODE_NAME_MAX  63
 

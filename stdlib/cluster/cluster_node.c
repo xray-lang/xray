@@ -41,6 +41,8 @@
  * signature is checked at link time against xsocket.c.
  */
 extern int xr_socket_read(struct XrayIsolate *X, int fd, char *buf, size_t len);
+extern void xr_socket_set_read_timeout(struct XrayIsolate *X, int fd, int timeout_ms);
+extern void xr_socket_set_write_timeout(struct XrayIsolate *X, int fd, int timeout_ms);
 
 // xr_coro_create_native is not declared in any header
 extern struct XrCoroutine *xr_coro_create_native(struct XrayIsolate *X, void (*func)(void*), void *arg,
@@ -734,6 +736,27 @@ int xr_cluster_node_send_ping(XrClusterNode *node) {
     return -1;
 }
 
+/*
+ * Arm / clear read+write deadlines on a conn for the duration of the
+ * handshake. Passing timeout_ms==0 clears both deadlines so subsequent
+ * heartbeat / app traffic on the conn runs unbounded (the writer
+ * coroutine + reader coroutine install their own shorter deadlines as
+ * needed).
+ *
+ * Safe to call with cluster->isolate == NULL or conn->fd < 0 —
+ * xr_socket_set_{read,write}_timeout short-circuit on bad arguments.
+ * We guard on tls_enabled here so the timeout is armed on the real
+ * underlying socket fd, which is what netpoll tracks for both TLS
+ * and plain connections (conn->fd is the socket fd in both cases,
+ * per stdlib/net/io.c).
+ */
+static void cluster_handshake_set_deadline(XrCluster *cluster,
+                                           XrIOConn *conn, int timeout_ms) {
+    if (!cluster || !cluster->isolate || !conn || conn->fd < 0) return;
+    xr_socket_set_read_timeout(cluster->isolate,  conn->fd, timeout_ms);
+    xr_socket_set_write_timeout(cluster->isolate, conn->fd, timeout_ms);
+}
+
 /* ========== Client-Side Handshake ========== */
 
 int xr_cluster_node_connect(XrCluster *cluster, XrClusterNode *node) {
@@ -761,6 +784,16 @@ int xr_cluster_node_connect(XrCluster *cluster, XrClusterNode *node) {
 
     node->state = XR_NODE_HANDSHAKING;
 
+    /*
+     * Arm read+write deadlines on the fresh conn so a peer that goes
+     * silent mid-handshake cannot pin this coroutine indefinitely.
+     * Cleared on every exit path below (success or failure) — the
+     * writer / reader coroutines that run after the handshake
+     * install their own timeouts as needed.
+     */
+    cluster_handshake_set_deadline(cluster, node->conn,
+                                   XR_CLUSTER_HANDSHAKE_TIMEOUT_MS);
+
     // Step 1: Send HANDSHAKE_REQ
     XrFrameHandshakeReq req;
     memset(&req, 0, sizeof(req));
@@ -772,6 +805,7 @@ int xr_cluster_node_connect(XrCluster *cluster, XrClusterNode *node) {
     uint8_t frame_buf[512];
     int flen = xr_frame_encode_handshake_req(frame_buf, sizeof(frame_buf), &req);
     if (flen < 0 || xr_io_write_all(node->conn, frame_buf, (size_t)flen) != flen) {
+        cluster_handshake_set_deadline(cluster, node->conn, 0);
         xr_cluster_node_close(node);
         node->state = XR_NODE_IDLE;
         return -1;
@@ -784,6 +818,7 @@ int xr_cluster_node_connect(XrCluster *cluster, XrClusterNode *node) {
     if (xr_cluster_node_recv_frame(node, &frame_type, recv_buf, sizeof(recv_buf),
                                     &payload_len) != 0 ||
         frame_type != XR_FRAME_HANDSHAKE_ACK) {
+        cluster_handshake_set_deadline(cluster, node->conn, 0);
         xr_cluster_node_close(node);
         node->state = XR_NODE_IDLE;
         return -1;
@@ -792,6 +827,7 @@ int xr_cluster_node_connect(XrCluster *cluster, XrClusterNode *node) {
     XrFrameHandshakeAck ack;
     if (xr_frame_decode_handshake_ack(recv_buf, payload_len, &ack) != 0 ||
         ack.version != XR_CLUSTER_HANDSHAKE_VERSION) {
+        cluster_handshake_set_deadline(cluster, node->conn, 0);
         xr_cluster_node_close(node);
         node->state = XR_NODE_IDLE;
         return -1;
@@ -802,6 +838,7 @@ int xr_cluster_node_connect(XrCluster *cluster, XrClusterNode *node) {
     uint8_t expected_proof[XR_PROOF_SIZE];
     xr_cluster_compute_proof(cluster->secret, req.nonce, expected_proof);
     if (!cluster_proof_equal(ack.proof, expected_proof)) {
+        cluster_handshake_set_deadline(cluster, node->conn, 0);
         xr_cluster_node_close(node);
         node->state = XR_NODE_IDLE;
         return -1;
@@ -818,12 +855,16 @@ int xr_cluster_node_connect(XrCluster *cluster, XrClusterNode *node) {
 
     flen = xr_frame_encode_handshake_done(frame_buf, sizeof(frame_buf), &done);
     if (flen < 0 || xr_io_write_all(node->conn, frame_buf, (size_t)flen) != flen) {
+        cluster_handshake_set_deadline(cluster, node->conn, 0);
         xr_cluster_node_close(node);
         node->state = XR_NODE_IDLE;
         return -1;
     }
 
-    // Handshake complete
+    // Handshake complete — clear the handshake deadlines so subsequent
+    // traffic (heartbeat, app messages) is not bounded by the 5s window.
+    cluster_handshake_set_deadline(cluster, node->conn, 0);
+
     node->state = XR_NODE_CONNECTED;
     node->last_heartbeat_recv = xr_cluster_now_ms();
     return 0;
@@ -833,6 +874,18 @@ int xr_cluster_node_connect(XrCluster *cluster, XrClusterNode *node) {
 
 XrClusterNode *xr_cluster_node_accept(XrCluster *cluster, XrIOConn *conn) {
     if (!cluster || !conn) return NULL;
+
+    /*
+     * Arm handshake deadlines immediately — before the first recv —
+     * so a peer that TCP-connects and then sits silent cannot pin the
+     * accept loop. The accept loop processes one handshake inline
+     * per socket, so a single stalled peer would otherwise freeze all
+     * further inbound connections. Cleared on every exit path below
+     * (success or failure) so downstream traffic (heartbeat / app
+     * frames) runs unbounded on the same conn.
+     */
+    cluster_handshake_set_deadline(cluster, conn,
+                                   XR_CLUSTER_HANDSHAKE_TIMEOUT_MS);
 
     // Step 1: Receive HANDSHAKE_REQ
     uint8_t recv_buf[512];
@@ -848,12 +901,14 @@ XrClusterNode *xr_cluster_node_accept(XrCluster *cluster, XrIOConn *conn) {
     if (xr_cluster_node_recv_frame(&temp, &frame_type, recv_buf, sizeof(recv_buf),
                                     &payload_len) != 0 ||
         frame_type != XR_FRAME_HANDSHAKE_REQ) {
+        cluster_handshake_set_deadline(cluster, conn, 0);
         return NULL;
     }
 
     XrFrameHandshakeReq req;
     if (xr_frame_decode_handshake_req(recv_buf, payload_len, &req) != 0 ||
         req.version != XR_CLUSTER_HANDSHAKE_VERSION) {
+        cluster_handshake_set_deadline(cluster, conn, 0);
         return NULL;
     }
 
@@ -869,6 +924,7 @@ XrClusterNode *xr_cluster_node_accept(XrCluster *cluster, XrIOConn *conn) {
     uint8_t frame_buf[512];
     int flen = xr_frame_encode_handshake_ack(frame_buf, sizeof(frame_buf), &ack);
     if (flen < 0 || xr_io_write_all(conn, frame_buf, (size_t)flen) != flen) {
+        cluster_handshake_set_deadline(cluster, conn, 0);
         return NULL;
     }
 
@@ -876,11 +932,13 @@ XrClusterNode *xr_cluster_node_accept(XrCluster *cluster, XrIOConn *conn) {
     if (xr_cluster_node_recv_frame(&temp, &frame_type, recv_buf, sizeof(recv_buf),
                                     &payload_len) != 0 ||
         frame_type != XR_FRAME_HANDSHAKE_DONE) {
+        cluster_handshake_set_deadline(cluster, conn, 0);
         return NULL;
     }
 
     XrFrameHandshakeDone done;
     if (xr_frame_decode_handshake_done(recv_buf, payload_len, &done) != 0) {
+        cluster_handshake_set_deadline(cluster, conn, 0);
         return NULL;
     }
 
@@ -888,12 +946,19 @@ XrClusterNode *xr_cluster_node_accept(XrCluster *cluster, XrIOConn *conn) {
     uint8_t expected_proof[XR_PROOF_SIZE];
     xr_cluster_compute_proof(cluster->secret, ack.nonce, expected_proof);
     if (!cluster_proof_equal(done.proof, expected_proof)) {
+        cluster_handshake_set_deadline(cluster, conn, 0);
         return NULL;
     }
 
     // Create node
     XrClusterNode *node = xr_cluster_node_new(req.name, NULL, 0);
-    if (!node) return NULL;
+    if (!node) {
+        cluster_handshake_set_deadline(cluster, conn, 0);
+        return NULL;
+    }
+
+    // Handshake complete — clear deadlines before handing off the conn.
+    cluster_handshake_set_deadline(cluster, conn, 0);
 
     node->conn = conn;
     node->state = XR_NODE_CONNECTED;
