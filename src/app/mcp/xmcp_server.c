@@ -21,11 +21,13 @@
 #include "../../base/xmalloc.h"
 #include "../../base/xchecks.h"
 #include "../lsp/xlsp_json.h"
+#include "../cli/xcli_utils.h"
 #include "xray.h"
 #include "xray_isolate.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <stdarg.h>
 #include <errno.h>
 #include <getopt.h>
 #include <time.h>
@@ -129,6 +131,7 @@ static bool mcp_read_exact(XmcpServer *s, size_t count) {
 
 /* Read one line from stdin (up to \n). Returns false on EOF. */
 static bool mcp_read_line(XmcpServer *s, char *line, size_t cap) {
+    (void)s;
     size_t pos = 0;
     while (pos < cap - 1) {
         char c;
@@ -307,7 +310,7 @@ XmcpServer *xmcp_server_new(void) {
     setvbuf(stdout, NULL, _IONBF, 0);
 
     /* Create parser isolate for xray_check */
-    s->isolate = xray_new();
+    s->isolate = cli_create_isolate();
     if (!s->isolate) {
         mcp_log(s, 0, "failed to create isolate");
         xr_free(s->read_buf);
@@ -327,7 +330,7 @@ XmcpServer *xmcp_server_new(void) {
 void xmcp_server_free(XmcpServer *s) {
     if (!s) return;
     if (s->knowledge) xmcp_knowledge_free(s->knowledge);
-    if (s->isolate)   xray_free(s->isolate);
+    if (s->isolate)   xray_isolate_delete(s->isolate);
     if (s->log_file)  fclose(s->log_file);
     xr_free(s->read_buf);
     xr_free(s);

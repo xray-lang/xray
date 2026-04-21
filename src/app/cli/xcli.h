@@ -87,6 +87,14 @@ XR_FUNC int cmd_lsp(int argc, char **argv);
 XR_FUNC int cmd_dap(int argc, char **argv);
 #endif
 
+#ifdef XR_HAS_MCP
+// cmd_mcp_server - Start MCP server
+// Usage: xray mcp-server [options]
+// Starts Model Context Protocol server for AI assistants
+// Returns 0 on success, non-zero on failure
+XR_FUNC int cmd_mcp_server(int argc, char **argv);
+#endif
+
 // print_usage - Print usage help
 XR_FUNC void print_usage(void);
 

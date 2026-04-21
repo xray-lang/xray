@@ -19,6 +19,8 @@
 #include <stdio.h>
 
 #include "xtype_internal.h"
+#include "../xisolate_api.h"
+#include "../xisolate_internal.h"
 
 // ========== Process-level static singletons (early init) ==========
 // Basic types are immutable and globally shared. No allocation needed.
@@ -78,22 +80,29 @@ void xr_type_global_init(void) {
     g_types_initialized = true;
 }
 
-// Thread-local current type pool (still needed for complex type allocation)
-static __thread XrTypePool *g_current_pool = NULL;
+// Fallback pool for contexts without an active isolate (unit tests, tools)
+static XrTypePool *g_fallback_pool = NULL;
 
-// Set current type pool (called by XrayIsolate or XaAnalyzer)
+// Set current type pool on the active isolate (called by XaAnalyzer)
 void xr_type_set_current_pool(XrTypePool *pool, uint32_t *id_counter) {
-    g_current_pool = pool;
     (void)id_counter;  // ID counter now managed by pool itself
+    XrayIsolate *X = xray_isolate_current();
+    if (X) {
+        X->current_type_pool = pool;
+    } else {
+        g_fallback_pool = pool;
+    }
 }
 
-// Get current type pool (no fallback - must be set)
+// Get current type pool from active isolate
 XrTypePool *xr_type_get_current_pool(void) {
-    return g_current_pool;
+    XrayIsolate *X = xray_isolate_current();
+    return X ? X->current_type_pool : g_fallback_pool;
 }
 
 static XrTypePool *get_current_pool(void) {
-    return g_current_pool;
+    XrayIsolate *X = xray_isolate_current();
+    return X ? X->current_type_pool : g_fallback_pool;
 }
 
 // Helper: allocate and initialize a type (for non-singleton types)
@@ -804,7 +813,7 @@ XrType *xr_type_make_nullable(XrType *type) {
     if (type == &g_type_json)   return &g_type_json_nullable;
 
     // Also handle pool singletons (frozen types from type pool)
-    if (type->frozen && g_current_pool) {
+    if (type->frozen && get_current_pool()) {
         switch (type->kind) {
         case XR_KIND_INT:    return &g_type_int_nullable;
         case XR_KIND_FLOAT:  return &g_type_float_nullable;
