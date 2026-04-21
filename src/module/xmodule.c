@@ -20,6 +20,7 @@
 #include "../frontend/parser/xast.h"
 #include "../frontend/parser/xparse.h"
 #include "../base/xmalloc.h"
+#include "../base/xfileio.h"
 #include "../runtime/xerror.h"
 #include "../runtime/gc/xgc.h"
 #include "../base/xhashmap.h"
@@ -368,17 +369,7 @@ void xr_module_system_init_with_script(XrayIsolate *isolate, const char *script_
 
     // Try to load project config (for package management)
     if (script_path && !registry->project) {
-        // Get script directory
-        char *dir = xr_strdup(script_path);
-        char *last_slash = strrchr(dir, '/');
-        if (last_slash) {
-            *last_slash = '\0';
-        } else {
-            xr_free(dir);
-            dir = xr_strdup(".");
-        }
-
-        // Try to load project config
+        char *dir = xr_path_dirname(script_path);
         registry->project = xr_project_load(isolate, dir);
         xr_free(dir);
     }
@@ -585,18 +576,8 @@ static bool load_script_extension(XrayIsolate *isolate, XrModule *module, const 
 
         XR_DBG_MODULE("load_script_extension: trying %s", path);
 
-        FILE *file = fopen(path, "r");
-        if (file) {
-            fseek(file, 0, SEEK_END);
-            long size = ftell(file);
-            fseek(file, 0, SEEK_SET);
-
-            source = (char*)xr_malloc(size + 1);
-            if (source) {
-                size_t read_size = fread(source, 1, size, file);
-                source[read_size] = '\0';
-            }
-            fclose(file);
+        source = xr_file_read_all(path, "r", NULL);
+        if (source) {
             XR_DBG_MODULE("load_script_extension: loaded from file");
         }
     }
@@ -711,28 +692,12 @@ static XrModule* load_script_module(XrayIsolate *isolate, XrModule *module, cons
 
     const char *module_name = module->name;
 
-    // 1. Check if file exists
-    FILE *file = fopen(path, "r");
-    if (!file) {
-        // File doesn't exist, not an error (might be Native module)
-        return NULL;
-    }
-
-    // 2. Read file contents
-    fseek(file, 0, SEEK_END);
-    long size = ftell(file);
-    fseek(file, 0, SEEK_SET);
-
-    char *source = (char*)xr_malloc(size + 1);
+    // 1. Read file contents
+    char *source = xr_file_read_all(path, "r", NULL);
     if (!source) {
-        fclose(file);
-        xr_log_warning("module", "memory allocation failed for module '%s'", module_name);
+        // File doesn't exist or unreadable
         return NULL;
     }
-
-    size_t read_size = fread(source, 1, size, file);
-    source[read_size] = '\0';
-    fclose(file);
 
     // 3. Set current module context (for export collection)
     XrModule *prev_module = xr_isolate_get_current_module(isolate);
@@ -878,12 +843,10 @@ XrValue xr_module_import(XrayIsolate *isolate, const char *module_name) {
     }
 
     // Normalize path (resolve . and ..), ensure same file uses same cache key
-    // Note: realpath uses system malloc, must convert to xr_malloc
-    char *real_path = realpath(path, NULL);
+    char *real_path = xr_realpath(path);
     if (real_path) {
         xr_free(path);
-        path = xr_strdup(real_path);
-        free(real_path);
+        path = real_path;
     }
 
     // 4. Check cache with absolute path (ensures module singleton)

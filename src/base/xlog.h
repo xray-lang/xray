@@ -36,7 +36,6 @@
 #include <stdio.h>
 #include <stdarg.h>
 #include <stdint.h>
-#include <unistd.h>
 #include "xdefs.h"
 #include "xchecks.h"
 

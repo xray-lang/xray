@@ -93,11 +93,11 @@ static inline int hex_value(char c) {
 bool xr_swar_is_8_digits(const char *s) {
     uint64_t chunk;
     memcpy(&chunk, s, 8);
-    
+
     // If any non-digit, a or b will have high bit set in some byte
     uint64_t a = chunk - SWAR_ZEROS;
     uint64_t b = SWAR_NINES - chunk;
-    
+
     return ((a | b) & SWAR_HIGH_BIT) == 0;
 }
 
@@ -123,12 +123,13 @@ uint64_t xr_swar_parse_8_digits(const char *s) {
 /* ========== Public API Implementation ========== */
 
 bool xr_swar_is_digits(const char *s, size_t len) {
+    XR_DCHECK(s != NULL, "swar_is_digits: NULL input");
     if (len == 0) {
         return false;
     }
-    
+
     size_t i = 0;
-    
+
     // Use SWAR to batch check 8 bytes
     while (i + 8 <= len) {
         if (!xr_swar_is_8_digits(s + i)) {
@@ -136,44 +137,46 @@ bool xr_swar_is_digits(const char *s, size_t len) {
         }
         i += 8;
     }
-    
+
     // Process remaining bytes
     return is_digits_scalar(s + i, len - i);
 }
 
 bool xr_swar_parse_uint(const char *s, size_t len, uint64_t *result) {
+    XR_DCHECK(s != NULL, "swar_parse_uint: NULL input");
+    XR_DCHECK(result != NULL, "swar_parse_uint: NULL result");
     if (len == 0 || len > 19) {
         return false;
     }
-    
+
     // Small numbers: use scalar
     if (len < 8) {
         return parse_uint_scalar(s, len, result);
     }
-    
+
     // First validate all digits
     if (!xr_swar_is_digits(s, len)) {
         return false;
     }
-    
+
     /*
      * Large number strategy:
      * - 8 digits: direct SWAR
      * - 9-16 digits: split into 8 + rest
      * - 17-19 digits: split into 8 + 8 + rest
      */
-    
+
     uint64_t val = 0;
     size_t pos = 0;
-    
+
     if (len >= 16) {
         // Process first 8 digits
         val = xr_swar_parse_8_digits(s);
         pos = 8;
-        
+
         // Process middle 8 digits
         uint64_t mid = xr_swar_parse_8_digits(s + 8);
-        
+
         // Overflow check
         if (val > UINT64_MAX / 100000000ULL) {
             return false;
@@ -185,7 +188,7 @@ bool xr_swar_parse_uint(const char *s, size_t len, uint64_t *result) {
         val = xr_swar_parse_8_digits(s);
         pos = 8;
     }
-    
+
     // Process remaining digits
     while (pos < len) {
         if (val > UINT64_MAX / 10) {
@@ -194,19 +197,21 @@ bool xr_swar_parse_uint(const char *s, size_t len, uint64_t *result) {
         val = val * 10 + digit_value(s[pos]);
         pos++;
     }
-    
+
     *result = val;
     return true;
 }
 
 bool xr_swar_parse_int(const char *s, size_t len, int64_t *result) {
+    XR_DCHECK(s != NULL, "swar_parse_int: NULL input");
+    XR_DCHECK(result != NULL, "swar_parse_int: NULL result");
     if (len == 0) {
         return false;
     }
-    
+
     bool negative = false;
     size_t start = 0;
-    
+
     // Handle sign
     if (s[0] == '-') {
         negative = true;
@@ -214,17 +219,17 @@ bool xr_swar_parse_int(const char *s, size_t len, int64_t *result) {
     } else if (s[0] == '+') {
         start = 1;
     }
-    
+
     if (start >= len) {
         return false;
     }
-    
+
     // Parse unsigned part
     uint64_t uval;
     if (!xr_swar_parse_uint(s + start, len - start, &uval)) {
         return false;
     }
-    
+
     // Range check
     if (negative) {
         if (uval > (uint64_t)INT64_MAX + 1) {
@@ -237,17 +242,19 @@ bool xr_swar_parse_int(const char *s, size_t len, int64_t *result) {
         }
         *result = (int64_t)uval;
     }
-    
+
     return true;
 }
 
 bool xr_swar_parse_hex(const char *s, size_t len, uint64_t *result) {
+    XR_DCHECK(s != NULL, "swar_parse_hex: NULL input");
+    XR_DCHECK(result != NULL, "swar_parse_hex: NULL result");
     if (len == 0 || len > 16) {
         return false;
     }
-    
+
     uint64_t val = 0;
-    
+
     for (size_t i = 0; i < len; i++) {
         int hv = hex_value(s[i]);
         if (hv < 0) {
@@ -255,7 +262,7 @@ bool xr_swar_parse_hex(const char *s, size_t len, uint64_t *result) {
         }
         val = (val << 4) | hv;
     }
-    
+
     *result = val;
     return true;
 }

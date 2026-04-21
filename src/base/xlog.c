@@ -9,11 +9,20 @@
  */
 
 #include "xdefs.h"
+#include "xplatform.h"
 #include "xlog.h"
 #include <stdio.h>
 #include <stdarg.h>
 #include <string.h>
 #include <stdatomic.h>
+
+#ifdef XR_OS_POSIX
+    #include <unistd.h>
+#elif defined(XR_OS_WINDOWS)
+    #include <io.h>
+    #define isatty _isatty
+    #define fileno _fileno
+#endif
 
 /* ========== Global State ========== */
 
@@ -45,6 +54,7 @@ static inline void log_acquire(void) {
     int expected = 0;
     while (!atomic_compare_exchange_weak(&log_lock, &expected, 1)) {
         expected = 0;
+        XR_CPU_PAUSE();
     }
 }
 

@@ -15,6 +15,7 @@
 #include "xlockfile.h"
 #include "../base/xchecks.h"
 #include "../base/xmalloc.h"
+#include "../base/xfileio.h"
 #if defined(XR_HAS_CRYPTO) || !defined(XR_STDLIB_MODULAR)
 #include "../../stdlib/crypto/crypto.h"
 #endif
@@ -170,23 +171,8 @@ XrLockfile* xr_lockfile_new(void) {
 
 XrLockfile* xr_lockfile_load(const char *path) {
     XR_DCHECK(path != NULL, "lockfile_load: NULL path");
-    FILE *f = fopen(path, "r");
-    if (!f) return NULL;
-
-    // Read entire file
-    fseek(f, 0, SEEK_END);
-    long size = ftell(f);
-    fseek(f, 0, SEEK_SET);
-
-    char *content = (char*)xr_malloc(size + 1);
-    if (!content) {
-        fclose(f);
-        return NULL;
-    }
-
-    size_t read_bytes = fread(content, 1, size, f);
-    content[read_bytes] = '\0';  // Use actual read bytes
-    fclose(f);
+    char *content = xr_file_read_all(path, "r", NULL);
+    if (!content) return NULL;
 
     // Create lockfile
     XrLockfile *lock = xr_lockfile_new();

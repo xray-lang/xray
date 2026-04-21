@@ -15,6 +15,7 @@
 #include "xbundle.h"
 #include "../base/xlog.h"
 #include "../base/xchecks.h"
+#include "../base/xfileio.h"
 #include "xbytecode_io.h"
 #include "../runtime/xisolate_api.h"
 #include "../base/xmalloc.h"
@@ -24,7 +25,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <libgen.h>
+#include <limits.h>
 
 // xr_parse_with_source declared in xparse.h (included above)
 // xr_compile_ast_with_source declared in xisolate_internal.h (included above)
@@ -42,36 +43,8 @@ typedef struct {
 
 /* ========== Helper Functions ========== */
 
-static char* read_file_content(const char *path) {
-    FILE *f = fopen(path, "r");
-    if (!f) return NULL;
-
-    fseek(f, 0, SEEK_END);
-    long size = ftell(f);
-    fseek(f, 0, SEEK_SET);
-
-    char *content = xr_malloc(size + 1);
-    if (!content) {
-        fclose(f);
-        return NULL;
-    }
-
-    size_t read = fread(content, 1, size, f);
-    content[read] = '\0';
-    fclose(f);
-    return content;
-}
-
-static char* get_dir_path(const char *file_path) {
-    char *path_copy = xr_strdup(file_path);
-    char *dir = dirname(path_copy);
-    char *result = xr_strdup(dir);
-    xr_free(path_copy);
-    return result;
-}
-
 static char* resolve_module_path(const char *base_dir, const char *module_name) {
-    char path[512];
+    char path[PATH_MAX];
 
     // Absolute path
     if (module_name[0] == '/') {
@@ -92,13 +65,8 @@ static char* resolve_module_path(const char *base_dir, const char *module_name) 
         FILE *f = fopen(path, "r");
         if (f) {
             fclose(f);
-            char *real = realpath(path, NULL);
-            if (real) {
-                char *dup = xr_strdup(real);
-                free(real);
-                return dup;
-            }
-            return xr_strdup(path);
+            char *real = xr_realpath(path);
+            return real ? real : xr_strdup(path);
         }
 
         // Try directory entry
@@ -106,13 +74,8 @@ static char* resolve_module_path(const char *base_dir, const char *module_name) 
         f = fopen(path, "r");
         if (f) {
             fclose(f);
-            char *real = realpath(path, NULL);
-            if (real) {
-                char *dup = xr_strdup(real);
-                free(real);
-                return dup;
-            }
-            return xr_strdup(path);
+            char *real = xr_realpath(path);
+            return real ? real : xr_strdup(path);
         }
     }
 
@@ -215,11 +178,11 @@ static void visit_node(BundleContext *ctx, AstNode *node, const char *current_di
                     if (!xr_hashmap_has(ctx->visited, pkg_path)) {
                         xr_hashmap_set(ctx->visited, pkg_path, (void*)1);
 
-                        char *source = read_file_content(pkg_path);
+                        char *source = xr_file_read_all(pkg_path, "r", NULL);
                         if (source) {
                             AstNode *ast = xr_parse_with_source(ctx->X, source, pkg_path);
                             if (ast) {
-                                char *pkg_dir = get_dir_path(pkg_path);
+                                char *pkg_dir = xr_path_dirname(pkg_path);
                                 collect_imports_from_ast(ctx, ast, pkg_dir);
 
                                 XrProto *proto = xr_compile_ast_with_source(ctx->X, ast, pkg_path);
@@ -256,12 +219,12 @@ static void visit_node(BundleContext *ctx, AstNode *node, const char *current_di
                     xr_hashmap_set(ctx->visited, resolved, (void*)1);
 
                     // Recursively process dependencies
-                    char *source = read_file_content(resolved);
+                    char *source = xr_file_read_all(resolved, "r", NULL);
                     if (source) {
                         AstNode *ast = xr_parse_with_source(ctx->X, source, resolved);
                         if (ast) {
                             // Get module directory
-                            char *module_dir = get_dir_path(resolved);
+                            char *module_dir = xr_path_dirname(resolved);
 
                             // Recursively collect dependencies
                             collect_imports_from_ast(ctx, ast, module_dir);
@@ -420,19 +383,15 @@ XrBundle* xr_bundle_create_ex(XrayIsolate *X, const char *entry_file, XrBundleFl
     if (!X || !entry_file) return NULL;
 
     // Read entry file
-    char *source = read_file_content(entry_file);
+    char *source = xr_file_read_all(entry_file, "r", NULL);
     if (!source) {
         xr_log_warning("bundle", "cannot read entry file: %s", entry_file);
         return NULL;
     }
 
-    // Get absolute path (realpath uses system malloc, convert to xr_malloc)
-    char *abs_path = NULL;
-    char *rp = realpath(entry_file, NULL);
-    if (rp) {
-        abs_path = xr_strdup(rp);
-        free(rp);
-    } else {
+    // Get absolute path
+    char *abs_path = xr_realpath(entry_file);
+    if (!abs_path) {
         abs_path = xr_strdup(entry_file);
     }
 
@@ -445,7 +404,7 @@ XrBundle* xr_bundle_create_ex(XrayIsolate *X, const char *entry_file, XrBundleFl
         .X = X,
         .bundle = bundle,
         .visited = xr_hashmap_new(),
-        .base_dir = get_dir_path(abs_path),
+        .base_dir = xr_path_dirname(abs_path),
         .flags = flags
     };
 
