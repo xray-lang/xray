@@ -18,7 +18,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-XrCompilerContext* xr_compiler_context_new(void) {
+XrCompilerContext* xr_compiler_context_new(XrayIsolate *X) {
     XrCompilerContext *ctx = (XrCompilerContext*)xr_malloc(sizeof(XrCompilerContext));
     if (!ctx) {
         return NULL;
@@ -48,7 +48,7 @@ XrCompilerContext* xr_compiler_context_new(void) {
         ctx->shared_vars[i].moved_column = 0;
     }
 
-    ctx->X = NULL;
+    ctx->X = X;
     ctx->current = NULL;
     ctx->current_line = 1;
     ctx->current_column = 0;

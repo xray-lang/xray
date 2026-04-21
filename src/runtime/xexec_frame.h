@@ -71,6 +71,7 @@ typedef struct XrExceptionHandler {
     int frame_count;            // frame count when entering try
     XrValue exception;          // caught exception value
     bool caught;                // exception was caught
+    bool in_finally;            // currently executing finally block
     XrInstruction *try_pc;      // PC at try block start
 } XrExceptionHandler;
 

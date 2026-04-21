@@ -6094,6 +6094,7 @@ startfunc:
                 handler->frame_count = VM_FRAME_COUNT;
                 handler->exception = xr_null();
                 handler->caught = false;
+                handler->in_finally = false;
                 handler->try_pc = pc - 2; // Save try instruction position
 
                 vmbreak;
@@ -6124,6 +6125,9 @@ startfunc:
                             R(a) = exc;
                         }
                         handler->caught = true;
+                        // Clear consumed exception; if catch rethrows,
+                        // xr_vm_throw_exception will set a new one.
+                        handler->exception = xr_null();
                     }
                 }
 
@@ -6131,9 +6135,11 @@ startfunc:
             }
 
             vmcase(OP_FINALLY) {
-                // finally block start
+                // finally block start - mark handler so re-throw propagates outward
                 TRACE_EXECUTION();
-                // finally block executes unconditionally, no special handling needed
+                if (VM_HANDLER_COUNT > 0) {
+                    VM_HANDLERS[VM_HANDLER_COUNT - 1].in_finally = true;
+                }
                 vmbreak;
             }
 
@@ -6144,8 +6150,12 @@ startfunc:
                 if (VM_HANDLER_COUNT > 0) {
                     XrExceptionHandler *handler = &VM_HANDLERS[VM_HANDLER_COUNT - 1];
 
-                    // If there's uncaught exception, re-throw
-                    if (!XR_IS_NULL(handler->exception) && !handler->caught) {
+                    // Check for pending exception that needs re-throw:
+                    // 1. Uncaught exception (try-finally without catch)
+                    // 2. Exception thrown during catch, finally just finished
+                    bool has_pending = !XR_IS_NULL(handler->exception) &&
+                                       (!handler->caught || handler->in_finally);
+                    if (has_pending) {
                         XrValue exc = handler->exception;
                         VM_DEC_HANDLER_COUNT; // Pop handler
                         xr_vm_throw_exception(isolate, exc);

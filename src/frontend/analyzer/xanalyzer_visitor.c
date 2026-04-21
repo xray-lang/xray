@@ -1724,9 +1724,9 @@ XrType *xa_visit_infer_expr(XaInferContext *ctx, AstNode *node) {
         case AST_TEMPLATE_STRING:
             result = xr_type_new_string(NULL); break;
         case AST_LITERAL_BIGINT:
-            result = xr_type_new_bigint(NULL); break;
+            result = xr_type_new_bigint(ctx->analyzer->isolate); break;
         case AST_LITERAL_REGEX:
-            result = xr_type_new_regex(NULL); break;
+            result = xr_type_new_regex(ctx->analyzer->isolate); break;
         case AST_LITERAL_NULL:
             result = xr_type_new_null(NULL); break;
         case AST_LITERAL_TRUE:
