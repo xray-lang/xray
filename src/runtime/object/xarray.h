@@ -21,7 +21,7 @@
 #include "../value/xvalue.h"
 #include "../gc/xgc_header.h"
 #include "../../base/xmalloc.h"
-#include "../base/xdefs.h"
+#include "../../base/xdefs.h"
 
 // Forward declaration
 

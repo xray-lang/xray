@@ -16,6 +16,7 @@
 #include "xml.h"
 #include "xml_node.h"
 #include "xml_parser.h"
+#include "../common.h"
 #include "../../src/runtime/xisolate_internal.h"
 #include "../../src/runtime/object/xarray.h"
 
@@ -606,28 +607,16 @@ XrModule* xr_load_module_xml(XrayIsolate *isolate) {
     XrModule *mod = xr_module_create_native(isolate, "xml");
     if (!mod) return NULL;
 
-    extern XrCFunction* xr_vm_cfunction_new(XrayIsolate *isolate, XrCFunctionPtr func, const char *name);
-    extern XrValue xr_value_from_cfunction(XrCFunction *cfunc);
-
-    #define EXPORT_CFUNC(name_str, func_ptr) \
-        do { \
-            XrCFunction *cfunc = xr_vm_cfunction_new(isolate, func_ptr, name_str); \
-            XrValue fn_val = xr_value_from_cfunction(cfunc); \
-            xr_module_add_export(isolate, mod, name_str, fn_val); \
-        } while(0)
-
-    EXPORT_CFUNC("parse", xml_parse_fn);
-    EXPORT_CFUNC("parseDetailed", xml_parse_detailed);
-    EXPORT_CFUNC("parseFile", xml_parse_file);
-    EXPORT_CFUNC("stringify", xml_stringify_fn);
-    EXPORT_CFUNC("writeFile", xml_write_file);
-    EXPORT_CFUNC("document", xml_document_fn);
-    EXPORT_CFUNC("element", xml_element_fn);
-    EXPORT_CFUNC("text", xml_text_fn);
-    EXPORT_CFUNC("comment", xml_comment_fn);
-    EXPORT_CFUNC("cdata", xml_cdata_fn);
-
-    #undef EXPORT_CFUNC
+    XRS_EXPORT(mod, isolate, "parse", xml_parse_fn);
+    XRS_EXPORT(mod, isolate, "parseDetailed", xml_parse_detailed);
+    XRS_EXPORT(mod, isolate, "parseFile", xml_parse_file);
+    XRS_EXPORT(mod, isolate, "stringify", xml_stringify_fn);
+    XRS_EXPORT(mod, isolate, "writeFile", xml_write_file);
+    XRS_EXPORT(mod, isolate, "document", xml_document_fn);
+    XRS_EXPORT(mod, isolate, "element", xml_element_fn);
+    XRS_EXPORT(mod, isolate, "text", xml_text_fn);
+    XRS_EXPORT(mod, isolate, "comment", xml_comment_fn);
+    XRS_EXPORT(mod, isolate, "cdata", xml_cdata_fn);
 
     mod->loaded = true;
     return mod;

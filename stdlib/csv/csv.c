@@ -13,6 +13,7 @@
 
 #include "csv.h"
 #include "csv_parser.h"
+#include "../common.h"
 #include "../json/json.h"
 #include "../../src/runtime/object/xjson.h"
 #include "../../src/base/xmalloc.h"
@@ -455,25 +456,13 @@ XrModule* xr_load_module_csv(XrayIsolate *isolate) {
     XrModule *mod = xr_module_create_native(isolate, "csv");
     if (!mod) return NULL;
 
-    extern XrCFunction* xr_vm_cfunction_new(XrayIsolate *isolate, XrCFunctionPtr func, const char *name);
-    extern XrValue xr_value_from_cfunction(XrCFunction *cfunc);
-
-    #define EXPORT_CFUNC(name_str, func_ptr) \
-        do { \
-            XrCFunction *cfunc = xr_vm_cfunction_new(isolate, func_ptr, name_str); \
-            XrValue fn_val = xr_value_from_cfunction(cfunc); \
-            xr_module_add_export(isolate, mod, name_str, fn_val); \
-        } while(0)
-
-    EXPORT_CFUNC("parse", csv_parse);
-    EXPORT_CFUNC("parseDetailed", csv_parse_detailed);
-    EXPORT_CFUNC("parseTsv", csv_parse_tsv);
-    EXPORT_CFUNC("parseAuto", csv_parse_auto);
-    EXPORT_CFUNC("stringify", csv_stringify);
-    EXPORT_CFUNC("parseFile", csv_parse_file);
-    EXPORT_CFUNC("writeFile", csv_write_file);
-
-    #undef EXPORT_CFUNC
+    XRS_EXPORT(mod, isolate, "parse", csv_parse);
+    XRS_EXPORT(mod, isolate, "parseDetailed", csv_parse_detailed);
+    XRS_EXPORT(mod, isolate, "parseTsv", csv_parse_tsv);
+    XRS_EXPORT(mod, isolate, "parseAuto", csv_parse_auto);
+    XRS_EXPORT(mod, isolate, "stringify", csv_stringify);
+    XRS_EXPORT(mod, isolate, "parseFile", csv_parse_file);
+    XRS_EXPORT(mod, isolate, "writeFile", csv_write_file);
 
     mod->loaded = true;
     return mod;
