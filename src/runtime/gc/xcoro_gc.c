@@ -1031,7 +1031,29 @@ static void sweeplargeobjects(XrCoroGC *gc) {
 
 static void setpause(XrCoroGC *gc);  // Forward declaration (defined after gen GC section)
 
-#define XGC_SWEEP_BUDGET_DEFAULT  4  // Blocks per step (tuned in P4)
+/*
+ * Compute mark-step byte budget proportional to GCdebt.
+ * Higher debt → more work per step to keep up with allocation.
+ */
+static inline int64_t mark_step_budget(XrCoroGC *gc) {
+    int64_t debt = gc->GCdebt > 0 ? gc->GCdebt : 0;
+    int64_t work = debt * gc->gc_stepmul / 100;
+    if (work < XGC_MARK_STEP_MIN) work = XGC_MARK_STEP_MIN;
+    if (work > XGC_MARK_STEP_MAX) work = XGC_MARK_STEP_MAX;
+    return work;
+}
+
+/*
+ * Compute sweep-step unit budget proportional to GCdebt.
+ * 1 unit = 1 block (or 1 batch of large objects / 1 reclaim).
+ */
+static inline int sweep_step_budget(XrCoroGC *gc) {
+    int64_t debt = gc->GCdebt > 0 ? gc->GCdebt : 0;
+    // Rough heuristic: 1 block per 4KB of debt
+    int units = (int)(debt / (4 * 1024)) + XGC_SWEEP_UNITS_MIN;
+    if (units > XGC_SWEEP_UNITS_MAX) units = XGC_SWEEP_UNITS_MAX;
+    return units;
+}
 
 // Initialize incremental sweep cursors.  Called at ATOMIC → SWEEP transition.
 static void sweep_start(XrCoroGC *gc) {
@@ -1208,10 +1230,6 @@ static void atomic(XrCoroGC *gc) {
 
 /* ========== Pause Control (Adaptive) ========== */
 
-// Minimum and maximum adaptive pause values
-#define XGC_MIN_PAUSE   50    // Minimum pause (aggressive GC under memory pressure)
-#define XGC_MAX_PAUSE   400   // Maximum pause (lazy GC when allocation is slow)
-
 // Set pause time until next GC cycle
 // Uses adaptive strategy based on allocation rate
 static void setpause(XrCoroGC *gc) {
@@ -1232,11 +1250,11 @@ static void setpause(XrCoroGC *gc) {
     if (alloc_rate > 10000) {
         // High pressure: >10KB/ms, reduce pause
         adaptive_pause = gc->gc_pause * 80 / 100;
-        if (adaptive_pause < XGC_MIN_PAUSE) adaptive_pause = XGC_MIN_PAUSE;
+        if (adaptive_pause < XGC_PAUSE_MIN) adaptive_pause = XGC_PAUSE_MIN;
     } else if (alloc_rate < 100) {
         // Low pressure: <100B/ms, increase pause
         adaptive_pause = gc->gc_pause * 150 / 100;
-        if (adaptive_pause > XGC_MAX_PAUSE) adaptive_pause = XGC_MAX_PAUSE;
+        if (adaptive_pause > XGC_PAUSE_MAX) adaptive_pause = XGC_PAUSE_MAX;
     }
 
     // Calculate threshold: marked * (pause / 100)
@@ -1249,12 +1267,6 @@ static void setpause(XrCoroGC *gc) {
 }
 
 /* ========== Sticky Immix: Minor Collection ========== */
-
-/*
- * Promotion threshold: young blocks with live line ratio above this
- * are promoted to old (not moved, just reclassified).
- */
-#define XGC_PROMOTE_THRESHOLD  40  // 40% live lines → promote to old
 
 /*
  * Sticky Immix minor collection. Non-incremental: runs to completion.
@@ -1346,7 +1358,7 @@ static void youngcollection(XrCoroGC *gc) {
                 (blk)->has_black = 0;                                           \
                 (blk)->next = new_free;                                         \
                 new_free = (blk);                                               \
-                    } else if (live * 100 / XR_IMMIX_USABLE_LINES >= XGC_PROMOTE_THRESHOLD) { \
+                    } else if (live * 100 / XR_IMMIX_USABLE_LINES >= XGC_PROMOTE_THRESHOLD_PCT) { \
                 (blk)->is_young = 0;                                            \
                 for (XrGCHeader *_o = (blk)->local_allgc; _o; _o = _o->gc_next) \
                     xr_gc_set2black(_o);                                        \
@@ -1408,7 +1420,8 @@ static void youngcollection(XrCoroGC *gc) {
     gc->last_gc_time_ns = elapsed;
     gc->gc_time_ns += elapsed;
     gc->gc_count++;
-    gc->alloc_since_gc = 0;
+    // alloc_since_gc reset moved to caller (xr_coro_gc_step gen-mode path)
+    // so entergen can still see the accumulated allocation rate.
 }
 
 /*
@@ -1557,12 +1570,13 @@ static void setminordebt(XrCoroGC *gc) {
 
 /*
  * Check whether to shift from minor to major collection.
- * Triggers major if promoted bytes exceed 400% of estimated live bytes,
- * deferring costly full-heap traversals until pressure is clearly high.
+ * Triggers major if promoted bytes exceed XGC_MAJOR_TRIGGER_PCT% of
+ * estimated live bytes.  Lower threshold (150 vs old 400) catches
+ * old-object accumulation earlier, reducing peak RSS.
  */
 static bool check_minor_to_major(XrCoroGC *gc) {
     if (gc->GCest <= 0) return false;
-    int64_t limit = gc->GCest * 4;  // 400%: defer major GC to avoid frequent mode switches
+    int64_t limit = gc->GCest * XGC_MAJOR_TRIGGER_PCT / 100;
     return gc->young_promoted >= limit;
 }
 
@@ -1595,6 +1609,7 @@ void xr_coro_gc_step(XrCoroGC *gc) {
             setminordebt(gc);
         }
 
+        gc->alloc_since_gc = 0;  // Reset once after all gen-mode work
         gc->in_gc = 0;
         return;
     }
@@ -1609,12 +1624,15 @@ void xr_coro_gc_step(XrCoroGC *gc) {
             break;
 
         case XGC_PROPAGATE: {
-            int prop_count = 5 + gc->gc_stepmul / 20;
             if (gc->gray.count > 0) {
-                for (int i = 0; i < prop_count && gc->gray.count > 0; i++) {
+                int64_t budget = mark_step_budget(gc);
+                int64_t scanned = 0;
+                while (gc->gray.count > 0 && scanned < budget) {
+                    scanned += gc->gray.items[gc->gray.count - 1]->objsize;
                     propagatemark(gc);
                 }
-            } else {
+            }
+            if (gc->gray.count == 0) {
                 gc->gcstate = XGC_ATOMIC;
             }
             break;
@@ -1628,7 +1646,7 @@ void xr_coro_gc_step(XrCoroGC *gc) {
         }
 
         case XGC_SWEEP: {
-            if (sweep_step(gc, XGC_SWEEP_BUDGET_DEFAULT)) {
+            if (sweep_step(gc, sweep_step_budget(gc))) {
                 // All sweep phases done — record timing and finalize
                 uint64_t elapsed = xr_gc_time_ns() - gc->gc_cycle_start_ns;
                 gc->last_gc_time_ns = elapsed;

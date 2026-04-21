@@ -18,6 +18,7 @@
  */
 
 #include "ws.h"
+#include "../common.h"
 #include "../../src/base/xmalloc.h"
 #include "../../src/module/xmodule.h"
 #include "../../src/vm/xvm.h"
@@ -106,32 +107,13 @@ extern XrValue xr_value_from_cfunction(XrCFunction *cfunc);
 
 /* ========== Helper Functions ========== */
 
-static XrValue make_string(XrayIsolate *X, const char *str, size_t len) {
-    if (!str) {
-        return xr_null();
-    }
-    if (len == 0) {
-        return xr_string_value(xr_string_intern(X, "", 0, 0));
-    }
-    // S1: Use non-interned string for WS message data
-    // No deduplication needed, avoids rwlock + hash table lookup in intern pool
-    XrString *s = xr_string_new(X, str, len);
-    if (!s) {
-        return xr_null();
-    }
-    return xr_string_value(s);
-}
-
-static XrValue make_cstring(XrayIsolate *X, const char *str) {
+// Non-interned string for WS message data (avoids rwlock + hash table lookup)
+static XrValue ws_make_string(XrayIsolate *X, const char *str, size_t len) {
     if (!str) return xr_null();
-    return make_string(X, str, strlen(str));
-}
-
-static const char* get_string_arg(XrValue v, size_t *out_len) {
-    if (!XR_IS_STRING(v)) return NULL;
-    XrString *s = XR_TO_STRING(v);
-    if (out_len) *out_len = s->length;
-    return s->data;
+    if (len == 0) return xrs_string_value_c(X, "");
+    XrString *s = xr_string_new(X, str, len);
+    if (!s) return xr_null();
+    return xr_string_value(s);
 }
 
 // Get raw data from XrString or Array<uint8>

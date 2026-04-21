@@ -13,6 +13,7 @@
  */
 
 #include "base64.h"
+#include "../common.h"
 #include "../../src/vm/xvm_internal.h"
 #include <stdio.h>
 #include <string.h>
@@ -20,11 +21,11 @@
 /* ========== Base64 encoding tables ========== */
 
 // Standard Base64 alphabet
-static const char BASE64_CHARS[] = 
+static const char BASE64_CHARS[] =
     "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
 
 // URL-safe Base64 alphabet (+ -> -, / -> _)
-static const char BASE64_URL_CHARS[] = 
+static const char BASE64_URL_CHARS[] =
     "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
 
 // Decode lookup table (64 = invalid character)
@@ -49,25 +50,10 @@ static const unsigned char BASE64_DECODE_TABLE[256] = {
 
 /* ========== Helper functions ========== */
 
-// Extract string argument
-static const char* get_string_arg(XrValue v, size_t *len) {
-    if (!XR_IS_STRING(v)) return NULL;
-    XrString *str = XR_TO_STRING(v);
-    if (len) *len = str->length;
-    return str->data;
-}
-
-// Create string value (non-interned, base64 output is typically one-shot data)
-static XrValue make_string(XrayIsolate *X, const char *s, size_t len) {
-    if (!s) return xr_null();
-    XrString *str = xr_string_new(X, s, len);
-    return xr_string_value(str);
-}
-
 /* ========== Encoding implementation ========== */
 
 // Internal encoding function
-static char* base64_encode_internal(const unsigned char *data, size_t len, 
+static char* base64_encode_internal(const unsigned char *data, size_t len,
                                     const char *chars, bool padding, size_t *out_len) {
     // Calculate output length
     size_t encoded_len = ((len + 2) / 3) * 4;
@@ -77,26 +63,26 @@ static char* base64_encode_internal(const unsigned char *data, size_t len,
         if (remainder == 1) encoded_len -= 2;
         else if (remainder == 2) encoded_len -= 1;
     }
-    
+
     char *output = (char*)xr_malloc(encoded_len + 1);
     if (!output) return NULL;
-    
+
     size_t i = 0, j = 0;
-    
+
     // Encode 3 bytes into 4 characters
     while (i + 2 < len) {
-        unsigned int n = ((unsigned int)data[i] << 16) | 
-                         ((unsigned int)data[i + 1] << 8) | 
+        unsigned int n = ((unsigned int)data[i] << 16) |
+                         ((unsigned int)data[i + 1] << 8) |
                          data[i + 2];
-        
+
         output[j++] = chars[(n >> 18) & 0x3F];
         output[j++] = chars[(n >> 12) & 0x3F];
         output[j++] = chars[(n >> 6) & 0x3F];
         output[j++] = chars[n & 0x3F];
-        
+
         i += 3;
     }
-    
+
     // Handle remaining bytes
     size_t remaining = len - i;
     if (remaining == 1) {
@@ -108,7 +94,7 @@ static char* base64_encode_internal(const unsigned char *data, size_t len,
             output[j++] = '=';
         }
     } else if (remaining == 2) {
-        unsigned int n = ((unsigned int)data[i] << 16) | 
+        unsigned int n = ((unsigned int)data[i] << 16) |
                          ((unsigned int)data[i + 1] << 8);
         output[j++] = chars[(n >> 18) & 0x3F];
         output[j++] = chars[(n >> 12) & 0x3F];
@@ -117,7 +103,7 @@ static char* base64_encode_internal(const unsigned char *data, size_t len,
             output[j++] = '=';
         }
     }
-    
+
     output[j] = '\0';
     if (out_len) *out_len = j;
     return output;
@@ -140,52 +126,52 @@ static unsigned char* base64_decode_internal(const char *data, size_t len, size_
     int pad = count_padding(data, len);
     if (pad < 0) return NULL;
     len -= (size_t)pad;
-    
+
     // After stripping padding, len%4 == 1 is invalid (6 bits, not enough for 1 byte)
     if (len % 4 == 1) return NULL;
-    
+
     // Calculate output length
     size_t decoded_len = (len / 4) * 3;
     size_t tail = len % 4;
     if (tail == 2) decoded_len += 1;
     else if (tail == 3) decoded_len += 2;
-    
+
     unsigned char *output = (unsigned char*)xr_malloc(decoded_len + 1);
     if (!output) return NULL;
-    
+
     size_t i = 0, j = 0;
-    
+
     while (i + 3 < len) {
         unsigned char a = BASE64_DECODE_TABLE[(unsigned char)data[i]];
         unsigned char b = BASE64_DECODE_TABLE[(unsigned char)data[i + 1]];
         unsigned char c = BASE64_DECODE_TABLE[(unsigned char)data[i + 2]];
         unsigned char d = BASE64_DECODE_TABLE[(unsigned char)data[i + 3]];
-        
+
         if (a == 64 || b == 64 || c == 64 || d == 64) {
             xr_free(output);
             return NULL;
         }
-        
+
         output[j++] = (a << 2) | (b >> 4);
         output[j++] = (b << 4) | (c >> 2);
         output[j++] = (c << 6) | d;
-        
+
         i += 4;
     }
-    
+
     // Handle remaining characters (2 or 3)
     size_t remaining = len - i;
     if (remaining >= 2) {
         unsigned char a = BASE64_DECODE_TABLE[(unsigned char)data[i]];
         unsigned char b = BASE64_DECODE_TABLE[(unsigned char)data[i + 1]];
-        
+
         if (a == 64 || b == 64) {
             xr_free(output);
             return NULL;
         }
-        
+
         output[j++] = (a << 2) | (b >> 4);
-        
+
         if (remaining == 3) {
             unsigned char c = BASE64_DECODE_TABLE[(unsigned char)data[i + 2]];
             if (c == 64) {
@@ -195,7 +181,7 @@ static unsigned char* base64_decode_internal(const char *data, size_t len, size_
             output[j++] = (b << 4) | (c >> 2);
         }
     }
-    
+
     output[j] = '\0';
     if (out_len) *out_len = j;
     return output;
@@ -207,17 +193,17 @@ static bool base64_is_valid_internal(const char *data, size_t len) {
     int pad = count_padding(data, len);
     if (pad < 0) return false;
     len -= (size_t)pad;
-    
+
     // len%4 == 1 is structurally invalid
     if (len % 4 == 1) return false;
-    
+
     // Check each character
     for (size_t i = 0; i < len; i++) {
         if (BASE64_DECODE_TABLE[(unsigned char)data[i]] == 64) {
             return false;
         }
     }
-    
+
     return true;
 }
 
@@ -249,17 +235,17 @@ bool xr_base64_is_valid(const char *data, size_t len) {
 // encode(str)
 static XrValue base64_encode(XrayIsolate *X, XrValue *args, int argc) {
     if (argc < 1) return xr_null();
-    
+
     size_t len;
-    const char *data = get_string_arg(args[0], &len);
+    const char *data = xrs_string_arg(args[0], &len);
     if (!data) return xr_null();
-    
+
     size_t out_len;
-    char *encoded = base64_encode_internal((const unsigned char*)data, len, 
+    char *encoded = base64_encode_internal((const unsigned char*)data, len,
                                            BASE64_CHARS, true, &out_len);
     if (!encoded) return xr_null();
-    
-    XrValue result = make_string(X, encoded, out_len);
+
+    XrValue result = xrs_string_value_n(X, encoded, out_len);
     xr_free(encoded);
     return result;
 }
@@ -267,16 +253,16 @@ static XrValue base64_encode(XrayIsolate *X, XrValue *args, int argc) {
 // decode(str)
 static XrValue base64_decode(XrayIsolate *X, XrValue *args, int argc) {
     if (argc < 1) return xr_null();
-    
+
     size_t len;
-    const char *data = get_string_arg(args[0], &len);
+    const char *data = xrs_string_arg(args[0], &len);
     if (!data) return xr_null();
-    
+
     size_t out_len;
     unsigned char *decoded = base64_decode_internal(data, len, &out_len);
     if (!decoded) return xr_null();
-    
-    XrValue result = make_string(X, (char*)decoded, out_len);
+
+    XrValue result = xrs_string_value_n(X, (char*)decoded, out_len);
     xr_free(decoded);
     return result;
 }
@@ -284,17 +270,17 @@ static XrValue base64_decode(XrayIsolate *X, XrValue *args, int argc) {
 // encodeUrl(str)
 static XrValue base64_encodeUrl(XrayIsolate *X, XrValue *args, int argc) {
     if (argc < 1) return xr_null();
-    
+
     size_t len;
-    const char *data = get_string_arg(args[0], &len);
+    const char *data = xrs_string_arg(args[0], &len);
     if (!data) return xr_null();
-    
+
     size_t out_len;
     char *encoded = base64_encode_internal((const unsigned char*)data, len,
                                            BASE64_URL_CHARS, false, &out_len);
     if (!encoded) return xr_null();
-    
-    XrValue result = make_string(X, encoded, out_len);
+
+    XrValue result = xrs_string_value_n(X, encoded, out_len);
     xr_free(encoded);
     return result;
 }
@@ -307,13 +293,13 @@ static XrValue base64_decodeUrl(XrayIsolate *X, XrValue *args, int argc) {
 // encodeBytes(bytes: Array<uint8>)
 static XrValue base64_encodeBytes(XrayIsolate *X, XrValue *args, int argc) {
     if (argc < 1 || !XR_IS_ARRAY(args[0])) return xr_null();
-    
+
     XrArray *arr = XR_TO_ARRAY(args[0]);
-    if (arr->length == 0) return make_string(X, "", 0);
-    
+    if (arr->length == 0) return xrs_string_value_c(X, "");
+
     const unsigned char *data;
     size_t len = (size_t)arr->length;
-    
+
     // Fast path: typed uint8 array has contiguous data
     if (arr->elem_type == XR_ELEM_U8) {
         data = (const unsigned char*)arr->data;
@@ -329,16 +315,16 @@ static XrValue base64_encodeBytes(XrayIsolate *X, XrValue *args, int argc) {
         char *encoded = base64_encode_internal(buf, len, BASE64_CHARS, true, &out_len);
         xr_free(buf);
         if (!encoded) return xr_null();
-        XrValue result = make_string(X, encoded, out_len);
+        XrValue result = xrs_string_value_n(X, encoded, out_len);
         xr_free(encoded);
         return result;
     }
-    
+
     size_t out_len;
     char *encoded = base64_encode_internal(data, len, BASE64_CHARS, true, &out_len);
     if (!encoded) return xr_null();
-    
-    XrValue result = make_string(X, encoded, out_len);
+
+    XrValue result = xrs_string_value_n(X, encoded, out_len);
     xr_free(encoded);
     return result;
 }
@@ -346,25 +332,25 @@ static XrValue base64_encodeBytes(XrayIsolate *X, XrValue *args, int argc) {
 // decodeToBytes(str)
 static XrValue base64_decodeToBytes(XrayIsolate *X, XrValue *args, int argc) {
     if (argc < 1) return xr_null();
-    
+
     size_t len;
-    const char *data = get_string_arg(args[0], &len);
+    const char *data = xrs_string_arg(args[0], &len);
     if (!data) return xr_null();
-    
+
     size_t out_len;
     unsigned char *decoded = base64_decode_internal(data, len, &out_len);
     if (!decoded) return xr_null();
-    
+
     XrArray *arr = xr_array_bytes_new(xr_current_coro(X), (int32_t)out_len);
     if (!arr) {
         xr_free(decoded);
         return xr_null();
     }
-    
+
     memcpy(arr->data, decoded, out_len);
     arr->length = (int32_t)out_len;
     xr_free(decoded);
-    
+
     return xr_value_from_array(arr);
 }
 
@@ -372,11 +358,11 @@ static XrValue base64_decodeToBytes(XrayIsolate *X, XrValue *args, int argc) {
 static XrValue base64_isValid(XrayIsolate *X, XrValue *args, int argc) {
     (void)X;
     if (argc < 1) return xr_bool(false);
-    
+
     size_t len;
-    const char *data = get_string_arg(args[0], &len);
+    const char *data = xrs_string_arg(args[0], &len);
     if (!data) return xr_bool(false);
-    
+
     return xr_bool(base64_is_valid_internal(data, len));
 }
 
@@ -400,24 +386,15 @@ XrModule* xr_load_module_base64(XrayIsolate *isolate) {
     // Create native module
     XrModule *mod = xr_module_create_native(isolate, "base64");
     if (!mod) return NULL;
-    
-    #define EXPORT_CFUNC(name_str, func_ptr) \
-        do { \
-            XrCFunction *cfunc = xr_vm_cfunction_new(isolate, func_ptr, name_str); \
-            XrValue fn_val = xr_value_from_cfunction(cfunc); \
-            xr_module_add_export(isolate, mod, name_str, fn_val); \
-        } while(0)
-    
-    EXPORT_CFUNC("encode", base64_encode);
-    EXPORT_CFUNC("decode", base64_decode);
-    EXPORT_CFUNC("encodeUrl", base64_encodeUrl);
-    EXPORT_CFUNC("decodeUrl", base64_decodeUrl);
-    EXPORT_CFUNC("encodeBytes", base64_encodeBytes);
-    EXPORT_CFUNC("decodeToBytes", base64_decodeToBytes);
-    EXPORT_CFUNC("isValid", base64_isValid);
-    
-    #undef EXPORT_CFUNC
-    
+
+    XRS_EXPORT(mod, isolate, "encode", base64_encode);
+    XRS_EXPORT(mod, isolate, "decode", base64_decode);
+    XRS_EXPORT(mod, isolate, "encodeUrl", base64_encodeUrl);
+    XRS_EXPORT(mod, isolate, "decodeUrl", base64_decodeUrl);
+    XRS_EXPORT(mod, isolate, "encodeBytes", base64_encodeBytes);
+    XRS_EXPORT(mod, isolate, "decodeToBytes", base64_decodeToBytes);
+    XRS_EXPORT(mod, isolate, "isValid", base64_isValid);
+
     // Mark as loaded
     mod->loaded = true;
     return mod;
