@@ -33,7 +33,7 @@
 // Substitute type parameters with actual types
 // e.g., substitute(T, ["T"], [int]) = int
 //       substitute(Array<T>, ["T"], [int]) = Array<int>
-XrType *xr_type_substitute(XrType *type, const char **param_names,
+XrType *xr_type_substitute(XrayIsolate *X, XrType *type, const char **param_names,
                            XrType **actual_types, int count) {
     if (!type || count == 0) return type;
 
@@ -43,7 +43,7 @@ XrType *xr_type_substitute(XrType *type, const char **param_names,
         if (param_name) {
             for (int i = 0; i < count; i++) {
                 if (param_names[i] && strcmp(param_names[i], param_name) == 0) {
-                    return actual_types[i] ? xr_type_copy(actual_types[i]) : type;
+                    return actual_types[i] ? xr_type_copy(X, actual_types[i]) : type;
                 }
             }
         }
@@ -52,48 +52,48 @@ XrType *xr_type_substitute(XrType *type, const char **param_names,
 
     // Recursively substitute in container types
     if (type->kind == XR_KIND_ARRAY) {
-        XrType *elem = xr_type_substitute(type->container.element_type,
+        XrType *elem = xr_type_substitute(X, type->container.element_type,
                                           param_names, actual_types, count);
         if (elem != type->container.element_type) {
-            return xr_type_new_array(elem);
+            return xr_type_new_array(X, elem);
         }
         return type;
     }
 
     if (type->kind == XR_KIND_SET) {
-        XrType *elem = xr_type_substitute(type->container.element_type,
+        XrType *elem = xr_type_substitute(X, type->container.element_type,
                                           param_names, actual_types, count);
         if (elem != type->container.element_type) {
-            return xr_type_new_set(elem);
+            return xr_type_new_set(X, elem);
         }
         return type;
     }
 
     if (type->kind == XR_KIND_CHANNEL) {
-        XrType *elem = xr_type_substitute(type->container.element_type,
+        XrType *elem = xr_type_substitute(X, type->container.element_type,
                                           param_names, actual_types, count);
         if (elem != type->container.element_type) {
-            return xr_type_new_channel(elem);
+            return xr_type_new_channel(X, elem);
         }
         return type;
     }
 
     if (xr_type_is_named_class(type, "Task")) {
         XrType *old_result = (type->instance.type_arg_count > 0) ? type->instance.type_args[0] : NULL;
-        XrType *result = xr_type_substitute(old_result, param_names, actual_types, count);
+        XrType *result = xr_type_substitute(X, old_result, param_names, actual_types, count);
         if (result != old_result) {
-            return xr_type_new_task(result);
+            return xr_type_new_task(X, result);
         }
         return type;
     }
 
     if (type->kind == XR_KIND_MAP) {
-        XrType *key = xr_type_substitute(type->map.key_type,
+        XrType *key = xr_type_substitute(X, type->map.key_type,
                                          param_names, actual_types, count);
-        XrType *val = xr_type_substitute(type->map.value_type,
+        XrType *val = xr_type_substitute(X, type->map.value_type,
                                          param_names, actual_types, count);
         if (key != type->map.key_type || val != type->map.value_type) {
-            return xr_type_new_map(key, val);
+            return xr_type_new_map(X, key, val);
         }
         return type;
     }
@@ -107,17 +107,17 @@ XrType *xr_type_substitute(XrType *type, const char **param_names,
         if (!new_params) return type;
 
         for (int i = 0; i < pc; i++) {
-            new_params[i] = xr_type_substitute(type->function.param_types[i],
+            new_params[i] = xr_type_substitute(X, type->function.param_types[i],
                                                param_names, actual_types, count);
             if (new_params[i] != type->function.param_types[i]) changed = true;
         }
 
-        XrType *ret = xr_type_substitute(type->function.return_type,
+        XrType *ret = xr_type_substitute(X, type->function.return_type,
                                          param_names, actual_types, count);
         if (ret != type->function.return_type) changed = true;
 
         if (changed) {
-            XrType *result = xr_type_new_function(new_params, pc, ret, type->function.is_variadic);
+            XrType *result = xr_type_new_function(X, new_params, pc, ret, type->function.is_variadic);
             if (result) result->function.min_params = type->function.min_params;
             if (new_params != stack_params) xr_free(new_params);
             return result;
@@ -132,21 +132,21 @@ XrType *xr_type_substitute(XrType *type, const char **param_names,
         XrType *new_members[XR_UNION_MAX_MEMBERS];
         int mc = type->union_type.member_count;
         for (int i = 0; i < mc; i++) {
-            new_members[i] = xr_type_substitute(type->union_type.members[i],
+            new_members[i] = xr_type_substitute(X, type->union_type.members[i],
                                                 param_names, actual_types, count);
             if (new_members[i] != type->union_type.members[i]) changed = true;
         }
-        if (changed) return xr_type_new_union(new_members, mc);
+        if (changed) return xr_type_new_union(X, new_members, mc);
         return type;
     }
 
     // Substitute in nullable types
     if (type->is_nullable) {
-        XrType *non_null = xr_type_non_nullable(type);
-        XrType *subst = xr_type_substitute(non_null,
+        XrType *non_null = xr_type_non_nullable(X, type);
+        XrType *subst = xr_type_substitute(X, non_null,
                                            param_names, actual_types, count);
         if (subst != non_null) {
-            return xr_type_make_nullable(subst);
+            return xr_type_make_nullable(X, subst);
         }
         return type;
     }
@@ -159,12 +159,12 @@ XrType *xr_type_substitute(XrType *type, const char **param_names,
         XrType **new_elems = (ec <= 16) ? stack_elems : xr_malloc(sizeof(XrType*) * ec);
         if (!new_elems) return type;
         for (int i = 0; i < ec; i++) {
-            new_elems[i] = xr_type_substitute(type->tuple.element_types[i],
+            new_elems[i] = xr_type_substitute(X, type->tuple.element_types[i],
                                               param_names, actual_types, count);
             if (new_elems[i] != type->tuple.element_types[i]) changed = true;
         }
         if (changed) {
-            XrType *result = xr_type_new_tuple(new_elems, ec);
+            XrType *result = xr_type_new_tuple(X, new_elems, ec);
             if (new_elems != stack_elems) xr_free(new_elems);
             return result;
         }
@@ -180,12 +180,12 @@ XrType *xr_type_substitute(XrType *type, const char **param_names,
         XrType **new_args = (ac <= 16) ? stack_args : xr_malloc(sizeof(XrType*) * ac);
         if (!new_args) return type;
         for (int i = 0; i < ac; i++) {
-            new_args[i] = xr_type_substitute(type->instance.type_args[i],
+            new_args[i] = xr_type_substitute(X, type->instance.type_args[i],
                                              param_names, actual_types, count);
             if (new_args[i] != type->instance.type_args[i]) changed = true;
         }
         if (changed) {
-            XrType *result = xr_type_new_generic_instance(type->instance.class_name,
+            XrType *result = xr_type_new_generic_instance(X, type->instance.class_name,
                                                 type->instance.class_ref,
                                                 new_args, ac);
             if (new_args != stack_args) xr_free(new_args);
@@ -197,10 +197,10 @@ XrType *xr_type_substitute(XrType *type, const char **param_names,
 
     // Substitute in fixed-length array types
     if (type->kind == XR_KIND_FIXED_ARRAY) {
-        XrType *elem = xr_type_substitute(type->fixed_array.element_type,
+        XrType *elem = xr_type_substitute(X, type->fixed_array.element_type,
                                           param_names, actual_types, count);
         if (elem != type->fixed_array.element_type) {
-            return xr_type_new_fixed_array(elem, type->fixed_array.length);
+            return xr_type_new_fixed_array(X, elem, type->fixed_array.length);
         }
         return type;
     }
@@ -290,7 +290,7 @@ bool xr_type_is_iterable(XrType *type, XrType **out_element_type) {
         if (out_element_type) {
             *out_element_type = type->container.element_type
                 ? type->container.element_type
-                : xr_type_new_unknown();
+                : xr_type_new_unknown(NULL);
         }
         return true;
     }
@@ -299,7 +299,7 @@ bool xr_type_is_iterable(XrType *type, XrType **out_element_type) {
         if (out_element_type) {
             *out_element_type = type->container.element_type
                 ? type->container.element_type
-                : xr_type_new_unknown();
+                : xr_type_new_unknown(NULL);
         }
         return true;
     }
@@ -307,14 +307,14 @@ bool xr_type_is_iterable(XrType *type, XrType **out_element_type) {
     if (type->kind == XR_KIND_MAP) {
         // Map iteration returns entries (key-value pairs)
         if (out_element_type) {
-            *out_element_type = xr_type_new_unknown();  // [key, value] tuple
+            *out_element_type = xr_type_new_unknown(NULL);  // [key, value] tuple
         }
         return true;
     }
 
     if (type->kind == XR_KIND_STRING) {
         if (out_element_type) {
-            *out_element_type = xr_type_new_string();  // Character strings
+            *out_element_type = xr_type_new_string(NULL);  // Character strings
         }
         return true;
     }

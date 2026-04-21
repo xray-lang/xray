@@ -444,7 +444,7 @@ bool xir_jit_try_compile(XirJitState *jit, XrProto *proto) {
                 if (i < proto->param_types_count && !proto->param_types[i] &&
                     i < XFB_MAX_PARAMS && xfb_is_monomorphic(proto->type_feedback->arg_types[i])) {
                     uint8_t st = xfb_to_slot_type(proto->type_feedback->arg_types[i]);
-                    proto->param_types[i] = xr_slot_type_to_type(st);
+                    proto->param_types[i] = xr_slot_type_to_type(NULL, st);
                 }
             }
         }
@@ -489,7 +489,7 @@ bool xir_jit_try_compile(XirJitState *jit, XrProto *proto) {
     if (!proto->return_type_info && proto->type_feedback) {
         uint8_t fb_ret = xfb_to_slot_type(proto->type_feedback->return_type);
         if (fb_ret != XR_SLOT_ANY) {
-            proto->return_type_info = xr_slot_type_to_type(fb_ret);
+            proto->return_type_info = xr_slot_type_to_type(NULL, fb_ret);
         }
     }
 
@@ -527,7 +527,7 @@ bool xir_jit_try_compile(XirJitState *jit, XrProto *proto) {
             }
         }
         if (inferred_slot != XR_SLOT_ANY) {
-            proto->return_type_info = xr_slot_type_to_type(inferred_slot);
+            proto->return_type_info = xr_slot_type_to_type(NULL, inferred_slot);
         }
     }
 

@@ -720,7 +720,7 @@ void xr_proto_set_jit_entry(XrProto *p, void *entry) {
 void xr_proto_set_param_types(XrProto *p, const uint8_t *ptypes,
                                int nparams, uint8_t return_type) {
     if (!p) return;
-    p->return_type_info = xr_slot_type_to_type(return_type);
+    p->return_type_info = xr_slot_type_to_type(NULL, return_type);
     if (nparams > 0 && ptypes && !p->param_types) {
         p->param_types = (struct XrType **)xr_calloc(
             nparams, sizeof(struct XrType *));
@@ -728,11 +728,11 @@ void xr_proto_set_param_types(XrProto *p, const uint8_t *ptypes,
             p->param_types_count = nparams;
             for (int i = 0; i < nparams; i++) {
                 if (ptypes[i] == XR_SLOT_I64)
-                    p->param_types[i] = xr_type_new_int();
+                    p->param_types[i] = xr_type_new_int(NULL);
                 else if (ptypes[i] == XR_SLOT_F64)
-                    p->param_types[i] = xr_type_new_float();
+                    p->param_types[i] = xr_type_new_float(NULL);
                 else if (ptypes[i] == XR_SLOT_BOOL)
-                    p->param_types[i] = xr_type_new_bool();
+                    p->param_types[i] = xr_type_new_bool(NULL);
             }
         }
     }

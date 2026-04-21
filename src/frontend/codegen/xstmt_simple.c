@@ -467,7 +467,7 @@ void compile_var_decl(XrCompilerContext *ctx, XrCompiler *compiler, VarDeclNode 
             // Use type annotation if available (e.g., Channel<int>), otherwise Channel<unknown>
             XrType *ch_type = node->type_annotation;
             if (!ch_type || !(ch_type->kind == XR_KIND_CHANNEL)) {
-                ch_type = xr_type_new_channel(xr_type_new_unknown());
+                ch_type = xr_type_new_channel(ctx->X, xr_type_new_unknown(NULL));
             }
             shared_set_type(ctx, shared_index, ch_type);
         } else if (node->initializer) {
@@ -665,7 +665,7 @@ void compile_var_decl(XrCompilerContext *ctx, XrCompiler *compiler, VarDeclNode 
                 XrType *init_type = get_expr_type(ctx, compiler, node->initializer);
                 XrType *check_init = init_type;
                 if (check_init && check_init->is_nullable) {
-                    XrType *base = xr_type_non_nullable(check_init);
+                    XrType *base = xr_type_non_nullable(ctx->X, check_init);
                     if (base) check_init = base;
                 }
                 if (check_init && !xr_type_assignable(inferred_compile_type, check_init)) {
@@ -997,7 +997,7 @@ void compile_assignment(XrCompilerContext *ctx, XrCompiler *compiler, Assignment
                 // (runtime UNBOX handles actual null values)
                 XrType *check_source = expr_type;
                 if (check_source && check_source->is_nullable) {
-                    XrType *base = xr_type_non_nullable(check_source);
+                    XrType *base = xr_type_non_nullable(ctx->X, check_source);
                     if (base) check_source = base;
                 }
                 if (check_source && !xr_type_assignable(target_type, check_source)) {

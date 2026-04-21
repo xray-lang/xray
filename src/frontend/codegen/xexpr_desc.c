@@ -64,14 +64,14 @@ void xexpr_init_int(XrExprDesc *e, int64_t val) {
     xexpr_init(e, XEXPR_INT, -1);
     e->u.ival = val;
     e->is_const = true;
-    e->compile_type = xr_type_new_int();
+    e->compile_type = xr_type_new_int(NULL);
 }
 
 void xexpr_init_number(XrExprDesc *e, double val) {
     xexpr_init(e, XEXPR_FLOAT, -1);
     e->u.nval = val;
     e->is_const = true;
-    e->compile_type = xr_type_new_float();
+    e->compile_type = xr_type_new_float(NULL);
 }
 
 void xexpr_init_bool(XrExprDesc *e, bool val) {

@@ -174,7 +174,7 @@ AstNode *xr_parse_function_declaration(Parser *parser) {
         // Create a new scope for generics if we have type params
         XaScope *generic_scope = xa_scope_new(XA_SCOPE_FUNCTION, parser->type_scope);
         for (int i = 0; i < type_param_count; i++) {
-            XrType *type_param = xr_type_new_type_param(type_params[i]->name, i);
+            XrType *type_param = xr_type_new_type_param(parser->X, type_params[i]->name, i);
             xa_scope_define_type_alias(generic_scope, type_params[i]->name, type_param);
         }
         parser->type_scope = generic_scope;
@@ -263,16 +263,16 @@ AstNode *xr_parse_function_declaration(Parser *parser) {
                     if (param->type == NULL && param->default_value != NULL) {
                         AstNode *dv = param->default_value;
                         switch (dv->type) {
-                            case AST_LITERAL_INT: param->type = xr_type_new_int(); break;
-                            case AST_LITERAL_FLOAT: param->type = xr_type_new_float(); break;
+                            case AST_LITERAL_INT: param->type = xr_type_new_int(NULL); break;
+                            case AST_LITERAL_FLOAT: param->type = xr_type_new_float(NULL); break;
                             case AST_LITERAL_STRING:
-                            case AST_TEMPLATE_STRING: param->type = xr_type_new_string(); break;
+                            case AST_TEMPLATE_STRING: param->type = xr_type_new_string(NULL); break;
                             case AST_LITERAL_TRUE:
-                            case AST_LITERAL_FALSE: param->type = xr_type_new_bool(); break;
-                            case AST_ARRAY_LITERAL: param->type = xr_type_new_array(xr_type_new_unknown()); break;
-                            case AST_MAP_LITERAL: param->type = xr_type_new_map(xr_type_new_unknown(), xr_type_new_unknown()); break;
-                            case AST_SET_LITERAL: param->type = xr_type_new_set(xr_type_new_unknown()); break;
-                            case AST_OBJECT_LITERAL: param->type = xr_type_new_json(); break;
+                            case AST_LITERAL_FALSE: param->type = xr_type_new_bool(NULL); break;
+                            case AST_ARRAY_LITERAL: param->type = xr_type_new_array(parser->X, xr_type_new_unknown(NULL)); break;
+                            case AST_MAP_LITERAL: param->type = xr_type_new_map(parser->X, xr_type_new_unknown(NULL), xr_type_new_unknown(NULL)); break;
+                            case AST_SET_LITERAL: param->type = xr_type_new_set(parser->X, xr_type_new_unknown(NULL)); break;
+                            case AST_OBJECT_LITERAL: param->type = xr_type_new_json(NULL); break;
                             default: break;
                         }
                     }

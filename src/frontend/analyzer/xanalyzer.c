@@ -49,7 +49,7 @@ static void register_builtin_module(XaAnalyzer *analyzer, const char *name) {
     xa_scope_add_symbol(analyzer->global_scope, sym);
     XaSymbolLinks *links = xa_analyzer_get_links(analyzer, sym);
     if (links) {
-        links->type = xr_type_new_unknown();
+        links->type = xr_type_new_unknown(NULL);
         links->declared_type = links->type;
         links->is_definitely_assigned = true;
         links->module_name = name;
@@ -76,18 +76,18 @@ static void register_builtin_var(XaAnalyzer *analyzer, const char *name, XrType 
 // Register all Codegen builtin functions/constructors that are available at runtime
 static void xa_register_codegen_builtins(XaAnalyzer *analyzer) {
     // Reusable param types
-    XrType *p_any = xr_type_new_unknown();
-    XrType *t_void = xr_type_new_void();
-    XrType *t_int = xr_type_new_int();
-    XrType *t_float = xr_type_new_float();
-    XrType *t_string = xr_type_new_string();
-    XrType *t_bool = xr_type_new_bool();
+    XrType *p_any = xr_type_new_unknown(NULL);
+    XrType *t_void = xr_type_new_void(NULL);
+    XrType *t_int = xr_type_new_int(NULL);
+    XrType *t_float = xr_type_new_float(NULL);
+    XrType *t_string = xr_type_new_string(NULL);
+    XrType *t_bool = xr_type_new_bool(NULL);
 
     // Test framework: fn(...any) -> void
-    XrType *fn_assert = xr_type_new_function(NULL, 0, t_void, true);
+    XrType *fn_assert = xr_type_new_function(analyzer->isolate, NULL, 0, t_void, true);
     fn_assert->function.min_params = 1;
     register_builtin_func(analyzer, "assert", fn_assert);
-    XrType *fn_assert2 = xr_type_new_function(NULL, 0, t_void, true);
+    XrType *fn_assert2 = xr_type_new_function(analyzer->isolate, NULL, 0, t_void, true);
     fn_assert2->function.min_params = 2;
     register_builtin_func(analyzer, "assert_eq", fn_assert2);
     register_builtin_func(analyzer, "assert_ne", fn_assert2);
@@ -96,60 +96,60 @@ static void xa_register_codegen_builtins(XaAnalyzer *analyzer) {
     register_builtin_func(analyzer, "assert_throws", fn_assert);
 
     // Type conversion: fn(any) -> T (precise return type)
-    XrType *fn_to_int = xr_type_new_function(&p_any, 1, t_int, false);
+    XrType *fn_to_int = xr_type_new_function(analyzer->isolate, &p_any, 1, t_int, false);
     register_builtin_func(analyzer, "int", fn_to_int);
-    XrType *fn_to_float = xr_type_new_function(&p_any, 1, t_float, false);
+    XrType *fn_to_float = xr_type_new_function(analyzer->isolate, &p_any, 1, t_float, false);
     register_builtin_func(analyzer, "float", fn_to_float);
-    XrType *fn_to_string = xr_type_new_function(&p_any, 1, t_string, false);
+    XrType *fn_to_string = xr_type_new_function(analyzer->isolate, &p_any, 1, t_string, false);
     register_builtin_func(analyzer, "string", fn_to_string);
-    XrType *fn_to_bool = xr_type_new_function(&p_any, 1, t_bool, false);
+    XrType *fn_to_bool = xr_type_new_function(analyzer->isolate, &p_any, 1, t_bool, false);
     register_builtin_func(analyzer, "bool", fn_to_bool);
 
     // Type constructors: fn(...any) -> Container
-    XrType *fn_array = xr_type_new_function(NULL, 0, xr_type_new_array(p_any), true);
+    XrType *fn_array = xr_type_new_function(analyzer->isolate, NULL, 0, xr_type_new_array(analyzer->isolate, p_any), true);
     fn_array->function.min_params = 0;
     register_builtin_func(analyzer, "Array", fn_array);
-    XrType *fn_map = xr_type_new_function(NULL, 0, xr_type_new_map(p_any, p_any), true);
+    XrType *fn_map = xr_type_new_function(analyzer->isolate, NULL, 0, xr_type_new_map(analyzer->isolate, p_any, p_any), true);
     fn_map->function.min_params = 0;
     register_builtin_func(analyzer, "Map", fn_map);
-    XrType *fn_set = xr_type_new_function(NULL, 0, xr_type_new_set(p_any), true);
+    XrType *fn_set = xr_type_new_function(analyzer->isolate, NULL, 0, xr_type_new_set(analyzer->isolate, p_any), true);
     fn_set->function.min_params = 0;
     register_builtin_func(analyzer, "Set", fn_set);
-    XrType *fn_bytes = xr_type_new_function(NULL, 0, xr_type_new_array(xr_type_new_int_width(XR_NATIVE_U8)), true);
+    XrType *fn_bytes = xr_type_new_function(analyzer->isolate, NULL, 0, xr_type_new_array(analyzer->isolate, xr_type_new_int_width(analyzer->isolate, XR_NATIVE_U8)), true);
     fn_bytes->function.min_params = 0;
     register_builtin_func(analyzer, "Bytes", fn_bytes);
-    XrType *fn_weakmap = xr_type_new_function(NULL, 0, xr_type_new_map(p_any, p_any), true);
+    XrType *fn_weakmap = xr_type_new_function(analyzer->isolate, NULL, 0, xr_type_new_map(analyzer->isolate, p_any, p_any), true);
     fn_weakmap->function.min_params = 0;
     register_builtin_func(analyzer, "WeakMap", fn_weakmap);
-    XrType *fn_weakset = xr_type_new_function(NULL, 0, xr_type_new_set(p_any), true);
+    XrType *fn_weakset = xr_type_new_function(analyzer->isolate, NULL, 0, xr_type_new_set(analyzer->isolate, p_any), true);
     fn_weakset->function.min_params = 0;
     register_builtin_func(analyzer, "WeakSet", fn_weakset);
 
     // typeof: fn(any) -> int (returns XrTypeId)
-    XrType *fn_typeof = xr_type_new_function(&p_any, 1, t_int, false);
+    XrType *fn_typeof = xr_type_new_function(analyzer->isolate, &p_any, 1, t_int, false);
     register_builtin_func(analyzer, "typeof", fn_typeof);
     // typename: fn(any) -> string
-    XrType *fn_typename = xr_type_new_function(&p_any, 1, t_string, false);
+    XrType *fn_typename = xr_type_new_function(analyzer->isolate, &p_any, 1, t_string, false);
     register_builtin_func(analyzer, "typename", fn_typename);
     // chr: fn(int) -> string
-    XrType *fn_chr = xr_type_new_function(&t_int, 1, t_string, false);
+    XrType *fn_chr = xr_type_new_function(analyzer->isolate, &t_int, 1, t_string, false);
     register_builtin_func(analyzer, "chr", fn_chr);
     // copy: fn(any) -> any (preserves unknown type)
-    XrType *fn_copy = xr_type_new_function(&p_any, 1, p_any, false);
+    XrType *fn_copy = xr_type_new_function(analyzer->isolate, &p_any, 1, p_any, false);
     register_builtin_func(analyzer, "copy", fn_copy);
     // dump: fn(any, ...) -> void
-    XrType *fn_dump = xr_type_new_function(&p_any, 1, t_void, true);
+    XrType *fn_dump = xr_type_new_function(analyzer->isolate, &p_any, 1, t_void, true);
     register_builtin_func(analyzer, "dump", fn_dump);
     // print/println: fn(...any) -> void
-    XrType *fn_print = xr_type_new_function(NULL, 0, t_void, true);
+    XrType *fn_print = xr_type_new_function(analyzer->isolate, NULL, 0, t_void, true);
     fn_print->function.min_params = 0;
     register_builtin_func(analyzer, "print", fn_print);
     register_builtin_func(analyzer, "println", fn_print);
     // sleep: fn(int) -> void (milliseconds)
-    XrType *fn_sleep = xr_type_new_function(&t_int, 1, t_void, false);
+    XrType *fn_sleep = xr_type_new_function(analyzer->isolate, &t_int, 1, t_void, false);
     register_builtin_func(analyzer, "sleep", fn_sleep);
     // spawn: fn(fn) -> any (returns coroutine task)
-    XrType *fn_spawn = xr_type_new_function(&p_any, 1, p_any, true);
+    XrType *fn_spawn = xr_type_new_function(analyzer->isolate, &p_any, 1, p_any, true);
     register_builtin_func(analyzer, "spawn", fn_spawn);
 
     // Modules/namespaces (XA_SYM_MODULE enables member signature lookup)
@@ -325,7 +325,7 @@ XrType *xa_analyzer_get_type(XaAnalyzer *analyzer, XaSymbol *symbol) {
     xr_type_set_current_pool(analyzer->type_pool, &analyzer->next_symbol_id);
     
     XaSymbolLinks *links = xa_analyzer_get_links(analyzer, symbol);
-    if (!links) return xr_type_new_unknown();
+    if (!links) return xr_type_new_unknown(NULL);
     
     // Return cached type
     if (links->type) return links->type;
@@ -338,7 +338,7 @@ XrType *xa_analyzer_get_type(XaAnalyzer *analyzer, XaSymbol *symbol) {
     
     // Fallback: some symbols may not have type after analysis (e.g. forward refs).
     // Return unknown as safe default.
-    return xr_type_new_unknown();
+    return xr_type_new_unknown(NULL);
 }
 
 // Get class info
@@ -930,13 +930,13 @@ XrType *xa_analyzer_infer_expr_type(XaAnalyzer *analyzer, XrAstNode *expr) {
     
     // Create temporary inference context
     XaInferContext *ctx = xa_infer_context_new(analyzer);
-    if (!ctx) return xr_type_new_unknown();
+    if (!ctx) return xr_type_new_unknown(NULL);
     
     // Infer expression type
     XrType *type = xa_visit_infer_expr(ctx, expr);
     
     xa_infer_context_free(ctx);
-    return type ? type : xr_type_new_unknown();
+    return type ? type : xr_type_new_unknown(NULL);
 }
 
 // Variable operations (compatible with ct_infer API)

@@ -1899,7 +1899,7 @@ XrJitResult xr_jit_call_func(XrCoroutine *coro, int64_t nargs_encoded) {
                 if (proto->param_types) {
                     for (int i = 0; i < proto->numparams; i++) {
                         if (i < proto->param_types_count && !proto->param_types[i])
-                            proto->param_types[i] = xr_slot_type_to_type(XR_SLOT_I64);
+                            proto->param_types[i] = xr_slot_type_to_type(NULL, XR_SLOT_I64);
                     }
                 }
             }

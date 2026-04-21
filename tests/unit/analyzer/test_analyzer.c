@@ -59,11 +59,11 @@ static void teardown_pool(void) {
 // ============================================================================
 
 TEST(type_primitives) {
-    XrType *t_int = xr_type_new_int();
-    XrType *t_float = xr_type_new_float();
-    XrType *t_string = xr_type_new_string();
-    XrType *t_bool = xr_type_new_bool();
-    XrType *t_null = xr_type_new_null();
+    XrType *t_int = xr_type_new_int(NULL);
+    XrType *t_float = xr_type_new_float(NULL);
+    XrType *t_string = xr_type_new_string(NULL);
+    XrType *t_bool = xr_type_new_bool(NULL);
+    XrType *t_null = xr_type_new_null(NULL);
     
     ASSERT(XR_TYPE_IS_INT(t_int));
     ASSERT(XR_TYPE_IS_FLOAT(t_float));
@@ -81,15 +81,15 @@ TEST(type_primitives) {
 }
 
 TEST(type_containers) {
-    XrType *elem = xr_type_new_int();
-    XrType *arr = xr_type_new_array(elem);
+    XrType *elem = xr_type_new_int(NULL);
+    XrType *arr = xr_type_new_array(NULL, elem);
     
     ASSERT(XR_TYPE_IS_ARRAY(arr));
     ASSERT(arr->container.element_type == elem);
     
-    XrType *key = xr_type_new_string();
-    XrType *val = xr_type_new_int();
-    XrType *map = xr_type_new_map(key, val);
+    XrType *key = xr_type_new_string(NULL);
+    XrType *val = xr_type_new_int(NULL);
+    XrType *map = xr_type_new_map(NULL, key, val);
     
     ASSERT(XR_TYPE_IS_MAP(map));
     ASSERT(map->map.key_type == key);
@@ -100,31 +100,31 @@ TEST(type_containers) {
 TEST(type_union) {
 
     // Test 1: T | null = T? (nullable type)
-    XrType *t_int = xr_type_new_int();
-    XrType *t_null = xr_type_new_null();
-    XrType *nullable_int = xr_type_union(t_int, t_null);
+    XrType *t_int = xr_type_new_int(NULL);
+    XrType *t_null = xr_type_new_null(NULL);
+    XrType *nullable_int = xr_type_union(NULL, t_int, t_null);
     ASSERT(nullable_int != NULL);
     ASSERT(nullable_int->is_nullable);
     ASSERT(XR_TYPE_IS_INT(nullable_int));
     
     // Test 2: int | string = union type
-    XrType *t_string = xr_type_new_string();
-    XrType *union_type = xr_type_union(t_int, t_string);
+    XrType *t_string = xr_type_new_string(NULL);
+    XrType *union_type = xr_type_union(NULL, t_int, t_string);
     ASSERT(union_type != NULL);
     ASSERT(XR_TYPE_IS_UNION(union_type));
     
     // Test 3: Same types = same type
-    XrType *t_int2 = xr_type_new_int();
-    XrType *same = xr_type_union(t_int, t_int2);
+    XrType *t_int2 = xr_type_new_int(NULL);
+    XrType *same = xr_type_union(NULL, t_int, t_int2);
     ASSERT(XR_TYPE_IS_INT(same));
     
 }
 
 TEST(type_assignable) {
-    XrType *t_int = xr_type_new_int();
-    XrType *t_float = xr_type_new_float();
-    XrType *t_any = xr_type_new_unknown();
-    XrType *t_never = xr_type_new_never();
+    XrType *t_int = xr_type_new_int(NULL);
+    XrType *t_float = xr_type_new_float(NULL);
+    XrType *t_any = xr_type_new_unknown(NULL);
+    XrType *t_never = xr_type_new_never(NULL);
     
     // int assignable to int
     ASSERT(xr_type_assignable(t_int, t_int));
@@ -140,8 +140,8 @@ TEST(type_assignable) {
 }
 
 TEST(type_to_string) {
-    XrType *t_int = xr_type_new_int();
-    XrType *t_arr = xr_type_new_array(xr_type_new_string());
+    XrType *t_int = xr_type_new_int(NULL);
+    XrType *t_arr = xr_type_new_array(NULL, xr_type_new_string(NULL));
     
     ASSERT(strcmp(xr_type_to_string(t_int), "int") == 0);
     ASSERT(strcmp(xr_type_to_string(t_arr), "Array<string>") == 0);
@@ -149,17 +149,17 @@ TEST(type_to_string) {
 }
 
 TEST(type_narrowing) {
-    XrType *t_int = xr_type_new_int();
-    XrType *t_null = xr_type_new_null();
-    XrType *u = xr_type_union(t_int, t_null);
+    XrType *t_int = xr_type_new_int(NULL);
+    XrType *t_null = xr_type_new_null(NULL);
+    XrType *u = xr_type_union(NULL, t_int, t_null);
     
     // Filter to int only
-    XrType *filtered = xr_type_filter(u, XR_KIND_INT);
+    XrType *filtered = xr_type_filter(NULL, u, XR_KIND_INT);
     ASSERT(XR_TYPE_IS_INT(filtered));
     ASSERT(!XR_TYPE_IS_NULL(filtered));
     
     // Exclude null
-    XrType *non_null = xr_type_non_nullable(u);
+    XrType *non_null = xr_type_non_nullable(NULL, u);
     ASSERT(XR_TYPE_IS_INT(non_null));
     
 }
@@ -284,7 +284,7 @@ TEST(flow_basic_graph) {
     ASSERT(start != NULL);
     ASSERT(start->flags & XA_FLOW_START);
     
-    XaFlowNode *assign = xa_flow_create_assignment(fb, NULL, "x", xr_type_new_int());
+    XaFlowNode *assign = xa_flow_create_assignment(fb, NULL, "x", xr_type_new_int(NULL));
     ASSERT(assign != NULL);
     ASSERT(assign->flags & XA_FLOW_ASSIGNMENT);
     ASSERT(assign->antecedent_count == 1);
@@ -321,7 +321,7 @@ TEST(flow_cache) {
     
     XaFlowBuilder *fb = xa_flow_builder_new();
     XaFlowNode *node = xa_flow_create_start(fb);
-    XrType *type = xr_type_new_int();
+    XrType *type = xr_type_new_int(NULL);
     
     xa_flow_cache_set(cache, node, type);
     
@@ -339,11 +339,11 @@ TEST(narrow_by_typeof) {
     // NOTE: xray now only supports nullable types (T | null = T?), not general unions.
     // Nullable types use is_nullable flag, not XR_KIND_NULL in flags.
     
-    XrType *t_int = xr_type_new_int();
-    XrType *t_null = xr_type_new_null();
+    XrType *t_int = xr_type_new_int(NULL);
+    XrType *t_null = xr_type_new_null(NULL);
     
     // Create nullable int (int | null = int?)
-    XrType *nullable_int = xr_type_union(t_int, t_null);
+    XrType *nullable_int = xr_type_union(NULL, t_int, t_null);
     ASSERT(nullable_int != NULL);
     ASSERT(nullable_int->is_nullable);
     
@@ -373,9 +373,9 @@ TEST(narrow_by_null) {
     // NOTE: xray now uses nullable types (T?) instead of union (T | null).
     // xr_type_union(int, null) returns a nullable int (is_nullable = true).
     
-    XrType *t_int = xr_type_new_int();
-    XrType *t_null = xr_type_new_null();
-    XrType *nullable_int = xr_type_union(t_int, t_null);
+    XrType *t_int = xr_type_new_int(NULL);
+    XrType *t_null = xr_type_new_null(NULL);
+    XrType *nullable_int = xr_type_union(NULL, t_int, t_null);
     
     // Verify it's a nullable int
     ASSERT(nullable_int != NULL);
@@ -401,26 +401,26 @@ TEST(narrow_by_null) {
 // ============================================================================
 
 TEST(type_class_instance) {
-    XrType *cls = xr_type_new_class("MyClass");
+    XrType *cls = xr_type_new_class(NULL, "MyClass");
     ASSERT(XR_TYPE_IS_CLASS(cls));
     ASSERT(cls->instance.class_name != NULL);
     ASSERT(strcmp(cls->instance.class_name, "MyClass") == 0);
     
     // Instance type requires class info
     XrClassInfo *info = xa_class_info_new("TestClass");
-    XrType *inst = xr_type_new_instance(info);
+    XrType *inst = xr_type_new_instance(NULL, info);
     ASSERT(XR_TYPE_IS_INSTANCE(inst));
     xa_class_info_free(info);
 }
 
 TEST(type_function_complex) {
     // fn(int, string): Array<int>
-    XrType *param1 = xr_type_new_int();
-    XrType *param2 = xr_type_new_string();
-    XrType *ret = xr_type_new_array(xr_type_new_int());
+    XrType *param1 = xr_type_new_int(NULL);
+    XrType *param2 = xr_type_new_string(NULL);
+    XrType *ret = xr_type_new_array(NULL, xr_type_new_int(NULL));
     
     XrType *params[] = { param1, param2 };
-    XrType *fn = xr_type_new_function(params, 2, ret, false);
+    XrType *fn = xr_type_new_function(NULL, params, 2, ret, false);
     
     ASSERT(XR_TYPE_IS_FUNCTION(fn));
     ASSERT(fn->function.param_count == 2);
@@ -431,14 +431,14 @@ TEST(type_function_complex) {
 }
 
 TEST(type_void_never) {
-    XrType *t_void = xr_type_new_void();
-    XrType *t_never = xr_type_new_never();
+    XrType *t_void = xr_type_new_void(NULL);
+    XrType *t_never = xr_type_new_never(NULL);
     
     ASSERT(XR_TYPE_IS_VOID(t_void));
     ASSERT(XR_TYPE_IS_NEVER(t_never));
     
     // never is assignable to anything
-    ASSERT(xr_type_assignable(xr_type_new_int(), t_never));
+    ASSERT(xr_type_assignable(xr_type_new_int(NULL), t_never));
 }
 
 // ============================================================================
@@ -465,8 +465,8 @@ TEST(infer_return_type_collection) {
     XaInferContext *ctx = xa_infer_context_new(a);
     
     // Add multiple return types
-    xa_infer_add_return_type(ctx, xr_type_new_int());
-    xa_infer_add_return_type(ctx, xr_type_new_string());
+    xa_infer_add_return_type(ctx, xr_type_new_int(NULL));
+    xa_infer_add_return_type(ctx, xr_type_new_string(NULL));
     
     ASSERT(ctx->return_type_count == 2);
     
@@ -487,7 +487,7 @@ TEST(infer_single_return_type) {
     XaAnalyzer *a = xa_analyzer_new();
     XaInferContext *ctx = xa_infer_context_new(a);
     
-    xa_infer_add_return_type(ctx, xr_type_new_int());
+    xa_infer_add_return_type(ctx, xr_type_new_int(NULL));
     
     XrType *ret = xa_infer_compute_return_type(ctx);
     ASSERT(XR_TYPE_IS_INT(ret));
@@ -516,23 +516,23 @@ TEST(infer_no_return_type) {
 
 TEST(compile_type_primitives) {
     // Test primitive types using new XrType API
-    ASSERT(XR_TYPE_IS_INT(xr_type_new_int()));
-    ASSERT(XR_TYPE_IS_FLOAT(xr_type_new_float()));
-    ASSERT(XR_TYPE_IS_STRING(xr_type_new_string()));
-    ASSERT(XR_TYPE_IS_BOOL(xr_type_new_bool()));
-    ASSERT(XR_TYPE_IS_NULL(xr_type_new_null()));
-    ASSERT(XR_TYPE_IS_VOID(xr_type_new_void()));
+    ASSERT(XR_TYPE_IS_INT(xr_type_new_int(NULL)));
+    ASSERT(XR_TYPE_IS_FLOAT(xr_type_new_float(NULL)));
+    ASSERT(XR_TYPE_IS_STRING(xr_type_new_string(NULL)));
+    ASSERT(XR_TYPE_IS_BOOL(xr_type_new_bool(NULL)));
+    ASSERT(XR_TYPE_IS_NULL(xr_type_new_null(NULL)));
+    ASSERT(XR_TYPE_IS_VOID(xr_type_new_void(NULL)));
 }
 
 TEST(compile_type_containers) {
     // Array<int> using new API
-    XrType *arr = xr_type_new_array(xr_type_new_int());
+    XrType *arr = xr_type_new_array(g_analyzer->isolate, xr_type_new_int(NULL));
     ASSERT(XR_TYPE_IS_ARRAY(arr));
     ASSERT(arr->container.element_type != NULL);
     ASSERT(XR_TYPE_IS_INT(arr->container.element_type));
     
     // Map<string, int> using new API
-    XrType *map = xr_type_new_map(xr_type_new_string(), xr_type_new_int());
+    XrType *map = xr_type_new_map(g_analyzer->isolate, xr_type_new_string(NULL), xr_type_new_int(NULL));
     ASSERT(XR_TYPE_IS_MAP(map));
     ASSERT(XR_TYPE_IS_STRING(map->map.key_type));
     ASSERT(XR_TYPE_IS_INT(map->map.value_type));
@@ -540,8 +540,8 @@ TEST(compile_type_containers) {
 
 TEST(compile_type_function) {
     // fn(int, string): bool using new API
-    XrType *param_types[] = { xr_type_new_int(), xr_type_new_string() };
-    XrType *fn = xr_type_new_function(param_types, 2, xr_type_new_bool(), false);
+    XrType *param_types[] = { xr_type_new_int(NULL), xr_type_new_string(NULL) };
+    XrType *fn = xr_type_new_function(g_analyzer->isolate, param_types, 2, xr_type_new_bool(NULL), false);
     ASSERT(XR_TYPE_IS_FUNCTION(fn));
     ASSERT(fn->function.param_count == 2);
     ASSERT(XR_TYPE_IS_INT(fn->function.param_types[0]));
@@ -551,14 +551,14 @@ TEST(compile_type_function) {
 
 TEST(compile_type_class) {
     // Class type using new API
-    XrType *cls = xr_type_new_class("MyClass");
+    XrType *cls = xr_type_new_class(NULL, "MyClass");
     ASSERT(XR_TYPE_IS_CLASS(cls));
     ASSERT(strcmp(cls->instance.class_name, "MyClass") == 0);
 }
 
 TEST(compile_type_optional) {
     // int? => nullable type (unified representation)
-    XrType *opt = xr_type_new_optional(xr_type_new_int());
+    XrType *opt = xr_type_new_optional(NULL, xr_type_new_int(NULL));
     ASSERT(opt->is_nullable);
     ASSERT(XR_TYPE_IS_INT(opt));
 }
@@ -590,7 +590,7 @@ TEST(symbol_links_lifecycle) {
     ASSERT(links->type == NULL);
     
     // Set type
-    links->type = xr_type_new_int();
+    links->type = xr_type_new_int(NULL);
     
     // Get same links
     XaSymbolLinks *links2 = xa_analyzer_get_links(a, sym);
@@ -603,9 +603,9 @@ TEST(symbol_links_lifecycle) {
 
 TEST(deeply_nested_types) {
     // Array<Map<string, Array<int>>>
-    XrType *inner_arr = xr_type_new_array(xr_type_new_int());
-    XrType *map = xr_type_new_map(xr_type_new_string(), inner_arr);
-    XrType *outer_arr = xr_type_new_array(map);
+    XrType *inner_arr = xr_type_new_array(NULL, xr_type_new_int(NULL));
+    XrType *map = xr_type_new_map(NULL, xr_type_new_string(NULL), inner_arr);
+    XrType *outer_arr = xr_type_new_array(NULL, map);
     
     ASSERT(XR_TYPE_IS_ARRAY(outer_arr));
     ASSERT(XR_TYPE_IS_MAP(outer_arr->container.element_type));
@@ -618,9 +618,9 @@ TEST(deeply_nested_types) {
 
 TEST(union_type_dedup) {
     // int | int should be int
-    XrType *t_int1 = xr_type_new_int();
-    XrType *t_int2 = xr_type_new_int();
-    XrType *u = xr_type_union(t_int1, t_int2);
+    XrType *t_int1 = xr_type_new_int(NULL);
+    XrType *t_int2 = xr_type_new_int(NULL);
+    XrType *u = xr_type_union(NULL, t_int1, t_int2);
     
     ASSERT(XR_TYPE_IS_INT(u));
     // Should not have union flag if types are same

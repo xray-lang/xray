@@ -486,7 +486,7 @@ static void compile_for_in_range_object(XrCompilerContext *ctx, XrCompiler *comp
         XrString *name_str = xr_compile_time_intern(ctx->X, var_name, strlen(var_name));
         XrLocalInfo *loop_lv = scope_define_local_reg(ctx, compiler, name_str, loop_var_reg);
         if (loop_lv) {
-            local_set_compile_type(loop_lv, xr_type_new_int());
+            local_set_compile_type(loop_lv, xr_type_new_int(NULL));
         }
     }
     xreg_set_local_end(compiler->regalloc, loop_var_reg + 1);
@@ -807,7 +807,7 @@ static void compile_for_in_channel(XrCompilerContext *ctx, XrCompiler *compiler,
     XrString *ref_name = xr_compile_time_intern(ctx->X, "__chan_ref", 11);
     XrLocalInfo *ref_local = compiler_get_local_by_name(compiler, ref_name->data);
     if (ref_local) {
-        ref_local->compile_type = xr_type_new_channel(xr_type_new_unknown());
+        ref_local->compile_type = xr_type_new_channel(ctx->X, xr_type_new_unknown(NULL));
     }
 
     // 1. Build: let __val, __ok = __ch.tryRecv()

@@ -73,7 +73,7 @@ XrType* xr_parse_type_annotation(Parser *parser) {
     // xr_type_to_slot_type returns XR_SLOT_ANY because raw storage cannot
     // distinguish null from a valid integer/float value.
     if (xr_parser_match(parser, TK_QUESTION)) {
-        base = xr_type_new_optional(base);
+        base = xr_type_new_optional(parser->X, base);
     }
 
     // Union type: Type | Type | ...
@@ -89,11 +89,11 @@ XrType* xr_parse_type_annotation(Parser *parser) {
             if (XR_TYPE_IS_UNION(next)) {
                 xr_parser_error(parser,
                     "nested union alias not allowed in union type, expand members directly");
-                return xr_type_new_unknown();
+                return xr_type_new_unknown(NULL);
             }
             // Allow ? on individual member: int | string?
             if (xr_parser_match(parser, TK_QUESTION)) {
-                next = xr_type_new_optional(next);
+                next = xr_type_new_optional(parser->X, next);
             }
             if (count < XR_UNION_MAX_MEMBERS + 1)
                 members[count++] = next;
@@ -101,10 +101,10 @@ XrType* xr_parse_type_annotation(Parser *parser) {
 
         if (count > XR_UNION_MAX_MEMBERS) {
             xr_parser_error(parser, "union type exceeds maximum of 6 members");
-            return xr_type_new_unknown();
+            return xr_type_new_unknown(NULL);
         }
 
-        return xr_type_new_union(members, count);
+        return xr_type_new_union(parser->X, members, count);
     }
 
     return base;
@@ -125,7 +125,7 @@ static XrType* parse_type_annotation_base(Parser *parser) {
             xr_parser_advance(parser);  // consume number
             if (xr_parser_match(parser, TK_RBRACKET)) {
                 XrType *elem = parse_type_annotation_base(parser);
-                return xr_type_new_fixed_array(elem, length);
+                return xr_type_new_fixed_array(parser->X, elem, length);
             }
         }
         // Not a fixed-array type, restore parser state
@@ -135,35 +135,35 @@ static XrType* parse_type_annotation_base(Parser *parser) {
 
     // Basic type keywords - direct Token type matching
     if (xr_parser_match(parser, TK_INT)) {
-        return xr_type_new_int();
+        return xr_type_new_int(NULL);
     }
     if (xr_parser_match(parser, TK_FLOAT)) {
-        return xr_type_new_float();
+        return xr_type_new_float(NULL);
     }
     if (xr_parser_match(parser, TK_STRING)) {
-        return xr_type_new_string();
+        return xr_type_new_string(NULL);
     }
     if (xr_parser_match(parser, TK_BOOL)) {
-        return xr_type_new_bool();
+        return xr_type_new_bool(NULL);
     }
     if (xr_parser_match(parser, TK_VOID)) {
-        return xr_type_new_void();
+        return xr_type_new_void(NULL);
     }
     if (xr_parser_match(parser, TK_NULL)) {
-        return xr_type_new_null();
+        return xr_type_new_null(NULL);
     }
 
     // Native-width integer types
-    if (xr_parser_match(parser, TK_INT8))  return xr_type_new_int_width(XR_NATIVE_I8);
-    if (xr_parser_match(parser, TK_INT16)) return xr_type_new_int_width(XR_NATIVE_I16);
-    if (xr_parser_match(parser, TK_INT32)) return xr_type_new_int_width(XR_NATIVE_I32);
-    if (xr_parser_match(parser, TK_INT64)) return xr_type_new_int_width(XR_NATIVE_I64);
-    if (xr_parser_match(parser, TK_UINT8))  return xr_type_new_int_width(XR_NATIVE_U8);
-    if (xr_parser_match(parser, TK_UINT16)) return xr_type_new_int_width(XR_NATIVE_U16);
-    if (xr_parser_match(parser, TK_UINT32)) return xr_type_new_int_width(XR_NATIVE_U32);
-    if (xr_parser_match(parser, TK_UINT64)) return xr_type_new_int_width(XR_NATIVE_U64);
-    if (xr_parser_match(parser, TK_FLOAT32)) return xr_type_new_float_width(XR_NATIVE_F32);
-    if (xr_parser_match(parser, TK_FLOAT64)) return xr_type_new_float_width(XR_NATIVE_F64);
+    if (xr_parser_match(parser, TK_INT8))  return xr_type_new_int_width(parser->X, XR_NATIVE_I8);
+    if (xr_parser_match(parser, TK_INT16)) return xr_type_new_int_width(parser->X, XR_NATIVE_I16);
+    if (xr_parser_match(parser, TK_INT32)) return xr_type_new_int_width(parser->X, XR_NATIVE_I32);
+    if (xr_parser_match(parser, TK_INT64)) return xr_type_new_int_width(parser->X, XR_NATIVE_I64);
+    if (xr_parser_match(parser, TK_UINT8))  return xr_type_new_int_width(parser->X, XR_NATIVE_U8);
+    if (xr_parser_match(parser, TK_UINT16)) return xr_type_new_int_width(parser->X, XR_NATIVE_U16);
+    if (xr_parser_match(parser, TK_UINT32)) return xr_type_new_int_width(parser->X, XR_NATIVE_U32);
+    if (xr_parser_match(parser, TK_UINT64)) return xr_type_new_int_width(parser->X, XR_NATIVE_U64);
+    if (xr_parser_match(parser, TK_FLOAT32)) return xr_type_new_float_width(parser->X, XR_NATIVE_F32);
+    if (xr_parser_match(parser, TK_FLOAT64)) return xr_type_new_float_width(parser->X, XR_NATIVE_F64);
 
     // Array<T> — generic parameter is mandatory in type annotations
     if (xr_parser_match(parser, TK_TYPE_ARRAY)) {
@@ -171,11 +171,11 @@ static XrType* parse_type_annotation_base(Parser *parser) {
             if (!parser->allow_bare_container)
                 xr_parser_error(parser,
                     "Array requires a type parameter, e.g. Array<int>");
-            return xr_type_new_array(xr_type_new_unknown());
+            return xr_type_new_array(parser->X, xr_type_new_unknown(NULL));
         }
         XrType *elem_type = xr_parse_type_annotation(parser);
         consume_gt_in_generic(parser);
-        return xr_type_new_array(elem_type);
+        return xr_type_new_array(parser->X, elem_type);
     }
 
     // Map<K, V> — generic parameters are mandatory in type annotations
@@ -184,15 +184,15 @@ static XrType* parse_type_annotation_base(Parser *parser) {
             if (!parser->allow_bare_container)
                 xr_parser_error(parser,
                     "Map requires type parameters, e.g. Map<string, int>");
-            return xr_type_new_map(xr_type_new_unknown(), xr_type_new_unknown());
+            return xr_type_new_map(parser->X, xr_type_new_unknown(NULL), xr_type_new_unknown(NULL));
         }
         XrType *key_type = xr_parse_type_annotation(parser);
-        XrType *val_type = xr_type_new_unknown();
+        XrType *val_type = xr_type_new_unknown(NULL);
         if (xr_parser_match(parser, TK_COMMA)) {
             val_type = xr_parse_type_annotation(parser);
         }
         consume_gt_in_generic(parser);
-        return xr_type_new_map(key_type, val_type);
+        return xr_type_new_map(parser->X, key_type, val_type);
     }
 
     // Set<T> — generic parameter is mandatory in type annotations
@@ -201,36 +201,36 @@ static XrType* parse_type_annotation_base(Parser *parser) {
             if (!parser->allow_bare_container)
                 xr_parser_error(parser,
                     "Set requires a type parameter, e.g. Set<int>");
-            return xr_type_new_set(xr_type_new_unknown());
+            return xr_type_new_set(parser->X, xr_type_new_unknown(NULL));
         }
         XrType *elem_type = xr_parse_type_annotation(parser);
         consume_gt_in_generic(parser);
-        return xr_type_new_set(elem_type);
+        return xr_type_new_set(parser->X, elem_type);
     }
 
     // Json dynamic object type
     if (xr_parser_match(parser, TK_TYPE_JSON)) {
-        return xr_type_new_json();
+        return xr_type_new_json(NULL);
     }
 
     // BigInt type
     if (xr_parser_match(parser, TK_TYPE_BIGINT)) {
-        return xr_type_new_bigint();
+        return xr_type_new_bigint(NULL);
     }
 
     // DateTime type
     if (xr_parser_match(parser, TK_TYPE_DATETIME)) {
-        return xr_type_new_datetime();
+        return xr_type_new_datetime(NULL);
     }
 
     // Bytes type
     if (xr_parser_match(parser, TK_TYPE_BYTES)) {
-        return xr_type_new_bytes();
+        return xr_type_new_bytes(NULL);
     }
 
     // Range type
     if (xr_parser_match(parser, TK_TYPE_RANGE)) {
-        XrType *t = xr_type_new(XR_KIND_INSTANCE); if (t) t->instance.class_name = "Range"; return t;
+        XrType *t = xr_type_new(parser->X, XR_KIND_INSTANCE); if (t) t->instance.class_name = "Range"; return t;
     }
 
     // Struct type literal: { x: float, y: float } or { x: float, ... }
@@ -279,7 +279,7 @@ static XrType* parse_type_annotation_base(Parser *parser) {
 
             // Optional field wrapped with optional type
             if (is_optional) {
-                ftype = xr_type_new_optional(ftype);
+                ftype = xr_type_new_optional(parser->X, ftype);
             }
             field_types[field_count] = ftype;
             field_count++;
@@ -291,7 +291,7 @@ static XrType* parse_type_annotation_base(Parser *parser) {
         xr_parser_consume(parser, TK_RBRACE, "expected '}'");
 
         // Create object type (allow_extension determines extensibility)
-        XrType *result = xr_type_new_object(field_names, field_types, field_count,
+        XrType *result = xr_type_new_object(parser->X, field_names, field_types, field_count,
                                              allow_extension, NULL);
 
         // Free temporary arrays (field_names strings are copied by xr_type_new_object)
@@ -326,12 +326,12 @@ static XrType* parse_type_annotation_base(Parser *parser) {
             xr_parser_consume(parser, TK_RPAREN, "expected ')'");
 
             // Parse return type after ':'
-            XrType *return_type = xr_type_new_void();
+            XrType *return_type = xr_type_new_void(NULL);
             if (xr_parser_match(parser, TK_COLON)) {
                 return_type = xr_parse_type_annotation(parser);
             }
 
-            return xr_type_new_function(types, count, return_type, false);
+            return xr_type_new_function(parser->X, types, count, return_type, false);
         } else {
             // Not a function type, restore parser state
             parser->scanner = saved;
@@ -354,7 +354,7 @@ static XrType* parse_type_annotation_base(Parser *parser) {
         }
 
         xr_parser_consume(parser, TK_RPAREN, "expected ')'");
-        return xr_type_new_tuple(types, count);
+        return xr_type_new_tuple(parser->X, types, count);
     }
 
     // Channel<T> — generic parameter is mandatory in type annotations
@@ -363,26 +363,26 @@ static XrType* parse_type_annotation_base(Parser *parser) {
             if (!parser->allow_bare_container)
                 xr_parser_error(parser,
                     "Channel requires a type parameter, e.g. Channel<int>");
-            return xr_type_new_channel(xr_type_new_unknown());
+            return xr_type_new_channel(parser->X, xr_type_new_unknown(NULL));
         }
         XrType *elem_type = xr_parse_type_annotation(parser);
         consume_gt_in_generic(parser);
-        return xr_type_new_channel(elem_type);
+        return xr_type_new_channel(parser->X, elem_type);
     }
 
     // Native-width integer types (first-class keywords)
-    if (xr_parser_match(parser, TK_INT8))  return xr_type_new_int_width(XR_NATIVE_I8);
-    if (xr_parser_match(parser, TK_INT16)) return xr_type_new_int_width(XR_NATIVE_I16);
-    if (xr_parser_match(parser, TK_INT32)) return xr_type_new_int_width(XR_NATIVE_I32);
-    if (xr_parser_match(parser, TK_INT64)) return xr_type_new_int_width(XR_NATIVE_I64);
-    if (xr_parser_match(parser, TK_UINT8))  return xr_type_new_int_width(XR_NATIVE_U8);
-    if (xr_parser_match(parser, TK_UINT16)) return xr_type_new_int_width(XR_NATIVE_U16);
-    if (xr_parser_match(parser, TK_UINT32)) return xr_type_new_int_width(XR_NATIVE_U32);
-    if (xr_parser_match(parser, TK_UINT64)) return xr_type_new_int_width(XR_NATIVE_U64);
+    if (xr_parser_match(parser, TK_INT8))  return xr_type_new_int_width(parser->X, XR_NATIVE_I8);
+    if (xr_parser_match(parser, TK_INT16)) return xr_type_new_int_width(parser->X, XR_NATIVE_I16);
+    if (xr_parser_match(parser, TK_INT32)) return xr_type_new_int_width(parser->X, XR_NATIVE_I32);
+    if (xr_parser_match(parser, TK_INT64)) return xr_type_new_int_width(parser->X, XR_NATIVE_I64);
+    if (xr_parser_match(parser, TK_UINT8))  return xr_type_new_int_width(parser->X, XR_NATIVE_U8);
+    if (xr_parser_match(parser, TK_UINT16)) return xr_type_new_int_width(parser->X, XR_NATIVE_U16);
+    if (xr_parser_match(parser, TK_UINT32)) return xr_type_new_int_width(parser->X, XR_NATIVE_U32);
+    if (xr_parser_match(parser, TK_UINT64)) return xr_type_new_int_width(parser->X, XR_NATIVE_U64);
 
     // Native-width float types
-    if (xr_parser_match(parser, TK_FLOAT32)) return xr_type_new_float_width(XR_NATIVE_F32);
-    if (xr_parser_match(parser, TK_FLOAT64)) return xr_type_new_float_width(XR_NATIVE_F64);
+    if (xr_parser_match(parser, TK_FLOAT32)) return xr_type_new_float_width(parser->X, XR_NATIVE_F32);
+    if (xr_parser_match(parser, TK_FLOAT64)) return xr_type_new_float_width(parser->X, XR_NATIVE_F64);
 
     // User-defined type or type alias (with optional generic parameters)
     if (xr_parser_match(parser, TK_NAME)) {
@@ -394,62 +394,62 @@ static XrType* parse_type_annotation_base(Parser *parser) {
 
         // JsonValue — built-in union type for Json field values
         if (strcmp(temp_name, "JsonValue") == 0) {
-            return xr_type_new_json_value();
+            return xr_type_new_json_value(parser->X);
         }
 
         // Built-in instance types — must create XR_KIND_INSTANCE (not XR_KIND_CLASS)
         // so that xr_type_is_named_class() matches correctly downstream.
         if (strcmp(temp_name, "Task") == 0) {
             // Task<T> — optional generic parameter for result type
-            XrType *result_type = xr_type_new_unknown();
+            XrType *result_type = xr_type_new_unknown(NULL);
             if (xr_parser_match(parser, TK_LT)) {
                 result_type = xr_parse_type_annotation(parser);
                 consume_gt_in_generic(parser);
             }
-            return xr_type_new_task(result_type);
+            return xr_type_new_task(parser->X, result_type);
         }
-        if (strcmp(temp_name, "BigInt") == 0) return xr_type_new_bigint();
-        if (strcmp(temp_name, "Regex") == 0) return xr_type_new_regex();
-        if (strcmp(temp_name, "StringBuilder") == 0) return xr_type_new_stringbuilder();
-        if (strcmp(temp_name, "DateTime") == 0) return xr_type_new_datetime();
-        if (strcmp(temp_name, "Exception") == 0) return xr_type_new_named_instance("Exception");
+        if (strcmp(temp_name, "BigInt") == 0) return xr_type_new_bigint(NULL);
+        if (strcmp(temp_name, "Regex") == 0) return xr_type_new_regex(NULL);
+        if (strcmp(temp_name, "StringBuilder") == 0) return xr_type_new_stringbuilder(NULL);
+        if (strcmp(temp_name, "DateTime") == 0) return xr_type_new_datetime(NULL);
+        if (strcmp(temp_name, "Exception") == 0) return xr_type_new_named_instance(parser->X, "Exception");
 
         // 'any' type has been removed from xray.
         // Use concrete types or Json for dynamic values.
         if (strcmp(temp_name, "any") == 0) {
             xr_parser_error(parser, "'any' type is not supported. "
                 "Use a concrete type or 'Json' for dynamic values.");
-            return xr_type_new_unknown();
+            return xr_type_new_unknown(NULL);
         }
 
         // Detect common type name misspellings from other languages
         if (strcmp(temp_name, "String") == 0 || strcmp(temp_name, "str") == 0) {
             xr_parser_error(parser, "type 'string' must be lowercase in Xray");
-            return xr_type_new_string();
+            return xr_type_new_string(NULL);
         }
         if (strcmp(temp_name, "Int") == 0 || strcmp(temp_name, "Integer") == 0 ||
             strcmp(temp_name, "integer") == 0) {
             xr_parser_error(parser, "use 'int' (lowercase) for integer type in Xray");
-            return xr_type_new_int();
+            return xr_type_new_int(NULL);
         }
         if (strcmp(temp_name, "Float") == 0 || strcmp(temp_name, "Double") == 0 ||
             strcmp(temp_name, "double") == 0) {
             xr_parser_error(parser, "use 'float' (lowercase) for floating-point type in Xray");
-            return xr_type_new_float();
+            return xr_type_new_float(NULL);
         }
         if (strcmp(temp_name, "Bool") == 0 || strcmp(temp_name, "Boolean") == 0 ||
             strcmp(temp_name, "boolean") == 0) {
             xr_parser_error(parser, "use 'bool' (lowercase) for boolean type in Xray");
-            return xr_type_new_bool();
+            return xr_type_new_bool(NULL);
         }
         if (strcmp(temp_name, "char") == 0 || strcmp(temp_name, "Char") == 0) {
             xr_parser_error(parser, "there is no 'char' type in Xray. Use 'string' for characters");
-            return xr_type_new_string();
+            return xr_type_new_string(NULL);
         }
         if (strcmp(temp_name, "void") == 0) {
             // 'void' as TK_NAME means it wasn't recognized as keyword in this context
             xr_parser_error(parser, "use 'void' only as function return type");
-            return xr_type_new_unknown();
+            return xr_type_new_unknown(NULL);
         }
 
         // Lookup type alias
@@ -485,15 +485,15 @@ static XrType* parse_type_annotation_base(Parser *parser) {
                     args_copy[i] = type_args[i];
                 }
             }
-            return xr_type_new_generic_instance(temp_name, NULL, args_copy, type_arg_count);
+            return xr_type_new_generic_instance(parser->X, temp_name, NULL, args_copy, type_arg_count);
         }
 
-        return xr_type_new_class(temp_name);
+        return xr_type_new_class(parser->X, temp_name);
     }
 
     // Error recovery
     xr_parser_error_expected_name(parser, "expected type name");
-    return xr_type_new_unknown();
+    return xr_type_new_unknown(NULL);
 }
 
 // Convert XrType to string (for debug / XrProto.return_type)

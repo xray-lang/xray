@@ -344,8 +344,8 @@ XrExprDesc compile_binary(XrCompilerContext *ctx, XrCompiler *compiler, BinaryNo
         if (lct && rct) {
             bool li = XR_TYPE_IS_INT(lct), lf = XR_TYPE_IS_FLOAT(lct);
             bool ri = XR_TYPE_IS_INT(rct), rf = XR_TYPE_IS_FLOAT(rct);
-            if (li && ri) result_ct = (XrType *)xr_type_new_int();
-            else if ((li || lf) && (ri || rf)) result_ct = (XrType *)xr_type_new_float();
+            if (li && ri) result_ct = (XrType *)xr_type_new_int(NULL);
+            else if ((li || lf) && (ri || rf)) result_ct = (XrType *)xr_type_new_float(NULL);
         }
     }
 
@@ -634,7 +634,7 @@ XrExprDesc compile_binary(XrCompilerContext *ctx, XrCompiler *compiler, BinaryNo
 
             emit_abc(compiler->emitter, OP_STRBUF_FINISH, buf_reg, 0, 0);
             xexpr_init(&e, XEXPR_TEMP, buf_reg);
-            e.compile_type = (XrType *)xr_type_new_string();
+            e.compile_type = (XrType *)xr_type_new_string(NULL);
             return e;
         }
 
@@ -948,7 +948,7 @@ XrExprDesc compile_comparison(XrCompilerContext *ctx, XrCompiler *compiler, Bina
     XrExprDesc e = {0};
     int reg = compile_comparison_internal(ctx, compiler, node, type);
     xexpr_init(&e, XEXPR_TEMP, reg);
-    e.compile_type = xr_type_new_bool();
+    e.compile_type = xr_type_new_bool(NULL);
     return e;
 }
 

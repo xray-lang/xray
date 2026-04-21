@@ -107,81 +107,81 @@ static XrTypePool *get_current_pool(void) {
 
 // Helper: allocate and initialize a type (for non-singleton types)
 // Uses pool arena for allocation - memory freed when pool is reset/destroyed
-static XrType *type_alloc(XrTypeKind kind) {
-    XrTypePool *pool = get_current_pool();
+static XrType *type_alloc(XrayIsolate *X, XrTypeKind kind) {
+    XrTypePool *pool = X ? X->current_type_pool : get_current_pool();
     XR_CHECK(pool != NULL, "Type pool not set - call xr_type_set_current_pool first");
     return xr_pool_alloc_type(pool, kind);
 }
 
-XrType *xr_type_new(XrTypeKind kind) {
-    return type_alloc(kind);
+XrType *xr_type_new(XrayIsolate *X, XrTypeKind kind) {
+    return type_alloc(X, kind);
 }
 
 // Primitive type constructors (return process-level singletons)
-XrType *xr_type_new_int(void)     { return &g_type_int; }
-XrType *xr_type_new_float(void)   { return &g_type_float; }
-XrType *xr_type_new_string(void)  { return &g_type_string; }
-XrType *xr_type_new_bool(void)    { return &g_type_bool; }
-XrType *xr_type_new_null(void)    { return &g_type_null; }
-XrType *xr_type_new_unknown(void) { return &g_type_unknown; }
-XrType *xr_type_new_never(void)   { return &g_type_never; }
-XrType *xr_type_new_void(void)    { return &g_type_void; }
+XrType *xr_type_new_int(XrayIsolate *X)     { (void)X; return &g_type_int; }
+XrType *xr_type_new_float(XrayIsolate *X)   { (void)X; return &g_type_float; }
+XrType *xr_type_new_string(XrayIsolate *X)  { (void)X; return &g_type_string; }
+XrType *xr_type_new_bool(XrayIsolate *X)    { (void)X; return &g_type_bool; }
+XrType *xr_type_new_null(XrayIsolate *X)    { (void)X; return &g_type_null; }
+XrType *xr_type_new_unknown(XrayIsolate *X) { (void)X; return &g_type_unknown; }
+XrType *xr_type_new_never(XrayIsolate *X)   { (void)X; return &g_type_never; }
+XrType *xr_type_new_void(XrayIsolate *X)    { (void)X; return &g_type_void; }
 
 // Native-width integer type (int8/16/32/64, uint8/16/32/64)
-XrType *xr_type_new_int_width(int width) {
-    XrType *type = type_alloc(XR_KIND_INT);
+XrType *xr_type_new_int_width(XrayIsolate *X, int width) {
+    XrType *type = type_alloc(X, XR_KIND_INT);
     if (!type) return NULL;
     type->native_width = (uint8_t)width;
     return type;
 }
 
 // Native-width float type (float32/64)
-XrType *xr_type_new_float_width(int width) {
-    XrType *type = type_alloc(XR_KIND_FLOAT);
+XrType *xr_type_new_float_width(XrayIsolate *X, int width) {
+    XrType *type = type_alloc(X, XR_KIND_FLOAT);
     if (!type) return NULL;
     type->native_width = (uint8_t)width;
     return type;
 }
 
 // Container type constructors
-XrType *xr_type_new_array(XrType *element_type) {
+XrType *xr_type_new_array(XrayIsolate *X, XrType *element_type) {
     XR_DCHECK(element_type != NULL, "type_new_array: NULL element_type");
-    XrType *type = type_alloc(XR_KIND_ARRAY);
+    XrType *type = type_alloc(X, XR_KIND_ARRAY);
     if (!type) return NULL;
     type->container.element_type = element_type;
     return type;
 }
 
-XrType *xr_type_new_map(XrType *key_type, XrType *value_type) {
+XrType *xr_type_new_map(XrayIsolate *X, XrType *key_type, XrType *value_type) {
     XR_DCHECK(key_type != NULL, "type_new_map: NULL key_type");
     XR_DCHECK(value_type != NULL, "type_new_map: NULL value_type");
-    XrType *type = type_alloc(XR_KIND_MAP);
+    XrType *type = type_alloc(X, XR_KIND_MAP);
     if (!type) return NULL;
     type->map.key_type = key_type;
     type->map.value_type = value_type;
     return type;
 }
 
-XrType *xr_type_new_set(XrType *element_type) {
-    XrType *type = type_alloc(XR_KIND_SET);
+XrType *xr_type_new_set(XrayIsolate *X, XrType *element_type) {
+    XrType *type = type_alloc(X, XR_KIND_SET);
     if (!type) return NULL;
     type->container.element_type = element_type;
     return type;
 }
 
-XrType *xr_type_new_channel(XrType *element_type) {
-    XrType *type = type_alloc(XR_KIND_CHANNEL);
+XrType *xr_type_new_channel(XrayIsolate *X, XrType *element_type) {
+    XrType *type = type_alloc(X, XR_KIND_CHANNEL);
     if (!type) return NULL;
     type->container.element_type = element_type;
     return type;
 }
 
-XrType *xr_type_new_task(XrType *result_type) {
-    XrType *type = type_alloc(XR_KIND_INSTANCE);
+XrType *xr_type_new_task(XrayIsolate *X, XrType *result_type) {
+    XrType *type = type_alloc(X, XR_KIND_INSTANCE);
     if (!type) return NULL;
     type->instance.class_name = "Task";
     if (result_type) {
-        XrTypePool *pool = get_current_pool();
+        XrTypePool *pool = X ? X->current_type_pool : get_current_pool();
         XrType **args = (XrType **)xr_pool_alloc(pool, sizeof(XrType *));
         if (args) { args[0] = result_type; type->instance.type_args = args; type->instance.type_arg_count = 1; }
     }
@@ -189,14 +189,14 @@ XrType *xr_type_new_task(XrType *result_type) {
 }
 
 // Object types
-XrType *xr_type_new_json(void) {
+XrType *xr_type_new_json(XrayIsolate *X) {
     return &g_type_json;  // Process-level singleton (plain Json without fields)
 }
 
-XrType *xr_type_new_json_with_fields(const char **names, XrType **types, int count) {
-    XrType *type = type_alloc(XR_KIND_JSON);
+XrType *xr_type_new_json_with_fields(XrayIsolate *X, const char **names, XrType **types, int count) {
+    XrType *type = type_alloc(X, XR_KIND_JSON);
     if (!type) return NULL;
-    XrTypePool *pool = get_current_pool();
+    XrTypePool *pool = X ? X->current_type_pool : get_current_pool();
     type->object.allow_extension = true;  // Json allows dynamic fields
     if (count > 0 && names && types) {
         type->object.field_count = count;
@@ -211,11 +211,11 @@ XrType *xr_type_new_json_with_fields(const char **names, XrType **types, int cou
 }
 
 // Structured object types (for JSON with known fields)
-XrType *xr_type_new_object(const char **field_names, XrType **field_types,
+XrType *xr_type_new_object(XrayIsolate *X, const char **field_names, XrType **field_types,
                            int field_count, bool allow_extension, const char *type_name) {
-    XrType *type = type_alloc(XR_KIND_JSON);
+    XrType *type = type_alloc(X, XR_KIND_JSON);
     if (!type) return NULL;
-    XrTypePool *pool = get_current_pool();
+    XrTypePool *pool = X ? X->current_type_pool : get_current_pool();
 
     if (field_count > 0 && field_names) {
         type->object.field_names = xr_pool_alloc(pool, sizeof(const char*) * field_count);
@@ -241,106 +241,106 @@ XrType *xr_type_new_object(const char **field_names, XrType **field_types,
     return type;
 }
 
-XrType *xr_type_new_object_anonymous(const char **field_names, XrType **field_types, int field_count) {
-    return xr_type_new_object(field_names, field_types, field_count, true, NULL);
+XrType *xr_type_new_object_anonymous(XrayIsolate *X, const char **field_names, XrType **field_types, int field_count) {
+    return xr_type_new_object(X, field_names, field_types, field_count, true, NULL);
 }
 
 // Optional type (T?) - unified: uses is_nullable on the base type itself
-XrType *xr_type_new_optional(XrType *base_type) {
-    return xr_type_make_nullable(base_type);
+XrType *xr_type_new_optional(XrayIsolate *X, XrType *base_type) {
+    return xr_type_make_nullable(X, base_type);
 }
 
 XrType *xr_type_get_base(XrType *optional_type) {
-    return xr_type_non_nullable(optional_type);
+    return xr_type_non_nullable(NULL, optional_type);
 }
 
 // Type parameter (for generics)
-XrType *xr_type_new_type_param(const char *name, int id) {
-    XrType *type = type_alloc(XR_KIND_TYPE_PARAM);
+XrType *xr_type_new_type_param(XrayIsolate *X, const char *name, int id) {
+    XrType *type = type_alloc(X, XR_KIND_TYPE_PARAM);
     if (!type) return NULL;
-    XrTypePool *pool = get_current_pool();
+    XrTypePool *pool = X ? X->current_type_pool : get_current_pool();
     type->type_param.name = name ? xr_pool_strdup(pool, name) : NULL;
     type->type_param.id = id;
     type->type_param.constraint = NULL;
     return type;
 }
 
-XrType *xr_type_new_type_param_constrained(const char *name, int id, XrType *constraint) {
-    XrType *type = xr_type_new_type_param(name, id);
+XrType *xr_type_new_type_param_constrained(XrayIsolate *X, const char *name, int id, XrType *constraint) {
+    XrType *type = xr_type_new_type_param(X, name, id);
     if (type) {
         type->type_param.constraint = constraint;
     }
     return type;
 }
 
-XrType *xr_type_new_class(const char *class_name) {
-    XrType *type = type_alloc(XR_KIND_CLASS);
+XrType *xr_type_new_class(XrayIsolate *X, const char *class_name) {
+    XrType *type = type_alloc(X, XR_KIND_CLASS);
     if (type && class_name) {
-        XrTypePool *pool = get_current_pool();
+        XrTypePool *pool = X ? X->current_type_pool : get_current_pool();
         type->instance.class_name = xr_pool_strdup(pool, class_name);
     }
     return type;
 }
 
-XrType *xr_type_new_interface(const char *interface_name) {
-    XrType *type = type_alloc(XR_KIND_INTERFACE);
+XrType *xr_type_new_interface(XrayIsolate *X, const char *interface_name) {
+    XrType *type = type_alloc(X, XR_KIND_INTERFACE);
     if (type && interface_name) {
-        XrTypePool *pool = get_current_pool();
+        XrTypePool *pool = X ? X->current_type_pool : get_current_pool();
         type->instance.class_name = xr_pool_strdup(pool, interface_name);
     }
     return type;
 }
 
-XrType *xr_type_new_bigint(void) {
-    XrType *type = type_alloc(XR_KIND_INSTANCE);
+XrType *xr_type_new_bigint(XrayIsolate *X) {
+    XrType *type = type_alloc(X, XR_KIND_INSTANCE);
     if (type) type->instance.class_name = "BigInt";
     return type;
 }
 
-XrType *xr_type_new_datetime(void) {
-    XrType *type = type_alloc(XR_KIND_INSTANCE);
+XrType *xr_type_new_datetime(XrayIsolate *X) {
+    XrType *type = type_alloc(X, XR_KIND_INSTANCE);
     if (type) type->instance.class_name = "DateTime";
     return type;
 }
 
-XrType *xr_type_new_bytes(void) {
-    XrType *type = type_alloc(XR_KIND_BYTES);
+XrType *xr_type_new_bytes(XrayIsolate *X) {
+    XrType *type = type_alloc(X, XR_KIND_BYTES);
     return type;
 }
 
-XrType *xr_type_new_regex(void) {
-    XrType *type = type_alloc(XR_KIND_INSTANCE);
+XrType *xr_type_new_regex(XrayIsolate *X) {
+    XrType *type = type_alloc(X, XR_KIND_INSTANCE);
     if (type) type->instance.class_name = "Regex";
     return type;
 }
 
-XrType *xr_type_new_stringbuilder(void) {
-    XrType *type = type_alloc(XR_KIND_INSTANCE);
+XrType *xr_type_new_stringbuilder(XrayIsolate *X) {
+    XrType *type = type_alloc(X, XR_KIND_INSTANCE);
     if (type) type->instance.class_name = "StringBuilder";
     return type;
 }
 
-XrType *xr_type_new_named_instance(const char *name) {
-    XrType *type = type_alloc(XR_KIND_INSTANCE);
+XrType *xr_type_new_named_instance(XrayIsolate *X, const char *name) {
+    XrType *type = type_alloc(X, XR_KIND_INSTANCE);
     if (type) type->instance.class_name = name;
     return type;
 }
 
-XrType *xr_type_new_enum(const char *enum_name) {
-    XrType *type = type_alloc(XR_KIND_ENUM);
+XrType *xr_type_new_enum(XrayIsolate *X, const char *enum_name) {
+    XrType *type = type_alloc(X, XR_KIND_ENUM);
     if (type && enum_name) {
         type->enum_type.enum_name = enum_name;
     }
     return type;
 }
 
-XrType *xr_type_new_instance(XrClassInfo *class_info) {
-    XrType *type = type_alloc(XR_KIND_INSTANCE);
+XrType *xr_type_new_instance(XrayIsolate *X, XrClassInfo *class_info) {
+    XrType *type = type_alloc(X, XR_KIND_INSTANCE);
     if (!type) return NULL;
     type->instance.class_ref = class_info;
     // Extract class_name from class_info for type comparison and display
     if (class_info && class_info->name) {
-        XrTypePool *pool = get_current_pool();
+        XrTypePool *pool = X ? X->current_type_pool : get_current_pool();
         type->instance.class_name = xr_pool_strdup(pool, class_info->name);
     }
     type->instance.type_args = NULL;
@@ -348,12 +348,12 @@ XrType *xr_type_new_instance(XrClassInfo *class_info) {
     return type;
 }
 
-XrType *xr_type_new_generic_instance(const char *class_name, XrClassInfo *class_info,
+XrType *xr_type_new_generic_instance(XrayIsolate *X, const char *class_name, XrClassInfo *class_info,
                                       XrType **type_args, int type_arg_count) {
     XR_DCHECK(type_arg_count >= 0, "type_new_generic_instance: negative type_arg_count");
-    XrType *type = type_alloc(XR_KIND_INSTANCE);
+    XrType *type = type_alloc(X, XR_KIND_INSTANCE);
     if (!type) return NULL;
-    XrTypePool *pool = get_current_pool();
+    XrTypePool *pool = X ? X->current_type_pool : get_current_pool();
 
     type->instance.class_name = class_name ? xr_pool_strdup(pool, class_name) : NULL;
     type->instance.class_ref = class_info;
@@ -376,13 +376,13 @@ XrType *xr_type_new_generic_instance(const char *class_name, XrClassInfo *class_
 }
 
 // Function type
-XrType *xr_type_new_function(XrType **param_types, int param_count,
+XrType *xr_type_new_function(XrayIsolate *X, XrType **param_types, int param_count,
                               XrType *return_type, bool is_variadic) {
     XR_DCHECK(param_count >= 0, "type_new_function: negative param_count");
     XR_DCHECK(param_count == 0 || param_types != NULL, "type_new_function: NULL param_types with count > 0");
-    XrType *type = type_alloc(XR_KIND_FUNCTION);
+    XrType *type = type_alloc(X, XR_KIND_FUNCTION);
     if (!type) return NULL;
-    XrTypePool *pool = get_current_pool();
+    XrTypePool *pool = X ? X->current_type_pool : get_current_pool();
 
     if (param_count > 0 && param_types) {
         type->function.param_types = xr_pool_alloc(pool, sizeof(XrType*) * param_count);
@@ -398,15 +398,15 @@ XrType *xr_type_new_function(XrType **param_types, int param_count,
 }
 
 // Tuple type (for multi-value return, compile-time only)
-XrType *xr_type_new_tuple(XrType **element_types, int count) {
-    if (count <= 0) return xr_type_new_void();
+XrType *xr_type_new_tuple(XrayIsolate *X, XrType **element_types, int count) {
+    if (count <= 0) return xr_type_new_void(X);
     if (count == 1 && element_types && element_types[0]) {
         return element_types[0];  // Single element is not a tuple
     }
 
-    XrType *type = type_alloc(XR_KIND_TUPLE);
+    XrType *type = type_alloc(X, XR_KIND_TUPLE);
     if (!type) return NULL;
-    XrTypePool *pool = get_current_pool();
+    XrTypePool *pool = X ? X->current_type_pool : get_current_pool();
 
     if (count > 0 && element_types) {
         type->tuple.element_types = xr_pool_alloc(pool, sizeof(XrType*) * count);
@@ -489,10 +489,10 @@ static int union_normalize(XrType **in, int in_count,
 // Construct a union type from an array of member types.
 // Applies: flatten existing unions, dedup, sort, special rules.
 // Union aliases as members are flattened (from xr_type_union merge path).
-XrType *xr_type_new_union(XrType **members, int count) {
+XrType *xr_type_new_union(XrayIsolate *X, XrType **members, int count) {
     XR_DCHECK(count >= 0, "type_new_union: negative count");
     XR_DCHECK(count == 0 || members != NULL, "type_new_union: NULL members with count > 0");
-    if (count == 0) return xr_type_new_never();
+    if (count == 0) return xr_type_new_never(X);
     if (count == 1) return members[0];
 
     // 1. Flatten any existing union members (from xr_type_union merge)
@@ -516,32 +516,32 @@ XrType *xr_type_new_union(XrType **members, int count) {
     int result_count = union_normalize(flat, flat_count, result, &has_null);
 
     // unknown fallback
-    if (result_count < 0) return xr_type_new_unknown();
+    if (result_count < 0) return xr_type_new_unknown(X);
 
     // Degenerate: empty -> never
     if (result_count == 0) {
-        return has_null ? xr_type_new_null() : xr_type_new_never();
+        return has_null ? xr_type_new_null(X) : xr_type_new_never(X);
     }
 
     // Single member
     if (result_count == 1) {
-        if (has_null) return xr_type_make_nullable(result[0]);
+        if (has_null) return xr_type_make_nullable(X, result[0]);
         return result[0];
     }
 
     // Exceeds max -> degrade to unknown
-    if (result_count > XR_UNION_MAX_MEMBERS) return xr_type_new_unknown();
+    if (result_count > XR_UNION_MAX_MEMBERS) return xr_type_new_unknown(X);
 
     // 3. Sort by kind for canonical order
     union_sort_by_kind(result, result_count);
 
     // 4. Allocate union type
-    XrType *type = type_alloc(XR_KIND_UNION);
-    if (!type) return xr_type_new_unknown();
-    XrTypePool *pool = get_current_pool();
+    XrType *type = type_alloc(X, XR_KIND_UNION);
+    if (!type) return xr_type_new_unknown(X);
+    XrTypePool *pool = X ? X->current_type_pool : get_current_pool();
     type->union_type.members = (XrType **)xr_pool_alloc(
         pool, sizeof(XrType *) * result_count);
-    if (!type->union_type.members) return xr_type_new_unknown();
+    if (!type->union_type.members) return xr_type_new_unknown(X);
     memcpy(type->union_type.members, result, sizeof(XrType *) * result_count);
     type->union_type.member_count = (uint8_t)result_count;
     if (has_null) type->is_nullable = true;
@@ -550,13 +550,13 @@ XrType *xr_type_new_union(XrType **members, int count) {
 
 // Merge two types into a union (or apply special rules).
 // Type union rules: int|float->float, T|null->T?
-XrType *xr_type_union(XrType *a, XrType *b) {
+XrType *xr_type_union(XrayIsolate *X, XrType *a, XrType *b) {
     if (!a) return b;
     if (!b) return a;
     if (xr_type_equals(a, b)) return a;
 
     // unknown | T = unknown
-    if (XR_TYPE_IS_UNKNOWN(a) || XR_TYPE_IS_UNKNOWN(b)) return xr_type_new_unknown();
+    if (XR_TYPE_IS_UNKNOWN(a) || XR_TYPE_IS_UNKNOWN(b)) return xr_type_new_unknown(X);
 
     // never | T = T
     if (XR_TYPE_IS_NEVER(a)) return b;
@@ -568,13 +568,13 @@ XrType *xr_type_union(XrType *a, XrType *b) {
 
     // T | null = T? (nullable shortcut)
     if (XR_TYPE_IS_NULL(a) && !XR_TYPE_IS_NULL(b))
-        return xr_type_make_nullable(b);
+        return xr_type_make_nullable(X, b);
     if (XR_TYPE_IS_NULL(b) && !XR_TYPE_IS_NULL(a))
-        return xr_type_make_nullable(a);
+        return xr_type_make_nullable(X, a);
 
     // General case: create real union
     XrType *pair[2] = {a, b};
-    return xr_type_new_union(pair, 2);
+    return xr_type_new_union(X, pair, 2);
 }
 
 // Union accessor: number of members (0 if not a union)
@@ -600,10 +600,10 @@ bool xr_type_union_contains(XrType *type, XrTypeKind kind) {
 }
 
 // Remove all members with given kind from union; return simplified type
-XrType *xr_type_union_remove(XrType *type, XrTypeKind kind) {
+XrType *xr_type_union_remove(XrayIsolate *X, XrType *type, XrTypeKind kind) {
     if (!type) return NULL;
     if (!XR_TYPE_IS_UNION(type)) {
-        return type->kind == kind ? xr_type_new_never() : type;
+        return type->kind == kind ? xr_type_new_never(X) : type;
     }
     XrType *kept[XR_UNION_MAX_MEMBERS];
     int kept_count = 0;
@@ -611,13 +611,13 @@ XrType *xr_type_union_remove(XrType *type, XrTypeKind kind) {
         if (type->union_type.members[i]->kind != kind)
             kept[kept_count++] = type->union_type.members[i];
     }
-    if (kept_count == 0) return xr_type_new_never();
+    if (kept_count == 0) return xr_type_new_never(X);
     if (kept_count == 1) {
         XrType *r = kept[0];
-        if (type->is_nullable) r = xr_type_make_nullable(r);
+        if (type->is_nullable) r = xr_type_make_nullable(X, r);
         return r;
     }
-    XrType *r = xr_type_new_union(kept, kept_count);
+    XrType *r = xr_type_new_union(X, kept, kept_count);
     if (type->is_nullable && r) r->is_nullable = true;
     return r;
 }
@@ -626,23 +626,23 @@ XrType *xr_type_union_remove(XrType *type, XrTypeKind kind) {
 // Represents a value extracted from a Json object with unknown field type.
 static XrType *s_json_value_type = NULL;
 
-XrType *xr_type_new_json_value(void) {
+XrType *xr_type_new_json_value(XrayIsolate *X) {
     if (s_json_value_type) return s_json_value_type;
     // Build manually to avoid union_normalize merging int|float→float.
     // JsonValue = (bool|int|float|string|Json|Array)? — 6 members, nullable.
     XrType *raw_members[6] = {
-        xr_type_new_bool(),
-        xr_type_new_int(),
-        xr_type_new_float(),
-        xr_type_new_string(),
-        xr_type_new_json(),
-        xr_type_new_array(xr_type_new_unknown()),
+        xr_type_new_bool(X),
+        xr_type_new_int(X),
+        xr_type_new_float(X),
+        xr_type_new_string(X),
+        xr_type_new_json(X),
+        xr_type_new_array(X, xr_type_new_unknown(X)),
     };
-    XrType *type = type_alloc(XR_KIND_UNION);
-    if (!type) return xr_type_new_unknown();
-    XrTypePool *pool = get_current_pool();
+    XrType *type = type_alloc(X, XR_KIND_UNION);
+    if (!type) return xr_type_new_unknown(X);
+    XrTypePool *pool = X ? X->current_type_pool : get_current_pool();
     type->union_type.members = (XrType **)xr_pool_alloc(pool, sizeof(XrType *) * 6);
-    if (!type->union_type.members) return xr_type_new_unknown();
+    if (!type->union_type.members) return xr_type_new_unknown(X);
     memcpy(type->union_type.members, raw_members, sizeof(XrType *) * 6);
     type->union_type.member_count = 6;
     type->is_nullable = true;  // null is a valid Json field value
@@ -679,18 +679,18 @@ bool xr_type_is_json_value(XrType *type) {
 static XrType *xr_type_union_filter(XrType *type, XrTypeKind kind) {
     if (!type) return NULL;
     if (!XR_TYPE_IS_UNION(type)) {
-        return type->kind == kind ? type : xr_type_new_never();
+        return type->kind == kind ? type : xr_type_new_never(NULL);
     }
     for (int i = 0; i < type->union_type.member_count; i++) {
         if (type->union_type.members[i]->kind == kind)
             return type->union_type.members[i];
     }
-    return xr_type_new_never();
+    return xr_type_new_never(NULL);
 }
 
 // Fixed-length array ([N]T - compile-time length, runtime Array<T>)
-XrType *xr_type_new_fixed_array(XrType *element_type, int length) {
-    XrType *type = type_alloc(XR_KIND_FIXED_ARRAY);
+XrType *xr_type_new_fixed_array(XrayIsolate *X, XrType *element_type, int length) {
+    XrType *type = type_alloc(X, XR_KIND_FIXED_ARRAY);
     if (!type) return NULL;
     type->fixed_array.element_type = element_type;
     type->fixed_array.length = length;
@@ -698,14 +698,14 @@ XrType *xr_type_new_fixed_array(XrType *element_type, int length) {
 }
 
 // Copy a type
-XrType *xr_type_copy(XrType *type) {
+XrType *xr_type_copy(XrayIsolate *X, XrType *type) {
     if (!type) return NULL;
     XR_DCHECK(type->kind < XR_KIND_COUNT, "type_copy: invalid kind");
 
-    XrType *copy = type_alloc(type->kind);
+    XrType *copy = type_alloc(X, type->kind);
     if (!copy) return NULL;
 
-    XrTypePool *pool = get_current_pool();
+    XrTypePool *pool = X ? X->current_type_pool : get_current_pool();
 
     copy->is_nullable = type->is_nullable;
 
@@ -801,7 +801,7 @@ XrType *xr_type_copy(XrType *type) {
 }
 
 // Make a type nullable (returns cached singleton for primitive types)
-XrType *xr_type_make_nullable(XrType *type) {
+XrType *xr_type_make_nullable(XrayIsolate *X, XrType *type) {
     if (!type) return NULL;
     if (type->is_nullable) return type;
 
@@ -813,7 +813,7 @@ XrType *xr_type_make_nullable(XrType *type) {
     if (type == &g_type_json)   return &g_type_json_nullable;
 
     // Also handle pool singletons (frozen types from type pool)
-    if (type->frozen && get_current_pool()) {
+    if (type->frozen && X && X->current_type_pool) {
         switch (type->kind) {
         case XR_KIND_INT:    return &g_type_int_nullable;
         case XR_KIND_FLOAT:  return &g_type_float_nullable;
@@ -829,7 +829,7 @@ XrType *xr_type_make_nullable(XrType *type) {
 
     // Frozen singleton without cached nullable: must copy before mutation
     if (type->frozen) {
-        XrType *copy = xr_type_copy(type);
+        XrType *copy = xr_type_copy(X, type);
         if (copy) copy->is_nullable = true;
         return copy;
     }
@@ -892,8 +892,8 @@ bool xr_type_assignable(XrType *target, XrType *source) {
 
     // Nullable target: compare base types (T assignable to T?, T? assignable to T?)
     if (target->is_nullable) {
-        XrType *target_base = xr_type_non_nullable(target);
-        XrType *source_base = source->is_nullable ? xr_type_non_nullable(source) : source;
+        XrType *target_base = xr_type_non_nullable(NULL, target);
+        XrType *source_base = source->is_nullable ? xr_type_non_nullable(NULL, source) : source;
         if (target_base && source_base) return xr_type_assignable(target_base, source_base);
     }
 
@@ -940,7 +940,7 @@ bool xr_type_assignable(XrType *target, XrType *source) {
                     if (target_field_type && source->object.field_types) {
                         XrType *source_field_type = source->object.field_types[j];
                         XrType *check_type = is_optional ?
-                            xr_type_non_nullable(target_field_type) : target_field_type;
+                            xr_type_non_nullable(NULL, target_field_type) : target_field_type;
                         if (!xr_type_assignable(check_type, source_field_type)) {
                             return false;
                         }
@@ -1177,32 +1177,32 @@ bool xr_type_equals(XrType *a, XrType *b) {
 }
 
 // Type narrowing: keep type only if it matches given kind
-XrType *xr_type_filter(XrType *type, XrTypeKind kind) {
+XrType *xr_type_filter(XrayIsolate *X, XrType *type, XrTypeKind kind) {
     if (!type) return NULL;
     if (XR_TYPE_IS_UNION(type)) return xr_type_union_filter(type, kind);
     if (type->kind == kind) return type;
-    return xr_type_new_never();
+    return xr_type_new_never(X);
 }
 
 // Type narrowing: exclude type if it matches given kind
-XrType *xr_type_exclude(XrType *type, XrTypeKind kind) {
+XrType *xr_type_exclude(XrayIsolate *X, XrType *type, XrTypeKind kind) {
     if (!type) return NULL;
-    if (XR_TYPE_IS_UNION(type)) return xr_type_union_remove(type, kind);
-    if (type->kind == kind) return xr_type_new_never();
+    if (XR_TYPE_IS_UNION(type)) return xr_type_union_remove(X, type, kind);
+    if (type->kind == kind) return xr_type_new_never(X);
     return type;
 }
 
 // Remove null from type
-XrType *xr_type_non_nullable(XrType *type) {
+XrType *xr_type_non_nullable(XrayIsolate *X, XrType *type) {
     if (!type) return NULL;
 
     // If type is nullable, return non-nullable version
     if (type->is_nullable) {
         switch (type->kind) {
-        case XR_KIND_INT:    return xr_type_new_int();
-        case XR_KIND_FLOAT:  return xr_type_new_float();
-        case XR_KIND_STRING: return xr_type_new_string();
-        case XR_KIND_BOOL:   return xr_type_new_bool();
+        case XR_KIND_INT:    return xr_type_new_int(X);
+        case XR_KIND_FLOAT:  return xr_type_new_float(X);
+        case XR_KIND_STRING: return xr_type_new_string(X);
+        case XR_KIND_BOOL:   return xr_type_new_bool(X);
         case XR_KIND_JSON:
             if (type == &g_type_json_nullable ||
                 (type->object.field_count == 0 && type->object.allow_extension))
@@ -1210,13 +1210,13 @@ XrType *xr_type_non_nullable(XrType *type) {
             break;
         default: break;
         }
-        XrType *result = xr_type_copy(type);
+        XrType *result = xr_type_copy(X, type);
         if (result) result->is_nullable = false;
         return result;
     }
 
     if (type->kind == XR_KIND_NULL) {
-        return xr_type_new_never();
+        return xr_type_new_never(X);
     }
 
     return type;

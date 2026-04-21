@@ -1058,7 +1058,7 @@ void xr_compile_statement(XrCompilerContext *ctx, XrCompiler *compiler, AstNode 
                         if (vd->initializer && vd->initializer->type == AST_CHANNEL_NEW) {
                             XrType *ch_type = vd->type_annotation;
                             if (!ch_type || ch_type->kind != XR_KIND_CHANNEL) {
-                                ch_type = xr_type_new_channel(xr_type_new_unknown());
+                                ch_type = xr_type_new_channel(ctx->X, xr_type_new_unknown(NULL));
                             }
                             shared_set_type(ctx, si, ch_type);
                         }
@@ -1142,7 +1142,7 @@ void xr_compile_statement(XrCompilerContext *ctx, XrCompiler *compiler, AstNode 
                     if (vd->initializer && vd->initializer->type == AST_CHANNEL_NEW) {
                         XrType *ch_type = vd->type_annotation;
                         if (!ch_type || ch_type->kind != XR_KIND_CHANNEL) {
-                            ch_type = xr_type_new_channel(xr_type_new_unknown());
+                            ch_type = xr_type_new_channel(ctx->X, xr_type_new_unknown(NULL));
                         }
                         shared_set_type(ctx, si, ch_type);
                     }

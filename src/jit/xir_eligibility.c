@@ -144,7 +144,7 @@ bool is_jit_eligible(struct XrProto *proto, bool verbose) {
     if (!proto->return_type_info && proto->type_feedback && proto->type_feedback->stable) {
         uint8_t fb_ret = xfb_to_slot_type(proto->type_feedback->return_type);
         if (fb_ret != XR_SLOT_ANY) {
-            proto->return_type_info = xr_slot_type_to_type(fb_ret);
+            proto->return_type_info = xr_slot_type_to_type(NULL, fb_ret);
         }
     }
     uint8_t rt = proto->return_type_info

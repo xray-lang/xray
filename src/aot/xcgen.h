@@ -66,6 +66,8 @@ typedef struct {
     void       *proto_ptr;   // XrProto* (opaque, compared by address)
     const char *c_name;      // C function name (e.g. "xr_fib")
     int         func_idx;    // index into mod->funcs (-1 = not yet compiled)
+    bool        non_escaping; // true if closure only called via CALL_KNOWN (never stored/returned)
+    int         num_upvals;   // upvalue count for non-escaping closures (0 if escaping)
 } XcgenProtoEntry;
 
 /* ========== Per-Function Codegen State ========== */
@@ -79,6 +81,8 @@ typedef struct XcgenFunc {
     bool           needs_runtime;  // true if function calls runtime APIs
     bool           needs_gc;       // true if function allocates GC objects
     bool           needs_closure_param; // true if function accesses upvalues (needs XrtValue xrt_closure param)
+    bool           non_escaping;        // true if all callers pass upvalues inline (no closure object)
+    int            num_upvals;          // upvalue count for non-escaping closures (upval params after regular params)
     bool           needs_exception;     // true if function uses try/catch (needs XrtValue xrt_exception local)
     bool           void_return;    // true if function always returns null → emit as void
 

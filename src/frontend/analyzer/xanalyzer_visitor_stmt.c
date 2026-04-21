@@ -95,7 +95,7 @@ void xa_visit_var_decl_stmt(XaInferContext *ctx, AstNode *node) {
         var_type = links->declared_type;
     } else {
         // Fallback for missing type (error already reported above)
-        var_type = xr_type_new_unknown();
+        var_type = xr_type_new_unknown(NULL);
     }
     
     links->type = var_type;
@@ -373,11 +373,11 @@ void xa_visit_return_stmt(XaInferContext *ctx, AstNode *node) {
     
     ReturnStmtNode *ret = &node->as.return_stmt;
     
-    XrType *return_type = xr_type_new_void();
+    XrType *return_type = xr_type_new_void(NULL);
     
     if (ret->value_count == 0) {
         // No return value
-        return_type = xr_type_new_void();
+        return_type = xr_type_new_void(NULL);
     } else if (ret->value_count == 1) {
         // Single return value
         if (ret->values[0]) {
@@ -413,11 +413,11 @@ void xa_visit_return_stmt(XaInferContext *ctx, AstNode *node) {
             if (ret->values[i]) {
                 element_types[i] = xa_visit_infer_expr(ctx, ret->values[i]);
             } else {
-                element_types[i] = xr_type_new_unknown();
+                element_types[i] = xr_type_new_unknown(NULL);
             }
         }
         // Create tuple type for multi-value return
-        return_type = xr_type_new_tuple(element_types, ret->value_count);
+        return_type = xr_type_new_tuple(ctx->analyzer->isolate, element_types, ret->value_count);
         
         // Store return type info on the AST node
         node->compile_type = return_type;

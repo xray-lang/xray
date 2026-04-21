@@ -103,7 +103,7 @@ AstNode *xr_parse_class_declaration(Parser *parser) {
     if (type_param_count > 0) {
         XaScope *generic_scope = xa_scope_new(XA_SCOPE_CLASS, parser->type_scope);
         for (int i = 0; i < type_param_count; i++) {
-            XrType *type_param = xr_type_new_type_param(type_params[i]->name, i);
+            XrType *type_param = xr_type_new_type_param(parser->X, type_params[i]->name, i);
             xa_scope_define_type_alias(generic_scope, type_params[i]->name, type_param);
         }
         parser->type_scope = generic_scope;
@@ -316,7 +316,7 @@ AstNode *xr_parse_struct_declaration(Parser *parser) {
     if (type_param_count > 0) {
         XaScope *generic_scope = xa_scope_new(XA_SCOPE_CLASS, parser->type_scope);
         for (int i = 0; i < type_param_count; i++) {
-            XrType *tp = xr_type_new_type_param(type_params[i]->name, i);
+            XrType *tp = xr_type_new_type_param(parser->X, type_params[i]->name, i);
             xa_scope_define_type_alias(generic_scope, type_params[i]->name, tp);
         }
         parser->type_scope = generic_scope;
@@ -1468,18 +1468,18 @@ AstNode *xr_parse_interface_method(Parser *parser) {
 
             XrType *param_type = NULL;
             if (xr_parser_match(parser, TK_INT)) {
-                param_type = xr_type_new_int();
+                param_type = xr_type_new_int(NULL);
             } else if (xr_parser_match(parser, TK_FLOAT)) {
-                param_type = xr_type_new_float();
+                param_type = xr_type_new_float(NULL);
             } else if (xr_parser_match(parser, TK_STRING)) {
-                param_type = xr_type_new_string();
+                param_type = xr_type_new_string(NULL);
             } else if (xr_parser_match(parser, TK_BOOL)) {
-                param_type = xr_type_new_bool();
+                param_type = xr_type_new_bool(NULL);
             } else if (xr_parser_match(parser, TK_NAME)) {
-                param_type = xr_type_new_class(token_to_string(parser, &parser->previous));
+                param_type = xr_type_new_class(parser->X, token_to_string(parser, &parser->previous));
             } else {
                 xr_parser_error(parser, "expected parameter type");
-                param_type = xr_type_new_unknown();
+                param_type = xr_type_new_unknown(NULL);
             }
 
             // Add to parameters array (arena grow - old buffers released by arena)

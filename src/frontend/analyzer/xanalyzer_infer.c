@@ -59,7 +59,7 @@ void xa_infer_add_return_type(XaInferContext *ctx, XrType *type) {
 // Compute unified return type from all return statements
 XrType *xa_infer_compute_return_type(XaInferContext *ctx) {
     if (!ctx || ctx->return_type_count == 0) {
-        return xr_type_new_void();
+        return xr_type_new_void(NULL);
     }
 
     if (ctx->return_type_count == 1) {
@@ -69,7 +69,7 @@ XrType *xa_infer_compute_return_type(XaInferContext *ctx) {
     // Create union of all return types
     XrType *result = ctx->return_types[0];
     for (int i = 1; i < ctx->return_type_count; i++) {
-        result = xr_type_union(result, ctx->return_types[i]);
+        result = xr_type_union(ctx->analyzer->isolate, result, ctx->return_types[i]);
     }
 
     return result;

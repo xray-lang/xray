@@ -388,7 +388,7 @@ static void compile_class_with_descriptor(
         // Module/top-level: allocate shared variable for cross-scope access
         class_global_idx = shared_get_or_add(ctx, compiler, class_name_str);
         shared_set_const(ctx, class_global_idx, true);
-        shared_set_type(ctx, class_global_idx, xr_type_new_class(node->name));
+        shared_set_type(ctx, class_global_idx, xr_type_new_class(ctx->X, node->name));
     }
 
     // Register class to class_registry (for compile-time type optimization)

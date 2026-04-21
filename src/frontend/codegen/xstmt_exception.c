@@ -87,7 +87,7 @@ void compile_try_catch(XrCompilerContext *ctx, XrCompiler *compiler, TryCatchNod
         if (node->catch_var) {
             XrString *var_name = xr_compile_time_intern(ctx->X, node->catch_var, strlen(node->catch_var));
             XrLocalInfo *local = scope_define_local(ctx, compiler, var_name);
-            local_set_compile_type(local, xr_type_new_named_instance("Exception"));
+            local_set_compile_type(local, xr_type_new_named_instance(ctx->X, "Exception"));
             catch_var_reg = local->reg;
         }
         

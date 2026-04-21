@@ -504,7 +504,7 @@ static int compile_member_access_internal(XrCompilerContext *ctx, XrCompiler *co
                 if (strcmp(node->name, type_consts[ti].name) == 0) {
                     int pc = emit_asbx(compiler->emitter, OP_LOADI, 0, type_consts[ti].tid);
                     // OP_LOADI for Type constants produces raw I64
-                    if (out_compile_type) *out_compile_type = xr_type_new_int();
+                    if (out_compile_type) *out_compile_type = xr_type_new_int(NULL);
                     if (out_is_raw) *out_is_raw = true;
                     return pc;
                 }

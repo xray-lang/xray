@@ -481,7 +481,7 @@ void compile_function(XrCompilerContext *ctx, XrCompiler *compiler, FunctionDecl
                         // are often unknown and skipped). Make them nullable as a
                         // safe default — Json fields can always be null at runtime.
                         if (XR_TYPE_IS_JSON(pt) && !XR_TYPE_IS_NULLABLE(pt)) {
-                            pt = xr_type_make_nullable(pt);
+                            pt = xr_type_make_nullable(ctx->X, pt);
                         }
                         local_set_compile_type(local, pt);
                     }
