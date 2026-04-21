@@ -14,16 +14,17 @@
 
 #include "xconfig.h"
 #include "xchecks.h"
+#include "xray_version.h"
 #include <string.h>
 
 /* ========== Default Config ========== */
 
 XrayConfig xray_config_default(void) {
     XrayConfig config = {
-        .version = "0.32.4",
+        .version = XRAY_VERSION_STRING,
         .debug = true,
         .verbose = false,
-        
+
         .gc = {
             .heap_initial = 4 * 1024 * 1024,      // 4MB
             .heap_min = 1 * 1024 * 1024,          // 1MB
@@ -34,7 +35,7 @@ XrayConfig xray_config_default(void) {
             .step_size = 1000,
             .pause_target_us = 2000,
         },
-        
+
         .compiler = {
             .enable_optimization = true,
             .enable_peephole = true,
@@ -42,12 +43,12 @@ XrayConfig xray_config_default(void) {
             .enable_fusion = true,
             .max_inline_depth = 3,
         },
-        
+
         .vm = {
             .stack_size = 65536,
         },
     };
-    
+
     return config;
 }
 

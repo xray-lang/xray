@@ -13,10 +13,10 @@
  */
 
 #include "xbytecode_io.h"
-#include "../base/xchecks.h"
+#include "../base/xmalloc.h"
+#include "../base/xfileio.h"
 #include "../base/xlog.h"
 #include "xray_isolate.h"
-#include "../base/xmalloc.h"
 #include "../runtime/xisolate_api.h"
 #include "xexec_state.h"
 #include "../runtime/value/xchunk.h"
@@ -743,22 +743,11 @@ void xr_proto_set_param_types(XrProto *p, const uint8_t *ptypes,
 bool xr_compile_to_file(XrayIsolate *X, const char *source_file,
                         const char *output_file, int flags) {
     // Read source file
-    FILE *f = fopen(source_file, "r");
-    if (!f) {
+    char *source = xr_file_read_all(source_file, "r", NULL);
+    if (!source) {
         xr_log_warning("compile", "cannot open: %s", source_file);
         return false;
     }
-
-    fseek(f, 0, SEEK_END);
-    long size = ftell(f);
-    fseek(f, 0, SEEK_SET);
-
-    char *source = xr_malloc(size + 1);
-    if (!source) { fclose(f); return false; }
-
-    size_t read = fread(source, 1, size, f);
-    source[read] = '\0';
-    fclose(f);
 
     // Parse
     AstNode *ast = xr_parse_with_source(X, source, source_file);
@@ -790,7 +779,7 @@ bool xr_compile_to_file(XrayIsolate *X, const char *source_file,
     xr_vm_proto_free(proto);
 
     // Write to file
-    f = fopen(output_file, "wb");
+    FILE *f = fopen(output_file, "wb");
     if (!f) {
         xr_free(bc);
         xr_log_warning("compile", "cannot create: %s", output_file);

@@ -63,7 +63,9 @@
   #define XRAY_API __attribute__((visibility("default"))) extern
 #else
   #define XRAY_API extern
-#endif // Internal cross-module functions/data
+#endif
+
+// Internal cross-module functions/data
 #if defined(xray_amalg_c)
   // Amalgamated build: all internal symbols become static
   #define XR_FUNC   static
@@ -71,14 +73,18 @@
 #else
   #define XR_FUNC   extern
   #define XR_DATA   extern
-#endif // For function definitions (in .c files) that match XR_FUNC declarations
+#endif
+
+// For function definitions (in .c files) that match XR_FUNC declarations
 #if defined(xray_amalg_c)
   #define XR_FUNCDEF  static
   #define XR_DATADEF  static
 #else
   #define XR_FUNCDEF
   #define XR_DATADEF
-#endif // === Visibility Macros ===
+#endif
+
+/* === End Visibility Macros === */
 
 /* === Function Attributes === */
 
@@ -124,7 +130,9 @@
 #else
   #define XR_ALIGN(n)
   #define XR_PACKED
-#endif // === Alignment & Packing ===
+#endif
+
+/* === End Alignment & Packing === */
 
 /* === Basic Helpers === */
 
@@ -140,6 +148,8 @@
 #else
   #define XR_MIN(a, b) ((a) < (b) ? (a) : (b))
   #define XR_MAX(a, b) ((a) > (b) ? (a) : (b))
-#endif // === Basic Helpers ===
+#endif
+
+/* === End Basic Helpers === */
 
 #endif // XDEFS_H

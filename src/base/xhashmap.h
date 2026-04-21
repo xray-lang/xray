@@ -43,6 +43,7 @@
 typedef struct XrHashMapEntry {
     char *key;
     void *value;
+    uint32_t hash;      // Cached hash (avoids recompute on probe/rehash)
 } XrHashMapEntry;
 
 typedef struct XrHashMap {

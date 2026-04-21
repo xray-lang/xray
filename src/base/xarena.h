@@ -59,6 +59,17 @@ XR_FUNC char *xr_arena_strdup(XrArena *arena, const char *str);
 XR_FUNC char *xr_arena_strndup(XrArena *arena, const char *str, size_t len);
 XR_FUNC size_t xr_arena_get_allocated_size(XrArena *arena);
 
+// Savepoint: mark/rewind for tentative allocations (e.g. speculative parsing).
+// Constraint: restore only valid when head segment unchanged since save.
+typedef struct XrArenaState {
+    XrArenaSegment *head;
+    char *position;
+    size_t total_allocated;
+} XrArenaState;
+
+XR_FUNC XrArenaState xr_arena_save(XrArena *arena);
+XR_FUNC void xr_arena_restore(XrArena *arena, XrArenaState state);
+
 // Statistics
 typedef struct XrArenaStats {
     size_t segment_count;

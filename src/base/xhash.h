@@ -29,6 +29,7 @@
 #include <stdint.h>
 #include <stddef.h>
 #include <stdbool.h>
+#include <string.h>
 #include "xdefs.h"
 
 // FNV-1a constants (32-bit)
@@ -79,14 +80,38 @@ static inline uint64_t xr_hash_bytes64(const void *data, size_t length) {
 
 // ============================================================================
 // Primitive type hash functions (no XrValue dependency)
+// Inline for performance — these are hot path functions.
+// Hash never returns 0 (0 is used for tombstone).
 // ============================================================================
 
-// Hash never returns 0 (0 is used for tombstone)
-XR_FUNC uint32_t xr_hash_int(int64_t val);
-XR_FUNC uint32_t xr_hash_float(double val);
-XR_FUNC uint32_t xr_hash_bool(int val);
+// Splitmix64 finalizer: 3 multiply-xorshift ops, much faster than byte-by-byte FNV
+XR_NO_SANITIZE_UNSIGNED
+static inline uint32_t xr_hash_int(int64_t val) {
+    uint64_t x = (uint64_t)val;
+    x = (x ^ (x >> 30)) * 0xbf58476d1ce4e5b9ULL;
+    x = (x ^ (x >> 27)) * 0x94d049bb133111ebULL;
+    x = x ^ (x >> 31);
+    uint32_t h = (uint32_t)(x ^ (x >> 32));
+    return h == 0 ? 1 : h;
+}
+
+static inline uint32_t xr_hash_float(double val) {
+    // Normalize: +0.0 == -0.0, all NaN equal
+    if (val == 0.0) val = 0.0;
+    if (val != val) return 0x7FC00001;  // NaN: non-zero constant
+    uint64_t bits;
+    memcpy(&bits, &val, sizeof(bits));
+    uint32_t hash = xr_hash_bytes(&bits, sizeof(bits));
+    return hash == 0 ? 1 : hash;
+}
+
+static inline uint32_t xr_hash_bool(int val) {
+    return val ? 5 : 4;
+}
 
 // Extract 7-bit prefix for fast key mismatch filtering
-XR_FUNC uint8_t xr_short_hash(uint32_t hash);
+static inline uint8_t xr_short_hash(uint32_t hash) {
+    return (uint8_t)((hash >> 25) | XR_SHORT_HASH_VALID);
+}
 
 #endif // XHASH_H

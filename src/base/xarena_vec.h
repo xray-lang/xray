@@ -49,4 +49,19 @@
     (v).data[(v).count++] = (item); \
 } while (0)
 
+/* Pre-allocate capacity to avoid repeated grow+copy.
+ * Use when final size is known or can be estimated. */
+#define XR_AVEC_RESERVE(arena, v, min_cap) do { \
+    if ((v).cap < (min_cap)) { \
+        int _nc = (min_cap); \
+        void *_nb = xr_arena_alloc((arena), (size_t)_nc * sizeof(*(v).data)); \
+        XR_CHECK(_nb != NULL, "XR_AVEC_RESERVE: arena alloc failed"); \
+        if ((v).data != NULL && (v).count > 0) { \
+            memcpy(_nb, (v).data, (size_t)(v).count * sizeof(*(v).data)); \
+        } \
+        (v).data = _nb; \
+        (v).cap = _nc; \
+    } \
+} while (0)
+
 #endif // XARENA_VEC_H
