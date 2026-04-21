@@ -879,17 +879,39 @@ XrVMResult xr_coro_run_on_worker(XrWorker *worker, XrCoroutine *coro) {
     int _fast_resume = xr_coro_resume_load(coro);
 
     // ========== Channel Resume Fast Path ==========
-    // Most common resume case: channel wake of bytecode coroutine. Acquire-
+    // Most common resume case: channel wake of a started coroutine. Acquire-
     // load of flags establishes happens-before with sender's flag swap so
     // recv_slot is visible before we enter run().
+    // Handles both VM bytecode and JIT coroutines (Phase 0.3: removed
+    // !jit_resume_entry exclusion — JIT now uses run_jit_resume directly).
     if (_fast_resume == XR_RESUME_CHANNEL &&
-        (_fast_flags & XR_CORO_FLG_STARTED) &&
-        !coro->jit_resume_entry) {
+        (_fast_flags & XR_CORO_FLG_STARTED)) {
         ctx->current_coro = coro;
         coro_ctx->current_coro = coro;
         coro->next = NULL;
         coro->prev = NULL;
         xr_coro_transition_to_running(coro);
+
+#ifdef XRAY_HAS_JIT
+        // JIT channel resume: propagate recv_slot → jit_suspend_state.result,
+        // then re-enter compiled code directly (no detour via run_resume_path).
+        if (coro->jit_resume_entry && coro->jit_ctx) {
+            XrValue jit_result;
+            int jrc = run_jit_resume(isolate, coro, coro_ctx, &jit_result);
+            if (jrc == XIR_JIT_OK) {
+                coro_ctx->stack[0] = jit_result;
+                return run_finalize(isolate, worker, coro, ctx, coro_ctx, XR_VM_OK);
+            }
+            if (jrc == XIR_JIT_SUSPEND) {
+                return run_finalize(isolate, worker, coro, ctx, coro_ctx, XR_VM_BLOCKED);
+            }
+            // Deopt or channel_closed (-1): jit_resume_entry already cleared.
+            // Deopt needs full unroll recovery → delegate to run_resume_path.
+            return run_resume_path(isolate, worker, coro, ctx, coro_ctx);
+        }
+#endif
+
+        // VM bytecode channel resume
         if (coro_ctx->frame_count > 0) {
             XrBcCallFrame *tf = &coro_ctx->frames[coro_ctx->frame_count - 1];
             if (tf->call_status & XR_CALL_C) {
