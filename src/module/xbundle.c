@@ -93,7 +93,12 @@ static char* resolve_module_path(const char *base_dir, const char *module_name) 
         if (f) {
             fclose(f);
             char *real = realpath(path, NULL);
-            return real ? real : xr_strdup(path);
+            if (real) {
+                char *dup = xr_strdup(real);
+                free(real);
+                return dup;
+            }
+            return xr_strdup(path);
         }
 
         // Try directory entry
@@ -102,7 +107,12 @@ static char* resolve_module_path(const char *base_dir, const char *module_name) 
         if (f) {
             fclose(f);
             char *real = realpath(path, NULL);
-            return real ? real : xr_strdup(path);
+            if (real) {
+                char *dup = xr_strdup(real);
+                free(real);
+                return dup;
+            }
+            return xr_strdup(path);
         }
     }
 
@@ -279,7 +289,7 @@ static void visit_node(BundleContext *ctx, AstNode *node, const char *current_di
         return;
     }
 
-    // Recursively traverse child nodes
+    // Recursively traverse child nodes that may contain import statements
     switch (node->type) {
         case AST_PROGRAM:
             for (int i = 0; i < node->as.program.count; i++) {
@@ -311,8 +321,18 @@ static void visit_node(BundleContext *ctx, AstNode *node, const char *current_di
             visit_node(ctx, node->as.for_stmt.body, current_dir);
             break;
 
+        case AST_FOR_IN_STMT:
+            visit_node(ctx, node->as.for_in_stmt.collection, current_dir);
+            visit_node(ctx, node->as.for_in_stmt.body, current_dir);
+            break;
+
         case AST_FUNCTION_DECL:
+        case AST_FUNCTION_EXPR:
             visit_node(ctx, node->as.function_decl.body, current_dir);
+            break;
+
+        case AST_METHOD_DECL:
+            visit_node(ctx, node->as.method_decl.body, current_dir);
             break;
 
         case AST_CLASS_DECL:
@@ -327,14 +347,61 @@ static void visit_node(BundleContext *ctx, AstNode *node, const char *current_di
             }
             break;
 
+        case AST_INTERFACE_DECL:
+            for (int i = 0; i < node->as.interface_decl.method_count; i++) {
+                visit_node(ctx, node->as.interface_decl.methods[i], current_dir);
+            }
+            break;
+
         case AST_TRY_CATCH:
             visit_node(ctx, node->as.try_catch.try_body, current_dir);
             visit_node(ctx, node->as.try_catch.catch_body, current_dir);
             visit_node(ctx, node->as.try_catch.finally_body, current_dir);
             break;
 
+        case AST_EXPORT_STMT:
+            visit_node(ctx, node->as.export_stmt.declaration, current_dir);
+            break;
+
+        case AST_EXPR_STMT:
+            visit_node(ctx, node->as.expr_stmt, current_dir);
+            break;
+
+        case AST_VAR_DECL:
+        case AST_CONST_DECL:
+            visit_node(ctx, node->as.var_decl.initializer, current_dir);
+            break;
+
+        case AST_MATCH_EXPR:
+            visit_node(ctx, node->as.match_expr.expr, current_dir);
+            for (int i = 0; i < node->as.match_expr.arm_count; i++) {
+                visit_node(ctx, node->as.match_expr.arms[i], current_dir);
+            }
+            break;
+
+        case AST_MATCH_ARM:
+            visit_node(ctx, node->as.match_arm.body, current_dir);
+            break;
+
+        case AST_SCOPE_BLOCK:
+            visit_node(ctx, node->as.scope_block.body, current_dir);
+            break;
+
+        case AST_SELECT_STMT:
+            for (int i = 0; i < node->as.select_stmt.case_count; i++) {
+                visit_node(ctx, node->as.select_stmt.cases[i], current_dir);
+            }
+            break;
+
+        case AST_SELECT_CASE:
+            visit_node(ctx, node->as.select_case.body, current_dir);
+            break;
+
+        case AST_DEFER_STMT:
+            visit_node(ctx, node->as.defer_stmt.expr, current_dir);
+            break;
+
         default:
-            // Other node types don't contain imports
             break;
     }
 }
@@ -359,9 +426,13 @@ XrBundle* xr_bundle_create_ex(XrayIsolate *X, const char *entry_file, XrBundleFl
         return NULL;
     }
 
-    // Get absolute path
-    char *abs_path = realpath(entry_file, NULL);
-    if (!abs_path) {
+    // Get absolute path (realpath uses system malloc, convert to xr_malloc)
+    char *abs_path = NULL;
+    char *rp = realpath(entry_file, NULL);
+    if (rp) {
+        abs_path = xr_strdup(rp);
+        free(rp);
+    } else {
         abs_path = xr_strdup(entry_file);
     }
 
