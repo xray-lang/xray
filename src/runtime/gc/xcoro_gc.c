@@ -85,7 +85,7 @@ static void gc_init_runtime_state(XrCoroGC *gc) {
     gc->GCest = 0;
     gc->young_promoted = 0;
     gc->totalbytes = 0;
-    gc->sweep_phase = 0;
+    gc->sweep_phase = XGC_SWEEP_DONE;
     gc->sweep_block = NULL;
     gc->alloc_since_gc = 0;
     gc->in_gc = 0;
@@ -1027,6 +1027,95 @@ static void sweeplargeobjects(XrCoroGC *gc) {
     }
 }
 
+/* ========== Incremental Sweep State Machine ========== */
+
+static void setpause(XrCoroGC *gc);  // Forward declaration (defined after gen GC section)
+
+#define XGC_SWEEP_BUDGET_DEFAULT  4  // Blocks per step (tuned in P4)
+
+// Initialize incremental sweep cursors.  Called at ATOMIC → SWEEP transition.
+static void sweep_start(XrCoroGC *gc) {
+    gc->sweep_phase = XGC_SWEEP_FULL_BLOCKS;
+    gc->sweep_block = gc->immix.full_blocks;
+}
+
+// Finalize sweep cycle: decref shared objects, state transition, verify.
+// Shared by incremental completion path.  STW paths (fullgc/entergen)
+// handle timing themselves and call the pieces directly.
+static void finalize_sweep(XrCoroGC *gc) {
+    gc_shared_refs_end(gc);
+    gc->gcstate = XGC_PAUSE;
+    gc->gc_count++;
+    setpause(gc);
+    xr_gc_verify_invariants(gc);
+}
+
+/*
+ * Incremental sweep: process up to `budget` units.
+ * 1 unit = 1 block or 1 batch of all large objects or 1 reclaim.
+ * Returns true when all sweep phases are done.
+ *
+ * STW fullgc does NOT use this; it sweeps everything in one go.
+ */
+static bool sweep_step(XrCoroGC *gc, int budget) {
+    XR_DCHECK(gc->gcstate == XGC_SWEEP, "sweep_step: not in SWEEP state");
+    int units = 0;
+
+    while (units < budget) {
+        switch (gc->sweep_phase) {
+            case XGC_SWEEP_FULL_BLOCKS:
+                if (gc->sweep_block) {
+                    XrImmixBlock *next = gc->sweep_block->next;
+                    sweep_block(gc, gc->sweep_block);
+                    gc->sweep_block = next;
+                    units++;
+                } else {
+                    gc->sweep_phase = XGC_SWEEP_RECYCLE_BLOCKS;
+                    gc->sweep_block = gc->immix.recycle_blocks;
+                }
+                break;
+
+            case XGC_SWEEP_RECYCLE_BLOCKS:
+                if (gc->sweep_block) {
+                    XrImmixBlock *next = gc->sweep_block->next;
+                    sweep_block(gc, gc->sweep_block);
+                    gc->sweep_block = next;
+                    units++;
+                } else {
+                    gc->sweep_phase = XGC_SWEEP_CURRENT_BLOCK;
+                }
+                break;
+
+            case XGC_SWEEP_CURRENT_BLOCK:
+                if (gc->immix.current_block) {
+                    sweep_block(gc, gc->immix.current_block);
+                    units++;
+                }
+                gc->sweep_phase = XGC_SWEEP_LARGE_OBJECTS;
+                break;
+
+            case XGC_SWEEP_LARGE_OBJECTS:
+                sweeplargeobjects(gc);
+                gc->sweep_phase = XGC_SWEEP_RECLAIM;
+                units++;
+                break;
+
+            case XGC_SWEEP_RECLAIM:
+                xr_immix_reclaim(&gc->immix);
+                gc->sweep_phase = XGC_SWEEP_DONE;
+                return true;
+
+            case XGC_SWEEP_DONE:
+                return true;
+
+            default:
+                XR_DCHECK(false, "sweep_step: invalid sweep_phase");
+                return true;
+        }
+    }
+    return gc->sweep_phase == XGC_SWEEP_DONE;
+}
+
 /* ========== Atomic Phase ========== */
 
 // Propagate all gray objects
@@ -1534,29 +1623,18 @@ void xr_coro_gc_step(XrCoroGC *gc) {
         case XGC_ATOMIC: {
             atomic(gc);
             gc->gcstate = XGC_SWEEP;
+            sweep_start(gc);
             break;
         }
 
         case XGC_SWEEP: {
-            sweep_blocklist(gc, gc->immix.full_blocks);
-            sweep_blocklist(gc, gc->immix.recycle_blocks);
-            if (gc->immix.current_block) {
-                sweep_block(gc, gc->immix.current_block);
+            if (sweep_step(gc, XGC_SWEEP_BUDGET_DEFAULT)) {
+                // All sweep phases done — record timing and finalize
+                uint64_t elapsed = xr_gc_time_ns() - gc->gc_cycle_start_ns;
+                gc->last_gc_time_ns = elapsed;
+                gc->gc_time_ns += elapsed;
+                finalize_sweep(gc);
             }
-            sweeplargeobjects(gc);
-            xr_immix_reclaim(&gc->immix);
-
-            uint64_t elapsed = xr_gc_time_ns() - gc->gc_cycle_start_ns;
-            gc->last_gc_time_ns = elapsed;
-            gc->gc_time_ns += elapsed;
-
-            // Decref shared objects no longer referenced
-            gc_shared_refs_end(gc);
-
-            gc->gcstate = XGC_PAUSE;
-            gc->gc_count++;
-            setpause(gc);
-            xr_gc_verify_invariants(gc);
             break;
         }
     }
