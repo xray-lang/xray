@@ -39,24 +39,20 @@
 
 // xr_vm_execute_module declared in vm/xvm.h (included via xisolate_internal.h → xvm_state.h → ...)
 
-// Compiler hooks — set by xray_isolate_init_common, NULL in lite mode.
-// Using function pointers prevents linker from pulling in the entire
-// compiler/parser/analyzer chain when only bytecode execution is needed.
-static void *(*fn_parse_with_source)(void*, const char*, const char*) = NULL;
-static void *(*fn_compile_ast)(void*, void*, const char*) = NULL;
-static void *(*fn_compile_source)(void*, const char*, const char*) = NULL;
-static void  (*fn_ast_free)(void*) = NULL;
-
 void xr_module_set_compiler_hooks(
+    XrayIsolate *isolate,
     void *(*parse_fn)(void*, const char*, const char*),
     void *(*compile_ast_fn)(void*, void*, const char*),
     void *(*compile_src_fn)(void*, const char*, const char*),
     void  (*ast_free_fn)(void*))
 {
-    fn_parse_with_source = parse_fn;
-    fn_compile_ast = compile_ast_fn;
-    fn_compile_source = compile_src_fn;
-    fn_ast_free = ast_free_fn;
+    XrModuleRegistry *registry = (XrModuleRegistry*)xr_isolate_get_module_registry(isolate);
+    XR_DCHECK(registry != NULL, "set_compiler_hooks: module system not initialized");
+    if (!registry) return;
+    registry->fn_parse = parse_fn;
+    registry->fn_compile_ast = compile_ast_fn;
+    registry->fn_compile_src = compile_src_fn;
+    registry->fn_ast_free = ast_free_fn;
 }
 
 /* ========== Helper Functions ========== */
@@ -635,13 +631,13 @@ static bool load_script_extension(XrayIsolate *isolate, XrModule *module, const 
         return true;
     }
 
-    if (!fn_compile_source) {
+    if (!registry->fn_compile_src) {
         xr_isolate_set_current_module(isolate, prev_module);
         xr_free(source);
         xr_log_warning("module", "compiler not available (lite runtime)");
         return false;
     }
-    code = fn_compile_source(isolate, source, path);
+    code = registry->fn_compile_src(isolate, source, path);
     if (!code) {
         xr_isolate_set_current_module(isolate, prev_module);
         xr_free(source);
@@ -754,14 +750,15 @@ static XrModule* load_script_module(XrayIsolate *isolate, XrModule *module, cons
     // Normalize path, remove redundant "./"
     char *clean_path = normalize_path(path);
 
-    if (!fn_parse_with_source || !fn_compile_ast) {
+    XrModuleRegistry *registry = (XrModuleRegistry*)xr_isolate_get_module_registry(isolate);
+    if (!registry || !registry->fn_parse || !registry->fn_compile_ast) {
         xr_isolate_set_current_module(isolate, prev_module);
         xr_free(source);
         xr_free(clean_path);
         xr_log_warning("module", "compiler not available (lite runtime)");
         return NULL;
     }
-    AstNode *ast = fn_parse_with_source(isolate, source, clean_path);
+    AstNode *ast = registry->fn_parse(isolate, source, clean_path);
     if (!ast) {
         xr_isolate_set_current_module(isolate, prev_module);
         xr_free(source);
@@ -769,9 +766,9 @@ static XrModule* load_script_module(XrayIsolate *isolate, XrModule *module, cons
         return NULL;
     }
 
-    void *code = fn_compile_ast(isolate, ast, clean_path);
+    void *code = registry->fn_compile_ast(isolate, ast, clean_path);
     if (!code) {
-        if (fn_ast_free) fn_ast_free(ast);
+        if (registry->fn_ast_free) registry->fn_ast_free(ast);
         xr_isolate_set_current_module(isolate, prev_module);
         xr_free(source);
         xr_free(clean_path);
@@ -790,7 +787,7 @@ static XrModule* load_script_module(XrayIsolate *isolate, XrModule *module, cons
 
     // Execution error should cause module loading to fail
     if (result != 0) {
-        if (fn_ast_free) fn_ast_free(ast);
+        if (registry->fn_ast_free) registry->fn_ast_free(ast);
         xr_free(source);
         xr_free(clean_path);
         xr_isolate_set_current_module(isolate, prev_module);
@@ -800,7 +797,7 @@ static XrModule* load_script_module(XrayIsolate *isolate, XrModule *module, cons
     // 7. Cleanup - Note: code cannot be freed because exported closures still reference proto
     // Save code to module, free when module is destroyed
     module->compiled_code = code;
-    if (fn_ast_free) fn_ast_free(ast);
+    if (registry->fn_ast_free) registry->fn_ast_free(ast);
     xr_free(source);
     xr_free(clean_path);
 

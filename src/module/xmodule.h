@@ -137,6 +137,13 @@ typedef struct XrModuleRegistry {
 
     // Project config (optional, for package management)
     XrProject *project;
+
+    // Compiler hooks — per-Isolate, NULL in lite/bytecode-only mode.
+    // Using void* function pointers avoids pulling in parser/compiler headers.
+    void *(*fn_parse)(void*, const char*, const char*);
+    void *(*fn_compile_ast)(void*, void*, const char*);
+    void *(*fn_compile_src)(void*, const char*, const char*);
+    void  (*fn_ast_free)(void*);
 } XrModuleRegistry;
 
 /* ========== Module System API ========== */
@@ -215,9 +222,10 @@ XR_FUNC void xr_module_register_stdlib(struct XrayIsolate *isolate);
 
 /* ========== Compiler Hook Registration ========== */
 
-// Set compiler hooks for module loading (called during isolate init).
+// Set compiler hooks for module loading (per-Isolate, called during isolate init).
 // Uses void* function pointers to avoid pulling in parser/compiler headers.
 XR_FUNC void xr_module_set_compiler_hooks(
+    struct XrayIsolate *isolate,
     void *(*parse_fn)(void*, const char*, const char*),
     void *(*compile_ast_fn)(void*, void*, const char*),
     void *(*compile_src_fn)(void*, const char*, const char*),
