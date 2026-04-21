@@ -252,6 +252,17 @@ typedef struct XrCoroGCRootEntry {
     struct XrCoroGCRootEntry *next;
 } XrCoroGCRootEntry;
 
+/* ========== Incremental Sweep Sub-State ========== */
+
+typedef enum {
+    XGC_SWEEP_FULL_BLOCKS    = 0,  // Sweeping full_blocks list
+    XGC_SWEEP_RECYCLE_BLOCKS = 1,  // Sweeping recycle_blocks list
+    XGC_SWEEP_CURRENT_BLOCK  = 2,  // Sweeping current_block (single)
+    XGC_SWEEP_LARGE_OBJECTS  = 3,  // Sweeping large object list
+    XGC_SWEEP_RECLAIM        = 4,  // Reclassify blocks (full/recycle/free)
+    XGC_SWEEP_DONE           = 5   // Sweep complete
+} XrSweepPhase;
+
 /* ========== Coroutine GC Structure (Immix Mark-Region) ========== */
 
 typedef struct XrCoroGC {
@@ -275,9 +286,9 @@ typedef struct XrCoroGC {
     XrGCGrayList gray;          // Gray list (pending scan)
     XrGCGrayList grayagain;     // Need re-scan (back barrier)
 
-    // Block-level incremental sweep state
-    int sweep_phase;            // 0=full, 1=recycle, 2=current, 3=large, 4=done
-    XrImmixBlock *sweep_block;  // Current block being swept
+    // Block-level incremental sweep state (see XrSweepPhase)
+    int sweep_phase;            // XGC_SWEEP_FULL_BLOCKS .. XGC_SWEEP_DONE
+    XrImmixBlock *sweep_block;  // Next block to sweep in current phase
 
     // === Generational GC state (Sticky Immix) ===
     int64_t GCest;              // Estimate of live bytes after last major GC
