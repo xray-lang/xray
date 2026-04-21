@@ -12,6 +12,7 @@
  *   TLS-level recycle pool eliminates lock contention.
  */
 
+#include "../../src/base/xmalloc.h"
 #include "xnetbuf.h"
 #include <stdlib.h>
 #include <string.h>
@@ -23,7 +24,7 @@ bool xr_netbuf_init(XrNetBuffer *buf, size_t initial_capacity) {
     assert(buf);
     if (initial_capacity == 0) initial_capacity = XR_NETBUF_DEFAULT_CAP;
 
-    char *mem = (char *)malloc(initial_capacity);
+    char *mem = (char *)xr_malloc(initial_capacity);
     if (!mem) {
         memset(buf, 0, sizeof(*buf));
         return false;
@@ -38,7 +39,7 @@ bool xr_netbuf_init(XrNetBuffer *buf, size_t initial_capacity) {
 
 void xr_netbuf_free(XrNetBuffer *buf) {
     if (!buf) return;
-    free(buf->_base);
+    xr_free(buf->_base);
     buf->_base = NULL;
     buf->bytes = NULL;
     buf->size = 0;
@@ -71,14 +72,14 @@ char* xr_netbuf_reserve(XrNetBuffer *buf, size_t min_avail) {
         new_cap = (new_cap < 1024 * 1024) ? new_cap * 2 : new_cap + new_cap / 4;
     }
 
-    char *new_base = (char *)malloc(new_cap);
+    char *new_base = (char *)xr_malloc(new_cap);
     if (!new_base) return NULL;
 
     if (buf->size > 0) {
         memcpy(new_base, buf->bytes, buf->size);
     }
 
-    free(buf->_base);
+    xr_free(buf->_base);
     buf->_base = new_base;
     buf->bytes = new_base;
     buf->capacity = new_cap;
@@ -151,18 +152,18 @@ XrNetBuffer* xr_netbuf_acquire(size_t initial_capacity) {
         // Otherwise free the undersized allocation and reallocate
         xr_netbuf_free(buf);
         if (!xr_netbuf_init(buf, initial_capacity)) {
-            free(buf);
+            xr_free(buf);
             return NULL;
         }
         return buf;
     }
 
     // Allocate new
-    XrNetBuffer *buf = (XrNetBuffer *)malloc(sizeof(XrNetBuffer));
+    XrNetBuffer *buf = (XrNetBuffer *)xr_malloc(sizeof(XrNetBuffer));
     if (!buf) return NULL;
 
     if (!xr_netbuf_init(buf, initial_capacity)) {
-        free(buf);
+        xr_free(buf);
         return NULL;
     }
     return buf;
@@ -181,13 +182,13 @@ void xr_netbuf_release(XrNetBuffer *buf) {
 
     // Pool full or oversized: free
     xr_netbuf_free(buf);
-    free(buf);
+    xr_free(buf);
 }
 
 void xr_netbuf_pool_cleanup(void) {
     for (int i = 0; i < tls_pool.count; i++) {
         xr_netbuf_free(tls_pool.slots[i]);
-        free(tls_pool.slots[i]);
+        xr_free(tls_pool.slots[i]);
         tls_pool.slots[i] = NULL;
     }
     tls_pool.count = 0;

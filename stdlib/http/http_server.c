@@ -14,6 +14,7 @@
  *   4. All I/O via xsocket API, netpoll handles blocked coroutines
  */
 
+#include "../../src/base/xmalloc.h"
 #include "http_server.h"
 #include "http_router.h"
 #include "../ws/ws.h"
@@ -191,7 +192,7 @@ static void http_server_mark_roots(XrCoroGC *gc, void *userdata) {
  * Create server
  */
 XrHttpServer *xr_http_server_new(XrayIsolate *isolate) {
-    XrHttpServer *server = (XrHttpServer *)calloc(1, sizeof(XrHttpServer));
+    XrHttpServer *server = (XrHttpServer *)xr_calloc(1, sizeof(XrHttpServer));
     if (!server) return NULL;
     
     server->isolate = isolate;
@@ -235,10 +236,10 @@ void xr_http_server_free(XrHttpServer *server) {
     
     // Free route closure array (closures themselves managed by GC)
     if (server->route_closures) {
-        free(server->route_closures);
+        xr_free(server->route_closures);
     }
     
-    free(server);
+    xr_free(server);
 }
 
 /*
@@ -253,7 +254,7 @@ void xr_http_server_route(XrHttpServer *server,
     // Save closure to array (prevent GC collection)
     if (server->route_closure_count >= server->route_closure_capacity) {
         int new_cap = server->route_closure_capacity == 0 ? 16 : server->route_closure_capacity * 2;
-        XrClosure **new_arr = (XrClosure **)realloc(server->route_closures, 
+        XrClosure **new_arr = (XrClosure **)xr_realloc(server->route_closures, 
                                                      new_cap * sizeof(XrClosure *));
         if (!new_arr) return;
         server->route_closures = new_arr;
@@ -339,7 +340,7 @@ int xr_http_read_request(XrayIsolate *X, int fd, XrHttpReq *req, char *buf, size
         }
         
         // Allocate body buffer
-        req->body = (char *)malloc(content_length + 1);
+        req->body = (char *)xr_malloc(content_length + 1);
         if (!req->body) return -1;
         
         // Read body
@@ -348,7 +349,7 @@ int xr_http_read_request(XrayIsolate *X, int fd, XrHttpReq *req, char *buf, size
             ssize_t n = xr_socket_read(X, fd, req->body + body_read, 
                                        content_length - body_read);
             if (n <= 0) {
-                free(req->body);
+                xr_free(req->body);
                 req->body = NULL;
                 return -1;
             }

@@ -13,6 +13,7 @@
  *   - HTTP/2 request/response
  */
 
+#include "../../src/base/xmalloc.h"
 #include "http2_client.h"
 #include "http2.h"
 #include "../net/io.h"
@@ -41,7 +42,7 @@ static XrH2Pool g_pool = {0};
 
 // Create per-isolate pool
 XrH2Pool* xr_h2_pool_create(void) {
-    XrH2Pool *pool = (XrH2Pool*)calloc(1, sizeof(XrH2Pool));
+    XrH2Pool *pool = (XrH2Pool*)xr_calloc(1, sizeof(XrH2Pool));
     if (!pool) return NULL;
     
     pthread_mutex_init(&pool->lock, NULL);
@@ -66,8 +67,8 @@ void xr_h2_pool_destroy(XrH2Pool *pool) {
                 xr_tls_conn_free(entry->tls_conn);
             }
             if (entry->tls_ctx) xr_tls_context_free(entry->tls_ctx);
-            free(entry->host);
-            free(entry);
+            xr_free(entry->host);
+            xr_free(entry);
             
             entry = next;
         }
@@ -77,7 +78,7 @@ void xr_h2_pool_destroy(XrH2Pool *pool) {
     pool->host_count = 0;
     pthread_mutex_unlock(&pool->lock);
     pthread_mutex_destroy(&pool->lock);
-    free(pool);
+    xr_free(pool);
 }
 
 // Forward declarations
@@ -113,10 +114,10 @@ XrH2PoolEntry* xr_h2_pool_acquire_from(XrH2Pool *pool, const char *host, int por
                 xr_tls_conn_free(entry->tls_conn);
             }
             if (entry->tls_ctx) xr_tls_context_free(entry->tls_ctx);
-            free(entry->host);
+            xr_free(entry->host);
             
             XrH2PoolEntry *next = entry->next;
-            free(entry);
+            xr_free(entry);
             entry = next;
             continue;
         }
@@ -190,8 +191,8 @@ void xr_h2_pool_cleanup(void) {
                 xr_tls_conn_free(entry->tls_conn);
             }
             if (entry->tls_ctx) xr_tls_context_free(entry->tls_ctx);
-            free(entry->host);
-            free(entry);
+            xr_free(entry->host);
+            xr_free(entry);
             
             entry = next;
         }
@@ -206,10 +207,10 @@ void xr_h2_pool_cleanup(void) {
 
 // Create new HTTP/2 connection
 static XrH2PoolEntry* create_h2_connection(const char *host, int port, bool is_https) {
-    XrH2PoolEntry *entry = (XrH2PoolEntry*)calloc(1, sizeof(XrH2PoolEntry));
+    XrH2PoolEntry *entry = (XrH2PoolEntry*)xr_calloc(1, sizeof(XrH2PoolEntry));
     if (!entry) return NULL;
     
-    entry->host = strdup(host);
+    entry->host = xr_strdup(host);
     entry->port = port;
     entry->in_use = true;
     entry->last_used = get_time_ms();
@@ -217,16 +218,16 @@ static XrH2PoolEntry* create_h2_connection(const char *host, int port, bool is_h
     // DNS resolution (with cache, IPv4/IPv6 dual-stack)
     XrSockAddr resolved_addr;
     if (!xr_dns_resolve(host, &resolved_addr, XR_AF_UNSPEC)) {
-        free(entry->host);
-        free(entry);
+        xr_free(entry->host);
+        xr_free(entry);
         return NULL;
     }
     
     // Create socket
     int fd = socket(resolved_addr.family, SOCK_STREAM, 0);
     if (fd < 0) {
-        free(entry->host);
-        free(entry);
+        xr_free(entry->host);
+        xr_free(entry);
         return NULL;
     }
     
@@ -249,8 +250,8 @@ static XrH2PoolEntry* create_h2_connection(const char *host, int port, bool is_h
     
     if (connect(fd, sa, sa_len) < 0) {
         close(fd);
-        free(entry->host);
-        free(entry);
+        xr_free(entry->host);
+        xr_free(entry);
         return NULL;
     }
     
@@ -259,8 +260,8 @@ static XrH2PoolEntry* create_h2_connection(const char *host, int port, bool is_h
         entry->tls_ctx = xr_tls_context_new_client();
         if (!entry->tls_ctx) {
             close(fd);
-            free(entry->host);
-            free(entry);
+            xr_free(entry->host);
+            xr_free(entry);
             return NULL;
         }
         
@@ -271,8 +272,8 @@ static XrH2PoolEntry* create_h2_connection(const char *host, int port, bool is_h
         if (!entry->tls_conn) {
             xr_tls_context_free(entry->tls_ctx);
             close(fd);
-            free(entry->host);
-            free(entry);
+            xr_free(entry->host);
+            xr_free(entry);
             return NULL;
         }
         
@@ -282,8 +283,8 @@ static XrH2PoolEntry* create_h2_connection(const char *host, int port, bool is_h
             xr_tls_conn_free(entry->tls_conn);
             xr_tls_context_free(entry->tls_ctx);
             close(fd);
-            free(entry->host);
-            free(entry);
+            xr_free(entry->host);
+            xr_free(entry);
             return NULL;
         }
         
@@ -295,8 +296,8 @@ static XrH2PoolEntry* create_h2_connection(const char *host, int port, bool is_h
             xr_tls_conn_free(entry->tls_conn);
             xr_tls_context_free(entry->tls_ctx);
             close(fd);
-            free(entry->host);
-            free(entry);
+            xr_free(entry->host);
+            xr_free(entry);
             return NULL;
         }
     }
@@ -310,8 +311,8 @@ static XrH2PoolEntry* create_h2_connection(const char *host, int port, bool is_h
         }
         if (entry->tls_ctx) xr_tls_context_free(entry->tls_ctx);
         close(fd);
-        free(entry->host);
-        free(entry);
+        xr_free(entry->host);
+        xr_free(entry);
         return NULL;
     }
     
@@ -324,8 +325,8 @@ static XrH2PoolEntry* create_h2_connection(const char *host, int port, bool is_h
         }
         if (entry->tls_ctx) xr_tls_context_free(entry->tls_ctx);
         close(fd);
-        free(entry->host);
-        free(entry);
+        xr_free(entry->host);
+        xr_free(entry);
         return NULL;
     }
     
@@ -363,10 +364,10 @@ XrH2PoolEntry* xr_h2_pool_acquire(const char *host, int port, bool is_https) {
                 xr_tls_conn_free(entry->tls_conn);
             }
             if (entry->tls_ctx) xr_tls_context_free(entry->tls_ctx);
-            free(entry->host);
+            xr_free(entry->host);
             
             XrH2PoolEntry *next = entry->next;
-            free(entry);
+            xr_free(entry);
             entry = next;
             continue;
         }
@@ -421,10 +422,10 @@ void xr_h2_pool_cleanup_idle(void) {
                     xr_tls_conn_free(entry->tls_conn);
                 }
                 if (entry->tls_ctx) xr_tls_context_free(entry->tls_ctx);
-                free(entry->host);
+                xr_free(entry->host);
                 
                 XrH2PoolEntry *next = entry->next;
-                free(entry);
+                xr_free(entry);
                 entry = next;
                 continue;
             }
@@ -534,7 +535,7 @@ XrH2Response* xr_h2_request(const char *url, const XrH2Request *req) {
     }
     
     // Receive response
-    XrH2Response *resp = (XrH2Response*)calloc(1, sizeof(XrH2Response));
+    XrH2Response *resp = (XrH2Response*)xr_calloc(1, sizeof(XrH2Response));
     if (!resp) {
         entry->active_streams--;
         xr_h2_pool_release(entry);
@@ -543,7 +544,7 @@ XrH2Response* xr_h2_request(const char *url, const XrH2Request *req) {
     }
     
     if (xr_h2_recv_stream_data(entry->conn, stream, &resp->body, &resp->body_len) < 0) {
-        free(resp);
+        xr_free(resp);
         entry->active_streams--;
         xr_h2_pool_release(entry);
         xr_http_url_free(&parsed);
@@ -589,14 +590,14 @@ void xr_h2_response_free(XrH2Response *resp) {
     
     if (resp->headers) {
         for (int i = 0; i < resp->header_count; i++) {
-            free((void*)resp->headers[i].name);
-            free((void*)resp->headers[i].value);
+            xr_free((void*)resp->headers[i].name);
+            xr_free((void*)resp->headers[i].value);
         }
-        free(resp->headers);
+        xr_free(resp->headers);
     }
-    free(resp->body);
-    free(resp->error_msg);
-    free(resp);
+    xr_free(resp->body);
+    xr_free(resp->error_msg);
+    xr_free(resp);
 }
 
 bool xr_http_auto_version(const char *host, int port, bool is_https) {

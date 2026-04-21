@@ -12,6 +12,7 @@
  *   Supports SNI, ALPN, certificate verification.
  */
 
+#include "../../src/base/xmalloc.h"
 #include "tls.h"
 
 #ifdef XR_ENABLE_TLS
@@ -61,7 +62,7 @@ void xr_tls_cleanup(void) {
 XrTlsContext* xr_tls_context_new_client(void) {
     xr_tls_init();
 
-    XrTlsContext *ctx = (XrTlsContext*)calloc(1, sizeof(XrTlsContext));
+    XrTlsContext *ctx = (XrTlsContext*)xr_calloc(1, sizeof(XrTlsContext));
     if (!ctx) return NULL;
 
     ctx->is_client = true;
@@ -70,7 +71,7 @@ XrTlsContext* xr_tls_context_new_client(void) {
     // Create SSL context with TLS client method
     ctx->ssl_ctx = SSL_CTX_new(TLS_client_method());
     if (!ctx->ssl_ctx) {
-        free(ctx);
+        xr_free(ctx);
         return NULL;
     }
 
@@ -91,7 +92,7 @@ XrTlsContext* xr_tls_context_new_server(const char *cert_file, const char *key_f
 
     if (!cert_file || !key_file) return NULL;
 
-    XrTlsContext *ctx = (XrTlsContext*)calloc(1, sizeof(XrTlsContext));
+    XrTlsContext *ctx = (XrTlsContext*)xr_calloc(1, sizeof(XrTlsContext));
     if (!ctx) return NULL;
 
     ctx->is_client = false;
@@ -99,7 +100,7 @@ XrTlsContext* xr_tls_context_new_server(const char *cert_file, const char *key_f
     // Create SSL context with TLS server method
     ctx->ssl_ctx = SSL_CTX_new(TLS_server_method());
     if (!ctx->ssl_ctx) {
-        free(ctx);
+        xr_free(ctx);
         return NULL;
     }
 
@@ -109,21 +110,21 @@ XrTlsContext* xr_tls_context_new_server(const char *cert_file, const char *key_f
     // Load certificate
     if (SSL_CTX_use_certificate_file(ctx->ssl_ctx, cert_file, SSL_FILETYPE_PEM) <= 0) {
         SSL_CTX_free(ctx->ssl_ctx);
-        free(ctx);
+        xr_free(ctx);
         return NULL;
     }
 
     // Load private key
     if (SSL_CTX_use_PrivateKey_file(ctx->ssl_ctx, key_file, SSL_FILETYPE_PEM) <= 0) {
         SSL_CTX_free(ctx->ssl_ctx);
-        free(ctx);
+        xr_free(ctx);
         return NULL;
     }
 
     // Verify private key matches certificate
     if (!SSL_CTX_check_private_key(ctx->ssl_ctx)) {
         SSL_CTX_free(ctx->ssl_ctx);
-        free(ctx);
+        xr_free(ctx);
         return NULL;
     }
 
@@ -136,7 +137,7 @@ void xr_tls_context_free(XrTlsContext *ctx) {
     if (ctx->ssl_ctx) {
         SSL_CTX_free(ctx->ssl_ctx);
     }
-    free(ctx);
+    xr_free(ctx);
 }
 
 void xr_tls_context_set_verify(XrTlsContext *ctx, bool verify) {
@@ -186,7 +187,7 @@ int xr_tls_context_load_ca(XrTlsContext *ctx, const char *ca_file) {
 XrTlsConn* xr_tls_conn_new(XrTlsContext *ctx, int fd) {
     if (!ctx || fd < 0) return NULL;
 
-    XrTlsConn *conn = (XrTlsConn*)calloc(1, sizeof(XrTlsConn));
+    XrTlsConn *conn = (XrTlsConn*)xr_calloc(1, sizeof(XrTlsConn));
     if (!conn) return NULL;
 
     conn->ctx = ctx;
@@ -195,14 +196,14 @@ XrTlsConn* xr_tls_conn_new(XrTlsContext *ctx, int fd) {
     // Create SSL object
     conn->ssl = SSL_new(ctx->ssl_ctx);
     if (!conn->ssl) {
-        free(conn);
+        xr_free(conn);
         return NULL;
     }
 
     // Bind socket
     if (SSL_set_fd(conn->ssl, fd) != 1) {
         SSL_free(conn->ssl);
-        free(conn);
+        xr_free(conn);
         return NULL;
     }
 
@@ -215,7 +216,7 @@ void xr_tls_conn_free(XrTlsConn *conn) {
     if (conn->ssl) {
         SSL_free(conn->ssl);
     }
-    free(conn);
+    xr_free(conn);
 }
 
 int xr_tls_conn_set_hostname(XrTlsConn *conn, const char *hostname) {

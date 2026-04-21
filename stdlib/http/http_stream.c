@@ -15,6 +15,7 @@
  *   fopen/fwrite to stay compatible with future AIO integration.
  */
 
+#include "../../src/base/xmalloc.h"
 #include "http_stream.h"
 #include "http_parser.h"
 #include "http.h"
@@ -87,7 +88,7 @@ XrStreamResult xr_http_stream(const XrStreamConfig *config) {
 
     if (!config || !config->url) {
         result.error = XR_HTTP_ERR_URL_PARSE;
-        result.error_msg = strdup("Invalid URL");
+        result.error_msg = xr_strdup("Invalid URL");
         return result;
     }
 
@@ -95,7 +96,7 @@ XrStreamResult xr_http_stream(const XrStreamConfig *config) {
     XrHttpUrl url;
     if (xr_http_url_parse(config->url, &url) < 0) {
         result.error = XR_HTTP_ERR_URL_PARSE;
-        result.error_msg = strdup("URL parse failed");
+        result.error_msg = xr_strdup("URL parse failed");
         return result;
     }
 
@@ -112,7 +113,7 @@ XrStreamResult xr_http_stream(const XrStreamConfig *config) {
         out_fd = open(config->output_path, oflags, 0644);
         if (out_fd < 0) {
             result.error = XR_HTTP_ERR_SEND;
-            result.error_msg = strdup("Cannot open output file");
+            result.error_msg = xr_strdup("Cannot open output file");
             goto cleanup;
         }
     }
@@ -121,14 +122,14 @@ XrStreamResult xr_http_stream(const XrStreamConfig *config) {
     pool = stream_get_pool();
     if (!pool) {
         result.error = XR_HTTP_ERR_CONNECT;
-        result.error_msg = strdup("HTTP pool unavailable");
+        result.error_msg = xr_strdup("HTTP pool unavailable");
         goto cleanup;
     }
 
     conn = xr_conn_pool_get(pool, url.host, (uint16_t)url.port, url.is_https);
     if (!conn) {
         result.error = XR_HTTP_ERR_CONNECT;
-        result.error_msg = strdup("Connection failed");
+        result.error_msg = xr_strdup("Connection failed");
         goto cleanup;
     }
 
@@ -161,7 +162,7 @@ XrStreamResult xr_http_stream(const XrStreamConfig *config) {
         size_t req_len = (size_t)(p - request);
         if (xr_pooled_conn_write(conn, request, req_len) < 0) {
             result.error = XR_HTTP_ERR_SEND;
-            result.error_msg = strdup("Send failed");
+            result.error_msg = xr_strdup("Send failed");
             goto cleanup;
         }
     }
@@ -169,20 +170,20 @@ XrStreamResult xr_http_stream(const XrStreamConfig *config) {
     // --- Allocate I/O buffer ---
     size_t buf_size = config->buffer_size > 0
                       ? config->buffer_size : DEFAULT_BUFFER_SIZE;
-    buffer = (char *)malloc(buf_size);
+    buffer = (char *)xr_malloc(buf_size);
     if (!buffer) {
         result.error = XR_HTTP_ERR_MEMORY;
-        result.error_msg = strdup("Memory allocation failed");
+        result.error_msg = xr_strdup("Memory allocation failed");
         goto cleanup;
     }
 
     // --- Receive response headers ---
     {
         size_t hdr_cap = 8192;
-        char *hdr_buf = (char *)malloc(hdr_cap);
+        char *hdr_buf = (char *)xr_malloc(hdr_cap);
         if (!hdr_buf) {
             result.error = XR_HTTP_ERR_MEMORY;
-            result.error_msg = strdup("Memory allocation failed");
+            result.error_msg = xr_strdup("Memory allocation failed");
             goto cleanup;
         }
         size_t hdr_len = 0;
@@ -199,8 +200,8 @@ XrStreamResult xr_http_stream(const XrStreamConfig *config) {
 
         if (!body_start) {
             result.error = XR_HTTP_ERR_PARSE;
-            result.error_msg = strdup("Invalid response headers");
-            free(hdr_buf);
+            result.error_msg = xr_strdup("Invalid response headers");
+            xr_free(hdr_buf);
             goto cleanup;
         }
 
@@ -210,8 +211,8 @@ XrStreamResult xr_http_stream(const XrStreamConfig *config) {
             result.error = XR_HTTP_ERR_RECV;
             char msg[64];
             snprintf(msg, sizeof(msg), "HTTP error: %d", result.status_code);
-            result.error_msg = strdup(msg);
-            free(hdr_buf);
+            result.error_msg = xr_strdup(msg);
+            xr_free(hdr_buf);
             goto cleanup;
         }
 
@@ -232,7 +233,7 @@ XrStreamResult xr_http_stream(const XrStreamConfig *config) {
                                     config->user_data);
         }
 
-        free(hdr_buf);
+        xr_free(hdr_buf);
     }
 
     // --- Stream body ---
@@ -264,7 +265,7 @@ cleanup:
     // Connection: close — don't return to pool, just close.
     if (conn && pool) xr_conn_pool_close(pool, conn);
     if (out_fd >= 0) close(out_fd);
-    free(buffer);
+    xr_free(buffer);
     xr_http_url_free(&url);
 
     return result;
@@ -313,6 +314,6 @@ long long xr_http_get_content_length(XrayIsolate *X, const char *url) {
 
 void xr_stream_result_free(XrStreamResult *result) {
     if (!result) return;
-    free(result->error_msg);
+    xr_free(result->error_msg);
     result->error_msg = NULL;
 }

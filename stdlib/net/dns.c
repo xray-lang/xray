@@ -15,6 +15,7 @@
  *   name-resolution layer with no socket I/O of its own.
  */
 
+#include "../../src/base/xmalloc.h"
 #include "dns.h"
 #include "../../src/base/xhash.h"
 #include "../../src/coro/xasync.h"
@@ -150,14 +151,14 @@ static void cache_insert_locked(const char *hostname, XrSockAddr *addrs, int add
         g_dns.cache_tail = old->lru_prev;
         if (g_dns.cache_head == old) g_dns.cache_head = NULL;
 
-        free(old->hostname);
-        free(old);
+        xr_free(old->hostname);
+        xr_free(old);
         g_dns.cache_count--;
     }
 
     // Create new entry
-    entry = (XrDnsCacheEntry*)malloc(sizeof(XrDnsCacheEntry));
-    entry->hostname = strdup(hostname);
+    entry = (XrDnsCacheEntry*)xr_malloc(sizeof(XrDnsCacheEntry));
+    entry->hostname = xr_strdup(hostname);
     entry->addr_count = addr_count < XR_DNS_MAX_ADDRS ? addr_count : XR_DNS_MAX_ADDRS;
     memcpy(entry->addrs, addrs, sizeof(XrSockAddr) * entry->addr_count);
     entry->current_idx = 0;
@@ -420,7 +421,7 @@ bool xr_dns_resolve_on_async(XrAsyncPool *pool, struct XrCoroutine *coro,
     }
 
     // Create async task data
-    XrDnsAsyncData *data = (XrDnsAsyncData *)malloc(sizeof(XrDnsAsyncData));
+    XrDnsAsyncData *data = (XrDnsAsyncData *)xr_malloc(sizeof(XrDnsAsyncData));
     if (!data) {
         return do_resolve(hostname, addr, family);
     }
@@ -433,7 +434,7 @@ bool xr_dns_resolve_on_async(XrAsyncPool *pool, struct XrCoroutine *coro,
     // Create async job
     XrAsyncJob *job = xr_async_job_create(coro, worker_id, dns_async_invoke, data);
     if (!job) {
-        free(data);
+        xr_free(data);
         return do_resolve(hostname, addr, family);
     }
 
@@ -453,8 +454,8 @@ void xr_dns_cache_clear(void)
     XrDnsCacheEntry *entry = g_dns.cache_head;
     while (entry) {
         XrDnsCacheEntry *next = entry->lru_next;
-        free(entry->hostname);
-        free(entry);
+        xr_free(entry->hostname);
+        xr_free(entry);
         entry = next;
     }
 

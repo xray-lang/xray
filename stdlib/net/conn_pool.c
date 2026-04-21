@@ -12,6 +12,7 @@
  *   Thread-safe via global mutex.
  */
 
+#include "../../src/base/xmalloc.h"
 #include "conn_pool.h"
 #include "dns.h"
 #include "io.h"
@@ -168,7 +169,7 @@ static XrPooledConn* create_connection(XrConnPool *pool, const char *host, uint1
     if (fd < 0) return NULL;
 
     // Create pooled connection
-    XrPooledConn *conn = (XrPooledConn*)calloc(1, sizeof(XrPooledConn));
+    XrPooledConn *conn = (XrPooledConn*)xr_calloc(1, sizeof(XrPooledConn));
     if (!conn) {
         close(fd);
         return NULL;
@@ -233,7 +234,7 @@ static XrPooledConn* create_connection(XrConnPool *pool, const char *host, uint1
 
                 if (!hs_ok) {
                     close_connection(conn);
-                    free(conn);
+                    xr_free(conn);
                     return NULL;
                 }
             }
@@ -280,7 +281,7 @@ static void close_connection(XrPooledConn *conn) {
 /* ========== Connection Pool API ========== */
 
 XrConnPool* xr_conn_pool_new(void) {
-    XrConnPool *pool = (XrConnPool*)calloc(1, sizeof(XrConnPool));
+    XrConnPool *pool = (XrConnPool*)xr_calloc(1, sizeof(XrConnPool));
     if (!pool) return NULL;
 
     pthread_mutex_init(&pool->lock, NULL);
@@ -313,11 +314,11 @@ void xr_conn_pool_destroy(XrConnPool *pool) {
             while (conn) {
                 XrPooledConn *next_conn = conn->next;
                 close_connection(conn);
-                free(conn);
+                xr_free(conn);
                 conn = next_conn;
             }
 
-            free(hp);
+            xr_free(hp);
             hp = next_hp;
         }
         pool->buckets[i] = NULL;
@@ -371,7 +372,7 @@ XrPooledConn* xr_conn_pool_get(XrConnPool *pool,
                 if (now - conn->last_used_ms > pool->idle_timeout_ms) {
                     *pp = conn->next;
                     close_connection(conn);
-                    free(conn);
+                    xr_free(conn);
                     hp->conn_count--;
                     hp->idle_count--;
                     pool->total_conns--;
@@ -408,7 +409,7 @@ void xr_conn_pool_put(XrConnPool *pool,
     // Not keeping alive, close directly
     if (!keep_alive) {
         close_connection(conn);
-        free(conn);
+        xr_free(conn);
         return;
     }
 
@@ -426,11 +427,11 @@ void xr_conn_pool_put(XrConnPool *pool,
 
     if (!hp) {
         // Create new host pool
-        hp = (XrHostPool*)calloc(1, sizeof(XrHostPool));
+        hp = (XrHostPool*)xr_calloc(1, sizeof(XrHostPool));
         if (!hp) {
             pthread_mutex_unlock(&pool->lock);
             close_connection(conn);
-            free(conn);
+            xr_free(conn);
             return;
         }
 
@@ -447,7 +448,7 @@ void xr_conn_pool_put(XrConnPool *pool,
     if (hp->idle_count >= XR_POOL_MAX_CONNS_PER_HOST) {
         pthread_mutex_unlock(&pool->lock);
         close_connection(conn);
-        free(conn);
+        xr_free(conn);
         return;
     }
 
@@ -467,7 +468,7 @@ void xr_conn_pool_close(XrConnPool *pool, XrPooledConn *conn) {
     (void)pool;
     if (!conn) return;
     close_connection(conn);
-    free(conn);
+    xr_free(conn);
 }
 
 int xr_conn_pool_evict_idle(XrConnPool *pool) {
@@ -488,7 +489,7 @@ int xr_conn_pool_evict_idle(XrConnPool *pool) {
                     now - conn->last_used_ms > pool->idle_timeout_ms) {
                     *pp = conn->next;
                     close_connection(conn);
-                    free(conn);
+                    xr_free(conn);
                     hp->conn_count--;
                     hp->idle_count--;
                     pool->total_conns--;
