@@ -12,6 +12,7 @@
  */
 
 #include "../runtime/xisolate_internal.h"
+#include "../runtime/xisolate_api.h"
 #include "../base/xchecks.h"
 #include "../base/xlog.h"
 #include "../base/xglobal_indices.h"
@@ -44,30 +45,48 @@ XrVMResult xr_vm_interpret_proto_isolate(XrayIsolate *isolate, XrProto *proto);
 /* ========== Compilation API ========== */
 
 // Compile AST to bytecode (internal)
+//
+// The compiler's for-in desugaring (xstmt_forin.c) creates new AST nodes
+// via xr_ast_* helpers which allocate from the Isolate's current arena.
+// After xr_parse_with_source returns, the arena is transferred to the
+// ProgramNode and the Isolate's pointer is restored to NULL.  We must
+// re-install the program's arena for the duration of compilation so the
+// desugaring allocations succeed, then restore the previous value.
 static XrProto* compile_ast_internal(XrayIsolate *isolate, AstNode *ast, const char *source_file) {
     XR_DCHECK(isolate != NULL, "compile_ast_internal: NULL isolate");
     XR_DCHECK(ast != NULL, "compile_ast_internal: NULL ast");
+
+    // Re-install the parse arena so compiler desugaring can allocate nodes.
+    struct XrArena *saved_arena = xr_isolate_get_current_arena(isolate);
+    if (ast->type == AST_PROGRAM && ast->as.program.arena) {
+        xr_isolate_set_current_arena(isolate, ast->as.program.arena);
+    }
+
     XrCompilerContext *ctx = xr_compiler_context_new();
     if (ctx == NULL) {
         xr_log_warning("vm", "failed to create compiler context");
+        xr_isolate_set_current_arena(isolate, saved_arena);
         return NULL;
     }
-    
+
     ctx->X = isolate;
     ctx->source_file = source_file;
-    
+
     ctx->shared_offset = isolate->vm.shared.count;
-    
+
     XrProto *proto = xr_compile(ctx, ast);
-    
+
     // Sync shared variable count back to isolate (offset-adjusted)
     int total_shared = ctx->shared_offset + ctx->shared_var_count;
     if (total_shared > isolate->vm.shared.count) {
         isolate->vm.shared.count = total_shared;
         xr_shared_array_ensure(&isolate->vm.shared, total_shared - 1);
     }
-    
+
     xr_compiler_context_free(ctx);
+
+    // Restore previous arena.
+    xr_isolate_set_current_arena(isolate, saved_arena);
 
     return proto;
 }
@@ -93,18 +112,18 @@ XrProto* xr_compile_source_with_path(XrayIsolate *isolate, const char *source, c
         xr_log_warning("vm", "failed to create compiler context");
         return NULL;
     }
-    
+
     ctx->X = isolate;
     ctx->source_file = source_file;
     ctx->shared_offset = isolate->vm.shared.count;
-    
+
     // Now parse with valid type pool
     AstNode *ast = xr_parse_with_source(isolate, source, source_file);
     if (!ast) {
         xr_compiler_context_free(ctx);
         return NULL;
     }
-    
+
     // Compile
     XrProto *proto = xr_compile(ctx, ast);
     int total_shared = ctx->shared_offset + ctx->shared_var_count;
@@ -112,12 +131,12 @@ XrProto* xr_compile_source_with_path(XrayIsolate *isolate, const char *source, c
         isolate->vm.shared.count = total_shared;
         xr_shared_array_ensure(&isolate->vm.shared, total_shared - 1);
     }
-    
+
     xr_compiler_context_free(ctx);
-    
+
     // Free AST (not needed after compilation)
     xr_ast_free(isolate, ast);
-    
+
     return proto;
 }
 
@@ -133,27 +152,27 @@ int xr_execute(XrayIsolate *isolate, XrProto *proto) {
         xr_log_warning("vm", "invalid bytecode");
         return -1;
     }
-    
+
     XrRuntime *runtime = (XrRuntime *)isolate->vm.runtime;
     if (!runtime) {
         XrVMResult result = xr_vm_interpret_proto_isolate(isolate, proto);
         return (result == XR_VM_OK) ? 0 : -1;
     }
-    
+
     XrCoroutine *main_coro = isolate->main_coro;
     if (!main_coro) {
         xr_log_warning("vm", "main_coro not initialized");
         return -1;
     }
-    
+
     XrClosure *closure = xr_closure_new(isolate, proto, main_coro);
     if (!closure) {
         xr_log_warning("vm", "failed to create main closure");
         return -1;
     }
-    
+
     xr_coro_setup_main(main_coro, isolate, closure);
-    
+
     return xr_main_thread_run(isolate, main_coro);
 }
 
@@ -183,16 +202,16 @@ void xr_free_code(XrayIsolate *isolate, XrProto *proto) {
 // Mark GC roots (stack and global variables)
 void xr_vm_gc_mark_roots(XrayIsolate *isolate) {
     if (!isolate) return;
-    
+
     XrGC *gc = &isolate->gc;
-    
+
     // Mark stack values
     for (XrValue *slot = isolate->vm.stack; slot < isolate->vm.stack_top; slot++) {
         if (XR_VALUE_NEEDS_GC(*slot)) {
             xr_gc_markvalue(gc, *slot);
         }
     }
-    
+
     // Mark global variables
     for (int i = 0; i < isolate->vm.builtin_count; i++) {
         XrValue val = isolate->vm.builtins[i];
@@ -200,17 +219,17 @@ void xr_vm_gc_mark_roots(XrayIsolate *isolate) {
             xr_gc_markvalue(gc, val);
         }
     }
-    
+
     // Mark current exception
     if (XR_VALUE_NEEDS_GC(isolate->vm.current_exception)) {
         xr_gc_markvalue(gc, isolate->vm.current_exception);
     }
-    
+
     // Mark main coroutine
     if (isolate->main_coro) {
         xr_gc_mark_object(gc, (XrGCHeader*)isolate->main_coro);
     }
-    
+
     // Mark shared array values (closures, strings, etc. stored across REPL inputs)
     XrSharedArray *shared = &isolate->vm.shared;
     for (int i = 0; i < shared->count; i++) {
@@ -228,12 +247,12 @@ static void init_globals(XrayIsolate *isolate) {
     for (int i = 0; i < 256; i++) {
         isolate->vm.builtins[i] = xr_null();
     }
-    
+
     xr_shared_array_init(&isolate->vm.shared);
-    
+
     // Core class registration is done in isolate_init_full() (xisolate_full.c)
     // because isolate->core is NULL at this point (before init_extra callback).
-    
+
     // User globals start from index XR_USER_GLOBALS_START
     if (isolate->vm.builtin_count < XR_USER_GLOBALS_START) {
         isolate->vm.builtin_count = XR_USER_GLOBALS_START;
@@ -267,7 +286,7 @@ static void init_vm_context(XrayIsolate *isolate) {
     ctx->current_coro = isolate->vm.current_coro;
     ctx->trace_execution = isolate->vm.trace_execution;
     ctx->isolate = isolate;
-    
+
     ctx->tmp_strbuf = NULL;
 }
 
@@ -278,16 +297,16 @@ int xr_vm_init(XrayIsolate *isolate) {
     for (int i = 0; i < XR_STACK_MAX; i++) {
         isolate->vm.stack[i] = xr_null();
     }
-    
+
     // Initialize call frames
     isolate->vm.frame_count = 0;
     isolate->vm.module_base_frame = -1;
     memset(isolate->vm.frames, 0, sizeof(XrBcCallFrame) * XR_FRAMES_MAX);
-    
+
     // Initialize exception handling
     isolate->vm.handler_count = 0;
     isolate->vm.current_exception = xr_null();
-    
+
     // Initialize string intern table
     isolate->vm.strings_map = xr_hashmap_new();
     if (isolate->vm.strings_map == NULL) {
@@ -295,18 +314,18 @@ int xr_vm_init(XrayIsolate *isolate) {
         return -1;
     }
     isolate->vm.trace_execution = isolate->params.trace_execution;
-    
+
     init_globals(isolate);
     init_scheduler(isolate);
-    
+
     // Initialize defer stack (lazy allocation)
     isolate->vm.defer_stack = NULL;
     isolate->vm.defer_count = 0;
     isolate->vm.defer_capacity = 0;
     isolate->vm.defer_frame_marks = NULL;
-    
+
     init_vm_context(isolate);
-    
+
 #ifdef XRAY_HAS_JIT
     if (isolate->params.enable_jit) {
         int thr = isolate->params.jit_threshold > 0 ? isolate->params.jit_threshold : 100;
@@ -314,7 +333,7 @@ int xr_vm_init(XrayIsolate *isolate) {
         isolate->vm.jit_threshold = thr;
     }
 #endif
-    
+
     return 0;
 }
 
@@ -324,21 +343,21 @@ void xr_vm_cleanup(XrayIsolate *isolate) {
         xr_hashmap_free(isolate->vm.strings_map);
         isolate->vm.strings_map = NULL;
     }
-    
+
     // Cleanup scheduler
     if (isolate->vm.scheduler != NULL) {
         xr_sched_destroy((XrScheduler*)isolate->vm.scheduler);
         xr_free(isolate->vm.scheduler);
         isolate->vm.scheduler = NULL;
     }
-    
+
 #ifdef XRAY_HAS_JIT
     if (isolate->vm.jit) {
         xir_jit_destroy(isolate->vm.jit);
         isolate->vm.jit = NULL;
     }
 #endif
-    
+
     // Cleanup defer stack
     if (isolate->vm.defer_stack != NULL) {
         xr_free(isolate->vm.defer_stack);
