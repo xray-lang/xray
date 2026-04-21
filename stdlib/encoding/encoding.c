@@ -213,15 +213,6 @@ int xr_utf16_to_utf8_len(const uint8_t *utf16, size_t utf16_len, XrUtf16Endian e
 
 /* ========== Helper Functions ========== */
 
-// Local alias: xrs_string_arg handles the length+NULL-check in one call.
-#define get_string_arg(v, lenp)  xrs_string_arg((v), (lenp))
-
-static XrValue make_string(XrayIsolate *X, const char *s, size_t len) {
-    if (!s) return xr_null();
-    XrString *str = xr_string_new(X, s, len);
-    return xr_string_value(str);
-}
-
 static XrValue make_bytes(XrayIsolate *X, const uint8_t *data, int len) {
     XrCoroutine *coro = xr_current_coro(X);
     if (!coro) return xr_null();
@@ -241,14 +232,14 @@ static XrValue encoding_hex_encode(XrayIsolate *X, XrValue *args, int nargs) {
     if (nargs < 1) return xr_null();
 
     size_t len;
-    const char *data = get_string_arg(args[0], &len);
+    const char *data = xrs_string_arg(args[0], &len);
     if (!data) return xr_null();
 
     char *output = (char*)xr_malloc(len * 2 + 1);
     if (!output) return xr_null();
 
     xr_hex_encode((const uint8_t*)data, len, output);
-    XrValue result = make_string(X, output, len * 2);
+    XrValue result = xrs_string_value_n(X, output, len * 2);
     xr_free(output);
     return result;
 }
@@ -258,7 +249,7 @@ static XrValue encoding_hex_decode(XrayIsolate *X, XrValue *args, int nargs) {
     if (nargs < 1) return xr_null();
 
     size_t len;
-    const char *hex = get_string_arg(args[0], &len);
+    const char *hex = xrs_string_arg(args[0], &len);
     if (!hex) return xr_null();
 
     uint8_t *output = (uint8_t*)xr_malloc(len / 2 + 1);
@@ -280,7 +271,7 @@ static XrValue encoding_hex_decode_string(XrayIsolate *X, XrValue *args, int nar
     if (nargs < 1) return xr_null();
 
     size_t len;
-    const char *hex = get_string_arg(args[0], &len);
+    const char *hex = xrs_string_arg(args[0], &len);
     if (!hex) return xr_null();
 
     uint8_t *output = (uint8_t*)xr_malloc(len / 2 + 1);
@@ -292,7 +283,7 @@ static XrValue encoding_hex_decode_string(XrayIsolate *X, XrValue *args, int nar
         return xr_null();
     }
 
-    XrValue result = make_string(X, (char*)output, out_len);
+    XrValue result = xrs_string_value_n(X, (char*)output, out_len);
     xr_free(output);
     return result;
 }
@@ -303,7 +294,7 @@ static XrValue encoding_hex_valid(XrayIsolate *X, XrValue *args, int nargs) {
     if (nargs < 1) return xr_bool(false);
 
     size_t len;
-    const char *hex = get_string_arg(args[0], &len);
+    const char *hex = xrs_string_arg(args[0], &len);
     if (!hex) return xr_bool(false);
 
     return xr_bool(xr_hex_valid(hex, len));
@@ -315,7 +306,7 @@ static XrValue encoding_utf8_valid(XrayIsolate *X, XrValue *args, int nargs) {
     if (nargs < 1) return xr_bool(false);
 
     size_t len;
-    const char *str = get_string_arg(args[0], &len);
+    const char *str = xrs_string_arg(args[0], &len);
     if (!str) return xr_bool(false);
 
     return xr_bool(xr_utf8_validate(str, len));
@@ -327,7 +318,7 @@ static XrValue encoding_utf8_count(XrayIsolate *X, XrValue *args, int nargs) {
     if (nargs < 1) return xr_int(0);
 
     size_t len;
-    const char *str = get_string_arg(args[0], &len);
+    const char *str = xrs_string_arg(args[0], &len);
     if (!str) return xr_int(0);
 
     return xr_int((int64_t)xr_utf8_strlen(str, len));
@@ -339,7 +330,7 @@ static XrValue encoding_utf8_byte_length(XrayIsolate *X, XrValue *args, int narg
     if (nargs < 1) return xr_int(0);
 
     size_t len;
-    const char *str = get_string_arg(args[0], &len);
+    const char *str = xrs_string_arg(args[0], &len);
     if (!str) return xr_int(0);
 
     return xr_int((int64_t)len);
@@ -357,7 +348,7 @@ static XrValue encoding_utf16_encode(XrayIsolate *X, XrValue *args, int nargs) {
     if (nargs < 1) return xr_null();
 
     size_t len;
-    const char *str = get_string_arg(args[0], &len);
+    const char *str = xrs_string_arg(args[0], &len);
     if (!str) return xr_null();
 
     XrUtf16Endian endian = parse_endian_arg(args, nargs);
@@ -405,7 +396,7 @@ static XrValue encoding_utf16_decode(XrayIsolate *X, XrValue *args, int nargs) {
         }
     }
     // Empty input → empty string
-    if (len == 0) return make_string(X, "", 0);
+    if (len == 0) return xrs_string_value_n(X, "", 0);
     if (!bytes) return xr_null();
 
     // Auto-detect endian from BOM when the caller did not supply one.
@@ -425,7 +416,7 @@ static XrValue encoding_utf16_decode(XrayIsolate *X, XrValue *args, int nargs) {
             bytes += 2; len -= 2;
         }
     }
-    if (len == 0) return make_string(X, "", 0);
+    if (len == 0) return xrs_string_value_n(X, "", 0);
 
     int out_len = xr_utf16_to_utf8_len(bytes, len, endian);
     if (out_len < 0) return xr_null();
@@ -439,7 +430,7 @@ static XrValue encoding_utf16_decode(XrayIsolate *X, XrValue *args, int nargs) {
         return xr_null();
     }
 
-    XrValue result = make_string(X, (char*)output, actual_len);
+    XrValue result = xrs_string_value_n(X, (char*)output, actual_len);
     xr_free(output);
     return result;
 }

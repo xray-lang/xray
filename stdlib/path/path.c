@@ -44,13 +44,9 @@
 
 /* ========== Helper Functions ========== */
 
-// Unified string helpers live in <common.h>.
-#define get_string_arg(v)            xrs_string_arg((v), NULL)
-#define make_string(iso, cstr)       xrs_string_value_c((iso), (cstr))
-
 // Create string from buffer with specified length.
 static inline XrValue make_string_n(XrayIsolate *X, const char *s, size_t len) {
-    if (!s || len == 0) return make_string(X, "");
+    if (!s || len == 0) return xrs_string_value_c(X, "");
     return xrs_string_value_n(X, s, len);
 }
 
@@ -58,16 +54,16 @@ static inline XrValue make_string_n(XrayIsolate *X, const char *s, size_t len) {
 
 // join(...) - Join multiple path segments
 static XrValue path_join(XrayIsolate *X, XrValue *args, int argc) {
-    if (argc < 1) return make_string(X, "");
+    if (argc < 1) return xrs_string_value_c(X, "");
 
     // Calculate max result length
     size_t total_len = 0;
     for (int i = 0; i < argc; i++) {
-        const char *s = get_string_arg(args[i]);
+        const char *s = xrs_string_arg(args[i], NULL);
         if (s) total_len += strlen(s) + 1;
     }
 
-    if (total_len == 0) return make_string(X, "");
+    if (total_len == 0) return xrs_string_value_c(X, "");
 
     char *result = (char*)xr_malloc(total_len + 1);
     if (!result) return xr_null();
@@ -76,7 +72,7 @@ static XrValue path_join(XrayIsolate *X, XrValue *args, int argc) {
     XR_DCHECK(total_len > 0, "path_join: total_len already validated > 0");
 
     for (int i = 0; i < argc; i++) {
-        const char *part = get_string_arg(args[i]);
+        const char *part = xrs_string_arg(args[i], NULL);
         if (!part || part[0] == '\0') continue;
 
         // Check absolute path FIRST, before adding separator
@@ -107,17 +103,17 @@ static XrValue path_join(XrayIsolate *X, XrValue *args, int argc) {
 
     result[pos] = '\0';
 
-    XrValue ret = make_string(X, result);
+    XrValue ret = xrs_string_value_c(X, result);
     xr_free(result);
     return ret;
 }
 
 // dirname(path) - Get directory part
 static XrValue path_dirname(XrayIsolate *X, XrValue *args, int argc) {
-    if (argc < 1) return make_string(X, ".");
+    if (argc < 1) return xrs_string_value_c(X, ".");
 
-    const char *path = get_string_arg(args[0]);
-    if (!path || path[0] == '\0') return make_string(X, ".");
+    const char *path = xrs_string_arg(args[0], NULL);
+    if (!path || path[0] == '\0') return xrs_string_value_c(X, ".");
 
     size_t len = strlen(path);
 
@@ -138,7 +134,7 @@ static XrValue path_dirname(XrayIsolate *X, XrValue *args, int argc) {
 
     if (len == 0) {
         // No directory part
-        return IS_SEP(path[0]) ? make_string(X, PATH_SEP_STR) : make_string(X, ".");
+        return IS_SEP(path[0]) ? xrs_string_value_c(X, PATH_SEP_STR) : xrs_string_value_c(X, ".");
     }
 
     return make_string_n(X, path, len);
@@ -146,10 +142,10 @@ static XrValue path_dirname(XrayIsolate *X, XrValue *args, int argc) {
 
 // basename(path) - Get filename part
 static XrValue path_basename(XrayIsolate *X, XrValue *args, int argc) {
-    if (argc < 1) return make_string(X, "");
+    if (argc < 1) return xrs_string_value_c(X, "");
 
-    const char *path = get_string_arg(args[0]);
-    if (!path || path[0] == '\0') return make_string(X, "");
+    const char *path = xrs_string_arg(args[0], NULL);
+    if (!path || path[0] == '\0') return xrs_string_value_c(X, "");
 
     size_t len = strlen(path);
 
@@ -158,7 +154,7 @@ static XrValue path_basename(XrayIsolate *X, XrValue *args, int argc) {
         len--;
     }
 
-    if (len == 0) return make_string(X, "");
+    if (len == 0) return xrs_string_value_c(X, "");
 
     // Find last separator
     size_t start = len;
@@ -171,10 +167,10 @@ static XrValue path_basename(XrayIsolate *X, XrValue *args, int argc) {
 
 // extname(path) - Get file extension
 static XrValue path_extname(XrayIsolate *X, XrValue *args, int argc) {
-    if (argc < 1) return make_string(X, "");
+    if (argc < 1) return xrs_string_value_c(X, "");
 
-    const char *path = get_string_arg(args[0]);
-    if (!path || path[0] == '\0') return make_string(X, "");
+    const char *path = xrs_string_arg(args[0], NULL);
+    if (!path || path[0] == '\0') return xrs_string_value_c(X, "");
 
     // Get basename first
     size_t len = strlen(path);
@@ -198,9 +194,9 @@ static XrValue path_extname(XrayIsolate *X, XrValue *args, int argc) {
         }
     }
 
-    if (!dot) return make_string(X, "");
+    if (!dot) return xrs_string_value_c(X, "");
 
-    return make_string(X, dot);
+    return xrs_string_value_c(X, dot);
 }
 
 // isAbsolute(path) - Check if path is absolute
@@ -208,7 +204,7 @@ static XrValue path_isAbsolute(XrayIsolate *X, XrValue *args, int argc) {
     (void)X;
     if (argc < 1) return xr_bool(false);
 
-    const char *path = get_string_arg(args[0]);
+    const char *path = xrs_string_arg(args[0], NULL);
     if (!path || path[0] == '\0') return xr_bool(false);
 
 #ifdef XR_PLATFORM_WINDOWS
@@ -228,10 +224,10 @@ static XrValue path_isAbsolute(XrayIsolate *X, XrValue *args, int argc) {
 // normalize(path) - Normalize path (resolve . and ..)
 // Thread-safe: no strtok. Zero-copy: uses offset array into original string.
 static XrValue path_normalize(XrayIsolate *X, XrValue *args, int argc) {
-    if (argc < 1) return make_string(X, ".");
+    if (argc < 1) return xrs_string_value_c(X, ".");
 
-    const char *path = get_string_arg(args[0]);
-    if (!path || path[0] == '\0') return make_string(X, ".");
+    const char *path = xrs_string_arg(args[0], NULL);
+    if (!path || path[0] == '\0') return xrs_string_value_c(X, ".");
 
     size_t len = strlen(path);
     int is_absolute = IS_SEP(path[0]);
@@ -299,7 +295,7 @@ static XrValue path_normalize(XrayIsolate *X, XrValue *args, int argc) {
     }
     result[pos] = '\0';
 
-    XrValue ret = make_string(X, result);
+    XrValue ret = xrs_string_value_c(X, result);
     xr_free(seg_buf);
     return ret;
 }
@@ -321,7 +317,7 @@ static XrValue path_resolve(XrayIsolate *X, XrValue *args, int argc) {
     xr_ctxbuf_append_cstr(&result, cwd);
 
     for (int i = 0; i < argc; i++) {
-        const char *part = get_string_arg(args[i]);
+        const char *part = xrs_string_arg(args[i], NULL);
         if (!part || part[0] == '\0') continue;
 
         if (IS_SEP(part[0])) {
@@ -348,21 +344,21 @@ static XrValue path_resolve(XrayIsolate *X, XrValue *args, int argc) {
 // relative(from, to) - Compute relative path
 // Fixed: segment-boundary-aware common prefix (avoids /foo vs /foobar mismatch)
 static XrValue path_relative(XrayIsolate *X, XrValue *args, int argc) {
-    if (argc < 2) return make_string(X, "");
+    if (argc < 2) return xrs_string_value_c(X, "");
 
-    const char *from = get_string_arg(args[0]);
-    const char *to = get_string_arg(args[1]);
+    const char *from = xrs_string_arg(args[0], NULL);
+    const char *to = xrs_string_arg(args[1], NULL);
 
-    if (!from || !to) return make_string(X, "");
+    if (!from || !to) return xrs_string_value_c(X, "");
 
     // Normalize both paths first
     XrValue from_norm = path_normalize(X, args, 1);
     XrValue to_norm = path_normalize(X, args + 1, 1);
 
-    from = get_string_arg(from_norm);
-    to = get_string_arg(to_norm);
+    from = xrs_string_arg(from_norm, NULL);
+    to = xrs_string_arg(to_norm, NULL);
 
-    if (!from || !to) return make_string(X, "");
+    if (!from || !to) return xrs_string_value_c(X, "");
 
     // Find common prefix at segment boundary
     size_t common = 0;
@@ -425,9 +421,9 @@ static XrValue path_relative(XrayIsolate *X, XrValue *args, int argc) {
 
     XrValue ret;
     if (pos == 0) {
-        ret = make_string(X, ".");
+        ret = xrs_string_value_c(X, ".");
     } else {
-        ret = make_string(X, result);
+        ret = xrs_string_value_c(X, result);
     }
     xr_free(result);
     return ret;
@@ -443,7 +439,7 @@ static XrValue path_parse(XrayIsolate *X, XrValue *args, int argc) {
         return xr_value_from_map(empty);
     }
 
-    const char *path = get_string_arg(args[0]);
+    const char *path = xrs_string_arg(args[0], NULL);
     if (!path) path = "";
 
     XrMap *map = xr_map_new(xr_current_coro(X));
@@ -454,23 +450,23 @@ static XrValue path_parse(XrayIsolate *X, XrValue *args, int argc) {
     XrValue ext = path_extname(X, args, 1);
 
     // name = basename without ext
-    const char *base_str = get_string_arg(base);
-    const char *ext_str = get_string_arg(ext);
+    const char *base_str = xrs_string_arg(base, NULL);
+    const char *ext_str = xrs_string_arg(ext, NULL);
     size_t base_len = base_str ? strlen(base_str) : 0;
     size_t ext_len = ext_str ? strlen(ext_str) : 0;
     XrValue name = make_string_n(X, base_str, base_len - ext_len);
 
     // root
-    XrValue root = make_string(X, "");
+    XrValue root = xrs_string_value_c(X, "");
     if (path[0] == '/') {
-        root = make_string(X, "/");
+        root = xrs_string_value_c(X, "/");
     }
 
-    xr_map_set(map, make_string(X, "root"), root);
-    xr_map_set(map, make_string(X, "dir"), dir);
-    xr_map_set(map, make_string(X, "base"), base);
-    xr_map_set(map, make_string(X, "name"), name);
-    xr_map_set(map, make_string(X, "ext"), ext);
+    xr_map_set(map, xrs_string_value_c(X, "root"), root);
+    xr_map_set(map, xrs_string_value_c(X, "dir"), dir);
+    xr_map_set(map, xrs_string_value_c(X, "base"), base);
+    xr_map_set(map, xrs_string_value_c(X, "name"), name);
+    xr_map_set(map, xrs_string_value_c(X, "ext"), ext);
 
     return xr_value_from_map(map);
 }
@@ -481,23 +477,23 @@ static XrValue path_parse(XrayIsolate *X, XrValue *args, int argc) {
 // PATH_SEP rather than hard-coding '/'. That avoids mixed-separator output
 // on Windows, e.g. `C:\foo/bar`.
 static XrValue path_format(XrayIsolate *X, XrValue *args, int argc) {
-    if (argc < 1) return make_string(X, "");
-    if (!XR_IS_MAP(args[0])) return make_string(X, "");
+    if (argc < 1) return xrs_string_value_c(X, "");
+    if (!XR_IS_MAP(args[0])) return xrs_string_value_c(X, "");
 
     XrMap *map = XR_TO_MAP(args[0]);
     bool found;
 
-    XrValue dir  = xr_map_get(map, make_string(X, "dir"),  &found);
-    XrValue base = xr_map_get(map, make_string(X, "base"), &found);
-    XrValue name = xr_map_get(map, make_string(X, "name"), &found);
-    XrValue ext  = xr_map_get(map, make_string(X, "ext"),  &found);
+    XrValue dir  = xr_map_get(map, xrs_string_value_c(X, "dir"),  &found);
+    XrValue base = xr_map_get(map, xrs_string_value_c(X, "base"), &found);
+    XrValue name = xr_map_get(map, xrs_string_value_c(X, "name"), &found);
+    XrValue ext  = xr_map_get(map, xrs_string_value_c(X, "ext"),  &found);
 
     // Derive `base` from name+ext when only those are present.
     XrCtxBuf base_buf; xr_ctxbuf_init(&base_buf, 64);
-    const char *base_str = get_string_arg(base);
+    const char *base_str = xrs_string_arg(base, NULL);
     if (!base_str || base_str[0] == '\0') {
-        const char *name_str = get_string_arg(name);
-        const char *ext_str  = get_string_arg(ext);
+        const char *name_str = xrs_string_arg(name, NULL);
+        const char *ext_str  = xrs_string_arg(ext, NULL);
         if (name_str && name_str[0] != '\0') {
             xr_ctxbuf_append_cstr(&base_buf, name_str);
             if (ext_str) xr_ctxbuf_append_cstr(&base_buf, ext_str);
@@ -505,7 +501,7 @@ static XrValue path_format(XrayIsolate *X, XrValue *args, int argc) {
         }
     }
 
-    const char *dir_str = get_string_arg(dir);
+    const char *dir_str = xrs_string_arg(dir, NULL);
     if (dir_str && dir_str[0] != '\0') {
         XrCtxBuf out; xr_ctxbuf_init(&out, 128);
         xr_ctxbuf_append_cstr(&out, dir_str);
@@ -522,7 +518,7 @@ static XrValue path_format(XrayIsolate *X, XrValue *args, int argc) {
 
     XrValue v = (base_str && base_str[0])
                     ? xrs_string_value_c(X, base_str)
-                    : make_string(X, "");
+                    : xrs_string_value_c(X, "");
     xr_ctxbuf_free(&base_buf);
     return v;
 }
@@ -564,8 +560,8 @@ XrModule* xr_load_module_path(XrayIsolate *isolate) {
     XRS_EXPORT(mod, isolate, "format", path_format);
 
     // Add constants
-    xr_module_add_export(isolate, mod, "sep", make_string(isolate, PATH_SEP_STR));
-    xr_module_add_export(isolate, mod, "delimiter", make_string(isolate, PATH_DELIMITER));
+    xr_module_add_export(isolate, mod, "sep", xrs_string_value_c(isolate, PATH_SEP_STR));
+    xr_module_add_export(isolate, mod, "delimiter", xrs_string_value_c(isolate, PATH_DELIMITER));
 
     // Mark as loaded
     mod->loaded = true;

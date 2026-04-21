@@ -45,12 +45,6 @@
 struct XrCoroutine;
 extern struct XrCoroutine* xr_current_coro(XrayIsolate *X);
 
-/* ========== Helper Functions ========== */
-
-// Unified string helpers live in <common.h>.
-#define get_string_arg(v)        xrs_string_arg((v), NULL)
-#define make_string(iso, cstr)   xrs_string_value_c((iso), (cstr))
-
 /* ========== File Read/Write ========== */
 
 // Upper bound for a single in-memory read. The binding exposes the file as
@@ -62,7 +56,7 @@ extern struct XrCoroutine* xr_current_coro(XrayIsolate *X);
 // readFile(path) - Read file content
 static XrValue io_readFile(XrayIsolate *X, XrValue *args, int argc) {
     if (argc < 1) return xr_null();
-    const char *path = get_string_arg(args[0]);
+    const char *path = xrs_string_arg(args[0], NULL);
     if (!path) return xr_null();
 
     XR_DCHECK(path[0] != '\0', "io_readFile: path must be non-empty after validation");
@@ -92,7 +86,7 @@ static XrValue io_readFile(XrayIsolate *X, XrValue *args, int argc) {
 // readFileBytes(path) - Read file as byte array (Array<uint8>)
 static XrValue io_readFileBytes(XrayIsolate *X, XrValue *args, int argc) {
     if (argc < 1) return xr_null();
-    const char *path = get_string_arg(args[0]);
+    const char *path = xrs_string_arg(args[0], NULL);
     if (!path) return xr_null();
 
     FILE *f = fopen(path, "rb");
@@ -121,7 +115,7 @@ static XrValue io_writeFileBytes(XrayIsolate *X, XrValue *args, int argc) {
     (void)X;
     if (argc < 2) return xr_bool(false);
 
-    const char *path = get_string_arg(args[0]);
+    const char *path = xrs_string_arg(args[0], NULL);
     if (!path) return xr_bool(false);
 
     // Accept Array<uint8>
@@ -143,7 +137,7 @@ static XrValue io_writeFile(XrayIsolate *X, XrValue *args, int argc) {
     (void)X;
     if (argc < 2) return xr_bool(false);
 
-    const char *path = get_string_arg(args[0]);
+    const char *path = xrs_string_arg(args[0], NULL);
     if (!path || !XR_IS_STRING(args[1])) return xr_bool(false);
 
     XrString *str = XR_TO_STRING(args[1]);
@@ -161,7 +155,7 @@ static XrValue io_appendFile(XrayIsolate *X, XrValue *args, int argc) {
     (void)X;
     if (argc < 2) return xr_bool(false);
 
-    const char *path = get_string_arg(args[0]);
+    const char *path = xrs_string_arg(args[0], NULL);
     if (!path || !XR_IS_STRING(args[1])) return xr_bool(false);
 
     XrString *str = XR_TO_STRING(args[1]);
@@ -180,7 +174,7 @@ static XrValue io_appendFile(XrayIsolate *X, XrValue *args, int argc) {
 static XrValue io_exists(XrayIsolate *X, XrValue *args, int argc) {
     (void)X;
     if (argc < 1) return xr_bool(false);
-    const char *path = get_string_arg(args[0]);
+    const char *path = xrs_string_arg(args[0], NULL);
     if (!path) return xr_bool(false);
 
     struct stat st;
@@ -191,7 +185,7 @@ static XrValue io_exists(XrayIsolate *X, XrValue *args, int argc) {
 static XrValue io_isFile(XrayIsolate *X, XrValue *args, int argc) {
     (void)X;
     if (argc < 1) return xr_bool(false);
-    const char *path = get_string_arg(args[0]);
+    const char *path = xrs_string_arg(args[0], NULL);
     if (!path) return xr_bool(false);
 
     struct stat st;
@@ -203,7 +197,7 @@ static XrValue io_isFile(XrayIsolate *X, XrValue *args, int argc) {
 static XrValue io_isDir(XrayIsolate *X, XrValue *args, int argc) {
     (void)X;
     if (argc < 1) return xr_bool(false);
-    const char *path = get_string_arg(args[0]);
+    const char *path = xrs_string_arg(args[0], NULL);
     if (!path) return xr_bool(false);
 
     struct stat st;
@@ -215,7 +209,7 @@ static XrValue io_isDir(XrayIsolate *X, XrValue *args, int argc) {
 static XrValue io_fileSize(XrayIsolate *X, XrValue *args, int argc) {
     (void)X;
     if (argc < 1) return xr_int(-1);
-    const char *path = get_string_arg(args[0]);
+    const char *path = xrs_string_arg(args[0], NULL);
     if (!path) return xr_int(-1);
 
     struct stat st;
@@ -229,7 +223,7 @@ static XrValue io_fileSize(XrayIsolate *X, XrValue *args, int argc) {
 static XrValue io_remove(XrayIsolate *X, XrValue *args, int argc) {
     (void)X;
     if (argc < 1) return xr_bool(false);
-    const char *path = get_string_arg(args[0]);
+    const char *path = xrs_string_arg(args[0], NULL);
     if (!path) return xr_bool(false);
 
     return xr_bool(remove(path) == 0);
@@ -240,8 +234,8 @@ static XrValue io_rename(XrayIsolate *X, XrValue *args, int argc) {
     (void)X;
     if (argc < 2) return xr_bool(false);
 
-    const char *old_path = get_string_arg(args[0]);
-    const char *new_path = get_string_arg(args[1]);
+    const char *old_path = xrs_string_arg(args[0], NULL);
+    const char *new_path = xrs_string_arg(args[1], NULL);
     if (!old_path || !new_path) return xr_bool(false);
 
     return xr_bool(rename(old_path, new_path) == 0);
@@ -251,7 +245,7 @@ static XrValue io_rename(XrayIsolate *X, XrValue *args, int argc) {
 static XrValue io_mkdir(XrayIsolate *X, XrValue *args, int argc) {
     (void)X;
     if (argc < 1) return xr_bool(false);
-    const char *path = get_string_arg(args[0]);
+    const char *path = xrs_string_arg(args[0], NULL);
     if (!path) return xr_bool(false);
 
     return xr_bool(mkdir(path, 0755) == 0);
@@ -260,7 +254,7 @@ static XrValue io_mkdir(XrayIsolate *X, XrValue *args, int argc) {
 // readDir(path) - Read directory contents
 static XrValue io_readDir(XrayIsolate *X, XrValue *args, int argc) {
     if (argc < 1) return xr_null();
-    const char *path = get_string_arg(args[0]);
+    const char *path = xrs_string_arg(args[0], NULL);
     if (!path) return xr_null();
 
     DIR *dir = opendir(path);
@@ -278,7 +272,7 @@ static XrValue io_readDir(XrayIsolate *X, XrValue *args, int argc) {
         if (strcmp(entry->d_name, ".") == 0 || strcmp(entry->d_name, "..") == 0) {
             continue;
         }
-        XrValue name = make_string(X, entry->d_name);
+        XrValue name = xrs_string_value_c(X, entry->d_name);
         xr_array_push(arr, name);
     }
 
@@ -294,7 +288,7 @@ static XrValue io_cwd(XrayIsolate *X, XrValue *args, int argc) {
     if (getcwd(buf, sizeof(buf)) == NULL) {
         return xr_null();
     }
-    return make_string(X, buf);
+    return xrs_string_value_c(X, buf);
 }
 
 /* ========== Extended Functions ========== */
@@ -303,7 +297,7 @@ static XrValue io_cwd(XrayIsolate *X, XrValue *args, int argc) {
 static XrValue io_chdir(XrayIsolate *X, XrValue *args, int argc) {
     (void)X;
     if (argc < 1) return xr_bool(false);
-    const char *path = get_string_arg(args[0]);
+    const char *path = xrs_string_arg(args[0], NULL);
     if (!path) return xr_bool(false);
 
     return xr_bool(chdir(path) == 0);
@@ -314,8 +308,8 @@ static XrValue io_copyFile(XrayIsolate *X, XrValue *args, int argc) {
     (void)X;
     if (argc < 2) return xr_bool(false);
 
-    const char *src = get_string_arg(args[0]);
-    const char *dst = get_string_arg(args[1]);
+    const char *src = xrs_string_arg(args[0], NULL);
+    const char *dst = xrs_string_arg(args[1], NULL);
     if (!src || !dst) return xr_bool(false);
 
 #ifdef __APPLE__
@@ -384,7 +378,7 @@ static XrValue io_copyFile(XrayIsolate *X, XrValue *args, int argc) {
 // readLines(path) - Read file by lines
 static XrValue io_readLines(XrayIsolate *X, XrValue *args, int argc) {
     if (argc < 1) return xr_null();
-    const char *path = get_string_arg(args[0]);
+    const char *path = xrs_string_arg(args[0], NULL);
     if (!path) return xr_null();
 
     FILE *f = fopen(path, "r");
@@ -420,7 +414,7 @@ static XrValue io_readLines(XrayIsolate *X, XrValue *args, int argc) {
 static XrValue io_isSymlink(XrayIsolate *X, XrValue *args, int argc) {
     (void)X;
     if (argc < 1) return xr_bool(false);
-    const char *path = get_string_arg(args[0]);
+    const char *path = xrs_string_arg(args[0], NULL);
     if (!path) return xr_bool(false);
 
     struct stat st;
@@ -468,7 +462,7 @@ static XrShape* io_get_stat_shape(XrayIsolate *X) {
 // Uses stat() for regular info + lstat() to detect symlinks
 static XrValue io_stat(XrayIsolate *X, XrValue *args, int argc) {
     if (argc < 1) return xr_null();
-    const char *path = get_string_arg(args[0]);
+    const char *path = xrs_string_arg(args[0], NULL);
     if (!path) return xr_null();
 
     struct stat st;
@@ -505,7 +499,7 @@ static XrValue io_stat(XrayIsolate *X, XrValue *args, int argc) {
 static XrValue io_mkdirp(XrayIsolate *X, XrValue *args, int argc) {
     (void)X;
     if (argc < 1) return xr_bool(false);
-    const char *path = get_string_arg(args[0]);
+    const char *path = xrs_string_arg(args[0], NULL);
     // Catch truncation before we copy into a PATH_MAX buffer.
     if (path && strnlen(path, PATH_MAX) >= PATH_MAX) return xr_bool(false);
     if (!path || path[0] == '\0') return xr_bool(false);
@@ -543,7 +537,7 @@ static int remove_callback(const char *fpath, const struct stat *sb,
 static XrValue io_removeAll(XrayIsolate *X, XrValue *args, int argc) {
     (void)X;
     if (argc < 1) return xr_bool(false);
-    const char *path = get_string_arg(args[0]);
+    const char *path = xrs_string_arg(args[0], NULL);
     if (!path) return xr_bool(false);
 
     // Use nftw to recursively traverse and remove
@@ -555,7 +549,7 @@ static XrValue io_removeAll(XrayIsolate *X, XrValue *args, int argc) {
 static XrValue io_chmod(XrayIsolate *X, XrValue *args, int argc) {
     (void)X;
     if (argc < 2) return xr_bool(false);
-    const char *path = get_string_arg(args[0]);
+    const char *path = xrs_string_arg(args[0], NULL);
     if (!path) return xr_bool(false);
     if (!XR_IS_INT(args[1])) return xr_bool(false);
 
@@ -567,7 +561,7 @@ static XrValue io_chmod(XrayIsolate *X, XrValue *args, int argc) {
 static XrValue io_touch(XrayIsolate *X, XrValue *args, int argc) {
     (void)X;
     if (argc < 1) return xr_bool(false);
-    const char *path = get_string_arg(args[0]);
+    const char *path = xrs_string_arg(args[0], NULL);
     if (!path) return xr_bool(false);
 
     // Try to update timestamp
@@ -584,8 +578,8 @@ static XrValue io_touch(XrayIsolate *X, XrValue *args, int argc) {
 static XrValue io_symlink(XrayIsolate *X, XrValue *args, int argc) {
     (void)X;
     if (argc < 2) return xr_bool(false);
-    const char *target = get_string_arg(args[0]);
-    const char *path = get_string_arg(args[1]);
+    const char *target = xrs_string_arg(args[0], NULL);
+    const char *path = xrs_string_arg(args[1], NULL);
     if (!target || !path) return xr_bool(false);
 
     return xr_bool(symlink(target, path) == 0);
@@ -594,25 +588,25 @@ static XrValue io_symlink(XrayIsolate *X, XrValue *args, int argc) {
 // readlink(path) - Read symbolic link target
 static XrValue io_readlink(XrayIsolate *X, XrValue *args, int argc) {
     if (argc < 1) return xr_null();
-    const char *path = get_string_arg(args[0]);
+    const char *path = xrs_string_arg(args[0], NULL);
     if (!path) return xr_null();
 
     char buf[PATH_MAX];
     ssize_t len = readlink(path, buf, sizeof(buf) - 1);
     if (len < 0) return xr_null();
     buf[len] = '\0';
-    return make_string(X, buf);
+    return xrs_string_value_c(X, buf);
 }
 
 // realpath(path) - Get resolved absolute path
 static XrValue io_realpath(XrayIsolate *X, XrValue *args, int argc) {
     if (argc < 1) return xr_null();
-    const char *path = get_string_arg(args[0]);
+    const char *path = xrs_string_arg(args[0], NULL);
     if (!path) return xr_null();
 
     char resolved[PATH_MAX];
     if (realpath(path, resolved) == NULL) return xr_null();
-    return make_string(X, resolved);
+    return xrs_string_value_c(X, resolved);
 }
 
 // Determine the directory used for xray-generated temporary entries. Honours
@@ -641,7 +635,7 @@ static XrValue io_tempFile(XrayIsolate *X, XrValue *args, int argc) {
     int fd = mkstemp(tpl);
     if (fd < 0) return xr_null();
     close(fd);
-    return make_string(X, tpl);
+    return xrs_string_value_c(X, tpl);
 }
 
 // tempDir() - Create temporary directory, return path
@@ -652,7 +646,7 @@ static XrValue io_tempDir(XrayIsolate *X, XrValue *args, int argc) {
     int n = snprintf(tpl, sizeof(tpl), "%s/xray_XXXXXX", io_tempdir_root());
     if (n <= 0 || n >= (int)sizeof(tpl)) return xr_null();
     if (mkdtemp(tpl) == NULL) return xr_null();
-    return make_string(X, tpl);
+    return xrs_string_value_c(X, tpl);
 }
 
 // readDirRecursive helper struct
@@ -691,7 +685,7 @@ static void read_dir_recursive_impl(ReadDirCtx *ctx, const char *path, int depth
         // Add relative path
         const char *relpath = fullpath + ctx->base_len;
         if (*relpath == '/') relpath++;
-        XrValue name = make_string(ctx->X, relpath);
+        XrValue name = xrs_string_value_c(ctx->X, relpath);
         xr_array_push(ctx->arr, name);
 
         // Recursively enter real subdirectories only (lstat never follows
@@ -709,7 +703,7 @@ static void read_dir_recursive_impl(ReadDirCtx *ctx, const char *path, int depth
 // readDirRecursive(path) - Recursively read directory
 static XrValue io_readDirRecursive(XrayIsolate *X, XrValue *args, int argc) {
     if (argc < 1) return xr_null();
-    const char *path = get_string_arg(args[0]);
+    const char *path = xrs_string_arg(args[0], NULL);
     if (!path) return xr_null();
     XR_DCHECK(strlen(path) < PATH_MAX, "io_readDirRecursive: path within bounds");
 

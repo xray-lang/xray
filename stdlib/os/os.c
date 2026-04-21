@@ -70,8 +70,6 @@ extern XrValue xr_value_from_array(XrArray *arr);
 #define os_chdir_impl(path)          chdir(path)
 #endif
 
-/* ========== Helper Functions ========== */
-
 /* ========== Environment Variables ========== */
 
 // getenv(name) - Get environment variable
@@ -83,7 +81,7 @@ static XrValue os_getenv(XrayIsolate *X, XrValue *args, int argc) {
     const char *value = getenv(name);
     if (!value) return xr_null();
 
-    return make_string(X, value);
+    return xrs_string_value_c(X, value);
 }
 
 // setenv(name, value) - Set environment variable
@@ -92,7 +90,7 @@ static XrValue os_setenv(XrayIsolate *X, XrValue *args, int argc) {
     if (argc < 2) return xr_bool(false);
 
     const char *name = xrs_string_arg(args[0], NULL);
-    const char *value = xrs_string_arg(args[1]);
+    const char *value = xrs_string_arg(args[1], NULL);
     if (!name || !value) return xr_bool(false);
 
     int result = os_setenv_impl(name, value);
@@ -128,7 +126,7 @@ static XrValue os_environ(XrayIsolate *X, XrValue *args, int argc) {
         // Directly intern with length — no temporary allocation needed
         XrString *key_str = xr_string_intern(X, *env, name_len, 0);
         XrValue key = xr_string_value(key_str);
-        XrValue val = make_string(X, value);
+        XrValue val = xrs_string_value_c(X, value);
         xr_map_set(map, key, val);
     }
 
@@ -164,7 +162,7 @@ static XrValue os_getcwd(XrayIsolate *X, XrValue *args, int argc) {
     if (getcwd(buf, sizeof(buf)) == NULL) {
         return xr_null();
     }
-    return make_string(X, buf);
+    return xrs_string_value_c(X, buf);
 }
 
 // chdir(path) - Change working directory
@@ -198,7 +196,7 @@ static XrValue os_hostname(XrayIsolate *X, XrValue *args, int argc) {
         return xr_null();
     }
 #endif
-    return make_string(X, buf);
+    return xrs_string_value_c(X, buf);
 }
 
 // tmpdir() - Get temporary directory
@@ -217,7 +215,7 @@ static XrValue os_tmpdir(XrayIsolate *X, XrValue *args, int argc) {
 #endif
     }
 
-    return make_string(X, tmpdir);
+    return xrs_string_value_c(X, tmpdir);
 }
 
 /* ========== User Information (P1) ========== */
@@ -229,12 +227,12 @@ static XrValue os_username(XrayIsolate *X, XrValue *args, int argc) {
 #ifdef XR_PLATFORM_WINDOWS
     char buf[256];
     DWORD size = sizeof(buf);
-    if (GetUserNameA(buf, &size)) return make_string(X, buf);
+    if (GetUserNameA(buf, &size)) return xrs_string_value_c(X, buf);
     return xr_null();
 #else
     struct passwd *pw = getpwuid(getuid());
     if (!pw) return xr_null();
-    return make_string(X, pw->pw_name);
+    return xrs_string_value_c(X, pw->pw_name);
 #endif
 }
 
@@ -245,13 +243,13 @@ static XrValue os_homedir(XrayIsolate *X, XrValue *args, int argc) {
     const char *home = getenv("HOME");
 #ifdef XR_PLATFORM_WINDOWS
     if (!home) home = getenv("USERPROFILE");
-    if (home) return make_string(X, home);
+    if (home) return xrs_string_value_c(X, home);
     return xr_null();
 #else
-    if (home) return make_string(X, home);
+    if (home) return xrs_string_value_c(X, home);
     struct passwd *pw = getpwuid(getuid());
     if (!pw) return xr_null();
-    return make_string(X, pw->pw_dir);
+    return xrs_string_value_c(X, pw->pw_dir);
 #endif
 }
 
@@ -511,9 +509,9 @@ static XrValue os_exec(XrayIsolate *X, XrValue *args, int argc) {
     }
 
     XrMap *map = xr_map_new(xr_current_coro(X));
-    xr_map_set(map, make_string(X, "stdout"), make_string(X, output));
-    xr_map_set(map, make_string(X, "stderr"), make_string(X, ""));
-    xr_map_set(map, make_string(X, "exitCode"), xr_int(exit_code));
+    xr_map_set(map, xrs_string_value_c(X, "stdout"), xrs_string_value_c(X, output));
+    xr_map_set(map, xrs_string_value_c(X, "stderr"), xrs_string_value_c(X, ""));
+    xr_map_set(map, xrs_string_value_c(X, "exitCode"), xr_int(exit_code));
     xr_free(output);
     return xr_value_from_map(map);
 #else
@@ -558,9 +556,9 @@ static XrValue os_exec(XrayIsolate *X, XrValue *args, int argc) {
     int exit_code = WIFEXITED(status) ? WEXITSTATUS(status) : -1;
 
     XrMap *map = xr_map_new(xr_current_coro(X));
-    xr_map_set(map, make_string(X, "stdout"), make_string(X, stdout_buf ? stdout_buf : ""));
-    xr_map_set(map, make_string(X, "stderr"), make_string(X, stderr_buf ? stderr_buf : ""));
-    xr_map_set(map, make_string(X, "exitCode"), xr_int(exit_code));
+    xr_map_set(map, xrs_string_value_c(X, "stdout"), xrs_string_value_c(X, stdout_buf ? stdout_buf : ""));
+    xr_map_set(map, xrs_string_value_c(X, "stderr"), xrs_string_value_c(X, stderr_buf ? stderr_buf : ""));
+    xr_map_set(map, xrs_string_value_c(X, "exitCode"), xr_int(exit_code));
 
     xr_free(stdout_buf);
     xr_free(stderr_buf);
@@ -687,15 +685,15 @@ XrModule* xr_load_module_os(XrayIsolate *isolate) {
     XRS_EXPORT(mod, isolate, "exec", os_exec);
 
     // 3. Add constants
-    xr_module_add_export(isolate, mod, "platform", make_string(isolate, get_platform()));
-    xr_module_add_export(isolate, mod, "arch", make_string(isolate, get_arch()));
+    xr_module_add_export(isolate, mod, "platform", xrs_string_value_c(isolate, get_platform()));
+    xr_module_add_export(isolate, mod, "arch", xrs_string_value_c(isolate, get_arch()));
 
 #ifdef _WIN32
-    xr_module_add_export(isolate, mod, "sep", make_string(isolate, "\\"));
-    xr_module_add_export(isolate, mod, "eol", make_string(isolate, "\r\n"));
+    xr_module_add_export(isolate, mod, "sep", xrs_string_value_c(isolate, "\\"));
+    xr_module_add_export(isolate, mod, "eol", xrs_string_value_c(isolate, "\r\n"));
 #else
-    xr_module_add_export(isolate, mod, "sep", make_string(isolate, "/"));
-    xr_module_add_export(isolate, mod, "eol", make_string(isolate, "\n"));
+    xr_module_add_export(isolate, mod, "sep", xrs_string_value_c(isolate, "/"));
+    xr_module_add_export(isolate, mod, "eol", xrs_string_value_c(isolate, "\n"));
 #endif
 
     // 4. Mark as loaded
