@@ -13,6 +13,7 @@
  *   - Timeout control
  */
 
+#include "../../src/base/xmalloc.h"
 #include "http_client.h"
 #include "http_parser.h"
 #include "../../include/xray_platform.h"
@@ -63,12 +64,12 @@ int xr_http_url_parse(const char *url, XrHttpUrl *out) {
     const char *scheme_end = strstr(p, "://");
     if (!scheme_end) {
         // Default http
-        out->scheme = strdup("http");
+        out->scheme = xr_strdup("http");
         out->is_https = false;
         out->port = XR_HTTP_DEFAULT_PORT;
     } else {
         int scheme_len = (int)(scheme_end - p);
-        out->scheme = (char*)malloc(scheme_len + 1);
+        out->scheme = (char*)xr_malloc(scheme_len + 1);
         memcpy(out->scheme, p, scheme_len);
         out->scheme[scheme_len] = '\0';
 
@@ -156,7 +157,7 @@ int xr_http_url_parse(const char *url, XrHttpUrl *out) {
         return -1;
     }
 
-    out->host = (char*)malloc(host_len + 1);
+    out->host = (char*)xr_malloc(host_len + 1);
     memcpy(out->host, host_start, host_len);
     out->host[host_len] = '\0';
 
@@ -184,9 +185,9 @@ int xr_http_url_parse(const char *url, XrHttpUrl *out) {
 
     // Parse path (including query string)
     if (*p) {
-        out->path = strdup(p);
+        out->path = xr_strdup(p);
     } else {
-        out->path = strdup("/");
+        out->path = xr_strdup("/");
     }
 
     return 0;
@@ -194,9 +195,9 @@ int xr_http_url_parse(const char *url, XrHttpUrl *out) {
 
 void xr_http_url_free(XrHttpUrl *url) {
     if (!url) return;
-    if (url->scheme) { free(url->scheme); url->scheme = NULL; }
-    if (url->host) { free(url->host); url->host = NULL; }
-    if (url->path) { free(url->path); url->path = NULL; }
+    if (url->scheme) { xr_free(url->scheme); url->scheme = NULL; }
+    if (url->host) { xr_free(url->host); url->host = NULL; }
+    if (url->path) { xr_free(url->path); url->path = NULL; }
 }
 
 /* ========== Request Config Initialization ========== */
@@ -235,17 +236,17 @@ const char* xr_http_error_string(XrHttpError err) {
 
 void xr_http_result_free(XrHttpResult *result) {
     if (!result) return;
-    if (result->status_text) { free(result->status_text); result->status_text = NULL; }
+    if (result->status_text) { xr_free(result->status_text); result->status_text = NULL; }
     if (result->headers) {
         for (int i = 0; i < result->header_count; i++) {
-            if (result->headers[i].name) free((void*)result->headers[i].name);
-            if (result->headers[i].value) free((void*)result->headers[i].value);
+            if (result->headers[i].name) xr_free((void*)result->headers[i].name);
+            if (result->headers[i].value) xr_free((void*)result->headers[i].value);
         }
-        free(result->headers);
+        xr_free(result->headers);
         result->headers = NULL;
     }
-    if (result->body) { free(result->body); result->body = NULL; }
-    if (result->error_msg) { free(result->error_msg); result->error_msg = NULL; }
+    if (result->body) { xr_free(result->body); result->body = NULL; }
+    if (result->error_msg) { xr_free(result->error_msg); result->error_msg = NULL; }
     // Clean up stream resources if caller forgot to close
     if (result->_stream_conn || result->_stream_buf) {
         xr_http_stream_close(result);
@@ -268,7 +269,7 @@ static char* build_request(XrayIsolate *isolate,
         buf_size += config->headers[i].name_len + config->headers[i].value_len + 4;
     }
 
-    char *buf = (char*)malloc(buf_size);
+    char *buf = (char*)xr_malloc(buf_size);
     if (!buf) return NULL;
 
     char *p = buf;
@@ -366,7 +367,7 @@ static char* build_request(XrayIsolate *isolate,
             char *cookie_header = xr_cookie_jar_get_header(jar, url->host, url->path, url->is_https);
             if (cookie_header) {
                 p += sprintf(p, "Cookie: %s\r\n", cookie_header);
-                free(cookie_header);
+                xr_free(cookie_header);
             }
         }
     }
@@ -390,7 +391,7 @@ static char* get_redirect_location(XrHttpResult *result) {
     for (int i = 0; i < result->header_count; i++) {
         if (result->headers[i].name_len == 8 &&
             strncasecmp(result->headers[i].name, "Location", 8) == 0) {
-            return strdup(result->headers[i].value);
+            return xr_strdup(result->headers[i].value);
         }
     }
     return NULL;
@@ -420,7 +421,7 @@ XrHttpResult xr_http_request(XrayIsolate *X, const XrHttpRequestConfig *config) 
     bool follow_redirects = config->follow_redirects;
     int max_redirects = config->max_redirects > 0 ? config->max_redirects : 10;
 
-    char *current_url = strdup(config->url);
+    char *current_url = xr_strdup(config->url);
     int redirect_count = 0;
 
     while (current_url) {
@@ -441,25 +442,25 @@ XrHttpResult xr_http_request(XrayIsolate *X, const XrHttpRequestConfig *config) 
                     XrHttpUrl parsed;
                     if (xr_http_url_parse(current_url, &parsed) == 0) {
                         size_t len = strlen(parsed.host) + strlen(location) + 16;
-                        new_url = (char*)malloc(len);
+                        new_url = (char*)xr_malloc(len);
                         snprintf(new_url, len, "%s://%s%s",
                                  parsed.is_https ? "https" : "http",
                                  parsed.host, location);
                         xr_http_url_free(&parsed);
                     }
-                    free(location);
+                    xr_free(location);
                 } else if (strncmp(location, "http://", 7) == 0 ||
                            strncmp(location, "https://", 8) == 0) {
                     // Absolute URL
                     new_url = location;
                 } else {
-                    free(location);
+                    xr_free(location);
                 }
 
                 if (new_url) {
                     // Free current result, continue redirect
                     xr_http_result_free(&result);
-                    free(current_url);
+                    xr_free(current_url);
                     current_url = new_url;
                     redirect_count++;
 
@@ -479,7 +480,7 @@ XrHttpResult xr_http_request(XrayIsolate *X, const XrHttpRequestConfig *config) 
         break;
     }
 
-    free(current_url);
+    xr_free(current_url);
     return result;
 }
 
@@ -492,7 +493,7 @@ static XrHttpResult xr_http_request_internal(XrayIsolate *X, const XrHttpRequest
     XrHttpUrl url;
     if (xr_http_url_parse(url_str, &url) < 0) {
         result.error = XR_HTTP_ERR_URL_PARSE;
-        result.error_msg = strdup("Invalid URL");
+        result.error_msg = xr_strdup("Invalid URL");
         return result;
     }
 
@@ -508,7 +509,7 @@ static XrHttpResult xr_http_request_internal(XrayIsolate *X, const XrHttpRequest
     pool = http_client_pool(X);
     if (!pool) {
         result.error = XR_HTTP_ERR_MEMORY;
-        result.error_msg = strdup("HTTP context unavailable");
+        result.error_msg = xr_strdup("HTTP context unavailable");
         goto cleanup;
     }
 
@@ -516,7 +517,7 @@ static XrHttpResult xr_http_request_internal(XrayIsolate *X, const XrHttpRequest
     pooled = xr_conn_pool_get(pool, url.host, (uint16_t)url.port, url.is_https);
     if (!pooled) {
         result.error = XR_HTTP_ERR_CONNECT;
-        result.error_msg = strdup("Connection failed");
+        result.error_msg = xr_strdup("Connection failed");
         goto cleanup;
     }
 
@@ -526,7 +527,7 @@ static XrHttpResult xr_http_request_internal(XrayIsolate *X, const XrHttpRequest
         request_buf = build_request(X, config, &url, &request_len);
         if (!request_buf) {
             result.error = XR_HTTP_ERR_MEMORY;
-            result.error_msg = strdup("Memory allocation failed");
+            result.error_msg = xr_strdup("Memory allocation failed");
             goto cleanup;
         }
 
@@ -536,7 +537,7 @@ static XrHttpResult xr_http_request_internal(XrayIsolate *X, const XrHttpRequest
             int n = xr_pooled_conn_write(pooled, request_buf + sent, request_len - sent);
             if (n <= 0) {
                 result.error = XR_HTTP_ERR_SEND;
-                result.error_msg = strdup("Send failed");
+                result.error_msg = xr_strdup("Send failed");
                 goto cleanup;
             }
             sent += n;
@@ -547,7 +548,7 @@ static XrHttpResult xr_http_request_internal(XrayIsolate *X, const XrHttpRequest
     recv_buf = xr_netbuf_acquire(XR_HTTP_RECV_BUFFER_SIZE);
     if (!recv_buf) {
         result.error = XR_HTTP_ERR_MEMORY;
-        result.error_msg = strdup("Memory allocation failed");
+        result.error_msg = xr_strdup("Memory allocation failed");
         goto cleanup;
     }
 
@@ -561,12 +562,12 @@ static XrHttpResult xr_http_request_internal(XrayIsolate *X, const XrHttpRequest
         if (xr_netbuf_available(recv_buf) < XR_HTTP_RECV_BUFFER_SIZE) {
             if (recv_buf->capacity > 100 * 1024 * 1024) {  // 100MB limit
                 result.error = XR_HTTP_ERR_TOO_LARGE;
-                result.error_msg = strdup("Response too large");
+                result.error_msg = xr_strdup("Response too large");
                 goto cleanup;
             }
             if (!xr_netbuf_reserve(recv_buf, XR_HTTP_RECV_BUFFER_SIZE)) {
                 result.error = XR_HTTP_ERR_MEMORY;
-                result.error_msg = strdup("Memory allocation failed");
+                result.error_msg = xr_strdup("Memory allocation failed");
                 goto cleanup;
             }
         }
@@ -577,7 +578,7 @@ static XrHttpResult xr_http_request_internal(XrayIsolate *X, const XrHttpRequest
                                      avail > 0 ? avail - 1 : 0);
         if (n < 0) {
             result.error = XR_HTTP_ERR_RECV;
-            result.error_msg = strdup("Receive failed");
+            result.error_msg = xr_strdup("Receive failed");
             goto cleanup;
         }
 
@@ -598,22 +599,22 @@ static XrHttpResult xr_http_request_internal(XrayIsolate *X, const XrHttpRequest
             if (config->stream) {
                 result.status_code = resp.status_code;
                 if (resp.status_text && resp.status_text_len > 0) {
-                    result.status_text = (char *)malloc(resp.status_text_len + 1);
+                    result.status_text = (char *)xr_malloc(resp.status_text_len + 1);
                     memcpy(result.status_text, resp.status_text, resp.status_text_len);
                     result.status_text[resp.status_text_len] = '\0';
                 }
                 // Copy headers
                 if (resp.header_count > 0) {
-                    result.headers = (XrHttpHeader *)malloc(sizeof(XrHttpHeader) * resp.header_count);
+                    result.headers = (XrHttpHeader *)xr_malloc(sizeof(XrHttpHeader) * resp.header_count);
                     result.header_count = resp.header_count;
                     for (size_t i = 0; i < resp.header_count; i++) {
                         XrHttpHeader *src = &resp.headers[i];
                         XrHttpHeader *dst = &result.headers[i];
-                        dst->name = (char *)malloc(src->name_len + 1);
+                        dst->name = (char *)xr_malloc(src->name_len + 1);
                         memcpy((void *)dst->name, src->name, src->name_len);
                         ((char *)dst->name)[src->name_len] = '\0';
                         dst->name_len = src->name_len;
-                        dst->value = (char *)malloc(src->value_len + 1);
+                        dst->value = (char *)xr_malloc(src->value_len + 1);
                         memcpy((void *)dst->value, src->value, src->value_len);
                         ((char *)dst->value)[src->value_len] = '\0';
                         dst->value_len = src->value_len;
@@ -649,7 +650,7 @@ static XrHttpResult xr_http_request_internal(XrayIsolate *X, const XrHttpRequest
             }
         } else if (parse_result == XR_HTTP_PARSE_ERROR) {
             result.error = XR_HTTP_ERR_PARSE;
-            result.error_msg = strdup("Response parse error");
+            result.error_msg = xr_strdup("Response parse error");
             goto cleanup;
         }
     }
@@ -659,7 +660,7 @@ static XrHttpResult xr_http_request_internal(XrayIsolate *X, const XrHttpRequest
                                                              recv_buf->bytes, recv_buf->size);
     if (parse_result == XR_HTTP_PARSE_ERROR) {
         result.error = XR_HTTP_ERR_PARSE;
-        result.error_msg = strdup("Response parse error");
+        result.error_msg = xr_strdup("Response parse error");
         goto cleanup;
     }
 
@@ -670,14 +671,14 @@ static XrHttpResult xr_http_request_internal(XrayIsolate *X, const XrHttpRequest
     result.status_code = resp.status_code;
 
     if (resp.status_text && resp.status_text_len > 0) {
-        result.status_text = (char*)malloc(resp.status_text_len + 1);
+        result.status_text = (char*)xr_malloc(resp.status_text_len + 1);
         memcpy(result.status_text, resp.status_text, resp.status_text_len);
         result.status_text[resp.status_text_len] = '\0';
     }
 
     // Copy Headers and extract Set-Cookie
     if (resp.header_count > 0) {
-        result.headers = (XrHttpHeader*)malloc(sizeof(XrHttpHeader) * resp.header_count);
+        result.headers = (XrHttpHeader*)xr_malloc(sizeof(XrHttpHeader) * resp.header_count);
         result.header_count = resp.header_count;
 
         // Collect Set-Cookie headers
@@ -688,12 +689,12 @@ static XrHttpResult xr_http_request_internal(XrayIsolate *X, const XrHttpRequest
             XrHttpHeader *src = &resp.headers[i];
             XrHttpHeader *dst = &result.headers[i];
 
-            dst->name = (char*)malloc(src->name_len + 1);
+            dst->name = (char*)xr_malloc(src->name_len + 1);
             memcpy((void*)dst->name, src->name, src->name_len);
             ((char*)dst->name)[src->name_len] = '\0';
             dst->name_len = src->name_len;
 
-            dst->value = (char*)malloc(src->value_len + 1);
+            dst->value = (char*)xr_malloc(src->value_len + 1);
             memcpy((void*)dst->value, src->value, src->value_len);
             ((char*)dst->value)[src->value_len] = '\0';
             dst->value_len = src->value_len;
@@ -731,7 +732,7 @@ static XrHttpResult xr_http_request_internal(XrayIsolate *X, const XrHttpRequest
     // Handle chunked encoding
     char *decoded_body = NULL;
     if (resp.chunked && raw_body && raw_body_len > 0) {
-        decoded_body = (char*)malloc(raw_body_len + 1);
+        decoded_body = (char*)xr_malloc(raw_body_len + 1);
         memcpy(decoded_body, raw_body, raw_body_len);
 
         XrChunkedDecoder decoder;
@@ -746,7 +747,7 @@ static XrHttpResult xr_http_request_internal(XrayIsolate *X, const XrHttpRequest
             raw_body = decoded_body;
             raw_body_len = decoded_len;
         } else {
-            free(decoded_body);
+            xr_free(decoded_body);
             decoded_body = NULL;
         }
     }
@@ -789,14 +790,14 @@ static XrHttpResult xr_http_request_internal(XrayIsolate *X, const XrHttpRequest
                 result.body_len = decompressed_len;
             } else {
                 // Decompress failed, use original data
-                result.body = (char*)malloc(raw_body_len + 1);
+                result.body = (char*)xr_malloc(raw_body_len + 1);
                 memcpy(result.body, raw_body, raw_body_len);
                 result.body[raw_body_len] = '\0';
                 result.body_len = raw_body_len;
             }
         } else {
             // No compression, copy directly
-            result.body = (char*)malloc(raw_body_len + 1);
+            result.body = (char*)xr_malloc(raw_body_len + 1);
             memcpy(result.body, raw_body, raw_body_len);
             result.body[raw_body_len] = '\0';
             result.body_len = raw_body_len;
@@ -806,7 +807,7 @@ static XrHttpResult xr_http_request_internal(XrayIsolate *X, const XrHttpRequest
     result.error = XR_HTTP_OK;
 
     // Free chunked decode buffer
-    if (decoded_body) free(decoded_body);
+    if (decoded_body) xr_free(decoded_body);
 
 cleanup:
     // Return connection to pool (or close if error/no keep-alive). `pool` is
@@ -819,7 +820,7 @@ cleanup:
             xr_conn_pool_close(pool, pooled);
         }
     }
-    if (request_buf) free(request_buf);
+    if (request_buf) xr_free(request_buf);
     xr_netbuf_release(recv_buf);
     xr_http_url_free(&url);
 
@@ -891,7 +892,7 @@ XrHttpResult xr_http_delete(XrayIsolate *X, const char *url) {
 /* ========== Request Context Implementation ========== */
 
 XrHttpReqContext* xr_http_context_new(void) {
-    XrHttpReqContext *ctx = (XrHttpReqContext*)calloc(1, sizeof(XrHttpReqContext));
+    XrHttpReqContext *ctx = (XrHttpReqContext*)xr_calloc(1, sizeof(XrHttpReqContext));
     return ctx;
 }
 
@@ -908,7 +909,7 @@ bool xr_http_context_is_cancelled(XrHttpReqContext *ctx) {
 }
 
 void xr_http_context_free(XrHttpReqContext *ctx) {
-    free(ctx);
+    xr_free(ctx);
 }
 
 /* ========== Streaming Response API ========== */

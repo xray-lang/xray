@@ -205,7 +205,7 @@ static HttpRawResponse format_response_raw(int status, const char *content_type,
     int header_len = build_response_header(header, status, content_type, body_len);
 
     resp.len = header_len + body_len;
-    resp.data = (char *)malloc(resp.len);
+    resp.data = (char *)xr_malloc(resp.len);
     if (!resp.data) { resp.len = 0; return resp; }
 
     memcpy(resp.data, header, header_len);
@@ -236,7 +236,7 @@ static XrValue format_response(XrayIsolate *X, int status, const char *content_t
     HttpRawResponse raw = format_response_raw(status, content_type, body, body_len);
     if (!raw.data) return xr_null();
     XrString *str = xr_string_new(X, raw.data, raw.len);
-    free(raw.data);
+    xr_free(raw.data);
     return xr_string_value(str);
 }
 
@@ -400,8 +400,8 @@ typedef struct HttpConnCtx {
 static XrCFuncResult http_conn_cleanup(HttpConnCtx *ctx) {
     int fd = ctx->fd;
     if (ctx->arena_inited) xr_arena_destroy(&ctx->req_arena);
-    free(ctx->read_buf);
-    free(ctx->response_data);
+    xr_free(ctx->read_buf);
+    xr_free(ctx->response_data);
     if (ctx->chunk_buf) xr_netbuf_release(ctx->chunk_buf);
     {
         XrRuntime *rt = ctx->runtime;
@@ -419,7 +419,7 @@ static XrCFuncResult http_conn_cleanup(HttpConnCtx *ctx) {
     }
     close(fd);
     if (ctx->http_ctx) atomic_fetch_sub(&ctx->http_ctx->current_conns, 1);
-    free(ctx);
+    xr_free(ctx);
     return XR_CFUNC_DONE;
 }
 
@@ -769,7 +769,7 @@ static XrCFuncResult http_conn_handler_done(XrayIsolate *X, int status,
     HttpConnCtx *ctx = (HttpConnCtx *)user_ctx;
     XrValue closure_result = xr_get_closure_result(X);
 
-    free(ctx->response_data);
+    xr_free(ctx->response_data);
     HttpRawResponse r = process_handler_result_raw(X, closure_result);
     ctx->response_data = r.data;
     if (!r.data) return http_conn_cleanup(ctx);
@@ -818,7 +818,7 @@ static XrCFuncResult http_conn_init(XrayIsolate *X, XrValue *args,
     int fd = (int)XR_TO_INT(args[0]);
     XrHttpContext *hctx = (XrHttpContext *)XR_TO_PTR(args[1]);
 
-    HttpConnCtx *ctx = (HttpConnCtx *)calloc(1, sizeof(HttpConnCtx));
+    HttpConnCtx *ctx = (HttpConnCtx *)xr_calloc(1, sizeof(HttpConnCtx));
     if (!ctx) { close(fd); return XR_CFUNC_DONE; }
 
     ctx->X = X;
@@ -829,11 +829,11 @@ static XrCFuncResult http_conn_init(XrayIsolate *X, XrValue *args,
     ctx->max_requests = atomic_load(&hctx->max_requests_per_conn);
     ctx->read_timeout_ms = atomic_load(&hctx->read_timeout_ms);
 
-    ctx->read_buf = (char *)malloc(CONN_READ_BUF_SIZE);
+    ctx->read_buf = (char *)xr_malloc(CONN_READ_BUF_SIZE);
     if (!ctx->read_buf) {
         close(fd);
         if (hctx) atomic_fetch_sub(&hctx->current_conns, 1);
-        free(ctx);
+        xr_free(ctx);
         return XR_CFUNC_DONE;
     }
 
@@ -858,7 +858,7 @@ static XrCFuncResult http_conn_loop(XrayIsolate *X, int status,
     if (ctx->arena_inited && ctx->request_count > 0) {
         xr_arena_reset(&ctx->req_arena);
     }
-    free(ctx->response_data);
+    xr_free(ctx->response_data);
     ctx->response_data = NULL;
 
     // Shift leftover data from previous request
@@ -949,7 +949,7 @@ static XrCFuncResult http_listen_init(XrayIsolate *X, XrValue *args,
     (void)result;
     if (argc < 2 || !XR_IS_INT(args[0])) return XR_CFUNC_DONE;
 
-    HttpListenCtx *ctx = (HttpListenCtx *)calloc(1, sizeof(HttpListenCtx));
+    HttpListenCtx *ctx = (HttpListenCtx *)xr_calloc(1, sizeof(HttpListenCtx));
     if (!ctx) return XR_CFUNC_DONE;
 
     ctx->X = X;
@@ -971,7 +971,7 @@ static XrCFuncResult http_listen_cont(XrayIsolate *X, int status,
 
     if (!ctx || !ctx->server || !ctx->server->running ||
         status != XR_RESUME_IO_READY) {
-        free(lctx);
+        xr_free(lctx);
         return XR_CFUNC_DONE;
     }
 

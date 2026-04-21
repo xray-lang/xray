@@ -11,6 +11,7 @@
  *   RFC 6265 compliant cookie parsing and storage
  */
 
+#include "../../src/base/xmalloc.h"
 #include "http_cookie.h"
 #include "http.h"
 #include <stdio.h>
@@ -28,7 +29,7 @@ static const char* skip_whitespace(const char *s) {
 
 // Copy string (with length)
 static char* strdup_n(const char *s, size_t len) {
-    char *copy = (char*)malloc(len + 1);
+    char *copy = (char*)xr_malloc(len + 1);
     if (copy) {
         memcpy(copy, s, len);
         copy[len] = '\0';
@@ -128,7 +129,7 @@ XrHttpCookie* xr_cookie_parse(const char *set_cookie_header,
     size_t header_len = strnlen(set_cookie_header, XR_COOKIE_MAX_INPUT_LEN + 1);
     if (header_len > XR_COOKIE_MAX_INPUT_LEN) return NULL;
 
-    XrHttpCookie *cookie = (XrHttpCookie*)calloc(1, sizeof(XrHttpCookie));
+    XrHttpCookie *cookie = (XrHttpCookie*)xr_calloc(1, sizeof(XrHttpCookie));
     if (!cookie) return NULL;
 
     const char *p = set_cookie_header;
@@ -136,7 +137,7 @@ XrHttpCookie* xr_cookie_parse(const char *set_cookie_header,
     // Parse name=value
     const char *eq = strchr(p, '=');
     if (!eq) {
-        free(cookie);
+        xr_free(cookie);
         return NULL;
     }
 
@@ -177,8 +178,8 @@ XrHttpCookie* xr_cookie_parse(const char *set_cookie_header,
         if (strncasecmp(attr_start, "Domain", attr_len) == 0 && attr_value) {
             // Remove leading dot
             if (attr_value[0] == '.') {
-                cookie->domain = strdup(attr_value + 1);
-                free(attr_value);
+                cookie->domain = xr_strdup(attr_value + 1);
+                xr_free(attr_value);
             } else {
                 cookie->domain = attr_value;
             }
@@ -186,17 +187,17 @@ XrHttpCookie* xr_cookie_parse(const char *set_cookie_header,
             cookie->path = attr_value;
         } else if (strncasecmp(attr_start, "Expires", attr_len) == 0 && attr_value) {
             cookie->expires = parse_cookie_date(attr_value);
-            free(attr_value);
+            xr_free(attr_value);
         } else if (strncasecmp(attr_start, "Max-Age", attr_len) == 0 && attr_value) {
             int max_age = atoi(attr_value);
             cookie->expires = time(NULL) + max_age;
-            free(attr_value);
+            xr_free(attr_value);
         } else if (strncasecmp(attr_start, "Secure", attr_len) == 0) {
             cookie->secure = true;
-            if (attr_value) free(attr_value);
+            if (attr_value) xr_free(attr_value);
         } else if (strncasecmp(attr_start, "HttpOnly", attr_len) == 0) {
             cookie->http_only = true;
-            if (attr_value) free(attr_value);
+            if (attr_value) xr_free(attr_value);
         } else if (strncasecmp(attr_start, "SameSite", attr_len) == 0 && attr_value) {
             // RFC 6265bis §4.1.2.7: three valid tokens — Strict / Lax /
             // None. Unknown tokens leave the field at UNSPECIFIED, which
@@ -208,15 +209,15 @@ XrHttpCookie* xr_cookie_parse(const char *set_cookie_header,
             } else if (strcasecmp(attr_value, "None") == 0) {
                 cookie->same_site = XR_SAMESITE_NONE;
             }
-            free(attr_value);
+            xr_free(attr_value);
         } else {
-            if (attr_value) free(attr_value);
+            if (attr_value) xr_free(attr_value);
         }
     }
 
     // Default domain and path
     if (!cookie->domain && request_domain) {
-        cookie->domain = strdup(request_domain);
+        cookie->domain = xr_strdup(request_domain);
     }
     if (!cookie->path) {
         if (request_path) {
@@ -225,10 +226,10 @@ XrHttpCookie* xr_cookie_parse(const char *set_cookie_header,
             if (last_slash && last_slash != request_path) {
                 cookie->path = strdup_n(request_path, last_slash - request_path);
             } else {
-                cookie->path = strdup("/");
+                cookie->path = xr_strdup("/");
             }
         } else {
-            cookie->path = strdup("/");
+            cookie->path = xr_strdup("/");
         }
     }
 
@@ -247,18 +248,18 @@ XrHttpCookie* xr_cookie_parse(const char *set_cookie_header,
 
 void xr_cookie_free(XrHttpCookie *cookie) {
     if (!cookie) return;
-    free(cookie->name);
-    free(cookie->value);
-    free(cookie->domain);
-    free(cookie->path);
-    free(cookie);
+    xr_free(cookie->name);
+    xr_free(cookie->value);
+    xr_free(cookie->domain);
+    xr_free(cookie->path);
+    xr_free(cookie);
 }
 
 char* xr_cookie_serialize(XrHttpCookie *cookie) {
     if (!cookie || !cookie->name || !cookie->value) return NULL;
 
     size_t len = strlen(cookie->name) + strlen(cookie->value) + 2;
-    char *buf = (char*)malloc(len);
+    char *buf = (char*)xr_malloc(len);
     if (buf) {
         snprintf(buf, len, "%s=%s", cookie->name, cookie->value);
     }
@@ -268,7 +269,7 @@ char* xr_cookie_serialize(XrHttpCookie *cookie) {
 /* ========== Cookie Jar ========== */
 
 XrCookieJar* xr_cookie_jar_new(void) {
-    XrCookieJar *jar = (XrCookieJar*)calloc(1, sizeof(XrCookieJar));
+    XrCookieJar *jar = (XrCookieJar*)xr_calloc(1, sizeof(XrCookieJar));
     if (jar) {
         jar->max_cookies = 300;
         jar->max_per_domain = 50;
@@ -279,7 +280,7 @@ XrCookieJar* xr_cookie_jar_new(void) {
 void xr_cookie_jar_free(XrCookieJar *jar) {
     if (!jar) return;
     xr_cookie_jar_clear(jar);
-    free(jar);
+    xr_free(jar);
 }
 
 void xr_cookie_jar_add(XrCookieJar *jar, XrHttpCookie *cookie) {
@@ -344,7 +345,7 @@ char* xr_cookie_jar_get_header(XrCookieJar *jar,
 
     // Calculate buffer size
     size_t buf_size = 1024;
-    char *buf = (char*)malloc(buf_size);
+    char *buf = (char*)xr_malloc(buf_size);
     if (!buf) return NULL;
     buf[0] = '\0';
 
@@ -385,10 +386,10 @@ char* xr_cookie_jar_get_header(XrCookieJar *jar,
             // Expand buffer
             while (pos + ser_len + 3 > buf_size) {
                 buf_size *= 2;
-                char *new_buf = (char*)realloc(buf, buf_size);
+                char *new_buf = (char*)xr_realloc(buf, buf_size);
                 if (!new_buf) {
-                    free(buf);
-                    free(serialized);
+                    xr_free(buf);
+                    xr_free(serialized);
                     return NULL;
                 }
                 buf = new_buf;
@@ -404,14 +405,14 @@ char* xr_cookie_jar_get_header(XrCookieJar *jar,
             pos += ser_len;
             buf[pos] = '\0';
 
-            free(serialized);
+            xr_free(serialized);
         }
 
         c = c->next;
     }
 
     if (pos == 0) {
-        free(buf);
+        xr_free(buf);
         return NULL;
     }
 

@@ -11,6 +11,7 @@
  *   RFC 2046 compliant multipart form data encoding
  */
 
+#include "../../src/base/xmalloc.h"
 #include "http_multipart.h"
 #include "xray_platform.h"  // xr_random_bytes (CSPRNG)
 #include <stdio.h>
@@ -33,7 +34,7 @@
 static char* generate_boundary(void) {
     static const char charset[] = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
     const size_t charset_len = sizeof(charset) - 1;  // 62
-    char *boundary = (char*)malloc(48);
+    char *boundary = (char*)xr_malloc(48);
     if (!boundary) return NULL;
 
     strcpy(boundary, "----XrayFormBoundary");
@@ -83,7 +84,7 @@ static const char* guess_mime_type(const char *filename) {
 /* ========== API Implementation ========== */
 
 XrFormData* xr_form_data_new(void) {
-    XrFormData *form = (XrFormData*)calloc(1, sizeof(XrFormData));
+    XrFormData *form = (XrFormData*)xr_calloc(1, sizeof(XrFormData));
     if (form) {
         form->boundary = generate_boundary();
         form->max_total_size = XR_FORM_DATA_DEFAULT_TOTAL_SIZE;
@@ -98,17 +99,17 @@ void xr_form_data_free(XrFormData *form) {
     XrFormField *field = form->fields;
     while (field) {
         XrFormField *next = field->next;
-        free(field->name);
-        free(field->value);
-        free(field->filename);
-        free(field->content_type);
-        free(field->file_data);
-        free(field);
+        xr_free(field->name);
+        xr_free(field->value);
+        xr_free(field->filename);
+        xr_free(field->content_type);
+        xr_free(field->file_data);
+        xr_free(field);
         field = next;
     }
 
-    free(form->boundary);
-    free(form);
+    xr_free(form->boundary);
+    xr_free(form);
 }
 
 void xr_form_data_append(XrFormData *form,
@@ -120,14 +121,14 @@ void xr_form_data_append(XrFormData *form,
     // Enforce total size limit (0 = no limit)
     if (form->max_total_size > 0 && form->total_size + value_len > form->max_total_size) return;
 
-    XrFormField *field = (XrFormField*)calloc(1, sizeof(XrFormField));
+    XrFormField *field = (XrFormField*)xr_calloc(1, sizeof(XrFormField));
     if (!field) return;
 
     field->type = XR_FORM_FIELD_TEXT;
-    field->name = strdup(name);
+    field->name = xr_strdup(name);
 
     if (value && value_len > 0) {
-        field->value = (char*)malloc(value_len + 1);
+        field->value = (char*)xr_malloc(value_len + 1);
         memcpy(field->value, value, value_len);
         field->value[value_len] = '\0';
         field->value_len = value_len;
@@ -157,15 +158,15 @@ void xr_form_data_append_file(XrFormData *form,
     if (form->max_file_size > 0 && size > form->max_file_size) return;
     if (form->max_total_size > 0 && form->total_size + size > form->max_total_size) return;
 
-    XrFormField *field = (XrFormField*)calloc(1, sizeof(XrFormField));
+    XrFormField *field = (XrFormField*)xr_calloc(1, sizeof(XrFormField));
     if (!field) return;
 
     field->type = XR_FORM_FIELD_FILE;
-    field->name = strdup(name);
-    field->filename = filename ? strdup(filename) : strdup("file");
-    field->content_type = strdup(content_type ? content_type : guess_mime_type(filename));
+    field->name = xr_strdup(name);
+    field->filename = filename ? xr_strdup(filename) : xr_strdup("file");
+    field->content_type = xr_strdup(content_type ? content_type : guess_mime_type(filename));
 
-    field->file_data = (char*)malloc(size);
+    field->file_data = (char*)xr_malloc(size);
     memcpy(field->file_data, data, size);
     field->file_size = size;
 
@@ -211,7 +212,7 @@ int xr_form_data_append_file_path(XrFormData *form,
     }
 
     // Read file content
-    char *data = (char*)malloc(size);
+    char *data = (char*)xr_malloc(size);
     if (!data) {
         fclose(fp);
         return -1;
@@ -219,7 +220,7 @@ int xr_form_data_append_file_path(XrFormData *form,
 
     if (fread(data, 1, size, fp) != (size_t)size) {
         fclose(fp);
-        free(data);
+        xr_free(data);
         return -1;
     }
     fclose(fp);
@@ -231,7 +232,7 @@ int xr_form_data_append_file_path(XrFormData *form,
 
     // Add file field
     xr_form_data_append_file(form, name, filename, NULL, data, size);
-    free(data);
+    xr_free(data);
 
     return 0;
 }
@@ -255,7 +256,7 @@ int xr_form_data_build(XrFormData *form,
         field = field->next;
     }
 
-    char *buf = (char*)malloc(buf_size);
+    char *buf = (char*)xr_malloc(buf_size);
     if (!buf) return -1;
 
     char *p = buf;
@@ -308,7 +309,7 @@ char* xr_form_data_content_type(XrFormData *form) {
     if (!form || !form->boundary) return NULL;
 
     size_t len = 64 + strlen(form->boundary);
-    char *ct = (char*)malloc(len);
+    char *ct = (char*)xr_malloc(len);
     if (ct) {
         snprintf(ct, len, "multipart/form-data; boundary=%s", form->boundary);
     }

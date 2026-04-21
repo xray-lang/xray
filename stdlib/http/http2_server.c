@@ -14,6 +14,7 @@
  *   - Windows: IOCP
  */
 
+#include "../../src/base/xmalloc.h"
 #include "http2_server.h"
 #include "http2.h"
 #include "../../include/xray_platform.h"
@@ -78,7 +79,7 @@ typedef struct XrH2FastConn {
 
 static void h2_server_conn_pool_init(XrH2Server *server, int max_conns) {
     server->conn_pool.size = max_conns;
-    server->conn_pool.conns = (XrH2FastConn*)calloc(max_conns, sizeof(XrH2FastConn));
+    server->conn_pool.conns = (XrH2FastConn*)xr_calloc(max_conns, sizeof(XrH2FastConn));
     for (int i = 0; i < max_conns; i++) {
         server->conn_pool.conns[i].fd = XR_INVALID_SOCKET;
         server->conn_pool.conns[i].state = H2_CONN_FREE;
@@ -99,7 +100,7 @@ static void h2_server_conn_pool_destroy(XrH2Server *server) {
                 xr_h2_conn_free(server->conn_pool.conns[i].h2);
             }
         }
-        free(server->conn_pool.conns);
+        xr_free(server->conn_pool.conns);
         server->conn_pool.conns = NULL;
     }
 }
@@ -450,7 +451,7 @@ XrH2Server* xr_h2_server_new(const XrH2ServerConfig *config) {
     WSAStartup(MAKEWORD(2, 2), &wsa);
 #endif
 
-    XrH2Server *server = (XrH2Server*)calloc(1, sizeof(XrH2Server));
+    XrH2Server *server = (XrH2Server*)xr_calloc(1, sizeof(XrH2Server));
     if (!server) return NULL;
 
     server->config = *config;
@@ -464,7 +465,7 @@ XrH2Server* xr_h2_server_new(const XrH2ServerConfig *config) {
     if (config->cert_file && config->key_file) {
         server->tls_ctx = xr_tls_context_new_server(config->cert_file, config->key_file);
         if (!server->tls_ctx) {
-            free(server);
+            xr_free(server);
             return NULL;
         }
         xr_tls_context_set_alpn_callback(server->tls_ctx, NULL, NULL);
@@ -495,7 +496,7 @@ void xr_h2_server_free(XrH2Server *server) {
 
     if (server->listen_fd >= 0) xr_close_socket(server->listen_fd);
 
-    free(server);
+    xr_free(server);
 
 #ifdef _WIN32
     WSACleanup();

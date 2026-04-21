@@ -11,6 +11,7 @@
  *   Implements RFC 7540 HTTP/2 protocol with HPACK header compression
  */
 
+#include "../../src/base/xmalloc.h"
 #include "http2.h"
 #include "../net/tls.h"
 #include "../../src/base/xhash.h"
@@ -344,12 +345,12 @@ static int hpack_decode_string(const uint8_t *buf, size_t buf_len,
         // Huffman-encoded. Shortest code is 5 bits, so each input byte expands
         // to at most 8/5 = 1.6 output bytes; allocate 2x for safety headroom.
         size_t max_out = (size_t)len * 2 + 1;
-        char *out = (char*)malloc(max_out);
+        char *out = (char*)xr_malloc(max_out);
         if (!out) return -1;
         size_t decoded_len = 0;
         if (hpack_decode_huffman(buf + int_len, (size_t)len,
                                  out, max_out - 1, &decoded_len) != 0) {
-            free(out);
+            xr_free(out);
             return -1;
         }
         out[decoded_len] = '\0';
@@ -357,7 +358,7 @@ static int hpack_decode_string(const uint8_t *buf, size_t buf_len,
         *str_len = decoded_len;
     } else {
         *str_len = (size_t)len;
-        *str = (char*)malloc(len + 1);
+        *str = (char*)xr_malloc(len + 1);
         if (!*str) return -1;
         memcpy(*str, buf + int_len, len);
         (*str)[len] = '\0';
@@ -377,9 +378,9 @@ void xr_hpack_free(XrHpackTable *table) {
     XrHpackEntry *entry = table->entries;
     while (entry) {
         XrHpackEntry *next = entry->next;
-        free(entry->name);
-        free(entry->value);
-        free(entry);
+        xr_free(entry->name);
+        xr_free(entry->value);
+        xr_free(entry);
         entry = next;
     }
     table->entries = NULL;
@@ -405,9 +406,9 @@ static void hpack_table_evict_one(XrHpackTable *table) {
 
     table->size -= victim->name_len + victim->value_len + 32;
     table->count--;
-    free(victim->name);
-    free(victim->value);
-    free(victim);
+    xr_free(victim->name);
+    xr_free(victim->value);
+    xr_free(victim);
 }
 
 // Add entry to dynamic table (RFC 7541 §4.4).
@@ -430,15 +431,15 @@ static void hpack_table_add(XrHpackTable *table,
     }
 
     // Create new entry
-    XrHpackEntry *entry = (XrHpackEntry*)calloc(1, sizeof(XrHpackEntry));
+    XrHpackEntry *entry = (XrHpackEntry*)xr_calloc(1, sizeof(XrHpackEntry));
     if (!entry) return;
 
-    entry->name = (char*)malloc(name_len + 1);
-    entry->value = (char*)malloc(value_len + 1);
+    entry->name = (char*)xr_malloc(name_len + 1);
+    entry->value = (char*)xr_malloc(value_len + 1);
     if (!entry->name || !entry->value) {
-        free(entry->name);
-        free(entry->value);
-        free(entry);
+        xr_free(entry->name);
+        xr_free(entry->value);
+        xr_free(entry);
         return;
     }
 
@@ -554,17 +555,17 @@ int xr_hpack_decode(XrHpackTable *table,
                 if (len < 0) return -1;
                 pos += len;
             } else if (index <= HPACK_STATIC_TABLE_SIZE) {
-                name = strdup(hpack_static_table[index].name);
+                name = xr_strdup(hpack_static_table[index].name);
                 name_len = strlen(name);
             } else {
                 XrHpackEntry *entry = hpack_table_get(table, (int)index);
                 if (!entry) return -1;
-                name = strdup(entry->name);
+                name = xr_strdup(entry->name);
                 name_len = entry->name_len;
             }
 
             len = hpack_decode_string(buf + pos, buf_len - pos, &value, &value_len);
-            if (len < 0) { free(name); return -1; }
+            if (len < 0) { xr_free(name); return -1; }
             pos += len;
 
             add_to_table = true;
@@ -573,8 +574,8 @@ int xr_hpack_decode(XrHpackTable *table,
             if (add_to_table) {
                 hpack_table_add(table, name, name_len, value, value_len);
             }
-            free(name);
-            free(value);
+            xr_free(name);
+            xr_free(value);
 
         } else if (b & 0x20) {
             // Dynamic table size update (RFC 7541 6.3)
@@ -597,22 +598,22 @@ int xr_hpack_decode(XrHpackTable *table,
                 if (len < 0) return -1;
                 pos += len;
             } else if (index <= HPACK_STATIC_TABLE_SIZE) {
-                name = strdup(hpack_static_table[index].name);
+                name = xr_strdup(hpack_static_table[index].name);
                 name_len = strlen(name);
             } else {
                 XrHpackEntry *entry = hpack_table_get(table, (int)index);
                 if (!entry) return -1;
-                name = strdup(entry->name);
+                name = xr_strdup(entry->name);
                 name_len = entry->name_len;
             }
 
             len = hpack_decode_string(buf + pos, buf_len - pos, &value, &value_len);
-            if (len < 0) { free(name); return -1; }
+            if (len < 0) { xr_free(name); return -1; }
             pos += len;
 
             if (callback) callback(name, name_len, value, value_len, user_data);
-            free(name);
-            free(value);
+            xr_free(name);
+            xr_free(value);
         }
     }
 
@@ -646,7 +647,7 @@ void xr_h2_write_frame_header(uint8_t *buf, const XrH2FrameHeader *header) {
 /* ========== HTTP/2 Connection ========== */
 
 XrH2Conn* xr_h2_conn_new_client(int fd, void *tls_conn) {
-    XrH2Conn *conn = (XrH2Conn*)calloc(1, sizeof(XrH2Conn));
+    XrH2Conn *conn = (XrH2Conn*)xr_calloc(1, sizeof(XrH2Conn));
     if (!conn) return NULL;
 
     conn->fd = fd;
@@ -670,9 +671,9 @@ XrH2Conn* xr_h2_conn_new_client(int fd, void *tls_conn) {
 
     // Allocate receive buffer
     conn->recv_cap = 16384;
-    conn->recv_buf = (char*)malloc(conn->recv_cap);
+    conn->recv_buf = (char*)xr_malloc(conn->recv_cap);
     if (!conn->recv_buf) {
-        free(conn);
+        xr_free(conn);
         return NULL;
     }
 
@@ -688,8 +689,8 @@ void xr_h2_conn_free(XrH2Conn *conn) {
     // Free stream hash table
     xr_h2_stream_hash_free(&conn->stream_hash);
 
-    free(conn->recv_buf);
-    free(conn);
+    xr_free(conn->recv_buf);
+    xr_free(conn);
 }
 
 // Send data
@@ -776,7 +777,7 @@ static inline uint32_t stream_hash_func(uint32_t stream_id, uint32_t nbuckets) {
 void xr_h2_stream_hash_init(XrH2StreamHash *hash) {
     if (!hash) return;
     hash->nbuckets = XR_H2_STREAM_HASH_INIT_CAP;
-    hash->buckets = (XrH2Stream **)calloc(hash->nbuckets,
+    hash->buckets = (XrH2Stream **)xr_calloc(hash->nbuckets,
                                            sizeof(XrH2Stream *));
     hash->count = 0;
 }
@@ -784,7 +785,7 @@ void xr_h2_stream_hash_init(XrH2StreamHash *hash) {
 // Grow the bucket array by 2x and rehash all streams.
 static void stream_hash_resize(XrH2StreamHash *hash) {
     uint32_t new_cap = hash->nbuckets * 2;
-    XrH2Stream **new_buckets = (XrH2Stream **)calloc(new_cap,
+    XrH2Stream **new_buckets = (XrH2Stream **)xr_calloc(new_cap,
                                                       sizeof(XrH2Stream *));
     if (!new_buckets) return;  // OOM: keep old table, accept degradation
 
@@ -800,7 +801,7 @@ static void stream_hash_resize(XrH2StreamHash *hash) {
         }
     }
 
-    free(hash->buckets);
+    xr_free(hash->buckets);
     hash->buckets = new_buckets;
     hash->nbuckets = new_cap;
 }
@@ -856,14 +857,14 @@ void xr_h2_stream_hash_free(XrH2StreamHash *hash) {
             while (stream) {
                 XrH2Stream *next = stream->next;
                 // Free stream resources
-                free(stream->headers_buf);
-                free(stream->data_buf);
-                free(stream->trailers_buf);
-                free(stream);
+                xr_free(stream->headers_buf);
+                xr_free(stream->data_buf);
+                xr_free(stream->trailers_buf);
+                xr_free(stream);
                 stream = next;
             }
         }
-        free(hash->buckets);
+        xr_free(hash->buckets);
         hash->buckets = NULL;
     }
     hash->nbuckets = 0;
@@ -875,7 +876,7 @@ void xr_h2_stream_hash_free(XrH2StreamHash *hash) {
 XrH2Stream* xr_h2_stream_new(XrH2Conn *conn) {
     if (!conn) return NULL;
 
-    XrH2Stream *stream = (XrH2Stream*)calloc(1, sizeof(XrH2Stream));
+    XrH2Stream *stream = (XrH2Stream*)xr_calloc(1, sizeof(XrH2Stream));
     if (!stream) return NULL;
 
     stream->id = conn->next_stream_id;
@@ -931,12 +932,12 @@ int xr_h2_recv(XrH2Conn *conn) {
     // Receive frame payload
     uint8_t *payload = NULL;
     if (header.length > 0) {
-        payload = (uint8_t*)malloc(header.length);
+        payload = (uint8_t*)xr_malloc(header.length);
         if (!payload) return -1;
 
         n = h2_recv(conn, payload, header.length);
         if (n != (int)header.length) {
-            free(payload);
+            xr_free(payload);
             return -1;
         }
     }
@@ -962,7 +963,7 @@ int xr_h2_recv(XrH2Conn *conn) {
         case XR_H2_FRAME_HEADERS: {
             XrH2Stream *stream = xr_h2_get_stream(conn, header.stream_id);
             if (!stream) {
-                stream = (XrH2Stream*)calloc(1, sizeof(XrH2Stream));
+                stream = (XrH2Stream*)xr_calloc(1, sizeof(XrH2Stream));
                 if (stream) {
                     stream->id = header.stream_id;
                     xr_h2_stream_hash_add(&conn->stream_hash, stream);
@@ -1018,7 +1019,7 @@ int xr_h2_recv(XrH2Conn *conn) {
                 // Append data to stream buffer. Use a temporary pointer so the
                 // original stream->data_buf is preserved on realloc failure.
                 size_t new_len = stream->data_len + data_len;
-                char *new_buf = (char*)realloc(stream->data_buf, new_len + 1);
+                char *new_buf = (char*)xr_realloc(stream->data_buf, new_len + 1);
                 if (!new_buf) {
                     // Propagate OOM instead of silently dropping body bytes.
                     result = -1;
@@ -1110,7 +1111,7 @@ int xr_h2_recv(XrH2Conn *conn) {
             break;
     }
 
-    free(payload);
+    xr_free(payload);
     return result;
 }
 
@@ -1168,7 +1169,7 @@ int xr_h2_recv_stream_data(XrH2Conn *conn, XrH2Stream *stream,
 
     // Copy response body
     if (out_data && stream->data_buf && stream->data_len > 0) {
-        *out_data = (char*)malloc(stream->data_len + 1);
+        *out_data = (char*)xr_malloc(stream->data_len + 1);
         if (*out_data) {
             memcpy(*out_data, stream->data_buf, stream->data_len);
             (*out_data)[stream->data_len] = '\0';
@@ -1259,7 +1260,7 @@ int xr_h2_send_window_update(XrH2Conn *conn, uint32_t stream_id, uint32_t increm
 /* ========== Additional API ========== */
 
 XrH2Conn* xr_h2_conn_new(int fd, void *tls_conn, bool is_client) {
-    XrH2Conn *conn = (XrH2Conn*)calloc(1, sizeof(XrH2Conn));
+    XrH2Conn *conn = (XrH2Conn*)xr_calloc(1, sizeof(XrH2Conn));
     if (!conn) return NULL;
 
     conn->fd = fd;
@@ -1283,11 +1284,11 @@ XrH2Conn* xr_h2_conn_new(int fd, void *tls_conn, bool is_client) {
     conn->connection_window = XR_H2_DEFAULT_INITIAL_WINDOW_SIZE;
 
     conn->recv_cap = 65536;
-    conn->recv_buf = (char*)malloc(conn->recv_cap);
+    conn->recv_buf = (char*)xr_malloc(conn->recv_cap);
     if (!conn->recv_buf) {
         xr_hpack_free(&conn->encoder_table);
         xr_hpack_free(&conn->decoder_table);
-        free(conn);
+        xr_free(conn);
         return NULL;
     }
 

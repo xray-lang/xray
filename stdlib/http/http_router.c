@@ -11,6 +11,7 @@
  *   Uses Radix Tree for O(k) route matching
  */
 
+#include "../../src/base/xmalloc.h"
 #include "http_router.h"
 #include <stdlib.h>
 #include <string.h>
@@ -20,11 +21,11 @@
 
 static XrRouterNode* node_new(const char *path, size_t path_len)
 {
-    XrRouterNode *node = (XrRouterNode*)calloc(1, sizeof(XrRouterNode));
+    XrRouterNode *node = (XrRouterNode*)xr_calloc(1, sizeof(XrRouterNode));
     if (!node) return NULL;
     
     if (path && path_len > 0) {
-        node->path = (char*)malloc(path_len + 1);
+        node->path = (char*)xr_malloc(path_len + 1);
         memcpy(node->path, path, path_len);
         node->path[path_len] = '\0';
         node->path_len = path_len;
@@ -41,22 +42,22 @@ static void node_free(XrRouterNode *node)
     for (int i = 0; i < node->child_count; i++) {
         node_free(node->children[i]);
     }
-    free(node->children);
+    xr_free(node->children);
     
     node_free(node->param_child);
     node_free(node->wildcard_child);
     
-    free(node->path);
-    free(node->param_name);
-    free(node->prebuilt_response);  // Free prebuilt response
-    free(node);
+    xr_free(node->path);
+    xr_free(node->param_name);
+    xr_free(node->prebuilt_response);  // Free prebuilt response
+    xr_free(node);
 }
 
 static void node_add_child(XrRouterNode *parent, XrRouterNode *child)
 {
     if (parent->child_count >= parent->child_cap) {
         int new_cap = parent->child_cap == 0 ? 4 : parent->child_cap * 2;
-        parent->children = (XrRouterNode**)realloc(parent->children, 
+        parent->children = (XrRouterNode**)xr_realloc(parent->children, 
                                                     sizeof(XrRouterNode*) * new_cap);
         parent->child_cap = new_cap;
     }
@@ -114,7 +115,7 @@ static bool insert_route(XrRouterNode *node, const char *path, size_t path_len,
         if (!node->param_child) {
             node->param_child = node_new(NULL, 0);
             node->param_child->is_param = true;
-            node->param_child->param_name = (char*)malloc(param_end);
+            node->param_child->param_name = (char*)xr_malloc(param_end);
             memcpy(node->param_child->param_name, path + 1, param_end - 1);
             node->param_child->param_name[param_end - 1] = '\0';
             node->param_child->param_name_len = param_end - 1;
@@ -142,7 +143,7 @@ static bool insert_route(XrRouterNode *node, const char *path, size_t path_len,
             node->wildcard_child->is_wildcard = true;
             
             if (path_len > 1) {
-                node->wildcard_child->param_name = (char*)malloc(path_len);
+                node->wildcard_child->param_name = (char*)xr_malloc(path_len);
                 memcpy(node->wildcard_child->param_name, path + 1, path_len - 1);
                 node->wildcard_child->param_name[path_len - 1] = '\0';
                 node->wildcard_child->param_name_len = path_len - 1;
@@ -190,7 +191,7 @@ static bool insert_route(XrRouterNode *node, const char *path, size_t path_len,
                 split->param_child = child->param_child;
                 split->wildcard_child = child->wildcard_child;
                 
-                child->path = (char*)realloc(child->path, prefix_len + 1);
+                child->path = (char*)xr_realloc(child->path, prefix_len + 1);
                 child->path[prefix_len] = '\0';
                 child->path_len = prefix_len;
                 child->handler = NULL;
@@ -261,7 +262,7 @@ static bool insert_route(XrRouterNode *node, const char *path, size_t path_len,
     split->wildcard_child = child->wildcard_child;
     
     // Update original node
-    child->path = (char*)realloc(child->path, prefix_len + 1);
+    child->path = (char*)xr_realloc(child->path, prefix_len + 1);
     child->path[prefix_len] = '\0';
     child->path_len = prefix_len;
     child->handler = NULL;
@@ -378,7 +379,7 @@ static XrRouteHandler find_route(XrRouterNode *node, const char *path, size_t pa
 
 XrRouter* xr_router_new(void)
 {
-    XrRouter *router = (XrRouter*)calloc(1, sizeof(XrRouter));
+    XrRouter *router = (XrRouter*)xr_calloc(1, sizeof(XrRouter));
     return router;
 }
 
@@ -389,7 +390,7 @@ void xr_router_free(XrRouter *router)
     for (int i = 0; i <= XR_HTTP_METHOD_UNKNOWN; i++) {
         node_free(router->trees[i]);
     }
-    free(router);
+    xr_free(router);
 }
 
 bool xr_router_add(XrRouter *router, XrHttpMethod method, const char *path,
@@ -430,7 +431,7 @@ static char* prebuild_http_response(const char *body, size_t body_len, size_t *o
     
     // Pre-allocate large enough buffer
     size_t header_max = 256;
-    char *buf = (char*)malloc(header_max + body_len);
+    char *buf = (char*)xr_malloc(header_max + body_len);
     if (!buf) return NULL;
     
     // Generate complete response

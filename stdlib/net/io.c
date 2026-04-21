@@ -12,6 +12,7 @@
  *   Integrates DNS, TLS, and TCP into unified interface.
  */
 
+#include "../../src/base/xmalloc.h"
 #include "io.h"
 #include "dns.h"
 #include "../../include/xray_platform.h"
@@ -228,7 +229,7 @@ XrIOConn* xr_io_connect(const char *host, int port, int timeout_ms)
     }
 
     // Create connection context
-    XrIOConn *conn = (XrIOConn*)calloc(1, sizeof(XrIOConn));
+    XrIOConn *conn = (XrIOConn*)xr_calloc(1, sizeof(XrIOConn));
     conn->fd = fd;
     conn->pd = pd;
     conn->is_tls = false;
@@ -296,7 +297,7 @@ void xr_io_close(XrIOConn *conn)
         close(conn->fd);
     }
 
-    free(conn);
+    xr_free(conn);
 }
 
 /* ========== Read/Write API ========== */
@@ -394,7 +395,7 @@ int xr_io_writev(XrIOConn *conn, const struct iovec *iov, int iovcnt)
     struct iovec local[16];
     struct iovec *vecs = local;
     if (iovcnt > 16) {
-        vecs = (struct iovec *)malloc(sizeof(struct iovec) * iovcnt);
+        vecs = (struct iovec *)xr_malloc(sizeof(struct iovec) * iovcnt);
         if (!vecs) return -1;
     }
     memcpy(vecs, iov, sizeof(struct iovec) * iovcnt);
@@ -424,18 +425,18 @@ int xr_io_writev(XrIOConn *conn, const struct iovec *iov, int iovcnt)
                 for (int i = cur; i < iovcnt; i++) {
                     if (vecs[i].iov_len == 0) continue;
                     int w = xr_io_write_all(conn, vecs[i].iov_base, vecs[i].iov_len);
-                    if (w < 0) { if (vecs != local) free(vecs); return total > 0 ? total : -1; }
+                    if (w < 0) { if (vecs != local) xr_free(vecs); return total > 0 ? total : -1; }
                     total += w;
                 }
                 break;
             }
             conn->last_error = XR_NERR_WRITE;
-            if (vecs != local) free(vecs);
+            if (vecs != local) xr_free(vecs);
             return total > 0 ? total : -1;
         }
     }
 
-    if (vecs != local) free(vecs);
+    if (vecs != local) xr_free(vecs);
     return total;
 }
 #endif
@@ -535,7 +536,7 @@ XrIOConn* xr_io_accept(int listen_fd)
     }
 
     // Create connection context
-    XrIOConn *conn = (XrIOConn*)calloc(1, sizeof(XrIOConn));
+    XrIOConn *conn = (XrIOConn*)xr_calloc(1, sizeof(XrIOConn));
     if (!conn) {
         close(client_fd);
         return NULL;
@@ -590,7 +591,7 @@ XrIOConn* xr_io_conn_from_fd(int fd, int timeout_ms)
     xr_io_set_nonblocking(fd);
     set_tcp_nodelay(fd);
 
-    XrIOConn *conn = (XrIOConn*)calloc(1, sizeof(XrIOConn));
+    XrIOConn *conn = (XrIOConn*)xr_calloc(1, sizeof(XrIOConn));
     if (!conn) return NULL;
 
     conn->fd = fd;

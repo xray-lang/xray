@@ -11,6 +11,7 @@
  *   HTTP/HTTPS proxy with CONNECT tunnel and authentication
  */
 
+#include "../../src/base/xmalloc.h"
 #include "http_proxy.h"
 #include "http.h"
 #include "../base64/base64.h"
@@ -61,7 +62,7 @@ int xr_proxy_parse(const char *proxy_url, XrProxyConfig *out) {
         out->host = strndup(p, slash - p);
         out->port = 8080;  // Default proxy port
     } else {
-        out->host = strdup(p);
+        out->host = xr_strdup(p);
         out->port = 8080;
     }
     
@@ -75,9 +76,9 @@ int xr_proxy_parse(const char *proxy_url, XrProxyConfig *out) {
 
 void xr_proxy_config_free(XrProxyConfig *config) {
     if (!config) return;
-    free(config->host);
-    free(config->username);
-    free(config->password);
+    xr_free(config->host);
+    xr_free(config->username);
+    xr_free(config->password);
     memset(config, 0, sizeof(XrProxyConfig));
 }
 
@@ -91,7 +92,7 @@ char* xr_proxy_auth_header(const char *username, const char *password) {
     size_t pass_len = password ? strlen(password) : 0;
     size_t cred_len = user_len + 1 + pass_len;
     
-    char *credentials = (char*)malloc(cred_len + 1);
+    char *credentials = (char*)xr_malloc(cred_len + 1);
     if (!credentials) return NULL;
     
     if (password) {
@@ -102,13 +103,13 @@ char* xr_proxy_auth_header(const char *username, const char *password) {
     
     // Base64 encode
     char *encoded = xr_base64_encode((const unsigned char*)credentials, strlen(credentials), NULL);
-    free(credentials);
+    xr_free(credentials);
     
     if (!encoded) return NULL;
     
     // Build complete header
     size_t header_len = 7 + strlen(encoded) + 1;  // "Basic " + encoded + \0
-    char *header = (char*)malloc(header_len);
+    char *header = (char*)xr_malloc(header_len);
     if (!header) {
         xr_free(encoded);
         return NULL;
@@ -129,7 +130,7 @@ char* xr_proxy_connect_request(const char *target_host, int target_port,
     size_t buf_size = 512;
     if (proxy_auth) buf_size += strlen(proxy_auth);
     
-    char *buf = (char*)malloc(buf_size);
+    char *buf = (char*)xr_malloc(buf_size);
     if (!buf) return NULL;
     
     char *p = buf;
@@ -168,10 +169,10 @@ void xr_set_proxy(XrayIsolate *X, const char *proxy_url) {
     XrHttpContext *ctx = xr_http_get_context(X);
     if (!ctx) return;
     
-    ctx->proxy = (XrProxyConfig*)calloc(1, sizeof(XrProxyConfig));
+    ctx->proxy = (XrProxyConfig*)xr_calloc(1, sizeof(XrProxyConfig));
     if (ctx->proxy) {
         if (xr_proxy_parse(proxy_url, ctx->proxy) < 0) {
-            free(ctx->proxy);
+            xr_free(ctx->proxy);
             ctx->proxy = NULL;
         }
     }
@@ -188,15 +189,15 @@ void xr_clear_proxy(XrayIsolate *X) {
     
     if (ctx->proxy) {
         xr_proxy_config_free(ctx->proxy);
-        free(ctx->proxy);
+        xr_free(ctx->proxy);
         ctx->proxy = NULL;
     }
     
     // Clear no_proxy list
     for (int i = 0; i < ctx->no_proxy_count; i++) {
-        free(ctx->no_proxy[i]);
+        xr_free(ctx->no_proxy[i]);
     }
-    free(ctx->no_proxy);
+    xr_free(ctx->no_proxy);
     ctx->no_proxy = NULL;
     ctx->no_proxy_count = 0;
 }
@@ -238,8 +239,8 @@ void xr_add_no_proxy(XrayIsolate *X, const char *host) {
     XrHttpContext *ctx = xr_http_get_context(X);
     if (!ctx) return;
     
-    ctx->no_proxy = (char**)realloc(ctx->no_proxy, sizeof(char*) * (ctx->no_proxy_count + 1));
+    ctx->no_proxy = (char**)xr_realloc(ctx->no_proxy, sizeof(char*) * (ctx->no_proxy_count + 1));
     if (ctx->no_proxy) {
-        ctx->no_proxy[ctx->no_proxy_count++] = strdup(host);
+        ctx->no_proxy[ctx->no_proxy_count++] = xr_strdup(host);
     }
 }
