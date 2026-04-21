@@ -1,0 +1,86 @@
+// Demo: Structs and Interfaces
+// struct (value semantics), interface, enum
+//
+// Run: xray demos/03-oop/structs_and_interfaces.xr
+
+// === Struct (value type, no inheritance) ===
+struct Vec2 {
+    x: float
+    y: float
+
+    length(): float {
+        return (this.x * this.x + this.y * this.y).sqrt()
+    }
+
+    add(other: Vec2): Vec2 {
+        return Vec2{x: this.x + other.x, y: this.y + other.y}
+    }
+
+    toString(): string {
+        return "(${this.x}, ${this.y})"
+    }
+}
+
+let a = Vec2{x: 3.0, y: 4.0}
+let b = Vec2{x: 1.0, y: 2.0}
+let c = a.add(b)
+print("a = ${a.toString()}, length = ${a.length()}")
+print("b = ${b.toString()}")
+print("a + b = ${c.toString()}")
+
+// === Interface ===
+interface Shape {
+    area(): float
+    describe(): string
+}
+
+class Circle implements Shape {
+    radius: float
+    constructor(r: float) { this.radius = r }
+    area(): float { return 3.14159 * this.radius * this.radius }
+    describe(): string { return "Circle(r=${this.radius})" }
+}
+
+class Rect implements Shape {
+    width: float
+    height: float
+    constructor(w: float, h: float) { this.width = w; this.height = h }
+    area(): float { return this.width * this.height }
+    describe(): string { return "Rect(${this.width}x${this.height})" }
+}
+
+let shapes = [new Circle(5.0), new Rect(3.0, 4.0)]
+for (s in shapes) {
+    print("${s.describe()} -> area = ${s.area()}")
+}
+
+// === Enum ===
+enum Color { Red, Green, Blue }
+
+print("Color.Red: name=${Color.Red.name}, value=${Color.Red.value}")
+print("Color.Green: ordinal=${Color.Green.ordinal}")
+print("memberCount: ${Color.memberCount}")
+
+// Enum iteration
+for (c in Color) {
+    print("  ${c.name} = ${c.value}")
+}
+
+// Enum with custom values
+enum HttpStatus {
+    OK = 200,
+    NotFound = 404,
+    ServerError = 500
+}
+print("NotFound = ${HttpStatus.NotFound.value}")
+
+// Match with enum
+fn statusMessage(s: HttpStatus): string {
+    return match s {
+        HttpStatus.OK => "Success",
+        HttpStatus.NotFound => "Not Found",
+        HttpStatus.ServerError => "Internal Error",
+        _ => "Unknown"
+    }
+}
+print(statusMessage(HttpStatus.NotFound))

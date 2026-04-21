@@ -88,13 +88,13 @@ struct XrShape {
     uint16_t *field_offsets;        // field_offsets[field_count] (byte offset into data[])
 };
 
-/* ========== Global Shape Registry ========== */
+/* ========== Per-Isolate Shape Registry ========== */
 
 #define XR_SHAPE_MAX_ID 16383  // 14 bits
 
-XR_FUNC void xr_shape_registry_init(void);
-XR_FUNC void xr_shape_registry_destroy(void);
-XR_FUNC XrShape *xr_shape_get_by_id(uint16_t id);
+XR_FUNC void xr_shape_registry_init(XrayIsolate *X);
+XR_FUNC void xr_shape_registry_destroy(XrayIsolate *X);
+XR_FUNC XrShape *xr_shape_get_by_id(XrayIsolate *X, uint16_t id);
 
 /* ========== Creation ========== */
 

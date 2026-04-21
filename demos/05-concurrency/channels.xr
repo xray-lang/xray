@@ -1,0 +1,75 @@
+// Demo: Channels
+// Buffered channels, send/recv, close, patterns
+//
+// Run: xray demos/05-concurrency/channels.xr
+
+// === Basic channel ===
+// Channels MUST be const (system heap, reference counted)
+const ch = Channel(3)
+
+// Send values (buffered, non-blocking up to capacity)
+ch.send(10)
+ch.send(20)
+ch.send(30)
+
+// Receive values
+print("recv: ${ch.recv()}")
+print("recv: ${ch.recv()}")
+print("recv: ${ch.recv()}")
+ch.close()
+
+// === Producer-Consumer pattern ===
+const data = Channel(5)
+
+fn producer(out: Channel<int>, count: int): void {
+    for (i in 0..count) {
+        out.send(i * i)
+    }
+    out.close()
+}
+
+fn consumer(input: Channel<int>): void {
+    while (true) {
+        let val = input.recv()
+        if (val == null) { break }
+        print("consumed: ${val}")
+    }
+}
+
+go producer(data, 6)
+consumer(data)
+
+// === Fan-out: one producer, multiple consumers ===
+const work = Channel(10)
+
+fn worker(id: int, jobs: Channel<int>): void {
+    while (true) {
+        let job = jobs.recv()
+        if (job == null) { break }
+        print("worker-${id}: processed job ${job}")
+    }
+}
+
+// Start 3 workers
+scope {
+    go worker(1, work)
+    go worker(2, work)
+    go worker(3, work)
+
+    // Send jobs
+    for (i in 0..9) {
+        work.send(i)
+    }
+    work.close()
+}
+
+// === tryRecv (non-blocking) ===
+const ch2 = Channel(1)
+ch2.send(42)
+
+let val, ok = ch2.tryRecv()
+print("tryRecv: val=${val}, ok=${ok}")
+
+let val2, ok2 = ch2.tryRecv()
+print("tryRecv empty: val=${val2}, ok=${ok2}")
+ch2.close()

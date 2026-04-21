@@ -166,6 +166,10 @@ typedef struct XrCompiler {
     // Declared return type for Json→primitive runtime check in return statements
     struct XrType *declared_return_type;
 
+    // Bytecode stackmap builder: records (pc, live_slots) at GC safepoints
+    // (alloc instructions). Finalized in xr_compiler_end → proto->bc_stackmap.
+    struct XrBcStackMapBuilder *bc_stackmap_builder;
+
 } XrCompiler;
 
 /* ========== Compile API ========== */

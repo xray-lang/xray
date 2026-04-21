@@ -89,7 +89,7 @@ bool xir_translate_object_ops(XirBuilder *b, XirBlock **cur_blk,
                 b->ops_skipped++;
                 return true;
             }
-            
+
             // Extract shape pointer from constant pool at compile time
             XrValue shape_val = PROTO_CONST_FAST(b->proto, bx);
             void *shape_ptr = (void*)(intptr_t)XR_TO_INT(shape_val);
@@ -213,7 +213,7 @@ bool xir_translate_object_ops(XirBuilder *b, XirBlock **cur_blk,
             if (b->proto->ic_fields) {
                 XrICField *ic = xr_ic_field_table_get(b->proto->ic_fields, (int)pc);
                 if (ic && ic->json_shape_id != 0 && ic->cached_symbol == (int)sym) {
-                    struct XrShape *ic_shape = xr_shape_get_by_id(ic->json_shape_id);
+                    struct XrShape *ic_shape = xr_shape_get_by_id(b->isolate, ic->json_shape_id);
                     if (ic_shape && ic_shape->symbol_to_index &&
                         (SymbolId)sym >= ic_shape->min_symbol &&
                         (SymbolId)sym <= ic_shape->max_symbol) {
@@ -303,7 +303,7 @@ bool xir_translate_object_ops(XirBuilder *b, XirBlock **cur_blk,
             if (b->proto->ic_fields) {
                 XrICField *ic = xr_ic_field_table_get(b->proto->ic_fields, (int)pc);
                 if (ic && ic->json_shape_id != 0 && ic->cached_symbol == (int)sym) {
-                    struct XrShape *ic_shape = xr_shape_get_by_id(ic->json_shape_id);
+                    struct XrShape *ic_shape = xr_shape_get_by_id(b->isolate, ic->json_shape_id);
                     if (ic_shape && ic_shape->symbol_to_index &&
                         (SymbolId)sym >= ic_shape->min_symbol &&
                         (SymbolId)sym <= ic_shape->max_symbol) {
@@ -392,7 +392,7 @@ bool xir_translate_object_ops(XirBuilder *b, XirBlock **cur_blk,
             if (b->proto->ic_fields) {
                 XrICField *ic = xr_ic_field_table_get(b->proto->ic_fields, (int)pc);
                 if (ic && ic->json_shape_id != 0 && ic->cached_symbol == (int)sym) {
-                    struct XrShape *ic_shape = xr_shape_get_by_id(ic->json_shape_id);
+                    struct XrShape *ic_shape = xr_shape_get_by_id(b->isolate, ic->json_shape_id);
                     if (ic_shape && ic_shape->symbol_to_index &&
                         (SymbolId)sym >= ic_shape->min_symbol &&
                         (SymbolId)sym <= ic_shape->max_symbol) {
@@ -480,7 +480,7 @@ bool xir_translate_object_ops(XirBuilder *b, XirBlock **cur_blk,
             if (b->proto->ic_fields) {
                 XrICField *ic = xr_ic_field_table_get(b->proto->ic_fields, (int)pc);
                 if (ic && ic->json_shape_id != 0 && ic->cached_symbol == (int)sym) {
-                    struct XrShape *ic_shape = xr_shape_get_by_id(ic->json_shape_id);
+                    struct XrShape *ic_shape = xr_shape_get_by_id(b->isolate, ic->json_shape_id);
                     if (ic_shape && ic_shape->symbol_to_index &&
                         (SymbolId)sym >= ic_shape->min_symbol &&
                         (SymbolId)sym <= ic_shape->max_symbol) {

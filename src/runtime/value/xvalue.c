@@ -322,8 +322,9 @@ static bool xr_json_equals_deep(XrValue a, XrValue b) {
     if (!ja || !jb) return false;
 
     // Compare field count and content
-    XrShape *sa = xr_json_shape(ja);
-    XrShape *sb = xr_json_shape(jb);
+    XrayIsolate *X = xray_isolate_current();
+    XrShape *sa = xr_json_shape(X, ja);
+    XrShape *sb = xr_json_shape(X, jb);
     if (sa->field_count != sb->field_count) return false;
 
     for (int i = 0; i < sa->field_count; i++) {

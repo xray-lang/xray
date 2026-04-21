@@ -602,7 +602,7 @@ static void stringify_map(JsonWriter *w, XrMap *map) {
 static void stringify_json(JsonWriter *w, XrJson *json) {
     writer_char(w, '{');
 
-    if (!json || !xr_json_shape(json)) {
+    if (!json || !xr_json_shape(w->isolate, json)) {
         writer_char(w, '}');
         return;
     }
@@ -610,7 +610,7 @@ static void stringify_json(JsonWriter *w, XrJson *json) {
     w->depth++;
     size_t output_count = 0;
 
-    XrShape *shape = xr_json_shape(json);
+    XrShape *shape = xr_json_shape(w->isolate, json);
     XrSymbolTable *symtab = (XrSymbolTable*)w->isolate->symbol_table;
 
     for (uint16_t i = 0; i < shape->field_count; i++) {
@@ -630,7 +630,7 @@ static void stringify_json(JsonWriter *w, XrJson *json) {
 
         writer_char(w, ':');
         if (w->indent > 0) writer_char(w, ' ');
-        stringify_value(w, xr_json_get_field_any(json, i));
+        stringify_value(w, xr_json_get_field_any(w->isolate, json, i));
         output_count++;
     }
 
@@ -1111,8 +1111,8 @@ static XrValue json_keys(XrayIsolate *X, XrValue *args, int argc) {
     if (xr_value_is_json(val)) {
         // XrJson object
         XrJson *json = xr_value_to_json(val);
-        if (json && xr_json_shape(json)) {
-            XrShape *shape = xr_json_shape(json);
+        if (json && xr_json_shape(X, json)) {
+            XrShape *shape = xr_json_shape(X, json);
             for (uint16_t i = 0; i < shape->field_count; i++) {
                 SymbolId sym = shape->field_symbols[i];
                 const char *name = xr_symbol_get_name_in_table(symtab, sym);
@@ -1161,10 +1161,10 @@ static XrValue json_values(XrayIsolate *X, XrValue *args, int argc) {
     if (xr_value_is_json(val)) {
         // XrJson object
         XrJson *json = xr_value_to_json(val);
-        if (json && xr_json_shape(json)) {
-            XrShape *shape = xr_json_shape(json);
+        if (json && xr_json_shape(X, json)) {
+            XrShape *shape = xr_json_shape(X, json);
             for (uint16_t i = 0; i < shape->field_count; i++) {
-                xr_array_push(values, xr_json_get_field_any(json, i));
+                xr_array_push(values, xr_json_get_field_any(X, json, i));
             }
         }
     } else if (XR_IS_MAP(val)) {

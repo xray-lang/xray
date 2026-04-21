@@ -1,0 +1,46 @@
+// Demo: HTTP Server
+// A simple REST API server using the http module
+//
+// Run: xray demos/06-networking/http_server.xr
+// Test: curl http://localhost:3000/api/hello
+//        curl http://localhost:3000/api/echo -d '{"msg":"hi"}'
+//
+// NOTE: This starts a real server. Press Ctrl+C to stop.
+
+import http
+import json
+
+// === Define routes ===
+
+// Simple text response
+http.route("GET", "/", (req: Json, res: Json): void => {
+    res.send("Welcome to Xray HTTP Server!")
+})
+
+// JSON response
+http.route("GET", "/api/hello", (req: Json, res: Json): void => {
+    res.json({
+        message: "Hello from Xray!",
+        method: req.method,
+        path: req.path
+    })
+})
+
+// Echo back request body
+http.route("POST", "/api/echo", (req: Json, res: Json): void => {
+    let body = req.body
+    res.json({
+        echo: body,
+        length: body.length
+    })
+})
+
+// Dynamic path (query params)
+http.route("GET", "/api/greet", (req: Json, res: Json): void => {
+    let name = req.query.name ?? "World"
+    res.json({ greeting: "Hello, ${name}!" })
+})
+
+// === Start server ===
+print("Server starting on http://localhost:3000")
+http.listen(3000)

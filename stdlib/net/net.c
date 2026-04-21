@@ -463,18 +463,16 @@ static XrValue make_udp_handle(XrayIsolate *X, int fd) {
 }
 
 static int handle_get_fd(XrayIsolate *X, XrValue handle) {
-    (void)X;
     if (!XR_IS_JSON(handle)) return -1;
     XrJson *json = (XrJson*)XR_TO_PTR(handle);
-    XrValue v = xr_json_get(json, sym_fd);
+    XrValue v = xr_json_get(X, json, sym_fd);
     return XR_IS_INT(v) ? (int)XR_TO_INT(v) : -1;
 }
 
 static bool handle_is_tls(XrayIsolate *X, XrValue handle) {
-    (void)X;
     if (!XR_IS_JSON(handle)) return false;
     XrJson *json = (XrJson*)XR_TO_PTR(handle);
-    XrValue v = xr_json_get(json, sym_tls);
+    XrValue v = xr_json_get(X, json, sym_tls);
     return XR_IS_BOOL(v) ? XR_TO_BOOL(v) : false;
 }
 

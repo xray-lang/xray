@@ -605,7 +605,7 @@ XrJitResult xr_jit_getprop(XrCoroutine *coro, int64_t symbol_id) {
     // Json object field access
     if (xr_value_is_json(obj)) {
         XrJson *json = xr_value_to_json(obj);
-        XrValue result = xr_json_get(json, sym);
+        XrValue result = xr_json_get(coro->isolate, json, sym);
         return XR_JIT_RESULT(result);
     }
 

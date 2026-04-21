@@ -48,4 +48,13 @@
 #define EMIT_LOADFALSE(ctx, c, reg)        emit_loadfalse((c)->emitter, reg)
 #define EMIT_RETURN(ctx, c, reg, n)        emit_return((c)->emitter, reg, n)
 
+// Record a GC safepoint at the last emitted instruction.
+// Creates liveness bitmap [0, freereg) and records it in the stackmap builder.
+// Called after emitting allocation instructions (OP_NEWARRAY, OP_NEWMAP, etc.).
+#define EMIT_GC_SAFEPOINT(ctx, c) \
+    xr_codegen_record_gc_safepoint(c)
+
+// Implementation (defined in xcompiler.c)
+XR_FUNC void xr_codegen_record_gc_safepoint(struct XrCompiler *compiler);
+
 #endif // XCOMPILER_EMIT_H

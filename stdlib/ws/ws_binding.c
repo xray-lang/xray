@@ -503,7 +503,7 @@ static XrCFuncResult ws_send_yieldable(XrayIsolate *X, XrValue *args, int argc, 
     }
 
     XrJson *conn = (XrJson*)XR_TO_PTR(args[0]);
-    XrValue id_val = xr_json_get(conn, ctx->sym_wsid);
+    XrValue id_val = xr_json_get(X, conn, ctx->sym_wsid);
 
     if (!XR_IS_INT(id_val)) {
         *result = xr_bool(false);
@@ -725,7 +725,7 @@ static XrCFuncResult ws_recv_yieldable(XrayIsolate *X, XrValue *args, int argc, 
     }
 
     XrJson *conn = (XrJson*)XR_TO_PTR(args[0]);
-    XrValue id_val = xr_json_get(conn, ctx->sym_wsid);
+    XrValue id_val = xr_json_get(X, conn, ctx->sym_wsid);
 
     if (!XR_IS_INT(id_val)) {
         XrJson *res = xr_json_new(xr_current_coro(X), 4);
@@ -856,7 +856,7 @@ static XrCFuncResult ws_recvdata(XrayIsolate *X, XrValue *args, int argc, XrValu
     if (!ctx) { *result = xr_null(); return XR_CFUNC_DONE; }
 
     XrJson *conn = (XrJson*)XR_TO_PTR(args[0]);
-    XrValue id_val = xr_json_get(conn, ctx->sym_wsid);
+    XrValue id_val = xr_json_get(X, conn, ctx->sym_wsid);
     if (!XR_IS_INT(id_val)) { *result = xr_null(); return XR_CFUNC_DONE; }
 
     int id = (int)XR_TO_INT(id_val);
@@ -907,7 +907,7 @@ static XrValue ws_close(XrayIsolate *X, XrValue *args, int argc) {
     if (!XR_IS_JSON(args[0])) return xr_bool(false);
 
     XrJson *conn = (XrJson*)XR_TO_PTR(args[0]);
-    XrValue id_val = xr_json_get(conn, ctx->sym_wsid);
+    XrValue id_val = xr_json_get(X, conn, ctx->sym_wsid);
 
     if (!XR_IS_INT(id_val)) {
         return xr_bool(false);
@@ -972,7 +972,7 @@ static XrValue ws_ping(XrayIsolate *X, XrValue *args, int argc) {
     if (!ctx) return xr_bool(false);
 
     XrJson *conn = (XrJson*)XR_TO_PTR(args[0]);
-    XrValue id_val = xr_json_get(conn, ctx->sym_wsid);
+    XrValue id_val = xr_json_get(X, conn, ctx->sym_wsid);
 
     if (!XR_IS_INT(id_val)) return xr_bool(false);
 
@@ -996,7 +996,7 @@ static XrValue ws_state(XrayIsolate *X, XrValue *args, int argc) {
     if (!ctx) return xrs_string_value_c(X, "closed");
 
     XrJson *conn = (XrJson*)XR_TO_PTR(args[0]);
-    XrValue id_val = xr_json_get(conn, ctx->sym_wsid);
+    XrValue id_val = xr_json_get(X, conn, ctx->sym_wsid);
 
     if (!XR_IS_INT(id_val)) return xrs_string_value_c(X, "closed");
 
@@ -1026,7 +1026,7 @@ static XrValue ws_is_open(XrayIsolate *X, XrValue *args, int argc) {
     if (!ctx) return xr_bool(false);
 
     XrJson *conn = (XrJson*)XR_TO_PTR(args[0]);
-    XrValue id_val = xr_json_get(conn, ctx->sym_wsid);
+    XrValue id_val = xr_json_get(X, conn, ctx->sym_wsid);
 
     if (!XR_IS_INT(id_val)) return xr_bool(false);
 
@@ -1403,7 +1403,7 @@ static XrCFuncResult ws_conn_handler_done(XrayIsolate *X, int status,
     XrWsContext *ws_ctx = get_ws_context(X);
     if (ws_ctx && !XR_IS_NULL(ctx->conn)) {
         XrJson *conn_obj = (XrJson *)XR_TO_PTR(ctx->conn);
-        XrValue id_val = xr_json_get(conn_obj, ws_ctx->sym_wsid);
+        XrValue id_val = xr_json_get(X, conn_obj, ws_ctx->sym_wsid);
         if (XR_IS_INT(id_val)) {
             int id = (int)XR_TO_INT(id_val);
             XrWebSocket *w = get_ws_from_ctx(ws_ctx, id);

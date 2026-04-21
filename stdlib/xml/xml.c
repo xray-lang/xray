@@ -524,7 +524,7 @@ static XrValue xml_element_fn(XrayIsolate *X, XrValue *args, int argc) {
     if (argc >= 2 && xr_value_is_json(args[1])) {
         XrJson *json = xr_value_to_json(args[1]);
         XrMap *attr_map = xr_map_new(xr_current_coro(X));
-        XrShape *shape = xr_json_shape(json);
+        XrShape *shape = xr_json_shape(X, json);
         XrSymbolTable *st = X->symbol_table;
         for (uint16_t i = 0; i < shape->field_count; i++) {
             const char *fname = xr_symbol_get_name_in_table(st, shape->field_symbols[i]);

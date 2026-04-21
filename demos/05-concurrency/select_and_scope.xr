@@ -1,0 +1,79 @@
+// Demo: Select and Structured Concurrency
+// select, defer, scope, linked scope
+//
+// Run: xray demos/05-concurrency/select_and_scope.xr
+
+import time
+
+// === select: multiplex multiple channels ===
+const ch1 = Channel(1)
+const ch2 = Channel(1)
+
+fn sendDelayed(ch: Channel<string>, msg: string, delay: int): void {
+    time.sleep(delay)
+    ch.send(msg)
+}
+
+go sendDelayed(ch1, "from ch1", 50)
+go sendDelayed(ch2, "from ch2", 100)
+
+// Wait for first available message
+select {
+    msg from ch1 => { print("select got: ${msg}") }
+    msg from ch2 => { print("select got: ${msg}") }
+    after 500 => { print("timeout!") }
+}
+
+ch1.close()
+ch2.close()
+
+// === defer: LIFO cleanup ===
+fn processFile(): void {
+    print("open file")
+    defer { print("close file") }    // runs when function exits
+    defer { print("flush buffer") }  // runs before close (LIFO order)
+
+    print("process data...")
+    // even if an exception occurs, defer blocks will run
+}
+processFile()
+
+// === scope: structured concurrency ===
+// scope {} waits for ALL goroutines inside to finish before continuing
+print("\n--- scope demo ---")
+fn taskA(): void {
+    time.sleep(30)
+    print("  task A done")
+}
+fn taskB(): void {
+    time.sleep(10)
+    print("  task B done")
+}
+scope {
+    go taskA()
+    go taskB()
+}
+print("all tasks in scope completed")
+
+// === Practical: parallel data processing ===
+print("\n--- parallel pipeline ---")
+const results = Channel(3)
+
+fn fetchData(id: int, out: Channel<string>): void {
+    time.sleep(10)
+    out.send("data-${id}")
+}
+
+scope {
+    go fetchData(1, results)
+    go fetchData(2, results)
+    go fetchData(3, results)
+}
+
+// All fetches complete, read results
+results.close()
+while (true) {
+    let r = results.recv()
+    if (r == null) { break }
+    print("got: ${r}")
+}

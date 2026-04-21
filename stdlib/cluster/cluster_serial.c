@@ -238,7 +238,7 @@ static int encode_value(XrayIsolate *X, XrValue value, XrSerialBuf *buf, int dep
             buf_put_u8(buf, XR_STAG_JSON);
 
             {
-                XrShape *shape = xr_json_shape(json);
+                XrShape *shape = xr_json_shape(X, json);
                 uint16_t count = shape->field_count;
                 buf_put_varint(buf, (uint64_t)count);
                 for (uint16_t i = 0; i < count; i++) {
@@ -249,7 +249,7 @@ static int encode_value(XrayIsolate *X, XrValue value, XrSerialBuf *buf, int dep
                     size_t flen = strlen(fname);
                     buf_put_varint(buf, (uint64_t)flen);
                     buf_put_bytes(buf, fname, flen);
-                    XrValue fval = xr_json_get_field_any(json, i);
+                    XrValue fval = xr_json_get_field_any(X, json, i);
                     if (encode_value(X, fval, buf, depth + 1) != 0) return -1;
                 }
             }

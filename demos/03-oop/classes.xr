@@ -1,0 +1,74 @@
+// Demo: Classes and Inheritance
+// class, constructor, methods, static, inheritance, override
+//
+// Run: xray demos/03-oop/classes.xr
+
+// === Basic class ===
+class Animal {
+    name: string
+    sound: string
+
+    constructor(name: string, sound: string) {
+        this.name = name
+        this.sound = sound
+    }
+
+    speak(): string {
+        return "${this.name} says ${this.sound}!"
+    }
+
+    toString(): string {
+        return "Animal(${this.name})"
+    }
+}
+
+let cat = new Animal("Cat", "meow")
+print(cat.speak())
+
+// === Inheritance ===
+class Dog extends Animal {
+    breed: string
+
+    constructor(name: string, breed: string) {
+        super(name, "woof")
+        this.breed = breed
+    }
+
+    override speak(): string {
+        return "${this.name} (${this.breed}) says woof!"
+    }
+
+    fetch(item: string): string {
+        return "${this.name} fetches the ${item}"
+    }
+}
+
+let dog = new Dog("Rex", "Labrador")
+print(dog.speak())
+print(dog.fetch("ball"))
+
+// === Static methods ===
+class Counter {
+    private count: int
+
+    constructor() { this.count = 0 }
+
+    increment(): void { this.count = this.count + 1 }
+    getCount(): int { return this.count }
+
+    static create(): Counter {
+        return new Counter()
+    }
+}
+
+let c = Counter.create()
+c.increment()
+c.increment()
+c.increment()
+print("count: ${c.getCount()}")
+
+// === Polymorphism via method override ===
+let animals = [new Animal("Parrot", "squawk"), new Dog("Buddy", "Golden")]
+for (a in animals) {
+    print("  ${a.speak()}")
+}

@@ -18,6 +18,7 @@
  */
 
 #include "xcompiler.h"
+#include "../../runtime/gc/xbc_stackmap.h"
 #include "../../base/xlog.h"
 #include "xcompiler_context.h"
 #include "xcompiler_scope.h"
@@ -553,6 +554,46 @@ int scope_resolve_upvalue(XrCompilerContext *ctx, XrCompiler *compiler, XrString
     return -1;
 }
 
+/* ========== Bytecode Stackmap Safepoint ========== */
+
+// Record a GC safepoint at the last emitted instruction's PC.
+// Bitmap: bits [0, freereg) are set (all live), bits >= freereg are clear (dead).
+void xr_codegen_record_gc_safepoint(XrCompiler *compiler) {
+    if (!compiler || !compiler->emitter || !compiler->regalloc) return;
+
+    int pc = compiler->emitter->pc - 1;  // last emitted instruction
+    if (pc < 0) return;
+
+    int freereg = xreg_get_freereg(compiler->regalloc);
+    if (freereg <= 0) return;
+
+    uint16_t maxslots = (uint16_t)freereg;
+    uint16_t num_words = (maxslots + 63) / 64;
+
+    // Lazy-create the builder
+    if (!compiler->bc_stackmap_builder) {
+        int watermark = xreg_watermark(compiler->regalloc);
+        uint16_t max_est = (watermark > freereg) ? (uint16_t)watermark : maxslots;
+        if (max_est < 64) max_est = 64;  // minimum bitmap width
+        compiler->bc_stackmap_builder = xr_bc_stackmap_builder_create(max_est);
+        if (!compiler->bc_stackmap_builder) return;
+    }
+
+    // Build bitmap: all bits [0, freereg) set
+    uint64_t bitmap[16] = {0};  // supports up to 1024 slots (64*16)
+    XR_DCHECK(num_words <= 16, "safepoint: too many bitmap words");
+    for (uint16_t w = 0; w < num_words; w++) {
+        uint32_t lo = w * 64;
+        uint32_t hi = lo + 64;
+        if (hi > (uint32_t)freereg) hi = (uint32_t)freereg;
+        if (lo >= (uint32_t)freereg) break;
+        uint32_t nbits = hi - lo;
+        bitmap[w] = (nbits >= 64) ? ~(uint64_t)0 : ((uint64_t)1 << nbits) - 1;
+    }
+
+    xr_bc_stackmap_builder_add(compiler->bc_stackmap_builder, (uint32_t)pc, bitmap);
+}
+
 /* ========== Compiler Initialization ========== */
 
 void xr_compiler_init(XrCompilerContext *ctx, XrCompiler *compiler, XrFunctionType type) {
@@ -586,6 +627,7 @@ void xr_compiler_init(XrCompilerContext *ctx, XrCompiler *compiler, XrFunctionTy
     compiler->inst_type_cap = 0;
     compiler->struct_area_offset = 0;
     compiler->declared_return_type = NULL;
+    compiler->bc_stackmap_builder = NULL;  // created lazily on first safepoint
     xr_local_list_init(&compiler->local_list);
 
     compiler->regalloc = xreg_new();
@@ -699,6 +741,12 @@ XrProto *xr_compiler_end(XrCompilerContext *ctx, XrCompiler *compiler) {
                 }
             }
         }
+    }
+
+    // Generate bytecode stackmap: transfer builder → proto->bc_stackmap.
+    if (compiler->bc_stackmap_builder) {
+        proto->bc_stackmap = xr_bc_stackmap_builder_finish(compiler->bc_stackmap_builder);
+        compiler->bc_stackmap_builder = NULL;  // ownership transferred or freed
     }
 
     // Generate inst_types: per-PC XrType* (flow-sensitive, authoritative for non-params).

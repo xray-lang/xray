@@ -10,10 +10,28 @@
 
 #include "xemit.h"
 #include "xcompiler_context.h"
+#include "xcompiler_emit.h"  // xr_codegen_record_gc_safepoint
 #include "xregalloc.h"
 #include "../../base/xmalloc.h"
 #include "../../base/xchecks.h"
 #include "../../base/xlog.h"
+
+// Bitmap of opcodes that allocate GC-managed objects (safepoints for precise GC).
+static inline bool opcode_is_gc_alloc(OpCode op) {
+    switch (op) {
+        case OP_NEWARRAY:
+        case OP_NEWMAP:
+        case OP_NEWSET:
+        case OP_NEWJSON:
+        case OP_NEWSTRINGBUILDER:
+        case OP_NEWRANGE:
+        case OP_CLOSURE:
+        case OP_CELL_NEW:
+            return true;
+        default:
+            return false;
+    }
+}
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -25,7 +43,7 @@ static inline int current_pc(XrEmitter *e) {
 /*
 ** Write instruction to XrProto
 ** @param inst Instruction to write
-** 
+**
 ** Automatically gets source line number from ctx->current_line
 */
 void emitter_write_instruction(XrEmitter *e, XrInstruction inst) {
@@ -35,12 +53,12 @@ void emitter_write_instruction(XrEmitter *e, XrInstruction inst) {
     xr_vm_proto_write(e->proto, inst, line);
     e->pc = current_pc(e);
     e->stats.inst_count++;
-    
+
     // LIFO mode does not require PC tracking
-    
+
     // Debug mode: print instruction
     if (e->debug_mode) {
-        printf("[Emit] PC=%d, Line=%d, Inst=0x%08x, OP=%d\n", 
+        printf("[Emit] PC=%d, Line=%d, Inst=0x%08x, OP=%d\n",
                e->pc - 1, line, inst, GET_OPCODE(inst));
     }
 }
@@ -61,23 +79,23 @@ XrEmitter* emitter_new(XrCompilerContext *ctx, XrProto *proto, XRegAlloc *regall
         xr_log_warning("emitter", "failed to allocate emitter");
         return NULL;
     }
-    
+
     memset(e, 0, sizeof(XrEmitter));
-    
+
     e->ctx = ctx;               // Save context for getting line number
     e->proto = proto;
     e->regalloc = regalloc;
     e->pc = current_pc(e);
     e->enable_peephole = true;  // Enable optimization (redundant MOVE removal)
     e->debug_mode = false;
-    
+
     // Initialize Peephole window
     e->window.can_optimize = false;
     e->window.last_inst = 0;
     e->window.last_pc = -1;
     e->window.last_op = OP_NOP;
     e->window.last_dest = -1;
-    
+
     return e;
 }
 
@@ -106,58 +124,68 @@ int emit_abc(XrEmitter *e, OpCode op, int a, int b, int c) {
     XR_DCHECK(a >= 0, "emit_abc: negative register A");
     XrInstruction inst = CREATE_ABC(op, a, b, c);
     int pc = current_pc(e);
-    
+
     // Peephole optimization
     if (e->enable_peephole && try_optimize_sequence(e, inst)) {
         e->stats.optimized_count++;
         return pc;  // Optimized out, do not emit
     }
-    
+
     // Normal emission
     emitter_write_instruction(e, inst);
     emitter_update_window(e, inst, pc);
-    
+
     // Statistics
     if (op == OP_MOVE) {
         e->stats.move_count++;
     }
-    
+
+    // Record GC safepoint for allocation instructions
+    if (opcode_is_gc_alloc(op) && e->ctx && e->ctx->current) {
+        xr_codegen_record_gc_safepoint(e->ctx->current);
+    }
+
     return pc;
 }
 
 int emit_abx(XrEmitter *e, OpCode op, int a, int bx) {
     XrInstruction inst = CREATE_ABx(op, a, bx);
     int pc = current_pc(e);
-    
+
     // Peephole optimization
     if (e->enable_peephole && try_optimize_sequence(e, inst)) {
         e->stats.optimized_count++;
         return pc;
     }
-    
+
     emitter_write_instruction(e, inst);
     emitter_update_window(e, inst, pc);
-    
+
+    // Record GC safepoint for allocation instructions (OP_NEWJSON uses ABx format)
+    if (opcode_is_gc_alloc(op) && e->ctx && e->ctx->current) {
+        xr_codegen_record_gc_safepoint(e->ctx->current);
+    }
+
     return pc;
 }
 
 int emit_asbx(XrEmitter *e, OpCode op, int a, int sbx) {
     XrInstruction inst = CREATE_AsBx(op, a, sbx);
     int pc = current_pc(e);
-    
+
     emitter_write_instruction(e, inst);
     emitter_update_window(e, inst, pc);
-    
+
     return pc;
 }
 
 int emit_sj(XrEmitter *e, OpCode op, int sj) {
     XrInstruction inst = CREATE_sJ(op, sj);
     int pc = current_pc(e);
-    
+
     emitter_write_instruction(e, inst);
     e->stats.jump_count++;
-    
+
     return pc;
 }
 
@@ -172,7 +200,7 @@ int emit_move(XrEmitter *e, int dest, int src) {
         e->stats.optimized_count++;
         return current_pc(e);
     }
-    
+
     return emit_abc(e, OP_MOVE, dest, src, 0);
 }
 
@@ -211,7 +239,7 @@ int emit_call(XrEmitter *e, int func, int nargs, int nresults) {
 int emit_return(XrEmitter *e, int base, int nret) {
     // Flush Peephole window (no instructions after RETURN)
     emitter_flush_peephole(e);
-    
+
     // Use optimized return instructions for common cases
     if (nret == 0) {
         return emit_abc(e, OP_RETURN0, 0, 0, 0);
@@ -227,7 +255,7 @@ int emit_jump(XrEmitter *e, OpCode op) {
     // Reset peephole window: JMP creates control flow boundary
     e->window.can_optimize = false;
     e->window.last_op = OP_NOP;
-    
+
     int pc = current_pc(e);
     XrInstruction inst = CREATE_sJ(op, 0);
     emitter_write_instruction(e, inst);
@@ -240,20 +268,20 @@ void patch_jump(XrEmitter *e, int jump_pc, int target_pc) {
     if (target_pc < 0) {
         target_pc = current_pc(e);
     }
-    
+
     int jump = target_pc - jump_pc - 1;
-    
+
     if (jump > MAXARG_sJ || jump < -MAXARG_sJ) {
         xr_log_warning("emitter", "jump offset too large: %d", jump);
         return;
     }
-    
+
     XrInstruction *inst = PROTO_CODE_PTR(e->proto, jump_pc);
     OpCode op = GET_OPCODE(*inst);
     *inst = CREATE_sJ(op, jump);
-    
+
     if (e->debug_mode) {
-        printf("[Emit] Patch jump at PC=%d, offset=%d, target=%d\n", 
+        printf("[Emit] Patch jump at PC=%d, offset=%d, target=%d\n",
                jump_pc, jump, target_pc);
     }
 }
@@ -262,14 +290,14 @@ static int get_jump_list_next(XrEmitter *e, int pc) {
     if (pc == NO_JUMP) {
         return NO_JUMP;
     }
-    
+
     XrInstruction *inst = PROTO_CODE_PTR(e->proto, pc);
     int offset = GETARG_sJ(*inst);
-    
+
     if (offset == 0) {
         return NO_JUMP;
     }
-    
+
     return pc + 1 + offset;
 }
 
@@ -277,10 +305,10 @@ static void set_jump_list_next(XrEmitter *e, int pc, int next_pc) {
     if (pc == NO_JUMP) {
         return;
     }
-    
+
     XrInstruction *inst = PROTO_CODE_PTR(e->proto, pc);
     OpCode op = GET_OPCODE(*inst);
-    
+
     if (next_pc == NO_JUMP) {
         *inst = CREATE_sJ(op, 0);
     } else {
@@ -296,21 +324,21 @@ int jump_list_concat(XrEmitter *e, int list1, int list2) {
     if (list1 == NO_JUMP) {
         return list2;
     }
-    
+
     int last = list1;
     int next = get_jump_list_next(e, last);
-    
+
     while (next != NO_JUMP) {
         last = next;
         next = get_jump_list_next(e, last);
     }
-    
+
     set_jump_list_next(e, last, list2);
-    
+
     if (e->debug_mode) {
         printf("[Emit] Concat jump lists: list1=%d, list2=%d\n", list1, list2);
     }
-    
+
     return list1;
 }
 
@@ -321,50 +349,50 @@ void patch_jump_list(XrEmitter *e, int list, int target_pc) {
     if (list == NO_JUMP) {
         return;
     }
-    
+
     // If target_pc < 0, use current PC
     if (target_pc < 0) {
         target_pc = current_pc(e);
     }
-    
+
     // Iterate through list and patch all jumps
     int current = list;
     while (current != NO_JUMP) {
         int next = get_jump_list_next(e, current);
-        
+
         // Patch current jump
         int jump = target_pc - current - 1;
-        
+
         if (jump > MAXARG_sJ || jump < -MAXARG_sJ) {
-            xr_log_warning("emitter", "jump offset too large: %d at PC=%d", 
+            xr_log_warning("emitter", "jump offset too large: %d at PC=%d",
                     jump, current);
         } else {
             XrInstruction *inst = PROTO_CODE_PTR(e->proto, current);
             OpCode op = GET_OPCODE(*inst);
             *inst = CREATE_sJ(op, jump);
-            
+
             if (e->debug_mode) {
                 printf("[Emit] Patch jump list node at PC=%d, offset=%d, target=%d\n",
                        current, jump, target_pc);
             }
         }
-        
+
         current = next;
     }
 }
 
 void emit_loop(XrEmitter *e, int loop_start) {
     int offset = current_pc(e) - loop_start + 1;
-    
+
     if (offset > MAXARG_sJ) {
         xr_log_warning("emitter", "loop body too large: %d", offset);
         return;
     }
-    
+
     // Reset peephole window: backward jump creates control flow boundary
     e->window.can_optimize = false;
     e->window.last_op = OP_NOP;
-    
+
     // Emit backward jump directly in sJ format
     XrInstruction inst = CREATE_sJ(OP_JMP, -offset);
     emitter_write_instruction(e, inst);
@@ -386,8 +414,8 @@ void emitter_print_stats(XrEmitter *e) {
     printf("MOVE instructions:       %d\n", e->stats.move_count);
     printf("Jump instructions:       %d\n", e->stats.jump_count);
     printf("Optimized out:           %d\n", e->stats.optimized_count);
-    printf("Optimization rate:       %.2f%%\n", 
-           e->stats.inst_count > 0 
+    printf("Optimization rate:       %.2f%%\n",
+           e->stats.inst_count > 0
            ? (e->stats.optimized_count * 100.0 / (e->stats.inst_count + e->stats.optimized_count))
            : 0.0);
     printf("========================================\n\n");
@@ -405,9 +433,9 @@ bool try_optimize_sequence(XrEmitter *e, XrInstruction inst) {
     if (!e->window.can_optimize) {
         return false;
     }
-    
+
     if (optimize_redundant_move(e, inst)) return true;
-    
+
     return false;
 }
 
@@ -427,13 +455,13 @@ void emit_patch_instruction_A(XrEmitter *e, int pc, int new_A) {
     XR_CHECK(e->proto != NULL, "XrProto cannot be NULL");
     XR_CHECK(pc >= 0 && pc < PROTO_CODE_COUNT(e->proto), "Invalid PC for patch");
     XR_CHECK(new_A >= 0 && new_A < 256, "Invalid register A");
-    
+
     XrInstruction *inst = PROTO_CODE_PTR(e->proto, pc);
     int old_a XR_UNUSED = GETARG_A(*inst);
-    
+
     // Clear A field (bits 8-15) and set new value
     *inst = (*inst & ~((XrInstruction)0xFFu << 8)) | ((XrInstruction)(new_A & 0xFF) << 8);
-    
+
     if (e->debug_mode) {
         printf("[Emitter] Patched PC=%d: A=%d->%d (op=%d)\n",
                pc, old_a, new_A, GET_OPCODE(*inst));
@@ -447,7 +475,7 @@ XrInstruction* emit_get_instruction(XrEmitter *e, int pc) {
     XR_CHECK(e != NULL, "Emitter cannot be NULL");
     XR_CHECK(e->proto != NULL, "XrProto cannot be NULL");
     XR_CHECK(pc >= 0 && pc < PROTO_CODE_COUNT(e->proto), "Invalid PC");
-    
+
     return PROTO_CODE_PTR(e->proto, pc);
 }
 
@@ -457,7 +485,7 @@ XrInstruction* emit_get_instruction(XrEmitter *e, int pc) {
 int emit_get_current_pc(XrEmitter *e) {
     XR_CHECK(e != NULL, "Emitter cannot be NULL");
     XR_CHECK(e->proto != NULL, "XrProto cannot be NULL");
-    
+
     return PROTO_CODE_COUNT(e->proto);
 }
 

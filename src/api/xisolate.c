@@ -36,6 +36,7 @@
 #include "../coro/xcoroutine.h"
 #include "../runtime/gc/xcoro_gc.h"
 #include "../runtime/xisolate_api.h"
+#include "../runtime/object/xshape.h"
 #include "../vm/xvm_profiler.h"
 #include "../vm/xvm_internal.h"
 #include <stdio.h>
@@ -85,6 +86,9 @@ XrayIsolate* xray_isolate_new(const XrayIsolateParams *params) {
     // --- Core: VM engine ---
     if (xr_vm_init(isolate) != 0) goto fail;
 
+    // --- Core: shape registry (hidden classes) ---
+    xr_shape_registry_init(isolate);
+
     // --- Optional: heavy subsystems via callback ---
     // init_extra is set by xray_isolate_full.c constructor (auto-registered).
     // For XR_INIT_RUNTIME mode, init_extra stays NULL → no heavy deps linked.
@@ -130,6 +134,8 @@ void xray_isolate_delete(XrayIsolate *isolate) {
     }
 
     xr_vm_cleanup(isolate);
+
+    xr_shape_registry_destroy(isolate);
 
     xr_gc_cleanup(&isolate->gc);
 

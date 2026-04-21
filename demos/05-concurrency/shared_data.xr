@@ -1,0 +1,65 @@
+// Demo: Concurrency Safety Rules
+// shared const, Channel, parameter passing — the three ways to share data
+//
+// Run: xray demos/05-concurrency/shared_data.xr
+//
+// GOLDEN RULE: If it compiles, it's concurrency-safe.
+// No locks needed. The compiler enforces safety.
+
+// === Rule 1: shared const (immutable cross-coroutine sharing) ===
+// Zero-copy reads from any coroutine
+shared const CONFIG = {
+    host: "localhost",
+    port: 8080,
+    maxRetries: 3
+}
+
+fn worker1(id: int): void {
+    // All workers can safely read CONFIG (no copy, no lock)
+    print("worker-${id}: host=${CONFIG.host}, port=${CONFIG.port}")
+}
+
+scope {
+    go worker1(1)
+    go worker1(2)
+    go worker1(3)
+}
+
+// === Rule 2: Channel (inter-coroutine communication) ===
+// Values sent through channels are deep-copied (pointer types)
+const ch = Channel(1)
+
+fn sender(ch: Channel<int>): void {
+    ch.send(42)
+}
+
+go sender(ch)
+let val = ch.recv()
+print("received via channel: ${val}")
+ch.close()
+
+// === Rule 3: Function parameters (deep copy) ===
+// When you pass data to go, it's deep-copied to the child coroutine
+fn processData(data: Array<int>): void {
+    // This is a separate copy — mutations don't affect the original
+    data.push(999)
+    print("child sees: ${data}")
+}
+
+let myData = [1, 2, 3]
+let t = go processData(myData)
+await t
+print("parent still has: ${myData}")
+
+// === What you CANNOT do (compiler errors): ===
+// These would all fail at compile time:
+//
+// let x = [1, 2, 3]
+// go fn() { print(x) }()    // ERROR: cannot capture 'x' in go closure
+//
+// let ch2 = Channel(1)      // ERROR: Channel must be const
+//
+// shared let data = [1,2,3]
+// go fn() { data.push(4) }()  // ERROR: cannot capture shared let
+
+print("\nAll concurrency rules demonstrated safely!")

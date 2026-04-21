@@ -395,7 +395,7 @@ static void emit_map(YamlEmitter *e, XrMap *map, int level, bool flow_mode) {
 
 static void emit_json(YamlEmitter *e, XrJson *json, int level, bool flow_mode) {
     XrSymbolTable *symtab = (XrSymbolTable*)e->isolate->symbol_table;
-    uint16_t count = xr_json_field_count(json);
+    uint16_t count = xr_json_field_count(e->isolate, json);
 
     if (count == 0) {
         emit_str(e, "{}");
@@ -407,7 +407,7 @@ static void emit_json(YamlEmitter *e, XrJson *json, int level, bool flow_mode) {
         use_flow = true;
     }
 
-    XrShape *shape = xr_json_shape(json);
+    XrShape *shape = xr_json_shape(e->isolate, json);
     if (use_flow) {
         emit_char(e, '{');
         for (uint16_t i = 0; i < shape->field_count; i++) {
@@ -416,7 +416,7 @@ static void emit_json(YamlEmitter *e, XrJson *json, int level, bool flow_mode) {
             const char *name = xr_symbol_get_name_in_table(symtab, sym);
             if (name) emit_key_string(e, name, strlen(name));
             emit_str(e, ": ");
-            XrValue v = xr_json_get_field_any(json, i);
+            XrValue v = xr_json_get_field_any(e->isolate, json, i);
             emit_value(e, v, level, true);
         }
         emit_char(e, '}');
@@ -430,7 +430,7 @@ static void emit_json(YamlEmitter *e, XrJson *json, int level, bool flow_mode) {
             const char *name = xr_symbol_get_name_in_table(symtab, sym);
             if (name) emit_key_string(e, name, strlen(name));
             emit_str(e, ": ");
-            XrValue v = xr_json_get_field_any(json, i);
+            XrValue v = xr_json_get_field_any(e->isolate, json, i);
             if (XR_IS_ARRAY(v) || XR_IS_MAP(v) || xr_value_is_json(v)) {
                 emit_char(e, '\n');
                 emit_indent(e, level + 1);

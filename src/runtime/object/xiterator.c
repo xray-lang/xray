@@ -32,7 +32,7 @@ XrIterator* xr_iterator_new_from_map(struct XrCoroutine *coro, struct XrMap *map
     XR_DCHECK(map_param != NULL, "iterator_new_from_map: NULL map");
     // Allocate Iterator on coroutine heap
     XrIterator *iter = (XrIterator*)xr_alloc(coro, sizeof(XrIterator), XR_TITERATOR);
-    
+
     if (!iter) {
         return NULL;
     }
@@ -55,7 +55,7 @@ XrIterator* xr_iterator_new_from_set(struct XrCoroutine *coro, struct XrSet *set
     XR_DCHECK(set_param != NULL, "iterator_new_from_set: NULL set");
     // Allocate Iterator on coroutine heap
     XrIterator *iter = (XrIterator*)xr_alloc(coro, sizeof(XrIterator), XR_TITERATOR);
-    
+
     if (!iter) {
         return NULL;
     }
@@ -79,17 +79,17 @@ XrIterator* xr_iterator_new_from_json(struct XrCoroutine *coro, struct XrJson *j
     XR_DCHECK(json != NULL, "iterator_new_from_json: NULL json");
     XrIterator *iter = (XrIterator*)xr_alloc(coro, sizeof(XrIterator), XR_TITERATOR);
     if (!iter) return NULL;
-    
+
     xr_gc_header_init_type(&iter->gc, XR_TITERATOR);
     iter->type = XR_ITERATOR_JSON;
     iter->source.json = json;
     iter->scan_index = 0;
     iter->coro = coro;
     iter->context = (void*)isolate;
-    
-    XrShape *shape = xr_json_shape(json);
+
+    XrShape *shape = xr_json_shape(isolate, json);
     iter->total_count = shape ? shape->field_count : 0;
-    
+
     return iter;
 }
 
@@ -104,7 +104,7 @@ bool xr_iterator_has_next(XrIterator *iter) {
 
         XrMap *map = (XrMap*)iter->source.map;
         if (xr_map_isdummy(map)) return false;
-        
+
         uint32_t size = xr_map_sizenode(map);
         // Skip empty nodes, park scan_index at next valid node
         while (iter->scan_index < size) {
@@ -130,7 +130,7 @@ bool xr_iterator_has_next(XrIterator *iter) {
     } else if (iter->type == XR_ITERATOR_JSON) {
         XrJson *json = iter->source.json;
         if (!json) return false;
-        
+
         return iter->scan_index < iter->total_count;
     }
 
@@ -151,7 +151,7 @@ XrValue xr_iterator_next(XrIterator *iter) {
 
         XrMap *map = (XrMap*)iter->source.map;
         if (xr_map_isdummy(map)) return xr_null();
-        
+
         uint32_t size = xr_map_sizenode(map);
         while (iter->scan_index < size) {
             XrMapNode *node = xr_map_node(map, iter->scan_index);
@@ -202,18 +202,18 @@ XrValue xr_iterator_next(XrIterator *iter) {
         if (!json) return xr_null();
         XrayIsolate *X = (XrayIsolate*)iter->context;
         XrSymbolTable *st = X ? (XrSymbolTable*)xr_isolate_get_symbol_table(X) : NULL;
-        
+
         {
-            XrShape *shape = xr_json_shape(json);
+            XrShape *shape = xr_json_shape(X, json);
             if (!shape || iter->scan_index >= shape->field_count) return xr_null();
-            
+
             uint32_t idx = iter->scan_index++;
             SymbolId sym = shape->field_symbols[idx];
-            XrValue value = xr_json_get_field_any(json, idx);
-            
+            XrValue value = xr_json_get_field_any(X, json, idx);
+
             XrArray *pair = xr_array_with_capacity(iter->coro, 2);
             if (!pair) return xr_null();
-            
+
             // Convert SymbolId to string
             XrValue key_str = xr_null();
             if (st) {
