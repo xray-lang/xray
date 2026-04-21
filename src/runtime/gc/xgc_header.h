@@ -142,6 +142,16 @@ _Static_assert(sizeof(XrGCHeader) == 16, "XrGCHeader must be 16 bytes");
     ((gc)->extra = ((gc)->extra & 0x01) | \
         (((argc) & 0x03) << 1) | (((tid0) & 0x1F) << 3) | (((tid1) & 0x1F) << 8))
 
+/* ========== MMAP Flag (extra field bit 13) ========== */
+/*
+ * Marks objects allocated via mmap (vs xr_malloc).
+ * Used by both system heap (shared objects) and per-coro GC (large objects).
+ * Bit 13 of extra is spare (bits 0-12 used by storage + type args).
+ */
+#define XR_GC_FLAG_MMAP       0x2000
+#define XR_GC_IS_MMAP(gc)     (((gc)->extra & XR_GC_FLAG_MMAP) != 0)
+#define XR_GC_SET_MMAP(gc)    ((gc)->extra |= XR_GC_FLAG_MMAP)
+
 /* ========== Initialization Functions ========== */
 
 static inline void xr_gc_header_init_type(XrGCHeader *gc, XrObjType type) {

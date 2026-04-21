@@ -37,6 +37,7 @@
 #include <string.h>
 #include <math.h>
 #include "../../base/xdefs.h"
+#include "../../base/xchecks.h"
 
 // Internal base types
 typedef int64_t xr_Integer;
@@ -237,6 +238,24 @@ static inline int64_t xr_value_to_i64(XrValue v) {
 static inline double xr_value_to_f64(XrValue v) {
     if (XR_IS_FLOAT(v)) return v.f;
     if (XR_IS_INT(v))   return (double)v.i;
+    return 0.0;
+}
+
+// Coerce any numeric/bool value to int64; panics on non-numeric (typed array use).
+static inline int64_t xr_value_to_int64_coerce(XrValue v) {
+    if (XR_IS_INT(v))   return XR_TO_INT(v);
+    if (XR_IS_FLOAT(v)) return (int64_t)XR_TO_FLOAT(v);
+    if (XR_IS_BOOL(v))  return XR_IS_TRUE(v) ? 1 : 0;
+    XR_CHECK(false, "type confusion: non-numeric value written to typed array");
+    return 0;
+}
+
+// Coerce any numeric/bool value to double; panics on non-numeric (typed array use).
+static inline double xr_value_to_f64_coerce(XrValue v) {
+    if (XR_IS_FLOAT(v)) return XR_TO_FLOAT(v);
+    if (XR_IS_INT(v))   return (double)XR_TO_INT(v);
+    if (XR_IS_BOOL(v))  return XR_IS_TRUE(v) ? 1.0 : 0.0;
+    XR_CHECK(false, "type confusion: non-numeric value written to typed array");
     return 0.0;
 }
 

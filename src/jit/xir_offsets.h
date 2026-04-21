@@ -130,7 +130,7 @@
 #define XIR_GC_IN_GC_OFFSET          110   // offsetof(XrCoroGC, in_gc)
 #define XIR_GC_GC_DISABLED_OFFSET    111   // offsetof(XrCoroGC, gc_disabled)
 #define XIR_GC_ALLOC_SINCE_GC_OFFSET 120   // offsetof(XrCoroGC, alloc_since_gc)
-#define XIR_GC_OBJECT_COUNT_OFFSET   280   // offsetof(XrCoroGC, object_count)
+#define XIR_GC_OBJECT_COUNT_OFFSET   312   // offsetof(XrCoroGC, object_count)
 #define XIR_IMMIX_BLOCK_LOCAL_ALLGC_OFFSET  24  // offsetof(XrImmixBlock, local_allgc)
 #define XIR_IMMIX_BLOCK_ALLOC_MARKS_OFFSET   8  // offsetof(XrImmixBlock, alloc_marks)
 #define XIR_IMMIX_BLOCK_ALLOC_COUNT_OFFSET  40  // offsetof(XrImmixBlock, alloc_count)

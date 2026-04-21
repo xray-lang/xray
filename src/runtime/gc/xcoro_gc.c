@@ -28,6 +28,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
+#include <sys/mman.h>
 #include "../../base/xmalloc.h"
 #include "xstackmap.h"  // XrStackMapTable, XrStackMapEntry
 
@@ -85,6 +86,7 @@ static void gc_init_runtime_state(XrCoroGC *gc) {
     gc->GCest = 0;
     gc->young_promoted = 0;
     gc->totalbytes = 0;
+    gc->large_bytes = 0;
     gc->sweep_phase = XGC_SWEEP_DONE;
     gc->sweep_block = NULL;
     gc->alloc_since_gc = 0;
@@ -189,7 +191,12 @@ static void gc_free_large_objects(XrCoroGC *gc) {
             XrGCDestroyFn destroy = get_destroy_func(lo->type);
             if (destroy) destroy(lo, gc);
         }
-        xr_free(lo);
+        gc->large_bytes -= lo->objsize;
+        if (XR_GC_IS_MMAP(lo)) {
+            munmap(lo, lo->objsize);
+        } else {
+            xr_free(lo);
+        }
         lo = next;
     }
     gc->large_objects = NULL;
@@ -316,10 +323,21 @@ XrGCHeader* xr_coro_gc_newobj(XrCoroGC *gc, uint8_t type, size_t size) {
     XrGCHeader *obj;
 
     if (total > XR_LARGE_OBJECT_THRESHOLD) {
-        obj = (XrGCHeader*)xr_malloc(total);
-        if (!obj) return NULL;
+        if (total >= XR_MMAP_THRESHOLD) {
+            // Tier 2: very large — use mmap to avoid libc heap fragmentation
+            obj = (XrGCHeader*)mmap(NULL, total, PROT_READ | PROT_WRITE,
+                                     MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+            if (obj == MAP_FAILED) return NULL;
+            // mmap returns zeroed memory; set mmap flag in extra
+            XR_GC_SET_MMAP(obj);
+        } else {
+            // Tier 1: medium large — use xr_malloc
+            obj = (XrGCHeader*)xr_malloc(total);
+            if (!obj) return NULL;
+        }
         obj->gc_next = gc->large_objects;
         gc->large_objects = obj;
+        gc->large_bytes += (int64_t)total;
     } else {
         obj = (XrGCHeader*)xr_immix_alloc(&gc->immix, total);
         if (!obj) return NULL;
@@ -327,8 +345,9 @@ XrGCHeader* xr_coro_gc_newobj(XrCoroGC *gc, uint8_t type, size_t size) {
     }
 
     obj->type = type;
-    obj->extra = 0;
     obj->objsize = (uint32_t)total;
+    // Preserve XR_GC_FLAG_MMAP if set during mmap allocation; clear other bits
+    obj->extra = (obj->extra & XR_GC_FLAG_MMAP);
 
     // New objects born with currentwhite (in young blocks or large list)
     // INVARIANT 3: new objects carry currentwhite
@@ -1018,8 +1037,13 @@ static void sweeplargeobjects(XrCoroGC *gc) {
             }
             *p = curr->gc_next;
             gc->totalbytes -= curr->objsize;
+            gc->large_bytes -= curr->objsize;
             gc->object_count--;
-            xr_free(curr);
+            if (XR_GC_IS_MMAP(curr)) {
+                munmap(curr, curr->objsize);
+            } else {
+                xr_free(curr);
+            }
         } else {
             curr->marked = (marked & ~(XGC_WHITEBITS | XGC_BLACK)) | gc->currentwhite;
             p = &curr->gc_next;
@@ -1061,6 +1085,18 @@ static void sweep_start(XrCoroGC *gc) {
     gc->sweep_block = gc->immix.full_blocks;
 }
 
+// Shrink a gray list if capacity is much larger than recent peak usage.
+// Avoids permanent high-water memory after a one-time large job.
+static void maybe_shrink_graylist(XrGCGrayList *list) {
+    if (list->capacity > 64 && list->capacity > list->peak * 4) {
+        int newcap = list->peak * 2;
+        if (newcap < 64) newcap = 64;
+        XrGCHeader **p = xr_realloc(list->items, (size_t)newcap * sizeof(XrGCHeader*));
+        if (p) { list->items = p; list->capacity = newcap; }
+    }
+    list->peak = 0;
+}
+
 // Finalize sweep cycle: decref shared objects, state transition, verify.
 // Shared by incremental completion path.  STW paths (fullgc/entergen)
 // handle timing themselves and call the pieces directly.
@@ -1069,6 +1105,8 @@ static void finalize_sweep(XrCoroGC *gc) {
     gc->gcstate = XGC_PAUSE;
     gc->gc_count++;
     setpause(gc);
+    maybe_shrink_graylist(&gc->gray);
+    maybe_shrink_graylist(&gc->grayagain);
     xr_gc_verify_invariants(gc);
 }
 
@@ -1892,7 +1930,7 @@ void xr_coro_gc_print_stats(XrCoroGC *gc) {
     size_t large_count = 0;
     for (XrGCHeader *obj = gc->large_objects; obj; obj = obj->gc_next)
         large_count++;
-    printf("Large objects:  %zu\n", large_count);
+    printf("Large objects:  %zu (%lld bytes)\n", large_count, (long long)gc->large_bytes);
 
     printf("=====================================\n");
 }

@@ -171,12 +171,14 @@ typedef struct XrGCGrayList {
     XrGCHeader **items;
     int count;
     int capacity;
+    int peak;       // High-water mark since last shrink check
 } XrGCGrayList;
 
 static inline void xr_gclist_init(XrGCGrayList *list) {
     list->items = NULL;
     list->count = 0;
     list->capacity = 0;
+    list->peak = 0;
 }
 
 static inline void xr_gclist_destroy(XrGCGrayList *list) {
@@ -201,6 +203,7 @@ static inline void xr_gclist_push(XrGCGrayList *list, XrGCHeader *obj) {
         list->capacity = newcap;
     }
     list->items[list->count++] = obj;
+    if (list->count > list->peak) list->peak = list->count;
 }
 
 static inline XrGCHeader *xr_gclist_pop(XrGCGrayList *list) {
@@ -239,7 +242,8 @@ static inline void xr_gclist_absorb(XrGCGrayList *dst, XrGCGrayList *src) {
 
 /* ========== Large Object Threshold ========== */
 
-#define XR_LARGE_OBJECT_THRESHOLD (4 * 1024)  // >4KB is large object
+#define XR_LARGE_OBJECT_THRESHOLD (4 * 1024)    // >4KB → large object (xr_malloc)
+#define XR_MMAP_THRESHOLD         (256 * 1024)  // ≥256KB → mmap (avoid libc heap fragmentation)
 
 /* ========== Per-Coroutine GC Root Callback ========== */
 
@@ -297,6 +301,7 @@ typedef struct XrCoroGC {
     // === Less frequent data ===
     XrGCGrayList weak;          // Weak tables
     XrGCHeader *large_objects;  // All large objects (single list)
+    int64_t large_bytes;        // Total bytes in large_objects (for stats/tuning)
     int64_t GCmarked;           // Bytes marked in last GC
 
     // GC tuning parameters

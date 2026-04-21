@@ -76,14 +76,11 @@ static inline bool xr_range_contains(XrRange *r, int64_t value) {
 /* ========== XrValue Conversion ========== */
 
 static inline XrValue xr_value_from_range(XrRange *r) {
-    XrValue v;
-    v.tag = XR_TAG_PTR;
-    v.ptr = r;
-    return v;
+    return XR_FROM_PTR(r);
 }
 
 static inline XrRange* xr_value_to_range(XrValue v) {
-    return (XrRange*)v.ptr;
+    return (XrRange*)XR_TO_PTR(v);
 }
 
 /* ========== Conversion ========== */
