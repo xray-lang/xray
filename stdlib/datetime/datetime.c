@@ -173,7 +173,9 @@ XrDateTime* xr_datetime_parse(XrayIsolate *isolate, const char *str, const char 
 
     if (!format || strcmp(format, "ISO8601") == 0 || strcmp(format, "iso") == 0) {
         int parsed = sscanf(str, "%d-%d-%dT%d:%d:%d", &year, &month, &day, &hour, &minute, &second);
-        if (parsed < 3) parsed = sscanf(str, "%d-%d-%d %d:%d:%d", &year, &month, &day, &hour, &minute, &second);
+        // Fall through to space-separated format when the T-format
+        // only matched the date part (parsed < 6), e.g. "1979-05-27 07:32:00".
+        if (parsed < 6) parsed = sscanf(str, "%d-%d-%d %d:%d:%d", &year, &month, &day, &hour, &minute, &second);
         if (parsed < 3) parsed = sscanf(str, "%d/%d/%d %d:%d:%d", &year, &month, &day, &hour, &minute, &second);
         if (parsed < 3) return NULL;
 

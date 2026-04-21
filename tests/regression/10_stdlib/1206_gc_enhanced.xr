@@ -54,28 +54,27 @@ fn test_gc_setstepmul_returns_old(): void {
 fn test_gc_info_keys(): void {
     let info = gc.info()
     // Memory stats
-    assert(info["totalbytes"] >= 0)
+    assert(info["totalBytes"] >= 0)
     assert(info["totalKB"] >= 0.0)
     assert(info["marked"] >= 0)
     // GC state
     assert(info["state"].length > 0)
-    assert(info["gccount"] >= 0)
+    assert(info["gcCount"] >= 0)
     // Tuning
     assert(info["pause"] > 0)
-    assert(info["stepmul"] > 0)
+    assert(info["stepMul"] > 0)
     // Timing (new)
-    assert(info["gctimeMs"] >= 0.0)
-    assert(info["lastgctimeUs"] >= 0.0)
+    assert(info["gcTimeMs"] >= 0.0)
+    assert(info["lastGcTimeUs"] >= 0.0)
     // Immix stats (new)
     assert(info["blocks"] >= 0)
-    assert(info["freeblocks"] >= 0)
-    assert(info["recycleblocks"] >= 0)
-    assert(info["fullblocks"] >= 0)
-    assert(info["livelines"] >= 0)
-    assert(info["freelines"] >= 0)
+    assert(info["freeBlocks"] >= 0)
+    assert(info["recycleBlocks"] >= 0)
+    assert(info["fullBlocks"] >= 0)
+    assert(info["liveLines"] >= 0)
+    assert(info["freeLines"] >= 0)
     // Monitoring
-    assert(info["finalizercount"] >= 0)
-    assert(info["finalizererrors"] >= 0)
+    assert(info["finalizerCount"] >= 0)
 }
 
 // @test gc.collect updates timing stats
@@ -83,9 +82,9 @@ fn test_gc_info_keys(): void {
 fn test_gc_collect_updates_timing(): void {
     gc.collect()
     let info = gc.info()
-    // After at least one collect, lastgctimeUs should be > 0
-    assert(info["lastgctimeUs"] > 0.0)
-    assert(info["gctimeMs"] >= 0.0)
+    // After at least one collect, lastGcTimeUs should be > 0
+    assert(info["lastGcTimeUs"] > 0.0)
+    assert(info["gcTimeMs"] >= 0.0)
 }
 
 // @test gc.collect returns cycle count

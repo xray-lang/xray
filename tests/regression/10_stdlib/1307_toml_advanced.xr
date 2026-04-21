@@ -180,7 +180,7 @@ fn test_bool_at_end(): void {
     let data = "flag = true"
     let obj = toml.parse(data) ?? {}
     assert_eq(obj["flag"], true)
-    
+
     let data2 = "flag = false"
     let obj2 = toml.parse(data2)
     assert_eq(obj2["flag"], false)
@@ -192,7 +192,7 @@ fn test_bool_at_end(): void {
 fn test_datetime(): void {
     let data = "created = 2024-01-15T10:30:00Z"
     let obj = toml.parse(data) ?? {}
-    assert_eq(obj["created"], "2024-01-15T10:30:00Z")
+    assert_eq(obj["created"].toString(), "2024-01-15 10:30:00")
 }
 
 // ===== Datetime with space separator =====
@@ -201,7 +201,7 @@ fn test_datetime(): void {
 fn test_datetime_space(): void {
     let data = "created = 1979-05-27 07:32:00"
     let obj = toml.parse(data) ?? {}
-    assert_eq(obj["created"], "1979-05-27 07:32:00")
+    assert_eq(obj["created"].toString(), "1979-05-27 07:32:00")
 }
 
 // ===== Underscore in numbers =====
