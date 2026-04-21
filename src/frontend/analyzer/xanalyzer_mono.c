@@ -1148,8 +1148,8 @@ static void rewrite_call_sites(AstNode *node, XaGenericRegistry *registry,
                 const char *mangled = xa_mono_collector_lookup(
                     collector, fn_name, call->type_args, call->type_arg_count);
                 if (mangled) {
-                    // Replace callee variable name
-                    xr_free(call->callee->as.variable.name);
+                    // Replace callee variable name.
+                    // Note: old name is arena-allocated, do not free.
                     call->callee->as.variable.name = xr_strdup(mangled);
                     // Clear type args (no longer generic call)
                     call->type_args = NULL;
@@ -1173,7 +1173,7 @@ static void rewrite_call_sites(AstNode *node, XaGenericRegistry *registry,
                 const char *mangled = xa_mono_collector_lookup(
                     collector, ne->class_name, ne->type_args, ne->type_arg_count);
                 if (mangled) {
-                    xr_free(ne->class_name);
+                    // Old class_name is arena-allocated, do not free.
                     ne->class_name = xr_strdup(mangled);
                     ne->type_args = NULL;
                     ne->type_arg_count = 0;
@@ -1194,7 +1194,7 @@ static void rewrite_call_sites(AstNode *node, XaGenericRegistry *registry,
                 const char *mangled = xa_mono_collector_lookup(
                     collector, sl->struct_name, sl->type_args, sl->type_arg_count);
                 if (mangled) {
-                    xr_free(sl->struct_name);
+                    // Old struct_name is arena-allocated, do not free.
                     sl->struct_name = xr_strdup(mangled);
                     sl->type_args = NULL;
                     sl->type_arg_count = 0;
@@ -1318,6 +1318,11 @@ static void inject_mono_decls(AstNode *root, XaGenericRegistry *registry,
 
     ProgramNode *prog = &root->as.program;
 
+    // prog->statements starts as arena-allocated (from xr_ast_program_add).
+    // Once we copy it to the heap for growth, heap_owned becomes true and
+    // subsequent grows can safely xr_free the old buffer.
+    bool heap_owned = false;
+
     for (int i = 0; i < collector->count; i++) {
         XaMonoInstance *inst = &collector->instances[i];
         XaGenericDecl *decl = registry_find(registry, inst->generic_name);
@@ -1328,6 +1333,7 @@ static void inject_mono_decls(AstNode *root, XaGenericRegistry *registry,
         if (map_count > inst->type_arg_count) map_count = inst->type_arg_count;
 
         XrMonoTypeMap *map = (XrMonoTypeMap *)xr_calloc(map_count, sizeof(XrMonoTypeMap));
+        if (!map) continue;
         for (int j = 0; j < map_count; j++) {
             map[j].param_name = decl->type_params[j]->name;
             map[j].concrete_type = inst->type_args[j];
@@ -1357,12 +1363,23 @@ static void inject_mono_decls(AstNode *root, XaGenericRegistry *registry,
             cloned->as.struct_decl.type_params = NULL;
         }
 
-        // Inject into program (grow array if needed)
+        // Inject into program (grow array if needed).
+        // The initial prog->statements is arena-allocated by the parser; we
+        // must not xr_free/xr_realloc it. On the first overflow, allocate a
+        // heap buffer and memcpy. After that, normal xr_realloc is safe.
         if (prog->count >= prog->capacity) {
-            int new_cap = prog->capacity ? prog->capacity * 2 : 16;
-            prog->statements = (AstNode **)xr_realloc(
-                prog->statements, new_cap * sizeof(AstNode *));
+            int new_cap = prog->capacity ? prog->capacity * 2 : (prog->count + 16);
+            AstNode **new_buf = (AstNode **)xr_malloc(
+                (size_t)new_cap * sizeof(AstNode *));
+            if (!new_buf) continue;
+            if (prog->statements && prog->count > 0)
+                memcpy(new_buf, prog->statements,
+                       (size_t)prog->count * sizeof(AstNode *));
+            if (heap_owned)
+                xr_free(prog->statements);
+            prog->statements = new_buf;
             prog->capacity = new_cap;
+            heap_owned = true;
         }
         prog->statements[prog->count++] = cloned;
     }
