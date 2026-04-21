@@ -29,14 +29,6 @@
 #include "xgc_internal.h"
 #include "../value/xvalue.h"
 
-/* ========== Mark API ========== */
-
-#define xr_gc_mark_object(gc, obj)  xr_gc_markobj((gc), (XrGCHeader*)(obj))
-
-/* ========== Type Registration ========== */
-
-typedef void (*XrGCDestroyFunc)(XrGCHeader *obj);
-
 /* ========== Unified Allocation Interface ========== */
 
 // Forward declarations

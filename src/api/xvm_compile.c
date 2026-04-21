@@ -197,48 +197,6 @@ void xr_free_code(XrayIsolate *isolate, XrProto *proto) {
     }
 }
 
-/* ========== GC Integration ========== */
-
-// Mark GC roots (stack and global variables)
-void xr_vm_gc_mark_roots(XrayIsolate *isolate) {
-    if (!isolate) return;
-
-    XrGC *gc = &isolate->gc;
-
-    // Mark stack values
-    for (XrValue *slot = isolate->vm.stack; slot < isolate->vm.stack_top; slot++) {
-        if (XR_VALUE_NEEDS_GC(*slot)) {
-            xr_gc_markvalue(gc, *slot);
-        }
-    }
-
-    // Mark global variables
-    for (int i = 0; i < isolate->vm.builtin_count; i++) {
-        XrValue val = isolate->vm.builtins[i];
-        if (XR_VALUE_NEEDS_GC(val)) {
-            xr_gc_markvalue(gc, val);
-        }
-    }
-
-    // Mark current exception
-    if (XR_VALUE_NEEDS_GC(isolate->vm.current_exception)) {
-        xr_gc_markvalue(gc, isolate->vm.current_exception);
-    }
-
-    // Mark main coroutine
-    if (isolate->main_coro) {
-        xr_gc_mark_object(gc, (XrGCHeader*)isolate->main_coro);
-    }
-
-    // Mark shared array values (closures, strings, etc. stored across REPL inputs)
-    XrSharedArray *shared = &isolate->vm.shared;
-    for (int i = 0; i < shared->count; i++) {
-        if (XR_VALUE_NEEDS_GC(shared->data[i])) {
-            xr_gc_markvalue(gc, shared->data[i]);
-        }
-    }
-}
-
 /* ========== VM Lifecycle ========== */
 
 // Initialize global variables table

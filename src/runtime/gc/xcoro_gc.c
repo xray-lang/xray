@@ -1445,7 +1445,8 @@ static void setminordebt(XrCoroGC *gc) {
 
 /*
  * Check whether to shift from minor to major collection.
- * Triggers major if promoted bytes exceed 70% of estimated live bytes.
+ * Triggers major if promoted bytes exceed 400% of estimated live bytes,
+ * deferring costly full-heap traversals until pressure is clearly high.
  */
 static bool check_minor_to_major(XrCoroGC *gc) {
     if (gc->GCest <= 0) return false;

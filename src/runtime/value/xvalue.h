@@ -265,21 +265,6 @@ static inline bool xr_value_same(XrValue a, XrValue b) {
 #define XR_VALUE_NEEDS_GC(v)    ((v).tag == XR_TAG_PTR)
 #define XR_VALUE_GCPTR(v)       ((XrGCHeader*)(v).ptr)
 
-#define XR_MARK_VALUE(gc_ctx, v) do { \
-    if (XR_VALUE_NEEDS_GC(v)) { \
-        XrGCHeader *_obj = XR_VALUE_GCPTR(v); \
-        if (_obj) xr_gc_mark_object((gc_ctx), _obj); \
-    } \
-} while(0)
-
-#define XR_MARK_VALUES(gc_ctx, arr, count) do { \
-    XrValue *_vals = (arr); \
-    size_t _n = (count); \
-    for (size_t _i = 0; _i < _n; _i++) { \
-        XR_MARK_VALUE((gc_ctx), _vals[_i]); \
-    } \
-} while(0)
-
 /* ========== String Data Access (always heap, no SSO) ========== */
 
 XR_FUNC const char* xr_value_str_data(const XrValue *v);

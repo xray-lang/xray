@@ -263,7 +263,7 @@ typedef struct XrCoroGC {
     int64_t GCdebt;             // Debt bytes (triggers GC when > 0)
     int64_t totalbytes;         // Total allocated bytes
     int32_t gc_requested;       // GC requested, trigger at next safe point (int32 for JIT)
-    uint8_t gcstate;            // GC phase (0-3, FINALIZE removed)
+    uint8_t gcstate;            // GC phase: PAUSE/PROPAGATE/ATOMIC/SWEEP
     uint8_t currentwhite;       // Current white bit (XGC_WHITE0 or XGC_WHITE1)
     uint8_t in_gc;              // Re-entry guard
     uint8_t gc_disabled;        // Disable counter

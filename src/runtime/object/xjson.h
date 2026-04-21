@@ -111,10 +111,6 @@ static inline bool xr_json_has_field(XrJson *json, SymbolId symbol) {
 }
 
 
-/* ========== GC Related ========== */
-
-XR_FUNC void xr_gc_traverse_json(XrGC *gc, XrGCHeader *obj);
-
 /* ========== XrValue Conversion ========== */
 
 static inline XrValue xr_json_value(XrJson *json) {

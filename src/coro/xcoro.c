@@ -1127,48 +1127,6 @@ static __attribute__((unused)) void xr_sched_print_deadlock(XrScheduler *sched) 
 
 // ========== GC Integration ==========
 
-// GC traverse: mark all objects referenced by coroutine
-void xr_gc_traverse_coroutine(XrGC *gc, XrGCHeader *obj) {
-    XrCoroutine *coro = (XrCoroutine *)obj;
-    if (!coro) return;
-
-    // Mark closure (only for CLOSURE entry type)
-    if (coro->entry_type == XR_CORO_ENTRY_CLOSURE && coro->entry.closure) {
-        xr_gc_mark_object(gc, (XrGCHeader *)coro->entry.closure);
-    }
-
-    // Mark values in args array
-    for (int i = 0; i < coro->arg_count; i++) {
-        xr_gc_markvalue(gc, coro->args[i]);
-    }
-
-    // Mark values in stack
-    int stack_size = (int)(coro->vm_ctx.stack_top - coro->vm_ctx.stack);
-    for (int i = 0; i < stack_size; i++) {
-        xr_gc_markvalue(gc, coro->vm_ctx.stack[i]);
-    }
-
-    // Mark closures in frames
-    for (int i = 0; i < coro->vm_ctx.frame_count; i++) {
-        if (coro->vm_ctx.frames[i].closure) {
-            xr_gc_mark_object(gc, (XrGCHeader *)coro->vm_ctx.frames[i].closure);
-        }
-    }
-
-    // Mark result, error, and pending_closure_result
-    xr_gc_markvalue(gc, coro->result);
-    xr_gc_markvalue(gc, coro->error);
-    xr_gc_markvalue(gc, coro->pending_closure_result);
-
-    // Mark send value
-    xr_gc_markvalue(gc, coro->send_value);
-
-    // Mark task (GC-allocated via xr_alloc with XR_TTASK)
-    if (coro->task) {
-        xr_gc_mark_object(gc, (XrGCHeader *)coro->task);
-    }
-}
-
 // GC destructor: free coroutine internal resources
 void xr_gc_destroy_coroutine(XrGCHeader *obj, struct XrCoroGC *owning_gc) {
     (void)owning_gc;
