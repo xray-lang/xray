@@ -157,6 +157,7 @@ typedef struct XrProc {
 
     /* === Handoff Signaling === */
     _Atomic bool handoff_exit;     // Signal handoff M to release P
+    _Atomic int  handoff_sync;     // Futex word: exitsyscall waits, handoff M wakes after releasing P
 
     /* === Continuation Stealing === */
     XrStealQueue cont_deque;       // Chase-Lev deque for parent continuations

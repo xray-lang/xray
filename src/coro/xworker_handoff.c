@@ -97,18 +97,20 @@ void xr_worker_exitsyscall(void) {
     // Slow path: handoff M is running (P_HANDOFF) or already finished (P_IDLE)
     if (expected == P_HANDOFF) {
         // Signal handoff M to release P
+        atomic_store_explicit(&p->handoff_sync, 0, memory_order_relaxed);
         atomic_store(&p->handoff_exit, true);
 
-        // Spin-wait for handoff M to fully release P
-        int spin = 0;
-        while (atomic_load(&p->current_m) != NULL) {
-            if (++spin > 100) {
-                struct timespec ts = {0, 100000};  // 100us
-                nanosleep(&ts, NULL);
-                spin = 0;
-            }
-            sched_yield();
+        // Wait for handoff M to fully release P.
+        // Brief spin for the common case (handoff exits within microseconds),
+        // then fall back to futex wait with 1000us timeout.
+        for (int spin = 0; spin < 64; spin++) {
+            if (atomic_load_explicit(&p->current_m, memory_order_acquire) == NULL)
+                goto handoff_done;
         }
+        while (atomic_load_explicit(&p->current_m, memory_order_acquire) != NULL) {
+            xr_park_futex_wait(&p->handoff_sync, 0, 1000 /* us */);
+        }
+    handoff_done:;
     }
     // else: P_IDLE (handoff M already finished and released)
 
@@ -193,9 +195,13 @@ handoff_restart:;
         }
     }
 
-    // Release P and unbind
+    // Release P and unbind.
+    // handoff_sync wake must follow current_m = NULL so the exitsyscall
+    // waiter sees the NULL when it re-checks after futex return.
     atomic_store(&m->current_p, NULL);
-    atomic_store(&p->current_m, NULL);
+    atomic_store_explicit(&p->current_m, NULL, memory_order_release);
+    atomic_store_explicit(&p->handoff_sync, 1, memory_order_release);
+    xr_park_futex_wake(&p->handoff_sync);
     atomic_store(&p->status, P_IDLE);
     worker->m = NULL;
     m->current_coro = NULL;

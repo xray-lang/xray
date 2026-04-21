@@ -24,17 +24,14 @@
 #include "xworker_internal.h"
 #include "../base/xchecks.h"
 #include "../base/xmalloc.h"
+#include "../base/xhash.h"
 #include <string.h>
 
 // ========== Per-Worker Blocked Queue Operations (lock-free) ==========
 
-// Hash function: Channel pointer -> bucket index
+// Hash function: Channel pointer -> bucket index (uses unified xr_hash_int)
 static inline int blocked_bucket_hash(void *channel) {
-    uintptr_t h = (uintptr_t)channel;
-    h ^= h >> 16;
-    h *= 0x85ebca6b;
-    h ^= h >> 13;
-    return (int)(h % XR_BLOCKED_BUCKET_SIZE);
+    return (int)(xr_hash_int((int64_t)(intptr_t)channel) % XR_BLOCKED_BUCKET_SIZE);
 }
 
 // Per-Worker version: find or create blocked bucket for Channel (lock-free)
