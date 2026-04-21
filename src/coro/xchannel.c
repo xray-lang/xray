@@ -123,23 +123,6 @@ void xr_channel_remove_waiter(XrChannel *ch, XrCoroutine *coro) {
 
 // ========== GC Callbacks ==========
 
-#include "../runtime/gc/xgc.h"
-
-// GC mark: mark values in buffer (visible externally for xr_gc_traverse.c)
-void xr_gc_traverse_channel(XrGC *gc, void *obj, void *X) {
-    (void)X;
-    XR_DCHECK(obj != NULL, "gc_traverse_channel: NULL obj");
-    XrChannel *ch = (XrChannel *)obj;
-    if (ch->buffer) {
-        XR_DCHECK(ch->buf_count <= ch->buf_size, "gc_traverse_channel: buf_count > buf_size");
-        for (uint32_t i = 0; i < ch->buf_count; i++) {
-            uint32_t idx = (ch->recv_idx + i) % ch->buf_size;
-            XR_DCHECK(idx < ch->buf_size, "gc_traverse_channel: idx out of range");
-            xr_gc_markvalue(gc, ch->buffer[idx]);
-        }
-    }
-}
-
 // Check if buffer is inline (allocated together with channel)
 static inline bool channel_buffer_is_inline(XrChannel *ch) {
     return ch->buffer == (XrValue*)(ch + 1);

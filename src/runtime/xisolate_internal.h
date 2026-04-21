@@ -63,7 +63,6 @@ typedef struct XrGlobalStringPool XrGlobalStringPool;
 // VM initialization and cleanup
 XR_FUNC int xr_vm_init(XrayIsolate *isolate);
 XR_FUNC void xr_vm_cleanup(XrayIsolate *isolate);
-XR_FUNC void xr_vm_gc_mark_roots(XrayIsolate *isolate);
 
 
 /* ========== Fast Macros ========== */

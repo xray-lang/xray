@@ -62,24 +62,24 @@ XrJson *xr_json_new(struct XrCoroutine *coro, uint16_t capacity) {
     if (capacity == 0) {
         capacity = SHAPE_DEFAULT_CAPACITY;
     }
-    
+
     // Get or create cached root shape for this capacity
     XrayIsolate *X = xr_coro_get_isolate(coro);
     XrShape *shape = get_or_create_root_shape(X, capacity);
     if (!shape) return NULL;
-    
+
     // Allocate Json on coroutine heap
     size_t size = json_size(capacity);
     XrJson *json = (XrJson*)xr_alloc(coro, size, XR_TJSON);
     if (!json) return NULL;
-    
+
     xr_json_set_shape(json, shape);
     json->overflow = NULL;
-    
+
     // Initialize all fields to null
     // XR_NULL_VAL is all-zeros (tag=0, ptr=NULL, _pad=0), so memset is equivalent
     memset(json->fields, 0, capacity * sizeof(XrValue));
-    
+
     return json;
 }
 
@@ -87,9 +87,9 @@ XrJson *xr_json_new(struct XrCoroutine *coro, uint16_t capacity) {
 XrJson *xr_json_new_with_shape(struct XrCoroutine *coro, XrShape *shape) {
     XR_DCHECK(coro != NULL, "json_new_with_shape: NULL coro");
     if (!shape) return NULL;
-    
+
     int field_count = shape->in_object_capacity;
-    
+
     // Allocate Json on coroutine heap — lazy coro_gc creation
     size_t size = json_size(field_count);
     XrCoroGC *gc = xr_coro_ensure_gc(coro);
@@ -97,14 +97,14 @@ XrJson *xr_json_new_with_shape(struct XrCoroutine *coro, XrShape *shape) {
     XrGCHeader *obj = xr_coro_gc_newobj(gc, XR_TJSON, size);
     if (!obj) return NULL;
     XrJson *json = (XrJson *)obj;
-    
+
     xr_json_set_shape(json, shape);
     json->overflow = NULL;
-    
+
     // Initialize all fields to null
     // XR_NULL_VAL is all-zeros (tag=0, ptr=NULL, _pad=0), so memset is equivalent
     memset(json->fields, 0, field_count * sizeof(XrValue));
-    
+
     return json;
 }
 
@@ -112,16 +112,16 @@ XrJson *xr_json_new_with_shape(struct XrCoroutine *coro, XrShape *shape) {
 // Caller MUST set all fields before any GC can run.
 XrJson *xr_json_new_with_shape_noinit(struct XrCoroutine *coro, XrShape *shape) {
     if (!shape) return NULL;
-    
+
     int field_count = shape->in_object_capacity;
-    
+
     size_t size = json_size(field_count);
     XrCoroGC *gc2 = xr_coro_ensure_gc(coro);
     if (!gc2) return NULL;
     XrGCHeader *obj = xr_coro_gc_newobj(gc2, XR_TJSON, size);
     if (!obj) return NULL;
     XrJson *json = (XrJson *)obj;
-    
+
     xr_json_set_shape(json, shape);
     json->overflow = NULL;
     return json;
@@ -130,10 +130,10 @@ XrJson *xr_json_new_with_shape_noinit(struct XrCoroutine *coro, XrShape *shape) 
 // Initialize Json in-place on pre-allocated memory (for shared Json)
 void xr_json_init_inplace(XrJson *json, XrShape *shape) {
     if (!json || !shape) return;
-    
+
     xr_json_set_shape(json, shape);
     json->overflow = NULL;
-    
+
     // Initialize all fields to null
     // XR_NULL_VAL is all-zeros, so memset is equivalent
     int field_count = shape->in_object_capacity;
@@ -150,11 +150,11 @@ size_t xr_json_size(int field_count) {
 // Get field by Symbol — O(1) via Shape index lookup
 XrValue xr_json_get(XrJson *json, SymbolId symbol) {
     if (!json) return xr_null();
-    
+
     XrShape *shape = xr_json_shape(json);
     int idx = xr_shape_field_index(shape, symbol);
     if (idx < 0) return xr_null();
-    
+
     // In-object fast path
     if (idx < shape->in_object_capacity) {
         XR_DCHECK(idx >= 0, "json_get: negative field index");
@@ -192,9 +192,9 @@ static XrJsonOverflow *overflow_grow(XrJsonOverflow *old, uint16_t min_cap) {
 void xr_json_set(XrayIsolate *X, XrJson *json, SymbolId symbol, XrValue value) {
     XR_DCHECK(X != NULL, "json_set: NULL isolate");
     if (!json) return;
-    
+
     XrShape *shape = xr_json_shape(json);
-    
+
     // Check if field already exists
     int idx = xr_shape_field_index(shape, symbol);
     if (idx >= 0) {
@@ -213,10 +213,10 @@ void xr_json_set(XrayIsolate *X, XrJson *json, SymbolId symbol, XrValue value) {
         XR_GC_BARRIER_BACK_SAFE(xr_current_coro_gc(), json);
         return;
     }
-    
+
     // Field doesn't exist: try Shape transition
     XrShape *new_shape = xr_shape_transition(X, shape, symbol);
-    
+
     if (new_shape) {
         // Zero-copy transition: just swap shape_id
         xr_json_set_shape(json, new_shape);
@@ -247,11 +247,11 @@ void xr_json_set(XrayIsolate *X, XrJson *json, SymbolId symbol, XrValue value) {
 XrValue xr_json_get_by_key(XrayIsolate *X, XrJson *json, const char *key) {
     XR_DCHECK(X != NULL, "json_get_by_key: NULL isolate");
     if (!json || !key) return xr_null();
-    
+
     // Intern key as Symbol
     XrSymbolTable *table = get_symbol_table(X);
     SymbolId symbol = xr_symbol_register_in_table(table, key);
-    
+
     return xr_json_get(json, symbol);
 }
 
@@ -259,11 +259,11 @@ XrValue xr_json_get_by_key(XrayIsolate *X, XrJson *json, const char *key) {
 void xr_json_set_by_key(XrayIsolate *X, XrJson *json, const char *key, XrValue value) {
     XR_DCHECK(X != NULL, "json_set_by_key: NULL isolate");
     if (!json || !key) return;
-    
+
     // Intern key as Symbol
     XrSymbolTable *table = get_symbol_table(X);
     SymbolId symbol = xr_symbol_register_in_table(table, key);
-    
+
     xr_json_set(X, json, symbol, value);
 }
 
@@ -279,29 +279,3 @@ void xr_gc_destroy_json(XrGCHeader *obj, struct XrCoroGC *owning_gc) {
     }
 }
 
-// Traverse Json references (XrGCTraverseFn signature)
-void xr_gc_traverse_json(XrGC *gc, XrGCHeader *obj) {
-    XrJson *json = (XrJson*)obj;
-    if (!json) return;
-    
-    XrShape *shape = xr_json_shape(json);
-    if (!shape) return;
-    
-    // Mark in-object fields
-    uint16_t in_obj = shape->in_object_capacity;
-    uint16_t total = shape->field_count;
-    uint16_t n = (total < in_obj) ? total : in_obj;
-    for (uint16_t i = 0; i < n; i++) {
-        xr_gc_markvalue(gc, json->fields[i]);
-    }
-    
-    // Mark overflow fields
-    XrJsonOverflow *ov = json->overflow;
-    if (ov && total > in_obj) {
-        uint16_t ov_count = total - in_obj;
-        if (ov_count > ov->length) ov_count = ov->length;
-        for (uint16_t i = 0; i < ov_count; i++) {
-            xr_gc_markvalue(gc, ov->values[i]);
-        }
-    }
-}

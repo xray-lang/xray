@@ -35,15 +35,6 @@
 
 /* ========== Compile-Time Type Function Tables (.rodata) ========== */
 
-/*
- * Traverse functions for fixedgc mark (global GC only).
- * Per-Coroutine GC uses xr_gc_traverse_object() switch-case instead.
- */
-const XrGCTraverseFn g_traverse_funcs[XGC_MAX_TYPES] = {
-    [XR_TCOROUTINE] = (XrGCTraverseFn)xr_gc_traverse_coroutine,
-    [XR_TCHANNEL]   = (XrGCTraverseFn)xr_gc_traverse_channel,
-};
-
 const XrGCDestroyFn g_destroy_funcs[XGC_MAX_TYPES] = {
     [XR_TARRAY]         = xr_gc_destroy_array,
     [XR_TMAP]           = xr_gc_destroy_map,
@@ -61,47 +52,8 @@ const XrGCDestroyFn g_destroy_funcs[XGC_MAX_TYPES] = {
 
 #define xr_gc_gettype(o)  XR_GC_GET_TYPE(o)
 
-/* ========== Type Function Lookup ========== */
-
-static XrGCTraverseFn get_traverse_func(uint8_t type) {
-    return (type < XGC_MAX_TYPES) ? g_traverse_funcs[type] : NULL;
-}
-
 static XrGCDestroyFn get_destroy_func(uint8_t type) {
     return (type < XGC_MAX_TYPES) ? g_destroy_funcs[type] : NULL;
-}
-
-/* ========== Mark Functions ========== */
-
-/*
- * Fixedgc objects live forever and are never swept.
- * Mark functions are kept for API compatibility but are effectively no-ops
- * since fixedgc objects are allocated with marked=0 (not white in dual-white
- * system), so the xr_gc_iswhite check below always fails.
- */
-static void reallymarkobject(XrGC *gc, XrGCHeader *o) {
-    XR_DCHECK(o != NULL, "reallymarkobject: NULL object");
-    (void)gc;
-    uint8_t type = xr_gc_gettype(o);
-    XR_DCHECK(type < XGC_MAX_TYPES, "reallymarkobject: invalid GC type");
-    if (get_traverse_func(type) != NULL) {
-        xr_gc_white2gray(o);
-    } else {
-        o->marked = (o->marked & ~XGC_WHITEBITS) | XGC_BLACK;
-    }
-}
-
-void xr_gc_markobj(XrGC *gc, XrGCHeader *obj) {
-    if (obj != NULL && xr_gc_iswhite(obj)) {
-        reallymarkobject(gc, obj);
-    }
-}
-
-void xr_gc_markvalue(XrGC *gc, XrValue value) {
-    if (XR_VALUE_NEEDS_GC(value)) {
-        XrGCHeader *obj = (XrGCHeader*)XR_VALUE_GCPTR(value);
-        xr_gc_markobj(gc, obj);
-    }
 }
 
 /* ========== Init/Cleanup ========== */
@@ -129,7 +81,7 @@ void xr_gc_cleanup(XrGC *gc) {
         obj = next;
     }
     gc->fixedgc = NULL;
-    
+
     gc->object_count = 0;
     gc->totalbytes = 0;
 }
@@ -206,7 +158,7 @@ void* xr_alloc(struct XrCoroutine *coro, size_t size, uint8_t type) {
                 type, size);
         return NULL;
     }
-    
+
     // Fallback: use isolate's global GC (needed during early isolate init
     // when coro_gc creation fails due to missing worker/machine)
     if (coro->isolate) {

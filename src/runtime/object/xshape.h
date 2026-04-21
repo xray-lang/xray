@@ -135,7 +135,6 @@ XR_FUNC bool xr_shape_is_descendant_of(XrShape *child, XrShape *ancestor);
 
 /* ========== GC ========== */
 
-XR_FUNC void xr_gc_traverse_shape(XrGC *gc, void *obj, void *X);
 XR_FUNC void xr_gc_destroy_shape(void *obj);
 
 /* ========== Shape ID for GC Header ========== */

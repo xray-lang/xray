@@ -60,7 +60,6 @@ typedef struct XrCoroGC XrCoroGC;
 /* ========== Type Function Types (must be before XrGC) ========== */
 
 struct XrGC;  // Forward declaration
-typedef void (*XrGCTraverseFn)(struct XrGC *gc, XrGCHeader *obj);
 typedef void (*XrGCDestroyFn)(XrGCHeader *obj, XrCoroGC *owning_gc);
 typedef struct XrGCHeader** (*XrGCGetGCListFn)(XrGCHeader *obj);
 
@@ -83,11 +82,6 @@ XR_FUNC XrGCHeader* xr_gc_newobj(XrGC *gc, uint8_t type, size_t size);
 /* ========== Compile-Time Type Function Tables ========== */
 
 extern const XrGCDestroyFn g_destroy_funcs[XGC_MAX_TYPES];
-extern const XrGCTraverseFn g_traverse_funcs[XGC_MAX_TYPES];
-
-// Traverse functions (non-static, referenced by const tables)
-XR_FUNC void xr_gc_traverse_coroutine(XrGC *gc, XrGCHeader *obj);
-XR_FUNC void xr_gc_traverse_channel(XrGC *gc, void *obj, void *X);
 
 // Destroy functions (non-static, referenced by const tables)
 XR_FUNC void xr_gc_destroy_array(XrGCHeader *obj, XrCoroGC *owning_gc);
@@ -100,12 +94,6 @@ XR_FUNC void regex_object_destroy(XrGCHeader *obj, XrCoroGC *owning_gc);
 XR_FUNC void xr_gc_destroy_logger(XrGCHeader *obj, XrCoroGC *owning_gc);
 XR_FUNC void xr_gc_destroy_json(XrGCHeader *obj, XrCoroGC *owning_gc);
 XR_FUNC void xr_gc_destroy_task(XrGCHeader *obj, XrCoroGC *owning_gc);
-
-/* ========== Special Operations ========== */
-
-// xr_gc_fix removed - objects allocated directly to fixedgc
-XR_FUNC void xr_gc_markobj(XrGC *gc, XrGCHeader *obj);
-XR_FUNC void xr_gc_markvalue(XrGC *gc, XrValue value);
 
 /* ========== Debug API ========== */
 
