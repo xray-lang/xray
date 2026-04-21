@@ -99,12 +99,6 @@ static void ws_prof_signal(int sig) {
 static int ws_prof_registered = 0;
 #endif
 
-// CFunction types (from xvm.h)
-typedef XrValue (*XrCFunctionPtr)(XrayIsolate*, XrValue*, int);
-typedef struct XrCFunction XrCFunction;
-extern XrCFunction* xr_vm_cfunction_new(XrayIsolate *isolate, XrCFunctionPtr func, const char *name);
-extern XrValue xr_value_from_cfunction(XrCFunction *cfunc);
-
 /* ========== Helper Functions ========== */
 
 // Non-interned string for WS message data (avoids rwlock + hash table lookup)
@@ -1800,9 +1794,6 @@ XR_DEFINE_BUILTIN(ws_recvdata, "recvData",
 XR_DEFINE_BUILTIN(ws_echo_serve_yieldable, "echoServe",
     "(port: int): bool",
     "Pure C echo server with zero VM/GC overhead per message")
-
-// Yieldable C function registration
-extern struct XrCFunction* xr_vm_yieldable_cfunction_new(XrayIsolate*, XrYieldableCFunctionPtr, const char*);
 
 XrModule* xr_load_module_ws(XrayIsolate *isolate) {
     // 1. Create Native module

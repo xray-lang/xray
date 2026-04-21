@@ -15,6 +15,7 @@
 #include "cluster.h"
 #include "cluster_channel.h"
 #include "cluster_serial.h"
+#include "../common.h"
 #include "../crypto/crypto.h"  // xr_secure_wipe
 #include "../net/io.h"
 #include "../../src/runtime/xisolate_internal.h"
@@ -1815,36 +1816,21 @@ static XrValue cluster_monitor_coro_fn(XrayIsolate *X, XrValue *args, int argc) 
 
 XrModule *xr_load_module_cluster(XrayIsolate *isolate) {
     XrModule *mod = xr_module_create_native(isolate, "cluster");
-    XrCFunction *fn;
 
-    fn = xr_vm_cfunction_new(isolate, cluster_start, "start");
-    xr_module_add_export(isolate, mod, "start", xr_value_from_cfunction(fn));
-    fn = xr_vm_cfunction_new(isolate, cluster_join, "join");
-    xr_module_add_export(isolate, mod, "join", xr_value_from_cfunction(fn));
-    fn = xr_vm_cfunction_new(isolate, cluster_self, "self");
-    xr_module_add_export(isolate, mod, "self", xr_value_from_cfunction(fn));
-    fn = xr_vm_cfunction_new(isolate, cluster_nodes, "nodes");
-    xr_module_add_export(isolate, mod, "nodes", xr_value_from_cfunction(fn));
-    fn = xr_vm_cfunction_new(isolate, cluster_channel_fn, "channel");
-    xr_module_add_export(isolate, mod, "channel", xr_value_from_cfunction(fn));
-    fn = xr_vm_cfunction_new(isolate, cluster_serve_fn, "serve");
-    xr_module_add_export(isolate, mod, "serve", xr_value_from_cfunction(fn));
-    fn = xr_vm_cfunction_new(isolate, cluster_reply_fn, "reply");
-    xr_module_add_export(isolate, mod, "reply", xr_value_from_cfunction(fn));
-    fn = xr_vm_cfunction_new(isolate, cluster_call_fn, "call");
-    xr_module_add_export(isolate, mod, "call", xr_value_from_cfunction(fn));
-    fn = xr_vm_cfunction_new(isolate, cluster_monitor_coro_fn, "monitor");
-    xr_module_add_export(isolate, mod, "monitor", xr_value_from_cfunction(fn));
-    fn = xr_vm_cfunction_new(isolate, cluster_discover_fn, "discover");
-    xr_module_add_export(isolate, mod, "discover", xr_value_from_cfunction(fn));
-    fn = xr_vm_cfunction_new(isolate, cluster_stop_fn, "stop");
-    xr_module_add_export(isolate, mod, "stop", xr_value_from_cfunction(fn));
-    fn = xr_vm_cfunction_new(isolate, cluster_info_fn, "info");
-    xr_module_add_export(isolate, mod, "info", xr_value_from_cfunction(fn));
-    fn = xr_vm_cfunction_new(isolate, cluster_publish_fn, "publish");
-    xr_module_add_export(isolate, mod, "publish", xr_value_from_cfunction(fn));
-    fn = xr_vm_cfunction_new(isolate, cluster_subscribe_fn, "subscribe");
-    xr_module_add_export(isolate, mod, "subscribe", xr_value_from_cfunction(fn));
+    XRS_EXPORT(mod, isolate, "start", cluster_start);
+    XRS_EXPORT(mod, isolate, "join", cluster_join);
+    XRS_EXPORT(mod, isolate, "self", cluster_self);
+    XRS_EXPORT(mod, isolate, "nodes", cluster_nodes);
+    XRS_EXPORT(mod, isolate, "channel", cluster_channel_fn);
+    XRS_EXPORT(mod, isolate, "serve", cluster_serve_fn);
+    XRS_EXPORT(mod, isolate, "reply", cluster_reply_fn);
+    XRS_EXPORT(mod, isolate, "call", cluster_call_fn);
+    XRS_EXPORT(mod, isolate, "monitor", cluster_monitor_coro_fn);
+    XRS_EXPORT(mod, isolate, "discover", cluster_discover_fn);
+    XRS_EXPORT(mod, isolate, "stop", cluster_stop_fn);
+    XRS_EXPORT(mod, isolate, "info", cluster_info_fn);
+    XRS_EXPORT(mod, isolate, "publish", cluster_publish_fn);
+    XRS_EXPORT(mod, isolate, "subscribe", cluster_subscribe_fn);
 
     return mod;
 }
