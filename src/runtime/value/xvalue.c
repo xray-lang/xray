@@ -125,7 +125,7 @@ static const XrTypeId tag_to_typeid[8] = {
 };
 
 // XrObjType (GC header) → XrTypeId lookup table
-static const XrTypeId gctype_to_typeid[XR_TCONTEXT + 1] = {
+static const XrTypeId gctype_to_typeid[XR_TTASK + 1] = {
     [XR_TNULL]           = XR_TID_NULL,
     [XR_TBOOL]           = XR_TID_BOOL,
     [XR_TINT]            = XR_TID_INT,

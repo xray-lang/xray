@@ -100,8 +100,8 @@ typedef enum {
     XR_TLOGGER,
     XR_TRANGE,
     XR_TBLOB,           // Raw byte buffer on Immix heap (no traverse/destroy)
-    XR_TCONTEXT,        // Closure context object (captured variable storage)
-    XR_TCELL,           // Single-slot mutable capture cell (32B, replaces 1-slot XrContext)
+    XR_TCONTEXT,        // DEPRECATED: kept for enum stability, no longer allocated
+    XR_TCELL,           // Single-slot mutable capture cell (32B)
     XR_TTASK,           // Lightweight GC-managed coroutine handle (Task/Executor separation)
 } XrObjType;
 

@@ -24,7 +24,6 @@ struct XrMap;
 struct XrSet;
 struct XrJson;
 struct XrClosure;
-struct XrContext;
 struct XrInstance;
 struct XrIterator;
 struct XrCoroutine;
@@ -36,7 +35,6 @@ XR_FUNC void xr_gc_traverse_map(XrCoroGC *gc, struct XrMap *map);
 XR_FUNC void xr_gc_traverse_set(XrCoroGC *gc, struct XrSet *set);
 XR_FUNC void xr_coro_gc_traverse_json(XrCoroGC *gc, struct XrJson *json);
 XR_FUNC void xr_gc_traverse_closure(XrCoroGC *gc, struct XrClosure *closure);
-XR_FUNC void xr_gc_traverse_context(XrCoroGC *gc, struct XrContext *ctx);
 XR_FUNC void xr_gc_traverse_instance(XrCoroGC *gc, struct XrInstance *inst);
 XR_FUNC void xr_gc_traverse_iterator(XrCoroGC *gc, struct XrIterator *iter);
 

@@ -171,21 +171,6 @@ void xr_gc_traverse_closure(XrCoroGC *gc, struct XrClosure *closure) {
     }
 }
 
-/* ========== Context Traversal ========== */
-
-void xr_gc_traverse_context(XrCoroGC *gc, struct XrContext *ctx) {
-    if (!gc || !ctx) return;
-
-    // Mark parent Context
-    if (ctx->parent)
-        xr_coro_gc_markobject(gc, (XrGCHeader*)ctx->parent);
-
-    // Mark all captured variable slots
-    for (int i = 0; i < ctx->slot_count; i++) {
-        xr_coro_gc_markvalue(gc, ctx->slots[i]);
-    }
-}
-
 /* ========== Instance Traversal ========== */
 
 void xr_gc_traverse_instance(XrCoroGC *gc, struct XrInstance *inst) {
@@ -259,10 +244,6 @@ void xr_gc_traverse_object(XrCoroGC *gc, XrGCHeader *obj) {
 
         case XR_TITERATOR:
             xr_gc_traverse_iterator(gc, (struct XrIterator*)obj);
-            break;
-
-        case XR_TCONTEXT:
-            xr_gc_traverse_context(gc, (struct XrContext*)obj);
             break;
 
         case XR_TCELL: {
