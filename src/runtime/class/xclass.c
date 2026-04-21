@@ -13,6 +13,7 @@
  */
 
 #include "xclass.h"
+#include "xclass_internal.h"
 #include "xclass_builder.h"
 #include "xinstance.h"
 #include "xmethod.h"
@@ -355,12 +356,6 @@ bool xr_class_implements_interface(XrClass *cls, XrClass *iface) {
     return false;
 }
 
-bool xr_class_has_method(XrClass *cls, int method_symbol) {
-    if (!cls || method_symbol < 0) return false;
-
-    XrMethod *method = xr_class_lookup_method(cls, method_symbol);
-    return (method != NULL && method->type != XMETHOD_NONE);
-}
 
 /* ========== ITable Generation ========== */
 
@@ -574,51 +569,12 @@ bool xr_instance_of(void *obj, const XrClass *target) {
     return xr_class_instanceof(obj_class, target);
 }
 
-/* ========== ITable Interface Method Lookup ========== */
-
-// O(n) where n = interface count (usually < 5)
-XrMethod* xr_class_lookup_interface_method(XrClass *cls, XrClass *iface, int method_index) {
-    if (!cls || !iface || !cls->itable || method_index < 0) {
-        return NULL;
-    }
-
-    for (int i = 0; i < cls->itable_size; i++) {
-        if (cls->itable[i].interface == iface) {
-            if (method_index < cls->itable[i].method_count) {
-                return cls->itable[i].methods[method_index];
-            }
-            return NULL;
-        }
-    }
-
-    return NULL;
-}
-
-// Lookup by symbol when method index is unknown at compile time.
-//
-// Outer scan over the itable is still O(n_interfaces) -- typically
-// < 5 -- but the inner slot lookup is O(1) through the entry's
-// method_symbol_to_index map built by xr_class_build_itable.
-XrMethod* xr_class_lookup_interface_method_by_symbol(XrClass *cls, XrClass *iface, int method_symbol) {
-    if (!cls || !iface || !cls->itable || method_symbol < 0) {
-        return NULL;
-    }
-
-    for (int i = 0; i < cls->itable_size; i++) {
-        XrItableEntry *entry = &cls->itable[i];
-        if (entry->interface != iface) continue;
-
-        if (!entry->method_symbol_to_index
-            || method_symbol >= entry->method_map_capacity) {
-            return NULL;
-        }
-        int idx = entry->method_symbol_to_index[method_symbol];
-        if (idx < 0 || idx >= entry->method_count) return NULL;
-        return entry->methods[idx];
-    }
-
-    return NULL;
-}
+// Interface method lookup (by index / by symbol) used to live here
+// but had no callers anywhere in the tree -- every dispatch site
+// goes through xr_class_lookup_method on the declaring class. The
+// pair was removed together with xr_class_has_method when the last
+// of the "scan classes by name or search interfaces by name" code
+// paths went away.
 
 /*
  * Free class resources
