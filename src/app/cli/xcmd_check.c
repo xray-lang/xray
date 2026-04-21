@@ -184,7 +184,7 @@ int cmd_check(int argc, char **argv) {
     // Create analyzer for --strict mode
     XaAnalyzer *analyzer = NULL;
     if (strict) {
-        analyzer = xa_analyzer_new();
+        analyzer = xa_analyzer_new(X);
         xa_analyzer_set_strict_mode(analyzer, true);
     }
 

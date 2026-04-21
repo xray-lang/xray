@@ -9,6 +9,7 @@
  */
 
 #include "xanalyzer.h"
+#include "../../runtime/xisolate_internal.h"
 #include "xanalyzer_visitor.h"
 #include "../../base/xchecks.h"
 #include "xanalyzer_infer.h"
@@ -167,85 +168,91 @@ static void xa_register_codegen_builtins(XaAnalyzer *analyzer) {
 }
 
 // Create analyzer
-XaAnalyzer *xa_analyzer_new(void) {
+XaAnalyzer *xa_analyzer_new(XrayIsolate *X) {
     // Ensure process-level type singletons are initialized (idempotent)
     xr_type_global_init();
 
     XaAnalyzer *analyzer = xr_calloc(1, sizeof(XaAnalyzer));
     if (!analyzer) return NULL;
-    
+
+    // Store owning isolate (explicit, no TLS)
+    analyzer->isolate = X;
+
     // Initialize type pool (per-analyzer, no global state)
     analyzer->type_pool = xr_type_pool_new();
     if (!analyzer->type_pool) {
         xr_free(analyzer);
         return NULL;
     }
-    
-    // Set as current pool and symbol ID counter for thread-local access
+
+    // Set pool on isolate so type_alloc can reach it via X
+    if (X) X->current_type_pool = analyzer->type_pool;
+
+    // Legacy TLS path (will be removed once all callers pass X)
     xr_type_set_current_pool(analyzer->type_pool, &analyzer->type_pool->next_type_id);
     xa_symbol_set_id_counter(&analyzer->next_symbol_id);
-    
+
     // Initialize symbol ID counter (starts at 1)
     analyzer->next_symbol_id = 1;
-    
+
     // Symbol registry for O(1) ID lookup (must be set before any scope_add_symbol)
     analyzer->symbols_by_id = xr_intmap_new();
     xa_symbol_set_registry(analyzer->symbols_by_id);
-    
+
     analyzer->global_scope = xa_scope_new(XA_SCOPE_GLOBAL, NULL);
     analyzer->current_scope = analyzer->global_scope;
     analyzer->files_map = xr_hashmap_new();
-    
+
     // Register built-in interfaces (Iterable, Comparable, etc.)
-    xa_register_builtin_interfaces(analyzer->global_scope);
-    
+    xa_register_builtin_interfaces(X, analyzer->global_scope);
+
     // Register Codegen builtin functions/constructors
     xa_register_codegen_builtins(analyzer);
-    
+
     // Default options
     analyzer->strict_null_checks = false;
     analyzer->strict_mode = false;
     analyzer->infer_return_types = true;
-    
+
     // Initialize incremental analysis support
     analyzer->incremental = xa_incremental_new();
-    
+
     return analyzer;
 }
 
 // Free analyzer
 void xa_analyzer_free(XaAnalyzer *analyzer) {
     if (!analyzer) return;
-    
+
     xa_scope_free(analyzer->global_scope);
-    
+
     // Free symbol registry (values are XaSymbol* owned by scopes, don't free them)
     if (analyzer->symbols_by_id) {
         xr_intmap_free((XrIntMap*)analyzer->symbols_by_id);
     }
     xa_symbol_set_registry(NULL);
     xa_symbol_set_id_counter(NULL);
-    
+
     // Free incremental analysis context
     if (analyzer->incremental) {
         xa_incremental_free(analyzer->incremental);
     }
-    
+
     // Free JIT metadata
     if (analyzer->jit_metadata) {
         xa_jit_metadata_free(analyzer->jit_metadata);
     }
-    
+
     // Free type pool
     if (analyzer->type_pool) {
         xr_type_pool_free(analyzer->type_pool);
     }
-    
+
     // Free files map (entries already freed via linked list above)
     if (analyzer->files_map) {
         xr_hashmap_free((XrHashMap *)analyzer->files_map);
     }
-    
+
     // Free diagnostics
     XaDiagnostic *diag = analyzer->diagnostics;
     while (diag) {
@@ -255,7 +262,7 @@ void xa_analyzer_free(XaAnalyzer *analyzer) {
         xr_free(diag);
         diag = next;
     }
-    
+
     xr_free(analyzer);
 }
 
@@ -284,13 +291,13 @@ XaSymbol *xa_analyzer_lookup_in_scope(XaAnalyzer *analyzer, const char *name, Xa
 static void lookup_deep_collect(XaScope *scope, const char *name,
                                 XaSymbol **results, int *count, int max) {
     if (!scope || *count >= max) return;
-    
+
     XaSymbol *local = xa_scope_lookup_local(scope, name);
     if (local) {
         results[*count] = local;
         (*count)++;
     }
-    
+
     for (int i = 0; i < scope->child_count && *count < max; i++) {
         lookup_deep_collect(scope->children[i], name, results, count, max);
     }
@@ -298,14 +305,14 @@ static void lookup_deep_collect(XaScope *scope, const char *name,
 
 XaSymbol *xa_analyzer_lookup_deep(XaAnalyzer *analyzer, const char *name) {
     if (!analyzer || !name || !analyzer->global_scope) return NULL;
-    
+
     XaSymbol *results[32];
     int count = 0;
     lookup_deep_collect(analyzer->global_scope, name, results, &count, 32);
-    
+
     if (count == 0) return NULL;
     if (count == 1) return results[0];
-    
+
     // Multiple matches: return the one with the highest line number
     // (innermost / latest declaration is most likely the intended one)
     XaSymbol *best = results[0];
@@ -320,22 +327,22 @@ XaSymbol *xa_analyzer_lookup_deep(XaAnalyzer *analyzer, const char *name) {
 // Get type of symbol (lazy computation)
 XrType *xa_analyzer_get_type(XaAnalyzer *analyzer, XaSymbol *symbol) {
     if (!analyzer || !symbol) return NULL;
-    
+
     // Ensure type pool is set for this thread
     xr_type_set_current_pool(analyzer->type_pool, &analyzer->next_symbol_id);
-    
+
     XaSymbolLinks *links = xa_analyzer_get_links(analyzer, symbol);
     if (!links) return xr_type_new_unknown(NULL);
-    
+
     // Return cached type
     if (links->type) return links->type;
-    
+
     // Return declared type if available
     if (links->declared_type) {
         links->type = links->declared_type;
         return links->type;
     }
-    
+
     // Fallback: some symbols may not have type after analysis (e.g. forward refs).
     // Return unknown as safe default.
     return xr_type_new_unknown(NULL);
@@ -344,10 +351,10 @@ XrType *xa_analyzer_get_type(XaAnalyzer *analyzer, XaSymbol *symbol) {
 // Get class info
 XrClassInfo *xa_analyzer_get_class(XaAnalyzer *analyzer, const char *name) {
     if (!analyzer || !name) return NULL;
-    
+
     XaSymbol *sym = xa_scope_lookup(analyzer->global_scope, name);
     if (!sym || sym->kind != XA_SYM_CLASS) return NULL;
-    
+
     XaSymbolLinks *links = xa_analyzer_get_links(analyzer, sym);
     return links ? links->class_info : NULL;
 }
@@ -357,22 +364,22 @@ XaSymbol **xa_analyzer_get_members(XaAnalyzer *analyzer, XrType *type, int *coun
     *count = 0;
     if (!type) return NULL;
     (void)analyzer;  // May be NULL for builtin lookups
-    
+
     // For class instances, return class members (including inherited)
     if (XR_TYPE_IS_INSTANCE(type) && type->instance.class_ref) {
         XrClassInfo *info = type->instance.class_ref;
-        
+
         // Count total members including inherited (walk inheritance chain)
         int total = 0;
         for (XrClassInfo *c = info; c != NULL; c = c->base) {
             total += c->field_count + c->method_count;
         }
         if (total == 0) return NULL;
-        
+
         XaSymbol **members = xr_malloc(sizeof(XaSymbol*) * total);
         if (!members) return NULL;
         int idx = 0;
-        
+
         // Collect members from current class and all base classes
         for (XrClassInfo *c = info; c != NULL; c = c->base) {
             for (int i = 0; i < c->field_count; i++) {
@@ -382,11 +389,11 @@ XaSymbol **xa_analyzer_get_members(XaAnalyzer *analyzer, XrType *type, int *coun
                 members[idx++] = c->methods[i];
             }
         }
-        
+
         *count = idx;
         return members;
     }
-    
+
     // Handle builtin types (Array, Map, String, etc.)
     return xa_builtin_get_members(type, count);
 }
@@ -395,16 +402,16 @@ XaSymbol **xa_analyzer_get_members(XaAnalyzer *analyzer, XrType *type, int *coun
 XaSymbol **xa_analyzer_get_scope_symbols(XaAnalyzer *analyzer, XaScope *scope, int *count) {
     *count = 0;
     if (!analyzer) return NULL;
-    
+
     XaScope *s = scope ? scope : analyzer->current_scope;
     if (!s) return NULL;
-    
+
     // Single-pass: collect symbols with dynamic array growth
     int capacity = 64;
     int idx = 0;
     XaSymbol **result = xr_malloc(sizeof(XaSymbol*) * capacity);
     if (!result) return NULL;
-    
+
     for (XaScope *p = s; p; p = p->parent) {
         int sc = 0;
         XaSymbol **syms = xa_scope_get_all_symbols(p, &sc);
@@ -422,9 +429,9 @@ XaSymbol **xa_analyzer_get_scope_symbols(XaAnalyzer *analyzer, XaScope *scope, i
             xr_free(syms);
         }
     }
-    
+
     if (idx == 0) { xr_free(result); return NULL; }
-    
+
     *count = idx;
     return result;
 }
@@ -441,7 +448,7 @@ XaDiagnostic *xa_analyzer_get_diagnostics(XaAnalyzer *analyzer, int *count) {
 
 void xa_analyzer_clear_diagnostics(XaAnalyzer *analyzer) {
     if (!analyzer) return;
-    
+
     XaDiagnostic *diag = analyzer->diagnostics;
     while (diag) {
         XaDiagnostic *next = diag->next;
@@ -457,17 +464,17 @@ void xa_analyzer_clear_diagnostics(XaAnalyzer *analyzer) {
 void xa_analyzer_add_diagnostic(XaAnalyzer *analyzer, XrDiagSeverity severity,
                                  int code, const char *message, XrLocation *loc) {
     if (!analyzer) return;
-    
+
     XaDiagnostic *diag = xr_calloc(1, sizeof(XaDiagnostic));
     if (!diag) return;
-    
+
     diag->severity = severity;
     diag->code = code;
     diag->message = message ? xr_strdup(message) : NULL;
     if (loc) {
         diag->location = *loc;
     }
-    
+
     // Append to tail: preserves source-order (first error reported = first in list)
     diag->next = NULL;
     if (analyzer->diagnostics_tail) {
@@ -483,7 +490,7 @@ void xa_analyzer_add_diagnostic(XaAnalyzer *analyzer, XrDiagSeverity severity,
 // Reuses existing child scope if ast_node matches (Pass 2 reuses Pass 1 scope)
 void xa_analyzer_enter_scope(XaAnalyzer *analyzer, XaScopeKind kind, void *ast_node) {
     if (!analyzer) return;
-    
+
     if (ast_node) {
         for (int i = 0; i < analyzer->current_scope->child_count; i++) {
             XaScope *child = analyzer->current_scope->children[i];
@@ -496,7 +503,7 @@ void xa_analyzer_enter_scope(XaAnalyzer *analyzer, XaScopeKind kind, void *ast_n
             }
         }
     }
-    
+
     XaScope *scope = xa_scope_new(kind, analyzer->current_scope);
     scope->ast_node = ast_node;
     analyzer->current_scope = scope;
@@ -511,34 +518,34 @@ void xa_analyzer_exit_scope(XaAnalyzer *analyzer) {
 }
 
 // Type checking
-bool xa_analyzer_check_assignment(XaAnalyzer *analyzer, XrType *target, 
+bool xa_analyzer_check_assignment(XaAnalyzer *analyzer, XrType *target,
                                    XrType *source, XrLocation *loc) {
     if (!analyzer || !target || !source) return false;
-    
+
     if (xr_type_assignable(target, source)) {
         return true;
     }
-    
+
     // Generate error
     char message[256];
-    snprintf(message, sizeof(message), 
+    snprintf(message, sizeof(message),
              "Type '%s' is not assignable to type '%s'",
              xr_type_to_string(source), xr_type_to_string(target));
     xa_analyzer_add_diagnostic(analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_TYPE_MISMATCH, message, loc);
-    
+
     return false;
 }
 
 bool xa_analyzer_check_call(XaAnalyzer *analyzer, XrType *func_type,
                              XrType **arg_types, int arg_count, XrLocation *loc) {
     if (!analyzer || !func_type) return false;
-    
+
     if (!XR_TYPE_IS_FUNCTION(func_type)) {
         xa_analyzer_add_diagnostic(analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_NOT_CALLABLE,
                                     "Value is not callable", loc);
         return false;
     }
-    
+
     // Check argument count
     int expected = func_type->function.param_count;
     if (arg_count < expected && !func_type->function.is_variadic) {
@@ -548,7 +555,7 @@ bool xa_analyzer_check_call(XaAnalyzer *analyzer, XrType *func_type,
         xa_analyzer_add_diagnostic(analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_WRONG_ARG_COUNT, message, loc);
         return false;
     }
-    
+
     // Check argument types
     bool ok = true;
     for (int i = 0; i < arg_count && i < expected; i++) {
@@ -562,7 +569,7 @@ bool xa_analyzer_check_call(XaAnalyzer *analyzer, XrType *func_type,
             xa_analyzer_add_diagnostic(analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_ARG_TYPE, message, loc);
         }
     }
-    
+
     return ok;
 }
 
@@ -570,36 +577,36 @@ bool xa_analyzer_check_call(XaAnalyzer *analyzer, XrType *func_type,
 // Find or create file entry
 static XaFileEntry *find_or_create_file(XaAnalyzer *analyzer, const char *file) {
     if (!analyzer || !file) return NULL;
-    
+
     // O(1) hash lookup
     XrHashMap *fmap = (XrHashMap *)analyzer->files_map;
     if (fmap) {
         XaFileEntry *found = (XaFileEntry *)xr_hashmap_get(fmap, file);
         if (found) return found;
     }
-    
+
     // Create new entry
     XaFileEntry *entry = xr_calloc(1, sizeof(XaFileEntry));
     if (!entry) return NULL;
-    
+
     entry->path = xr_strdup(file);
     entry->dirty = true;
     entry->next = analyzer->files;
     analyzer->files = entry;
     analyzer->file_count++;
-    
+
     // Register in hash map
     if (fmap) {
         xr_hashmap_set(fmap, entry->path, entry);
     }
-    
+
     return entry;
 }
 
 // Clear all base pointers that reference a specific class_info (before freeing it)
 static void clear_base_references(XaScope *scope, XrClassInfo *target, XaAnalyzer *analyzer) {
     if (!scope || !target) return;
-    
+
     int count = 0;
     XaSymbol **syms = xa_scope_get_all_symbols(scope, &count);
     if (syms) {
@@ -612,7 +619,7 @@ static void clear_base_references(XaScope *scope, XrClassInfo *target, XaAnalyze
         }
         xr_free(syms);
     }
-    
+
     for (int i = 0; i < scope->child_count; i++) {
         clear_base_references(scope->children[i], target, analyzer);
     }
@@ -621,7 +628,7 @@ static void clear_base_references(XaScope *scope, XrClassInfo *target, XaAnalyze
 // Remove symbols owned by a specific file from scope
 static void remove_file_symbols(XaScope *scope, const char *file, XaAnalyzer *analyzer) {
     if (!scope || !file) return;
-    
+
     // Get all symbols and check ownership
     int count = 0;
     XaSymbol **syms = xa_scope_get_all_symbols(scope, &count);
@@ -636,19 +643,19 @@ static void remove_file_symbols(XaScope *scope, const char *file, XaAnalyzer *an
                     xa_class_info_free(links->class_info);
                     links->class_info = NULL;
                 }
-                
+
                 // Actually remove symbol from scope
                 if (sym->name) {
                     xa_scope_remove_symbol(scope, sym->name);
                 }
-                
+
                 // Free the symbol (xa_symbol_free also releases inline links content)
                 xa_symbol_free(sym);
             }
         }
         xr_free(syms);
     }
-    
+
     // Process child scopes
     for (int i = 0; i < scope->child_count; i++) {
         remove_file_symbols(scope->children[i], file, analyzer);
@@ -657,39 +664,39 @@ static void remove_file_symbols(XaScope *scope, const char *file, XaAnalyzer *an
 
 void xa_analyzer_analyze(XaAnalyzer *analyzer, const char *file, XrAstNode *ast) {
     if (!analyzer || !ast) return;
-    
+
     // Set current type pool and symbol ID counter (eliminates global state)
     xr_type_set_current_pool(analyzer->type_pool, &analyzer->next_symbol_id);
     xa_symbol_set_id_counter(&analyzer->next_symbol_id);
-    
+
     // Track file
     XaFileEntry *entry = find_or_create_file(analyzer, file);
     if (entry) {
         entry->dirty = false;
     }
-    
+
     // Set current file for symbol ownership tracking
     analyzer->current_file = file;
-    
+
     // Use the visitor-based analysis
     xa_analyze_ast(analyzer, ast);
-    
+
     analyzer->current_file = NULL;
-    
+
     // Keep pool set - type_check may call xa_analyzer_infer_expr_type after analyze
     // Pool will be cleared when analyzer is freed
 }
 
 void xa_analyzer_update(XaAnalyzer *analyzer, const char *file, XrAstNode *ast) {
     if (!analyzer || !ast) return;
-    
+
     // Set current type pool and symbol ID counter
     xr_type_set_current_pool(analyzer->type_pool, &analyzer->next_symbol_id);
     xa_symbol_set_id_counter(&analyzer->next_symbol_id);
-    
+
     // Find file entry
     XaFileEntry *entry = find_or_create_file(analyzer, file);
-    
+
     // Check if content changed using hash (incremental optimization)
     XaIncrementalCtx *incr = (XaIncrementalCtx*)analyzer->incremental;
     if (incr && entry) {
@@ -700,19 +707,19 @@ void xa_analyzer_update(XaAnalyzer *analyzer, const char *file, XrAstNode *ast) 
         }
         entry->content_hash = new_hash;
     }
-    
+
     // Clear diagnostics for this file
     xa_analyzer_clear_diagnostics(analyzer);
-    
+
     // Remove old symbols from this file
     if (file) {
         remove_file_symbols(analyzer->global_scope, file, analyzer);
     }
-    
+
     // Mark as dirty then re-analyze
     if (entry) entry->dirty = true;
     xa_analyzer_analyze(analyzer, file, ast);
-    
+
     // Mark as clean after analysis
     if (entry) entry->dirty = false;
 }
@@ -720,90 +727,90 @@ void xa_analyzer_update(XaAnalyzer *analyzer, const char *file, XrAstNode *ast) 
 void xa_analyzer_update_incremental(XaAnalyzer *analyzer, const char *file,
                                      XrAstNode *ast, uint64_t content_hash) {
     if (!analyzer || !ast) return;
-    
+
     // Set current type pool and symbol ID counter
     xr_type_set_current_pool(analyzer->type_pool, &analyzer->next_symbol_id);
     xa_symbol_set_id_counter(&analyzer->next_symbol_id);
-    
+
     // Find file entry
     XaFileEntry *entry = find_or_create_file(analyzer, file);
-    
+
     // Check if content changed using provided hash (true incremental check)
     if (entry && entry->content_hash == content_hash && !entry->dirty) {
         // Content unchanged - skip re-analysis entirely
         return;
     }
-    
+
     // Update hash
     if (entry) {
         entry->content_hash = content_hash;
     }
-    
+
     XaIncrementalCtx *incr = (XaIncrementalCtx*)analyzer->incremental;
-    
+
     // Collect symbols that will be removed (for dependency propagation)
     int old_sym_count = 0;
     XaSymbol **old_symbols = xa_scope_get_all_symbols(analyzer->global_scope, &old_sym_count);
-    
+
     // Build change set from symbols in this file
     XaChangeSet changes = {0};
     if (old_symbols && incr && old_sym_count > 0) {
         changes.modified_symbols = xr_malloc(sizeof(uint32_t) * old_sym_count);
         if (changes.modified_symbols) {
             for (int i = 0; i < old_sym_count; i++) {
-                if (old_symbols[i]->location.file && 
+                if (old_symbols[i]->location.file &&
                     strcmp(old_symbols[i]->location.file, file) == 0) {
                     changes.modified_symbols[changes.modified_count++] = old_symbols[i]->id;
                 }
             }
-            
+
             // Propagate dirty through dependency graph
             xa_propagate_dirty(incr, &changes);
-            
+
             // Track statistics
             if (incr->dirty_count > changes.modified_count) {
                 // Dependencies were affected
                 incr->incremental_updates++;
             }
-            
+
             xr_free(changes.modified_symbols);
         }
         xr_free(old_symbols);
     } else if (old_symbols) {
         xr_free(old_symbols);
     }
-    
+
     // Clear diagnostics for this file
     xa_analyzer_clear_diagnostics(analyzer);
-    
+
     // Remove old symbols from this file
     if (file) {
         remove_file_symbols(analyzer->global_scope, file, analyzer);
     }
-    
+
     // Re-analyze this file
     xa_analyzer_analyze(analyzer, file, ast);
-    
+
     // Mark other files as dirty based on affected symbols
     if (incr && incr->dirty_count > 0) {
         for (int i = 0; i < incr->dirty_count; i++) {
-            XaSymbol *sym = xa_scope_lookup_by_id(analyzer->global_scope, 
+            XaSymbol *sym = xa_scope_lookup_by_id(analyzer->global_scope,
                                                    incr->dirty_symbols[i]);
-            if (sym && sym->location.file && 
+            if (sym && sym->location.file &&
                 strcmp(sym->location.file, file) != 0) {
                 // Symbol is in another file - mark that file as dirty
                 xa_analyzer_mark_file_dirty(analyzer, sym->location.file);
             }
         }
     }
-    
+
     // Mark current file as clean
     if (entry) entry->dirty = false;
 }
 
 void xa_analyzer_mark_file_dirty(XaAnalyzer *analyzer, const char *file) {
     if (!analyzer || !file) return;
-    
+
     XrHashMap *fmap = (XrHashMap *)analyzer->files_map;
     XaFileEntry *entry = fmap ? (XaFileEntry *)xr_hashmap_get(fmap, file) : NULL;
     if (entry) {
@@ -814,7 +821,7 @@ void xa_analyzer_mark_file_dirty(XaAnalyzer *analyzer, const char *file) {
 const char **xa_analyzer_get_dirty_files(XaAnalyzer *analyzer, int *count) {
     *count = 0;
     if (!analyzer) return NULL;
-    
+
     // Count dirty files
     int dirty_count = 0;
     XaFileEntry *entry = analyzer->files;
@@ -822,13 +829,13 @@ const char **xa_analyzer_get_dirty_files(XaAnalyzer *analyzer, int *count) {
         if (entry->dirty) dirty_count++;
         entry = entry->next;
     }
-    
+
     if (dirty_count == 0) return NULL;
-    
+
     // Allocate and fill array
     const char **result = xr_malloc(sizeof(const char*) * dirty_count);
     if (!result) return NULL;
-    
+
     int idx = 0;
     entry = analyzer->files;
     while (entry && idx < dirty_count) {
@@ -837,21 +844,21 @@ const char **xa_analyzer_get_dirty_files(XaAnalyzer *analyzer, int *count) {
         }
         entry = entry->next;
     }
-    
+
     *count = idx;
     return result;
 }
 
 void xa_analyzer_remove_file(XaAnalyzer *analyzer, const char *file) {
     if (!analyzer || !file) return;
-    
+
     // Remove symbols owned by this file
     remove_file_symbols(analyzer->global_scope, file, analyzer);
-    
+
     // Remove from hash map
     XrHashMap *fmap = (XrHashMap *)analyzer->files_map;
     if (fmap) xr_hashmap_delete(fmap, file);
-    
+
     // Remove file entry from linked list
     XaFileEntry **pp = &analyzer->files;
     while (*pp) {
@@ -865,7 +872,7 @@ void xa_analyzer_remove_file(XaAnalyzer *analyzer, const char *file) {
         }
         pp = &(*pp)->next;
     }
-    
+
     // Clear diagnostics
     xa_analyzer_clear_diagnostics(analyzer);
 }
@@ -874,19 +881,19 @@ void xa_analyzer_remove_file(XaAnalyzer *analyzer, const char *file) {
 static XaSymbol *find_symbol_at_position_in_file(XaScope *scope, const char *file,
                                                   uint32_t line, uint32_t column) {
     if (!scope) return NULL;
-    
+
     int count = 0;
     XaSymbol **symbols = xa_scope_get_all_symbols(scope, &count);
-    
+
     for (int i = 0; i < count; i++) {
         XaSymbol *sym = symbols[i];
         if (!sym) continue;
-        
+
         // Filter by file if specified
         if (file && sym->location.file && strcmp(sym->location.file, file) != 0) {
             continue;
         }
-        
+
         // Check if position is within symbol
         if (sym->location.line == line) {
             uint32_t sym_end = sym->location.column + (sym->name ? strlen(sym->name) : 0);
@@ -897,20 +904,20 @@ static XaSymbol *find_symbol_at_position_in_file(XaScope *scope, const char *fil
         }
     }
     xr_free(symbols);
-    
+
     // Search child scopes
     for (int i = 0; i < scope->child_count; i++) {
         XaSymbol *found = find_symbol_at_position_in_file(scope->children[i], file, line, column);
         if (found) return found;
     }
-    
+
     return NULL;
 }
 
 XaSymbol *xa_analyzer_lookup_at(XaAnalyzer *analyzer, const char *file,
                                  uint32_t line, uint32_t column) {
     if (!analyzer || !analyzer->global_scope) return NULL;
-    
+
     return find_symbol_at_position_in_file(analyzer->global_scope, file, line, column);
 }
 
@@ -918,23 +925,23 @@ XrType *xa_analyzer_get_type_at(XaAnalyzer *analyzer, const char *file,
                                  uint32_t line, uint32_t column) {
     XaSymbol *sym = xa_analyzer_lookup_at(analyzer, file, line, column);
     if (!sym) return NULL;
-    
+
     return xa_analyzer_get_type(analyzer, sym);
 }
 
 XrType *xa_analyzer_infer_expr_type(XaAnalyzer *analyzer, XrAstNode *expr) {
     if (!analyzer || !expr) return NULL;
-    
+
     // Ensure type pool is set for this thread
     xr_type_set_current_pool(analyzer->type_pool, &analyzer->next_symbol_id);
-    
+
     // Create temporary inference context
     XaInferContext *ctx = xa_infer_context_new(analyzer);
     if (!ctx) return xr_type_new_unknown(NULL);
-    
+
     // Infer expression type
     XrType *type = xa_visit_infer_expr(ctx, expr);
-    
+
     xa_infer_context_free(ctx);
     return type ? type : xr_type_new_unknown(NULL);
 }
@@ -942,19 +949,19 @@ XrType *xa_analyzer_infer_expr_type(XaAnalyzer *analyzer, XrAstNode *expr) {
 // Variable operations (compatible with ct_infer API)
 XrType *xa_analyzer_lookup_var(XaAnalyzer *analyzer, const char *name) {
     if (!analyzer || !name) return NULL;
-    
+
     XaSymbol *sym = xa_scope_lookup(analyzer->current_scope, name);
     if (!sym) return NULL;
-    
+
     return xa_analyzer_get_type(analyzer, sym);
 }
 
 void xa_analyzer_define_var(XaAnalyzer *analyzer, const char *name, XrType *type) {
     if (!analyzer || !name) return;
-    
+
     XaSymbol *sym = xa_symbol_new(name, XA_SYM_VARIABLE);
     xa_scope_add_symbol(analyzer->current_scope, sym);
-    
+
     XaSymbolLinks *links = xa_analyzer_get_links(analyzer, sym);
     if (links) {
         links->type = type;
@@ -975,13 +982,13 @@ XaSymbolRef *xa_analyzer_find_references(XaAnalyzer *analyzer,
                                           int *count) {
     *count = 0;
     if (!analyzer || !name || !analyzer->global_scope) return NULL;
-    
+
     XaSymbolRef *refs = NULL;
-    
+
     // First find the symbol definition
     XaSymbol *sym = xa_scope_lookup(analyzer->global_scope, name);
     if (!sym) return NULL;
-    
+
     // Add definition location if requested
     if (include_definition) {
         XaSymbolRef *def_ref = xr_calloc(1, sizeof(XaSymbolRef));
@@ -997,7 +1004,7 @@ XaSymbolRef *xa_analyzer_find_references(XaAnalyzer *analyzer,
             (*count)++;
         }
     }
-    
+
     // Get collected references from symbol links
     XaSymbolLinks *links = xa_analyzer_get_links(analyzer, sym);
     if (links && links->references) {
@@ -1018,7 +1025,7 @@ XaSymbolRef *xa_analyzer_find_references(XaAnalyzer *analyzer,
             loc = loc->next;
         }
     }
-    
+
     return refs;
 }
 
@@ -1029,11 +1036,11 @@ XaSymbolRef *xa_analyzer_find_references_at(XaAnalyzer *analyzer,
                                              int *count) {
     *count = 0;
     if (!analyzer) return NULL;
-    
+
     // Find symbol at position
     XaSymbol *sym = xa_analyzer_lookup_at(analyzer, file, line, column);
     if (!sym || !sym->name) return NULL;
-    
+
     // Find all references to this symbol
     return xa_analyzer_find_references(analyzer, sym->name, true, count);
 }
@@ -1053,14 +1060,14 @@ bool xa_analyzer_can_rename(XaAnalyzer *analyzer,
                             char **out_symbol_name) {
     if (!analyzer || !out_symbol_name) return false;
     *out_symbol_name = NULL;
-    
+
     // Find symbol at position
     XaSymbol *sym = xa_analyzer_lookup_at(analyzer, file, line, column);
     if (!sym || !sym->name) return false;
-    
+
     // Check if symbol can be renamed (not builtin)
     if (sym->is_builtin) return false;
-    
+
     // Return symbol name
     *out_symbol_name = xr_strdup(sym->name);
     return true;
@@ -1073,7 +1080,7 @@ bool xa_analyzer_can_rename(XaAnalyzer *analyzer,
 // Helper: get method return type from class
 static XrType *get_method_return_type(XaAnalyzer *analyzer, XrClassInfo *info, const char *method_name) {
     if (!analyzer || !info || !method_name) return NULL;
-    
+
     // Search in class and base classes
     for (XrClassInfo *c = info; c != NULL; c = c->base) {
         for (int i = 0; i < c->method_count; i++) {
@@ -1110,25 +1117,25 @@ static XrClassInfo *resolve_class_info(XaAnalyzer *analyzer, XrType *type) {
 // Check if type satisfies Iterator<T> (has hasNext(): bool and next(): T)
 bool xa_analyzer_is_iterator(XaAnalyzer *analyzer, XrType *type, XrType **out_element_type) {
     if (!analyzer || !type) return false;
-    
+
     // Must be a class or instance type
     if (type->kind != XR_KIND_INSTANCE && type->kind != XR_KIND_CLASS) return false;
-    
+
     XrClassInfo *info = resolve_class_info(analyzer, type);
     if (!info) return false;
-    
+
     // Check hasNext() method returns bool
     XrType *has_next_ret = get_method_return_type(analyzer, info, "hasNext");
     if (!has_next_ret || !(has_next_ret->kind == XR_KIND_BOOL)) {
         return false;
     }
-    
+
     // Check next() method exists
     XrType *next_ret = get_method_return_type(analyzer, info, "next");
     if (!next_ret) {
         return false;
     }
-    
+
     // Element type is the return type of next()
     if (out_element_type) {
         *out_element_type = next_ret;
@@ -1139,17 +1146,17 @@ bool xa_analyzer_is_iterator(XaAnalyzer *analyzer, XrType *type, XrType **out_el
 // Check if type satisfies Iterable<T> (built-in or has iterator() -> Iterator<T>)
 bool xa_analyzer_is_iterable(XaAnalyzer *analyzer, XrType *type, XrType **out_element_type) {
     if (!type) return false;
-    
+
     // First check built-in iterable types (doesn't need analyzer)
     if (xr_type_is_iterable(type, out_element_type)) {
         return true;
     }
-    
+
     // Custom class: check if it has iterator() method returning Iterator<T>
     if (analyzer && (type->kind == XR_KIND_INSTANCE || type->kind == XR_KIND_CLASS)) {
         XrClassInfo *info = resolve_class_info(analyzer, type);
         if (!info) return false;
-        
+
         XrType *iter_ret = get_method_return_type(analyzer, info, "iterator");
         if (iter_ret) {
             // Check if the return type satisfies Iterator<T>
@@ -1162,6 +1169,6 @@ bool xa_analyzer_is_iterable(XaAnalyzer *analyzer, XrType *type, XrType **out_el
             }
         }
     }
-    
+
     return false;
 }

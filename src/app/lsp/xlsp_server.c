@@ -370,7 +370,7 @@ XrLspServer *xlsp_server_new(void) {
     }
 
     // Create workspace-level analyzer (unified index for all cross-file features)
-    server->workspace_analyzer = xa_analyzer_new();
+    server->workspace_analyzer = xa_analyzer_new(server->isolate);
     if (!server->workspace_analyzer) {
         lsp_log("Warning: Failed to create workspace analyzer");
     }

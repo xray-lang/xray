@@ -111,7 +111,7 @@ struct XaAnalyzer {
 };
 
 // API: Analyzer lifecycle
-XR_FUNC XaAnalyzer *xa_analyzer_new(void);
+XR_FUNC XaAnalyzer *xa_analyzer_new(XrayIsolate *X);
 XR_FUNC void xa_analyzer_free(XaAnalyzer *analyzer);
 
 // API: Configuration
