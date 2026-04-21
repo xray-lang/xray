@@ -194,11 +194,10 @@ static XrClass* create_json_utility_class(XrayIsolate *X) {
 
 void xr_json_api_init(XrayIsolate *X) {
     XR_DCHECK(X != NULL, "xr_json_api_init: NULL isolate");
+    // create_json_utility_class goes through xr_class_builder_finalize,
+    // which already registers the resulting class with the reflection
+    // type registry. No manual registration is required here.
     XrClass *jsonClass = create_json_utility_class(X);
-
-    if (xr_isolate_get_type_registry(X)) {
-        xr_registry_register_class(X, jsonClass);
-    }
 
     if (xr_isolate_get_core_classes(X)) {
         xr_isolate_get_core_classes(X)->jsonClass = jsonClass;

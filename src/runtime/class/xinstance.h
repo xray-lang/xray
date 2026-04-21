@@ -71,19 +71,19 @@ XR_FUNC void xr_instance_init_inplace(XrInstance *inst, XrClass *cls);
 XR_FUNC size_t xr_instance_size(XrClass *cls);
 XR_FUNC void xr_instance_free(XrInstance *inst);
 
-XR_FUNC XrValue xr_instance_get_field(XrInstance *inst, const char *name);
-XR_FUNC void xr_instance_set_field(XrInstance *inst, const char *name, XrValue value);
+XR_FUNC XrValue xr_instance_get_field(XrayIsolate *X, XrInstance *inst, const char *name);
+XR_FUNC void xr_instance_set_field(XrayIsolate *X, XrInstance *inst, const char *name, XrValue value);
 
 // Fast path by index
 XR_FUNC XrValue xr_instance_get_field_by_index(XrInstance *inst, int index);
 XR_FUNC void xr_instance_set_field_by_index(XrInstance *inst, int index, XrValue value);
 
-XR_FUNC XrValue xr_instance_call_method(XrayIsolate *X, XrInstance *inst, 
-                                 const char *name, 
+XR_FUNC XrValue xr_instance_call_method(XrayIsolate *X, XrInstance *inst,
+                                 const char *name,
                                  XrValue *args, int argc);
 
 // Allocate + init fields + call constructor
-XR_FUNC XrValue xr_instance_construct(XrayIsolate *X, XrClass *cls, 
+XR_FUNC XrValue xr_instance_construct(XrayIsolate *X, XrClass *cls,
                                XrValue *args, int argc);
 
 // Shallow clone: allocate new instance, copy all field values

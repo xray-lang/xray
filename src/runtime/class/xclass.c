@@ -130,17 +130,20 @@ const XrFieldDescriptor* xr_class_get_field(const XrClass *cls, int index) {
     return &cls->fields[index];
 }
 
-int xr_class_lookup_field_by_name(XrClass *cls, const char *name) {
-    if (!cls || !name) return -1;
+int xr_class_lookup_field_by_name(XrayIsolate *X, XrClass *cls, const char *name) {
+    if (!X || !cls || !name) return -1;
 
-    for (int i = 0; i < cls->field_count; i++) {
-        if (cls->fields && cls->fields[i].name &&
-            strcmp(cls->fields[i].name, name) == 0) {
-            return i;
-        }
-    }
+    // Resolve the name through the symbol table (O(1) hash) rather
+    // than scanning every field descriptor with strcmp. The symbol
+    // table owns every interned name and xr_class_lookup_field has
+    // its own O(1) symbol -> index mapping, so the full path is a
+    // pair of hash hits without any string compares.
+    XrSymbolTable *tab = (XrSymbolTable*)xr_isolate_get_symbol_table(X);
+    if (!tab) return -1;
+    SymbolId sym = xr_symbol_lookup_in_table(tab, name);
+    if (sym == SYMBOL_INVALID) return -1;
 
-    return -1;
+    return xr_class_lookup_field(cls, (int)sym);
 }
 
 // O(1) lookup + O(depth) recursive parent lookup
@@ -336,34 +339,12 @@ XrClass* xr_interface_new(XrayIsolate *X, const char *name) {
     return iface;
 }
 
-bool xr_class_implements_interface(XrClass *cls, const char *interface_name) {
-    if (!cls || !interface_name) return false;
-
-    for (int i = 0; i < cls->interface_count; i++) {
-        if (cls->interfaces[i] && cls->interfaces[i]->name &&
-            strcmp(cls->interfaces[i]->name, interface_name) == 0) {
-            return true;
-        }
-    }
-
-    if (cls->super) {
-        return xr_class_implements_interface(cls->super, interface_name);
-    }
-
-    return false;
-}
-
-bool xr_class_has_method(XrClass *cls, int method_symbol) {
-    if (!cls || method_symbol < 0) return false;
-
-    XrMethod *method = xr_class_lookup_method(cls, method_symbol);
-    return (method != NULL && method->type != XMETHOD_NONE);
-}
-
-// Fast interface check (pointer compare, walks inheritance chain)
-bool xr_class_implements_interface_fast(XrClass *cls, XrClass *iface) {
+bool xr_class_implements_interface(XrClass *cls, XrClass *iface) {
     if (!cls || !iface || !(iface->flags & XR_CLASS_INTERFACE)) return false;
 
+    // Walk the inheritance chain iteratively; an interface declared on
+    // any ancestor counts as implemented. Pointer identity compare
+    // throughout -- no strcmp, no name-based resolution.
     for (XrClass *cur = cls; cur != NULL; cur = cur->super) {
         for (int i = 0; i < cur->interface_count; i++) {
             if (cur->interfaces[i] == iface) {
@@ -374,32 +355,11 @@ bool xr_class_implements_interface_fast(XrClass *cls, XrClass *iface) {
     return false;
 }
 
-int xr_class_verify_interface(XrClass *cls, XrClass *iface,
-                               char **errors, int max_errors) {
-    if (!cls || !iface) return 0;
-    if (!(iface->flags & XR_CLASS_INTERFACE)) return 0;
+bool xr_class_has_method(XrClass *cls, int method_symbol) {
+    if (!cls || method_symbol < 0) return false;
 
-    int satisfied_count = 0;
-    int error_count = 0;
-
-    for (int i = 0; i < iface->method_count; i++) {
-        XrMethod *iface_method = &iface->methods[i];
-
-        if (iface_method->type == XMETHOD_NONE) {
-            continue;
-        }
-
-        if (xr_class_has_method(cls, iface_method->symbol)) {
-            satisfied_count++;
-        } else {
-            if (errors && error_count < max_errors) {
-                errors[error_count] = xr_strdup("unknown_method");
-                error_count++;
-            }
-        }
-    }
-
-    return satisfied_count;
+    XrMethod *method = xr_class_lookup_method(cls, method_symbol);
+    return (method != NULL && method->type != XMETHOD_NONE);
 }
 
 /* ========== ITable Generation ========== */

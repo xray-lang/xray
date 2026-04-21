@@ -50,14 +50,11 @@ XrEnumType* xr_enum_type_new(XrayIsolate *X, const char *name, int base_type,
 
     XrayCoreClasses *core = xr_isolate_get_core_classes(X);
     XrClass *enum_base = core ? core->enumClass : NULL;
+    // xr_class_new -> builder finalize registers the class with the
+    // reflection type registry automatically, so the enum is visible
+    // through Type.getTypeByName without any follow-up call here.
     XrClass *enum_class = xr_class_new(X, name, enum_base);
     enum_type->enum_class = enum_class;
-
-    // xr_class_new no longer auto-registers; enum classes must opt in so
-    // that reflection (Type.getTypeByName, etc.) can see them.
-    if (enum_class && xr_isolate_get_type_registry(X)) {
-        xr_registry_register_class(X, enum_class);
-    }
 
     enum_type->name = xr_symbol_intern(X, name);
     enum_type->base_type = base_type;
@@ -165,18 +162,10 @@ void xr_enum_type_init_symbols(XrEnumType *enum_type, void *isolate) {
 
 /* ========== Access ========== */
 
-XrEnumValue* xr_enum_get_member(XrEnumType *enum_type, const char *member_name) {
-    XR_DCHECK(enum_type != NULL, "enum_get_member: NULL enum_type");
-    XR_DCHECK(member_name != NULL, "enum_get_member: NULL member_name");
-    for (uint32_t i = 0; i < enum_type->member_count; i++) {
-        if (strcmp(enum_type->members[i].name, member_name) == 0) {
-            return enum_type->members[i].instance;
-        }
-    }
-    return NULL;
-}
-
-// O(1) symbol-based member lookup
+// O(1) symbol-based member lookup. There used to be a by-name variant
+// as well, but it had no call sites outside its own header declaration
+// -- every real lookup goes through xr_symbol_lookup_in_table first,
+// yielding a SymbolId that this function consumes directly.
 XrEnumValue* xr_enum_get_member_by_symbol(XrEnumType *enum_type, int symbol) {
     XR_DCHECK(enum_type != NULL, "enum_get_member_by_symbol: NULL enum_type");
     if (symbol >= 0 && symbol < enum_type->symbol_map_capacity &&
