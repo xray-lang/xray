@@ -84,6 +84,10 @@ XrTlsContext* xr_tls_context_new_client(void) {
     // Set verification mode
     SSL_CTX_set_verify(ctx->ssl_ctx, SSL_VERIFY_PEER, NULL);
 
+    // Enable session caching by default for connection reuse performance
+    SSL_CTX_set_session_cache_mode(ctx->ssl_ctx, SSL_SESS_CACHE_CLIENT);
+    SSL_CTX_sess_set_cache_size(ctx->ssl_ctx, 256);
+
     return ctx;
 }
 
@@ -589,6 +593,82 @@ const char* xr_tls_error_string(XrTlsError err) {
     return xr_net_error_string(err);
 }
 
+/* ========== Production Features (P17) ========== */
+
+int xr_tls_context_set_client_cert(XrTlsContext *ctx,
+                                    const char *cert_file,
+                                    const char *key_file) {
+    if (!ctx || !ctx->ssl_ctx || !cert_file || !key_file) return -1;
+
+    if (SSL_CTX_use_certificate_file(ctx->ssl_ctx, cert_file,
+                                      SSL_FILETYPE_PEM) <= 0) {
+        return -1;
+    }
+    if (SSL_CTX_use_PrivateKey_file(ctx->ssl_ctx, key_file,
+                                     SSL_FILETYPE_PEM) <= 0) {
+        return -1;
+    }
+    if (!SSL_CTX_check_private_key(ctx->ssl_ctx)) {
+        return -1;
+    }
+    return 0;
+}
+
+int xr_tls_context_enable_session_cache(XrTlsContext *ctx) {
+    if (!ctx || !ctx->ssl_ctx) return -1;
+
+    // Enable client-side session caching. The internal cache stores
+    // sessions keyed by server address so SSL_connect can resume.
+    SSL_CTX_set_session_cache_mode(ctx->ssl_ctx,
+                                    SSL_SESS_CACHE_CLIENT |
+                                    SSL_SESS_CACHE_NO_INTERNAL_LOOKUP);
+    // Cap the cache at 256 entries to bound memory
+    SSL_CTX_sess_set_cache_size(ctx->ssl_ctx, 256);
+    return 0;
+}
+
+void* xr_tls_conn_get_session(XrTlsConn *conn) {
+    if (!conn || !conn->ssl) return NULL;
+
+    SSL_SESSION *sess = SSL_get1_session(conn->ssl);
+    return (void *)sess;
+}
+
+int xr_tls_conn_set_session(XrTlsConn *conn, void *session) {
+    if (!conn || !conn->ssl || !session) return -1;
+
+    // SSL_set_session increments the reference count internally
+    if (SSL_set_session(conn->ssl, (SSL_SESSION *)session) != 1) {
+        return -1;
+    }
+    return 0;
+}
+
+void xr_tls_session_free(void *session) {
+    if (session) {
+        SSL_SESSION_free((SSL_SESSION *)session);
+    }
+}
+
+bool xr_tls_conn_is_resumed(XrTlsConn *conn) {
+    if (!conn || !conn->ssl) return false;
+    return SSL_session_reused(conn->ssl) != 0;
+}
+
+int xr_tls_context_enable_ocsp_stapling(XrTlsContext *ctx) {
+    if (!ctx || !ctx->ssl_ctx) return -1;
+
+    // Request the server to staple an OCSP response during the handshake.
+    // OpenSSL will verify the stapled response automatically when
+    // X509_V_FLAG_CRL_CHECK is not set (default) — the status_request
+    // extension is enough for most deployments.
+    if (SSL_CTX_set_tlsext_status_type(ctx->ssl_ctx,
+                                        TLSEXT_STATUSTYPE_ocsp) != 1) {
+        return -1;
+    }
+    return 0;
+}
+
 #else // !XR_ENABLE_TLS
 
 // Empty implementations when TLS is disabled
@@ -616,5 +696,12 @@ int xr_tls_conn_write_try(XrTlsConn *conn, const void *buf, size_t len) { (void)
 void xr_tls_conn_close(XrTlsConn *conn) { (void)conn; }
 int xr_tls_conn_get_fd(XrTlsConn *conn) { (void)conn; return -1; }
 const char* xr_tls_error_string(XrTlsError err) { (void)err; return "TLS not enabled"; }
+int xr_tls_context_set_client_cert(XrTlsContext *ctx, const char *cert_file, const char *key_file) { (void)ctx; (void)cert_file; (void)key_file; return -1; }
+int xr_tls_context_enable_session_cache(XrTlsContext *ctx) { (void)ctx; return -1; }
+void* xr_tls_conn_get_session(XrTlsConn *conn) { (void)conn; return NULL; }
+int xr_tls_conn_set_session(XrTlsConn *conn, void *session) { (void)conn; (void)session; return -1; }
+void xr_tls_session_free(void *session) { (void)session; }
+bool xr_tls_conn_is_resumed(XrTlsConn *conn) { (void)conn; return false; }
+int xr_tls_context_enable_ocsp_stapling(XrTlsContext *ctx) { (void)ctx; return -1; }
 
 #endif

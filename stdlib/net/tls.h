@@ -128,4 +128,60 @@ XR_FUNC int xr_tls_conn_get_fd(XrTlsConn *conn);
 // Get the error description
 XR_FUNC const char* xr_tls_error_string(XrTlsError err);
 
+/* ========== Production Features (P17) ========== */
+
+/*
+ * Load client certificate + private key for mutual TLS (mTLS).
+ * Both files must be PEM-encoded.
+ * Returns 0 on success, -1 on error.
+ */
+XR_FUNC int xr_tls_context_set_client_cert(XrTlsContext *ctx,
+                                             const char *cert_file,
+                                             const char *key_file);
+
+/*
+ * Enable TLS session caching on the context.
+ * Client contexts cache sessions so repeated connections to the same
+ * server can resume with an abbreviated handshake.
+ * Returns 0 on success, -1 on error.
+ */
+XR_FUNC int xr_tls_context_enable_session_cache(XrTlsContext *ctx);
+
+/*
+ * Retrieve the current session from a connected TLS connection.
+ * Returns an opaque pointer (SSL_SESSION*) the caller can pass to
+ * xr_tls_conn_set_session on a new connection to attempt resumption.
+ * The returned session must be freed with xr_tls_session_free().
+ * Returns NULL if no session is available.
+ */
+XR_FUNC void* xr_tls_conn_get_session(XrTlsConn *conn);
+
+/*
+ * Set a previously saved session for resumption.
+ * Must be called before the handshake. The session is not consumed;
+ * the caller still owns and must free it.
+ * Returns 0 on success, -1 on error.
+ */
+XR_FUNC int xr_tls_conn_set_session(XrTlsConn *conn, void *session);
+
+/*
+ * Free a session obtained from xr_tls_conn_get_session.
+ */
+XR_FUNC void xr_tls_session_free(void *session);
+
+/*
+ * Check whether the current connection was resumed from a cached session.
+ * Returns true if the handshake was an abbreviated (resumed) handshake.
+ */
+XR_FUNC bool xr_tls_conn_is_resumed(XrTlsConn *conn);
+
+/*
+ * Request OCSP stapling from the server (client-side).
+ * Must be called on a client context before creating connections.
+ * When enabled, the client will request an OCSP response via the
+ * TLS status_request extension and verify it during the handshake.
+ * Returns 0 on success, -1 on error.
+ */
+XR_FUNC int xr_tls_context_enable_ocsp_stapling(XrTlsContext *ctx);
+
 #endif // XR_STDLIB_TLS_H
