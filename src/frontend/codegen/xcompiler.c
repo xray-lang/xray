@@ -329,10 +329,10 @@ static XrLocalInfo* scope_init_local_info(XrCompiler *compiler, XrString *name, 
     // Check prescan: if this local was found to be captured by a nested fn,
     // eagerly mark is_captured and allocate a ctx_slot before codegen proceeds.
     bool captured = false;
-    if (name && compiler->prescan_captured_count > 0) {
-        for (int i = 0; i < compiler->prescan_captured_count; i++) {
-            if (compiler->prescan_captured[i] &&
-                strcmp(compiler->prescan_captured[i], name->data) == 0) {
+    if (name && compiler->prescan_captured.count > 0) {
+        for (int i = 0; i < compiler->prescan_captured.count; i++) {
+            if (compiler->prescan_captured.data[i] &&
+                strcmp(compiler->prescan_captured.data[i], name->data) == 0) {
                 captured = true;
                 break;
             }
@@ -563,7 +563,7 @@ void xr_compiler_init(XrCompilerContext *ctx, XrCompiler *compiler, XrFunctionTy
     compiler->type = type;
     compiler->local_count = 0;
     compiler->captured_count = 0;
-    compiler->prescan_captured_count = 0;
+    XR_AVEC_INIT(compiler->prescan_captured);
     compiler->scope_depth = 0;
     compiler->scope_block_depth = 0;
     compiler->block_depth = 0;
@@ -571,8 +571,8 @@ void xr_compiler_init(XrCompilerContext *ctx, XrCompiler *compiler, XrFunctionTy
     compiler->loop_start = 0;
     compiler->loop_continue = 0;
     compiler->loop_scope = 0;
-    compiler->break_count = 0;
-    compiler->continue_count = 0;
+    XR_AVEC_INIT(compiler->break_jumps);
+    XR_AVEC_INIT(compiler->continue_jumps);
 
     // Initialize BCE (Bounds Check Elimination) info
     compiler->bce_loop_var = NULL;
@@ -967,9 +967,7 @@ void xr_compile_statement(XrCompilerContext *ctx, XrCompiler *compiler, AstNode 
                 xr_compiler_error(ctx, compiler, "Cannot use 'break' outside of loop");
             } else {
                 int jump_pos = EMIT_JUMP(ctx, compiler, OP_JMP);
-                if (compiler->break_count < 256) {
-                    compiler->break_jumps[compiler->break_count++] = jump_pos;
-                }
+                XR_AVEC_PUSH(compiler->arena, compiler->break_jumps, jump_pos);
             }
             break;
 
@@ -978,9 +976,7 @@ void xr_compile_statement(XrCompilerContext *ctx, XrCompiler *compiler, AstNode 
                 xr_compiler_error(ctx, compiler, "Cannot use 'continue' outside of loop");
             } else {
                 int jump_pos = EMIT_JUMP(ctx, compiler, OP_JMP);
-                if (compiler->continue_count < 256) {
-                    compiler->continue_jumps[compiler->continue_count++] = jump_pos;
-                }
+                XR_AVEC_PUSH(compiler->arena, compiler->continue_jumps, jump_pos);
             }
             break;
 
