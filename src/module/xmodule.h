@@ -38,7 +38,7 @@ typedef enum {
 
 /*
 ** XrModule - Dedicated Module type
-** 
+**
 ** Design:
 ** - SymbolId-indexed flat export table for O(1) property access
 ** - Sparse array maps SymbolId range to dense index (same pattern as XrShape)
@@ -49,25 +49,25 @@ typedef enum {
 
 typedef struct XrModule {
     XrGCHeader gc;
-    
+
     char *name;             // Module name (e.g. "time")
     char *path;             // Module path (e.g. "std/time/time.xr")
     ModuleType module_type;
-    
+
     // SymbolId-indexed export table
     XrValue  *export_values;      // Dense array of export values [export_count]
     SymbolId *export_symbols;     // Dense array of SymbolIds [export_count] (for iteration)
     uint8_t  *export_flags;       // Dense array of flags [export_count] (bit 0 = const)
-    
+
     int16_t  *symbol_to_index;    // Sparse lookup: [max_symbol - min_symbol + 1], -1 = not found
     SymbolId  min_symbol;
     SymbolId  max_symbol;
     uint16_t  export_count;
     uint16_t  export_capacity;
-    
+
     bool loaded;
     bool loading;
-    
+
     void *native_handle;
     struct XrClosure *init_fn;
     void *compiled_code;
@@ -132,9 +132,9 @@ typedef XrModule* (*NativeModuleLoader)(struct XrayIsolate *isolate);
 typedef struct XrModuleRegistry {
     XrHashMap *native_loaders;   // Module name → NativeModuleLoader
     XrHashMap *loaded_modules;   // Module path → XrModule*
-    
+
     char *stdlib_path;            // Stdlib path (default: stdlib/)
-    
+
     // Project config (optional, for package management)
     XrProject *project;
 } XrModuleRegistry;
@@ -146,7 +146,7 @@ XR_FUNC void xr_module_system_init(struct XrayIsolate *isolate);
 /*
 ** Initialize module system (with script path)
 ** Loads project config (if xray.toml exists)
-** 
+**
 ** @param isolate     Isolate instance
 ** @param script_path Entry script path
 */
@@ -155,11 +155,11 @@ XR_FUNC void xr_module_system_free(struct XrayIsolate *isolate);
 
 /*
 ** Register Native module loader
-** 
+**
 ** @param isolate Isolate instance
 ** @param name    Module name (e.g. "time")
 ** @param loader  Loader function
-** 
+**
 ** Example:
 **   xr_module_register_native(isolate, "time", xr_load_module_time);
 */
@@ -167,11 +167,11 @@ XR_FUNC void xr_module_register_native(struct XrayIsolate *isolate, const char *
 
 /*
 ** Import module (called by VM instruction)
-** 
+**
 ** @param isolate     Isolate instance
 ** @param module_name Module name (e.g. "time")
 ** @return            Module object (contains export table) or XR_NULL
-** 
+**
 ** Flow:
 ** 1. Check cache
 ** 2. Resolve path
@@ -198,11 +198,11 @@ XR_FUNC void xr_module_free(XrModule *module);
 
 /*
 ** Resolve module path
-** 
+**
 ** @param isolate     Isolate instance
 ** @param module_name Module name
 ** @return            Full path or NULL
-** 
+**
 ** Resolution rules:
 ** - "time"           → "stdlib/time/time.c" (native)
 ** - "datetime"       → "stdlib/datetime/datetime.c" (native)
@@ -221,6 +221,6 @@ XR_FUNC void xr_module_set_compiler_hooks(
     void *(*parse_fn)(void*, const char*, const char*),
     void *(*compile_ast_fn)(void*, void*, const char*),
     void *(*compile_src_fn)(void*, const char*, const char*),
-    void  (*ast_free_fn)(void*, void*));
+    void  (*ast_free_fn)(void*));
 
 #endif // XMODULE_H

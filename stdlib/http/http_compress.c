@@ -9,8 +9,8 @@
  *
  * KEY CONCEPT:
  *   Delegates to the unified compress module (compress_zlib.c).
- *   Retains the http-specific API surface (XrCompressType dispatch,
- *   Content-Encoding detection, pooled gzip) for backward compat.
+ *   Retains the http-specific API surface (Content-Encoding dispatch,
+ *   detection, pooled gzip) while using the unified XrContentEncoding.
  */
 
 #include "http_compress.h"
@@ -18,9 +18,8 @@
 
 /* ========== Compression Type Detection ========== */
 
-XrCompressType xr_detect_compress_type(const char *content_encoding) {
-    /* XrContentEncoding values (0,1,2) map directly to XrCompressType */
-    return (XrCompressType)xr_detect_content_encoding(content_encoding);
+XrContentEncoding xr_detect_compress_type(const char *content_encoding) {
+    return xr_detect_content_encoding(content_encoding);
 }
 
 bool xr_compress_available(void) {
@@ -39,15 +38,15 @@ int xr_deflate_decompress(const void *in, size_t in_len,
     return xr_zlib_deflate_decompress(in, in_len, out, out_len);
 }
 
-int xr_decompress(XrCompressType type,
+int xr_decompress(XrContentEncoding type,
                   const void *in, size_t in_len,
                   void **out, size_t *out_len) {
     switch (type) {
-        case XR_COMPRESS_GZIP:
+        case XR_CONTENT_ENC_GZIP:
             return xr_zlib_gzip_decompress(in, in_len, out, out_len);
-        case XR_COMPRESS_DEFLATE:
+        case XR_CONTENT_ENC_DEFLATE:
             return xr_zlib_deflate_decompress(in, in_len, out, out_len);
-        case XR_COMPRESS_NONE:
+        case XR_CONTENT_ENC_NONE:
         default:
             return -1;
     }
@@ -65,15 +64,15 @@ int xr_deflate_compress(const void *in, size_t in_len,
     return xr_zlib_deflate_compress(in, in_len, out, out_len, level);
 }
 
-int xr_compress(XrCompressType type, int level,
+int xr_compress(XrContentEncoding type, int level,
                 const void *in, size_t in_len,
                 void **out, size_t *out_len) {
     switch (type) {
-        case XR_COMPRESS_GZIP:
+        case XR_CONTENT_ENC_GZIP:
             return xr_zlib_gzip_compress(in, in_len, out, out_len, level);
-        case XR_COMPRESS_DEFLATE:
+        case XR_CONTENT_ENC_DEFLATE:
             return xr_zlib_deflate_compress(in, in_len, out, out_len, level);
-        case XR_COMPRESS_NONE:
+        case XR_CONTENT_ENC_NONE:
         default:
             return -1;
     }

@@ -2710,7 +2710,7 @@ XrJsonValue *xlsp_analyze_format(XrLspDocument *doc) {
     char *formatted = xfmt_format_ast(ast, &config, X);
 
     // Free AST
-    xr_ast_free(X, ast);
+    xr_program_destroy(ast);
 
     if (!formatted) {
         return edits;

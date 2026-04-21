@@ -28,7 +28,7 @@
 
 // xr_parse_with_source declared in xparse.h (included above)
 // xr_compile_ast_with_source declared in xisolate_internal.h (included above)
-// xr_ast_free declared in xast.h (included via xast.h)
+// xr_program_destroy declared in xast.h (included via xast.h)
 
 /* ========== Internal Structures ========== */
 
@@ -221,7 +221,7 @@ static void visit_node(BundleContext *ctx, AstNode *node, const char *current_di
                                         xr_free(bc);
                                     }
                                 }
-                                xr_ast_free(ctx->X, ast);
+                                xr_program_destroy(ast);
                                 xr_free(pkg_dir);
                             }
                             xr_free(source);
@@ -267,7 +267,7 @@ static void visit_node(BundleContext *ctx, AstNode *node, const char *current_di
                                 }
                             }
 
-                            xr_ast_free(ctx->X, ast);
+                            xr_program_destroy(ast);
                             xr_free(module_dir);
                         }
                         xr_free(source);
@@ -408,7 +408,7 @@ XrBundle* xr_bundle_create_ex(XrayIsolate *X, const char *entry_file, XrBundleFl
         }
     }
 
-    xr_ast_free(X, ast);
+    xr_program_destroy(ast);
     xr_hashmap_free(ctx.visited);
     xr_free(ctx.base_dir);
     xr_free(abs_path);

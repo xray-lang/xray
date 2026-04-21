@@ -17,13 +17,7 @@
 
 #include <stddef.h>
 #include <stdbool.h>
-
-// Compression type
-typedef enum {
-    XR_COMPRESS_NONE = 0,
-    XR_COMPRESS_GZIP,
-    XR_COMPRESS_DEFLATE
-} XrCompressType;
+#include "../compress/compress.h"
 
 // Compression level
 typedef enum {
@@ -34,23 +28,23 @@ typedef enum {
 } XrCompressLevel;
 
 /*
- * Detect compression type
- * content_encoding: Content-Encoding header value
+ * Detect compression type from Content-Encoding header.
+ * Returns XrContentEncoding (defined in compress.h).
  */
-XrCompressType xr_detect_compress_type(const char *content_encoding);
+XrContentEncoding xr_detect_compress_type(const char *content_encoding);
 
 /*
  * Decompress data
- * 
+ *
  * type: Compression type
  * in: Compressed data
  * in_len: Compressed data length
  * out: Output buffer (caller must free)
  * out_len: Output length
- * 
+ *
  * Returns: 0 on success, -1 on failure
  */
-int xr_decompress(XrCompressType type, 
+int xr_decompress(XrContentEncoding type,
                   const void *in, size_t in_len,
                   void **out, size_t *out_len);
 
@@ -91,7 +85,7 @@ int xr_deflate_compress(const void *in, size_t in_len,
 /*
  * Generic compression interface
  */
-int xr_compress(XrCompressType type, int level,
+int xr_compress(XrContentEncoding type, int level,
                 const void *in, size_t in_len,
                 void **out, size_t *out_len);
 

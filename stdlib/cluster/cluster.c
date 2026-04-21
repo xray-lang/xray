@@ -62,62 +62,35 @@ static inline uint32_t str_hash(const char *s) {
  * Block the current coroutine for up to `ms` milliseconds, returning
  * early (false) as soon as xr_cluster_stop closes the stop_pipe.
  *
- * We deliberately avoid nanosleep / usleep here because every cluster
- * coroutine (heartbeat, accept retry, reconnect backoff, discovery
- * tick) runs on a worker thread; a syscall sleep would block that
- * worker from scheduling any other coroutine for the full window.
- *
  * Strategy:
  *   1. Program a read deadline on stop_pipe[0] via the netpoll timer
- *      wheel — this is the same machinery that drives socket read
- *      timeouts, so it folds cleanly into the existing scheduler.
+ *      wheel — same machinery that drives socket read timeouts.
  *   2. Call xr_socket_read on stop_pipe[0]. The coroutine yields
- *      until one of three things happens:
- *        a. deadline expires   → return > 0 never satisfied, read
- *                                 returns -1; we interpret as
- *                                 "normal sleep elapsed".
+ *      until:
+ *        a. deadline expires   → read returns -1; sleep elapsed.
  *        b. stop_pipe[1] closes → read returns 0 (EOF); shutdown.
- *        c. stop writes a byte → read returns > 0; shutdown. (We do
- *                                 not currently write bytes, but the
- *                                 helper tolerates it for future
- *                                 targeted wake-ups.)
+ *        c. targeted wake byte → read returns > 0; shutdown.
  *   3. Clear the deadline so the next sleep sees a fresh deadline.
  *
- * Fallback: if stop_pipe was never set up (pipe() failed at start_ex)
- * we nanosleep in small slices and honour c->running. Cluster still
- * runs; it just loses the "wake-immediately on stop" property.
+ * Requires: stop_pipe created in start_ex (now fatal if pipe() fails)
+ * and c->isolate bound (always true for cluster coroutines).
  */
 bool xr_cluster_sleep_interruptible(XrCluster *c, int ms) {
     if (!c) return false;
     if (!atomic_load(&c->running)) return false;
     if (ms <= 0) return atomic_load(&c->running);
 
-    int rfd = c->stop_pipe[0];
-    if (rfd < 0 || !c->isolate) {
-        // Fallback: slice-poll running every 50ms. Still blocks the
-        // worker, but this path is only reached on a pipe() failure
-        // at start_ex, which is rare enough to accept the degradation.
-        const int slice_ms = 50;
-        while (ms > 0 && atomic_load(&c->running)) {
-            int chunk = ms > slice_ms ? slice_ms : ms;
-            struct timespec ts = {
-                .tv_sec  = chunk / 1000,
-                .tv_nsec = (chunk % 1000) * 1000000L
-            };
-            nanosleep(&ts, NULL);
-            ms -= chunk;
-        }
-        return atomic_load(&c->running);
-    }
+    XR_DCHECK(c->stop_pipe[0] >= 0, "cluster: stop_pipe required");
+    XR_DCHECK(c->isolate != NULL, "cluster: isolate required for sleep");
 
+    int rfd = c->stop_pipe[0];
     xr_socket_set_read_timeout(c->isolate, rfd, ms);
     char byte;
     int n = xr_socket_read(c->isolate, rfd, &byte, 1);
-    xr_socket_set_read_timeout(c->isolate, rfd, 0);  // clear deadline
+    xr_socket_set_read_timeout(c->isolate, rfd, 0);
 
     if (n == 0)  return false;            // EOF — stop closed write end
     if (n > 0)   return false;            // targeted wake (treat as stop)
-    // n < 0 → deadline fired or error; either way the sleep window is over.
     return atomic_load(&c->running);
 }
 
@@ -305,6 +278,15 @@ int xr_cluster_start_ex(XrayIsolate *X, const char *name,
                          uint16_t port, const char *secret,
                          const XrClusterTlsOptions *tls) {
     if (X->cluster) return -1; // already running
+    if (!name || name[0] == '\0') return -1; // name required
+
+    // Validate name: printable ASCII, max XR_NODE_NAME_MAX bytes
+    size_t name_len = strlen(name);
+    if (name_len > XR_NODE_NAME_MAX) return -1;
+    for (size_t i = 0; i < name_len; i++) {
+        if ((unsigned char)name[i] < 0x20 || (unsigned char)name[i] > 0x7E)
+            return -1;
+    }
 
     XrCluster *c = (XrCluster *)xr_calloc(1, sizeof(XrCluster));
     if (!c) return -1;
@@ -350,6 +332,7 @@ int xr_cluster_start_ex(XrayIsolate *X, const char *name,
     c->heartbeat_interval_ms = 5000;
     c->heartbeat_timeout_ms = 15000;
     c->max_missed_heartbeats = 3;
+    c->max_pending_requests = XR_MAX_PENDING_REQUESTS;
     // Dynamic tombstone array
     c->tombstone_cap = 16;
     c->tombstones = xr_calloc((size_t)c->tombstone_cap, sizeof(c->tombstones[0]));
@@ -375,20 +358,23 @@ int xr_cluster_start_ex(XrayIsolate *X, const char *name,
     atomic_store(&c->running, true);
 
     /*
-     * Stop-signalling pipe. Failure here is non-fatal — the
-     * interruptible-sleep helper falls back to a sliced nanosleep so
-     * the cluster still functions, just without wake-immediately-on-stop
-     * semantics. We mark the fds -1 so the helper can detect the
-     * degraded mode.
+     * Stop-signalling pipe. Required for coroutine-friendly
+     * interruptible sleep. Failure is fatal — without it every
+     * sleep in the cluster degrades to nanosleep, blocking the
+     * worker thread and starving other coroutines.
      */
     c->stop_pipe[0] = -1;
     c->stop_pipe[1] = -1;
-    if (pipe(c->stop_pipe) == 0) {
-        fcntl(c->stop_pipe[0], F_SETFL, O_NONBLOCK);
-        fcntl(c->stop_pipe[1], F_SETFL, O_NONBLOCK);
-    } else {
-        c->stop_pipe[0] = c->stop_pipe[1] = -1;
+    if (pipe(c->stop_pipe) != 0) {
+        close(c->listen_fd);
+        if (c->tls_client_ctx) xr_tls_context_free(c->tls_client_ctx);
+        if (c->tls_server_ctx) xr_tls_context_free(c->tls_server_ctx);
+        xr_secure_wipe(c->secret, sizeof(c->secret));
+        xr_free(c);
+        return -1;
     }
+    fcntl(c->stop_pipe[0], F_SETFL, O_NONBLOCK);
+    fcntl(c->stop_pipe[1], F_SETFL, O_NONBLOCK);
 
     X->cluster = c;
     xr_cluster_channel_install_hooks(X);
@@ -462,9 +448,9 @@ void xr_cluster_stop(XrCluster *c) {
      * we already closed listen_fd, so at worst it observes a stale
      * isolate pointer and a failed accept and bails out.
      *
-     * We poll with a short nanosleep (not xr_cluster_sleep_interruptible)
-     * because this runs in the embedder thread that called stop(), not
-     * in a coroutine — we cannot yield the scheduler from here.
+     * We spin with nanosleep (not xr_cluster_sleep_interruptible)
+     * because stop() runs on the embedder thread, not a coroutine.
+     * Bounded to 1s total; coroutines typically exit within one tick.
      */
     if (c->accept_coro_spawned) {
         for (int i = 0; i < 100 && atomic_load(&c->accept_running); i++) {
@@ -1179,7 +1165,8 @@ static XrValue cluster_call_fn(XrayIsolate *X, XrValue *args, int argc) {
     }
 
     // Register pending request BEFORE sending (avoid race)
-    XrChannel *rsp_ch = xr_cluster_node_add_pending(target, req_id, X);
+    XrChannel *rsp_ch = xr_cluster_node_add_pending(
+        target, req_id, X, c->max_pending_requests);
     if (!rsp_ch) {
         xr_serial_buf_free(&sbuf);
         return xr_null();

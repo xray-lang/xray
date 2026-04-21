@@ -388,7 +388,7 @@ cleanup_suite:
     xr_test_suite_free(suite);
     xr_free_code(X, proto);
 cleanup_ast:
-    xr_ast_free(X, ast);
+    xr_program_destroy(ast);
 cleanup_source:
     xr_free(source);
 cleanup_isolate:

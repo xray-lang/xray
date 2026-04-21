@@ -67,17 +67,17 @@ void print_compile_help(void) {
 static char* generate_var_name(const char *filename) {
     const char *base = strrchr(filename, '/');
     base = base ? base + 1 : filename;
-    
+
     // Remove extension
     const char *dot = strrchr(base, '.');
     size_t len = dot ? (size_t)(dot - base) : strlen(base);
-    
+
     char *name = xr_malloc(len + 8);
     if (!name) return NULL;
-    
+
     strcpy(name, "xr_bc_");
     size_t j = 6;
-    
+
     for (size_t i = 0; i < len; i++) {
         char c = base[i];
         if ((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') ||
@@ -108,10 +108,10 @@ int cmd_compile(int argc, char **argv) {
     const char *var_name = NULL;
     XrOutputFormat explicit_format = XR_OUTPUT_AUTO;
     int flags = 0;
-    
+
     // Reset getopt state
     optind = 1;
-    
+
     int opt;
     while ((opt = getopt_long(argc, argv, "ho:f:sSn:", compile_long_options, NULL)) != -1) {
         switch (opt) {
@@ -142,16 +142,16 @@ int cmd_compile(int argc, char **argv) {
                 return 1;
         }
     }
-    
+
     // Check input file
     if (optind >= argc) {
         fprintf(stderr, "Error: missing input file\n");
         print_compile_help();
         return 1;
     }
-    
+
     const char *input_file = argv[optind];
-    
+
     // Default output file
     char default_output[512];
     if (!output_file) {
@@ -162,54 +162,54 @@ int cmd_compile(int argc, char **argv) {
         snprintf(default_output, sizeof(default_output), "%.*s.xrc", (int)len, base);
         output_file = default_output;
     }
-    
+
     // Determine output format
     XrOutputFormat format = xr_detect_output_format(output_file, explicit_format);
-    
+
     // Resources to clean up
     int result = 1;
     char *gen_var_name = NULL;
     XrayIsolate *X = NULL;
     char *source = NULL;
     AstNode *ast = NULL;
-    
+
     // Generate variable name
     if (!var_name && (format == XR_OUTPUT_C_SOURCE || format == XR_OUTPUT_C_HEADER)) {
         gen_var_name = generate_var_name(input_file);
         var_name = gen_var_name;
     }
-    
+
     // Create Isolate
     X = cli_create_isolate();
     if (!X) {
         fprintf(stderr, "Error: cannot create Isolate\n");
         goto cleanup;
     }
-    
+
     // Read source file
     source = cli_read_file(input_file);
     if (!source) {
         fprintf(stderr, "Error: cannot open '%s'\n", input_file);
         goto cleanup;
     }
-    
+
     // Parse
     ast = xr_parse_with_source(X, source, input_file);
     if (!ast) {
         fprintf(stderr, "Error: parsing failed\n");
         goto cleanup;
     }
-    
+
     // Compile
     XrProto *proto = xr_compile_ast_with_source(X, ast, input_file);
     if (!proto) {
         fprintf(stderr, "Error: compilation failed\n");
         goto cleanup;
     }
-    
+
     // Output
     bool success = false;
-    
+
     switch (format) {
         case XR_OUTPUT_BYTECODE: {
             size_t bc_size;
@@ -226,7 +226,7 @@ int cmd_compile(int argc, char **argv) {
             }
             break;
         }
-        
+
         case XR_OUTPUT_C_SOURCE:
         case XR_OUTPUT_C_HEADER:
             success = xr_output_c_source(X, proto, output_file, var_name, flags);
@@ -234,21 +234,21 @@ int cmd_compile(int argc, char **argv) {
                 printf("Compiled: %s\n", output_file);
             }
             break;
-            
+
         default:
             fprintf(stderr, "Error: unknown output format\n");
             break;
     }
-    
+
     if (!success) {
         fprintf(stderr, "Error: cannot write to '%s'\n", output_file);
     }
-    
+
     result = success ? 0 : 1;
 
 cleanup:
     if (ast) {
-        xr_ast_free(X, ast);
+        xr_program_destroy(ast);
     }
     xr_free(source);
     if (X) xray_isolate_delete(X);

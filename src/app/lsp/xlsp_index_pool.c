@@ -229,7 +229,7 @@ static XrLspIndexResult *parse_file(XrayIsolate *isolate, const char *path, cons
         }
 
         // Free AST (we've extracted what we need)
-        xr_ast_free(isolate, ast);
+        xr_program_destroy(ast);
     } else {
         result->error_message = xr_strdup("Parse failed");
     }

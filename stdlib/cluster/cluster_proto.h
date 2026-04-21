@@ -130,7 +130,21 @@ typedef enum {
  */
 #define XR_TOPIC_DEFAULT_HOP_LIMIT  3
 
-// Max node name length
+/*
+ * Max node name length (bytes, excluding NUL).
+ *
+ * SAFETY BOUNDARY:
+ *   - Names are validated and truncated at the API boundary
+ *     (xr_cluster_start_ex) and at the wire boundary
+ *     (xr_frame_decode_handshake_req/ack, parse_announce).
+ *   - Must be ≤ 255 (wire encodes name_len as uint8_t).
+ *   - Must be ≤ 63 to fit in the fixed-size fields inside
+ *     XrClusterNode, XrFrameHandshakeReq/Ack, XrCluster,
+ *     tombstones, and monitor entries.
+ *   - Names MUST be printable ASCII (0x20–0x7E). The handshake
+ *     encoder writes strlen(name) bytes; NUL or control chars
+ *     would truncate or corrupt the wire message.
+ */
 #define XR_NODE_NAME_MAX  63
 
 // Max channel name length

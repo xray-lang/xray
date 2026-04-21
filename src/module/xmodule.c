@@ -44,13 +44,13 @@
 static void *(*fn_parse_with_source)(void*, const char*, const char*) = NULL;
 static void *(*fn_compile_ast)(void*, void*, const char*) = NULL;
 static void *(*fn_compile_source)(void*, const char*, const char*) = NULL;
-static void  (*fn_ast_free)(void*, void*) = NULL;
+static void  (*fn_ast_free)(void*) = NULL;
 
 void xr_module_set_compiler_hooks(
     void *(*parse_fn)(void*, const char*, const char*),
     void *(*compile_ast_fn)(void*, void*, const char*),
     void *(*compile_src_fn)(void*, const char*, const char*),
-    void  (*ast_free_fn)(void*, void*))
+    void  (*ast_free_fn)(void*))
 {
     fn_parse_with_source = parse_fn;
     fn_compile_ast = compile_ast_fn;
@@ -634,7 +634,7 @@ execute:
                   result, xr_isolate_get_current_module(isolate) ? xr_isolate_get_current_module(isolate)->name : "null");
 
     // Cleanup
-    if (ast && fn_ast_free) fn_ast_free(isolate, ast);
+    if (ast && fn_ast_free) fn_ast_free(ast);
     if (source) xr_free(source);
     xr_isolate_set_current_module(isolate, prev_module);
 
@@ -763,7 +763,7 @@ static XrModule* load_script_module(XrayIsolate *isolate, XrModule *module, cons
 
     void *code = fn_compile_ast(isolate, ast, clean_path);
     if (!code) {
-        if (fn_ast_free) fn_ast_free(isolate, ast);
+        if (fn_ast_free) fn_ast_free(ast);
         xr_isolate_set_current_module(isolate, prev_module);
         xr_free(source);
         xr_free(clean_path);
@@ -782,7 +782,7 @@ static XrModule* load_script_module(XrayIsolate *isolate, XrModule *module, cons
 
     // Execution error should cause module loading to fail
     if (result != 0) {
-        if (fn_ast_free) fn_ast_free(isolate, ast);
+        if (fn_ast_free) fn_ast_free(ast);
         xr_free(source);
         xr_free(clean_path);
         xr_isolate_set_current_module(isolate, prev_module);
@@ -792,7 +792,7 @@ static XrModule* load_script_module(XrayIsolate *isolate, XrModule *module, cons
     // 7. Cleanup - Note: code cannot be freed because exported closures still reference proto
     // Save code to module, free when module is destroyed
     module->compiled_code = code;
-    if (fn_ast_free) fn_ast_free(isolate, ast);
+    if (fn_ast_free) fn_ast_free(ast);
     xr_free(source);
     xr_free(clean_path);
 

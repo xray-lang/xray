@@ -747,7 +747,7 @@ static void xr_parser_init_internal(Parser *parser, XrayIsolate *X, const char *
 // Allocate and install a new arena on the Isolate. Returns the previous arena
 // which must be restored by the caller via xr_parse_teardown_arena.
 // The returned arena pointer is heap-allocated (xr_malloc) so it outlives
-// the stack frame; its memory is reclaimed by xr_ast_free.
+// the stack frame; its memory is reclaimed by xr_program_destroy.
 static XrArena *xr_parse_setup_arena(XrayIsolate *X, XrArena **saved_out) {
     XrArena *arena = (XrArena *)xr_malloc(sizeof(XrArena));
     XR_CHECK(arena != NULL, "xr_parse: failed to allocate parse arena");
@@ -772,7 +772,7 @@ AstNode *xr_parse(XrayIsolate *X, const char *source) {
 
 // Parse source code with filename, return AST.
 // Creates and owns a dedicated arena; ownership is transferred to the returned
-// program node. xr_ast_free on the returned node releases all memory.
+// program node. xr_program_destroy on the returned node releases all memory.
 AstNode *xr_parse_with_source(XrayIsolate *X, const char *source, const char *source_file) {
     XR_DCHECK(source != NULL, "xr_parse_with_source: NULL source");
 
@@ -1304,8 +1304,6 @@ AstNode *xr_parse_assignment(Parser *parser, AstNode *left) {
     // Variable assignment: x = 10
     if (left->type == AST_VARIABLE) {
         char *name = ast_strdup(parser->X, left->as.variable.name);
-        xr_ast_free(parser->X, left);
-
         AstNode *value = xr_parse_expression(parser);
 
         AstNode *node = xr_ast_assignment(parser->X, name, value, line);
@@ -1339,11 +1337,9 @@ AstNode *xr_parse_assignment(Parser *parser, AstNode *left) {
         XrDestructurePattern *pattern = convert_array_literal_to_pattern(parser->X, left);
         if (!pattern) {
             xr_parser_error(parser, "destructure target must be variable list, e.g. [a, b]");
-            xr_ast_free(parser->X, left);
             return NULL;
         }
 
-        xr_ast_free(parser->X, left);
         AstNode *value = xr_parse_expression(parser);
         return xr_ast_destructure_assign(parser->X, pattern, value, line);
     }
@@ -1351,18 +1347,15 @@ AstNode *xr_parse_assignment(Parser *parser, AstNode *left) {
         XrDestructurePattern *pattern = convert_object_literal_to_pattern(parser->X, left);
         if (!pattern) {
             xr_parser_error(parser, "destructure target must be variable list, e.g. {x, y}");
-            xr_ast_free(parser->X, left);
             return NULL;
         }
 
-        xr_ast_free(parser->X, left);
         AstNode *value = xr_parse_expression(parser);
         return xr_ast_destructure_assign(parser->X, pattern, value, line);
     }
     // Invalid assignment target
     else {
         xr_parser_error(parser, "assignment target must be variable, index, member or destructure pattern");
-        xr_ast_free(parser->X, left);
         return NULL;
     }
 }
@@ -1375,8 +1368,6 @@ AstNode *xr_parse_compound_assignment(Parser *parser, AstNode *left) {
     if (left->type == AST_VARIABLE) {
         // Variable compound assignment: x += 10
         char *var_name = ast_strdup(parser->X, left->as.variable.name);
-        xr_ast_free(parser->X, left);
-
         AstNode *right = xr_parse_expression(parser);
         AstNode *compound_assignment = xr_ast_compound_assignment(parser->X, var_name, op_token, right, line);
         return compound_assignment;
@@ -1385,16 +1376,12 @@ AstNode *xr_parse_compound_assignment(Parser *parser, AstNode *left) {
         AstNode *object = left->as.member_access.object;
         char *member_name = ast_strdup(parser->X, left->as.member_access.name);
 
-        left->as.member_access.object = NULL;  // Prevent freeing
-        xr_ast_free(parser->X, left);
-
         AstNode *right = xr_parse_expression(parser);
         AstNode *compound_assignment = xr_ast_member_compound_assignment(
             parser->X, object, member_name, op_token, right, line);
         return compound_assignment;
     } else {
         xr_parser_error(parser, "compound assignment only for variables or member access");
-        xr_ast_free(parser->X, left);
         return NULL;
     }
 }
@@ -1444,20 +1431,16 @@ AstNode *xr_parse_postfix_inc_dec(Parser *parser, AstNode *left) {
 
     if (left->type != AST_VARIABLE) {
         xr_parser_error(parser, "++/-- only for variables");
-        xr_ast_free(parser->X, left);
         return NULL;
     }
 
     // Check if embedded in expression
     if (is_binary_operator(parser->current.type)) {
         xr_parser_error(parser, "++/-- must be standalone statement, cannot be in expression (e.g. y = x++ or a + x++)");
-        xr_ast_free(parser->X, left);
         return NULL;
     }
 
     char *var_name = ast_strdup(parser->X, left->as.variable.name);
-    xr_ast_free(parser->X, left);
-
     AstNode *node;
     if (op_token == TK_INC) {
         node = xr_ast_inc(parser->X, var_name, line);

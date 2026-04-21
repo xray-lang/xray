@@ -114,8 +114,9 @@ static int dist_recv(XrChannel *ch, XrValue *out, XrCoroutine *coro) {
     uint64_t saved_req_id = req_id; // save before serialization mutates it
 
     // Register pending request BEFORE sending
-    XrChannel *rsp_ch = xr_cluster_node_add_pending(dc->owner_node, req_id, c->isolate);
-    if (!rsp_ch) return XR_CHAN_CLOSED;
+    XrChannel *rsp_ch = xr_cluster_node_add_pending(
+        dc->owner_node, req_id, c->isolate, c->max_pending_requests);
+    if (!rsp_ch) return XR_CHAN_FULL;
 
     // Build payload: [request_id 8B] [name_len 1B] [name ...]
     uint8_t name_len = (uint8_t)strlen(dc->name);

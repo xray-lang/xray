@@ -59,7 +59,7 @@ int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size) {
 
     /* Free AST if successfully parsed */
     if (ast) {
-        xr_ast_free(NULL, ast);
+        xr_program_destroy(ast);
     }
 
     free(input);

@@ -33,7 +33,7 @@
 #define XR_DISCOVERY_MCAST_PORT    47200
 #define XR_DISCOVERY_INTERVAL_MS   3000 // announce every 3 seconds
 #define XR_DISCOVERY_MAGIC         0x58524459 // "XRDY"
-#define XR_DISCOVERY_VERSION       1
+#define XR_DISCOVERY_VERSION       2  // v2: all fields big-endian
 
 // Forward declarations
 struct XrCluster;

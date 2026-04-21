@@ -176,7 +176,8 @@ typedef enum {
     XR_CHAN_OK,
     XR_CHAN_CLOSED,
     XR_CHAN_BLOCK,
-    XR_CHAN_NO_CORO
+    XR_CHAN_NO_CORO,
+    XR_CHAN_FULL       // pending request table saturated (backpressure)
 } XrChanResult;
 
 XR_FUNC XrChanResult xr_channel_send(XrChannel *ch, XrValue value, struct XrCoroutine *coro);
