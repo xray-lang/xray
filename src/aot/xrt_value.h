@@ -1,0 +1,96 @@
+/*
+ * xray - Lightweight typed scripting with native concurrency
+ * https://www.xray-lang.org
+ *
+ * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
+ * Licensed under the MIT License
+ *
+ * xrt_value.h - AOT value representation: tags, boxing/unboxing, string helpers
+ */
+
+#ifndef XRT_VALUE_H
+#define XRT_VALUE_H
+
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <stdint.h>
+#include <inttypes.h>
+#include <stdarg.h>
+#include <math.h>
+
+/* =========================================================================
+ * Value representation
+ * ========================================================================= */
+
+typedef union XrtValue {
+    struct { int64_t  i;   uint8_t _pi[7]; uint8_t tag; };
+    struct { double   f;   uint8_t _pf[7]; uint8_t _tf; };
+    struct { void    *ptr; uint32_t heap_type; uint8_t _pp[3]; uint8_t _tp; };
+    uint8_t raw[16];
+} XrtValue;
+
+#define XRT_TAG_NULL    0
+#define XRT_TAG_BOOL    1
+// 2 reserved (was XRT_TAG_FALSE)
+#define XRT_TAG_I64     6
+#define XRT_TAG_F64     12
+#define XRT_TAG_PTR     13
+#define XRT_TAG_STR     14 // static / literal string (no ARC)
+#define XRT_TAG_ARRAY   15
+#define XRT_TAG_MAP     16
+#define XRT_TAG_STRBUF  17
+#define XRT_TAG_CLOSURE 18
+#define XRT_TAG_STR_ARC 19 // heap string managed by ARC (xrt_arc_alloc)
+
+// Treat both STR and STR_ARC as strings in generic operations
+#define XRT_IS_STR(v)  ((v).tag == XRT_TAG_STR || (v).tag == XRT_TAG_STR_ARC)
+
+/* =========================================================================
+ * Boxing / unboxing
+ * ========================================================================= */
+
+static inline XrtValue xrt_box_int(int64_t v) {
+    return (XrtValue){.i = v, .tag = XRT_TAG_I64};
+}
+
+static inline XrtValue xrt_box_float(double v) {
+    return (XrtValue){.f = v, .tag = XRT_TAG_F64};
+}
+
+static inline XrtValue xrt_box_bool(int64_t v) {
+    XrtValue r;
+    r.tag = XRT_TAG_BOOL;
+    r.i   = v ? 1 : 0;
+    return r;
+}
+
+static inline XrtValue xrt_box_str(const char *s) {
+    return (XrtValue){.ptr = (void *)s, .tag = XRT_TAG_STR};
+}
+
+static inline int64_t      xrt_unbox_int(XrtValue v)   { return v.i; }
+static inline double       xrt_unbox_float(XrtValue v)  { return v.f; }
+static inline const char  *xrt_unbox_str(XrtValue v)    { return (const char *)v.ptr; }
+
+/* =========================================================================
+ * String helpers
+ * ========================================================================= */
+
+static inline const char *xrt_to_cstr(XrtValue v, char *buf, size_t bufsz) {
+    switch (v.tag) {
+        case XRT_TAG_STR:
+        case XRT_TAG_STR_ARC: return (const char *)v.ptr;
+        case XRT_TAG_I64:   snprintf(buf, bufsz, "%lld", (long long)v.i); return buf;
+        case XRT_TAG_F64:   snprintf(buf, bufsz, "%g",   v.f);            return buf;
+        case XRT_TAG_BOOL:  return v.i ? "true" : "false";
+        case XRT_TAG_NULL:  return "null";
+        default:            snprintf(buf, bufsz, "<object@%p>", v.ptr);   return buf;
+    }
+}
+
+// xrt_str_alloc/xrt_str_concat: defined in xrt_arc.h
+static inline XrtValue xrt_str_alloc(size_t len);
+static inline XrtValue xrt_str_concat(const char *sa, const char *sb);
+
+#endif // XRT_VALUE_H

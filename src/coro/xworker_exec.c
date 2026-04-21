@@ -719,11 +719,65 @@ static XrVMResult run_first_exec(XrayIsolate *isolate, XrWorker *worker,
     return run_finalize(isolate, worker, coro, ctx, coro_ctx, result);
 }
 
+// ========== run_jit_resume: Extracted JIT Resume Logic ==========
+//
+// Prepares resume state (channel recv value or await task result) in
+// jit_suspend_state, then re-enters compiled code via xir_jit_resume.
+//
+// Returns: XIR_JIT_OK, XIR_JIT_SUSPEND, XIR_JIT_DEOPT (fall through), or
+// -1 for channel-close (caller should clear jit_resume_entry and deopt).
+#ifdef XRAY_HAS_JIT
+static int run_jit_resume(XrayIsolate *isolate, XrCoroutine *coro,
+                           XrVMContext *coro_ctx, XrValue *jit_result_out) {
+    XR_DCHECK(coro->jit_resume_entry != NULL, "run_jit_resume: no resume entry");
+    XR_DCHECK(coro->jit_ctx != NULL, "run_jit_resume: no jit_ctx");
+
+    int resume_reason = xr_coro_resume_load(coro);
+
+    // Channel close wake: deopt to bytecode (rare edge case).
+    if (resume_reason == XR_RESUME_CHANNEL_CLOSED) {
+        coro->jit_resume_entry = NULL;
+        coro->jit_resume_proto = NULL;
+        return -1;
+    }
+
+    // Channel recv resume: copy value from recv_slot (stack[0]) to
+    // jit_suspend_state.result where the JIT continuation reads it.
+    if (resume_reason == XR_RESUME_CHANNEL) {
+        XrValue rv = coro_ctx->stack[0];
+        if (XR_IS_PTR(rv) && xr_value_needs_copy(rv)) {
+            rv = xr_deep_copy_to_coro(isolate, rv, coro);
+        }
+        coro->jit_suspend_state.result = rv.i;
+        coro->jit_suspend_state.result_tag = rv.tag;
+    }
+
+    // AWAIT resume: xr_task_wake_waiter only marks coro ready but does
+    // NOT propagate the result — do it here to avoid stale register reads.
+    if (resume_reason != XR_RESUME_CHANNEL && resume_reason != XR_RESUME_CHANNEL_CLOSED) {
+        XrTask *await_task = atomic_load_explicit(&coro->await_task, memory_order_acquire);
+        if (await_task) {
+            uint8_t tstate = atomic_load_explicit(&await_task->state, memory_order_acquire);
+            XrValue res = xr_null();
+            if (tstate == XR_TASK_COMPLETED) {
+                res = xr_deep_copy_to_coro(isolate, await_task->result, coro);
+            }
+            coro->jit_suspend_state.result = res.i;
+            coro->jit_suspend_state.result_tag = res.tag;
+            atomic_store_explicit(&coro->await_task, NULL, memory_order_relaxed);
+        }
+    }
+
+    xr_coro_resume_store(coro, XR_RESUME_OK);
+    return xir_jit_resume(coro, jit_result_out);
+}
+#endif
+
 // ========== run_resume_path: JIT Resume + Continuation + Unroll ==========
 //
 // Handles every resume case except the inline channel-resume fast path that
 // xr_coro_run_on_worker handles directly.  Supports:
-//   - JIT suspend/resume (xir_jit_resume re-enters compiled code)
+//   - JIT suspend/resume (run_jit_resume re-enters compiled code)
 //   - XR_RESUME_CONTINUATION / XR_RESUME_DEBUG (run() directly)
 //   - Default unroll via xr_coro_resume_with_unroll then run()
 static XrVMResult run_resume_path(XrayIsolate *isolate, XrWorker *worker,
@@ -737,54 +791,17 @@ static XrVMResult run_resume_path(XrayIsolate *isolate, XrWorker *worker,
 
 #ifdef XRAY_HAS_JIT
     if (coro->jit_resume_entry && coro->jit_ctx) {
-        int _jit_rs = xr_coro_resume_load(coro);
-
-        // Channel close wake: deopt to bytecode (rare edge case).
-        if (_jit_rs == XR_RESUME_CHANNEL_CLOSED) {
-            coro->jit_resume_entry = NULL;
-            coro->jit_resume_proto = NULL;
-            goto jit_resume_fallback;
-        }
-
-        // Channel recv resume: copy value from recv_slot (stack[0]) to
-        // jit_suspend_state.result where the JIT continuation reads it.
-        if (_jit_rs == XR_RESUME_CHANNEL) {
-            XrValue rv = coro_ctx->stack[0];
-            if (XR_IS_PTR(rv) && xr_value_needs_copy(rv)) {
-                rv = xr_deep_copy_to_coro(isolate, rv, coro);
-            }
-            coro->jit_suspend_state.result = rv.i;
-            coro->jit_suspend_state.result_tag = rv.tag;
-        }
-        // AWAIT resume: xr_task_wake_waiter only marks coro ready but does
-        // NOT propagate the result — do it here to avoid stale register reads.
-        if (_jit_rs != XR_RESUME_CHANNEL && _jit_rs != XR_RESUME_CHANNEL_CLOSED) {
-            XrTask *await_task = atomic_load_explicit(&coro->await_task, memory_order_acquire);
-            if (await_task) {
-                uint8_t tstate = atomic_load_explicit(&await_task->state, memory_order_acquire);
-                XrValue res = xr_null();
-                if (tstate == XR_TASK_COMPLETED) {
-                    res = xr_deep_copy_to_coro(isolate, await_task->result, coro);
-                }
-                coro->jit_suspend_state.result = res.i;
-                coro->jit_suspend_state.result_tag = res.tag;
-                atomic_store_explicit(&coro->await_task, NULL, memory_order_relaxed);
-            }
-        }
-        xr_coro_resume_store(coro, XR_RESUME_OK);
-
         XrValue jit_result;
-        int _jrc_resume = xir_jit_resume(coro, &jit_result);
-        if (_jrc_resume == XIR_JIT_OK) {
+        int jrc = run_jit_resume(isolate, coro, coro_ctx, &jit_result);
+        if (jrc == XIR_JIT_OK) {
             coro_ctx->stack[0] = jit_result;
             return run_finalize(isolate, worker, coro, ctx, coro_ctx, XR_VM_OK);
         }
-        if (_jrc_resume == XIR_JIT_SUSPEND) {
+        if (jrc == XIR_JIT_SUSPEND) {
             return run_finalize(isolate, worker, coro, ctx, coro_ctx, XR_VM_BLOCKED);
         }
-        // Deopt or error: fall through to interpreter recovery.
+        // -1 (channel close) or XIR_JIT_DEOPT: fall through to interpreter.
     }
-jit_resume_fallback:;
 #endif
 
     // Continuation stealing resume: vm_ctx already set, just call run().

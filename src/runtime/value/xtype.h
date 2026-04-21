@@ -8,8 +8,8 @@
  * xtype.h - Unified type system definitions
  *
  * KEY CONCEPT:
- *   Each XrType has exactly one XrTypeKind. No union types;
- *   only T? (nullable) is supported via is_nullable flag.
+ *   Each XrType has exactly one XrTypeKind.
+ *   Supports union types (int | string) and T? (nullable) via is_nullable flag.
  *   Category checks (numeric, primitive, etc.) use inline functions.
  */
 
@@ -44,7 +44,7 @@ typedef enum {
 typedef struct XrTypePool XrTypePool;
 
 // Primary type discriminator - each XrType has exactly one kind.
-// No union types: only T? (nullable) is supported.
+// Supports union types (int | string) and T? (nullable).
 typedef enum XrTypeKind {
     XR_KIND_INT = 0,
     XR_KIND_FLOAT,
@@ -109,22 +109,22 @@ struct XrType {
     XrTypeKind kind;            // Primary type discriminator
     uint32_t id;                // Unique type ID for caching
     bool frozen;                // Singleton protection
-    
+
     union {
         // For Array<T>, Set<T>, Channel<T>
         struct {
             XrType *element_type;
         } container;
-        
+
         // For Map<K, V>
         struct {
             XrType *key_type;
             XrType *value_type;
         } map;
-        
+
         // For JSON/object types with structured fields
         XrObjectType object;
-        
+
         // For class instance
         struct {
             const char *class_name;
@@ -133,7 +133,7 @@ struct XrType {
             XrType **type_args;         // Generic type arguments (e.g., Box<int> -> [int])
             int type_arg_count;         // Number of type arguments
         } instance;
-        
+
         // For function type
         struct {
             XrType **param_types;
@@ -142,7 +142,7 @@ struct XrType {
             XrType *return_type;
             bool is_variadic;
         } function;
-        
+
         // For literal types
         struct {
             union {
@@ -152,48 +152,48 @@ struct XrType {
                 bool bool_value;
             };
         } literal;
-        
+
         // For type parameter (generics)
         struct {
             const char *name;           // Parameter name (e.g., "T")
             int id;                     // Unique ID within function/class
             XrType *constraint;         // e.g., <T: Comparable>
         } type_param;
-        
+
         // For tuple type (multi-value return)
         struct {
             XrType **element_types;
             int element_count;
         } tuple;
-        
+
         // For enum value type
         struct {
             const char *enum_name;
         } enum_type;
-        
+
         // For union type (int | string) - compile-time only
         struct {
             XrType **members;       // Flat member types (sorted by kind)
             uint8_t member_count;   // Number of members (≤ XR_UNION_MAX_MEMBERS)
         } union_type;
-        
+
         // For fixed-length array ([N]T)
         struct {
             XrType *element_type;   // Element type
             int length;             // Fixed length N
         } fixed_array;
     };
-    
+
     // Type modifiers
     bool is_nullable;           // T | null (shorthand for T?)
     bool is_const;              // Deep immutability (for coroutine safety)
     bool is_value_type;         // Struct value type (copy-on-assign)
     bool is_literal;            // Literal type: kind + literal union holds value
-    
+
     // Native width for int/float types (XrSlotType value)
     // 0 = default (int=int64, float=float64), nonzero = specific width
     uint8_t native_width;
-    
+
     // Type alias name (NULL unless resolved through a type alias)
     const char *alias_name;
 };
@@ -419,7 +419,7 @@ XR_FUNC XrType *xr_type_new_named_instance(const char *name); // generic named c
 XR_FUNC XrType *xr_type_new_enum(const char *enum_name);
 
 // API: Structured object types (for JSON with known fields)
-XR_FUNC XrType *xr_type_new_object(const char **field_names, XrType **field_types, 
+XR_FUNC XrType *xr_type_new_object(const char **field_names, XrType **field_types,
                            int field_count, bool allow_extension, const char *type_name);
 XR_FUNC XrType *xr_type_new_object_anonymous(const char **field_names, XrType **field_types, int field_count);
 
@@ -432,7 +432,7 @@ XR_FUNC XrType *xr_type_new_type_param(const char *name, int id);
 XR_FUNC XrType *xr_type_new_type_param_constrained(const char *name, int id, XrType *constraint);
 
 // API: Function type
-XR_FUNC XrType *xr_type_new_function(XrType **param_types, int param_count, 
+XR_FUNC XrType *xr_type_new_function(XrType **param_types, int param_count,
                               XrType *return_type, bool is_variadic);
 
 // API: Tuple type (for multi-value return)
@@ -536,7 +536,7 @@ XR_FUNC bool xr_type_satisfies_constraint(XrType *type, XrType *constraint);
 // Substitute type parameters with actual types
 // e.g., substitute(T, ["T"], [int]) = int
 //       substitute(Array<T>, ["T"], [int]) = Array<int>
-XR_FUNC XrType *xr_type_substitute(XrType *type, const char **param_names, 
+XR_FUNC XrType *xr_type_substitute(XrType *type, const char **param_names,
                            XrType **actual_types, int count);
 
 // API: Initialize process-level type singletons (call once at startup)

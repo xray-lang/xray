@@ -190,35 +190,78 @@ void worker_drain_inbox(XrWorker *worker) {
 }
 
 // Poll all I/O sources and drain MPSC inbox into P's local run queue.
-void worker_poll_sources(XrWorker *worker) {
+// Returns a fast-path IO coroutine (single wakeup with affinity to this
+// worker) that the caller should execute directly, bypassing the queue.
+// Returns NULL when no fast-path candidate is available.
+XrCoroutine *worker_poll_sources(XrWorker *worker) {
     XrRuntime *runtime = worker->p.runtime;
     XrProc *p = &worker->p;
+    XrCoroutine *fast_coro = NULL;
+    int total_io_events = 0;
 
-    // Netpoll: shared kqueue/epoll for all workers
-    {
-        XrReadyList ready = xr_netpoll_poll(&runtime->netpoll, 0);
-
-        // Adaptive poll_skip feedback: EWMA of I/O event frequency.
-        // Decay 7/8: io_ewma = io_ewma * 7/8 + sample * 1/8
-        // Sample: 256 if events, 0 if none. Range [0, 256].
-        p->io_poll_ewma = p->io_poll_ewma - (p->io_poll_ewma >> 3)
-                        + (ready.count > 0 ? 32 : 0);
-
-        XrCoroutine *io_coro = ready.head;
+    // ===== Fast path: per-worker local poll (zero contention) =====
+    if (p->local_poll.poll_fd >= 0) {
+        XrReadyList local_ready = {0};
+        xr_local_poll_events(&p->local_poll, 0, &local_ready);
+        total_io_events += local_ready.count;
+        XrCoroutine *io_coro = local_ready.head;
         while (io_coro) {
             XrCoroutine *next = io_coro->sched_link;
             io_coro->sched_link = NULL;
-            // Invariant: IO wakeup must not target a DONE coroutine
             XR_DCHECK(!xr_coro_flags_has(io_coro, XR_CORO_FLG_DONE),
-                      "poll_sources: waking DONE coroutine from IO");
-            SCHED_TRACE_CORO(worker, io_coro, "io_wake");
+                      "poll_sources: waking DONE coroutine from local IO");
+            SCHED_TRACE_CORO(worker, io_coro, "local_io_wake");
             xr_coro_resume_store(io_coro, XR_RESUME_IO_READY);
-            // Single CAS replaces flags_clear(BLOCKED) + flags_set(READY)
             xr_coro_transition_wake(io_coro);
             xr_worker_push_lifo(worker, io_coro);
             io_coro = next;
         }
     }
+
+    // ===== Shared netpoll (all workers, handles unbound fds) =====
+    {
+        XrReadyList ready = xr_netpoll_poll(&runtime->netpoll, 0);
+        total_io_events += ready.count;
+
+        // Zero-copy fast path: single IO wakeup with affinity to this
+        // worker — skip queue push/pop, return directly for execution.
+        if (ready.count == 1 && ready.head) {
+            XrCoroutine *io_coro = ready.head;
+            int aff = atomic_load_explicit(&io_coro->affinity_p,
+                                           memory_order_relaxed);
+            if (aff == p->id) {
+                io_coro->sched_link = NULL;
+                XR_DCHECK(!xr_coro_flags_has(io_coro, XR_CORO_FLG_DONE),
+                          "poll_sources: waking DONE coroutine from IO");
+                SCHED_TRACE_CORO(worker, io_coro, "io_wake_fast");
+                xr_coro_resume_store(io_coro, XR_RESUME_IO_READY);
+                xr_coro_transition_wake(io_coro);
+                fast_coro = io_coro;
+                goto after_netpoll;
+            }
+        }
+
+        // Normal path: enqueue all ready coroutines to LIFO slot.
+        XrCoroutine *io_coro = ready.head;
+        while (io_coro) {
+            XrCoroutine *next = io_coro->sched_link;
+            io_coro->sched_link = NULL;
+            XR_DCHECK(!xr_coro_flags_has(io_coro, XR_CORO_FLG_DONE),
+                      "poll_sources: waking DONE coroutine from IO");
+            SCHED_TRACE_CORO(worker, io_coro, "io_wake");
+            xr_coro_resume_store(io_coro, XR_RESUME_IO_READY);
+            xr_coro_transition_wake(io_coro);
+            xr_worker_push_lifo(worker, io_coro);
+            io_coro = next;
+        }
+    }
+
+after_netpoll:
+    // Adaptive poll_skip feedback: EWMA of I/O event frequency.
+    // Decay 7/8: io_ewma = io_ewma * 7/8 + sample * 1/8
+    // Sample: 256 if events, 0 if none. Range [0, 256].
+    p->io_poll_ewma = p->io_poll_ewma - (p->io_poll_ewma >> 3)
+                    + (total_io_events > 0 ? 32 : 0);
 
     // Async thread pool completions
     if (runtime->async_pool) {
@@ -243,10 +286,9 @@ void worker_poll_sources(XrWorker *worker) {
         int32_t new_items = atomic_load_explicit(
             &runtime->total_inbox_len, memory_order_relaxed) - inbox_before;
         if (new_items > 0) {
-            // Relaxed load: approximate count is fine for wake heuristic.
             int idle_count = atomic_load_explicit(
                 &runtime->idle_worker_count, memory_order_relaxed);
-            if (idle_count < 0) idle_count = 0;  // relaxed may observe transient negatives
+            if (idle_count < 0) idle_count = 0;
             int wakes = new_items < idle_count ? new_items : idle_count;
             if (wakes < 1) wakes = 1;
             for (int _w = 0; _w < wakes; _w++)
@@ -260,6 +302,8 @@ void worker_poll_sources(XrWorker *worker) {
 
     // Drain MPSC inbox
     worker_drain_inbox(worker);
+
+    return fast_coro;
 }
 
 // ========== Per-Worker Sleep Timer ==========
@@ -586,9 +630,10 @@ static void worker_bind_cpu(XrWorker *worker) {
 // (netpoll + async + timer), reductions-based balance check, and per-priority
 // migration. Returns false if runtime is shutting down.
 static bool worker_housekeeping(XrWorker *worker, XrRuntime *runtime,
-                                 int *poll_skip_io) {
+                                 int *poll_skip_io, XrCoroutine **io_fast_out) {
+    *io_fast_out = NULL;
     if (*poll_skip_io <= 0) {
-        worker_poll_sources(worker);
+        *io_fast_out = worker_poll_sources(worker);
     } else {
         worker_drain_inbox(worker);
         (*poll_skip_io)--;
@@ -775,7 +820,15 @@ void *worker_loop(void *arg) {
             }
 
             // Slow path: housekeeping (poll, balance, migrate).
-            if (!worker_housekeeping(worker, runtime, &poll_skip)) goto exit_loop;
+            XrCoroutine *io_fast = NULL;
+            if (!worker_housekeeping(worker, runtime, &poll_skip, &io_fast))
+                goto exit_loop;
+
+            // Fast-path IO coroutine: skip queue, execute directly.
+            if (io_fast) {
+                coro = io_fast;
+                goto found_work;
+            }
 
             // Recheck after housekeeping (inbox drain may have added work).
             coro = xr_worker_pop(worker);

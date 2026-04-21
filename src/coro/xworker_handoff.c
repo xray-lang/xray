@@ -172,9 +172,9 @@ handoff_restart:;
         while (atomic_load(&runtime->running)) {
             if (atomic_load(&p->handoff_exit)) break;
 
-            worker_poll_sources(worker);
+            XrCoroutine *fast_io = worker_poll_sources(worker);
 
-            XrCoroutine *coro = xr_worker_pop(worker);
+            XrCoroutine *coro = fast_io ? fast_io : xr_worker_pop(worker);
 
             if (!coro) {
                 if (++idle_iterations > 100) break;

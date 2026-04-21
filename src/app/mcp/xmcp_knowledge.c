@@ -79,8 +79,12 @@ static const char TOPIC_TYPES[] =
 "- `BigInt` — arbitrary precision integer\n"
 "- `Channel<T>` — inter-coroutine communication\n"
 "\n"
-"### No union types\n"
-"Xray uses `T?` for nullable instead of unions. `T | null` = `T?`.\n";
+"### Union types\n"
+"```xray\n"
+"let value: int | string = 42   // can hold int or string\n"
+"let result: int | null = null  // equivalent to int?\n"
+"```\n"
+"Note: `T?` is shorthand for `T | null`.\n";
 
 static const char TOPIC_FUNCTIONS[] =
 "## Functions\n"
@@ -603,7 +607,7 @@ static const char CHEATSHEET[] =
 "\n"
 "## Types\n"
 "int, float, string, bool, void | Array<T>, Map<K,V>, Set<T>\n"
-"int?, string? (nullable) | Json, Bytes, BigInt, Channel<T>\n"
+"int?, string? (nullable) | int | string (union) | Json, Bytes, BigInt, Channel<T>\n"
 "\n"
 "## Control flow\n"
 "```xray\n"
