@@ -20,15 +20,15 @@
 typedef struct {
     int loop_depth;
     int loop_start;
-    int break_count;
-    int continue_count;
+    int break_count;   // saved break_jumps.count
+    int continue_count; // saved continue_jumps.count
 } XrLoopState;
 
 static inline void loop_state_save(XrCompiler *compiler, XrLoopState *state) {
     state->loop_depth = compiler->loop_depth;
     state->loop_start = compiler->loop_start;
-    state->break_count = compiler->break_count;
-    state->continue_count = compiler->continue_count;
+    state->break_count = compiler->break_jumps.count;
+    state->continue_count = compiler->continue_jumps.count;
 }
 
 static inline void loop_state_enter(XrCompiler *compiler, int loop_start) {
@@ -37,17 +37,17 @@ static inline void loop_state_enter(XrCompiler *compiler, int loop_start) {
 }
 
 static inline void loop_state_patch_continue(XrCompiler *compiler, XrLoopState *state, int target) {
-    for (int i = state->continue_count; i < compiler->continue_count; i++) {
-        patch_jump(compiler->emitter, compiler->continue_jumps[i], target);
+    for (int i = state->continue_count; i < compiler->continue_jumps.count; i++) {
+        patch_jump(compiler->emitter, compiler->continue_jumps.data[i], target);
     }
-    compiler->continue_count = state->continue_count;
+    compiler->continue_jumps.count = state->continue_count;
 }
 
 static inline void loop_state_patch_break(XrCompiler *compiler, XrLoopState *state, int target) {
-    for (int i = state->break_count; i < compiler->break_count; i++) {
-        patch_jump(compiler->emitter, compiler->break_jumps[i], target);
+    for (int i = state->break_count; i < compiler->break_jumps.count; i++) {
+        patch_jump(compiler->emitter, compiler->break_jumps.data[i], target);
     }
-    compiler->break_count = state->break_count;
+    compiler->break_jumps.count = state->break_count;
 }
 
 static inline void loop_state_restore(XrCompiler *compiler, XrLoopState *state) {

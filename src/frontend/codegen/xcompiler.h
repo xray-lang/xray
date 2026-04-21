@@ -25,6 +25,7 @@
 #include "../../runtime/object/xstring.h"
 #include "../../runtime/value/xtype.h"
 #include "../../base/xarena.h"
+#include "../../base/xarena_vec.h"
 #include "xcompiler_scope.h"
 #include <stdbool.h>
 #include <stdint.h>
@@ -100,57 +101,54 @@ typedef struct XrBlockCnt {
 
 typedef struct XrCompiler {
     struct XrCompiler *enclosing;  // Enclosing compiler (nested functions)
-    
+
     XrProto *proto;
     XrFunctionType type;
-    
+
     // Scope system
     XrArena *arena;                // Shared arena allocator
     XrLocalList local_list;        // Local variable list (sequential)
     int local_count;
-    
+
     XrUpvalueDesc upvalues[UINT8_MAX];
     int captured_count;   // Number of captured locals in this function
 
     // Pre-scan result: names of locals pre-marked captured before codegen starts.
     // Filled by prescan_fn_body(); checked by scope_define_local().
-    const char *prescan_captured[256];
-    int prescan_captured_count;
-    
+    XrArenaVec(const char *) prescan_captured;
+
     int scope_depth;
-    
+
     // Block management (stack-allocated, no malloc per scope)
     XrBlockCnt block_stack[XR_MAX_BLOCK_DEPTH];
     int block_depth;
-    
+
     // Core components
     XRegAlloc *regalloc;
     XrEmitter *emitter;            // Bytecode emitter with peephole optimization
-    
+
     // Scope block tracking (Phase 5: continuation stealing)
     int scope_block_depth;  // > 0 when inside scope{}, go emits OP_SPAWN_CONT
-    
+
     // Loop control
     int loop_depth;
     int loop_start;                // Loop start position (condition check)
     int loop_continue;             // continue jump target
     int loop_scope;
-    
+
     // Bounds Check Elimination (BCE) optimization
     const char *bce_loop_var;      // Loop variable name (NULL=no optimization)
     const char *bce_limit_var;     // Loop limit variable for safe index inference
     int bce_loop_var_reg;
-    
+
     // break/continue jump lists for backpatching
-    int break_jumps[256];
-    int break_count;
-    int continue_jumps[256];
-    int continue_count;
-    
+    XrArenaVec(int) break_jumps;
+    XrArenaVec(int) continue_jumps;
+
     // Global variables (shared)
     XrGlobalVar *globals;
     int *global_count;
-    
+
     // Error flags
     bool had_error;
     bool panic_mode;
@@ -209,7 +207,7 @@ XR_FUNC int reg_reserve_n(XrCompiler *compiler, int n);
 XR_FUNC int compile_expr_to_next_reg(XrCompilerContext *ctx, XrCompiler *compiler, AstNode *expr);
 
 // Compile argument list to consecutive registers starting at base_reg
-XR_FUNC int compile_args_to_base(XrCompilerContext *ctx, XrCompiler *compiler, 
+XR_FUNC int compile_args_to_base(XrCompilerContext *ctx, XrCompiler *compiler,
                          AstNode **args, int arg_count, int base_reg);
 
 // Compile multiple expressions to consecutive registers, returns base register
@@ -238,7 +236,7 @@ XR_FUNC int scope_resolve_local(XrCompiler *compiler, XrString *name);
 // Resolve upvalue, returns upvalue index or -1 if not found
 XR_FUNC int scope_resolve_upvalue(XrCompilerContext *ctx, XrCompiler *compiler, XrString *name);
 
-// Pre-scan function body: find locals captured by nested fns, fill prescan_captured[].
+// Pre-scan function body: find locals captured by nested fns, fill prescan_captured.
 // Must be called BEFORE scope_define_local_reg for params (uses fn_node->params as seed).
 XR_FUNC void prescan_fn_body(XrCompiler *compiler, struct FunctionDeclNode *fn_node, struct AstNode *body);
 

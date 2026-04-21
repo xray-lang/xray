@@ -44,9 +44,9 @@ void compile_function_decl_only(XrCompilerContext *ctx, XrCompiler *compiler, Fu
     XR_DCHECK(ctx != NULL, "compile_function_decl_only: NULL ctx");
     XR_DCHECK(compiler != NULL, "compile_function_decl_only: NULL compiler");
     if (!node || !node->name) return;
-    
+
     bool is_module_level = (compiler->scope_depth == 0 && compiler->type == FUNCTION_SCRIPT);
-    
+
     // REPL mode: top-level functions use shared variables (persist across inputs)
     if (is_repl_top_level(ctx, compiler)) {
         XrString *name_str = xr_compile_time_intern(ctx->X, node->name, strlen(node->name));
@@ -56,14 +56,14 @@ void compile_function_decl_only(XrCompilerContext *ctx, XrCompiler *compiler, Fu
         (void)shared_index;
         return;
     }
-    
+
     if (compiler->scope_depth > 0 || is_module_level) {
         XrString *name_str = xr_compile_time_intern(ctx->X, node->name, strlen(node->name));
-        
+
         // Check if already defined (avoid duplicate)
         XrLocalInfo *existing = compiler_get_local_by_name(compiler, node->name);
         if (existing) return;  // Already hoisted
-        
+
         // Pre-define as local, will be assigned actual closure later
         XrLocalInfo *local = scope_define_local(ctx, compiler, name_str);
         local->is_const = true;
@@ -82,13 +82,11 @@ void compile_function_decl_only(XrCompilerContext *ctx, XrCompiler *compiler, Fu
 
 // Add name to captured set (avoid duplicates)
 static void ps_mark_captured(XrCompiler *compiler, const char *name) {
-    for (int i = 0; i < compiler->prescan_captured_count; i++) {
-        if (compiler->prescan_captured[i] &&
-            strcmp(compiler->prescan_captured[i], name) == 0) return;
+    for (int i = 0; i < compiler->prescan_captured.count; i++) {
+        if (compiler->prescan_captured.data[i] &&
+            strcmp(compiler->prescan_captured.data[i], name) == 0) return;
     }
-    if (compiler->prescan_captured_count < 256) {
-        compiler->prescan_captured[compiler->prescan_captured_count++] = name;
-    }
+    XR_AVEC_PUSH(compiler->arena, compiler->prescan_captured, name);
 }
 
 // Unified tree walk for pre-scan.
@@ -321,13 +319,13 @@ static void ps_walk(AstNode *node, const char **names, int *ncount,
     }
 }
 
-// Public entry: fill compiler->prescan_captured[] with names of locals that will
+// Public entry: fill compiler->prescan_captured with names of locals that will
 // be captured by any (possibly transitive) nested function.
 // Must be called BEFORE scope_define_local_reg for params.
 // Params are seeded from fn_node->params so they are available for capture detection.
 void prescan_fn_body(XrCompiler *compiler, FunctionDeclNode *fn_node, AstNode *body) {
     if (!body || !compiler) return;
-    compiler->prescan_captured_count = 0;
+    XR_AVEC_INIT(compiler->prescan_captured);
 
     // Seed names with the function's parameter names
     const char *names[256];
@@ -344,7 +342,7 @@ void prescan_fn_body(XrCompiler *compiler, FunctionDeclNode *fn_node, AstNode *b
 
 /*
  * Compile function definition statement
- * 
+ *
  * Handles:
  * - Local functions (can recursively access self)
  * - Global functions
@@ -358,21 +356,21 @@ void compile_function(XrCompilerContext *ctx, XrCompiler *compiler, FunctionDecl
     XR_DCHECK(node != NULL, "compile_function: NULL node");
     // Save function definition line for CLOSURE instruction (set by xr_compile_statement)
     int func_def_line = ctx->current_line;
-    
+
     // If named function, first define function name in current scope
     int func_reg = -1;
     XrString *name_str = NULL;
-    
+
     /*
      * Module system optimization: module-level functions compile as local variables
      * Condition: scope_depth == 0 and type == FUNCTION_SCRIPT
      */
     bool is_module_level = (compiler->scope_depth == 0 && compiler->type == FUNCTION_SCRIPT);
-    
+
     // REPL mode: top-level functions stored in shared variables
     bool repl_top_level = is_repl_top_level(ctx, compiler);
     int shared_fn_index = -1;
-    
+
     if (repl_top_level && node->name != NULL) {
         name_str = xr_compile_time_intern(ctx->X, node->name, strlen(node->name));
         shared_fn_index = shared_get_in_scope(ctx, compiler, name_str);
@@ -381,7 +379,7 @@ void compile_function(XrCompilerContext *ctx, XrCompiler *compiler, FunctionDecl
     } else if (node->name != NULL && (compiler->scope_depth > 0 || is_module_level)) {
         // Local function or module-level function (non-shared): define first, support recursion
         name_str = xr_compile_time_intern(ctx->X, node->name, strlen(node->name));
-        
+
         // Check if already hoisted (from two-pass compilation)
         XrLocalInfo *existing = compiler_get_local_by_name(compiler, node->name);
         if (existing && existing->is_hoisted) {
@@ -400,12 +398,12 @@ void compile_function(XrCompilerContext *ctx, XrCompiler *compiler, FunctionDecl
             func_reg = local->reg;
         }
     }
-    
+
     // Create new compiler (nested)
     XrCompiler function_compiler;
     xr_compiler_init(ctx, &function_compiler, FUNCTION_FUNCTION);
     function_compiler.enclosing = compiler;
-    
+
     // Set function name
     if (node->name != NULL) {
         if (name_str == NULL) {
@@ -413,7 +411,7 @@ void compile_function(XrCompilerContext *ctx, XrCompiler *compiler, FunctionDecl
         }
         function_compiler.proto->name = name_str;
     }
-    
+
     // Check if has rest parameter
     bool has_rest = false;
     for (int i = 0; i < node->param_count; i++) {
@@ -432,34 +430,34 @@ void compile_function(XrCompilerContext *ctx, XrCompiler *compiler, FunctionDecl
     } else {
         function_compiler.proto->entry_type = XR_ENTRY_NORMAL;
     }
-    
+
     // Set parameter count: numparams excludes rest param (VM packs varargs into it)
     function_compiler.proto->numparams = has_rest ? node->param_count - 1 : node->param_count;
     function_compiler.proto->min_params = node->required_count;
-    
+
     // Set return type (if specified)
     if (node->return_type != NULL) {
         const char *type_str = xr_type_to_string(node->return_type);
         function_compiler.proto->return_type = type_str ? strdup(type_str) : NULL;
         function_compiler.declared_return_type = node->return_type;
     }
-    
+
     // Set test attributes (if any)
     if (node->attr_count > 0 && node->attributes != NULL) {
         XrAttribute *attr = node->attributes[0];
         function_compiler.proto->test_attr = (uint8_t)attr->kind;
         function_compiler.proto->test_timeout = attr->timeout;
     }
-    
+
     // Enter function scope
     scope_begin(&function_compiler);
-    
+
     // Pre-scan BEFORE defining params: determines which params/locals will be
     // captured by nested functions, so scope_define_local_reg can eagerly
     // mark them as captured. This finalises captured_count before any
     // codegen, making depth calculation in scope_resolve_upvalue exact.
     prescan_fn_body(&function_compiler, node, node->body);
-    
+
     // Define parameters as local variables (directly use registers 0, 1, 2...)
     for (int i = 0; i < node->param_count; i++) {
         XrParamNode *param = node->params[i];
@@ -491,12 +489,12 @@ void compile_function(XrCompilerContext *ctx, XrCompiler *compiler, FunctionDecl
             }
         }
     }
-    
+
     // After parameter definition, freereg should equal local_end
     if (function_compiler.regalloc) {
         xreg_set_freereg(function_compiler.regalloc, xreg_get_local_end(function_compiler.regalloc));
     }
-    
+
     // Save return type info (single source of truth for JIT return type)
     // Parameter types are carried via param_types (generated in xr_compiler_end)
     {
@@ -515,33 +513,33 @@ void compile_function(XrCompilerContext *ctx, XrCompiler *compiler, FunctionDecl
             }
         }
     }
-    
+
     // Generate default parameter initialization code
     for (int i = 0; i < node->param_count; i++) {
         XrParamNode *param = node->params[i];
         if (param && param->default_value != NULL) {
             int param_reg = i;
-            
+
             // Load null to temp register for comparison
             int temp_reg = reg_alloc(ctx, &function_compiler);
             emit_abc(function_compiler.emitter, OP_LOADNULL, temp_reg, 0, 0);
-            
+
             // Compare param with null
             emit_abc(function_compiler.emitter, OP_EQ, param_reg, temp_reg, 0);
             reg_free(&function_compiler, temp_reg);
-            
+
             // Jump over default assignment if param != null
             int skip_jmp = emit_jump(function_compiler.emitter, OP_JMP);
-            
+
             // Compile default value expression
             XrExprDesc default_desc = xr_compile_expr(ctx, &function_compiler, param->default_value);
             xexpr_to_specific_reg(ctx, &function_compiler, &default_desc, param_reg);
-            
+
             // Patch jump
             patch_jump(function_compiler.emitter, skip_jmp, -1);
         }
     }
-    
+
     // Struct value semantics: copy struct-typed parameters at function entry
     // so callee gets an independent copy (caller's struct is not modified)
     // Skip for in/ref params (they pass by reference, no copy needed)
@@ -593,13 +591,13 @@ void compile_function(XrCompilerContext *ctx, XrCompiler *compiler, FunctionDecl
                 emit_abc(function_compiler.emitter, OP_COPY, plocal->reg, plocal->reg, 0);
         }
     }
-    
+
     // Compile function body
     xr_compile_statement(ctx, &function_compiler, node->body);
-    
+
     // End compilation
     XrProto *proto = xr_compiler_end(ctx, &function_compiler);
-    
+
     /*
      * If nested compilation fails, don't propagate error to outer compiler
      * This way subsequent function definitions can still compile (supports mutual recursion etc)
@@ -610,17 +608,17 @@ void compile_function(XrCompilerContext *ctx, XrCompiler *compiler, FunctionDecl
         xr_compiler_ctx_set_error(ctx);
         return;
     }
-    
+
     if (proto != NULL) {
         // Add function prototype to parent compiler
         int proto_idx = xr_vm_proto_add_proto(compiler->proto, proto);
-        
+
         // Restore function definition line for CLOSURE instruction
         ctx->current_line = func_def_line;
-        
+
         // Check if pure function (no upvalue)
         bool is_pure_function = (PROTO_UPVAL_COUNT(proto) == 0);
-        
+
         // Define function based on scope type
         if (node->name != NULL) {
             /*
@@ -638,21 +636,21 @@ void compile_function(XrCompilerContext *ctx, XrCompiler *compiler, FunctionDecl
                 // Pure function: store in shared_array (cross-coroutine access), keep local variable (recursive call)
                 emit_ctx_sync_before_closure(ctx, compiler);
                 emit_abx(compiler->emitter, OP_CLOSURE, func_reg, proto_idx);
-                
+
                 int shared_index = shared_get_or_add(ctx, compiler, name_str);
                 shared_set_const(ctx, shared_index, true);
                 emit_abx(compiler->emitter, OP_SETSHARED, func_reg, shared_index);
-                
+
                 // Inner function access prioritizes shared over upvalue, so uses OP_GETSHARED
             } else if (is_module_level) {
                 // Module-level function with upvalue: local + shared
                 emit_ctx_sync_before_closure(ctx, compiler);
                 emit_abx(compiler->emitter, OP_CLOSURE, func_reg, proto_idx);
-                
+
                 int shared_index = shared_get_or_add(ctx, compiler, name_str);
                 shared_set_const(ctx, shared_index, true);
                 emit_abx(compiler->emitter, OP_SETSHARED, func_reg, shared_index);
-                
+
                 // Associate Proto with local variable (for coroutine safety check)
                 XrLocalInfo *local = compiler_get_local_by_name(compiler, node->name);
                 if (local) {
@@ -662,7 +660,7 @@ void compile_function(XrCompilerContext *ctx, XrCompiler *compiler, FunctionDecl
             } else if (compiler->scope_depth > 0) {
                 // Local function: local variable only
                 emit_ctx_sync_before_closure(ctx, compiler);
-                
+
                 XrLocalInfo *local = compiler_get_local_by_name(compiler, node->name);
                 if (local && local->is_cellified) {
                     // Cell already exists in func_reg (created by emit_ctx_sync).
@@ -689,18 +687,18 @@ void compile_function(XrCompilerContext *ctx, XrCompiler *compiler, FunctionDecl
                 }
             } else if (compiler->scope_depth == 0) {
                 // Non-module top-level (like REPL) - use shared variable
-                
+
                 // Check if constant with same name already exists
                 int existing = shared_get_in_scope(ctx, compiler, name_str);
                 if (existing >= 0 && shared_is_const(ctx, existing)) {
                     xr_compiler_error(ctx, compiler, "cannot redefine function '%s'", node->name);
                     return;
                 }
-                
+
                 int reg = reg_alloc(ctx, compiler);
                 emit_ctx_sync_before_closure(ctx, compiler);
                 emit_abx(compiler->emitter, OP_CLOSURE, reg, proto_idx);
-                
+
                 int shared_index = shared_get_or_add(ctx, compiler, name_str);
                 shared_set_const(ctx, shared_index, true);
                 emit_abx(compiler->emitter, OP_SETSHARED, reg, shared_index);
