@@ -51,10 +51,18 @@ XrValue xr_vm_call_closure(XrayIsolate *isolate, XrClosure *closure, XrValue *ar
         return xr_null();
     }
 
-    // Check argument count
-    if (nargs != closure->proto->numparams) {
-        xr_log_warning("vm", "expected %d arguments but got %d",
-                closure->proto->numparams, nargs);
+    XrProto *proto = closure->proto;
+
+    // Argument count validation (aligned with OP_CALL semantics)
+    if (proto->is_vararg) {
+        if (nargs < proto->min_params) {
+            xr_log_warning("vm", "expected at least %d arguments but got %d",
+                    proto->min_params, nargs);
+            return xr_null();
+        }
+    } else if (nargs < proto->min_params || nargs > proto->numparams) {
+        xr_log_warning("vm", "expected %d..%d arguments but got %d",
+                proto->min_params, proto->numparams, nargs);
         return xr_null();
     }
 
@@ -89,7 +97,7 @@ XrValue xr_vm_call_closure(XrayIsolate *isolate, XrClosure *closure, XrValue *ar
               "vm_call_closure: call frame overflow");
     XrBcCallFrame *frame = &ctx->frames[ctx->frame_count++];
     frame->closure = closure;
-    frame->pc = PROTO_CODE_BASE(closure->proto);
+    frame->pc = PROTO_CODE_BASE(proto);
     frame->base_offset = (int)(func_base - ctx->stack);
     XR_DCHECK(frame->base_offset >= 0, "vm_call_closure: negative base_offset");
     frame->flags = 0;
@@ -102,8 +110,30 @@ XrValue xr_vm_call_closure(XrayIsolate *isolate, XrClosure *closure, XrValue *ar
         func_base[i] = args[i];
     }
 
+    if (proto->is_vararg) {
+        // Collect extra arguments into rest array (matches OP_CALL vararg path)
+        int extra = nargs > proto->numparams ? nargs - proto->numparams : 0;
+        XrCoroutine *coro = (XrCoroutine *)ctx->current_coro;
+        XrArray *rest = xr_array_new(coro);
+        if (extra > 0) {
+            for (int j = 0; j < extra; j++) {
+                xr_array_push(rest, func_base[proto->numparams + j]);
+            }
+        }
+        func_base[proto->numparams] = xr_value_from_array(rest);
+        // Fill missing optional fixed params with null
+        for (int j = nargs; j < proto->numparams; j++) {
+            func_base[j] = xr_null();
+        }
+    } else {
+        // Fill missing optional arguments with null (default params)
+        for (int j = nargs; j < proto->numparams; j++) {
+            func_base[j] = xr_null();
+        }
+    }
+
     // Update stack top
-    ctx->stack_top = ctx->stack + frame->base_offset + closure->proto->maxstacksize;
+    ctx->stack_top = ctx->stack + frame->base_offset + proto->maxstacksize;
     XR_DCHECK(ctx->stack_top <= ctx->stack + ctx->stack_capacity,
               "vm_call_closure: stack overflow");
 
