@@ -82,6 +82,7 @@ option(XR_STDLIB_FROM_FILE "Load stdlib from file instead of embedded bytecode (
 # Modular build options
 option(XR_BUILD_LSP "Build LSP language server" ON)
 option(XR_BUILD_DAP "Build DAP debug adapter" ON)
+option(XR_BUILD_MCP "Build MCP server for AI assistants" ON)
 
 # Stdlib modular options (for security control / binary size)
 option(XR_STDLIB_FULL       "Full stdlib (ignores group options below)" ON)
@@ -288,6 +289,7 @@ set(XRAY_COMMON_INCLUDES
     ${CMAKE_CURRENT_SOURCE_DIR}/src/app/cli
     ${CMAKE_CURRENT_SOURCE_DIR}/src/app/lsp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/app/dap
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/app/mcp
     ${CMAKE_CURRENT_SOURCE_DIR}/stdlib/net
 )
 
@@ -512,6 +514,24 @@ else()
     message(STATUS "DAP: disabled")
 endif()
 
+# MCP optional module (uses xlsp_json for JSON)
+if(XR_BUILD_MCP)
+    file(GLOB MCP_SRC "src/app/mcp/*.c")
+    list(APPEND XRAY_CLI_SOURCES ${MCP_SRC})
+    list(APPEND XRAY_CLI_INCLUDES ${CMAKE_CURRENT_SOURCE_DIR}/src/app/mcp)
+
+    # MCP uses xlsp_json for JSON parsing (shared with LSP)
+    if(NOT XR_BUILD_LSP AND NOT XR_BUILD_DAP)
+        list(APPEND XRAY_CLI_SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/src/app/lsp/xlsp_json.c)
+        list(APPEND XRAY_CLI_INCLUDES ${CMAKE_CURRENT_SOURCE_DIR}/src/app/lsp)
+    endif()
+
+    add_compile_definitions(XR_HAS_MCP=1)
+    message(STATUS "MCP: enabled")
+else()
+    message(STATUS "MCP: disabled")
+endif()
+
 # Optional readline support for REPL
 find_library(READLINE_LIB readline)
 if(READLINE_LIB)
@@ -537,6 +557,9 @@ if(XR_BUILD_LSP)
 endif()
 if(XR_BUILD_DAP)
     string(APPEND MODULES_ENABLED "DAP ")
+endif()
+if(XR_BUILD_MCP)
+    string(APPEND MODULES_ENABLED "MCP ")
 endif()
 if(MODULES_ENABLED STREQUAL "")
     set(MODULES_ENABLED "core")

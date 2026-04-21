@@ -87,6 +87,9 @@ static const CmdEntry commands[] = {
 #ifdef XR_HAS_DAP
     {"dap",      cmd_dap,     2, false, NULL},
 #endif
+#ifdef XR_HAS_MCP
+    {"mcp-server", cmd_mcp_server, 2, false, NULL},
+#endif
     // Package management aliases (xray init = xray pkg init)
     {"init",     cmd_pkg,    1, true, print_pkg_help},
     {"add",      cmd_pkg,    1, true, print_pkg_help},
@@ -112,9 +115,9 @@ int main(int argc, char **argv) {
     if (argc < 2) {
         return cmd_repl(0, NULL);
     }
-    
+
     const char *cmd = argv[1];
-    
+
     // Global options
     if (strcmp(cmd, "--version") == 0 || strcmp(cmd, "-v") == 0) {
         print_version();
@@ -124,7 +127,7 @@ int main(int argc, char **argv) {
         print_usage();
         return 0;
     }
-    
+
     // Table-driven command routing
     for (int i = 0; commands[i].name != NULL; i++) {
         if (strcmp(cmd, commands[i].name) == 0) {
@@ -132,24 +135,24 @@ int main(int argc, char **argv) {
             return commands[i].handler(argc - offset, argv + offset);
         }
     }
-    
+
     // Options starting with -, pass to cmd_run
     if (cmd[0] == '-') {
         return cmd_run(argc, argv);
     }
-    
+
     // Script file: run directly
     // Check if .xr file or existing file
     const char *ext = strrchr(cmd, '.');
     if (ext && strcmp(ext, ".xr") == 0) {
         return cmd_run(argc, argv);
     }
-    
+
     // Try running as script file (may have no extension)
     if (cli_file_exists(cmd)) {
         return cmd_run(argc, argv);
     }
-    
+
     // Unknown command: try to suggest
     if (!suggest_command(cmd)) {
         fprintf(stderr, "Error: unknown command '%s'\n", cmd);
@@ -163,7 +166,7 @@ int main(int argc, char **argv) {
 static int suggest_command(const char *input) {
     const char *best = NULL;
     int best_dist = 999;
-    
+
     for (int i = 0; commands[i].name != NULL; i++) {
         int dist = cli_string_distance(input, commands[i].name);
         if (dist < best_dist && dist <= 2) {
@@ -171,7 +174,7 @@ static int suggest_command(const char *input) {
             best = commands[i].name;
         }
     }
-    
+
     if (best) {
         fprintf(stderr, "Error: unknown command '%s'\n", input);
         fprintf(stderr, "\nDid you mean?\n");
@@ -235,7 +238,7 @@ void print_version(void) {
 #else
     printf("VM");
 #endif
-    
+
     // Print architecture
 #if defined(__x86_64__) || defined(_M_X64)
     printf(", x86_64");
@@ -244,7 +247,7 @@ void print_version(void) {
 #elif defined(__i386__) || defined(_M_IX86)
     printf(", x86");
 #endif
-    
+
     // Print OS
 #if defined(__linux__)
     printf("-linux");
@@ -253,7 +256,7 @@ void print_version(void) {
 #elif defined(_WIN32)
     printf("-windows");
 #endif
-    
+
     printf(")\n");
 }
 
@@ -283,6 +286,9 @@ void print_usage(void) {
 #endif
 #ifdef XR_HAS_DAP
     printf("  dap         Start DAP debug server\n");
+#endif
+#ifdef XR_HAS_MCP
+    printf("  mcp-server  Start MCP server (AI assistant)\n");
 #endif
     printf("  info        Environment info\n");
     printf("\n");

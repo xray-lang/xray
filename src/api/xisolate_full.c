@@ -60,6 +60,9 @@ static int isolate_init_full(XrayIsolate *isolate) {
     // Analyzer type pool
     isolate->analyzer_pool = xr_type_pool_new();
     if (isolate->analyzer_pool) {
+        // Set on isolate directly (xray_isolate_enter not called yet)
+        isolate->current_type_pool = isolate->analyzer_pool;
+        // Also set TLS fallback for code that runs before enter
         xr_type_set_current_pool(isolate->analyzer_pool,
             &isolate->analyzer_pool->next_type_id);
     }

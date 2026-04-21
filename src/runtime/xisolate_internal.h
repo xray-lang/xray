@@ -141,6 +141,12 @@ struct XrayIsolate {
     uint16_t shape_count;
     uint16_t shape_capacity;
 
+    // Per-isolate root shape cache (for json creation)
+    struct XrShape *root_shape_cache[32];
+
+    // Per-isolate active type pool (replaces __thread g_current_pool)
+    struct XrTypePool *current_type_pool;
+
     /* ========== VM Engine State ========== */
 
     // VM state uses independent type XrVMState (defined in xr_vm_state.h)

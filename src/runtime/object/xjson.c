@@ -37,19 +37,21 @@ static inline size_t json_size(uint16_t capacity) {
 
 /* ========== Root Shape Cache ========== */
 
-// Cached root shapes by capacity, shared across all json.parse / xr_json_new calls.
-// Shape transitions branch from these roots, so identical field sequences
-// converge to the same transition chain and avoid shape registry exhaustion.
+// Root shapes cached per-isolate by capacity. Shape transitions branch from
+// these roots, so identical field sequences converge to the same transition
+// chain and avoid shape registry exhaustion.
 #define ROOT_SHAPE_CACHE_SIZE 32
-static XrShape *root_shape_cache[ROOT_SHAPE_CACHE_SIZE];
+
+#include "../xisolate_internal.h"
 
 static XrShape *get_or_create_root_shape(XrayIsolate *X, uint16_t capacity) {
-    if (capacity < ROOT_SHAPE_CACHE_SIZE && root_shape_cache[capacity]) {
-        return root_shape_cache[capacity];
+    XR_DCHECK(X != NULL, "get_or_create_root_shape: NULL isolate");
+    if (capacity < ROOT_SHAPE_CACHE_SIZE && X->root_shape_cache[capacity]) {
+        return X->root_shape_cache[capacity];
     }
     XrShape *shape = xr_shape_new(X, capacity);
     if (shape && capacity < ROOT_SHAPE_CACHE_SIZE) {
-        root_shape_cache[capacity] = shape;
+        X->root_shape_cache[capacity] = shape;
     }
     return shape;
 }
