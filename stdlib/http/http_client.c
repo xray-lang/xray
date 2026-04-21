@@ -213,23 +213,7 @@ void xr_http_request_config_init(XrHttpRequestConfig *config) {
 /* ========== Error Description ========== */
 
 const char* xr_http_error_string(XrHttpError err) {
-    static const char *errors[] = {
-        "Success",
-        "URL parse error",
-        "DNS resolution failed",
-        "Connection failed",
-        "Send failed",
-        "Receive failed",
-        "Timeout",
-        "Response parse error",
-        "Response too large",
-        "Memory allocation failed",
-        "TLS error"
-    };
-    if (err < 0 || err > XR_HTTP_ERR_TLS) {
-        return "Unknown error";
-    }
-    return errors[err];
+    return xr_net_error_string(err);
 }
 
 /* ========== Result Cleanup ========== */
