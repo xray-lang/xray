@@ -414,6 +414,9 @@ typedef struct XrSelectCase {
     bool is_send;
     XrValue send_value;
     int result_reg;
+    // Phase 6.1: per-bucket select queue linkage (avoids O(N) blocked scan)
+    struct XrSelectCase *bucket_next;  // next case node in same bucket's select queue
+    XrCoroutine *owner;                // back-pointer to owning coroutine
 } XrSelectCase;
 
 typedef struct XrSelectWait {
@@ -430,8 +433,8 @@ typedef struct XrBlockedBucket {
     XrCoroutine *send_tail;
     XrCoroutine *recv_head;
     XrCoroutine *recv_tail;
-    XrCoroutine *select_head;
-    XrCoroutine *select_tail;
+    XrSelectCase *select_head;       // Phase 6.1: per-channel select case chain
+    XrSelectCase *select_tail;
     struct XrBlockedBucket *next;
 } XrBlockedBucket;
 

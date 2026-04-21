@@ -2864,6 +2864,8 @@ int vm_select_block(XrayIsolate *isolate, XrVMContext *vm_ctx,
         sw->cases[ci].channel = channels[ci];
         sw->cases[ci].is_send = false;
         sw->cases[ci].result_reg = base_reg + ci;
+        sw->cases[ci].bucket_next = NULL;
+        sw->cases[ci].owner = coro;
     }
     sw->case_count = ch_count < case_count ? ch_count : case_count;
     sw->timer_channel = timer_ch;
