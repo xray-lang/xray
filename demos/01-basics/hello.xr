@@ -1,0 +1,21 @@
+// Demo: Hello World
+// The simplest Xray program
+//
+// Run: xray demos/01-basics/hello.xr
+
+print("Hello, World!")
+
+// String interpolation
+let name = "Xray"
+let version = 1
+print("Welcome to ${name} v${version}!")
+
+// print() outputs with a newline
+print("Line 1")
+print("Line 2")
+
+// Multi-line string
+let message = "This is
+a multi-line
+string"
+print(message)

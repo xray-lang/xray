@@ -205,18 +205,11 @@ const char* xr_symbol_get_name_in_table(XrSymbolTable *table, SymbolId id) {
     return table->id_to_name[index];
 }
 
-/* ========== Builtin Symbol Fast Lookup (O(1) hash) ========== */
+/* ========== Builtin Symbol Fast Lookup (O(1) hash, const table) ========== */
 
-// Open-addressing hash table for builtin symbol name → id lookup.
-// Lazy-init on first call. Idempotent init is thread-safe since
-// all threads write identical values.
-#define BUILTIN_HASH_SIZE 256  // power of 2, load factor ~0.6 with ~160 symbols
-
-static struct {
-    const char *name;
-    SymbolId id;
-} builtin_hash[BUILTIN_HASH_SIZE];
-static int builtin_hash_ready = 0;
+// Compile-time generated open-addressing hash table.
+// Regenerate: python3 scripts/gen_builtin_hash.py > src/runtime/symbol/xbuiltin_hash.inc
+#include "xbuiltin_hash.inc"
 
 static uint32_t builtin_hash_fn(const char *s) {
     uint32_t h = 2166136261u;
@@ -227,26 +220,13 @@ static uint32_t builtin_hash_fn(const char *s) {
     return h;
 }
 
-static void builtin_hash_init(void) {
-    for (int i = 0; i < BUILTIN_NAME_COUNT; i++) {
-        uint32_t slot = builtin_hash_fn(xr_builtin_symbol_names[i]) & (BUILTIN_HASH_SIZE - 1);
-        while (builtin_hash[slot].name != NULL) {
-            slot = (slot + 1) & (BUILTIN_HASH_SIZE - 1);
-        }
-        builtin_hash[slot].name = xr_builtin_symbol_names[i];
-        builtin_hash[slot].id = (SymbolId)(i + 1);
-    }
-    builtin_hash_ready = 1;
-}
-
 SymbolId xr_builtin_symbol_from_name(const char *name) {
     if (!name) return SYMBOL_INVALID;
-    if (!builtin_hash_ready) builtin_hash_init();
 
     uint32_t slot = builtin_hash_fn(name) & (BUILTIN_HASH_SIZE - 1);
-    while (builtin_hash[slot].name != NULL) {
-        if (strcmp(builtin_hash[slot].name, name) == 0) {
-            return builtin_hash[slot].id;
+    while (xr_builtin_hash_table[slot].name != NULL) {
+        if (strcmp(xr_builtin_hash_table[slot].name, name) == 0) {
+            return xr_builtin_hash_table[slot].id;
         }
         slot = (slot + 1) & (BUILTIN_HASH_SIZE - 1);
     }

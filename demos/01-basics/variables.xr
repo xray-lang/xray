@@ -1,0 +1,51 @@
+// Demo: Variables and Types
+// Shows let, const, type annotations, and basic types
+//
+// Run: xray demos/01-basics/variables.xr
+
+// === let (mutable) vs const (immutable) ===
+let count = 0
+count = count + 1
+print("count = ${count}")
+
+const PI = 3.14159
+// PI = 3.0       // ERROR: cannot reassign const
+print("PI = ${PI}")
+
+// === Type annotations ===
+let age: int = 25
+let height: float = 1.75
+let name: string = "Alice"
+let active: bool = true
+
+print("${name}, age ${age}, height ${height}, active: ${active}")
+
+// === Type inference ===
+let x = 42            // inferred as int
+let y = 3.14          // inferred as float
+let s = "hello"       // inferred as string
+
+// === Nullable types ===
+let maybe: int? = null
+print("maybe = ${maybe}")
+maybe = 42
+print("maybe = ${maybe}")
+
+// Null coalescing operator
+let value = maybe ?? 0
+print("value = ${value}")
+
+// === Multiple assignment ===
+fn divmod(a: int, b: int): (int, int) {
+    return a / b, a % b
+}
+let quotient, remainder = divmod(17, 5)
+print("17 / 5 = ${quotient} remainder ${remainder}")
+
+// === Destructuring ===
+let [a, b, c] = [10, 20, 30]
+print("a=${a}, b=${b}, c=${c}")
+
+let person = { first: "Bob", score: 99 }
+let { first, score } = person
+print("${first}, score ${score}")

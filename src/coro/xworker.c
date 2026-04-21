@@ -31,6 +31,7 @@
 #include "../base/xchecks.h"
 #include "../base/xlog.h"
 #include "../runtime/gc/ximmix.h"
+#include "../runtime/gc/xcoro_gc.h"
 #ifdef XRAY_HAS_JIT
 #include "../jit/xir_jit_debug.h"
 #endif
@@ -148,13 +149,8 @@ void xr_worker_destroy(XrWorker *worker) {
     // Flush Per-Worker Immix block cache L1 → L2
     xr_immix_flush_block_cache(worker->p.block_cache, &worker->p.block_cache_count);
 
-    // Free Per-Worker CoroGC free list
-    while (worker->p.gc_free_list) {
-        XrCoroGC *gc = worker->p.gc_free_list;
-        worker->p.gc_free_list = *(XrCoroGC**)gc;
-        xr_free(gc);
-    }
-    worker->p.gc_free_count = 0;
+    // Flush Per-Worker CoroGC free list L1 → L2
+    xr_coro_gc_flush_pool(&worker->p.gc_free_list, &worker->p.gc_free_count);
 
     // Free Per-Worker stack slab free list
     while (worker->p.stack_slab_free) {

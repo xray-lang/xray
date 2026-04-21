@@ -1,0 +1,89 @@
+// Demo: Control Flow
+// if/else, while, for, for-in, match
+//
+// Run: xray demos/01-basics/control_flow.xr
+
+// === if / else if / else ===
+let score = 85
+if (score >= 90) {
+    print("Grade: A")
+} else if (score >= 80) {
+    print("Grade: B")
+} else if (score >= 70) {
+    print("Grade: C")
+} else {
+    print("Grade: F")
+}
+
+// === while loop ===
+let n = 1
+while (n <= 5) {
+    print("n = ${n}")
+    n++
+}
+
+// === C-style for loop ===
+for (let i = 0; i < 5; i++) {
+    print("i = ${i}")
+}
+
+// === for-in with range ===
+for (i in 0..5) {
+    print("range: ${i}")
+}
+
+// === for-in with array ===
+let fruits = ["apple", "banana", "cherry"]
+for (fruit in fruits) {
+    print("fruit: ${fruit}")
+}
+
+// === break and continue ===
+for (let i = 0; i < 10; i++) {
+    if (i == 3) { continue }
+    if (i == 7) { break }
+    print("loop: ${i}")
+}
+
+// === match expression ===
+fn describe(x: int): string {
+    return match x {
+        0 => "zero",
+        1 => "one",
+        2, 3 => "two or three",
+        4..10 => "four to ten",
+        _ => "something else"
+    }
+}
+print(describe(0))
+print(describe(3))
+print(describe(7))
+print(describe(42))
+
+// === match with guard ===
+fn classify(n: int): string {
+    return match n {
+        0 => "zero",
+        n if (n < 0) => "negative",
+        n if (n > 100) => "big",
+        _ => "small positive"
+    }
+}
+print(classify(-5))
+print(classify(50))
+print(classify(200))
+
+// === try / catch / finally ===
+fn safeDivide(a: int, b: int): int {
+    if (b == 0) { throw "division by zero" }
+    return a / b
+}
+
+try {
+    print("10 / 3 = ${safeDivide(10, 3)}")
+    print("10 / 0 = ${safeDivide(10, 0)}")
+} catch (e) {
+    print("Error: ${e}")
+} finally {
+    print("cleanup done")
+}

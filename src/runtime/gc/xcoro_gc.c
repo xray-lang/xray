@@ -31,6 +31,47 @@
 #include <sys/mman.h>
 #include "../../base/xmalloc.h"
 #include "xstackmap.h"  // XrStackMapTable, XrStackMapEntry
+#include <pthread.h>
+
+/* ========== GC Struct Two-Level Pool ========== */
+/*
+ * L1: per-Worker gc_free_list (lock-free, max 32).
+ * L2: global mutex-protected stack (max 256).
+ *
+ * L1 miss → L2 → xr_malloc.
+ * L1 full → L2 → xr_free if L2 full.
+ * Worker exit flushes L1 → L2 (xr_coro_gc_flush_pool).
+ */
+#define XR_GC_POOL_L1_MAX   32
+#define XR_GC_POOL_L2_MAX  256
+
+static pthread_mutex_t g_gc_pool_mu = PTHREAD_MUTEX_INITIALIZER;
+static XrCoroGC *g_gc_pool_head = NULL;
+static int g_gc_pool_count = 0;
+
+static XrCoroGC* gc_pool_l2_pop(void) {
+    pthread_mutex_lock(&g_gc_pool_mu);
+    XrCoroGC *gc = g_gc_pool_head;
+    if (gc) {
+        g_gc_pool_head = *(XrCoroGC**)gc;
+        g_gc_pool_count--;
+    }
+    pthread_mutex_unlock(&g_gc_pool_mu);
+    return gc;
+}
+
+static bool gc_pool_l2_push(XrCoroGC *gc) {
+    pthread_mutex_lock(&g_gc_pool_mu);
+    if (g_gc_pool_count >= XR_GC_POOL_L2_MAX) {
+        pthread_mutex_unlock(&g_gc_pool_mu);
+        return false;
+    }
+    *(XrCoroGC**)gc = g_gc_pool_head;
+    g_gc_pool_head = gc;
+    g_gc_pool_count++;
+    pthread_mutex_unlock(&g_gc_pool_mu);
+    return true;
+}
 
 /* ========== Helper Functions ========== */
 
@@ -107,14 +148,18 @@ XrCoroGC* xr_coro_gc_create(struct XrCoroutine *coro, const XrCoroGCConfig *conf
     XR_DCHECK(coro != NULL, "gc_create: NULL coroutine");
     XrCoroGC *gc = NULL;
 
-    // Fast path: reuse from per-Worker free list (no malloc)
+    // Fast path: L1 per-Worker free list (no lock)
     XrWorker *w = xr_current_worker();
     if (w && w->p.gc_free_list) {
         gc = w->p.gc_free_list;
-        w->p.gc_free_list = *(XrCoroGC**)gc;  // next pointer stored at start
+        w->p.gc_free_list = *(XrCoroGC**)gc;
         w->p.gc_free_count--;
     } else {
-        gc = (XrCoroGC*)xr_malloc(sizeof(XrCoroGC));
+        // L2 global pool (mutex)
+        gc = gc_pool_l2_pop();
+        if (!gc) {
+            gc = (XrCoroGC*)xr_malloc(sizeof(XrCoroGC));
+        }
     }
     if (!gc) return NULL;
 
@@ -230,15 +275,30 @@ void xr_coro_gc_destroy(XrCoroGC *gc) {
     if (gc->shared_refs) xr_free(gc->shared_refs);
     if (gc->prev_shared_refs) xr_free(gc->prev_shared_refs);
 
-    // Recycle to per-Worker free list instead of xr_free()
+    // Recycle: try L1 (per-Worker), then L2 (global), then free
     XrWorker *w = xr_current_worker();
-    if (w && w->p.gc_free_count < 256) {
-        *(XrCoroGC**)gc = w->p.gc_free_list;  // store next pointer at start
+    if (w && w->p.gc_free_count < XR_GC_POOL_L1_MAX) {
+        *(XrCoroGC**)gc = w->p.gc_free_list;
         w->p.gc_free_list = gc;
         w->p.gc_free_count++;
-    } else {
+    } else if (!gc_pool_l2_push(gc)) {
         xr_free(gc);
     }
+}
+
+// Flush a per-worker GC struct free list (L1) to the global pool (L2).
+// Structs that don't fit in L2 are freed immediately.
+void xr_coro_gc_flush_pool(XrCoroGC **free_list, int *count) {
+    XR_DCHECK(free_list != NULL, "flush_pool: NULL free_list");
+    XR_DCHECK(count != NULL, "flush_pool: NULL count");
+    while (*free_list) {
+        XrCoroGC *gc = *free_list;
+        *free_list = *(XrCoroGC**)gc;
+        if (!gc_pool_l2_push(gc)) {
+            xr_free(gc);
+        }
+    }
+    *count = 0;
 }
 
 /*
