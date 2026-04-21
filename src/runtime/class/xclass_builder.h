@@ -91,11 +91,14 @@ XR_FUNC XrClass* xr_class_builder_finalize(XrClassBuilder *builder);
 // Manual cleanup if finalize fails
 XR_FUNC void xr_class_builder_destroy(XrClassBuilder *builder);
 
-/* ========== Internal Helpers ========== */
+/* ========== Duplicate Detection ========== */
 
 XR_FUNC bool xr_class_builder_has_field(const XrClassBuilder *builder, const char *name);
 XR_FUNC bool xr_class_builder_has_method(const XrClassBuilder *builder, const char *name);
-XR_FUNC uint16_t xr_class_builder_calculate_instance_size(const XrClassBuilder *builder);
-XR_FUNC int xr_class_builder_generate_vtable(XrClassBuilder *builder, XrClass *cls);
+
+// calculate_instance_size and generate_vtable were removed when
+// finalize was split into xclass_builder_finalize.c. The latter
+// keeps vtable generation as a file-local static helper; no
+// consumer outside finalize ever needed it.
 
 #endif // XCLASS_BUILDER_H
