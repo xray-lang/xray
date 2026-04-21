@@ -386,11 +386,15 @@ bool xr_lockfile_add_dependency(XrLockfile *lock,
 
     if (!pkg) return false;
 
-    // Expand dependencies array
-    char **new_deps = (char**)xr_realloc(pkg->dependencies, (pkg->dep_count + 1) * sizeof(char*));
-    if (!new_deps) return false;
+    // Expand dependencies array (doubling strategy)
+    if (pkg->dep_count >= pkg->dep_capacity) {
+        int new_cap = (pkg->dep_capacity < 4) ? 4 : pkg->dep_capacity * 2;
+        char **new_deps = (char**)xr_realloc(pkg->dependencies, new_cap * sizeof(char*));
+        if (!new_deps) return false;
+        pkg->dependencies = new_deps;
+        pkg->dep_capacity = new_cap;
+    }
 
-    pkg->dependencies = new_deps;
     pkg->dependencies[pkg->dep_count++] = xr_strdup(dep_spec);
 
     return true;

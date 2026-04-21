@@ -76,11 +76,11 @@ typedef struct XrModule {
 /* ========== Inline O(1) Export Access ========== */
 
 static inline XrValue xr_module_get_sym(XrModule *m, SymbolId sym) {
-    if (!m->symbol_to_index) goto slow;
-    if (sym < m->min_symbol || sym > m->max_symbol) return xr_null();
-    int16_t idx = m->symbol_to_index[sym - m->min_symbol];
-    return (idx >= 0) ? m->export_values[idx] : xr_null();
-slow:
+    if (m->symbol_to_index) {
+        if (sym < m->min_symbol || sym > m->max_symbol) return xr_null();
+        int16_t idx = m->symbol_to_index[sym - m->min_symbol];
+        return (idx >= 0) ? m->export_values[idx] : xr_null();
+    }
     // Fallback: linear scan (during loading or before index built)
     for (uint16_t i = 0; i < m->export_count; i++) {
         if (m->export_symbols[i] == sym) return m->export_values[i];
@@ -89,23 +89,23 @@ slow:
 }
 
 static inline void xr_module_set_sym(XrModule *m, SymbolId sym, XrValue val) {
-    if (!m->symbol_to_index) goto slow;
-    if (sym < m->min_symbol || sym > m->max_symbol) return;
-    int16_t idx = m->symbol_to_index[sym - m->min_symbol];
-    if (idx >= 0) m->export_values[idx] = val;
-    return;
-slow:
+    if (m->symbol_to_index) {
+        if (sym < m->min_symbol || sym > m->max_symbol) return;
+        int16_t idx = m->symbol_to_index[sym - m->min_symbol];
+        if (idx >= 0) m->export_values[idx] = val;
+        return;
+    }
     for (uint16_t i = 0; i < m->export_count; i++) {
         if (m->export_symbols[i] == sym) { m->export_values[i] = val; return; }
     }
 }
 
 static inline bool xr_module_is_const_sym(XrModule *m, SymbolId sym) {
-    if (!m->symbol_to_index) goto slow;
-    if (sym < m->min_symbol || sym > m->max_symbol) return false;
-    int16_t idx = m->symbol_to_index[sym - m->min_symbol];
-    return (idx >= 0) && (m->export_flags[idx] & XR_EXPORT_CONST);
-slow:
+    if (m->symbol_to_index) {
+        if (sym < m->min_symbol || sym > m->max_symbol) return false;
+        int16_t idx = m->symbol_to_index[sym - m->min_symbol];
+        return (idx >= 0) && (m->export_flags[idx] & XR_EXPORT_CONST);
+    }
     for (uint16_t i = 0; i < m->export_count; i++) {
         if (m->export_symbols[i] == sym) return (m->export_flags[i] & XR_EXPORT_CONST) != 0;
     }
@@ -113,10 +113,10 @@ slow:
 }
 
 static inline bool xr_module_has_sym(XrModule *m, SymbolId sym) {
-    if (!m->symbol_to_index) goto slow;
-    if (sym < m->min_symbol || sym > m->max_symbol) return false;
-    return m->symbol_to_index[sym - m->min_symbol] >= 0;
-slow:
+    if (m->symbol_to_index) {
+        if (sym < m->min_symbol || sym > m->max_symbol) return false;
+        return m->symbol_to_index[sym - m->min_symbol] >= 0;
+    }
     for (uint16_t i = 0; i < m->export_count; i++) {
         if (m->export_symbols[i] == sym) return true;
     }
