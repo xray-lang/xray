@@ -300,7 +300,7 @@ XrCFuncResult xr_yield_call_closure(
     if (needed > ctx->stack_capacity || ctx->frame_count + 1 >= ctx->frame_capacity) {
         int extra = needed - ctx->stack_capacity + 64;
         if (extra < 64) extra = 64;
-        bool ok = xr_coro_gc_grow_stack(coro, extra);
+        bool ok = xr_coro_grow_stack(coro, extra);
         if (!ok) return XR_CFUNC_ERROR;
         // Re-read after potential realloc
         caller = &ctx->frames[ctx->frame_count - 1];

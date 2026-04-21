@@ -456,6 +456,12 @@ XR_FUNC void xr_coro_reset_for_call(XrCoroutine *coro, struct XrayIsolate *X, Xr
 
 // xr_coro_create_stackful removed — use xr_coro_create_cfunc instead
 
+/* ========== Stack Growth ========== */
+
+// Grow coroutine VM stack and/or frame array.
+// Pure stack management — no GC interaction.
+XR_FUNC bool xr_coro_grow_stack(XrCoroutine *coro, int extra_slots);
+
 /* ========== Scope Context ========== */
 
 typedef struct XrScopeContext {

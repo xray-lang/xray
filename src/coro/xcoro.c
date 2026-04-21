@@ -815,19 +815,11 @@ void xr_coro_recycle_local(XrWorker *worker, XrCoroutine *coro) {
         // Note: ext->timer_active is set to false inside xr_worker_cancel_timer
     }
 
-    // Reset GC context (bulk free all Immix blocks, reset state)
-    // This is the key optimization for coroutine pool!
-    // xr_immix_reset frees all blocks (including per-block local_allgc lists)
+    // Reset GC context: finalize objects, bulk free Immix blocks, reset state.
+    // Uses xr_coro_gc_reset which handles large objects, shared_refs, and
+    // finalizers correctly (the previous partial reset skipped those).
     if (coro->coro_gc) {
-        xr_immix_reset(&coro->coro_gc->immix);
-        xr_gclist_reset(&coro->coro_gc->gray);
-        xr_gclist_reset(&coro->coro_gc->grayagain);
-        xr_gclist_reset(&coro->coro_gc->weak);
-        coro->coro_gc->totalbytes = 0;
-        coro->coro_gc->GCdebt = 0;
-        coro->coro_gc->gcstate = XGC_PAUSE;
-        coro->coro_gc->sweep_phase = 0;
-        coro->coro_gc->sweep_block = NULL;
+        xr_coro_gc_reset(coro->coro_gc, coro);
     }
     // Stack: only zero return slot. GC scan uses stack_top boundary (reset below),
     // so slots beyond stack_top are never scanned. Full memset is unnecessary.
@@ -1376,4 +1368,91 @@ void xr_coro_wake_waiter(XrayIsolate *X, XrCoroutine *coro) {
     if (coro->task) {
         xr_task_wake_waiter(X, coro->task);
     }
+}
+
+/* ========== Stack Growth ========== */
+
+bool xr_coro_grow_stack(XrCoroutine *coro, int extra_slots) {
+    if (!coro || !coro->vm_ctx.stack) return false;
+    XR_DCHECK(extra_slots > 0, "grow_stack: non-positive extra_slots");
+    XR_DCHECK(coro->vm_ctx.stack_capacity > 0, "grow_stack: zero stack_capacity");
+
+    int new_capacity = coro->vm_ctx.stack_capacity + extra_slots;
+    if (new_capacity > 1024 * 1024) return false;
+
+    // Check if stack and frames are in a combined allocation block.
+    // If frames pointer is right after the stack, they share one malloc.
+    char *stack_end = (char*)coro->vm_ctx.stack + sizeof(XrValue) * coro->vm_ctx.stack_capacity;
+    bool combined = ((char*)coro->vm_ctx.frames == stack_end);
+
+    // Check if stack is from arena slab (gc_flags bit 0)
+    bool slab_stack = (coro->gc_flags & 0x0001) != 0;
+
+    if (combined) {
+        // Split: allocate new separate stack, copy data
+        XrValue *new_stack = (XrValue*)xr_malloc(sizeof(XrValue) * new_capacity);
+        if (!new_stack) return false;
+        memcpy(new_stack, coro->vm_ctx.stack, sizeof(XrValue) * coro->vm_ctx.stack_capacity);
+        memset(new_stack + coro->vm_ctx.stack_capacity, 0, sizeof(XrValue) * extra_slots);
+
+        // Allocate separate frames, copy from old combined block
+        XrBcCallFrame *new_frames = (XrBcCallFrame*)xr_malloc(
+            sizeof(XrBcCallFrame) * coro->vm_ctx.frame_capacity);
+        if (!new_frames) { xr_free(new_stack); return false; }
+        memcpy(new_frames, coro->vm_ctx.frames, sizeof(XrBcCallFrame) * coro->vm_ctx.frame_count);
+
+        // Free old block only if it was malloc'd (not from arena slab)
+        if (!slab_stack) {
+            xr_free(coro->vm_ctx.stack);
+        }
+        coro->vm_ctx.stack = new_stack;
+        coro->vm_ctx.stack_capacity = new_capacity;
+        coro->vm_ctx.frames = new_frames;
+        // Clear slab flag: stack is now independently malloc'd
+        coro->gc_flags &= ~0x0001;
+    } else {
+        // Already separate
+        if (slab_stack) {
+            // Slab stack (not combined): malloc new, copy, don't free old
+            XrValue *new_stack = (XrValue*)xr_malloc(sizeof(XrValue) * new_capacity);
+            if (!new_stack) return false;
+            memcpy(new_stack, coro->vm_ctx.stack, sizeof(XrValue) * coro->vm_ctx.stack_capacity);
+            memset(new_stack + coro->vm_ctx.stack_capacity, 0, sizeof(XrValue) * extra_slots);
+            coro->vm_ctx.stack = new_stack;
+            coro->vm_ctx.stack_capacity = new_capacity;
+            coro->gc_flags &= ~0x0001;
+        } else {
+            XrValue *new_stack = (XrValue*)xr_realloc(coro->vm_ctx.stack, sizeof(XrValue) * new_capacity);
+            if (!new_stack) return false;
+            memset(new_stack + coro->vm_ctx.stack_capacity, 0, sizeof(XrValue) * extra_slots);
+            coro->vm_ctx.stack = new_stack;
+            coro->vm_ctx.stack_capacity = new_capacity;
+        }
+    }
+
+    if (coro->vm_ctx.frame_count + 8 >= coro->vm_ctx.frame_capacity) {
+        int new_frame_cap = coro->vm_ctx.frame_capacity * 2;
+        // If frames were from slab (now split out in combined path above),
+        // they may already be malloc'd. But if slab_stack was true and we
+        // only grew stack (not combined path), frames are still in slab.
+        // Check: after combined split, frames are always malloc'd.
+        // After non-combined slab grow, frames pointer still points to slab.
+        bool frames_in_slab = slab_stack && !combined;
+        if (frames_in_slab) {
+            XrBcCallFrame *new_frames = (XrBcCallFrame*)xr_malloc(
+                sizeof(XrBcCallFrame) * new_frame_cap);
+            if (!new_frames) return false;
+            memcpy(new_frames, coro->vm_ctx.frames,
+                   sizeof(XrBcCallFrame) * coro->vm_ctx.frame_count);
+            coro->vm_ctx.frames = new_frames;
+        } else {
+            XrBcCallFrame *new_frames = (XrBcCallFrame*)xr_realloc(
+                coro->vm_ctx.frames, sizeof(XrBcCallFrame) * new_frame_cap);
+            if (!new_frames) return false;
+            coro->vm_ctx.frames = new_frames;
+        }
+        coro->vm_ctx.frame_capacity = new_frame_cap;
+    }
+
+    return true;
 }

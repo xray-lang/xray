@@ -69,7 +69,37 @@ static inline XrGCDestroyFn get_destroy_func(uint8_t type) {
 static void xr_gc_verify_invariants(XrCoroGC *gc);
 #else
 static inline void xr_gc_verify_invariants(XrCoroGC *gc) { (void)gc; }
-#endif // ========== Coroutine GC Lifecycle ==========
+#endif
+
+/*
+ * Reset GC runtime state fields to initial values.
+ * Shared by xr_coro_gc_create and xr_coro_gc_reset.
+ * Does NOT touch: immix heap, gray list buffers, shared_refs buffers,
+ * tuning params (gc_pause, gc_stepmul), or owner pointer.
+ */
+static void gc_init_runtime_state(XrCoroGC *gc) {
+    gc->gcstate = XGC_PAUSE;
+    gc->currentwhite = XGC_WHITE0;
+    gc->gc_mode = XGC_MODE_GEN;
+    gc->GCmarked = 0;
+    gc->GCest = 0;
+    gc->young_promoted = 0;
+    gc->totalbytes = 0;
+    gc->sweep_phase = 0;
+    gc->sweep_block = NULL;
+    gc->alloc_since_gc = 0;
+    gc->in_gc = 0;
+    gc->gc_disabled = 0;
+    gc->gc_requested = 0;
+    gc->gc_count = 0;
+    gc->object_count = 0;
+    gc->gc_time_ns = 0;
+    gc->last_gc_time_ns = 0;
+    gc->gc_cycle_start_ns = 0;
+    gc->finalizer_count = 0;
+}
+
+/* ========== Coroutine GC Lifecycle ========== */
 
 XrCoroGC* xr_coro_gc_create(struct XrCoroutine *coro, const XrCoroGCConfig *config) {
     XR_DCHECK(coro != NULL, "gc_create: NULL coroutine");
@@ -97,8 +127,7 @@ XrCoroGC* xr_coro_gc_create(struct XrCoroutine *coro, const XrCoroGCConfig *conf
     xr_gclist_init(&gc->grayagain);
     xr_gclist_init(&gc->weak);
 
-    // Non-zero fields only (everything else is 0/NULL from memset)
-    gc->currentwhite = XGC_WHITE0;
+    gc_init_runtime_state(gc);
 
     int64_t threshold = (config && config->gc_threshold > 0)
         ? (int64_t)config->gc_threshold
@@ -112,7 +141,6 @@ XrCoroGC* xr_coro_gc_create(struct XrCoroutine *coro, const XrCoroGCConfig *conf
         ? config->gc_stepmul
         : XR_SPAWN_CORO_GC_STEPMUL;
 
-    gc->gc_mode = XGC_MODE_GEN;
     gc->owner = coro;
 
     return gc;
@@ -229,28 +257,51 @@ void xr_coro_gc_reset(XrCoroGC *gc, struct XrCoroutine *new_owner) {
     gc->shared_refs_count = 0;
     gc->prev_shared_refs_count = 0;
 
-    // Reset GC state (keep tuning params and shared_refs buffers)
-    gc->gcstate = XGC_PAUSE;
-    gc->currentwhite = XGC_WHITE0;
+    // Reset runtime state (keep tuning params and shared_refs buffers)
+    gc_init_runtime_state(gc);
     gc->GCdebt = -(int64_t)XR_SPAWN_CORO_GC_THRESHOLD;
-    gc->totalbytes = 0;
-    gc->GCmarked = 0;
-    gc->gc_mode = XGC_MODE_GEN;
-    gc->GCest = 0;
-    gc->young_promoted = 0;
-    gc->sweep_phase = 0;
-    gc->sweep_block = NULL;
-    gc->alloc_since_gc = 0;
-    gc->in_gc = 0;
-    gc->gc_disabled = 0;
-    gc->gc_requested = 0;
-    gc->gc_count = 0;
-    gc->object_count = 0;
-    gc->gc_time_ns = 0;
-    gc->last_gc_time_ns = 0;
-    gc->gc_cycle_start_ns = 0;
-    gc->finalizer_count = 0;
     gc->owner = new_owner;
+}
+
+/* ========== Allocation Helpers ========== */
+
+/*
+ * Link Immix object to block's local_allgc list and mark allocation lines.
+ * Shared by xr_coro_gc_newobj (interpreter) and xr_jit_alloc_post (JIT).
+ */
+static inline void gc_post_immix_alloc(XrGCHeader *obj, uint8_t type,
+                                       uint32_t total) {
+    XrImmixBlock *block = XR_IMMIX_BLOCK_FROM_PTR(obj);
+    obj->gc_next = block->local_allgc;
+    block->local_allgc = obj;
+    block->alloc_count++;
+    block->alloc_bytes += (int64_t)total;
+    if (xr_gc_needs_finalize(type))
+        block->has_finalizers = 1;
+
+    // Mark alloc_marks so allocator knows these lines are occupied.
+    // NOTE: Do NOT advance mark_cursor here. JIT inline allocs bump
+    // cursor without setting alloc_marks; advancing mark_cursor would
+    // skip those unmarked lines, causing hole scanner to treat them as
+    // free. flush_marks (called in slow path) will batch-mark from
+    // mark_cursor to cursor, covering both JIT and interpreter allocs.
+    xr_immix_mark_alloc_lines_fast(obj, total);
+}
+
+/*
+ * Update GC allocation statistics after object creation.
+ * Shared by xr_coro_gc_newobj and xr_jit_alloc_post.
+ */
+static inline void gc_update_alloc_stats(XrCoroGC *gc, uint32_t total) {
+    gc->totalbytes += (int64_t)total;
+    gc->object_count++;
+    XR_DCHECK(gc->totalbytes >= 0, "totalbytes underflow");
+    if (gc->gc_disabled == 0) {
+        gc->GCdebt += (int64_t)total;
+        gc->alloc_since_gc += total;
+        if (gc->GCdebt > 0 && !gc->in_gc)
+            gc->gc_requested = 1;
+    }
 }
 
 /* ========== Allocation ========== */
@@ -272,23 +323,7 @@ XrGCHeader* xr_coro_gc_newobj(XrCoroGC *gc, uint8_t type, size_t size) {
     } else {
         obj = (XrGCHeader*)xr_immix_alloc(&gc->immix, total);
         if (!obj) return NULL;
-
-        // Link to per-block local_allgc (cache-friendly sweep)
-        XrImmixBlock *block = XR_IMMIX_BLOCK_FROM_PTR(obj);
-        obj->gc_next = block->local_allgc;
-        block->local_allgc = obj;
-        block->alloc_count++;
-        block->alloc_bytes += (int64_t)total;
-        if (xr_gc_needs_finalize(type))
-            block->has_finalizers = 1;
-
-        // Mark alloc_marks so allocator knows this line is occupied
-        xr_immix_mark_alloc_lines_fast(obj, total);
-        // NOTE: Do NOT advance mark_cursor here. JIT inline allocs bump
-        // cursor without setting alloc_marks; advancing mark_cursor would
-        // skip those unmarked lines, causing hole scanner to treat them as
-        // free. flush_marks (called in slow path) will batch-mark from
-        // mark_cursor to cursor, covering both JIT and interpreter allocs.
+        gc_post_immix_alloc(obj, type, (uint32_t)total);
     }
 
     obj->type = type;
@@ -300,19 +335,7 @@ XrGCHeader* xr_coro_gc_newobj(XrCoroGC *gc, uint8_t type, size_t size) {
     obj->marked = gc->currentwhite;
     XR_DCHECK(xr_gc_iswhite(obj), "new object must be white");
 
-    gc->totalbytes += (int64_t)total;
-    gc->object_count++;
-    XR_DCHECK(gc->totalbytes >= 0, "totalbytes underflow");
-
-    if (gc->gc_disabled == 0) {
-        gc->GCdebt += (int64_t)total;
-        gc->alloc_since_gc += total;
-        // Trigger GC at next VM safe point (not mid-allocation)
-        if (gc->GCdebt > 0 && !gc->in_gc) {
-            gc->gc_requested = 1;
-        }
-    }
-
+    gc_update_alloc_stats(gc, (uint32_t)total);
     return obj;
 }
 
@@ -1823,112 +1846,7 @@ void xr_jit_alloc_post(struct XrCoroutine *coro, void *obj_ptr) {
     XR_DCHECK(total > 0, "jit_alloc_post: zero objsize");
     XR_DCHECK(total <= XR_LARGE_OBJECT_THRESHOLD, "jit_alloc_post: oversized for Immix");
 
-    // Link to per-block local_allgc
-    XrImmixBlock *block = XR_IMMIX_BLOCK_FROM_PTR(obj);
-    obj->gc_next = block->local_allgc;
-    block->local_allgc = obj;
-    block->alloc_count++;
-    block->alloc_bytes += (int64_t)total;
-    if (xr_gc_needs_finalize(obj->type))
-        block->has_finalizers = 1;
-
-    // Mark alloc_marks
-    xr_immix_mark_alloc_lines_fast(obj, total);
-
-    // Stats
-    gc->totalbytes += (int64_t)total;
-    gc->object_count++;
-    if (gc->gc_disabled == 0) {
-        gc->GCdebt += (int64_t)total;
-        gc->alloc_since_gc += total;
-        if (gc->GCdebt > 0 && !gc->in_gc)
-            gc->gc_requested = 1;
-    }
+    gc_post_immix_alloc(obj, obj->type, total);
+    gc_update_alloc_stats(gc, total);
 }
 
-/* ========== Stack Growth ========== */
-
-bool xr_coro_gc_grow_stack(struct XrCoroutine *coro, int extra_slots) {
-    if (!coro || !coro->vm_ctx.stack) return false;
-    XR_DCHECK(extra_slots > 0, "grow_stack: non-positive extra_slots");
-    XR_DCHECK(coro->vm_ctx.stack_capacity > 0, "grow_stack: zero stack_capacity");
-
-    int new_capacity = coro->vm_ctx.stack_capacity + extra_slots;
-    if (new_capacity > 1024 * 1024) return false;
-
-    // Check if stack and frames are in a combined allocation block.
-    // If frames pointer is right after the stack, they share one malloc.
-    char *stack_end = (char*)coro->vm_ctx.stack + sizeof(XrValue) * coro->vm_ctx.stack_capacity;
-    bool combined = ((char*)coro->vm_ctx.frames == stack_end);
-
-    // Check if stack is from arena slab (gc_flags bit 0)
-    bool slab_stack = (coro->gc_flags & 0x0001) != 0;
-
-    if (combined) {
-        // Split: allocate new separate stack, copy data
-        XrValue *new_stack = (XrValue*)xr_malloc(sizeof(XrValue) * new_capacity);
-        if (!new_stack) return false;
-        memcpy(new_stack, coro->vm_ctx.stack, sizeof(XrValue) * coro->vm_ctx.stack_capacity);
-        memset(new_stack + coro->vm_ctx.stack_capacity, 0, sizeof(XrValue) * extra_slots);
-
-        // Allocate separate frames, copy from old combined block
-        XrBcCallFrame *new_frames = (XrBcCallFrame*)xr_malloc(
-            sizeof(XrBcCallFrame) * coro->vm_ctx.frame_capacity);
-        if (!new_frames) { xr_free(new_stack); return false; }
-        memcpy(new_frames, coro->vm_ctx.frames, sizeof(XrBcCallFrame) * coro->vm_ctx.frame_count);
-
-        // Free old block only if it was malloc'd (not from arena slab)
-        if (!slab_stack) {
-            xr_free(coro->vm_ctx.stack);
-        }
-        coro->vm_ctx.stack = new_stack;
-        coro->vm_ctx.stack_capacity = new_capacity;
-        coro->vm_ctx.frames = new_frames;
-        // Clear slab flag: stack is now independently malloc'd
-        coro->gc_flags &= ~0x0001;
-    } else {
-        // Already separate
-        if (slab_stack) {
-            // Slab stack (not combined): malloc new, copy, don't free old
-            XrValue *new_stack = (XrValue*)xr_malloc(sizeof(XrValue) * new_capacity);
-            if (!new_stack) return false;
-            memcpy(new_stack, coro->vm_ctx.stack, sizeof(XrValue) * coro->vm_ctx.stack_capacity);
-            memset(new_stack + coro->vm_ctx.stack_capacity, 0, sizeof(XrValue) * extra_slots);
-            coro->vm_ctx.stack = new_stack;
-            coro->vm_ctx.stack_capacity = new_capacity;
-            coro->gc_flags &= ~0x0001;
-        } else {
-            XrValue *new_stack = (XrValue*)xr_realloc(coro->vm_ctx.stack, sizeof(XrValue) * new_capacity);
-            if (!new_stack) return false;
-            memset(new_stack + coro->vm_ctx.stack_capacity, 0, sizeof(XrValue) * extra_slots);
-            coro->vm_ctx.stack = new_stack;
-            coro->vm_ctx.stack_capacity = new_capacity;
-        }
-    }
-
-    if (coro->vm_ctx.frame_count + 8 >= coro->vm_ctx.frame_capacity) {
-        int new_frame_cap = coro->vm_ctx.frame_capacity * 2;
-        // If frames were from slab (now split out in combined path above),
-        // they may already be malloc'd. But if slab_stack was true and we
-        // only grew stack (not combined path), frames are still in slab.
-        // Check: after combined split, frames are always malloc'd.
-        // After non-combined slab grow, frames pointer still points to slab.
-        bool frames_in_slab = slab_stack && !combined;
-        if (frames_in_slab) {
-            XrBcCallFrame *new_frames = (XrBcCallFrame*)xr_malloc(
-                sizeof(XrBcCallFrame) * new_frame_cap);
-            if (!new_frames) return false;
-            memcpy(new_frames, coro->vm_ctx.frames,
-                   sizeof(XrBcCallFrame) * coro->vm_ctx.frame_count);
-            coro->vm_ctx.frames = new_frames;
-        } else {
-            XrBcCallFrame *new_frames = (XrBcCallFrame*)xr_realloc(
-                coro->vm_ctx.frames, sizeof(XrBcCallFrame) * new_frame_cap);
-            if (!new_frames) return false;
-            coro->vm_ctx.frames = new_frames;
-        }
-        coro->vm_ctx.frame_capacity = new_frame_cap;
-    }
-
-    return true;
-}
