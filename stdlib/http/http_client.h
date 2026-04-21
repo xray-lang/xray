@@ -85,8 +85,9 @@ typedef struct {
 typedef struct {
     int status_code;                // Status code
     char *status_text;              // Status text (copied)
-    XrHttpHeader *headers;          // Response headers (copied)
+    XrHttpHeader *headers;          // Response headers (zero-copy into _header_data)
     int header_count;               // Header count
+    char *_header_data;             // Single allocation backing all header name/value strings
     char *body;                     // Response body (copied, needs free)
     size_t body_len;                // Response body length
     XrHttpError error;              // Error code
