@@ -586,17 +586,7 @@ int xr_tls_conn_get_fd(XrTlsConn *conn) {
 }
 
 const char* xr_tls_error_string(XrTlsError err) {
-    switch (err) {
-        case XR_TLS_OK: return "Success";
-        case XR_TLS_ERR_INIT: return "TLS initialization failed";
-        case XR_TLS_ERR_CERT: return "Certificate error";
-        case XR_TLS_ERR_HANDSHAKE: return "TLS handshake failed";
-        case XR_TLS_ERR_READ: return "TLS read failed";
-        case XR_TLS_ERR_WRITE: return "TLS write failed";
-        case XR_TLS_ERR_CLOSED: return "Connection closed";
-        case XR_TLS_ERR_VERIFY: return "Certificate verification failed";
-        default: return "Unknown TLS error";
-    }
+    return xr_net_error_string(err);
 }
 
 #else // !XR_ENABLE_TLS

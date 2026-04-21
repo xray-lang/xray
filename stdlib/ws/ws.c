@@ -1941,20 +1941,7 @@ XrWsState xr_ws_get_state(XrWebSocket *ws) {
 }
 
 const char* xr_ws_error_string(XrWsError err) {
-    switch (err) {
-        case WS_OK:           return "OK";
-        case WS_ERR_URL:      return "Invalid URL";
-        case WS_ERR_DNS:      return "DNS resolution failed";
-        case WS_ERR_CONNECT:  return "Connection failed";
-        case WS_ERR_HANDSHAKE:return "Handshake failed";
-        case WS_ERR_SEND:     return "Send failed";
-        case WS_ERR_RECV:     return "Receive failed";
-        case WS_ERR_TIMEOUT:  return "Timeout";
-        case WS_ERR_CLOSED:   return "Connection closed";
-        case WS_ERR_PROTOCOL: return "Protocol error";
-        case WS_ERR_MEMORY:   return "Memory allocation failed";
-        default:              return "Unknown error";
-    }
+    return xr_net_error_string(err);
 }
 
 /* ========== WebSocket Server Implementation ========== */
