@@ -247,6 +247,10 @@ static void xcgen_emit_forward_decl(XcgenModule *mod, XcgenFunc *cf) {
     has_params = true;
     if (cf->needs_closure_param) {
         xcgen_buf_puts(fwd, ", xrt_closure_t*");
+    } else if (cf->non_escaping && cf->num_upvals > 0) {
+        // Non-escaping closure: upvalues passed as direct XrtValue params
+        for (int u = 0; u < cf->num_upvals; u++)
+            xcgen_buf_puts(fwd, ", XrtValue");
     }
     for (int i = 0; i < func->num_params; i++) {
         if (has_params || i > 0) xcgen_buf_puts(fwd, ", ");
@@ -806,6 +810,10 @@ static void xcgen_compile_function_body(XcgenModule *mod, XcgenFunc *cf) {
     has_sig_params = true;
     if (cf->needs_closure_param) {
         xcgen_buf_puts(b, ", xrt_closure_t *xrt_cl");
+    } else if (cf->non_escaping && cf->num_upvals > 0) {
+        // Non-escaping closure: upvalues as direct XrtValue params (xrt_upv0, xrt_upv1, ...)
+        for (int u = 0; u < cf->num_upvals; u++)
+            xcgen_buf_printf(b, ", XrtValue xrt_upv%d", u);
     }
     for (int i = 0; i < func->num_params; i++) {
         if (has_sig_params || i > 0) xcgen_buf_puts(b, ", ");
@@ -821,6 +829,9 @@ static void xcgen_compile_function_body(XcgenModule *mod, XcgenFunc *cf) {
     xcgen_buf_puts(b, "    (void)xrt_ctx;\n");
     if (cf->needs_closure_param) {
         xcgen_buf_puts(b, "    (void)xrt_cl;\n");
+    } else if (cf->non_escaping && cf->num_upvals > 0) {
+        for (int u = 0; u < cf->num_upvals; u++)
+            xcgen_buf_printf(b, "    (void)xrt_upv%d;\n", u);
     }
     xcgen_buf_append(b, &locals);
     xcgen_buf_append(b, &stmts);
@@ -1030,6 +1041,21 @@ XcgenFunc *xcgen_compile_func(XcgenModule *mod, XirFunc *xfunc, const char *c_na
             }
         }
     }
+
+    // Non-escaping closure: check if this function was marked by its parent's
+    // escape analysis. If so, replace xrt_closure_t* param with direct upval params.
+    if (cf->needs_closure_param) {
+        XcgenProtoEntry *self_entry = xcg_lookup_proto_entry(mod, xfunc->proto);
+        if (self_entry && self_entry->non_escaping && self_entry->num_upvals > 0) {
+            cf->non_escaping = true;
+            cf->num_upvals = self_entry->num_upvals;
+            cf->needs_closure_param = false;  // no longer needs xrt_closure_t* param
+        }
+    }
+
+    // Run escape analysis on this function's child closures.
+    // Must happen before child functions are compiled so they see the non_escaping flag.
+    prescan_closure_escape(mod, xfunc);
 
     // Detect void-return functions (always return null) before forward decl
     cf->void_return = xcgen_detect_void_return(xfunc);

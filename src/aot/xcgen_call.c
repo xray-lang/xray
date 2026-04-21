@@ -50,6 +50,40 @@
 // Forward declaration (defined below, after CALL_C helpers)
 static void emit_ref_as_tagged(XcgenBuf *b, XirFunc *func, XirRef ref);
 
+// Maximum upvalues for non-escaping closure inlining (stack array limit).
+#define XCGEN_MAX_NONESC_UPVALS 16
+
+// Collect upvalue value refs from STORE_UPVAL instructions targeting cl_vreg.
+// Fills out_refs[0..nupvals-1] with the XirRef of each upvalue value.
+// Returns the number of upvals successfully collected.
+static int xcg_collect_upval_refs(XirFunc *func, uint32_t cl_vreg, int nupvals,
+                                   XirRef *out_refs) {
+    XR_DCHECK(func != NULL, "xcg_collect_upval_refs: NULL func");
+    XR_DCHECK(out_refs != NULL, "xcg_collect_upval_refs: NULL out_refs");
+    for (int i = 0; i < nupvals; i++) out_refs[i] = XIR_NONE;
+    int found = 0;
+    for (uint32_t bi = 0; bi < func->nblk && found < nupvals; bi++) {
+        XirBlock *blk = func->blocks[bi];
+        for (uint32_t ii = 0; ii < blk->nins && found < nupvals; ii++) {
+            XirIns *ins = &blk->ins[ii];
+            if (ins->op != XIR_STORE_UPVAL) continue;
+            if (!xir_ref_is_vreg(ins->dst) || XIR_REF_INDEX(ins->dst) != cl_vreg)
+                continue;
+            // Extract upval index from args[0]
+            int64_t uv_idx = 0;
+            if (xir_ref_is_const(ins->args[0])) {
+                uint32_t ci = XIR_REF_INDEX(ins->args[0]);
+                if (ci < func->nconst) uv_idx = func->consts[ci].val.i64;
+            }
+            if (uv_idx >= 0 && uv_idx < nupvals) {
+                out_refs[uv_idx] = ins->args[1];
+                found++;
+            }
+        }
+    }
+    return found;
+}
+
 /* ========== Call Arg Pool → cf->call_args[] ========== */
 
 // Populate cf->call_args[] from the call_arg_pool for the given CALL ins.
@@ -148,11 +182,41 @@ static void emit_call_known(XcgenBuf *b, XirFunc *func, XirIns *ins,
         // Pass xrt_ctx as implicit first argument
         bool ctx_emitted = true;
         xcgen_buf_puts(b, "xrt_ctx");
-        // Pass closure pointer if callee needs it
+        // Pass closure pointer (escaping) or upvalue params (non-escaping).
         bool callee_needs_closure = false;
-        if (callee_func_idx >= 0 && callee_func_idx < mod->nfuncs)
+        bool callee_non_escaping = false;
+        int callee_nupvals = 0;
+        if (callee_func_idx >= 0 && callee_func_idx < mod->nfuncs) {
             callee_needs_closure = mod->funcs[callee_func_idx].needs_closure_param;
-        if (callee_needs_closure && cf->call_args_count > 0 &&
+            callee_non_escaping = mod->funcs[callee_func_idx].non_escaping;
+            callee_nupvals = mod->funcs[callee_func_idx].num_upvals;
+        } else {
+            // Callee not yet compiled — check proto_map for non-escaping flag
+            for (int pi = 0; pi < mod->proto_map_count; pi++) {
+                if (mod->proto_map[pi].proto_ptr == callee_proto) {
+                    callee_non_escaping = mod->proto_map[pi].non_escaping;
+                    callee_nupvals = mod->proto_map[pi].num_upvals;
+                    break;
+                }
+            }
+        }
+        if (callee_non_escaping && callee_nupvals > 0 &&
+            callee_nupvals <= XCGEN_MAX_NONESC_UPVALS &&
+            cf->call_args_count > 0 && !xir_ref_is_none(cf->call_args[0])) {
+            // Non-escaping callee: pass upvalue values as direct XrtValue args
+            uint32_t cl_vreg = 0;
+            if (xir_ref_is_vreg(cf->call_args[0]))
+                cl_vreg = XIR_REF_INDEX(cf->call_args[0]);
+            XirRef upval_refs[XCGEN_MAX_NONESC_UPVALS];
+            xcg_collect_upval_refs(func, cl_vreg, callee_nupvals, upval_refs);
+            for (int u = 0; u < callee_nupvals; u++) {
+                xcgen_buf_puts(b, ", ");
+                if (!xir_ref_is_none(upval_refs[u]))
+                    emit_ref_as_tagged(b, func, upval_refs[u]);
+                else
+                    xcgen_buf_puts(b, "(XrtValue){0}");
+            }
+        } else if (callee_needs_closure && cf->call_args_count > 0 &&
             !xir_ref_is_none(cf->call_args[0])) {
             xcgen_buf_puts(b, ", (xrt_closure_t*)");
             emit_ref_as_tagged(b, func, cf->call_args[0]);
@@ -849,7 +913,26 @@ static void emit_call_c(XcgenBuf *b, XirFunc *func, XirIns *ins,
             const char *closure_fn = xcg_lookup_proto_name(mod, fn_ptr);
             if (closure_fn) {
                 uint32_t dst_idx = XIR_REF_INDEX(ins->dst);
-                // Extract nupvals from args[1]
+
+                // Check if the child closure is non-escaping
+                bool child_non_esc = false;
+                for (int pi = 0; pi < mod->proto_map_count; pi++) {
+                    if (mod->proto_map[pi].proto_ptr == fn_ptr) {
+                        child_non_esc = mod->proto_map[pi].non_escaping;
+                        break;
+                    }
+                }
+
+                if (child_non_esc) {
+                    // Non-escaping closure: skip allocation entirely.
+                    // Upvals passed at call site; STORE_UPVAL emits no-ops.
+                    xcgen_buf_printf(b, "    /* non-escaping closure %s: no allocation */\n",
+                                     closure_fn);
+                    cf->call_args_count = 0;
+                    return;
+                }
+
+                // Escaping closure: allocate normally
                 int64_t nupvals = 0;
                 if (xir_ref_is_vreg(ins->args[1])) {
                     // Trace through CONST_I64 def
