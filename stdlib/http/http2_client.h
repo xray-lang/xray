@@ -15,6 +15,7 @@
 #ifndef XR_STDLIB_HTTP2_CLIENT_H
 #define XR_STDLIB_HTTP2_CLIENT_H
 
+#include "../../src/base/xdefs.h"
 #include "http2.h"
 #include "http_client.h"
 #include "../net/tls.h"
@@ -75,30 +76,30 @@ typedef struct XrH2Response {
 /* ========== Per-Isolate Pool API ========== */
 
 // Create per-isolate HTTP/2 connection pool
-XrH2Pool* xr_h2_pool_create(void);
+XR_FUNC XrH2Pool* xr_h2_pool_create(void);
 
 // Free per-isolate pool
-void xr_h2_pool_destroy(XrH2Pool *pool);
+XR_FUNC void xr_h2_pool_destroy(XrH2Pool *pool);
 
 // Acquire connection from per-isolate pool
-XrH2PoolEntry* xr_h2_pool_acquire_from(XrH2Pool *pool, const char *host, int port, bool is_https);
+XR_FUNC XrH2PoolEntry* xr_h2_pool_acquire_from(XrH2Pool *pool, const char *host, int port, bool is_https);
 
 // Release connection to per-isolate pool
-void xr_h2_pool_release_to(XrH2Pool *pool, XrH2PoolEntry *entry);
+XR_FUNC void xr_h2_pool_release_to(XrH2Pool *pool, XrH2PoolEntry *entry);
 
 /* ========== Legacy Global API (deprecated) ========== */
 
 // Initialize global connection pool
-void xr_h2_pool_init(void);
+XR_FUNC void xr_h2_pool_init(void);
 
 // Cleanup global connection pool
-void xr_h2_pool_cleanup(void);
+XR_FUNC void xr_h2_pool_cleanup(void);
 
 // Acquire from global pool (deprecated)
-XrH2PoolEntry* xr_h2_pool_acquire(const char *host, int port, bool is_https);
+XR_FUNC XrH2PoolEntry* xr_h2_pool_acquire(const char *host, int port, bool is_https);
 
 // Release to global pool (deprecated)
-void xr_h2_pool_release(XrH2PoolEntry *entry);
+XR_FUNC void xr_h2_pool_release(XrH2PoolEntry *entry);
 
 /*
  * Send HTTP/2 request
@@ -108,23 +109,23 @@ void xr_h2_pool_release(XrH2PoolEntry *entry);
  * 
  * Returns: response (must call xr_h2_response_free to free)
  */
-XrH2Response* xr_h2_request(const char *url, const XrH2Request *req);
+XR_FUNC XrH2Response* xr_h2_request(const char *url, const XrH2Request *req);
 
 /*
  * Convenience function: HTTP/2 GET
  */
-XrH2Response* xr_h2_get(const char *url);
+XR_FUNC XrH2Response* xr_h2_get(const char *url);
 
 /*
  * Convenience function: HTTP/2 POST
  */
-XrH2Response* xr_h2_post(const char *url, const char *body, size_t body_len,
+XR_FUNC XrH2Response* xr_h2_post(const char *url, const char *body, size_t body_len,
                           const char *content_type);
 
 /*
  * Free response
  */
-void xr_h2_response_free(XrH2Response *resp);
+XR_FUNC void xr_h2_response_free(XrH2Response *resp);
 
 /*
  * Auto-select HTTP version
@@ -133,11 +134,11 @@ void xr_h2_response_free(XrH2Response *resp);
  * 
  * Returns: true = HTTP/2, false = HTTP/1.1
  */
-bool xr_http_auto_version(const char *host, int port, bool is_https);
+XR_FUNC bool xr_http_auto_version(const char *host, int port, bool is_https);
 
 /*
  * Cleanup idle connections
  */
-void xr_h2_pool_cleanup_idle(void);
+XR_FUNC void xr_h2_pool_cleanup_idle(void);
 
 #endif

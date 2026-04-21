@@ -15,6 +15,7 @@
 #ifndef XR_STDLIB_CONN_POOL_H
 #define XR_STDLIB_CONN_POOL_H
 
+#include "../../src/base/xdefs.h"
 #include "tls.h"
 #include <stdint.h>
 #include <stdbool.h>
@@ -73,39 +74,39 @@ typedef struct XrConnPool {
 
 /* ========== Connection Pool API ========== */
 
-void xr_conn_pool_init(XrConnPool *pool);
-void xr_conn_pool_destroy(XrConnPool *pool);
+XR_FUNC void xr_conn_pool_init(XrConnPool *pool);
+XR_FUNC void xr_conn_pool_destroy(XrConnPool *pool);
 
 // Get connection from pool, creates new one if none available
-XrPooledConn* xr_conn_pool_get(XrConnPool *pool, 
+XR_FUNC XrPooledConn* xr_conn_pool_get(XrConnPool *pool, 
                                 const char *host, 
                                 uint16_t port, 
                                 bool is_https);
 
 // Return connection to pool (closes if keep_alive=false)
-void xr_conn_pool_put(XrConnPool *pool, 
+XR_FUNC void xr_conn_pool_put(XrConnPool *pool, 
                        XrPooledConn *conn,
                        const char *host,
                        uint16_t port,
                        bool is_https,
                        bool keep_alive);
 
-void xr_conn_pool_close(XrConnPool *pool, XrPooledConn *conn);
+XR_FUNC void xr_conn_pool_close(XrConnPool *pool, XrPooledConn *conn);
 
 /* Evict idle connections older than pool->idle_timeout_ms.
  * Designed to be called from a timer wheel callback. */
-int xr_conn_pool_evict_idle(XrConnPool *pool);
+XR_FUNC int xr_conn_pool_evict_idle(XrConnPool *pool);
 
-void xr_conn_pool_cleanup(XrConnPool *pool);
-void xr_conn_pool_stats(XrConnPool *pool, int *total, int *idle);
+XR_FUNC void xr_conn_pool_cleanup(XrConnPool *pool);
+XR_FUNC void xr_conn_pool_stats(XrConnPool *pool, int *total, int *idle);
 
 /* ========== Per-Isolate Pool Creation ========== */
 
 // Create a new connection pool (per-isolate)
-XrConnPool* xr_conn_pool_new(void);
+XR_FUNC XrConnPool* xr_conn_pool_new(void);
 
 // Connection read/write helpers
-int xr_pooled_conn_read(XrPooledConn *conn, void *buf, size_t len);
-int xr_pooled_conn_write(XrPooledConn *conn, const void *buf, size_t len);
+XR_FUNC int xr_pooled_conn_read(XrPooledConn *conn, void *buf, size_t len);
+XR_FUNC int xr_pooled_conn_write(XrPooledConn *conn, const void *buf, size_t len);
 
 #endif // XR_STDLIB_CONN_POOL_H

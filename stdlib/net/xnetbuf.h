@@ -34,6 +34,7 @@
 #ifndef XR_STDLIB_NETBUF_H
 #define XR_STDLIB_NETBUF_H
 
+#include "../../src/base/xdefs.h"
 #include <stddef.h>
 #include <stdbool.h>
 
@@ -57,42 +58,42 @@ typedef struct XrNetBuffer {
  * buf must be caller-allocated (stack or embedded struct).
  * Returns false on allocation failure.
  */
-bool xr_netbuf_init(XrNetBuffer *buf, size_t initial_capacity);
+XR_FUNC bool xr_netbuf_init(XrNetBuffer *buf, size_t initial_capacity);
 
 /*
  * Free buffer memory. Safe to call on zeroed or already-freed buffer.
  */
-void xr_netbuf_free(XrNetBuffer *buf);
+XR_FUNC void xr_netbuf_free(XrNetBuffer *buf);
 
 /*
  * Ensure at least min_avail bytes of writable space after bytes+size.
  * May reallocate or compact. Uses exponential growth.
  * Returns pointer to writable area, or NULL on allocation failure.
  */
-char* xr_netbuf_reserve(XrNetBuffer *buf, size_t min_avail);
+XR_FUNC char* xr_netbuf_reserve(XrNetBuffer *buf, size_t min_avail);
 
 /*
  * Advance write cursor after filling n bytes into reserved area.
  * Caller must ensure n <= available space from last reserve().
  */
-void xr_netbuf_advance(XrNetBuffer *buf, size_t n);
+XR_FUNC void xr_netbuf_advance(XrNetBuffer *buf, size_t n);
 
 /*
  * Consume n bytes from the front of the buffer.
  * Adjusts bytes pointer forward without memmove.
  * Auto-compacts when consumed portion exceeds half of capacity.
  */
-void xr_netbuf_consume(XrNetBuffer *buf, size_t n);
+XR_FUNC void xr_netbuf_consume(XrNetBuffer *buf, size_t n);
 
 /*
  * Force compact: memmove remaining data to _base.
  */
-void xr_netbuf_compact(XrNetBuffer *buf);
+XR_FUNC void xr_netbuf_compact(XrNetBuffer *buf);
 
 /*
  * Reset buffer to empty state, keeping allocation.
  */
-void xr_netbuf_reset(XrNetBuffer *buf);
+XR_FUNC void xr_netbuf_reset(XrNetBuffer *buf);
 
 /*
  * Available writable space at the end of the buffer.
@@ -114,18 +115,18 @@ static inline size_t xr_netbuf_consumed(const XrNetBuffer *buf) {
  * Acquire a buffer from TLS recycle pool, or allocate a new one.
  * Returns heap-allocated XrNetBuffer*, or NULL on failure.
  */
-XrNetBuffer* xr_netbuf_acquire(size_t initial_capacity);
+XR_FUNC XrNetBuffer* xr_netbuf_acquire(size_t initial_capacity);
 
 /*
  * Release buffer back to TLS recycle pool (or free if pool full / oversized).
  * Safe to call with NULL.
  */
-void xr_netbuf_release(XrNetBuffer *buf);
+XR_FUNC void xr_netbuf_release(XrNetBuffer *buf);
 
 /*
  * Cleanup TLS recycle pool for current thread.
  * Call during thread shutdown to avoid leaks.
  */
-void xr_netbuf_pool_cleanup(void);
+XR_FUNC void xr_netbuf_pool_cleanup(void);
 
 #endif // XR_STDLIB_NETBUF_H

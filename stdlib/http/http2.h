@@ -15,6 +15,7 @@
 #ifndef XR_STDLIB_HTTP2_H
 #define XR_STDLIB_HTTP2_H
 
+#include "../../src/base/xdefs.h"
 #include <stdint.h>
 #include <stdbool.h>
 #include <stddef.h>
@@ -198,17 +199,17 @@ typedef struct {
 
 /* ========== HPACK API ========== */
 
-void xr_hpack_init(XrHpackTable *table, size_t max_size);
-void xr_hpack_free(XrHpackTable *table);
+XR_FUNC void xr_hpack_init(XrHpackTable *table, size_t max_size);
+XR_FUNC void xr_hpack_free(XrHpackTable *table);
 
 // HPACK encode header, returns encoded length or -1
-int xr_hpack_encode(XrHpackTable *table,
+XR_FUNC int xr_hpack_encode(XrHpackTable *table,
                     const char *name, size_t name_len,
                     const char *value, size_t value_len,
                     uint8_t *buf, size_t buf_len);
 
 // HPACK decode header block
-int xr_hpack_decode(XrHpackTable *table,
+XR_FUNC int xr_hpack_decode(XrHpackTable *table,
                     const uint8_t *buf, size_t buf_len,
                     void (*callback)(const char *name, size_t name_len,
                                     const char *value, size_t value_len,
@@ -219,77 +220,77 @@ int xr_hpack_decode(XrHpackTable *table,
 
 struct XrHttpHeader;
 
-XrH2Conn* xr_h2_conn_new(int fd, void *tls_conn, bool is_client);
-XrH2Conn* xr_h2_conn_new_client(int fd, void *tls_conn);
-void xr_h2_conn_free(XrH2Conn *conn);
-int xr_h2_conn_init(XrH2Conn *conn);
-XrH2Stream* xr_h2_stream_new(XrH2Conn *conn);
+XR_FUNC XrH2Conn* xr_h2_conn_new(int fd, void *tls_conn, bool is_client);
+XR_FUNC XrH2Conn* xr_h2_conn_new_client(int fd, void *tls_conn);
+XR_FUNC void xr_h2_conn_free(XrH2Conn *conn);
+XR_FUNC int xr_h2_conn_init(XrH2Conn *conn);
+XR_FUNC XrH2Stream* xr_h2_stream_new(XrH2Conn *conn);
 
 /* ========== Stream Hash Table API ========== */
 
-void xr_h2_stream_hash_init(XrH2StreamHash *hash);
-void xr_h2_stream_hash_add(XrH2StreamHash *hash, XrH2Stream *stream);
-XrH2Stream* xr_h2_stream_hash_find(XrH2StreamHash *hash, uint32_t stream_id);
-void xr_h2_stream_hash_remove(XrH2StreamHash *hash, uint32_t stream_id);
-void xr_h2_stream_hash_free(XrH2StreamHash *hash);
+XR_FUNC void xr_h2_stream_hash_init(XrH2StreamHash *hash);
+XR_FUNC void xr_h2_stream_hash_add(XrH2StreamHash *hash, XrH2Stream *stream);
+XR_FUNC XrH2Stream* xr_h2_stream_hash_find(XrH2StreamHash *hash, uint32_t stream_id);
+XR_FUNC void xr_h2_stream_hash_remove(XrH2StreamHash *hash, uint32_t stream_id);
+XR_FUNC void xr_h2_stream_hash_free(XrH2StreamHash *hash);
 
 // Send HEADERS frame
-int xr_h2_send_headers(XrH2Conn *conn, XrH2Stream *stream,
+XR_FUNC int xr_h2_send_headers(XrH2Conn *conn, XrH2Stream *stream,
                        const char **names, const size_t *name_lens,
                        const char **values, const size_t *value_lens,
                        int count, bool end_stream);
 
 // Send DATA frame
-int xr_h2_send_data(XrH2Conn *conn, XrH2Stream *stream,
+XR_FUNC int xr_h2_send_data(XrH2Conn *conn, XrH2Stream *stream,
                     const void *data, size_t len, bool end_stream);
 
 // Receive stream data (blocking)
-int xr_h2_recv_stream_data(XrH2Conn *conn, XrH2Stream *stream,
+XR_FUNC int xr_h2_recv_stream_data(XrH2Conn *conn, XrH2Stream *stream,
                             char **out_data, size_t *out_len);
 
 // Receive and process frames
-int xr_h2_recv(XrH2Conn *conn);
+XR_FUNC int xr_h2_recv(XrH2Conn *conn);
 
 // Get stream response
-XrH2Stream* xr_h2_get_stream(XrH2Conn *conn, uint32_t stream_id);
+XR_FUNC XrH2Stream* xr_h2_get_stream(XrH2Conn *conn, uint32_t stream_id);
 
 /* ========== Frame Parsing/Generation ========== */
 
-int xr_h2_parse_frame_header(const uint8_t *buf, XrH2FrameHeader *header);
-void xr_h2_write_frame_header(uint8_t *buf, const XrH2FrameHeader *header);
-int xr_h2_send_settings(XrH2Conn *conn);
-int xr_h2_send_settings_ack(XrH2Conn *conn);
-int xr_h2_send_goaway(XrH2Conn *conn, uint32_t last_stream_id, XrH2ErrorCode error);
-int xr_h2_send_window_update(XrH2Conn *conn, uint32_t stream_id, uint32_t increment);
+XR_FUNC int xr_h2_parse_frame_header(const uint8_t *buf, XrH2FrameHeader *header);
+XR_FUNC void xr_h2_write_frame_header(uint8_t *buf, const XrH2FrameHeader *header);
+XR_FUNC int xr_h2_send_settings(XrH2Conn *conn);
+XR_FUNC int xr_h2_send_settings_ack(XrH2Conn *conn);
+XR_FUNC int xr_h2_send_goaway(XrH2Conn *conn, uint32_t last_stream_id, XrH2ErrorCode error);
+XR_FUNC int xr_h2_send_window_update(XrH2Conn *conn, uint32_t stream_id, uint32_t increment);
 
 /* ========== Stream Priority API ========== */
 
-int xr_h2_set_priority(XrH2Conn *conn, XrH2Stream *stream, const XrH2Priority *priority);
-int xr_h2_send_priority(XrH2Conn *conn, uint32_t stream_id, const XrH2Priority *priority);
+XR_FUNC int xr_h2_set_priority(XrH2Conn *conn, XrH2Stream *stream, const XrH2Priority *priority);
+XR_FUNC int xr_h2_send_priority(XrH2Conn *conn, uint32_t stream_id, const XrH2Priority *priority);
 
 /* ========== Stream Cancel API ========== */
 
-int xr_h2_cancel_stream(XrH2Conn *conn, XrH2Stream *stream, XrH2ErrorCode error);
-int xr_h2_send_rst_stream(XrH2Conn *conn, uint32_t stream_id, XrH2ErrorCode error);
+XR_FUNC int xr_h2_cancel_stream(XrH2Conn *conn, XrH2Stream *stream, XrH2ErrorCode error);
+XR_FUNC int xr_h2_send_rst_stream(XrH2Conn *conn, uint32_t stream_id, XrH2ErrorCode error);
 
 /* ========== Trailers API ========== */
 
 // Send Trailers (HEADERS after DATA)
-int xr_h2_send_trailers(XrH2Conn *conn, XrH2Stream *stream,
+XR_FUNC int xr_h2_send_trailers(XrH2Conn *conn, XrH2Stream *stream,
                          const char **names, const size_t *name_lens,
                          const char **values, const size_t *value_lens,
                          int count);
 
 /* ========== PING API ========== */
 
-int xr_h2_send_ping(XrH2Conn *conn, const uint8_t data[8], bool ack);
+XR_FUNC int xr_h2_send_ping(XrH2Conn *conn, const uint8_t data[8], bool ack);
 
 /* ========== h2c (HTTP/2 Cleartext) ========== */
 
 // Upgrade to HTTP/2 via HTTP/1.1 Upgrade
-int xr_h2_upgrade_from_http1(XrH2Conn *conn, const char *settings_payload, size_t len);
+XR_FUNC int xr_h2_upgrade_from_http1(XrH2Conn *conn, const char *settings_payload, size_t len);
 
 // Start h2c connection directly (Prior Knowledge)
-int xr_h2_start_h2c(XrH2Conn *conn);
+XR_FUNC int xr_h2_start_h2c(XrH2Conn *conn);
 
 #endif // XR_STDLIB_HTTP2_H

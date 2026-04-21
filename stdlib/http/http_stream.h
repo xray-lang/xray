@@ -15,6 +15,7 @@
 #ifndef XR_STDLIB_HTTP_STREAM_H
 #define XR_STDLIB_HTTP_STREAM_H
 
+#include "../../src/base/xdefs.h"
 #include "http_client.h"
 #include <stdbool.h>
 #include <stddef.h>
@@ -67,19 +68,19 @@ typedef struct XrStreamResult {
 /*
  * Initialize stream config
  */
-void xr_stream_config_init(XrStreamConfig *config);
+XR_FUNC void xr_stream_config_init(XrStreamConfig *config);
 
 /*
  * Stream download to file
- * 
+ *
  * url: Download URL
  * output_path: Output file path
  * on_progress: Progress callback (optional)
  * user_data: Callback user data
- * 
+ *
  * Returns: download result
  */
-XrStreamResult xr_http_download(const char *url, 
+XR_FUNC XrStreamResult xr_http_download(const char *url,
                                  const char *output_path,
                                  XrHttpProgressCallback on_progress,
                                  void *user_data);
@@ -87,14 +88,14 @@ XrStreamResult xr_http_download(const char *url,
 /*
  * Stream download (using config)
  */
-XrStreamResult xr_http_stream(const XrStreamConfig *config);
+XR_FUNC XrStreamResult xr_http_stream(const XrStreamConfig *config);
 
 /*
  * Resume download
- * 
+ *
  * Checks local file size and sends Range header to continue download
  */
-XrStreamResult xr_http_resume_download(const char *url,
+XR_FUNC XrStreamResult xr_http_resume_download(const char *url,
                                         const char *output_path,
                                         XrHttpProgressCallback on_progress,
                                         void *user_data);
@@ -103,11 +104,11 @@ XrStreamResult xr_http_resume_download(const char *url,
  * Get remote file size (HEAD request)
  * Returns: file size, -1 on failure or unknown
  */
-long long xr_http_get_content_length(XrayIsolate *X, const char *url);
+XR_FUNC long long xr_http_get_content_length(XrayIsolate *X, const char *url);
 
 /*
  * Free stream result
  */
-void xr_stream_result_free(XrStreamResult *result);
+XR_FUNC void xr_stream_result_free(XrStreamResult *result);
 
 #endif

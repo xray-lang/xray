@@ -23,6 +23,8 @@
 #ifndef XR_STDLIB_NETERROR_H
 #define XR_STDLIB_NETERROR_H
 
+#include "../../src/base/xdefs.h"
+
 typedef enum {
     // Success
     XR_NERR_OK = 0,
@@ -69,6 +71,6 @@ typedef enum {
 } XrNetError;
 
 // Human-readable error string (never NULL).
-const char* xr_net_error_string(XrNetError err);
+XR_FUNC const char* xr_net_error_string(XrNetError err);
 
 #endif // XR_STDLIB_NETERROR_H

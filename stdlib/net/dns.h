@@ -20,6 +20,7 @@
 #ifndef XR_STDLIB_DNS_H
 #define XR_STDLIB_DNS_H
 
+#include "../../src/base/xdefs.h"
 #include <stdint.h>
 #include <stdbool.h>
 #include <netinet/in.h>
@@ -70,25 +71,25 @@ typedef struct {
 
 /* ========== API ========== */
 
-void xr_dns_init(void);
-void xr_dns_shutdown(void);
+XR_FUNC void xr_dns_init(void);
+XR_FUNC void xr_dns_shutdown(void);
 
 // Synchronous DNS resolve (cached + round-robin)
-bool xr_dns_resolve(const char *hostname, XrSockAddr *addr, XrAddrFamily family);
+XR_FUNC bool xr_dns_resolve(const char *hostname, XrSockAddr *addr, XrAddrFamily family);
 
 // Get all IPs for hostname (for failover scenarios).
 // Addresses are returned with IPv6/IPv4 interleaved (RFC 8305 §4
 // destination address sorting) so callers that try them in order get
 // coarse-grained Happy Eyeballs behaviour for free.
-int xr_dns_resolve_all(const char *hostname, XrSockAddr *addrs, int max_addrs, XrAddrFamily family);
+XR_FUNC int xr_dns_resolve_all(const char *hostname, XrSockAddr *addrs, int max_addrs, XrAddrFamily family);
 
 // Async DNS resolve (coroutine-friendly)
 // Returns true if cache hit or task submitted
-bool xr_dns_resolve_on_async(struct XrAsyncPool *pool, struct XrCoroutine *coro,
+XR_FUNC bool xr_dns_resolve_on_async(struct XrAsyncPool *pool, struct XrCoroutine *coro,
                               int worker_id, const char *hostname,
                               XrSockAddr *addr, XrAddrFamily family);
 
-void xr_dns_cache_clear(void);
-void xr_dns_prefetch(const char *hostname);
+XR_FUNC void xr_dns_cache_clear(void);
+XR_FUNC void xr_dns_prefetch(const char *hostname);
 
 #endif // XR_STDLIB_DNS_H

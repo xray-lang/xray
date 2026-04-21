@@ -15,6 +15,7 @@
 #ifndef XR_STDLIB_HTTP_ROUTER_H
 #define XR_STDLIB_HTTP_ROUTER_H
 
+#include "../../src/base/xdefs.h"
 #include "http_parser.h"
 #include <stdbool.h>
 
@@ -83,12 +84,12 @@ typedef struct {
 /*
  * Create router
  */
-XrRouter* xr_router_new(void);
+XR_FUNC XrRouter* xr_router_new(void);
 
 /*
  * Free router
  */
-void xr_router_free(XrRouter *router);
+XR_FUNC void xr_router_free(XrRouter *router);
 
 /*
  * Add route
@@ -98,13 +99,13 @@ void xr_router_free(XrRouter *router);
  *   /user/:id         - Parameter path
  *   /files/{*filepath}  - Wildcard path
  */
-bool xr_router_add(XrRouter *router, XrHttpMethod method, const char *path,
+XR_FUNC bool xr_router_add(XrRouter *router, XrHttpMethod method, const char *path,
                    XrRouteHandler handler, void *user_data);
 
 /*
  * Add static response route
  */
-bool xr_router_add_static(XrRouter *router, XrHttpMethod method, const char *path,
+XR_FUNC bool xr_router_add_static(XrRouter *router, XrHttpMethod method, const char *path,
                           const char *response, size_t response_len);
 
 /*
@@ -114,7 +115,7 @@ bool xr_router_add_static(XrRouter *router, XrHttpMethod method, const char *pat
  * params: output parameters, can be NULL
  * prebuilt_response/prebuilt_response_len: prebuilt complete HTTP response (optional)
  */
-XrRouteHandler xr_router_find(XrRouter *router, XrHttpMethod method,
+XR_FUNC XrRouteHandler xr_router_find(XrRouter *router, XrHttpMethod method,
                                const char *path, size_t path_len,
                                XrRouteParams *params, void **user_data,
                                const char **static_response, size_t *static_response_len,
@@ -126,7 +127,7 @@ XrRouteHandler xr_router_find(XrRouter *router, XrHttpMethod method,
  */
 #define XR_ROUTE_HANDLER_WEBSOCKET  ((XrRouteHandler)2)
 
-bool xr_router_add_websocket(XrRouter *router, const char *path,
+XR_FUNC bool xr_router_add_websocket(XrRouter *router, const char *path,
                               void *user_data);
 
 // Convenience macros

@@ -15,6 +15,7 @@
 #ifndef XR_STDLIB_HTTP_CLIENT_H
 #define XR_STDLIB_HTTP_CLIENT_H
 
+#include "../../src/base/xdefs.h"
 #include "http_parser.h"
 #include "../net/xneterror.h"
 #include <stdbool.h>
@@ -104,17 +105,17 @@ typedef struct {
  * Returns: 0 on success, -1 on failure
  * Note: caller must call xr_http_url_free to free
  */
-int xr_http_url_parse(const char *url, XrHttpUrl *out);
+XR_FUNC int xr_http_url_parse(const char *url, XrHttpUrl *out);
 
 /*
  * Free URL structure
  */
-void xr_http_url_free(XrHttpUrl *url);
+XR_FUNC void xr_http_url_free(XrHttpUrl *url);
 
 /*
  * Initialize request config
  */
-void xr_http_request_config_init(XrHttpRequestConfig *config);
+XR_FUNC void xr_http_request_config_init(XrHttpRequestConfig *config);
 
 /*
  * Execute HTTP request
@@ -123,79 +124,79 @@ void xr_http_request_config_init(XrHttpRequestConfig *config);
  * @param config  Request config
  * @return        XrHttpResult (caller must call xr_http_result_free to free)
  */
-XrHttpResult xr_http_request(XrayIsolate *X, const XrHttpRequestConfig *config);
+XR_FUNC XrHttpResult xr_http_request(XrayIsolate *X, const XrHttpRequestConfig *config);
 
 /*
  * Convenience function: GET request
  */
-XrHttpResult xr_http_get(XrayIsolate *X, const char *url);
+XR_FUNC XrHttpResult xr_http_get(XrayIsolate *X, const char *url);
 
 /*
  * Convenience function: POST request
  */
-XrHttpResult xr_http_post(XrayIsolate *X, const char *url, const char *body, size_t body_len,
+XR_FUNC XrHttpResult xr_http_post(XrayIsolate *X, const char *url, const char *body, size_t body_len,
                           const char *content_type);
 
 /*
  * Convenience function: PUT request
  */
-XrHttpResult xr_http_put(XrayIsolate *X, const char *url, const char *body, size_t body_len,
+XR_FUNC XrHttpResult xr_http_put(XrayIsolate *X, const char *url, const char *body, size_t body_len,
                          const char *content_type);
 
 /*
  * Convenience function: DELETE request
  */
-XrHttpResult xr_http_delete(XrayIsolate *X, const char *url);
+XR_FUNC XrHttpResult xr_http_delete(XrayIsolate *X, const char *url);
 
 /*
  * Free response result
  */
-void xr_http_result_free(XrHttpResult *result);
+XR_FUNC void xr_http_result_free(XrHttpResult *result);
 
 /*
  * Read next chunk from a streaming response.
  * Returns bytes read (>0), 0 on EOF, -1 on error.
  * buf must be at least max_bytes in size.
  */
-int xr_http_stream_read(XrHttpResult *result, char *buf, int max_bytes);
+XR_FUNC int xr_http_stream_read(XrHttpResult *result, char *buf, int max_bytes);
 
 /*
  * Close a streaming response and return connection to pool.
  * Must be called after stream reading is complete.
  */
-void xr_http_stream_close(XrHttpResult *result);
+XR_FUNC void xr_http_stream_close(XrHttpResult *result);
 
 /*
  * Get error description
  */
-const char* xr_http_error_string(XrHttpError err);
+XR_FUNC const char* xr_http_error_string(XrHttpError err);
 
 /* ========== Request Context API ========== */
 
 /*
  * Create request context
  */
-XrHttpReqContext* xr_http_context_new(void);
+XR_FUNC XrHttpReqContext* xr_http_context_new(void);
 
 /*
  * Set timeout (milliseconds)
  */
-void xr_http_context_set_timeout(XrHttpReqContext *ctx, int timeout_ms);
+XR_FUNC void xr_http_context_set_timeout(XrHttpReqContext *ctx, int timeout_ms);
 
 /*
  * Cancel request
  */
-void xr_http_context_cancel(XrHttpReqContext *ctx);
+XR_FUNC void xr_http_context_cancel(XrHttpReqContext *ctx);
 
 /*
  * Check if cancelled
  */
-bool xr_http_context_is_cancelled(XrHttpReqContext *ctx);
+XR_FUNC bool xr_http_context_is_cancelled(XrHttpReqContext *ctx);
 
 /*
  * Free context
  */
-void xr_http_context_free(XrHttpReqContext *ctx);
+XR_FUNC void xr_http_context_free(XrHttpReqContext *ctx);
 
 // HTTP connection pool is managed per-Isolate via XrHttpContext.conn_pool
 // (see http.h). There is no global pool — each Isolate owns its own pool,

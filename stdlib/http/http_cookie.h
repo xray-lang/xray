@@ -15,6 +15,7 @@
 #ifndef XR_STDLIB_HTTP_COOKIE_H
 #define XR_STDLIB_HTTP_COOKIE_H
 
+#include "../../src/base/xdefs.h"
 #include <stdbool.h>
 #include <stdint.h>
 #include <stddef.h>
@@ -70,32 +71,32 @@ typedef struct XrCookieJar {
  * Parse Set-Cookie header
  * Returns: new cookie (caller must free)
  */
-XrHttpCookie* xr_cookie_parse(const char *set_cookie_header,
+XR_FUNC XrHttpCookie* xr_cookie_parse(const char *set_cookie_header,
                                const char *request_domain,
                                const char *request_path);
 
 /*
  * Free cookie
  */
-void xr_cookie_free(XrHttpCookie *cookie);
+XR_FUNC void xr_cookie_free(XrHttpCookie *cookie);
 
 /*
  * Serialize cookie (generate Cookie header value)
  * Returns: newly allocated string (caller must free)
  */
-char* xr_cookie_serialize(XrHttpCookie *cookie);
+XR_FUNC char* xr_cookie_serialize(XrHttpCookie *cookie);
 
 /* ========== Cookie Jar API ========== */
 
 /*
  * Create cookie jar
  */
-XrCookieJar* xr_cookie_jar_new(void);
+XR_FUNC XrCookieJar* xr_cookie_jar_new(void);
 
 /*
  * Free cookie jar
  */
-void xr_cookie_jar_free(XrCookieJar *jar);
+XR_FUNC void xr_cookie_jar_free(XrCookieJar *jar);
 
 /*
  * Add cookie to jar
@@ -104,14 +105,14 @@ void xr_cookie_jar_free(XrCookieJar *jar);
  * - Expired cookie deletion
  * - Count limit
  */
-void xr_cookie_jar_add(XrCookieJar *jar, XrHttpCookie *cookie);
+XR_FUNC void xr_cookie_jar_add(XrCookieJar *jar, XrHttpCookie *cookie);
 
 /*
  * Extract and add cookies from response headers
  * headers: "Set-Cookie: ..." header array
  * count: Header count
  */
-void xr_cookie_jar_add_from_response(XrCookieJar *jar,
+XR_FUNC void xr_cookie_jar_add_from_response(XrCookieJar *jar,
                                       const char **set_cookie_headers,
                                       int count,
                                       const char *request_domain,
@@ -121,7 +122,7 @@ void xr_cookie_jar_add_from_response(XrCookieJar *jar,
  * Get Cookie header value for specified URL
  * Returns: newly allocated string "name1=value1; name2=value2" (caller must free)
  */
-char* xr_cookie_jar_get_header(XrCookieJar *jar,
+XR_FUNC char* xr_cookie_jar_get_header(XrCookieJar *jar,
                                 const char *domain,
                                 const char *path,
                                 bool is_secure);
@@ -129,33 +130,33 @@ char* xr_cookie_jar_get_header(XrCookieJar *jar,
 /*
  * Clear expired cookies
  */
-void xr_cookie_jar_cleanup(XrCookieJar *jar);
+XR_FUNC void xr_cookie_jar_cleanup(XrCookieJar *jar);
 
 /*
  * Clear all cookies for specified domain
  */
-void xr_cookie_jar_clear_domain(XrCookieJar *jar, const char *domain);
+XR_FUNC void xr_cookie_jar_clear_domain(XrCookieJar *jar, const char *domain);
 
 /*
  * Clear all cookies
  */
-void xr_cookie_jar_clear(XrCookieJar *jar);
+XR_FUNC void xr_cookie_jar_clear(XrCookieJar *jar);
 
 /* ========== Global Cookie Jar ========== */
 
 /*
  * Get Isolate's cookie jar (auto-create)
  */
-XrCookieJar* xr_get_cookie_jar(XrayIsolate *X);
+XR_FUNC XrCookieJar* xr_get_cookie_jar(XrayIsolate *X);
 
 /*
  * Set whether cookie jar is enabled
  */
-void xr_set_cookie_jar_enabled(XrayIsolate *X, bool enabled);
+XR_FUNC void xr_set_cookie_jar_enabled(XrayIsolate *X, bool enabled);
 
 /*
  * Check if cookie jar is enabled
  */
-bool xr_is_cookie_jar_enabled(XrayIsolate *X);
+XR_FUNC bool xr_is_cookie_jar_enabled(XrayIsolate *X);
 
 #endif
