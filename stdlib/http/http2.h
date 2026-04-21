@@ -101,11 +101,13 @@ typedef struct XrHpackEntry {
     char *value;
     size_t value_len;
     struct XrHpackEntry *next;
+    struct XrHpackEntry *prev;  // Doubly-linked for O(1) tail eviction
 } XrHpackEntry;
 
 typedef struct {
-    XrHpackEntry *entries;
-    size_t size;
+    XrHpackEntry *entries;  // Head (newest)
+    XrHpackEntry *tail;     // Tail (oldest, evicted first)
+    size_t size;            // Current table size in bytes (RFC 7541 §4.1)
     size_t max_size;
     int count;
 } XrHpackTable;
@@ -131,30 +133,33 @@ typedef struct XrH2Stream {
     XrH2StreamState state;
     int32_t window_size;
     int status;  // HTTP status code from :status pseudo-header (0 = not set)
-    
+
     XrH2Priority priority;
-    
+
     // Request/response data
     char *headers_buf;
     size_t headers_len;
     char *data_buf;
     size_t data_len;
     size_t data_cap;
-    
+
     char *trailers_buf;
     size_t trailers_len;
-    
+
     bool cancelled;
-    
+
     struct XrH2Stream *next;
 } XrH2Stream;
 
 /* ========== HTTP/2 Stream Hash Table ========== */
 
-#define XR_H2_STREAM_HASH_SIZE 64
+#define XR_H2_STREAM_HASH_INIT_CAP 16   // Initial bucket count (must be power of 2)
+#define XR_H2_STREAM_HASH_LOAD_NUM 3    // Resize when count * 4 > nbuckets * 3
+#define XR_H2_STREAM_HASH_LOAD_DEN 4    // i.e. load factor 75%
 
 typedef struct {
-    XrH2Stream *buckets[XR_H2_STREAM_HASH_SIZE];
+    XrH2Stream **buckets;   // Heap-allocated bucket array
+    uint32_t nbuckets;      // Current capacity (always power of 2)
     uint32_t count;
 } XrH2StreamHash;
 
@@ -164,25 +169,25 @@ typedef struct {
     int fd;
     void *tls_conn;
     bool is_client;
-    
+
     // Local/remote settings
     uint32_t local_settings[7];
     uint32_t remote_settings[7];
-    
+
     // HPACK encoder/decoder
     XrHpackTable encoder_table;
     XrHpackTable decoder_table;
-    
+
     // Stream management
     XrH2StreamHash stream_hash;
     uint32_t next_stream_id;
     int32_t connection_window;
-    
+
     // Receive buffer
     char *recv_buf;
     size_t recv_len;
     size_t recv_cap;
-    
+
     // State
     bool settings_sent;
     bool settings_acked;
@@ -197,7 +202,7 @@ void xr_hpack_init(XrHpackTable *table, size_t max_size);
 void xr_hpack_free(XrHpackTable *table);
 
 // HPACK encode header, returns encoded length or -1
-int xr_hpack_encode(XrHpackTable *table, 
+int xr_hpack_encode(XrHpackTable *table,
                     const char *name, size_t name_len,
                     const char *value, size_t value_len,
                     uint8_t *buf, size_t buf_len);

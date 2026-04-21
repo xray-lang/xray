@@ -13,6 +13,7 @@
 
 #include "http2.h"
 #include "../net/tls.h"
+#include "../../src/base/xhash.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -382,36 +383,48 @@ void xr_hpack_free(XrHpackTable *table) {
         entry = next;
     }
     table->entries = NULL;
+    table->tail = NULL;
     table->size = 0;
     table->count = 0;
 }
 
-// Add entry to dynamic table
+// Unlink and free the tail (oldest) entry. O(1) via prev pointer.
+static void hpack_table_evict_one(XrHpackTable *table) {
+    XrHpackEntry *victim = table->tail;
+    if (!victim) return;
+
+    // Detach from doubly-linked list
+    if (victim->prev) {
+        victim->prev->next = NULL;
+        table->tail = victim->prev;
+    } else {
+        // Single-element list
+        table->entries = NULL;
+        table->tail = NULL;
+    }
+
+    table->size -= victim->name_len + victim->value_len + 32;
+    table->count--;
+    free(victim->name);
+    free(victim->value);
+    free(victim);
+}
+
+// Add entry to dynamic table (RFC 7541 §4.4).
+// New entries go to head; eviction removes from tail — O(1) in both
+// directions thanks to the doubly-linked list.
 static void hpack_table_add(XrHpackTable *table,
                             const char *name, size_t name_len,
                             const char *value, size_t value_len) {
     size_t entry_size = name_len + value_len + 32;  // RFC 7541: 32 bytes overhead
 
-    // Evict old entries until enough space
-    while (table->size + entry_size > table->max_size && table->entries) {
-        // Remove last entry
-        XrHpackEntry **pp = &table->entries;
-        while (*pp && (*pp)->next) {
-            pp = &(*pp)->next;
-        }
-        if (*pp) {
-            XrHpackEntry *last = *pp;
-            table->size -= last->name_len + last->value_len + 32;
-            table->count--;
-            free(last->name);
-            free(last->value);
-            free(last);
-            *pp = NULL;
-        }
+    // Evict oldest entries until enough space (O(1) per eviction)
+    while (table->size + entry_size > table->max_size && table->tail) {
+        hpack_table_evict_one(table);
     }
 
     if (entry_size > table->max_size) {
-        // Entry too large, clear table
+        // Entry too large, clear table (RFC 7541 §4.4)
         xr_hpack_free(table);
         return;
     }
@@ -437,8 +450,14 @@ static void hpack_table_add(XrHpackTable *table,
     entry->value[value_len] = '\0';
     entry->value_len = value_len;
 
-    // Insert at table head
+    // Insert at head of doubly-linked list
+    entry->prev = NULL;
     entry->next = table->entries;
+    if (table->entries) {
+        table->entries->prev = entry;
+    } else {
+        table->tail = entry;  // First entry is also the tail
+    }
     table->entries = entry;
     table->size += entry_size;
     table->count++;
@@ -745,27 +764,67 @@ int xr_h2_send_settings_ack(XrH2Conn *conn) {
 
 /* ========== Stream Hash Table Implementation ========== */
 
-static inline uint32_t stream_hash_func(uint32_t stream_id) {
-    return stream_id % XR_H2_STREAM_HASH_SIZE;
+// Hash a stream ID into a bucket index. Uses xr_hash_bytes from
+// xhash.h (FNV-1a) and masks to nbuckets (always a power of 2).
+// Plain modulo of sequential odd IDs (1,3,5,...) against a power-of-2
+// size wastes half the buckets; FNV-1a scatters them properly.
+static inline uint32_t stream_hash_func(uint32_t stream_id, uint32_t nbuckets) {
+    uint32_t h = xr_hash_bytes(&stream_id, sizeof(stream_id));
+    return h & (nbuckets - 1);
 }
 
 void xr_h2_stream_hash_init(XrH2StreamHash *hash) {
     if (!hash) return;
-    memset(hash->buckets, 0, sizeof(hash->buckets));
+    hash->nbuckets = XR_H2_STREAM_HASH_INIT_CAP;
+    hash->buckets = (XrH2Stream **)calloc(hash->nbuckets,
+                                           sizeof(XrH2Stream *));
     hash->count = 0;
+}
+
+// Grow the bucket array by 2x and rehash all streams.
+static void stream_hash_resize(XrH2StreamHash *hash) {
+    uint32_t new_cap = hash->nbuckets * 2;
+    XrH2Stream **new_buckets = (XrH2Stream **)calloc(new_cap,
+                                                      sizeof(XrH2Stream *));
+    if (!new_buckets) return;  // OOM: keep old table, accept degradation
+
+    // Rehash every stream into the new bucket array
+    for (uint32_t i = 0; i < hash->nbuckets; i++) {
+        XrH2Stream *s = hash->buckets[i];
+        while (s) {
+            XrH2Stream *next = s->next;
+            uint32_t idx = stream_hash_func(s->id, new_cap);
+            s->next = new_buckets[idx];
+            new_buckets[idx] = s;
+            s = next;
+        }
+    }
+
+    free(hash->buckets);
+    hash->buckets = new_buckets;
+    hash->nbuckets = new_cap;
 }
 
 void xr_h2_stream_hash_add(XrH2StreamHash *hash, XrH2Stream *stream) {
     if (!hash || !stream) return;
-    uint32_t idx = stream_hash_func(stream->id);
+
+    // Resize when load factor exceeds 75%
+    if (hash->buckets &&
+        hash->count * XR_H2_STREAM_HASH_LOAD_DEN >=
+        hash->nbuckets * XR_H2_STREAM_HASH_LOAD_NUM) {
+        stream_hash_resize(hash);
+    }
+
+    if (!hash->buckets) return;  // init failed or OOM
+    uint32_t idx = stream_hash_func(stream->id, hash->nbuckets);
     stream->next = hash->buckets[idx];
     hash->buckets[idx] = stream;
     hash->count++;
 }
 
 XrH2Stream* xr_h2_stream_hash_find(XrH2StreamHash *hash, uint32_t stream_id) {
-    if (!hash) return NULL;
-    uint32_t idx = stream_hash_func(stream_id);
+    if (!hash || !hash->buckets) return NULL;
+    uint32_t idx = stream_hash_func(stream_id, hash->nbuckets);
     XrH2Stream *stream = hash->buckets[idx];
     while (stream) {
         if (stream->id == stream_id) return stream;
@@ -775,8 +834,8 @@ XrH2Stream* xr_h2_stream_hash_find(XrH2StreamHash *hash, uint32_t stream_id) {
 }
 
 void xr_h2_stream_hash_remove(XrH2StreamHash *hash, uint32_t stream_id) {
-    if (!hash) return;
-    uint32_t idx = stream_hash_func(stream_id);
+    if (!hash || !hash->buckets) return;
+    uint32_t idx = stream_hash_func(stream_id, hash->nbuckets);
     XrH2Stream **pp = &hash->buckets[idx];
     while (*pp) {
         if ((*pp)->id == stream_id) {
@@ -791,19 +850,23 @@ void xr_h2_stream_hash_remove(XrH2StreamHash *hash, uint32_t stream_id) {
 
 void xr_h2_stream_hash_free(XrH2StreamHash *hash) {
     if (!hash) return;
-    for (int i = 0; i < XR_H2_STREAM_HASH_SIZE; i++) {
-        XrH2Stream *stream = hash->buckets[i];
-        while (stream) {
-            XrH2Stream *next = stream->next;
-            // Free stream resources
-            free(stream->headers_buf);
-            free(stream->data_buf);
-            free(stream->trailers_buf);
-            free(stream);
-            stream = next;
+    if (hash->buckets) {
+        for (uint32_t i = 0; i < hash->nbuckets; i++) {
+            XrH2Stream *stream = hash->buckets[i];
+            while (stream) {
+                XrH2Stream *next = stream->next;
+                // Free stream resources
+                free(stream->headers_buf);
+                free(stream->data_buf);
+                free(stream->trailers_buf);
+                free(stream);
+                stream = next;
+            }
         }
-        hash->buckets[i] = NULL;
+        free(hash->buckets);
+        hash->buckets = NULL;
     }
+    hash->nbuckets = 0;
     hash->count = 0;
 }
 
