@@ -706,7 +706,11 @@ static void stringify_value(JsonWriter *w, XrValue val) {
         if (isinf(d) || isnan(d)) {
             writer_str(w, "null");  // JSON doesn't support Infinity/NaN
         } else {
-            snprintf(buf, sizeof(buf), "%.17g", d);
+            // Shortest round-trip: try %.15g first (DBL_DIG); only
+            // fall back to %.17g if the shorter form doesn't round-trip.
+            snprintf(buf, sizeof(buf), "%.15g", d);
+            if (strtod(buf, NULL) != d)
+                snprintf(buf, sizeof(buf), "%.17g", d);
             writer_str(w, buf);
         }
     } else if (XR_IS_STRING(val)) {
