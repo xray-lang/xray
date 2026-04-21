@@ -134,9 +134,6 @@ XR_FUNC XirPipelineStats xir_run_fixedpoint(XirFunc *func,
 // Dead Code Elimination: remove instructions whose results are unused
 XR_FUNC void xir_pass_dce(XirFunc *func);
 
-// Constant Propagation + Folding: propagate and fold constant expressions
-XR_FUNC void xir_pass_const_prop(XirFunc *func);
-
 // Common Subexpression Elimination: replace duplicate pure computations (local, per-block)
 XR_FUNC void xir_pass_cse(XirFunc *func);
 
@@ -149,14 +146,6 @@ XR_FUNC void xir_pass_licm(XirFunc *func);
 // Copy Propagation: replace uses of MOV dst with the original src,
 // collapsing copy chains. Run before DCE to expose dead MOVs.
 XR_FUNC void xir_pass_copy_prop(XirFunc *func);
-
-// Branch Simplification: convert branches with known-constant conditions
-// into unconditional jumps, and simplify trivial diamond patterns.
-XR_FUNC void xir_pass_branch_simp(XirFunc *func);
-
-// Unreachable Block Elimination: remove blocks with no predecessors
-// (except the entry block). Run after branch simplification.
-XR_FUNC void xir_pass_remove_unreachable(XirFunc *func);
 
 // Phi Simplification: replace phi nodes where all args are the same value
 // (or all non-self args are the same) with a MOV from that value.
@@ -173,7 +162,7 @@ XR_FUNC void xir_pass_gcm(XirFunc *func);
 
 // CFG Rebuild: reconstruct all predecessor lists from s1/s2 edges and
 // remap phi args to match the new pred ordering. Call after any group of
-// passes that modify CFG structure (branch_simp, remove_unreachable, merge_blocks).
+// passes that modify CFG structure (sccp, merge_blocks, etc.).
 XR_FUNC void xir_rebuild_preds(XirFunc *func);
 
 // CFG Verification (debug only): assert pred/succ/phi consistency.
@@ -265,7 +254,7 @@ XR_FUNC void xir_pass_auto_inline(XirFunc *func, XrProto *caller_proto);
 // 2. Identity elimination: x+0→x, x*1→x, x&-1→x, x|0→x, x^0→x
 // 3. Absorbing elimination: x*0→0, x&0→0
 // 4. Double negation: NEG(NEG(x))→x, NOT(NOT(x))→x
-// Run after const_prop and before CSE for maximum effect.
+// Run after SCCP and before CSE for maximum effect.
 XR_FUNC void xir_pass_canonicalize(XirFunc *func);
 
 // Dead Store Elimination: remove stores that are overwritten before being read.
