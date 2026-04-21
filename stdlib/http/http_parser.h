@@ -15,6 +15,7 @@
 #ifndef XR_STDLIB_HTTP_PARSER_H
 #define XR_STDLIB_HTTP_PARSER_H
 
+#include "../../src/base/xdefs.h"
 #include <stddef.h>
 #include <stdint.h>
 #include <stdbool.h>
@@ -182,7 +183,7 @@ typedef struct {
  *   num_headers- In/Out: Header array capacity / actual count
  *   last_len   - Last parse position (for incremental parsing), 0 for first call
  */
-int xr_http_parse_request_ex(const char *buf, size_t len,
+XR_FUNC int xr_http_parse_request_ex(const char *buf, size_t len,
                               const char **method, size_t *method_len,
                               const char **path, size_t *path_len,
                               int *minor_ver,
@@ -194,7 +195,7 @@ int xr_http_parse_request_ex(const char *buf, size_t len,
  *
  * Returns same as xr_http_parse_request_ex
  */
-int xr_http_parse_response_ex(const char *buf, size_t len,
+XR_FUNC int xr_http_parse_response_ex(const char *buf, size_t len,
                                int *minor_ver, int *status,
                                const char **msg, size_t *msg_len,
                                XrHttpHeader *headers, size_t *num_headers,
@@ -203,7 +204,7 @@ int xr_http_parse_response_ex(const char *buf, size_t len,
 /*
  * Parse headers only (for trailer etc.)
  */
-int xr_http_parse_headers(const char *buf, size_t len,
+XR_FUNC int xr_http_parse_headers(const char *buf, size_t len,
                            XrHttpHeader *headers, size_t *num_headers,
                            size_t last_len);
 
@@ -222,26 +223,26 @@ int xr_http_parse_headers(const char *buf, size_t len,
  *   buf     - Data buffer (will be modified in-place)
  *   bufsz   - In/Out: input is buffer size, output is decoded data size
  */
-ssize_t xr_http_decode_chunked(XrChunkedDecoder *decoder, 
+XR_FUNC ssize_t xr_http_decode_chunked(XrChunkedDecoder *decoder, 
                                 char *buf, size_t *bufsz);
 
 /*
  * Check if chunked decoder is in the middle of a data block
  */
-int xr_http_chunked_is_in_data(XrChunkedDecoder *decoder);
+XR_FUNC int xr_http_chunked_is_in_data(XrChunkedDecoder *decoder);
 
 /* ========== Simplified API ========== */
 
 /*
  * Initialize parser
  */
-void xr_http_parser_init(XrHttpParser *parser);
+XR_FUNC void xr_http_parser_init(XrHttpParser *parser);
 
 /*
  * Parse HTTP request (auto-fill XrHttpRequest struct)
  * Uses xr_http_parse_request_ex internally, and handles special headers
  */
-XrHttpParseResult xr_http_parse_request(XrHttpParser *parser, 
+XR_FUNC XrHttpParseResult xr_http_parse_request(XrHttpParser *parser, 
                                          XrHttpRequest *req,
                                          const char *data, 
                                          size_t len);
@@ -250,7 +251,7 @@ XrHttpParseResult xr_http_parse_request(XrHttpParser *parser,
  * Parse HTTP response (auto-fill XrHttpResponse struct)
  * Uses xr_http_parse_response_ex internally, and handles special headers
  */
-XrHttpParseResult xr_http_parse_response(XrHttpParser *parser,
+XR_FUNC XrHttpParseResult xr_http_parse_response(XrHttpParser *parser,
                                           XrHttpResponse *resp,
                                           const char *data,
                                           size_t len);
@@ -258,33 +259,33 @@ XrHttpParseResult xr_http_parse_response(XrHttpParser *parser,
 /*
  * Reset parser state
  */
-void xr_http_parser_reset(XrHttpParser *parser);
+XR_FUNC void xr_http_parser_reset(XrHttpParser *parser);
 
 /*
  * Initialize request struct
  */
-void xr_http_request_init(XrHttpRequest *req);
+XR_FUNC void xr_http_request_init(XrHttpRequest *req);
 
 /*
  * Initialize response struct
  */
-void xr_http_response_init(XrHttpResponse *resp);
+XR_FUNC void xr_http_response_init(XrHttpResponse *resp);
 
 /*
  * Find header (case-insensitive)
  */
-const char* xr_http_get_header(XrHttpHeader *headers, size_t count,
+XR_FUNC const char* xr_http_get_header(XrHttpHeader *headers, size_t count,
                                 const char *name, size_t *out_len);
 
 /*
  * HTTP method string to enum
  */
-XrHttpMethod xr_http_method_from_string(const char *str, size_t len);
+XR_FUNC XrHttpMethod xr_http_method_from_string(const char *str, size_t len);
 
 /*
  * HTTP method enum to string
  */
-const char* xr_http_method_to_string(XrHttpMethod method);
+XR_FUNC const char* xr_http_method_to_string(XrHttpMethod method);
 
 /* ========== HTTP Parse Helper Functions ========== */
 

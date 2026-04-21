@@ -15,6 +15,7 @@
 #ifndef XR_STDLIB_NET_IO_H
 #define XR_STDLIB_NET_IO_H
 
+#include "../../src/base/xdefs.h"
 #include "tls.h"
 #include "xneterror.h"
 #include "../../src/coro/xnetpoll.h"
@@ -39,18 +40,18 @@ typedef struct XrIOConn {
 
 // Initialize I/O layer
 // Must be called before using other APIs
-void xr_io_init(void);
+XR_FUNC void xr_io_init(void);
 
 /* Bind I/O layer to an external netpoll (e.g. runtime's netpoll).
  * Avoids creating a duplicate kqueue/epoll instance.
  * Must be called before any I/O operations. */
-void xr_io_init_with_netpoll(XrNetpoll *np);
+XR_FUNC void xr_io_init_with_netpoll(XrNetpoll *np);
 
 // Shutdown I/O layer
-void xr_io_shutdown(void);
+XR_FUNC void xr_io_shutdown(void);
 
 // Get active netpoll instance (owned or external)
-XrNetpoll* xr_io_get_netpoll(void);
+XR_FUNC XrNetpoll* xr_io_get_netpoll(void);
 
 /* ========== Connection API ========== */
 
@@ -65,7 +66,7 @@ XrNetpoll* xr_io_get_netpoll(void);
  *
  * Note: This function auto-yields until connection completes or times out
  */
-XrIOConn* xr_io_connect(const char *host, int port, int timeout_ms);
+XR_FUNC XrIOConn* xr_io_connect(const char *host, int port, int timeout_ms);
 
 /*
  * Create TLS connection (coroutine-friendly)
@@ -76,7 +77,7 @@ XrIOConn* xr_io_connect(const char *host, int port, int timeout_ms);
  *
  * Returns: Connection context, NULL on failure
  */
-XrIOConn* xr_io_connect_tls(const char *host, int port, int timeout_ms);
+XR_FUNC XrIOConn* xr_io_connect_tls(const char *host, int port, int timeout_ms);
 
 /*
  * Create TLS connection using a caller-supplied TLS context.
@@ -92,11 +93,11 @@ XrIOConn* xr_io_connect_tls(const char *host, int port, int timeout_ms);
  * Returns: coroutine-ready XrIOConn on success, NULL on connect /
  * handshake / verify failure.
  */
-XrIOConn* xr_io_connect_tls_with_ctx(XrTlsContext *ctx, const char *host,
+XR_FUNC XrIOConn* xr_io_connect_tls_with_ctx(XrTlsContext *ctx, const char *host,
                                       int port, int timeout_ms);
 
 // Close connection
-void xr_io_close(XrIOConn *conn);
+XR_FUNC void xr_io_close(XrIOConn *conn);
 
 /* ========== Read/Write API ========== */
 
@@ -111,13 +112,13 @@ void xr_io_close(XrIOConn *conn);
  *
  * Note: This function auto-yields until data available or timeout
  */
-int xr_io_read(XrIOConn *conn, void *buf, size_t len);
+XR_FUNC int xr_io_read(XrIOConn *conn, void *buf, size_t len);
 
 /*
  * Read exact length of data (coroutine-friendly)
  * Blocks until buffer filled or error
  */
-int xr_io_read_full(XrIOConn *conn, void *buf, size_t len);
+XR_FUNC int xr_io_read_full(XrIOConn *conn, void *buf, size_t len);
 
 /*
  * Write data (coroutine-friendly)
@@ -128,13 +129,13 @@ int xr_io_read_full(XrIOConn *conn, void *buf, size_t len);
  *
  * Returns: Actual bytes written, -1=error
  */
-int xr_io_write(XrIOConn *conn, const void *buf, size_t len);
+XR_FUNC int xr_io_write(XrIOConn *conn, const void *buf, size_t len);
 
 /*
  * Write all data (coroutine-friendly)
  * Blocks until all written or error
  */
-int xr_io_write_all(XrIOConn *conn, const void *buf, size_t len);
+XR_FUNC int xr_io_write_all(XrIOConn *conn, const void *buf, size_t len);
 
 /*
  * Scatter-gather write (coroutine-friendly, plain TCP only)
@@ -145,7 +146,7 @@ int xr_io_write_all(XrIOConn *conn, const void *buf, size_t len);
  *
  * Returns: Total bytes written, -1 on error
  */
-int xr_io_writev(XrIOConn *conn, const struct iovec *iov, int iovcnt);
+XR_FUNC int xr_io_writev(XrIOConn *conn, const struct iovec *iov, int iovcnt);
 
 /* ========== Server API ========== */
 
@@ -158,7 +159,7 @@ int xr_io_writev(XrIOConn *conn, const struct iovec *iov, int iovcnt);
  *
  * Returns: Listen fd, -1 on failure
  */
-int xr_io_listen(const char *addr, int port, int backlog);
+XR_FUNC int xr_io_listen(const char *addr, int port, int backlog);
 
 /*
  * Accept connection (coroutine-friendly)
@@ -169,7 +170,7 @@ int xr_io_listen(const char *addr, int port, int backlog);
  *
  * Note: This function auto-yields until new connection arrives
  */
-XrIOConn* xr_io_accept(int listen_fd);
+XR_FUNC XrIOConn* xr_io_accept(int listen_fd);
 
 /*
  * Accept + server-side TLS handshake (coroutine-friendly).
@@ -186,7 +187,7 @@ XrIOConn* xr_io_accept(int listen_fd);
  *
  * Returns: coroutine-ready XrIOConn on success, NULL otherwise.
  */
-XrIOConn* xr_io_accept_tls_with_ctx(int listen_fd, XrTlsContext *ctx);
+XR_FUNC XrIOConn* xr_io_accept_tls_with_ctx(int listen_fd, XrTlsContext *ctx);
 
 /*
  * Wrap an existing file descriptor into an XrIOConn.
@@ -195,26 +196,26 @@ XrIOConn* xr_io_accept_tls_with_ctx(int listen_fd, XrTlsContext *ctx);
  *
  * Returns: Connection context, NULL on failure
  */
-XrIOConn* xr_io_conn_from_fd(int fd, int timeout_ms);
+XR_FUNC XrIOConn* xr_io_conn_from_fd(int fd, int timeout_ms);
 
 /* ========== Utility Functions ========== */
 
 // Set connection timeout
-void xr_io_set_timeout(XrIOConn *conn, int timeout_ms);
+XR_FUNC void xr_io_set_timeout(XrIOConn *conn, int timeout_ms);
 
 // Get last error code
-XrNetError xr_io_get_error(XrIOConn *conn);
+XR_FUNC XrNetError xr_io_get_error(XrIOConn *conn);
 
 // Set socket to non-blocking mode
-int xr_io_set_nonblocking(int fd);
+XR_FUNC int xr_io_set_nonblocking(int fd);
 
 /* ========== Coroutine Integration API ========== */
 
 // Set current thread's VM instance (for coroutine scheduling)
 // Call before I/O operations in coroutine mode
-void xr_io_set_isolate(struct XrayIsolate *X);
+XR_FUNC void xr_io_set_isolate(struct XrayIsolate *X);
 
 // Get current thread's VM instance
-struct XrayIsolate* xr_io_get_isolate(void);
+XR_FUNC struct XrayIsolate* xr_io_get_isolate(void);
 
 #endif // XR_STDLIB_NET_IO_H

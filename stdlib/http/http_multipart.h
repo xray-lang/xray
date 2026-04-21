@@ -15,6 +15,7 @@
 #ifndef XR_STDLIB_HTTP_MULTIPART_H
 #define XR_STDLIB_HTTP_MULTIPART_H
 
+#include "../../src/base/xdefs.h"
 #include <stddef.h>
 #include <stdbool.h>
 
@@ -62,17 +63,17 @@ typedef struct XrFormData {
 /*
  * Create form data
  */
-XrFormData* xr_form_data_new(void);
+XR_FUNC XrFormData* xr_form_data_new(void);
 
 /*
  * Free form data
  */
-void xr_form_data_free(XrFormData *form);
+XR_FUNC void xr_form_data_free(XrFormData *form);
 
 /*
  * Append text field
  */
-void xr_form_data_append(XrFormData *form, 
+XR_FUNC void xr_form_data_append(XrFormData *form, 
                           const char *name,
                           const char *value,
                           size_t value_len);
@@ -86,7 +87,7 @@ void xr_form_data_append(XrFormData *form,
  * data: File data
  * size: File size
  */
-void xr_form_data_append_file(XrFormData *form,
+XR_FUNC void xr_form_data_append_file(XrFormData *form,
                                const char *name,
                                const char *filename,
                                const char *content_type,
@@ -97,7 +98,7 @@ void xr_form_data_append_file(XrFormData *form,
  * Append file from file path
  * Returns: 0 on success, -1 on failure
  */
-int xr_form_data_append_file_path(XrFormData *form,
+XR_FUNC int xr_form_data_append_file_path(XrFormData *form,
                                    const char *name,
                                    const char *filepath);
 
@@ -110,7 +111,7 @@ int xr_form_data_append_file_path(XrFormData *form,
  * 
  * Returns: 0 on success, -1 on failure
  */
-int xr_form_data_build(XrFormData *form,
+XR_FUNC int xr_form_data_build(XrFormData *form,
                         char **out,
                         size_t *out_len,
                         char **content_type);
@@ -119,6 +120,6 @@ int xr_form_data_build(XrFormData *form,
  * Get Content-Type header value (with boundary)
  * Returns: newly allocated string (caller must free)
  */
-char* xr_form_data_content_type(XrFormData *form);
+XR_FUNC char* xr_form_data_content_type(XrFormData *form);
 
 #endif

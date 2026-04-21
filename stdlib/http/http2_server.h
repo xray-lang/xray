@@ -14,6 +14,7 @@
 #ifndef XR_STDLIB_HTTP2_SERVER_H
 #define XR_STDLIB_HTTP2_SERVER_H
 
+#include "../../src/base/xdefs.h"
 #include "http2.h"
 #include "../net/tls.h"
 #include <stdbool.h>
@@ -92,57 +93,57 @@ typedef struct XrH2Server {
 /*
  * Initialize server config
  */
-void xr_h2_server_config_init(XrH2ServerConfig *config);
+XR_FUNC void xr_h2_server_config_init(XrH2ServerConfig *config);
 
 /*
  * Create HTTP/2 server
  */
-XrH2Server* xr_h2_server_new(const XrH2ServerConfig *config);
+XR_FUNC XrH2Server* xr_h2_server_new(const XrH2ServerConfig *config);
 
 /*
  * Free server
  */
-void xr_h2_server_free(XrH2Server *server);
+XR_FUNC void xr_h2_server_free(XrH2Server *server);
 
 /*
  * Set request handler callback
  */
-void xr_h2_server_on_request(XrH2Server *server,
+XR_FUNC void xr_h2_server_on_request(XrH2Server *server,
                               void (*handler)(XrH2Context *ctx, void *user_data),
                               void *user_data);
 
 /*
  * Start server (blocking)
  */
-int xr_h2_server_listen(XrH2Server *server);
+XR_FUNC int xr_h2_server_listen(XrH2Server *server);
 
 /*
  * Stop server
  */
-void xr_h2_server_stop(XrH2Server *server);
+XR_FUNC void xr_h2_server_stop(XrH2Server *server);
 
 /* ========== Response API ========== */
 
 /*
  * Send response headers
  */
-int xr_h2_ctx_respond(XrH2Context *ctx, int status,
+XR_FUNC int xr_h2_ctx_respond(XrH2Context *ctx, int status,
                        const char **names, const char **values, int count);
 
 /*
  * Send response body
  */
-int xr_h2_ctx_write(XrH2Context *ctx, const void *data, size_t len);
+XR_FUNC int xr_h2_ctx_write(XrH2Context *ctx, const void *data, size_t len);
 
 /*
  * End response
  */
-int xr_h2_ctx_end(XrH2Context *ctx);
+XR_FUNC int xr_h2_ctx_end(XrH2Context *ctx);
 
 /*
  * Send complete response (headers + body)
  */
-int xr_h2_ctx_send(XrH2Context *ctx, int status,
+XR_FUNC int xr_h2_ctx_send(XrH2Context *ctx, int status,
                     const char *content_type,
                     const void *body, size_t body_len);
 
@@ -157,7 +158,7 @@ int xr_h2_ctx_send(XrH2Context *ctx, int status,
  * data: Resource data
  * len: Data length
  */
-int xr_h2_ctx_push(XrH2Context *ctx, const char *path,
+XR_FUNC int xr_h2_ctx_push(XrH2Context *ctx, const char *path,
                     const char *content_type,
                     const void *data, size_t len);
 

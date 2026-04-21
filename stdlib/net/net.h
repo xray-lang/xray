@@ -15,6 +15,7 @@
 #ifndef XR_STDLIB_NET_H
 #define XR_STDLIB_NET_H
 
+#include "../../src/base/xdefs.h"
 #include <stdint.h>
 #include <stdbool.h>
 #include <stddef.h>
@@ -52,12 +53,12 @@ typedef struct XrUdpConn XrUdpConn;
  * local_addr: Bind address (NULL means system-assigned)
  * local_port: Bind port (0 means system-assigned)
  */
-XrUdpConn* xr_udp_new(const char *local_addr, int local_port);
+XR_FUNC XrUdpConn* xr_udp_new(const char *local_addr, int local_port);
 
 /*
  * Send data to specified address
  */
-int xr_udp_send_to(XrUdpConn *conn, const void *buf, size_t len,
+XR_FUNC int xr_udp_send_to(XrUdpConn *conn, const void *buf, size_t len,
                    const char *host, int port);
 
 /*
@@ -69,12 +70,12 @@ int xr_udp_send_to(XrUdpConn *conn, const void *buf, size_t len,
  * 
  * Returns: Actual bytes received
  */
-int xr_udp_recv_from(XrUdpConn *conn, void *buf, size_t len, XrNetAddr *from);
+XR_FUNC int xr_udp_recv_from(XrUdpConn *conn, void *buf, size_t len, XrNetAddr *from);
 
 /*
  * Close UDP socket
  */
-void xr_udp_close(XrUdpConn *conn);
+XR_FUNC void xr_udp_close(XrUdpConn *conn);
 
 /* ========== DNS ========== */
 
@@ -89,43 +90,43 @@ void xr_udp_close(XrUdpConn *conn);
  * 
  * Returns: Number of resolved addresses, 0 means failure
  */
-int xr_dns_lookup(const char *hostname, XrNetAddr *addrs, int max_addrs);
+XR_FUNC int xr_dns_lookup(const char *hostname, XrNetAddr *addrs, int max_addrs);
 
 /*
  * Synchronous resolve single address (with cache and polling)
  */
-bool xr_net_resolve(const char *hostname, XrNetAddr *addr);
+XR_FUNC bool xr_net_resolve(const char *hostname, XrNetAddr *addr);
 
 /*
  * Clear DNS cache
  */
-void xr_dns_cache_clear(void);
+XR_FUNC void xr_dns_cache_clear(void);
 
 /*
  * Preheat DNS cache
  */
-void xr_dns_prefetch(const char *hostname);
+XR_FUNC void xr_dns_prefetch(const char *hostname);
 
 /* ========== Utilities ========== */
 
 /*
  * Parse address string "host:port"
  */
-int xr_net_parse_addr(const char *addr_str, char *host, size_t host_len, int *port);
+XR_FUNC int xr_net_parse_addr(const char *addr_str, char *host, size_t host_len, int *port);
 
 /*
  * Format address "host:port"
  */
-int xr_net_format_addr(const XrNetAddr *addr, char *buf, size_t buf_len);
+XR_FUNC int xr_net_format_addr(const XrNetAddr *addr, char *buf, size_t buf_len);
 
 /* ========== Module Lifecycle ========== */
 
-void xr_net_init(void);
-void xr_net_shutdown(void);
+XR_FUNC void xr_net_init(void);
+XR_FUNC void xr_net_shutdown(void);
 
 /*
  * Load net module
  */
-struct XrModule* xr_load_module_net(struct XrayIsolate *isolate);
+XR_FUNC struct XrModule* xr_load_module_net(struct XrayIsolate *isolate);
 
 #endif // XR_STDLIB_NET_H
