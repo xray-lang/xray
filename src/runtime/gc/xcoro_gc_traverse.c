@@ -18,6 +18,7 @@
 #include "../object/xjson.h"
 #include "../object/xiterator.h"
 #include "../object/xexception.h"
+#include "xalloc_unified.h"  // xr_coro_get_isolate
 #include "../xerror_impl.h"
 #include "../class/xclass.h"
 #include "../class/xinstance.h"
@@ -137,7 +138,8 @@ void xr_gc_traverse_set(XrCoroGC *gc, struct XrSet *set) {
 void xr_coro_gc_traverse_json(XrCoroGC *gc, struct XrJson *json) {
     if (!gc || !json) return;
 
-    XrShape *shape = xr_json_shape(json);
+    XrayIsolate *X = gc->owner ? xr_coro_get_isolate(gc->owner) : NULL;
+    XrShape *shape = xr_json_shape(X, json);
     if (!shape) return;
 
     // Mark in-object fields

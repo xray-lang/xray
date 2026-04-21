@@ -591,7 +591,7 @@ static XrValue url_build_query_fn(XrayIsolate *X, XrValue *args, int nargs) {
     if (nargs < 1 || !xr_value_is_json(args[0])) return XR_NULL_VAL;
     XrJson *json = xr_value_to_json(args[0]);
 
-    XrShape *shape = xr_json_shape(json);
+    XrShape *shape = xr_json_shape(X, json);
     if (!shape || shape->field_count == 0) return make_cstr(X, "");
 
     XrSymbolTable *st = X->symbol_table;
@@ -605,7 +605,7 @@ static XrValue url_build_query_fn(XrayIsolate *X, XrValue *args, int nargs) {
 
         ctxbuf_append_url_form(&buf, key_name, strlen(key_name));
 
-        XrValue val = xr_json_get_field_any(json, i);
+        XrValue val = xr_json_get_field_any(X, json, i);
         if (XR_IS_STRING(val)) {
             XrString *vs = XR_TO_STRING(val);
             xr_ctxbuf_putc(&buf, '=');

@@ -136,6 +136,11 @@ struct XrayIsolate {
     // Native type mapping table
     XrClass *native_type_classes[XR_NATIVE_TYPE_MAX];  // GC type ID -> XrClass mapping
 
+    // Per-isolate shape registry (hidden classes)
+    struct XrShape **shape_entries;
+    uint16_t shape_count;
+    uint16_t shape_capacity;
+
     /* ========== VM Engine State ========== */
 
     // VM state uses independent type XrVMState (defined in xr_vm_state.h)

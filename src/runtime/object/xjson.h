@@ -51,8 +51,8 @@ struct XrJson {
 };
 
 // Retrieve shape via shape_id stored in GC header extra (replaces json->shape)
-static inline XrShape* xr_json_shape(XrJson *json) {
-    return xr_shape_get_by_id(xr_gc_get_shape_id(&json->gc));
+static inline XrShape* xr_json_shape(XrayIsolate *X, XrJson *json) {
+    return xr_shape_get_by_id(X, xr_gc_get_shape_id(&json->gc));
 }
 
 // Set shape for a Json object (stores shape_id in GC header extra)
@@ -70,7 +70,7 @@ XR_FUNC size_t xr_json_size(int field_count);
 
 /* ========== Field Access API ========== */
 
-XR_FUNC XrValue xr_json_get(XrJson *json, SymbolId symbol);
+XR_FUNC XrValue xr_json_get(XrayIsolate *X, XrJson *json, SymbolId symbol);
 XR_FUNC void xr_json_set(XrayIsolate *X, XrJson *json, SymbolId symbol, XrValue value);
 XR_FUNC XrValue xr_json_get_by_key(XrayIsolate *X, XrJson *json, const char *key);
 XR_FUNC void xr_json_set_by_key(XrayIsolate *X, XrJson *json, const char *key, XrValue value);
@@ -86,8 +86,8 @@ static inline void xr_json_set_field(XrJson *json, uint16_t index, XrValue value
 }
 
 // Access field by logical index (in-object or overflow)
-static inline XrValue xr_json_get_field_any(XrJson *json, uint16_t index) {
-    XrShape *shape = xr_json_shape(json);
+static inline XrValue xr_json_get_field_any(XrayIsolate *X, XrJson *json, uint16_t index) {
+    XrShape *shape = xr_json_shape(X, json);
     if (index < shape->in_object_capacity) {
         return json->fields[index];
     }
@@ -100,14 +100,14 @@ static inline XrValue xr_json_get_field_any(XrJson *json, uint16_t index) {
 
 /* ========== Query API ========== */
 
-static inline uint16_t xr_json_field_count(XrJson *json) {
+static inline uint16_t xr_json_field_count(XrayIsolate *X, XrJson *json) {
     if (!json) return 0;
-    return xr_json_shape(json)->field_count;
+    return xr_json_shape(X, json)->field_count;
 }
 
-static inline bool xr_json_has_field(XrJson *json, SymbolId symbol) {
+static inline bool xr_json_has_field(XrayIsolate *X, XrJson *json, SymbolId symbol) {
     if (!json) return false;
-    return xr_shape_has_field(xr_json_shape(json), symbol);
+    return xr_shape_has_field(xr_json_shape(X, json), symbol);
 }
 
 

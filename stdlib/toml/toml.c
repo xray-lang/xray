@@ -235,7 +235,7 @@ static void write_value(TomlWriter *w, XrValue val) {
     } else if (xr_value_is_json(val)) {
         // XrJson -> inline table form {k1 = v1, k2 = v2, ...}
         XrJson *json = xr_value_to_json(val);
-        XrShape *shape = xr_json_shape(json);
+        XrShape *shape = xr_json_shape(w->isolate, json);
         XrSymbolTable *symtab = (XrSymbolTable*)w->isolate->symbol_table;
         tw_char(w, '{');
         w->depth++;
@@ -259,7 +259,7 @@ static void write_value(TomlWriter *w, XrValue val) {
                     tw_char(w, '"');
                 }
                 tw_str(w, " = ");
-                write_value(w, xr_json_get_field_any(json, i));
+                write_value(w, xr_json_get_field_any(w->isolate, json, i));
             }
         }
         w->depth--;

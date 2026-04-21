@@ -388,7 +388,7 @@ static XrValue http_request(XrayIsolate *X, XrValue *args, int argc) {
         config.header_count = custom_header_count;
     } else if (xr_value_is_json(headers_val)) {
         XrJson *headers_json = xr_value_to_json(headers_val);
-        XrShape *shape = xr_json_shape(headers_json);
+        XrShape *shape = xr_json_shape(X, headers_json);
 
         if (shape && shape->field_count > 0) {
             // Fast mode: iterate Shape fields
@@ -399,7 +399,7 @@ static XrValue http_request(XrayIsolate *X, XrValue *args, int argc) {
             int idx = 0;
             for (uint16_t i = 0; i < shape->field_count; i++) {
                 SymbolId sym = shape->field_symbols[i];
-                XrValue val = xr_json_get_field_any(headers_json, i);
+                XrValue val = xr_json_get_field_any(X, headers_json, i);
 
                 // Get field name from Symbol table
                 const char *field_name = xr_symbol_get_name_in_table(symtab, sym);

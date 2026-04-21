@@ -27,45 +27,45 @@
 XrValue xr_create_type_object(XrayIsolate *X, XrTypeMetadata *meta) {
     XR_DCHECK(X != NULL, "create_type_object: NULL isolate");
     if (!meta) return xr_null();
-    
+
     TypeWrapper *wrapper = (TypeWrapper*)XR_ALLOCATE(TypeWrapper);
     if (!wrapper) return xr_null();
-    
+
     XrClass *typeClass = xr_isolate_get_core_classes(X) ? xr_isolate_get_core_classes(X)->typeClass : NULL;
     (void)typeClass;
     xr_gc_header_init_type(&wrapper->gc, XR_TINSTANCE);
     wrapper->metadata = *meta;
-    
+
     return wrapper_to_value(wrapper);
 }
 
 XrValue xr_create_field_object(XrayIsolate *X, XrFieldMetadata *field) {
     XR_DCHECK(X != NULL, "create_field_object: NULL isolate");
     if (!field) return xr_null();
-    
+
     FieldWrapper *wrapper = (FieldWrapper*)XR_ALLOCATE(FieldWrapper);
     if (!wrapper) return xr_null();
-    
+
     XrClass *fieldClass = xr_isolate_get_core_classes(X) ? xr_isolate_get_core_classes(X)->fieldClass : NULL;
     (void)fieldClass;
     xr_gc_header_init_type(&wrapper->gc, XR_TINSTANCE);
     wrapper->metadata = *field;
-    
+
     return wrapper_to_value(wrapper);
 }
 
 XrValue xr_create_method_object(XrayIsolate *X, XrMethodMetadata *method) {
     XR_DCHECK(X != NULL, "create_method_object: NULL isolate");
     if (!method) return xr_null();
-    
+
     MethodWrapper *wrapper = (MethodWrapper*)XR_ALLOCATE(MethodWrapper);
     if (!wrapper) return xr_null();
-    
+
     XrClass *methodClass = xr_isolate_get_core_classes(X) ? xr_isolate_get_core_classes(X)->methodClass : NULL;
     (void)methodClass;
     xr_gc_header_init_type(&wrapper->gc, XR_TINSTANCE);
     wrapper->metadata = *method;
-    
+
     return wrapper_to_value(wrapper);
 }
 
@@ -75,15 +75,15 @@ XrValue xr_create_constructor_object(XrayIsolate *X, XrMethodMetadata *ctor) {
 
 XrValue xr_create_parameter_object(XrayIsolate *X, XrParameterMetadata *param) {
     if (!param) return xr_null();
-    
+
     ParameterWrapper *wrapper = (ParameterWrapper*)XR_ALLOCATE(ParameterWrapper);
     if (!wrapper) return xr_null();
-    
+
     XrClass *paramClass = xr_isolate_get_core_classes(X) ? xr_isolate_get_core_classes(X)->parameterClass : NULL;
     (void)paramClass;
     xr_gc_header_init_type(&wrapper->gc, XR_TINSTANCE);
     wrapper->metadata = param;
-    
+
     return wrapper_to_value(wrapper);
 }
 
@@ -91,7 +91,7 @@ XrValue xr_create_parameter_object(XrayIsolate *X, XrParameterMetadata *param) {
 
 XrTypeMetadata* xr_get_type_metadata(XrValue type_obj) {
     if (!XR_IS_INSTANCE(type_obj)) return NULL;
-    
+
     TypeWrapper *wrapper = (TypeWrapper*)XR_TO_INSTANCE(type_obj);
     return &wrapper->metadata;
 }
@@ -122,19 +122,19 @@ XrValue xr_reflect_getType(XrayIsolate *isolate, XrValue *args, int nargs) {
         xr_log_warning("reflect", "Reflect.getType: requires 1 argument");
         return xr_null();
     }
-    
+
     XrValue obj = args[0];
     XrayIsolate *X = isolate;
-    
+
     XrClass *klass = NULL;
     if (xr_value_is_class(obj)) {
         klass = xr_value_to_class(obj);
     } else {
         klass = xr_value_get_class(X, obj);
     }
-    
+
     if (!klass) return xr_null();
-    
+
     XrTypeMetadata *meta = xr_registry_find_type_by_class(X, klass);
     if (!meta) {
         meta = xr_registry_register_class(X, klass);
@@ -143,7 +143,7 @@ XrValue xr_reflect_getType(XrayIsolate *isolate, XrValue *args, int nargs) {
             return xr_null();
         }
     }
-    
+
     return xr_create_type_object(X, meta);
 }
 
@@ -153,19 +153,19 @@ XrValue xr_reflect_getTypeByName(XrayIsolate *isolate, XrValue *args, int nargs)
         xr_log_warning("reflect", "Reflect.getTypeByName: requires 1 argument");
         return xr_null();
     }
-    
+
     if (!XR_IS_STRING(args[0])) {
         xr_log_warning("reflect", "Reflect.getTypeByName: argument must be string");
         return xr_null();
     }
-    
+
     XrayIsolate *X = isolate;
     XrString *name_str = XR_TO_STRING(args[0]);
     const char *name = name_str->data;
-    
+
     XrTypeMetadata *meta = xr_registry_find_type(X, name);
     if (!meta) return xr_null();
-    
+
     return xr_create_type_object(X, meta);
 }
 
@@ -173,23 +173,23 @@ XrValue xr_reflect_getAllTypes(XrayIsolate *isolate, XrValue *args, int nargs) {
     XR_DCHECK(isolate != NULL, "reflect_getAllTypes: NULL isolate");
     (void)args;
     (void)nargs;
-    
+
     XrayIsolate *X = isolate;
-    
+
     int count = 0;
     XrTypeMetadata **all_types = xr_registry_get_all_types(X, &count);
-    
+
     if (!all_types || count == 0) {
         XrArray *empty = xr_array_new(xr_current_coro(X));
         return xr_value_from_array(empty);
     }
-    
+
     XrArray *array = xr_array_new(xr_current_coro(X));
     for (int i = 0; i < count; i++) {
         XrValue type_obj = xr_create_type_object(X, all_types[i]);
         xr_array_push(array, type_obj);
     }
-    
+
     xr_free(all_types);
     return xr_value_from_array(array);
 }
@@ -200,16 +200,16 @@ XrValue xr_reflect_isInstance(XrayIsolate *isolate, XrValue *args, int nargs) {
         xr_log_warning("reflect", "Reflect.isInstance: requires 2 arguments");
         return xr_bool(false);
     }
-    
+
     XrValue obj = args[0];
     XrValue type_obj = args[1];
-    
+
     XrClass *obj_class = xr_value_get_class(isolate, obj);
     if (!obj_class) return xr_bool(false);
-    
+
     XrTypeMetadata *type_meta = xr_get_type_metadata(type_obj);
     if (!type_meta || !type_meta->klass) return xr_bool(false);
-    
+
     return xr_bool(xr_class_instanceof(obj_class, type_meta->klass));
 }
 
@@ -219,19 +219,19 @@ XrValue xr_reflect_isInstanceOf(XrayIsolate *isolate, XrValue *args, int nargs) 
         xr_log_warning("reflect", "Reflect.isInstanceOf: requires 2 arguments");
         return xr_bool(false);
     }
-    
+
     if (!XR_IS_STRING(args[1])) {
         xr_log_warning("reflect", "Reflect.isInstanceOf: second argument must be string");
         return xr_bool(false);
     }
-    
+
     XrayIsolate *X = isolate;
     XrValue obj = args[0];
     XrString *type_name = XR_TO_STRING(args[1]);
-    
+
     XrTypeMetadata *type_meta = xr_registry_find_type(X, type_name->data);
     if (!type_meta) return xr_bool(false);
-    
+
     XrValue type_obj = xr_create_type_object(X, type_meta);
     XrValue new_args[2] = {obj, type_obj};
     return xr_reflect_isInstance(isolate, new_args, 2);
@@ -240,15 +240,14 @@ XrValue xr_reflect_isInstanceOf(XrayIsolate *isolate, XrValue *args, int nargs) 
 // Reflect.fieldCount(obj: any): int
 // Supports Json, struct (stack-allocated), and class instances
 XrValue xr_reflect_fieldCount(XrayIsolate *isolate, XrValue *args, int nargs) {
-    (void)isolate;
     if (nargs < 1) return xr_int(0);
     XrValue obj = args[0];
-    
+
     if (xr_value_is_json(obj)) {
         XrJson *json = xr_value_to_json(obj);
-        return xr_int((xr_Integer)xr_json_field_count(json));
+        return xr_int((xr_Integer)xr_json_field_count(isolate, json));
     }
-    
+
     // Struct ref (skip array_ref which uses ext for elem metadata)
     if (XR_IS_STRUCT_REF(obj) && !XR_IS_ARRAY_REF(obj)) {
         uint8_t *sptr = (uint8_t*)xr_to_struct_ptr(obj);
@@ -258,14 +257,14 @@ XrValue xr_reflect_fieldCount(XrayIsolate *isolate, XrValue *args, int nargs) {
         if (scls)
             return xr_int((xr_Integer)xr_class_instance_field_count(scls));
     }
-    
+
     // Class instance
     if (xr_value_is_instance(obj)) {
         XrInstance *inst = xr_value_to_instance(obj);
         XrClass *cls = xr_instance_get_class(inst);
         return xr_int((xr_Integer)xr_class_instance_field_count(cls));
     }
-    
+
     return xr_int(0);
 }
 

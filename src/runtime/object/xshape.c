@@ -21,60 +21,53 @@
 #include <string.h>
 #include <stdio.h>
 
-/* ========== Global Shape Registry ========== */
-/*
- * WARNING: Thread safety
- *   These are process-global mutable variables, NOT per-isolate.
- *   In a multi-isolate (multi-threaded) environment, concurrent access
- *   to shape_registry is a data race. To fix properly, migrate the
- *   registry into XrayIsolate and pass isolate to xr_shape_get_by_id().
- *   This requires signature changes across VM, JIT, and object layers.
- */
+/* ========== Per-Isolate Shape Registry ========== */
+
+#include "../xisolate_internal.h"
 
 #define SHAPE_REGISTRY_INIT_CAP 256
 
-static XrShape **shape_registry = NULL;
-static uint16_t shape_registry_count = 0;
-static uint16_t shape_registry_cap = 0;
-
-void xr_shape_registry_init(void) {
-    if (shape_registry) return;
-    shape_registry = (XrShape**)xr_calloc(SHAPE_REGISTRY_INIT_CAP, sizeof(XrShape*));
-    shape_registry_cap = SHAPE_REGISTRY_INIT_CAP;
-    shape_registry_count = 0;
+void xr_shape_registry_init(XrayIsolate *X) {
+    XR_DCHECK(X != NULL, "shape_registry_init: NULL isolate");
+    if (X->shape_entries) return;
+    X->shape_entries = (XrShape**)xr_calloc(SHAPE_REGISTRY_INIT_CAP, sizeof(XrShape*));
+    X->shape_capacity = SHAPE_REGISTRY_INIT_CAP;
+    X->shape_count = 0;
 }
 
-void xr_shape_registry_destroy(void) {
-    if (shape_registry) {
-        xr_free(shape_registry);
-        shape_registry = NULL;
-        shape_registry_count = 0;
-        shape_registry_cap = 0;
+void xr_shape_registry_destroy(XrayIsolate *X) {
+    if (!X) return;
+    if (X->shape_entries) {
+        xr_free(X->shape_entries);
+        X->shape_entries = NULL;
+        X->shape_count = 0;
+        X->shape_capacity = 0;
     }
 }
 
-XrShape *xr_shape_get_by_id(uint16_t id) {
-    if (id >= shape_registry_count) return NULL;
-    return shape_registry[id];
+XrShape *xr_shape_get_by_id(XrayIsolate *X, uint16_t id) {
+    XR_DCHECK(X != NULL, "shape_get_by_id: NULL isolate");
+    if (id >= X->shape_count) return NULL;
+    return X->shape_entries[id];
 }
 
-static uint16_t shape_registry_add(XrShape *shape) {
-    if (!shape_registry) xr_shape_registry_init();
-    if (shape_registry_count >= XR_SHAPE_MAX_ID) {
-        // Overflow: return 0 (empty shape) as fallback
+static uint16_t shape_registry_add(XrayIsolate *X, XrShape *shape) {
+    XR_DCHECK(X != NULL, "shape_registry_add: NULL isolate");
+    if (!X->shape_entries) xr_shape_registry_init(X);
+    if (X->shape_count >= XR_SHAPE_MAX_ID) {
         return 0;
     }
-    if (shape_registry_count >= shape_registry_cap) {
-        uint16_t new_cap = shape_registry_cap * 2;
+    if (X->shape_count >= X->shape_capacity) {
+        uint16_t new_cap = X->shape_capacity * 2;
         if (new_cap > XR_SHAPE_MAX_ID + 1) new_cap = XR_SHAPE_MAX_ID + 1;
-        XrShape **new_reg = (XrShape**)xr_realloc(shape_registry, new_cap * sizeof(XrShape*));
+        XrShape **new_reg = (XrShape**)xr_realloc(X->shape_entries, new_cap * sizeof(XrShape*));
         if (!new_reg) return 0;
-        memset(new_reg + shape_registry_cap, 0, (new_cap - shape_registry_cap) * sizeof(XrShape*));
-        shape_registry = new_reg;
-        shape_registry_cap = new_cap;
+        memset(new_reg + X->shape_capacity, 0, (new_cap - X->shape_capacity) * sizeof(XrShape*));
+        X->shape_entries = new_reg;
+        X->shape_capacity = new_cap;
     }
-    uint16_t id = shape_registry_count++;
-    shape_registry[id] = shape;
+    uint16_t id = X->shape_count++;
+    X->shape_entries[id] = shape;
     return id;
 }
 
@@ -117,12 +110,11 @@ static void shape_build_index_table(XrShape *shape) {
 XrShape *xr_shape_new(XrayIsolate *X, uint16_t capacity) {
     XR_DCHECK(X != NULL, "shape_new: NULL isolate");
     XR_DCHECK(capacity > 0, "shape_new: zero capacity");
-    (void)X;
 
     XrShape *shape = (XrShape*)xr_calloc(1, sizeof(XrShape));
     if (!shape) return NULL;
 
-    shape->id = shape_registry_add(shape);
+    shape->id = shape_registry_add(X, shape);
     shape->field_count = 0;
     shape->in_object_capacity = capacity;
     shape->field_symbols = NULL;
@@ -151,7 +143,7 @@ XrShape *xr_shape_new_compact(XrayIsolate *X, const XrCompactFieldDef *fields, u
     XrShape *shape = (XrShape*)xr_calloc(1, sizeof(XrShape));
     if (!shape) return NULL;
 
-    shape->id = shape_registry_add(shape);
+    shape->id = shape_registry_add(X, shape);
     shape->field_count = count;
     shape->in_object_capacity = count;
     shape->is_compact = true;

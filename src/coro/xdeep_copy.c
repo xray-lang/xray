@@ -338,7 +338,7 @@ static XrValue xr_deep_copy_json_with_ctx(XrCopyContext *ctx, XrJson *json) {
     XrValue cached = xr_copy_context_lookup(ctx, json);
     if (!XR_IS_NULL(cached)) return cached;
 
-    XrShape *shape = xr_json_shape(json);
+    XrShape *shape = xr_json_shape(ctx->X, json);
     int field_count = shape->field_count;
 
     size_t size = xr_json_size(shape->in_object_capacity);
@@ -597,7 +597,7 @@ static XrValue deep_copy_instance_to_shared(struct XrayIsolate *X, XrInstance *i
 
 static XrValue deep_copy_json_to_shared(struct XrayIsolate *X, XrJson *json) {
     if (!json || !xr_isolate_get_sys_heap(X)) return XR_NULL_VAL;
-    XrShape *shape = xr_json_shape(json);
+    XrShape *shape = xr_json_shape(X, json);
     uint16_t in_obj = shape->in_object_capacity;
     uint16_t field_count = shape->field_count;
     size_t size = xr_json_size(in_obj);

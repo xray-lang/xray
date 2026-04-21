@@ -1,0 +1,98 @@
+// Demo: Generics
+// Generic classes, generic functions, type safety
+//
+// Run: xray demos/07-advanced/generics.xr
+
+// === Generic class ===
+class Box<T> {
+    value: T
+
+    constructor(v: T) {
+        this.value = v
+    }
+
+    get(): T { return this.value }
+
+    map(f: fn(T): T): Box<T> {
+        return new Box(f(this.value))
+    }
+
+    toString(): string {
+        return "Box(${this.value})"
+    }
+}
+
+let intBox = new Box(42)
+let strBox = new Box("hello")
+print("intBox: ${intBox.toString()}, get: ${intBox.get()}")
+print("strBox: ${strBox.toString()}, get: ${strBox.get()}")
+
+// map transforms the value inside the box
+let doubled = intBox.map((x: int): int => x * 2)
+print("doubled: ${doubled.toString()}")
+
+// === Generic pair ===
+class Pair<A, B> {
+    first: A
+    second: B
+
+    constructor(a: A, b: B) {
+        this.first = a
+        this.second = b
+    }
+
+    toString(): string {
+        return "(${this.first}, ${this.second})"
+    }
+}
+
+let p = new Pair("age", 25)
+print("pair: ${p.toString()}")
+print("first: ${p.first}, second: ${p.second}")
+
+// === Generic stack ===
+class Stack<T> {
+    private items: Array<T>
+
+    constructor() { this.items = [] }
+
+    push(item: T): void { this.items.push(item) }
+
+    pop(): T? {
+        if (this.items.length == 0) { return null }
+        return this.items.pop()
+    }
+
+    peek(): T? {
+        if (this.items.length == 0) { return null }
+        return this.items[this.items.length - 1]
+    }
+
+    size(): int { return this.items.length }
+    isEmpty(): bool { return this.items.length == 0 }
+}
+
+let stack = new Stack<int>()
+stack.push(10)
+stack.push(20)
+stack.push(30)
+print("size: ${stack.size()}, peek: ${stack.peek()}")
+print("pop: ${stack.pop()}")
+print("pop: ${stack.pop()}")
+print("size: ${stack.size()}")
+
+// === Nullable types ===
+fn safeDivide(a: float, b: float): float? {
+    if (b == 0.0) { return null }
+    return a / b
+}
+
+let ok = safeDivide(10.0, 3.0)
+let bad = safeDivide(10.0, 0.0)
+print("10/3 = ${ok ?? 0.0}")
+print("10/0 = ${bad ?? 0.0} (fallback)")
+
+// Optional chaining
+let obj: Json = { inner: { value: 42 } }
+print("optional chain: ${obj?.inner?.value}")
+print("missing chain: ${obj?.missing?.value}")

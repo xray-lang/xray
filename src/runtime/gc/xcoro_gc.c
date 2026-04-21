@@ -31,6 +31,7 @@
 #include <sys/mman.h>
 #include "../../base/xmalloc.h"
 #include "xstackmap.h"  // XrStackMapTable, XrStackMapEntry
+#include "xbc_stackmap.h"  // XrBcStackMap, bytecode precise GC scanning
 #include <pthread.h>
 
 /* ========== GC Struct Two-Level Pool ========== */
@@ -697,12 +698,35 @@ static void mark_coro_roots(XrCoroGC *gc) {
                     continue;
                 }
 
-                // Conservative scan: always mark all slots.
-                // Typed scan is unsafe because registers are reused across
-                // scopes — a slot typed I64 at compile time may hold a GC
-                // pointer at runtime.
-                for (size_t i = base; i < frame_end; i++)
-                    xr_coro_gc_markvalue(gc, stack[i]);
+                // Try precise scan using bytecode stackmap.
+                // If the current PC has a safepoint entry, scan only live slots.
+                // Otherwise fall back to conservative (scan all slots).
+                XrProto *proto = f->closure->proto;
+                const XrBcStackMap *bcmap = (const XrBcStackMap *)proto->bc_stackmap;
+                const XrBcStackMapEntry *sme = NULL;
+                if (bcmap && f->pc) {
+                    uint32_t pc_off = (uint32_t)(f->pc - (XrInstruction*)proto->code.data);
+                    sme = xr_bc_stackmap_lookup(bcmap, pc_off);
+                }
+                if (sme) {
+                    // Precise scan: only mark live slots
+                    uint32_t nslots = (uint32_t)(frame_end - base);
+                    for (uint32_t w = 0; w < sme->num_words; w++) {
+                        uint64_t bits = bcmap->bitmap_pool[sme->bitmap_offset + w];
+                        while (bits) {
+                            int bit = __builtin_ctzll(bits);
+                            uint32_t slot = w * 64 + (uint32_t)bit;
+                            if (slot < nslots) {
+                                xr_coro_gc_markvalue(gc, stack[base + slot]);
+                            }
+                            bits &= bits - 1;
+                        }
+                    }
+                } else {
+                    // Conservative scan: mark all slots in frame
+                    for (size_t i = base; i < frame_end; i++)
+                        xr_coro_gc_markvalue(gc, stack[i]);
+                }
             }
 
             // Slots before frame[0].base_offset (e.g. varargs area)

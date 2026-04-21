@@ -1774,7 +1774,7 @@ int vm_getprop_type_dispatch(XrayIsolate *isolate, XrVMContext *vm_ctx,
     // Json property access
     if (xr_value_is_json(obj)) {
         XrJson *json = xr_value_to_json(obj);
-        base[a] = xr_json_get(json, prop_symbol);
+        base[a] = xr_json_get(isolate, json, prop_symbol);
         return VM_COLD_BREAK;
     }
 

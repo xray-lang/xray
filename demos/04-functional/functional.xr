@@ -1,0 +1,71 @@
+// Demo: Functional Programming
+// Closures, higher-order functions, currying, composition
+//
+// Run: xray demos/04-functional/functional.xr
+
+// === Closures ===
+fn makeCounter(start: int): fn(): int {
+    let count = start
+    return (): int => {
+        count = count + 1
+        return count
+    }
+}
+
+let counter = makeCounter(0)
+print("counter: ${counter()}, ${counter()}, ${counter()}")
+
+// === Higher-order functions ===
+fn twice(f: fn(int): int, x: int): int {
+    return f(f(x))
+}
+let addOne = (x: int): int => x + 1
+print("twice(addOne, 5) = ${twice(addOne, 5)}")
+
+// === Function composition ===
+fn compose(f: fn(int): int, g: fn(int): int): fn(int): int {
+    return (x: int): int => f(g(x))
+}
+
+let doubleIt = (x: int): int => x * 2
+let addTen = (x: int): int => x + 10
+let doubleThenAdd = compose(addTen, doubleIt)
+print("doubleThenAdd(5) = ${doubleThenAdd(5)}")
+
+// === Currying ===
+fn multiply(a: int): fn(int): int {
+    return (b: int): int => a * b
+}
+let triple = multiply(3)
+let quadruple = multiply(4)
+print("triple(7) = ${triple(7)}")
+print("quadruple(7) = ${quadruple(7)}")
+
+// === Pipeline with arrays ===
+let data = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+
+// Filter evens, square them, sum the result
+let result = data
+    .filter((x: int): bool => x % 2 == 0)
+    .map((x: int): int => x * x)
+    .reduce((acc: int, x: int): int => acc + x, 0)
+print("sum of even squares: ${result}")
+
+// === Memoization pattern ===
+fn makeFibMemo(): fn(int): int {
+    let cache = {"0" => 0, "1" => 1}
+    let fib_inner = (n: int): int => {
+        let key = string(n)
+        let cached = cache.get(key)
+        if (cached != null) { return cached }
+        let val = fib_inner(n - 1) + fib_inner(n - 2)
+        cache.set(key, val)
+        return val
+    }
+    return fib_inner
+}
+
+let fib = makeFibMemo()
+for (i in 0..10) {
+    print("fib(${i}) = ${fib(i)}")
+}

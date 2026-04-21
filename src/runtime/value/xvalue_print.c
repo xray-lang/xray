@@ -186,14 +186,14 @@ static void dump_json(XrJson *json, DumpContext *ctx) {
         return;
     }
 
-    XrShape *shape = xr_json_shape(json);
+    XrayIsolate *X = xray_isolate_current();
+    XrShape *shape = xr_json_shape(X, json);
     if (!shape) {
         printf("}");
         return;
     }
 
     // Fields stored in fields[] array
-    XrayIsolate *X = xray_isolate_current();
     XrSymbolTable *table = X ? (XrSymbolTable*)xr_isolate_get_symbol_table(X) : NULL;
 
     if (shape->field_count == 0) {
@@ -218,7 +218,7 @@ static void dump_json(XrJson *json, DumpContext *ctx) {
         }
 
         // Field value
-        XrValue fval = xr_json_get_field_any(json, i);
+        XrValue fval = xr_json_get_field_any(X, json, i);
         dump_value_internal(fval, ctx);
     }
     ctx->depth--;

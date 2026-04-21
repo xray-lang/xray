@@ -4846,7 +4846,7 @@ startfunc:
                 int b = GETARG_B(i);
                 int c = GETARG_C(i); // Local symbol index
                 XrJson *json = xr_value_to_json(R(b));
-                R(a) = xr_json_get(json, (SymbolId)PROTO_SYMBOL(cl->proto, c));
+                R(a) = xr_json_get(isolate, json, (SymbolId)PROTO_SYMBOL(cl->proto, c));
                 vmbreak;
             }
 
@@ -5792,7 +5792,7 @@ startfunc:
                     }
 
                     // IC miss: full shape lookup
-                    XrShape *shape = xr_shape_get_by_id(shape_id);
+                    XrShape *shape = xr_shape_get_by_id(isolate, shape_id);
                     if (shape && shape->symbol_to_index &&
                         prop_symbol >= (int)shape->min_symbol &&
                         prop_symbol <= (int)shape->max_symbol) {
@@ -5809,7 +5809,7 @@ startfunc:
                     }
 
                     // Slow path: overflow field or field not found
-                    R(a) = xr_json_get(json, prop_symbol);
+                    R(a) = xr_json_get(isolate, json, prop_symbol);
                     vmbreak;
                 }
 
@@ -5950,7 +5950,7 @@ startfunc:
                     }
 
                     // IC miss: try inline fast path for existing in-object field
-                    XrShape *shape = xr_shape_get_by_id(shape_id);
+                    XrShape *shape = xr_shape_get_by_id(isolate, shape_id);
                     if (shape && shape->symbol_to_index &&
                         prop_symbol >= (int)shape->min_symbol &&
                         prop_symbol <= (int)shape->max_symbol) {

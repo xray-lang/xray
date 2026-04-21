@@ -148,10 +148,10 @@ size_t xr_json_size(int field_count) {
 /* ========== Field Access API Implementation ========== */
 
 // Get field by Symbol — O(1) via Shape index lookup
-XrValue xr_json_get(XrJson *json, SymbolId symbol) {
+XrValue xr_json_get(XrayIsolate *X, XrJson *json, SymbolId symbol) {
     if (!json) return xr_null();
 
-    XrShape *shape = xr_json_shape(json);
+    XrShape *shape = xr_json_shape(X, json);
     int idx = xr_shape_field_index(shape, symbol);
     if (idx < 0) return xr_null();
 
@@ -193,7 +193,7 @@ void xr_json_set(XrayIsolate *X, XrJson *json, SymbolId symbol, XrValue value) {
     XR_DCHECK(X != NULL, "json_set: NULL isolate");
     if (!json) return;
 
-    XrShape *shape = xr_json_shape(json);
+    XrShape *shape = xr_json_shape(X, json);
 
     // Check if field already exists
     int idx = xr_shape_field_index(shape, symbol);
@@ -252,7 +252,7 @@ XrValue xr_json_get_by_key(XrayIsolate *X, XrJson *json, const char *key) {
     XrSymbolTable *table = get_symbol_table(X);
     SymbolId symbol = xr_symbol_register_in_table(table, key);
 
-    return xr_json_get(json, symbol);
+    return xr_json_get(X, json, symbol);
 }
 
 // Set field by string key
