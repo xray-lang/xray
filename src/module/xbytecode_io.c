@@ -338,7 +338,9 @@ static void set_shared_offset_recursive(XrProto *proto, int offset) {
 /* ========== Proto Serialization ========== */
 
 static bool bc_write_proto(BcWriter *w, XrProto *proto);
-static XrProto* bc_read_proto(BcReader *r);
+static XrProto* bc_read_proto_depth(BcReader *r, int depth);
+
+#define BC_MAX_NESTING_DEPTH 64
 
 static bool bc_write_proto(BcWriter *w, XrProto *proto) {
     if (!proto) return false;
@@ -418,7 +420,11 @@ static bool bc_write_proto(BcWriter *w, XrProto *proto) {
     return true;
 }
 
-static XrProto* bc_read_proto(BcReader *r) {
+static XrProto* bc_read_proto_depth(BcReader *r, int depth) {
+    if (depth > BC_MAX_NESTING_DEPTH) {
+        r->error = XR_BC_ERR_CORRUPT;
+        return NULL;
+    }
     // Allocate Proto
     XrProto *proto = xr_malloc(sizeof(XrProto));
     if (!proto) { r->error = XR_BC_ERR_ALLOC; return NULL; }
@@ -500,7 +506,7 @@ static XrProto* bc_read_proto(BcReader *r) {
     if (r->error != XR_BC_OK) goto fail;
     xr_dynarray_init(&proto->protos, sizeof(XrProto*));
     for (uint32_t i = 0; i < sub_count; i++) {
-        XrProto *sub = bc_read_proto(r);
+        XrProto *sub = bc_read_proto_depth(r, depth + 1);
         if (!sub) goto fail;
         DYNARRAY_ADD(&proto->protos, sub, XrProto*);
     }
@@ -646,7 +652,7 @@ XrProto* xr_bytecode_read(XrayIsolate *X, const uint8_t *data, size_t size, XrBc
     }
 
     // Read Proto
-    XrProto *proto = bc_read_proto(&r);
+    XrProto *proto = bc_read_proto_depth(&r, 0);
 
     // Remap symbol IDs
     if (proto && id_map) {

@@ -21,6 +21,28 @@
 #include <string.h>
 
 #define INITIAL_CAPACITY 16
+#define DEFAULT_CONSTRAINT "^1.0.0"
+
+/*
+ * Parse "name@version" dependency spec.
+ * Sets *out_name to the name part (within the dup'd buffer) and
+ * *out_ver to the version part (or DEFAULT_CONSTRAINT if no @).
+ * Returns xr_malloc'd buffer that caller must xr_free().
+ */
+static char* parse_dep_spec(const char *spec, const char **out_name, const char **out_ver) {
+    char *buf = xr_strdup(spec);
+    if (!buf) return NULL;
+    char *at = strchr(buf, '@');
+    if (at) {
+        *at = '\0';
+        *out_name = buf;
+        *out_ver = at + 1;
+    } else {
+        *out_name = buf;
+        *out_ver = DEFAULT_CONSTRAINT;
+    }
+    return buf;
+}
 
 static XrDepNode* node_new(const char *name, const char *constraint_str) {
     XR_DCHECK(name != NULL, "node_new: NULL name");
@@ -363,24 +385,16 @@ static bool resolve_node(XrDepGraph *graph, XrDepNode *node,
 
             // Add locked dependencies
             for (int i = 0; i < locked->dep_count; i++) {
-                // Parse dependency spec "name@version"
-                char *spec = xr_strdup(locked->dependencies[i]);
-                char *at = strchr(spec, '@');
-                char *dep_name = spec;
-                char *dep_ver = "^1.0.0";
-
-                if (at) {
-                    *at = '\0';
-                    dep_ver = at + 1;
-                }
+                const char *dep_name, *dep_ver;
+                char *buf = parse_dep_spec(locked->dependencies[i], &dep_name, &dep_ver);
+                if (!buf) continue;
 
                 XrDepNode *dep = graph_get_or_create_node(graph, dep_name, dep_ver);
                 if (dep) {
                     dep->depth = node->depth + 1;
                     node_add_dep(node, dep);
                 }
-
-                xr_free(spec);
+                xr_free(buf);
             }
 
             // Recursively resolve dependencies
@@ -452,24 +466,16 @@ static bool resolve_node(XrDepGraph *graph, XrDepNode *node,
 
     // 4. Handle transitive dependencies
     for (int i = 0; i < info->dep_count; i++) {
-        // Parse dependency spec
-        char *spec = xr_strdup(info->deps[i]);
-        char *at = strchr(spec, '@');
-        char *dep_name = spec;
-        char *dep_ver = "^1.0.0";
-
-        if (at) {
-            *at = '\0';
-            dep_ver = at + 1;
-        }
+        const char *dep_name, *dep_ver;
+        char *buf = parse_dep_spec(info->deps[i], &dep_name, &dep_ver);
+        if (!buf) continue;
 
         XrDepNode *dep = graph_get_or_create_node(graph, dep_name, dep_ver);
         if (dep) {
             dep->depth = node->depth + 1;
             node_add_dep(node, dep);
         }
-
-        xr_free(spec);
+        xr_free(buf);
     }
 
     xr_package_info_free(info);

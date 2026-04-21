@@ -33,6 +33,7 @@ typedef struct XrLockedPackage {
     char *checksum;             // sha256:...
     char **dependencies;        // name@constraint list
     int dep_count;
+    int dep_capacity;
 } XrLockedPackage;
 
 // Complete xray.lock file content

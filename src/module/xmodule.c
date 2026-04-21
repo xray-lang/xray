@@ -63,31 +63,77 @@ void xr_module_set_compiler_hooks(
 
 /*
 ** Normalize path
-** Remove redundant "./" from path, e.g. "a/b/./c" -> "a/b/c"
+** Remove "." and resolve ".." segments.
+** E.g. "a/b/./c" -> "a/b/c", "a/b/../c" -> "a/c"
+** Does NOT touch the filesystem (purely lexical).
 */
 static char* normalize_path(const char *path) {
     if (!path) return NULL;
 
     size_t len = strlen(path);
-    char *result = (char*)xr_malloc(len + 1);
-    char *dst = result;
-    const char *src = path;
+    char *buf = (char*)xr_malloc(len + 1);
+    if (!buf) return NULL;
+    memcpy(buf, path, len + 1);
 
-    while (*src) {
-        // Skip "/./" sequences
-        if (src[0] == '/' && src[1] == '.' && src[2] == '/') {
-            src += 2;  // Skip "/.", keep trailing "/"
+    // Split into components and resolve in place using a stack of offsets
+    // Stack stores start-offsets of kept components inside buf
+    int stack[256];
+    int top = 0;
+    bool absolute = (buf[0] == '/');
+
+    char *p = buf;
+    while (*p) {
+        // Skip leading slashes
+        while (*p == '/') p++;
+        if (!*p) break;
+
+        // Find end of component
+        char *comp = p;
+        while (*p && *p != '/') p++;
+        size_t clen = (size_t)(p - comp);
+
+        if (clen == 1 && comp[0] == '.') {
+            // "." — skip
             continue;
         }
-        // Skip leading "./"
-        if (src == path && src[0] == '.' && src[1] == '/') {
-            src += 2;
+        if (clen == 2 && comp[0] == '.' && comp[1] == '.') {
+            // ".." — pop if possible (don't pop past root for absolute paths)
+            if (top > 0) {
+                top--;
+            }
             continue;
         }
-        *dst++ = *src++;
+        // Push component
+        XR_DCHECK(top < 256, "normalize_path: path too deep");
+        if (top < 256) {
+            comp[clen] = '\0';  // NUL-terminate component
+            stack[top++] = (int)(comp - buf);
+        }
+    }
+
+    // Rebuild path
+    char *result = (char*)xr_malloc(len + 1);
+    if (!result) { xr_free(buf); return NULL; }
+    char *dst = result;
+
+    if (absolute) *dst++ = '/';
+
+    for (int i = 0; i < top; i++) {
+        if (i > 0) *dst++ = '/';
+        const char *comp = buf + stack[i];
+        size_t clen = strlen(comp);
+        memcpy(dst, comp, clen);
+        dst += clen;
     }
     *dst = '\0';
 
+    // Empty result means current dir
+    if (result[0] == '\0') {
+        result[0] = '.';
+        result[1] = '\0';
+    }
+
+    xr_free(buf);
     return result;
 }
 

@@ -44,6 +44,8 @@ typedef struct {
 /* ========== Helper Functions ========== */
 
 static char* resolve_module_path(const char *base_dir, const char *module_name) {
+    XR_DCHECK(base_dir != NULL, "resolve_module_path: NULL base_dir");
+    XR_DCHECK(module_name != NULL, "resolve_module_path: NULL module_name");
     char path[PATH_MAX];
 
     // Absolute path
@@ -237,11 +239,17 @@ static void visit_node(BundleContext *ctx, AstNode *node, const char *current_di
                                 if (bc) {
                                     bundle_add_entry(ctx->bundle, resolved, bc, bc_size);
                                     xr_free(bc);
+                                } else {
+                                    xr_log_warning("bundle", "bytecode serialization failed: %s", resolved);
                                 }
+                            } else {
+                                xr_log_warning("bundle", "compilation failed: %s", resolved);
                             }
 
                             xr_program_destroy(ast);
                             xr_free(module_dir);
+                        } else {
+                            xr_log_warning("bundle", "parse failed: %s", resolved);
                         }
                         xr_free(source);
                     }
@@ -380,6 +388,8 @@ XrBundle* xr_bundle_create(XrayIsolate *X, const char *entry_file) {
 }
 
 XrBundle* xr_bundle_create_ex(XrayIsolate *X, const char *entry_file, XrBundleFlags flags) {
+    XR_DCHECK(X != NULL, "bundle_create_ex: NULL isolate");
+    XR_DCHECK(entry_file != NULL, "bundle_create_ex: NULL entry_file");
     if (!X || !entry_file) return NULL;
 
     // Read entry file
