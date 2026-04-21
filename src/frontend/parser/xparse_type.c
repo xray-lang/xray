@@ -215,17 +215,17 @@ static XrType* parse_type_annotation_base(Parser *parser) {
 
     // BigInt type
     if (xr_parser_match(parser, TK_TYPE_BIGINT)) {
-        return xr_type_new_bigint(NULL);
+        return xr_type_new_bigint(parser->X);
     }
 
     // DateTime type
     if (xr_parser_match(parser, TK_TYPE_DATETIME)) {
-        return xr_type_new_datetime(NULL);
+        return xr_type_new_datetime(parser->X);
     }
 
     // Bytes type
     if (xr_parser_match(parser, TK_TYPE_BYTES)) {
-        return xr_type_new_bytes(NULL);
+        return xr_type_new_bytes(parser->X);
     }
 
     // Range type
@@ -408,10 +408,10 @@ static XrType* parse_type_annotation_base(Parser *parser) {
             }
             return xr_type_new_task(parser->X, result_type);
         }
-        if (strcmp(temp_name, "BigInt") == 0) return xr_type_new_bigint(NULL);
-        if (strcmp(temp_name, "Regex") == 0) return xr_type_new_regex(NULL);
-        if (strcmp(temp_name, "StringBuilder") == 0) return xr_type_new_stringbuilder(NULL);
-        if (strcmp(temp_name, "DateTime") == 0) return xr_type_new_datetime(NULL);
+        if (strcmp(temp_name, "BigInt") == 0) return xr_type_new_bigint(parser->X);
+        if (strcmp(temp_name, "Regex") == 0) return xr_type_new_regex(parser->X);
+        if (strcmp(temp_name, "StringBuilder") == 0) return xr_type_new_stringbuilder(parser->X);
+        if (strcmp(temp_name, "DateTime") == 0) return xr_type_new_datetime(parser->X);
         if (strcmp(temp_name, "Exception") == 0) return xr_type_new_named_instance(parser->X, "Exception");
 
         // 'any' type has been removed from xray.

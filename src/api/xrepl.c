@@ -206,13 +206,11 @@ XrProto* xr_repl_compile(XrayIsolate *isolate, const char *source) {
     if (!ast) return NULL;
 
     // Create compiler context
-    XrCompilerContext *ctx = xr_compiler_context_new();
+    XrCompilerContext *ctx = xr_compiler_context_new(isolate);
     if (!ctx) {
         xr_program_destroy(ast);
         return NULL;
     }
-
-    ctx->X = isolate;
     ctx->source_file = "<repl>";
     ctx->repl_mode = true;
     ctx->shared_offset = 0;  // REPL: absolute indices

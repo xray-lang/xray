@@ -62,14 +62,13 @@ static XrProto* compile_ast_internal(XrayIsolate *isolate, AstNode *ast, const c
         xr_isolate_set_current_arena(isolate, ast->as.program.arena);
     }
 
-    XrCompilerContext *ctx = xr_compiler_context_new();
+    XrCompilerContext *ctx = xr_compiler_context_new(isolate);
     if (ctx == NULL) {
         xr_log_warning("vm", "failed to create compiler context");
         xr_isolate_set_current_arena(isolate, saved_arena);
         return NULL;
     }
 
-    ctx->X = isolate;
     ctx->source_file = source_file;
 
     ctx->shared_offset = isolate->vm.shared.count;
@@ -107,13 +106,12 @@ XrProto* xr_compile_source_with_path(XrayIsolate *isolate, const char *source, c
     XR_DCHECK(isolate != NULL, "compile_source_with_path: NULL isolate");
     XR_DCHECK(source != NULL, "compile_source_with_path: NULL source");
     // Create compiler context FIRST to ensure type pool is valid during parsing
-    XrCompilerContext *ctx = xr_compiler_context_new();
+    XrCompilerContext *ctx = xr_compiler_context_new(isolate);
     if (!ctx) {
         xr_log_warning("vm", "failed to create compiler context");
         return NULL;
     }
 
-    ctx->X = isolate;
     ctx->source_file = source_file;
     ctx->shared_offset = isolate->vm.shared.count;
 

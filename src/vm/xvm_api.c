@@ -429,13 +429,33 @@ void xr_vm_throw_exception(XrayIsolate *isolate, XrValue exception) {
     while (ctx->handler_count > 0) {
         XrExceptionHandler *handler = &ctx->handlers[ctx->handler_count - 1];
 
-        // Skip handlers that already caught an exception (re-throw in catch block)
-        if (handler->caught) {
+        // Case 1: Already in finally block — pop and propagate outward
+        if (handler->in_finally) {
             ctx->handler_count--;
             continue;
         }
 
-        // Save exception object
+        // Case 2: Caught (re-throw in catch block) — run finally if available
+        if (handler->caught) {
+            if (handler->finally_offset > 0) {
+                // Store new exception, jump to finally block
+                handler->exception = exception;
+                handler->in_finally = true;
+                ctx->current_exception = exception;
+                ctx->stack_top = ctx->stack + handler->stack_size;
+                ctx->frame_count = handler->frame_count;
+                if (ctx->frame_count > 0) {
+                    XrBcCallFrame *frame = &ctx->frames[ctx->frame_count - 1];
+                    frame->pc = PROTO_CODE_BASE(frame->closure->proto) + handler->finally_offset;
+                    return;
+                }
+            }
+            // No finally — pop and continue outward
+            ctx->handler_count--;
+            continue;
+        }
+
+        // Case 3: Fresh handler — save exception and jump to catch or finally
         handler->exception = exception;
         ctx->current_exception = exception;
 

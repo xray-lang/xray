@@ -341,7 +341,7 @@ XrType *xa_builtin_get_method_return_type(XrayIsolate *X, XrType *container_type
         case SYMBOL_TOSTRING: case SYMBOL_TOHEX:    return xr_type_new_string(NULL);
         case SYMBOL_TOFLOAT:                        return xr_type_new_float(NULL);
         case SYMBOL_SQRT: case SYMBOL_POW:          return xr_type_new_float(NULL);
-        case SYMBOL_TOBIGINT:                       return xr_type_new_bigint(NULL);
+        case SYMBOL_TOBIGINT:                       return xr_type_new_bigint(X);
         default: break;
         }
     }
@@ -366,7 +366,7 @@ XrType *xa_builtin_get_method_return_type(XrayIsolate *X, XrType *container_type
     // BigInt methods
     if (xr_type_is_named_class(container_type, "BigInt")) {
         switch (sym) {
-        case SYMBOL_ABS:                            return xr_type_new_bigint(NULL);
+        case SYMBOL_ABS:                            return xr_type_new_bigint(X);
         case SYMBOL_TOSTRING:                       return xr_type_new_string(NULL);
         case SYMBOL_SIGN:                           return xr_type_new_int(NULL);
         case SYMBOL_ISZERO: case SYMBOL_ISNEGATIVE:
@@ -402,11 +402,11 @@ XrType *xa_builtin_get_method_return_type(XrayIsolate *X, XrType *container_type
     if (xr_type_is_named_class(container_type, "StringBuilder")) {
         switch (sym) {
         case SYMBOL_TOSTRING:                       return xr_type_new_string(NULL);
-        case SYMBOL_CLEAR:                          return xr_type_new_stringbuilder(NULL);
+        case SYMBOL_CLEAR:                          return xr_type_new_stringbuilder(X);
         default: break;
         }
         // "append" is not a builtin symbol, handle separately
-        if (strcmp(method_name, "append") == 0) return xr_type_new_stringbuilder(NULL);
+        if (strcmp(method_name, "append") == 0) return xr_type_new_stringbuilder(X);
     }
 
     return NULL;
@@ -668,9 +668,9 @@ static XrType *parse_type_str(XrayIsolate *X, const char *s, size_t len) {
     } else if (base_len == 1 && s[0] >= 'A' && s[0] <= 'Z') {
         // Single uppercase letter: generic type parameter (T, K, V, etc.)
         char name[2] = { s[0], '\0' };
-        type = xr_type_new_type_param(NULL, name, s[0] - 'A');
+        type = xr_type_new_type_param(X, name, s[0] - 'A');
     } else {
-        type = xr_type_new_unknown(NULL);
+        type = xr_type_new_unknown(X);
     }
 
     if (type && nullable) {

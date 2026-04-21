@@ -93,10 +93,17 @@ XrTypePool *xr_type_get_current_pool(void) {
     return X ? X->current_type_pool : NULL;
 }
 
+// Resolve isolate: use explicit X, or fallback to TLS current isolate.
+// Many callers (xr_type_to_string, xr_type_assignable, etc.) pass NULL.
+static inline XrayIsolate *resolve_isolate(XrayIsolate *X) {
+    return X ? X : xray_isolate_current();
+}
+
 // Helper: allocate and initialize a type (for non-singleton types)
 // Uses pool arena for allocation - memory freed when pool is reset/destroyed
 static XrType *type_alloc(XrayIsolate *X, XrTypeKind kind) {
-    XR_CHECK(X != NULL, "type_alloc: XrayIsolate *X is NULL");
+    X = resolve_isolate(X);
+    XR_CHECK(X != NULL, "type_alloc: no isolate (explicit or TLS)");
     XrTypePool *pool = X->current_type_pool;
     XR_CHECK(pool != NULL, "Type pool not set - ensure isolate has current_type_pool");
     return xr_pool_alloc_type(pool, kind);
@@ -166,6 +173,7 @@ XrType *xr_type_new_channel(XrayIsolate *X, XrType *element_type) {
 }
 
 XrType *xr_type_new_task(XrayIsolate *X, XrType *result_type) {
+    X = resolve_isolate(X);
     XrType *type = type_alloc(X, XR_KIND_INSTANCE);
     if (!type) return NULL;
     type->instance.class_name = "Task";
@@ -183,6 +191,7 @@ XrType *xr_type_new_json(XrayIsolate *X) {
 }
 
 XrType *xr_type_new_json_with_fields(XrayIsolate *X, const char **names, XrType **types, int count) {
+    X = resolve_isolate(X);
     XrType *type = type_alloc(X, XR_KIND_JSON);
     if (!type) return NULL;
     XrTypePool *pool = X->current_type_pool;
@@ -202,6 +211,7 @@ XrType *xr_type_new_json_with_fields(XrayIsolate *X, const char **names, XrType 
 // Structured object types (for JSON with known fields)
 XrType *xr_type_new_object(XrayIsolate *X, const char **field_names, XrType **field_types,
                            int field_count, bool allow_extension, const char *type_name) {
+    X = resolve_isolate(X);
     XrType *type = type_alloc(X, XR_KIND_JSON);
     if (!type) return NULL;
     XrTypePool *pool = X->current_type_pool;
@@ -245,6 +255,7 @@ XrType *xr_type_get_base(XrType *optional_type) {
 
 // Type parameter (for generics)
 XrType *xr_type_new_type_param(XrayIsolate *X, const char *name, int id) {
+    X = resolve_isolate(X);
     XrType *type = type_alloc(X, XR_KIND_TYPE_PARAM);
     if (!type) return NULL;
     XrTypePool *pool = X->current_type_pool;
@@ -263,6 +274,7 @@ XrType *xr_type_new_type_param_constrained(XrayIsolate *X, const char *name, int
 }
 
 XrType *xr_type_new_class(XrayIsolate *X, const char *class_name) {
+    X = resolve_isolate(X);
     XrType *type = type_alloc(X, XR_KIND_CLASS);
     if (type && class_name) {
         XrTypePool *pool = X->current_type_pool;
@@ -272,6 +284,7 @@ XrType *xr_type_new_class(XrayIsolate *X, const char *class_name) {
 }
 
 XrType *xr_type_new_interface(XrayIsolate *X, const char *interface_name) {
+    X = resolve_isolate(X);
     XrType *type = type_alloc(X, XR_KIND_INTERFACE);
     if (type && interface_name) {
         XrTypePool *pool = X->current_type_pool;
@@ -324,6 +337,7 @@ XrType *xr_type_new_enum(XrayIsolate *X, const char *enum_name) {
 }
 
 XrType *xr_type_new_instance(XrayIsolate *X, XrClassInfo *class_info) {
+    X = resolve_isolate(X);
     XrType *type = type_alloc(X, XR_KIND_INSTANCE);
     if (!type) return NULL;
     type->instance.class_ref = class_info;
@@ -340,6 +354,7 @@ XrType *xr_type_new_instance(XrayIsolate *X, XrClassInfo *class_info) {
 XrType *xr_type_new_generic_instance(XrayIsolate *X, const char *class_name, XrClassInfo *class_info,
                                       XrType **type_args, int type_arg_count) {
     XR_DCHECK(type_arg_count >= 0, "type_new_generic_instance: negative type_arg_count");
+    X = resolve_isolate(X);
     XrType *type = type_alloc(X, XR_KIND_INSTANCE);
     if (!type) return NULL;
     XrTypePool *pool = X->current_type_pool;
@@ -369,6 +384,7 @@ XrType *xr_type_new_function(XrayIsolate *X, XrType **param_types, int param_cou
                               XrType *return_type, bool is_variadic) {
     XR_DCHECK(param_count >= 0, "type_new_function: negative param_count");
     XR_DCHECK(param_count == 0 || param_types != NULL, "type_new_function: NULL param_types with count > 0");
+    X = resolve_isolate(X);
     XrType *type = type_alloc(X, XR_KIND_FUNCTION);
     if (!type) return NULL;
     XrTypePool *pool = X->current_type_pool;
@@ -388,6 +404,7 @@ XrType *xr_type_new_function(XrayIsolate *X, XrType **param_types, int param_cou
 
 // Tuple type (for multi-value return, compile-time only)
 XrType *xr_type_new_tuple(XrayIsolate *X, XrType **element_types, int count) {
+    X = resolve_isolate(X);
     if (count <= 0) return xr_type_new_void(X);
     if (count == 1 && element_types && element_types[0]) {
         return element_types[0];  // Single element is not a tuple
@@ -479,6 +496,7 @@ static int union_normalize(XrType **in, int in_count,
 // Applies: flatten existing unions, dedup, sort, special rules.
 // Union aliases as members are flattened (from xr_type_union merge path).
 XrType *xr_type_new_union(XrayIsolate *X, XrType **members, int count) {
+    X = resolve_isolate(X);
     XR_DCHECK(count >= 0, "type_new_union: negative count");
     XR_DCHECK(count == 0 || members != NULL, "type_new_union: NULL members with count > 0");
     if (count == 0) return xr_type_new_never(X);
@@ -692,6 +710,8 @@ XrType *xr_type_new_fixed_array(XrayIsolate *X, XrType *element_type, int length
 XrType *xr_type_copy(XrayIsolate *X, XrType *type) {
     if (!type) return NULL;
     XR_DCHECK(type->kind < XR_KIND_COUNT, "type_copy: invalid kind");
+    // Resolve X early for callers that pass NULL (e.g. xr_type_to_string)
+    if (!X) X = xray_isolate_current();
 
     XrType *copy = type_alloc(X, type->kind);
     if (!copy) return NULL;
@@ -795,6 +815,7 @@ XrType *xr_type_copy(XrayIsolate *X, XrType *type) {
 XrType *xr_type_make_nullable(XrayIsolate *X, XrType *type) {
     if (!type) return NULL;
     if (type->is_nullable) return type;
+    X = resolve_isolate(X);
 
     // Fast path: return process-level nullable singletons for common types
     if (type == &g_type_int)    return &g_type_int_nullable;
