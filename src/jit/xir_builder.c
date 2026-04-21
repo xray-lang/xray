@@ -210,8 +210,7 @@ int builder_add_deopt_info(XirBuilder *b, uint32_t bc_pc) {
     if (func->ndeopt >= func->deopt_cap) {
         uint32_t new_cap = func->deopt_cap ? func->deopt_cap * 2 : 16;
         if (new_cap > XIR_MAX_DEOPT_POINTS) new_cap = XIR_MAX_DEOPT_POINTS;
-        if (!XR_REALLOC(func->deopt_infos, new_cap * sizeof(XirDeoptInfo)))
-            return -1;
+        XR_REALLOC_OR_ABORT(func->deopt_infos, new_cap * sizeof(XirDeoptInfo), "xir: deopt infos");
         func->deopt_cap = new_cap;
     }
 

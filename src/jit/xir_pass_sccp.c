@@ -540,9 +540,8 @@ static void rewrite_function(SccpCtx *ctx) {
         }
 
         /* Simplify BR with a now-constant condition into an
-         * unconditional JMP.  The unreached successor is dropped and
-         * left to remove_unreachable (legacy CFG cleanup) or the
-         * unreachable-block arm above on the next SCCP run. */
+         * unconditional JMP.  The unreached successor will be compacted
+         * away by the driver after rewrite completes. */
         if (blk->jmp.type == XIR_JMP_BR) {
             SccpVal c = ref_value(ctx, blk->jmp.arg);
             if (c.kind == SCCP_CONST_BOOL || c.kind == SCCP_CONST_I64) {
@@ -632,6 +631,19 @@ void xir_pass_sccp(XirFunc *func) {
     }
 
     rewrite_function(&ctx);
+
+    /* Compact: physically remove unreachable blocks from the block
+     * array so downstream passes never see them.  Entry (block 0) is
+     * always reachable by construction. */
+    uint32_t write = 0;
+    for (uint32_t i = 0; i < func->nblk; i++) {
+        if (ctx.reachable[i]) {
+            func->blocks[write] = func->blocks[i];
+            func->blocks[write]->id = write;
+            write++;
+        }
+    }
+    func->nblk = write;
 
     xr_free(ctx.cells);
     xr_free(ctx.reachable);

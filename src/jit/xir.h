@@ -829,22 +829,9 @@ static inline XirType xir_ref_ctype(XirFunc *func, XirRef ref) {
 
 // Compute immediate dominators using Cooper's algorithm.
 // idom[] must be pre-allocated with nblk entries.
-// (Primarily a building block for xir_domtree.c — most callers should
-// instead go through xir_func_get_domtree().)
+// (Building block for xir_domtree.c — most callers should
+// go through xir_func_get_domtree() instead.)
 XR_FUNC void xir_compute_idom(XirFunc *func, uint32_t *idom, uint32_t nblk);
-
-// Check if block 'a' dominates block 'b' using idom[] array.
-// For O(1) queries use xir_dom_covers() against a cached XirDomTree.
-XR_FUNC bool xir_dominates(uint32_t *idom, uint32_t a, uint32_t b);
-
-// Legacy accessor returning the cached idom[] pointer.  Internally
-// delegates to xir_func_get_domtree(); the array is owned by the
-// cache and must not be freed.
-XR_FUNC uint32_t *xir_func_get_idom(XirFunc *func);
-
-// Invalidate the dom-tree cache.  Alias of xir_func_invalidate_domtree
-// kept for ease of migration.
-XR_FUNC void xir_func_invalidate_idom(XirFunc *func);
 
 // Rebuild vreg.def pointers by scanning all instructions.
 // Call after any pass that moves or compacts instructions in block arrays.

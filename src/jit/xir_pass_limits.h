@@ -68,7 +68,6 @@
 #define XIR_CSE_MAX_TABLE         1024
 
 #define XIR_GVN_MIN_TABLE         128
-#define XIR_GVN_MAX_TABLE         2048
 
 /* ========== LICM ==========
  *

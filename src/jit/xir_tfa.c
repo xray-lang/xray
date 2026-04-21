@@ -76,8 +76,7 @@ void tfa_free(TfaState *tfa) {
 static bool tfa_grow_summaries(TfaState *tfa) {
     uint32_t old_cap = tfa->summary_cap;
     uint32_t new_cap = old_cap * 2;
-    if (!XR_REALLOC(tfa->summaries, new_cap * sizeof(TfaSummary)))
-        return false;
+    XR_REALLOC_OR_ABORT(tfa->summaries, new_cap * sizeof(TfaSummary), "tfa: summaries");
     memset(tfa->summaries + old_cap, 0, (new_cap - old_cap) * sizeof(TfaSummary));
     tfa->summary_cap = new_cap;
     return true;
@@ -86,8 +85,7 @@ static bool tfa_grow_summaries(TfaState *tfa) {
 static bool tfa_grow_calls(TfaState *tfa) {
     uint32_t old_cap = tfa->call_cap;
     uint32_t new_cap = old_cap * 2;
-    if (!XR_REALLOC(tfa->calls, new_cap * sizeof(TfaCallSite)))
-        return false;
+    XR_REALLOC_OR_ABORT(tfa->calls, new_cap * sizeof(TfaCallSite), "tfa: calls");
     memset(tfa->calls + old_cap, 0, (new_cap - old_cap) * sizeof(TfaCallSite));
     tfa->call_cap = new_cap;
     return true;
@@ -96,8 +94,7 @@ static bool tfa_grow_calls(TfaState *tfa) {
 static bool tfa_grow_worklist(TfaState *tfa) {
     uint32_t old_cap = tfa->worklist_cap;
     uint32_t new_cap = old_cap * 2;
-    if (!XR_REALLOC(tfa->worklist, new_cap * sizeof(TfaSummary *)))
-        return false;
+    XR_REALLOC_OR_ABORT(tfa->worklist, new_cap * sizeof(TfaSummary *), "tfa: worklist");
     memset(tfa->worklist + old_cap, 0, (new_cap - old_cap) * sizeof(TfaSummary *));
     tfa->worklist_cap = new_cap;
     return true;
@@ -700,8 +697,7 @@ void tfa_analyze_module(TfaState *tfa, XrProto *main_proto) {
             if (child && !tfa_lookup(tfa, child)) {
                 if (sp >= stack_cap) {
                     uint32_t new_cap = stack_cap * 2;
-                    if (!XR_REALLOC(stack, new_cap * sizeof(XrProto *)))
-                        break;
+                    XR_REALLOC_OR_ABORT(stack, new_cap * sizeof(XrProto *), "tfa: stack");
                     stack_cap = new_cap;
                 }
                 stack[sp++] = child;

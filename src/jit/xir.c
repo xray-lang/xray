@@ -164,8 +164,7 @@ XirBlock *xir_func_add_block(XirFunc *func, const char *label) {
     // Add to func
     if (func->nblk >= func->blk_cap) {
         uint32_t new_cap = func->blk_cap * 2;
-        if (!XR_REALLOC(func->blocks, new_cap * sizeof(XirBlock *)))
-            return NULL;
+        XR_REALLOC_OR_ABORT(func->blocks, new_cap * sizeof(XirBlock *), "xir: block array");
         func->blk_cap = new_cap;
     }
     func->blocks[func->nblk++] = blk;
@@ -389,8 +388,7 @@ uint32_t xir_func_add_call_args(XirFunc *func, const XirRef *args, uint16_t narg
     // Grow if needed
     while (func->call_arg_pool_used + nargs > func->call_arg_pool_cap) {
         uint32_t new_cap = func->call_arg_pool_cap * 2;
-        if (!XR_REALLOC(func->call_arg_pool, new_cap * sizeof(XirRef)))
-            return 0;
+        XR_REALLOC_OR_ABORT(func->call_arg_pool, new_cap * sizeof(XirRef), "xir: call arg pool");
         func->call_arg_pool_cap = new_cap;
     }
 
@@ -459,8 +457,7 @@ static XirRef add_const(XirFunc *func, XirConstVal val, uint8_t type) {
     // Not found — insert new constant
     if (func->nconst >= func->const_cap) {
         uint32_t new_cap = func->const_cap * 2;
-        if (!XR_REALLOC(func->consts, new_cap * sizeof(XirConst)))
-            return XIR_NONE;
+        XR_REALLOC_OR_ABORT(func->consts, new_cap * sizeof(XirConst), "xir: const pool");
         func->const_cap = new_cap;
     }
 
@@ -495,8 +492,7 @@ fallback_linear:
     }
     if (func->nconst >= func->const_cap) {
         uint32_t new_cap = func->const_cap * 2;
-        if (!XR_REALLOC(func->consts, new_cap * sizeof(XirConst)))
-            return XIR_NONE;
+        XR_REALLOC_OR_ABORT(func->consts, new_cap * sizeof(XirConst), "xir: const pool");
         func->const_cap = new_cap;
     }
     uint32_t fi = func->nconst++;
@@ -740,21 +736,6 @@ void xir_compute_idom(XirFunc *func, uint32_t *idom, uint32_t nblk) {
     }
 }
 
-uint32_t *xir_func_get_idom(XirFunc *func) {
-    /* Legacy accessor retained for passes that still want the raw idom[]
-     * array.  Internally it delegates to the dominator-tree cache, so
-     * there is a single computation path and a single invalidation
-     * point.  The returned pointer is owned by the cache — callers must
-     * not free it and must not rely on it staying live across
-     * xir_func_invalidate_domtree(). */
-    const XirDomTree *dt = xir_func_get_domtree(func);
-    return dt ? dt->idom : NULL;
-}
-
-void xir_func_invalidate_idom(XirFunc *func) {
-    xir_func_invalidate_domtree(func);
-}
-
 void xir_rebuild_vreg_defs(XirFunc *func) {
     if (!func) return;
     // Clear all def pointers first
@@ -772,20 +753,6 @@ void xir_rebuild_vreg_defs(XirFunc *func) {
             }
         }
     }
-}
-
-bool xir_dominates(uint32_t *idom, uint32_t a, uint32_t b) {
-    // Walk the idom chain from b up to entry.  The entry node is its own
-    // immediate dominator (idom[0] == 0) which serves as the sentinel — we
-    // stop as soon as b reaches 0.  A non-entry node pointing to itself would
-    // indicate corrupt idom data, so we defend against it.
-    while (b != a) {
-        if (b == 0) return (a == 0);
-        uint32_t next = idom[b];
-        if (next == UINT32_MAX || next == b) return false;
-        b = next;
-    }
-    return true;
 }
 
 bool xir_op_has_side_effect(uint16_t op) {

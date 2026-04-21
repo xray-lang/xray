@@ -15,6 +15,7 @@
 
 #include "xir_pass_internal.h"
 #include "xir_pass_limits.h"
+#include "xir_domtree.h"
 #include "xir_looptree.h"
 #include "../base/xchecks.h"
 
@@ -1040,9 +1041,8 @@ void xir_pass_alloc_sink(XirFunc *func) {
 
     uint32_t nblk = func->nblk;
 
-    // Use cached idom for dominance checks
-    uint32_t *idom = xir_func_get_idom(func);
-    if (!idom) return;
+    const XirDomTree *dt = xir_func_get_domtree(func);
+    if (!dt) return;
 
     for (uint32_t bi = 0; bi < nblk; bi++) {
         XirBlock *blk = func->blocks[bi];
@@ -1103,8 +1103,8 @@ void xir_pass_alloc_sink(XirFunc *func) {
             for (uint32_t u = 0; u < nuse; u++) {
                 uint32_t ub = use_blocks[u];
                 if (ub == bi) { all_in_s1 = false; all_in_s2 = false; break; }
-                if (!xir_dominates(idom, s1_id, ub)) all_in_s1 = false;
-                if (!xir_dominates(idom, s2_id, ub)) all_in_s2 = false;
+                if (!xir_dom_covers(dt, s1_id, ub)) all_in_s1 = false;
+                if (!xir_dom_covers(dt, s2_id, ub)) all_in_s2 = false;
             }
 
             XirBlock *sink_target = NULL;
@@ -1741,9 +1741,10 @@ void xir_pass_gcm(XirFunc *func) {
     uint32_t nblk = func->nblk;
     uint32_t nv = func->nvreg;
 
-    // Step 0: Build infrastructure (idom is cached in func)
-    uint32_t *idom = xir_func_get_idom(func);
-    if (!idom) return;
+    // Step 0: Build infrastructure (domtree is cached in func)
+    const XirDomTree *dt = xir_func_get_domtree(func);
+    if (!dt) return;
+    uint32_t *idom = dt->idom;
 
     uint32_t *depth = (uint32_t *)xr_malloc(nblk * sizeof(uint32_t));
     uint32_t *early = (uint32_t *)xr_malloc(nv * sizeof(uint32_t));
@@ -1826,7 +1827,7 @@ void xir_pass_gcm(XirFunc *func) {
         if (e == def_blk[v] && l == def_blk[v]) continue;
 
         // Verify early dominates late
-        if (!xir_dominates(idom, e, l)) continue;
+        if (!xir_dom_covers(dt, e, l)) continue;
 
         // Walk from late up to early, find best loop depth
         uint32_t best_bid = l;
@@ -3220,7 +3221,7 @@ void xir_pass_range_analysis(XirFunc *func) {
 void xir_pass_insert_redefines(XirFunc *func) {
     if (!func || func->nblk == 0) return;
 
-    uint32_t *idom = xir_func_get_idom(func);
+    const XirDomTree *dt = xir_func_get_domtree(func);
 
     for (uint32_t bi = 0; bi < func->nblk; bi++) {
         XirBlock *blk = func->blocks[bi];
@@ -3315,10 +3316,10 @@ void xir_pass_insert_redefines(XirFunc *func) {
                 blk->jmp.arg = new_ref;
 
             // Rewrite uses in dominated blocks
-            if (idom) {
+            if (dt) {
                 for (uint32_t dbi = 0; dbi < func->nblk; dbi++) {
                     if (dbi == bi) continue;
-                    if (!xir_dominates(idom, bi, dbi)) continue;
+                    if (!xir_dom_covers(dt, bi, dbi)) continue;
                     XirBlock *dblk = func->blocks[dbi];
                     if (!dblk) continue;
                     for (uint32_t j = 0; j < dblk->nins; j++) {
