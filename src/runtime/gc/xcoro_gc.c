@@ -322,14 +322,14 @@ XrGCHeader* xr_coro_gc_newobj(XrCoroGC *gc, uint8_t type, size_t size) {
     size_t total = XGC_ALIGN(size);
     XrGCHeader *obj;
 
+    bool use_mmap = false;
     if (total > XR_LARGE_OBJECT_THRESHOLD) {
         if (total >= XR_MMAP_THRESHOLD) {
             // Tier 2: very large — use mmap to avoid libc heap fragmentation
             obj = (XrGCHeader*)mmap(NULL, total, PROT_READ | PROT_WRITE,
                                      MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
             if (obj == MAP_FAILED) return NULL;
-            // mmap returns zeroed memory; set mmap flag in extra
-            XR_GC_SET_MMAP(obj);
+            use_mmap = true;
         } else {
             // Tier 1: medium large — use xr_malloc
             obj = (XrGCHeader*)xr_malloc(total);
@@ -346,8 +346,8 @@ XrGCHeader* xr_coro_gc_newobj(XrCoroGC *gc, uint8_t type, size_t size) {
 
     obj->type = type;
     obj->objsize = (uint32_t)total;
-    // Preserve XR_GC_FLAG_MMAP if set during mmap allocation; clear other bits
-    obj->extra = (obj->extra & XR_GC_FLAG_MMAP);
+    obj->extra = 0;  // Always clear extra (Immix memory may be uninitialized)
+    if (use_mmap) XR_GC_SET_MMAP(obj);
 
     // New objects born with currentwhite (in young blocks or large list)
     // INVARIANT 3: new objects carry currentwhite
