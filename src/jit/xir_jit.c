@@ -244,7 +244,9 @@ bool xir_jit_try_compile(XirJitState *jit, XrProto *proto) {
     // Background compilation: enqueue and return immediately.
     // The VM continues interpreting; compiled code is picked up at next call
     // when jit_entry_pending becomes non-NULL.
-    if (jit->bg_queue && !is_recompile) {
+    // Both first-compile and recompile (Tier1→Tier2) use this path so
+    // that all bg tasks share the same XirBgTask snapshot construction.
+    if (jit->bg_queue) {
         // Already queued or compiled by bg thread → skip
         if (atomic_load_explicit(&proto->jit_entry_pending, memory_order_acquire))
             return false;
@@ -306,15 +308,18 @@ bool xir_jit_try_compile(XirJitState *jit, XrProto *proto) {
     }
 
     // Run TFA to infer types for untyped params.
-    // Only run once per JIT lifetime, on first compilation of an untyped function.
-    if (!jit->tfa_ran && !is_recompile &&
+    // Per-module: only analyze each module root once; newly loaded modules
+    // (with a different root proto) trigger fresh analysis automatically.
+    if (!is_recompile &&
         proto->numparams > 0 && !proto->param_types && !proto->type_feedback) {
         if (!jit->tfa) {
             jit->tfa = (TfaState *)xr_calloc(1, sizeof(TfaState));
         }
         if (jit->tfa) {
-            tfa_analyze_module(jit->tfa, proto);
-            jit->tfa_ran = true;
+            XrProto *root = tfa_find_root(proto);
+            if (!tfa_is_module_analyzed(jit->tfa, root)) {
+                tfa_analyze_module(jit->tfa, proto);
+            }
         }
     }
 
@@ -323,7 +328,7 @@ bool xir_jit_try_compile(XirJitState *jit, XrProto *proto) {
         // Walk up to module root via TFA summaries, or scan from this proto
         // For now: scan from the proto being compiled (covers its children)
         // and also scan TFA-registered protos if available
-        if (jit->tfa && jit->tfa_ran) {
+        if (jit->tfa && jit->tfa->n_analyzed_roots > 0) {
             for (uint32_t i = 0; i < jit->tfa->nsummary && !jit->dominant_shape; i++) {
                 struct XrShape *s = find_dominant_shape(jit->tfa->summaries[i].proto);
                 if (s) jit->dominant_shape = s;

@@ -44,7 +44,6 @@ typedef struct XirJitState {
     int          compiled_count;
     bool         enabled;
     TfaState    *tfa;              // lazily allocated TFA state (NULL until first use)
-    bool         tfa_ran;          // true after TFA has been run for the module
     void        *dominant_shape;   // XrShape* — most common NEWJSON shape in module (NULL if none/ambiguous)
     bool         verbose;          // diagnostic logging (auto-enabled by --jit-force)
     XirCompileQueue *bg_queue;     // background compilation queue (NULL if sync mode)

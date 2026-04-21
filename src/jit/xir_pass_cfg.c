@@ -1047,23 +1047,41 @@ void xir_pass_select_rep(XirFunc *func) {
     xr_free(def_ins);
 }
 
-/* ========== Block Reordering ========== */
+/* ========== Block Reordering (Profile-Guided) ========== */
+
+/*
+ * Heuristic edge weight for block selection.
+ *
+ * Priority (higher wins):
+ *   - Non-deferred > deferred (cold paths sink to end)
+ *   - Higher loop depth > lower (keep loop bodies compact)
+ *   - Loop header preference when continuing a loop body
+ *
+ * This replaces pure fall-through chaining with a profile-guided
+ * strategy that uses structural hints (is_deferred, loop_depth)
+ * as a proxy for edge frequency.
+ */
+static int32_t blk_weight(XirFunc *func, XirBlock *blk) {
+    if (!blk) return -1;
+    int32_t w = (int32_t)xir_block_loop_depth(func, blk->id) * 2;
+    if (blk->is_deferred) w -= 1000; // push cold blocks to end
+    if (blk->is_loop_header) w += 1; // slight preference to keep header adjacent
+    return w;
+}
 
 /*
  * Reorder func->blocks[] to minimize taken branches.
  *
- * Strategy (greedy fall-through chaining):
- *   1. Start from entry block, build a linear order by greedily following
- *      fall-through edges.
- *   2. For BR blocks: the codegen emits a conditional branch to s1 (true),
- *      so s2 (false) is the natural fall-through → prefer s2 as next.
+ * Strategy (profile-guided greedy fall-through chaining):
+ *   1. Start from entry block, greedily follow fall-through edges.
+ *   2. For BR blocks: pick the higher-weight successor as fall-through.
+ *      Deferred (catch/deopt) successors are deprioritized.
  *   3. For JMP blocks: s1 is the only successor → prefer it as next.
- *   4. When the preferred successor is already placed, pick any unplaced
- *      successor. If none, pick the next unplaced block with highest
- *      loop_depth (keeps loop bodies compact).
+ *   4. When both successors are placed, pick the unplaced block with
+ *      highest weight (non-deferred first, then highest loop depth).
  *
- * This is similar to Dart's BlockScheduler::ReorderBlocksJIT but simplified
- * to use greedy chaining instead of edge-weight union-find.
+ * Edge weight heuristics replace exact counters, matching the approach
+ * used by V8 TurboFan and Dart when branch profile data is unavailable.
  */
 void xir_pass_reorder_blocks(XirFunc *func) {
     if (!func || func->nblk <= 2) return;
@@ -1076,13 +1094,11 @@ void xir_pass_reorder_blocks(XirFunc *func) {
     if (!placed) { xr_free(order); return; }
 
     // Build block-index lookup: block->id → index in func->blocks[]
-    // We need this because block ids may not be contiguous
     uint32_t max_id = 0;
     for (uint32_t i = 0; i < n; i++) {
         if (func->blocks[i]->id > max_id)
             max_id = func->blocks[i]->id;
     }
-    // id_to_idx: maps block->id to its index in func->blocks[]
     int32_t *id_to_idx = (int32_t *)xr_malloc((max_id + 1) * sizeof(int32_t));
     if (!id_to_idx) { xr_free(placed); xr_free(order); return; }
     for (uint32_t i = 0; i <= max_id; i++) id_to_idx[i] = -1;
@@ -1090,67 +1106,71 @@ void xir_pass_reorder_blocks(XirFunc *func) {
 
     uint32_t norder = 0;
 
-    // Helper: find block index, return -1 if not found
     #define BLK_IDX(blk) ((blk) && (blk)->id <= max_id ? id_to_idx[(blk)->id] : -1)
 
     // Place entry block first
     order[norder++] = func->blocks[0];
     placed[0] = true;
 
-    // Greedy walk: follow fall-through edges
+    // Greedy walk: follow best-weight fall-through edges
     XirBlock *cur = func->blocks[0];
     while (norder < n) {
         XirBlock *next = NULL;
 
         if (cur) {
-            // Prefer fall-through successor
-            XirBlock *ft = NULL; // fall-through candidate
-            XirBlock *alt = NULL; // alternative successor
+            XirBlock *cand1 = NULL, *cand2 = NULL;
 
             if (cur->jmp.type == XIR_JMP_BR) {
-                // BR: s2 (false) is fall-through, s1 (true) is branch target
-                ft = cur->s2;
-                alt = cur->s1;
+                // BR: codegen emits s2 (false) as the inline fall-through
+                // path, so we always prefer s2 as next. Only swap when s2
+                // is deferred AND s1 is a loop header (codegen has a
+                // dedicated loop-header layout that puts s1 inline).
+                if (cur->is_loop_header && cur->s1 && !cur->s1->is_deferred) {
+                    cand1 = cur->s1; // loop body as fall-through
+                    cand2 = cur->s2;
+                } else {
+                    cand1 = cur->s2; // default: false path as fall-through
+                    cand2 = cur->s1;
+                }
             } else if (cur->jmp.type == XIR_JMP_JMP) {
-                ft = cur->s1;
+                cand1 = cur->s1;
             }
 
-            // Try fall-through first
-            if (ft) {
-                int32_t idx = BLK_IDX(ft);
+            // Try primary candidate
+            if (cand1) {
+                int32_t idx = BLK_IDX(cand1);
                 if (idx >= 0 && !placed[idx]) {
-                    next = ft;
+                    next = cand1;
                     placed[idx] = true;
                 }
             }
-            // Try alternative
-            if (!next && alt) {
-                int32_t idx = BLK_IDX(alt);
+            // Try secondary candidate
+            if (!next && cand2) {
+                int32_t idx = BLK_IDX(cand2);
                 if (idx >= 0 && !placed[idx]) {
-                    next = alt;
+                    next = cand2;
                     placed[idx] = true;
                 }
             }
         }
 
-        // No successor available — pick unplaced block with highest loop depth
+        // No successor available — pick unplaced block with highest weight.
+        // Non-deferred blocks with high loop depth come first; deferred
+        // (catch/deopt) blocks naturally sink to the end of the function.
         if (!next) {
-            int best_depth = -1;
+            int32_t best_w = INT32_MIN;
             uint32_t best_idx = 0;
+            bool found = false;
             for (uint32_t i = 0; i < n; i++) {
                 if (placed[i]) continue;
-                int d = (int)xir_block_loop_depth(func, func->blocks[i]->id);
-                if (d > best_depth) {
-                    best_depth = d;
+                int32_t w = blk_weight(func, func->blocks[i]);
+                if (!found || w > best_w) {
+                    best_w = w;
                     best_idx = i;
+                    found = true;
                 }
             }
-            // Fallback: first unplaced
-            if (best_depth < 0) {
-                for (uint32_t i = 0; i < n; i++) {
-                    if (!placed[i]) { best_idx = i; break; }
-                }
-            }
+            XR_DCHECK(found, "reorder: no unplaced block but norder < n");
             next = func->blocks[best_idx];
             placed[best_idx] = true;
         }

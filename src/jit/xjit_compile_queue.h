@@ -8,7 +8,7 @@
  * xjit_compile_queue.h - Background JIT compilation queue
  *
  * KEY CONCEPT:
- *   Single background thread compiles hot functions asynchronously.
+ *   N background worker threads compile hot functions asynchronously.
  *   Main thread enqueues compilation tasks at hot-function detection,
  *   continues interpreting without stalling. Compiled code is installed
  *   at GC safepoints via atomic jit_entry_pending → jit_entry swap.
@@ -16,8 +16,8 @@
  * WHY THIS DESIGN:
  *   - XrProto is immutable after creation → safe for concurrent read
  *   - XIR build + codegen uses only xr_malloc (no GC heap interaction)
- *   - Single thread avoids code_alloc contention (no lock needed)
- *   - SPSC queue: one producer (main thread), one consumer (bg thread)
+ *   - Each worker owns a private XirCodeAlloc (no lock needed)
+ *   - MPSC queue: one producer (main thread), N consumers (bg workers)
  */
 
 #ifndef XJIT_COMPILE_QUEUE_H
@@ -81,29 +81,31 @@ typedef struct XirBgTask {
     struct XrShape *shape_hint; // dominant-shape hint for param PTR shaping
 } XirBgTask;
 
-/* ========== SPSC Ring Buffer ========== */
+/* ========== MPSC Ring Buffer ========== */
 
-#define XJIT_QUEUE_CAPACITY 64  // power of 2
+#define XJIT_QUEUE_CAPACITY 256  // power of 2, increased for multi-worker
+#define XJIT_MAX_WORKERS      4  // max background compile threads
 
 typedef struct XirCompileQueue {
     XirBgTask tasks[XJIT_QUEUE_CAPACITY];
     _Atomic uint32_t head;      // written by producer (main thread)
-    _Atomic uint32_t tail;      // written by consumer (bg thread)
+    _Atomic uint32_t tail;      // CAS-advanced by consumers (bg workers)
 
-    // Background thread state
-    pthread_t        bg_thread;
+    // Background worker threads
+    pthread_t        workers[XJIT_MAX_WORKERS];
+    uint32_t         n_workers;  // actual number of bg threads started
     pthread_mutex_t  mutex;
     pthread_cond_t   cond;
-    _Atomic bool     shutdown;  // signal background thread to exit
-    bool             started;   // background thread has been created
+    _Atomic bool     shutdown;  // signal background threads to exit
+    bool             started;   // at least one worker thread is running
 
     // Owning JIT state (for compilation pipeline access)
     XirJitState     *jit;
 
-    // Dedicated code allocator for background thread.
-    // Eliminates concurrent access with main thread's sync/recompile path
-    // which uses jit->code_alloc.
-    XirCodeAlloc     bg_code_alloc;
+    // Per-worker dedicated code allocator.
+    // Each worker owns one to eliminate contention with main thread
+    // and with other workers.
+    XirCodeAlloc     worker_code_alloc[XJIT_MAX_WORKERS];
 } XirCompileQueue;
 
 /* ========== API ========== */
