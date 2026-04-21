@@ -363,6 +363,26 @@ typedef struct XrCoroGCConfig {
 #define XR_SPAWN_CORO_GC_PAUSE     100            // Collect at 100% (standard)
 #define XR_SPAWN_CORO_GC_STEPMUL   200            // Faster GC steps
 
+/* ========== GC Tuning Constants ========== */
+
+// Mark step: bytes of objects to scan per gc_step (debt-proportional)
+#define XGC_MARK_STEP_MIN          4096          // Floor: always scan at least 4KB
+#define XGC_MARK_STEP_MAX          (256 * 1024)  // Cap: never scan > 256KB per step
+
+// Sweep step: blocks per gc_step (debt-proportional)
+#define XGC_SWEEP_UNITS_MIN        4             // Floor: at least 4 blocks
+#define XGC_SWEEP_UNITS_MAX        128           // Cap: never sweep > 128 blocks
+
+// Adaptive pause bounds (setpause)
+#define XGC_PAUSE_MIN              50            // Aggressive GC under memory pressure
+#define XGC_PAUSE_MAX              400           // Lazy GC when allocation is slow
+
+// Generational: minor→major promotion trigger (% of GCest)
+#define XGC_MAJOR_TRIGGER_PCT      150           // 150% of estimated live → trigger major
+
+// Generational: promotion threshold (live line %)
+#define XGC_PROMOTE_THRESHOLD_PCT  40            // ≥40% live lines → promote to old
+
 /* ========== Coroutine GC Lifecycle API ========== */
 
 XR_FUNC XrCoroGC* xr_coro_gc_create(struct XrCoroutine *coro, const XrCoroGCConfig *config);

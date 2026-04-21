@@ -45,6 +45,7 @@
 #include "../src/runtime/object/xstring.h"
 #include "../src/module/xmodule.h"
 #include "../src/module/xbuiltin_decl.h"
+#include "../src/runtime/xexec_frame.h"     // XrCFunction full definition, XR_CFUNC_SLOW
 
 /* ========== String Argument Accessor ========== */
 
@@ -109,6 +110,19 @@ static inline XrValue xrs_string_value_c(XrayIsolate *X, const char *s) {
  * that header on the include path; see stdlib/test_yield/test_yield.c for
  * a representative example.
  */
+/*
+ * Register a C function marked SLOW (blocking I/O). The scheduler will
+ * hand the coroutine to a dedicated M-thread immediately instead of running
+ * it on a P worker queue.
+ */
+#define XRS_EXPORT_SLOW(mod, isolate, name_str, func_ptr)                                   \
+    do {                                                                                    \
+        struct XrCFunction *_cf =                                                           \
+            xr_vm_cfunction_new((isolate), (func_ptr), (name_str));                         \
+        _cf->cfunc_class = XR_CFUNC_SLOW;                                                   \
+        xr_module_add_export((isolate), (mod), (name_str), xr_value_from_cfunction(_cf));   \
+    } while (0)
+
 #define XRS_EXPORT_YIELDABLE(mod, isolate, name_str, func_ptr)                              \
     do {                                                                                    \
         struct XrCFunction *_cf =                                                           \
