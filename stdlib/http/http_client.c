@@ -8,8 +8,8 @@
  * http_client.c - HTTP client implementation
  *
  * KEY CONCEPT:
- *   - BSD socket based synchronous HTTP client
- *   - URL parsing
+ *   - Coroutine-friendly HTTP client backed by conn_pool (non-blocking I/O)
+ *   - URL parsing (RFC 3986, IPv6 literal support)
  *   - Timeout control
  */
 

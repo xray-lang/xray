@@ -223,6 +223,14 @@ static const HpackHuffmanEntry hpack_huffman_table[257] = {
 // symbol value. Root lives at index 0. Built once at first decode via
 // pthread_once so we pay the ~513-node construction cost exactly once per
 // process.
+//
+// NOTE: these file-scope variables are write-once (populated by
+// hpack_huffman_init, guarded by pthread_once) and read-only thereafter.
+// They are effectively immutable after process startup and do not violate
+// the "no mutable file-scope globals" rule in spirit. A compile-time
+// generated table would eliminate even this edge case but the RFC 7541
+// Appendix B encoding makes that impractical without a build-time codegen
+// step.
 typedef struct { int16_t left; int16_t right; int16_t sym; } HpackHuffmanNode;
 #define HPACK_HUFFMAN_TREE_CAP 1024  // 2 * 257 leaves = 514 nodes upper bound
 static HpackHuffmanNode hpack_huffman_tree[HPACK_HUFFMAN_TREE_CAP];
@@ -990,21 +998,50 @@ int xr_h2_recv(XrH2Conn *conn) {
             break;
         }
 
-        case XR_H2_FRAME_WINDOW_UPDATE:
-            // Update window size
+        case XR_H2_FRAME_WINDOW_UPDATE: {
+            // RFC 7540 §6.9: WINDOW_UPDATE payload is exactly 4 bytes.
+            if (header.length != 4 || !payload) { result = -1; break; }
+            uint32_t inc = ((uint32_t)payload[0] << 24) |
+                           ((uint32_t)payload[1] << 16) |
+                           ((uint32_t)payload[2] << 8)  |
+                           (uint32_t)payload[3];
+            // RFC 7540 §6.9: increment of 0 is a PROTOCOL_ERROR.
+            inc &= 0x7FFFFFFFU;  // Clear reserved bit (RFC 7540 §6.9)
+            if (inc == 0) {
+                if (header.stream_id == 0) {
+                    xr_h2_send_goaway(conn, 0, XR_H2_PROTOCOL_ERROR);
+                } else {
+                    xr_h2_send_rst_stream(conn, header.stream_id,
+                                          XR_H2_PROTOCOL_ERROR);
+                }
+                result = -1;
+                break;
+            }
             if (header.stream_id == 0) {
-                uint32_t inc = (payload[0] << 24) | (payload[1] << 16) |
-                               (payload[2] << 8) | payload[3];
-                conn->connection_window += inc;
+                // RFC 7540 §6.9.1: connection window must not exceed
+                // 2^31-1. Overflow → FLOW_CONTROL_ERROR on connection.
+                if ((int64_t)conn->connection_window + inc > 0x7FFFFFFF) {
+                    xr_h2_send_goaway(conn, 0, XR_H2_FLOW_CONTROL_ERROR);
+                    result = -1;
+                    break;
+                }
+                conn->connection_window += (int32_t)inc;
             } else {
                 XrH2Stream *stream = xr_h2_get_stream(conn, header.stream_id);
                 if (stream) {
-                    uint32_t inc = (payload[0] << 24) | (payload[1] << 16) |
-                                   (payload[2] << 8) | payload[3];
-                    stream->window_size += inc;
+                    // RFC 7540 §6.9.1: stream window must not exceed
+                    // 2^31-1. Overflow → RST_STREAM FLOW_CONTROL_ERROR.
+                    if ((int64_t)stream->window_size + inc > 0x7FFFFFFF) {
+                        xr_h2_send_rst_stream(conn, header.stream_id,
+                                              XR_H2_FLOW_CONTROL_ERROR);
+                        result = -1;
+                        break;
+                    }
+                    stream->window_size += (int32_t)inc;
                 }
             }
             break;
+        }
 
         default:
             break;

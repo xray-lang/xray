@@ -485,14 +485,5 @@ int xr_dns_resolve_all(const char *hostname, XrSockAddr *addrs, int max_addrs, X
     return do_resolve_all(hostname, addrs, max_addrs, family);
 }
 
-// Removed: connect_with_timeout() + xr_dns_dial().
-//
-// These used select() (fd > 1024 UB + FD_SETSIZE limit) and, on success,
-// reset the fd back to blocking mode, which defeated any caller that
-// wanted to keep using netpoll afterwards. They also had zero in-tree
-// consumers — conn_pool.c does its own connect via coro_tcp_connect.
-//
-// Connection-level failover across DNS-resolved IPs now lives in
-// conn_pool.c::create_connection (see docs/analysis TODO-P12 for the
-// plan to upgrade that to parallel Happy Eyeballs v2 RFC 8305).
-
+// Connection-level failover: see conn_pool.c::create_connection and
+// docs/analysis/TODO-P12-happy-eyeballs.md.

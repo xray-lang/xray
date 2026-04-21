@@ -77,8 +77,10 @@ static int coro_tcp_connect(int fd, const struct sockaddr *sa, socklen_t sa_len,
     // from non-VM contexts (tests, CLI tools) without crashing.
     XrRuntime *runtime = X ? (XrRuntime *)X->vm.runtime : NULL;
     if (!runtime) {
+        // 30 s upper bound so a black-holed peer can't hang the
+        // caller forever in non-VM contexts (CLI, unit tests).
         struct pollfd pfd = { .fd = fd, .events = POLLOUT };
-        if (poll(&pfd, 1, -1) <= 0) return -1;
+        if (poll(&pfd, 1, 30000) <= 0) return -1;
         int soerr = 0;
         socklen_t sl = sizeof(soerr);
         if (getsockopt(fd, SOL_SOCKET, SO_ERROR, &soerr, &sl) < 0 || soerr != 0) {
@@ -180,7 +182,18 @@ static XrPooledConn* create_connection(XrConnPool *pool, const char *host, uint1
     conn->tls_conn = NULL;
 
 #ifdef XR_ENABLE_TLS
-    // HTTPS: TLS handshake
+    // HTTPS: TLS handshake (coroutine-friendly).
+    //
+    // Use the non-blocking xr_tls_conn_handshake_try() in a loop.  On
+    // WANT_READ / WANT_WRITE we suspend the current coroutine via
+    // xr_netpoll_block so the worker can service other goroutines
+    // while the TCP round-trips complete. Without a runtime (CLI /
+    // tests) we fall back to poll() with a bounded timeout so the
+    // caller never busy-loops or hangs indefinitely.
+    //
+    // All failure paths go through close_connection() which properly
+    // deregisters the fd from netpoll before close(), avoiding a stale
+    // pollDesc that would corrupt future fd reuse.
     if (is_https && pool) {
         if (!pool->tls_ctx) {
             pool->tls_ctx = xr_tls_context_new_client();
@@ -190,10 +203,36 @@ static XrPooledConn* create_connection(XrConnPool *pool, const char *host, uint1
             conn->tls_conn = xr_tls_conn_new(pool->tls_ctx, fd);
             if (conn->tls_conn) {
                 xr_tls_conn_set_hostname(conn->tls_conn, host);
-                if (xr_tls_conn_handshake_client(conn->tls_conn) != XR_TLS_OK) {
-                    xr_tls_conn_free(conn->tls_conn);
-                    conn->tls_conn = NULL;
-                    close(fd);
+
+                // Non-blocking handshake loop
+                bool hs_ok = false;
+                for (;;) {
+                    int hs = xr_tls_conn_handshake_try(conn->tls_conn);
+                    if (hs == 0) { hs_ok = true; break; }  // Success
+                    if (hs < 0) { break; }                  // Fatal error
+
+                    // hs == 1 → WANT_READ, hs == 2 → WANT_WRITE
+                    XrPollMode mode = (hs == 1) ? XR_POLL_READ
+                                                : XR_POLL_WRITE;
+                    XrRuntime *rt = X ? (XrRuntime *)X->vm.runtime : NULL;
+                    if (rt) {
+                        XrPollDesc *pd = xr_netpoll_open(&rt->netpoll, fd);
+                        if (!pd || !xr_netpoll_block(pd, mode, X)) {
+                            break;  // Netpoll error → abort
+                        }
+                    } else {
+                        // Non-VM fallback: bounded poll so we don't spin
+                        struct pollfd pfd = {
+                            .fd = fd,
+                            .events = (short)((mode == XR_POLL_READ)
+                                              ? POLLIN : POLLOUT)
+                        };
+                        if (poll(&pfd, 1, 30000) <= 0) { break; }
+                    }
+                }
+
+                if (!hs_ok) {
+                    close_connection(conn);
                     free(conn);
                     return NULL;
                 }
