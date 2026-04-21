@@ -12,6 +12,7 @@
  */
 
 #include "../../src/base/xmalloc.h"
+#include "../common.h"
 #include "net.h"
 #include "io.h"
 #include "tls.h"
@@ -126,22 +127,22 @@ XrUdpConn* xr_udp_new(const char *local_addr, int local_port) {
     if (local_addr && strchr(local_addr, ':')) {
         family = AF_INET6;
     }
-    
+
     int fd = socket(family, SOCK_DGRAM, 0);
     if (fd < 0) return NULL;
-    
+
     if (family == AF_INET) {
         struct sockaddr_in addr;
         memset(&addr, 0, sizeof(addr));
         addr.sin_family = AF_INET;
         addr.sin_port = htons(local_port);
-        
+
         if (local_addr && local_addr[0]) {
             inet_pton(AF_INET, local_addr, &addr.sin_addr);
         } else {
             addr.sin_addr.s_addr = INADDR_ANY;
         }
-        
+
         if (bind(fd, (struct sockaddr*)&addr, sizeof(addr)) < 0) {
             close(fd);
             return NULL;
@@ -151,19 +152,19 @@ XrUdpConn* xr_udp_new(const char *local_addr, int local_port) {
         memset(&addr, 0, sizeof(addr));
         addr.sin6_family = AF_INET6;
         addr.sin6_port = htons(local_port);
-        
+
         if (local_addr && local_addr[0]) {
             inet_pton(AF_INET6, local_addr, &addr.sin6_addr);
         } else {
             addr.sin6_addr = in6addr_any;
         }
-        
+
         if (bind(fd, (struct sockaddr*)&addr, sizeof(addr)) < 0) {
             close(fd);
             return NULL;
         }
     }
-    
+
     XrUdpConn *conn = xr_malloc(sizeof(XrUdpConn));
     if (!conn) {
         close(fd);
@@ -182,34 +183,34 @@ XrUdpConn* xr_udp_new(const char *local_addr, int local_port) {
 int xr_udp_send_to(XrUdpConn *conn, const void *buf, size_t len,
                    const char *host, int port) {
     if (!conn || !buf) return -1;
-    
+
     // Resolve target address (supports IPv4/IPv6)
     XrSockAddr resolved;
     XrAddrFamily family = (conn->family == AF_INET) ? XR_AF_INET : XR_AF_INET6;
     if (!xr_dns_resolve(host, &resolved, family)) {
         return -1;
     }
-    
+
     if (resolved.family == AF_INET) {
         resolved.addr.v4.sin_port = htons(port);
-        return (int)sendto(conn->fd, buf, len, 0, 
+        return (int)sendto(conn->fd, buf, len, 0,
                           (struct sockaddr*)&resolved.addr.v4, sizeof(struct sockaddr_in));
     } else {
         resolved.addr.v6.sin6_port = htons(port);
-        return (int)sendto(conn->fd, buf, len, 0, 
+        return (int)sendto(conn->fd, buf, len, 0,
                           (struct sockaddr*)&resolved.addr.v6, sizeof(struct sockaddr_in6));
     }
 }
 
 int xr_udp_recv_from(XrUdpConn *conn, void *buf, size_t len, XrNetAddr *from) {
     if (!conn || !buf) return -1;
-    
+
     struct sockaddr_storage addr;
     socklen_t addr_len = sizeof(addr);
-    
+
     ssize_t n = recvfrom(conn->fd, buf, len, 0, (struct sockaddr*)&addr, &addr_len);
     if (n < 0) return -1;
-    
+
     if (from) {
         if (addr.ss_family == AF_INET) {
             struct sockaddr_in *sin = (struct sockaddr_in*)&addr;
@@ -238,10 +239,10 @@ void xr_udp_close(XrUdpConn *conn) {
 
 int xr_dns_lookup(const char *hostname, XrNetAddr *addrs, int max_addrs) {
     if (!hostname || !addrs || max_addrs <= 0) return 0;
-    
+
     XrSockAddr resolved[8];
     int count = xr_dns_resolve_all(hostname, resolved, max_addrs > 8 ? 8 : max_addrs, XR_AF_UNSPEC);
-    
+
     for (int i = 0; i < count; i++) {
         if (resolved[i].family == AF_INET) {
             addrs[i].family = XR_NET_IPV4;
@@ -257,12 +258,12 @@ int xr_dns_lookup(const char *hostname, XrNetAddr *addrs, int max_addrs) {
 
 bool xr_net_resolve(const char *hostname, XrNetAddr *addr) {
     if (!hostname || !addr) return false;
-    
+
     XrSockAddr resolved;
     if (!xr_dns_resolve(hostname, &resolved, XR_AF_UNSPEC)) {
         return false;
     }
-    
+
     if (resolved.family == AF_INET) {
         addr->family = XR_NET_IPV4;
         inet_ntop(AF_INET, &resolved.addr.v4.sin_addr, addr->host, sizeof(addr->host));
@@ -278,7 +279,7 @@ bool xr_net_resolve(const char *hostname, XrNetAddr *addr) {
 
 int xr_net_parse_addr(const char *addr_str, char *host, size_t host_len, int *port) {
     if (!addr_str) return -1;
-    
+
     const char *colon = strrchr(addr_str, ':');
     if (!colon) {
         if (host && host_len > 0) {
@@ -288,7 +289,7 @@ int xr_net_parse_addr(const char *addr_str, char *host, size_t host_len, int *po
         if (port) *port = 0;
         return 0;
     }
-    
+
     size_t host_part_len = colon - addr_str;
     if (host && host_len > 0) {
         if (host_part_len >= host_len) host_part_len = host_len - 1;
@@ -322,14 +323,6 @@ void xr_net_shutdown(void) {
 
 // ========== Script Bindings ==========
 
-// External declarations
-extern XrString* xr_string_intern(XrayIsolate *X, const char *str, size_t len, uint32_t hash);
-extern XrModule* xr_module_create_native(XrayIsolate *isolate, const char *name);
-extern void xr_module_add_export(XrayIsolate *isolate, XrModule *module, const char *name, XrValue value);
-
-typedef XrValue (*XrNetCFunc)(XrayIsolate*, XrValue*, int);
-extern struct XrCFunction* xr_vm_cfunction_new(XrayIsolate *isolate, XrNetCFunc func, const char *name);
-extern XrValue xr_value_from_cfunction(struct XrCFunction *cfunc);
 
 // ========== TLS fd-indexed storage ==========
 
@@ -423,7 +416,7 @@ static void net_ensure_symbols(XrayIsolate *X) {
     sym_type = xr_symbol_register_in_table(table, "type");
     sym_tls  = xr_symbol_register_in_table(table, "tls");
     sym_port = xr_symbol_register_in_table(table, "port");
-    
+
     {
         XrString *names[] = {
             xr_compile_time_intern(X, "fd", 2),
@@ -1492,13 +1485,13 @@ static XrValue net_dns_lookup(XrayIsolate *isolate, XrValue *args, int nargs) {
     if (nargs < 1 || !XR_IS_STRING(args[0])) {
         return XR_NULL_VAL;
     }
-    
+
     XrString *hostname = XR_TO_STRING(args[0]);
     XrNetAddr addrs[8];
     int count = xr_dns_lookup(XR_STRING_CHARS(hostname), addrs, 8);
-    
+
     if (count <= 0) return XR_NULL_VAL;
-    
+
     return xr_string_value(xr_string_intern(isolate, addrs[0].host, strlen(addrs[0].host), 0));
 }
 
@@ -1554,48 +1547,32 @@ XR_DEFINE_BUILTIN(net_recv_from_yieldable, "recvFrom",
     "(handle: Json, maxlen?: int): Json?",
     "Receive UDP datagram")
 
-// Regular C function registration macro
-#define ADD_FUNC(name, fn) do { \
-    struct XrCFunction *cf = xr_vm_cfunction_new(isolate, fn, name); \
-    xr_module_add_export(isolate, mod, name, xr_value_from_cfunction(cf)); \
-} while(0)
-
-// Yieldable C function registration macro
-extern struct XrCFunction* xr_vm_yieldable_cfunction_new(XrayIsolate*, XrYieldableCFunctionPtr, const char*);
-#define ADD_YIELDABLE(name, fn) do { \
-    struct XrCFunction *cf = xr_vm_yieldable_cfunction_new(isolate, fn, name); \
-    xr_module_add_export(isolate, mod, name, xr_value_from_cfunction(cf)); \
-} while(0)
-
 XrModule* xr_load_module_net(XrayIsolate *isolate) {
     XrModule *mod = xr_module_create_native(isolate, "net");
-    
+
     // Initialize symbols and shapes once per isolate
     net_ensure_symbols(isolate);
-    
+
     // User-level API (handle-based)
-    ADD_YIELDABLE("dial",        net_dial_yieldable);
-    ADD_FUNC("listen",           net_listen_handle);
-    ADD_YIELDABLE("accept",      net_accept_handle_yieldable);
-    ADD_YIELDABLE("read",        net_read_handle_yieldable);
-    ADD_YIELDABLE("write",       net_write_handle_yieldable);
-    ADD_FUNC("close",            net_close_handle);
-    ADD_FUNC("fd",               net_fd_handle);
-    ADD_FUNC("lookup",           net_dns_lookup);
-    ADD_FUNC("hasTLS",           net_has_tls);
+    XRS_EXPORT_YIELDABLE(mod, isolate, "dial",        net_dial_yieldable);
+    XRS_EXPORT(mod, isolate, "listen",           net_listen_handle);
+    XRS_EXPORT_YIELDABLE(mod, isolate, "accept",      net_accept_handle_yieldable);
+    XRS_EXPORT_YIELDABLE(mod, isolate, "read",        net_read_handle_yieldable);
+    XRS_EXPORT_YIELDABLE(mod, isolate, "write",       net_write_handle_yieldable);
+    XRS_EXPORT(mod, isolate, "close",            net_close_handle);
+    XRS_EXPORT(mod, isolate, "fd",               net_fd_handle);
+    XRS_EXPORT(mod, isolate, "lookup",           net_dns_lookup);
+    XRS_EXPORT(mod, isolate, "hasTLS",           net_has_tls);
 
 #ifdef XR_ENABLE_TLS
-    ADD_YIELDABLE("dialTLS",     net_dial_tls_yieldable);
-    ADD_YIELDABLE("upgradeTLS",  net_upgrade_tls_yieldable);
+    XRS_EXPORT_YIELDABLE(mod, isolate, "dialTLS",     net_dial_tls_yieldable);
+    XRS_EXPORT_YIELDABLE(mod, isolate, "upgradeTLS",  net_upgrade_tls_yieldable);
 #endif
 
     // UDP (handle-based)
-    ADD_FUNC("udpBind",          net_udp_bind_handle);
-    ADD_YIELDABLE("sendTo",      net_send_to_yieldable);
-    ADD_YIELDABLE("recvFrom",    net_recv_from_yieldable);
-    
+    XRS_EXPORT(mod, isolate, "udpBind",          net_udp_bind_handle);
+    XRS_EXPORT_YIELDABLE(mod, isolate, "sendTo",      net_send_to_yieldable);
+    XRS_EXPORT_YIELDABLE(mod, isolate, "recvFrom",    net_recv_from_yieldable);
+
     return mod;
 }
-
-#undef ADD_FUNC
-#undef ADD_YIELDABLE
