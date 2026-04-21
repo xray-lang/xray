@@ -8,9 +8,12 @@
  * xreflect_cache.h - Per-class reflection cache
  *
  * KEY CONCEPT:
- *   Created on first reflection access.
- *   Pre-creates all Field/Method wrapper objects.
- *   Subsequent queries return cached objects (50-100x speedup).
+ *   Built eagerly at xr_class_builder_finalize time -- every class
+ *   owns a fully-populated cache by the moment it becomes visible to
+ *   the rest of the runtime. Subsequent reflection queries index
+ *   directly into field_wrappers[] / method_wrappers[] without
+ *   allocating (~50-100x speedup over the original lazy-create path
+ *   that had to run under a lock to be race-free).
  */
 
 #ifndef XREFLECT_CACHE_H
@@ -24,13 +27,13 @@
 typedef struct XrReflectCache {
     XrGCHeader gc;
     XrClass *owner;
-    
+
     XrValue *field_wrappers;
     int field_count;
-    
+
     XrValue *method_wrappers;
     int method_count;
-    
+
     bool initialized;
 } XrReflectCache;
 

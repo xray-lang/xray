@@ -112,13 +112,15 @@ XR_FUNC void xr_class_descriptor_print(const XrClassDescriptor *descriptor, bool
 /*
  * Create an immutable XrClass from a descriptor.
  *
- * super_override, if non-NULL, takes precedence over any super information
- * encoded in the descriptor (super_global_index / super_name). The VM uses
- * this path to pass a runtime-resolved parent class (for `extends` whose
- * parent lives in a local / upvalue / imported module member) so that
- * inheritance is established in a single instruction without a follow-up
- * OP_INHERIT. When super_override is NULL the function falls back to
- * descriptor-encoded resolution.
+ * super_override, if non-NULL, takes precedence over any super
+ * information encoded in the descriptor (super_global_index /
+ * super_name). The VM uses this path to pass a runtime-resolved
+ * parent class for `extends` whose parent lives in a local / upvalue
+ * / imported module member, so inheritance is established in a
+ * single OP_CLASS_NEW instruction -- there is no longer any separate
+ * "patch super link" opcode. When super_override is NULL the function
+ * falls back to descriptor-encoded resolution (global_index first,
+ * then name lookup via xr_class_lookup_by_name).
  */
 XR_FUNC XrClass* xr_class_from_descriptor(XrayIsolate *isolate, const XrClassDescriptor *descriptor,
                                    XrProto *proto, struct XrClosure *cl, XrValue *base,

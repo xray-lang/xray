@@ -465,37 +465,37 @@ static void compile_class_with_descriptor(
         }
     }
 
-    // 2.1. Record parent class global_index (compiler optimization: O(1) parent lookup)
+    // 2.1. Resolve parent for runtime inheritance.
+    //
+    // There are three shapes:
+    //   a) `extends module.Class` -- parent lives behind a module member
+    //      access expression; strip super_name so xr_class_from_descriptor
+    //      defaults to Object, and the runtime opcode (OP_CLASS_NEW) will
+    //      pass the real XrClass* through descriptor's super_override.
+    //   b) `extends Class` where Class is a local / upvalue -- same deal
+    //      as (a); the runtime super_override path is authoritative.
+    //   c) `extends Class` where Class is a same-module top-level name
+    //      -- keep super_name and let xr_class_from_descriptor resolve
+    //      it via xr_class_lookup_by_name at finalize time.
+    //
+    // Note: OP_INHERIT is gone. Inheritance is always established in a
+    // single OP_CLASS_NEW + xr_class_from_descriptor + builder finalize
+    // shot; there is no follow-up "patch the super link" opcode.
     if (node->super_name != NULL) {
         if (node->super_module != NULL) {
-            /*
-             * Module member access form: extends module.Class
-             * Cannot use global_index optimization, set parent via OP_INHERIT at runtime
-             * Keep super_global_index = -1, also clear super_name to avoid name lookup
-             */
             desc->super_name = NULL;
+            desc->super_global_index = -1;
         } else {
-            /*
-             * Simple form: extends Class
-             * Check if parent comes from import (local or upvalue)
-             * If so, cannot use global_index optimization, handled by OP_INHERIT
-             */
             XrString *super_name_str = xr_compile_time_intern(ctx->X, node->super_name, strlen(node->super_name));
             XrLocalInfo *local = compiler_get_local_by_name(compiler, node->super_name);
             int upvalue_idx = scope_resolve_upvalue(ctx, compiler, super_name_str);
 
             if (local || upvalue_idx >= 0) {
-                /*
-                 * Parent comes from imported module, don't use global_index optimization
-                 * Clear super_name, let ClassFromDescriptor default inherit Object
-                 * OP_INHERIT will correctly override parent
-                 */
                 desc->super_name = NULL;
                 desc->super_global_index = -1;
             } else {
-                // Parent defined in same module, rely on name lookup at runtime
-                // (shared indices are local and need offset adjustment at runtime,
-                //  but ClassFromDescriptor doesn't have access to proto->shared_offset)
+                // Same-module top-level parent -- xr_class_from_descriptor
+                // will resolve super_name via xr_class_lookup_by_name.
                 desc->super_global_index = -1;
             }
         }

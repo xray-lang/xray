@@ -8,8 +8,9 @@
  * xreflect_cache.c - Per-class reflection cache
  *
  * KEY CONCEPT:
- *   Pre-creates all Field/Method wrappers on first access.
- *   Subsequent queries return cached objects (50-100x speedup).
+ *   Created eagerly by xr_class_builder_finalize alongside the class
+ *   itself; the reflection layer reads wrappers straight out of the
+ *   cache arrays. See xreflect_cache.h for the end-to-end rationale.
  */
 
 #include "../../base/xchecks.h"
