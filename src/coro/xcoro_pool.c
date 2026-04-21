@@ -57,11 +57,17 @@ static XrCoroPoolBlock* xr_coro_pool_block_create(size_t capacity) {
 static void xr_coro_pool_block_destroy(XrCoroPoolBlock *block) {
     if (!block) return;
 
+    // Free lazily-allocated jit_suspend state for each coroutine
+    if (block->coros) {
+        for (size_t i = 0; i < block->capacity; i++) {
+            if (block->coros[i].jit_suspend) {
+                xr_free(block->coros[i].jit_suspend);
+            }
+        }
+        xr_free(block->coros);
+    }
     if (block->slab) {
         xr_free(block->slab);
-    }
-    if (block->coros) {
-        xr_free(block->coros);
     }
     xr_free(block);
 }

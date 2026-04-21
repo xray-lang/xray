@@ -1120,9 +1120,9 @@ bool xir_emit_mem_ops(CodegenCtx *ctx, XirIns *ins, A64Reg rd) {
             // 1. Record safepoint bitmap for GC
             uint32_t smap_id = record_safepoint(ctx);
 
-            // 2. Compute suspend_state base: x16 = &coro->jit_suspend_state
-            a64_buf_emit(&ctx->buf, a64_add_imm(SCRATCH_REG, CORO_REG,
-                         XIR_CORO_SUSPEND_REGS_OFFSET));
+            // 2. Load suspend_state pointer: x16 = coro->jit_suspend
+            a64_buf_emit(&ctx->buf, a64_ldr(SCRATCH_REG, CORO_REG,
+                         XIR_CORO_SUSPEND_PTR_OFFSET));
 
             // 3. Save x1-x15 to suspend_regs[0..14]
             a64_buf_emit(&ctx->buf, a64_stp(A64_X1, A64_X2, SCRATCH_REG, 0));
@@ -1226,9 +1226,9 @@ bool xir_emit_mem_ops(CodegenCtx *ctx, XirIns *ins, A64Reg rd) {
                 ctx->buf.code[cbnz_not_blocked] = a64_cbnz(A64_X0, off);
             }
 
-            // Recompute base (x16 clobbered by BLR)
-            a64_buf_emit(&ctx->buf, a64_add_imm(SCRATCH_REG, CORO_REG,
-                         XIR_CORO_SUSPEND_REGS_OFFSET));
+            // Reload suspend pointer (x16 clobbered by BLR)
+            a64_buf_emit(&ctx->buf, a64_ldr(SCRATCH_REG, CORO_REG,
+                         XIR_CORO_SUSPEND_PTR_OFFSET));
 
             // Reload x1-x15 from suspend_regs (x20-x27 survived as callee-saved)
             a64_buf_emit(&ctx->buf, a64_ldp(A64_X1, A64_X2, SCRATCH_REG, 0));
