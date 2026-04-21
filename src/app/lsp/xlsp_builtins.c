@@ -24,20 +24,20 @@
 
 static XrType *create_type_for_builtin(XlspBuiltinType type) {
     switch (type) {
-        case XLSP_TYPE_INT:           return xr_type_new_int();
-        case XLSP_TYPE_FLOAT:         return xr_type_new_float();
-        case XLSP_TYPE_STRING:        return xr_type_new_string();
-        case XLSP_TYPE_BOOL:          return xr_type_new_bool();
-        case XLSP_TYPE_ARRAY:         return xr_type_new_array(xr_type_new_unknown());
-        case XLSP_TYPE_MAP:           return xr_type_new_map(xr_type_new_unknown(), xr_type_new_unknown());
-        case XLSP_TYPE_SET:           return xr_type_new_set(xr_type_new_unknown());
-        case XLSP_TYPE_JSON:          return xr_type_new_json();
-        case XLSP_TYPE_CHANNEL:       return xr_type_new_channel(xr_type_new_unknown());
-        case XLSP_TYPE_REGEX:         return xr_type_new_regex();
-        case XLSP_TYPE_BIGINT:        return xr_type_new_bigint();
-        case XLSP_TYPE_STRINGBUILDER: return xr_type_new_stringbuilder();
-        case XLSP_TYPE_EXCEPTION:     return xr_type_new_named_instance("Exception");
-        case XLSP_TYPE_COROUTINE:     return xr_type_new_task(NULL);
+        case XLSP_TYPE_INT:           return xr_type_new_int(NULL);
+        case XLSP_TYPE_FLOAT:         return xr_type_new_float(NULL);
+        case XLSP_TYPE_STRING:        return xr_type_new_string(NULL);
+        case XLSP_TYPE_BOOL:          return xr_type_new_bool(NULL);
+        case XLSP_TYPE_ARRAY:         return xr_type_new_array(NULL, xr_type_new_unknown(NULL));
+        case XLSP_TYPE_MAP:           return xr_type_new_map(NULL, xr_type_new_unknown(NULL), xr_type_new_unknown(NULL));
+        case XLSP_TYPE_SET:           return xr_type_new_set(NULL, xr_type_new_unknown(NULL));
+        case XLSP_TYPE_JSON:          return xr_type_new_json(NULL);
+        case XLSP_TYPE_CHANNEL:       return xr_type_new_channel(NULL, xr_type_new_unknown(NULL));
+        case XLSP_TYPE_REGEX:         return xr_type_new_regex(NULL);
+        case XLSP_TYPE_BIGINT:        return xr_type_new_bigint(NULL);
+        case XLSP_TYPE_STRINGBUILDER: return xr_type_new_stringbuilder(NULL);
+        case XLSP_TYPE_EXCEPTION:     return xr_type_new_named_instance(NULL, "Exception");
+        case XLSP_TYPE_COROUTINE:     return xr_type_new_task(NULL, NULL);
         default:                      return NULL;
     }
 }
@@ -71,21 +71,21 @@ XlspBuiltinType xlsp_builtin_type_from_name(const char *name) {
 
 XrJsonValue *xlsp_builtin_get_completions(XlspBuiltinType type) {
     XrJsonValue *items = xlsp_json_new_array();
-    
+
     XrType *xa_type = create_type_for_builtin(type);
     if (!xa_type) return items;
-    
+
     const XaBuiltinMember *members = NULL;
     int count = xa_builtin_get_members_for_type(xa_type, &members);
-    
+
     for (int i = 0; i < count; i++) {
         const XaBuiltinMember *m = &members[i];
-        
+
         XrJsonValue *item = xlsp_json_new_object();
         xlsp_json_object_set(item, "label", xlsp_json_new_string(m->name));
         int kind = m->is_method ? XLSP_KIND_METHOD : XLSP_KIND_PROPERTY;
         xlsp_json_object_set(item, "kind", xlsp_json_new_number(kind));
-        
+
         if (m->signature) {
             // Build full signature: name + signature
             char detail[256];
@@ -97,7 +97,7 @@ XrJsonValue *xlsp_builtin_get_completions(XlspBuiltinType type) {
         }
         xlsp_json_array_push(items, item);
     }
-    
+
     return items;
 }
 
@@ -105,40 +105,40 @@ const char *xlsp_builtin_get_hover(XlspBuiltinType type, const char *method_name
                                     char *buf, size_t buf_size) {
     XrType *xa_type = create_type_for_builtin(type);
     if (!xa_type) return NULL;
-    
+
     const char *type_name = xa_builtin_get_type_name(xa_type);
     const char *signature = xa_builtin_get_member_signature(xa_type, method_name);
     const char *doc = xa_builtin_get_member_doc(xa_type, method_name);
-    
+
     if (!signature) return NULL;
-    
+
     snprintf(buf, buf_size, "```xray\n%s.%s%s\n```\n\n%s",
              type_name ? type_name : "unknown",
              method_name,
              signature,
              doc ? doc : "");
-    
+
     return buf;
 }
 
 XlspBuiltinType xlsp_infer_literal_type(const char *text) {
     if (!text || !*text) return XLSP_TYPE_UNKNOWN;
-    
+
     // String literal: "..." or '...'
     if (text[0] == '"' || text[0] == '\'') {
         return XLSP_TYPE_STRING;
     }
-    
+
     // Array literal: [...]
     if (text[0] == '[') {
         return XLSP_TYPE_ARRAY;
     }
-    
+
     // Object/Map literal: {...}
     if (text[0] == '{') {
         return XLSP_TYPE_JSON;
     }
-    
+
     // Number literals
     int has_dot = 0;
     int is_number = 1;
@@ -153,7 +153,7 @@ XlspBuiltinType xlsp_infer_literal_type(const char *text) {
     if (is_number && *text) {
         return has_dot ? XLSP_TYPE_FLOAT : XLSP_TYPE_INT;
     }
-    
+
     // Constructor calls
     if (strncmp(text, TYPE_NAME_ARRAY, 5) == 0) return XLSP_TYPE_ARRAY;
     if (strncmp(text, TYPE_NAME_MAP, 3) == 0) return XLSP_TYPE_MAP;
@@ -163,6 +163,6 @@ XlspBuiltinType xlsp_infer_literal_type(const char *text) {
     if (strncmp(text, TYPE_NAME_BIGINT, 6) == 0) return XLSP_TYPE_BIGINT;
     if (strncmp(text, TYPE_NAME_STRINGBUILDER, 13) == 0) return XLSP_TYPE_STRINGBUILDER;
     if (strncmp(text, TYPE_NAME_REGEX, 5) == 0) return XLSP_TYPE_REGEX;
-    
+
     return XLSP_TYPE_UNKNOWN;
 }

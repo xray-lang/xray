@@ -41,13 +41,13 @@ static void proto_set_types(XrProto *proto, const uint8_t *types, int count) {
         for (int i = 0; i < nparams && i < count; i++) {
             switch (types[i]) {
             case XR_SLOT_I64:
-                proto->param_types[i] = xr_type_new_int();
+                proto->param_types[i] = xr_type_new_int(NULL);
                 break;
             case XR_SLOT_F64:
-                proto->param_types[i] = xr_type_new_float();
+                proto->param_types[i] = xr_type_new_float(NULL);
                 break;
             case XR_SLOT_BOOL:
-                proto->param_types[i] = xr_type_new_bool();
+                proto->param_types[i] = xr_type_new_bool(NULL);
                 break;
             default:
                 proto->param_types[i] = NULL;
@@ -74,7 +74,7 @@ static void test_simple_add(void) {
     // Set up function metadata
     proto->numparams = 2;
     proto->maxstacksize = 3;
-    proto->return_type_info = xr_type_new_int();
+    proto->return_type_info = xr_type_new_int(NULL);
 
     // param_types: both params are i64
     uint8_t types_add[] = {XR_SLOT_I64, XR_SLOT_I64, XR_SLOT_I64};

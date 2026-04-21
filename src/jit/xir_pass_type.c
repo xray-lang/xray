@@ -31,12 +31,12 @@
 static XrType *xr_tag_to_xrtype(uint8_t tag) {
     switch (tag) {
     case 1: case 2:                     // TRUE, FALSE
-        return xr_type_new_bool();
+        return xr_type_new_bool(NULL);
     case 3: case 4: case 5: case 6:     // I8..I64
     case 7: case 8: case 9: case 10:    // U8..U64
-        return xr_type_new_int();
+        return xr_type_new_int(NULL);
     case 11: case 12:                   // F32, F64
-        return xr_type_new_float();
+        return xr_type_new_float(NULL);
     case 13:                            // PTR
         return NULL;                    // PTR needs heap_type for precision
     default:
@@ -130,9 +130,9 @@ static uint8_t meet_vtag(uint8_t a, uint8_t b) {
 /* One forward scan of the type lattice.  Wrapped by xir_pass_type_prop
  * below which iterates until no vreg type changes. */
 static void type_prop_scan_once(XirFunc *func) {
-    XrType *t_int   = xr_type_new_int();
-    XrType *t_float = xr_type_new_float();
-    XrType *t_bool  = xr_type_new_bool();
+    XrType *t_int   = xr_type_new_int(NULL);
+    XrType *t_float = xr_type_new_float(NULL);
+    XrType *t_bool  = xr_type_new_bool(NULL);
 
     for (uint32_t bi = 0; bi < func->nblk; bi++) {
         XirBlock *blk = func->blocks[bi];

@@ -165,6 +165,8 @@ void xcgen_register_proto(XcgenModule *mod, void *proto_ptr, const char *c_name)
     e->proto_ptr = proto_ptr;
     e->c_name = c_name;
     e->func_idx = -1;  // set after xcgen_compile_func
+    e->non_escaping = false;
+    e->num_upvals = 0;
 }
 
 const char *xcg_lookup_proto_name(XcgenModule *mod, void *proto_ptr) {
@@ -831,6 +833,165 @@ static void xcgen_compile_function_body(XcgenModule *mod, XcgenFunc *cf) {
     // mirror the allocation site above and prevent freeing the stack buffer.
     if (reachable_is_heap) xr_free(reachable);
     if (used_is_heap) xr_free(used);
+}
+
+/* ========== Non-Escaping Closure Analysis ========== */
+//
+// A closure created in function F is "non-escaping" if the vreg holding it
+// is ONLY used as:
+//   (a) dst of XIR_STORE_UPVAL (setting upvalues on the child closure), or
+//   (b) call_arg_pool slot 0 of a XIR_CALL_KNOWN targeting the same proto.
+// Any other reference (returned, stored to heap, passed as regular arg,
+// indirect call via CALL_DIRECT) means the closure escapes.
+//
+// When non-escaping, the child function receives upvalues as extra XrtValue
+// parameters instead of through xrt_closure_t*, eliminating:
+//   - xrt_closure_new heap allocation
+//   - xrt_cl->upvals[i] indirect memory access
+//   - closure object entirely
+
+// Resolve a const ref in a XIR function to its raw pointer value (for fn_ptr).
+static void *xcg_resolve_const_ptr(XirFunc *func, XirRef ref) {
+    if (xir_ref_is_const(ref)) {
+        uint32_t ci = XIR_REF_INDEX(ref);
+        if (ci < func->nconst) return (void *)(uintptr_t)func->consts[ci].val.raw;
+    }
+    return NULL;
+}
+
+// Resolve a const ref to an int64 value (for nupvals).
+static int64_t xcg_resolve_const_i64(XirFunc *func, XirRef ref) {
+    if (xir_ref_is_const(ref)) {
+        uint32_t ci = XIR_REF_INDEX(ref);
+        if (ci < func->nconst) return func->consts[ci].val.i64;
+    }
+    // Trace through CONST_I64 def if ref is a vreg
+    if (xir_ref_is_vreg(ref)) {
+        uint32_t vi = XIR_REF_INDEX(ref);
+        if (vi < func->nvreg && func->vregs[vi].def) {
+            XirIns *def = func->vregs[vi].def;
+            if (def->op == XIR_CONST_I64 && xir_ref_is_const(def->args[0])) {
+                uint32_t ci2 = XIR_REF_INDEX(def->args[0]);
+                if (ci2 < func->nconst) return func->consts[ci2].val.i64;
+            }
+        }
+    }
+    return 0;
+}
+
+// Check if vreg cl_vreg (holding a closure of cl_proto) escapes from func.
+// Returns true if the closure does NOT escape.
+static bool xcg_closure_is_non_escaping(XirFunc *func, uint32_t cl_vreg,
+                                         void *cl_proto, XcgenModule *mod) {
+    XR_DCHECK(func != NULL, "xcg_closure_is_non_escaping: NULL func");
+    XR_DCHECK(cl_vreg < func->nvreg, "xcg_closure_is_non_escaping: invalid vreg");
+
+    // Phase 1: scan all instruction args for references to cl_vreg.
+    // Only STORE_UPVAL(dst=cl_vreg) is safe; any use in ins->args[] escapes.
+    for (uint32_t bi = 0; bi < func->nblk; bi++) {
+        XirBlock *blk = func->blocks[bi];
+        for (uint32_t ii = 0; ii < blk->nins; ii++) {
+            XirIns *ins = &blk->ins[ii];
+            // Check dst: STORE_UPVAL with cl_vreg as target is safe
+            if (xir_ref_is_vreg(ins->dst) && XIR_REF_INDEX(ins->dst) == cl_vreg) {
+                if (ins->op == XIR_STORE_UPVAL) continue;  // safe
+                // Definition site (CALL_C creating the closure) also ok
+                if (ins->op == XIR_CALL_C || ins->op == XIR_CALL_C_LEAF) continue;
+                return false;  // unexpected redefinition
+            }
+            // Check args[0..1] for any reference to cl_vreg
+            for (int a = 0; a < 2; a++) {
+                if (xir_ref_is_vreg(ins->args[a]) &&
+                    XIR_REF_INDEX(ins->args[a]) == cl_vreg) {
+                    return false;  // used in an instruction arg → escaping
+                }
+            }
+        }
+        // Also check PHI nodes
+        for (XirPhi *phi = blk->phis; phi; phi = phi->next) {
+            for (uint16_t p = 0; p < phi->narg; p++) {
+                if (xir_ref_is_vreg(phi->args[p]) &&
+                    XIR_REF_INDEX(phi->args[p]) == cl_vreg) {
+                    return false;  // flows through PHI → might escape
+                }
+            }
+        }
+    }
+
+    // Phase 2: scan call_arg_pool for references to cl_vreg.
+    // Slot 0 of a CALL_KNOWN targeting the same proto is safe; anything else escapes.
+    if (func->call_arg_pool) {
+        for (uint32_t vi = 0; vi < func->nvreg; vi++) {
+            XirVReg *vr = &func->vregs[vi];
+            if (vr->call_nargs == 0) continue;
+            for (uint16_t si = 0; si < vr->call_nargs; si++) {
+                XirRef ref = func->call_arg_pool[vr->call_arg_start + si];
+                if (!xir_ref_is_vreg(ref) || XIR_REF_INDEX(ref) != cl_vreg)
+                    continue;
+                // cl_vreg found in call arg pool at slot si
+                if (si != 0) return false;  // not closure slot → escaping
+                // Slot 0: verify it's a CALL_KNOWN targeting the same proto
+                XirIns *def = vr->def;
+                if (!def) return false;
+                if (def->op != XIR_CALL_KNOWN && def->op != XIR_CALL_KNOWN_REG)
+                    return false;  // not a direct call → escaping
+                void *callee = xcg_resolve_const_ptr(func, def->args[0]);
+                if (callee != cl_proto) return false;  // different target → escaping
+            }
+        }
+    }
+
+    return true;  // all uses are safe → non-escaping
+}
+
+// Lookup XcgenProtoEntry by proto pointer.
+static XcgenProtoEntry *xcg_lookup_proto_entry(XcgenModule *mod, void *proto_ptr) {
+    for (int i = 0; i < mod->proto_map_count; i++) {
+        if (mod->proto_map[i].proto_ptr == proto_ptr)
+            return &mod->proto_map[i];
+    }
+    return NULL;
+}
+
+// Pre-scan a function for child closure creation sites and run escape analysis.
+// Marks non-escaping closures in proto_map so child functions get the right
+// signature when compiled later.
+static void prescan_closure_escape(XcgenModule *mod, XirFunc *func) {
+    XR_DCHECK(mod != NULL, "prescan_closure_escape: NULL mod");
+    XR_DCHECK(func != NULL, "prescan_closure_escape: NULL func");
+
+    for (uint32_t bi = 0; bi < func->nblk; bi++) {
+        XirBlock *blk = func->blocks[bi];
+        for (uint32_t ii = 0; ii < blk->nins; ii++) {
+            XirIns *ins = &blk->ins[ii];
+            if (ins->op != XIR_CALL_C && ins->op != XIR_CALL_C_LEAF) continue;
+            if (!xir_ref_is_vreg(ins->dst)) continue;
+
+            // Try to resolve fn_ptr: first from call_arg_pool, then from args[0]
+            uint32_t dst_vi = XIR_REF_INDEX(ins->dst);
+            void *fn_ptr = NULL;
+            if (func->call_arg_pool && func->vregs[dst_vi].call_nargs > 0) {
+                XirRef pool_ref = func->call_arg_pool[func->vregs[dst_vi].call_arg_start];
+                fn_ptr = xcg_resolve_const_ptr(func, pool_ref);
+            }
+            if (!fn_ptr) fn_ptr = xcg_resolve_const_ptr(func, ins->args[0]);
+            if (!fn_ptr) continue;
+
+            // Check if fn_ptr is a registered proto (closure creation)
+            XcgenProtoEntry *entry = xcg_lookup_proto_entry(mod, fn_ptr);
+            if (!entry) continue;
+
+            // Resolve nupvals
+            int64_t nupvals = xcg_resolve_const_i64(func, ins->args[1]);
+            if (nupvals <= 0) continue;
+
+            // Run escape analysis
+            if (xcg_closure_is_non_escaping(func, dst_vi, fn_ptr, mod)) {
+                entry->non_escaping = true;
+                entry->num_upvals = (int)nupvals;
+            }
+        }
+    }
 }
 
 XcgenFunc *xcgen_compile_func(XcgenModule *mod, XirFunc *xfunc, const char *c_name) {

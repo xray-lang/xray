@@ -67,7 +67,7 @@ XrExprDesc compile_literal(XrCompilerContext *ctx, XrCompiler *compiler, Literal
             }
             e.kind = XEXPR_RELOC;
             e.u.pc = pc;
-            e.compile_type = xr_type_new_bool();
+            e.compile_type = xr_type_new_bool(NULL);
             break;
 
         case LITERAL_KIND_INT: {
@@ -86,7 +86,7 @@ XrExprDesc compile_literal(XrCompilerContext *ctx, XrCompiler *compiler, Literal
                 e.kind = XEXPR_RELOC;
                 e.u.pc = pc;
             }
-            e.compile_type = xr_type_new_int();
+            e.compile_type = xr_type_new_int(NULL);
             break;
         }
 
@@ -97,7 +97,7 @@ XrExprDesc compile_literal(XrCompilerContext *ctx, XrCompiler *compiler, Literal
             pc = emit_abx(compiler->emitter, OP_LOADK, 0, kidx);
             e.kind = XEXPR_RELOC;
             e.u.pc = pc;
-            e.compile_type = xr_type_new_float();
+            e.compile_type = xr_type_new_float(NULL);
             break;
         }
 
@@ -126,7 +126,7 @@ XrExprDesc compile_literal(XrCompilerContext *ctx, XrCompiler *compiler, Literal
             pc = emit_abx(compiler->emitter, OP_LOADK, 0, kidx);
             e.kind = XEXPR_RELOC;
             e.u.pc = pc;
-            e.compile_type = xr_type_new_string();
+            e.compile_type = xr_type_new_string(NULL);
             break;
         }
 

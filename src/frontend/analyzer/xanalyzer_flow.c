@@ -437,7 +437,7 @@ static XrType *get_type_at_flow_node(XaFlowBuilder *builder,
     }
 
     if (!flow || (flow->flags & XA_FLOW_UNREACHABLE)) {
-        return xr_type_new_never();
+        return xr_type_new_never(NULL);
     }
 
     // Check cache for shared nodes
@@ -488,7 +488,7 @@ static XrType *get_type_at_flow_node(XaFlowBuilder *builder,
     else if (flow->flags & XA_FLOW_BRANCH_LABEL) {
         // Branch merge: union of all antecedent types
         if (flow->antecedent_count == 0) {
-            result = xr_type_new_never();
+            result = xr_type_new_never(NULL);
         } else if (flow->antecedent_count == 1) {
             result = get_type_at_flow_node(builder, name, declared_type,
                                            flow->antecedents[0], cache, depth + 1);
@@ -498,7 +498,7 @@ static XrType *get_type_at_flow_node(XaFlowBuilder *builder,
             for (int i = 0; i < flow->antecedent_count; i++) {
                 XrType *path_type = get_type_at_flow_node(builder, name, declared_type,
                                                           flow->antecedents[i], cache, depth + 1);
-                union_type = xr_type_union(union_type, path_type);
+                union_type = xr_type_union(NULL, union_type, path_type);
             }
             result = union_type;
         }
@@ -516,7 +516,7 @@ static XrType *get_type_at_flow_node(XaFlowBuilder *builder,
             for (int i = 0; i < flow->antecedent_count; i++) {
                 XrType *path_type = get_type_at_flow_node(builder, name, declared_type,
                                                           flow->antecedents[i], cache, depth + 1);
-                union_type = xr_type_union(union_type, path_type);
+                union_type = xr_type_union(NULL, union_type, path_type);
             }
             result = union_type;
         }
@@ -591,9 +591,9 @@ XrType *xa_narrow_by_typeof(XrType *type, const char *type_name, bool assume_tru
     if (target_kind < 0) return type;
 
     if (assume_true) {
-        return xr_type_filter(type, (XrTypeKind)target_kind);
+        return xr_type_filter(NULL, type, (XrTypeKind)target_kind);
     } else {
-        return xr_type_exclude(type, (XrTypeKind)target_kind);
+        return xr_type_exclude(NULL, type, (XrTypeKind)target_kind);
     }
 }
 
@@ -609,9 +609,9 @@ XrType *xa_narrow_by_null_check(XrType *type, bool is_equal_null, bool assume_tr
     bool is_null = (is_equal_null == assume_true);
 
     if (is_null) {
-        return xr_type_filter(type, XR_KIND_NULL);
+        return xr_type_filter(NULL, type, XR_KIND_NULL);
     } else {
-        return xr_type_non_nullable(type);
+        return xr_type_non_nullable(NULL, type);
     }
 }
 
@@ -621,7 +621,7 @@ XrType *xa_narrow_by_truthiness(XrType *type, bool assume_true) {
 
     if (assume_true) {
         // Truthy: exclude null, undefined
-        return xr_type_non_nullable(type);
+        return xr_type_non_nullable(NULL, type);
     } else {
         // Falsy: could be null, 0, "", false
         // Can't narrow much here without more context
@@ -641,7 +641,7 @@ XrType *xa_narrow_by_instanceof(XrType *type, const char *class_name, bool assum
 
     if (assume_true) {
         // x instanceof ClassName is true => x is ClassName instance
-        XrType *instance_type = xr_type_new_instance(NULL);
+        XrType *instance_type = xr_type_new_instance(NULL, NULL);
         if (instance_type) {
             instance_type->instance.class_name = class_name;
         }
@@ -660,15 +660,15 @@ XrType *xa_narrow_by_instanceof(XrType *type, const char *class_name, bool assum
                     remaining[count++] = m;
                 }
             }
-            if (count == 0) return xr_type_new_never();
+            if (count == 0) return xr_type_new_never(NULL);
             if (count == 1) return remaining[0];
-            XrType *result = xr_type_new_union(remaining, count);
+            XrType *result = xr_type_new_union(NULL, remaining, count);
             return result ? result : type;
         }
 
         // Non-union: exact match => never
         if (type_is_class_instance(type, class_name)) {
-            return xr_type_new_never();
+            return xr_type_new_never(NULL);
         }
         return type;
     }

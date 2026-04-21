@@ -473,7 +473,7 @@ void xa_builtin_interfaces_init(void) {
     // Create interface types
     for (int i = 0; i < XA_IFACE_COUNT; i++) {
         XaInterfaceDefinition *def = &builtin_interfaces[i];
-        def->type = xr_type_new_interface(def->name);
+        def->type = xr_type_new_interface(NULL, def->name);
         
         // Set up method signatures based on interface
         // (Simplified: actual method types would need proper setup)
@@ -481,16 +481,16 @@ void xa_builtin_interfaces_init(void) {
     
     // Set specific return types
     // Comparable.compareTo returns int
-    comparable_methods[0].return_type = xr_type_new_int();
+    comparable_methods[0].return_type = xr_type_new_int(NULL);
     
     // Hashable.hashCode returns int
-    hashable_methods[0].return_type = xr_type_new_int();
+    hashable_methods[0].return_type = xr_type_new_int(NULL);
     
     // Stringable.toString returns string
-    stringable_methods[0].return_type = xr_type_new_string();
+    stringable_methods[0].return_type = xr_type_new_string(NULL);
     
     // Iterator.hasNext returns bool
-    iterator_methods[1].return_type = xr_type_new_bool();
+    iterator_methods[1].return_type = xr_type_new_bool(NULL);
     
     g_interfaces_initialized = true;
 }

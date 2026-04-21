@@ -32,6 +32,7 @@
 // Forward declarations
 typedef struct XaAnalyzer XaAnalyzer;
 typedef struct AstNode XrAstNode;
+typedef struct XrayIsolate XrayIsolate;
 
 // Diagnostic severity (matches LSP XrLspDiagnosticSeverity values)
 typedef enum XrDiagSeverity {
@@ -62,6 +63,9 @@ typedef struct XaFileEntry {
 
 // Analyzer context
 struct XaAnalyzer {
+    // Owning isolate (explicit, no TLS)
+    XrayIsolate *isolate;
+
     // Type pool (per-analyzer, no global state)
     XrTypePool *type_pool;
 

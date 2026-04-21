@@ -266,9 +266,9 @@ static XrType *tfa_infer_return_type(TfaSummary *s) {
     if (proto->type_feedback) {
         uint8_t fb_tag = proto->type_feedback->return_type;
         if (fb_tag != 0) {
-            if (fb_tag <= 8) return xr_type_new_int();
-            if (fb_tag == 9 || fb_tag == 10) return xr_type_new_float();
-            return xr_type_new_unknown();
+            if (fb_tag <= 8) return xr_type_new_int(NULL);
+            if (fb_tag == 9 || fb_tag == 10) return xr_type_new_float(NULL);
+            return xr_type_new_unknown(NULL);
         }
     }
 
@@ -277,7 +277,7 @@ static XrType *tfa_infer_return_type(TfaSummary *s) {
     bool any_float = false;
     for (uint8_t i = 0; i < s->nparam; i++) {
         XrType *pt = s->param_types[i];
-        if (!pt || pt == xr_type_new_unknown()) {
+        if (!pt || pt == xr_type_new_unknown(NULL)) {
             all_numeric = false;
             break;
         }
@@ -289,10 +289,10 @@ static XrType *tfa_infer_return_type(TfaSummary *s) {
     }
 
     if (all_numeric && s->nparam > 0) {
-        return any_float ? xr_type_new_float() : xr_type_new_int();
+        return any_float ? xr_type_new_float(NULL) : xr_type_new_int(NULL);
     }
 
-    return xr_type_new_unknown();
+    return xr_type_new_unknown(NULL);
 }
 
 /* ========== Fixed-Point Solver ========== */
@@ -387,7 +387,7 @@ void tfa_apply_results(TfaState *tfa) {
 
             for (uint8_t p = 0; p < np; p++) {
                 XrType *inferred = s->param_types[p];
-                if (inferred && inferred != xr_type_new_unknown()) {
+                if (inferred && inferred != xr_type_new_unknown(NULL)) {
                     any_refined = true;
                     break;
                 }
@@ -404,7 +404,7 @@ void tfa_apply_results(TfaState *tfa) {
                     for (uint8_t p = 0; p < np && p < proto->param_types_count; p++) {
                         if (proto->param_types[p] == NULL) {
                             XrType *inferred = s->param_types[p];
-                            if (inferred && inferred != xr_type_new_unknown())
+                            if (inferred && inferred != xr_type_new_unknown(NULL))
                                 proto->param_types[p] = inferred;
                         }
                     }
@@ -413,7 +413,7 @@ void tfa_apply_results(TfaState *tfa) {
         }
 
         // Apply return type
-        if (s->return_type && s->return_type != xr_type_new_unknown()) {
+        if (s->return_type && s->return_type != xr_type_new_unknown(NULL)) {
             if (!proto->return_type_info) {
                 proto->return_type_info = s->return_type;
             }
@@ -449,7 +449,7 @@ static void tfa_scan_proto(TfaState *tfa, TfaSummary *caller, XrProto *proto) {
     XrType *reg_type[TFA_REG_TRACK_MAX];
     memset(reg_proto, 0, sizeof(reg_proto));
     for (int r = 0; r < TFA_REG_TRACK_MAX; r++)
-        reg_type[r] = xr_type_new_unknown();
+        reg_type[r] = xr_type_new_unknown(NULL);
 
     // Seed param register types from caller summary
     if (caller) {
@@ -459,11 +459,11 @@ static void tfa_scan_proto(TfaState *tfa, TfaSummary *caller, XrProto *proto) {
         }
     }
 
-    XrType *t_int   = xr_type_new_int();
-    XrType *t_float = xr_type_new_float();
-    XrType *t_bool  = xr_type_new_bool();
-    XrType *t_top   = xr_type_new_unknown();
-    XrType *t_str   = xr_type_new_string();
+    XrType *t_int   = xr_type_new_int(NULL);
+    XrType *t_float = xr_type_new_float(NULL);
+    XrType *t_bool  = xr_type_new_bool(NULL);
+    XrType *t_top   = xr_type_new_unknown(NULL);
+    XrType *t_str   = xr_type_new_string(NULL);
 
     for (uint32_t pc = 0; pc < ncode; pc++) {
         XrInstruction ins = code[pc];

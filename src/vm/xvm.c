@@ -3735,14 +3735,14 @@ startfunc:
                                                 pi < XFB_MAX_PARAMS &&
                                                 xfb_is_monomorphic(proto->type_feedback->arg_types[pi])) {
                                                 uint8_t st = xfb_to_slot_type(proto->type_feedback->arg_types[pi]);
-                                                proto->param_types[pi] = xr_slot_type_to_type(st);
+                                                proto->param_types[pi] = xr_slot_type_to_type(NULL, st);
                                             }
                                         }
                                     }
                                     if (!proto->return_type_info) {
                                         uint8_t fb_ret = xfb_to_slot_type(proto->type_feedback->return_type);
                                         if (fb_ret != XR_SLOT_ANY)
-                                            proto->return_type_info = xr_slot_type_to_type(fb_ret);
+                                            proto->return_type_info = xr_slot_type_to_type(NULL, fb_ret);
                                     }
                                 }
                             }

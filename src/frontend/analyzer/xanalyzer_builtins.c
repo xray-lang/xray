@@ -154,13 +154,13 @@ const XaBuiltinType *xa_builtin_get_by_name(const char *name) {
 XaSymbol **xa_builtin_get_members(XrType *type, int *count) {
     XR_DCHECK(count != NULL, "builtin_get_members: NULL count");
     *count = 0;
-    
+
     const XaBuiltinType *bt = xa_builtin_get_type_info(type);
     if (!bt) return NULL;
-    
+
     XaSymbol **symbols = xr_malloc(sizeof(XaSymbol*) * bt->member_count);
     if (!symbols) return NULL;
-    
+
     for (int i = 0; i < bt->member_count; i++) {
         const XaBuiltinMember *m = &bt->members[i];
         XaSymbolKind kind = m->is_method ? XA_SYM_METHOD : XA_SYM_FIELD;
@@ -168,7 +168,7 @@ XaSymbol **xa_builtin_get_members(XrType *type, int *count) {
         sym->is_builtin = true;
         symbols[i] = sym;
     }
-    
+
     *count = bt->member_count;
     return symbols;
 }
@@ -177,7 +177,7 @@ XaSymbol **xa_builtin_get_members(XrType *type, int *count) {
 const char *xa_builtin_get_member_signature(XrType *type, const char *member_name) {
     const XaBuiltinType *bt = xa_builtin_get_type_info(type);
     if (!bt || !member_name) return NULL;
-    
+
     for (int i = 0; i < bt->member_count; i++) {
         if (strcmp(bt->members[i].name, member_name) == 0) {
             return bt->members[i].signature;
@@ -190,7 +190,7 @@ const char *xa_builtin_get_member_signature(XrType *type, const char *member_nam
 const char *xa_builtin_get_member_doc(XrType *type, const char *member_name) {
     const XaBuiltinType *bt = xa_builtin_get_type_info(type);
     if (!bt || !member_name) return NULL;
-    
+
     for (int i = 0; i < bt->member_count; i++) {
         if (strcmp(bt->members[i].name, member_name) == 0) {
             return bt->members[i].doc;
@@ -204,7 +204,7 @@ bool xa_builtin_is_method(XrType *type, const char *member_name) {
     XR_DCHECK(member_name != NULL, "builtin_is_method: NULL member_name");
     const XaBuiltinType *bt = xa_builtin_get_type_info(type);
     if (!bt || !member_name) return false;
-    
+
     for (int i = 0; i < bt->member_count; i++) {
         if (strcmp(bt->members[i].name, member_name) == 0) {
             return bt->members[i].is_method;
@@ -214,12 +214,12 @@ bool xa_builtin_is_method(XrType *type, const char *member_name) {
 }
 
 // Get method return type with generic substitution
-XrType *xa_builtin_get_method_return_type(XrType *container_type, const char *method_name) {
+XrType *xa_builtin_get_method_return_type(XrayIsolate *X, XrType *container_type, const char *method_name) {
     if (!container_type || !method_name) return NULL;
-    
+
     // Convert method name to Symbol ID once
     SymbolId sym = xr_builtin_symbol_from_name(method_name);
-    
+
     // Get element type for generic substitution
     XrType *elem_type = NULL;
     if (XR_TYPE_IS_ARRAY(container_type)) {
@@ -229,38 +229,38 @@ XrType *xa_builtin_get_method_return_type(XrType *container_type, const char *me
     } else if (container_type->kind == XR_KIND_CHANNEL) {
         elem_type = container_type->container.element_type;
     }
-    
+
     // Array methods
     if (XR_TYPE_IS_ARRAY(container_type)) {
         switch (sym) {
-        case SYMBOL_CONCAT:                         return xr_type_new_array(elem_type);
-        case SYMBOL_EVERY:                          return xr_type_new_bool();
-        case SYMBOL_FILTER: case SYMBOL_FILL:       return xr_type_new_array(elem_type);
+        case SYMBOL_CONCAT:                         return xr_type_new_array(X, elem_type);
+        case SYMBOL_EVERY:                          return xr_type_new_bool(NULL);
+        case SYMBOL_FILTER: case SYMBOL_FILL:       return xr_type_new_array(X, elem_type);
         case SYMBOL_FIND: {
-            XrType *t = elem_type ? xr_type_copy(elem_type) : xr_type_new_unknown();
+            XrType *t = elem_type ? xr_type_copy(X, elem_type) : xr_type_new_unknown(NULL);
             if (t) t->is_nullable = true;
             return t;
         }
-        case SYMBOL_FINDINDEX:                      return xr_type_new_int();
-        case SYMBOL_FOREACH:                        return xr_type_new_void();
-        case SYMBOL_INDEXOF:                        return xr_type_new_int();
-        case SYMBOL_INCLUDES:                       return xr_type_new_bool();
-        case SYMBOL_JOIN:                           return xr_type_new_string();
-        case SYMBOL_MAP:                            return xr_type_new_array(xr_type_new_unknown());
-        case SYMBOL_PUSH: case SYMBOL_UNSHIFT:      return xr_type_new_void();
+        case SYMBOL_FINDINDEX:                      return xr_type_new_int(NULL);
+        case SYMBOL_FOREACH:                        return xr_type_new_void(NULL);
+        case SYMBOL_INDEXOF:                        return xr_type_new_int(NULL);
+        case SYMBOL_INCLUDES:                       return xr_type_new_bool(NULL);
+        case SYMBOL_JOIN:                           return xr_type_new_string(NULL);
+        case SYMBOL_MAP:                            return xr_type_new_array(X, xr_type_new_unknown(NULL));
+        case SYMBOL_PUSH: case SYMBOL_UNSHIFT:      return xr_type_new_void(NULL);
         case SYMBOL_POP: case SYMBOL_SHIFT: {
-            XrType *t = elem_type ? xr_type_copy(elem_type) : xr_type_new_unknown();
+            XrType *t = elem_type ? xr_type_copy(X, elem_type) : xr_type_new_unknown(NULL);
             if (t) t->is_nullable = true;
             return t;
         }
         case SYMBOL_REVERSE: case SYMBOL_SLICE:
-        case SYMBOL_SORT:                           return xr_type_new_array(elem_type);
-        case SYMBOL_REDUCE:                         return xr_type_new_unknown();
-        case SYMBOL_SOME:                           return xr_type_new_bool();
+        case SYMBOL_SORT:                           return xr_type_new_array(X, elem_type);
+        case SYMBOL_REDUCE:                         return xr_type_new_unknown(NULL);
+        case SYMBOL_SOME:                           return xr_type_new_bool(NULL);
         default: break;
         }
     }
-    
+
     // String methods
     if (XR_TYPE_IS_STRING(container_type)) {
         switch (sym) {
@@ -270,145 +270,145 @@ XrType *xa_builtin_get_method_return_type(XrType *container_type, const char *me
         case SYMBOL_TRIM: case SYMBOL_TRIM_START: case SYMBOL_TRIM_END:
         case SYMBOL_REPLACE: case SYMBOL_REPLACEALL:
         case SYMBOL_REPEAT:
-        case SYMBOL_PAD_START: case SYMBOL_PAD_END:     return xr_type_new_string();
+        case SYMBOL_PAD_START: case SYMBOL_PAD_END:     return xr_type_new_string(NULL);
         case SYMBOL_CODEPOINT_AT:
-        case SYMBOL_INDEXOF: case SYMBOL_LASTINDEXOF:   return xr_type_new_int();
+        case SYMBOL_INDEXOF: case SYMBOL_LASTINDEXOF:   return xr_type_new_int(NULL);
         case SYMBOL_CONTAINS:
-        case SYMBOL_STARTSWITH: case SYMBOL_ENDSWITH:    return xr_type_new_bool();
-        case SYMBOL_SPLIT:                              return xr_type_new_array(xr_type_new_string());
+        case SYMBOL_STARTSWITH: case SYMBOL_ENDSWITH:    return xr_type_new_bool(NULL);
+        case SYMBOL_SPLIT:                              return xr_type_new_array(X, xr_type_new_string(NULL));
         case SYMBOL_MATCH: {
-            XrType *t = xr_type_new_array(xr_type_new_string());
+            XrType *t = xr_type_new_array(X, xr_type_new_string(NULL));
             if (t) t->is_nullable = true;
             return t;
         }
         default: break;
         }
     }
-    
+
     // Map methods
     if (XR_TYPE_IS_MAP(container_type)) {
         XrType *key_type = container_type->map.key_type;
         XrType *val_type = container_type->map.value_type;
-        
+
         switch (sym) {
         case SYMBOL_GET: {
-            XrType *t = val_type ? xr_type_copy(val_type) : xr_type_new_unknown();
+            XrType *t = val_type ? xr_type_copy(X, val_type) : xr_type_new_unknown(NULL);
             if (t) t->is_nullable = true;
             return t;
         }
         case SYMBOL_SET: case SYMBOL_CLEAR:
-        case SYMBOL_FOREACH:                        return xr_type_new_void();
-        case SYMBOL_HAS: case SYMBOL_DELETE:        return xr_type_new_bool();
-        case SYMBOL_KEYS:                           return xr_type_new_array(key_type);
-        case SYMBOL_VALUES:                         return xr_type_new_array(val_type);
-        case SYMBOL_ENTRIES:                        return xr_type_new_array(xr_type_new_unknown());
-        case SYMBOL_MAP:                            return xr_type_new_map(key_type, xr_type_new_unknown());
-        case SYMBOL_FILTER:                         return xr_type_new_map(key_type, val_type);
-        case SYMBOL_REDUCE:                         return xr_type_new_unknown();
+        case SYMBOL_FOREACH:                        return xr_type_new_void(NULL);
+        case SYMBOL_HAS: case SYMBOL_DELETE:        return xr_type_new_bool(NULL);
+        case SYMBOL_KEYS:                           return xr_type_new_array(X, key_type);
+        case SYMBOL_VALUES:                         return xr_type_new_array(X, val_type);
+        case SYMBOL_ENTRIES:                        return xr_type_new_array(X, xr_type_new_unknown(NULL));
+        case SYMBOL_MAP:                            return xr_type_new_map(X, key_type, xr_type_new_unknown(NULL));
+        case SYMBOL_FILTER:                         return xr_type_new_map(X, key_type, val_type);
+        case SYMBOL_REDUCE:                         return xr_type_new_unknown(NULL);
         default: break;
         }
     }
-    
+
     // Set methods
     if (container_type->kind == XR_KIND_SET) {
         switch (sym) {
         case SYMBOL_ADD: case SYMBOL_CLEAR:
-        case SYMBOL_FOREACH:                        return xr_type_new_void();
-        case SYMBOL_HAS: case SYMBOL_DELETE:        return xr_type_new_bool();
-        case SYMBOL_VALUES:                         return xr_type_new_array(elem_type);
+        case SYMBOL_FOREACH:                        return xr_type_new_void(NULL);
+        case SYMBOL_HAS: case SYMBOL_DELETE:        return xr_type_new_bool(NULL);
+        case SYMBOL_VALUES:                         return xr_type_new_array(X, elem_type);
         default: break;
         }
     }
-    
+
     // Channel methods and properties
     if (container_type->kind == XR_KIND_CHANNEL) {
         switch (sym) {
-        case SYMBOL_SEND: case SYMBOL_CLOSE:        return xr_type_new_void();
-        case SYMBOL_RECV:                           return elem_type ? elem_type : xr_type_new_unknown();
-        case SYMBOL_TRYSEND: case SYMBOL_IS_CLOSED: return xr_type_new_bool();
-        case SYMBOL_TRYRECV:                        return xr_type_new_unknown();
-        case SYMBOL_LENGTH: case SYMBOL_CAPACITY:   return xr_type_new_int();
+        case SYMBOL_SEND: case SYMBOL_CLOSE:        return xr_type_new_void(NULL);
+        case SYMBOL_RECV:                           return elem_type ? elem_type : xr_type_new_unknown(NULL);
+        case SYMBOL_TRYSEND: case SYMBOL_IS_CLOSED: return xr_type_new_bool(NULL);
+        case SYMBOL_TRYRECV:                        return xr_type_new_unknown(NULL);
+        case SYMBOL_LENGTH: case SYMBOL_CAPACITY:   return xr_type_new_int(NULL);
         default: break;
         }
     }
-    
+
     // int methods
     if (XR_TYPE_IS_INT(container_type)) {
         switch (sym) {
         case SYMBOL_ABS: case SYMBOL_MAX: case SYMBOL_MIN:
         case SYMBOL_FLOOR: case SYMBOL_CEIL:
-        case SYMBOL_ROUND:                          return xr_type_new_int();
-        case SYMBOL_TOSTRING: case SYMBOL_TOHEX:    return xr_type_new_string();
-        case SYMBOL_TOFLOAT:                        return xr_type_new_float();
-        case SYMBOL_SQRT: case SYMBOL_POW:          return xr_type_new_float();
-        case SYMBOL_TOBIGINT:                       return xr_type_new_bigint();
+        case SYMBOL_ROUND:                          return xr_type_new_int(NULL);
+        case SYMBOL_TOSTRING: case SYMBOL_TOHEX:    return xr_type_new_string(NULL);
+        case SYMBOL_TOFLOAT:                        return xr_type_new_float(NULL);
+        case SYMBOL_SQRT: case SYMBOL_POW:          return xr_type_new_float(NULL);
+        case SYMBOL_TOBIGINT:                       return xr_type_new_bigint(NULL);
         default: break;
         }
     }
-    
+
     // float methods
     if (XR_TYPE_IS_FLOAT(container_type)) {
         switch (sym) {
         case SYMBOL_ABS: case SYMBOL_SQRT:
-        case SYMBOL_POW:                            return xr_type_new_float();
-        case SYMBOL_TOSTRING: case SYMBOL_TOFIXED:  return xr_type_new_string();
+        case SYMBOL_POW:                            return xr_type_new_float(NULL);
+        case SYMBOL_TOSTRING: case SYMBOL_TOFIXED:  return xr_type_new_string(NULL);
         case SYMBOL_TOINT: case SYMBOL_FLOOR:
-        case SYMBOL_CEIL: case SYMBOL_ROUND:        return xr_type_new_int();
+        case SYMBOL_CEIL: case SYMBOL_ROUND:        return xr_type_new_int(NULL);
         default: break;
         }
     }
-    
+
     // bool methods
     if (XR_TYPE_IS_BOOL(container_type)) {
-        if (sym == SYMBOL_TOSTRING) return xr_type_new_string();
+        if (sym == SYMBOL_TOSTRING) return xr_type_new_string(NULL);
     }
-    
+
     // BigInt methods
     if (xr_type_is_named_class(container_type, "BigInt")) {
         switch (sym) {
-        case SYMBOL_ABS:                            return xr_type_new_bigint();
-        case SYMBOL_TOSTRING:                       return xr_type_new_string();
-        case SYMBOL_SIGN:                           return xr_type_new_int();
+        case SYMBOL_ABS:                            return xr_type_new_bigint(NULL);
+        case SYMBOL_TOSTRING:                       return xr_type_new_string(NULL);
+        case SYMBOL_SIGN:                           return xr_type_new_int(NULL);
         case SYMBOL_ISZERO: case SYMBOL_ISNEGATIVE:
-        case SYMBOL_ISPOSITIVE:                     return xr_type_new_bool();
+        case SYMBOL_ISPOSITIVE:                     return xr_type_new_bool(NULL);
         case SYMBOL_TOINT: {
-            XrType *t = xr_type_new_int();
+            XrType *t = xr_type_new_int(NULL);
             if (t) t->is_nullable = true;
             return t;
         }
-        case SYMBOL_TOFLOAT:                        return xr_type_new_float();
+        case SYMBOL_TOFLOAT:                        return xr_type_new_float(NULL);
         default: break;
         }
     }
-    
+
     // Json methods
     if (XR_TYPE_IS_JSON(container_type)) {
         switch (sym) {
-        case SYMBOL_KEYS:                           return xr_type_new_array(xr_type_new_string());
-        case SYMBOL_VALUES: case SYMBOL_ENTRIES:    return xr_type_new_array(xr_type_new_json());
-        case SYMBOL_HAS: case SYMBOL_IS_EMPTY:      return xr_type_new_bool();
+        case SYMBOL_KEYS:                           return xr_type_new_array(X, xr_type_new_string(NULL));
+        case SYMBOL_VALUES: case SYMBOL_ENTRIES:    return xr_type_new_array(X, xr_type_new_json(NULL));
+        case SYMBOL_HAS: case SYMBOL_IS_EMPTY:      return xr_type_new_bool(NULL);
         case SYMBOL_GET: {
-            XrType *t = xr_type_new_json();
+            XrType *t = xr_type_new_json(NULL);
             if (t) t->is_nullable = true;
             return t;
         }
-        case SYMBOL_DELETE: case SYMBOL_CLEAR:      return xr_type_new_void();
-        case SYMBOL_TOSTRING:                       return xr_type_new_string();
+        case SYMBOL_DELETE: case SYMBOL_CLEAR:      return xr_type_new_void(NULL);
+        case SYMBOL_TOSTRING:                       return xr_type_new_string(NULL);
         default: break;
         }
     }
-    
+
     // StringBuilder methods
     if (xr_type_is_named_class(container_type, "StringBuilder")) {
         switch (sym) {
-        case SYMBOL_TOSTRING:                       return xr_type_new_string();
-        case SYMBOL_CLEAR:                          return xr_type_new_stringbuilder();
+        case SYMBOL_TOSTRING:                       return xr_type_new_string(NULL);
+        case SYMBOL_CLEAR:                          return xr_type_new_stringbuilder(NULL);
         default: break;
         }
         // "append" is not a builtin symbol, handle separately
-        if (strcmp(method_name, "append") == 0) return xr_type_new_stringbuilder();
+        if (strcmp(method_name, "append") == 0) return xr_type_new_stringbuilder(NULL);
     }
-    
+
     return NULL;
 }
 
@@ -505,21 +505,21 @@ void xa_builtin_set_script_dir(const char *dir) {
 
 const XaBuiltinModule *xa_builtin_get_module_info(const char *module_name) {
     if (!module_name) return NULL;
-    
+
     // 1. Search runtime modules (Coro, CoroPool, Reflect, Type)
     for (int i = 0; i < RT_BUILTIN_MODULE_COUNT; i++) {
         if (strcmp(g_rt_builtin_modules[i].name, module_name) == 0) {
             return &g_rt_builtin_modules[i];
         }
     }
-    
+
     // 2. Search built-in (embedded) C modules
     for (int i = 0; i < builtin_module_count; i++) {
         if (strcmp(builtin_modules[i].name, module_name) == 0) {
             return &builtin_modules[i];
         }
     }
-    
+
     // 3. Fall back to .xrd files for third-party modules
     return xa_xrd_find_module(module_name, g_script_dir);
 }
@@ -564,7 +564,7 @@ const XaBuiltinHandle *xa_builtin_get_handle_type(const char *module_name, const
 int xa_builtin_get_members_for_type(XrType *type, const XaBuiltinMember **out_members) {
     const XaBuiltinType *info = xa_builtin_get_type_info(type);
     if (!info || !out_members) return 0;
-    
+
     *out_members = info->members;
     return info->member_count;
 }
@@ -577,65 +577,65 @@ const char *xa_builtin_get_type_name(XrType *type) {
 }
 
 // Parse a type string (e.g., "int", "string?", "Array<int>") to XrType
-static XrType *parse_type_str(const char *s, size_t len) {
-    if (!s || len == 0) return xr_type_new_unknown();
-    
+static XrType *parse_type_str(XrayIsolate *X, const char *s, size_t len) {
+    if (!s || len == 0) return xr_type_new_unknown(NULL);
+
     // Strip trailing '?' for nullable check
     bool nullable = (s[len - 1] == '?');
     size_t base_len = nullable ? len - 1 : len;
-    
+
     // Strip trailing '?' from optional params too
     // e.g., "int?" means int or null
-    
+
     XrType *type = NULL;
     if (base_len == 3 && strncmp(s, TYPE_NAME_INT, 3) == 0) {
-        type = xr_type_new_int();
+        type = xr_type_new_int(NULL);
     } else if (base_len == 5 && strncmp(s, TYPE_NAME_FLOAT, 5) == 0) {
-        type = xr_type_new_float();
+        type = xr_type_new_float(NULL);
     } else if (base_len == 4 && strncmp(s, TYPE_NAME_BOOL, 4) == 0) {
-        type = xr_type_new_bool();
+        type = xr_type_new_bool(NULL);
     } else if (base_len == 6 && strncmp(s, TYPE_NAME_STRING, 6) == 0) {
-        type = xr_type_new_string();
+        type = xr_type_new_string(NULL);
     } else if (base_len == 4 && strncmp(s, TYPE_NAME_VOID, 4) == 0) {
-        type = xr_type_new_void();
+        type = xr_type_new_void(NULL);
     } else if (base_len == 4 && strncmp(s, TYPE_NAME_JSON, 4) == 0) {
-        type = xr_type_new_json();
+        type = xr_type_new_json(NULL);
     } else if (base_len == 7 && strncmp(s, TYPE_NAME_UNKNOWN, 7) == 0) {
-        type = xr_type_new_unknown();
+        type = xr_type_new_unknown(NULL);
     } else if (base_len == 5 && strncmp(s, "Regex", 5) == 0) {
-        type = xr_type_new_instance(NULL);
+        type = xr_type_new_instance(X, NULL);
         type->instance.class_name = "Regex";
     } else if (base_len == 5 && strncmp(s, "Bytes", 5) == 0) {
-        type = xr_type_new(XR_KIND_BYTES);
+        type = xr_type_new(X, XR_KIND_BYTES);
     } else if (base_len == 5 && strncmp(s, TYPE_NAME_NEVER, 5) == 0) {
-        type = xr_type_new_never();
+        type = xr_type_new_never(NULL);
     // Native-width integer types
     } else if (base_len == 5 && strncmp(s, "uint8", 5) == 0) {
-        type = xr_type_new_int_width(XR_NATIVE_U8);
+        type = xr_type_new_int_width(X, XR_NATIVE_U8);
     } else if (base_len == 6 && strncmp(s, "uint16", 6) == 0) {
-        type = xr_type_new_int_width(XR_NATIVE_U16);
+        type = xr_type_new_int_width(X, XR_NATIVE_U16);
     } else if (base_len == 6 && strncmp(s, "uint32", 6) == 0) {
-        type = xr_type_new_int_width(XR_NATIVE_U32);
+        type = xr_type_new_int_width(X, XR_NATIVE_U32);
     } else if (base_len == 6 && strncmp(s, "uint64", 6) == 0) {
-        type = xr_type_new_int_width(XR_NATIVE_U64);
+        type = xr_type_new_int_width(X, XR_NATIVE_U64);
     } else if (base_len == 4 && strncmp(s, "int8", 4) == 0) {
-        type = xr_type_new_int_width(XR_NATIVE_I8);
+        type = xr_type_new_int_width(X, XR_NATIVE_I8);
     } else if (base_len == 5 && strncmp(s, "int16", 5) == 0) {
-        type = xr_type_new_int_width(XR_NATIVE_I16);
+        type = xr_type_new_int_width(X, XR_NATIVE_I16);
     } else if (base_len == 5 && strncmp(s, "int32", 5) == 0) {
-        type = xr_type_new_int_width(XR_NATIVE_I32);
+        type = xr_type_new_int_width(X, XR_NATIVE_I32);
     } else if (base_len == 5 && strncmp(s, "int64", 5) == 0) {
-        type = xr_type_new_int_width(XR_NATIVE_I64);
+        type = xr_type_new_int_width(X, XR_NATIVE_I64);
     } else if (base_len == 7 && strncmp(s, "float32", 7) == 0) {
-        type = xr_type_new_float_width(XR_NATIVE_F32);
+        type = xr_type_new_float_width(X, XR_NATIVE_F32);
     } else if (base_len == 7 && strncmp(s, "float64", 7) == 0) {
-        type = xr_type_new_float_width(XR_NATIVE_F64);
+        type = xr_type_new_float_width(X, XR_NATIVE_F64);
     // Generic containers: recursively parse element types
     } else if (base_len >= 6 && strncmp(s, TYPE_NAME_ARRAY "<", 6) == 0) {
         // Array<ElemType>: parse inner type between '<' and last '>'
         const char *inner = s + 6;
         size_t inner_len = base_len - 7;  // strip "Array<" and ">"
-        type = xr_type_new_array(parse_type_str(inner, inner_len));
+        type = xr_type_new_array(X, parse_type_str(X, inner, inner_len));
     } else if (base_len >= 4 && strncmp(s, TYPE_NAME_MAP "<", 4) == 0) {
         // Map<K, V>: find comma separator at depth 0
         const char *inner = s + 4;
@@ -652,43 +652,43 @@ static XrType *parse_type_str(const char *s, size_t len) {
             const char *vstart = comma + 1;
             while (*vstart == ' ') vstart++;
             size_t vlen = inner_len - (vstart - inner);
-            type = xr_type_new_map(parse_type_str(inner, klen),
-                                   parse_type_str(vstart, vlen));
+            type = xr_type_new_map(X, parse_type_str(X, inner, klen),
+                                   parse_type_str(X, vstart, vlen));
         } else {
-            type = xr_type_new_map(xr_type_new_unknown(), xr_type_new_unknown());
+            type = xr_type_new_map(X, xr_type_new_unknown(NULL), xr_type_new_unknown(NULL));
         }
     } else if (base_len >= 4 && strncmp(s, TYPE_NAME_SET "<", 4) == 0) {
         const char *inner = s + 4;
         size_t inner_len = base_len - 5;
-        type = xr_type_new_set(parse_type_str(inner, inner_len));
+        type = xr_type_new_set(X, parse_type_str(X, inner, inner_len));
     } else if (base_len >= 8 && strncmp(s, "Channel<", 8) == 0) {
         const char *inner = s + 8;
         size_t inner_len = base_len - 9;
-        type = xr_type_new_channel(parse_type_str(inner, inner_len));
+        type = xr_type_new_channel(X, parse_type_str(X, inner, inner_len));
     } else if (base_len == 1 && s[0] >= 'A' && s[0] <= 'Z') {
         // Single uppercase letter: generic type parameter (T, K, V, etc.)
         char name[2] = { s[0], '\0' };
-        type = xr_type_new_type_param(name, s[0] - 'A');
+        type = xr_type_new_type_param(NULL, name, s[0] - 'A');
     } else {
-        type = xr_type_new_unknown();
+        type = xr_type_new_unknown(NULL);
     }
-    
+
     if (type && nullable) {
-        type = xr_type_make_nullable(type);
+        type = xr_type_make_nullable(X, type);
     }
     return type;
 }
 
 // Parse full function signature: "(param: type, param2: type): ReturnType"
 // Returns a complete function type with parameter types
-XrType *xa_builtin_parse_full_signature(const char *sig) {
-    if (!sig) return xr_type_new_function(NULL, 0, xr_type_new_unknown(), false);
-    
+XrType *xa_builtin_parse_full_signature(XrayIsolate *X, const char *sig) {
+    if (!sig) return xr_type_new_function(X, NULL, 0, xr_type_new_unknown(NULL), false);
+
     // Find parameter section: between '(' and matching ')'
     const char *open = strchr(sig, '(');
-    if (!open) return xr_type_new_function(NULL, 0, xr_type_new_unknown(), false);
+    if (!open) return xr_type_new_function(X, NULL, 0, xr_type_new_unknown(NULL), false);
     open++;
-    
+
     // Find matching close paren at depth 0 (handles nested fn(...) types)
     const char *close = NULL;
     int depth = 0;
@@ -701,10 +701,10 @@ XrType *xa_builtin_parse_full_signature(const char *sig) {
     }
     if (!close || close <= open) {
         // Empty params "()"
-        XrType *ret_type = xa_builtin_parse_return_type_from_sig(sig);
-        return xr_type_new_function(NULL, 0, ret_type ? ret_type : xr_type_new_void(), false);
+        XrType *ret_type = xa_builtin_parse_return_type_from_sig(X, sig);
+        return xr_type_new_function(X, NULL, 0, ret_type ? ret_type : xr_type_new_void(NULL), false);
     }
-    
+
     // Parse parameters: "param: type, param2: type"
     XrType *param_types[16];
     bool param_optional[16];
@@ -712,20 +712,20 @@ XrType *xa_builtin_parse_full_signature(const char *sig) {
     int min_params = 0;
     bool is_variadic = false;
     bool seen_optional = false;
-    
+
     const char *p = open;
     while (p < close && param_count < 16) {
         // Skip whitespace
         while (p < close && (*p == ' ' || *p == ',')) p++;
         if (p >= close) break;
-        
+
         // Check for rest parameter (rest params are always optional)
         if (strncmp(p, "...", 3) == 0) {
             is_variadic = true;
             seen_optional = true;
             p += 3;
         }
-        
+
         // Find colon separator (track both <> and () depth for nested fn types)
         const char *colon = NULL;
         int depth = 0;
@@ -735,18 +735,18 @@ XrType *xa_builtin_parse_full_signature(const char *sig) {
             else if (*c == ':' && depth == 0) { colon = c; break; }
             else if (*c == ',' && depth == 0) break;
         }
-        
+
         if (colon && colon < close) {
             // Detect optional parameter: '?' immediately before ':'
             // e.g., "level?: int" or "compareFn?: fn(...)"
             bool is_optional = (colon > open && *(colon - 1) == '?');
             if (is_optional) seen_optional = true;
             param_optional[param_count] = is_optional;
-            
+
             // Skip to type: after ": "
             const char *type_start = colon + 1;
             while (type_start < close && *type_start == ' ') type_start++;
-            
+
             // Find end of type (next comma at depth 0 or close paren)
             const char *type_end = type_start;
             depth = 0;
@@ -756,8 +756,8 @@ XrType *xa_builtin_parse_full_signature(const char *sig) {
                 else if (*type_end == ',' && depth == 0) break;
                 type_end++;
             }
-            
-            param_types[param_count] = parse_type_str(type_start, type_end - type_start);
+
+            param_types[param_count] = parse_type_str(X, type_start, type_end - type_start);
             if (!seen_optional) min_params = param_count + 1;
             param_count++;
             p = type_end;
@@ -765,16 +765,16 @@ XrType *xa_builtin_parse_full_signature(const char *sig) {
             // No colon found, skip to next comma
             while (p < close && *p != ',') p++;
             param_optional[param_count] = false;
-            param_types[param_count] = xr_type_new_unknown();
+            param_types[param_count] = xr_type_new_unknown(NULL);
             if (!seen_optional) min_params = param_count + 1;
             param_count++;
         }
     }
-    
+
     // Parse return type
-    XrType *ret_type = xa_builtin_parse_return_type_from_sig(sig);
-    if (!ret_type) ret_type = xr_type_new_void();
-    
+    XrType *ret_type = xa_builtin_parse_return_type_from_sig(X, sig);
+    if (!ret_type) ret_type = xr_type_new_void(NULL);
+
     // Build function type
     XrType **params = NULL;
     if (param_count > 0) {
@@ -783,8 +783,8 @@ XrType *xa_builtin_parse_full_signature(const char *sig) {
             params[i] = param_types[i];
         }
     }
-    
-    XrType *fn_type = xr_type_new_function(params, param_count, ret_type, is_variadic);
+
+    XrType *fn_type = xr_type_new_function(X, params, param_count, ret_type, is_variadic);
     if (fn_type) fn_type->function.min_params = min_params;
     if (params) xr_free(params);
     return fn_type;
@@ -792,9 +792,9 @@ XrType *xa_builtin_parse_full_signature(const char *sig) {
 
 // Parse return type from signature string like "(param: type): ReturnType"
 // Returns an XrType based on the return type portion after "): "
-XrType *xa_builtin_parse_return_type_from_sig(const char *sig) {
+XrType *xa_builtin_parse_return_type_from_sig(XrayIsolate *X, const char *sig) {
     if (!sig) return NULL;
-    
+
     // Find last "): " which marks the return type
     const char *ret = NULL;
     const char *p = sig;
@@ -802,7 +802,7 @@ XrType *xa_builtin_parse_return_type_from_sig(const char *sig) {
         ret = p + 3;  // skip "): "
         p += 3;
     }
-    if (!ret || *ret == '\0') return xr_type_new_void();
-    
-    return parse_type_str(ret, strlen(ret));
+    if (!ret || *ret == '\0') return xr_type_new_void(NULL);
+
+    return parse_type_str(X, ret, strlen(ret));
 }

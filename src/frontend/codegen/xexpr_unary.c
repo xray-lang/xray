@@ -138,9 +138,9 @@ XrExprDesc compile_unary(XrCompilerContext *ctx, XrCompiler *compiler, UnaryNode
 
     // Infer compile_type: !x→bool, -x→operand type, ~x→int
     if (type == AST_UNARY_NOT) {
-        e.compile_type = xr_type_new_bool();
+        e.compile_type = xr_type_new_bool(NULL);
     } else if (type == AST_UNARY_BNOT) {
-        e.compile_type = xr_type_new_int();
+        e.compile_type = xr_type_new_int(NULL);
     } else if (type == AST_UNARY_NEG) {
         XrType *op_ct = get_expr_type(ctx, compiler, node->operand);
         if (op_ct && (XR_TYPE_IS_INT(op_ct) || XR_TYPE_IS_FLOAT(op_ct))) {

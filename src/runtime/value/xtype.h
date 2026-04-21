@@ -285,19 +285,19 @@ typedef enum XrTypeRelation {
 
 
 // API: Type creation
-XR_FUNC XrType *xr_type_new(XrTypeKind kind);
-XR_FUNC XrType *xr_type_new_int(void);
-XR_FUNC XrType *xr_type_new_float(void);
-XR_FUNC XrType *xr_type_new_string(void);
-XR_FUNC XrType *xr_type_new_bool(void);
-XR_FUNC XrType *xr_type_new_null(void);
-XR_FUNC XrType *xr_type_new_unknown(void);
-XR_FUNC XrType *xr_type_new_never(void);
-XR_FUNC XrType *xr_type_new_void(void);
+XR_FUNC XrType *xr_type_new(XrayIsolate *X, XrTypeKind kind);
+XR_FUNC XrType *xr_type_new_int(XrayIsolate *X);
+XR_FUNC XrType *xr_type_new_float(XrayIsolate *X);
+XR_FUNC XrType *xr_type_new_string(XrayIsolate *X);
+XR_FUNC XrType *xr_type_new_bool(XrayIsolate *X);
+XR_FUNC XrType *xr_type_new_null(XrayIsolate *X);
+XR_FUNC XrType *xr_type_new_unknown(XrayIsolate *X);
+XR_FUNC XrType *xr_type_new_never(XrayIsolate *X);
+XR_FUNC XrType *xr_type_new_void(XrayIsolate *X);
 
 // API: Native-width types (int8/16/32/64, uint8/16/32/64, float32/64)
-XR_FUNC XrType *xr_type_new_int_width(int width);   // XrNativeType value
-XR_FUNC XrType *xr_type_new_float_width(int width);  // XrNativeType value
+XR_FUNC XrType *xr_type_new_int_width(XrayIsolate *X, int width);   // XrNativeType value
+XR_FUNC XrType *xr_type_new_float_width(XrayIsolate *X, int width);  // XrNativeType value
 
 // API: Derive XrSlotType from XrType (P0 unified type pipeline)
 // Returns the storage slot type — used by GC scanning, JIT guards, and AOT thunks.
@@ -396,61 +396,61 @@ static inline uint8_t xr_type_element_gc_tag(XrType *type) {
 }
 
 // API: Container types
-XR_FUNC XrType *xr_type_new_array(XrType *element_type);
-XR_FUNC XrType *xr_type_new_map(XrType *key_type, XrType *value_type);
-XR_FUNC XrType *xr_type_new_set(XrType *element_type);
-XR_FUNC XrType *xr_type_new_channel(XrType *element_type);
-XR_FUNC XrType *xr_type_new_task(XrType *result_type);
+XR_FUNC XrType *xr_type_new_array(XrayIsolate *X, XrType *element_type);
+XR_FUNC XrType *xr_type_new_map(XrayIsolate *X, XrType *key_type, XrType *value_type);
+XR_FUNC XrType *xr_type_new_set(XrayIsolate *X, XrType *element_type);
+XR_FUNC XrType *xr_type_new_channel(XrayIsolate *X, XrType *element_type);
+XR_FUNC XrType *xr_type_new_task(XrayIsolate *X, XrType *result_type);
 
 // API: Object types
-XR_FUNC XrType *xr_type_new_json(void);
-XR_FUNC XrType *xr_type_new_json_with_fields(const char **names, XrType **types, int count);
-XR_FUNC XrType *xr_type_new_class(const char *class_name);
-XR_FUNC XrType *xr_type_new_interface(const char *interface_name);
-XR_FUNC XrType *xr_type_new_instance(XrClassInfo *class_info);
-XR_FUNC XrType *xr_type_new_generic_instance(const char *class_name, XrClassInfo *class_info,
+XR_FUNC XrType *xr_type_new_json(XrayIsolate *X);
+XR_FUNC XrType *xr_type_new_json_with_fields(XrayIsolate *X, const char **names, XrType **types, int count);
+XR_FUNC XrType *xr_type_new_class(XrayIsolate *X, const char *class_name);
+XR_FUNC XrType *xr_type_new_interface(XrayIsolate *X, const char *interface_name);
+XR_FUNC XrType *xr_type_new_instance(XrayIsolate *X, XrClassInfo *class_info);
+XR_FUNC XrType *xr_type_new_generic_instance(XrayIsolate *X, const char *class_name, XrClassInfo *class_info,
                                       XrType **type_args, int type_arg_count);
-XR_FUNC XrType *xr_type_new_bigint(void);
-XR_FUNC XrType *xr_type_new_datetime(void);
-XR_FUNC XrType *xr_type_new_bytes(void);
-XR_FUNC XrType *xr_type_new_regex(void);
-XR_FUNC XrType *xr_type_new_stringbuilder(void);
-XR_FUNC XrType *xr_type_new_named_instance(const char *name); // generic named class (Exception/Range/etc)
-XR_FUNC XrType *xr_type_new_enum(const char *enum_name);
+XR_FUNC XrType *xr_type_new_bigint(XrayIsolate *X);
+XR_FUNC XrType *xr_type_new_datetime(XrayIsolate *X);
+XR_FUNC XrType *xr_type_new_bytes(XrayIsolate *X);
+XR_FUNC XrType *xr_type_new_regex(XrayIsolate *X);
+XR_FUNC XrType *xr_type_new_stringbuilder(XrayIsolate *X);
+XR_FUNC XrType *xr_type_new_named_instance(XrayIsolate *X, const char *name); // generic named class (Exception/Range/etc)
+XR_FUNC XrType *xr_type_new_enum(XrayIsolate *X, const char *enum_name);
 
 // API: Structured object types (for JSON with known fields)
-XR_FUNC XrType *xr_type_new_object(const char **field_names, XrType **field_types,
+XR_FUNC XrType *xr_type_new_object(XrayIsolate *X, const char **field_names, XrType **field_types,
                            int field_count, bool allow_extension, const char *type_name);
-XR_FUNC XrType *xr_type_new_object_anonymous(const char **field_names, XrType **field_types, int field_count);
+XR_FUNC XrType *xr_type_new_object_anonymous(XrayIsolate *X, const char **field_names, XrType **field_types, int field_count);
 
 // API: Optional type (T?)
-XR_FUNC XrType *xr_type_new_optional(XrType *base_type);
+XR_FUNC XrType *xr_type_new_optional(XrayIsolate *X, XrType *base_type);
 XR_FUNC XrType *xr_type_get_base(XrType *optional_type);
 
 // API: Type parameter (for generics)
-XR_FUNC XrType *xr_type_new_type_param(const char *name, int id);
-XR_FUNC XrType *xr_type_new_type_param_constrained(const char *name, int id, XrType *constraint);
+XR_FUNC XrType *xr_type_new_type_param(XrayIsolate *X, const char *name, int id);
+XR_FUNC XrType *xr_type_new_type_param_constrained(XrayIsolate *X, const char *name, int id, XrType *constraint);
 
 // API: Function type
-XR_FUNC XrType *xr_type_new_function(XrType **param_types, int param_count,
+XR_FUNC XrType *xr_type_new_function(XrayIsolate *X, XrType **param_types, int param_count,
                               XrType *return_type, bool is_variadic);
 
 // API: Tuple type (for multi-value return)
-XR_FUNC XrType *xr_type_new_tuple(XrType **element_types, int count);
+XR_FUNC XrType *xr_type_new_tuple(XrayIsolate *X, XrType **element_types, int count);
 XR_FUNC int xr_type_tuple_count(XrType *type);
 XR_FUNC XrType *xr_type_tuple_get(XrType *type, int index);
 
 // API: Union type construction and operations
-XR_FUNC XrType *xr_type_new_union(XrType **members, int count);
-XR_FUNC XrType *xr_type_union(XrType *a, XrType *b);
+XR_FUNC XrType *xr_type_new_union(XrayIsolate *X, XrType **members, int count);
+XR_FUNC XrType *xr_type_union(XrayIsolate *X, XrType *a, XrType *b);
 XR_FUNC int xr_type_union_count(XrType *type);
 XR_FUNC XrType *xr_type_union_member(XrType *type, int index);
 XR_FUNC bool xr_type_union_contains(XrType *type, XrTypeKind kind);
-XR_FUNC XrType *xr_type_union_remove(XrType *type, XrTypeKind kind);
+XR_FUNC XrType *xr_type_union_remove(XrayIsolate *X, XrType *type, XrTypeKind kind);
 
 // API: JsonValue — built-in union (null|bool|int|float|string|Json)
 // Represents a value extracted from a Json object with unknown field type.
-XR_FUNC XrType *xr_type_new_json_value(void);
+XR_FUNC XrType *xr_type_new_json_value(XrayIsolate *X);
 XR_FUNC bool xr_type_is_json_value(XrType *type);
 
 // Check if source type allows Json coercion to target (compile-time pass, runtime check).
@@ -501,20 +501,20 @@ static inline bool xr_type_is_json_field_compatible(XrType *type) {
 }
 
 // API: Fixed-length array ([N]T - compile-time length, runtime Array<T>)
-XR_FUNC XrType *xr_type_new_fixed_array(XrType *element_type, int length);
+XR_FUNC XrType *xr_type_new_fixed_array(XrayIsolate *X, XrType *element_type, int length);
 
 // API: Type operations
-XR_FUNC XrType *xr_type_copy(XrType *type);
+XR_FUNC XrType *xr_type_copy(XrayIsolate *X, XrType *type);
 XR_FUNC bool xr_type_assignable(XrType *target, XrType *source);
 XR_FUNC bool xr_type_equals(XrType *a, XrType *b);
 
 // API: Nullable operations (safe for singletons - copies if frozen)
-XR_FUNC XrType *xr_type_make_nullable(XrType *type);
+XR_FUNC XrType *xr_type_make_nullable(XrayIsolate *X, XrType *type);
 
 // API: Type narrowing
-XR_FUNC XrType *xr_type_filter(XrType *type, XrTypeKind kind);
-XR_FUNC XrType *xr_type_exclude(XrType *type, XrTypeKind kind);
-XR_FUNC XrType *xr_type_non_nullable(XrType *type);
+XR_FUNC XrType *xr_type_filter(XrayIsolate *X, XrType *type, XrTypeKind kind);
+XR_FUNC XrType *xr_type_exclude(XrayIsolate *X, XrType *type, XrTypeKind kind);
+XR_FUNC XrType *xr_type_non_nullable(XrayIsolate *X, XrType *type);
 
 // API: Type utilities
 XR_FUNC const char *xr_type_to_string(XrType *type);
@@ -524,7 +524,7 @@ XR_FUNC bool xr_type_is_inherently_immutable(XrType *type);
 
 // API: Immutability
 XR_FUNC bool xr_type_is_const(XrType *type);
-XR_FUNC XrType *xr_type_make_const(XrType *base);
+XR_FUNC XrType *xr_type_make_const(XrayIsolate *X, XrType *base);
 
 // API: Structural compatibility (for JSON objects)
 XR_FUNC XrType *xr_type_object_get_field(XrType *type, const char *field_name);
@@ -536,7 +536,7 @@ XR_FUNC bool xr_type_satisfies_constraint(XrType *type, XrType *constraint);
 // Substitute type parameters with actual types
 // e.g., substitute(T, ["T"], [int]) = int
 //       substitute(Array<T>, ["T"], [int]) = Array<int>
-XR_FUNC XrType *xr_type_substitute(XrType *type, const char **param_names,
+XR_FUNC XrType *xr_type_substitute(XrayIsolate *X, XrType *type, const char **param_names,
                            XrType **actual_types, int count);
 
 // API: Initialize process-level type singletons (call once at startup)
@@ -584,12 +584,13 @@ static inline XrType **xr_type_get_param_types(XrType *t) {
 // ============================================================================
 
 // Convert XrSlotType to XrType* singleton. Returns NULL for ANY/unknown.
-static inline XrType *xr_slot_type_to_type(uint8_t slot_type) {
+// Singletons are global read-only; X is passed for API consistency.
+static inline XrType *xr_slot_type_to_type(XrayIsolate *X, uint8_t slot_type) {
     switch (slot_type) {
-    case XR_SLOT_I64:  return xr_type_new_int();
-    case XR_SLOT_F64:  return xr_type_new_float();
-    case XR_SLOT_BOOL: return xr_type_new_bool();
-    case XR_SLOT_PTR:  return xr_type_new_string();  // generic heap ref (best approx)
+    case XR_SLOT_I64:  return xr_type_new_int(X);
+    case XR_SLOT_F64:  return xr_type_new_float(X);
+    case XR_SLOT_BOOL: return xr_type_new_bool(X);
+    case XR_SLOT_PTR:  return xr_type_new_string(X);  // generic heap ref (best approx)
     default: return NULL;
     }
 }

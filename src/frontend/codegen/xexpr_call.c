@@ -1448,7 +1448,7 @@ int compile_call_internal(XrCompilerContext *ctx, XrCompiler *compiler, CallExpr
         else if (member->object->type == AST_THIS_EXPR && ctx->current_class_node) {
             ClassDeclNode *cls_node = (ClassDeclNode*)ctx->current_class_node;
             if (cls_node->name) {
-                obj_type = xr_type_new_class(cls_node->name);
+                obj_type = xr_type_new_class(ctx->X, cls_node->name);
             }
         }
         

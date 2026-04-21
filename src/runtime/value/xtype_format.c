@@ -58,7 +58,7 @@ const char *xr_type_to_string(XrType *type) {
     }
     
     if (type->is_nullable) {
-        XrType *base = xr_type_non_nullable(type);
+        XrType *base = xr_type_non_nullable(NULL, type);
         if (base) {
             snprintf(buf, TYPE_STR_BUF_SIZE, "%s?", xr_type_to_string(base));
             return xr_pool_strdup(pool, buf);
@@ -231,12 +231,12 @@ bool xr_type_is_const(XrType *type) {
     return type->is_const;
 }
 
-XrType *xr_type_make_const(XrType *base) {
+XrType *xr_type_make_const(XrayIsolate *X, XrType *base) {
     if (!base) return NULL;
     if (xr_type_is_inherently_immutable(base)) return base;
     if (base->is_const) return base;
     
-    XrType *copy = xr_type_copy(base);
+    XrType *copy = xr_type_copy(X, base);
     if (copy) {
         copy->is_const = true;
     }
@@ -250,7 +250,7 @@ XrType *xr_type_object_get_field(XrType *type, const char *field_name) {
     for (int i = 0; i < type->object.field_count; i++) {
         if (type->object.field_names && type->object.field_names[i] &&
             strcmp(type->object.field_names[i], field_name) == 0) {
-            return type->object.field_types ? type->object.field_types[i] : xr_type_new_unknown();
+            return type->object.field_types ? type->object.field_types[i] : xr_type_new_unknown(NULL);
         }
     }
     return NULL;

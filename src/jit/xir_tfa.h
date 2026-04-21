@@ -61,8 +61,8 @@ static inline XrType *tfa_join(XrType *a, XrType *b) {
     if (!a) return b;                      // BOTTOM ∨ X = X
     if (!b) return a;                      // X ∨ BOTTOM = X
     if (a == b) return a;                  // same canonical
-    if (a == xr_type_new_unknown()) return a;      // TOP ∨ X = TOP
-    if (b == xr_type_new_unknown()) return b;      // X ∨ TOP = TOP
+    if (a == xr_type_new_unknown(NULL)) return a;  // TOP ∨ X = TOP
+    if (b == xr_type_new_unknown(NULL)) return b;  // X ∨ TOP = TOP
     // Nullable widening: T ∨ T? = T?
     if (a->kind == b->kind && a->is_nullable != b->is_nullable) {
         return a->is_nullable ? a : b;     // return the nullable one
@@ -70,9 +70,9 @@ static inline XrType *tfa_join(XrType *a, XrType *b) {
     // Numeric promotion: int ∨ float = float
     if ((a->kind == XR_KIND_INT && b->kind == XR_KIND_FLOAT) ||
         (a->kind == XR_KIND_FLOAT && b->kind == XR_KIND_INT))
-        return xr_type_new_float();
+        return xr_type_new_float(NULL);
     // Incompatible → any
-    return xr_type_new_unknown();
+    return xr_type_new_unknown(NULL);
 }
 
 /* ========== Function Summary ========== */
