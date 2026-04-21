@@ -72,10 +72,6 @@ XR_FUNC struct XrayConfig* xr_isolate_get_config(XrayIsolate *X);
 XR_FUNC uint32_t xr_isolate_get_init_flags(XrayIsolate *X);
 XR_FUNC const char* xr_isolate_get_script_file(XrayIsolate *X);
 
-// Native type registry
-XR_FUNC void* xr_isolate_get_native_type_registry(XrayIsolate *X);
-XR_FUNC void xr_isolate_set_native_type_registry(XrayIsolate *X, void *registry);
-
 // Parser arena
 XR_FUNC struct XrArena* xr_isolate_get_current_arena(XrayIsolate *X);
 XR_FUNC void xr_isolate_set_current_arena(XrayIsolate *X, struct XrArena *arena);
