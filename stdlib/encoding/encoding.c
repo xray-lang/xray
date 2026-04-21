@@ -27,6 +27,7 @@ static const char HEX_CHARS_LOWER[] = "0123456789abcdef";
 
 int xr_hex_encode(const uint8_t *data, size_t len, char *output) {
     if (!data || !output) return 0;
+    XR_DCHECK(len <= (SIZE_MAX / 2), "xr_hex_encode: len must not overflow output index");
 
     for (size_t i = 0; i < len; i++) {
         output[i * 2] = HEX_CHARS_LOWER[data[i] >> 4];
@@ -179,6 +180,8 @@ int xr_utf16_encoded_len(const uint8_t *utf8, size_t utf8_len) {
 
 int xr_utf16_to_utf8_len(const uint8_t *utf16, size_t utf16_len, XrUtf16Endian endian) {
     if (!utf16 || utf16_len % 2 != 0) return -1;
+    XR_DCHECK(endian == XR_UTF16_LE || endian == XR_UTF16_BE,
+              "xr_utf16_to_utf8_len: invalid endian value");
 
     int len = 0;
     size_t i = 0;

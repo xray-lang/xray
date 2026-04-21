@@ -28,6 +28,7 @@
 /* ========== Helper ========== */
 
 static XrCoroGC* get_coro_gc(XrayIsolate *isolate) {
+    XR_DCHECK(isolate != NULL, "get_coro_gc: isolate must not be NULL");
     // Try current coroutine first (ensure coro_gc exists via lazy init)
     XrCoroutine *coro = xr_current_coro(isolate);
     if (coro) {
@@ -137,6 +138,8 @@ static XrValue gc_setpause(XrayIsolate *isolate, XrValue *args, int argc) {
         int newval = (int)XR_TO_INT(args[0]);
         if (newval > 0 && newval <= GC_PARAM_MAX) gc->gc_pause = newval;
     }
+    XR_DCHECK(gc->gc_pause > 0 && gc->gc_pause <= GC_PARAM_MAX,
+              "gc_setpause: pause must stay within bounds");
     return xr_int(old);
 }
 
@@ -150,6 +153,8 @@ static XrValue gc_setstepmul(XrayIsolate *isolate, XrValue *args, int argc) {
         int newval = (int)XR_TO_INT(args[0]);
         if (newval > 0 && newval <= GC_PARAM_MAX) gc->gc_stepmul = newval;
     }
+    XR_DCHECK(gc->gc_stepmul > 0 && gc->gc_stepmul <= GC_PARAM_MAX,
+              "gc_setstepmul: stepmul must stay within bounds");
     return xr_int(old);
 }
 

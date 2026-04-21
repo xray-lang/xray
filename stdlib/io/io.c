@@ -65,6 +65,7 @@ static XrValue io_readFile(XrayIsolate *X, XrValue *args, int argc) {
     const char *path = get_string_arg(args[0]);
     if (!path) return xr_null();
 
+    XR_DCHECK(path[0] != '\0', "io_readFile: path must be non-empty after validation");
     FILE *f = fopen(path, "rb");
     if (!f) return xr_null();
 
@@ -453,6 +454,7 @@ static XrShape* io_get_stat_shape(XrayIsolate *X) {
     XrShape *shape = xr_shape_new(X, 10);
     if (!shape) return NULL;
     XrSymbolTable *table = (XrSymbolTable*)xr_isolate_get_symbol_table(X);
+    XR_DCHECK(table != NULL, "io_get_stat_shape: symbol table must exist");
     for (int i = 0; i < 10; i++) {
         SymbolId sym = xr_symbol_register_in_table(table, names[i]);
         shape = xr_shape_transition(X, shape, sym);
@@ -504,6 +506,8 @@ static XrValue io_mkdirp(XrayIsolate *X, XrValue *args, int argc) {
     (void)X;
     if (argc < 1) return xr_bool(false);
     const char *path = get_string_arg(args[0]);
+    // Catch truncation before we copy into a PATH_MAX buffer.
+    if (path && strnlen(path, PATH_MAX) >= PATH_MAX) return xr_bool(false);
     if (!path || path[0] == '\0') return xr_bool(false);
 
     char tmp[PATH_MAX];
@@ -707,6 +711,7 @@ static XrValue io_readDirRecursive(XrayIsolate *X, XrValue *args, int argc) {
     if (argc < 1) return xr_null();
     const char *path = get_string_arg(args[0]);
     if (!path) return xr_null();
+    XR_DCHECK(strlen(path) < PATH_MAX, "io_readDirRecursive: path within bounds");
 
     XrArray *arr = xr_array_new(xr_current_coro(X));
     if (!arr) return xr_null();
