@@ -125,7 +125,7 @@ typedef struct XrImmixHeap {
     XrImmixBlock *free_blocks;
     size_t total_blocks;
     size_t total_block_bytes;
-    
+
     // Sticky Immix: old blocks (skipped by minor GC)
     XrImmixBlock *old_blocks;
     size_t old_block_count;
@@ -217,6 +217,12 @@ static inline bool xr_immix_is_young_ptr(void *ptr) {
     XrImmixBlock *block = XR_IMMIX_BLOCK_FROM_PTR(ptr);
     return block->is_young;
 }
+
+/* ========== Block Cache API ========== */
+
+// Flush per-worker L1 block cache to global L2.
+// Called from worker destroy to avoid block leaks.
+XR_FUNC void xr_immix_flush_block_cache(void *block_cache[], int *count);
 
 /* ========== Debug API ========== */
 

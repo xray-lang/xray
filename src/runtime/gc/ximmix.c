@@ -41,53 +41,111 @@ static void free_aligned_block(char *data) {
 #endif
 }
 
-/* ========== Global Block Cache Pool ========== */
+/* ========== Two-Level Block Cache ========== */
+/*
+ * L1: per-Worker array (XrP.block_cache[8]), lock-free (single-thread access).
+ * L2: global mutex-protected stack, max 64 blocks.
+ *
+ * L1 miss → L2 → fresh allocation.
+ * L1 overflow → L2 → free_aligned_block if L2 full.
+ * Worker exit flushes L1 → L2 (see xr_immix_flush_block_cache).
+ *
+ * This eliminates the ABA hazard of the old lock-free stack and reduces
+ * cross-worker contention to rare L2 accesses.
+ */
 
-#include <stdatomic.h>
+#include <pthread.h>
+#include "../../coro/xworker.h"
 
-#define XR_BLOCK_CACHE_MAX 64
+#define XR_BLOCK_CACHE_L2_MAX 64
 
-static _Atomic(XrImmixBlock *) g_cache_head = NULL;
-static _Atomic int g_cache_count = 0;
+static pthread_mutex_t g_block_cache_mu = PTHREAD_MUTEX_INITIALIZER;
+static XrImmixBlock *g_block_cache_head = NULL;
+static int g_block_cache_count = 0;
 
 static void block_cache_cleanup(void) {
-    XrImmixBlock *b = atomic_exchange(&g_cache_head, NULL);
+    pthread_mutex_lock(&g_block_cache_mu);
+    XrImmixBlock *b = g_block_cache_head;
+    g_block_cache_head = NULL;
+    g_block_cache_count = 0;
+    pthread_mutex_unlock(&g_block_cache_mu);
+
     while (b) {
         XrImmixBlock *next = b->next;
         free_aligned_block((char*)b);
         b = next;
     }
-    atomic_store(&g_cache_count, 0);
 }
 
 static void block_cache_init_once(void) {
-    static _Atomic int registered = 0;
-    if (atomic_exchange(&registered, 1) == 0) {
+    static int registered = 0;
+    if (!registered) {
+        registered = 1;
         atexit(block_cache_cleanup);
     }
 }
 
-static XrImmixBlock* block_cache_pop(void) {
-    XrImmixBlock *head = atomic_load(&g_cache_head);
-    while (head) {
-        if (atomic_compare_exchange_weak(&g_cache_head, &head, head->next)) {
-            atomic_fetch_sub(&g_cache_count, 1);
-            return head;
-        }
+// L2 pop (caller holds no lock — we lock internally)
+static XrImmixBlock* block_cache_l2_pop(void) {
+    pthread_mutex_lock(&g_block_cache_mu);
+    XrImmixBlock *b = g_block_cache_head;
+    if (b) {
+        g_block_cache_head = b->next;
+        g_block_cache_count--;
     }
-    return NULL;
+    pthread_mutex_unlock(&g_block_cache_mu);
+    return b;
 }
 
+// L2 push (returns false if L2 full — caller should free the block)
+static bool block_cache_l2_push(XrImmixBlock *block) {
+    pthread_mutex_lock(&g_block_cache_mu);
+    if (g_block_cache_count >= XR_BLOCK_CACHE_L2_MAX) {
+        pthread_mutex_unlock(&g_block_cache_mu);
+        return false;
+    }
+    block->next = g_block_cache_head;
+    g_block_cache_head = block;
+    g_block_cache_count++;
+    pthread_mutex_unlock(&g_block_cache_mu);
+    return true;
+}
+
+// Pop: try L1 (per-worker), then L2 (global)
+static XrImmixBlock* block_cache_pop(void) {
+    XrWorker *w = xr_current_worker();
+    if (w && w->p.block_cache_count > 0) {
+        w->p.block_cache_count--;
+        return (XrImmixBlock*)w->p.block_cache[w->p.block_cache_count];
+    }
+    return block_cache_l2_pop();
+}
+
+// Push: try L1 (per-worker), then L2 (global), then free
 static void block_cache_push(XrImmixBlock *block) {
-    if (atomic_load(&g_cache_count) >= XR_BLOCK_CACHE_MAX) {
-        free_aligned_block((char*)block);
+    XrWorker *w = xr_current_worker();
+    if (w && w->p.block_cache_count < XR_BLOCK_CACHE_L1_MAX) {
+        w->p.block_cache[w->p.block_cache_count++] = block;
         return;
     }
-    XrImmixBlock *head = atomic_load(&g_cache_head);
-    do {
-        block->next = head;
-    } while (!atomic_compare_exchange_weak(&g_cache_head, &head, block));
-    atomic_fetch_add(&g_cache_count, 1);
+    if (!block_cache_l2_push(block)) {
+        free_aligned_block((char*)block);
+    }
+}
+
+// Flush a per-worker L1 block cache to the global L2 pool.
+// Blocks that don't fit in L2 are freed immediately.
+void xr_immix_flush_block_cache(void *block_cache[], int *count) {
+    XR_DCHECK(block_cache != NULL, "flush_block_cache: NULL cache array");
+    XR_DCHECK(count != NULL, "flush_block_cache: NULL count");
+    for (int i = 0; i < *count; i++) {
+        XrImmixBlock *b = (XrImmixBlock*)block_cache[i];
+        if (!block_cache_l2_push(b)) {
+            free_aligned_block((char*)b);
+        }
+        block_cache[i] = NULL;
+    }
+    *count = 0;
 }
 
 /* ========== Block Management ========== */

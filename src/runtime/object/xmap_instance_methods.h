@@ -12,7 +12,7 @@
 #define XMAP_INSTANCE_METHODS_H
 
 #include "../value/xvalue.h"
-#include "../base/xdefs.h"
+#include "../../base/xdefs.h"
 
 // Map instance methods
 XR_FUNC XrValue xr_map_method_set(XrayIsolate *isolate, XrValue *args, int nargs);

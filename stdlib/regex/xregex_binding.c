@@ -13,6 +13,7 @@
 
 #include "xregex_binding.h"
 #include "xregex.h"
+#include "../common.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -49,7 +50,7 @@ static const char* value_to_cstring(XrValue v, int *len) {
 static XrRegexFlags parse_flags(const char *flags_str) {
     XrRegexFlags flags = XR_RE_NONE;
     if (!flags_str) return flags;
-    
+
     for (const char *p = flags_str; *p; p++) {
         switch (*p) {
             case 'i': flags |= XR_RE_IGNORECASE; break;
@@ -62,21 +63,21 @@ static XrRegexFlags parse_flags(const char *flags_str) {
 
 /*
  * Create Match object (as Json)
- * 
+ *
  * Structure:
  *   { start: int, end: int, text: string, groups: Array<string> }
  */
 static XrValue create_match_object(XrayIsolate *isolate, const char *text, XrMatch *match) {
     XrJson *result = xr_json_new(xr_current_coro(isolate), 4);
-    
+
     // start
     int start_offset = match->groups[0].start ? (int)(match->groups[0].start - text) : 0;
     xr_json_set_by_key(isolate, result, "start", xr_int(start_offset));
-    
+
     // end
     int end_offset = match->groups[0].end ? (int)(match->groups[0].end - text) : 0;
     xr_json_set_by_key(isolate, result, "end", xr_int(end_offset));
-    
+
     // text
     if (match->groups[0].start && match->groups[0].end) {
         int len = (int)(match->groups[0].end - match->groups[0].start);
@@ -85,7 +86,7 @@ static XrValue create_match_object(XrayIsolate *isolate, const char *text, XrMat
     } else {
         xr_json_set_by_key(isolate, result, "text", xr_null());
     }
-    
+
     // groups
     XrArray *groups = xr_array_new(xr_current_coro(isolate));
     for (int i = 0; i < match->group_count; i++) {
@@ -98,7 +99,7 @@ static XrValue create_match_object(XrayIsolate *isolate, const char *text, XrMat
         }
     }
     xr_json_set_by_key(isolate, result, "groups", xr_value_from_array(groups));
-    
+
     return xr_json_value(result);
 }
 
@@ -110,7 +111,7 @@ static XrValue create_match_object(XrayIsolate *isolate, const char *text, XrMat
 
 /*
  * XrRegexObject - GC-managed regex object
- * 
+ *
  * Contains GC header and pointer to underlying XrRegex
  */
 typedef struct XrRegexObject {
@@ -177,17 +178,17 @@ XrRegex* xr_value_to_regex(XrValue v) {
 // compile(pattern [, flags]) - Compile regex
 static XrValue regex_compile(XrayIsolate *isolate, XrValue *args, int argc) {
     if (argc < 1) return xr_null();
-    
+
     int pattern_len;
     const char *pattern = value_to_cstring(args[0], &pattern_len);
     if (!pattern) return xr_null();
-    
+
     XrRegexFlags flags = XR_RE_NONE;
     if (argc >= 2) {
         const char *flags_str = value_to_cstring(args[1], NULL);
         flags = parse_flags(flags_str);
     }
-    
+
     XrRegexError error;
     XrRegex *re = xr_regex_compile(pattern, flags, &error);
     if (!re) {
@@ -195,21 +196,21 @@ static XrValue regex_compile(XrayIsolate *isolate, XrValue *args, int argc) {
                          xr_regex_error_str(error), pattern);
         return xr_null();
     }
-    
+
     return wrap_regex(isolate, re);
 }
 
 // test(re, text) - Test if matches
 static XrValue regex_test(XrayIsolate *isolate, XrValue *args, int argc) {
     if (argc < 2) return xr_bool(false);
-    
+
     XrRegex *re = unwrap_regex(isolate, args[0]);
     if (!re) return xr_bool(false);
-    
+
     int text_len;
     const char *text = value_to_cstring(args[1], &text_len);
     if (!text) return xr_bool(false);
-    
+
     bool result = xr_regex_test(re, text, text_len);
     return xr_bool(result);
 }
@@ -217,32 +218,32 @@ static XrValue regex_test(XrayIsolate *isolate, XrValue *args, int argc) {
 // fullMatch(re, text) - Full match
 static XrValue regex_full_match(XrayIsolate *isolate, XrValue *args, int argc) {
     if (argc < 2) return xr_null();
-    
+
     XrRegex *re = unwrap_regex(isolate, args[0]);
     if (!re) return xr_null();
-    
+
     int text_len;
     const char *text = value_to_cstring(args[1], &text_len);
     if (!text) return xr_null();
-    
+
     XrMatch match;
     bool found = xr_regex_full_match(re, text, text_len, &match);
     if (!found) return xr_null();
-    
+
     return create_match_object(isolate, text, &match);
 }
 
 // count(re, text) - Count matches
 static XrValue regex_count(XrayIsolate *isolate, XrValue *args, int argc) {
     if (argc < 2) return xr_int(0);
-    
+
     XrRegex *re = unwrap_regex(isolate, args[0]);
     if (!re) return xr_int(0);
-    
+
     int text_len;
     const char *text = value_to_cstring(args[1], &text_len);
     if (!text) return xr_int(0);
-    
+
     int count = xr_regex_count(re, text, text_len);
     return xr_int(count);
 }
@@ -250,45 +251,45 @@ static XrValue regex_count(XrayIsolate *isolate, XrValue *args, int argc) {
 // find(re, text [, offset]) - Find match from specified position
 static XrValue regex_find(XrayIsolate *isolate, XrValue *args, int argc) {
     if (argc < 2) return xr_null();
-    
+
     XrRegex *re = unwrap_regex(isolate, args[0]);
     if (!re) return xr_null();
-    
+
     int text_len;
     const char *text = value_to_cstring(args[1], &text_len);
     if (!text) return xr_null();
-    
+
     int offset = 0;
     if (argc >= 3 && XR_IS_INT(args[2])) {
         offset = (int)XR_TO_INT(args[2]);
     }
-    
+
     XrMatch match;
     bool found = xr_regex_match_at(re, text, text_len, offset, &match);
     if (!found) return xr_null();
-    
+
     return create_match_object(isolate, text, &match);
 }
 
 // findAll(re, text [, limit]) - Find all matches
 static XrValue regex_find_all(XrayIsolate *isolate, XrValue *args, int argc) {
     if (argc < 2) return xr_value_from_array(xr_array_new(xr_current_coro(isolate)));
-    
+
     XrRegex *re = unwrap_regex(isolate, args[0]);
     if (!re) return xr_value_from_array(xr_array_new(xr_current_coro(isolate)));
-    
+
     int text_len;
     const char *text = value_to_cstring(args[1], &text_len);
     if (!text) return xr_value_from_array(xr_array_new(xr_current_coro(isolate)));
-    
+
     int limit = -1;
     if (argc >= 3 && XR_IS_INT(args[2])) {
         limit = (int)XR_TO_INT(args[2]);
     }
-    
+
     int count = 0;
     XrMatch *matches = xr_regex_find_all(re, text, text_len, limit, &count);
-    
+
     XrArray *result = xr_array_new(xr_current_coro(isolate));
     if (matches) {
         for (int i = 0; i < count; i++) {
@@ -297,85 +298,85 @@ static XrValue regex_find_all(XrayIsolate *isolate, XrValue *args, int argc) {
         }
         xr_regex_find_all_free(matches);
     }
-    
+
     return xr_value_from_array(result);
 }
 
 // replace(re, text, replacement) - Replace first match
 static XrValue regex_replace(XrayIsolate *isolate, XrValue *args, int argc) {
     if (argc < 3) return xr_null();
-    
+
     XrRegex *re = unwrap_regex(isolate, args[0]);
     if (!re) return xr_null();
-    
+
     int text_len;
     const char *text = value_to_cstring(args[1], &text_len);
     if (!text) return xr_null();
-    
+
     const char *repl = value_to_cstring(args[2], NULL);
     if (!repl) return xr_null();
-    
+
     // Use dynamically allocated version
     char *result = xr_regex_replace_alloc(re, text, text_len, repl, false);
     if (!result) return args[1];  // no match, return original text
-    
+
     XrString *result_str = xr_string_intern(isolate, result, strlen(result), 0);
     xr_free(result);
-    
+
     return xr_string_value(result_str);
 }
 
 // replaceAll(re, text, replacement) - Replace all matches
 static XrValue regex_replace_all(XrayIsolate *isolate, XrValue *args, int argc) {
     if (argc < 3) return xr_null();
-    
+
     XrRegex *re = unwrap_regex(isolate, args[0]);
     if (!re) return xr_null();
-    
+
     int text_len;
     const char *text = value_to_cstring(args[1], &text_len);
     if (!text) return xr_null();
-    
+
     const char *repl = value_to_cstring(args[2], NULL);
     if (!repl) return xr_null();
-    
+
     // Use dynamically allocated version
     char *result = xr_regex_replace_alloc(re, text, text_len, repl, true);
     if (!result) return args[1];
-    
+
     XrString *result_str = xr_string_intern(isolate, result, strlen(result), 0);
     xr_free(result);
-    
+
     return xr_string_value(result_str);
 }
 
 // split(re, text) - Split by pattern
 static XrValue regex_split(XrayIsolate *isolate, XrValue *args, int argc) {
     if (argc < 2) return xr_value_from_array(xr_array_new(xr_current_coro(isolate)));
-    
+
     XrRegex *re = unwrap_regex(isolate, args[0]);
     if (!re) return xr_value_from_array(xr_array_new(xr_current_coro(isolate)));
-    
+
     int text_len;
     const char *text = value_to_cstring(args[1], &text_len);
     if (!text) return xr_value_from_array(xr_array_new(xr_current_coro(isolate)));
-    
+
     int limit = -1;
     if (argc >= 3 && XR_IS_INT(args[2])) {
         limit = (int)XR_TO_INT(args[2]);
     }
-    
+
     // Dynamic allocation to avoid stack overflow on large inputs
     int max_parts = (limit > 0 && limit < 256) ? limit : 256;
     XrSplitPart *parts = (XrSplitPart*)xr_malloc(max_parts * sizeof(XrSplitPart));
     int count = xr_regex_split(re, text, text_len, parts, max_parts, limit);
-    
+
     XrArray *result = xr_array_new(xr_current_coro(isolate));
     for (int i = 0; i < count; i++) {
         XrString *part = xr_string_intern(isolate, parts[i].str, parts[i].len, 0);
         xr_array_push(result, xr_string_value(part));
     }
-    
+
     xr_free(parts);
     return xr_value_from_array(result);
 }
@@ -383,35 +384,35 @@ static XrValue regex_split(XrayIsolate *isolate, XrValue *args, int argc) {
 // escape(text) - Escape special characters
 static XrValue regex_escape(XrayIsolate *isolate, XrValue *args, int argc) {
     if (argc < 1) return xr_null();
-    
+
     int text_len;
     const char *text = value_to_cstring(args[0], &text_len);
     if (!text) return xr_null();
-    
+
     // Worst case: every character needs escaping
     size_t buf_size = (size_t)(text_len * 2 + 1);
     char *escaped = (char*)xr_malloc(buf_size);
     if (!escaped) return args[0];
-    
+
     int result_len = xr_regex_escape(text, text_len, escaped, buf_size);
     if (result_len < 0) {
         xr_free(escaped);
         return args[0];
     }
-    
+
     XrString *result = xr_string_intern(isolate, escaped, result_len, 0);
     xr_free(escaped);
-    
+
     return xr_string_value(result);
 }
 
 // isValid(pattern) - Check if pattern is valid
 static XrValue regex_is_valid(XrayIsolate *isolate, XrValue *args, int argc) {
     if (argc < 1) return xr_bool(false);
-    
+
     const char *pattern = value_to_cstring(args[0], NULL);
     if (!pattern) return xr_bool(false);
-    
+
     (void)isolate;
     return xr_bool(xr_regex_is_valid(pattern, XR_RE_NONE));
 }
@@ -429,13 +430,13 @@ static XrValue regex_is_valid(XrayIsolate *isolate, XrValue *args, int argc) {
 // re.pattern() - Get pattern string
 static XrValue re_method_pattern(XrayIsolate *isolate, XrValue *args, int nargs) {
     if (nargs < 1) return xr_null();
-    
+
     XrRegex *re = unwrap_regex(isolate, args[0]);
     if (!re) return xr_null();
-    
+
     const char *pattern = xr_regex_pattern(re);
     if (!pattern) return xr_null();
-    
+
     return xr_string_value(xr_string_intern(isolate, pattern, strlen(pattern), 0));
 }
 
@@ -462,12 +463,12 @@ static XrNativeMethod regex_getters[] = {
 
 void xr_regex_init_native_type(XrayIsolate *isolate) {
     #include "../../src/runtime/object/xnative_type.h"
-    
+
     // Check if already registered
     if (xr_get_native_type_class(isolate, XR_TREGEX)) {
         return;  // Already registered
     }
-    
+
     XrNativeTypeInfo regex_info = {
         .name = "regex",
         .gc_type = XR_TREGEX,
@@ -504,33 +505,20 @@ XrModule* xr_load_module_regex(XrayIsolate *isolate) {
     // 1. Create native module
     XrModule *mod = xr_module_create_native(isolate, "regex");
     if (!mod) return NULL;
-    
-    
-    // 2. Add exported functions
-    extern XrCFunction* xr_vm_cfunction_new(XrayIsolate *isolate, XrCFunctionPtr func, const char *name);
-    extern XrValue xr_value_from_cfunction(XrCFunction *cfunc);
-    
-    #define EXPORT_CFUNC(name_str, func_ptr) \
-        do { \
-            XrCFunction *cfunc = xr_vm_cfunction_new(isolate, func_ptr, name_str); \
-            XrValue fn_val = xr_value_from_cfunction(cfunc); \
-            xr_module_add_export(isolate, mod, name_str, fn_val); \
-        } while(0)
-    
-    EXPORT_CFUNC("compile", regex_compile);
-    EXPORT_CFUNC("test", regex_test);
-    EXPORT_CFUNC("find", regex_find);
-    EXPORT_CFUNC("fullFind", regex_full_match);
-    EXPORT_CFUNC("count", regex_count);        // new API
-    EXPORT_CFUNC("findAll", regex_find_all);   // new API
-    EXPORT_CFUNC("replace", regex_replace);
-    EXPORT_CFUNC("replaceAll", regex_replace_all);
-    EXPORT_CFUNC("split", regex_split);
-    EXPORT_CFUNC("escape", regex_escape);
-    EXPORT_CFUNC("isValid", regex_is_valid);
-    
-    #undef EXPORT_CFUNC
-    
+
+
+    XRS_EXPORT(mod, isolate, "compile", regex_compile);
+    XRS_EXPORT(mod, isolate, "test", regex_test);
+    XRS_EXPORT(mod, isolate, "find", regex_find);
+    XRS_EXPORT(mod, isolate, "fullFind", regex_full_match);
+    XRS_EXPORT(mod, isolate, "count", regex_count);
+    XRS_EXPORT(mod, isolate, "findAll", regex_find_all);
+    XRS_EXPORT(mod, isolate, "replace", regex_replace);
+    XRS_EXPORT(mod, isolate, "replaceAll", regex_replace_all);
+    XRS_EXPORT(mod, isolate, "split", regex_split);
+    XRS_EXPORT(mod, isolate, "escape", regex_escape);
+    XRS_EXPORT(mod, isolate, "isValid", regex_is_valid);
+
     // 3. Register Regex native type (support object method syntax)
     XrNativeTypeInfo regex_info = {
         .name = "regex",
@@ -540,7 +528,7 @@ XrModule* xr_load_module_regex(XrayIsolate *isolate) {
         .static_methods = NULL,
     };
     xr_register_native_type(isolate, &regex_info);
-    
+
     // 4. Mark as loaded
     mod->loaded = true;
     return mod;

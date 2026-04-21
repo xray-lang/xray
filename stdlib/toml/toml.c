@@ -13,6 +13,7 @@
 
 #include "toml.h"
 #include "toml_parser.h"
+#include "../common.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -520,20 +521,11 @@ XrModule* xr_load_module_toml(XrayIsolate *isolate) {
     XrModule *mod = xr_module_create_native(isolate, "toml");
     if (!mod) return NULL;
 
-    #define EXPORT_CFUNC(name_str, func_ptr) \
-        do { \
-            XrCFunction *cfunc = xr_vm_cfunction_new(isolate, func_ptr, name_str); \
-            XrValue fn_val = xr_value_from_cfunction(cfunc); \
-            xr_module_add_export(isolate, mod, name_str, fn_val); \
-        } while(0)
-
-    EXPORT_CFUNC("parse", toml_parse);
-    EXPORT_CFUNC("parseStrict", toml_parse_strict);
-    EXPORT_CFUNC("stringify", toml_stringify);
-    EXPORT_CFUNC("parseFile", toml_parse_file);
-    EXPORT_CFUNC("writeFile", toml_write_file);
-
-    #undef EXPORT_CFUNC
+    XRS_EXPORT(mod, isolate, "parse", toml_parse);
+    XRS_EXPORT(mod, isolate, "parseStrict", toml_parse_strict);
+    XRS_EXPORT(mod, isolate, "stringify", toml_stringify);
+    XRS_EXPORT(mod, isolate, "parseFile", toml_parse_file);
+    XRS_EXPORT(mod, isolate, "writeFile", toml_write_file);
 
     mod->loaded = true;
     return mod;

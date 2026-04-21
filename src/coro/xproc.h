@@ -134,6 +134,11 @@ typedef struct XrProc {
     void *stack_slab_free;     // Free list of stack+frames blocks (1312B each)
     int stack_slab_count;      // Number of blocks in free list
 
+    /* === Immix Block Cache L1 (per-worker, no lock needed) === */
+    #define XR_BLOCK_CACHE_L1_MAX 8
+    void *block_cache[XR_BLOCK_CACHE_L1_MAX];  // Cached aligned blocks
+    int block_cache_count;                      // Number of cached blocks
+
     /* === CoroGC Free List (avoids malloc/free per coroutine that needs heap) === */
     struct XrCoroGC *gc_free_list;   // Free list of XrCoroGC structs (320B each)
     int gc_free_count;               // Number of XrCoroGC in free list

@@ -15,7 +15,7 @@
 #define XSET_CLASS_INIT_H
 
 #include "../../base/xforward_decl.h"
-#include "../base/xdefs.h"
+#include "../../base/xdefs.h"
 
 // Create Set class with all methods (using XrClassBuilder)
 XR_FUNC XrClass* xr_set_create_class(XrayIsolate *X, XrClass *objectClass);

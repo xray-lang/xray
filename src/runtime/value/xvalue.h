@@ -58,7 +58,7 @@ typedef double xr_Number;
 
 #if !XR_64BIT
   #error "xray requires 64-bit platform"
-#endif // ========== Value Tag Enum ==========
+#endif // !XR_64BIT
 
 typedef enum {
     XR_TAG_NULL       = 0, // null singleton

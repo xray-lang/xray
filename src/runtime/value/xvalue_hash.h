@@ -26,6 +26,9 @@
 // Forward declaration
 typedef struct XrString XrString;
 
+// Null hash: non-zero to avoid collision with tombstone (0)
+#define XR_HASH_NULL 6u
+
 // Hash never returns 0 (0 is used for tombstone)
 XR_FUNC uint32_t xr_hash_value(XrValue val);
 XR_FUNC uint32_t xr_hash_string(XrString *str);

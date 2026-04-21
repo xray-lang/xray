@@ -25,15 +25,15 @@ struct XrException {
     XrGCHeader gc;
     XrErrorCode code;          // error code
     XrString *message;         // error message
-    
+
     // Source location
     XrString *file;            // filename (GC managed)
     int line;                  // line number
     int column;                // column number
-    
+
     // Stack trace
     XrArray *stackTrace;       // call stack array (GC managed)
-    
+
     // User data
     XrValue userData;          // custom data attached by user
 };
@@ -70,11 +70,7 @@ XR_FUNC void xr_exception_print(XrayIsolate *X, XrValue exception);
 
 /* ========== Type Check Macros ========== */
 
-// XR_IS_EXCEPTION is defined in xvalue.h
-#ifndef XR_IS_EXCEPTION
-#define XR_IS_EXCEPTION(v) \
-    (XR_IS_PTR(v) && XR_GC_GET_TYPE(&((XrGCHeader*)XR_TO_PTR(v))[0]) == XR_TEXCEPTION)
-#endif
+// XR_IS_EXCEPTION is defined in xvalue.h (single source of truth)
 
 #define XR_AS_EXCEPTION(v) \
     ((XrException*)XR_TO_PTR(v))

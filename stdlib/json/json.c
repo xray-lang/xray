@@ -13,6 +13,7 @@
  */
 
 #include "json.h"
+#include "../common.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -1213,26 +1214,13 @@ XrModule* xr_load_module_json(XrayIsolate *isolate) {
     XrModule *mod = xr_module_create_native(isolate, "json");
     if (!mod) return NULL;
 
-    // Add exported functions
-    extern XrCFunction* xr_vm_cfunction_new(XrayIsolate *isolate, XrCFunctionPtr func, const char *name);
-    extern XrValue xr_value_from_cfunction(XrCFunction *cfunc);
-
-    #define EXPORT_CFUNC(name_str, func_ptr) \
-        do { \
-            XrCFunction *cfunc = xr_vm_cfunction_new(isolate, func_ptr, name_str); \
-            XrValue fn_val = xr_value_from_cfunction(cfunc); \
-            xr_module_add_export(isolate, mod, name_str, fn_val); \
-        } while(0)
-
-    EXPORT_CFUNC("parse", json_parse);
-    EXPORT_CFUNC("stringify", json_stringify);
-    EXPORT_CFUNC("isValid", json_is_valid);
-    EXPORT_CFUNC("typeof", json_type_of);
-    EXPORT_CFUNC("tryParse", json_try_parse);
-    EXPORT_CFUNC("keys", json_keys);
-    EXPORT_CFUNC("values", json_values);
-
-    #undef EXPORT_CFUNC
+    XRS_EXPORT(mod, isolate, "parse", json_parse);
+    XRS_EXPORT(mod, isolate, "stringify", json_stringify);
+    XRS_EXPORT(mod, isolate, "isValid", json_is_valid);
+    XRS_EXPORT(mod, isolate, "typeof", json_type_of);
+    XRS_EXPORT(mod, isolate, "tryParse", json_try_parse);
+    XRS_EXPORT(mod, isolate, "keys", json_keys);
+    XRS_EXPORT(mod, isolate, "values", json_values);
 
     // Mark as loaded
     mod->loaded = true;

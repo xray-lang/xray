@@ -353,7 +353,7 @@ static XrValue ws_connect(XrayIsolate *X, XrValue *args, int argc) {
     if (!ctx) return xr_null();
 
     size_t url_len;
-    const char *url = get_string_arg(args[0], &url_len);
+    const char *url = xrs_string_arg(args[0], &url_len);
     if (!url) return xr_null();
 
     // Copy URL
@@ -390,8 +390,8 @@ static XrValue ws_connect(XrayIsolate *X, XrValue *args, int argc) {
 
     if (!ws) {
         xr_json_set(X, result, ctx->sym_wsid, xr_int(-1));
-        xr_json_set(X, result, ctx->sym_error, make_cstring(X, "Failed to create WebSocket"));
-        xr_json_set(X, result, ctx->sym_state, make_cstring(X, "closed"));
+        xr_json_set(X, result, ctx->sym_error, xrs_string_value_c(X, "Failed to create WebSocket"));
+        xr_json_set(X, result, ctx->sym_state, xrs_string_value_c(X, "closed"));
         return xr_json_value(result);
     }
 
@@ -404,8 +404,8 @@ static XrValue ws_connect(XrayIsolate *X, XrValue *args, int argc) {
 
     if (err != WS_OK) {
         xr_json_set(X, result, ctx->sym_wsid, xr_int(-1));
-        xr_json_set(X, result, ctx->sym_error, make_cstring(X, xr_ws_error_string(err)));
-        xr_json_set(X, result, ctx->sym_state, make_cstring(X, "closed"));
+        xr_json_set(X, result, ctx->sym_error, xrs_string_value_c(X, xr_ws_error_string(err)));
+        xr_json_set(X, result, ctx->sym_state, xrs_string_value_c(X, "closed"));
         xr_ws_free(ws);
         return xr_json_value(result);
     }
@@ -414,8 +414,8 @@ static XrValue ws_connect(XrayIsolate *X, XrValue *args, int argc) {
     int id = store_ws(X, ws);
 
     xr_json_set(X, result, ctx->sym_wsid, xr_int(id));
-    xr_json_set(X, result, ctx->sym_url, make_string(X, url, url_len));
-    xr_json_set(X, result, ctx->sym_state, make_cstring(X, "open"));
+    xr_json_set(X, result, ctx->sym_url, ws_make_string(X, url, url_len));
+    xr_json_set(X, result, ctx->sym_state, xrs_string_value_c(X, "open"));
 
     return xr_json_value(result);
 }
@@ -610,9 +610,9 @@ static XrValue make_recv_result(XrayIsolate *X, XrWsContext *ctx, XrWebSocket *w
         const char *err_msg = (!ws || xr_ws_get_state(ws) != WS_STATE_OPEN)
             ? "Connection closed" : "Receive failed";
         if (ctx && ctx->shape_recv_err)
-            xr_json_set_field(result, 0, make_cstring(X, err_msg));
+            xr_json_set_field(result, 0, xrs_string_value_c(X, err_msg));
         else
-            xr_json_set(X, result, ctx ? ctx->sym_error : 0, make_cstring(X, err_msg));
+            xr_json_set(X, result, ctx ? ctx->sym_error : 0, xrs_string_value_c(X, err_msg));
         return xr_json_value(result);
     }
 
@@ -627,7 +627,7 @@ static XrValue make_recv_result(XrayIsolate *X, XrWsContext *ctx, XrWebSocket *w
 
     XrValue data_val;
     if (msg->is_text) {
-        data_val = make_string(X, msg->data, msg->len);
+        data_val = ws_make_string(X, msg->data, msg->len);
     } else {
         XrArray *bytes_arr = xr_array_with_capacity_typed(coro, (int)msg->len, XR_ELEM_U8);
         if (bytes_arr && msg->len > 0) {
@@ -659,7 +659,7 @@ static XrCFuncResult ws_recv_continue(XrayIsolate *X, int status, void *cont_ctx
     if (status == XR_RESUME_TIMEOUT || status == XR_RESUME_CANCELLED) {
         XrWsContext *ctx = get_ws_context(X);
         XrJson *res = xr_json_new(xr_current_coro(X), 4);
-        xr_json_set(X, res, ctx ? ctx->sym_error : 0, make_cstring(X, "Timeout"));
+        xr_json_set(X, res, ctx ? ctx->sym_error : 0, xrs_string_value_c(X, "Timeout"));
         *result = xr_json_value(res);
         xr_free(state);
         return XR_CFUNC_DONE;
@@ -735,7 +735,7 @@ static XrCFuncResult ws_recv_yieldable(XrayIsolate *X, XrValue *args, int argc, 
 
     if (!XR_IS_INT(id_val)) {
         XrJson *res = xr_json_new(xr_current_coro(X), 4);
-        xr_json_set(X, res, ctx->sym_error, make_cstring(X, "Invalid connection object"));
+        xr_json_set(X, res, ctx->sym_error, xrs_string_value_c(X, "Invalid connection object"));
         *result = xr_json_value(res);
         return XR_CFUNC_DONE;
     }
@@ -745,7 +745,7 @@ static XrCFuncResult ws_recv_yieldable(XrayIsolate *X, XrValue *args, int argc, 
 
     if (!ws) {
         XrJson *res = xr_json_new(xr_current_coro(X), 4);
-        xr_json_set(X, res, ctx->sym_error, make_cstring(X, "Connection not found"));
+        xr_json_set(X, res, ctx->sym_error, xrs_string_value_c(X, "Connection not found"));
         *result = xr_json_value(res);
         return XR_CFUNC_DONE;
     }
@@ -790,7 +790,7 @@ static XrCFuncResult ws_recv_yieldable(XrayIsolate *X, XrValue *args, int argc, 
     WsRecvState *state = (WsRecvState *)xr_malloc(sizeof(WsRecvState));
     if (!state) {
         XrJson *res = xr_json_new(xr_current_coro(X), 4);
-        xr_json_set(X, res, ctx->sym_error, make_cstring(X, "Out of memory"));
+        xr_json_set(X, res, ctx->sym_error, xrs_string_value_c(X, "Out of memory"));
         *result = xr_json_value(res);
         return XR_CFUNC_ERROR;
     }
@@ -829,7 +829,7 @@ static XrCFuncResult ws_recvdata_continue(XrayIsolate *X, int status, void *cont
     if (msg) {
         ctx->total_msgs_recv++;
         ctx->total_bytes_recv += msg->len;
-        *result = make_string(X, msg->data, msg->len);
+        *result = ws_make_string(X, msg->data, msg->len);
         xr_ws_message_free(msg);
         xr_free(state);
         return XR_CFUNC_DONE;
@@ -878,7 +878,7 @@ static XrCFuncResult ws_recvdata(XrayIsolate *X, XrValue *args, int argc, XrValu
     if (msg) {
         ctx->total_msgs_recv++;
         ctx->total_bytes_recv += msg->len;
-        *result = make_string(X, msg->data, msg->len);
+        *result = ws_make_string(X, msg->data, msg->len);
         xr_ws_message_free(msg);
         return XR_CFUNC_DONE;
     }
@@ -934,7 +934,7 @@ static XrValue ws_close(XrayIsolate *X, XrValue *args, int argc) {
     }
 
     if (argc >= 3 && XR_IS_STRING(args[2])) {
-        reason = get_string_arg(args[2], NULL);
+        reason = xrs_string_arg(args[2], NULL);
     }
 
     // CRITICAL: Clean up netpoll registration BEFORE closing the socket.
@@ -958,7 +958,7 @@ static XrValue ws_close(XrayIsolate *X, XrValue *args, int argc) {
     xr_ws_free(ws);
     remove_ws(ctx, id);
 
-    xr_json_set(X, conn, ctx->sym_state, make_cstring(X, "closed"));
+    xr_json_set(X, conn, ctx->sym_state, xrs_string_value_c(X, "closed"));
     xr_json_set(X, conn, ctx->sym_wsid, xr_int(-1));
 
     return xr_bool(true);
@@ -995,26 +995,26 @@ static XrValue ws_ping(XrayIsolate *X, XrValue *args, int argc) {
  */
 static XrValue ws_state(XrayIsolate *X, XrValue *args, int argc) {
     if (argc < 1 || !XR_IS_JSON(args[0])) {
-        return make_cstring(X, "closed");
+        return xrs_string_value_c(X, "closed");
     }
 
     XrWsContext *ctx = get_ws_context(X);
-    if (!ctx) return make_cstring(X, "closed");
+    if (!ctx) return xrs_string_value_c(X, "closed");
 
     XrJson *conn = (XrJson*)XR_TO_PTR(args[0]);
     XrValue id_val = xr_json_get(conn, ctx->sym_wsid);
 
-    if (!XR_IS_INT(id_val)) return make_cstring(X, "closed");
+    if (!XR_IS_INT(id_val)) return xrs_string_value_c(X, "closed");
 
     XrWebSocket *ws = get_ws_from_ctx(ctx, (int)XR_TO_INT(id_val));
-    if (!ws) return make_cstring(X, "closed");
+    if (!ws) return xrs_string_value_c(X, "closed");
 
     switch (xr_ws_get_state(ws)) {
-        case WS_STATE_CONNECTING: return make_cstring(X, "connecting");
-        case WS_STATE_OPEN:       return make_cstring(X, "open");
-        case WS_STATE_CLOSING:    return make_cstring(X, "closing");
-        case WS_STATE_CLOSED:     return make_cstring(X, "closed");
-        default:                  return make_cstring(X, "unknown");
+        case WS_STATE_CONNECTING: return xrs_string_value_c(X, "connecting");
+        case WS_STATE_OPEN:       return xrs_string_value_c(X, "open");
+        case WS_STATE_CLOSING:    return xrs_string_value_c(X, "closing");
+        case WS_STATE_CLOSED:     return xrs_string_value_c(X, "closed");
+        default:                  return xrs_string_value_c(X, "unknown");
     }
 }
 
@@ -1058,7 +1058,7 @@ static XrValue ws_wrap_server_conn(XrayIsolate *X, XrWebSocket *ws) {
 
     XrJson *result = xr_json_new(xr_current_coro(X), 4);
     xr_json_set(X, result, ctx->sym_wsid, xr_int(id));
-    xr_json_set(X, result, ctx->sym_state, make_cstring(X, "open"));
+    xr_json_set(X, result, ctx->sym_state, xrs_string_value_c(X, "open"));
     xr_json_set(X, result, ctx->sym_is_svr, xr_bool(true));
 
     return xr_json_value(result);
@@ -1809,30 +1809,6 @@ XrModule* xr_load_module_ws(XrayIsolate *isolate) {
     XrModule *mod = xr_module_create_native(isolate, "ws");
     if (!mod) return NULL;
 
-    // 2. Add exported functions using macro (same pattern as http module)
-    #define EXPORT_CFUNC(name_str, func_ptr) \
-        do { \
-            XrCFunction *cfunc = xr_vm_cfunction_new(isolate, func_ptr, name_str); \
-            XrValue fn_val = xr_value_from_cfunction(cfunc); \
-            xr_module_add_export(isolate, mod, name_str, fn_val); \
-        } while(0)
-
-    // SLOW C function (blocking I/O, immediate P/M handoff)
-    #define EXPORT_SLOW_CFUNC(name_str, func_ptr) \
-        do { \
-            XrCFunction *cfunc = xr_vm_cfunction_new(isolate, func_ptr, name_str); \
-            cfunc->cfunc_class = XR_CFUNC_SLOW; \
-            XrValue fn_val = xr_value_from_cfunction(cfunc); \
-            xr_module_add_export(isolate, mod, name_str, fn_val); \
-        } while(0)
-
-    // Yieldable function registration macro
-    #define EXPORT_YIELDABLE(name_str, func_ptr) \
-        do { \
-            struct XrCFunction *cfunc = xr_vm_yieldable_cfunction_new(isolate, func_ptr, name_str); \
-            xr_module_add_export(isolate, mod, name_str, xr_value_from_cfunction(cfunc)); \
-        } while(0)
-
 #if WS_PROFILE
     if (!ws_prof_registered) {
         signal(SIGUSR1, ws_prof_signal);
@@ -1841,27 +1817,23 @@ XrModule* xr_load_module_ws(XrayIsolate *isolate) {
 #endif
 
     // WebSocket client functions (directly exported, no script wrapper needed)
-    EXPORT_SLOW_CFUNC("connect", ws_connect);
-    EXPORT_YIELDABLE("send", ws_send_yieldable);
-    EXPORT_YIELDABLE("recv", ws_recv_yieldable);
-    EXPORT_CFUNC("close", ws_close);
-    EXPORT_CFUNC("ping", ws_ping);
-    EXPORT_CFUNC("state", ws_state);
-    EXPORT_CFUNC("isOpen", ws_is_open);
+    XRS_EXPORT_SLOW(mod, isolate, "connect", ws_connect);
+    XRS_EXPORT_YIELDABLE(mod, isolate, "send", ws_send_yieldable);
+    XRS_EXPORT_YIELDABLE(mod, isolate, "recv", ws_recv_yieldable);
+    XRS_EXPORT(mod, isolate, "close", ws_close);
+    XRS_EXPORT(mod, isolate, "ping", ws_ping);
+    XRS_EXPORT(mod, isolate, "state", ws_state);
+    XRS_EXPORT(mod, isolate, "isOpen", ws_is_open);
 
     // High-performance variants (recvData returns string directly, no Json wrapper)
-    EXPORT_YIELDABLE("recvData", ws_recvdata);
-    EXPORT_YIELDABLE("sendData", ws_send_yieldable);
+    XRS_EXPORT_YIELDABLE(mod, isolate, "recvData", ws_recvdata);
+    XRS_EXPORT_YIELDABLE(mod, isolate, "sendData", ws_send_yieldable);
 
     // WebSocket server (pure C, no script layer needed)
-    EXPORT_YIELDABLE("serve", ws_serve_yieldable);
-    EXPORT_YIELDABLE("echoServe", ws_echo_serve_yieldable);
-    EXPORT_CFUNC("stopServer", ws_stop_server);
-    EXPORT_CFUNC("isServerRunning", ws_is_server_running);
-
-    #undef EXPORT_CFUNC
-    #undef EXPORT_SLOW_CFUNC
-    #undef EXPORT_YIELDABLE
+    XRS_EXPORT_YIELDABLE(mod, isolate, "serve", ws_serve_yieldable);
+    XRS_EXPORT_YIELDABLE(mod, isolate, "echoServe", ws_echo_serve_yieldable);
+    XRS_EXPORT(mod, isolate, "stopServer", ws_stop_server);
+    XRS_EXPORT(mod, isolate, "isServerRunning", ws_is_server_running);
 
     return mod;
 }

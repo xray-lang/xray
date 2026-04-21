@@ -25,7 +25,7 @@ uint32_t xr_hash_string(XrString *str) {
 uint32_t xr_hash_value(XrValue val) {
     switch (val.tag) {
     case XR_TAG_NULL:
-        return 6;
+        return XR_HASH_NULL;
     case XR_TAG_BOOL:
         return xr_hash_bool((int)val.i);
     case XR_TAG_I64:
@@ -46,12 +46,12 @@ uint32_t xr_hash_value(XrValue val) {
 bool xr_value_eq(XrValue a, XrValue b) {
     // Fast path: same tag and value
     if (xr_value_same(a, b)) return true;
-    
+
     XrTypeId tid_a = xr_value_typeid(a);
     XrTypeId tid_b = xr_value_typeid(b);
-    
+
     if (tid_a != tid_b) return false;
-    
+
     if (tid_a == XR_TID_NULL) return true;
     if (tid_a == XR_TID_BOOL) return XR_TO_BOOL(a) == XR_TO_BOOL(b);
     if (XR_TID_IS_INT(tid_a)) return XR_TO_INT(a) == XR_TO_INT(b);

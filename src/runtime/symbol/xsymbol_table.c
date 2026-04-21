@@ -87,8 +87,6 @@ static bool expand_capacity(XrSymbolTable *table) {
     XR_DCHECK(table != NULL, "expand_capacity: NULL table");
     XR_DCHECK(table->capacity > 0, "expand_capacity: zero capacity");
     int new_capacity = table->capacity * 2;
-    size_t old_size = sizeof(const char*) * (size_t)table->capacity;
-    (void)old_size;
     size_t new_size = sizeof(const char*) * (size_t)new_capacity;
 
     const char **new_array = (const char**)xr_realloc(table->id_to_name, new_size);
