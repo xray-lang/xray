@@ -80,36 +80,25 @@ void xr_type_global_init(void) {
     g_types_initialized = true;
 }
 
-// Fallback pool for contexts without an active isolate (unit tests, tools)
-static XrTypePool *g_fallback_pool = NULL;
-
 // Set current type pool on the active isolate (called by XaAnalyzer)
 void xr_type_set_current_pool(XrTypePool *pool, uint32_t *id_counter) {
     (void)id_counter;  // ID counter now managed by pool itself
     XrayIsolate *X = xray_isolate_current();
-    if (X) {
-        X->current_type_pool = pool;
-    } else {
-        g_fallback_pool = pool;
-    }
+    if (X) X->current_type_pool = pool;
 }
 
-// Get current type pool from active isolate
+// Get current type pool from active isolate (for rare no-X contexts like xr_type_to_string)
 XrTypePool *xr_type_get_current_pool(void) {
     XrayIsolate *X = xray_isolate_current();
-    return X ? X->current_type_pool : g_fallback_pool;
-}
-
-static XrTypePool *get_current_pool(void) {
-    XrayIsolate *X = xray_isolate_current();
-    return X ? X->current_type_pool : g_fallback_pool;
+    return X ? X->current_type_pool : NULL;
 }
 
 // Helper: allocate and initialize a type (for non-singleton types)
 // Uses pool arena for allocation - memory freed when pool is reset/destroyed
 static XrType *type_alloc(XrayIsolate *X, XrTypeKind kind) {
-    XrTypePool *pool = X ? X->current_type_pool : get_current_pool();
-    XR_CHECK(pool != NULL, "Type pool not set - call xr_type_set_current_pool first");
+    XR_CHECK(X != NULL, "type_alloc: XrayIsolate *X is NULL");
+    XrTypePool *pool = X->current_type_pool;
+    XR_CHECK(pool != NULL, "Type pool not set - ensure isolate has current_type_pool");
     return xr_pool_alloc_type(pool, kind);
 }
 
@@ -181,7 +170,7 @@ XrType *xr_type_new_task(XrayIsolate *X, XrType *result_type) {
     if (!type) return NULL;
     type->instance.class_name = "Task";
     if (result_type) {
-        XrTypePool *pool = X ? X->current_type_pool : get_current_pool();
+        XrTypePool *pool = X->current_type_pool;
         XrType **args = (XrType **)xr_pool_alloc(pool, sizeof(XrType *));
         if (args) { args[0] = result_type; type->instance.type_args = args; type->instance.type_arg_count = 1; }
     }
@@ -196,7 +185,7 @@ XrType *xr_type_new_json(XrayIsolate *X) {
 XrType *xr_type_new_json_with_fields(XrayIsolate *X, const char **names, XrType **types, int count) {
     XrType *type = type_alloc(X, XR_KIND_JSON);
     if (!type) return NULL;
-    XrTypePool *pool = X ? X->current_type_pool : get_current_pool();
+    XrTypePool *pool = X->current_type_pool;
     type->object.allow_extension = true;  // Json allows dynamic fields
     if (count > 0 && names && types) {
         type->object.field_count = count;
@@ -215,7 +204,7 @@ XrType *xr_type_new_object(XrayIsolate *X, const char **field_names, XrType **fi
                            int field_count, bool allow_extension, const char *type_name) {
     XrType *type = type_alloc(X, XR_KIND_JSON);
     if (!type) return NULL;
-    XrTypePool *pool = X ? X->current_type_pool : get_current_pool();
+    XrTypePool *pool = X->current_type_pool;
 
     if (field_count > 0 && field_names) {
         type->object.field_names = xr_pool_alloc(pool, sizeof(const char*) * field_count);
@@ -258,7 +247,7 @@ XrType *xr_type_get_base(XrType *optional_type) {
 XrType *xr_type_new_type_param(XrayIsolate *X, const char *name, int id) {
     XrType *type = type_alloc(X, XR_KIND_TYPE_PARAM);
     if (!type) return NULL;
-    XrTypePool *pool = X ? X->current_type_pool : get_current_pool();
+    XrTypePool *pool = X->current_type_pool;
     type->type_param.name = name ? xr_pool_strdup(pool, name) : NULL;
     type->type_param.id = id;
     type->type_param.constraint = NULL;
@@ -276,7 +265,7 @@ XrType *xr_type_new_type_param_constrained(XrayIsolate *X, const char *name, int
 XrType *xr_type_new_class(XrayIsolate *X, const char *class_name) {
     XrType *type = type_alloc(X, XR_KIND_CLASS);
     if (type && class_name) {
-        XrTypePool *pool = X ? X->current_type_pool : get_current_pool();
+        XrTypePool *pool = X->current_type_pool;
         type->instance.class_name = xr_pool_strdup(pool, class_name);
     }
     return type;
@@ -285,7 +274,7 @@ XrType *xr_type_new_class(XrayIsolate *X, const char *class_name) {
 XrType *xr_type_new_interface(XrayIsolate *X, const char *interface_name) {
     XrType *type = type_alloc(X, XR_KIND_INTERFACE);
     if (type && interface_name) {
-        XrTypePool *pool = X ? X->current_type_pool : get_current_pool();
+        XrTypePool *pool = X->current_type_pool;
         type->instance.class_name = xr_pool_strdup(pool, interface_name);
     }
     return type;
@@ -340,7 +329,7 @@ XrType *xr_type_new_instance(XrayIsolate *X, XrClassInfo *class_info) {
     type->instance.class_ref = class_info;
     // Extract class_name from class_info for type comparison and display
     if (class_info && class_info->name) {
-        XrTypePool *pool = X ? X->current_type_pool : get_current_pool();
+        XrTypePool *pool = X->current_type_pool;
         type->instance.class_name = xr_pool_strdup(pool, class_info->name);
     }
     type->instance.type_args = NULL;
@@ -353,7 +342,7 @@ XrType *xr_type_new_generic_instance(XrayIsolate *X, const char *class_name, XrC
     XR_DCHECK(type_arg_count >= 0, "type_new_generic_instance: negative type_arg_count");
     XrType *type = type_alloc(X, XR_KIND_INSTANCE);
     if (!type) return NULL;
-    XrTypePool *pool = X ? X->current_type_pool : get_current_pool();
+    XrTypePool *pool = X->current_type_pool;
 
     type->instance.class_name = class_name ? xr_pool_strdup(pool, class_name) : NULL;
     type->instance.class_ref = class_info;
@@ -382,7 +371,7 @@ XrType *xr_type_new_function(XrayIsolate *X, XrType **param_types, int param_cou
     XR_DCHECK(param_count == 0 || param_types != NULL, "type_new_function: NULL param_types with count > 0");
     XrType *type = type_alloc(X, XR_KIND_FUNCTION);
     if (!type) return NULL;
-    XrTypePool *pool = X ? X->current_type_pool : get_current_pool();
+    XrTypePool *pool = X->current_type_pool;
 
     if (param_count > 0 && param_types) {
         type->function.param_types = xr_pool_alloc(pool, sizeof(XrType*) * param_count);
@@ -406,7 +395,7 @@ XrType *xr_type_new_tuple(XrayIsolate *X, XrType **element_types, int count) {
 
     XrType *type = type_alloc(X, XR_KIND_TUPLE);
     if (!type) return NULL;
-    XrTypePool *pool = X ? X->current_type_pool : get_current_pool();
+    XrTypePool *pool = X->current_type_pool;
 
     if (count > 0 && element_types) {
         type->tuple.element_types = xr_pool_alloc(pool, sizeof(XrType*) * count);
@@ -538,7 +527,7 @@ XrType *xr_type_new_union(XrayIsolate *X, XrType **members, int count) {
     // 4. Allocate union type
     XrType *type = type_alloc(X, XR_KIND_UNION);
     if (!type) return xr_type_new_unknown(X);
-    XrTypePool *pool = X ? X->current_type_pool : get_current_pool();
+    XrTypePool *pool = X->current_type_pool;
     type->union_type.members = (XrType **)xr_pool_alloc(
         pool, sizeof(XrType *) * result_count);
     if (!type->union_type.members) return xr_type_new_unknown(X);
@@ -640,7 +629,7 @@ XrType *xr_type_new_json_value(XrayIsolate *X) {
     };
     XrType *type = type_alloc(X, XR_KIND_UNION);
     if (!type) return xr_type_new_unknown(X);
-    XrTypePool *pool = X ? X->current_type_pool : get_current_pool();
+    XrTypePool *pool = X->current_type_pool;
     type->union_type.members = (XrType **)xr_pool_alloc(pool, sizeof(XrType *) * 6);
     if (!type->union_type.members) return xr_type_new_unknown(X);
     memcpy(type->union_type.members, raw_members, sizeof(XrType *) * 6);
@@ -705,7 +694,7 @@ XrType *xr_type_copy(XrayIsolate *X, XrType *type) {
     XrType *copy = type_alloc(X, type->kind);
     if (!copy) return NULL;
 
-    XrTypePool *pool = X ? X->current_type_pool : get_current_pool();
+    XrTypePool *pool = X->current_type_pool;
 
     copy->is_nullable = type->is_nullable;
 

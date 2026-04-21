@@ -83,7 +83,7 @@ XrCompilerContext* xr_compiler_context_new(void) {
     ctx->const_entry_capacity = 0;
 
     // Create unified type analyzer
-    ctx->analyzer = xa_analyzer_new();
+    ctx->analyzer = xa_analyzer_new(ctx->X);
 
     return ctx;
 }

@@ -64,9 +64,6 @@ typedef struct {
     XrType *type;               // Cached interface type
 } XaInterfaceDefinition;
 
-// Initialize all built-in interfaces (call once at startup)
-XR_FUNC void xa_builtin_interfaces_init(void);
-
 // Cleanup built-in interfaces
 XR_FUNC void xa_builtin_interfaces_cleanup(void);
 
@@ -80,6 +77,6 @@ XR_FUNC XrType *xa_get_builtin_interface_by_name(const char *name);
 XR_FUNC bool xa_builtin_type_implements(XrType *type, XaBuiltinInterface iface);
 
 // Register built-in interfaces to a scope (for name resolution)
-XR_FUNC void xa_register_builtin_interfaces(XaScope *global_scope);
+XR_FUNC void xa_register_builtin_interfaces(XrayIsolate *X, XaScope *global_scope);
 
 #endif // XANALYZER_BUILTIN_INTERFACES_H
