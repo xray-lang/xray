@@ -1608,7 +1608,7 @@ XraResult *xra_run(XirFunc *func) {
      *   2. If the function contains any XIR_SUSPEND, also:
      *        res->nspill <= XIR_SUSPEND_SPILL_MAX
      *      because the suspend/resume path bridges old→new frame spill
-     *      values through XrCoroutine::jit_suspend_state.spill[], whose
+     *      values through XrCoroutine::jit_suspend.spill[], whose
      *      capacity is fixed by the runtime struct layout.
      *
      * When either bound is exceeded we refuse to produce valid code for

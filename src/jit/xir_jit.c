@@ -606,6 +606,13 @@ int xir_jit_call(void *jit_entry, XrCoroutine *coro,
                   XrValue *args, int nargs,
                   struct XrType *return_type_info, XrValue *result) {
     if (!jit_entry || !result) return XIR_JIT_DEOPT;
+
+    // Lazy-allocate jit_suspend on first JIT entry (saves 320B per non-JIT coro)
+    if (!coro->jit_suspend) {
+        coro->jit_suspend = xr_calloc(1, sizeof(XrJitSuspendState));
+        if (!coro->jit_suspend) return XIR_JIT_DEOPT;
+    }
+
     // Reset frame stack: must be empty when entering JIT from interpreter.
     // Prevents stale frame pointers from previous deopt or aborted JIT calls.
     coro->jit_ctx->jit_frame_depth = 0;
@@ -766,6 +773,8 @@ int xir_jit_call(void *jit_entry, XrCoroutine *coro,
 int xir_jit_resume(XrCoroutine *coro, XrValue *result) {
     void *resume_entry = coro->jit_resume_entry;
     if (!resume_entry || !result) return XIR_JIT_DEOPT;
+    // jit_suspend must exist if we were suspended (allocated in xir_jit_call)
+    XR_DCHECK(coro->jit_suspend != NULL, "xir_jit_resume: NULL jit_suspend");
 
     // Restore JIT scratch context from the proto that was suspended
     XrProto *proto = (XrProto *)coro->jit_resume_proto;
@@ -779,7 +788,7 @@ int xir_jit_resume(XrCoroutine *coro, XrValue *result) {
     coro->jit_ctx->yield_frame_pushed = false;
 
     // The await result has already been written into
-    // coro->jit_suspend_state.result by the waker (xr_jit_await_block
+    // coro->jit_suspend.result by the waker (xr_jit_await_block
     // inline-resume path or worker resume path).
 
     // Call the resume entry stub: same calling convention as XirJitFn

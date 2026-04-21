@@ -242,7 +242,7 @@ typedef struct XrCoroExt {
 /* ========== XrCoroutine - Coroutine Object ========== */
 
 /*
- * Capacity of XrCoroutine::jit_suspend_state.spill[].
+ * Capacity of XrJitSuspendState::spill[].
  *
  * Single source of truth consumed by JIT codegen and LSRA eligibility:
  *   - codegen stores/restores at most this many spill slots across a
@@ -256,6 +256,25 @@ typedef struct XrCoroExt {
  * containing struct changes.
  */
 #define XIR_SUSPEND_SPILL_MAX 15
+
+/*
+ * JIT suspend state: saved registers across suspend/resume.
+ * Heap-allocated on demand (lazy) to save 320 bytes per non-JIT coroutine.
+ *
+ * MEMORY LAYOUT (320 bytes = 40 * int64_t):
+ *   +0    caller_saved[15]  x1-x15  (scratch regs, saved by XIR_SUSPEND)
+ *   +120  callee_saved[8]   x20-x27 (callee-saved, for cross-worker resume)
+ *   +184  result            await/channel return value slot
+ *   +192  result_tag        XR_TAG_* for result (written alongside result by waker)
+ *   +200  spill[XIR_SUSPEND_SPILL_MAX] spill slots bridging old→new stack frame
+ */
+typedef struct XrJitSuspendState {
+    int64_t caller_saved[15];   // x1-x15
+    int64_t callee_saved[8];    // x20-x27
+    int64_t result;             // await/channel result (written by block helper or waker)
+    int64_t result_tag;         // XR_TAG_* for result (resume writes to runtime_tags)
+    int64_t spill[XIR_SUSPEND_SPILL_MAX]; // spill slots (old frame → suspend → new frame)
+} XrJitSuspendState;
 
 typedef struct XrCoroutine {
     /* ================================================================
@@ -330,21 +349,10 @@ typedef struct XrCoroutine {
 
     /*
      * JIT suspend state: saved registers across suspend/resume.
-     *
-     * MEMORY LAYOUT:
-     *   +0    caller_saved[15]  x1-x15  (scratch regs, saved by XIR_SUSPEND)
-     *   +120  callee_saved[8]   x20-x27 (callee-saved, for cross-worker resume)
-     *   +184  result            await/channel return value slot
-     *   +192  result_tag        XR_TAG_* for result (written alongside result by waker)
-     *   +200  spill[XIR_SUSPEND_SPILL_MAX] spill slots bridging old→new stack frame
+     * Allocated on demand (lazy) to save 320 bytes per non-JIT coroutine.
+     * NULL until the first JIT call/resume that needs suspend support.
      */
-    struct {
-        int64_t caller_saved[15];   // x1-x15
-        int64_t callee_saved[8];    // x20-x27
-        int64_t result;             // await/channel result (written by block helper or waker)
-        int64_t result_tag;         // XR_TAG_* for result (resume writes to runtime_tags)
-        int64_t spill[XIR_SUSPEND_SPILL_MAX]; // spill slots (old frame → suspend → new frame)
-    } jit_suspend_state;
+    XrJitSuspendState *jit_suspend;
 
     /* === Identity (set once at creation, cold path) === */
     const char *name;

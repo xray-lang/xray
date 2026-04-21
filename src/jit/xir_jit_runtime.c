@@ -1647,8 +1647,8 @@ XrJitResult xr_jit_chan_send_block(XrCoroutine *coro, int64_t extra_arg) {
     (void)extra_arg;
     XrValue ch_val = jit_value_from_tag(coro->jit_ctx->call_args[0], XR_TAG_PTR);
     if (!xr_value_is_channel(ch_val)) {
-        coro->jit_suspend_state.result = xr_null().i;
-        coro->jit_suspend_state.result_tag = XR_TAG_NULL;
+        coro->jit_suspend->result = xr_null().i;
+        coro->jit_suspend->result_tag = XR_TAG_NULL;
         return (XrJitResult){ 1, 0 };  // not blocked, handle error inline
     }
     XrChannel *ch = xr_value_to_channel(ch_val);
@@ -1658,8 +1658,8 @@ XrJitResult xr_jit_chan_send_block(XrCoroutine *coro, int64_t extra_arg) {
     coro->send_value = send_v;
     XrChanResult cr = xr_channel_send(ch, send_v, coro);
     if (cr == XR_CHAN_OK) {
-        coro->jit_suspend_state.result = xr_null().i;
-        coro->jit_suspend_state.result_tag = XR_TAG_NULL;
+        coro->jit_suspend->result = xr_null().i;
+        coro->jit_suspend->result_tag = XR_TAG_NULL;
         return (XrJitResult){ 1, 0 };  // succeeded during retry
     }
     if (cr == XR_CHAN_BLOCK) {
@@ -1669,8 +1669,8 @@ XrJitResult xr_jit_chan_send_block(XrCoroutine *coro, int64_t extra_arg) {
         return (XrJitResult){ 0, 0 };  // blocked
     }
     // Closed or error: store null result, continue inline
-    coro->jit_suspend_state.result = xr_null().i;
-    coro->jit_suspend_state.result_tag = XR_TAG_NULL;
+    coro->jit_suspend->result = xr_null().i;
+    coro->jit_suspend->result_tag = XR_TAG_NULL;
     return XR_JIT_OK();
 }
 
@@ -1714,8 +1714,8 @@ XrJitResult xr_jit_chan_recv_block(XrCoroutine *coro, int64_t extra_arg) {
     (void)extra_arg;
     XrValue ch_val = jit_value_from_tag(coro->jit_ctx->call_args[0], XR_TAG_PTR);
     if (!xr_value_is_channel(ch_val)) {
-        coro->jit_suspend_state.result = xr_null().i;
-        coro->jit_suspend_state.result_tag = XR_TAG_NULL;
+        coro->jit_suspend->result = xr_null().i;
+        coro->jit_suspend->result_tag = XR_TAG_NULL;
         return XR_JIT_OK();
     }
     XrChannel *ch = xr_value_to_channel(ch_val);
@@ -1732,25 +1732,25 @@ XrJitResult xr_jit_chan_recv_block(XrCoroutine *coro, int64_t extra_arg) {
         if (XR_IS_PTR(out) && xr_value_needs_copy(out)) {
             out = xr_deep_copy_to_coro(coro->isolate, out, coro);
         }
-        coro->jit_suspend_state.result = out.i;
-        coro->jit_suspend_state.result_tag = out.tag;
+        coro->jit_suspend->result = out.i;
+        coro->jit_suspend->result_tag = out.tag;
         return (XrJitResult){ 1, 0 };  // succeeded during retry
     }
     if (cr == XR_CHAN_CLOSED) {
-        coro->jit_suspend_state.result = xr_null().i;
-        coro->jit_suspend_state.result_tag = XR_TAG_NULL;
+        coro->jit_suspend->result = xr_null().i;
+        coro->jit_suspend->result_tag = XR_TAG_NULL;
         return (XrJitResult){ 1, 0 };
     }
     if (cr == XR_CHAN_BLOCK) {
         // BLOCKED already set by xr_channel_recv under lock (gopark pattern).
         // recv_slot → stack[0] is persistent; sender will write there.
-        // Worker resume path copies stack[0] → jit_suspend_state.result before
+        // Worker resume path copies stack[0] → jit_suspend.result before
         // calling xir_jit_resume.
         // Do NOT touch flags — coro may already be woken by another worker.
         return (XrJitResult){ 0, 0 };  // blocked
     }
-    coro->jit_suspend_state.result = xr_null().i;
-    coro->jit_suspend_state.result_tag = XR_TAG_NULL;
+    coro->jit_suspend->result = xr_null().i;
+    coro->jit_suspend->result_tag = XR_TAG_NULL;
     return XR_JIT_OK();
 }
 
@@ -2485,7 +2485,7 @@ XrJitResult xr_jit_await(XrCoroutine *coro, int64_t extra_arg) {
  * JIT suspend helper for AWAIT blocking path.
  *
  * Called from XIR_SUSPEND codegen AFTER live registers are saved to
- * coro->jit_suspend_state. Performs the CAS coordination on Task to
+ * coro->jit_suspend-> Performs the CAS coordination on Task to
  * register this coro as waiter.
  *
  * The Task ptr was stored in jit_call_args[0] by the preceding CALL_C
@@ -2494,7 +2494,7 @@ XrJitResult xr_jit_await(XrCoroutine *coro, int64_t extra_arg) {
  *
  * Returns:
  *   0 → blocked (JIT returns SUSPEND_MARKER, worker yields coro)
- *   1 → race: task completed during CAS, result in jit_suspend_state.result
+ *   1 → race: task completed during CAS, result in jit_suspend.result
  *       (JIT reloads regs and continues inline)
  */
 XrJitResult xr_jit_await_block(XrCoroutine *coro, int64_t extra_arg) {
@@ -2516,8 +2516,8 @@ XrJitResult xr_jit_await_block(XrCoroutine *coro, int64_t extra_arg) {
         if (tstate == XR_TASK_COMPLETED && !discard_result) {
             res = xr_deep_copy_to_coro(coro->isolate, task->result, coro);
         }
-        coro->jit_suspend_state.result = res.i;
-        coro->jit_suspend_state.result_tag = res.tag;
+        coro->jit_suspend->result = res.i;
+        coro->jit_suspend->result_tag = res.tag;
         return (XrJitResult){ 1, 0 }; // not blocked — JIT continues
     }
 
@@ -2547,8 +2547,8 @@ XrJitResult xr_jit_await_block(XrCoroutine *coro, int64_t extra_arg) {
         if (!discard_result) {
             res = xr_deep_copy_to_coro(coro->isolate, task->result, coro);
         }
-        coro->jit_suspend_state.result = res.i;
-        coro->jit_suspend_state.result_tag = res.tag;
+        coro->jit_suspend->result = res.i;
+        coro->jit_suspend->result_tag = res.tag;
         atomic_store_explicit(&task->await_state, XR_AWAIT_NONE, memory_order_relaxed);
         return (XrJitResult){ 1, 0 }; // not blocked — JIT continues
     }

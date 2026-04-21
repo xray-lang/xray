@@ -722,7 +722,7 @@ static XrVMResult run_first_exec(XrayIsolate *isolate, XrWorker *worker,
 // ========== run_jit_resume: Extracted JIT Resume Logic ==========
 //
 // Prepares resume state (channel recv value or await task result) in
-// jit_suspend_state, then re-enters compiled code via xir_jit_resume.
+// jit_suspend, then re-enters compiled code via xir_jit_resume.
 //
 // Returns: XIR_JIT_OK, XIR_JIT_SUSPEND, XIR_JIT_DEOPT (fall through), or
 // -1 for channel-close (caller should clear jit_resume_entry and deopt).
@@ -742,14 +742,14 @@ static int run_jit_resume(XrayIsolate *isolate, XrCoroutine *coro,
     }
 
     // Channel recv resume: copy value from recv_slot (stack[0]) to
-    // jit_suspend_state.result where the JIT continuation reads it.
+    // jit_suspend.result where the JIT continuation reads it.
     if (resume_reason == XR_RESUME_CHANNEL) {
         XrValue rv = coro_ctx->stack[0];
         if (XR_IS_PTR(rv) && xr_value_needs_copy(rv)) {
             rv = xr_deep_copy_to_coro(isolate, rv, coro);
         }
-        coro->jit_suspend_state.result = rv.i;
-        coro->jit_suspend_state.result_tag = rv.tag;
+        coro->jit_suspend->result = rv.i;
+        coro->jit_suspend->result_tag = rv.tag;
     }
 
     // AWAIT resume: xr_task_wake_waiter only marks coro ready but does
@@ -762,8 +762,8 @@ static int run_jit_resume(XrayIsolate *isolate, XrCoroutine *coro,
             if (tstate == XR_TASK_COMPLETED) {
                 res = xr_deep_copy_to_coro(isolate, await_task->result, coro);
             }
-            coro->jit_suspend_state.result = res.i;
-            coro->jit_suspend_state.result_tag = res.tag;
+            coro->jit_suspend->result = res.i;
+            coro->jit_suspend->result_tag = res.tag;
             atomic_store_explicit(&coro->await_task, NULL, memory_order_relaxed);
         }
     }
@@ -893,7 +893,7 @@ XrVMResult xr_coro_run_on_worker(XrWorker *worker, XrCoroutine *coro) {
         xr_coro_transition_to_running(coro);
 
 #ifdef XRAY_HAS_JIT
-        // JIT channel resume: propagate recv_slot → jit_suspend_state.result,
+        // JIT channel resume: propagate recv_slot → jit_suspend.result,
         // then re-enter compiled code directly (no detour via run_resume_path).
         if (coro->jit_resume_entry && coro->jit_ctx) {
             XrValue jit_result;

@@ -58,7 +58,7 @@ typedef struct XirJitState {
 /* ========== Suspend/Resume ========== */
 
 // Sentinel return value from JIT code when AWAIT needs to block.
-// JIT saves live registers to coro->jit_suspend_state and returns this.
+// JIT saves live registers to coro->jit_suspend and returns this.
 // xir_jit_call detects it and returns XR_VM_BLOCKED to the worker.
 // On resume, worker calls jit_resume_entry to re-enter JIT code.
 #define XIR_SUSPEND_MARKER ((int64_t)0xDEAD0002DEAD0002LL)

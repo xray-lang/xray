@@ -253,6 +253,9 @@ static bool coro_init_common(XrCoroutine *coro, XrayIsolate *X,
         struct XrCoroGC *saved_coro_gc = coro->coro_gc;
         uint16_t saved_pool_bits = coro->gc_flags & (XR_CORO_GC_SLAB_STACK | XR_CORO_GC_FROM_POOL);
         XrCoroExt *saved_ext = coro->ext;
+        // Preserve jit_suspend allocation for reuse (avoid free+malloc churn).
+        // The memset below will zero the pointer; restore after.
+        XrJitSuspendState *saved_jit_suspend = coro->jit_suspend;
 
         memset((char *)coro + offsetof(XrCoroutine, flags), 0,
                sizeof(XrCoroutine) - offsetof(XrCoroutine, flags));
@@ -266,6 +269,7 @@ static bool coro_init_common(XrCoroutine *coro, XrayIsolate *X,
         coro->coro_gc = saved_coro_gc;
         coro->gc_flags = saved_pool_bits;
         coro->ext = saved_ext;
+        coro->jit_suspend = saved_jit_suspend;
         // Reset ext fields that must not persist across lifetimes
         if (coro->ext) {
             coro->ext->locals = NULL;

@@ -35,12 +35,12 @@
 #define XIR_CORO_RESUME_PROTO_OFFSET   offsetof(XrCoroutine, jit_resume_proto)
 #define XIR_CORO_SUSPEND_ID_OFFSET     offsetof(XrCoroutine, jit_suspend_id)
 #define XIR_CORO_SUSPEND_SMAP_OFFSET   offsetof(XrCoroutine, jit_suspend_smap_id)
-#define XIR_CORO_SUSPEND_REGS_OFFSET   offsetof(XrCoroutine, jit_suspend_state)
-// Sub-field offsets within jit_suspend_state (for ARM64 codegen addressing)
-#define XIR_SUSPEND_CALLEE_SAVED_OFF   offsetof(XrCoroutine, jit_suspend_state.callee_saved) - XIR_CORO_SUSPEND_REGS_OFFSET
-#define XIR_SUSPEND_RESULT_OFF         offsetof(XrCoroutine, jit_suspend_state.result) - XIR_CORO_SUSPEND_REGS_OFFSET
-#define XIR_SUSPEND_RESULT_TAG_OFF     offsetof(XrCoroutine, jit_suspend_state.result_tag) - XIR_CORO_SUSPEND_REGS_OFFSET
-#define XIR_SUSPEND_SPILL_OFF          offsetof(XrCoroutine, jit_suspend_state.spill) - XIR_CORO_SUSPEND_REGS_OFFSET
+#define XIR_CORO_SUSPEND_PTR_OFFSET    offsetof(XrCoroutine, jit_suspend)
+// Sub-field offsets within XrJitSuspendState (for ARM64 codegen addressing)
+#define XIR_SUSPEND_CALLEE_SAVED_OFF   offsetof(XrJitSuspendState, callee_saved)
+#define XIR_SUSPEND_RESULT_OFF         offsetof(XrJitSuspendState, result)
+#define XIR_SUSPEND_RESULT_TAG_OFF     offsetof(XrJitSuspendState, result_tag)
+#define XIR_SUSPEND_SPILL_OFF          offsetof(XrJitSuspendState, spill)
 
 /* ========== XrJitScratch field offsets (relative to jit_ctx base) ========== */
 
@@ -198,7 +198,7 @@ _Static_assert(offsetof(XrValue, i)                     == XIR_XRVALUE_PAYLOAD_O
 _Static_assert(offsetof(XrClosure, proto)               == XIR_CLOSURE_PROTO_OFFSET,     "Closure.proto offset mismatch");
 
 // JIT suspend state struct layout must match the old int64_t[40] layout
-_Static_assert(sizeof(((XrCoroutine*)0)->jit_suspend_state) == 40 * sizeof(int64_t), "jit_suspend_state size mismatch");
+_Static_assert(sizeof(XrJitSuspendState) == 40 * sizeof(int64_t), "XrJitSuspendState size mismatch");
 _Static_assert(XIR_SUSPEND_CALLEE_SAVED_OFF == 15 * 8, "callee_saved offset mismatch");
 _Static_assert(XIR_SUSPEND_RESULT_OFF == 23 * 8, "result offset mismatch");
 _Static_assert(XIR_SUSPEND_RESULT_TAG_OFF == 24 * 8, "result_tag offset mismatch");
