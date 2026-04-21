@@ -33,6 +33,7 @@
 /* ========== Internal Helpers ========== */
 
 static XrDateTime* datetime_alloc(XrayIsolate *isolate) {
+    XR_DCHECK(isolate != NULL, "datetime_alloc: isolate must not be NULL");
     XrDateTime *dt = (XrDateTime*)xr_gc_alloc(&isolate->gc, sizeof(XrDateTime), XR_TDATETIME);
     if (!dt) return NULL;
     dt->timestamp = 0;
@@ -58,6 +59,7 @@ static int64_t get_current_millis(void) {
 
 static int days_in_month_table(int year, int mon) {
     static const int days[] = {31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31};
+    XR_DCHECK(year >= -9999 && year <= 9999, "days_in_month: year in sane range");
     if (mon < 1 || mon > 12) return 30;
     int d = days[mon - 1];
     if (mon == 2 && (year % 4 == 0 && (year % 100 != 0 || year % 400 == 0))) d = 29;
@@ -65,6 +67,7 @@ static int days_in_month_table(int year, int mon) {
 }
 
 static inline time_t datetime_mktime(struct tm *tm, int is_utc) {
+    XR_DCHECK(tm != NULL, "datetime_mktime: tm must not be NULL");
     if (is_utc) {
 #ifdef _WIN32
         return _mkgmtime(tm);

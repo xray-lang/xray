@@ -449,6 +449,7 @@ static XrValue os_clock(XrayIsolate *X, XrValue *args, int argc) {
 #ifndef XR_PLATFORM_WINDOWS
 // Read all data from a file descriptor into a heap-allocated string
 static char* read_fd_to_string(int fd) {
+    XR_DCHECK(fd >= 0, "read_fd_to_string: fd must be non-negative");
     size_t cap = 4096, len = 0;
     char *buf = (char*)xr_malloc(cap);
     if (!buf) return NULL;
@@ -475,6 +476,7 @@ static XrValue os_exec(XrayIsolate *X, XrValue *args, int argc) {
     if (argc < 1) return xr_null();
     const char *cmd = get_string_arg(args[0]);
     if (!cmd) return xr_null();
+    XR_DCHECK(cmd[0] != '\0', "os_exec: command string must be non-empty");
 
 #ifdef XR_PLATFORM_WINDOWS
     // Windows: simplified via _popen (stdout only)

@@ -73,6 +73,7 @@ static XrValue path_join(XrayIsolate *X, XrValue *args, int argc) {
     if (!result) return xr_null();
 
     size_t pos = 0;
+    XR_DCHECK(total_len > 0, "path_join: total_len already validated > 0");
 
     for (int i = 0; i < argc; i++) {
         const char *part = get_string_arg(args[i]);
@@ -316,6 +317,7 @@ static XrValue path_resolve(XrayIsolate *X, XrValue *args, int argc) {
     }
 
     XrCtxBuf result; xr_ctxbuf_init(&result, 256);
+    XR_DCHECK(result.data != NULL, "path_resolve: ctxbuf init must succeed");
     xr_ctxbuf_append_cstr(&result, cwd);
 
     for (int i = 0; i < argc; i++) {

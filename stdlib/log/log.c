@@ -75,6 +75,7 @@ static void log_state_destroy(void *opaque);
 
 // Retrieve (and lazily create) the per-isolate log state.
 static XrLogState* log_state_get(XrayIsolate *X) {
+    XR_DCHECK(X != NULL, "log_state_get: isolate must not be NULL");
     XrStdlibCache *cache = xr_stdlib_cache_get(X);
     if (cache->log_state) return (XrLogState *)cache->log_state;
 
@@ -160,6 +161,7 @@ static void* async_log_thread(void *arg) {
 
 // Initialize async queue on the given log state.
 static void async_queue_init(XrLogState *ls, FILE *output) {
+    XR_DCHECK(ls != NULL, "async_queue_init: log state must not be NULL");
     if (ls->async_initialized) return;
 
     AsyncLogQueue *q = (AsyncLogQueue *)xr_malloc(sizeof(AsyncLogQueue));
@@ -819,6 +821,7 @@ static XrLogger* unwrap_logger(XrayIsolate *X, XrValue v) {
 
 // Create child logger
 static XrLogger* create_child_logger(XrLogger *parent, XrValue *attrs, int nattrs) {
+    XR_DCHECK(parent != NULL, "create_child_logger: parent must not be NULL");
     XrLogger *child = (XrLogger*)xr_malloc(sizeof(XrLogger));
     if (!child) return NULL;
 
