@@ -40,7 +40,7 @@ static const uint64_t HAS_REFS_BITMAP =
     (1ULL << XR_TMAP) | (1ULL << XR_TSET) | (1ULL << XR_TJSON) |
     (1ULL << XR_TFUNCTION) | (1ULL << XR_TINSTANCE) |
     (1ULL << XR_TITERATOR) |
-    (1ULL << XR_TCONTEXT) | (1ULL << XR_TCELL) | (1ULL << XR_TMODULE) |
+    (1ULL << XR_TCELL) | (1ULL << XR_TMODULE) |
     (1ULL << XR_TBOUND_METHOD) |
     (1ULL << XR_TEXCEPTION) |
     (1ULL << XR_TERROR); // has message/file/stackTrace/userData

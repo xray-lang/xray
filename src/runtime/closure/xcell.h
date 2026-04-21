@@ -5,16 +5,12 @@
  * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
  * Licensed under the MIT License
  *
- * xcell.h - Closure capture objects (XrCell primary, XrContext legacy)
+ * xcell.h - Closure capture cell (single mutable captured variable)
  *
  * KEY CONCEPT:
- *   XrCell is the primary capture object: a 32-byte heap cell holding a
- *   single mutable captured variable. Each mutable local captured by a
- *   closure is wrapped in a cell; the cell pointer is stored in the
- *   closure's flat upvals[] array.
- *
- *   XrContext is a legacy type kept only for GC traversal of existing
- *   heap objects (deep_copy). No new XrContext objects are created.
+ *   XrCell is a 32-byte heap cell holding a single mutable captured
+ *   variable. Each mutable local captured by a closure is wrapped in
+ *   a cell; the cell pointer is stored in the closure's flat upvals[] array.
  *
  * LAYERING:
  *   Lives at the runtime closure layer (same as XrClosure / XrBoundMethod)
@@ -27,18 +23,6 @@
 #include "../../base/xdefs.h"
 #include "../gc/xgc_header.h"
 #include "../value/xvalue.h"
-
-/* ========== Legacy Context Object (GC traversal only) ========== */
-
-typedef struct XrContext {
-    XrGCHeader gc;
-    struct XrContext *parent;
-    uint16_t slot_count;
-    XrValue slots[];
-} XrContext;
-
-#define XR_CONTEXT_BASE_SIZE  (sizeof(XrContext))
-#define XR_CONTEXT_SIZE(n)    (XR_CONTEXT_BASE_SIZE + (n) * sizeof(XrValue))
 
 /* ========== XrCell: single-slot mutable capture cell (32 bytes) ========== */
 

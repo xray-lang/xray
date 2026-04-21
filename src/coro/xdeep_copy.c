@@ -259,8 +259,6 @@ static XrValue xr_deep_copy_map_with_ctx(XrCopyContext *ctx, XrMap *map) {
     return result;
 }
 
-static XrValue deep_copy_context_chain(XrCopyContext *ctx, XrContext *src_context);
-
 static XrValue xr_deep_copy_closure_with_ctx(XrCopyContext *ctx, XrClosure *closure) {
     if (!closure || !ctx->dst_gc) return XR_NULL_VAL;
     XrValue cached = xr_copy_context_lookup(ctx, closure);
@@ -281,38 +279,6 @@ static XrValue xr_deep_copy_closure_with_ctx(XrCopyContext *ctx, XrClosure *clos
     for (int i = 0; i < closure->upval_count; i++) {
         new_closure->upvals[i] = xr_deep_copy_with_ctx(ctx, closure->upvals[i]);
     }
-    return result;
-}
-
-// Deep copy a Context object and its parent chain
-static XrValue deep_copy_context_chain(XrCopyContext *ctx, XrContext *src_context) {
-    if (!src_context) return XR_NULL_VAL;
-
-    XrValue cached = xr_copy_context_lookup(ctx, src_context);
-    if (!XR_IS_NULL(cached)) return cached;
-
-    size_t size = sizeof(XrContext) + src_context->slot_count * sizeof(XrValue);
-    XrContext *new_ctx = (XrContext *)copy_ctx_alloc(ctx, size, XR_TCONTEXT);
-    if (!new_ctx) return XR_NULL_VAL;
-
-    new_ctx->slot_count = src_context->slot_count;
-    new_ctx->parent = NULL;
-
-    XrValue result = XR_FROM_PTR(new_ctx);
-    xr_copy_context_record(ctx, src_context, result);
-    ctx->objects_copied++;
-
-    // Deep copy parent chain
-    if (src_context->parent) {
-        XrValue parent_val = deep_copy_context_chain(ctx, src_context->parent);
-        new_ctx->parent = XR_IS_NULL(parent_val) ? NULL : (XrContext*)parent_val.ptr;
-    }
-
-    // Deep copy all slots
-    for (int i = 0; i < src_context->slot_count; i++) {
-        new_ctx->slots[i] = xr_deep_copy_with_ctx(ctx, src_context->slots[i]);
-    }
-
     return result;
 }
 
