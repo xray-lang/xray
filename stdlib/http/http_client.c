@@ -216,19 +216,59 @@ const char* xr_http_error_string(XrHttpError err) {
     return xr_net_error_string(err);
 }
 
+/* ========== Compact Header Copy (single allocation) ========== */
+
+/*
+ * Copy parsed headers into result using two allocations total:
+ *   1. XrHttpHeader array
+ *   2. One contiguous char buffer for all name + NUL + value + NUL strings
+ * Header name/value pointers in the array point into (2).
+ * Returns 0 on success, -1 on allocation failure.
+ */
+static int copy_headers_compact(XrHttpResult *result,
+                                const XrHttpHeader *src, size_t count) {
+    if (count == 0) return 0;
+
+    // Pass 1: compute total string bytes
+    size_t total = 0;
+    for (size_t i = 0; i < count; i++) {
+        total += src[i].name_len + 1 + src[i].value_len + 1;
+    }
+
+    XrHttpHeader *hdrs = (XrHttpHeader *)xr_malloc(sizeof(XrHttpHeader) * count);
+    if (!hdrs) return -1;
+    char *data = (char *)xr_malloc(total);
+    if (!data) { xr_free(hdrs); return -1; }
+
+    // Pass 2: pack strings
+    char *p = data;
+    for (size_t i = 0; i < count; i++) {
+        hdrs[i].name = p;
+        hdrs[i].name_len = src[i].name_len;
+        memcpy(p, src[i].name, src[i].name_len);
+        p += src[i].name_len;
+        *p++ = '\0';
+
+        hdrs[i].value = p;
+        hdrs[i].value_len = src[i].value_len;
+        memcpy(p, src[i].value, src[i].value_len);
+        p += src[i].value_len;
+        *p++ = '\0';
+    }
+
+    result->headers = hdrs;
+    result->header_count = (int)count;
+    result->_header_data = data;
+    return 0;
+}
+
 /* ========== Result Cleanup ========== */
 
 void xr_http_result_free(XrHttpResult *result) {
     if (!result) return;
     if (result->status_text) { xr_free(result->status_text); result->status_text = NULL; }
-    if (result->headers) {
-        for (int i = 0; i < result->header_count; i++) {
-            if (result->headers[i].name) xr_free((void*)result->headers[i].name);
-            if (result->headers[i].value) xr_free((void*)result->headers[i].value);
-        }
-        xr_free(result->headers);
-        result->headers = NULL;
-    }
+    if (result->_header_data) { xr_free(result->_header_data); result->_header_data = NULL; }
+    if (result->headers) { xr_free(result->headers); result->headers = NULL; }
     if (result->body) { xr_free(result->body); result->body = NULL; }
     if (result->error_msg) { xr_free(result->error_msg); result->error_msg = NULL; }
     // Clean up stream resources if caller forgot to close
@@ -587,23 +627,8 @@ static XrHttpResult xr_http_request_internal(XrayIsolate *X, const XrHttpRequest
                     memcpy(result.status_text, resp.status_text, resp.status_text_len);
                     result.status_text[resp.status_text_len] = '\0';
                 }
-                // Copy headers
-                if (resp.header_count > 0) {
-                    result.headers = (XrHttpHeader *)xr_malloc(sizeof(XrHttpHeader) * resp.header_count);
-                    result.header_count = resp.header_count;
-                    for (size_t i = 0; i < resp.header_count; i++) {
-                        XrHttpHeader *src = &resp.headers[i];
-                        XrHttpHeader *dst = &result.headers[i];
-                        dst->name = (char *)xr_malloc(src->name_len + 1);
-                        memcpy((void *)dst->name, src->name, src->name_len);
-                        ((char *)dst->name)[src->name_len] = '\0';
-                        dst->name_len = src->name_len;
-                        dst->value = (char *)xr_malloc(src->value_len + 1);
-                        memcpy((void *)dst->value, src->value, src->value_len);
-                        ((char *)dst->value)[src->value_len] = '\0';
-                        dst->value_len = src->value_len;
-                    }
-                }
+                // Copy headers (compact single-allocation)
+                copy_headers_compact(&result, resp.headers, resp.header_count);
                 // Compact recv_buf: discard headers, keep leftover body data
                 size_t leftover = recv_buf->size - resp.header_bytes;
                 if (leftover > 0) {
@@ -660,33 +685,18 @@ static XrHttpResult xr_http_request_internal(XrayIsolate *X, const XrHttpRequest
         result.status_text[resp.status_text_len] = '\0';
     }
 
-    // Copy Headers and extract Set-Cookie
+    // Copy Headers (compact single-allocation) and extract Set-Cookie
     if (resp.header_count > 0) {
-        result.headers = (XrHttpHeader*)xr_malloc(sizeof(XrHttpHeader) * resp.header_count);
-        result.header_count = resp.header_count;
+        copy_headers_compact(&result, resp.headers, resp.header_count);
 
-        // Collect Set-Cookie headers
+        // Collect Set-Cookie headers from the compacted copy
         const char *set_cookies[64];
         int set_cookie_count = 0;
-
-        for (size_t i = 0; i < resp.header_count; i++) {
-            XrHttpHeader *src = &resp.headers[i];
-            XrHttpHeader *dst = &result.headers[i];
-
-            dst->name = (char*)xr_malloc(src->name_len + 1);
-            memcpy((void*)dst->name, src->name, src->name_len);
-            ((char*)dst->name)[src->name_len] = '\0';
-            dst->name_len = src->name_len;
-
-            dst->value = (char*)xr_malloc(src->value_len + 1);
-            memcpy((void*)dst->value, src->value, src->value_len);
-            ((char*)dst->value)[src->value_len] = '\0';
-            dst->value_len = src->value_len;
-
-            // Collect Set-Cookie headers
-            if (src->name_len == 10 && strncasecmp(src->name, "Set-Cookie", 10) == 0) {
+        for (int i = 0; i < result.header_count; i++) {
+            if (result.headers[i].name_len == 10 &&
+                strncasecmp(result.headers[i].name, "Set-Cookie", 10) == 0) {
                 if (set_cookie_count < 64) {
-                    set_cookies[set_cookie_count++] = dst->value;
+                    set_cookies[set_cookie_count++] = result.headers[i].value;
                 }
             }
         }
