@@ -1,0 +1,45 @@
+// Demo: Maps and Sets
+// Map (dynamic key-value), Set (unique elements), object literals
+//
+// Run: xray demos/02-collections/maps_and_sets.xr
+
+// === Map (key => value syntax) ===
+let scores = {"alice" => 95, "bob" => 87, "charlie" => 92}
+print("scores: ${scores}")
+
+// Access and mutation
+let alice_score = scores.get("alice")
+print("alice: ${alice_score}")
+scores.set("dave", 88)
+let has_bob = scores.has("bob")
+print("has bob: ${has_bob}")
+scores.delete("bob")
+print("after delete bob: ${scores}")
+print("length: ${scores.length}")
+
+// Keys, values
+print("keys: ${scores.keys()}")
+print("values: ${scores.values()}")
+
+// Iterate
+scores.forEach((key: string, val: int): void => {
+    print("  ${key} => ${val}")
+})
+
+// Empty map
+let empty = #{}
+print("empty map length: ${empty.length}")
+
+// === Set (unique elements) ===
+let colors = #[1, 2, 3, 2, 1]
+print("set: ${colors}, length: ${colors.length}")
+
+colors.add(4)
+print("has 3: ${colors.has(3)}")
+colors.delete(1)
+print("after delete 1: ${colors}")
+
+// === Object literal (static structure) ===
+let point = { x: 3.0, y: 4.0, label: "A" }
+print("point: ${point}")
+print("x: ${point.x}, label: ${point.label}")
