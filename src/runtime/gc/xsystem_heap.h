@@ -65,16 +65,16 @@ typedef struct XrSysHeapStats {
     uint64_t coro_alloc_count;
     uint64_t coro_free_count;
     uint64_t coro_reuse_count;
-    
+
     // Arena stats
     _Atomic uint64_t class_alloc_count;
     _Atomic uint64_t class_alloc_bytes;
     _Atomic uint64_t module_alloc_count;
-    
+
     // Shared object stats
     _Atomic uint64_t shared_alloc_count;
     _Atomic uint64_t shared_mmap_count;   // Large objects allocated via mmap
-    
+
     // Channel stats (for leak detection)
     _Atomic uint64_t channel_create_count;
     _Atomic uint64_t channel_close_count;
@@ -122,9 +122,8 @@ XR_FUNC void* xr_sysheap_alloc_shared(XrSystemHeap *heap, size_t size, uint8_t t
 // Free shared object (handles both malloc and mmap)
 XR_FUNC void xr_sysheap_free_shared(void *ptr, size_t size);
 
-// Flag for mmap-allocated objects (bit 7 of marked field).
-// Safe: shared objects never enter per-coroutine GC (bits 0-2 = color only).
-#define XR_GC_FLAG_MMAP 0x80
+// XR_GC_FLAG_MMAP now defined in xgc_header.h (extra bit 13, shared by both
+// system heap and per-coro GC large objects).
 
 /* ========== Statistics ========== */
 

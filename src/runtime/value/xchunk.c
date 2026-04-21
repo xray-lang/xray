@@ -72,70 +72,14 @@ XrProto *xr_vm_proto_new(void) {
         return NULL;
     }
 
-    // Initialize all dynamic arrays
+    // NOTE: All scalar fields are zero-initialized by xr_calloc.
+    // Only containers that require explicit init are called below.
     DYNARRAY_INIT(&proto->code, XrInstruction);
     xr_valuearray_init(&proto->constants);
     DYNARRAY_INIT(&proto->protos, XrProto*);
     DYNARRAY_INIT(&proto->upvalues, UpvalInfo);
     DYNARRAY_INIT(&proto->lineinfo, int);
     DYNARRAY_INIT(&proto->locvars, XrLocVar);
-
-    // Initialize per-function symbol table
-    proto->symbols = NULL;
-    proto->symbol_count = 0;
-    proto->symbol_capacity = 0;
-
-    // Initialize function info
-    proto->name = NULL;
-    proto->return_type = NULL;
-    proto->maxstacksize = 0;
-    proto->numparams = 0;
-    proto->num_globals = 0;
-    proto->num_spill_slots = 0;
-    proto->shared_offset = 0;
-    proto->is_vararg = false;
-    proto->ic_methods = NULL;
-    proto->ic_fields = NULL;
-    proto->raw_constants = NULL;
-    proto->raw_constant_count = 0;
-    proto->raw_constant_capacity = 0;
-
-    // Initialize test attributes
-    proto->test_attr = 0;       // ATTR_NONE
-    proto->test_timeout = 0;
-
-    // Initialize JIT/AOT metadata
-    proto->bb_leaders = NULL;
-    proto->bb_leaders_size = 0;
-    proto->inline_hint = 0;
-    proto->is_recursive = 0;
-    proto->loop_headers = NULL;
-    proto->loop_header_count = 0;
-
-    // Initialize type pipeline
-    proto->param_types = NULL;
-    proto->param_types_count = 0;
-    proto->inst_types = NULL;
-    proto->inst_types_count = 0;
-    proto->return_type_info = NULL;
-
-    // Initialize JIT runtime state
-    proto->jit_entry = NULL;
-    proto->type_feedback = NULL;
-    proto->call_count = 0;
-    proto->exec_count = 0;
-    proto->deopt_count = 0;
-    proto->jit_opt_level = 0;
-    proto->osr_entries = NULL;
-    proto->nosr = 0;
-    proto->deopt_table = NULL;
-    proto->ndeopt = 0;
-    proto->tfield_float_bitmap = 0;
-    proto->source_file = NULL;
-    proto->entry_type = 0;
-    proto->is_coro_safe = false;
-    proto->min_params = 0;
-    proto->blueprint = NULL;
 
     return proto;
 }
@@ -275,11 +219,8 @@ int xr_proto_add_symbol(XrProto *proto, int32_t global_symbol) {
     proto->symbols[local_idx] = global_symbol;
     proto->symbol_count++;
 
-    if (local_idx >= 255) {
-        fprintf(stderr, "WARNING: function '%s' uses %d unique symbols (>254)\n",
-                proto->name ? (const char*)proto->name->data : "<anonymous>",
-                local_idx + 1);
-    }
+    XR_CHECK(local_idx < 255,
+             "proto: too many unique symbols (>254), function too complex");
 
     return local_idx;
 }

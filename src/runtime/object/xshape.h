@@ -72,7 +72,7 @@ struct XrShape {
 
     SymbolId *field_symbols;        // In insertion order
 
-    int8_t *symbol_to_index;        // O(1) lookup
+    int16_t *symbol_to_index;       // O(1) lookup (int16 to support field_count up to 256)
     SymbolId min_symbol;
     SymbolId max_symbol;
 

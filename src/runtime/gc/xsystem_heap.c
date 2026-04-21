@@ -130,9 +130,9 @@ void* xr_sysheap_alloc_shared(XrSystemHeap *heap, size_t size, uint8_t type) {
         // MAP_ANONYMOUS guarantees zero-initialized memory
         obj->type = type;
         obj->objsize = (uint32_t)size;
-        // Mark as shared and mmap-allocated (in marked)
-        obj->extra = XR_GC_STORAGE_SHARED;
-        obj->marked = XR_GC_FLAG_MMAP;
+        // Mark as shared and mmap-allocated (in extra bit 13)
+        obj->extra = XR_GC_STORAGE_SHARED | XR_GC_FLAG_MMAP;
+        obj->marked = 0;
         atomic_fetch_add(&heap->stats.shared_mmap_count, 1);
     } else {
         // Small objects use regular malloc
@@ -155,7 +155,7 @@ void xr_sysheap_free_shared(void *ptr, size_t size) {
     if (!ptr) return;
 
     XrGCHeader *obj = (XrGCHeader*)ptr;
-    if (obj->marked & XR_GC_FLAG_MMAP) {
+    if (XR_GC_IS_MMAP(obj)) {
         munmap(ptr, size);
     } else {
         xr_free(ptr);
@@ -258,7 +258,7 @@ void xr_shared_destroy(XrGCHeader *obj) {
     }
 
     // Free the object itself
-    if (obj->marked & XR_GC_FLAG_MMAP) {
+    if (XR_GC_IS_MMAP(obj)) {
         munmap(obj, obj->objsize);
     } else {
         xr_free(obj);

@@ -101,13 +101,13 @@ static void shape_build_index_table(XrShape *shape) {
     shape->max_symbol = max_sym;
 
     size_t table_size = (size_t)(max_sym - min_sym + 1);
-    shape->symbol_to_index = (int8_t*)xr_malloc(table_size * sizeof(int8_t));
-    memset(shape->symbol_to_index, -1, table_size * sizeof(int8_t));
+    shape->symbol_to_index = (int16_t*)xr_malloc(table_size * sizeof(int16_t));
+    memset(shape->symbol_to_index, -1, table_size * sizeof(int16_t));
 
     for (uint16_t i = 0; i < shape->field_count; i++) {
         SymbolId sym = shape->field_symbols[i];
         XR_DCHECK(sym >= min_sym && sym <= max_sym, "shape_build_index: symbol out of range");
-        shape->symbol_to_index[sym - min_sym] = (int8_t)i;
+        shape->symbol_to_index[sym - min_sym] = (int16_t)i;
     }
 }
 

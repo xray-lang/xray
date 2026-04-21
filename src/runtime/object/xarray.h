@@ -216,56 +216,36 @@ static inline void xr_array_set_element(XrArray *arr, int32_t index, XrValue val
             ((XrValue*)arr->data)[index] = value;
             XR_ARRAY_MARK_GC_PTRS(arr, value);
             break;
-        case XR_ELEM_I8: {
-            int64_t v = XR_IS_INT(value) ? XR_TO_INT(value) : (int64_t)XR_TO_FLOAT(value);
-            ((int8_t*)arr->data)[index] = (int8_t)v;
+        case XR_ELEM_I8:
+            ((int8_t*)arr->data)[index] = (int8_t)xr_value_to_int64_coerce(value);
             break;
-        }
-        case XR_ELEM_U8: {
-            int64_t v = XR_IS_INT(value) ? XR_TO_INT(value) : (int64_t)XR_TO_FLOAT(value);
-            ((uint8_t*)arr->data)[index] = (uint8_t)v;
+        case XR_ELEM_U8:
+            ((uint8_t*)arr->data)[index] = (uint8_t)xr_value_to_int64_coerce(value);
             break;
-        }
-        case XR_ELEM_I16: {
-            int64_t v = XR_IS_INT(value) ? XR_TO_INT(value) : (int64_t)XR_TO_FLOAT(value);
-            ((int16_t*)arr->data)[index] = (int16_t)v;
+        case XR_ELEM_I16:
+            ((int16_t*)arr->data)[index] = (int16_t)xr_value_to_int64_coerce(value);
             break;
-        }
-        case XR_ELEM_U16: {
-            int64_t v = XR_IS_INT(value) ? XR_TO_INT(value) : (int64_t)XR_TO_FLOAT(value);
-            ((uint16_t*)arr->data)[index] = (uint16_t)v;
+        case XR_ELEM_U16:
+            ((uint16_t*)arr->data)[index] = (uint16_t)xr_value_to_int64_coerce(value);
             break;
-        }
-        case XR_ELEM_I32: {
-            int64_t v = XR_IS_INT(value) ? XR_TO_INT(value) : (int64_t)XR_TO_FLOAT(value);
-            ((int32_t*)arr->data)[index] = (int32_t)v;
+        case XR_ELEM_I32:
+            ((int32_t*)arr->data)[index] = (int32_t)xr_value_to_int64_coerce(value);
             break;
-        }
-        case XR_ELEM_U32: {
-            int64_t v = XR_IS_INT(value) ? XR_TO_INT(value) : (int64_t)XR_TO_FLOAT(value);
-            ((uint32_t*)arr->data)[index] = (uint32_t)v;
+        case XR_ELEM_U32:
+            ((uint32_t*)arr->data)[index] = (uint32_t)xr_value_to_int64_coerce(value);
             break;
-        }
-        case XR_ELEM_I64: {
-            int64_t v = XR_IS_INT(value) ? XR_TO_INT(value) : (int64_t)XR_TO_FLOAT(value);
-            ((int64_t*)arr->data)[index] = v;
+        case XR_ELEM_I64:
+            ((int64_t*)arr->data)[index] = xr_value_to_int64_coerce(value);
             break;
-        }
-        case XR_ELEM_U64: {
-            uint64_t v = XR_IS_INT(value) ? (uint64_t)XR_TO_INT(value) : (uint64_t)XR_TO_FLOAT(value);
-            ((uint64_t*)arr->data)[index] = v;
+        case XR_ELEM_U64:
+            ((uint64_t*)arr->data)[index] = (uint64_t)xr_value_to_int64_coerce(value);
             break;
-        }
-        case XR_ELEM_F32: {
-            double d = XR_IS_FLOAT(value) ? XR_TO_FLOAT(value) : (double)XR_TO_INT(value);
-            ((float*)arr->data)[index] = (float)d;
+        case XR_ELEM_F32:
+            ((float*)arr->data)[index] = (float)xr_value_to_f64_coerce(value);
             break;
-        }
-        case XR_ELEM_F64: {
-            double d = XR_IS_FLOAT(value) ? XR_TO_FLOAT(value) : (double)XR_TO_INT(value);
-            ((double*)arr->data)[index] = d;
+        case XR_ELEM_F64:
+            ((double*)arr->data)[index] = xr_value_to_f64_coerce(value);
             break;
-        }
         case XR_ELEM_BOOL: {
             bool falsy = XR_IS_FALSE(value) || XR_IS_NULL(value)
                       || (XR_IS_INT(value) && XR_TO_INT(value) == 0)
