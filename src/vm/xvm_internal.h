@@ -233,12 +233,8 @@ XR_FUNC bool xr_vm_is_truthy(XrValue value);
 
 /* ========== API Functions (in xvm_api.c) ========== */
 
-// Call closure from C code
+// Call closure from C code (coroutine-aware, unified implementation)
 XR_FUNC XrValue xr_vm_call_closure(XrayIsolate *isolate, XrClosure *closure, XrValue *args, int nargs);
-
-// Extended closure call (supports blocking return, for coroutines)
-XR_FUNC XrValue xr_vm_call_closure_ex(XrayIsolate *isolate, XrClosure *closure,
-                               XrValue *args, int nargs, XrVMResult *out_result);
 
 // VM execution
 XR_FUNC XrVMResult xr_vm_interpret_proto(XrayIsolate *isolate, XrProto *proto);

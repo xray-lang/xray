@@ -35,11 +35,18 @@ static XrVMContext* xr_vm_get_current_ctx(XrayIsolate *isolate) {
 
 /* ========== C Code Calling Closure API ========== */
 
-// Call Xray closure from C (for higher-order functions and defer)
+/*
+** Call Xray closure from C code.
+** Unified implementation for higher-order functions, defer, and coroutines.
+**
+** @param out_result Optional: if non-NULL, receives XrVMResult status.
+**                   If NULL, errors are logged via xr_log_warning.
+** @return Return value (xr_null() on failure or when *out_result != XR_VM_OK)
+*/
 XrValue xr_vm_call_closure(XrayIsolate *isolate, XrClosure *closure, XrValue *args, int nargs) {
     XR_DCHECK(isolate != NULL, "vm_call_closure: NULL isolate");
     XR_DCHECK(nargs >= 0, "vm_call_closure: negative nargs");
-    // Parameter check
+
     if (closure == NULL || closure->proto == NULL) {
         return xr_null();
     }
@@ -51,36 +58,29 @@ XrValue xr_vm_call_closure(XrayIsolate *isolate, XrClosure *closure, XrValue *ar
         return xr_null();
     }
 
-    // Get execution context: prefer current coroutine, fallback to main
-    XrWorker *worker = xr_current_worker();
-    XrVMContext *ctx = NULL;
-    if (worker && worker->m->current_coro) {
-        ctx = &((XrCoroutine *)worker->m->current_coro)->vm_ctx;
-    } else {
-        // Fallback to main coroutine
-        XrCoroutine *main_coro = (XrCoroutine*)isolate->main_coro;
-        ctx = &main_coro->vm_ctx;
-    }
+    // Get execution context (coroutine-aware)
+    XrVMContext *ctx = xr_vm_get_current_ctx(isolate);
 
     // Save current VM state
-    XrBcCallFrame *current_frame = (ctx->frame_count > 0)
-        ? &ctx->frames[ctx->frame_count - 1]
-        : NULL;
-    XrValue *safe_stack_top = ctx->stack_top;
-    if (current_frame && current_frame->closure && current_frame->closure->proto) {
-        XrValue *frame_end = ctx->stack + current_frame->base_offset + current_frame->closure->proto->maxstacksize;
-        if (safe_stack_top < frame_end) {
-            safe_stack_top = frame_end;
-        }
-    }
-    XrValue *saved_stack_top = safe_stack_top;
     int saved_frame_count = ctx->frame_count;
     int saved_module_base = ctx->module_base_frame;
+    XrValue *saved_stack_top = ctx->stack_top;
 
-    // Set module_base_frame for OP_RETURN boundary
+    // Ensure stack_top is past any active frame
+    if (saved_frame_count > 0) {
+        XrBcCallFrame *cur = &ctx->frames[saved_frame_count - 1];
+        if (cur->closure && cur->closure->proto) {
+            XrValue *frame_end = ctx->stack + cur->base_offset + cur->closure->proto->maxstacksize;
+            if (saved_stack_top < frame_end) {
+                saved_stack_top = frame_end;
+            }
+        }
+    }
+
+    // Set module_base_frame so run() stops when returning past this point
     ctx->module_base_frame = saved_frame_count;
 
-    // Reserve slot for function object on stack
+    // Reserve slot for function object (return value) on stack
     saved_stack_top[0] = xr_null();
     XrValue *func_base = saved_stack_top + 1;
 
@@ -113,8 +113,7 @@ XrValue xr_vm_call_closure(XrayIsolate *isolate, XrClosure *closure, XrValue *ar
     // Get return value
     XrValue return_value = xr_null();
     if (exec_result == XR_VM_OK) {
-        XrValue *return_slot = saved_stack_top;
-        return_value = *return_slot;
+        return_value = saved_stack_top[0];
     } else {
         if (!isolate->suppress_exception_print) {
             xr_log_warning("vm", "xr_vm_call_closure: execution failed with error %d", exec_result);
@@ -122,101 +121,6 @@ XrValue xr_vm_call_closure(XrayIsolate *isolate, XrClosure *closure, XrValue *ar
     }
 
     // Restore VM state
-    ctx->frame_count = saved_frame_count;
-    ctx->stack_top = saved_stack_top;
-    ctx->module_base_frame = saved_module_base;
-
-    return return_value;
-}
-
-/*
-** Extended closure call (supports blocking return)
-** Used for coroutine execution, can handle XR_VM_BLOCKED state
-** Uses main coroutine's vm_ctx uniformly
-**
-** @param out_result Output: execution result status
-** @return Return value (only valid when *out_result == XR_VM_OK)
-*/
-XrValue xr_vm_call_closure_ex(XrayIsolate *isolate, XrClosure *closure,
-                               XrValue *args, int nargs, XrVMResult *out_result) {
-    XR_DCHECK(isolate != NULL, "vm_call_closure_ex: NULL isolate");
-    XR_DCHECK(out_result != NULL, "vm_call_closure_ex: NULL out_result");
-    XR_DCHECK(nargs >= 0, "vm_call_closure_ex: negative nargs");
-    // Parameter check
-    if (closure == NULL || closure->proto == NULL) {
-        *out_result = XR_VM_RUNTIME_ERROR;
-        return xr_null();
-    }
-
-    // Check argument count
-    if (nargs != closure->proto->numparams) {
-        fprintf(stderr, "Expected %d arguments but got %d\n",
-                closure->proto->numparams, nargs);
-        *out_result = XR_VM_RUNTIME_ERROR;
-        return xr_null();
-    }
-
-    // Get main coroutine's vm_ctx
-    XrCoroutine *main_coro = (XrCoroutine*)isolate->main_coro;
-    XrVMContext *ctx = &main_coro->vm_ctx;
-
-    // Save current VM state (no frame copy needed - use module_base_frame)
-    int saved_frame_count = ctx->frame_count;
-    int saved_module_base = ctx->module_base_frame;
-    XrValue *saved_stack_top = ctx->stack_top;
-
-    // Ensure stack_top is past any active frame
-    if (saved_frame_count > 0) {
-        XrBcCallFrame *cur = &ctx->frames[saved_frame_count - 1];
-        if (cur->closure && cur->closure->proto) {
-            XrValue *frame_end = ctx->stack + cur->base_offset + cur->closure->proto->maxstacksize;
-            if (saved_stack_top < frame_end) {
-                saved_stack_top = frame_end;
-            }
-        }
-    }
-
-    // Use module_base_frame so run() stops when returning past this point
-    ctx->module_base_frame = saved_frame_count;
-
-    // Reserve slot for function object on stack
-    saved_stack_top[0] = xr_null();
-    XrValue *func_base = saved_stack_top + 1;
-
-    // Create new call frame (append, don't reset)
-    XR_DCHECK(ctx->frame_count >= 0 && ctx->frame_count < ctx->frame_capacity,
-              "vm_call_closure_ex: call frame overflow");
-    XrBcCallFrame *frame = &ctx->frames[ctx->frame_count++];
-    frame->closure = closure;
-    frame->pc = PROTO_CODE_BASE(closure->proto);
-    frame->base_offset = (int)(func_base - ctx->stack);
-    XR_DCHECK(frame->base_offset >= 0, "vm_call_closure_ex: negative base_offset");
-    frame->flags = 0;
-    frame->call_status = 0;
-    frame->result_offset = 0;
-    frame->u.l.pending_operator_check = false;
-
-    // Copy arguments to stack
-    for (int i = 0; i < nargs; i++) {
-        func_base[i] = args[i];
-    }
-
-    // Update stack top
-    ctx->stack_top = ctx->stack + frame->base_offset + closure->proto->maxstacksize;
-    XR_DCHECK(ctx->stack_top <= ctx->stack + ctx->stack_capacity,
-              "vm_call_closure_ex: stack overflow");
-
-    // Execute bytecode
-    XrVMResult exec_result = run(isolate, ctx);
-    *out_result = exec_result;
-
-    // Get return value
-    XrValue return_value = xr_null();
-    if (exec_result == XR_VM_OK) {
-        return_value = saved_stack_top[0];
-    }
-
-    // Restore VM state (frames are naturally truncated by frame_count restore)
     ctx->module_base_frame = saved_module_base;
     ctx->frame_count = saved_frame_count;
     ctx->stack_top = saved_stack_top;
