@@ -829,10 +829,15 @@ void xcg_emit_instruction(XcgenBuf *b, XirFunc *func, XirIns *ins,
                 uint32_t ci = XIR_REF_INDEX(ins->args[0]);
                 if (ci < func->nconst) uv_idx = func->consts[ci].val.i64;
             }
-            xcgen_buf_printf(b, "    v%u = xrt_cl->upvals[%d];\n",
-                             dst_idx, (int)uv_idx);
+            if (cf->non_escaping && uv_idx < cf->num_upvals) {
+                // Non-escaping closure: read from direct param instead of closure object
+                xcgen_buf_printf(b, "    v%u = xrt_upv%d;\n", dst_idx, (int)uv_idx);
+            } else {
+                xcgen_buf_printf(b, "    v%u = xrt_cl->upvals[%d];\n",
+                                 dst_idx, (int)uv_idx);
+                cf->needs_closure_param = true;
+            }
             cf->needs_runtime = true;
-            cf->needs_closure_param = true;
             return;
         }
         case XIR_STORE_UPVAL: {
@@ -844,18 +849,59 @@ void xcg_emit_instruction(XcgenBuf *b, XirFunc *func, XirIns *ins,
                 if (ci < func->nconst) uv_idx = func->consts[ci].val.i64;
             }
             if (xir_ref_is_vreg(ins->dst)) {
-                // Child closure upvalue initialization: set upval on the child closure
+                // Child closure upvalue initialization.
+                // If child is non-escaping, skip: upvals passed at call site directly.
                 uint32_t cl_vreg = XIR_REF_INDEX(ins->dst);
-                xcgen_buf_printf(b, "    ((xrt_closure_t*)v%u.ptr)->upvals[%d] = ",
-                                 cl_vreg, (int)uv_idx);
-                xcg_emit_ref_as_tagged(b, func, ins->args[1]);
-                xcgen_buf_puts(b, ";\n");
+                XcgenProtoEntry *child_entry = NULL;
+                // Find the child proto from the closure creation instruction
+                if (cl_vreg < func->nvreg && func->vregs[cl_vreg].def) {
+                    XirIns *cl_def = func->vregs[cl_vreg].def;
+                    void *child_proto = NULL;
+                    if (func->call_arg_pool && func->vregs[cl_vreg].call_nargs > 0) {
+                        XirRef pr = func->call_arg_pool[func->vregs[cl_vreg].call_arg_start];
+                        if (xir_ref_is_const(pr)) {
+                            uint32_t pci = XIR_REF_INDEX(pr);
+                            if (pci < func->nconst)
+                                child_proto = (void *)(uintptr_t)func->consts[pci].val.raw;
+                        }
+                    }
+                    if (!child_proto && xir_ref_is_const(cl_def->args[0])) {
+                        uint32_t pci = XIR_REF_INDEX(cl_def->args[0]);
+                        if (pci < func->nconst)
+                            child_proto = (void *)(uintptr_t)func->consts[pci].val.raw;
+                    }
+                    if (child_proto) {
+                        for (int pi = 0; pi < mod->proto_map_count; pi++) {
+                            if (mod->proto_map[pi].proto_ptr == child_proto) {
+                                child_entry = &mod->proto_map[pi];
+                                break;
+                            }
+                        }
+                    }
+                }
+                if (child_entry && child_entry->non_escaping) {
+                    // Non-escaping child: store is a no-op (upvals passed at call site)
+                    xcgen_buf_printf(b, "    /* upval[%d] for non-escaping %s: passed at call site */\n",
+                                     (int)uv_idx, child_entry->c_name);
+                } else {
+                    xcgen_buf_printf(b, "    ((xrt_closure_t*)v%u.ptr)->upvals[%d] = ",
+                                     cl_vreg, (int)uv_idx);
+                    xcg_emit_ref_as_tagged(b, func, ins->args[1]);
+                    xcgen_buf_puts(b, ";\n");
+                }
             } else {
                 // Writing to own closure's upvalue
-                xcgen_buf_printf(b, "    xrt_cl->upvals[%d] = ", (int)uv_idx);
-                xcg_emit_ref_as_tagged(b, func, ins->args[1]);
-                xcgen_buf_puts(b, ";\n");
-                cf->needs_closure_param = true;
+                if (cf->non_escaping && uv_idx < cf->num_upvals) {
+                    // Non-escaping: xrt_upvN is a param, not writable.
+                    // This case should be rare (closure mutation) — fall back to comment.
+                    xcgen_buf_printf(b, "    /* WARN: store to non-escaping upval[%d] */\n",
+                                     (int)uv_idx);
+                } else {
+                    xcgen_buf_printf(b, "    xrt_cl->upvals[%d] = ", (int)uv_idx);
+                    xcg_emit_ref_as_tagged(b, func, ins->args[1]);
+                    xcgen_buf_puts(b, ";\n");
+                    cf->needs_closure_param = true;
+                }
             }
             cf->needs_runtime = true;
             return;
