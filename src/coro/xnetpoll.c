@@ -612,6 +612,18 @@ void xr_netpoll_close(XrNetpoll *np, XrPollDesc *pd) {
         xr_fdmap_cas(np, fd, &exp, NULL);
     }
 
+    // Unregister from owner worker's local poll (if bound)
+    if (fd >= 0 && pd->owner_worker_id >= 0) {
+        XrWorker *current = xr_current_worker();
+        if (current && current->p.runtime) {
+            XrRuntime *rt = current->p.runtime;
+            if (pd->owner_worker_id < rt->worker_count) {
+                XrLocalPoll *lp = &rt->workers[pd->owner_worker_id].p.local_poll;
+                xr_local_poll_del_fd(lp, fd);
+            }
+        }
+    }
+
     // Unregister from shared kqueue
     np->ops->del_fd(np, fd);
 
@@ -826,7 +838,9 @@ void xr_netpoll_set_deadline(XrNetpoll *np, XrPollDesc *pd, int64_t deadline,
 
 // ========== fd bound to Worker ==========
 
-// Bind fd to current Worker
+// Bind fd to current Worker and register with worker's local poll.
+// Dual-registration (shared netpoll + local poll) is safe: the CAS state
+// machine in xr_netpoll_unblock ensures only one waker succeeds.
 int xr_netpoll_bind_worker(XrPollDesc *pd) {
     if (!pd) return -1;
 
@@ -839,6 +853,10 @@ int xr_netpoll_bind_worker(XrPollDesc *pd) {
     XrWorker *worker = xr_current_worker();
     if (worker) {
         pd->owner_worker_id = worker->p.id;
+        // Register fd with worker's local poll for zero-contention IO delivery
+        if (pd->fd >= 0 && worker->p.local_poll.poll_fd >= 0) {
+            xr_local_poll_add_fd(&worker->p.local_poll, pd->fd, pd);
+        }
         return worker->p.id;
     }
 

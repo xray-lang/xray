@@ -70,7 +70,8 @@ XR_FUNC bool worker_process_blocked(XrWorker *worker, XrCoroutine *coro);
 
 // Poll & inbox drain (xworker_sched.c) — shared with handoff
 XR_FUNC void worker_drain_inbox(XrWorker *worker);
-XR_FUNC void worker_poll_sources(XrWorker *worker);
+// Returns a fast-path IO coroutine (affinity match, skip queue) or NULL.
+XR_FUNC XrCoroutine *worker_poll_sources(XrWorker *worker);
 
 // Sysmon constants
 #define XR_SYSMON_WARN_US       100000

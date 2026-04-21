@@ -90,6 +90,9 @@ void xr_worker_init(XrWorker *worker, int id, XrRuntime *runtime) {
     xr_mpsc_init(&worker->p.inbox);
     worker->p.check_balance_reds = XR_CALL_CHECK_BALANCE_REDS;
 
+    // Initialize Per-Worker local poll (kqueue/epoll fd for fast IO delivery)
+    xr_local_poll_init(&worker->p.local_poll);
+
     // Initialize continuation stealing deque
     xr_steal_queue_init(&worker->p.cont_deque, 64);
     worker->p.stats.cont_steal_count = 0;
@@ -128,6 +131,9 @@ void xr_worker_destroy(XrWorker *worker) {
         worker->p.jit_scratch.safepoint_page = NULL;
     }
 #endif
+
+    // Free Per-Worker local poll (kqueue/epoll fd)
+    xr_local_poll_cleanup(&worker->p.local_poll);
 
     // Free Per-Worker Timer Wheel
     if (worker->p.timer_wheel) {
