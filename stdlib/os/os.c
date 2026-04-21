@@ -72,17 +72,12 @@ extern XrValue xr_value_from_array(XrArray *arr);
 
 /* ========== Helper Functions ========== */
 
-// String argument accessor and interned-string constructor come from
-// <common.h>: xrs_string_arg() / xrs_string_value_c().
-#define get_string_arg(v)         xrs_string_arg((v), NULL)
-#define make_string(iso, cstr)    xrs_string_value_c((iso), (cstr))
-
 /* ========== Environment Variables ========== */
 
 // getenv(name) - Get environment variable
 static XrValue os_getenv(XrayIsolate *X, XrValue *args, int argc) {
     if (argc < 1) return xr_null();
-    const char *name = get_string_arg(args[0]);
+    const char *name = xrs_string_arg(args[0], NULL);
     if (!name) return xr_null();
 
     const char *value = getenv(name);
@@ -96,8 +91,8 @@ static XrValue os_setenv(XrayIsolate *X, XrValue *args, int argc) {
     (void)X;
     if (argc < 2) return xr_bool(false);
 
-    const char *name = get_string_arg(args[0]);
-    const char *value = get_string_arg(args[1]);
+    const char *name = xrs_string_arg(args[0], NULL);
+    const char *value = xrs_string_arg(args[1]);
     if (!name || !value) return xr_bool(false);
 
     int result = os_setenv_impl(name, value);
@@ -109,7 +104,7 @@ static XrValue os_unsetenv(XrayIsolate *X, XrValue *args, int argc) {
     (void)X;
     if (argc < 1) return xr_bool(false);
 
-    const char *name = get_string_arg(args[0]);
+    const char *name = xrs_string_arg(args[0], NULL);
     if (!name) return xr_bool(false);
 
     int result = os_unsetenv_impl(name);
@@ -177,7 +172,7 @@ static XrValue os_chdir(XrayIsolate *X, XrValue *args, int argc) {
     (void)X;
     if (argc < 1) return xr_bool(false);
 
-    const char *path = get_string_arg(args[0]);
+    const char *path = xrs_string_arg(args[0], NULL);
     if (!path) return xr_bool(false);
 
     return xr_bool(os_chdir_impl(path) == 0);
@@ -474,7 +469,7 @@ static char* read_fd_to_string(int fd) {
 // exec(cmd) - Execute shell command, return {stdout, stderr, exitCode}
 static XrValue os_exec(XrayIsolate *X, XrValue *args, int argc) {
     if (argc < 1) return xr_null();
-    const char *cmd = get_string_arg(args[0]);
+    const char *cmd = xrs_string_arg(args[0], NULL);
     if (!cmd) return xr_null();
     XR_DCHECK(cmd[0] != '\0', "os_exec: command string must be non-empty");
 

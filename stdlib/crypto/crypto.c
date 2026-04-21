@@ -14,6 +14,8 @@
  */
 
 #include "crypto.h"
+#include "../common.h"
+#include "../../src/base/xmalloc.h"
 #include "../../src/runtime/value/xvalue.h"
 #include "../../src/runtime/object/xstring.h"
 #include <string.h>
@@ -477,14 +479,14 @@ static void hmac_compute(HashFn hash, int block_size, int digest_size,
     size_t outer_len = (size_t)block_size + (size_t)digest_size;
 
     uint8_t stack_buf[4096];
-    uint8_t *inner_buf = (inner_len <= sizeof(stack_buf)) ? stack_buf : (uint8_t *)malloc(inner_len);
+    uint8_t *inner_buf = (inner_len <= sizeof(stack_buf)) ? stack_buf : (uint8_t *)xr_malloc(inner_len);
     if (!inner_buf) { memset(digest, 0, digest_size); return; }
 
     memcpy(inner_buf, ipad, block_size);
     memcpy(inner_buf + block_size, data, data_len);
     hash(inner_buf, inner_len, inner);
 
-    if (inner_buf != stack_buf) free(inner_buf);
+    if (inner_buf != stack_buf) xr_free(inner_buf);
 
     // opad || inner_hash (always fits in stack)
     uint8_t outer_buf[192]; // 128 + 64 max
@@ -943,15 +945,15 @@ static XrValue crypto_encrypt(XrayIsolate *isolate, XrValue *args, int nargs) {
     size_t padded_len = plain_len + pad;
 
     uint8_t stack_plain[4096];
-    uint8_t *padded = (padded_len <= sizeof(stack_plain)) ? stack_plain : (uint8_t *)malloc(padded_len);
+    uint8_t *padded = (padded_len <= sizeof(stack_plain)) ? stack_plain : (uint8_t *)xr_malloc(padded_len);
     if (!padded) return xr_null();
     memcpy(padded, XR_STRING_CHARS(plain_str), plain_len);
     memset(padded + plain_len, pad, pad);
 
     // Encrypt
     uint8_t stack_cipher[4096];
-    uint8_t *cipher = (padded_len <= sizeof(stack_cipher)) ? stack_cipher : (uint8_t *)malloc(padded_len);
-    if (!cipher) { if (padded != stack_plain) free(padded); return xr_null(); }
+    uint8_t *cipher = (padded_len <= sizeof(stack_cipher)) ? stack_cipher : (uint8_t *)xr_malloc(padded_len);
+    if (!cipher) { if (padded != stack_plain) xr_free(padded); return xr_null(); }
 
     XrAESContext ctx;
     xr_aes_init(&ctx, aes_key, 256);
@@ -961,10 +963,10 @@ static XrValue crypto_encrypt(XrayIsolate *isolate, XrValue *args, int nargs) {
     size_t out_bytes = 16 + padded_len;
     size_t hex_len = out_bytes * 2;
     char stack_hex[8193];
-    char *hex = (hex_len + 1 <= sizeof(stack_hex)) ? stack_hex : (char *)malloc(hex_len + 1);
+    char *hex = (hex_len + 1 <= sizeof(stack_hex)) ? stack_hex : (char *)xr_malloc(hex_len + 1);
     if (!hex) {
-        if (padded != stack_plain) free(padded);
-        if (cipher != stack_cipher) free(cipher);
+        if (padded != stack_plain) xr_free(padded);
+        if (cipher != stack_cipher) xr_free(cipher);
         return xr_null();
     }
 
@@ -975,9 +977,9 @@ static XrValue crypto_encrypt(XrayIsolate *isolate, XrValue *args, int nargs) {
 
     xr_secure_wipe(aes_key, sizeof(aes_key));
     xr_secure_wipe(&ctx, sizeof(ctx));
-    if (padded != stack_plain) free(padded);
-    if (cipher != stack_cipher) free(cipher);
-    if (hex != stack_hex) free(hex);
+    if (padded != stack_plain) xr_free(padded);
+    if (cipher != stack_cipher) xr_free(cipher);
+    if (hex != stack_hex) xr_free(hex);
     return result;
 }
 
@@ -1001,11 +1003,11 @@ static XrValue crypto_decrypt(XrayIsolate *isolate, XrValue *args, int nargs) {
 
     // Hex decode
     uint8_t stack_raw[4096];
-    uint8_t *raw = (total_bytes <= sizeof(stack_raw)) ? stack_raw : (uint8_t *)malloc(total_bytes);
+    uint8_t *raw = (total_bytes <= sizeof(stack_raw)) ? stack_raw : (uint8_t *)xr_malloc(total_bytes);
     if (!raw) return xr_null();
 
     if (xr_hex_to_bytes(XR_STRING_CHARS(cipher_hex_str), raw, total_bytes) < 0) {
-        if (raw != stack_raw) free(raw);
+        if (raw != stack_raw) xr_free(raw);
         return xr_null();
     }
 
@@ -1018,9 +1020,9 @@ static XrValue crypto_decrypt(XrayIsolate *isolate, XrValue *args, int nargs) {
 
     // Decrypt
     uint8_t stack_plain[4096];
-    uint8_t *plain = (cipher_len <= sizeof(stack_plain)) ? stack_plain : (uint8_t *)malloc(cipher_len);
+    uint8_t *plain = (cipher_len <= sizeof(stack_plain)) ? stack_plain : (uint8_t *)xr_malloc(cipher_len);
     if (!plain) {
-        if (raw != stack_raw) free(raw);
+        if (raw != stack_raw) xr_free(raw);
         return xr_null();
     }
 
@@ -1044,8 +1046,8 @@ static XrValue crypto_decrypt(XrayIsolate *isolate, XrValue *args, int nargs) {
     if (bad) {
         xr_secure_wipe(aes_key, sizeof(aes_key));
         xr_secure_wipe(&ctx, sizeof(ctx));
-        if (raw != stack_raw) free(raw);
-        if (plain != stack_plain) free(plain);
+        if (raw != stack_raw) xr_free(raw);
+        if (plain != stack_plain) xr_free(plain);
         return xr_null();
     }
     size_t plain_len = cipher_len - pad;
@@ -1054,8 +1056,8 @@ static XrValue crypto_decrypt(XrayIsolate *isolate, XrValue *args, int nargs) {
 
     xr_secure_wipe(aes_key, sizeof(aes_key));
     xr_secure_wipe(&ctx, sizeof(ctx));
-    if (raw != stack_raw) free(raw);
-    if (plain != stack_plain) free(plain);
+    if (raw != stack_raw) xr_free(raw);
+    if (plain != stack_plain) xr_free(plain);
     return result;
 }
 
@@ -1079,7 +1081,6 @@ static XrValue crypto_timing_safe_equal(XrayIsolate *isolate, XrValue *args, int
     return diff == 0 ? xr_bool(true) : xr_bool(false);
 }
 
-// External declarations
 // ========== Type Declarations (parsed by gen_stdlib_types.py) ==========
 
 #include "../../src/module/xbuiltin_decl.h"
@@ -1117,32 +1118,20 @@ XR_DEFINE_BUILTIN(crypto_timing_safe_equal, "timingSafeEqual",
     "(a: string, b: string): bool",
     "Constant-time string comparison")
 
-extern XrCFunction* xr_vm_cfunction_new(XrayIsolate *isolate, XrCFunctionPtr func, const char *name);
-extern XrValue xr_value_from_cfunction(XrCFunction *cfunc);
-
 XrModule* xr_load_module_crypto(XrayIsolate *isolate) {
     XrModule *mod = xr_module_create_native(isolate, "crypto");
     if (!mod) return NULL;
 
-    #define EXPORT_CFUNC(name_str, func_ptr) \
-        do { \
-            XrCFunction *cfunc = xr_vm_cfunction_new(isolate, func_ptr, name_str); \
-            XrValue fn_val = xr_value_from_cfunction(cfunc); \
-            xr_module_add_export(isolate, mod, name_str, fn_val); \
-        } while(0)
-
-    EXPORT_CFUNC("md5", crypto_md5);
-    EXPORT_CFUNC("sha1", crypto_sha1);
-    EXPORT_CFUNC("sha256", crypto_sha256);
-    EXPORT_CFUNC("sha512", crypto_sha512);
-    EXPORT_CFUNC("hmac", crypto_hmac);
-    EXPORT_CFUNC("randomBytes", crypto_random_bytes);
-    EXPORT_CFUNC("uuid", crypto_uuid);
-    EXPORT_CFUNC("encrypt", crypto_encrypt);
-    EXPORT_CFUNC("decrypt", crypto_decrypt);
-    EXPORT_CFUNC("timingSafeEqual", crypto_timing_safe_equal);
-
-    #undef EXPORT_CFUNC
+    XRS_EXPORT(mod, isolate, "md5", crypto_md5);
+    XRS_EXPORT(mod, isolate, "sha1", crypto_sha1);
+    XRS_EXPORT(mod, isolate, "sha256", crypto_sha256);
+    XRS_EXPORT(mod, isolate, "sha512", crypto_sha512);
+    XRS_EXPORT(mod, isolate, "hmac", crypto_hmac);
+    XRS_EXPORT(mod, isolate, "randomBytes", crypto_random_bytes);
+    XRS_EXPORT(mod, isolate, "uuid", crypto_uuid);
+    XRS_EXPORT(mod, isolate, "encrypt", crypto_encrypt);
+    XRS_EXPORT(mod, isolate, "decrypt", crypto_decrypt);
+    XRS_EXPORT(mod, isolate, "timingSafeEqual", crypto_timing_safe_equal);
 
     mod->loaded = true;
     return mod;

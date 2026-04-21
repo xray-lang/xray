@@ -482,10 +482,6 @@ static inline bool xr_coro_gc_in_gc(XrCoroGC *gc) {
     return gc && gc->in_gc;
 }
 
-/* ========== Stack Growth ========== */
-
-XR_FUNC bool xr_coro_gc_grow_stack(struct XrCoroutine *coro, int extra_slots);
-
 /* ========== External Root Registration ========== */
 
 /*

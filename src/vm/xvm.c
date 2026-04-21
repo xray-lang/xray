@@ -266,7 +266,7 @@ XrVMResult run(XrayIsolate *isolate, XrVMContext *vm_ctx) {
                 XrValue *_old_stack = vm_ctx->stack; \
                 int _old_cap = vm_ctx->stack_capacity; \
                 bool _grow_ok; \
-                _grow_ok = xr_coro_gc_grow_stack(_coro, _extra); \
+                _grow_ok = xr_coro_grow_stack(_coro, _extra); \
                 if (!_grow_ok) { \
                     VM_RUNTIME_ERROR(XR_ERR_STACK_OVERFLOW, \
                         "Stack overflow: recursion exceeds %d levels (grow failed)", vm_ctx->frame_count); \
