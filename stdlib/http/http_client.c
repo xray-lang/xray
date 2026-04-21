@@ -19,7 +19,7 @@
 #include "http.h"
 #include "../net/tls.h"
 #include "http_cookie.h"
-#include "http_compress.h"
+#include "../compress/compress.h"
 #include "../net/dns.h"
 #include "../net/io.h"
 #include "../net/xnetbuf.h"
@@ -350,7 +350,7 @@ static char* build_request(XrayIsolate *isolate,
     }
 
     // Accept-Encoding (supports gzip decompression)
-    if (xr_compress_available()) {
+    {
         p += sprintf(p, "Accept-Encoding: gzip, deflate\r\n");
     }
 
@@ -762,7 +762,7 @@ static XrHttpResult xr_http_request_internal(XrayIsolate *X, const XrHttpRequest
                 size_t len = resp.headers[i].value_len < 63 ? resp.headers[i].value_len : 63;
                 memcpy(encoding, resp.headers[i].value, len);
                 encoding[len] = '\0';
-                compress_type = xr_detect_compress_type(encoding);
+                compress_type = xr_detect_content_encoding(encoding);
                 break;
             }
         }
@@ -772,8 +772,19 @@ static XrHttpResult xr_http_request_internal(XrayIsolate *X, const XrHttpRequest
             void *decompressed = NULL;
             size_t decompressed_len = 0;
 
-            if (xr_decompress(compress_type, raw_body, raw_body_len,
-                              &decompressed, &decompressed_len) == 0) {
+            int dc_rc = -1;
+            switch (compress_type) {
+                case XR_CONTENT_ENC_GZIP:
+                    dc_rc = xr_zlib_gzip_decompress(raw_body, raw_body_len,
+                                                    &decompressed, &decompressed_len);
+                    break;
+                case XR_CONTENT_ENC_DEFLATE:
+                    dc_rc = xr_zlib_deflate_decompress(raw_body, raw_body_len,
+                                                      &decompressed, &decompressed_len);
+                    break;
+                default: break;
+            }
+            if (dc_rc == 0) {
                 result.body = (char*)decompressed;
                 result.body_len = decompressed_len;
             } else {
