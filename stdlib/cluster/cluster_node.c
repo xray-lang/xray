@@ -838,6 +838,9 @@ int xr_cluster_node_connect(XrCluster *cluster, XrClusterNode *node) {
     uint8_t expected_proof[XR_PROOF_SIZE];
     xr_cluster_compute_proof(cluster->secret, req.nonce, expected_proof);
     if (!cluster_proof_equal(ack.proof, expected_proof)) {
+        xr_secure_wipe(expected_proof, sizeof(expected_proof));
+        xr_secure_wipe(&req, sizeof(req));
+        xr_secure_wipe(&ack, sizeof(ack));
         cluster_handshake_set_deadline(cluster, node->conn, 0);
         xr_cluster_node_close(node);
         node->state = XR_NODE_IDLE;
@@ -855,14 +858,22 @@ int xr_cluster_node_connect(XrCluster *cluster, XrClusterNode *node) {
 
     flen = xr_frame_encode_handshake_done(frame_buf, sizeof(frame_buf), &done);
     if (flen < 0 || xr_io_write_all(node->conn, frame_buf, (size_t)flen) != flen) {
+        xr_secure_wipe(&done, sizeof(done));
+        xr_secure_wipe(expected_proof, sizeof(expected_proof));
+        xr_secure_wipe(&req, sizeof(req));
+        xr_secure_wipe(&ack, sizeof(ack));
         cluster_handshake_set_deadline(cluster, node->conn, 0);
         xr_cluster_node_close(node);
         node->state = XR_NODE_IDLE;
         return -1;
     }
 
-    // Handshake complete — clear the handshake deadlines so subsequent
-    // traffic (heartbeat, app messages) is not bounded by the 5s window.
+    // Handshake complete — erase cryptographic material from stack then
+    // clear deadlines so subsequent traffic runs unbounded.
+    xr_secure_wipe(expected_proof, sizeof(expected_proof));
+    xr_secure_wipe(&req, sizeof(req));
+    xr_secure_wipe(&ack, sizeof(ack));
+    xr_secure_wipe(&done, sizeof(done));
     cluster_handshake_set_deadline(cluster, node->conn, 0);
 
     node->state = XR_NODE_CONNECTED;
@@ -946,6 +957,10 @@ XrClusterNode *xr_cluster_node_accept(XrCluster *cluster, XrIOConn *conn) {
     uint8_t expected_proof[XR_PROOF_SIZE];
     xr_cluster_compute_proof(cluster->secret, ack.nonce, expected_proof);
     if (!cluster_proof_equal(done.proof, expected_proof)) {
+        xr_secure_wipe(expected_proof, sizeof(expected_proof));
+        xr_secure_wipe(&req, sizeof(req));
+        xr_secure_wipe(&ack, sizeof(ack));
+        xr_secure_wipe(&done, sizeof(done));
         cluster_handshake_set_deadline(cluster, conn, 0);
         return NULL;
     }
@@ -953,11 +968,20 @@ XrClusterNode *xr_cluster_node_accept(XrCluster *cluster, XrIOConn *conn) {
     // Create node
     XrClusterNode *node = xr_cluster_node_new(req.name, NULL, 0);
     if (!node) {
+        xr_secure_wipe(expected_proof, sizeof(expected_proof));
+        xr_secure_wipe(&req, sizeof(req));
+        xr_secure_wipe(&ack, sizeof(ack));
+        xr_secure_wipe(&done, sizeof(done));
         cluster_handshake_set_deadline(cluster, conn, 0);
         return NULL;
     }
 
-    // Handshake complete — clear deadlines before handing off the conn.
+    // Handshake complete — erase cryptographic material from stack then
+    // clear deadlines before handing off the conn.
+    xr_secure_wipe(expected_proof, sizeof(expected_proof));
+    xr_secure_wipe(&req, sizeof(req));
+    xr_secure_wipe(&ack, sizeof(ack));
+    xr_secure_wipe(&done, sizeof(done));
     cluster_handshake_set_deadline(cluster, conn, 0);
 
     node->conn = conn;
