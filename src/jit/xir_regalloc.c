@@ -1363,7 +1363,15 @@ static int gap_cmp(const void *a, const void *b) {
 
 /*
  * Build per-segment allocation from sibling chains.
- * Each sibling becomes one XraSegment with its RA position range.
+ *
+ * Each live interval within each sibling becomes one XraSegment.
+ * A sibling range with holes (multiple non-contiguous intervals) must
+ * emit separate segments so that xra_reg_at_pos() returns -1 inside
+ * holes where another vreg may legitimately share the same physical
+ * register.  The old code emitted one [range_start, range_end) per
+ * sibling, which reported false conflicts in the verifier and — more
+ * critically — could confuse codegen into emitting gap moves for
+ * positions where the value isn't live.
  */
 static void build_result(LsCtx *ctx, XraResult *res) {
     res->valloc = xr_calloc(ctx->nvreg, sizeof(XraVRegAlloc));
@@ -1375,28 +1383,33 @@ static void build_result(LsCtx *ctx, XraResult *res) {
 
         if (!r) continue;
 
-        // Count siblings
-        uint16_t nsib = 0;
-        for (LsRange *s = r; s; s = s->next_sibling) nsib++;
-
-        va->segs = xr_malloc(nsib * sizeof(XraSegment));
-        va->nseg = nsib;
-
-        // Fill segments from sibling chain
-        uint16_t si = 0;
+        // Count total intervals across all siblings
+        uint16_t niv = 0;
         int16_t fspill = XRA_SPILL_NONE;
-        for (LsRange *s = r; s; s = s->next_sibling, si++) {
-            va->segs[si].start = range_start(s);
-            va->segs[si].end = range_end(s);
-            va->segs[si].assigned = s->assigned;
-            va->segs[si].is_fp = s->is_fp;
-
-            // Track spill: use spill from any spilled sibling
+        for (LsRange *s = r; s; s = s->next_sibling) {
+            for (LsInterval *iv = s->first_iv; iv; iv = iv->next)
+                niv++;
             if (s->spill != XRA_SPILL_NONE && fspill == XRA_SPILL_NONE)
                 fspill = s->spill;
-            // Prefer spill from actually-spilled sibling (assigned < 0)
             if (s->assigned < 0 && s->spill != XRA_SPILL_NONE)
                 fspill = s->spill;
+        }
+
+        va->segs = xr_malloc(niv * sizeof(XraSegment));
+        if (!va->segs) { va->nseg = 0; continue; }
+        va->nseg = niv;
+
+        // Fill one segment per interval
+        uint16_t si = 0;
+        for (LsRange *s = r; s; s = s->next_sibling) {
+            for (LsInterval *iv = s->first_iv; iv; iv = iv->next) {
+                XR_DCHECK(si < niv, "build_result: segment index overflow");
+                va->segs[si].start = iv->start;
+                va->segs[si].end = iv->end;
+                va->segs[si].assigned = s->assigned;
+                va->segs[si].is_fp = s->is_fp;
+                si++;
+            }
         }
         va->spill = fspill;
     }
