@@ -144,7 +144,23 @@ static bool vfp(XirFunc *f, uint32_t v) {
 static bool is_remat(XirFunc *f, uint32_t v) {
     if (v >= f->nvreg) return false;
     XirIns *d = f->vregs[v].def;
-    return d && (d->op == XIR_CONST_I64 || d->op == XIR_CONST_F64 || d->op == XIR_CONST_PTR);
+    if (!d) return false;
+    /* Constants: single-instruction immediate load. */
+    if (d->op == XIR_CONST_I64 || d->op == XIR_CONST_F64 ||
+        d->op == XIR_CONST_PTR)
+        return true;
+    /* LOAD_CORO_BYTE with a const offset: single LDRB from the
+     * callee-saved jit_ctx register (x28), always available. */
+    if (d->op == XIR_LOAD_CORO_BYTE &&
+        xir_ref_is_const(d->args[0]))
+        return true;
+    /* I2F / F2I with a const operand: 2-instruction sequence
+     * (load const + SCVTF/FCVTZS).  Still cheaper than a spill
+     * round-trip through the stack. */
+    if ((d->op == XIR_I2F || d->op == XIR_F2I) &&
+        xir_ref_is_const(d->args[0]))
+        return true;
+    return false;
 }
 
 static void ctx_track(LsCtx *ctx, LsRange *r) {

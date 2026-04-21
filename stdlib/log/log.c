@@ -15,6 +15,7 @@
 #include "log.h"
 #include "../common.h"
 #include "../ctxbuf.h"
+#include "../stdlib_cache.h"
 #include "../../src/vm/xvm.h"
 #include "../../src/runtime/object/xmap.h"
 #include "../../src/runtime/object/xutf8.h"
@@ -57,51 +58,51 @@ typedef struct {
     size_t dropped_reported;
 } AsyncLogQueue;
 
-// FIXME(stdlib_basic_tools.md): the async queue is process-global state. A
-// follow-up commit will migrate it into XrayIsolate so multi-isolate
-// embeddings do not share a single background writer thread.
-static AsyncLogQueue g_async_queue = {0};
-static bool g_async_initialized = false;
+/* ========== Per-Isolate Log State ========== */
 
-/* ========== Global Logger ========== */
+// All mutable log state lives here; one instance per XrayIsolate, stored
+// in XrStdlibCache::log_state. This eliminates the former process-global
+// g_default_logger / g_async_queue / g_default_logger_mutex.
+typedef struct XrLogState {
+    XrLogger default_logger;
+    pthread_mutex_t mutex;   // protects setLevel/setFormat/setOutput
+    AsyncLogQueue *async_queue;   // NULL until enableAsync(true)
+    bool async_initialized;
+} XrLogState;
 
-// FIXME(stdlib_basic_tools.md): this mutable global should move to
-// XrayIsolate. For now it is shared across all isolates, which matches the
-// legacy behaviour but prevents per-isolate log-level overrides.
-static XrLogger g_default_logger = {
-    .level = XR_LOG_INFO,
-    .format = XR_LOG_FORMAT_TEXT,
-    .output = NULL,  // Lazy init to stderr
-    .add_source = false,
-    .async_mode = false,
-    .json_ctx = NULL,
-    .json_ctx_len = 0,
-    .text_ctx = NULL,
-    .text_ctx_len = 0,
-    .parent = NULL
-};
+// Destroy callback invoked from xr_stdlib_cache_free (via function pointer).
+static void log_state_destroy(void *opaque);
 
-// Protects mutating access to g_default_logger from the setLevel/setFormat/
-// setOutput bindings. Without this lock, two coroutines racing through
-// log.setOutput("a.log") / log.setOutput("b.log") could have one of them
-// fclose() a file descriptor that the other is actively writing into.
-// Held only for the short duration of a struct-field update, so contention
-// is negligible in practice.
-static pthread_mutex_t g_default_logger_mutex = PTHREAD_MUTEX_INITIALIZER;
+// Retrieve (and lazily create) the per-isolate log state.
+static XrLogState* log_state_get(XrayIsolate *X) {
+    XrStdlibCache *cache = xr_stdlib_cache_get(X);
+    if (cache->log_state) return (XrLogState *)cache->log_state;
 
-static XrLogger* xr_log_default(void) {
-    if (g_default_logger.output == NULL) {
-        g_default_logger.output = stderr;
-    }
-    return &g_default_logger;
+    XrLogState *s = (XrLogState *)xr_malloc(sizeof(XrLogState));
+    if (!s) return NULL;
+    memset(s, 0, sizeof(*s));
+
+    s->default_logger.level  = XR_LOG_INFO;
+    s->default_logger.format = XR_LOG_FORMAT_TEXT;
+    s->default_logger.output = stderr;
+    pthread_mutex_init(&s->mutex, NULL);
+
+    cache->log_state = s;
+    cache->log_state_cleanup = log_state_destroy;
+    return s;
+}
+
+// Convenience: return the isolate's default logger.
+static XrLogger* log_default(XrayIsolate *X) {
+    XrLogState *s = log_state_get(X);
+    return s ? &s->default_logger : NULL;
 }
 
 /* ========== Async Write Implementation ========== */
 
-// Background thread function
+// Background thread function (arg is the owning AsyncLogQueue*)
 static void* async_log_thread(void *arg) {
-    (void)arg;
-    AsyncLogQueue *q = &g_async_queue;
+    AsyncLogQueue *q = (AsyncLogQueue *)arg;
 
     while (1) {
         pthread_mutex_lock(&q->mutex);
@@ -157,11 +158,12 @@ static void* async_log_thread(void *arg) {
     return NULL;
 }
 
-// Initialize async queue
-static void async_queue_init(FILE *output) {
-    if (g_async_initialized) return;
+// Initialize async queue on the given log state.
+static void async_queue_init(XrLogState *ls, FILE *output) {
+    if (ls->async_initialized) return;
 
-    AsyncLogQueue *q = &g_async_queue;
+    AsyncLogQueue *q = (AsyncLogQueue *)xr_malloc(sizeof(AsyncLogQueue));
+    if (!q) return;
     memset(q, 0, sizeof(AsyncLogQueue));
 
     pthread_mutex_init(&q->mutex, NULL);
@@ -172,15 +174,16 @@ static void async_queue_init(FILE *output) {
     q->output = output;
     q->running = true;
 
-    pthread_create(&q->thread, NULL, async_log_thread, NULL);
-    g_async_initialized = true;
+    pthread_create(&q->thread, NULL, async_log_thread, q);
+    ls->async_queue = q;
+    ls->async_initialized = true;
 }
 
-// Stop async queue
-static void async_queue_stop(void) {
-    if (!g_async_initialized) return;
+// Stop async queue.
+static void async_queue_stop(XrLogState *ls) {
+    if (!ls->async_initialized || !ls->async_queue) return;
 
-    AsyncLogQueue *q = &g_async_queue;
+    AsyncLogQueue *q = ls->async_queue;
 
     pthread_mutex_lock(&q->mutex);
     q->running = false;
@@ -202,7 +205,9 @@ static void async_queue_stop(void) {
     pthread_cond_destroy(&q->not_full);
     pthread_cond_destroy(&q->drained);
 
-    g_async_initialized = false;
+    xr_free(q);
+    ls->async_queue = NULL;
+    ls->async_initialized = false;
 }
 
 // Write log entry asynchronously (takes ownership of msg, caller must not free).
@@ -215,10 +220,10 @@ static void async_queue_stop(void) {
 //   - Dropping newest preserves the earlier context most useful for
 //     postmortem analysis; the writer thread later emits a synthetic
 //     "[log] dropped=N" marker so the user knows messages were lost.
-static void async_log_write(char *msg) {
-    if (!g_async_initialized) { xr_free(msg); return; }
+static void async_log_write(XrLogState *ls, char *msg) {
+    if (!ls->async_initialized || !ls->async_queue) { xr_free(msg); return; }
 
-    AsyncLogQueue *q = &g_async_queue;
+    AsyncLogQueue *q = ls->async_queue;
 
     pthread_mutex_lock(&q->mutex);
 
@@ -247,10 +252,10 @@ static void async_log_write(char *msg) {
 }
 
 // Flush async queue (blocks until complete)
-static void async_queue_flush(void) {
-    if (!g_async_initialized) return;
+static void async_queue_flush(XrLogState *ls) {
+    if (!ls->async_initialized || !ls->async_queue) return;
 
-    AsyncLogQueue *q = &g_async_queue;
+    AsyncLogQueue *q = ls->async_queue;
 
     // Wait for queue to drain using condvar (no busy-wait)
     pthread_mutex_lock(&q->mutex);
@@ -400,13 +405,11 @@ static const char* get_filename(const char *path) {
     return slash ? slash + 1 : path;
 }
 
-static void xr_log_write_ex(XrLogger *logger, XrLogLevel level,
+static void xr_log_write_ex(XrLogState *ls, XrLogger *logger, XrLogLevel level,
                             const char *msg, XrValue *attrs, int nattrs,
                             const char *source_file, int source_line) {
     XR_DCHECK(msg != NULL, "xr_log_write_ex: NULL msg");
-    if (logger == NULL) {
-        logger = xr_log_default();
-    }
+    XR_DCHECK(logger != NULL, "xr_log_write_ex: NULL logger");
 
     // Level filtering
     if (level < logger->level) {
@@ -515,8 +518,8 @@ static void xr_log_write_ex(XrLogger *logger, XrLogLevel level,
     }
 
     // Async: transfer buffer ownership to queue; Sync: write and free
-    if (logger->async_mode && g_async_initialized) {
-        async_log_write(b.data);  // ownership transferred
+    if (logger->async_mode && ls && ls->async_initialized) {
+        async_log_write(ls, b.data);  // ownership transferred
     } else {
         FILE *out = logger->output ? logger->output : stderr;
         fwrite(b.data, 1, b.len, out);
@@ -529,9 +532,9 @@ static void xr_log_write_ex(XrLogger *logger, XrLogLevel level,
 }
 
 // Simplified version without source location
-static void xr_log_write(XrLogger *logger, XrLogLevel level,
+static void xr_log_write(XrLogState *ls, XrLogger *logger, XrLogLevel level,
                          const char *msg, XrValue *attrs, int nattrs) {
-    xr_log_write_ex(logger, level, msg, attrs, nattrs, NULL, 0);
+    xr_log_write_ex(ls, logger, level, msg, attrs, nattrs, NULL, 0);
 }
 
 /* ========== VM Binding Functions ========== */
@@ -588,15 +591,16 @@ static void get_source_location(XrayIsolate *isolate, const char **out_file, int
 // Log output with source location
 static void log_with_source(XrayIsolate *isolate, XrLogLevel level,
                             const char *msg, XrValue *attrs, int nattrs) {
+    XrLogState *ls = log_state_get(isolate);
+    XrLogger *logger = &ls->default_logger;
     const char *file = NULL;
     int line = 0;
 
-    XrLogger *logger = xr_log_default();
     if (logger->add_source) {
         get_source_location(isolate, &file, &line);
     }
 
-    xr_log_write_ex(NULL, level, msg, attrs, nattrs, file, line);
+    xr_log_write_ex(ls, logger, level, msg, attrs, nattrs, file, line);
 }
 
 static XrValue xr_log_debug(XrayIsolate *isolate, XrValue *args, int nargs) {
@@ -642,29 +646,30 @@ static XrValue xr_log_fatal(XrayIsolate *isolate, XrValue *args, int nargs) {
     extract_log_args(args, nargs, &msg, &attrs, &nattrs);
     log_with_source(isolate, XR_LOG_FATAL, msg, attrs, nattrs);
     // Flush async queue before exit
-    if (g_async_initialized) async_queue_flush();
+    XrLogState *ls = log_state_get(isolate);
+    if (ls->async_initialized) async_queue_flush(ls);
     exit(1);
     return xr_null();  // Unreachable
 }
 
 static XrValue xr_log_enable_source(XrayIsolate *isolate, XrValue *args, int nargs) {
-    (void)isolate;
-    XrLogger *logger = xr_log_default();
+    XrLogState *ls = log_state_get(isolate);
+    XrLogger *logger = &ls->default_logger;
 
-    pthread_mutex_lock(&g_default_logger_mutex);
+    pthread_mutex_lock(&ls->mutex);
     if (nargs >= 1 && XR_IS_BOOL(args[0])) {
         logger->add_source = XR_TO_BOOL(args[0]);
     } else {
         // Toggle if no argument
         logger->add_source = !logger->add_source;
     }
-    pthread_mutex_unlock(&g_default_logger_mutex);
+    pthread_mutex_unlock(&ls->mutex);
     return xr_null();
 }
 
 static XrValue xr_log_enable_async(XrayIsolate *isolate, XrValue *args, int nargs) {
-    (void)isolate;
-    XrLogger *logger = xr_log_default();
+    XrLogState *ls = log_state_get(isolate);
+    XrLogger *logger = &ls->default_logger;
 
     bool enable = true;
     if (nargs >= 1 && XR_IS_BOOL(args[0])) {
@@ -674,61 +679,61 @@ static XrValue xr_log_enable_async(XrayIsolate *isolate, XrValue *args, int narg
     // Guard the async transition with the logger mutex: flipping
     // async_mode while a concurrent log.info() call is reading the flag
     // would otherwise race the async_queue init/teardown sequence.
-    pthread_mutex_lock(&g_default_logger_mutex);
+    pthread_mutex_lock(&ls->mutex);
     if (enable && !logger->async_mode) {
-        async_queue_init(logger->output);
+        async_queue_init(ls, logger->output);
         logger->async_mode = true;
     } else if (!enable && logger->async_mode) {
-        async_queue_flush();
-        async_queue_stop();
+        async_queue_flush(ls);
+        async_queue_stop(ls);
         logger->async_mode = false;
     }
-    pthread_mutex_unlock(&g_default_logger_mutex);
+    pthread_mutex_unlock(&ls->mutex);
     return xr_null();
 }
 
 static XrValue xr_log_flush(XrayIsolate *isolate, XrValue *args, int nargs) {
-    (void)isolate;
     (void)args;
     (void)nargs;
 
-    XrLogger *logger = xr_log_default();
+    XrLogState *ls = log_state_get(isolate);
+    XrLogger *logger = &ls->default_logger;
     if (logger->async_mode) {
-        async_queue_flush();
+        async_queue_flush(ls);
     }
 
     return xr_null();
 }
 
 static XrValue xr_log_set_level(XrayIsolate *isolate, XrValue *args, int nargs) {
-    (void)isolate;
     if (nargs < 1) {
         fprintf(stderr, "log.setLevel() requires 1 argument\n");
         return xr_null();
     }
 
-    XrLogger *logger = xr_log_default();
-    pthread_mutex_lock(&g_default_logger_mutex);
+    XrLogState *ls = log_state_get(isolate);
+    XrLogger *logger = &ls->default_logger;
+    pthread_mutex_lock(&ls->mutex);
     if (XR_IS_INT(args[0])) {
         logger->level = (XrLogLevel)XR_TO_INT(args[0]);
     } else if (XR_IS_STRING(args[0])) {
         logger->level = xr_log_level_parse(XR_STRING_CHARS(XR_TO_STRING(args[0])));
     }
-    pthread_mutex_unlock(&g_default_logger_mutex);
+    pthread_mutex_unlock(&ls->mutex);
     return xr_null();
 }
 
 static XrValue xr_log_set_format(XrayIsolate *isolate, XrValue *args, int nargs) {
-    (void)isolate;
     if (nargs < 1 || !XR_IS_STRING(args[0])) {
         fprintf(stderr, "log.setFormat() requires a string argument\n");
         return xr_null();
     }
 
-    XrLogger *logger = xr_log_default();
+    XrLogState *ls = log_state_get(isolate);
+    XrLogger *logger = &ls->default_logger;
     const char *format = XR_STRING_CHARS(XR_TO_STRING(args[0]));
 
-    pthread_mutex_lock(&g_default_logger_mutex);
+    pthread_mutex_lock(&ls->mutex);
     if (strcasecmp(format, "json") == 0) {
         logger->format = XR_LOG_FORMAT_JSON;
     } else if (strcasecmp(format, "text") == 0) {
@@ -736,18 +741,18 @@ static XrValue xr_log_set_format(XrayIsolate *isolate, XrValue *args, int nargs)
     } else {
         fprintf(stderr, "log.setFormat(): unknown format '%s', use 'json' or 'text'\n", format);
     }
-    pthread_mutex_unlock(&g_default_logger_mutex);
+    pthread_mutex_unlock(&ls->mutex);
     return xr_null();
 }
 
 static XrValue xr_log_set_output(XrayIsolate *isolate, XrValue *args, int nargs) {
-    (void)isolate;
     if (nargs < 1 || !XR_IS_STRING(args[0])) {
         fprintf(stderr, "log.setOutput() requires a string argument\n");
         return xr_null();
     }
 
-    XrLogger *logger = xr_log_default();
+    XrLogState *ls = log_state_get(isolate);
+    XrLogger *logger = &ls->default_logger;
     const char *output = XR_STRING_CHARS(XR_TO_STRING(args[0]));
 
     // Open the new stream outside the critical section so fopen blocking
@@ -768,10 +773,10 @@ static XrValue xr_log_set_output(XrayIsolate *isolate, XrValue *args, int nargs)
         }
     }
 
-    pthread_mutex_lock(&g_default_logger_mutex);
+    pthread_mutex_lock(&ls->mutex);
     FILE *old_out = logger->output;
     logger->output = new_out;
-    pthread_mutex_unlock(&g_default_logger_mutex);
+    pthread_mutex_unlock(&ls->mutex);
 
     // Close the previous file handle only after the swap so any in-flight
     // log write that already sampled the old pointer can finish draining
@@ -784,15 +789,14 @@ static XrValue xr_log_set_output(XrayIsolate *isolate, XrValue *args, int nargs)
 }
 
 static XrValue xr_log_is_enabled(XrayIsolate *isolate, XrValue *args, int nargs) {
-    (void)isolate;
     if (nargs < 1 || !XR_IS_INT(args[0])) {
         return xr_bool(false);
     }
 
-    XrLogger *logger = xr_log_default();
+    XrLogState *ls = log_state_get(isolate);
     XrLogLevel level = (XrLogLevel)XR_TO_INT(args[0]);
 
-    return xr_bool(level >= logger->level);
+    return xr_bool(level >= ls->default_logger.level);
 }
 
 /* ========== Child Logger Implementation ========== */
@@ -905,7 +909,7 @@ static XrLogger* create_child_logger(XrLogger *parent, XrValue *attrs, int nattr
 }
 
 static XrValue xr_log_child(XrayIsolate *isolate, XrValue *args, int nargs) {
-    XrLogger *parent = xr_log_default();
+    XrLogger *parent = log_default(isolate);
     XrLogger *child = create_child_logger(parent, args, nargs / 2);
     if (!child) return xr_null();
     return wrap_logger(isolate, child);
@@ -925,7 +929,8 @@ static XrValue logger_log_at(XrayIsolate *isolate, XrValue *args, int nargs, XrL
     XrValue *attrs = (nargs > 2) ? &args[2] : NULL;
     int nattrs = (nargs > 2) ? (nargs - 2) / 2 : 0;
 
-    xr_log_write(logger, level, msg, attrs, nattrs);
+    XrLogState *ls = log_state_get(isolate);
+    xr_log_write(ls, logger, level, msg, attrs, nattrs);
     return xr_null();
 }
 
@@ -937,7 +942,8 @@ static XrValue xr_logger_error(XrayIsolate *X, XrValue *args, int n) { return lo
 static XrValue xr_logger_fatal(XrayIsolate *X, XrValue *args, int n) {
     logger_log_at(X, args, n, XR_LOG_FATAL);
     // Flush async queue before exit
-    if (g_async_initialized) async_queue_flush();
+    XrLogState *ls = log_state_get(X);
+    if (ls->async_initialized) async_queue_flush(ls);
     exit(1);
     return xr_null();
 }
@@ -953,6 +959,29 @@ static XrValue xr_logger_child(XrayIsolate *isolate, XrValue *args, int nargs) {
     XrLogger *child = create_child_logger(parent, attrs, nattrs);
     if (!child) return xr_null();
     return wrap_logger(isolate, child);
+}
+
+/* ========== Log State Cleanup ========== */
+
+// Destroy the per-isolate log state. Called from xr_stdlib_cache_free via
+// the log_state_cleanup function pointer.
+static void log_state_destroy(void *opaque) {
+    XrLogState *ls = (XrLogState *)opaque;
+    if (!ls) return;
+
+    // Tear down the async writer thread if it is still running.
+    if (ls->async_initialized) {
+        async_queue_stop(ls);
+    }
+
+    // Close a custom output file (never close stderr/stdout).
+    FILE *out = ls->default_logger.output;
+    if (out && out != stderr && out != stdout) {
+        fclose(out);
+    }
+
+    pthread_mutex_destroy(&ls->mutex);
+    xr_free(ls);
 }
 
 /* ========== GC Destroy ========== */

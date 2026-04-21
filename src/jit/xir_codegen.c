@@ -28,6 +28,7 @@
 
 #include "xir_codegen_internal.h"
 #include "xir_coalesce.h"
+#include "xir_peephole.h"
 #include "xir_blueprint.h"
 #include "../base/xchecks.h"
 #include "../base/xmalloc.h"
@@ -70,6 +71,84 @@ void add_patch(CodegenCtx *ctx, PatchType type, uint32_t target_blk, A64Reg reg)
     p->target_blk = target_blk;
     p->type = type;
     p->reg = reg;
+}
+
+/* ========== Rematerialization ========== */
+
+/*
+ * Emit code to rematerialise a spilled vreg into |rd|.
+ * Returns true if the pattern was handled; false if not (caller should
+ * fall through to the error path).
+ *
+ * Supported patterns (see is_remat in xir_regalloc.c):
+ *   - XIR_CONST_I64 / XIR_CONST_F64 / XIR_CONST_PTR  →  load imm64
+ *   - XIR_LOAD_CORO_BYTE with const offset  →  LDRB from jit_ctx
+ *   - XIR_I2F with const int operand  →  load imm64 + SCVTF
+ *   - XIR_F2I with const float operand  →  FMOV + FCVTZS
+ */
+static bool emit_remat(CodegenCtx *ctx, uint32_t vreg, A64Reg rd) {
+    if (vreg >= ctx->func->nvreg) return false;
+    XirIns *def = ctx->func->vregs[vreg].def;
+    if (!def) return false;
+
+    switch (def->op) {
+    case XIR_CONST_I64:
+    case XIR_CONST_F64:
+    case XIR_CONST_PTR:
+        if (xir_ref_is_const(def->args[0])) {
+            uint32_t ci = XIR_REF_INDEX(def->args[0]);
+            if (ci < ctx->func->nconst) {
+                a64_load_imm64(&ctx->buf, rd,
+                               (uint64_t)ctx->func->consts[ci].val.raw);
+                return true;
+            }
+        }
+        return false;
+
+    case XIR_LOAD_CORO_BYTE:
+        if (xir_ref_is_const(def->args[0])) {
+            uint32_t ci = XIR_REF_INDEX(def->args[0]);
+            if (ci < ctx->func->nconst) {
+                int32_t offset = (int32_t)ctx->func->consts[ci].val.i64;
+                a64_buf_emit(&ctx->buf, a64_ldrb(rd, JIT_CTX_REG, offset));
+                return true;
+            }
+        }
+        return false;
+
+    case XIR_I2F: {
+        /* Pre-compute (double)int64 and emit as FP constant load.
+         * rd is an FP register; a64_load_f64 handles GP→FP transfer. */
+        if (xir_ref_is_const(def->args[0])) {
+            uint32_t ci = XIR_REF_INDEX(def->args[0]);
+            if (ci < ctx->func->nconst) {
+                double d = (double)ctx->func->consts[ci].val.i64;
+                a64_load_f64(&ctx->buf, rd, SCRATCH_REG, d);
+                return true;
+            }
+        }
+        return false;
+    }
+
+    case XIR_F2I: {
+        /* Pre-compute (int64_t)f64 at compile time and emit as
+         * integer constant load — avoids needing an FP scratch reg. */
+        if (xir_ref_is_const(def->args[0])) {
+            uint32_t ci = XIR_REF_INDEX(def->args[0]);
+            if (ci < ctx->func->nconst) {
+                union { uint64_t raw; double d; } u;
+                u.raw = ctx->func->consts[ci].val.raw;
+                int64_t ival = (int64_t)u.d;
+                a64_load_imm64(&ctx->buf, rd, (uint64_t)ival);
+                return true;
+            }
+        }
+        return false;
+    }
+
+    default:
+        return false;
+    }
 }
 
 /* ========== XraResult Lookup (global vreg→reg) ========== */
@@ -122,15 +201,8 @@ A64Reg xra_get(CodegenCtx *ctx, XirRef ref) {
                 return SCRATCH_REG;
             }
             if (slot == XRA_SPILL_REMAT) {
-                XirIns *def = (idx < ctx->func->nvreg) ? ctx->func->vregs[idx].def : NULL;
-                if (def && xir_ref_is_const(def->args[0])) {
-                    uint32_t ci = XIR_REF_INDEX(def->args[0]);
-                    if (ci < ctx->func->nconst) {
-                        a64_load_imm64(&ctx->buf, SCRATCH_REG,
-                                       (uint64_t)ctx->func->consts[ci].val.raw);
-                        return SCRATCH_REG;
-                    }
-                }
+                if (emit_remat(ctx, idx, SCRATCH_REG))
+                    return SCRATCH_REG;
             }
         }
         // Genuinely dead vreg or missing spill slot — codegen error
@@ -681,17 +753,10 @@ A64Reg xra_arg(CodegenCtx *ctx, XirRef ref, A64Reg scratch_reg) {
         return scratch_reg;
     }
 
-    // Rematerializable: re-emit constant
+    // Rematerializable: re-emit instruction (constant / LOAD_CORO_BYTE / I2F / F2I)
     if (slot == XRA_SPILL_REMAT) {
-        XirIns *def = (idx < ctx->func->nvreg) ? ctx->func->vregs[idx].def : NULL;
-        if (def && xir_ref_is_const(def->args[0])) {
-            uint32_t ci = XIR_REF_INDEX(def->args[0]);
-            if (ci < ctx->func->nconst) {
-                a64_load_imm64(&ctx->buf, scratch_reg,
-                               (uint64_t)ctx->func->consts[ci].val.raw);
-                return scratch_reg;
-            }
-        }
+        if (emit_remat(ctx, idx, scratch_reg))
+            return scratch_reg;
     }
 
     // Not spilled — use per-block vreg_reg mapping
@@ -2435,6 +2500,9 @@ XirCodegenResult xir_codegen_arm64(XirFunc *func, XirCodeAlloc *alloc) {
             ctx.buf.code[ctx.cs_patches[i].idx] = a64_nop();
         }
     }
+
+    // Post-emit peephole: NOP-out redundant STR+LDR, MOV self, CMP+B→CBZ
+    xir_peephole(&ctx.buf);
 
     uint32_t code_size = a64_buf_offset(&ctx.buf);
 
