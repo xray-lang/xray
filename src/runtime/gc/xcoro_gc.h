@@ -330,6 +330,17 @@ typedef struct XrCoroGC {
     uint64_t last_gc_time_ns;       // Duration of last completed GC cycle
     uint64_t gc_cycle_start_ns;     // Start time of current incremental cycle
     uint32_t finalizer_count;       // Total finalizers called
+
+    // Per-phase timing (reset each cycle)
+    uint64_t mark_time_ns;          // Time spent in PROPAGATE + ATOMIC
+    uint64_t sweep_time_ns;         // Time spent in SWEEP
+    uint64_t mark_start_ns;         // Timestamp when mark phase began (internal)
+
+    // Per-cycle counters (reset each cycle)
+    uint32_t objects_marked;        // Objects traversed during mark
+    uint32_t objects_swept;         // Objects freed during sweep
+    uint32_t objects_finalized;     // Objects with finalizers called
+    uint32_t objects_promoted;      // Young blocks promoted to old (gen mode)
 } XrCoroGC;
 
 // Hot-path fields (immix + GCdebt + gc_requested) must be in first 2 cache lines

@@ -355,6 +355,14 @@ XrGCHeader* xr_coro_gc_newobj(XrCoroGC *gc, uint8_t type, size_t size) {
     XR_DCHECK(xr_gc_iswhite(obj), "new object must be white");
 
     gc_update_alloc_stats(gc, (uint32_t)total);
+
+#if XR_GC_STRESS
+    // Stress mode: trigger a GC step on every allocation to expose
+    // write barrier bugs that only manifest under tight GC pressure.
+    if (gc->gc_disabled == 0 && !gc->in_gc)
+        xr_coro_gc_step(gc);
+#endif
+
     return obj;
 }
 
@@ -896,6 +904,7 @@ static void propagatemark(XrCoroGC *gc) {
     xr_gc_gray2black(obj);
     XR_DCHECK(xr_gc_isblack(obj), "object not black after gray2black");
     gc->GCmarked += obj->objsize;
+    gc->objects_marked++;
     traverse_object(gc, obj);
 }
 
@@ -925,12 +934,13 @@ static int sweep_block(XrCoroGC *gc, XrImmixBlock *block) {
                 XrGCHeader *next = obj->gc_next;
                 if (xr_gc_needs_finalize(obj->type)) {
                     XrGCDestroyFn destroy = get_destroy_func(obj->type);
-                    if (destroy) { destroy(obj, gc); gc->finalizer_count++; }
+                    if (destroy) { destroy(obj, gc); gc->finalizer_count++; gc->objects_finalized++; }
                 }
                 obj = next;
             }
         }
         gc->totalbytes -= block->alloc_bytes;
+        gc->objects_swept += block->alloc_count;
         gc->object_count -= block->alloc_count;
         block->local_allgc = NULL;
         block->alloc_count = 0;
@@ -964,11 +974,13 @@ static int sweep_block(XrCoroGC *gc, XrImmixBlock *block) {
                 if (destroy) {
                     destroy(curr, gc);
                     gc->finalizer_count++;
+                    gc->objects_finalized++;
                 }
             }
 
             gc->totalbytes -= curr->objsize;
             gc->object_count--;
+            gc->objects_swept++;
         } else {
             // Alive: reset color for next cycle.
             if (gc->gc_mode != XGC_MODE_GEN) {
@@ -1032,6 +1044,7 @@ static void sweeplargeobjects(XrCoroGC *gc) {
                 XrGCDestroyFn destroy = get_destroy_func(curr->type);
                 if (destroy) {
                     gc->finalizer_count++;
+                    gc->objects_finalized++;
                     destroy(curr, gc);
                 }
             }
@@ -1039,6 +1052,7 @@ static void sweeplargeobjects(XrCoroGC *gc) {
             gc->totalbytes -= curr->objsize;
             gc->large_bytes -= curr->objsize;
             gc->object_count--;
+            gc->objects_swept++;
             if (XR_GC_IS_MMAP(curr)) {
                 munmap(curr, curr->objsize);
             } else {
@@ -1657,6 +1671,14 @@ void xr_coro_gc_step(XrCoroGC *gc) {
     switch (gc->gcstate) {
         case XGC_PAUSE:
             gc->gc_cycle_start_ns = xr_gc_time_ns();
+            // Reset per-cycle stats
+            gc->objects_marked = 0;
+            gc->objects_swept = 0;
+            gc->objects_finalized = 0;
+            gc->objects_promoted = 0;
+            gc->mark_time_ns = 0;
+            gc->sweep_time_ns = 0;
+            gc->mark_start_ns = gc->gc_cycle_start_ns;
             markroots(gc);
             gc->gcstate = XGC_PROPAGATE;
             break;
@@ -1678,6 +1700,7 @@ void xr_coro_gc_step(XrCoroGC *gc) {
 
         case XGC_ATOMIC: {
             atomic(gc);
+            gc->mark_time_ns = xr_gc_time_ns() - gc->mark_start_ns;
             gc->gcstate = XGC_SWEEP;
             sweep_start(gc);
             break;
@@ -1686,7 +1709,9 @@ void xr_coro_gc_step(XrCoroGC *gc) {
         case XGC_SWEEP: {
             if (sweep_step(gc, sweep_step_budget(gc))) {
                 // All sweep phases done — record timing and finalize
-                uint64_t elapsed = xr_gc_time_ns() - gc->gc_cycle_start_ns;
+                uint64_t now = xr_gc_time_ns();
+                gc->sweep_time_ns = now - (gc->gc_cycle_start_ns + gc->mark_time_ns);
+                uint64_t elapsed = now - gc->gc_cycle_start_ns;
                 gc->last_gc_time_ns = elapsed;
                 gc->gc_time_ns += elapsed;
                 finalize_sweep(gc);
@@ -1878,6 +1903,42 @@ void xr_gc_verify_invariants(XrCoroGC *gc) {
         }
     }
 
+    // INV-6: totalbytes == Σ block.alloc_bytes + large_bytes
+    {
+        int64_t computed = gc->large_bytes;
+        for (int li = 0; li < 4; li++) {
+            for (XrImmixBlock *b = blists[li]; b; b = b->next) {
+                computed += b->alloc_bytes;
+                if (li == 2) break;
+            }
+        }
+        if (computed != gc->totalbytes) {
+            fprintf(stderr, "[GC-INV] INV-6 FAIL: totalbytes=%lld but computed=%lld (large_bytes=%lld)\n",
+                    (long long)gc->totalbytes, (long long)computed, (long long)gc->large_bytes);
+            errors++;
+        }
+    }
+
+    // INV-7: object_count == Σ block.alloc_count + count(large_objects)
+    {
+        uint32_t computed = 0;
+        for (int li = 0; li < 4; li++) {
+            for (XrImmixBlock *b = blists[li]; b; b = b->next) {
+                computed += b->alloc_count;
+                if (li == 2) break;
+            }
+        }
+        uint32_t large_count = 0;
+        for (XrGCHeader *obj = gc->large_objects; obj; obj = obj->gc_next)
+            large_count++;
+        computed += large_count;
+        if (computed != gc->object_count) {
+            fprintf(stderr, "[GC-INV] INV-7 FAIL: object_count=%u but computed=%u (large=%u)\n",
+                    gc->object_count, computed, large_count);
+            errors++;
+        }
+    }
+
     if (errors > 0) {
         fprintf(stderr, "[GC-INV] %d invariant violations detected (gc_count=%u state=%s)\n",
                 errors, gc->gc_count, xr_gc_state_name(gc->gcstate));
@@ -1931,6 +1992,19 @@ void xr_coro_gc_print_stats(XrCoroGC *gc) {
     for (XrGCHeader *obj = gc->large_objects; obj; obj = obj->gc_next)
         large_count++;
     printf("Large objects:  %zu (%lld bytes)\n", large_count, (long long)gc->large_bytes);
+
+    // Timing
+    printf("GC time total:  %llu us\n", (unsigned long long)(gc->gc_time_ns / 1000));
+    printf("Last cycle:     %llu us (mark=%llu sweep=%llu)\n",
+           (unsigned long long)(gc->last_gc_time_ns / 1000),
+           (unsigned long long)(gc->mark_time_ns / 1000),
+           (unsigned long long)(gc->sweep_time_ns / 1000));
+
+    // Per-cycle counters (from last completed cycle)
+    printf("Last cycle objects: marked=%u swept=%u finalized=%u promoted=%u\n",
+           gc->objects_marked, gc->objects_swept,
+           gc->objects_finalized, gc->objects_promoted);
+    printf("Finalizers total: %u\n", gc->finalizer_count);
 
     printf("=====================================\n");
 }

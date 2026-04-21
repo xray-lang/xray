@@ -142,18 +142,6 @@ const char* xr_isolate_get_script_file(XrayIsolate *X) {
     return X ? X->params.script_file : NULL;
 }
 
-/* ========== Native Type Registry ========== */
-
-void* xr_isolate_get_native_type_registry(XrayIsolate *X) {
-    return X ? X->native_type_registry : NULL;
-}
-
-void xr_isolate_set_native_type_registry(XrayIsolate *X, void *registry) {
-    if (X) {
-        X->native_type_registry = registry;
-    }
-}
-
 /* ========== Parser Arena ========== */
 
 struct XrArena* xr_isolate_get_current_arena(XrayIsolate *X) {

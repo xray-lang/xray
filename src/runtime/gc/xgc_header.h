@@ -35,6 +35,10 @@
 #define XR_GC_DEBUG 0
 #endif
 
+#ifndef XR_GC_STRESS
+#define XR_GC_STRESS 0
+#endif
+
 #if XR_GC_DEBUG
 #define XGC_LOG(fmt, ...) \
     fprintf(stderr, "[XGC] " fmt "\n", ##__VA_ARGS__)

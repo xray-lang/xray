@@ -177,6 +177,13 @@ if(XR_USE_GC)
     add_compile_definitions(XR_USE_GC=1)
 endif()
 
+# GC stress testing (every alloc triggers gc_step, exposes barrier bugs)
+option(XRAY_GC_STRESS "Enable GC stress mode (every alloc triggers GC step)" OFF)
+if(XRAY_GC_STRESS)
+    add_compile_definitions(XR_GC_STRESS=1)
+    message(STATUS "GC stress mode: enabled")
+endif()
+
 # Stdlib loading mode (file vs embedded bytecode)
 if(XR_STDLIB_FROM_FILE)
     add_compile_definitions(XR_STDLIB_FROM_FILE=1)

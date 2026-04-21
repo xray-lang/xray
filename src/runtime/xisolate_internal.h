@@ -136,9 +136,6 @@ struct XrayIsolate {
     // Native type mapping table
     XrClass *native_type_classes[XR_NATIVE_TYPE_MAX];  // GC type ID -> XrClass mapping
 
-    // Dynamic native type registry
-    void *native_type_registry;        // XrNativeTypeRegistry* for third-party libs
-
     /* ========== VM Engine State ========== */
 
     // VM state uses independent type XrVMState (defined in xr_vm_state.h)
