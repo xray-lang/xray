@@ -1202,9 +1202,14 @@ void xr_ast_free(XrayIsolate *X, AstNode *node) {
 
     ProgramNode *prog = &node->as.program;
     if (prog->owns_arena && prog->arena) {
-        xr_arena_destroy(prog->arena);
-        xr_free(prog->arena);
-        // node itself lives in the arena just destroyed; do not touch.
+        // `node` -- and therefore `prog` -- lives inside one of the
+        // arena's own segments, so we must capture the arena pointer
+        // into a local BEFORE xr_arena_destroy frees those segments.
+        // Reading `prog->arena` afterwards would be a heap-use-after-
+        // free (caught by AddressSanitizer on the regression suite).
+        XrArena *arena = prog->arena;
+        xr_arena_destroy(arena);
+        xr_free(arena);
     }
 }
 
