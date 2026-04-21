@@ -782,9 +782,12 @@ bool xr_compile_to_file(XrayIsolate *X, const char *source_file,
     size_t bc_size;
     uint8_t *bc = xr_bytecode_write(X, proto, flags, &bc_size);
     if (!bc) {
+        xr_vm_proto_free(proto);
         xr_log_warning("compile", "serialization failed");
         return false;
     }
+
+    xr_vm_proto_free(proto);
 
     // Write to file
     f = fopen(output_file, "wb");

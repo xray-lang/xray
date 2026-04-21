@@ -33,7 +33,7 @@ static const char* skip_whitespace_and_comments(const char *s) {
             while (*s && *s != '\n') s++;
             continue;
         }
-        
+
         break;
     }
     return s;
@@ -45,28 +45,30 @@ static const char* skip_whitespace_and_comments(const char *s) {
  */
 static char* parse_quoted_string(const char **p) {
     const char *s = *p;
-    
+
     // Skip whitespace
     while (*s && isspace(*s)) s++;
-    
+
     if (*s != '"') return NULL;
     s++;  // Skip opening quote
-    
+
     const char *start = s;
     while (*s && *s != '"' && *s != '\n') s++;
-    
+
     if (*s != '"') return NULL;
-    
+
     size_t len = s - start;
     char *result = (char*)xr_malloc(len + 1);
     if (result) {
         memcpy(result, start, len);
         result[len] = '\0';
     }
-    
+
     *p = s + 1;  // Skip closing quote
     return result;
 }
+
+static void free_dependencies(char **deps, int count);
 
 /*
  * Parse array value ["a", "b", "c"].
@@ -75,48 +77,50 @@ static char* parse_quoted_string(const char **p) {
 static char** parse_string_array(const char **p, int *count) {
     const char *s = *p;
     *count = 0;
-    
+
     // Skip whitespace
     while (*s && isspace(*s)) s++;
-    
+
     if (*s != '[') return NULL;
     s++;  // Skip '['
-    
+
     // Estimate capacity
     int capacity = 8;
     char **result = (char**)xr_malloc(capacity * sizeof(char*));
     if (!result) return NULL;
-    
+
     while (*s) {
         // Skip whitespace
         while (*s && isspace(*s)) s++;
-        
+
         if (*s == ']') {
             s++;
             break;
         }
-        
+
         if (*s == '"') {
             char *item = parse_quoted_string(&s);
             if (item) {
                 if (*count >= capacity) {
-                    int old_cap = capacity;
-                    (void)old_cap;
                     capacity *= 2;
                     char** _new_result = (char**)xr_realloc(result, capacity * sizeof(char*));
-                    if (!_new_result) return NULL;
+                    if (!_new_result) {
+                        xr_free(item);
+                        free_dependencies(result, *count);
+                        *count = 0;
+                        return NULL;
+                    }
                     result = _new_result;
-
                 }
                 result[(*count)++] = item;
             }
         }
-        
+
         // Skip comma
         while (*s && isspace(*s)) s++;
         if (*s == ',') s++;
     }
-    
+
     *p = s;
     return result;
 }
@@ -150,17 +154,17 @@ XrLockfile* xr_lockfile_new(void) {
     XrLockfile *lock = (XrLockfile*)xr_malloc(sizeof(XrLockfile));
     if (!lock) return NULL;
     memset(lock, 0, sizeof(XrLockfile));
-    
+
     lock->version = LOCKFILE_VERSION;
     lock->package_capacity = INITIAL_CAPACITY;
     lock->packages = (XrLockedPackage*)xr_malloc(lock->package_capacity * sizeof(XrLockedPackage));
-    
+
     if (!lock->packages) {
         xr_free(lock);
         return NULL;
     }
     memset(lock->packages, 0, lock->package_capacity * sizeof(XrLockedPackage));
-    
+
     return lock;
 }
 
@@ -168,59 +172,59 @@ XrLockfile* xr_lockfile_load(const char *path) {
     XR_DCHECK(path != NULL, "lockfile_load: NULL path");
     FILE *f = fopen(path, "r");
     if (!f) return NULL;
-    
+
     // Read entire file
     fseek(f, 0, SEEK_END);
     long size = ftell(f);
     fseek(f, 0, SEEK_SET);
-    
+
     char *content = (char*)xr_malloc(size + 1);
     if (!content) {
         fclose(f);
         return NULL;
     }
-    
+
     size_t read_bytes = fread(content, 1, size, f);
     content[read_bytes] = '\0';  // Use actual read bytes
     fclose(f);
-    
+
     // Create lockfile
     XrLockfile *lock = xr_lockfile_new();
     if (!lock) {
         xr_free(content);
         return NULL;
     }
-    
+
     // Parse content
     const char *p = content;
     char current_package[256] = {0};
-    
+
     while (*p) {
         p = skip_whitespace_and_comments(p);
         if (!*p) break;
-        
+
         // Parse section header [package.xxx]
         if (*p == '[') {
             p++;
-            
+
             // Skip "package." prefix
             if (strncmp(p, "package.", 8) == 0) {
                 p += 8;
-                
+
                 // Extract package name
                 const char *start = p;
                 while (*p && *p != ']' && *p != '\n') p++;
-                
+
                 size_t len = p - start;
                 if (len < sizeof(current_package)) {
                     memcpy(current_package, start, len);
                     current_package[len] = '\0';
-                    
+
                     // Add package
-                    xr_lockfile_add_package(lock, current_package, 
+                    xr_lockfile_add_package(lock, current_package,
                                            "0.0.0", "", "");
                 }
-                
+
                 if (*p == ']') p++;
             } else {
                 // Skip other sections
@@ -230,13 +234,13 @@ XrLockfile* xr_lockfile_load(const char *path) {
             }
             continue;
         }
-        
+
         // Parse key-value pairs
         if (current_package[0] && isalpha(*p)) {
             const char *key_start = p;
             // Fix: allow alphanumeric and underscore in key names
             while (*p && (isalnum(*p) || *p == '_')) p++;
-            
+
             size_t key_len = p - key_start;
             char key[64];
             if (key_len < sizeof(key)) {
@@ -245,12 +249,12 @@ XrLockfile* xr_lockfile_load(const char *path) {
             } else {
                 key[0] = '\0';
             }
-            
+
             // Skip =
             while (*p && isspace(*p)) p++;
             if (*p == '=') p++;
             while (*p && isspace(*p)) p++;
-            
+
             // Find package
             XrLockedPackage *pkg = NULL;
             for (int i = 0; i < lock->package_count; i++) {
@@ -259,7 +263,7 @@ XrLockfile* xr_lockfile_load(const char *path) {
                     break;
                 }
             }
-            
+
             if (pkg) {
                 if (strcmp(key, "version") == 0) {
                     xr_free(pkg->version);
@@ -276,41 +280,41 @@ XrLockfile* xr_lockfile_load(const char *path) {
                 }
             }
         }
-        
+
         // Skip to next line
         while (*p && *p != '\n') p++;
         if (*p == '\n') p++;
     }
-    
+
     xr_free(content);
     return lock;
 }
 
 bool xr_lockfile_save(const XrLockfile *lock, const char *path) {
     if (!lock || !path) return false;
-    
+
     FILE *f = fopen(path, "w");
     if (!f) return false;
-    
+
     // Write header
     fprintf(f, "# xray.lock - Auto-generated, do not edit manually\n");
     fprintf(f, "# Format version: %d\n\n", lock->version);
-    
+
     // Write each package
     for (int i = 0; i < lock->package_count; i++) {
         const XrLockedPackage *pkg = &lock->packages[i];
-        
+
         fprintf(f, "[package.%s]\n", pkg->name);
         fprintf(f, "version = \"%s\"\n", pkg->version ? pkg->version : "0.0.0");
-        
+
         if (pkg->resolved && pkg->resolved[0]) {
             fprintf(f, "resolved = \"%s\"\n", pkg->resolved);
         }
-        
+
         if (pkg->checksum && pkg->checksum[0]) {
             fprintf(f, "checksum = \"%s\"\n", pkg->checksum);
         }
-        
+
         // Write dependencies
         fprintf(f, "dependencies = [");
         for (int j = 0; j < pkg->dep_count; j++) {
@@ -319,18 +323,18 @@ bool xr_lockfile_save(const XrLockfile *lock, const char *path) {
         }
         fprintf(f, "]\n\n");
     }
-    
+
     fclose(f);
     return true;
 }
 
 void xr_lockfile_free(XrLockfile *lock) {
     if (!lock) return;
-    
+
     for (int i = 0; i < lock->package_count; i++) {
         free_locked_package(&lock->packages[i]);
     }
-    
+
     xr_free(lock->packages);
     xr_free(lock);
 }
@@ -343,7 +347,7 @@ bool xr_lockfile_add_package(XrLockfile *lock,
                              const char *resolved,
                              const char *checksum) {
     if (!lock || !name) return false;
-    
+
     // Check if already exists
     for (int i = 0; i < lock->package_count; i++) {
         if (strcmp(lock->packages[i].name, name) == 0) {
@@ -358,7 +362,7 @@ bool xr_lockfile_add_package(XrLockfile *lock,
             return true;
         }
     }
-    
+
     // Check capacity
     if (lock->package_count >= lock->package_capacity) {
         int old_cap = lock->package_capacity;
@@ -368,7 +372,7 @@ bool xr_lockfile_add_package(XrLockfile *lock,
         lock->packages = new_pkgs;
         lock->package_capacity = new_cap;
     }
-    
+
     // Add new package
     XrLockedPackage *pkg = &lock->packages[lock->package_count++];
     memset(pkg, 0, sizeof(XrLockedPackage));
@@ -376,7 +380,7 @@ bool xr_lockfile_add_package(XrLockfile *lock,
     pkg->version = xr_strdup(version);
     pkg->resolved = xr_strdup(resolved);
     pkg->checksum = xr_strdup(checksum);
-    
+
     return true;
 }
 
@@ -384,7 +388,7 @@ bool xr_lockfile_add_dependency(XrLockfile *lock,
                                 const char *package_name,
                                 const char *dep_spec) {
     if (!lock || !package_name || !dep_spec) return false;
-    
+
     // Find package
     XrLockedPackage *pkg = NULL;
     for (int i = 0; i < lock->package_count; i++) {
@@ -393,28 +397,28 @@ bool xr_lockfile_add_dependency(XrLockfile *lock,
             break;
         }
     }
-    
+
     if (!pkg) return false;
-    
+
     // Expand dependencies array
     char **new_deps = (char**)xr_realloc(pkg->dependencies, (pkg->dep_count + 1) * sizeof(char*));
     if (!new_deps) return false;
-    
+
     pkg->dependencies = new_deps;
     pkg->dependencies[pkg->dep_count++] = xr_strdup(dep_spec);
-    
+
     return true;
 }
 
 const XrLockedPackage* xr_lockfile_find(const XrLockfile *lock, const char *name) {
     if (!lock || !name) return NULL;
-    
+
     for (int i = 0; i < lock->package_count; i++) {
         if (strcmp(lock->packages[i].name, name) == 0) {
             return &lock->packages[i];
         }
     }
-    
+
     return NULL;
 }
 
@@ -424,22 +428,22 @@ bool xr_lockfile_has(const XrLockfile *lock, const char *name) {
 
 bool xr_lockfile_remove(XrLockfile *lock, const char *name) {
     if (!lock || !name) return false;
-    
+
     for (int i = 0; i < lock->package_count; i++) {
         if (strcmp(lock->packages[i].name, name) == 0) {
             // Free package memory
             free_locked_package(&lock->packages[i]);
-            
+
             // Move remaining elements
             for (int j = i; j < lock->package_count - 1; j++) {
                 lock->packages[j] = lock->packages[j + 1];
             }
-            
+
             lock->package_count--;
             return true;
         }
     }
-    
+
     return false;
 }
 
@@ -450,34 +454,34 @@ bool xr_lockfile_remove(XrLockfile *lock, const char *name) {
  */
 bool xr_lockfile_checksum_file(const char *filepath, char *out_checksum) {
     if (!filepath || !out_checksum) return false;
-    
+
     // Read file content
     FILE *f = fopen(filepath, "rb");
     if (!f) return false;
-    
+
     fseek(f, 0, SEEK_END);
     long size = ftell(f);
     fseek(f, 0, SEEK_SET);
-    
+
     uint8_t *data = (uint8_t*)xr_malloc(size);
     if (!data) {
         fclose(f);
         return false;
     }
-    
+
     size_t read_bytes = fread(data, 1, size, f);
     fclose(f);
-    
+
     // Calculate SHA256
 #if defined(XR_HAS_CRYPTO) || !defined(XR_STDLIB_MODULAR)
     uint8_t digest[32];
     xr_sha256(data, read_bytes, digest);
     xr_free(data);
-    
+
     // Convert to hex string
     char hex[65];
     xr_bytes_to_hex(digest, 32, hex);
-    
+
     // Format output
     snprintf(out_checksum, 72, "sha256:%s", hex);
     return true;
@@ -490,11 +494,11 @@ bool xr_lockfile_checksum_file(const char *filepath, char *out_checksum) {
 
 bool xr_lockfile_verify_checksum(const char *filepath, const char *expected) {
     if (!filepath || !expected) return false;
-    
+
     char actual[72];
     if (!xr_lockfile_checksum_file(filepath, actual)) {
         return false;
     }
-    
+
     return strcmp(actual, expected) == 0;
 }

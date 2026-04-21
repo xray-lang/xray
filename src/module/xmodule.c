@@ -574,7 +574,6 @@ static bool load_script_extension(XrayIsolate *isolate, XrModule *module, const 
     void *code = NULL;
     char path[PATH_MAX];
     char *source = NULL;
-    AstNode *ast = NULL;
 
     // Load script extension from file system (stdlib/<name>/<name>.xr)
     // This mechanism is preserved for third-party hybrid modules that
@@ -623,7 +622,6 @@ static bool load_script_extension(XrayIsolate *isolate, XrModule *module, const 
         return false;
     }
 
-execute:
     // Execute extension script
     XR_DBG_MODULE("before execute: current_module=%s",
                   xr_isolate_get_current_module(isolate) ? xr_isolate_get_current_module(isolate)->name : "null");
@@ -634,8 +632,7 @@ execute:
                   result, xr_isolate_get_current_module(isolate) ? xr_isolate_get_current_module(isolate)->name : "null");
 
     // Cleanup
-    if (ast && fn_ast_free) fn_ast_free(ast);
-    if (source) xr_free(source);
+    xr_free(source);
     xr_isolate_set_current_module(isolate, prev_module);
 
     if (result != 0) {
@@ -850,9 +847,9 @@ XrValue xr_module_import(XrayIsolate *isolate, const char *module_name) {
     }
 
     // 2. Try to load Native module (standard library C layer)
+    // Note: load_native_module already adds to cache internally
     module = load_native_module(isolate, module_name);
     if (module) {
-        xr_hashmap_set(registry->loaded_modules, module_name, module);
         return xr_value_from_module(module);
     }
 
@@ -881,10 +878,12 @@ XrValue xr_module_import(XrayIsolate *isolate, const char *module_name) {
     }
 
     // Normalize path (resolve . and ..), ensure same file uses same cache key
+    // Note: realpath uses system malloc, must convert to xr_malloc
     char *real_path = realpath(path, NULL);
     if (real_path) {
         xr_free(path);
-        path = real_path;
+        path = xr_strdup(real_path);
+        free(real_path);
     }
 
     // 4. Check cache with absolute path (ensures module singleton)
