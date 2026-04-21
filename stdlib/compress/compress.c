@@ -984,9 +984,6 @@ const char* xr_compress_error_str(XrCompressError err) {
 
 /* ========== Helper Functions ========== */
 
-// Local alias: xrs_string_arg handles the length+NULL-check in one call.
-#define get_string_arg(v, lenp) xrs_string_arg((v), (lenp))
-
 static XrValue make_string_n(XrayIsolate *X, const char *s, size_t len) {
     if (!s) return xr_null();
     return xrs_string_value_n(X, s, len);
@@ -999,7 +996,7 @@ static XrValue compress_gzip(XrayIsolate *X, XrValue *args, int nargs) {
     if (nargs < 1) return xr_null();
 
     size_t len;
-    const char *data = get_string_arg(args[0], &len);
+    const char *data = xrs_string_arg(args[0], &len);
     if (!data) return xr_null();
 
     int level = XR_COMPRESS_DEFAULT_COMPRESSION;
@@ -1023,7 +1020,7 @@ static XrValue compress_gunzip(XrayIsolate *X, XrValue *args, int nargs) {
     if (nargs < 1) return xr_null();
 
     size_t len;
-    const char *data = get_string_arg(args[0], &len);
+    const char *data = xrs_string_arg(args[0], &len);
     if (!data) return xr_null();
 
     size_t out_len;
@@ -1040,7 +1037,7 @@ static XrValue compress_deflate(XrayIsolate *X, XrValue *args, int nargs) {
     if (nargs < 1) return xr_null();
 
     size_t len;
-    const char *data = get_string_arg(args[0], &len);
+    const char *data = xrs_string_arg(args[0], &len);
     if (!data) return xr_null();
 
     int level = XR_COMPRESS_DEFAULT_COMPRESSION;
@@ -1071,7 +1068,7 @@ static XrValue compress_inflate(XrayIsolate *X, XrValue *args, int nargs) {
     if (nargs < 1) return xr_null();
 
     size_t len;
-    const char *data = get_string_arg(args[0], &len);
+    const char *data = xrs_string_arg(args[0], &len);
     if (!data) return xr_null();
 
     // Estimate output size (generous to handle high compression ratios)
@@ -1103,7 +1100,7 @@ static XrValue compress_zlib_compress(XrayIsolate *X, XrValue *args, int nargs) 
     if (nargs < 1) return xr_null();
 
     size_t len;
-    const char *data = get_string_arg(args[0], &len);
+    const char *data = xrs_string_arg(args[0], &len);
     if (!data) return xr_null();
 
     int level = XR_COMPRESS_DEFAULT_COMPRESSION;
@@ -1134,7 +1131,7 @@ static XrValue compress_zlib_decompress(XrayIsolate *X, XrValue *args, int nargs
     if (nargs < 1) return xr_null();
 
     size_t len;
-    const char *data = get_string_arg(args[0], &len);
+    const char *data = xrs_string_arg(args[0], &len);
     if (!data) return xr_null();
 
     size_t cap = len * 8 + 1024;
@@ -1166,7 +1163,7 @@ static XrValue compress_is_gzip(XrayIsolate *X, XrValue *args, int nargs) {
     if (nargs < 1) return xr_bool(false);
 
     size_t len;
-    const char *data = get_string_arg(args[0], &len);
+    const char *data = xrs_string_arg(args[0], &len);
     if (!data) return xr_bool(false);
 
     return xr_bool(xr_is_gzip((const uint8_t*)data, len));
@@ -1178,7 +1175,7 @@ static XrValue compress_is_zlib(XrayIsolate *X, XrValue *args, int nargs) {
     if (nargs < 1) return xr_bool(false);
 
     size_t len;
-    const char *data = get_string_arg(args[0], &len);
+    const char *data = xrs_string_arg(args[0], &len);
     if (!data) return xr_bool(false);
 
     return xr_bool(xr_is_zlib((const uint8_t*)data, len));
@@ -1190,7 +1187,7 @@ static XrValue compress_crc32(XrayIsolate *X, XrValue *args, int nargs) {
     if (nargs < 1) return xr_int(0);
 
     size_t len;
-    const char *data = get_string_arg(args[0], &len);
+    const char *data = xrs_string_arg(args[0], &len);
     if (!data) return xr_int(0);
 
     return xr_int((int64_t)xr_crc32((const uint8_t*)data, len));
@@ -1202,7 +1199,7 @@ static XrValue compress_adler32(XrayIsolate *X, XrValue *args, int nargs) {
     if (nargs < 1) return xr_int(1);
 
     size_t len;
-    const char *data = get_string_arg(args[0], &len);
+    const char *data = xrs_string_arg(args[0], &len);
     if (!data) return xr_int(1);
 
     return xr_int((int64_t)xr_adler32((const uint8_t*)data, len));
