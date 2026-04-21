@@ -96,6 +96,13 @@ typedef struct XrStdlibCache {
 
     // Parser error-map key cache (see XrStdlibErrKeys above).
     XrStdlibErrKeys err_keys;
+
+    // Per-isolate log state (default logger, mutex, async queue).
+    // The concrete struct lives privately in log.c; the cache only holds
+    // an opaque pointer and a destructor so stdlib_cache.h does not depend
+    // on log.h.  Set by log_state_get() on first use.
+    void *log_state;
+    void (*log_state_cleanup)(void *);
 } XrStdlibCache;
 
 // Retrieve (and lazily allocate) the per-isolate stdlib cache.
@@ -116,6 +123,12 @@ static inline XrStdlibCache* xr_stdlib_cache_get(XrayIsolate *isolate) {
 static inline void xr_stdlib_cache_free(XrayIsolate *isolate) {
     if (!isolate || !isolate->stdlib_cache) return;
     XrStdlibCache *c = (XrStdlibCache *)isolate->stdlib_cache;
+
+    // Tear down the per-isolate log state (async thread, mutex, logger).
+    if (c->log_state_cleanup && c->log_state) {
+        c->log_state_cleanup(c->log_state);
+    }
+
     // Shapes are GC-managed, so we do NOT xr_free io_stat_shape itself.
     // Zeroing the struct and releasing the container is enough.
     xr_free(c);

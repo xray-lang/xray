@@ -17,6 +17,7 @@
 #include "../../include/xray_platform.h"
 #include "../../src/base/xmalloc.h"
 #include "../../src/base/xchecks.h"
+#include "../../src/coro/xyieldable.h"  // xr_yield_for_timeout
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -410,25 +411,31 @@ static XrValue os_kill(XrayIsolate *X, XrValue *args, int argc) {
 #endif
 }
 
-// sleep(ms) - Sleep for milliseconds
-static XrValue os_sleep(XrayIsolate *X, XrValue *args, int argc) {
-    (void)X;
-    if (argc < 1) return xr_null();
-    if (!XR_IS_INT(args[0])) return xr_null();
+// Continuation for os.sleep — timer fired, return null.
+static XrCFuncResult os_sleep_done(XrayIsolate *X, int status,
+                                   void *ctx, XrValue *result) {
+    (void)X; (void)status; (void)ctx;
+    *result = xr_null();
+    return XR_CFUNC_DONE;
+}
+
+// sleep(ms) - Coroutine-friendly sleep for milliseconds.
+// Yields the coroutine via the timer wheel so the worker thread can
+// service other coroutines during the wait.
+static XrCFuncResult os_sleep(XrayIsolate *X, XrValue *args, int argc,
+                              XrValue *result) {
+    if (argc < 1 || !XR_IS_INT(args[0])) {
+        *result = xr_null();
+        return XR_CFUNC_DONE;
+    }
 
     int64_t ms = XR_TO_INT(args[0]);
-    if (ms <= 0) return xr_null();
+    if (ms <= 0) {
+        *result = xr_null();
+        return XR_CFUNC_DONE;
+    }
 
-#ifdef XR_PLATFORM_WINDOWS
-    Sleep((DWORD)ms);
-#else
-    struct timespec ts;
-    ts.tv_sec = ms / 1000;
-    ts.tv_nsec = (ms % 1000) * 1000000;
-    nanosleep(&ts, NULL);
-#endif
-
-    return xr_null();
+    return xr_yield_for_timeout(X, ms, os_sleep_done, NULL, result);
 }
 
 // clock() - Get process CPU time in seconds
@@ -676,7 +683,7 @@ XrModule* xr_load_module_os(XrayIsolate *isolate) {
     // Process & signal
     XRS_EXPORT(mod, isolate, "ppid", os_ppid);
     XRS_EXPORT(mod, isolate, "kill", os_kill);
-    XRS_EXPORT(mod, isolate, "sleep", os_sleep);
+    XRS_EXPORT_YIELDABLE(mod, isolate, "sleep", os_sleep);
     XRS_EXPORT(mod, isolate, "clock", os_clock);
 
     // Process execution

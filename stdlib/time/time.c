@@ -12,6 +12,7 @@
 #include "../common.h"
 #include "../../include/xray_platform.h"
 #include "../../src/vm/xvm_internal.h"  // XrScheduler, XrCoroutine
+#include "../../src/coro/xyieldable.h"   // xr_yield_for_timeout
 #include "../../src/base/xchecks.h"
 #include <time.h>
 #include <stdio.h>
@@ -106,34 +107,40 @@ static XrValue xr_time_micros(XrayIsolate *isolate, XrValue *args, int nargs) {
 }
 
 /*
+ * Continuation for time.sleep — the timer has fired, just return null.
+ */
+static XrCFuncResult time_sleep_done(XrayIsolate *X, int status,
+                                     void *ctx, XrValue *result) {
+    (void)X; (void)status; (void)ctx;
+    *result = xr_null();
+    return XR_CFUNC_DONE;
+}
+
+/*
  * time.sleep(milliseconds: int) -> null
  *
- * Note: the compiler normally translates time.sleep() to OP_SLEEP. This
- * function is the dynamic-dispatch fallback and remains a blocking call
- * until the coroutine-timer integration lands (see stdlib_basic_tools.md).
+ * Coroutine-friendly: yields via xr_yield_for_timeout so the worker
+ * thread is free to run other coroutines during the sleep.
+ *
+ * Note: the compiler normally translates time.sleep() to OP_SLEEP.
+ * This yieldable C function is the dynamic-dispatch fallback that
+ * was previously a blocking nanosleep.
  */
-static XrValue xr_time_sleep(XrayIsolate *isolate, XrValue *args, int nargs) {
-    (void)isolate;
-
-    if (nargs < 1) {
-        fprintf(stderr, "time.sleep() requires 1 argument\n");
-        return xr_null();
+static XrCFuncResult xr_time_sleep(XrayIsolate *X, XrValue *args, int nargs,
+                                   XrValue *result) {
+    if (nargs < 1 || (!XR_IS_INT(args[0]) && !XR_IS_FLOAT(args[0]))) {
+        *result = xr_null();
+        return XR_CFUNC_DONE;
     }
 
-    if (!XR_IS_FLOAT(args[0]) && !XR_IS_INT(args[0])) {
-        fprintf(stderr, "time.sleep() argument must be a number\n");
-        return xr_null();
+    int64_t ms = XR_IS_INT(args[0]) ? XR_TO_INT(args[0])
+                                    : (int64_t)XR_TO_FLOAT(args[0]);
+    if (ms <= 0) {
+        *result = xr_null();
+        return XR_CFUNC_DONE;
     }
 
-    int64_t milliseconds = XR_IS_INT(args[0]) ? XR_TO_INT(args[0]) : (int64_t)XR_TO_FLOAT(args[0]);
-    if (milliseconds < 0) {
-        fprintf(stderr, "time.sleep() argument must be non-negative\n");
-        return xr_null();
-    }
-
-    // Blocking sleep (fallback implementation) - use platform abstraction
-    xr_sleep_ms((uint32_t)milliseconds);
-    return xr_null();
+    return xr_yield_for_timeout(X, ms, time_sleep_done, NULL, result);
 }
 
 
@@ -170,7 +177,7 @@ XrModule* xr_load_module_time(XrayIsolate *isolate) {
     XRS_EXPORT(module, isolate, "monotonic", xr_time_monotonic);
     XRS_EXPORT(module, isolate, "nanos", xr_time_nanos);
     XRS_EXPORT(module, isolate, "micros", xr_time_micros);
-    XRS_EXPORT(module, isolate, "sleep", xr_time_sleep);
+    XRS_EXPORT_YIELDABLE(module, isolate, "sleep", xr_time_sleep);
 
     // 3. Mark as loaded
     module->loaded = true;
