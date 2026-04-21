@@ -35,10 +35,10 @@ static int check_file(XrayIsolate *X, XaAnalyzer *analyzer,
         fprintf(stderr, "Error: cannot read file '%s'\n", path);
         return 1;
     }
-    
+
     // Parse source code - NULL result means syntax error
     AstNode *ast = xr_parse_with_source(X, source, path);
-    
+
     int has_error = (ast == NULL);
     if (has_error) {
         // Error message already printed by parser
@@ -66,13 +66,13 @@ static int check_file(XrayIsolate *X, XaAnalyzer *analyzer,
     } else if (verbose) {
         printf("ok %s\n", path);
     }
-    
+
     // Release resources
     if (ast) {
-        xr_ast_free(X, ast);
+        xr_program_destroy(ast);
     }
     xr_free(source);
-    
+
     return has_error;
 }
 
@@ -85,22 +85,22 @@ static int check_directory(XrayIsolate *X, XaAnalyzer *analyzer,
         fprintf(stderr, "Error: cannot open directory '%s'\n", path);
         return 1;
     }
-    
+
     int errors = 0;
     struct dirent *entry;
     char filepath[1024];
-    
+
     while ((entry = readdir(dir)) != NULL) {
         // Skip . and ..
         if (strcmp(entry->d_name, ".") == 0 || strcmp(entry->d_name, "..") == 0) {
             continue;
         }
-        
+
         snprintf(filepath, sizeof(filepath), "%s/%s", path, entry->d_name);
-        
+
         struct stat st;
         if (stat(filepath, &st) != 0) continue;
-        
+
         if (S_ISDIR(st.st_mode)) {
             // Recursively check subdirectory
             errors += check_directory(X, analyzer, filepath, verbose, total, passed);
@@ -114,7 +114,7 @@ static int check_directory(XrayIsolate *X, XaAnalyzer *analyzer,
             }
         }
     }
-    
+
     closedir(dir);
     return errors;
 }
@@ -149,10 +149,10 @@ int cmd_check(int argc, char **argv) {
     int verbose = 0;
     int quiet = 0;
     int strict = 0;
-    
+
     // Reset getopt state
     optind = 1;
-    
+
     int opt;
     while ((opt = getopt_long(argc, argv, "vqsh", check_long_options, NULL)) != -1) {
         switch (opt) {
@@ -173,30 +173,30 @@ int cmd_check(int argc, char **argv) {
                 return 1;
         }
     }
-    
+
     // Create shared isolate for all checks
     XrayIsolate *X = cli_create_isolate();
     if (!X) {
         fprintf(stderr, "Error: cannot create parsing environment\n");
         return 1;
     }
-    
+
     // Create analyzer for --strict mode
     XaAnalyzer *analyzer = NULL;
     if (strict) {
         analyzer = xa_analyzer_new();
         xa_analyzer_set_strict_mode(analyzer, true);
     }
-    
+
     int result = 0;
-    
+
     // No file arguments - check current directory
     if (optind >= argc) {
         struct stat st;
         if (stat(".", &st) == 0 && S_ISDIR(st.st_mode)) {
             int total = 0, passed = 0;
             int errors = check_directory(X, analyzer, ".", verbose, &total, &passed);
-            
+
             if (!quiet && total > 0) {
                 printf("\n");
                 if (errors == 0) {
@@ -215,17 +215,17 @@ int cmd_check(int argc, char **argv) {
         int total_files = 0;
         int passed_files = 0;
         int total_errors = 0;
-        
+
         for (int i = optind; i < argc; i++) {
             const char *path = argv[i];
             struct stat st;
-            
+
             if (stat(path, &st) != 0) {
                 fprintf(stderr, "Error: path does not exist '%s'\n", path);
                 total_errors++;
                 continue;
             }
-            
+
             if (S_ISDIR(st.st_mode)) {
                 total_errors += check_directory(X, analyzer, path, verbose, &total_files, &passed_files);
             } else if (S_ISREG(st.st_mode)) {
@@ -237,7 +237,7 @@ int cmd_check(int argc, char **argv) {
                 }
             }
         }
-        
+
         // Output statistics
         if (!quiet && total_files > 1) {
             printf("\n");
@@ -247,10 +247,10 @@ int cmd_check(int argc, char **argv) {
                 printf("FAIL: %d files checked, %d errors\n", total_files, total_errors);
             }
         }
-        
+
         result = total_errors > 0 ? 1 : 0;
     }
-    
+
     if (analyzer) xa_analyzer_free(analyzer);
     xray_isolate_delete(X);
     return result;

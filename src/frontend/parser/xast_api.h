@@ -28,10 +28,10 @@ XR_FUNC AstNode *xr_ast_literal_bool(XrayIsolate *X, int value, int line);
 
 XR_FUNC AstNode *xr_ast_template_string(XrayIsolate *X, AstNode **parts, int part_count, int line);
 
-XR_FUNC AstNode *xr_ast_binary(XrayIsolate *X, AstNodeType type, 
+XR_FUNC AstNode *xr_ast_binary(XrayIsolate *X, AstNodeType type,
                        AstNode *left, AstNode *right, int line);
 
-XR_FUNC AstNode *xr_ast_unary(XrayIsolate *X, AstNodeType type, 
+XR_FUNC AstNode *xr_ast_unary(XrayIsolate *X, AstNodeType type,
                       AstNode *operand, int line);
 
 XR_FUNC AstNode *xr_ast_grouping(XrayIsolate *X, AstNode *expr, int line);
@@ -41,19 +41,19 @@ XR_FUNC AstNode *xr_ast_program(XrayIsolate *iso);
 XR_FUNC void xr_ast_program_add(XrayIsolate *X, AstNode *program, AstNode *stmt);
 XR_FUNC AstNode *xr_ast_block(XrayIsolate *X, int line);
 XR_FUNC void xr_ast_block_add(XrayIsolate *X, AstNode *block, AstNode *stmt);
-XR_FUNC AstNode *xr_ast_var_decl(XrayIsolate *X, const char *name, 
+XR_FUNC AstNode *xr_ast_var_decl(XrayIsolate *X, const char *name,
                          AstNode *initializer, bool is_const, int line);
 
 // Create variable declaration with storage mode (shared)
-XR_FUNC AstNode *xr_ast_var_decl_with_mode(XrayIsolate *X, const char *name, 
-                                   AstNode *initializer, bool is_const, 
+XR_FUNC AstNode *xr_ast_var_decl_with_mode(XrayIsolate *X, const char *name,
+                                   AstNode *initializer, bool is_const,
                                    uint8_t storage_mode, int line);
 
 // Create variable reference node
 XR_FUNC AstNode *xr_ast_variable(XrayIsolate *X, const char *name, int line);
 
 // Create assignment node
-XR_FUNC AstNode *xr_ast_assignment(XrayIsolate *X, const char *name, 
+XR_FUNC AstNode *xr_ast_assignment(XrayIsolate *X, const char *name,
                            AstNode *value, int line);
 
 // Create compound assignment node
@@ -72,16 +72,16 @@ XR_FUNC AstNode *xr_ast_inc(XrayIsolate *X, const char *name, int line);
 XR_FUNC AstNode *xr_ast_dec(XrayIsolate *X, const char *name, int line);
 
 // Create if statement node
-XR_FUNC AstNode *xr_ast_if_stmt(XrayIsolate *X, AstNode *condition, 
+XR_FUNC AstNode *xr_ast_if_stmt(XrayIsolate *X, AstNode *condition,
                         AstNode *then_branch, AstNode *else_branch, int line);
 
 // Create while loop node
-XR_FUNC AstNode *xr_ast_while_stmt(XrayIsolate *X, AstNode *condition, 
+XR_FUNC AstNode *xr_ast_while_stmt(XrayIsolate *X, AstNode *condition,
                            AstNode *body, int line);
 
 // Create for loop node
-XR_FUNC AstNode *xr_ast_for_stmt(XrayIsolate *X, AstNode *initializer, 
-                         AstNode *condition, AstNode *increment, 
+XR_FUNC AstNode *xr_ast_for_stmt(XrayIsolate *X, AstNode *initializer,
+                         AstNode *condition, AstNode *increment,
                          AstNode *body, int line);
 
 // Create for-in loop node
@@ -103,7 +103,6 @@ XR_FUNC AstNode *xr_ast_continue_stmt(XrayIsolate *X, int line);
 
 // Create parameter node
 XR_FUNC XrParamNode *xr_param_node_new(XrayIsolate *X, const char *name, int line, int column);
-XR_FUNC void xr_param_node_free(XrayIsolate *X, XrParamNode *param);
 
 // Create function declaration node
 XR_FUNC AstNode *xr_ast_function_decl(XrayIsolate *X, const char *name,
@@ -115,7 +114,7 @@ XR_FUNC AstNode *xr_ast_function_expr(XrayIsolate *X, XrParamNode **params, int 
                               AstNode *body, int line);
 
 // Create function call node
-XR_FUNC AstNode *xr_ast_call_expr(XrayIsolate *X, AstNode *callee, 
+XR_FUNC AstNode *xr_ast_call_expr(XrayIsolate *X, AstNode *callee,
                           AstNode **arguments, int arg_count, int line);
 
 // Create function call node with generic type arguments
@@ -140,7 +139,7 @@ XR_FUNC AstNode *xr_ast_as_expr(XrayIsolate *X, AstNode *expr, XrType *type, boo
 XR_FUNC AstNode *xr_ast_array_literal(XrayIsolate *X, AstNode **elements, int count, int line);
 
 // Create object literal node
-XR_FUNC AstNode *xr_ast_object_literal(XrayIsolate *X, AstNode **keys, AstNode **values, 
+XR_FUNC AstNode *xr_ast_object_literal(XrayIsolate *X, AstNode **keys, AstNode **values,
                                 bool *computed, int count, int line);
 
 // Create Map literal node
@@ -222,11 +221,11 @@ XR_FUNC AstNode *xr_ast_enum_decl(XrayIsolate *X, const char *name, const char *
 XR_FUNC AstNode *xr_ast_enum_member(XrayIsolate *X, const char *name, AstNode *value, int line);
 
 // Create enum access node
-XR_FUNC AstNode *xr_ast_enum_access(XrayIsolate *X, const char *enum_name, 
+XR_FUNC AstNode *xr_ast_enum_access(XrayIsolate *X, const char *enum_name,
                             const char *member_name, int line);
 
 // Create enum conversion node
-XR_FUNC AstNode *xr_ast_enum_convert(XrayIsolate *X, const char *enum_name, 
+XR_FUNC AstNode *xr_ast_enum_convert(XrayIsolate *X, const char *enum_name,
                              AstNode *value_expr, int line);
 
 // Create enum index node (compiler-generated for for-in desugaring)
@@ -241,16 +240,17 @@ XR_FUNC AstNode *xr_ast_try_catch(XrayIsolate *X, AstNode *try_body,
 // Create throw statement node
 XR_FUNC AstNode *xr_ast_throw_stmt(XrayIsolate *X, AstNode *expression, int line);
 
-// Free AST node
-XR_FUNC void xr_ast_free(XrayIsolate *X, AstNode *node);
+// Destroy a program AST and release its owning arena in O(1).
+// Only valid for AST_PROGRAM nodes. Non-owning programs (LSP) are no-ops.
+XR_FUNC void xr_program_destroy(AstNode *program);
 
 // Create import statement node
-XR_FUNC AstNode *xr_ast_import_stmt(XrayIsolate *X, const char *module_name, const char *alias, 
+XR_FUNC AstNode *xr_ast_import_stmt(XrayIsolate *X, const char *module_name, const char *alias,
                             ImportType import_type, int line);
 
 // Create import statement node (extended, supports named imports)
 XR_FUNC AstNode *xr_ast_import_stmt_ex(XrayIsolate *X, const char *module_name, const char *alias,
-                               ImportType import_type, ImportMember *members, 
+                               ImportType import_type, ImportMember *members,
                                int member_count, int line);
 
 // Create export statement node
@@ -260,17 +260,17 @@ XR_FUNC AstNode *xr_ast_export_stmt(XrayIsolate *X, AstNode *declaration, const 
 XR_FUNC AstNode *xr_ast_export_list(XrayIsolate *X, char **names, int count, int line);
 
 // Create re-export statement node
-XR_FUNC AstNode *xr_ast_export_reexport(XrayIsolate *X, const char *from_path, 
+XR_FUNC AstNode *xr_ast_export_reexport(XrayIsolate *X, const char *from_path,
                                  ReexportMember *members, int count,
                                  bool is_all, int line);
 
 // Create ternary expression node
-XR_FUNC AstNode *xr_ast_ternary(XrayIsolate *X, AstNode *condition, 
+XR_FUNC AstNode *xr_ast_ternary(XrayIsolate *X, AstNode *condition,
                         AstNode *true_expr, AstNode *false_expr, int line);
 
 // Create optional chain node
-XR_FUNC AstNode *xr_ast_optional_chain(XrayIsolate *X, AstNode *object, 
-                               const char *name, AstNode *index, 
+XR_FUNC AstNode *xr_ast_optional_chain(XrayIsolate *X, AstNode *object,
+                               const char *name, AstNode *index,
                                int chain_type, int line);
 
 // Create range expression node
@@ -283,9 +283,9 @@ XR_FUNC XrDestructurePattern* xr_pattern_identifier(XrayIsolate *X, const char *
 XR_FUNC XrDestructurePattern* xr_pattern_skip(XrayIsolate *iso);
 
 // Create destructure nodes
-XR_FUNC AstNode* xr_ast_destructure_decl(XrayIsolate *X, XrDestructurePattern *pattern, 
+XR_FUNC AstNode* xr_ast_destructure_decl(XrayIsolate *X, XrDestructurePattern *pattern,
                                   AstNode *initializer, bool is_const, int line);
-XR_FUNC AstNode* xr_ast_destructure_assign(XrayIsolate *X, XrDestructurePattern *pattern, 
+XR_FUNC AstNode* xr_ast_destructure_assign(XrayIsolate *X, XrDestructurePattern *pattern,
                                     AstNode *value, int line);
 
 // Create multi-value declaration node
@@ -296,15 +296,13 @@ XR_FUNC AstNode* xr_ast_multi_var_decl(XrayIsolate *X, char **names, int name_co
 XR_FUNC AstNode* xr_ast_multi_assign(XrayIsolate *X, AstNode **targets, int target_count,
                               AstNode **values, int value_count, int line);
 
-// Free destructure pattern
-XR_FUNC void xr_pattern_free(XrayIsolate *X, XrDestructurePattern *pattern);
 
 // Create match expression node
-XR_FUNC AstNode *xr_ast_match_expr(XrayIsolate *X, AstNode *expr, 
+XR_FUNC AstNode *xr_ast_match_expr(XrayIsolate *X, AstNode *expr,
                            AstNode **arms, int arm_count, int line);
 
 // Create match arm node
-XR_FUNC AstNode *xr_ast_match_arm(XrayIsolate *X, AstNode *pattern, AstNode *guard, 
+XR_FUNC AstNode *xr_ast_match_arm(XrayIsolate *X, AstNode *pattern, AstNode *guard,
                           AstNode *body, int line);
 
 // Create literal pattern node
@@ -335,7 +333,7 @@ XR_FUNC AstNode *xr_ast_channel_new(XrayIsolate *X, AstNode *buffer_size, int li
 
 // Create select case node
 XR_FUNC AstNode *xr_ast_select_case(XrayIsolate *X, const char *var_name, AstNode *channel,
-                            AstNode *value, AstNode *body, 
+                            AstNode *value, AstNode *body,
                             bool is_send, bool is_default, bool is_timeout, int line);
 
 // Create select statement node

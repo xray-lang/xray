@@ -53,13 +53,13 @@ static void bc_writer_init(BcWriter *w, XrayIsolate *X, int flags) {
 
 static bool bc_writer_ensure(BcWriter *w, size_t need) {
     if (w->size + need <= w->capacity) return true;
-    
+
     size_t new_cap = w->capacity ? w->capacity * 2 : 4096;
     while (new_cap < w->size + need) new_cap *= 2;
-    
+
     uint8_t *new_buf = xr_realloc(w->buf, new_cap);
     if (!new_buf) return false;
-    
+
     w->buf = new_buf;
     w->capacity = new_cap;
     XR_DCHECK(w->size + need <= w->capacity, "bc_writer_ensure: capacity still insufficient");
@@ -180,12 +180,12 @@ static char* bc_get_string(BcReader *r) {
     uint32_t len = bc_get_u32(r);
     if (r->error != XR_BC_OK) return NULL;
     if (len == 0) return NULL;
-    
+
     if (!bc_has_bytes(r, len)) { r->error = XR_BC_ERR_TRUNCATED; return NULL; }
-    
+
     char *str = xr_malloc(len + 1);
     if (!str) { r->error = XR_BC_ERR_ALLOC; return NULL; }
-    
+
     memcpy(str, r->buf + r->pos, len);
     str[len] = '\0';
     r->pos += len;
@@ -225,7 +225,7 @@ static bool bc_write_value(BcWriter *w, XrValue val) {
 static XrValue bc_read_value(BcReader *r) {
     uint8_t type = bc_get_u8(r);
     if (r->error != XR_BC_OK) return xr_null();
-    
+
     switch (type) {
         case BC_VAL_NULL:
             return xr_null();
@@ -253,7 +253,7 @@ static XrValue bc_read_value(BcReader *r) {
 // Collect global symbol IDs from per-function symbol table, returns max_symbol_id + 1
 static int collect_symbols_from_proto(XrProto *proto, int max_symbol) {
     if (!proto) return max_symbol;
-    
+
     // Scan per-function symbol table (no need to scan instructions)
     for (int i = 0; i < proto->symbol_count; i++) {
         int32_t sym = proto->symbols[i];
@@ -261,21 +261,21 @@ static int collect_symbols_from_proto(XrProto *proto, int max_symbol) {
             max_symbol = sym + 1;
         }
     }
-    
+
     // Recursively process nested Protos
     uint32_t sub_count = (uint32_t)PROTO_PROTO_COUNT(proto);
     for (uint32_t i = 0; i < sub_count; i++) {
         XrProto *sub = PROTO_PROTO(proto, i);
         max_symbol = collect_symbols_from_proto(sub, max_symbol);
     }
-    
+
     return max_symbol;
 }
 
 // Remap global symbol IDs in per-function symbol table
 static void remap_symbols_in_proto(XrProto *proto, int *id_map, int map_size) {
     if (!proto) return;
-    
+
     // Remap per-function symbol table entries (instructions are untouched)
     for (int i = 0; i < proto->symbol_count; i++) {
         int32_t old_id = proto->symbols[i];
@@ -283,7 +283,7 @@ static void remap_symbols_in_proto(XrProto *proto, int *id_map, int map_size) {
             proto->symbols[i] = id_map[old_id];
         }
     }
-    
+
     // Recursively process nested Protos
     uint32_t sub_count = (uint32_t)PROTO_PROTO_COUNT(proto);
     for (uint32_t i = 0; i < sub_count; i++) {
@@ -297,12 +297,12 @@ static void remap_symbols_in_proto(XrProto *proto, int *id_map, int map_size) {
 // Collect max shared index used in Proto, returns max_shared_index + 1
 static int collect_shared_from_proto(XrProto *proto, int max_shared) {
     if (!proto) return max_shared;
-    
+
     uint32_t code_count = (uint32_t)PROTO_CODE_COUNT(proto);
     for (uint32_t i = 0; i < code_count; i++) {
         XrInstruction inst = PROTO_CODE(proto, i);
         OpCode op = GET_OPCODE(inst);
-        
+
         // Check opcodes that use shared index
         if (op == OP_GETSHARED || op == OP_SETSHARED) {
             int shared_idx = GETARG_Bx(inst);
@@ -311,23 +311,23 @@ static int collect_shared_from_proto(XrProto *proto, int max_shared) {
             }
         }
     }
-    
+
     // Recursively process nested Protos
     uint32_t sub_count = (uint32_t)PROTO_PROTO_COUNT(proto);
     for (uint32_t i = 0; i < sub_count; i++) {
         XrProto *sub = PROTO_PROTO(proto, i);
         max_shared = collect_shared_from_proto(sub, max_shared);
     }
-    
+
     return max_shared;
 }
 
 // Set shared_offset on proto and all nested protos (no instruction rewriting needed)
 static void set_shared_offset_recursive(XrProto *proto, int offset) {
     if (!proto) return;
-    
+
     proto->shared_offset = offset;
-    
+
     uint32_t sub_count = (uint32_t)PROTO_PROTO_COUNT(proto);
     for (uint32_t i = 0; i < sub_count; i++) {
         XrProto *sub = PROTO_PROTO(proto, i);
@@ -342,18 +342,18 @@ static XrProto* bc_read_proto(BcReader *r);
 
 static bool bc_write_proto(BcWriter *w, XrProto *proto) {
     if (!proto) return false;
-    
+
     // 1. Function name
     const char *name = proto->name ? proto->name->data : "";
     if (!bc_put_string(w, name)) return false;
-    
+
     // 2. Source file (optional)
     if (w->flags & XR_BC_STRIP_SOURCE) {
         if (!bc_put_string(w, "")) return false;
     } else {
         if (!bc_put_string(w, proto->source_file)) return false;
     }
-    
+
     // 3. Function attributes
     if (!bc_put_u32(w, proto->numparams)) return false;
     if (!bc_put_u32(w, proto->maxstacksize)) return false;
@@ -361,7 +361,7 @@ static bool bc_write_proto(BcWriter *w, XrProto *proto) {
     if (!bc_put_u32(w, proto->num_spill_slots)) return false;
     if (!bc_put_u8(w, proto->is_vararg ? 1 : 0)) return false;
     if (!bc_put_u8(w, proto->is_coro_safe ? 1 : 0)) return false;
-    
+
     // 4. Bytecode
     uint32_t code_count = (uint32_t)PROTO_CODE_COUNT(proto);
     if (!bc_put_u32(w, code_count)) return false;
@@ -369,7 +369,7 @@ static bool bc_write_proto(BcWriter *w, XrProto *proto) {
         XrInstruction inst = PROTO_CODE(proto, i);
         if (!bc_put_u32(w, inst)) return false;
     }
-    
+
     // 5. Constants
     uint32_t const_count = (uint32_t)PROTO_CONST_COUNT(proto);
     if (!bc_put_u32(w, const_count)) return false;
@@ -377,7 +377,7 @@ static bool bc_write_proto(BcWriter *w, XrProto *proto) {
         XrValue val = PROTO_CONSTANT(proto, i);
         if (!bc_write_value(w, val)) return false;
     }
-    
+
     // 6. Line info (optional)
     if (w->flags & XR_BC_STRIP_DEBUG) {
         if (!bc_put_u32(w, 0)) return false;
@@ -388,7 +388,7 @@ static bool bc_write_proto(BcWriter *w, XrProto *proto) {
             if (!bc_put_u32(w, PROTO_LINE(proto, i))) return false;
         }
     }
-    
+
     // 7. Upvalue info
     uint32_t upval_count = (uint32_t)PROTO_UPVAL_COUNT(proto);
     if (!bc_put_u32(w, upval_count)) return false;
@@ -400,7 +400,7 @@ static bool bc_write_proto(BcWriter *w, XrProto *proto) {
         if (!bc_put_u8(w, info.is_const)) return false;
         if (!bc_put_u8(w, info.slot_type)) return false;
     }
-    
+
     // 8. Nested Protos
     uint32_t sub_count = (uint32_t)PROTO_PROTO_COUNT(proto);
     if (!bc_put_u32(w, sub_count)) return false;
@@ -408,13 +408,13 @@ static bool bc_write_proto(BcWriter *w, XrProto *proto) {
         XrProto *sub = PROTO_PROTO(proto, i);
         if (!bc_write_proto(w, sub)) return false;
     }
-    
+
     // 9. Per-function symbol table
     if (!bc_put_u32(w, (uint32_t)proto->symbol_count)) return false;
     for (int i = 0; i < proto->symbol_count; i++) {
         if (!bc_put_u32(w, (uint32_t)proto->symbols[i])) return false;
     }
-    
+
     return true;
 }
 
@@ -423,7 +423,7 @@ static XrProto* bc_read_proto(BcReader *r) {
     XrProto *proto = xr_malloc(sizeof(XrProto));
     if (!proto) { r->error = XR_BC_ERR_ALLOC; return NULL; }
     memset(proto, 0, sizeof(XrProto));
-    
+
     // 1. Function name
     char *name = bc_get_string(r);
     if (r->error != XR_BC_OK) goto fail;
@@ -431,7 +431,7 @@ static XrProto* bc_read_proto(BcReader *r) {
         proto->name = xr_string_intern(r->X, name, strlen(name), 0);
         xr_free(name);
     }
-    
+
     // 2. Source file
     char *source = bc_get_string(r);
     if (r->error != XR_BC_OK) goto fail;
@@ -440,7 +440,7 @@ static XrProto* bc_read_proto(BcReader *r) {
     } else {
         xr_free(source);
     }
-    
+
     // 3. Function attributes
     proto->numparams = bc_get_u32(r);
     proto->maxstacksize = bc_get_u32(r);
@@ -449,7 +449,7 @@ static XrProto* bc_read_proto(BcReader *r) {
     proto->is_vararg = bc_get_u8(r) != 0;
     proto->is_coro_safe = bc_get_u8(r) != 0;
     if (r->error != XR_BC_OK) goto fail;
-    
+
     // 4. Bytecode
     uint32_t code_count = bc_get_u32(r);
     if (r->error != XR_BC_OK) goto fail;
@@ -459,7 +459,7 @@ static XrProto* bc_read_proto(BcReader *r) {
         if (r->error != XR_BC_OK) goto fail;
         DYNARRAY_ADD(&proto->code, inst, XrInstruction);
     }
-    
+
     // 5. Constants
     uint32_t const_count = bc_get_u32(r);
     if (r->error != XR_BC_OK) goto fail;
@@ -469,7 +469,7 @@ static XrProto* bc_read_proto(BcReader *r) {
         if (r->error != XR_BC_OK) goto fail;
         DYNARRAY_ADD(&proto->constants, val, XrValue);
     }
-    
+
     // 6. Line info
     uint32_t line_count = bc_get_u32(r);
     if (r->error != XR_BC_OK) goto fail;
@@ -479,7 +479,7 @@ static XrProto* bc_read_proto(BcReader *r) {
         if (r->error != XR_BC_OK) goto fail;
         DYNARRAY_ADD(&proto->lineinfo, line, int);
     }
-    
+
     // 7. Upvalue info
     uint32_t upval_count = bc_get_u32(r);
     if (r->error != XR_BC_OK) goto fail;
@@ -494,7 +494,7 @@ static XrProto* bc_read_proto(BcReader *r) {
         if (r->error != XR_BC_OK) goto fail;
         DYNARRAY_ADD(&proto->upvalues, info, UpvalInfo);
     }
-    
+
     // 8. Nested Protos
     uint32_t sub_count = bc_get_u32(r);
     if (r->error != XR_BC_OK) goto fail;
@@ -504,7 +504,7 @@ static XrProto* bc_read_proto(BcReader *r) {
         if (!sub) goto fail;
         DYNARRAY_ADD(&proto->protos, sub, XrProto*);
     }
-    
+
     // 9. Per-function symbol table
     uint32_t sym_count = bc_get_u32(r);
     if (r->error != XR_BC_OK) goto fail;
@@ -518,9 +518,9 @@ static XrProto* bc_read_proto(BcReader *r) {
             if (r->error != XR_BC_OK) goto fail;
         }
     }
-    
+
     return proto;
-    
+
 fail:
     // Free all resources allocated during partial read
     if (proto->source_file) xr_free((void*)proto->source_file);
@@ -543,16 +543,16 @@ fail:
 
 uint8_t* xr_bytecode_write(XrayIsolate *X, XrProto *proto, int flags, size_t *out_size) {
     if (!X || !proto || !out_size) return NULL;
-    
+
     BcWriter w;
     bc_writer_init(&w, X, flags);
-    
+
     // Collect symbols (symbol ID starts from 1, returns max ID + 1)
     int max_symbol_id = collect_symbols_from_proto(proto, 0);
-    
+
     // Collect shared variable count
     int shared_count = collect_shared_from_proto(proto, 0);
-    
+
     // Write header
     if (!bc_put_u32(&w, XR_BC_MAGIC)) goto fail;
     if (!bc_put_u16(&w, XR_BC_VERSION)) goto fail;
@@ -560,19 +560,19 @@ uint8_t* xr_bytecode_write(XrayIsolate *X, XrProto *proto, int flags, size_t *ou
     if (!bc_put_u32(&w, 1)) goto fail; // proto count
     if (!bc_put_u32(&w, (uint32_t)max_symbol_id)) goto fail; // max symbol id
     if (!bc_put_u32(&w, (uint32_t)shared_count)) goto fail; // shared count
-    
+
     // Write symbol table (symbol ID starts from 1)
     for (int i = 1; i <= max_symbol_id; i++) {
         const char *name = xr_symbol_get_name_by_id(X, i);
         if (!bc_put_string(&w, name ? name : "")) goto fail;
     }
-    
+
     // Write Proto
     if (!bc_write_proto(&w, proto)) goto fail;
-    
+
     *out_size = w.size;
     return w.buf;
-    
+
 fail:
     xr_free(w.buf);
     *out_size = 0;
@@ -584,39 +584,39 @@ XrProto* xr_bytecode_read(XrayIsolate *X, const uint8_t *data, size_t size, XrBc
         if (error) *error = XR_BC_ERR_TRUNCATED;
         return NULL;
     }
-    
+
     BcReader r;
     bc_reader_init(&r, X, data, size);
-    
+
     // Read header
     uint32_t magic = bc_get_u32(&r);
     if (magic != XR_BC_MAGIC) {
         if (error) *error = XR_BC_ERR_MAGIC;
         return NULL;
     }
-    
+
     uint16_t version = bc_get_u16(&r);
     if (version != XR_BC_VERSION) {
         if (error) *error = XR_BC_ERR_VERSION;
         return NULL;
     }
-    
+
     bc_get_u16(&r); // flags
     bc_get_u32(&r); // proto count
     uint32_t max_symbol_id = bc_get_u32(&r); // max symbol id
     uint32_t shared_count = bc_get_u32(&r); // shared count
-    
+
     if (r.error != XR_BC_OK) {
         if (error) *error = r.error;
         return NULL;
     }
-    
+
     // Calculate shared index offset (based on current shared count)
     XrVMState *vm = xr_isolate_get_vm_state(X);
     int shared_offset = vm->shared.count;
-    
+
     (void)shared_count;
-    
+
     // Read symbol table and build mapping (symbol ID starts from 1)
     int *id_map = NULL;
     int map_size = (int)max_symbol_id + 1;
@@ -627,7 +627,7 @@ XrProto* xr_bytecode_read(XrayIsolate *X, const uint8_t *data, size_t size, XrBc
             return NULL;
         }
         memset(id_map, -1, map_size * sizeof(int));
-        
+
         for (uint32_t i = 1; i <= max_symbol_id; i++) {
             char *name = bc_get_string(&r);
             if (r.error != XR_BC_OK) {
@@ -644,26 +644,26 @@ XrProto* xr_bytecode_read(XrayIsolate *X, const uint8_t *data, size_t size, XrBc
             }
         }
     }
-    
+
     // Read Proto
     XrProto *proto = bc_read_proto(&r);
-    
+
     // Remap symbol IDs
     if (proto && id_map) {
         remap_symbols_in_proto(proto, id_map, map_size);
     }
-    
+
     // Set per-module shared_offset (VM applies offset at runtime, no instruction rewriting)
     if (proto && shared_offset > 0) {
         set_shared_offset_recursive(proto, shared_offset);
     }
-    
+
     // Update global shared.count
     if (shared_count > 0) {
         vm->shared.count += (int)shared_count;
         xr_shared_array_ensure(&vm->shared, vm->shared.count - 1);
     }
-    
+
     xr_free(id_map);
     if (error) *error = r.error;
     return proto;
@@ -740,7 +740,7 @@ void xr_proto_set_param_types(XrProto *p, const uint8_t *ptypes,
 
 /* ========== File API ========== */
 
-bool xr_compile_to_file(XrayIsolate *X, const char *source_file, 
+bool xr_compile_to_file(XrayIsolate *X, const char *source_file,
                         const char *output_file, int flags) {
     // Read source file
     FILE *f = fopen(source_file, "r");
@@ -748,36 +748,36 @@ bool xr_compile_to_file(XrayIsolate *X, const char *source_file,
         xr_log_warning("compile", "cannot open: %s", source_file);
         return false;
     }
-    
+
     fseek(f, 0, SEEK_END);
     long size = ftell(f);
     fseek(f, 0, SEEK_SET);
-    
+
     char *source = xr_malloc(size + 1);
     if (!source) { fclose(f); return false; }
-    
+
     size_t read = fread(source, 1, size, f);
     source[read] = '\0';
     fclose(f);
-    
+
     // Parse
     AstNode *ast = xr_parse_with_source(X, source, source_file);
     xr_free(source);
-    
+
     if (!ast) {
         xr_log_warning("compile", "parse failed: %s", source_file);
         return false;
     }
-    
+
     // Compile
     XrProto *proto = xr_compile_ast_with_source(X, ast, source_file);
-    xr_ast_free(X, ast);
-    
+    xr_program_destroy(ast);
+
     if (!proto) {
         xr_log_warning("compile", "compilation failed: %s", source_file);
         return false;
     }
-    
+
     // Serialize
     size_t bc_size;
     uint8_t *bc = xr_bytecode_write(X, proto, flags, &bc_size);
@@ -785,7 +785,7 @@ bool xr_compile_to_file(XrayIsolate *X, const char *source_file,
         xr_log_warning("compile", "serialization failed");
         return false;
     }
-    
+
     // Write to file
     f = fopen(output_file, "wb");
     if (!f) {
@@ -793,11 +793,11 @@ bool xr_compile_to_file(XrayIsolate *X, const char *source_file,
         xr_log_warning("compile", "cannot create: %s", output_file);
         return false;
     }
-    
+
     fwrite(bc, 1, bc_size, f);
     fclose(f);
     xr_free(bc);
-    
+
     return true;
 }
 
@@ -809,17 +809,17 @@ int xr_run_bytecode_file(XrayIsolate *X, const char *bytecode_file) {
         xr_log_warning("bytecode", "cannot open: %s", bytecode_file);
         return -1;
     }
-    
+
     fseek(f, 0, SEEK_END);
     long size = ftell(f);
     fseek(f, 0, SEEK_SET);
-    
+
     uint8_t *data = xr_malloc(size);
     if (!data) { fclose(f); return -1; }
-    
+
     fread(data, 1, size, f);
     fclose(f);
-    
+
     int result = xr_eval_bytecode(X, data, size);
     xr_free(data);
     return result;
@@ -830,14 +830,14 @@ int xr_run_bytecode_file(XrayIsolate *X, const char *bytecode_file) {
 XrOutputFormat xr_detect_output_format(const char *filename, XrOutputFormat explicit_fmt) {
     if (explicit_fmt != XR_OUTPUT_AUTO) return explicit_fmt;
     if (!filename) return XR_OUTPUT_BYTECODE;
-    
+
     const char *ext = strrchr(filename, '.');
     if (!ext) return XR_OUTPUT_BYTECODE;
-    
+
     if (strcmp(ext, ".c") == 0) return XR_OUTPUT_C_SOURCE;
     if (strcmp(ext, ".h") == 0) return XR_OUTPUT_C_HEADER;
     if (strcmp(ext, ".xrc") == 0) return XR_OUTPUT_BYTECODE;
-    
+
     return XR_OUTPUT_BYTECODE;
 }
 
@@ -847,16 +847,16 @@ bool xr_output_c_source(XrayIsolate *X, XrProto *proto,
     size_t bc_size;
     uint8_t *bc = xr_bytecode_write(X, proto, flags, &bc_size);
     if (!bc) return false;
-    
+
     // Write C file
     FILE *f = fopen(output_file, "w");
     if (!f) { xr_free(bc); return false; }
-    
+
     fprintf(f, "/* Auto-generated by xray compile */\n\n");
     fprintf(f, "#include <stdint.h>\n\n");
     fprintf(f, "const uint32_t %s_size = %zu;\n\n", var_name, bc_size);
     fprintf(f, "const uint8_t %s[%zu] = {\n", var_name, bc_size);
-    
+
     for (size_t i = 0; i < bc_size; i++) {
         if (i % 12 == 0) fprintf(f, "    ");
         fprintf(f, "0x%02x", bc[i]);
@@ -864,9 +864,9 @@ bool xr_output_c_source(XrayIsolate *X, XrProto *proto,
         if ((i + 1) % 12 == 0 || i == bc_size - 1) fprintf(f, "\n");
         else fprintf(f, " ");
     }
-    
+
     fprintf(f, "};\n");
-    
+
     fclose(f);
     xr_free(bc);
     return true;

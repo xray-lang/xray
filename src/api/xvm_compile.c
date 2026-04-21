@@ -135,7 +135,7 @@ XrProto* xr_compile_source_with_path(XrayIsolate *isolate, const char *source, c
     xr_compiler_context_free(ctx);
 
     // Free AST (not needed after compilation)
-    xr_ast_free(isolate, ast);
+    xr_program_destroy(ast);
 
     return proto;
 }

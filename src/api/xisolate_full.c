@@ -104,12 +104,12 @@ static int isolate_init_full(XrayIsolate *isolate) {
     {
         typedef void *(*GenFn3)(void*, const char*, const char*);
         typedef void *(*GenFn3b)(void*, void*, const char*);
-        typedef void  (*GenFn2)(void*, void*);
+        typedef void  (*GenFn1)(void*);
         xr_module_set_compiler_hooks(
             (GenFn3)xr_parse_with_source,
             (GenFn3b)xr_compile_ast_with_source,
             (GenFn3)xr_compile_source_with_path,
-            (GenFn2)xr_ast_free);
+            (GenFn1)xr_program_destroy);
     }
 
     // Regex

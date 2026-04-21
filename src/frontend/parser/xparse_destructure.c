@@ -157,14 +157,12 @@ AstNode* xr_parse_destructure_declaration(Parser *parser, bool is_const) {
 
     if (!xr_parser_match(parser, TK_ASSIGN)) {
         xr_parser_error(parser, "destructuring declaration requires initializer");
-        xr_pattern_free(parser->X, pattern);
         return NULL;
     }
 
     AstNode *initializer = xr_parse_expression(parser);
     if (!initializer) {
         xr_parser_error(parser, "expected initializer expression");
-        xr_pattern_free(parser->X, pattern);
         return NULL;
     }
 

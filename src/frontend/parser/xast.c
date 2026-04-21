@@ -54,7 +54,9 @@ XR_FUNC char *ast_strdup(XrayIsolate *X, const char *s) {
     if (!s) return NULL;
     XrArena *arena = get_arena(X);
     XR_CHECK(arena != NULL, "ast_strdup: parser requires an arena");
-    return xr_arena_strdup(arena, s);
+    char *dup = xr_arena_strdup(arena, s);
+    XR_CHECK(dup != NULL, "ast_strdup: arena allocation failed (out of memory)");
+    return dup;
 }
 
 // Allocate zero-initialized AST node through the current arena.
@@ -292,12 +294,6 @@ AstNode *xr_ast_var_decl(XrayIsolate *X, const char *name,
     node->as.var_decl.is_const = is_const;
     node->as.var_decl.storage_mode = XR_STORAGE_NORMAL;
     node->as.var_decl.type_annotation = NULL;
-
-    if (node->as.var_decl.name == NULL) {
-        xr_log_warning("ast", "memory allocation failed");
-        exit(1);
-    }
-
     return node;
 }
 
@@ -312,12 +308,6 @@ AstNode *xr_ast_var_decl_with_mode(XrayIsolate *X, const char *name,
     node->as.var_decl.is_const = is_const;
     node->as.var_decl.storage_mode = storage_mode;
     node->as.var_decl.type_annotation = NULL;
-
-    if (node->as.var_decl.name == NULL) {
-        xr_log_warning("ast", "memory allocation failed");
-        exit(1);
-    }
-
     return node;
 }
 
@@ -326,12 +316,6 @@ AstNode *xr_ast_var_decl_with_mode(XrayIsolate *X, const char *name,
 AstNode *xr_ast_variable(XrayIsolate *X, const char *name, int line) {
     AstNode *node = alloc_node(X, AST_VARIABLE, line);
     node->as.variable.name = ast_strdup(X, name);
-
-    if (node->as.variable.name == NULL) {
-        xr_log_warning("ast", "memory allocation failed");
-        exit(1);
-    }
-
     return node;
 }
 
@@ -343,12 +327,6 @@ AstNode *xr_ast_assignment(XrayIsolate *X, const char *name,
     AstNode *node = alloc_node(X, AST_ASSIGNMENT, line);
     node->as.assignment.name = ast_strdup(X, name);
     node->as.assignment.value = value;
-
-    if (node->as.assignment.name == NULL) {
-        xr_log_warning("ast", "memory allocation failed");
-        exit(1);
-    }
-
     return node;
 }
 
@@ -363,12 +341,6 @@ AstNode *xr_ast_compound_assignment(XrayIsolate *X, const char *name,
     node->as.compound_assignment.op = op;
     node->as.compound_assignment.value = value;
     node->as.compound_assignment.object = NULL;  // Regular variable compound assignment, no object
-
-    if (node->as.compound_assignment.name == NULL) {
-        xr_log_warning("ast", "memory allocation failed");
-        exit(1);
-    }
-
     return node;
 }
 
@@ -385,12 +357,6 @@ AstNode *xr_ast_member_compound_assignment(XrayIsolate *X, AstNode *object,
     node->as.compound_assignment.op = op;
     node->as.compound_assignment.value = value;
     node->as.compound_assignment.object = object;  // Member compound assignment, has object
-
-    if (node->as.compound_assignment.name == NULL) {
-        xr_log_warning("ast", "memory allocation failed");
-        exit(1);
-    }
-
     return node;
 }
 
@@ -399,12 +365,6 @@ AstNode *xr_ast_member_compound_assignment(XrayIsolate *X, AstNode *object,
 AstNode *xr_ast_inc(XrayIsolate *X, const char *name, int line) {
     AstNode *node = alloc_node(X, AST_INC, line);
     node->as.inc.name = ast_strdup(X, name);
-
-    if (node->as.inc.name == NULL) {
-        xr_log_warning("ast", "memory allocation failed");
-        exit(1);
-    }
-
     return node;
 }
 
@@ -413,12 +373,6 @@ AstNode *xr_ast_inc(XrayIsolate *X, const char *name, int line) {
 AstNode *xr_ast_dec(XrayIsolate *X, const char *name, int line) {
     AstNode *node = alloc_node(X, AST_DEC, line);
     node->as.dec.name = ast_strdup(X, name);
-
-    if (node->as.dec.name == NULL) {
-        xr_log_warning("ast", "memory allocation failed");
-        exit(1);
-    }
-
     return node;
 }
 
@@ -529,16 +483,6 @@ XrParamNode *xr_param_node_new(XrayIsolate *X, const char *name, int line, int c
     param->pattern = NULL;
     param->is_rest = false;
     return param;
-}
-
-// Free parameter node.
-// Kept as a no-op for API compatibility. All XrParamNode instances and
-// their members (name string, pattern, default_value) now live in the
-// parse arena and are bulk-released when the owning program node is
-// destroyed via xr_ast_free.
-void xr_param_node_free(XrayIsolate *X, XrParamNode *param) {
-    (void)X;
-    (void)param;
 }
 
 // Create function declaration node
@@ -1185,28 +1129,19 @@ AstNode *xr_ast_pattern_multi(XrayIsolate *X, AstNode **patterns, int count, int
     return node;
 }
 
-// Free an AST tree.
-//
-// For program nodes returned by xr_parse / xr_parse_with_source /
-// xr_parse_with_trivia, the node owns a dedicated arena; destroying it
-// releases every AST node, array, and string allocated during parsing in
-// O(1). For program nodes from xr_parse_recoverable (LSP), the caller
-// owns the arena and this call is a no-op.
-//
-// Non-program nodes are always sub-nodes of some program and live in that
-// program's arena; calling xr_ast_free on them is a no-op.
-void xr_ast_free(XrayIsolate *X, AstNode *node) {
-    (void)X;
-    if (node == NULL) return;
-    if (node->type != AST_PROGRAM) return;
+// Destroy a program AST and its owning arena.
+// Releases every AST node, array, and string allocated during parsing in O(1).
+// For program nodes from xr_parse_recoverable (LSP), the caller owns the
+// arena and this call is a no-op.
+// The program node itself lives inside the arena, so we capture the arena
+// pointer into a local BEFORE xr_arena_destroy frees the segments.
+void xr_program_destroy(AstNode *program) {
+    if (program == NULL) return;
+    XR_CHECK(program->type == AST_PROGRAM,
+             "xr_program_destroy: expected AST_PROGRAM node");
 
-    ProgramNode *prog = &node->as.program;
+    ProgramNode *prog = &program->as.program;
     if (prog->owns_arena && prog->arena) {
-        // `node` -- and therefore `prog` -- lives inside one of the
-        // arena's own segments, so we must capture the arena pointer
-        // into a local BEFORE xr_arena_destroy frees those segments.
-        // Reading `prog->arena` afterwards would be a heap-use-after-
-        // free (caught by AddressSanitizer on the regression suite).
         XrArena *arena = prog->arena;
         xr_arena_destroy(arena);
         xr_free(arena);
@@ -1818,15 +1753,6 @@ AstNode* xr_ast_multi_assign(XrayIsolate *X, AstNode **targets, int target_count
 }
 
 /* ========== Match Expression AST Node Creation ========== */
-
-// Free destructuring pattern.
-// Kept as a no-op for API compatibility. All destructuring patterns and
-// their owned strings/arrays are allocated from the parse arena and are
-// bulk-released when the owning program node is destroyed via xr_ast_free.
-void xr_pattern_free(XrayIsolate *X, XrDestructurePattern *pattern) {
-    (void)X;
-    (void)pattern;
-}
 
 /* ========== Type Alias Node ========== */
 

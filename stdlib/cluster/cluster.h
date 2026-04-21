@@ -132,6 +132,10 @@ typedef struct XrCluster {
     int               heartbeat_timeout_ms;   // default 15000 (3x interval)
     int               max_missed_heartbeats;  // default 3
 
+    // Per-node pending request cap (default XR_MAX_PENDING_REQUESTS).
+    // Controls backpressure on concurrent RPC / channel recv proxies.
+    int               max_pending_requests;
+
     // Dead nodes tombstone (prevent reconnecting to recently departed nodes)
     struct {
         char     name[XR_NODE_NAME_MAX + 1];
@@ -156,17 +160,13 @@ typedef struct XrCluster {
     /*
      * Stop-signalling pipe for coroutine-friendly interruptible sleep.
      *
-     * Every long-lived cluster coroutine that needs to poll periodically
-     * (heartbeat, accept retry on EMFILE, reconnect backoff, discovery
-     * tick) uses xr_cluster_sleep_interruptible(c, ms) which reads from
+     * Every long-lived cluster coroutine uses
+     * xr_cluster_sleep_interruptible(c, ms) which reads from
      * stop_pipe[0] with a read deadline. xr_cluster_stop closes
      * stop_pipe[1] early, turning every outstanding read into an
-     * immediate EOF so no coroutine is ever stuck in a per-thread
-     * nanosleep/usleep that blocks its worker. Both ends non-blocking.
+     * immediate EOF. Both ends non-blocking.
      *
-     * Both ends set to -1 when unavailable (pipe() failure during
-     * start_ex); the helper then falls back to a straight nanosleep
-     * so cluster still functions — just not interruptible.
+     * Created in start_ex — pipe() failure is fatal.
      */
     int               stop_pipe[2];
 

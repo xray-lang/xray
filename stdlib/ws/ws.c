@@ -30,7 +30,6 @@
 #include <unistd.h>
 #include <fcntl.h>
 #include <sys/socket.h>
-#include <poll.h>
 #include <sys/uio.h>  // for writev
 #include <netinet/in.h>
 #include <netinet/tcp.h>
@@ -172,7 +171,14 @@ static char* compute_accept_key(const char *sec_key) {
     return xr_base64_encode(hash, 20, NULL);
 }
 
-// Parse WebSocket URL
+/*
+ * Parse WebSocket URL. Supports:
+ *   ws://host/path           — plain, default port 80
+ *   wss://host/path          — TLS, default port 443
+ *   ws://host:port/path      — explicit port
+ *   ws://[::1]:port/path     — IPv6 literal (RFC 3986 bracket notation)
+ *   ws://[::1]/path          — IPv6 literal, default port
+ */
 static int parse_ws_url(const char *url, char **host, int *port, char **path, bool *secure) {
     *host = NULL;
     *path = NULL;
@@ -191,10 +197,21 @@ static int parse_ws_url(const char *url, char **host, int *port, char **path, bo
         return -1;
     }
 
-    // Extract host
-    const char *host_start = p;
-    while (*p && *p != ':' && *p != '/' && *p != '?') p++;
-    *host = xr_strndup(host_start, p - host_start);
+    // Extract host — handle IPv6 bracket notation
+    if (*p == '[') {
+        // IPv6 literal: ws://[::1]:8080/path
+        p++; // skip '['
+        const char *host_start = p;
+        while (*p && *p != ']') p++;
+        if (*p != ']') return -1; // unterminated bracket
+        *host = xr_strndup(host_start, (size_t)(p - host_start));
+        p++; // skip ']'
+    } else {
+        const char *host_start = p;
+        while (*p && *p != ':' && *p != '/' && *p != '?') p++;
+        *host = xr_strndup(host_start, (size_t)(p - host_start));
+    }
+    if (!*host) return -1;
 
     // Extract port
     if (*p == ':') {
@@ -216,68 +233,43 @@ static int parse_ws_url(const char *url, char **host, int *port, char **path, bo
 /*
  * Raw recv (TLS-aware).
  *
- * When xr_ws_set_isolate() has bound a XrayIsolate, non-TLS reads go through
- * xr_socket_read which yields the current coroutine on EAGAIN via netpoll
- * instead of blocking the worker thread. This removes the legacy 5s
- * poll() fallback that used to freeze the worker on slow peers.
+ * All reads route through coroutine-aware I/O: plain-TCP via xr_socket_read
+ * (yields on EAGAIN via netpoll), TLS via xr_tls_conn_read (yields
+ * internally when xr_io_get_isolate() is set).
  *
- * The TLS path keeps using xr_tls_conn_read — that function already checks
- * xr_io_get_isolate() internally, so set_isolate() callers must also invoke
- * xr_io_set_isolate() before entering any TLS handshake / read path (done
- * in xr_ws_connect).
+ * Requires ws->isolate to be bound (enforced by xr_ws_connect and
+ * xr_ws_upgrade). There is no legacy fallback.
  */
 static ssize_t ws_raw_recv(XrWebSocket *ws, void *buf, size_t len) {
+    XR_DCHECK(ws->isolate != NULL, "ws: isolate required for I/O");
     if (ws->is_secure && ws->tls_conn) {
         return xr_tls_conn_read((XrTlsConn*)ws->tls_conn, buf, len);
     }
-    if (ws->isolate) {
-        int n = xr_socket_read(ws->isolate, ws->fd, (char *)buf, len);
-        return (ssize_t)n;
-    }
-    return recv(ws->fd, buf, len, 0);
+    int n = xr_socket_read(ws->isolate, ws->fd, (char *)buf, len);
+    return (ssize_t)n;
 }
 
 /*
  * recv with timeout.
  *
- * Used by the client handshake where a bounded wait is required even if
- * no scheduler is plugged in. When an isolate is bound we rely on
- * xr_socket_read to yield; the explicit poll() timeout is only honoured
- * for the legacy blocking path (no isolate).
- *
- * NOTE: once xr_ws_set_isolate is wired up for client bindings the
- * timeout_ms argument becomes informational — cancellation will come
- * from scheduler deadlines rather than poll(2).
+ * Used by the client handshake where a bounded wait is needed.
+ * timeout_ms is informational — cancellation comes from scheduler
+ * deadlines. The actual read yields via netpoll.
  */
 static ssize_t ws_recv_timeout(XrWebSocket *ws, void *buf, size_t len, int timeout_ms) {
-    if (ws->isolate) {
-        return ws_raw_recv(ws, buf, len);
-    }
-    if (timeout_ms > 0) {
-        struct pollfd pfd = { .fd = ws->fd, .events = POLLIN };
-        int ret = poll(&pfd, 1, timeout_ms);
-        if (ret < 0) return -1;
-        if (ret == 0) {
-            errno = ETIMEDOUT;
-            return -1;
-        }
-    }
+    (void)timeout_ms; // enforced by scheduler deadlines, not poll()
     return ws_raw_recv(ws, buf, len);
 }
 
 /*
  * Send all data (TLS-aware).
  *
- * With a bound isolate, plain-TCP sends route through xr_socket_write which
- * auto-yields on EAGAIN via netpoll. The legacy poll(5000) fallback was
- * replaced because it blocked the worker thread on backpressure, starving
- * every other coroutine sharing the worker.
- *
- * The TLS path is unchanged: xr_tls_conn_write already yields via
- * xr_socket_read/write internally when an isolate has been installed through
- * xr_io_set_isolate.
+ * Plain-TCP sends route through xr_socket_write which auto-yields on
+ * EAGAIN via netpoll. TLS via xr_tls_conn_write (yields internally).
+ * Requires ws->isolate to be bound.
  */
 static int ws_send_all(XrWebSocket *ws, const void *buf, size_t len) {
+    XR_DCHECK(ws->isolate != NULL, "ws: isolate required for send");
     const char *p = (const char*)buf;
     size_t sent = 0;
 
@@ -285,18 +277,8 @@ static int ws_send_all(XrWebSocket *ws, const void *buf, size_t len) {
         ssize_t n;
         if (ws->is_secure && ws->tls_conn) {
             n = xr_tls_conn_write((XrTlsConn*)ws->tls_conn, p + sent, len - sent);
-        } else if (ws->isolate) {
-            n = xr_socket_write(ws->isolate, ws->fd, p + sent, len - sent);
         } else {
-            n = send(ws->fd, p + sent, len - sent, 0);
-            if (n < 0 && (errno == EAGAIN || errno == EWOULDBLOCK)) {
-                // Legacy fallback when no isolate is bound (non-coroutine use).
-                struct pollfd pfd = { .fd = ws->fd, .events = POLLOUT };
-                if (poll(&pfd, 1, 5000) > 0) {
-                    continue;
-                }
-                return -1;
-            }
+            n = xr_socket_write(ws->isolate, ws->fd, p + sent, len - sent);
         }
         if (n <= 0) return -1;
         sent += n;
@@ -455,11 +437,9 @@ static int ws_send_frame_writev(XrWebSocket *ws, XrWsOpcode opcode,
 
             if (n < 0) {
                 if (errno == EAGAIN || errno == EWOULDBLOCK) {
-                    // Non-blocking: would block, need to wait
-                    struct pollfd pfd = { .fd = ws->fd, .events = POLLOUT };
-                    if (poll(&pfd, 1, 5000) > 0) {
-                        continue;
-                    }
+                    // Yield until writable via netpoll
+                    int wr = xr_socket_wait_writable(ws->isolate, ws->fd, 5000);
+                    if (wr > 0) continue;
                 }
                 return -1;
             }
@@ -970,6 +950,8 @@ XrWsError xr_ws_connect(XrWebSocket *ws) {
 
     XrWsError err = WS_OK;
     char *accept_key = NULL;
+    char *request = NULL;
+    char *response = NULL;
     ws->state = WS_STATE_CONNECTING;
 
     // Ensure the TLS and xr_io helper routines can locate the scheduler.
@@ -1062,32 +1044,18 @@ XrWsError xr_ws_connect(XrWebSocket *ws) {
 
     if (cret < 0) {
         /*
-         * EINPROGRESS path: yield until socket is writable or we hit
-         * the per-config connect_timeout_ms. Falls back to a plain
-         * blocking wait only if no isolate was bound — in practice
-         * ws_binding always binds the isolate right after xr_ws_new.
+         * EINPROGRESS path: yield via netpoll until socket is writable
+         * or the per-config connect_timeout_ms fires.
          */
         int connect_timeout = ws->config.connect_timeout_ms > 0
                                 ? ws->config.connect_timeout_ms
                                 : 10000; // match cluster default
 
-        if (ws->isolate) {
-            int wr = xr_socket_wait_writable(ws->isolate, ws->fd, connect_timeout);
-            if (wr <= 0) {
-                // 0 = deadline fired; < 0 = netpoll / fd error.
-                err = (wr == 0) ? WS_ERR_TIMEOUT : WS_ERR_CONNECT;
-                goto fail_cleanup;
-            }
-        } else {
-            // No scheduler bound — degrade to a single poll() slice so
-            // we at least honour the timeout. This path exists only
-            // for legacy callers that forget to call xr_ws_set_isolate.
-            struct pollfd pfd = { .fd = ws->fd, .events = POLLOUT };
-            int pr = poll(&pfd, 1, connect_timeout);
-            if (pr <= 0) {
-                err = (pr == 0) ? WS_ERR_TIMEOUT : WS_ERR_CONNECT;
-                goto fail_cleanup;
-            }
+        XR_DCHECK(ws->isolate != NULL, "ws: isolate required for connect");
+        int wr = xr_socket_wait_writable(ws->isolate, ws->fd, connect_timeout);
+        if (wr <= 0) {
+            err = (wr == 0) ? WS_ERR_TIMEOUT : WS_ERR_CONNECT;
+            goto fail_cleanup;
         }
 
         // The socket became writable — pull SO_ERROR to distinguish
@@ -1121,15 +1089,23 @@ XrWsError xr_ws_connect(XrWebSocket *ws) {
     ws->sec_key = generate_sec_key();
     if (!ws->sec_key) { err = WS_ERR_MEMORY; goto fail_cleanup; }
 
-    // Build handshake request (bounds-checked)
-    char request[2048];
-    size_t req_cap = sizeof(request);
+    // Build handshake request (dynamic buffer for large header sets)
+    size_t req_cap = 2048;
+    request = (char *)xr_malloc(req_cap);
+    if (!request) { err = WS_ERR_MEMORY; goto fail_cleanup; }
     size_t req_len = 0;
 
     #define WS_APPEND(fmt, ...) do { \
         int _n = snprintf(request + req_len, req_cap - req_len, fmt, ##__VA_ARGS__); \
-        if (_n < 0 || req_len + (size_t)_n >= req_cap) { \
-            err = WS_ERR_MEMORY; goto fail_cleanup; \
+        if (_n < 0) { err = WS_ERR_MEMORY; goto fail_cleanup; } \
+        if (req_len + (size_t)_n >= req_cap) { \
+            size_t new_cap = (req_cap + (size_t)_n + 1) * 2; \
+            char *tmp = (char *)xr_realloc(request, new_cap); \
+            if (!tmp) { err = WS_ERR_MEMORY; goto fail_cleanup; } \
+            request = tmp; \
+            req_cap = new_cap; \
+            _n = snprintf(request + req_len, req_cap - req_len, fmt, ##__VA_ARGS__); \
+            if (_n < 0) { err = WS_ERR_MEMORY; goto fail_cleanup; } \
         } \
         req_len += (size_t)_n; \
     } while(0)
@@ -1168,14 +1144,18 @@ XrWsError xr_ws_connect(XrWebSocket *ws) {
         err = WS_ERR_SEND;
         goto fail_cleanup;
     }
+    xr_free(request);
+    request = NULL;
 
-    // Receive handshake response
-    char response[4096];
+    // Receive handshake response (dynamic buffer)
+    size_t resp_cap = 4096;
+    response = (char *)xr_malloc(resp_cap);
+    if (!response) { err = WS_ERR_MEMORY; goto fail_cleanup; }
     size_t resp_len = 0;
 
-    while (resp_len < sizeof(response) - 1) {
+    while (resp_len < resp_cap - 1) {
         ssize_t n = ws_recv_timeout(ws, response + resp_len,
-                                     sizeof(response) - 1 - resp_len,
+                                     resp_cap - 1 - resp_len,
                                      ws->config.connect_timeout_ms);
         if (n <= 0) { err = WS_ERR_RECV; goto fail_cleanup; }
         resp_len += n;
@@ -1243,11 +1223,14 @@ XrWsError xr_ws_connect(XrWebSocket *ws) {
 
     // Connection successful
     ws->state = WS_STATE_OPEN;
+    xr_free(response);
 
     return WS_OK;
 
 fail_cleanup:
     xr_free(accept_key);
+    xr_free(request);
+    xr_free(response);
     if (ws->tls_conn) {
         xr_tls_conn_close((XrTlsConn*)ws->tls_conn);
         xr_tls_conn_free((XrTlsConn*)ws->tls_conn);
@@ -1416,28 +1399,14 @@ XrWsError xr_ws_pong(XrWebSocket *ws, const void *data, size_t len) {
 }
 
 /*
- * Blocking-style recv wrapper around xr_ws_recv_try. Originally this
- * looped poll(POLLIN, 100ms) until a full frame was assembled — that
- * pinned the worker thread for the whole wait window and, worse, the
- * 100ms cap made it behave like a busy poll when data arrived right
- * after the timeout fired.
- *
- * The new body yields via xr_socket_wait_readable when an isolate is
- * bound (the common case — every binding and upgrade path calls
- * xr_ws_set_isolate), so the worker is free to run other coroutines
- * until POLLIN or the slice deadline fires. The slice is kept at
- * 100ms so callers still see bounded latency if application-level
- * state changes (e.g. ws->state being flipped by a concurrent
- * xr_ws_close) need to be observed.
- *
- * Legacy callers that never bound an isolate fall back to the
- * original poll() slice so behaviour is preserved — only the
- * coroutine-bound path gets the win. xr_ws_recv is deprecated in
- * favour of the yieldable xr_ws_recv_try + scheduler-level retry,
- * but remains wired for C-only consumers.
+ * Blocking-style recv: loops xr_ws_recv_try + xr_socket_wait_readable.
+ * Yields the coroutine on EAGAIN via netpoll. The 100ms slice keeps
+ * bounded latency for concurrent xr_ws_close state transitions.
+ * Requires ws->isolate.
  */
 XrWsMessage* xr_ws_recv(XrWebSocket *ws) {
     if (!ws || ws->state != WS_STATE_OPEN) return NULL;
+    XR_DCHECK(ws->isolate != NULL, "ws: isolate required for recv");
 
     while (1) {
         bool need_more = false;
@@ -1448,23 +1417,10 @@ XrWsMessage* xr_ws_recv(XrWebSocket *ws) {
 
         if (!need_more) continue;
 
-        if (ws->isolate) {
-            int wr = xr_socket_wait_readable(ws->isolate, ws->fd, 100);
-            if (wr < 0) {
-                // fd closed or netpoll error — treat as abnormal close.
-                xr_ws_close(ws, WS_CLOSE_ABNORMAL, NULL);
-                return NULL;
-            }
-            // wr == 0 (slice timeout) or wr > 0 (POLLIN) both fall
-            // through to the next xr_ws_recv_try iteration.
-        } else {
-            // Legacy non-coroutine path: keep the original poll slice.
-            struct pollfd pfd = { .fd = ws->fd, .events = POLLIN };
-            int ret = poll(&pfd, 1, 100);  // 100ms timeout
-            if (ret < 0 && errno != EINTR) {
-                xr_ws_close(ws, WS_CLOSE_ABNORMAL, NULL);
-                return NULL;
-            }
+        int wr = xr_socket_wait_readable(ws->isolate, ws->fd, 100);
+        if (wr < 0) {
+            xr_ws_close(ws, WS_CLOSE_ABNORMAL, NULL);
+            return NULL;
         }
     }
 }
@@ -1797,8 +1753,7 @@ process_frame:
     XrWsMessage *msg = &ws->last_msg;
     msg->data = NULL;
     msg->len = 0;
-    msg->_no_free = true;
-    msg->_data_inplace = false;
+    msg->_flags = XR_WS_MSG_NO_FREE;
 
     // RFC 6455 Section 5.4: continuation without in-progress fragmentation
     if (ws->frame_opcode == WS_OPCODE_CONTINUATION && !ws->frag_buf) {
@@ -1846,7 +1801,7 @@ process_frame:
         if (payload_inplace && payload_len_actual > 0) {
             // Zero-copy: data points into rbuf (already unmasked in-place)
             msg->data = payload;
-            msg->_data_inplace = true;
+            msg->_flags |= XR_WS_MSG_DATA_INPLACE;
         } else if (ws->msg_buf && payload_len_actual > 0) {
             msg->data = ws->msg_buf;
             ws->msg_buf = NULL;
@@ -1872,17 +1827,17 @@ process_frame:
         if (xr_ws_deflate_decompress((const uint8_t *)msg->data, msg->len,
                                      max_out,
                                      &decompressed, &decompressed_len) == 0) {
-            if (!msg->_data_inplace) xr_free(msg->data);
+            if (!(msg->_flags & XR_WS_MSG_DATA_INPLACE)) xr_free(msg->data);
             msg->data = (char *)decompressed;
             msg->len = decompressed_len;
-            msg->_data_inplace = false;
+            msg->_flags &= (uint8_t)~XR_WS_MSG_DATA_INPLACE;
         } else {
             // Decompression failed or exceeded size budget.
             // Treat as protocol / policy error and close connection.
-            if (!msg->_data_inplace) xr_free(msg->data);
+            if (!(msg->_flags & XR_WS_MSG_DATA_INPLACE)) xr_free(msg->data);
             msg->data = NULL;
             msg->len = 0;
-            msg->_data_inplace = false;
+            msg->_flags &= (uint8_t)~XR_WS_MSG_DATA_INPLACE;
             if (ws->state == WS_STATE_OPEN) {
                 char cd[2] = {(WS_CLOSE_TOO_LARGE >> 8) & 0xFF, WS_CLOSE_TOO_LARGE & 0xFF};
                 send_close_frame(ws, cd, 2, !ws->is_server);
@@ -1896,9 +1851,9 @@ process_frame:
     // RFC 6455 Section 5.6: text frames MUST be valid UTF-8
     if (msg->is_text && msg->len > 0) {
         if (!xr_utf8_validate(msg->data, msg->len)) {
-            if (!msg->_data_inplace) xr_free(msg->data);
+            if (!(msg->_flags & XR_WS_MSG_DATA_INPLACE)) xr_free(msg->data);
             msg->data = NULL;
-            msg->_data_inplace = false;
+            msg->_flags &= (uint8_t)~XR_WS_MSG_DATA_INPLACE;
             if (ws->state == WS_STATE_OPEN) {
                 char cd[2] = {(WS_CLOSE_INVALID_DATA >> 8) & 0xFF, WS_CLOSE_INVALID_DATA & 0xFF};
                 send_close_frame(ws, cd, 2, !ws->is_server);
@@ -1945,24 +1900,23 @@ int xr_ws_uncork(XrWebSocket *ws) {
 
 int xr_ws_poll(XrWebSocket *ws, int timeout_ms) {
     if (!ws || ws->state != WS_STATE_OPEN) return -1;
-
-    struct pollfd pfd = { .fd = ws->fd, .events = POLLIN };
-    return poll(&pfd, 1, timeout_ms);
+    XR_DCHECK(ws->isolate != NULL, "ws: isolate required for poll");
+    return xr_socket_wait_readable(ws->isolate, ws->fd, timeout_ms);
 }
 
 void xr_ws_message_free(XrWsMessage *msg) {
     if (!msg) return;
-    if (!msg->_data_inplace) {
+    if (!(msg->_flags & XR_WS_MSG_DATA_INPLACE)) {
         xr_free(msg->data);
     }
     msg->data = NULL;
-    msg->_data_inplace = false;
-    if (!msg->_no_free) xr_free(msg);
+    msg->_flags &= (uint8_t)~XR_WS_MSG_DATA_INPLACE;
+    if (!(msg->_flags & XR_WS_MSG_NO_FREE)) xr_free(msg);
 }
 
 void xr_ws_message_recycle(XrWebSocket *ws, XrWsMessage *msg) {
     if (!msg || !msg->data) return;
-    if (msg->_data_inplace) {
+    if (msg->_flags & XR_WS_MSG_DATA_INPLACE) {
         // inplace data lives in rbuf, nothing to recycle
         msg->data = NULL;
         return;
@@ -2193,16 +2147,12 @@ int xr_ws_send_upgrade_response(int fd, const char *sec_key,
 
     xr_free(accept_key);
 
-    // Send response (retry loop for partial writes)
+    // Send response (retry on EINTR)
     size_t total_sent = 0;
     while (total_sent < (size_t)len) {
         ssize_t n = write(fd, response + total_sent, len - total_sent);
         if (n < 0) {
             if (errno == EINTR) continue;
-            if (errno == EAGAIN || errno == EWOULDBLOCK) {
-                struct pollfd pfd = { .fd = fd, .events = POLLOUT };
-                if (poll(&pfd, 1, 5000) > 0) continue;
-            }
             return -1;
         }
         total_sent += n;

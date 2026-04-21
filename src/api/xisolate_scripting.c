@@ -42,12 +42,12 @@
 // Recursively dump IC type feedback for a proto tree
 static void dump_ic_feedback_recursive(XrProto *proto) {
     if (!proto) return;
-    
+
     const char *name = proto->name ? (const char*)proto->name->data : "<script>";
     if (proto->ic_methods) {
         xr_ic_method_table_dump_feedback(proto->ic_methods, name);
     }
-    
+
     // Recurse into nested functions
     int nprotos = PROTO_PROTO_COUNT(proto);
     for (int i = 0; i < nprotos; i++) {
@@ -138,14 +138,14 @@ int xray_isolate_dostring(XrayIsolate *isolate, const char *source) {
     XrProto *code = xr_compile_ast(isolate, ast);
     if (code == NULL) {
         fprintf(stderr, "Compilation error\n");
-        xr_ast_free(isolate, ast);
+        xr_program_destroy(ast);
         return -1;
     }
 
     int result = execute_and_dump(isolate, code, "<eval>");
 
     xr_free_code(isolate, code);
-    xr_ast_free(isolate, ast);
+    xr_program_destroy(ast);
 
     return result;
 }
@@ -172,7 +172,7 @@ int xray_isolate_dofile(XrayIsolate *isolate, const char *filename) {
 
     XrProto *code = xr_compile_ast_with_source(isolate, ast, filename);
     if (code == NULL) {
-        xr_ast_free(isolate, ast);
+        xr_program_destroy(ast);
         xr_free(source);
         return -1;
     }
@@ -180,7 +180,7 @@ int xray_isolate_dofile(XrayIsolate *isolate, const char *filename) {
     int result = execute_and_dump(isolate, code, filename);
 
     xr_free_code(isolate, code);
-    xr_ast_free(isolate, ast);
+    xr_program_destroy(ast);
     xr_free(source);
 
     return result;
@@ -210,7 +210,7 @@ int xray_isolate_dofile_debug(XrayIsolate *isolate, const char *filename, void *
 
     XrProto *code = xr_compile_ast_with_source(isolate, ast, filename);
     if (code == NULL) {
-        xr_ast_free(isolate, ast);
+        xr_program_destroy(ast);
         xr_free(source);
         return -1;
     }
@@ -221,7 +221,7 @@ int xray_isolate_dofile_debug(XrayIsolate *isolate, const char *filename, void *
         *out_proto = code;
     }
 
-    xr_ast_free(isolate, ast);
+    xr_program_destroy(ast);
     xr_free(source);
 
     return result;

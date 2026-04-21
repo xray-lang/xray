@@ -280,10 +280,12 @@ XR_FUNC bool xr_cluster_node_is_slow(XrClusterNode *node);
 
 /* ========== Pending Request API ========== */
 
-// Register a pending request. Returns the response Channel to block on.
+// Register a pending request. Returns the response Channel to block on,
+// or NULL if the node has reached `max_pending` in-flight requests.
 // Caller must recv from the returned Channel to get the response payload.
 XR_FUNC struct XrChannel *xr_cluster_node_add_pending(
-    XrClusterNode *node, uint64_t request_id, struct XrayIsolate *X);
+    XrClusterNode *node, uint64_t request_id, struct XrayIsolate *X,
+    int max_pending);
 
 // Find and remove a pending request by request_id.
 // Returns the response Channel, or NULL if not found.

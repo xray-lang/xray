@@ -875,11 +875,7 @@ AstNode *xr_parse_optional_chain(Parser *parser, AstNode *object) {
         xr_parser_advance(parser);
         const char *name = parser->previous.start;
         int name_len = parser->previous.length;
-        char *name_str = (char *)xr_malloc(name_len + 1);
-        if (name_str == NULL) {
-            xr_parser_error(parser, "memory allocation failed");
-            return NULL;
-        }
+        char *name_str = (char *)ast_alloc(parser->X, name_len + 1);
         memcpy(name_str, name, name_len);
         name_str[name_len] = '\0';
 

@@ -82,13 +82,20 @@ typedef XrNetError XrWsError;
 
 /* ========== WebSocket Message ========== */
 
+/*
+ * Internal ownership flags — packed into a single byte so the public
+ * message struct does not expose individual booleans that callers might
+ * accidentally flip. Values are powers of two for bitwise testing.
+ */
+#define XR_WS_MSG_NO_FREE      0x01  /* struct is embedded, do not xr_free it */
+#define XR_WS_MSG_DATA_INPLACE 0x02  /* data points into rbuf, do not xr_free data */
+
 typedef struct XrWsMessage {
     XrWsOpcode opcode;      // Opcode
-    char *data;             // Data
+    char *data;             // Data (caller reads; freed by xr_ws_message_free)
     size_t len;             // Length
     bool is_text;           // Is text message
-    bool _no_free;          // If true, struct is embedded (don't free it)
-    bool _data_inplace;     // If true, data points into rbuf (don't free data)
+    uint8_t _flags;         // Reserved — do not touch (internal ownership bits)
 } XrWsMessage;
 
 struct XrWebSocket;
@@ -205,13 +212,9 @@ XR_FUNC void xr_ws_free(XrWebSocket *ws);
 
 /*
  * Bind the WebSocket to a XrayIsolate for coroutine-aware I/O.
- * When set, blocking send/recv paths yield via netpoll instead of
- * falling back to poll(5s). Callers (typically ws_binding) must invoke
- * this right after xr_ws_new so the subsequent xr_ws_connect / xr_ws_send
- * paths can cooperate with the scheduler.
- *
- * Passing NULL restores the legacy blocking fallback behaviour.
+ * MUST be called before xr_ws_connect / xr_ws_send / xr_ws_recv.
  * Server-side connections are bound automatically in xr_ws_upgrade.
+ * Passing NULL is a programming error — all WS I/O requires an isolate.
  */
 XR_FUNC void xr_ws_set_isolate(XrWebSocket *ws, struct XrayIsolate *X);
 
@@ -279,7 +282,7 @@ XR_FUNC const char* xr_ws_error_string(XrWsError err);
 // Upgrade from HTTP request to WebSocket (server side)
 // fd: client socket
 // request_headers: HTTP request headers (containing Upgrade, Sec-WebSocket-Key, etc.)
-// isolate: XrayIsolate for coroutine-aware I/O (can be NULL for non-coroutine use)
+// isolate: XrayIsolate for coroutine-aware I/O (required, must not be NULL)
 // Returns: upgraded WebSocket connection, NULL on failure
 XR_FUNC XrWebSocket* xr_ws_upgrade(struct XrayIsolate *isolate, int fd, const char *request_headers);
 

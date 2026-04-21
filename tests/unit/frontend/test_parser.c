@@ -345,7 +345,7 @@ TEST(parser_empty_source) {
     ASSERT_NOT_NULL(ast);
     ASSERT_EQ_INT(ast->type, AST_PROGRAM);
     ASSERT_EQ_INT(ast->as.program.count, 0);
-    xr_ast_free(X, ast);
+    xr_program_destroy(ast);
     teardown();
 }
 

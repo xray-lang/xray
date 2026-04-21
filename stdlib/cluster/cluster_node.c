@@ -995,10 +995,11 @@ XrClusterNode *xr_cluster_node_accept(XrCluster *cluster, XrIOConn *conn) {
 /* ========== Pending Request API ========== */
 
 XrChannel *xr_cluster_node_add_pending(XrClusterNode *node, uint64_t request_id,
-                                        XrayIsolate *X) {
+                                        XrayIsolate *X, int max_pending) {
     XR_DCHECK(node != NULL, "node must not be NULL");
     XR_DCHECK(X != NULL, "isolate must not be NULL");
     if (!node || !X) return NULL;
+    if (max_pending <= 0) max_pending = XR_MAX_PENDING_REQUESTS;
 
     XrPendingRequest *pr = (XrPendingRequest *)xr_calloc(1, sizeof(XrPendingRequest));
     if (!pr) return NULL;
@@ -1022,8 +1023,9 @@ XrChannel *xr_cluster_node_add_pending(XrClusterNode *node, uint64_t request_id,
     uint32_t bucket = (uint32_t)(request_id & (XR_PENDING_BUCKETS - 1));
 
     xr_mutex_lock(&node->pending_lock);
-    if (node->pending_count >= XR_MAX_PENDING_REQUESTS) {
+    if (node->pending_count >= max_pending) {
         xr_mutex_unlock(&node->pending_lock);
+        xr_channel_close(ch);
         xr_free(pr);
         return NULL;
     }

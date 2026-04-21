@@ -415,7 +415,7 @@ static char *debug_evaluate_internal(XrayIsolate *isolate, const char *expressio
     XrValue result = eval_ast(&ctx, ast);
 
     // Free AST
-    xr_ast_free(isolate, ast);
+    xr_program_destroy(ast);
 
     // Check for evaluation error
     if (ctx.error) {

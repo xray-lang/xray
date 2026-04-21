@@ -36,13 +36,13 @@
 XrReplSymbolTable* xr_repl_symbols_new(void) {
     XrReplSymbolTable *table = (XrReplSymbolTable *)xr_malloc(sizeof(XrReplSymbolTable));
     if (!table) return NULL;
-    
+
     table->symbols = (XrReplSymbol *)xr_malloc(sizeof(XrReplSymbol) * REPL_SYMBOLS_INITIAL_CAPACITY);
     if (!table->symbols) {
         xr_free(table);
         return NULL;
     }
-    
+
     table->count = 0;
     table->capacity = REPL_SYMBOLS_INITIAL_CAPACITY;
     return table;
@@ -63,14 +63,14 @@ void xr_repl_symbols_clear(XrReplSymbolTable *table) {
 
 static void repl_symbols_ensure_capacity(XrReplSymbolTable *table, int needed) {
     if (needed <= table->capacity) return;
-    
+
     int new_capacity = table->capacity * 2;
     if (new_capacity < needed) new_capacity = needed;
-    
+
     XrReplSymbol *new_syms = (XrReplSymbol *)xr_realloc(table->symbols,
         sizeof(XrReplSymbol) * new_capacity);
     if (!new_syms) return;
-    
+
     table->symbols = new_syms;
     table->capacity = new_capacity;
 }
@@ -87,7 +87,7 @@ static void repl_symbols_add_or_update(XrReplSymbolTable *table,
             return;
         }
     }
-    
+
     // New symbol
     repl_symbols_ensure_capacity(table, table->count + 1);
     table->symbols[table->count].name = name;
@@ -98,7 +98,7 @@ static void repl_symbols_add_or_update(XrReplSymbolTable *table,
 
 void xr_repl_symbols_seed_context(XrReplSymbolTable *table, XrCompilerContext *ctx) {
     if (!table || !ctx || table->count == 0) return;
-    
+
     // Ensure ctx->shared_vars has enough capacity
     while (ctx->shared_var_capacity < table->count) {
         int new_capacity = ctx->shared_var_capacity * 2;
@@ -113,7 +113,7 @@ void xr_repl_symbols_seed_context(XrReplSymbolTable *table, XrCompilerContext *c
         ctx->shared_vars = new_vars;
         ctx->shared_var_capacity = new_capacity;
     }
-    
+
     // Copy symbols into shared_vars
     for (int i = 0; i < table->count; i++) {
         ctx->shared_vars[i].name = table->symbols[i].name;
@@ -126,14 +126,14 @@ void xr_repl_symbols_seed_context(XrReplSymbolTable *table, XrCompilerContext *c
         ctx->shared_vars[i].moved_column = 0;
         ctx->shared_vars[i].compile_type = NULL;
     }
-    
+
     ctx->shared_var_count = table->count;
 }
 
 void xr_repl_symbols_collect(XrReplSymbolTable *table, XrCompilerContext *ctx,
                              int seeded_count) {
     if (!table || !ctx) return;
-    
+
     // Collect new definitions (indices beyond seeded_count)
     for (int i = seeded_count; i < ctx->shared_var_count; i++) {
         if (ctx->shared_vars[i].name != NULL) {
@@ -194,59 +194,59 @@ XrInputStatus xr_repl_check_input(const char *source) {
 
 XrProto* xr_repl_compile(XrayIsolate *isolate, const char *source) {
     if (!isolate || !source) return NULL;
-    
+
     // Ensure REPL symbol table exists
     if (!isolate->repl_symbols) {
         isolate->repl_symbols = xr_repl_symbols_new();
         if (!isolate->repl_symbols) return NULL;
     }
-    
+
     // Parse
     AstNode *ast = xr_parse(isolate, source);
     if (!ast) return NULL;
-    
+
     // Create compiler context
     XrCompilerContext *ctx = xr_compiler_context_new();
     if (!ctx) {
-        xr_ast_free(isolate, ast);
+        xr_program_destroy(ast);
         return NULL;
     }
-    
+
     ctx->X = isolate;
     ctx->source_file = "<repl>";
     ctx->repl_mode = true;
     ctx->shared_offset = 0;  // REPL: absolute indices
-    
+
     // Seed with prior definitions
     int seeded_count = isolate->repl_symbols->count;
     xr_repl_symbols_seed_context(isolate->repl_symbols, ctx);
-    
+
     // REPL mode: disable analyzer — it cannot see cross-compilation-unit
     // shared variables seeded from prior inputs, producing false warnings.
     if (ctx->analyzer) {
         xa_analyzer_free(ctx->analyzer);
         ctx->analyzer = NULL;
     }
-    
+
     // Compile
     XrProto *proto = xr_compile(ctx, ast);
-    
+
     if (proto && !ctx->had_error) {
         // Force shared_offset=0 on compiled proto
         proto->shared_offset = 0;
-        
+
         // Update isolate shared array count
         if (ctx->shared_var_count > isolate->vm.shared.count) {
             isolate->vm.shared.count = ctx->shared_var_count;
             xr_shared_array_ensure(&isolate->vm.shared, ctx->shared_var_count - 1);
         }
-        
+
         // Collect new definitions into REPL symbol table
         xr_repl_symbols_collect(isolate->repl_symbols, ctx, seeded_count);
     }
-    
+
     xr_compiler_context_free(ctx);
-    xr_ast_free(isolate, ast);
-    
+    xr_program_destroy(ast);
+
     return proto;
 }

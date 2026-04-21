@@ -1510,10 +1510,6 @@ XrDestructurePattern* convert_array_literal_to_pattern(XrayIsolate *X, AstNode *
             elements[i] = xr_pattern_identifier(X, element->as.variable.name, NULL);
         } else {
             // Not a variable reference, cannot convert to destructure pattern
-            // Free already allocated patterns
-            for (int j = 0; j < i; j++) {
-                xr_pattern_free(X, elements[j]);
-            }
             return NULL;
         }
     }
@@ -1549,9 +1545,6 @@ XrDestructurePattern* convert_object_literal_to_pattern(XrayIsolate *X, AstNode 
             field_name = ast_strdup(X, key_node->as.variable.name);
         } else {
             // Key is not string or variable, cannot convert
-            for (int j = 0; j < i; j++) {
-                xr_pattern_free(X, patterns[j]);
-            }
             return NULL;
         }
 
@@ -1561,9 +1554,6 @@ XrDestructurePattern* convert_object_literal_to_pattern(XrayIsolate *X, AstNode 
             if (key_node->type == AST_VARIABLE &&
                 strcmp(key_node->as.variable.name, value_node->as.variable.name) != 0) {
                 // Key and value don't match, not shorthand syntax
-                for (int j = 0; j < i; j++) {
-                    xr_pattern_free(X, patterns[j]);
-                }
                 return NULL;
             }
 
@@ -1572,10 +1562,6 @@ XrDestructurePattern* convert_object_literal_to_pattern(XrayIsolate *X, AstNode 
             patterns[i] = xr_pattern_identifier(X, value_node->as.variable.name, NULL);
         } else {
             // Value is not variable reference, cannot convert to destructure pattern
-            // Free already allocated resources
-            for (int j = 0; j < i; j++) {
-                xr_pattern_free(X, patterns[j]);
-            }
             return NULL;
         }
     }

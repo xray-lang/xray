@@ -753,7 +753,7 @@ static XrHttpResult xr_http_request_internal(XrayIsolate *X, const XrHttpRequest
 
     if (raw_body && raw_body_len > 0) {
         // Check Content-Encoding for decompression
-        XrCompressType compress_type = XR_COMPRESS_NONE;
+        XrContentEncoding compress_type = XR_CONTENT_ENC_NONE;
         for (size_t i = 0; i < resp.header_count; i++) {
             if (resp.headers[i].name_len == 16 &&
                 strncasecmp(resp.headers[i].name, "Content-Encoding", 16) == 0) {
@@ -767,7 +767,7 @@ static XrHttpResult xr_http_request_internal(XrayIsolate *X, const XrHttpRequest
             }
         }
 
-        if (compress_type != XR_COMPRESS_NONE) {
+        if (compress_type != XR_CONTENT_ENC_NONE) {
             // Decompress data
             void *decompressed = NULL;
             size_t decompressed_len = 0;

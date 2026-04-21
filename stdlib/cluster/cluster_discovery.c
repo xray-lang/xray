@@ -14,36 +14,15 @@
  *   TCP connection with full challenge-response authentication.
  *
  * WIRE FORMAT (announce datagram):
- *   [magic 4B LE] [version 1B] [name_len 1B] [name ...] [port 2B LE]
- *   [cluster_hash 8B LE]
+ *   [magic 4B BE] [version 1B] [name_len 1B] [name ...] [port 2B BE]
+ *   [cluster_hash 8B BE]
  *
  *   cluster_hash = FNV-1a 64-bit of the shared secret, used to filter
  *   announces from different clusters without revealing the secret.
  *
- * BYTE-ORDER NOTE — DELIBERATELY LITTLE-ENDIAN.
- *
- * The cluster handshake / data protocol in cluster_proto.c uses
- * big-endian (network byte order) per the usual TCP convention.
- * Discovery announces are *intentionally* little-endian because:
- *
- *   1. LAN discovery runs only on IPv4/IPv6 multicast within a
- *      single broadcast domain — there is no cross-WAN interop
- *      requirement, so "network byte order" brings no portability
- *      benefit.
- *
- *   2. Every platform we ship on (x86, x86_64, ARM64 little-endian
- *      mode) is LE natively, so `memcpy(&u32, buf, 4)` is a single
- *      aligned load. Big-endian would add htonl/ntohl overhead on
- *      the hot send/parse path for zero gain.
- *
- *   3. Announces never leave the LAN: the IP_MULTICAST_TTL is
- *      hard-coded to 1 (see create_mcast_socket below), so an
- *      announce cannot reach a BE-only box over the wire.
- *
- * Do NOT "fix" this by switching to BE — the codebase is
- * consistent in documenting LE here so new developers can grep for
- * the rationale. Future protocol additions to this datagram should
- * stay LE for the same reasons.
+ * BYTE ORDER: big-endian (network byte order), matching the cluster
+ * TCP protocol in cluster_proto.c. Consistency across all wire formats
+ * keeps the codebase simple and avoids LE/BE mixup bugs.
  */
 
 #include "cluster_discovery.h"
@@ -91,8 +70,8 @@ static int build_announce(uint8_t *buf, size_t buf_size,
 
     uint8_t *p = buf;
 
-    // magic (LE)
-    uint32_t magic = XR_DISCOVERY_MAGIC;
+    // magic (BE)
+    uint32_t magic = htonl(XR_DISCOVERY_MAGIC);
     memcpy(p, &magic, 4); p += 4;
 
     // version
@@ -102,11 +81,15 @@ static int build_announce(uint8_t *buf, size_t buf_size,
     *p++ = name_len;
     memcpy(p, name, name_len); p += name_len;
 
-    // port (LE)
-    memcpy(p, &port, 2); p += 2;
+    // port (BE)
+    uint16_t port_be = htons(port);
+    memcpy(p, &port_be, 2); p += 2;
 
-    // cluster_hash (LE)
-    memcpy(p, &cluster_hash, 8); p += 8;
+    // cluster_hash (BE)
+    uint64_t hash_be;
+    for (int i = 0; i < 8; i++)
+        ((uint8_t *)&hash_be)[i] = (uint8_t)(cluster_hash >> (56 - i * 8));
+    memcpy(p, &hash_be, 8); p += 8;
 
     return (int)(p - buf);
 }
@@ -118,10 +101,10 @@ static int parse_announce(const uint8_t *buf, size_t len,
     if (len < 4 + 1 + 1 + 0 + 2 + 8) return -1;
     const uint8_t *p = buf;
 
-    // magic
-    uint32_t magic;
-    memcpy(&magic, p, 4); p += 4;
-    if (magic != XR_DISCOVERY_MAGIC) return -1;
+    // magic (BE)
+    uint32_t magic_be;
+    memcpy(&magic_be, p, 4); p += 4;
+    if (ntohl(magic_be) != XR_DISCOVERY_MAGIC) return -1;
 
     // version
     uint8_t ver = *p++;
@@ -135,11 +118,16 @@ static int parse_announce(const uint8_t *buf, size_t len,
     name_out[name_len] = '\0';
     p += name_len;
 
-    // port
-    memcpy(port_out, p, 2); p += 2;
+    // port (BE)
+    uint16_t port_be;
+    memcpy(&port_be, p, 2); p += 2;
+    *port_out = ntohs(port_be);
 
-    // cluster_hash
-    memcpy(hash_out, p, 8);
+    // cluster_hash (BE)
+    uint64_t h = 0;
+    for (int i = 0; i < 8; i++)
+        h = (h << 8) | p[i];
+    *hash_out = h;
 
     return 0;
 }
