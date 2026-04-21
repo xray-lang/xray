@@ -14,6 +14,7 @@
 #include "../../base/xmalloc.h"
 #include "../../base/xchecks.h"
 #include "xtype_names.h"
+#include <stdatomic.h>
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
@@ -24,7 +25,7 @@
 
 // ========== Process-level static singletons (early init) ==========
 // Basic types are immutable and globally shared. No allocation needed.
-static bool g_types_initialized = false;
+static _Atomic bool g_types_initialized = false;
 
 // Non-nullable singletons
 static XrType g_type_int;
@@ -55,8 +56,8 @@ static void init_singleton(XrType *t, XrTypeKind kind, uint32_t id,
 }
 
 void xr_type_global_init(void) {
-    if (g_types_initialized) return;
-    XR_DCHECK(!g_types_initialized, "type system double init");
+    bool expected = false;
+    if (!atomic_compare_exchange_strong(&g_types_initialized, &expected, true)) return;
 
     uint32_t id = 1;
     init_singleton(&g_type_int,     XR_KIND_INT,     id++, false, 0);
@@ -77,7 +78,6 @@ void xr_type_global_init(void) {
     init_singleton(&g_type_json_nullable,   XR_KIND_JSON,   id++, true, 0);
     g_type_json_nullable.object.allow_extension = true;
 
-    g_types_initialized = true;
 }
 
 // Set current type pool on the active isolate (called by XaAnalyzer)
@@ -613,10 +613,11 @@ XrType *xr_type_union_remove(XrayIsolate *X, XrType *type, XrTypeKind kind) {
 
 // Built-in JsonValue union type: (bool|int|float|string|Json|Array)?
 // Represents a value extracted from a Json object with unknown field type.
-static XrType *s_json_value_type = NULL;
+// Cached per-isolate in X->json_value_type.
 
 XrType *xr_type_new_json_value(XrayIsolate *X) {
-    if (s_json_value_type) return s_json_value_type;
+    XR_CHECK(X != NULL, "xr_type_new_json_value: X is NULL");
+    if (X->json_value_type) return X->json_value_type;
     // Build manually to avoid union_normalize merging int|float→float.
     // JsonValue = (bool|int|float|string|Json|Array)? — 6 members, nullable.
     XrType *raw_members[6] = {
@@ -635,14 +636,15 @@ XrType *xr_type_new_json_value(XrayIsolate *X) {
     memcpy(type->union_type.members, raw_members, sizeof(XrType *) * 6);
     type->union_type.member_count = 6;
     type->is_nullable = true;  // null is a valid Json field value
-    s_json_value_type = type;
-    return s_json_value_type;
+    X->json_value_type = type;
+    return X->json_value_type;
 }
 
 bool xr_type_is_json_value(XrType *type) {
     if (!type) return false;
-    // Fast path: pointer comparison with cached singleton
-    if (type == s_json_value_type) return true;
+    // Fast path: pointer comparison with per-isolate cached type
+    XrayIsolate *X = xray_isolate_current();
+    if (X && type == X->json_value_type) return true;
     // Structural check: union of (bool|int|float|string|Json|Array), nullable or not
     // (codegen may strip nullable before checking)
     if (type->kind != XR_KIND_UNION) return false;

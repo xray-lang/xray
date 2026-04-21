@@ -147,6 +147,9 @@ struct XrayIsolate {
     // Per-isolate active type pool (replaces __thread g_current_pool)
     struct XrTypePool *current_type_pool;
 
+    // Per-isolate cached JsonValue union type (replaces static s_json_value_type)
+    struct XrType *json_value_type;
+
     /* ========== VM Engine State ========== */
 
     // VM state uses independent type XrVMState (defined in xr_vm_state.h)
