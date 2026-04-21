@@ -717,6 +717,12 @@ void tfa_analyze_module(TfaState *tfa, XrProto *main_proto) {
 
     // Phase 4: Apply inferred types to protos
     tfa_apply_results(tfa);
+
+    // Record this module root as analyzed (prevents redundant re-analysis)
+    XrProto *root = tfa_find_root(main_proto);
+    if (root && tfa->n_analyzed_roots < TFA_MAX_MODULES) {
+        tfa->analyzed_roots[tfa->n_analyzed_roots++] = root;
+    }
 }
 
 /* ========== Debug Dump ========== */

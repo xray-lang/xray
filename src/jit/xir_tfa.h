@@ -116,6 +116,8 @@ typedef struct TfaCallSite {
 #define TFA_INIT_CALLS 256
 #define TFA_INIT_HASH  128
 
+#define TFA_MAX_MODULES 32  // max modules with independent TFA analysis
+
 typedef struct TfaState {
     // Function summaries (dynamically allocated)
     TfaSummary *summaries;
@@ -136,6 +138,12 @@ typedef struct TfaState {
     TfaSummary **worklist;
     uint32_t worklist_cap;
     uint32_t worklist_head, worklist_tail;
+
+    // Per-module tracking: root protos that have been analyzed.
+    // Prevents redundant re-analysis within a single JIT lifetime
+    // while allowing newly loaded modules to be analyzed on demand.
+    XrProto *analyzed_roots[TFA_MAX_MODULES];
+    uint32_t n_analyzed_roots;
 
     // Statistics
     uint32_t iterations;
@@ -170,6 +178,21 @@ XR_FUNC void tfa_apply_results(TfaState *tfa);
 // run fixed-point solver, and apply inferred types to protos.
 // This is the main entry point — call once after compilation, before JIT.
 XR_FUNC void tfa_analyze_module(TfaState *tfa, XrProto *main_proto);
+
+// Walk up proto->enclosing chain to find module root.
+static inline XrProto *tfa_find_root(XrProto *proto) {
+    while (proto && proto->enclosing) proto = proto->enclosing;
+    return proto;
+}
+
+// Check if a module root has already been analyzed.
+static inline bool tfa_is_module_analyzed(TfaState *tfa, XrProto *root) {
+    if (!tfa || !root) return false;
+    for (uint32_t i = 0; i < tfa->n_analyzed_roots; i++) {
+        if (tfa->analyzed_roots[i] == root) return true;
+    }
+    return false;
+}
 
 // Print TFA statistics (debug)
 XR_FUNC void tfa_dump_stats(TfaState *tfa);

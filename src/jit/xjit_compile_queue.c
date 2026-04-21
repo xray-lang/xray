@@ -8,15 +8,16 @@
  * xjit_compile_queue.c - Background JIT compilation queue
  *
  * KEY CONCEPT:
- *   Single background thread consumes compilation tasks from a SPSC
- *   ring buffer. Each task runs the full XIR pipeline (build → optimize
- *   → codegen) and publishes the result via proto->jit_entry_pending.
- *   The main thread installs pending code at GC safepoints.
+ *   N background worker threads consume compilation tasks from an MPSC
+ *   ring buffer via CAS on the tail index. Each task runs the full XIR
+ *   pipeline (build → optimize → codegen) and publishes the result via
+ *   proto->jit_entry_pending.  Main thread installs pending code at
+ *   GC safepoints.
  *
  * THREAD SAFETY:
  *   - XrProto fields read by builder are immutable after creation
- *   - Background thread owns its own XirCodeAlloc (no sharing)
- *   - Only jit_entry_pending is written by bg thread (atomic)
+ *   - Each worker owns a private XirCodeAlloc (no sharing)
+ *   - Only jit_entry_pending is written by bg threads (atomic)
  *   - Main thread reads jit_entry_pending and writes jit_entry (at safepoint)
  */
 
@@ -35,19 +36,29 @@
 #include "../base/xlog.h"
 #include "../base/xchecks.h"
 #include <string.h>
+#include <unistd.h>  // sysconf(_SC_NPROCESSORS_ONLN)
+
+/* ========== Worker context (passed via thread arg) ========== */
+
+typedef struct {
+    XirCompileQueue *queue;
+    uint32_t         worker_id;  // 0..n_workers-1
+} BgWorkerArg;
 
 /* ========== Background compilation (single task) ========== */
 
 // Run the full compilation pipeline for one proto using a pre-snapshotted task.
-// Called from the background thread. All allocations use xr_malloc.
+// Called from a background worker. All allocations use xr_malloc.
 // On success, publishes result via atomic store to proto->jit_entry_pending.
 //
 // IMPORTANT: this function must never write back to |proto|; every field it
 // needs is already present in |task| or is a truly immutable proto field
 // (bytecode array, constants pool, child protos, etc.).
-static void bg_compile_one(XirCompileQueue *q, const XirBgTask *task) {
+static void bg_compile_one(XirCompileQueue *q, uint32_t worker_id,
+                           const XirBgTask *task) {
     XirJitState *jit = q->jit;
     if (!task || !task->proto || !jit) return;
+    XR_DCHECK(worker_id < XJIT_MAX_WORKERS, "worker_id out of range");
 
     XrProto *proto = task->proto;
     bool is_recompile = task->is_recompile;
@@ -90,10 +101,9 @@ static void bg_compile_one(XirCompileQueue *q, const XirBgTask *task) {
     XirOptLevel opt = is_recompile ? XIR_OPT_FULL : XIR_OPT_BASIC;
     xir_run_pipeline_ex(func, opt, proto);
 
-    // Codegen — background thread uses its own dedicated code_alloc.
-    // This eliminates data races with the main thread's sync/recompile
-    // path which uses jit->code_alloc concurrently.
-    XirCodegenResult res = xir_codegen_arm64(func, &q->bg_code_alloc);
+    // Codegen — each worker uses its own dedicated code_alloc.
+    // This eliminates data races between workers and the main thread.
+    XirCodegenResult res = xir_codegen_arm64(func, &q->worker_code_alloc[worker_id]);
     if (!res.success) {
         xr_log_warning("jit-bg", "codegen failed for %s",
                 proto->name ? XR_STRING_CHARS(proto->name) : "?");
@@ -153,11 +163,22 @@ static void bg_compile_one(XirCompileQueue *q, const XirBgTask *task) {
     xir_func_destroy(func);
 }
 
-/* ========== Background thread main loop ========== */
+/* ========== Background worker main loop ========== */
 
-static void *bg_thread_main(void *arg) {
-    XirCompileQueue *q = (XirCompileQueue *)arg;
-    XirJitState *jit = q->jit;
+// Each worker loops: wait on condvar, CAS-dequeue a task, compile it.
+// CAS on tail ensures exactly-once delivery across multiple workers.
+static void *bg_worker_main(void *arg) {
+    BgWorkerArg *wa = (BgWorkerArg *)arg;
+    XirCompileQueue *q = wa->queue;
+    uint32_t wid = wa->worker_id;
+    xr_free(wa);  // heap-allocated by init, owned by this thread
+
+#if defined(__APPLE__)
+    // Set thread name for debugging (macOS: can only set own name)
+    char tname[32];
+    snprintf(tname, sizeof(tname), "jit-bg-%u", wid);
+    pthread_setname_np(tname);
+#endif
 
     while (!atomic_load_explicit(&q->shutdown, memory_order_acquire)) {
         // Wait for tasks
@@ -172,19 +193,22 @@ static void *bg_thread_main(void *arg) {
         if (atomic_load_explicit(&q->shutdown, memory_order_acquire))
             break;
 
-        // Drain all available tasks
+        // Drain tasks via CAS (multiple workers may compete)
         while (true) {
             uint32_t tail = atomic_load_explicit(&q->tail, memory_order_acquire);
             uint32_t head = atomic_load_explicit(&q->head, memory_order_acquire);
             if (tail == head) break;
 
-            // Copy the snapshot out of the ring buffer first so the slot can
-            // be reclaimed before we start compiling (important when the
-            // main thread is producing faster than we can drain).
-            XirBgTask task = q->tasks[tail & (XJIT_QUEUE_CAPACITY - 1)];
-            atomic_store_explicit(&q->tail, tail + 1, memory_order_release);
+            // CAS: try to claim slot [tail]
+            if (!atomic_compare_exchange_weak_explicit(
+                    &q->tail, &tail, tail + 1,
+                    memory_order_acq_rel, memory_order_acquire)) {
+                continue;  // another worker got it, retry
+            }
 
-            bg_compile_one(q, &task);
+            // Copy the snapshot out of the ring buffer before compiling
+            XirBgTask task = q->tasks[tail & (XJIT_QUEUE_CAPACITY - 1)];
+            bg_compile_one(q, wid, &task);
         }
     }
 
@@ -205,19 +229,40 @@ void xjit_queue_init(XirCompileQueue *q, XirJitState *jit) {
 
     pthread_mutex_init(&q->mutex, NULL);
     pthread_cond_init(&q->cond, NULL);
-    xir_code_alloc_init(&q->bg_code_alloc);
 
-    // Start background thread
-    int err = pthread_create(&q->bg_thread, NULL, bg_thread_main, q);
-    if (err == 0) {
-        q->started = true;
-        // Set thread name for debugging
-#if defined(__APPLE__)
-        // macOS: pthread_setname_np takes only name (sets current thread)
-        // Can't set name from parent thread on macOS, bg thread would need to do it
-#endif
-    } else {
-        xr_log_warning("jit-bg", "failed to create background compile thread: %d", err);
+    // Determine worker count: min(XJIT_MAX_WORKERS, nCPU - 1), at least 1
+    long ncpu = sysconf(_SC_NPROCESSORS_ONLN);
+    if (ncpu < 1) ncpu = 1;
+    uint32_t nw = (uint32_t)(ncpu - 1);
+    if (nw < 1) nw = 1;
+    if (nw > XJIT_MAX_WORKERS) nw = XJIT_MAX_WORKERS;
+
+    // Initialize per-worker code allocators
+    for (uint32_t i = 0; i < nw; i++) {
+        xir_code_alloc_init(&q->worker_code_alloc[i]);
+    }
+
+    // Start worker threads
+    q->n_workers = 0;
+    for (uint32_t i = 0; i < nw; i++) {
+        BgWorkerArg *wa = (BgWorkerArg *)xr_malloc(sizeof(BgWorkerArg));
+        if (!wa) break;
+        wa->queue = q;
+        wa->worker_id = i;
+        int err = pthread_create(&q->workers[i], NULL, bg_worker_main, wa);
+        if (err == 0) {
+            q->n_workers++;
+        } else {
+            xr_free(wa);
+            xr_log_warning("jit-bg", "failed to create worker %u: %d", i, err);
+            break;
+        }
+    }
+    q->started = (q->n_workers > 0);
+
+    if (jit->verbose && q->started) {
+        xr_log_verbose("jit-bg", "started %u background compile workers",
+                       q->n_workers);
     }
 }
 
@@ -227,18 +272,23 @@ void xjit_queue_destroy(XirCompileQueue *q) {
     // Signal shutdown
     atomic_store_explicit(&q->shutdown, true, memory_order_release);
 
-    // Wake up blocked thread
+    // Wake up all blocked workers
     pthread_mutex_lock(&q->mutex);
-    pthread_cond_signal(&q->cond);
+    pthread_cond_broadcast(&q->cond);
     pthread_mutex_unlock(&q->mutex);
 
-    // Join thread
-    if (q->started) {
-        pthread_join(q->bg_thread, NULL);
-        q->started = false;
+    // Join all worker threads
+    for (uint32_t i = 0; i < q->n_workers; i++) {
+        pthread_join(q->workers[i], NULL);
+    }
+    q->n_workers = 0;
+    q->started = false;
+
+    // Destroy per-worker code allocators
+    for (uint32_t i = 0; i < XJIT_MAX_WORKERS; i++) {
+        xir_code_alloc_destroy(&q->worker_code_alloc[i]);
     }
 
-    xir_code_alloc_destroy(&q->bg_code_alloc);
     pthread_mutex_destroy(&q->mutex);
     pthread_cond_destroy(&q->cond);
 }
@@ -257,7 +307,7 @@ bool xjit_queue_push(XirCompileQueue *q, const XirBgTask *task) {
     q->tasks[head & (XJIT_QUEUE_CAPACITY - 1)] = *task;
     atomic_store_explicit(&q->head, head + 1, memory_order_release);
 
-    // Wake background thread
+    // Wake one worker (or broadcast if queue was empty — multiple items queued rapidly)
     pthread_mutex_lock(&q->mutex);
     pthread_cond_signal(&q->cond);
     pthread_mutex_unlock(&q->mutex);
