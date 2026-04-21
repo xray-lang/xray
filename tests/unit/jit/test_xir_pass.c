@@ -14,6 +14,7 @@
 #include <string.h>
 #include "../../../src/jit/xir.h"
 #include "../../../src/jit/xir_pass.h"
+#include "../../../src/jit/xir_looptree.h"
 
 /* ========== Copy Propagation Tests ========== */
 
@@ -931,13 +932,13 @@ static void test_licm_loop_depth(void) {
 
     xir_pass_licm(func);
 
-    /* Check loop_depth */
-    assert(entry->loop_depth == 0);
-    assert(outer_hdr->loop_depth == 1);
-    assert(inner_hdr->loop_depth == 2);
-    assert(inner_body->loop_depth == 2);
-    assert(outer_body->loop_depth == 1);
-    assert(exit_b->loop_depth == 0);
+    /* Check loop_depth via XirLoopInfo (loop_depth moved off XirBlock) */
+    assert(xir_block_loop_depth(func, entry->id) == 0);
+    assert(xir_block_loop_depth(func, outer_hdr->id) == 1);
+    assert(xir_block_loop_depth(func, inner_hdr->id) == 2);
+    assert(xir_block_loop_depth(func, inner_body->id) == 2);
+    assert(xir_block_loop_depth(func, outer_body->id) == 1);
+    assert(xir_block_loop_depth(func, exit_b->id) == 0);
 
     xir_func_destroy(func);
     fprintf(stderr, " PASS\n");
