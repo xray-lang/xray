@@ -22,6 +22,6 @@
 #include <stdio.h>
 #include "../base/xdefs.h"
 
-// xir_op_is_pure, xir_compute_idom, xir_dominates now declared in xir.h
+// xir_op_is_pure, xir_compute_idom now declared in xir.h
 
 #endif // XIR_PASS_INTERNAL_H

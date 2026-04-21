@@ -26,10 +26,6 @@
  * and produces strictly at least as many folding opportunities as
  * that sequence (it is only stronger because phi-meet is conditional
  * on edge reachability).
- *
- * The existing three passes are retained for the moment as a
- * conservative fallback while SCCP bakes in; the pipeline driver will
- * migrate to SCCP exclusively in a follow-up commit.
  */
 XR_FUNC void xir_pass_sccp(XirFunc *func);
 

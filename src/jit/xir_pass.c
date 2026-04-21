@@ -399,7 +399,6 @@ static bool gvn_assoc_const(XirFunc *func, XirIns *ins,
 }
 
 #define GVN_MIN_TABLE  XIR_GVN_MIN_TABLE
-#define GVN_MAX_TABLE  XIR_GVN_MAX_TABLE
 
 typedef struct {
     uint32_t key;       // hash; 0 = empty
@@ -418,9 +417,8 @@ void xir_pass_gvn(XirFunc *func) {
 
     /* Dynamic table size: one slot per ~half an instruction so the load
      * factor stays around 50%.  Floored at GVN_MIN_TABLE so tiny
-     * functions still have probe room.  The old GVN_MAX_TABLE ceiling
-     * is gone — the function-level hard cap XIR_MAX_FUNC_TOTAL_INS
-     * already bounds worst-case allocation upstream. */
+     * functions still have probe room; XIR_MAX_FUNC_TOTAL_INS bounds
+     * worst-case allocation upstream. */
     uint32_t total_ins = 0;
     for (uint32_t bi = 0; bi < func->nblk; bi++) total_ins += func->blocks[bi]->nins;
     uint32_t gvn_tsize = GVN_MIN_TABLE;
@@ -1602,8 +1600,7 @@ static uint32_t xir_count_se_(XirFunc *fn) {
  */
 
 /* Canonicalising group: runs at every optimisation level to fold
- * constants, propagate types, drop dead code.  SCCP subsumes the
- * legacy const_prop / branch_simp / remove_unreachable triple. */
+ * constants, propagate types, drop dead code. */
 static const XirPassDesc PG_CANON[] = {
     { "select_rep",   { .v = xir_pass_select_rep   }, XIR_PASS_SKIP_CFG_VERIFY },
     { "sccp",         { .v = xir_pass_sccp         }, 0 },

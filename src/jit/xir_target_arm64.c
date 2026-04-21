@@ -53,7 +53,7 @@ const XirTarget xir_target_arm64 = {
 
     .frame_base         = 176,      // callee-saved(160) + stack_map_ptr(8) + safepoint_id(8) = 176B
     .spill_base         = 176,      // spill slots start after frame metadata
-    .max_spill_slots    = 64,
+    .max_spill_slots    = 32,       // must match XIR_MAX_SPILL_SLOTS (uint32_t spill_bitmap)
 
     .max_vregs          = 512,
 };

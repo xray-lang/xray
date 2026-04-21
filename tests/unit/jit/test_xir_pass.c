@@ -6,7 +6,7 @@
  * Licensed under the MIT License
  *
  * test_xir_pass.c - Unit tests for XIR optimization passes
- *   (copy_prop, branch_simp, remove_unreachable, phi_simp)
+ *   (copy_prop, sccp, phi_simp)
  */
 
 #include <stdio.h>
@@ -14,6 +14,7 @@
 #include <string.h>
 #include "../../../src/jit/xir.h"
 #include "../../../src/jit/xir_pass.h"
+#include "../../../src/jit/xir_pass_sccp.h"
 #include "../../../src/jit/xir_looptree.h"
 
 /* ========== Copy Propagation Tests ========== */
@@ -128,7 +129,7 @@ static void test_branch_simp_const_true(void) {
     xir_block_add_pred(then_blk, entry, func->arena);
     xir_block_add_pred(else_blk, entry, func->arena);
 
-    xir_pass_branch_simp(func);
+    xir_pass_sccp(func);
 
     assert(entry->jmp.type == XIR_JMP_JMP);
     assert(entry->s1 == then_blk);
@@ -163,7 +164,7 @@ static void test_branch_simp_const_false(void) {
     xir_block_add_pred(then_blk, entry, func->arena);
     xir_block_add_pred(else_blk, entry, func->arena);
 
-    xir_pass_branch_simp(func);
+    xir_pass_sccp(func);
 
     assert(entry->jmp.type == XIR_JMP_JMP);
     assert(entry->s1 == else_blk);
@@ -193,7 +194,7 @@ static void test_branch_simp_same_target(void) {
     xir_block_set_br(entry, v0, merge, merge);
     xir_block_add_pred(merge, entry, func->arena);
 
-    xir_pass_branch_simp(func);
+    xir_pass_sccp(func);
 
     assert(entry->jmp.type == XIR_JMP_JMP);
     assert(entry->s1 == merge);
@@ -237,12 +238,9 @@ static void test_remove_unreachable_basic(void) {
 
     assert(func->nblk == 3);
 
-    /* branch_simp turns BR(1) → JMP then */
-    xir_pass_branch_simp(func);
+    /* SCCP folds BR(1) → JMP then and removes unreachable else_blk */
+    xir_pass_sccp(func);
     assert(entry->jmp.type == XIR_JMP_JMP);
-
-    /* remove_unreachable should drop else_blk */
-    xir_pass_remove_unreachable(func);
     assert(func->nblk == 2);
 
     /* Verify block IDs are compacted */
@@ -468,9 +466,7 @@ static void test_combined_branch_elim(void) {
     assert(func->nblk == 3);
 
     /* Run the combined passes */
-    xir_pass_const_prop(func);
-    xir_pass_branch_simp(func);
-    xir_pass_remove_unreachable(func);
+    xir_pass_sccp(func);
     xir_pass_copy_prop(func);
     xir_pass_dce(func);
 
