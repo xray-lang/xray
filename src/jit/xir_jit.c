@@ -2249,7 +2249,7 @@ XrJitResult xr_jit_getfield_ic(XrCoroutine *coro, int64_t extra_arg) {
         return XR_JIT_NULL();
     }
     XrClass *cls = xr_instance_get_class(inst);
-    int idx = xr_class_lookup_field_by_name(cls, field_name->data);
+    int idx = xr_class_lookup_field_by_name(coro->isolate, cls, field_name->data);
     if (idx < 0) {
         return XR_JIT_NULL();
     }

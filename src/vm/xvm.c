@@ -4765,7 +4765,7 @@ startfunc:
                     VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, "field name must be a string");
                 }
                 XrString *field_name = XR_TO_STRING(field_name_val);
-                field_idx = xr_class_lookup_field_by_name(cls, field_name->data);
+                field_idx = xr_class_lookup_field_by_name(isolate, cls, field_name->data);
 
                 if (field_idx < 0) {
                     VM_RUNTIME_ERROR(XR_ERR_TYPE_NO_PROPERTY, "field '%s' not found", field_name->data);

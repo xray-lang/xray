@@ -167,8 +167,13 @@ struct XrClass {
     uint32_t operator_flags;
 
     /* === Reflection Cache === */
-    struct XrReflectCache *reflect_cache;  // Per-class, lazy creation
-    struct XrTypeMetadata *type_metadata;  // Cached, set on first registry lookup
+    // Eagerly built by xr_class_builder_finalize; guaranteed non-NULL
+    // for any class that survives finalize, unless its allocation hit
+    // OOM. reflection clients can treat NULL as "degraded, no cache"
+    // but never as "not built yet".
+    struct XrReflectCache *reflect_cache;
+    // Also eagerly populated by finalize via xr_registry_register_class.
+    struct XrTypeMetadata *type_metadata;
 };
 
 // Class flags
@@ -252,8 +257,10 @@ static inline uint16_t xr_class_instance_field_count(const XrClass *cls) {
 // Returns NULL for invalid index
 XR_FUNC const XrFieldDescriptor* xr_class_get_field(const XrClass *cls, int index);
 
-// Lookup field index by name, returns -1 if not found
-XR_FUNC int xr_class_lookup_field_by_name(XrClass *cls, const char *name);
+// Lookup field index by name, returns -1 if not found.
+// Name is resolved via the isolate's symbol table, so the lookup is
+// O(1) whenever the name has been interned. `X` is required.
+XR_FUNC int xr_class_lookup_field_by_name(XrayIsolate *X, XrClass *cls, const char *name);
 
 // Lookup field index by symbol, returns -1 if not found
 XR_FUNC int xr_class_lookup_field(XrClass *cls, int symbol);
@@ -356,12 +363,11 @@ XR_FUNC void xr_class_print(XrClass *cls);
 
 XR_FUNC XrClass* xr_interface_new(XrayIsolate *X, const char *name);
 
-XR_FUNC bool xr_class_implements_interface(XrClass *cls, const char *interface_name);
-XR_FUNC bool xr_class_implements_interface_fast(XrClass *cls, XrClass *iface);
-
-// Returns count of satisfied methods (equals interface method count if fully satisfied)
-XR_FUNC int xr_class_verify_interface(XrClass *cls, XrClass *iface,
-                               char **errors, int max_errors);
+// Pointer-identity interface check that walks cls's inheritance chain
+// and scans cls->interfaces[] for `iface`. No string compares -- every
+// interface slot is an XrClass* so the check is an O(depth*width) walk
+// of pointers. `iface` must have the XR_CLASS_INTERFACE flag set.
+XR_FUNC bool xr_class_implements_interface(XrClass *cls, XrClass *iface);
 
 XR_FUNC bool xr_class_has_method(XrClass *cls, int method_symbol);
 

@@ -101,21 +101,21 @@ XrValue xr_type_getField(XrayIsolate *isolate, XrValue *args, int nargs) {
 
     if (!meta || !meta->klass) return xr_null();
 
-    // Search inheritance chain
+    // Intern the caller's name once; every field descriptor also stores
+    // an interned-pointer `name`, so after this we can compare pointers
+    // instead of walking each class's fields[] with strcmp.
+    const char *interned = xr_symbol_intern(X, name_str->data);
+    if (!interned) return xr_null();
+
+    // Search the inheritance chain.
     XrClass *current_class = meta->klass;
     while (current_class != NULL) {
-        // Try to use cache for this class (may be NULL for classes
-        // that finalised before the isolate's registry was ready).
         XrReflectCache *cache = current_class->reflect_cache;
-
         for (int i = 0; i < current_class->own_field_count; i++) {
-            if (current_class->fields && current_class->fields[i].name &&
-                strcmp(current_class->fields[i].name, name_str->data) == 0) {
-                // Return cached wrapper if available
+            if (current_class->fields && current_class->fields[i].name == interned) {
                 if (cache && cache->initialized && i < cache->field_count) {
                     return cache->field_wrappers[i];
                 }
-                // Fallback: create new object
                 XrFieldMetadata field_meta = { .owner = current_class, .field_index = i };
                 return xr_create_field_object(X, &field_meta);
             }
@@ -227,21 +227,23 @@ XrValue xr_type_getMethod(XrayIsolate *isolate, XrValue *args, int nargs) {
 
     if (!meta || !meta->klass) return xr_null();
 
-    // Use reflection cache for performance
-    XrReflectCache *cache = meta->klass->reflect_cache;
-
+    // Resolve method name -> symbol once, then match by symbol instead
+    // of walking the methods[] array with strcmp on every reflection
+    // Type.getMethod call. method_symbol_to_index gives O(1) lookup;
+    // the symbol itself is already the canonical identity shared
+    // between the symbol table and every XrMethod.
     XrSymbolTable *sym_table = (XrSymbolTable*)xr_isolate_get_symbol_table(X);
+    SymbolId sym = xr_symbol_lookup_in_table(sym_table, name_str->data);
+    if (sym == SYMBOL_INVALID) return xr_null();
+
+    XrReflectCache *cache = meta->klass->reflect_cache;
     for (int i = 0; i < meta->klass->method_count; i++) {
-        const char *method_name = xr_symbol_get_name_in_table(sym_table, meta->klass->methods[i].symbol);
-        if (method_name && strcmp(method_name, name_str->data) == 0) {
-            // Return cached wrapper if available
-            if (cache && cache->initialized && i < cache->method_count) {
-                return cache->method_wrappers[i];
-            }
-            // Fallback: create new object
-            XrMethodMetadata method_meta = { .owner = meta->klass, .method_index = i };
-            return xr_create_method_object(X, &method_meta);
+        if (meta->klass->methods[i].symbol != (int)sym) continue;
+        if (cache && cache->initialized && i < cache->method_count) {
+            return cache->method_wrappers[i];
         }
+        XrMethodMetadata method_meta = { .owner = meta->klass, .method_index = i };
+        return xr_create_method_object(X, &method_meta);
     }
 
     return xr_null();
@@ -404,8 +406,7 @@ XrValue xr_type_implements(XrayIsolate *isolate, XrValue *args, int nargs) {
         return xr_bool(false);  // Not an interface
     }
 
-    // Use xr_class_implements_interface_fast for O(n) check
-    return xr_bool(xr_class_implements_interface_fast(meta->klass, iface_meta->klass));
+    return xr_bool(xr_class_implements_interface(meta->klass, iface_meta->klass));
 }
 
 /* ========== Type Property Getters ========== */

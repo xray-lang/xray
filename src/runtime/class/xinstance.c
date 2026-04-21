@@ -103,13 +103,13 @@ XrInstance* xr_instance_clone(XrayIsolate *X, XrInstance *src) {
 }
 
 // Access control handled by compiler/interpreter
-XrValue xr_instance_get_field(XrInstance *inst, const char *name) {
-    if (!inst || !name) return xr_null();
+XrValue xr_instance_get_field(XrayIsolate *X, XrInstance *inst, const char *name) {
+    if (!X || !inst || !name) return xr_null();
 
     XrClass *klass = xr_instance_get_class(inst);
     if (!klass) return xr_null();
 
-    int index = xr_class_lookup_field_by_name(klass, name);
+    int index = xr_class_lookup_field_by_name(X, klass, name);
     if (index < 0) {
         xr_log_warning("instance", "field '%s' not found in class '%s'",
                        name, klass->name ? klass->name : "<unnamed>");
@@ -127,13 +127,13 @@ XrValue xr_instance_get_field(XrInstance *inst, const char *name) {
     return inst->fields[index];
 }
 
-void xr_instance_set_field(XrInstance *inst, const char *name, XrValue value) {
-    if (!inst || !name) return;
+void xr_instance_set_field(XrayIsolate *X, XrInstance *inst, const char *name, XrValue value) {
+    if (!X || !inst || !name) return;
 
     XrClass *klass = xr_instance_get_class(inst);
     if (!klass) return;
 
-    int index = xr_class_lookup_field_by_name(klass, name);
+    int index = xr_class_lookup_field_by_name(X, klass, name);
     if (index < 0) {
         xr_log_warning("instance", "field '%s' not found in class '%s'",
                        name, klass->name ? klass->name : "<unnamed>");

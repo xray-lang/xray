@@ -146,8 +146,15 @@ XrClassBuilder* xr_class_builder_new(XrayIsolate *isolate,
 
 bool xr_class_builder_has_field(const XrClassBuilder *builder, const char *name) {
     XR_DCHECK(builder != NULL, "has_field: NULL builder");
+    // Every add_field call intern's its name via the isolate's symbol
+    // table, so the builder's fields[] names are all interned
+    // pointers. Interning the caller's name once gives us the same
+    // canonical pointer and reduces duplicate-check to a single
+    // pointer comparison per slot.
+    const char *interned = xr_symbol_intern(builder->isolate, name);
+    if (!interned) return false;
     for (int i = 0; i < builder->field_count; i++) {
-        if (strcmp(builder->fields[i].name, name) == 0) {
+        if (builder->fields[i].name == interned) {
             return true;
         }
     }
@@ -191,8 +198,10 @@ int xr_class_builder_add_field(XrClassBuilder *builder,
 
 bool xr_class_builder_has_method(const XrClassBuilder *builder, const char *name) {
     XR_DCHECK(builder != NULL, "has_method: NULL builder");
+    const char *interned = xr_symbol_intern(builder->isolate, name);
+    if (!interned) return false;
     for (int i = 0; i < builder->method_count; i++) {
-        if (strcmp(builder->methods[i].name, name) == 0) {
+        if (builder->methods[i].name == interned) {
             return true;
         }
     }
@@ -956,13 +965,18 @@ XrClass* xr_class_builder_finalize(XrClassBuilder *builder) {
 
     xr_class_compute_operator_flags(cls);
 
-    // Eagerly populate the two optional per-class caches that the
-    // reflection layer used to fill in lazily. Both are best-effort:
-    // on allocation failure we fall back to the old lazy path the
-    // read sites already handle (they tolerate NULL). For every class
-    // that finalises cleanly, reflect_cache and type_metadata are now
-    // guaranteed non-NULL on return, which eliminates the race that
-    // existed when two coroutines reflected the same class at once.
+    // Eagerly populate reflect_cache and register type_metadata. Both
+    // are mandatory outputs of finalize: callers can rely on
+    // cls->reflect_cache != NULL and a live registry entry for any
+    // class that survives this function. This is what removed the
+    // race between concurrent reflection users that the old lazy
+    // design exposed, and it is why no caller anywhere else in the
+    // tree needs to re-register a freshly-created class.
+    //
+    // Allocation failures remain non-fatal -- they downgrade the
+    // class to the pre-eager behaviour (NULL cache, no registry
+    // entry) rather than aborting finalize -- but they are logged so
+    // they surface in ASAN / stress runs.
     if (builder->isolate != NULL) {
         if (cls->reflect_cache == NULL) {
             XrReflectCache *rcache = xr_reflect_cache_create(builder->isolate, cls);
@@ -976,11 +990,6 @@ XrClass* xr_class_builder_finalize(XrClassBuilder *builder) {
         }
         if (cls->type_metadata == NULL
             && xr_isolate_get_type_registry(builder->isolate) != NULL) {
-            // xr_registry_register_class is idempotent: if the class was
-            // already registered by a prior path it returns the existing
-            // metadata without producing a duplicate warning. The cache
-            // of metadata back onto cls->type_metadata happens inside
-            // xr_registry_register_type.
             (void)xr_registry_register_class(builder->isolate, cls);
         }
     }

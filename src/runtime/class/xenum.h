@@ -68,7 +68,6 @@ XR_FUNC XrEnumValue* xr_enum_value_new(XrayIsolate *X, const char *enum_name,
 
 /* ========== Access ========== */
 
-XR_FUNC XrEnumValue* xr_enum_get_member(XrEnumType *enum_type, const char *member_name);
 XR_FUNC XrEnumValue* xr_enum_get_member_by_symbol(XrEnumType *enum_type, int symbol);
 XR_FUNC XrEnumValue* xr_enum_from_value(XrEnumType *enum_type, XrValue value);
 XR_FUNC const char* xr_enum_value_name(XrEnumValue *enum_val);
