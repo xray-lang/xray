@@ -48,6 +48,12 @@
 /* ========== GC Allocation ========== */
 #include "../src/runtime/gc/xgc.h"
 
+/* ========== Per-Coroutine GC (mark API for traverse callbacks) ========== */
+#include "../src/runtime/gc/xcoro_gc.h"
+
+/* ========== Error Reporting ========== */
+#include "../src/api/xruntime.h"
+
 /* ========== Isolate API (opaque accessors) ========== */
 #include "../src/runtime/xisolate_api.h"
 

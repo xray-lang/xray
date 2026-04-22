@@ -130,49 +130,93 @@ static const char *xcg_c_type_for_xrtype(struct XrType *t) {
     }
 }
 
-/* ========== Module Lifecycle ========== */
+/* ========== Compilation Lifecycle ========== */
 
-XcgenModule *xcgen_module_new(void) {
-    XcgenModule *mod = (XcgenModule *)xr_calloc(1, sizeof(XcgenModule));
-    if (!mod) return NULL;
-    for (int i = 0; i < XCGEN_SEC_COUNT; i++) {
-        xcgen_buf_init(&mod->sections[i]);
-    }
-    mod->funcs_cap = 16;
-    mod->funcs = (XcgenFunc *)xr_calloc(mod->funcs_cap, sizeof(XcgenFunc));
-    mod->proto_map_cap = 64;
-    mod->proto_map = (XcgenProtoEntry *)xr_malloc(mod->proto_map_cap * sizeof(XcgenProtoEntry));
-    if (!mod->funcs || !mod->proto_map) {
-        xr_free(mod->funcs);
-        xr_free(mod->proto_map);
-        xr_free(mod);
+XcgenCompilation *xcgen_compilation_new(void) {
+    XcgenCompilation *comp = (XcgenCompilation *)xr_calloc(1, sizeof(XcgenCompilation));
+    if (!comp) return NULL;
+
+    comp->modules_cap = 4;
+    comp->modules = (XcgenModule **)xr_calloc(comp->modules_cap, sizeof(XcgenModule *));
+    if (!comp->modules) { xr_free(comp); return NULL; }
+
+    comp->proto_map_cap = 64;
+    comp->proto_map = (XcgenProtoEntry *)xr_malloc(
+        comp->proto_map_cap * sizeof(XcgenProtoEntry));
+    if (!comp->proto_map) {
+        xr_free(comp->modules);
+        xr_free(comp);
         return NULL;
     }
+    comp->single_file = true;
+    return comp;
+}
+
+XcgenModule *xcgen_compilation_add_module(XcgenCompilation *comp,
+                                           const char *name,
+                                           const char *path) {
+    XR_DCHECK(comp != NULL, "xcgen_compilation_add_module: NULL comp");
+
+    // Grow modules array if needed
+    if (comp->nmodules >= comp->modules_cap) {
+        int new_cap = comp->modules_cap * 2;
+        XcgenModule **tmp = (XcgenModule **)xr_realloc(
+            comp->modules, new_cap * sizeof(XcgenModule *));
+        if (!tmp) return NULL;
+        comp->modules = tmp;
+        comp->modules_cap = new_cap;
+    }
+
+    XcgenModule *mod = (XcgenModule *)xr_calloc(1, sizeof(XcgenModule));
+    if (!mod) return NULL;
+
+    mod->module_name = name;
+    mod->module_path = path;
+    mod->module_id = (int16_t)comp->nmodules;
+    mod->comp = comp;
+    mod->struct_reg = comp->struct_reg;
+    mod->emit_debug = comp->emit_debug;
+
+    for (int i = 0; i < XCGEN_SEC_COUNT; i++)
+        xcgen_buf_init(&mod->sections[i]);
+
+    mod->funcs_cap = 16;
+    mod->funcs = (XcgenFunc *)xr_calloc(mod->funcs_cap, sizeof(XcgenFunc));
+    if (!mod->funcs) { xr_free(mod); return NULL; }
+
+    comp->modules[comp->nmodules++] = mod;
     return mod;
 }
 
-void xcgen_register_proto(XcgenModule *mod, void *proto_ptr, const char *c_name) {
-    if (!mod || !proto_ptr || !c_name) return;
-    if (mod->proto_map_count >= mod->proto_map_cap) {
-        uint32_t new_cap = mod->proto_map_cap * 2;
-        XcgenProtoEntry *new_map = (XcgenProtoEntry *)xr_realloc(mod->proto_map,
-                         new_cap * sizeof(XcgenProtoEntry));
-        if (!new_map) return;
-        mod->proto_map = new_map;
-        mod->proto_map_cap = new_cap;
+void xcgen_register_proto(XcgenCompilation *comp, void *proto_ptr,
+                           const char *c_name) {
+    XR_DCHECK(comp != NULL, "xcgen_register_proto: NULL comp");
+    if (!proto_ptr || !c_name) return;
+
+    if (comp->proto_map_count >= comp->proto_map_cap) {
+        int new_cap = comp->proto_map_cap * 2;
+        XcgenProtoEntry *tmp = (XcgenProtoEntry *)xr_realloc(
+            comp->proto_map, new_cap * sizeof(XcgenProtoEntry));
+        if (!tmp) return;
+        comp->proto_map = tmp;
+        comp->proto_map_cap = new_cap;
     }
-    XcgenProtoEntry *e = &mod->proto_map[mod->proto_map_count++];
+    XcgenProtoEntry *e = &comp->proto_map[comp->proto_map_count++];
     e->proto_ptr = proto_ptr;
     e->c_name = c_name;
-    e->func_idx = -1;  // set after xcgen_compile_func
+    e->func_idx = -1;
     e->non_escaping = false;
     e->num_upvals = 0;
 }
 
+/* ========== Proto Lookup (via mod->comp global registry) ========== */
+
 const char *xcg_lookup_proto_name(XcgenModule *mod, void *proto_ptr) {
-    for (int i = 0; i < mod->proto_map_count; i++) {
-        if (mod->proto_map[i].proto_ptr == proto_ptr)
-            return mod->proto_map[i].c_name;
+    XR_DCHECK(mod != NULL && mod->comp != NULL, "xcg_lookup_proto_name: NULL mod/comp");
+    XcgenCompilation *comp = mod->comp;
+    for (int i = 0; i < comp->proto_map_count; i++) {
+        if (comp->proto_map[i].proto_ptr == proto_ptr)
+            return comp->proto_map[i].c_name;
     }
     return NULL;
 }
@@ -181,9 +225,11 @@ const char *xcg_lookup_proto_name(XcgenModule *mod, void *proto_ptr) {
 // Callers must use mod->funcs[idx] to get the actual XcgenFunc — never cache
 // the pointer across calls that may trigger mod->funcs realloc.
 int xcg_lookup_proto_func_idx(XcgenModule *mod, void *proto_ptr) {
-    for (int i = 0; i < mod->proto_map_count; i++) {
-        if (mod->proto_map[i].proto_ptr == proto_ptr)
-            return mod->proto_map[i].func_idx;
+    XR_DCHECK(mod != NULL && mod->comp != NULL, "xcg_lookup_proto_func_idx: NULL");
+    XcgenCompilation *comp = mod->comp;
+    for (int i = 0; i < comp->proto_map_count; i++) {
+        if (comp->proto_map[i].proto_ptr == proto_ptr)
+            return comp->proto_map[i].func_idx;
     }
     return -1;
 }
@@ -194,19 +240,29 @@ XcgenFunc *xcg_lookup_proto_cf(XcgenModule *mod, void *proto_ptr) {
     return NULL;
 }
 
+/* ========== Module Lifecycle ========== */
+
 void xcgen_module_free(XcgenModule *mod) {
     if (!mod) return;
-    for (int i = 0; i < XCGEN_SEC_COUNT; i++) {
+    for (int i = 0; i < XCGEN_SEC_COUNT; i++)
         xcgen_buf_free(&mod->sections[i]);
-    }
     for (int i = 0; i < mod->nfuncs; i++) {
         xcgen_buf_free(&mod->funcs[i].body);
         xr_free(mod->funcs[i].vreg_struct_id);
         xr_free(mod->funcs[i].call_args);
     }
     xr_free(mod->funcs);
-    xr_free(mod->proto_map);
+    xr_free(mod->exports);
     xr_free(mod);
+}
+
+void xcgen_compilation_free(XcgenCompilation *comp) {
+    if (!comp) return;
+    for (int i = 0; i < comp->nmodules; i++)
+        xcgen_module_free(comp->modules[i]);
+    xr_free(comp->modules);
+    xr_free(comp->proto_map);
+    xr_free(comp);
 }
 
 /* ========== Forward Declaration Generation ========== */
@@ -955,11 +1011,13 @@ static bool xcg_closure_is_non_escaping(XirFunc *func, uint32_t cl_vreg,
     return true;  // all uses are safe → non-escaping
 }
 
-// Lookup XcgenProtoEntry by proto pointer.
+// Lookup XcgenProtoEntry by proto pointer (global compilation registry).
 static XcgenProtoEntry *xcg_lookup_proto_entry(XcgenModule *mod, void *proto_ptr) {
-    for (int i = 0; i < mod->proto_map_count; i++) {
-        if (mod->proto_map[i].proto_ptr == proto_ptr)
-            return &mod->proto_map[i];
+    XR_DCHECK(mod != NULL && mod->comp != NULL, "xcg_lookup_proto_entry: NULL");
+    XcgenCompilation *comp = mod->comp;
+    for (int i = 0; i < comp->proto_map_count; i++) {
+        if (comp->proto_map[i].proto_ptr == proto_ptr)
+            return &comp->proto_map[i];
     }
     return NULL;
 }
@@ -1084,10 +1142,12 @@ XcgenFunc *xcgen_compile_func(XcgenModule *mod, XirFunc *xfunc, const char *c_na
     // Compile function body
     xcgen_compile_function_body(mod, cf);
 
-    // Backfill func_idx into proto_map so callers can look up struct param info
-    for (int i = 0; i < mod->proto_map_count; i++) {
-        if (mod->proto_map[i].c_name == c_name) {
-            mod->proto_map[i].func_idx = mod->nfuncs;  // not yet incremented
+    // Backfill func_idx into global proto_map
+    XcgenCompilation *comp = mod->comp;
+    XR_DCHECK(comp != NULL, "xcgen_compile_func: NULL comp backpointer");
+    for (int i = 0; i < comp->proto_map_count; i++) {
+        if (comp->proto_map[i].c_name == c_name) {
+            comp->proto_map[i].func_idx = mod->nfuncs;
             break;
         }
     }
@@ -1098,23 +1158,54 @@ XcgenFunc *xcgen_compile_func(XcgenModule *mod, XirFunc *xfunc, const char *c_na
 
 /* ========== Final Source Assembly ========== */
 
-char *xcgen_emit_source(XcgenModule *mod) {
-    if (!mod) return NULL;
+// Emit source for a single module into buf (internal helper)
+static void xcgen_emit_module_source(XcgenBuf *out, XcgenModule *mod) {
+    XR_DCHECK(out != NULL && mod != NULL, "xcgen_emit_module_source: NULL arg");
+
+    // Per-module sections: types, forward decls, data, function bodies
+    if (mod->sections[XCGEN_SEC_TYPES].len > 0) {
+        xcgen_buf_puts(out, mod->sections[XCGEN_SEC_TYPES].data);
+        xcgen_buf_puts(out, "\n");
+    }
+    if (mod->sections[XCGEN_SEC_FORWARD].len > 0) {
+        xcgen_buf_printf(out, "/* Forward declarations [%s] */\n",
+                         mod->module_name ? mod->module_name : "main");
+        xcgen_buf_puts(out, mod->sections[XCGEN_SEC_FORWARD].data);
+        xcgen_buf_puts(out, "\n");
+    }
+    if (mod->sections[XCGEN_SEC_DATA].len > 0) {
+        xcgen_buf_puts(out, mod->sections[XCGEN_SEC_DATA].data);
+        xcgen_buf_puts(out, "\n");
+    }
+    for (int i = 0; i < mod->nfuncs; i++) {
+        xcgen_buf_puts(out, mod->funcs[i].body.data);
+        xcgen_buf_puts(out, "\n");
+    }
+    if (mod->sections[XCGEN_SEC_MAIN].len > 0) {
+        xcgen_buf_puts(out, mod->sections[XCGEN_SEC_MAIN].data);
+    }
+}
+
+char *xcgen_emit_source(XcgenCompilation *comp) {
+    if (!comp) return NULL;
 
     XcgenBuf out;
     xcgen_buf_init(&out);
 
-    // Auto-generated header comment
     xcgen_buf_puts(&out, "/* Auto-generated by xray build --native (transpile to C) */\n\n");
 
     // Check if any function needs runtime
-    // main() always needs runtime for xrt_bump_init, xrt_println etc.
-    bool any_needs_runtime = (mod->sections[XCGEN_SEC_MAIN].len > 0);
-    for (int i = 0; i < mod->nfuncs; i++) {
-        if (mod->funcs[i].needs_runtime) { any_needs_runtime = true; break; }
+    bool any_needs_runtime = false;
+    for (int m = 0; m < comp->nmodules; m++) {
+        XcgenModule *mod = comp->modules[m];
+        if (mod->sections[XCGEN_SEC_MAIN].len > 0) { any_needs_runtime = true; break; }
+        for (int i = 0; i < mod->nfuncs; i++) {
+            if (mod->funcs[i].needs_runtime) { any_needs_runtime = true; break; }
+        }
+        if (any_needs_runtime) break;
     }
 
-    // Headers section (always emit standard headers)
+    // Headers
     xcgen_buf_puts(&out,
         "#include <stdio.h>\n"
         "#include <stdlib.h>\n"
@@ -1122,54 +1213,28 @@ char *xcgen_emit_source(XcgenModule *mod) {
         "#include <stdint.h>\n"
         "#include <inttypes.h>\n"
     );
-    if (any_needs_runtime) {
+    if (any_needs_runtime)
         xcgen_buf_puts(&out, "#include \"xrt.h\"\n");
-    }
     xcgen_buf_puts(&out, "\n");
-    if (mod->sections[XCGEN_SEC_HEADERS].len > 0) {
-        xcgen_buf_puts(&out, mod->sections[XCGEN_SEC_HEADERS].data);
-        xcgen_buf_puts(&out, "\n");
+
+    // Per-module custom headers
+    for (int m = 0; m < comp->nmodules; m++) {
+        XcgenModule *mod = comp->modules[m];
+        if (mod->sections[XCGEN_SEC_HEADERS].len > 0) {
+            xcgen_buf_puts(&out, mod->sections[XCGEN_SEC_HEADERS].data);
+            xcgen_buf_puts(&out, "\n");
+        }
     }
 
-    // Struct typedefs (from Json promotion)
-    if (mod->struct_reg && mod->struct_reg->nstructs > 0) {
-        xcgen_emit_all_typedefs(&out, mod->struct_reg);
-    }
-    // Deinit dispatch table + xrt_arc_deinit definition (always emitted;
-    // no-op when no structs have PTR fields)
-    xcgen_emit_struct_deinits(&out, mod->struct_reg);
+    // Struct typedefs (global, from Json promotion)
+    if (comp->struct_reg && comp->struct_reg->nstructs > 0)
+        xcgen_emit_all_typedefs(&out, comp->struct_reg);
+    xcgen_emit_struct_deinits(&out, comp->struct_reg);
 
-    // Types section
-    if (mod->sections[XCGEN_SEC_TYPES].len > 0) {
-        xcgen_buf_puts(&out, mod->sections[XCGEN_SEC_TYPES].data);
-        xcgen_buf_puts(&out, "\n");
-    }
+    // Emit each module's code
+    for (int m = 0; m < comp->nmodules; m++)
+        xcgen_emit_module_source(&out, comp->modules[m]);
 
-    // Forward declarations
-    if (mod->sections[XCGEN_SEC_FORWARD].len > 0) {
-        xcgen_buf_puts(&out, "/* Forward declarations */\n");
-        xcgen_buf_puts(&out, mod->sections[XCGEN_SEC_FORWARD].data);
-        xcgen_buf_puts(&out, "\n");
-    }
-
-    // Static data
-    if (mod->sections[XCGEN_SEC_DATA].len > 0) {
-        xcgen_buf_puts(&out, mod->sections[XCGEN_SEC_DATA].data);
-        xcgen_buf_puts(&out, "\n");
-    }
-
-    // Function bodies
-    for (int i = 0; i < mod->nfuncs; i++) {
-        xcgen_buf_puts(&out, mod->funcs[i].body.data);
-        xcgen_buf_puts(&out, "\n");
-    }
-
-    // Main section
-    if (mod->sections[XCGEN_SEC_MAIN].len > 0) {
-        xcgen_buf_puts(&out, mod->sections[XCGEN_SEC_MAIN].data);
-    }
-
-    char *result = out.data;
-    // Don't free out.data — ownership transfers to caller
-    return result;
+    // Ownership transfers to caller
+    return out.data;
 }

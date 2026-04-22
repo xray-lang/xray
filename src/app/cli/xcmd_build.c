@@ -397,14 +397,15 @@ static int cmd_build_native(const char *input, const char *output,
         return 1;
     }
 
-    // Collect AOT-eligible functions
-    #define MAX_AOT_PROTOS 64
-    XrProto *aot_protos[MAX_AOT_PROTOS];
-    int aot_count = 0;
-    collect_aot_protos(proto, aot_protos, &aot_count, MAX_AOT_PROTOS);
-    if (aot_count >= MAX_AOT_PROTOS) {
-        fprintf(stderr, "Warning: AOT proto limit reached (%d), some functions will use bytecode fallback\n", MAX_AOT_PROTOS);
+    // Collect AOT-eligible functions (dynamic array, no hard limit)
+    int aot_cap = 128;
+    XrProto **aot_protos = (XrProto **)xr_malloc(aot_cap * sizeof(XrProto *));
+    if (!aot_protos) {
+        fprintf(stderr, "Error: out of memory\n");
+        xray_isolate_delete(X); xr_free(bc_source); return 1;
     }
+    int aot_count = 0;
+    collect_aot_protos(proto, aot_protos, &aot_count, aot_cap);
 
     // Create struct promotion registry
     XcgenStructRegistry struct_reg;
@@ -414,23 +415,33 @@ static int cmd_build_native(const char *input, const char *output,
         xcgen_collect_shapes(aot_protos[i], &struct_reg, (void *)X);
     xcgen_rebuild_field_index(&struct_reg);
 
-    // Create xcgen module
-    XcgenModule *mod = xcgen_module_new();
-    mod->struct_reg = &struct_reg;
+    // Create compilation context
+    XcgenCompilation *comp = xcgen_compilation_new();
+    comp->struct_reg = &struct_reg;
+
+    // Add main module to compilation
+    XcgenModule *mod = xcgen_compilation_add_module(comp, "main", input);
+
+    // Allocate C name storage (dynamic, same count as aot_protos)
+    char (*aot_c_names)[140] = (char (*)[140])xr_malloc(aot_count * 140);
+    if (!aot_c_names) {
+        fprintf(stderr, "Error: out of memory\n");
+        xcgen_compilation_free(comp); xr_free(aot_protos);
+        xray_isolate_delete(X); xr_free(bc_source); return 1;
+    }
 
     // Register AOT proto→name mappings
-    char aot_c_names[MAX_AOT_PROTOS][140];
     for (int i = 0; i < aot_count; i++) {
         XrProto *p = aot_protos[i];
         const char *name = p->name ? XR_STRING_CHARS(p->name) : "?";
-        snprintf(aot_c_names[i], sizeof(aot_c_names[i]), "xr_%s", name);
+        snprintf(aot_c_names[i], 140, "xr_%s", name);
         for (int j = 0; j < i; j++) {
             if (strcmp(aot_c_names[i], aot_c_names[j]) == 0) {
-                snprintf(aot_c_names[i], sizeof(aot_c_names[i]), "xr_%s_%d", name, i);
+                snprintf(aot_c_names[i], 140, "xr_%s_%d", name, i);
                 break;
             }
         }
-        xcgen_register_proto(mod, (void *)p, aot_c_names[i]);
+        xcgen_register_proto(comp, (void *)p, aot_c_names[i]);
     }
 
     // Build shared_index → proto mapping
@@ -448,7 +459,9 @@ static int cmd_build_native(const char *input, const char *output,
         bool needs_closure;
         bool void_return;
     } AotFuncInfo;
-    AotFuncInfo compiled_funcs[64];
+    int compiled_cap = aot_count > 0 ? aot_count : 16;
+    AotFuncInfo *compiled_funcs = (AotFuncInfo *)xr_malloc(
+        compiled_cap * sizeof(AotFuncInfo));
     int ncompiled = 0;
 
     for (int i = 0; i < aot_count; i++) {
@@ -476,7 +489,7 @@ static int cmd_build_native(const char *input, const char *output,
         }
         xir_func_destroy(xfunc);
 
-        if (cf && ncompiled < 64) {
+        if (cf && ncompiled < compiled_cap) {
             printf("  [C] %s → %zu bytes C source\n", name, cf->body.len);
             // Functions that create child closures (have sub-protos) cannot
             // register AOT thunks: xrt_closure_new creates AOT closures
@@ -508,9 +521,11 @@ static int cmd_build_native(const char *input, const char *output,
     // Assemble AOT C source (without main)
     char *aot_source = NULL;
     if (ncompiled > 0) {
-        aot_source = xcgen_emit_source(mod);
+        aot_source = xcgen_emit_source(comp);
     }
-    xcgen_module_free(mod);
+    xcgen_compilation_free(comp);
+    xr_free(aot_protos);
+    xr_free(aot_c_names);
 
     // Write combined C source: bytecode bundle + AOT functions + thunks + main()
     char c_file[512];
@@ -724,6 +739,8 @@ static int cmd_build_native(const char *input, const char *output,
         "}\n"
     );
     fclose(f);
+
+    xr_free(compiled_funcs);
 
     if (c_only) {
         printf("Generated: %s\n", output);
