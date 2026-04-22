@@ -51,24 +51,24 @@ static int compile_array_literal_internal(XrCompilerContext *ctx, XrCompiler *co
     XR_DCHECK(compiler != NULL, "compile_array_literal: NULL compiler");
     // Allocate target register
     int array_reg = reg_alloc(ctx, compiler);
-    
-    // Create array: C = (elem_tid << 2) | storage_mode
+
     int c_field = ((int)ctx->current_elem_tid << 2) | ctx->current_storage_mode;
-    emit_abc(compiler->emitter, OP_NEWARRAY, array_reg, node->count, c_field);
-    
-    // Use SETLIST to batch set elements
+
     if (node->count > 0) {
-        // Compile elements directly to consecutive registers
+        /* Compile elements BEFORE OP_NEWARRAY so that the registers
+         * R(array_reg+1 .. array_reg+count) are populated when the VM
+         * executes the inline push loop inside OP_NEWARRAY.  The old
+         * order (NEWARRAY first, then LOADI, then ARRAY_INIT) failed
+         * for typed arrays because the push loop ran before LOADIs. */
         int first_elem_reg = array_reg + 1;
         compile_args_to_base(ctx, compiler, node->elements, node->count, first_elem_reg);
-        
-        // SETLIST: batch set array elements
-        emit_abc(compiler->emitter, OP_ARRAY_INIT, array_reg, node->count, 0);
-        
-        // After operation, set freereg = base + 1
+
+        emit_abc(compiler->emitter, OP_NEWARRAY, array_reg, node->count, c_field);
         xreg_set_freereg(compiler->regalloc, array_reg + 1);
+    } else {
+        emit_abc(compiler->emitter, OP_NEWARRAY, array_reg, 0, c_field);
     }
-    
+
     return array_reg;
 }
 
@@ -94,22 +94,22 @@ static int compile_map_literal_internal(XrCompilerContext *ctx, XrCompiler *comp
     // LIFO mode: allocate and protect target register
     int map_reg = xreg_alloc_temp(compiler->regalloc);
     int map_protect_id = xreg_protect_begin(compiler->regalloc, map_reg, 1, "map_literal");
-    
+
     // Create empty Map (use dedicated OP_NEWMAP instruction)
     // OP_NEWMAP A B C: R[A] = #{}, B=capacity hint, C=(key_kind<<7)|(value_tid<<2)|flags
     int key_kind = (ctx->current_key_tid == XR_TID_STRING) ? 1 : (ctx->current_key_tid == XR_TID_INT) ? 2 : 0;
     int c_field = (key_kind << 7) | (((int)ctx->current_elem_tid & 0x1F) << 2) | ctx->current_storage_mode;
     emit_abc(compiler->emitter, OP_NEWMAP, map_reg, node->count, c_field);
-    
+
     // Set each key-value pair (map_reg already auto-protected)
     if (node->count > 0) {
-        
+
         for (int i = 0; i < node->count; i++) {
             // Compile value expression (compile value first, since key might be constant)
             XrExprDesc value_expr = xr_compile_expr(ctx, compiler, node->values[i]);
             // Optimization: value readonly, directly reuse source register, avoid MOVE
             int value_reg = xexpr_to_anyreg_readonly(ctx, compiler, &value_expr);
-            
+
             // Optimization: constant string key uses OP_MAP_SETK
             if (node->keys[i]->type == AST_LITERAL_STRING) {
                 LiteralNode *lit = (LiteralNode *)&node->keys[i]->as;
@@ -117,7 +117,7 @@ static int compile_map_literal_internal(XrCompilerContext *ctx, XrCompiler *comp
                 // Use compile-time interned string, same content shares same object, Map key comparison can use pointer comparison
                 XrString *key_str = xr_compile_time_intern(ctx->X, str_val, strlen(str_val));
                 int key_const = xr_vm_proto_add_constant(compiler->proto, xr_string_value(key_str));
-                
+
                 // OP_MAP_SETK A B C: R[A][K[B]] = R[C]
                 emit_abc(compiler->emitter, OP_MAP_SETK, map_reg, key_const, value_reg);
             } else {
@@ -125,20 +125,20 @@ static int compile_map_literal_internal(XrCompilerContext *ctx, XrCompiler *comp
                 XrExprDesc key_expr = xr_compile_expr(ctx, compiler, node->keys[i]);
                 // Optimization: key readonly
                 int key_reg = xexpr_to_anyreg_readonly(ctx, compiler, &key_expr);
-                
+
                 // INDEX_SET: map[key] = value
                 emit_abc(compiler->emitter, OP_INDEX_SET, map_reg, key_reg, value_reg);
                 xexpr_free(compiler, &key_expr);
             }
-            
+
             // Reclaim value temporary register (in readonly mode might be LOCAL, won't be freed)
             xexpr_free(compiler, &value_expr);
         }
     }
-    
+
     // Release protection (but keep register value, as return value)
     xreg_protect_end(compiler->regalloc, map_protect_id);
-    
+
     return map_reg;
 }
 
@@ -165,11 +165,11 @@ XrExprDesc compile_index_get(XrCompilerContext *ctx, XrCompiler *compiler, Index
     XR_DCHECK(compiler != NULL, "compile_index_get: NULL compiler");
     XrExprDesc e = {0};
     xexpr_init(&e, XEXPR_VOID, -1);
-    
+
     // Compile array/Map expression - use readonly version to avoid redundant MOVE
     XrExprDesc array_expr = xr_compile_expr(ctx, compiler, node->array);
     int array_reg = xexpr_to_anyreg_readonly(ctx, compiler, &array_expr);
-    
+
     // Optimization: constant string key uses OP_MAP_GETK
     if (node->index->type == AST_LITERAL_STRING) {
         LiteralNode *lit = (LiteralNode *)&node->index->as;
@@ -177,25 +177,25 @@ XrExprDesc compile_index_get(XrCompilerContext *ctx, XrCompiler *compiler, Index
         // Use compile-time interned string, shares same object with Map key
         XrString *key_str = xr_compile_time_intern(ctx->X, str_val, strlen(str_val));
         int key_const = xr_vm_proto_add_constant(compiler->proto, xr_string_value(key_str));
-        
+
         // Allocate result register, avoid overwriting source register
         int result_reg = reg_alloc(ctx, compiler);
-        
+
         // OP_MAP_GETK A B C: R[A] = R[B][K[C]]
         emit_abc(compiler->emitter, OP_MAP_GETK, result_reg, array_reg, key_const);
         reg_free(compiler, array_reg);
-        
+
         // Return TEMP: already has determined register
         e.kind = XEXPR_TEMP;
         e.reg = result_reg;
         return e;
     }
-    
+
     // Optimization: integer literal index uses OP_ARRAY_GETC (e.g. arr[0], arr[1])
     if (node->index->type == AST_LITERAL_INT) {
         LiteralNode *lit = (LiteralNode *)&node->index->as;
         int64_t idx = lit->raw_value.int_val;
-        
+
         // C parameter only 8 bits (0-255), check range
         if (idx >= 0 && idx <= 255) {
             XrType *elem_type = get_typed_array_elem_type(ctx, node->array);
@@ -212,17 +212,17 @@ XrExprDesc compile_index_get(XrCompilerContext *ctx, XrCompiler *compiler, Index
             // OP_ARRAY_GETC A B C: R[A] = R[B][C]
             int pc = emit_abc(compiler->emitter, OP_ARRAY_GETC, 0, array_reg, (int)idx);
             reg_free(compiler, array_reg);
-            
+
             e.kind = XEXPR_RELOC;
             e.u.pc = pc;
             return e;
         }
     }
-    
+
     // General path: compile index expression - use readonly version to avoid redundant MOVE
     XrExprDesc index_expr = xr_compile_expr(ctx, compiler, node->index);
     int index_reg = xexpr_to_anyreg_readonly(ctx, compiler, &index_expr);
-    
+
     // Typed array fast path: raw in, raw out (no BOX/UNBOX)
     {
         XrType *elem_type = get_typed_array_elem_type(ctx, node->array);
@@ -238,29 +238,29 @@ XrExprDesc compile_index_get(XrCompilerContext *ctx, XrCompiler *compiler, Index
             return e;
         }
     }
-    
+
     // BOX if typed (INDEX_GET expects tagged values)
     index_reg = xexpr_ensure_boxed(ctx, compiler, &index_expr, index_reg);
-    
+
     /*
      * Fix: pre-allocate result register, avoid conflict with index_reg or array_reg
-     * 
+     *
      * Problem scenario: a[i] * b[i]
      * If i is LOCAL in R[7], INDEX_GET's RELOC writeback might store result to R[7]
      * This would overwrite i's value, causing subsequent b[i] to use wrong index
-     * 
+     *
      * Solution: pre-allocate target register, ensure it doesn't conflict with source operands
      */
     int result_reg = reg_alloc(ctx, compiler);
-    
+
     /*
      * Bounds Check Elimination (BCE) optimization
-     * 
+     *
      * Conditions:
      * 1. Currently in BCE loop (bce_loop_var != NULL)
      * 2. Index expression is loop variable (variable name matches)
      * 3. Use ARRAY_GET_NOCHECK to skip bounds check
-     * 
+     *
      * Scenario: for (let i = 0; i < n; i++) { sum = arr[i] + ... }
      * If arr.length >= n, then arr[i] is safe
      */
@@ -272,18 +272,18 @@ XrExprDesc compile_index_get(XrCompilerContext *ctx, XrCompiler *compiler, Index
             use_nocheck = true;
         }
     }
-    
+
     // Generate INDEX_GET or ARRAY_GET_NOCHECK, target register already determined
     if (use_nocheck) {
         emit_abc(compiler->emitter, OP_ARRAY_GET_NOCHECK, result_reg, array_reg, index_reg);
     } else {
         emit_abc(compiler->emitter, OP_INDEX_GET, result_reg, array_reg, index_reg);
     }
-    
+
     // Free temporary registers (if they are temporary)
     reg_free(compiler, index_reg);
     reg_free(compiler, array_reg);
-    
+
     // Return TEMP: target register already determined
     e.kind = XEXPR_TEMP;
     e.reg = result_reg;
@@ -295,7 +295,7 @@ XrExprDesc compile_index_get(XrCompilerContext *ctx, XrCompiler *compiler, Index
 
 /*
  * Compile slice expression: source[start:end]
- * 
+ *
  * Instruction format: OP_SLICE A B C
  *   R[A] = R[B][R[C]:R[C+1]]
  *   - R[B]: source object (Array/String/Bytes)
@@ -307,15 +307,15 @@ XrExprDesc compile_slice_expr(XrCompilerContext *ctx, XrCompiler *compiler, Slic
     XR_DCHECK(compiler != NULL, "compile_slice_expr: NULL compiler");
     XrExprDesc e = {0};
     xexpr_init(&e, XEXPR_VOID, -1);
-    
+
     // Compile source object to register
     XrExprDesc source_e = xr_compile_expr(ctx, compiler, node->source);
     int source_reg = xexpr_to_anyreg(ctx, compiler, &source_e);
-    
+
     // Reserve two consecutive registers for start and end (must be consecutive!)
     int start_reg = xreg_reserve(compiler->regalloc, 2);
     int end_reg = start_reg + 1;
-    
+
     // Compile start index (if omitted, load 0 to start from beginning)
     if (node->start) {
         XrExprDesc start_e = xr_compile_expr(ctx, compiler, node->start);
@@ -327,7 +327,7 @@ XrExprDesc compile_slice_expr(XrCompilerContext *ctx, XrCompiler *compiler, Slic
         // Omitted start, load 0 to start from beginning
         emit_abx(compiler->emitter, OP_LOADI, start_reg, 0);
     }
-    
+
     // Compile end index (if omitted, load -1 to use default value length)
     if (node->end) {
         XrExprDesc end_e = xr_compile_expr(ctx, compiler, node->end);
@@ -339,20 +339,20 @@ XrExprDesc compile_slice_expr(XrCompilerContext *ctx, XrCompiler *compiler, Slic
         // Omitted end, load -1 to use default value
         emit_abx(compiler->emitter, OP_LOADI, end_reg, -1);
     }
-    
+
     // Result register
     int result_reg = xreg_alloc_temp(compiler->regalloc);
-    
+
     // Generate OP_SLICE instruction
     emit_abc(compiler->emitter, OP_SLICE, result_reg, source_reg, start_reg);
-    
+
     // Free temporary registers
     xreg_free_temp(compiler->regalloc, end_reg);
     xreg_free_temp(compiler->regalloc, start_reg);
     if (source_e.kind == XEXPR_TEMP) {
         xreg_free_temp(compiler->regalloc, source_reg);
     }
-    
+
     e.kind = XEXPR_TEMP;
     e.reg = result_reg;
     return e;
@@ -363,7 +363,7 @@ XrExprDesc compile_slice_expr(XrCompilerContext *ctx, XrCompiler *compiler, Slic
 
 /*
  * Internal implementation: compile object literal (returns register)
- * 
+ *
  * Optimization: using Json V2 (based on V8 Hidden Class)
  * - Zero-copy Shape transition
  * - Inline property value storage
@@ -395,14 +395,14 @@ static void emit_json_field_init(XrCompilerContext *ctx, XrCompiler *compiler,
 
 static int compile_object_literal_internal(XrCompilerContext *ctx, XrCompiler *compiler, ObjectLiteralNode *node) {
     uint32_t field_count = node->count;
-    
+
     // Check if has computed properties
     bool has_computed = node->computed != NULL;
     uint32_t static_count = 0;  // Static field count
-    
+
     // Use interned strings to store static field names (pointer comparison O(1))
     XrString** interned_names = NULL;
-    
+
     // Strict type alias: reorder literal fields to match type definition order.
     // This ensures Shape field indices match compile-time field_idx used by
     // OP_JSON_GET/SET and OP_TFIELD_GET/SET.
@@ -412,21 +412,21 @@ static int compile_object_literal_internal(XrCompilerContext *ctx, XrCompiler *c
                          && !target_type->object.allow_extension
                          && target_type->object.field_count > 0
                          && target_type->object.field_names;
-    
+
     // reorder_map[target_idx] = literal_idx, or -1 if missing
     int *reorder_map = NULL;
-    
+
     if (needs_reorder) {
         int target_count = target_type->object.field_count;
         static_count = (uint32_t)target_count;
-        
+
         reorder_map = (int*)xr_malloc(target_count * sizeof(int));
         interned_names = (XrString**)xr_malloc(target_count * sizeof(XrString*));
-        
+
         for (int ti = 0; ti < target_count; ti++) {
             const char *target_name = target_type->object.field_names[ti];
             interned_names[ti] = xr_compile_time_intern(ctx->X, target_name, strlen(target_name));
-            
+
             // Find matching literal field
             reorder_map[ti] = -1;
             for (uint32_t li = 0; li < field_count; li++) {
@@ -446,30 +446,30 @@ static int compile_object_literal_internal(XrCompilerContext *ctx, XrCompiler *c
                 static_count++;
             }
         }
-        
+
         if (static_count > 0) {
             interned_names = (XrString**)xr_malloc(static_count * sizeof(XrString*));
             uint32_t idx = 0;
-            
+
             for (uint32_t i = 0; i < field_count; i++) {
                 if (has_computed && node->computed[i]) {
                     continue;  // Skip computed properties
                 }
-                
+
                 // key must be string literal
                 if (node->keys[i]->type != AST_LITERAL_STRING) {
-                    xr_compiler_error(ctx, compiler, 
+                    xr_compiler_error(ctx, compiler,
                         "Object literal keys must be string literals");
                     if (interned_names) xr_free((void*)interned_names);
                     return reg_alloc(ctx, compiler);
                 }
-                
+
                 const char *name = node->keys[i]->as.literal.raw_value.string_val;
                 interned_names[idx++] = xr_compile_time_intern(ctx->X, name, strlen(name));
             }
         }
     }
-    
+
     // Use Shape cache (static fields only)
     XrShape *shape = xr_shape_cache_get_or_create(
         ctx->X,
@@ -477,21 +477,21 @@ static int compile_object_literal_internal(XrCompilerContext *ctx, XrCompiler *c
         interned_names,
         static_count
     );
-    
+
     if (interned_names) {
         xr_free((void*)interned_names);
     }
-    
+
     if (!shape) {
         if (reorder_map) xr_free(reorder_map);
         xr_compiler_error(ctx, compiler, "Failed to create shape");
         return reg_alloc(ctx, compiler);
     }
-    
+
     // LIFO mode: allocate and protect target register
     int obj_reg = xreg_alloc_temp(compiler->regalloc);
     int obj_protect_id = xreg_protect_begin(compiler->regalloc, obj_reg, 1, "json_literal");
-    
+
     // OP_NEWJSON: create Json object
     // Shape uses malloc allocation (not GC managed), stored as integer pointer
     // B = Shape constant index, C = storage mode
@@ -500,7 +500,7 @@ static int compile_object_literal_internal(XrCompilerContext *ctx, XrCompiler *c
         xr_int((intptr_t)shape)
     );
     emit_abc(compiler->emitter, OP_NEWJSON, obj_reg, shape_const_idx, ctx->current_storage_mode);
-    
+
     // Initialize fields
     if (needs_reorder) {
         // Emit in target type field order (reordered)
@@ -523,16 +523,16 @@ static int compile_object_literal_internal(XrCompilerContext *ctx, XrCompiler *c
         for (uint32_t i = 0; i < field_count; i++) {
             bool is_computed = has_computed && node->computed[i];
             if (is_computed) continue;
-            
+
             emit_json_field_init(ctx, compiler, obj_reg, static_idx, node->values[i]);
             static_idx++;
         }
-        
+
         // Pass 2: emit computed properties via INDEX_SET (may convert to dictionary)
         if (has_computed) {
             for (uint32_t i = 0; i < field_count; i++) {
                 if (!node->computed[i]) continue;
-                
+
                 int value_reg = xr_compile_expression(ctx, compiler, node->values[i]);
                 int key_reg = xr_compile_expression(ctx, compiler, node->keys[i]);
                 emit_abc(compiler->emitter, OP_INDEX_SET, obj_reg, key_reg, value_reg);
@@ -541,10 +541,10 @@ static int compile_object_literal_internal(XrCompilerContext *ctx, XrCompiler *c
             }
         }
     }
-    
+
     // Release protection (but keep register value, as return value)
     xreg_protect_end(compiler->regalloc, obj_protect_id);
-    
+
     return obj_reg;
 }
 
@@ -564,43 +564,43 @@ XrExprDesc compile_object_literal(XrCompilerContext *ctx, XrCompiler *compiler, 
 static int compile_set_literal_internal(XrCompilerContext *ctx, XrCompiler *compiler, SetLiteralNode *node) {
     // Allocate target register
     int set_reg = reg_alloc(ctx, compiler);
-    
+
     // Use dedicated OP_NEWSET instruction to create Set object
     // B = (elem_tid << 2) | storage_mode
     int b_field = ((int)ctx->current_elem_tid << 2) | ctx->current_storage_mode;
     emit_abc(compiler->emitter, OP_NEWSET, set_reg, b_field, 0);
-    
+
     // Generate set.add(elem) call for each element
     if (node->count > 0) {
         // Get Symbol ID for 'add' method
-        
+
         // Unified calling convention: R[base]=return value, R[base+1]=receiver, R[base+2]=arg1
         for (int i = 0; i < node->count; i++) {
             // LIFO mode: allocate consecutive registers and protect
             int base = xreg_get_freereg(compiler->regalloc);
             int call_protect_id = xreg_protect_begin(compiler->regalloc, base, 2, "set_add");
             xreg_reserve(compiler->regalloc, 2);
-            
+
             // receiver (Set) to R[base+1]
             emit_move(compiler->emitter, base + 1, set_reg);
             xreg_set_freereg(compiler->regalloc, base + 2);
-            
+
             // Compile element expression to R[base+2] (base and base+1 already auto-protected)
             XrExprDesc elem_expr = xr_compile_expr(ctx, compiler, node->elements[i]);
             xexpr_to_specific_reg(ctx, compiler, &elem_expr, base + 2);
-            
+
             // End protection
             xreg_protect_end(compiler->regalloc, call_protect_id);
-            
+
             // Generate method call: set.add(elem)
             int local_sym = emitter_add_symbol(compiler->emitter, SYMBOL_ADD);
             emit_abc(compiler->emitter, OP_INVOKE, base, local_sym, 1);
-            
+
             // Reclaim registers
             xreg_set_freereg(compiler->regalloc, base + 1);
         }
     }
-    
+
     return set_reg;
 }
 
