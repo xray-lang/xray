@@ -30,16 +30,18 @@
  *      to use the root instead of intermediate copies.
  *   4. Repeat until no more changes.
  */
-void xir_pass_copy_prop(XirFunc *func) {
-    if (!func || func->nvreg == 0) return;
+XirPassChange xir_pass_copy_prop(XirFunc *func) {
+    if (!func || func->nvreg == 0) return xir_pass_no_change();
 
     uint32_t nv = func->nvreg;
     XirRef *copy_of = (XirRef *)xr_malloc(nv * sizeof(XirRef));
-    if (!copy_of) return;
+    if (!copy_of) return xir_pass_no_change();
 
+    uint32_t iters = 0;
     bool changed = true;
     while (changed) {
         changed = false;
+        iters++;
 
         // Initialize: every vreg maps to itself
         for (uint32_t i = 0; i < nv; i++)
@@ -265,6 +267,9 @@ void xir_pass_copy_prop(XirFunc *func) {
     }
 
     xr_free(copy_of);
+    return iters > 1
+        ? (XirPassChange){ false, false, true, 0, 0, 0 }
+        : xir_pass_no_change();
 }
 
 /* ========== Phi Simplification ========== */
@@ -277,12 +282,14 @@ void xir_pass_copy_prop(XirFunc *func) {
  * The MOV is inserted at the beginning of the block's instruction array,
  * and the phi is removed. Subsequent copy_prop + DCE will clean up.
  */
-void xir_pass_phi_simp(XirFunc *func) {
-    if (!func) return;
+XirPassChange xir_pass_phi_simp(XirFunc *func) {
+    if (!func) return xir_pass_no_change();
 
+    uint32_t iters = 0;
     bool changed = true;
     while (changed) {
         changed = false;
+        iters++;
         for (uint32_t bi = 0; bi < func->nblk; bi++) {
             XirBlock *blk = func->blocks[bi];
 
@@ -428,6 +435,9 @@ void xir_pass_phi_simp(XirFunc *func) {
                 func->vregs[dvi].xrtype = common_xrt;
         }
     }
+    return iters > 1
+        ? (XirPassChange){ false, true, true, 0, 0, 0 }
+        : xir_pass_no_change();
 }
 
 /* ========== CFG Rebuild (QBE fillpreds model) ========== */
@@ -851,8 +861,8 @@ void xir_verify_types(XirFunc *func) {
  * multiple successors (BR) to a block with multiple predecessors.
  * This enables clean phi resolution and reduces unnecessary register copies.
  */
-void xir_pass_split_critical_edges(XirFunc *func) {
-    if (!func || func->nblk == 0) return;
+XirPassChange xir_pass_split_critical_edges(XirFunc *func) {
+    if (!func || func->nblk == 0) return xir_pass_no_change();
 
     // Collect critical edges first to avoid mutation during iteration
     typedef struct { uint32_t from_bi; int succ_slot; } CritEdge;
@@ -904,6 +914,9 @@ void xir_pass_split_critical_edges(XirFunc *func) {
         /* No phi arg values change — only the predecessor identity changes,
          * which is already handled by updating preds[p] above. */
     }
+    return nedges > 0
+        ? (XirPassChange){ true, false, false, 0, 0, 0 }
+        : xir_pass_no_change();
 }
 
 /*
@@ -917,12 +930,14 @@ void xir_pass_split_critical_edges(XirFunc *func) {
  *
  * Iterates until no more merges are possible.
  */
-void xir_pass_merge_blocks(XirFunc *func) {
-    if (!func || func->nblk <= 1) return;
+XirPassChange xir_pass_merge_blocks(XirFunc *func) {
+    if (!func || func->nblk <= 1) return xir_pass_no_change();
 
+    uint32_t iters = 0;
     bool changed = true;
     while (changed) {
         changed = false;
+        iters++;
 
         for (uint32_t bi = 0; bi < func->nblk; bi++) {
             XirBlock *a = func->blocks[bi];
@@ -974,6 +989,9 @@ void xir_pass_merge_blocks(XirFunc *func) {
             }
         }
     }
+    return iters > 1
+        ? (XirPassChange){ true, false, false, 0, 0, 0 }
+        : xir_pass_no_change();
 }
 
 /* ========== SelectRepresentations ========== */
@@ -990,14 +1008,14 @@ void xir_pass_merge_blocks(XirFunc *func) {
  * cleaned up by DCE if its result is unused, or by regalloc if
  * src == dst.
  */
-void xir_pass_select_rep(XirFunc *func) {
-    if (!func || func->nvreg == 0) return;
+XirPassChange xir_pass_select_rep(XirFunc *func) {
+    if (!func || func->nvreg == 0) return xir_pass_no_change();
 
     uint32_t nv = func->nvreg;
 
     // Build def map: vreg → instruction pointer
     XirIns **def_ins = (XirIns **)xr_calloc(nv, sizeof(XirIns *));
-    if (!def_ins) return;
+    if (!def_ins) return xir_pass_no_change();
 
     for (uint32_t bi = 0; bi < func->nblk; bi++) {
         XirBlock *blk = func->blocks[bi];
@@ -1011,9 +1029,11 @@ void xir_pass_select_rep(XirFunc *func) {
     }
 
     // Scan for BOX/UNBOX pairs
+    uint32_t iters = 0;
     bool changed = true;
     while (changed) {
         changed = false;
+        iters++;
         for (uint32_t bi = 0; bi < func->nblk; bi++) {
             XirBlock *blk = func->blocks[bi];
             for (uint32_t i = 0; i < blk->nins; i++) {
@@ -1045,6 +1065,9 @@ void xir_pass_select_rep(XirFunc *func) {
     }
 
     xr_free(def_ins);
+    return iters > 1
+        ? (XirPassChange){ false, false, true, 0, 0, 0 }
+        : xir_pass_no_change();
 }
 
 /* ========== Block Reordering (Profile-Guided) ========== */
@@ -1083,15 +1106,15 @@ static int32_t blk_weight(XirFunc *func, XirBlock *blk) {
  * Edge weight heuristics replace exact counters, matching the approach
  * used by V8 TurboFan and Dart when branch profile data is unavailable.
  */
-void xir_pass_reorder_blocks(XirFunc *func) {
-    if (!func || func->nblk <= 2) return;
+XirPassChange xir_pass_reorder_blocks(XirFunc *func) {
+    if (!func || func->nblk <= 2) return xir_pass_no_change();
 
     uint32_t n = func->nblk;
     XirBlock **order = (XirBlock **)xr_malloc(n * sizeof(XirBlock *));
-    if (!order) return;
+    if (!order) return xir_pass_no_change();
 
     bool *placed = (bool *)xr_calloc(n, sizeof(bool));
-    if (!placed) { xr_free(order); return; }
+    if (!placed) { xr_free(order); return xir_pass_no_change(); }
 
     // Build block-index lookup: block->id → index in func->blocks[]
     uint32_t max_id = 0;
@@ -1100,7 +1123,7 @@ void xir_pass_reorder_blocks(XirFunc *func) {
             max_id = func->blocks[i]->id;
     }
     int32_t *id_to_idx = (int32_t *)xr_malloc((max_id + 1) * sizeof(int32_t));
-    if (!id_to_idx) { xr_free(placed); xr_free(order); return; }
+    if (!id_to_idx) { xr_free(placed); xr_free(order); return xir_pass_no_change(); }
     for (uint32_t i = 0; i <= max_id; i++) id_to_idx[i] = -1;
     for (uint32_t i = 0; i < n; i++) id_to_idx[func->blocks[i]->id] = (int32_t)i;
 
@@ -1198,5 +1221,6 @@ void xir_pass_reorder_blocks(XirFunc *func) {
     xr_free(id_to_idx);
     xr_free(placed);
     xr_free(order);
+    return (XirPassChange){ true, false, false, 0, 0, 0 };
 }
 
