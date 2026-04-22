@@ -694,7 +694,7 @@ static XrVMResult run_first_exec(XrayIsolate *isolate, XrWorker *worker,
                 xir_jit_install_bg_result(proto);
             }
         }
-        if (proto->jit_entry && proto->deopt_count == 0) {
+        if (proto->jit_entry && proto->deopt_count < 20) {
             coro->jit_ctx->call_proto = proto;
             coro->jit_ctx->call_closure = closure;
             coro->jit_ctx->call_base_offset = (int32_t)(func_base - coro_ctx->stack);

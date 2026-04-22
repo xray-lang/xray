@@ -79,22 +79,33 @@ bool is_jit_eligible(struct XrProto *proto, bool verbose) {
         return false;
     }
 
-    // Too many deopt failures — exponential backoff retry (never permanently banned)
-    if (proto->deopt_count > 3) {
+    // Adaptive deopt policy:
+    //   deopt_count < 5  → normal (keep current JIT code)
+    //   deopt_count >= 5  → conservative recompile (no type speculation)
+    //   deopt_count >= 20 → permanently disable JIT for this proto
+    uint32_t dc = atomic_load_explicit(&proto->deopt_count, memory_order_relaxed);
+    if (dc >= 20) {
+        if (verbose) fprintf(stderr, "[JIT] skip %s: permanently disabled (deopt_count=%u)\n",
+                             name, dc);
+        return false;
+    }
+    if (dc > 3 && dc < 5) {
+        // Backoff retry for mild deopt failures
         uint32_t backoff = proto->deopt_backoff ? proto->deopt_backoff : 10;
-        uint32_t current = proto->call_count;
+        uint32_t current = atomic_load_explicit(&proto->call_count, memory_order_relaxed);
         if (current - proto->deopt_reset_at < backoff) {
-            if (verbose) fprintf(stderr, "[JIT] skip %s: deopt backoff (%d/%d)\n",
+            if (verbose) fprintf(stderr, "[JIT] skip %s: deopt backoff (%u/%u)\n",
                                  name, current - proto->deopt_reset_at, backoff);
             return false;
         }
         // Backoff elapsed: give one retry, double interval for next failure
-        proto->deopt_count = 0;
+        atomic_store_explicit(&proto->deopt_count, 0, memory_order_relaxed);
         proto->deopt_reset_at = current;
         proto->deopt_backoff = backoff * 2 < 10000 ? backoff * 2 : 10000;
         if (verbose) fprintf(stderr, "[JIT] retry %s after backoff (next=%u)\n",
                              name, proto->deopt_backoff);
     }
+    // deopt_count >= 5: eligible, but caller should use conservative mode
 
     // Source 1: param_types (authoritative per-parameter types)
     if (proto->param_types) {

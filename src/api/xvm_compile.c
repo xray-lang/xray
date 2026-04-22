@@ -287,6 +287,8 @@ int xr_vm_init(XrayIsolate *isolate) {
         int thr = isolate->params.jit_threshold > 0 ? isolate->params.jit_threshold : 100;
         isolate->vm.jit = xir_jit_init(isolate, thr);
         isolate->vm.jit_threshold = thr;
+        if (isolate->vm.jit && isolate->params.jit_stats)
+            isolate->vm.jit->stats_enabled = true;
     }
 #endif
 

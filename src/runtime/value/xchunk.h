@@ -595,7 +595,7 @@ typedef struct XrProto {
     struct XirTypeFeedback *type_feedback; // runtime type profile (lazily allocated)
     _Atomic uint32_t call_count;  // runtime call count (hot function detection)
     _Atomic uint32_t exec_count;  // runtime execution count (Tier 2 trigger)
-    uint8_t deopt_count;        // deopt counter (>3 → enter backoff retry)
+    _Atomic uint32_t deopt_count; // deopt counter (<5 normal, >=5 conservative recompile, >=20 JIT disabled)
     bool osr_pending;           // post-deopt: re-attempt OSR at next matching loop back-edge
     uint8_t jit_opt_level;      // current JIT compilation level (0=none, 1=basic, 2=full)
     uint32_t deopt_backoff;     // retry interval: calls to wait before reattempting JIT (doubles on each failure, max 10000)

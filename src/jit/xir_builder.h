@@ -130,6 +130,11 @@ typedef struct {
 
     // AOT mode: generate closure/upvalue XIR instead of skipping
     bool       aot_mode;
+
+    // Conservative mode: skip type speculation guards (shape/klass guards).
+    // Emits generic CALL_C paths to avoid deopt on type-unstable functions.
+    // Set when deopt_count >= 5 (adaptive recompile after frequent deopts).
+    bool       conservative;
 } XirBuilder;
 
 /* ========== API ========== */

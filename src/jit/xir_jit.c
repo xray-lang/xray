@@ -23,6 +23,7 @@
 #include "../base/xlog.h"
 #include "../base/xchecks.h"
 #include "../runtime/value/xtype_feedback.h"
+#include "../../include/xray_platform.h"  // xr_monotonic_ms()
 #include "xir_builder.h"
 #include "xir_codegen.h"
 #include "xir_target.h"
@@ -148,6 +149,25 @@ XirJitState *xir_jit_init(XrayIsolate *isolate, int threshold) {
 
 void xir_jit_destroy(XirJitState *jit) {
     if (!jit) return;
+
+    // Print compilation statistics if --jit-stats was set
+    if (jit->stats_enabled) {
+        uint32_t total = jit->stats_tier1 + jit->stats_tier2 + jit->stats_conservative;
+        uint64_t total_ms = jit->stats_compile_ns / 1000000ULL;
+        double avg_ms = total > 0 ? (double)total_ms / total : 0.0;
+        fprintf(stderr,
+            "\n=== JIT Statistics ===\n"
+            "Functions compiled: %u (Tier1: %u, Tier2: %u, Conservative: %u)\n"
+            "Total compile time: %llums (avg %.1fms/func)\n"
+            "Code cache used: %lluKB\n"
+            "Deopts: %u  Permanently disabled: %u\n"
+            "======================\n",
+            total, jit->stats_tier1, jit->stats_tier2, jit->stats_conservative,
+            (unsigned long long)total_ms, avg_ms,
+            (unsigned long long)(jit->stats_code_bytes / 1024),
+            jit->stats_deopt_total, jit->stats_disabled);
+    }
+
     // Shutdown background thread before freeing code allocator
     if (jit->bg_queue) {
         xjit_queue_destroy(jit->bg_queue);
@@ -343,6 +363,11 @@ bool xir_jit_try_compile(XirJitState *jit, XrProto *proto) {
     // Check eligibility
     if (!is_jit_eligible(proto, jit->verbose)) return false;
 
+    // Conservative mode: deopt_count >= 5 means type-unstable function.
+    // Skip shape hints and type feedback to avoid repeated deopts.
+    uint32_t dc = atomic_load_explicit(&proto->deopt_count, memory_order_relaxed);
+    bool conservative = (dc >= 5);
+
     // Eager-compile child protos referenced by OP_CLOSURE instructions.
     // Ensures callback closures (filter/map/reduce callbacks) have jit_entry
     // set when the parent's builder emits CALL_KNOWN, enabling direct
@@ -370,8 +395,9 @@ bool xir_jit_try_compile(XirJitState *jit, XrProto *proto) {
 
     // Build XIR from bytecode
     // Use shape-guided build if dominant shape is known and proto has PTR params
+    // Conservative mode: skip shape speculation to avoid guard deopts
     struct XrShape *shape_hint = NULL;
-    if (jit->dominant_shape) {
+    if (jit->dominant_shape && !conservative) {
         for (int i = 0; i < proto->numparams; i++) {
             uint8_t gc = XR_SLOT_ANY;
             if (proto->param_types && i < proto->param_types_count && proto->param_types[i])
@@ -382,17 +408,27 @@ bool xir_jit_try_compile(XirJitState *jit, XrProto *proto) {
             }
         }
     }
+    // Conservative mode: temporarily suppress type feedback to avoid
+    // speculation on type-unstable functions
+    struct XirTypeFeedback *saved_feedback = NULL;
+    if (conservative && proto->type_feedback) {
+        saved_feedback = proto->type_feedback;
+        proto->type_feedback = NULL;
+    }
+    uint64_t compile_start_ms = xr_monotonic_ms();
     XirFunc *func = xir_build_from_proto_jit(proto, shared_protos, nshared,
                                               shape_hint, jit->isolate);
+    if (saved_feedback) proto->type_feedback = saved_feedback;
     if (!func) {
         xr_log_warning("jit", "builder failed for %s",
                 proto->name ? XR_STRING_CHARS(proto->name) : "?");
         xr_free(shared_protos);
         return false;
     }
+    func->conservative = conservative;
 
     // Guard: reject functions with too many vregs for fixed-size arrays
-    if (func->nvreg > 512) {
+    if (func->nvreg > 4096) {
         xr_log_warning("jit", "too many vregs (%u) for %s, skipping",
                 func->nvreg,
                 proto->name ? XR_STRING_CHARS(proto->name) : "?");
@@ -405,6 +441,8 @@ bool xir_jit_try_compile(XirJitState *jit, XrProto *proto) {
     // First compile: Tier 1 (basic) for fast startup
     // Recompile: Tier 2 (full) with GVN, LICM, etc.
     XirOptLevel opt = is_recompile ? XIR_OPT_FULL : XIR_OPT_BASIC;
+    // Conservative recompile: still use basic optimization (safe passes only)
+    if (conservative) opt = XIR_OPT_BASIC;
     xir_run_pipeline_ex(func, opt, proto);
 
     // Generate ARM64 machine code
@@ -427,6 +465,14 @@ bool xir_jit_try_compile(XirJitState *jit, XrProto *proto) {
     if (proto->stack_map) xr_free(proto->stack_map);
     proto->stack_map = res.stack_map;
     if (!is_recompile) jit->compiled_count++;
+
+    // Record compilation statistics
+    uint64_t compile_elapsed_ms = xr_monotonic_ms() - compile_start_ms;
+    jit->stats_compile_ns += compile_elapsed_ms * 1000000ULL;
+    jit->stats_code_bytes += res.code_size;
+    if (conservative) jit->stats_conservative++;
+    else if (is_recompile) jit->stats_tier2++;
+    else jit->stats_tier1++;
 
     // Promote feedback param types to param_types (freeze at compile time).
     // param_types is the authoritative source for JIT entry type guards.
@@ -451,7 +497,8 @@ bool xir_jit_try_compile(XirJitState *jit, XrProto *proto) {
     }
 
     if (jit->verbose) {
-        xr_log_verbose("jit", "%s %s (O%d, %u bytes, %u vregs, %u blocks)",
+        xr_log_verbose("jit", "%s%s %s (O%d, %u bytes, %u vregs, %u blocks)",
+                conservative ? "conservative " : "",
                 is_recompile ? "recompile" : "compile",
                 proto->name ? XR_STRING_CHARS(proto->name) : "?",
                 (int)opt, res.code_size, func->nvreg, func->nblk);
@@ -728,6 +775,9 @@ int xir_jit_call(void *jit_entry, XrCoroutine *coro,
             xr_vm_add_stacktrace(coro->isolate, exc);
             xr_vm_throw_exception(coro->isolate, exc);
         }
+        // Record deopt for statistics
+        if (coro->isolate && coro->isolate->vm.jit)
+            coro->isolate->vm.jit->stats_deopt_total++;
         // Recovery happens in VM via xir_jit_deopt_recover().
         return XIR_JIT_DEOPT;
     }
