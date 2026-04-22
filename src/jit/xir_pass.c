@@ -20,6 +20,7 @@
 #include "xir_alias.h"
 #include "../base/xchecks.h"
 #include "../base/xmalloc.h"
+#include "../../include/xray_platform.h"  // xr_monotonic_ms()
 
 /* ========== Dead Code Elimination ========== */
 
@@ -1520,11 +1521,21 @@ static void fixedpoint_invoke(XirFunc *func, XrProto *proto,
 
 XirPipelineStats xir_run_fixedpoint(XirFunc *func, XrProto *proto,
                                      const XirPassDesc *passes,
-                                     uint32_t npass, uint32_t max_rounds) {
-    XirPipelineStats st = { 0, 0, 0 };
+                                     uint32_t npass, uint32_t max_rounds,
+                                     XirCompileBudget *budget) {
+    XirPipelineStats st = { 0, 0, 0, 0 };
     if (!func || !passes || npass == 0 || max_rounds == 0) return st;
 
     for (uint32_t round = 0; round < max_rounds; round++) {
+        // Check compile-time budget at each round boundary
+        if (budget && !budget->timed_out) {
+            uint64_t now_ms = xr_monotonic_ms();
+            if (now_ms * 1000000ULL > budget->deadline_ns) {
+                budget->timed_out = true;
+                st.timed_out = 1;
+                break;
+            }
+        }
         uint64_t before = fixedpoint_checksum(func);
         for (uint32_t i = 0; i < npass; i++) {
             fixedpoint_invoke(func, proto, &passes[i]);
@@ -1674,60 +1685,78 @@ static bool pipeline_verbose(void) {
  * instrumentation clutter. */
 static void run_group(const char *group_name, XirFunc *func, XrProto *proto,
                       const XirPassDesc *passes, uint32_t npass,
-                      uint32_t max_rounds) {
-    XirPipelineStats s = xir_run_fixedpoint(func, proto, passes, npass, max_rounds);
+                      uint32_t max_rounds, XirCompileBudget *budget) {
+    // Skip group entirely if budget already exhausted
+    if (budget && budget->timed_out) return;
+    XirPipelineStats s = xir_run_fixedpoint(func, proto, passes, npass,
+                                             max_rounds, budget);
     if (pipeline_verbose()) {
         fprintf(stderr,
                 "[jit-pipe] %-7s func=%s passes=%u rounds=%u invocations=%u%s\n",
                 group_name,
                 func->name ? func->name : "?",
                 npass, s.rounds_run, s.invocations,
-                s.converged ? " converged" : " max-rounds");
+                s.converged ? " converged" :
+                s.timed_out ? " budget-exceeded" : " max-rounds");
     }
 }
 
 void xir_run_pipeline_ex(XirFunc *func, XirOptLevel opt, XrProto *proto) {
     if (!func) return;
 
+    // Compile-time budget: 50ms default (skip remaining groups on timeout)
+    XirCompileBudget budget;
+    budget.start_ns    = xr_monotonic_ms() * 1000000ULL;
+    budget.deadline_ns = budget.start_ns + 50ULL * 1000000ULL; // 50ms
+    budget.timed_out   = false;
+
     /* Phase 0: initial type/rep analysis + DCE.  Runs even at
      * -O0 because the rest of the compiler expects vreg
      * representations to be resolved. */
-    run_group("canon", func, proto, PG_CANON, XIR_PIPELINE_SIZE(PG_CANON), 3);
+    run_group("canon", func, proto, PG_CANON, XIR_PIPELINE_SIZE(PG_CANON), 3, &budget);
 
-    if (opt >= XIR_OPT_BASIC) {
+    if (opt >= XIR_OPT_BASIC && !budget.timed_out) {
         xir_rebuild_preds(func);
         xir_verify_cfg(func);
         xir_verify_types(func);
-        run_group("basic", func, proto, PG_BASIC, XIR_PIPELINE_SIZE(PG_BASIC), 3);
+        run_group("basic", func, proto, PG_BASIC, XIR_PIPELINE_SIZE(PG_BASIC), 3, &budget);
     }
 
-    if (opt >= XIR_OPT_FULL) {
+    if (opt >= XIR_OPT_FULL && !budget.timed_out) {
         if (proto) {
             xir_pass_auto_inline(func, proto);
             XIR_RESET_ANALYSIS(func);
             /* Re-canon once post-inline so the loop group below sees
              * the callee's constants / types. */
             run_group("post-inline", func, proto, PG_CANON,
-                      XIR_PIPELINE_SIZE(PG_CANON), 2);
+                      XIR_PIPELINE_SIZE(PG_CANON), 2, &budget);
         }
 
-        run_group("loop", func, proto, PG_LOOP, XIR_PIPELINE_SIZE(PG_LOOP), 3);
+        run_group("loop", func, proto, PG_LOOP, XIR_PIPELINE_SIZE(PG_LOOP), 3, &budget);
 
-        /* CFG cleanup between the heavy and the range-analysis
-         * phases keeps subsequent checks on a well-formed CFG. */
-        xir_pass_merge_blocks(func);
-        xir_rebuild_preds(func);
-        xir_verify_cfg(func);
-        xir_verify_types(func);
+        if (!budget.timed_out) {
+            /* CFG cleanup between the heavy and the range-analysis
+             * phases keeps subsequent checks on a well-formed CFG. */
+            xir_pass_merge_blocks(func);
+            xir_rebuild_preds(func);
+            xir_verify_cfg(func);
+            xir_verify_types(func);
 
-        run_group("cleanup", func, proto, PG_CLEANUP,
-                  XIR_PIPELINE_SIZE(PG_CLEANUP), 2);
-        run_group("range", func, proto, PG_RANGE,
-                  XIR_PIPELINE_SIZE(PG_RANGE), 2);
+            run_group("cleanup", func, proto, PG_CLEANUP,
+                      XIR_PIPELINE_SIZE(PG_CLEANUP), 2, &budget);
+            run_group("range", func, proto, PG_RANGE,
+                      XIR_PIPELINE_SIZE(PG_RANGE), 2, &budget);
+        }
+    }
+
+    if (budget.timed_out && pipeline_verbose()) {
+        uint64_t elapsed_ms = xr_monotonic_ms() - budget.start_ns / 1000000ULL;
+        fprintf(stderr, "[jit-pipe] TIMEOUT func=%s after %llums\n",
+                func->name ? func->name : "?", (unsigned long long)elapsed_ms);
     }
 
     /* Trailing housekeeping: block reordering + write barriers.
-     * These are deterministic and run exactly once. */
+     * These are deterministic and run exactly once (always run). */
     xir_pass_reorder_blocks(func);
     XIR_RESET_ANALYSIS(func);
     xir_insert_write_barriers(func);

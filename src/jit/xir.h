@@ -535,6 +535,7 @@ typedef struct XirFunc {
 
     // Flags
     bool           has_coro_deopt;  // contains AWAIT/SCOPE_EXIT (OSR unsafe)
+    bool           conservative;    // compiled in conservative mode (no type speculation)
 
     // Suspend point tracking (for resume entry generation)
     uint32_t       nsuspend;        // number of XIR_SUSPEND instructions

@@ -37,6 +37,7 @@ static struct option run_long_options[] = {
     {"coro-http",     required_argument, 0, 'H'},
     {"no-jit",        no_argument,       0, 'J'},
     {"jit-force",     no_argument,       0, 'F'},
+    {"jit-stats",     no_argument,       0, 'S'},
     {"dump-ic",       no_argument,       0, 'I'},
     {0, 0, 0, 0}
 };
@@ -48,6 +49,7 @@ typedef struct {
     bool dump_ic;
     bool jitless;
     bool jit_force;
+    bool jit_stats;
     int num_workers;           // 0 = auto-detect
     int coro_watch_interval;   // 0 = disabled, >0 = refresh interval(ms)
     int coro_http_port;        // 0 = disabled, >0 = HTTP port
@@ -63,7 +65,8 @@ static XrayIsolate *create_run_isolate(const RunOptions *opts) {
     params.dump_ic_feedback = opts->dump_ic;
     params.enable_jit = !opts->jitless;
     if (opts->jit_force) params.jit_threshold = 1;
-    
+    params.jit_stats = opts->jit_stats;
+
     XrayIsolate *iso = xray_isolate_new(&params);
     if (!iso) {
         fprintf(stderr, "Error: failed to create Xray isolate\n");
@@ -77,7 +80,7 @@ static XrayIsolate *create_run_isolate(const RunOptions *opts) {
 static int run_string(const RunOptions *opts, const char *code) {
     XrayIsolate *iso = create_run_isolate(opts);
     if (!iso) return 1;
-    
+
     int result = xray_isolate_dostring(iso, code);
     xr_multicore_destroy(iso);
     xray_isolate_delete(iso);
@@ -100,6 +103,7 @@ void print_run_help(void) {
     printf("    --dump-ic         Dump IC type feedback after execution\n");
     printf("    --no-jit          Disable JIT compiler (interpreter only)\n");
     printf("    --jit-force       Force JIT on first call (threshold=1, debug only)\n");
+    printf("    --jit-stats       Print JIT compilation statistics on exit\n");
     printf("    -h, --help        Show this help\n");
     printf("\n");
     printf("Coroutine monitoring options:\n");
@@ -132,10 +136,10 @@ void print_run_help(void) {
 int cmd_run(int argc, char **argv) {
     RunOptions opts = {0};
     const char *eval_code = NULL;
-    
+
     // Reset getopt state (allow multiple calls)
     optind = 1;
-    
+
     // Parse options
     int opt;
     while ((opt = getopt_long(argc, argv, "+e:tdW:w::H:hJFI", run_long_options, NULL)) != -1) {
@@ -174,6 +178,9 @@ int cmd_run(int argc, char **argv) {
             case 'F': // --jit-force
                 opts.jit_force = true;
                 break;
+            case 'S': // --jit-stats
+                opts.jit_stats = true;
+                break;
             case 'I': // --dump-ic
                 opts.dump_ic = true;
                 break;
@@ -188,11 +195,11 @@ int cmd_run(int argc, char **argv) {
                 return 1;
         }
     }
-    
+
     // -e mode: execute code directly
     if (eval_code != NULL) {
         char *stdin_code = NULL;
-        
+
         // -e - : read code from stdin
         if (strcmp(eval_code, "-") == 0) {
             stdin_code = cli_read_stdin();
@@ -203,21 +210,21 @@ int cmd_run(int argc, char **argv) {
             }
             eval_code = stdin_code;
         }
-        
+
         int result = run_string(&opts, eval_code);
         xr_free(stdin_code);
         return result;
     }
-    
+
     // After optind are non-option args: script file and script arguments
     if (optind >= argc) {
         fprintf(stderr, "Error: no input file specified\n");
         fprintf(stderr, "Usage: xray <file.xr> [-- script args...]\n");
         return 1;
     }
-    
+
     const char *file = argv[optind];
-    
+
     // "-" as filename: read script from stdin
     if (strcmp(file, "-") == 0) {
         char *stdin_code = cli_read_stdin();
@@ -230,7 +237,7 @@ int cmd_run(int argc, char **argv) {
         xr_free(stdin_code);
         return result;
     }
-    
+
     // Script arguments: all arguments after optind+1, skip '--' separator
     int script_argc = argc - optind - 1;
     char **script_argv = (script_argc > 0) ? &argv[optind + 1] : NULL;
@@ -238,30 +245,30 @@ int cmd_run(int argc, char **argv) {
         script_argc--;
         script_argv = (script_argc > 0) ? script_argv + 1 : NULL;
     }
-    
+
     // Create Isolate with runtime
     XrayIsolate *iso = create_run_isolate(&opts);
     if (!iso) return 1;
-    
+
     // Set script info (for args/__file__/__dir__)
     xray_isolate_set_script_info(iso, file, script_argc, script_argv);
-    
+
     // Re-initialize module system (with script path, for project mode detection)
     xr_module_system_init_with_script(iso, file);
-    
+
     // Start coroutine monitor (if enabled)
     if (opts.coro_watch_interval > 0 || opts.coro_http_port > 0) {
         xr_coro_monitor_start(iso, opts.coro_watch_interval, opts.coro_http_port);
     }
-    
+
     // Execute file
     int result = xray_isolate_dofile(iso, file);
-    
+
     // Destroy runtime
     xr_multicore_destroy(iso);
-    
+
     // Cleanup
     xray_isolate_delete(iso);
-    
+
     return (result != 0) ? 1 : 0;
 }

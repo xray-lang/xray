@@ -115,19 +115,33 @@ typedef struct XirPipelineStats {
     uint32_t rounds_run;          // number of complete sweeps performed
     uint32_t invocations;         // sum of passes executed across all rounds
     uint32_t converged;           // non-zero if driver stopped on convergence
+    uint32_t timed_out;           // non-zero if budget deadline was exceeded
 } XirPipelineStats;
+
+/* Compile-time budget: caps pipeline wall-clock time so bg workers
+ * are not blocked by pathological functions.  Pass NULL for no limit. */
+typedef struct XirCompileBudget {
+    uint64_t start_ns;            // pipeline start timestamp
+    uint64_t deadline_ns;         // start_ns + budget (default 50ms)
+    bool     timed_out;           // set by driver when deadline exceeded
+} XirCompileBudget;
 
 /*
  * Run |passes| to a fixed-point on |func|, at most |max_rounds|
  * sweeps.  Returns per-run statistics so callers / tests can reason
  * about convergence behaviour.  Proto is optional; passes with
  * XIR_PASS_NEEDS_PROTO receive it, others ignore it.
+ *
+ * If |budget| is non-NULL the driver checks the deadline at the start
+ * of every round and bails out early if exceeded.  The partially
+ * optimised IR is still valid — only remaining passes are skipped.
  */
 XR_FUNC XirPipelineStats xir_run_fixedpoint(XirFunc *func,
                                              XrProto *proto,
                                              const XirPassDesc *passes,
                                              uint32_t npass,
-                                             uint32_t max_rounds);
+                                             uint32_t max_rounds,
+                                             XirCompileBudget *budget);
 
 /* ========== Individual Pass API ========== */
 

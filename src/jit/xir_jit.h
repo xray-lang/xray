@@ -46,7 +46,17 @@ typedef struct XirJitState {
     TfaState    *tfa;              // lazily allocated TFA state (NULL until first use)
     void        *dominant_shape;   // XrShape* — most common NEWJSON shape in module (NULL if none/ambiguous)
     bool         verbose;          // diagnostic logging (auto-enabled by --jit-force)
+    bool         stats_enabled;    // --jit-stats: print compilation statistics on exit
     XirCompileQueue *bg_queue;     // background compilation queue (NULL if sync mode)
+
+    // Statistics (populated during compilation, printed by xir_jit_destroy)
+    uint32_t     stats_tier1;          // functions compiled at Tier 1
+    uint32_t     stats_tier2;          // functions recompiled at Tier 2
+    uint32_t     stats_conservative;   // conservative recompiles (deopt_count >= 5)
+    uint32_t     stats_deopt_total;    // total deopts across all protos
+    uint32_t     stats_disabled;       // protos permanently disabled (deopt_count >= 20)
+    uint64_t     stats_compile_ns;     // cumulative compile time (nanoseconds)
+    uint64_t     stats_code_bytes;     // total generated code bytes
 } XirJitState;
 
 /* ========== Deoptimization ========== */

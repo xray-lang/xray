@@ -92,7 +92,7 @@ static void bg_compile_one(XirCompileQueue *q, uint32_t worker_id,
     }
 
     // Guard: reject oversized functions
-    if (func->nvreg > 512) {
+    if (func->nvreg > 4096) {
         xir_func_destroy(func);
         return;
     }

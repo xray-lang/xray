@@ -60,6 +60,7 @@ typedef struct {
     /* === JIT (for LLVM/Mixed backends) === */
     bool enable_jit;
     int jit_threshold;              // Call count before JIT (default: 100)
+    bool jit_stats;                 // --jit-stats: print compilation statistics on exit
 
     /* === Memory === */
     size_t initial_heap_size;       // 0 = use default
