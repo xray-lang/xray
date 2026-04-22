@@ -217,6 +217,14 @@ XR_FUNC void xcg_emit_ref(XcgenBuf *b, XirFunc *func, XirRef ref);
 XR_FUNC void xcg_emit_binary_op(XcgenBuf *b, XirFunc *func, XirIns *ins, const char *op);
 XR_FUNC void xcg_emit_compare_op(XcgenBuf *b, XirFunc *func, XirIns *ins, const char *op);
 
+// Resolve a constant int64 from an XIR ref, tracing through MOV chains (max 8 hops).
+// Returns true if resolved, writing the value to *out_val.
+XR_FUNC bool xcg_resolve_const_i64(XirFunc *func, XirRef ref, int64_t *out_val);
+
+// Find the defining instruction for a vreg, tracing through MOV chains (max 8 hops).
+// Returns the defining XirIns* or NULL if not found / not a vreg.
+XR_FUNC XirIns *xcg_find_def(XirFunc *func, XirRef ref);
+
 // Emit a single XIR instruction as C code
 XR_FUNC void xcg_emit_instruction(XcgenBuf *b, XirFunc *func, XirIns *ins,
                            const char *self_name, XcgenModule *mod,

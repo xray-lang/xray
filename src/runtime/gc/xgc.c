@@ -74,6 +74,9 @@ void xr_gc_cleanup(XrGC *gc) {
         XrGCHeader *next = obj->gc_next;
         uint8_t type = xr_gc_gettype(obj);
         XrGCDestroyFn destroy = get_destroy_func(type);
+        if (!destroy && gc->isolate) {
+            destroy = gc->isolate->ext_destroy_funcs[type];
+        }
         if (destroy != NULL) {
             destroy(obj, NULL);
         }

@@ -950,26 +950,6 @@ static void *xcg_resolve_const_ptr(XirFunc *func, XirRef ref) {
     return NULL;
 }
 
-// Resolve a const ref to an int64 value (for nupvals).
-static int64_t xcg_resolve_const_i64(XirFunc *func, XirRef ref) {
-    if (xir_ref_is_const(ref)) {
-        uint32_t ci = XIR_REF_INDEX(ref);
-        if (ci < func->nconst) return func->consts[ci].val.i64;
-    }
-    // Trace through CONST_I64 def if ref is a vreg
-    if (xir_ref_is_vreg(ref)) {
-        uint32_t vi = XIR_REF_INDEX(ref);
-        if (vi < func->nvreg && func->vregs[vi].def) {
-            XirIns *def = func->vregs[vi].def;
-            if (def->op == XIR_CONST_I64 && xir_ref_is_const(def->args[0])) {
-                uint32_t ci2 = XIR_REF_INDEX(def->args[0]);
-                if (ci2 < func->nconst) return func->consts[ci2].val.i64;
-            }
-        }
-    }
-    return 0;
-}
-
 // Check if vreg cl_vreg (holding a closure of cl_proto) escapes from func.
 // Returns true if the closure does NOT escape.
 static bool xcg_closure_is_non_escaping(XirFunc *func, uint32_t cl_vreg,
@@ -1075,7 +1055,8 @@ static void prescan_closure_escape(XcgenModule *mod, XirFunc *func) {
             if (!entry) continue;
 
             // Resolve nupvals
-            int64_t nupvals = xcg_resolve_const_i64(func, ins->args[1]);
+            int64_t nupvals = 0;
+            xcg_resolve_const_i64(func, ins->args[1], &nupvals);
             if (nupvals <= 0) continue;
 
             // Run escape analysis

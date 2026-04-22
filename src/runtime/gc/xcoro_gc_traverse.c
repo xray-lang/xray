@@ -19,6 +19,7 @@
 #include "../object/xiterator.h"
 #include "../object/xexception.h"
 #include "xalloc_unified.h"  // xr_coro_get_isolate
+#include "../xisolate_internal.h"  // XrayIsolate ext_traverse_funcs
 #include "../xerror_impl.h"
 #include "../class/xclass.h"
 #include "../class/xinstance.h"
@@ -335,8 +336,17 @@ void xr_gc_traverse_object(XrCoroGC *gc, XrGCHeader *obj) {
             break;
         }
 
-        default:
-            // Unknown type or no refs, nothing to traverse
+        default: {
+            // Extension types: call per-isolate traverse callback if registered
+            XrayIsolate *iso = xr_coro_get_isolate(gc->owner);
+            if (iso) {
+                void *fn = iso->ext_traverse_funcs[obj->type];
+                if (fn) {
+                    typedef void (*TraverseFn)(XrCoroGC*, XrGCHeader*);
+                    ((TraverseFn)fn)(gc, obj);
+                }
+            }
             break;
+        }
     }
 }

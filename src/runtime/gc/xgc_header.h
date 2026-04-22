@@ -186,6 +186,11 @@ static inline const char* xr_obj_type_name(XrObjType type) {
     if (type < sizeof(names)/sizeof(names[0])) {
         return names[type];
     }
+    /* Extension types (allocated dynamically per isolate).
+     * Use per-isolate lookup for named types; generic label here. */
+    if (type < 64) {
+        return "ext";
+    }
     return TYPE_NAME_UNKNOWN;
 }
 

@@ -22,6 +22,7 @@
 #include "xsystem_heap.h"
 #include "../object/xstring.h"
 #include "../xisolate_api.h"
+#include "../xisolate_internal.h"
 #include "../../runtime/xexec_state.h"
 #include "../value/xstruct_layout.h"
 #include "../class/xclass.h"
@@ -105,6 +106,31 @@ static inline bool xr_gc_needs_finalize(uint8_t type) {
 // Get global destroy function for type (const table defined in xgc.c)
 static inline XrGCDestroyFn get_destroy_func(uint8_t type) {
     return (type < XGC_MAX_TYPES) ? g_destroy_funcs[type] : NULL;
+}
+
+/* Extension-aware variants: consult per-isolate tables for dynamic types */
+
+static inline XrayIsolate* gc_get_isolate(XrCoroGC *gc) {
+    return (gc && gc->owner) ? gc->owner->isolate : NULL;
+}
+
+static inline bool xr_gc_has_refs_ext(XrCoroGC *gc, uint8_t type) {
+    if (xr_gc_has_refs(type)) return true;
+    XrayIsolate *iso = gc_get_isolate(gc);
+    return iso && (iso->ext_has_refs_bitmap & (1ULL << type));
+}
+
+static inline bool xr_gc_needs_finalize_ext(XrCoroGC *gc, uint8_t type) {
+    if (xr_gc_needs_finalize(type)) return true;
+    XrayIsolate *iso = gc_get_isolate(gc);
+    return iso && (iso->ext_finalize_bitmap & (1ULL << type));
+}
+
+static inline XrGCDestroyFn get_destroy_func_ext(XrCoroGC *gc, uint8_t type) {
+    XrGCDestroyFn fn = get_destroy_func(type);
+    if (fn) return fn;
+    XrayIsolate *iso = gc_get_isolate(gc);
+    return iso ? iso->ext_destroy_funcs[type] : NULL;
 }
 
 /* ========== Debug Invariant Forward Declaration ========== */
@@ -218,8 +244,8 @@ static void gc_finalize_immix_objects(XrCoroGC *gc) {
         for (XrImmixBlock *b = blists[i]; b; b = b->next) {
             if (!b->has_finalizers) continue;
             for (XrGCHeader *obj = b->local_allgc; obj; obj = obj->gc_next) {
-                if (xr_gc_needs_finalize(obj->type)) {
-                    XrGCDestroyFn destroy = get_destroy_func(obj->type);
+                if (xr_gc_needs_finalize_ext(gc, obj->type)) {
+                    XrGCDestroyFn destroy = get_destroy_func_ext(gc, obj->type);
                     if (destroy) destroy(obj, gc);
                 }
             }
@@ -233,8 +259,8 @@ static void gc_free_large_objects(XrCoroGC *gc) {
     XrGCHeader *lo = gc->large_objects;
     while (lo) {
         XrGCHeader *next = lo->gc_next;
-        if (xr_gc_needs_finalize(lo->type)) {
-            XrGCDestroyFn destroy = get_destroy_func(lo->type);
+        if (xr_gc_needs_finalize_ext(gc, lo->type)) {
+            XrGCDestroyFn destroy = get_destroy_func_ext(gc, lo->type);
             if (destroy) destroy(lo, gc);
         }
         gc->large_bytes -= lo->objsize;
@@ -337,14 +363,14 @@ void xr_coro_gc_reset(XrCoroGC *gc, struct XrCoroutine *new_owner) {
  * Link Immix object to block's local_allgc list and mark allocation lines.
  * Shared by xr_coro_gc_newobj (interpreter) and xr_jit_alloc_post (JIT).
  */
-static inline void gc_post_immix_alloc(XrGCHeader *obj, uint8_t type,
-                                       uint32_t total) {
+static inline void gc_post_immix_alloc(XrCoroGC *gc, XrGCHeader *obj,
+                                       uint8_t type, uint32_t total) {
     XrImmixBlock *block = XR_IMMIX_BLOCK_FROM_PTR(obj);
     obj->gc_next = block->local_allgc;
     block->local_allgc = obj;
     block->alloc_count++;
     block->alloc_bytes += (int64_t)total;
-    if (xr_gc_needs_finalize(type))
+    if (xr_gc_needs_finalize_ext(gc, type))
         block->has_finalizers = 1;
 
     // Mark alloc_marks so allocator knows these lines are occupied.
@@ -402,7 +428,7 @@ XrGCHeader* xr_coro_gc_newobj(XrCoroGC *gc, uint8_t type, size_t size) {
     } else {
         obj = (XrGCHeader*)xr_immix_alloc(&gc->immix, total);
         if (!obj) return NULL;
-        gc_post_immix_alloc(obj, type, (uint32_t)total);
+        gc_post_immix_alloc(gc, obj, type, (uint32_t)total);
     }
 
     obj->type = type;
@@ -501,7 +527,7 @@ static void reallymarkobject(XrCoroGC *gc, XrGCHeader *obj) {
     if (obj->objsize <= XR_LARGE_OBJECT_THRESHOLD) {
         XR_IMMIX_BLOCK_FROM_PTR(obj)->has_marked = 1;
     }
-    if (xr_gc_has_refs(obj->type)) {
+    if (xr_gc_has_refs_ext(gc, obj->type)) {
         xr_gclist_push(&gc->gray, obj);
     } else {
         xr_gc_gray2black(obj);
@@ -539,7 +565,7 @@ void xr_coro_gc_markobject(XrCoroGC *gc, XrGCHeader *obj) {
     }
     if (xr_gc_iswhite(obj)) {
         reallymarkobject(gc, obj);
-    } else if (xr_gc_has_refs(obj->type)) {
+    } else if (xr_gc_has_refs_ext(gc, obj->type)) {
         // Defensive traversal for external objects not managed by this coro GC.
         // After scheme C, closures are primarily on Immix heap, but fixed GC
         // fallback objects (e.g. deep-copied closures when dst_coro_gc is NULL)
@@ -1016,8 +1042,8 @@ static int sweep_block(XrCoroGC *gc, XrImmixBlock *block) {
             XrGCHeader *obj = block->local_allgc;
             while (obj) {
                 XrGCHeader *next = obj->gc_next;
-                if (xr_gc_needs_finalize(obj->type)) {
-                    XrGCDestroyFn destroy = get_destroy_func(obj->type);
+                if (xr_gc_needs_finalize_ext(gc, obj->type)) {
+                    XrGCDestroyFn destroy = get_destroy_func_ext(gc, obj->type);
                     if (destroy) { destroy(obj, gc); gc->finalizer_count++; gc->objects_finalized++; }
                 }
                 obj = next;
@@ -1053,8 +1079,8 @@ static int sweep_block(XrCoroGC *gc, XrImmixBlock *block) {
             // Dead object: unlink from per-block list
             *p = curr->gc_next;
 
-            if (xr_gc_needs_finalize(curr->type)) {
-                XrGCDestroyFn destroy = get_destroy_func(curr->type);
+            if (xr_gc_needs_finalize_ext(gc, curr->type)) {
+                XrGCDestroyFn destroy = get_destroy_func_ext(gc, curr->type);
                 if (destroy) {
                     destroy(curr, gc);
                     gc->finalizer_count++;
@@ -1081,7 +1107,7 @@ static int sweep_block(XrCoroGC *gc, XrImmixBlock *block) {
 
             live_count++;
             live_bytes += curr->objsize;
-            if (xr_gc_needs_finalize(curr->type))
+            if (xr_gc_needs_finalize_ext(gc, curr->type))
                 live_has_fin = 1;
 
             p = &curr->gc_next;
@@ -1124,8 +1150,8 @@ static void sweeplargeobjects(XrCoroGC *gc) {
         uint8_t marked = curr->marked;
 
         if ((marked & XGC_WHITEBITS) == deadwhite) {
-            if (xr_gc_needs_finalize(curr->type)) {
-                XrGCDestroyFn destroy = get_destroy_func(curr->type);
+            if (xr_gc_needs_finalize_ext(gc, curr->type)) {
+                XrGCDestroyFn destroy = get_destroy_func_ext(gc, curr->type);
                 if (destroy) {
                     gc->finalizer_count++;
                     gc->objects_finalized++;
@@ -2138,7 +2164,7 @@ void xr_jit_alloc_post(struct XrCoroutine *coro, void *obj_ptr) {
     XR_DCHECK(total > 0, "jit_alloc_post: zero objsize");
     XR_DCHECK(total <= XR_LARGE_OBJECT_THRESHOLD, "jit_alloc_post: oversized for Immix");
 
-    gc_post_immix_alloc(obj, obj->type, total);
+    gc_post_immix_alloc(gc, obj, obj->type, total);
     gc_update_alloc_stats(gc, total);
 }
 
