@@ -1736,12 +1736,173 @@ static void x64_emit_xir_ins(X64CodegenCtx *ctx, XirIns *ins) {
         break;
     }
 
+    /* CALL_KNOWN_REG: register-passing variant of CALL_KNOWN (nargs <= 2).
+     * args[0] = param0 XIR ref, args[1] = param1 XIR ref (or NONE).
+     * Builder pre-stored callee proto in jit_ctx->call_proto. */
+    case XIR_CALL_KNOWN_REG: {
+        x64_emit_call_args_from_pool(ctx, ins);
+        x64_emit_ptr_spill_writeback(ctx);
+
+        /* Record safepoint */
+        uint32_t smap_id_kr = x64_record_safepoint(ctx);
+        x64_load_imm64(&ctx->buf, X64_SCRATCH_REG, (uint64_t)smap_id_kr);
+        x64_mov_mr32(&ctx->buf, X64_JIT_CTX_REG,
+                     (int32_t)XIR_JIT_ACTIVE_SMAP_ID_OFFSET, X64_SCRATCH_REG);
+
+        /* Resolve arg vreg → physical reg mapping (before spill save) */
+        int nargs_reg = 0;
+        X64Reg arg_regs[2] = { X64_SCRATCH_REG, X64_SCRATCH_REG };
+        {
+            X64Reg scratches[2] = { X64_SCRATCH_REG, X64_RCX };
+            for (int a = 0; a < 2; a++) {
+                if (xir_ref_is_none(ins->args[a])) break;
+                arg_regs[a] = x64_get_operand(ctx, ins->args[a], scratches[a]);
+                nargs_reg++;
+            }
+        }
+
+        /* Save live caller-saved regs */
+        X64Reg live_gp[8];
+        int ngp = x64_live_gp(ctx, live_gp, rd);
+        X64Xmm live_fp_arr[14];
+        int nfp = x64_live_fp(ctx, live_fp_arr);
+        int32_t save_frame = (((ngp + nfp) * 8 + 15) & ~15);
+        if (save_frame > 0) {
+            x64_sub_ri(&ctx->buf, X64_RSP, save_frame);
+            int off = 0;
+            for (int i = 0; i < ngp; i++) {
+                x64_mov_mr(&ctx->buf, X64_RSP, off, live_gp[i]);
+                off += 8;
+            }
+            for (int f = 0; f < nfp; f++) {
+                x64_movsd_mr(&ctx->buf, X64_RSP, off, live_fp_arr[f]);
+                off += 8;
+            }
+        }
+
+        /* Load callee proto->jit_fast_entry to R11 */
+        x64_mov_rm(&ctx->buf, X64_SCRATCH_REG, X64_JIT_CTX_REG,
+                   (int32_t)XIR_JIT_CALL_PROTO_OFFSET);
+        x64_mov_rm(&ctx->buf, X64_SCRATCH_REG, X64_SCRATCH_REG,
+                   (int32_t)XIR_PROTO_JIT_FAST_ENTRY_OFFSET);
+        /* TEST R11, R11; JE slow_path */
+        x64_test_rr(&ctx->buf, X64_SCRATCH_REG, X64_SCRATCH_REG);
+        x64_emit8(&ctx->buf, 0x0F);
+        x64_emit8(&ctx->buf, (uint8_t)(0x80 | X64_CC_E));
+        uint32_t je_slow_kr = ctx->buf.pos;
+        x64_emit32(&ctx->buf, 0);
+
+        /* Set call_closure from call_args[0] */
+        x64_mov_rm(&ctx->buf, X64_RCX, X64_JIT_CTX_REG,
+                   (int32_t)XIR_JIT_CALL_ARGS_OFFSET);
+        x64_mov_mr(&ctx->buf, X64_JIT_CTX_REG,
+                   (int32_t)XIR_JIT_CALL_CLOSURE_OFFSET, X64_RCX);
+
+        /* Move args to alloc_regs[0..nargs-1], handling collisions */
+        if (nargs_reg == 1) {
+            X64Reg p0 = x64_alloc_regs[0];
+            if (arg_regs[0] != p0)
+                x64_mov_rr(&ctx->buf, p0, arg_regs[0]);
+        } else if (nargs_reg == 2) {
+            X64Reg p0 = x64_alloc_regs[0];
+            X64Reg p1 = x64_alloc_regs[1];
+            if (arg_regs[0] == p1 && arg_regs[1] == p0) {
+                /* Swap via RCX scratch (already clobbered above) */
+                x64_mov_rr(&ctx->buf, X64_RCX, arg_regs[0]);
+                x64_mov_rr(&ctx->buf, p0, arg_regs[1]);
+                x64_mov_rr(&ctx->buf, p1, X64_RCX);
+            } else if (arg_regs[1] == p0) {
+                /* Write p1 first to avoid clobbering arg_regs[1] */
+                if (arg_regs[1] != p1)
+                    x64_mov_rr(&ctx->buf, p1, arg_regs[1]);
+                if (arg_regs[0] != p0)
+                    x64_mov_rr(&ctx->buf, p0, arg_regs[0]);
+            } else {
+                if (arg_regs[0] != p0)
+                    x64_mov_rr(&ctx->buf, p0, arg_regs[0]);
+                if (arg_regs[1] != p1)
+                    x64_mov_rr(&ctx->buf, p1, arg_regs[1]);
+            }
+        }
+        /* RDI = coro (System V ABI) */
+        x64_mov_rr(&ctx->buf, X64_RDI, X64_CORO_REG);
+        /* CALL R11 (jit_fast_entry) */
+        x64_call_r(&ctx->buf, X64_SCRATCH_REG);
+
+        /* Store callee tag (RCX) to call_result_tag */
+        x64_mov_mr(&ctx->buf, X64_JIT_CTX_REG,
+                   (int32_t)XIR_JIT_CALL_RESULT_TAG_OFFSET, X64_RCX);
+
+        /* Nested deopt check */
+        x64_load_imm64(&ctx->buf, X64_RCX, (uint64_t)XIR_DEOPT_MARKER);
+        x64_cmp_rr(&ctx->buf, X64_RAX, X64_RCX);
+        x64_emit8(&ctx->buf, 0x0F);
+        x64_emit8(&ctx->buf, (uint8_t)(0x80 | X64_CC_E));
+        uint32_t je_cascade_kr = ctx->buf.pos;
+        x64_emit32(&ctx->buf, 0);
+
+        /* JMP done */
+        x64_emit8(&ctx->buf, 0xE9);
+        uint32_t jmp_done_kr = ctx->buf.pos;
+        x64_emit32(&ctx->buf, 0);
+
+        /* Cascade: clear stale deopt_id */
+        uint32_t cascade_kr_pos = ctx->buf.pos;
+        x64_xor_rr(&ctx->buf, X64_RCX, X64_RCX);
+        x64_mov_mr32(&ctx->buf, X64_JIT_CTX_REG,
+                     (int32_t)XIR_JIT_DEOPT_ID_OFFSET, X64_RCX);
+
+        /* Slow path */
+        uint32_t slow_kr_pos = ctx->buf.pos;
+        x64_patch_rel32(&ctx->buf, je_slow_kr, slow_kr_pos);
+        x64_patch_rel32(&ctx->buf, je_cascade_kr, cascade_kr_pos);
+
+        x64_load_imm64(&ctx->buf, X64_SCRATCH_REG, (uint64_t)nargs_reg);
+        x64_mov_mr(&ctx->buf, X64_JIT_CTX_REG,
+                   (int32_t)X64_EXTRA_ARG_OFFSET, X64_SCRATCH_REG);
+        x64_load_imm64(&ctx->buf, X64_R10, (uint64_t)(uintptr_t)xr_jit_call_func);
+        XR_DCHECK(ctx->npatch < ctx->patches_cap, "too many patches");
+        X64BranchPatch *cp_kr = &ctx->patches[ctx->npatch];
+        x64_emit8(&ctx->buf, 0xE8);
+        cp_kr->emit_pos = ctx->buf.pos;
+        cp_kr->target_blk = 0;
+        cp_kr->type = X64_PATCH_CALL_C;
+        cp_kr->cc = X64_CC_E;
+        ctx->npatch++;
+        x64_emit32(&ctx->buf, 0);
+        ctx->has_call_c = true;
+
+        /* Done */
+        uint32_t done_kr_pos = ctx->buf.pos;
+        x64_patch_rel32(&ctx->buf, jmp_done_kr, done_kr_pos);
+
+        /* Save RAX to R11 before restoring caller-saved regs */
+        x64_mov_rr(&ctx->buf, X64_SCRATCH_REG, X64_RAX);
+
+        /* Restore caller-saved regs */
+        if (save_frame > 0) {
+            int off = 0;
+            for (int i = 0; i < ngp; i++) {
+                x64_mov_rm(&ctx->buf, live_gp[i], X64_RSP, off);
+                off += 8;
+            }
+            for (int f = 0; f < nfp; f++) {
+                x64_movsd_rm(&ctx->buf, live_fp_arr[f], X64_RSP, off);
+                off += 8;
+            }
+            x64_add_ri(&ctx->buf, X64_RSP, save_frame);
+        }
+
+        if (xir_ref_is_vreg(ins->dst) && rd != X64_SCRATCH_REG)
+            x64_mov_rr(&ctx->buf, rd, X64_SCRATCH_REG);
+        break;
+    }
+
     case XIR_CALL:
     case XIR_CALL_DIRECT:
-    case XIR_CALL_KNOWN_REG:
-        /* TODO: CALL_DIRECT + CALL_KNOWN_REG — similar pattern to CALL_KNOWN
-         * but with additional guards (type check for DIRECT, register passing
-         * for KNOWN_REG). Deferring until benchmarked as hot path. */
+        /* TODO: CALL_DIRECT — requires type guard for TFUNCTION vs TCLASS
+         * closures (classes need C bridge for instance allocation). Deferred
+         * to future work; monomorphic callsites use CALL_KNOWN/CALL_KNOWN_REG. */
         xr_log_warning("x64-cg", "cross-function call op %d not yet implemented", ins->op);
         ctx->had_error = true;
         break;
