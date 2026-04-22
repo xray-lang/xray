@@ -50,6 +50,8 @@ typedef enum {
     X64_PATCH_CALL_C,        // CALL rel32 to shared call_c_stub
     X64_PATCH_CALL_SELF,     // CALL rel32 to function entry (offset 0)
     X64_PATCH_CALL_SELF_FAST,// CALL rel32 to fast_entry_offset
+    X64_PATCH_BARRIER_FWD,   // CALL rel32 to barrier_fwd_stub
+    X64_PATCH_BARRIER_BACK,  // CALL rel32 to barrier_back_stub
 } X64PatchType;
 
 typedef struct {
@@ -93,6 +95,8 @@ typedef struct {
 
     uint32_t      call_c_stub;       // byte offset of call_c_stub in code buffer
     uint32_t      deopt_stub;        // byte offset of deopt stub
+    uint32_t      barrier_fwd_stub;  // byte offset of forward barrier stub
+    uint32_t      barrier_back_stub; // byte offset of back barrier stub
 
     /* GC stack map: collect safepoint bitmaps during codegen */
     XrStackMapEntry smap_entries[XIR_MAX_STACK_MAP_ENTRIES];
@@ -101,6 +105,7 @@ typedef struct {
     bool          had_error;
     bool          has_deopt;
     bool          has_call_c;
+    bool          has_barriers;
 
     /* Suspend/resume tracking (coroutine support) */
     uint32_t      suspend_cont_offsets[16];   // byte offset of continuation per suspend_id
