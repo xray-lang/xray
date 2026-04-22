@@ -1430,32 +1430,52 @@ bool xir_translate_call_ops(XirBuilder *b, XirBlock **cur_blk,
             int c_field = GETARG_C(inst);
             int newline = c_field & 1;
             XirRef val = builder_get_slot(b, blk, a);
-            {
-                XirRef off0 = xir_const_i64(b->func, (int64_t)JIT_CALL_ARGS_OFFSET);
-                xir_emit_raw(b->func, blk, XIR_STORE_CORO, XR_REP_VOID,
-                             off0, val, XIR_NONE);
+
+            if (b->aot_mode) {
+                // AOT: use non-void CALL_C so call_arg_pool binding works.
+                // STORE_CORO path fails because void dst → no vreg → pool lost.
+                // Encoded flags: bit0=newline, bit1=add_space (AOT codegen
+                // handles boxing; no slot_enc/val_tag needed).
+                int64_t encoded = ((add_space & 1) << 1) | (newline & 1);
+                XirRef fn_ref = xir_const_ptr(b->func, (void *)xr_jit_print);
+                XirRef enc_ref = xir_const_i64(b->func, encoded);
+                XirRef enc_val = xir_emit_unary(b->func, blk, XIR_CONST_I64,
+                                                XR_REP_I64, enc_ref);
+                XirRef result = xir_emit(b->func, blk, XIR_CALL_C, XR_REP_I64,
+                                         fn_ref, enc_val);
+                blk->ins[blk->nins - 1].flags |= XIR_FLAG_SIDE_EFFECT;
+                XirRef call_args[1] = { val };
+                builder_bind_call_args(b, result, call_args, 1);
+            } else {
+                // JIT: store value to coro call_args buffer, emit void CALL_C
+                {
+                    XirRef off0 = xir_const_i64(b->func,
+                                                (int64_t)JIT_CALL_ARGS_OFFSET);
+                    xir_emit_raw(b->func, blk, XIR_STORE_CORO, XR_REP_VOID,
+                                 off0, val, XIR_NONE);
+                    blk->ins[blk->nins - 1].flags |= XIR_FLAG_SIDE_EFFECT;
+                }
+                // Convert vtag to value_tag for the runtime print helper.
+                uint8_t val_tag = vtag_to_value_tag(builder_slot_xr_tag(b, a));
+                int bc_slot_hint = -1;
+                if (a >= 0 && a < 256 &&
+                    !xir_ref_is_none(b->slot_tag_refs[a])) {
+                    val_tag = 0xFF;
+                    bc_slot_hint = a;
+                }
+                int64_t slot_enc = (bc_slot_hint >= 0)
+                    ? (int64_t)bc_slot_hint : 0xFF;
+                int64_t encoded = (slot_enc << 24)
+                                | ((int64_t)val_tag << 8)
+                                | ((add_space & 1) << 1) | (newline & 1);
+                XirRef fn_ref = xir_const_ptr(b->func, (void *)xr_jit_print);
+                XirRef enc_ref = xir_const_i64(b->func, encoded);
+                XirRef enc_val = xir_emit_unary(b->func, blk, XIR_CONST_I64,
+                                                XR_REP_I64, enc_ref);
+                xir_emit(b->func, blk, XIR_CALL_C, XR_REP_VOID,
+                         fn_ref, enc_val);
                 blk->ins[blk->nins - 1].flags |= XIR_FLAG_SIDE_EFFECT;
             }
-            // Convert vtag to value_tag for the runtime print helper.
-            uint8_t val_tag = vtag_to_value_tag(builder_slot_xr_tag(b, a));
-            // When slot_tag_refs is set, the tag is in slot_runtime_tags[a]
-            // (written by call_c_stub from x1). Encode bc_slot so the runtime
-            // helper can load the precise tag instead of using a heuristic.
-            int bc_slot_hint = -1;
-            if (a >= 0 && a < 256 && !xir_ref_is_none(b->slot_tag_refs[a])) {
-                val_tag = 0xFF;  // unknown — load from slot_runtime_tags[a]
-                bc_slot_hint = a;
-            }
-            int64_t slot_enc = (bc_slot_hint >= 0) ? (int64_t)bc_slot_hint : 0xFF;
-            int64_t encoded = (slot_enc << 24)
-                            | ((int64_t)val_tag << 8)
-                            | ((add_space & 1) << 1) | (newline & 1);
-            XirRef fn_ref = xir_const_ptr(b->func, (void *)xr_jit_print);
-            XirRef enc_ref = xir_const_i64(b->func, encoded);
-            XirRef enc_val = xir_emit_unary(b->func, blk, XIR_CONST_I64,
-                                            XR_REP_I64, enc_ref);
-            xir_emit(b->func, blk, XIR_CALL_C, XR_REP_VOID, fn_ref, enc_val);
-            blk->ins[blk->nins - 1].flags |= XIR_FLAG_SIDE_EFFECT;
             b->ops_translated++;
             return true;
         }

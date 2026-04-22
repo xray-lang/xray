@@ -36,6 +36,8 @@
 #include <stddef.h>
 #include <string.h>
 #include <math.h>
+#include <stdio.h>
+#include <execinfo.h>
 #include "../../base/xdefs.h"
 #include "../../base/xchecks.h"
 
@@ -246,6 +248,13 @@ static inline int64_t xr_value_to_int64_coerce(XrValue v) {
     if (XR_IS_INT(v))   return XR_TO_INT(v);
     if (XR_IS_FLOAT(v)) return (int64_t)XR_TO_FLOAT(v);
     if (XR_IS_BOOL(v))  return XR_IS_TRUE(v) ? 1 : 0;
+    fprintf(stderr, "[DEBUG] type confusion: tag=%u descriptor=0x%016llx payload=0x%016llx\n",
+            (unsigned)v.tag, (unsigned long long)v.descriptor, (unsigned long long)v.i);
+    /* Print backtrace on macOS for diagnosis */
+    {
+        void *bt[32]; int n = backtrace(bt, 32);
+        backtrace_symbols_fd(bt, n, 2);
+    }
     XR_CHECK(false, "type confusion: non-numeric value written to typed array");
     return 0;
 }

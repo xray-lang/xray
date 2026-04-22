@@ -31,6 +31,7 @@ XR_FUNC int64_t xr_jit_getprop(void *, int64_t);
 XR_FUNC int64_t xr_jit_throw(void *, int64_t);
 XR_FUNC int64_t xr_jit_tarray_get(void *, int64_t);
 XR_FUNC int64_t xr_jit_tarray_set(void *, int64_t);
+XR_FUNC int64_t xr_jit_print(void *, int64_t);
 
 /* ========== Tagged Arithmetic (runtime fallback) ========== */
 
