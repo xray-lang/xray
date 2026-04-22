@@ -37,10 +37,16 @@
 
 /* ========== Branch Patch ========== */
 
+/* Extra-arg scratch: reuse call_args[15] slot to pass extra_arg to call_c_stub.
+ * This slot is safe because call_args are written before the call and the
+ * extra_arg is consumed before any call_args are read by the callee. */
+#define X64_EXTRA_ARG_OFFSET   XIR_JIT_LOAD_TAG_SCRATCH
+
 typedef enum {
     X64_PATCH_JMP,       // unconditional JMP rel32
     X64_PATCH_JCC,       // conditional Jcc rel32
     X64_PATCH_DEOPT_JCC, // deopt: conditional Jcc to deopt stub
+    X64_PATCH_CALL_C,    // CALL rel32 to shared call_c_stub
 } X64PatchType;
 
 typedef struct {
@@ -82,8 +88,12 @@ typedef struct {
     uint32_t      nsub_patches;
     uint32_t      nadd_patches;
 
+    uint32_t      call_c_stub;       // byte offset of call_c_stub in code buffer
+    uint32_t      deopt_stub;        // byte offset of deopt stub
+
     bool          had_error;
     bool          has_deopt;
+    bool          has_call_c;
 } X64CodegenCtx;
 
 /* ========== Register Mapping ========== */
