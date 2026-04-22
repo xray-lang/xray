@@ -83,7 +83,12 @@ bool x64_emit_call_ins(X64CodegenCtx *ctx, XirIns *ins, X64Reg rd) {
         x64_emit32(&ctx->buf, 0);  /* placeholder rel32 */
         ctx->has_call_c = true;
 
-        /* TODO: check deopt_id after return (F.4.6) */
+        /* Check if C helper requested deopt (e.g. yieldable cfunc).
+         * If jit_ctx->deopt_id != 0, jump to deopt stub. */
+        x64_mov_rm32(&ctx->buf, X64_RCX, X64_JIT_CTX_REG,
+                     (int32_t)XIR_JIT_DEOPT_ID_OFFSET);
+        x64_test_rr(&ctx->buf, X64_RCX, X64_RCX);
+        x64_emit_deopt_jcc(ctx, X64_CC_NE);
 
         /* Move result payload (RAX) to dst register */
         if (xir_ref_is_vreg(ins->dst)) {
