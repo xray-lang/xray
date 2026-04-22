@@ -442,11 +442,14 @@ static void compute_used_vregs(XirFunc *func, bool *reachable, bool *used) {
             // CALL_C: some are dead (GETSHARED closure load), but
             // xr_json_new_with_shape (struct promotion) produces live dst.
             // Mark dst as used so transitive pass picks up STORE_FIELD args.
+            // Also mark vreg args directly used by CALL_C (e.g. xr_jit_throw
+            // passes exception value in args[1] — a vreg, not via STORE_CORO).
             if (ins->op == XIR_CALL_C || ins->op == XIR_CALL_C_LEAF) {
-                // Check if this produces a value (has vreg dst)
                 if (!xir_ref_is_none(ins->dst) && xir_ref_is_vreg(ins->dst)) {
                     mark_ref_used(used, func->nvreg, ins->dst);
                 }
+                // Mark vreg operands (args[1] for throw, etc.)
+                mark_ref_used(used, func->nvreg, ins->args[1]);
                 continue;
             }
 

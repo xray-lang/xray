@@ -20,6 +20,8 @@
 #include "xcgen.h"
 #include "../base/xchecks.h"
 #include "../runtime/value/xvalue.h"
+#include "../runtime/object/xstring.h"
+#include "../runtime/gc/xgc_header.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -88,6 +90,24 @@ void xcg_emit_ref(XcgenBuf *b, XirFunc *func, XirRef ref) {
                     const char *s = c->val.str.chars;
                     for (uint32_t si = 0; si < c->val.str.len; si++) {
                         char ch = s[si];
+                        switch (ch) {
+                            case '\\': xcgen_buf_puts(b, "\\\\"); break;
+                            case '"':  xcgen_buf_puts(b, "\\\""); break;
+                            case '\n': xcgen_buf_puts(b, "\\n"); break;
+                            case '\r': xcgen_buf_puts(b, "\\r"); break;
+                            case '\t': xcgen_buf_puts(b, "\\t"); break;
+                            case '\0': xcgen_buf_puts(b, "\\0"); break;
+                            default:   xcgen_buf_printf(b, "%c", ch); break;
+                        }
+                    }
+                    xcgen_buf_puts(b, "\"");
+                } else if (c->rep == XR_REP_PTR && c->val.raw != 0 &&
+                           XR_GC_GET_TYPE((XrGCHeader *)(uintptr_t)c->val.raw) == XR_TSTRING) {
+                    // PTR const pointing to XrString*: emit the string data
+                    XrString *xrs = (XrString *)(uintptr_t)c->val.raw;
+                    xcgen_buf_puts(b, "\"");
+                    for (uint32_t si = 0; si < xrs->length; si++) {
+                        char ch = xrs->data[si];
                         switch (ch) {
                             case '\\': xcgen_buf_puts(b, "\\\\"); break;
                             case '"':  xcgen_buf_puts(b, "\\\""); break;
@@ -822,7 +842,22 @@ static void xcg_emit_const_ptr(XcgenBuf *b, XirFunc *func, XirIns *ins,
         uint32_t vi = XIR_REF_INDEX(ins->dst);
         if (vi < func->nvreg) vtype = func->vregs[vi].rep;
     }
-    if (vtype == XR_REP_STR) {
+    // Check if underlying const is a string: either XR_REP_STR const, or a
+    // raw PTR const that points to a live XrString* (from bytecode const pool).
+    bool const_is_str = false;
+    if (xir_ref_is_const(ins->args[0])) {
+        uint32_t ci = XIR_REF_INDEX(ins->args[0]);
+        if (ci < func->nconst) {
+            if (func->consts[ci].rep == XR_REP_STR) {
+                const_is_str = true;
+            } else if (func->consts[ci].rep == XR_REP_PTR) {
+                void *p = (void *)(uintptr_t)func->consts[ci].val.raw;
+                if (p && XR_GC_GET_TYPE((XrGCHeader *)p) == XR_TSTRING)
+                    const_is_str = true;
+            }
+        }
+    }
+    if (vtype == XR_REP_STR || const_is_str) {
         xcgen_buf_printf(b, "    v%u = xrt_box_str(", dst_idx);
         xcg_emit_ref(b, func, ins->args[0]);
         xcgen_buf_puts(b, ");\n");
