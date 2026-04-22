@@ -36,6 +36,10 @@
 #include "xir_offsets.h"
 #include <string.h>
 
+/* Forward declarations for call helpers (defined after emit_xir_ins) */
+static void x64_emit_call_args_from_pool(X64CodegenCtx *ctx, XirIns *ins);
+static inline uint8_t const_rep_to_value_tag(uint8_t rep);
+
 /* ========== Register Mapping Tables ========== */
 
 const X64Reg x64_alloc_regs[X64_MAX_PHYS_REGS] = {
@@ -855,6 +859,169 @@ static void x64_emit_xir_ins(X64CodegenCtx *ctx, XirIns *ins) {
         break;
     }
 
+    /* ========== Call ops ========== */
+    case XIR_CALL_C: {
+        x64_emit_call_args_from_pool(ctx, ins);
+        /* TODO: emit_ptr_spill_writeback (F.4.6)
+         * TODO: record_safepoint + store safepoint_id (F.4.6) */
+
+        /* Store extra_arg to jit_ctx scratch slot */
+        if (!xir_ref_is_none(ins->args[1])) {
+            if (xir_ref_is_const(ins->args[1])) {
+                uint32_t ci = XIR_REF_INDEX(ins->args[1]);
+                uint64_t arg_val = (uint64_t)ctx->func->consts[ci].val.raw;
+                x64_load_imm64(&ctx->buf, X64_SCRATCH_REG, arg_val);
+            } else {
+                X64Reg arg_reg = x64_get_operand(ctx, ins->args[1], X64_SCRATCH_REG);
+                if (arg_reg != X64_SCRATCH_REG)
+                    x64_mov_rr(&ctx->buf, X64_SCRATCH_REG, arg_reg);
+            }
+            x64_mov_mr(&ctx->buf, X64_JIT_CTX_REG,
+                       (int32_t)X64_EXTRA_ARG_OFFSET, X64_SCRATCH_REG);
+        } else {
+            /* No extra arg — store 0 */
+            x64_xor_rr(&ctx->buf, X64_SCRATCH_REG, X64_SCRATCH_REG);
+            x64_mov_mr(&ctx->buf, X64_JIT_CTX_REG,
+                       (int32_t)X64_EXTRA_ARG_OFFSET, X64_SCRATCH_REG);
+        }
+
+        /* Clear deopt_id before call so helper can request deopt */
+        x64_xor_rr(&ctx->buf, X64_SCRATCH_REG, X64_SCRATCH_REG);
+        x64_mov_mr32(&ctx->buf, X64_JIT_CTX_REG,
+                     (int32_t)XIR_JIT_DEOPT_ID_OFFSET, X64_SCRATCH_REG);
+
+        /* Load C function pointer into R11 (scratch) */
+        if (xir_ref_is_const(ins->args[0])) {
+            uint32_t ci = XIR_REF_INDEX(ins->args[0]);
+            uint64_t fn_ptr = (uint64_t)ctx->func->consts[ci].val.raw;
+            x64_load_imm64(&ctx->buf, X64_SCRATCH_REG, fn_ptr);
+        } else {
+            X64Reg fn_reg = x64_get_operand(ctx, ins->args[0], X64_SCRATCH_REG);
+            if (fn_reg != X64_SCRATCH_REG)
+                x64_mov_rr(&ctx->buf, X64_SCRATCH_REG, fn_reg);
+        }
+
+        /* CALL call_c_stub (patched later as rel32) */
+        XR_DCHECK(ctx->npatch < ctx->patches_cap, "too many patches");
+        X64BranchPatch *p = &ctx->patches[ctx->npatch];
+        x64_emit8(&ctx->buf, 0xE8);  /* CALL rel32 */
+        p->emit_pos = ctx->buf.pos;
+        p->target_blk = 0;  /* unused; patched to call_c_stub */
+        p->type = X64_PATCH_CALL_C;
+        p->cc = X64_CC_E;   /* unused */
+        ctx->npatch++;
+        x64_emit32(&ctx->buf, 0);  /* placeholder rel32 */
+        ctx->has_call_c = true;
+
+        /* TODO: check deopt_id after return (F.4.6) */
+
+        /* Move result payload (RAX) to dst register */
+        if (xir_ref_is_vreg(ins->dst)) {
+            uint32_t dvi = XIR_REF_INDEX(ins->dst);
+            bool dst_fp = (dvi < ctx->func->nvreg &&
+                          ctx->func->vregs[dvi].rep == XR_REP_F64);
+            if (dst_fp) {
+                X64Xmm fd = x64_get_fp_reg(ctx, ins->dst);
+                x64_movq_xmm_gp(&ctx->buf, fd, X64_RAX);
+            } else if (rd != X64_RAX) {
+                x64_mov_rr(&ctx->buf, rd, X64_RAX);
+            }
+        }
+
+        /* Store tag (from jit_ctx->call_result_tag) to slot_runtime_tags */
+        if (xir_ref_is_vreg(ins->dst)) {
+            uint32_t dvi = XIR_REF_INDEX(ins->dst);
+            if (dvi < ctx->func->nvreg) {
+                int16_t bc_slot = ctx->func->vregs[dvi].bc_slot;
+                if (bc_slot >= 0 && bc_slot < 256) {
+                    int32_t tag_off = (int32_t)XIR_JIT_SLOT_RUNTIME_TAGS_OFFSET + bc_slot;
+                    x64_movzx_rm8(&ctx->buf, X64_SCRATCH_REG, X64_JIT_CTX_REG,
+                                  (int32_t)XIR_JIT_CALL_RESULT_TAG_OFFSET);
+                    x64_mov_mr8(&ctx->buf, X64_JIT_CTX_REG, tag_off,
+                                X64_SCRATCH_REG);
+                }
+            }
+        }
+        break;
+    }
+
+    case XIR_CALL_C_LEAF: {
+        x64_emit_call_args_from_pool(ctx, ins);
+
+        /* Resolve extra arg value */
+        uint64_t extra_arg_val = 0;
+        bool extra_is_const = false;
+        X64Reg extra_reg = X64_SCRATCH_REG;
+        if (!xir_ref_is_none(ins->args[1])) {
+            if (xir_ref_is_const(ins->args[1])) {
+                uint32_t ci = XIR_REF_INDEX(ins->args[1]);
+                extra_arg_val = (uint64_t)ctx->func->consts[ci].val.raw;
+                extra_is_const = true;
+            } else {
+                extra_reg = x64_get_operand(ctx, ins->args[1], X64_SCRATCH_REG);
+            }
+        }
+
+        /* Load function pointer */
+        uint64_t fn_ptr_val = 0;
+        if (xir_ref_is_const(ins->args[0])) {
+            uint32_t ci = XIR_REF_INDEX(ins->args[0]);
+            fn_ptr_val = (uint64_t)ctx->func->consts[ci].val.raw;
+        }
+
+        /* Save all caller-saved GP regs (RAX-R10 = first 8 alloc regs).
+         * Callee-saved regs (RBX, R12, R13) don't need saving.
+         * Save 8 regs = 64 bytes, +8 (return addr already on stack = misaligned)
+         * → 8+64 = 72, need 1 push more for alignment → push 9 = 72 total → aligned. */
+        int nsave_gp = 8;  /* first 8 alloc regs are caller-saved */
+        if (nsave_gp % 2 == 0) {
+            /* Push a dummy for 16-byte alignment before inner CALL */
+            x64_push_r(&ctx->buf, X64_SCRATCH_REG);
+            nsave_gp++;
+        }
+        for (int i = 0; i < 8 && i < X64_MAX_PHYS_REGS; i++)
+            x64_push_r(&ctx->buf, x64_alloc_regs[i]);
+
+        /* Setup System V call: RDI=coro, RSI=extra_arg */
+        x64_mov_rr(&ctx->buf, X64_RDI, X64_CORO_REG);
+        if (!xir_ref_is_none(ins->args[1])) {
+            if (extra_is_const)
+                x64_load_imm64(&ctx->buf, X64_RSI, extra_arg_val);
+            else
+                x64_mov_rr(&ctx->buf, X64_RSI, extra_reg);
+        }
+
+        /* Load func_ptr and CALL directly */
+        x64_load_imm64(&ctx->buf, X64_SCRATCH_REG, fn_ptr_val);
+        x64_call_r(&ctx->buf, X64_SCRATCH_REG);
+
+        /* Save result to R11 */
+        x64_mov_rr(&ctx->buf, X64_SCRATCH_REG, X64_RAX);
+
+        /* Restore caller-saved GP regs (reverse) */
+        for (int i = 7; i >= 0 && i < X64_MAX_PHYS_REGS; i--)
+            x64_pop_r(&ctx->buf, x64_alloc_regs[i]);
+        if (nsave_gp > 8)
+            x64_pop_r(&ctx->buf, X64_SCRATCH_REG);  /* pop dummy */
+
+        /* Move result to dst */
+        if (xir_ref_is_vreg(ins->dst)) {
+            if (rd != X64_SCRATCH_REG)
+                x64_mov_rr(&ctx->buf, rd, X64_SCRATCH_REG);
+        }
+        break;
+    }
+
+    case XIR_CALL:
+    case XIR_CALL_SELF_DIRECT:
+    case XIR_CALL_DIRECT:
+    case XIR_CALL_KNOWN:
+    case XIR_CALL_KNOWN_REG:
+        /* TODO: cross-function calls — requires frame push/pop, deopt (F.4.6/F.4.7) */
+        xr_log_warning("x64-cg", "cross-function call op %d not yet implemented", ins->op);
+        ctx->had_error = true;
+        break;
+
     case XIR_RET: {
         /* Return value is in the register assigned to args[0].
          * JIT calling convention: return value in RAX. */
@@ -875,6 +1042,140 @@ static void x64_emit_xir_ins(X64CodegenCtx *ctx, XirIns *ins) {
         ctx->had_error = true;
         break;
     }
+}
+
+/* ========== Call Helpers ========== */
+
+/* Derive XR_TAG_* from const rep for call_arg_tags[] */
+static inline uint8_t const_rep_to_value_tag(uint8_t rep) {
+    switch (rep) {
+    case XR_REP_I64: return 3;  /* XR_TAG_I64 */
+    case XR_REP_F64: return 4;  /* XR_TAG_F64 */
+    case XR_REP_PTR: return 5;  /* XR_TAG_PTR */
+    default:         return 0xFF; /* XR_RTAG_UNKNOWN */
+    }
+}
+
+/* Store call arguments from the pool to jit_ctx->call_args[] and
+ * compile-time type tags to jit_ctx->call_arg_tags[]. */
+static void x64_emit_call_args_from_pool(X64CodegenCtx *ctx, XirIns *ins) {
+    XR_DCHECK(ctx != NULL && ins != NULL, "call_args: NULL");
+    if (!xir_ref_is_vreg(ins->dst)) return;
+    uint32_t vi = XIR_REF_INDEX(ins->dst);
+    if (vi >= ctx->func->nvreg) return;
+    XirVReg *vreg = &ctx->func->vregs[vi];
+    if (vreg->call_nargs == 0) return;
+    XirRef *pool = ctx->func->call_arg_pool;
+    uint32_t start = vreg->call_arg_start;
+
+    uint64_t tag_pack[2] = {0, 0};
+
+    for (uint16_t i = 0; i < vreg->call_nargs; i++) {
+        XirRef arg = pool[start + i];
+        int32_t off = (int32_t)(XIR_JIT_CALL_ARGS_OFFSET + i * 8);
+        uint8_t tag = XR_RTAG_UNKNOWN;
+        if (xir_ref_is_none(arg)) goto store_tag;
+        if (xir_ref_is_const(arg)) {
+            uint32_t ci = XIR_REF_INDEX(arg);
+            uint64_t val = (uint64_t)ctx->func->consts[ci].val.raw;
+            x64_load_imm64(&ctx->buf, X64_SCRATCH_REG, val);
+            x64_mov_mr(&ctx->buf, X64_JIT_CTX_REG, off, X64_SCRATCH_REG);
+            tag = const_rep_to_value_tag(ctx->func->consts[ci].rep);
+        } else {
+            X64Reg reg = x64_get_operand(ctx, arg, X64_SCRATCH_REG);
+            x64_mov_mr(&ctx->buf, X64_JIT_CTX_REG, off, reg);
+            XirType ct = xir_ref_ctype(ctx->func, arg);
+            tag = vtag_to_value_tag(type_kind_to_vtag(ct.kind));
+        }
+    store_tag:
+        if (i < 8)  tag_pack[0] |= ((uint64_t)tag << (i * 8));
+        else         tag_pack[1] |= ((uint64_t)tag << ((i - 8) * 8));
+    }
+
+    /* Store packed tags as compile-time constants */
+    x64_load_imm64(&ctx->buf, X64_SCRATCH_REG, tag_pack[0]);
+    x64_mov_mr(&ctx->buf, X64_JIT_CTX_REG,
+               (int32_t)XIR_JIT_CALL_ARG_TAGS_OFFSET, X64_SCRATCH_REG);
+    if (vreg->call_nargs > 8) {
+        x64_load_imm64(&ctx->buf, X64_SCRATCH_REG, tag_pack[1]);
+        x64_mov_mr(&ctx->buf, X64_JIT_CTX_REG,
+                   (int32_t)(XIR_JIT_CALL_ARG_TAGS_OFFSET + 8), X64_SCRATCH_REG);
+    }
+
+    /* Dynamic tag patch: overwrite unknown tags from slot_runtime_tags */
+    for (uint16_t i = 0; i < vreg->call_nargs; i++) {
+        uint8_t ct = (i < 8)
+            ? (uint8_t)((tag_pack[0] >> (i * 8)) & 0xFF)
+            : (uint8_t)((tag_pack[1] >> ((i - 8) * 8)) & 0xFF);
+        if (ct != XR_RTAG_UNKNOWN) continue;
+        XirRef arg = pool[start + i];
+        if (!xir_ref_is_vreg(arg)) continue;
+        uint32_t ai = XIR_REF_INDEX(arg);
+        if (ai >= ctx->func->nvreg) continue;
+        int16_t bc_slot = ctx->func->vregs[ai].bc_slot;
+        if (bc_slot < 0 || bc_slot >= 256) continue;
+        int32_t src_off = (int32_t)XIR_JIT_SLOT_RUNTIME_TAGS_OFFSET + bc_slot;
+        int32_t dst_off = (int32_t)XIR_JIT_CALL_ARG_TAGS_OFFSET + (int32_t)i;
+        x64_movzx_rm8(&ctx->buf, X64_SCRATCH_REG, X64_JIT_CTX_REG, src_off);
+        x64_mov_mr8(&ctx->buf, X64_JIT_CTX_REG, dst_off, X64_SCRATCH_REG);
+    }
+}
+
+/* Emit call_c_stub: shared trampoline that saves/restores all registers
+ * around a C function call.
+ *
+ * Protocol:
+ *   R11 = C function pointer
+ *   [R14 + X64_EXTRA_ARG_OFFSET] = extra argument (pre-stored by codegen)
+ *
+ * Stub saves all 11 allocatable GP + 15 FP regs, calls the C function
+ * with System V ABI (RDI=coro, RSI=extra_arg), saves result payload/tag,
+ * restores all regs, returns payload in RAX. */
+static void x64_emit_call_c_stub(X64CodegenCtx *ctx) {
+    if (!ctx->has_call_c) return;
+    ctx->call_c_stub = ctx->buf.pos;
+
+    /* Save all 11 allocatable GP regs (88 bytes).
+     * After CALL into stub: rsp is misaligned (-8 from return addr).
+     * 11 pushes = 88 bytes → -96 total → 16-byte aligned. */
+    for (int i = 0; i < X64_MAX_PHYS_REGS; i++)
+        x64_push_r(&ctx->buf, x64_alloc_regs[i]);
+
+    /* Save 15 FP regs (xmm0-xmm14, skip xmm15=scratch).
+     * sub rsp, 128 (15*8=120 + 8 pad for alignment).
+     * Stack: -96 - 128 = -224 → aligned. */
+    x64_sub_ri(&ctx->buf, X64_RSP, 128);
+    for (int i = 0; i < 15; i++)
+        x64_movsd_mr(&ctx->buf, X64_RSP, i * 8, (X64Xmm)i);
+
+    /* Save SP to jit_ctx for GC stack map access */
+    x64_mov_mr(&ctx->buf, X64_JIT_CTX_REG,
+               (int32_t)XIR_JIT_SAFEPOINT_SAVED_SP_OFFSET, X64_RSP);
+
+    /* Setup System V call: RDI=coro, RSI=extra_arg, func_ptr in R11 */
+    x64_mov_rr(&ctx->buf, X64_RDI, X64_CORO_REG);
+    x64_mov_rm(&ctx->buf, X64_RSI, X64_JIT_CTX_REG,
+               (int32_t)X64_EXTRA_ARG_OFFSET);
+    x64_call_r(&ctx->buf, X64_SCRATCH_REG);
+
+    /* XrJitResult returned in RAX(payload), RDX(tag) on System V x86-64.
+     * Save payload to R11 (scratch), store tag to jit_ctx. */
+    x64_mov_rr(&ctx->buf, X64_SCRATCH_REG, X64_RAX);
+    x64_mov_mr(&ctx->buf, X64_JIT_CTX_REG,
+               (int32_t)XIR_JIT_CALL_RESULT_TAG_OFFSET, X64_RDX);
+
+    /* Restore 15 FP regs */
+    for (int i = 0; i < 15; i++)
+        x64_movsd_rm(&ctx->buf, (X64Xmm)i, X64_RSP, i * 8);
+    x64_add_ri(&ctx->buf, X64_RSP, 128);
+
+    /* Restore 11 GP regs (reverse order) */
+    for (int i = X64_MAX_PHYS_REGS - 1; i >= 0; i--)
+        x64_pop_r(&ctx->buf, x64_alloc_regs[i]);
+
+    /* Return payload in RAX */
+    x64_mov_rr(&ctx->buf, X64_RAX, X64_SCRATCH_REG);
+    x64_ret(&ctx->buf);
 }
 
 /* ========== Prologue / Epilogue ========== */
@@ -1067,10 +1368,15 @@ static void x64_emit_block(X64CodegenCtx *ctx, uint32_t block_idx) {
 static void x64_patch_branches(X64CodegenCtx *ctx) {
     for (uint32_t i = 0; i < ctx->npatch; i++) {
         X64BranchPatch *p = &ctx->patches[i];
-        XR_DCHECK(p->target_blk < ctx->nblock_offsets,
-                  "x64_patch: target block OOB");
-        uint32_t target_offset = ctx->block_offsets[p->target_blk];
-        x64_patch_rel32(&ctx->buf, p->emit_pos, target_offset);
+        if (p->type == X64_PATCH_CALL_C) {
+            /* Patch CALL rel32 to call_c_stub */
+            x64_patch_rel32(&ctx->buf, p->emit_pos, ctx->call_c_stub);
+        } else {
+            XR_DCHECK(p->target_blk < ctx->nblock_offsets,
+                      "x64_patch: target block OOB");
+            uint32_t target_offset = ctx->block_offsets[p->target_blk];
+            x64_patch_rel32(&ctx->buf, p->emit_pos, target_offset);
+        }
     }
 }
 
@@ -1177,7 +1483,10 @@ XirCodegenResult xir_codegen_x64(XirFunc *func, XirCodeAlloc *alloc) {
     for (uint32_t i = 0; i < func->nblk; i++)
         x64_emit_block(&ctx, i);
 
-    /* Patch branches */
+    /* Emit stubs (after all blocks, before patching) */
+    x64_emit_call_c_stub(&ctx);
+
+    /* Patch branches + call stubs */
     x64_patch_branches(&ctx);
 
     /* Patch frame size: SPILL_BASE + spill area, 16-byte aligned */
