@@ -1,0 +1,7 @@
+// AOT basic test: simple print
+fn double_it(x: int): int {
+    return x * 2
+}
+
+let a = double_it(21)
+print(a)

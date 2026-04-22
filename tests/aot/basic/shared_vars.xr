@@ -1,0 +1,16 @@
+// AOT basic test: shared variables (GETSHARED/SETSHARED)
+let counter = 0
+
+fn increment(): int {
+    counter = counter + 1
+    return counter
+}
+
+fn get_counter(): int {
+    return counter
+}
+
+increment()
+increment()
+increment()
+print(get_counter())

@@ -1,0 +1,15 @@
+// AOT module test: const and function exports
+export const MAX_SIZE = 1024
+export const VERSION = 1
+
+export fn clamp(x: int, lo: int, hi: int): int {
+    if (x < lo) {
+        return lo
+    }
+    if (x > hi) {
+        return hi
+    }
+    return x
+}
+
+print(clamp(50, 0, MAX_SIZE))
