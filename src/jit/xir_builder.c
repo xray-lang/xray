@@ -2232,16 +2232,6 @@ static bool translate_instruction(XirBuilder *b, XirBlock **cur_blk, uint32_t pc
         case OP_RETURN1: {
             int a = GETARG_A(inst);
             XirRef va = builder_get_slot(b, blk, a);
-            // DIAG: trace RETURN1 vreg
-            if (xir_ref_is_vreg(va)) {
-                uint32_t vi = XIR_REF_INDEX(va);
-                fprintf(stderr, "[RETURN1-BUILDER] func=%s slot=R[%d] vreg=v%u bc_slot=%d rep=%d cur_blk_id=%u blk->id=%u\n",
-                        b->proto->name ? b->proto->name : "?",
-                        a, vi,
-                        vi < b->func->nvreg ? b->func->vregs[vi].bc_slot : -99,
-                        vi < b->func->nvreg ? b->func->vregs[vi].rep : -1,
-                        b->cur_blk_id, blk->id);
-            }
             xir_block_set_ret(blk, va);
             b->ops_translated++;
             return true;
