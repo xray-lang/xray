@@ -317,6 +317,10 @@ typedef struct XirBlock {
     bool     is_deferred;         // cold path: catch block, deopt, throw — RA deprioritizes
     uint32_t bc_offset;            // bytecode PC of block start (for OSR matching)
 
+    // Branch profile: fraction of times condition was true (0..100).
+    // 0 = unknown (use heuristic).  Set from type_feedback branch counters.
+    uint8_t branch_taken_pct;
+
     // Exception handling: if non-NULL, this block is inside a try region
     // and exception_handler points to the catch block
     struct XirBlock *exception_handler;
@@ -628,6 +632,25 @@ XR_FUNC bool xir_op_is_pure(uint16_t op);
 // True for copy-like ops (MOV or REDEFINE) that can be coalesced
 static inline bool xir_op_is_copy(uint16_t op) {
     return op == XIR_MOV || op == XIR_REDEFINE;
+}
+
+// Returns true if instruction cannot throw an exception (pure memory access,
+// arithmetic, constants).  LICM uses this to hoist from try blocks safely.
+static inline bool xir_ins_nothrow(const XirIns *ins) {
+    switch (ins->op) {
+    case XIR_CONST_I64: case XIR_CONST_F64: case XIR_CONST_PTR:
+    case XIR_ADD:  case XIR_SUB:  case XIR_MUL:  case XIR_DIV:
+    case XIR_AND:  case XIR_OR:   case XIR_XOR:
+    case XIR_SHL:  case XIR_SHR:  case XIR_NEG:  case XIR_NOT:
+    case XIR_EQ:   case XIR_NE:   case XIR_LT:
+    case XIR_LE:   case XIR_GT:   case XIR_GE:
+    case XIR_LOAD_FIELD:
+    case XIR_MOV:  case XIR_REDEFINE:
+    case XIR_PHI:  case XIR_SELECT:
+        return true;
+    default:
+        return !(ins->flags & XIR_FLAG_MAY_THROW);
+    }
 }
 
 // Get compile-time type of a ref by looking up its defining instruction.

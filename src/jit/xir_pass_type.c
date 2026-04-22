@@ -883,7 +883,6 @@ void xir_pass_elim_write_barriers(XirFunc *func) {
  *   Phase 4: Eliminate redundant GUARD_BOUNDS (constant + symbolic)
  */
 
-#define RA_MAX_VALUES XIR_RA_MAX_VALUES
 #define RA_MAX_ROUNDS XIR_RA_MAX_ROUNDS
 
 typedef struct {
@@ -1004,7 +1003,7 @@ void xir_pass_range_analysis(XirFunc *func) {
     if (!func || func->nvreg == 0 || func->nblk == 0) return;
 
     uint32_t nv = func->nvreg;
-    if (nv > RA_MAX_VALUES) return; // bail on very large functions
+    if (nv > XIR_MAX_FUNC_VREGS) return; // bail on very large functions
 
     // Phase 1: Initialize range info for all vregs
     XirRange *ranges = (XirRange *)xr_calloc(nv, sizeof(XirRange));
@@ -1258,7 +1257,6 @@ void xir_pass_range_analysis(XirFunc *func) {
     xr_free(ranges);
 }
 
-#undef RA_MAX_VALUES
 #undef RA_MAX_ROUNDS
 
 /* ========== REDEFINE Insertion ========== */

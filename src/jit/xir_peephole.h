@@ -13,10 +13,15 @@
  *   patterns with NOPs.  Because NOPs preserve instruction count and
  *   alignment, every branch offset and block-start table remains valid.
  *
- * PATTERNS (Phase 5.3):
- *   1. STR Xt,[SP,#N] ; LDR Xt,[SP,#N]  → NOP the LDR
+ * PATTERNS:
+ *   1. STR Xt,[Xn,#N] ; LDR Xt,[Xn,#N]  → NOP the LDR  (32/64-bit)
  *   2. MOV Xd, Xd  (ORR Xd, XZR, Xd)   → NOP
  *   3. CMP Xn, #0 ; B.EQ/B.NE           → CBZ/CBNZ Xn (fuse)
+ *   4. STR+STR / LDR+LDR adjacent        → STP/LDP (pair fusion)
+ *   5. SUBS Xd,Xn,Xm ; CMP Xn,Xm       → NOP the CMP (redundant flags)
+ *   6. MOVZ Xd,#0 ; MOVK Xd,#imm        → MOVZ Xd,#imm
+ *   7. B.cond +2 ; B target              → B.!cond target
+ *   8. STR Xt,[Xn,#N] ; STR Xt,[Xn,#N]  → NOP duplicate store
  */
 
 #ifndef XIR_PEEPHOLE_H

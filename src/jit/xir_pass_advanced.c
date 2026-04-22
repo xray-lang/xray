@@ -1661,8 +1661,6 @@ void xir_pass_propjnz(XirFunc *func) {
  */
 
 #define GCM_NOBID UINT32_MAX
-#define GCM_MAX_BLOCKS XIR_GCM_MAX_BLOCKS
-#define GCM_MAX_VREGS  XIR_GCM_MAX_VREGS
 
 static bool gcm_is_pinned(uint16_t op) {
     return !xir_op_is_pure(op);
@@ -1732,7 +1730,7 @@ static uint32_t gcm_early(XirFunc *func, uint32_t *idom, uint32_t *depth,
 
 void xir_pass_gcm(XirFunc *func) {
     if (!func || func->nblk < 2 || func->nvreg == 0) return;
-    if (func->nblk > GCM_MAX_BLOCKS || func->nvreg > GCM_MAX_VREGS) return;
+    if (func->nblk > XIR_MAX_FUNC_BLOCKS || func->nvreg > XIR_MAX_FUNC_VREGS) return;
 
     uint32_t nblk = func->nblk;
     uint32_t nv = func->nvreg;
