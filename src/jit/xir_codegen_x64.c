@@ -36,9 +36,11 @@
 #include "xir_offsets.h"
 #include <string.h>
 
-/* Forward declarations for call helpers (defined after emit_xir_ins) */
+/* Forward declarations for helpers (defined after emit_xir_ins) */
 static void x64_emit_call_args_from_pool(X64CodegenCtx *ctx, XirIns *ins);
 static inline uint8_t const_rep_to_value_tag(uint8_t rep);
+static void x64_emit_deopt_jcc(X64CodegenCtx *ctx, X64Cond cc);
+static void x64_emit_deopt_id(X64CodegenCtx *ctx, XirIns *ins);
 
 /* ========== Register Mapping Tables ========== */
 
@@ -859,6 +861,214 @@ static void x64_emit_xir_ins(X64CodegenCtx *ctx, XirIns *ins) {
         break;
     }
 
+    /* ========== BOX/UNBOX ========== */
+    case XIR_BOX_I64:
+    case XIR_BOX_F64: {
+        /* BOX is a no-op inside JIT (values are always raw/untagged) */
+        X64Reg rn = x64_get_operand(ctx, ins->args[0], X64_SCRATCH_REG);
+        if (rd != rn) x64_mov_rr(&ctx->buf, rd, rn);
+        break;
+    }
+
+    case XIR_UNBOX_I64: {
+        uint8_t src_type = XR_REP_I64;
+        if (xir_ref_is_vreg(ins->args[0])) {
+            uint32_t vi = XIR_REF_INDEX(ins->args[0]);
+            if (vi < ctx->func->nvreg) src_type = ctx->func->vregs[vi].rep;
+        }
+        if (src_type == XR_REP_PTR) {
+            /* Source is pointer to XrValue — load payload from [ptr+8] */
+            X64Reg ptr = x64_get_operand(ctx, ins->args[0], X64_SCRATCH_REG);
+            x64_mov_rm(&ctx->buf, rd, ptr, XIR_XRVALUE_PAYLOAD_OFFSET);
+        } else {
+            X64Reg rn = x64_get_operand(ctx, ins->args[0], X64_SCRATCH_REG);
+            if (rd != rn) x64_mov_rr(&ctx->buf, rd, rn);
+        }
+        break;
+    }
+
+    case XIR_UNBOX_F64: {
+        uint8_t src_type = XR_REP_F64;
+        if (xir_ref_is_vreg(ins->args[0])) {
+            uint32_t vi = XIR_REF_INDEX(ins->args[0]);
+            if (vi < ctx->func->nvreg) src_type = ctx->func->vregs[vi].rep;
+        }
+        if (src_type == XR_REP_PTR) {
+            X64Reg ptr = x64_get_operand(ctx, ins->args[0], X64_SCRATCH_REG);
+            X64Xmm fd = x64_get_fp_reg(ctx, ins->dst);
+            x64_movsd_rm(&ctx->buf, fd, ptr, XIR_XRVALUE_PAYLOAD_OFFSET);
+        } else {
+            X64Reg rn = x64_get_operand(ctx, ins->args[0], X64_SCRATCH_REG);
+            if (rd != rn) x64_mov_rr(&ctx->buf, rd, rn);
+        }
+        break;
+    }
+
+    /* ========== Guard ops ========== */
+    case XIR_GUARD_TAG: {
+        /* args[0] = tagged value ptr, args[1] = expected tag (const i64) */
+        X64Reg val_reg = x64_get_operand(ctx, ins->args[0], X64_SCRATCH_REG);
+        /* Load tag byte: MOVZX r64, byte [val_reg + tag_offset] */
+        x64_movzx_rm8(&ctx->buf, X64_SCRATCH_REG, val_reg,
+                       XIR_XRVALUE_TAG_OFFSET);
+        if (xir_ref_is_const(ins->args[1])) {
+            uint32_t ci = XIR_REF_INDEX(ins->args[1]);
+            int32_t expected = (int32_t)ctx->func->consts[ci].val.raw;
+            x64_cmp_ri(&ctx->buf, X64_SCRATCH_REG, expected);
+        } else {
+            X64Reg exp_reg = x64_get_operand(ctx, ins->args[1], X64_SCRATCH_REG);
+            x64_cmp_rr(&ctx->buf, X64_SCRATCH_REG, exp_reg);
+        }
+        x64_emit_deopt_id(ctx, ins);
+        x64_emit_deopt_jcc(ctx, X64_CC_NE);
+        break;
+    }
+
+    case XIR_GUARD_BOUNDS: {
+        /* deopt if (unsigned)index >= (unsigned)length */
+        X64Reg idx_reg = x64_get_operand(ctx, ins->args[0], X64_SCRATCH_REG);
+        X64Reg len_reg = x64_get_operand(ctx, ins->args[1],
+                          idx_reg == X64_SCRATCH_REG ? X64_RCX : X64_SCRATCH_REG);
+        x64_cmp_rr(&ctx->buf, idx_reg, len_reg);
+        x64_emit_deopt_id(ctx, ins);
+        x64_emit_deopt_jcc(ctx, X64_CC_AE);  /* unsigned >= */
+        break;
+    }
+
+    case XIR_GUARD_NONNULL: {
+        X64Reg val_reg = x64_get_operand(ctx, ins->args[0], X64_SCRATCH_REG);
+        x64_test_rr(&ctx->buf, val_reg, val_reg);
+        x64_emit_deopt_id(ctx, ins);
+        x64_emit_deopt_jcc(ctx, X64_CC_E);  /* ZF=1 → null → deopt */
+        break;
+    }
+
+    case XIR_GUARD_CLASS: {
+        /* Check shape_id in GC header (uint16 at gc_extra_offset) */
+        X64Reg obj = x64_get_operand(ctx, ins->args[0], X64_SCRATCH_REG);
+        x64_movzx_rm16(&ctx->buf, X64_SCRATCH_REG, obj,
+                        (int32_t)XIR_GC_EXTRA_OFFSET);
+        if (xir_ref_is_const(ins->args[1])) {
+            uint32_t ci = XIR_REF_INDEX(ins->args[1]);
+            int32_t expected = (int32_t)ctx->func->consts[ci].val.raw;
+            x64_cmp_ri(&ctx->buf, X64_SCRATCH_REG, expected);
+        } else {
+            X64Reg exp_reg = x64_get_operand(ctx, ins->args[1], X64_SCRATCH_REG);
+            x64_cmp_rr(&ctx->buf, X64_SCRATCH_REG, exp_reg);
+        }
+        x64_emit_deopt_id(ctx, ins);
+        x64_emit_deopt_jcc(ctx, X64_CC_NE);
+        break;
+    }
+
+    case XIR_GUARD_KLASS: {
+        /* Check inst->klass pointer (at offset XIR_INSTANCE_KLASS_OFFSET) */
+        X64Reg obj = x64_get_operand(ctx, ins->args[0], X64_SCRATCH_REG);
+        x64_mov_rm(&ctx->buf, X64_SCRATCH_REG, obj,
+                   (int32_t)XIR_INSTANCE_KLASS_OFFSET);
+        if (xir_ref_is_const(ins->args[1])) {
+            uint32_t ci = XIR_REF_INDEX(ins->args[1]);
+            uint64_t expected = (uint64_t)ctx->func->consts[ci].val.i64;
+            /* CMP r64,imm64 doesn't exist: save actual klass to RCX,
+             * load expected to R11, then CMP RCX, R11. */
+            x64_mov_rr(&ctx->buf, X64_RCX, X64_SCRATCH_REG);
+            x64_load_imm64(&ctx->buf, X64_SCRATCH_REG, expected);
+            x64_cmp_rr(&ctx->buf, X64_RCX, X64_SCRATCH_REG);
+        } else {
+            X64Reg exp_reg = x64_get_operand(ctx, ins->args[1], X64_SCRATCH_REG);
+            x64_cmp_rr(&ctx->buf, X64_SCRATCH_REG, exp_reg);
+        }
+        x64_emit_deopt_id(ctx, ins);
+        x64_emit_deopt_jcc(ctx, X64_CC_NE);
+        break;
+    }
+
+    case XIR_GUARD_SHAPE: {
+        /* Check obj null, alignment, type==XR_TJSON, then shape_id */
+        X64Reg obj = x64_get_operand(ctx, ins->args[0], X64_SCRATCH_REG);
+        x64_emit_deopt_id(ctx, ins);
+        /* Null check */
+        x64_test_rr(&ctx->buf, obj, obj);
+        x64_emit_deopt_jcc(ctx, X64_CC_E);
+        /* Alignment check: obj & 7 != 0 → deopt */
+        x64_test_ri(&ctx->buf, obj, 0x7);
+        x64_emit_deopt_jcc(ctx, X64_CC_NE);
+        /* Type check: gc.type at offset 8, must be 23 (XR_TJSON) */
+        x64_movzx_rm8(&ctx->buf, X64_SCRATCH_REG, obj,
+                       (int32_t)XIR_GC_HDR_TYPE_OFFSET);
+        x64_cmp_ri(&ctx->buf, X64_SCRATCH_REG, 23);
+        x64_emit_deopt_jcc(ctx, X64_CC_NE);
+        /* Load gc.extra (uint16 at offset 10) */
+        x64_movzx_rm16(&ctx->buf, X64_SCRATCH_REG, obj,
+                        (int32_t)XIR_GC_HDR_EXTRA_OFFSET);
+        /* shape_id = extra >> 2 */
+        x64_shr_ri(&ctx->buf, X64_SCRATCH_REG, 2);
+        /* Compare with expected shape_id */
+        if (xir_ref_is_const(ins->args[1])) {
+            uint32_t ci = XIR_REF_INDEX(ins->args[1]);
+            int32_t expected_id = (int32_t)ctx->func->consts[ci].val.raw;
+            x64_cmp_ri(&ctx->buf, X64_SCRATCH_REG, expected_id);
+        }
+        x64_emit_deopt_jcc(ctx, X64_CC_NE);
+        break;
+    }
+
+    case XIR_DEOPT: {
+        /* Unconditional deopt */
+        x64_emit_deopt_id(ctx, ins);
+        XR_DCHECK(ctx->npatch < ctx->patches_cap, "too many patches");
+        X64BranchPatch *p = &ctx->patches[ctx->npatch];
+        x64_emit8(&ctx->buf, 0xE9);  /* JMP rel32 */
+        p->emit_pos = ctx->buf.pos;
+        p->target_blk = 0;
+        p->type = X64_PATCH_DEOPT_JMP;
+        p->cc = X64_CC_E;  /* unused */
+        ctx->npatch++;
+        x64_emit32(&ctx->buf, 0);
+        ctx->has_deopt = true;
+        break;
+    }
+
+    case XIR_TAG_CHECK: {
+        /* Same as GUARD_TAG but may have different dst semantics */
+        X64Reg val_reg = x64_get_operand(ctx, ins->args[0], X64_SCRATCH_REG);
+        x64_movzx_rm8(&ctx->buf, X64_SCRATCH_REG, val_reg,
+                       XIR_XRVALUE_TAG_OFFSET);
+        if (xir_ref_is_const(ins->args[1])) {
+            uint32_t ci = XIR_REF_INDEX(ins->args[1]);
+            int32_t expected = (int32_t)ctx->func->consts[ci].val.raw;
+            x64_cmp_ri(&ctx->buf, X64_SCRATCH_REG, expected);
+        }
+        x64_emit_deopt_id(ctx, ins);
+        x64_emit_deopt_jcc(ctx, X64_CC_NE);
+        break;
+    }
+
+    case XIR_SAFEPOINT: {
+        /* TODO: record_safepoint + guard page poll (F.4.6 full) */
+        /* Placeholder: load from safepoint_page to trigger fault if armed */
+        x64_mov_rm(&ctx->buf, X64_SCRATCH_REG, X64_JIT_CTX_REG,
+                   (int32_t)XIR_JIT_SAFEPOINT_PAGE_OFFSET);
+        /* Load from the safepoint page: movzx r11d, byte [r11] */
+        x64_movzx_rm8(&ctx->buf, X64_SCRATCH_REG, X64_SCRATCH_REG, 0);
+        break;
+    }
+
+    case XIR_BARRIER_FWD:
+    case XIR_BARRIER_BACK:
+        /* TODO: write barrier stubs (F.4.6 full) — skip for now */
+        break;
+
+    case XIR_CATCH: {
+        /* Load exception from jit_ctx->exception, then clear it */
+        x64_mov_rm(&ctx->buf, rd, X64_JIT_CTX_REG,
+                   (int32_t)XIR_JIT_EXCEPTION_OFFSET);
+        x64_xor_rr(&ctx->buf, X64_SCRATCH_REG, X64_SCRATCH_REG);
+        x64_mov_mr(&ctx->buf, X64_JIT_CTX_REG,
+                   (int32_t)XIR_JIT_EXCEPTION_OFFSET, X64_SCRATCH_REG);
+        break;
+    }
+
     /* ========== Call ops ========== */
     case XIR_CALL_C: {
         x64_emit_call_args_from_pool(ctx, ins);
@@ -1178,6 +1388,81 @@ static void x64_emit_call_c_stub(X64CodegenCtx *ctx) {
     x64_ret(&ctx->buf);
 }
 
+/* ========== Deopt Stub ========== */
+
+/* Emit deopt exit stub: saves all register state to jit_ctx->deopt_regs,
+ * loads DEOPT_MARKER into RAX, then returns via epilogue.
+ *
+ * On entry to stub, [R14 + deopt_id_offset] already stores the deopt_id
+ * (written by codegen before the Jcc/JMP to this stub). */
+static void x64_emit_deopt_stub(X64CodegenCtx *ctx);
+
+/* Forward declaration for epilogue (used by deopt stub) */
+static void x64_emit_epilogue(X64CodegenCtx *ctx);
+
+static void x64_emit_deopt_stub(X64CodegenCtx *ctx) {
+    if (!ctx->has_deopt) return;
+    ctx->deopt_stub = ctx->buf.pos;
+
+    /* Save frame pointer for spill slot recovery */
+    x64_mov_mr(&ctx->buf, X64_JIT_CTX_REG,
+               (int32_t)XIR_JIT_DEOPT_SPILL_BASE_OFFSET, X64_RBP);
+
+    /* Save all allocatable GP registers to jit_ctx->deopt_regs[reg_num].
+     * Index by hardware register number so the deopt reconstructor
+     * can map phys_reg → deopt_regs[phys_reg] directly. */
+    int32_t gp_base = (int32_t)XIR_JIT_DEOPT_REGS_OFFSET;
+    for (int i = 0; i < X64_MAX_PHYS_REGS; i++) {
+        X64Reg r = x64_alloc_regs[i];
+        x64_mov_mr(&ctx->buf, X64_JIT_CTX_REG,
+                   gp_base + (int32_t)r * 8, r);
+    }
+
+    /* Save FP registers xmm0-xmm14 to jit_ctx->deopt_fp_regs[d_num] */
+    int32_t fp_base = (int32_t)XIR_JIT_DEOPT_FP_REGS_OFFSET;
+    for (int i = 0; i < 15; i++) {
+        x64_movsd_mr(&ctx->buf, X64_JIT_CTX_REG,
+                     fp_base + i * 8, (X64Xmm)i);
+    }
+
+    /* Load DEOPT_MARKER into RAX as return value */
+    x64_load_imm64(&ctx->buf, X64_RAX, (uint64_t)XIR_DEOPT_MARKER);
+
+    /* Epilogue + RET */
+    x64_emit_epilogue(ctx);
+    x64_ret(&ctx->buf);
+}
+
+/* Helper: emit a deopt branch patch (Jcc rel32 → deopt_stub).
+ * Before calling this, codegen has already stored deopt_id into
+ * [R14 + XIR_JIT_DEOPT_ID_OFFSET]. */
+static void x64_emit_deopt_jcc(X64CodegenCtx *ctx, X64Cond cc) {
+    XR_DCHECK(ctx->npatch < ctx->patches_cap, "too many patches");
+    X64BranchPatch *p = &ctx->patches[ctx->npatch];
+    x64_emit8(&ctx->buf, 0x0F);
+    x64_emit8(&ctx->buf, (uint8_t)(0x80 | cc));  /* Jcc rel32 */
+    p->emit_pos = ctx->buf.pos;
+    p->target_blk = 0;
+    p->type = X64_PATCH_DEOPT_JCC;
+    p->cc = cc;
+    ctx->npatch++;
+    x64_emit32(&ctx->buf, 0);  /* placeholder rel32 */
+    ctx->has_deopt = true;
+}
+
+/* Helper: store deopt_id (from ins->dst const) to jit_ctx->deopt_id */
+static void x64_emit_deopt_id(X64CodegenCtx *ctx, XirIns *ins) {
+    uint32_t did = 0xFFFF;
+    if (!xir_ref_is_none(ins->dst) && xir_ref_is_const(ins->dst)) {
+        uint32_t dci = XIR_REF_INDEX(ins->dst);
+        did = (uint32_t)ctx->func->consts[dci].val.raw;
+    }
+    /* Store deopt_id as 32-bit value to jit_ctx */
+    x64_load_imm64(&ctx->buf, X64_SCRATCH_REG, (uint64_t)did);
+    x64_mov_mr32(&ctx->buf, X64_JIT_CTX_REG,
+                 (int32_t)XIR_JIT_DEOPT_ID_OFFSET, X64_SCRATCH_REG);
+}
+
 /* ========== Prologue / Epilogue ========== */
 
 static void x64_emit_prologue(X64CodegenCtx *ctx) {
@@ -1368,14 +1653,20 @@ static void x64_emit_block(X64CodegenCtx *ctx, uint32_t block_idx) {
 static void x64_patch_branches(X64CodegenCtx *ctx) {
     for (uint32_t i = 0; i < ctx->npatch; i++) {
         X64BranchPatch *p = &ctx->patches[i];
-        if (p->type == X64_PATCH_CALL_C) {
-            /* Patch CALL rel32 to call_c_stub */
+        switch (p->type) {
+        case X64_PATCH_CALL_C:
             x64_patch_rel32(&ctx->buf, p->emit_pos, ctx->call_c_stub);
-        } else {
+            break;
+        case X64_PATCH_DEOPT_JCC:
+        case X64_PATCH_DEOPT_JMP:
+            x64_patch_rel32(&ctx->buf, p->emit_pos, ctx->deopt_stub);
+            break;
+        default:
             XR_DCHECK(p->target_blk < ctx->nblock_offsets,
                       "x64_patch: target block OOB");
-            uint32_t target_offset = ctx->block_offsets[p->target_blk];
-            x64_patch_rel32(&ctx->buf, p->emit_pos, target_offset);
+            x64_patch_rel32(&ctx->buf, p->emit_pos,
+                           ctx->block_offsets[p->target_blk]);
+            break;
         }
     }
 }
@@ -1484,6 +1775,7 @@ XirCodegenResult xir_codegen_x64(XirFunc *func, XirCodeAlloc *alloc) {
         x64_emit_block(&ctx, i);
 
     /* Emit stubs (after all blocks, before patching) */
+    x64_emit_deopt_stub(&ctx);
     x64_emit_call_c_stub(&ctx);
 
     /* Patch branches + call stubs */

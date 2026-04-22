@@ -269,6 +269,9 @@ XR_FUNC void x64_shl_ri(X64Buf *buf, X64Reg dst, uint8_t imm);
 /* SHR r64, cl:  REX.W D3 /5 */
 XR_FUNC void x64_shr_rcl(X64Buf *buf, X64Reg dst);
 
+/* SHR r64, imm8:  REX.W C1 /5 ib */
+XR_FUNC void x64_shr_ri(X64Buf *buf, X64Reg dst, uint8_t imm);
+
 /* SAR r64, cl:  REX.W D3 /7 */
 XR_FUNC void x64_sar_rcl(X64Buf *buf, X64Reg dst);
 
@@ -282,6 +285,12 @@ XR_FUNC void x64_cmp_ri(X64Buf *buf, X64Reg dst, int32_t imm);
 
 /* TEST r64, r64:  REX.W 85 /r */
 XR_FUNC void x64_test_rr(X64Buf *buf, X64Reg dst, X64Reg src);
+
+/* TEST r64, imm32:  REX.W F7 /0 id */
+XR_FUNC void x64_test_ri(X64Buf *buf, X64Reg dst, int32_t imm);
+
+/* AND r64, imm32:  REX.W 81 /4 id */
+XR_FUNC void x64_and_ri(X64Buf *buf, X64Reg dst, int32_t imm);
 
 /* ========== Move ========== */
 

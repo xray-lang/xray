@@ -46,6 +46,7 @@ typedef enum {
     X64_PATCH_JMP,       // unconditional JMP rel32
     X64_PATCH_JCC,       // conditional Jcc rel32
     X64_PATCH_DEOPT_JCC, // deopt: conditional Jcc to deopt stub
+    X64_PATCH_DEOPT_JMP, // deopt: unconditional JMP rel32 to deopt stub
     X64_PATCH_CALL_C,    // CALL rel32 to shared call_c_stub
 } X64PatchType;
 

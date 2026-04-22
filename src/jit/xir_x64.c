@@ -175,6 +175,15 @@ void x64_shr_rcl(X64Buf *buf, X64Reg dst) {
     x64_modrm(buf, 0x3, 5, (uint8_t)dst);
 }
 
+/* SHR r64, imm8:  REX.W C1 /5 ib */
+void x64_shr_ri(X64Buf *buf, X64Reg dst, uint8_t imm) {
+    XR_DCHECK(buf != NULL, "x64_shr_ri: NULL buf");
+    x64_rex(buf, true, false, false, dst > 7);
+    x64_emit8(buf, 0xC1);
+    x64_modrm(buf, 0x3, 5, (uint8_t)dst);
+    x64_emit8(buf, imm);
+}
+
 /* SAR r64, cl:  REX.W D3 /7 */
 void x64_sar_rcl(X64Buf *buf, X64Reg dst) {
     XR_DCHECK(buf != NULL, "x64_sar_rcl: NULL buf");
@@ -214,6 +223,30 @@ void x64_test_rr(X64Buf *buf, X64Reg dst, X64Reg src) {
     x64_rex_rr(buf, true, src, dst);
     x64_emit8(buf, 0x85);
     x64_modrm_rr(buf, src, dst);
+}
+
+/* TEST r64, imm32:  REX.W F7 /0 id */
+void x64_test_ri(X64Buf *buf, X64Reg dst, int32_t imm) {
+    XR_DCHECK(buf != NULL, "x64_test_ri: NULL buf");
+    x64_rex(buf, true, false, false, dst > 7);
+    x64_emit8(buf, 0xF7);
+    x64_modrm(buf, 0x3, 0, (uint8_t)dst);
+    x64_emit32(buf, (uint32_t)imm);
+}
+
+/* AND r64, imm32:  REX.W 81 /4 id  or  REX.W 83 /4 ib */
+void x64_and_ri(X64Buf *buf, X64Reg dst, int32_t imm) {
+    XR_DCHECK(buf != NULL, "x64_and_ri: NULL buf");
+    x64_rex(buf, true, false, false, dst > 7);
+    if (imm >= -128 && imm <= 127) {
+        x64_emit8(buf, 0x83);
+        x64_modrm(buf, 0x3, 4, (uint8_t)dst);
+        x64_emit8(buf, (uint8_t)(int8_t)imm);
+    } else {
+        x64_emit8(buf, 0x81);
+        x64_modrm(buf, 0x3, 4, (uint8_t)dst);
+        x64_emit32(buf, (uint32_t)imm);
+    }
 }
 
 /* ========== Move ========== */
