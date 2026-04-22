@@ -670,6 +670,30 @@ static void test_or_ri_imm8(void) {
     check_bytes("or_ri_imm8", exp, sizeof(exp));
 }
 
+/* SHR RAX, 2:  REX.W C1 E8 02 */
+static void test_shr_ri(void) {
+    reset();
+    x64_shr_ri(&g_buf, X64_RAX, 2);
+    uint8_t exp[] = { 0x48, 0xC1, 0xE8, 0x02 };
+    check_bytes("shr_ri", exp, sizeof(exp));
+}
+
+/* TEST RAX, 7:  REX.W F7 C0 07000000 */
+static void test_test_ri(void) {
+    reset();
+    x64_test_ri(&g_buf, X64_RAX, 0x7);
+    uint8_t exp[] = { 0x48, 0xF7, 0xC0, 0x07, 0x00, 0x00, 0x00 };
+    check_bytes("test_ri", exp, sizeof(exp));
+}
+
+/* AND RAX, 0x7:  REX.W 83 E0 07 (imm8 form) */
+static void test_and_ri(void) {
+    reset();
+    x64_and_ri(&g_buf, X64_RAX, 0x7);
+    uint8_t exp[] = { 0x48, 0x83, 0xE0, 0x07 };
+    check_bytes("and_ri", exp, sizeof(exp));
+}
+
 /* ========== Driver ========== */
 
 int main(void) {
@@ -774,7 +798,12 @@ int main(void) {
     test_shl_ri();
     test_or_ri_imm8();
 
-    int total = 65;
+    /* SHR/TEST/AND immediate */
+    test_shr_ri();
+    test_test_ri();
+    test_and_ri();
+
+    int total = 68;
     fprintf(stderr, "[test_x64_emit] ALL PASSED (%d tests)\n", total);
     return 0;
 }
