@@ -49,6 +49,12 @@ typedef struct XirJitState {
     bool         stats_enabled;    // --jit-stats: print compilation statistics on exit
     XirCompileQueue *bg_queue;     // background compilation queue (NULL if sync mode)
 
+    // Code cache eviction: track compiled protos for LRU reclaim
+    struct XrProto **compiled_protos;  // array of compiled protos (for eviction scan)
+    uint32_t     compiled_protos_count;
+    uint32_t     compiled_protos_cap;
+    uint32_t     stats_evicted;        // number of evicted protos
+
     // Statistics (populated during compilation, printed by xir_jit_destroy)
     uint32_t     stats_tier1;          // functions compiled at Tier 1
     uint32_t     stats_tier2;          // functions recompiled at Tier 2

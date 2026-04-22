@@ -91,6 +91,10 @@ void xir_code_alloc_init(XirCodeAlloc *alloc) {
     alloc->current = NULL;
     alloc->total_allocated = 0;
     alloc->total_used = 0;
+    alloc->budget = XIR_CODE_CACHE_DEFAULT;
+    alloc->n_pages = 0;
+    alloc->epoch = 0;
+    alloc->garbage = NULL;
 }
 
 void xir_code_alloc_destroy(XirCodeAlloc *alloc) {
@@ -105,6 +109,16 @@ void xir_code_alloc_destroy(XirCodeAlloc *alloc) {
     alloc->current = NULL;
     alloc->total_allocated = 0;
     alloc->total_used = 0;
+    alloc->n_pages = 0;
+
+    // Free remaining garbage entries (no epoch safety needed at shutdown)
+    XirCodeGarbage *g = alloc->garbage;
+    while (g) {
+        XirCodeGarbage *next = g->next;
+        xr_free(g);
+        g = next;
+    }
+    alloc->garbage = NULL;
 }
 
 void *xir_code_alloc(XirCodeAlloc *alloc, size_t size, size_t alignment) {
@@ -130,11 +144,19 @@ void *xir_code_alloc(XirCodeAlloc *alloc, size_t size, size_t alignment) {
     XirCodePage *page = alloc_code_page(needed);
     if (!page) return NULL;
 
+    // Budget check: refuse allocation if over budget
+    if (alloc->budget > 0 &&
+        alloc->total_allocated + page->size > alloc->budget) {
+        free_code_page(page);
+        return NULL;
+    }
+
     // Link into page list
     page->next = alloc->pages;
     alloc->pages = page;
     alloc->current = page;
     alloc->total_allocated += page->size;
+    alloc->n_pages++;
 
     // Allocate from new page (already aligned at 0)
     size_t offset = (0 + alignment - 1) & ~(alignment - 1);
@@ -174,6 +196,50 @@ void xir_code_make_writable(void *ptr, size_t size) {
     total = page_align(total);
     mprotect(page_start, total, PROT_READ | PROT_WRITE);
 #endif
+}
+
+void xir_code_alloc_set_budget(XirCodeAlloc *alloc, size_t budget_bytes) {
+    XR_DCHECK(alloc != NULL, "code_alloc_set_budget: NULL alloc");
+    if (budget_bytes > XIR_CODE_CACHE_MAX)
+        budget_bytes = XIR_CODE_CACHE_MAX;
+    alloc->budget = budget_bytes;
+}
+
+void xir_code_alloc_retire(XirCodeAlloc *alloc, void *code, size_t size) {
+    XR_DCHECK(alloc != NULL, "code_alloc_retire: NULL alloc");
+    if (!code || size == 0) return;
+
+    XirCodeGarbage *g = (XirCodeGarbage *)xr_malloc(sizeof(XirCodeGarbage));
+    if (!g) return;  // leak is acceptable under OOM
+
+    g->code = code;
+    g->size = size;
+    g->retire_epoch = alloc->epoch;
+    g->next = alloc->garbage;
+    alloc->garbage = g;
+}
+
+void xir_code_alloc_reclaim(XirCodeAlloc *alloc, uint64_t safe_epoch) {
+    XR_DCHECK(alloc != NULL, "code_alloc_reclaim: NULL alloc");
+
+    XirCodeGarbage **prev = &alloc->garbage;
+    XirCodeGarbage *g = alloc->garbage;
+    while (g) {
+        XirCodeGarbage *next = g->next;
+        if (g->retire_epoch < safe_epoch) {
+            // All coroutines have moved past this epoch; code is unreachable.
+            // NOTE: bump allocator cannot release individual ranges, so we
+            // only track the accounting.  The actual pages are freed when
+            // the entire code allocator is destroyed.
+            if (alloc->total_used >= g->size)
+                alloc->total_used -= g->size;
+            *prev = next;
+            xr_free(g);
+        } else {
+            prev = &g->next;
+        }
+        g = next;
+    }
 }
 
 void xir_code_flush_icache(void *ptr, size_t size) {
