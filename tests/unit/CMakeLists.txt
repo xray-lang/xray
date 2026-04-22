@@ -89,6 +89,7 @@ add_xray_unit_test(test_xir_fold jit/test_xir_fold.c)
 add_xray_unit_test(test_xir_liveness2 jit/test_xir_liveness2.c)
 add_xray_unit_test(test_xir_pass jit/test_xir_pass.c)
 add_xray_unit_test(test_arm64_emit jit/test_arm64_emit.c)
+add_xray_unit_test(test_peephole jit/test_peephole.c)
 add_xray_unit_test(test_code_alloc jit/test_code_alloc.c)
 
 # E2E tests: require full JIT runtime (coro + jit_ctx), excluded from default build
