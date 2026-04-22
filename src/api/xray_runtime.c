@@ -38,6 +38,7 @@ static const char *xrt_to_cstr(XrtValue v, char *buf, size_t bufsz) {
 static XrtValue xrt_str_concat(const char *sa, const char *sb) {
     size_t la = strlen(sa), lb = strlen(sb);
     char *r = (char *)xr_malloc(la + lb + 1);
+    if (!r) return XRT_NULL;
     memcpy(r, sa, la);
     memcpy(r + la, sb, lb + 1);
     return xrt_box_str(r);
@@ -169,6 +170,7 @@ XrtValue xrt_string_slice(XrtValue s, int64_t start, int64_t end) {
     if (start >= end) return xrt_box_str("");
     int64_t slen = end - start;
     char *r = (char *)xr_malloc((size_t)slen + 1);
+    if (!r) return XRT_NULL;
     memcpy(r, str + start, (size_t)slen);
     r[slen] = '\0';
     return xrt_box_str(r);

@@ -101,7 +101,8 @@ void xr_repl_symbols_seed_context(XrReplSymbolTable *table, XrCompilerContext *c
 
     // Ensure ctx->shared_vars has enough capacity
     while (ctx->shared_var_capacity < table->count) {
-        int new_capacity = ctx->shared_var_capacity * 2;
+        int new_capacity = ctx->shared_var_capacity < 8
+            ? 8 : ctx->shared_var_capacity * 2;
         XrSharedVar *new_vars = (XrSharedVar *)xr_realloc(ctx->shared_vars,
             sizeof(XrSharedVar) * new_capacity);
         if (!new_vars) return;

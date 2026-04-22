@@ -56,7 +56,4 @@ XR_FUNC void xmcp_server_free(XmcpServer *server);
  * Returns 0 on clean shutdown, non-zero on error. */
 XR_FUNC int xmcp_server_run(XmcpServer *server);
 
-/* CLI entry point: `xray mcp-server [options]` */
-XR_FUNC int cmd_mcp_server(int argc, char **argv);
-
-#endif /* XMCP_SERVER_H */
+#endif // XMCP_SERVER_H

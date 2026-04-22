@@ -16,6 +16,7 @@
 #define XMCP_PROTOCOL_H
 
 #include "../../base/xdefs.h"
+#include "xray_version.h"
 
 /* Forward declarations */
 typedef struct XrJsonValue XrJsonValue;
@@ -23,9 +24,9 @@ typedef struct XmcpServer XmcpServer;
 
 #define XMCP_PROTOCOL_VERSION "2025-03-26"
 #define XMCP_SERVER_NAME      "xray-mcp-server"
-#define XMCP_SERVER_VERSION   "0.1.0"
+#define XMCP_SERVER_VERSION   XRAY_VERSION_STRING
 
 /* Handle "initialize" request. Returns the result JSON object. */
 XR_FUNC XrJsonValue *xmcp_handle_initialize(XmcpServer *server, XrJsonValue *params);
 
-#endif /* XMCP_PROTOCOL_H */
+#endif // XMCP_PROTOCOL_H

@@ -27,4 +27,4 @@ XR_FUNC XrJsonValue *xmcp_handle_tools_list(void);
 /* Handle "tools/call" request. */
 XR_FUNC XrJsonValue *xmcp_handle_tools_call(XmcpServer *server, XrJsonValue *params);
 
-#endif /* XMCP_TOOLS_H */
+#endif // XMCP_TOOLS_H

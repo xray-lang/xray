@@ -29,4 +29,4 @@ XR_FUNC XrJsonValue *xmcp_handle_resources_list(XmcpServer *server);
 /* Handle "resources/read" request. */
 XR_FUNC XrJsonValue *xmcp_handle_resources_read(XmcpServer *server, XrJsonValue *params);
 
-#endif /* XMCP_RESOURCES_H */
+#endif // XMCP_RESOURCES_H
