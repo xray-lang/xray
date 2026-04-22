@@ -1,0 +1,112 @@
+/*
+ * xray - Lightweight typed scripting with native concurrency
+ * https://www.xray-lang.org
+ *
+ * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
+ * Licensed under the MIT License
+ *
+ * xir_codegen_x64_internal.h - Internal types for x86-64 codegen
+ *
+ * KEY CONCEPT:
+ *   Shared state between xir_codegen_x64.c and its sub-files.
+ *   Mirrors the role of xir_codegen_internal.h for ARM64.
+ */
+
+#ifndef XIR_CODEGEN_X64_INTERNAL_H
+#define XIR_CODEGEN_X64_INTERNAL_H
+
+#include "xir_codegen.h"
+#include "xir_x64.h"
+#include "xir_jit.h"
+#include "xir_regalloc.h"
+#include "../base/xchecks.h"
+#include "../base/xmalloc.h"
+#include "../base/xlog.h"
+
+/* ========== Constants ========== */
+
+#define X64_MAX_PHYS_REGS   13  // allocatable GP registers (see xir_target_x64.c)
+#define X64_MAX_FP_REGS     16
+#define X64_MAX_VREGS       4096
+#define X64_SCRATCH_REG     X64_R11
+#define X64_CORO_REG        X64_R15
+#define X64_SPILL_BASE      64   // must match xir_target_x64.c
+#define X64_JIT_FRAME_BASE  64
+
+/* jit_ctx field offsets (same as ARM64: struct XrCoroutine layout) */
+#define X64_JIT_CTX_REG     X64_R15  // coroutine pointer
+
+/* ========== Branch Patch ========== */
+
+typedef enum {
+    X64_PATCH_JMP,       // unconditional JMP rel32
+    X64_PATCH_JCC,       // conditional Jcc rel32
+    X64_PATCH_DEOPT_JCC, // deopt: conditional Jcc to deopt stub
+} X64PatchType;
+
+typedef struct {
+    uint32_t    emit_pos;    // byte offset of the rel32 field in code buffer
+    uint32_t    target_blk;  // target block id
+    X64PatchType type;
+    X64Cond     cc;          // condition code (for JCC patches)
+} X64BranchPatch;
+
+#define X64_INIT_PATCHES 256
+
+/* ========== Codegen Context ========== */
+
+typedef struct {
+    XirFunc      *func;
+    XirCodeAlloc *alloc;
+    X64Buf        buf;
+
+    uint32_t     *block_offsets;    // byte offset of each block's start
+    uint32_t      nblock_offsets;
+
+    X64BranchPatch *patches;       // deferred branch patches
+    uint32_t      npatch;
+    uint32_t      patches_cap;
+
+    XraResult    *xra;             // register allocation result
+    int8_t       *vreg_override;   // gap-move overrides (-128 = no override)
+
+    uint32_t      cur_blk_id;
+    int32_t       cur_ra_pos;
+    uint32_t      cur_ins_idx;
+    uint32_t      gap_move_cursor;
+
+    uint32_t      fast_entry_offset;  // byte offset of fast-path entry
+
+    /* Frame size patch locations (byte offsets where sub rsp/add rsp imm32 lives) */
+    uint32_t      frame_patch_sub[8];
+    uint32_t      frame_patch_add[8];
+    uint32_t      nsub_patches;
+    uint32_t      nadd_patches;
+
+    bool          had_error;
+    bool          has_deopt;
+} X64CodegenCtx;
+
+/* ========== Register Mapping ========== */
+
+/* Map physical register index (0..12) to x86-64 hardware register */
+extern const X64Reg x64_alloc_regs[X64_MAX_PHYS_REGS];
+extern const X64Reg x64_alloc_fp_regs[X64_MAX_FP_REGS];
+
+/* Get the x86-64 hardware register assigned to a vreg reference */
+XR_FUNC X64Reg x64_get_reg(X64CodegenCtx *ctx, XirRef ref);
+
+/* Get register for a source operand, loading from spill slot if needed */
+XR_FUNC X64Reg x64_get_operand(X64CodegenCtx *ctx, XirRef ref, X64Reg scratch);
+
+/* Load a 64-bit constant into a register using optimal encoding */
+XR_FUNC void x64_load_imm64(X64Buf *buf, X64Reg dst, uint64_t val);
+
+/* Store to spill slot if vreg has one assigned */
+XR_FUNC void x64_maybe_spill(X64CodegenCtx *ctx, XirRef dst_ref);
+
+/* Add a deferred branch patch */
+XR_FUNC void x64_add_patch(X64CodegenCtx *ctx, X64PatchType type,
+                            uint32_t target_blk, X64Cond cc);
+
+#endif // XIR_CODEGEN_X64_INTERNAL_H
