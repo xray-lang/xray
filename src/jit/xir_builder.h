@@ -160,8 +160,10 @@ XR_FUNC XirFunc *xir_build_from_proto_jit(XrProto *proto,
                                    struct XrShape *dominant_shape,
                                    struct XrayIsolate *isolate);
 
-// Build XIR in AOT mode: generates closure/upvalue XIR instead of skipping
+// Build XIR in AOT mode: generates closure/upvalue XIR instead of skipping.
+// If isolate is non-NULL, enables CHA devirtualization for class method calls.
 XR_FUNC XirFunc *xir_build_from_proto_aot(XrProto *proto,
-                                   XrProto **shared_protos, int nshared);
+                                   XrProto **shared_protos, int nshared,
+                                   struct XrayIsolate *isolate);
 
 #endif // XIR_BUILDER_H

@@ -557,7 +557,7 @@ bool xir_translate_call_ops(XirBuilder *b, XirBlock **cur_blk,
             int a = GETARG_A(inst);
             int sym_local = GETARG_B(inst);
             int nargs = GETARG_C(inst);
-            
+
             // Bounds check to prevent SIGSEGV
             if (sym_local >= PROTO_SYMBOL_COUNT(b->proto)) {
 #if XR_DEBUG
@@ -567,7 +567,7 @@ bool xir_translate_call_ops(XirBuilder *b, XirBlock **cur_blk,
                 b->ops_skipped++;
                 return true;
             }
-            
+
             int method_symbol = PROTO_SYMBOL(b->proto, sym_local);
 
             if (nargs > 14) {
@@ -578,12 +578,12 @@ bool xir_translate_call_ops(XirBuilder *b, XirBlock **cur_blk,
             // --- CHA devirtualization attempt ---
             // When receiver type is statically known (INSTANCE with class_name),
             // and the class is final or has no subclasses, resolve the method at
-            // JIT compile time and emit CALL_KNOWN instead of the generic bridge.
-            // This enables direct calls and subsequent inlining by auto_inline.
+            // compile time and emit CALL_KNOWN instead of the generic bridge.
+            // Works in both JIT and AOT modes when isolate is available.
             // CHA devirt: resolve receiver type to devirtualize method call.
             // Uses builder_find_reg_type which checks param_types then
             // backward-scans inst_types to find the receiver's static type.
-            if (!b->aot_mode && b->isolate &&
+            if (b->isolate &&
                 method_symbol >= SYMBOL_BUILTIN_COUNT &&
                 (a + 1) < 256)
             {
@@ -787,7 +787,7 @@ bool xir_translate_call_ops(XirBuilder *b, XirBlock **cur_blk,
             int a = GETARG_A(inst);
             int sym_local = GETARG_B(inst);
             int nargs = GETARG_C(inst);
-            
+
             // Bounds check to prevent SIGSEGV
             if (sym_local >= PROTO_SYMBOL_COUNT(b->proto)) {
 #if XR_DEBUG
@@ -797,7 +797,7 @@ bool xir_translate_call_ops(XirBuilder *b, XirBlock **cur_blk,
                 b->ops_skipped++;
                 return true;
             }
-            
+
             int method_symbol = PROTO_SYMBOL(b->proto, sym_local);
 
             if (nargs > 14) {
@@ -867,7 +867,7 @@ bool xir_translate_call_ops(XirBuilder *b, XirBlock **cur_blk,
             int a = GETARG_A(inst);
             int sym_local = GETARG_B(inst);
             int nargs = GETARG_C(inst);
-            
+
             // Bounds check to prevent SIGSEGV
             if (sym_local >= PROTO_SYMBOL_COUNT(b->proto)) {
 #if XR_DEBUG
@@ -877,7 +877,7 @@ bool xir_translate_call_ops(XirBuilder *b, XirBlock **cur_blk,
                 b->ops_skipped++;
                 return true;
             }
-            
+
             int method_symbol = PROTO_SYMBOL(b->proto, sym_local);
             if (nargs > 14) { b->ops_skipped++; return true; }
 
@@ -1676,13 +1676,13 @@ bool xir_translate_call_ops(XirBuilder *b, XirBlock **cur_blk,
             int a = GETARG_A(inst);
             int rb = GETARG_B(inst);
             int kc = GETARG_C(inst);
-            
+
             // Bounds check for constant pool
             if (kc >= PROTO_CONST_COUNT(b->proto)) {
                 b->ops_skipped++;
                 return true;
             }
-            
+
             XirRef map = builder_get_slot(b, blk, rb);
             // Load constant key as tagged value (string ptr)
             XrValue kval = PROTO_CONST_FAST(b->proto, kc);
@@ -1749,13 +1749,13 @@ bool xir_translate_call_ops(XirBuilder *b, XirBlock **cur_blk,
             int a = GETARG_A(inst);
             int kb = GETARG_B(inst);
             int rc = GETARG_C(inst);
-            
+
             // Bounds check for constant pool
             if (kb >= PROTO_CONST_COUNT(b->proto)) {
                 b->ops_skipped++;
                 return true;
             }
-            
+
             XirRef map = builder_get_slot(b, blk, a);
             XrValue kval = PROTO_CONST_FAST(b->proto, kb);
             XirRef key = xir_const_i64(b->func, kval.i);
