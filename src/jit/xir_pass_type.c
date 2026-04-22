@@ -663,13 +663,17 @@ static uint64_t type_prop_checksum(XirFunc *func) {
  * deeply chained IR; the cap guards against pathological input. */
 #define TYPE_PROP_MAX_ROUNDS 6
 
-void xir_pass_type_prop(XirFunc *func) {
-    if (!func || func->nblk == 0) return;
+XirPassChange xir_pass_type_prop(XirFunc *func) {
+    if (!func || func->nblk == 0) return xir_pass_no_change();
+    uint64_t initial = type_prop_checksum(func);
     for (int round = 0; round < TYPE_PROP_MAX_ROUNDS; round++) {
         uint64_t before = type_prop_checksum(func);
         type_prop_scan_once(func);
         if (type_prop_checksum(func) == before) break;
     }
+    return type_prop_checksum(func) != initial
+        ? (XirPassChange){ false, false, true, 0, 0, 0 }
+        : xir_pass_no_change();
 }
 
 /* ========== Type-Driven Specialization ========== */
@@ -690,15 +694,17 @@ void xir_pass_type_prop(XirFunc *func) {
  *   (CSE, LICM, GVN, if-conversion) to optimize these operations, which
  *   they cannot do with opaque RT_* instructions.
  */
-void xir_pass_specialize(XirFunc *func) {
-    if (!func || func->nblk == 0) return;
+XirPassChange xir_pass_specialize(XirFunc *func) {
+    if (!func || func->nblk == 0) return xir_pass_no_change();
 
+    uint32_t n_spec = 0;
     for (uint32_t bi = 0; bi < func->nblk; bi++) {
         XirBlock *blk = func->blocks[bi];
         if (!blk) continue;
 
         for (uint32_t i = 0; i < blk->nins; i++) {
             XirIns *ins = &blk->ins[i];
+            uint16_t orig_op = ins->op;
 
             // Get operand vtags for binary ops
             uint8_t ta = VTAG_TAGGED, tb = VTAG_TAGGED;
@@ -762,8 +768,12 @@ void xir_pass_specialize(XirFunc *func) {
             default:
                 break;
             }
+            if (ins->op != orig_op) n_spec++;
         }
     }
+    return n_spec
+        ? (XirPassChange){ false, false, true, 0, 0, 0 }
+        : xir_pass_no_change();
 }
 
 /* ========== Write Barrier Elimination ========== */
@@ -800,8 +810,10 @@ static bool can_trigger_gc(uint16_t op) {
     }
 }
 
-void xir_pass_elim_write_barriers(XirFunc *func) {
-    if (!func) return;
+XirPassChange xir_pass_elim_write_barriers(XirFunc *func) {
+    if (!func) return xir_pass_no_change();
+
+    uint32_t n_elim = 0;
 
     /* Track up to 32 "known-safe" parent vregs per block.
      * A vreg is safe if it was freshly allocated (Rule 1) or
@@ -848,6 +860,7 @@ void xir_pass_elim_write_barriers(XirFunc *func) {
 
             if (is_safe) {
                 // Eliminate this barrier
+                n_elim++;
                 ins->op = XIR_NOP;
                 ins->dst = XIR_NONE;
                 ins->args[0] = XIR_NONE;
@@ -863,6 +876,9 @@ void xir_pass_elim_write_barriers(XirFunc *func) {
     }
 
     #undef WBE_MAX_SAFE
+    return n_elim
+        ? (XirPassChange){ false, true, false, n_elim, 0, 0 }
+        : xir_pass_no_change();
 }
 
 /* ========== Range Analysis ========== */
@@ -999,15 +1015,15 @@ static bool ra_find_loop_bound(XirFunc *func, XirBlock *header, XirRef iv_ref,
     return false;
 }
 
-void xir_pass_range_analysis(XirFunc *func) {
-    if (!func || func->nvreg == 0 || func->nblk == 0) return;
+XirPassChange xir_pass_range_analysis(XirFunc *func) {
+    if (!func || func->nvreg == 0 || func->nblk == 0) return xir_pass_no_change();
 
     uint32_t nv = func->nvreg;
-    if (nv > XIR_MAX_FUNC_VREGS) return; // bail on very large functions
+    if (nv > XIR_MAX_FUNC_VREGS) return xir_pass_no_change(); // bail on very large functions
 
     // Phase 1: Initialize range info for all vregs
     XirRange *ranges = (XirRange *)xr_calloc(nv, sizeof(XirRange));
-    if (!ranges) return;
+    if (!ranges) return xir_pass_no_change();
 
     // Set ranges for constants
     for (uint32_t bi = 0; bi < func->nblk; bi++) {
@@ -1255,6 +1271,7 @@ void xir_pass_range_analysis(XirFunc *func) {
     }
 
     xr_free(ranges);
+    return (XirPassChange){ false, false, true, 0, 0, 0 };
 }
 
 #undef RA_MAX_ROUNDS
@@ -1274,8 +1291,10 @@ void xir_pass_range_analysis(XirFunc *func) {
  * This makes type narrowing flow-sensitive: only uses after the guard
  * see the narrowed type. Uses before the guard keep the original type.
  */
-void xir_pass_insert_redefines(XirFunc *func) {
-    if (!func || func->nblk == 0) return;
+XirPassChange xir_pass_insert_redefines(XirFunc *func) {
+    if (!func || func->nblk == 0) return xir_pass_no_change();
+
+    bool any_inserted = false;
 
     const XirDomTree *dt = xir_func_get_domtree(func);
 

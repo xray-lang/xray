@@ -500,8 +500,9 @@ static void rewrite_to_const(SccpCtx *ctx, XirIns *ins, SccpVal v) {
     }
 }
 
-static void rewrite_function(SccpCtx *ctx) {
+static bool rewrite_function(SccpCtx *ctx) {
     XirFunc *func = ctx->func;
+    bool any = false;
 
     for (uint32_t bi = 0; bi < func->nblk; bi++) {
         XirBlock *blk = func->blocks[bi];
@@ -521,6 +522,7 @@ static void rewrite_function(SccpCtx *ctx) {
             blk->jmp.arg = XIR_NONE;
             blk->s1 = NULL;
             blk->s2 = NULL;
+            any = true;
             continue;
         }
 
@@ -536,6 +538,7 @@ static void rewrite_function(SccpCtx *ctx) {
                 cell.kind == SCCP_CONST_F64 ||
                 (cell.kind == SCCP_CONST_PTR && cell.ptr == NULL)) {
                 rewrite_to_const(ctx, ins, cell);
+                any = true;
             }
         }
 
@@ -550,15 +553,17 @@ static void rewrite_function(SccpCtx *ctx) {
                 blk->jmp.arg = XIR_NONE;
                 blk->s1 = taken;
                 blk->s2 = NULL;
+                any = true;
             }
         }
     }
+    return any;
 }
 
 /* ========== Driver ========== */
 
-void xir_pass_sccp(XirFunc *func) {
-    if (!func || func->nblk == 0 || func->nvreg == 0) return;
+XirPassChange xir_pass_sccp(XirFunc *func) {
+    if (!func || func->nblk == 0 || func->nvreg == 0) return xir_pass_no_change();
 
     SccpCtx ctx;
     memset(&ctx, 0, sizeof(ctx));
@@ -570,7 +575,7 @@ void xir_pass_sccp(XirFunc *func) {
         xr_free(ctx.cells);
         xr_free(ctx.reachable);
         xr_free(ctx.exec_edge);
-        return;
+        return xir_pass_no_change();
     }
 
     /* Kick off with the entry block executable.  Every other block
@@ -644,7 +649,7 @@ void xir_pass_sccp(XirFunc *func) {
         }
     }
 
-    rewrite_function(&ctx);
+    bool any_rewrite = rewrite_function(&ctx);
 
     /* Compact: physically remove unreachable blocks from the block
      * array so downstream passes never see them.  Entry (block 0) is
@@ -657,6 +662,7 @@ void xir_pass_sccp(XirFunc *func) {
             write++;
         }
     }
+    bool blocks_removed = (write < func->nblk);
     func->nblk = write;
 
     xr_free(ctx.cells);
@@ -664,4 +670,7 @@ void xir_pass_sccp(XirFunc *func) {
     xr_free(ctx.exec_edge);
     xr_free(ctx.cfg.edges);
     xr_free(ctx.ssa.vregs);
+    return (any_rewrite || blocks_removed)
+        ? (XirPassChange){ blocks_removed, true, true, 0, 0, 0 }
+        : xir_pass_no_change();
 }

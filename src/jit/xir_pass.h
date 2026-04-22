@@ -25,15 +25,11 @@
 
 /* ========== Pass Change Tracker ==========
  *
- * Fine-grained "what did this pass actually do?" record, intended
- * for the next-generation pipeline driver that wants to skip
- * rebuilding analyses the pass did not affect.  Phase 2 sets up the
- * type and the cooperating XIR_RESET_ANALYSIS in xir_pass.c; Phase 3
- * will wire individual passes to return it so the driver can replace
- * the current "invalidate everything" hook with precise decisions.
- *
- * Existing void-returning passes still work — the driver simply
- * treats their output as "assume worst", invalidating every cache.
+ * Fine-grained "what did this pass actually do?" record returned by
+ * every optimisation pass.  The fixedpoint driver uses this to:
+ *   1. Detect convergence — stop when no pass reports any change.
+ *   2. Skip rebuilding analyses the pass did not affect (e.g. skip
+ *      domtree rebuild when only ins_changed but not cfg_changed).
  */
 typedef struct XirPassChange {
     bool cfg_changed;        // block/edge/terminator topology was altered
@@ -79,19 +75,19 @@ XR_FUNC void xir_run_pipeline_ex(XirFunc *func, XirOptLevel opt, XrProto *proto)
 /* ========== Declarative Pipeline Driver ==========
  *
  * xir_run_fixedpoint runs a sequence of passes repeatedly until no
- * more IR changes are observed (cheap FNV-1a checksum over every
- * block's instruction count, terminator and vreg count) or the
+ * more IR changes are observed (each pass returns XirPassChange;
+ * the driver stops when no pass reports any mutation) or the
  * caller-supplied round cap is hit.  Passes are described by
  * XirPassDesc records so callers do not assemble a hand-written
  * chain of XIR_RUN_PASS macros anymore.
  *
- * The driver treats each pass as opaque and invokes
- * XIR_RESET_ANALYSIS internally, matching the legacy macro behaviour.
+ * The driver collects XirPassChange from each pass and invokes
+ * XIR_RESET_ANALYSIS when the pass touched the IR.
  * Pass names are purely for logging (jit->verbose).
  */
 
-typedef void (*XirPassFnVoid)(XirFunc *func);
-typedef void (*XirPassFnProto)(XirFunc *func, XrProto *proto);
+typedef XirPassChange (*XirPassFn)(XirFunc *func);
+typedef XirPassChange (*XirPassFnProto)(XirFunc *func, XrProto *proto);
 
 /* Flags describing per-pass properties.  Currently advisory only;
  * used to drive logging and to pick the right verify macro
@@ -105,7 +101,7 @@ typedef void (*XirPassFnProto)(XirFunc *func, XrProto *proto);
 typedef struct XirPassDesc {
     const char    *name;
     union {
-        XirPassFnVoid  v;      // used when !NEEDS_PROTO
+        XirPassFn      v;      // used when !NEEDS_PROTO
         XirPassFnProto p;      // used when NEEDS_PROTO
     } fn;
     uint32_t       flags;
@@ -146,33 +142,33 @@ XR_FUNC XirPipelineStats xir_run_fixedpoint(XirFunc *func,
 /* ========== Individual Pass API ========== */
 
 // Dead Code Elimination: remove instructions whose results are unused
-XR_FUNC void xir_pass_dce(XirFunc *func);
+XR_FUNC XirPassChange xir_pass_dce(XirFunc *func);
 
 // Common Subexpression Elimination: replace duplicate pure computations (local, per-block)
-XR_FUNC void xir_pass_cse(XirFunc *func);
+XR_FUNC XirPassChange xir_pass_cse(XirFunc *func);
 
 // Global Value Numbering: dominator-based cross-block CSE (replaces local CSE at -O2)
-XR_FUNC void xir_pass_gvn(XirFunc *func);
+XR_FUNC XirPassChange xir_pass_gvn(XirFunc *func);
 
 // Loop Invariant Code Motion: hoist invariant computations out of loops
-XR_FUNC void xir_pass_licm(XirFunc *func);
+XR_FUNC XirPassChange xir_pass_licm(XirFunc *func);
 
 // Copy Propagation: replace uses of MOV dst with the original src,
 // collapsing copy chains. Run before DCE to expose dead MOVs.
-XR_FUNC void xir_pass_copy_prop(XirFunc *func);
+XR_FUNC XirPassChange xir_pass_copy_prop(XirFunc *func);
 
 // Phi Simplification: replace phi nodes where all args are the same value
 // (or all non-self args are the same) with a MOV from that value.
-XR_FUNC void xir_pass_phi_simp(XirFunc *func);
+XR_FUNC XirPassChange xir_pass_phi_simp(XirFunc *func);
 
 // Allocation Sinking: move XIR_ALLOC from dominating blocks into the
 // specific branch where it's used, avoiding allocation on unused paths.
-XR_FUNC void xir_pass_alloc_sink(XirFunc *func);
+XR_FUNC XirPassChange xir_pass_alloc_sink(XirFunc *func);
 
 // Global Code Motion (GCM): Click's algorithm to move pure instructions
 // to optimal positions — as early as dependencies allow, but placed in the
 // block with the lowest loop depth between early and late bounds.
-XR_FUNC void xir_pass_gcm(XirFunc *func);
+XR_FUNC XirPassChange xir_pass_gcm(XirFunc *func);
 
 // CFG Rebuild: reconstruct all predecessor lists from s1/s2 edges and
 // remap phi args to match the new pred ordering. Call after any group of
@@ -193,75 +189,75 @@ XR_FUNC void xir_verify_types(XirFunc *func);
 
 // Critical Edge Splitting: insert empty blocks on edges from multi-successor
 // blocks (BR) to multi-predecessor blocks. Enables clean phi resolution.
-XR_FUNC void xir_pass_split_critical_edges(XirFunc *func);
+XR_FUNC XirPassChange xir_pass_split_critical_edges(XirFunc *func);
 
 // Block Reordering: reorder func->blocks[] to minimize taken branches.
 // Greedy fall-through chaining: BR false-branch as fall-through, loop bodies compact.
-XR_FUNC void xir_pass_reorder_blocks(XirFunc *func);
+XR_FUNC XirPassChange xir_pass_reorder_blocks(XirFunc *func);
 
 // Block Merging: merge a block with its sole successor when the successor
 // has exactly one predecessor. Reduces jumps and expands optimization scope.
-XR_FUNC void xir_pass_merge_blocks(XirFunc *func);
+XR_FUNC XirPassChange xir_pass_merge_blocks(XirFunc *func);
 
 // Store-to-Load Forwarding: when a LOAD_FIELD reads from the same object+offset
 // that a preceding STORE_FIELD just wrote, replace the load with a MOV from
 // the stored value. Also eliminates redundant loads (load-load forwarding).
-XR_FUNC void xir_pass_store_to_load(XirFunc *func);
+XR_FUNC XirPassChange xir_pass_store_to_load(XirFunc *func);
 
 // Redundant Guard Elimination: eliminate duplicate GUARD_TAG/GUARD_SHAPE/
 // GUARD_NONNULL/GUARD_CLASS within each block. Useful after guard hoisting.
-XR_FUNC void xir_pass_elim_guards(XirFunc *func);
+XR_FUNC XirPassChange xir_pass_elim_guards(XirFunc *func);
 
 // Branch Value Propagation: when BR(cond) branches, propagate known values
 // into single-predecessor successors. E.g., if cond = EQ(a, K) and the true
 // successor has only one predecessor, replace uses of a with K in that block.
 // Also propagates cond == 0 into the false successor.
-XR_FUNC void xir_pass_propjnz(XirFunc *func);
+XR_FUNC XirPassChange xir_pass_propjnz(XirFunc *func);
 
 // If-Conversion: convert simple diamond CFG patterns into conditional select
 // instructions (XIR_SELECT_COND + XIR_SELECT), eliminating branches.
 // Pattern: BR(cond) → then/else → merge with PHI → SELECT + JMP merge
-XR_FUNC void xir_pass_ifconvert(XirFunc *func);
+XR_FUNC XirPassChange xir_pass_ifconvert(XirFunc *func);
 
 // TypePropagation: propagate precise XrType* through the IR.
 // 1. GUARD_TAG narrows guarded vreg type in dominated blocks
 // 2. Arithmetic result type inferred from operand types
 // 3. Known CALL_KNOWN return types propagated to dst vreg
 // Should run before select_rep for maximum type precision.
-XR_FUNC void xir_pass_type_prop(XirFunc *func);
+XR_FUNC XirPassChange xir_pass_type_prop(XirFunc *func);
 
 // Type-driven specialization: lower polymorphic RT_* instructions to
 // monomorphic native ops when type_prop has proven operand types.
 // RT_LT/LE/EQ(I64,I64) → LT/LE/EQ, RT_LT(F64,F64) → FLT, etc.
 // RT_ADD/SUB/MUL/DIV(F64,F64) → FADD/FSUB/FMUL/FDIV.
 // Should run immediately after type_prop for maximum benefit.
-XR_FUNC void xir_pass_specialize(XirFunc *func);
+XR_FUNC XirPassChange xir_pass_specialize(XirFunc *func);
 
 // SelectRepresentations: eliminate redundant BOX/UNBOX pairs
-XR_FUNC void xir_pass_select_rep(XirFunc *func);
+XR_FUNC XirPassChange xir_pass_select_rep(XirFunc *func);
 
 // InsertWriteBarriers: insert XIR_BARRIER_FWD after XIR_STORE_FIELD
-XR_FUNC void xir_insert_write_barriers(XirFunc *func);
+XR_FUNC XirPassChange xir_insert_write_barriers(XirFunc *func);
 
 // EliminateWriteBarriers: remove redundant BARRIER_FWD instructions.
 // Rule 1: parent freshly allocated in same block (young → no barrier needed)
 // Rule 2: duplicate barrier on same parent (already in remembered set)
 // Both rules invalidated by GC-triggering instructions.
-XR_FUNC void xir_pass_elim_write_barriers(XirFunc *func);
+XR_FUNC XirPassChange xir_pass_elim_write_barriers(XirFunc *func);
 
 // InsertArcReleases: AOT-only pass — insert XIR_RELEASE before each RET for
 // locally-allocated PTR vregs that are not returned.
 // Only used in AOT transpile mode (not JIT).
-XR_FUNC void xir_insert_arc_releases(XirFunc *func);
+XR_FUNC XirPassChange xir_insert_arc_releases(XirFunc *func);
 
 // Escape Analysis + Scalar Replacement: replace non-escaping XIR_ALLOC
 // with virtual registers for each field (eliminates heap allocation).
 // Per-block analysis: only optimizes allocations that don't escape the block.
-XR_FUNC void xir_pass_escape_analysis(XirFunc *func);
+XR_FUNC XirPassChange xir_pass_escape_analysis(XirFunc *func);
 
 // Automatic Function Inlining: inline small XIR_CALL_KNOWN callees.
 // caller_proto needed for recursion detection and callee XIR build.
-XR_FUNC void xir_pass_auto_inline(XirFunc *func, XrProto *caller_proto);
+XR_FUNC XirPassChange xir_pass_auto_inline(XirFunc *func, XrProto *caller_proto);
 
 // Canonicalize: normalize IR for better optimization opportunities.
 // 1. Commutative ops: ensure constant on right side (enables more CSE matches)
@@ -269,23 +265,23 @@ XR_FUNC void xir_pass_auto_inline(XirFunc *func, XrProto *caller_proto);
 // 3. Absorbing elimination: x*0→0, x&0→0
 // 4. Double negation: NEG(NEG(x))→x, NOT(NOT(x))→x
 // Run after SCCP and before CSE for maximum effect.
-XR_FUNC void xir_pass_canonicalize(XirFunc *func);
+XR_FUNC XirPassChange xir_pass_canonicalize(XirFunc *func);
 
 // Dead Store Elimination: remove stores that are overwritten before being read.
 // Per-block analysis: tracks (obj, offset) pairs; a store is dead if a later
 // store to the same (obj, offset) exists with no intervening load or GC point.
-XR_FUNC void xir_pass_dse(XirFunc *func);
+XR_FUNC XirPassChange xir_pass_dse(XirFunc *func);
 
 // REDEFINE Insertion: insert XIR_REDEFINE after GUARD instructions.
 // Creates new SSA values with narrowed types for flow-sensitive type info.
 // Rewrites dominated uses of the guarded vreg to the REDEFINE result.
-XR_FUNC void xir_pass_insert_redefines(XirFunc *func);
+XR_FUNC XirPassChange xir_pass_insert_redefines(XirFunc *func);
 
 // Range Analysis: infer integer value ranges and eliminate redundant bounds checks.
 // 1. Track loop induction variables: i=0; i<N; i++ → range [0, N-1]
 // 2. Eliminate GUARD_BOUNDS where index range is provably within [0, length)
 // 3. Propagate range constraints from GUARD_BOUNDS to dominated uses
-XR_FUNC void xir_pass_range_analysis(XirFunc *func);
+XR_FUNC XirPassChange xir_pass_range_analysis(XirFunc *func);
 
 /* ========== Function Inlining ========== */
 

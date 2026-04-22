@@ -50,15 +50,15 @@ static inline void dce_dec_use(uint32_t *use_count, XirRef ref, uint32_t nvreg,
     }
 }
 
-void xir_pass_dce(XirFunc *func) {
-    if (!func || func->nvreg == 0) return;
+XirPassChange xir_pass_dce(XirFunc *func) {
+    if (!func || func->nvreg == 0) return xir_pass_no_change();
 
     uint32_t nv = func->nvreg;
 
     // Step 1: Build DefUse once to get use counts
     XirDefUse du;
     xir_defuse_build(&du, func);
-    if (du.nvreg == 0 && nv > 0) return;
+    if (du.nvreg == 0 && nv > 0) return xir_pass_no_change();
 
     // Step 2: Extract mutable use_count[] and compute removable[] flags
     uint32_t *use_count = (uint32_t *)xr_malloc(nv * sizeof(uint32_t));
@@ -67,7 +67,7 @@ void xir_pass_dce(XirFunc *func) {
     if (!use_count || !removable || !worklist) {
         xr_free(use_count); xr_free(removable); xr_free(worklist);
         xir_defuse_free(&du);
-        return;
+        return xir_pass_no_change();
     }
 
     for (uint32_t v = 0; v < nv; v++) {
@@ -100,6 +100,7 @@ void xir_pass_dce(XirFunc *func) {
     }
 
     // Step 4: Process worklist — NOP dead instructions, cascade to operands
+    uint32_t n_removed = 0;
     while (wl_top > 0) {
         uint32_t v = worklist[--wl_top];
         if (use_count[v] > 0) continue;  // re-check (may have been re-used)
@@ -109,6 +110,7 @@ void xir_pass_dce(XirFunc *func) {
             // Decrement operand use counts before NOPing
             dce_dec_use(use_count, def->args[0], nv, worklist, &wl_top, removable);
             dce_dec_use(use_count, def->args[1], nv, worklist, &wl_top, removable);
+            n_removed++;
             def->op = XIR_NOP;
             def->dst = XIR_NONE;
             def->args[0] = XIR_NONE;
@@ -131,6 +133,7 @@ void xir_pass_dce(XirFunc *func) {
                                     worklist, &wl_top, removable);
                     }
                     *pp = phi->next;
+                    n_removed++;
                     goto phi_removed;
                 }
                 pp = &(*pp)->next;
@@ -156,6 +159,9 @@ void xir_pass_dce(XirFunc *func) {
     xr_free(use_count);
     xr_free(removable);
     xr_free(worklist);
+    return n_removed
+        ? (XirPassChange){ false, true, false, n_removed, 0, n_removed }
+        : xir_pass_no_change();
 }
 
 /* ========== Instruction Normalization (shared by CSE and GVN) ========== */
@@ -216,8 +222,8 @@ static uint32_t cse_hash(uint16_t op, XirRef a0, XirRef a1) {
     return h | 1;  // ensure non-zero (0 = empty)
 }
 
-void xir_pass_cse(XirFunc *func) {
-    if (!func) return;
+XirPassChange xir_pass_cse(XirFunc *func) {
+    if (!func) return xir_pass_no_change();
 
     // Find max block size to determine table capacity
     uint32_t max_nins = 0;
@@ -230,8 +236,9 @@ void xir_pass_cse(XirFunc *func) {
     uint32_t tmask = tsize - 1;
 
     CseEntry *table = (CseEntry *)xr_malloc(tsize * sizeof(CseEntry));
-    if (!table) return;
+    if (!table) return xir_pass_no_change();
 
+    uint32_t n_replaced = 0;
     for (uint32_t bi = 0; bi < func->nblk; bi++) {
         XirBlock *blk = func->blocks[bi];
         memset(table, 0, tsize * sizeof(CseEntry));
@@ -271,6 +278,7 @@ void xir_pass_cse(XirFunc *func) {
                     ins->op = XIR_MOV;
                     ins->args[0] = e->result;
                     ins->args[1] = XIR_NONE;
+                    n_replaced++;
                     found = true;
                     break;
                 }
@@ -280,6 +288,9 @@ void xir_pass_cse(XirFunc *func) {
     }
 
     xr_free(table);
+    return n_replaced
+        ? (XirPassChange){ false, false, true, 0, 0, 0 }
+        : xir_pass_no_change();
 }
 
 /* ========== Global Value Numbering (GVN) ========== */
@@ -410,11 +421,11 @@ typedef struct {
 } GvnEntry;
 
 
-void xir_pass_gvn(XirFunc *func) {
-    if (!func || func->nblk < 2) return;
+XirPassChange xir_pass_gvn(XirFunc *func) {
+    if (!func || func->nblk < 2) return xir_pass_no_change();
 
     const XirDomTree *dt = xir_func_get_domtree(func);
-    if (!dt) return;
+    if (!dt) return xir_pass_no_change();
 
     /* Dynamic table size: one slot per ~half an instruction so the load
      * factor stays around 50%.  Floored at GVN_MIN_TABLE so tiny
@@ -427,7 +438,9 @@ void xir_pass_gvn(XirFunc *func) {
     uint32_t gvn_tmask = gvn_tsize - 1;
 
     GvnEntry *table = (GvnEntry *)xr_calloc(gvn_tsize, sizeof(GvnEntry));
-    if (!table) return;
+    if (!table) return xir_pass_no_change();
+
+    uint32_t n_replaced = 0;
 
     /* Pull the def-use chain from the function's shared cache (Phase
      * 2.3) rather than building a local throwaway copy. */
@@ -476,6 +489,7 @@ void xir_pass_gvn(XirFunc *func) {
                         ins->op = XIR_MOV;
                         ins->args[0] = e->result;
                         ins->args[1] = XIR_NONE;
+                        n_replaced++;
                     }
                     break;
                 }
@@ -484,6 +498,9 @@ void xir_pass_gvn(XirFunc *func) {
     }
 
     xr_free(table);
+    return n_replaced
+        ? (XirPassChange){ false, false, true, 0, 0, 0 }
+        : xir_pass_no_change();
 }
 
 /* ========== Store-to-Load Forwarding ========== */
@@ -605,14 +622,16 @@ static uint32_t s2l_table_size(XirFunc *func) {
     return size;
 }
 
-void xir_pass_store_to_load(XirFunc *func) {
-    if (!func || func->nblk == 0) return;
+XirPassChange xir_pass_store_to_load(XirFunc *func) {
+    if (!func || func->nblk == 0) return xir_pass_no_change();
 
     S2lTable t;
     t.size = s2l_table_size(func);
     t.mask = t.size - 1;
     t.entries = (S2lEntry *)xr_calloc(t.size, sizeof(S2lEntry));
-    if (!t.entries) return;
+    if (!t.entries) return xir_pass_no_change();
+
+    uint32_t n_fwd = 0;
 
     for (uint32_t bi = 0; bi < func->nblk; bi++) {
         XirBlock *blk = func->blocks[bi];
@@ -653,6 +672,7 @@ void xir_pass_store_to_load(XirFunc *func) {
                         }
                         if (dead_blk && prev->store_idx < dead_blk->nins) {
                             XirIns *dead = &dead_blk->ins[prev->store_idx];
+                            n_fwd++;
                             dead->op = XIR_MOV;
                             dead->dst = XIR_NONE;
                             dead->args[0] = XIR_NONE;
@@ -675,6 +695,7 @@ void xir_pass_store_to_load(XirFunc *func) {
                 XirRef fwd = s2l_lookup(&t, obj, offset);
                 if (!xir_ref_is_none(fwd)) {
                     // Forward: replace LOAD_FIELD with MOV from stored/loaded value
+                    n_fwd++;
                     ins->op = XIR_MOV;
                     ins->args[0] = fwd;
                     ins->args[1] = XIR_NONE;
@@ -702,6 +723,9 @@ void xir_pass_store_to_load(XirFunc *func) {
     }
 
     xr_free(t.entries);
+    return n_fwd
+        ? (XirPassChange){ false, true, true, n_fwd, 0, 0 }
+        : xir_pass_no_change();
 }
 
 /* ========== If-Conversion ========== */
@@ -769,8 +793,10 @@ static XirRef ifconv_phi_arg(XirPhi *phi, XirBlock *pred, XirBlock *joinblk) {
  * without risking unbounded growth on pathological inputs. */
 #define IFCONV_MAX_ROUNDS 3
 
-void xir_pass_ifconvert(XirFunc *func) {
-    if (!func || func->nblk < 3) return;
+XirPassChange xir_pass_ifconvert(XirFunc *func) {
+    if (!func || func->nblk < 3) return xir_pass_no_change();
+
+    bool ever_converted = false;
 
     /* Iterate to a local fixed-point so a successful outer conversion
      * exposes the next level of nesting inside the now-flattened
@@ -861,10 +887,14 @@ void xir_pass_ifconvert(XirFunc *func) {
         joinblk->preds[0] = ifblk;
         joinblk->phis = NULL;
         converted_any = true;
+        ever_converted = true;
       }
 
       if (!converted_any) break;
     }
+    return ever_converted
+        ? (XirPassChange){ true, true, false, 0, 0, 0 }
+        : xir_pass_no_change();
 }
 
 /* ========== Loop Invariant Code Motion (LICM) ========== */
@@ -960,18 +990,19 @@ static bool licm_definitely_no_alias(XirFunc *func, XirRef a, XirRef b) {
     return false;
 }
 
-void xir_pass_licm(XirFunc *func) {
-    if (!func || func->nblk < 2 || func->nvreg == 0) return;
+XirPassChange xir_pass_licm(XirFunc *func) {
+    if (!func || func->nblk < 2 || func->nvreg == 0) return xir_pass_no_change();
 
     const XirLoopInfo *loops = xir_func_get_loops(func);
-    if (!loops || loops->nloop == 0) return;
+    if (!loops || loops->nloop == 0) return xir_pass_no_change();
 
     uint32_t nv   = func->nvreg;
     uint32_t nblk = func->nblk;
 
     uint32_t *def_block = (uint32_t *)xr_malloc(nv * sizeof(uint32_t));
     uint8_t  *in_loop   = (uint8_t *)xr_malloc(nblk * sizeof(uint8_t));
-    if (!def_block || !in_loop) { xr_free(def_block); xr_free(in_loop); return; }
+    if (!def_block || !in_loop) { xr_free(def_block); xr_free(in_loop); return xir_pass_no_change(); }
+    bool any_hoisted = false;
     licm_build_def_block(func, def_block, nv);
 
     /* all_loops is already sorted innermost-first by xir_looptree, so
@@ -1114,6 +1145,7 @@ void xir_pass_licm(XirFunc *func) {
                             if (di < nv) def_block[di] = preh_bi;
                         }
                         hoisted_any = true;
+                        any_hoisted = true;
                     } else {
                         if (write != k) loop_blk->ins[write] = loop_blk->ins[k];
                         write++;
@@ -1130,6 +1162,9 @@ void xir_pass_licm(XirFunc *func) {
 
     xr_free(def_block);
     xr_free(in_loop);
+    return any_hoisted
+        ? (XirPassChange){ false, true, false, 0, 0, 0 }
+        : xir_pass_no_change();
 }
 
 /* ========== Canonicalize ========== */
@@ -1147,9 +1182,10 @@ void xir_pass_licm(XirFunc *func) {
  * 5. Comparison with self: EQ(x,x) → 1, NE(x,x) → 0
  * 6. Float identity: FADD(x,0.0)→x, FMUL(x,1.0)→x, FSUB(x,0.0)→x
  */
-void xir_pass_canonicalize(XirFunc *func) {
-    if (!func || func->nvreg == 0) return;
+XirPassChange xir_pass_canonicalize(XirFunc *func) {
+    if (!func || func->nvreg == 0) return xir_pass_no_change();
 
+    bool changed = false;
     for (uint32_t bi = 0; bi < func->nblk; bi++) {
         XirBlock *blk = func->blocks[bi];
         if (!blk) continue;
@@ -1157,6 +1193,9 @@ void xir_pass_canonicalize(XirFunc *func) {
         for (uint32_t i = 0; i < blk->nins; i++) {
             XirIns *ins = &blk->ins[i];
             if (!xir_ref_is_vreg(ins->dst)) continue;
+
+            uint16_t prev_op = ins->op;
+            XirRef prev_a0 = ins->args[0], prev_a1 = ins->args[1];
 
             switch (ins->op) {
 
@@ -1345,8 +1384,15 @@ void xir_pass_canonicalize(XirFunc *func) {
             default:
                 break;
             }
+
+            if (ins->op != prev_op || ins->args[0] != prev_a0 ||
+                ins->args[1] != prev_a1)
+                changed = true;
         }
     }
+    return changed
+        ? (XirPassChange){ false, false, true, 0, 0, 0 }
+        : xir_pass_no_change();
 }
 
 /* ========== Dead Store Elimination ========== */
@@ -1371,14 +1417,15 @@ typedef struct {
     uint32_t ins_idx; // instruction index in block
 } DseEntry;
 
-void xir_pass_dse(XirFunc *func) {
-    if (!func) return;
+XirPassChange xir_pass_dse(XirFunc *func) {
+    if (!func) return xir_pass_no_change();
 
     /* Reusable heap buffer: grows once and is recycled across blocks,
      * so we pay the allocation cost at most O(log) times per function
      * regardless of how many blocks contain STORE_FIELD. */
     DseEntry *tracked = NULL;
     uint32_t  tracked_cap = 0;
+    uint32_t  n_killed = 0;
 
     for (uint32_t bi = 0; bi < func->nblk; bi++) {
         XirBlock *blk = func->blocks[bi];
@@ -1441,6 +1488,7 @@ void xir_pass_dse(XirFunc *func) {
 
                 if (is_dead) {
                     // Kill this store — replace with NOP
+                    n_killed++;
                     ins->op = XIR_NOP;
                     ins->dst = XIR_NONE;
                     ins->args[0] = XIR_NONE;
@@ -1459,6 +1507,9 @@ void xir_pass_dse(XirFunc *func) {
     }
 
     xr_free(tracked);
+    return n_killed
+        ? (XirPassChange){ false, true, false, n_killed, 0, 0 }
+        : xir_pass_no_change();
 }
 
 /* ========== Pipeline Runner ========== */
@@ -1509,14 +1560,18 @@ static uint64_t fixedpoint_checksum(XirFunc *func) {
 }
 
 /* Invoke a single pass descriptor, honouring its flags. */
-static void fixedpoint_invoke(XirFunc *func, XrProto *proto,
-                              const XirPassDesc *d) {
+static XirPassChange fixedpoint_invoke(XirFunc *func, XrProto *proto,
+                                       const XirPassDesc *d) {
+    XirPassChange ch;
     if (d->flags & XIR_PASS_NEEDS_PROTO) {
-        if (d->fn.p) d->fn.p(func, proto);
+        ch = d->fn.p ? d->fn.p(func, proto) : xir_pass_no_change();
     } else {
-        if (d->fn.v) d->fn.v(func);
+        ch = d->fn.v ? d->fn.v(func) : xir_pass_no_change();
     }
-    if (!(d->flags & XIR_PASS_NO_RESET)) XIR_RESET_ANALYSIS(func);
+    if (!(d->flags & XIR_PASS_NO_RESET) &&
+        (ch.cfg_changed || ch.vreg_defs_changed || ch.ins_changed))
+        XIR_RESET_ANALYSIS(func);
+    return ch;
 }
 
 XirPipelineStats xir_run_fixedpoint(XirFunc *func, XrProto *proto,
@@ -1536,13 +1591,15 @@ XirPipelineStats xir_run_fixedpoint(XirFunc *func, XrProto *proto,
                 break;
             }
         }
-        uint64_t before = fixedpoint_checksum(func);
+        bool any_change = false;
         for (uint32_t i = 0; i < npass; i++) {
-            fixedpoint_invoke(func, proto, &passes[i]);
+            XirPassChange ch = fixedpoint_invoke(func, proto, &passes[i]);
+            if (ch.cfg_changed || ch.vreg_defs_changed || ch.ins_changed)
+                any_change = true;
             st.invocations++;
         }
         st.rounds_run = round + 1;
-        if (fixedpoint_checksum(func) == before) {
+        if (!any_change) {
             st.converged = 1;
             break;
         }
@@ -1570,17 +1627,17 @@ static uint32_t xir_count_se_(XirFunc *fn) {
     return n;
 }
 
-#define XIR_RUN_PASS(fn, pass)       do { pass(fn); XIR_RESET_ANALYSIS(fn); xir_verify_cfg(fn); xir_verify_types(fn); } while(0)
-#define XIR_RUN_PASS2(fn, pass, arg) do { pass(fn, arg); XIR_RESET_ANALYSIS(fn); xir_verify_cfg(fn); xir_verify_types(fn); } while(0)
+#define XIR_RUN_PASS(fn, pass)       do { (void)pass(fn); XIR_RESET_ANALYSIS(fn); xir_verify_cfg(fn); xir_verify_types(fn); } while(0)
+#define XIR_RUN_PASS2(fn, pass, arg) do { (void)pass(fn, arg); XIR_RESET_ANALYSIS(fn); xir_verify_cfg(fn); xir_verify_types(fn); } while(0)
 // For passes that do NOT modify CFG — skip cfg verify (builder may leave
 // pred lists inconsistent until rebuild_preds normalizes them).
-#define XIR_RUN_PASS_NOCFG(fn, pass) do { pass(fn); XIR_RESET_ANALYSIS(fn); xir_verify_types(fn); } while(0)
+#define XIR_RUN_PASS_NOCFG(fn, pass) do { (void)pass(fn); XIR_RESET_ANALYSIS(fn); xir_verify_types(fn); } while(0)
 
 /* Strict SE variant: for passes that must NOT remove side-effect instructions
  * (DCE, CSE, GVN, copy_prop). Asserts SE count is non-decreasing. */
 #define XIR_RUN_PASS_STRICT_SE(fn, pass) do { \
     uint32_t _se_pre = xir_count_se_(fn); \
-    pass(fn); XIR_RESET_ANALYSIS(fn); \
+    (void)pass(fn); XIR_RESET_ANALYSIS(fn); \
     xir_verify_cfg(fn); xir_verify_types(fn); \
     uint32_t _se_post = xir_count_se_(fn); \
     if (_se_post < _se_pre) { \
@@ -1591,9 +1648,9 @@ static uint32_t xir_count_se_(XirFunc *fn) {
 } while(0)
 
 #else
-#define XIR_RUN_PASS(fn, pass)       do { pass(fn); XIR_RESET_ANALYSIS(fn); } while(0)
-#define XIR_RUN_PASS2(fn, pass, arg) do { pass(fn, arg); XIR_RESET_ANALYSIS(fn); } while(0)
-#define XIR_RUN_PASS_NOCFG(fn, pass) do { pass(fn); XIR_RESET_ANALYSIS(fn); } while(0)
+#define XIR_RUN_PASS(fn, pass)       do { (void)pass(fn); XIR_RESET_ANALYSIS(fn); } while(0)
+#define XIR_RUN_PASS2(fn, pass, arg) do { (void)pass(fn, arg); XIR_RESET_ANALYSIS(fn); } while(0)
+#define XIR_RUN_PASS_NOCFG(fn, pass) do { (void)pass(fn); XIR_RESET_ANALYSIS(fn); } while(0)
 #define XIR_RUN_PASS_STRICT_SE(fn, pass) XIR_RUN_PASS(fn, pass)
 #endif
 
@@ -1724,7 +1781,7 @@ void xir_run_pipeline_ex(XirFunc *func, XirOptLevel opt, XrProto *proto) {
 
     if (opt >= XIR_OPT_FULL && !budget.timed_out) {
         if (proto) {
-            xir_pass_auto_inline(func, proto);
+            (void)xir_pass_auto_inline(func, proto);
             XIR_RESET_ANALYSIS(func);
             /* Re-canon once post-inline so the loop group below sees
              * the callee's constants / types. */
@@ -1757,11 +1814,11 @@ void xir_run_pipeline_ex(XirFunc *func, XirOptLevel opt, XrProto *proto) {
 
     /* Trailing housekeeping: block reordering + write barriers.
      * These are deterministic and run exactly once (always run). */
-    xir_pass_reorder_blocks(func);
+    (void)xir_pass_reorder_blocks(func);
     XIR_RESET_ANALYSIS(func);
-    xir_insert_write_barriers(func);
+    (void)xir_insert_write_barriers(func);
     XIR_RESET_ANALYSIS(func);
-    xir_pass_elim_write_barriers(func);
+    (void)xir_pass_elim_write_barriers(func);
     XIR_RESET_ANALYSIS(func);
 }
 

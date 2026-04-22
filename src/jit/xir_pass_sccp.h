@@ -11,8 +11,7 @@
 #ifndef XIR_PASS_SCCP_H
 #define XIR_PASS_SCCP_H
 
-#include "xir.h"
-#include "../base/xdefs.h"
+#include "xir_pass.h"
 
 /*
  * Run Sparse Conditional Constant Propagation on |func|.
@@ -27,6 +26,6 @@
  * that sequence (it is only stronger because phi-meet is conditional
  * on edge reachability).
  */
-XR_FUNC void xir_pass_sccp(XirFunc *func);
+XR_FUNC XirPassChange xir_pass_sccp(XirFunc *func);
 
 #endif // XIR_PASS_SCCP_H
