@@ -30,6 +30,7 @@
 #include "../base/xchecks.h"
 #include "../runtime/value/xchunk.h"
 #include "../runtime/value/xtype.h"
+#include "../runtime/object/xstring.h"
 #include <stdio.h>
 #include <string.h>
 #include <inttypes.h>
@@ -238,6 +239,54 @@ static void emit_call_known(XcgenBuf *b, XirFunc *func, XirIns *ins,
     // We store func_idx rather than a pointer because mod->funcs may realloc during compilation.
     const char *callee_name     = callee_proto ? xcg_lookup_proto_name(mod, callee_proto) : NULL;
     int         callee_func_idx = callee_proto ? xcg_lookup_proto_func_idx(mod, callee_proto) : -1;
+
+    // Detect class constructor call: GETSHARED loaded a class, CALL uses nargs < numparams.
+    // In this case, the caller passes N args but the constructor expects N+1 (this, args...).
+    // We must allocate the instance and prepend it as the first argument.
+    XrProto *cp = (XrProto *)callee_proto;
+    bool is_ctor_call = false;
+    int ctor_nfields = 0;
+    if (cp && cp->name && callee_name &&
+        strcmp(XR_STRING_CHARS(cp->name), "constructor") == 0 &&
+        nargs < cp->numparams) {
+        is_ctor_call = true;
+        // Compute instance size from max TFIELD_SET field index in constructor bytecode
+        int max_field = -1;
+        uint32_t cc = PROTO_CODE_COUNT(cp);
+        for (uint32_t ci2 = 0; ci2 < cc; ci2++) {
+            XrInstruction cins = PROTO_CODE(cp, ci2);
+            if (GET_OPCODE(cins) == OP_TFIELD_SET) {
+                int fi = GETARG_B(cins);
+                if (fi > max_field) max_field = fi;
+            }
+        }
+        ctor_nfields = (max_field >= 0) ? max_field + 1 : 2;
+    }
+
+    if (is_ctor_call && callee_name) {
+        // Class constructor call: allocate instance + call constructor + assign instance
+        int inst_bytes = ctor_nfields * 16; // sizeof(XrtValue) per field
+        const char *tagged_type = "XrValue";
+        xcgen_buf_printf(b, "    { %s _inst = {.ptr = xrt_arc_alloc(%d), .tag = XRT_TAG_PTR};\n",
+                         tagged_type, inst_bytes);
+        xcgen_buf_printf(b, "      %s(xrt_ctx, _inst", callee_name);
+        // Pass call_args[1..nargs] as constructor args (skip closure at [0])
+        for (int i = 0; i < nargs; i++) {
+            xcgen_buf_puts(b, ", ");
+            int slot = 1 + i;
+            if (slot < cf->call_args_cap && !xir_ref_is_none(cf->call_args[slot]))
+                emit_ref_as_tagged(b, func, cf->call_args[slot]);
+            else
+                xcgen_buf_printf(b, "(%s){0}", tagged_type);
+        }
+        xcgen_buf_puts(b, ");\n");
+        xcgen_buf_printf(b, "      v%u = _inst; }\n", dst_idx);
+        cf->needs_gc = true;
+        cf->call_args_count = 0;
+        for (int i = 0; i < cf->call_args_cap; i++)
+            cf->call_args[i] = XIR_NONE;
+        return;
+    }
 
     if (callee_name) {
         // Direct C function call.

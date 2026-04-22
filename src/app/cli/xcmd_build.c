@@ -304,10 +304,15 @@ static int cmd_build_bytecode(const char *input, const char *output,
 
 #ifdef XRAY_HAS_JIT
 
-// Build shared_index → child_proto mapping by scanning top-level bytecode
-// Pattern: CLOSURE R[A], Proto[Bx]; SETSHARED R[A], G[j]
-// Returns max shared index + 1 (size of shared_protos array)
-static int build_shared_proto_map(XrProto *top, XrProto **shared_protos, int max_shared) {
+// Build shared_index → child_proto mapping by scanning top-level bytecode.
+// Recognizes two patterns:
+//   1) CLOSURE R[A], Proto[Bx]; SETSHARED R[A], G[j]  — plain closure
+//   2) CLOSUREs R[X]...; CLASS_FROM_DESC R[X]; [MOVE;] SETSHARED R[X], G[j]
+//      → maps to constructor proto (first CLOSURE before CLASS_FROM_DESC)
+// shared_is_ctor[i] is set when shared_protos[i] is a class constructor.
+// Returns max shared index + 1 (size of shared_protos array).
+static int build_shared_proto_map(XrProto *top, XrProto **shared_protos,
+                                   bool *shared_is_ctor, int max_shared) {
     if (!top) return 0;
     int max_idx = 0;
     uint32_t code_count = (uint32_t)top->code.count;
@@ -318,6 +323,7 @@ static int build_shared_proto_map(XrProto *top, XrProto **shared_protos, int max
         OpCode op0 = GET_OPCODE(inst0);
         OpCode op1 = GET_OPCODE(inst1);
 
+        // Pattern 1: CLOSURE R[A]; SETSHARED R[A]
         if (op0 == OP_CLOSURE && op1 == OP_SETSHARED) {
             int closure_dst = GETARG_A(inst0);
             int setshared_src = GETARG_A(inst1);
@@ -329,6 +335,43 @@ static int build_shared_proto_map(XrProto *top, XrProto **shared_protos, int max
                     proto_idx < PROTO_PROTO_COUNT(top)) {
                     shared_protos[abs_idx] = PROTO_PROTO(top, proto_idx);
                     if (abs_idx + 1 > max_idx) max_idx = abs_idx + 1;
+                }
+            }
+        }
+
+        // Pattern 2: CLASS_FROM_DESC R[X]; [MOVE R[Y] R[X];] SETSHARED R[X]
+        if (op0 == OP_CLASS_CREATE_FROM_DESCRIPTOR) {
+            int class_reg = GETARG_A(inst0);
+            // Look ahead for SETSHARED (with optional MOVE in between)
+            int ss_pc = -1;
+            if (op1 == OP_SETSHARED && GETARG_A(inst1) == class_reg) {
+                ss_pc = (int)pc + 1;
+            } else if (op1 == OP_MOVE && pc + 2 < code_count) {
+                XrInstruction inst2 = code[pc + 2];
+                if (GET_OPCODE(inst2) == OP_SETSHARED &&
+                    GETARG_A(inst2) == class_reg) {
+                    ss_pc = (int)pc + 2;
+                }
+            }
+            if (ss_pc >= 0) {
+                int shared_bx = GETARG_Bx(code[ss_pc]);
+                int abs_idx = shared_bx + top->shared_offset;
+                // Scan backward for first CLOSURE targeting class_reg
+                int ctor_pc = -1;
+                for (int scan = (int)pc - 1; scan >= 0; scan--) {
+                    OpCode sop = GET_OPCODE(code[scan]);
+                    if (sop == OP_CLOSURE && GETARG_A(code[scan]) == class_reg)
+                        ctor_pc = scan; // keep updating → earliest wins
+                    else if (ctor_pc >= 0)
+                        break; // passed CLOSURE block
+                }
+                if (ctor_pc >= 0 && abs_idx >= 0 && abs_idx < max_shared) {
+                    uint16_t ctor_proto_idx = GETARG_Bx(code[ctor_pc]);
+                    if (ctor_proto_idx < PROTO_PROTO_COUNT(top)) {
+                        shared_protos[abs_idx] = PROTO_PROTO(top, ctor_proto_idx);
+                        shared_is_ctor[abs_idx] = true;
+                        if (abs_idx + 1 > max_idx) max_idx = abs_idx + 1;
+                    }
                 }
             }
         }
@@ -509,8 +552,10 @@ static int cmd_build_native(const char *input, const char *output,
 
     // Build shared_index → proto mapping
     XrProto *shared_protos[128];
+    bool shared_is_ctor[128];
     memset(shared_protos, 0, sizeof(shared_protos));
-    int nshared = build_shared_proto_map(proto, shared_protos, 128);
+    memset(shared_is_ctor, 0, sizeof(shared_is_ctor));
+    int nshared = build_shared_proto_map(proto, shared_protos, shared_is_ctor, 128);
 
     // Track compiled AOT functions for thunk/registration generation
     typedef struct {
