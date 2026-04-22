@@ -496,7 +496,7 @@ static int cmd_build_native(const char *input, const char *output,
     // Register AOT proto→name mappings
     for (int i = 0; i < aot_count; i++) {
         XrProto *p = aot_protos[i];
-        const char *name = p->name ? XR_STRING_CHARS(p->name) : "?";
+        const char *name = p->name ? XR_STRING_CHARS(p->name) : "__module_init";
         snprintf(aot_c_names[i], 140, "xr_%s", name);
         for (int j = 0; j < i; j++) {
             if (strcmp(aot_c_names[i], aot_c_names[j]) == 0) {
@@ -529,7 +529,7 @@ static int cmd_build_native(const char *input, const char *output,
 
     for (int i = 0; i < aot_count; i++) {
         XrProto *p = aot_protos[i];
-        const char *name = p->name ? XR_STRING_CHARS(p->name) : "?";
+        const char *name = p->name ? XR_STRING_CHARS(p->name) : "__module_init";
 
         XirFunc *xfunc = xir_build_from_proto_aot(p, shared_protos, nshared);
         if (!xfunc) {
