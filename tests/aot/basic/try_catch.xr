@@ -1,0 +1,20 @@
+// AOT basic test: try/catch exception handling
+fn risky(x: int): int {
+    if (x < 0) {
+        throw "negative"
+    }
+    return x * 2
+}
+
+// Same-function try/catch
+fn safe_double(x: int): int {
+    try {
+        return risky(x)
+    } catch (e) {
+        return -1
+    }
+}
+
+print(safe_double(5))    // 10
+print(safe_double(-3))   // -1
+print(safe_double(0))    // 0
