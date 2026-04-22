@@ -1185,6 +1185,45 @@ throw_check_done:
                 cf->call_args_count = 0;
                 return;
             }
+            // Tagged arithmetic: CALL_C(xr_jit_rt_add/sub/mul/div/mod, tag_enc)
+            // call_args[0]=lhs, call_args[1]=rhs.  Map to xrt_add/sub/mul/div/mod.
+            const char *arith_name = NULL;
+            if (fn_ptr == (void *)xr_jit_rt_add) arith_name = "xrt_add";
+            else if (fn_ptr == (void *)xr_jit_rt_sub) arith_name = "xrt_sub";
+            else if (fn_ptr == (void *)xr_jit_rt_mul) arith_name = "xrt_mul";
+            else if (fn_ptr == (void *)xr_jit_rt_div) arith_name = "xrt_div";
+            else if (fn_ptr == (void *)xr_jit_rt_mod) arith_name = "xrt_mod";
+            if (arith_name) {
+                uint32_t dst_idx = XIR_REF_INDEX(ins->dst);
+                uint8_t dst_type = (dst_idx < func->nvreg)
+                    ? func->vregs[dst_idx].rep : XR_REP_TAGGED;
+                bool dst_is_int = (dst_type == XR_REP_I64);
+                bool dst_is_float = (dst_type == XR_REP_F64);
+                if (dst_is_int)
+                    xcgen_buf_printf(b, "    v%u = xrt_unbox_int(%s(",
+                                     dst_idx, arith_name);
+                else if (dst_is_float)
+                    xcgen_buf_printf(b, "    v%u = xrt_unbox_float(%s(",
+                                     dst_idx, arith_name);
+                else
+                    xcgen_buf_printf(b, "    v%u = %s(", dst_idx, arith_name);
+                if (cf->call_args_count > 0)
+                    emit_ref_as_tagged(b, func, cf->call_args[0]);
+                else
+                    xcgen_buf_printf(b, "(%s){0}", tagged_type);
+                xcgen_buf_puts(b, ", ");
+                if (cf->call_args_count > 1)
+                    emit_ref_as_tagged(b, func, cf->call_args[1]);
+                else
+                    xcgen_buf_printf(b, "(%s){0}", tagged_type);
+                if (dst_is_int || dst_is_float)
+                    xcgen_buf_puts(b, "));\n");
+                else
+                    xcgen_buf_puts(b, ");\n");
+                cf->needs_runtime = true;
+                cf->call_args_count = 0;
+                return;
+            }
         }
     }
     // Default: suppress unknown CALL_C targets (dead code in AOT)

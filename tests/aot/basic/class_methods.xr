@@ -1,0 +1,37 @@
+// AOT test: class method calls within methods
+class Vec2 {
+    x: float
+    y: float
+
+    constructor(x: float, y: float) {
+        this.x = x
+        this.y = y
+    }
+
+    length_sq(): float {
+        return this.x * this.x + this.y * this.y
+    }
+
+    dot(other: Vec2): float {
+        return this.x * other.x + this.y * other.y
+    }
+
+    scale(factor: float): Vec2 {
+        return Vec2(this.x * factor, this.y * factor)
+    }
+
+    add(other: Vec2): Vec2 {
+        return Vec2(this.x + other.x, this.y + other.y)
+    }
+}
+
+let a = Vec2(3.0, 4.0)
+let b = Vec2(1.0, 2.0)
+print(a.length_sq())     // 25.0
+print(a.dot(b))          // 11.0
+let c = a.scale(2.0)
+print(c.x)               // 6.0
+print(c.y)               // 8.0
+let d = a.add(b)
+print(d.x)               // 4.0
+print(d.y)               // 6.0

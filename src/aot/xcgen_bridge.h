@@ -32,6 +32,14 @@ XR_FUNC int64_t xr_jit_throw(void *, int64_t);
 XR_FUNC int64_t xr_jit_tarray_get(void *, int64_t);
 XR_FUNC int64_t xr_jit_tarray_set(void *, int64_t);
 
+/* ========== Tagged Arithmetic (runtime fallback) ========== */
+
+XR_FUNC int64_t xr_jit_rt_add(void *, int64_t);
+XR_FUNC int64_t xr_jit_rt_sub(void *, int64_t);
+XR_FUNC int64_t xr_jit_rt_mul(void *, int64_t);
+XR_FUNC int64_t xr_jit_rt_div(void *, int64_t);
+XR_FUNC int64_t xr_jit_rt_mod(void *, int64_t);
+
 /* ========== Shared Variables (GETSHARED/SETSHARED) ========== */
 
 XR_FUNC int64_t xr_jit_get_shared(void *, int64_t);

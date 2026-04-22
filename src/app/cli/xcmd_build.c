@@ -531,7 +531,7 @@ static int cmd_build_native(const char *input, const char *output,
         XrProto *p = aot_protos[i];
         const char *name = p->name ? XR_STRING_CHARS(p->name) : "__module_init";
 
-        XirFunc *xfunc = xir_build_from_proto_aot(p, shared_protos, nshared);
+        XirFunc *xfunc = xir_build_from_proto_aot(p, shared_protos, nshared, X);
         if (!xfunc) {
             printf("  [C] %s → skip (XIR build failed)\n", name);
             continue;

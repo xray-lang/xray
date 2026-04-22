@@ -995,7 +995,9 @@ static void translate_binop(XirBuilder *b, XirBlock *blk,
                 int64_t tag_enc = ((int64_t)btag << 8) | ctag;
                 XirRef fn_ref = xir_const_ptr(b->func, (void *)fn);
                 XirRef enc_ref = xir_const_i64(b->func, tag_enc);
-                XirRef result = xir_emit(b->func, blk, XIR_CALL_C, XR_REP_I64,
+                // AOT: tagged arithmetic returns XrtValue (struct), not raw i64
+                uint8_t rt_rep = b->aot_mode ? XR_REP_TAGGED : XR_REP_I64;
+                XirRef result = xir_emit(b->func, blk, XIR_CALL_C, rt_rep,
                                          fn_ref, enc_ref);
                 blk->ins[blk->nins - 1].flags |= XIR_FLAG_SIDE_EFFECT;
                 builder_bind_call_args(b, result, bo_args, 2);
@@ -2709,7 +2711,8 @@ XirFunc *xir_build_from_proto_jit(XrProto *proto,
 }
 
 XirFunc *xir_build_from_proto_aot(XrProto *proto,
-                                   XrProto **shared_protos, int nshared) {
+                                   XrProto **shared_protos, int nshared,
+                                   XrayIsolate *isolate) {
     XR_DCHECK(proto != NULL, "xir_build_from_proto_aot: proto is NULL");
-    return build_from_proto_impl(proto, shared_protos, nshared, NULL, true, NULL);
+    return build_from_proto_impl(proto, shared_protos, nshared, NULL, true, isolate);
 }

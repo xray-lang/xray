@@ -542,6 +542,33 @@ static void compute_used_vregs(XirFunc *func, bool *reachable, bool *used) {
                         used[vi] = true; changed = true;
                     }
                 }
+
+                // Propagate liveness through call_arg_pool: when a CALL
+                // dst is used, mark all pool-bound arg vregs as used.
+                // builder_bind_call_args stores args in vreg's call_arg pool
+                // (not STORE_CORO), so the seed pass above doesn't see them.
+                bool is_call = (ins->op == XIR_CALL_KNOWN ||
+                                ins->op == XIR_CALL_KNOWN_REG ||
+                                ins->op == XIR_CALL_SELF_DIRECT ||
+                                ins->op == XIR_CALL_DIRECT ||
+                                ins->op == XIR_CALL_C ||
+                                ins->op == XIR_CALL_C_LEAF);
+                if (is_call && func->call_arg_pool) {
+                    XirVReg *dv = &func->vregs[dvi];
+                    uint32_t ca_start = dv->call_arg_start;
+                    uint16_t ca_n     = dv->call_nargs;
+                    if (ca_start + ca_n <= func->call_arg_pool_used) {
+                        for (uint16_t ci = 0; ci < ca_n; ci++) {
+                            XirRef ca_ref = func->call_arg_pool[ca_start + ci];
+                            if (xir_ref_is_vreg(ca_ref)) {
+                                uint32_t cvi = XIR_REF_INDEX(ca_ref);
+                                if (cvi < func->nvreg && !used[cvi]) {
+                                    used[cvi] = true; changed = true;
+                                }
+                            }
+                        }
+                    }
+                }
             }
         }
     }
