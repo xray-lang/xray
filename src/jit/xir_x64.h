@@ -251,6 +251,9 @@ XR_FUNC void x64_and_rr(X64Buf *buf, X64Reg dst, X64Reg src);
 /* OR r64, r64:  REX.W 09 /r */
 XR_FUNC void x64_or_rr(X64Buf *buf, X64Reg dst, X64Reg src);
 
+/* OR r64, imm32:  REX.W 81 /1 id  or  REX.W 83 /1 ib */
+XR_FUNC void x64_or_ri(X64Buf *buf, X64Reg dst, int32_t imm);
+
 /* XOR r64, r64:  REX.W 31 /r */
 XR_FUNC void x64_xor_rr(X64Buf *buf, X64Reg dst, X64Reg src);
 
@@ -259,6 +262,9 @@ XR_FUNC void x64_not_r(X64Buf *buf, X64Reg dst);
 
 /* SHL r64, cl:  REX.W D3 /4 */
 XR_FUNC void x64_shl_rcl(X64Buf *buf, X64Reg dst);
+
+/* SHL r64, imm8:  REX.W C1 /4 ib */
+XR_FUNC void x64_shl_ri(X64Buf *buf, X64Reg dst, uint8_t imm);
 
 /* SHR r64, cl:  REX.W D3 /5 */
 XR_FUNC void x64_shr_rcl(X64Buf *buf, X64Reg dst);
@@ -299,6 +305,30 @@ XR_FUNC void x64_lea(X64Buf *buf, X64Reg dst, X64Reg base, int32_t disp);
 
 /* MOVSX r64, dword [base + disp]:  REX.W 63 /r  (MOVSXD) */
 XR_FUNC void x64_movsxd_rm(X64Buf *buf, X64Reg dst, X64Reg base, int32_t disp);
+
+/* MOV r32, [base + disp]:  8B /r  (32-bit load, zero-extends to 64) */
+XR_FUNC void x64_mov_rm32(X64Buf *buf, X64Reg dst, X64Reg base, int32_t disp);
+
+/* MOV [base + disp], r32:  89 /r  (32-bit store) */
+XR_FUNC void x64_mov_mr32(X64Buf *buf, X64Reg base, int32_t disp, X64Reg src);
+
+/* MOVZX r64, byte [base + disp]:  REX.W 0F B6 /r  (8-bit zero-extend) */
+XR_FUNC void x64_movzx_rm8(X64Buf *buf, X64Reg dst, X64Reg base, int32_t disp);
+
+/* MOVSX r64, byte [base + disp]:  REX.W 0F BE /r  (8-bit sign-extend) */
+XR_FUNC void x64_movsx_rm8(X64Buf *buf, X64Reg dst, X64Reg base, int32_t disp);
+
+/* MOV [base + disp], r8:  REX? 88 /r  (8-bit store) */
+XR_FUNC void x64_mov_mr8(X64Buf *buf, X64Reg base, int32_t disp, X64Reg src);
+
+/* MOVZX r64, word [base + disp]:  REX.W 0F B7 /r  (16-bit zero-extend) */
+XR_FUNC void x64_movzx_rm16(X64Buf *buf, X64Reg dst, X64Reg base, int32_t disp);
+
+/* MOVSX r64, word [base + disp]:  REX.W 0F BF /r  (16-bit sign-extend) */
+XR_FUNC void x64_movsx_rm16(X64Buf *buf, X64Reg dst, X64Reg base, int32_t disp);
+
+/* MOV [base + disp], r16:  66 REX? 89 /r  (16-bit store) */
+XR_FUNC void x64_mov_mr16(X64Buf *buf, X64Reg base, int32_t disp, X64Reg src);
 
 /* CMOVcc r64, r64:  REX.W 0F 4x /r */
 XR_FUNC void x64_cmov_rr(X64Buf *buf, X64Cond cc, X64Reg dst, X64Reg src);

@@ -25,17 +25,15 @@
 
 /* ========== Constants ========== */
 
-#define X64_MAX_PHYS_REGS   13  // allocatable GP registers (see xir_target_x64.c)
+#define X64_MAX_PHYS_REGS   11  // allocatable GP registers (see xir_target_x64.c)
 #define X64_MAX_FP_REGS     16
 #define X64_MAX_VREGS       4096
 #define X64_SCRATCH_REG     X64_R11
 #define X64_SCRATCH_XMM     15       // xmm15 as FP scratch
 #define X64_CORO_REG        X64_R15
+#define X64_JIT_CTX_REG     X64_R14  // jit_ctx pointer (XrJitScratch*)
 #define X64_SPILL_BASE      64   // must match xir_target_x64.c
 #define X64_JIT_FRAME_BASE  64
-
-/* jit_ctx field offsets (same as ARM64: struct XrCoroutine layout) */
-#define X64_JIT_CTX_REG     X64_R15  // coroutine pointer
 
 /* ========== Branch Patch ========== */
 

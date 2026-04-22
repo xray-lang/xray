@@ -119,6 +119,21 @@ void x64_or_rr(X64Buf *buf, X64Reg dst, X64Reg src) {
     x64_modrm_rr(buf, src, dst);
 }
 
+/* OR r64, imm32:  REX.W 81 /1 id  or  REX.W 83 /1 ib */
+void x64_or_ri(X64Buf *buf, X64Reg dst, int32_t imm) {
+    XR_DCHECK(buf != NULL, "x64_or_ri: NULL buf");
+    x64_rex(buf, true, false, false, dst > 7);
+    if (imm >= -128 && imm <= 127) {
+        x64_emit8(buf, 0x83);
+        x64_modrm(buf, 0x3, 1, (uint8_t)dst);
+        x64_emit8(buf, (uint8_t)(int8_t)imm);
+    } else {
+        x64_emit8(buf, 0x81);
+        x64_modrm(buf, 0x3, 1, (uint8_t)dst);
+        x64_emit32(buf, (uint32_t)imm);
+    }
+}
+
 /* XOR r64, r64:  REX.W 31 /r */
 void x64_xor_rr(X64Buf *buf, X64Reg dst, X64Reg src) {
     XR_DCHECK(buf != NULL, "x64_xor_rr: NULL buf");
@@ -141,6 +156,15 @@ void x64_shl_rcl(X64Buf *buf, X64Reg dst) {
     x64_rex(buf, true, false, false, dst > 7);
     x64_emit8(buf, 0xD3);
     x64_modrm(buf, 0x3, 4, (uint8_t)dst);
+}
+
+/* SHL r64, imm8:  REX.W C1 /4 ib */
+void x64_shl_ri(X64Buf *buf, X64Reg dst, uint8_t imm) {
+    XR_DCHECK(buf != NULL, "x64_shl_ri: NULL buf");
+    x64_rex(buf, true, false, false, dst > 7);
+    x64_emit8(buf, 0xC1);
+    x64_modrm(buf, 0x3, 4, (uint8_t)dst);
+    x64_emit8(buf, imm);
 }
 
 /* SHR r64, cl:  REX.W D3 /5 */
@@ -249,6 +273,80 @@ void x64_movsxd_rm(X64Buf *buf, X64Reg dst, X64Reg base, int32_t disp) {
     x64_rex(buf, true, dst > 7, false, base > 7);
     x64_emit8(buf, 0x63);
     x64_modrm_mem(buf, dst, base, disp);
+}
+
+/* MOV r32, [base + disp]:  8B /r  (no REX.W → 32-bit, zero-extends) */
+void x64_mov_rm32(X64Buf *buf, X64Reg dst, X64Reg base, int32_t disp) {
+    XR_DCHECK(buf != NULL, "x64_mov_rm32: NULL buf");
+    if (dst > 7 || base > 7)
+        x64_rex(buf, false, dst > 7, false, base > 7);
+    x64_emit8(buf, 0x8B);
+    x64_modrm_mem(buf, dst, base, disp);
+}
+
+/* MOV [base + disp], r32:  89 /r  (no REX.W → 32-bit store) */
+void x64_mov_mr32(X64Buf *buf, X64Reg base, int32_t disp, X64Reg src) {
+    XR_DCHECK(buf != NULL, "x64_mov_mr32: NULL buf");
+    if (src > 7 || base > 7)
+        x64_rex(buf, false, src > 7, false, base > 7);
+    x64_emit8(buf, 0x89);
+    x64_modrm_mem(buf, src, base, disp);
+}
+
+/* MOVZX r64, byte [base + disp]:  REX.W 0F B6 /r */
+void x64_movzx_rm8(X64Buf *buf, X64Reg dst, X64Reg base, int32_t disp) {
+    XR_DCHECK(buf != NULL, "x64_movzx_rm8: NULL buf");
+    x64_rex(buf, true, dst > 7, false, base > 7);
+    x64_emit8(buf, 0x0F);
+    x64_emit8(buf, 0xB6);
+    x64_modrm_mem(buf, dst, base, disp);
+}
+
+/* MOVSX r64, byte [base + disp]:  REX.W 0F BE /r */
+void x64_movsx_rm8(X64Buf *buf, X64Reg dst, X64Reg base, int32_t disp) {
+    XR_DCHECK(buf != NULL, "x64_movsx_rm8: NULL buf");
+    x64_rex(buf, true, dst > 7, false, base > 7);
+    x64_emit8(buf, 0x0F);
+    x64_emit8(buf, 0xBE);
+    x64_modrm_mem(buf, dst, base, disp);
+}
+
+/* MOV [base + disp], r8:  REX? 88 /r */
+void x64_mov_mr8(X64Buf *buf, X64Reg base, int32_t disp, X64Reg src) {
+    XR_DCHECK(buf != NULL, "x64_mov_mr8: NULL buf");
+    /* Need REX for r8-r15 OR to access SPL/BPL/SIL/DIL (regs 4-7) */
+    if (src > 7 || src >= 4 || base > 7)
+        x64_rex(buf, false, src > 7, false, base > 7);
+    x64_emit8(buf, 0x88);
+    x64_modrm_mem(buf, src, base, disp);
+}
+
+/* MOVZX r64, word [base + disp]:  REX.W 0F B7 /r */
+void x64_movzx_rm16(X64Buf *buf, X64Reg dst, X64Reg base, int32_t disp) {
+    XR_DCHECK(buf != NULL, "x64_movzx_rm16: NULL buf");
+    x64_rex(buf, true, dst > 7, false, base > 7);
+    x64_emit8(buf, 0x0F);
+    x64_emit8(buf, 0xB7);
+    x64_modrm_mem(buf, dst, base, disp);
+}
+
+/* MOVSX r64, word [base + disp]:  REX.W 0F BF /r */
+void x64_movsx_rm16(X64Buf *buf, X64Reg dst, X64Reg base, int32_t disp) {
+    XR_DCHECK(buf != NULL, "x64_movsx_rm16: NULL buf");
+    x64_rex(buf, true, dst > 7, false, base > 7);
+    x64_emit8(buf, 0x0F);
+    x64_emit8(buf, 0xBF);
+    x64_modrm_mem(buf, dst, base, disp);
+}
+
+/* MOV [base + disp], r16:  66 REX? 89 /r */
+void x64_mov_mr16(X64Buf *buf, X64Reg base, int32_t disp, X64Reg src) {
+    XR_DCHECK(buf != NULL, "x64_mov_mr16: NULL buf");
+    x64_emit8(buf, 0x66);  /* operand-size override prefix */
+    if (src > 7 || base > 7)
+        x64_rex(buf, false, src > 7, false, base > 7);
+    x64_emit8(buf, 0x89);
+    x64_modrm_mem(buf, src, base, disp);
 }
 
 /* CMOVcc r64, r64:  REX.W 0F 4x /r */
