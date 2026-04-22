@@ -578,6 +578,20 @@ void xir_pass_sccp(XirFunc *func) {
     ctx.reachable[0] = true;
     cfg_push(&ctx.cfg, 0, 0);  // sentinel: process entry's body
 
+    /* Exception handler (catch) blocks are reachable via longjmp —
+     * not through normal CFG edges.  Seed them now so the compaction
+     * phase does not eliminate them. */
+    for (uint32_t bi = 0; bi < func->nblk; bi++) {
+        XirBlock *blk = func->blocks[bi];
+        if (blk->exception_handler) {
+            uint32_t eh_bi = block_index(func, blk->exception_handler);
+            if (eh_bi < func->nblk && !ctx.reachable[eh_bi]) {
+                ctx.reachable[eh_bi] = true;
+                cfg_push(&ctx.cfg, bi, eh_bi);
+            }
+        }
+    }
+
     /* Main driver: alternately drain both worklists until both are
      * empty.  Order does not matter for correctness. */
     while (ctx.cfg.len > 0 || ctx.ssa.len > 0) {

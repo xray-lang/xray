@@ -655,13 +655,34 @@ static void emit_call_c(XcgenBuf *b, XirFunc *func, XirIns *ins,
             }
 
             // Throw: CALL_C(xr_jit_throw, exception_value)
-            // In AOT, store exception value to xrt_exception local
-            // Control flow (goto catch) is already handled by builder
+            // Same-function throw: store to local; goto catch handled by terminator.
+            // Cross-function throw: use xrt_throw_exc() for longjmp propagation.
             if (fn_ptr == (void *)xr_jit_throw) {
-                xcgen_buf_puts(b, "    xrt_exception = ");
-                emit_ref_as_tagged(b, func, ins->args[1]);
-                xcgen_buf_puts(b, ";\n");
-                cf->needs_exception = true;
+                // Find the enclosing block to check if we have a local catch
+                XirIns *throw_ins = ins;
+                bool has_local_catch = false;
+                for (uint32_t tbi = 0; tbi < func->nblk; tbi++) {
+                    XirBlock *tblk = func->blocks[tbi];
+                    for (uint32_t ti = 0; ti < tblk->nins; ti++) {
+                        if (&tblk->ins[ti] == throw_ins) {
+                            has_local_catch = (tblk->exception_handler != NULL);
+                            goto throw_check_done;
+                        }
+                    }
+                }
+throw_check_done:
+                if (has_local_catch) {
+                    // Same-function: set local, goto is emitted by terminator
+                    xcgen_buf_puts(b, "    xrt_exception = ");
+                    emit_ref_as_tagged(b, func, ins->args[1]);
+                    xcgen_buf_puts(b, ";\n");
+                    cf->needs_exception = true;
+                } else {
+                    // Cross-function: longjmp to caller's catch frame
+                    xcgen_buf_puts(b, "    xrt_throw_exc(");
+                    emit_ref_as_tagged(b, func, ins->args[1]);
+                    xcgen_buf_puts(b, ");\n");
+                }
                 cf->needs_runtime = true;
                 cf->call_args_count = 0;
                 return;
@@ -1058,8 +1079,20 @@ static void emit_call_c(XcgenBuf *b, XirFunc *func, XirIns *ins,
                 if (xcg_resolve_const_i64(func, ins->args[1], &shared_idx) &&
                     shared_idx >= 0) {
                     uint32_t dst_idx = XIR_REF_INDEX(ins->dst);
-                    xcgen_buf_printf(b, "    v%u = xrt_shared[%d];\n",
-                                     dst_idx, (int)shared_idx);
+                    uint8_t dst_type = (dst_idx < func->nvreg)
+                                       ? func->vregs[dst_idx].rep : XR_REP_TAGGED;
+                    bool dst_tagged = (dst_type == XR_REP_STR ||
+                                       dst_type == XR_REP_PTR ||
+                                       dst_type == XR_REP_TAGGED);
+                    if (dst_tagged) {
+                        xcgen_buf_printf(b, "    v%u = xrt_shared[%d];\n",
+                                         dst_idx, (int)shared_idx);
+                    } else {
+                        // Native-typed dst: shared var holds a closure; AOT
+                        // resolves calls by name, so just note the index.
+                        xcgen_buf_printf(b, "    /* GETSHARED[%d] → v%u (native, elided) */\n",
+                                         (int)shared_idx, dst_idx);
+                    }
                     // Track max shared index for array sizing
                     XcgenCompilation *comp = mod->comp;
                     XR_DCHECK(comp != NULL, "emit_call_c GETSHARED: NULL comp");

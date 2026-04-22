@@ -365,9 +365,9 @@ static void compute_reachable(XirFunc *func, bool *reachable) {
         XirBlock *blk = func->blocks[bi];
 
         // Check terminator targets (s1=jump/true, s2=false branch)
-        // Use block->id for O(1) index lookup instead of O(n) pointer scan
-        XirBlock *targets[2] = { blk->s1, blk->s2 };
-        for (int t = 0; t < 2; t++) {
+        // and exception_handler (catch block reachable via longjmp).
+        XirBlock *targets[3] = { blk->s1, blk->s2, blk->exception_handler };
+        for (int t = 0; t < 3; t++) {
             if (!targets[t]) continue;
             uint32_t tid = targets[t]->id;
             if (tid < func->nblk && !reachable[tid]) {
@@ -833,23 +833,50 @@ static void xcgen_compile_function_body(XcgenModule *mod, XcgenFunc *cf) {
         }
     }
 
-    // Exception handling local
-    if (cf->needs_exception)
-        xcgen_buf_printf(&locals, "    %s xrt_exception = {0};\n", tagged_type);
-
-    if (locals.len > 0)
-        xcgen_buf_puts(&locals, "\n");
+    // Exception locals are emitted after Phase 2 (needs_exception may be set there)
 
     // --- Phase 2: stmts buffer ---
     // Emit basic blocks (skip unreachable) into a separate stmts buffer.
     XcgenBuf stmts;
     xcgen_buf_init(&stmts);
 
-    // ARC mode: no shadow stack needed.
-    // Object lifetime is managed by retain/release inserted by XIR_RETAIN/XIR_RELEASE.
+    // Exception frame tracking: detect try region boundaries.
+    // cur_exc_handler tracks which catch block the current try region targets.
+    // When it transitions NULL→non-NULL we push a setjmp frame;
+    // when it transitions non-NULL→NULL (or to different handler) we pop.
+    XirBlock *cur_exc_handler = NULL;
+    int exc_frame_idx = 0;  // counter for unique frame variable names
+
     for (uint32_t bi = 0; bi < func->nblk; bi++) {
         if (!reachable[bi]) continue;
         XirBlock *blk = func->blocks[bi];
+
+        // Exception frame transitions: detect try region entry/exit.
+        // A block with exception_handler != cur_exc_handler means we
+        // crossed a try boundary. Skip catch blocks themselves (they
+        // read the exception but are not inside the try region).
+        XirBlock *blk_eh = blk->exception_handler;
+        if (blk_eh != cur_exc_handler) {
+            if (cur_exc_handler != NULL) {
+                // Exiting previous try region: pop exception frame
+                xcgen_buf_printf(&stmts, "    xrt_exc_top = _ef%d.prev; /* end try */\n",
+                                 exc_frame_idx - 1);
+            }
+            if (blk_eh != NULL) {
+                // Entering new try region: push setjmp frame
+                xcgen_buf_printf(&stmts, "    _ef%d.prev = xrt_exc_top;\n", exc_frame_idx);
+                xcgen_buf_printf(&stmts, "    xrt_exc_top = &_ef%d;\n", exc_frame_idx);
+                xcgen_buf_printf(&stmts, "    if (setjmp(_ef%d.buf) != 0) {\n", exc_frame_idx);
+                xcgen_buf_printf(&stmts, "        xrt_exception = _ef%d.exception;\n",
+                                 exc_frame_idx);
+                xcgen_buf_printf(&stmts, "        xrt_exc_top = _ef%d.prev;\n", exc_frame_idx);
+                xcgen_buf_printf(&stmts, "        goto L%u;\n", blk_eh->id);
+                xcgen_buf_puts(&stmts, "    }\n");
+                exc_frame_idx++;
+                cf->needs_exception = true;
+            }
+            cur_exc_handler = blk_eh;
+        }
 
         // Label
         xcgen_buf_printf(&stmts, "L%u:", blk->id);
@@ -877,6 +904,20 @@ static void xcgen_compile_function_body(XcgenModule *mod, XcgenFunc *cf) {
         // Terminator
         xcg_emit_terminator(&stmts, func, blk, cf->c_name, cf);
     }
+    // Pop any remaining exception frame
+    if (cur_exc_handler != NULL) {
+        xcgen_buf_printf(&stmts, "    xrt_exc_top = _ef%d.prev; /* end try */\n",
+                         exc_frame_idx - 1);
+    }
+
+    // Emit exception locals now that needs_exception and exc_frame_idx are known
+    if (cf->needs_exception) {
+        xcgen_buf_printf(&locals, "    %s xrt_exception = {0};\n", tagged_type);
+        for (int ei = 0; ei < exc_frame_idx; ei++)
+            xcgen_buf_printf(&locals, "    XrtExcFrame _ef%d;\n", ei);
+    }
+    if (locals.len > 0)
+        xcgen_buf_puts(&locals, "\n");
 
     // Suppress unused label warnings
     xcgen_buf_puts(&stmts, "    (void)0;\n");

@@ -32,7 +32,8 @@
 #include "xrt_arith.h"   // L1: add/sub/mul/div/mod/neg, eq/lt/le, print
 #include "xrt_coll.h"    // L2: Array, Map, StringBuilder, Closure, index ops
 #include "xrt_method.h"  // L3: method_0/1/2, getprop, tostring, symbol IDs
-#include "xrt_compat.h"  // L4: XrValue alias, XR_TAG_*, XR_FROM_*, XrtContext
-#include "xrt_module.h"  // L5: module export tables, init sequencing
+#include "xrt_compat.h"    // L4: XrValue alias, XR_TAG_*, XR_FROM_*, XrtContext
+#include "xrt_module.h"    // L5: module export tables, init sequencing
+#include "xrt_exception.h" // L6: setjmp/longjmp exception handling
 
 #endif // XRT_H
