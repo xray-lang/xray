@@ -189,6 +189,27 @@ XcgenModule *xcgen_compilation_add_module(XcgenCompilation *comp,
     return mod;
 }
 
+void xcgen_module_add_export(XcgenModule *mod, const char *name,
+                              int shared_index, bool is_const) {
+    XR_DCHECK(mod != NULL, "xcgen_module_add_export: NULL mod");
+    if (!name) return;
+
+    // Grow exports array if needed
+    if (mod->nexports >= mod->exports_cap) {
+        int new_cap = mod->exports_cap > 0 ? mod->exports_cap * 2 : 8;
+        XcgenExport *tmp = (XcgenExport *)xr_realloc(
+            mod->exports, (size_t)new_cap * sizeof(XcgenExport));
+        if (!tmp) return;
+        mod->exports = tmp;
+        mod->exports_cap = new_cap;
+    }
+    XcgenExport *e = &mod->exports[mod->nexports++];
+    e->name = xr_strdup(name);  // copy: source may be on GC heap
+    e->c_var = NULL;  // populated during emission
+    e->shared_index = shared_index;
+    e->is_const = is_const;
+}
+
 void xcgen_register_proto(XcgenCompilation *comp, void *proto_ptr,
                            const char *c_name) {
     XR_DCHECK(comp != NULL, "xcgen_register_proto: NULL comp");
@@ -253,6 +274,8 @@ void xcgen_module_free(XcgenModule *mod) {
         xr_free(mod->funcs[i].call_args);
     }
     xr_free(mod->funcs);
+    for (int i = 0; i < mod->nexports; i++)
+        xr_free((void *)mod->exports[i].name);
     xr_free(mod->exports);
     xr_free(mod);
 }
@@ -1206,6 +1229,18 @@ char *xcgen_emit_source(XcgenCompilation *comp) {
         if (any_needs_runtime) break;
     }
 
+    // Helper: sanitize module name for C identifier (replace non-alnum with '_')
+    #define SANITIZE_IDENT(dst, src, cap) do { \
+        const char *_s = (src); \
+        int _k; \
+        for (_k = 0; _s[_k] && _k < (cap) - 1; _k++) \
+            (dst)[_k] = ((_s[_k] >= 'a' && _s[_k] <= 'z') || \
+                         (_s[_k] >= 'A' && _s[_k] <= 'Z') || \
+                         (_s[_k] >= '0' && _s[_k] <= '9') || \
+                         _s[_k] == '_') ? _s[_k] : '_'; \
+        (dst)[_k] = '\0'; \
+    } while(0)
+
     // Headers
     xcgen_buf_puts(&out,
         "#include <stdio.h>\n"
@@ -1243,6 +1278,56 @@ char *xcgen_emit_source(XcgenCompilation *comp) {
     // Emit each module's code
     for (int m = 0; m < comp->nmodules; m++)
         xcgen_emit_module_source(&out, comp->modules[m]);
+
+    // Emit export tables (one per module that has exports)
+    bool has_any_exports = false;
+    for (int m = 0; m < comp->nmodules; m++) {
+        XcgenModule *mod = comp->modules[m];
+        if (mod->nexports <= 0) continue;
+        has_any_exports = true;
+
+        const char *raw_name = mod->module_name ? mod->module_name : "xr_main";
+        char c_ident[128];
+        SANITIZE_IDENT(c_ident, raw_name, 128);
+
+        xcgen_buf_printf(&out, "\n/* --- Module exports: %s --- */\n",
+                         mod->module_name ? mod->module_name : "main");
+        xcgen_buf_printf(&out, "static XrtModuleExport %s__exports[] = {\n", c_ident);
+        for (int e = 0; e < mod->nexports; e++) {
+            XcgenExport *ex = &mod->exports[e];
+            xcgen_buf_printf(&out, "    {\"%s\", &xrt_shared[%d], %s},\n",
+                             ex->name, ex->shared_index,
+                             ex->is_const ? "XRT_EXPORT_CONST" : "XRT_EXPORT_LET");
+        }
+        xcgen_buf_puts(&out, "};\n");
+    }
+
+    // Emit module descriptor table (if any module has exports)
+    if (has_any_exports) {
+        xcgen_buf_printf(&out, "\nstatic XrtModule xrt_modules[] = {\n");
+        for (int m = 0; m < comp->nmodules; m++) {
+            XcgenModule *mod = comp->modules[m];
+            const char *mname = mod->module_name ? mod->module_name : "main";
+
+            const char *raw = mod->module_name ? mod->module_name : "xr_main";
+            char cid[128];
+            SANITIZE_IDENT(cid, raw, 128);
+
+            if (mod->nexports > 0) {
+                xcgen_buf_printf(&out,
+                    "    {\"%s\", \"%s\", NULL, %s__exports, %d, 0},\n",
+                    mname,
+                    mod->module_path ? mod->module_path : "",
+                    cid, mod->nexports);
+            } else {
+                xcgen_buf_printf(&out,
+                    "    {\"%s\", \"%s\", NULL, NULL, 0, 0},\n",
+                    mname,
+                    mod->module_path ? mod->module_path : "");
+            }
+        }
+        xcgen_buf_puts(&out, "};\n");
+    }
 
     // Ownership transfers to caller
     return out.data;

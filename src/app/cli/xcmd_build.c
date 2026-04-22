@@ -336,6 +336,52 @@ static int build_shared_proto_map(XrProto *top, XrProto **shared_protos, int max
     return max_idx;
 }
 
+// Scan bytecodes for OP_EXPORT and correlate with OP_SETSHARED to populate exports.
+// Pattern: OP_SETSHARED R[A], shared_idx; ... OP_EXPORT K[name_idx], R[A], is_const
+static void collect_exports(XrProto *proto, XcgenModule *mod) {
+    if (!proto || !mod) return;
+    uint32_t code_count = (uint32_t)proto->code.count;
+    const XrInstruction *code = (const XrInstruction *)proto->code.data;
+
+    for (uint32_t pc = 0; pc < code_count; pc++) {
+        XrInstruction inst = code[pc];
+        if (GET_OPCODE(inst) != OP_EXPORT) continue;
+
+        int name_idx = GETARG_A(inst);
+        int value_reg = GETARG_B(inst);
+        int is_const = GETARG_C(inst);
+
+        // Get export name from constant pool
+        if (name_idx >= (int)VALUEARRAY_COUNT(&proto->constants)) continue;
+        XrValue name_val = VALUEARRAY_GET(&proto->constants, name_idx);
+        if (!XR_IS_STRING(name_val)) continue;
+        const char *export_name = XR_STRING_CHARS(XR_TO_STRING(name_val));
+
+        // Scan backwards for the shared_index, tracing through OP_MOVE chains.
+        // Patterns:
+        //   (a) OP_GETSHARED R[reg], idx → OP_EXPORT K[n], R[reg], c
+        //   (b) OP_SETSHARED R[reg], idx → OP_EXPORT K[n], R[reg], c
+        //   (c) OP_MOVE R[reg], R[src]   → trace src register
+        int shared_idx = -1;
+        int trace_reg = value_reg;
+        for (int bpc = (int)pc - 1; bpc >= 0 && shared_idx < 0; bpc--) {
+            XrInstruction prev = code[bpc];
+            OpCode prev_op = GET_OPCODE(prev);
+            if ((prev_op == OP_GETSHARED || prev_op == OP_SETSHARED) &&
+                GETARG_A(prev) == trace_reg) {
+                shared_idx = GETARG_Bx(prev) + proto->shared_offset;
+            } else if (prev_op == OP_MOVE && GETARG_A(prev) == trace_reg) {
+                // OP_MOVE R[A] = R[B] → trace to source register
+                trace_reg = GETARG_B(prev);
+            }
+        }
+
+        if (shared_idx >= 0) {
+            xcgen_module_add_export(mod, export_name, shared_idx, is_const != 0);
+        }
+    }
+}
+
 // Recursively collect AOT-eligible protos (bb_leaders required)
 // Untyped parameters are treated as tagged (XR_SLOT_ANY) — lower performance
 // but still faster than VM interpreter for complex function bodies.
@@ -435,6 +481,9 @@ static int cmd_build_native(const char *input, const char *output,
 
     // Add main module to compilation
     XcgenModule *mod = xcgen_compilation_add_module(comp, "main", input);
+
+    // Collect module-level exports (scan OP_EXPORT + OP_SETSHARED pairs)
+    collect_exports(proto, mod);
 
     // Allocate C name storage (dynamic, same count as aot_protos)
     char (*aot_c_names)[140] = (char (*)[140])xr_malloc(aot_count * 140);

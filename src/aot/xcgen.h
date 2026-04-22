@@ -112,6 +112,7 @@ typedef struct XcgenCompilation XcgenCompilation;
 typedef struct XcgenExport {
     const char *name;       // export name (e.g. "pi", "add")
     const char *c_var;      // C global variable name (e.g. "mod_math__pi")
+    int         shared_index; // index into xrt_shared[] array (-1 = named global)
     bool        is_const;   // true if const export
 } XcgenExport;
 
@@ -192,6 +193,10 @@ XR_FUNC char *xcgen_emit_source(XcgenCompilation *comp);
 // Compile a single XIR function into a module
 XR_FUNC XcgenFunc *xcgen_compile_func(XcgenModule *mod, XirFunc *xfunc,
                                        const char *c_name);
+
+// Register an export in a module's export table
+XR_FUNC void xcgen_module_add_export(XcgenModule *mod, const char *name,
+                                      int shared_index, bool is_const);
 
 // Free a single module (also called by xcgen_compilation_free)
 XR_FUNC void xcgen_module_free(XcgenModule *mod);
