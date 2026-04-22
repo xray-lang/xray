@@ -11,6 +11,7 @@
 #include "xisolate_api.h"
 #include "xisolate_internal.h"
 #include "../coro/xcoroutine.h"
+#include "../base/xlog.h"
 
 /* ========== Memory Subsystem ========== */
 
@@ -228,6 +229,54 @@ void xr_isolate_set_suppress_exception_print(XrayIsolate *X, bool suppress) {
     if (X) {
         X->suppress_exception_print = suppress;
     }
+}
+
+/* ========== Extension Type System ========== */
+
+uint8_t xr_alloc_extension_type(XrayIsolate *isolate, const char *name) {
+    if (!isolate) return 0;
+    uint8_t id = isolate->ext_type_next;
+    if (id >= XGC_MAX_TYPES) {
+        xr_log_warning("ext_type", "extension type slots exhausted (max %d)", XGC_MAX_TYPES);
+        return 0;
+    }
+    isolate->ext_type_next = id + 1;
+    isolate->ext_type_names[id] = name;
+    return id;
+}
+
+void xr_register_extension_destroy(XrayIsolate *isolate,
+                                   uint8_t type_id,
+                                   XrExtDestroyFn destroy_fn) {
+    if (!isolate || type_id >= XGC_MAX_TYPES) return;
+    isolate->ext_destroy_funcs[type_id] = (XrGCDestroyFn)destroy_fn;
+    isolate->ext_finalize_bitmap |= (1ULL << type_id);
+}
+
+void xr_register_extension_traverse(XrayIsolate *isolate,
+                                    uint8_t type_id,
+                                    XrExtTraverseFn traverse_fn) {
+    if (!isolate || type_id >= XGC_MAX_TYPES) return;
+    isolate->ext_traverse_funcs[type_id] = (void *)traverse_fn;
+    isolate->ext_has_refs_bitmap |= (1ULL << type_id);
+}
+
+uint64_t xr_isolate_get_ext_finalize_bitmap(XrayIsolate *isolate) {
+    return isolate ? isolate->ext_finalize_bitmap : 0;
+}
+
+uint64_t xr_isolate_get_ext_has_refs_bitmap(XrayIsolate *isolate) {
+    return isolate ? isolate->ext_has_refs_bitmap : 0;
+}
+
+XrExtDestroyFn xr_isolate_get_ext_destroy(XrayIsolate *isolate, uint8_t type_id) {
+    if (!isolate || type_id >= XGC_MAX_TYPES) return NULL;
+    return (XrExtDestroyFn)isolate->ext_destroy_funcs[type_id];
+}
+
+XrExtTraverseFn xr_isolate_get_ext_traverse(XrayIsolate *isolate, uint8_t type_id) {
+    if (!isolate || type_id >= XGC_MAX_TYPES) return NULL;
+    return (XrExtTraverseFn)isolate->ext_traverse_funcs[type_id];
 }
 
 /* ========== Thread Local API ========== */

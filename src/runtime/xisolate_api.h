@@ -113,6 +113,34 @@ XR_FUNC void xr_free_code(XrayIsolate *isolate, struct XrProto *proto);
 
 XR_FUNC void xr_runtime_error(XrayIsolate *isolate, const char *fmt, ...);
 
+/* ========== Extension Type System (for dlopen packages) ========== */
+
+struct XrGCHeader;  // forward declaration (full definition in xgc_header.h)
+
+// Callback typedefs (distinct from GC-internal types to avoid conflicts)
+typedef void (*XrExtDestroyFn)(struct XrGCHeader *obj, void *gc);
+typedef void (*XrExtTraverseFn)(void *gc, struct XrGCHeader *obj);
+
+// Allocate a dynamic GC type ID for an extension type.
+// Returns 0 on failure (all slots exhausted).
+XR_FUNC uint8_t xr_alloc_extension_type(XrayIsolate *isolate, const char *name);
+
+// Register destroy callback (also sets ext_finalize_bitmap).
+XR_FUNC void xr_register_extension_destroy(XrayIsolate *isolate,
+                                            uint8_t type_id,
+                                            XrExtDestroyFn destroy_fn);
+
+// Register traverse callback (also sets ext_has_refs_bitmap).
+XR_FUNC void xr_register_extension_traverse(XrayIsolate *isolate,
+                                             uint8_t type_id,
+                                             XrExtTraverseFn traverse_fn);
+
+// Accessors for GC code
+XR_FUNC uint64_t xr_isolate_get_ext_finalize_bitmap(XrayIsolate *isolate);
+XR_FUNC uint64_t xr_isolate_get_ext_has_refs_bitmap(XrayIsolate *isolate);
+XR_FUNC XrExtDestroyFn xr_isolate_get_ext_destroy(XrayIsolate *isolate, uint8_t type_id);
+XR_FUNC XrExtTraverseFn xr_isolate_get_ext_traverse(XrayIsolate *isolate, uint8_t type_id);
+
 /* ========== Thread Local API ========== */
 
 XR_FUNC XrayIsolate* xray_isolate_current(void);

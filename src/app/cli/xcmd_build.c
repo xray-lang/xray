@@ -360,8 +360,9 @@ static int cmd_build_native(const char *input, const char *output,
                             bool c_only, bool strip, const char *sysroot) {
     printf("[native] Building: %s (AOT + runtime)\n", input);
 
-    // Phase 1: Create bytecode bundle (separate isolate, freed immediately)
+    // Phase 1: Create bytecode bundle + collect module paths
     char *bc_source = NULL;
+    int bundle_module_count = 0;
     {
         XrayIsolate *Xb = cli_create_isolate();
         if (!Xb) { fprintf(stderr, "Error: failed to create isolate for bundling\n"); return 1; }
@@ -373,6 +374,19 @@ static int cmd_build_native(const char *input, const char *output,
             return 1;
         }
         bc_source = xr_bundle_to_c_source(bundle, "xr_app");
+        bundle_module_count = bundle->count;
+
+        // Log discovered modules
+        if (bundle->count > 1) {
+            printf("[native] Bundle: %d modules\n", bundle->count);
+            for (int i = 0; i < bundle->count; i++) {
+                printf("  [%d] %s%s\n", i, bundle->entries[i].path,
+                       (bundle->entry_path &&
+                        strcmp(bundle->entries[i].path, bundle->entry_path) == 0)
+                       ? " (entry)" : "");
+            }
+        }
+
         xr_bundle_free(bundle);
         xray_isolate_delete(Xb);
     }
@@ -516,7 +530,8 @@ static int cmd_build_native(const char *input, const char *output,
 
     xray_isolate_delete(X);
 
-    printf("AOT: %d/%d functions transpiled\n", ncompiled, aot_count);
+    printf("AOT: %d/%d functions transpiled (entry module, %d total modules in bundle)\n",
+           ncompiled, aot_count, bundle_module_count);
 
     // Assemble AOT C source (without main)
     char *aot_source = NULL;
