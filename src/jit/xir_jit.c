@@ -159,13 +159,15 @@ void xir_jit_destroy(XirJitState *jit) {
             "\n=== JIT Statistics ===\n"
             "Functions compiled: %u (Tier1: %u, Tier2: %u, Conservative: %u)\n"
             "Total compile time: %llums (avg %.1fms/func)\n"
-            "Code cache used: %lluKB\n"
-            "Deopts: %u  Permanently disabled: %u\n"
+            "Code cache: %lluKB used / %lluKB allocated (budget %lluMB)\n"
+            "Deopts: %u  Permanently disabled: %u  Evicted: %u\n"
             "======================\n",
             total, jit->stats_tier1, jit->stats_tier2, jit->stats_conservative,
             (unsigned long long)total_ms, avg_ms,
             (unsigned long long)(jit->stats_code_bytes / 1024),
-            jit->stats_deopt_total, jit->stats_disabled);
+            (unsigned long long)(jit->code_alloc.total_allocated / 1024),
+            (unsigned long long)(jit->code_alloc.budget / (1024 * 1024)),
+            jit->stats_deopt_total, jit->stats_disabled, jit->stats_evicted);
     }
 
     // Shutdown background thread before freeing code allocator
@@ -175,6 +177,7 @@ void xir_jit_destroy(XirJitState *jit) {
         jit->bg_queue = NULL;
     }
     xir_code_alloc_destroy(&jit->code_alloc);
+    xr_free(jit->compiled_protos);
     if (jit->tfa) {
         tfa_free(jit->tfa);
         xr_free(jit->tfa);
@@ -239,8 +242,44 @@ static XrProto **jit_build_shared_protos(XrProto *proto, int *out_nshared) {
     return mapping;
 }
 
+// Evict the coldest compiled proto (lowest exec_count) to free code cache space.
+// Clears jit_entry so the function falls back to interpreter; the code page
+// itself cannot be reclaimed (bump allocator) but future compilations can
+// reuse pages once all their occupants are evicted.
+static void xir_jit_evict_coldest(XirJitState *jit) {
+    if (!jit || jit->compiled_protos_count == 0) return;
+
+    uint32_t coldest_idx = 0;
+    uint32_t coldest_exec = UINT32_MAX;
+    for (uint32_t i = 0; i < jit->compiled_protos_count; i++) {
+        XrProto *p = jit->compiled_protos[i];
+        if (!p->jit_entry) continue;  // already evicted
+        uint32_t ec = atomic_load_explicit(&p->exec_count, memory_order_relaxed);
+        if (ec < coldest_exec) {
+            coldest_exec = ec;
+            coldest_idx = i;
+        }
+    }
+
+    XrProto *victim = jit->compiled_protos[coldest_idx];
+    if (victim->jit_entry) {
+        victim->jit_entry = NULL;
+        victim->jit_fast_entry = NULL;
+        victim->jit_resume_entry = NULL;
+        victim->jit_opt_level = 0;
+        // Reset call_count so it can re-trigger JIT later
+        atomic_store_explicit(&victim->call_count, 0, memory_order_relaxed);
+        jit->stats_evicted++;
+    }
+}
+
 bool xir_jit_try_compile(XirJitState *jit, XrProto *proto) {
     if (!jit || !jit->enabled || !proto) return false;
+
+    // Code cache pressure: evict cold protos before attempting new compilation
+    if (xir_code_alloc_over_budget(&jit->code_alloc)) {
+        xir_jit_evict_coldest(jit);
+    }
 
     static bool crash_handler_installed = false;
     if (!crash_handler_installed) {
@@ -455,7 +494,12 @@ bool xir_jit_try_compile(XirJitState *jit, XrProto *proto) {
         return false;
     }
 
-    // Store compiled entry point (old code is abandoned in arena)
+    // Retire old code via epoch-based reclaim (recompile path)
+    if (is_recompile && proto->jit_entry) {
+        xir_code_alloc_retire(&jit->code_alloc, proto->jit_entry, res.code_size);
+    }
+
+    // Store compiled entry point
     proto->jit_entry = res.code;
     proto->jit_fast_entry = (char *)res.code + res.fast_entry_offset * 4;
     proto->jit_resume_entry = res.resume_entry_offset
@@ -473,6 +517,18 @@ bool xir_jit_try_compile(XirJitState *jit, XrProto *proto) {
     if (conservative) jit->stats_conservative++;
     else if (is_recompile) jit->stats_tier2++;
     else jit->stats_tier1++;
+
+    // Track compiled proto for code cache eviction
+    if (!is_recompile) {
+        if (jit->compiled_protos_count >= jit->compiled_protos_cap) {
+            uint32_t new_cap = jit->compiled_protos_cap ? jit->compiled_protos_cap * 2 : 32;
+            XR_REALLOC_OR_ABORT(jit->compiled_protos,
+                                new_cap * sizeof(struct XrProto *),
+                                "jit compiled_protos");
+            jit->compiled_protos_cap = new_cap;
+        }
+        jit->compiled_protos[jit->compiled_protos_count++] = proto;
+    }
 
     // Promote feedback param types to param_types (freeze at compile time).
     // param_types is the authoritative source for JIT entry type guards.
