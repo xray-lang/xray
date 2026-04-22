@@ -25,6 +25,7 @@
 #include <stdint.h>
 #include <stdbool.h>
 #include <stddef.h>
+#include "xray_export.h"
 
 /* ========== Tagged Union Value (16 bytes) ========== */
 
@@ -118,54 +119,54 @@ static inline bool xrt_to_bool(XrtValue v) {
 
 /* ========== Mixed-type Arithmetic (requires libxray_rt) ========== */
 
-XrtValue xrt_add(XrtValue a, XrtValue b);
-XrtValue xrt_sub(XrtValue a, XrtValue b);
-XrtValue xrt_mul(XrtValue a, XrtValue b);
-XrtValue xrt_div(XrtValue a, XrtValue b);
-XrtValue xrt_mod(XrtValue a, XrtValue b);
-XrtValue xrt_neg(XrtValue a);
+XRAY_API XrtValue xrt_add(XrtValue a, XrtValue b);
+XRAY_API XrtValue xrt_sub(XrtValue a, XrtValue b);
+XRAY_API XrtValue xrt_mul(XrtValue a, XrtValue b);
+XRAY_API XrtValue xrt_div(XrtValue a, XrtValue b);
+XRAY_API XrtValue xrt_mod(XrtValue a, XrtValue b);
+XRAY_API XrtValue xrt_neg(XrtValue a);
 
 /* ========== Mixed-type Comparison ========== */
 
-int64_t xrt_lt(XrtValue a, XrtValue b);
-int64_t xrt_le(XrtValue a, XrtValue b);
-int64_t xrt_eq(XrtValue a, XrtValue b);
+XRAY_API int64_t xrt_lt(XrtValue a, XrtValue b);
+XRAY_API int64_t xrt_le(XrtValue a, XrtValue b);
+XRAY_API int64_t xrt_eq(XrtValue a, XrtValue b);
 
 /* ========== String Operations ========== */
 
-XrtValue xrt_string_concat(XrtValue a, XrtValue b);
-XrtValue xrt_string_len(XrtValue s);
-XrtValue xrt_string_slice(XrtValue s, int64_t start, int64_t end);
-int64_t  xrt_string_eq(XrtValue a, XrtValue b);
+XRAY_API XrtValue xrt_string_concat(XrtValue a, XrtValue b);
+XRAY_API XrtValue xrt_string_len(XrtValue s);
+XRAY_API XrtValue xrt_string_slice(XrtValue s, int64_t start, int64_t end);
+XRAY_API int64_t  xrt_string_eq(XrtValue a, XrtValue b);
 
 /* ========== Array Operations ========== */
 
-XrtValue xrt_array_new(int64_t capacity);
-XrtValue xrt_array_get(XrtValue arr, int64_t idx);
-void     xrt_array_set(XrtValue arr, int64_t idx, XrtValue val);
-int64_t  xrt_array_len(XrtValue arr);
-void     xrt_array_push(XrtValue arr, XrtValue val);
+XRAY_API XrtValue xrt_array_new(int64_t capacity);
+XRAY_API XrtValue xrt_array_get(XrtValue arr, int64_t idx);
+XRAY_API void     xrt_array_set(XrtValue arr, int64_t idx, XrtValue val);
+XRAY_API int64_t  xrt_array_len(XrtValue arr);
+XRAY_API void     xrt_array_push(XrtValue arr, XrtValue val);
 
 /* ========== Map Operations ========== */
 
-XrtValue xrt_map_new(void);
-XrtValue xrt_map_get(XrtValue map, XrtValue key);
-void     xrt_map_set(XrtValue map, XrtValue key, XrtValue val);
-int64_t  xrt_map_len(XrtValue map);
+XRAY_API XrtValue xrt_map_new(void);
+XRAY_API XrtValue xrt_map_get(XrtValue map, XrtValue key);
+XRAY_API void     xrt_map_set(XrtValue map, XrtValue key, XrtValue val);
+XRAY_API int64_t  xrt_map_len(XrtValue map);
 
 /* ========== Object Field Access ========== */
 
-XrtValue xrt_field_get(XrtValue obj, const char *name);
-void     xrt_field_set(XrtValue obj, const char *name, XrtValue val);
+XRAY_API XrtValue xrt_field_get(XrtValue obj, const char *name);
+XRAY_API void     xrt_field_set(XrtValue obj, const char *name, XrtValue val);
 
 /* ========== Print ========== */
 
-void xrt_print(XrtValue v);
-void xrt_println(XrtValue v);
+XRAY_API void xrt_print(XrtValue v);
+XRAY_API void xrt_println(XrtValue v);
 
 /* ========== GC ========== */
 
-void  xrt_safepoint(void);
-void *xrt_alloc(size_t size);
+XRAY_API void  xrt_safepoint(void);
+XRAY_API void *xrt_alloc(size_t size);
 
 #endif // XRAY_RUNTIME_H
