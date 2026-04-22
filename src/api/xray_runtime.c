@@ -83,6 +83,7 @@ XrtValue xrt_div(XrtValue a, XrtValue b) {
         return b.i ? xrt_box_int(a.i / b.i) : xrt_box_int(0);
     double fa = (a.tag == XRT_TAG_I64) ? (double)a.i : a.f;
     double fb = (b.tag == XRT_TAG_I64) ? (double)b.i : b.f;
+    if (fb == 0.0) return xrt_box_float(0.0);
     return xrt_box_float(fa / fb);
 }
 
