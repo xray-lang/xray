@@ -1054,9 +1054,190 @@ static void x64_emit_xir_ins(X64CodegenCtx *ctx, XirIns *ins) {
         break;
     }
 
+    /* ========== Mixed-type runtime arithmetic ========== */
+    case XIR_RT_ADD: case XIR_RT_SUB: case XIR_RT_MUL:
+    case XIR_RT_DIV: case XIR_RT_MOD: {
+        uint8_t ta = XR_REP_I64, tb = XR_REP_I64;
+        if (xir_ref_is_vreg(ins->args[0])) {
+            uint32_t ai = XIR_REF_INDEX(ins->args[0]);
+            if (ai < ctx->func->nvreg) ta = ctx->func->vregs[ai].rep;
+        }
+        if (xir_ref_is_vreg(ins->args[1])) {
+            uint32_t bi = XIR_REF_INDEX(ins->args[1]);
+            if (bi < ctx->func->nvreg) tb = ctx->func->vregs[bi].rep;
+        }
+
+        if ((ta == XR_REP_I64 || ta == XR_REP_F64) &&
+            (tb == XR_REP_I64 || tb == XR_REP_F64)) {
+            /* Both numeric: convert to FP, operate, result in FP dst */
+            X64Xmm fa;
+            if (ta == XR_REP_F64) {
+                fa = x64_get_fp_operand(ctx, ins->args[0], X64_XMM14);
+            } else {
+                X64Reg ga = x64_get_operand(ctx, ins->args[0], X64_SCRATCH_REG);
+                fa = X64_XMM14;  /* scratch FP */
+                x64_cvtsi2sd(&ctx->buf, fa, ga);
+            }
+            X64Xmm fb;
+            if (tb == XR_REP_F64) {
+                fb = x64_get_fp_operand(ctx, ins->args[1], X64_XMM15);
+            } else {
+                X64Reg gb = x64_get_operand(ctx, ins->args[1], X64_SCRATCH_REG);
+                fb = X64_XMM15;  /* scratch FP */
+                x64_cvtsi2sd(&ctx->buf, fb, gb);
+            }
+            /* Ensure dst != operand aliasing issues */
+            X64Xmm fd = x64_get_fp_reg(ctx, ins->dst);
+            if (fd != fa) x64_movsd_rr(&ctx->buf, fd, fa);
+            switch (ins->op) {
+            case XIR_RT_ADD: x64_addsd(&ctx->buf, fd, fb); break;
+            case XIR_RT_SUB: x64_subsd(&ctx->buf, fd, fb); break;
+            case XIR_RT_MUL: x64_mulsd(&ctx->buf, fd, fb); break;
+            case XIR_RT_DIV: x64_divsd(&ctx->buf, fd, fb); break;
+            case XIR_RT_MOD: {
+                /* fmod: a - trunc(a/b) * b */
+                x64_movsd_rr(&ctx->buf, X64_XMM14, fd);
+                x64_divsd(&ctx->buf, X64_XMM14, fb);
+                x64_cvttsd2si(&ctx->buf, X64_SCRATCH_REG, X64_XMM14);
+                x64_cvtsi2sd(&ctx->buf, X64_XMM14, X64_SCRATCH_REG);
+                x64_mulsd(&ctx->buf, X64_XMM14, fb);
+                x64_subsd(&ctx->buf, fd, X64_XMM14);
+                break;
+            }
+            default: break;
+            }
+        } else {
+            /* Unknown types: deopt */
+            x64_emit_deopt_id(ctx, ins);
+            XR_DCHECK(ctx->npatch < ctx->patches_cap, "too many patches");
+            X64BranchPatch *p = &ctx->patches[ctx->npatch];
+            x64_emit8(&ctx->buf, 0xE9);
+            p->emit_pos = ctx->buf.pos;
+            p->target_blk = 0;
+            p->type = X64_PATCH_DEOPT_JMP;
+            p->cc = X64_CC_E;
+            ctx->npatch++;
+            x64_emit32(&ctx->buf, 0);
+            ctx->has_deopt = true;
+        }
+        break;
+    }
+
+    case XIR_RT_UNM: {
+        uint8_t ta = XR_REP_I64;
+        if (xir_ref_is_vreg(ins->args[0])) {
+            uint32_t ai = XIR_REF_INDEX(ins->args[0]);
+            if (ai < ctx->func->nvreg) ta = ctx->func->vregs[ai].rep;
+        }
+        X64Xmm fd = x64_get_fp_reg(ctx, ins->dst);
+        if (ta == XR_REP_F64) {
+            X64Xmm fa = x64_get_fp_operand(ctx, ins->args[0], X64_XMM14);
+            /* XORPD + SUBSD for negation: 0.0 - x */
+            x64_xorpd(&ctx->buf, fd, fd);
+            x64_subsd(&ctx->buf, fd, fa);
+        } else {
+            X64Reg ga = x64_get_operand(ctx, ins->args[0], X64_SCRATCH_REG);
+            x64_cvtsi2sd(&ctx->buf, fd, ga);
+            x64_xorpd(&ctx->buf, X64_XMM15, X64_XMM15);
+            x64_subsd(&ctx->buf, X64_XMM15, fd);
+            x64_movsd_rr(&ctx->buf, fd, X64_XMM15);
+        }
+        break;
+    }
+
+    case XIR_RT_LT: case XIR_RT_LE: case XIR_RT_EQ: {
+        uint8_t ta = XR_REP_I64, tb = XR_REP_I64;
+        if (xir_ref_is_vreg(ins->args[0])) {
+            uint32_t ai = XIR_REF_INDEX(ins->args[0]);
+            if (ai < ctx->func->nvreg) ta = ctx->func->vregs[ai].rep;
+        }
+        if (xir_ref_is_vreg(ins->args[1])) {
+            uint32_t bi = XIR_REF_INDEX(ins->args[1]);
+            if (bi < ctx->func->nvreg) tb = ctx->func->vregs[bi].rep;
+        }
+        if ((ta == XR_REP_I64 || ta == XR_REP_F64) &&
+            (tb == XR_REP_I64 || tb == XR_REP_F64)) {
+            X64Xmm fa;
+            if (ta == XR_REP_F64) {
+                fa = x64_get_fp_operand(ctx, ins->args[0], X64_XMM14);
+            } else {
+                X64Reg ga = x64_get_operand(ctx, ins->args[0], X64_SCRATCH_REG);
+                fa = X64_XMM14;
+                x64_cvtsi2sd(&ctx->buf, fa, ga);
+            }
+            X64Xmm fb;
+            if (tb == XR_REP_F64) {
+                fb = x64_get_fp_operand(ctx, ins->args[1], X64_XMM15);
+            } else {
+                X64Reg gb = x64_get_operand(ctx, ins->args[1], X64_SCRATCH_REG);
+                fb = X64_XMM15;
+                x64_cvtsi2sd(&ctx->buf, fb, gb);
+            }
+            x64_ucomisd(&ctx->buf, fa, fb);
+            /* UCOMISD sets ZF/CF for unordered float comparison.
+             * SETcc to get 0/1 result in rd. */
+            X64Cond cc;
+            if (ins->op == XIR_RT_LT) cc = X64_CC_B;   /* CF=1 → below */
+            else if (ins->op == XIR_RT_LE) cc = X64_CC_BE; /* CF=1 or ZF=1 */
+            else cc = X64_CC_E;  /* ZF=1 */
+            x64_xor_rr(&ctx->buf, rd, rd);
+            /* SETcc r8: 0F 9x /0 — set low byte of rd */
+            x64_emit8(&ctx->buf, (rd > 7) ? 0x41 : 0x40);  /* REX prefix */
+            x64_emit8(&ctx->buf, 0x0F);
+            x64_emit8(&ctx->buf, (uint8_t)(0x90 | cc));
+            x64_emit8(&ctx->buf, (uint8_t)(0xC0 | ((uint8_t)rd & 7)));
+        } else {
+            x64_emit_deopt_id(ctx, ins);
+            XR_DCHECK(ctx->npatch < ctx->patches_cap, "too many patches");
+            X64BranchPatch *p = &ctx->patches[ctx->npatch];
+            x64_emit8(&ctx->buf, 0xE9);
+            p->emit_pos = ctx->buf.pos;
+            p->target_blk = 0;
+            p->type = X64_PATCH_DEOPT_JMP;
+            p->cc = X64_CC_E;
+            ctx->npatch++;
+            x64_emit32(&ctx->buf, 0);
+            ctx->has_deopt = true;
+        }
+        break;
+    }
+
+    case XIR_RT_PRINT:
+    case XIR_RT_ARRAY_NEW:
+    case XIR_RT_ARRAY_PUSH:
+    case XIR_RT_ARRAY_LEN:
+    case XIR_RT_MAP_NEW:
+    case XIR_RT_INDEX_GET:
+    case XIR_RT_INDEX_SET:
+        /* These are handled via CALL_C in the builder; shouldn't reach here */
+        xr_log_warning("x64-cg", "RT opcode %d should use CALL_C path", ins->op);
+        break;
+
+    case XIR_RT_ISNULL: {
+        X64Reg val = x64_get_operand(ctx, ins->args[0], X64_SCRATCH_REG);
+        x64_xor_rr(&ctx->buf, rd, rd);
+        x64_test_rr(&ctx->buf, val, val);
+        /* SETcc: SETE rd (ZF=1 → null → result=1) */
+        x64_emit8(&ctx->buf, (rd > 7) ? 0x41 : 0x40);
+        x64_emit8(&ctx->buf, 0x0F);
+        x64_emit8(&ctx->buf, 0x94);  /* SETE */
+        x64_emit8(&ctx->buf, (uint8_t)(0xC0 | ((uint8_t)rd & 7)));
+        break;
+    }
+
+    /* ========== Coroutine suspend ========== */
+    case XIR_SUSPEND:
+    case XIR_TRY_BEGIN:
+    case XIR_TRY_END:
+    case XIR_THROW:
+        /* TODO: coroutine suspend/resume + exception (F.4.7) */
+        xr_log_warning("x64-cg", "suspend/exception op %d not yet implemented", ins->op);
+        ctx->had_error = true;
+        break;
+
     case XIR_BARRIER_FWD:
     case XIR_BARRIER_BACK:
-        /* TODO: write barrier stubs (F.4.6 full) — skip for now */
+        /* TODO: write barrier stubs — skip for now */
         break;
 
     case XIR_CATCH: {
