@@ -34,6 +34,7 @@ typedef enum {
     JIT_OP_UNIMPLEMENTED = 0,  // default — catch missing entries
     JIT_OP_SUPPORTED,          // full JIT builder handler exists
     JIT_OP_BAIL_OUT,           // function rejected from JIT if opcode present
+    JIT_OP_DEOPT_FALLBACK,     // builder emits unconditional deopt (not whole-func bail)
 } JitOpcodeSupport;
 
 static const JitOpcodeSupport jit_op_support_table[NUM_OPCODES] = {
@@ -214,9 +215,9 @@ static const JitOpcodeSupport jit_op_support_table[NUM_OPCODES] = {
     [OP_SUPERINVOKE]       = JIT_OP_SUPPORTED,
 
     /* === Structured Concurrency === */
-    [OP_SCOPE_ENTER]       = JIT_OP_BAIL_OUT,  // requires VM scope tracking
-    [OP_SCOPE_EXIT]        = JIT_OP_BAIL_OUT,   // requires VM scope tracking
-    [OP_SPAWN_CONT]        = JIT_OP_BAIL_OUT,   // requires child-first dispatch
+    [OP_SCOPE_ENTER]       = JIT_OP_SUPPORTED,  // CALL_C(xr_jit_scope_enter)
+    [OP_SCOPE_EXIT]        = JIT_OP_SUPPORTED,  // CALL_C(xr_jit_scope_exit) + deopt on block
+    [OP_SPAWN_CONT]        = JIT_OP_SUPPORTED,  // CALL_C(xr_jit_spawn_cont)
     [OP_AWAIT]             = JIT_OP_SUPPORTED,   // deopt-based: fast path in JIT, slow path deopts to interpreter
 
     /* === Non-blocking Channel === */
@@ -261,19 +262,19 @@ static const JitOpcodeSupport jit_op_support_table[NUM_OPCODES] = {
 
     /* === Blocking Channel / Scheduler (BAIL_OUT: require VM scheduler) === */
     [OP_CHAN_NEW_NAMED]     = JIT_OP_BAIL_OUT,
-    [OP_CHAN_SEND_TIMEOUT]  = JIT_OP_BAIL_OUT,
-    [OP_CHAN_RECV_TIMEOUT]  = JIT_OP_BAIL_OUT,
-    [OP_SELECT_START]      = JIT_OP_BAIL_OUT,
-    [OP_SELECT_CASE]       = JIT_OP_BAIL_OUT,
-    [OP_SELECT_BLOCK]      = JIT_OP_BAIL_OUT,
-    [OP_SELECT_END]        = JIT_OP_BAIL_OUT,
+    [OP_CHAN_SEND_TIMEOUT]  = JIT_OP_DEOPT_FALLBACK,
+    [OP_CHAN_RECV_TIMEOUT]  = JIT_OP_DEOPT_FALLBACK,
+    [OP_SELECT_START]      = JIT_OP_DEOPT_FALLBACK,
+    [OP_SELECT_CASE]       = JIT_OP_DEOPT_FALLBACK,
+    [OP_SELECT_BLOCK]      = JIT_OP_DEOPT_FALLBACK,
+    [OP_SELECT_END]        = JIT_OP_DEOPT_FALLBACK,
 
     /* === Coroutine Control (BAIL_OUT: require VM scheduler) === */
-    [OP_GO]                = JIT_OP_BAIL_OUT,
-    [OP_GO_INVOKE]         = JIT_OP_BAIL_OUT,
-    [OP_AWAIT_TIMEOUT]     = JIT_OP_BAIL_OUT,
-    [OP_AWAIT_ALL]         = JIT_OP_BAIL_OUT,
-    [OP_AWAIT_ANY]         = JIT_OP_BAIL_OUT,
+    [OP_GO]                = JIT_OP_SUPPORTED,  // CALL_C(xr_jit_go)
+    [OP_GO_INVOKE]         = JIT_OP_SUPPORTED,  // CALL_C(xr_jit_go_invoke) → deopt
+    [OP_AWAIT_TIMEOUT]     = JIT_OP_DEOPT_FALLBACK,
+    [OP_AWAIT_ALL]         = JIT_OP_DEOPT_FALLBACK,
+    [OP_AWAIT_ANY]         = JIT_OP_DEOPT_FALLBACK,
     [OP_YIELD]             = JIT_OP_BAIL_OUT,
     [OP_SLEEP]             = JIT_OP_BAIL_OUT,
     [OP_TIME_AFTER]        = JIT_OP_BAIL_OUT,

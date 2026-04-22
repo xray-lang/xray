@@ -1,0 +1,28 @@
+// EXPECTED: 10
+// EXPECTED: 20
+// EXPECTED: outer=4950
+// EXPECTED: done
+// Test: OP_SCOPE_ENTER/EXIT in JIT-compiled function (lexical scope)
+
+fn test_scope() {
+    // Hot loop to trigger JIT compilation
+    let sum = 0
+    let i = 0
+    while (i < 100) {
+        sum = sum + i
+        i = i + 1
+    }
+
+    // Scope block — emits OP_SCOPE_ENTER / OP_SCOPE_EXIT
+    scope {
+        let x = 10
+        print(x)
+        let y = 20
+        print(y)
+    }
+
+    print("outer=${sum}")
+    print("done")
+}
+
+test_scope()

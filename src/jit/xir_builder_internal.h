@@ -24,6 +24,7 @@
 #include "../frontend/analyzer/xanalyzer_symbol.h"
 #include "../runtime/gc/xgc_header.h"
 #include "xir_jit_runtime.h"
+#include "xir_jit.h"         // XIR_DEOPT_MARKER
 #include "xir_offsets.h"
 #include "../runtime/object/xjson.h"
 #include <stdlib.h>
