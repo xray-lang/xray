@@ -103,45 +103,95 @@ typedef struct XcgenFunc {
     int            shadow_stack_count;
 } XcgenFunc;
 
+/* ========== Forward Declarations ========== */
+
+typedef struct XcgenCompilation XcgenCompilation;
+
+/* ========== Module-Level Export Entry ========== */
+
+typedef struct XcgenExport {
+    const char *name;       // export name (e.g. "pi", "add")
+    const char *c_var;      // C global variable name (e.g. "mod_math__pi")
+    bool        is_const;   // true if const export
+} XcgenExport;
+
 /* ========== Module-Level Codegen State ========== */
 
 typedef struct XcgenModule {
+    // Module metadata
+    const char    *module_name;     // e.g. "math", "./utils"
+    const char    *module_path;     // absolute path
+    int16_t        module_id;       // unique id within compilation
+
     XcgenBuf       sections[XCGEN_SEC_COUNT];
-    XcgenFunc     *funcs;          // all functions being compiled
+    XcgenFunc     *funcs;          // compiled functions in this module
     int            nfuncs;
     int            funcs_cap;
 
-    // Proto → C name mapping (for cross-function calls); dynamically grown
+    // Module-level exports (populated during GETSHARED/SETSHARED scan)
+    XcgenExport   *exports;
+    int            nexports;
+    int            exports_cap;
+
+    // Struct promotion registry (non-owning ptr → comp->struct_reg)
+    XcgenStructRegistry *struct_reg;
+
+    // Compilation flags
+    bool           emit_debug;     // true = #line directives
+
+    // Backpointer to parent compilation context
+    XcgenCompilation *comp;
+} XcgenModule;
+
+/* ========== Top-Level Compilation Context ========== */
+
+struct XcgenCompilation {
+    XcgenModule   **modules;       // array of module pointers
+    int             nmodules;
+    int             modules_cap;
+
+    // Global proto registry (cross-module function lookup)
     XcgenProtoEntry *proto_map;
     int              proto_map_count;
     int              proto_map_cap;
 
-    // Struct promotion registry (Json → C struct)
-    XcgenStructRegistry *struct_reg;  // owned externally (by cmd_build)
+    // Global struct promotion registry (owned externally by cmd_build)
+    XcgenStructRegistry *struct_reg;
 
-    // Compilation flags
-    bool           emit_debug;     // true = #line directives
-} XcgenModule;
+    // Output configuration
+    bool            emit_debug;     // true = #line directives
+    bool            single_file;    // true = combine all modules into one .c
+};
 
-/* ========== Public API ========== */
+/* ========== Compilation API ========== */
 
-// Create a new module-level codegen context
-XR_FUNC XcgenModule *xcgen_module_new(void);
+// Create a new compilation context
+XR_FUNC XcgenCompilation *xcgen_compilation_new(void);
 
-// Free module and all owned resources
-XR_FUNC void xcgen_module_free(XcgenModule *mod);
+// Free compilation and all owned modules
+XR_FUNC void xcgen_compilation_free(XcgenCompilation *comp);
 
-// Compile a single XIR function into the module
-// Returns the XcgenFunc* on success, NULL on failure
-XR_FUNC XcgenFunc *xcgen_compile_func(XcgenModule *mod, XirFunc *xfunc, const char *c_name);
+// Add a module to the compilation; returns the module pointer
+XR_FUNC XcgenModule *xcgen_compilation_add_module(XcgenCompilation *comp,
+                                                   const char *name,
+                                                   const char *path);
 
-// Register a proto pointer → C function name mapping
-// Must be called before xcgen_compile_func for cross-function calls
-XR_FUNC void xcgen_register_proto(XcgenModule *mod, void *proto_ptr, const char *c_name);
+// Register a proto → C name mapping in the global registry
+XR_FUNC void xcgen_register_proto(XcgenCompilation *comp, void *proto_ptr,
+                                   const char *c_name);
 
-// Emit the complete C source file into a buffer
+// Emit combined C source for all modules (single-file mode)
 // Caller must free the returned string
-XR_FUNC char *xcgen_emit_source(XcgenModule *mod);
+XR_FUNC char *xcgen_emit_source(XcgenCompilation *comp);
+
+/* ========== Module API ========== */
+
+// Compile a single XIR function into a module
+XR_FUNC XcgenFunc *xcgen_compile_func(XcgenModule *mod, XirFunc *xfunc,
+                                       const char *c_name);
+
+// Free a single module (also called by xcgen_compilation_free)
+XR_FUNC void xcgen_module_free(XcgenModule *mod);
 
 /* ========== Internal API (used by xcgen_expr.c / xcgen_stmt.c) ========== */
 

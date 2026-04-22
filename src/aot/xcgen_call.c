@@ -192,10 +192,11 @@ static void emit_call_known(XcgenBuf *b, XirFunc *func, XirIns *ins,
             callee_nupvals = mod->funcs[callee_func_idx].num_upvals;
         } else {
             // Callee not yet compiled — check proto_map for non-escaping flag
-            for (int pi = 0; pi < mod->proto_map_count; pi++) {
-                if (mod->proto_map[pi].proto_ptr == callee_proto) {
-                    callee_non_escaping = mod->proto_map[pi].non_escaping;
-                    callee_nupvals = mod->proto_map[pi].num_upvals;
+            XcgenCompilation *comp = mod->comp;
+            for (int pi = 0; pi < comp->proto_map_count; pi++) {
+                if (comp->proto_map[pi].proto_ptr == callee_proto) {
+                    callee_non_escaping = comp->proto_map[pi].non_escaping;
+                    callee_nupvals = comp->proto_map[pi].num_upvals;
                     break;
                 }
             }
@@ -916,9 +917,10 @@ static void emit_call_c(XcgenBuf *b, XirFunc *func, XirIns *ins,
 
                 // Check if the child closure is non-escaping
                 bool child_non_esc = false;
-                for (int pi = 0; pi < mod->proto_map_count; pi++) {
-                    if (mod->proto_map[pi].proto_ptr == fn_ptr) {
-                        child_non_esc = mod->proto_map[pi].non_escaping;
+                XcgenCompilation *comp2 = mod->comp;
+                for (int pi = 0; pi < comp2->proto_map_count; pi++) {
+                    if (comp2->proto_map[pi].proto_ptr == fn_ptr) {
+                        child_non_esc = comp2->proto_map[pi].non_escaping;
                         break;
                     }
                 }

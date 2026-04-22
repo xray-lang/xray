@@ -871,9 +871,10 @@ void xcg_emit_instruction(XcgenBuf *b, XirFunc *func, XirIns *ins,
                             child_proto = (void *)(uintptr_t)func->consts[pci].val.raw;
                     }
                     if (child_proto) {
-                        for (int pi = 0; pi < mod->proto_map_count; pi++) {
-                            if (mod->proto_map[pi].proto_ptr == child_proto) {
-                                child_entry = &mod->proto_map[pi];
+                        XcgenCompilation *comp = mod->comp;
+                        for (int pi = 0; pi < comp->proto_map_count; pi++) {
+                            if (comp->proto_map[pi].proto_ptr == child_proto) {
+                                child_entry = &comp->proto_map[pi];
                                 break;
                             }
                         }
