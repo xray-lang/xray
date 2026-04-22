@@ -95,7 +95,7 @@ if(XR_TARGET_ARCH MATCHES "arm64|aarch64")
 endif()
 # x86-64-specific tests
 if(XR_TARGET_ARCH MATCHES "x86_64|AMD64")
-    # add_xray_unit_test(test_x64_emit jit/test_x64_emit.c)  # F.4.2+
+    add_xray_unit_test(test_x64_emit jit/test_x64_emit.c)
 endif()
 add_xray_unit_test(test_code_alloc jit/test_code_alloc.c)
 
