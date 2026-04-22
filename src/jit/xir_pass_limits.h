@@ -99,20 +99,17 @@
 
 /* ========== Global Code Motion ==========
  *
- * GCM sizes its per-vreg and per-block bookkeeping statically.  These
- * should eventually be switched to dynamic allocation tied to
- * XIR_MAX_FUNC_{VREGS,BLOCKS}; the values below keep current behaviour
- * for callers that inline them directly.
+ * GCM allocates bookkeeping dynamically from func->nblk / func->nvreg.
+ * No separate caps needed — function-level XIR_MAX_FUNC_{BLOCKS,VREGS}
+ * bound the upper size via eligibility.
  */
-#define XIR_GCM_MAX_BLOCKS        512
-#define XIR_GCM_MAX_VREGS         4096
 
 /* ========== Range Analysis ==========
  *
  * Bounded fixed-point iterations for interval arithmetic over a
- * function's value graph.
+ * function's value graph.  Per-vreg arrays are heap-allocated from
+ * func->nvreg; no separate cap — XIR_MAX_FUNC_VREGS applies.
  */
-#define XIR_RA_MAX_VALUES         512
 #define XIR_RA_MAX_ROUNDS         4
 
 /* ========== Inlining (reserved for Phase 4 pipeline) ========== */

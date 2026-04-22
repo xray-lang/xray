@@ -1121,11 +1121,19 @@ void xir_pass_reorder_blocks(XirFunc *func) {
             XirBlock *cand1 = NULL, *cand2 = NULL;
 
             if (cur->jmp.type == XIR_JMP_BR) {
-                // BR: codegen emits s2 (false) as the inline fall-through
-                // path, so we always prefer s2 as next. Only swap when s2
-                // is deferred AND s1 is a loop header (codegen has a
-                // dedicated loop-header layout that puts s1 inline).
-                if (cur->is_loop_header && cur->s1 && !cur->s1->is_deferred) {
+                // Profile-guided: if branch_taken_pct is set, prefer the
+                // more-likely successor as the fall-through candidate.
+                //   s1 = taken (true) path, s2 = not-taken (false) path.
+                //   branch_taken_pct > 50 → s1 is hot → fall through to s1.
+                //   branch_taken_pct <= 50 (or 0=unknown) → use heuristic.
+                if (cur->branch_taken_pct > 50) {
+                    cand1 = cur->s1; // hot taken path as fall-through
+                    cand2 = cur->s2;
+                } else if (cur->branch_taken_pct > 0) {
+                    cand1 = cur->s2; // hot not-taken path as fall-through
+                    cand2 = cur->s1;
+                } else if (cur->is_loop_header && cur->s1 &&
+                           !cur->s1->is_deferred) {
                     cand1 = cur->s1; // loop body as fall-through
                     cand2 = cur->s2;
                 } else {
