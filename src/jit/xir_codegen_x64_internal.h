@@ -101,6 +101,14 @@ typedef struct {
     bool          had_error;
     bool          has_deopt;
     bool          has_call_c;
+
+    /* Suspend/resume tracking (coroutine support) */
+    uint32_t      suspend_cont_offsets[16];   // byte offset of continuation per suspend_id
+    uint32_t      suspend_smap_ids[16];       // smap id at each suspend point
+    uint8_t       suspend_result_regs[16];    // physical register for result per suspend_id
+    int16_t       suspend_result_bc_slots[16];// bc_slot of result vreg per suspend_id
+    uint32_t      nsuspend;                   // number of suspend points emitted
+    uint32_t      resume_entry_offset;        // byte offset of resume entry (0 = none)
 } X64CodegenCtx;
 
 /* ========== Register Mapping ========== */
@@ -130,5 +138,36 @@ XR_FUNC void x64_maybe_spill(X64CodegenCtx *ctx, XirRef dst_ref);
 /* Add a deferred branch patch */
 XR_FUNC void x64_add_patch(X64CodegenCtx *ctx, X64PatchType type,
                             uint32_t target_blk, X64Cond cc);
+
+/* ========== Shared helpers (defined in xir_codegen_x64.c) ========== */
+
+/* Write call arguments from pool to jit_ctx->call_args[] */
+XR_FUNC void x64_emit_call_args_from_pool(X64CodegenCtx *ctx, XirIns *ins);
+
+/* Write live PTR-typed registers back to their spill slots for GC visibility */
+XR_FUNC void x64_emit_ptr_spill_writeback(X64CodegenCtx *ctx);
+
+/* Record a safepoint GC stack map bitmap, return the smap_id */
+XR_FUNC uint32_t x64_record_safepoint(X64CodegenCtx *ctx);
+
+/* Collect live caller-saved GP registers (exclude one), return count */
+XR_FUNC int x64_live_gp(X64CodegenCtx *ctx, X64Reg *out, X64Reg exclude);
+
+/* Collect live FP registers, return count */
+XR_FUNC int x64_live_fp(X64CodegenCtx *ctx, X64Xmm *out);
+
+/* Emit deopt_id store (for deopt stub identification) */
+XR_FUNC void x64_emit_deopt_id(X64CodegenCtx *ctx, XirIns *ins);
+
+/* Emit conditional deopt jump (Jcc to deopt stub) */
+XR_FUNC void x64_emit_deopt_jcc(X64CodegenCtx *ctx, X64Cond cc);
+
+/* Emit epilogue sequence (restore callee-saved regs, leave, ret) */
+XR_FUNC void x64_emit_epilogue(X64CodegenCtx *ctx);
+
+/* ========== Sub-emit functions (defined in split files) ========== */
+
+/* Call ops: CALL_C, CALL_C_LEAF, CALL_SELF_DIRECT, CALL_KNOWN, etc. */
+XR_FUNC bool x64_emit_call_ins(X64CodegenCtx *ctx, XirIns *ins, X64Reg rd);
 
 #endif // XIR_CODEGEN_X64_INTERNAL_H
