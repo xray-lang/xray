@@ -1116,19 +1116,99 @@ bool xir_translate_misc_ops(XirBuilder *b, XirBlock **cur_blk,
             return true;
         }
 
-        // Coroutine/Channel/Select (require VM scheduler — blocking, deopt)
+        /* === go closure(args...) — fire-and-forget coroutine === */
+        case OP_GO: {
+            int a = GETARG_A(inst);
+            int rb = GETARG_B(inst);
+            int nargs = GETARG_C(inst);
+
+            // Collect args: [0]=closure, [1..nargs]=args
+            XirRef go_args[16];
+            go_args[0] = builder_get_slot(b, blk, rb);
+            int go_count = 1;
+            for (int i = 0; i < nargs && i < 15; i++)
+                go_args[go_count++] = builder_get_slot(b, blk, rb + 1 + i);
+
+            // Scan ahead for optional NOP annotations (name, priority)
+            int priority = 1;
+            int next_pc = pc + 1;
+            int code_len = b->proto->code.count;
+            while (next_pc < code_len) {
+                XrInstruction ni = PROTO_CODE(b->proto, next_pc);
+                if (GET_OPCODE(ni) != OP_NOP) break;
+                int na = GETARG_A(ni);
+                if (na == 1) { next_pc++; continue; }  // name NOP — skip
+                if (na == 2) { priority = GETARG_Bx(ni); next_pc++; continue; }
+                break;
+            }
+
+            // Encode: bits[0:7]=nargs, bits[8:15]=priority
+            int64_t extra_enc = (int64_t)(nargs & 0xFF) | ((int64_t)(priority & 0xFF) << 8);
+
+            XirRef fn_ref = xir_const_ptr(b->func, (void *)xr_jit_go);
+            XirRef enc_ref = xir_const_i64(b->func, extra_enc);
+            XirRef enc_val = xir_emit_unary(b->func, blk, XIR_CONST_I64,
+                                            XR_REP_I64, enc_ref);
+            XirRef result = xir_emit(b->func, blk, XIR_CALL_C, XR_REP_I64,
+                                     fn_ref, enc_val);
+            blk->ins[blk->nins - 1].flags |= XIR_FLAG_SIDE_EFFECT;
+            builder_bind_call_args(b, result, go_args, (uint16_t)go_count);
+
+            builder_set_slot(b, a, result);
+            b->slot_rep[a] = XR_REP_TAGGED;
+            b->ops_translated++;
+            return true;
+        }
+
+        /* === go receiver.method(args...) — deopt to interpreter === */
+        case OP_GO_INVOKE: {
+            b->func->has_coro_deopt = true;
+            int deopt_id = builder_add_deopt_info(b, pc);
+
+            XirRef fn_ref = xir_const_ptr(b->func, (void *)xr_jit_go_invoke);
+            XirRef zero = xir_const_i64(b->func, 0);
+            XirRef zero_val = xir_emit_unary(b->func, blk, XIR_CONST_I64,
+                                             XR_REP_I64, zero);
+            XirRef result = xir_emit(b->func, blk, XIR_CALL_C, XR_REP_I64,
+                                     fn_ref, zero_val);
+            blk->ins[blk->nins - 1].flags |= XIR_FLAG_SIDE_EFFECT;
+            (void)deopt_id;
+            (void)result;
+            b->ops_translated++;
+            return true;
+        }
+
+        /* === DEOPT_FALLBACK opcodes: emit unconditional deopt so hot loops
+         * before these instructions can still run JIT-compiled. === */
         case OP_AWAIT_ALL:
         case OP_AWAIT_ANY:
         case OP_AWAIT_TIMEOUT:
-        case OP_CHAN_NEW_NAMED:
         case OP_CHAN_RECV_TIMEOUT:
         case OP_CHAN_SEND_TIMEOUT:
         case OP_SELECT_START:
         case OP_SELECT_CASE:
         case OP_SELECT_BLOCK:
-        case OP_SELECT_END:
-        case OP_GO:
-        case OP_GO_INVOKE:
+        case OP_SELECT_END: {
+            b->func->has_coro_deopt = true;
+            int deopt_id = builder_add_deopt_info(b, pc);
+            if (deopt_id >= 0) {
+                XirRef did_ref = xir_const_i64(b->func, (int64_t)deopt_id);
+                xir_emit_unary(b->func, blk, XIR_DEOPT, XR_REP_VOID, XIR_NONE);
+                blk->ins[blk->nins - 1].dst = did_ref;
+                blk->ins[blk->nins - 1].flags |= XIR_FLAG_SIDE_EFFECT;
+            }
+            // Return DEOPT_MARKER to trigger deopt recovery
+            XirRef marker = xir_const_i64(b->func, (int64_t)XIR_DEOPT_MARKER);
+            XirRef marker_v = xir_emit_unary(b->func, blk, XIR_CONST_I64,
+                                             XR_REP_I64, marker);
+            blk->jmp.type = XIR_JMP_RET;
+            blk->jmp.arg = marker_v;
+            b->ops_translated++;
+            return true;
+        }
+
+        // Coroutine/Channel (require VM scheduler — still BAIL_OUT)
+        case OP_CHAN_NEW_NAMED:
         case OP_YIELD:
         case OP_SLEEP:
         case OP_CORO_CTRL:
@@ -1140,9 +1220,8 @@ bool xir_translate_misc_ops(XirBuilder *b, XirBlock **cur_blk,
         // Coroutine local storage
         case OP_GET_LOCAL:
         case OP_SET_LOCAL:
-        // Misc deopt
+        // Misc
         case OP_REGEX_COMPILE:
-            // Deopt: abstract method calls are rare, let VM handle the error
             b->ops_translated++;
             return true;
 

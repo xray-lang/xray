@@ -178,6 +178,8 @@ XR_FUNC XrJitResult xr_jit_chan_recv_block(struct XrCoroutine *coro, int64_t ext
 XR_FUNC XrJitResult xr_jit_scope_enter(struct XrCoroutine *coro, int64_t extra_arg);
 XR_FUNC XrJitResult xr_jit_scope_exit(struct XrCoroutine *coro, int64_t extra_arg);
 XR_FUNC XrJitResult xr_jit_spawn_cont(struct XrCoroutine *coro, int64_t extra_arg);
+XR_FUNC XrJitResult xr_jit_go(struct XrCoroutine *coro, int64_t extra_arg);
+XR_FUNC XrJitResult xr_jit_go_invoke(struct XrCoroutine *coro, int64_t extra_arg);
 XR_FUNC XrJitResult xr_jit_await(struct XrCoroutine *coro, int64_t extra_arg);
 
 /* JIT suspend helper for AWAIT blocking path.

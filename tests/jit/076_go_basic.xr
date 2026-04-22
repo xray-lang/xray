@@ -1,0 +1,26 @@
+// EXPECTED: sum=4950
+// EXPECTED: go_result=42
+// Test: OP_GO coroutine launch in JIT-compiled function
+
+fn worker(n: int): int {
+    return n * 2
+}
+
+fn test_go() {
+    // Hot loop to trigger JIT compilation
+    let sum = 0
+    let i = 0
+    while (i < 100) {
+        sum = sum + i
+        i = i + 1
+    }
+    print("sum=${sum}")
+
+    // go launch — should work from JIT via CALL_C(xr_jit_go)
+    let task = go worker(21)
+    let result = await task
+    print("go_result=${result}")
+    assert_eq(result, 42)
+}
+
+test_go()
