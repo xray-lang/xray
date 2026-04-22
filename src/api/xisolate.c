@@ -52,6 +52,7 @@ XrayIsolate* xray_isolate_new(const XrayIsolateParams *params) {
         return NULL;
     }
     memset(isolate, 0, sizeof(XrayIsolate));
+    isolate->ext_type_next = XR_TTASK + 1;
 
     if (params) {
         isolate->params = *params;

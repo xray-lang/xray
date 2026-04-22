@@ -52,7 +52,7 @@ static void emit_ref_as_tagged(XcgenBuf *b, XirFunc *func, XirRef ref);
 
 // Resolve a constant int64 value from an XIR ref, tracing through MOV chains.
 // Returns true if resolved, writing to *out_val.
-static bool xcg_resolve_const_i64(XirFunc *func, XirRef ref, int64_t *out_val) {
+bool xcg_resolve_const_i64(XirFunc *func, XirRef ref, int64_t *out_val) {
     XR_DCHECK(func != NULL && out_val != NULL, "xcg_resolve_const_i64: NULL arg");
     if (xir_ref_is_const(ref)) {
         uint32_t ci = XIR_REF_INDEX(ref);
@@ -86,6 +86,43 @@ static bool xcg_resolve_const_i64(XirFunc *func, XirRef ref, int64_t *out_val) {
         if (!found) break;
     }
     return false;
+}
+
+// Find the defining instruction for a vreg, tracing through MOV chains (max 8 hops).
+// Returns the non-MOV defining XirIns*, or NULL if not found.
+XirIns *xcg_find_def(XirFunc *func, XirRef ref) {
+    XR_DCHECK(func != NULL, "xcg_find_def: func is NULL");
+    if (!xir_ref_is_vreg(ref)) return NULL;
+    uint32_t vi = XIR_REF_INDEX(ref);
+    for (int hop = 0; hop < 8 && vi < func->nvreg; hop++) {
+        // Fast path: use SSA def pointer if available
+        if (func->vregs[vi].def) {
+            XirIns *def = func->vregs[vi].def;
+            if (def->op == XIR_MOV && xir_ref_is_vreg(def->args[0])) {
+                vi = XIR_REF_INDEX(def->args[0]);
+                continue;
+            }
+            return def;
+        }
+        // Slow path: scan all blocks
+        bool found = false;
+        for (uint32_t bi = 0; bi < func->nblk && !found; bi++) {
+            XirBlock *blk = func->blocks[bi];
+            for (uint32_t ii = 0; ii < blk->nins; ii++) {
+                XirIns *def = &blk->ins[ii];
+                if (!xir_ref_is_vreg(def->dst) || XIR_REF_INDEX(def->dst) != vi)
+                    continue;
+                if (def->op == XIR_MOV && xir_ref_is_vreg(def->args[0])) {
+                    vi = XIR_REF_INDEX(def->args[0]);
+                    found = true;
+                    break;
+                }
+                return def;
+            }
+        }
+        if (!found) break;
+    }
+    return NULL;
 }
 
 // Maximum upvalues for non-escaping closure inlining (stack array limit).
@@ -471,39 +508,9 @@ static void emit_call_c(XcgenBuf *b, XirFunc *func, XirIns *ins,
             // obj in call_args[0], symbol_id in args[1] (vreg from CONST_I64)
             if (fn_ptr == (void *)xr_jit_getprop && mod->struct_reg) {
                 uint32_t dst_idx = XIR_REF_INDEX(ins->dst);
-                // Extract symbol_id from args[1] — may be const ref or vreg
-                // Trace through MOV chains (from GVN/CSE) to find CONST_I64
+                // Extract symbol_id from args[1], tracing through MOV chains
                 int64_t symbol_id = -1;
-                XirRef trace_ref = ins->args[1];
-                for (int trace_depth = 0; trace_depth < 8; trace_depth++) {
-                    if (xir_ref_is_const(trace_ref)) {
-                        uint32_t ci2 = XIR_REF_INDEX(trace_ref);
-                        if (ci2 < func->nconst)
-                            symbol_id = func->consts[ci2].val.i64;
-                        break;
-                    }
-                    if (!xir_ref_is_vreg(trace_ref)) break;
-                    uint32_t vi = XIR_REF_INDEX(trace_ref);
-                    bool found = false;
-                    for (uint32_t bi2 = 0; bi2 < func->nblk && !found; bi2++) {
-                        XirBlock *blk2 = func->blocks[bi2];
-                        for (uint32_t ii = 0; ii < blk2->nins && !found; ii++) {
-                            XirIns *def = &blk2->ins[ii];
-                            if (!xir_ref_is_vreg(def->dst) ||
-                                XIR_REF_INDEX(def->dst) != vi) continue;
-                            if (def->op == XIR_CONST_I64) {
-                                trace_ref = def->args[0];  // follow to const
-                                found = true;
-                            } else if (def->op == XIR_MOV) {
-                                trace_ref = def->args[0];  // follow MOV chain
-                                found = true;
-                            } else {
-                                break;  // unknown def, give up
-                            }
-                        }
-                    }
-                    if (!found) break;
-                }
+                xcg_resolve_const_i64(func, ins->args[1], &symbol_id);
                 // O(log n) lookup: binary search on sorted field_entries
                 const XcgenFieldEntry *fe = xcgen_find_field_by_symbol(
                         mod->struct_reg, (uint32_t)symbol_id);
@@ -750,42 +757,9 @@ static void emit_call_c(XcgenBuf *b, XirFunc *func, XirIns *ins,
             // encoded = (method_symbol << 32) | nargs
             if (fn_ptr == (void *)xrt_invoke_method_sentinel) {
                 // Decode method_symbol and nargs from args[1] (const i64).
-                // Follow MOV chains: CSE may replace CONST_I64 with MOV of earlier vreg.
+                // Trace through MOV chains (from GVN/CSE) to find CONST_I64.
                 int64_t encoded = 0;
-                if (xir_ref_is_vreg(ins->args[1])) {
-                    uint32_t vi = XIR_REF_INDEX(ins->args[1]);
-                    // Chase up to 8 MOV hops to find the CONST_I64 definition
-                    for (int hop = 0; hop < 8 && vi < func->nvreg; hop++) {
-                        bool found = false;
-                        for (uint32_t bi2 = 0; bi2 < func->nblk && !found; bi2++) {
-                            XirBlock *blk2 = func->blocks[bi2];
-                            for (uint32_t ii2 = 0; ii2 < blk2->nins; ii2++) {
-                                XirIns *def = &blk2->ins[ii2];
-                                if (!xir_ref_is_vreg(def->dst)) continue;
-                                if (XIR_REF_INDEX(def->dst) != vi) continue;
-                                if (def->op == XIR_CONST_I64 &&
-                                    xir_ref_is_const(def->args[0])) {
-                                    uint32_t ci2 = XIR_REF_INDEX(def->args[0]);
-                                    if (ci2 < func->nconst)
-                                        encoded = func->consts[ci2].val.i64;
-                                    found = true;
-                                    hop = 8; // done
-                                    break;
-                                }
-                                if (def->op == XIR_MOV &&
-                                    xir_ref_is_vreg(def->args[0])) {
-                                    vi = XIR_REF_INDEX(def->args[0]);
-                                    found = true; // follow the chain
-                                    break;
-                                }
-                                // Any other def: give up
-                                found = true; hop = 8;
-                                break;
-                            }
-                        }
-                        if (!found) break;
-                    }
-                }
+                xcg_resolve_const_i64(func, ins->args[1], &encoded);
                 uint32_t dst_idx = XIR_REF_INDEX(ins->dst);
 
                 if (encoded < 0) {
