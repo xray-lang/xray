@@ -32,6 +32,11 @@ XR_FUNC int64_t xr_jit_throw(void *, int64_t);
 XR_FUNC int64_t xr_jit_tarray_get(void *, int64_t);
 XR_FUNC int64_t xr_jit_tarray_set(void *, int64_t);
 
+/* ========== Shared Variables (GETSHARED/SETSHARED) ========== */
+
+XR_FUNC int64_t xr_jit_get_shared(void *, int64_t);
+XR_FUNC int64_t xr_jit_set_shared(void *, int64_t);
+
 /* ========== Json Creation (void* coro for AOT) ========== */
 
 XR_FUNC struct XrJson *xr_json_new_with_shape(void *, struct XrShape *);

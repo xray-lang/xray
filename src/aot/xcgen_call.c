@@ -50,6 +50,44 @@
 // Forward declaration (defined below, after CALL_C helpers)
 static void emit_ref_as_tagged(XcgenBuf *b, XirFunc *func, XirRef ref);
 
+// Resolve a constant int64 value from an XIR ref, tracing through MOV chains.
+// Returns true if resolved, writing to *out_val.
+static bool xcg_resolve_const_i64(XirFunc *func, XirRef ref, int64_t *out_val) {
+    XR_DCHECK(func != NULL && out_val != NULL, "xcg_resolve_const_i64: NULL arg");
+    if (xir_ref_is_const(ref)) {
+        uint32_t ci = XIR_REF_INDEX(ref);
+        if (ci < func->nconst) { *out_val = func->consts[ci].val.i64; return true; }
+        return false;
+    }
+    if (!xir_ref_is_vreg(ref)) return false;
+    uint32_t vi = XIR_REF_INDEX(ref);
+    for (int hop = 0; hop < 8 && vi < func->nvreg; hop++) {
+        bool found = false;
+        for (uint32_t bi = 0; bi < func->nblk && !found; bi++) {
+            XirBlock *blk = func->blocks[bi];
+            for (uint32_t ii = 0; ii < blk->nins; ii++) {
+                XirIns *def = &blk->ins[ii];
+                if (!xir_ref_is_vreg(def->dst) || XIR_REF_INDEX(def->dst) != vi)
+                    continue;
+                if (def->op == XIR_CONST_I64 && xir_ref_is_const(def->args[0])) {
+                    uint32_t ci = XIR_REF_INDEX(def->args[0]);
+                    if (ci < func->nconst)
+                        { *out_val = func->consts[ci].val.i64; return true; }
+                    return false;
+                }
+                if (def->op == XIR_MOV && xir_ref_is_vreg(def->args[0])) {
+                    vi = XIR_REF_INDEX(def->args[0]);
+                    found = true;
+                    break;
+                }
+                return false; // unknown def
+            }
+        }
+        if (!found) break;
+    }
+    return false;
+}
+
 // Maximum upvalues for non-escaping closure inlining (stack array limit).
 #define XCGEN_MAX_NONESC_UPVALS 16
 
@@ -909,6 +947,56 @@ static void emit_call_c(XcgenBuf *b, XirFunc *func, XirIns *ins,
                 return;
             }
 
+            // GETSHARED: CALL_C(xr_jit_get_shared, shared_index)
+            // Translate to: v<dst> = xrt_shared[<index>]
+            if (fn_ptr == (void *)xr_jit_get_shared) {
+                int64_t shared_idx = -1;
+                if (xcg_resolve_const_i64(func, ins->args[1], &shared_idx) &&
+                    shared_idx >= 0) {
+                    uint32_t dst_idx = XIR_REF_INDEX(ins->dst);
+                    xcgen_buf_printf(b, "    v%u = xrt_shared[%d];\n",
+                                     dst_idx, (int)shared_idx);
+                    // Track max shared index for array sizing
+                    XcgenCompilation *comp = mod->comp;
+                    XR_DCHECK(comp != NULL, "emit_call_c GETSHARED: NULL comp");
+                    if ((int)shared_idx > comp->max_shared_index)
+                        comp->max_shared_index = (int)shared_idx;
+                    cf->needs_runtime = true;
+                } else {
+                    // Could not resolve shared index — emit comment
+                    xcgen_buf_puts(b, "    /* GETSHARED: unresolved index */\n");
+                }
+                cf->call_args_count = 0;
+                return;
+            }
+
+            // SETSHARED: CALL_C(xr_jit_set_shared, encoded)
+            // encoded = (val_bc_slot<<24) | (val_tag<<16) | shared_index
+            // The value to store is in call_args[0]
+            if (fn_ptr == (void *)xr_jit_set_shared) {
+                int64_t encoded = -1;
+                if (xcg_resolve_const_i64(func, ins->args[1], &encoded) &&
+                    encoded >= 0) {
+                    int shared_idx = (int)(encoded & 0xFFFF);
+                    xcgen_buf_printf(b, "    xrt_shared[%d] = ", shared_idx);
+                    if (cf->call_args_count > 0)
+                        emit_ref_as_tagged(b, func, cf->call_args[0]);
+                    else
+                        xcgen_buf_printf(b, "(%s){0}", tagged_type);
+                    xcgen_buf_puts(b, ";\n");
+                    // Track max shared index for array sizing
+                    XcgenCompilation *comp = mod->comp;
+                    XR_DCHECK(comp != NULL, "emit_call_c SETSHARED: NULL comp");
+                    if (shared_idx > comp->max_shared_index)
+                        comp->max_shared_index = shared_idx;
+                    cf->needs_runtime = true;
+                } else {
+                    xcgen_buf_puts(b, "    /* SETSHARED: unresolved encoded */\n");
+                }
+                cf->call_args_count = 0;
+                return;
+            }
+
             // Closure creation: CALL_C(child_proto_ptr, nupvals)
             // Recognize by checking if fn_ptr is a registered proto
             const char *closure_fn = xcg_lookup_proto_name(mod, fn_ptr);
@@ -962,7 +1050,7 @@ static void emit_call_c(XcgenBuf *b, XirFunc *func, XirIns *ins,
             }
         }
     }
-    // Default: suppress (dead code in AOT for GETSHARED etc.)
+    // Default: suppress unknown CALL_C targets (dead code in AOT)
     cf->call_args_count = 0;
 }
 

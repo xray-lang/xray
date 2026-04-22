@@ -192,6 +192,18 @@ struct XrayIsolate {
      */
     void *channel_dist_hooks;  // XrChannelDistHooks*
 
+    /* ========== Extension Type System (dlopen packages) ========== */
+    // Dynamic type allocation: next type ID to assign (starts at XR_TTASK + 1)
+    uint8_t ext_type_next;
+    // Per-type name strings (only extension slots used)
+    const char *ext_type_names[XGC_MAX_TYPES];
+    // Runtime bitmaps (OR'd with compile-time constants in GC hot path)
+    uint64_t ext_finalize_bitmap;   // types needing finalization
+    uint64_t ext_has_refs_bitmap;   // types needing GC traversal
+    // Per-type callbacks (only extension slots used)
+    XrGCDestroyFn ext_destroy_funcs[XGC_MAX_TYPES];
+    void         *ext_traverse_funcs[XGC_MAX_TYPES]; // XrGCTraverseFn equivalent
+
     /* ========== stdlib per-isolate cache ========== */
     // Opaque pointer owned by stdlib/stdlib_cache.h. Holds memoised
     // values that reference per-isolate symbol IDs (e.g. the XrShape
