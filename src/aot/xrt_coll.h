@@ -26,7 +26,7 @@ static inline XrtValue xrt_array_new(int64_t cap) {
     a->len  = 0;
     a->cap  = cap;
     a->data = (XrtValue *)calloc((size_t)cap, sizeof(XrtValue));
-    return (XrtValue){.ptr = a, .tag = XRT_TAG_ARRAY};
+    return xrt_mkptr(a, XRT_TAG_ARRAY);
 }
 
 static inline void xrt_array_push(XrtValue arr, XrtValue val) {
@@ -53,7 +53,7 @@ static inline void xrt_array_push_f(XrtValue arr, double val) {
         a->cap  *= 2;
         a->data  = (XrtValue *)realloc(a->data, (size_t)a->cap * sizeof(XrtValue));
     }
-    a->data[a->len++] = (XrtValue){.f = val, .tag = XRT_TAG_F64};
+    a->data[a->len++] = xrt_mkf64(val, XRT_TAG_F64);
 }
 
 static inline int64_t xrt_array_len(XrtValue arr) {
@@ -94,7 +94,7 @@ static inline void xrt_array_set_i(XrtValue arr, int64_t idx, int64_t val) {
 static inline void xrt_array_set_f(XrtValue arr, int64_t idx, double val) {
     xrt_array_t *a = (xrt_array_t *)arr.ptr;
     if ((uint64_t)idx >= (uint64_t)a->len) return;
-    a->data[idx] = (XrtValue){.f = val, .tag = XRT_TAG_F64};
+    a->data[idx] = xrt_mkf64(val, XRT_TAG_F64);
 }
 
 /* =========================================================================
@@ -109,7 +109,7 @@ static inline XrtValue xrt_strbuf_new(void) {
     sb->len = 0;
     sb->buf = (char *)malloc(64);
     sb->buf[0] = 0;
-    return (XrtValue){.ptr = sb, .tag = XRT_TAG_STRBUF};
+    return xrt_mkptr(sb, XRT_TAG_STRBUF);
 }
 
 static inline void xrt_strbuf_grow(xrt_strbuf_t *sb, int64_t need) {
@@ -175,7 +175,7 @@ static inline XrtValue xrt_map_new(int64_t cap) {
     m->len     = 0;
     m->cap     = cap;
     m->entries = (xrt_map_entry_t *)calloc((size_t)cap, sizeof(xrt_map_entry_t));
-    return (XrtValue){.ptr = m, .tag = XRT_TAG_MAP};
+    return xrt_mkptr(m, XRT_TAG_MAP);
 }
 
 static inline int xrt_key_eq(XrtValue a, XrtValue b) {
@@ -253,7 +253,7 @@ static inline XrtValue xrt_closure_new(void *fn, int nupvals) {
     c->nupvals = nupvals;
     for (int i = 0; i < nupvals; i++)
         c->upvals[i] = (XrtValue){.i = 0, .tag = XRT_TAG_NULL};
-    return (XrtValue){.ptr = c, .tag = XRT_TAG_CLOSURE};
+    return xrt_mkptr(c, XRT_TAG_CLOSURE);
 }
 
 #endif // XRT_COLL_H

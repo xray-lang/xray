@@ -18,6 +18,9 @@
 #include "../base/xchecks.h"
 #include "../base/xmalloc.h"
 #include "../runtime/value/xstruct_layout.h"
+#include "../runtime/class/xclass_descriptor.h"
+#include "../runtime/class/xclass.h"
+#include "../runtime/class/xclass_lookup.h"
 
 /*
  * CPS suspend pattern helper: shared by OP_AWAIT, OP_CHAN_SEND, OP_CHAN_RECV.
@@ -465,7 +468,51 @@ bool xir_translate_misc_ops(XirBuilder *b, XirBlock **cur_blk,
             int c_raw = GETARG_C(inst);
             int nargs = c_raw & 0x7F;
 
-            // Collect args: [0]=receiver, [1..nargs]=args
+            // AOT: resolve method proto at compile time via pre-registered class
+            if (b->aot_mode && b->isolate && (a + 1) < 256) {
+                XrType *recv_type = builder_find_reg_type(b, a + 1);
+                const char *cname = recv_type ? xr_type_get_class_name(recv_type) : NULL;
+                XrClass *klass = NULL;
+                if (cname && recv_type->kind == XR_KIND_INSTANCE)
+                    klass = xr_class_lookup_by_name(b->isolate, cname);
+                if (klass && method_idx < klass->method_count) {
+                    XrMethod *method = &klass->methods[method_idx];
+                    if (method->type == XMETHOD_CLOSURE &&
+                        method->as.closure && method->as.closure->proto)
+                    {
+                        XrProto *callee_proto = method->as.closure->proto;
+                        uint8_t ret_type = XR_REP_I64;
+                        if (callee_proto->return_type_info)
+                            ret_type = xr_type_rep(callee_proto->return_type_info);
+                        // Collect args: [0]=closure(unused), [1]=receiver, [2..nargs+1]=args
+                        XirRef ck_args[16];
+                        XirRef cl_ptr = xir_const_ptr(b->func, (void *)method->as.closure);
+                        ck_args[0] = xir_emit_unary(b->func, blk, XIR_CONST_I64,
+                                                     XR_REP_I64, cl_ptr);
+                        ck_args[1] = builder_get_slot(b, blk, a + 1);
+                        for (int j = 0; j < nargs && j < 13; j++)
+                            ck_args[2 + j] = builder_get_slot(b, blk, a + 2 + j);
+                        uint16_t ck_nca = (uint16_t)(2 + (nargs < 13 ? nargs : 13));
+                        XirRef proto_ref = xir_const_ptr(b->func, (void *)callee_proto);
+                        XirRef na_ref = xir_const_i64(b->func, (int64_t)(nargs + 1));
+                        XirRef na_val = xir_emit_unary(b->func, blk, XIR_CONST_I64,
+                                                        XR_REP_I64, na_ref);
+                        XirRef result = xir_emit(b->func, blk, XIR_CALL_KNOWN,
+                                                  ret_type, proto_ref, na_val);
+                        blk->ins[blk->nins - 1].flags |= XIR_FLAG_SIDE_EFFECT;
+                        builder_bind_call_args(b, result, ck_args, ck_nca);
+                        if (ret_type == XR_REP_PTR)
+                            builder_tag_vreg(b, result, VTAG_PTR, 0);
+                        if (ret_type != XR_REP_PTR && a < 256)
+                            b->slot_rep[a] = ret_type;
+                        builder_set_slot(b, a, result);
+                        b->ops_translated++;
+                        return true;
+                    }
+                }
+            }
+
+            // JIT fallback: generic CALL_C bridge
             XirRef id_args[16];
             id_args[0] = builder_get_slot(b, blk, a + 1);
             for (int j = 0; j < nargs && j < 15; j++)
@@ -763,14 +810,66 @@ bool xir_translate_misc_ops(XirBuilder *b, XirBlock **cur_blk,
             return true;
         }
 
+        /* === Class creation (AOT handles, JIT defers to VM) === */
+        case OP_CLASS_CREATE_FROM_DESCRIPTOR: {
+            int a = GETARG_A(inst);
+            if (b->aot_mode) {
+                // AOT: find constructor proto from class descriptor.
+                // Set callee_proto on result so OP_CALL uses CALL_KNOWN
+                // (emit_call_known detects constructor and emits alloc+call).
+                int bx = GETARG_Bx(inst);
+                XrProto *ctor_proto = NULL;
+                if (bx < (int)PROTO_CONST_COUNT(b->proto)) {
+                    XrValue desc_val = PROTO_CONSTANT(b->proto, bx);
+                    XrClassDescriptor *desc = (XrClassDescriptor *)XR_TO_PTR(desc_val);
+                    if (desc) {
+                        for (uint32_t m = 0; m < desc->instance_method_count; m++) {
+                            if (strcmp(desc->instance_methods[m].name, "constructor") == 0) {
+                                uint32_t ci = desc->instance_methods[m].closure_index;
+                                if (ci < PROTO_PROTO_COUNT(b->proto))
+                                    ctor_proto = PROTO_PROTO(b->proto, ci);
+                                break;
+                            }
+                        }
+                    }
+                }
+                // Emit a tagged zero constant as placeholder class value.
+                // Use REP_I64 (CONST_I64 requires it), then set slot to TAGGED
+                // so codegen auto-boxes via emit_ref_as_tagged for CALL_KNOWN.
+                XirRef val = xir_const_i64(b->func, 0);
+                XirRef result = xir_emit_unary(b->func, blk, XIR_CONST_I64,
+                                               XR_REP_I64, val);
+                builder_tag_vreg(b, result, VTAG_PTR, 0);
+                builder_set_slot(b, a, result);
+                b->slot_rep[a] = XR_REP_TAGGED;
+                if (ctor_proto) {
+                    XirVReg *vr = builder_vreg_for_slot(b, a);
+                    if (vr) vr->callee_proto = ctor_proto;
+                }
+                b->ops_translated++;
+                return true;
+            }
+            b->ops_skipped++;
+            return true;
+        }
+
+        case OP_CLINIT_CALL: {
+            // AOT: static constructor — skip for now (no runtime class init)
+            // JIT: deopt-to-VM
+            if (b->aot_mode) {
+                b->ops_translated++;
+                return true;
+            }
+            b->ops_skipped++;
+            return true;
+        }
+
         /* === Deopt-to-VM opcodes (rare in hot loops) === */
         case OP_IMPORT:
         case OP_DEFER:
         case OP_ABSTRACT_ERROR:
         case OP_GETSUPER:
         case OP_SUPERINVOKE:
-        case OP_CLASS_CREATE_FROM_DESCRIPTOR:
-        case OP_CLINIT_CALL:
         /* === Channel (non-blocking) === */
         case OP_CHAN_NEW: {
             // R[A] = Channel(Bx) — create channel with buffer

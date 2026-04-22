@@ -873,11 +873,11 @@ static void xcg_emit_const_ptr(XcgenBuf *b, XirFunc *func, XirIns *ins,
             if (ci < func->nconst) raw = func->consts[ci].val.i64;
         }
         if (raw == 0) {
-            xcgen_buf_printf(b, "    v%u = (%s){.ptr=NULL,.tag=XRT_TAG_NULL};\n",
-                             dst_idx, tagged_type);
+            xcgen_buf_printf(b, "    v%u = xrt_mkptr(NULL, XRT_TAG_NULL);\n",
+                             dst_idx);
         } else {
-            xcgen_buf_printf(b, "    v%u = (%s){.ptr=(void*)0x%" PRIx64 ",.tag=XRT_TAG_PTR};\n",
-                             dst_idx, tagged_type, (uint64_t)raw);
+            xcgen_buf_printf(b, "    v%u = xrt_mkptr((void*)0x%" PRIx64 ", XRT_TAG_PTR);\n",
+                             dst_idx, (uint64_t)raw);
         }
         cf->needs_runtime = true;
     } else {

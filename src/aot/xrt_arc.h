@@ -158,7 +158,7 @@ static inline void xrt_arc_init(void) {
 // Allocate a heap string via ARC; xrt_arc_release will free it
 static inline XrtValue xrt_str_alloc(size_t len) {
     char *p = (char *)xrt_arc_alloc(len + 1);
-    return (XrtValue){.ptr = p, .tag = XRT_TAG_STR_ARC};
+    return xrt_mkptr(p, XRT_TAG_STR_ARC);
 }
 
 static inline XrtValue xrt_str_concat(const char *sa, const char *sb) {

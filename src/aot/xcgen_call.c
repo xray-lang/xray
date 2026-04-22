@@ -267,7 +267,7 @@ static void emit_call_known(XcgenBuf *b, XirFunc *func, XirIns *ins,
         // Class constructor call: allocate instance + call constructor + assign instance
         int inst_bytes = ctor_nfields * 16; // sizeof(XrtValue) per field
         const char *tagged_type = "XrValue";
-        xcgen_buf_printf(b, "    { %s _inst = {.ptr = xrt_arc_alloc(%d), .tag = XRT_TAG_PTR};\n",
+        xcgen_buf_printf(b, "    { %s _inst = xrt_mkptr(xrt_arc_alloc(%d), XRT_TAG_PTR);\n",
                          tagged_type, inst_bytes);
         xcgen_buf_printf(b, "      %s(xrt_ctx, _inst", callee_name);
         // Pass call_args[1..nargs] as constructor args (skip closure at [0])
@@ -300,9 +300,18 @@ static void emit_call_known(XcgenBuf *b, XirFunc *func, XirIns *ins,
                         xir_ref_is_none(ins->dst) ||
                         !xir_ref_is_vreg(ins->dst) ||
                         (dst_idx < func->nvreg && cf->used_vregs && cf->used_vregs[dst_idx]));
-        if (dst_used && xir_ref_is_vreg(ins->dst))
-            xcgen_buf_printf(b, "    v%u = %s(", dst_idx, callee_name);
-        else
+        // Auto-unbox: callee returns XrValue but dst vreg expects I64/F64
+        uint8_t dst_rep = (dst_idx < func->nvreg) ? func->vregs[dst_idx].rep : XR_REP_TAGGED;
+        bool needs_unbox_i64 = (dst_used && dst_rep == XR_REP_I64);
+        bool needs_unbox_f64 = (dst_used && dst_rep == XR_REP_F64);
+        if (dst_used && xir_ref_is_vreg(ins->dst)) {
+            if (needs_unbox_i64)
+                xcgen_buf_printf(b, "    v%u = xrt_unbox_int(%s(", dst_idx, callee_name);
+            else if (needs_unbox_f64)
+                xcgen_buf_printf(b, "    v%u = xrt_unbox_float(%s(", dst_idx, callee_name);
+            else
+                xcgen_buf_printf(b, "    v%u = %s(", dst_idx, callee_name);
+        } else
             xcgen_buf_printf(b, "    %s(", callee_name);
         // Pass xrt_ctx as implicit first argument
         bool ctx_emitted = true;
@@ -425,7 +434,10 @@ static void emit_call_known(XcgenBuf *b, XirFunc *func, XirIns *ins,
                 xcgen_buf_puts(b, "0");
             }
         }
-        xcgen_buf_puts(b, ");\n");
+        if (needs_unbox_i64 || needs_unbox_f64)
+            xcgen_buf_puts(b, "));\n");
+        else
+            xcgen_buf_puts(b, ");\n");
     } else if (callee_proto) {
         // Pure AOT: all functions must be compiled. Emit abort for unresolved protos.
         xcgen_buf_printf(b, "    fprintf(stderr, \"AOT: uncompiled function call\\n\");\n");
