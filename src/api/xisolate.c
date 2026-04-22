@@ -175,10 +175,9 @@ void xray_isolate_delete(XrayIsolate *isolate) {
 }
 
 // For bytecode serialization
-void* xr_isolate_get_symbol_table(void *isolate) {
+void* xr_isolate_get_symbol_table(XrayIsolate *isolate) {
     if (!isolate) return NULL;
-    XrayIsolate *X = (XrayIsolate*)isolate;
-    return X->symbol_table;
+    return isolate->symbol_table;
 }
 
 /* ========== Advanced API ========== */

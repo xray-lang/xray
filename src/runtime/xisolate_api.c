@@ -39,7 +39,7 @@ void xr_isolate_set_type_registry(XrayIsolate *X, XrTypeRegistry *registry) {
     if (X) X->type_registry = registry;
 }
 
-// xr_isolate_get_symbol_table defined in xray_isolate.c with void* signature
+// xr_isolate_get_symbol_table defined in api/xisolate.c
 
 /* ========== Class Subsystem ========== */
 
@@ -228,6 +228,54 @@ void xr_isolate_set_suppress_exception_print(XrayIsolate *X, bool suppress) {
     if (X) {
         X->suppress_exception_print = suppress;
     }
+}
+
+/* ========== Extension Type System ========== */
+
+uint8_t xr_alloc_extension_type(XrayIsolate *X, const char *name) {
+    if (!X || !name) return 0;
+    uint8_t id = X->ext_type_next;
+    if (id >= XGC_MAX_TYPES) return 0;  // capacity exhausted
+    X->ext_type_names[id] = name;
+    X->ext_type_next = id + 1;
+    return id;
+}
+
+void xr_register_extension_destroy(XrayIsolate *X, uint8_t type_id,
+                                    XrExtDestroyFn destroy_fn) {
+    if (!X || type_id >= XGC_MAX_TYPES) return;
+    X->ext_destroy_funcs[type_id] = (XrGCDestroyFn)destroy_fn;
+    X->ext_finalize_bitmap |= (1ULL << type_id);
+}
+
+void xr_register_extension_traverse(XrayIsolate *X, uint8_t type_id,
+                                     XrExtTraverseFn traverse_fn) {
+    if (!X || type_id >= XGC_MAX_TYPES) return;
+    X->ext_traverse_funcs[type_id] = (XrGCTraverseFn)traverse_fn;
+    X->ext_has_refs_bitmap |= (1ULL << type_id);
+}
+
+uint64_t xr_isolate_get_ext_finalize_bitmap(XrayIsolate *X) {
+    return X ? X->ext_finalize_bitmap : 0;
+}
+
+uint64_t xr_isolate_get_ext_has_refs_bitmap(XrayIsolate *X) {
+    return X ? X->ext_has_refs_bitmap : 0;
+}
+
+XrExtDestroyFn xr_isolate_get_ext_destroy(XrayIsolate *X, uint8_t type_id) {
+    if (!X || type_id >= XGC_MAX_TYPES) return NULL;
+    return (XrExtDestroyFn)X->ext_destroy_funcs[type_id];
+}
+
+XrExtTraverseFn xr_isolate_get_ext_traverse(XrayIsolate *X, uint8_t type_id) {
+    if (!X || type_id >= XGC_MAX_TYPES) return NULL;
+    return (XrExtTraverseFn)X->ext_traverse_funcs[type_id];
+}
+
+const char* xr_isolate_get_ext_type_name(XrayIsolate *X, uint8_t type_id) {
+    if (!X || type_id >= XGC_MAX_TYPES) return NULL;
+    return X->ext_type_names[type_id];
 }
 
 /* ========== Thread Local API ========== */

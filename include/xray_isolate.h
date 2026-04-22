@@ -18,6 +18,7 @@
 
 #include <stddef.h>
 #include <stdbool.h>
+#include "xray_export.h"
 
 // An Isolate is a complete instance of the Xray VM with its own
 // heap, GC, stack, globals, type registry, and execution backend.
@@ -55,28 +56,28 @@ typedef struct {
 
     /* === Backend === */
     XrayBackendType backend_type;
-    
+
     /* === JIT (for LLVM/Mixed backends) === */
     bool enable_jit;
     int jit_threshold;              // Call count before JIT (default: 100)
-    
+
     /* === Memory === */
     size_t initial_heap_size;       // 0 = use default
     size_t max_heap_size;           // 0 = unlimited
-    
+
     /* === GC === */
     bool enable_gc;                 // Default: true
     size_t gc_threshold;
-    
+
     /* === Debug === */
     bool trace_execution;
     bool trace_gc;
     bool dump_bytecode;
     bool dump_ic_feedback;          // Dump IC type feedback after execution
-    
+
     /* === User Data === */
     void *userdata;
-    
+
     /* === Script Info (set at runtime) === */
     const char *script_file;        // Script path (for __file__)
     int script_argc;
@@ -91,53 +92,53 @@ typedef struct {
 
 // Create a new Isolate. Pass NULL for default params.
 // Returns NULL on failure.
-XrayIsolate* xray_isolate_new(const XrayIsolateParams *params);
+XRAY_API XrayIsolate* xray_isolate_new(const XrayIsolateParams *params);
 
 // Initialize params with defaults: Bytecode backend, GC enabled, JIT disabled
-void xray_isolate_params_init(XrayIsolateParams *params);
+XRAY_API void xray_isolate_params_init(XrayIsolateParams *params);
 
 // Setup full runtime (compiler, classes, modules, reflection, regex, etc.)
 // Call after params_init, before xray_isolate_new.
 // Bytecode-bundled executables skip this for minimal binary size.
-void xray_isolate_setup_full(XrayIsolateParams *params);
+XRAY_API void xray_isolate_setup_full(XrayIsolateParams *params);
 
 // Destroy Isolate and free all resources. Safe to pass NULL.
-void xray_isolate_delete(XrayIsolate *isolate);
+XRAY_API void xray_isolate_delete(XrayIsolate *isolate);
 
 // Execute source code. Returns 0 on success, -1 on error.
-int xray_isolate_dostring(XrayIsolate *isolate, const char *source);
+XRAY_API int xray_isolate_dostring(XrayIsolate *isolate, const char *source);
 
 // Execute source file. Returns 0 on success, -1 on error.
-int xray_isolate_dofile(XrayIsolate *isolate, const char *filename);
+XRAY_API int xray_isolate_dofile(XrayIsolate *isolate, const char *filename);
 
 // Execute source file with debug support (DAP).
 // Returns 0 on success, -1 on error. out_proto receives compiled proto for debugging.
-int xray_isolate_dofile_debug(XrayIsolate *isolate, const char *filename, void **out_proto);
+XRAY_API int xray_isolate_dofile_debug(XrayIsolate *isolate, const char *filename, void **out_proto);
 
 /* ========== Advanced API ========== */
 
 // Get current backend type (determined at compile time via CMake)
-XrayBackendType xray_isolate_get_backend(XrayIsolate *isolate);
+XRAY_API XrayBackendType xray_isolate_get_backend(XrayIsolate *isolate);
 
-void xray_isolate_set_userdata(XrayIsolate *isolate, void *userdata);
-void* xray_isolate_get_userdata(XrayIsolate *isolate);
+XRAY_API void xray_isolate_set_userdata(XrayIsolate *isolate, void *userdata);
+XRAY_API void* xray_isolate_get_userdata(XrayIsolate *isolate);
 
 /* ========== Statistics and Debugging ========== */
 
-void xray_isolate_get_stats(XrayIsolate *isolate, 
-                            size_t *bytes_allocated, 
-                            int *gc_count);
+XRAY_API void xray_isolate_get_stats(XrayIsolate *isolate,
+                                     size_t *bytes_allocated,
+                                     int *gc_count);
 
-void xray_isolate_collect_garbage(XrayIsolate *isolate);
+XRAY_API void xray_isolate_collect_garbage(XrayIsolate *isolate);
 
-void xray_isolate_set_trace(XrayIsolate *isolate, bool enable);
+XRAY_API void xray_isolate_set_trace(XrayIsolate *isolate, bool enable);
 
-void xray_isolate_set_dump_bytecode(XrayIsolate *isolate, bool enable);
+XRAY_API void xray_isolate_set_dump_bytecode(XrayIsolate *isolate, bool enable);
 
 // Set script info. Accessible in script as: process.args, __file__, __dir__
-void xray_isolate_set_script_info(XrayIsolate *isolate, 
-                                   const char *script_file,
-                                   int argc, 
-                                   char **argv);
+XRAY_API void xray_isolate_set_script_info(XrayIsolate *isolate,
+                                           const char *script_file,
+                                           int argc,
+                                           char **argv);
 
 #endif // XRAY_ISOLATE_H
