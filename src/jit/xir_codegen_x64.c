@@ -1230,13 +1230,21 @@ static void x64_emit_xir_ins(X64CodegenCtx *ctx, XirIns *ins) {
         break;
     }
 
-    /* ========== Coroutine suspend ========== */
-    case XIR_SUSPEND:
+    /* ========== Exception handling ========== */
+    /* TRY_BEGIN / TRY_END / THROW are never emitted directly by the builder
+     * in JIT mode; builder lowers them to CALL_C (xr_jit_throw) + GOTO/RET.
+     * XIR_CATCH is handled above as a direct exception load + clear. */
     case XIR_TRY_BEGIN:
     case XIR_TRY_END:
     case XIR_THROW:
-        /* TODO: coroutine suspend/resume + exception (F.4.7) */
-        xr_log_warning("x64-cg", "suspend/exception op %d not yet implemented", ins->op);
+        break;  /* no-op in JIT codegen */
+
+    /* ========== Coroutine suspend ========== */
+    case XIR_SUSPEND:
+        /* TODO: coroutine await/channel suspend (F.4.9) — requires
+         * suspend_state, resume entry tracking, gopark pattern.
+         * Until implemented, force deopt for coro-using functions. */
+        xr_log_warning("x64-cg", "XIR_SUSPEND not yet implemented on x86-64");
         ctx->had_error = true;
         break;
 
@@ -1244,6 +1252,59 @@ static void x64_emit_xir_ins(X64CodegenCtx *ctx, XirIns *ins) {
     case XIR_BARRIER_BACK:
         /* TODO: write barrier stubs — skip for now */
         break;
+
+    /* ========== GC allocation ========== */
+    /* Slow-path only: always go through xr_jit_alloc C helper.
+     * TODO: inline bump-pointer fast path (matches ARM64 ~100 lines of
+     * immix cursor+limit check + GC header init + alloc_post bookkeeping). */
+    case XIR_ALLOC: {
+        uint8_t gc_type = 0;
+        uint32_t alloc_size = 0;
+        if (xir_ref_is_const(ins->args[0])) {
+            uint32_t ci = XIR_REF_INDEX(ins->args[0]);
+            int64_t packed_const = ctx->func->consts[ci].val.i64;
+            gc_type = (uint8_t)(packed_const & 0xFF);
+        }
+        if (xir_ref_is_const(ins->args[1])) {
+            uint32_t ci = XIR_REF_INDEX(ins->args[1]);
+            alloc_size = (uint32_t)ctx->func->consts[ci].val.i64;
+        }
+        alloc_size = (alloc_size + 7) & ~7u;
+
+        x64_emit_ptr_spill_writeback(ctx);
+        uint32_t smap_id_a = x64_record_safepoint(ctx);
+        x64_load_imm64(&ctx->buf, X64_RCX, (uint64_t)smap_id_a);
+        x64_mov_mr32(&ctx->buf, X64_JIT_CTX_REG,
+                     (int32_t)XIR_JIT_ACTIVE_SMAP_ID_OFFSET, X64_RCX);
+
+        /* packed = type<<32 | size */
+        uint64_t packed_arg = ((uint64_t)gc_type << 32) | (uint64_t)alloc_size;
+        x64_load_imm64(&ctx->buf, X64_RCX, packed_arg);
+        x64_mov_mr(&ctx->buf, X64_JIT_CTX_REG,
+                   (int32_t)X64_EXTRA_ARG_OFFSET, X64_RCX);
+
+        /* Load helper + CALL call_c_stub */
+        x64_load_imm64(&ctx->buf, X64_SCRATCH_REG,
+                       (uint64_t)(uintptr_t)xr_jit_alloc);
+        XR_DCHECK(ctx->npatch < ctx->patches_cap, "too many patches");
+        X64BranchPatch *cp_a = &ctx->patches[ctx->npatch];
+        x64_emit8(&ctx->buf, 0xE8);
+        cp_a->emit_pos = ctx->buf.pos;
+        cp_a->target_blk = 0;
+        cp_a->type = X64_PATCH_CALL_C;
+        cp_a->cc = X64_CC_E;
+        ctx->npatch++;
+        x64_emit32(&ctx->buf, 0);
+        ctx->has_call_c = true;
+
+        /* Move RAX → rd, then deopt if NULL (allocation failure) */
+        if (rd != X64_RAX)
+            x64_mov_rr(&ctx->buf, rd, X64_RAX);
+        x64_test_rr(&ctx->buf, rd, rd);
+        x64_emit_deopt_id(ctx, ins);
+        x64_emit_deopt_jcc(ctx, X64_CC_E);
+        break;
+    }
 
     case XIR_CATCH: {
         /* Load exception from jit_ctx->exception, then clear it */
