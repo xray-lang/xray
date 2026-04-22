@@ -33,6 +33,7 @@
 #include "../../jit/xir_builder.h"
 #include "../../jit/xir_pass.h"
 #include "../../aot/xcgen.h"
+#include "../../runtime/class/xclass_descriptor.h"
 #endif
 #include <stdio.h>
 #include <stdlib.h>
@@ -438,6 +439,26 @@ static int build_shared_proto_map(XrProto *top, XrProto **shared_protos,
     return max_idx;
 }
 
+// Pre-register classes in isolate for CHA devirtualization.
+// Without VM execution, classes are never instantiated. This scans
+// top-level bytecode for CLASS_FROM_DESC and creates minimal class
+// objects so xr_class_lookup_by_name works at AOT compile time.
+static void aot_preregister_classes(XrProto *proto, XrayIsolate *isolate) {
+    if (!proto || !isolate) return;
+    uint32_t code_count = (uint32_t)proto->code.count;
+    const XrInstruction *code = (const XrInstruction *)proto->code.data;
+    for (uint32_t pc = 0; pc < code_count; pc++) {
+        XrInstruction inst = code[pc];
+        if (GET_OPCODE(inst) != OP_CLASS_CREATE_FROM_DESCRIPTOR) continue;
+        int bx = GETARG_Bx(inst);
+        if (bx >= (int)PROTO_CONST_COUNT(proto)) continue;
+        XrValue desc_val = PROTO_CONSTANT(proto, bx);
+        XrClassDescriptor *desc = (XrClassDescriptor *)XR_TO_PTR(desc_val);
+        if (!desc) continue;
+        xr_class_from_descriptor(isolate, desc, proto, NULL, NULL, NULL, NULL);
+    }
+}
+
 // Scan bytecodes for OP_EXPORT and correlate with OP_SETSHARED to populate exports.
 // Pattern: OP_SETSHARED R[A], shared_idx; ... OP_EXPORT K[name_idx], R[A], is_const
 static void collect_exports(XrProto *proto, XcgenModule *mod) {
@@ -615,6 +636,9 @@ static int cmd_build_native(const char *input, const char *output,
     memset(shared_protos, 0, sizeof(shared_protos));
     memset(shared_is_ctor, 0, sizeof(shared_is_ctor));
     int nshared = build_shared_proto_map(proto, shared_protos, shared_is_ctor, 128);
+
+    // Pre-register classes so CHA devirt resolves user-defined methods
+    aot_preregister_classes(proto, X);
 
     int total_compiled = 0;
 

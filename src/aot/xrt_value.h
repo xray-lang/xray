@@ -48,25 +48,43 @@ typedef union XrtValue {
 
 /* =========================================================================
  * Boxing / unboxing
+ *
+ * IMPORTANT: XrtValue is a union with 3 anonymous structs. Compound
+ * literals like (XrtValue){.f = v, .tag = T} cross struct boundaries —
+ * Clang zeros .f because .tag selects a different union member.
+ * Always use two-step init or xrt_mkptr/xrt_mkf64 helpers.
  * ========================================================================= */
+
+// Helper: build XrtValue with ptr payload (avoids compound literal bug)
+static inline XrtValue xrt_mkptr(void *p, uint8_t tag) {
+    XrtValue r;
+    r.i = 0; r.tag = tag;
+    r.ptr = p;
+    return r;
+}
+
+// Helper: build XrtValue with double payload
+static inline XrtValue xrt_mkf64(double v, uint8_t tag) {
+    XrtValue r;
+    r.i = 0; r.tag = tag;
+    r.f = v;
+    return r;
+}
 
 static inline XrtValue xrt_box_int(int64_t v) {
     return (XrtValue){.i = v, .tag = XRT_TAG_I64};
 }
 
 static inline XrtValue xrt_box_float(double v) {
-    return (XrtValue){.f = v, .tag = XRT_TAG_F64};
+    return xrt_mkf64(v, XRT_TAG_F64);
 }
 
 static inline XrtValue xrt_box_bool(int64_t v) {
-    XrtValue r;
-    r.tag = XRT_TAG_BOOL;
-    r.i   = v ? 1 : 0;
-    return r;
+    return (XrtValue){.i = v ? 1 : 0, .tag = XRT_TAG_BOOL};
 }
 
 static inline XrtValue xrt_box_str(const char *s) {
-    return (XrtValue){.ptr = (void *)s, .tag = XRT_TAG_STR};
+    return xrt_mkptr((void *)s, XRT_TAG_STR);
 }
 
 static inline int64_t      xrt_unbox_int(XrtValue v)   { return v.i; }
