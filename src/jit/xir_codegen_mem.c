@@ -8,6 +8,8 @@
  * xir_codegen_mem.c - XIR codegen for runtime/memory/guard instructions
  */
 
+#ifdef __aarch64__
+
 #include "xir_codegen_internal.h"
 #include "../base/xchecks.h"
 
@@ -1284,3 +1286,5 @@ bool xir_emit_mem_ops(CodegenCtx *ctx, XirIns *ins, A64Reg rd) {
     }
     return true;
 }
+
+#endif // __aarch64__

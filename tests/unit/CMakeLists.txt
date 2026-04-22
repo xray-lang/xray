@@ -88,8 +88,15 @@ add_xray_unit_test(test_xir_defuse jit/test_xir_defuse.c)
 add_xray_unit_test(test_xir_fold jit/test_xir_fold.c)
 add_xray_unit_test(test_xir_liveness2 jit/test_xir_liveness2.c)
 add_xray_unit_test(test_xir_pass jit/test_xir_pass.c)
-add_xray_unit_test(test_arm64_emit jit/test_arm64_emit.c)
-add_xray_unit_test(test_peephole jit/test_peephole.c)
+# ARM64-specific tests (instruction encoding, peephole)
+if(XR_TARGET_ARCH MATCHES "arm64|aarch64")
+    add_xray_unit_test(test_arm64_emit jit/test_arm64_emit.c)
+    add_xray_unit_test(test_peephole jit/test_peephole.c)
+endif()
+# x86-64-specific tests
+if(XR_TARGET_ARCH MATCHES "x86_64|AMD64")
+    # add_xray_unit_test(test_x64_emit jit/test_x64_emit.c)  # F.4.2+
+endif()
 add_xray_unit_test(test_code_alloc jit/test_code_alloc.c)
 
 # E2E tests: require full JIT runtime (coro + jit_ctx), excluded from default build

@@ -119,4 +119,8 @@ typedef struct {
 // Uses the provided code allocator for executable memory
 XR_FUNC XirCodegenResult xir_codegen_arm64(XirFunc *func, XirCodeAlloc *alloc);
 
+// Generate x86-64 machine code from XIR function
+// Uses the provided code allocator for executable memory
+XR_FUNC XirCodegenResult xir_codegen_x64(XirFunc *func, XirCodeAlloc *alloc);
+
 #endif // XIR_CODEGEN_H

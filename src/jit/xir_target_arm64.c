@@ -13,6 +13,8 @@
  *   for all ARM64-specific register and frame parameters.
  */
 
+#ifdef __aarch64__
+
 #include "xir_target.h"
 #include "../base/xchecks.h"
 #include "xir_arm64.h"
@@ -58,5 +60,7 @@ const XirTarget xir_target_arm64 = {
     .max_vregs          = 4096,
 };
 
-// Global current target pointer (initialized by JIT init)
+// Global current target pointer — set to this platform's target
 const XirTarget *xir_current_target = &xir_target_arm64;
+
+#endif // __aarch64__

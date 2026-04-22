@@ -17,6 +17,8 @@
  *   priority order at each position.
  */
 
+#ifdef __aarch64__
+
 #include "xir_peephole.h"
 #include "../base/xchecks.h"
 
@@ -371,3 +373,5 @@ uint32_t xir_peephole(A64Buf *buf) {
 
     return nops;
 }
+
+#endif // __aarch64__

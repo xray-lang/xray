@@ -13,6 +13,8 @@
  *   name, offset, and surrounding disassembly for quick diagnosis.
  */
 
+#ifdef __aarch64__
+
 #include "xir_jit_debug.h"
 #include "../base/xchecks.h"
 #include "xir_arm64_disasm.h"
@@ -434,3 +436,5 @@ void jit_debug_install_crash_handler(void) {
 
     fprintf(stderr, "[JIT-debug] crash handler installed (with alt stack)\n");
 }
+
+#endif // __aarch64__

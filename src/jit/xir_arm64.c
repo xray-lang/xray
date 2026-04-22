@@ -16,6 +16,8 @@
  *   - xir_arm64.h: public API and register definitions
  */
 
+#ifdef __aarch64__
+
 #include "xir_arm64.h"
 #include "../base/xchecks.h"
 #include <string.h>
@@ -612,3 +614,5 @@ int a64_load_f64(A64Buf *buf, A64Reg dd, A64Reg scratch_gpr, double val) {
 uint32_t a64_nop(void) {
     return 0xD503201F;
 }
+
+#endif // __aarch64__

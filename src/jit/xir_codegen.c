@@ -24,6 +24,8 @@
  *   - x19 = coro pointer (callee-saved, set in prologue)
  */
 
+#ifdef __aarch64__
+
 #include "../base/xlog.h"
 
 #include "xir_codegen_internal.h"
@@ -2538,3 +2540,5 @@ XirCodegenResult xir_codegen_arm64(XirFunc *func, XirCodeAlloc *alloc) {
 }
 
 // xir_insert_write_barriers moved to xir_pass.c
+
+#endif // __aarch64__

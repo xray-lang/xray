@@ -74,6 +74,6 @@ extern const XirTarget *xir_current_target;
 
 // Built-in target definitions
 extern const XirTarget xir_target_arm64;
-/* extern const XirTarget xir_target_x86_64; */  // future
+extern const XirTarget xir_target_x64;
 
 #endif // XIR_TARGET_H

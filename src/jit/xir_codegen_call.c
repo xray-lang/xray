@@ -8,6 +8,8 @@
  * xir_codegen_call.c - XIR codegen for call/invoke instructions
  */
 
+#ifdef __aarch64__
+
 #include "xir_codegen_internal.h"
 #include "../base/xchecks.h"
 
@@ -932,3 +934,5 @@ bool xir_emit_call_ops(CodegenCtx *ctx, XirIns *ins, A64Reg rd) {
     }
     return true;
 }
+
+#endif // __aarch64__
