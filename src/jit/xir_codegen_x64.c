@@ -1376,10 +1376,47 @@ static void x64_emit_xir_ins(X64CodegenCtx *ctx, XirIns *ins) {
         break;
     }
 
-    case XIR_BARRIER_FWD:
-    case XIR_BARRIER_BACK:
-        /* TODO: write barrier stubs — skip for now */
+    case XIR_BARRIER_FWD: {
+        /* Forward write barrier: parent = args[0], child = args[1].
+         * Move to scratch regs then CALL shared barrier_fwd_stub. */
+        X64Reg parent_reg = x64_get_operand(ctx, ins->args[0], X64_SCRATCH_REG);
+        X64Reg child_reg  = x64_get_operand(ctx, ins->args[1], X64_RCX);
+        if (parent_reg != X64_SCRATCH_REG)
+            x64_mov_rr(&ctx->buf, X64_SCRATCH_REG, parent_reg);
+        if (child_reg != X64_RCX)
+            x64_mov_rr(&ctx->buf, X64_RCX, child_reg);
+        /* CALL rel32 → barrier_fwd_stub */
+        XR_DCHECK(ctx->npatch < ctx->patches_cap, "too many patches");
+        X64BranchPatch *bp = &ctx->patches[ctx->npatch];
+        x64_emit8(&ctx->buf, 0xE8);
+        bp->emit_pos = ctx->buf.pos;
+        bp->target_blk = 0;
+        bp->type = X64_PATCH_BARRIER_FWD;
+        bp->cc = X64_CC_E;
+        ctx->npatch++;
+        x64_emit32(&ctx->buf, 0);
+        ctx->has_barriers = true;
         break;
+    }
+    case XIR_BARRIER_BACK: {
+        /* Back write barrier: container = args[0].
+         * Move to scratch reg then CALL shared barrier_back_stub. */
+        X64Reg container_reg = x64_get_operand(ctx, ins->args[0], X64_SCRATCH_REG);
+        if (container_reg != X64_SCRATCH_REG)
+            x64_mov_rr(&ctx->buf, X64_SCRATCH_REG, container_reg);
+        /* CALL rel32 → barrier_back_stub */
+        XR_DCHECK(ctx->npatch < ctx->patches_cap, "too many patches");
+        X64BranchPatch *bp = &ctx->patches[ctx->npatch];
+        x64_emit8(&ctx->buf, 0xE8);
+        bp->emit_pos = ctx->buf.pos;
+        bp->target_blk = 0;
+        bp->type = X64_PATCH_BARRIER_BACK;
+        bp->cc = X64_CC_E;
+        ctx->npatch++;
+        x64_emit32(&ctx->buf, 0);
+        ctx->has_barriers = true;
+        break;
+    }
 
     /* ========== GC allocation ========== */
     /* Slow-path only: always go through xr_jit_alloc C helper.
@@ -1606,6 +1643,68 @@ static void x64_emit_call_c_stub(X64CodegenCtx *ctx) {
 
     /* Return payload in RAX */
     x64_mov_rr(&ctx->buf, X64_RAX, X64_SCRATCH_REG);
+    x64_ret(&ctx->buf);
+}
+
+/* ========== Write Barrier Stubs ========== */
+
+/* Barrier stubs save/restore all caller-saved GP regs, then call the
+ * runtime barrier function via System V ABI.
+ * On entry:  R11 = parent/container, RCX = child (fwd only).
+ * Convention: barriers are leaf-like (no GC re-entry, no safepoint needed). */
+
+static void x64_emit_barrier_stubs(X64CodegenCtx *ctx) {
+    if (!ctx->has_barriers) return;
+
+    /* Forward barrier stub: xr_jit_barrier_fwd(coro, parent, child)
+     * On entry: R11 = parent, RCX = child. */
+    ctx->barrier_fwd_stub = ctx->buf.pos;
+
+    /* Save all 8 caller-saved GP alloc regs + RCX_child (avoid clobber).
+     * 8 pushes from CALL + 8 caller-saved = 9 pushes total (incl. return addr
+     * = 10 * 8 = 80 → not aligned). Need 10 pushes for 16-byte align. */
+    x64_push_r(&ctx->buf, X64_RCX);  /* save child */
+    for (int i = 0; i < 8 && i < X64_MAX_PHYS_REGS; i++)
+        x64_push_r(&ctx->buf, x64_alloc_regs[i]);
+    /* 9 pushes + return addr push = 10 * 8 = 80 → not 16-aligned.
+     * Push dummy for alignment. */
+    x64_push_r(&ctx->buf, X64_SCRATCH_REG);
+
+    /* Setup System V: RDI=coro, RSI=parent(R11), RDX=child(RCX saved on stack) */
+    x64_mov_rr(&ctx->buf, X64_RDI, X64_CORO_REG);
+    x64_mov_rr(&ctx->buf, X64_RSI, X64_SCRATCH_REG);  /* parent was in R11 */
+    /* child is at [RSP + 80] (10 pushes * 8 bytes above current RSP) */
+    x64_mov_rm(&ctx->buf, X64_RDX, X64_RSP, 80);
+    x64_load_imm64(&ctx->buf, X64_SCRATCH_REG,
+                   (uint64_t)(uintptr_t)xr_jit_barrier_fwd);
+    x64_call_r(&ctx->buf, X64_SCRATCH_REG);
+
+    /* Restore regs */
+    x64_pop_r(&ctx->buf, X64_SCRATCH_REG);  /* pop dummy */
+    for (int i = 7; i >= 0 && i < X64_MAX_PHYS_REGS; i--)
+        x64_pop_r(&ctx->buf, x64_alloc_regs[i]);
+    x64_pop_r(&ctx->buf, X64_RCX);
+    x64_ret(&ctx->buf);
+
+    /* Back barrier stub: xr_jit_barrier_back(coro, container)
+     * On entry: R11 = container. */
+    ctx->barrier_back_stub = ctx->buf.pos;
+
+    for (int i = 0; i < 8 && i < X64_MAX_PHYS_REGS; i++)
+        x64_push_r(&ctx->buf, x64_alloc_regs[i]);
+    /* 8 pushes + return addr = 9 * 8 = 72 → push dummy for alignment */
+    x64_push_r(&ctx->buf, X64_SCRATCH_REG);
+
+    /* Setup System V: RDI=coro, RSI=container(R11) */
+    x64_mov_rr(&ctx->buf, X64_RDI, X64_CORO_REG);
+    x64_mov_rr(&ctx->buf, X64_RSI, X64_SCRATCH_REG);
+    x64_load_imm64(&ctx->buf, X64_SCRATCH_REG,
+                   (uint64_t)(uintptr_t)xr_jit_barrier_back);
+    x64_call_r(&ctx->buf, X64_SCRATCH_REG);
+
+    x64_pop_r(&ctx->buf, X64_SCRATCH_REG);  /* pop dummy */
+    for (int i = 7; i >= 0 && i < X64_MAX_PHYS_REGS; i--)
+        x64_pop_r(&ctx->buf, x64_alloc_regs[i]);
     x64_ret(&ctx->buf);
 }
 
@@ -1983,6 +2082,12 @@ static void x64_patch_branches(X64CodegenCtx *ctx) {
         case X64_PATCH_CALL_SELF_FAST:
             x64_patch_rel32(&ctx->buf, p->emit_pos, ctx->fast_entry_offset);
             break;
+        case X64_PATCH_BARRIER_FWD:
+            x64_patch_rel32(&ctx->buf, p->emit_pos, ctx->barrier_fwd_stub);
+            break;
+        case X64_PATCH_BARRIER_BACK:
+            x64_patch_rel32(&ctx->buf, p->emit_pos, ctx->barrier_back_stub);
+            break;
         default:
             XR_DCHECK(p->target_blk < ctx->nblock_offsets,
                       "x64_patch: target block OOB");
@@ -2235,6 +2340,7 @@ XirCodegenResult xir_codegen_x64(XirFunc *func, XirCodeAlloc *alloc) {
     /* Emit stubs (after all blocks, before patching) */
     x64_emit_deopt_stub(&ctx);
     x64_emit_call_c_stub(&ctx);
+    x64_emit_barrier_stubs(&ctx);
     x64_emit_resume_entry(&ctx, &result);
 
     /* Patch branches + call stubs */
