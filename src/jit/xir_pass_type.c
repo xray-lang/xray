@@ -1365,6 +1365,7 @@ XirPassChange xir_pass_insert_redefines(XirFunc *func) {
             XirIns *redef = xir_block_insert_at(func, blk, insert_pos);
             if (!redef) continue;
 
+            any_inserted = true;
             redef->op = XIR_REDEFINE;
             redef->rep = rep;
             redef->flags = 0;
@@ -1417,5 +1418,8 @@ XirPassChange xir_pass_insert_redefines(XirFunc *func) {
             }
         }
     }
+    return any_inserted
+        ? (XirPassChange){ false, true, true, 0, 0, 0 }
+        : xir_pass_no_change();
 }
 

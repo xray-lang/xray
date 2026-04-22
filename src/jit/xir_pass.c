@@ -1526,42 +1526,28 @@ XirPassChange xir_pass_dse(XirFunc *func) {
     xir_func_invalidate_alias(fn);                       \
 } while (0)
 
-/* ========== FixedPoint pipeline driver ==========
- *
- * Cheap IR checksum: combines each block's terminator, instruction
- * count, vreg count and first/last opcode into a 64-bit FNV-1a hash.
- * Two consecutive rounds of the pass list that leave the checksum
- * unchanged are treated as a fixed point.  The checksum is coarse on
- * purpose — we only need a "did anything change?" signal, not a
- * deep-equal comparison.
- */
-static uint64_t fixedpoint_checksum(XirFunc *func) {
-    uint64_t h = 1469598103934665603ull;
-    #define MIX(x) do { h ^= (uint64_t)(x); h *= 1099511628211ull; } while (0)
-    MIX(func->nvreg);
-    MIX(func->nblk);
-    for (uint32_t bi = 0; bi < func->nblk; bi++) {
-        XirBlock *blk = func->blocks[bi];
-        if (!blk) { MIX(0xBADB10Cu); continue; }
-        MIX(blk->id);
-        MIX(blk->nins);
-        MIX(blk->jmp.type);
-        MIX(blk->jmp.arg);
-        if (blk->nins > 0) {
-            MIX(blk->ins[0].op);
-            MIX(blk->ins[blk->nins - 1].op);
-        }
-        uint32_t nphi = 0;
-        for (XirPhi *p = blk->phis; p; p = p->next) nphi++;
-        MIX(nphi);
-    }
-    #undef MIX
-    return h;
+/* ========== FixedPoint pipeline driver ========== */
+
+#ifndef NDEBUG
+/* Count instructions with XIR_FLAG_SIDE_EFFECT.  Used by the
+ * XIR_PASS_VERIFY_SE check: passes like DCE/CSE/GVN must never
+ * reduce this count (doing so means a side-effectful instruction
+ * was incorrectly removed or merged). */
+static uint32_t xir_count_se_(XirFunc *fn) {
+    uint32_t n = 0;
+    for (uint32_t bi = 0; bi < fn->nblk; bi++)
+        for (uint32_t ii = 0; ii < fn->blocks[bi]->nins; ii++)
+            if (fn->blocks[bi]->ins[ii].flags & XIR_FLAG_SIDE_EFFECT) n++;
+    return n;
 }
+#endif
 
 /* Invoke a single pass descriptor, honouring its flags. */
 static XirPassChange fixedpoint_invoke(XirFunc *func, XrProto *proto,
                                        const XirPassDesc *d) {
+#ifndef NDEBUG
+    uint32_t se_pre = (d->flags & XIR_PASS_VERIFY_SE) ? xir_count_se_(func) : 0;
+#endif
     XirPassChange ch;
     if (d->flags & XIR_PASS_NEEDS_PROTO) {
         ch = d->fn.p ? d->fn.p(func, proto) : xir_pass_no_change();
@@ -1571,6 +1557,19 @@ static XirPassChange fixedpoint_invoke(XirFunc *func, XrProto *proto,
     if (!(d->flags & XIR_PASS_NO_RESET) &&
         (ch.cfg_changed || ch.vreg_defs_changed || ch.ins_changed))
         XIR_RESET_ANALYSIS(func);
+#ifndef NDEBUG
+    if (d->flags & XIR_PASS_VERIFY_SE) {
+        uint32_t se_post = xir_count_se_(func);
+        if (se_post < se_pre) {
+            fprintf(stderr, "[SE VERIFY] %s: %s removed %u SE instructions (%u -> %u)\n",
+                    func->name ? func->name : "?", d->name,
+                    se_pre - se_post, se_pre, se_post);
+            XR_DCHECK(false, "pass removed side-effect instructions");
+        }
+    }
+    if (!(d->flags & XIR_PASS_SKIP_CFG_VERIFY)) xir_verify_cfg(func);
+    xir_verify_types(func);
+#endif
     return ch;
 }
 
@@ -1606,53 +1605,6 @@ XirPipelineStats xir_run_fixedpoint(XirFunc *func, XrProto *proto,
     }
     return st;
 }
-
-/*
- * Auto-verify macros: run xir_verify_cfg after every pass in debug builds.
- * Inspired by Dart VM's FlowGraphChecker which runs after each compiler pass
- * to detect graph inconsistencies as soon as possible.
- */
-#ifndef NDEBUG
-
-/* V2: Side-effect preservation verifier.
- * Count instructions with XIR_FLAG_SIDE_EFFECT before and after a pass.
- * Passes like DCE, CSE, GVN, copy_prop must NEVER reduce this count;
- * doing so means a side-effectful instruction was incorrectly removed
- * or merged (e.g. the 1130_owned_shared bug where CSE merged CALL_C). */
-static uint32_t xir_count_se_(XirFunc *fn) {
-    uint32_t n = 0;
-    for (uint32_t bi = 0; bi < fn->nblk; bi++)
-        for (uint32_t ii = 0; ii < fn->blocks[bi]->nins; ii++)
-            if (fn->blocks[bi]->ins[ii].flags & XIR_FLAG_SIDE_EFFECT) n++;
-    return n;
-}
-
-#define XIR_RUN_PASS(fn, pass)       do { (void)pass(fn); XIR_RESET_ANALYSIS(fn); xir_verify_cfg(fn); xir_verify_types(fn); } while(0)
-#define XIR_RUN_PASS2(fn, pass, arg) do { (void)pass(fn, arg); XIR_RESET_ANALYSIS(fn); xir_verify_cfg(fn); xir_verify_types(fn); } while(0)
-// For passes that do NOT modify CFG — skip cfg verify (builder may leave
-// pred lists inconsistent until rebuild_preds normalizes them).
-#define XIR_RUN_PASS_NOCFG(fn, pass) do { (void)pass(fn); XIR_RESET_ANALYSIS(fn); xir_verify_types(fn); } while(0)
-
-/* Strict SE variant: for passes that must NOT remove side-effect instructions
- * (DCE, CSE, GVN, copy_prop). Asserts SE count is non-decreasing. */
-#define XIR_RUN_PASS_STRICT_SE(fn, pass) do { \
-    uint32_t _se_pre = xir_count_se_(fn); \
-    (void)pass(fn); XIR_RESET_ANALYSIS(fn); \
-    xir_verify_cfg(fn); xir_verify_types(fn); \
-    uint32_t _se_post = xir_count_se_(fn); \
-    if (_se_post < _se_pre) { \
-        fprintf(stderr, "[SE VERIFY] %s: " #pass " removed %u SE instructions (%u -> %u)\n", \
-                (fn)->name ? (fn)->name : "?", _se_pre - _se_post, _se_pre, _se_post); \
-        XR_DCHECK(false, #pass " removed side-effect instructions"); \
-    } \
-} while(0)
-
-#else
-#define XIR_RUN_PASS(fn, pass)       do { (void)pass(fn); XIR_RESET_ANALYSIS(fn); } while(0)
-#define XIR_RUN_PASS2(fn, pass, arg) do { (void)pass(fn, arg); XIR_RESET_ANALYSIS(fn); } while(0)
-#define XIR_RUN_PASS_NOCFG(fn, pass) do { (void)pass(fn); XIR_RESET_ANALYSIS(fn); } while(0)
-#define XIR_RUN_PASS_STRICT_SE(fn, pass) XIR_RUN_PASS(fn, pass)
-#endif
 
 /* ========== Declarative pipeline groups ==========
  *

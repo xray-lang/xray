@@ -277,8 +277,10 @@ static bool sf_needs_barrier(XirFunc *func, XirIns *ins) {
     return true; // conservative
 }
 
-void xir_insert_write_barriers(XirFunc *func) {
-    if (!func || !func->arena) return;
+XirPassChange xir_insert_write_barriers(XirFunc *func) {
+    if (!func || !func->arena) return xir_pass_no_change();
+
+    uint32_t total_barriers = 0;
 
     for (uint32_t bi = 0; bi < func->nblk; bi++) {
         XirBlock *blk = func->blocks[bi];
@@ -317,7 +319,11 @@ void xir_insert_write_barriers(XirFunc *func) {
         XR_DCHECK(j == new_nins, "instruction count mismatch after rewrite");
         blk->ins  = new_ins;
         blk->nins = new_nins;
+        total_barriers += barrier_count;
     }
+    return total_barriers
+        ? (XirPassChange){ false, true, false, 0, 0, 0 }
+        : xir_pass_no_change();
 }
 
 /* ========== InsertArcReleases (AOT only) ========== */
@@ -347,11 +353,13 @@ static bool xir_ref_uses_vreg(XirRef a0, XirRef a1, XirRef r) {
            (xir_ref_is_vreg(a1) && a1 == r);
 }
 
-void xir_insert_arc_releases(XirFunc *func) {
-    if (!func || !func->arena) return;
+XirPassChange xir_insert_arc_releases(XirFunc *func) {
+    if (!func || !func->arena) return xir_pass_no_change();
 
     uint32_t nvreg = func->nvreg;
-    if (nvreg == 0) return;
+    if (nvreg == 0) return xir_pass_no_change();
+
+    bool any_inserted = false;
 
     for (uint32_t bi = 0; bi < func->nblk; bi++) {
         XirBlock *blk = func->blocks[bi];
@@ -719,8 +727,12 @@ void xir_insert_arc_releases(XirFunc *func) {
         XR_DCHECK(wi == new_nins, "instruction count mismatch after rewrite");
         tblk->ins  = new_ins;
         tblk->nins = new_nins;
+        any_inserted = true;
     }
     #undef ARC_MAX_GLOBAL
+    return any_inserted
+        ? (XirPassChange){ false, true, false, 0, 0, 0 }
+        : xir_pass_no_change();
 }
 
 /* ========== Escape Analysis + Scalar Replacement ========== */
@@ -999,12 +1011,12 @@ static bool ea_scalar_replace(XirFunc *func, const EaAlloc *a) {
     return true;
 }
 
-void xir_pass_escape_analysis(XirFunc *func) {
-    if (!func) return;
+XirPassChange xir_pass_escape_analysis(XirFunc *func) {
+    if (!func) return xir_pass_no_change();
 
     EaAlloc *allocs = NULL;
     uint32_t nalloc = ea_collect_allocs(func, &allocs);
-    if (nalloc == 0) { xr_free(allocs); return; }
+    if (nalloc == 0) { xr_free(allocs); return xir_pass_no_change(); }
 
     /* Single function-wide escape-set computation.  Cost is
      *   O(ninstr * args) + O(call_arg_pool) + O(nphi)
@@ -1015,12 +1027,16 @@ void xir_pass_escape_analysis(XirFunc *func) {
      * Mem2Reg is the obvious next step; it requires dom-frontier phi
      * insertion and will land in a follow-up once we have the general
      * helpers for it. */
+    uint32_t n_replaced = 0;
     for (uint32_t j = 0; j < nalloc; j++) {
         if (!allocs[j].escapes)
-            (void)ea_scalar_replace(func, &allocs[j]);
+            if (ea_scalar_replace(func, &allocs[j])) n_replaced++;
     }
 
     xr_free(allocs);
+    return n_replaced
+        ? (XirPassChange){ false, true, true, n_replaced, 0, 0 }
+        : xir_pass_no_change();
 }
 
 /*
@@ -1032,13 +1048,15 @@ void xir_pass_escape_analysis(XirFunc *func) {
  * This runs before escape_analysis so that sunk allocations can still
  * be scalar-replaced within their new (smaller) scope.
  */
-void xir_pass_alloc_sink(XirFunc *func) {
-    if (!func || func->nblk < 3 || func->nvreg == 0) return;
+XirPassChange xir_pass_alloc_sink(XirFunc *func) {
+    if (!func || func->nblk < 3 || func->nvreg == 0) return xir_pass_no_change();
+
+    uint32_t n_sunk = 0;
 
     uint32_t nblk = func->nblk;
 
     const XirDomTree *dt = xir_func_get_domtree(func);
-    if (!dt) return;
+    if (!dt) return xir_pass_no_change();
 
     for (uint32_t bi = 0; bi < nblk; bi++) {
         XirBlock *blk = func->blocks[bi];
@@ -1116,6 +1134,7 @@ void xir_pass_alloc_sink(XirFunc *func) {
                 sink_target->ins[0] = *ins;
                 sink_target->nins++;
                 // NOP the original
+                n_sunk++;
                 ins->op = XIR_NOP;
                 ins->dst = XIR_NONE;
                 ins->args[0] = XIR_NONE;
@@ -1124,6 +1143,9 @@ void xir_pass_alloc_sink(XirFunc *func) {
             }
         }
     }
+    return n_sunk
+        ? (XirPassChange){ false, true, false, n_sunk, 0, 0 }
+        : xir_pass_no_change();
 }
 
 /* ========== Automatic Function Inlining ========== */
@@ -1189,8 +1211,8 @@ static bool extract_const_i64(XirFunc *func, XirRef ref, int64_t *out) {
     return false;
 }
 
-void xir_pass_auto_inline(XirFunc *func, XrProto *caller_proto) {
-    if (!func || !caller_proto) return;
+XirPassChange xir_pass_auto_inline(XirFunc *func, XrProto *caller_proto) {
+    if (!func || !caller_proto) return xir_pass_no_change();
 
     int inlined_count = 0;
     int inlined_size = 0;           // total bytecodes inlined (caller budget)
@@ -1393,6 +1415,9 @@ void xir_pass_auto_inline(XirFunc *func, XrProto *caller_proto) {
     }
 
     #undef MAX_INLINE_CALLEES
+    return inlined_count > 0
+        ? (XirPassChange){ true, true, true, 0, 0, 0 }
+        : xir_pass_no_change();
 }
 
 // (INLINE_JIT_CALL_ARGS_BASE removed: args now come from call_arg_pool)
@@ -1406,8 +1431,10 @@ void xir_pass_auto_inline(XirFunc *func, XrProto *caller_proto) {
  * This is especially useful after guard hoisting gathers guards from
  * multiple loop iterations into the same preheader.
  */
-void xir_pass_elim_guards(XirFunc *func) {
-    if (!func || func->nblk == 0) return;
+XirPassChange xir_pass_elim_guards(XirFunc *func) {
+    if (!func || func->nblk == 0) return xir_pass_no_change();
+
+    uint32_t n_elim = 0;
 
     #define GUARD_TABLE_SIZE 32
     #define GUARD_TABLE_MASK (GUARD_TABLE_SIZE - 1)
@@ -1439,6 +1466,7 @@ void xir_pass_elim_guards(XirFunc *func) {
                         if (ci < func->nconst) {
                             uint8_t expected = (uint8_t)func->consts[ci].val.raw;
                             if (vtag_to_value_tag(gvtag) == expected) {
+                                n_elim++;
                                 ins->op = XIR_NOP;
                                 ins->dst = XIR_NONE;
                                 ins->args[0] = XIR_NONE;
@@ -1458,6 +1486,7 @@ void xir_pass_elim_guards(XirFunc *func) {
                 if (vi < func->nvreg &&
                     (xir_type_is_ptr(gct.kind) ||
                      func->vregs[vi].is_fresh_alloc)) {
+                    n_elim++;
                     ins->op = XIR_NOP;
                     ins->dst = XIR_NONE;
                     ins->args[0] = XIR_NONE;
@@ -1476,6 +1505,7 @@ void xir_pass_elim_guards(XirFunc *func) {
                         if (ci < func->nconst) {
                             uint16_t expected_ht = (uint16_t)func->consts[ci].val.raw;
                             if (func->vregs[vi].heap_type == expected_ht) {
+                                n_elim++;
                                 ins->op = XIR_NOP;
                                 ins->dst = XIR_NONE;
                                 ins->args[0] = XIR_NONE;
@@ -1514,6 +1544,7 @@ void xir_pass_elim_guards(XirFunc *func) {
 
             if (found) {
                 // Duplicate guard — convert to NOP
+                n_elim++;
                 ins->op = XIR_NOP;
                 ins->dst = XIR_NONE;
                 ins->args[0] = XIR_NONE;
@@ -1524,6 +1555,9 @@ void xir_pass_elim_guards(XirFunc *func) {
     }
     #undef GUARD_TABLE_SIZE
     #undef GUARD_TABLE_MASK
+    return n_elim
+        ? (XirPassChange){ false, true, false, n_elim, 0, 0 }
+        : xir_pass_no_change();
 }
 
 /* ========== Branch Value Propagation (propjnz) ========== */
@@ -1580,8 +1614,10 @@ static bool propjnz_is_const(XirFunc *func, XirRef ref, int64_t *val) {
     return true;
 }
 
-void xir_pass_propjnz(XirFunc *func) {
-    if (!func || func->nblk < 2) return;
+XirPassChange xir_pass_propjnz(XirFunc *func) {
+    if (!func || func->nblk < 2) return xir_pass_no_change();
+
+    bool any_prop = false;
 
     for (uint32_t bi = 0; bi < func->nblk; bi++) {
         XirBlock *blk = func->blocks[bi];
@@ -1609,6 +1645,7 @@ void xir_pass_propjnz(XirFunc *func) {
             }
             if (!xir_ref_is_none(zero_vreg)) {
                 propjnz_replace_in_block(s_false, cond, zero_vreg);
+                any_prop = true;
             }
         }
 
@@ -1625,8 +1662,10 @@ void xir_pass_propjnz(XirFunc *func) {
             int64_t val;
             if (xir_ref_is_vreg(a) && propjnz_is_const(func, b, &val)) {
                 propjnz_replace_in_block(s_true, a, b);
+                any_prop = true;
             } else if (xir_ref_is_vreg(b) && propjnz_is_const(func, a, &val)) {
                 propjnz_replace_in_block(s_true, b, a);
+                any_prop = true;
             }
         }
 
@@ -1637,11 +1676,16 @@ void xir_pass_propjnz(XirFunc *func) {
             int64_t val;
             if (xir_ref_is_vreg(a) && propjnz_is_const(func, b, &val)) {
                 propjnz_replace_in_block(s_false, a, b);
+                any_prop = true;
             } else if (xir_ref_is_vreg(b) && propjnz_is_const(func, a, &val)) {
                 propjnz_replace_in_block(s_false, b, a);
+                any_prop = true;
             }
         }
     }
+    return any_prop
+        ? (XirPassChange){ false, false, true, 0, 0, 0 }
+        : xir_pass_no_change();
 }
 
 /* ========== Global Code Motion (GCM) ========== */
@@ -1728,16 +1772,16 @@ static uint32_t gcm_early(XirFunc *func, uint32_t *idom, uint32_t *depth,
     return early[v];
 }
 
-void xir_pass_gcm(XirFunc *func) {
-    if (!func || func->nblk < 2 || func->nvreg == 0) return;
-    if (func->nblk > XIR_MAX_FUNC_BLOCKS || func->nvreg > XIR_MAX_FUNC_VREGS) return;
+XirPassChange xir_pass_gcm(XirFunc *func) {
+    if (!func || func->nblk < 2 || func->nvreg == 0) return xir_pass_no_change();
+    if (func->nblk > XIR_MAX_FUNC_BLOCKS || func->nvreg > XIR_MAX_FUNC_VREGS) return xir_pass_no_change();
 
     uint32_t nblk = func->nblk;
     uint32_t nv = func->nvreg;
 
     // Step 0: Build infrastructure (domtree is cached in func)
     const XirDomTree *dt = xir_func_get_domtree(func);
-    if (!dt) return;
+    if (!dt) return xir_pass_no_change();
     uint32_t *idom = dt->idom;
 
     uint32_t *depth = (uint32_t *)xr_malloc(nblk * sizeof(uint32_t));
@@ -1746,7 +1790,7 @@ void xir_pass_gcm(XirFunc *func) {
     uint32_t *def_blk = (uint32_t *)xr_calloc(nv, sizeof(uint32_t));
     if (!depth || !early || !best || !def_blk) {
         xr_free(depth); xr_free(early); xr_free(best); xr_free(def_blk);
-        return;
+        return xir_pass_no_change();
     }
     gcm_fill_depth(idom, depth, nblk);
 
@@ -1849,7 +1893,7 @@ void xir_pass_gcm(XirFunc *func) {
 
     if (moved == 0) {
         xr_free(depth); xr_free(early); xr_free(best); xr_free(def_blk);
-        return;
+        return xir_pass_no_change();
     }
 
     /* Step 4: Move instructions to their best blocks.
@@ -1938,6 +1982,7 @@ void xir_pass_gcm(XirFunc *func) {
     xr_free(early);
     xr_free(best);
     xr_free(def_blk);
+    return (XirPassChange){ false, true, false, 0, 0, 0 };
 }
 
 /* ========== Type Propagation Pass ========== */
