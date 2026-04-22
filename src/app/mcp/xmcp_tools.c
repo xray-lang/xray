@@ -22,13 +22,47 @@
 #include "../../base/xchecks.h"
 #include "../../frontend/parser/xparse.h"
 #include "../../frontend/parser/xast.h"
-#include "../../frontend/analyzer/xanalyzer.h"
 #include "xray_isolate.h"
+#include "../../base/xarena.h"
 #include <stdio.h>
 #include <string.h>
 
 /* Maximum errors captured per check */
-#define MAX_CHECK_ERRORS 20
+#define MAX_CHECK_ERRORS  20
+#define CHECK_BUF_SIZE  4096
+
+/* --------------------------------------------------------------------------
+ * Helper: build MCP tool error result
+ * -------------------------------------------------------------------------- */
+
+static XrJsonValue *xmcp_make_error_result(const char *message) {
+    XR_DCHECK(message != NULL, "xmcp_make_error_result: NULL message");
+    XrJsonValue *r = xlsp_json_new_object();
+    XrJsonValue *c = xlsp_json_new_array();
+    XrJsonValue *item = xlsp_json_new_object();
+    XLSP_JSON_SET_STRING(item, "type", "text");
+    XLSP_JSON_SET_STRING(item, "text", message);
+    xlsp_json_array_push(c, item);
+    xlsp_json_object_set(r, "content", c);
+    XLSP_JSON_SET_BOOL(r, "isError", true);
+    return r;
+}
+
+/* Build a MCP text content result. */
+static XrJsonValue *xmcp_make_text_result(const char *text, bool is_error) {
+    XR_DCHECK(text != NULL, "xmcp_make_text_result: NULL text");
+    XrJsonValue *result = xlsp_json_new_object();
+    XrJsonValue *arr = xlsp_json_new_array();
+    XrJsonValue *item = xlsp_json_new_object();
+    XLSP_JSON_SET_STRING(item, "type", "text");
+    xlsp_json_object_set(item, "text", xlsp_json_new_string(text));
+    xlsp_json_array_push(arr, item);
+    xlsp_json_object_set(result, "content", arr);
+    if (is_error) {
+        XLSP_JSON_SET_BOOL(result, "isError", true);
+    }
+    return result;
+}
 
 /* --------------------------------------------------------------------------
  * Error capture for xray_check
@@ -181,59 +215,56 @@ XrJsonValue *xmcp_handle_tools_list(void) {
 
 static XrJsonValue *tool_xray_check(XmcpServer *server, XrJsonValue *arguments) {
     XR_DCHECK(server != NULL, "tool_xray_check: NULL server");
+    XR_DCHECK(arguments != NULL, "tool_xray_check: NULL arguments");
 
     const char *code = xlsp_json_get_string(arguments, "code");
     if (!code || code[0] == '\0') {
-        XrJsonValue *r = xlsp_json_new_object();
-        XrJsonValue *c = xlsp_json_new_array();
-        XrJsonValue *item = xlsp_json_new_object();
-        XLSP_JSON_SET_STRING(item, "type", "text");
-        XLSP_JSON_SET_STRING(item, "text", "Error: 'code' parameter is required");
-        xlsp_json_array_push(c, item);
-        xlsp_json_object_set(r, "content", c);
-        XLSP_JSON_SET_BOOL(r, "isError", true);
-        return r;
+        return xmcp_make_error_result("Error: 'code' parameter is required");
     }
+
+    /* Create a dedicated arena so each check is fully isolated */
+    XrArena *arena = xr_malloc(sizeof(XrArena));
+    if (!arena) return xmcp_make_error_result("Error: out of memory");
+    xr_arena_init(arena, 0);
 
     /* Parse with error callback */
     ErrorCapture cap = {.count = 0};
     Parser parser;
-    xr_parser_init(&parser, server->isolate, code, "<mcp-check>", NULL);
+    xr_parser_init(&parser, server->isolate, code, "<mcp-check>", arena);
     xr_parser_set_error_callback(&parser, check_error_callback, &cap, MAX_CHECK_ERRORS);
 
     AstNode *ast = xr_parse_recoverable(&parser);
 
-    /* Build result text */
-    char text_buf[8192];
+    /* Build result text on heap */
+    size_t buf_cap = CHECK_BUF_SIZE;
+    char *text_buf = xr_malloc(buf_cap);
+    if (!text_buf) {
+        if (ast) xr_program_destroy(ast);
+        xr_arena_destroy(arena);
+        xr_free(arena);
+        return xmcp_make_error_result("Error: out of memory");
+    }
     int text_len = 0;
 
     if (cap.count == 0) {
-        text_len = snprintf(text_buf, sizeof(text_buf),
-                            "OK: no errors found.\n");
+        text_len = snprintf(text_buf, buf_cap, "OK: no errors found.\n");
     } else {
-        text_len = snprintf(text_buf, sizeof(text_buf),
+        text_len = snprintf(text_buf, buf_cap,
                             "Found %d error(s):\n\n", cap.count);
         for (int i = 0; i < cap.count; i++) {
             text_len += snprintf(text_buf + text_len,
-                                 sizeof(text_buf) - (size_t)text_len,
+                                 buf_cap - (size_t)text_len,
                                  "- %s\n", cap.messages[i]);
         }
     }
+    (void)text_len;
 
+    XrJsonValue *result = xmcp_make_text_result(text_buf, cap.count > 0);
+
+    xr_free(text_buf);
     if (ast) xr_program_destroy(ast);
-
-    /* Build MCP content response */
-    XrJsonValue *result = xlsp_json_new_object();
-    XrJsonValue *content = xlsp_json_new_array();
-    XrJsonValue *item = xlsp_json_new_object();
-    XLSP_JSON_SET_STRING(item, "type", "text");
-    xlsp_json_object_set(item, "text", xlsp_json_new_string(text_buf));
-    xlsp_json_array_push(content, item);
-    xlsp_json_object_set(result, "content", content);
-
-    if (cap.count > 0) {
-        XLSP_JSON_SET_BOOL(result, "isError", true);
-    }
+    xr_arena_destroy(arena);
+    xr_free(arena);
 
     return result;
 }
@@ -244,43 +275,26 @@ static XrJsonValue *tool_xray_check(XmcpServer *server, XrJsonValue *arguments) 
 
 static XrJsonValue *tool_xray_syntax_lookup(XmcpServer *server, XrJsonValue *arguments) {
     XR_DCHECK(server != NULL, "tool_xray_syntax_lookup: NULL server");
+    XR_DCHECK(arguments != NULL, "tool_xray_syntax_lookup: NULL arguments");
 
     const char *topic = xlsp_json_get_string(arguments, "topic");
     if (!topic || topic[0] == '\0') {
-        XrJsonValue *r = xlsp_json_new_object();
-        XrJsonValue *c = xlsp_json_new_array();
-        XrJsonValue *item = xlsp_json_new_object();
-        XLSP_JSON_SET_STRING(item, "type", "text");
-        XLSP_JSON_SET_STRING(item, "text", "Error: 'topic' parameter is required");
-        xlsp_json_array_push(c, item);
-        xlsp_json_object_set(r, "content", c);
-        XLSP_JSON_SET_BOOL(r, "isError", true);
-        return r;
+        return xmcp_make_error_result("Error: 'topic' parameter is required");
     }
 
     const char *content = xmcp_knowledge_lookup_topic(server->knowledge, topic);
-
-    XrJsonValue *result = xlsp_json_new_object();
-    XrJsonValue *arr = xlsp_json_new_array();
-    XrJsonValue *item = xlsp_json_new_object();
-    XLSP_JSON_SET_STRING(item, "type", "text");
-
     if (content) {
-        xlsp_json_object_set(item, "text", xlsp_json_new_string(content));
-    } else {
-        char msg[256];
-        snprintf(msg, sizeof(msg),
-                 "No syntax documentation found for topic \"%s\".\n\n"
-                 "Available topics: variables, types, functions, control_flow, "
-                 "class, struct, interface, enum, generics, collections, string, "
-                 "channel, coroutine, concurrency_rules, modules, testing, "
-                 "operators, builtin_functions.", topic);
-        xlsp_json_object_set(item, "text", xlsp_json_new_string(msg));
+        return xmcp_make_text_result(content, false);
     }
 
-    xlsp_json_array_push(arr, item);
-    xlsp_json_object_set(result, "content", arr);
-    return result;
+    char msg[512];
+    snprintf(msg, sizeof(msg),
+             "No syntax documentation found for topic \"%s\".\n\n"
+             "Available topics: variables, types, functions, control_flow, "
+             "class, struct, interface, enum, generics, collections, string, "
+             "channel, coroutine, concurrency_rules, modules, testing, "
+             "operators, builtin_functions.", topic);
+    return xmcp_make_text_result(msg, false);
 }
 
 /* --------------------------------------------------------------------------
@@ -289,33 +303,17 @@ static XrJsonValue *tool_xray_syntax_lookup(XmcpServer *server, XrJsonValue *arg
 
 static XrJsonValue *tool_xray_stdlib_search(XmcpServer *server, XrJsonValue *arguments) {
     XR_DCHECK(server != NULL, "tool_xray_stdlib_search: NULL server");
+    XR_DCHECK(arguments != NULL, "tool_xray_stdlib_search: NULL arguments");
 
     const char *query = xlsp_json_get_string(arguments, "query");
     const char *module = xlsp_json_get_string(arguments, "module");
 
     if (!query || query[0] == '\0') {
-        XrJsonValue *r = xlsp_json_new_object();
-        XrJsonValue *c = xlsp_json_new_array();
-        XrJsonValue *item = xlsp_json_new_object();
-        XLSP_JSON_SET_STRING(item, "type", "text");
-        XLSP_JSON_SET_STRING(item, "text", "Error: 'query' parameter is required");
-        xlsp_json_array_push(c, item);
-        xlsp_json_object_set(r, "content", c);
-        XLSP_JSON_SET_BOOL(r, "isError", true);
-        return r;
+        return xmcp_make_error_result("Error: 'query' parameter is required");
     }
 
     char *text = xmcp_knowledge_search_stdlib(server->knowledge, query, module);
-
-    XrJsonValue *result = xlsp_json_new_object();
-    XrJsonValue *arr = xlsp_json_new_array();
-    XrJsonValue *item = xlsp_json_new_object();
-    XLSP_JSON_SET_STRING(item, "type", "text");
-    xlsp_json_object_set(item, "text",
-        xlsp_json_new_string(text ? text : "No results found"));
-    xlsp_json_array_push(arr, item);
-    xlsp_json_object_set(result, "content", arr);
-
+    XrJsonValue *result = xmcp_make_text_result(text ? text : "No results found", false);
     xr_free(text);
     return result;
 }
@@ -331,41 +329,29 @@ XrJsonValue *xmcp_handle_tools_call(XmcpServer *server, XrJsonValue *params) {
     XrJsonValue *arguments = xlsp_json_get_object(params, "arguments");
 
     if (!name) {
-        XrJsonValue *r = xlsp_json_new_object();
-        XrJsonValue *c = xlsp_json_new_array();
-        XrJsonValue *item = xlsp_json_new_object();
-        XLSP_JSON_SET_STRING(item, "type", "text");
-        XLSP_JSON_SET_STRING(item, "text", "Error: tool 'name' is required");
-        xlsp_json_array_push(c, item);
-        xlsp_json_object_set(r, "content", c);
-        XLSP_JSON_SET_BOOL(r, "isError", true);
-        return r;
+        return xmcp_make_error_result("Error: tool 'name' is required");
     }
 
+    /* Provide empty arguments if not supplied (static, no leak) */
+    XrJsonValue *empty_args = NULL;
     if (!arguments) {
-        arguments = xlsp_json_new_object();
+        empty_args = xlsp_json_new_object();
+        arguments = empty_args;
     }
 
+    XrJsonValue *result = NULL;
     if (strcmp(name, "xray_check") == 0) {
-        return tool_xray_check(server, arguments);
-    }
-    if (strcmp(name, "xray_syntax_lookup") == 0) {
-        return tool_xray_syntax_lookup(server, arguments);
-    }
-    if (strcmp(name, "xray_stdlib_search") == 0) {
-        return tool_xray_stdlib_search(server, arguments);
+        result = tool_xray_check(server, arguments);
+    } else if (strcmp(name, "xray_syntax_lookup") == 0) {
+        result = tool_xray_syntax_lookup(server, arguments);
+    } else if (strcmp(name, "xray_stdlib_search") == 0) {
+        result = tool_xray_stdlib_search(server, arguments);
+    } else {
+        char msg[256];
+        snprintf(msg, sizeof(msg), "Unknown tool: %s", name);
+        result = xmcp_make_error_result(msg);
     }
 
-    /* Unknown tool */
-    XrJsonValue *r = xlsp_json_new_object();
-    XrJsonValue *c = xlsp_json_new_array();
-    XrJsonValue *item = xlsp_json_new_object();
-    XLSP_JSON_SET_STRING(item, "type", "text");
-    char msg[256];
-    snprintf(msg, sizeof(msg), "Unknown tool: %s", name);
-    xlsp_json_object_set(item, "text", xlsp_json_new_string(msg));
-    xlsp_json_array_push(c, item);
-    xlsp_json_object_set(r, "content", c);
-    XLSP_JSON_SET_BOOL(r, "isError", true);
-    return r;
+    if (empty_args) xlsp_json_free(empty_args);
+    return result;
 }

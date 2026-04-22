@@ -68,4 +68,4 @@ XR_FUNC const char *xmcp_knowledge_get_concurrency(void);
 /* Get the stdlib modules list resource content. */
 XR_FUNC const char *xmcp_knowledge_get_stdlib_list(void);
 
-#endif /* XMCP_KNOWLEDGE_H */
+#endif // XMCP_KNOWLEDGE_H

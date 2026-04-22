@@ -25,7 +25,9 @@ static void suite_add_test(XrTestSuite *suite, XrProto *proto, int idx, Attribut
     // Expand capacity
     if (suite->test_count >= suite->test_capacity) {
         suite->test_capacity = suite->test_capacity == 0 ? 8 : suite->test_capacity * 2;
-        suite->tests = (XrTestFunc *)xr_realloc(suite->tests, sizeof(XrTestFunc) * suite->test_capacity);
+        XR_REALLOC_OR_ABORT(suite->tests,
+            sizeof(XrTestFunc) * suite->test_capacity,
+            "suite_add_test: tests grow");
     }
 
     XrTestFunc *func = &suite->tests[suite->test_count++];
@@ -36,7 +38,8 @@ static void suite_add_test(XrTestSuite *suite, XrProto *proto, int idx, Attribut
 }
 
 static void suite_add_hook(XrTestFunc **hooks, int *count, XrProto *proto, int idx) {
-    *hooks = (XrTestFunc *)xr_realloc(*hooks, sizeof(XrTestFunc) * (*count + 1));
+    XR_REALLOC_OR_ABORT(*hooks, sizeof(XrTestFunc) * (*count + 1),
+        "suite_add_hook: hooks grow");
     XrTestFunc *func = &(*hooks)[*count];
     func->proto = proto;
     func->closure_idx = idx;
@@ -49,6 +52,7 @@ static void suite_add_hook(XrTestFunc **hooks, int *count, XrProto *proto, int i
 
 XrTestRunner* xr_test_runner_new(void) {
     XrTestRunner *runner = (XrTestRunner *)xr_malloc(sizeof(XrTestRunner));
+    if (!runner) return NULL;
     memset(runner, 0, sizeof(XrTestRunner));
     return runner;
 }
@@ -76,6 +80,7 @@ void xr_test_runner_configure(XrTestRunner *runner, XrTestConfig *config) {
 XrTestSuite* xr_test_discover(XrProto *proto, const char *suite_name) {
     XR_DCHECK(proto != NULL, "test_discover: NULL proto");
     XrTestSuite *suite = (XrTestSuite *)xr_malloc(sizeof(XrTestSuite));
+    if (!suite) return NULL;
     memset(suite, 0, sizeof(XrTestSuite));
     suite->name = suite_name;
 
@@ -143,9 +148,16 @@ void xr_test_runner_add_failure(XrTestRunner *runner, const char *file,
     const char *f = file ? file : "<unknown>";
     const char *t = test_name ? test_name : "<anonymous>";
     const char *m = message ? message : "";
-    rec->file = xr_malloc(strlen(f) + 1); memcpy(rec->file, f, strlen(f) + 1);
-    rec->test_name = xr_malloc(strlen(t) + 1); memcpy(rec->test_name, t, strlen(t) + 1);
-    rec->message = xr_malloc(strlen(m) + 1); memcpy(rec->message, m, strlen(m) + 1);
+    size_t flen = strlen(f) + 1;
+    size_t tlen = strlen(t) + 1;
+    size_t mlen = strlen(m) + 1;
+    rec->file = xr_malloc(flen);
+    rec->test_name = xr_malloc(tlen);
+    rec->message = xr_malloc(mlen);
+    if (!rec->file || !rec->test_name || !rec->message) return;
+    memcpy(rec->file, f, flen);
+    memcpy(rec->test_name, t, tlen);
+    memcpy(rec->message, m, mlen);
     rec->status = status;
 }
 

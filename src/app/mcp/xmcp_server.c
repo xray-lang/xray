@@ -22,7 +22,6 @@
 #include "../../base/xchecks.h"
 #include "../lsp/xlsp_json.h"
 #include "../cli/xcli_utils.h"
-#include "xray.h"
 #include "xray_isolate.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -54,20 +53,21 @@ static void mcp_log(XmcpServer *s, int level, const char *fmt, ...) {
 
     va_list ap;
     va_start(ap, fmt);
-    fprintf(stderr, MCP_LOG_PREFIX "[%s] ", tag);
-    vfprintf(stderr, fmt, ap);
-    fprintf(stderr, "\n");
-    va_end(ap);
 
     if (s->log_file) {
         va_list ap2;
-        va_start(ap2, fmt);
+        va_copy(ap2, ap);
         fprintf(s->log_file, MCP_LOG_PREFIX "[%s] ", tag);
         vfprintf(s->log_file, fmt, ap2);
         fprintf(s->log_file, "\n");
         fflush(s->log_file);
         va_end(ap2);
     }
+
+    fprintf(stderr, MCP_LOG_PREFIX "[%s] ", tag);
+    vfprintf(stderr, fmt, ap);
+    fprintf(stderr, "\n");
+    va_end(ap);
 }
 
 /* --------------------------------------------------------------------------
@@ -76,6 +76,7 @@ static void mcp_log(XmcpServer *s, int level, const char *fmt, ...) {
 
 /* Write a JSON-RPC message with Content-Length header to stdout. */
 static void mcp_write(const char *json, size_t len) {
+    XR_DCHECK(json != NULL, "mcp_write: NULL json");
     char header[64];
     int hlen = snprintf(header, sizeof(header),
                         "Content-Length: %zu\r\n\r\n", len);
@@ -150,6 +151,7 @@ static bool mcp_read_line(XmcpServer *s, char *line, size_t cap) {
 
 /* Read one complete JSON-RPC message from stdin. Caller must xr_free(). */
 static char *mcp_read_message(XmcpServer *s) {
+    XR_DCHECK(s != NULL, "mcp_read_message: NULL server");
     /* Parse headers until empty line */
     int content_length = -1;
     char line[1024];

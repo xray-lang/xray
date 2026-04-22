@@ -750,6 +750,7 @@ static const char STDLIB_LIST[] =
 /* Case-insensitive substring search. */
 static bool icontains(const char *haystack, const char *needle) {
     if (!haystack || !needle) return false;
+    if (needle[0] == '\0') return true;
     size_t nlen = strlen(needle);
     size_t hlen = strlen(haystack);
     if (nlen > hlen) return false;
@@ -761,11 +762,12 @@ static bool icontains(const char *haystack, const char *needle) {
 
 XmcpKnowledge *xmcp_knowledge_new(void) {
     XmcpKnowledge *kb = xr_calloc(1, sizeof(XmcpKnowledge));
+    if (!kb) return NULL;
     return kb;
 }
 
 void xmcp_knowledge_load(XmcpKnowledge *kb) {
-    if (!kb) return;
+    XR_DCHECK(kb != NULL, "xmcp_knowledge_load: NULL kb");
 
     /* Load topics */
     for (int i = 0; BUILTIN_TOPICS[i].name != NULL; i++) {
@@ -794,7 +796,8 @@ void xmcp_knowledge_free(XmcpKnowledge *kb) {
 }
 
 const char *xmcp_knowledge_lookup_topic(XmcpKnowledge *kb, const char *query) {
-    if (!kb || !query) return NULL;
+    XR_DCHECK(kb != NULL, "xmcp_knowledge_lookup_topic: NULL kb");
+    if (!query) return NULL;
 
     /* Exact name match first */
     for (int i = 0; i < kb->topic_count; i++) {
@@ -822,7 +825,8 @@ const char *xmcp_knowledge_lookup_topic(XmcpKnowledge *kb, const char *query) {
 
 char *xmcp_knowledge_search_stdlib(XmcpKnowledge *kb, const char *query,
                                     const char *module_filter) {
-    if (!kb || !query) return NULL;
+    XR_DCHECK(kb != NULL, "xmcp_knowledge_search_stdlib: NULL kb");
+    if (!query) return NULL;
 
     /* Build result string */
     size_t cap = 4096;
