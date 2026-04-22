@@ -210,12 +210,23 @@ if(XR_DEBUG_REGALLOC)
     message(STATUS "Register allocator statistics output enabled")
 endif()
 
-# JIT compiler (ARM64 only)
-if(CMAKE_SYSTEM_PROCESSOR MATCHES "arm64|aarch64")
+# JIT compiler (ARM64 and x86-64)
+# When cross-compiling on macOS (CMAKE_OSX_ARCHITECTURES), use that instead of
+# CMAKE_SYSTEM_PROCESSOR which always reports the host CPU.
+if(CMAKE_OSX_ARCHITECTURES)
+    set(XR_TARGET_ARCH "${CMAKE_OSX_ARCHITECTURES}")
+else()
+    set(XR_TARGET_ARCH "${CMAKE_SYSTEM_PROCESSOR}")
+endif()
+
+if(XR_TARGET_ARCH MATCHES "arm64|aarch64")
     add_compile_definitions(XRAY_HAS_JIT=1)
     message(STATUS "JIT: enabled (ARM64)")
+elseif(XR_TARGET_ARCH MATCHES "x86_64|AMD64")
+    add_compile_definitions(XRAY_HAS_JIT=1)
+    message(STATUS "JIT: enabled (x86-64)")
 else()
-    message(STATUS "JIT: disabled (not ARM64)")
+    message(STATUS "JIT: disabled (unsupported architecture: ${XR_TARGET_ARCH})")
 endif()
 
 # VM Profiler configuration

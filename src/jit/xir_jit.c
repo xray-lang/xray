@@ -484,8 +484,14 @@ bool xir_jit_try_compile(XirJitState *jit, XrProto *proto) {
     if (conservative) opt = XIR_OPT_BASIC;
     xir_run_pipeline_ex(func, opt, proto);
 
-    // Generate ARM64 machine code
+    // Generate platform-specific machine code
+#if defined(__aarch64__)
     XirCodegenResult res = xir_codegen_arm64(func, &jit->code_alloc);
+#elif defined(__x86_64__)
+    XirCodegenResult res = xir_codegen_x64(func, &jit->code_alloc);
+#else
+    XirCodegenResult res = { .success = false, .error = "unsupported architecture" };
+#endif
     if (!res.success) {
         xr_log_warning("jit", "codegen failed for %s: %s",
                 proto->name ? XR_STRING_CHARS(proto->name) : "?", res.error ? res.error : "unknown");

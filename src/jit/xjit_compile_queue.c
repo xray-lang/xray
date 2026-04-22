@@ -103,7 +103,13 @@ static void bg_compile_one(XirCompileQueue *q, uint32_t worker_id,
 
     // Codegen — each worker uses its own dedicated code_alloc.
     // This eliminates data races between workers and the main thread.
+#if defined(__aarch64__)
     XirCodegenResult res = xir_codegen_arm64(func, &q->worker_code_alloc[worker_id]);
+#elif defined(__x86_64__)
+    XirCodegenResult res = xir_codegen_x64(func, &q->worker_code_alloc[worker_id]);
+#else
+    XirCodegenResult res = { .success = false, .error = "unsupported architecture" };
+#endif
     if (!res.success) {
         xr_log_warning("jit-bg", "codegen failed for %s",
                 proto->name ? XR_STRING_CHARS(proto->name) : "?");

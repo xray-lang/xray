@@ -33,6 +33,8 @@ typedef struct {
     uint32_t    fast_entry_offset; // instruction offset to fast entry
 } JitCodeRegion;
 
+#ifdef __aarch64__
+
 // Register a JIT-compiled code region for crash diagnostics
 XR_FUNC void jit_debug_register(const char *name, void *code, uint32_t size,
                         uint32_t fast_entry_offset);
@@ -63,5 +65,26 @@ XR_FUNC void jit_guard_page_disarm(void *page);
 
 // Initialize the global safepoint trampoline (call once at JIT init).
 XR_FUNC void jit_guard_page_init_trampoline(void);
+
+#else // !__aarch64__
+
+// Stubs for non-ARM64 platforms (debug infra not yet ported)
+static inline void jit_debug_register(const char *n, void *c, uint32_t s, uint32_t f) {
+    (void)n; (void)c; (void)s; (void)f;
+}
+static inline void jit_debug_install_crash_handler(void) {}
+static inline void jit_debug_dump(const char *n, const void *c, uint32_t s, uint32_t f) {
+    (void)n; (void)c; (void)s; (void)f;
+}
+static inline const JitCodeRegion *jit_debug_lookup(const void *pc) {
+    (void)pc; return NULL;
+}
+static inline void *jit_guard_page_alloc(void) { return NULL; }
+static inline void jit_guard_page_free(void *p) { (void)p; }
+static inline void jit_guard_page_arm(void *p) { (void)p; }
+static inline void jit_guard_page_disarm(void *p) { (void)p; }
+static inline void jit_guard_page_init_trampoline(void) {}
+
+#endif // __aarch64__
 
 #endif // XIR_JIT_DEBUG_H
