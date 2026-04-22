@@ -34,6 +34,7 @@
 #include "xir_coalesce.h"
 #include "xir_code_alloc.h"
 #include "xir_offsets.h"
+#include "xir_jit_runtime.h"
 #include <string.h>
 
 /* Forward declarations for helpers (defined after emit_xir_ins) */
@@ -1578,11 +1579,169 @@ static void x64_emit_xir_ins(X64CodegenCtx *ctx, XirIns *ins) {
         break;
     }
 
+    /* CALL_KNOWN: cross-function direct CALL with known callee proto.
+     * args[0] = const_ptr(callee XrProto*), args[1] = const(nargs). */
+    case XIR_CALL_KNOWN: {
+        x64_emit_call_args_from_pool(ctx, ins);
+        x64_emit_ptr_spill_writeback(ctx);
+
+        /* Record safepoint + store safepoint_id to jit_ctx */
+        uint32_t smap_id_k = x64_record_safepoint(ctx);
+        x64_load_imm64(&ctx->buf, X64_SCRATCH_REG, (uint64_t)smap_id_k);
+        x64_mov_mr32(&ctx->buf, X64_JIT_CTX_REG,
+                     (int32_t)XIR_JIT_ACTIVE_SMAP_ID_OFFSET, X64_SCRATCH_REG);
+
+        /* Extract callee proto pointer and nargs from consts */
+        uint64_t callee_proto_ptr = 0;
+        if (xir_ref_is_const(ins->args[0])) {
+            uint32_t ci = XIR_REF_INDEX(ins->args[0]);
+            callee_proto_ptr = (uint64_t)ctx->func->consts[ci].val.raw;
+        }
+        uint64_t nargs_val = 0;
+        if (!xir_ref_is_none(ins->args[1]) && xir_ref_is_const(ins->args[1])) {
+            uint32_t ci = XIR_REF_INDEX(ins->args[1]);
+            nargs_val = (uint64_t)ctx->func->consts[ci].val.i64;
+        }
+
+        /* Save live caller-saved regs to stack (16-byte aligned) */
+        X64Reg live_gp[8];
+        int ngp = x64_live_gp(ctx, live_gp, rd);
+        X64Xmm live_fp_arr[14];
+        int nfp = x64_live_fp(ctx, live_fp_arr);
+        int32_t save_frame = (((ngp + nfp) * 8 + 15) & ~15);
+        if (save_frame > 0) {
+            x64_sub_ri(&ctx->buf, X64_RSP, save_frame);
+            int off = 0;
+            for (int i = 0; i < ngp; i++) {
+                x64_mov_mr(&ctx->buf, X64_RSP, off, live_gp[i]);
+                off += 8;
+            }
+            for (int f = 0; f < nfp; f++) {
+                x64_movsd_mr(&ctx->buf, X64_RSP, off, live_fp_arr[f]);
+                off += 8;
+            }
+        }
+
+        /* Fast path: load proto → jit_ctx->call_proto, then jit_entry */
+        x64_load_imm64(&ctx->buf, X64_SCRATCH_REG, callee_proto_ptr);
+        x64_mov_mr(&ctx->buf, X64_JIT_CTX_REG,
+                   (int32_t)XIR_JIT_CALL_PROTO_OFFSET, X64_SCRATCH_REG);
+        x64_mov_rm(&ctx->buf, X64_SCRATCH_REG, X64_SCRATCH_REG,
+                   (int32_t)XIR_PROTO_JIT_ENTRY_OFFSET);
+        /* TEST r11, r11; JE slow_path (placeholder) */
+        x64_test_rr(&ctx->buf, X64_SCRATCH_REG, X64_SCRATCH_REG);
+        x64_emit8(&ctx->buf, 0x0F);
+        x64_emit8(&ctx->buf, (uint8_t)(0x80 | X64_CC_E));
+        uint32_t je_slow_pos = ctx->buf.pos;
+        x64_emit32(&ctx->buf, 0);
+
+        /* Set call_closure from call_args[0] so callee can access upvalues */
+        x64_mov_rm(&ctx->buf, X64_RCX, X64_JIT_CTX_REG,
+                   (int32_t)XIR_JIT_CALL_ARGS_OFFSET);
+        x64_mov_mr(&ctx->buf, X64_JIT_CTX_REG,
+                   (int32_t)XIR_JIT_CALL_CLOSURE_OFFSET, X64_RCX);
+
+        /* Fast path direct CALL: RDI=coro, RSI=&call_args[1], CALL r11 */
+        x64_mov_rr(&ctx->buf, X64_RDI, X64_CORO_REG);
+        x64_lea(&ctx->buf, X64_RSI, X64_JIT_CTX_REG,
+                (int32_t)(XIR_JIT_CALL_ARGS_OFFSET + 8));
+        x64_call_r(&ctx->buf, X64_SCRATCH_REG);
+
+        /* Store RCX (callee tag from epilogue) to jit_ctx->call_result_tag */
+        x64_mov_mr(&ctx->buf, X64_JIT_CTX_REG,
+                   (int32_t)XIR_JIT_CALL_RESULT_TAG_OFFSET, X64_RCX);
+
+        /* Nested deopt guard: if RAX == DEOPT_MARKER, cascade to slow path */
+        x64_load_imm64(&ctx->buf, X64_RCX, (uint64_t)XIR_DEOPT_MARKER);
+        x64_cmp_rr(&ctx->buf, X64_RAX, X64_RCX);
+        x64_emit8(&ctx->buf, 0x0F);
+        x64_emit8(&ctx->buf, (uint8_t)(0x80 | X64_CC_E));
+        uint32_t je_cascade_pos = ctx->buf.pos;
+        x64_emit32(&ctx->buf, 0);
+
+        /* JMP done (over slow path) */
+        x64_emit8(&ctx->buf, 0xE9);
+        uint32_t jmp_done_pos = ctx->buf.pos;
+        x64_emit32(&ctx->buf, 0);
+
+        /* Cascade target: clear stale deopt_id before C bridge retry */
+        uint32_t cascade_pos = ctx->buf.pos;
+        x64_xor_rr(&ctx->buf, X64_RCX, X64_RCX);
+        x64_mov_mr32(&ctx->buf, X64_JIT_CTX_REG,
+                     (int32_t)XIR_JIT_DEOPT_ID_OFFSET, X64_RCX);
+
+        /* Slow path: CALL_C to xr_jit_call_func(coro, nargs) */
+        uint32_t slow_pos = ctx->buf.pos;
+        /* Patch je_slow → slow_pos */
+        x64_patch_rel32(&ctx->buf, je_slow_pos, slow_pos);
+        /* Patch je_cascade → cascade_pos */
+        x64_patch_rel32(&ctx->buf, je_cascade_pos, cascade_pos);
+
+        /* Store extra_arg (nargs) to jit_ctx */
+        x64_load_imm64(&ctx->buf, X64_SCRATCH_REG, nargs_val);
+        x64_mov_mr(&ctx->buf, X64_JIT_CTX_REG,
+                   (int32_t)X64_EXTRA_ARG_OFFSET, X64_SCRATCH_REG);
+        /* Load helper function pointer to R10 */
+        x64_load_imm64(&ctx->buf, X64_R10, (uint64_t)(uintptr_t)xr_jit_call_func);
+        /* CALL rel32 → call_c_stub */
+        XR_DCHECK(ctx->npatch < ctx->patches_cap, "too many patches");
+        X64BranchPatch *cp = &ctx->patches[ctx->npatch];
+        x64_emit8(&ctx->buf, 0xE8);
+        cp->emit_pos = ctx->buf.pos;
+        cp->target_blk = 0;
+        cp->type = X64_PATCH_CALL_C;
+        cp->cc = X64_CC_E;
+        ctx->npatch++;
+        x64_emit32(&ctx->buf, 0);
+        ctx->has_call_c = true;
+
+        /* Done label */
+        uint32_t done_pos = ctx->buf.pos;
+        x64_patch_rel32(&ctx->buf, jmp_done_pos, done_pos);
+
+        /* Load call_result_tag → slot_runtime_tags[bc_slot] */
+        int16_t bc_slot_k = -1;
+        if (xir_ref_is_vreg(ins->dst)) {
+            uint32_t vi = XIR_REF_INDEX(ins->dst);
+            if (vi < ctx->func->nvreg)
+                bc_slot_k = ctx->func->vregs[vi].bc_slot;
+        }
+        if (bc_slot_k >= 0 && bc_slot_k < 256) {
+            x64_movzx_rm8(&ctx->buf, X64_RCX, X64_JIT_CTX_REG,
+                          (int32_t)XIR_JIT_CALL_RESULT_TAG_OFFSET);
+            int32_t tag_off = (int32_t)XIR_JIT_SLOT_RUNTIME_TAGS_OFFSET + bc_slot_k;
+            x64_mov_mr8(&ctx->buf, X64_JIT_CTX_REG, tag_off, X64_RCX);
+        }
+
+        /* Save RAX to R11 before restoring caller-saved regs */
+        x64_mov_rr(&ctx->buf, X64_SCRATCH_REG, X64_RAX);
+
+        /* Restore caller-saved regs */
+        if (save_frame > 0) {
+            int off = 0;
+            for (int i = 0; i < ngp; i++) {
+                x64_mov_rm(&ctx->buf, live_gp[i], X64_RSP, off);
+                off += 8;
+            }
+            for (int f = 0; f < nfp; f++) {
+                x64_movsd_rm(&ctx->buf, live_fp_arr[f], X64_RSP, off);
+                off += 8;
+            }
+            x64_add_ri(&ctx->buf, X64_RSP, save_frame);
+        }
+
+        /* Move result (R11) → dst */
+        if (xir_ref_is_vreg(ins->dst) && rd != X64_SCRATCH_REG)
+            x64_mov_rr(&ctx->buf, rd, X64_SCRATCH_REG);
+        break;
+    }
+
     case XIR_CALL:
     case XIR_CALL_DIRECT:
-    case XIR_CALL_KNOWN:
     case XIR_CALL_KNOWN_REG:
-        /* TODO: cross-function calls — requires frame push/pop (F.4.8) */
+        /* TODO: CALL_DIRECT + CALL_KNOWN_REG — similar pattern to CALL_KNOWN
+         * but with additional guards (type check for DIRECT, register passing
+         * for KNOWN_REG). Deferring until benchmarked as hot path. */
         xr_log_warning("x64-cg", "cross-function call op %d not yet implemented", ins->op);
         ctx->had_error = true;
         break;
