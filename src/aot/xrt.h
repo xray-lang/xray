@@ -35,5 +35,6 @@
 #include "xrt_compat.h"    // L4: XrValue alias, XR_TAG_*, XR_FROM_*, XrtContext
 #include "xrt_module.h"    // L5: module export tables, init sequencing
 #include "xrt_exception.h" // L6: setjmp/longjmp exception handling
+#include "xrt_class.h"     // L7: ObjHeader, TypeInfo, vtable, ARC, instanceof
 
 #endif // XRT_H
