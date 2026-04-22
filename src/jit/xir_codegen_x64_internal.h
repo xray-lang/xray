@@ -43,11 +43,13 @@
 #define X64_EXTRA_ARG_OFFSET   XIR_JIT_LOAD_TAG_SCRATCH
 
 typedef enum {
-    X64_PATCH_JMP,       // unconditional JMP rel32
-    X64_PATCH_JCC,       // conditional Jcc rel32
-    X64_PATCH_DEOPT_JCC, // deopt: conditional Jcc to deopt stub
-    X64_PATCH_DEOPT_JMP, // deopt: unconditional JMP rel32 to deopt stub
-    X64_PATCH_CALL_C,    // CALL rel32 to shared call_c_stub
+    X64_PATCH_JMP,           // unconditional JMP rel32
+    X64_PATCH_JCC,           // conditional Jcc rel32
+    X64_PATCH_DEOPT_JCC,     // deopt: conditional Jcc to deopt stub
+    X64_PATCH_DEOPT_JMP,     // deopt: unconditional JMP rel32 to deopt stub
+    X64_PATCH_CALL_C,        // CALL rel32 to shared call_c_stub
+    X64_PATCH_CALL_SELF,     // CALL rel32 to function entry (offset 0)
+    X64_PATCH_CALL_SELF_FAST,// CALL rel32 to fast_entry_offset
 } X64PatchType;
 
 typedef struct {
@@ -91,6 +93,10 @@ typedef struct {
 
     uint32_t      call_c_stub;       // byte offset of call_c_stub in code buffer
     uint32_t      deopt_stub;        // byte offset of deopt stub
+
+    /* GC stack map: collect safepoint bitmaps during codegen */
+    XrStackMapEntry smap_entries[XIR_MAX_STACK_MAP_ENTRIES];
+    uint32_t      nsmap;
 
     bool          had_error;
     bool          has_deopt;
