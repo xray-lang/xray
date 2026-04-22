@@ -35,6 +35,7 @@
 #include <inttypes.h>
 
 #include "../jit/xir_sentinels.h"
+#include "xrt_method.h"   // XRT_SYM_* constants for method inlining
 
 /*
  * JIT_CALL_ARGS_OFFSET = 688 (from xir_offsets.h)
@@ -787,19 +788,19 @@ static void emit_call_c(XcgenBuf *b, XirFunc *func, XirIns *ins,
                     bool recv_is_float = xcg_is_float_type(recv_type);
                     bool dst_is_float  = xcg_is_float_type(dst_vtype);
 
-                    // XRT_SYM_* values (from xrt.h)
                     const char *math_fn = NULL;
                     if (recv_is_float && dst_is_float && nargs == 0) {
                         switch (method_symbol) {
-                            case 59: math_fn = "floor"; break; // XRT_SYM_FLOOR
-                            case 60: math_fn = "ceil";  break; // XRT_SYM_CEIL
-                            case 61: math_fn = "round"; break; // XRT_SYM_ROUND
-                            case 62: math_fn = "fabs";  break; // XRT_SYM_ABS
-                            case 63: math_fn = "sqrt";  break; // XRT_SYM_SQRT
+                            case XRT_SYM_FLOOR: math_fn = "floor"; break;
+                            case XRT_SYM_CEIL:  math_fn = "ceil";  break;
+                            case XRT_SYM_ROUND: math_fn = "round"; break;
+                            case XRT_SYM_ABS:   math_fn = "fabs";  break;
+                            case XRT_SYM_SQRT:  math_fn = "sqrt";  break;
                             default: break;
                         }
                     }
-                    if (recv_is_float && dst_is_float && nargs == 1 && method_symbol == 64) {
+                    if (recv_is_float && dst_is_float && nargs == 1 &&
+                        method_symbol == XRT_SYM_POW) {
                         // XRT_SYM_POW: pow(receiver, arg)
                         XirRef arg1 = (cf->call_args_count > 1) ? cf->call_args[1] : XIR_NONE;
                         uint8_t arg1_type = xir_ref_is_none(arg1)
@@ -827,8 +828,8 @@ static void emit_call_c(XcgenBuf *b, XirFunc *func, XirIns *ins,
                     // Inline I64 methods when receiver is I64
                     bool recv_is_int = (recv_type == XR_REP_I64);
                     bool dst_is_int  = (dst_vtype == XR_REP_I64);
-                    if (recv_is_int && dst_is_int && nargs == 0 && method_symbol == 62) {
-                        // XRT_SYM_ABS: abs(v) = v < 0 ? -v : v
+                    if (recv_is_int && dst_is_int && nargs == 0 &&
+                        method_symbol == XRT_SYM_ABS) {
                         xcgen_buf_printf(b, "    v%u = (", dst_idx);
                         xcg_emit_ref(b, func, recv_ref);
                         xcgen_buf_puts(b, " < 0) ? -(");
@@ -840,14 +841,143 @@ static void emit_call_c(XcgenBuf *b, XirFunc *func, XirIns *ins,
                         return;
                     }
 
-                    // Inline string.length when receiver is STR and dst is I64
+                    // Inline string methods when receiver is STR
                     bool recv_is_str = (recv_type == XR_REP_STR);
-                    if (recv_is_str && dst_is_int && nargs == 0 &&
-                        (method_symbol == 2 || method_symbol == 1)) {
-                        // XRT_SYM_LENGTH(2) or XRT_SYM_SIZE(1)
-                        xcgen_buf_printf(b, "    v%u = (int64_t)strlen((const char *)", dst_idx);
+                    if (recv_is_str && nargs == 0) {
+                        if (dst_is_int && (method_symbol == XRT_SYM_LENGTH ||
+                                           method_symbol == XRT_SYM_SIZE)) {
+                            xcgen_buf_printf(b, "    v%u = (int64_t)strlen((const char *)",
+                                             dst_idx);
+                            xcg_emit_ref(b, func, recv_ref);
+                            xcgen_buf_puts(b, ".ptr);\n");
+                            cf->needs_runtime = true;
+                            cf->call_args_count = 0;
+                            return;
+                        }
+                        if (dst_is_int && method_symbol == XRT_SYM_IS_EMPTY) {
+                            xcgen_buf_printf(b, "    v%u = (((const char *)",
+                                             dst_idx);
+                            xcg_emit_ref(b, func, recv_ref);
+                            xcgen_buf_puts(b, ".ptr)[0] == '\\0') ? 1 : 0;\n");
+                            cf->call_args_count = 0;
+                            return;
+                        }
+                    }
+                    if (recv_is_str && nargs == 1) {
+                        XirRef arg1 = (cf->call_args_count > 1) ? cf->call_args[1] : XIR_NONE;
+                        uint8_t arg1_type = xir_ref_is_none(arg1)
+                                            ? XR_REP_TAGGED : xcg_ref_type(func, arg1);
+                        bool arg1_is_str = (arg1_type == XR_REP_STR);
+                        if (dst_is_int && arg1_is_str && method_symbol == XRT_SYM_CONTAINS) {
+                            xcgen_buf_printf(b, "    v%u = strstr((const char *)",
+                                             dst_idx);
+                            xcg_emit_ref(b, func, recv_ref);
+                            xcgen_buf_puts(b, ".ptr, (const char *)");
+                            xcg_emit_ref(b, func, arg1);
+                            xcgen_buf_puts(b, ".ptr) ? 1 : 0;\n");
+                            cf->needs_runtime = true;
+                            cf->call_args_count = 0;
+                            return;
+                        }
+                        if (dst_is_int && arg1_is_str && method_symbol == XRT_SYM_INDEXOF) {
+                            xcgen_buf_printf(b, "    { const char *_s = (const char *)", dst_idx);
+                            xcg_emit_ref(b, func, recv_ref);
+                            xcgen_buf_puts(b, ".ptr; const char *_p = strstr(_s, (const char *)");
+                            xcg_emit_ref(b, func, arg1);
+                            xcgen_buf_printf(b, ".ptr); v%u = _p ? (int64_t)(_p - _s) : -1; }\n",
+                                             dst_idx);
+                            cf->needs_runtime = true;
+                            cf->call_args_count = 0;
+                            return;
+                        }
+                        if (dst_is_int && arg1_is_str && method_symbol == XRT_SYM_STARTSWITH) {
+                            xcgen_buf_printf(b, "    { const char *_s = (const char *)");
+                            xcg_emit_ref(b, func, recv_ref);
+                            xcgen_buf_puts(b, ".ptr; const char *_p = (const char *)");
+                            xcg_emit_ref(b, func, arg1);
+                            xcgen_buf_puts(b, ".ptr; size_t _pl = strlen(_p); ");
+                            xcgen_buf_printf(b, "v%u = (strlen(_s) >= _pl && memcmp(_s, _p, _pl) == 0) ? 1 : 0; }\n",
+                                             dst_idx);
+                            cf->needs_runtime = true;
+                            cf->call_args_count = 0;
+                            return;
+                        }
+                        if (dst_is_int && arg1_is_str && method_symbol == XRT_SYM_ENDSWITH) {
+                            xcgen_buf_printf(b, "    { const char *_s = (const char *)");
+                            xcg_emit_ref(b, func, recv_ref);
+                            xcgen_buf_puts(b, ".ptr; size_t _sl = strlen(_s); const char *_p = (const char *)");
+                            xcg_emit_ref(b, func, arg1);
+                            xcgen_buf_puts(b, ".ptr; size_t _pl = strlen(_p); ");
+                            xcgen_buf_printf(b, "v%u = (_sl >= _pl && memcmp(_s + _sl - _pl, _p, _pl) == 0) ? 1 : 0; }\n",
+                                             dst_idx);
+                            cf->needs_runtime = true;
+                            cf->call_args_count = 0;
+                            return;
+                        }
+                    }
+
+                    // Inline array methods: push, pop, length, isEmpty
+                    // Array push has a unique symbol (49), so receiver must be array.
+                    bool recv_is_tagged = (recv_type == XR_REP_PTR ||
+                                           recv_type == XR_REP_TAGGED);
+                    if (recv_is_tagged && nargs == 1 && method_symbol == XRT_SYM_PUSH) {
+                        XirRef arg1 = (cf->call_args_count > 1) ? cf->call_args[1] : XIR_NONE;
+                        xcgen_buf_puts(b, "    xrt_array_push(");
                         xcg_emit_ref(b, func, recv_ref);
-                        xcgen_buf_puts(b, ".ptr);\n");
+                        xcgen_buf_puts(b, ", ");
+                        emit_ref_as_tagged(b, func, arg1);
+                        xcgen_buf_puts(b, ");\n");
+                        cf->needs_runtime = true;
+                        cf->call_args_count = 0;
+                        return;
+                    }
+                    if (recv_is_tagged && nargs == 0 && method_symbol == XRT_SYM_POP) {
+                        xcgen_buf_printf(b, "    { xrt_array_t *_a = (xrt_array_t *)");
+                        xcg_emit_ref(b, func, recv_ref);
+                        xcgen_buf_printf(b, ".ptr; v%u = (_a->len > 0) ? _a->data[--_a->len] : (XrtValue){0}; }\n",
+                                         dst_idx);
+                        cf->needs_runtime = true;
+                        cf->call_args_count = 0;
+                        return;
+                    }
+
+                    // Inline map.get, map.has, map.set (unique symbols for maps)
+                    if (recv_is_tagged && nargs == 1 && method_symbol == XRT_SYM_GET) {
+                        XirRef arg1 = (cf->call_args_count > 1) ? cf->call_args[1] : XIR_NONE;
+                        xcgen_buf_printf(b, "    v%u = xrt_map_get((xrt_map_t *)",
+                                         dst_idx);
+                        xcg_emit_ref(b, func, recv_ref);
+                        xcgen_buf_puts(b, ".ptr, ");
+                        emit_ref_as_tagged(b, func, arg1);
+                        xcgen_buf_puts(b, ");\n");
+                        cf->needs_runtime = true;
+                        cf->call_args_count = 0;
+                        return;
+                    }
+                    if (recv_is_tagged && nargs == 2 && method_symbol == XRT_SYM_SET) {
+                        XirRef arg1 = (cf->call_args_count > 1) ? cf->call_args[1] : XIR_NONE;
+                        XirRef arg2 = (cf->call_args_count > 2) ? cf->call_args[2] : XIR_NONE;
+                        xcgen_buf_puts(b, "    xrt_map_set((xrt_map_t *)");
+                        xcg_emit_ref(b, func, recv_ref);
+                        xcgen_buf_puts(b, ".ptr, ");
+                        emit_ref_as_tagged(b, func, arg1);
+                        xcgen_buf_puts(b, ", ");
+                        emit_ref_as_tagged(b, func, arg2);
+                        xcgen_buf_puts(b, ");\n");
+                        cf->needs_runtime = true;
+                        cf->call_args_count = 0;
+                        return;
+                    }
+                    if (recv_is_tagged && nargs == 1 && method_symbol == XRT_SYM_HAS) {
+                        XirRef arg1 = (cf->call_args_count > 1) ? cf->call_args[1] : XIR_NONE;
+                        xcgen_buf_printf(b, "    { xrt_map_t *_m = (xrt_map_t *)");
+                        xcg_emit_ref(b, func, recv_ref);
+                        xcgen_buf_puts(b, ".ptr; int64_t _found = 0; ");
+                        xcgen_buf_puts(b, "for (int64_t _i = 0; _i < _m->len; _i++) ");
+                        xcgen_buf_puts(b, "if (xrt_key_eq(_m->entries[_i].key, ");
+                        emit_ref_as_tagged(b, func, arg1);
+                        xcgen_buf_printf(b, ")) { _found = 1; break; } v%u = _found; }\n",
+                                         dst_idx);
                         cf->needs_runtime = true;
                         cf->call_args_count = 0;
                         return;
