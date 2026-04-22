@@ -1,0 +1,10 @@
+// AOT module test: math library with exports
+export fn square(x: int): int {
+    return x * x
+}
+
+export fn cube(x: int): int {
+    return x * x * x
+}
+
+export const PI = 3.14159265358979

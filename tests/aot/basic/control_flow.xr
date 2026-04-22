@@ -1,0 +1,28 @@
+// AOT basic test: control flow
+fn abs_val(x: int): int {
+    if (x < 0) {
+        return -x
+    }
+    return x
+}
+
+fn max_of(a: int, b: int): int {
+    if (a > b) {
+        return a
+    }
+    return b
+}
+
+fn sum_to(n: int): int {
+    let total = 0
+    let i = 1
+    while (i <= n) {
+        total = total + i
+        i = i + 1
+    }
+    return total
+}
+
+print(abs_val(-42))
+print(max_of(10, 20))
+print(sum_to(100))
