@@ -1,0 +1,18 @@
+// AOT basic test: class with fields and methods
+class Point {
+    x: int
+    y: int
+
+    constructor(x: int, y: int) {
+        this.x = x
+        this.y = y
+    }
+
+    sum(): int {
+        return this.x + this.y
+    }
+}
+
+let p = Point(3, 4)
+print(p.sum())  // 7
+print(p.x)      // 3

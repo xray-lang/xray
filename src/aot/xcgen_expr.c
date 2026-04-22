@@ -573,7 +573,11 @@ static void xcg_emit_field_store(XcgenBuf *b, XirFunc *func, XirIns *ins,
         bool val_tagged = (val_type == XR_REP_PTR || val_type == XR_REP_TAGGED ||
                            val_type == XR_REP_STR);
         if (val_tagged) {
-            xcgen_buf_puts(b, "    { double _fv = xrt_unbox_float(");
+            // Use sf_tag (ins->rep) to pick correct XrValue member
+            bool is_float = (ins->rep == XR_TAG_F64);
+            const char *extract = is_float ? "xrt_unbox_float" : "xrt_unbox_int";
+            const char *ctype   = is_float ? "double" : "int64_t";
+            xcgen_buf_printf(b, "    { %s _sv = %s(", ctype, extract);
             xcg_emit_ref(b, func, ins->args[1]);
             xcgen_buf_puts(b, "); memcpy((char*)");
             if (base_tagged) {
@@ -582,7 +586,7 @@ static void xcg_emit_field_store(XcgenBuf *b, XirFunc *func, XirIns *ins,
             } else {
                 xcg_emit_ref(b, func, ins->args[0]);
             }
-            xcgen_buf_printf(b, " + %" PRId64 ", &_fv, 8); }\n", adj_offset);
+            xcgen_buf_printf(b, " + %" PRId64 ", &_sv, 8); }\n", adj_offset);
         } else if (val_type == XR_REP_F64) {
             xcgen_buf_puts(b, "    *(double*)((char*)");
             if (base_tagged) {

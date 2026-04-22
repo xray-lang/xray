@@ -173,7 +173,14 @@ static int32_t jit_prepush_yield_frame(XrCoroutine *coro, uint32_t deopt_id) {
         default:
             continue;
         }
-        frame_base[bc] = deopt_reconstruct(raw, s->type, s->xr_tag);
+        // Resolve xr_tag: prefer compile-time tag, fallback to runtime tag
+        uint8_t tag = s->xr_tag;
+        if (tag == XR_RTAG_UNKNOWN && bc >= 0 && bc < 256) {
+            uint8_t rt = jctx->slot_runtime_tags[bc];
+            if (rt != 0 && rt != XR_RTAG_UNKNOWN)
+                tag = rt;
+        }
+        frame_base[bc] = deopt_reconstruct(raw, s->type, tag);
     }
 
     // Pre-push interpreter frame
