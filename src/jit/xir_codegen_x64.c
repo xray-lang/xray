@@ -41,6 +41,10 @@ static void x64_emit_call_args_from_pool(X64CodegenCtx *ctx, XirIns *ins);
 static inline uint8_t const_rep_to_value_tag(uint8_t rep);
 static void x64_emit_deopt_jcc(X64CodegenCtx *ctx, X64Cond cc);
 static void x64_emit_deopt_id(X64CodegenCtx *ctx, XirIns *ins);
+static uint32_t x64_record_safepoint(X64CodegenCtx *ctx);
+static void x64_emit_ptr_spill_writeback(X64CodegenCtx *ctx);
+static int x64_live_gp(X64CodegenCtx *ctx, X64Reg *out, X64Reg exclude);
+static int x64_live_fp(X64CodegenCtx *ctx, X64Xmm *out);
 
 /* ========== Register Mapping Tables ========== */
 
@@ -1253,8 +1257,13 @@ static void x64_emit_xir_ins(X64CodegenCtx *ctx, XirIns *ins) {
     /* ========== Call ops ========== */
     case XIR_CALL_C: {
         x64_emit_call_args_from_pool(ctx, ins);
-        /* TODO: emit_ptr_spill_writeback (F.4.6)
-         * TODO: record_safepoint + store safepoint_id (F.4.6) */
+        x64_emit_ptr_spill_writeback(ctx);
+
+        /* Record safepoint + store safepoint_id to jit_ctx */
+        uint32_t smap_id_cc = x64_record_safepoint(ctx);
+        x64_load_imm64(&ctx->buf, X64_SCRATCH_REG, (uint64_t)smap_id_cc);
+        x64_mov_mr32(&ctx->buf, X64_JIT_CTX_REG,
+                     (int32_t)XIR_JIT_ACTIVE_SMAP_ID_OFFSET, X64_SCRATCH_REG);
 
         /* Store extra_arg to jit_ctx scratch slot */
         if (!xir_ref_is_none(ins->args[1])) {
@@ -1403,12 +1412,177 @@ static void x64_emit_xir_ins(X64CodegenCtx *ctx, XirIns *ins) {
         break;
     }
 
+    /* ========== Cross-function calls ========== */
+    case XIR_CALL_SELF_DIRECT: {
+        x64_emit_call_args_from_pool(ctx, ins);
+        x64_emit_ptr_spill_writeback(ctx);
+
+        /* Record safepoint + store safepoint_id to jit_ctx */
+        uint32_t smap_id_self = x64_record_safepoint(ctx);
+        x64_load_imm64(&ctx->buf, X64_SCRATCH_REG, (uint64_t)smap_id_self);
+        x64_mov_mr32(&ctx->buf, X64_JIT_CTX_REG,
+                     (int32_t)XIR_JIT_ACTIVE_SMAP_ID_OFFSET, X64_SCRATCH_REG);
+
+        bool reg_passing = !xir_ref_is_none(ins->args[0]);
+
+        /* Resolve arg registers before save */
+        X64Reg arg_regs[2] = { X64_SCRATCH_REG, X64_SCRATCH_REG };
+        int nargs_reg = 0;
+        if (reg_passing) {
+            X64Reg scratches[2] = { X64_SCRATCH_REG, X64_RCX };
+            for (int a = 0; a < 2; a++) {
+                if (xir_ref_is_none(ins->args[a])) break;
+                arg_regs[a] = x64_get_operand(ctx, ins->args[a], scratches[a]);
+                nargs_reg++;
+            }
+        }
+
+        /* Collect live caller-saved regs */
+        X64Reg live_gp[8];
+        int ngp = x64_live_gp(ctx, live_gp, rd);
+        X64Xmm live_fp_arr[14];
+        int nfp = x64_live_fp(ctx, live_fp_arr);
+
+        /* Save caller-saved regs to stack (16-byte aligned) */
+        int total_saves = ngp + nfp;
+        int32_t save_frame = ((total_saves * 8 + 15) & ~15);
+        if (save_frame > 0) {
+            x64_sub_ri(&ctx->buf, X64_RSP, save_frame);
+            int off = 0;
+            for (int i = 0; i < ngp; i++) {
+                x64_mov_mr(&ctx->buf, X64_RSP, off, live_gp[i]);
+                off += 8;
+            }
+            for (int f = 0; f < nfp; f++) {
+                x64_movsd_mr(&ctx->buf, X64_RSP, off, live_fp_arr[f]);
+                off += 8;
+            }
+        }
+
+        /* Setup args and CALL self */
+        if (reg_passing) {
+            /* Move args to fixed ABI registers (alloc_regs[0..N]). */
+            X64Reg p0 = x64_alloc_regs[0];
+            if (nargs_reg >= 1 && arg_regs[0] != p0)
+                x64_mov_rr(&ctx->buf, p0, arg_regs[0]);
+            if (nargs_reg >= 2) {
+                X64Reg p1 = x64_alloc_regs[1];
+                if (arg_regs[1] != p1)
+                    x64_mov_rr(&ctx->buf, p1, arg_regs[1]);
+            }
+            /* Load extra args from call_args[] to alloc_regs[] */
+            int extra = XIR_FLAG_EXTRA_ARGS_GET(ins->flags);
+            for (int ei = 0; ei < extra; ei++) {
+                X64Reg dst = x64_alloc_regs[2 + ei];
+                int32_t off = (int32_t)(XIR_JIT_CALL_ARGS_OFFSET + (2 + ei) * 8);
+                x64_mov_rm(&ctx->buf, dst, X64_JIT_CTX_REG, off);
+            }
+            /* RDI = coro for System V ABI */
+            x64_mov_rr(&ctx->buf, X64_RDI, X64_CORO_REG);
+            /* CALL to fast_entry (after param loading) */
+            XR_DCHECK(ctx->npatch < ctx->patches_cap, "too many patches");
+            X64BranchPatch *p = &ctx->patches[ctx->npatch];
+            x64_emit8(&ctx->buf, 0xE8);
+            p->emit_pos = ctx->buf.pos;
+            p->target_blk = 0;
+            p->type = X64_PATCH_CALL_SELF_FAST;
+            p->cc = X64_CC_E;
+            ctx->npatch++;
+            x64_emit32(&ctx->buf, 0);
+        } else {
+            /* Memory passing: RDI=coro, RSI=&call_args */
+            x64_mov_rr(&ctx->buf, X64_RDI, X64_CORO_REG);
+            x64_lea(&ctx->buf, X64_RSI, X64_JIT_CTX_REG,
+                       (int32_t)XIR_JIT_CALL_ARGS_OFFSET);
+            /* CALL to entry (offset 0) */
+            XR_DCHECK(ctx->npatch < ctx->patches_cap, "too many patches");
+            X64BranchPatch *p = &ctx->patches[ctx->npatch];
+            x64_emit8(&ctx->buf, 0xE8);
+            p->emit_pos = ctx->buf.pos;
+            p->target_blk = 0;
+            p->type = X64_PATCH_CALL_SELF;
+            p->cc = X64_CC_E;
+            ctx->npatch++;
+            x64_emit32(&ctx->buf, 0);
+        }
+
+        /* Restore active stack map in jit_ctx */
+        x64_mov_rm(&ctx->buf, X64_SCRATCH_REG, X64_RBP,
+                   -(int32_t)X64_JIT_FRAME_BASE);  /* TODO: frame smap ptr slot */
+        x64_mov_mr(&ctx->buf, X64_JIT_CTX_REG,
+                   (int32_t)XIR_JIT_FRAME_SP_OFFSET, X64_RBP);
+
+        /* Save return value (RAX) to R11 before deopt check */
+        x64_mov_rr(&ctx->buf, X64_SCRATCH_REG, X64_RAX);
+
+        /* Store return tag (RCX = callee tag) to slot_runtime_tags if needed */
+        int16_t self_bc_slot = -1;
+        if (xir_ref_is_vreg(ins->dst)) {
+            uint32_t vi = XIR_REF_INDEX(ins->dst);
+            if (vi < ctx->func->nvreg)
+                self_bc_slot = ctx->func->vregs[vi].bc_slot;
+        }
+        if (self_bc_slot >= 0 && self_bc_slot < 256) {
+            int32_t stag_off = (int32_t)XIR_JIT_SLOT_RUNTIME_TAGS_OFFSET + self_bc_slot;
+            x64_mov_mr8(&ctx->buf, X64_JIT_CTX_REG, stag_off, X64_RCX);
+        }
+
+        /* Deopt propagation check: if result == DEOPT_MARKER, propagate */
+        x64_load_imm64(&ctx->buf, X64_RCX, (uint64_t)XIR_DEOPT_MARKER);
+        x64_cmp_rr(&ctx->buf, X64_SCRATCH_REG, X64_RCX);
+        /* JNE skip_deopt */
+        x64_emit8(&ctx->buf, 0x0F);
+        x64_emit8(&ctx->buf, (uint8_t)(0x80 | X64_CC_NE));
+        uint32_t jne_pos = ctx->buf.pos;
+        x64_emit32(&ctx->buf, 0);  /* placeholder */
+
+        /* Deopt path: clean up save frame and jump to deopt_stub */
+        if (save_frame > 0)
+            x64_add_ri(&ctx->buf, X64_RSP, save_frame);
+        /* Store max deopt_id to indicate propagation */
+        x64_load_imm64(&ctx->buf, X64_RCX, 0xFFFF);
+        x64_mov_mr32(&ctx->buf, X64_JIT_CTX_REG,
+                     (int32_t)XIR_JIT_DEOPT_ID_OFFSET, X64_RCX);
+        /* JMP to deopt_stub */
+        XR_DCHECK(ctx->npatch < ctx->patches_cap, "too many patches");
+        X64BranchPatch *dp = &ctx->patches[ctx->npatch];
+        x64_emit8(&ctx->buf, 0xE9);
+        dp->emit_pos = ctx->buf.pos;
+        dp->target_blk = 0;
+        dp->type = X64_PATCH_DEOPT_JMP;
+        dp->cc = X64_CC_E;
+        ctx->npatch++;
+        x64_emit32(&ctx->buf, 0);
+        ctx->has_deopt = true;
+
+        /* Skip target for JNE (not deopt) */
+        x64_patch_rel32(&ctx->buf, jne_pos, ctx->buf.pos);
+
+        /* Restore caller-saved regs */
+        if (save_frame > 0) {
+            int off = 0;
+            for (int i = 0; i < ngp; i++) {
+                x64_mov_rm(&ctx->buf, live_gp[i], X64_RSP, off);
+                off += 8;
+            }
+            for (int f = 0; f < nfp; f++) {
+                x64_movsd_rm(&ctx->buf, live_fp_arr[f], X64_RSP, off);
+                off += 8;
+            }
+            x64_add_ri(&ctx->buf, X64_RSP, save_frame);
+        }
+
+        /* Move result to dst */
+        if (xir_ref_is_vreg(ins->dst) && rd != X64_SCRATCH_REG)
+            x64_mov_rr(&ctx->buf, rd, X64_SCRATCH_REG);
+        break;
+    }
+
     case XIR_CALL:
-    case XIR_CALL_SELF_DIRECT:
     case XIR_CALL_DIRECT:
     case XIR_CALL_KNOWN:
     case XIR_CALL_KNOWN_REG:
-        /* TODO: cross-function calls — requires frame push/pop, deopt (F.4.6/F.4.7) */
+        /* TODO: cross-function calls — requires frame push/pop (F.4.8) */
         xr_log_warning("x64-cg", "cross-function call op %d not yet implemented", ins->op);
         ctx->had_error = true;
         break;
@@ -1644,6 +1818,104 @@ static void x64_emit_deopt_id(X64CodegenCtx *ctx, XirIns *ins) {
                  (int32_t)XIR_JIT_DEOPT_ID_OFFSET, X64_SCRATCH_REG);
 }
 
+/* ========== GC Stack Map + Spill Writeback ========== */
+
+/* Record safepoint bitmap: which alloc_regs[] hold PTR vregs (reg_bitmap),
+ * and which spill slots hold PTR vregs (spill_bitmap) at cur_ra_pos. */
+static uint32_t x64_record_safepoint(X64CodegenCtx *ctx) {
+    if (ctx->nsmap >= XIR_MAX_STACK_MAP_ENTRIES) {
+        xr_log_warning("x64-cg", "stack map table full (%u entries)", ctx->nsmap);
+        return ctx->nsmap > 0 ? ctx->nsmap - 1 : 0;
+    }
+
+    int32_t pos = ctx->cur_ra_pos;
+    uint32_t reg_bitmap = 0;
+    uint32_t spill_bitmap = 0;
+
+    for (uint32_t v = 0; v < ctx->func->nvreg; v++) {
+        if (ctx->func->vregs[v].rep != XR_REP_PTR) continue;
+
+        int8_t ri = xra_reg_at_pos(ctx->xra, v, pos);
+        if (ri < 0) ri = xra_reg_at_pos(ctx->xra, v, pos + 1);
+        if (ri >= 0 && ri < X64_MAX_PHYS_REGS) {
+            reg_bitmap |= (1u << ri);
+            if (ctx->xra && v < ctx->xra->nvreg && ctx->xra->valloc[v].spill >= 0) {
+                int16_t slot = ctx->xra->valloc[v].spill;
+                if (slot >= 0 && slot < XIR_MAX_SPILL_SLOTS)
+                    spill_bitmap |= (1u << slot);
+            }
+            continue;
+        }
+
+        if (ctx->xra && v < ctx->xra->nvreg && ctx->xra->valloc[v].spill >= 0
+            && xra_vreg_live_at(ctx->xra, v, pos)) {
+            int16_t slot = ctx->xra->valloc[v].spill;
+            if (slot >= 0 && slot < XIR_MAX_SPILL_SLOTS)
+                spill_bitmap |= (1u << slot);
+        }
+    }
+
+    uint32_t sid = ctx->nsmap;
+    ctx->smap_entries[sid].pc_offset = ctx->buf.pos;
+    ctx->smap_entries[sid].reg_bitmap = reg_bitmap;
+    ctx->smap_entries[sid].spill_bitmap = spill_bitmap;
+    ctx->nsmap++;
+    return sid;
+}
+
+/* Write back all live PTR register values to their spill slots.
+ * Called before cross-function calls so GC can find PTR values in outer
+ * frames by scanning spill slots. */
+static void x64_emit_ptr_spill_writeback(X64CodegenCtx *ctx) {
+    XR_DCHECK(ctx != NULL, "ptr_spill_writeback: NULL ctx");
+    int32_t pos = ctx->cur_ra_pos;
+    for (uint32_t v = 0; v < ctx->func->nvreg; v++) {
+        if (ctx->func->vregs[v].rep != XR_REP_PTR) continue;
+        int8_t ri = xra_reg_at_pos(ctx->xra, v, pos);
+        if (ri < 0) ri = xra_reg_at_pos(ctx->xra, v, pos + 1);
+        if (ri < 0) continue;
+
+        int16_t slot = ctx->xra->valloc[v].spill;
+        if (slot < 0) {
+            slot = (int16_t)ctx->xra->nspill++;
+            ctx->xra->valloc[v].spill = slot;
+        }
+        if (slot >= 0 && slot < 32 && ri >= 0 && ri < X64_MAX_PHYS_REGS) {
+            X64Reg reg = x64_alloc_regs[ri];
+            int32_t offset = -(X64_SPILL_BASE + slot * 8);
+            x64_mov_mr(&ctx->buf, X64_RBP, offset, reg);
+        }
+    }
+}
+
+/* Collect live caller-saved GP regs (alloc indices 0..7) in current block. */
+static int x64_live_gp(X64CodegenCtx *ctx, X64Reg *out, X64Reg exclude) {
+    uint32_t bid = ctx->cur_blk_id;
+    uint32_t mask = (ctx->xra && bid < ctx->xra->nblk)
+                  ? ctx->xra->blk_gp_live[bid] : 0;
+    int n = 0;
+    /* Caller-saved: alloc indices 0..7 (RAX,RCX,RDX,RSI,RDI,R8,R9,R10) */
+    for (int r = 0; r < 8; r++) {
+        if ((mask & (1u << r)) && x64_alloc_regs[r] != exclude)
+            out[n++] = x64_alloc_regs[r];
+    }
+    return n;
+}
+
+/* Collect live caller-saved FP regs in current block. */
+static int x64_live_fp(X64CodegenCtx *ctx, X64Xmm *out) {
+    uint32_t bid = ctx->cur_blk_id;
+    uint32_t mask = (ctx->xra && bid < ctx->xra->nblk)
+                  ? ctx->xra->blk_fp_live[bid] : 0;
+    int n = 0;
+    /* All xmm0-xmm13 are caller-saved in System V */
+    for (int r = 0; r < X64_MAX_FP_REGS; r++) {
+        if (mask & (1u << r))
+            out[n++] = x64_alloc_fp_regs[r];
+    }
+    return n;
+}
+
 /* ========== Prologue / Epilogue ========== */
 
 static void x64_emit_prologue(X64CodegenCtx *ctx) {
@@ -1841,6 +2113,12 @@ static void x64_patch_branches(X64CodegenCtx *ctx) {
         case X64_PATCH_DEOPT_JCC:
         case X64_PATCH_DEOPT_JMP:
             x64_patch_rel32(&ctx->buf, p->emit_pos, ctx->deopt_stub);
+            break;
+        case X64_PATCH_CALL_SELF:
+            x64_patch_rel32(&ctx->buf, p->emit_pos, 0);  /* entry at offset 0 */
+            break;
+        case X64_PATCH_CALL_SELF_FAST:
+            x64_patch_rel32(&ctx->buf, p->emit_pos, ctx->fast_entry_offset);
             break;
         default:
             XR_DCHECK(p->target_blk < ctx->nblock_offsets,
