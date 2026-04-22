@@ -922,8 +922,8 @@ static XrModule* try_load_native_package(XrayIsolate *isolate,
     module->loading = false;
     module->loaded = true;
 
-    xr_log_info("module", "loaded native package '%s' from '%s'",
-                module_name, lib_path);
+    xr_log_notice("module", "loaded native package '%s' from '%s'",
+                  module_name, lib_path);
 
     return module;
 }

@@ -32,7 +32,9 @@
 #include <stdlib.h>
 #include <string.h>
 #include <limits.h>
+#ifndef _WIN32
 #include <unistd.h>
+#endif
 #include "../base/xmalloc.h"
 #include "../vm/xdebug.h"
 #include "../base/xsource_cache.h"
