@@ -100,35 +100,6 @@ XR_FUNC void xr_isolate_set_repl_symbols(XrayIsolate *X, struct XrReplSymbolTabl
 XR_FUNC bool xr_isolate_get_suppress_exception_print(XrayIsolate *X);
 XR_FUNC void xr_isolate_set_suppress_exception_print(XrayIsolate *X, bool suppress);
 
-/* ========== Extension Type System (third-party native packages) ========== */
-
-// Function pointer types for extension callbacks (compatible with xgc_internal.h typedefs)
-struct XrGCHeader;
-struct XrCoroGC;
-typedef void (*XrExtDestroyFn)(struct XrGCHeader *obj, struct XrCoroGC *owning_gc);
-typedef void (*XrExtTraverseFn)(struct XrCoroGC *gc, struct XrGCHeader *obj);
-
-// Allocate a dynamic GC type ID for a third-party extension type.
-// Returns allocated type ID (> XR_TTASK), or 0 on failure (capacity full).
-XR_FUNC uint8_t xr_alloc_extension_type(XrayIsolate *X, const char *name);
-
-// Register destroy callback for an extension type.
-// Also sets the ext_finalize_bitmap bit so GC knows to call destroy.
-XR_FUNC void xr_register_extension_destroy(XrayIsolate *X, uint8_t type_id,
-                                             XrExtDestroyFn destroy_fn);
-
-// Register traverse callback for an extension type.
-// Also sets the ext_has_refs_bitmap bit so GC adds objects to gray list.
-XR_FUNC void xr_register_extension_traverse(XrayIsolate *X, uint8_t type_id,
-                                              XrExtTraverseFn traverse_fn);
-
-// Accessors for GC extension tables (used by xcoro_gc.c sweep/traverse)
-XR_FUNC uint64_t xr_isolate_get_ext_finalize_bitmap(XrayIsolate *X);
-XR_FUNC uint64_t xr_isolate_get_ext_has_refs_bitmap(XrayIsolate *X);
-XR_FUNC XrExtDestroyFn xr_isolate_get_ext_destroy(XrayIsolate *X, uint8_t type_id);
-XR_FUNC XrExtTraverseFn xr_isolate_get_ext_traverse(XrayIsolate *X, uint8_t type_id);
-XR_FUNC const char* xr_isolate_get_ext_type_name(XrayIsolate *X, uint8_t type_id);
-
 /* ========== Compilation & Execution ========== */
 
 struct XrProto;

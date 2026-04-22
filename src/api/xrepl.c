@@ -62,6 +62,8 @@ void xr_repl_symbols_clear(XrReplSymbolTable *table) {
 }
 
 static void repl_symbols_ensure_capacity(XrReplSymbolTable *table, int needed) {
+    XR_DCHECK(table != NULL, "repl_symbols_ensure_capacity: NULL table");
+    XR_DCHECK(needed > 0, "repl_symbols_ensure_capacity: non-positive needed");
     if (needed <= table->capacity) return;
 
     int new_capacity = table->capacity * 2;
@@ -97,6 +99,8 @@ static void repl_symbols_add_or_update(XrReplSymbolTable *table,
 }
 
 void xr_repl_symbols_seed_context(XrReplSymbolTable *table, XrCompilerContext *ctx) {
+    XR_DCHECK(table != NULL, "xr_repl_symbols_seed_context: NULL table");
+    XR_DCHECK(ctx != NULL, "xr_repl_symbols_seed_context: NULL ctx");
     if (!table || !ctx || table->count == 0) return;
 
     // Ensure ctx->shared_vars has enough capacity
@@ -194,6 +198,8 @@ XrInputStatus xr_repl_check_input(const char *source) {
 /* ========== REPL Compilation ========== */
 
 XrProto* xr_repl_compile(XrayIsolate *isolate, const char *source) {
+    XR_DCHECK(isolate != NULL, "xr_repl_compile: NULL isolate");
+    XR_DCHECK(source != NULL, "xr_repl_compile: NULL source");
     if (!isolate || !source) return NULL;
 
     // Ensure REPL symbol table exists

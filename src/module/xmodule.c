@@ -30,6 +30,7 @@
 #include <string.h>
 #include <unistd.h>
 #include <limits.h>
+#include <dlfcn.h>  // dlopen, dlsym, dlclose (native package loading)
 
 /* ========== Forward Declarations ========== */
 
@@ -812,6 +813,120 @@ static XrModule* load_script_module(XrayIsolate *isolate, XrModule *module, cons
 }
 
 /* ========== Main Interface Implementation ========== */
+
+/* ========== Native Third-Party Package Loader ========== */
+
+// ABI version must match between runtime and compiled native packages
+#ifndef XRAY_MODULE_ABI_VERSION
+#define XRAY_MODULE_ABI_VERSION 1
+#endif
+
+/*
+** Try to load a native third-party package via dlopen.
+** Expects module_name in "owner/name" format (e.g. "xray/sqlite").
+** Returns loaded XrModule* or NULL if not a native package.
+*/
+static XrModule* try_load_native_package(XrayIsolate *isolate,
+                                          const char *module_name) {
+    if (!isolate || !module_name) return NULL;
+
+    // 1. Parse owner/name (must be exactly "owner/name", no extra slashes)
+    const char *slash = strchr(module_name, '/');
+    if (!slash || slash == module_name) return NULL;
+    if (strchr(slash + 1, '/')) return NULL;  // reject "a/b/c"
+    if (module_name[0] == '.' || module_name[0] == '/') return NULL;
+
+    char owner[64], name[64];
+    size_t owner_len = (size_t)(slash - module_name);
+    size_t name_len  = strlen(slash + 1);
+    if (owner_len >= sizeof(owner) || name_len >= sizeof(name) || name_len == 0)
+        return NULL;
+    memcpy(owner, module_name, owner_len); owner[owner_len] = '\0';
+    memcpy(name, slash + 1, name_len);     name[name_len] = '\0';
+
+    // 2. Find package directory
+    const char *home = getenv("HOME");
+    if (!home) return NULL;
+
+    char pkg_dir[PATH_MAX];
+    snprintf(pkg_dir, sizeof(pkg_dir),
+             "%s/.xray/packages/%s/%s/latest", home, owner, name);
+
+    // 3. Find native library (try platform-preferred suffix first)
+    char lib_path[PATH_MAX];
+    static const char *suffixes[] = {
+#ifdef __APPLE__
+        ".dylib", ".so"
+#else
+        ".so", ".dylib"
+#endif
+    };
+    bool found = false;
+    for (int i = 0; i < 2 && !found; i++) {
+        snprintf(lib_path, sizeof(lib_path),
+                 "%s/lib/libxray_%s%s", pkg_dir, name, suffixes[i]);
+        if (access(lib_path, F_OK) == 0) found = true;
+    }
+    if (!found) return NULL;
+
+    // 4. dlopen
+    void *handle = dlopen(lib_path, RTLD_NOW | RTLD_LOCAL);
+    if (!handle) {
+        xr_log_warning("module", "dlopen failed for '%s': %s",
+                       lib_path, dlerror());
+        return NULL;
+    }
+
+    // 5. ABI version check
+    char abi_sym[128];
+    snprintf(abi_sym, sizeof(abi_sym), "xr_module_abi_version_%s", name);
+    int *abi_ver = (int*)dlsym(handle, abi_sym);
+    if (!abi_ver || *abi_ver != XRAY_MODULE_ABI_VERSION) {
+        xr_log_warning("module",
+            "ABI mismatch for '%s': package=%d, runtime=%d",
+            module_name, abi_ver ? *abi_ver : -1, XRAY_MODULE_ABI_VERSION);
+        dlclose(handle);
+        return NULL;
+    }
+
+    // 6. Find entry point symbol
+    char sym_name[128];
+    snprintf(sym_name, sizeof(sym_name), "xr_load_module_%s", name);
+
+    NativeModuleLoader loader =
+        (NativeModuleLoader)dlsym(handle, sym_name);
+    if (!loader) {
+        xr_log_warning("module", "symbol '%s' not found in '%s'",
+                       sym_name, lib_path);
+        dlclose(handle);
+        return NULL;
+    }
+
+    // 7. Call loader — creates XrModule and registers exports
+    XrModule *module = loader(isolate);
+    if (!module) {
+        dlclose(handle);
+        return NULL;
+    }
+
+    // 8. Store dlopen handle (NEVER dlclose on success — symbols remain in use)
+    module->native_handle = handle;
+
+    // 9. Cache and finalize
+    XrModuleRegistry *registry =
+        (XrModuleRegistry*)xr_isolate_get_module_registry(isolate);
+    XR_DCHECK(registry != NULL, "try_load_native_package: NULL registry");
+    module->loading = true;
+    xr_hashmap_set(registry->loaded_modules, module_name, module);
+    xr_module_build_export_index(module);
+    module->loading = false;
+    module->loaded = true;
+
+    xr_log_info("module", "loaded native package '%s' from '%s'",
+                module_name, lib_path);
+
+    return module;
+}
 
 /*
 ** Import module

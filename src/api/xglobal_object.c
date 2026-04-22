@@ -94,34 +94,38 @@ bool xr_global_register_all_core_classes(XrGlobalObject* global,
 
     XrayCoreClasses* core = xr_isolate_get_core_classes(isolate);
 
-    xr_global_register_class(global, CLASS_NAME_OBJECT, core->objectClass);
+    #define REG_OR_FAIL(name, klass) \
+        if ((klass) && !xr_global_register_class(global, (name), (klass))) return false
 
-    xr_global_register_class(global, TYPE_NAME_STRING, core->stringClass);
-    xr_global_register_class(global, TYPE_NAME_ARRAY, core->arrayClass);
-    xr_global_register_class(global, TYPE_NAME_MAP, core->mapClass);
-    xr_global_register_class(global, TYPE_NAME_SET, core->setClass);
+    REG_OR_FAIL(CLASS_NAME_OBJECT, core->objectClass);
 
-    xr_global_register_class(global, TYPE_NAME_INT, core->intClass);
-    xr_global_register_class(global, TYPE_NAME_FLOAT, core->floatClass);
-    xr_global_register_class(global, TYPE_NAME_BOOL, core->boolClass);
-    xr_global_register_class(global, TYPE_NAME_NULL, core->nullClass);
+    REG_OR_FAIL(TYPE_NAME_STRING, core->stringClass);
+    REG_OR_FAIL(TYPE_NAME_ARRAY, core->arrayClass);
+    REG_OR_FAIL(TYPE_NAME_MAP, core->mapClass);
+    REG_OR_FAIL(TYPE_NAME_SET, core->setClass);
 
-    xr_global_register_class(global, TYPE_NAME_FUNCTION, core->functionClass);
-    xr_global_register_class(global, TYPE_NAME_CLOSURE, core->closureClass);
-    xr_global_register_class(global, TYPE_NAME_UPVALUE, core->upvalueClass);
-    xr_global_register_class(global, TYPE_NAME_CFUNCTION, core->cfunctionClass);
+    REG_OR_FAIL(TYPE_NAME_INT, core->intClass);
+    REG_OR_FAIL(TYPE_NAME_FLOAT, core->floatClass);
+    REG_OR_FAIL(TYPE_NAME_BOOL, core->boolClass);
+    REG_OR_FAIL(TYPE_NAME_NULL, core->nullClass);
 
-    xr_global_register_class(global, CLASS_NAME_REFLECT, core->reflectClass);
-    xr_global_register_class(global, CLASS_NAME_TYPE, core->typeClass);
-    xr_global_register_class(global, CLASS_NAME_FIELD, core->fieldClass);
-    xr_global_register_class(global, CLASS_NAME_METHOD, core->methodClass);
-    xr_global_register_class(global, CLASS_NAME_CONSTRUCTOR, core->constructorClass);
-    xr_global_register_class(global, CLASS_NAME_PARAMETER, core->parameterClass);
+    REG_OR_FAIL(TYPE_NAME_FUNCTION, core->functionClass);
+    REG_OR_FAIL(TYPE_NAME_CLOSURE, core->closureClass);
+    REG_OR_FAIL(TYPE_NAME_UPVALUE, core->upvalueClass);
+    REG_OR_FAIL(TYPE_NAME_CFUNCTION, core->cfunctionClass);
 
-    xr_global_register_class(global, CLASS_NAME_ENUM, core->enumClass);
+    REG_OR_FAIL(CLASS_NAME_REFLECT, core->reflectClass);
+    REG_OR_FAIL(CLASS_NAME_TYPE, core->typeClass);
+    REG_OR_FAIL(CLASS_NAME_FIELD, core->fieldClass);
+    REG_OR_FAIL(CLASS_NAME_METHOD, core->methodClass);
+    REG_OR_FAIL(CLASS_NAME_CONSTRUCTOR, core->constructorClass);
+    REG_OR_FAIL(CLASS_NAME_PARAMETER, core->parameterClass);
 
-    xr_global_register_class(global, TYPE_NAME_STRINGBUILDER, core->stringBuilderClass);
+    REG_OR_FAIL(CLASS_NAME_ENUM, core->enumClass);
 
+    REG_OR_FAIL(TYPE_NAME_STRINGBUILDER, core->stringBuilderClass);
+
+    #undef REG_OR_FAIL
     return true;
 }
 

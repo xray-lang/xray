@@ -204,7 +204,10 @@ void xray_isolate_get_stats(XrayIsolate *isolate,
                             int *gc_count) {
     xray_api_check(isolate != NULL, "xray_isolate_get_stats: NULL isolate");
     if (bytes_allocated) *bytes_allocated = (size_t)isolate->gc.totalbytes;
-    if (gc_count) *gc_count = 0;
+    if (gc_count) {
+        XrCoroGC *coro_gc = xr_isolate_get_coro_gc(isolate);
+        *gc_count = coro_gc ? (int)coro_gc->gc_count : 0;
+    }
 }
 
 void xray_isolate_collect_garbage(XrayIsolate *isolate) {

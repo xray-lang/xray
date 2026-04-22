@@ -50,28 +50,25 @@ static int isolate_init_full(XrayIsolate *isolate) {
     XR_DCHECK(isolate != NULL, "isolate_init_full: NULL isolate");
     // Config
     isolate->config = xr_malloc(sizeof(XrayConfig));
-    if (isolate->config) {
-        xr_config_init((XrayConfig*)isolate->config);
-    }
+    if (!isolate->config) return -1;
+    xr_config_init((XrayConfig*)isolate->config);
 
     // Process-level type singletons (idempotent, safe to call multiple times)
     xr_type_global_init();
 
     // Analyzer type pool
     isolate->analyzer_pool = xr_type_pool_new();
-    if (isolate->analyzer_pool) {
-        // Set on isolate directly (xray_isolate_enter not called yet)
-        isolate->current_type_pool = isolate->analyzer_pool;
-        // Also set TLS fallback for code that runs before enter
-        xr_type_set_current_pool(isolate->analyzer_pool,
-            &isolate->analyzer_pool->next_type_id);
-    }
+    if (!isolate->analyzer_pool) return -1;
+    // Set on isolate directly (xray_isolate_enter not called yet)
+    isolate->current_type_pool = isolate->analyzer_pool;
+    // Also set TLS fallback for code that runs before enter
+    xr_type_set_current_pool(isolate->analyzer_pool,
+        &isolate->analyzer_pool->next_type_id);
 
     // Symbol table
     isolate->symbol_table = xr_symbol_table_create();
-    if (isolate->symbol_table) {
-        xr_symbol_table_init_builtins((XrSymbolTable*)isolate->symbol_table);
-    }
+    if (!isolate->symbol_table) return -1;
+    xr_symbol_table_init_builtins((XrSymbolTable*)isolate->symbol_table);
 
     // Type registry (must be before core_init, which registers classes)
     xr_registry_init(isolate);
@@ -87,17 +84,16 @@ static int isolate_init_full(XrayIsolate *isolate) {
 
     // Global object + core classes + builtins
     isolate->global_object = xr_global_object_create(isolate);
-    if (isolate->global_object) {
-        if (!xr_global_register_all_core_classes(
-                (XrGlobalObject*)isolate->global_object, isolate)) {
-            xr_log_warning("isolate", "failed to register core classes");
-            return -1;
-        }
-        if (!xr_global_register_all_builtin_functions(
-                (XrGlobalObject*)isolate->global_object)) {
-            xr_log_warning("isolate", "failed to register builtin functions");
-            return -1;
-        }
+    if (!isolate->global_object) return -1;
+    if (!xr_global_register_all_core_classes(
+            (XrGlobalObject*)isolate->global_object, isolate)) {
+        xr_log_warning("isolate", "failed to register core classes");
+        return -1;
+    }
+    if (!xr_global_register_all_builtin_functions(
+            (XrGlobalObject*)isolate->global_object)) {
+        xr_log_warning("isolate", "failed to register builtin functions");
+        return -1;
     }
 
     // Module system
