@@ -47,6 +47,8 @@ static XrtValue xrt_str_concat(const char *sa, const char *sb) {
 /* ========== Mixed-type Arithmetic ========== */
 
 XrtValue xrt_add(XrtValue a, XrtValue b) {
+    XR_DCHECK(a.tag <= XRT_TAG_STR, "xrt_add: invalid tag a");
+    XR_DCHECK(b.tag <= XRT_TAG_STR, "xrt_add: invalid tag b");
     if (a.tag == XRT_TAG_I64 && b.tag == XRT_TAG_I64)
         return xrt_box_int(a.i + b.i);
     if (a.tag == XRT_TAG_STR || b.tag == XRT_TAG_STR) {
@@ -147,19 +149,21 @@ void xrt_println(XrtValue v) { xrt_print(v); printf("\n"); }
 /* ========== String Operations ========== */
 
 XrtValue xrt_string_concat(XrtValue a, XrtValue b) {
+    XR_DCHECK(a.tag <= XRT_TAG_STR, "xrt_string_concat: invalid tag a");
+    XR_DCHECK(b.tag <= XRT_TAG_STR, "xrt_string_concat: invalid tag b");
     char ba[64], bb[64];
     return xrt_str_concat(xrt_to_cstr(a, ba, sizeof(ba)),
                           xrt_to_cstr(b, bb, sizeof(bb)));
 }
 
 XrtValue xrt_string_len(XrtValue s) {
-    if (s.tag == XRT_TAG_STR && s.ptr) {
-        return xrt_box_int((int64_t)strlen((const char *)s.ptr));
-    }
-    return xrt_box_int(0);
+    XR_DCHECK(s.tag == XRT_TAG_STR, "xrt_string_len: expected string");
+    if (s.tag != XRT_TAG_STR || !s.ptr) return xrt_box_int(0);
+    return xrt_box_int((int64_t)strlen((const char *)s.ptr));
 }
 
 XrtValue xrt_string_slice(XrtValue s, int64_t start, int64_t end) {
+    XR_DCHECK(s.tag == XRT_TAG_STR, "xrt_string_slice: expected string");
     if (s.tag != XRT_TAG_STR || !s.ptr) return XRT_NULL;
     const char *str = (const char *)s.ptr;
     int64_t len = (int64_t)strlen(str);
