@@ -375,6 +375,9 @@ XR_FUNC void x64_movq_xmm_gp(X64Buf *buf, X64Xmm dst, X64Reg src);
 /* MOVQ r64, xmm (XMM → GP):  66 REX.W 0F 7E /r */
 XR_FUNC void x64_movq_gp_xmm(X64Buf *buf, X64Reg dst, X64Xmm src);
 
+/* XORPD xmm, xmm:  66 0F 57 /r  (bitwise XOR of packed doubles) */
+XR_FUNC void x64_xorpd(X64Buf *buf, X64Xmm dst, X64Xmm src);
+
 /* ========== Patch Helpers ========== */
 
 /* Patch a rel32 at the given byte offset to jump to target_offset */

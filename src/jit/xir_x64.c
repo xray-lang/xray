@@ -478,4 +478,15 @@ void x64_movq_gp_xmm(X64Buf *buf, X64Reg dst, X64Xmm src) {
     x64_modrm(buf, 0x3, (uint8_t)src & 7, (uint8_t)dst & 7);
 }
 
+/* XORPD xmm, xmm:  66 0F 57 /r */
+void x64_xorpd(X64Buf *buf, X64Xmm dst, X64Xmm src) {
+    XR_DCHECK(buf != NULL, "x64_xorpd: NULL buf");
+    x64_emit8(buf, 0x66);
+    if ((int)dst > 7 || (int)src > 7)
+        x64_rex(buf, false, (int)dst > 7, false, (int)src > 7);
+    x64_emit8(buf, 0x0F);
+    x64_emit8(buf, 0x57);
+    x64_modrm(buf, 0x3, (uint8_t)dst & 7, (uint8_t)src & 7);
+}
+
 #endif // __x86_64__

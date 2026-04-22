@@ -29,6 +29,7 @@
 #define X64_MAX_FP_REGS     16
 #define X64_MAX_VREGS       4096
 #define X64_SCRATCH_REG     X64_R11
+#define X64_SCRATCH_XMM     15       // xmm15 as FP scratch
 #define X64_CORO_REG        X64_R15
 #define X64_SPILL_BASE      64   // must match xir_target_x64.c
 #define X64_JIT_FRAME_BASE  64
@@ -93,16 +94,22 @@ typedef struct {
 extern const X64Reg x64_alloc_regs[X64_MAX_PHYS_REGS];
 extern const X64Reg x64_alloc_fp_regs[X64_MAX_FP_REGS];
 
-/* Get the x86-64 hardware register assigned to a vreg reference */
+/* Get the x86-64 GP hardware register assigned to a vreg reference */
 XR_FUNC X64Reg x64_get_reg(X64CodegenCtx *ctx, XirRef ref);
 
-/* Get register for a source operand, loading from spill slot if needed */
+/* Get GP register for a source operand, loading from spill slot if needed */
 XR_FUNC X64Reg x64_get_operand(X64CodegenCtx *ctx, XirRef ref, X64Reg scratch);
+
+/* Get the FP (xmm) register assigned to a vreg reference */
+XR_FUNC X64Xmm x64_get_fp_reg(X64CodegenCtx *ctx, XirRef ref);
+
+/* Get FP register for a source operand, loading constant or spill if needed */
+XR_FUNC X64Xmm x64_get_fp_operand(X64CodegenCtx *ctx, XirRef ref, X64Xmm scratch);
 
 /* Load a 64-bit constant into a register using optimal encoding */
 XR_FUNC void x64_load_imm64(X64Buf *buf, X64Reg dst, uint64_t val);
 
-/* Store to spill slot if vreg has one assigned */
+/* Store to spill slot if vreg has one assigned (GP or FP) */
 XR_FUNC void x64_maybe_spill(X64CodegenCtx *ctx, XirRef dst_ref);
 
 /* Add a deferred branch patch */
