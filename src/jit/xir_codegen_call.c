@@ -509,9 +509,21 @@ bool xir_emit_call_ops(CodegenCtx *ctx, XirIns *ins, A64Reg rd) {
             a64_buf_emit(&ctx->buf, a64_nop());
             ctx->has_call_c = true;
 
+            // Nested deopt guard: if callee returned DEOPT_MARKER via
+            // call_c_stub fast path, redirect to C bridge slow path.
+            a64_load_imm64(&ctx->buf, SCRATCH_REG, (uint64_t)XIR_DEOPT_MARKER);
+            a64_buf_emit(&ctx->buf, a64_cmp(A64_X0, SCRATCH_REG));
+            uint32_t beq_cascade_direct = ctx->buf.count;
+            a64_buf_emit(&ctx->buf, a64_nop());  // patched: B.EQ → cascade
+
             // B done (skip slow path)
             uint32_t b_done_idx = ctx->buf.count;
             a64_buf_emit(&ctx->buf, a64_nop());
+
+            // Cascade handler: callee deopt'd on fast path, clear stale
+            // deopt_id (set by callee's deopt stub) before C bridge retry
+            uint32_t cascade_direct = ctx->buf.count;
+            a64_buf_emit(&ctx->buf, a64_str_w(A64_XZR, JIT_CTX_REG, XIR_JIT_DEOPT_ID_OFFSET));
 
             // --- Slow path: C bridge fallback ---
             uint32_t slow_path = ctx->buf.count;
@@ -557,6 +569,10 @@ bool xir_emit_call_ops(CodegenCtx *ctx, XirIns *ins, A64Reg rd) {
             // Patch B → done
             int32_t off3 = (int32_t)done_label - (int32_t)b_done_idx;
             ctx->buf.code[b_done_idx] = a64_b(off3);
+
+            // Patch B.EQ cascade → cascade_direct (nested deopt redirect)
+            int32_t off_cascade_d = (int32_t)cascade_direct - (int32_t)beq_cascade_direct;
+            ctx->buf.code[beq_cascade_direct] = a64_b_cond(A64_CC_EQ, off_cascade_d);
 
             // Pop frame stack + restore caller's stack map in jit_ctx
             emit_jit_frame_pop(ctx);
@@ -666,9 +682,20 @@ bool xir_emit_call_ops(CodegenCtx *ctx, XirIns *ins, A64Reg rd) {
             // so the done-path tag read is uniform with the slow (call_c_stub) path.
             a64_buf_emit(&ctx->buf, a64_str(A64_X1, JIT_CTX_REG, XIR_JIT_CALL_RESULT_TAG_OFFSET));
 
+            // Nested deopt guard: if callee returned DEOPT_MARKER,
+            // redirect to C bridge slow path (xr_jit_call_func handles it)
+            a64_load_imm64(&ctx->buf, SCRATCH_REG2, (uint64_t)XIR_DEOPT_MARKER);
+            a64_buf_emit(&ctx->buf, a64_cmp(A64_X0, SCRATCH_REG2));
+            uint32_t beq_cascade_known = ctx->buf.count;
+            a64_buf_emit(&ctx->buf, a64_nop());  // patched: B.EQ → cascade
+
             // B done
             uint32_t b_done_idx = ctx->buf.count;
             a64_buf_emit(&ctx->buf, a64_nop());
+
+            // Cascade handler: clear stale deopt_id before C bridge retry
+            uint32_t cascade_known = ctx->buf.count;
+            a64_buf_emit(&ctx->buf, a64_str_w(A64_XZR, JIT_CTX_REG, XIR_JIT_DEOPT_ID_OFFSET));
 
             // --- Slow path: fallback to xr_jit_call_func C bridge ---
             uint32_t slow_path = ctx->buf.count;
@@ -685,6 +712,10 @@ bool xir_emit_call_ops(CodegenCtx *ctx, XirIns *ins, A64Reg rd) {
             ctx->buf.code[cbz_entry_idx] = a64_cbz(SCRATCH_REG, off_cbz);
             int32_t off_b = (int32_t)done_label - (int32_t)b_done_idx;
             ctx->buf.code[b_done_idx] = a64_b(off_b);
+
+            // Patch B.EQ cascade → cascade_known (nested deopt redirect)
+            int32_t off_cascade_k = (int32_t)cascade_known - (int32_t)beq_cascade_known;
+            ctx->buf.code[beq_cascade_known] = a64_b_cond(A64_CC_EQ, off_cascade_k);
 
             // Pop frame stack + restore caller's stack map in jit_ctx
             emit_jit_frame_pop(ctx);
@@ -829,9 +860,20 @@ bool xir_emit_call_ops(CodegenCtx *ctx, XirIns *ins, A64Reg rd) {
             a64_buf_emit(&ctx->buf, a64_mov(A64_X0, CORO_REG));
             a64_buf_emit(&ctx->buf, a64_blr(SCRATCH_REG));
 
+            // Nested deopt guard: if callee returned DEOPT_MARKER,
+            // redirect to C bridge slow path (xr_jit_call_func handles it)
+            a64_load_imm64(&ctx->buf, SCRATCH_REG2, (uint64_t)XIR_DEOPT_MARKER);
+            a64_buf_emit(&ctx->buf, a64_cmp(A64_X0, SCRATCH_REG2));
+            uint32_t beq_cascade_fast = ctx->buf.count;
+            a64_buf_emit(&ctx->buf, a64_nop());  // patched: B.EQ → cascade
+
             // B done
             uint32_t b_done_fast_idx = ctx->buf.count;
             a64_buf_emit(&ctx->buf, a64_nop());
+
+            // Cascade handler: clear stale deopt_id before C bridge retry
+            uint32_t cascade_fast = ctx->buf.count;
+            a64_buf_emit(&ctx->buf, a64_str_w(A64_XZR, JIT_CTX_REG, XIR_JIT_DEOPT_ID_OFFSET));
 
             // --- Slow path ---
             uint32_t slow_path_fast = ctx->buf.count;
@@ -848,6 +890,10 @@ bool xir_emit_call_ops(CodegenCtx *ctx, XirIns *ins, A64Reg rd) {
             ctx->buf.code[cbz_fast_idx] = a64_cbz(SCRATCH_REG, off_cbz_f);
             int32_t off_b_f = (int32_t)done_fast_label - (int32_t)b_done_fast_idx;
             ctx->buf.code[b_done_fast_idx] = a64_b(off_b_f);
+
+            // Patch B.EQ cascade → cascade_fast (nested deopt redirect)
+            int32_t off_cascade_f = (int32_t)cascade_fast - (int32_t)beq_cascade_fast;
+            ctx->buf.code[beq_cascade_fast] = a64_b_cond(A64_CC_EQ, off_cascade_f);
 
             // Pop frame stack + restore caller's stack map in jit_ctx
             emit_jit_frame_pop(ctx);
