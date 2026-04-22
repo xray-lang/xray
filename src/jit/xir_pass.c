@@ -1567,7 +1567,10 @@ static XirPassChange fixedpoint_invoke(XirFunc *func, XrProto *proto,
             XR_DCHECK(false, "pass removed side-effect instructions");
         }
     }
-    if (!(d->flags & XIR_PASS_SKIP_CFG_VERIFY)) xir_verify_cfg(func);
+    if (!(d->flags & XIR_PASS_SKIP_CFG_VERIFY)) {
+        if (ch.cfg_changed) xir_rebuild_preds(func);
+        xir_verify_cfg(func);
+    }
     xir_verify_types(func);
 #endif
     return ch;

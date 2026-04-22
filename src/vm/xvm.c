@@ -2965,6 +2965,8 @@ startfunc:
                 } else {
                     // Slow path: typed arrays need per-element unboxing
                     for (int j = 1; j <= b; j++) {
+                        fprintf(stderr, "[INIT] a=%d j=%d R(a+j).tag=%u R(a+j).i=%lld elem_type=%u\n",
+                                a, j, (unsigned)R(a+j).tag, (long long)R(a+j).i, (unsigned)arr->elem_type);
                         xr_array_set(arr, j - 1, R(a + j));
                     }
                 }

@@ -1234,6 +1234,28 @@ throw_check_done:
                 cf->call_args_count = 0;
                 return;
             }
+            // Print: CALL_C(xr_jit_print, flags)
+            // call_args[0] = value to print
+            // AOT encoding: bit0=newline, bit1=add_space
+            if (fn_ptr == (void *)xr_jit_print) {
+                int64_t flags = 0;
+                xcg_resolve_const_i64(func, ins->args[1], &flags);
+                int newline   = (int)(flags & 1);
+                int add_space = (int)((flags >> 1) & 1);
+                if (add_space)
+                    xcgen_buf_puts(b, "    printf(\" \");\n");
+                xcgen_buf_printf(b, "    %s(",
+                                 newline ? "xrt_println" : "xrt_print");
+                if (cf->call_args_count > 0)
+                    emit_ref_as_tagged(b, func, cf->call_args[0]);
+                else
+                    xcgen_buf_printf(b, "(%s){0}", tagged_type);
+                xcgen_buf_puts(b, ");\n");
+                cf->needs_runtime = true;
+                cf->call_args_count = 0;
+                return;
+            }
+
             // Tagged arithmetic: CALL_C(xr_jit_rt_add/sub/mul/div/mod, tag_enc)
             // call_args[0]=lhs, call_args[1]=rhs.  Map to xrt_add/sub/mul/div/mod.
             const char *arith_name = NULL;
