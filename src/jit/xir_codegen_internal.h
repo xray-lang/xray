@@ -28,7 +28,7 @@
 
 #define MAX_PHYS_REGS 22
 #define MAX_FP_REGS   16
-#define MAX_VREGS     512
+#define MAX_VREGS     4096
 #define SCRATCH_REG   A64_X16
 #define SCRATCH_REG2  A64_X17
 #define CORO_REG      A64_X19

@@ -55,7 +55,7 @@ const XirTarget xir_target_arm64 = {
     .spill_base         = 176,      // spill slots start after frame metadata
     .max_spill_slots    = 32,       // must match XIR_MAX_SPILL_SLOTS (uint32_t spill_bitmap)
 
-    .max_vregs          = 512,
+    .max_vregs          = 4096,
 };
 
 // Global current target pointer (initialized by JIT init)

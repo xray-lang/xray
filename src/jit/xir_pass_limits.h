@@ -105,7 +105,7 @@
  * for callers that inline them directly.
  */
 #define XIR_GCM_MAX_BLOCKS        512
-#define XIR_GCM_MAX_VREGS         512
+#define XIR_GCM_MAX_VREGS         4096
 
 /* ========== Range Analysis ==========
  *
