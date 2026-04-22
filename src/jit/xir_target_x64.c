@@ -36,16 +36,16 @@
 #include "xir_x64.h"
 
 /* Allocatable GP registers.
- * Caller-saved first (9): rax, rcx, rdx, rsi, rdi, r8, r9, r10, r11 → exclude r11 (scratch) = 8
- * Callee-saved next (5):  rbx, r12, r13, r14    (r15=coro, rbp=FP excluded)
- * Total: 13 allocatable */
+ * Caller-saved (8): rax, rcx, rdx, rsi, rdi, r8, r9, r10  (r11=scratch excluded)
+ * Callee-saved (3): rbx, r12, r13  (r14=jit_ctx, r15=coro, rbp=FP excluded)
+ * Total: 11 allocatable */
 static const int x64_gpr_alloc[] = {
     /* Caller-saved (first 8 entries) */
     X64_RAX, X64_RCX, X64_RDX, X64_RSI, X64_RDI,
     X64_R8,  X64_R9,  X64_R10,
-    /* Callee-saved (next 5 entries) */
-    X64_RBX, X64_R12, X64_R13, X64_R14,
-    /* Note: r15 = coro pointer, rbp = frame pointer → not allocatable */
+    /* Callee-saved (next 3 entries) */
+    X64_RBX, X64_R12, X64_R13,
+    /* Note: r11=scratch, r14=jit_ctx, r15=coro, rbp=FP → not allocatable */
 };
 
 /* Allocatable FP registers: xmm0-xmm15.
@@ -79,7 +79,7 @@ static const int x64_fpr_alloc[] = {
 const XirTarget xir_target_x64 = {
     .name               = "x86-64",
 
-    .ngpr               = 13,       // 8 caller-saved + 5 callee-saved (minus r11,r15,rbp,rsp)
+    .ngpr               = 11,       // 8 caller-saved + 3 callee-saved (minus r11,r14,r15,rbp,rsp)
     .nfpr               = 16,       // xmm0-xmm15
 
     .gpr_alloc          = x64_gpr_alloc,

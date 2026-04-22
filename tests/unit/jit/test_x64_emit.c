@@ -602,6 +602,74 @@ static void test_movsd_store(void) {
     check_bytes("movsd_store", exp, sizeof(exp));
 }
 
+/* ========== Sub-word memory ========== */
+
+/* MOVZX r64, byte [RAX+0]:  REX.W 0F B6 00 */
+static void test_movzx_rm8(void) {
+    reset();
+    x64_movzx_rm8(&g_buf, X64_RAX, X64_RAX, 0);
+    uint8_t exp[] = { 0x48, 0x0F, 0xB6, 0x00 };
+    check_bytes("movzx_rm8", exp, sizeof(exp));
+}
+
+/* MOVSX r64, byte [RAX+0]:  REX.W 0F BE 00 */
+static void test_movsx_rm8(void) {
+    reset();
+    x64_movsx_rm8(&g_buf, X64_RAX, X64_RAX, 0);
+    uint8_t exp[] = { 0x48, 0x0F, 0xBE, 0x00 };
+    check_bytes("movsx_rm8", exp, sizeof(exp));
+}
+
+/* MOV [RAX+0], r8(CL):  40 88 08  (REX needed for CL in 64-bit mode regs 4-7) */
+static void test_mov_mr8(void) {
+    reset();
+    x64_mov_mr8(&g_buf, X64_RAX, 0, X64_RCX);
+    uint8_t exp[] = { 0x88, 0x08 };
+    check_bytes("mov_mr8", exp, sizeof(exp));
+}
+
+/* MOV r32, [RBP-8]:  8B 45 F8  (32-bit load, zero-extend) */
+static void test_mov_rm32(void) {
+    reset();
+    x64_mov_rm32(&g_buf, X64_RAX, X64_RBP, -8);
+    uint8_t exp[] = { 0x8B, 0x45, 0xF8 };
+    check_bytes("mov_rm32", exp, sizeof(exp));
+}
+
+/* MOV [RBP-8], r32:  89 45 F8  (32-bit store) */
+static void test_mov_mr32(void) {
+    reset();
+    x64_mov_mr32(&g_buf, X64_RBP, -8, X64_RAX);
+    uint8_t exp[] = { 0x89, 0x45, 0xF8 };
+    check_bytes("mov_mr32", exp, sizeof(exp));
+}
+
+/* MOVSXD r64, [RBP-4]:  REX.W 63 45 FC */
+static void test_movsxd(void) {
+    reset();
+    x64_movsxd_rm(&g_buf, X64_RAX, X64_RBP, -4);
+    uint8_t exp[] = { 0x48, 0x63, 0x45, 0xFC };
+    check_bytes("movsxd", exp, sizeof(exp));
+}
+
+/* ========== Shift/OR immediate ========== */
+
+/* SHL RAX, 16:  REX.W C1 E0 10 */
+static void test_shl_ri(void) {
+    reset();
+    x64_shl_ri(&g_buf, X64_RAX, 16);
+    uint8_t exp[] = { 0x48, 0xC1, 0xE0, 0x10 };
+    check_bytes("shl_ri", exp, sizeof(exp));
+}
+
+/* OR RAX, 5:  REX.W 83 C8 05 */
+static void test_or_ri_imm8(void) {
+    reset();
+    x64_or_ri(&g_buf, X64_RAX, 5);
+    uint8_t exp[] = { 0x48, 0x83, 0xC8, 0x05 };
+    check_bytes("or_ri_imm8", exp, sizeof(exp));
+}
+
 /* ========== Driver ========== */
 
 int main(void) {
@@ -694,7 +762,19 @@ int main(void) {
     test_movsd_load();
     test_movsd_store();
 
-    int total = 57;
+    /* Sub-word memory */
+    test_movzx_rm8();
+    test_movsx_rm8();
+    test_mov_mr8();
+    test_mov_rm32();
+    test_mov_mr32();
+    test_movsxd();
+
+    /* Shift/OR immediate */
+    test_shl_ri();
+    test_or_ri_imm8();
+
+    int total = 65;
     fprintf(stderr, "[test_x64_emit] ALL PASSED (%d tests)\n", total);
     return 0;
 }

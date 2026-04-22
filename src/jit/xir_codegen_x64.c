@@ -42,10 +42,8 @@ const X64Reg x64_alloc_regs[X64_MAX_PHYS_REGS] = {
     /* Caller-saved (first 8) */
     X64_RAX, X64_RCX, X64_RDX, X64_RSI, X64_RDI,
     X64_R8,  X64_R9,  X64_R10,
-    /* Callee-saved (next 5) — excludes r15(coro), rbp(FP) */
-    X64_RBX, X64_R12, X64_R13, X64_R14,
-    /* Pad to 13 entries — r11 is scratch, not allocatable */
-    X64_R11,  /* Should never be reached; sentinel */
+    /* Callee-saved (next 3) — r14=jit_ctx, r15=coro, rbp=FP excluded */
+    X64_RBX, X64_R12, X64_R13,
 };
 
 const X64Reg x64_alloc_fp_regs[X64_MAX_FP_REGS] = {
@@ -536,6 +534,327 @@ static void x64_emit_xir_ins(X64CodegenCtx *ctx, XirIns *ins) {
         break;
     }
 
+    /* ========== Memory — basic load/store ========== */
+    case XIR_LOAD: {
+        X64Reg rn = x64_get_operand(ctx, ins->args[0], X64_SCRATCH_REG);
+        bool load_fp = (ins->rep == XR_REP_F64);
+        if (load_fp) {
+            X64Xmm fd = x64_get_fp_reg(ctx, ins->dst);
+            x64_movsd_rm(&ctx->buf, fd, rn, 0);
+        } else {
+            x64_mov_rm(&ctx->buf, rd, rn, 0);
+        }
+        break;
+    }
+    case XIR_STORE: {
+        X64Reg rn = x64_get_operand(ctx, ins->args[0], X64_SCRATCH_REG);
+        bool store_fp = false;
+        if (xir_ref_is_vreg(ins->args[1])) {
+            uint32_t vi = XIR_REF_INDEX(ins->args[1]);
+            if (vi < ctx->func->nvreg)
+                store_fp = (ctx->func->vregs[vi].rep == XR_REP_F64);
+        }
+        if (store_fp) {
+            X64Xmm fm = x64_get_fp_operand(ctx, ins->args[1], X64_SCRATCH_XMM);
+            x64_movsd_mr(&ctx->buf, rn, 0, fm);
+        } else {
+            X64Reg rm = x64_get_operand(ctx, ins->args[1], X64_SCRATCH_REG);
+            if (rm == rn) {
+                x64_mov_rr(&ctx->buf, X64_SCRATCH_REG, rm);
+                rm = X64_SCRATCH_REG;
+            }
+            x64_mov_mr(&ctx->buf, rn, 0, rm);
+        }
+        break;
+    }
+
+    /* ========== Sub-word loads/stores ========== */
+    case XIR_LOAD8Z: {
+        X64Reg addr = x64_get_operand(ctx, ins->args[0], X64_SCRATCH_REG);
+        x64_movzx_rm8(&ctx->buf, rd, addr, 0);
+        break;
+    }
+    case XIR_LOAD8S: {
+        X64Reg addr = x64_get_operand(ctx, ins->args[0], X64_SCRATCH_REG);
+        x64_movsx_rm8(&ctx->buf, rd, addr, 0);
+        break;
+    }
+    case XIR_STORE8: {
+        X64Reg addr = x64_get_operand(ctx, ins->args[0], X64_SCRATCH_REG);
+        X64Reg val = x64_get_operand(ctx, ins->args[1], X64_SCRATCH_REG);
+        if (val == addr) {
+            x64_mov_rr(&ctx->buf, X64_SCRATCH_REG, val);
+            val = X64_SCRATCH_REG;
+        }
+        x64_mov_mr8(&ctx->buf, addr, 0, val);
+        break;
+    }
+    case XIR_LOAD16Z: {
+        X64Reg addr = x64_get_operand(ctx, ins->args[0], X64_SCRATCH_REG);
+        x64_movzx_rm16(&ctx->buf, rd, addr, 0);
+        break;
+    }
+    case XIR_LOAD16S: {
+        X64Reg addr = x64_get_operand(ctx, ins->args[0], X64_SCRATCH_REG);
+        x64_movsx_rm16(&ctx->buf, rd, addr, 0);
+        break;
+    }
+    case XIR_STORE16: {
+        X64Reg addr = x64_get_operand(ctx, ins->args[0], X64_SCRATCH_REG);
+        X64Reg val = x64_get_operand(ctx, ins->args[1], X64_SCRATCH_REG);
+        if (val == addr) {
+            x64_mov_rr(&ctx->buf, X64_SCRATCH_REG, val);
+            val = X64_SCRATCH_REG;
+        }
+        x64_mov_mr16(&ctx->buf, addr, 0, val);
+        break;
+    }
+    case XIR_LOAD32Z: {
+        X64Reg addr = x64_get_operand(ctx, ins->args[0], X64_SCRATCH_REG);
+        x64_mov_rm32(&ctx->buf, rd, addr, 0);
+        break;
+    }
+    case XIR_LOAD32S: {
+        X64Reg base = x64_get_operand(ctx, ins->args[0], X64_SCRATCH_REG);
+        int32_t offset = 0;
+        if (xir_ref_is_const(ins->args[1])) {
+            uint32_t ci = XIR_REF_INDEX(ins->args[1]);
+            offset = (int32_t)ctx->func->consts[ci].val.i64;
+        }
+        x64_movsxd_rm(&ctx->buf, rd, base, offset);
+        break;
+    }
+    case XIR_STORE32: {
+        X64Reg addr = x64_get_operand(ctx, ins->args[0], X64_SCRATCH_REG);
+        X64Reg val = x64_get_operand(ctx, ins->args[1], X64_SCRATCH_REG);
+        if (val == addr) {
+            x64_mov_rr(&ctx->buf, X64_SCRATCH_REG, val);
+            val = X64_SCRATCH_REG;
+        }
+        x64_mov_mr32(&ctx->buf, addr, 0, val);
+        break;
+    }
+
+    /* ========== Float sub-word memory ========== */
+    case XIR_LOAD_F32: {
+        /* Load 32-bit float, promote to f64.
+         * x86-64: CVTSS2SD xmm, [addr] — but we don't have that encoded.
+         * Use: MOV r32d, [addr] → MOVD xmm, r32 → CVTSS2SD xmm, xmm.
+         * Simpler: just do MOVSS + CVTSS2SD via raw encoding. */
+        X64Xmm fd = x64_get_fp_reg(ctx, ins->dst);
+        X64Reg addr = x64_get_operand(ctx, ins->args[0], X64_SCRATCH_REG);
+        /* MOVSS xmm_scratch, [addr]:  F3 0F 10 /r */
+        x64_emit8(&ctx->buf, 0xF3);
+        if (X64_SCRATCH_XMM > 7 || addr > 7)
+            x64_emit8(&ctx->buf, 0x40 | ((X64_SCRATCH_XMM > 7) ? 4 : 0) |
+                                         ((addr > 7) ? 1 : 0));
+        x64_emit8(&ctx->buf, 0x0F);
+        x64_emit8(&ctx->buf, 0x10);
+        x64_modrm_mem(&ctx->buf, X64_SCRATCH_XMM & 7, addr, 0);
+        /* CVTSS2SD fd, xmm_scratch:  F3 0F 5A /r */
+        x64_emit8(&ctx->buf, 0xF3);
+        if ((int)fd > 7 || X64_SCRATCH_XMM > 7)
+            x64_emit8(&ctx->buf, 0x40 | (((int)fd > 7) ? 4 : 0) |
+                                         ((X64_SCRATCH_XMM > 7) ? 1 : 0));
+        x64_emit8(&ctx->buf, 0x0F);
+        x64_emit8(&ctx->buf, 0x5A);
+        x64_emit8(&ctx->buf, 0xC0 | (((int)fd & 7) << 3) | (X64_SCRATCH_XMM & 7));
+        break;
+    }
+    case XIR_STORE_F32: {
+        /* Truncate f64 to f32, store 32-bit float.
+         * CVTSD2SS xmm_scratch, src → MOVSS [addr], xmm_scratch */
+        X64Reg addr = x64_get_operand(ctx, ins->args[0], X64_SCRATCH_REG);
+        X64Xmm fm = x64_get_fp_operand(ctx, ins->args[1], X64_SCRATCH_XMM);
+        /* CVTSD2SS xmm_scratch, fm:  F2 0F 5A /r */
+        x64_emit8(&ctx->buf, 0xF2);
+        if (X64_SCRATCH_XMM > 7 || (int)fm > 7)
+            x64_emit8(&ctx->buf, 0x40 | ((X64_SCRATCH_XMM > 7) ? 4 : 0) |
+                                         (((int)fm > 7) ? 1 : 0));
+        x64_emit8(&ctx->buf, 0x0F);
+        x64_emit8(&ctx->buf, 0x5A);
+        x64_emit8(&ctx->buf, 0xC0 | ((X64_SCRATCH_XMM & 7) << 3) | ((int)fm & 7));
+        /* MOVSS [addr], xmm_scratch:  F3 0F 11 /r */
+        x64_emit8(&ctx->buf, 0xF3);
+        if (X64_SCRATCH_XMM > 7 || addr > 7)
+            x64_emit8(&ctx->buf, 0x40 | ((X64_SCRATCH_XMM > 7) ? 4 : 0) |
+                                         ((addr > 7) ? 1 : 0));
+        x64_emit8(&ctx->buf, 0x0F);
+        x64_emit8(&ctx->buf, 0x11);
+        x64_modrm_mem(&ctx->buf, X64_SCRATCH_XMM & 7, addr, 0);
+        break;
+    }
+
+    /* ========== Coro/context loads/stores ========== */
+    case XIR_LOAD_CORO: {
+        int32_t offset = 0;
+        if (!xir_ref_is_none(ins->args[0]) && xir_ref_is_const(ins->args[0])) {
+            uint32_t ci = XIR_REF_INDEX(ins->args[0]);
+            offset = (int32_t)ctx->func->consts[ci].val.i64;
+        }
+        x64_mov_rm(&ctx->buf, rd, X64_JIT_CTX_REG, offset);
+        break;
+    }
+    case XIR_LOAD_CORO_BYTE: {
+        int32_t offset = 0;
+        if (!xir_ref_is_none(ins->args[0]) && xir_ref_is_const(ins->args[0])) {
+            uint32_t ci = XIR_REF_INDEX(ins->args[0]);
+            offset = (int32_t)ctx->func->consts[ci].val.i64;
+        }
+        x64_movzx_rm8(&ctx->buf, rd, X64_JIT_CTX_REG, offset);
+        break;
+    }
+    case XIR_STORE_CORO: {
+        int32_t offset = 0;
+        if (!xir_ref_is_none(ins->dst) && xir_ref_is_const(ins->dst)) {
+            uint32_t ci = XIR_REF_INDEX(ins->dst);
+            offset = (int32_t)ctx->func->consts[ci].val.i64;
+        }
+        bool val_fp = false;
+        if (xir_ref_is_vreg(ins->args[0])) {
+            uint32_t vi = XIR_REF_INDEX(ins->args[0]);
+            if (vi < ctx->func->nvreg)
+                val_fp = (ctx->func->vregs[vi].rep == XR_REP_F64);
+        }
+        if (val_fp) {
+            X64Xmm fm = x64_get_fp_operand(ctx, ins->args[0], X64_SCRATCH_XMM);
+            x64_movsd_mr(&ctx->buf, X64_JIT_CTX_REG, offset, fm);
+        } else {
+            X64Reg val = x64_get_operand(ctx, ins->args[0], X64_SCRATCH_REG);
+            x64_mov_mr(&ctx->buf, X64_JIT_CTX_REG, offset, val);
+        }
+        break;
+    }
+    case XIR_STORE_CORO_BYTE: {
+        int32_t offset = 0;
+        if (!xir_ref_is_none(ins->dst) && xir_ref_is_const(ins->dst)) {
+            uint32_t ci = XIR_REF_INDEX(ins->dst);
+            offset = (int32_t)ctx->func->consts[ci].val.i64;
+        }
+        X64Reg val = x64_get_operand(ctx, ins->args[0], X64_SCRATCH_REG);
+        x64_mov_mr8(&ctx->buf, X64_JIT_CTX_REG, offset, val);
+        break;
+    }
+
+    /* ========== Object field load/store ========== */
+    case XIR_LOAD_FIELD: {
+        X64Reg obj = x64_get_operand(ctx, ins->args[0], X64_SCRATCH_REG);
+        int32_t offset = 0;
+        if (xir_ref_is_const(ins->args[1])) {
+            uint32_t ci = XIR_REF_INDEX(ins->args[1]);
+            offset = (int32_t)ctx->func->consts[ci].val.i64;
+        }
+        /* Save runtime tag to jit_ctx scratch if type is unknown */
+        if (xir_ref_is_vreg(ins->dst)) {
+            uint32_t vi = XIR_REF_INDEX(ins->dst);
+            if (vi < ctx->func->nvreg &&
+                ins->ctype.kind == XIR_TK_UNKNOWN &&
+                ins->rep == XR_REP_I64) {
+                x64_movzx_rm8(&ctx->buf, X64_SCRATCH_REG, obj,
+                              offset + XIR_XRVALUE_TAG_OFFSET);
+                x64_mov_mr(&ctx->buf, X64_JIT_CTX_REG,
+                            (int32_t)XIR_JIT_LOAD_TAG_SCRATCH, X64_SCRATCH_REG);
+            }
+        }
+        /* Load payload at byte 8 */
+        if (ins->rep == XR_REP_F64) {
+            X64Xmm fd = x64_get_fp_reg(ctx, ins->dst);
+            x64_movsd_rm(&ctx->buf, fd, obj, offset + XIR_XRVALUE_PAYLOAD_OFFSET);
+        } else {
+            x64_mov_rm(&ctx->buf, rd, obj, offset + XIR_XRVALUE_PAYLOAD_OFFSET);
+        }
+        break;
+    }
+    case XIR_STORE_FIELD: {
+        X64Reg obj = x64_get_operand(ctx, ins->args[0], X64_SCRATCH_REG);
+        int32_t offset = 0;
+        if (!xir_ref_is_none(ins->dst) && xir_ref_is_const(ins->dst)) {
+            uint32_t ci = XIR_REF_INDEX(ins->dst);
+            offset = (int32_t)ctx->func->consts[ci].val.i64;
+        }
+
+        bool is_fp = false;
+        if (xir_ref_is_vreg(ins->args[1])) {
+            uint32_t vi = XIR_REF_INDEX(ins->args[1]);
+            if (vi < ctx->func->nvreg)
+                is_fp = (ctx->func->vregs[vi].rep == XR_REP_F64);
+        }
+
+        /* Store payload at XrValue byte 8 */
+        if (is_fp) {
+            X64Xmm fm = x64_get_fp_operand(ctx, ins->args[1], X64_SCRATCH_XMM);
+            x64_movsd_mr(&ctx->buf, obj, offset + XIR_XRVALUE_PAYLOAD_OFFSET, fm);
+        } else {
+            X64Reg val = x64_get_operand(ctx, ins->args[1], X64_SCRATCH_REG);
+            if (val == obj) {
+                x64_mov_rr(&ctx->buf, X64_SCRATCH_REG, val);
+                val = X64_SCRATCH_REG;
+            }
+            x64_mov_mr(&ctx->buf, obj, offset + XIR_XRVALUE_PAYLOAD_OFFSET, val);
+        }
+
+        /* Store tag (descriptor: tag + flags + heap_type) as 32-bit */
+        uint8_t xr_tag = ins->rep;
+        bool is_ptr_val = false;
+        uint32_t tag_val = 0;
+
+        if (xr_tag == XIR_SF_TAG_RUNTIME) {
+            tag_val = XR_TAG_PTR;
+            if (xir_ref_is_vreg(ins->args[1])) {
+                XirType vct = xir_ref_ctype(ctx->func, ins->args[1]);
+                uint8_t vk = type_kind_to_vtag(vct.kind);
+                if (vtag_is_concrete(vk)) {
+                    tag_val = vtag_to_value_tag(vk);
+                    is_ptr_val = xir_type_is_ptr(vct.kind);
+                } else {
+                    uint32_t vi = XIR_REF_INDEX(ins->args[1]);
+                    uint8_t vt = (vi < ctx->func->nvreg)
+                                 ? ctx->func->vregs[vi].rep
+                                 : XR_REP_TAGGED;
+                    if (vt == XR_REP_F64)      tag_val = XR_TAG_F64;
+                    else if (vt == XR_REP_I64)  tag_val = XR_TAG_I64;
+                    is_ptr_val = (vt == XR_REP_PTR || vt == XR_REP_TAGGED);
+                }
+            }
+        } else {
+            tag_val = xr_tag;
+            is_ptr_val = (xr_tag == XR_TAG_PTR);
+        }
+
+        if (is_ptr_val) {
+            /* PTR: read gc_type from GC header, build tag|(gc_type<<16) */
+            X64Reg val = x64_get_operand(ctx, ins->args[1], X64_SCRATCH_REG);
+            /* gc_type = *(uint8_t*)(val + XIR_GC_TYPE_OFFSET) */
+            x64_movzx_rm8(&ctx->buf, X64_SCRATCH_REG, val,
+                          (int32_t)XIR_GC_TYPE_OFFSET);
+            /* scratch = gc_type << 16 */
+            x64_shl_ri(&ctx->buf, X64_SCRATCH_REG, 16);
+            /* scratch |= tag_val */
+            x64_or_ri(&ctx->buf, X64_SCRATCH_REG, (int32_t)tag_val);
+            /* Store 32-bit descriptor */
+            x64_mov_mr32(&ctx->buf, obj,
+                         offset + XIR_XRVALUE_TAG_OFFSET, X64_SCRATCH_REG);
+        } else {
+            /* Non-PTR: tag with heap_type=0 */
+            x64_load_imm64(&ctx->buf, X64_SCRATCH_REG, tag_val);
+            x64_mov_mr32(&ctx->buf, obj,
+                         offset + XIR_XRVALUE_TAG_OFFSET, X64_SCRATCH_REG);
+        }
+        break;
+    }
+
+    /* ========== Tag load/check ========== */
+    case XIR_TAG_LOAD: {
+        X64Reg ptr = x64_get_operand(ctx, ins->args[0], X64_SCRATCH_REG);
+        int32_t offset = 0;
+        if (!xir_ref_is_none(ins->args[1]) && xir_ref_is_const(ins->args[1])) {
+            uint32_t ci = XIR_REF_INDEX(ins->args[1]);
+            offset = (int32_t)ctx->func->consts[ci].val.i64;
+        }
+        x64_movzx_rm8(&ctx->buf, rd, ptr, offset);
+        break;
+    }
+
     case XIR_RET: {
         /* Return value is in the register assigned to args[0].
          * JIT calling convention: return value in RAX. */
@@ -584,6 +903,10 @@ static void x64_emit_prologue(X64CodegenCtx *ctx) {
 
     /* MOV R15, RDI  (save coro pointer — first arg in System V ABI) */
     x64_mov_rr(&ctx->buf, X64_CORO_REG, X64_RDI);
+
+    /* LDR R14, [R15 + jit_ctx_offset]  (load per-Worker JIT scratch pointer) */
+    x64_mov_rm(&ctx->buf, X64_JIT_CTX_REG, X64_CORO_REG,
+               (int32_t)XIR_CORO_JIT_CTX_OFFSET);
 
     /* Load params from args array (RSI = args pointer, System V 2nd arg) */
     uint32_t nparams = ctx->func->num_params;
