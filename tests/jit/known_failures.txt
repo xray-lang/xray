@@ -14,7 +14,5 @@
 #
 # Format: relative_path  # optional comment
 
-# Nested JIT deopt: --jit-force causes all functions to be JIT compiled,
-# callback deopt returns DEOPT_MARKER that outer JIT code mishandles (P0.1)
-tests/regression/07_strings/0741_context_buffer_isolation.xr
+# GC stress: map_set NULL key assertion under --jit-force (GC interaction bug)
 tests/regression/10_stdlib/1207_gc_stress.xr

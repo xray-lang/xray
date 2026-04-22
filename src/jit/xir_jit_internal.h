@@ -92,30 +92,41 @@ static inline XrValue jit_value_from_tag(int64_t raw, uint8_t xr_tag) {
 /* ========== Deopt value reconstruction ========== */
 
 // Reconstruct XrValue from deopt slot: raw payload + XIR rep + xr_tag hint.
+// When xr_tag is known (0-15), reconstruction is exact — no address heuristic.
+// Callers should resolve xr_tag from slot_runtime_tags before calling this.
 static inline XrValue deopt_reconstruct(int64_t raw, uint8_t xir_type, uint8_t xr_tag) {
     XrValue v;
     v.descriptor = 0;
 
+    // Treat NUMERIC the same as UNKNOWN (no precise tag)
     if (xr_tag == XR_RTAG_NUMERIC) {
         xr_tag = XR_RTAG_UNKNOWN;
     }
 
-    if (xr_tag != XR_RTAG_UNKNOWN && xir_type != XR_REP_TAGGED &&
-        !(xr_tag == XR_TAG_I64 && raw != 0 && (raw & 0x7) == 0 &&
-          (uint64_t)raw > 0x10000)) {
-        v.tag = xr_tag;
+    // Known tag: trust unconditionally, no address-range heuristic
+    if (xr_tag != XR_RTAG_UNKNOWN) {
         if (xr_tag == XR_TAG_F64) {
             memcpy(&v.f, &raw, sizeof(double));
+            v.tag = XR_TAG_F64;
+        } else if (xr_tag == XR_TAG_PTR) {
+            v.i = raw;
+            if (raw == 0) {
+                v.tag = XR_TAG_NULL;
+            } else {
+                v.tag = XR_TAG_PTR;
+                if ((raw & 0x7) == 0) {
+                    XrGCHeader *gc = (XrGCHeader *)(intptr_t)raw;
+                    v.heap_type = (uint16_t)gc->type;
+                }
+            }
         } else {
             v.i = raw;
-        }
-        if (xr_tag == XR_TAG_PTR && raw != 0 && (raw & 0x7) == 0) {
-            XrGCHeader *gc = (XrGCHeader *)(intptr_t)raw;
-            v.heap_type = (uint16_t)gc->type;
+            v.tag = xr_tag;
         }
         return v;
     }
 
+    // Unknown tag: infer from XIR representation type
     switch (xir_type) {
     case XR_REP_F64:
         memcpy(&v.f, &raw, sizeof(double));
@@ -134,7 +145,8 @@ static inline XrValue deopt_reconstruct(int64_t raw, uint8_t xir_type, uint8_t x
         }
         break;
     case XR_REP_TAGGED:
-    tagged_heuristic:
+    default:
+        // Last resort: address heuristic for truly unknown values
         v.i = raw;
         if (raw != 0 && (raw & 0x7) == 0 && (uint64_t)raw > 0x10000) {
             v.tag = XR_TAG_PTR;
@@ -143,13 +155,6 @@ static inline XrValue deopt_reconstruct(int64_t raw, uint8_t xir_type, uint8_t x
         } else {
             v.tag = XR_TAG_I64;
         }
-        break;
-    default:
-        v.i = raw;
-        if (raw != 0 && (raw & 0x7) == 0 && (uint64_t)raw > 0x10000) {
-            goto tagged_heuristic;
-        }
-        v.tag = XR_TAG_I64;
         break;
     }
     return v;

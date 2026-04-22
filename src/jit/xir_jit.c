@@ -956,7 +956,14 @@ int32_t xir_jit_deopt_recover(XrCoroutine *coro, XrValue *frame, int maxstack) {
             continue;
         }
 
-        frame[bc] = deopt_reconstruct(raw, s->type, s->xr_tag);
+        // Resolve xr_tag: prefer compile-time tag, fallback to runtime tag
+        uint8_t tag = s->xr_tag;
+        if (tag == XR_RTAG_UNKNOWN && bc >= 0 && bc < 256) {
+            uint8_t rt = coro->jit_ctx->slot_runtime_tags[bc];
+            if (rt != 0 && rt != XR_RTAG_UNKNOWN)
+                tag = rt;
+        }
+        frame[bc] = deopt_reconstruct(raw, s->type, tag);
     }
 
     return (int32_t)entry->bc_pc;
