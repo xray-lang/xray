@@ -158,6 +158,9 @@ struct XcgenCompilation {
     // Global struct promotion registry (owned externally by cmd_build)
     XcgenStructRegistry *struct_reg;
 
+    // Shared variable tracking (for GETSHARED/SETSHARED → C globals)
+    int             max_shared_index;  // highest shared index seen (-1 = none)
+
     // Output configuration
     bool            emit_debug;     // true = #line directives
     bool            single_file;    // true = combine all modules into one .c

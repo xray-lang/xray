@@ -52,7 +52,9 @@
 #include "../src/runtime/gc/xcoro_gc.h"
 
 /* ========== Error Reporting ========== */
-#include "../src/api/xruntime.h"
+/* Forward-declare only the error function to avoid header conflicts
+ * between xruntime.h and xmap.h (different signatures for xr_map_*). */
+XR_FUNC void xr_runtime_error(XrayIsolate *X, const char *fmt, ...);
 
 /* ========== Isolate API (opaque accessors) ========== */
 #include "../src/runtime/xisolate_api.h"
@@ -67,7 +69,7 @@
 #include "../src/runtime/xexec_frame.h"
 
 /* ========== Symbol Table ========== */
-#include "../src/runtime/symbol/xsymbol.h"
+#include "../src/runtime/symbol/xsymbol_table.h"
 
 /* ========== Export Macros (same as stdlib/common.h) ========== */
 /* XRS_EXPORT(mod, isolate, name, func)

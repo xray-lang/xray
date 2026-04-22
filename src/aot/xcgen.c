@@ -148,6 +148,7 @@ XcgenCompilation *xcgen_compilation_new(void) {
         xr_free(comp);
         return NULL;
     }
+    comp->max_shared_index = -1;
     comp->single_file = true;
     return comp;
 }
@@ -1224,6 +1225,14 @@ char *xcgen_emit_source(XcgenCompilation *comp) {
             xcgen_buf_puts(&out, mod->sections[XCGEN_SEC_HEADERS].data);
             xcgen_buf_puts(&out, "\n");
         }
+    }
+
+    // Shared variable array (GETSHARED/SETSHARED → C global)
+    if (comp->max_shared_index >= 0) {
+        xcgen_buf_printf(&out,
+            "/* Module-level shared variables */\n"
+            "static XrValue xrt_shared[%d];\n\n",
+            comp->max_shared_index + 1);
     }
 
     // Struct typedefs (global, from Json promotion)
