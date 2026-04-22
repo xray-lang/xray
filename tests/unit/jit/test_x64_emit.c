@@ -560,6 +560,48 @@ static void test_cvttsd2si(void) {
     check_bytes("cvttsd2si", exp, sizeof(exp));
 }
 
+/* ========== XORPD / MOVQ ========== */
+
+/* XORPD XMM0, XMM0:  66 0F 57 C0 */
+static void test_xorpd(void) {
+    reset();
+    x64_xorpd(&g_buf, X64_XMM0, X64_XMM0);
+    uint8_t exp[] = { 0x66, 0x0F, 0x57, 0xC0 };
+    check_bytes("xorpd", exp, sizeof(exp));
+}
+
+/* MOVQ XMM0, RAX:  66 REX.W(48) 0F 6E C0 */
+static void test_movq_xmm_gp(void) {
+    reset();
+    x64_movq_xmm_gp(&g_buf, X64_XMM0, X64_RAX);
+    uint8_t exp[] = { 0x66, 0x48, 0x0F, 0x6E, 0xC0 };
+    check_bytes("movq_xmm_gp", exp, sizeof(exp));
+}
+
+/* MOVQ RAX, XMM0:  66 REX.W(48) 0F 7E C0 */
+static void test_movq_gp_xmm(void) {
+    reset();
+    x64_movq_gp_xmm(&g_buf, X64_RAX, X64_XMM0);
+    uint8_t exp[] = { 0x66, 0x48, 0x0F, 0x7E, 0xC0 };
+    check_bytes("movq_gp_xmm", exp, sizeof(exp));
+}
+
+/* MOVSD XMM1, [RBP-8]:  F2 0F 10 4D F8 */
+static void test_movsd_load(void) {
+    reset();
+    x64_movsd_rm(&g_buf, X64_XMM1, X64_RBP, -8);
+    uint8_t exp[] = { 0xF2, 0x0F, 0x10, 0x4D, 0xF8 };
+    check_bytes("movsd_load", exp, sizeof(exp));
+}
+
+/* MOVSD [RBP-8], XMM1:  F2 0F 11 4D F8 */
+static void test_movsd_store(void) {
+    reset();
+    x64_movsd_mr(&g_buf, X64_RBP, -8, X64_XMM1);
+    uint8_t exp[] = { 0xF2, 0x0F, 0x11, 0x4D, 0xF8 };
+    check_bytes("movsd_store", exp, sizeof(exp));
+}
+
 /* ========== Driver ========== */
 
 int main(void) {
@@ -645,7 +687,14 @@ int main(void) {
     test_cvtsi2sd();
     test_cvttsd2si();
 
-    int total = 52;
+    /* XORPD / MOVQ / MOVSD mem */
+    test_xorpd();
+    test_movq_xmm_gp();
+    test_movq_gp_xmm();
+    test_movsd_load();
+    test_movsd_store();
+
+    int total = 57;
     fprintf(stderr, "[test_x64_emit] ALL PASSED (%d tests)\n", total);
     return 0;
 }
