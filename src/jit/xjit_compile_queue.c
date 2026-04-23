@@ -321,9 +321,3 @@ bool xjit_queue_push(XirCompileQueue *q, const XirBgTask *task) {
     return true;
 }
 
-void xjit_install_pending(XirCompileQueue *q, XrProto *proto) {
-    // Installation is done inline in xvm.c OP_CALL handler.
-    // This function exists for future batch-install at GC safepoints.
-    (void)q;
-    (void)proto;
-}

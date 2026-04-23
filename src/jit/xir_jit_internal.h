@@ -146,15 +146,12 @@ static inline XrValue deopt_reconstruct(int64_t raw, uint8_t xir_type, uint8_t x
         break;
     case XR_REP_TAGGED:
     default:
-        // Last resort: address heuristic for truly unknown values
+        // Unknown rep + unknown tag: safe default to I64.
+        // Never guess pointer from address range — an integer that happens
+        // to be aligned > 0x10000 would SIGSEGV when dereferencing GC header.
+        // The interpreter will do proper type checking after deopt.
         v.i = raw;
-        if (raw != 0 && (raw & 0x7) == 0 && (uint64_t)raw > 0x10000) {
-            v.tag = XR_TAG_PTR;
-            XrGCHeader *gc = (XrGCHeader *)(intptr_t)raw;
-            v.heap_type = (uint16_t)gc->type;
-        } else {
-            v.tag = XR_TAG_I64;
-        }
+        v.tag = (raw == 0) ? XR_TAG_NULL : XR_TAG_I64;
         break;
     }
     return v;

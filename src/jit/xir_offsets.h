@@ -53,6 +53,7 @@
 #define XIR_JIT_DEOPT_REGS_OFFSET    offsetof(XrJitScratch, deopt_regs)
 #define XIR_JIT_DEOPT_FP_REGS_OFFSET offsetof(XrJitScratch, deopt_fp_regs)
 #define XIR_JIT_DEOPT_SPILL_BASE_OFFSET offsetof(XrJitScratch, deopt_spill_base)
+#define XIR_JIT_DEOPT_SPILL_SAVE_OFFSET offsetof(XrJitScratch, deopt_spill_save)
 #define XIR_JIT_PARAM_TAGS_OFFSET    offsetof(XrJitScratch, param_tags)
 #define XIR_JIT_RET_COUNT_OFFSET     offsetof(XrJitScratch, ret_count)
 #define XIR_JIT_RET_VALS_OFFSET      offsetof(XrJitScratch, ret_vals)
