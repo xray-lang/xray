@@ -781,10 +781,10 @@ static void xcg_emit_raw_mem_op(XcgenBuf *b, XirFunc *func, XirIns *ins) {
             return;
         case XIR_ALLOC:
             if (!xir_ref_is_none(ins->dst)) {
-                xcgen_buf_printf(b, "    v%u = (XrValue){ .ptr = xrt_arc_alloc((size_t)(",
+                xcgen_buf_printf(b, "    v%u = xrt_mkptr(xrt_arc_alloc((size_t)(",
                                  dst_idx);
                 xcg_emit_ref(b, func, ins->args[0]);
-                xcgen_buf_puts(b, ")), .tag = XRT_TAG_PTR };\n");
+                xcgen_buf_puts(b, ")), XRT_TAG_PTR);\n");
             }
             return;
         default: return;

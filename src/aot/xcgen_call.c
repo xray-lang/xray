@@ -300,15 +300,29 @@ static void emit_call_known(XcgenBuf *b, XirFunc *func, XirIns *ins,
                         xir_ref_is_none(ins->dst) ||
                         !xir_ref_is_vreg(ins->dst) ||
                         (dst_idx < func->nvreg && cf->used_vregs && cf->used_vregs[dst_idx]));
-        // Auto-unbox: callee returns XrValue but dst vreg expects I64/F64
+        // Auto-unbox/box: bridge callee return type ↔ dst vreg type.
+        // Callee's C return type depends on its proto's return_type_info.
         uint8_t dst_rep = (dst_idx < func->nvreg) ? func->vregs[dst_idx].rep : XR_REP_TAGGED;
-        bool needs_unbox_i64 = (dst_used && dst_rep == XR_REP_I64);
-        bool needs_unbox_f64 = (dst_used && dst_rep == XR_REP_F64);
+        uint8_t callee_ret_rep = (cp && cp->return_type_info)
+            ? xr_type_rep(cp->return_type_info) : XR_REP_TAGGED;
+        bool callee_ret_tagged = (callee_ret_rep == XR_REP_PTR ||
+                                  callee_ret_rep == XR_REP_STR ||
+                                  callee_ret_rep == XR_REP_TAGGED);
+        bool needs_unbox_i64 = (dst_used && dst_rep == XR_REP_I64 && callee_ret_tagged);
+        bool needs_unbox_f64 = (dst_used && dst_rep == XR_REP_F64 && callee_ret_tagged);
+        bool needs_box_i64 = (dst_used && callee_ret_rep == XR_REP_I64 &&
+                              (dst_rep == XR_REP_PTR || dst_rep == XR_REP_TAGGED));
+        bool needs_box_f64 = (dst_used && callee_ret_rep == XR_REP_F64 &&
+                              (dst_rep == XR_REP_PTR || dst_rep == XR_REP_TAGGED));
         if (dst_used && xir_ref_is_vreg(ins->dst)) {
             if (needs_unbox_i64)
                 xcgen_buf_printf(b, "    v%u = xrt_unbox_int(%s(", dst_idx, callee_name);
             else if (needs_unbox_f64)
                 xcgen_buf_printf(b, "    v%u = xrt_unbox_float(%s(", dst_idx, callee_name);
+            else if (needs_box_i64)
+                xcgen_buf_printf(b, "    v%u = xrt_box_int(%s(", dst_idx, callee_name);
+            else if (needs_box_f64)
+                xcgen_buf_printf(b, "    v%u = xrt_box_float(%s(", dst_idx, callee_name);
             else
                 xcgen_buf_printf(b, "    v%u = %s(", dst_idx, callee_name);
         } else
@@ -416,8 +430,8 @@ static void emit_call_known(XcgenBuf *b, XirFunc *func, XirIns *ins,
                     uint8_t param_type = 0;
                     if (cp && cp->param_types && i < cp->param_types_count && cp->param_types[i])
                         param_type = xr_type_to_slot_type(cp->param_types[i]);
-                    bool param_wants_i64 = (param_type >= 1 && param_type <= 8);
-                    bool param_wants_f64 = (param_type == 9 || param_type == 10);
+                    bool param_wants_i64 = (param_type == XR_SLOT_I64 || param_type == XR_SLOT_BOOL);
+                    bool param_wants_f64 = (param_type == XR_SLOT_F64);
                     if (arg_is_tagged && param_wants_i64) {
                         xcgen_buf_puts(b, "xrt_unbox_int(");
                         xcg_emit_ref(b, func, arg_ref);
@@ -426,6 +440,19 @@ static void emit_call_known(XcgenBuf *b, XirFunc *func, XirIns *ins,
                         xcgen_buf_puts(b, "xrt_unbox_float(");
                         xcg_emit_ref(b, func, arg_ref);
                         xcgen_buf_puts(b, ")");
+                    } else if (!arg_is_tagged && !param_wants_i64 && !param_wants_f64) {
+                        // Arg is native but callee expects XrValue: auto-box
+                        if (arg_type == XR_REP_I64) {
+                            xcgen_buf_puts(b, "xrt_box_int(");
+                            xcg_emit_ref(b, func, arg_ref);
+                            xcgen_buf_puts(b, ")");
+                        } else if (arg_type == XR_REP_F64) {
+                            xcgen_buf_puts(b, "xrt_box_float(");
+                            xcg_emit_ref(b, func, arg_ref);
+                            xcgen_buf_puts(b, ")");
+                        } else {
+                            xcg_emit_ref(b, func, arg_ref);
+                        }
                     } else {
                         xcg_emit_ref(b, func, arg_ref);
                     }
@@ -434,7 +461,7 @@ static void emit_call_known(XcgenBuf *b, XirFunc *func, XirIns *ins,
                 xcgen_buf_puts(b, "0");
             }
         }
-        if (needs_unbox_i64 || needs_unbox_f64)
+        if (needs_unbox_i64 || needs_unbox_f64 || needs_box_i64 || needs_box_f64)
             xcgen_buf_puts(b, "));\n");
         else
             xcgen_buf_puts(b, ");\n");
