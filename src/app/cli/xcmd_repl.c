@@ -27,10 +27,11 @@
 #include <signal.h>
 #include <getopt.h>
 
+#include "../../base/xmalloc.h"
+
 #ifdef HAS_READLINE
 #include <readline/readline.h>
 #include <readline/history.h>
-#include "../../base/xmalloc.h"
 #endif
 
 #define REPL_BUFFER_SIZE    8192
