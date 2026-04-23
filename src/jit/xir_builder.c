@@ -1493,15 +1493,24 @@ static bool translate_instruction(XirBuilder *b, XirBlock **cur_blk, uint32_t pc
 
         case OP_UPVAL_GET: {
             // Flat upvalue read: R[A] = cl->upvals[B]
-            // Uses C bridge: xr_jit_upval_get(coro, upval_index)
             int a = GETARG_A(inst);
             int uv_idx = GETARG_B(inst);
-            XirRef fn_ref = xir_const_ptr(b->func, (void *)xr_jit_upval_get);
-            XirRef idx_ref = xir_const_i64(b->func, (int64_t)uv_idx);
-            XirRef idx_val = xir_emit_unary(b->func, blk, XIR_CONST_I64,
-                                             XR_REP_I64, idx_ref);
-            XirRef res = xir_emit(b->func, blk, XIR_CALL_C, XR_REP_I64,
-                                  fn_ref, idx_val);
+            XirRef res;
+            if (b->aot_mode) {
+                // AOT: emit LOAD_UPVAL (handled by xcgen_expr.c)
+                XirRef idx_ref = xir_const_i64(b->func, (int64_t)uv_idx);
+                res = xir_emit_unary(b->func, blk, XIR_LOAD_UPVAL,
+                                     XR_REP_TAGGED, idx_ref);
+            } else {
+                // JIT: use C bridge xr_jit_upval_get(coro, upval_index)
+                XirRef fn_ref = xir_const_ptr(b->func,
+                                               (void *)xr_jit_upval_get);
+                XirRef idx_ref = xir_const_i64(b->func, (int64_t)uv_idx);
+                XirRef idx_val = xir_emit_unary(b->func, blk, XIR_CONST_I64,
+                                                 XR_REP_I64, idx_ref);
+                res = xir_emit(b->func, blk, XIR_CALL_C, XR_REP_I64,
+                               fn_ref, idx_val);
+            }
             blk->ins[blk->nins - 1].flags |= XIR_FLAG_SIDE_EFFECT;
             // Tag result: mutable captures store cell pointers (always PTR),
             // const captures store the value directly (use slot_type).
@@ -1645,6 +1654,32 @@ static bool translate_instruction(XirBuilder *b, XirBlock **cur_blk, uint32_t pc
                                           proto_ref, nupvals_val);
                 blk->ins[blk->nins - 1].flags |= XIR_FLAG_SIDE_EFFECT;
                 builder_tag_vreg(b, closure, VTAG_PTR, 0);
+
+                // Populate upvals from current frame registers / enclosing closure
+                for (int j = 0; j < nupvals; j++) {
+                    UpvalInfo *uv = &((UpvalInfo*)child->upvalues.data)[j];
+                    XirRef idx_ref = xir_const_i64(b->func, (int64_t)j);
+                    XirRef src_val;
+                    if (uv->source == UPVAL_SRC_REG) {
+                        src_val = builder_get_slot(b, blk, uv->index);
+                    } else if (uv->source == UPVAL_SRC_UPVAL) {
+                        // Read from enclosing closure's upval
+                        XirRef enc_idx = xir_const_i64(b->func,
+                                                        (int64_t)uv->index);
+                        src_val = xir_emit_unary(b->func, blk,
+                                                  XIR_LOAD_UPVAL,
+                                                  XR_REP_TAGGED, enc_idx);
+                        blk->ins[blk->nins - 1].flags |= XIR_FLAG_SIDE_EFFECT;
+                    } else {
+                        continue;
+                    }
+                    // Convention: dst=idx(const), args[0]=closure, args[1]=value
+                    // Avoids putting vreg in dst (which SSA defuse would
+                    // interpret as a re-definition of the closure).
+                    xir_emit_raw(b->func, blk, XIR_STORE_UPVAL,
+                                 XR_REP_VOID, idx_ref, closure, src_val);
+                    blk->ins[blk->nins - 1].flags |= XIR_FLAG_SIDE_EFFECT;
+                }
 
                 builder_set_slot(b, a, closure);
                 // Set callee_proto on the NEW closure vreg (after builder_set_slot)

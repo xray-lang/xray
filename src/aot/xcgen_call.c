@@ -144,12 +144,14 @@ static int xcg_collect_upval_refs(XirFunc *func, uint32_t cl_vreg, int nupvals,
         for (uint32_t ii = 0; ii < blk->nins && found < nupvals; ii++) {
             XirIns *ins = &blk->ins[ii];
             if (ins->op != XIR_STORE_UPVAL) continue;
-            if (!xir_ref_is_vreg(ins->dst) || XIR_REF_INDEX(ins->dst) != cl_vreg)
+            // New convention: args[0]=closure(vreg), dst=idx(const)
+            if (!xir_ref_is_vreg(ins->args[0]) ||
+                XIR_REF_INDEX(ins->args[0]) != cl_vreg)
                 continue;
-            // Extract upval index from args[0]
+            // Extract upval index from dst (const ref)
             int64_t uv_idx = 0;
-            if (xir_ref_is_const(ins->args[0])) {
-                uint32_t ci = XIR_REF_INDEX(ins->args[0]);
+            if (xir_ref_is_const(ins->dst)) {
+                uint32_t ci = XIR_REF_INDEX(ins->dst);
                 if (ci < func->nconst) uv_idx = func->consts[ci].val.i64;
             }
             if (uv_idx >= 0 && uv_idx < nupvals) {
@@ -346,6 +348,14 @@ static void emit_call_known(XcgenBuf *b, XirFunc *func, XirIns *ins,
                     callee_non_escaping = comp->proto_map[pi].non_escaping;
                     callee_nupvals = comp->proto_map[pi].num_upvals;
                     break;
+                }
+            }
+            // Derive upval info from proto when proto_map doesn't have it yet
+            if (callee_nupvals == 0 && cp) {
+                int proto_nupvals = (int)PROTO_UPVAL_COUNT(cp);
+                if (proto_nupvals > 0) {
+                    callee_nupvals = proto_nupvals;
+                    callee_needs_closure = true;
                 }
             }
         }
@@ -1172,14 +1182,15 @@ throw_check_done:
                     bool dst_tagged = (dst_type == XR_REP_STR ||
                                        dst_type == XR_REP_PTR ||
                                        dst_type == XR_REP_TAGGED);
+                    // Always emit the load: even native-typed closures may be
+                    // needed as call_args[0] for passing upvalues to callees.
                     if (dst_tagged) {
                         xcgen_buf_printf(b, "    v%u = xrt_shared[%d];\n",
                                          dst_idx, (int)shared_idx);
                     } else {
-                        // Native-typed dst: shared var holds a closure; AOT
-                        // resolves calls by name, so just note the index.
-                        xcgen_buf_printf(b, "    /* GETSHARED[%d] → v%u (native, elided) */\n",
-                                         (int)shared_idx, dst_idx);
+                        // Reinterpret as tagged for closure passing
+                        xcgen_buf_printf(b, "    v%u = xrt_shared[%d].i;\n",
+                                         dst_idx, (int)shared_idx);
                     }
                     // Track max shared index for array sizing
                     XcgenCompilation *comp = mod->comp;

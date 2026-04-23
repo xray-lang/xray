@@ -637,14 +637,15 @@ static void xcg_emit_upval_load(XcgenBuf *b, XirFunc *func, XirIns *ins,
 // Emit STORE_UPVAL instruction
 static void xcg_emit_upval_store(XcgenBuf *b, XirFunc *func, XirIns *ins,
                                   XcgenModule *mod, XcgenFunc *cf) {
+    // New convention: dst=idx(const), args[0]=closure(vreg), args[1]=value
     int64_t uv_idx = 0;
-    if (xir_ref_is_const(ins->args[0])) {
-        uint32_t ci = XIR_REF_INDEX(ins->args[0]);
+    if (xir_ref_is_const(ins->dst)) {
+        uint32_t ci = XIR_REF_INDEX(ins->dst);
         if (ci < func->nconst) uv_idx = func->consts[ci].val.i64;
     }
-    if (xir_ref_is_vreg(ins->dst)) {
+    if (xir_ref_is_vreg(ins->args[0])) {
         // Child closure upvalue initialization
-        uint32_t cl_vreg = XIR_REF_INDEX(ins->dst);
+        uint32_t cl_vreg = XIR_REF_INDEX(ins->args[0]);
         XcgenProtoEntry *child_entry = NULL;
         if (cl_vreg < func->nvreg && func->vregs[cl_vreg].def) {
             void *child_proto = NULL;
@@ -683,7 +684,7 @@ static void xcg_emit_upval_store(XcgenBuf *b, XirFunc *func, XirIns *ins,
             xcg_emit_ref_as_tagged(b, func, ins->args[1]);
             xcgen_buf_puts(b, ";\n");
         }
-    } else {
+    } else if (!xir_ref_is_vreg(ins->args[0])) {
         if (cf->non_escaping && uv_idx < cf->num_upvals) {
             xcgen_buf_printf(b, "    /* WARN: store to non-escaping upval[%d] */\n",
                              (int)uv_idx);
@@ -781,9 +782,10 @@ static void xcg_emit_raw_mem_op(XcgenBuf *b, XirFunc *func, XirIns *ins) {
             return;
         case XIR_ALLOC:
             if (!xir_ref_is_none(ins->dst)) {
+                // args[0] = type tag (unused in AOT), args[1] = byte size
                 xcgen_buf_printf(b, "    v%u = xrt_mkptr(xrt_arc_alloc((size_t)(",
                                  dst_idx);
-                xcg_emit_ref(b, func, ins->args[0]);
+                xcg_emit_ref(b, func, ins->args[1]);
                 xcgen_buf_puts(b, ")), XRT_TAG_PTR);\n");
             }
             return;
