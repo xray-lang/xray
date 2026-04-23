@@ -132,6 +132,14 @@ XrProto* xr_compile_source_with_path(XrayIsolate *isolate, const char *source, c
 
     xr_compiler_context_free(ctx);
 
+    // Restore type pool: compiler context freed its own pool, leaving
+    // current_type_pool as a dangling pointer.  Fall back to the
+    // isolate's long-lived analyzer_pool so post-compile callers
+    // (e.g. aot_preregister_classes) can still allocate types safely.
+    if (isolate->analyzer_pool) {
+        isolate->current_type_pool = isolate->analyzer_pool;
+    }
+
     // Free AST (not needed after compilation)
     xr_program_destroy(ast);
 

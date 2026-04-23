@@ -137,6 +137,7 @@ static inline void xr_coro_init_from_slab(struct XrCoroutine *coro,
     coro->vm_ctx.handler_capacity = 0;
     coro->coro_gc = NULL;
     coro->ext = NULL;
+    coro->jit_suspend = NULL;
     if (block->slab) {
         char *entry = block->slab + local_idx * block->slab_entry_size;
         size_t stack_bytes = sizeof(XrValue) * XR_CORO_POOL_STACK_SLOTS;
