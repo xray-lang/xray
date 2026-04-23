@@ -157,8 +157,10 @@ static int32_t jit_prepush_yield_frame(XrCoroutine *coro, uint32_t deopt_id) {
             raw = jit_read_saved_fp(jctx, s->loc.phys_reg);
             break;
         case DEOPT_LOC_SPILL: {
-            int64_t *fp = (int64_t *)jctx->jit_frame_sp;
-            if (fp) raw = *(int64_t *)((char *)fp + s->loc.spill_offset);
+            // Read from deopt_spill_save[] — safe copy made before epilogue.
+            int16_t slot = (int16_t)(s->loc.spill_offset / 8);
+            if (slot >= 0 && slot < 32)
+                raw = jctx->deopt_spill_save[slot];
             break;
         }
         case DEOPT_LOC_CONST_I64:

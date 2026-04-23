@@ -1679,6 +1679,21 @@ static void emit_deopt_stub(CodegenCtx *ctx) {
                                             fp_base + i * 8));
     }
 
+    // Copy spill slots from frame to jit_ctx->deopt_spill_save[] BEFORE epilogue.
+    // After epilogue the frame is deallocated and may be overwritten by C calls.
+    // Uses x16 (SCRATCH_REG) as scratch — safe since all GP regs are already saved.
+    {
+        uint32_t nspill = ctx->xra ? ctx->xra->nspill : 0;
+        if (nspill > 32) nspill = 32;
+        int32_t save_base = (int32_t)XIR_JIT_DEOPT_SPILL_SAVE_OFFSET;
+        for (uint32_t s = 0; s < nspill; s++) {
+            int32_t frame_off = SPILL_BASE + (int32_t)s * 8;
+            a64_buf_emit(&ctx->buf, a64_ldr(SCRATCH_REG, A64_SP, frame_off));
+            a64_buf_emit(&ctx->buf, a64_str(SCRATCH_REG, JIT_CTX_REG,
+                                             save_base + (int32_t)s * 8));
+        }
+    }
+
     // Load deopt marker into x0
     a64_load_imm64(&ctx->buf, A64_X0, (uint64_t)XIR_DEOPT_MARKER);
 

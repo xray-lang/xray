@@ -121,10 +121,6 @@ XR_FUNC void xjit_queue_destroy(XirCompileQueue *q);
 // |task| is copied into the ring buffer; the caller retains ownership.
 XR_FUNC bool xjit_queue_push(XirCompileQueue *q, const XirBgTask *task);
 
-// Install all pending compiled code (called from main thread at OP_CALL).
-// Atomically moves bg_result data into proto fields and sets jit_entry.
-XR_FUNC void xjit_install_pending(XirCompileQueue *q, XrProto *proto);
-
 // Check if queue has pending tasks (for safepoint polling).
 static inline bool xjit_queue_has_pending(XirCompileQueue *q) {
     return atomic_load_explicit(&q->head, memory_order_acquire) !=

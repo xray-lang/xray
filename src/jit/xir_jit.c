@@ -1046,15 +1046,12 @@ void xir_jit_read_multi_ret(XrCoroutine *coro, XrValue *results, int nresults) {
             results[i + 1].i = raw;
             results[i + 1].tag = tag;
         } else {
-            // Unknown/Numeric tag: raw==0 defaults to I64(0), NOT NULL.
+            // Unknown/Numeric tag: safe default to I64.
+            // Never guess pointer from address range — an aligned integer
+            // would SIGSEGV when dereferencing GC header.
             // Null values must carry XR_TAG_NULL from VTAG_NULL.
             results[i + 1].i = raw;
-            if (raw != 0 && (raw & 0x7) == 0 && (uint64_t)raw > 0x10000) {
-                results[i + 1].tag = XR_TAG_PTR;
-                results[i + 1].heap_type = (uint16_t)((XrGCHeader *)(void *)raw)->type;
-            } else {
-                results[i + 1].tag = XR_TAG_I64;
-            }
+            results[i + 1].tag = XR_TAG_I64;
         }
     }
 }
@@ -1091,14 +1088,12 @@ int32_t xir_jit_deopt_recover(XrCoroutine *coro, XrValue *frame, int maxstack) {
                 raw = coro->jit_ctx->deopt_fp_regs[s->loc.phys_reg];
             break;
         case DEOPT_LOC_SPILL: {
-            // Read from saved frame pointer + offset.
-            // NOTE: stack frame is destroyed after epilogue; spill data may
-            // be stale. This path is rare (most values are in registers).
-            int64_t *fp = (int64_t *)coro->jit_ctx->deopt_spill_base;
-            if (fp) {
-                int16_t off = s->loc.spill_offset;
-                raw = *(int64_t *)((char *)fp + off);
-            }
+            // Read from deopt_spill_save[] — spill data copied by deopt stub
+            // BEFORE epilogue destroys the frame. Safe to read at any time.
+            int16_t slot = (int16_t)(s->loc.spill_offset / 8);
+            XR_DCHECK(slot >= 0 && slot < 32, "spill slot out of range");
+            if (slot >= 0 && slot < 32)
+                raw = coro->jit_ctx->deopt_spill_save[slot];
             break;
         }
         case DEOPT_LOC_CONST_I64:

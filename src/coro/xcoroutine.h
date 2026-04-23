@@ -139,7 +139,13 @@ typedef struct XrJitScratch {
      * GP: x0-x28 (29 slots), FP: d0-d15 (16 slots) */
     int64_t deopt_regs[29];
     int64_t deopt_fp_regs[16];
-    int64_t deopt_spill_base;   // Frame pointer at deopt (for spill slot reads)
+    int64_t deopt_spill_base;   // Frame pointer at deopt (legacy, kept for GC)
+
+    /* Spill slot snapshot: copied from frame by deopt stub BEFORE epilogue.
+     * Indexed by spill slot number: deopt_spill_save[slot] = frame[SPILL_BASE + slot*8].
+     * Recovery reads from here instead of the frame (which is deallocated after epilogue).
+     * Max slots = XIR_MAX_SPILL_SLOTS (32). */
+    int64_t deopt_spill_save[32];
 
     int32_t osr_deopt_pc;           // OSR deopt recovery: bytecode PC to resume (-1 = none)
 
