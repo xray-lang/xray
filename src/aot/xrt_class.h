@@ -44,6 +44,7 @@
 #define XRT_CLASS_H
 
 #include "xrt_value.h"
+#include "xrt_arc.h" // XRT_CALLOC / XRT_FREE macros
 #include <stdint.h>
 #include <stdbool.h>
 #include <stdlib.h>
@@ -117,7 +118,7 @@ static inline uint16_t xrt_type_register(const char *name, uint16_t parent_id,
  * ========================================================================= */
 
 static inline void *xrt_obj_alloc(uint16_t type_id, uint32_t size) {
-    void *obj = calloc(1, size);
+    void *obj = XRT_CALLOC(1, size);
     if (!obj) {
         fprintf(stderr, "xrt_obj_alloc: out of memory\n");
         abort();
@@ -145,7 +146,7 @@ static inline void xrt_obj_release(void *obj) {
     if (--h->refcount == 0) {
         XrtTypeInfo *ti = &xrt_type_table[h->type_id];
         if (ti->destructor) ti->destructor(obj);
-        free(obj);
+        XRT_FREE(obj);
     }
 }
 

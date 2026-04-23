@@ -20,6 +20,29 @@
 #include "xrt_value.h"
 
 /* =========================================================================
+ * AOT allocator adapter
+ *
+ * In standalone AOT mode, maps to system allocator.
+ * When building inside xray project, define XRT_USE_XR_MALLOC to route
+ * through xr_malloc/xr_free (set by CMakeLists.txt: -DXRT_USE_XR_MALLOC).
+ * ========================================================================= */
+
+#ifndef XRT_MALLOC
+  #ifdef XRT_USE_XR_MALLOC
+    #include "../base/xmalloc.h"
+    #define XRT_MALLOC(sz)       xr_malloc(sz)
+    #define XRT_CALLOC(n, sz)    xr_calloc(n, sz)
+    #define XRT_REALLOC(p, sz)   xr_realloc(p, sz)
+    #define XRT_FREE(p)          xr_free(p)
+  #else
+    #define XRT_MALLOC(sz)       malloc(sz)
+    #define XRT_CALLOC(n, sz)    calloc(n, sz)
+    #define XRT_REALLOC(p, sz)   realloc(p, sz)
+    #define XRT_FREE(p)          free(p)
+  #endif
+#endif
+
+/* =========================================================================
  * ARC (Automatic Reference Counting)
  *
  * Object layout (bytes preceding user data):
@@ -69,7 +92,7 @@ static int           xrt_bump_enabled = 0; // 0 = calloc (safe default); 1 = bum
 static void xrt_bump_new_block(size_t min_size) {
     size_t bsize = XRT_BUMP_BLOCK_SIZE;
     if (min_size > bsize) bsize = min_size;
-    XrtBumpBlock *b = (XrtBumpBlock *)malloc(sizeof(XrtBumpBlock) + bsize);
+    XrtBumpBlock *b = (XrtBumpBlock *)XRT_MALLOC(sizeof(XrtBumpBlock) + bsize);
     if (!b) { fprintf(stderr, "xrt_bump: out of memory\n"); abort(); }
     b->next = xrt_bump_blocks;
     xrt_bump_blocks = b;
@@ -93,7 +116,7 @@ static void xrt_bump_destroy(void) {
     XrtBumpBlock *b = xrt_bump_blocks;
     while (b) {
         XrtBumpBlock *next = b->next;
-        free(b);
+        XRT_FREE(b);
         b = next;
     }
     xrt_bump_blocks  = NULL;
@@ -110,7 +133,7 @@ static inline void *xrt_arc_alloc(size_t obj_size) {
         memset(hdr, 0, total);
         hdr->flags = XRT_ARC_BUMP; // mark as bump-allocated
     } else {
-        hdr = (XrtArcHdr *)calloc(1, total);
+        hdr = (XrtArcHdr *)XRT_CALLOC(1, total);
         if (!hdr) { fprintf(stderr, "xrt_arc_alloc: out of memory\n"); abort(); }
     }
     hdr->rc = 1;
@@ -136,7 +159,7 @@ static inline void xrt_arc_release(void *p) {
         if (h->flags & XRT_ARC_HAS_DEINIT)
             xrt_arc_deinit((char *)h + sizeof(XrtArcHdr), h->type);
         if (!(h->flags & XRT_ARC_BUMP))
-            free(h); // bump-allocated objects are freed in bulk by xrt_bump_destroy
+            XRT_FREE(h); // bump-allocated objects are freed in bulk by xrt_bump_destroy
     }
 }
 

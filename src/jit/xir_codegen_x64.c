@@ -254,6 +254,11 @@ static X64Reg x64_ensure_dst(X64CodegenCtx *ctx, X64Reg rd,
     return rd;
 }
 
+/* Forward declaration: defined after x64_emit_xir_ins */
+static void x64_emit_alloc_ins(X64CodegenCtx *ctx, XirIns *ins, X64Reg rd,
+                                uint8_t gc_type, uint16_t gc_extra,
+                                uint32_t alloc_size);
+
 static void x64_emit_xir_ins(X64CodegenCtx *ctx, XirIns *ins) {
     XR_DCHECK(ctx != NULL, "x64_emit_xir_ins: NULL ctx");
     XR_DCHECK(ins != NULL, "x64_emit_xir_ins: NULL ins");

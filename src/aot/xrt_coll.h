@@ -22,10 +22,12 @@ typedef struct { int64_t len; int64_t cap; XrtValue *data; } xrt_array_t;
 
 static inline XrtValue xrt_array_new(int64_t cap) {
     if (cap < 4) cap = 4;
-    xrt_array_t *a = (xrt_array_t *)malloc(sizeof(xrt_array_t));
+    xrt_array_t *a = (xrt_array_t *)XRT_MALLOC(sizeof(xrt_array_t));
+    if (!a) { fprintf(stderr, "xrt_array_new: out of memory\n"); abort(); }
     a->len  = 0;
     a->cap  = cap;
-    a->data = (XrtValue *)calloc((size_t)cap, sizeof(XrtValue));
+    a->data = (XrtValue *)XRT_CALLOC((size_t)cap, sizeof(XrtValue));
+    if (!a->data) { fprintf(stderr, "xrt_array_new: out of memory\n"); abort(); }
     return xrt_mkptr(a, XRT_TAG_ARRAY);
 }
 
@@ -33,7 +35,9 @@ static inline void xrt_array_push(XrtValue arr, XrtValue val) {
     xrt_array_t *a = (xrt_array_t *)arr.ptr;
     if (a->len >= a->cap) {
         a->cap  *= 2;
-        a->data  = (XrtValue *)realloc(a->data, (size_t)a->cap * sizeof(XrtValue));
+        XrtValue *tmp = (XrtValue *)XRT_REALLOC(a->data, (size_t)a->cap * sizeof(XrtValue));
+        if (!tmp) { fprintf(stderr, "xrt_array_push: out of memory\n"); abort(); }
+        a->data = tmp;
     }
     a->data[a->len++] = val;
 }
@@ -42,7 +46,9 @@ static inline void xrt_array_push_i(XrtValue arr, int64_t val) {
     xrt_array_t *a = (xrt_array_t *)arr.ptr;
     if (a->len >= a->cap) {
         a->cap  *= 2;
-        a->data  = (XrtValue *)realloc(a->data, (size_t)a->cap * sizeof(XrtValue));
+        XrtValue *tmp = (XrtValue *)XRT_REALLOC(a->data, (size_t)a->cap * sizeof(XrtValue));
+        if (!tmp) { fprintf(stderr, "xrt_array_push_i: out of memory\n"); abort(); }
+        a->data = tmp;
     }
     a->data[a->len++] = (XrtValue){.i = val, .tag = XRT_TAG_I64};
 }
@@ -51,7 +57,9 @@ static inline void xrt_array_push_f(XrtValue arr, double val) {
     xrt_array_t *a = (xrt_array_t *)arr.ptr;
     if (a->len >= a->cap) {
         a->cap  *= 2;
-        a->data  = (XrtValue *)realloc(a->data, (size_t)a->cap * sizeof(XrtValue));
+        XrtValue *tmp = (XrtValue *)XRT_REALLOC(a->data, (size_t)a->cap * sizeof(XrtValue));
+        if (!tmp) { fprintf(stderr, "xrt_array_push_f: out of memory\n"); abort(); }
+        a->data = tmp;
     }
     a->data[a->len++] = xrt_mkf64(val, XRT_TAG_F64);
 }
@@ -104,17 +112,21 @@ static inline void xrt_array_set_f(XrtValue arr, int64_t idx, double val) {
 typedef struct { char *buf; int64_t len; int64_t cap; } xrt_strbuf_t;
 
 static inline XrtValue xrt_strbuf_new(void) {
-    xrt_strbuf_t *sb = (xrt_strbuf_t *)malloc(sizeof(xrt_strbuf_t));
+    xrt_strbuf_t *sb = (xrt_strbuf_t *)XRT_MALLOC(sizeof(xrt_strbuf_t));
+    if (!sb) { fprintf(stderr, "xrt_strbuf_new: out of memory\n"); abort(); }
     sb->cap = 64;
     sb->len = 0;
-    sb->buf = (char *)malloc(64);
+    sb->buf = (char *)XRT_MALLOC(64);
+    if (!sb->buf) { fprintf(stderr, "xrt_strbuf_new: out of memory\n"); abort(); }
     sb->buf[0] = 0;
     return xrt_mkptr(sb, XRT_TAG_STRBUF);
 }
 
 static inline void xrt_strbuf_grow(xrt_strbuf_t *sb, int64_t need) {
     while (sb->len + need >= sb->cap) sb->cap *= 2;
-    sb->buf = (char *)realloc(sb->buf, (size_t)sb->cap);
+    char *tmp = (char *)XRT_REALLOC(sb->buf, (size_t)sb->cap);
+    if (!tmp) { fprintf(stderr, "xrt_strbuf_grow: out of memory\n"); abort(); }
+    sb->buf = tmp;
 }
 
 static inline void xrt_strbuf_append(XrtValue sbv, XrtValue val) {
@@ -171,10 +183,12 @@ typedef struct { int64_t len; int64_t cap; xrt_map_entry_t *entries; } xrt_map_t
 
 static inline XrtValue xrt_map_new(int64_t cap) {
     if (cap < 8) cap = 8;
-    xrt_map_t *m  = (xrt_map_t *)malloc(sizeof(xrt_map_t));
+    xrt_map_t *m  = (xrt_map_t *)XRT_MALLOC(sizeof(xrt_map_t));
+    if (!m) { fprintf(stderr, "xrt_map_new: out of memory\n"); abort(); }
     m->len     = 0;
     m->cap     = cap;
-    m->entries = (xrt_map_entry_t *)calloc((size_t)cap, sizeof(xrt_map_entry_t));
+    m->entries = (xrt_map_entry_t *)XRT_CALLOC((size_t)cap, sizeof(xrt_map_entry_t));
+    if (!m->entries) { fprintf(stderr, "xrt_map_new: out of memory\n"); abort(); }
     return xrt_mkptr(m, XRT_TAG_MAP);
 }
 
@@ -201,8 +215,10 @@ static inline void xrt_map_set(xrt_map_t *m, XrtValue key, XrtValue val) {
     }
     if (m->len >= m->cap) {
         m->cap    *= 2;
-        m->entries = (xrt_map_entry_t *)realloc(
+        xrt_map_entry_t *tmp = (xrt_map_entry_t *)XRT_REALLOC(
             m->entries, (size_t)m->cap * sizeof(xrt_map_entry_t));
+        if (!tmp) { fprintf(stderr, "xrt_map_set: out of memory\n"); abort(); }
+        m->entries = tmp;
     }
     m->entries[m->len].key = key;
     m->entries[m->len].val = val;
@@ -247,8 +263,9 @@ typedef struct xrt_closure {
 } xrt_closure_t;
 
 static inline XrtValue xrt_closure_new(void *fn, int nupvals) {
-    xrt_closure_t *c = (xrt_closure_t *)malloc(
+    xrt_closure_t *c = (xrt_closure_t *)XRT_MALLOC(
         sizeof(xrt_closure_t) + (size_t)nupvals * sizeof(XrtValue));
+    if (!c) { fprintf(stderr, "xrt_closure_new: out of memory\n"); abort(); }
     c->fn      = fn;
     c->nupvals = nupvals;
     for (int i = 0; i < nupvals; i++)
