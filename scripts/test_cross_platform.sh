@@ -328,7 +328,8 @@ run_linux_x64_crosscompile() {
             if [ -f build-x64/xray ]; then
                 echo ">>> xray (linux-x64) built successfully"
                 ls -lh build-x64/xray
-                file build-x64/xray
+                # Verify it is actually an x86_64 ELF
+                head -c 20 build-x64/xray | od -A x -t x1z | head -1
             else
                 echo ">>> FAILED: xray not produced"
                 echo ">>> Errors:"
