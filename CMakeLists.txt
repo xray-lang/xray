@@ -17,6 +17,11 @@ configure_file(
     @ONLY
 )
 
+# Linux: expose POSIX/GNU extensions (CLOCK_MONOTONIC, CPU_SET, pthread_setaffinity_np, etc.)
+if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+    add_compile_definitions(_GNU_SOURCE)
+endif()
+
 # ============================================================================
 # Compiler Options
 # ============================================================================
@@ -463,20 +468,24 @@ if(NOT WIN32)
     target_link_libraries(xray_core PUBLIC pthread)
 endif()
 
-# TLS/OpenSSL support
-if(ENABLE_TLS)
-    # macOS Homebrew OpenSSL path
-    if(APPLE)
-        set(OPENSSL_ROOT_DIR "/opt/homebrew/opt/openssl@3")
-    endif()
-
-    find_package(OpenSSL REQUIRED)
-    if(OpenSSL_FOUND)
-        message(STATUS "OpenSSL version: ${OPENSSL_VERSION}")
-        target_include_directories(xray_core PRIVATE ${OPENSSL_INCLUDE_DIR})
-        target_link_libraries(xray_core PUBLIC OpenSSL::SSL OpenSSL::Crypto)
+# OpenSSL support
+# - WebSocket stdlib needs libcrypto (SHA1 for handshake) even without TLS
+# - Full TLS needs both libssl and libcrypto
+if(APPLE)
+    set(OPENSSL_ROOT_DIR "/opt/homebrew/opt/openssl@3")
+endif()
+find_package(OpenSSL QUIET)
+if(OpenSSL_FOUND)
+    message(STATUS "OpenSSL version: ${OPENSSL_VERSION}")
+    target_include_directories(xray_core PRIVATE ${OPENSSL_INCLUDE_DIR})
+    # Always link libcrypto (needed by ws module for SHA1)
+    target_link_libraries(xray_core PUBLIC OpenSSL::Crypto)
+    if(ENABLE_TLS)
+        target_link_libraries(xray_core PUBLIC OpenSSL::SSL)
         target_compile_definitions(xray_core PRIVATE XR_ENABLE_TLS=1)
     endif()
+else()
+    message(STATUS "OpenSSL: not found (ws/crypto modules may be limited)")
 endif()
 
 # ============================================================================

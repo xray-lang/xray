@@ -15,6 +15,7 @@
 
 #include "xir_code_alloc.h"
 #include "../base/xchecks.h"
+#include "../base/xmalloc.h"
 #include <stdlib.h>
 #include <string.h>
 #include <sys/mman.h>
@@ -23,7 +24,6 @@
 #ifdef __APPLE__
 #include <pthread.h>
 #include <libkern/OSCacheControl.h>
-#include "../base/xmalloc.h"
 #endif // ========== Platform Helpers ==========
 
 static size_t get_page_size(void) {

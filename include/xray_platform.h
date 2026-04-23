@@ -40,64 +40,64 @@
     #ifndef WIN32_LEAN_AND_MEAN
         #define WIN32_LEAN_AND_MEAN
     #endif
-    
+
     #include <winsock2.h>
     #include <ws2tcpip.h>
     #include <windows.h>
     #include <io.h>
     #include <process.h>
-    
+
     #pragma comment(lib, "ws2_32.lib")
-    
+
     // Socket types and constants
     typedef SOCKET xr_socket_t;
     #define XR_INVALID_SOCKET INVALID_SOCKET
     #define XR_SOCKET_ERROR SOCKET_ERROR
-    
+
     // Socket function mappings
     #define xr_closesocket closesocket
     #define xr_ioctlsocket ioctlsocket
-    
+
     // Error codes
     #define XR_EAGAIN WSAEWOULDBLOCK
     #define XR_EWOULDBLOCK WSAEWOULDBLOCK
     #define XR_EINPROGRESS WSAEINPROGRESS
     #define XR_ECONNREFUSED WSAECONNREFUSED
     #define XR_ETIMEDOUT WSAETIMEDOUT
-    
+
     static inline int xr_get_socket_error(void) {
         return WSAGetLastError();
     }
-    
+
     static inline void xr_set_socket_error(int err) {
         WSASetLastError(err);
     }
-    
+
     // File descriptor type
     typedef int xr_fd_t;
     #define XR_INVALID_FD (-1)
-    
+
     // Sleep (milliseconds)
     static inline void xr_sleep_ms(int ms) {
         Sleep(ms);
     }
-    
+
     // Initialize network library (Windows requires WSAStartup)
     static inline int xr_net_init(void) {
         WSADATA wsa;
         return WSAStartup(MAKEWORD(2, 2), &wsa);
     }
-    
+
     static inline void xr_net_cleanup(void) {
         WSACleanup();
     }
-    
+
     // writev emulation
     struct iovec {
         void *iov_base;
         size_t iov_len;
     };
-    
+
     static inline ssize_t writev(xr_socket_t fd, const struct iovec *iov, int iovcnt) {
         DWORD sent = 0;
         WSABUF *bufs = (WSABUF*)_alloca(iovcnt * sizeof(WSABUF));
@@ -110,7 +110,7 @@
         }
         return (ssize_t)sent;
     }
-    
+
     // ssize_t definition
     #ifndef ssize_t
         #ifdef _WIN64
@@ -129,13 +129,14 @@
     #include <sys/socket.h>
     #include <sys/select.h>
     #include <sys/time.h>
+    #include <time.h>
     #include <sys/uio.h>
     #include <netinet/in.h>
     #include <netinet/tcp.h>
     #include <arpa/inet.h>
     #include <netdb.h>
     #include <poll.h>
-    
+
     #ifdef XR_PLATFORM_MACOS
         #include <sys/event.h>
         #include <stdlib.h> // arc4random_buf
@@ -146,39 +147,39 @@
     typedef int xr_socket_t;
     #define XR_INVALID_SOCKET (-1)
     #define XR_SOCKET_ERROR (-1)
-    
+
     // Socket function mappings
     #define xr_closesocket close
-    
+
     // Error codes
     #define XR_EAGAIN EAGAIN
     #define XR_EWOULDBLOCK EWOULDBLOCK
     #define XR_EINPROGRESS EINPROGRESS
     #define XR_ECONNREFUSED ECONNREFUSED
     #define XR_ETIMEDOUT ETIMEDOUT
-    
+
     static inline int xr_get_socket_error(void) {
         return errno;
     }
-    
+
     static inline void xr_set_socket_error(int err) {
         errno = err;
     }
-    
+
     // File descriptor type
     typedef int xr_fd_t;
     #define XR_INVALID_FD (-1)
-    
+
     // Sleep (milliseconds)
     static inline void xr_sleep_ms(int ms) {
         usleep(ms * 1000);
     }
-    
+
     // Initialize network library (no-op on Unix)
     static inline int xr_net_init(void) {
         return 0;
     }
-    
+
     static inline void xr_net_cleanup(void) {
         // no-op
     }
@@ -267,18 +268,18 @@ static inline ssize_t xr_recv_timeout(xr_socket_t fd, void *buf, size_t len, int
     fd_set readfds;
     FD_ZERO(&readfds);
     FD_SET(fd, &readfds);
-    
+
     struct timeval tv;
     tv.tv_sec = timeout_ms / 1000;
     tv.tv_usec = (timeout_ms % 1000) * 1000;
-    
+
     int ret = select((int)fd + 1, &readfds, NULL, NULL, &tv);
     if (ret < 0) return -1;
     if (ret == 0) {
         xr_set_socket_error(XR_ETIMEDOUT);
         return -1;
     }
-    
+
     return recv(fd, buf, len, 0);
 }
 
@@ -289,18 +290,18 @@ static inline ssize_t xr_send_timeout(xr_socket_t fd, const void *buf, size_t le
     fd_set writefds;
     FD_ZERO(&writefds);
     FD_SET(fd, &writefds);
-    
+
     struct timeval tv;
     tv.tv_sec = timeout_ms / 1000;
     tv.tv_usec = (timeout_ms % 1000) * 1000;
-    
+
     int ret = select((int)fd + 1, NULL, &writefds, NULL, &tv);
     if (ret < 0) return -1;
     if (ret == 0) {
         xr_set_socket_error(XR_ETIMEDOUT);
         return -1;
     }
-    
+
     return send(fd, buf, len, 0);
 }
 

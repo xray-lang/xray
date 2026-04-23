@@ -416,10 +416,12 @@ void jit_debug_install_crash_handler(void) {
     }
 
     // Allocate alternate signal stack so handler works during stack overflow
-    static char alt_stack_buf[SIGSTKSZ * 4];
+    // Use fixed 64KB instead of SIGSTKSZ which is not a compile-time constant on glibc 2.34+
+    #define JIT_ALT_STACK_SIZE (64 * 1024)
+    static char alt_stack_buf[JIT_ALT_STACK_SIZE];
     stack_t ss;
     ss.ss_sp = alt_stack_buf;
-    ss.ss_size = sizeof(alt_stack_buf);
+    ss.ss_size = JIT_ALT_STACK_SIZE;
     ss.ss_flags = 0;
     if (sigaltstack(&ss, NULL) != 0) {
         perror("[JIT-debug] sigaltstack failed");

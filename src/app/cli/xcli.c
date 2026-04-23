@@ -28,8 +28,13 @@
 #define HAS_BACKTRACE 1
 #endif
 
+// GCC compatibility: __has_feature is Clang-specific
+#ifndef __has_feature
+#define __has_feature(x) 0
+#endif
+
 #if !defined(__SANITIZE_ADDRESS__) && !defined(__SANITIZE_THREAD__) && \
-    !(defined(__has_feature) && (__has_feature(address_sanitizer) || __has_feature(thread_sanitizer)))
+    !(__has_feature(address_sanitizer) || __has_feature(thread_sanitizer))
 static void crash_handler(int sig) {
     // Only use async-signal-safe functions: write(), _exit()
     const char *msg = "\n=== CRASH: signal unknown ===\n";
@@ -105,7 +110,7 @@ static const CmdEntry commands[] = {
 
 int main(int argc, char **argv) {
 #if !defined(__SANITIZE_ADDRESS__) && !defined(__SANITIZE_THREAD__) && \
-    !(defined(__has_feature) && (__has_feature(address_sanitizer) || __has_feature(thread_sanitizer)))
+    !(__has_feature(address_sanitizer) || __has_feature(thread_sanitizer))
     signal(SIGSEGV, crash_handler);
 #ifdef SIGBUS
     signal(SIGBUS, crash_handler);
