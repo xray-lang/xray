@@ -76,6 +76,51 @@
 #include "xir_jit_runtime.h"
 #include "xir_jit_internal.h"
 
+/* ========== Unified Install Helper ========== */
+
+/*
+ * Install compiled JIT code into proto fields with correct memory ordering.
+ *
+ * Write order contract (critical for ARM64 weak memory):
+ *   1. Free old metadata
+ *   2. Write ALL metadata fields (stack_map, deopt, osr, fast/resume entry)
+ *   3. Release fence
+ *   4. Write jit_entry (the publish point — readers check this first)
+ *
+ * Both sync compile (xir_jit_try_compile) and background install
+ * (xir_jit_install_bg_result) MUST use this single function.
+ * Having two separate write sequences is a guaranteed source of drift.
+ */
+XR_FUNC void xir_jit_install_to_proto(XrProto *proto, const XirInstallData *data) {
+    XR_DCHECK(proto != NULL, "install: NULL proto");
+    XR_DCHECK(data != NULL, "install: NULL data");
+    XR_DCHECK(data->code != NULL, "install: NULL code");
+
+    /* Step 1: free old metadata (safe even on first compile — fields are NULL) */
+    if (proto->stack_map) xr_free(proto->stack_map);
+    if (proto->deopt_table) xr_free(proto->deopt_table);
+    if (proto->osr_entries) xr_free(proto->osr_entries);
+
+    /* Step 2: write all metadata BEFORE jit_entry */
+    proto->stack_map = data->stack_map;
+    proto->deopt_table = data->deopt_table;
+    proto->ndeopt = data->ndeopt;
+    proto->osr_entries = data->osr_entries;
+    proto->nosr = data->nosr;
+    proto->jit_opt_level = data->opt_level;
+    proto->jit_fast_entry = data->fast_entry;
+    proto->jit_resume_entry = data->resume_entry;
+
+    /* Step 3: release fence — all stores above become visible before jit_entry.
+     * Without this, ARM64 weak memory order allows reordering such that
+     * another core sees jit_entry != NULL but stale metadata (NULL deopt_table,
+     * wrong fast_entry, etc.), causing SIGSEGV on deopt or wrong entry jump. */
+    atomic_thread_fence(memory_order_release);
+
+    /* Step 4: publish — readers check jit_entry to decide whether JIT is ready */
+    proto->jit_entry = data->code;
+}
+
 /* ========== Dominant Shape Discovery ========== */
 
 // Scan all protos in the module tree for OP_NEWJSON instructions.
@@ -505,15 +550,37 @@ bool xir_jit_try_compile(XirJitState *jit, XrProto *proto) {
         xir_code_alloc_retire(&jit->code_alloc, proto->jit_entry, res.code_size);
     }
 
-    // Store compiled entry point
-    proto->jit_entry = res.code;
-    proto->jit_fast_entry = (char *)res.code + res.fast_entry_offset * 4;
-    proto->jit_resume_entry = res.resume_entry_offset
-        ? (char *)res.code + res.resume_entry_offset * 4 : NULL;
-    proto->jit_opt_level = (uint8_t)opt;
-    // Transfer stack map table ownership to proto (freed on proto destruction)
-    if (proto->stack_map) xr_free(proto->stack_map);
-    proto->stack_map = res.stack_map;
+    // Heap-copy deopt table from codegen result (res has stack-allocated array)
+    XirRtDeoptEntry *deopt_copy = NULL;
+    if (res.ndeopt > 0) {
+        size_t deopt_size = res.ndeopt * sizeof(XirRtDeoptEntry);
+        deopt_copy = (XirRtDeoptEntry *)xr_malloc(deopt_size);
+        if (deopt_copy) memcpy(deopt_copy, res.deopt_entries, deopt_size);
+    }
+
+    // Heap-copy OSR entries from codegen result
+    XirOsrEntry *osr_copy = NULL;
+    if (res.nosr > 0) {
+        size_t osr_size = res.nosr * sizeof(XirOsrEntry);
+        osr_copy = (XirOsrEntry *)xr_malloc(osr_size);
+        if (osr_copy) memcpy(osr_copy, res.osr_entries, osr_size);
+    }
+
+    // Install all metadata + jit_entry via unified helper (correct write order
+    // with release fence — see xir_jit_install_to_proto for the contract).
+    XirInstallData idata = {
+        .code         = res.code,
+        .fast_entry   = (char *)res.code + res.fast_entry_offset * 4,
+        .resume_entry = res.resume_entry_offset
+            ? (char *)res.code + res.resume_entry_offset * 4 : NULL,
+        .opt_level    = (uint8_t)opt,
+        .stack_map    = res.stack_map,
+        .deopt_table  = deopt_copy,
+        .ndeopt       = deopt_copy ? res.ndeopt : 0,
+        .osr_entries  = osr_copy,
+        .nosr         = osr_copy ? res.nosr : 0,
+    };
+    xir_jit_install_to_proto(proto, &idata);
     if (!is_recompile) jit->compiled_count++;
 
     // Record compilation statistics
@@ -566,29 +633,8 @@ bool xir_jit_try_compile(XirJitState *jit, XrProto *proto) {
                 (int)opt, res.code_size, func->nvreg, func->nblk);
     }
 
-    // Store runtime deopt table
-    if (res.ndeopt > 0) {
-        size_t deopt_size = res.ndeopt * sizeof(XirRtDeoptEntry);
-        XirRtDeoptEntry *entries = (XirRtDeoptEntry *)xr_malloc(deopt_size);
-        if (entries) {
-            xr_free(proto->deopt_table);
-            memcpy(entries, res.deopt_entries, deopt_size);
-            proto->deopt_table = entries;
-            proto->ndeopt = res.ndeopt;
-        }
-    }
-
-    // Store OSR entry points for loop headers
-    if (res.nosr > 0) {
-        size_t osr_size = res.nosr * sizeof(XirOsrEntry);
-        XirOsrEntry *entries = (XirOsrEntry *)xr_malloc(osr_size);
-        if (entries) {
-            xr_free(proto->osr_entries);  // free old OSR entries on recompile
-            memcpy(entries, res.osr_entries, osr_size);
-            proto->osr_entries = entries;
-            proto->nosr = res.nosr;
-        }
-    }
+    // NOTE: deopt_table and osr_entries are now installed by
+    // xir_jit_install_to_proto() above, with correct memory ordering.
 
     // NOTE: param_types population from feedback is handled in xir_builder_init
     // (line 250-263) which reads proto->type_feedback->arg_types directly.
