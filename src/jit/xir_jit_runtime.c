@@ -2022,22 +2022,21 @@ void xir_jit_install_bg_result(XrProto *proto) {
     }
 
     XirBgResult *bgr = (XirBgResult *)pending;
-    if (proto->stack_map) xr_free(proto->stack_map);
-    proto->stack_map = bgr->stack_map;
-    if (proto->deopt_table) xr_free(proto->deopt_table);
-    proto->deopt_table = bgr->deopt_table;
-    proto->ndeopt = bgr->ndeopt;
-    if (proto->osr_entries) xr_free(proto->osr_entries);
-    proto->osr_entries = bgr->osr_entries;
-    proto->nosr = bgr->nosr;
-    proto->jit_opt_level = bgr->opt_level;
-    proto->jit_fast_entry = bgr->fast_entry;
-    proto->jit_resume_entry = bgr->resume_entry;
-    // jit_entry must be written LAST — release fence ensures all metadata
-    // stores above are visible to other cores before they observe jit_entry.
-    // On ARM64 (weak memory order), plain stores can be reordered without this.
-    atomic_thread_fence(memory_order_release);
-    proto->jit_entry = bgr->code;
+    // Use unified install helper — single write sequence with release fence.
+    // Ownership of heap-allocated fields (stack_map, deopt_table, osr_entries)
+    // is transferred to proto; bgr itself is freed after.
+    XirInstallData idata = {
+        .code         = bgr->code,
+        .fast_entry   = bgr->fast_entry,
+        .resume_entry = bgr->resume_entry,
+        .opt_level    = bgr->opt_level,
+        .stack_map    = bgr->stack_map,
+        .deopt_table  = bgr->deopt_table,
+        .ndeopt       = bgr->ndeopt,
+        .osr_entries  = bgr->osr_entries,
+        .nosr         = bgr->nosr,
+    };
+    xir_jit_install_to_proto(proto, &idata);
     xr_free(bgr);
 }
 

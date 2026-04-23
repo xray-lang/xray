@@ -135,6 +135,28 @@ XR_FUNC bool xir_jit_osr_enter(void *osr_entry, XrCoroutine *coro,
                         int64_t *values, uint8_t return_type,
                         XrValue *result);
 
+/* Unified JIT result installation data.
+ * Both sync and background paths fill this struct, then call
+ * xir_jit_install_to_proto() which writes fields in the correct order
+ * with a release fence before publishing jit_entry. */
+typedef struct {
+    void    *code;           // compiled machine code (becomes jit_entry)
+    void    *fast_entry;     // fast entry point (skip param setup)
+    void    *resume_entry;   // resume entry for suspend/resume (NULL = none)
+    uint8_t  opt_level;      // XIR_OPT_BASIC or XIR_OPT_FULL
+    void    *stack_map;      // XrStackMapTable* (ownership transferred)
+    void    *deopt_table;    // XirRtDeoptEntry* (heap-allocated, ownership transferred)
+    uint32_t ndeopt;
+    void    *osr_entries;    // XirOsrEntry* (heap-allocated, ownership transferred)
+    uint32_t nosr;
+} XirInstallData;
+
+// Install compiled JIT code into proto fields with correct memory ordering.
+// All metadata is written BEFORE jit_entry (the publish point).
+// A release fence ensures visibility on ARM64 weak memory order.
+// Frees old metadata (stack_map, deopt_table, osr_entries) if present.
+XR_FUNC void xir_jit_install_to_proto(XrProto *proto, const XirInstallData *data);
+
 // Install a completed background compilation result into proto fields.
 // Thread-safe: uses CAS to prevent double-install from racing workers.
 // Called from both OP_CALL and OSR paths when jit_entry_pending is ready.
