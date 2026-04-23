@@ -77,7 +77,7 @@ void jit_debug_dump(const char *name, const void *code, uint32_t size,
     fprintf(stderr, "\n===== JIT disasm: %s (%u bytes, %u instructions) =====\n",
             name ? name : "?", size, n_inst);
     fprintf(stderr, "  normal_entry: 0x0000\n");
-    fprintf(stderr, "  fast_entry:   0x%04x\n", fast_entry_offset * 4);
+    fprintf(stderr, "  fast_entry:   0x%04x\n", fast_entry_offset);
     fprintf(stderr, "-----\n");
 
     a64_disasm_dump(stderr, insts, n_inst, 0);

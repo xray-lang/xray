@@ -2316,7 +2316,8 @@ static void emit_resume_entry(CodegenCtx *ctx, XirCodegenResult *result) {
         a64_buf_emit(&ctx->buf, a64_b(branch_off));
     }
 
-    result->resume_entry_offset = ctx->resume_entry_offset;
+    // Convert instruction index to byte offset (ARM64: 4 bytes/insn)
+    result->resume_entry_offset = ctx->resume_entry_offset * 4;
 }
 
 /* ========== Main Codegen Entry ========== */
@@ -2542,7 +2543,8 @@ XirCodegenResult xir_codegen_arm64(XirFunc *func, XirCodeAlloc *alloc) {
 
     result.code = code_mem;
     result.code_size = code_size;
-    result.fast_entry_offset = ctx.fast_entry_offset;
+    // Convert instruction index to byte offset (ARM64: 4 bytes/insn)
+    result.fast_entry_offset = ctx.fast_entry_offset * 4;
     result.stack_map = build_stack_map_table(&ctx, frame_size);
     result.success = true;
 

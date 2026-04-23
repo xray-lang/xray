@@ -127,9 +127,9 @@ static void bg_compile_one(XirCompileQueue *q, uint32_t worker_id,
     }
 
     bgr->code = res.code;
-    bgr->fast_entry = (char *)res.code + res.fast_entry_offset * 4;
+    bgr->fast_entry = (char *)res.code + res.fast_entry_offset;
     bgr->resume_entry = res.resume_entry_offset
-        ? (char *)res.code + res.resume_entry_offset * 4 : NULL;
+        ? (char *)res.code + res.resume_entry_offset : NULL;
     bgr->opt_level = (uint8_t)opt;
     bgr->stack_map = res.stack_map;
 

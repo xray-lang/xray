@@ -570,9 +570,9 @@ bool xir_jit_try_compile(XirJitState *jit, XrProto *proto) {
     // with release fence — see xir_jit_install_to_proto for the contract).
     XirInstallData idata = {
         .code         = res.code,
-        .fast_entry   = (char *)res.code + res.fast_entry_offset * 4,
+        .fast_entry   = (char *)res.code + res.fast_entry_offset,
         .resume_entry = res.resume_entry_offset
-            ? (char *)res.code + res.resume_entry_offset * 4 : NULL,
+            ? (char *)res.code + res.resume_entry_offset : NULL,
         .opt_level    = (uint8_t)opt,
         .stack_map    = res.stack_map,
         .deopt_table  = deopt_copy,
