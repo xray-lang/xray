@@ -97,8 +97,9 @@ typedef struct {
     uint32_t code_size;  // size in bytes
     bool     success;
     const char *error;   // error message if !success
-    // Fast entry offset: instruction count from code start to fast prologue
-    // (skip param loading, for register-passing cross-function calls)
+    // Fast entry offset: byte offset from code start to fast prologue
+    // (skip param loading, for register-passing cross-function calls).
+    // Both ARM64 and x64 codegens return byte offsets.
     uint32_t fast_entry_offset;
     // OSR entry points for loop headers
     XirOsrEntry osr_entries[XIR_MAX_OSR_ENTRIES];
@@ -108,7 +109,7 @@ typedef struct {
     uint32_t        ndeopt;
     // GC stack map table (heap-allocated, transferred to XrProto)
     XrStackMapTable *stack_map;
-    // Resume entry offset (instruction count from code start)
+    // Resume entry offset: byte offset from code start (0 = none).
     // Non-zero when function contains XIR_SUSPEND points.
     uint32_t resume_entry_offset;
 } XirCodegenResult;
