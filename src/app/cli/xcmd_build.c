@@ -34,6 +34,9 @@
 #include "../../jit/xir_pass.h"
 #include "../../aot/xcgen.h"
 #include "../../runtime/class/xclass_descriptor.h"
+#include "../../runtime/class/xclass.h"
+#include "../../runtime/class/xclass_lookup.h"
+#include "../../runtime/closure/xclosure.h"
 #endif
 #include <stdio.h>
 #include <stdlib.h>
@@ -455,7 +458,28 @@ static void aot_preregister_classes(XrProto *proto, XrayIsolate *isolate) {
         XrValue desc_val = PROTO_CONSTANT(proto, bx);
         XrClassDescriptor *desc = (XrClassDescriptor *)XR_TO_PTR(desc_val);
         if (!desc) continue;
-        xr_class_from_descriptor(isolate, desc, proto, NULL, NULL, NULL, NULL);
+        XrClass *klass = xr_class_from_descriptor(isolate, desc, proto, NULL, NULL, NULL, NULL);
+        if (!klass) continue;
+
+        // Patch method protos: set 'this' (param 0) type to the
+        // enclosing class instance type so builder_find_reg_type works.
+        for (uint32_t mi = 0; mi < desc->instance_method_count && mi < klass->method_count; mi++) {
+            XrMethod *method = &klass->methods[mi];
+            if (method->type != XMETHOD_CLOSURE || !method->as.closure) continue;
+            XrProto *mp = method->as.closure->proto;
+            if (!mp || mp->numparams < 1 || mp->numparams > 200) continue;
+            // Allocate param_types if not present
+            if (!mp->param_types) {
+                mp->param_types = (struct XrType **)xr_calloc(
+                    (size_t)mp->numparams, sizeof(struct XrType *));
+                if (!mp->param_types) continue;
+                mp->param_types_count = (uint8_t)mp->numparams;
+            }
+            // Patch 'this' (param 0) with enclosing class instance type
+            if (mp->param_types_count > 0 && !mp->param_types[0]) {
+                mp->param_types[0] = xr_type_new_named_instance(isolate, desc->class_name);
+            }
+        }
     }
 }
 

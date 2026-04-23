@@ -481,7 +481,7 @@ bool xir_translate_misc_ops(XirBuilder *b, XirBlock **cur_blk,
                         method->as.closure && method->as.closure->proto)
                     {
                         XrProto *callee_proto = method->as.closure->proto;
-                        uint8_t ret_type = XR_REP_I64;
+                        uint8_t ret_type = XR_REP_TAGGED;
                         if (callee_proto->return_type_info)
                             ret_type = xr_type_rep(callee_proto->return_type_info);
                         // Collect args: [0]=closure(unused), [1]=receiver, [2..nargs+1]=args
@@ -501,10 +501,11 @@ bool xir_translate_misc_ops(XirBuilder *b, XirBlock **cur_blk,
                                                   ret_type, proto_ref, na_val);
                         blk->ins[blk->nins - 1].flags |= XIR_FLAG_SIDE_EFFECT;
                         builder_bind_call_args(b, result, ck_args, ck_nca);
-                        if (ret_type == XR_REP_PTR)
+                        if (ret_type == XR_REP_PTR || ret_type == XR_REP_TAGGED)
                             builder_tag_vreg(b, result, VTAG_PTR, 0);
-                        if (ret_type != XR_REP_PTR && a < 256)
-                            b->slot_rep[a] = ret_type;
+                        if (ret_type == XR_REP_I64 || ret_type == XR_REP_F64) {
+                            if (a < 256) b->slot_rep[a] = ret_type;
+                        }
                         builder_set_slot(b, a, result);
                         b->ops_translated++;
                         return true;

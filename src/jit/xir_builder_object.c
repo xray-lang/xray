@@ -16,6 +16,8 @@
 #include "xir_builder_internal.h"
 #include "../base/xchecks.h"
 #include "../runtime/value/xstruct_layout.h"
+#include "../runtime/class/xclass.h"
+#include "../runtime/class/xclass_lookup.h"
 
 bool xir_translate_object_ops(XirBuilder *b, XirBlock **cur_blk,
                               uint32_t pc, XrInstruction inst, OpCode op) {
@@ -247,6 +249,51 @@ bool xir_translate_object_ops(XirBuilder *b, XirBlock **cur_blk,
                 }
             }
             } // known_shape block
+
+            // AOT class field resolution: if receiver is a known class
+            // instance, resolve symbol → field offset for direct access.
+            if (b->aot_mode && b->isolate && rb < 256) {
+                XrType *recv_type = builder_find_reg_type(b, rb);
+                // Fallback: if receiver type unknown but 'this' (param 0) has
+                // a known class type, try that class's fields for the symbol.
+                if (!recv_type || recv_type->kind != XR_KIND_INSTANCE) {
+                    XrType *this_type = builder_find_reg_type(b, 0);
+                    if (this_type && this_type->kind == XR_KIND_INSTANCE)
+                        recv_type = this_type;
+                }
+                const char *cname = recv_type ? xr_type_get_class_name(recv_type) : NULL;
+                if (cname && recv_type->kind == XR_KIND_INSTANCE) {
+                    XrClass *klass = xr_class_lookup_by_name(b->isolate, cname);
+                    if (klass) {
+                        int fi = xr_class_lookup_field(klass, (int)sym);
+                        if (fi >= 0 && fi < klass->field_count) {
+                            // Use same offset formula as OP_GETFIELD for
+                            // consistency with AOT codegen adj_offset logic.
+                            int32_t byte_off = XR_INSTANCE_FIELDS_OFFSET
+                                             + fi * XR_XRVALUE_SIZE;
+                            XirRef obj2 = builder_get_slot(b, blk, rb);
+                            XirRef off2 = xir_const_i64(b->func, (int64_t)byte_off);
+                            // Determine load rep from field type
+                            uint8_t frep = XR_REP_I64;
+                            const char *ftype = klass->fields[fi].type_name;
+                            if (ftype && (strcmp(ftype, "float") == 0 ||
+                                          strcmp(ftype, "double") == 0 ||
+                                          strcmp(ftype, "f64") == 0))
+                                frep = XR_REP_F64;
+                            XirRef fv = xir_emit(b->func, blk, XIR_LOAD_FIELD,
+                                                 frep, obj2, off2);
+                            blk->ins[blk->nins - 1].flags |= XIR_FLAG_SIDE_EFFECT;
+                            if (frep == XR_REP_F64)
+                                builder_tag_vreg(b, fv, VTAG_F64, 0);
+                            else
+                                builder_tag_vreg(b, fv, VTAG_TAGGED, 0);
+                            builder_set_slot(b, a, fv);
+                            b->ops_translated++;
+                            return true;
+                        }
+                    }
+                }
+            }
 
             // Slow path: call runtime helper.
             XirRef obj = builder_get_slot(b, blk, rb);
