@@ -947,6 +947,15 @@ XirPassChange xir_pass_merge_blocks(XirFunc *func) {
             if (!b) continue;
             if (b->npred != 1) continue;
             if (b->phis != NULL) continue;
+
+            // Do not merge if B is an exception handler target —
+            // other blocks' exception_handler pointers would go stale.
+            bool is_exc_target = false;
+            for (uint32_t j = 0; j < func->nblk && !is_exc_target; j++) {
+                if (func->blocks[j]->exception_handler == b)
+                    is_exc_target = true;
+            }
+            if (is_exc_target) continue;
             if (b == a) continue;
 
             // Merge B's instructions into A

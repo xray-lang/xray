@@ -1915,75 +1915,61 @@ bool xir_translate_call_ops(XirBuilder *b, XirBlock **cur_blk,
             int nargs = GETARG_B(inst);
             int result_reg = GETARG_C(inst);
 
-            if (nargs > 8) { b->ops_skipped++; return true; }
+            if (nargs > (b->aot_mode ? 64 : 8)) {
+                b->ops_skipped++;
+                return true;
+            }
 
             // Check if callee proto is known (from OP_CLOSURE tracking)
             { XirVReg *_cv3 = builder_vreg_for_slot(b, a);
             XrProto *callee_proto = _cv3 ? _cv3->callee_proto : NULL;
 
-            // Store closure to jit_call_args[0] (needed for slow path fallback)
-            XirRef func_val = builder_get_slot(b, blk, a);
-            {
-                XirRef off_ref = xir_const_i64(b->func, (int64_t)JIT_CALL_ARGS_OFFSET);
-                xir_emit_raw(b->func, blk, XIR_STORE_CORO, XR_REP_VOID,
-                             off_ref, func_val, XIR_NONE);
-                blk->ins[blk->nins - 1].flags |= XIR_FLAG_SIDE_EFFECT;
-            }
+            if (b->aot_mode && callee_proto) {
+                // AOT CALL_KNOWN path: collect call_args, emit CALL_KNOWN
+                XirRef call_args[66]; // 1 closure + up to 64 args
+                call_args[0] = builder_get_slot(b, blk, a);
+                for (int j = 0; j < nargs; j++)
+                    call_args[1 + j] = builder_get_slot(b, blk, a + 1 + j);
+                uint16_t total_ca = (uint16_t)(1 + nargs);
 
-            // Store args to jit_call_args[1..n]
-            XirRef arg_refs[2] = { XIR_NONE, XIR_NONE };
-            for (int j = 0; j < nargs; j++) {
-                int32_t off = JIT_CALL_ARGS_OFFSET + (1 + j) * 8;
-                XirRef off_ref = xir_const_i64(b->func, (int64_t)off);
-                XirRef arg = builder_get_slot(b, blk, a + 1 + j);
-                if (j < 2) arg_refs[j] = arg;
-                xir_emit_raw(b->func, blk, XIR_STORE_CORO, XR_REP_VOID,
-                             off_ref, arg, XIR_NONE);
-                blk->ins[blk->nins - 1].flags |= XIR_FLAG_SIDE_EFFECT;
-            }
-
-            if (false && callee_proto && !b->aot_mode) {  // TEMP: disable CALL_KNOWN for CALL_KEEP
-                // CALL_KNOWN path: direct JIT-to-JIT call.
-                // Callee was eager-compiled in xir_jit_try_compile, so
-                // jit_entry is set → codegen emits BLR to fast_entry.
                 uint8_t ret_type = callee_proto->return_type_info
                     ? xr_type_rep(callee_proto->return_type_info)
                     : XR_REP_TAGGED;
 
-                if (nargs <= 2) {
-                    // Register-passing fast path
-                    XirRef proto_val = xir_const_ptr(b->func, (void*)callee_proto);
-                    XirRef proto_store = xir_emit_unary(b->func, blk, XIR_CONST_I64,
-                                                        XR_REP_I64, proto_val);
-                    {
-                        XirRef poff = xir_const_i64(b->func, (int64_t)JIT_CALL_PROTO_OFFSET);
-                        xir_emit_raw(b->func, blk, XIR_STORE_CORO, XR_REP_VOID,
-                                     poff, proto_store, XIR_NONE);
-                        blk->ins[blk->nins - 1].flags |= XIR_FLAG_SIDE_EFFECT;
-                    }
-                    XirRef result = xir_emit(b->func, blk, XIR_CALL_KNOWN_REG, ret_type,
-                                             arg_refs[0], arg_refs[1]);
-                    blk->ins[blk->nins - 1].flags |= XIR_FLAG_SIDE_EFFECT;
-                    builder_set_slot(b, result_reg, result);
-                } else {
-                    // Memory-passing path (nargs > 2)
-                    XirRef proto_ref = xir_const_ptr(b->func, (void*)callee_proto);
-                    XirRef nargs_ref = xir_const_i64(b->func, (int64_t)nargs);
-                    XirRef nargs_val = xir_emit_unary(b->func, blk, XIR_CONST_I64,
-                                                      XR_REP_I64, nargs_ref);
-                    XirRef result = xir_emit(b->func, blk, XIR_CALL_KNOWN, ret_type,
-                                             proto_ref, nargs_val);
-                    blk->ins[blk->nins - 1].flags |= XIR_FLAG_SIDE_EFFECT;
-                    builder_set_slot(b, result_reg, result);
-                }
+                XirRef proto_ref = xir_const_ptr(b->func, (void*)callee_proto);
+                XirRef nargs_ref = xir_const_i64(b->func, (int64_t)nargs);
+                XirRef nargs_val = xir_emit_unary(b->func, blk, XIR_CONST_I64,
+                                                  XR_REP_I64, nargs_ref);
+                XirRef result = xir_emit(b->func, blk, XIR_CALL_KNOWN, ret_type,
+                                         proto_ref, nargs_val);
+                blk->ins[blk->nins - 1].flags |= XIR_FLAG_SIDE_EFFECT;
+                builder_bind_call_args(b, result, call_args, total_ca);
+                builder_set_slot(b, result_reg, result);
             } else {
-                // Generic path: callee unknown or CALL_KNOWN disabled, use C bridge
+                // JIT path: STORE_CORO + C bridge fallback
+                XirRef func_val = builder_get_slot(b, blk, a);
+                {
+                    XirRef off_ref = xir_const_i64(b->func,
+                                                    (int64_t)JIT_CALL_ARGS_OFFSET);
+                    xir_emit_raw(b->func, blk, XIR_STORE_CORO, XR_REP_VOID,
+                                 off_ref, func_val, XIR_NONE);
+                    blk->ins[blk->nins - 1].flags |= XIR_FLAG_SIDE_EFFECT;
+                }
+                for (int j = 0; j < nargs; j++) {
+                    int32_t off = JIT_CALL_ARGS_OFFSET + (1 + j) * 8;
+                    XirRef off_ref = xir_const_i64(b->func, (int64_t)off);
+                    XirRef arg = builder_get_slot(b, blk, a + 1 + j);
+                    xir_emit_raw(b->func, blk, XIR_STORE_CORO, XR_REP_VOID,
+                                 off_ref, arg, XIR_NONE);
+                    blk->ins[blk->nins - 1].flags |= XIR_FLAG_SIDE_EFFECT;
+                }
                 uint8_t call_rep = XR_REP_I64;
                 if (callee_proto && callee_proto->return_type_info) {
                     uint8_t rt = xr_type_rep(callee_proto->return_type_info);
                     if (rt == XR_REP_PTR) call_rep = XR_REP_PTR;
                 }
-                XirRef fn_ref = xir_const_ptr(b->func, (void *)xr_jit_call_func);
+                XirRef fn_ref = xir_const_ptr(b->func,
+                                               (void *)xr_jit_call_func);
                 XirRef nargs_ref = xir_const_i64(b->func, (int64_t)nargs);
                 XirRef nargs_val = xir_emit_unary(b->func, blk, XIR_CONST_I64,
                                                   XR_REP_I64, nargs_ref);
@@ -2024,7 +2010,6 @@ bool xir_translate_call_ops(XirBuilder *b, XirBlock **cur_blk,
         /* === Call Variants === */
         case OP_CALL_STATIC: {
             // Same as OP_CALL but with known closure type — skip callable check
-            // For JIT, translate identically to OP_CALL
             int a = GETARG_A(inst);
             int nargs = GETARG_B(inst);
 
@@ -2032,12 +2017,37 @@ bool xir_translate_call_ops(XirBuilder *b, XirBlock **cur_blk,
             XirVReg *_cv4 = builder_vreg_for_slot(b, a);
             XrProto *callee_proto = _cv4 ? _cv4->callee_proto : NULL;
 
+            if (b->aot_mode && callee_proto) {
+                // AOT: emit CALL_KNOWN with call_args binding
+                XirRef call_args[66];
+                call_args[0] = builder_get_slot(b, blk, a);
+                for (int j = 0; j < nargs; j++)
+                    call_args[1 + j] = builder_get_slot(b, blk, a + 1 + j);
+                uint16_t total_ca = (uint16_t)(1 + nargs);
+
+                uint8_t ret_type = callee_proto->return_type_info
+                    ? xr_type_rep(callee_proto->return_type_info)
+                    : XR_REP_TAGGED;
+
+                XirRef proto_ref = xir_const_ptr(b->func, (void*)callee_proto);
+                XirRef nargs_ref = xir_const_i64(b->func, (int64_t)nargs);
+                XirRef nargs_val = xir_emit_unary(b->func, blk, XIR_CONST_I64,
+                                                  XR_REP_I64, nargs_ref);
+                XirRef result = xir_emit(b->func, blk, XIR_CALL_KNOWN, ret_type,
+                                         proto_ref, nargs_val);
+                blk->ins[blk->nins - 1].flags |= XIR_FLAG_SIDE_EFFECT;
+                builder_bind_call_args(b, result, call_args, total_ca);
+                builder_set_slot(b, a, result);
+                b->ops_translated++;
+                return true;
+            }
+
             if (callee_proto && callee_proto->jit_entry) {
                 // Direct JIT→JIT call (same as OP_CALL's CALL_KNOWN path)
                 goto handle_call_known;
             }
 
-            // Store closure to jit_call_args[0] (xr_jit_call_func reads it here)
+            // JIT fallback: STORE_CORO + CALL_C(xr_jit_call_func)
             {
                 XirRef closure = builder_get_slot(b, blk, a);
                 XirRef off_ref = xir_const_i64(b->func, (int64_t)JIT_CALL_ARGS_OFFSET);
@@ -2045,8 +2055,6 @@ bool xir_translate_call_ops(XirBuilder *b, XirBlock **cur_blk,
                              off_ref, closure, XIR_NONE);
                 blk->ins[blk->nins - 1].flags |= XIR_FLAG_SIDE_EFFECT;
             }
-
-            // Store args to jit_call_args[1..n]
             for (int j = 0; j < nargs && j < 15; j++) {
                 int32_t off = JIT_CALL_ARGS_OFFSET + (1 + j) * 8;
                 XirRef off_ref = xir_const_i64(b->func, (int64_t)off);
@@ -2055,23 +2063,21 @@ bool xir_translate_call_ops(XirBuilder *b, XirBlock **cur_blk,
                              off_ref, arg, XIR_NONE);
                 blk->ins[blk->nins - 1].flags |= XIR_FLAG_SIDE_EFFECT;
             }
-
-            // Call xr_jit_call_func(coro, nargs_encoded)
-            XirRef fn_ref = xir_const_ptr(b->func, (void *)xr_jit_call_func);
-            int64_t nargs_enc = (int64_t)nargs;
-            XirRef nargs_ref = xir_const_i64(b->func, nargs_enc);
-            XirRef nargs_val = xir_emit_unary(b->func, blk, XIR_CONST_I64,
-                                              XR_REP_I64, nargs_ref);
-            XirRef result = xir_emit(b->func, blk, XIR_CALL_C, XR_REP_I64,
-                                     fn_ref, nargs_val);
-            blk->ins[blk->nins - 1].flags |= XIR_FLAG_SIDE_EFFECT;
-            builder_set_slot(b, a, result);
+            {
+                XirRef fn_ref = xir_const_ptr(b->func, (void *)xr_jit_call_func);
+                XirRef nargs_ref = xir_const_i64(b->func, (int64_t)nargs);
+                XirRef nargs_val = xir_emit_unary(b->func, blk, XIR_CONST_I64,
+                                                  XR_REP_I64, nargs_ref);
+                XirRef result = xir_emit(b->func, blk, XIR_CALL_C, XR_REP_I64,
+                                         fn_ref, nargs_val);
+                blk->ins[blk->nins - 1].flags |= XIR_FLAG_SIDE_EFFECT;
+                builder_set_slot(b, a, result);
+            }
             b->ops_translated++;
             return true;
 
             handle_call_known: (void)0;
-            // Fall through to CALL_KNOWN — store closure+args, emit XIR_CALL_KNOWN
-            // Store closure to call_args[0] (needed for slow-path fallback)
+            // JIT CALL_KNOWN path with STORE_CORO
             {
                 XirRef closure_ref = builder_get_slot(b, blk, a);
                 XirRef off0 = xir_const_i64(b->func, (int64_t)JIT_CALL_ARGS_OFFSET);
@@ -2079,7 +2085,6 @@ bool xir_translate_call_ops(XirBuilder *b, XirBlock **cur_blk,
                              off0, closure_ref, XIR_NONE);
                 blk->ins[blk->nins - 1].flags |= XIR_FLAG_SIDE_EFFECT;
             }
-            // Store args to call_args[1..n]
             for (int j = 0; j < nargs && j < 15; j++) {
                 int32_t off = JIT_CALL_ARGS_OFFSET + (1 + j) * 8;
                 XirRef off_ref = xir_const_i64(b->func, (int64_t)off);

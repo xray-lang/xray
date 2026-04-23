@@ -1029,15 +1029,13 @@ static bool xcg_closure_is_non_escaping(XirFunc *func, uint32_t cl_vreg,
     XR_DCHECK(cl_vreg < func->nvreg, "xcg_closure_is_non_escaping: invalid vreg");
 
     // Phase 1: scan all instruction args for references to cl_vreg.
-    // Only STORE_UPVAL(dst=cl_vreg) is safe; any use in ins->args[] escapes.
+    // STORE_UPVAL(args[0]=cl_vreg) is safe; any other use escapes.
     for (uint32_t bi = 0; bi < func->nblk; bi++) {
         XirBlock *blk = func->blocks[bi];
         for (uint32_t ii = 0; ii < blk->nins; ii++) {
             XirIns *ins = &blk->ins[ii];
-            // Check dst: STORE_UPVAL with cl_vreg as target is safe
+            // Check dst: Definition site (CALL_C creating the closure) is ok
             if (xir_ref_is_vreg(ins->dst) && XIR_REF_INDEX(ins->dst) == cl_vreg) {
-                if (ins->op == XIR_STORE_UPVAL) continue;  // safe
-                // Definition site (CALL_C creating the closure) also ok
                 if (ins->op == XIR_CALL_C || ins->op == XIR_CALL_C_LEAF) continue;
                 return false;  // unexpected redefinition
             }
@@ -1045,7 +1043,9 @@ static bool xcg_closure_is_non_escaping(XirFunc *func, uint32_t cl_vreg,
             for (int a = 0; a < 2; a++) {
                 if (xir_ref_is_vreg(ins->args[a]) &&
                     XIR_REF_INDEX(ins->args[a]) == cl_vreg) {
-                    return false;  // used in an instruction arg → escaping
+                    // STORE_UPVAL(args[0]=cl_vreg) is safe (upval init)
+                    if (ins->op == XIR_STORE_UPVAL && a == 0) continue;
+                    return false;  // used as arg → escaping
                 }
             }
         }
@@ -1167,7 +1167,7 @@ XcgenFunc *xcgen_compile_func(XcgenModule *mod, XirFunc *xfunc, const char *c_na
             if (op == XIR_LOAD_UPVAL) {
                 cf->needs_closure_param = true;
             }
-            if (op == XIR_STORE_UPVAL && !xir_ref_is_vreg(blk->ins[ii].dst)) {
+            if (op == XIR_STORE_UPVAL && !xir_ref_is_vreg(blk->ins[ii].args[0])) {
                 cf->needs_closure_param = true;
             }
             if (op == XIR_CATCH) {
