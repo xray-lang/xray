@@ -15,6 +15,7 @@
 
 #include "xir_eligibility.h"
 
+#include <stdatomic.h>
 #include <stdint.h>
 #include <stdio.h>
 

@@ -29,7 +29,7 @@ static XrCoroPoolBlock* xr_coro_pool_block_create(size_t capacity) {
     XrCoroPoolBlock *block = xr_malloc(sizeof(XrCoroPoolBlock));
     if (!block) return NULL;
 
-    block->coros = xr_malloc(capacity * sizeof(XrCoroutine));
+    block->coros = xr_calloc(capacity, sizeof(XrCoroutine));
     if (!block->coros) {
         xr_free(block);
         return NULL;
