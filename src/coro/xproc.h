@@ -40,6 +40,7 @@ struct XrMachine;
 struct XrTimerWheel;
 struct XrRuntime;
 struct XrCStackPool;
+struct XrCanceledTimerNode;
 
 /* ========== Channel Wake Command (MPSC queue, Vyukov style) ==========
  *
@@ -184,6 +185,11 @@ typedef struct XrProc {
     XrCoroutine *blocked_tail;
     int blocked_count;
     int select_waiter_count;
+
+    /* === Canceled Timer Node Freelist (Phase 3.2: avoids malloc/free churn) === */
+    #define XR_CANCEL_NODE_POOL_MAX 64
+    struct XrCanceledTimerNode *cancel_node_free;
+    int cancel_node_free_count;
 
     /* === Deferred Free Queue (MPSC Treiber stack for cross-worker PollDesc) === */
     _Atomic(void *) deferred_free_head;

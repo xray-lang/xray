@@ -128,10 +128,7 @@ static void ready_queue_push(XrAsyncReadyQueue *q, XrAsyncJob *job) {
         memory_order_release, memory_order_relaxed));
 }
 
-// Pop one element. Implemented as CAS pop to match the original API,
-// but callers in this file iterate repeatedly — the hot xr_async_check_ready
-// path could be switched to atomic_exchange + local walk for O(1) drain
-// if profiling shows contention on head.
+// Pop one element (CAS). Used only by destroy path.
 static XrAsyncJob *ready_queue_pop(XrAsyncReadyQueue *q) {
     for (int retry = 0; retry < 8; retry++) {
         XrAsyncJob *head = atomic_load_explicit(&q->head, memory_order_acquire);
@@ -145,6 +142,12 @@ static XrAsyncJob *ready_queue_pop(XrAsyncReadyQueue *q) {
         }
     }
     return NULL;
+}
+
+// Phase 3.3: O(1) whole-list drain via atomic_exchange.
+// Grabs the entire chain in a single atomic op; caller walks locally.
+static XrAsyncJob *ready_queue_drain_all(XrAsyncReadyQueue *q) {
+    return atomic_exchange_explicit(&q->head, NULL, memory_order_acq_rel);
 }
 
 // ========== Public API ==========
@@ -267,15 +270,17 @@ int xr_async_check_ready(XrAsyncPool *pool, int worker_id) {
     }
 
     XrAsyncReadyQueue *q = &pool->ready_queues[worker_id];
+
+    // Phase 3.3: O(1) drain — grab entire list in one atomic_exchange,
+    // then walk locally without further CAS contention.
+    XrAsyncJob *list = ready_queue_drain_all(q);
+    if (!list) return 0;
+
     int count = 0;
-
-    // Process all completed tasks (limit per check to avoid starvation)
-    const int max_per_check = 20;
-
-    for (int i = 0; i < max_per_check; i++) {
-        XrAsyncJob *job = ready_queue_pop(q);
-        if (!job) break;
-
+    while (list) {
+        XrAsyncJob *job = list;
+        list = job->next;
+        job->next = NULL;
         count++;
 
         // Wake coroutine

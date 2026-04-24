@@ -1121,6 +1121,29 @@ void xcg_emit_instruction(XcgenBuf *b, XirFunc *func, XirIns *ins,
             xcg_emit_raw_mem_op(b, func, ins);
             return;
 
+        // --- Conditional select (from if-conversion) ---
+        case XIR_SELECT_COND:
+            // Store condition ref for the upcoming XIR_SELECT.
+            cf->last_select_cond = ins->args[0];
+            return;
+        case XIR_SELECT: {
+            // dst = cond ? args[0] : args[1]   (NE semantics: non-zero picks args[0])
+            uint8_t dst_t = (dst_idx < func->nvreg) ? func->vregs[dst_idx].rep
+                                                          : XR_REP_I64;
+            bool tagged = (dst_t == XR_REP_TAGGED || dst_t == XR_REP_PTR ||
+                           dst_t == XR_REP_STR);
+            xcgen_buf_printf(b, "    v%u = ", dst_idx);
+            xcg_emit_ref(b, func, cf->last_select_cond);
+            xcgen_buf_puts(b, " ? ");
+            if (tagged) xcg_emit_ref_as_tagged(b, func, ins->args[0]);
+            else        xcg_emit_ref(b, func, ins->args[0]);
+            xcgen_buf_puts(b, " : ");
+            if (tagged) xcg_emit_ref_as_tagged(b, func, ins->args[1]);
+            else        xcg_emit_ref(b, func, ins->args[1]);
+            xcgen_buf_puts(b, ";\n");
+            return;
+        }
+
         // --- No-ops in C ---
         case XIR_SAFEPOINT:
         case XIR_NOP:

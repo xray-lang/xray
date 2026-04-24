@@ -30,6 +30,10 @@
 #include <string.h>
 #include <stdio.h>
 
+// Phase 3: forward-declare wake helper (defined later in this file) so that
+// the timer_channel_fire_cb callback at the top can reference it.
+static void channel_wake_coro(XrCoroutine *coro);
+
 // Ring buffer index advance: conditional increment is faster than modulo division
 // on ARM64 (~1-2 cycles vs ~10 cycles for SDIV+MSUB)
 static inline uint32_t chan_advance_idx(uint32_t idx, uint32_t buf_size) {
@@ -171,9 +175,47 @@ XrChannel *xr_channel_new(struct XrayIsolate *X, uint32_t buffer_size) {
     return ch;
 }
 
+// Phase 3 (CORO 3.1): Timer wheel callback for time.after.
+// Fires once when the timeout elapses, writes current time to the channel
+// buffer so that any subsequent recv/tryRecv finds data immediately.
+// If a receiver is already blocked on this channel, wake it directly.
+static void timer_channel_fire_cb(void *arg) {
+    XrChannel *ch = (XrChannel *)arg;
+    XR_DCHECK(ch != NULL, "timer_channel_fire_cb: NULL channel");
+    if (!ch) return;
+
+    // Double-check: callback should only fire once
+    if (atomic_load_explicit(&ch->timer_fired, memory_order_relaxed)) return;
+
+    int64_t now = xr_monotonic_ticks();
+    XrCoroutine *receiver = NULL;
+
+    xr_mutex_lock(&ch->lock);
+    if (!atomic_load_explicit(&ch->timer_fired, memory_order_relaxed)) {
+        // Try to hand value directly to a blocked receiver
+        receiver = xr_waitq_dequeue(&ch->recvq);
+        if (receiver) {
+            // Direct transfer to blocked receiver's slot
+            XrValue *slot = receiver->recv_slot;
+            if (slot) *slot = xr_int(now);
+        } else {
+            // No receiver waiting: leave value in buffer for later recv
+            ch->buffer[0] = xr_int(now);
+            ch->buf_count = 1;
+        }
+        atomic_store_explicit(&ch->timer_fired, true, memory_order_release);
+    }
+    xr_mutex_unlock(&ch->lock);
+
+    // Wake receiver outside lock (same pattern as chan_direct_send)
+    if (receiver) {
+        channel_wake_coro(receiver);
+    }
+}
+
 // Create Timer Channel
-// Returns a read-only channel that sends current time after timeout
-// Timer channel is also allocated on system heap
+// Returns a read-only channel that sends current time after timeout.
+// Phase 3: uses embedded tw_timer for timer wheel registration.
 XrChannel *xr_channel_new_timer(struct XrayIsolate *X, int64_t timeout_ms) {
     if (!X || !xr_isolate_get_sys_heap(X)) return NULL;
 
@@ -202,11 +244,16 @@ XrChannel *xr_channel_new_timer(struct XrayIsolate *X, int64_t timeout_ms) {
     ch->timer_timeout_ms = timeout_ms;
 
     // Record start time
-    struct timespec ts;
-    clock_gettime(CLOCK_MONOTONIC, &ts);
-    ch->timer_start_ticks = (int64_t)ts.tv_sec * 1000 + ts.tv_nsec / 1000000;
+    ch->timer_start_ticks = xr_monotonic_ticks();
 
     atomic_store_explicit(&ch->timer_fired, false, memory_order_relaxed);
+
+    // Phase 3: initialize embedded timer node
+    ch->tw_timer.prev = NULL;
+    ch->tw_timer.next = NULL;
+    ch->tw_timer.slot = XR_TW_SLOT_INACTIVE;
+    atomic_init(&ch->tw_timer.state, XR_TIMER_STATE_ACTIVE);
+
     ch->elem_tid = 0;
     ch->dist = NULL;
     ch->name = NULL;
@@ -216,38 +263,33 @@ XrChannel *xr_channel_new_timer(struct XrayIsolate *X, int64_t timeout_ms) {
     return ch;
 }
 
-// Check if Timer Channel has fired
-// If timeout reached and not yet fired, write current time to buffer
+// Phase 3: arm the timer channel on the given timer wheel.
+// Must be called from the owner worker after xr_channel_new_timer().
+// If the timeout has already elapsed (e.g. after 0), fire immediately
+// so that the first OP_CHAN_TRY_RECV poll finds data in the buffer.
+void xr_channel_timer_arm(XrChannel *ch, XrTimerWheel *tw) {
+    if (!ch || !tw) return;
+    XR_DCHECK(atomic_load_explicit(&ch->is_timer, memory_order_relaxed),
+              "xr_channel_timer_arm: not a timer channel");
+
+    int64_t timeout_pos = ch->timer_start_ticks + ch->timer_timeout_ms;
+    int64_t now = xr_monotonic_ticks();
+    if (now >= timeout_pos) {
+        // Already elapsed: fire callback inline (avoids round-trip via wheel)
+        timer_channel_fire_cb(ch);
+        return;
+    }
+    xr_twheel_set_timer(tw, &ch->tw_timer, timer_channel_fire_cb, ch, timeout_pos);
+}
+
+// Check if Timer Channel has fired (Phase 3: thin check, no polling).
+// Returns true if the timer has already delivered its value to the buffer.
 bool xr_channel_timer_ready(XrChannel *ch) {
     if (!ch) return false;
     if (!atomic_load_explicit(&ch->is_timer, memory_order_relaxed)) {
-        return false;  // Not a timer channel
+        return false;
     }
-
-    // Already fired, check if data available
-    if (atomic_load_explicit(&ch->timer_fired, memory_order_relaxed)) {
-        return ch->buf_count > 0;
-    }
-
-    // Check if timeout reached
-    struct timespec ts;
-    clock_gettime(CLOCK_MONOTONIC, &ts);
-    int64_t now = (int64_t)ts.tv_sec * 1000 + ts.tv_nsec / 1000000;
-    int64_t elapsed = now - ch->timer_start_ticks;
-
-    if (elapsed >= ch->timer_timeout_ms) {
-        // Timeout: write current time to buffer and mark as fired
-        xr_mutex_lock(&ch->lock);
-        if (!atomic_load_explicit(&ch->timer_fired, memory_order_relaxed)) {
-            ch->buffer[0] = xr_int(now);
-            ch->buf_count = 1;
-            atomic_store_explicit(&ch->timer_fired, true, memory_order_release);
-        }
-        xr_mutex_unlock(&ch->lock);
-        return true;
-    }
-
-    return false;
+    return atomic_load_explicit(&ch->timer_fired, memory_order_acquire);
 }
 
 void xr_channel_destroy(XrChannel *ch) {

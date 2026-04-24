@@ -61,6 +61,7 @@
 #include "../runtime/gc/xgc_header.h"
 #include "../base/xmalloc.h"
 #include "../base/xchecks.h"
+#include "xtimer_wheel.h"  // XrTWheelTimer (embedded in channel for timer wheel)
 
 /* ========== Forward Declarations ========== */
 
@@ -144,6 +145,7 @@ typedef struct XrChannel {
     int64_t timer_timeout_ms;
     int64_t timer_start_ticks;
     _Atomic(bool) timer_fired;
+    struct XrTWheelTimer tw_timer;  // Phase 3: embedded timer wheel node (avoids polling)
     uint8_t elem_tid;           // XrTypeId: element type for reified generics (0=any)
 
     /* === Distributed Channel (cluster) === */
@@ -169,6 +171,7 @@ typedef struct XrChannel {
 
 XR_FUNC XrChannel *xr_channel_new(struct XrayIsolate *X, uint32_t buffer_size);
 XR_FUNC XrChannel *xr_channel_new_timer(struct XrayIsolate *X, int64_t timeout_ms);
+XR_FUNC void xr_channel_timer_arm(XrChannel *ch, XrTimerWheel *tw);
 XR_FUNC bool xr_channel_timer_ready(XrChannel *ch);
 XR_FUNC void xr_channel_destroy(XrChannel *ch);
 XR_FUNC bool xr_channel_try_send(XrChannel *ch, XrValue value);

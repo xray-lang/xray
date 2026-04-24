@@ -548,8 +548,8 @@ void xr_timer_queue_cancel(XrTimerWheel *target_tw, XrTWheelTimer *timer, XrCoro
     // the owner worker processes the cancel queue
     atomic_store_explicit(&timer->state, XR_TIMER_STATE_ZOMBIE, memory_order_release);
 
-    // Step 2: Allocate cancel node for async cleanup
-    XrCanceledTimerNode *node = (XrCanceledTimerNode *)xr_malloc(sizeof(XrCanceledTimerNode));
+    // Step 2: Allocate cancel node (Phase 3.2: try per-worker freelist first)
+    XrCanceledTimerNode *node = xr_cancel_node_alloc();
     if (!node) return;  // Out of memory, zombie will be cleaned up when slot is processed
 
     node->next = NULL;
@@ -607,13 +607,53 @@ int xr_timer_process_canceled_queue(XrTimerWheel *tw) {
         // Advance head (dequeue)
         atomic_store_explicit(&cq->head, next, memory_order_release);
 
-        // Free the old head (stub or previous node)
+        // Recycle the old head (Phase 3.2: return to freelist, not xr_free)
         if (head != &cq->stub) {
-            xr_free(head);
+            xr_cancel_node_free(head);
         }
     }
 
     return count;
+}
+
+// ========== Cancel Node Pool (Phase 3.2) ==========
+//
+// Per-worker freelists avoid malloc/free churn during cancel storms.
+// Alloc: pop from current worker's freelist, fallback to xr_malloc.
+// Free:  push to current worker's freelist (capped), overflow to xr_free.
+
+XrCanceledTimerNode *xr_cancel_node_alloc(void) {
+    XrWorker *w = xr_current_worker();
+    if (w && w->p.cancel_node_free) {
+        XrCanceledTimerNode *node = w->p.cancel_node_free;
+        w->p.cancel_node_free = node->next;
+        w->p.cancel_node_free_count--;
+        node->next = NULL;
+        node->timer = NULL;
+        node->coro = NULL;
+        return node;
+    }
+    XrCanceledTimerNode *node = (XrCanceledTimerNode *)xr_malloc(sizeof(XrCanceledTimerNode));
+    if (node) {
+        node->next = NULL;
+        node->timer = NULL;
+        node->coro = NULL;
+    }
+    return node;
+}
+
+void xr_cancel_node_free(XrCanceledTimerNode *node) {
+    if (!node) return;
+    XrWorker *w = xr_current_worker();
+    if (w && w->p.cancel_node_free_count < XR_CANCEL_NODE_POOL_MAX) {
+        node->next = w->p.cancel_node_free;
+        node->timer = NULL;
+        node->coro = NULL;
+        w->p.cancel_node_free = node;
+        w->p.cancel_node_free_count++;
+        return;
+    }
+    xr_free(node);
 }
 
 // ========== Public API ==========

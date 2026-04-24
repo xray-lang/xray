@@ -2377,6 +2377,12 @@ XrJitResult xr_jit_scope_enter(XrCoroutine *coro, int64_t extra_arg) {
     XrScopeContext *scope = (XrScopeContext *)xr_malloc(sizeof(XrScopeContext));
     if (scope) {
         atomic_store(&scope->count, 0);
+        scope->mode = XR_SCOPE_WAIT;
+        atomic_init(&scope->cancel_requested, false);
+        atomic_init(&scope->child_lock, false);
+        scope->first_error = xr_null();
+        scope->errors = NULL;
+        scope->first_child = NULL;
         scope->parent = coro->current_scope;
         coro->current_scope = scope;
     }

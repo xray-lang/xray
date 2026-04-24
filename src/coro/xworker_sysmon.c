@@ -95,12 +95,21 @@ static void sysmon_check(XrRuntime *runtime) {
             // If a C function marked FAST actually blocks >10ms, increment
             // its auto_slow_count. After 3 occurrences, upgrade to SLOW so
             // future calls release P before execution (dirty worker path).
+            // Phase 2 (CORO-04): all accesses are atomic; upgrade uses
+            // one-way CAS to prevent ABA with concurrent VM reads.
             if (elapsed_us >= 10000 && wm->current_cfunc) {
                 XrCFunction *cfn = (XrCFunction *)wm->current_cfunc;
-                if (cfn->cfunc_class == XR_CFUNC_FAST) {
-                    cfn->auto_slow_count++;
-                    if (cfn->auto_slow_count >= 3) {
-                        cfn->cfunc_class = XR_CFUNC_SLOW;
+                uint8_t cls = atomic_load_explicit(&cfn->cfunc_class,
+                                                    memory_order_relaxed);
+                if (cls == XR_CFUNC_FAST) {
+                    uint8_t cnt = atomic_fetch_add_explicit(
+                        &cfn->auto_slow_count, 1, memory_order_relaxed) + 1;
+                    if (cnt >= 3) {
+                        // One-way CAS: FAST → SLOW (never reverts)
+                        uint8_t expected = XR_CFUNC_FAST;
+                        atomic_compare_exchange_strong_explicit(
+                            &cfn->cfunc_class, &expected, XR_CFUNC_SLOW,
+                            memory_order_release, memory_order_relaxed);
                     }
                 }
             }

@@ -106,13 +106,13 @@ typedef struct XrTimerWheel {
     /* === Slot Array === */
     XrTWheelTimer *slots[1 + XR_TW_SOON_WHEEL_SIZE + XR_TW_LATER_WHEEL_SIZE];
     XrTWheelTimer **w;            // Pointer to current slot
-    
+
     /* === Slot Counters === */
     int64_t         scnt[XR_TW_SCNT_SIZE];
     int64_t         bump_scnt[XR_TW_SCNT_SIZE];
     int64_t         pos;          // Current wheel position
     int             nto;          // Total active timers
-    
+
     /* === Wheel State === */
     struct {
         int nto;
@@ -127,21 +127,21 @@ typedef struct XrTimerWheel {
         int64_t pos;
         int     nto;
     } later;                      // Later wheel (8s granularity)
-    
+
     /* === Bump State === */
     int             yield_slot;
     int             yield_slots_left;
     XrTWheelTimer   sentinel;
-    
+
     /* === Next Timeout Cache === */
     int             true_next_timeout_time;
     int64_t         next_timeout_pos;
     int64_t         next_timeout_time;
-    
+
     /* === Ownership === */
     int             owner_worker_id;  // Worker that owns this timer wheel
     XrRuntime      *runtime;
-    
+
     /* === Canceled Timer Queue (cross-worker cancellation) === */
     XrTimerCancelQueue canceled_queue;
 } XrTimerWheel;
@@ -179,6 +179,14 @@ XR_FUNC void xr_timer_queue_cancel(XrTimerWheel *target_tw, XrTWheelTimer *timer
 // Process canceled queue (called by owner worker before bump)
 // Returns number of timers processed
 XR_FUNC int xr_timer_process_canceled_queue(XrTimerWheel *tw);
+
+/* ========== Cancel Node Pool (Phase 3.2) ========== */
+
+// Allocate a cancel node from current worker's freelist, fallback to xr_malloc.
+XR_FUNC XrCanceledTimerNode *xr_cancel_node_alloc(void);
+
+// Return a cancel node to the owner worker's freelist (called during queue drain).
+XR_FUNC void xr_cancel_node_free(XrCanceledTimerNode *node);
 
 /* ========== Helpers ========== */
 

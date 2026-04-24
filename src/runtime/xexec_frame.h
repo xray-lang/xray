@@ -21,6 +21,7 @@
 
 #include <stdint.h>
 #include <stdbool.h>
+#include <stdatomic.h>
 #include "value/xvalue.h"
 #include "value/xchunk.h"
 #include "closure/xclosure.h"
@@ -110,8 +111,8 @@ typedef struct XrCFunction {
     } as;
     const char *name;
     bool is_yieldable;
-    uint8_t cfunc_class;       // XrCFuncClass: FAST or SLOW
-    uint8_t auto_slow_count;   // sysmon auto-upgrade counter (upgrade after 3)
+    _Atomic uint8_t cfunc_class;       // XrCFuncClass: FAST or SLOW (atomic: sysmon writes, VM reads)
+    _Atomic uint8_t auto_slow_count;   // sysmon auto-upgrade counter (atomic: sysmon r/w)
 } XrCFunction;
 
 /* ========== Unified VM Context ========== */

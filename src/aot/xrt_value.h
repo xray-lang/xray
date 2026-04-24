@@ -107,6 +107,20 @@ static inline const char *xrt_to_cstr(XrtValue v, char *buf, size_t bufsz) {
     }
 }
 
+/* =========================================================================
+ * Truthiness (matches VM semantics: null, false, 0, 0.0 are falsy)
+ * ========================================================================= */
+
+static inline int xrt_truthy(XrtValue v) {
+    switch (v.tag) {
+        case XRT_TAG_NULL:  return 0;
+        case XRT_TAG_BOOL:  return v.i != 0;
+        case XRT_TAG_I64:   return v.i != 0;
+        case XRT_TAG_F64:   return v.f != 0.0;
+        default:            return 1; // strings, ptrs, arrays, etc.
+    }
+}
+
 // xrt_str_alloc/xrt_str_concat: defined in xrt_arc.h
 static inline XrtValue xrt_str_alloc(size_t len);
 static inline XrtValue xrt_str_concat(const char *sa, const char *sb);

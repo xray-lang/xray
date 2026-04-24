@@ -1364,6 +1364,10 @@ void xr_coro_wake_waiter(XrayIsolate *X, XrCoroutine *coro) {
             }
         }
 
+        /* Phase 2 (CORO-10): protect scope child list with spinlock.
+         * Multiple children can complete on different workers concurrently. */
+        while (atomic_exchange_explicit(&scope->child_lock, true, memory_order_acquire)) {}
+
         /* Remove this coro from scope's child list BEFORE sibling cancel.
          * Critical: coro pool recycle can reuse memory, causing list corruption
          * if a completed coro remains in the list. */
@@ -1396,6 +1400,8 @@ void xr_coro_wake_waiter(XrayIsolate *X, XrCoroutine *coro) {
                 }
             }
         }
+
+        atomic_store_explicit(&scope->child_lock, false, memory_order_release);
 
         atomic_fetch_sub(&scope->count, 1);
         coro->parent_scope = NULL;

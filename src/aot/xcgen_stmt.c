@@ -133,9 +133,11 @@ void xcg_emit_terminator(XcgenBuf *b, XirFunc *func, XirBlock *blk,
             bool br_tagged = (br_type == XR_REP_STR || br_type == XR_REP_PTR || br_type == XR_REP_TAGGED);
             xcgen_buf_puts(b, "    if (");
             if (br_tagged) {
-                // XrtValue → truthy: non-null pointer or non-zero int
+                // XrtValue → truthy: matches VM semantics
+                // (null, false, 0, 0.0 are falsy; everything else is truthy)
+                xcgen_buf_puts(b, "xrt_truthy(");
                 xcg_emit_ref(b, func, blk->jmp.arg);
-                xcgen_buf_puts(b, ".tag != XRT_TAG_NULL");
+                xcgen_buf_puts(b, ")");
             } else {
                 xcg_emit_ref(b, func, blk->jmp.arg);
             }
