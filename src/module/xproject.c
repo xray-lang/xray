@@ -112,6 +112,8 @@ XrProject* xr_project_load(XrayIsolate *isolate, const char *project_root) {
         project->main = get_string_from_map(isolate, section_map, "main");
         if (project->is_package) {
             project->version = get_string_from_map(isolate, section_map, "version");
+            project->description = get_string_from_map(isolate, section_map, "description");
+            project->license = get_string_from_map(isolate, section_map, "license");
         }
     }
 
@@ -187,6 +189,8 @@ void xr_project_free(XrProject *project) {
     xr_free(project->name);
     xr_free(project->main);
     xr_free(project->version);
+    xr_free(project->description);
+    xr_free(project->license);
 
     if (project->dependencies) {
         // Free all dependency entries by iterating over hashmap entries

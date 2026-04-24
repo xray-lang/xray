@@ -79,7 +79,15 @@ XR_FUNC bool xr_pkg_client_install(const char *owner, const char *name,
 
 /* ========== Publish API ========== */
 
-XR_FUNC bool xr_pkg_client_publish(const char *tarball_path, const char *auth_token);
+typedef struct XrPkgPublishInfo {
+    const char *name;        // e.g. "xray/sqlite"
+    const char *version;     // e.g. "1.0.0"
+    const char *description; // optional
+    const char *license;     // optional
+} XrPkgPublishInfo;
+
+XR_FUNC bool xr_pkg_client_publish(const char *tarball_path, const char *auth_token,
+                                    const XrPkgPublishInfo *info);
 
 /* ========== Auth API ========== */
 
