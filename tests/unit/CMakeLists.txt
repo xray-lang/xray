@@ -273,6 +273,7 @@ if(XR_BUILD_DAP)
     add_executable(test_dap_transport
         dap/test_dap_transport.c
         ${CMAKE_SOURCE_DIR}/src/app/dap/xdap_transport.c
+        ${CMAKE_SOURCE_DIR}/src/base/xframing.c
     )
     target_include_directories(test_dap_transport PRIVATE
         ${CMAKE_SOURCE_DIR}/src/app/dap

@@ -14,8 +14,7 @@
  */
 
 #include "xml.h"
-#include "xml_node.h"
-#include "xml_parser.h"
+#include "../../src/base/xxml.h"
 #include "../common.h"
 #include "../../src/runtime/xisolate_internal.h"
 #include "../../src/runtime/object/xarray.h"
@@ -72,23 +71,23 @@ static XmlKeys* xml_keys_get(XrayIsolate *X) {
 
 // ========== Helper functions ==========
 
-static void extract_config(XrayIsolate *X, XrValue config_val, XmlParseConfig *config) {
-    xml_parse_config_init(config);
-    if (xr_value_is_json(config_val)) {
-        XrJson *json = xr_value_to_json(config_val);
-        xml_config_from_json(X, config, json);
-    }
+static void extract_config(XrayIsolate *X, XrValue config_val, XrXmlParseConfig *config) {
+    xr_xml_parse_config_init(config);
+    if (!xr_value_is_json(config_val)) return;
+    XrJson *json = xr_value_to_json(config_val);
+    xrs_cfg_get_bool(X, json, "preserveWhitespace", &config->preserve_whitespace);
+    xrs_cfg_get_bool(X, json, "preserveComments",   &config->preserve_comments);
+    xrs_cfg_get_bool(X, json, "preserveCData",      &config->preserve_cdata);
+    xrs_cfg_get_bool(X, json, "validateEntities",   &config->validate_entities);
 }
 
-static void extract_write_config(XrayIsolate *X, XrValue config_val, XmlWriteConfig *config) {
-    xml_write_config_init(config);
+static void extract_write_config(XrayIsolate *X, XrValue config_val, XrXmlWriteConfig *config) {
+    xr_xml_write_config_init(config);
     if (!xr_value_is_json(config_val)) return;
     XrJson *json = xr_value_to_json(config_val);
 
     xrs_cfg_get_int (X, json, "indent",      &config->indent);
     xrs_cfg_get_bool(X, json, "declaration", &config->declaration);
-    // Fixed-buffer copy keeps config valid after caller's XrString is
-    // reclaimed by GC.
     xrs_cfg_get_fixed_str(X, json, "encoding",
                           config->encoding, sizeof(config->encoding));
 }
@@ -100,47 +99,40 @@ static void extract_write_config(XrayIsolate *X, XrValue config_val, XmlWriteCon
 
 #define NODE_TO_MAP_MAX_DEPTH XR_STDLIB_MAX_DEPTH
 
-static XrValue node_to_map_r(XrayIsolate *X, XmlNode *node, XmlKeys *k, int depth) {
+static XrValue node_to_map_r(XrayIsolate *X, XrXmlNode *node, XmlKeys *k, int depth) {
     if (!node || depth > NODE_TO_MAP_MAX_DEPTH) return xr_null();
 
     XrMap *map = xr_map_new(xr_current_coro(X));
 
     const char *type_str = "element";
     switch (node->type) {
-        case XML_NODE_ELEMENT:  type_str = "element"; break;
-        case XML_NODE_TEXT:     type_str = "text"; break;
-        case XML_NODE_COMMENT:  type_str = "comment"; break;
-        case XML_NODE_CDATA:    type_str = "cdata"; break;
-        case XML_NODE_DOCUMENT: type_str = "document"; break;
-        case XML_NODE_PI:       type_str = "pi"; break;
+        case XR_XML_ELEMENT:  type_str = "element"; break;
+        case XR_XML_TEXT:     type_str = "text"; break;
+        case XR_XML_COMMENT:  type_str = "comment"; break;
+        case XR_XML_CDATA:    type_str = "cdata"; break;
+        case XR_XML_DOCUMENT: type_str = "document"; break;
+        case XR_XML_PI:       type_str = "pi"; break;
         default: break;
     }
     xr_map_set(map, k->type,
                xr_string_value(xr_string_intern(X, type_str, strlen(type_str), 0)));
 
-    if (node->type == XML_NODE_ELEMENT) {
+    if (node->type == XR_XML_ELEMENT) {
         if (node->tag) {
             xr_map_set(map, k->tag,
                        xr_string_value(xr_string_intern(X, node->tag, node->tag_len, 0)));
         }
 
-        // Build attrs map from XmlAttr array. In parallel, split out
-        // `xmlns` / `xmlns:prefix` declarations into a dedicated
-        // `namespaces` Map so script callers have a usable namespace
-        // surface (prefix -> URI). Namespace attrs are retained in the
-        // generic `attrs` map too so existing scripts that read them
-        // raw keep working — doc §2.4.5 requested at least basic
-        // namespace recording.
+        // Build attrs map from XrXmlAttr array. Split out xmlns
+        // declarations into a dedicated namespaces Map.
         XrMap *attr_map = xr_map_new(xr_current_coro(X));
-        XrMap *ns_map = NULL;  // lazy; most elements declare no xmlns
+        XrMap *ns_map = NULL;
         for (int i = 0; i < node->attr_count; i++) {
-            XmlAttr *a = &node->attrs[i];
+            XrXmlAttr *a = &node->attrs[i];
             XrValue akey = xr_string_value(xr_string_intern(X, a->name, a->name_len, 0));
             XrValue aval = xr_string_value(xr_string_intern(X, a->value, a->value_len, 0));
             xr_map_set(attr_map, akey, aval);
 
-            // Detect xmlns declarations. `xmlns="uri"` goes under key "".
-            // `xmlns:prefix="uri"` goes under "prefix".
             if (a->name_len >= 5 && memcmp(a->name, "xmlns", 5) == 0
                 && (a->name_len == 5 || a->name[5] == ':')) {
                 if (!ns_map) {
@@ -158,7 +150,7 @@ static XrValue node_to_map_r(XrayIsolate *X, XmlNode *node, XmlKeys *k, int dept
         }
 
         XrArray *children = xr_array_new(xr_current_coro(X));
-        for (XmlNode *child = node->first_child; child; child = child->next_sibling) {
+        for (XrXmlNode *child = node->first_child; child; child = child->next_sibling) {
             xr_array_push(children, node_to_map_r(X, child, k, depth + 1));
         }
         xr_map_set(map, k->children, xr_value_from_array(children));
@@ -172,7 +164,7 @@ static XrValue node_to_map_r(XrayIsolate *X, XmlNode *node, XmlKeys *k, int dept
     return xr_value_from_map(map);
 }
 
-static XrValue node_to_map(XrayIsolate *X, XmlNode *node) {
+static XrValue node_to_map(XrayIsolate *X, XrXmlNode *node) {
     XmlKeys *k = xml_keys_get(X);
     return node_to_map_r(X, node, k, 0);
 }
@@ -366,20 +358,17 @@ static XrValue xml_parse_fn(XrayIsolate *X, XrValue *args, int argc) {
 
     XrString *str = XR_TO_STRING(args[0]);
 
-    XmlParseConfig config;
+    XrXmlParseConfig config;
     if (argc >= 2) extract_config(X, args[1], &config);
-    else xml_parse_config_init(&config);
+    else xr_xml_parse_config_init(&config);
 
-    XmlParser parser;
-    xml_parser_init(&parser, X, str->data, str->length, &config);
-    XmlParseResult result = xml_parser_parse(&parser);
-    xml_parser_cleanup(&parser);
+    XrXmlParseResult result = xr_xml_parse(str->data, str->length, &config);
 
     XrValue ret = xr_null();
     if (result.doc && result.doc->root) {
         ret = node_to_map(X, result.doc->root);
     }
-    xml_document_free(result.doc);
+    xr_xml_free_result(&result);
     return ret;
 }
 
@@ -395,13 +384,11 @@ static XrValue xml_parse_detailed(XrayIsolate *X, XrValue *args, int argc) {
 
     XrString *str = XR_TO_STRING(args[0]);
 
-    XmlParseConfig config;
+    XrXmlParseConfig config;
     if (argc >= 2) extract_config(X, args[1], &config);
-    else xml_parse_config_init(&config);
+    else xr_xml_parse_config_init(&config);
 
-    XmlParser parser;
-    xml_parser_init(&parser, X, str->data, str->length, &config);
-    XmlParseResult result = xml_parser_parse(&parser);
+    XrXmlParseResult result = xr_xml_parse(str->data, str->length, &config);
 
     XrMap *output = xr_map_new(xr_current_coro(X));
     XrValue key_doc = xr_string_value(xr_string_intern(X, "doc", 3, 0));
@@ -411,11 +398,16 @@ static XrValue xml_parse_detailed(XrayIsolate *X, XrValue *args, int argc) {
         xr_map_set(output, key_doc, xr_null());
     }
 
+    // Convert C error array to XrArray of error maps
+    XrArray *err_arr = xr_array_new(xr_current_coro(X));
+    for (int i = 0; i < result.error_count; i++) {
+        XrXmlError *e = &result.errors[i];
+        xrs_error_push(X, err_arr, e->type, e->line, -1, e->column, e->message);
+    }
     XrValue key_errors = xr_string_value(xr_string_intern(X, "errors", 6, 0));
-    xr_map_set(output, key_errors, xr_value_from_array(result.errors));
+    xr_map_set(output, key_errors, xr_value_from_array(err_arr));
 
-    xml_parser_cleanup(&parser);
-    xml_document_free(result.doc);
+    xr_xml_free_result(&result);
 
     return xr_value_from_map(output);
 }
@@ -432,21 +424,18 @@ static XrValue xml_parse_file(XrayIsolate *X, XrValue *args, int argc) {
         return xr_null();
     }
 
-    XmlParseConfig config;
+    XrXmlParseConfig config;
     if (argc >= 2) extract_config(X, args[1], &config);
-    else xml_parse_config_init(&config);
+    else xr_xml_parse_config_init(&config);
 
-    XmlParser parser;
-    xml_parser_init(&parser, X, content, content_len, &config);
-    XmlParseResult result = xml_parser_parse(&parser);
-    xml_parser_cleanup(&parser);
+    XrXmlParseResult result = xr_xml_parse(content, content_len, &config);
     xr_free(content);
 
     XrValue ret = xr_null();
     if (result.doc && result.doc->root) {
         ret = node_to_map(X, result.doc->root);
     }
-    xml_document_free(result.doc);
+    xr_xml_free_result(&result);
     return ret;
 }
 
@@ -457,9 +446,9 @@ static XrValue xml_stringify_fn(XrayIsolate *X, XrValue *args, int argc) {
 
     XrMap *node = XR_TO_MAP(args[0]);
 
-    XmlWriteConfig config;
+    XrXmlWriteConfig config;
     if (argc >= 2) extract_write_config(X, args[1], &config);
-    else xml_write_config_init(&config);
+    else xr_xml_write_config_init(&config);
 
     XmlWriter writer;
     xw_init(&writer, config.indent, 1024);

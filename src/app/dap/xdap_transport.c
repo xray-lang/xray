@@ -9,6 +9,7 @@
  */
 
 #include "xdap_transport.h"
+#include "../../base/xframing.h"
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
@@ -422,24 +423,6 @@ int xdap_transport_poll(XdapTransport *t, int timeout_ms) {
     return xr_poll_wait(&t->poll, events, 4, timeout_ms);
 }
 
-// Parse Content-Length from accumulated header data
-// Returns: content length, or -1 if header not complete
-static int parse_header(XdapTransport *t) {
-    // Look for \r\n\r\n marking end of headers
-    char *end = strstr(t->read_buf, "\r\n\r\n");
-    if (!end) return -1;
-
-    t->header_end = (size_t)(end - t->read_buf) + 4;
-
-    // Find Content-Length header
-    char *cl = strcasestr(t->read_buf, "Content-Length:");
-    if (!cl || cl >= end) return -1;
-
-    cl += strlen("Content-Length:");
-    while (*cl && isspace((unsigned char)*cl)) cl++;
-
-    return atoi(cl);
-}
 
 // Forward decl — drain lives below try_read.
 static bool try_drain_write(XdapTransport *t);
@@ -478,9 +461,16 @@ char *xdap_transport_try_read(XdapTransport *t, size_t *out_len, bool *would_blo
         return NULL;
     }
 
-    // Try to parse header if not already done
+    // Try to parse header via shared framing module
     if (t->pending_content_length < 0) {
-        t->pending_content_length = parse_header(t);
+        XrFrameStatus fs = xr_frame_parse(t->read_buf, t->read_len,
+                                          &t->header_end,
+                                          &t->pending_content_length);
+        if (fs == XR_FRAME_ERROR) {
+            t->connected = false;
+            if (would_block) *would_block = false;
+            return NULL;
+        }
     }
 
     // Check if we have a complete message
@@ -569,8 +559,7 @@ void xdap_transport_write(XdapTransport *t, const char *json, size_t len) {
     if (!try_drain_write(t)) return;
 
     char header[64];
-    int header_len = snprintf(header, sizeof(header),
-                              "Content-Length: %zu\r\n\r\n", len);
+    int header_len = xr_frame_write_header(header, sizeof(header), len);
     if (header_len < 0) return;
 
     size_t add = (size_t)header_len + len;

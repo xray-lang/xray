@@ -63,6 +63,58 @@ char* xr_path_dirname(const char *path) {
     return dir;
 }
 
+char* xr_path_join(const char *dir, const char *name) {
+    if (!dir || !name) return NULL;
+
+    size_t dir_len = strlen(dir);
+    size_t name_len = strlen(name);
+
+    /* Strip trailing slashes from dir */
+    while (dir_len > 0 && dir[dir_len - 1] == '/') {
+        dir_len--;
+    }
+
+    /* Handle empty dir after stripping */
+    if (dir_len == 0) return xr_strdup(name);
+
+    char *result = (char*)xr_malloc(dir_len + 1 + name_len + 1);
+    if (!result) return NULL;
+
+    memcpy(result, dir, dir_len);
+    result[dir_len] = '/';
+    memcpy(result + dir_len + 1, name, name_len);
+    result[dir_len + 1 + name_len] = '\0';
+    return result;
+}
+
+char* xr_path_basename(const char *path) {
+    if (!path || !*path) return xr_strdup(".");
+
+    size_t len = strlen(path);
+
+    /* Strip trailing slashes */
+    while (len > 1 && path[len - 1] == '/') {
+        len--;
+    }
+
+    /* Root "/" */
+    if (len == 1 && path[0] == '/') return xr_strdup("/");
+
+    const char *end = path + len;
+    const char *start = end;
+    while (start > path && *(start - 1) != '/') {
+        start--;
+    }
+
+    size_t blen = (size_t)(end - start);
+    char *result = (char*)xr_malloc(blen + 1);
+    if (!result) return NULL;
+
+    memcpy(result, start, blen);
+    result[blen] = '\0';
+    return result;
+}
+
 char* xr_realpath(const char *path) {
     if (!path) return NULL;
 
