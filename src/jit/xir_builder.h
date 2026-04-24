@@ -52,6 +52,14 @@ typedef struct {
     uint32_t back_edge_pc;      // source of backward jump
 } BuilderLoop;
 
+/* ========== AOT Import Resolution ========== */
+
+typedef struct {
+    const char *module_path;    // import path (e.g. "./math")
+    const char *export_name;    // export name (e.g. "add")
+    int         shared_index;   // absolute shared index in xrt_shared[]
+} XirAotImportEntry;
+
 /* ========== Builder State ========== */
 
 typedef struct {
@@ -131,6 +139,11 @@ typedef struct {
     // AOT mode: generate closure/upvalue XIR instead of skipping
     bool       aot_mode;
 
+    // AOT import resolution: cross-module export map (non-owning)
+    XirAotImportEntry *aot_import_map;
+    int                aot_import_count;
+    const char        *import_modules[256]; // slot → module path (NULL = not import reg)
+
     // Conservative mode: skip type speculation guards (shape/klass guards).
     // Emits generic CALL_C paths to avoid deopt on type-unstable functions.
     // Set when deopt_count >= 5 (adaptive recompile after frequent deopts).
@@ -165,5 +178,13 @@ XR_FUNC XirFunc *xir_build_from_proto_jit(XrProto *proto,
 XR_FUNC XirFunc *xir_build_from_proto_aot(XrProto *proto,
                                    XrProto **shared_protos, int nshared,
                                    struct XrayIsolate *isolate);
+
+// Build XIR in AOT mode with cross-module import resolution map.
+// import_map entries allow OP_IMPORT+OP_GETPROP to resolve to GETSHARED.
+XR_FUNC XirFunc *xir_build_from_proto_aot_ex(XrProto *proto,
+                                   XrProto **shared_protos, int nshared,
+                                   struct XrayIsolate *isolate,
+                                   XirAotImportEntry *import_map,
+                                   int import_count);
 
 #endif // XIR_BUILDER_H

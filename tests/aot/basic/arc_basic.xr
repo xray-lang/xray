@@ -1,0 +1,33 @@
+// AOT test: ARC lifecycle with class objects and control flow
+class Pair {
+    a: int
+    b: int
+    constructor(a: int, b: int) {
+        this.a = a
+        this.b = b
+    }
+}
+
+fn make_pair(x: int): Pair {
+    return Pair(x, x * 2)
+}
+
+fn sum_pair(p: Pair): int {
+    return p.a + p.b
+}
+
+// Create and pass class objects
+let p1 = make_pair(5)
+print(sum_pair(p1))      // 15
+
+let p2 = make_pair(10)
+print(sum_pair(p2))      // 30
+
+// Multiple objects in expressions
+print(sum_pair(p1) + sum_pair(p2))  // 45
+
+// Conditional object creation
+let x = 7
+let p3 = make_pair(x)
+print(p3.a)              // 7
+print(p3.b)              // 14

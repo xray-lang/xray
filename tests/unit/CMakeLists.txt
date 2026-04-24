@@ -195,12 +195,12 @@ if(XR_BUILD_LSP)
     add_executable(test_lsp_document
         lsp/test_lsp_document.c
         ${LSP_SOURCES}
-        ${CMAKE_SOURCE_DIR}/src/app/cli/xfmt.c
     )
     target_include_directories(test_lsp_document PRIVATE
         ${XRAY_COMMON_INCLUDES}
         ${CMAKE_SOURCE_DIR}/src/app/lsp
         ${CMAKE_SOURCE_DIR}/src/app/cli
+        ${CMAKE_SOURCE_DIR}/src/frontend/format
     )
     target_link_libraries(test_lsp_document PRIVATE xray_core)
     add_test(NAME test_lsp_document COMMAND test_lsp_document)
@@ -241,3 +241,35 @@ if(XR_BUILD_DAP)
     )
     add_test(NAME test_dap_transport COMMAND test_dap_transport)
 endif()
+
+# ============================================================================
+# cli/ — CLI spec, parser, dispatch, help
+# ============================================================================
+
+add_executable(test_cli_fs
+    cli/test_cli_fs.c
+    ${CMAKE_SOURCE_DIR}/src/app/cli/xcli_fs.c
+    ${CMAKE_SOURCE_DIR}/src/app/cli/xcli_output.c
+)
+target_include_directories(test_cli_fs PRIVATE
+    ${XRAY_COMMON_INCLUDES}
+    ${CMAKE_SOURCE_DIR}/src/app/cli
+)
+target_link_libraries(test_cli_fs PRIVATE xray_core)
+add_test(NAME test_cli_fs COMMAND test_cli_fs)
+
+add_executable(test_cli_spec
+    cli/test_cli_spec.c
+    ${CMAKE_SOURCE_DIR}/src/app/cli/xcli_spec.c
+    ${CMAKE_SOURCE_DIR}/src/app/cli/xcli_parser.c
+    ${CMAKE_SOURCE_DIR}/src/app/cli/xcli_help.c
+    ${CMAKE_SOURCE_DIR}/src/app/cli/xcli_diag.c
+    ${CMAKE_SOURCE_DIR}/src/app/cli/xcli_fs.c
+    ${CMAKE_SOURCE_DIR}/src/app/cli/xcli_output.c
+)
+target_include_directories(test_cli_spec PRIVATE
+    ${XRAY_COMMON_INCLUDES}
+    ${CMAKE_SOURCE_DIR}/src/app/cli
+)
+target_link_libraries(test_cli_spec PRIVATE xray_core)
+add_test(NAME test_cli_spec COMMAND test_cli_spec)

@@ -65,9 +65,6 @@ XRAY_API void* xray_alloc(XrayIsolate *X, size_t size);
 // Reallocate memory (for non-GC-managed memory only)
 XRAY_API void* xray_realloc(XrayIsolate *X, void *ptr, size_t old_size, size_t new_size);
 
-// Mark memory for GC collection (no-op, GC handles actual freeing)
-XRAY_API void xray_free(XrayIsolate *X, void *ptr, size_t size);
-
 /* ========== GC Control ========== */
 
 // Trigger garbage collection

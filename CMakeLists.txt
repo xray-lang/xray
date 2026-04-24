@@ -297,6 +297,7 @@ set(XRAY_COMMON_INCLUDES
     ${CMAKE_CURRENT_SOURCE_DIR}/src/frontend/parser
     ${CMAKE_CURRENT_SOURCE_DIR}/src/frontend/codegen
     ${CMAKE_CURRENT_SOURCE_DIR}/src/frontend/analyzer
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/frontend/format
     ${CMAKE_CURRENT_SOURCE_DIR}/src/vm
     ${CMAKE_CURRENT_SOURCE_DIR}/src/jit
     ${CMAKE_CURRENT_SOURCE_DIR}/src/module
@@ -330,6 +331,7 @@ file(GLOB FRONTEND_LEXER_SRC "src/frontend/lexer/*.c")
 file(GLOB FRONTEND_PARSER_SRC "src/frontend/parser/*.c")
 file(GLOB FRONTEND_CODEGEN_SRC "src/frontend/codegen/*.c")
 file(GLOB FRONTEND_ANALYZER_SRC "src/frontend/analyzer/*.c")
+file(GLOB FRONTEND_FORMAT_SRC "src/frontend/format/*.c")
 file(GLOB VM_SRC "src/vm/*.c")
 file(GLOB JIT_SRC "src/jit/*.c")
 file(GLOB MODULE_SRC "src/module/*.c")
@@ -425,6 +427,7 @@ set(CORE_ALL_SOURCES
     ${FRONTEND_PARSER_SRC}
     ${FRONTEND_CODEGEN_SRC}
     ${FRONTEND_ANALYZER_SRC}
+    ${FRONTEND_FORMAT_SRC}
     ${VM_SRC}
     ${JIT_SRC}
     ${MODULE_SRC}

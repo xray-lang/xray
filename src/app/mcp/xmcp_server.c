@@ -21,14 +21,14 @@
 #include "../../base/xmalloc.h"
 #include "../../base/xchecks.h"
 #include "../lsp/xlsp_json.h"
-#include "../cli/xcli_utils.h"
+#include "../cli/xcli_isolate.h"
+#include "../cli/xcli_spec.h"
+#include "../cli/xcli_diag.h"
 #include "xray_isolate.h"
 #include <stdio.h>
-#include <stdlib.h>
 #include <string.h>
 #include <stdarg.h>
 #include <errno.h>
-#include <getopt.h>
 #include <time.h>
 
 #ifdef _WIN32
@@ -312,7 +312,7 @@ XmcpServer *xmcp_server_new(void) {
     setvbuf(stdout, NULL, _IONBF, 0);
 
     /* Create parser isolate for xray_check */
-    s->isolate = cli_create_isolate();
+    s->isolate = xr_cli_isolate_new(XR_CLI_ISOLATE_ANALYZE);
     if (!s->isolate) {
         mcp_log(s, 0, "failed to create isolate");
         xr_free(s->read_buf);
@@ -370,73 +370,38 @@ int xmcp_server_run(XmcpServer *s) {
  * CLI entry: xray mcp-server [options]
  * -------------------------------------------------------------------------- */
 
-static struct option mcp_long_options[] = {
-    {"log-level", required_argument, 0, 'l'},
-    {"log-file",  required_argument, 0, 'f'},
-    {"help",      no_argument,       0, 'h'},
-    {0, 0, 0, 0}
-};
-
-static void print_mcp_help(void) {
-    fprintf(stderr, "Usage: xray mcp-server [options]\n");
-    fprintf(stderr, "\n");
-    fprintf(stderr, "Start the MCP (Model Context Protocol) server for AI assistants.\n");
-    fprintf(stderr, "Communicates via JSON-RPC over stdio.\n");
-    fprintf(stderr, "\n");
-    fprintf(stderr, "Options:\n");
-    fprintf(stderr, "  --log-level <level>  Log level: error, warn, info, debug (default: info)\n");
-    fprintf(stderr, "  --log-file <path>    Log to file (in addition to stderr)\n");
-    fprintf(stderr, "  -h, --help           Show this help\n");
-    fprintf(stderr, "\n");
-    fprintf(stderr, "Configuration (in IDE):\n");
-    fprintf(stderr, "  {\n");
-    fprintf(stderr, "    \"mcpServers\": {\n");
-    fprintf(stderr, "      \"xray\": { \"command\": \"xray\", \"args\": [\"mcp-server\"] }\n");
-    fprintf(stderr, "    }\n");
-    fprintf(stderr, "  }\n");
+/* Parse log level string to integer */
+static int parse_log_level(const char *level) {
+    if (!level) return 2; /* info */
+    if (strcmp(level, "error") == 0) return 0;
+    if (strcmp(level, "warn") == 0)  return 1;
+    if (strcmp(level, "info") == 0)  return 2;
+    if (strcmp(level, "debug") == 0) return 3;
+    return 2; /* default: info */
 }
 
-int cmd_mcp_server(int argc, char **argv) {
-    int log_level = 2;
-    const char *log_file_path = NULL;
+XR_FUNC int cmd_mcp_server(const XrCliInvocation *inv) {
+    XR_DCHECK(inv != NULL, "inv is NULL");
 
-    optind = 1;
-    int opt;
-    while ((opt = getopt_long(argc, argv, "l:f:h", mcp_long_options, NULL)) != -1) {
-        switch (opt) {
-        case 'l':
-            if (strcmp(optarg, "error") == 0)      log_level = 0;
-            else if (strcmp(optarg, "warn") == 0)   log_level = 1;
-            else if (strcmp(optarg, "info") == 0)   log_level = 2;
-            else if (strcmp(optarg, "debug") == 0)  log_level = 3;
-            break;
-        case 'f':
-            log_file_path = optarg;
-            break;
-        case 'h':
-            print_mcp_help();
-            return 0;
-        default:
-            print_mcp_help();
-            return 1;
-        }
-    }
+    const char *level_str     = xr_cli_opt_string(&inv->options, "log-level", NULL);
+    const char *log_file_path = xr_cli_opt_string(&inv->options, "log-file", NULL);
+    int log_level = parse_log_level(level_str);
 
     XmcpServer *s = xmcp_server_new();
     if (!s) {
-        fprintf(stderr, "Error: failed to create MCP server\n");
-        return 1;
+        xr_cli_error("mcp-server", "failed to create MCP server");
+        return XR_CLI_EXIT_INTERNAL;
     }
     s->log_level = log_level;
 
     if (log_file_path) {
         s->log_file = fopen(log_file_path, "a");
         if (!s->log_file) {
-            fprintf(stderr, "Warning: cannot open log file '%s'\n", log_file_path);
+            xr_cli_warn("mcp-server", "cannot open log file '%s'", log_file_path);
         }
     }
 
     int rc = xmcp_server_run(s);
     xmcp_server_free(s);
-    return rc;
+    return (rc != 0) ? XR_CLI_EXIT_FAIL : XR_CLI_EXIT_OK;
 }

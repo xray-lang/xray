@@ -1,0 +1,26 @@
+// AOT module: shape library with exported class and functions
+export class Rect {
+    w: int
+    h: int
+
+    constructor(w: int, h: int) {
+        this.w = w
+        this.h = h
+    }
+
+    area(): int {
+        return this.w * this.h
+    }
+
+    perimeter(): int {
+        return 2 * (this.w + this.h)
+    }
+}
+
+export fn add(a: int, b: int): int {
+    return a + b
+}
+
+export fn mul(a: int, b: int): int {
+    return a * b
+}

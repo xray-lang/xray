@@ -14,20 +14,21 @@
  */
 
 #include "xcli.h"
-#include "xcli_utils.h"
+#include "xcli_spec.h"
+#include "xcli_fs.h"
+#include "xcli_isolate.h"
+#include "xcli_output.h"
 #include "xray.h"
 #include "xray_isolate.h"
 #include "../../api/xrepl.h"
 #include "../../runtime/xisolate_api.h"
+#include "../../base/xmalloc.h"
+#include "../../base/xchecks.h"
 #include <stdio.h>
-#include <stdlib.h>
 #include <string.h>
 #include <stdbool.h>
 #include <unistd.h>
 #include <signal.h>
-#include <getopt.h>
-
-#include "../../base/xmalloc.h"
 
 #ifdef HAS_READLINE
 #include <readline/readline.h>
@@ -79,13 +80,12 @@ static char* get_history_file(void) {
     return path;
 }
 
-// Use cli_get_time_ms from cli_utils.h (monotonic clock)
-#define get_time_ms() cli_get_time_ms()
+#define get_time_ms() xr_cli_get_time_ms()
 
 // Print colored text
 static void print_colored(ReplState *state, const char *color, const char *text) {
     if (state->use_color) {
-        printf("%s%s%s", color, text, CLR_RESET);
+        printf("%s%s%s", color, text, XR_CLR_RESET);
     } else {
         printf("%s", text);
     }
@@ -96,13 +96,13 @@ static void print_welcome(ReplState *state) {
     printf("\n");
 
     if (state->use_color) {
-        printf("  %s----------------------------------------%s\n", CLR_BLUE, CLR_RESET);
+        printf("  %s----------------------------------------%s\n", XR_CLR_BLUE, XR_CLR_RESET);
         printf("  %s%s* Xray%s %sv%d.%d.%d%s\n",
-               CLR_BOLD, CLR_CYAN, CLR_RESET,
-               CLR_GRAY, XRAY_VERSION_MAJOR, XRAY_VERSION_MINOR, XRAY_VERSION_PATCH, CLR_RESET);
-        printf("  %s----------------------------------------%s\n", CLR_BLUE, CLR_RESET);
+               XR_CLR_BOLD, XR_CLR_CYAN, XR_CLR_RESET,
+               XR_CLR_GRAY, XRAY_VERSION_MAJOR, XRAY_VERSION_MINOR, XRAY_VERSION_PATCH, XR_CLR_RESET);
+        printf("  %s----------------------------------------%s\n", XR_CLR_BLUE, XR_CLR_RESET);
         printf("  %sType .help for commands, .exit to quit%s\n",
-               CLR_GRAY, CLR_RESET);
+               XR_CLR_GRAY, XR_CLR_RESET);
     } else {
         printf("  ----------------------------------------\n");
         printf("  * Xray v%d.%d.%d\n", XRAY_VERSION_MAJOR, XRAY_VERSION_MINOR, XRAY_VERSION_PATCH);
@@ -116,7 +116,7 @@ static void print_welcome(ReplState *state) {
 // Print brief help
 static void print_help_brief(ReplState *state) {
     printf("\n");
-    print_colored(state, CLR_BOLD, "REPL Commands:\n");
+    print_colored(state, XR_CLR_BOLD, "REPL Commands:\n");
     printf("  .help            Show this help\n");
     printf("  .exit, .quit     Exit REPL\n");
     printf("  .clear           Clear screen\n");
@@ -127,30 +127,30 @@ static void print_help_brief(ReplState *state) {
     printf("  .history         Show command history\n");
 #endif
     printf("\n");
-    print_colored(state, CLR_BOLD, "Shortcuts:\n");
+    print_colored(state, XR_CLR_BOLD, "Shortcuts:\n");
     printf("  Ctrl+C  Cancel    Ctrl+D  Exit    Ctrl+L  Clear\n");
     printf("\n");
-    print_colored(state, CLR_GRAY, "Type .help <topic> for details: ");
+    print_colored(state, XR_CLR_GRAY, "Type .help <topic> for details: ");
     printf("syntax, types, coro, operators\n\n");
 }
 
 // Print syntax help
 static void print_help_syntax(ReplState *state) {
     printf("\n");
-    print_colored(state, CLR_BOLD, "Basic Syntax:\n");
+    print_colored(state, XR_CLR_BOLD, "Basic Syntax:\n");
     printf("  let x = 1              // mutable variable\n");
     printf("  const PI = 3.14        // constant\n");
     printf("  fn add(a, b) { a + b } // function\n");
     printf("  (x) => x * 2           // arrow function\n");
     printf("\n");
-    print_colored(state, CLR_BOLD, "Control Flow:\n");
+    print_colored(state, XR_CLR_BOLD, "Control Flow:\n");
     printf("  if (x > 0) { } else { }\n");
     printf("  for (let i = 0; i < 10; i++) { }\n");
     printf("  for (item in array) { }\n");
     printf("  while (cond) { }\n");
     printf("  match x { 1 => \"one\", _ => \"other\" }\n");
     printf("\n");
-    print_colored(state, CLR_BOLD, "Class:\n");
+    print_colored(state, XR_CLR_BOLD, "Class:\n");
     printf("  class Point {\n");
     printf("    x = 0; y = 0\n");
     printf("    constructor(x, y) { this.x = x; this.y = y }\n");
@@ -162,21 +162,21 @@ static void print_help_syntax(ReplState *state) {
 // Print types help
 static void print_help_types(ReplState *state) {
     printf("\n");
-    print_colored(state, CLR_BOLD, "Basic Types:\n");
+    print_colored(state, XR_CLR_BOLD, "Basic Types:\n");
     printf("  int, float, string, bool, null\n");
     printf("\n");
-    print_colored(state, CLR_BOLD, "Container Types:\n");
+    print_colored(state, XR_CLR_BOLD, "Container Types:\n");
     printf("  Array       [1, 2, 3]\n");
     printf("  Map         {\"a\" => 1, \"b\" => 2}\n");
     printf("  Set         #[1, 2, 3]\n");
     printf("  Bytes       Bytes(1024)\n");
     printf("\n");
-    print_colored(state, CLR_BOLD, "Type Annotations:\n");
+    print_colored(state, XR_CLR_BOLD, "Type Annotations:\n");
     printf("  let x: int = 1\n");
     printf("  let arr: Array<int> = [1, 2]\n");
     printf("  fn add(a: int, b: int): int { a + b }\n");
     printf("\n");
-    print_colored(state, CLR_BOLD, "Type Conversion:\n");
+    print_colored(state, XR_CLR_BOLD, "Type Conversion:\n");
     printf("  int(3.14)      // 3\n");
     printf("  float(\"3.14\")  // 3.14\n");
     printf("  string(123)    // \"123\"\n");
@@ -187,26 +187,26 @@ static void print_help_types(ReplState *state) {
 // Print coroutine help
 static void print_help_coro(ReplState *state) {
     printf("\n");
-    print_colored(state, CLR_BOLD, "Coroutine Basics:\n");
+    print_colored(state, XR_CLR_BOLD, "Coroutine Basics:\n");
     printf("  let t = go func()      // spawn coroutine\n");
     printf("  await t                // wait for completion\n");
     printf("  yield                  // yield execution\n");
     printf("\n");
-    print_colored(state, CLR_BOLD, "Channel:\n");
+    print_colored(state, XR_CLR_BOLD, "Channel:\n");
     printf("  const ch = Channel()   // unbuffered\n");
     printf("  const ch = Channel(10) // buffered\n");
     printf("  ch.send(value)         // blocking send\n");
     printf("  let v = ch.recv()      // blocking receive\n");
     printf("  ch.close()             // close channel\n");
     printf("\n");
-    print_colored(state, CLR_BOLD, "Select:\n");
+    print_colored(state, XR_CLR_BOLD, "Select:\n");
     printf("  select {\n");
     printf("    msg from ch1 => { print(msg) }\n");
     printf("    ch2.send(v)  => { print(\"sent\") }\n");
     printf("    after 1000   => { print(\"timeout\") }\n");
     printf("  }\n");
     printf("\n");
-    print_colored(state, CLR_BOLD, "Shared Variables:\n");
+    print_colored(state, XR_CLR_BOLD, "Shared Variables:\n");
     printf("  shared const CFG = {...}  // read-only sharing\n");
     printf("  shared let data = [...]   // move semantics\n");
     printf("\n");
@@ -215,20 +215,20 @@ static void print_help_coro(ReplState *state) {
 // Print operators help
 static void print_help_operators(ReplState *state) {
     printf("\n");
-    print_colored(state, CLR_BOLD, "Arithmetic:\n");
+    print_colored(state, XR_CLR_BOLD, "Arithmetic:\n");
     printf("  +  -  *  /  %%  **    // ** is power\n");
     printf("\n");
-    print_colored(state, CLR_BOLD, "Comparison:\n");
+    print_colored(state, XR_CLR_BOLD, "Comparison:\n");
     printf("  ==  !=  <  >  <=  >=  // value comparison\n");
     printf("  ===  !==              // reference comparison\n");
     printf("\n");
-    print_colored(state, CLR_BOLD, "Logical:\n");
+    print_colored(state, XR_CLR_BOLD, "Logical:\n");
     printf("  &&  ||  !             // and, or, not\n");
     printf("\n");
-    print_colored(state, CLR_BOLD, "Bitwise:\n");
+    print_colored(state, XR_CLR_BOLD, "Bitwise:\n");
     printf("  &  |  ^  ~  <<  >>    // bit operations\n");
     printf("\n");
-    print_colored(state, CLR_BOLD, "Special:\n");
+    print_colored(state, XR_CLR_BOLD, "Special:\n");
     printf("  a ?? b                // null coalescing\n");
     printf("  obj?.prop             // optional chaining\n");
     printf("  a ? b : c             // ternary\n");
@@ -256,7 +256,7 @@ static void print_help(ReplState *state, const char *topic) {
     } else if (strcmp(topic, "operators") == 0 || strcmp(topic, "ops") == 0) {
         print_help_operators(state);
     } else {
-        print_colored(state, CLR_RED, "Unknown topic: ");
+        print_colored(state, XR_CLR_RED, "Unknown topic: ");
         printf("%s\n", topic);
         printf("Available topics: syntax, types, coro, operators\n\n");
     }
@@ -333,7 +333,7 @@ static void execute_code(ReplState *state, const char *code) {
 // Handle .load command (uses incremental compilation path)
 static void cmd_load(ReplState *state, const char *filename) {
     if (!filename || strlen(filename) == 0) {
-        print_colored(state, CLR_RED, "Error: please specify filename\n");
+        print_colored(state, XR_CLR_RED, "Error: please specify filename\n");
         printf("Usage: .load <filename>\n");
         return;
     }
@@ -341,9 +341,9 @@ static void cmd_load(ReplState *state, const char *filename) {
     // Skip leading spaces
     while (*filename == ' ') filename++;
 
-    char *source = cli_read_file(filename);
+    char *source = xr_cli_read_file(filename);
     if (!source) {
-        print_colored(state, CLR_RED, "Error: ");
+        print_colored(state, XR_CLR_RED, "Error: ");
         printf("cannot open file '%s'\n", filename);
         return;
     }
@@ -356,7 +356,7 @@ static void cmd_load(ReplState *state, const char *filename) {
 // Handle .time command (uses incremental compilation path)
 static void cmd_time(ReplState *state, const char *expr) {
     if (!expr || strlen(expr) == 0) {
-        print_colored(state, CLR_RED, "Error: please specify expression\n");
+        print_colored(state, XR_CLR_RED, "Error: please specify expression\n");
         printf("Usage: .time <expression>\n");
         return;
     }
@@ -369,9 +369,9 @@ static void cmd_time(ReplState *state, const char *expr) {
     double end = get_time_ms();
 
     printf("%s%.3f ms%s\n",
-           state->use_color ? CLR_GRAY : "",
+           state->use_color ? XR_CLR_GRAY : "",
            end - start,
-           state->use_color ? CLR_RESET : "");
+           state->use_color ? XR_CLR_RESET : "");
 }
 
 // Handle built-in commands
@@ -404,13 +404,13 @@ static bool handle_command(ReplState *state, const char *input) {
         repl_free_protos(state);
         xr_multicore_destroy(state->isolate);
         xray_isolate_delete(state->isolate);
-        state->isolate = cli_create_isolate();
+        state->isolate = xr_cli_isolate_new(XR_CLI_ISOLATE_REPL);
         if (!state->isolate) {
             fprintf(stderr, "Error: failed to create isolate\n");
             return true;
         }
         xr_multicore_init(state->isolate, 0);
-        print_colored(state, CLR_GREEN, "Environment reset\n");
+        print_colored(state, XR_CLR_GREEN, "Environment reset\n");
         return true;
     }
 
@@ -435,9 +435,9 @@ static bool handle_command(ReplState *state, const char *input) {
             HIST_ENTRY *entry = history_get(i);
             if (entry) {
                 printf("%s%4d%s  %s\n",
-                       state->use_color ? CLR_GRAY : "",
+                       state->use_color ? XR_CLR_GRAY : "",
                        i,
-                       state->use_color ? CLR_RESET : "",
+                       state->use_color ? XR_CLR_RESET : "",
                        entry->line);
             }
         }
@@ -447,7 +447,7 @@ static bool handle_command(ReplState *state, const char *input) {
 
     // Unknown command
     if (input[0] == '.') {
-        print_colored(state, CLR_RED, "Unknown command: ");
+        print_colored(state, XR_CLR_RED, "Unknown command: ");
         printf("%s\n", input);
         printf("Type .help for available commands\n");
         return true;
@@ -465,14 +465,14 @@ static const char* get_prompt(ReplState *state, bool is_continuation) {
     if (is_continuation) {
         if (state->use_color) {
             snprintf(prompt, sizeof(prompt),
-                     "\001" CLR_GRAY "\002" "....." "\001" CLR_RESET "\002" " ");
+                     "\001" XR_CLR_GRAY "\002" "....." "\001" XR_CLR_RESET "\002" " ");
         } else {
             snprintf(prompt, sizeof(prompt), "..... ");
         }
     } else {
         if (state->use_color) {
             snprintf(prompt, sizeof(prompt),
-                     "\001" CLR_BLUE "\002" "xray>" "\001" CLR_RESET "\002" " ");
+                     "\001" XR_CLR_BLUE "\002" "xray>" "\001" XR_CLR_RESET "\002" " ");
         } else {
             snprintf(prompt, sizeof(prompt), "xray> ");
         }
@@ -512,47 +512,15 @@ static char* read_line(ReplState *state, bool is_continuation) {
 #endif
 }
 
-void print_repl_help(void) {
-    printf("Usage: xray [options]\n");
-    printf("\n");
-    printf("Start interactive REPL (Read-Eval-Print-Loop)\n");
-    printf("\n");
-    printf("Options:\n");
-    printf("  --no-color      Disable color output\n");
-    printf("  -h, --help      Show this help\n");
-    printf("\n");
-    printf("REPL Commands:\n");
-    printf("  .help           Show help\n");
-    printf("  .exit, .quit    Exit\n");
-    printf("  .clear          Clear screen\n");
-    printf("  .reset          Reset environment\n");
-    printf("  .load <file>    Load file\n");
-    printf("  .time <expr>    Time execution\n");
-    printf("\n");
-}
+XR_FUNC int cmd_repl(const XrCliInvocation *inv) {
+    XR_DCHECK(inv != NULL, "inv is NULL");
 
-static struct option repl_long_options[] = {
-    {"no-color", no_argument, 0, 'n'},
-    {"help",     no_argument, 0, 'h'},
-    {0, 0, 0, 0}
-};
-
-int cmd_repl(int argc, char **argv) {
     ReplState state = {0};
     state.use_color = terminal_supports_color();
+    if (xr_cli_opt_bool(&inv->options, "no-color"))
+        state.use_color = false;
 
-    // Parse arguments with getopt_long
-    optind = 1;
-    int opt;
-    while ((opt = getopt_long(argc, argv, "nh", repl_long_options, NULL)) != -1) {
-        switch (opt) {
-            case 'n': state.use_color = false; break;
-            case 'h': print_repl_help(); return 0;
-            default: print_repl_help(); return 1;
-        }
-    }
-
-    // Initialize buffer
+    /* Initialize buffer */
     state.buffer_size = REPL_BUFFER_SIZE;
     state.buffer = (char*)xr_malloc(state.buffer_size);
     state.buffer[0] = '\0';
@@ -579,11 +547,12 @@ int cmd_repl(int argc, char **argv) {
 #endif
 
     // Create Isolate + Runtime (persistent across inputs for GC safety)
-    state.isolate = cli_create_isolate();
+    state.isolate = xr_cli_isolate_new(XR_CLI_ISOLATE_REPL);
     if (!state.isolate) {
-        fprintf(stderr, "Error: cannot create execution environment\n");
+        xr_cli_error("repl", "failed to create isolate");
         xr_free(state.buffer);
-        return 1;
+        xr_free(state.protos);
+        return XR_CLI_EXIT_INTERNAL;
     }
     xr_multicore_init(state.isolate, 0);
 
@@ -679,5 +648,5 @@ int cmd_repl(int argc, char **argv) {
     xr_free(state.protos);
     xr_free(state.buffer);
 
-    return 0;
+    return XR_CLI_EXIT_OK;
 }

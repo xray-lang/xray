@@ -96,36 +96,120 @@ static bool debug_eval_condition_truthy(XrayIsolate *isolate, const char *condit
 }
 
 // ============================================================================
-// VM Debug Hook Callbacks (registered with core)
+// VM Debug Hook Callbacks (new unified interface)
 // ============================================================================
 
-static bool hook_check_breakpoint(XrayIsolate *isolate, const char *path, int line) {
-    return xr_debug_check_breakpoint(isolate, path, line);
+// Record stop position (used by on_line when deciding to break)
+static void hook_record_stop(XrDebugState *dbg, const char *path, int line,
+                              XrClosure *closure, int frame_depth) {
+    xr_free(dbg->last_path);
+    dbg->last_path = path ? xr_strdup(path) : NULL;
+    dbg->last_line = line;
+    dbg->step_depth = frame_depth;
+    dbg->current_action = XR_DBG_ACTION_BREAK;
+
+    xr_free(dbg->last_func_name);
+    dbg->last_func_name = NULL;
+    if (closure && closure->proto && closure->proto->name) {
+        dbg->last_func_name = xr_strdup(XR_STRING_CHARS(closure->proto->name));
+    }
 }
 
-static void hook_on_breakpoint_hit(XrayIsolate *isolate, const char *path, int line,
-                                    XrClosure *closure, XrBcCallFrame *frame) {
-    xr_debug_on_breakpoint_hit(isolate, path, line, closure, frame);
-}
-
-static XrDebugAction hook_get_action(XrayIsolate *isolate) {
+// Unified on_line hook — owns ALL debug decision logic.
+// Called by VM at each line-change safe point.
+static XrDebugAction hook_on_line(XrayIsolate *isolate, const char *path,
+                                   int line, XrClosure *closure,
+                                   XrBcCallFrame *frame, int frame_depth) {
+    (void)frame;
     XrDebugState *dbg = (XrDebugState *)xr_isolate_get_debug_state(isolate);
-    return dbg ? dbg->current_action : XR_DBG_ACTION_CONTINUE;
+    if (!dbg) return XR_DBG_ACTION_CONTINUE;
+
+    bool line_changed = (line != dbg->last_line);
+    XrDebugAction action = dbg->current_action;
+
+    // 1. Pause check (highest priority) — set by controller via atomic flag
+    XdapController *ctrl = (XdapController *)xray_isolate_get_userdata(isolate);
+    if (ctrl && atomic_load(&ctrl->cmd_pending)) {
+        int cmd = atomic_load(&ctrl->pending_cmd);
+        if (cmd == XDAP_CMD_PAUSE) {
+            atomic_store(&ctrl->cmd_pending, false);
+            hook_record_stop(dbg, path, line, closure, frame_depth);
+            return XR_DBG_ACTION_BREAK;
+        }
+    }
+
+    // 2. Breakpoint check (only on line change)
+    if (line_changed && path) {
+        char *log_msg = NULL;
+        int bp_result = xr_debug_check_breakpoint_ex(isolate, path, line, &log_msg);
+        if (bp_result == 2 && log_msg) {
+            // Logpoint: send output event, don't break
+            if (ctrl) {
+                xdap_send_output_event(ctrl, "console", log_msg);
+            }
+            xr_free(log_msg);
+            // Fall through — don't return, check stepping too
+        } else if (bp_result == 1) {
+            xr_free(log_msg);
+            hook_record_stop(dbg, path, line, closure, frame_depth);
+            return XR_DBG_ACTION_BREAK;
+        } else {
+            xr_free(log_msg);
+        }
+    }
+
+    // 3. Function breakpoint check (only on line change)
+    if (line_changed && closure && closure->proto && closure->proto->name) {
+        const char *func_name = XR_STRING_CHARS(closure->proto->name);
+        if (xr_debug_check_function_breakpoint(isolate, func_name)) {
+            hook_record_stop(dbg, path, line, closure, frame_depth);
+            return XR_DBG_ACTION_BREAK;
+        }
+    }
+
+    // 4. Stepping logic
+    bool should_break = false;
+    if (action == XR_DBG_ACTION_BREAK && line_changed) {
+        should_break = true;
+    } else if (action == XR_DBG_ACTION_STEP_IN) {
+        if (line_changed || frame_depth > dbg->step_depth) {
+            should_break = true;
+        }
+    } else if (action == XR_DBG_ACTION_STEP_OVER) {
+        if (frame_depth < dbg->step_depth) {
+            should_break = true;
+        } else if (line_changed && frame_depth <= dbg->step_depth) {
+            should_break = true;
+        }
+    } else if (action == XR_DBG_ACTION_STEP_OUT) {
+        if (frame_depth < dbg->step_depth) {
+            should_break = true;
+        }
+    }
+
+    if (should_break) {
+        hook_record_stop(dbg, path, line, closure, frame_depth);
+        return XR_DBG_ACTION_BREAK;
+    }
+
+    return XR_DBG_ACTION_CONTINUE;
 }
 
-static int hook_get_step_depth(XrayIsolate *isolate) {
+// Exception hook — called by VM/runtime when exception is thrown
+static XrDebugAction hook_on_exception(XrayIsolate *isolate, const char *message,
+                                        bool is_uncaught) {
     XrDebugState *dbg = (XrDebugState *)xr_isolate_get_debug_state(isolate);
-    return dbg ? dbg->step_depth : 0;
-}
+    if (!dbg) return XR_DBG_ACTION_CONTINUE;
 
-static void hook_set_last_line(XrayIsolate *isolate, int line) {
-    XrDebugState *dbg = (XrDebugState *)xr_isolate_get_debug_state(isolate);
-    if (dbg) dbg->last_line = line;
-}
-
-static int hook_get_last_line(XrayIsolate *isolate) {
-    XrDebugState *dbg = (XrDebugState *)xr_isolate_get_debug_state(isolate);
-    return dbg ? dbg->last_line : -1;
+    if ((is_uncaught && dbg->break_on_uncaught) ||
+        (!is_uncaught && dbg->break_on_caught)) {
+        xr_free(dbg->exception_message);
+        dbg->exception_message = message ? xr_strdup(message) : NULL;
+        dbg->exception_is_uncaught = is_uncaught;
+        dbg->current_action = XR_DBG_ACTION_BREAK;
+        return XR_DBG_ACTION_BREAK;
+    }
+    return XR_DBG_ACTION_CONTINUE;
 }
 
 static bool hook_is_enabled(XrayIsolate *isolate) {
@@ -133,15 +217,10 @@ static bool hook_is_enabled(XrayIsolate *isolate) {
     return dbg && dbg->enabled;
 }
 
-// Static hooks structure (all hook functions are stateless - they access
-// per-isolate debug_state via isolate parameter, safe for multi-isolate use)
+// Static hooks structure (stateless — per-isolate state via debug_state)
 static XrDebugHooks g_debug_hooks = {
-    .check_breakpoint = hook_check_breakpoint,
-    .on_breakpoint_hit = hook_on_breakpoint_hit,
-    .get_action = hook_get_action,
-    .get_step_depth = hook_get_step_depth,
-    .set_last_line = hook_set_last_line,
-    .get_last_line = hook_get_last_line,
+    .on_line = hook_on_line,
+    .on_exception = hook_on_exception,
     .is_enabled = hook_is_enabled
 };
 

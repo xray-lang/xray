@@ -504,6 +504,15 @@ bool xir_emit_call_ops(CodegenCtx *ctx, XirIns *ins, A64Reg rd) {
             uint32_t cbz_entry_idx = ctx->buf.count;
             a64_buf_emit(&ctx->buf, a64_nop());
 
+            // Copy call_arg_tags[i+1] → param_tags[i] for JIT→JIT param type
+            // pass-through. Uses x17 (SCRATCH_REG2), safe here since x16 holds
+            // jit_entry. nargs unknown at compile time, copy all 8 slots.
+            for (int pi = 0; pi < 8; pi++) {
+                int32_t src = (int32_t)(XIR_JIT_CALL_ARG_TAGS_OFFSET + (pi + 1));
+                int32_t dst = (int32_t)(XIR_JIT_PARAM_TAGS_OFFSET + pi * 8);
+                a64_buf_emit(&ctx->buf, a64_ldrb(SCRATCH_REG2, JIT_CTX_REG, src));
+                a64_buf_emit(&ctx->buf, a64_str(SCRATCH_REG2, JIT_CTX_REG, dst));
+            }
             // Fast path: BLR via call_c_stub
             a64_buf_emit(&ctx->buf, a64_add_imm(SCRATCH_REG2, JIT_CTX_REG,
                                                   XIR_JIT_CALL_ARGS_OFFSET + 8));
@@ -675,6 +684,15 @@ bool xir_emit_call_ops(CodegenCtx *ctx, XirIns *ins, A64Reg rd) {
             a64_buf_emit(&ctx->buf, a64_str(SCRATCH_REG2, JIT_CTX_REG,
                                              XIR_JIT_CALL_CLOSURE_OFFSET));
 
+            // Copy call_arg_tags[i+1] → param_tags[i] for JIT→JIT param type
+            // pass-through. Callee prologue reads param_tags to init
+            // slot_runtime_tags for TAGGED params. Uses x17 (SCRATCH_REG2).
+            for (uint64_t pi = 0; pi < nargs_val && pi < 8; pi++) {
+                int32_t src = (int32_t)(XIR_JIT_CALL_ARG_TAGS_OFFSET + (pi + 1));
+                int32_t dst = (int32_t)(XIR_JIT_PARAM_TAGS_OFFSET + pi * 8);
+                a64_buf_emit(&ctx->buf, a64_ldrb(SCRATCH_REG2, JIT_CTX_REG, src));
+                a64_buf_emit(&ctx->buf, a64_str(SCRATCH_REG2, JIT_CTX_REG, dst));
+            }
             // Fast path: direct BLR to callee's jit_entry
             a64_buf_emit(&ctx->buf, a64_mov(A64_X0, CORO_REG));
             a64_buf_emit(&ctx->buf, a64_add_imm(A64_X1, JIT_CTX_REG,

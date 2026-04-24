@@ -1,0 +1,14 @@
+// AOT multi-module test: import functions from another module
+import { square, cube } from "./math_lib"
+
+// Test imported functions
+print(square(5))    // 25
+print(cube(3))      // 27
+print(square(10))   // 100
+
+// Use in expressions
+let a = square(4) + cube(2)
+print(a)            // 16 + 8 = 24
+
+// Nested calls
+print(square(cube(2)))  // square(8) = 64

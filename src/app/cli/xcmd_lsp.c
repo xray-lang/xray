@@ -15,50 +15,26 @@
 #ifdef XR_HAS_LSP
 
 #include "xcli.h"
+#include "xcli_spec.h"
+#include "../../base/xchecks.h"
 #include "../lsp/xlsp_server.h"
 #include <stdio.h>
-#include <string.h>
 
-static void print_lsp_usage(void) {
-    fprintf(stderr, "xray Language Server Protocol implementation\n");
-    fprintf(stderr, "\n");
-    fprintf(stderr, "Usage: xray lsp [options]\n");
-    fprintf(stderr, "\n");
-    fprintf(stderr, "Options:\n");
-    fprintf(stderr, "  --stdio     Use stdio for communication (default)\n");
-    fprintf(stderr, "  --version   Print version and exit\n");
-    fprintf(stderr, "  --help      Print this help message\n");
-}
+XR_FUNC int cmd_lsp(const XrCliInvocation *inv) {
+    XR_DCHECK(inv != NULL, "inv is NULL");
+    (void)inv; /* --stdio is the only transport, no options to read */
 
-int cmd_lsp(int argc, char **argv) {
-    // Parse command line arguments
-    for (int i = 0; i < argc; i++) {
-        if (strcmp(argv[i], "--help") == 0 || strcmp(argv[i], "-h") == 0) {
-            print_lsp_usage();
-            return 0;
-        }
-        if (strcmp(argv[i], "--version") == 0 || strcmp(argv[i], "-v") == 0) {
-            print_version();
-            return 0;
-        }
-        if (strcmp(argv[i], "--stdio") == 0) {
-            // Default behavior, ignored
-            continue;
-        }
-    }
-    
-    // Create and run server
+    /* Create and run server */
     XrLspServer *server = xlsp_server_new();
     if (!server) {
-        fprintf(stderr, "Failed to create LSP server\n");
-        return 1;
+        xr_cli_error("lsp", "failed to create LSP server");
+        return XR_CLI_EXIT_INTERNAL;
     }
-    
+
     int result = xlsp_server_run(server);
-    
     xlsp_server_free(server);
-    
-    return result;
+
+    return (result != 0) ? XR_CLI_EXIT_FAIL : XR_CLI_EXIT_OK;
 }
 
 #endif // XR_HAS_LSP

@@ -1924,6 +1924,18 @@ XrJitResult xr_jit_call_func(XrCoroutine *coro, int64_t nargs_encoded) {
         void *saved_closure = coro->jit_ctx->call_closure;
         coro->jit_ctx->call_proto = proto;
         coro->jit_ctx->call_closure = closure;
+        // Set param_tags for callee's dynamic op tag lookups.
+        // Derive tags from callee's param_types (the STORE_CORO builder path
+        // does NOT populate call_arg_tags, so we use declared types).
+        // Callee prologue copies param_tags[i] → slot_runtime_tags[bc_slot].
+        for (int i = 0; i < nargs && i < 8; i++) {
+            uint8_t tag = XR_TAG_I64;
+            if (proto->param_types && i < proto->param_types_count &&
+                proto->param_types[i])
+                tag = slot_type_to_xr_tag(
+                    xr_type_to_slot_type(proto->param_types[i]));
+            coro->jit_ctx->param_tags[i] = (int64_t)tag;
+        }
         XrJitResult ret = ((XirJitFn)proto->jit_entry)(
             (intptr_t)coro, &coro->jit_ctx->call_args[1]);
         coro->jit_ctx->call_proto = saved_proto;

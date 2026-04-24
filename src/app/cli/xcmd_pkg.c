@@ -20,15 +20,16 @@
  */
 
 #include "xcli.h"
-#include "xcli_utils.h"
+#include "xcli_spec.h"
+#include "xcli_fs.h"
 #include "../../base/xmalloc.h"
+#include "../../base/xchecks.h"
 #include "../../module/xsemver.h"
 #include "../../module/xlockfile.h"
 #include "../../module/xresolver.h"
 #include "../../module/xpkg_client.h"
 #include "../../module/xproject.h"
 #include <stdio.h>
-#include <stdlib.h>
 #include <string.h>
 #include <sys/stat.h>
 #include <unistd.h>
@@ -52,28 +53,28 @@ static int init_global_cache(void) {
         fprintf(stderr, "Error: cannot get user home directory\n");
         return -1;
     }
-    
+
     char path[512];
-    
+
     // Create ~/.xray directory
     snprintf(path, sizeof(path), "%s/.xray", home);
     if (ensure_dir(path) != 0 && errno != EEXIST) {
         fprintf(stderr, "Error: cannot create directory %s\n", path);
         return -1;
     }
-    
+
     // Create ~/.xray/cache directory
     snprintf(path, sizeof(path), "%s/.xray/cache", home);
     ensure_dir(path);
-    
+
     // Create ~/.xray/packages directory
     snprintf(path, sizeof(path), "%s/.xray/packages", home);
     ensure_dir(path);
-    
+
     // Create ~/.xray/bin directory
     snprintf(path, sizeof(path), "%s/.xray/bin", home);
     ensure_dir(path);
-    
+
     return 0;
 }
 
@@ -84,14 +85,14 @@ static int init_global_cache(void) {
 static bool create_tarball(const char *output_path) {
     pid_t pid = fork();
     if (pid < 0) return false;
-    
+
     if (pid == 0) {
         // Child process
         execlp("tar", "tar", "-czf", output_path,
                "--exclude=.git", "--exclude=node_modules", ".", NULL);
         _exit(127);
     }
-    
+
     int status;
     if (waitpid(pid, &status, 0) < 0) return false;
     return WIFEXITED(status) && WEXITSTATUS(status) == 0;
@@ -100,20 +101,20 @@ static bool create_tarball(const char *output_path) {
 // xray pkg init - Initialize project, create xray.toml
 static int cmd_pkg_init(int argc, char **argv) {
     const char *name = NULL;
-    
+
     // Parse arguments
     for (int i = 0; i < argc; i++) {
         if (strcmp(argv[i], "--name") == 0 && i + 1 < argc) {
             name = argv[++i];
         }
     }
-    
+
     // Check if xray.toml already exists
-    if (cli_file_exists("xray.toml")) {
+    if (xr_cli_file_exists("xray.toml")) {
         fprintf(stderr, "Error: xray.toml already exists\n");
         return 1;
     }
-    
+
     // If name not specified, use current directory name
     char default_name[256] = "my-project";
     if (!name) {
@@ -126,14 +127,14 @@ static int cmd_pkg_init(int argc, char **argv) {
         }
         name = default_name;
     }
-    
+
     // Create xray.toml
     FILE *f = fopen("xray.toml", "w");
     if (!f) {
         fprintf(stderr, "Error: cannot create xray.toml\n");
         return 1;
     }
-    
+
     fprintf(f, "# xray.toml - Project configuration\n\n");
     fprintf(f, "[project]\n");
     fprintf(f, "name = \"%s\"\n", name);
@@ -143,14 +144,14 @@ static int cmd_pkg_init(int argc, char **argv) {
     fprintf(f, "# Example:\n");
     fprintf(f, "# xray/redis = \"^1.0.0\"\n");
     fprintf(f, "# alice/utils = \"^1.0.0\"\n");
-    
+
     fclose(f);
-    
+
     // Create src directory
     ensure_dir("src");
-    
+
     // Create example main.xr
-    if (!cli_file_exists("src/main.xr")) {
+    if (!xr_cli_file_exists("src/main.xr")) {
         f = fopen("src/main.xr", "w");
         if (f) {
             fprintf(f, "// %s - Main entry\n\n", name);
@@ -158,7 +159,7 @@ static int cmd_pkg_init(int argc, char **argv) {
             fclose(f);
         }
     }
-    
+
     printf("Project initialized\n");
     printf("  - xray.toml created\n");
     printf("  - src/main.xr created\n");
@@ -166,7 +167,7 @@ static int cmd_pkg_init(int argc, char **argv) {
     printf("Next steps:\n");
     printf("  xray src/main.xr       Run project\n");
     printf("  xray pkg add <package> Add dependency\n");
-    
+
     return 0;
 }
 
@@ -178,18 +179,18 @@ static int cmd_pkg_add(int argc, char **argv) {
         fprintf(stderr, "         xray pkg add xray/redis@^1.0.0\n");
         return 1;
     }
-    
+
     // Check if xray.toml exists
-    if (!cli_file_exists("xray.toml")) {
+    if (!xr_cli_file_exists("xray.toml")) {
         fprintf(stderr, "Error: xray.toml not found, run 'xray pkg init' first\n");
         return 1;
     }
-    
+
     // Parse package name and version
     char package_buf[256];
     strncpy(package_buf, argv[0], sizeof(package_buf) - 1);
     package_buf[sizeof(package_buf) - 1] = '\0';
-    
+
     char *package = package_buf;
     char *version = "^1.0.0";  // Default version
     char *at_sign = strchr(package, '@');
@@ -197,7 +198,7 @@ static int cmd_pkg_add(int argc, char **argv) {
         *at_sign = '\0';
         version = at_sign + 1;
     }
-    
+
     // Validate package name format (owner/name)
     char *slash = strchr(package, '/');
     if (!slash) {
@@ -205,7 +206,7 @@ static int cmd_pkg_add(int argc, char **argv) {
         fprintf(stderr, "Example: xray/redis, alice/utils\n");
         return 1;
     }
-    
+
     // Validate version constraint format
     XrVersionConstraint constraint;
     if (!xr_constraint_parse(version, &constraint)) {
@@ -214,22 +215,22 @@ static int cmd_pkg_add(int argc, char **argv) {
         return 1;
     }
     xr_constraint_free(&constraint);
-    
+
     printf("Adding dependency: %s = \"%s\"\n", package, version);
-    
+
     // Initialize HTTP client
     if (!xr_pkg_client_init()) {
         fprintf(stderr, "Error: cannot initialize HTTP client\n");
         return 1;
     }
-    
+
     // Parse owner and name
     char owner[128], name[128];
     *slash = '\0';
     strncpy(owner, package, sizeof(owner) - 1);
     strncpy(name, slash + 1, sizeof(name) - 1);
     *slash = '/';  // Restore
-    
+
     // Try to get package info from registry
     XrPackageInfo *info = xr_pkg_client_get_info(owner, name);
     if (!info) {
@@ -239,15 +240,15 @@ static int cmd_pkg_add(int argc, char **argv) {
         xr_pkg_client_cleanup();
         return 0;
     }
-    
+
     printf("Found package %s, %d versions\n", package, info->version_count);
-    
+
     // Install package
     const char *home = getenv("HOME");
     if (home) {
         char dest_dir[512];
         snprintf(dest_dir, sizeof(dest_dir), "%s/.xray/packages", home);
-        
+
         // Select best version
         if (info->version_count > 0) {
             const char *best_ver = info->versions[0];  // Simplified: take first
@@ -256,13 +257,13 @@ static int cmd_pkg_add(int argc, char **argv) {
             }
         }
     }
-    
+
     xr_package_info_free(info);
     xr_pkg_client_cleanup();
-    
+
     printf("\nPlease add to xray.toml:\n");
     printf("  %s = \"%s\"\n", package, version);
-    
+
     return 0;
 }
 
@@ -272,18 +273,18 @@ static int cmd_pkg_remove(int argc, char **argv) {
         fprintf(stderr, "Usage: xray pkg remove <owner/name>\n");
         return 1;
     }
-    
+
     // Check if xray.toml exists
-    if (!cli_file_exists("xray.toml")) {
+    if (!xr_cli_file_exists("xray.toml")) {
         fprintf(stderr, "Error: xray.toml not found\n");
         return 1;
     }
-    
+
     const char *package = argv[0];
     printf("Removing dependency: %s\n", package);
-    
+
     fprintf(stderr, "Error: 'pkg remove' is not yet implemented\n");
-    
+
     return 0;
 }
 
@@ -291,42 +292,42 @@ static int cmd_pkg_remove(int argc, char **argv) {
 static int cmd_pkg_install(int argc, char **argv) {
     (void)argc;
     (void)argv;
-    
+
     // Check if xray.toml exists
-    if (!cli_file_exists("xray.toml")) {
+    if (!xr_cli_file_exists("xray.toml")) {
         fprintf(stderr, "Error: xray.toml not found\n");
         return 1;
     }
-    
+
     // Initialize global cache
     if (init_global_cache() != 0) {
         return 1;
     }
-    
+
     printf("Installing dependencies...\n");
-    
+
     // Load project config
     char cwd[512];
     if (!getcwd(cwd, sizeof(cwd))) {
         fprintf(stderr, "Error: cannot get current directory\n");
         return 1;
     }
-    
+
     XrProject *project = xr_project_load(NULL, cwd);
     if (!project) {
         fprintf(stderr, "Error: cannot parse xray.toml\n");
         return 1;
     }
-    
+
     // Check if there are dependencies
     if (!project->dependencies || project->dependencies->count == 0) {
         printf("No dependencies to install\n");
         xr_project_free(project);
         return 0;
     }
-    
+
     printf("Found %d dependencies\n", project->dependencies->count);
-    
+
     // Try to load existing lockfile
     XrLockfile *lockfile = xr_lockfile_load("xray.lock");
     if (lockfile) {
@@ -334,31 +335,31 @@ static int cmd_pkg_install(int argc, char **argv) {
     } else {
         lockfile = xr_lockfile_new();
     }
-    
+
     // Initialize HTTP client
     if (!xr_pkg_client_init()) {
         fprintf(stderr, "Warning: cannot initialize HTTP client\n");
     }
-    
+
     // Create dependency graph
     XrDepGraph *graph = xr_depgraph_new();
-    
+
     // Traverse dependencies and add to graph
     // Simplified, actual implementation needs HashMap traversal
     printf("Dependency resolver ready, waiting for registry deployment\n");
-    
+
     // Save lockfile
     if (lockfile->package_count > 0) {
         xr_lockfile_save(lockfile, "xray.lock");
         printf("Generated xray.lock\n");
     }
-    
+
     // Cleanup
     xr_depgraph_free(graph);
     xr_lockfile_free(lockfile);
     xr_project_free(project);
     xr_pkg_client_cleanup();
-    
+
     return 0;
 }
 
@@ -366,17 +367,17 @@ static int cmd_pkg_install(int argc, char **argv) {
 static int cmd_pkg_update(int argc, char **argv) {
     (void)argc;
     (void)argv;
-    
+
     // Check if xray.toml exists
-    if (!cli_file_exists("xray.toml")) {
+    if (!xr_cli_file_exists("xray.toml")) {
         fprintf(stderr, "Error: xray.toml not found\n");
         return 1;
     }
-    
+
     printf("Updating dependencies...\n");
-    
+
     fprintf(stderr, "Error: 'pkg update' is not yet implemented\n");
-    
+
     return 0;
 }
 
@@ -384,33 +385,33 @@ static int cmd_pkg_update(int argc, char **argv) {
 static int cmd_pkg_tree(int argc, char **argv) {
     (void)argc;
     (void)argv;
-    
+
     // Check if xray.toml exists
-    if (!cli_file_exists("xray.toml")) {
+    if (!xr_cli_file_exists("xray.toml")) {
         fprintf(stderr, "Error: xray.toml not found\n");
         return 1;
     }
-    
+
     // Try to load lockfile
     XrLockfile *lockfile = xr_lockfile_load("xray.lock");
     if (lockfile && lockfile->package_count > 0) {
         printf("Dependency tree (from xray.lock):\n\n");
-        
+
         for (int i = 0; i < lockfile->package_count; i++) {
             const XrLockedPackage *pkg = &lockfile->packages[i];
             printf("├── %s@%s\n", pkg->name, pkg->version ? pkg->version : "*");
-            
+
             for (int j = 0; j < pkg->dep_count; j++) {
                 const char *is_last = (j == pkg->dep_count - 1) ? "└" : "├";
                 printf("│   %s── %s\n", is_last, pkg->dependencies[j]);
             }
         }
-        
+
         xr_lockfile_free(lockfile);
     } else {
         printf("xray.lock not found, run 'xray pkg install' first\n");
     }
-    
+
     return 0;
 }
 
@@ -418,16 +419,16 @@ static int cmd_pkg_tree(int argc, char **argv) {
 static int cmd_pkg_login(int argc, char **argv) {
     (void)argc;
     (void)argv;
-    
+
     printf("Logging in to pkg.xray-lang.org...\n\n");
-    
+
     // Check if already logged in
     char *existing_token = NULL;
     if (xr_pkg_client_load_token(&existing_token)) {
         printf("Login credentials already exist.\n");
         printf("Re-login? (y/N) ");
         fflush(stdout);
-        
+
         char answer[16];
         if (fgets(answer, sizeof(answer), stdin)) {
             if (answer[0] != 'y' && answer[0] != 'Y') {
@@ -438,22 +439,22 @@ static int cmd_pkg_login(int argc, char **argv) {
         }
         xr_free(existing_token);
     }
-    
+
     // Execute login flow
     char *token = NULL;
     if (!xr_pkg_client_login(&token)) {
         fprintf(stderr, "Login failed\n");
         return 1;
     }
-    
+
     // Save token
     if (!xr_pkg_client_save_token(token)) {
         fprintf(stderr, "Warning: cannot save login credentials\n");
     }
-    
+
     xr_free(token);
     printf("\nLogin successful\n");
-    
+
     return 0;
 }
 
@@ -461,26 +462,26 @@ static int cmd_pkg_login(int argc, char **argv) {
 static int cmd_pkg_publish(int argc, char **argv) {
     (void)argc;
     (void)argv;
-    
+
     // Check if xray.toml exists
-    if (!cli_file_exists("xray.toml")) {
+    if (!xr_cli_file_exists("xray.toml")) {
         fprintf(stderr, "Error: xray.toml not found\n");
         return 1;
     }
-    
+
     // Load project config
     char cwd[512];
     if (!getcwd(cwd, sizeof(cwd))) {
         fprintf(stderr, "Error: cannot get current directory\n");
         return 1;
     }
-    
+
     XrProject *project = xr_project_load(NULL, cwd);
     if (!project) {
         fprintf(stderr, "Error: cannot parse xray.toml\n");
         return 1;
     }
-    
+
     // Check if it's a publishable package
     if (!project->is_package) {
         fprintf(stderr, "Error: this is not a publishable package\n");
@@ -488,7 +489,7 @@ static int cmd_pkg_publish(int argc, char **argv) {
         xr_project_free(project);
         return 1;
     }
-    
+
     // Check version
     if (!project->version || !xr_semver_is_valid(project->version)) {
         fprintf(stderr, "Error: missing valid version number\n");
@@ -496,9 +497,9 @@ static int cmd_pkg_publish(int argc, char **argv) {
         xr_project_free(project);
         return 1;
     }
-    
+
     printf("Publishing %s@%s...\n", project->name, project->version);
-    
+
     // Load auth token
     char *token = NULL;
     if (!xr_pkg_client_load_token(&token)) {
@@ -506,12 +507,12 @@ static int cmd_pkg_publish(int argc, char **argv) {
         xr_project_free(project);
         return 1;
     }
-    
+
     // Create package tarball
     char tarball[512];
     snprintf(tarball, sizeof(tarball), "/tmp/%s-%s.tar.gz",
              project->name, project->version);
-    
+
     printf("Packaging...\n");
     if (!create_tarball(tarball)) {
         fprintf(stderr, "Error: packaging failed\n");
@@ -519,13 +520,13 @@ static int cmd_pkg_publish(int argc, char **argv) {
         xr_project_free(project);
         return 1;
     }
-    
+
     // Calculate checksum
     char checksum[72];
     if (xr_lockfile_checksum_file(tarball, checksum)) {
         printf("Checksum: %s\n", checksum);
     }
-    
+
     // Publish
     if (!xr_pkg_client_init()) {
         fprintf(stderr, "Error: cannot initialize HTTP client\n");
@@ -533,83 +534,51 @@ static int cmd_pkg_publish(int argc, char **argv) {
         xr_project_free(project);
         return 1;
     }
-    
+
     bool success = xr_pkg_client_publish(tarball, token);
-    
+
     // Cleanup
     unlink(tarball);
     xr_free(token);
     xr_project_free(project);
     xr_pkg_client_cleanup();
-    
+
     return success ? 0 : 1;
 }
 
-void print_pkg_help(void) {
-    printf("Usage: xray pkg <command> [options]\n\n");
-    printf("Commands:\n");
-    printf("  init [--name <name>]       Initialize project\n");
-    printf("  add <owner/name>[@version] Add dependency\n");
-    printf("  remove <owner/name>        Remove dependency\n");
-    printf("  install                    Install all dependencies\n");
-    printf("  update [owner/name]        Update dependencies\n");
-    printf("  tree                       Show dependency tree\n");
-    printf("  login                      Login to package registry\n");
-    printf("  publish                    Publish package\n");
-    printf("\n");
-    printf("Examples:\n");
-    printf("  xray pkg init                  # Initialize project\n");
-    printf("  xray pkg init --name my-app    # Specify project name\n");
-    printf("  xray pkg add xray/redis        # Add dependency\n");
-    printf("  xray pkg add xray/redis@^2.0   # Specify version\n");
-    printf("  xray pkg install               # Install dependencies\n");
-    printf("\n");
-}
+/* Subcommand entry — unified parser has already consumed --help.
+ * Positionals from inv carry the subcommand name and its arguments. */
+XR_FUNC int cmd_pkg(const XrCliInvocation *inv) {
+    XR_DCHECK(inv != NULL, "inv is NULL");
 
-// xray pkg subcommand entry
-int cmd_pkg(int argc, char **argv) {
-    // No subcommand, show help
-    if (argc < 1) {
-        print_pkg_help();
-        return 0;
+    if (inv->positional_count < 1) {
+        /* No subcommand — dispatch already shows subcommand help */
+        xr_cli_error("pkg", "no subcommand specified");
+        return XR_CLI_EXIT_USAGE;
     }
-    
-    const char *subcmd = argv[0];
-    
-    // Help
-    if (strcmp(subcmd, "--help") == 0 || strcmp(subcmd, "-h") == 0) {
-        print_pkg_help();
-        return 0;
-    }
-    
-    // Route to subcommand
-    if (strcmp(subcmd, "init") == 0) {
-        return cmd_pkg_init(argc - 1, argv + 1);
-    }
-    else if (strcmp(subcmd, "add") == 0) {
-        return cmd_pkg_add(argc - 1, argv + 1);
-    }
-    else if (strcmp(subcmd, "remove") == 0) {
-        return cmd_pkg_remove(argc - 1, argv + 1);
-    }
-    else if (strcmp(subcmd, "install") == 0) {
-        return cmd_pkg_install(argc - 1, argv + 1);
-    }
-    else if (strcmp(subcmd, "update") == 0) {
-        return cmd_pkg_update(argc - 1, argv + 1);
-    }
-    else if (strcmp(subcmd, "tree") == 0) {
-        return cmd_pkg_tree(argc - 1, argv + 1);
-    }
-    else if (strcmp(subcmd, "login") == 0) {
-        return cmd_pkg_login(argc - 1, argv + 1);
-    }
-    else if (strcmp(subcmd, "publish") == 0) {
-        return cmd_pkg_publish(argc - 1, argv + 1);
-    }
-    else {
-        fprintf(stderr, "Error: unknown command 'xray pkg %s'\n", subcmd);
-        fprintf(stderr, "Run 'xray pkg --help' for help\n");
-        return 1;
-    }
+
+    const char *subcmd = inv->positionals[0];
+    /* Internal subcommand argc/argv (skip the subcommand name itself) */
+    int sub_argc = inv->positional_count - 1;
+    char **sub_argv = (char **)inv->positionals + 1;
+
+    if (strcmp(subcmd, "init") == 0)
+        return cmd_pkg_init(sub_argc, sub_argv);
+    if (strcmp(subcmd, "add") == 0)
+        return cmd_pkg_add(sub_argc, sub_argv);
+    if (strcmp(subcmd, "remove") == 0)
+        return cmd_pkg_remove(sub_argc, sub_argv);
+    if (strcmp(subcmd, "install") == 0)
+        return cmd_pkg_install(sub_argc, sub_argv);
+    if (strcmp(subcmd, "update") == 0)
+        return cmd_pkg_update(sub_argc, sub_argv);
+    if (strcmp(subcmd, "tree") == 0)
+        return cmd_pkg_tree(sub_argc, sub_argv);
+    if (strcmp(subcmd, "login") == 0)
+        return cmd_pkg_login(sub_argc, sub_argv);
+    if (strcmp(subcmd, "publish") == 0)
+        return cmd_pkg_publish(sub_argc, sub_argv);
+
+    xr_cli_error("pkg", "unknown subcommand '%s'", subcmd);
+    return XR_CLI_EXIT_USAGE;
 }

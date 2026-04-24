@@ -18,7 +18,9 @@
  */
 
 #include "xcli.h"
-#include "xcli_utils.h"
+#include "xcli_spec.h"
+#include "xcli_fs.h"
+#include "xcli_isolate.h"
 #include "xray.h"
 #include "xray_isolate.h"
 #include "../../runtime/xisolate_api.h"
@@ -38,15 +40,14 @@
 #include "../../runtime/class/xclass_lookup.h"
 #include "../../runtime/closure/xclosure.h"
 #endif
+#include "../../base/xmalloc.h"
+#include "../../base/xchecks.h"
 #include <stdio.h>
-#include <stdlib.h>
 #include <string.h>
 #include <stdbool.h>
 #include <unistd.h>
-#include <getopt.h>
 #include <spawn.h>
 #include <sys/wait.h>
-#include "../../base/xmalloc.h"
 
 /* ========== Shared Helpers ========== */
 
@@ -220,43 +221,8 @@ static void write_bytecode_main(FILE *f, const char *bundle_source) {
     );
 }
 
-/* ========== Help ========== */
+/* ========== Optimization Flag ========== */
 
-void print_build_help(void) {
-    printf("Usage: xray build [options] <file.xr>\n\n");
-    printf("Compile Xray script into executable.\n\n");
-    printf("Options:\n");
-    printf("    -o, --output <name>  Output file name (default: a.out)\n");
-    printf("    -c                   Output C source only, no linking\n");
-    printf("    --native             Native binary (AOT + runtime, like Go)\n");
-    printf("    --cc <compiler>      C compiler (default: cc)\n");
-    printf("    -O <level>           Optimization level: 0,1,2,3,s,fast (default: 2)\n");
-    printf("    --sysroot <path>     Cross-compile sysroot path\n");
-    printf("    --strip              Strip symbols\n");
-    printf("    -h, --help           Show this help\n\n");
-    printf("Build modes:\n");
-    printf("    (default)      Bytecode bundle — full features, needs libxray_core\n");
-    printf("    --native       AOT native — full features, static linked, like Go\n\n");
-    printf("Examples:\n");
-    printf("    xray build app.xr                  # bytecode bundle\n");
-    printf("    xray build app.xr --native         # native + runtime (like Go)\n");
-    printf("    xray build app.xr --native -c      # output C source only\n");
-    printf("    xray build app.xr --native --cc gcc -O 3\n\n");
-}
-
-/* ========== Argument Parsing ========== */
-
-static struct option build_long_options[] = {
-    {"output",   required_argument, 0, 'o'},
-    {"cc",       required_argument, 0, 'C'},
-    {"sysroot",  required_argument, 0, 'r'},
-    {"strip",    no_argument,       0, 'S'},
-    {"native",   no_argument,       0, 'N'},
-    {"help",     no_argument,       0, 'h'},
-    {0, 0, 0, 0}
-};
-
-// Validate and format -O flag (returns string literal, no static buffer)
 static const char *make_opt_flag(const char *level) {
     if (!level) return "-O2";
     if (strcmp(level, "0") == 0) return "-O0";
@@ -269,7 +235,8 @@ static const char *make_opt_flag(const char *level) {
     return "-O2";
 }
 
-// Forward declarations
+/* ========== Build Sub-Modes (forward declarations) ========== */
+
 static int cmd_build_bytecode(const char *input, const char *output,
                               const char *cc, const char *opt_flag,
                               bool c_only, bool strip, const char *sysroot);
@@ -277,38 +244,21 @@ static int cmd_build_native(const char *input, const char *output,
                             const char *cc, const char *opt_flag,
                             bool c_only, bool strip, const char *sysroot);
 
-int cmd_build(int argc, char **argv) {
-    const char *input_file = NULL;
-    const char *output_file = NULL;
-    const char *cc = "cc";
-    const char *opt_level = NULL;
-    bool c_only = false;
-    bool strip_symbols = false;
-    bool native_mode = false;
-    const char *sysroot = NULL;
+/* ========== CLI Entry Point ========== */
 
-    optind = 1;
-    int opt;
-    while ((opt = getopt_long(argc, argv, "o:cshC:r:O:SN", build_long_options, NULL)) != -1) {
-        switch (opt) {
-            case 'o': output_file = optarg; break;
-            case 'c': c_only = true; break;
-            case 'C': cc = optarg; break;
-            case 'O': opt_level = optarg; break;
-            case 'r': sysroot = optarg; break;
-            case 'S': strip_symbols = true; break;
-            case 'N': native_mode = true; break;
-            case 'h': print_build_help(); return 0;
-            default:  print_build_help(); return 1;
-        }
-    }
+XR_FUNC int cmd_build(const XrCliInvocation *inv) {
+    XR_DCHECK(inv != NULL, "inv is NULL");
+    XR_DCHECK(inv->positional_count == 1, "build expects exactly 1 positional");
 
-    if (optind < argc) input_file = argv[optind];
-    if (!input_file) {
-        fprintf(stderr, "Error: no input file\n");
-        print_build_help();
-        return 1;
-    }
+    const char *input_file  = inv->positionals[0];
+    const char *output_file = xr_cli_opt_string(&inv->options, "output", NULL);
+    const char *cc          = xr_cli_opt_string(&inv->options, "cc", "cc");
+    const char *opt_level   = xr_cli_opt_string(&inv->options, "opt", NULL);
+    const char *sysroot     = xr_cli_opt_string(&inv->options, "sysroot", NULL);
+    bool c_only             = xr_cli_opt_bool(&inv->options, "c-only");
+    bool strip_symbols      = xr_cli_opt_bool(&inv->options, "strip");
+    bool native_mode        = xr_cli_opt_bool(&inv->options, "native");
+
     if (!output_file) output_file = c_only ? "app.c" : "a.out";
 
     const char *opt_flag = make_opt_flag(opt_level);
@@ -326,7 +276,7 @@ static int cmd_build_bytecode(const char *input, const char *output,
                               bool c_only, bool strip, const char *sysroot) {
     printf("[bytecode] Building: %s\n", input);
 
-    XrayIsolate *X = cli_create_isolate();
+    XrayIsolate *X = xr_cli_isolate_new(XR_CLI_ISOLATE_RUN);
     if (!X) { fprintf(stderr, "Error: failed to create isolate\n"); return 1; }
 
     XrBundle *bundle = xr_bundle_create_ex(X, input, XR_BUNDLE_DEFAULT);
@@ -505,21 +455,32 @@ static void collect_exports(XrProto *proto, XcgenModule *mod) {
         const char *export_name = XR_STRING_CHARS(XR_TO_STRING(name_val));
 
         // Scan backwards for the shared_index, tracing through OP_MOVE chains.
-        // Patterns:
-        //   (a) OP_GETSHARED R[reg], idx → OP_EXPORT K[n], R[reg], c
-        //   (b) OP_SETSHARED R[reg], idx → OP_EXPORT K[n], R[reg], c
-        //   (c) OP_MOVE R[reg], R[src]   → trace src register
+        // Two-pass: (1) collect all registers in the MOVE chain,
+        // (2) scan for GETSHARED/SETSHARED matching any of them.
+        // This handles class exports where MOVE chain interleaves with
+        // SETSHARED in bytecode order.
         int shared_idx = -1;
-        int trace_reg = value_reg;
+        int chain[16]; // register chain
+        int chain_len = 0;
+        chain[chain_len++] = value_reg;
+        for (int bpc = (int)pc - 1; bpc >= 0 && chain_len < 16; bpc--) {
+            XrInstruction prev = code[bpc];
+            if (GET_OPCODE(prev) == OP_MOVE &&
+                GETARG_A(prev) == chain[chain_len - 1]) {
+                chain[chain_len++] = GETARG_B(prev);
+            }
+        }
         for (int bpc = (int)pc - 1; bpc >= 0 && shared_idx < 0; bpc--) {
             XrInstruction prev = code[bpc];
             OpCode prev_op = GET_OPCODE(prev);
-            if ((prev_op == OP_GETSHARED || prev_op == OP_SETSHARED) &&
-                GETARG_A(prev) == trace_reg) {
-                shared_idx = GETARG_Bx(prev) + proto->shared_offset;
-            } else if (prev_op == OP_MOVE && GETARG_A(prev) == trace_reg) {
-                // OP_MOVE R[A] = R[B] → trace to source register
-                trace_reg = GETARG_B(prev);
+            if (prev_op == OP_GETSHARED || prev_op == OP_SETSHARED) {
+                int reg_a = GETARG_A(prev);
+                for (int ci = 0; ci < chain_len; ci++) {
+                    if (chain[ci] == reg_a) {
+                        shared_idx = GETARG_Bx(prev) + proto->shared_offset;
+                        break;
+                    }
+                }
             }
         }
 
@@ -546,212 +507,429 @@ static void collect_aot_protos(XrProto *proto, XrProto **out, int *count, int ma
     }
 }
 
-/* ========== Native + Runtime (--native, AOT + bytecode hybrid) ========== */
+/* ========== Multi-Module AOT Helpers ========== */
+
+// Per-module state during AOT compilation
+typedef struct {
+    const char   *path;              // absolute source path (owned)
+    const char   *mod_name;          // module name for C codegen (owned)
+    XrProto      *proto;             // compiled bytecode (owned by isolate)
+    XcgenModule  *cmod;              // C codegen module (owned by comp)
+    XrProto     **aot_protos;        // AOT-eligible protos (owned)
+    char        (*aot_c_names)[140]; // C function names (owned)
+    int           aot_count;
+    int           aot_cap;
+} AotModuleInfo;
+
+// Derive a C-safe module name from absolute path (caller must free)
+static char *aot_derive_module_name(const char *path) {
+    XR_DCHECK(path != NULL, "aot_derive_module_name: NULL path");
+    const char *base = strrchr(path, '/');
+    base = base ? base + 1 : path;
+    size_t len = strlen(base);
+    // Strip .xr extension
+    if (len > 3 && strcmp(base + len - 3, ".xr") == 0)
+        len -= 3;
+    char *name = (char *)xr_malloc(len + 1);
+    if (!name) return NULL;
+    for (size_t i = 0; i < len; i++)
+        name[i] = (base[i] == '-' || base[i] == '.') ? '_' : base[i];
+    name[len] = '\0';
+    return name;
+}
+
+// Derive the import string that would be used to reach target_path from
+// importer_dir. E.g. "/a/b/math.xr" from "/a/b" → "./math"
+static char *aot_derive_import_string(const char *target_path,
+                                       const char *importer_dir) {
+    XR_DCHECK(target_path != NULL, "aot_derive_import_string: NULL target");
+    XR_DCHECK(importer_dir != NULL, "aot_derive_import_string: NULL dir");
+    size_t dir_len = strlen(importer_dir);
+    // Check if target is in the same directory
+    if (strncmp(target_path, importer_dir, dir_len) == 0 &&
+        target_path[dir_len] == '/') {
+        const char *filename = target_path + dir_len + 1;
+        size_t flen = strlen(filename);
+        // Strip .xr extension
+        if (flen > 3 && strcmp(filename + flen - 3, ".xr") == 0)
+            flen -= 3;
+        // Build "./basename"
+        char *result = (char *)xr_malloc(2 + flen + 1);
+        if (!result) return NULL;
+        result[0] = '.';
+        result[1] = '/';
+        memcpy(result + 2, filename, flen);
+        result[2 + flen] = '\0';
+        return result;
+    }
+    // Fallback: use basename
+    const char *base = strrchr(target_path, '/');
+    base = base ? base + 1 : target_path;
+    size_t blen = strlen(base);
+    if (blen > 3 && strcmp(base + blen - 3, ".xr") == 0) blen -= 3;
+    char *result = (char *)xr_malloc(2 + blen + 1);
+    if (!result) return NULL;
+    result[0] = '.'; result[1] = '/';
+    memcpy(result + 2, base, blen);
+    result[2 + blen] = '\0';
+    return result;
+}
+
+// Build cross-module export map for AOT import resolution.
+// For each non-entry module, creates entries mapping
+// (import_string, export_name) → absolute shared index.
+static XirAotImportEntry *aot_build_export_map(AotModuleInfo *modules,
+                                                 int nmodules,
+                                                 int entry_index,
+                                                 int *out_count) {
+    *out_count = 0;
+    int cap = 64;
+    XirAotImportEntry *map = (XirAotImportEntry *)xr_malloc(
+        cap * sizeof(XirAotImportEntry));
+    if (!map) return NULL;
+
+    // Derive the entry module's directory for relative path resolution
+    char *entry_dir = NULL;
+    if (entry_index >= 0) {
+        const char *ep = modules[entry_index].path;
+        const char *last_slash = strrchr(ep, '/');
+        if (last_slash) {
+            size_t dlen = (size_t)(last_slash - ep);
+            entry_dir = (char *)xr_malloc(dlen + 1);
+            if (entry_dir) { memcpy(entry_dir, ep, dlen); entry_dir[dlen] = '\0'; }
+        }
+    }
+
+    for (int m = 0; m < nmodules; m++) {
+        if (m == entry_index) continue; // Entry module is not imported
+        XcgenModule *cmod = modules[m].cmod;
+        if (!cmod || cmod->nexports == 0) continue;
+
+        // Compute what import string would reference this module
+        char *import_str = entry_dir
+            ? aot_derive_import_string(modules[m].path, entry_dir)
+            : NULL;
+        if (!import_str) continue;
+
+        for (int e = 0; e < cmod->nexports; e++) {
+            // Grow if needed
+            if (*out_count >= cap) {
+                int new_cap = cap * 2;
+                XirAotImportEntry *tmp = (XirAotImportEntry *)xr_realloc(
+                    map, new_cap * sizeof(XirAotImportEntry));
+                if (!tmp) { xr_free(import_str); xr_free(entry_dir); return map; }
+                map = tmp;
+                cap = new_cap;
+            }
+            map[*out_count].module_path = import_str; // shared, freed later
+            map[*out_count].export_name = cmod->exports[e].name;
+            map[*out_count].shared_index = cmod->exports[e].shared_index;
+            (*out_count)++;
+        }
+        // import_str is shared by all entries for this module — do NOT free here.
+        // Lifetime: valid until cmd_build_native returns.
+    }
+    xr_free(entry_dir);
+    return map;
+}
+
+// Write multi-module standalone main() to file
+static void aot_write_main(FILE *f, AotModuleInfo *modules, int nmodules) {
+    fprintf(f,
+        "/* --- Standalone Main (multi-module, no VM) --- */\n"
+        "\nint main(int argc, char **argv) {\n"
+        "    (void)argc; (void)argv;\n");
+    // Call module inits in topo order (bundle order = leaves first, entry last)
+    for (int m = 0; m < nmodules; m++) {
+        if (!modules[m].cmod) continue;
+        // Find the init function name (proto with no name = top-level)
+        const char *init_name = NULL;
+        for (int i = 0; i < modules[m].aot_count; i++) {
+            XrProto *p = modules[m].aot_protos[i];
+            if (!p->name) {
+                init_name = modules[m].aot_c_names[i];
+                break;
+            }
+        }
+        if (init_name) {
+            fprintf(f, "    %s(NULL);\n", init_name);
+        }
+    }
+    fprintf(f,
+        "    return 0;\n"
+        "}\n");
+}
+
+/* ========== Native Build (--native, standalone AOT) ========== */
 
 static int cmd_build_native(const char *input, const char *output,
                             const char *cc, const char *opt_flag,
                             bool c_only, bool strip, const char *sysroot) {
-    printf("[native] Building: %s (AOT + runtime)\n", input);
+    printf("[native] Building: %s (AOT)\n", input);
 
-    // Phase 1: Create bytecode bundle + collect module paths
-    char *bc_source = NULL;
-    int bundle_module_count = 0;
+    // Phase 1: Discover modules via bundle (topo order, entry last)
+    int nmodules = 0;
+    int entry_index = -1;
+    AotModuleInfo *modules = NULL;
     {
-        XrayIsolate *Xb = cli_create_isolate();
-        if (!Xb) { fprintf(stderr, "Error: failed to create isolate for bundling\n"); return 1; }
-
+        XrayIsolate *Xb = xr_cli_isolate_new(XR_CLI_ISOLATE_RUN);
+        if (!Xb) { fprintf(stderr, "Error: failed to create isolate\n"); return 1; }
         XrBundle *bundle = xr_bundle_create_ex(Xb, input, XR_BUNDLE_DEFAULT);
         if (!bundle) {
-            fprintf(stderr, "Error: bytecode bundling failed\n");
-            xray_isolate_delete(Xb);
-            return 1;
+            fprintf(stderr, "Error: bundling failed\n");
+            xray_isolate_delete(Xb); return 1;
         }
-        bc_source = xr_bundle_to_c_source(bundle, "xr_app");
-        bundle_module_count = bundle->count;
-
-        // Log discovered modules
-        if (bundle->count > 1) {
-            printf("[native] Bundle: %d modules\n", bundle->count);
-            for (int i = 0; i < bundle->count; i++) {
-                printf("  [%d] %s%s\n", i, bundle->entries[i].path,
-                       (bundle->entry_path &&
-                        strcmp(bundle->entries[i].path, bundle->entry_path) == 0)
-                       ? " (entry)" : "");
-            }
+        nmodules = bundle->count;
+        modules = (AotModuleInfo *)xr_calloc(nmodules, sizeof(AotModuleInfo));
+        if (!modules) {
+            xr_bundle_free(bundle); xray_isolate_delete(Xb); return 1;
         }
-
+        for (int i = 0; i < nmodules; i++) {
+            modules[i].path = xr_strdup(bundle->entries[i].path);
+            modules[i].mod_name = aot_derive_module_name(bundle->entries[i].path);
+            if (bundle->entry_path &&
+                strcmp(bundle->entries[i].path, bundle->entry_path) == 0)
+                entry_index = i;
+        }
         xr_bundle_free(bundle);
         xray_isolate_delete(Xb);
     }
-    if (!bc_source) {
-        fprintf(stderr, "Error: C source generation for bytecode failed\n");
-        return 1;
+    XR_DCHECK(entry_index >= 0, "cmd_build_native: entry not found in bundle");
+
+    if (nmodules > 1) {
+        printf("[native] %d modules (topo order):\n", nmodules);
+        for (int i = 0; i < nmodules; i++)
+            printf("  [%d] %s%s\n", i, modules[i].path,
+                   i == entry_index ? " (entry)" : "");
     }
 
-    // Phase 2: AOT compile typed functions (separate isolate)
-    char *source = cli_read_file(input);
-    if (!source) { fprintf(stderr, "Error: cannot open '%s'\n", input); xr_free(bc_source); return 1; }
+    // Phase 2: Compile all modules to XrProto (topo order, shared offsets accumulate)
+    XrayIsolate *X = xr_cli_isolate_new(XR_CLI_ISOLATE_RUN);
+    if (!X) { fprintf(stderr, "Error: failed to create isolate\n"); goto fail_early; }
 
-    XrayIsolate *X = cli_create_isolate();
-    if (!X) { xr_free(source); xr_free(bc_source); fprintf(stderr, "Error: failed to create isolate\n"); return 1; }
-
-    XrProto *proto = xr_compile_source_with_path(X, source, input);
-    xr_free(source);
-    if (!proto) {
-        fprintf(stderr, "Error: compilation failed\n");
-        xray_isolate_delete(X);
-        xr_free(bc_source);
-        return 1;
+    for (int m = 0; m < nmodules; m++) {
+        char *src = xr_cli_read_file(modules[m].path);
+        if (!src) {
+            fprintf(stderr, "Error: cannot read '%s'\n", modules[m].path);
+            goto fail_isolate;
+        }
+        modules[m].proto = xr_compile_source_with_path(X, src, modules[m].path);
+        xr_free(src);
+        if (!modules[m].proto) {
+            fprintf(stderr, "Error: compilation failed for '%s'\n", modules[m].path);
+            goto fail_isolate;
+        }
     }
 
-    // Collect AOT-eligible functions (dynamic array, no hard limit)
-    int aot_cap = 128;
-    XrProto **aot_protos = (XrProto **)xr_malloc(aot_cap * sizeof(XrProto *));
-    if (!aot_protos) {
-        fprintf(stderr, "Error: out of memory\n");
-        xray_isolate_delete(X); xr_free(bc_source); return 1;
-    }
-    int aot_count = 0;
-    collect_aot_protos(proto, aot_protos, &aot_count, aot_cap);
-
-    // Create struct promotion registry
+    // Phase 3: Create compilation context, collect protos + exports
     XcgenStructRegistry struct_reg;
     xcgen_struct_registry_init(&struct_reg);
-    xcgen_collect_shapes(proto, &struct_reg, (void *)X);
-    for (int i = 0; i < aot_count; i++)
-        xcgen_collect_shapes(aot_protos[i], &struct_reg, (void *)X);
-    xcgen_rebuild_field_index(&struct_reg);
-
-    // Create compilation context
     XcgenCompilation *comp = xcgen_compilation_new();
     comp->struct_reg = &struct_reg;
 
-    // Add main module to compilation
-    XcgenModule *mod = xcgen_compilation_add_module(comp, "main", input);
-
-    // Collect module-level exports (scan OP_EXPORT + OP_SETSHARED pairs)
-    collect_exports(proto, mod);
-
-    // Allocate C name storage (dynamic, same count as aot_protos)
-    char (*aot_c_names)[140] = (char (*)[140])xr_malloc(aot_count * 140);
-    if (!aot_c_names) {
-        fprintf(stderr, "Error: out of memory\n");
-        xcgen_compilation_free(comp); xr_free(aot_protos);
-        xray_isolate_delete(X); xr_free(bc_source); return 1;
-    }
-
-    // Register AOT proto→name mappings
-    for (int i = 0; i < aot_count; i++) {
-        XrProto *p = aot_protos[i];
-        const char *name = p->name ? XR_STRING_CHARS(p->name) : "__module_init";
-        snprintf(aot_c_names[i], 140, "xr_%s", name);
-        for (int j = 0; j < i; j++) {
-            if (strcmp(aot_c_names[i], aot_c_names[j]) == 0) {
-                snprintf(aot_c_names[i], 140, "xr_%s_%d", name, i);
-                break;
-            }
-        }
-        xcgen_register_proto(comp, (void *)p, aot_c_names[i]);
-    }
-
-    // Build shared_index → proto mapping
-    XrProto *shared_protos[128];
-    bool shared_is_ctor[128];
+    // Global shared_protos array (all modules combined)
+    XrProto *shared_protos[256];
+    bool shared_is_ctor[256];
     memset(shared_protos, 0, sizeof(shared_protos));
     memset(shared_is_ctor, 0, sizeof(shared_is_ctor));
-    int nshared = build_shared_proto_map(proto, shared_protos, shared_is_ctor, 128);
+    int nshared = 0;
 
-    // Pre-register classes so CHA devirt resolves user-defined methods
-    aot_preregister_classes(proto, X);
+    int total_aot = 0, total_compiled = 0;
 
-    int total_compiled = 0;
+    for (int m = 0; m < nmodules; m++) {
+        XrProto *proto = modules[m].proto;
+        const char *mname = (m == entry_index) ? "main" : modules[m].mod_name;
 
-    for (int i = 0; i < aot_count; i++) {
-        XrProto *p = aot_protos[i];
-        const char *name = p->name ? XR_STRING_CHARS(p->name) : "__module_init";
+        // Add module to compilation
+        modules[m].cmod = xcgen_compilation_add_module(comp, mname, modules[m].path);
+        XR_DCHECK(modules[m].cmod != NULL, "cmd_build_native: add_module failed");
 
-        XirFunc *xfunc = xir_build_from_proto_aot(p, shared_protos, nshared, X);
-        if (!xfunc) {
-            printf("  [C] %s → skip (XIR build failed)\n", name);
-            continue;
+        // Collect exports
+        collect_exports(proto, modules[m].cmod);
+
+        // Collect AOT-eligible protos
+        modules[m].aot_cap = 64;
+        modules[m].aot_protos = (XrProto **)xr_malloc(
+            modules[m].aot_cap * sizeof(XrProto *));
+        if (!modules[m].aot_protos) goto fail_comp;
+        modules[m].aot_count = 0;
+        collect_aot_protos(proto, modules[m].aot_protos,
+                           &modules[m].aot_count, modules[m].aot_cap);
+
+        // Collect shapes for struct promotion
+        xcgen_collect_shapes(proto, &struct_reg, (void *)X);
+        for (int i = 0; i < modules[m].aot_count; i++)
+            xcgen_collect_shapes(modules[m].aot_protos[i], &struct_reg, (void *)X);
+
+        // Build shared_proto_map for this module
+        int ns = build_shared_proto_map(proto, shared_protos, shared_is_ctor, 256);
+        if (ns > nshared) nshared = ns;
+
+        // Pre-register classes
+        aot_preregister_classes(proto, X);
+
+        // Allocate C name storage
+        modules[m].aot_c_names = (char (*)[140])xr_malloc(
+            modules[m].aot_count * 140);
+        if (!modules[m].aot_c_names && modules[m].aot_count > 0) goto fail_comp;
+
+        // Generate unique C function names with module prefix
+        for (int i = 0; i < modules[m].aot_count; i++) {
+            XrProto *p = modules[m].aot_protos[i];
+            const char *fname = p->name ? XR_STRING_CHARS(p->name) : "__module_init";
+            if (m == entry_index)
+                snprintf(modules[m].aot_c_names[i], 140, "xr_%s", fname);
+            else
+                snprintf(modules[m].aot_c_names[i], 140, "xr_%s__%s",
+                         modules[m].mod_name, fname);
+            // Dedup: append index if collision with ANY prior name
+            for (int pm = 0; pm <= m; pm++) {
+                int jmax = (pm == m) ? i : modules[pm].aot_count;
+                for (int j = 0; j < jmax; j++) {
+                    if (strcmp(modules[m].aot_c_names[i],
+                               modules[pm].aot_c_names[j]) == 0) {
+                        snprintf(modules[m].aot_c_names[i], 140,
+                                 "xr_%s__%s_%d", modules[m].mod_name, fname,
+                                 total_aot + i);
+                        goto dedup_done;
+                    }
+                }
+            }
+            dedup_done:
+            xcgen_register_proto(comp, (void *)modules[m].aot_protos[i],
+                                 modules[m].aot_c_names[i]);
         }
-        xir_run_pipeline(xfunc, XIR_OPT_FULL);
-        XcgenFunc *cf = xcgen_compile_func(mod, xfunc, aot_c_names[i]);
-        xir_func_destroy(xfunc);
+        total_aot += modules[m].aot_count;
+    }
 
-        if (cf) {
-            printf("  [C] %s → %zu bytes C source\n", name, cf->body.len);
-            total_compiled++;
-        } else {
-            printf("  [C] %s → skip (xcgen failed)\n", name);
+    xcgen_rebuild_field_index(&struct_reg);
+
+    // Phase 4: Build cross-module export map for import resolution
+    int import_map_count = 0;
+    XirAotImportEntry *import_map = aot_build_export_map(
+        modules, nmodules, entry_index, &import_map_count);
+    if (import_map_count > 0) {
+        printf("[native] Cross-module exports: %d entries\n", import_map_count);
+    }
+
+    // Phase 5: Lower each module to XIR → C
+    for (int m = 0; m < nmodules; m++) {
+        if (nmodules > 1)
+            printf("[native] Module: %s (%d functions)\n",
+                   modules[m].mod_name, modules[m].aot_count);
+
+        for (int i = 0; i < modules[m].aot_count; i++) {
+            XrProto *p = modules[m].aot_protos[i];
+            const char *fname = p->name ? XR_STRING_CHARS(p->name) : "__module_init";
+
+            // Use extended builder with import map for top-level init functions
+            XirFunc *xfunc;
+            if (!p->name && import_map_count > 0)
+                xfunc = xir_build_from_proto_aot_ex(
+                    p, shared_protos, nshared, X, import_map, import_map_count);
+            else
+                xfunc = xir_build_from_proto_aot(p, shared_protos, nshared, X);
+
+            if (!xfunc) {
+                printf("  [C] %s → skip (XIR build failed)\n", fname);
+                continue;
+            }
+            xir_run_pipeline(xfunc, XIR_OPT_FULL);
+            XcgenFunc *cf = xcgen_compile_func(modules[m].cmod, xfunc,
+                                                modules[m].aot_c_names[i]);
+            xir_func_destroy(xfunc);
+            if (cf) {
+                printf("  [C] %s → %zu bytes\n", fname, cf->body.len);
+                total_compiled++;
+            } else {
+                printf("  [C] %s → skip (xcgen failed)\n", fname);
+            }
         }
     }
 
     xray_isolate_delete(X);
+    X = NULL;
 
-    printf("AOT: %d/%d functions transpiled (entry module, %d total modules in bundle)\n",
-           total_compiled, aot_count, bundle_module_count);
+    printf("AOT: %d/%d functions transpiled across %d modules\n",
+           total_compiled, total_aot, nmodules);
 
-    // Assemble AOT C source (without main)
-    char *aot_source = NULL;
-    if (total_compiled > 0) {
-        aot_source = xcgen_emit_source(comp);
-    }
+    // Phase 6: Emit C source + main() + link
+    char *aot_source = (total_compiled > 0) ? xcgen_emit_source(comp) : NULL;
     xcgen_compilation_free(comp);
-    xr_free(aot_protos);
-    xr_free(aot_c_names);
+    comp = NULL;
 
-    // Write standalone AOT C source: functions + main()
     char c_file[512];
     if (c_only) snprintf(c_file, sizeof(c_file), "%s", output);
-    else snprintf(c_file, sizeof(c_file), "/tmp/xray_native_rt_%d.c", getpid());
+    else snprintf(c_file, sizeof(c_file), "/tmp/xray_native_%d.c", getpid());
 
     FILE *f = fopen(c_file, "w");
     if (!f) {
         fprintf(stderr, "Error: cannot create '%s'\n", c_file);
-        xr_free(bc_source);
-        if (aot_source) xr_free(aot_source);
-        return 1;
+        goto fail_final;
     }
 
-    // Headers
     fprintf(f,
-        "#include <stdio.h>\n"
-        "#include <stdlib.h>\n"
-        "#include <string.h>\n"
-        "#include <stdint.h>\n"
-        "#include <stddef.h>\n\n"
-    );
-
-    // AOT transpiled functions
+        "#include <stdio.h>\n#include <stdlib.h>\n#include <string.h>\n"
+        "#include <stdint.h>\n#include <stddef.h>\n\n");
     if (aot_source) {
-        fprintf(f, "/* --- AOT Transpiled Functions --- */\n");
-        fprintf(f, "%s\n\n", aot_source);
-        xr_free(aot_source);
+        fprintf(f, "/* --- AOT Transpiled Functions --- */\n%s\n\n", aot_source);
+        xr_free(aot_source); aot_source = NULL;
     }
-    xr_free(bc_source);
-
-    // Standalone main: call __module_init directly (no VM)
-    fprintf(f,
-        "/* --- Standalone Main (no VM) --- */\n"
-        "\nint main(int argc, char **argv) {\n"
-        "    (void)argc; (void)argv;\n"
-        "    xr___module_init(NULL);\n"
-        "    return 0;\n"
-        "}\n"
-    );
+    aot_write_main(f, modules, nmodules);
     fclose(f);
 
-    if (c_only) {
-        printf("Generated: %s\n", output);
-        return 0;
+    // Free module info and import map
+    for (int m = 0; m < nmodules; m++) {
+        xr_free((void *)modules[m].path);
+        xr_free((void *)modules[m].mod_name);
+        xr_free(modules[m].aot_protos);
+        xr_free(modules[m].aot_c_names);
+    }
+    xr_free(modules);
+    // Free import_map strings (module_path pointers are shared per-module group)
+    if (import_map) {
+        const char *prev = NULL;
+        for (int i = 0; i < import_map_count; i++) {
+            if (import_map[i].module_path != prev) {
+                xr_free((void *)import_map[i].module_path);
+                prev = import_map[i].module_path;
+            }
+        }
+        xr_free(import_map);
     }
 
-    // Link standalone: only libc + libm (no libxray_core)
+    if (c_only) { printf("Generated: %s\n", output); return 0; }
+
     int ret = invoke_cc_standalone(cc, opt_flag, output, c_file, strip, sysroot);
     unlink(c_file);
     if (ret == 0) printf("Generated: %s\n", output);
     return ret;
+
+    // Error cleanup paths
+fail_comp:
+    xcgen_compilation_free(comp);
+fail_isolate:
+    xray_isolate_delete(X);
+fail_early:
+    for (int m = 0; m < nmodules; m++) {
+        xr_free((void *)modules[m].path);
+        xr_free((void *)modules[m].mod_name);
+        xr_free(modules[m].aot_protos);
+        xr_free(modules[m].aot_c_names);
+    }
+    xr_free(modules);
+    return 1;
+
+fail_final:
+    if (aot_source) xr_free(aot_source);
+    for (int m = 0; m < nmodules; m++) {
+        xr_free((void *)modules[m].path);
+        xr_free((void *)modules[m].mod_name);
+        xr_free(modules[m].aot_protos);
+        xr_free(modules[m].aot_c_names);
+    }
+    xr_free(modules);
+    return 1;
 }
 
 #else

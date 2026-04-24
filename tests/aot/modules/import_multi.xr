@@ -1,0 +1,13 @@
+// AOT multi-module test: import class and functions from another module
+import { Rect, add, mul } from "./shape_lib"
+
+// Cross-module class: construct, invoke methods, access fields
+let r = Rect(5, 3)
+print(r.area())       // 15
+print(r.perimeter())  // 16
+print(r.w)            // 5
+print(r.h)            // 3
+
+// Cross-module function calls
+print(add(10, 20))    // 30
+print(mul(6, 7))      // 42

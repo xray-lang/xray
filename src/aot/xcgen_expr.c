@@ -525,6 +525,14 @@ static void xcg_emit_field_store(XcgenBuf *b, XirFunc *func, XirIns *ins,
                 bool val_tagged = (val_type == XR_REP_PTR ||
                                    val_type == XR_REP_TAGGED ||
                                    val_type == XR_REP_STR);
+                // ARC: retain new val, release old field for tagged fields
+                if (st->fields[fi].c_type == 2 && val_tagged) {
+                    xcgen_buf_puts(b, "    xrt_arc_retain_val(");
+                    xcg_emit_ref(b, func, ins->args[1]);
+                    xcgen_buf_puts(b, "); xrt_arc_release_val(");
+                    EMIT_STRUCT_BASE(b, st, base_vi, func);
+                    xcgen_buf_printf(b, "%s);\n", st->fields[fi].name);
+                }
                 xcgen_buf_puts(b, "    ");
                 EMIT_STRUCT_BASE(b, st, base_vi, func);
                 xcgen_buf_printf(b, "%s = ", st->fields[fi].name);
@@ -918,6 +926,15 @@ static void xcg_emit_mov(XcgenBuf *b, XirFunc *func, XirIns *ins,
         xcgen_buf_printf(b, "    v%u = xrt_box_float(", dst_idx);
         xcg_emit_ref(b, func, ins->args[0]);
         xcgen_buf_puts(b, ");\n");
+        cf->needs_runtime = true;
+    } else if (src_tagged && dst_tagged) {
+        // ARC: retain new value, release old, then assign
+        xcgen_buf_puts(b, "    xrt_arc_retain_val(");
+        xcg_emit_ref(b, func, ins->args[0]);
+        xcgen_buf_printf(b, "); xrt_arc_release_val(v%u);\n", dst_idx);
+        xcgen_buf_printf(b, "    v%u = ", dst_idx);
+        xcg_emit_ref(b, func, ins->args[0]);
+        xcgen_buf_puts(b, ";\n");
         cf->needs_runtime = true;
     } else {
         xcgen_buf_printf(b, "    v%u = ", dst_idx);

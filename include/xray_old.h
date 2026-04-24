@@ -38,12 +38,6 @@ typedef int64_t xr_Integer;
 XrayIsolate* xray_new(void);
 
 /*
-** Free a Xray isolate
-** @param iso The isolate to free
-*/
-void xray_free(XrayIsolate *iso);
-
-/*
 ** Execute a Xray script file
 ** @param iso Isolate instance
 ** @param filename Script file path

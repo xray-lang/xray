@@ -24,7 +24,10 @@
  */
 
 #include "xcli.h"
-#include "xcli_utils.h"
+#include "xcli_spec.h"
+#include "xcli_fs.h"
+#include "xcli_isolate.h"
+#include "xcli_output.h"
 #include "xray.h"
 #include "xray_isolate.h"
 #include "../../api/xtest_runner.h"
@@ -35,10 +38,10 @@
 #include "../../coro/xcoroutine.h"
 #include "../../coro/xworker.h"
 #include "../../frontend/parser/xparse.h"
+#include "../../base/xmalloc.h"
+#include "../../base/xchecks.h"
 #include <stdio.h>
-#include <stdlib.h>
 #include <string.h>
-#include <getopt.h>
 #include <dirent.h>
 #include <sys/stat.h>
 #include <time.h>
@@ -46,7 +49,6 @@
 #include <errno.h>
 #include <stdatomic.h>
 #include <unistd.h>
-#include "../../base/xmalloc.h"
 
 #define TEST_FILE_TIMEOUT_SEC 120
 
@@ -106,7 +108,7 @@ static void get_display_name(const char *filepath, char *buf, size_t bufsz) {
     if (dot && strcmp(dot, ".xr") == 0) *dot = '\0';
 }
 
-#define get_time_ms() cli_get_time_ms()
+#define get_time_ms() xr_cli_get_time_ms()
 
 /* ========== Closure Lookup ========== */
 
@@ -251,7 +253,7 @@ static void run_test_file(const char *filepath, XrTestConfig *config,
     xr_module_system_init_with_script(X, filepath);
 
     // Read + Parse + Compile
-    char *source = cli_read_file(filepath);
+    char *source = xr_cli_read_file(filepath);
     if (!source) {
         result->has_error = true;
         snprintf(result->error_msg, sizeof(result->error_msg), "cannot read file");
@@ -453,7 +455,7 @@ static void collect_files_recursive(const char *path, XrFileList *fl) {
                                     "xcmd_test subdirs grow");
             }
             subdirs[ndir++] = xr_strdup(filepath);
-        } else if (S_ISREG(st.st_mode) && cli_is_xr_file(entry->d_name)) {
+        } else if (S_ISREG(st.st_mode) && xr_cli_is_xr_file(entry->d_name)) {
             if (nfile >= fcap) {
                 fcap = fcap == 0 ? 16 : fcap * 2;
                 XR_REALLOC_OR_ABORT(xrfiles, fcap * sizeof(char *),
@@ -519,7 +521,7 @@ static void print_file_result(XrTestFileResult *r, int align_width, bool verbose
     get_display_name(r->filepath, name, sizeof(name));
 
     if (r->has_error) {
-        printf("   " CLR_RED "x" CLR_RESET " %s: %s\n", name, r->error_msg);
+        printf("   " XR_CLR_RED "x" XR_CLR_RESET " %s: %s\n", name, r->error_msg);
         return;
     }
 
@@ -528,25 +530,25 @@ static void print_file_result(XrTestFileResult *r, int align_width, bool verbose
 
     if (verbose) {
         const char *plural = (r->test_count == 1) ? "" : "s";
-        printf("   " CLR_CYAN "%s" CLR_RESET " " CLR_DIM "(%d test%s)" CLR_RESET "\n",
+        printf("   " XR_CLR_CYAN "%s" XR_CLR_RESET " " XR_CLR_DIM "(%d test%s)" XR_CLR_RESET "\n",
                name, r->test_count, plural);
 
         // Print individual failures
         for (int i = 0; i < r->failure_count; i++) {
             XrTestFailureRecord *f = &r->failures[i];
-            const char *color = (f->status == TEST_TIMEOUT) ? CLR_YELLOW : CLR_RED;
-            printf("     %sx" CLR_RESET " %s: %s\n", color, f->test_name, f->message);
+            const char *color = (f->status == TEST_TIMEOUT) ? XR_CLR_YELLOW : XR_CLR_RED;
+            printf("     %sx" XR_CLR_RESET " %s: %s\n", color, f->test_name, f->message);
         }
 
         // Summary line
         if (problems > 0) {
-            printf("     " CLR_DIM "%d passed," CLR_RESET " " CLR_RED "%d failed" CLR_RESET,
+            printf("     " XR_CLR_DIM "%d passed," XR_CLR_RESET " " XR_CLR_RED "%d failed" XR_CLR_RESET,
                    r->passed, problems);
         } else {
-            printf("     " CLR_GREEN "%d passed" CLR_RESET, r->passed);
+            printf("     " XR_CLR_GREEN "%d passed" XR_CLR_RESET, r->passed);
         }
-        if (r->skipped > 0) printf(CLR_DIM ", %d skipped" CLR_RESET, r->skipped);
-        printf("  " CLR_DIM "(%.0fms)" CLR_RESET "\n", r->duration_ms);
+        if (r->skipped > 0) printf(XR_CLR_DIM ", %d skipped" XR_CLR_RESET, r->skipped);
+        printf("  " XR_CLR_DIM "(%.0fms)" XR_CLR_RESET "\n", r->duration_ms);
     } else {
         if (problems == 0) {
             int name_len = (int)strlen(name);
@@ -559,22 +561,22 @@ static void print_file_result(XrTestFileResult *r, int align_width, bool verbose
             for (int d = 1; d < dots; d++) dot_buf[d] = '.';
             dot_buf[dots] = '\0';
 
-            printf("   " CLR_GREEN "+" CLR_RESET " %s" CLR_DIM "%s" CLR_RESET " %d/%d",
+            printf("   " XR_CLR_GREEN "+" XR_CLR_RESET " %s" XR_CLR_DIM "%s" XR_CLR_RESET " %d/%d",
                    name, dot_buf, r->passed, ran + r->skipped);
-            if (r->skipped > 0) printf("  " CLR_DIM "%d skipped" CLR_RESET, r->skipped);
-            printf("  " CLR_DIM "(%.0fms)" CLR_RESET "\n", r->duration_ms);
+            if (r->skipped > 0) printf("  " XR_CLR_DIM "%d skipped" XR_CLR_RESET, r->skipped);
+            printf("  " XR_CLR_DIM "(%.0fms)" XR_CLR_RESET "\n", r->duration_ms);
         } else {
-            printf("   " CLR_RED "x" CLR_RESET " %s " CLR_DIM "(%d test%s)" CLR_RESET "\n",
+            printf("   " XR_CLR_RED "x" XR_CLR_RESET " %s " XR_CLR_DIM "(%d test%s)" XR_CLR_RESET "\n",
                    name, r->test_count, r->test_count == 1 ? "" : "s");
             for (int i = 0; i < r->failure_count; i++) {
                 XrTestFailureRecord *f = &r->failures[i];
-                const char *color = (f->status == TEST_TIMEOUT) ? CLR_YELLOW : CLR_RED;
-                printf("       %sx" CLR_RESET " %s: %s\n", color, f->test_name, f->message);
+                const char *color = (f->status == TEST_TIMEOUT) ? XR_CLR_YELLOW : XR_CLR_RED;
+                printf("       %sx" XR_CLR_RESET " %s: %s\n", color, f->test_name, f->message);
             }
-            printf("     " CLR_DIM "%d passed," CLR_RESET " " CLR_RED "%d failed" CLR_RESET,
+            printf("     " XR_CLR_DIM "%d passed," XR_CLR_RESET " " XR_CLR_RED "%d failed" XR_CLR_RESET,
                    r->passed, problems);
             if (r->skipped > 0) printf(", %d skipped", r->skipped);
-            printf("  " CLR_DIM "(%.0fms)" CLR_RESET "\n", r->duration_ms);
+            printf("  " XR_CLR_DIM "(%.0fms)" XR_CLR_RESET "\n", r->duration_ms);
         }
     }
 }
@@ -597,7 +599,7 @@ static void print_all_results(XrTestFileResult *results, char **files, int count
 
         if (!last_dir || strcmp(last_dir, dir_buf) != 0) {
             last_dir = dir_buf;
-            printf(" " CLR_BOLD "%s" CLR_RESET "\n", dir_name);
+            printf(" " XR_CLR_BOLD "%s" XR_CLR_RESET "\n", dir_name);
         }
 
         print_file_result(&results[i], align_width, verbose);
@@ -617,165 +619,107 @@ static void print_summary(int file_count, int total_passed, int total_failed,
         total_failure_records += results[i].failure_count;
 
     if (total_failure_records > 0) {
-        printf("\n " CLR_RED CLR_BOLD "Failed Tests" CLR_RESET "\n\n");
+        printf("\n " XR_CLR_RED XR_CLR_BOLD "Failed Tests" XR_CLR_RESET "\n\n");
         for (int i = 0; i < result_count; i++) {
             for (int j = 0; j < results[i].failure_count; j++) {
                 XrTestFailureRecord *rec = &results[i].failures[j];
                 char fname[256];
                 get_display_name(rec->file, fname, sizeof(fname));
-                printf("  " CLR_RED "\u2717" CLR_RESET " %s " CLR_DIM ">" CLR_RESET " %s\n",
+                printf("  " XR_CLR_RED "\u2717" XR_CLR_RESET " %s " XR_CLR_DIM ">" XR_CLR_RESET " %s\n",
                        fname, rec->test_name);
                 if (rec->message[0] != '\0')
-                    printf("    " CLR_DIM "%s" CLR_RESET "\n", rec->message);
+                    printf("    " XR_CLR_DIM "%s" XR_CLR_RESET "\n", rec->message);
             }
         }
     }
 
     // Summary
-    printf("\n " CLR_DIM "\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500"
+    printf("\n " XR_CLR_DIM "\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500"
            "\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500"
            "\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500"
-           "\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500" CLR_RESET "\n");
+           "\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500" XR_CLR_RESET "\n");
 
-    printf(" " CLR_BOLD " Tests" CLR_RESET "  ");
+    printf(" " XR_CLR_BOLD " Tests" XR_CLR_RESET "  ");
     printf("%d file%s", file_count, file_count == 1 ? "" : "s");
-    printf(CLR_DIM " | " CLR_RESET);
+    printf(XR_CLR_DIM " | " XR_CLR_RESET);
     if (total_problems == 0) {
-        printf(CLR_GREEN CLR_BOLD "%d passed" CLR_RESET, total_passed);
+        printf(XR_CLR_GREEN XR_CLR_BOLD "%d passed" XR_CLR_RESET, total_passed);
     } else {
-        printf(CLR_GREEN "%d passed" CLR_RESET, total_passed);
-        printf(CLR_DIM " | " CLR_RESET);
-        printf(CLR_RED CLR_BOLD "%d failed" CLR_RESET, total_problems);
+        printf(XR_CLR_GREEN "%d passed" XR_CLR_RESET, total_passed);
+        printf(XR_CLR_DIM " | " XR_CLR_RESET);
+        printf(XR_CLR_RED XR_CLR_BOLD "%d failed" XR_CLR_RESET, total_problems);
     }
     if (total_skipped > 0) {
-        printf(CLR_DIM " | " CLR_RESET);
-        printf(CLR_DIM "%d skipped" CLR_RESET, total_skipped);
+        printf(XR_CLR_DIM " | " XR_CLR_RESET);
+        printf(XR_CLR_DIM "%d skipped" XR_CLR_RESET, total_skipped);
     }
     if (filter)
-        printf("  " CLR_DIM "(filter: \"%s\")" CLR_RESET, filter);
+        printf("  " XR_CLR_DIM "(filter: \"%s\")" XR_CLR_RESET, filter);
     printf("\n");
 
-    printf(" " CLR_BOLD "  Time" CLR_RESET "  ");
+    printf(" " XR_CLR_BOLD "  Time" XR_CLR_RESET "  ");
     if (total_time_ms >= 1000.0)
         printf("%.2fs\n", total_time_ms / 1000.0);
     else
         printf("%.0fms\n", total_time_ms);
 
-    printf(" " CLR_DIM "\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500"
+    printf(" " XR_CLR_DIM "\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500"
            "\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500"
            "\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500"
-           "\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500" CLR_RESET "\n");
+           "\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500" XR_CLR_RESET "\n");
 
     if (total_problems == 0)
-        printf("\n " CLR_GREEN CLR_BOLD "\u2713 All tests passed" CLR_RESET "\n\n");
+        printf("\n " XR_CLR_GREEN XR_CLR_BOLD "\u2713 All tests passed" XR_CLR_RESET "\n\n");
     else
-        printf("\n " CLR_RED CLR_BOLD "\u2717 %d test%s failed" CLR_RESET "\n\n",
+        printf("\n " XR_CLR_RED XR_CLR_BOLD "\u2717 %d test%s failed" XR_CLR_RESET "\n\n",
                total_problems, total_problems == 1 ? "" : "s");
 }
 
 /* ========== CLI Entry Point ========== */
 
-#define OPT_JIT_FORCE 256
+XR_FUNC int cmd_test(const XrCliInvocation *inv) {
+    XR_DCHECK(inv != NULL, "inv is NULL");
 
-static struct option test_long_options[] = {
-    {"verbose",   no_argument,       0, 'v'},
-    {"fail-fast", no_argument,       0, 'F'},
-    {"filter",    required_argument, 0, 'f'},
-    {"no-jit",    no_argument,       0, 'J'},
-    {"jit-force", no_argument,       0, OPT_JIT_FORCE},
-    {"quiet",     no_argument,       0, 'q'},
-    {"help",      no_argument,       0, 'h'},
-    {0, 0, 0, 0}
-};
+    bool verbose   = xr_cli_opt_bool(&inv->options, "verbose");
+    bool quiet     = xr_cli_opt_bool(&inv->options, "quiet");
+    bool fail_fast = xr_cli_opt_bool(&inv->options, "fail-fast");
+    bool jitless   = xr_cli_opt_bool(&inv->options, "no-jit");
+    bool jit_force = xr_cli_opt_bool(&inv->options, "jit-force");
+    const char *filter = xr_cli_opt_string(&inv->options, "filter", NULL);
+    int num_threads = xr_cli_opt_int(&inv->options, "jobs", 1);
+    if (num_threads < 1) num_threads = 1;
 
-void print_test_help(void) {
-    printf("Usage: xray test [OPTIONS] <file or directory>\n");
-    printf("\n");
-    printf("Run Xray tests\n");
-    printf("\n");
-    printf("OPTIONS:\n");
-    printf("    -v, --verbose          Verbose output (per-test details)\n");
-    printf("    -q, --quiet            Quiet mode (exit code only, for scripting)\n");
-    printf("    -F, --fail-fast        Stop on first failure\n");
-    printf("    -f, --filter <pattern> Only run matching tests\n");
-    printf("    -j <N>                 Parallel execution (N threads, default: 1)\n");
-    printf("    --no-jit               Disable JIT compiler\n");
-    printf("    --jit-force            Force JIT on first call\n");
-    printf("    -h, --help             Show help\n");
-    printf("\n");
-    printf("EXAMPLES:\n");
-    printf("    xray test tests/test_math.xr      # Run single file\n");
-    printf("    xray test tests/                   # Run all tests in directory\n");
-    printf("    xray test -j8 tests/               # 8-thread parallel\n");
-    printf("    xray test --verbose tests/         # Verbose output\n");
-    printf("    xray test -f basic tests/          # Filter by pattern\n");
-    printf("    xray test --quiet --jit-force t.xr # JIT diff testing\n");
-    printf("\n");
-}
-
-int cmd_test(int argc, char **argv) {
-    bool verbose = false;
-    bool quiet = false;
-    bool fail_fast = false;
-    bool jitless = false;
-    bool jit_force = false;
-    const char *filter = NULL;
-    const char *test_path = NULL;
-    int num_threads = 1;
-
-    optind = 1;
-
-    int opt;
-    while ((opt = getopt_long(argc, argv, "vqFf:j:hJ", test_long_options, NULL)) != -1) {
-        switch (opt) {
-            case 'v': verbose = true; break;
-            case 'q': quiet = true; break;
-            case 'F': fail_fast = true; break;
-            case 'f': filter = optarg; break;
-            case 'j':
-                if (!cli_parse_int(optarg, &num_threads) || num_threads < 1) {
-                    fprintf(stderr, "Error: -j requires positive integer\n");
-                    return 1;
-                }
-                break;
-            case 'J': jitless = true; break;
-            case OPT_JIT_FORCE: jit_force = true; break;
-            case 'h': print_test_help(); return 0;
-            default: print_test_help(); return 1;
-        }
+    if (inv->positional_count < 1) {
+        xr_cli_error("test", "please specify test file or directory");
+        return XR_CLI_EXIT_USAGE;
     }
 
-    if (optind < argc) test_path = argv[optind];
-
-    if (!test_path) {
-        fprintf(stderr, "Error: please specify test file or directory\n");
-        fprintf(stderr, "Usage: xray test <file.xr> or <directory>\n");
-        return 1;
-    }
-
-    struct stat st;
-    if (stat(test_path, &st) != 0) {
-        fprintf(stderr, "Error: path does not exist '%s'\n", test_path);
-        return 1;
-    }
-
-    // Collect test files
+    /* Collect test files from all positional args */
     XrFileList fl = {0};
-    if (S_ISDIR(st.st_mode)) {
-        collect_files_recursive(test_path, &fl);
-    } else {
-        filelist_add(&fl, test_path);
+    for (int i = 0; i < inv->positional_count; i++) {
+        const char *test_path = inv->positionals[i];
+        struct stat st;
+        if (stat(test_path, &st) != 0) {
+            xr_cli_error("test", "path does not exist '%s'", test_path);
+            filelist_free(&fl);
+            return XR_CLI_EXIT_FAIL;
+        }
+        if (S_ISDIR(st.st_mode)) {
+            collect_files_recursive(test_path, &fl);
+        } else {
+            filelist_add(&fl, test_path);
+        }
     }
 
     if (fl.count == 0) {
         if (!quiet) fprintf(stderr, "No test files found\n");
         filelist_free(&fl);
-        return 0;
+        return XR_CLI_EXIT_OK;
     }
 
     XrTestConfig config = { .verbose = verbose, .fail_fast = fail_fast, .filter = filter };
 
-    // Allocate results
+    /* Allocate results */
     XrTestFileResult *results = xr_calloc(fl.count, sizeof(XrTestFileResult));
 
     double total_start = get_time_ms();
@@ -783,15 +727,13 @@ int cmd_test(int argc, char **argv) {
     if (!quiet) printf("\n");
 
     if (num_threads <= 1 || fl.count == 1) {
-        // Serial execution
+        /* Serial execution */
         int aw = quiet ? 0 : compute_align_width(fl.paths, fl.count);
         char last_dir[1024] = "";
         for (int i = 0; i < fl.count; i++) {
             run_test_file(fl.paths[i], &config, jitless, jit_force, &results[i]);
 
-            // In serial + non-quiet mode, print file result immediately
             if (!quiet) {
-                // Print directory header if needed
                 char dir_buf[1024];
                 strncpy(dir_buf, fl.paths[i], sizeof(dir_buf) - 1);
                 dir_buf[sizeof(dir_buf) - 1] = '\0';
@@ -802,17 +744,16 @@ int cmd_test(int argc, char **argv) {
                     const char *dn = strrchr(dir_buf, '/');
                     dn = dn ? dn + 1 : dir_buf;
                     if (results[i].test_count > 0 || results[i].has_error)
-                        printf(" " CLR_BOLD "%s" CLR_RESET "\n", dn);
+                        printf(" " XR_CLR_BOLD "%s" XR_CLR_RESET "\n", dn);
                 }
                 print_file_result(&results[i], aw, verbose);
             }
 
-            // Fail-fast at file level
             if (fail_fast && (results[i].failed + results[i].errors + results[i].timeout) > 0)
                 break;
         }
     } else {
-        // Parallel execution
+        /* Parallel execution */
         XrTestParallelCtx pctx = {
             .files = fl.paths,
             .file_count = fl.count,
@@ -827,7 +768,7 @@ int cmd_test(int argc, char **argv) {
         if (nworkers > fl.count) nworkers = fl.count;
 
         if (!quiet)
-            printf(" " CLR_DIM "Running %d files on %d threads..." CLR_RESET "\n\n",
+            printf(" " XR_CLR_DIM "Running %d files on %d threads..." XR_CLR_RESET "\n\n",
                    fl.count, nworkers);
 
         pthread_t *threads = xr_calloc(nworkers, sizeof(pthread_t));
@@ -837,7 +778,6 @@ int cmd_test(int argc, char **argv) {
             pthread_join(threads[i], NULL);
         xr_free(threads);
 
-        // Print results in file order
         if (!quiet) {
             int aw = compute_align_width(fl.paths, fl.count);
             print_all_results(results, fl.paths, fl.count, aw, verbose);
@@ -846,7 +786,7 @@ int cmd_test(int argc, char **argv) {
 
     double total_time = get_time_ms() - total_start;
 
-    // Aggregate stats
+    /* Aggregate stats */
     int file_count = 0, total_passed = 0, total_failed = 0;
     int total_errors = 0, total_skipped = 0, total_timeout = 0;
     for (int i = 0; i < fl.count; i++) {
@@ -864,9 +804,9 @@ int cmd_test(int argc, char **argv) {
                       results, fl.count);
     }
 
-    int exit_code = (total_failed + total_errors + total_timeout) > 0 ? 1 : 0;
+    int exit_code = (total_failed + total_errors + total_timeout) > 0
+        ? XR_CLI_EXIT_FAIL : XR_CLI_EXIT_OK;
 
-    // Cleanup
     for (int i = 0; i < fl.count; i++) file_result_free(&results[i]);
     xr_free(results);
     filelist_free(&fl);

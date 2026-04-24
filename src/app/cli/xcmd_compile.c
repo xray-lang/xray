@@ -13,7 +13,9 @@
  */
 
 #include "xcli.h"
-#include "xcli_utils.h"
+#include "xcli_spec.h"
+#include "xcli_fs.h"
+#include "xcli_isolate.h"
 #include "xray.h"
 #include "xray_isolate.h"
 #include "../../runtime/xisolate_api.h"
@@ -21,47 +23,10 @@
 #include "../../frontend/parser/xast_api.h"
 #include "../../module/xbytecode_io.h"
 #include "../../runtime/value/xchunk.h"
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <getopt.h>
 #include "../../base/xmalloc.h"
-
-static struct option compile_long_options[] = {
-    {"help",         no_argument,       0, 'h'},
-    {"output",       required_argument, 0, 'o'},
-    {"format",       required_argument, 0, 'f'},
-    {"strip-debug",  no_argument,       0, 's'},
-    {"strip-source", no_argument,       0, 'S'},
-    {"name",         required_argument, 0, 'n'},
-    {0, 0, 0, 0}
-};
-
-void print_compile_help(void) {
-    printf("Usage: xray compile [options] <file.xr>\n");
-    printf("\n");
-    printf("Compile source file to bytecode or C code\n");
-    printf("\n");
-    printf("Options:\n");
-    printf("    -o, --output <file>  Output file path\n");
-    printf("    -f, --format <fmt>   Output format: bytecode, c, header (default: infer from extension)\n");
-    printf("    -s, --strip-debug    Remove debug info (line numbers, variable names)\n");
-    printf("    -S, --strip-source   Remove source file path\n");
-    printf("    -n, --name <name>    C variable name prefix (default: generated from filename)\n");
-    printf("    -h, --help           Show this help\n");
-    printf("\n");
-    printf("Output formats:\n");
-    printf("    .xrc     Bytecode file (binary)\n");
-    printf("    .c       C source file (contains bytecode array)\n");
-    printf("    .h       C header file (single array declaration)\n");
-    printf("\n");
-    printf("Examples:\n");
-    printf("    xray compile app.xr -o app.xrc      # Compile to bytecode\n");
-    printf("    xray compile app.xr -o app.c        # Compile to C source\n");
-    printf("    xray compile app.xr -o app.c -s     # Compile and strip debug info\n");
-    printf("    xray compile lib.xr -o lib.c -n mylib  # Specify variable name prefix\n");
-    printf("\n");
-}
+#include "../../base/xchecks.h"
+#include <stdio.h>
+#include <string.h>
 
 // Generate C variable name from filename
 static char* generate_var_name(const char *filename) {
@@ -103,56 +68,30 @@ static XrOutputFormat parse_format(const char *fmt) {
     return XR_OUTPUT_AUTO;
 }
 
-int cmd_compile(int argc, char **argv) {
-    const char *output_file = NULL;
-    const char *var_name = NULL;
-    XrOutputFormat explicit_format = XR_OUTPUT_AUTO;
+XR_FUNC int cmd_compile(const XrCliInvocation *inv) {
+    XR_DCHECK(inv != NULL, "inv is NULL");
+    XR_DCHECK(inv->positional_count == 1, "compile expects exactly 1 positional");
+
+    const char *input_file = inv->positionals[0];
+    const char *output_file = xr_cli_opt_string(&inv->options, "output", NULL);
+    const char *var_name = xr_cli_opt_string(&inv->options, "name", NULL);
+    const char *fmt_str = xr_cli_opt_string(&inv->options, "format", NULL);
+
     int flags = 0;
+    if (xr_cli_opt_present(&inv->options, "strip-debug"))  flags |= XR_BC_STRIP_DEBUG;
+    if (xr_cli_opt_present(&inv->options, "strip-source")) flags |= XR_BC_STRIP_SOURCE;
 
-    // Reset getopt state
-    optind = 1;
-
-    int opt;
-    while ((opt = getopt_long(argc, argv, "ho:f:sSn:", compile_long_options, NULL)) != -1) {
-        switch (opt) {
-            case 'h':
-                print_compile_help();
-                return 0;
-            case 'o':
-                output_file = optarg;
-                break;
-            case 'f':
-                explicit_format = parse_format(optarg);
-                if (explicit_format == XR_OUTPUT_AUTO) {
-                    fprintf(stderr, "Error: unknown format '%s'\n", optarg);
-                    return 1;
-                }
-                break;
-            case 's':
-                flags |= XR_BC_STRIP_DEBUG;
-                break;
-            case 'S':
-                flags |= XR_BC_STRIP_SOURCE;
-                break;
-            case 'n':
-                var_name = optarg;
-                break;
-            default:
-                print_compile_help();
-                return 1;
+    /* Parse explicit format */
+    XrOutputFormat explicit_format = XR_OUTPUT_AUTO;
+    if (fmt_str) {
+        explicit_format = parse_format(fmt_str);
+        if (explicit_format == XR_OUTPUT_AUTO) {
+            xr_cli_error("compile", "unknown format '%s'", fmt_str);
+            return XR_CLI_EXIT_USAGE;
         }
     }
 
-    // Check input file
-    if (optind >= argc) {
-        fprintf(stderr, "Error: missing input file\n");
-        print_compile_help();
-        return 1;
-    }
-
-    const char *input_file = argv[optind];
-
-    // Default output file
+    /* Default output file */
     char default_output[512];
     if (!output_file) {
         const char *base = strrchr(input_file, '/');
@@ -163,51 +102,52 @@ int cmd_compile(int argc, char **argv) {
         output_file = default_output;
     }
 
-    // Determine output format
+    /* Determine output format */
     XrOutputFormat format = xr_detect_output_format(output_file, explicit_format);
 
-    // Resources to clean up
-    int result = 1;
+    /* Resources to clean up */
+    int result = XR_CLI_EXIT_FAIL;
     char *gen_var_name = NULL;
     XrayIsolate *X = NULL;
     char *source = NULL;
     AstNode *ast = NULL;
 
-    // Generate variable name
+    /* Generate variable name */
     if (!var_name && (format == XR_OUTPUT_C_SOURCE || format == XR_OUTPUT_C_HEADER)) {
         gen_var_name = generate_var_name(input_file);
         var_name = gen_var_name;
     }
 
-    // Create Isolate
-    X = cli_create_isolate();
+    /* Create isolate */
+    X = xr_cli_isolate_new(XR_CLI_ISOLATE_RUN);
     if (!X) {
-        fprintf(stderr, "Error: cannot create Isolate\n");
+        xr_cli_error("compile", "failed to create isolate");
+        result = XR_CLI_EXIT_INTERNAL;
         goto cleanup;
     }
 
-    // Read source file
-    source = cli_read_file(input_file);
+    /* Read source file */
+    source = xr_cli_read_file(input_file);
     if (!source) {
-        fprintf(stderr, "Error: cannot open '%s'\n", input_file);
+        xr_cli_error("compile", "cannot open '%s'", input_file);
         goto cleanup;
     }
 
-    // Parse
+    /* Parse */
     ast = xr_parse_with_source(X, source, input_file);
     if (!ast) {
-        fprintf(stderr, "Error: parsing failed\n");
+        xr_cli_error("compile", "parsing failed");
         goto cleanup;
     }
 
-    // Compile
+    /* Compile */
     XrProto *proto = xr_compile_ast_with_source(X, ast, input_file);
     if (!proto) {
-        fprintf(stderr, "Error: compilation failed\n");
+        xr_cli_error("compile", "compilation failed");
         goto cleanup;
     }
 
-    // Output
+    /* Output */
     bool success = false;
 
     switch (format) {
@@ -236,15 +176,15 @@ int cmd_compile(int argc, char **argv) {
             break;
 
         default:
-            fprintf(stderr, "Error: unknown output format\n");
+            xr_cli_error("compile", "unknown output format");
             break;
     }
 
     if (!success) {
-        fprintf(stderr, "Error: cannot write to '%s'\n", output_file);
+        xr_cli_error("compile", "cannot write to '%s'", output_file);
     }
 
-    result = success ? 0 : 1;
+    result = success ? XR_CLI_EXIT_OK : XR_CLI_EXIT_FAIL;
 
 cleanup:
     if (ast) {

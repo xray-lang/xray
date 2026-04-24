@@ -1,0 +1,30 @@
+// AOT test: class objects with field access (tagged value paths)
+class Point {
+    x: int
+    y: int
+    constructor(x: int, y: int) {
+        this.x = x
+        this.y = y
+    }
+}
+
+// Create and access class objects
+let a = Point(3, 4)
+print(a.x)          // 3
+print(a.y)          // 4
+
+// Multiple objects
+let b = Point(10, 20)
+print(b.x + b.y)    // 30
+
+// Object fields in expressions
+let sum = a.x + a.y + b.x + b.y
+print(sum)           // 37
+
+// Reassign variable to different object
+let p = Point(1, 1)
+print(p.x)           // 1
+p = Point(2, 2)
+print(p.x)           // 2
+p = Point(3, 3)
+print(p.x)           // 3

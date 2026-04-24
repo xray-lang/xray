@@ -1,0 +1,24 @@
+// AOT test: array operations
+let arr = [1, 2, 3]
+print(arr.length)       // 3
+print(arr[0])           // 1
+print(arr[1])           // 2
+print(arr[2])           // 3
+
+// Push
+arr.push(4)
+print(arr.length)       // 4
+print(arr[3])           // 4
+
+// Modify element
+arr[0] = 10
+print(arr[0])           // 10
+
+// Sum via loop with dynamic indexing
+let total = 0
+let i = 0
+while (i < arr.length) {
+    total = total + arr[i]
+    i = i + 1
+}
+print(total)            // 10+2+3+4 = 19

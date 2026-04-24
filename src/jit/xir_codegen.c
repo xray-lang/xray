@@ -1255,6 +1255,22 @@ static void emit_prologue(CodegenCtx *ctx) {
                     a64_buf_emit(&ctx->buf, a64_str(alloc_regs[ri], A64_SP, offset));
             }
         }
+        // Init slot_runtime_tags for TAGGED (any/Json) params from param_tags[].
+        // emit_call_args_from_pool dynamic-patches UNKNOWN tags by reading
+        // slot_runtime_tags[bc_slot]. Without this init, dynamic ops on
+        // any-typed params (OP_ADD, etc.) see stale/zero tags → wrong results.
+        // param_tags[] is set by xir_jit_call (interp→JIT) or
+        // xr_jit_call_func / CALL_KNOWN codegen (JIT→JIT).
+        for (uint32_t i = 0; i < nparams && i < 8; i++) {
+            if (i >= ctx->func->nvreg) continue;
+            if (ctx->func->vregs[i].rep != XR_REP_TAGGED) continue;
+            int16_t bc_slot = ctx->func->vregs[i].bc_slot;
+            if (bc_slot < 0 || bc_slot >= 256) continue;
+            int32_t pt_off = (int32_t)(XIR_JIT_PARAM_TAGS_OFFSET + i * 8);
+            int32_t rt_off = (int32_t)XIR_JIT_SLOT_RUNTIME_TAGS_OFFSET + bc_slot;
+            a64_buf_emit(&ctx->buf, a64_ldr(SCRATCH_REG, JIT_CTX_REG, pt_off));
+            a64_buf_emit(&ctx->buf, a64_strb(SCRATCH_REG, JIT_CTX_REG, rt_off));
+        }
     }
 
 }

@@ -18,6 +18,7 @@
 #include "../runtime/value/xstruct_layout.h"
 #include "../runtime/class/xclass.h"
 #include "../runtime/class/xclass_lookup.h"
+#include "../runtime/symbol/xsymbol_table.h"
 
 bool xir_translate_object_ops(XirBuilder *b, XirBlock **cur_blk,
                               uint32_t pc, XrInstruction inst, OpCode op) {
@@ -190,6 +191,49 @@ bool xir_translate_object_ops(XirBuilder *b, XirBlock **cur_blk,
             // Resolve compile-time global symbol id
             SymbolId sym = PROTO_SYMBOL(b->proto, c);
 
+            // AOT import resolution: if source register is a module import,
+            // resolve (module_path, export_name) → shared_index via export map
+            if (b->aot_mode && rb < 256 && b->import_modules[rb] &&
+                b->aot_import_map && b->aot_import_count > 0 && b->isolate) {
+                const char *mod_path = b->import_modules[rb];
+                const char *export_name = xr_symbol_get_name_by_id(
+                    b->isolate, (int)sym);
+                if (export_name) {
+                    // Search export map for matching entry
+                    for (int ei = 0; ei < b->aot_import_count; ei++) {
+                        XirAotImportEntry *e = &b->aot_import_map[ei];
+                        if (strcmp(e->module_path, mod_path) == 0 &&
+                            strcmp(e->export_name, export_name) == 0) {
+                            // Emit as GETSHARED: CALL_C(xr_jit_get_shared, idx)
+                            XirRef fn_ref = xir_const_ptr(b->func,
+                                (void *)xr_jit_get_shared);
+                            XirRef idx_ref = xir_const_i64(b->func,
+                                (int64_t)e->shared_index);
+                            XirRef idx_val = xir_emit_unary(b->func, blk,
+                                XIR_CONST_I64, XR_REP_I64, idx_ref);
+                            XirRef result = xir_emit(b->func, blk,
+                                XIR_CALL_C, XR_REP_I64, fn_ref, idx_val);
+                            blk->ins[blk->nins - 1].flags |=
+                                XIR_FLAG_SIDE_EFFECT;
+                            builder_tag_vreg(b, result, VTAG_TAGGED, 0);
+                            builder_set_slot(b, a, result);
+                            // Track proto if available
+                            if (b->shared_protos &&
+                                e->shared_index >= 0 &&
+                                e->shared_index < b->nshared_protos &&
+                                b->shared_protos[e->shared_index]) {
+                                XirVReg *_pv = builder_vreg_for_slot(b, a);
+                                if (_pv) _pv->callee_proto =
+                                    b->shared_protos[e->shared_index];
+                            }
+                            b->ops_translated++;
+                            return true;
+                        }
+                    }
+                }
+                // Not found in export map — fall through to slow path
+            }
+
             { XirVReg *_srb = builder_vreg_for_slot(b, rb);
             struct XrShape *known_shape = _srb ? _srb->shape_hint : NULL;
             if (known_shape && known_shape->symbol_to_index &&
@@ -254,8 +298,15 @@ bool xir_translate_object_ops(XirBuilder *b, XirBlock **cur_blk,
             // instance, resolve symbol → field offset for direct access.
             if (b->aot_mode && b->isolate && rb < 256) {
                 XrType *recv_type = builder_find_reg_type(b, rb);
-                // Fallback: if receiver type unknown but 'this' (param 0) has
-                // a known class type, try that class's fields for the symbol.
+                // Fallback: check vreg's xrtype set by constructor CALL_KNOWN
+                // (cross-module class instances where inst_types misses)
+                if (!recv_type || recv_type->kind != XR_KIND_INSTANCE) {
+                    XirVReg *recv_v = builder_vreg_for_slot(b, rb);
+                    if (recv_v && recv_v->xrtype &&
+                        recv_v->xrtype->kind == XR_KIND_INSTANCE)
+                        recv_type = recv_v->xrtype;
+                }
+                // Fallback: if receiver is 'this' (param 0) with known class
                 if (!recv_type || recv_type->kind != XR_KIND_INSTANCE) {
                     XrType *this_type = builder_find_reg_type(b, 0);
                     if (this_type && this_type->kind == XR_KIND_INSTANCE)

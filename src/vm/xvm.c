@@ -328,52 +328,21 @@ XrVMResult run(XrayIsolate *isolate, XrVMContext *vm_ctx) {
     } while(0)
 
     /* ========== Debug Hook (Zero Overhead When No Debugger) ========== */
-    // Uses callback interface - hooks are NULL when no debugger attached
+    /* All decision logic (breakpoints, stepping, pause, logpoints) lives in
+     * the on_line hook impl (DAP side).  VM just resolves (path, line) and
+     * acts on the return value: BREAK → save pc → return XR_VM_DEBUG_BREAK. */
     #define VM_DEBUG_CHECK() do { \
         XrDebugHooks *_hooks = (XrDebugHooks *)isolate->debug_hooks; \
         if (_hooks && _hooks->is_enabled && _hooks->is_enabled(isolate)) { \
             int _pc_idx = (int)(pc - 1 - PROTO_CODE_BASE(cl->proto)); \
             int _line = (_pc_idx >= 0 && _pc_idx < (int)PROTO_LINE_COUNT(cl->proto)) \
                 ? PROTO_LINE(cl->proto, _pc_idx) : 0; \
-            if (_line > 0) { \
-                const char *_path = cl->proto->source_file; \
-                bool _should_break = false; \
-                int _last_line = _hooks->get_last_line ? _hooks->get_last_line(isolate) : -1; \
-                bool _line_changed = (_line != _last_line); \
-                /* Check breakpoints (only on line change) */ \
-                if (_line_changed && _path && _hooks->check_breakpoint && \
-                    _hooks->check_breakpoint(isolate, _path, _line)) { \
-                    _should_break = true; \
-                } \
-                /* Check stepping conditions */ \
-                XrDebugAction _action = _hooks->get_action ? _hooks->get_action(isolate) : XR_DBG_ACTION_CONTINUE; \
-                int _step_depth = _hooks->get_step_depth ? _hooks->get_step_depth(isolate) : 0; \
-                if (_action == XR_DBG_ACTION_BREAK && _line_changed) { \
-                    _should_break = true; \
-                } else if (_action == XR_DBG_ACTION_STEP_IN) { \
-                    if (_line_changed || VM_FRAME_COUNT > _step_depth) { \
-                        _should_break = true; \
-                    } \
-                } else if (_action == XR_DBG_ACTION_STEP_OVER) { \
-                    if (VM_FRAME_COUNT < _step_depth) { \
-                        _should_break = true; \
-                    } else if (_line_changed && VM_FRAME_COUNT <= _step_depth) { \
-                        _should_break = true; \
-                    } \
-                } else if (_action == XR_DBG_ACTION_STEP_OUT) { \
-                    if (VM_FRAME_COUNT < _step_depth) { \
-                        _should_break = true; \
-                    } \
-                } \
-                if (_should_break) { \
-                    if (_hooks->set_last_line) _hooks->set_last_line(isolate, _line); \
+            if (_line > 0 && _hooks->on_line) { \
+                XrDebugAction _act = _hooks->on_line( \
+                    isolate, cl->proto->source_file, _line, cl, ci, VM_FRAME_COUNT); \
+                if (_act == XR_DBG_ACTION_BREAK) { \
                     ci->pc = pc - 1; \
-                    if (_hooks->on_breakpoint_hit) { \
-                        _hooks->on_breakpoint_hit(isolate, _path ? _path : "<unknown>", _line, cl, ci); \
-                    } \
-                    if (_action == XR_DBG_ACTION_BREAK) { \
-                        return XR_VM_DEBUG_BREAK; \
-                    } \
+                    return XR_VM_DEBUG_BREAK; \
                 } \
             } \
         } \
