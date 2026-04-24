@@ -231,13 +231,13 @@ static void init_globals(XrayIsolate *isolate) {
     }
 }
 
-// Initialize coroutine scheduler
-static void init_scheduler(XrayIsolate *isolate) {
-    XrScheduler *sched = (XrScheduler *)xr_malloc(sizeof(XrScheduler));
+// Initialize coroutine state
+static void init_coro_state(XrayIsolate *isolate) {
+    XrCoroState *sched = (XrCoroState *)xr_malloc(sizeof(XrCoroState));
     if (sched) {
         xr_sched_init(sched);
     }
-    isolate->vm.scheduler = sched;
+    isolate->vm.coro_state = sched;
     isolate->vm.current_coro = NULL;
 }
 
@@ -288,7 +288,7 @@ int xr_vm_init(XrayIsolate *isolate) {
     isolate->vm.trace_execution = isolate->params.trace_execution;
 
     init_globals(isolate);
-    init_scheduler(isolate);
+    init_coro_state(isolate);
 
     // Initialize defer stack (lazy allocation)
     isolate->vm.defer_stack = NULL;
@@ -318,11 +318,11 @@ void xr_vm_cleanup(XrayIsolate *isolate) {
         isolate->vm.strings_map = NULL;
     }
 
-    // Cleanup scheduler
-    if (isolate->vm.scheduler != NULL) {
-        xr_sched_destroy((XrScheduler*)isolate->vm.scheduler);
-        xr_free(isolate->vm.scheduler);
-        isolate->vm.scheduler = NULL;
+    // Cleanup coroutine state
+    if (isolate->vm.coro_state != NULL) {
+        xr_sched_destroy((XrCoroState *)isolate->vm.coro_state);
+        xr_free(isolate->vm.coro_state);
+        isolate->vm.coro_state = NULL;
     }
 
 #ifdef XRAY_HAS_JIT

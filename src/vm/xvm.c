@@ -6655,7 +6655,7 @@ startfunc:
                 }
                 int old_prio = xr_coro_get_priority(xr_coro_flags_load(coro));
                 if (xr_coro_flags_has(coro, XR_CORO_FLG_READY) && old_prio != (int)new_prio) {
-                    XrScheduler *sched = (XrScheduler *)isolate->vm.scheduler;
+                    XrCoroState *sched = (XrCoroState *)isolate->vm.coro_state;
                     if (sched) {
                         xr_sched_remove(sched, coro);
                         uint32_t old_flags = xr_coro_flags_load(coro);
@@ -7158,7 +7158,7 @@ startfunc:
                         current->current_scope = scope;
                     } else {
                         // Main thread fallback: use scheduler global
-                        XrScheduler *sched = (XrScheduler *)isolate->vm.scheduler;
+                        XrCoroState *sched = (XrCoroState *)isolate->vm.coro_state;
                         if (sched) {
                             scope->parent = sched->current_scope;
                             sched->current_scope = scope;
@@ -7218,7 +7218,7 @@ startfunc:
                     xr_free(scope);
                 } else {
                     // Main thread fallback
-                    XrScheduler *sched = (XrScheduler *)isolate->vm.scheduler;
+                    XrCoroState *sched = (XrCoroState *)isolate->vm.coro_state;
                     if (!sched || !sched->current_scope) vmbreak;
 
                     XrScopeContext *scope = sched->current_scope;

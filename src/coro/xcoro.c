@@ -235,7 +235,7 @@ void xr_coro_reset_for_call(XrCoroutine *coro, XrayIsolate *X, XrClosure *closur
 // XR_TAG_NULL == 0, so memset(0) automatically produces xr_null() for XrValue fields.
 static bool coro_init_common(XrCoroutine *coro, XrayIsolate *X,
                              const char *name, bool need_stack) {
-    XrScheduler *sched = (XrScheduler *)X->vm.scheduler;
+    XrCoroState *sched = (XrCoroState *)X->vm.coro_state;
 
     // Check if coro was recycled with thorough cleanup (XR_CORO_GC_RECYCLED_CLEAN).
     // Recycled coros already have all fields zeroed by xr_coro_recycle_local,
@@ -399,7 +399,7 @@ XrCoroutine *xr_coro_create(XrayIsolate *X, XrClosure *closure,
     XR_DCHECK(arg_count >= 0, "coro_create: negative arg_count");
     XR_DCHECK(arg_count == 0 || args != NULL, "coro_create: NULL args with count > 0");
     // Check coroutine limit
-    XrScheduler *sched = (XrScheduler *)X->vm.scheduler;
+    XrCoroState *sched = (XrCoroState *)X->vm.coro_state;
     if (sched && sched->coro_count >= XR_MAX_COROUTINES) {
         xr_runtime_error(X, "coroutine limit exceeded (%d)", XR_MAX_COROUTINES);
         return NULL;
@@ -481,7 +481,7 @@ XrCoroutine *xr_coro_create(XrayIsolate *X, XrClosure *closure,
 // Used for HTTP connection handling and other I/O wait scenarios
 XrCoroutine *xr_coro_create_cfunc(XrayIsolate *X, XrCFuncResult (*cfunc)(XrayIsolate*, XrValue*, int, XrValue*),
                                    XrValue *args, int argc, const char *name) {
-    XrScheduler *sched = (XrScheduler *)X->vm.scheduler;
+    XrCoroState *sched = (XrCoroState *)X->vm.coro_state;
     if (sched && sched->coro_count >= XR_MAX_COROUTINES) {
         return NULL;
     }
@@ -546,7 +546,7 @@ XrCoroutine *xr_coro_create_cfunc(XrayIsolate *X, XrCFuncResult (*cfunc)(XrayIso
 // For simple callbacks without I/O wait
 XrCoroutine *xr_coro_create_native(XrayIsolate *X, void (*func)(void*), void *arg,
                                     const char *name) {
-    XrScheduler *sched = (XrScheduler *)X->vm.scheduler;
+    XrCoroState *sched = (XrCoroState *)X->vm.coro_state;
     if (sched && sched->coro_count >= XR_MAX_COROUTINES) {
         return NULL;
     }
@@ -912,7 +912,7 @@ void xr_coro_recycle_local(XrWorker *worker, XrCoroutine *coro) {
 // ========== Scheduler Operations ==========
 
 // Initialize scheduler
-void xr_sched_init(XrScheduler *sched) {
+void xr_sched_init(XrCoroState *sched) {
     if (!sched) return;
 
     // Initialize multi-level priority queues
@@ -920,9 +920,7 @@ void xr_sched_init(XrScheduler *sched) {
         sched->ready_head[i] = NULL;
         sched->ready_tail[i] = NULL;
     }
-    sched->current = NULL;
     sched->coro_count = 0;
-    sched->next_id = 1;
     sched->total_created = 0;
 
     // Initialize scope
@@ -936,7 +934,7 @@ void xr_sched_init(XrScheduler *sched) {
 }
 
 // Destroy scheduler
-void xr_sched_destroy(XrScheduler *sched) {
+void xr_sched_destroy(XrCoroState *sched) {
     if (!sched) return;
 
     // Coroutines managed by GC, just clear list refs
@@ -945,7 +943,6 @@ void xr_sched_destroy(XrScheduler *sched) {
         sched->ready_tail[i] = NULL;
     }
 
-    sched->current = NULL;
     sched->coro_count = 0;
 
     // Destroy named coroutine registry
@@ -957,7 +954,7 @@ void xr_sched_destroy(XrScheduler *sched) {
 }
 
 // Add coroutine to ready queue tail (select queue by priority)
-void xr_sched_enqueue(XrScheduler *sched, XrCoroutine *coro) {
+void xr_sched_enqueue(XrCoroState *sched, XrCoroutine *coro) {
     if (!sched || !coro) return;
 
     xr_coro_flags_clear(coro, XR_CORO_FLG_BLOCKED | XR_CORO_FLG_RUNNING);
@@ -981,7 +978,7 @@ void xr_sched_enqueue(XrScheduler *sched, XrCoroutine *coro) {
 
 // Remove specific coroutine from ready queue (for await direct execution)
 // Note: don't decrement coro_count, coroutine still active (just not in ready queue)
-void xr_sched_remove(XrScheduler *sched, XrCoroutine *target) {
+void xr_sched_remove(XrCoroState *sched, XrCoroutine *target) {
     if (!sched || !target) return;
 
     // Search all priority queues
@@ -1011,7 +1008,7 @@ void xr_sched_remove(XrScheduler *sched, XrCoroutine *target) {
 }
 
 // Dequeue coroutine from ready queue (high to low priority)
-XrCoroutine *xr_sched_dequeue(XrScheduler *sched) {
+XrCoroutine *xr_sched_dequeue(XrCoroState *sched) {
     if (!sched) return NULL;
 
     // Search from high to low priority
@@ -1139,7 +1136,7 @@ static __attribute__((unused)) const char *format_coro_id(XrCoroutine *coro, cha
 }
 
 // Print deadlock diagnosis info (simplified: blocked queue managed by Runtime)
-static __attribute__((unused)) void xr_sched_print_deadlock(XrScheduler *sched) {
+static __attribute__((unused)) void xr_sched_print_deadlock(XrCoroState *sched) {
     if (!sched) return;
 
     int ready_count = 0;
@@ -1199,7 +1196,7 @@ void xr_coro_cancel(XrCoroutine *coro) {
 //
 // Per-coroutine scope tracking: prefer parent->current_scope,
 // fallback to runtime/sched globals for main thread.
-void xr_scope_add_coro(XrScheduler *sched, XrCoroutine *coro, XrCoroutine *parent) {
+void xr_scope_add_coro(XrCoroState *sched, XrCoroutine *coro, XrCoroutine *parent) {
     if (!coro) return;
 
     XrScopeContext *scope = NULL;

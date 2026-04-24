@@ -392,12 +392,12 @@ XR_FUNC void xr_coro_free(XrCoroutine *coro);
 XR_FUNC void xr_coro_release_heap(XrCoroutine *coro);
 XR_FUNC void xr_coro_release_resources(XrCoroutine *coro);
 XR_FUNC void xr_coro_spawn(XrayIsolate *X, XrCoroutine *coro);
-XR_FUNC void xr_sched_enqueue(XrScheduler *sched, XrCoroutine *coro);
-XR_FUNC void xr_sched_remove(XrScheduler *sched, XrCoroutine *target);
-XR_FUNC XrCoroutine *xr_sched_dequeue(XrScheduler *sched);
+XR_FUNC void xr_sched_enqueue(XrCoroState *sched, XrCoroutine *coro);
+XR_FUNC void xr_sched_remove(XrCoroState *sched, XrCoroutine *target);
+XR_FUNC XrCoroutine *xr_sched_dequeue(XrCoroState *sched);
 // Scheduler initialization
-XR_FUNC void xr_sched_init(XrScheduler *sched);
-XR_FUNC void xr_sched_destroy(XrScheduler *sched);
+XR_FUNC void xr_sched_init(XrCoroState *sched);
+XR_FUNC void xr_sched_destroy(XrCoroState *sched);
 
 // Multicore runtime
 XR_FUNC void xr_multicore_init(XrayIsolate *X, int num_workers);
@@ -418,6 +418,6 @@ XR_FUNC void xr_runtime_wake_channel_all(XrayIsolate *X, void *channel);
 XR_FUNC void xr_coro_cancel(XrCoroutine *coro);
 
 // Scope structured concurrency
-XR_FUNC void xr_scope_add_coro(XrScheduler *sched, XrCoroutine *coro, XrCoroutine *parent);
+XR_FUNC void xr_scope_add_coro(XrCoroState *sched, XrCoroutine *coro, XrCoroutine *parent);
 
 #endif // XVM_INTERNAL_H

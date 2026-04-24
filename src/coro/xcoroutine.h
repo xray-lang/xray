@@ -489,18 +489,16 @@ typedef struct XrScopeContext {
     struct XrCoroutine *first_child;  // linked list of child coros in this scope
 } XrScopeContext;
 
-/* ========== Scheduler ========== */
+/* ========== Coroutine State (single-thread scheduler + isolate-level coro bookkeeping) ========== */
 
-typedef struct XrScheduler {
+typedef struct XrCoroState {
     XrCoroutine *ready_head[XR_CORO_PRIORITY_COUNT];
     XrCoroutine *ready_tail[XR_CORO_PRIORITY_COUNT];
-    XrCoroutine *current;
     int coro_count;
-    int next_id;
     _Atomic int total_created;
     XrScopeContext *current_scope;
     struct XrCoroRegistry *coro_registry;  // Named coroutine registry (lazy init)
-} XrScheduler;
+} XrCoroState;
 
 /* ========== Coroutine API (moved from vm/xvm_internal.h, Phase 4) ========== */
 
@@ -517,11 +515,11 @@ XR_FUNC void xr_coro_release_resources(XrCoroutine *coro);
 XR_FUNC void xr_coro_spawn(struct XrayIsolate *X, XrCoroutine *coro);
 
 // Scheduler
-XR_FUNC void xr_sched_init(XrScheduler *sched);
-XR_FUNC void xr_sched_destroy(XrScheduler *sched);
-XR_FUNC void xr_sched_enqueue(XrScheduler *sched, XrCoroutine *coro);
-XR_FUNC void xr_sched_remove(XrScheduler *sched, XrCoroutine *target);
-XR_FUNC XrCoroutine *xr_sched_dequeue(XrScheduler *sched);
+XR_FUNC void xr_sched_init(XrCoroState *sched);
+XR_FUNC void xr_sched_destroy(XrCoroState *sched);
+XR_FUNC void xr_sched_enqueue(XrCoroState *sched, XrCoroutine *coro);
+XR_FUNC void xr_sched_remove(XrCoroState *sched, XrCoroutine *target);
+XR_FUNC XrCoroutine *xr_sched_dequeue(XrCoroState *sched);
 
 // Multicore runtime
 XR_FUNC void xr_multicore_init(struct XrayIsolate *X, int num_workers);
@@ -540,6 +538,6 @@ XR_FUNC void xr_runtime_wake_channel_all(struct XrayIsolate *X, void *channel);
 XR_FUNC void xr_coro_cancel(XrCoroutine *coro);
 
 // Scope structured concurrency
-XR_FUNC void xr_scope_add_coro(XrScheduler *sched, XrCoroutine *coro, XrCoroutine *parent);
+XR_FUNC void xr_scope_add_coro(XrCoroState *sched, XrCoroutine *coro, XrCoroutine *parent);
 
 #endif // XCOROUTINE_H

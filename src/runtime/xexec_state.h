@@ -147,7 +147,7 @@ typedef struct XrVMState {
 #endif
 
     // Coroutine support
-    void *scheduler;               // coroutine scheduler
+    void *coro_state;              // XrCoroState* (single-thread scheduler + bookkeeping)
     void *current_coro;            // currently running coroutine
     struct XrMap *main_locals;     // REPL local variables
 

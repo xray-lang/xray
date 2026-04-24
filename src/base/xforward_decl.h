@@ -78,7 +78,7 @@ typedef struct XrJsonPoolManager XrJsonPoolManager;
 
 /* ========== Coroutine Scheduling ========== */
 
-typedef struct XrScheduler XrScheduler;
+typedef struct XrCoroState XrCoroState;
 typedef struct XrRuntime XrRuntime;
 typedef struct XrWorker XrWorker;
 typedef struct XrProc XrProc;

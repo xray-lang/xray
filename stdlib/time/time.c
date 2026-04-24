@@ -11,7 +11,7 @@
 #include "time.h"
 #include "../common.h"
 #include "../../include/xray_platform.h"
-#include "../../src/vm/xvm_internal.h"  // XrScheduler, XrCoroutine
+#include "../../src/vm/xvm_internal.h"  // XrCoroState, XrCoroutine
 #include "../../src/coro/xyieldable.h"   // xr_yield_for_timeout
 #include "../../src/base/xchecks.h"
 #include <time.h>

@@ -145,7 +145,7 @@ static bool worker_handle_vm_result(XrWorker *worker, XrCoroutine *coro, XrVMRes
 
             // Inline fast path: skip extern calls for anonymous coros without monitors
             if (__builtin_expect(coro->name != NULL || (coro->ext && coro->ext->watched_by), 0)) {
-                XrScheduler *_s = (XrScheduler *)runtime->isolate->vm.scheduler;
+                XrCoroState *_s = (XrCoroState *)runtime->isolate->vm.coro_state;
                 xr_coro_notify_monitors(runtime->isolate, _s ? _s->coro_registry : NULL, coro, "normal");
                 xr_coro_on_exit(runtime->isolate, coro);
             }
@@ -190,7 +190,7 @@ static bool worker_handle_vm_result(XrWorker *worker, XrCoroutine *coro, XrVMRes
             if (coro->task) {
                 xr_task_cancel(coro->task);
             }
-            { XrScheduler *_s = (XrScheduler *)runtime->isolate->vm.scheduler;
+            { XrCoroState *_s = (XrCoroState *)runtime->isolate->vm.coro_state;
             xr_coro_notify_monitors(runtime->isolate, _s ? _s->coro_registry : NULL, coro, "cancelled"); }
             xr_coro_on_exit(runtime->isolate, coro);
             worker->p.stats.completed_count++;
@@ -218,7 +218,7 @@ static bool worker_handle_vm_result(XrWorker *worker, XrCoroutine *coro, XrVMRes
                     xr_task_fail(coro->task, coro->error);
                 }
             }
-            { XrScheduler *_s = (XrScheduler *)runtime->isolate->vm.scheduler;
+            { XrCoroState *_s = (XrCoroState *)runtime->isolate->vm.coro_state;
             xr_coro_notify_monitors(runtime->isolate, _s ? _s->coro_registry : NULL, coro, "error"); }
             xr_coro_on_exit(runtime->isolate, coro);
             worker->p.stats.completed_count++;

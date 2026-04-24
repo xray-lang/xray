@@ -593,13 +593,10 @@ static const char *coro_state_string(XrCoroutine *coro) {
 }
 
 int xr_debug_get_coro_count(XrayIsolate *isolate) {
-    if (!xr_isolate_get_vm_state(isolate)->scheduler) return 0;
+    if (!xr_isolate_get_vm_state(isolate)->coro_state) return 0;
 
-    XrScheduler *sched = (XrScheduler *)xr_isolate_get_vm_state(isolate)->scheduler;
+    XrCoroState *sched = (XrCoroState *)xr_isolate_get_vm_state(isolate)->coro_state;
     int count = 0;
-
-    // Current coroutine
-    if (sched->current) count++;
 
     // Ready queues (all priority levels)
     for (int p = 0; p < XR_CORO_PRIORITY_COUNT; p++) {
@@ -627,17 +624,11 @@ int xr_debug_get_coro_count(XrayIsolate *isolate) {
 
 bool xr_debug_get_coro_info(XrayIsolate *isolate, int coro_idx,
                              int *out_id, const char **out_name, const char **out_state) {
-    if (!xr_isolate_get_vm_state(isolate)->scheduler) return false;
+    if (!xr_isolate_get_vm_state(isolate)->coro_state) return false;
 
-    XrScheduler *sched = (XrScheduler *)xr_isolate_get_vm_state(isolate)->scheduler;
+    XrCoroState *sched = (XrCoroState *)xr_isolate_get_vm_state(isolate)->coro_state;
     int idx = 0;
     XrCoroutine *target = NULL;
-
-    // Current coroutine first
-    if (sched->current) {
-        if (idx == coro_idx) target = sched->current;
-        idx++;
-    }
 
     // Ready queues
     if (!target) {
