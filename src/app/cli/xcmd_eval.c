@@ -20,6 +20,7 @@
 #include "xray_isolate.h"
 #include "../../base/xmalloc.h"
 #include "../../base/xchecks.h"
+#include "../../vm/xvm_internal.h"
 #include <stdio.h>
 #include <string.h>
 
@@ -54,9 +55,11 @@ XR_FUNC int cmd_eval(const XrCliInvocation *inv) {
         xr_free(stdin_code);
         return XR_CLI_EXIT_INTERNAL;
     }
+    xr_multicore_init(iso, 0);
 
     int result = xray_isolate_dostring(iso, code);
 
+    xr_multicore_destroy(iso);
     xray_isolate_delete(iso);
     xr_free(stdin_code);
 
