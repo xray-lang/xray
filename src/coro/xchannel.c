@@ -678,9 +678,13 @@ send_locked:
     // so it is safe to set BLOCKED here under the channel lock.  The coro
     // becomes wakeable only after we enqueue + unlock below.
     xr_coro_transition_to_blocked(coro);
-    // Set affinity_p for cross-Worker wake
+    // Set affinity_p for cross-Worker wake + waiter mask for routing
     XrWorker *w = xr_current_worker();
-    if (w) atomic_store_explicit(&coro->affinity_p, w->p.id, memory_order_relaxed);
+    if (w) {
+        atomic_store_explicit(&coro->affinity_p, w->p.id, memory_order_relaxed);
+        atomic_fetch_or_explicit(&ch->waiter_worker_mask,
+                                 (uint64_t)1 << w->p.id, memory_order_relaxed);
+    }
     xr_waitq_enqueue(&ch->sendq, coro);
 
     xr_mutex_unlock(&ch->lock);
@@ -749,9 +753,13 @@ recv_locked:
     // recv_slot already set by VM to stack register address
     // see send path comment for rationale.
     xr_coro_transition_to_blocked(coro);
-    // Set affinity_p for cross-Worker wake
+    // Set affinity_p for cross-Worker wake + waiter mask for routing
     XrWorker *w = xr_current_worker();
-    if (w) atomic_store_explicit(&coro->affinity_p, w->p.id, memory_order_relaxed);
+    if (w) {
+        atomic_store_explicit(&coro->affinity_p, w->p.id, memory_order_relaxed);
+        atomic_fetch_or_explicit(&ch->waiter_worker_mask,
+                                 (uint64_t)1 << w->p.id, memory_order_relaxed);
+    }
     xr_waitq_enqueue(&ch->recvq, coro);
 
     xr_mutex_unlock(&ch->lock);

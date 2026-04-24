@@ -41,6 +41,31 @@ struct XrTimerWheel;
 struct XrRuntime;
 struct XrCStackPool;
 
+/* ========== Channel Wake Command (MPSC queue, Vyukov style) ==========
+ *
+ * When a channel send/recv/close succeeds, remote workers that may have
+ * blocked waiters need to process their own blocked buckets.  Instead of
+ * directly touching the remote worker's owner-private data, the originator
+ * enqueues a lightweight command here.  The owning worker drains the queue
+ * in its scheduling loop and performs the local wake_one / wake_select /
+ * wake_all on its own thread.
+ *
+ * Queue uses the same Vyukov MPSC pattern as XrTimerCancelQueue.
+ */
+
+typedef struct XrChanWakeCmd {
+    void *channel;                     // Channel pointer
+    bool  wake_sender;                 // true = wake sender, false = wake receiver
+    bool  is_close;                    // true = wake_all (channel close fan-out)
+    struct XrChanWakeCmd *next;        // Intrusive MPSC link
+} XrChanWakeCmd;
+
+typedef struct XrChanWakeCmdQueue {
+    _Atomic(XrChanWakeCmd *) head;     // Consumer reads here
+    _Atomic(XrChanWakeCmd *) tail;     // Producers push here
+    XrChanWakeCmd stub;                // Vyukov stub sentinel
+} XrChanWakeCmdQueue;
+
 /* ========== Per-P Statistics (cache-line aligned) ========== */
 
 // XrProcStats — owner-written per-Worker counters, aggregated by
@@ -109,6 +134,9 @@ typedef struct XrProc {
 
     /* === MPSC Inbox (cross-thread coroutine delivery) === */
     XrMPSCQueue inbox;
+
+    /* === Channel Wake Command Queue (MPSC, Vyukov) === */
+    XrChanWakeCmdQueue chan_wake_queue;
 
     /* === Back pointer to current M === */
     _Atomic(struct XrMachine *) current_m;

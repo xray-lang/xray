@@ -88,6 +88,7 @@ void xr_worker_init(XrWorker *worker, int id, XrRuntime *runtime) {
 
     // Initialize MPSC inbox
     xr_mpsc_init(&worker->p.inbox);
+    xr_chan_wake_queue_init(&worker->p.chan_wake_queue);
     worker->p.check_balance_reds = XR_CALL_CHECK_BALANCE_REDS;
 
     // Initialize Per-Worker local poll (kqueue/epoll fd for fast IO delivery)
@@ -140,6 +141,9 @@ void xr_worker_destroy(XrWorker *worker) {
         xr_timer_wheel_destroy(worker->p.timer_wheel);
         worker->p.timer_wheel = NULL;
     }
+
+    // Free Per-Worker Channel Wake Command Queue
+    xr_chan_wake_queue_destroy(&worker->p.chan_wake_queue);
 
     // Free Per-Worker blocked buckets (hash table of XrBlockedBucket)
     for (int i = 0; i < XR_BLOCKED_BUCKET_SIZE; i++) {

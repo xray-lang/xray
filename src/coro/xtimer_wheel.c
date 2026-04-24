@@ -149,7 +149,7 @@ static inline int later_slot(int64_t later_pos) {
 // Insert timer into slot
 static inline void insert_timer_into_slot(XrTimerWheel *tw, int slot, XrTWheelTimer *p) {
     XR_TW_ASSERT(XR_TW_SLOT_AT_ONCE <= slot && slot < XR_TW_LATER_WHEEL_END_SLOT);
-    
+
     p->slot = slot;
     if (!tw->w[slot]) {
         tw->w[slot] = p;
@@ -164,7 +164,7 @@ static inline void insert_timer_into_slot(XrTimerWheel *tw, int slot, XrTWheelTi
         prev->next = p;
         next->prev = p;
     }
-    
+
     if (slot == XR_TW_SLOT_AT_ONCE) {
         tw->at_once.nto++;
     } else {
@@ -190,7 +190,7 @@ static inline void insert_timer_into_slot(XrTimerWheel *tw, int slot, XrTWheelTi
 static inline void remove_timer(XrTimerWheel *tw, XrTWheelTimer *p) {
     int slot = p->slot;
     int empty_slot;
-    
+
     XR_TW_ASSERT(slot != XR_TW_SLOT_INACTIVE);
     XR_TW_ASSERT(XR_TW_SLOT_AT_ONCE <= slot && slot < XR_TW_LATER_WHEEL_END_SLOT);
 
@@ -205,7 +205,7 @@ static inline void remove_timer(XrTimerWheel *tw, XrTWheelTimer *p) {
         p->next->prev = p->prev;
         empty_slot = 0;
     }
-    
+
     if (slot == XR_TW_SLOT_AT_ONCE) {
         XR_TW_ASSERT(tw->at_once.nto > 0);
         tw->at_once.nto--;
@@ -248,7 +248,7 @@ static inline void remove_timer(XrTimerWheel *tw, XrTWheelTimer *p) {
 static inline void timeout_timer(XrTWheelTimer *p) {
     XrTimeoutProc timeout;
     void *arg;
-    
+
     p->slot = XR_TW_SLOT_INACTIVE;
     timeout = p->timeout;
     arg = p->arg;
@@ -543,17 +543,17 @@ void xr_timer_queue_cancel(XrTimerWheel *target_tw, XrTWheelTimer *timer, XrCoro
     // This allows find_next_timeout to skip this timer immediately, even before
     // the owner worker processes the cancel queue
     atomic_store_explicit(&timer->state, XR_TIMER_STATE_ZOMBIE, memory_order_release);
-    
+
     // Step 2: Allocate cancel node for async cleanup
     XrCanceledTimerNode *node = (XrCanceledTimerNode *)xr_malloc(sizeof(XrCanceledTimerNode));
     if (!node) return;  // Out of memory, zombie will be cleaned up when slot is processed
-    
+
     node->next = NULL;
     node->timer = timer;
     node->coro = coro;
-    
+
     // Step 3: MPSC enqueue for owner to cleanup
-    XrCanceledTimerNode *prev = atomic_exchange_explicit(&target_tw->canceled_queue.tail, 
+    XrCanceledTimerNode *prev = atomic_exchange_explicit(&target_tw->canceled_queue.tail,
                                                           node, memory_order_acq_rel);
     // Link previous tail to new node
     // Note: There's a brief window where prev->next is NULL, handled by consumer
@@ -567,23 +567,23 @@ int xr_timer_process_canceled_queue(XrTimerWheel *tw) {
     XrTimerCancelQueue *cq = &tw->canceled_queue;
     XrCanceledTimerNode *head, *next;
     int count = 0;
-    
+
     // Fast path: check if queue is empty
     head = atomic_load_explicit(&cq->head, memory_order_acquire);
     if (head == atomic_load_explicit(&cq->tail, memory_order_acquire)) {
         return 0;  // Queue empty
     }
-    
+
     // Process all nodes from head
     while (1) {
         head = atomic_load_explicit(&cq->head, memory_order_acquire);
         next = atomic_load_explicit((_Atomic(XrCanceledTimerNode *)*)&head->next, memory_order_acquire);
-        
+
         if (next == NULL) {
             // Either empty or in-progress enqueue
             break;
         }
-        
+
         // Process this timer cancellation (zombie cleanup)
         XrTWheelTimer *timer = next->timer;
         if (timer && timer->slot != XR_TW_SLOT_INACTIVE) {
@@ -595,16 +595,16 @@ int xr_timer_process_canceled_queue(XrTimerWheel *tw) {
         if (timer) {
             atomic_store_explicit(&timer->state, XR_TIMER_STATE_ACTIVE, memory_order_release);
         }
-        
+
         // Advance head (dequeue)
         atomic_store_explicit(&cq->head, next, memory_order_release);
-        
+
         // Free the old head (stub or previous node)
         if (head != &cq->stub) {
             xr_free(head);
         }
     }
-    
+
     return count;
 }
 
@@ -657,16 +657,28 @@ XrTimerWheel *xr_timer_wheel_create(XrRuntime *runtime, int owner_worker_id) {
 // Destroy timer wheel
 void xr_timer_wheel_destroy(XrTimerWheel *tw) {
     if (!tw) return;
-    
-    // Cleanup canceled queue
+
+    // Cleanup canceled queue: drain all remaining allocated nodes.
+    //
+    // Vyukov MPSC queue layout:
+    //   stub(embedded) -> node1 -> node2 -> ...
+    //   head points to stub initially; consumer advances head past stub.
+    //
+    // If consumer never ran, head == &stub and pending nodes are on stub.next.
+    // If consumer ran, head is some allocated sentinel node; the rest follow.
     XrTimerCancelQueue *cq = &tw->canceled_queue;
     XrCanceledTimerNode *node = atomic_load(&cq->head);
-    while (node && node != &cq->stub) {
+
+    if (node == &cq->stub) {
+        // Consumer never ran — pending nodes start at stub.next
+        node = cq->stub.next;
+    }
+    while (node) {
         XrCanceledTimerNode *next = node->next;
         xr_free(node);
         node = next;
     }
-    
+
     xr_free(tw);
 }
 
@@ -678,7 +690,7 @@ void xr_twheel_set_timer(XrTimerWheel *tw, XrTWheelTimer *p,
     int slot;
 
     // No mutex needed - owner worker exclusive access
-    
+
     p->timeout = timeout;
     p->arg = arg;
     p->owner_worker_id = tw->owner_worker_id;  // Record ownership
@@ -742,7 +754,7 @@ void xr_bump_timers(XrTimerWheel *tw, int64_t curr_time) {
     int64_t *scnt, *bump_scnt;
 
     // No mutex needed - owner worker exclusive access
-    
+
  // process cross-worker cancellation queue first
     xr_timer_process_canceled_queue(tw);
 
@@ -808,7 +820,7 @@ void xr_bump_timers(XrTimerWheel *tw, int64_t curr_time) {
 
                     // Set slot = INACTIVE immediately, allow safe external reuse
                     p->slot = XR_TW_SLOT_INACTIVE;
-                    
+
  // skip zombie timers (cancelled during bump)
                     if (atomic_load_explicit(&p->state, memory_order_acquire) != XR_TIMER_STATE_ZOMBIE) {
                         timeout_timer(p);
@@ -900,10 +912,10 @@ void xr_bump_timers(XrTimerWheel *tw, int64_t curr_time) {
                         if (--tw->soon.nto == 0)
                             tw->soon.min_tpos = XR_TW_MAX_TICKS;
                         scnt_ix_dec(scnt, scnt_ix);
-                        
+
                         // Set slot = INACTIVE immediately, allow safe external reuse
                         p->slot = XR_TW_SLOT_INACTIVE;
-                        
+
                         if (p->timeout_pos <= bump_to) {
  // skip zombie timers (cancelled during bump)
                             if (atomic_load_explicit(&p->state, memory_order_acquire) != XR_TIMER_STATE_ZOMBIE) {
@@ -969,11 +981,11 @@ void xr_bump_timers(XrTimerWheel *tw, int64_t curr_time) {
 int64_t xr_check_next_timeout_time(XrTimerWheel *tw) {
     XR_DCHECK(tw != NULL, "check_next_timeout_time: NULL tw");
     int64_t time;
-    
+
     // No mutex needed - owner worker exclusive access
-    
+
     XR_TW_ASSERT(tw->next_timeout_time == tw->next_timeout_pos);
-    
+
     if (tw->true_next_timeout_time) {
         time = tw->next_timeout_time;
     } else if (tw->next_timeout_pos > tw->pos + XR_TW_SOON_WHEEL_SIZE) {
@@ -981,7 +993,7 @@ int64_t xr_check_next_timeout_time(XrTimerWheel *tw) {
     } else {
         time = find_next_timeout(tw);
     }
-    
+
     return time;
 }
 

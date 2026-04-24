@@ -374,6 +374,7 @@ void xr_worker_block_select(XrWorker *worker, XrCoroutine *coro,
     XR_DCHECK(sw != NULL, "block_select: coro has no select_wait");
 
     // Link each case into its channel's bucket select queue.
+    // Also set waiter_worker_mask on each channel for wake routing.
     for (int i = 0; i < count; i++) {
         void *channel = channels[i];
         if (!channel) continue;
@@ -390,6 +391,11 @@ void xr_worker_block_select(XrWorker *worker, XrCoroutine *coro,
             bucket->select_head = sc;
         }
         bucket->select_tail = sc;
+
+        // Set waiter mask bit for this worker on the channel
+        XrChannel *ch = (XrChannel *)channel;
+        atomic_fetch_or_explicit(&ch->waiter_worker_mask,
+                                 (uint64_t)1 << worker->p.id, memory_order_relaxed);
     }
 
     // Add to Worker's linear blocked queue (for sysmon / timer traversal)
@@ -408,6 +414,9 @@ void xr_worker_block_select(XrWorker *worker, XrCoroutine *coro,
 // scanning all blocked coros.  Complexity = O(select waiters on this channel).
 XrCoroutine *xr_worker_wake_select(XrWorker *worker, void *channel) {
     if (!worker || !channel) return NULL;
+    // Phase 0: MUST only be called from the owning worker thread.
+    XR_DCHECK(xr_current_worker() == worker,
+              "wake_select: cross-worker call detected (use chan_wake_queue)");
 
     // Fast path: no select waiters at all
     if (worker->p.select_waiter_count == 0) return NULL;

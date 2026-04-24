@@ -40,6 +40,9 @@ void xr_proc_init(XrProc *p, int id, struct XrRuntime *runtime) {
     // MPSC inbox
     xr_mpsc_init(&p->inbox);
 
+    // Channel wake command queue (Phase 0)
+    xr_chan_wake_queue_init(&p->chan_wake_queue);
+
     // Timer wheel created later (needs runtime fully initialized)
     p->timer_wheel = NULL;
     p->last_timer_tick = 0;
@@ -93,6 +96,8 @@ void xr_proc_destroy(XrProc *p) {
     // Destroy continuation deque
     xr_steal_queue_destroy(&p->cont_deque);
 
+    // Destroy channel wake command queue
+    xr_chan_wake_queue_destroy(&p->chan_wake_queue);
 }
 
 // ========== P/M Binding ==========
