@@ -41,14 +41,7 @@ XR_FUNC XrJsonValue *xlsp_analyze_document_highlight(XrLspServer *server, XrLspD
 // Uses server->workspace_analyzer for cross-file analysis
 XR_FUNC void xlsp_parse_document(XrLspDocument *doc, XrLspServer *server);
 
-// Rename symbol at position (cross-file)
-// Returns WorkspaceEdit JSON or NULL if rename not possible
-XR_FUNC XrJsonValue *xlsp_analyze_rename(XrLspServer *server, XrLspDocument *doc, 
-                                  XrLspPosition pos, const char *new_name);
-
-// Prepare rename (check if rename is valid at position)
-// Returns Range JSON or NULL if rename not valid
-XR_FUNC XrJsonValue *xlsp_analyze_prepare_rename(XrLspDocument *doc, XrLspPosition pos);
+// Rename (moved to xlsp_rename.h / xlsp_rename.c)
 
 // Format document
 // Returns array of TextEdit

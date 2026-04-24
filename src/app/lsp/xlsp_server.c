@@ -23,6 +23,7 @@
 #include "xlsp_code_action.h"
 #include "xlsp_call_hierarchy.h"
 #include "xlsp_extra_handlers.h"
+#include "xlsp_rename.h"
 #include "xlsp_utils.h"
 #include "../../frontend/parser/xast_nodes.h"
 #include "../../base/xhash.h"
