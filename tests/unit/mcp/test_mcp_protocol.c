@@ -18,7 +18,7 @@
 #include "../../../src/app/mcp/xmcp_resources.h"
 #include "../../../src/app/mcp/xmcp_prompts.h"
 #include "../../../src/app/mcp/xmcp_knowledge.h"
-#include "../../../src/app/lsp/xlsp_json.h"
+#include "../../../src/base/xjson.h"
 #include "../../../src/base/xmalloc.h"
 
 /* Stubs for notification functions (implemented in xmcp_server.c, not linked
@@ -112,11 +112,11 @@ TEST(initialize_returns_protocol_version) {
     XrJsonValue *result = xmcp_handle_initialize(&server, NULL);
     ASSERT_NOT_NULL(result);
 
-    const char *version = xlsp_json_get_string(result, "protocolVersion");
+    const char *version = xjson_get_string(result, "protocolVersion");
     ASSERT_NOT_NULL(version);
     ASSERT_STR_EQ(version, "2025-03-26");
 
-    xlsp_json_free(result);
+    xjson_free(result);
 }
 
 TEST(initialize_returns_server_info) {
@@ -129,18 +129,18 @@ TEST(initialize_returns_server_info) {
     XrJsonValue *result = xmcp_handle_initialize(&server, NULL);
     ASSERT_NOT_NULL(result);
 
-    XrJsonValue *info = xlsp_json_get_object(result, "serverInfo");
+    XrJsonValue *info = xjson_get_object(result, "serverInfo");
     ASSERT_NOT_NULL(info);
 
-    const char *name = xlsp_json_get_string(info, "name");
+    const char *name = xjson_get_string(info, "name");
     ASSERT_NOT_NULL(name);
     ASSERT_STR_EQ(name, "xray-mcp-server");
 
-    const char *ver = xlsp_json_get_string(info, "version");
+    const char *ver = xjson_get_string(info, "version");
     ASSERT_NOT_NULL(ver);
     ASSERT(strlen(ver) > 0);
 
-    xlsp_json_free(result);
+    xjson_free(result);
 }
 
 TEST(initialize_capabilities_with_all_features) {
@@ -153,26 +153,26 @@ TEST(initialize_capabilities_with_all_features) {
     XrJsonValue *result = xmcp_handle_initialize(&server, NULL);
     ASSERT_NOT_NULL(result);
 
-    XrJsonValue *caps = xlsp_json_get_object(result, "capabilities");
+    XrJsonValue *caps = xjson_get_object(result, "capabilities");
     ASSERT_NOT_NULL(caps);
 
     /* tools capability present */
-    XrJsonValue *tools = xlsp_json_get_object(caps, "tools");
+    XrJsonValue *tools = xjson_get_object(caps, "tools");
     ASSERT_NOT_NULL(tools);
 
     /* resources capability present */
-    XrJsonValue *resources = xlsp_json_get_object(caps, "resources");
+    XrJsonValue *resources = xjson_get_object(caps, "resources");
     ASSERT_NOT_NULL(resources);
 
     /* prompts capability present */
-    XrJsonValue *prompts = xlsp_json_get_object(caps, "prompts");
+    XrJsonValue *prompts = xjson_get_object(caps, "prompts");
     ASSERT_NOT_NULL(prompts);
 
     /* logging always present */
-    XrJsonValue *logging = xlsp_json_get_object(caps, "logging");
+    XrJsonValue *logging = xjson_get_object(caps, "logging");
     ASSERT_NOT_NULL(logging);
 
-    xlsp_json_free(result);
+    xjson_free(result);
 }
 
 TEST(initialize_capabilities_without_prompts) {
@@ -185,21 +185,21 @@ TEST(initialize_capabilities_without_prompts) {
     XrJsonValue *result = xmcp_handle_initialize(&server, NULL);
     ASSERT_NOT_NULL(result);
 
-    XrJsonValue *caps = xlsp_json_get_object(result, "capabilities");
+    XrJsonValue *caps = xjson_get_object(result, "capabilities");
     ASSERT_NOT_NULL(caps);
 
     /* tools and resources present */
-    ASSERT_NOT_NULL(xlsp_json_get_object(caps, "tools"));
-    ASSERT_NOT_NULL(xlsp_json_get_object(caps, "resources"));
+    ASSERT_NOT_NULL(xjson_get_object(caps, "tools"));
+    ASSERT_NOT_NULL(xjson_get_object(caps, "resources"));
 
     /* prompts should NOT be present */
-    XrJsonValue *prompts = xlsp_json_get_object(caps, "prompts");
+    XrJsonValue *prompts = xjson_get_object(caps, "prompts");
     ASSERT(prompts == NULL);
 
     /* logging always present */
-    ASSERT_NOT_NULL(xlsp_json_get_object(caps, "logging"));
+    ASSERT_NOT_NULL(xjson_get_object(caps, "logging"));
 
-    xlsp_json_free(result);
+    xjson_free(result);
 }
 
 TEST(initialize_capabilities_minimal) {
@@ -212,16 +212,16 @@ TEST(initialize_capabilities_minimal) {
     XrJsonValue *result = xmcp_handle_initialize(&server, NULL);
     ASSERT_NOT_NULL(result);
 
-    XrJsonValue *caps = xlsp_json_get_object(result, "capabilities");
+    XrJsonValue *caps = xjson_get_object(result, "capabilities");
     ASSERT_NOT_NULL(caps);
 
     /* Only logging should be present */
-    ASSERT(xlsp_json_get_object(caps, "tools") == NULL);
-    ASSERT(xlsp_json_get_object(caps, "resources") == NULL);
-    ASSERT(xlsp_json_get_object(caps, "prompts") == NULL);
-    ASSERT_NOT_NULL(xlsp_json_get_object(caps, "logging"));
+    ASSERT(xjson_get_object(caps, "tools") == NULL);
+    ASSERT(xjson_get_object(caps, "resources") == NULL);
+    ASSERT(xjson_get_object(caps, "prompts") == NULL);
+    ASSERT_NOT_NULL(xjson_get_object(caps, "logging"));
 
-    xlsp_json_free(result);
+    xjson_free(result);
 }
 
 /* =========================================================================
@@ -232,54 +232,54 @@ TEST(tools_list_returns_seven_tools) {
     XrJsonValue *result = xmcp_handle_tools_list(NULL);
     ASSERT_NOT_NULL(result);
 
-    XrJsonValue *tools = xlsp_json_get_array(result, "tools");
+    XrJsonValue *tools = xjson_get_array(result, "tools");
     ASSERT_NOT_NULL(tools);
-    ASSERT_EQ(xlsp_json_array_len(tools), 7);
+    ASSERT_EQ(xjson_array_len(tools), 7);
 
-    xlsp_json_free(result);
+    xjson_free(result);
 }
 
 TEST(tools_list_has_required_fields) {
     XrJsonValue *result = xmcp_handle_tools_list(NULL);
     ASSERT_NOT_NULL(result);
 
-    XrJsonValue *tools = xlsp_json_get_array(result, "tools");
-    for (int i = 0; i < xlsp_json_array_len(tools); i++) {
-        XrJsonValue *tool = xlsp_json_array_get(tools, i);
-        ASSERT_NOT_NULL(xlsp_json_get_string(tool, "name"));
-        ASSERT_NOT_NULL(xlsp_json_get_string(tool, "description"));
-        ASSERT_NOT_NULL(xlsp_json_get_object(tool, "inputSchema"));
+    XrJsonValue *tools = xjson_get_array(result, "tools");
+    for (int i = 0; i < xjson_array_len(tools); i++) {
+        XrJsonValue *tool = xjson_array_get(tools, i);
+        ASSERT_NOT_NULL(xjson_get_string(tool, "name"));
+        ASSERT_NOT_NULL(xjson_get_string(tool, "description"));
+        ASSERT_NOT_NULL(xjson_get_object(tool, "inputSchema"));
     }
 
-    xlsp_json_free(result);
+    xjson_free(result);
 }
 
 TEST(tools_list_has_annotations) {
     XrJsonValue *result = xmcp_handle_tools_list(NULL);
     ASSERT_NOT_NULL(result);
 
-    XrJsonValue *tools = xlsp_json_get_array(result, "tools");
-    for (int i = 0; i < xlsp_json_array_len(tools); i++) {
-        XrJsonValue *tool = xlsp_json_array_get(tools, i);
-        XrJsonValue *ann = xlsp_json_get_object(tool, "annotations");
+    XrJsonValue *tools = xjson_get_array(result, "tools");
+    for (int i = 0; i < xjson_array_len(tools); i++) {
+        XrJsonValue *tool = xjson_array_get(tools, i);
+        XrJsonValue *ann = xjson_get_object(tool, "annotations");
         ASSERT_NOT_NULL(ann);
-        ASSERT_NOT_NULL(xlsp_json_get_string(ann, "title"));
+        ASSERT_NOT_NULL(xjson_get_string(ann, "title"));
         /* Most tools are read-only; xray_run is not */
-        const char *tname = xlsp_json_get_string(tool, "name");
+        const char *tname = xjson_get_string(tool, "name");
         if (strcmp(tname, "xray_run") != 0) {
-            ASSERT(xlsp_json_get_bool(ann, "readOnlyHint") == true);
+            ASSERT(xjson_get_bool(ann, "readOnlyHint") == true);
         }
-        ASSERT(xlsp_json_get_bool(ann, "destructiveHint") == false);
+        ASSERT(xjson_get_bool(ann, "destructiveHint") == false);
     }
 
-    xlsp_json_free(result);
+    xjson_free(result);
 }
 
 TEST(tools_list_tool_names) {
     XrJsonValue *result = xmcp_handle_tools_list(NULL);
     ASSERT_NOT_NULL(result);
 
-    XrJsonValue *tools = xlsp_json_get_array(result, "tools");
+    XrJsonValue *tools = xjson_get_array(result, "tools");
     const char *expected[] = {
         "xray_check", "xray_format", "xray_diagnostics",
         "xray_run", "xray_syntax_lookup",
@@ -287,11 +287,11 @@ TEST(tools_list_tool_names) {
     };
 
     for (int i = 0; i < 7; i++) {
-        XrJsonValue *tool = xlsp_json_array_get(tools, i);
-        ASSERT_STR_EQ(xlsp_json_get_string(tool, "name"), expected[i]);
+        XrJsonValue *tool = xjson_array_get(tools, i);
+        ASSERT_STR_EQ(xjson_get_string(tool, "name"), expected[i]);
     }
 
-    xlsp_json_free(result);
+    xjson_free(result);
 }
 
 /* =========================================================================
@@ -300,29 +300,29 @@ TEST(tools_list_tool_names) {
 
 TEST(tools_call_unknown_tool) {
     XmcpServer server = {0};
-    XrJsonValue *params = xlsp_json_new_object();
-    XLSP_JSON_SET_STRING(params, "name", "nonexistent_tool");
+    XrJsonValue *params = xjson_new_object();
+    XJSON_SET_STRING(params, "name", "nonexistent_tool");
 
     XrJsonValue *result = xmcp_handle_tools_call(&server, params);
     ASSERT_NOT_NULL(result);
 
     /* Should have isError=true */
-    ASSERT(xlsp_json_get_bool(result, "isError") == true);
+    ASSERT(xjson_get_bool(result, "isError") == true);
 
-    xlsp_json_free(params);
-    xlsp_json_free(result);
+    xjson_free(params);
+    xjson_free(result);
 }
 
 TEST(tools_call_missing_name) {
     XmcpServer server = {0};
-    XrJsonValue *params = xlsp_json_new_object();
+    XrJsonValue *params = xjson_new_object();
 
     XrJsonValue *result = xmcp_handle_tools_call(&server, params);
     ASSERT_NOT_NULL(result);
-    ASSERT(xlsp_json_get_bool(result, "isError") == true);
+    ASSERT(xjson_get_bool(result, "isError") == true);
 
-    xlsp_json_free(params);
-    xlsp_json_free(result);
+    xjson_free(params);
+    xjson_free(result);
 }
 
 /* =========================================================================
@@ -331,39 +331,39 @@ TEST(tools_call_missing_name) {
 
 TEST(tools_call_format_missing_code) {
     XmcpServer server = {0};
-    XrJsonValue *params = xlsp_json_new_object();
-    XLSP_JSON_SET_STRING(params, "name", "xray_format");
-    XrJsonValue *args = xlsp_json_new_object();
-    xlsp_json_object_set(params, "arguments", args);
+    XrJsonValue *params = xjson_new_object();
+    XJSON_SET_STRING(params, "name", "xray_format");
+    XrJsonValue *args = xjson_new_object();
+    xjson_object_set(params, "arguments", args);
 
     XrJsonValue *result = xmcp_handle_tools_call(&server, params);
     ASSERT_NOT_NULL(result);
-    ASSERT(xlsp_json_get_bool(result, "isError") == true);
+    ASSERT(xjson_get_bool(result, "isError") == true);
 
-    xlsp_json_free(params);
-    xlsp_json_free(result);
+    xjson_free(params);
+    xjson_free(result);
 }
 
 TEST(tools_call_format_schema_has_optional_params) {
     XrJsonValue *result = xmcp_handle_tools_list(NULL);
     ASSERT_NOT_NULL(result);
 
-    XrJsonValue *tools = xlsp_json_get_array(result, "tools");
+    XrJsonValue *tools = xjson_get_array(result, "tools");
     /* xray_format is at index 1 */
-    XrJsonValue *fmt_tool = xlsp_json_array_get(tools, 1);
-    ASSERT_STR_EQ(xlsp_json_get_string(fmt_tool, "name"), "xray_format");
+    XrJsonValue *fmt_tool = xjson_array_get(tools, 1);
+    ASSERT_STR_EQ(xjson_get_string(fmt_tool, "name"), "xray_format");
 
-    XrJsonValue *schema = xlsp_json_get_object(fmt_tool, "inputSchema");
+    XrJsonValue *schema = xjson_get_object(fmt_tool, "inputSchema");
     ASSERT_NOT_NULL(schema);
-    XrJsonValue *props = xlsp_json_get_object(schema, "properties");
+    XrJsonValue *props = xjson_get_object(schema, "properties");
     ASSERT_NOT_NULL(props);
 
     /* code is required, indentSize and useTabs are optional */
-    ASSERT_NOT_NULL(xlsp_json_get_object(props, "code"));
-    ASSERT_NOT_NULL(xlsp_json_get_object(props, "indentSize"));
-    ASSERT_NOT_NULL(xlsp_json_get_object(props, "useTabs"));
+    ASSERT_NOT_NULL(xjson_get_object(props, "code"));
+    ASSERT_NOT_NULL(xjson_get_object(props, "indentSize"));
+    ASSERT_NOT_NULL(xjson_get_object(props, "useTabs"));
 
-    xlsp_json_free(result);
+    xjson_free(result);
 }
 
 /* =========================================================================
@@ -372,32 +372,32 @@ TEST(tools_call_format_schema_has_optional_params) {
 
 TEST(tools_call_diagnostics_missing_code) {
     XmcpServer server = {0};
-    XrJsonValue *params = xlsp_json_new_object();
-    XLSP_JSON_SET_STRING(params, "name", "xray_diagnostics");
-    XrJsonValue *args = xlsp_json_new_object();
-    xlsp_json_object_set(params, "arguments", args);
+    XrJsonValue *params = xjson_new_object();
+    XJSON_SET_STRING(params, "name", "xray_diagnostics");
+    XrJsonValue *args = xjson_new_object();
+    xjson_object_set(params, "arguments", args);
 
     XrJsonValue *result = xmcp_handle_tools_call(&server, params);
     ASSERT_NOT_NULL(result);
-    ASSERT(xlsp_json_get_bool(result, "isError") == true);
+    ASSERT(xjson_get_bool(result, "isError") == true);
 
-    xlsp_json_free(params);
-    xlsp_json_free(result);
+    xjson_free(params);
+    xjson_free(result);
 }
 
 TEST(tools_call_diagnostics_schema) {
     XrJsonValue *result = xmcp_handle_tools_list(NULL);
-    XrJsonValue *tools = xlsp_json_get_array(result, "tools");
+    XrJsonValue *tools = xjson_get_array(result, "tools");
     /* xray_diagnostics is at index 2 */
-    XrJsonValue *diag_tool = xlsp_json_array_get(tools, 2);
-    ASSERT_STR_EQ(xlsp_json_get_string(diag_tool, "name"), "xray_diagnostics");
+    XrJsonValue *diag_tool = xjson_array_get(tools, 2);
+    ASSERT_STR_EQ(xjson_get_string(diag_tool, "name"), "xray_diagnostics");
 
-    XrJsonValue *schema = xlsp_json_get_object(diag_tool, "inputSchema");
+    XrJsonValue *schema = xjson_get_object(diag_tool, "inputSchema");
     ASSERT_NOT_NULL(schema);
-    XrJsonValue *props = xlsp_json_get_object(schema, "properties");
-    ASSERT_NOT_NULL(xlsp_json_get_object(props, "code"));
+    XrJsonValue *props = xjson_get_object(schema, "properties");
+    ASSERT_NOT_NULL(xjson_get_object(props, "code"));
 
-    xlsp_json_free(result);
+    xjson_free(result);
 }
 
 /* =========================================================================
@@ -406,31 +406,31 @@ TEST(tools_call_diagnostics_schema) {
 
 TEST(tools_call_run_missing_code) {
     XmcpServer server = {0};
-    XrJsonValue *params = xlsp_json_new_object();
-    XLSP_JSON_SET_STRING(params, "name", "xray_run");
-    XrJsonValue *args = xlsp_json_new_object();
-    xlsp_json_object_set(params, "arguments", args);
+    XrJsonValue *params = xjson_new_object();
+    XJSON_SET_STRING(params, "name", "xray_run");
+    XrJsonValue *args = xjson_new_object();
+    xjson_object_set(params, "arguments", args);
 
     XrJsonValue *result = xmcp_handle_tools_call(&server, params);
     ASSERT_NOT_NULL(result);
-    ASSERT(xlsp_json_get_bool(result, "isError") == true);
+    ASSERT(xjson_get_bool(result, "isError") == true);
 
-    xlsp_json_free(params);
-    xlsp_json_free(result);
+    xjson_free(params);
+    xjson_free(result);
 }
 
 TEST(tools_call_run_has_open_world_hint) {
     XrJsonValue *result = xmcp_handle_tools_list(NULL);
-    XrJsonValue *tools = xlsp_json_get_array(result, "tools");
+    XrJsonValue *tools = xjson_get_array(result, "tools");
     /* xray_run is at index 3 */
-    XrJsonValue *run_tool = xlsp_json_array_get(tools, 3);
-    ASSERT_STR_EQ(xlsp_json_get_string(run_tool, "name"), "xray_run");
+    XrJsonValue *run_tool = xjson_array_get(tools, 3);
+    ASSERT_STR_EQ(xjson_get_string(run_tool, "name"), "xray_run");
 
-    XrJsonValue *ann = xlsp_json_get_object(run_tool, "annotations");
-    ASSERT(xlsp_json_get_bool(ann, "readOnlyHint") == false);
-    ASSERT(xlsp_json_get_bool(ann, "openWorldHint") == true);
+    XrJsonValue *ann = xjson_get_object(run_tool, "annotations");
+    ASSERT(xjson_get_bool(ann, "readOnlyHint") == false);
+    ASSERT(xjson_get_bool(ann, "openWorldHint") == true);
 
-    xlsp_json_free(result);
+    xjson_free(result);
 }
 
 /* =========================================================================
@@ -439,32 +439,32 @@ TEST(tools_call_run_has_open_world_hint) {
 
 TEST(tools_call_definition_missing_symbol) {
     XmcpServer server = {0};
-    XrJsonValue *params = xlsp_json_new_object();
-    XLSP_JSON_SET_STRING(params, "name", "xray_definition");
-    XrJsonValue *args = xlsp_json_new_object();
-    xlsp_json_object_set(params, "arguments", args);
+    XrJsonValue *params = xjson_new_object();
+    XJSON_SET_STRING(params, "name", "xray_definition");
+    XrJsonValue *args = xjson_new_object();
+    xjson_object_set(params, "arguments", args);
 
     XrJsonValue *result = xmcp_handle_tools_call(&server, params);
     ASSERT_NOT_NULL(result);
-    ASSERT(xlsp_json_get_bool(result, "isError") == true);
+    ASSERT(xjson_get_bool(result, "isError") == true);
 
-    xlsp_json_free(params);
-    xlsp_json_free(result);
+    xjson_free(params);
+    xjson_free(result);
 }
 
 TEST(tools_call_definition_schema) {
     XrJsonValue *result = xmcp_handle_tools_list(NULL);
-    XrJsonValue *tools = xlsp_json_get_array(result, "tools");
+    XrJsonValue *tools = xjson_get_array(result, "tools");
     /* xray_definition is at index 6 */
-    XrJsonValue *def_tool = xlsp_json_array_get(tools, 6);
-    ASSERT_STR_EQ(xlsp_json_get_string(def_tool, "name"), "xray_definition");
+    XrJsonValue *def_tool = xjson_array_get(tools, 6);
+    ASSERT_STR_EQ(xjson_get_string(def_tool, "name"), "xray_definition");
 
-    XrJsonValue *schema = xlsp_json_get_object(def_tool, "inputSchema");
+    XrJsonValue *schema = xjson_get_object(def_tool, "inputSchema");
     ASSERT_NOT_NULL(schema);
-    XrJsonValue *props = xlsp_json_get_object(schema, "properties");
-    ASSERT_NOT_NULL(xlsp_json_get_object(props, "symbol"));
+    XrJsonValue *props = xjson_get_object(schema, "properties");
+    ASSERT_NOT_NULL(xjson_get_object(props, "symbol"));
 
-    xlsp_json_free(result);
+    xjson_free(result);
 }
 
 /* =========================================================================
@@ -473,11 +473,11 @@ TEST(tools_call_definition_schema) {
 
 TEST(tools_list_pagination_no_cursor) {
     XrJsonValue *result = xmcp_handle_tools_list(NULL);
-    XrJsonValue *tools = xlsp_json_get_array(result, "tools");
-    ASSERT_EQ(xlsp_json_array_len(tools), 7);
+    XrJsonValue *tools = xjson_get_array(result, "tools");
+    ASSERT_EQ(xjson_array_len(tools), 7);
     /* No nextCursor when all items fit */
-    ASSERT(xlsp_json_get_string(result, "nextCursor") == NULL);
-    xlsp_json_free(result);
+    ASSERT(xjson_get_string(result, "nextCursor") == NULL);
+    xjson_free(result);
 }
 
 /* =========================================================================
@@ -489,11 +489,11 @@ TEST(resources_list_returns_three) {
     XrJsonValue *result = xmcp_handle_resources_list(&server);
     ASSERT_NOT_NULL(result);
 
-    XrJsonValue *resources = xlsp_json_get_array(result, "resources");
+    XrJsonValue *resources = xjson_get_array(result, "resources");
     ASSERT_NOT_NULL(resources);
-    ASSERT_EQ(xlsp_json_array_len(resources), 3);
+    ASSERT_EQ(xjson_array_len(resources), 3);
 
-    xlsp_json_free(result);
+    xjson_free(result);
 }
 
 TEST(resources_list_has_required_fields) {
@@ -501,15 +501,15 @@ TEST(resources_list_has_required_fields) {
     XrJsonValue *result = xmcp_handle_resources_list(&server);
     ASSERT_NOT_NULL(result);
 
-    XrJsonValue *resources = xlsp_json_get_array(result, "resources");
-    for (int i = 0; i < xlsp_json_array_len(resources); i++) {
-        XrJsonValue *res = xlsp_json_array_get(resources, i);
-        ASSERT_NOT_NULL(xlsp_json_get_string(res, "uri"));
-        ASSERT_NOT_NULL(xlsp_json_get_string(res, "name"));
-        ASSERT_NOT_NULL(xlsp_json_get_string(res, "mimeType"));
+    XrJsonValue *resources = xjson_get_array(result, "resources");
+    for (int i = 0; i < xjson_array_len(resources); i++) {
+        XrJsonValue *res = xjson_array_get(resources, i);
+        ASSERT_NOT_NULL(xjson_get_string(res, "uri"));
+        ASSERT_NOT_NULL(xjson_get_string(res, "name"));
+        ASSERT_NOT_NULL(xjson_get_string(res, "mimeType"));
     }
 
-    xlsp_json_free(result);
+    xjson_free(result);
 }
 
 TEST(resources_list_uris) {
@@ -517,7 +517,7 @@ TEST(resources_list_uris) {
     XrJsonValue *result = xmcp_handle_resources_list(&server);
     ASSERT_NOT_NULL(result);
 
-    XrJsonValue *resources = xlsp_json_get_array(result, "resources");
+    XrJsonValue *resources = xjson_get_array(result, "resources");
     const char *expected[] = {
         "xray://spec/cheatsheet",
         "xray://spec/concurrency",
@@ -525,11 +525,11 @@ TEST(resources_list_uris) {
     };
 
     for (int i = 0; i < 3; i++) {
-        XrJsonValue *res = xlsp_json_array_get(resources, i);
-        ASSERT_STR_EQ(xlsp_json_get_string(res, "uri"), expected[i]);
+        XrJsonValue *res = xjson_array_get(resources, i);
+        ASSERT_STR_EQ(xjson_get_string(res, "uri"), expected[i]);
     }
 
-    xlsp_json_free(result);
+    xjson_free(result);
 }
 
 /* =========================================================================
@@ -538,38 +538,38 @@ TEST(resources_list_uris) {
 
 TEST(resources_read_cheatsheet) {
     XmcpServer server = {0};
-    XrJsonValue *params = xlsp_json_new_object();
-    XLSP_JSON_SET_STRING(params, "uri", "xray://spec/cheatsheet");
+    XrJsonValue *params = xjson_new_object();
+    XJSON_SET_STRING(params, "uri", "xray://spec/cheatsheet");
 
     XrJsonValue *result = xmcp_handle_resources_read(&server, params);
     ASSERT_NOT_NULL(result);
 
-    XrJsonValue *contents = xlsp_json_get_array(result, "contents");
+    XrJsonValue *contents = xjson_get_array(result, "contents");
     ASSERT_NOT_NULL(contents);
-    ASSERT_EQ(xlsp_json_array_len(contents), 1);
+    ASSERT_EQ(xjson_array_len(contents), 1);
 
-    XrJsonValue *item = xlsp_json_array_get(contents, 0);
-    ASSERT_STR_EQ(xlsp_json_get_string(item, "uri"), "xray://spec/cheatsheet");
-    ASSERT_STR_EQ(xlsp_json_get_string(item, "mimeType"), "text/markdown");
+    XrJsonValue *item = xjson_array_get(contents, 0);
+    ASSERT_STR_EQ(xjson_get_string(item, "uri"), "xray://spec/cheatsheet");
+    ASSERT_STR_EQ(xjson_get_string(item, "mimeType"), "text/markdown");
 
-    xlsp_json_free(params);
-    xlsp_json_free(result);
+    xjson_free(params);
+    xjson_free(result);
 }
 
 TEST(resources_read_unknown_uri) {
     XmcpServer server = {0};
-    XrJsonValue *params = xlsp_json_new_object();
-    XLSP_JSON_SET_STRING(params, "uri", "xray://nonexistent");
+    XrJsonValue *params = xjson_new_object();
+    XJSON_SET_STRING(params, "uri", "xray://nonexistent");
 
     XrJsonValue *result = xmcp_handle_resources_read(&server, params);
     ASSERT_NOT_NULL(result);
 
-    XrJsonValue *contents = xlsp_json_get_array(result, "contents");
+    XrJsonValue *contents = xjson_get_array(result, "contents");
     ASSERT_NOT_NULL(contents);
-    ASSERT_EQ(xlsp_json_array_len(contents), 0);
+    ASSERT_EQ(xjson_array_len(contents), 0);
 
-    xlsp_json_free(params);
-    xlsp_json_free(result);
+    xjson_free(params);
+    xjson_free(result);
 }
 
 /* =========================================================================
@@ -581,11 +581,11 @@ TEST(resource_templates_list_returns_two) {
     XrJsonValue *result = xmcp_handle_resource_templates_list(&server);
     ASSERT_NOT_NULL(result);
 
-    XrJsonValue *templates = xlsp_json_get_array(result, "resourceTemplates");
+    XrJsonValue *templates = xjson_get_array(result, "resourceTemplates");
     ASSERT_NOT_NULL(templates);
-    ASSERT_EQ(xlsp_json_array_len(templates), 2);
+    ASSERT_EQ(xjson_array_len(templates), 2);
 
-    xlsp_json_free(result);
+    xjson_free(result);
 }
 
 TEST(resource_templates_have_required_fields) {
@@ -593,16 +593,16 @@ TEST(resource_templates_have_required_fields) {
     XrJsonValue *result = xmcp_handle_resource_templates_list(&server);
     ASSERT_NOT_NULL(result);
 
-    XrJsonValue *templates = xlsp_json_get_array(result, "resourceTemplates");
-    for (int i = 0; i < xlsp_json_array_len(templates); i++) {
-        XrJsonValue *t = xlsp_json_array_get(templates, i);
-        ASSERT_NOT_NULL(xlsp_json_get_string(t, "uriTemplate"));
-        ASSERT_NOT_NULL(xlsp_json_get_string(t, "name"));
-        ASSERT_NOT_NULL(xlsp_json_get_string(t, "description"));
-        ASSERT_NOT_NULL(xlsp_json_get_string(t, "mimeType"));
+    XrJsonValue *templates = xjson_get_array(result, "resourceTemplates");
+    for (int i = 0; i < xjson_array_len(templates); i++) {
+        XrJsonValue *t = xjson_array_get(templates, i);
+        ASSERT_NOT_NULL(xjson_get_string(t, "uriTemplate"));
+        ASSERT_NOT_NULL(xjson_get_string(t, "name"));
+        ASSERT_NOT_NULL(xjson_get_string(t, "description"));
+        ASSERT_NOT_NULL(xjson_get_string(t, "mimeType"));
     }
 
-    xlsp_json_free(result);
+    xjson_free(result);
 }
 
 TEST(resource_templates_uris) {
@@ -610,14 +610,14 @@ TEST(resource_templates_uris) {
     XrJsonValue *result = xmcp_handle_resource_templates_list(&server);
     ASSERT_NOT_NULL(result);
 
-    XrJsonValue *templates = xlsp_json_get_array(result, "resourceTemplates");
-    XrJsonValue *t0 = xlsp_json_array_get(templates, 0);
-    ASSERT(strstr(xlsp_json_get_string(t0, "uriTemplate"), "{name}") != NULL);
+    XrJsonValue *templates = xjson_get_array(result, "resourceTemplates");
+    XrJsonValue *t0 = xjson_array_get(templates, 0);
+    ASSERT(strstr(xjson_get_string(t0, "uriTemplate"), "{name}") != NULL);
 
-    XrJsonValue *t1 = xlsp_json_array_get(templates, 1);
-    ASSERT(strstr(xlsp_json_get_string(t1, "uriTemplate"), "{module}") != NULL);
+    XrJsonValue *t1 = xjson_array_get(templates, 1);
+    ASSERT(strstr(xjson_get_string(t1, "uriTemplate"), "{module}") != NULL);
 
-    xlsp_json_free(result);
+    xjson_free(result);
 }
 
 TEST(resources_read_topic_template) {
@@ -626,22 +626,22 @@ TEST(resources_read_topic_template) {
     server.knowledge = xmcp_knowledge_new();
     xmcp_knowledge_load(server.knowledge);
 
-    XrJsonValue *params = xlsp_json_new_object();
-    XLSP_JSON_SET_STRING(params, "uri", "xray://spec/topic/variables");
+    XrJsonValue *params = xjson_new_object();
+    XJSON_SET_STRING(params, "uri", "xray://spec/topic/variables");
 
     XrJsonValue *result = xmcp_handle_resources_read(&server, params);
     ASSERT_NOT_NULL(result);
 
-    XrJsonValue *contents = xlsp_json_get_array(result, "contents");
+    XrJsonValue *contents = xjson_get_array(result, "contents");
     ASSERT_NOT_NULL(contents);
-    ASSERT_EQ(xlsp_json_array_len(contents), 1);
+    ASSERT_EQ(xjson_array_len(contents), 1);
 
-    XrJsonValue *item = xlsp_json_array_get(contents, 0);
-    ASSERT_STR_EQ(xlsp_json_get_string(item, "uri"), "xray://spec/topic/variables");
+    XrJsonValue *item = xjson_array_get(contents, 0);
+    ASSERT_STR_EQ(xjson_get_string(item, "uri"), "xray://spec/topic/variables");
 
     xmcp_knowledge_free(server.knowledge);
-    xlsp_json_free(params);
-    xlsp_json_free(result);
+    xjson_free(params);
+    xjson_free(result);
 }
 
 TEST(resources_read_stdlib_template) {
@@ -649,20 +649,20 @@ TEST(resources_read_stdlib_template) {
     server.knowledge = xmcp_knowledge_new();
     xmcp_knowledge_load(server.knowledge);
 
-    XrJsonValue *params = xlsp_json_new_object();
-    XLSP_JSON_SET_STRING(params, "uri", "xray://stdlib/http");
+    XrJsonValue *params = xjson_new_object();
+    XJSON_SET_STRING(params, "uri", "xray://stdlib/http");
 
     XrJsonValue *result = xmcp_handle_resources_read(&server, params);
     ASSERT_NOT_NULL(result);
 
-    XrJsonValue *contents = xlsp_json_get_array(result, "contents");
+    XrJsonValue *contents = xjson_get_array(result, "contents");
     ASSERT_NOT_NULL(contents);
     /* Should find http module */
-    ASSERT(xlsp_json_array_len(contents) >= 1);
+    ASSERT(xjson_array_len(contents) >= 1);
 
     xmcp_knowledge_free(server.knowledge);
-    xlsp_json_free(params);
-    xlsp_json_free(result);
+    xjson_free(params);
+    xjson_free(result);
 }
 
 /* =========================================================================
@@ -673,60 +673,60 @@ TEST(prompts_list_returns_five) {
     XrJsonValue *result = xmcp_handle_prompts_list();
     ASSERT_NOT_NULL(result);
 
-    XrJsonValue *prompts = xlsp_json_get_array(result, "prompts");
+    XrJsonValue *prompts = xjson_get_array(result, "prompts");
     ASSERT_NOT_NULL(prompts);
-    ASSERT_EQ(xlsp_json_array_len(prompts), 5);
+    ASSERT_EQ(xjson_array_len(prompts), 5);
 
-    xlsp_json_free(result);
+    xjson_free(result);
 }
 
 TEST(prompts_list_has_required_fields) {
     XrJsonValue *result = xmcp_handle_prompts_list();
     ASSERT_NOT_NULL(result);
 
-    XrJsonValue *prompts = xlsp_json_get_array(result, "prompts");
-    for (int i = 0; i < xlsp_json_array_len(prompts); i++) {
-        XrJsonValue *p = xlsp_json_array_get(prompts, i);
-        ASSERT_NOT_NULL(xlsp_json_get_string(p, "name"));
-        ASSERT_NOT_NULL(xlsp_json_get_string(p, "description"));
+    XrJsonValue *prompts = xjson_get_array(result, "prompts");
+    for (int i = 0; i < xjson_array_len(prompts); i++) {
+        XrJsonValue *p = xjson_array_get(prompts, i);
+        ASSERT_NOT_NULL(xjson_get_string(p, "name"));
+        ASSERT_NOT_NULL(xjson_get_string(p, "description"));
     }
 
-    xlsp_json_free(result);
+    xjson_free(result);
 }
 
 TEST(prompts_list_prompt_names) {
     XrJsonValue *result = xmcp_handle_prompts_list();
     ASSERT_NOT_NULL(result);
 
-    XrJsonValue *prompts = xlsp_json_get_array(result, "prompts");
+    XrJsonValue *prompts = xjson_get_array(result, "prompts");
     const char *expected[] = {
         "code-review", "explain-error", "convert-to-xray",
         "concurrency-pattern", "write-test"
     };
 
     for (int i = 0; i < 5; i++) {
-        XrJsonValue *p = xlsp_json_array_get(prompts, i);
-        ASSERT_STR_EQ(xlsp_json_get_string(p, "name"), expected[i]);
+        XrJsonValue *p = xjson_array_get(prompts, i);
+        ASSERT_STR_EQ(xjson_get_string(p, "name"), expected[i]);
     }
 
-    xlsp_json_free(result);
+    xjson_free(result);
 }
 
 TEST(prompts_list_has_arguments) {
     XrJsonValue *result = xmcp_handle_prompts_list();
     ASSERT_NOT_NULL(result);
 
-    XrJsonValue *prompts = xlsp_json_get_array(result, "prompts");
+    XrJsonValue *prompts = xjson_get_array(result, "prompts");
 
     /* All prompts should have at least one argument */
-    for (int i = 0; i < xlsp_json_array_len(prompts); i++) {
-        XrJsonValue *p = xlsp_json_array_get(prompts, i);
-        XrJsonValue *args = xlsp_json_get_array(p, "arguments");
+    for (int i = 0; i < xjson_array_len(prompts); i++) {
+        XrJsonValue *p = xjson_array_get(prompts, i);
+        XrJsonValue *args = xjson_get_array(p, "arguments");
         ASSERT_NOT_NULL(args);
-        ASSERT(xlsp_json_array_len(args) >= 1);
+        ASSERT(xjson_array_len(args) >= 1);
     }
 
-    xlsp_json_free(result);
+    xjson_free(result);
 }
 
 /* =========================================================================
@@ -735,58 +735,58 @@ TEST(prompts_list_has_arguments) {
 
 TEST(prompts_get_code_review) {
     XmcpServer server = {0};
-    XrJsonValue *params = xlsp_json_new_object();
-    XLSP_JSON_SET_STRING(params, "name", "code-review");
+    XrJsonValue *params = xjson_new_object();
+    XJSON_SET_STRING(params, "name", "code-review");
 
-    XrJsonValue *args = xlsp_json_new_object();
-    XLSP_JSON_SET_STRING(args, "code", "let x = 1\nprint(x)");
-    xlsp_json_object_set(params, "arguments", args);
+    XrJsonValue *args = xjson_new_object();
+    XJSON_SET_STRING(args, "code", "let x = 1\nprint(x)");
+    xjson_object_set(params, "arguments", args);
 
     XrJsonValue *result = xmcp_handle_prompts_get(&server, params);
     ASSERT_NOT_NULL(result);
 
-    XrJsonValue *messages = xlsp_json_get_array(result, "messages");
+    XrJsonValue *messages = xjson_get_array(result, "messages");
     ASSERT_NOT_NULL(messages);
-    ASSERT(xlsp_json_array_len(messages) >= 2);
+    ASSERT(xjson_array_len(messages) >= 2);
 
     /* First message should have role */
-    XrJsonValue *first = xlsp_json_array_get(messages, 0);
-    ASSERT_NOT_NULL(xlsp_json_get_string(first, "role"));
+    XrJsonValue *first = xjson_array_get(messages, 0);
+    ASSERT_NOT_NULL(xjson_get_string(first, "role"));
 
-    xlsp_json_free(params);
-    xlsp_json_free(result);
+    xjson_free(params);
+    xjson_free(result);
 }
 
 TEST(prompts_get_unknown_prompt) {
     XmcpServer server = {0};
-    XrJsonValue *params = xlsp_json_new_object();
-    XLSP_JSON_SET_STRING(params, "name", "nonexistent-prompt");
+    XrJsonValue *params = xjson_new_object();
+    XJSON_SET_STRING(params, "name", "nonexistent-prompt");
 
     XrJsonValue *result = xmcp_handle_prompts_get(&server, params);
     ASSERT_NOT_NULL(result);
 
     /* Should still have messages array (empty) */
-    XrJsonValue *messages = xlsp_json_get_array(result, "messages");
+    XrJsonValue *messages = xjson_get_array(result, "messages");
     ASSERT_NOT_NULL(messages);
-    ASSERT_EQ(xlsp_json_array_len(messages), 0);
+    ASSERT_EQ(xjson_array_len(messages), 0);
 
-    xlsp_json_free(params);
-    xlsp_json_free(result);
+    xjson_free(params);
+    xjson_free(result);
 }
 
 TEST(prompts_get_missing_name) {
     XmcpServer server = {0};
-    XrJsonValue *params = xlsp_json_new_object();
+    XrJsonValue *params = xjson_new_object();
 
     XrJsonValue *result = xmcp_handle_prompts_get(&server, params);
     ASSERT_NOT_NULL(result);
 
-    XrJsonValue *messages = xlsp_json_get_array(result, "messages");
+    XrJsonValue *messages = xjson_get_array(result, "messages");
     ASSERT_NOT_NULL(messages);
-    ASSERT_EQ(xlsp_json_array_len(messages), 0);
+    ASSERT_EQ(xjson_array_len(messages), 0);
 
-    xlsp_json_free(params);
-    xlsp_json_free(result);
+    xjson_free(params);
+    xjson_free(result);
 }
 
 /* =========================================================================

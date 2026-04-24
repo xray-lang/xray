@@ -14,7 +14,7 @@
 #include <string.h>
 #include "../../../src/app/lsp/xlsp_server.h"
 #include "../../../src/app/lsp/xlsp_analysis.h"
-#include "../../../src/app/lsp/xlsp_json.h"
+#include "../../../src/base/xjson.h"
 
 static int tests_passed = 0;
 static int tests_failed = 0;
@@ -61,9 +61,9 @@ TEST(diagnostics_empty_document) {
 
     XrJsonValue *diags = xlsp_analyze_diagnostics(doc);
     ASSERT(diags != NULL);
-    ASSERT_EQ(xlsp_json_array_len(diags), 0);
+    ASSERT_EQ(xjson_array_len(diags), 0);
 
-    xlsp_json_free(diags);
+    xjson_free(diags);
     xlsp_document_close(server, "file:///test.xr");
     xlsp_server_free(server);
 }
@@ -79,9 +79,9 @@ TEST(diagnostics_valid_code) {
     XrJsonValue *diags = xlsp_analyze_diagnostics(doc);
     ASSERT(diags != NULL);
     // Valid code should produce zero diagnostics
-    ASSERT_EQ(xlsp_json_array_len(diags), 0);
+    ASSERT_EQ(xjson_array_len(diags), 0);
 
-    xlsp_json_free(diags);
+    xjson_free(diags);
     xlsp_document_close(server, "file:///test.xr");
     xlsp_server_free(server);
 }
@@ -98,15 +98,15 @@ TEST(diagnostics_syntax_error) {
     XrJsonValue *diags = xlsp_analyze_diagnostics(doc);
     ASSERT(diags != NULL);
     // Should produce at least one diagnostic for the parse error
-    ASSERT(xlsp_json_array_len(diags) > 0);
+    ASSERT(xjson_array_len(diags) > 0);
 
     // Verify first diagnostic has required LSP fields
-    XrJsonValue *first = xlsp_json_array_get(diags, 0);
+    XrJsonValue *first = xjson_array_get(diags, 0);
     ASSERT(first != NULL);
-    ASSERT(xlsp_json_get_object(first, "range") != NULL);
-    ASSERT(xlsp_json_get_string(first, "message") != NULL);
+    ASSERT(xjson_get_object(first, "range") != NULL);
+    ASSERT(xjson_get_string(first, "message") != NULL);
 
-    xlsp_json_free(diags);
+    xjson_free(diags);
     xlsp_document_close(server, "file:///test.xr");
     xlsp_server_free(server);
 }
@@ -115,8 +115,8 @@ TEST(diagnostics_null_document) {
     // Passing NULL should not crash, just return empty array
     XrJsonValue *diags = xlsp_analyze_diagnostics(NULL);
     ASSERT(diags != NULL);
-    ASSERT_EQ(xlsp_json_array_len(diags), 0);
-    xlsp_json_free(diags);
+    ASSERT_EQ(xjson_array_len(diags), 0);
+    xjson_free(diags);
 }
 
 // ============================================================================

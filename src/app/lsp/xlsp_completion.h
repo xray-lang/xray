@@ -16,7 +16,7 @@
 
 #include "xlsp_types.h"
 #include "xlsp_server.h"
-#include "xlsp_json.h"
+#include "../../base/xjson.h"
 #include "xlsp_builtins.h"
 
 // Unified completion: keywords, builtins, symbols, modules, classes, enums

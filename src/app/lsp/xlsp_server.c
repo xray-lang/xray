@@ -13,7 +13,7 @@
 #include "xlsp_ast_utils.h"
 #include "xlsp_workspace.h"
 #include "xlsp_index_pool.h"
-#include "xlsp_json.h"
+#include "../../base/xjson.h"
 #include "xlsp_cache.h"
 #include "../../frontend/analyzer/xanalyzer.h"
 #include "xlsp_semantic_tokens.h"
@@ -751,7 +751,7 @@ XrLspPosition xlsp_offset_to_position(XrLspDocument *doc, uint32_t offset) {
 // XLSP_ID_NONE, which the caller uses to distinguish notifications.
 static XlspRequestId parse_request_id(XrJsonValue *msg) {
     XlspRequestId id = { .kind = XLSP_ID_NONE, .as.number = 0 };
-    XrJsonValue *v = xlsp_json_get(msg, "id");
+    XrJsonValue *v = xjson_get(msg, "id");
     if (!v) return id;
     if (v->type == XR_JSON_NUMBER) {
         id.kind = XLSP_ID_NUMBER;
@@ -810,9 +810,9 @@ static bool xlsp_request_id_equals(const XlspRequestId *a, const XlspRequestId *
 // value (null for XLSP_ID_NONE — used only for error responses that
 // have to be emitted before we could parse the id).
 static XrJsonValue *xlsp_request_id_to_json(const XlspRequestId *id) {
-    if (!id || id->kind == XLSP_ID_NONE) return xlsp_json_new_null();
-    if (id->kind == XLSP_ID_NUMBER) return xlsp_json_new_number(id->as.number);
-    return xlsp_json_new_string(id->as.string ? id->as.string : "");
+    if (!id || id->kind == XLSP_ID_NONE) return xjson_new_null();
+    if (id->kind == XLSP_ID_NUMBER) return xjson_new_number(id->as.number);
+    return xjson_new_string(id->as.string ? id->as.string : "");
 }
 
 // Short debug label, used for log messages only. Returns a pointer into
@@ -837,72 +837,72 @@ static const char *xlsp_request_id_debug(const XlspRequestId *id) {
 // Send a JSON-RPC response echoing back the client's id exactly.
 static void send_response(XrLspServer *server, const XlspRequestId *id,
                           XrJsonValue *result) {
-    XrJsonValue *resp = xlsp_json_new_object();
-    xlsp_json_object_set(resp, "jsonrpc", xlsp_json_new_string("2.0"));
-    xlsp_json_object_set(resp, "id", xlsp_request_id_to_json(id));
-    xlsp_json_object_set(resp, "result", result ? result : xlsp_json_new_null());
+    XrJsonValue *resp = xjson_new_object();
+    xjson_object_set(resp, "jsonrpc", xjson_new_string("2.0"));
+    xjson_object_set(resp, "id", xlsp_request_id_to_json(id));
+    xjson_object_set(resp, "result", result ? result : xjson_new_null());
 
     size_t len;
-    char *json = xlsp_json_stringify(resp, &len);
+    char *json = xjson_stringify(resp, &len);
     xlsp_transport_write(server->transport, json, len);
 
     xr_free(json);
-    xlsp_json_free(resp);
+    xjson_free(resp);
 }
 
 // Send a JSON-RPC error response, mirroring the client's id shape.
 static void send_error(XrLspServer *server, const XlspRequestId *id,
                        int code, const char *message) {
-    XrJsonValue *resp = xlsp_json_new_object();
-    xlsp_json_object_set(resp, "jsonrpc", xlsp_json_new_string("2.0"));
-    xlsp_json_object_set(resp, "id", xlsp_request_id_to_json(id));
+    XrJsonValue *resp = xjson_new_object();
+    xjson_object_set(resp, "jsonrpc", xjson_new_string("2.0"));
+    xjson_object_set(resp, "id", xlsp_request_id_to_json(id));
 
-    XrJsonValue *error = xlsp_json_new_object();
-    xlsp_json_object_set(error, "code", xlsp_json_new_number(code));
-    xlsp_json_object_set(error, "message", xlsp_json_new_string(message));
-    xlsp_json_object_set(resp, "error", error);
+    XrJsonValue *error = xjson_new_object();
+    xjson_object_set(error, "code", xjson_new_number(code));
+    xjson_object_set(error, "message", xjson_new_string(message));
+    xjson_object_set(resp, "error", error);
 
     size_t len;
-    char *json = xlsp_json_stringify(resp, &len);
+    char *json = xjson_stringify(resp, &len);
     xlsp_transport_write(server->transport, json, len);
 
     xr_free(json);
-    xlsp_json_free(resp);
+    xjson_free(resp);
 }
 
 // Send a notification
 void xlsp_send_notification(XrLspServer *server, const char *method, XrJsonValue *params) {
-    XrJsonValue *notif = xlsp_json_new_object();
-    xlsp_json_object_set(notif, "jsonrpc", xlsp_json_new_string("2.0"));
-    xlsp_json_object_set(notif, "method", xlsp_json_new_string(method));
+    XrJsonValue *notif = xjson_new_object();
+    xjson_object_set(notif, "jsonrpc", xjson_new_string("2.0"));
+    xjson_object_set(notif, "method", xjson_new_string(method));
     if (params) {
-        xlsp_json_object_set(notif, "params", params);
+        xjson_object_set(notif, "params", params);
     }
 
     size_t len;
-    char *json = xlsp_json_stringify(notif, &len);
+    char *json = xjson_stringify(notif, &len);
     xlsp_transport_write(server->transport, json, len);
 
     xr_free(json);
-    xlsp_json_free(notif);
+    xjson_free(notif);
 }
 
 // Send a server-initiated request (fire-and-forget, response ignored)
 void xlsp_send_request(XrLspServer *server, const char *method, XrJsonValue *params) {
-    XrJsonValue *req = xlsp_json_new_object();
-    xlsp_json_object_set(req, "jsonrpc", xlsp_json_new_string("2.0"));
-    xlsp_json_object_set(req, "id", xlsp_json_new_number(++server->next_request_id));
-    xlsp_json_object_set(req, "method", xlsp_json_new_string(method));
+    XrJsonValue *req = xjson_new_object();
+    xjson_object_set(req, "jsonrpc", xjson_new_string("2.0"));
+    xjson_object_set(req, "id", xjson_new_number(++server->next_request_id));
+    xjson_object_set(req, "method", xjson_new_string(method));
     if (params) {
-        xlsp_json_object_set(req, "params", params);
+        xjson_object_set(req, "params", params);
     }
 
     size_t len;
-    char *json = xlsp_json_stringify(req, &len);
+    char *json = xjson_stringify(req, &len);
     xlsp_transport_write(server->transport, json, len);
 
     xr_free(json);
-    xlsp_json_free(req);
+    xjson_free(req);
 }
 
 // ============================================================================
@@ -1014,10 +1014,10 @@ static void handle_cancel_request(XrLspServer *server, XrJsonValue *params) {
 void xlsp_publish_diagnostics(XrLspServer *server, XrLspDocument *doc) {
     XrJsonValue *diagnostics = xlsp_analyze_diagnostics(doc);
 
-    XrJsonValue *params = xlsp_json_new_object();
-    xlsp_json_object_set(params, "uri", xlsp_json_new_string(doc->uri));
-    xlsp_json_object_set(params, "version", xlsp_json_new_number(doc->version));
-    xlsp_json_object_set(params, "diagnostics", diagnostics);
+    XrJsonValue *params = xjson_new_object();
+    xjson_object_set(params, "uri", xjson_new_string(doc->uri));
+    xjson_object_set(params, "version", xjson_new_number(doc->version));
+    xjson_object_set(params, "diagnostics", diagnostics);
 
     xlsp_send_notification(server, "textDocument/publishDiagnostics", params);
 }
@@ -1036,23 +1036,23 @@ static char *progress_begin_ex(XrLspServer *server, const char *title,
     snprintf(token, sizeof(token), "xlsp-progress-%d", ++server->progress_token_counter);
 
     // Create progress token
-    XrJsonValue *create_params = xlsp_json_new_object();
-    xlsp_json_object_set(create_params, "token", xlsp_json_new_string(token));
+    XrJsonValue *create_params = xjson_new_object();
+    xjson_object_set(create_params, "token", xjson_new_string(token));
     xlsp_send_request(server, "window/workDoneProgress/create", create_params);
 
     // Send begin notification
-    XrJsonValue *params = xlsp_json_new_object();
-    xlsp_json_object_set(params, "token", xlsp_json_new_string(token));
+    XrJsonValue *params = xjson_new_object();
+    xjson_object_set(params, "token", xjson_new_string(token));
 
-    XrJsonValue *value = xlsp_json_new_object();
-    xlsp_json_object_set(value, "kind", xlsp_json_new_string("begin"));
-    xlsp_json_object_set(value, "title", xlsp_json_new_string(title));
+    XrJsonValue *value = xjson_new_object();
+    xjson_object_set(value, "kind", xjson_new_string("begin"));
+    xjson_object_set(value, "title", xjson_new_string(title));
     if (message) {
-        xlsp_json_object_set(value, "message", xlsp_json_new_string(message));
+        xjson_object_set(value, "message", xjson_new_string(message));
     }
-    xlsp_json_object_set(value, "cancellable", xlsp_json_new_bool(cancellable));
-    xlsp_json_object_set(value, "percentage", xlsp_json_new_number(0));
-    xlsp_json_object_set(params, "value", value);
+    xjson_object_set(value, "cancellable", xjson_new_bool(cancellable));
+    xjson_object_set(value, "percentage", xjson_new_number(0));
+    xjson_object_set(params, "value", value);
 
     xlsp_send_notification(server, "$/progress", params);
 
@@ -1070,18 +1070,18 @@ void xlsp_progress_report(XrLspServer *server, const char *token,
                           const char *message, int percentage) {
     if (!server || !token) return;
 
-    XrJsonValue *params = xlsp_json_new_object();
-    xlsp_json_object_set(params, "token", xlsp_json_new_string(token));
+    XrJsonValue *params = xjson_new_object();
+    xjson_object_set(params, "token", xjson_new_string(token));
 
-    XrJsonValue *value = xlsp_json_new_object();
-    xlsp_json_object_set(value, "kind", xlsp_json_new_string("report"));
+    XrJsonValue *value = xjson_new_object();
+    xjson_object_set(value, "kind", xjson_new_string("report"));
     if (message) {
-        xlsp_json_object_set(value, "message", xlsp_json_new_string(message));
+        xjson_object_set(value, "message", xjson_new_string(message));
     }
     if (percentage >= 0) {
-        xlsp_json_object_set(value, "percentage", xlsp_json_new_number(percentage));
+        xjson_object_set(value, "percentage", xjson_new_number(percentage));
     }
-    xlsp_json_object_set(params, "value", value);
+    xjson_object_set(params, "value", value);
 
     xlsp_send_notification(server, "$/progress", params);
 }
@@ -1090,15 +1090,15 @@ void xlsp_progress_report(XrLspServer *server, const char *token,
 void xlsp_progress_end(XrLspServer *server, const char *token, const char *message) {
     if (!server || !token) return;
 
-    XrJsonValue *params = xlsp_json_new_object();
-    xlsp_json_object_set(params, "token", xlsp_json_new_string(token));
+    XrJsonValue *params = xjson_new_object();
+    xjson_object_set(params, "token", xjson_new_string(token));
 
-    XrJsonValue *value = xlsp_json_new_object();
-    xlsp_json_object_set(value, "kind", xlsp_json_new_string("end"));
+    XrJsonValue *value = xjson_new_object();
+    xjson_object_set(value, "kind", xjson_new_string("end"));
     if (message) {
-        xlsp_json_object_set(value, "message", xlsp_json_new_string(message));
+        xjson_object_set(value, "message", xjson_new_string(message));
     }
-    xlsp_json_object_set(params, "value", value);
+    xjson_object_set(params, "value", value);
 
     xlsp_send_notification(server, "$/progress", params);
 }
@@ -1146,11 +1146,11 @@ void xlsp_clear_all_diagnostics(XrLspServer *server) {
         while (bucket) {
             XrLspDocument *doc = bucket->doc;
             if (doc) {
-                XrJsonValue *params = xlsp_json_new_object();
-                xlsp_json_object_set(params, "uri", xlsp_json_new_string(doc->uri));
-                xlsp_json_object_set(params, "diagnostics", xlsp_json_new_array());
+                XrJsonValue *params = xjson_new_object();
+                xjson_object_set(params, "uri", xjson_new_string(doc->uri));
+                xjson_object_set(params, "diagnostics", xjson_new_array());
                 xlsp_send_notification(server, "textDocument/publishDiagnostics", params);
-                xlsp_json_free(params);
+                xjson_free(params);
             }
             bucket = bucket->next;
         }
@@ -1308,8 +1308,8 @@ static const LspMethodEntry *find_method(XrLspServer *server, const char *method
 static void handle_message(XrLspServer *server, XrJsonValue *msg) {
     init_method_table(server);
 
-    const char *method = xlsp_json_get_string(msg, "method");
-    XrJsonValue *params = xlsp_json_get(msg, "params");
+    const char *method = xjson_get_string(msg, "method");
+    XrJsonValue *params = xjson_get(msg, "params");
 
     XlspRequestId id = parse_request_id(msg);
     bool is_request = (id.kind != XLSP_ID_NONE);
@@ -1348,7 +1348,7 @@ static void handle_message(XrLspServer *server, XrJsonValue *msg) {
     if (strcmp(method, "window/workDoneProgress/cancel") == 0) {
         // Mark indexing as cancelled if token matches
         if (params) {
-            const char *token = xlsp_json_get_string(params, "token");
+            const char *token = xjson_get_string(params, "token");
             if (token && server->index_progress_token &&
                 strcmp(token, server->index_progress_token) == 0) {
                 lsp_log("Workspace indexing cancelled by user");
@@ -1389,7 +1389,7 @@ static void handle_message(XrLspServer *server, XrJsonValue *msg) {
                             xlsp_request_id_debug(&id));
                     send_error(server, &id, LSP_ERROR_REQUEST_CANCELLED,
                                "Request cancelled");
-                    if (result) xlsp_json_free(result);
+                    if (result) xjson_free(result);
                 } else {
                     send_response(server, &id, result);
                 }
@@ -1513,12 +1513,12 @@ int xlsp_server_run(XrLspServer *server) {
             char *msg_str = xlsp_transport_try_read(server->transport, &len, &would_block);
 
             if (msg_str) {
-                XrJsonValue *msg = xlsp_json_parse(msg_str, len);
+                XrJsonValue *msg = xjson_parse(msg_str, len);
                 xr_free(msg_str);
 
                 if (msg) {
                     handle_message(server, msg);
-                    xlsp_json_free(msg);
+                    xjson_free(msg);
                 } else {
                     lsp_log("Failed to parse JSON message");
                 }

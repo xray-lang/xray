@@ -11,14 +11,14 @@
  *   Handles all DAP protocol messages:
  *   - Request parsing and response building
  *   - Event generation
- *   - JSON serialization using xlsp_json
+ *   - JSON serialization using xjson (src/base)
  */
 
 #ifndef XDAP_PROTOCOL_H
 #define XDAP_PROTOCOL_H
 
 #include "xdap_controller.h"
-#include "../lsp/xlsp_json.h"
+#include "../../base/xjson.h"
 
 // ============================================================================
 // Message Handling

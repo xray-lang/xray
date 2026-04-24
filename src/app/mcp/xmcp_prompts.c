@@ -19,7 +19,7 @@
 #include "xmcp_prompts.h"
 #include "xmcp_server.h"
 #include "xmcp_knowledge.h"
-#include "../lsp/xlsp_json.h"
+#include "../../base/xjson.h"
 #include "../../base/xmalloc.h"
 #include "../../base/xchecks.h"
 #include <string.h>
@@ -158,31 +158,31 @@ static const char WRITE_TEST_SYSTEM[] =
  * -------------------------------------------------------------------------- */
 
 XrJsonValue *xmcp_handle_prompts_list(void) {
-    XrJsonValue *result = xlsp_json_new_object();
-    XrJsonValue *prompts = xlsp_json_new_array();
+    XrJsonValue *result = xjson_new_object();
+    XrJsonValue *prompts = xjson_new_array();
 
     for (int i = 0; i < PROMPT_COUNT; i++) {
         const PromptDef *p = &PROMPTS[i];
-        XrJsonValue *prompt = xlsp_json_new_object();
-        XLSP_JSON_SET_STRING(prompt, "name", p->name);
-        XLSP_JSON_SET_STRING(prompt, "description", p->description);
+        XrJsonValue *prompt = xjson_new_object();
+        XJSON_SET_STRING(prompt, "name", p->name);
+        XJSON_SET_STRING(prompt, "description", p->description);
 
         if (p->arg_count > 0) {
-            XrJsonValue *args = xlsp_json_new_array();
+            XrJsonValue *args = xjson_new_array();
             for (int j = 0; j < p->arg_count; j++) {
-                XrJsonValue *arg = xlsp_json_new_object();
-                XLSP_JSON_SET_STRING(arg, "name", p->args[j].name);
-                XLSP_JSON_SET_STRING(arg, "description", p->args[j].description);
-                XLSP_JSON_SET_BOOL(arg, "required", p->args[j].required);
-                xlsp_json_array_push(args, arg);
+                XrJsonValue *arg = xjson_new_object();
+                XJSON_SET_STRING(arg, "name", p->args[j].name);
+                XJSON_SET_STRING(arg, "description", p->args[j].description);
+                XJSON_SET_BOOL(arg, "required", p->args[j].required);
+                xjson_array_push(args, arg);
             }
-            xlsp_json_object_set(prompt, "arguments", args);
+            xjson_object_set(prompt, "arguments", args);
         }
 
-        xlsp_json_array_push(prompts, prompt);
+        xjson_array_push(prompts, prompt);
     }
 
-    xlsp_json_object_set(result, "prompts", prompts);
+    xjson_object_set(result, "prompts", prompts);
     return result;
 }
 
@@ -196,11 +196,11 @@ static XrJsonValue *build_prompt_messages(const char *system_text,
     XR_DCHECK(system_text != NULL, "build_prompt_messages: NULL system");
     XR_DCHECK(user_text != NULL, "build_prompt_messages: NULL user");
 
-    XrJsonValue *messages = xlsp_json_new_array();
+    XrJsonValue *messages = xjson_new_array();
 
     /* System message with language knowledge */
-    XrJsonValue *sys_msg = xlsp_json_new_object();
-    XLSP_JSON_SET_STRING(sys_msg, "role", "user");
+    XrJsonValue *sys_msg = xjson_new_object();
+    XJSON_SET_STRING(sys_msg, "role", "user");
 
     /* Build combined system content */
     size_t preamble_len = strlen(SYSTEM_PREAMBLE);
@@ -212,26 +212,26 @@ static XrJsonValue *build_prompt_messages(const char *system_text,
         memcpy(combined + preamble_len, system_text, system_len);
         combined[total - 1] = '\0';
 
-        XrJsonValue *sys_content = xlsp_json_new_object();
-        XLSP_JSON_SET_STRING(sys_content, "type", "text");
-        xlsp_json_object_set(sys_content, "text", xlsp_json_new_string(combined));
-        XrJsonValue *sys_arr = xlsp_json_new_array();
-        xlsp_json_array_push(sys_arr, sys_content);
-        xlsp_json_object_set(sys_msg, "content", sys_arr);
+        XrJsonValue *sys_content = xjson_new_object();
+        XJSON_SET_STRING(sys_content, "type", "text");
+        xjson_object_set(sys_content, "text", xjson_new_string(combined));
+        XrJsonValue *sys_arr = xjson_new_array();
+        xjson_array_push(sys_arr, sys_content);
+        xjson_object_set(sys_msg, "content", sys_arr);
         xr_free(combined);
     }
-    xlsp_json_array_push(messages, sys_msg);
+    xjson_array_push(messages, sys_msg);
 
     /* User message with the actual content */
-    XrJsonValue *usr_msg = xlsp_json_new_object();
-    XLSP_JSON_SET_STRING(usr_msg, "role", "user");
-    XrJsonValue *usr_content = xlsp_json_new_object();
-    XLSP_JSON_SET_STRING(usr_content, "type", "text");
-    xlsp_json_object_set(usr_content, "text", xlsp_json_new_string(user_text));
-    XrJsonValue *usr_arr = xlsp_json_new_array();
-    xlsp_json_array_push(usr_arr, usr_content);
-    xlsp_json_object_set(usr_msg, "content", usr_arr);
-    xlsp_json_array_push(messages, usr_msg);
+    XrJsonValue *usr_msg = xjson_new_object();
+    XJSON_SET_STRING(usr_msg, "role", "user");
+    XrJsonValue *usr_content = xjson_new_object();
+    XJSON_SET_STRING(usr_content, "type", "text");
+    xjson_object_set(usr_content, "text", xjson_new_string(user_text));
+    XrJsonValue *usr_arr = xjson_new_array();
+    xjson_array_push(usr_arr, usr_content);
+    xjson_object_set(usr_msg, "content", usr_arr);
+    xjson_array_push(messages, usr_msg);
 
     return messages;
 }
@@ -240,15 +240,15 @@ XrJsonValue *xmcp_handle_prompts_get(XmcpServer *server, XrJsonValue *params) {
     (void)server;
     XR_DCHECK(params != NULL, "xmcp_handle_prompts_get: NULL params");
 
-    const char *name = xlsp_json_get_string(params, "name");
+    const char *name = xjson_get_string(params, "name");
     if (!name) {
-        XrJsonValue *r = xlsp_json_new_object();
-        XLSP_JSON_SET_STRING(r, "description", "Error: prompt 'name' is required");
-        xlsp_json_object_set(r, "messages", xlsp_json_new_array());
+        XrJsonValue *r = xjson_new_object();
+        XJSON_SET_STRING(r, "description", "Error: prompt 'name' is required");
+        xjson_object_set(r, "messages", xjson_new_array());
         return r;
     }
 
-    XrJsonValue *arguments = xlsp_json_get_object(params, "arguments");
+    XrJsonValue *arguments = xjson_get_object(params, "arguments");
 
     /* Dispatch by prompt name */
     const char *system_text = NULL;
@@ -267,8 +267,8 @@ XrJsonValue *xmcp_handle_prompts_get(XmcpServer *server, XrJsonValue *params) {
         user_arg_key = "code";
         /* Append source language if provided */
         if (arguments) {
-            const char *lang = xlsp_json_get_string(arguments, "sourceLanguage");
-            const char *code = xlsp_json_get_string(arguments, "code");
+            const char *lang = xjson_get_string(arguments, "sourceLanguage");
+            const char *code = xjson_get_string(arguments, "code");
             if (lang && code) {
                 snprintf(user_buf, sizeof(user_buf),
                          "Source language: %s\n\n```\n%s\n```", lang, code);
@@ -284,32 +284,32 @@ XrJsonValue *xmcp_handle_prompts_get(XmcpServer *server, XrJsonValue *params) {
     }
 
     if (!system_text) {
-        XrJsonValue *r = xlsp_json_new_object();
+        XrJsonValue *r = xjson_new_object();
         char msg[256];
         snprintf(msg, sizeof(msg), "Unknown prompt: %s", name);
-        XLSP_JSON_SET_STRING(r, "description", msg);
-        xlsp_json_object_set(r, "messages", xlsp_json_new_array());
+        XJSON_SET_STRING(r, "description", msg);
+        xjson_object_set(r, "messages", xjson_new_array());
         return r;
     }
 
     /* Get user argument if not already set */
     if (!user_arg && arguments && user_arg_key) {
-        user_arg = xlsp_json_get_string(arguments, user_arg_key);
+        user_arg = xjson_get_string(arguments, user_arg_key);
     }
     if (!user_arg) user_arg = "(no input provided)";
 
     /* Build result */
-    XrJsonValue *result = xlsp_json_new_object();
+    XrJsonValue *result = xjson_new_object();
 
     /* Find prompt description */
     for (int i = 0; i < PROMPT_COUNT; i++) {
         if (strcmp(PROMPTS[i].name, name) == 0) {
-            XLSP_JSON_SET_STRING(result, "description", PROMPTS[i].description);
+            XJSON_SET_STRING(result, "description", PROMPTS[i].description);
             break;
         }
     }
 
-    xlsp_json_object_set(result, "messages",
+    xjson_object_set(result, "messages",
                          build_prompt_messages(system_text, user_arg));
     return result;
 }

@@ -44,7 +44,7 @@ void xlsp_free_document_cache(XrLspDocument *doc) {
     
     // Free diagnostics cache
     if (doc->cached_diagnostics) {
-        xlsp_json_free((XrJsonValue *)doc->cached_diagnostics);
+        xjson_free((XrJsonValue *)doc->cached_diagnostics);
         doc->cached_diagnostics = NULL;
     }
 }

@@ -13,7 +13,7 @@
 #include <string.h>
 #include "../../../src/app/lsp/xlsp_server.h"
 #include "../../../src/app/lsp/xlsp_code_action.h"
-#include "../../../src/app/lsp/xlsp_json.h"
+#include "../../../src/base/xjson.h"
 
 static int tests_passed = 0;
 static int tests_failed = 0;
@@ -251,24 +251,24 @@ TEST(document_version) {
 static XrJsonValue *make_code_action_params(const char *uri, int line,
                                              int start_col, int end_col,
                                              const char *diag_message) {
-    XrJsonValue *params = xlsp_json_new_object();
+    XrJsonValue *params = xjson_new_object();
 
-    XrJsonValue *text_doc = xlsp_json_new_object();
-    xlsp_json_object_set(text_doc, "uri", xlsp_json_new_string(uri));
-    xlsp_json_object_set(params, "textDocument", text_doc);
+    XrJsonValue *text_doc = xjson_new_object();
+    xjson_object_set(text_doc, "uri", xjson_new_string(uri));
+    xjson_object_set(params, "textDocument", text_doc);
 
-    xlsp_json_object_set(params, "range",
-        xlsp_json_make_range(line, start_col, line, end_col));
+    xjson_object_set(params, "range",
+        xjson_make_range(line, start_col, line, end_col));
 
-    XrJsonValue *context = xlsp_json_new_object();
-    XrJsonValue *diagnostics = xlsp_json_new_array();
-    XrJsonValue *diag = xlsp_json_new_object();
-    xlsp_json_object_set(diag, "message", xlsp_json_new_string(diag_message));
-    xlsp_json_object_set(diag, "range",
-        xlsp_json_make_range(line, start_col, line, end_col));
-    xlsp_json_array_push(diagnostics, diag);
-    xlsp_json_object_set(context, "diagnostics", diagnostics);
-    xlsp_json_object_set(params, "context", context);
+    XrJsonValue *context = xjson_new_object();
+    XrJsonValue *diagnostics = xjson_new_array();
+    XrJsonValue *diag = xjson_new_object();
+    xjson_object_set(diag, "message", xjson_new_string(diag_message));
+    xjson_object_set(diag, "range",
+        xjson_make_range(line, start_col, line, end_col));
+    xjson_array_push(diagnostics, diag);
+    xjson_object_set(context, "diagnostics", diagnostics);
+    xjson_object_set(params, "context", context);
     return params;
 }
 
@@ -277,10 +277,10 @@ static XrJsonValue *make_code_action_params(const char *uri, int line,
 static bool actions_contain_title_with(XrJsonValue *actions,
                                        const char *s1, const char *s2) {
     if (!actions) return false;
-    int n = xlsp_json_array_len(actions);
+    int n = xjson_array_len(actions);
     for (int i = 0; i < n; i++) {
-        XrJsonValue *a = xlsp_json_array_get(actions, i);
-        const char *title = xlsp_json_get_string(a, "title");
+        XrJsonValue *a = xjson_array_get(actions, i);
+        const char *title = xjson_get_string(a, "title");
         if (!title) continue;
         if (s1 && !strstr(title, s1)) continue;
         if (s2 && !strstr(title, s2)) continue;
@@ -316,8 +316,8 @@ TEST(code_action_go_capture_to_shared_const) {
     ASSERT(actions != NULL);
     ASSERT(actions_contain_title_with(actions, "shared const", "counter"));
 
-    xlsp_json_free(params);
-    xlsp_json_free(actions);
+    xjson_free(params);
+    xjson_free(actions);
     xlsp_server_free(server);
 }
 
@@ -346,8 +346,8 @@ TEST(code_action_move_to_shared_let) {
     ASSERT(actions != NULL);
     ASSERT(actions_contain_title_with(actions, "shared let", "data"));
 
-    xlsp_json_free(params);
-    xlsp_json_free(actions);
+    xjson_free(params);
+    xjson_free(actions);
     xlsp_server_free(server);
 }
 
@@ -376,8 +376,8 @@ TEST(code_action_quickfix_skips_when_decl_missing) {
     // declaration was not found.
     ASSERT(!actions_contain_title_with(actions, "shared const", "counter"));
 
-    xlsp_json_free(params);
-    xlsp_json_free(actions);
+    xjson_free(params);
+    xjson_free(actions);
     xlsp_server_free(server);
 }
 

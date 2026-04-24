@@ -18,7 +18,8 @@
 #include "../base/xchecks.h"
 #include "xnetpoll.h"
 #include "xworker.h"
-#include "../vm/xvm_internal.h"
+#include "xcoroutine.h"                  // XrCoroutine
+#include "../runtime/xisolate_internal.h" // XrayIsolate definition
 #include "../runtime/xray_debug.h"
 
 #include <stdio.h>

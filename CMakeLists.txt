@@ -524,30 +524,17 @@ if(XR_BUILD_DAP)
     list(APPEND XRAY_CLI_SOURCES ${DAP_SRC})
     list(APPEND XRAY_CLI_INCLUDES ${CMAKE_CURRENT_SOURCE_DIR}/src/app/dap)
 
-    # DAP uses xlsp_json for JSON parsing (shared with LSP)
-    # If LSP is disabled, we need to include xlsp_json.c separately
-    if(NOT XR_BUILD_LSP)
-        list(APPEND XRAY_CLI_SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/src/app/lsp/xlsp_json.c)
-        list(APPEND XRAY_CLI_INCLUDES ${CMAKE_CURRENT_SOURCE_DIR}/src/app/lsp)
-    endif()
-
     add_compile_definitions(XR_HAS_DAP=1)
     message(STATUS "DAP: enabled")
 else()
     message(STATUS "DAP: disabled")
 endif()
 
-# MCP optional module (uses xlsp_json for JSON)
+# MCP optional module
 if(XR_BUILD_MCP)
     file(GLOB MCP_SRC "src/app/mcp/*.c")
     list(APPEND XRAY_CLI_SOURCES ${MCP_SRC})
     list(APPEND XRAY_CLI_INCLUDES ${CMAKE_CURRENT_SOURCE_DIR}/src/app/mcp)
-
-    # MCP uses xlsp_json for JSON parsing (shared with LSP)
-    if(NOT XR_BUILD_LSP AND NOT XR_BUILD_DAP)
-        list(APPEND XRAY_CLI_SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/src/app/lsp/xlsp_json.c)
-        list(APPEND XRAY_CLI_INCLUDES ${CMAKE_CURRENT_SOURCE_DIR}/src/app/lsp)
-    endif()
 
     add_compile_definitions(XR_HAS_MCP=1)
     message(STATUS "MCP: enabled")

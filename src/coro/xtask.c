@@ -37,10 +37,6 @@
 #include <string.h>
 #include <stdlib.h>
 
-// Forward declarations (defined in xcoro.c, declared in xvm_internal.h)
-XR_FUNC void xr_coro_ready(struct XrayIsolate *X, XrCoroutine *gp, bool next);
-XR_FUNC void xr_coro_cancel(XrCoroutine *coro);
-
 // Phase 2 (CORO-03): lightweight TAS spinlock for child list serialization.
 // Critical sections are very short (list link/unlink), so spinning is fine.
 static inline void child_lock_acquire(_Atomic bool *lock) {

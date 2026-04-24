@@ -15,7 +15,7 @@
 #define XLSP_SERVER_H
 
 #include "xlsp_transport.h"
-#include "xlsp_json.h"
+#include "../../base/xjson.h"
 #include "xlsp_types.h"
 #include "xlsp_async.h"
 #include "xray_isolate.h"

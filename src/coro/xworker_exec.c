@@ -31,11 +31,7 @@
 #include "../base/xchecks.h"
 #include "../base/xlog.h"
 #include "xsched_trace.h"
-#ifdef XRAY_HAS_JIT
-#include "../jit/xir_jit.h"
-#include "../jit/xjit_compile_queue.h"
-#include "../jit/xir_jit_debug.h"
-#endif
+#include "xjit_hooks.h"
 
 // ========== Forward Declarations ==========
 
@@ -681,17 +677,16 @@ static XrVMResult run_first_exec(XrayIsolate *isolate, XrWorker *worker,
 
     XrVMResult result;
 
-#ifdef XRAY_HAS_JIT
     // JIT fast path for coroutine entry: call compiled code directly.
     // go-spawned coroutines bypass OP_CALL and would otherwise always run
     // in the interpreter even when JIT code exists. deopt_count==0 guard
     // prevents replaying a proto whose first coroutine deopted.
-    if (proto->numparams == coro->arg_count) {
+    if (XR_JIT_AVAILABLE() && proto->numparams == coro->arg_count) {
         if (!proto->jit_entry) {
             void *pending = atomic_load_explicit(
                 &proto->jit_entry_pending, memory_order_acquire);
             if (pending && (uintptr_t)pending > 1) {
-                xir_jit_install_bg_result(proto);
+                xr_jit_hooks->install_bg_result(proto);
             }
         }
         if (proto->jit_entry && proto->deopt_count < 20) {
@@ -699,21 +694,20 @@ static XrVMResult run_first_exec(XrayIsolate *isolate, XrWorker *worker,
             coro->jit_ctx->call_closure = closure;
             coro->jit_ctx->call_base_offset = (int32_t)(func_base - coro_ctx->stack);
             XrValue jit_result;
-            int _jrc = xir_jit_call(proto->jit_entry, coro, func_base,
-                                     coro->arg_count, proto->return_type_info,
-                                     &jit_result);
-            if (_jrc == XIR_JIT_OK) {
+            int _jrc = xr_jit_hooks->call(proto->jit_entry, coro, func_base,
+                                           coro->arg_count, proto->return_type_info,
+                                           &jit_result);
+            if (_jrc == XR_JIT_OK) {
                 coro_ctx->stack[0] = jit_result;
                 return run_finalize(isolate, worker, coro, ctx, coro_ctx, XR_VM_OK);
             }
-            if (_jrc == XIR_JIT_SUSPEND) {
+            if (_jrc == XR_JIT_SUSPEND) {
                 return run_finalize(isolate, worker, coro, ctx, coro_ctx, XR_VM_BLOCKED);
             }
             // JIT deopt: disable fast path for this proto.
             proto->deopt_count++;
         }
     }
-#endif
 
     result = run(isolate, coro_ctx);
     return run_finalize(isolate, worker, coro, ctx, coro_ctx, result);
@@ -724,13 +718,13 @@ static XrVMResult run_first_exec(XrayIsolate *isolate, XrWorker *worker,
 // Prepares resume state (channel recv value or await task result) in
 // jit_suspend, then re-enters compiled code via xir_jit_resume.
 //
-// Returns: XIR_JIT_OK, XIR_JIT_SUSPEND, XIR_JIT_DEOPT (fall through), or
+// Returns: XR_JIT_OK, XR_JIT_SUSPEND, XR_JIT_DEOPT (fall through), or
 // -1 for channel-close (caller should clear jit_resume_entry and deopt).
-#ifdef XRAY_HAS_JIT
 static int run_jit_resume(XrayIsolate *isolate, XrCoroutine *coro,
                            XrVMContext *coro_ctx, XrValue *jit_result_out) {
     XR_DCHECK(coro->jit_resume_entry != NULL, "run_jit_resume: no resume entry");
     XR_DCHECK(coro->jit_ctx != NULL, "run_jit_resume: no jit_ctx");
+    XR_DCHECK(XR_JIT_AVAILABLE(), "run_jit_resume: JIT hooks not registered");
 
     int resume_reason = xr_coro_resume_load(coro);
 
@@ -769,9 +763,8 @@ static int run_jit_resume(XrayIsolate *isolate, XrCoroutine *coro,
     }
 
     xr_coro_resume_store(coro, XR_RESUME_OK);
-    return xir_jit_resume(coro, jit_result_out);
+    return xr_jit_hooks->resume(coro, jit_result_out);
 }
-#endif
 
 // ========== run_resume_path: JIT Resume + Continuation + Unroll ==========
 //
@@ -789,20 +782,18 @@ static XrVMResult run_resume_path(XrayIsolate *isolate, XrWorker *worker,
 
     XrVMResult result;
 
-#ifdef XRAY_HAS_JIT
-    if (coro->jit_resume_entry && coro->jit_ctx) {
+    if (XR_JIT_AVAILABLE() && coro->jit_resume_entry && coro->jit_ctx) {
         XrValue jit_result;
         int jrc = run_jit_resume(isolate, coro, coro_ctx, &jit_result);
-        if (jrc == XIR_JIT_OK) {
+        if (jrc == XR_JIT_OK) {
             coro_ctx->stack[0] = jit_result;
             return run_finalize(isolate, worker, coro, ctx, coro_ctx, XR_VM_OK);
         }
-        if (jrc == XIR_JIT_SUSPEND) {
+        if (jrc == XR_JIT_SUSPEND) {
             return run_finalize(isolate, worker, coro, ctx, coro_ctx, XR_VM_BLOCKED);
         }
-        // -1 (channel close) or XIR_JIT_DEOPT: fall through to interpreter.
+        // -1 (channel close) or XR_JIT_DEOPT: fall through to interpreter.
     }
-#endif
 
     // Continuation stealing resume: vm_ctx already set, just call run().
     if (xr_coro_resume_load(coro) == XR_RESUME_CONTINUATION) {
@@ -892,24 +883,22 @@ XrVMResult xr_coro_run_on_worker(XrWorker *worker, XrCoroutine *coro) {
         coro->prev = NULL;
         xr_coro_transition_to_running(coro);
 
-#ifdef XRAY_HAS_JIT
         // JIT channel resume: propagate recv_slot → jit_suspend.result,
         // then re-enter compiled code directly (no detour via run_resume_path).
-        if (coro->jit_resume_entry && coro->jit_ctx) {
+        if (XR_JIT_AVAILABLE() && coro->jit_resume_entry && coro->jit_ctx) {
             XrValue jit_result;
             int jrc = run_jit_resume(isolate, coro, coro_ctx, &jit_result);
-            if (jrc == XIR_JIT_OK) {
+            if (jrc == XR_JIT_OK) {
                 coro_ctx->stack[0] = jit_result;
                 return run_finalize(isolate, worker, coro, ctx, coro_ctx, XR_VM_OK);
             }
-            if (jrc == XIR_JIT_SUSPEND) {
+            if (jrc == XR_JIT_SUSPEND) {
                 return run_finalize(isolate, worker, coro, ctx, coro_ctx, XR_VM_BLOCKED);
             }
             // Deopt or channel_closed (-1): jit_resume_entry already cleared.
             // Deopt needs full unroll recovery → delegate to run_resume_path.
             return run_resume_path(isolate, worker, coro, ctx, coro_ctx);
         }
-#endif
 
         // VM bytecode channel resume
         if (coro_ctx->frame_count > 0) {

@@ -14,7 +14,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include "../../../src/app/lsp/xlsp_json.h"
+#include "../../../src/base/xjson.h"
 
 static int tests_passed = 0;
 static int tests_failed = 0;
@@ -45,98 +45,98 @@ static int tests_failed = 0;
 // ============================================================================
 
 TEST(build_initialize_response) {
-    XrJsonValue *body = xlsp_json_new_object();
+    XrJsonValue *body = xjson_new_object();
     
     // Capabilities
-    xlsp_json_object_set(body, "supportsConfigurationDoneRequest", 
-                          xlsp_json_new_bool(true));
-    xlsp_json_object_set(body, "supportsFunctionBreakpoints",
-                          xlsp_json_new_bool(false));
-    xlsp_json_object_set(body, "supportsConditionalBreakpoints",
-                          xlsp_json_new_bool(true));
-    xlsp_json_object_set(body, "supportsEvaluateForHovers",
-                          xlsp_json_new_bool(true));
+    xjson_object_set(body, "supportsConfigurationDoneRequest", 
+                          xjson_new_bool(true));
+    xjson_object_set(body, "supportsFunctionBreakpoints",
+                          xjson_new_bool(false));
+    xjson_object_set(body, "supportsConditionalBreakpoints",
+                          xjson_new_bool(true));
+    xjson_object_set(body, "supportsEvaluateForHovers",
+                          xjson_new_bool(true));
     
     size_t len;
-    char *json = xlsp_json_stringify(body, &len);
+    char *json = xjson_stringify(body, &len);
     ASSERT(json != NULL);
     ASSERT(strstr(json, "supportsConfigurationDoneRequest") != NULL);
     ASSERT(strstr(json, "true") != NULL);
     
     free(json);
-    xlsp_json_free(body);
+    xjson_free(body);
 }
 
 TEST(build_stopped_event) {
-    XrJsonValue *body = xlsp_json_new_object();
-    xlsp_json_object_set(body, "reason", xlsp_json_new_string("breakpoint"));
-    xlsp_json_object_set(body, "threadId", xlsp_json_new_number(1));
-    xlsp_json_object_set(body, "allThreadsStopped", xlsp_json_new_bool(true));
+    XrJsonValue *body = xjson_new_object();
+    xjson_object_set(body, "reason", xjson_new_string("breakpoint"));
+    xjson_object_set(body, "threadId", xjson_new_number(1));
+    xjson_object_set(body, "allThreadsStopped", xjson_new_bool(true));
     
     size_t len;
-    char *json = xlsp_json_stringify(body, &len);
+    char *json = xjson_stringify(body, &len);
     ASSERT(json != NULL);
     ASSERT(strstr(json, "breakpoint") != NULL);
     ASSERT(strstr(json, "threadId") != NULL);
     
     free(json);
-    xlsp_json_free(body);
+    xjson_free(body);
 }
 
 TEST(build_stack_frame) {
-    XrJsonValue *frame = xlsp_json_new_object();
-    xlsp_json_object_set(frame, "id", xlsp_json_new_number(0));
-    xlsp_json_object_set(frame, "name", xlsp_json_new_string("main"));
+    XrJsonValue *frame = xjson_new_object();
+    xjson_object_set(frame, "id", xjson_new_number(0));
+    xjson_object_set(frame, "name", xjson_new_string("main"));
     
-    XrJsonValue *source = xlsp_json_new_object();
-    xlsp_json_object_set(source, "path", xlsp_json_new_string("/test/file.xr"));
-    xlsp_json_object_set(frame, "source", source);
+    XrJsonValue *source = xjson_new_object();
+    xjson_object_set(source, "path", xjson_new_string("/test/file.xr"));
+    xjson_object_set(frame, "source", source);
     
-    xlsp_json_object_set(frame, "line", xlsp_json_new_number(10));
-    xlsp_json_object_set(frame, "column", xlsp_json_new_number(0));
+    xjson_object_set(frame, "line", xjson_new_number(10));
+    xjson_object_set(frame, "column", xjson_new_number(0));
     
     size_t len;
-    char *json = xlsp_json_stringify(frame, &len);
+    char *json = xjson_stringify(frame, &len);
     ASSERT(json != NULL);
     ASSERT(strstr(json, "main") != NULL);
     ASSERT(strstr(json, "/test/file.xr") != NULL);
     
     free(json);
-    xlsp_json_free(frame);
+    xjson_free(frame);
 }
 
 TEST(build_scope) {
-    XrJsonValue *scope = xlsp_json_new_object();
-    xlsp_json_object_set(scope, "name", xlsp_json_new_string("Locals"));
-    xlsp_json_object_set(scope, "variablesReference", xlsp_json_new_number(1000));
-    xlsp_json_object_set(scope, "expensive", xlsp_json_new_bool(false));
+    XrJsonValue *scope = xjson_new_object();
+    xjson_object_set(scope, "name", xjson_new_string("Locals"));
+    xjson_object_set(scope, "variablesReference", xjson_new_number(1000));
+    xjson_object_set(scope, "expensive", xjson_new_bool(false));
     
     size_t len;
-    char *json = xlsp_json_stringify(scope, &len);
+    char *json = xjson_stringify(scope, &len);
     ASSERT(json != NULL);
     ASSERT(strstr(json, "Locals") != NULL);
     ASSERT(strstr(json, "1000") != NULL);
     
     free(json);
-    xlsp_json_free(scope);
+    xjson_free(scope);
 }
 
 TEST(build_variable) {
-    XrJsonValue *var = xlsp_json_new_object();
-    xlsp_json_object_set(var, "name", xlsp_json_new_string("count"));
-    xlsp_json_object_set(var, "value", xlsp_json_new_string("42"));
-    xlsp_json_object_set(var, "type", xlsp_json_new_string("int"));
-    xlsp_json_object_set(var, "variablesReference", xlsp_json_new_number(0));
+    XrJsonValue *var = xjson_new_object();
+    xjson_object_set(var, "name", xjson_new_string("count"));
+    xjson_object_set(var, "value", xjson_new_string("42"));
+    xjson_object_set(var, "type", xjson_new_string("int"));
+    xjson_object_set(var, "variablesReference", xjson_new_number(0));
     
     size_t len;
-    char *json = xlsp_json_stringify(var, &len);
+    char *json = xjson_stringify(var, &len);
     ASSERT(json != NULL);
     ASSERT(strstr(json, "count") != NULL);
     ASSERT(strstr(json, "42") != NULL);
     ASSERT(strstr(json, "int") != NULL);
     
     free(json);
-    xlsp_json_free(var);
+    xjson_free(var);
 }
 
 // ============================================================================
@@ -157,19 +157,19 @@ TEST(parse_initialize_request) {
         "  }"
         "}";
     
-    XrJsonValue *msg = xlsp_json_parse(json, strlen(json));
+    XrJsonValue *msg = xjson_parse(json, strlen(json));
     ASSERT(msg != NULL);
     
-    ASSERT_EQ(xlsp_json_get_int(msg, "seq"), 1);
-    ASSERT_STR_EQ(xlsp_json_get_string(msg, "type"), "request");
-    ASSERT_STR_EQ(xlsp_json_get_string(msg, "command"), "initialize");
+    ASSERT_EQ(xjson_get_int(msg, "seq"), 1);
+    ASSERT_STR_EQ(xjson_get_string(msg, "type"), "request");
+    ASSERT_STR_EQ(xjson_get_string(msg, "command"), "initialize");
     
-    XrJsonValue *args = xlsp_json_get(msg, "arguments");
+    XrJsonValue *args = xjson_get(msg, "arguments");
     ASSERT(args != NULL);
-    ASSERT_STR_EQ(xlsp_json_get_string(args, "clientID"), "vscode");
-    ASSERT(xlsp_json_get_bool(args, "linesStartAt1") == true);
+    ASSERT_STR_EQ(xjson_get_string(args, "clientID"), "vscode");
+    ASSERT(xjson_get_bool(args, "linesStartAt1") == true);
     
-    xlsp_json_free(msg);
+    xjson_free(msg);
 }
 
 TEST(parse_set_breakpoints_request) {
@@ -188,29 +188,29 @@ TEST(parse_set_breakpoints_request) {
         "  }"
         "}";
     
-    XrJsonValue *msg = xlsp_json_parse(json, strlen(json));
+    XrJsonValue *msg = xjson_parse(json, strlen(json));
     ASSERT(msg != NULL);
     
-    ASSERT_STR_EQ(xlsp_json_get_string(msg, "command"), "setBreakpoints");
+    ASSERT_STR_EQ(xjson_get_string(msg, "command"), "setBreakpoints");
     
-    XrJsonValue *args = xlsp_json_get(msg, "arguments");
-    XrJsonValue *source = xlsp_json_get(args, "source");
-    ASSERT_STR_EQ(xlsp_json_get_string(source, "path"), "/test/file.xr");
+    XrJsonValue *args = xjson_get(msg, "arguments");
+    XrJsonValue *source = xjson_get(args, "source");
+    ASSERT_STR_EQ(xjson_get_string(source, "path"), "/test/file.xr");
     
-    XrJsonValue *bps = xlsp_json_get(args, "breakpoints");
-    ASSERT_EQ(xlsp_json_array_len(bps), 3);
+    XrJsonValue *bps = xjson_get(args, "breakpoints");
+    ASSERT_EQ(xjson_array_len(bps), 3);
     
-    XrJsonValue *bp1 = xlsp_json_array_get(bps, 0);
-    ASSERT_EQ(xlsp_json_get_int(bp1, "line"), 10);
+    XrJsonValue *bp1 = xjson_array_get(bps, 0);
+    ASSERT_EQ(xjson_get_int(bp1, "line"), 10);
     
-    XrJsonValue *bp2 = xlsp_json_array_get(bps, 1);
-    ASSERT_EQ(xlsp_json_get_int(bp2, "line"), 20);
-    ASSERT_STR_EQ(xlsp_json_get_string(bp2, "condition"), "x > 5");
+    XrJsonValue *bp2 = xjson_array_get(bps, 1);
+    ASSERT_EQ(xjson_get_int(bp2, "line"), 20);
+    ASSERT_STR_EQ(xjson_get_string(bp2, "condition"), "x > 5");
     
-    XrJsonValue *bp3 = xlsp_json_array_get(bps, 2);
-    ASSERT_STR_EQ(xlsp_json_get_string(bp3, "logMessage"), "value = {x}");
+    XrJsonValue *bp3 = xjson_array_get(bps, 2);
+    ASSERT_STR_EQ(xjson_get_string(bp3, "logMessage"), "value = {x}");
     
-    xlsp_json_free(msg);
+    xjson_free(msg);
 }
 
 TEST(parse_evaluate_request) {
@@ -226,15 +226,15 @@ TEST(parse_evaluate_request) {
         "  }"
         "}";
     
-    XrJsonValue *msg = xlsp_json_parse(json, strlen(json));
+    XrJsonValue *msg = xjson_parse(json, strlen(json));
     ASSERT(msg != NULL);
     
-    XrJsonValue *args = xlsp_json_get(msg, "arguments");
-    ASSERT_STR_EQ(xlsp_json_get_string(args, "expression"), "x + y * 2");
-    ASSERT_EQ(xlsp_json_get_int(args, "frameId"), 0);
-    ASSERT_STR_EQ(xlsp_json_get_string(args, "context"), "watch");
+    XrJsonValue *args = xjson_get(msg, "arguments");
+    ASSERT_STR_EQ(xjson_get_string(args, "expression"), "x + y * 2");
+    ASSERT_EQ(xjson_get_int(args, "frameId"), 0);
+    ASSERT_STR_EQ(xjson_get_string(args, "context"), "watch");
     
-    xlsp_json_free(msg);
+    xjson_free(msg);
 }
 
 // ============================================================================

@@ -32,9 +32,7 @@
 #include "../base/xlog.h"
 #include "../runtime/gc/ximmix.h"
 #include "../runtime/gc/xcoro_gc.h"
-#ifdef XRAY_HAS_JIT
-#include "../jit/xir_jit_debug.h"
-#endif
+#include "xjit_hooks.h"
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
@@ -110,11 +108,11 @@ void xr_worker_init(XrWorker *worker, int id, XrRuntime *runtime) {
         worker->p.runq_max_len[p] = 0;
     }
 
-#ifdef XRAY_HAS_JIT
     // Allocate guard page for JIT safepoint (one per worker)
-    worker->p.jit_scratch.safepoint_page = jit_guard_page_alloc();
+    if (XR_JIT_AVAILABLE()) {
+        worker->p.jit_scratch.safepoint_page = xr_jit_hooks->guard_page_alloc();
+    }
     worker->p.jit_scratch.safepoint_return_pc = NULL;
-#endif
 }
 
 // Destroy Worker
@@ -125,13 +123,11 @@ void xr_worker_destroy(XrWorker *worker) {
         xr_machine_destroy(worker->m);
     }
 
-#ifdef XRAY_HAS_JIT
     // Free guard page for JIT safepoint
-    if (worker->p.jit_scratch.safepoint_page) {
-        jit_guard_page_free(worker->p.jit_scratch.safepoint_page);
+    if (worker->p.jit_scratch.safepoint_page && XR_JIT_AVAILABLE()) {
+        xr_jit_hooks->guard_page_free(worker->p.jit_scratch.safepoint_page);
         worker->p.jit_scratch.safepoint_page = NULL;
     }
-#endif
 
     // Free Per-Worker local poll (kqueue/epoll fd)
     xr_local_poll_cleanup(&worker->p.local_poll);

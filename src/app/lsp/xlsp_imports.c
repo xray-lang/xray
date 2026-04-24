@@ -10,7 +10,7 @@
 
 #include "xlsp_imports.h"
 #include "xlsp_stdlib.h"
-#include "xlsp_json.h"
+#include "../../base/xjson.h"
 #include "xlsp_cache.h"
 #include "../../base/xhash.h"
 #include "../../frontend/lexer/xlex.h"
@@ -486,7 +486,7 @@ static XlspImportInfo *find_import(XrLspDocument *doc, const char *module_name) 
 }
 
 XrJsonValue *xlsp_get_import_completions(XrLspDocument *doc, const char *module_name) {
-    XrJsonValue *items = xlsp_json_new_array();
+    XrJsonValue *items = xjson_new_array();
 
     XlspImportInfo *imp = find_import(doc, module_name);
     if (!imp) return items;
@@ -497,29 +497,29 @@ XrJsonValue *xlsp_get_import_completions(XrLspDocument *doc, const char *module_
         if (module) {
             for (int i = 0; i < module->symbol_count; i++) {
                 const XlspSymbolInfo *sym = &module->symbols[i];
-                XrJsonValue *item = xlsp_json_new_object();
-                xlsp_json_object_set(item, "label", xlsp_json_new_string(sym->name));
-                xlsp_json_object_set(item, "kind", xlsp_json_new_number(sym->kind));
+                XrJsonValue *item = xjson_new_object();
+                xjson_object_set(item, "label", xjson_new_string(sym->name));
+                xjson_object_set(item, "kind", xjson_new_number(sym->kind));
                 if (sym->signature) {
-                    xlsp_json_object_set(item, "detail", xlsp_json_new_string(sym->signature));
+                    xjson_object_set(item, "detail", xjson_new_string(sym->signature));
                 }
                 if (sym->documentation) {
-                    xlsp_json_object_set(item, "documentation", xlsp_json_new_string(sym->documentation));
+                    xjson_object_set(item, "documentation", xjson_new_string(sym->documentation));
                 }
-                xlsp_json_array_push(items, item);
+                xjson_array_push(items, item);
             }
         }
     } else if (imp->type == XLSP_IMPORT_LOCAL && imp->resolved_path) {
         // Use local file exports
         XlspExportedSymbol *exports = xlsp_extract_exports(doc->server, imp->resolved_path);
         for (XlspExportedSymbol *sym = exports; sym; sym = sym->next) {
-            XrJsonValue *item = xlsp_json_new_object();
-            xlsp_json_object_set(item, "label", xlsp_json_new_string(sym->name));
-            xlsp_json_object_set(item, "kind", xlsp_json_new_number(sym->kind));
+            XrJsonValue *item = xjson_new_object();
+            xjson_object_set(item, "label", xjson_new_string(sym->name));
+            xjson_object_set(item, "kind", xjson_new_number(sym->kind));
             if (sym->signature) {
-                xlsp_json_object_set(item, "detail", xlsp_json_new_string(sym->signature));
+                xjson_object_set(item, "detail", xjson_new_string(sym->signature));
             }
-            xlsp_json_array_push(items, item);
+            xjson_array_push(items, item);
         }
         xlsp_free_exports(exports);
     }
@@ -577,24 +577,24 @@ XrJsonValue *xlsp_get_import_definition(XrLspDocument *doc, const char *module_n
         XlspExportedSymbol *exports = xlsp_extract_exports(doc->server, imp->resolved_path);
         for (XlspExportedSymbol *sym = exports; sym; sym = sym->next) {
             if (strcmp(sym->name, symbol_name) == 0) {
-                result = xlsp_json_new_object();
+                result = xjson_new_object();
 
                 // Build file URI
                 char uri[512];
                 snprintf(uri, sizeof(uri), "file://%s", imp->resolved_path);
-                xlsp_json_object_set(result, "uri", xlsp_json_new_string(uri));
+                xjson_object_set(result, "uri", xjson_new_string(uri));
 
                 // Range at symbol line
-                XrJsonValue *range = xlsp_json_new_object();
-                XrJsonValue *start = xlsp_json_new_object();
-                xlsp_json_object_set(start, "line", xlsp_json_new_number(sym->line - 1));
-                xlsp_json_object_set(start, "character", xlsp_json_new_number(0));
-                XrJsonValue *end = xlsp_json_new_object();
-                xlsp_json_object_set(end, "line", xlsp_json_new_number(sym->line - 1));
-                xlsp_json_object_set(end, "character", xlsp_json_new_number(100));
-                xlsp_json_object_set(range, "start", start);
-                xlsp_json_object_set(range, "end", end);
-                xlsp_json_object_set(result, "range", range);
+                XrJsonValue *range = xjson_new_object();
+                XrJsonValue *start = xjson_new_object();
+                xjson_object_set(start, "line", xjson_new_number(sym->line - 1));
+                xjson_object_set(start, "character", xjson_new_number(0));
+                XrJsonValue *end = xjson_new_object();
+                xjson_object_set(end, "line", xjson_new_number(sym->line - 1));
+                xjson_object_set(end, "character", xjson_new_number(100));
+                xjson_object_set(range, "start", start);
+                xjson_object_set(range, "end", end);
+                xjson_object_set(result, "range", range);
                 break;
             }
         }
@@ -615,24 +615,24 @@ XrJsonValue *xlsp_get_module_file_location(XrLspDocument *doc, const char *modul
     for (XlspImportInfo *imp = imports; imp; imp = imp->next) {
         if (strcmp(imp->module_name, module_name) == 0) {
             if (imp->type == XLSP_IMPORT_LOCAL && imp->resolved_path) {
-                result = xlsp_json_new_object();
+                result = xjson_new_object();
 
                 // Build file URI
                 char uri[512];
                 snprintf(uri, sizeof(uri), "file://%s", imp->resolved_path);
-                xlsp_json_object_set(result, "uri", xlsp_json_new_string(uri));
+                xjson_object_set(result, "uri", xjson_new_string(uri));
 
                 // Range at file start
-                XrJsonValue *range = xlsp_json_new_object();
-                XrJsonValue *start = xlsp_json_new_object();
-                xlsp_json_object_set(start, "line", xlsp_json_new_number(0));
-                xlsp_json_object_set(start, "character", xlsp_json_new_number(0));
-                XrJsonValue *end = xlsp_json_new_object();
-                xlsp_json_object_set(end, "line", xlsp_json_new_number(0));
-                xlsp_json_object_set(end, "character", xlsp_json_new_number(0));
-                xlsp_json_object_set(range, "start", start);
-                xlsp_json_object_set(range, "end", end);
-                xlsp_json_object_set(result, "range", range);
+                XrJsonValue *range = xjson_new_object();
+                XrJsonValue *start = xjson_new_object();
+                xjson_object_set(start, "line", xjson_new_number(0));
+                xjson_object_set(start, "character", xjson_new_number(0));
+                XrJsonValue *end = xjson_new_object();
+                xjson_object_set(end, "line", xjson_new_number(0));
+                xjson_object_set(end, "character", xjson_new_number(0));
+                xjson_object_set(range, "start", start);
+                xjson_object_set(range, "end", end);
+                xjson_object_set(result, "range", range);
             }
             break;
         }

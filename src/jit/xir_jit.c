@@ -69,6 +69,7 @@
 #include "../coro/xworker.h"
 #include "../coro/xcoro_pool.h"
 #include "xir_jit_debug.h"
+#include "../coro/xjit_hooks.h"
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
@@ -189,6 +190,19 @@ XirJitState *xir_jit_init(XrayIsolate *isolate, int threshold) {
         }
     }
 
+    // Phase 4: register JIT hooks so coro/ can call JIT without
+    // including jit/ headers (L3 → L5 decoupling).
+    static XrJitHooks hooks = {
+        .call             = xir_jit_call,
+        .resume           = xir_jit_resume,
+        .install_bg_result = xir_jit_install_bg_result,
+        .guard_page_alloc = jit_guard_page_alloc,
+        .guard_page_free  = jit_guard_page_free,
+        .guard_page_arm   = jit_guard_page_arm,
+        .guard_page_disarm = jit_guard_page_disarm,
+    };
+    xr_jit_hooks = &hooks;
+
     return jit;
 }
 
@@ -227,6 +241,9 @@ void xir_jit_destroy(XirJitState *jit) {
         tfa_free(jit->tfa);
         xr_free(jit->tfa);
     }
+    // Phase 4: deregister hooks
+    xr_jit_hooks = NULL;
+
     xr_free(jit);
 }
 

@@ -11,7 +11,7 @@
 #ifndef XLSP_FORMAT_H
 #define XLSP_FORMAT_H
 
-#include "xlsp_json.h"
+#include "../../base/xjson.h"
 
 typedef struct XrLspDocument XrLspDocument;
 

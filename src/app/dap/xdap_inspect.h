@@ -19,7 +19,7 @@
 #define XDAP_INSPECT_H
 
 #include "xdap_controller.h"
-#include "../lsp/xlsp_json.h"
+#include "../../base/xjson.h"
 #include "../../runtime/value/xvalue.h"
 
 // Forward declarations

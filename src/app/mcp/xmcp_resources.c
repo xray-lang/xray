@@ -19,7 +19,7 @@
 #include "xmcp_resources.h"
 #include "xmcp_server.h"
 #include "xmcp_knowledge.h"
-#include "../lsp/xlsp_json.h"
+#include "../../base/xjson.h"
 #include "../../base/xmalloc.h"
 #include "../../base/xchecks.h"
 #include <string.h>
@@ -173,19 +173,19 @@ static char *read_stdlib_resource(XmcpServer *server, const char *module,
 XrJsonValue *xmcp_handle_resources_list(XmcpServer *server) {
     (void)server;
 
-    XrJsonValue *result = xlsp_json_new_object();
-    XrJsonValue *resources = xlsp_json_new_array();
+    XrJsonValue *result = xjson_new_object();
+    XrJsonValue *resources = xjson_new_array();
 
     for (int i = 0; RESOURCES[i].uri != NULL; i++) {
-        XrJsonValue *res = xlsp_json_new_object();
-        XLSP_JSON_SET_STRING(res, "uri", RESOURCES[i].uri);
-        XLSP_JSON_SET_STRING(res, "name", RESOURCES[i].name);
-        XLSP_JSON_SET_STRING(res, "description", RESOURCES[i].description);
-        XLSP_JSON_SET_STRING(res, "mimeType", RESOURCES[i].mime_type);
-        xlsp_json_array_push(resources, res);
+        XrJsonValue *res = xjson_new_object();
+        XJSON_SET_STRING(res, "uri", RESOURCES[i].uri);
+        XJSON_SET_STRING(res, "name", RESOURCES[i].name);
+        XJSON_SET_STRING(res, "description", RESOURCES[i].description);
+        XJSON_SET_STRING(res, "mimeType", RESOURCES[i].mime_type);
+        xjson_array_push(resources, res);
     }
 
-    xlsp_json_object_set(result, "resources", resources);
+    xjson_object_set(result, "resources", resources);
     return result;
 }
 
@@ -196,19 +196,19 @@ XrJsonValue *xmcp_handle_resources_list(XmcpServer *server) {
 XrJsonValue *xmcp_handle_resource_templates_list(XmcpServer *server) {
     (void)server;
 
-    XrJsonValue *result = xlsp_json_new_object();
-    XrJsonValue *templates = xlsp_json_new_array();
+    XrJsonValue *result = xjson_new_object();
+    XrJsonValue *templates = xjson_new_array();
 
     for (int i = 0; TEMPLATES[i].uri_template != NULL; i++) {
-        XrJsonValue *t = xlsp_json_new_object();
-        XLSP_JSON_SET_STRING(t, "uriTemplate", TEMPLATES[i].uri_template);
-        XLSP_JSON_SET_STRING(t, "name", TEMPLATES[i].name);
-        XLSP_JSON_SET_STRING(t, "description", TEMPLATES[i].description);
-        XLSP_JSON_SET_STRING(t, "mimeType", TEMPLATES[i].mime_type);
-        xlsp_json_array_push(templates, t);
+        XrJsonValue *t = xjson_new_object();
+        XJSON_SET_STRING(t, "uriTemplate", TEMPLATES[i].uri_template);
+        XJSON_SET_STRING(t, "name", TEMPLATES[i].name);
+        XJSON_SET_STRING(t, "description", TEMPLATES[i].description);
+        XJSON_SET_STRING(t, "mimeType", TEMPLATES[i].mime_type);
+        xjson_array_push(templates, t);
     }
 
-    xlsp_json_object_set(result, "resourceTemplates", templates);
+    xjson_object_set(result, "resourceTemplates", templates);
     return result;
 }
 
@@ -219,10 +219,10 @@ XrJsonValue *xmcp_handle_resource_templates_list(XmcpServer *server) {
 XrJsonValue *xmcp_handle_resources_read(XmcpServer *server, XrJsonValue *params) {
     XR_DCHECK(params != NULL, "xmcp_handle_resources_read: NULL params");
 
-    const char *uri = xlsp_json_get_string(params, "uri");
+    const char *uri = xjson_get_string(params, "uri");
     if (!uri) {
-        XrJsonValue *r = xlsp_json_new_object();
-        xlsp_json_object_set(r, "contents", xlsp_json_new_array());
+        XrJsonValue *r = xjson_new_object();
+        xjson_object_set(r, "contents", xjson_new_array());
         return r;
     }
 
@@ -258,19 +258,19 @@ XrJsonValue *xmcp_handle_resources_read(XmcpServer *server, XrJsonValue *params)
     }
 
     /* Build result */
-    XrJsonValue *result = xlsp_json_new_object();
-    XrJsonValue *contents = xlsp_json_new_array();
+    XrJsonValue *result = xjson_new_object();
+    XrJsonValue *contents = xjson_new_array();
 
     const char *final_text = text ? text : dyn_text;
     if (final_text) {
-        XrJsonValue *item = xlsp_json_new_object();
-        XLSP_JSON_SET_STRING(item, "uri", uri);
-        XLSP_JSON_SET_STRING(item, "mimeType", mime);
-        xlsp_json_object_set(item, "text", xlsp_json_new_string(final_text));
-        xlsp_json_array_push(contents, item);
+        XrJsonValue *item = xjson_new_object();
+        XJSON_SET_STRING(item, "uri", uri);
+        XJSON_SET_STRING(item, "mimeType", mime);
+        xjson_object_set(item, "text", xjson_new_string(final_text));
+        xjson_array_push(contents, item);
     }
 
-    xlsp_json_object_set(result, "contents", contents);
+    xjson_object_set(result, "contents", contents);
     xr_free(dyn_text);
     return result;
 }

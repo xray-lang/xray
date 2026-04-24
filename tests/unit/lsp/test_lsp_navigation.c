@@ -15,7 +15,7 @@
 #include "../../../src/app/lsp/xlsp_server.h"
 #include "../../../src/app/lsp/xlsp_analysis.h"
 #include "../../../src/app/lsp/xlsp_rename.h"
-#include "../../../src/app/lsp/xlsp_json.h"
+#include "../../../src/base/xjson.h"
 
 static int tests_passed = 0;
 static int tests_failed = 0;
@@ -67,7 +67,7 @@ TEST(hover_on_keyword) {
     // "let" is a keyword, hover should return something (keyword doc)
     // May return NULL if no keyword doc available — either is acceptable
     if (result) {
-        xlsp_json_free(result);
+        xjson_free(result);
     }
 
     xlsp_server_free(server);
@@ -87,7 +87,7 @@ TEST(hover_on_variable) {
     // Should get some hover info for the variable
     // Even if no type info is available, it should not crash
     if (result) {
-        xlsp_json_free(result);
+        xjson_free(result);
     }
 
     xlsp_server_free(server);
@@ -106,7 +106,7 @@ TEST(hover_on_empty_space) {
     XrJsonValue *result = xlsp_analyze_hover(server, doc, pos);
     // Should return NULL for empty space
     if (result) {
-        xlsp_json_free(result);
+        xjson_free(result);
     }
 
     xlsp_server_free(server);
@@ -144,7 +144,7 @@ TEST(definition_local_variable) {
     XrJsonValue *result = xlsp_analyze_definition(server, doc, pos);
     // Should return a location pointing to line 0 (the declaration)
     if (result) {
-        xlsp_json_free(result);
+        xjson_free(result);
     }
 
     xlsp_server_free(server);
@@ -167,7 +167,7 @@ TEST(definition_function) {
     XrJsonValue *result = xlsp_analyze_definition(server, doc, pos);
     // Should return a location pointing to line 0 (the declaration)
     if (result) {
-        xlsp_json_free(result);
+        xjson_free(result);
     }
 
     xlsp_server_free(server);
@@ -205,10 +205,10 @@ TEST(references_local_variable) {
     ASSERT(result != NULL);
 
     // Should find at least the declaration itself + usages
-    int ref_count = xlsp_json_array_len(result);
+    int ref_count = xjson_array_len(result);
     ASSERT(ref_count >= 1);
 
-    xlsp_json_free(result);
+    xjson_free(result);
     xlsp_server_free(server);
 }
 
@@ -231,10 +231,10 @@ TEST(references_function_name) {
     ASSERT(result != NULL);
 
     // Should find: declaration + 2 call sites = 3
-    int ref_count = xlsp_json_array_len(result);
+    int ref_count = xjson_array_len(result);
     ASSERT(ref_count >= 1);
 
-    xlsp_json_free(result);
+    xjson_free(result);
     xlsp_server_free(server);
 }
 
@@ -246,7 +246,7 @@ TEST(references_null_safety) {
     XrJsonValue *result = xlsp_analyze_references(server, NULL, pos);
     // May return NULL or empty array depending on implementation
     if (result) {
-        xlsp_json_free(result);
+        xjson_free(result);
     }
 
     xlsp_server_free(server);
@@ -273,10 +273,10 @@ TEST(highlight_variable_occurrences) {
     ASSERT(result != NULL);
 
     // Should find at least one highlight
-    int hl_count = xlsp_json_array_len(result);
+    int hl_count = xjson_array_len(result);
     ASSERT(hl_count >= 1);
 
-    xlsp_json_free(result);
+    xjson_free(result);
     xlsp_server_free(server);
 }
 
@@ -288,7 +288,7 @@ TEST(highlight_null_safety) {
     XrJsonValue *result = xlsp_analyze_document_highlight(server, NULL, pos);
     // May return NULL or empty array depending on implementation
     if (result) {
-        xlsp_json_free(result);
+        xjson_free(result);
     }
 
     xlsp_server_free(server);
@@ -312,7 +312,7 @@ TEST(prepare_rename_valid_symbol) {
     // Should return a range covering "counter"
     ASSERT(result != NULL);
 
-    xlsp_json_free(result);
+    xjson_free(result);
     xlsp_server_free(server);
 }
 
@@ -360,10 +360,10 @@ TEST(symbols_function_listed) {
     ASSERT(result != NULL);
 
     // Should have at least 2 symbols (hello, world)
-    int sym_count = xlsp_json_array_len(result);
+    int sym_count = xjson_array_len(result);
     ASSERT(sym_count >= 2);
 
-    xlsp_json_free(result);
+    xjson_free(result);
     xlsp_server_free(server);
 }
 
@@ -378,9 +378,9 @@ TEST(symbols_empty_document) {
     XrJsonValue *result = xlsp_analyze_document_symbols(doc);
     // Should return empty array, not NULL
     ASSERT(result != NULL);
-    ASSERT_EQ(xlsp_json_array_len(result), 0);
+    ASSERT_EQ(xjson_array_len(result), 0);
 
-    xlsp_json_free(result);
+    xjson_free(result);
     xlsp_server_free(server);
 }
 
@@ -388,8 +388,8 @@ TEST(symbols_null_safety) {
     XrJsonValue *result = xlsp_analyze_document_symbols(NULL);
     // May return NULL or empty array depending on implementation
     if (result) {
-        ASSERT_EQ(xlsp_json_array_len(result), 0);
-        xlsp_json_free(result);
+        ASSERT_EQ(xjson_array_len(result), 0);
+        xjson_free(result);
     }
 }
 
