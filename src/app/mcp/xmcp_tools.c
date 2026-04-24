@@ -179,6 +179,14 @@ XrJsonValue *xmcp_handle_tools_list(void) {
         "Returns a list of diagnostics (errors, warnings). "
         "Use this before suggesting code to the user.");
     xlsp_json_object_set(t1, "inputSchema", build_check_schema());
+    {
+        XrJsonValue *ann = xlsp_json_new_object();
+        XLSP_JSON_SET_STRING(ann, "title", "Xray Code Checker");
+        XLSP_JSON_SET_BOOL(ann, "readOnlyHint", true);
+        XLSP_JSON_SET_BOOL(ann, "destructiveHint", false);
+        XLSP_JSON_SET_BOOL(ann, "openWorldHint", false);
+        xlsp_json_object_set(t1, "annotations", ann);
+    }
     xlsp_json_array_push(tools, t1);
 
     /* Tool 2: xray_syntax_lookup */
@@ -192,6 +200,14 @@ XrJsonValue *xmcp_handle_tools_list(void) {
         "channel, coroutine, concurrency_rules, modules, testing, "
         "operators, builtin_functions.");
     xlsp_json_object_set(t2, "inputSchema", build_syntax_schema());
+    {
+        XrJsonValue *ann = xlsp_json_new_object();
+        XLSP_JSON_SET_STRING(ann, "title", "Xray Syntax Reference");
+        XLSP_JSON_SET_BOOL(ann, "readOnlyHint", true);
+        XLSP_JSON_SET_BOOL(ann, "destructiveHint", false);
+        XLSP_JSON_SET_BOOL(ann, "openWorldHint", false);
+        xlsp_json_object_set(t2, "annotations", ann);
+    }
     xlsp_json_array_push(tools, t2);
 
     /* Tool 3: xray_stdlib_search */
@@ -203,6 +219,14 @@ XrJsonValue *xmcp_handle_tools_list(void) {
         "Available modules: http, json, time, math, io, os, net, "
         "ws, crypto, csv, regex, cluster, compress, and more.");
     xlsp_json_object_set(t3, "inputSchema", build_stdlib_schema());
+    {
+        XrJsonValue *ann = xlsp_json_new_object();
+        XLSP_JSON_SET_STRING(ann, "title", "Xray Stdlib Search");
+        XLSP_JSON_SET_BOOL(ann, "readOnlyHint", true);
+        XLSP_JSON_SET_BOOL(ann, "destructiveHint", false);
+        XLSP_JSON_SET_BOOL(ann, "openWorldHint", false);
+        xlsp_json_object_set(t3, "annotations", ann);
+    }
     xlsp_json_array_push(tools, t3);
 
     xlsp_json_object_set(result, "tools", tools);

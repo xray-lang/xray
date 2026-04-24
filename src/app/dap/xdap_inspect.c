@@ -22,6 +22,9 @@
 #include "../../runtime/object/xmap.h"
 #include "../../runtime/object/xjson.h"
 #include "../../runtime/class/xinstance.h"
+#include "../../runtime/closure/xclosure.h"
+#include "../../api/xglobal_object.h"
+#include "../../runtime/xisolate_api.h"
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
@@ -172,6 +175,76 @@ XrJsonValue *xdap_inspect_locals(XdapController *ctrl, XrCoroutine *coro,
     return variables;
 }
 
+XrJsonValue *xdap_inspect_upvalues(XdapController *ctrl, XrCoroutine *coro,
+                                    int frame_idx) {
+    XrJsonValue *variables = xlsp_json_new_array();
+
+    if (!ctrl || !coro) return variables;
+
+    int actual_idx = coro->vm_ctx.frame_count - 1 - frame_idx;
+    if (actual_idx < 0 || actual_idx >= coro->vm_ctx.frame_count) return variables;
+
+    XrBcCallFrame *frame = &coro->vm_ctx.frames[actual_idx];
+    if (!frame->closure) return variables;
+
+    XrClosure *cl = frame->closure;
+    for (int i = 0; i < cl->upval_count; i++) {
+        XrValue val = cl->upvals[i];
+
+        XrJsonValue *var = xlsp_json_new_object();
+
+        // Format name as upvalue[N]
+        char name_buf[32];
+        snprintf(name_buf, sizeof(name_buf), "upvalue[%d]", i);
+        xlsp_json_object_set(var, "name", xlsp_json_new_string(name_buf));
+
+        char *value_str = xr_value_to_debug_string(ctrl->isolate, val);
+        xlsp_json_object_set(var, "value", xlsp_json_new_string(value_str));
+        xr_free(value_str);
+
+        xlsp_json_object_set(var, "type",
+            xlsp_json_new_string(xr_value_type_name(val)));
+
+        int var_ref = 0;
+        if (ctrl->isolate && xr_debug_value_is_expandable(ctrl->isolate, val)) {
+            XdapVarRefType ref_type = xr_debug_get_ref_type(val);
+            if (ref_type != XDAP_REF_INVALID) {
+                var_ref = xr_debug_create_var_ref(ctrl->isolate, ref_type, frame_idx, val);
+            }
+        }
+        xlsp_json_object_set(var, "variablesReference", xlsp_json_new_number(var_ref));
+
+        xlsp_json_array_push(variables, var);
+    }
+
+    return variables;
+}
+
+static void globals_collect_cb(const char *key, void *value, void *userdata) {
+    (void)value;
+    XrJsonValue *variables = (XrJsonValue *)userdata;
+    XrJsonValue *var = xlsp_json_new_object();
+    xlsp_json_object_set(var, "name", xlsp_json_new_string(key));
+    xlsp_json_object_set(var, "value", xlsp_json_new_string("<class>"));
+    xlsp_json_object_set(var, "type", xlsp_json_new_string("class"));
+    xlsp_json_object_set(var, "variablesReference", xlsp_json_new_number(0));
+    xlsp_json_array_push(variables, var);
+}
+
+XrJsonValue *xdap_inspect_globals(XdapController *ctrl) {
+    XrJsonValue *variables = xlsp_json_new_array();
+
+    if (!ctrl || !ctrl->isolate) return variables;
+
+    // Show global object properties (core classes)
+    XrGlobalObject *gobj = xr_isolate_get_global_object(ctrl->isolate);
+    if (gobj && gobj->properties) {
+        xr_hashmap_foreach(gobj->properties, globals_collect_cb, variables);
+    }
+
+    return variables;
+}
+
 // Convert XdapVarInfo array from debug API to JSON array for DAP protocol
 static XrJsonValue *var_info_to_json(XrayIsolate *isolate, int var_ref_id) {
     XdapVarInfo *vars = NULL;
@@ -202,6 +275,14 @@ XrJsonValue *xdap_inspect_variables(XdapController *ctrl, int var_ref) {
             XrCoroutine *coro = ctrl->stopped_coro;
             return xdap_inspect_locals(ctrl, coro, ref->frame_idx);
         }
+
+        case XDAP_REF_SCOPE_UPVALUES: {
+            XrCoroutine *coro = ctrl->stopped_coro;
+            return xdap_inspect_upvalues(ctrl, coro, ref->frame_idx);
+        }
+
+        case XDAP_REF_SCOPE_GLOBALS:
+            return xdap_inspect_globals(ctrl);
 
         case XDAP_REF_ARRAY:
         case XDAP_REF_MAP:

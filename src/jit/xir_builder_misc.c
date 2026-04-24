@@ -21,6 +21,8 @@
 #include "../runtime/class/xclass_descriptor.h"
 #include "../runtime/class/xclass.h"
 #include "../runtime/class/xclass_lookup.h"
+#include "../runtime/symbol/xsymbol_table.h"
+#include "../runtime/xisolate_api.h"
 
 /*
  * CPS suspend pattern helper: shared by OP_AWAIT, OP_CHAN_SEND, OP_CHAN_RECV.
@@ -926,10 +928,80 @@ bool xir_translate_misc_ops(XirBuilder *b, XirBlock **cur_blk,
             return true;
         }
 
+        /* === Super invocation (AOT: compile-time resolution) === */
+        case OP_SUPERINVOKE: {
+            // SUPERINVOKE A B C: call super method
+            // A=0 for ctor call (this in base[0]), B=method_name_const, C=nargs
+            int a = GETARG_A(inst);
+            int method_name_idx = GETARG_B(inst);
+            int nargs = GETARG_C(inst);
+            bool is_ctor_call = (a == 0);
+
+            if (b->aot_mode && b->isolate) {
+                // Resolve this type → class → superclass → method
+                XrType *this_type = builder_find_reg_type(b, is_ctor_call ? 0 : a + 1);
+                const char *cname = this_type ? xr_type_get_class_name(this_type) : NULL;
+                XrClass *klass = NULL;
+                if (cname && this_type->kind == XR_KIND_INSTANCE)
+                    klass = xr_class_lookup_by_name(b->isolate, cname);
+                XrClass *super_class = klass ? klass->super : NULL;
+
+                if (super_class && method_name_idx < (int)PROTO_CONST_COUNT(b->proto)) {
+                    XrValue name_val = PROTO_CONSTANT(b->proto, method_name_idx);
+                    if (XR_IS_STRING(name_val)) {
+                        const char *mname = XR_TO_STRING(name_val)->data;
+                        XrSymbolTable *st = (XrSymbolTable *)xr_isolate_get_symbol_table(b->isolate);
+                        int method_sym = (int)xr_symbol_register_in_table(st, mname);
+                        XrMethod *method = xr_class_lookup_method(super_class, method_sym);
+
+                        if (method && method->type == XMETHOD_CLOSURE &&
+                            method->as.closure && method->as.closure->proto)
+                        {
+                            XrProto *callee = method->as.closure->proto;
+                            uint8_t ret_type = XR_REP_TAGGED;
+                            if (callee->return_type_info)
+                                ret_type = xr_type_rep(callee->return_type_info);
+
+                            // Args: [0]=closure, [1]=this, [2..nargs+1]=args
+                            XirRef ck_args[16];
+                            XirRef cl_ptr = xir_const_ptr(b->func, (void *)method->as.closure);
+                            ck_args[0] = xir_emit_unary(b->func, blk, XIR_CONST_I64,
+                                                         XR_REP_I64, cl_ptr);
+                            // this is in slot 0 for ctor, slot a+1 otherwise
+                            int this_slot = is_ctor_call ? 0 : (a + 1);
+                            ck_args[1] = builder_get_slot(b, blk, this_slot);
+                            for (int j = 0; j < nargs && j < 13; j++)
+                                ck_args[2 + j] = builder_get_slot(b, blk, a + 2 + j);
+                            uint16_t ck_nca = (uint16_t)(2 + (nargs < 13 ? nargs : 13));
+
+                            XirRef proto_ref = xir_const_ptr(b->func, (void *)callee);
+                            XirRef na_ref = xir_const_i64(b->func, (int64_t)(nargs + 1));
+                            XirRef na_val = xir_emit_unary(b->func, blk, XIR_CONST_I64,
+                                                            XR_REP_I64, na_ref);
+                            XirRef result = xir_emit(b->func, blk, XIR_CALL_KNOWN,
+                                                      ret_type, proto_ref, na_val);
+                            blk->ins[blk->nins - 1].flags |= XIR_FLAG_SIDE_EFFECT;
+                            builder_bind_call_args(b, result, ck_args, ck_nca);
+                            if (ret_type == XR_REP_PTR || ret_type == XR_REP_TAGGED)
+                                builder_tag_vreg(b, result, VTAG_PTR, 0);
+                            if (a < 256 && (ret_type == XR_REP_I64 || ret_type == XR_REP_F64))
+                                b->slot_rep[a] = ret_type;
+                            if (!is_ctor_call)
+                                builder_set_slot(b, a, result);
+                            b->ops_translated++;
+                            return true;
+                        }
+                    }
+                }
+            }
+            // JIT: bail out (super calls are cold path)
+            b->ops_skipped++;
+            return true;
+        }
+
         /* === Deopt-to-VM opcodes (rare in hot loops) === */
         case OP_ABSTRACT_ERROR:
         case OP_GETSUPER:
-        case OP_SUPERINVOKE:
         /* === Channel (non-blocking) === */
         case OP_CHAN_NEW: {
             // R[A] = Channel(Bx) — create channel with buffer

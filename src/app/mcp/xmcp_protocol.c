@@ -8,7 +8,8 @@
  * xmcp_protocol.c - MCP protocol lifecycle handling
  *
  * KEY CONCEPT:
- *   Builds the initialize response with server capabilities.
+ *   Builds the initialize response with dynamically inferred capabilities.
+ *   Capabilities are derived from server feature flags (has_tools, etc.).
  *   MCP protocol version 2025-03-26.
  */
 
@@ -16,6 +17,35 @@
 #include "xmcp_server.h"
 #include "../lsp/xlsp_json.h"
 #include "../../base/xchecks.h"
+
+/* Build capabilities object from server feature flags. */
+static XrJsonValue *build_capabilities(XmcpServer *server) {
+    XR_DCHECK(server != NULL, "build_capabilities: NULL server");
+    XrJsonValue *caps = xlsp_json_new_object();
+
+    if (server->has_tools) {
+        XrJsonValue *tc = xlsp_json_new_object();
+        XLSP_JSON_SET_BOOL(tc, "listChanged", true);
+        xlsp_json_object_set(caps, "tools", tc);
+    }
+
+    if (server->has_resources) {
+        XrJsonValue *rc = xlsp_json_new_object();
+        XLSP_JSON_SET_BOOL(rc, "listChanged", false);
+        xlsp_json_object_set(caps, "resources", rc);
+    }
+
+    if (server->has_prompts) {
+        XrJsonValue *pc = xlsp_json_new_object();
+        XLSP_JSON_SET_BOOL(pc, "listChanged", true);
+        xlsp_json_object_set(caps, "prompts", pc);
+    }
+
+    /* Logging is always available */
+    xlsp_json_object_set(caps, "logging", xlsp_json_new_object());
+
+    return caps;
+}
 
 XrJsonValue *xmcp_handle_initialize(XmcpServer *server, XrJsonValue *params) {
     (void)params;
@@ -26,15 +56,8 @@ XrJsonValue *xmcp_handle_initialize(XmcpServer *server, XrJsonValue *params) {
     /* Protocol version */
     XLSP_JSON_SET_STRING(result, "protocolVersion", XMCP_PROTOCOL_VERSION);
 
-    /* Capabilities */
-    XrJsonValue *caps = xlsp_json_new_object();
-    xlsp_json_object_set(caps, "tools", xlsp_json_new_object());
-
-    XrJsonValue *res_caps = xlsp_json_new_object();
-    XLSP_JSON_SET_BOOL(res_caps, "listChanged", false);
-    xlsp_json_object_set(caps, "resources", res_caps);
-
-    xlsp_json_object_set(result, "capabilities", caps);
+    /* Dynamically inferred capabilities */
+    xlsp_json_object_set(result, "capabilities", build_capabilities(server));
 
     /* Server info */
     XrJsonValue *info = xlsp_json_new_object();

@@ -8,15 +8,17 @@
  * xmcp_server.c - MCP server main loop and stdio transport
  *
  * KEY CONCEPT:
- *   Blocking read on stdin, JSON-RPC 2.0 dispatch to tool/resource
- *   handlers, write responses to stdout with Content-Length framing.
- *   All diagnostic/log output goes to stderr (never stdout).
+ *   Table-driven JSON-RPC 2.0 dispatch, Content-Length framing on stdio,
+ *   signal-safe shutdown (SIGTERM/SIGINT/SIGPIPE), parent process monitor,
+ *   and notification sending infrastructure for log/progress messages.
+ *   All diagnostic output goes to stderr (never stdout).
  */
 
 #include "xmcp_server.h"
 #include "xmcp_protocol.h"
 #include "xmcp_tools.h"
 #include "xmcp_resources.h"
+#include "xmcp_prompts.h"
 #include "xmcp_knowledge.h"
 #include "../../base/xmalloc.h"
 #include "../../base/xchecks.h"
@@ -41,6 +43,9 @@
 
 #define MCP_READ_BUF_INIT 4096
 #define MCP_LOG_PREFIX    "[mcp] "
+
+/* Global server pointer for signal handler (single-instance) */
+static volatile XmcpServer *g_mcp_server = NULL;
 
 /* --------------------------------------------------------------------------
  * Logging (always to stderr, never stdout)
@@ -71,12 +76,38 @@ static void mcp_log(XmcpServer *s, int level, const char *fmt, ...) {
 }
 
 /* --------------------------------------------------------------------------
+ * Signal handling
+ * -------------------------------------------------------------------------- */
+
+static void mcp_signal_handler(int sig) {
+    (void)sig;
+    if (g_mcp_server) {
+        /* Safe: volatile sig_atomic_t write is async-signal-safe */
+        ((XmcpServer *)g_mcp_server)->shutdown = 1;
+    }
+}
+
+static void mcp_install_signals(XmcpServer *s) {
+    g_mcp_server = s;
+    struct sigaction sa;
+    memset(&sa, 0, sizeof(sa));
+    sa.sa_handler = mcp_signal_handler;
+    sigemptyset(&sa.sa_mask);
+    sa.sa_flags = 0;
+    sigaction(SIGTERM, &sa, NULL);
+    sigaction(SIGINT, &sa, NULL);
+    /* Ignore SIGPIPE to avoid crash on broken pipe */
+    sa.sa_handler = SIG_IGN;
+    sigaction(SIGPIPE, &sa, NULL);
+}
+
+/* --------------------------------------------------------------------------
  * Blocking stdio transport
  * -------------------------------------------------------------------------- */
 
 /* Write a JSON-RPC message with Content-Length header to stdout. */
-static void mcp_write(const char *json, size_t len) {
-    XR_DCHECK(json != NULL, "mcp_write: NULL json");
+void xmcp_write_message(const char *json, size_t len) {
+    XR_DCHECK(json != NULL, "xmcp_write_message: NULL json");
     char header[64];
     int hlen = snprintf(header, sizeof(header),
                         "Content-Length: %zu\r\n\r\n", len);
@@ -152,16 +183,12 @@ static bool mcp_read_line(XmcpServer *s, char *line, size_t cap) {
 /* Read one complete JSON-RPC message from stdin. Caller must xr_free(). */
 static char *mcp_read_message(XmcpServer *s) {
     XR_DCHECK(s != NULL, "mcp_read_message: NULL server");
-    /* Parse headers until empty line */
     int content_length = -1;
     char line[1024];
 
     while (true) {
         if (!mcp_read_line(s, line, sizeof(line))) return NULL;
-        /* Empty line (just \r\n or \n) marks end of headers */
         if (strcmp(line, "\r\n") == 0 || strcmp(line, "\n") == 0) break;
-
-        /* Parse Content-Length */
         if (strncasecmp(line, "Content-Length:", 15) == 0) {
             content_length = atoi(line + 15);
         }
@@ -172,7 +199,6 @@ static char *mcp_read_message(XmcpServer *s) {
         return NULL;
     }
 
-    /* Read body */
     s->read_len = 0;
     if (!mcp_read_exact(s, (size_t)content_length)) return NULL;
 
@@ -185,10 +211,9 @@ static char *mcp_read_message(XmcpServer *s) {
 }
 
 /* --------------------------------------------------------------------------
- * JSON-RPC dispatch
+ * JSON-RPC response / error helpers
  * -------------------------------------------------------------------------- */
 
-/* Send a JSON-RPC response (result or error). */
 static void mcp_send_response(XrJsonValue *id, XrJsonValue *result,
                                XrJsonValue *error) {
     XrJsonValue *resp = xlsp_json_new_object();
@@ -203,19 +228,19 @@ static void mcp_send_response(XrJsonValue *id, XrJsonValue *result,
     if (error) {
         xlsp_json_object_set(resp, "error", error);
     } else {
-        xlsp_json_object_set(resp, "result", result ? result : xlsp_json_new_object());
+        xlsp_json_object_set(resp, "result",
+                             result ? result : xlsp_json_new_object());
     }
 
     size_t len = 0;
     char *json = xlsp_json_stringify(resp, &len);
     if (json) {
-        mcp_write(json, len);
+        xmcp_write_message(json, len);
         xr_free(json);
     }
     xlsp_json_free(resp);
 }
 
-/* Send a JSON-RPC error response. */
 static void mcp_send_error(XrJsonValue *id, int code, const char *message) {
     XrJsonValue *err = xlsp_json_new_object();
     XLSP_JSON_SET_INT(err, "code", code);
@@ -223,7 +248,107 @@ static void mcp_send_error(XrJsonValue *id, int code, const char *message) {
     mcp_send_response(id, NULL, err);
 }
 
-/* Dispatch a single JSON-RPC request. */
+/* --------------------------------------------------------------------------
+ * Notification sending (public API)
+ * -------------------------------------------------------------------------- */
+
+void xmcp_send_notification(XmcpServer *server, const char *method,
+                              XrJsonValue *params) {
+    XR_DCHECK(server != NULL, "xmcp_send_notification: NULL server");
+    XR_DCHECK(method != NULL, "xmcp_send_notification: NULL method");
+    if (!server->initialized) return;
+
+    XrJsonValue *msg = xlsp_json_new_object();
+    XLSP_JSON_SET_STRING(msg, "jsonrpc", "2.0");
+    XLSP_JSON_SET_STRING(msg, "method", method);
+    if (params) {
+        xlsp_json_object_set(msg, "params", params);
+    }
+
+    size_t len = 0;
+    char *json = xlsp_json_stringify(msg, &len);
+    if (json) {
+        xmcp_write_message(json, len);
+        xr_free(json);
+    }
+    xlsp_json_free(msg);
+}
+
+void xmcp_send_log_notification(XmcpServer *server, const char *level,
+                                  const char *message) {
+    XR_DCHECK(server != NULL, "xmcp_send_log_notification: NULL server");
+    XR_DCHECK(level != NULL, "xmcp_send_log_notification: NULL level");
+    XR_DCHECK(message != NULL, "xmcp_send_log_notification: NULL message");
+    if (!server->initialized) return;
+
+    XrJsonValue *params = xlsp_json_new_object();
+    XLSP_JSON_SET_STRING(params, "level", level);
+    xlsp_json_object_set(params, "data", xlsp_json_new_string(message));
+    xmcp_send_notification(server, "notifications/message", params);
+}
+
+/* --------------------------------------------------------------------------
+ * Method handlers (thin wrappers matching XmcpMethodHandler signature)
+ * -------------------------------------------------------------------------- */
+
+static XrJsonValue *handle_initialized(XmcpServer *s, XrJsonValue *params) {
+    (void)params;
+    s->initialized = true;
+    mcp_log(s, 2, "client initialized");
+    return NULL; /* notification, no response */
+}
+
+static XrJsonValue *handle_ping(XmcpServer *s, XrJsonValue *params) {
+    (void)s; (void)params;
+    return xlsp_json_new_object();
+}
+
+static XrJsonValue *handle_tools_list(XmcpServer *s, XrJsonValue *params) {
+    (void)s; (void)params;
+    return xmcp_handle_tools_list();
+}
+
+static XrJsonValue *handle_tools_call(XmcpServer *s, XrJsonValue *params) {
+    return xmcp_handle_tools_call(s, params);
+}
+
+static XrJsonValue *handle_resources_list(XmcpServer *s, XrJsonValue *params) {
+    (void)params;
+    return xmcp_handle_resources_list(s);
+}
+
+static XrJsonValue *handle_resources_read(XmcpServer *s, XrJsonValue *params) {
+    return xmcp_handle_resources_read(s, params);
+}
+
+static XrJsonValue *handle_prompts_list(XmcpServer *s, XrJsonValue *params) {
+    (void)s; (void)params;
+    return xmcp_handle_prompts_list();
+}
+
+static XrJsonValue *handle_prompts_get(XmcpServer *s, XrJsonValue *params) {
+    return xmcp_handle_prompts_get(s, params);
+}
+
+/* --------------------------------------------------------------------------
+ * Table-driven method dispatch
+ * -------------------------------------------------------------------------- */
+
+static const XmcpMethodEntry METHOD_TABLE[] = {
+    /* method                       handler                notification  needs_init */
+    {"initialize",                  xmcp_handle_initialize, false,       false},
+    {"notifications/initialized",   handle_initialized,     true,        false},
+    {"notifications/cancelled",     NULL,                   true,        false},
+    {"ping",                        handle_ping,            false,       false},
+    {"tools/list",                  handle_tools_list,      false,       true},
+    {"tools/call",                  handle_tools_call,      false,       true},
+    {"resources/list",              handle_resources_list,   false,       true},
+    {"resources/read",              handle_resources_read,   false,       true},
+    {"prompts/list",                handle_prompts_list,     false,       true},
+    {"prompts/get",                 handle_prompts_get,      false,       true},
+    {NULL, NULL, false, false}
+};
+
 static void mcp_dispatch(XmcpServer *s, XrJsonValue *msg) {
     XR_DCHECK(s != NULL, "mcp_dispatch: NULL server");
     XR_DCHECK(msg != NULL, "mcp_dispatch: NULL msg");
@@ -233,65 +358,54 @@ static void mcp_dispatch(XmcpServer *s, XrJsonValue *msg) {
     XrJsonValue *params = xlsp_json_get(msg, "params");
 
     if (!method) {
-        if (id) mcp_send_error(id, -32600, "Invalid Request: missing method");
+        if (id) mcp_send_error(id, XMCP_ERR_INVALID_REQ,
+                               "Invalid Request: missing method");
         return;
     }
 
     mcp_log(s, 3, "dispatch: %s", method);
 
-    /* --- Lifecycle --- */
-    if (strcmp(method, "initialize") == 0) {
-        XrJsonValue *result = xmcp_handle_initialize(s, params);
+    /* Look up method in table */
+    const XmcpMethodEntry *entry = NULL;
+    for (int i = 0; METHOD_TABLE[i].method != NULL; i++) {
+        if (strcmp(method, METHOD_TABLE[i].method) == 0) {
+            entry = &METHOD_TABLE[i];
+            break;
+        }
+    }
+
+    if (!entry) {
+        /* Unknown method: error for requests, silently ignore notifications */
+        if (id) {
+            mcp_send_error(id, XMCP_ERR_METHOD_NOT_FOUND, "Method not found");
+        }
+        mcp_log(s, 3, "unknown method: %s (id=%s)", method,
+                id ? "present" : "none");
+        return;
+    }
+
+    /* Pre-init guard */
+    if (entry->needs_init && !s->initialized) {
+        if (id) mcp_send_error(id, XMCP_ERR_NOT_INITIALIZED,
+                               "Server not initialized");
+        return;
+    }
+
+    /* Ignored notification (e.g. notifications/cancelled with NULL handler) */
+    if (!entry->handler) {
+        mcp_log(s, 3, "ignored notification: %s", method);
+        return;
+    }
+
+    /* Call handler */
+    XrJsonValue *result = entry->handler(s, params);
+
+    /* Send response for requests (not notifications) */
+    if (!entry->is_notification && id) {
         mcp_send_response(id, result, NULL);
-        return;
-    }
-
-    if (strcmp(method, "notifications/initialized") == 0) {
-        s->initialized = true;
-        mcp_log(s, 2, "client initialized");
-        return; /* notification, no response */
-    }
-
-    if (strcmp(method, "ping") == 0) {
-        mcp_send_response(id, xlsp_json_new_object(), NULL);
-        return;
-    }
-
-    /* Reject requests before initialization (except initialize) */
-    if (!s->initialized) {
-        if (id) mcp_send_error(id, -32002, "Server not initialized");
-        return;
-    }
-
-    /* --- Tools --- */
-    if (strcmp(method, "tools/list") == 0) {
-        XrJsonValue *result = xmcp_handle_tools_list();
-        mcp_send_response(id, result, NULL);
-        return;
-    }
-
-    if (strcmp(method, "tools/call") == 0) {
-        XrJsonValue *result = xmcp_handle_tools_call(s, params);
-        mcp_send_response(id, result, NULL);
-        return;
-    }
-
-    /* --- Resources --- */
-    if (strcmp(method, "resources/list") == 0) {
-        XrJsonValue *result = xmcp_handle_resources_list(s);
-        mcp_send_response(id, result, NULL);
-        return;
-    }
-
-    if (strcmp(method, "resources/read") == 0) {
-        XrJsonValue *result = xmcp_handle_resources_read(s, params);
-        mcp_send_response(id, result, NULL);
-        return;
-    }
-
-    /* Unknown method */
-    if (id) {
-        mcp_send_error(id, -32601, "Method not found");
+    } else if (result) {
+        /* Notification handler returned a value — free it */
+        xlsp_json_free(result);
     }
 }
 
@@ -326,11 +440,17 @@ XmcpServer *xmcp_server_new(void) {
         xmcp_knowledge_load(s->knowledge);
     }
 
+    /* Set feature flags for capability inference */
+    s->has_tools     = true;  /* 3 built-in tools */
+    s->has_resources = true;  /* 3 static resources */
+    s->has_prompts   = true;  /* 5 built-in prompts */
+
     return s;
 }
 
 void xmcp_server_free(XmcpServer *s) {
     if (!s) return;
+    if (g_mcp_server == s) g_mcp_server = NULL;
     if (s->knowledge) xmcp_knowledge_free(s->knowledge);
     if (s->isolate)   xray_isolate_delete(s->isolate);
     if (s->log_file)  fclose(s->log_file);
@@ -340,6 +460,10 @@ void xmcp_server_free(XmcpServer *s) {
 
 int xmcp_server_run(XmcpServer *s) {
     XR_DCHECK(s != NULL, "xmcp_server_run: NULL server");
+
+    /* Install signal handlers for graceful shutdown */
+    mcp_install_signals(s);
+
     mcp_log(s, 2, "MCP server starting (stdio)");
 
     while (!s->shutdown) {
@@ -354,7 +478,7 @@ int xmcp_server_run(XmcpServer *s) {
 
         if (!msg) {
             mcp_log(s, 0, "JSON parse error");
-            mcp_send_error(NULL, -32700, "Parse error");
+            mcp_send_error(NULL, XMCP_ERR_PARSE, "Parse error");
             continue;
         }
 
@@ -370,7 +494,6 @@ int xmcp_server_run(XmcpServer *s) {
  * CLI entry: xray mcp-server [options]
  * -------------------------------------------------------------------------- */
 
-/* Parse log level string to integer */
 static int parse_log_level(const char *level) {
     if (!level) return 2; /* info */
     if (strcmp(level, "error") == 0) return 0;
@@ -397,7 +520,8 @@ XR_FUNC int cmd_mcp_server(const XrCliInvocation *inv) {
     if (log_file_path) {
         s->log_file = fopen(log_file_path, "a");
         if (!s->log_file) {
-            xr_cli_warn("mcp-server", "cannot open log file '%s'", log_file_path);
+            xr_cli_warn("mcp-server", "cannot open log file '%s'",
+                         log_file_path);
         }
     }
 

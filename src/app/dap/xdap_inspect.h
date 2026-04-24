@@ -53,6 +53,13 @@ XR_FUNC XrJsonValue *xdap_inspect_variables(XdapController *ctrl, int var_ref);
 XR_FUNC XrJsonValue *xdap_inspect_locals(XdapController *ctrl, XrCoroutine *coro,
                                   int frame_idx);
 
+// Get closure upvalues for a frame
+XR_FUNC XrJsonValue *xdap_inspect_upvalues(XdapController *ctrl, XrCoroutine *coro,
+                                    int frame_idx);
+
+// Get global variables
+XR_FUNC XrJsonValue *xdap_inspect_globals(XdapController *ctrl);
+
 // ============================================================================
 // Expression Evaluation
 // ============================================================================
