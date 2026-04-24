@@ -17,6 +17,7 @@
 #include "xpkg_client.h"
 #include "../base/xmalloc.h"
 #include "../base/xfileio.h"
+#include "../base/xjson.h"
 
 #if defined(XR_HAS_NETWORK) || !defined(XR_STDLIB_MODULAR)
 
@@ -135,90 +136,42 @@ static bool extract_tarball(const char *tarball, const char *dest_dir, bool verb
 }
 
 /*
- * Parse simple JSON string value.
- * Find "key": "value" and return value.
+ * Extract a string value from JSON body by key.
+ * Returns xr_strdup'd string (caller frees), or NULL if not found.
  */
 static char* json_get_string(const char *json, const char *key) {
-    char pattern[128];
-    snprintf(pattern, sizeof(pattern), "\"%s\"", key);
-
-    const char *p = strstr(json, pattern);
-    if (!p) return NULL;
-
-    p += strlen(pattern);
-
-    // Skip : and whitespace
-    while (*p && (*p == ':' || *p == ' ' || *p == '\t')) p++;
-
-    if (*p != '"') return NULL;
-    p++;  // Skip opening quote
-
-    const char *start = p;
-    while (*p && *p != '"') p++;
-
-    size_t len = p - start;
-    char *result = (char*)xr_malloc(len + 1);
-    memcpy(result, start, len);
-    result[len] = '\0';
-
+    if (!json || !key) return NULL;
+    XrJsonValue *root = xjson_parse(json, strlen(json));
+    if (!root) return NULL;
+    const char *val = xjson_get_string(root, key);
+    char *result = val ? xr_strdup(val) : NULL;
+    xjson_free(root);
     return result;
 }
 
 /*
- * Parse JSON string array.
- * Find "key": ["a", "b", "c"].
+ * Extract a string array from JSON body by key.
+ * Returns malloc'd array of xr_strdup'd strings (caller frees each + array).
  */
 static char** json_get_string_array(const char *json, const char *key, int *count) {
     *count = 0;
-
-    char pattern[128];
-    snprintf(pattern, sizeof(pattern), "\"%s\"", key);
-
-    const char *p = strstr(json, pattern);
-    if (!p) return NULL;
-
-    p += strlen(pattern);
-
-    // Skip : and whitespace
-    while (*p && (*p == ':' || *p == ' ' || *p == '\t' || *p == '\n')) p++;
-
-    if (*p != '[') return NULL;
-    p++;  // Skip [
-
-    // Count elements
-    int capacity = 16;
-    char **result = (char**)xr_malloc(capacity * sizeof(char*));
-
-    while (*p) {
-        // Skip whitespace
-        while (*p && (*p == ' ' || *p == '\t' || *p == '\n' || *p == ',')) p++;
-
-        if (*p == ']') break;
-
-        if (*p == '"') {
-            p++;  // Skip opening quote
-            const char *start = p;
-            while (*p && *p != '"') p++;
-
-            size_t len = p - start;
-
-            if (*count >= capacity) {
-                capacity *= 2;
-                char** _new_result = (char**)xr_realloc(result, capacity * sizeof(char*));
-                if (!_new_result) return NULL;
-                result = _new_result;
-
-            }
-
-            result[*count] = (char*)xr_malloc(len + 1);
-            memcpy(result[*count], start, len);
-            result[*count][len] = '\0';
+    if (!json || !key) return NULL;
+    XrJsonValue *root = xjson_parse(json, strlen(json));
+    if (!root) return NULL;
+    XrJsonValue *arr = xjson_get_array(root, key);
+    if (!arr) { xjson_free(root); return NULL; }
+    int n = xjson_array_len(arr);
+    if (n == 0) { xjson_free(root); return NULL; }
+    char **result = (char**)xr_malloc((size_t)n * sizeof(char*));
+    if (!result) { xjson_free(root); return NULL; }
+    for (int i = 0; i < n; i++) {
+        XrJsonValue *elem = xjson_array_get(arr, i);
+        if (elem && xjson_is_string(elem)) {
+            result[*count] = xr_strdup(elem->as.string);
             (*count)++;
-
-            if (*p == '"') p++;
         }
     }
-
+    xjson_free(root);
     return result;
 }
 
