@@ -28,9 +28,10 @@
 #define XR_ASYNC_THREAD_COUNT 10
 #endif
 
-// Async thread stack size (64KB)
+// Async thread stack size (128KB — must exceed TLS segment + guard page;
+// on Linux/x86_64 with __thread the TLS block alone can be ~65KB)
 #ifndef XR_ASYNC_STACK_SIZE
-#define XR_ASYNC_STACK_SIZE (64 * 1024)
+#define XR_ASYNC_STACK_SIZE (128 * 1024)
 #endif
 
 // ========== Async Task ==========
