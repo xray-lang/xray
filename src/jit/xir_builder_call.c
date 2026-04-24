@@ -464,24 +464,31 @@ bool xir_translate_call_ops(XirBuilder *b, XirBlock **cur_blk,
         /* === Exception Handling === */
         case OP_TRY: {
             int catch_offset = GETARG_Bx(inst);
-            if (catch_offset <= 0 || (uint32_t)catch_offset >= b->code_count) {
-                b->ops_skipped++;
-                return true;
-            }
             // Next instruction holds finally_offset (OP_NOP placeholder)
             XrInstruction next_inst = PROTO_CODE(b->proto, pc + 1);
             int finally_offset = GETARG_Bx(next_inst);
 
-            // Get or create catch block
-            XirBlock *catch_blk = b->pc_to_block[catch_offset];
-            if (!catch_blk) {
-                catch_blk = xir_func_add_block(b->func, "catch");
-                b->pc_to_block[catch_offset] = catch_blk;
+            // Skip if neither catch nor finally
+            bool has_catch = (catch_offset > 0 && (uint32_t)catch_offset < b->code_count);
+            bool has_finally = (finally_offset > 0 && (uint32_t)finally_offset < b->code_count);
+            if (!has_catch && !has_finally) {
+                b->ops_skipped++;
+                return true;
+            }
+
+            // Get or create catch block (if present)
+            XirBlock *catch_blk = NULL;
+            if (has_catch) {
+                catch_blk = b->pc_to_block[catch_offset];
+                if (!catch_blk) {
+                    catch_blk = xir_func_add_block(b->func, "catch");
+                    b->pc_to_block[catch_offset] = catch_blk;
+                }
             }
 
             // Get or create finally block (if present)
             XirBlock *finally_blk = NULL;
-            if (finally_offset > 0) {
+            if (has_finally) {
                 finally_blk = b->pc_to_block[finally_offset];
                 if (!finally_blk) {
                     finally_blk = xir_func_add_block(b->func, "finally");
@@ -489,9 +496,14 @@ bool xir_translate_call_ops(XirBuilder *b, XirBlock **cur_blk,
                 }
             }
 
+            // Exception handler: catch block if present, otherwise finally block.
+            // For try-finally (no catch), exceptions jump directly to the finally block.
+            XirBlock *handler_blk = catch_blk ? catch_blk : finally_blk;
+            XR_DCHECK(handler_blk != NULL, "OP_TRY: no handler block");
+
             // Push try state with slot_map snapshot
             if (b->try_depth < 8) {
-                b->try_stack[b->try_depth].catch_block = catch_blk;
+                b->try_stack[b->try_depth].catch_block = handler_blk;
                 b->try_stack[b->try_depth].finally_block = finally_blk;
                 memcpy(b->try_stack[b->try_depth].saved_slot_map,
                        b->slot_map, sizeof(b->slot_map));
@@ -499,7 +511,7 @@ bool xir_translate_call_ops(XirBuilder *b, XirBlock **cur_blk,
             }
 
             // Set exception_handler on current block
-            blk->exception_handler = catch_blk;
+            blk->exception_handler = handler_blk;
 
             b->ops_translated++;
             return true;
@@ -552,6 +564,9 @@ bool xir_translate_call_ops(XirBuilder *b, XirBlock **cur_blk,
             if (b->try_depth > 0) {
                 b->try_depth--;
             }
+            // Emit XIR_TRY_END so AOT codegen can insert re-throw check
+            xir_emit(b->func, blk, XIR_TRY_END, XR_REP_I64, XIR_NONE, XIR_NONE);
+            blk->ins[blk->nins - 1].flags |= XIR_FLAG_SIDE_EFFECT;
             // Clear exception_handler on current block
             blk->exception_handler = NULL;
             b->ops_translated++;
@@ -559,7 +574,8 @@ bool xir_translate_call_ops(XirBuilder *b, XirBlock **cur_blk,
         }
 
         case OP_FINALLY:
-            // Finally block marker (no special XIR needed)
+            // Finally block marker — no special XIR instruction needed.
+            // AOT codegen detects finally via exception_handler transitions.
             b->ops_translated++;
             return true;
 

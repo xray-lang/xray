@@ -119,12 +119,12 @@ typedef struct XrDebugState {
     // Hook callback
     XrDebugHookFn hook;
     void *hook_userdata;
-    
+
     // Execution control
     bool enabled;               // Debug mode enabled
     XrDebugAction current_action;
     int step_depth;             // Frame depth for step-over/step-out
-    
+
     // Breakpoints (list + hash table for fast lookup)
     struct XrBreakpoint {
         int id;
@@ -138,14 +138,14 @@ typedef struct XrDebugState {
         struct XrBreakpoint *next;  // For linked list
     } *breakpoints;
     int next_bp_id;
-    
+
     // Hash table for O(1) breakpoint lookup by (path, line)
     XrBpHashTable bp_hash;
-    
+
     // Function breakpoints (per-isolate, not global)
     XrFuncBreakpoint *func_breakpoints;
     int next_func_bp_id;
-    
+
     // Watch expressions
     struct XrWatch {
         int id;
@@ -153,26 +153,26 @@ typedef struct XrDebugState {
         struct XrWatch *next;
     } *watches;
     int next_watch_id;
-    
+
     // Last stop location (for step-over, owned copy via strdup)
     char *last_path;
     int last_line;
     char *last_func_name;       // Function name at last stop (owned)
-    
+
     // Exception breakpoints
     bool break_on_uncaught;     // Break on uncaught exceptions
     bool break_on_caught;       // Break on caught exceptions
-    
+
     // Current exception info (when stopped on exception)
     char *exception_message;
     bool exception_is_uncaught;
-    
+
     // Variable references for object expansion (dynamic array, O(1) lookup by ID)
     XrDebugVarRef *var_refs;    // Array indexed by (id - XDAP_VAR_REF_ID_BASE)
     int var_refs_count;         // Number of allocated refs
     int var_refs_capacity;      // Allocated capacity
     int next_var_ref_id;        // Next ID (starts at XDAP_VAR_REF_ID_BASE)
-    
+
     // Async stack trace scratch buffers (per-isolate, avoids global state)
     const char *async_names[8];
     const char *async_files[8];
@@ -183,13 +183,26 @@ typedef struct XrDebugState {
 // Debug API
 // ============================================================================
 
+// Frame context helper (shared between xdap_debug.c and xdap_variables.c)
+typedef struct {
+    XrBcCallFrame *frames;
+    XrValue *stack;
+    int frame_count;
+} XrDebugFrameCtx;
+
 // Initialize/cleanup debug state
 XR_FUNC void xr_debug_init(XrayIsolate *isolate);
 XR_FUNC void xr_debug_free(XrayIsolate *isolate);
 
 // Hook management
-XR_FUNC void xr_debug_set_hook(XrayIsolate *isolate, XrDebugHookFn hook, void *userdata);
 XR_FUNC void xr_debug_enable(XrayIsolate *isolate, bool enable);
+
+// Internal helpers (shared between split files)
+XR_FUNC bool xr_debug_get_frame_ctx_ex(XrayIsolate *isolate, XrDebugFrameCtx *out);
+XR_FUNC bool xr_debug_eval_condition_truthy(XrayIsolate *isolate, const char *condition);
+XR_FUNC void xr_bp_hash_clear(XrBpHashTable *table);
+XR_FUNC void xr_bp_free_fields(struct XrBreakpoint *bp);
+XR_FUNC struct XrBreakpoint *xr_bp_hash_find(XrBpHashTable *table, const char *path, int line);
 
 // Breakpoint management
 XR_FUNC int xr_debug_add_breakpoint(XrayIsolate *isolate, const char *path, int line, const char *condition);
@@ -230,14 +243,6 @@ XR_FUNC int xr_debug_get_local_count(XrayIsolate *isolate, int frame_idx);
 XR_FUNC bool xr_debug_get_local(XrayIsolate *isolate, int frame_idx, int local_idx,
                          const char **out_name, char **out_value, char **out_type);
 
-// Called by VM at execution points
-XR_FUNC XrDebugAction xr_debug_on_line(XrayIsolate *isolate, const char *path, int line, 
-                                XrClosure *closure, XrBcCallFrame *frame);
-
-// Called by VM when breakpoint is hit
-XR_FUNC void xr_debug_on_breakpoint_hit(XrayIsolate *isolate, const char *path, int line,
-                                 XrClosure *closure, XrBcCallFrame *frame);
-
 // Value formatting (shared with xdap_inspect and xdap_eval)
 XR_FUNC const char *xr_value_type_name(XrValue val);
 XR_FUNC char *xr_value_to_debug_string(XrayIsolate *isolate, XrValue val);
@@ -250,7 +255,7 @@ XR_FUNC char *xr_debug_evaluate(XrayIsolate *isolate, const char *expression, in
 
 // Enhanced expression evaluation with expandable result support
 // Returns result string, sets out_var_ref if result is expandable (>0)
-XR_FUNC char *xr_debug_evaluate_ex(XrayIsolate *isolate, const char *expression, 
+XR_FUNC char *xr_debug_evaluate_ex(XrayIsolate *isolate, const char *expression,
                             int frame_idx, int *out_var_ref);
 
 // Exception breakpoints
@@ -331,7 +336,7 @@ XR_FUNC bool xr_debug_value_is_expandable(XrayIsolate *isolate, XrValue value);
 XR_FUNC XdapVarRefType xr_debug_get_ref_type(XrValue value);
 
 // Set variable value (returns new value string, caller must free)
-XR_FUNC char *xr_debug_set_variable(XrayIsolate *isolate, int var_ref, 
+XR_FUNC char *xr_debug_set_variable(XrayIsolate *isolate, int var_ref,
                              const char *name, const char *value);
 
 // Function breakpoints

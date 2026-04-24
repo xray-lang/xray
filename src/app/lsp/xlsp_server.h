@@ -111,6 +111,15 @@ typedef struct XrLspIndexPool XrLspIndexPool;
 // Maximum workspace folders
 #define MAX_WORKSPACE_FOLDERS 16
 
+// Per-tick time budget (ms) for draining pending background analysis
+#define ANALYSIS_DRAIN_BUDGET_MS 5
+
+// Pending analysis entry (file waiting for main-thread re-analysis)
+typedef struct XlspPendingAnalysis {
+    char *uri;
+    char *path;
+} XlspPendingAnalysis;
+
 // Maximum pending requests to track (for cancellation support)
 #define MAX_PENDING_REQUESTS 64
 
@@ -266,6 +275,11 @@ struct XrLspServer {
     XrLspDocument **pending_diag;
     int pending_diag_count;
     int pending_diag_capacity;
+
+    // Pending background analysis queue (budgeted drain per tick)
+    XlspPendingAnalysis *pending_analysis;
+    int pending_analysis_count;
+    int pending_analysis_capacity;
 
     // Request cancellation support ($/cancelRequest)
     XlspPendingRequests pending_requests;
