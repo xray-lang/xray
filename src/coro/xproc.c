@@ -65,6 +65,10 @@ void xr_proc_init(XrProc *p, int id, struct XrRuntime *runtime) {
     p->blocked_count = 0;
     p->select_waiter_count = 0;
 
+    // Phase 3.2: canceled timer node freelist
+    p->cancel_node_free = NULL;
+    p->cancel_node_free_count = 0;
+
     // Continuation stealing deque (small: scope depth is typically shallow)
     xr_steal_queue_init(&p->cont_deque, 64);
     p->yield_streak = 0;
@@ -98,6 +102,18 @@ void xr_proc_destroy(XrProc *p) {
 
     // Destroy channel wake command queue
     xr_chan_wake_queue_destroy(&p->chan_wake_queue);
+
+    // Phase 3.2: drain canceled timer node freelist
+    {
+        struct XrCanceledTimerNode *n = p->cancel_node_free;
+        while (n) {
+            struct XrCanceledTimerNode *next = n->next;
+            xr_free(n);
+            n = next;
+        }
+        p->cancel_node_free = NULL;
+        p->cancel_node_free_count = 0;
+    }
 }
 
 // ========== P/M Binding ==========

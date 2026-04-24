@@ -1903,6 +1903,10 @@ XirPassChange xir_pass_gcm(XirFunc *func) {
         XirIns *def = func->vregs[v].def;
         if (!def) continue;
 
+        // Skip pinned instructions — best[] aliases late[] so pinned
+        // ops may retain a stale late-schedule value from step 2.
+        if (gcm_is_pinned(def->op)) continue;
+
         XirBlock *target = func->blocks[best[v]];
         // Append instruction to target block
         if (target->nins < target->ins_cap) {

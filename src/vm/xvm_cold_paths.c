@@ -2325,8 +2325,11 @@ int vm_spawn_cont(XrayIsolate *isolate, XrVMContext *vm_ctx,
             _scope = runtime->current_scope;
         if (_scope && parent) {
             coro->parent_scope = _scope;
+            // Phase 2 (CORO-10): protect child list prepend
+            while (atomic_exchange_explicit(&_scope->child_lock, true, memory_order_acquire)) {}
             coro->scope_sibling = _scope->first_child;
             _scope->first_child = coro;
+            atomic_store_explicit(&_scope->child_lock, false, memory_order_release);
             atomic_fetch_add_explicit(&_scope->count, 1, memory_order_relaxed);
             atomic_fetch_add_explicit(&parent->wait_count, 1, memory_order_relaxed);
             task->waiter = parent;
@@ -2879,13 +2882,17 @@ int vm_select_block(XrayIsolate *isolate, XrVMContext *vm_ctx,
     coro->select_wait = sw;
     coro->select_ready_case = -1;
 
-    if (timer_ch && !atomic_load(&timer_ch->timer_fired)) {
-        struct timespec ts;
-        clock_gettime(CLOCK_MONOTONIC, &ts);
-        int64_t now_ms = (int64_t)ts.tv_sec * 1000 + ts.tv_nsec / 1000000;
+    // Phase 3: arm sleep timer so the worker wakes the coro when the timer
+    // channel fires.  The tw_timer callback writes data to the buffer; when
+    // the coro re-polls after wakeup, OP_CHAN_TRY_RECV will find it.
+    // Clamp remaining to at least 1ms so that xr_bump_timers fires both the
+    // tw_timer and the sleep timer on the next tick (handles after 0 case).
+    if (timer_ch && !atomic_load_explicit(&timer_ch->timer_fired, memory_order_acquire)) {
+        int64_t now_ms = xr_monotonic_ticks();
         int64_t elapsed = now_ms - timer_ch->timer_start_ticks;
         int64_t remaining = timer_ch->timer_timeout_ms - elapsed;
-        if (remaining > 0 && worker->p.timer_wheel) {
+        if (remaining < 1) remaining = 1;
+        if (worker->p.timer_wheel) {
             if (coro->ext && atomic_load_explicit(&coro->ext->timer_active, memory_order_relaxed)) {
                 xr_twheel_cancel_timer(worker->p.timer_wheel, &coro->ext->timer);
                 atomic_store_explicit(&coro->ext->timer_active, false, memory_order_relaxed);

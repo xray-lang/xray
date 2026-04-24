@@ -633,6 +633,56 @@ static XirRef braun_add_phi_operands(XirBuilder *b, uint32_t blk_id, int slot, X
         xir_phi_set_arg(phi, p, val);
     }
 
+    // Trivial phi elimination (Braun SSA standard step):
+    // If all operands (ignoring self-refs and NONE) are the same single value,
+    // the phi is redundant. Return the unique value instead of the phi dst.
+    // This collapses intermediate phis created in multi-predecessor blocks
+    // (e.g. loop latch with 2 preds both feeding the same loop header phi).
+    {
+        XirRef same_val = XIR_NONE;
+        bool trivial = true;
+        for (uint32_t p = 0; p < phi->narg && trivial; p++) {
+            XirRef arg = phi->args[p];
+            if (xir_ref_is_none(arg) || arg == phi->dst) continue;
+            if (xir_ref_is_none(same_val)) {
+                same_val = arg;
+            } else if (arg != same_val) {
+                trivial = false;
+            }
+        }
+        if (trivial && !xir_ref_is_none(same_val)) {
+            return same_val;
+        }
+    }
+
+    // Reconcile phi rep with actual operand reps.
+    // slot_rep[] is flow-insensitive and may be stale when a bytecode register
+    // is reused across type boundaries (e.g. R[3] first holds I64 from
+    // TARRAY_GETC, then TAGGED array from MOVE). Fix the phi rep if all
+    // concrete operands agree on a rep that differs from the initial one.
+    {
+        uint8_t common_rep = 0xFF;
+        bool rep_agree = true;
+        for (uint32_t p = 0; p < phi->narg && rep_agree; p++) {
+            XirRef arg = phi->args[p];
+            if (xir_ref_is_none(arg) || arg == phi->dst) continue;
+            if (!xir_ref_is_vreg(arg)) { rep_agree = false; break; }
+            uint32_t vi = XIR_REF_INDEX(arg);
+            if (vi >= b->func->nvreg) { rep_agree = false; break; }
+            uint8_t r = b->func->vregs[vi].rep;
+            if (common_rep == 0xFF) common_rep = r;
+            else if (r != common_rep) rep_agree = false;
+        }
+        if (rep_agree && common_rep != 0xFF && common_rep != phi->rep) {
+            phi->rep = common_rep;
+            if (xir_ref_is_vreg(phi->dst)) {
+                uint32_t di = XIR_REF_INDEX(phi->dst);
+                if (di < b->func->nvreg)
+                    b->func->vregs[di].rep = common_rep;
+            }
+        }
+    }
+
     // Propagate xr_tag through PHI: if all inputs share the same
     // non-default tag, the PHI dst inherits it.  This propagates
     // meta-tags like XRVREG_TAG_BOOL through && / || merges.

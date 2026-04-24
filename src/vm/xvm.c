@@ -3525,7 +3525,8 @@ startfunc:
                     /* Phase 3: SLOW C functions release P before execution.
                     ** This prevents long-running C code from blocking the
                     ** scheduler. Other coroutines continue on other M's. */
-                    bool is_slow = (cfunc->cfunc_class == XR_CFUNC_SLOW);
+                    bool is_slow = (atomic_load_explicit(&cfunc->cfunc_class,
+                                        memory_order_acquire) == XR_CFUNC_SLOW);
                     if (is_slow) {
                         xr_worker_entersyscall();
                     }
@@ -6911,15 +6912,8 @@ startfunc:
                 }
                 XrChannel *ch = xr_value_to_channel(ch_val);
 
-                // Timer Channel special handling
-                if (xr_channel_timer_ready(ch)) {
-                    // Timer triggered, read from buffer
-                    bool ok;
-                    XrValue value = xr_channel_try_recv(ch, &ok);
-                    R(a) = ok ? vm_chan_copy_recv(isolate, value, vm_ctx) : xr_null();
-                    R(a + 1) = xr_bool(ok);
-                    vmbreak;
-                }
+                // Phase 3: timer channel no longer needs polling here.
+                // Timer wheel callback writes data to buffer; try_recv finds it.
 
                 // Non-blocking receive
                 bool ok;
@@ -7155,6 +7149,7 @@ startfunc:
                     atomic_store(&scope->count, 0);
                     scope->mode = (uint8_t)scope_mode;
                     atomic_store(&scope->cancel_requested, false);
+                    atomic_init(&scope->child_lock, false);
                     scope->first_error = xr_null();
                     scope->errors = NULL;
                     scope->first_child = NULL;
@@ -7271,6 +7266,14 @@ startfunc:
                 XrChannel *timer_ch = xr_channel_new_timer(isolate, timeout_ms);
                 if (!timer_ch) {
                     VM_RUNTIME_ERROR(XR_ERR_OUT_OF_MEMORY, "time.after: out of memory");
+                }
+
+                // Phase 3: arm on current worker's timer wheel (no polling)
+                {
+                    XrWorker *_w = xr_current_worker();
+                    if (_w && _w->p.timer_wheel) {
+                        xr_channel_timer_arm(timer_ch, _w->p.timer_wheel);
+                    }
                 }
 
                 R(a) = xr_value_from_channel(timer_ch);

@@ -41,6 +41,17 @@
 XR_FUNC void xr_coro_ready(struct XrayIsolate *X, XrCoroutine *gp, bool next);
 XR_FUNC void xr_coro_cancel(XrCoroutine *coro);
 
+// Phase 2 (CORO-03): lightweight TAS spinlock for child list serialization.
+// Critical sections are very short (list link/unlink), so spinning is fine.
+static inline void child_lock_acquire(_Atomic bool *lock) {
+    while (atomic_exchange_explicit(lock, true, memory_order_acquire)) {
+        // Spin — critical section is < 100 ns
+    }
+}
+static inline void child_lock_release(_Atomic bool *lock) {
+    atomic_store_explicit(lock, false, memory_order_release);
+}
+
 /* ========== Task Creation ========== */
 
 XrTask *xr_task_create(XrCoroutine *parent_coro, XrCoroutine *executor) {
@@ -63,6 +74,7 @@ XrTask *xr_task_create(XrCoroutine *parent_coro, XrCoroutine *executor) {
     task->link_mode = 0;
     task->_pad1 = 0;
     task->_pad2 = 0;
+    atomic_init(&task->child_lock, false);
     task->parent = NULL;
     task->first_child = NULL;
     task->next_sibling = NULL;
@@ -112,13 +124,16 @@ void xr_task_attach_child(XrTask *parent, XrTask *child) {
     if (!parent || !child) return;
     child->parent = parent;
     child->flags |= XR_TASK_FLG_HAS_PARENT;
+    child_lock_acquire(&parent->child_lock);
     child->next_sibling = parent->first_child;
     parent->first_child = child;
     parent->child_count++;
+    child_lock_release(&parent->child_lock);
 }
 
 void xr_task_detach_child(XrTask *parent, XrTask *child) {
     if (!parent || !child) return;
+    child_lock_acquire(&parent->child_lock);
     XrTask **pp = &parent->first_child;
     while (*pp) {
         if (*pp == child) {
@@ -127,10 +142,12 @@ void xr_task_detach_child(XrTask *parent, XrTask *child) {
             child->parent = NULL;
             child->next_sibling = NULL;
             child->flags &= ~XR_TASK_FLG_HAS_PARENT;
+            child_lock_release(&parent->child_lock);
             return;
         }
         pp = &(*pp)->next_sibling;
     }
+    child_lock_release(&parent->child_lock);
 }
 
 /* ========== Structured Completion ========== */
@@ -139,7 +156,11 @@ void xr_task_try_complete(XrTask *task, XrValue result) {
     if (!task) return;
     task->result = result;
 
-    if (task->first_child) {
+    child_lock_acquire(&task->child_lock);
+    bool has_children = (task->first_child != NULL);
+    child_lock_release(&task->child_lock);
+
+    if (has_children) {
         atomic_store_explicit(&task->state, XR_TASK_COMPLETING, memory_order_release);
     } else {
         xr_task_finalize(task, XR_TASK_COMPLETED);
@@ -161,9 +182,26 @@ void xr_task_finalize(XrTask *task, uint8_t final_state) {
 
 void xr_task_child_completed(XrTask *parent, XrTask *child) {
     if (!parent || !child) return;
-    xr_task_detach_child(parent, child);
 
-    if (!parent->first_child) {
+    // Phase 2 (CORO-03): detach + empty check must be atomic to avoid TOCTOU.
+    // Inline the detach logic here under one lock hold.
+    child_lock_acquire(&parent->child_lock);
+    XrTask **pp = &parent->first_child;
+    while (*pp) {
+        if (*pp == child) {
+            *pp = child->next_sibling;
+            parent->child_count--;
+            child->parent = NULL;
+            child->next_sibling = NULL;
+            child->flags &= ~XR_TASK_FLG_HAS_PARENT;
+            break;
+        }
+        pp = &(*pp)->next_sibling;
+    }
+    bool no_children = (parent->first_child == NULL);
+    child_lock_release(&parent->child_lock);
+
+    if (no_children) {
         uint8_t s = atomic_load_explicit(&parent->state, memory_order_acquire);
         if (s == XR_TASK_COMPLETING) {
             xr_task_finalize(parent, XR_TASK_COMPLETED);
@@ -194,13 +232,16 @@ void xr_task_cancel_tree(XrTask *task) {
         xr_coro_cancel(task->coro);
     }
 
-    // Recursively cancel all children
+    // Recursively cancel all children (hold lock while iterating)
+    child_lock_acquire(&task->child_lock);
     for (XrTask *child = task->first_child; child; child = child->next_sibling) {
         xr_task_cancel_tree(child);
     }
+    bool no_children = (task->first_child == NULL);
+    child_lock_release(&task->child_lock);
 
     // If no children, finalize now
-    if (!task->first_child) {
+    if (no_children) {
         xr_task_finalize(task, XR_TASK_CANCELLED);
     }
 }
@@ -211,16 +252,19 @@ void xr_task_fail_with_propagation(XrTask *task, XrValue error) {
     if (!task) return;
     task->error = error;
 
-    if (task->first_child) {
+    child_lock_acquire(&task->child_lock);
+    bool has_children = (task->first_child != NULL);
+    if (has_children) {
         // Cancel all children before failing
         atomic_store_explicit(&task->state, XR_TASK_CANCELLING, memory_order_release);
         for (XrTask *child = task->first_child; child; child = child->next_sibling) {
             xr_task_cancel_tree(child);
         }
-        if (!task->first_child) {
-            xr_task_finalize(task, XR_TASK_FAILED);
-        }
-    } else {
+        has_children = (task->first_child != NULL);
+    }
+    child_lock_release(&task->child_lock);
+
+    if (!has_children) {
         xr_task_finalize(task, XR_TASK_FAILED);
     }
 

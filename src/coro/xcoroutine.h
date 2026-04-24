@@ -483,6 +483,7 @@ typedef struct XrScopeContext {
     struct XrScopeContext *parent;
     uint8_t mode;                     // XrScopeMode
     _Atomic bool cancel_requested;    // linked scope: set when first child fails
+    _Atomic bool child_lock;          // Phase 2 (CORO-10): spinlock for first_child list
     XrValue first_error;              // linked scope: first child error
     struct XrArray *errors;           // supervisor scope: collected error array
     struct XrCoroutine *first_child;  // linked list of child coros in this scope

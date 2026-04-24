@@ -113,6 +113,10 @@ typedef struct XcgenFunc {
     // Defer tracking: number of deferred closures in this function.
     // Codegen emits _defer_N / _defer_N_set locals and LIFO cleanup at returns.
     int            defer_count;
+
+    // Conditional select: XIR_SELECT_COND stores the condition ref here,
+    // XIR_SELECT reads it to emit a C ternary expression.
+    XirRef         last_select_cond;
 } XcgenFunc;
 
 /* ========== Forward Declarations ========== */

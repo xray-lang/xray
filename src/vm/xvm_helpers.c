@@ -165,8 +165,8 @@ XrCFunction *xr_vm_cfunction_new(XrayIsolate *isolate, XrCFunctionPtr func, cons
     cfunc->as.func = func;
     cfunc->name = name;
     cfunc->is_yieldable = false;
-    cfunc->cfunc_class = XR_CFUNC_FAST;
-    cfunc->auto_slow_count = 0;
+    atomic_init(&cfunc->cfunc_class, XR_CFUNC_FAST);
+    atomic_init(&cfunc->auto_slow_count, 0);
 
     return cfunc;
 }
@@ -186,8 +186,8 @@ XrCFunction *xr_vm_yieldable_cfunction_new(XrayIsolate *isolate, XrYieldableCFun
     cfunc->as.yieldable = func;
     cfunc->name = name;
     cfunc->is_yieldable = true;
-    cfunc->cfunc_class = XR_CFUNC_FAST;
-    cfunc->auto_slow_count = 0;
+    atomic_init(&cfunc->cfunc_class, XR_CFUNC_FAST);
+    atomic_init(&cfunc->auto_slow_count, 0);
 
     return cfunc;
 }
