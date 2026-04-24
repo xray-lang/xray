@@ -1833,6 +1833,8 @@ bool xir_translate_call_ops(XirBuilder *b, XirBlock **cur_blk,
             XirRef enc_val = xir_emit_unary(b->func, blk, XIR_CONST_I64, XR_REP_I64, enc_ref);
             XirRef result = xir_emit(b->func, blk, XIR_CALL_C, XR_REP_I64, fn_ref, enc_val);
             blk->ins[blk->nins - 1].flags |= XIR_FLAG_SIDE_EFFECT;
+            XirRef mg_args[2] = { map, key };
+            builder_bind_call_args(b, result, mg_args, 2);
             builder_set_slot(b, a, result);
             b->ops_translated++;
             return true;
@@ -1851,10 +1853,18 @@ bool xir_translate_call_ops(XirBuilder *b, XirBlock **cur_blk,
             }
 
             XirRef map = builder_get_slot(b, blk, rb);
-            // Load constant key as tagged value (string ptr)
+            // Load constant key as string pointer (same as OP_LOADK for strings)
             XrValue kval = PROTO_CONST_FAST(b->proto, kc);
-            XirRef key = xir_const_i64(b->func, kval.i);
-            XirRef key_val = xir_emit_unary(b->func, blk, XIR_CONST_I64, XR_REP_I64, key);
+            XirRef key_val;
+            if (XR_IS_STRING(kval)) {
+                XrString *s = XR_TO_STRING(kval);
+                XirRef c = xir_const_ptr(b->func, (void *)s);
+                key_val = xir_emit_unary(b->func, blk, XIR_CONST_PTR, XR_REP_PTR, c);
+                builder_tag_vreg(b, key_val, VTAG_PTR, 0);
+            } else {
+                XirRef c = xir_const_i64(b->func, kval.i);
+                key_val = xir_emit_unary(b->func, blk, XIR_CONST_I64, XR_REP_I64, c);
+            }
             {
                 XirRef off0 = xir_const_i64(b->func, (int64_t)JIT_CALL_ARGS_OFFSET);
                 xir_emit_raw(b->func, blk, XIR_STORE_CORO, XR_REP_VOID, off0, map, XIR_NONE);
@@ -1871,6 +1881,8 @@ bool xir_translate_call_ops(XirBuilder *b, XirBlock **cur_blk,
             XirRef enc_val2 = xir_emit_unary(b->func, blk, XIR_CONST_I64, XR_REP_I64, enc_ref);
             XirRef result = xir_emit(b->func, blk, XIR_CALL_C, XR_REP_PTR, fn_ref, enc_val2);
             blk->ins[blk->nins - 1].flags |= XIR_FLAG_SIDE_EFFECT;
+            XirRef mgk_args[2] = { map, key_val };
+            builder_bind_call_args(b, result, mgk_args, 2);
             // Use compiler type for map value (Map<K,V> → V known at compile time)
             builder_tag_from_slot(b, result, a);
             builder_set_slot(b, a, result);
@@ -1905,8 +1917,10 @@ bool xir_translate_call_ops(XirBuilder *b, XirBlock **cur_blk,
             XirRef fn_ref = xir_const_ptr(b->func, (void *)xr_jit_map_set);
             XirRef enc_ref = xir_const_i64(b->func, encoded);
             XirRef enc_val = xir_emit_unary(b->func, blk, XIR_CONST_I64, XR_REP_I64, enc_ref);
-            xir_emit(b->func, blk, XIR_CALL_C, XR_REP_VOID, fn_ref, enc_val);
+            XirRef ms_result = xir_emit(b->func, blk, XIR_CALL_C, XR_REP_I64, fn_ref, enc_val);
             blk->ins[blk->nins - 1].flags |= XIR_FLAG_SIDE_EFFECT;
+            XirRef ms_args[3] = { map, key, val };
+            builder_bind_call_args(b, ms_result, ms_args, 3);
             b->ops_translated++;
             return true;
         }
@@ -1924,9 +1938,18 @@ bool xir_translate_call_ops(XirBuilder *b, XirBlock **cur_blk,
             }
 
             XirRef map = builder_get_slot(b, blk, a);
+            // Load constant key as string pointer (same as OP_LOADK for strings)
             XrValue kval = PROTO_CONST_FAST(b->proto, kb);
-            XirRef key = xir_const_i64(b->func, kval.i);
-            XirRef key_val = xir_emit_unary(b->func, blk, XIR_CONST_I64, XR_REP_I64, key);
+            XirRef key_val;
+            if (XR_IS_STRING(kval)) {
+                XrString *s = XR_TO_STRING(kval);
+                XirRef c = xir_const_ptr(b->func, (void *)s);
+                key_val = xir_emit_unary(b->func, blk, XIR_CONST_PTR, XR_REP_PTR, c);
+                builder_tag_vreg(b, key_val, VTAG_PTR, 0);
+            } else {
+                XirRef c = xir_const_i64(b->func, kval.i);
+                key_val = xir_emit_unary(b->func, blk, XIR_CONST_I64, XR_REP_I64, c);
+            }
             XirRef val = builder_get_slot(b, blk, rc);
             {
                 XirRef off0 = xir_const_i64(b->func, (int64_t)JIT_CALL_ARGS_OFFSET);
@@ -1947,8 +1970,10 @@ bool xir_translate_call_ops(XirBuilder *b, XirBlock **cur_blk,
             XirRef fn_ref = xir_const_ptr(b->func, (void *)xr_jit_map_set);
             XirRef enc_ref = xir_const_i64(b->func, encoded);
             XirRef enc_val = xir_emit_unary(b->func, blk, XIR_CONST_I64, XR_REP_I64, enc_ref);
-            xir_emit(b->func, blk, XIR_CALL_C, XR_REP_VOID, fn_ref, enc_val);
+            XirRef msk_result = xir_emit(b->func, blk, XIR_CALL_C, XR_REP_I64, fn_ref, enc_val);
             blk->ins[blk->nins - 1].flags |= XIR_FLAG_SIDE_EFFECT;
+            XirRef msk_args[3] = { map, key_val, val };
+            builder_bind_call_args(b, msk_result, msk_args, 3);
             b->ops_translated++;
             return true;
         }
@@ -1987,8 +2012,10 @@ bool xir_translate_call_ops(XirBuilder *b, XirBlock **cur_blk,
             XirRef fn_ref = xir_const_ptr(b->func, (void *)xr_jit_map_increment);
             XirRef enc_ref = xir_const_i64(b->func, (int64_t)key_tag);
             XirRef enc_val = xir_emit_unary(b->func, blk, XIR_CONST_I64, XR_REP_I64, enc_ref);
-            xir_emit(b->func, blk, XIR_CALL_C, XR_REP_VOID, fn_ref, enc_val);
+            XirRef mi_result = xir_emit(b->func, blk, XIR_CALL_C, XR_REP_I64, fn_ref, enc_val);
             blk->ins[blk->nins - 1].flags |= XIR_FLAG_SIDE_EFFECT;
+            XirRef mi_args[2] = { map, key };
+            builder_bind_call_args(b, mi_result, mi_args, 2);
             b->ops_translated++;
             return true;
         }
@@ -2001,17 +2028,14 @@ bool xir_translate_call_ops(XirBuilder *b, XirBlock **cur_blk,
             XirRef map = builder_get_slot(b, blk, a);
             for (int j = 0; j < count; j++) {
                 XirRef val = builder_get_slot(b, blk, a + 1 + j);
-                // Store map, key (constant from j-th position), value
+                XirRef idx_ref = xir_const_i64(b->func, (int64_t)j);
+                XirRef idx_val = xir_emit_unary(b->func, blk, XIR_CONST_I64, XR_REP_I64, idx_ref);
+                // Store map, key, value to coro for JIT path
                 {
                     XirRef off0 = xir_const_i64(b->func, (int64_t)JIT_CALL_ARGS_OFFSET);
                     xir_emit_raw(b->func, blk, XIR_STORE_CORO, XR_REP_VOID, off0, map, XIR_NONE);
                     blk->ins[blk->nins - 1].flags |= XIR_FLAG_SIDE_EFFECT;
-                    // Key: j-th constant from constant pool (pairs: key0, key1, ...)
-                    // For batch set, keys are consecutive constants starting from proto->symbols
-                    // Use index_set as fallback — store index, map, value
                     int32_t off1v = JIT_CALL_ARGS_OFFSET + 8;
-                    XirRef idx_ref = xir_const_i64(b->func, (int64_t)j);
-                    XirRef idx_val = xir_emit_unary(b->func, blk, XIR_CONST_I64, XR_REP_I64, idx_ref);
                     XirRef off1 = xir_const_i64(b->func, (int64_t)off1v);
                     xir_emit_raw(b->func, blk, XIR_STORE_CORO, XR_REP_VOID, off1, idx_val, XIR_NONE);
                     blk->ins[blk->nins - 1].flags |= XIR_FLAG_SIDE_EFFECT;
@@ -2025,8 +2049,10 @@ bool xir_translate_call_ops(XirBuilder *b, XirBlock **cur_blk,
                 XirRef fn_ref = xir_const_ptr(b->func, (void *)xr_jit_map_set);
                 XirRef enc_ref = xir_const_i64(b->func, encoded);
                 XirRef enc_val = xir_emit_unary(b->func, blk, XIR_CONST_I64, XR_REP_I64, enc_ref);
-                xir_emit(b->func, blk, XIR_CALL_C, XR_REP_VOID, fn_ref, enc_val);
+                XirRef msks_result = xir_emit(b->func, blk, XIR_CALL_C, XR_REP_I64, fn_ref, enc_val);
                 blk->ins[blk->nins - 1].flags |= XIR_FLAG_SIDE_EFFECT;
+                XirRef msks_args[3] = { map, idx_val, val };
+                builder_bind_call_args(b, msks_result, msks_args, 3);
             }
             b->ops_translated++;
             return true;

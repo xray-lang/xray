@@ -874,6 +874,71 @@ throw_check_done:
                 return;
             }
 
+            // Map get: CALL_C(xr_jit_map_get, key_tag)
+            // call_args[0] = map, call_args[1] = key
+            if (fn_ptr == (void *)xr_jit_map_get) {
+                uint32_t dst_idx = XIR_REF_INDEX(ins->dst);
+                xcgen_buf_printf(b, "    v%u = xrt_map_get((xrt_map_t *)", dst_idx);
+                if (cf->call_args_count > 0)
+                    xcg_emit_ref(b, func, cf->call_args[0]);
+                else
+                    xcgen_buf_printf(b, "(%s){0}", tagged_type);
+                xcgen_buf_puts(b, ".ptr, ");
+                if (cf->call_args_count > 1)
+                    emit_ref_as_tagged(b, func, cf->call_args[1]);
+                else
+                    xcgen_buf_printf(b, "(%s){0}", tagged_type);
+                xcgen_buf_puts(b, ");\n");
+                cf->needs_runtime = true;
+                cf->call_args_count = 0;
+                return;
+            }
+
+            // Map set: CALL_C(xr_jit_map_set, (key_tag << 8) | val_tag)
+            // call_args[0] = map, call_args[1] = key, call_args[2] = value
+            if (fn_ptr == (void *)xr_jit_map_set) {
+                xcgen_buf_puts(b, "    xrt_map_set((xrt_map_t *)");
+                if (cf->call_args_count > 0)
+                    xcg_emit_ref(b, func, cf->call_args[0]);
+                else
+                    xcgen_buf_printf(b, "(%s){0}", tagged_type);
+                xcgen_buf_puts(b, ".ptr, ");
+                if (cf->call_args_count > 1)
+                    emit_ref_as_tagged(b, func, cf->call_args[1]);
+                else
+                    xcgen_buf_printf(b, "(%s){0}", tagged_type);
+                xcgen_buf_puts(b, ", ");
+                if (cf->call_args_count > 2)
+                    emit_ref_as_tagged(b, func, cf->call_args[2]);
+                else
+                    xcgen_buf_printf(b, "(%s){0}", tagged_type);
+                xcgen_buf_puts(b, ");\n");
+                cf->needs_runtime = true;
+                cf->call_args_count = 0;
+                return;
+            }
+
+            // Map increment: CALL_C(xr_jit_map_increment, key_tag)
+            // call_args[0] = map, call_args[1] = key
+            if (fn_ptr == (void *)xr_jit_map_increment) {
+                xcgen_buf_puts(b, "    { xrt_map_t *_m = (xrt_map_t *)");
+                if (cf->call_args_count > 0)
+                    xcg_emit_ref(b, func, cf->call_args[0]);
+                else
+                    xcgen_buf_printf(b, "(%s){0}", tagged_type);
+                xcgen_buf_puts(b, ".ptr; ");
+                xcgen_buf_puts(b, "XrtValue _k = ");
+                if (cf->call_args_count > 1)
+                    emit_ref_as_tagged(b, func, cf->call_args[1]);
+                else
+                    xcgen_buf_printf(b, "(%s){0}", tagged_type);
+                xcgen_buf_puts(b, "; XrtValue _cv = xrt_map_get(_m, _k); ");
+                xcgen_buf_puts(b, "xrt_map_set(_m, _k, xrt_box_int((_cv.tag == XRT_TAG_I64 ? _cv.i : 0) + 1)); }\n");
+                cf->needs_runtime = true;
+                cf->call_args_count = 0;
+                return;
+            }
+
             // StringBuilder new: CALL_C(xrt_strbuf_new_sentinel, 0)
             if (fn_ptr == (void *)xrt_strbuf_new_sentinel) {
                 uint32_t dst_idx = XIR_REF_INDEX(ins->dst);

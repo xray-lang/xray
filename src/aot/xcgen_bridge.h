@@ -33,6 +33,12 @@ XR_FUNC int64_t xr_jit_tarray_get(void *, int64_t);
 XR_FUNC int64_t xr_jit_tarray_set(void *, int64_t);
 XR_FUNC int64_t xr_jit_print(void *, int64_t);
 
+/* ========== Map Operations ========== */
+
+XR_FUNC int64_t xr_jit_map_get(void *, int64_t);
+XR_FUNC int64_t xr_jit_map_set(void *, int64_t);
+XR_FUNC int64_t xr_jit_map_increment(void *, int64_t);
+
 /* ========== Tagged Arithmetic (runtime fallback) ========== */
 
 XR_FUNC int64_t xr_jit_rt_add(void *, int64_t);
