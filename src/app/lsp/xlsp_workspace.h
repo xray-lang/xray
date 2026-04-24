@@ -43,14 +43,14 @@ typedef struct XrLspWorkspaceSymbol {
     bool is_exported;
     bool is_function;
     bool is_class;
-    
+
     // Definition location
     XrLspSymbolLocation def_loc;
-    
+
     // All references
     XrLspSymbolRef *refs;
     int ref_count;
-    
+
     struct XrLspWorkspaceSymbol *next;  // Hash chain
 } XrLspWorkspaceSymbol;
 
@@ -59,7 +59,7 @@ typedef struct XrLspWorkspaceIndex {
     XrLspWorkspaceSymbol **symbols;  // Hash table
     int table_size;
     int symbol_count;
-    
+
     // Indexed files
     char **indexed_files;
     int file_count;
@@ -77,7 +77,7 @@ XR_FUNC void xlsp_workspace_index_document(XrLspWorkspaceIndex *idx, XrLspDocume
 XR_FUNC void xlsp_workspace_remove_document(XrLspWorkspaceIndex *idx, const char *uri);
 
 // Find symbol definition
-XR_FUNC XrLspWorkspaceSymbol *xlsp_workspace_find_definition(XrLspWorkspaceIndex *idx, 
+XR_FUNC XrLspWorkspaceSymbol *xlsp_workspace_find_definition(XrLspWorkspaceIndex *idx,
                                                        const char *name);
 
 // Find all references to a symbol
@@ -109,6 +109,10 @@ typedef struct XrLspIndexTaskData {
 // Start background workspace indexing
 XR_FUNC void xlsp_workspace_start_background_index(XrLspServer *server, const char *root_path);
 
+// Start background indexing for multiple roots (all scanned into one batch)
+XR_FUNC void xlsp_workspace_start_background_index_roots(XrLspServer *server,
+                                                          const char **roots, int root_count);
+
 // Background task execute function (runs in worker thread)
 XR_FUNC void xlsp_workspace_index_task_execute(void *data);
 
@@ -133,5 +137,8 @@ XR_FUNC int xlsp_workspace_get_index_notify_fd(XrLspServer *server);
 
 // Merge index results into workspace analyzer
 XR_FUNC void xlsp_workspace_merge_index_results(XrLspServer *server, XrLspIndexResult *results);
+
+// Purge all analyzer/cache state for files under a path prefix
+XR_FUNC void xlsp_workspace_purge_prefix(XrLspServer *server, const char *path_prefix);
 
 #endif // XLSP_WORKSPACE_H
