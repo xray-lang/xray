@@ -46,7 +46,7 @@ typedef enum {
 } XirUseKind;
 
 // Def-use chains for an entire function
-typedef struct {
+typedef struct XirDefUse {
     XirUse   *uses; // flat array of all use records
     uint32_t *offset; // offset[v] = start index in uses[] for vreg v
     uint32_t *count; // count[v]  = number of uses for vreg v
