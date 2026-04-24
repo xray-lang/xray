@@ -114,6 +114,8 @@ void xr_package_info_free(XrPackageInfo *info) {
     if (!info) return;
 
     xr_free(info->name);
+    xr_free(info->latest_version);
+    xr_free(info->description);
 
     for (int i = 0; i < info->version_count; i++) {
         xr_free(info->versions[i]);

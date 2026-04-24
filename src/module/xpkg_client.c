@@ -356,13 +356,53 @@ XrPackageInfo* xr_pkg_client_get_info(const char *owner, const char *name) {
     snprintf(full_name, sizeof(full_name), "%s/%s", owner, name);
     info->name = xr_strdup(full_name);
 
-    // Parse version list
-    info->versions = json_get_string_array(resp->body, "versions",
-                                           &info->version_count);
+    // Parse response body once
+    XrJsonValue *root = xjson_parse(resp->body, resp->body_len);
+    if (root) {
+        // Extract version list
+        XrJsonValue *ver_arr = xjson_get_array(root, "versions");
+        if (ver_arr) {
+            int n = xjson_array_len(ver_arr);
+            if (n > 0) {
+                info->versions = (char**)xr_malloc((size_t)n * sizeof(char*));
+                if (info->versions) {
+                    for (int i = 0; i < n; i++) {
+                        XrJsonValue *elem = xjson_array_get(ver_arr, i);
+                        if (elem && xjson_is_string(elem)) {
+                            info->versions[info->version_count++] = xr_strdup(elem->as.string);
+                        }
+                    }
+                }
+            }
+        }
 
-    // Parse dependency list
-    info->deps = json_get_string_array(resp->body, "dependencies",
-                                       &info->dep_count);
+        // Extract dependency list
+        XrJsonValue *dep_arr = xjson_get_array(root, "dependencies");
+        if (dep_arr) {
+            int n = xjson_array_len(dep_arr);
+            if (n > 0) {
+                info->deps = (char**)xr_malloc((size_t)n * sizeof(char*));
+                if (info->deps) {
+                    for (int i = 0; i < n; i++) {
+                        XrJsonValue *elem = xjson_array_get(dep_arr, i);
+                        if (elem && xjson_is_string(elem)) {
+                            info->deps[info->dep_count++] = xr_strdup(elem->as.string);
+                        }
+                    }
+                }
+            }
+        }
+
+        // Extract latest_version
+        const char *latest = xjson_get_string(root, "latest_version");
+        if (latest) info->latest_version = xr_strdup(latest);
+
+        // Extract description
+        const char *desc = xjson_get_string(root, "description");
+        if (desc) info->description = xr_strdup(desc);
+
+        xjson_free(root);
+    }
 
     xr_pkg_response_free(resp);
     return info;
@@ -700,7 +740,7 @@ bool xr_pkg_client_save_token(const char *token) {
         return false;
     }
 
-    fprintf(f, "token = \"%s\"\n", token);
+    fprintf(f, "{\"token\":\"%s\"}\n", token);
     fclose(f);
 
     // Set permissions to user read/write only
@@ -723,9 +763,25 @@ bool xr_pkg_client_load_token(char **token_out) {
     char *content = xr_file_read_all(config_path, "r", &len);
     if (!content) return false;
 
-    *token_out = json_get_string(content, "token");
+    XrJsonValue *root = xjson_parse(content, len);
     xr_free(content);
-
+    if (!root) {
+        // Migrate legacy TOML format: token = "VALUE"
+        content = xr_file_read_all(config_path, "r", &len);
+        if (!content) return false;
+        const char *q1 = strchr(content, '"');
+        if (q1) {
+            const char *q2 = strchr(q1 + 1, '"');
+            if (q2 && q2 > q1 + 1) {
+                *token_out = xr_strndup(q1 + 1, (size_t)(q2 - q1 - 1));
+            }
+        }
+        xr_free(content);
+        return *token_out != NULL;
+    }
+    const char *val = xjson_get_string(root, "token");
+    *token_out = val ? xr_strdup(val) : NULL;
+    xjson_free(root);
     return *token_out != NULL;
 }
 
@@ -758,8 +814,8 @@ bool xr_pkg_client_download(const char *owner, const char *name, const char *ver
 bool xr_pkg_client_install(const char *owner, const char *name, const char *version, const char *dest) {
     (void)owner; (void)name; (void)version; (void)dest; return false;
 }
-bool xr_pkg_client_publish(const char *tarball, const char *token) {
-    (void)tarball; (void)token; return false;
+bool xr_pkg_client_publish(const char *tarball, const char *token, const XrPkgPublishInfo *info) {
+    (void)tarball; (void)token; (void)info; return false;
 }
 
 bool xr_pkg_client_login(char **token_out) { (void)token_out; return false; }

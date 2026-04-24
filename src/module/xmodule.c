@@ -30,7 +30,9 @@
 #include <string.h>
 #include <unistd.h>
 #include <limits.h>
+#include <dirent.h>
 #include <dlfcn.h>  // dlopen, dlsym, dlclose (native package loading)
+#include "xlockfile.h"
 
 /* ========== Forward Declarations ========== */
 
@@ -523,22 +525,94 @@ char* xr_module_resolve_path(XrayIsolate *isolate, const char *module_name) {
 
     // 3. Third-party package (owner/name format): ~/.xray/packages/owner/name/version/
     if (strchr(module_name, '/') != NULL) {
-        // Get user home directory
         const char *home = getenv("HOME");
         if (home) {
-            // Parse owner/name
             char owner[64], name[64];
             if (sscanf(module_name, "%63[^/]/%63s", owner, name) == 2) {
-                // Try to find installed package (simplified: use latest version directory)
-                // Full implementation needs to read xray.lock or scan version directories
-                snprintf(path, sizeof(path), "%s/.xray/packages/%s/%s/latest/src/main.xr",
-                         home, owner, name);
-                if (access(path, F_OK) == 0) return xr_strdup(path);
+                const char *version = NULL;
+                XrLockfile *lock = NULL;
 
-                // Try other entry file names
-                snprintf(path, sizeof(path), "%s/.xray/packages/%s/%s/latest/main.xr",
-                         home, owner, name);
-                if (access(path, F_OK) == 0) return xr_strdup(path);
+                // Read version from xray.lock if present
+                if (xr_isolate_get_script_file(isolate)) {
+                    char lock_dir[PATH_MAX];
+                    strncpy(lock_dir, xr_isolate_get_script_file(isolate),
+                            sizeof(lock_dir) - 1);
+                    lock_dir[sizeof(lock_dir) - 1] = '\0';
+                    char *ls = strrchr(lock_dir, '/');
+                    if (ls) *ls = '\0';
+                    char lock_path[PATH_MAX];
+                    snprintf(lock_path, sizeof(lock_path), "%s/xray.lock", lock_dir);
+                    lock = xr_lockfile_load(lock_path);
+                }
+                if (lock) {
+                    const XrLockedPackage *lp = xr_lockfile_find(lock, module_name);
+                    if (lp && lp->version) version = lp->version;
+                }
+
+                if (version) {
+                    // Exact version from lockfile
+                    // Try xray script entry points
+                    const char *entries[] = {
+                        "src/main.xr", "main.xr", "%s.xr"
+                    };
+                    for (int e = 0; e < 3; e++) {
+                        if (e == 2) {
+                            snprintf(path, sizeof(path),
+                                     "%s/.xray/packages/%s/%s/%s/%s.xr",
+                                     home, owner, name, version, name);
+                        } else {
+                            snprintf(path, sizeof(path),
+                                     "%s/.xray/packages/%s/%s/%s/%s",
+                                     home, owner, name, version, entries[e]);
+                        }
+                        if (access(path, F_OK) == 0) {
+                            xr_lockfile_free(lock);
+                            return xr_strdup(path);
+                        }
+                    }
+                    // Try native module (.dylib / .so)
+                    snprintf(path, sizeof(path),
+                             "%s/.xray/packages/%s/%s/%s/build/lib%s.dylib",
+                             home, owner, name, version, name);
+                    if (access(path, F_OK) == 0) {
+                        xr_lockfile_free(lock);
+                        return xr_strdup(path);
+                    }
+                    snprintf(path, sizeof(path),
+                             "%s/.xray/packages/%s/%s/%s/build/lib%s.so",
+                             home, owner, name, version, name);
+                    if (access(path, F_OK) == 0) {
+                        xr_lockfile_free(lock);
+                        return xr_strdup(path);
+                    }
+                }
+
+                xr_lockfile_free(lock);
+
+                // Fallback: scan version directories (no lockfile)
+                char pkg_base[PATH_MAX];
+                snprintf(pkg_base, sizeof(pkg_base),
+                         "%s/.xray/packages/%s/%s", home, owner, name);
+                DIR *vdir = opendir(pkg_base);
+                if (vdir) {
+                    struct dirent *ve;
+                    while ((ve = readdir(vdir)) != NULL) {
+                        if (ve->d_name[0] == '.') continue;
+                        snprintf(path, sizeof(path), "%s/%s/src/main.xr",
+                                 pkg_base, ve->d_name);
+                        if (access(path, F_OK) == 0) {
+                            closedir(vdir);
+                            return xr_strdup(path);
+                        }
+                        snprintf(path, sizeof(path), "%s/%s/main.xr",
+                                 pkg_base, ve->d_name);
+                        if (access(path, F_OK) == 0) {
+                            closedir(vdir);
+                            return xr_strdup(path);
+                        }
+                    }
+                    closedir(vdir);
+                }
             }
         }
     }
@@ -679,14 +753,45 @@ static XrModule* load_native_module(XrayIsolate *isolate, const char *module_nam
     XrModuleRegistry *registry = (XrModuleRegistry*)xr_isolate_get_module_registry(isolate);
     if (!registry) return NULL;
 
-    // Find loader from registry
+    // Find loader from static registry
     void *loader_ptr = xr_hashmap_get(registry->native_loaders, module_name);
 
     if (!loader_ptr) {
-        return NULL;  // Not a native module
+        // Try dlopen from installed package path
+        char *dylib_path = xr_module_resolve_path(isolate, module_name);
+        if (!dylib_path) return NULL;
+
+        // Only attempt dlopen for shared libraries
+        const char *ext = strrchr(dylib_path, '.');
+        if (!ext || (strcmp(ext, ".dylib") != 0 && strcmp(ext, ".so") != 0)) {
+            xr_free(dylib_path);
+            return NULL;  // Not a native module
+        }
+
+        void *handle = dlopen(dylib_path, RTLD_NOW | RTLD_LOCAL);
+        if (!handle) {
+            XR_DBG_MODULE("dlopen failed for '%s': %s", dylib_path, dlerror());
+            xr_free(dylib_path);
+            return NULL;
+        }
+        xr_free(dylib_path);
+
+        // Extract short name from module_name (owner/name -> name)
+        const char *short_name = strrchr(module_name, '/');
+        short_name = short_name ? short_name + 1 : module_name;
+
+        // Look for xr_load_module_<name>(XrayIsolate*) symbol
+        char sym[128];
+        snprintf(sym, sizeof(sym), "xr_load_module_%s", short_name);
+        NativeModuleLoader dyn_loader = (NativeModuleLoader)dlsym(handle, sym);
+        if (!dyn_loader) {
+            XR_DBG_MODULE("symbol '%s' not found in dylib", sym);
+            dlclose(handle);
+            return NULL;
+        }
+        loader_ptr = (void*)dyn_loader;
     }
 
-    // Extract loader function pointer
     NativeModuleLoader loader = (NativeModuleLoader)loader_ptr;
 
     // 1. Call C loader
