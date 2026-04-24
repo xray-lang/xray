@@ -480,13 +480,16 @@ static void xcg_emit_field_load(XcgenBuf *b, XirFunc *func, XirIns *ins,
             }
         }
     }
-    // Fallback: raw byte offset access
+    // Fallback: raw byte offset access into 16-byte XrtValue field slots
     {
         uint8_t dst_t = xcg_ref_type(func, ins->dst);
         uint8_t base_t = xcg_ref_type(func, ins->args[0]);
         bool base_tagged = (base_t == XR_REP_PTR || base_t == XR_REP_TAGGED ||
                             base_t == XR_REP_STR);
-        const char *cast = (dst_t == XR_REP_F64) ? "double" : "int64_t";
+        bool dst_is_tagged = (dst_t == XR_REP_PTR || dst_t == XR_REP_TAGGED ||
+                              dst_t == XR_REP_STR);
+        const char *cast = dst_is_tagged ? "XrValue" :
+                           (dst_t == XR_REP_F64) ? "double" : "int64_t";
         int64_t adj_offset = offset - 24;
         if (adj_offset < 0) adj_offset = 0;
         xcgen_buf_printf(b, "    v%u = *(%s*)((char*)", dst_idx, cast);
@@ -570,7 +573,9 @@ static void xcg_emit_field_store(XcgenBuf *b, XirFunc *func, XirIns *ins,
             }
         }
     }
-    // Fallback: raw byte offset access
+    // Fallback: raw byte offset store into 16-byte XrtValue field slots.
+    // Always write a full 16-byte XrValue (with proper tag) so that the
+    // LOAD_FIELD fallback (which reads *(XrValue*)) gets a complete value.
     {
         int64_t adj_offset = offset - 24;
         if (adj_offset < 0) adj_offset = 0;
@@ -580,44 +585,31 @@ static void xcg_emit_field_store(XcgenBuf *b, XirFunc *func, XirIns *ins,
         uint8_t val_type = xcg_ref_type(func, ins->args[1]);
         bool val_tagged = (val_type == XR_REP_PTR || val_type == XR_REP_TAGGED ||
                            val_type == XR_REP_STR);
+
+        // Emit: { XrValue _sv = <boxed_value>; memcpy(base + off, &_sv, 16); }
         if (val_tagged) {
-            // Use sf_tag (ins->rep) to pick correct XrValue member
-            bool is_float = (ins->rep == XR_TAG_F64);
-            const char *extract = is_float ? "xrt_unbox_float" : "xrt_unbox_int";
-            const char *ctype   = is_float ? "double" : "int64_t";
-            xcgen_buf_printf(b, "    { %s _sv = %s(", ctype, extract);
+            // Already a full XrValue — store directly
+            xcgen_buf_puts(b, "    { XrValue _sv = ");
             xcg_emit_ref(b, func, ins->args[1]);
-            xcgen_buf_puts(b, "); memcpy((char*)");
-            if (base_tagged) {
-                xcg_emit_ref(b, func, ins->args[0]);
-                xcgen_buf_puts(b, ".ptr");
-            } else {
-                xcg_emit_ref(b, func, ins->args[0]);
-            }
-            xcgen_buf_printf(b, " + %" PRId64 ", &_sv, 8); }\n", adj_offset);
         } else if (val_type == XR_REP_F64) {
-            xcgen_buf_puts(b, "    *(double*)((char*)");
-            if (base_tagged) {
-                xcg_emit_ref(b, func, ins->args[0]);
-                xcgen_buf_puts(b, ".ptr");
-            } else {
-                xcg_emit_ref(b, func, ins->args[0]);
-            }
-            xcgen_buf_printf(b, " + %" PRId64 ") = ", adj_offset);
+            // Raw double — box with float tag
+            xcgen_buf_puts(b, "    { XrValue _sv = xrt_box_float(");
             xcg_emit_ref(b, func, ins->args[1]);
-            xcgen_buf_puts(b, ";\n");
+            xcgen_buf_puts(b, ")");
         } else {
-            xcgen_buf_puts(b, "    *(int64_t*)((char*)");
-            if (base_tagged) {
-                xcg_emit_ref(b, func, ins->args[0]);
-                xcgen_buf_puts(b, ".ptr");
-            } else {
-                xcg_emit_ref(b, func, ins->args[0]);
-            }
-            xcgen_buf_printf(b, " + %" PRId64 ") = ", adj_offset);
+            // Raw int64_t — box with int tag
+            xcgen_buf_puts(b, "    { XrValue _sv = xrt_box_int(");
             xcg_emit_ref(b, func, ins->args[1]);
-            xcgen_buf_puts(b, ";\n");
+            xcgen_buf_puts(b, ")");
         }
+        xcgen_buf_puts(b, "; memcpy((char*)");
+        if (base_tagged) {
+            xcg_emit_ref(b, func, ins->args[0]);
+            xcgen_buf_puts(b, ".ptr");
+        } else {
+            xcg_emit_ref(b, func, ins->args[0]);
+        }
+        xcgen_buf_printf(b, " + %" PRId64 ", &_sv, 16); }\n", adj_offset);
     }
 }
 

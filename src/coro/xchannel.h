@@ -150,6 +150,17 @@ typedef struct XrChannel {
     void *dist;               // Opaque pointer to cluster dist context (NULL = local)
     const char *name;         // Named Channel identifier (NULL = anonymous)
 
+    /* === Waiter Worker Mask (Phase 0: ownership-safe wake routing) ===
+     * Bit i is set when worker i has at least one coroutine blocked on this
+     * channel (normal send/recv or select).  Used by xr_runtime_wake_channel()
+     * to dispatch wake commands only to relevant workers.
+     * Bits are set under ch->lock when a coroutine blocks; cleared lazily
+     * by the owning worker after wake_one/wake_all finds no more waiters.
+     * False positives (stale set bit) are harmless; false negatives are
+     * prevented by always setting under lock before the coro is visible to
+     * the wake path.  Supports up to 64 workers (XR_MAX_WORKERS). */
+    _Atomic(uint64_t) waiter_worker_mask;
+
     /* === Owner Isolate (for dist hook dispatch + stats) === */
     struct XrayIsolate *isolate;  // Set at xr_channel_new
 } XrChannel;

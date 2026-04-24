@@ -303,6 +303,11 @@ after_netpoll:
     // Drain MPSC inbox
     worker_drain_inbox(worker);
 
+    // Drain channel wake command queue (Phase 0: ownership-safe routing).
+    // Commands arrive from remote workers that need us to wake our local
+    // blocked waiters on specific channels.
+    xr_worker_drain_chan_wake_queue(worker);
+
     return fast_coro;
 }
 

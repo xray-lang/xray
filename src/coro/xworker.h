@@ -172,6 +172,26 @@ static inline int xr_runtime_active_coros(XrRuntime *runtime) {
     return total;
 }
 
+/* ========== Channel Wake Command Queue ========== */
+
+// Initialize a per-worker channel wake command queue (Vyukov MPSC).
+XR_FUNC void xr_chan_wake_queue_init(XrChanWakeCmdQueue *q);
+
+// Dispatch a channel wake command to a remote worker.
+// Allocates an XrChanWakeCmd, enqueues via MPSC, and wakes the target
+// worker if it is parked.  Must NOT be called for the local worker.
+XR_FUNC void xr_worker_dispatch_chan_wake(XrRuntime *runtime, int target_id,
+                                          void *channel, bool wake_sender,
+                                          bool is_close);
+
+// Drain all pending channel wake commands on the calling worker's own
+// queue and execute local wake_one / wake_select / wake_all as needed.
+// Called from the owner worker's scheduling loop (worker_poll_sources).
+XR_FUNC void xr_worker_drain_chan_wake_queue(XrWorker *worker);
+
+// Destroy (free residual nodes) for shutdown.
+XR_FUNC void xr_chan_wake_queue_destroy(XrChanWakeCmdQueue *q);
+
 /* ========== Blocked Queue Operations ========== */
 
 XR_FUNC void xr_worker_block(XrWorker *worker, XrCoroutine *coro);

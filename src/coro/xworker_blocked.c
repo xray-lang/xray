@@ -199,8 +199,11 @@ void xr_worker_unblock(XrWorker *worker, XrCoroutine *coro) {
 }
 
 // xr_worker_wake_one - Wake one coroutine waiting on specified Channel on current Worker (lock-free)
+// Phase 0: MUST only be called from the owning worker thread.
 XrCoroutine *xr_worker_wake_one(XrWorker *worker, void *channel, bool wake_sender) {
     if (!worker || !channel) return NULL;
+    XR_DCHECK(xr_current_worker() == NULL || xr_current_worker() == worker,
+              "wake_one: cross-worker call detected (use chan_wake_queue)");
 
     XrBlockedBucket *bucket = worker_blocked_bucket_find(worker, channel);
     if (!bucket) return NULL;
@@ -290,8 +293,11 @@ XrCoroutine *xr_worker_dequeue_blocked(XrWorker *worker, void *channel, bool wak
 }
 
 // xr_worker_wake_all - Wake all coroutines waiting on specified Channel on current Worker (lock-free)
+// Phase 0: MUST only be called from the owning worker thread.
 void xr_worker_wake_all(XrWorker *worker, void *channel) {
     if (!worker || !channel) return;
+    XR_DCHECK(xr_current_worker() == NULL || xr_current_worker() == worker,
+              "wake_all: cross-worker call detected (use chan_wake_queue)");
 
     XrBlockedBucket *bucket = worker_blocked_bucket_find(worker, channel);
     if (!bucket) return;
@@ -305,9 +311,14 @@ void xr_worker_wake_all(XrWorker *worker, void *channel) {
 
         coro->wait_channel = NULL;
         coro->wait_link = NULL;
-        xr_coro_flags_clear(coro, XR_CORO_FLG_BLOCKED | XR_CORO_WAIT_MASK);
-        xr_coro_flags_set(coro, XR_CORO_FLG_READY);
-        xr_worker_push(worker, coro);
+        // Guard: skip coros already woken by channel_wake_coro_ex (close path).
+        // channel_wake_coro_ex clears BLOCKED before we get here; pushing a
+        // non-BLOCKED coro would double-enqueue it in the run queue.
+        if (xr_coro_flags_has(coro, XR_CORO_FLG_BLOCKED)) {
+            xr_coro_flags_clear(coro, XR_CORO_FLG_BLOCKED | XR_CORO_WAIT_MASK);
+            xr_coro_flags_set(coro, XR_CORO_FLG_READY);
+            xr_worker_push(worker, coro);
+        }
 
         coro = next;
     }
@@ -322,9 +333,12 @@ void xr_worker_wake_all(XrWorker *worker, void *channel) {
 
         coro->wait_channel = NULL;
         coro->wait_link = NULL;
-        xr_coro_flags_clear(coro, XR_CORO_FLG_BLOCKED | XR_CORO_WAIT_MASK);
-        xr_coro_flags_set(coro, XR_CORO_FLG_READY);
-        xr_worker_push(worker, coro);
+        // Guard: skip coros already woken (see sender guard comment above)
+        if (xr_coro_flags_has(coro, XR_CORO_FLG_BLOCKED)) {
+            xr_coro_flags_clear(coro, XR_CORO_FLG_BLOCKED | XR_CORO_WAIT_MASK);
+            xr_coro_flags_set(coro, XR_CORO_FLG_READY);
+            xr_worker_push(worker, coro);
+        }
 
         coro = next;
     }

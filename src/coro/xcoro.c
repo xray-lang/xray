@@ -21,6 +21,7 @@
 #include <stdio.h>
 #include <sys/time.h> // gettimeofday
 #include "xworker.h"
+#include "xchannel.h"
 #include "xtimer_wheel.h"
 #include "../runtime/gc/xcoro_gc.h"
 #include "xdeep_copy.h"
@@ -1032,62 +1033,94 @@ XrCoroutine *xr_sched_dequeue(XrScheduler *sched) {
 // Note: xr_coro_save_context, xr_coro_restore_context, xr_coro_run removed.
 // All coroutine execution goes through xr_coro_run_on_worker (zero-copy path).
 
-// ========== Channel Wake (unified using Runtime blocked queue) ==========
+// ========== Channel Wake (ownership-safe routing, Phase 0) ==========
+//
+// Design (Phase 0 rewrite):
+//   - Local worker: direct wake via xr_worker_wake_one / xr_worker_wake_select
+//   - Remote workers: dispatch command via MPSC chan_wake_queue
+//   - Never directly access remote worker's blocked buckets or run queues
+//   - Uses channel waiter_worker_mask to skip workers with no waiters
 
-// Wake coroutine waiting on Channel
-// Blocked queue managed by XrRuntime (see xworker.c)
-// Event-driven select support:
-// 1. First try to wake normal waiters (send/recv)
-// 2. If no normal waiters, wake select waiters
 XrCoroutine *xr_runtime_wake_channel(XrayIsolate *X, void *channel, bool wake_sender) {
     if (!X || !channel) return NULL;
 
     XrRuntime *runtime = (XrRuntime *)X->vm.runtime;
     if (!runtime) return NULL;
 
-    // traverse all Workers to find Channel (cross-Worker scenario)
     XrWorker *current = xr_current_worker();
+    int current_id = current ? current->p.id : -1;
 
-    // Step 1: try to wake normal waiters
+    // Step 1: Local worker — direct wake (owner-safe)
     if (current) {
         XrCoroutine *coro = xr_worker_wake_one(current, channel, wake_sender);
         if (coro) return coro;
-    }
-
-    for (int i = 0; i < runtime->worker_count; i++) {
-        XrWorker *worker = &runtime->workers[i];
-        if (worker == current) continue;
-        XrCoroutine *coro = xr_worker_wake_one(worker, channel, wake_sender);
+        coro = xr_worker_wake_select(current, channel);
         if (coro) return coro;
     }
 
-    // Step 2: try to wake select waiters (event-driven)
-    if (current) {
-        XrCoroutine *coro = xr_worker_wake_select(current, channel);
-        if (coro) return coro;
+    // Step 2: Remote workers — dispatch via command queue (mask-guided)
+    XrChannel *ch = (XrChannel *)channel;
+    uint64_t mask = atomic_load_explicit(&ch->waiter_worker_mask, memory_order_acquire);
+    // Clear local worker bit (already handled)
+    if (current_id >= 0) mask &= ~((uint64_t)1 << current_id);
+
+    while (mask) {
+        int wid = __builtin_ctzll(mask);
+        mask &= mask - 1;  // Clear lowest set bit
+        if (wid >= runtime->worker_count) break;
+
+        xr_worker_dispatch_chan_wake(runtime, wid, channel, wake_sender, false);
+        // Only need to wake one waiter; remote worker will handle locally.
+        // We can't know synchronously if the remote wake succeeded, so
+        // we dispatch to all masked workers.  In practice, at most one
+        // worker will find a waiter and the rest are fast no-ops.
     }
 
-    for (int i = 0; i < runtime->worker_count; i++) {
-        XrWorker *worker = &runtime->workers[i];
-        if (worker == current) continue;
-        XrCoroutine *coro = xr_worker_wake_select(worker, channel);
-        if (coro) return coro;
-    }
-
+    // Synchronous return is only possible for local wake.  Remote wakes
+    // are asynchronous via command queue — callers that relied on the
+    // return value for unbuffered rendezvous now use chan_direct_recv
+    // which handles this case inside the channel lock.
     return NULL;
 }
 
 // Wake all coroutines waiting on Channel (for Channel close)
+//
+// xr_channel_close() already dequeues all normal waiters from ch->sendq/recvq
+// and wakes them via channel_wake_coro_ex().  This function handles:
+//   1. Select waiters (not in ch->sendq/recvq, only in blocked buckets)
+//   2. Cleanup of stale blocked bucket entries for timer-based waiters
 void xr_runtime_wake_channel_all(XrayIsolate *X, void *channel) {
     if (!X || !channel) return;
 
     XrRuntime *runtime = (XrRuntime *)X->vm.runtime;
     if (!runtime) return;
 
-    // traverse all Workers to wake
-    for (int i = 0; i < runtime->worker_count; i++) {
-        xr_worker_wake_all(&runtime->workers[i], channel);
+    XrWorker *current = xr_current_worker();
+    int current_id = current ? current->p.id : -1;
+
+    // Local worker: direct wake (owner-safe)
+    if (current) {
+        xr_worker_wake_all(current, channel);
+        while (xr_worker_wake_select(current, channel)) {
+            // Keep waking until no more select waiters
+        }
     }
+
+    // Remote workers: dispatch close commands via mask
+    XrChannel *ch = (XrChannel *)channel;
+    uint64_t mask = atomic_load_explicit(&ch->waiter_worker_mask, memory_order_acquire);
+    if (current_id >= 0) mask &= ~((uint64_t)1 << current_id);
+
+    while (mask) {
+        int wid = __builtin_ctzll(mask);
+        mask &= mask - 1;
+        if (wid >= runtime->worker_count) break;
+
+        xr_worker_dispatch_chan_wake(runtime, wid, channel, false, true);
+    }
+
+    // Clear the mask — channel is closed, no future waiters expected.
+    atomic_store_explicit(&ch->waiter_worker_mask, 0, memory_order_relaxed);
 }
 
 // ========== Deadlock Diagnosis ==========

@@ -704,6 +704,39 @@ static void prescan_struct_vregs(XcgenModule *mod, XcgenFunc *cf) {
             cf->vreg_struct_id[p] = (int16_t)candidate[p];
         }
     }
+
+}
+
+// Retype LOAD_FIELD dst vregs to TAGGED when the base object is NOT a
+// promoted struct.  Non-promoted instances store each field as a 16-byte
+// XrtValue slot; reading only 8 bytes (I64) loses the tag and breaks
+// string/ptr/array fields.  The auto-boxing/unboxing helpers
+// (xcg_emit_ref_as_tagged / xcg_emit_ref_as_native) handle downstream
+// conversions transparently, so this retyping is safe for all consumers.
+//
+// Runs unconditionally — does not require struct registration.
+static void retype_field_loads(XcgenFunc *cf) {
+    XR_DCHECK(cf != NULL, "retype_field_loads: NULL cf");
+    XirFunc *func = cf->xfunc;
+    if (!func) return;
+    for (uint32_t bi = 0; bi < func->nblk; bi++) {
+        XirBlock *blk = func->blocks[bi];
+        for (uint32_t i = 0; i < blk->nins; i++) {
+            XirIns *ins = &blk->ins[i];
+            if (ins->op != XIR_LOAD_FIELD) continue;
+            if (!xir_ref_is_vreg(ins->dst)) continue;
+            // Check if base vreg is a promoted struct — if so, the
+            // struct-promotion codegen path handles types correctly.
+            if (xir_ref_is_vreg(ins->args[0]) && cf->vreg_struct_id) {
+                uint32_t base_vi = XIR_REF_INDEX(ins->args[0]);
+                if (base_vi < func->nvreg && cf->vreg_struct_id[base_vi] >= 0)
+                    continue;  // promoted struct — skip retyping
+            }
+            uint32_t dst_vi = XIR_REF_INDEX(ins->dst);
+            if (dst_vi < func->nvreg)
+                func->vregs[dst_vi].rep = XR_REP_TAGGED;
+        }
+    }
 }
 
 // Returns true if every block terminator in this function is a JMP_RET returning null.
@@ -1257,6 +1290,10 @@ XcgenFunc *xcgen_compile_func(XcgenModule *mod, XirFunc *xfunc, const char *c_na
     } else {
         cf->vreg_struct_id = NULL;
     }
+
+    // Retype non-promoted LOAD_FIELD results to TAGGED (16-byte XrtValue slots).
+    // Runs unconditionally — class instances skip struct registration.
+    retype_field_loads(cf);
 
     // Generate forward declaration (after struct prescan so param struct types are known)
     xcgen_emit_forward_decl(mod, cf);
