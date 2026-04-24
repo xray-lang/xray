@@ -287,6 +287,22 @@ void xmcp_send_log_notification(XmcpServer *server, const char *level,
     xmcp_send_notification(server, "notifications/message", params);
 }
 
+void xmcp_send_progress_notification(XmcpServer *server,
+                                       int64_t progress_token,
+                                       int progress,
+                                       int total) {
+    XR_DCHECK(server != NULL, "xmcp_send_progress_notification: NULL server");
+    if (!server->initialized) return;
+
+    XrJsonValue *params = xlsp_json_new_object();
+    XLSP_JSON_SET_INT(params, "progressToken", progress_token);
+    XLSP_JSON_SET_INT(params, "progress", progress);
+    if (total > 0) {
+        XLSP_JSON_SET_INT(params, "total", total);
+    }
+    xmcp_send_notification(server, "notifications/progress", params);
+}
+
 /* --------------------------------------------------------------------------
  * Method handlers (thin wrappers matching XmcpMethodHandler signature)
  * -------------------------------------------------------------------------- */
@@ -445,6 +461,8 @@ XmcpServer *xmcp_server_new(void) {
     if (s->knowledge) {
         xmcp_knowledge_load(s->knowledge);
     }
+
+    s->current_progress_token = -1;
 
     /* Set feature flags for capability inference */
     s->has_tools     = true;  /* 4 built-in tools */

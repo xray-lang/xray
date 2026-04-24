@@ -72,4 +72,12 @@ XR_FUNC void xmcp_send_log_notification(XmcpServer *server,
                                           const char *level,
                                           const char *message);
 
+/* Send a progress notification (notifications/progress).
+ * progress_token comes from the request's _meta.progressToken.
+ * progress and total are 0-based; total can be 0 if unknown. */
+XR_FUNC void xmcp_send_progress_notification(XmcpServer *server,
+                                               int64_t progress_token,
+                                               int progress,
+                                               int total);
+
 #endif // XMCP_PROTOCOL_H
