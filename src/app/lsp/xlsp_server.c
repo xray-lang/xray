@@ -755,7 +755,7 @@ static XlspRequestId parse_request_id(XrJsonValue *msg) {
     if (!v) return id;
     if (v->type == XR_JSON_NUMBER) {
         id.kind = XLSP_ID_NUMBER;
-        id.as.number = v->as.number;
+        id.as.number = v->is_integer ? (double)v->as.integer : v->as.number;
     } else if (v->type == XR_JSON_STRING) {
         id.kind = XLSP_ID_STRING;
         id.as.string = xr_strdup(v->as.string ? v->as.string : "");

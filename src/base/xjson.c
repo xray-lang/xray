@@ -135,6 +135,7 @@ static XrJsonValue *parse_number(JsonParser *p) {
     if (!v) return NULL;
 
     if (is_float) {
+        v->is_integer = false;
         v->as.number = strtod(start, NULL);
     } else {
         /* Try int64 first; fall back to double on overflow */
@@ -142,9 +143,11 @@ static XrJsonValue *parse_number(JsonParser *p) {
         char *end_ptr;
         int64_t ival = strtoll(start, &end_ptr, 10);
         if (errno == ERANGE) {
+            v->is_integer = false;
             v->as.number = strtod(start, NULL);
         } else {
-            v->as.number = (double)ival;
+            v->is_integer = true;
+            v->as.integer = ival;
         }
     }
     return v;
@@ -474,7 +477,14 @@ XR_FUNC XrJsonValue *xjson_clone(XrJsonValue *value) {
     switch (value->type) {
         case XR_JSON_NULL:   return xjson_new_null();
         case XR_JSON_BOOL:   return xjson_new_bool(value->as.boolean);
-        case XR_JSON_NUMBER: return xjson_new_number(value->as.number);
+        case XR_JSON_NUMBER: {
+            XrJsonValue *n = alloc_value(XR_JSON_NUMBER);
+            if (!n) return NULL;
+            n->is_integer = value->is_integer;
+            if (value->is_integer) n->as.integer = value->as.integer;
+            else n->as.number = value->as.number;
+            return n;
+        }
         case XR_JSON_STRING: return xjson_new_string(value->as.string);
         case XR_JSON_ARRAY: {
             XrJsonValue *arr = xjson_new_array();
@@ -519,12 +529,14 @@ XR_FUNC const char *xjson_get_string(XrJsonValue *obj, const char *key) {
 
 XR_FUNC int64_t xjson_get_int(XrJsonValue *obj, const char *key) {
     XrJsonValue *v = xjson_get(obj, key);
-    return (v && v->type == XR_JSON_NUMBER) ? (int64_t)v->as.number : 0;
+    if (!v || v->type != XR_JSON_NUMBER) return 0;
+    return v->is_integer ? v->as.integer : (int64_t)v->as.number;
 }
 
 XR_FUNC int64_t xjson_get_int_or(XrJsonValue *obj, const char *key, int64_t default_val) {
     XrJsonValue *v = xjson_get(obj, key);
-    return (v && v->type == XR_JSON_NUMBER) ? (int64_t)v->as.number : default_val;
+    if (!v || v->type != XR_JSON_NUMBER) return default_val;
+    return v->is_integer ? v->as.integer : (int64_t)v->as.number;
 }
 
 XR_FUNC bool xjson_get_bool(XrJsonValue *obj, const char *key) {
@@ -575,7 +587,10 @@ XR_FUNC XrJsonValue *xjson_new_bool(bool value) {
 
 XR_FUNC XrJsonValue *xjson_new_number(double value) {
     XrJsonValue *v = alloc_value(XR_JSON_NUMBER);
-    if (v) v->as.number = value;
+    if (v) {
+        v->is_integer = false;
+        v->as.number = value;
+    }
     return v;
 }
 
@@ -758,16 +773,21 @@ static void stringify_value(JsonWriter *w, XrJsonValue *v) {
             break;
         case XR_JSON_NUMBER: {
             char buf[32];
-            double d = v->as.number;
-            if (isinf(d) || isnan(d)) {
-                writer_str(w, "null");
-            } else {
-                /* Shortest round-trip: try %.15g, fallback %.17g */
-                snprintf(buf, sizeof(buf), "%.15g", d);
-                if (strtod(buf, NULL) != d) {
-                    snprintf(buf, sizeof(buf), "%.17g", d);
-                }
+            if (v->is_integer) {
+                snprintf(buf, sizeof(buf), "%lld", (long long)v->as.integer);
                 writer_str(w, buf);
+            } else {
+                double d = v->as.number;
+                if (isinf(d) || isnan(d)) {
+                    writer_str(w, "null");
+                } else {
+                    /* Shortest round-trip: try %.15g, fallback %.17g */
+                    snprintf(buf, sizeof(buf), "%.15g", d);
+                    if (strtod(buf, NULL) != d) {
+                        snprintf(buf, sizeof(buf), "%.17g", d);
+                    }
+                    writer_str(w, buf);
+                }
             }
             break;
         }

@@ -33,7 +33,8 @@ static inline XrJsonValue *json_get(XrJsonValue *obj, const char *key) {
 }
 
 static inline double json_number(XrJsonValue *v) {
-    return v && v->type == XR_JSON_NUMBER ? v->as.number : 0;
+    if (!v || v->type != XR_JSON_NUMBER) return 0;
+    return v->is_integer ? (double)v->as.integer : v->as.number;
 }
 
 static inline const char *json_string(XrJsonValue *v) {
