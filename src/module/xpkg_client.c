@@ -552,11 +552,39 @@ bool xr_pkg_client_install(const char *owner, const char *name,
 
 /* ========== Publish API Implementation ========== */
 
-bool xr_pkg_client_publish(const char *tarball_path, const char *auth_token) {
-    if (!tarball_path || !auth_token) {
-        fprintf(stderr, "Error: package file and auth token required\n");
+// Append a multipart text field to a dynamic buffer.
+// Returns new write offset, or 0 on failure.
+static size_t multipart_append_field(char **buf, size_t *cap, size_t off,
+                                     const char *boundary,
+                                     const char *name, const char *value) {
+    if (!value) return off;
+    char hdr[256];
+    int hdr_len = snprintf(hdr, sizeof(hdr),
+        "--%s\r\nContent-Disposition: form-data; name=\"%s\"\r\n\r\n",
+        boundary, name);
+    size_t val_len = strlen(value);
+    size_t need = off + (size_t)hdr_len + val_len + 2; // +2 for \r\n
+    if (need > *cap) {
+        size_t new_cap = need * 2;
+        char *tmp = (char *)xr_realloc(*buf, new_cap);
+        if (!tmp) return 0;
+        *buf = tmp;
+        *cap = new_cap;
+    }
+    memcpy(*buf + off, hdr, hdr_len);   off += hdr_len;
+    memcpy(*buf + off, value, val_len);  off += val_len;
+    memcpy(*buf + off, "\r\n", 2);       off += 2;
+    return off;
+}
+
+bool xr_pkg_client_publish(const char *tarball_path, const char *auth_token,
+                            const XrPkgPublishInfo *info) {
+    if (!tarball_path || !auth_token || !info) {
+        fprintf(stderr, "Error: tarball, auth token and publish info required\n");
         return false;
     }
+    XR_DCHECK(info->name != NULL, "publish: NULL name");
+    XR_DCHECK(info->version != NULL, "publish: NULL version");
 
     // Read tarball content
     size_t file_size;
@@ -566,42 +594,50 @@ bool xr_pkg_client_publish(const char *tarball_path, const char *auth_token) {
         return false;
     }
 
-    // Build multipart form data
-    // Format: --boundary\r\nContent-Disposition: ...\r\n\r\n<data>\r\n--boundary--
     const char *boundary = "----XrayPkgUploadBoundary";
 
-    // Extract filename from path
-    char *path_copy = xr_strdup(tarball_path);
-    const char *filename = strrchr(path_copy, '/');
-    filename = filename ? filename + 1 : path_copy;
+    // Build multipart body: text fields + file part + footer
+    size_t cap = file_size + 4096;
+    char *body = (char *)xr_malloc(cap);
+    if (!body) { xr_free(file_content); return false; }
+    size_t off = 0;
 
-    // Calculate body size
-    char part_header[512];
-    int part_header_len = snprintf(part_header, sizeof(part_header),
+    // Metadata fields (match server PostForm keys)
+    off = multipart_append_field(&body, &cap, off, boundary, "name", info->name);
+    off = multipart_append_field(&body, &cap, off, boundary, "version", info->version);
+    off = multipart_append_field(&body, &cap, off, boundary, "description", info->description);
+    off = multipart_append_field(&body, &cap, off, boundary, "license", info->license);
+    if (off == 0) { xr_free(body); xr_free(file_content); return false; }
+
+    // File part
+    const char *filename = strrchr(tarball_path, '/');
+    filename = filename ? filename + 1 : tarball_path;
+
+    char file_hdr[512];
+    int file_hdr_len = snprintf(file_hdr, sizeof(file_hdr),
         "--%s\r\n"
-        "Content-Disposition: form-data; name=\"package\"; filename=\"%s\"\r\n"
+        "Content-Disposition: form-data; name=\"tarball\"; filename=\"%s\"\r\n"
         "Content-Type: application/gzip\r\n\r\n",
         boundary, filename);
 
     char footer[64];
     int footer_len = snprintf(footer, sizeof(footer), "\r\n--%s--\r\n", boundary);
 
-    size_t body_size = part_header_len + file_size + footer_len;
-    char *body = (char*)xr_malloc(body_size);
-    if (!body) {
-        xr_free(file_content);
-        xr_free(path_copy);
-        return false;
+    size_t need = off + (size_t)file_hdr_len + file_size + (size_t)footer_len;
+    if (need > cap) {
+        char *tmp = (char *)xr_realloc(body, need);
+        if (!tmp) { xr_free(body); xr_free(file_content); return false; }
+        body = tmp;
+        cap = need;
     }
-
-    memcpy(body, part_header, part_header_len);
-    memcpy(body + part_header_len, file_content, file_size);
-    memcpy(body + part_header_len + file_size, footer, footer_len);
-
+    memcpy(body + off, file_hdr, file_hdr_len);       off += file_hdr_len;
+    memcpy(body + off, file_content, file_size);       off += file_size;
+    memcpy(body + off, footer, footer_len);            off += footer_len;
     xr_free(file_content);
-    xr_free(path_copy);
 
-    // Build URL and content type
+    size_t body_size = off;
+
+    // Build URL and headers
     char url[512];
     snprintf(url, sizeof(url), "%s/api/packages", tls_config.registry_url);
 
@@ -609,7 +645,6 @@ bool xr_pkg_client_publish(const char *tarball_path, const char *auth_token) {
     snprintf(content_type, sizeof(content_type),
              "multipart/form-data; boundary=%s", boundary);
 
-    // Build auth header
     char auth_header_value[512];
     snprintf(auth_header_value, sizeof(auth_header_value), "Bearer %s", auth_token);
 
@@ -622,7 +657,6 @@ bool xr_pkg_client_publish(const char *tarball_path, const char *auth_token) {
         printf("Publish: POST %s (%zu bytes)\n", url, body_size);
     }
 
-    // Use xr_http_request with custom headers (safe, no shell injection)
     XrHttpRequestConfig config;
     xr_http_request_config_init(&config);
     config.url = url;
@@ -643,7 +677,16 @@ bool xr_pkg_client_publish(const char *tarball_path, const char *auth_token) {
         printf("Published successfully\n");
     } else {
         fprintf(stderr, "Publish failed");
-        if (result.error_msg) {
+        if (result.body && result.body_len > 0) {
+            // Try to extract error message from JSON response
+            char *msg = json_get_string(result.body, "error");
+            if (msg) {
+                fprintf(stderr, ": %s", msg);
+                xr_free(msg);
+            } else if (result.status_code > 0) {
+                fprintf(stderr, " (HTTP %d)", result.status_code);
+            }
+        } else if (result.error_msg) {
             fprintf(stderr, ": %s", result.error_msg);
         } else if (result.status_code > 0) {
             fprintf(stderr, " (HTTP %d)", result.status_code);

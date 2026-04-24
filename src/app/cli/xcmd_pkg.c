@@ -529,7 +529,13 @@ static int cmd_pkg_publish(int argc, char **argv) {
         return XR_CLI_EXIT_FAIL;
     }
 
-    bool success = xr_pkg_client_publish(tarball, token);
+    XrPkgPublishInfo pub_info = {
+        .name = project->name,
+        .version = project->version,
+        .description = project->description,
+        .license = project->license,
+    };
+    bool success = xr_pkg_client_publish(tarball, token, &pub_info);
 
     // Cleanup
     unlink(tarball);

@@ -39,6 +39,8 @@ typedef struct XrProject {
     char *name;
     char *main;
     char *version;
+    char *description;
+    char *license;
     bool is_package;
     XrHashMap *dependencies;
     bool initialized;
