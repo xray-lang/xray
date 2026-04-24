@@ -396,20 +396,47 @@ static int build_shared_proto_map(XrProto *top, XrProto **shared_protos,
 // Without VM execution, classes are never instantiated. This scans
 // top-level bytecode for CLASS_FROM_DESC and creates minimal class
 // objects so xr_class_lookup_by_name works at AOT compile time.
+// Tracks register→XrClass* so that same-module inheritance (where
+// the compiler puts the parent class into R[A] as super_override)
+// resolves correctly.
 static void aot_preregister_classes(XrProto *proto, XrayIsolate *isolate) {
     if (!proto || !isolate) return;
     uint32_t code_count = (uint32_t)proto->code.count;
     const XrInstruction *code = (const XrInstruction *)proto->code.data;
+
+    // Simple register→class tracker (covers OP_MOVE + OP_CLASS_CREATE)
+    XrClass *reg_class[256];
+    memset(reg_class, 0, sizeof(reg_class));
+
     for (uint32_t pc = 0; pc < code_count; pc++) {
         XrInstruction inst = code[pc];
-        if (GET_OPCODE(inst) != OP_CLASS_CREATE_FROM_DESCRIPTOR) continue;
+        OpCode op = GET_OPCODE(inst);
+
+        // Track OP_MOVE: propagate class references between registers
+        if (op == OP_MOVE) {
+            int dst = GETARG_A(inst);
+            int src = GETARG_B(inst);
+            if (dst < 256 && src < 256)
+                reg_class[dst] = reg_class[src];
+            continue;
+        }
+
+        if (op != OP_CLASS_CREATE_FROM_DESCRIPTOR) continue;
+        int a = GETARG_A(inst);
         int bx = GETARG_Bx(inst);
         if (bx >= (int)PROTO_CONST_COUNT(proto)) continue;
         XrValue desc_val = PROTO_CONSTANT(proto, bx);
         XrClassDescriptor *desc = (XrClassDescriptor *)XR_TO_PTR(desc_val);
         if (!desc) continue;
-        XrClass *klass = xr_class_from_descriptor(isolate, desc, proto, NULL, NULL, NULL, NULL);
+
+        // R[A] may hold the parent class (same-module inheritance)
+        XrClass *super_override = (a < 256) ? reg_class[a] : NULL;
+        XrClass *klass = xr_class_from_descriptor(
+            isolate, desc, proto, NULL, NULL, NULL, super_override);
         if (!klass) continue;
+
+        // Record this class in the register tracker
+        if (a < 256) reg_class[a] = klass;
 
         // Patch method protos: set 'this' (param 0) type to the
         // enclosing class instance type so builder_find_reg_type works.

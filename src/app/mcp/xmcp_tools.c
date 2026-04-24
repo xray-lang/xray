@@ -5,13 +5,14 @@
  * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
  * Licensed under the MIT License
  *
- * xmcp_tools.c - MCP tool implementations (Phase 1)
+ * xmcp_tools.c - MCP tool implementations
  *
  * KEY CONCEPT:
- *   Three tools for Phase 1:
+ *   Built-in tools for AI-assisted Xray development:
  *   - xray_check: compile-check a code snippet
  *   - xray_syntax_lookup: look up Xray syntax by topic
  *   - xray_stdlib_search: search standard library modules
+ *   - xray_format: format Xray source code
  */
 
 #include "xmcp_tools.h"
@@ -22,6 +23,7 @@
 #include "../../base/xchecks.h"
 #include "../../frontend/parser/xparse.h"
 #include "../../frontend/parser/xast.h"
+#include "../../frontend/format/xfmt.h"
 #include "xray_isolate.h"
 #include "../../base/xarena.h"
 #include <stdio.h>
@@ -112,6 +114,40 @@ static XrJsonValue *build_check_schema(void) {
     return schema;
 }
 
+/* Build the input schema JSON for xray_format. */
+static XrJsonValue *build_format_schema(void) {
+    XrJsonValue *schema = xlsp_json_new_object();
+    XLSP_JSON_SET_STRING(schema, "type", "object");
+
+    XrJsonValue *props = xlsp_json_new_object();
+
+    XrJsonValue *code_prop = xlsp_json_new_object();
+    XLSP_JSON_SET_STRING(code_prop, "type", "string");
+    XLSP_JSON_SET_STRING(code_prop, "description",
+        "Xray source code to format");
+    xlsp_json_object_set(props, "code", code_prop);
+
+    XrJsonValue *indent_prop = xlsp_json_new_object();
+    XLSP_JSON_SET_STRING(indent_prop, "type", "integer");
+    XLSP_JSON_SET_STRING(indent_prop, "description",
+        "Indent size in spaces (default: 4)");
+    xlsp_json_object_set(props, "indentSize", indent_prop);
+
+    XrJsonValue *tabs_prop = xlsp_json_new_object();
+    XLSP_JSON_SET_STRING(tabs_prop, "type", "boolean");
+    XLSP_JSON_SET_STRING(tabs_prop, "description",
+        "Use tabs instead of spaces (default: false)");
+    xlsp_json_object_set(props, "useTabs", tabs_prop);
+
+    xlsp_json_object_set(schema, "properties", props);
+
+    XrJsonValue *req = xlsp_json_new_array();
+    xlsp_json_array_push(req, xlsp_json_new_string("code"));
+    xlsp_json_object_set(schema, "required", req);
+
+    return schema;
+}
+
 /* Build the input schema JSON for xray_syntax_lookup. */
 static XrJsonValue *build_syntax_schema(void) {
     XrJsonValue *schema = xlsp_json_new_object();
@@ -189,7 +225,25 @@ XrJsonValue *xmcp_handle_tools_list(void) {
     }
     xlsp_json_array_push(tools, t1);
 
-    /* Tool 2: xray_syntax_lookup */
+    /* Tool 2: xray_format */
+    XrJsonValue *t1b = xlsp_json_new_object();
+    XLSP_JSON_SET_STRING(t1b, "name", "xray_format");
+    XLSP_JSON_SET_STRING(t1b, "description",
+        "Format Xray source code according to standard style. "
+        "Returns the formatted code. Optionally specify indent size "
+        "and whether to use tabs.");
+    xlsp_json_object_set(t1b, "inputSchema", build_format_schema());
+    {
+        XrJsonValue *ann = xlsp_json_new_object();
+        XLSP_JSON_SET_STRING(ann, "title", "Xray Code Formatter");
+        XLSP_JSON_SET_BOOL(ann, "readOnlyHint", true);
+        XLSP_JSON_SET_BOOL(ann, "destructiveHint", false);
+        XLSP_JSON_SET_BOOL(ann, "openWorldHint", false);
+        xlsp_json_object_set(t1b, "annotations", ann);
+    }
+    xlsp_json_array_push(tools, t1b);
+
+    /* Tool 3: xray_syntax_lookup */
     XrJsonValue *t2 = xlsp_json_new_object();
     XLSP_JSON_SET_STRING(t2, "name", "xray_syntax_lookup");
     XLSP_JSON_SET_STRING(t2, "description",
@@ -210,7 +264,7 @@ XrJsonValue *xmcp_handle_tools_list(void) {
     }
     xlsp_json_array_push(tools, t2);
 
-    /* Tool 3: xray_stdlib_search */
+    /* Tool 4: xray_stdlib_search */
     XrJsonValue *t3 = xlsp_json_new_object();
     XLSP_JSON_SET_STRING(t3, "name", "xray_stdlib_search");
     XLSP_JSON_SET_STRING(t3, "description",
@@ -294,6 +348,50 @@ static XrJsonValue *tool_xray_check(XmcpServer *server, XrJsonValue *arguments) 
 }
 
 /* --------------------------------------------------------------------------
+ * Tool: xray_format
+ * -------------------------------------------------------------------------- */
+
+static XrJsonValue *tool_xray_format(XmcpServer *server, XrJsonValue *arguments) {
+    XR_DCHECK(server != NULL, "tool_xray_format: NULL server");
+    XR_DCHECK(arguments != NULL, "tool_xray_format: NULL arguments");
+
+    const char *code = xlsp_json_get_string(arguments, "code");
+    if (!code || code[0] == '\0') {
+        return xmcp_make_error_result("Error: 'code' parameter is required");
+    }
+
+    /* Build config from optional parameters */
+    XrFmtConfig config = xfmt_default_config;
+    int64_t indent = xlsp_json_get_int_or(arguments, "indentSize", 0);
+    if (indent > 0 && indent <= 16) {
+        config.indent_size = (int)indent;
+    }
+    if (xlsp_json_get_bool(arguments, "useTabs")) {
+        config.use_tabs = 1;
+    }
+
+    /* Parse with trivia (preserves comments) */
+    AstNode *ast = xr_parse_with_trivia(server->isolate, code, "<mcp-format>");
+    if (!ast) {
+        return xmcp_make_error_result(
+            "Error: cannot format code with syntax errors. "
+            "Use xray_check first to find and fix errors.");
+    }
+
+    /* Format AST */
+    char *formatted = xfmt_format_ast(ast, &config, server->isolate);
+    xr_program_destroy(ast);
+
+    if (!formatted) {
+        return xmcp_make_error_result("Error: formatting failed");
+    }
+
+    XrJsonValue *result = xmcp_make_text_result(formatted, false);
+    xr_free(formatted);
+    return result;
+}
+
+/* --------------------------------------------------------------------------
  * Tool: xray_syntax_lookup
  * -------------------------------------------------------------------------- */
 
@@ -366,6 +464,8 @@ XrJsonValue *xmcp_handle_tools_call(XmcpServer *server, XrJsonValue *params) {
     XrJsonValue *result = NULL;
     if (strcmp(name, "xray_check") == 0) {
         result = tool_xray_check(server, arguments);
+    } else if (strcmp(name, "xray_format") == 0) {
+        result = tool_xray_format(server, arguments);
     } else if (strcmp(name, "xray_syntax_lookup") == 0) {
         result = tool_xray_syntax_lookup(server, arguments);
     } else if (strcmp(name, "xray_stdlib_search") == 0) {
