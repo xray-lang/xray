@@ -185,13 +185,22 @@ void x64_maybe_spill(X64CodegenCtx *ctx, XirRef dst_ref) {
     int16_t slot = xra_vreg_spill(ctx->xra, idx);
     if (slot < 0) return;
     int8_t ri = xra_reg_at_pos(ctx->xra, idx, ctx->cur_ra_pos + 1);
-    if (ri < 0) return;
     int32_t offset = -(X64_SPILL_BASE + slot * 8);
     bool is_fp = x64_is_fp_vreg(ctx, dst_ref);
-    if (is_fp)
-        x64_movsd_mr(&ctx->buf, X64_RBP, offset, x64_alloc_fp_regs[ri]);
-    else
-        x64_mov_mr(&ctx->buf, X64_RBP, offset, x64_alloc_regs[ri]);
+    if (ri >= 0) {
+        /* vreg is in an allocated register — spill from there */
+        if (is_fp)
+            x64_movsd_mr(&ctx->buf, X64_RBP, offset, x64_alloc_fp_regs[ri]);
+        else
+            x64_mov_mr(&ctx->buf, X64_RBP, offset, x64_alloc_regs[ri]);
+    } else {
+        /* vreg has no register (spill-only) — instruction result was placed
+         * in SCRATCH by x64_get_reg; must spill from there. */
+        if (is_fp)
+            x64_movsd_mr(&ctx->buf, X64_RBP, offset, X64_SCRATCH_XMM);
+        else
+            x64_mov_mr(&ctx->buf, X64_RBP, offset, X64_SCRATCH_REG);
+    }
 }
 
 /* ========== Branch Patching ========== */
@@ -226,10 +235,40 @@ static void x64_emit_gap_moves_before(X64CodegenCtx *ctx, uint32_t ins_idx) {
         if (gm->gap_blk < blk_id) { cursor++; continue; }
         if (gm->gap_ins_idx > ins_idx) break;
         if (gm->gap_ins_idx == ins_idx) {
-            X64Reg src_hw = x64_alloc_regs[gm->src_reg];
-            X64Reg dst_hw = x64_alloc_regs[gm->dst_reg];
-            if (src_hw != dst_hw)
-                x64_mov_rr(&ctx->buf, dst_hw, src_hw);
+            if (gm->src_reg >= 0 && gm->dst_reg >= 0) {
+                /* reg-to-reg move */
+                if (gm->is_fp) {
+                    X64Xmm sf = x64_alloc_fp_regs[gm->src_reg];
+                    X64Xmm df = x64_alloc_fp_regs[gm->dst_reg];
+                    if (sf != df)
+                        x64_movsd_rr(&ctx->buf, df, sf);
+                } else {
+                    X64Reg sh = x64_alloc_regs[gm->src_reg];
+                    X64Reg dh = x64_alloc_regs[gm->dst_reg];
+                    if (sh != dh)
+                        x64_mov_rr(&ctx->buf, dh, sh);
+                }
+            } else if (gm->src_reg >= 0 && gm->dst_reg < 0) {
+                /* reg-to-spill (store) */
+                int32_t offset = -(X64_SPILL_BASE + gm->spill_slot * 8);
+                if (gm->is_fp) {
+                    X64Xmm sf = x64_alloc_fp_regs[gm->src_reg];
+                    x64_movsd_mr(&ctx->buf, X64_RBP, offset, sf);
+                } else {
+                    X64Reg sh = x64_alloc_regs[gm->src_reg];
+                    x64_mov_mr(&ctx->buf, X64_RBP, offset, sh);
+                }
+            } else if (gm->src_reg < 0 && gm->dst_reg >= 0) {
+                /* spill-to-reg (reload) */
+                int32_t offset = -(X64_SPILL_BASE + gm->spill_slot * 8);
+                if (gm->is_fp) {
+                    X64Xmm df = x64_alloc_fp_regs[gm->dst_reg];
+                    x64_movsd_rm(&ctx->buf, df, X64_RBP, offset);
+                } else {
+                    X64Reg dh = x64_alloc_regs[gm->dst_reg];
+                    x64_mov_rm(&ctx->buf, dh, X64_RBP, offset);
+                }
+            }
             /* Record override so subsequent lookups see the new register */
             if (ctx->vreg_override && gm->vreg < ctx->xra->nvreg)
                 ctx->vreg_override[gm->vreg] = gm->dst_reg;
@@ -393,8 +432,9 @@ static void x64_emit_xir_ins(X64CodegenCtx *ctx, XirIns *ins) {
             case XIR_GE: cc = X64_CC_GE; break;
             default: cc = X64_CC_E; break;
         }
-        /* Zero-extend destination first, then SETcc */
-        x64_xor_rr(&ctx->buf, rd, rd);
+        /* Zero destination without clobbering CMP flags (MOV doesn't affect flags,
+         * unlike XOR which would reset ZF/SF/OF and break the SETcc). */
+        x64_mov_ri32(&ctx->buf, rd, 0);
         x64_setcc(&ctx->buf, cc, rd);
         break;
     }
@@ -2068,6 +2108,71 @@ static void x64_emit_prologue(X64CodegenCtx *ctx) {
     }
 }
 
+/* Fast prologue: frame setup + coro/jit_ctx load, NO RSI param loading.
+ * Used as CALL target for register-passing self-calls where args are
+ * already in alloc_regs[0..N].  Moves them to RA-assigned registers. */
+static void x64_emit_fast_prologue(X64CodegenCtx *ctx) {
+    /* PUSH RBP; MOV RBP, RSP */
+    x64_push_r(&ctx->buf, X64_RBP);
+    x64_mov_rr(&ctx->buf, X64_RBP, X64_RSP);
+
+    /* SUB RSP, frame_size (placeholder, patched later) */
+    XR_DCHECK(ctx->nsub_patches < 8, "too many frame sub patches");
+    x64_emit8(&ctx->buf, 0x48);
+    x64_emit8(&ctx->buf, 0x81);
+    x64_emit8(&ctx->buf, 0xEC);
+    ctx->frame_patch_sub[ctx->nsub_patches++] = ctx->buf.pos;
+    x64_emit32(&ctx->buf, X64_JIT_FRAME_BASE);
+
+    /* Save callee-saved registers */
+    x64_push_r(&ctx->buf, X64_RBX);
+    x64_push_r(&ctx->buf, X64_R12);
+    x64_push_r(&ctx->buf, X64_R13);
+    x64_push_r(&ctx->buf, X64_R14);
+    x64_push_r(&ctx->buf, X64_R15);
+
+    /* MOV R15, RDI (coro pointer from System V 1st arg) */
+    x64_mov_rr(&ctx->buf, X64_CORO_REG, X64_RDI);
+
+    /* Load jit_ctx pointer */
+    x64_mov_rm(&ctx->buf, X64_JIT_CTX_REG, X64_CORO_REG,
+               (int32_t)XIR_CORO_JIT_CTX_OFFSET);
+
+    /* Move params from alloc_regs[i] → RA-assigned registers.
+     * Self-calls place arg i in alloc_regs[i]; if RA assigned param i
+     * to a different register index ri, move alloc_regs[i] → alloc_regs[ri]. */
+    uint32_t nparams = ctx->func->num_params;
+    if (nparams > 0 && ctx->xra) {
+        for (uint32_t i = 0; i < nparams; i++) {
+            bool is_fp = (i < ctx->func->nvreg &&
+                          ctx->func->vregs[i].rep == XR_REP_F64);
+            int8_t ri = xra_vreg_first_reg(ctx->xra, i);
+            if (ri < 0) continue;
+            if (is_fp) {
+                X64Xmm dst = x64_alloc_fp_regs[ri];
+                X64Xmm src = x64_alloc_fp_regs[i];
+                if (dst != src)
+                    x64_movsd_rr(&ctx->buf, dst, src);
+                int16_t slot = xra_vreg_spill(ctx->xra, i);
+                if (slot >= 0) {
+                    int32_t offset = -(X64_SPILL_BASE + slot * 8);
+                    x64_movsd_mr(&ctx->buf, X64_RBP, offset, dst);
+                }
+            } else {
+                X64Reg dst = x64_alloc_regs[ri];
+                X64Reg src = x64_alloc_regs[i];
+                if (dst != src)
+                    x64_mov_rr(&ctx->buf, dst, src);
+                int16_t slot = xra_vreg_spill(ctx->xra, i);
+                if (slot >= 0) {
+                    int32_t offset = -(X64_SPILL_BASE + slot * 8);
+                    x64_mov_mr(&ctx->buf, X64_RBP, offset, dst);
+                }
+            }
+        }
+    }
+}
+
 void x64_emit_epilogue(X64CodegenCtx *ctx) {
     /* Restore callee-saved registers */
     x64_pop_r(&ctx->buf, X64_R15);
@@ -2184,9 +2289,34 @@ static void x64_emit_block(X64CodegenCtx *ctx, uint32_t block_idx) {
         }
         break;
     }
-    case XIR_JMP_RET:
+    case XIR_JMP_RET: {
+        /* Set RCX = return type tag before epilogue.
+         * x64 JIT calling convention: RAX = payload, RCX = tag. */
+        if (!xir_ref_is_none(blk->jmp.arg)) {
+            uint32_t ret_idx = XIR_REF_INDEX(blk->jmp.arg);
+            uint8_t ret_xr_tag = 3; /* XR_TAG_I64 default */
+            if (ret_idx < ctx->func->nvreg) {
+                XirType rct = xir_ref_ctype(ctx->func, blk->jmp.arg);
+                uint8_t ret_vtag = type_kind_to_vtag(rct.kind);
+                uint8_t vt = vtag_to_value_tag(ret_vtag);
+                if (vt != 0xFF) {
+                    ret_xr_tag = vt;
+                } else if (ret_vtag == VTAG_TAGGED) {
+                    uint8_t mt = ctx->func->vregs[ret_idx].rep;
+                    if (mt == XR_REP_F64)      ret_xr_tag = 4; /* XR_TAG_F64 */
+                    else if (mt == XR_REP_PTR) ret_xr_tag = 5; /* XR_TAG_PTR */
+                    else                        ret_xr_tag = 0xFF; /* unknown */
+                }
+            }
+            /* RCX = tag for JIT-to-JIT calls (CALL_SELF_DIRECT reads RCX).
+             * RDX = tag for C callers (System V ABI returns struct{i64,u64}
+             * in RAX+RDX, so xir_jit_call reads XrJitResult.tag from RDX). */
+            x64_mov_ri32(&ctx->buf, X64_RCX, (uint32_t)ret_xr_tag);
+            x64_mov_ri32(&ctx->buf, X64_RDX, (uint32_t)ret_xr_tag);
+        }
         x64_emit_epilogue(ctx);
         break;
+    }
     default:
         break;
     }
@@ -2459,8 +2589,20 @@ XirCodegenResult xir_codegen_x64(XirFunc *func, XirCodeAlloc *alloc) {
 
     x64_buf_init(&ctx.buf, (uint8_t *)code_mem, alloc_size);
 
-    /* Emit prologue */
+    /* Emit normal prologue (loads params from RSI memory) */
     x64_emit_prologue(&ctx);
+
+    /* JMP over fast prologue to body start (placeholder, patched below) */
+    x64_emit8(&ctx.buf, 0xE9);  /* JMP rel32 */
+    uint32_t skip_jmp_pos = ctx.buf.pos;
+    x64_emit32(&ctx.buf, 0);
+
+    /* Emit fast prologue (register-based param passing for self-calls) */
+    ctx.fast_entry_offset = ctx.buf.pos;
+    x64_emit_fast_prologue(&ctx);
+
+    /* Patch skip JMP: normal prologue jumps over fast prologue to body */
+    x64_patch_rel32(&ctx.buf, skip_jmp_pos, ctx.buf.pos);
 
     /* Emit all blocks */
     for (uint32_t i = 0; i < func->nblk; i++)
@@ -2512,7 +2654,7 @@ XirCodegenResult xir_codegen_x64(XirFunc *func, XirCodeAlloc *alloc) {
 
     result.code = code_mem;
     result.code_size = code_size;
-    result.fast_entry_offset = 0;  /* No fast entry yet */
+    result.fast_entry_offset = ctx.fast_entry_offset;
     result.success = true;
 
     xr_free(ctx.block_offsets);

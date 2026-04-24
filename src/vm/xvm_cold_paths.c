@@ -1167,7 +1167,7 @@ int vm_coro_ctrl(XrayIsolate *isolate, XrVMContext *vm_ctx,
 
     case CORO_CTRL_STALLED: {
         (void)b;
-        XrScheduler *sched = (XrScheduler *)isolate->vm.scheduler;
+        XrCoroState *sched = (XrCoroState *)isolate->vm.coro_state;
         if (!sched) {
             base[a] = xr_value_from_array(xr_array_new(COLD_CORO(vm_ctx)));
             return VM_COLD_BREAK;
@@ -1178,7 +1178,7 @@ int vm_coro_ctrl(XrayIsolate *isolate, XrVMContext *vm_ctx,
     }
 
     case CORO_CTRL_DEADLOCKS: {
-        XrScheduler *sched = (XrScheduler *)isolate->vm.scheduler;
+        XrCoroState *sched = (XrCoroState *)isolate->vm.coro_state;
         if (!sched) {
             base[a] = xr_value_from_array(xr_array_new(COLD_CORO(vm_ctx)));
             return VM_COLD_BREAK;
@@ -1303,7 +1303,7 @@ int vm_coro_ctrl(XrayIsolate *isolate, XrVMContext *vm_ctx,
         XrValue name_val = base[b];
         if (!XR_IS_STRING(name_val)) { base[a] = xr_bool(false); return VM_COLD_BREAK; }
         const char *name_cstr = xr_value_str_data(&name_val);
-        XrScheduler *sched = (XrScheduler *)isolate->vm.scheduler;
+        XrCoroState *sched = (XrCoroState *)isolate->vm.coro_state;
         if (!sched || !sched->coro_registry) { base[a] = xr_bool(false); return VM_COLD_BREAK; }
         XrCoroutine *found = xr_coro_registry_whereis(sched->coro_registry, name_cstr);
         base[a] = xr_bool(found != NULL);
@@ -1314,7 +1314,7 @@ int vm_coro_ctrl(XrayIsolate *isolate, XrVMContext *vm_ctx,
         XrValue name_val = base[b];
         if (!XR_IS_STRING(name_val)) { base[a] = xr_null(); return VM_COLD_BREAK; }
         const char *name_cstr = xr_value_str_data(&name_val);
-        XrScheduler *sched = (XrScheduler *)isolate->vm.scheduler;
+        XrCoroState *sched = (XrCoroState *)isolate->vm.coro_state;
         if (!sched || !sched->coro_registry) { base[a] = xr_null(); return VM_COLD_BREAK; }
         XrChannel *ch = xr_coro_monitor(isolate, sched->coro_registry, name_cstr);
         base[a] = ch ? xr_value_from_channel(ch) : xr_null();
@@ -1328,7 +1328,7 @@ int vm_coro_ctrl(XrayIsolate *isolate, XrVMContext *vm_ctx,
         XrValue ch_val = base[a + 1];
         if (!xr_value_is_channel(ch_val)) { base[a] = xr_null(); return VM_COLD_BREAK; }
         XrChannel *ch = xr_value_to_channel(ch_val);
-        XrScheduler *sched = (XrScheduler *)isolate->vm.scheduler;
+        XrCoroState *sched = (XrCoroState *)isolate->vm.coro_state;
         if (!sched || !sched->coro_registry) { base[a] = xr_null(); return VM_COLD_BREAK; }
         XrCoroutine *coro = xr_coro_registry_whereis(sched->coro_registry, name_cstr);
         if (coro) {
@@ -1342,7 +1342,7 @@ int vm_coro_ctrl(XrayIsolate *isolate, XrVMContext *vm_ctx,
         XrValue name_val = base[b];
         if (!XR_IS_STRING(name_val)) { base[a] = xr_bool(false); return VM_COLD_BREAK; }
         const char *name_cstr = xr_value_str_data(&name_val);
-        XrScheduler *sched = (XrScheduler *)isolate->vm.scheduler;
+        XrCoroState *sched = (XrCoroState *)isolate->vm.coro_state;
         if (!sched || !sched->coro_registry) { base[a] = xr_bool(false); return VM_COLD_BREAK; }
         XrCoroutine *target = xr_coro_registry_whereis(sched->coro_registry, name_cstr);
         if (!target || xr_coro_flags_has(target, XR_CORO_FLG_DONE)) {

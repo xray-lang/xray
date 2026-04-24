@@ -1017,11 +1017,20 @@ throw_check_done:
                             cf->call_args_count = 0;
                             return;
                         }
-                        if (dst_is_int && method_symbol == XRT_SYM_IS_EMPTY) {
-                            xcgen_buf_printf(b, "    v%u = (((const char *)",
-                                             dst_idx);
+                        if ((dst_is_int || dst_vtype == XR_REP_TAGGED) &&
+                            method_symbol == XRT_SYM_IS_EMPTY) {
+                            if (dst_vtype == XR_REP_TAGGED)
+                                xcgen_buf_printf(b, "    v%u = xrt_box_bool(", dst_idx);
+                            else
+                                xcgen_buf_printf(b, "    v%u = ", dst_idx);
+                            xcgen_buf_puts(b, "(((const char *)");
                             xcg_emit_ref(b, func, recv_ref);
-                            xcgen_buf_puts(b, ".ptr)[0] == '\\0') ? 1 : 0;\n");
+                            xcgen_buf_puts(b, ".ptr)[0] == '\\0') ? 1 : 0");
+                            if (dst_vtype == XR_REP_TAGGED)
+                                xcgen_buf_puts(b, ");");
+                            else
+                                xcgen_buf_puts(b, ";");
+                            xcgen_buf_puts(b, "\n");
                             cf->call_args_count = 0;
                             return;
                         }
@@ -1031,13 +1040,22 @@ throw_check_done:
                         uint8_t arg1_type = xir_ref_is_none(arg1)
                                             ? XR_REP_TAGGED : xcg_ref_type(func, arg1);
                         bool arg1_is_str = (arg1_type == XR_REP_STR);
-                        if (dst_is_int && arg1_is_str && method_symbol == XRT_SYM_CONTAINS) {
-                            xcgen_buf_printf(b, "    v%u = strstr((const char *)",
-                                             dst_idx);
+                        if ((dst_is_int || dst_vtype == XR_REP_TAGGED) &&
+                            arg1_is_str && method_symbol == XRT_SYM_CONTAINS) {
+                            if (dst_vtype == XR_REP_TAGGED)
+                                xcgen_buf_printf(b, "    v%u = xrt_box_bool(", dst_idx);
+                            else
+                                xcgen_buf_printf(b, "    v%u = ", dst_idx);
+                            xcgen_buf_puts(b, "strstr((const char *)");
                             xcg_emit_ref(b, func, recv_ref);
                             xcgen_buf_puts(b, ".ptr, (const char *)");
                             xcg_emit_ref(b, func, arg1);
-                            xcgen_buf_puts(b, ".ptr) ? 1 : 0;\n");
+                            xcgen_buf_puts(b, ".ptr) ? 1 : 0");
+                            if (dst_vtype == XR_REP_TAGGED)
+                                xcgen_buf_puts(b, ");");
+                            else
+                                xcgen_buf_puts(b, ";");
+                            xcgen_buf_puts(b, "\n");
                             cf->needs_runtime = true;
                             cf->call_args_count = 0;
                             return;
@@ -1053,26 +1071,36 @@ throw_check_done:
                             cf->call_args_count = 0;
                             return;
                         }
-                        if (dst_is_int && arg1_is_str && method_symbol == XRT_SYM_STARTSWITH) {
+                        if ((dst_is_int || dst_vtype == XR_REP_TAGGED) &&
+                            arg1_is_str && method_symbol == XRT_SYM_STARTSWITH) {
                             xcgen_buf_printf(b, "    { const char *_s = (const char *)");
                             xcg_emit_ref(b, func, recv_ref);
                             xcgen_buf_puts(b, ".ptr; const char *_p = (const char *)");
                             xcg_emit_ref(b, func, arg1);
                             xcgen_buf_puts(b, ".ptr; size_t _pl = strlen(_p); ");
-                            xcgen_buf_printf(b, "v%u = (strlen(_s) >= _pl && memcmp(_s, _p, _pl) == 0) ? 1 : 0; }\n",
-                                             dst_idx);
+                            if (dst_vtype == XR_REP_TAGGED)
+                                xcgen_buf_printf(b, "v%u = xrt_box_bool((strlen(_s) >= _pl && memcmp(_s, _p, _pl) == 0) ? 1 : 0); }\n",
+                                                 dst_idx);
+                            else
+                                xcgen_buf_printf(b, "v%u = (strlen(_s) >= _pl && memcmp(_s, _p, _pl) == 0) ? 1 : 0; }\n",
+                                                 dst_idx);
                             cf->needs_runtime = true;
                             cf->call_args_count = 0;
                             return;
                         }
-                        if (dst_is_int && arg1_is_str && method_symbol == XRT_SYM_ENDSWITH) {
+                        if ((dst_is_int || dst_vtype == XR_REP_TAGGED) &&
+                            arg1_is_str && method_symbol == XRT_SYM_ENDSWITH) {
                             xcgen_buf_printf(b, "    { const char *_s = (const char *)");
                             xcg_emit_ref(b, func, recv_ref);
                             xcgen_buf_puts(b, ".ptr; size_t _sl = strlen(_s); const char *_p = (const char *)");
                             xcg_emit_ref(b, func, arg1);
                             xcgen_buf_puts(b, ".ptr; size_t _pl = strlen(_p); ");
-                            xcgen_buf_printf(b, "v%u = (_sl >= _pl && memcmp(_s + _sl - _pl, _p, _pl) == 0) ? 1 : 0; }\n",
-                                             dst_idx);
+                            if (dst_vtype == XR_REP_TAGGED)
+                                xcgen_buf_printf(b, "v%u = xrt_box_bool((_sl >= _pl && memcmp(_s + _sl - _pl, _p, _pl) == 0) ? 1 : 0); }\n",
+                                                 dst_idx);
+                            else
+                                xcgen_buf_printf(b, "v%u = (_sl >= _pl && memcmp(_s + _sl - _pl, _p, _pl) == 0) ? 1 : 0; }\n",
+                                                 dst_idx);
                             cf->needs_runtime = true;
                             cf->call_args_count = 0;
                             return;
@@ -1139,8 +1167,12 @@ throw_check_done:
                         xcgen_buf_puts(b, "for (int64_t _i = 0; _i < _m->len; _i++) ");
                         xcgen_buf_puts(b, "if (xrt_key_eq(_m->entries[_i].key, ");
                         emit_ref_as_tagged(b, func, arg1);
-                        xcgen_buf_printf(b, ")) { _found = 1; break; } v%u = _found; }\n",
-                                         dst_idx);
+                        if (dst_vtype == XR_REP_TAGGED)
+                            xcgen_buf_printf(b, ")) { _found = 1; break; } v%u = xrt_box_bool(_found); }\n",
+                                             dst_idx);
+                        else
+                            xcgen_buf_printf(b, ")) { _found = 1; break; } v%u = _found; }\n",
+                                             dst_idx);
                         cf->needs_runtime = true;
                         cf->call_args_count = 0;
                         return;

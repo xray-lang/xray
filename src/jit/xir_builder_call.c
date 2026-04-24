@@ -1266,6 +1266,9 @@ bool xir_translate_call_ops(XirBuilder *b, XirBlock **cur_blk,
             XirRef enc_val = xir_emit_unary(b->func, blk, XIR_CONST_I64, XR_REP_I64, enc_ref);
             XirRef v = xir_emit(b->func, blk, XIR_CALL_C, res_type, fn_ref, enc_val);
             blk->ins[blk->nins - 1].flags |= XIR_FLAG_SIDE_EFFECT;
+            // Bind call args for AOT codegen (JIT uses STORE_CORO above)
+            { XirRef ca[2] = { obj, key };
+              builder_bind_call_args(b, v, ca, 2); }
             builder_set_slot(b, a, v);
             // Read precise runtime tag from slot_runtime_tags[a] (written by call_c_stub)
             if (res_type == XR_REP_TAGGED && a >= 0 && a < 256) {
@@ -1360,6 +1363,9 @@ bool xir_translate_call_ops(XirBuilder *b, XirBlock **cur_blk,
             XirRef enc_val = xir_emit_unary(b->func, blk, XIR_CONST_I64, XR_REP_I64, enc_ref);
             XirRef v = xir_emit(b->func, blk, XIR_CALL_C, res_type, fn_ref, enc_val);
             blk->ins[blk->nins - 1].flags |= XIR_FLAG_SIDE_EFFECT;
+            // Bind call args for AOT codegen (JIT uses STORE_CORO above)
+            { XirRef ca[2] = { obj, key };
+              builder_bind_call_args(b, v, ca, 2); }
             builder_set_slot(b, a, v);
             // Read precise runtime tag from slot_runtime_tags[a] (written by call_c_stub)
             if (res_type == XR_REP_TAGGED && a >= 0 && a < 256) {
@@ -1399,8 +1405,11 @@ bool xir_translate_call_ops(XirBuilder *b, XirBlock **cur_blk,
             XirRef fn_ref = xir_const_ptr(b->func, (void *)xr_jit_index_set);
             XirRef enc_ref = xir_const_i64(b->func, encoded);
             XirRef enc_val = xir_emit_unary(b->func, blk, XIR_CONST_I64, XR_REP_I64, enc_ref);
-            xir_emit(b->func, blk, XIR_CALL_C, XR_REP_VOID, fn_ref, enc_val);
+            // Use I64 (not VOID) so builder_bind_call_args can bind to dst vreg
+            XirRef sv = xir_emit(b->func, blk, XIR_CALL_C, XR_REP_I64, fn_ref, enc_val);
             blk->ins[blk->nins - 1].flags |= XIR_FLAG_SIDE_EFFECT;
+            { XirRef ca[3] = { obj, key, val };
+              builder_bind_call_args(b, sv, ca, 3); }
             b->ops_translated++;
             return true;
         }
@@ -1430,8 +1439,11 @@ bool xir_translate_call_ops(XirBuilder *b, XirBlock **cur_blk,
             XirRef fn_ref = xir_const_ptr(b->func, (void *)xr_jit_index_set);
             XirRef enc_ref = xir_const_i64(b->func, encoded);
             XirRef enc_val = xir_emit_unary(b->func, blk, XIR_CONST_I64, XR_REP_I64, enc_ref);
-            xir_emit(b->func, blk, XIR_CALL_C, XR_REP_VOID, fn_ref, enc_val);
+            // Use I64 (not VOID) so builder_bind_call_args can bind to dst vreg
+            XirRef sv = xir_emit(b->func, blk, XIR_CALL_C, XR_REP_I64, fn_ref, enc_val);
             blk->ins[blk->nins - 1].flags |= XIR_FLAG_SIDE_EFFECT;
+            { XirRef ca[3] = { obj, key, val };
+              builder_bind_call_args(b, sv, ca, 3); }
             b->ops_translated++;
             return true;
         }

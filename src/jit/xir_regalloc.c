@@ -28,6 +28,7 @@
  */
 
 #include "xir_regalloc.h"
+#include "xir_target.h"
 #include "xir_looptree.h"
 #include "../base/xchecks.h"
 #include "../base/xmalloc.h"
@@ -792,8 +793,8 @@ static void compute_hints(LsCtx *ctx) {
     uint32_t gpi = 0, fpi = 0;
     for (uint32_t v = 0; v < f->num_params && v < nv; v++) {
         LsRange *r = ctx->vreg_ranges[v];
-        if (r->is_fp) { if (fpi < XRA_MAX_FP_REGS) r->hint = (int8_t)fpi++; }
-        else           { if (gpi < XRA_MAX_GP_REGS) r->hint = (int8_t)gpi++; }
+        if (r->is_fp) { if (fpi < xir_current_target->nfpr) r->hint = (int8_t)fpi++; }
+        else           { if (gpi < xir_current_target->ngpr) r->hint = (int8_t)gpi++; }
     }
 
     // Pass 2-4: iterative Phi + MOV + Bundle propagation (max 3 rounds)
@@ -1096,7 +1097,7 @@ static bool alloc_free_reg(LsCtx *ctx, LsRange *range,
                            LsRange ***wl, uint32_t *wl_len, uint32_t *wl_cap)
 {
     bool isfp = range->is_fp;
-    int mx = isfp ? XRA_MAX_FP_REGS : XRA_MAX_GP_REGS;
+    int mx = isfp ? xir_current_target->nfpr : xir_current_target->ngpr;
     int32_t rend = range_end(range);
     int32_t rstart = range_start(range);
 
@@ -1204,7 +1205,7 @@ static void alloc_blocked_reg(LsCtx *ctx, LsRange *range,
                               LsRange ***wl, uint32_t *wl_len, uint32_t *wl_cap)
 {
     bool isfp = range->is_fp;
-    int mx = isfp ? XRA_MAX_FP_REGS : XRA_MAX_GP_REGS;
+    int mx = isfp ? xir_current_target->nfpr : xir_current_target->ngpr;
     int32_t rstart = range_start(range);
     int32_t rend = range_end(range);
 

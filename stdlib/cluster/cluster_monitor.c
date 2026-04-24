@@ -212,7 +212,7 @@ void xr_cluster_handle_coro_monitor(XrCluster *c, XrClusterNode *node, const cha
     // Register a local monitor; on exit, send CORO_EXIT frame back.
     if (!c || !c->isolate) return;
 
-    XrScheduler *sched = (XrScheduler *)c->isolate->vm.scheduler;
+    XrCoroState *sched = (XrCoroState *)c->isolate->vm.coro_state;
     if (!sched || !sched->coro_registry) return;
 
     // Use the local registry monitor mechanism

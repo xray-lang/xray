@@ -32,7 +32,7 @@
 // Forward declarations
 struct XrCoroutine;
 struct XrayIsolate;
-struct XrScheduler;
+struct XrCoroState;
 struct XrProc;
 
 // ========== Error Codes ==========

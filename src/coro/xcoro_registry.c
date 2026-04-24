@@ -280,7 +280,7 @@ void xr_coro_on_exit(XrayIsolate *X, XrCoroutine *coro) {
     if (!X || !coro) return;
     if (!coro->name) return;  // fast path: anonymous coroutines
 
-    XrScheduler *sched = (XrScheduler *)xr_isolate_get_vm_state(X)->scheduler;
+    XrCoroState *sched = (XrCoroState *)xr_isolate_get_vm_state(X)->coro_state;
     if (sched && sched->coro_registry) {
         xr_coro_registry_unregister(sched->coro_registry, coro->name);
     }

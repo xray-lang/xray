@@ -66,7 +66,7 @@
 /* ========== Forward Declarations ========== */
 
 typedef struct XrCoroutine XrCoroutine;
-typedef struct XrScheduler XrScheduler;
+typedef struct XrCoroState XrCoroState;
 
 /* ========== Channel Lock ========== */
 

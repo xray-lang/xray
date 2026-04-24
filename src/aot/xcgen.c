@@ -24,6 +24,8 @@
 #include <string.h>
 #include <inttypes.h>
 #include "../base/xmalloc.h"
+#include "../jit/xir_sentinels.h"  // xrt_invoke_method_sentinel
+#include "xrt_method.h"              // XRT_SYM_* constants
 
 /* ========== Dynamic String Buffer ========== */
 
@@ -739,6 +741,58 @@ static void retype_field_loads(XcgenFunc *cf) {
     }
 }
 
+// Returns true if the given method symbol returns a boolean value.
+static bool is_bool_method(int method_symbol) {
+    switch (method_symbol) {
+        case XRT_SYM_CONTAINS:
+        case XRT_SYM_STARTSWITH:
+        case XRT_SYM_ENDSWITH:
+        case XRT_SYM_IS_EMPTY:
+        case XRT_SYM_INCLUDES:
+        case XRT_SYM_HAS:
+            return true;
+        default:
+            return false;
+    }
+}
+
+// Retype dst vregs of boolean-returning method calls from I64 to TAGGED.
+// Without this, the codegen path does xrt_unbox_int(xrt_method_N(...)) which
+// discards the BOOL tag, causing xrt_println to print "1"/"0" instead of
+// "true"/"false".  By retyping to TAGGED, the fallback xrt_method_N path
+// returns XrtValue directly (preserving the tag), and inline paths produce
+// xrt_box_bool() instead of raw 1/0.
+static void retype_bool_method_results(XcgenFunc *cf) {
+    XR_DCHECK(cf != NULL, "retype_bool_method_results: NULL cf");
+    XirFunc *func = cf->xfunc;
+    if (!func) return;
+    for (uint32_t bi = 0; bi < func->nblk; bi++) {
+        XirBlock *blk = func->blocks[bi];
+        for (uint32_t i = 0; i < blk->nins; i++) {
+            XirIns *ins = &blk->ins[i];
+            if (ins->op != XIR_CALL_C && ins->op != XIR_CALL_C_LEAF) continue;
+            if (!xir_ref_is_vreg(ins->dst)) continue;
+            if (!xir_ref_is_const(ins->args[0])) continue;
+            uint32_t ci = XIR_REF_INDEX(ins->args[0]);
+            if (ci >= func->nconst) continue;
+            void *fn_ptr = func->consts[ci].val.ptr;
+            fprintf(stderr, "[DBG-PRESCAN] CALL_C fn_ptr=%p sentinel=%p match=%d\n",
+                    fn_ptr, (void *)xrt_invoke_method_sentinel,
+                    fn_ptr == (void *)xrt_invoke_method_sentinel);
+            if (fn_ptr != (void *)xrt_invoke_method_sentinel) continue;
+            // Decode method_symbol from args[1]
+            int64_t encoded = 0;
+            if (!xcg_resolve_const_i64(func, ins->args[1], &encoded)) continue;
+            if (encoded < 0) continue;  // TOSTRING, not method call
+            int method_symbol = (int)(encoded >> 32);
+            if (!is_bool_method(method_symbol)) continue;
+            uint32_t dst_vi = XIR_REF_INDEX(ins->dst);
+            if (dst_vi < func->nvreg)
+                func->vregs[dst_vi].rep = XR_REP_TAGGED;
+        }
+    }
+}
+
 // Returns true if every block terminator in this function is a JMP_RET returning null.
 // JMP_RET is a block terminator in blk->jmp, not an instruction in blk->ins[].
 // When true, the AOT function can be emitted as void instead of XrtValue.
@@ -1294,6 +1348,9 @@ XcgenFunc *xcgen_compile_func(XcgenModule *mod, XirFunc *xfunc, const char *c_na
     // Retype non-promoted LOAD_FIELD results to TAGGED (16-byte XrtValue slots).
     // Runs unconditionally — class instances skip struct registration.
     retype_field_loads(cf);
+
+    // Retype boolean method results to TAGGED so print preserves true/false.
+    retype_bool_method_results(cf);
 
     // Generate forward declaration (after struct prescan so param struct types are known)
     xcgen_emit_forward_decl(mod, cf);
