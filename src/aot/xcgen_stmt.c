@@ -156,6 +156,25 @@ void xcg_emit_terminator(XcgenBuf *b, XirFunc *func, XirBlock *blk,
             if (cf && cf->shadow_stack_count > 0)
                 xcgen_buf_puts(b, "    xrt_shadow_sp = xrt_saved_sp;\n");
 
+            // Defer cleanup: call deferred closures in LIFO order before return
+            if (cf && cf->defer_count > 0) {
+                for (int di = cf->defer_count - 1; di >= 0; di--) {
+                    int nargs = func->defer_entries[di].arg_count;
+                    xcgen_buf_printf(b,
+                        "    if (_defer_%d_set) ((void (*)(XrtContext, xrt_closure_t*",
+                        di);
+                    for (int ai = 0; ai < nargs; ai++)
+                        xcgen_buf_puts(b, ", XrValue");
+                    xcgen_buf_printf(b,
+                        "))((xrt_closure_t*)_defer_%d.ptr)->fn)"
+                        "(xrt_ctx, (xrt_closure_t*)_defer_%d.ptr",
+                        di, di);
+                    for (int ai = 0; ai < nargs; ai++)
+                        xcgen_buf_printf(b, ", _defer_%d_arg%d", di, ai);
+                    xcgen_buf_puts(b, ");\n");
+                }
+            }
+
             // void_return functions always return null; emit bare return
             if (cf && cf->void_return) {
                 xcgen_buf_puts(b, "    return;\n");

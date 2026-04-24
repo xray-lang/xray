@@ -983,6 +983,19 @@ static void xcgen_compile_function_body(XcgenModule *mod, XcgenFunc *cf) {
             xcgen_buf_printf(&locals, "    int _ef%d_state = 0;\n", ei);
         }
     }
+    // Emit defer locals
+    if (cf->defer_count > 0) {
+        for (int di = 0; di < cf->defer_count; di++) {
+            xcgen_buf_printf(&locals, "    XrValue _defer_%d = {0};\n", di);
+            xcgen_buf_printf(&locals, "    int _defer_%d_set = 0;\n", di);
+            // Emit arg save slots for deferred calls with arguments
+            int nargs = func->defer_entries[di].arg_count;
+            for (int ai = 0; ai < nargs; ai++) {
+                xcgen_buf_printf(&locals, "    XrValue _defer_%d_arg%d = {0};\n",
+                                 di, ai);
+            }
+        }
+    }
     if (locals.len > 0)
         xcgen_buf_puts(&locals, "\n");
 
@@ -1223,6 +1236,9 @@ XcgenFunc *xcgen_compile_func(XcgenModule *mod, XirFunc *xfunc, const char *c_na
             cf->needs_closure_param = false;  // no longer needs xrt_closure_t* param
         }
     }
+
+    // Transfer defer count from XIR function to codegen state
+    cf->defer_count = xfunc->defer_count;
 
     // Run escape analysis on this function's child closures.
     // Must happen before child functions are compiled so they see the non_escaping flag.

@@ -1,0 +1,6 @@
+// DAP test fixture: function breakpoint test
+fn greet(name: string) {
+    print("hello " + name)
+}
+greet("world")
+print("done")

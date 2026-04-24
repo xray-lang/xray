@@ -179,6 +179,10 @@ typedef enum {
     XIR_THROW,       // throw exception
     XIR_CATCH,       // catch entry (read exception value)
 
+    // --- Defer (AOT only) ---
+    XIR_DEFER_PUSH,  // push closure to defer stack: args[0]=closure, args[1]=const(nargs)
+                     // actual call args stored in XirFunc.defer_entries[]
+
     // --- ARC reference counting (AOT mode only) ---
     XIR_RETAIN,      // ARC retain: args[0]=ptr — rc++, no result
     XIR_RELEASE,     // ARC release: args[0]=ptr — rc--, free when 0

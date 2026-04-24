@@ -109,6 +109,10 @@ typedef struct XcgenFunc {
 
     // Shadow stack: number of XrtValue locals registered for GC scanning
     int            shadow_stack_count;
+
+    // Defer tracking: number of deferred closures in this function.
+    // Codegen emits _defer_N / _defer_N_set locals and LIFO cleanup at returns.
+    int            defer_count;
 } XcgenFunc;
 
 /* ========== Forward Declarations ========== */

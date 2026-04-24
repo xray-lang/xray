@@ -157,12 +157,17 @@ static XrDebugAction hook_on_line(XrayIsolate *isolate, const char *path,
         }
     }
 
-    // 3. Function breakpoint check (only on line change)
+    // 3. Function breakpoint check (only on function entry — first line of proto)
     if (line_changed && closure && closure->proto && closure->proto->name) {
-        const char *func_name = XR_STRING_CHARS(closure->proto->name);
-        if (xr_debug_check_function_breakpoint(isolate, func_name)) {
-            hook_record_stop(isolate, dbg, path, line, closure, frame_depth, XDAP_STOP_BREAKPOINT);
-            return XR_DBG_ACTION_BREAK;
+        int first_line = PROTO_LINE_COUNT(closure->proto) > 0
+            ? PROTO_LINE(closure->proto, 0) : 0;
+        if (line == first_line) {
+            const char *func_name = XR_STRING_CHARS(closure->proto->name);
+            if (xr_debug_check_function_breakpoint(isolate, func_name)) {
+                hook_record_stop(isolate, dbg, path, line, closure, frame_depth,
+                                 XDAP_STOP_BREAKPOINT);
+                return XR_DBG_ACTION_BREAK;
+            }
         }
     }
 
