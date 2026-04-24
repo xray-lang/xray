@@ -435,10 +435,29 @@ static void aot_preregister_classes(XrProto *proto, XrayIsolate *isolate) {
 
 // Scan bytecodes for OP_EXPORT and correlate with OP_SETSHARED to populate exports.
 // Pattern: OP_SETSHARED R[A], shared_idx; ... OP_EXPORT K[name_idx], R[A], is_const
-static void collect_exports(XrProto *proto, XcgenModule *mod) {
+// For const exports without SETSHARED, allocates synthetic shared indices and
+// populates out_slots/out_nslots so the XIR builder can emit SETSHARED at export time.
+static void collect_exports(XrProto *proto, XcgenModule *mod,
+                            XirAotExportSlot **out_slots, int *out_nslots) {
+    if (out_slots) *out_slots = NULL;
+    if (out_nslots) *out_nslots = 0;
     if (!proto || !mod) return;
     uint32_t code_count = (uint32_t)proto->code.count;
     const XrInstruction *code = (const XrInstruction *)proto->code.data;
+
+    // Find max local Bx in SETSHARED to allocate synthetic indices beyond it
+    int max_local_bx = -1;
+    for (uint32_t pc = 0; pc < code_count; pc++) {
+        if (GET_OPCODE(code[pc]) == OP_SETSHARED) {
+            int bx = GETARG_Bx(code[pc]);
+            if (bx > max_local_bx) max_local_bx = bx;
+        }
+    }
+    int next_local_bx = max_local_bx + 1;
+
+    // Temporary storage for synthetic export slots
+    XirAotExportSlot synth[64];
+    int nsynth = 0;
 
     for (uint32_t pc = 0; pc < code_count; pc++) {
         XrInstruction inst = code[pc];
@@ -457,10 +476,8 @@ static void collect_exports(XrProto *proto, XcgenModule *mod) {
         // Scan backwards for the shared_index, tracing through OP_MOVE chains.
         // Two-pass: (1) collect all registers in the MOVE chain,
         // (2) scan for GETSHARED/SETSHARED matching any of them.
-        // This handles class exports where MOVE chain interleaves with
-        // SETSHARED in bytecode order.
         int shared_idx = -1;
-        int chain[16]; // register chain
+        int chain[16];
         int chain_len = 0;
         chain[chain_len++] = value_reg;
         for (int bpc = (int)pc - 1; bpc >= 0 && chain_len < 16; bpc--) {
@@ -484,8 +501,27 @@ static void collect_exports(XrProto *proto, XcgenModule *mod) {
             }
         }
 
-        if (shared_idx >= 0) {
-            xcgen_module_add_export(mod, export_name, shared_idx, is_const != 0);
+        if (shared_idx < 0) {
+            // Allocate a synthetic shared index for this const export
+            shared_idx = next_local_bx + proto->shared_offset;
+            if (nsynth < 64) {
+                synth[nsynth].export_pc = pc;
+                synth[nsynth].value_reg = value_reg;
+                synth[nsynth].shared_index = shared_idx;
+                nsynth++;
+            }
+            next_local_bx++;
+        }
+        xcgen_module_add_export(mod, export_name, shared_idx, is_const != 0);
+    }
+
+    // Copy synthetic slots to caller-owned array
+    if (nsynth > 0 && out_slots && out_nslots) {
+        *out_slots = (XirAotExportSlot *)xr_malloc(
+                         nsynth * sizeof(XirAotExportSlot));
+        if (*out_slots) {
+            memcpy(*out_slots, synth, nsynth * sizeof(XirAotExportSlot));
+            *out_nslots = nsynth;
         }
     }
 }
@@ -519,6 +555,9 @@ typedef struct {
     char        (*aot_c_names)[140]; // C function names (owned)
     int           aot_count;
     int           aot_cap;
+    // Synthetic export slots for const exports without OP_SETSHARED
+    XirAotExportSlot *export_slots;  // owned, passed to XIR builder
+    int               export_slot_count;
 } AotModuleInfo;
 
 // Derive a C-safe module name from absolute path (caller must free)
@@ -744,8 +783,10 @@ static int cmd_build_native(const char *input, const char *output,
         modules[m].cmod = xcgen_compilation_add_module(comp, mname, modules[m].path);
         XR_DCHECK(modules[m].cmod != NULL, "cmd_build_native: add_module failed");
 
-        // Collect exports
-        collect_exports(proto, modules[m].cmod);
+        // Collect exports (+ synthetic const export slots)
+        collect_exports(proto, modules[m].cmod,
+                        &modules[m].export_slots,
+                        &modules[m].export_slot_count);
 
         // Collect AOT-eligible protos
         modules[m].aot_cap = 64;
@@ -822,13 +863,23 @@ static int cmd_build_native(const char *input, const char *output,
             XrProto *p = modules[m].aot_protos[i];
             const char *fname = p->name ? XR_STRING_CHARS(p->name) : "__module_init";
 
-            // Use extended builder with import map for top-level init functions
+            // Use extended builder with import/export opts for init functions
             XirFunc *xfunc;
-            if (!p->name && import_map_count > 0)
+            bool is_init = (p->name == NULL);
+            bool needs_opts = is_init && (import_map_count > 0 ||
+                                           modules[m].export_slot_count > 0);
+            if (needs_opts) {
+                XirAotOptions opts = {
+                    .import_map = import_map,
+                    .import_count = import_map_count,
+                    .export_slots = modules[m].export_slots,
+                    .export_slot_count = modules[m].export_slot_count,
+                };
                 xfunc = xir_build_from_proto_aot_ex(
-                    p, shared_protos, nshared, X, import_map, import_map_count);
-            else
+                    p, shared_protos, nshared, X, &opts);
+            } else {
                 xfunc = xir_build_from_proto_aot(p, shared_protos, nshared, X);
+            }
 
             if (!xfunc) {
                 printf("  [C] %s → skip (XIR build failed)\n", fname);
@@ -884,6 +935,7 @@ static int cmd_build_native(const char *input, const char *output,
         xr_free((void *)modules[m].mod_name);
         xr_free(modules[m].aot_protos);
         xr_free(modules[m].aot_c_names);
+        xr_free(modules[m].export_slots);
     }
     xr_free(modules);
     // Free import_map strings (module_path pointers are shared per-module group)
@@ -916,6 +968,7 @@ fail_early:
         xr_free((void *)modules[m].mod_name);
         xr_free(modules[m].aot_protos);
         xr_free(modules[m].aot_c_names);
+        xr_free(modules[m].export_slots);
     }
     xr_free(modules);
     return 1;
@@ -927,6 +980,7 @@ fail_final:
         xr_free((void *)modules[m].mod_name);
         xr_free(modules[m].aot_protos);
         xr_free(modules[m].aot_c_names);
+        xr_free(modules[m].export_slots);
     }
     xr_free(modules);
     return 1;

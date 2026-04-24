@@ -50,9 +50,8 @@ void xr_cli_print_version(void) {
 
 /* Print option help lines for a command's option spec. */
 static void print_options(const XrCliOptionSpec *opts) {
-    if (!opts || !opts[0].long_name) return;
-
     printf("\nOptions:\n");
+    if (!opts || !opts[0].long_name) return;
     for (int i = 0; opts[i].long_name != NULL; i++) {
         const XrCliOptionSpec *o = &opts[i];
         char short_buf[8] = "";
@@ -136,6 +135,7 @@ void xr_cli_print_command_help(const XrCliCommandSpec *spec) {
     }
 
     print_options(spec->options);
+    printf("  -h, --help                     Show help\n");
     printf("\n");
 }
 

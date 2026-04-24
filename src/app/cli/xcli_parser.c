@@ -15,6 +15,7 @@
 
 #include "xcli_parser.h"
 #include "xcli_diag.h"
+#include "xcli_output.h"
 #include "../../base/xmalloc.h"
 #include "../../base/xchecks.h"
 #include <string.h>
@@ -33,27 +34,52 @@ int xr_cli_parse_global(int argc, char **argv, XrCliContext *ctx) {
     ctx->json_output = false;
     ctx->program = (argc > 0) ? argv[0] : "xray";
 
-    /* Global flags only appear as argv[1] in current design.
-     * If argv[1] is a global flag, consume it. */
     if (argc < 2) return 0;
 
-    const char *arg = argv[1];
-    if (strcmp(arg, "--help") == 0 || strcmp(arg, "-h") == 0) {
-        return -1;
-    }
-    if (strcmp(arg, "--version") == 0 || strcmp(arg, "-v") == 0) {
-        return -2;
-    }
-    if (strcmp(arg, "--color") == 0) {
-        ctx->color = true;
-        return 1;
-    }
-    if (strcmp(arg, "--no-color") == 0) {
-        ctx->color = false;
-        return 1;
+    int consumed = 0;
+    for (int i = 1; i < argc; i++) {
+        const char *arg = argv[i];
+        /* Stop at first non-flag or end-of-flags */
+        if (arg[0] != '-') break;
+
+        if (strcmp(arg, "--help") == 0 || strcmp(arg, "-h") == 0)
+            return -1;
+        if (strcmp(arg, "--version") == 0 || strcmp(arg, "-v") == 0)
+            return -2;
+        if (strcmp(arg, "--color") == 0) {
+            ctx->color = true;
+            xr_cli_set_color(XR_COLOR_ON);
+            consumed++;
+        } else if (strcmp(arg, "--no-color") == 0) {
+            ctx->color = false;
+            xr_cli_set_color(XR_COLOR_OFF);
+            consumed++;
+        } else if (strcmp(arg, "--verbose") == 0) {
+            ctx->verbose = true;
+            consumed++;
+        } else if (strcmp(arg, "--quiet") == 0 || strcmp(arg, "-q") == 0) {
+            ctx->quiet = true;
+            consumed++;
+        } else if (strcmp(arg, "--json") == 0) {
+            ctx->json_output = true;
+            consumed++;
+        } else {
+            /* Unknown flag — not a global flag, let command parse it */
+            break;
+        }
     }
 
-    return 0;
+    /* Apply to output layer (color is only forced when explicitly requested) */
+    if (ctx->verbose) {
+        xr_cli_set_output_level(XR_OUTPUT_VERBOSE);
+    } else if (ctx->quiet) {
+        xr_cli_set_output_level(XR_OUTPUT_QUIET);
+    }
+    if (ctx->json_output) {
+        xr_cli_set_json(true);
+    }
+
+    return consumed;
 }
 
 /* ========== Option Matching Helpers ========== */

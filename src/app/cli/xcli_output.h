@@ -50,6 +50,22 @@ XR_FUNC bool xr_cli_color_enabled(void);
  * Convenience for:  printf("%sPASS%s\n", CLR(XR_CLR_GREEN), CLR(XR_CLR_RESET)); */
 XR_FUNC const char *xr_cli_clr(const char *code);
 
+/* ========== Output Verbosity ========== */
+
+typedef enum {
+    XR_OUTPUT_NORMAL,   /* Default */
+    XR_OUTPUT_VERBOSE,  /* --verbose: extra detail */
+    XR_OUTPUT_QUIET,    /* --quiet: errors only */
+} XrCliOutputLevel;
+
+/* Set/query output level. Called by dispatch after parsing global flags. */
+XR_FUNC void xr_cli_set_output_level(XrCliOutputLevel level);
+XR_FUNC XrCliOutputLevel xr_cli_output_level(void);
+
+/* Set/query JSON output mode. */
+XR_FUNC void xr_cli_set_json(bool on);
+XR_FUNC bool xr_cli_json_output(void);
+
 /* ========== Timing ========== */
 
 /* Monotonic time in milliseconds. */

@@ -131,4 +131,8 @@ XR_FUNC const XrCliCommandSpec *xr_cli_find_command(const char *name);
 /* Count the number of options in a spec array (up to sentinel). */
 XR_FUNC int xr_cli_option_count(const XrCliOptionSpec *opts);
 
+/* Register a handler for a command by name.
+ * Called once at startup to populate the spec->handler field. */
+XR_FUNC void xr_cli_register_handler(const char *name, XrCliHandler handler);
+
 #endif // XCLI_SPEC_H

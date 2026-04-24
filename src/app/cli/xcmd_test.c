@@ -234,13 +234,12 @@ static void run_test_file(const char *filepath, XrTestConfig *config,
     memset(result, 0, sizeof(*result));
     strncpy(result->filepath, filepath, sizeof(result->filepath) - 1);
 
-    // Create fresh isolate
+    // Create fresh isolate via profile factory
     XrayIsolateParams params;
-    xray_isolate_params_init(&params);
-    xray_isolate_setup_full(&params);
+    xr_cli_isolate_params(XR_CLI_ISOLATE_TEST, &params);
     params.enable_jit = !jitless;
     if (jit_force) params.jit_threshold = 1;
-    XrayIsolate *X = xray_isolate_new(&params);
+    XrayIsolate *X = xr_cli_isolate_create(&params);
     if (!X) {
         result->has_error = true;
         snprintf(result->error_msg, sizeof(result->error_msg), "failed to create isolate");

@@ -18,6 +18,10 @@
 
 #include "xcli_spec.h"
 
+/* Register all command handlers into the spec table.
+ * Must be called once before xr_cli_main(). */
+void xr_cli_register_all_handlers(void);
+
 /* Main CLI entry point. Called from main() after signal setup.
  * Returns an exit code (0 on success). */
 XR_FUNC int xr_cli_main(int argc, char **argv);

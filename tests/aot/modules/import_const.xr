@@ -1,0 +1,8 @@
+// AOT test: import const values from another module
+import { MAX_SIZE, VERSION, clamp } from "./export_const"
+
+print(MAX_SIZE)        // 1024
+print(VERSION)         // 1
+print(clamp(50, 0, 100))  // 50
+print(clamp(-5, 0, 100))  // 0
+print(clamp(200, 0, 100)) // 100

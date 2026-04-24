@@ -52,13 +52,29 @@ typedef struct {
     uint32_t back_edge_pc;      // source of backward jump
 } BuilderLoop;
 
-/* ========== AOT Import Resolution ========== */
+/* ========== AOT Import / Export Resolution ========== */
 
 typedef struct {
     const char *module_path;    // import path (e.g. "./math")
     const char *export_name;    // export name (e.g. "add")
     int         shared_index;   // absolute shared index in xrt_shared[]
 } XirAotImportEntry;
+
+// Synthetic export slot: const exports without OP_SETSHARED in bytecode.
+// The builder emits a SETSHARED at the OP_EXPORT PC for these.
+typedef struct {
+    uint32_t export_pc;         // bytecode PC of the OP_EXPORT instruction
+    int      value_reg;         // register holding the value at export time
+    int      shared_index;      // absolute shared index to write to
+} XirAotExportSlot;
+
+// Bundled AOT build options (keeps public API params <= 6)
+typedef struct {
+    XirAotImportEntry  *import_map;
+    int                 import_count;
+    XirAotExportSlot   *export_slots;
+    int                 export_slot_count;
+} XirAotOptions;
 
 /* ========== Builder State ========== */
 
@@ -144,6 +160,10 @@ typedef struct {
     int                aot_import_count;
     const char        *import_modules[256]; // slot → module path (NULL = not import reg)
 
+    // AOT synthetic export slots: const exports needing SETSHARED injection
+    XirAotExportSlot  *aot_export_slots;
+    int                aot_export_slot_count;
+
     // Conservative mode: skip type speculation guards (shape/klass guards).
     // Emits generic CALL_C paths to avoid deopt on type-unstable functions.
     // Set when deopt_count >= 5 (adaptive recompile after frequent deopts).
@@ -179,12 +199,12 @@ XR_FUNC XirFunc *xir_build_from_proto_aot(XrProto *proto,
                                    XrProto **shared_protos, int nshared,
                                    struct XrayIsolate *isolate);
 
-// Build XIR in AOT mode with cross-module import resolution map.
-// import_map entries allow OP_IMPORT+OP_GETPROP to resolve to GETSHARED.
+// Build XIR in AOT mode with cross-module import/export resolution.
+// opts->import_map allows OP_IMPORT+OP_GETPROP to resolve to GETSHARED.
+// opts->export_slots allows OP_EXPORT to emit synthetic SETSHARED.
 XR_FUNC XirFunc *xir_build_from_proto_aot_ex(XrProto *proto,
                                    XrProto **shared_protos, int nshared,
                                    struct XrayIsolate *isolate,
-                                   XirAotImportEntry *import_map,
-                                   int import_count);
+                                   const XirAotOptions *opts);
 
 #endif // XIR_BUILDER_H
