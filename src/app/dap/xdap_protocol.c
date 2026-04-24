@@ -141,16 +141,7 @@ static void handle_initialize(XdapController *ctrl, int seq, XrJsonValue *args) 
     xlsp_json_object_set(body, "supportsSetVariable", xlsp_json_new_bool(true));
     xlsp_json_object_set(body, "supportsEvaluateForHovers", xlsp_json_new_bool(true));
     xlsp_json_object_set(body, "supportsDisassembleRequest", xlsp_json_new_bool(true));
-    xlsp_json_object_set(body, "supportsSteppingGranularity", xlsp_json_new_bool(true));
-    // Newly-declared (backed by handlers added in this file):
-    //   * terminateDebuggee semantics honoured in handle_disconnect
-    //   * conditional exception filters supported via break_caught/uncaught
-    // Advertising these lets VS Code expose richer UI (restart button stays
-    // enabled for attach sessions, "Disconnect and terminate" menu entry,
-    // editable filter conditions, etc.).
     xlsp_json_object_set(body, "supportTerminateDebuggee", xlsp_json_new_bool(true));
-    xlsp_json_object_set(body, "supportsExceptionFilterOptions", xlsp_json_new_bool(true));
-    xlsp_json_object_set(body, "supportsExceptionOptions", xlsp_json_new_bool(true));
 
     // Exception breakpoint filters
     XrJsonValue *filters = xlsp_json_new_array();

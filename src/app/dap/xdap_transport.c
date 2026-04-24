@@ -233,12 +233,47 @@ XdapTransport *xdap_transport_tcp_server(int port) {
 
     fprintf(stderr, "[DAP] Listening on port %d, waiting for debugger...\n", t->listen_port);
 
-    // Accept connection (blocking for now, could be made async)
+    // Non-blocking accept: poll the listen socket so we don't hang forever
+    set_nonblock(t->listen_fd);
+
+    // Temporary poll for accept (the main poll is initialized later for the client fd)
+    XrPoll accept_poll;
+    if (xr_poll_init(&accept_poll) < 0) {
+        fprintf(stderr, "[DAP] Failed to initialize accept poll\n");
+        xdap_transport_free(t);
+        return NULL;
+    }
+    if (xr_poll_add(&accept_poll, t->listen_fd, XR_POLL_IN, NULL) < 0) {
+        xr_poll_destroy(&accept_poll);
+        xdap_transport_free(t);
+        return NULL;
+    }
+
+    int client_fd = -1;
     struct sockaddr_in client_addr;
     socklen_t client_len = sizeof(client_addr);
-    int client_fd = accept(t->listen_fd, (struct sockaddr *)&client_addr, &client_len);
+
+    // Poll with 500ms timeout so the process stays interruptible
+    for (;;) {
+        XrPollEvent ev[1];
+        int n = xr_poll_wait(&accept_poll, ev, 1, 500);
+        if (n < 0) {
+            if (errno == EINTR) continue;  // Signal, retry
+            fprintf(stderr, "[DAP] Accept poll error: %s\n", strerror(errno));
+            break;
+        }
+        if (n > 0) {
+            client_fd = accept(t->listen_fd, (struct sockaddr *)&client_addr, &client_len);
+            if (client_fd >= 0) break;
+            if (errno == EAGAIN || errno == EWOULDBLOCK) continue;
+            fprintf(stderr, "[DAP] Failed to accept connection: %s\n", strerror(errno));
+            break;
+        }
+        // n == 0: timeout, loop again
+    }
+    xr_poll_destroy(&accept_poll);
+
     if (client_fd < 0) {
-        fprintf(stderr, "[DAP] Failed to accept connection: %s\n", strerror(errno));
         xdap_transport_free(t);
         return NULL;
     }

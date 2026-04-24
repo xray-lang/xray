@@ -870,45 +870,21 @@ static void xcgen_compile_function_body(XcgenModule *mod, XcgenFunc *cf) {
     XcgenBuf stmts;
     xcgen_buf_init(&stmts);
 
-    // Exception frame tracking: detect try region boundaries.
-    // cur_exc_handler tracks which catch block the current try region targets.
-    // When it transitions NULL→non-NULL we push a setjmp frame;
-    // when it transitions non-NULL→NULL (or to different handler) we pop.
+    // Exception frame tracking with finally/re-throw support.
+    // Push setjmp frames when entering try regions, pop before the
+    // terminator when the block exits the try region, and track state
+    // for re-throw after finally via _ef{n}_state variables.
     XirBlock *cur_exc_handler = NULL;
     int exc_frame_idx = 0;  // counter for unique frame variable names
+    memset(cf->exc_catch_frame, -1, sizeof(cf->exc_catch_frame));
+    cf->exc_pending_depth = 0;
 
     for (uint32_t bi = 0; bi < func->nblk; bi++) {
         if (!reachable[bi]) continue;
         XirBlock *blk = func->blocks[bi];
-
-        // Exception frame transitions: detect try region entry/exit.
-        // A block with exception_handler != cur_exc_handler means we
-        // crossed a try boundary. Skip catch blocks themselves (they
-        // read the exception but are not inside the try region).
         XirBlock *blk_eh = blk->exception_handler;
-        if (blk_eh != cur_exc_handler) {
-            if (cur_exc_handler != NULL) {
-                // Exiting previous try region: pop exception frame
-                xcgen_buf_printf(&stmts, "    xrt_exc_top = _ef%d.prev; /* end try */\n",
-                                 exc_frame_idx - 1);
-            }
-            if (blk_eh != NULL) {
-                // Entering new try region: push setjmp frame
-                xcgen_buf_printf(&stmts, "    _ef%d.prev = xrt_exc_top;\n", exc_frame_idx);
-                xcgen_buf_printf(&stmts, "    xrt_exc_top = &_ef%d;\n", exc_frame_idx);
-                xcgen_buf_printf(&stmts, "    if (setjmp(_ef%d.buf) != 0) {\n", exc_frame_idx);
-                xcgen_buf_printf(&stmts, "        xrt_exception = _ef%d.exception;\n",
-                                 exc_frame_idx);
-                xcgen_buf_printf(&stmts, "        xrt_exc_top = _ef%d.prev;\n", exc_frame_idx);
-                xcgen_buf_printf(&stmts, "        goto L%u;\n", blk_eh->id);
-                xcgen_buf_puts(&stmts, "    }\n");
-                exc_frame_idx++;
-                cf->needs_exception = true;
-            }
-            cur_exc_handler = blk_eh;
-        }
 
-        // Label
+        // Label (emitted FIRST so gotos land before frame management)
         xcgen_buf_printf(&stmts, "L%u:", blk->id);
         if (blk->label)
             xcgen_buf_printf(&stmts, " /* %s */", blk->label);
@@ -920,6 +896,31 @@ static void xcgen_compile_function_body(XcgenModule *mod, XcgenFunc *cf) {
             xcgen_buf_printf(&stmts, "    v%u = phi_v%u;\n", vi, vi);
         }
 
+        // Entering new try region: push setjmp frame (after label + phis)
+        if (blk_eh != NULL && blk_eh != cur_exc_handler) {
+            int fidx = exc_frame_idx;
+            xcgen_buf_printf(&stmts, "    _ef%d_state = 0;\n", fidx);
+            xcgen_buf_printf(&stmts, "    _ef%d.prev = xrt_exc_top;\n", fidx);
+            xcgen_buf_printf(&stmts, "    xrt_exc_top = &_ef%d;\n", fidx);
+            xcgen_buf_printf(&stmts, "    if (setjmp(_ef%d.buf) != 0) {\n", fidx);
+            xcgen_buf_printf(&stmts, "        xrt_exception = _ef%d.exception;\n", fidx);
+            xcgen_buf_printf(&stmts, "        xrt_exc_top = _ef%d.prev;\n", fidx);
+            xcgen_buf_printf(&stmts, "        _ef%d_state = 1;\n", fidx);
+            xcgen_buf_printf(&stmts, "        goto L%u;\n", blk_eh->id);
+            xcgen_buf_puts(&stmts, "    }\n");
+            // Record handler block → frame index mapping
+            XR_DCHECK(blk_eh->id < 256, "exc_catch_frame: block id overflow");
+            cf->exc_catch_frame[blk_eh->id] = fidx;
+            // Push onto pending stack for TRY_END re-throw
+            XR_DCHECK(cf->exc_pending_depth < 8, "exc_pending_stack overflow");
+            cf->exc_pending_stack[cf->exc_pending_depth++] = fidx;
+            exc_frame_idx++;
+            cf->needs_exception = true;
+            cur_exc_handler = blk_eh;
+        } else if (blk_eh == NULL && cur_exc_handler != NULL) {
+            cur_exc_handler = NULL;
+        }
+
         // Instructions (skip dead: unused dst + no side effects)
         for (uint32_t i = 0; i < blk->nins; i++) {
             XirIns *ins = &blk->ins[i];
@@ -928,23 +929,59 @@ static void xcgen_compile_function_body(XcgenModule *mod, XcgenFunc *cf) {
                 uint32_t dvi = XIR_REF_INDEX(ins->dst);
                 if (dvi < func->nvreg && !used[dvi]) continue;
             }
+
+            // XIR_CATCH: reset exception state (exception successfully caught)
+            if (ins->op == XIR_CATCH && blk->id < 256) {
+                int fidx = cf->exc_catch_frame[blk->id];
+                if (fidx >= 0) {
+                    xcgen_buf_printf(&stmts,
+                        "    _ef%d_state = 0; /* caught */\n", fidx);
+                }
+            }
+
             xcg_emit_instruction(&stmts, func, ins, cf->c_name, mod, cf);
+
+            // XIR_TRY_END: re-throw if exception still pending after finally
+            if (ins->op == XIR_TRY_END && cf->exc_pending_depth > 0) {
+                int fidx = cf->exc_pending_stack[--cf->exc_pending_depth];
+                xcgen_buf_printf(&stmts,
+                    "    if (_ef%d_state) xrt_throw_exc(xrt_exception);\n",
+                    fidx);
+            }
+        }
+
+        // Pop exception frame BEFORE terminator if leaving try region.
+        // Check whether any successor block has a different exception_handler.
+        if (blk_eh != NULL && exc_frame_idx > 0) {
+            bool leaving = false;
+            if (blk->jmp.type == XIR_JMP_RET) {
+                leaving = true;
+            } else if (blk->jmp.type == XIR_JMP_JMP && blk->s1) {
+                if (blk->s1->exception_handler != blk_eh)
+                    leaving = true;
+            } else if (blk->jmp.type == XIR_JMP_BR) {
+                if ((blk->s1 && blk->s1->exception_handler != blk_eh) ||
+                    (blk->s2 && blk->s2->exception_handler != blk_eh))
+                    leaving = true;
+            }
+            if (leaving) {
+                xcgen_buf_printf(&stmts,
+                    "    xrt_exc_top = _ef%d.prev; /* exit try */\n",
+                    exc_frame_idx - 1);
+            }
         }
 
         // Terminator
         xcg_emit_terminator(&stmts, func, blk, cf->c_name, cf);
     }
-    // Pop any remaining exception frame
-    if (cur_exc_handler != NULL) {
-        xcgen_buf_printf(&stmts, "    xrt_exc_top = _ef%d.prev; /* end try */\n",
-                         exc_frame_idx - 1);
-    }
 
     // Emit exception locals now that needs_exception and exc_frame_idx are known
     if (cf->needs_exception) {
         xcgen_buf_printf(&locals, "    %s xrt_exception = {0};\n", tagged_type);
-        for (int ei = 0; ei < exc_frame_idx; ei++)
+        for (int ei = 0; ei < exc_frame_idx; ei++) {
             xcgen_buf_printf(&locals, "    XrtExcFrame _ef%d;\n", ei);
+            xcgen_buf_printf(&locals, "    int _ef%d_state = 0;\n", ei);
+        }
     }
     if (locals.len > 0)
         xcgen_buf_puts(&locals, "\n");

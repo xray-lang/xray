@@ -86,6 +86,14 @@ typedef struct XcgenFunc {
     bool           needs_exception;     // true if function uses try/catch (needs XrtValue xrt_exception local)
     bool           void_return;    // true if function always returns null → emit as void
 
+    // Exception frame tracking for finally support:
+    // Maps catch/finally handler block IDs to their exception frame index,
+    // and maintains a stack for TRY_END re-throw emission.
+    int            exc_catch_frame[256]; // block_id → frame_index (-1 = none)
+    int            exc_pending_stack[8]; // frame indices awaiting TRY_END re-throw
+    int            exc_pending_depth;    // depth of pending stack
+    bool           exc_has_finally[8];   // per-frame: true if this try has a finally block
+
     // Dead code elimination: which vregs are actually read
     bool          *used_vregs;
 

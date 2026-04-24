@@ -22,6 +22,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <limits.h>
+#include <time.h>
 #include "../../base/xmalloc.h"
 
 // lsp_log declared in xlsp_server.h (included via xlsp_workspace.h)
@@ -1015,6 +1016,87 @@ void xlsp_workspace_start_background_index_roots(XrLspServer *server,
         xr_free(files[i]);
     }
     xr_free(files);
+}
+
+// ============================================================================
+// Pending Analysis Queue — budgeted main-thread drain
+// ============================================================================
+
+void xlsp_enqueue_analysis(XrLspServer *server, const char *uri, const char *path) {
+    if (!server || !uri || !path) return;
+
+    // O(n) dedup — queue is typically small (<100 entries per batch)
+    for (int i = 0; i < server->pending_analysis_count; i++) {
+        if (strcmp(server->pending_analysis[i].path, path) == 0) {
+            return;  // Already queued
+        }
+    }
+
+    // Grow if needed
+    if (server->pending_analysis_count >= server->pending_analysis_capacity) {
+        int new_cap = server->pending_analysis_capacity == 0
+                    ? 32
+                    : server->pending_analysis_capacity * 2;
+        XlspPendingAnalysis *tmp = xr_realloc(server->pending_analysis,
+                                              (size_t)new_cap * sizeof(XlspPendingAnalysis));
+        if (!tmp) return;
+        server->pending_analysis = tmp;
+        server->pending_analysis_capacity = new_cap;
+    }
+
+    int idx = server->pending_analysis_count++;
+    server->pending_analysis[idx].uri  = xr_strdup(uri);
+    server->pending_analysis[idx].path = xr_strdup(path);
+}
+
+int xlsp_drain_pending_analysis(XrLspServer *server) {
+    if (!server || server->pending_analysis_count == 0) return 0;
+
+    struct timespec ts;
+    clock_gettime(CLOCK_MONOTONIC, &ts);
+    uint64_t now_ms = (uint64_t)ts.tv_sec * 1000 + ts.tv_nsec / 1000000;
+    uint64_t deadline = now_ms + ANALYSIS_DRAIN_BUDGET_MS;
+    int processed = 0;
+
+    while (server->pending_analysis_count > 0) {
+        // Pop from front
+        XlspPendingAnalysis entry = server->pending_analysis[0];
+
+        // Shift remaining entries (could be optimised with ring buffer later)
+        server->pending_analysis_count--;
+        for (int i = 0; i < server->pending_analysis_count; i++) {
+            server->pending_analysis[i] = server->pending_analysis[i + 1];
+        }
+
+        // Analyse on main thread
+        xlsp_workspace_index_file(server, entry.uri, entry.path);
+        xr_free(entry.uri);
+        xr_free(entry.path);
+        processed++;
+
+        // Respect time budget
+        clock_gettime(CLOCK_MONOTONIC, &ts);
+        now_ms = (uint64_t)ts.tv_sec * 1000 + ts.tv_nsec / 1000000;
+        if (now_ms >= deadline) break;
+    }
+
+    if (processed > 0) {
+        lsp_log("[Drain] Analysed %d files, %d remaining",
+                processed, server->pending_analysis_count);
+    }
+    return processed;
+}
+
+void xlsp_free_pending_analysis(XrLspServer *server) {
+    if (!server) return;
+    for (int i = 0; i < server->pending_analysis_count; i++) {
+        xr_free(server->pending_analysis[i].uri);
+        xr_free(server->pending_analysis[i].path);
+    }
+    xr_free(server->pending_analysis);
+    server->pending_analysis = NULL;
+    server->pending_analysis_count = 0;
+    server->pending_analysis_capacity = 0;
 }
 
 // Purge all analyzer/cache state for files under a path prefix

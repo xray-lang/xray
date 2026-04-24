@@ -177,6 +177,19 @@ XrVMResult run(XrayIsolate *isolate, XrVMContext *vm_ctx) {
         XrValue _exc = xr_exception_newf(isolate, (code), fmt, ##__VA_ARGS__); \
         savepc(); \
         xr_vm_add_stacktrace(isolate, _exc); \
+        { \
+            XrDebugHooks *_eh = (XrDebugHooks *)isolate->debug_hooks; \
+            if (_eh && _eh->on_exception) { \
+                bool _unc = (VM_HANDLER_COUNT == 0); \
+                const char *_msg = XR_IS_EXCEPTION(_exc) \
+                    ? xr_exception_get_message(_exc) : "<exception>"; \
+                if (_eh->on_exception(isolate, _msg, _unc) == XR_DBG_ACTION_BREAK) { \
+                    VM_SET_EXCEPTION(_exc); \
+                    ci->pc = pc - 1; \
+                    return XR_VM_DEBUG_BREAK; \
+                } \
+            } \
+        } \
         xr_vm_throw_exception(isolate, _exc); \
         if (VM_HANDLER_COUNT == 0) return XR_VM_RUNTIME_ERROR; \
         goto startfunc; \
@@ -6156,7 +6169,23 @@ startfunc:
                 }
 
                 // Add current position to stack trace
+                savepc();
                 xr_vm_add_stacktrace(isolate, exception);
+
+                // Debug hook: check exception breakpoint before unwinding
+                {
+                    XrDebugHooks *_eh = (XrDebugHooks *)isolate->debug_hooks;
+                    if (_eh && _eh->on_exception) {
+                        bool _unc = (VM_HANDLER_COUNT == 0);
+                        const char *_msg = XR_IS_EXCEPTION(exception)
+                            ? xr_exception_get_message(exception) : "<exception>";
+                        if (_eh->on_exception(isolate, _msg, _unc) == XR_DBG_ACTION_BREAK) {
+                            VM_SET_EXCEPTION(exception);
+                            ci->pc = pc - 1;
+                            return XR_VM_DEBUG_BREAK;
+                        }
+                    }
+                }
 
                 // Throw exception (stack unwinding)
                 xr_vm_throw_exception(isolate, exception);

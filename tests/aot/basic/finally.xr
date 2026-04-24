@@ -1,0 +1,38 @@
+fn test_normal(): int {
+    let result = 0
+    try {
+        result = 10
+    } catch (e) {
+        result = -1
+    } finally {
+        result = result + 1
+    }
+    return result
+}
+
+fn test_exception(): int {
+    let result = 0
+    try {
+        throw "error"
+        result = 10
+    } catch (e) {
+        result = -1
+    } finally {
+        result = result + 1
+    }
+    return result
+}
+
+fn test_finally_only(): int {
+    let result = 0
+    try {
+        result = 42
+    } finally {
+        result = result + 100
+    }
+    return result
+}
+
+print(test_normal())       // 11
+print(test_exception())    // 0
+print(test_finally_only()) // 142

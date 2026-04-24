@@ -141,4 +141,9 @@ XR_FUNC void xlsp_workspace_merge_index_results(XrLspServer *server, XrLspIndexR
 // Purge all analyzer/cache state for files under a path prefix
 XR_FUNC void xlsp_workspace_purge_prefix(XrLspServer *server, const char *path_prefix);
 
+// Pending analysis queue helpers
+XR_FUNC void xlsp_enqueue_analysis(XrLspServer *server, const char *uri, const char *path);
+XR_FUNC int  xlsp_drain_pending_analysis(XrLspServer *server);
+XR_FUNC void xlsp_free_pending_analysis(XrLspServer *server);
+
 #endif // XLSP_WORKSPACE_H
