@@ -18,7 +18,7 @@
 #include "xray_isolate.h"
 #include "../../coro/xcoroutine.h"
 #include "../../module/xmodule.h"
-#include "xray.h"
+#include "../../vm/xvm_internal.h"
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
@@ -59,7 +59,7 @@ void xdap_controller_free(XdapController *ctrl) {
     // Free isolate if owned by controller
     if (ctrl->isolate) {
         xr_debug_free(ctrl->isolate);  // Free debug state first
-        xray_free(ctrl->isolate);
+        xray_isolate_delete(ctrl->isolate);
         ctrl->isolate = NULL;
     }
 
@@ -263,7 +263,7 @@ bool xdap_controller_restart(XdapController *ctrl) {
         if (old_isolate) {
             xr_debug_free(old_isolate);
             xr_multicore_destroy(old_isolate);
-            xray_free(old_isolate);
+            xray_isolate_delete(old_isolate);
         }
         xr_free(old_program_path);
         if (old_program_args) {
@@ -288,7 +288,7 @@ bool xdap_controller_restart(XdapController *ctrl) {
     if (ctrl->isolate) {
         xr_debug_free(ctrl->isolate);
         xr_multicore_destroy(ctrl->isolate);
-        xray_free(ctrl->isolate);
+        xray_isolate_delete(ctrl->isolate);
     }
 
     ctrl->isolate       = old_isolate;

@@ -865,8 +865,34 @@ bool xir_translate_misc_ops(XirBuilder *b, XirBlock **cur_blk,
             return true;
         }
 
+        /* === Module import (AOT: record module register; JIT: deopt) === */
+        case OP_IMPORT: {
+            int a = GETARG_A(inst);
+            if (b->aot_mode) {
+                // Record which register holds a module import result
+                int bx = GETARG_Bx(inst);
+                if (a < 256 && bx < (int)PROTO_CONST_COUNT(b->proto)) {
+                    XrValue name_val = PROTO_CONSTANT(b->proto, bx);
+                    if (XR_IS_STRING(name_val)) {
+                        b->import_modules[a] =
+                            XR_STRING_CHARS(XR_TO_STRING(name_val));
+                    }
+                }
+                // Emit null constant to satisfy SSA (module object not used)
+                XirRef zero = xir_const_i64(b->func, 0);
+                XirRef nv = xir_emit_unary(b->func, blk, XIR_CONST_I64,
+                                           XR_REP_I64, zero);
+                builder_tag_vreg(b, nv, VTAG_PTR, 0);
+                builder_set_slot(b, a, nv);
+                b->ops_translated++;
+                return true;
+            }
+            // JIT: skip (deopt-to-VM)
+            b->ops_skipped++;
+            return true;
+        }
+
         /* === Deopt-to-VM opcodes (rare in hot loops) === */
-        case OP_IMPORT:
         case OP_DEFER:
         case OP_ABSTRACT_ERROR:
         case OP_GETSUPER:

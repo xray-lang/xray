@@ -13,7 +13,7 @@
 #include "../vm/xvm.h"
 #include "../runtime/object/xstring.h"
 #include "../runtime/value/xvalue.h"
-#include "../app/cli/xcli_utils.h"
+#include "../app/cli/xcli_output.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -169,7 +169,7 @@ void xr_test_print_report(XrTestRunner *runner) {
 
     // Failures detail section
     if (runner->failure_record_count > 0) {
-        printf("\n " CLR_RED CLR_BOLD "Failed Tests" CLR_RESET "\n\n");
+        printf("\n " XR_CLR_RED XR_CLR_BOLD "Failed Tests" XR_CLR_RESET "\n\n");
         for (int i = 0; i < runner->failure_record_count; i++) {
             XrTestFailureRecord *rec = &runner->failure_records[i];
             const char *base = strrchr(rec->file, '/');
@@ -180,52 +180,52 @@ void xr_test_print_report(XrTestRunner *runner) {
             name_buf[sizeof(name_buf) - 1] = '\0';
             char *dot = strrchr(name_buf, '.');
             if (dot && strcmp(dot, ".xr") == 0) *dot = '\0';
-            printf("  " CLR_RED "\u2717" CLR_RESET " %s " CLR_DIM ">" CLR_RESET " %s\n",
+            printf("  " XR_CLR_RED "\u2717" XR_CLR_RESET " %s " XR_CLR_DIM ">" XR_CLR_RESET " %s\n",
                    name_buf, rec->test_name);
             if (rec->message[0] != '\0') {
-                printf("    " CLR_DIM "%s" CLR_RESET "\n", rec->message);
+                printf("    " XR_CLR_DIM "%s" XR_CLR_RESET "\n", rec->message);
             }
         }
     }
 
     // Summary
-    printf("\n " CLR_DIM "\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500" CLR_RESET "\n");
+    printf("\n " XR_CLR_DIM "\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500" XR_CLR_RESET "\n");
 
     // Test counts line
-    printf(" " CLR_BOLD " Tests" CLR_RESET "  ");
+    printf(" " XR_CLR_BOLD " Tests" XR_CLR_RESET "  ");
     printf("%d file%s", runner->file_count, runner->file_count == 1 ? "" : "s");
-    printf(CLR_DIM " | " CLR_RESET);
+    printf(XR_CLR_DIM " | " XR_CLR_RESET);
     if (total_problems == 0) {
-        printf(CLR_GREEN CLR_BOLD "%d passed" CLR_RESET, runner->passed_tests);
+        printf(XR_CLR_GREEN XR_CLR_BOLD "%d passed" XR_CLR_RESET, runner->passed_tests);
     } else {
-        printf(CLR_GREEN "%d passed" CLR_RESET, runner->passed_tests);
-        printf(CLR_DIM " | " CLR_RESET);
-        printf(CLR_RED CLR_BOLD "%d failed" CLR_RESET, total_problems);
+        printf(XR_CLR_GREEN "%d passed" XR_CLR_RESET, runner->passed_tests);
+        printf(XR_CLR_DIM " | " XR_CLR_RESET);
+        printf(XR_CLR_RED XR_CLR_BOLD "%d failed" XR_CLR_RESET, total_problems);
     }
     if (runner->skipped_tests > 0) {
-        printf(CLR_DIM " | " CLR_RESET);
-        printf(CLR_DIM "%d skipped" CLR_RESET, runner->skipped_tests);
+        printf(XR_CLR_DIM " | " XR_CLR_RESET);
+        printf(XR_CLR_DIM "%d skipped" XR_CLR_RESET, runner->skipped_tests);
     }
     if (runner->config.filter) {
-        printf("  " CLR_DIM "(filter: \"%s\")" CLR_RESET, runner->config.filter);
+        printf("  " XR_CLR_DIM "(filter: \"%s\")" XR_CLR_RESET, runner->config.filter);
     }
     printf("\n");
 
     // Time line
     double time_ms = runner->total_time_ms;
-    printf(" " CLR_BOLD "  Time" CLR_RESET "  ");
+    printf(" " XR_CLR_BOLD "  Time" XR_CLR_RESET "  ");
     if (time_ms >= 1000.0) {
         printf("%.2fs\n", time_ms / 1000.0);
     } else {
         printf("%.0fms\n", time_ms);
     }
 
-    printf(" " CLR_DIM "\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500" CLR_RESET "\n");
+    printf(" " XR_CLR_DIM "\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500" XR_CLR_RESET "\n");
 
     if (total_problems == 0) {
-        printf("\n " CLR_GREEN CLR_BOLD "\u2713 All tests passed" CLR_RESET "\n\n");
+        printf("\n " XR_CLR_GREEN XR_CLR_BOLD "\u2713 All tests passed" XR_CLR_RESET "\n\n");
     } else {
-        printf("\n " CLR_RED CLR_BOLD "\u2717 %d test%s failed" CLR_RESET "\n\n",
+        printf("\n " XR_CLR_RED XR_CLR_BOLD "\u2717 %d test%s failed" XR_CLR_RESET "\n\n",
                total_problems, total_problems == 1 ? "" : "s");
     }
 }

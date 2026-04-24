@@ -38,10 +38,6 @@ typedef int64_t xr_Integer;
 // Returns new isolate instance, or NULL on failure
 XRAY_API XrayIsolate* xray_new(void);
 
-// Free an Xray isolate
-// @param iso  The isolate to free
-XRAY_API void xray_free(XrayIsolate *iso);
-
 // Execute an Xray script file
 // @param iso       Isolate instance
 // @param filename  Path to script file

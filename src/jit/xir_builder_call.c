@@ -251,10 +251,9 @@ bool xir_translate_call_ops(XirBuilder *b, XirBlock **cur_blk,
                     // Memory-passing path (nargs > 2 or AOT mode)
                     XirRef proto_ref = xir_const_ptr(b->func, (void*)callee_proto);
                     XirRef nargs_ref = xir_const_i64(b->func, (int64_t)nargs);
-                    XirRef nargs_val = xir_emit_unary(b->func, blk, XIR_CONST_I64,
-                                                      XR_REP_I64, nargs_ref);
+                    // Pass raw const ref — CALL_KNOWN codegen uses xir_ref_is_const()
                     XirRef result = xir_emit(b->func, blk, XIR_CALL_KNOWN, ret_type,
-                                             proto_ref, nargs_val);
+                                             proto_ref, nargs_ref);
                     blk->ins[blk->nins - 1].flags |= XIR_FLAG_SIDE_EFFECT;
                     builder_bind_call_args(b, result, call_args, total_ca);
                     if (xir_ref_is_vreg(result)) {
@@ -302,6 +301,22 @@ bool xir_translate_call_ops(XirBuilder *b, XirBlock **cur_blk,
             }
             // Clear proto tracking for result register (call result is not a closure)
             { XirVReg *_rv = builder_vreg_for_slot(b, a); if (_rv) _rv->callee_proto = NULL; }
+
+            // Tag result vreg with class instance type when callee is a
+            // constructor.  aot_preregister_classes patches param_types[0]
+            // to XR_KIND_INSTANCE("ClassName") on every class method proto.
+            // For constructor CALL_KNOWN, the return value IS the instance.
+            // This enables CHA devirtualization on cross-module INVOKE
+            // where inst_types does not propagate class types through
+            // module boundaries.
+            if (callee_proto &&
+                callee_proto->param_types &&
+                callee_proto->param_types_count > 0 &&
+                callee_proto->param_types[0] &&
+                callee_proto->param_types[0]->kind == XR_KIND_INSTANCE) {
+                XirVReg *rv = builder_vreg_for_slot(b, a);
+                if (rv) rv->xrtype = callee_proto->param_types[0];
+            }
 
             // track return_tag for nullable primitive result slots
             builder_track_call_result_tag(b, blk, a, b->slot_map[a]);
@@ -353,10 +368,9 @@ bool xir_translate_call_ops(XirBuilder *b, XirBlock **cur_blk,
                     : VTAG_TAGGED;
                 XirRef proto_ref = xir_const_ptr(b->func, (void*)callee_proto);
                 XirRef nargs_ref = xir_const_i64(b->func, (int64_t)nargs);
-                XirRef nargs_val = xir_emit_unary(b->func, blk, XIR_CONST_I64,
-                                                  XR_REP_I64, nargs_ref);
+                // Pass raw const ref — CALL_KNOWN codegen uses xir_ref_is_const()
                 XirRef result = xir_emit(b->func, blk, XIR_CALL_KNOWN, ret_type,
-                                         proto_ref, nargs_val);
+                                         proto_ref, nargs_ref);
                 blk->ins[blk->nins - 1].flags |= XIR_FLAG_SIDE_EFFECT;
                 builder_bind_call_args(b, result, call_args, total_ca);
                 if (xir_ref_is_vreg(result)) {
@@ -588,6 +602,14 @@ bool xir_translate_call_ops(XirBuilder *b, XirBlock **cur_blk,
                 (a + 1) < 256)
             {
                 XrType *recv_type = builder_find_reg_type(b, a + 1);
+                // Fallback: when inst_types misses class type (cross-module
+                // imports), check vreg's xrtype set by constructor CALL_KNOWN
+                if (!recv_type || recv_type->kind != XR_KIND_INSTANCE) {
+                    XirVReg *recv_v = builder_vreg_for_slot(b, a + 1);
+                    if (recv_v && recv_v->xrtype &&
+                        recv_v->xrtype->kind == XR_KIND_INSTANCE)
+                        recv_type = recv_v->xrtype;
+                }
                 if (!recv_type) goto skip_cha_devirt;
                 const char *cname = xr_type_get_class_name(recv_type);
                 if (cname && recv_type->kind == XR_KIND_INSTANCE) {
@@ -1098,6 +1120,8 @@ bool xir_translate_call_ops(XirBuilder *b, XirBlock **cur_blk,
 
         /* === Array Operations === */
         case OP_NEWARRAY: {
+            // VM inlines initial element push:
+            //   R(A) = new_array(B); for j in 0..B: push(R(A+1+j))
             int a = GETARG_A(inst);
             int cap = GETARG_B(inst);
             XirRef cap_ref = xir_const_i64(b->func, (int64_t)cap);
@@ -1106,6 +1130,13 @@ bool xir_translate_call_ops(XirBuilder *b, XirBlock **cur_blk,
             blk->ins[blk->nins - 1].flags |= XIR_FLAG_SIDE_EFFECT;
             builder_tag_vreg(b, v, VTAG_PTR, 0);
             builder_set_slot(b, a, v);
+            // Push initial elements from R(A+1)..R(A+cap)
+            for (int j = 0; j < cap; j++) {
+                XirRef elem = builder_get_slot(b, blk, a + 1 + j);
+                xir_emit(b->func, blk, XIR_RT_ARRAY_PUSH, XR_REP_VOID,
+                         v, elem);
+                blk->ins[blk->nins - 1].flags |= XIR_FLAG_SIDE_EFFECT;
+            }
             b->ops_translated++;
             return true;
         }
@@ -1489,14 +1520,54 @@ bool xir_translate_call_ops(XirBuilder *b, XirBlock **cur_blk,
 
             // Build-time check: inline path assumes 8-byte stride (int64_t).
             // Array<any> stores 16-byte XrValue elements → wrong offset.
-            // Bail if element type is not I64 (forces interpreter fallback).
+            // Fall back to CALL_C when element type is not I64.
             {
                 struct XrType *arr_type = builder_slot_xrtype(b, rb);
                 uint8_t elem_tag = xr_type_element_gc_tag(arr_type);
                 if (elem_tag != XR_SLOT_I64) {
-                    b->ops_skipped++;
+                    XirRef arr_fb = builder_get_slot(b, blk, rb);
+                    XirRef idx_fb = builder_get_slot(b, blk, rc);
+                    XirRef ca[2]; ca[0] = arr_fb; ca[1] = idx_fb;
+                    XirRef fn = xir_const_ptr(b->func,
+                                              (void *)xr_jit_tarray_get);
+                    XirRef enc = xir_const_i64(b->func, 0);
+                    XirRef ev = xir_emit_unary(b->func, blk,
+                                               XIR_CONST_I64, XR_REP_I64, enc);
+                    // OP_TARRAY_GET returns raw i64 payload (no tag),
+                    // matching xrt_tarray_get -> int64_t in AOT.
+                    uint8_t rt = (elem_tag == XR_SLOT_F64) ? XR_REP_F64
+                                                           : XR_REP_I64;
+                    XirRef res = xir_emit(b->func, blk, XIR_CALL_C, rt,
+                                          fn, ev);
+                    blk->ins[blk->nins - 1].flags |= XIR_FLAG_SIDE_EFFECT;
+                    builder_bind_call_args(b, res, ca, 2);
+                    builder_tag_vreg(b, res,
+                                     rt == XR_REP_F64 ? VTAG_F64 : VTAG_I64,
+                                     0);
+                    builder_set_slot(b, a, res);
+                    b->ops_translated++;
                     return true;
                 }
+            }
+
+            // AOT mode: always use CALL_C (inline XIR not supported)
+            if (b->aot_mode) {
+                XirRef arr_fb = builder_get_slot(b, blk, rb);
+                XirRef idx_fb = builder_get_slot(b, blk, rc);
+                XirRef ca[2]; ca[0] = arr_fb; ca[1] = idx_fb;
+                XirRef fn = xir_const_ptr(b->func,
+                                          (void *)xr_jit_tarray_get);
+                XirRef enc = xir_const_i64(b->func, 0);
+                XirRef ev = xir_emit_unary(b->func, blk,
+                                           XIR_CONST_I64, XR_REP_I64, enc);
+                XirRef res = xir_emit(b->func, blk, XIR_CALL_C, XR_REP_I64,
+                                      fn, ev);
+                blk->ins[blk->nins - 1].flags |= XIR_FLAG_SIDE_EFFECT;
+                builder_bind_call_args(b, res, ca, 2);
+                builder_tag_vreg(b, res, VTAG_I64, 0);
+                builder_set_slot(b, a, res);
+                b->ops_translated++;
+                return true;
             }
 
             XirRef arr = builder_get_slot(b, blk, rb);
@@ -1540,6 +1611,29 @@ bool xir_translate_call_ops(XirBuilder *b, XirBlock **cur_blk,
             int a = GETARG_A(inst);
             int rb = GETARG_B(inst);
             int rc = GETARG_C(inst);
+
+            // AOT mode: inline XIR not supported by C codegen.
+            // Fall back to CALL_C(xr_jit_tarray_set).
+            if (b->aot_mode) {
+                XirRef arr_fb = builder_get_slot(b, blk, a);
+                XirRef idx_fb = builder_get_slot(b, blk, rb);
+                XirRef val_fb = builder_get_slot(b, blk, rc);
+                XirRef ca[3]; ca[0] = arr_fb; ca[1] = idx_fb; ca[2] = val_fb;
+                XirRef fn = xir_const_ptr(b->func,
+                                          (void *)xr_jit_tarray_set);
+                XirRef enc = xir_const_i64(b->func, 0);
+                XirRef ev = xir_emit_unary(b->func, blk,
+                                           XIR_CONST_I64, XR_REP_I64, enc);
+                // Use I64 (not VOID) so CALL_C gets a real vreg dst,
+                // enabling call_args binding for AOT codegen.
+                XirRef res = xir_emit(b->func, blk, XIR_CALL_C, XR_REP_I64,
+                                      fn, ev);
+                blk->ins[blk->nins - 1].flags |= XIR_FLAG_SIDE_EFFECT;
+                builder_bind_call_args(b, res, ca, 3);
+                b->ops_translated++;
+                return true;
+            }
+
             XirRef arr = builder_get_slot(b, blk, a);
             XirRef idx = builder_get_slot(b, blk, rb);
             XirRef val = builder_get_slot(b, blk, rc);
@@ -1583,6 +1677,31 @@ bool xir_translate_call_ops(XirBuilder *b, XirBlock **cur_blk,
             int a = GETARG_A(inst);
             int rb = GETARG_B(inst);
             int rc = GETARG_C(inst);
+
+            // AOT mode: inline XIR (LOAD32S/GUARD_BOUNDS) not supported by
+            // C codegen. Fall back to CALL_C(xr_jit_tarray_get).
+            if (b->aot_mode) {
+                XirRef arr_fb = builder_get_slot(b, blk, rb);
+                XirRef idx_c2 = xir_const_i64(b->func, (int64_t)rc);
+                XirRef idx_fb = xir_emit_unary(b->func, blk,
+                                               XIR_CONST_I64, XR_REP_I64,
+                                               idx_c2);
+                XirRef ca[2]; ca[0] = arr_fb; ca[1] = idx_fb;
+                XirRef fn = xir_const_ptr(b->func,
+                                          (void *)xr_jit_tarray_get);
+                XirRef enc = xir_const_i64(b->func, 0);
+                XirRef ev = xir_emit_unary(b->func, blk,
+                                           XIR_CONST_I64, XR_REP_I64, enc);
+                XirRef res = xir_emit(b->func, blk, XIR_CALL_C, XR_REP_I64,
+                                      fn, ev);
+                blk->ins[blk->nins - 1].flags |= XIR_FLAG_SIDE_EFFECT;
+                builder_bind_call_args(b, res, ca, 2);
+                builder_tag_vreg(b, res, VTAG_I64, 0);
+                builder_set_slot(b, a, res);
+                b->ops_translated++;
+                return true;
+            }
+
             XirRef arr = builder_get_slot(b, blk, rb);
             XirRef idx_c = xir_const_i64(b->func, (int64_t)rc);
             XirRef idx = xir_emit_unary(b->func, blk, XIR_CONST_I64, XR_REP_I64, idx_c);
@@ -1938,10 +2057,9 @@ bool xir_translate_call_ops(XirBuilder *b, XirBlock **cur_blk,
 
                 XirRef proto_ref = xir_const_ptr(b->func, (void*)callee_proto);
                 XirRef nargs_ref = xir_const_i64(b->func, (int64_t)nargs);
-                XirRef nargs_val = xir_emit_unary(b->func, blk, XIR_CONST_I64,
-                                                  XR_REP_I64, nargs_ref);
+                // Pass raw const ref — CALL_KNOWN codegen uses xir_ref_is_const()
                 XirRef result = xir_emit(b->func, blk, XIR_CALL_KNOWN, ret_type,
-                                         proto_ref, nargs_val);
+                                         proto_ref, nargs_ref);
                 blk->ins[blk->nins - 1].flags |= XIR_FLAG_SIDE_EFFECT;
                 builder_bind_call_args(b, result, call_args, total_ca);
                 builder_set_slot(b, result_reg, result);
@@ -2031,10 +2149,9 @@ bool xir_translate_call_ops(XirBuilder *b, XirBlock **cur_blk,
 
                 XirRef proto_ref = xir_const_ptr(b->func, (void*)callee_proto);
                 XirRef nargs_ref = xir_const_i64(b->func, (int64_t)nargs);
-                XirRef nargs_val = xir_emit_unary(b->func, blk, XIR_CONST_I64,
-                                                  XR_REP_I64, nargs_ref);
+                // Pass raw const ref — CALL_KNOWN codegen uses xir_ref_is_const()
                 XirRef result = xir_emit(b->func, blk, XIR_CALL_KNOWN, ret_type,
-                                         proto_ref, nargs_val);
+                                         proto_ref, nargs_ref);
                 blk->ins[blk->nins - 1].flags |= XIR_FLAG_SIDE_EFFECT;
                 builder_bind_call_args(b, result, call_args, total_ca);
                 builder_set_slot(b, a, result);

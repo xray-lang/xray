@@ -12,15 +12,15 @@
  */
 
 #include "xcli.h"
-#include "xcli_utils.h"
+#include "xcli_spec.h"
+#include "xcli_isolate.h"
 #include "xray.h"
 #include "xray_isolate.h"
 #include "../../module/xbundle.h"
+#include "../../base/xchecks.h"
 #include <stdio.h>
-#include <stdlib.h>
 #include <string.h>
 #include <stdbool.h>
-#include <getopt.h>
 
 // Write a JSON-escaped string to file (handles \, ", and control chars)
 static void fprint_json_string(FILE *f, const char *s) {
@@ -37,106 +37,51 @@ static void fprint_json_string(FILE *f, const char *s) {
     fputc('"', f);
 }
 
-void print_deps_help(void) {
-    printf("Usage: xray deps [options] <file.xr>\n");
-    printf("\n");
-    printf("Analyze project dependencies and generate install scripts\n");
-    printf("\n");
-    printf("Options:\n");
-    printf("    -o, --output <file>  Output to file (default: stdout)\n");
-    printf("    --shell              Generate shell script (default)\n");
-    printf("    --json               Output JSON format\n");
-    printf("    --list               List dependencies only\n");
-    printf("    -h, --help           Show this help message\n");
-    printf("\n");
-    printf("Examples:\n");
-    printf("    xray deps app.xr                      # Show dependencies\n");
-    printf("    xray deps app.xr -o install.sh        # Generate install script\n");
-    printf("    xray deps app.xr --json               # JSON format output\n");
-    printf("\n");
-}
-
 typedef enum {
     OUTPUT_SHELL,
     OUTPUT_JSON,
     OUTPUT_LIST
 } OutputFormat;
 
-int cmd_deps(int argc, char **argv) {
-    static struct option long_options[] = {
-        {"output", required_argument, 0, 'o'},
-        {"shell", no_argument, 0, 's'},
-        {"json", no_argument, 0, 'j'},
-        {"list", no_argument, 0, 'l'},
-        {"help", no_argument, 0, 'h'},
-        {0, 0, 0, 0}
-    };
-    
-    const char *output_file = NULL;
-    const char *input_file = NULL;
+XR_FUNC int cmd_deps(const XrCliInvocation *inv) {
+    XR_DCHECK(inv != NULL, "inv is NULL");
+    XR_DCHECK(inv->positional_count == 1, "deps expects exactly 1 positional");
+
+    const char *input_file = inv->positionals[0];
+    const char *output_file = xr_cli_opt_string(&inv->options, "output", NULL);
+
     OutputFormat format = OUTPUT_SHELL;
-    
-    optind = 1;
-    int opt;
-    while ((opt = getopt_long(argc, argv, "o:sjlh", long_options, NULL)) != -1) {
-        switch (opt) {
-            case 'o':
-                output_file = optarg;
-                break;
-            case 's':
-                format = OUTPUT_SHELL;
-                break;
-            case 'j':
-                format = OUTPUT_JSON;
-                break;
-            case 'l':
-                format = OUTPUT_LIST;
-                break;
-            case 'h':
-                print_deps_help();
-                return 0;
-            default:
-                return 1;
-        }
-    }
-    
-    if (optind < argc) {
-        input_file = argv[optind];
-    }
-    
-    if (input_file == NULL) {
-        fprintf(stderr, "Error: no input file specified\n");
-        print_deps_help();
-        return 1;
-    }
-    
-    // Create Isolate and analyze dependencies
-    XrayIsolate *X = cli_create_isolate();
+    if (xr_cli_opt_present(&inv->options, "json")) format = OUTPUT_JSON;
+    else if (xr_cli_opt_present(&inv->options, "list")) format = OUTPUT_LIST;
+    else if (xr_cli_opt_present(&inv->options, "shell")) format = OUTPUT_SHELL;
+
+    /* Create isolate and analyze dependencies */
+    XrayIsolate *X = xr_cli_isolate_new(XR_CLI_ISOLATE_RUN);
     if (!X) {
-        fprintf(stderr, "Error: cannot create Isolate\n");
-        return 1;
+        xr_cli_error("deps", "failed to create isolate");
+        return XR_CLI_EXIT_INTERNAL;
     }
-    
+
     XrBundle *bundle = xr_bundle_create(X, input_file);
     xray_isolate_delete(X);
-    
+
     if (!bundle) {
-        fprintf(stderr, "Error: dependency analysis failed\n");
-        return 1;
+        xr_cli_error("deps", "dependency analysis failed for '%s'", input_file);
+        return XR_CLI_EXIT_FAIL;
     }
-    
-    // Open output file
+
+    /* Open output file */
     FILE *out = stdout;
     if (output_file) {
         out = fopen(output_file, "w");
         if (!out) {
-            fprintf(stderr, "Error: cannot create '%s'\n", output_file);
+            xr_cli_error("deps", "cannot create '%s'", output_file);
             xr_bundle_free(bundle);
-            return 1;
+            return XR_CLI_EXIT_FAIL;
         }
     }
-    
-    // Output dependency info
+
+    /* Write output */
     switch (format) {
         case OUTPUT_LIST:
             if (bundle->stdlib.count > 0) {
@@ -158,27 +103,27 @@ int cmd_deps(int argc, char **argv) {
                 }
             }
             break;
-            
+
         case OUTPUT_JSON:
             fprintf(out, "{\n");
             fprintf(out, "  \"entry\": ");
             fprint_json_string(out, bundle->entry_path);
             fprintf(out, ",\n");
-            
+
             fprintf(out, "  \"stdlib\": [");
             for (int i = 0; i < bundle->stdlib.count; i++) {
                 if (i > 0) fprintf(out, ", ");
                 fprint_json_string(out, bundle->stdlib.deps[i]);
             }
             fprintf(out, "],\n");
-            
+
             fprintf(out, "  \"packages\": [");
             for (int i = 0; i < bundle->packages.count; i++) {
                 if (i > 0) fprintf(out, ", ");
                 fprint_json_string(out, bundle->packages.deps[i]);
             }
             fprintf(out, "],\n");
-            
+
             fprintf(out, "  \"local_modules\": [");
             for (int i = 0; i < bundle->count - 1; i++) {
                 if (i > 0) fprintf(out, ", ");
@@ -187,7 +132,7 @@ int cmd_deps(int argc, char **argv) {
             fprintf(out, "]\n");
             fprintf(out, "}\n");
             break;
-            
+
         case OUTPUT_SHELL:
         default:
             fprintf(out, "#!/bin/bash\n");
@@ -197,7 +142,7 @@ int cmd_deps(int argc, char **argv) {
             fprintf(out, "\n");
             fprintf(out, "set -e\n");
             fprintf(out, "\n");
-            
+
             if (bundle->packages.count > 0) {
                 fprintf(out, "echo \"Installing third-party package dependencies...\"\n");
                 for (int i = 0; i < bundle->packages.count; i++) {
@@ -208,7 +153,7 @@ int cmd_deps(int argc, char **argv) {
             } else {
                 fprintf(out, "echo \"No third-party package dependencies\"\n");
             }
-            
+
             if (bundle->stdlib.count > 0) {
                 fprintf(out, "\n");
                 fprintf(out, "# Stdlib dependencies (built-in, no install needed):\n");
@@ -218,7 +163,7 @@ int cmd_deps(int argc, char **argv) {
             }
             break;
     }
-    
+
     if (output_file) {
         fclose(out);
         printf("Dependency script generated: %s\n", output_file);
@@ -226,7 +171,7 @@ int cmd_deps(int argc, char **argv) {
             printf("Run with: bash %s\n", output_file);
         }
     }
-    
+
     xr_bundle_free(bundle);
     return 0;
 }

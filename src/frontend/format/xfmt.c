@@ -14,7 +14,7 @@
  */
 
 #include "xfmt.h"
-#include "../../frontend/parser/xparse.h"
+#include "../parser/xparse.h"
 #include "../../runtime/value/xtype.h"
 #include "../../runtime/value/xtype_names.h"
 #include <stdio.h>
@@ -23,6 +23,7 @@
 #include <ctype.h>
 #include <stdarg.h>
 #include "../../base/xmalloc.h"
+/* Note: file moved from src/app/cli/ to src/frontend/format/ in CLI Phase 2 */
 
 // Default configuration
 XrFmtConfig xfmt_default_config = {
@@ -53,7 +54,7 @@ static void write_char(XrFmtContext *ctx, char c) {
     ensure_capacity(ctx, 1);
     ctx->output[ctx->length++] = c;
     ctx->output[ctx->length] = '\0';
-    
+
     if (c == '\n') {
         ctx->line_start = 1;
         ctx->column = 0;
@@ -94,7 +95,7 @@ static void write_fmt(XrFmtContext *ctx, const char *fmt, ...) {
 
 static void write_indent(XrFmtContext *ctx) {
     if (!ctx->line_start) return;
-    
+
     if (ctx->config->use_tabs) {
         for (int i = 0; i < ctx->indent_level; i++) {
             write_char(ctx, '\t');
@@ -120,7 +121,7 @@ static void write_newline(XrFmtContext *ctx) {
 static void write_leading_comments(XrFmtContext *ctx, XrTrivia *trivia) {
     while (trivia) {
         write_indent(ctx);
-        
+
         if (trivia->type == TRIVIA_LINE_COMMENT) {
             write_str(ctx, "//");
             // Write comment content (without delimiters)
@@ -137,7 +138,7 @@ static void write_leading_comments(XrFmtContext *ctx, XrTrivia *trivia) {
             write_str(ctx, "*/");
             write_newline(ctx);
         }
-        
+
         trivia = trivia->next;
     }
 }
@@ -242,7 +243,7 @@ static void fmt_type(XrFmtContext *ctx, XrType *type) {
 // Format generic type parameters <T, U: Constraint>
 static void fmt_generic_params(XrFmtContext *ctx, XrGenericParam **params, int count) {
     if (count <= 0) return;
-    
+
     write_char(ctx, '<');
     for (int i = 0; i < count; i++) {
         if (i > 0) write_str(ctx, ", ");
@@ -258,7 +259,7 @@ static void fmt_generic_params(XrFmtContext *ctx, XrGenericParam **params, int c
 // Format generic type arguments <int, string>
 static void fmt_generic_args(XrFmtContext *ctx, XrType **args, int count) {
     if (count <= 0) return;
-    
+
     write_char(ctx, '<');
     for (int i = 0; i < count; i++) {
         if (i > 0) write_str(ctx, ", ");
@@ -273,7 +274,7 @@ static void fmt_generic_args(XrFmtContext *ctx, XrType **args, int count) {
 
 static void fmt_pattern(XrFmtContext *ctx, XrDestructurePattern *pattern) {
     if (!pattern) return;
-    
+
     switch (pattern->type) {
         case PATTERN_IDENTIFIER:
             write_str(ctx, pattern->as.identifier.name);
@@ -282,7 +283,7 @@ static void fmt_pattern(XrFmtContext *ctx, XrDestructurePattern *pattern) {
                 fmt_type(ctx, pattern->as.identifier.type);
             }
             break;
-            
+
         case PATTERN_ARRAY:
             write_char(ctx, '[');
             for (int i = 0; i < pattern->as.array.element_count; i++) {
@@ -291,7 +292,7 @@ static void fmt_pattern(XrFmtContext *ctx, XrDestructurePattern *pattern) {
             }
             write_char(ctx, ']');
             break;
-            
+
         case PATTERN_OBJECT:
             write_char(ctx, '{');
             for (int i = 0; i < pattern->as.object.field_count; i++) {
@@ -300,7 +301,7 @@ static void fmt_pattern(XrFmtContext *ctx, XrDestructurePattern *pattern) {
             }
             write_char(ctx, '}');
             break;
-            
+
         case PATTERN_SKIP:
             write_char(ctx, '_');
             break;
@@ -313,7 +314,7 @@ static void fmt_pattern(XrFmtContext *ctx, XrDestructurePattern *pattern) {
 
 static void fmt_literal(XrFmtContext *ctx, AstNode *node) {
     write_indent(ctx);
-    
+
     switch (node->type) {
         case AST_LITERAL_INT:
             write_fmt(ctx, "%lld", (long long)node->as.literal.raw_value.int_val);
@@ -425,11 +426,11 @@ static void fmt_match_expr(XrFmtContext *ctx, AstNode *node) {
     write_str(ctx, " {");
     write_newline(ctx);
     ctx->indent_level++;
-    
+
     for (int i = 0; i < node->as.match_expr.arm_count; i++) {
         AstNode *arm = node->as.match_expr.arms[i];
         MatchArmNode *ma = &arm->as.match_arm;
-        
+
         write_indent(ctx);
         fmt_expression(ctx, ma->pattern);
         if (ma->guard) {
@@ -437,7 +438,7 @@ static void fmt_match_expr(XrFmtContext *ctx, AstNode *node) {
             fmt_expression(ctx, ma->guard);
         }
         write_str(ctx, " => ");
-        
+
         if (ma->body->type == AST_BLOCK) {
             fmt_block(ctx, ma->body);
         } else {
@@ -445,7 +446,7 @@ static void fmt_match_expr(XrFmtContext *ctx, AstNode *node) {
         }
         write_newline(ctx);
     }
-    
+
     ctx->indent_level--;
     write_indent(ctx);
     write_char(ctx, '}');
@@ -453,7 +454,7 @@ static void fmt_match_expr(XrFmtContext *ctx, AstNode *node) {
 
 static void fmt_expression(XrFmtContext *ctx, AstNode *node) {
     if (!node) return;
-    
+
     switch (node->type) {
         // Literals
         case AST_LITERAL_INT:
@@ -466,12 +467,12 @@ static void fmt_expression(XrFmtContext *ctx, AstNode *node) {
         case AST_LITERAL_FALSE:
             fmt_literal(ctx, node);
             break;
-            
+
         // Template string
         case AST_TEMPLATE_STRING:
             fmt_template_string(ctx, node);
             break;
-            
+
         // Binary operators
         case AST_BINARY_ADD:
         case AST_BINARY_SUB:
@@ -495,14 +496,14 @@ static void fmt_expression(XrFmtContext *ctx, AstNode *node) {
         case AST_BINARY_OR:
             fmt_binary(ctx, node);
             break;
-            
+
         // Unary operators
         case AST_UNARY_NEG:
         case AST_UNARY_NOT:
         case AST_UNARY_BNOT:
             fmt_unary(ctx, node);
             break;
-            
+
         // Grouping
         case AST_GROUPING:
             write_indent(ctx);
@@ -510,29 +511,29 @@ static void fmt_expression(XrFmtContext *ctx, AstNode *node) {
             fmt_expression(ctx, node->as.grouping);
             write_char(ctx, ')');
             break;
-            
+
         // Variable
         case AST_VARIABLE:
             write_indent(ctx);
             write_str(ctx, node->as.variable.name);
             break;
-            
+
         // Call
         case AST_CALL_EXPR:
             fmt_call(ctx, node);
             break;
-            
+
         // New
         case AST_NEW_EXPR:
             fmt_new_expr(ctx, node);
             break;
-            
+
         // This
         case AST_THIS_EXPR:
             write_indent(ctx);
             write_str(ctx, "this");
             break;
-            
+
         // Super call
         case AST_SUPER_CALL: {
             write_indent(ctx);
@@ -551,7 +552,7 @@ static void fmt_expression(XrFmtContext *ctx, AstNode *node) {
             write_char(ctx, ')');
             break;
         }
-            
+
         // Array literal
         case AST_ARRAY_LITERAL: {
             write_indent(ctx);
@@ -564,7 +565,7 @@ static void fmt_expression(XrFmtContext *ctx, AstNode *node) {
             write_char(ctx, ']');
             break;
         }
-            
+
         // Object literal
         case AST_OBJECT_LITERAL: {
             write_indent(ctx);
@@ -583,7 +584,7 @@ static void fmt_expression(XrFmtContext *ctx, AstNode *node) {
             }
             break;
         }
-            
+
         // Map literal
         case AST_MAP_LITERAL: {
             write_indent(ctx);
@@ -602,7 +603,7 @@ static void fmt_expression(XrFmtContext *ctx, AstNode *node) {
             }
             break;
         }
-            
+
         // Set literal
         case AST_SET_LITERAL: {
             write_indent(ctx);
@@ -615,7 +616,7 @@ static void fmt_expression(XrFmtContext *ctx, AstNode *node) {
             write_char(ctx, ']');
             break;
         }
-            
+
         // Index access
         case AST_INDEX_GET:
             fmt_expression(ctx, node->as.index_get.array);
@@ -623,7 +624,7 @@ static void fmt_expression(XrFmtContext *ctx, AstNode *node) {
             fmt_expression(ctx, node->as.index_get.index);
             write_char(ctx, ']');
             break;
-            
+
         // Index set
         case AST_INDEX_SET:
             write_indent(ctx);
@@ -633,7 +634,7 @@ static void fmt_expression(XrFmtContext *ctx, AstNode *node) {
             write_str(ctx, "] = ");
             fmt_expression(ctx, node->as.index_set.value);
             break;
-            
+
         // Slice expression
         case AST_SLICE_EXPR:
             fmt_expression(ctx, node->as.slice_expr.source);
@@ -647,14 +648,14 @@ static void fmt_expression(XrFmtContext *ctx, AstNode *node) {
             }
             write_char(ctx, ']');
             break;
-            
+
         // Member access
         case AST_MEMBER_ACCESS:
             fmt_expression(ctx, node->as.member_access.object);
             write_char(ctx, '.');
             write_str(ctx, node->as.member_access.name);
             break;
-            
+
         // Member set
         case AST_MEMBER_SET:
             write_indent(ctx);
@@ -664,7 +665,7 @@ static void fmt_expression(XrFmtContext *ctx, AstNode *node) {
             write_str(ctx, " = ");
             fmt_expression(ctx, node->as.member_set.value);
             break;
-            
+
         // Ternary
         case AST_TERNARY:
             fmt_expression(ctx, node->as.ternary.condition);
@@ -673,14 +674,14 @@ static void fmt_expression(XrFmtContext *ctx, AstNode *node) {
             write_str(ctx, " : ");
             fmt_expression(ctx, node->as.ternary.false_expr);
             break;
-            
+
         // Nullish coalesce
         case AST_NULLISH_COALESCE:
             fmt_expression(ctx, node->as.binary.left);
             write_str(ctx, " ?? ");
             fmt_expression(ctx, node->as.binary.right);
             break;
-            
+
         // Optional chain
         case AST_OPTIONAL_CHAIN: {
             OptionalChainNode *oc = &node->as.optional_chain;
@@ -695,21 +696,21 @@ static void fmt_expression(XrFmtContext *ctx, AstNode *node) {
             }
             break;
         }
-            
+
         // Range
         case AST_RANGE:
             fmt_expression(ctx, node->as.range.start);
             write_str(ctx, "..");
             fmt_expression(ctx, node->as.range.end);
             break;
-            
+
         // Is expression
         case AST_IS_EXPR:
             fmt_expression(ctx, node->as.is_expr.expr);
             write_str(ctx, " is ");
             fmt_type(ctx, node->as.is_expr.type);
             break;
-            
+
         // Assignment
         case AST_ASSIGNMENT:
             write_indent(ctx);
@@ -717,7 +718,7 @@ static void fmt_expression(XrFmtContext *ctx, AstNode *node) {
             write_str(ctx, " = ");
             fmt_expression(ctx, node->as.assignment.value);
             break;
-            
+
         // Compound assignment
         case AST_COMPOUND_ASSIGNMENT: {
             write_indent(ctx);
@@ -733,21 +734,21 @@ static void fmt_expression(XrFmtContext *ctx, AstNode *node) {
             fmt_expression(ctx, ca->value);
             break;
         }
-            
+
         // Increment
         case AST_INC:
             write_indent(ctx);
             write_str(ctx, node->as.inc.name);
             write_str(ctx, "++");
             break;
-            
+
         // Decrement
         case AST_DEC:
             write_indent(ctx);
             write_str(ctx, node->as.dec.name);
             write_str(ctx, "--");
             break;
-            
+
         // Function expression
         case AST_FUNCTION_EXPR: {
             FunctionDeclNode *fn = &node->as.function_expr;
@@ -771,12 +772,12 @@ static void fmt_expression(XrFmtContext *ctx, AstNode *node) {
             fmt_block(ctx, fn->body);
             break;
         }
-            
+
         // Match expression
         case AST_MATCH_EXPR:
             fmt_match_expr(ctx, node);
             break;
-            
+
         // Enum access
         case AST_ENUM_ACCESS:
             write_indent(ctx);
@@ -784,7 +785,7 @@ static void fmt_expression(XrFmtContext *ctx, AstNode *node) {
             write_char(ctx, '.');
             write_str(ctx, node->as.enum_access.member_name);
             break;
-            
+
         // Enum convert
         case AST_ENUM_CONVERT:
             write_indent(ctx);
@@ -793,7 +794,7 @@ static void fmt_expression(XrFmtContext *ctx, AstNode *node) {
             fmt_expression(ctx, node->as.enum_convert.value_expr);
             write_char(ctx, ')');
             break;
-            
+
         // Go expression
         case AST_GO_EXPR: {
             write_indent(ctx);
@@ -820,7 +821,7 @@ static void fmt_expression(XrFmtContext *ctx, AstNode *node) {
             fmt_expression(ctx, go->expr);
             break;
         }
-            
+
         // Await expression
         case AST_AWAIT_EXPR:
         case AST_AWAIT_ALL_EXPR:
@@ -838,7 +839,7 @@ static void fmt_expression(XrFmtContext *ctx, AstNode *node) {
             }
             break;
         }
-            
+
         // Channel
         case AST_CHANNEL_NEW:
             write_indent(ctx);
@@ -848,13 +849,13 @@ static void fmt_expression(XrFmtContext *ctx, AstNode *node) {
             }
             write_char(ctx, ')');
             break;
-            
+
         // Cancelled
         case AST_CANCELLED_EXPR:
             write_indent(ctx);
             write_str(ctx, "cancelled()");
             break;
-            
+
         // Yield expression
         case AST_YIELD_EXPR:
             write_indent(ctx);
@@ -864,23 +865,23 @@ static void fmt_expression(XrFmtContext *ctx, AstNode *node) {
                 fmt_expression(ctx, node->as.yield_expr.value);
             }
             break;
-            
+
         // Pattern nodes (for match)
         case AST_PATTERN_LITERAL:
             fmt_expression(ctx, node->as.pattern_literal.value);
             break;
-            
+
         case AST_PATTERN_RANGE:
             fmt_expression(ctx, node->as.pattern_range.start);
             write_str(ctx, "..");
             fmt_expression(ctx, node->as.pattern_range.end);
             break;
-            
+
         case AST_PATTERN_WILDCARD:
             write_indent(ctx);
             write_char(ctx, '_');
             break;
-            
+
         case AST_PATTERN_MULTI: {
             PatternMultiNode *pm = &node->as.pattern_multi;
             for (int i = 0; i < pm->count; i++) {
@@ -889,7 +890,7 @@ static void fmt_expression(XrFmtContext *ctx, AstNode *node) {
             }
             break;
         }
-            
+
         default:
             write_indent(ctx);
             write_fmt(ctx, "/* unsupported expr: %d */", node->type);
@@ -904,13 +905,13 @@ static void fmt_expression(XrFmtContext *ctx, AstNode *node) {
 static void fmt_var_decl(XrFmtContext *ctx, AstNode *node) {
     write_indent(ctx);
     VarDeclNode *decl = &node->as.var_decl;
-    
+
     if (decl->storage_mode == XR_STORAGE_SHARED) {
         write_str(ctx, "shared ");
     }
     write_str(ctx, decl->is_const ? "const " : "let ");
     write_str(ctx, decl->name);
-    
+
     if (decl->type_annotation) {
         write_str(ctx, ": ");
         fmt_type(ctx, decl->type_annotation);
@@ -925,7 +926,7 @@ static void fmt_var_decl(XrFmtContext *ctx, AstNode *node) {
 static void fmt_multi_var_decl(XrFmtContext *ctx, AstNode *node) {
     write_indent(ctx);
     MultiVarDeclNode *decl = &node->as.multi_var_decl;
-    
+
     write_str(ctx, decl->is_const ? "const " : "let ");
     for (int i = 0; i < decl->name_count; i++) {
         if (i > 0) write_str(ctx, ", ");
@@ -942,7 +943,7 @@ static void fmt_multi_var_decl(XrFmtContext *ctx, AstNode *node) {
 static void fmt_destructure_decl(XrFmtContext *ctx, AstNode *node) {
     write_indent(ctx);
     DestructureDeclNode *decl = &node->as.destructure_decl;
-    
+
     write_str(ctx, decl->is_const ? "const " : "let ");
     fmt_pattern(ctx, decl->pattern);
     write_str(ctx, " = ");
@@ -953,11 +954,11 @@ static void fmt_destructure_decl(XrFmtContext *ctx, AstNode *node) {
 static void fmt_function_decl(XrFmtContext *ctx, AstNode *node) {
     write_indent(ctx);
     FunctionDeclNode *fn = &node->as.function_decl;
-    
+
     write_str(ctx, "fn ");
     write_str(ctx, fn->name);
     fmt_generic_params(ctx, fn->type_params, fn->type_param_count);
-    
+
     write_char(ctx, '(');
     for (int i = 0; i < fn->param_count; i++) {
         if (i > 0) write_str(ctx, ", ");
@@ -973,12 +974,12 @@ static void fmt_function_decl(XrFmtContext *ctx, AstNode *node) {
         }
     }
     write_char(ctx, ')');
-    
+
     if (fn->return_type) {
         write_str(ctx, ": ");
         fmt_type(ctx, fn->return_type);
     }
-    
+
     write_space(ctx);
     fmt_block(ctx, fn->body);
     write_newline(ctx);
@@ -987,12 +988,12 @@ static void fmt_function_decl(XrFmtContext *ctx, AstNode *node) {
 static void fmt_class_decl(XrFmtContext *ctx, AstNode *node) {
     write_indent(ctx);
     ClassDeclNode *cls = &node->as.class_decl;
-    
+
     if (cls->is_abstract) write_str(ctx, "abstract ");
     write_str(ctx, "class ");
     write_str(ctx, cls->name);
     fmt_generic_params(ctx, cls->type_params, cls->type_param_count);
-    
+
     if (cls->super_name) {
         write_str(ctx, " extends ");
         if (cls->super_module) {
@@ -1001,7 +1002,7 @@ static void fmt_class_decl(XrFmtContext *ctx, AstNode *node) {
         }
         write_str(ctx, cls->super_name);
     }
-    
+
     if (cls->interface_count > 0) {
         write_str(ctx, " implements ");
         for (int i = 0; i < cls->interface_count; i++) {
@@ -1009,16 +1010,16 @@ static void fmt_class_decl(XrFmtContext *ctx, AstNode *node) {
             write_str(ctx, cls->interfaces[i]);
         }
     }
-    
+
     write_str(ctx, " {");
     write_newline(ctx);
     ctx->indent_level++;
-    
+
     // Fields
     for (int i = 0; i < cls->field_count; i++) {
         AstNode *field = cls->fields[i];
         FieldDeclNode *f = &field->as.field_decl;
-        
+
         write_indent(ctx);
         if (f->is_private) write_str(ctx, "private ");
         if (f->is_static) write_str(ctx, "static ");
@@ -1033,29 +1034,29 @@ static void fmt_class_decl(XrFmtContext *ctx, AstNode *node) {
         }
         write_newline(ctx);
     }
-    
+
     if (cls->field_count > 0 && cls->method_count > 0) {
         write_newline(ctx);
     }
-    
+
     // Methods
     for (int i = 0; i < cls->method_count; i++) {
         AstNode *method = cls->methods[i];
         MethodDeclNode *m = &method->as.method_decl;
-        
+
         write_indent(ctx);
         if (m->is_private) write_str(ctx, "private ");
         if (m->is_static) write_str(ctx, "static ");
         if (m->is_abstract) write_str(ctx, "abstract ");
         if (m->is_getter) write_str(ctx, "get ");
         if (m->is_setter) write_str(ctx, "set ");
-        
+
         if (m->is_constructor) {
             write_str(ctx, XR_KEYWORD_CONSTRUCTOR);
         } else {
             write_str(ctx, m->name);
         }
-        
+
         if (m->type_param_count > 0) {
             write_char(ctx, '<');
             for (int j = 0; j < m->type_param_count; j++) {
@@ -1064,7 +1065,7 @@ static void fmt_class_decl(XrFmtContext *ctx, AstNode *node) {
             }
             write_char(ctx, '>');
         }
-        
+
         write_char(ctx, '(');
         for (int j = 0; j < m->param_count; j++) {
             if (j > 0) write_str(ctx, ", ");
@@ -1075,12 +1076,12 @@ static void fmt_class_decl(XrFmtContext *ctx, AstNode *node) {
             }
         }
         write_char(ctx, ')');
-        
+
         if (m->return_type) {
             write_str(ctx, ": ");
             fmt_type(ctx, m->return_type);
         }
-        
+
         if (m->is_abstract) {
             write_newline(ctx);
         } else if (m->body) {
@@ -1088,12 +1089,12 @@ static void fmt_class_decl(XrFmtContext *ctx, AstNode *node) {
             fmt_block(ctx, m->body);
             write_newline(ctx);
         }
-        
+
         if (i < cls->method_count - 1) {
             write_newline(ctx);
         }
     }
-    
+
     ctx->indent_level--;
     write_indent(ctx);
     write_char(ctx, '}');
@@ -1103,10 +1104,10 @@ static void fmt_class_decl(XrFmtContext *ctx, AstNode *node) {
 static void fmt_interface_decl(XrFmtContext *ctx, AstNode *node) {
     write_indent(ctx);
     InterfaceDeclNode *iface = &node->as.interface_decl;
-    
+
     write_str(ctx, "interface ");
     write_str(ctx, iface->name);
-    
+
     if (iface->extends_count > 0) {
         write_str(ctx, " extends ");
         for (int i = 0; i < iface->extends_count; i++) {
@@ -1114,15 +1115,15 @@ static void fmt_interface_decl(XrFmtContext *ctx, AstNode *node) {
             write_str(ctx, iface->extends[i]);
         }
     }
-    
+
     write_str(ctx, " {");
     write_newline(ctx);
     ctx->indent_level++;
-    
+
     for (int i = 0; i < iface->method_count; i++) {
         AstNode *method = iface->methods[i];
         InterfaceMethodNode *m = &method->as.interface_method;
-        
+
         write_indent(ctx);
         write_str(ctx, m->name);
         write_char(ctx, '(');
@@ -1141,7 +1142,7 @@ static void fmt_interface_decl(XrFmtContext *ctx, AstNode *node) {
         }
         write_newline(ctx);
     }
-    
+
     ctx->indent_level--;
     write_indent(ctx);
     write_char(ctx, '}');
@@ -1151,7 +1152,7 @@ static void fmt_interface_decl(XrFmtContext *ctx, AstNode *node) {
 static void fmt_enum_decl(XrFmtContext *ctx, AstNode *node) {
     write_indent(ctx);
     EnumDeclNode *en = &node->as.enum_decl;
-    
+
     write_str(ctx, "enum ");
     write_str(ctx, en->name);
     if (en->type_hint) {
@@ -1161,11 +1162,11 @@ static void fmt_enum_decl(XrFmtContext *ctx, AstNode *node) {
     write_str(ctx, " {");
     write_newline(ctx);
     ctx->indent_level++;
-    
+
     for (int i = 0; i < en->member_count; i++) {
         AstNode *member = en->members[i];
         EnumMemberNode *m = &member->as.enum_member;
-        
+
         write_indent(ctx);
         write_str(ctx, m->name);
         if (m->value) {
@@ -1177,7 +1178,7 @@ static void fmt_enum_decl(XrFmtContext *ctx, AstNode *node) {
         }
         write_newline(ctx);
     }
-    
+
     ctx->indent_level--;
     write_indent(ctx);
     write_char(ctx, '}');
@@ -1187,11 +1188,11 @@ static void fmt_enum_decl(XrFmtContext *ctx, AstNode *node) {
 static void fmt_type_alias(XrFmtContext *ctx, AstNode *node) {
     write_indent(ctx);
     TypeAliasNode *ta = &node->as.type_alias;
-    
+
     write_str(ctx, "type ");
     write_str(ctx, ta->name);
     write_str(ctx, " = { ");
-    
+
     for (int i = 0; i < ta->field_count; i++) {
         if (i > 0) write_str(ctx, ", ");
         write_str(ctx, ta->field_names[i]);
@@ -1201,7 +1202,7 @@ static void fmt_type_alias(XrFmtContext *ctx, AstNode *node) {
         write_str(ctx, ": ");
         fmt_type(ctx, ta->field_types[i]);
     }
-    
+
     write_str(ctx, " }");
     write_newline(ctx);
 }
@@ -1212,7 +1213,7 @@ static void fmt_if_stmt(XrFmtContext *ctx, AstNode *node) {
     fmt_expression(ctx, node->as.if_stmt.condition);
     write_str(ctx, ") ");
     fmt_block(ctx, node->as.if_stmt.then_branch);
-    
+
     if (node->as.if_stmt.else_branch) {
         write_str(ctx, " else ");
         if (node->as.if_stmt.else_branch->type == AST_IF_STMT) {
@@ -1238,7 +1239,7 @@ static void fmt_while_stmt(XrFmtContext *ctx, AstNode *node) {
 static void fmt_for_stmt(XrFmtContext *ctx, AstNode *node) {
     write_indent(ctx);
     write_str(ctx, "for (");
-    
+
     ForStmtNode *f = &node->as.for_stmt;
     if (f->initializer) {
         // Don't add newline for initializer
@@ -1273,7 +1274,7 @@ static void fmt_for_stmt(XrFmtContext *ctx, AstNode *node) {
 static void fmt_for_in_stmt(XrFmtContext *ctx, AstNode *node) {
     write_indent(ctx);
     write_str(ctx, "for (");
-    
+
     ForInStmtNode *f = &node->as.for_in_stmt;
     if (f->is_keyvalue) {
         write_str(ctx, f->item_name);
@@ -1282,7 +1283,7 @@ static void fmt_for_in_stmt(XrFmtContext *ctx, AstNode *node) {
     } else {
         write_str(ctx, f->item_name);
     }
-    
+
     write_str(ctx, " in ");
     fmt_expression(ctx, f->collection);
     write_str(ctx, ") ");
@@ -1293,10 +1294,10 @@ static void fmt_for_in_stmt(XrFmtContext *ctx, AstNode *node) {
 static void fmt_try_catch(XrFmtContext *ctx, AstNode *node) {
     write_indent(ctx);
     TryCatchNode *tc = &node->as.try_catch;
-    
+
     write_str(ctx, "try ");
     fmt_block(ctx, tc->try_body);
-    
+
     if (tc->catch_body) {
         write_str(ctx, " catch");
         if (tc->catch_var) {
@@ -1307,12 +1308,12 @@ static void fmt_try_catch(XrFmtContext *ctx, AstNode *node) {
         write_space(ctx);
         fmt_block(ctx, tc->catch_body);
     }
-    
+
     if (tc->finally_body) {
         write_str(ctx, " finally ");
         fmt_block(ctx, tc->finally_body);
     }
-    
+
     write_newline(ctx);
 }
 
@@ -1321,12 +1322,12 @@ static void fmt_select_stmt(XrFmtContext *ctx, AstNode *node) {
     write_str(ctx, "select {");
     write_newline(ctx);
     ctx->indent_level++;
-    
+
     SelectStmtNode *sel = &node->as.select_stmt;
     for (int i = 0; i < sel->case_count; i++) {
         AstNode *c = sel->cases[i];
         SelectCaseNode *sc = &c->as.select_case;
-        
+
         write_indent(ctx);
         if (sc->is_default) {
             write_str(ctx, "default");
@@ -1343,7 +1344,7 @@ static void fmt_select_stmt(XrFmtContext *ctx, AstNode *node) {
             fmt_expression(ctx, sc->channel);
         }
         write_str(ctx, " => ");
-        
+
         if (sc->body->type == AST_BLOCK) {
             fmt_block(ctx, sc->body);
         } else {
@@ -1351,7 +1352,7 @@ static void fmt_select_stmt(XrFmtContext *ctx, AstNode *node) {
         }
         write_newline(ctx);
     }
-    
+
     ctx->indent_level--;
     write_indent(ctx);
     write_char(ctx, '}');
@@ -1363,16 +1364,16 @@ static void fmt_block(XrFmtContext *ctx, AstNode *node) {
         write_str(ctx, "{}");
         return;
     }
-    
+
     write_char(ctx, '{');
     write_newline(ctx);
     ctx->indent_level++;
-    
+
     BlockNode *block = &node->as.block;
     for (int i = 0; i < block->count; i++) {
         fmt_statement(ctx, block->statements[i]);
     }
-    
+
     ctx->indent_level--;
     write_indent(ctx);
     write_char(ctx, '}');
@@ -1380,26 +1381,26 @@ static void fmt_block(XrFmtContext *ctx, AstNode *node) {
 
 static void fmt_statement(XrFmtContext *ctx, AstNode *node) {
     if (!node) return;
-    
+
     // Output leading comments
     if (node->leading_comments) {
         write_leading_comments(ctx, node->leading_comments);
     }
-    
+
     switch (node->type) {
         case AST_VAR_DECL:
         case AST_CONST_DECL:
             fmt_var_decl(ctx, node);
             break;
-            
+
         case AST_MULTI_VAR_DECL:
             fmt_multi_var_decl(ctx, node);
             break;
-            
+
         case AST_DESTRUCTURE_DECL:
             fmt_destructure_decl(ctx, node);
             break;
-            
+
         case AST_DESTRUCTURE_ASSIGN:
             write_indent(ctx);
             fmt_pattern(ctx, node->as.destructure_assign.pattern);
@@ -1407,7 +1408,7 @@ static void fmt_statement(XrFmtContext *ctx, AstNode *node) {
             fmt_expression(ctx, node->as.destructure_assign.value);
             write_newline(ctx);
             break;
-            
+
         case AST_MULTI_ASSIGN: {
             write_indent(ctx);
             MultiAssignNode *ma = &node->as.multi_assign;
@@ -1423,44 +1424,44 @@ static void fmt_statement(XrFmtContext *ctx, AstNode *node) {
             write_newline(ctx);
             break;
         }
-            
+
         case AST_FUNCTION_DECL:
             fmt_function_decl(ctx, node);
             break;
-            
+
         case AST_CLASS_DECL:
         case AST_STRUCT_DECL:
             fmt_class_decl(ctx, node);
             break;
-            
+
         case AST_INTERFACE_DECL:
             fmt_interface_decl(ctx, node);
             break;
-            
+
         case AST_ENUM_DECL:
             fmt_enum_decl(ctx, node);
             break;
-            
+
         case AST_TYPE_ALIAS:
             fmt_type_alias(ctx, node);
             break;
-            
+
         case AST_IF_STMT:
             fmt_if_stmt(ctx, node);
             break;
-            
+
         case AST_WHILE_STMT:
             fmt_while_stmt(ctx, node);
             break;
-            
+
         case AST_FOR_STMT:
             fmt_for_stmt(ctx, node);
             break;
-            
+
         case AST_FOR_IN_STMT:
             fmt_for_in_stmt(ctx, node);
             break;
-            
+
         case AST_RETURN_STMT: {
             write_indent(ctx);
             write_str(ctx, "return");
@@ -1475,34 +1476,34 @@ static void fmt_statement(XrFmtContext *ctx, AstNode *node) {
             write_newline(ctx);
             break;
         }
-            
+
         case AST_BREAK_STMT:
             write_indent(ctx);
             write_str(ctx, "break");
             write_newline(ctx);
             break;
-            
+
         case AST_CONTINUE_STMT:
             write_indent(ctx);
             write_str(ctx, "continue");
             write_newline(ctx);
             break;
-            
+
         case AST_TRY_CATCH:
             fmt_try_catch(ctx, node);
             break;
-            
+
         case AST_THROW_STMT:
             write_indent(ctx);
             write_str(ctx, "throw ");
             fmt_expression(ctx, node->as.throw_stmt.expression);
             write_newline(ctx);
             break;
-            
+
         case AST_IMPORT_STMT: {
             write_indent(ctx);
             ImportStmtNode *imp = &node->as.import_stmt;
-            
+
             if (imp->member_count > 0) {
                 write_str(ctx, "import { ");
                 for (int i = 0; i < imp->member_count; i++) {
@@ -1517,7 +1518,7 @@ static void fmt_statement(XrFmtContext *ctx, AstNode *node) {
             } else {
                 write_str(ctx, "import ");
             }
-            
+
             if (imp->import_type == IMPORT_FILE || imp->import_type == IMPORT_DIR) {
                 write_char(ctx, '"');
                 write_str(ctx, imp->module_name);
@@ -1525,9 +1526,9 @@ static void fmt_statement(XrFmtContext *ctx, AstNode *node) {
             } else {
                 write_str(ctx, imp->module_name);
             }
-            
+
             // Only output "as alias" if alias is different from module name
-            if (imp->alias && imp->member_count == 0 && 
+            if (imp->alias && imp->member_count == 0 &&
                 strcmp(imp->alias, imp->module_name) != 0) {
                 write_str(ctx, " as ");
                 write_str(ctx, imp->alias);
@@ -1535,12 +1536,12 @@ static void fmt_statement(XrFmtContext *ctx, AstNode *node) {
             write_newline(ctx);
             break;
         }
-            
+
         case AST_EXPORT_STMT: {
             write_indent(ctx);
             write_str(ctx, "export ");
             ExportStmtNode *exp = &node->as.export_stmt;
-            
+
             if (exp->declaration) {
                 ctx->line_start = 0;
                 fmt_statement(ctx, exp->declaration);
@@ -1553,42 +1554,42 @@ static void fmt_statement(XrFmtContext *ctx, AstNode *node) {
             }
             break;
         }
-            
+
         case AST_SELECT_STMT:
             fmt_select_stmt(ctx, node);
             break;
-            
+
         case AST_DEFER_STMT:
             write_indent(ctx);
             write_str(ctx, "defer ");
             fmt_expression(ctx, node->as.defer_stmt.expr);
             write_newline(ctx);
             break;
-            
+
         case AST_SCOPE_BLOCK:
             write_indent(ctx);
             write_str(ctx, "scope ");
             fmt_block(ctx, node->as.scope_block.body);
             write_newline(ctx);
             break;
-            
+
         case AST_YIELD_STMT:
             write_indent(ctx);
             write_str(ctx, "yield");
             write_newline(ctx);
             break;
-            
+
         case AST_BLOCK:
             fmt_block(ctx, node);
             write_newline(ctx);
             break;
-            
+
         case AST_EXPR_STMT:
             write_indent(ctx);
             fmt_expression(ctx, node->as.expr_stmt);
             write_newline(ctx);
             break;
-            
+
         case AST_PRINT_STMT: {
             write_indent(ctx);
             write_str(ctx, "print(");
@@ -1601,7 +1602,7 @@ static void fmt_statement(XrFmtContext *ctx, AstNode *node) {
             write_newline(ctx);
             break;
         }
-            
+
         case AST_ASSIGNMENT:
             write_indent(ctx);
             write_str(ctx, node->as.assignment.name);
@@ -1609,7 +1610,7 @@ static void fmt_statement(XrFmtContext *ctx, AstNode *node) {
             fmt_expression(ctx, node->as.assignment.value);
             write_newline(ctx);
             break;
-            
+
         case AST_MEMBER_SET:
             write_indent(ctx);
             fmt_expression(ctx, node->as.member_set.object);
@@ -1619,7 +1620,7 @@ static void fmt_statement(XrFmtContext *ctx, AstNode *node) {
             fmt_expression(ctx, node->as.member_set.value);
             write_newline(ctx);
             break;
-            
+
         case AST_INDEX_SET:
             write_indent(ctx);
             fmt_expression(ctx, node->as.index_set.array);
@@ -1629,7 +1630,7 @@ static void fmt_statement(XrFmtContext *ctx, AstNode *node) {
             fmt_expression(ctx, node->as.index_set.value);
             write_newline(ctx);
             break;
-            
+
         case AST_COMPOUND_ASSIGNMENT: {
             write_indent(ctx);
             CompoundAssignmentNode *ca = &node->as.compound_assignment;
@@ -1645,21 +1646,21 @@ static void fmt_statement(XrFmtContext *ctx, AstNode *node) {
             write_newline(ctx);
             break;
         }
-            
+
         case AST_INC:
             write_indent(ctx);
             write_str(ctx, node->as.inc.name);
             write_str(ctx, "++");
             write_newline(ctx);
             break;
-            
+
         case AST_DEC:
             write_indent(ctx);
             write_str(ctx, node->as.dec.name);
             write_str(ctx, "--");
             write_newline(ctx);
             break;
-            
+
         default:
             write_indent(ctx);
             write_fmt(ctx, "/* unsupported statement: %d */", node->type);
@@ -1674,28 +1675,28 @@ static void fmt_statement(XrFmtContext *ctx, AstNode *node) {
 
 static void fmt_program(XrFmtContext *ctx, AstNode *node) {
     if (!node || node->type != AST_PROGRAM) return;
-    
+
     // Output file-level leading comments
     if (node->leading_comments) {
         write_leading_comments(ctx, node->leading_comments);
     }
-    
+
     ProgramNode *prog = &node->as.program;
     int last_was_decl = 0;
-    
+
     for (int i = 0; i < prog->count; i++) {
         AstNode *stmt = prog->statements[i];
-        
-        int is_decl = (stmt->type == AST_FUNCTION_DECL || 
+
+        int is_decl = (stmt->type == AST_FUNCTION_DECL ||
                        stmt->type == AST_CLASS_DECL ||
                        stmt->type == AST_STRUCT_DECL ||
                        stmt->type == AST_INTERFACE_DECL ||
                        stmt->type == AST_ENUM_DECL);
-        
+
         if (i > 0 && (is_decl || last_was_decl)) {
             write_newline(ctx);
         }
-        
+
         fmt_statement(ctx, stmt);
         last_was_decl = is_decl;
     }
@@ -1707,7 +1708,7 @@ static void fmt_program(XrFmtContext *ctx, AstNode *node) {
 
 void xfmt_node(XrFmtContext *ctx, AstNode *node) {
     if (!node) return;
-    
+
     if (node->type == AST_PROGRAM) {
         fmt_program(ctx, node);
     } else {
@@ -1722,14 +1723,14 @@ void xfmt_type(XrFmtContext *ctx, XrType *type) {
 char *xfmt_format_ast(AstNode *ast, XrFmtConfig *config, XrayIsolate *X) {
     XrFmtContext ctx;
     xfmt_init(&ctx, config, X);
-    
+
     xfmt_node(&ctx, ast);
-    
+
     if (config && config->trailing_newline && ctx.length > 0 &&
         ctx.output[ctx.length - 1] != '\n') {
         write_char(&ctx, '\n');
     }
-    
+
     char *result = ctx.output;
     ctx.output = NULL;
     return result;

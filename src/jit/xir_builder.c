@@ -2372,11 +2372,31 @@ static bool translate_instruction(XirBuilder *b, XirBlock **cur_blk, uint32_t pc
 
 /* ========== Main Build Entry Point ========== */
 
+static XirFunc *build_from_proto_impl_ex(XrProto *proto,
+                                          XrProto **shared_protos, int nshared,
+                                          struct XrShape *dominant_shape,
+                                          bool aot_mode,
+                                          XrayIsolate *isolate,
+                                          XirAotImportEntry *import_map,
+                                          int import_count);
+
 static XirFunc *build_from_proto_impl(XrProto *proto,
                                        XrProto **shared_protos, int nshared,
                                        struct XrShape *dominant_shape,
                                        bool aot_mode,
                                        XrayIsolate *isolate) {
+    return build_from_proto_impl_ex(proto, shared_protos, nshared,
+                                     dominant_shape, aot_mode, isolate,
+                                     NULL, 0);
+}
+
+static XirFunc *build_from_proto_impl_ex(XrProto *proto,
+                                          XrProto **shared_protos, int nshared,
+                                          struct XrShape *dominant_shape,
+                                          bool aot_mode,
+                                          XrayIsolate *isolate,
+                                          XirAotImportEntry *import_map,
+                                          int import_count) {
     if (!proto) return NULL;
 
     const char *name = proto->name ? proto->name->data : "<anon>";
@@ -2389,6 +2409,9 @@ static XirFunc *build_from_proto_impl(XrProto *proto,
     b.nshared_protos = nshared;
     b.aot_mode = aot_mode;
     b.isolate = isolate;
+    b.aot_import_map = import_map;
+    b.aot_import_count = import_count;
+    memset(b.import_modules, 0, sizeof(b.import_modules));
 
     // Step 1: Create basic blocks from bb_leaders and jump targets
     builder_create_blocks(&b);
@@ -2740,4 +2763,19 @@ XirFunc *xir_build_from_proto_aot(XrProto *proto,
                                    XrayIsolate *isolate) {
     XR_DCHECK(proto != NULL, "xir_build_from_proto_aot: proto is NULL");
     return build_from_proto_impl(proto, shared_protos, nshared, NULL, true, isolate);
+}
+
+XirFunc *xir_build_from_proto_aot_ex(XrProto *proto,
+                                      XrProto **shared_protos, int nshared,
+                                      XrayIsolate *isolate,
+                                      XirAotImportEntry *import_map,
+                                      int import_count) {
+    XR_DCHECK(proto != NULL, "xir_build_from_proto_aot_ex: proto is NULL");
+    // Use the standard impl, then we need the builder to hold the import map.
+    // Since build_from_proto_impl creates a local builder, we set import info
+    // via proto->aot_import_map/count fields temporarily.
+    // Alternatively, store on proto (avoided to keep proto clean).
+    // For now, store in thread-local or pass through extended impl.
+    return build_from_proto_impl_ex(proto, shared_protos, nshared, NULL, true,
+                                     isolate, import_map, import_count);
 }

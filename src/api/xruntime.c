@@ -38,12 +38,4 @@ void* xray_realloc(XrayIsolate *X, void *ptr, size_t old_size, size_t new_size) 
     return xr_realloc(ptr, new_size);
 }
 
-// Free memory.
-// NOTE: GC manages memory automatically, this is a no-op.
-void xray_free(XrayIsolate *X, void *ptr, size_t size) {
-    xray_api_check(X != NULL, "xray_free: NULL isolate");
-    (void)ptr;
-    (void)size;
-    // GC automatically reclaims unmarked objects, no manual free needed
-}
 

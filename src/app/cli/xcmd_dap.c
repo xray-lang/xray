@@ -16,7 +16,9 @@
 #ifdef XR_HAS_DAP
 
 #include "xcli.h"
-#include "xcli_utils.h"
+#include "xcli_spec.h"
+#include "xcli_fs.h"
+#include "../../base/xchecks.h"
 #include "../dap/xdap_controller.h"
 #include "../dap/xdap_transport.h"
 #include "../dap/xdap_protocol.h"
@@ -25,97 +27,61 @@
 #include <stdlib.h>
 #include <string.h>
 
-static void print_dap_usage(void) {
-    fprintf(stderr, "xray Debug Adapter Protocol implementation\n");
-    fprintf(stderr, "\n");
-    fprintf(stderr, "Usage: xray dap [options]\n");
-    fprintf(stderr, "\n");
-    fprintf(stderr, "Options:\n");
-    fprintf(stderr, "  --port <port>   Start TCP server on port (0 for random)\n");
-    fprintf(stderr, "  --help          Show this help\n");
-    fprintf(stderr, "\n");
-    fprintf(stderr, "Environment:\n");
-    fprintf(stderr, "  XRAY_DAP_PORT   Default TCP port if --port is not passed\n");
-    fprintf(stderr, "\n");
-    fprintf(stderr, "Without options, uses stdio transport for IDE extension.\n");
-    fprintf(stderr, "\n");
-    fprintf(stderr, "Remote debugging example:\n");
-    fprintf(stderr, "  xray dap --port 4711\n");
-    fprintf(stderr, "  Then configure your debugger to connect to localhost:4711\n");
-}
+XR_FUNC int cmd_dap(const XrCliInvocation *inv) {
+    XR_DCHECK(inv != NULL, "inv is NULL");
 
-int cmd_dap(int argc, char **argv) {
-    int tcp_port = -1;  // -1 means use stdio
-    bool port_set_by_arg = false;
+    int tcp_port = -1;  /* -1 means use stdio */
+    bool port_set = xr_cli_opt_present(&inv->options, "port");
 
-    // Parse arguments
-    for (int i = 0; i < argc; i++) {
-        if (strcmp(argv[i], "--port") == 0) {
-            if (i + 1 >= argc) {
-                fprintf(stderr, "Error: --port requires a port number\n");
-                return 1;
-            }
-            if (!cli_parse_port(argv[++i], &tcp_port)) {
-                fprintf(stderr, "Error: invalid port number '%s'\n", argv[i]);
-                return 1;
-            }
-            port_set_by_arg = true;
-        } else if (strcmp(argv[i], "--help") == 0 || strcmp(argv[i], "-h") == 0) {
-            print_dap_usage();
-            return 0;
-        }
+    if (port_set) {
+        tcp_port = xr_cli_opt_int(&inv->options, "port", -1);
     }
 
-    // Env var fallback: XRAY_DAP_PORT only kicks in when --port was not
-    // passed. This is the same tiered precedence we use for XRAY_LSP_LOG
-    // in the language server (explicit flag > env > default).
-    if (!port_set_by_arg) {
+    /* Env var fallback: XRAY_DAP_PORT only kicks in when --port was not
+     * passed. Same tiered precedence as XRAY_LSP_LOG. */
+    if (!port_set) {
         const char *env_port = getenv("XRAY_DAP_PORT");
         if (env_port && env_port[0] != '\0') {
             int env_tcp_port;
-            if (!cli_parse_port(env_port, &env_tcp_port)) {
-                fprintf(stderr,
-                        "Error: invalid XRAY_DAP_PORT='%s'\n", env_port);
-                return 1;
+            if (!xr_cli_parse_port(env_port, &env_tcp_port)) {
+                xr_cli_error("dap", "invalid XRAY_DAP_PORT='%s'", env_port);
+                return XR_CLI_EXIT_FAIL;
             }
             tcp_port = env_tcp_port;
         }
     }
 
-    // Create transport
+    /* Create transport */
     XdapTransport *transport;
 
     if (tcp_port >= 0) {
-        // TCP transport for remote debugging
         transport = xdap_transport_tcp_server(tcp_port);
         if (!transport) {
-            fprintf(stderr, "Failed to create TCP transport on port %d\n", tcp_port);
-            return 1;
+            xr_cli_error("dap", "failed to create TCP transport on port %d", tcp_port);
+            return XR_CLI_EXIT_INTERNAL;
         }
     } else {
-        // stdio transport for IDE extension
         transport = xdap_transport_stdio();
         if (!transport) {
-            fprintf(stderr, "Failed to create stdio transport\n");
-            return 1;
+            xr_cli_error("dap", "failed to create stdio transport");
+            return XR_CLI_EXIT_INTERNAL;
         }
     }
 
-    // Create controller
+    /* Create controller */
     XdapController *ctrl = xdap_controller_new(transport);
     if (!ctrl) {
-        fprintf(stderr, "Failed to create DAP controller\n");
+        xr_cli_error("dap", "failed to create DAP controller");
         xdap_transport_free(transport);
-        return 1;
+        return XR_CLI_EXIT_INTERNAL;
     }
 
-    // Run main loop
+    /* Run main loop */
     int result = xdap_run(ctrl);
 
-    // Cleanup
     xdap_controller_free(ctrl);
 
-    return result;
+    return (result != 0) ? XR_CLI_EXIT_FAIL : XR_CLI_EXIT_OK;
 }
 
 #endif // XR_HAS_DAP

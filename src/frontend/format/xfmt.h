@@ -16,7 +16,7 @@
 #ifndef XFMT_H
 #define XFMT_H
 
-#include "../../frontend/parser/xast.h"
+#include "../parser/xast.h"
 #include "xray_isolate.h"
 
 // Format configuration
