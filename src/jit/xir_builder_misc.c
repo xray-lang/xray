@@ -1351,8 +1351,39 @@ bool xir_translate_misc_ops(XirBuilder *b, XirBlock **cur_blk,
             b->ops_translated++;
             return true;
 
-        /* === Export (no-op for JIT — module-level only) === */
-        case OP_EXPORT:
+        /* === Export (emit synthetic SETSHARED for const exports in AOT) === */
+        case OP_EXPORT: {
+            // In AOT mode, const exports without OP_SETSHARED need a
+            // synthetic shared write so other modules can read them.
+            if (b->aot_mode && b->aot_export_slots) {
+                uint32_t cur = b->cur_pc;
+                for (int ei = 0; ei < b->aot_export_slot_count; ei++) {
+                    if (b->aot_export_slots[ei].export_pc != cur) continue;
+                    int vreg = b->aot_export_slots[ei].value_reg;
+                    int sidx = b->aot_export_slots[ei].shared_index;
+                    XirRef val = builder_get_slot(b, blk, vreg);
+                    XirRef fn_ref = xir_const_ptr(b->func,
+                                                   (void*)xr_jit_set_shared);
+                    uint8_t val_tag = vtag_to_value_tag(
+                                          builder_slot_xr_tag(b, vreg));
+                    uint8_t val_bc = (vreg >= 0 && vreg < 256)
+                                         ? (uint8_t)vreg : 0xFF;
+                    int64_t enc = ((int64_t)val_bc << 24)
+                                | ((int64_t)val_tag << 16)
+                                | (sidx & 0xFFFF);
+                    XirRef idx_ref = xir_const_i64(b->func, enc);
+                    XirRef idx_val = xir_emit_unary(b->func, blk,
+                                        XIR_CONST_I64, XR_REP_I64, idx_ref);
+                    XirRef ss_res = xir_emit(b->func, blk, XIR_CALL_C,
+                                             XR_REP_I64, fn_ref, idx_val);
+                    blk->ins[blk->nins - 1].flags |= XIR_FLAG_SIDE_EFFECT;
+                    builder_bind_call_args(b, ss_res, &val, 1);
+                    break;
+                }
+            }
+            b->ops_translated++;
+            return true;
+        }
         case OP_EXPORT_ALL:
             b->ops_translated++;
             return true;

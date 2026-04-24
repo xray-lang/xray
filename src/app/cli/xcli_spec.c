@@ -20,7 +20,6 @@
 /* ========== Option Specs per Command ========== */
 
 static const XrCliOptionSpec run_options[] = {
-    {"help",          'h', XR_CLI_VALUE_NONE,   false, false, NULL,     "Show help"},
     {"trace",         't', XR_CLI_VALUE_NONE,   false, false, NULL,     "Trace execution"},
     {"dump-bytecode", 'd', XR_CLI_VALUE_NONE,   false, false, NULL,     "Dump bytecode"},
     {"workers",       'W', XR_CLI_VALUE_INT,    false, false, "N",      "Number of worker threads"},
@@ -34,13 +33,11 @@ static const XrCliOptionSpec run_options[] = {
 };
 
 static const XrCliOptionSpec eval_options[] = {
-    {"help", 'h', XR_CLI_VALUE_NONE, false, false, NULL, "Show help"},
     XR_CLI_OPT_END
 };
 
 static const XrCliOptionSpec repl_options[] = {
     {"no-color", 'n', XR_CLI_VALUE_NONE, false, false, NULL, "Disable color output"},
-    {"help",     'h', XR_CLI_VALUE_NONE, false, false, NULL, "Show help"},
     XR_CLI_OPT_END
 };
 
@@ -52,7 +49,6 @@ static const XrCliOptionSpec test_options[] = {
     {"jit-force",  0,  XR_CLI_VALUE_NONE,   false, false, NULL,      "Force JIT on first call"},
     {"quiet",     'q', XR_CLI_VALUE_NONE,   false, false, NULL,      "Quiet mode (exit code only)"},
     {"jobs",      'j', XR_CLI_VALUE_INT,    false, false, "N",       "Parallel threads (default 1)"},
-    {"help",      'h', XR_CLI_VALUE_NONE,   false, false, NULL,      "Show help"},
     XR_CLI_OPT_END
 };
 
@@ -60,7 +56,6 @@ static const XrCliOptionSpec check_options[] = {
     {"verbose", 'v', XR_CLI_VALUE_NONE, false, false, NULL, "Show all checked files"},
     {"quiet",   'q', XR_CLI_VALUE_NONE, false, false, NULL, "Show errors only"},
     {"strict",  's', XR_CLI_VALUE_NONE, false, false, NULL, "Enable type checking"},
-    {"help",    'h', XR_CLI_VALUE_NONE, false, false, NULL, "Show help"},
     XR_CLI_OPT_END
 };
 
@@ -69,12 +64,10 @@ static const XrCliOptionSpec fmt_options[] = {
     {"verbose", 'v', XR_CLI_VALUE_NONE, false, false, NULL, "Show all processed files"},
     {"tabs",    't', XR_CLI_VALUE_NONE, false, false, NULL, "Use tab indent"},
     {"indent",  'i', XR_CLI_VALUE_INT,  false, false, "N",  "Indent spaces (default 4)"},
-    {"help",    'h', XR_CLI_VALUE_NONE, false, false, NULL, "Show help"},
     XR_CLI_OPT_END
 };
 
 static const XrCliOptionSpec compile_options[] = {
-    {"help",         'h', XR_CLI_VALUE_NONE,   false, false, NULL,   "Show help"},
     {"output",       'o', XR_CLI_VALUE_STRING, false, false, "FILE", "Output file path"},
     {"format",       'f', XR_CLI_VALUE_STRING, false, false, "FMT",  "Output format: bytecode, c, header"},
     {"strip-debug",  's', XR_CLI_VALUE_NONE,   false, false, NULL,   "Remove debug info"},
@@ -91,7 +84,6 @@ static const XrCliOptionSpec build_options[] = {
     {"sysroot", 'r', XR_CLI_VALUE_STRING, false, false, "DIR",    "System root directory"},
     {"strip",   'S', XR_CLI_VALUE_NONE,   false, false, NULL,     "Strip debug symbols"},
     {"native",  'N', XR_CLI_VALUE_NONE,   false, false, NULL,     "Use AOT native backend"},
-    {"help",    'h', XR_CLI_VALUE_NONE,   false, false, NULL,     "Show help"},
     XR_CLI_OPT_END
 };
 
@@ -100,12 +92,10 @@ static const XrCliOptionSpec deps_options[] = {
     {"shell",  's', XR_CLI_VALUE_NONE,   false, false, NULL,   "Shell script format"},
     {"json",   'j', XR_CLI_VALUE_NONE,   false, false, NULL,   "JSON format"},
     {"list",   'l', XR_CLI_VALUE_NONE,   false, false, NULL,   "Simple list format"},
-    {"help",   'h', XR_CLI_VALUE_NONE,   false, false, NULL,   "Show help"},
     XR_CLI_OPT_END
 };
 
 static const XrCliOptionSpec pkg_options[] = {
-    {"help", 'h', XR_CLI_VALUE_NONE, false, false, NULL, "Show help"},
     XR_CLI_OPT_END
 };
 
@@ -116,7 +106,6 @@ static const XrCliOptionSpec empty_options[] = {
 #ifdef XR_HAS_LSP
 static const XrCliOptionSpec lsp_options[] = {
     {"stdio",   0,   XR_CLI_VALUE_NONE, false, false, NULL, "Use stdio transport (default)"},
-    {"help",    'h', XR_CLI_VALUE_NONE, false, false, NULL, "Show help"},
     XR_CLI_OPT_END
 };
 #endif
@@ -124,7 +113,6 @@ static const XrCliOptionSpec lsp_options[] = {
 #ifdef XR_HAS_DAP
 static const XrCliOptionSpec dap_options[] = {
     {"port",    'p', XR_CLI_VALUE_INT,  false, false, "PORT", "TCP port (0 for random, omit for stdio)"},
-    {"help",    'h', XR_CLI_VALUE_NONE, false, false, NULL,   "Show help"},
     XR_CLI_OPT_END
 };
 #endif
@@ -133,7 +121,6 @@ static const XrCliOptionSpec dap_options[] = {
 static const XrCliOptionSpec mcp_options[] = {
     {"log-level", 'l', XR_CLI_VALUE_STRING, false, false, "LEVEL", "Log level: error,warn,info,debug"},
     {"log-file",  'f', XR_CLI_VALUE_STRING, false, false, "PATH",  "Log to file"},
-    {"help",      'h', XR_CLI_VALUE_NONE,   false, false, NULL,    "Show help"},
     XR_CLI_OPT_END
 };
 #endif
@@ -154,7 +141,7 @@ static const XrCliCommandSpec pkg_subcommands[] = {
 
 /* ========== Top-level Command Table ========== */
 
-static const XrCliCommandSpec cli_commands[] = {
+static XrCliCommandSpec cli_commands[] = {
     /* Execution commands */
     {"run",     "Run script or project",      NULL, run_options,     0, -1, true,  false, NULL, NULL, 0},
     {"eval",    "Execute code string",        NULL, eval_options,    1, 1,  false, false, NULL, NULL, 0},
@@ -189,6 +176,20 @@ static const XrCliCommandSpec cli_commands[] = {
     /* Sentinel */
     {NULL, NULL, NULL, NULL, 0, 0, false, false, NULL, NULL, 0}
 };
+
+/* ========== Handler Registration ========== */
+
+void xr_cli_register_handler(const char *name, XrCliHandler handler) {
+    XR_DCHECK(name != NULL, "name is NULL");
+    XR_DCHECK(handler != NULL, "handler is NULL");
+    for (int i = 0; cli_commands[i].name != NULL; i++) {
+        if (strcmp(cli_commands[i].name, name) == 0) {
+            cli_commands[i].handler = handler;
+            return;
+        }
+    }
+    XR_DCHECK(false, "unknown command for registration");
+}
 
 /* ========== Option Map Accessors ========== */
 

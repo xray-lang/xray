@@ -2377,8 +2377,7 @@ static XirFunc *build_from_proto_impl_ex(XrProto *proto,
                                           struct XrShape *dominant_shape,
                                           bool aot_mode,
                                           XrayIsolate *isolate,
-                                          XirAotImportEntry *import_map,
-                                          int import_count);
+                                          const XirAotOptions *opts);
 
 static XirFunc *build_from_proto_impl(XrProto *proto,
                                        XrProto **shared_protos, int nshared,
@@ -2387,7 +2386,7 @@ static XirFunc *build_from_proto_impl(XrProto *proto,
                                        XrayIsolate *isolate) {
     return build_from_proto_impl_ex(proto, shared_protos, nshared,
                                      dominant_shape, aot_mode, isolate,
-                                     NULL, 0);
+                                     NULL);
 }
 
 static XirFunc *build_from_proto_impl_ex(XrProto *proto,
@@ -2395,8 +2394,7 @@ static XirFunc *build_from_proto_impl_ex(XrProto *proto,
                                           struct XrShape *dominant_shape,
                                           bool aot_mode,
                                           XrayIsolate *isolate,
-                                          XirAotImportEntry *import_map,
-                                          int import_count) {
+                                          const XirAotOptions *opts) {
     if (!proto) return NULL;
 
     const char *name = proto->name ? proto->name->data : "<anon>";
@@ -2409,8 +2407,10 @@ static XirFunc *build_from_proto_impl_ex(XrProto *proto,
     b.nshared_protos = nshared;
     b.aot_mode = aot_mode;
     b.isolate = isolate;
-    b.aot_import_map = import_map;
-    b.aot_import_count = import_count;
+    b.aot_import_map = opts ? opts->import_map : NULL;
+    b.aot_import_count = opts ? opts->import_count : 0;
+    b.aot_export_slots = opts ? opts->export_slots : NULL;
+    b.aot_export_slot_count = opts ? opts->export_slot_count : 0;
     memset(b.import_modules, 0, sizeof(b.import_modules));
 
     // Step 1: Create basic blocks from bb_leaders and jump targets
@@ -2768,14 +2768,8 @@ XirFunc *xir_build_from_proto_aot(XrProto *proto,
 XirFunc *xir_build_from_proto_aot_ex(XrProto *proto,
                                       XrProto **shared_protos, int nshared,
                                       XrayIsolate *isolate,
-                                      XirAotImportEntry *import_map,
-                                      int import_count) {
+                                      const XirAotOptions *opts) {
     XR_DCHECK(proto != NULL, "xir_build_from_proto_aot_ex: proto is NULL");
-    // Use the standard impl, then we need the builder to hold the import map.
-    // Since build_from_proto_impl creates a local builder, we set import info
-    // via proto->aot_import_map/count fields temporarily.
-    // Alternatively, store on proto (avoided to keep proto clean).
-    // For now, store in thread-local or pass through extended impl.
     return build_from_proto_impl_ex(proto, shared_protos, nshared, NULL, true,
-                                     isolate, import_map, import_count);
+                                     isolate, opts);
 }

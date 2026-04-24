@@ -55,5 +55,6 @@ int main(int argc, char **argv) {
     signal(SIGBUS, crash_handler);
 #endif
 #endif
+    xr_cli_register_all_handlers();
     return xr_cli_main(argc, argv);
 }

@@ -15,6 +15,7 @@
 #include "xcli.h"
 #include "xcli_spec.h"
 #include "xcli_fs.h"
+#include "xcli_isolate.h"
 
 #include "xray.h"
 #include "xray_isolate.h"
@@ -38,11 +39,10 @@ typedef struct {
     int coro_http_port;        // 0 = disabled, >0 = HTTP port
 } RunOptions;
 
-// Create isolate with runtime for execution
+/* Create isolate via profile factory, then apply run-specific overrides */
 static XrayIsolate *create_run_isolate(const RunOptions *opts) {
     XrayIsolateParams params;
-    xray_isolate_params_init(&params);
-    xray_isolate_setup_full(&params);
+    xr_cli_isolate_params(XR_CLI_ISOLATE_RUN, &params);
     params.trace_execution = opts->trace;
     params.dump_bytecode = opts->dump_bytecode;
     params.dump_ic_feedback = opts->dump_ic;
@@ -50,11 +50,8 @@ static XrayIsolate *create_run_isolate(const RunOptions *opts) {
     if (opts->jit_force) params.jit_threshold = 1;
     params.jit_stats = opts->jit_stats;
 
-    XrayIsolate *iso = xray_isolate_new(&params);
-    if (!iso) {
-        fprintf(stderr, "Error: failed to create Xray isolate\n");
-        return NULL;
-    }
+    XrayIsolate *iso = xr_cli_isolate_create(&params);
+    if (!iso) return NULL;
     xr_multicore_init(iso, opts->num_workers);
     return iso;
 }

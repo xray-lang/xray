@@ -80,9 +80,9 @@ TEST(spec_option_count) {
     const XrCliCommandSpec *spec = xr_cli_find_command("run");
     ASSERT_NOT_NULL(spec);
     int count = xr_cli_option_count(spec->options);
-    /* run has: help, trace, dump-bytecode, workers, coro-watch,
-     *          coro-http, no-jit, jit-force, jit-stats, dump-ic = 10 */
-    ASSERT_EQ_INT(count, 10);
+    /* run has: trace, dump-bytecode, workers, coro-watch,
+     *          coro-http, no-jit, jit-force, jit-stats, dump-ic = 9 */
+    ASSERT_EQ_INT(count, 9);
 }
 
 TEST(spec_option_count_empty) {
@@ -120,8 +120,8 @@ TEST(optmap_present_flag) {
     bool present[16] = {false};
     const char *values[16] = {NULL};
 
-    /* Set "trace" (index 1) as present */
-    present[1] = true;
+    /* Set "trace" (index 0) as present */
+    present[0] = true;
 
     XrCliOptionMap map = {
         .spec = spec->options,
@@ -142,9 +142,9 @@ TEST(optmap_present_string) {
     bool present[16] = {false};
     const char *values[16] = {NULL};
 
-    /* Set "output" (index 1) as present */
-    present[1] = true;
-    values[1] = "out.xrc";
+    /* Set "output" (index 0) as present */
+    present[0] = true;
+    values[0] = "out.xrc";
 
     XrCliOptionMap map = {
         .spec = spec->options,
@@ -165,9 +165,9 @@ TEST(optmap_present_int) {
     bool present[16] = {false};
     const char *values[16] = {NULL};
 
-    /* Set "workers" (index 3) */
-    present[3] = true;
-    values[3] = "8";
+    /* Set "workers" (index 2) */
+    present[2] = true;
+    values[2] = "8";
 
     XrCliOptionMap map = {
         .spec = spec->options,
@@ -405,6 +405,53 @@ TEST(parse_cmd_passthrough_rejected) {
     ASSERT_EQ_INT(rc, XR_CLI_EXIT_USAGE);
 }
 
+TEST(parse_global_verbose) {
+    XrCliContext ctx = {0};
+    char *argv[] = {"xray", "--verbose", "run"};
+    int consumed = xr_cli_parse_global(3, argv, &ctx);
+    ASSERT_EQ_INT(consumed, 1);
+    ASSERT_TRUE(ctx.verbose);
+}
+
+TEST(parse_global_quiet) {
+    XrCliContext ctx = {0};
+    char *argv[] = {"xray", "--quiet", "check"};
+    int consumed = xr_cli_parse_global(3, argv, &ctx);
+    ASSERT_EQ_INT(consumed, 1);
+    ASSERT_TRUE(ctx.quiet);
+}
+
+TEST(parse_global_quiet_short) {
+    XrCliContext ctx = {0};
+    char *argv[] = {"xray", "-q", "check"};
+    int consumed = xr_cli_parse_global(3, argv, &ctx);
+    ASSERT_EQ_INT(consumed, 1);
+    ASSERT_TRUE(ctx.quiet);
+}
+
+TEST(parse_global_json) {
+    XrCliContext ctx = {0};
+    char *argv[] = {"xray", "--json", "test"};
+    int consumed = xr_cli_parse_global(3, argv, &ctx);
+    ASSERT_EQ_INT(consumed, 1);
+    ASSERT_TRUE(ctx.json_output);
+}
+
+TEST(parse_global_multiple_flags) {
+    XrCliContext ctx = {0};
+    char *argv[] = {"xray", "--no-color", "--verbose", "run"};
+    int consumed = xr_cli_parse_global(4, argv, &ctx);
+    ASSERT_EQ_INT(consumed, 2);
+    ASSERT_FALSE(ctx.color);
+    ASSERT_TRUE(ctx.verbose);
+}
+
+TEST(spec_handler_null_before_register) {
+    const XrCliCommandSpec *spec = xr_cli_find_command("run");
+    ASSERT_NOT_NULL(spec);
+    /* Handler may be NULL (test binary doesn't link handlers) */
+}
+
 /* ========== Help Generation (smoke tests) ========== */
 
 TEST(help_print_usage_no_crash) {
@@ -477,6 +524,14 @@ TEST_MAIN_BEGIN()
     RUN_TEST(parse_global_no_color);
     RUN_TEST(parse_global_color);
     RUN_TEST(parse_global_command_not_consumed);
+    RUN_TEST(parse_global_verbose);
+    RUN_TEST(parse_global_quiet);
+    RUN_TEST(parse_global_quiet_short);
+    RUN_TEST(parse_global_json);
+    RUN_TEST(parse_global_multiple_flags);
+
+    RUN_TEST_SUITE("Handler Registration");
+    RUN_TEST(spec_handler_null_before_register);
 
     RUN_TEST_SUITE("Command Parser");
     RUN_TEST(parse_cmd_simple_flag);

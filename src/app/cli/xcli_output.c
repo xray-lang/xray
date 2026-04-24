@@ -42,6 +42,28 @@ const char *xr_cli_clr(const char *code) {
     return xr_cli_color_enabled() ? code : "";
 }
 
+/* ========== Output Verbosity ========== */
+
+static XrCliOutputLevel s_output_level = XR_OUTPUT_NORMAL;
+static bool s_json_output = false;
+
+void xr_cli_set_output_level(XrCliOutputLevel level) {
+    s_output_level = level;
+}
+
+XrCliOutputLevel xr_cli_output_level(void) {
+    return s_output_level;
+}
+
+void xr_cli_set_json(bool on) {
+    s_json_output = on;
+    if (on) xr_cli_set_color(XR_COLOR_OFF);
+}
+
+bool xr_cli_json_output(void) {
+    return s_json_output;
+}
+
 /* ========== Timing ========== */
 
 double xr_cli_get_time_ms(void) {
