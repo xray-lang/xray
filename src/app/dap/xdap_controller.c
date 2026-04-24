@@ -135,7 +135,8 @@ bool xdap_controller_launch(XdapController *ctrl, const char *program,
 
     // Set initial state based on stop_on_entry
     if (stop_on_entry) {
-        ctrl->step_mode = XDAP_CMD_STEP_IN;  // Step in will stop at first line
+        ctrl->step_mode = XDAP_CMD_STEP_IN;
+        xr_debug_step_in(ctrl->isolate);  // Set debug action so on_line hook breaks
     }
 
     ctrl->vm_state = XDAP_VM_PAUSED;  // Wait for configurationDone

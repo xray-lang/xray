@@ -251,6 +251,12 @@ XrProto* xr_repl_compile(XrayIsolate *isolate, const char *source) {
     }
 
     xr_compiler_context_free(ctx);
+
+    // Restore type pool (compiler context freed its analyzer's pool)
+    if (isolate->analyzer_pool) {
+        isolate->current_type_pool = isolate->analyzer_pool;
+    }
+
     xr_program_destroy(ast);
 
     return proto;
