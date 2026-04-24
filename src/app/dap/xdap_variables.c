@@ -22,6 +22,8 @@
 #include "../../runtime/class/xinstance.h"
 #include "../../runtime/symbol/xsymbol_table.h"
 #include "../../coro/xcoroutine.h"
+#include "../../coro/xcoro_flags.h"
+#include "../../coro/xworker.h"
 #include "../../base/xmalloc.h"
 #include <stdlib.h>
 #include <string.h>
@@ -128,11 +130,13 @@ static int get_array_children(XrayIsolate *isolate, XrArray *arr, XdapVarInfo **
         return 0;
     }
 
-    // Limit to first 100 elements for performance
-    int display_count = count > 100 ? 100 : count;
-    XdapVarInfo *vars = (XdapVarInfo *)xr_calloc(display_count, sizeof(XdapVarInfo));
+    XdapVarInfo *vars = (XdapVarInfo *)xr_calloc(count, sizeof(XdapVarInfo));
+    if (!vars) {
+        *out_vars = NULL;
+        return 0;
+    }
 
-    for (int i = 0; i < display_count; i++) {
+    for (int i = 0; i < count; i++) {
         XrValue elem = xr_array_get(arr, i);
 
         char name_buf[32];
@@ -149,7 +153,7 @@ static int get_array_children(XrayIsolate *isolate, XrArray *arr, XdapVarInfo **
     }
 
     *out_vars = vars;
-    return display_count;
+    return count;
 }
 
 static int get_map_children(XrayIsolate *isolate, XrMap *map, XdapVarInfo **out_vars) {
@@ -433,6 +437,46 @@ bool xr_debug_get_local(XrayIsolate *isolate, int frame_idx, int local_idx,
 // Set Variable API
 // ============================================================================
 
+// Parse a debug value string into XrValue. Returns true on success.
+static bool parse_debug_value(XrayIsolate *isolate, const char *value, XrValue *out) {
+    if (!value) return false;
+
+    if (strcmp(value, "null") == 0) {
+        *out = xr_null();
+        return true;
+    }
+    if (strcmp(value, "true") == 0) {
+        *out = xr_bool(true);
+        return true;
+    }
+    if (strcmp(value, "false") == 0) {
+        *out = xr_bool(false);
+        return true;
+    }
+    if (value[0] == '"') {
+        size_t len = strlen(value);
+        if (len >= 2 && value[len - 1] == '"') {
+            XrString *str = xr_string_intern(isolate, value + 1, len - 2, 0);
+            *out = xr_string_value(str);
+            return true;
+        }
+        return false;
+    }
+    // Try integer then float
+    char *endptr = NULL;
+    long long ival = strtoll(value, &endptr, 10);
+    if (*endptr == '\0') {
+        *out = xr_int(ival);
+        return true;
+    }
+    double fval = strtod(value, &endptr);
+    if (*endptr == '\0') {
+        *out = xr_float(fval);
+        return true;
+    }
+    return false;
+}
+
 char *xr_debug_set_variable(XrayIsolate *isolate, int var_ref,
                              const char *name, const char *value) {
     if (!isolate || !name || !value) return NULL;
@@ -440,15 +484,18 @@ char *xr_debug_set_variable(XrayIsolate *isolate, int var_ref,
     XrDebugState *dbg = (XrDebugState *)xr_isolate_get_debug_state(isolate);
     if (!dbg) return NULL;
 
-    XrDebugFrameCtx fctx;
-    xr_debug_get_frame_ctx_ex(isolate, &fctx);
+    XrValue new_val;
+    if (!parse_debug_value(isolate, value, &new_val)) return NULL;
 
     // Find the variable reference
     XrDebugVarRef *ref = xr_debug_get_var_ref(isolate, var_ref);
-    int frame_idx = ref ? ref->frame_idx : 0;
 
-    // For scope locals, find by name
+    // Scope locals: find register by name and write
     if (!ref || ref->type == XDAP_REF_SCOPE_LOCALS) {
+        int frame_idx = ref ? ref->frame_idx : 0;
+        XrDebugFrameCtx fctx;
+        xr_debug_get_frame_ctx_ex(isolate, &fctx);
+
         if (frame_idx < 0 || frame_idx >= fctx.frame_count) return NULL;
 
         int actual_idx = fctx.frame_count - 1 - frame_idx;
@@ -458,51 +505,59 @@ char *xr_debug_set_variable(XrayIsolate *isolate, int var_ref,
         XrProto *proto = frame->closure->proto;
         XrValue *base = fctx.stack + frame->base_offset;
 
-        // Find local by name
         int locvar_count = PROTO_LOCVAR_COUNT(proto);
         for (int i = 0; i < locvar_count; i++) {
             XrLocVar locvar = PROTO_LOCVAR(proto, i);
             if (locvar.name && strcmp(locvar.name, name) == 0) {
-                // Parse the new value
-                XrValue new_val;
-                if (strcmp(value, "null") == 0) {
-                    new_val = xr_null();
-                } else if (strcmp(value, "true") == 0) {
-                    new_val = xr_bool(true);
-                } else if (strcmp(value, "false") == 0) {
-                    new_val = xr_bool(false);
-                } else if (value[0] == '"') {
-                    // String literal
-                    size_t len = strlen(value);
-                    if (len >= 2 && value[len-1] == '"') {
-                        XrString *str = xr_string_intern(isolate, value + 1, len - 2, 0);
-                        new_val = xr_string_value(str);
-                    } else {
-                        return NULL;
-                    }
-                } else {
-                    // Try as number
-                    char *endptr = NULL;
-                    long long ival = strtoll(value, &endptr, 10);
-                    if (*endptr == '\0') {
-                        new_val = xr_int(ival);
-                    } else {
-                        double fval = strtod(value, &endptr);
-                        if (*endptr == '\0') {
-                            new_val = xr_float(fval);
-                        } else {
-                            return NULL;
-                        }
-                    }
-                }
-
-                // Set the value
                 base[i] = new_val;
-
-                // Return the new value as string
                 return xr_value_to_debug_string(isolate, new_val);
             }
         }
+        return NULL;
+    }
+
+    // Array element: name is "[N]"
+    if (ref->type == XDAP_REF_ARRAY && XR_IS_PTR(ref->value)) {
+        XrArray *arr = (XrArray *)XR_TO_PTR(ref->value);
+        int idx = atoi(name[0] == '[' ? name + 1 : name);
+        if (idx >= 0 && idx < xr_array_size(arr)) {
+            xr_array_set(arr, idx, new_val);
+            return xr_value_to_debug_string(isolate, new_val);
+        }
+        return NULL;
+    }
+
+    // Map entry: name is the key display string
+    if (ref->type == XDAP_REF_MAP && XR_IS_PTR(ref->value)) {
+        XrMap *map = (XrMap *)XR_TO_PTR(ref->value);
+        // Try to find the entry by iterating and matching display name
+        uint32_t size = xr_map_sizenode(map);
+        for (uint32_t i = 0; i < size; i++) {
+            XrMapNode *node = xr_map_node(map, i);
+            if (XR_MAP_NODE_EMPTY(node)) continue;
+            char *key_str = xr_value_to_debug_string(isolate, node->key);
+            bool match = key_str && strcmp(key_str, name) == 0;
+            xr_free(key_str);
+            if (match) {
+                node->value = new_val;
+                return xr_value_to_debug_string(isolate, new_val);
+            }
+        }
+        return NULL;
+    }
+
+    // Json object field
+    if (ref->type == XDAP_REF_OBJECT && XR_IS_PTR(ref->value)) {
+        XrJson *json = (XrJson *)XR_TO_PTR(ref->value);
+        xr_json_set_by_key(isolate, json, name, new_val);
+        return xr_value_to_debug_string(isolate, new_val);
+    }
+
+    // Instance field
+    if (ref->type == XDAP_REF_INSTANCE && XR_IS_PTR(ref->value)) {
+        XrInstance *inst = (XrInstance *)XR_TO_PTR(ref->value);
+        xr_instance_set_field(isolate, inst, name, new_val);
+        return xr_value_to_debug_string(isolate, new_val);
     }
 
     return NULL;
@@ -512,13 +567,41 @@ char *xr_debug_set_variable(XrayIsolate *isolate, int var_ref,
 // Coroutine Debugging
 // ============================================================================
 
+// Map coroutine state + wait reason to human-readable string
+static const char *coro_state_string(XrCoroutine *coro) {
+    uint8_t st = atomic_load_explicit(&coro->coro_state, memory_order_relaxed);
+    switch (st) {
+        case XR_CORO_STATE_RUNNING: return "running";
+        case XR_CORO_STATE_READY:   return "ready";
+        case XR_CORO_STATE_DONE:    return "done";
+        case XR_CORO_STATE_BLOCKED: {
+            uint32_t flags = atomic_load_explicit(&coro->flags, memory_order_relaxed);
+            uint32_t wait = flags & XR_CORO_WAIT_MASK;
+            switch (wait) {
+                case XR_CORO_WAIT_CHANNEL_SEND: return "blocked (channel send)";
+                case XR_CORO_WAIT_CHANNEL_RECV: return "blocked (channel recv)";
+                case XR_CORO_WAIT_AWAIT:        return "blocked (await)";
+                case XR_CORO_WAIT_AWAIT_ALL:    return "blocked (await.all)";
+                case XR_CORO_WAIT_SLEEP:        return "blocked (sleep)";
+                case XR_CORO_WAIT_IO:           return "blocked (I/O)";
+                case XR_CORO_WAIT_SELECT:       return "blocked (select)";
+                default:                        return "blocked";
+            }
+        }
+        default: return "unknown";
+    }
+}
+
 int xr_debug_get_coro_count(XrayIsolate *isolate) {
     if (!xr_isolate_get_vm_state(isolate)->scheduler) return 0;
 
     XrScheduler *sched = (XrScheduler *)xr_isolate_get_vm_state(isolate)->scheduler;
     int count = 0;
 
-    // Count coroutines in ready queues (all priority levels)
+    // Current coroutine
+    if (sched->current) count++;
+
+    // Ready queues (all priority levels)
     for (int p = 0; p < XR_CORO_PRIORITY_COUNT; p++) {
         XrCoroutine *coro = sched->ready_head[p];
         while (coro) {
@@ -527,8 +610,17 @@ int xr_debug_get_coro_count(XrayIsolate *isolate) {
         }
     }
 
-    // Add current coroutine if exists
-    if (sched->current) count++;
+    // Blocked coroutines in per-worker queues
+    XrRuntime *rt = (XrRuntime *)xr_isolate_get_vm_state(isolate)->runtime;
+    if (rt) {
+        for (int w = 0; w < rt->worker_count; w++) {
+            XrCoroutine *bc = rt->workers[w].p.blocked_head;
+            while (bc) {
+                count++;
+                bc = bc->sched_link;
+            }
+        }
+    }
 
     return count;
 }
@@ -540,28 +632,36 @@ bool xr_debug_get_coro_info(XrayIsolate *isolate, int coro_idx,
     XrScheduler *sched = (XrScheduler *)xr_isolate_get_vm_state(isolate)->scheduler;
     int idx = 0;
     XrCoroutine *target = NULL;
-    const char *state = "unknown";
 
     // Current coroutine first
     if (sched->current) {
-        if (idx == coro_idx) {
-            target = sched->current;
-            state = "running";
-        }
+        if (idx == coro_idx) target = sched->current;
         idx++;
     }
 
-    // Search ready queues
+    // Ready queues
     if (!target) {
         for (int p = 0; p < XR_CORO_PRIORITY_COUNT && !target; p++) {
             XrCoroutine *coro = sched->ready_head[p];
             while (coro && !target) {
-                if (idx == coro_idx) {
-                    target = coro;
-                    state = "ready";
-                }
+                if (idx == coro_idx) target = coro;
                 idx++;
                 coro = coro->sched_link;
+            }
+        }
+    }
+
+    // Blocked coroutines in per-worker queues
+    if (!target) {
+        XrRuntime *rt = (XrRuntime *)xr_isolate_get_vm_state(isolate)->runtime;
+        if (rt) {
+            for (int w = 0; w < rt->worker_count && !target; w++) {
+                XrCoroutine *bc = rt->workers[w].p.blocked_head;
+                while (bc && !target) {
+                    if (idx == coro_idx) target = bc;
+                    idx++;
+                    bc = bc->sched_link;
+                }
             }
         }
     }
@@ -570,7 +670,7 @@ bool xr_debug_get_coro_info(XrayIsolate *isolate, int coro_idx,
 
     if (out_id) *out_id = target->id;
     if (out_name) *out_name = target->name ? target->name : "<unnamed>";
-    if (out_state) *out_state = state;
+    if (out_state) *out_state = coro_state_string(target);
 
     return true;
 }

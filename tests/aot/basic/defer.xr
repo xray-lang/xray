@@ -1,0 +1,27 @@
+// AOT test: defer statement support
+// Tests basic defer, multiple defers (LIFO), and defer with upvalue capture
+
+fn test_basic(): int {
+    let result = 0
+    defer { result = 99 }
+    result = 42
+    return result
+}
+
+fn test_multi_defer(): int {
+    let order = 0
+    defer { order = order + 1 }
+    defer { order = order + 10 }
+    defer { order = order + 100 }
+    return order
+}
+
+fn test_defer_capture(): int {
+    let x = 0
+    defer { x = 1 }
+    return x
+}
+
+print(test_basic())
+print(test_multi_defer())
+print(test_defer_capture())

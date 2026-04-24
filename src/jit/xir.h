@@ -537,6 +537,16 @@ typedef struct XirFunc {
     uint32_t  call_arg_pool_used;
     uint32_t  call_arg_pool_cap;
 
+    // Defer tracking (AOT mode): deferred closure calls executed at function exit.
+    // Each entry records the closure vreg, arg vregs, and arg count.
+    // Codegen emits LIFO cleanup at every return point.
+    struct {
+        XirRef   closure;      // closure vreg (XrValue)
+        int      arg_count;    // number of call arguments (0 for defer { ... })
+        XirRef   args[8];      // call arg vregs (if arg_count > 0)
+    } defer_entries[16];
+    int            defer_count;     // number of defer entries
+
     // Flags
     bool           has_coro_deopt;  // contains AWAIT/SCOPE_EXIT (OSR unsafe)
     bool           conservative;    // compiled in conservative mode (no type speculation)

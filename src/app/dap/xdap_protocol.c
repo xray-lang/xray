@@ -142,6 +142,7 @@ static void handle_initialize(XdapController *ctrl, int seq, XrJsonValue *args) 
     xlsp_json_object_set(body, "supportsEvaluateForHovers", xlsp_json_new_bool(true));
     xlsp_json_object_set(body, "supportsDisassembleRequest", xlsp_json_new_bool(true));
     xlsp_json_object_set(body, "supportTerminateDebuggee", xlsp_json_new_bool(true));
+    xlsp_json_object_set(body, "supportsPauseRequest", xlsp_json_new_bool(true));
 
     // Exception breakpoint filters
     XrJsonValue *filters = xlsp_json_new_array();
@@ -543,24 +544,39 @@ static void handle_threads(XdapController *ctrl, int seq, XrJsonValue *args) {
 
 static void handle_stack_trace(XdapController *ctrl, int seq, XrJsonValue *args) {
     int thread_id = (int)json_number(json_get(args, "threadId"));
+    int start_frame = (int)json_number(json_get(args, "startFrame"));  // 0 if absent
+    int levels = (int)json_number(json_get(args, "levels"));            // 0 if absent
 
     // Find the coroutine for this thread
     XrCoroutine *coro = xdap_find_coro(ctrl, thread_id);
 
-    XrJsonValue *frames = NULL;
+    XrJsonValue *all_frames = NULL;
 
     if (coro && ctrl->vm_state == XDAP_VM_PAUSED) {
         int frame_id = 0;
-        frames = xdap_inspect_stack_frames(ctrl, coro, &frame_id);
+        all_frames = xdap_inspect_stack_frames(ctrl, coro, &frame_id);
     }
 
-    if (!frames) {
+    if (!all_frames) {
+        all_frames = xlsp_json_new_array();
+    }
+
+    int total = xlsp_json_array_len(all_frames);
+
+    // Apply pagination: startFrame + levels
+    XrJsonValue *frames = all_frames;
+    if (start_frame > 0 || (levels > 0 && levels < total)) {
         frames = xlsp_json_new_array();
+        int end = (levels > 0) ? start_frame + levels : total;
+        if (end > total) end = total;
+        for (int i = start_frame; i < end; i++) {
+            xlsp_json_array_push(frames, xlsp_json_array_get(all_frames, i));
+        }
     }
 
     XrJsonValue *body = xlsp_json_new_object();
     xlsp_json_object_set(body, "stackFrames", frames);
-    xlsp_json_object_set(body, "totalFrames", xlsp_json_new_number(xlsp_json_array_len(frames)));
+    xlsp_json_object_set(body, "totalFrames", xlsp_json_new_number(total));
 
     xdap_send_response(ctrl, seq, "stackTrace", true, body, NULL);
 }
@@ -593,11 +609,26 @@ static void handle_scopes(XdapController *ctrl, int seq, XrJsonValue *args) {
 
 static void handle_variables(XdapController *ctrl, int seq, XrJsonValue *args) {
     int var_ref = (int)json_number(json_get(args, "variablesReference"));
+    int start = (int)json_number(json_get(args, "start"));    // 0 if absent
+    int count = (int)json_number(json_get(args, "count"));    // 0 if absent
 
-    XrJsonValue *variables = xdap_inspect_variables(ctrl, var_ref);
+    XrJsonValue *all_vars = xdap_inspect_variables(ctrl, var_ref);
+    if (!all_vars) all_vars = xlsp_json_new_array();
+
+    // Apply pagination when start/count provided
+    XrJsonValue *variables = all_vars;
+    int total = xlsp_json_array_len(all_vars);
+    if (start > 0 || (count > 0 && count < total)) {
+        variables = xlsp_json_new_array();
+        int end = (count > 0) ? start + count : total;
+        if (end > total) end = total;
+        for (int i = start; i < end; i++) {
+            xlsp_json_array_push(variables, xlsp_json_array_get(all_vars, i));
+        }
+    }
 
     XrJsonValue *body = xlsp_json_new_object();
-    xlsp_json_object_set(body, "variables", variables ? variables : xlsp_json_new_array());
+    xlsp_json_object_set(body, "variables", variables);
 
     xdap_send_response(ctrl, seq, "variables", true, body, NULL);
 }

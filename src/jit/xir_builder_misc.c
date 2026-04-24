@@ -892,8 +892,41 @@ bool xir_translate_misc_ops(XirBuilder *b, XirBlock **cur_blk,
             return true;
         }
 
+        /* === Defer (AOT only) === */
+        case OP_DEFER: {
+            if (!b->aot_mode) {
+                // JIT mode: bail out (defer not supported in JIT)
+                b->ops_skipped++;
+                b->nyi_opcode = "OP_DEFER";
+                return true;
+            }
+            // AOT mode: record deferred closure + args
+            int a = GETARG_A(inst);
+            int nargs = GETARG_B(inst);
+            XirRef closure_ref = builder_get_slot(b, blk, a);
+
+            // Emit XIR_DEFER_PUSH marker instruction
+            XirRef nargs_ref = xir_const_i64(b->func, (int64_t)nargs);
+            xir_emit(b->func, blk, XIR_DEFER_PUSH, XR_REP_I64,
+                     closure_ref, nargs_ref);
+            blk->ins[blk->nins - 1].flags |= XIR_FLAG_SIDE_EFFECT;
+
+            // Record defer entry on XirFunc for codegen
+            XR_DCHECK(b->func->defer_count < 16,
+                      "OP_DEFER: too many defers (max 16)");
+            int di = b->func->defer_count++;
+            b->func->defer_entries[di].closure = closure_ref;
+            b->func->defer_entries[di].arg_count = nargs;
+            for (int j = 0; j < nargs && j < 8; j++) {
+                b->func->defer_entries[di].args[j] =
+                    builder_get_slot(b, blk, a + 1 + j);
+            }
+
+            b->ops_translated++;
+            return true;
+        }
+
         /* === Deopt-to-VM opcodes (rare in hot loops) === */
-        case OP_DEFER:
         case OP_ABSTRACT_ERROR:
         case OP_GETSUPER:
         case OP_SUPERINVOKE:

@@ -1084,6 +1084,34 @@ void xcg_emit_instruction(XcgenBuf *b, XirFunc *func, XirIns *ins,
             xcg_emit_upval_store(b, func, ins, mod, cf);
             return;
 
+        // --- Defer ---
+        case XIR_DEFER_PUSH: {
+            // Save closure and args to defer locals, set active flag.
+            // defer_idx is a static counter per function (cf->defer_count tracks total).
+            // Each XIR_DEFER_PUSH corresponds to one defer entry in order.
+            int di = -1;
+            XirRef cl_ref = ins->args[0];
+            // Find matching defer entry by closure ref
+            for (int k = 0; k < func->defer_count; k++) {
+                if (func->defer_entries[k].closure == cl_ref) {
+                    di = k;
+                    break;
+                }
+            }
+            if (di < 0) return; // safety: no match
+            xcgen_buf_printf(b, "    _defer_%d = ", di);
+            xcg_emit_ref_as_tagged(b, func, cl_ref);
+            xcgen_buf_puts(b, ";\n");
+            int nargs = func->defer_entries[di].arg_count;
+            for (int ai = 0; ai < nargs; ai++) {
+                xcgen_buf_printf(b, "    _defer_%d_arg%d = ", di, ai);
+                xcg_emit_ref_as_tagged(b, func, func->defer_entries[di].args[ai]);
+                xcgen_buf_puts(b, ";\n");
+            }
+            xcgen_buf_printf(b, "    _defer_%d_set = 1;\n", di);
+            return;
+        }
+
         // --- No-op categories: guards, ARC, GC barriers ---
         case XIR_GUARD_TAG: case XIR_GUARD_CLASS:
         case XIR_GUARD_NONNULL: case XIR_DEOPT:
