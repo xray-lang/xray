@@ -228,19 +228,19 @@ TEST(initialize_capabilities_minimal) {
  * Tools: tools/list
  * ========================================================================= */
 
-TEST(tools_list_returns_four_tools) {
-    XrJsonValue *result = xmcp_handle_tools_list();
+TEST(tools_list_returns_seven_tools) {
+    XrJsonValue *result = xmcp_handle_tools_list(NULL);
     ASSERT_NOT_NULL(result);
 
     XrJsonValue *tools = xlsp_json_get_array(result, "tools");
     ASSERT_NOT_NULL(tools);
-    ASSERT_EQ(xlsp_json_array_len(tools), 4);
+    ASSERT_EQ(xlsp_json_array_len(tools), 7);
 
     xlsp_json_free(result);
 }
 
 TEST(tools_list_has_required_fields) {
-    XrJsonValue *result = xmcp_handle_tools_list();
+    XrJsonValue *result = xmcp_handle_tools_list(NULL);
     ASSERT_NOT_NULL(result);
 
     XrJsonValue *tools = xlsp_json_get_array(result, "tools");
@@ -255,7 +255,7 @@ TEST(tools_list_has_required_fields) {
 }
 
 TEST(tools_list_has_annotations) {
-    XrJsonValue *result = xmcp_handle_tools_list();
+    XrJsonValue *result = xmcp_handle_tools_list(NULL);
     ASSERT_NOT_NULL(result);
 
     XrJsonValue *tools = xlsp_json_get_array(result, "tools");
@@ -264,8 +264,11 @@ TEST(tools_list_has_annotations) {
         XrJsonValue *ann = xlsp_json_get_object(tool, "annotations");
         ASSERT_NOT_NULL(ann);
         ASSERT_NOT_NULL(xlsp_json_get_string(ann, "title"));
-        /* All current tools are read-only */
-        ASSERT(xlsp_json_get_bool(ann, "readOnlyHint") == true);
+        /* Most tools are read-only; xray_run is not */
+        const char *tname = xlsp_json_get_string(tool, "name");
+        if (strcmp(tname, "xray_run") != 0) {
+            ASSERT(xlsp_json_get_bool(ann, "readOnlyHint") == true);
+        }
         ASSERT(xlsp_json_get_bool(ann, "destructiveHint") == false);
     }
 
@@ -273,16 +276,17 @@ TEST(tools_list_has_annotations) {
 }
 
 TEST(tools_list_tool_names) {
-    XrJsonValue *result = xmcp_handle_tools_list();
+    XrJsonValue *result = xmcp_handle_tools_list(NULL);
     ASSERT_NOT_NULL(result);
 
     XrJsonValue *tools = xlsp_json_get_array(result, "tools");
     const char *expected[] = {
-        "xray_check", "xray_format",
-        "xray_syntax_lookup", "xray_stdlib_search"
+        "xray_check", "xray_format", "xray_diagnostics",
+        "xray_run", "xray_syntax_lookup",
+        "xray_stdlib_search", "xray_definition"
     };
 
-    for (int i = 0; i < 4; i++) {
+    for (int i = 0; i < 7; i++) {
         XrJsonValue *tool = xlsp_json_array_get(tools, i);
         ASSERT_STR_EQ(xlsp_json_get_string(tool, "name"), expected[i]);
     }
@@ -341,7 +345,7 @@ TEST(tools_call_format_missing_code) {
 }
 
 TEST(tools_call_format_schema_has_optional_params) {
-    XrJsonValue *result = xmcp_handle_tools_list();
+    XrJsonValue *result = xmcp_handle_tools_list(NULL);
     ASSERT_NOT_NULL(result);
 
     XrJsonValue *tools = xlsp_json_get_array(result, "tools");
@@ -359,6 +363,120 @@ TEST(tools_call_format_schema_has_optional_params) {
     ASSERT_NOT_NULL(xlsp_json_get_object(props, "indentSize"));
     ASSERT_NOT_NULL(xlsp_json_get_object(props, "useTabs"));
 
+    xlsp_json_free(result);
+}
+
+/* =========================================================================
+ * Tools: xray_diagnostics
+ * ========================================================================= */
+
+TEST(tools_call_diagnostics_missing_code) {
+    XmcpServer server = {0};
+    XrJsonValue *params = xlsp_json_new_object();
+    XLSP_JSON_SET_STRING(params, "name", "xray_diagnostics");
+    XrJsonValue *args = xlsp_json_new_object();
+    xlsp_json_object_set(params, "arguments", args);
+
+    XrJsonValue *result = xmcp_handle_tools_call(&server, params);
+    ASSERT_NOT_NULL(result);
+    ASSERT(xlsp_json_get_bool(result, "isError") == true);
+
+    xlsp_json_free(params);
+    xlsp_json_free(result);
+}
+
+TEST(tools_call_diagnostics_schema) {
+    XrJsonValue *result = xmcp_handle_tools_list(NULL);
+    XrJsonValue *tools = xlsp_json_get_array(result, "tools");
+    /* xray_diagnostics is at index 2 */
+    XrJsonValue *diag_tool = xlsp_json_array_get(tools, 2);
+    ASSERT_STR_EQ(xlsp_json_get_string(diag_tool, "name"), "xray_diagnostics");
+
+    XrJsonValue *schema = xlsp_json_get_object(diag_tool, "inputSchema");
+    ASSERT_NOT_NULL(schema);
+    XrJsonValue *props = xlsp_json_get_object(schema, "properties");
+    ASSERT_NOT_NULL(xlsp_json_get_object(props, "code"));
+
+    xlsp_json_free(result);
+}
+
+/* =========================================================================
+ * Tools: xray_run
+ * ========================================================================= */
+
+TEST(tools_call_run_missing_code) {
+    XmcpServer server = {0};
+    XrJsonValue *params = xlsp_json_new_object();
+    XLSP_JSON_SET_STRING(params, "name", "xray_run");
+    XrJsonValue *args = xlsp_json_new_object();
+    xlsp_json_object_set(params, "arguments", args);
+
+    XrJsonValue *result = xmcp_handle_tools_call(&server, params);
+    ASSERT_NOT_NULL(result);
+    ASSERT(xlsp_json_get_bool(result, "isError") == true);
+
+    xlsp_json_free(params);
+    xlsp_json_free(result);
+}
+
+TEST(tools_call_run_has_open_world_hint) {
+    XrJsonValue *result = xmcp_handle_tools_list(NULL);
+    XrJsonValue *tools = xlsp_json_get_array(result, "tools");
+    /* xray_run is at index 3 */
+    XrJsonValue *run_tool = xlsp_json_array_get(tools, 3);
+    ASSERT_STR_EQ(xlsp_json_get_string(run_tool, "name"), "xray_run");
+
+    XrJsonValue *ann = xlsp_json_get_object(run_tool, "annotations");
+    ASSERT(xlsp_json_get_bool(ann, "readOnlyHint") == false);
+    ASSERT(xlsp_json_get_bool(ann, "openWorldHint") == true);
+
+    xlsp_json_free(result);
+}
+
+/* =========================================================================
+ * Tools: xray_definition
+ * ========================================================================= */
+
+TEST(tools_call_definition_missing_symbol) {
+    XmcpServer server = {0};
+    XrJsonValue *params = xlsp_json_new_object();
+    XLSP_JSON_SET_STRING(params, "name", "xray_definition");
+    XrJsonValue *args = xlsp_json_new_object();
+    xlsp_json_object_set(params, "arguments", args);
+
+    XrJsonValue *result = xmcp_handle_tools_call(&server, params);
+    ASSERT_NOT_NULL(result);
+    ASSERT(xlsp_json_get_bool(result, "isError") == true);
+
+    xlsp_json_free(params);
+    xlsp_json_free(result);
+}
+
+TEST(tools_call_definition_schema) {
+    XrJsonValue *result = xmcp_handle_tools_list(NULL);
+    XrJsonValue *tools = xlsp_json_get_array(result, "tools");
+    /* xray_definition is at index 6 */
+    XrJsonValue *def_tool = xlsp_json_array_get(tools, 6);
+    ASSERT_STR_EQ(xlsp_json_get_string(def_tool, "name"), "xray_definition");
+
+    XrJsonValue *schema = xlsp_json_get_object(def_tool, "inputSchema");
+    ASSERT_NOT_NULL(schema);
+    XrJsonValue *props = xlsp_json_get_object(schema, "properties");
+    ASSERT_NOT_NULL(xlsp_json_get_object(props, "symbol"));
+
+    xlsp_json_free(result);
+}
+
+/* =========================================================================
+ * Pagination: tools/list cursor support
+ * ========================================================================= */
+
+TEST(tools_list_pagination_no_cursor) {
+    XrJsonValue *result = xmcp_handle_tools_list(NULL);
+    XrJsonValue *tools = xlsp_json_get_array(result, "tools");
+    ASSERT_EQ(xlsp_json_array_len(tools), 7);
+    /* No nextCursor when all items fit */
+    ASSERT(xlsp_json_get_string(result, "nextCursor") == NULL);
     xlsp_json_free(result);
 }
 
@@ -815,7 +933,7 @@ int main(void) {
     RUN_TEST(initialize_capabilities_minimal);
 
     /* Tools */
-    RUN_TEST(tools_list_returns_four_tools);
+    RUN_TEST(tools_list_returns_seven_tools);
     RUN_TEST(tools_list_has_required_fields);
     RUN_TEST(tools_list_has_annotations);
     RUN_TEST(tools_list_tool_names);
@@ -825,6 +943,21 @@ int main(void) {
     /* Format tool */
     RUN_TEST(tools_call_format_missing_code);
     RUN_TEST(tools_call_format_schema_has_optional_params);
+
+    /* Diagnostics tool */
+    RUN_TEST(tools_call_diagnostics_missing_code);
+    RUN_TEST(tools_call_diagnostics_schema);
+
+    /* Run tool */
+    RUN_TEST(tools_call_run_missing_code);
+    RUN_TEST(tools_call_run_has_open_world_hint);
+
+    /* Definition tool */
+    RUN_TEST(tools_call_definition_missing_symbol);
+    RUN_TEST(tools_call_definition_schema);
+
+    /* Pagination */
+    RUN_TEST(tools_list_pagination_no_cursor);
 
     /* Resources */
     RUN_TEST(resources_list_returns_three);
