@@ -472,6 +472,9 @@ void xlsp_server_free(XrLspServer *server) {
     // Free pending diagnostics queue
     xr_free(server->pending_diag);
 
+    // Free pending analysis queue
+    xlsp_free_pending_analysis(server);
+
     // Release any still-live string ids in the pending-request ring
     // buffer. After a clean shutdown the ring is usually empty, but
     // abrupt disconnects can leave entries behind; failing to free
@@ -1562,6 +1565,9 @@ int xlsp_server_run(XrLspServer *server) {
             }
             xlsp_workspace_poll_index_results(server);
         }
+
+        // Drain pending background analysis (budgeted: ≤5ms per tick)
+        xlsp_drain_pending_analysis(server);
 
         // Check debounced diagnostic deadlines (every loop iteration)
         flush_pending_diagnostics(server);

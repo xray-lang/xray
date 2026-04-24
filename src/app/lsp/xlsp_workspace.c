@@ -823,14 +823,13 @@ void xlsp_workspace_merge_index_results(XrLspServer *server, XrLspIndexResult *r
         }
 
         // ================================================================
-        // Cross-file symbol merging: re-analyze in main thread
-        // This adds symbols to workspace_analyzer for Go to Definition,
-        // Find References, workspace/symbol, etc.
+        // Enqueue for budgeted main-thread analysis instead of
+        // blocking the merge loop with synchronous per-file I/O.
         // ================================================================
         if (result->path && result->uri) {
-            xlsp_workspace_index_file(server, result->uri, result->path);
+            xlsp_enqueue_analysis(server, result->uri, result->path);
 
-            // Count symbols from this file
+            // Count symbols from worker-side shallow extraction
             for (XrLspIndexSymbol *sym = result->symbols; sym; sym = sym->next) {
                 symbols_added++;
             }
