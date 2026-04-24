@@ -215,13 +215,13 @@ TEST(initialize_capabilities_minimal) {
  * Tools: tools/list
  * ========================================================================= */
 
-TEST(tools_list_returns_three_tools) {
+TEST(tools_list_returns_four_tools) {
     XrJsonValue *result = xmcp_handle_tools_list();
     ASSERT_NOT_NULL(result);
 
     XrJsonValue *tools = xlsp_json_get_array(result, "tools");
     ASSERT_NOT_NULL(tools);
-    ASSERT_EQ(xlsp_json_array_len(tools), 3);
+    ASSERT_EQ(xlsp_json_array_len(tools), 4);
 
     xlsp_json_free(result);
 }
@@ -264,9 +264,12 @@ TEST(tools_list_tool_names) {
     ASSERT_NOT_NULL(result);
 
     XrJsonValue *tools = xlsp_json_get_array(result, "tools");
-    const char *expected[] = {"xray_check", "xray_syntax_lookup", "xray_stdlib_search"};
+    const char *expected[] = {
+        "xray_check", "xray_format",
+        "xray_syntax_lookup", "xray_stdlib_search"
+    };
 
-    for (int i = 0; i < 3; i++) {
+    for (int i = 0; i < 4; i++) {
         XrJsonValue *tool = xlsp_json_array_get(tools, i);
         ASSERT_STR_EQ(xlsp_json_get_string(tool, "name"), expected[i]);
     }
@@ -302,6 +305,47 @@ TEST(tools_call_missing_name) {
     ASSERT(xlsp_json_get_bool(result, "isError") == true);
 
     xlsp_json_free(params);
+    xlsp_json_free(result);
+}
+
+/* =========================================================================
+ * Tools: xray_format
+ * ========================================================================= */
+
+TEST(tools_call_format_missing_code) {
+    XmcpServer server = {0};
+    XrJsonValue *params = xlsp_json_new_object();
+    XLSP_JSON_SET_STRING(params, "name", "xray_format");
+    XrJsonValue *args = xlsp_json_new_object();
+    xlsp_json_object_set(params, "arguments", args);
+
+    XrJsonValue *result = xmcp_handle_tools_call(&server, params);
+    ASSERT_NOT_NULL(result);
+    ASSERT(xlsp_json_get_bool(result, "isError") == true);
+
+    xlsp_json_free(params);
+    xlsp_json_free(result);
+}
+
+TEST(tools_call_format_schema_has_optional_params) {
+    XrJsonValue *result = xmcp_handle_tools_list();
+    ASSERT_NOT_NULL(result);
+
+    XrJsonValue *tools = xlsp_json_get_array(result, "tools");
+    /* xray_format is at index 1 */
+    XrJsonValue *fmt_tool = xlsp_json_array_get(tools, 1);
+    ASSERT_STR_EQ(xlsp_json_get_string(fmt_tool, "name"), "xray_format");
+
+    XrJsonValue *schema = xlsp_json_get_object(fmt_tool, "inputSchema");
+    ASSERT_NOT_NULL(schema);
+    XrJsonValue *props = xlsp_json_get_object(schema, "properties");
+    ASSERT_NOT_NULL(props);
+
+    /* code is required, indentSize and useTabs are optional */
+    ASSERT_NOT_NULL(xlsp_json_get_object(props, "code"));
+    ASSERT_NOT_NULL(xlsp_json_get_object(props, "indentSize"));
+    ASSERT_NOT_NULL(xlsp_json_get_object(props, "useTabs"));
+
     xlsp_json_free(result);
 }
 
@@ -393,6 +437,99 @@ TEST(resources_read_unknown_uri) {
     ASSERT_NOT_NULL(contents);
     ASSERT_EQ(xlsp_json_array_len(contents), 0);
 
+    xlsp_json_free(params);
+    xlsp_json_free(result);
+}
+
+/* =========================================================================
+ * Resources: resource templates
+ * ========================================================================= */
+
+TEST(resource_templates_list_returns_two) {
+    XmcpServer server = {0};
+    XrJsonValue *result = xmcp_handle_resource_templates_list(&server);
+    ASSERT_NOT_NULL(result);
+
+    XrJsonValue *templates = xlsp_json_get_array(result, "resourceTemplates");
+    ASSERT_NOT_NULL(templates);
+    ASSERT_EQ(xlsp_json_array_len(templates), 2);
+
+    xlsp_json_free(result);
+}
+
+TEST(resource_templates_have_required_fields) {
+    XmcpServer server = {0};
+    XrJsonValue *result = xmcp_handle_resource_templates_list(&server);
+    ASSERT_NOT_NULL(result);
+
+    XrJsonValue *templates = xlsp_json_get_array(result, "resourceTemplates");
+    for (int i = 0; i < xlsp_json_array_len(templates); i++) {
+        XrJsonValue *t = xlsp_json_array_get(templates, i);
+        ASSERT_NOT_NULL(xlsp_json_get_string(t, "uriTemplate"));
+        ASSERT_NOT_NULL(xlsp_json_get_string(t, "name"));
+        ASSERT_NOT_NULL(xlsp_json_get_string(t, "description"));
+        ASSERT_NOT_NULL(xlsp_json_get_string(t, "mimeType"));
+    }
+
+    xlsp_json_free(result);
+}
+
+TEST(resource_templates_uris) {
+    XmcpServer server = {0};
+    XrJsonValue *result = xmcp_handle_resource_templates_list(&server);
+    ASSERT_NOT_NULL(result);
+
+    XrJsonValue *templates = xlsp_json_get_array(result, "resourceTemplates");
+    XrJsonValue *t0 = xlsp_json_array_get(templates, 0);
+    ASSERT(strstr(xlsp_json_get_string(t0, "uriTemplate"), "{name}") != NULL);
+
+    XrJsonValue *t1 = xlsp_json_array_get(templates, 1);
+    ASSERT(strstr(xlsp_json_get_string(t1, "uriTemplate"), "{module}") != NULL);
+
+    xlsp_json_free(result);
+}
+
+TEST(resources_read_topic_template) {
+    /* Need knowledge base for template resources */
+    XmcpServer server = {0};
+    server.knowledge = xmcp_knowledge_new();
+    xmcp_knowledge_load(server.knowledge);
+
+    XrJsonValue *params = xlsp_json_new_object();
+    XLSP_JSON_SET_STRING(params, "uri", "xray://spec/topic/variables");
+
+    XrJsonValue *result = xmcp_handle_resources_read(&server, params);
+    ASSERT_NOT_NULL(result);
+
+    XrJsonValue *contents = xlsp_json_get_array(result, "contents");
+    ASSERT_NOT_NULL(contents);
+    ASSERT_EQ(xlsp_json_array_len(contents), 1);
+
+    XrJsonValue *item = xlsp_json_array_get(contents, 0);
+    ASSERT_STR_EQ(xlsp_json_get_string(item, "uri"), "xray://spec/topic/variables");
+
+    xmcp_knowledge_free(server.knowledge);
+    xlsp_json_free(params);
+    xlsp_json_free(result);
+}
+
+TEST(resources_read_stdlib_template) {
+    XmcpServer server = {0};
+    server.knowledge = xmcp_knowledge_new();
+    xmcp_knowledge_load(server.knowledge);
+
+    XrJsonValue *params = xlsp_json_new_object();
+    XLSP_JSON_SET_STRING(params, "uri", "xray://stdlib/http");
+
+    XrJsonValue *result = xmcp_handle_resources_read(&server, params);
+    ASSERT_NOT_NULL(result);
+
+    XrJsonValue *contents = xlsp_json_get_array(result, "contents");
+    ASSERT_NOT_NULL(contents);
+    /* Should find http module */
+    ASSERT(xlsp_json_array_len(contents) >= 1);
+
+    xmcp_knowledge_free(server.knowledge);
     xlsp_json_free(params);
     xlsp_json_free(result);
 }
@@ -665,12 +802,16 @@ int main(void) {
     RUN_TEST(initialize_capabilities_minimal);
 
     /* Tools */
-    RUN_TEST(tools_list_returns_three_tools);
+    RUN_TEST(tools_list_returns_four_tools);
     RUN_TEST(tools_list_has_required_fields);
     RUN_TEST(tools_list_has_annotations);
     RUN_TEST(tools_list_tool_names);
     RUN_TEST(tools_call_unknown_tool);
     RUN_TEST(tools_call_missing_name);
+
+    /* Format tool */
+    RUN_TEST(tools_call_format_missing_code);
+    RUN_TEST(tools_call_format_schema_has_optional_params);
 
     /* Resources */
     RUN_TEST(resources_list_returns_three);
@@ -678,6 +819,13 @@ int main(void) {
     RUN_TEST(resources_list_uris);
     RUN_TEST(resources_read_cheatsheet);
     RUN_TEST(resources_read_unknown_uri);
+
+    /* Resource templates */
+    RUN_TEST(resource_templates_list_returns_two);
+    RUN_TEST(resource_templates_have_required_fields);
+    RUN_TEST(resource_templates_uris);
+    RUN_TEST(resources_read_topic_template);
+    RUN_TEST(resources_read_stdlib_template);
 
     /* Prompts */
     RUN_TEST(prompts_list_returns_five);
