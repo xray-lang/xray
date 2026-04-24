@@ -17,6 +17,7 @@
 
 #include "xmcp_tools.h"
 #include "xmcp_server.h"
+#include "xmcp_protocol.h"
 #include "xmcp_knowledge.h"
 #include "../lsp/xlsp_json.h"
 #include "../../base/xmalloc.h"
@@ -305,6 +306,12 @@ static XrJsonValue *tool_xray_check(XmcpServer *server, XrJsonValue *arguments) 
     if (!arena) return xmcp_make_error_result("Error: out of memory");
     xr_arena_init(arena, 0);
 
+    /* Send progress: parsing phase */
+    int64_t ptok = server->current_progress_token;
+    if (ptok >= 0) {
+        xmcp_send_progress_notification(server, ptok, 0, 2);
+    }
+
     /* Parse with error callback */
     ErrorCapture cap = {.count = 0};
     Parser parser;
@@ -312,6 +319,11 @@ static XrJsonValue *tool_xray_check(XmcpServer *server, XrJsonValue *arguments) 
     xr_parser_set_error_callback(&parser, check_error_callback, &cap, MAX_CHECK_ERRORS);
 
     AstNode *ast = xr_parse_recoverable(&parser);
+
+    /* Send progress: building result */
+    if (ptok >= 0) {
+        xmcp_send_progress_notification(server, ptok, 1, 2);
+    }
 
     /* Build result text on heap */
     size_t buf_cap = CHECK_BUF_SIZE;
@@ -338,6 +350,11 @@ static XrJsonValue *tool_xray_check(XmcpServer *server, XrJsonValue *arguments) 
     (void)text_len;
 
     XrJsonValue *result = xmcp_make_text_result(text_buf, cap.count > 0);
+
+    /* Send progress: done */
+    if (ptok >= 0) {
+        xmcp_send_progress_notification(server, ptok, 2, 2);
+    }
 
     xr_free(text_buf);
     if (ast) xr_program_destroy(ast);
@@ -452,6 +469,14 @@ XrJsonValue *xmcp_handle_tools_call(XmcpServer *server, XrJsonValue *params) {
 
     if (!name) {
         return xmcp_make_error_result("Error: tool 'name' is required");
+    }
+
+    /* Extract progress token from _meta if present */
+    server->current_progress_token = -1;
+    XrJsonValue *meta = xlsp_json_get_object(params, "_meta");
+    if (meta) {
+        int64_t tok = xlsp_json_get_int_or(meta, "progressToken", -1);
+        server->current_progress_token = tok;
     }
 
     /* Provide empty arguments if not supplied (static, no leak) */

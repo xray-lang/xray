@@ -48,6 +48,9 @@ typedef struct XmcpServer {
     bool has_resources;     /* true if resources are registered */
     bool has_prompts;       /* true if prompts are registered */
 
+    /* Per-request progress token (-1 = no progress tracking) */
+    int64_t current_progress_token;
+
     /* Server lifecycle */
     bool initialized;
     volatile sig_atomic_t shutdown;  /* signal-safe shutdown flag */

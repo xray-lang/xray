@@ -21,6 +21,19 @@
 #include "../../../src/app/lsp/xlsp_json.h"
 #include "../../../src/base/xmalloc.h"
 
+/* Stubs for notification functions (implemented in xmcp_server.c, not linked
+ * into this test binary). Tools may call these; they are no-ops here. */
+void xmcp_write_message(const char *json, size_t len) { (void)json; (void)len; }
+void xmcp_send_notification(XmcpServer *s, const char *m, XrJsonValue *p) {
+    (void)s; (void)m; (void)p;
+}
+void xmcp_send_log_notification(XmcpServer *s, const char *l, const char *m) {
+    (void)s; (void)l; (void)m;
+}
+void xmcp_send_progress_notification(XmcpServer *s, int64_t t, int p, int tot) {
+    (void)s; (void)t; (void)p; (void)tot;
+}
+
 static int tests_passed = 0;
 static int tests_failed = 0;
 
