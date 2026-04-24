@@ -168,15 +168,11 @@ typedef struct XlspConfig {
     bool diagnostics_enabled;
 
     // Completion settings
-    bool completion_auto_import;
     int completion_max_items;
 
     // Formatting settings
     int format_tab_size;
     bool format_insert_spaces;
-
-    // Analysis settings
-    bool analysis_type_checking;
 
     // Inlay hints settings
     bool inlay_hints_type_annotations;
@@ -190,7 +186,6 @@ typedef struct XlspConfig {
     // Logging settings
     char *log_path;           // Log file path (NULL = no file logging, "" = default)
     bool log_to_stderr;       // Also log to stderr (default: true)
-    int log_level;            // 0=error, 1=warn, 2=info, 3=debug (default: 2)
 } XlspConfig;
 
 // Ignore pattern API
