@@ -67,7 +67,8 @@ TEST(parse_number_integer) {
     XrJsonValue *v = xjson_parse("42", 2);
     ASSERT(v != NULL);
     ASSERT(xjson_is_number(v));
-    ASSERT_EQ((int)v->as.number, 42);
+    ASSERT(v->is_integer);
+    ASSERT_EQ((int)v->as.integer, 42);
     xjson_free(v);
 }
 
@@ -75,7 +76,8 @@ TEST(parse_number_negative) {
     XrJsonValue *v = xjson_parse("-123", 4);
     ASSERT(v != NULL);
     ASSERT(xjson_is_number(v));
-    ASSERT_EQ((int)v->as.number, -123);
+    ASSERT(v->is_integer);
+    ASSERT_EQ((int)v->as.integer, -123);
     xjson_free(v);
 }
 
@@ -126,9 +128,9 @@ TEST(parse_array_numbers) {
     ASSERT(v != NULL);
     ASSERT(xjson_is_array(v));
     ASSERT_EQ(xjson_array_len(v), 3);
-    ASSERT_EQ((int)xjson_array_get(v, 0)->as.number, 1);
-    ASSERT_EQ((int)xjson_array_get(v, 1)->as.number, 2);
-    ASSERT_EQ((int)xjson_array_get(v, 2)->as.number, 3);
+    ASSERT_EQ((int)xjson_array_get(v, 0)->as.integer, 1);
+    ASSERT_EQ((int)xjson_array_get(v, 1)->as.integer, 2);
+    ASSERT_EQ((int)xjson_array_get(v, 2)->as.integer, 3);
     xjson_free(v);
 }
 

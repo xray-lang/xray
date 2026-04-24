@@ -19,7 +19,6 @@
 #include <string.h>
 #include <ctype.h>
 #include <math.h>
-#include <errno.h>
 
 #include "../common_writer.h"
 #include "../common_parser.h"
@@ -32,10 +31,10 @@
 #include "../../src/runtime/class/xinstance.h"
 #include "../../src/runtime/class/xclass.h"
 #include "../../src/runtime/object/xjson.h"
-#include "../../src/runtime/object/xutf8.h"
 #include "../../src/runtime/symbol/xsymbol_table.h"
 #include "../../src/runtime/xisolate_internal.h"
 #include "../../src/base/xsimd.h"
+#include "../../src/base/xjson.h"
 
 /* ========== External Declarations ========== */
 
@@ -44,398 +43,63 @@ extern XrValue xr_value_from_array(XrArray *arr);
 extern XrValue xr_value_from_map(XrMap *map);
 extern XrValue xr_json_value(XrJson *json);
 
-/* ========== JSON Parser ========== */
+/* ========== JSON Parser (delegates to src/base/xjson) ========== */
 
-// Defer to the stdlib-wide default (256) set in common_parser.h so JSON,
-// YAML, TOML and XML all refuse the same pathological input depth. The
-// legacy 512 was an outlier from pre-P4 days and made the depth guard
-// effectively twice as deep as every other module.
+// Depth limit shared with validator (defined in common_parser.h)
 #define JSON_MAX_DEPTH XR_STDLIB_MAX_DEPTH
 
-typedef struct {
-    XrayIsolate *isolate;
-    const char *json;
-    const char *ptr;
-    char error[256];
-    int depth;
-} JsonParser;
+/*
+ * Convert a pure-C XrJsonValue DOM tree (from src/base/xjson) to runtime
+ * XrValue objects (XrString, XrArray, XrJson). This is the bridge layer
+ * that avoids duplicating parser code in the stdlib.
+ *
+ * Number heuristic: JSON has no integer type; we return xr_int when the
+ * double has no fractional part and fits in int64, else xr_float.
+ */
+static XrValue dom_to_xrvalue(XrayIsolate *X, XrJsonValue *v) {
+    if (!v) return xr_null();
 
-// Skip JSON whitespace (RFC 8259: space/tab/cr/lf only, no locale dependency)
-static void skip_whitespace(JsonParser *p) {
-    const char *s = p->ptr;
-    while (*s == ' ' || *s == '\t' || *s == '\n' || *s == '\r') s++;
-    p->ptr = s;
-}
+    switch (v->type) {
+        case XR_JSON_NULL:
+            return xr_null();
 
-// Forward declaration
-static XrValue parse_value(JsonParser *p);
+        case XR_JSON_BOOL:
+            return xr_bool(v->as.boolean);
 
-// Parse 4 hex digits using lookup table, return -1 on error
-static int parse_hex4(const char *s) {
-    unsigned int val = 0;
-    for (int i = 0; i < 4; i++) {
-        uint8_t v = XR_HEX_TO_VAL(s[i]);
-        if (v == 255) return -1;
-        val = (val << 4) | v;
-    }
-    return (int)val;
-}
-
-// Use xr_utf8_encode from xutf8.h (avoids duplicate implementation)
-
-// Parse string (RFC 8259 compliant, single-pass with stack buffer)
-static XrValue parse_string(JsonParser *p) {
-    if (*p->ptr != '"') {
-        snprintf(p->error, sizeof(p->error), "Expected '\"'");
-        return xr_null();
-    }
-    p->ptr++;  // Skip opening quote
-
-    // Fast path: scan for end of string to check if escapes exist
-    const char *scan = p->ptr;
-    while (*scan && *scan != '"' && *scan != '\\') scan++;
-
-    if (*scan == '"' && scan > p->ptr) {
-        // No escape sequences: zero-copy path
-        size_t len = scan - p->ptr;
-        XrString *str = xr_string_intern(p->isolate, p->ptr, len, 0);
-        p->ptr = scan + 1;  // Skip closing quote
-        return xr_string_value(str);
-    }
-
-    // General path: single-pass decode with stack buffer
-    char stack_buf[256];
-    size_t cap = sizeof(stack_buf);
-    char *buf = stack_buf;
-    size_t len = 0;
-
-    #define STR_ENSURE(n) do { \
-        if (len + (n) >= cap) { \
-            size_t new_cap = cap * 2; \
-            while (new_cap < len + (n) + 1) new_cap *= 2; \
-            char *nb = (char*)xr_malloc(new_cap); \
-            if (!nb) { \
-                snprintf(p->error, sizeof(p->error), "Out of memory"); \
-                if (buf != stack_buf) xr_free(buf); \
-                return xr_null(); \
-            } \
-            memcpy(nb, buf, len); \
-            if (buf != stack_buf) xr_free(buf); \
-            buf = nb; \
-            cap = new_cap; \
-        } \
-    } while (0)
-
-    while (*p->ptr && *p->ptr != '"') {
-        if (*p->ptr == '\\') {
-            p->ptr++;
-            STR_ENSURE(4);  // Max UTF-8 bytes for a single codepoint
-            switch (*p->ptr) {
-                case 'n': buf[len++] = '\n'; break;
-                case 'r': buf[len++] = '\r'; break;
-                case 't': buf[len++] = '\t'; break;
-                case '\\': buf[len++] = '\\'; break;
-                case '"': buf[len++] = '"'; break;
-                case '/': buf[len++] = '/'; break;
-                case 'b': buf[len++] = '\b'; break;
-                case 'f': buf[len++] = '\f'; break;
-                case 'u': {
-                    p->ptr++;
-                    if (!p->ptr[0] || !p->ptr[1] || !p->ptr[2] || !p->ptr[3]) {
-                        snprintf(p->error, sizeof(p->error), "Incomplete unicode escape");
-                        if (buf != stack_buf) xr_free(buf);
-                        return xr_null();
-                    }
-                    int cp = parse_hex4(p->ptr);
-                    if (cp < 0) {
-                        snprintf(p->error, sizeof(p->error), "Invalid unicode hex digits");
-                        if (buf != stack_buf) xr_free(buf);
-                        return xr_null();
-                    }
-                    p->ptr += 3;  // Point to last digit, outer loop adds +1
-
-                    // Handle UTF-16 surrogate pairs
-                    if (cp >= 0xD800 && cp <= 0xDBFF) {
-                        // Boundary check: need \uXXXX (6 chars) after current pos
-                        if (p->ptr[1] == '\\' && p->ptr[2] == 'u' &&
-                            p->ptr[3] && p->ptr[4] && p->ptr[5] && p->ptr[6]) {
-                            int low = parse_hex4(p->ptr + 3);
-                            if (low >= 0xDC00 && low <= 0xDFFF) {
-                                unsigned int full_cp = 0x10000 + ((cp - 0xD800) << 10) + (low - 0xDC00);
-                                len += xr_utf8_encode(full_cp, buf + len);
-                                p->ptr += 6;
-                            } else {
-                                snprintf(p->error, sizeof(p->error), "Invalid surrogate pair");
-                                if (buf != stack_buf) xr_free(buf);
-                                return xr_null();
-                            }
-                        } else {
-                            snprintf(p->error, sizeof(p->error), "Lone high surrogate");
-                            if (buf != stack_buf) xr_free(buf);
-                            return xr_null();
-                        }
-                    } else if (cp >= 0xDC00 && cp <= 0xDFFF) {
-                        snprintf(p->error, sizeof(p->error), "Lone low surrogate");
-                        if (buf != stack_buf) xr_free(buf);
-                        return xr_null();
-                    } else {
-                        len += xr_utf8_encode((uint32_t)cp, buf + len);
-                    }
-                    break;
-                }
-                default:
-                    snprintf(p->error, sizeof(p->error), "Invalid escape sequence '\\%c'", *p->ptr);
-                    if (buf != stack_buf) xr_free(buf);
-                    return xr_null();
+        case XR_JSON_NUMBER:
+            if (v->is_integer) {
+                return xr_int(v->as.integer);
             }
-        } else {
-            STR_ENSURE(1);
-            buf[len++] = *p->ptr;
+            return xr_float(v->as.number);
+
+        case XR_JSON_STRING: {
+            size_t len = strlen(v->as.string);
+            XrString *str = xr_string_intern(X, v->as.string, len, 0);
+            return xr_string_value(str);
         }
-        p->ptr++;
-    }
 
-    #undef STR_ENSURE
-
-    if (*p->ptr != '"') {
-        snprintf(p->error, sizeof(p->error), "Unclosed string");
-        if (buf != stack_buf) xr_free(buf);
-        return xr_null();
-    }
-    p->ptr++;  // Skip closing quote
-
-    XrString *str = xr_string_intern(p->isolate, buf, len, 0);
-    if (buf != stack_buf) xr_free(buf);
-    return xr_string_value(str);
-}
-
-// Parse number
-static XrValue parse_number(JsonParser *p) {
-    const char *start = p->ptr;
-    bool is_float = false;
-
-    if (*p->ptr == '-') p->ptr++;  // Negative sign
-
-    // RFC 8259: leading zeros not allowed (except "0" itself)
-    const char *digit_start = p->ptr;
-    while (isdigit((unsigned char)*p->ptr)) p->ptr++;  // Integer part
-    int digit_count = (int)(p->ptr - digit_start);
-    if (digit_count > 1 && *digit_start == '0') {
-        snprintf(p->error, sizeof(p->error), "Leading zeros not allowed");
-        return xr_null();
-    }
-
-    // Fractional part (RFC 8259: at least one digit after '.')
-    if (*p->ptr == '.') {
-        is_float = true;
-        p->ptr++;
-        if (!isdigit((unsigned char)*p->ptr)) {
-            snprintf(p->error, sizeof(p->error), "Invalid number: no digits after decimal point");
-            return xr_null();
-        }
-        while (isdigit((unsigned char)*p->ptr)) p->ptr++;
-    }
-
-    // Exponent part (RFC 8259: at least one digit after 'e'/'E')
-    if (*p->ptr == 'e' || *p->ptr == 'E') {
-        is_float = true;
-        p->ptr++;
-        if (*p->ptr == '+' || *p->ptr == '-') p->ptr++;
-        if (!isdigit((unsigned char)*p->ptr)) {
-            snprintf(p->error, sizeof(p->error), "Invalid number: no digits in exponent");
-            return xr_null();
-        }
-        while (isdigit((unsigned char)*p->ptr)) p->ptr++;
-    }
-
-    char *end;
-    if (is_float) {
-        double val = strtod(start, &end);
-        return xr_float(val);
-    } else {
-        // Tagged Union: full 64-bit int, fall back to float only on overflow
-        errno = 0;
-        int64_t val = strtoll(start, &end, 10);
-        if (errno == ERANGE) {
-            double fval = strtod(start, &end);
-            return xr_float(fval);
-        }
-        return xr_int(val);
-    }
-}
-
-// Parse array
-static XrValue parse_array(JsonParser *p) {
-    if (*p->ptr != '[') {
-        snprintf(p->error, sizeof(p->error), "Expected '['");
-        return xr_null();
-    }
-    p->ptr++;  // Skip [
-
-    XrArray *arr = xr_array_new(xr_current_coro(p->isolate));
-
-    skip_whitespace(p);
-    if (*p->ptr == ']') {
-        p->ptr++;
-        return xr_value_from_array(arr);
-    }
-
-    while (1) {
-        skip_whitespace(p);
-        XrValue elem = parse_value(p);
-        if (p->error[0]) return xr_null();
-
-        xr_array_push(arr, elem);
-
-        skip_whitespace(p);
-        if (*p->ptr == ']') {
-            p->ptr++;
-            break;
-        }
-        if (*p->ptr != ',') {
-            snprintf(p->error, sizeof(p->error), "Expected ',' or ']'");
-            return xr_null();
-        }
-        p->ptr++;
-    }
-
-    return xr_value_from_array(arr);
-}
-
-// Quick scan to count top-level keys in a JSON object (for pre-allocation).
-// Counts ':' at depth 0, skipping nested objects/arrays/strings.
-static uint16_t count_object_keys(const char *start) {
-    const char *s = start;
-    uint16_t count = 0;
-    int depth = 0;
-    bool in_string = false;
-    while (*s && !(depth == 0 && *s == '}')) {
-        if (in_string) {
-            if (*s == '\\') { s++; if (*s) s++; continue; }
-            if (*s == '"') in_string = false;
-            s++;
-            continue;
-        }
-        if (*s == '"') { in_string = true; s++; continue; }
-        if (*s == '{' || *s == '[') { depth++; s++; continue; }
-        if (*s == '}' || *s == ']') { depth--; s++; continue; }
-        if (*s == ':' && depth == 0) count++;
-        s++;
-    }
-    return count < 4 ? 4 : count;
-}
-
-// Parse object - returns XrJson type
-static XrValue parse_object(JsonParser *p) {
-    if (*p->ptr != '{') {
-        snprintf(p->error, sizeof(p->error), "Expected '{'");
-        return xr_null();
-    }
-    p->ptr++;  // Skip {
-
-    // Pre-scan to determine exact capacity needed
-    uint16_t capacity = count_object_keys(p->ptr);
-    XrJson *json = xr_json_new(xr_current_coro(p->isolate), capacity);
-    if (!json) {
-        snprintf(p->error, sizeof(p->error), "Failed to create Json object");
-        return xr_null();
-    }
-
-    skip_whitespace(p);
-    if (*p->ptr == '}') {
-        p->ptr++;
-        return xr_json_value(json);
-    }
-
-    while (1) {
-        skip_whitespace(p);
-
-        // Parse key
-        if (*p->ptr != '"') {
-            snprintf(p->error, sizeof(p->error), "Object key must be a string");
-            return xr_null();
-        }
-        XrValue key = parse_string(p);
-        if (p->error[0]) return xr_null();
-
-        skip_whitespace(p);
-        if (*p->ptr != ':') {
-            snprintf(p->error, sizeof(p->error), "Expected ':'");
-            return xr_null();
-        }
-        p->ptr++;
-
-        // Parse value
-        skip_whitespace(p);
-        XrValue val = parse_value(p);
-        if (p->error[0]) return xr_null();
-
-        // Set field using string key
-        XrString *key_str = XR_TO_STRING(key);
-        xr_json_set_by_key(p->isolate, json, key_str->data, val);
-
-        skip_whitespace(p);
-        if (*p->ptr == '}') {
-            p->ptr++;
-            break;
-        }
-        if (*p->ptr != ',') {
-            snprintf(p->error, sizeof(p->error), "Expected ',' or '}'");
-            return xr_null();
-        }
-        p->ptr++;
-    }
-
-    return xr_json_value(json);
-}
-
-// Parse value
-static XrValue parse_value(JsonParser *p) {
-    skip_whitespace(p);
-
-    if (p->depth >= JSON_MAX_DEPTH) {
-        snprintf(p->error, sizeof(p->error), "Maximum nesting depth exceeded");
-        return xr_null();
-    }
-    p->depth++;
-
-    XrValue result;
-    switch (*p->ptr) {
-        case '"': result = parse_string(p); p->depth--; return result;
-        case '[': result = parse_array(p); p->depth--; return result;
-        case '{': result = parse_object(p); p->depth--; return result;
-        case 't': // true
-            if (strncmp(p->ptr, "true", 4) == 0) {
-                p->ptr += 4;
-                p->depth--;
-                return xr_bool(true);
+        case XR_JSON_ARRAY: {
+            XrArray *arr = xr_array_new(xr_current_coro(X));
+            for (int idx = 0; idx < v->as.array.count; idx++) {
+                xr_array_push(arr, dom_to_xrvalue(X, v->as.array.items[idx]));
             }
-            break;
-        case 'f': // false
-            if (strncmp(p->ptr, "false", 5) == 0) {
-                p->ptr += 5;
-                p->depth--;
-                return xr_bool(false);
-            }
-            break;
-        case 'n': // null
-            if (strncmp(p->ptr, "null", 4) == 0) {
-                p->ptr += 4;
-                p->depth--;
-                return xr_null();
-            }
-            break;
-        default:
-            if (*p->ptr == '-' || isdigit((unsigned char)*p->ptr)) {
-                result = parse_number(p);
-                p->depth--;
-                return result;
-            }
-            break;
-    }
+            return xr_value_from_array(arr);
+        }
 
-    snprintf(p->error, sizeof(p->error), "Invalid JSON value");
-    p->depth--;
+        case XR_JSON_OBJECT: {
+            uint16_t cap = v->as.object.count > 4
+                         ? (uint16_t)v->as.object.count
+                         : 4;
+            XrJson *json = xr_json_new(xr_current_coro(X), cap);
+            if (!json) return xr_null();
+            for (int idx = 0; idx < v->as.object.count; idx++) {
+                xr_json_set_by_key(X, json,
+                    v->as.object.members[idx].key,
+                    dom_to_xrvalue(X, v->as.object.members[idx].value));
+            }
+            return xr_json_value(json);
+        }
+    }
     return xr_null();
 }
 
@@ -741,27 +405,11 @@ static XrValue json_parse(XrayIsolate *X, XrValue *args, int argc) {
     }
 
     XrString *str = XR_TO_STRING(args[0]);
+    XrJsonValue *dom = xjson_parse(str->data, str->length);
+    if (!dom) return xr_null();
 
-    JsonParser parser = {
-        .isolate = X,
-        .json = str->data,
-        .ptr = str->data,
-        .error = {0},
-        .depth = 0
-    };
-
-    XrValue result = parse_value(&parser);
-
-    if (parser.error[0]) {
-        return xr_null();
-    }
-
-    // B1: Check for trailing content after valid JSON value
-    skip_whitespace(&parser);
-    if (*parser.ptr != '\0') {
-        return xr_null();
-    }
-
+    XrValue result = dom_to_xrvalue(X, dom);
+    xjson_free(dom);
     return result;
 }
 
@@ -806,36 +454,11 @@ char* xr_json_stringify_to_cstr(XrayIsolate *X, XrValue val, size_t *out_len) {
 XrValue xr_json_parse_from_cstr(XrayIsolate *X, const char *json_str, size_t len) {
     if (!X || !json_str || len == 0) return xr_null();
 
-    // Always make a null-terminated copy (avoids out-of-bounds read on json_str[len])
-    char *buf = (char *)xr_malloc(len + 1);
-    if (!buf) return xr_null();
-    memcpy(buf, json_str, len);
-    buf[len] = '\0';
-    const char *src = buf;
+    XrJsonValue *dom = xjson_parse(json_str, len);
+    if (!dom) return xr_null();
 
-    JsonParser parser = {
-        .isolate = X,
-        .json = src,
-        .ptr = src,
-        .error = {0},
-        .depth = 0
-    };
-
-    XrValue result = parse_value(&parser);
-
-    if (parser.error[0]) {
-        xr_free(buf);
-        return xr_null();
-    }
-
-    // Check for trailing content
-    skip_whitespace(&parser);
-    if (*parser.ptr != '\0') {
-        xr_free(buf);
-        return xr_null();
-    }
-
-    xr_free(buf);
+    XrValue result = dom_to_xrvalue(X, dom);
+    xjson_free(dom);
     return result;
 }
 
@@ -1068,32 +691,17 @@ static XrValue json_try_parse(XrayIsolate *X, XrValue *args, int argc) {
     }
 
     XrString *str = XR_TO_STRING(args[0]);
-    JsonParser parser = {
-        .isolate = X,
-        .json = str->data,
-        .ptr = str->data,
-        .error = {0},
-        .depth = 0
-    };
+    XrJsonValue *dom = xjson_parse(str->data, str->length);
 
-    XrValue parsed = parse_value(&parser);
-
-    if (parser.error[0]) {
+    if (!dom) {
+        const char *msg = "Invalid JSON";
         xr_json_set_by_key(X, result, "value", xr_null());
         xr_json_set_by_key(X, result, "error",
-            xr_string_value(xr_string_intern(X, parser.error, strlen(parser.error), 0)));
+            xr_string_value(xr_string_intern(X, msg, strlen(msg), 0)));
     } else {
-        // B5: Check for trailing content
-        skip_whitespace(&parser);
-        if (*parser.ptr != '\0') {
-            const char *msg = "Unexpected content after JSON value";
-            xr_json_set_by_key(X, result, "value", xr_null());
-            xr_json_set_by_key(X, result, "error",
-                xr_string_value(xr_string_intern(X, msg, strlen(msg), 0)));
-        } else {
-            xr_json_set_by_key(X, result, "value", parsed);
-            xr_json_set_by_key(X, result, "error", xr_null());
-        }
+        xr_json_set_by_key(X, result, "value", dom_to_xrvalue(X, dom));
+        xr_json_set_by_key(X, result, "error", xr_null());
+        xjson_free(dom);
     }
 
     return xr_json_value(result);

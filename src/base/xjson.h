@@ -49,9 +49,11 @@ typedef struct XrJsonMember {
 
 struct XrJsonValue {
     XrJsonType type;
+    bool is_integer;   /* true when number was parsed without '.' or 'e/E' */
     union {
         bool boolean;
         double number;
+        int64_t integer;   /* valid when type==XR_JSON_NUMBER && is_integer */
         char *string;
         struct {
             XrJsonValue **items;
