@@ -71,6 +71,8 @@ typedef struct XrResolveResult {
 
 typedef struct XrPackageInfo {
     char *name;
+    char *latest_version;
+    char *description;
     char **versions;
     int version_count;
     char **deps;

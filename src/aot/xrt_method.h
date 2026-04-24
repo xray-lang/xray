@@ -98,7 +98,7 @@ static inline XrtValue xrt_method_0(XrtValue recv, int sym) {
         const char *s = (const char *)recv.ptr;
         int64_t slen = (int64_t)strlen(s);
         if (sym == XRT_SYM_LENGTH || sym == XRT_SYM_SIZE) return xrt_box_int(slen);
-        if (sym == XRT_SYM_IS_EMPTY) return xrt_box_int(slen == 0);
+        if (sym == XRT_SYM_IS_EMPTY) return xrt_box_bool(slen == 0);
         if (sym == XRT_SYM_TOSTRING) return recv;
         if (sym == XRT_SYM_TRIM) {
             const char *start = s, *end = s + slen;
@@ -130,7 +130,7 @@ static inline XrtValue xrt_method_0(XrtValue recv, int sym) {
     if (recv.tag == XRT_TAG_ARRAY) {
         xrt_array_t *a = (xrt_array_t *)recv.ptr;
         if (sym == XRT_SYM_LENGTH || sym == XRT_SYM_SIZE) return xrt_box_int(a->len);
-        if (sym == XRT_SYM_IS_EMPTY) return xrt_box_int(a->len == 0);
+        if (sym == XRT_SYM_IS_EMPTY) return xrt_box_bool(a->len == 0);
         if (sym == XRT_SYM_POP && a->len > 0) return a->data[--a->len];
         if (sym == XRT_SYM_REVERSE) {
             for (int64_t i = 0, j = a->len - 1; i < j; i++, j--) {
@@ -142,7 +142,7 @@ static inline XrtValue xrt_method_0(XrtValue recv, int sym) {
     if (recv.tag == XRT_TAG_MAP) {
         xrt_map_t *m = (xrt_map_t *)recv.ptr;
         if (sym == XRT_SYM_LENGTH || sym == XRT_SYM_SIZE) return xrt_box_int(m->len);
-        if (sym == XRT_SYM_IS_EMPTY) return xrt_box_int(m->len == 0);
+        if (sym == XRT_SYM_IS_EMPTY) return xrt_box_bool(m->len == 0);
         if (sym == XRT_SYM_KEYS) {
             XrtValue arr = xrt_array_new(m->len);
             xrt_array_t *a = (xrt_array_t *)arr.ptr;
@@ -177,7 +177,7 @@ static inline XrtValue xrt_method_1(XrtValue recv, int sym, XrtValue arg0) {
         const char *s = (const char *)recv.ptr;
         int64_t slen = (int64_t)strlen(s);
         if (sym == XRT_SYM_CONTAINS && XRT_IS_STR(arg0))
-            return xrt_box_int(strstr(s, (const char *)arg0.ptr) ? 1 : 0);
+            return xrt_box_bool(strstr(s, (const char *)arg0.ptr) ? 1 : 0);
         if (sym == XRT_SYM_INDEXOF && XRT_IS_STR(arg0)) {
             const char *p = strstr(s, (const char *)arg0.ptr);
             return xrt_box_int(p ? (int64_t)(p - s) : -1);
@@ -196,12 +196,12 @@ static inline XrtValue xrt_method_1(XrtValue recv, int sym, XrtValue arg0) {
         if (sym == XRT_SYM_STARTSWITH && XRT_IS_STR(arg0)) {
             const char *p = (const char *)arg0.ptr;
             size_t plen = strlen(p);
-            return xrt_box_int((size_t)slen >= plen && memcmp(s, p, plen) == 0);
+            return xrt_box_bool((size_t)slen >= plen && memcmp(s, p, plen) == 0);
         }
         if (sym == XRT_SYM_ENDSWITH && XRT_IS_STR(arg0)) {
             const char *p = (const char *)arg0.ptr;
             size_t plen = strlen(p);
-            return xrt_box_int((size_t)slen >= plen && memcmp(s + slen - plen, p, plen) == 0);
+            return xrt_box_bool((size_t)slen >= plen && memcmp(s + slen - plen, p, plen) == 0);
         }
         if (sym == XRT_SYM_SPLIT && XRT_IS_STR(arg0)) {
             const char *sep = (const char *)arg0.ptr;
@@ -271,9 +271,9 @@ static inline XrtValue xrt_method_1(XrtValue recv, int sym, XrtValue arg0) {
         }
         if (sym == XRT_SYM_INCLUDES) {
             for (int64_t i = 0; i < a->len; i++) {
-                if (a->data[i].tag == arg0.tag && a->data[i].i == arg0.i) return xrt_box_int(1);
+                if (a->data[i].tag == arg0.tag && a->data[i].i == arg0.i) return xrt_box_bool(1);
             }
-            return xrt_box_int(0);
+            return xrt_box_bool(0);
         }
         if (sym == XRT_SYM_JOIN && XRT_IS_STR(arg0)) {
             const char *sep = (const char *)arg0.ptr;
@@ -315,17 +315,17 @@ static inline XrtValue xrt_method_1(XrtValue recv, int sym, XrtValue arg0) {
         if (sym == XRT_SYM_GET) return xrt_map_get(m, arg0);
         if (sym == XRT_SYM_HAS) {
             for (int64_t i = 0; i < m->len; i++)
-                if (xrt_key_eq(m->entries[i].key, arg0)) return xrt_box_int(1);
-            return xrt_box_int(0);
+                if (xrt_key_eq(m->entries[i].key, arg0)) return xrt_box_bool(1);
+            return xrt_box_bool(0);
         }
         if (sym == XRT_SYM_DELETE) {
             for (int64_t i = 0; i < m->len; i++) {
                 if (xrt_key_eq(m->entries[i].key, arg0)) {
                     m->entries[i] = m->entries[--m->len];
-                    return xrt_box_int(1);
+                    return xrt_box_bool(1);
                 }
             }
-            return xrt_box_int(0);
+            return xrt_box_bool(0);
         }
     }
     if (recv.tag == XRT_TAG_F64 && sym == XRT_SYM_POW) {

@@ -776,9 +776,6 @@ static void retype_bool_method_results(XcgenFunc *cf) {
             uint32_t ci = XIR_REF_INDEX(ins->args[0]);
             if (ci >= func->nconst) continue;
             void *fn_ptr = func->consts[ci].val.ptr;
-            fprintf(stderr, "[DBG-PRESCAN] CALL_C fn_ptr=%p sentinel=%p match=%d\n",
-                    fn_ptr, (void *)xrt_invoke_method_sentinel,
-                    fn_ptr == (void *)xrt_invoke_method_sentinel);
             if (fn_ptr != (void *)xrt_invoke_method_sentinel) continue;
             // Decode method_symbol from args[1]
             int64_t encoded = 0;

@@ -24,17 +24,26 @@
 #include "xcli_fs.h"
 #include "../../base/xmalloc.h"
 #include "../../base/xchecks.h"
+#include "../../base/xfileio.h"
 #include "../../module/xsemver.h"
 #include "../../module/xlockfile.h"
 #include "../../module/xresolver.h"
 #include "../../module/xpkg_client.h"
 #include "../../module/xproject.h"
+#include "../../base/xtoml.h"
 #include <stdio.h>
 #include <string.h>
 #include <sys/stat.h>
 #include <unistd.h>
 #include <sys/wait.h>
 #include <errno.h>
+
+/* Build ~/.xray/packages path. Returns pointer to static buffer. */
+static const char *home_packages_dir(const char *home) {
+    static char buf[512];
+    snprintf(buf, sizeof(buf), "%s/.xray/packages", home);
+    return buf;
+}
 
 // Create directory if not exists
 static int ensure_dir(const char *path) {
@@ -245,24 +254,74 @@ static int cmd_pkg_add(int argc, char **argv) {
 
     // Install package
     const char *home = getenv("HOME");
-    if (home) {
-        char dest_dir[512];
-        snprintf(dest_dir, sizeof(dest_dir), "%s/.xray/packages", home);
-
-        // Select best version
-        if (info->version_count > 0) {
-            const char *best_ver = info->versions[0];  // Simplified: take first
-            if (xr_pkg_client_install(owner, name, best_ver, dest_dir)) {
-                printf("Installed %s@%s\n", package, best_ver);
-            }
+    const char *installed_ver = NULL;
+    if (home && info->version_count > 0) {
+        installed_ver = info->versions[0];
+        if (xr_pkg_client_install(owner, name, installed_ver,
+                                   home_packages_dir(home))) {
+            printf("Installed %s@%s\n", package, installed_ver);
+        } else {
+            fprintf(stderr, "Install failed, adding to xray.toml anyway\n");
         }
     }
 
     xr_package_info_free(info);
     xr_pkg_client_cleanup();
 
-    printf("\nPlease add to xray.toml:\n");
-    printf("  %s = \"%s\"\n", package, version);
+    // Write dependency to xray.toml
+    // Read existing content and append to [dependencies] section
+    size_t toml_sz;
+    char *toml = xr_file_read_all("xray.toml", "r", &toml_sz);
+    if (toml) {
+        FILE *f = fopen("xray.toml", "w");
+        if (f) {
+            // Check if [dependencies] section exists
+            const char *dep_section = strstr(toml, "[dependencies]");
+            if (dep_section) {
+                // Find end of [dependencies] header line
+                const char *after_hdr = strchr(dep_section, '\n');
+                if (!after_hdr) after_hdr = dep_section + strlen(dep_section);
+                else after_hdr++;
+                // Write up to after [dependencies] header
+                fwrite(toml, 1, (size_t)(after_hdr - toml), f);
+                // Insert new dependency
+                fprintf(f, "%s = \"%s\"\n", package, version);
+                // Write remainder (skip if package already exists)
+                const char *rest = after_hdr;
+                char needle[256];
+                snprintf(needle, sizeof(needle), "%s =", package);
+                const char *existing = strstr(rest, needle);
+                if (existing) {
+                    // Replace existing line
+                    fwrite(rest, 1, (size_t)(existing - rest), f);
+                    // Skip old line
+                    const char *eol = strchr(existing, '\n');
+                    if (eol) rest = eol + 1;
+                    else rest = existing + strlen(existing);
+                }
+                fwrite(rest, 1, strlen(rest), f);
+            } else {
+                // No [dependencies] section, append one
+                fwrite(toml, 1, toml_sz, f);
+                fprintf(f, "\n[dependencies]\n");
+                fprintf(f, "%s = \"%s\"\n", package, version);
+            }
+            fclose(f);
+            printf("Updated xray.toml\n");
+        }
+        xr_free(toml);
+    }
+
+    // Update lockfile
+    if (installed_ver) {
+        XrLockfile *lockfile = xr_lockfile_load("xray.lock");
+        if (!lockfile) lockfile = xr_lockfile_new();
+        if (lockfile) {
+            xr_lockfile_add_package(lockfile, package, installed_ver, NULL, NULL);
+            xr_lockfile_save(lockfile, "xray.lock");
+            xr_lockfile_free(lockfile);
+        }
+    }
 
     return 0;
 }
@@ -285,25 +344,96 @@ static int cmd_pkg_remove(int argc, char **argv) {
     return XR_CLI_EXIT_UNAVAILABLE;
 }
 
+/*
+ * Detect if an installed package is native (has native = true in xray.toml).
+ * Returns true if native, false otherwise. Sets *build_system if non-NULL.
+ */
+static bool pkg_is_native(const char *pkg_dir) {
+    char *toml_path = xr_path_join(pkg_dir, "xray.toml");
+    if (!toml_path) return false;
+
+    size_t sz;
+    char *content = xr_file_read_all(toml_path, "r", &sz);
+    xr_free(toml_path);
+    if (!content) return false;
+
+    XrTomlValue *root = xtoml_parse(content, sz);
+    xr_free(content);
+    if (!root) return false;
+
+    XrTomlValue *pkg = xtoml_get_table(root, "package");
+    if (!pkg) { xtoml_free(root); return false; }
+
+    bool native = xtoml_get_bool_or(pkg, "native", false);
+    xtoml_free(root);
+    return native;
+}
+
+/*
+ * Build a native package using cmake in-tree.
+ * Expects CMakeLists.txt in pkg_dir.
+ */
+static bool pkg_build_native(const char *pkg_dir, bool verbose) {
+    /* Check for CMakeLists.txt */
+    char *cmake_file = xr_path_join(pkg_dir, "CMakeLists.txt");
+    if (!cmake_file) return false;
+    bool has_cmake = (access(cmake_file, F_OK) == 0);
+    xr_free(cmake_file);
+
+    if (!has_cmake) {
+        fprintf(stderr, "Warning: native package at %s has no CMakeLists.txt\n", pkg_dir);
+        return false;
+    }
+
+    /* cmake -B build -DCMAKE_BUILD_TYPE=Release */
+    char build_dir[512];
+    snprintf(build_dir, sizeof(build_dir), "%s/build", pkg_dir);
+
+    if (verbose) printf("Building native package: cmake -B %s -S %s\n", build_dir, pkg_dir);
+
+    char *cmake_argv[] = {
+        "cmake", "-B", build_dir, "-S", (char*)pkg_dir,
+        "-DCMAKE_BUILD_TYPE=Release", NULL
+    };
+    pid_t pid = fork();
+    if (pid < 0) return false;
+    if (pid == 0) { execvp("cmake", cmake_argv); _exit(127); }
+    int status;
+    if (waitpid(pid, &status, 0) < 0) return false;
+    if (!WIFEXITED(status) || WEXITSTATUS(status) != 0) {
+        fprintf(stderr, "cmake configure failed\n");
+        return false;
+    }
+
+    /* cmake --build build */
+    char *build_argv[] = {
+        "cmake", "--build", build_dir, "--parallel", "4", NULL
+    };
+    pid = fork();
+    if (pid < 0) return false;
+    if (pid == 0) { execvp("cmake", build_argv); _exit(127); }
+    if (waitpid(pid, &status, 0) < 0) return false;
+    if (!WIFEXITED(status) || WEXITSTATUS(status) != 0) {
+        fprintf(stderr, "cmake build failed\n");
+        return false;
+    }
+
+    printf("  Native build complete\n");
+    return true;
+}
+
 // xray pkg install - Install all dependencies from xray.toml
 static int cmd_pkg_install(int argc, char **argv) {
     (void)argc;
     (void)argv;
 
-    // Check if xray.toml exists
     if (!xr_cli_file_exists("xray.toml")) {
         xr_cli_error("pkg install", "xray.toml not found");
         return XR_CLI_EXIT_FAIL;
     }
 
-    // Initialize global cache
-    if (init_global_cache() != 0) {
-        return XR_CLI_EXIT_FAIL;
-    }
+    if (init_global_cache() != 0) return XR_CLI_EXIT_FAIL;
 
-    printf("Installing dependencies...\n");
-
-    // Load project config
     char cwd[512];
     if (!getcwd(cwd, sizeof(cwd))) {
         xr_cli_error("pkg install", "cannot get current directory");
@@ -316,48 +446,142 @@ static int cmd_pkg_install(int argc, char **argv) {
         return XR_CLI_EXIT_FAIL;
     }
 
-    // Check if there are dependencies
     if (!project->dependencies || project->dependencies->count == 0) {
         printf("No dependencies to install\n");
         xr_project_free(project);
         return 0;
     }
 
-    printf("Found %d dependencies\n", project->dependencies->count);
+    printf("Installing %d dependencies...\n", project->dependencies->count);
 
-    // Try to load existing lockfile
+    /* Load or create lockfile */
     XrLockfile *lockfile = xr_lockfile_load("xray.lock");
-    if (lockfile) {
-        printf("Using locked versions from xray.lock\n");
-    } else {
-        lockfile = xr_lockfile_new();
-    }
+    bool had_lockfile = (lockfile != NULL);
+    if (!lockfile) lockfile = xr_lockfile_new();
 
-    // Initialize HTTP client
     if (!xr_pkg_client_init()) {
         xr_cli_warn("pkg install", "cannot initialize HTTP client");
     }
 
-    // Create dependency graph
-    XrDepGraph *graph = xr_depgraph_new();
-
-    // Traverse dependencies and add to graph
-    // Simplified, actual implementation needs HashMap traversal
-    printf("Dependency resolver ready, waiting for registry deployment\n");
-
-    // Save lockfile
-    if (lockfile->package_count > 0) {
-        xr_lockfile_save(lockfile, "xray.lock");
-        printf("Generated xray.lock\n");
+    const char *home = getenv("HOME");
+    if (!home) {
+        xr_cli_error("pkg install", "HOME not set");
+        xr_lockfile_free(lockfile);
+        xr_project_free(project);
+        return XR_CLI_EXIT_FAIL;
     }
 
-    // Cleanup
-    xr_depgraph_free(graph);
+    int installed = 0, skipped = 0, failed = 0;
+
+    /* Iterate over all dependencies */
+    XrHashMap *deps = project->dependencies;
+    for (uint32_t i = 0; i < deps->capacity; i++) {
+        if (!deps->entries[i].key) continue;
+        XrDependency *dep = (XrDependency*)deps->entries[i].value;
+        if (!dep) continue;
+
+        /* Skip local dependencies */
+        if (dep->is_local) {
+            printf("  %s (local: %s) — skipped\n", dep->name, dep->path);
+            skipped++;
+            continue;
+        }
+
+        /* Parse owner/name */
+        const char *dep_name = dep->name;
+        const char *slash = strchr(dep_name, '/');
+        if (!slash) {
+            fprintf(stderr, "  %s — invalid format (expected owner/name)\n", dep_name);
+            failed++;
+            continue;
+        }
+        char owner[128], name[128];
+        size_t owner_len = (size_t)(slash - dep_name);
+        if (owner_len >= sizeof(owner)) owner_len = sizeof(owner) - 1;
+        memcpy(owner, dep_name, owner_len);
+        owner[owner_len] = '\0';
+        strncpy(name, slash + 1, sizeof(name) - 1);
+        name[sizeof(name) - 1] = '\0';
+
+        /* Check if already locked */
+        const XrLockedPackage *locked = xr_lockfile_find(lockfile, dep_name);
+        const char *target_version = NULL;
+
+        if (locked && locked->version) {
+            target_version = locked->version;
+        } else {
+            /* Query registry for latest version */
+            XrPackageInfo *info = xr_pkg_client_get_info(owner, name);
+            if (!info || info->version_count == 0) {
+                fprintf(stderr, "  %s — not found in registry\n", dep_name);
+                if (info) xr_package_info_free(info);
+                failed++;
+                continue;
+            }
+            /* Pick latest version (first in list) */
+            target_version = info->versions[0];
+
+            /* Lock it */
+            char resolved_url[512];
+            snprintf(resolved_url, sizeof(resolved_url),
+                     "%s/api/packages/%s/%s/%s/download",
+                     PKG_REGISTRY_URL, owner, name, target_version);
+            xr_lockfile_add_package(lockfile, dep_name, target_version,
+                                    resolved_url, NULL);
+            /* Use version string from info before freeing */
+            target_version = xr_lockfile_find(lockfile, dep_name)->version;
+            xr_package_info_free(info);
+        }
+
+        /* Check if already installed */
+        char pkg_dir[512];
+        snprintf(pkg_dir, sizeof(pkg_dir), "%s/.xray/packages/%s/%s/%s",
+                 home, owner, name, target_version);
+
+        char entry_check[512];
+        snprintf(entry_check, sizeof(entry_check), "%s/xray.toml", pkg_dir);
+        if (access(entry_check, F_OK) == 0) {
+            printf("  %s@%s — already installed\n", dep_name, target_version);
+            skipped++;
+            continue;
+        }
+
+        /* Download + extract */
+        printf("  %s@%s — downloading...\n", dep_name, target_version);
+        if (!xr_pkg_client_install(owner, name, target_version,
+                                    home_packages_dir(home))) {
+            fprintf(stderr, "  %s@%s — install failed\n", dep_name, target_version);
+            failed++;
+            continue;
+        }
+
+        /* Detect native and build */
+        if (pkg_is_native(pkg_dir)) {
+            printf("  %s@%s — native package, building...\n", dep_name, target_version);
+            if (!pkg_build_native(pkg_dir, false)) {
+                fprintf(stderr, "  %s@%s — native build failed\n", dep_name, target_version);
+                failed++;
+                continue;
+            }
+        }
+
+        installed++;
+    }
+
+    /* Save lockfile */
+    if (lockfile->package_count > 0) {
+        xr_lockfile_save(lockfile, "xray.lock");
+        if (!had_lockfile) printf("\nGenerated xray.lock\n");
+    }
+
+    printf("\nDone: %d installed, %d skipped, %d failed\n",
+           installed, skipped, failed);
+
     xr_lockfile_free(lockfile);
     xr_project_free(project);
     xr_pkg_client_cleanup();
 
-    return 0;
+    return failed > 0 ? XR_CLI_EXIT_FAIL : XR_CLI_EXIT_OK;
 }
 
 // xray pkg update [package] - Update dependencies
