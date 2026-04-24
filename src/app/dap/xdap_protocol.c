@@ -1010,6 +1010,9 @@ int xdap_run(XdapController *ctrl) {
                     xdap_send_exited_event(ctrl, 0);
                 }
             }
+            // Update prev_state after execution so the transition detection
+            // at the top of the loop doesn't re-send the stopped event.
+            prev_state = ctrl->vm_state;
         }
     }
 

@@ -42,7 +42,7 @@ struct XrLspDocument {
     // Diagnostic debounce: timer-based (no background thread sleep)
     uint64_t last_change_time;
     uint64_t diagnostic_deadline;    // 0 = no pending diagnostic
-
+    bool diag_pending;              // true while queued in pending_diag[]
 
     // Line index for position conversion
     uint32_t *line_offsets;
@@ -267,10 +267,10 @@ struct XrLspServer {
     // File exports cache (hash table for O(1) lookup by file path)
     struct XlspExportsCache *exports_cache;
 
-    // Pending diagnostics queue (avoids full doc_table scan each loop iteration)
-    #define MAX_PENDING_DIAG 16
-    XrLspDocument *pending_diag[MAX_PENDING_DIAG];
+    // Pending diagnostics queue (growable, avoids full doc_table scan)
+    XrLspDocument **pending_diag;
     int pending_diag_count;
+    int pending_diag_capacity;
 
     // Request cancellation support ($/cancelRequest)
     XlspPendingRequests pending_requests;

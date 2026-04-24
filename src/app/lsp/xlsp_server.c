@@ -475,6 +475,9 @@ void xlsp_server_free(XrLspServer *server) {
         server->index_progress_token = NULL;
     }
 
+    // Free pending diagnostics queue
+    xr_free(server->pending_diag);
+
     // Release any still-live string ids in the pending-request ring
     // buffer. After a clean shutdown the ring is usually empty, but
     // abrupt disconnects can leave entries behind; failing to free
@@ -1137,6 +1140,8 @@ void xlsp_progress_end(XrLspServer *server, const char *token, const char *messa
 // Uses timer-based debounce in the main event loop instead of blocking
 // a background thread with usleep.
 static void schedule_diagnostics(XrLspServer *server, XrLspDocument *doc) {
+    if (!server->config.diagnostics_enabled) return;
+
     uint64_t now = get_monotonic_ms();
     doc->last_change_time = now;
     int debounce_ms = server->config.diagnostic_debounce_ms > 0
@@ -1144,18 +1149,47 @@ static void schedule_diagnostics(XrLspServer *server, XrLspDocument *doc) {
                     : DIAGNOSTIC_DEBOUNCE_MS;
     doc->diagnostic_deadline = now + (uint64_t)debounce_ms;
 
-    // Add to pending queue (avoid duplicates)
-    for (int i = 0; i < server->pending_diag_count; i++) {
-        if (server->pending_diag[i] == doc) return;
+    // O(1) dedup via per-document flag
+    if (doc->diag_pending) return;
+
+    // Grow queue if needed
+    if (server->pending_diag_count >= server->pending_diag_capacity) {
+        int new_cap = server->pending_diag_capacity ? server->pending_diag_capacity * 2 : 16;
+        XrLspDocument **tmp = xr_realloc(server->pending_diag,
+                                         (size_t)new_cap * sizeof(XrLspDocument *));
+        if (!tmp) return;
+        server->pending_diag = tmp;
+        server->pending_diag_capacity = new_cap;
     }
-    if (server->pending_diag_count < MAX_PENDING_DIAG) {
-        server->pending_diag[server->pending_diag_count++] = doc;
+    server->pending_diag[server->pending_diag_count++] = doc;
+    doc->diag_pending = true;
+}
+
+// Publish empty diagnostics for all open documents (used when diagnostics
+// are disabled to clear stale squiggles on the client side).
+static void clear_all_diagnostics(XrLspServer *server) {
+    if (!server->doc_table) return;
+    XrLspDocTable *table = server->doc_table;
+    for (int i = 0; i < table->bucket_count; i++) {
+        XrLspDocBucket *bucket = table->buckets[i];
+        while (bucket) {
+            XrLspDocument *doc = bucket->doc;
+            if (doc) {
+                XrJsonValue *params = xlsp_json_new_object();
+                xlsp_json_object_set(params, "uri", xlsp_json_new_string(doc->uri));
+                xlsp_json_object_set(params, "diagnostics", xlsp_json_new_array());
+                send_notification(server, "textDocument/publishDiagnostics", params);
+                xlsp_json_free(params);
+            }
+            bucket = bucket->next;
+        }
     }
 }
 
 // Check and publish diagnostics for documents in the pending queue.
 // O(K) where K = pending count, instead of O(N) full table scan.
 static void flush_pending_diagnostics(XrLspServer *server) {
+    if (!server->config.diagnostics_enabled) return;
     if (server->pending_diag_count == 0) return;
 
     uint64_t now = get_monotonic_ms();
@@ -1165,13 +1199,16 @@ static void flush_pending_diagnostics(XrLspServer *server) {
         XrLspDocument *doc = server->pending_diag[i];
         if (doc && doc->diagnostic_deadline > 0 && now >= doc->diagnostic_deadline) {
             doc->diagnostic_deadline = 0;
+            doc->diag_pending = false;
             lsp_log("Diagnostic debounce: publishing for %s", doc->uri);
             publish_diagnostics(server, doc);
         } else if (doc && doc->diagnostic_deadline > 0) {
             // Not yet ready, keep in queue
             server->pending_diag[write++] = doc;
+        } else {
+            // deadline == 0 means already published or cancelled, drop
+            if (doc) doc->diag_pending = false;
         }
-        // else: deadline == 0 means already published or cancelled, drop
     }
     server->pending_diag_count = write;
 }
@@ -1641,7 +1678,8 @@ static XrJsonValue *handle_initialize(XrLspServer *server, XrJsonValue *params) 
     // Formatting
     if (server->capabilities.formatting) {
         xlsp_json_object_set_new(capabilities, "documentFormattingProvider", xlsp_json_new_bool(true));
-        xlsp_json_object_set_new(capabilities, "documentRangeFormattingProvider", xlsp_json_new_bool(true));
+        // Range formatting disabled: current impl formats the whole document
+        // xlsp_json_object_set_new(capabilities, "documentRangeFormattingProvider", xlsp_json_new_bool(true));
 
         // On-type formatting (auto-indent on } and newline)
         XrJsonValue *onType = xlsp_json_new_object();
@@ -1770,8 +1808,20 @@ static void handle_initialized(XrLspServer *server, XrJsonValue *params) {
 
     lsp_log("Registered file watcher for **/*.xr");
 
-    // Start background workspace indexing if we have a root path
-    if (server->root_path) {
+    // Start background workspace indexing for all workspace folders.
+    // Collect paths into a temp array and index in a single batch.
+    if (server->workspace_folder_count > 0) {
+        const char *paths[MAX_WORKSPACE_FOLDERS];
+        int path_count = 0;
+        for (int i = 0; i < server->workspace_folder_count; i++) {
+            if (server->workspace_folders[i].path) {
+                paths[path_count++] = server->workspace_folders[i].path;
+            }
+        }
+        if (path_count > 0) {
+            xlsp_workspace_start_background_index_roots(server, paths, path_count);
+        }
+    } else if (server->root_path) {
         xlsp_workspace_start_background_index(server, server->root_path);
     } else if (server->root_uri) {
         xlsp_workspace_start_background_index(server, xlsp_uri_to_path(server->root_uri));
@@ -1881,11 +1931,16 @@ static void add_workspace_folder(XrLspServer *server, const char *uri, const cha
     xlsp_workspace_start_background_index(server, path);
 }
 
-// Remove a workspace folder
+// Remove a workspace folder and purge related state
 static void remove_workspace_folder(XrLspServer *server, const char *uri) {
     for (int i = 0; i < server->workspace_folder_count; i++) {
         if (strcmp(server->workspace_folders[i].uri, uri) == 0) {
             lsp_log("Removed workspace folder: %s", server->workspace_folders[i].name);
+
+            // Purge analyzer and cache state for files under this folder
+            if (server->workspace_folders[i].path) {
+                xlsp_workspace_purge_prefix(server, server->workspace_folders[i].path);
+            }
 
             xr_free(server->workspace_folders[i].uri);
             xr_free(server->workspace_folders[i].name);
@@ -1950,7 +2005,18 @@ static void apply_configuration(XrLspServer *server, XrJsonValue *settings) {
     XrJsonValue *diagnostics = xlsp_json_get_object(xray, "diagnostics");
     if (diagnostics) {
         if (xlsp_json_get(diagnostics, "enabled")) {
+            bool was_enabled = server->config.diagnostics_enabled;
             server->config.diagnostics_enabled = xlsp_json_get_bool(diagnostics, "enabled");
+            // On disable: clear pending queue and publish empty diagnostics
+            if (was_enabled && !server->config.diagnostics_enabled) {
+                for (int i = 0; i < server->pending_diag_count; i++) {
+                    if (server->pending_diag[i]) {
+                        server->pending_diag[i]->diag_pending = false;
+                    }
+                }
+                server->pending_diag_count = 0;
+                clear_all_diagnostics(server);
+            }
         }
         if (xlsp_json_get(diagnostics, "debounceMs")) {
             server->config.diagnostic_debounce_ms = (int)xlsp_json_get_int(diagnostics, "debounceMs");
@@ -2022,7 +2088,9 @@ static void handle_did_open(XrLspServer *server, XrJsonValue *params) {
         if (doc) {
             // Parse document to AST
             xlsp_parse_document(doc, server);
-            publish_diagnostics(server, doc);
+            if (server->config.diagnostics_enabled) {
+                publish_diagnostics(server, doc);
+            }
         }
     }
 }

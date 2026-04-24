@@ -78,7 +78,7 @@ XR_FUNC void xlsp_free_exports(XlspExportedSymbol *symbols);
 XR_FUNC XrJsonValue *xlsp_get_import_completions(XrLspDocument *doc, const char *module_name);
 
 // Get hover info for an imported symbol
-XR_FUNC const char *xlsp_get_import_hover(XrLspDocument *doc, const char *module_name, 
+XR_FUNC const char *xlsp_get_import_hover(XrLspDocument *doc, const char *module_name,
                                    const char *symbol_name, char *buf, size_t buf_size);
 
 // Go to definition for an imported symbol
@@ -100,6 +100,9 @@ XR_FUNC void xlsp_free_exports_cache(XrLspServer *server);
 
 // Remove a single entry from exports cache by file path
 XR_FUNC void xlsp_exports_cache_remove(XrLspServer *server, const char *file_path);
+
+// Remove all exports cache entries whose file_path starts with prefix
+XR_FUNC void xlsp_exports_cache_remove_prefix(XrLspServer *server, const char *prefix);
 
 // Invalidate document's import cache (call when content changes)
 XR_FUNC void xlsp_invalidate_import_cache(XrLspDocument *doc);
