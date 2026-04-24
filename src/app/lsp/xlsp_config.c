@@ -15,6 +15,8 @@
 #include "xlsp_server.h"
 #include "xlsp_utils.h"
 #include "../../base/xmalloc.h"
+#include "../../base/xtoml.h"
+#include "../../base/xfileio.h"
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
@@ -111,56 +113,6 @@ void xlsp_config_load_defaults(XlspConfig *config) {
 }
 
 // ============================================================================
-// Simple TOML value extractors for a bounded section
-// ============================================================================
-
-// Find "key = " within [start, start+section_len) and return pointer past '='
-// after skipping whitespace.  Returns NULL if the key is not found.
-static const char *toml_find_value(const char *start, size_t section_len,
-                                   const char *key) {
-    const char *hit = strstr(start, key);
-    if (!hit || (size_t)(hit - start) >= section_len) return NULL;
-    const char *eq = strchr(hit + strlen(key), '=');
-    if (!eq || (size_t)(eq - start) >= section_len) return NULL;
-    eq++;
-    while (*eq == ' ' || *eq == '\t') eq++;
-    return eq;
-}
-
-// Parse a bool value ("true" / "false") at *val.
-static bool toml_parse_bool(const char *val, bool *out) {
-    if (!val) return false;
-    if (strncmp(val, "true", 4) == 0)  { *out = true;  return true; }
-    if (strncmp(val, "false", 5) == 0) { *out = false; return true; }
-    return false;
-}
-
-// Parse an integer value at *val.
-static bool toml_parse_int(const char *val, int *out) {
-    if (!val) return false;
-    char *end = NULL;
-    long v = strtol(val, &end, 10);
-    if (end == val) return false;
-    *out = (int)v;
-    return true;
-}
-
-// Parse a quoted string value at *val into a newly allocated string.
-// Caller must xr_free() the result.
-static char *toml_parse_string(const char *val) {
-    if (!val || *val != '"') return NULL;
-    val++;
-    const char *str_end = strchr(val, '"');
-    if (!str_end) return NULL;
-    size_t len = (size_t)(str_end - val);
-    char *s = xr_malloc(len + 1);
-    if (!s) return NULL;
-    memcpy(s, val, len);
-    s[len] = '\0';
-    return s;
-}
-
-// ============================================================================
 
 // Load configuration from xray.toml [lsp] section
 bool xlsp_config_load_from_toml(XlspConfig *config, const char *root_path) {
@@ -170,143 +122,81 @@ bool xlsp_config_load_from_toml(XlspConfig *config, const char *root_path) {
     char toml_path[XLSP_MAX_PATH];
     snprintf(toml_path, sizeof(toml_path), "%s/xray.toml", root_path);
 
-    FILE *f = fopen(toml_path, "r");
-    if (!f) return false;
+    size_t content_size;
+    char *content = xr_file_read_all(toml_path, "r", &content_size);
+    if (!content) return false;
 
-    // Read file content
-    fseek(f, 0, SEEK_END);
-    long size = ftell(f);
-    fseek(f, 0, SEEK_SET);
+    XrTomlValue *root = xtoml_parse(content, content_size);
+    xr_free(content);
+    if (!root) return false;
 
-    char *content = xr_malloc(size + 1);
-    if (!content) {
-        fclose(f);
-        return false;
-    }
+    XrTomlValue *lsp = xtoml_get_table(root, "lsp");
+    if (!lsp) { xtoml_free(root); return false; }
 
-    fread(content, 1, size, f);
-    content[size] = '\0';
-    fclose(f);
+    // --- ignore = [...] array ---
+    XrTomlValue *ignore_arr = xtoml_get_array(lsp, "ignore");
+    if (ignore_arr) {
+        int n = xtoml_array_len(ignore_arr);
+        for (int i = 0; i < n; i++) {
+            XrTomlValue *elem = xtoml_array_get(ignore_arr, i);
+            if (!elem || !xtoml_is_string(elem)) continue;
+            const char *pat = elem->as.string;
+            size_t len = strlen(pat);
+            if (len == 0) continue;
 
-    // Find [lsp] section
-    char *lsp_section = strstr(content, "[lsp]");
-    if (!lsp_section) {
-        xr_free(content);
-        return false;
-    }
+            // Determine if pattern is directory-only
+            bool is_dir = (strchr(pat, '.') == NULL && strchr(pat, '*') == NULL) ||
+                         (pat[len - 1] == '/');
 
-    // Find next section header or end of file.
-    // A TOML section header is '[' at the start of a line, so skip any '['
-    // that appears mid-line (e.g. inside array values like ignore = [...]).
-    char *next_section = NULL;
-    {
-        const char *p = lsp_section + 5;
-        while (*p) {
-            if (*p == '\n' && *(p + 1) == '[') {
-                next_section = (char *)(p + 1);
-                break;
-            }
-            p++;
-        }
-    }
-    size_t section_len = next_section ? (size_t)(next_section - lsp_section)
-                                      : strlen(lsp_section);
-
-    // --- ignore = [...] array (special parsing) ---
-    char *ignore_start = strstr(lsp_section, "ignore");
-    if (ignore_start && (size_t)(ignore_start - lsp_section) < section_len) {
-        char *array_start = strchr(ignore_start, '[');
-        if (array_start && (next_section == NULL || array_start < next_section)) {
-            char *array_end = strchr(array_start, ']');
-            if (array_end) {
-                char *p = array_start + 1;
-                while (p < array_end) {
-                    while (p < array_end && (*p == ' ' || *p == '\t' || *p == '\n' || *p == ',')) p++;
-                    if (p >= array_end) break;
-                    if (*p == '"') {
-                        p++;
-                        char *str_end = strchr(p, '"');
-                        if (str_end && str_end < array_end) {
-                            size_t len = (size_t)(str_end - p);
-                            char *pattern = xr_malloc(len + 1);
-                            if (pattern) {
-                                memcpy(pattern, p, len);
-                                pattern[len] = '\0';
-                                bool is_dir = (strchr(pattern, '.') == NULL && strchr(pattern, '*') == NULL) ||
-                                             (len > 0 && pattern[len-1] == '/');
-                                if (is_dir && len > 0 && pattern[len-1] == '/') {
-                                    pattern[len-1] = '\0';
-                                }
-                                xlsp_config_add_ignore(config, pattern, is_dir);
-                                xr_free(pattern);
-                            }
-                            p = str_end + 1;
-                        } else {
-                            break;
-                        }
-                    } else {
-                        p++;
-                    }
+            if (is_dir && pat[len - 1] == '/') {
+                // Strip trailing '/'
+                char *trimmed = xr_strdup(pat);
+                if (trimmed) {
+                    trimmed[len - 1] = '\0';
+                    xlsp_config_add_ignore(config, trimmed, true);
+                    xr_free(trimmed);
                 }
+            } else {
+                xlsp_config_add_ignore(config, pat, is_dir);
             }
         }
     }
 
     // --- Scalar config values ---
-    const char *val;
-    bool bval;
-    int ival;
+    const char *sval;
 
     // Logging
-    val = toml_find_value(lsp_section, section_len, "log_path");
-    if (val) {
-        char *s = toml_parse_string(val);
-        if (s) {
-            if (config->log_path) xr_free(config->log_path);
-            config->log_path = s;
-        }
+    sval = xtoml_get_string(lsp, "log_path");
+    if (sval) {
+        if (config->log_path) xr_free(config->log_path);
+        config->log_path = xr_strdup(sval);
     }
-    val = toml_find_value(lsp_section, section_len, "log_to_stderr");
-    if (val && toml_parse_bool(val, &bval)) {
-        config->log_to_stderr = bval;
-    }
+    XrTomlValue *v;
+    v = xtoml_get(lsp, "log_to_stderr");
+    if (v && xtoml_is_bool(v)) config->log_to_stderr = v->as.boolean;
 
     // Diagnostics
-    val = toml_find_value(lsp_section, section_len, "diagnostics_enabled");
-    if (val && toml_parse_bool(val, &bval)) {
-        config->diagnostics_enabled = bval;
-    }
-    val = toml_find_value(lsp_section, section_len, "diagnostic_debounce_ms");
-    if (val && toml_parse_int(val, &ival)) {
-        config->diagnostic_debounce_ms = ival;
-    }
+    v = xtoml_get(lsp, "diagnostics_enabled");
+    if (v && xtoml_is_bool(v)) config->diagnostics_enabled = v->as.boolean;
+    v = xtoml_get(lsp, "diagnostic_debounce_ms");
+    if (v && xtoml_is_integer(v)) config->diagnostic_debounce_ms = (int)v->as.integer;
 
     // Completion
-    val = toml_find_value(lsp_section, section_len, "completion_max_items");
-    if (val && toml_parse_int(val, &ival)) {
-        config->completion_max_items = ival;
-    }
+    v = xtoml_get(lsp, "completion_max_items");
+    if (v && xtoml_is_integer(v)) config->completion_max_items = (int)v->as.integer;
 
     // Formatting
-    val = toml_find_value(lsp_section, section_len, "format_tab_size");
-    if (val && toml_parse_int(val, &ival)) {
-        config->format_tab_size = ival;
-    }
-    val = toml_find_value(lsp_section, section_len, "format_insert_spaces");
-    if (val && toml_parse_bool(val, &bval)) {
-        config->format_insert_spaces = bval;
-    }
+    v = xtoml_get(lsp, "format_tab_size");
+    if (v && xtoml_is_integer(v)) config->format_tab_size = (int)v->as.integer;
+    v = xtoml_get(lsp, "format_insert_spaces");
+    if (v && xtoml_is_bool(v)) config->format_insert_spaces = v->as.boolean;
 
     // Inlay hints
-    val = toml_find_value(lsp_section, section_len, "inlay_hints_type_annotations");
-    if (val && toml_parse_bool(val, &bval)) {
-        config->inlay_hints_type_annotations = bval;
-    }
-    val = toml_find_value(lsp_section, section_len, "inlay_hints_parameter_names");
-    if (val && toml_parse_bool(val, &bval)) {
-        config->inlay_hints_parameter_names = bval;
-    }
+    v = xtoml_get(lsp, "inlay_hints_type_annotations");
+    if (v && xtoml_is_bool(v)) config->inlay_hints_type_annotations = v->as.boolean;
+    v = xtoml_get(lsp, "inlay_hints_parameter_names");
+    if (v && xtoml_is_bool(v)) config->inlay_hints_parameter_names = v->as.boolean;
 
-    xr_free(content);
+    xtoml_free(root);
     return true;
 }

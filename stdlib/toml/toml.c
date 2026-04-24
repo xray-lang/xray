@@ -25,6 +25,7 @@
 #include "../common_parser.h"
 #include "../datetime/datetime.h"
 #include "../../src/base/xmalloc.h"
+#include "../../src/base/xtoml.h"
 #include "../../src/runtime/value/xvalue.h"
 #include "../../src/runtime/object/xarray.h"
 #include "../../src/runtime/object/xmap.h"
@@ -32,18 +33,64 @@
 #include "../../src/runtime/symbol/xsymbol_table.h"
 #include "../../src/runtime/xisolate_internal.h"
 
+// ========== DOM-to-XrValue Bridge ==========
+
+// Convert xtoml DOM tree to runtime XrValue, analogous to the JSON bridge.
+static XrValue dom_to_xrvalue(XrayIsolate *X, XrTomlValue *v) {
+    if (!v) return xr_null();
+    switch (v->type) {
+        case XR_TOML_STRING: {
+            size_t slen = strlen(v->as.string);
+            XrString *str = xr_string_intern(X, v->as.string, slen, 0);
+            return xr_string_value(str);
+        }
+        case XR_TOML_INTEGER:
+            return xr_int(v->as.integer);
+        case XR_TOML_FLOAT:
+            return xr_float(v->as.number);
+        case XR_TOML_BOOL:
+            return xr_bool(v->as.boolean);
+        case XR_TOML_DATETIME: {
+            // Try runtime datetime parse; fall back to string.
+            XrDateTime *dt = xr_datetime_parse(X, v->as.string, NULL);
+            if (dt) return xr_datetime_value(dt);
+            size_t slen = strlen(v->as.string);
+            XrString *str = xr_string_intern(X, v->as.string, slen, 0);
+            return xr_string_value(str);
+        }
+        case XR_TOML_ARRAY: {
+            XrArray *arr = xr_array_new(xr_current_coro(X));
+            for (int i = 0; i < v->as.array.count; i++) {
+                xr_array_push(arr, dom_to_xrvalue(X, v->as.array.items[i]));
+            }
+            return xr_value_from_array(arr);
+        }
+        case XR_TOML_TABLE: {
+            XrMap *map = xr_map_new(xr_current_coro(X));
+            for (int i = 0; i < v->as.table.count; i++) {
+                XrTomlMember *m = &v->as.table.members[i];
+                size_t klen = strlen(m->key);
+                XrString *key = xr_string_intern(X, m->key, klen, 0);
+                xr_map_set(map, xr_string_value(key),
+                           dom_to_xrvalue(X, m->value));
+            }
+            return xr_value_from_map(map);
+        }
+    }
+    return xr_null();
+}
+
 // ========== Parser Wrapper ==========
 
 XrValue xr_toml_parse(XrayIsolate *X, const char *data, size_t len) {
-    TomlConfig config;
-    toml_config_init(&config);
-
-    TomlParser parser;
-    toml_parser_init(&parser, X, data, len, &config);
-    TomlResult result = toml_parser_parse(&parser);
-    toml_parser_cleanup(&parser);
-
-    return xr_value_from_map(result.data);
+    XrTomlValue *root = xtoml_parse(data, len);
+    if (!root) {
+        // Fallback: return empty map on parse failure
+        return xr_value_from_map(xr_map_new(xr_current_coro(X)));
+    }
+    XrValue result = dom_to_xrvalue(X, root);
+    xtoml_free(root);
+    return result;
 }
 
 // ========== TOML Serialization ==========
@@ -392,21 +439,7 @@ static XrValue toml_parse(XrayIsolate *X, XrValue *args, int argc) {
         return xr_value_from_map(xr_map_new(xr_current_coro(X)));
     }
     XrString *str = XR_TO_STRING(args[0]);
-
-    TomlConfig config;
-    toml_config_init(&config);
-
-    if (argc >= 2 && xr_value_is_json(args[1])) {
-        XrJson *json = xr_value_to_json(args[1]);
-        toml_config_from_json(X, &config, json);
-    }
-
-    TomlParser parser;
-    toml_parser_init(&parser, X, str->data, str->length, &config);
-    TomlResult result = toml_parser_parse(&parser);
-    toml_parser_cleanup(&parser);
-
-    return xr_value_from_map(result.data);
+    return xr_toml_parse(X, str->data, str->length);
 }
 
 static XrValue toml_parse_strict(XrayIsolate *X, XrValue *args, int argc) {
