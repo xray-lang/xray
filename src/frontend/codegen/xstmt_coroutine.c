@@ -58,7 +58,7 @@ static bool check_coro_closure_upvalues(XrCompilerContext *ctx, XrCompiler *c,
 
     for (int i = 0; i < upvalue_count; i++) {
         XrUpvalueDesc *uv = &closure_compiler->upvalues[i];
-        const char *var_name = uv->name ? uv->name : "?";
+        const char *var_name = uv->name ? XR_STRING_CHARS(uv->name) : "?";
 
         // shared const - safe for concurrent read (global heap + refcount)
         if (uv->storage_mode == XR_STORAGE_SHARED && uv->is_const) {
