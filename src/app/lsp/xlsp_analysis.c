@@ -575,8 +575,12 @@ XrJsonValue *xlsp_analyze_hover(XrLspServer *server, XrLspDocument *doc, XrLspPo
     }
 
     // Check if it's a local variable/function using XaAnalyzer
+    // Prefer position-aware lookup to resolve shadowed names correctly,
+    // then fall back to global name lookup.
     if (!description && analyzer) {
-        XaSymbol *sym = xa_analyzer_lookup(analyzer, word);
+        XaSymbol *sym = xa_analyzer_lookup_at(analyzer, doc->uri,
+                                              pos.line + 1, pos.character + 1);
+        if (!sym) sym = xa_analyzer_lookup(analyzer, word);
         if (sym) {
             XrType *type = xa_analyzer_get_type(analyzer, sym);
             const char *type_str = type ? xr_type_to_string(type) : "unknown";
@@ -1654,44 +1658,38 @@ XrJsonValue *xlsp_analyze_references(XrLspServer *server, XrLspDocument *doc, Xr
     }
 
     // =========================================================================
-    // Cross-file reference search (still uses lexer for other open documents)
-    // TODO: Use analyzer for cross-file semantic search when available
+    // Cross-file reference search via analyzer dependency graph.
+    // xa_analyzer_find_references_at covers all indexed files (not just
+    // open documents), giving uniform behaviour for opened/unopened files.
     // =========================================================================
 
-    if (server && server->doc_table) {
-        XrLspDocTable *table = server->doc_table;
-        for (int i = 0; i < table->bucket_count; i++) {
-            XrLspDocBucket *bucket = table->buckets[i];
-            while (bucket) {
-                XrLspDocument *other = bucket->doc;
-                // Skip current document (already searched)
-                if (other && other != doc && other->content) {
-                    // For other files, try semantic search if AST available
-                    if (other->ast && analyzer && analyzer->global_scope) {
-                        // Use simple scope check - only include if symbol is exported
-                        // and visible from this file
-                        XaSymbol *other_sym = xa_analyzer_lookup_in_scope(
-                            analyzer, search_word, analyzer->global_scope);
+    if (analyzer) {
+        int ref_count = 0;
+        XaSymbolRef *arefs = xa_analyzer_find_references_at(
+            analyzer, doc->uri, pos.line + 1, pos.character + 1, &ref_count);
 
-                        if (other_sym && other_sym->is_exported) {
-                            RefFindContext ctx = {
-                                .target_name = search_word,
-                                .def_scope = analyzer->global_scope,  // Global for exported symbols
-                                .current_scope = analyzer->global_scope,
-                                .global_scope = analyzer->global_scope,
-                                .refs = refs,
-                                .uri = other->uri
-                            };
-                            collect_refs_from_ast(other->ast, &ctx);
-                        }
-                    } else {
-                        // Fallback to lexer
-                        scan_doc_for_refs_lexer(other, search_word, word_len, refs);
-                    }
-                }
-                bucket = bucket->next;
-            }
+        for (XaSymbolRef *r = arefs; r; r = r->next) {
+            // Skip refs already covered by the in-document search above
+            if (r->file && strcmp(r->file, doc->uri) == 0) continue;
+
+            const char *ref_uri = r->file ? r->file : doc->uri;
+            int line = r->line > 0 ? (int)r->line - 1 : 0;
+            int col  = r->column > 0 ? (int)r->column - 1 : 0;
+            int end_col = col + (int)strlen(search_word);
+
+            XrJsonValue *loc = xlsp_json_new_object();
+            xlsp_json_object_set(loc, "uri", xlsp_json_new_string(ref_uri));
+            xlsp_json_object_set(loc, "range",
+                xlsp_json_make_range(line, col, line, end_col));
+            xlsp_json_array_push(refs, loc);
         }
+
+        if (ref_count > 0) {
+            lsp_log("References (cross-file analyzer): %d refs for '%s'",
+                    ref_count, search_word);
+        }
+
+        xa_analyzer_free_references(arefs);
     }
 
     xr_free(search_word);
