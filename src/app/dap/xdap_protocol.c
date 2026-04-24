@@ -14,6 +14,9 @@
 #include "../../runtime/xisolate_api.h"
 #include "../../base/xmalloc.h"
 #include "../../coro/xcoroutine.h"
+#include "../../runtime/closure/xclosure.h"
+#include "../../runtime/xexec_frame.h"
+#include "../../runtime/value/xchunk.h"
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
@@ -143,6 +146,7 @@ static void handle_initialize(XdapController *ctrl, int seq, XrJsonValue *args) 
     xlsp_json_object_set(body, "supportsDisassembleRequest", xlsp_json_new_bool(true));
     xlsp_json_object_set(body, "supportTerminateDebuggee", xlsp_json_new_bool(true));
     xlsp_json_object_set(body, "supportsPauseRequest", xlsp_json_new_bool(true));
+    xlsp_json_object_set(body, "supportsExceptionInfoRequest", xlsp_json_new_bool(true));
 
     // Exception breakpoint filters
     XrJsonValue *filters = xlsp_json_new_array();
@@ -591,15 +595,50 @@ static void handle_scopes(XdapController *ctrl, int seq, XrJsonValue *args) {
 
     XrJsonValue *scopes = xlsp_json_new_array();
 
-    // Create locals scope reference (directly use debug API)
+    // Resolve frame for variable counts
+    XrBcCallFrame *frame = NULL;
+    int actual_idx = -1;
+    if (ctrl->stopped_coro) {
+        actual_idx = ctrl->stopped_coro->vm_ctx.frame_count - 1 - frame_id;
+        if (actual_idx >= 0 && actual_idx < ctrl->stopped_coro->vm_ctx.frame_count) {
+            frame = &ctrl->stopped_coro->vm_ctx.frames[actual_idx];
+        }
+    }
+
+    // Locals scope (always present)
     int locals_ref = xr_debug_create_var_ref(ctrl->isolate, XDAP_REF_SCOPE_LOCALS,
                                               frame_id, XR_NULL_VAL);
-
+    int local_count = (frame && frame->closure && frame->closure->proto)
+        ? PROTO_LOCVAR_COUNT(frame->closure->proto) : 0;
     XrJsonValue *local = xlsp_json_new_object();
     xlsp_json_object_set(local, "name", xlsp_json_new_string("Locals"));
     xlsp_json_object_set(local, "variablesReference", xlsp_json_new_number(locals_ref));
+    xlsp_json_object_set(local, "namedVariables", xlsp_json_new_number(local_count));
     xlsp_json_object_set(local, "expensive", xlsp_json_new_bool(false));
     xlsp_json_array_push(scopes, local);
+
+    // Closure scope (only when frame has upvalues)
+    if (frame && frame->closure && frame->closure->upval_count > 0) {
+        int upval_ref = xr_debug_create_var_ref(ctrl->isolate,
+            XDAP_REF_SCOPE_UPVALUES, frame_id, XR_NULL_VAL);
+        XrJsonValue *closure_scope = xlsp_json_new_object();
+        xlsp_json_object_set(closure_scope, "name", xlsp_json_new_string("Closure"));
+        xlsp_json_object_set(closure_scope, "variablesReference",
+            xlsp_json_new_number(upval_ref));
+        xlsp_json_object_set(closure_scope, "namedVariables",
+            xlsp_json_new_number(frame->closure->upval_count));
+        xlsp_json_object_set(closure_scope, "expensive", xlsp_json_new_bool(false));
+        xlsp_json_array_push(scopes, closure_scope);
+    }
+
+    // Globals scope (always present, marked expensive)
+    int globals_ref = xr_debug_create_var_ref(ctrl->isolate, XDAP_REF_SCOPE_GLOBALS,
+                                               -1, XR_NULL_VAL);
+    XrJsonValue *global = xlsp_json_new_object();
+    xlsp_json_object_set(global, "name", xlsp_json_new_string("Globals"));
+    xlsp_json_object_set(global, "variablesReference", xlsp_json_new_number(globals_ref));
+    xlsp_json_object_set(global, "expensive", xlsp_json_new_bool(true));
+    xlsp_json_array_push(scopes, global);
 
     XrJsonValue *body = xlsp_json_new_object();
     xlsp_json_object_set(body, "scopes", scopes);
@@ -857,6 +896,30 @@ static void handle_disconnect(XdapController *ctrl, int seq, XrJsonValue *args) 
     xdap_send_response(ctrl, seq, "disconnect", true, NULL, NULL);
 }
 
+static void handle_exception_info(XdapController *ctrl, int seq, XrJsonValue *args) {
+    (void)args;
+
+    if (!ctrl->isolate || ctrl->stop_reason != XDAP_STOP_EXCEPTION) {
+        xdap_send_response(ctrl, seq, "exceptionInfo", false, NULL,
+                           "Not stopped on an exception");
+        return;
+    }
+
+    XrDebugState *dbg = (XrDebugState *)xr_isolate_get_debug_state(ctrl->isolate);
+    const char *message = (dbg && dbg->exception_message) ? dbg->exception_message : "<unknown>";
+    const char *filter = (dbg && dbg->exception_is_uncaught) ? "uncaught" : "caught";
+
+    // breakMode: "always" | "unhandled" | "userUnhandled" | "never"
+    const char *break_mode = (dbg && dbg->exception_is_uncaught) ? "unhandled" : "always";
+
+    XrJsonValue *body = xlsp_json_new_object();
+    xlsp_json_object_set(body, "exceptionId", xlsp_json_new_string(filter));
+    xlsp_json_object_set(body, "description", xlsp_json_new_string(message));
+    xlsp_json_object_set(body, "breakMode", xlsp_json_new_string(break_mode));
+
+    xdap_send_response(ctrl, seq, "exceptionInfo", true, body, NULL);
+}
+
 // ============================================================================
 // Message Dispatch (table-driven)
 // ============================================================================
@@ -887,6 +950,7 @@ static const DapDispatchEntry dispatch_table[] = {
     {"pause",                   handle_pause},
     {"evaluate",                handle_evaluate},
     {"setVariable",             handle_set_variable},
+    {"exceptionInfo",            handle_exception_info},
     {"disassemble",             handle_disassemble},
     {"restart",                 handle_restart},
     {"terminate",               handle_terminate},
@@ -1015,21 +1079,25 @@ int xdap_run(XdapController *ctrl) {
                 }
             } else {
                 // Resume after pause: continue execution from where we stopped
-                bool still_running = xr_debug_resume_execution(ctrl->isolate);
+                XdapResumeResult resume = xr_debug_resume_execution(ctrl->isolate);
 
-                if (ctrl->vm_state == XDAP_VM_PAUSED) {
-                    // Stopped again at breakpoint/step
-                    xdap_send_stopped_event(ctrl, stop_reason_str(ctrl->stop_reason),
-                                            ctrl->stopped_coro_id);
-                } else if (!still_running) {
-                    // Program terminated
-                    if (ctrl->debug_proto) {
-                        xr_free_code(ctrl->isolate, ctrl->debug_proto);
-                        ctrl->debug_proto = NULL;
-                    }
-                    ctrl->vm_state = XDAP_VM_TERMINATED;
-                    xdap_send_terminated_event(ctrl);
-                    xdap_send_exited_event(ctrl, 0);
+                switch (resume) {
+                    case XDAP_RESUME_STOPPED:
+                        // Stopped again at breakpoint/step
+                        xdap_send_stopped_event(ctrl, stop_reason_str(ctrl->stop_reason),
+                                                ctrl->stopped_coro_id);
+                        break;
+                    case XDAP_RESUME_TERMINATED:
+                    case XDAP_RESUME_ERROR:
+                        // Program ended or runtime error
+                        if (ctrl->debug_proto) {
+                            xr_free_code(ctrl->isolate, ctrl->debug_proto);
+                            ctrl->debug_proto = NULL;
+                        }
+                        ctrl->vm_state = XDAP_VM_TERMINATED;
+                        xdap_send_terminated_event(ctrl);
+                        xdap_send_exited_event(ctrl, resume == XDAP_RESUME_ERROR ? 1 : 0);
+                        break;
                 }
             }
             // Update prev_state after execution so the transition detection

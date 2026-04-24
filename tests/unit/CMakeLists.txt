@@ -230,6 +230,19 @@ if(XR_BUILD_LSP)
     )
     target_link_libraries(test_lsp_navigation PRIVATE xray_core)
     add_test(NAME test_lsp_navigation COMMAND test_lsp_navigation)
+
+    add_executable(test_lsp_diagnostics
+        lsp/test_lsp_diagnostics.c
+        ${LSP_SOURCES}
+    )
+    target_include_directories(test_lsp_diagnostics PRIVATE
+        ${XRAY_COMMON_INCLUDES}
+        ${CMAKE_SOURCE_DIR}/src/app/lsp
+        ${CMAKE_SOURCE_DIR}/src/app/cli
+        ${CMAKE_SOURCE_DIR}/src/frontend/format
+    )
+    target_link_libraries(test_lsp_diagnostics PRIVATE xray_core)
+    add_test(NAME test_lsp_diagnostics COMMAND test_lsp_diagnostics)
 endif()
 
 # ============================================================================
@@ -266,6 +279,31 @@ if(XR_BUILD_DAP)
         ${CMAKE_SOURCE_DIR}/src/base
     )
     add_test(NAME test_dap_transport COMMAND test_dap_transport)
+endif()
+
+# ============================================================================
+# mcp/ — MCP protocol, tools, resources, prompts
+# ============================================================================
+
+if(XR_BUILD_MCP)
+    add_executable(test_mcp_protocol
+        mcp/test_mcp_protocol.c
+        ${CMAKE_SOURCE_DIR}/src/app/mcp/xmcp_protocol.c
+        ${CMAKE_SOURCE_DIR}/src/app/mcp/xmcp_tools.c
+        ${CMAKE_SOURCE_DIR}/src/app/mcp/xmcp_resources.c
+        ${CMAKE_SOURCE_DIR}/src/app/mcp/xmcp_prompts.c
+        ${CMAKE_SOURCE_DIR}/src/app/mcp/xmcp_knowledge.c
+        ${CMAKE_SOURCE_DIR}/src/app/lsp/xlsp_json.c
+        ${CMAKE_SOURCE_DIR}/src/runtime/object/xutf8.c
+    )
+    target_include_directories(test_mcp_protocol PRIVATE
+        ${XRAY_COMMON_INCLUDES}
+        ${CMAKE_SOURCE_DIR}/src/app/mcp
+        ${CMAKE_SOURCE_DIR}/src/app/lsp
+        ${CMAKE_SOURCE_DIR}/src/runtime/object
+    )
+    target_link_libraries(test_mcp_protocol PRIVATE xray_core)
+    add_test(NAME test_mcp_protocol COMMAND test_mcp_protocol)
 endif()
 
 # ============================================================================

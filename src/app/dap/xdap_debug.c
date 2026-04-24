@@ -501,19 +501,22 @@ void xr_debug_step_over(XrayIsolate *isolate) {
     dbg->step_depth = coro ? coro->vm_ctx.frame_count : xr_isolate_get_vm_state(isolate)->frame_count;
 }
 
-// Resume VM execution after a debug break
-// Returns true if execution continued (stopped at breakpoint), false if program ended
-bool xr_debug_resume_execution(XrayIsolate *isolate) {
-    if (!isolate) return false;
+// Resume VM execution after a debug break.
+// Returns classified result instead of flattened bool.
+XdapResumeResult xr_debug_resume_execution(XrayIsolate *isolate) {
+    if (!isolate) return XDAP_RESUME_ERROR;
 
     XrCoroutine *coro = xr_debug_get_coro(isolate);
-    if (!coro) return false;
+    if (!coro) return XDAP_RESUME_ERROR;
 
-    // Use the public API from xworker
+    // xr_debug_resume_vm: 0 = debug_break, 1 = ended, -1 = error
     int result = xr_debug_resume_vm(isolate, coro);
 
-    // result: 0 = stopped at breakpoint, 1 = program ended, -1 = error
-    return (result == 0);
+    switch (result) {
+        case 0:  return XDAP_RESUME_STOPPED;
+        case 1:  return XDAP_RESUME_TERMINATED;
+        default: return XDAP_RESUME_ERROR;
+    }
 }
 
 // ============================================================================

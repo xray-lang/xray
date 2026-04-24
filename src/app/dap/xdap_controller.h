@@ -85,35 +85,30 @@ typedef enum {
 typedef struct XdapController {
     // Transport (owned)
     XdapTransport *transport;
-    
+
     // VM target
     XrayIsolate *isolate;
     char *program_path;
     char **program_args;
     int arg_count;
     XrProto *debug_proto;    // Keep alive for resume
-    
+
     // Session state
     XdapVMState vm_state;
     bool initialized;       // DAP initialized
     bool configured;        // DAP configurationDone received
     bool program_launched;  // Program has been initially launched (for launch vs resume)
     int seq;                // DAP message sequence number
-    
-    // Stopped state
+
+    // Stopped state (single authoritative source)
     XdapStopReason stop_reason;
     XrCoroutine *stopped_coro;
     int stopped_coro_id;    // DAP threadId
-    const char *stopped_path;
-    int stopped_line;
-    
-    // Step state (step_mode tracks current step command for stop notification)
-    XdapCommand step_mode;
-    
+
     // Pending command (from IO to VM, accessed cross-thread)
     _Atomic XdapCommand pending_cmd;
     _Atomic bool cmd_pending;
-    
+
 } XdapController;
 
 // ============================================================================
@@ -158,13 +153,5 @@ XR_FUNC XrCoroutine *xdap_find_coro(XdapController *ctrl, int thread_id);
 
 // Get DAP threadId for coroutine
 XR_FUNC int xdap_coro_to_thread_id(XrCoroutine *coro);
-
-// ============================================================================
-// VM Hook Interface
-// ============================================================================
-
-// Notify controller that VM stopped
-XR_FUNC void xdap_on_stopped(XdapController *ctrl, XdapStopReason reason,
-                      XrCoroutine *coro, const char *path, int line);
 
 #endif // XDAP_CONTROLLER_H

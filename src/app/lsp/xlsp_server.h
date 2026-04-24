@@ -80,9 +80,6 @@ struct XrLspDocument {
     struct XrLspDocument *next;
 };
 
-// Forward declaration
-typedef struct XrLspWorkspaceIndex XrLspWorkspaceIndex;
-
 // Document hash table bucket
 typedef struct XrLspDocBucket {
     XrLspDocument *doc;
@@ -330,5 +327,22 @@ XR_FUNC void xlsp_progress_end(XrLspServer *server, const char *token, const cha
 // Logging
 XR_FUNC void lsp_log(const char *fmt, ...);
 XR_FUNC void xlsp_set_log_server(XrLspServer *server);
+
+// ============================================================================
+// Internal helpers (shared between handler files, not public API)
+// ============================================================================
+
+// JSON-RPC transport helpers
+XR_FUNC void xlsp_send_notification(XrLspServer *server, const char *method,
+                                     XrJsonValue *params);
+XR_FUNC void xlsp_send_request(XrLspServer *server, const char *method,
+                                XrJsonValue *params);
+
+// URI/path conversion (defined as static inline in xlsp_utils.h)
+
+// Diagnostics scheduling
+XR_FUNC void xlsp_publish_diagnostics(XrLspServer *server, XrLspDocument *doc);
+XR_FUNC void xlsp_schedule_diagnostics(XrLspServer *server, XrLspDocument *doc);
+XR_FUNC void xlsp_clear_all_diagnostics(XrLspServer *server);
 
 #endif // XLSP_SERVER_H

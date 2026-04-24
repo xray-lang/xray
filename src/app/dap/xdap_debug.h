@@ -25,37 +25,17 @@ typedef struct XrProto XrProto;
 // Value type
 #include "../../runtime/value/xvalue.h"
 
+// XrDebugAction is defined in xray_debug_hooks.h
+
 // ============================================================================
-// Debug Hook Types
+// Resume Result (replaces bool still_running)
 // ============================================================================
 
 typedef enum {
-    XR_DBG_HOOK_NONE = 0,
-    XR_DBG_HOOK_LINE,       // New line reached
-    XR_DBG_HOOK_CALL,       // Function call
-    XR_DBG_HOOK_RETURN,     // Function return
-    XR_DBG_HOOK_COUNT       // Instruction count (for stepping)
-} XrDebugHookType;
-
-// XrDebugAction is defined in xray_debug_hooks.h
-
-// Debug event info passed to hook
-typedef struct XrDebugEvent {
-    XrDebugHookType type;
-    const char *source_path;    // Current file path
-    int line;                   // Current line number
-    int column;                 // Current column (if available)
-    XrClosure *closure;         // Current function
-    XrBcCallFrame *frame;       // Current call frame
-    int frame_depth;            // Call stack depth
-} XrDebugEvent;
-
-// Debug hook callback type
-typedef XrDebugAction (*XrDebugHookFn)(XrayIsolate *isolate, XrDebugEvent *event, void *userdata);
-
-// ============================================================================
-// Debug State
-// ============================================================================
+    XDAP_RESUME_STOPPED,     // Debug break — send stopped event
+    XDAP_RESUME_TERMINATED,  // Program ended normally
+    XDAP_RESUME_ERROR,       // Runtime error
+} XdapResumeResult;
 
 // ============================================================================
 // Variable Reference Types (for object expansion)
@@ -72,6 +52,7 @@ typedef enum {
     XDAP_REF_INVALID = 0,
     XDAP_REF_SCOPE_LOCALS,   // Local variables scope
     XDAP_REF_SCOPE_GLOBALS,  // Global variables scope
+    XDAP_REF_SCOPE_UPVALUES, // Closure upvalues scope
     XDAP_REF_ARRAY,          // Array elements
     XDAP_REF_MAP,            // Map key-value pairs
     XDAP_REF_OBJECT,         // Object/Json properties
@@ -116,10 +97,6 @@ typedef struct XrBpHashTable {
 } XrBpHashTable;
 
 typedef struct XrDebugState {
-    // Hook callback
-    XrDebugHookFn hook;
-    void *hook_userdata;
-
     // Execution control
     bool enabled;               // Debug mode enabled
     XrDebugAction current_action;
@@ -229,7 +206,7 @@ XR_FUNC void xr_debug_continue(XrayIsolate *isolate);
 XR_FUNC void xr_debug_step_in(XrayIsolate *isolate);
 XR_FUNC void xr_debug_step_out(XrayIsolate *isolate);
 XR_FUNC void xr_debug_step_over(XrayIsolate *isolate);
-XR_FUNC bool xr_debug_resume_execution(XrayIsolate *isolate);
+XR_FUNC XdapResumeResult xr_debug_resume_execution(XrayIsolate *isolate);
 
 // Stack inspection
 XR_FUNC int xr_debug_get_stack_depth(XrayIsolate *isolate);

@@ -135,7 +135,6 @@ bool xdap_controller_launch(XdapController *ctrl, const char *program,
 
     // Set initial state based on stop_on_entry
     if (stop_on_entry) {
-        ctrl->step_mode = XDAP_CMD_STEP_IN;
         xr_debug_step_in(ctrl->isolate);  // Set debug action so on_line hook breaks
     }
 
@@ -146,7 +145,6 @@ bool xdap_controller_launch(XdapController *ctrl, const char *program,
 
 void xdap_controller_continue(XdapController *ctrl) {
     if (!ctrl) return;
-    ctrl->step_mode = XDAP_CMD_NONE;
     if (ctrl->isolate) {
         xr_debug_continue(ctrl->isolate);
         xr_debug_clear_var_refs(ctrl->isolate);
@@ -155,7 +153,6 @@ void xdap_controller_continue(XdapController *ctrl) {
 
 void xdap_controller_step_in(XdapController *ctrl) {
     if (!ctrl) return;
-    ctrl->step_mode = XDAP_CMD_STEP_IN;
     if (ctrl->isolate) {
         xr_debug_step_in(ctrl->isolate);
         xr_debug_clear_var_refs(ctrl->isolate);
@@ -164,7 +161,6 @@ void xdap_controller_step_in(XdapController *ctrl) {
 
 void xdap_controller_step_out(XdapController *ctrl) {
     if (!ctrl) return;
-    ctrl->step_mode = XDAP_CMD_STEP_OUT;
     if (ctrl->isolate) {
         xr_debug_step_out(ctrl->isolate);
         xr_debug_clear_var_refs(ctrl->isolate);
@@ -173,7 +169,6 @@ void xdap_controller_step_out(XdapController *ctrl) {
 
 void xdap_controller_step_over(XdapController *ctrl) {
     if (!ctrl) return;
-    ctrl->step_mode = XDAP_CMD_STEP_OVER;
     if (ctrl->isolate) {
         xr_debug_step_over(ctrl->isolate);
         xr_debug_clear_var_refs(ctrl->isolate);
@@ -240,9 +235,6 @@ bool xdap_controller_restart(XdapController *ctrl) {
     ctrl->program_launched  = false;
     ctrl->stopped_coro      = NULL;
     ctrl->stopped_coro_id   = 0;
-    ctrl->stopped_path      = NULL;
-    ctrl->stopped_line      = 0;
-    ctrl->step_mode         = XDAP_CMD_NONE;
     atomic_store(&ctrl->cmd_pending, false);
 
     // 3. Build the new isolate. At this point the old one is still
@@ -336,10 +328,8 @@ XrCoroutine *xdap_find_coro(XdapController *ctrl, int thread_id) {
         return xr_isolate_get_main_coro(ctrl->isolate);
     }
 
-    // Fall back to stopped coro or main coro (log for diagnostics)
-    fprintf(stderr, "[DAP] xdap_find_coro: thread_id=%d not found, falling back\n", thread_id);
-    if (ctrl->stopped_coro) return ctrl->stopped_coro;
-    return xr_isolate_get_main_coro(ctrl->isolate);
+    // Not found — return NULL, let caller handle the error
+    return NULL;
 }
 
 int xdap_coro_to_thread_id(XrCoroutine *coro) {
@@ -347,20 +337,4 @@ int xdap_coro_to_thread_id(XrCoroutine *coro) {
     return coro->id > 0 ? coro->id : 1;
 }
 
-// ============================================================================
-// VM Hook Interface
-// ============================================================================
-
-void xdap_on_stopped(XdapController *ctrl, XdapStopReason reason,
-                      XrCoroutine *coro, const char *path, int line) {
-    if (!ctrl) return;
-
-    ctrl->vm_state = XDAP_VM_PAUSED;
-    ctrl->stop_reason = reason;
-    ctrl->stopped_coro = coro;
-    ctrl->stopped_coro_id = xdap_coro_to_thread_id(coro);
-    ctrl->stopped_path = path;
-    ctrl->stopped_line = line;
-    ctrl->step_mode = XDAP_CMD_NONE;
-}
 

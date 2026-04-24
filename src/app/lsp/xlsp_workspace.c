@@ -5,7 +5,7 @@
  * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
  * Licensed under the MIT License
  *
- * xlsp_workspace.c - Workspace indexing implementation
+ * xlsp_workspace.c - Workspace background indexing and file scanning
  */
 
 #include "xlsp_workspace.h"
@@ -15,7 +15,6 @@
 #include "../../frontend/parser/xast_nodes.h"
 #include "../../frontend/parser/xast_api.h"
 #include "../../frontend/analyzer/xanalyzer.h"
-#include "../../runtime/value/xtype.h"
 #include "../../runtime/xisolate_api.h"
 #include "../../runtime/value/xtype_pool.h"
 #include "../../frontend/parser/xparse.h"
@@ -26,476 +25,6 @@
 #include "../../base/xmalloc.h"
 
 // lsp_log declared in xlsp_server.h (included via xlsp_workspace.h)
-
-#define WORKSPACE_TABLE_SIZE 256
-#define INITIAL_FILE_CAPACITY 16
-
-#include "../../base/xhash.h"
-
-// Hash function
-static uint32_t hash_name(const char *name) {
-    return xr_hash_bytes(name, strlen(name));
-}
-
-// Create workspace index
-XrLspWorkspaceIndex *xlsp_workspace_new(void) {
-    XrLspWorkspaceIndex *idx = xr_calloc(1, sizeof(XrLspWorkspaceIndex));
-    if (!idx) return NULL;
-
-    idx->table_size = WORKSPACE_TABLE_SIZE;
-    idx->symbols = xr_calloc(WORKSPACE_TABLE_SIZE, sizeof(XrLspWorkspaceSymbol*));
-    if (!idx->symbols) {
-        xr_free(idx);
-        return NULL;
-    }
-
-    idx->file_capacity = INITIAL_FILE_CAPACITY;
-    idx->indexed_files = xr_calloc(INITIAL_FILE_CAPACITY, sizeof(char*));
-    if (!idx->indexed_files) {
-        xr_free(idx->symbols);
-        xr_free(idx);
-        return NULL;
-    }
-
-    return idx;
-}
-
-// Free symbol references
-static void free_refs(XrLspSymbolRef *ref) {
-    while (ref) {
-        XrLspSymbolRef *next = ref->next;
-        xr_free(ref->loc.uri);
-        xr_free(ref);
-        ref = next;
-    }
-}
-
-// Free workspace symbol
-static void free_workspace_symbol(XrLspWorkspaceSymbol *sym) {
-    if (!sym) return;
-    xr_free(sym->name);
-    xr_free(sym->def_loc.uri);
-    free_refs(sym->refs);
-    xr_free(sym);
-}
-
-// Free workspace index
-void xlsp_workspace_free(XrLspWorkspaceIndex *idx) {
-    if (!idx) return;
-
-    // Free symbols
-    for (int i = 0; i < idx->table_size; i++) {
-        XrLspWorkspaceSymbol *sym = idx->symbols[i];
-        while (sym) {
-            XrLspWorkspaceSymbol *next = sym->next;
-            free_workspace_symbol(sym);
-            sym = next;
-        }
-    }
-    xr_free(idx->symbols);
-
-    // Free file list
-    for (int i = 0; i < idx->file_count; i++) {
-        xr_free(idx->indexed_files[i]);
-    }
-    xr_free(idx->indexed_files);
-
-    xr_free(idx);
-}
-
-// Add or update symbol in index
-static XrLspWorkspaceSymbol *add_symbol(XrLspWorkspaceIndex *idx,
-                                         const char *name,
-                                         const char *uri,
-                                         int line, int column) {
-    uint32_t hash = hash_name(name) % idx->table_size;
-
-    // Check if symbol already exists
-    XrLspWorkspaceSymbol *sym = idx->symbols[hash];
-    while (sym) {
-        if (strcmp(sym->name, name) == 0) {
-            return sym;  // Already exists
-        }
-        sym = sym->next;
-    }
-
-    // Create new symbol
-    sym = xr_calloc(1, sizeof(XrLspWorkspaceSymbol));
-    if (!sym) return NULL;
-
-    sym->name = xr_strdup(name);
-    if (!sym->name) {
-        xr_free(sym);
-        return NULL;
-    }
-
-    sym->def_loc.uri = xr_strdup(uri);
-    if (!sym->def_loc.uri) {
-        xr_free(sym->name);
-        xr_free(sym);
-        return NULL;
-    }
-
-    sym->def_loc.line = line;
-    sym->def_loc.column = column;
-
-    // Add to hash chain
-    sym->next = idx->symbols[hash];
-    idx->symbols[hash] = sym;
-    idx->symbol_count++;
-
-    return sym;
-}
-
-// Add reference to symbol
-static void add_reference(XrLspWorkspaceSymbol *sym, const char *uri,
-                          int line, int column, bool is_def, bool is_write) {
-    if (!sym || !uri) return;
-
-    XrLspSymbolRef *ref = xr_calloc(1, sizeof(XrLspSymbolRef));
-    if (!ref) return;
-
-    ref->loc.uri = xr_strdup(uri);
-    if (!ref->loc.uri) {
-        xr_free(ref);
-        return;
-    }
-
-    ref->loc.line = line;
-    ref->loc.column = column;
-    ref->is_definition = is_def;
-    ref->is_write = is_write;
-
-    ref->next = sym->refs;
-    sym->refs = ref;
-    sym->ref_count++;
-}
-
-// Add file to indexed list
-static void add_indexed_file(XrLspWorkspaceIndex *idx, const char *uri) {
-    if (!idx || !uri) return;
-
-    if (idx->file_count >= idx->file_capacity) {
-        int new_capacity = idx->file_capacity * 2;
-        // Overflow check
-        if (new_capacity < idx->file_capacity) return;
-
-        char **new_files = xr_realloc(idx->indexed_files, new_capacity * sizeof(char*));
-        if (!new_files) return;  // Keep old array on failure
-
-        idx->indexed_files = new_files;
-        idx->file_capacity = new_capacity;
-    }
-
-    char *uri_copy = xr_strdup(uri);
-    if (!uri_copy) return;
-
-    idx->indexed_files[idx->file_count++] = uri_copy;
-}
-
-// Collect exported symbols from AST
-static void collect_exports(XrLspWorkspaceIndex *idx, XrLspDocument *doc,
-                            AstNode *node) {
-    if (!node) return;
-
-    switch (node->type) {
-        case AST_PROGRAM: {
-            int count = node->as.program.count;
-            for (int i = 0; i < count; i++) {
-                collect_exports(idx, doc, node->as.program.statements[i]);
-            }
-            break;
-        }
-        case AST_EXPORT_STMT: {
-            AstNode *decl = node->as.export_stmt.declaration;
-            if (decl) {
-                collect_exports(idx, doc, decl);
-            }
-            break;
-        }
-        case AST_VAR_DECL: {
-            const char *name = node->as.var_decl.name;
-            XrLspWorkspaceSymbol *sym = add_symbol(idx, name, doc->uri,
-                                                    node->line, 0);
-            sym->is_exported = true;
-            sym->type = node->as.var_decl.type_annotation;
-            add_reference(sym, doc->uri, node->line, 0, true, true);
-            break;
-        }
-        case AST_FUNCTION_DECL: {
-            const char *name = node->as.function_decl.name;
-            if (name) {
-                XrLspWorkspaceSymbol *sym = add_symbol(idx, name, doc->uri,
-                                                        node->line, 0);
-                sym->is_exported = true;
-                sym->is_function = true;
-                add_reference(sym, doc->uri, node->line, 0, true, false);
-            }
-            break;
-        }
-        case AST_CLASS_DECL:
-        case AST_STRUCT_DECL: {
-            const char *name = node->as.class_decl.name;
-            if (name) {
-                XrLspWorkspaceSymbol *sym = add_symbol(idx, name, doc->uri,
-                                                        node->line, 0);
-                sym->is_exported = true;
-                sym->is_class = true;
-                add_reference(sym, doc->uri, node->line, 0, true, false);
-            }
-            break;
-        }
-        default:
-            break;
-    }
-}
-
-// Collect variable references from AST
-static void collect_references(XrLspWorkspaceIndex *idx, XrLspDocument *doc,
-                                AstNode *node) {
-    if (!node) return;
-
-    switch (node->type) {
-        case AST_PROGRAM: {
-            int count = node->as.program.count;
-            for (int i = 0; i < count; i++) {
-                collect_references(idx, doc, node->as.program.statements[i]);
-            }
-            break;
-        }
-        case AST_BLOCK: {
-            int count = node->as.block.count;
-            for (int i = 0; i < count; i++) {
-                collect_references(idx, doc, node->as.block.statements[i]);
-            }
-            break;
-        }
-        case AST_VARIABLE: {
-            const char *name = node->as.variable.name;
-            // Find existing symbol
-            uint32_t hash = hash_name(name) % idx->table_size;
-            XrLspWorkspaceSymbol *sym = idx->symbols[hash];
-            while (sym) {
-                if (strcmp(sym->name, name) == 0) {
-                    add_reference(sym, doc->uri, node->line, 0, false, false);
-                    break;
-                }
-                sym = sym->next;
-            }
-            break;
-        }
-        case AST_ASSIGNMENT: {
-            const char *name = node->as.assignment.name;
-            uint32_t hash = hash_name(name) % idx->table_size;
-            XrLspWorkspaceSymbol *sym = idx->symbols[hash];
-            while (sym) {
-                if (strcmp(sym->name, name) == 0) {
-                    add_reference(sym, doc->uri, node->line, 0, false, true);
-                    break;
-                }
-                sym = sym->next;
-            }
-            collect_references(idx, doc, node->as.assignment.value);
-            break;
-        }
-        case AST_CALL_EXPR: {
-            collect_references(idx, doc, node->as.call_expr.callee);
-            for (int i = 0; i < node->as.call_expr.arg_count; i++) {
-                collect_references(idx, doc, node->as.call_expr.arguments[i]);
-            }
-            break;
-        }
-        case AST_IF_STMT: {
-            collect_references(idx, doc, node->as.if_stmt.condition);
-            collect_references(idx, doc, node->as.if_stmt.then_branch);
-            collect_references(idx, doc, node->as.if_stmt.else_branch);
-            break;
-        }
-        case AST_WHILE_STMT: {
-            collect_references(idx, doc, node->as.while_stmt.condition);
-            collect_references(idx, doc, node->as.while_stmt.body);
-            break;
-        }
-        case AST_FOR_STMT: {
-            collect_references(idx, doc, node->as.for_stmt.initializer);
-            collect_references(idx, doc, node->as.for_stmt.condition);
-            collect_references(idx, doc, node->as.for_stmt.increment);
-            collect_references(idx, doc, node->as.for_stmt.body);
-            break;
-        }
-        case AST_FUNCTION_DECL: {
-            collect_references(idx, doc, node->as.function_decl.body);
-            break;
-        }
-        case AST_RETURN_STMT: {
-            for (int i = 0; i < node->as.return_stmt.value_count; i++) {
-                collect_references(idx, doc, node->as.return_stmt.values[i]);
-            }
-            break;
-        }
-        default:
-            break;
-    }
-}
-
-// Index a document
-void xlsp_workspace_index_document(XrLspWorkspaceIndex *idx, XrLspDocument *doc) {
-    if (!idx || !doc || !doc->ast) return;
-
-    // Remove old index for this file if exists
-    xlsp_workspace_remove_document(idx, doc->uri);
-
-    // Collect exported symbols (definitions)
-    collect_exports(idx, doc, doc->ast);
-
-    // Collect references
-    collect_references(idx, doc, doc->ast);
-
-    // Add to indexed files
-    add_indexed_file(idx, doc->uri);
-}
-
-// Remove document from index
-void xlsp_workspace_remove_document(XrLspWorkspaceIndex *idx, const char *uri) {
-    if (!idx || !uri) return;
-
-    // Remove from file list
-    for (int i = 0; i < idx->file_count; i++) {
-        if (strcmp(idx->indexed_files[i], uri) == 0) {
-            xr_free(idx->indexed_files[i]);
-            memmove(&idx->indexed_files[i], &idx->indexed_files[i+1],
-                    (idx->file_count - i - 1) * sizeof(char*));
-            idx->file_count--;
-            break;
-        }
-    }
-
-    // Remove symbols defined in this file
-    for (int i = 0; i < idx->table_size; i++) {
-        XrLspWorkspaceSymbol **pp = &idx->symbols[i];
-        while (*pp) {
-            XrLspWorkspaceSymbol *sym = *pp;
-            if (sym->def_loc.uri && strcmp(sym->def_loc.uri, uri) == 0) {
-                *pp = sym->next;
-                free_workspace_symbol(sym);
-                idx->symbol_count--;
-            } else {
-                // Remove references from this file
-                XrLspSymbolRef **rp = &sym->refs;
-                while (*rp) {
-                    XrLspSymbolRef *ref = *rp;
-                    if (ref->loc.uri && strcmp(ref->loc.uri, uri) == 0) {
-                        *rp = ref->next;
-                        xr_free(ref->loc.uri);
-                        xr_free(ref);
-                        sym->ref_count--;
-                    } else {
-                        rp = &(*rp)->next;
-                    }
-                }
-                pp = &(*pp)->next;
-            }
-        }
-    }
-}
-
-// Find symbol definition
-XrLspWorkspaceSymbol *xlsp_workspace_find_definition(XrLspWorkspaceIndex *idx,
-                                                       const char *name) {
-    if (!idx || !name) return NULL;
-
-    uint32_t hash = hash_name(name) % idx->table_size;
-    XrLspWorkspaceSymbol *sym = idx->symbols[hash];
-    while (sym) {
-        if (strcmp(sym->name, name) == 0) {
-            return sym;
-        }
-        sym = sym->next;
-    }
-    return NULL;
-}
-
-// Find all references
-XrLspSymbolRef *xlsp_workspace_find_references(XrLspWorkspaceIndex *idx,
-                                                 const char *name,
-                                                 int *count) {
-    *count = 0;
-    XrLspWorkspaceSymbol *sym = xlsp_workspace_find_definition(idx, name);
-    if (!sym) return NULL;
-
-    *count = sym->ref_count;
-    return sym->refs;
-}
-
-// Find symbol at position
-XrLspWorkspaceSymbol *xlsp_workspace_symbol_at(XrLspWorkspaceIndex *idx,
-                                                 const char *uri,
-                                                 int line, int column) {
-    if (!idx || !uri) return NULL;
-
-    XrLspWorkspaceSymbol *best_match = NULL;
-    int best_distance = INT_MAX;
-
-    // Search all symbols for one defined at this location
-    for (int i = 0; i < idx->table_size; i++) {
-        XrLspWorkspaceSymbol *sym = idx->symbols[i];
-        while (sym) {
-            if (sym->def_loc.uri && strcmp(sym->def_loc.uri, uri) == 0 &&
-                sym->def_loc.line == line) {
-                // Check column range if available
-                int start_col = sym->def_loc.column;
-                int end_col = sym->def_loc.end_column;
-
-                // If column info is available (end_column > 0), use precise matching
-                if (end_col > 0 && column >= 0) {
-                    if (column >= start_col && column <= end_col) {
-                        // Exact match within symbol range
-                        return sym;
-                    }
-                    // Calculate distance from symbol for fallback
-                    int distance = (column < start_col) ? (start_col - column) : (column - end_col);
-                    if (distance < best_distance) {
-                        best_distance = distance;
-                        best_match = sym;
-                    }
-                } else {
-                    // No column info, fall back to line-only match
-                    if (!best_match) {
-                        best_match = sym;
-                    }
-                }
-            }
-            sym = sym->next;
-        }
-    }
-
-    return best_match;
-}
-
-// Get all workspace symbols
-XrLspWorkspaceSymbol **xlsp_workspace_get_all_symbols(XrLspWorkspaceIndex *idx,
-                                                        int *count) {
-    if (!idx || idx->symbol_count == 0) {
-        *count = 0;
-        return NULL;
-    }
-
-    XrLspWorkspaceSymbol **result = xr_calloc(idx->symbol_count,
-                                            sizeof(XrLspWorkspaceSymbol*));
-    int n = 0;
-
-    for (int i = 0; i < idx->table_size; i++) {
-        XrLspWorkspaceSymbol *sym = idx->symbols[i];
-        while (sym && n < idx->symbol_count) {
-            result[n++] = sym;
-            sym = sym->next;
-        }
-    }
-
-    *count = n;
-    return result;
-}
-
 // ============================================================================
 // Background Indexing
 // ============================================================================
@@ -905,7 +434,32 @@ int xlsp_workspace_get_index_notify_fd(XrLspServer *server) {
 // Start background workspace indexing (using parallel index pool)
 void xlsp_workspace_start_background_index(XrLspServer *server, const char *root_path) {
     if (!server || !root_path) return;
-    if (server->indexing_in_progress) return;
+
+    // If indexing is already running, scan files and enqueue them into the
+    // pending analysis queue so they get processed after the current batch.
+    if (server->indexing_in_progress) {
+        int capacity = 64;
+        char **files = xr_malloc(capacity * sizeof(char*));
+        if (!files) return;
+        int file_count = 0;
+
+        find_xr_files_with_config(root_path, &files, &file_count, &capacity,
+                                   &server->config);
+
+        for (int i = 0; i < file_count; i++) {
+            char uri[XLSP_MAX_PATH + 8];
+            snprintf(uri, sizeof(uri), "file://%s", files[i]);
+            xlsp_enqueue_analysis(server, uri, files[i]);
+            xr_free(files[i]);
+        }
+        xr_free(files);
+
+        if (file_count > 0) {
+            lsp_log("[IndexPool] Queued %d files from %s (indexing in progress)",
+                    file_count, root_path);
+        }
+        return;
+    }
 
     // Create index pool if not exists
     if (!server->index_pool) {
