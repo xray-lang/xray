@@ -499,7 +499,8 @@ bool xir_translate_misc_ops(XirBuilder *b, XirBlock **cur_blk,
                 XrType *recv_type = builder_find_reg_type(b, a + 1);
                 const char *cname = recv_type ? xr_type_get_class_name(recv_type) : NULL;
                 XrClass *klass = NULL;
-                if (cname && recv_type->kind == XR_KIND_INSTANCE)
+                if (cname && (recv_type->kind == XR_KIND_INSTANCE ||
+                             recv_type->kind == XR_KIND_CLASS))
                     klass = xr_class_lookup_by_name(b->isolate, cname);
                 if (klass && method_idx < klass->method_count) {
                     XrMethod *method = &klass->methods[method_idx];

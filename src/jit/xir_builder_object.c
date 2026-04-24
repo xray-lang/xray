@@ -300,20 +300,26 @@ bool xir_translate_object_ops(XirBuilder *b, XirBlock **cur_blk,
                 XrType *recv_type = builder_find_reg_type(b, rb);
                 // Fallback: check vreg's xrtype set by constructor CALL_KNOWN
                 // (cross-module class instances where inst_types misses)
-                if (!recv_type || recv_type->kind != XR_KIND_INSTANCE) {
+                // Accept both XR_KIND_INSTANCE (from aot_preregister) and
+                // XR_KIND_CLASS (from parser type annotations) — they share
+                // the same instance.class_name layout.
+                #define IS_CLASS_OR_INSTANCE(t) \
+                    ((t)->kind == XR_KIND_INSTANCE || (t)->kind == XR_KIND_CLASS)
+                if (!recv_type || !IS_CLASS_OR_INSTANCE(recv_type)) {
                     XirVReg *recv_v = builder_vreg_for_slot(b, rb);
                     if (recv_v && recv_v->xrtype &&
-                        recv_v->xrtype->kind == XR_KIND_INSTANCE)
+                        IS_CLASS_OR_INSTANCE(recv_v->xrtype))
                         recv_type = recv_v->xrtype;
                 }
                 // Fallback: if receiver is 'this' (param 0) with known class
-                if (!recv_type || recv_type->kind != XR_KIND_INSTANCE) {
+                if (!recv_type || !IS_CLASS_OR_INSTANCE(recv_type)) {
                     XrType *this_type = builder_find_reg_type(b, 0);
-                    if (this_type && this_type->kind == XR_KIND_INSTANCE)
+                    if (this_type && IS_CLASS_OR_INSTANCE(this_type))
                         recv_type = this_type;
                 }
                 const char *cname = recv_type ? xr_type_get_class_name(recv_type) : NULL;
-                if (cname && recv_type->kind == XR_KIND_INSTANCE) {
+                if (cname && IS_CLASS_OR_INSTANCE(recv_type)) {
+                #undef IS_CLASS_OR_INSTANCE
                     XrClass *klass = xr_class_lookup_by_name(b->isolate, cname);
                     if (klass) {
                         int fi = xr_class_lookup_field(klass, (int)sym);
@@ -339,6 +345,23 @@ bool xir_translate_object_ops(XirBuilder *b, XirBlock **cur_blk,
                             else
                                 builder_tag_vreg(b, fv, VTAG_TAGGED, 0);
                             builder_set_slot(b, a, fv);
+                            b->ops_translated++;
+                            return true;
+                        }
+                        // Field not found — resolve as method.
+                        // Emit a null placeholder; attach method's XrProto so
+                        // the subsequent OP_CALL emits CALL_KNOWN (direct AOT
+                        // dispatch) instead of CALL_DIRECT (closure indirect).
+                        XrMethod *method = xr_class_lookup_method(klass, (int)sym);
+                        if (method && method->type == XMETHOD_CLOSURE &&
+                            method->as.closure && method->as.closure->proto) {
+                            XirRef null_c = xir_const_ptr(b->func, NULL);
+                            XirRef ph = xir_emit_unary(b->func, blk,
+                                XIR_CONST_PTR, XR_REP_PTR, null_c);
+                            builder_tag_vreg(b, ph, VTAG_TAGGED, 0);
+                            builder_set_slot(b, a, ph);
+                            XirVReg *mv = builder_vreg_for_slot(b, a);
+                            if (mv) mv->callee_proto = method->as.closure->proto;
                             b->ops_translated++;
                             return true;
                         }
