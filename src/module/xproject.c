@@ -10,17 +10,10 @@
 
 #include "xproject.h"
 #include "../base/xchecks.h"
-#include "../runtime/xisolate_api.h"
 #include "../base/xmalloc.h"
 #include "../base/xfileio.h"
 #include "../base/xhashmap.h"
-#if defined(XR_HAS_DATA_FORMATS) || !defined(XR_STDLIB_MODULAR)
-#include "../../stdlib/toml/toml.h"
-#endif
-#include "../runtime/object/xmap.h"
-#include "../runtime/object/xarray.h"
-#include "../runtime/object/xstring.h"
-#include "../runtime/object/xiterator.h"
+#include "../base/xtoml.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -47,23 +40,17 @@ static char* join_path(const char *dir, const char *file) {
     return result;
 }
 
-static char* get_string_from_map(XrayIsolate *isolate, XrMap *map, const char *key) {
-    XrString *key_str = xr_string_intern(isolate, key, strlen(key), 0);
-    bool found = false;
-    XrValue val = xr_map_get(map, xr_string_value(key_str), &found);
-
-    if (found && XR_IS_STRING(val)) {
-        XrString *str = (XrString*)XR_TO_PTR(val);
-        return xr_strdup(str->data);
-    }
-
-    return NULL;
+/* Get a strdup'd string from a TOML table by key, or NULL. */
+static char *get_toml_str(XrTomlValue *tbl, const char *key) {
+    const char *s = xtoml_get_string(tbl, key);
+    return s ? xr_strdup(s) : NULL;
 }
 
 /* ========== Project Loading ========== */
 
 XrProject* xr_project_load(XrayIsolate *isolate, const char *project_root) {
-    if (!isolate || !project_root) return NULL;
+    (void)isolate; /* no longer needed — base xtoml parser is pure C */
+    if (!project_root) return NULL;
 
     char *toml_path = join_path(project_root, "xray.toml");
     if (!toml_path) return NULL;
@@ -72,103 +59,63 @@ XrProject* xr_project_load(XrayIsolate *isolate, const char *project_root) {
     char *content = xr_file_read_all(toml_path, "r", &content_size);
     xr_free(toml_path);
     if (!content) return NULL;
-    long size = (long)content_size;
 
-#if !defined(XR_HAS_DATA_FORMATS) && defined(XR_STDLIB_MODULAR)
-    // TOML parsing not available in minimal build
+    XrTomlValue *root = xtoml_parse(content, content_size);
     xr_free(content);
-    return NULL;
-#else
-    XrValue parsed = xr_toml_parse(isolate, content, size);
-    xr_free(content);
+    if (!root) return NULL;
 
-    if (XR_IS_NULL(parsed) || !XR_IS_MAP(parsed)) {
-        return NULL;
-    }
-
-    XrMap *root_map = (XrMap*)XR_TO_PTR(parsed);
-
-    XrProject *project = (XrProject*)xr_malloc(sizeof(XrProject));
-    memset(project, 0, sizeof(XrProject));
+    XrProject *project = (XrProject*)xr_calloc(1, sizeof(XrProject));
+    if (!project) { xtoml_free(root); return NULL; }
 
     project->root = xr_strdup(project_root);
     project->dependencies = xr_hashmap_new();
 
-    XrString *project_key = xr_string_intern(isolate, "project", 7, 0);
-    XrString *package_key = xr_string_intern(isolate, "package", 7, 0);
-
-    bool found = false;
-    XrValue section = xr_map_get(root_map, xr_string_value(project_key), &found);
-    if (!found) {
-        section = xr_map_get(root_map, xr_string_value(package_key), &found);
-        if (found) {
-            project->is_package = true;
-        }
+    // Try [project], then [package]
+    XrTomlValue *section = xtoml_get_table(root, "project");
+    if (!section) {
+        section = xtoml_get_table(root, "package");
+        if (section) project->is_package = true;
     }
 
-    if (found && XR_IS_MAP(section)) {
-        XrMap *section_map = (XrMap*)XR_TO_PTR(section);
-        project->name = get_string_from_map(isolate, section_map, "name");
-        project->main = get_string_from_map(isolate, section_map, "main");
+    if (section) {
+        project->name = get_toml_str(section, "name");
+        project->main = get_toml_str(section, "main");
         if (project->is_package) {
-            project->version = get_string_from_map(isolate, section_map, "version");
-            project->description = get_string_from_map(isolate, section_map, "description");
-            project->license = get_string_from_map(isolate, section_map, "license");
+            project->version = get_toml_str(section, "version");
+            project->description = get_toml_str(section, "description");
+            project->license = get_toml_str(section, "license");
         }
     }
 
     // Parse [dependencies] section
-    XrString *deps_key = xr_string_intern(isolate, "dependencies", 12, 0);
-    XrValue deps_section = xr_map_get(root_map, xr_string_value(deps_key), &found);
+    XrTomlValue *deps = xtoml_get_table(root, "dependencies");
+    if (deps) {
+        for (int i = 0; i < deps->as.table.count; i++) {
+            XrTomlMember *m = &deps->as.table.members[i];
+            XR_DCHECK(m->key != NULL, "TOML member key must not be NULL");
 
-    if (found && XR_IS_MAP(deps_section)) {
-        XrMap *deps_map = (XrMap*)XR_TO_PTR(deps_section);
+            XrDependency *dep = (XrDependency*)xr_calloc(1, sizeof(XrDependency));
+            if (!dep) continue;
+            dep->name = xr_strdup(m->key);
 
-        // Iterate over all dependencies using entries iterator
-        XrIterator *iter = xr_map_entries_iterator(isolate, deps_map);
-        if (iter) {
-            while (xr_iterator_has_next(iter)) {
-                XrValue entry = xr_iterator_next(iter);
-                if (!XR_IS_ARRAY(entry)) continue;
-
-                XrArray *pair = (XrArray*)XR_TO_PTR(entry);
-                if (pair->length < 2) continue;
-
-                XrValue key_val = ((XrValue*)pair->data)[0];
-                XrValue val = ((XrValue*)pair->data)[1];
-
-                if (!XR_IS_STRING(key_val)) continue;
-                XrString *key_str = (XrString*)XR_TO_PTR(key_val);
-                const char *dep_name = key_str->data;
-
-                XrDependency *dep = (XrDependency*)xr_malloc(sizeof(XrDependency));
-                if (!dep) continue;
-                memset(dep, 0, sizeof(XrDependency));
-
-                dep->name = xr_strdup(dep_name);
-
-                if (XR_IS_STRING(val)) {
-                    // Simple version string: "^1.0.0"
-                    XrString *ver_str = (XrString*)XR_TO_PTR(val);
-                    dep->version = xr_strdup(ver_str->data);
-                    dep->is_local = false;
-                } else if (XR_IS_MAP(val)) {
-                    // Complex dependency: { version = "^1.0.0", path = "./local" }
-                    XrMap *dep_map = (XrMap*)XR_TO_PTR(val);
-                    dep->version = get_string_from_map(isolate, dep_map, "version");
-                    dep->path = get_string_from_map(isolate, dep_map, "path");
-                    dep->is_local = (dep->path != NULL);
-                }
-
-                xr_hashmap_set(project->dependencies, dep_name, dep);
+            if (m->value->type == XR_TOML_STRING) {
+                // Simple version string: "^1.0.0"
+                dep->version = xr_strdup(m->value->as.string);
+                dep->is_local = false;
+            } else if (m->value->type == XR_TOML_TABLE) {
+                // Complex dependency: { version = "^1.0.0", path = "./local" }
+                dep->version = get_toml_str(m->value, "version");
+                dep->path = get_toml_str(m->value, "path");
+                dep->is_local = (dep->path != NULL);
             }
+
+            xr_hashmap_set(project->dependencies, m->key, dep);
         }
     }
 
     project->initialized = true;
-
+    xtoml_free(root);
     return project;
-#endif
 }
 
 /*
