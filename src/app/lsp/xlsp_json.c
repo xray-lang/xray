@@ -586,6 +586,19 @@ void xlsp_json_array_push(XrJsonValue *arr, XrJsonValue *value) {
     arr->as.array.items[arr->as.array.count++] = value;
 }
 
+void xlsp_json_array_truncate(XrJsonValue *arr, int max_len) {
+    if (!arr || arr->type != XR_JSON_ARRAY) return;
+    if (max_len < 0) max_len = 0;
+    if (arr->as.array.count <= max_len) return;
+
+    // Free excess items
+    for (int i = max_len; i < arr->as.array.count; i++) {
+        xlsp_json_free(arr->as.array.items[i]);
+        arr->as.array.items[i] = NULL;
+    }
+    arr->as.array.count = max_len;
+}
+
 void xlsp_json_object_set(XrJsonValue *obj, const char *key, XrJsonValue *value) {
     if (!obj || obj->type != XR_JSON_OBJECT || !key || !value) return;
 

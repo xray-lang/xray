@@ -2705,8 +2705,12 @@ XrJsonValue *xlsp_analyze_format(XrLspDocument *doc) {
         return edits;
     }
 
-    // Format AST
+    // Format AST using server-configured tab size / spaces
     XrFmtConfig config = xfmt_default_config;
+    if (doc->server) {
+        config.indent_size = doc->server->config.format_tab_size;
+        config.use_tabs = doc->server->config.format_insert_spaces ? 0 : 1;
+    }
     char *formatted = xfmt_format_ast(ast, &config, X);
 
     // Free AST

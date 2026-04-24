@@ -96,6 +96,7 @@ XR_FUNC XrJsonValue *xlsp_json_new_array(void);
 XR_FUNC XrJsonValue *xlsp_json_new_object(void);
 
 XR_FUNC void xlsp_json_array_push(XrJsonValue *arr, XrJsonValue *value);
+XR_FUNC void xlsp_json_array_truncate(XrJsonValue *arr, int max_len);
 XR_FUNC void xlsp_json_object_set(XrJsonValue *obj, const char *key, XrJsonValue *value);
 
 // Fast append: skip key dedup check (use when building new objects with unique keys)

@@ -391,18 +391,15 @@ XrLspServer *xlsp_server_new(void) {
     // Default configuration
     server->config.diagnostic_debounce_ms = 300;
     server->config.diagnostics_enabled = true;
-    server->config.completion_auto_import = false;
     server->config.completion_max_items = 100;
     server->config.format_tab_size = 4;
     server->config.format_insert_spaces = true;
-    server->config.analysis_type_checking = true;
     server->config.inlay_hints_type_annotations = true;
     server->config.inlay_hints_parameter_names = true;
 
     // Logging defaults
     server->config.log_path = NULL;       // NULL = use default path
     server->config.log_to_stderr = true;  // Always log to stderr by default
-    server->config.log_level = 2;         // Info level
 
     // Load default ignore patterns
     xlsp_config_load_defaults(&server->config);
@@ -2026,9 +2023,6 @@ static void apply_configuration(XrLspServer *server, XrJsonValue *settings) {
     // Completion settings
     XrJsonValue *completion = xlsp_json_get_object(xray, "completion");
     if (completion) {
-        if (xlsp_json_get(completion, "autoImport")) {
-            server->config.completion_auto_import = xlsp_json_get_bool(completion, "autoImport");
-        }
         if (xlsp_json_get(completion, "maxItems")) {
             server->config.completion_max_items = (int)xlsp_json_get_int(completion, "maxItems");
         }
@@ -2045,14 +2039,6 @@ static void apply_configuration(XrLspServer *server, XrJsonValue *settings) {
         }
     }
 
-    // Analysis settings
-    XrJsonValue *analysis = xlsp_json_get_object(xray, "analysis");
-    if (analysis) {
-        if (xlsp_json_get(analysis, "typeChecking")) {
-            server->config.analysis_type_checking = xlsp_json_get_bool(analysis, "typeChecking");
-        }
-    }
-
     // Inlay hints settings
     XrJsonValue *inlay_hints = xlsp_json_get_object(xray, "inlayHints");
     if (inlay_hints) {
@@ -2064,10 +2050,11 @@ static void apply_configuration(XrLspServer *server, XrJsonValue *settings) {
         }
     }
 
-    lsp_log("Configuration updated: debounce=%dms, diagnostics=%s, typeChecking=%s",
+    lsp_log("Configuration updated: debounce=%dms, diagnostics=%s, maxItems=%d, tabSize=%d",
             server->config.diagnostic_debounce_ms,
             server->config.diagnostics_enabled ? "on" : "off",
-            server->config.analysis_type_checking ? "on" : "off");
+            server->config.completion_max_items,
+            server->config.format_tab_size);
 }
 
 static void handle_did_change_configuration(XrLspServer *server, XrJsonValue *params) {
@@ -2204,10 +2191,17 @@ static XrJsonValue *handle_completion(XrLspServer *server, XrJsonValue *params) 
     XrJsonValue *items = xlsp_analyze_completion(server, doc, pos);
 
     int item_count = items ? xlsp_json_array_len(items) : 0;
-    lsp_log("handle_completion: returning %d items", item_count);
+    int max_items = server->config.completion_max_items;
+    bool truncated = (max_items > 0 && item_count > max_items);
+    if (truncated) {
+        xlsp_json_array_truncate(items, max_items);
+        item_count = max_items;
+    }
+    lsp_log("handle_completion: returning %d items%s", item_count,
+            truncated ? " (truncated)" : "");
 
     XrJsonValue *result = xlsp_json_new_object();
-    xlsp_json_object_set(result, "isIncomplete", xlsp_json_new_bool(false));
+    xlsp_json_object_set(result, "isIncomplete", xlsp_json_new_bool(truncated));
     xlsp_json_object_set(result, "items", items);
 
     return result;
