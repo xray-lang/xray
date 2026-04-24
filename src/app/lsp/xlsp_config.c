@@ -195,8 +195,20 @@ bool xlsp_config_load_from_toml(XlspConfig *config, const char *root_path) {
         return false;
     }
 
-    // Find next section or end of file
-    char *next_section = strchr(lsp_section + 5, '[');
+    // Find next section header or end of file.
+    // A TOML section header is '[' at the start of a line, so skip any '['
+    // that appears mid-line (e.g. inside array values like ignore = [...]).
+    char *next_section = NULL;
+    {
+        const char *p = lsp_section + 5;
+        while (*p) {
+            if (*p == '\n' && *(p + 1) == '[') {
+                next_section = (char *)(p + 1);
+                break;
+            }
+            p++;
+        }
+    }
     size_t section_len = next_section ? (size_t)(next_section - lsp_section)
                                       : strlen(lsp_section);
 

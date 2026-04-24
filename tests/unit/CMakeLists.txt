@@ -204,6 +204,32 @@ if(XR_BUILD_LSP)
     )
     target_link_libraries(test_lsp_document PRIVATE xray_core)
     add_test(NAME test_lsp_document COMMAND test_lsp_document)
+
+    add_executable(test_lsp_config
+        lsp/test_lsp_config.c
+        ${LSP_SOURCES}
+    )
+    target_include_directories(test_lsp_config PRIVATE
+        ${XRAY_COMMON_INCLUDES}
+        ${CMAKE_SOURCE_DIR}/src/app/lsp
+        ${CMAKE_SOURCE_DIR}/src/app/cli
+        ${CMAKE_SOURCE_DIR}/src/frontend/format
+    )
+    target_link_libraries(test_lsp_config PRIVATE xray_core)
+    add_test(NAME test_lsp_config COMMAND test_lsp_config)
+
+    add_executable(test_lsp_navigation
+        lsp/test_lsp_navigation.c
+        ${LSP_SOURCES}
+    )
+    target_include_directories(test_lsp_navigation PRIVATE
+        ${XRAY_COMMON_INCLUDES}
+        ${CMAKE_SOURCE_DIR}/src/app/lsp
+        ${CMAKE_SOURCE_DIR}/src/app/cli
+        ${CMAKE_SOURCE_DIR}/src/frontend/format
+    )
+    target_link_libraries(test_lsp_navigation PRIVATE xray_core)
+    add_test(NAME test_lsp_navigation COMMAND test_lsp_navigation)
 endif()
 
 # ============================================================================

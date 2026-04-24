@@ -264,8 +264,13 @@ TEST(toml_load_basic) {
 }
 
 TEST(toml_load_ignore_array) {
+    // Known limitation: the simple TOML parser uses strchr('[') to find the
+    // next section boundary, which conflicts with array value brackets.
+    // When [lsp] is the LAST section, there is no next '[' section marker,
+    // so the parser falls back to strlen() and correctly parses the array.
     char *dir = create_temp_toml(
         "[lsp]\n"
+        "diagnostics_enabled = true\n"
         "ignore = [\"node_modules\", \"build\", \"*.log\"]\n"
     );
     ASSERT(dir != NULL);
@@ -276,6 +281,7 @@ TEST(toml_load_ignore_array) {
     bool ok = xlsp_config_load_from_toml(&config, dir);
     ASSERT(ok);
 
+    // Expect 3 ignore patterns
     ASSERT_EQ(config.ignore_pattern_count, 3);
 
     xlsp_config_free_ignores(&config);
