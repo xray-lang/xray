@@ -419,9 +419,6 @@ void xlsp_server_free(XrLspServer *server) {
         doc_table_free(server->doc_table);
     }
 
-    xr_free(server->root_uri);
-    xr_free(server->root_path);
-
     // Free workspace folders
     for (int i = 0; i < server->workspace_folder_count; i++) {
         xr_free(server->workspace_folders[i].uri);
@@ -1579,18 +1576,11 @@ int xlsp_server_run(XrLspServer *server) {
 // ============== Handler Implementations ==============
 
 static XrJsonValue *handle_initialize(XrLspServer *server, XrJsonValue *params) {
-    // Extract root path
-    const char *root_uri = xlsp_json_get_string(params, "rootUri");
-    if (root_uri) {
-        server->root_uri = xr_strdup(root_uri);
-    }
-
-    const char *root_path = xlsp_json_get_string(params, "rootPath");
-    if (root_path) {
-        server->root_path = xr_strdup(root_path);
-    }
-
-    // Handle workspace folders from initialize request
+    // Collect workspace folders from initialize params.
+    // If the client provides workspaceFolders, use them directly.
+    // Otherwise, fall back to rootUri / rootPath and create a
+    // synthetic workspace folder so the rest of the code has a
+    // single model to work with.
     XrJsonValue *folders = xlsp_json_get_array(params, "workspaceFolders");
     if (folders) {
         int count = xlsp_json_array_len(folders);
@@ -1608,19 +1598,41 @@ static XrJsonValue *handle_initialize(XrLspServer *server, XrJsonValue *params) 
         lsp_log("Initialized with %d workspace folders", server->workspace_folder_count);
     }
 
-    // Try to load project-specific ignore patterns from xray.toml
-    if (server->root_path) {
-        if (xlsp_config_load_from_toml(&server->config, server->root_path)) {
-            lsp_log("Loaded LSP config from xray.toml");
-        }
-    } else if (server->workspace_folder_count > 0) {
-        // Try first workspace folder
-        if (xlsp_config_load_from_toml(&server->config, server->workspace_folders[0].path)) {
-            lsp_log("Loaded LSP config from xray.toml");
+    // Fold rootUri / rootPath into workspace_folders if no folders were
+    // provided (single-root fallback).
+    if (server->workspace_folder_count == 0) {
+        const char *root_uri = xlsp_json_get_string(params, "rootUri");
+        const char *root_path = xlsp_json_get_string(params, "rootPath");
+        if (root_uri || root_path) {
+            int idx = server->workspace_folder_count++;
+            server->workspace_folders[idx].uri = root_uri ? xr_strdup(root_uri) : NULL;
+            server->workspace_folders[idx].name = xr_strdup("root");
+            if (root_path) {
+                server->workspace_folders[idx].path = xr_strdup(root_path);
+            } else if (root_uri) {
+                server->workspace_folders[idx].path = xr_strdup(xlsp_uri_to_path(root_uri));
+            }
+            lsp_log("Folded rootUri/rootPath into workspace folder[0]: %s",
+                     server->workspace_folders[0].path ? server->workspace_folders[0].path : "(null)");
         }
     }
 
-    lsp_log("Initializing with root: %s", root_uri ? root_uri : "(none)");
+    // Load project-specific config from xray.toml (first folder wins)
+    for (int i = 0; i < server->workspace_folder_count; i++) {
+        if (server->workspace_folders[i].path) {
+            if (xlsp_config_load_from_toml(&server->config,
+                                           server->workspace_folders[i].path)) {
+                server->workspace_folders[i].config_loaded = true;
+                lsp_log("Loaded LSP config from xray.toml in: %s",
+                        server->workspace_folders[i].path);
+                break;
+            }
+        }
+    }
+
+    const char *display_root = server->workspace_folder_count > 0
+        ? server->workspace_folders[0].path : "(none)";
+    lsp_log("Initializing with root: %s", display_root);
 
     // Build capabilities response
     XrJsonValue *result = xlsp_json_new_object();
@@ -1806,22 +1818,19 @@ static void handle_initialized(XrLspServer *server, XrJsonValue *params) {
     lsp_log("Registered file watcher for **/*.xr");
 
     // Start background workspace indexing for all workspace folders.
-    // Collect paths into a temp array and index in a single batch.
+    // root_path/root_uri were folded into workspace_folders at initialize.
     if (server->workspace_folder_count > 0) {
         const char *paths[MAX_WORKSPACE_FOLDERS];
         int path_count = 0;
         for (int i = 0; i < server->workspace_folder_count; i++) {
             if (server->workspace_folders[i].path) {
                 paths[path_count++] = server->workspace_folders[i].path;
+                server->workspace_folders[i].index_requested = true;
             }
         }
         if (path_count > 0) {
             xlsp_workspace_start_background_index_roots(server, paths, path_count);
         }
-    } else if (server->root_path) {
-        xlsp_workspace_start_background_index(server, server->root_path);
-    } else if (server->root_uri) {
-        xlsp_workspace_start_background_index(server, xlsp_uri_to_path(server->root_uri));
     }
 }
 
@@ -1890,12 +1899,20 @@ static void handle_did_change_watched_files(XrLspServer *server, XrJsonValue *pa
                 break;
             }
 
-            case FILE_CHANGE_DELETED:
-                // Remove from exports cache
-                xlsp_exports_cache_remove(server, xlsp_uri_to_path(uri));
+            case FILE_CHANGE_DELETED: {
+                const char *del_path = xlsp_uri_to_path(uri);
 
-                // If document was open, it will be handled by didClose
+                // Remove from exports cache
+                xlsp_exports_cache_remove(server, del_path);
+
+                // Remove from analyzer so stale symbols don't linger
+                if (server->workspace_analyzer) {
+                    xa_analyzer_remove_file(server->workspace_analyzer, del_path);
+                }
+
+                lsp_log("Purged state for deleted file: %s", del_path);
                 break;
+            }
         }
     }
 
@@ -1921,6 +1938,9 @@ static void add_workspace_folder(XrLspServer *server, const char *uri, const cha
 
     const char *path = xlsp_uri_to_path(uri);
     server->workspace_folders[idx].path = xr_strdup(path);
+    server->workspace_folders[idx].config_loaded = false;
+    server->workspace_folders[idx].index_requested = true;
+    server->workspace_folders[idx].index_completed = false;
 
     lsp_log("Added workspace folder: %s (%s)", name ? name : uri, path);
 
