@@ -320,8 +320,8 @@ static XrJsonValue *handle_ping(XmcpServer *s, XrJsonValue *params) {
 }
 
 static XrJsonValue *handle_tools_list(XmcpServer *s, XrJsonValue *params) {
-    (void)s; (void)params;
-    return xmcp_handle_tools_list();
+    (void)s;
+    return xmcp_handle_tools_list(params);
 }
 
 static XrJsonValue *handle_tools_call(XmcpServer *s, XrJsonValue *params) {
@@ -465,7 +465,7 @@ XmcpServer *xmcp_server_new(void) {
     s->current_progress_token = -1;
 
     /* Set feature flags for capability inference */
-    s->has_tools     = true;  /* 4 built-in tools */
+    s->has_tools     = true;  /* 7 built-in tools */
     s->has_resources = true;  /* 3 static resources */
     s->has_prompts   = true;  /* 5 built-in prompts */
 
