@@ -147,11 +147,14 @@ typedef struct XlspPendingRequests {
     int count;  // Number of active entries
 } XlspPendingRequests;
 
-// Workspace folder
+// Workspace folder with lifecycle state
 typedef struct XlspWorkspaceFolder {
     char *uri;
     char *name;
-    char *path;  // Derived from uri
+    char *path;           // Derived from uri
+    bool config_loaded;   // xray.toml loaded for this folder
+    bool index_requested; // Background indexing requested
+    bool index_completed; // Background indexing finished
 } XlspWorkspaceFolder;
 
 // Ignore pattern for workspace scanning
@@ -217,11 +220,8 @@ struct XrLspServer {
     bool shutdown_received;
     bool exit_received;
 
-    // Workspace info (primary/root workspace)
-    char *root_uri;
-    char *root_path;
-
-    // Multi-root workspace folders
+    // Workspace folders (unified — root_path/root_uri folded in at initialize)
+    // root_path() accessor returns workspace_folders[0].path or NULL.
     XlspWorkspaceFolder workspace_folders[MAX_WORKSPACE_FOLDERS];
     int workspace_folder_count;
 
