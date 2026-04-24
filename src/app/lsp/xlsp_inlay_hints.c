@@ -18,25 +18,25 @@
 // Create inlay hint JSON
 static XrJsonValue *make_hint(int line, int character, const char *label, 
                                XlspInlayHintKind kind) {
-    XrJsonValue *hint = xlsp_json_new_object();
+    XrJsonValue *hint = xjson_new_object();
     
     // Position
-    XrJsonValue *pos = xlsp_json_new_object();
-    xlsp_json_object_set(pos, "line", xlsp_json_new_number(line));
-    xlsp_json_object_set(pos, "character", xlsp_json_new_number(character));
-    xlsp_json_object_set(hint, "position", pos);
+    XrJsonValue *pos = xjson_new_object();
+    xjson_object_set(pos, "line", xjson_new_number(line));
+    xjson_object_set(pos, "character", xjson_new_number(character));
+    xjson_object_set(hint, "position", pos);
     
     // Label
-    xlsp_json_object_set(hint, "label", xlsp_json_new_string(label));
+    xjson_object_set(hint, "label", xjson_new_string(label));
     
     // Kind
-    xlsp_json_object_set(hint, "kind", xlsp_json_new_number(kind));
+    xjson_object_set(hint, "kind", xjson_new_number(kind));
     
     // Padding
     if (kind == XLSP_HINT_TYPE) {
-        xlsp_json_object_set(hint, "paddingLeft", xlsp_json_new_bool(true));
+        xjson_object_set(hint, "paddingLeft", xjson_new_bool(true));
     } else {
-        xlsp_json_object_set(hint, "paddingRight", xlsp_json_new_bool(true));
+        xjson_object_set(hint, "paddingRight", xjson_new_bool(true));
     }
     
     return hint;
@@ -118,7 +118,7 @@ static void collect_hints(XrJsonValue *hints, AstNode *node, AstNode *root, XrLs
                     // Position after variable name, using AST column info
                     // node->column points to the start of var name (1-indexed)
                     int char_pos = (node->column > 0 ? node->column - 1 : 0) + strlen(name);
-                    xlsp_json_array_push(hints, make_hint(line, char_pos, label, XLSP_HINT_TYPE));
+                    xjson_array_push(hints, make_hint(line, char_pos, label, XLSP_HINT_TYPE));
                 }
             }
             collect_hints(hints, node->as.var_decl.initializer, root, range, analyzer, show_types, show_params);
@@ -180,7 +180,7 @@ static void collect_hints(XrJsonValue *hints, AstNode *node, AstNode *root, XrLs
                                 snprintf(label, sizeof(label), "%s:", param_name);
                                 int arg_line = arg->line - 1;
                                 int arg_col = arg->column > 0 ? arg->column - 1 : 0;
-                                xlsp_json_array_push(hints, 
+                                xjson_array_push(hints, 
                                     make_hint(arg_line, arg_col, label, XLSP_HINT_PARAMETER));
                             }
                         }
@@ -223,7 +223,7 @@ static void collect_hints(XrJsonValue *hints, AstNode *node, AstNode *root, XrLs
 
 // Analyze document for inlay hints
 XrJsonValue *xlsp_analyze_inlay_hints(XrLspServer *server, XrLspDocument *doc, XrLspRange range) {
-    XrJsonValue *hints = xlsp_json_new_array();
+    XrJsonValue *hints = xjson_new_array();
     
     if (!doc || !doc->ast) return hints;
     

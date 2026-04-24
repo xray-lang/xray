@@ -12,7 +12,7 @@
 #define XLSP_CALL_HIERARCHY_H
 
 #include "xlsp_server.h"
-#include "xlsp_json.h"
+#include "../../base/xjson.h"
 
 // Call hierarchy
 XR_FUNC XrJsonValue *xlsp_handle_prepare_call_hierarchy(XrLspServer *server, XrJsonValue *params);

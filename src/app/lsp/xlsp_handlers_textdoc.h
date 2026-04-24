@@ -11,7 +11,7 @@
 #ifndef XLSP_HANDLERS_TEXTDOC_H
 #define XLSP_HANDLERS_TEXTDOC_H
 
-#include "xlsp_json.h"
+#include "../../base/xjson.h"
 
 typedef struct XrLspServer XrLspServer;
 

@@ -16,7 +16,7 @@
 #define XLSP_EXTRA_HANDLERS_H
 
 #include "xlsp_server.h"
-#include "xlsp_json.h"
+#include "../../base/xjson.h"
 
 XR_FUNC XrJsonValue *xlsp_handle_document_highlight(XrLspServer *server, XrJsonValue *params);
 XR_FUNC XrJsonValue *xlsp_handle_workspace_symbol(XrLspServer *server, XrJsonValue *params);

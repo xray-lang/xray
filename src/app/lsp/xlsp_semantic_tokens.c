@@ -40,21 +40,21 @@ static const char *token_modifier_names[] = {
 
 // Get semantic tokens legend
 XrJsonValue *xlsp_semantic_tokens_legend(void) {
-    XrJsonValue *legend = xlsp_json_new_object();
+    XrJsonValue *legend = xjson_new_object();
 
     // Token types
-    XrJsonValue *types = xlsp_json_new_array();
+    XrJsonValue *types = xjson_new_array();
     for (int i = 0; i < XLSP_TOKEN_COUNT; i++) {
-        xlsp_json_array_push(types, xlsp_json_new_string(token_type_names[i]));
+        xjson_array_push(types, xjson_new_string(token_type_names[i]));
     }
-    xlsp_json_object_set(legend, "tokenTypes", types);
+    xjson_object_set(legend, "tokenTypes", types);
 
     // Token modifiers
-    XrJsonValue *modifiers = xlsp_json_new_array();
+    XrJsonValue *modifiers = xjson_new_array();
     for (int i = 0; i < 10; i++) {
-        xlsp_json_array_push(modifiers, xlsp_json_new_string(token_modifier_names[i]));
+        xjson_array_push(modifiers, xjson_new_string(token_modifier_names[i]));
     }
-    xlsp_json_object_set(legend, "tokenModifiers", modifiers);
+    xjson_object_set(legend, "tokenModifiers", modifiers);
 
     return legend;
 }
@@ -677,8 +677,8 @@ uint32_t *xlsp_semantic_tokens_encode_raw(XlspSemanticTokensResult *result, int 
 
 // Encode tokens to LSP format (delta encoding)
 XrJsonValue *xlsp_semantic_tokens_encode(XlspSemanticTokensResult *result) {
-    XrJsonValue *response = xlsp_json_new_object();
-    XrJsonValue *data = xlsp_json_new_array();
+    XrJsonValue *response = xjson_new_object();
+    XrJsonValue *data = xjson_new_array();
 
     int prev_line = 0;
     int prev_char = 0;
@@ -690,16 +690,16 @@ XrJsonValue *xlsp_semantic_tokens_encode(XlspSemanticTokensResult *result) {
         int delta_line = t->line - prev_line;
         int delta_char = (delta_line == 0) ? (t->start_char - prev_char) : t->start_char;
 
-        xlsp_json_array_push(data, xlsp_json_new_number(delta_line));
-        xlsp_json_array_push(data, xlsp_json_new_number(delta_char));
-        xlsp_json_array_push(data, xlsp_json_new_number(t->length));
-        xlsp_json_array_push(data, xlsp_json_new_number(t->type));
-        xlsp_json_array_push(data, xlsp_json_new_number(t->modifiers));
+        xjson_array_push(data, xjson_new_number(delta_line));
+        xjson_array_push(data, xjson_new_number(delta_char));
+        xjson_array_push(data, xjson_new_number(t->length));
+        xjson_array_push(data, xjson_new_number(t->type));
+        xjson_array_push(data, xjson_new_number(t->modifiers));
 
         prev_line = t->line;
         prev_char = t->start_char;
     }
 
-    xlsp_json_object_set(response, "data", data);
+    xjson_object_set(response, "data", data);
     return response;
 }

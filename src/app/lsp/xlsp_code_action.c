@@ -96,86 +96,86 @@ static void push_decl_rewrite_action(XrJsonValue *actions, const char *uri,
     int dline = 0, dsc = 0, dec = 0;
     if (!find_plain_decl_keyword(content, var_name, &dline, &dsc, &dec)) return;
 
-    XrJsonValue *action = xlsp_json_new_object();
-    xlsp_json_object_set(action, "title", xlsp_json_new_string(title));
-    xlsp_json_object_set(action, "kind", xlsp_json_new_string("quickfix"));
+    XrJsonValue *action = xjson_new_object();
+    xjson_object_set(action, "title", xjson_new_string(title));
+    xjson_object_set(action, "kind", xjson_new_string("quickfix"));
 
-    XrJsonValue *edit = xlsp_json_new_object();
-    XrJsonValue *changes = xlsp_json_new_object();
-    XrJsonValue *edits = xlsp_json_new_array();
+    XrJsonValue *edit = xjson_new_object();
+    XrJsonValue *changes = xjson_new_object();
+    XrJsonValue *edits = xjson_new_array();
 
-    XrJsonValue *text_edit = xlsp_json_new_object();
-    xlsp_json_object_set(text_edit, "newText", xlsp_json_new_string(new_prefix));
-    xlsp_json_object_set(text_edit, "range",
-        xlsp_json_make_range(dline, dsc, dline, dec));
+    XrJsonValue *text_edit = xjson_new_object();
+    xjson_object_set(text_edit, "newText", xjson_new_string(new_prefix));
+    xjson_object_set(text_edit, "range",
+        xjson_make_range(dline, dsc, dline, dec));
 
-    xlsp_json_array_push(edits, text_edit);
-    xlsp_json_object_set(changes, uri, edits);
-    xlsp_json_object_set(edit, "changes", changes);
-    xlsp_json_object_set(action, "edit", edit);
-    xlsp_json_array_push(actions, action);
+    xjson_array_push(edits, text_edit);
+    xjson_object_set(changes, uri, edits);
+    xjson_object_set(edit, "changes", changes);
+    xjson_object_set(action, "edit", edit);
+    xjson_array_push(actions, action);
 }
 
 XrJsonValue *xlsp_handle_code_action(XrLspServer *server, XrJsonValue *params) {
-    XrJsonValue *textDocument = xlsp_json_get_object(params, "textDocument");
-    XrJsonValue *context = xlsp_json_get_object(params, "context");
-    XrJsonValue *range_obj = xlsp_json_get_object(params, "range");
-    if (!textDocument) return xlsp_json_new_array();
+    XrJsonValue *textDocument = xjson_get_object(params, "textDocument");
+    XrJsonValue *context = xjson_get_object(params, "context");
+    XrJsonValue *range_obj = xjson_get_object(params, "range");
+    if (!textDocument) return xjson_new_array();
 
-    const char *uri = xlsp_json_get_string(textDocument, "uri");
+    const char *uri = xjson_get_string(textDocument, "uri");
     XrLspDocument *doc = xlsp_document_get(server, uri);
-    if (!doc || !doc->content) return xlsp_json_new_array();
+    if (!doc || !doc->content) return xjson_new_array();
 
-    XrJsonValue *actions = xlsp_json_new_array();
+    XrJsonValue *actions = xjson_new_array();
 
     // Get selection range
     int sel_start_line = 0, sel_start_char = 0, sel_end_line = 0, sel_end_char = 0;
     bool has_selection = false;
     if (range_obj) {
-        XrJsonValue *start = xlsp_json_get_object(range_obj, "start");
-        XrJsonValue *end = xlsp_json_get_object(range_obj, "end");
+        XrJsonValue *start = xjson_get_object(range_obj, "start");
+        XrJsonValue *end = xjson_get_object(range_obj, "end");
         if (start && end) {
-            sel_start_line = xlsp_json_get_int(start, "line");
-            sel_start_char = xlsp_json_get_int(start, "character");
-            sel_end_line = xlsp_json_get_int(end, "line");
-            sel_end_char = xlsp_json_get_int(end, "character");
+            sel_start_line = xjson_get_int(start, "line");
+            sel_start_char = xjson_get_int(start, "character");
+            sel_end_line = xjson_get_int(end, "line");
+            sel_end_char = xjson_get_int(end, "character");
             has_selection = (sel_start_line != sel_end_line || sel_start_char != sel_end_char);
         }
     }
 
     // Check for diagnostics with undefined symbols or unused variables
-    XrJsonValue *diagnostics = xlsp_json_get(context, "diagnostics");
+    XrJsonValue *diagnostics = xjson_get(context, "diagnostics");
     if (diagnostics && diagnostics->type == XR_JSON_ARRAY) {
-        for (int i = 0; i < xlsp_json_array_len(diagnostics); i++) {
-            XrJsonValue *diag = xlsp_json_array_get(diagnostics, i);
-            const char *msg = xlsp_json_get_string(diag, "message");
+        for (int i = 0; i < xjson_array_len(diagnostics); i++) {
+            XrJsonValue *diag = xjson_array_get(diagnostics, i);
+            const char *msg = xjson_get_string(diag, "message");
 
             // QuickFix: Remove unused variable
             if (msg && (strstr(msg, "unused") || strstr(msg, "never used"))) {
-                XrJsonValue *diag_range = xlsp_json_get_object(diag, "range");
+                XrJsonValue *diag_range = xjson_get_object(diag, "range");
                 if (diag_range) {
-                    XrJsonValue *diag_start = xlsp_json_get_object(diag_range, "start");
-                    int diag_line = xlsp_json_get_int(diag_start, "line");
+                    XrJsonValue *diag_start = xjson_get_object(diag_range, "start");
+                    int diag_line = xjson_get_int(diag_start, "line");
 
-                    XrJsonValue *action = xlsp_json_new_object();
-                    xlsp_json_object_set(action, "title", xlsp_json_new_string("Remove unused variable"));
-                    xlsp_json_object_set(action, "kind", xlsp_json_new_string("quickfix"));
+                    XrJsonValue *action = xjson_new_object();
+                    xjson_object_set(action, "title", xjson_new_string("Remove unused variable"));
+                    xjson_object_set(action, "kind", xjson_new_string("quickfix"));
 
-                    XrJsonValue *edit = xlsp_json_new_object();
-                    XrJsonValue *changes = xlsp_json_new_object();
-                    XrJsonValue *edits = xlsp_json_new_array();
+                    XrJsonValue *edit = xjson_new_object();
+                    XrJsonValue *changes = xjson_new_object();
+                    XrJsonValue *edits = xjson_new_array();
 
-                    XrJsonValue *text_edit = xlsp_json_new_object();
-                    xlsp_json_object_set(text_edit, "newText", xlsp_json_new_string(""));
-                    xlsp_json_object_set(text_edit, "range",
-                        xlsp_json_make_range(diag_line, 0, diag_line + 1, 0));
+                    XrJsonValue *text_edit = xjson_new_object();
+                    xjson_object_set(text_edit, "newText", xjson_new_string(""));
+                    xjson_object_set(text_edit, "range",
+                        xjson_make_range(diag_line, 0, diag_line + 1, 0));
 
-                    xlsp_json_array_push(edits, text_edit);
-                    xlsp_json_object_set(changes, uri, edits);
-                    xlsp_json_object_set(edit, "changes", changes);
-                    xlsp_json_object_set(action, "edit", edit);
+                    xjson_array_push(edits, text_edit);
+                    xjson_object_set(changes, uri, edits);
+                    xjson_object_set(edit, "changes", changes);
+                    xjson_object_set(action, "edit", edit);
 
-                    xlsp_json_array_push(actions, action);
+                    xjson_array_push(actions, action);
                 }
             }
 
@@ -186,26 +186,26 @@ XrJsonValue *xlsp_handle_code_action(XrLspServer *server, XrJsonValue *params) {
                         char title[128];
                         snprintf(title, sizeof(title), "Import '%s' module", STDLIB_MODULES[m]);
 
-                        XrJsonValue *action = xlsp_json_new_object();
-                        xlsp_json_object_set(action, "title", xlsp_json_new_string(title));
-                        xlsp_json_object_set(action, "kind", xlsp_json_new_string("quickfix"));
+                        XrJsonValue *action = xjson_new_object();
+                        xjson_object_set(action, "title", xjson_new_string(title));
+                        xjson_object_set(action, "kind", xjson_new_string("quickfix"));
 
-                        XrJsonValue *edit = xlsp_json_new_object();
-                        XrJsonValue *changes = xlsp_json_new_object();
-                        XrJsonValue *edits = xlsp_json_new_array();
+                        XrJsonValue *edit = xjson_new_object();
+                        XrJsonValue *changes = xjson_new_object();
+                        XrJsonValue *edits = xjson_new_array();
 
-                        XrJsonValue *text_edit = xlsp_json_new_object();
+                        XrJsonValue *text_edit = xjson_new_object();
                         char import_text[64];
                         snprintf(import_text, sizeof(import_text), "import %s\n", STDLIB_MODULES[m]);
-                        xlsp_json_object_set(text_edit, "newText", xlsp_json_new_string(import_text));
-                        xlsp_json_object_set(text_edit, "range", xlsp_json_make_range(0, 0, 0, 0));
+                        xjson_object_set(text_edit, "newText", xjson_new_string(import_text));
+                        xjson_object_set(text_edit, "range", xjson_make_range(0, 0, 0, 0));
 
-                        xlsp_json_array_push(edits, text_edit);
-                        xlsp_json_object_set(changes, uri, edits);
-                        xlsp_json_object_set(edit, "changes", changes);
-                        xlsp_json_object_set(action, "edit", edit);
+                        xjson_array_push(edits, text_edit);
+                        xjson_object_set(changes, uri, edits);
+                        xjson_object_set(edit, "changes", changes);
+                        xjson_object_set(action, "edit", edit);
 
-                        xlsp_json_array_push(actions, action);
+                        xjson_array_push(actions, action);
                         break;
                     }
                 }
@@ -290,26 +290,26 @@ XrJsonValue *xlsp_handle_code_action(XrLspServer *server, XrJsonValue *params) {
                     if (occurrences <= 1) {
                         int let_col = (int)(trimmed - cur_line_start);
 
-                        XrJsonValue *action = xlsp_json_new_object();
-                        xlsp_json_object_set(action, "title",
-                            xlsp_json_new_string("Convert 'let' to 'const'"));
-                        xlsp_json_object_set(action, "kind", xlsp_json_new_string("refactor.rewrite"));
+                        XrJsonValue *action = xjson_new_object();
+                        xjson_object_set(action, "title",
+                            xjson_new_string("Convert 'let' to 'const'"));
+                        xjson_object_set(action, "kind", xjson_new_string("refactor.rewrite"));
 
-                        XrJsonValue *edit = xlsp_json_new_object();
-                        XrJsonValue *changes = xlsp_json_new_object();
-                        XrJsonValue *edits_arr = xlsp_json_new_array();
+                        XrJsonValue *edit = xjson_new_object();
+                        XrJsonValue *changes = xjson_new_object();
+                        XrJsonValue *edits_arr = xjson_new_array();
 
-                        XrJsonValue *text_edit = xlsp_json_new_object();
-                        xlsp_json_object_set(text_edit, "newText", xlsp_json_new_string("const"));
-                        xlsp_json_object_set(text_edit, "range",
-                            xlsp_json_make_range(sel_start_line, let_col, sel_start_line, let_col + 3));
+                        XrJsonValue *text_edit = xjson_new_object();
+                        xjson_object_set(text_edit, "newText", xjson_new_string("const"));
+                        xjson_object_set(text_edit, "range",
+                            xjson_make_range(sel_start_line, let_col, sel_start_line, let_col + 3));
 
-                        xlsp_json_array_push(edits_arr, text_edit);
-                        xlsp_json_object_set(changes, uri, edits_arr);
-                        xlsp_json_object_set(edit, "changes", changes);
-                        xlsp_json_object_set(action, "edit", edit);
+                        xjson_array_push(edits_arr, text_edit);
+                        xjson_object_set(changes, uri, edits_arr);
+                        xjson_object_set(edit, "changes", changes);
+                        xjson_object_set(action, "edit", edit);
 
-                        xlsp_json_array_push(actions, action);
+                        xjson_array_push(actions, action);
                     }
                 }
             }
@@ -338,34 +338,34 @@ XrJsonValue *xlsp_handle_code_action(XrLspServer *server, XrJsonValue *params) {
                 }
 
                 if (looks_like_expr && sel_len > 1) {
-                    XrJsonValue *action = xlsp_json_new_object();
-                    xlsp_json_object_set(action, "title", xlsp_json_new_string("Extract to variable"));
-                    xlsp_json_object_set(action, "kind", xlsp_json_new_string("refactor.extract"));
+                    XrJsonValue *action = xjson_new_object();
+                    xjson_object_set(action, "title", xjson_new_string("Extract to variable"));
+                    xjson_object_set(action, "kind", xjson_new_string("refactor.extract"));
 
-                    XrJsonValue *edit = xlsp_json_new_object();
-                    XrJsonValue *changes = xlsp_json_new_object();
-                    XrJsonValue *edits = xlsp_json_new_array();
+                    XrJsonValue *edit = xjson_new_object();
+                    XrJsonValue *changes = xjson_new_object();
+                    XrJsonValue *edits = xjson_new_array();
 
-                    XrJsonValue *decl_edit = xlsp_json_new_object();
+                    XrJsonValue *decl_edit = xjson_new_object();
                     char decl_text[256];
                     snprintf(decl_text, sizeof(decl_text), "let extracted = %s\n", selected);
-                    xlsp_json_object_set(decl_edit, "newText", xlsp_json_new_string(decl_text));
-                    xlsp_json_object_set(decl_edit, "range",
-                        xlsp_json_make_range(sel_start_line, 0, sel_start_line, 0));
-                    xlsp_json_array_push(edits, decl_edit);
+                    xjson_object_set(decl_edit, "newText", xjson_new_string(decl_text));
+                    xjson_object_set(decl_edit, "range",
+                        xjson_make_range(sel_start_line, 0, sel_start_line, 0));
+                    xjson_array_push(edits, decl_edit);
 
-                    XrJsonValue *repl_edit = xlsp_json_new_object();
-                    xlsp_json_object_set(repl_edit, "newText", xlsp_json_new_string("extracted"));
-                    xlsp_json_object_set(repl_edit, "range",
-                        xlsp_json_make_range(sel_start_line + 1, sel_start_char,
+                    XrJsonValue *repl_edit = xjson_new_object();
+                    xjson_object_set(repl_edit, "newText", xjson_new_string("extracted"));
+                    xjson_object_set(repl_edit, "range",
+                        xjson_make_range(sel_start_line + 1, sel_start_char,
                                              sel_end_line + 1, sel_end_char));
-                    xlsp_json_array_push(edits, repl_edit);
+                    xjson_array_push(edits, repl_edit);
 
-                    xlsp_json_object_set(changes, uri, edits);
-                    xlsp_json_object_set(edit, "changes", changes);
-                    xlsp_json_object_set(action, "edit", edit);
+                    xjson_object_set(changes, uri, edits);
+                    xjson_object_set(edit, "changes", changes);
+                    xjson_object_set(action, "edit", edit);
 
-                    xlsp_json_array_push(actions, action);
+                    xjson_array_push(actions, action);
                 }
                 xr_free(selected);
             }
@@ -429,37 +429,37 @@ XrJsonValue *xlsp_handle_code_action(XrLspServer *server, XrJsonValue *params) {
                     char call_text[256];
                     snprintf(call_text, sizeof(call_text), "%sextracted()\n", indent_str);
 
-                    XrJsonValue *action = xlsp_json_new_object();
-                    xlsp_json_object_set(action, "title", xlsp_json_new_string("Extract to function"));
-                    xlsp_json_object_set(action, "kind", xlsp_json_new_string("refactor.extract"));
+                    XrJsonValue *action = xjson_new_object();
+                    xjson_object_set(action, "title", xjson_new_string("Extract to function"));
+                    xjson_object_set(action, "kind", xjson_new_string("refactor.extract"));
 
-                    XrJsonValue *edit = xlsp_json_new_object();
-                    XrJsonValue *changes = xlsp_json_new_object();
-                    XrJsonValue *edits_arr = xlsp_json_new_array();
+                    XrJsonValue *edit = xjson_new_object();
+                    XrJsonValue *changes = xjson_new_object();
+                    XrJsonValue *edits_arr = xjson_new_array();
 
                     // Replace selection with function call
-                    XrJsonValue *repl = xlsp_json_new_object();
-                    xlsp_json_object_set(repl, "newText", xlsp_json_new_string(call_text));
-                    xlsp_json_object_set(repl, "range",
-                        xlsp_json_make_range(sel_start_line, 0, sel_end_line, sel_end_char));
-                    xlsp_json_array_push(edits_arr, repl);
+                    XrJsonValue *repl = xjson_new_object();
+                    xjson_object_set(repl, "newText", xjson_new_string(call_text));
+                    xjson_object_set(repl, "range",
+                        xjson_make_range(sel_start_line, 0, sel_end_line, sel_end_char));
+                    xjson_array_push(edits_arr, repl);
 
                     // Insert function definition at end of file
                     int last_line = 0;
                     const char *cp = doc->content;
                     while (*cp) { if (*cp == '\n') last_line++; cp++; }
 
-                    XrJsonValue *ins = xlsp_json_new_object();
-                    xlsp_json_object_set(ins, "newText", xlsp_json_new_string(func_def));
-                    xlsp_json_object_set(ins, "range",
-                        xlsp_json_make_range(last_line, 0, last_line, 0));
-                    xlsp_json_array_push(edits_arr, ins);
+                    XrJsonValue *ins = xjson_new_object();
+                    xjson_object_set(ins, "newText", xjson_new_string(func_def));
+                    xjson_object_set(ins, "range",
+                        xjson_make_range(last_line, 0, last_line, 0));
+                    xjson_array_push(edits_arr, ins);
 
-                    xlsp_json_object_set(changes, uri, edits_arr);
-                    xlsp_json_object_set(edit, "changes", changes);
-                    xlsp_json_object_set(action, "edit", edit);
+                    xjson_object_set(changes, uri, edits_arr);
+                    xjson_object_set(edit, "changes", changes);
+                    xjson_object_set(action, "edit", edit);
 
-                    xlsp_json_array_push(actions, action);
+                    xjson_array_push(actions, action);
 
                     xr_free(func_def);
                 }
@@ -469,10 +469,10 @@ XrJsonValue *xlsp_handle_code_action(XrLspServer *server, XrJsonValue *params) {
     }
 
     // Always offer "Organize Imports" action
-    XrJsonValue *organize = xlsp_json_new_object();
-    xlsp_json_object_set(organize, "title", xlsp_json_new_string("Organize Imports"));
-    xlsp_json_object_set(organize, "kind", xlsp_json_new_string("source.organizeImports"));
-    xlsp_json_array_push(actions, organize);
+    XrJsonValue *organize = xjson_new_object();
+    xjson_object_set(organize, "title", xjson_new_string("Organize Imports"));
+    xjson_object_set(organize, "kind", xjson_new_string("source.organizeImports"));
+    xjson_array_push(actions, organize);
 
     return actions;
 }

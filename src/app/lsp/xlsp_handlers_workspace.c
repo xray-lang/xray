@@ -11,7 +11,7 @@
 
 #include "xlsp_handlers_workspace.h"
 #include "xlsp_server.h"
-#include "xlsp_json.h"
+#include "../../base/xjson.h"
 #include "xlsp_workspace.h"
 #include "xlsp_analysis.h"
 #include "../../frontend/analyzer/xanalyzer.h"
@@ -27,16 +27,16 @@
 #define FILE_CHANGE_DELETED 3
 
 void xlsp_handle_ws_did_change_watched_files(XrLspServer *server, XrJsonValue *params) {
-    XrJsonValue *changes = xlsp_json_get_array(params, "changes");
+    XrJsonValue *changes = xjson_get_array(params, "changes");
     if (!changes) return;
 
-    int change_count = xlsp_json_array_len(changes);
+    int change_count = xjson_array_len(changes);
     lsp_log("Received %d file change events", change_count);
 
     for (int i = 0; i < change_count; i++) {
-        XrJsonValue *change = xlsp_json_array_get(changes, i);
-        const char *uri = xlsp_json_get_string(change, "uri");
-        int type = (int)xlsp_json_get_int(change, "type");
+        XrJsonValue *change = xjson_array_get(changes, i);
+        const char *uri = xjson_get_string(change, "uri");
+        int type = (int)xjson_get_int(change, "type");
 
         if (!uri) continue;
 
@@ -142,16 +142,16 @@ void xlsp_handle_ws_remove_folder(XrLspServer *server, const char *uri) {
 }
 
 void xlsp_handle_ws_did_change_workspace_folders(XrLspServer *server, XrJsonValue *params) {
-    XrJsonValue *event = xlsp_json_get_object(params, "event");
+    XrJsonValue *event = xjson_get_object(params, "event");
     if (!event) return;
 
     // Handle removed folders
-    XrJsonValue *removed = xlsp_json_get_array(event, "removed");
+    XrJsonValue *removed = xjson_get_array(event, "removed");
     if (removed) {
-        int count = xlsp_json_array_len(removed);
+        int count = xjson_array_len(removed);
         for (int i = 0; i < count; i++) {
-            XrJsonValue *folder = xlsp_json_array_get(removed, i);
-            const char *uri = xlsp_json_get_string(folder, "uri");
+            XrJsonValue *folder = xjson_array_get(removed, i);
+            const char *uri = xjson_get_string(folder, "uri");
             if (uri) {
                 xlsp_handle_ws_remove_folder(server, uri);
             }
@@ -159,13 +159,13 @@ void xlsp_handle_ws_did_change_workspace_folders(XrLspServer *server, XrJsonValu
     }
 
     // Handle added folders
-    XrJsonValue *added = xlsp_json_get_array(event, "added");
+    XrJsonValue *added = xjson_get_array(event, "added");
     if (added) {
-        int count = xlsp_json_array_len(added);
+        int count = xjson_array_len(added);
         for (int i = 0; i < count; i++) {
-            XrJsonValue *folder = xlsp_json_array_get(added, i);
-            const char *uri = xlsp_json_get_string(folder, "uri");
-            const char *name = xlsp_json_get_string(folder, "name");
+            XrJsonValue *folder = xjson_array_get(added, i);
+            const char *uri = xjson_get_string(folder, "uri");
+            const char *name = xjson_get_string(folder, "name");
             if (uri) {
                 xlsp_handle_ws_add_folder(server, uri, name);
             }
@@ -183,15 +183,15 @@ void xlsp_handle_ws_apply_configuration(XrLspServer *server, XrJsonValue *settin
     if (!settings) return;
 
     // Get xray settings section
-    XrJsonValue *xray = xlsp_json_get_object(settings, "xray");
+    XrJsonValue *xray = xjson_get_object(settings, "xray");
     if (!xray) return;
 
     // Diagnostic settings
-    XrJsonValue *diagnostics = xlsp_json_get_object(xray, "diagnostics");
+    XrJsonValue *diagnostics = xjson_get_object(xray, "diagnostics");
     if (diagnostics) {
-        if (xlsp_json_get(diagnostics, "enabled")) {
+        if (xjson_get(diagnostics, "enabled")) {
             bool was_enabled = server->config.diagnostics_enabled;
-            server->config.diagnostics_enabled = xlsp_json_get_bool(diagnostics, "enabled");
+            server->config.diagnostics_enabled = xjson_get_bool(diagnostics, "enabled");
             // On disable: clear pending queue and publish empty diagnostics
             if (was_enabled && !server->config.diagnostics_enabled) {
                 for (int i = 0; i < server->pending_diag_count; i++) {
@@ -203,38 +203,38 @@ void xlsp_handle_ws_apply_configuration(XrLspServer *server, XrJsonValue *settin
                 xlsp_clear_all_diagnostics(server);
             }
         }
-        if (xlsp_json_get(diagnostics, "debounceMs")) {
-            server->config.diagnostic_debounce_ms = (int)xlsp_json_get_int(diagnostics, "debounceMs");
+        if (xjson_get(diagnostics, "debounceMs")) {
+            server->config.diagnostic_debounce_ms = (int)xjson_get_int(diagnostics, "debounceMs");
         }
     }
 
     // Completion settings
-    XrJsonValue *completion = xlsp_json_get_object(xray, "completion");
+    XrJsonValue *completion = xjson_get_object(xray, "completion");
     if (completion) {
-        if (xlsp_json_get(completion, "maxItems")) {
-            server->config.completion_max_items = (int)xlsp_json_get_int(completion, "maxItems");
+        if (xjson_get(completion, "maxItems")) {
+            server->config.completion_max_items = (int)xjson_get_int(completion, "maxItems");
         }
     }
 
     // Format settings
-    XrJsonValue *format = xlsp_json_get_object(xray, "format");
+    XrJsonValue *format = xjson_get_object(xray, "format");
     if (format) {
-        if (xlsp_json_get(format, "tabSize")) {
-            server->config.format_tab_size = (int)xlsp_json_get_int(format, "tabSize");
+        if (xjson_get(format, "tabSize")) {
+            server->config.format_tab_size = (int)xjson_get_int(format, "tabSize");
         }
-        if (xlsp_json_get(format, "insertSpaces")) {
-            server->config.format_insert_spaces = xlsp_json_get_bool(format, "insertSpaces");
+        if (xjson_get(format, "insertSpaces")) {
+            server->config.format_insert_spaces = xjson_get_bool(format, "insertSpaces");
         }
     }
 
     // Inlay hints settings
-    XrJsonValue *inlay_hints = xlsp_json_get_object(xray, "inlayHints");
+    XrJsonValue *inlay_hints = xjson_get_object(xray, "inlayHints");
     if (inlay_hints) {
-        if (xlsp_json_get(inlay_hints, "typeAnnotations")) {
-            server->config.inlay_hints_type_annotations = xlsp_json_get_bool(inlay_hints, "typeAnnotations");
+        if (xjson_get(inlay_hints, "typeAnnotations")) {
+            server->config.inlay_hints_type_annotations = xjson_get_bool(inlay_hints, "typeAnnotations");
         }
-        if (xlsp_json_get(inlay_hints, "parameterNames")) {
-            server->config.inlay_hints_parameter_names = xlsp_json_get_bool(inlay_hints, "parameterNames");
+        if (xjson_get(inlay_hints, "parameterNames")) {
+            server->config.inlay_hints_parameter_names = xjson_get_bool(inlay_hints, "parameterNames");
         }
     }
 
@@ -246,7 +246,7 @@ void xlsp_handle_ws_apply_configuration(XrLspServer *server, XrJsonValue *settin
 }
 
 void xlsp_handle_ws_did_change_configuration(XrLspServer *server, XrJsonValue *params) {
-    XrJsonValue *settings = xlsp_json_get_object(params, "settings");
+    XrJsonValue *settings = xjson_get_object(params, "settings");
     xlsp_handle_ws_apply_configuration(server, settings);
 }
 

@@ -12,7 +12,7 @@
  */
 
 #include "xlsp_completion.h"
-#include "xlsp_json.h"
+#include "../../base/xjson.h"
 #include "xlsp_utils.h"
 #include "../../base/xmalloc.h"
 #include "xlsp_stdlib.h"
@@ -39,48 +39,48 @@
 
 // Create a completion item with markdown documentation for syntax highlighting
 static XrJsonValue *make_completion_item(const char *label, int kind, const char *detail) {
-    XrJsonValue *item = xlsp_json_new_object();
-    xlsp_json_object_set(item, "label", xlsp_json_new_string(label));
-    xlsp_json_object_set(item, "kind", xlsp_json_new_number(kind));
+    XrJsonValue *item = xjson_new_object();
+    xjson_object_set(item, "label", xjson_new_string(label));
+    xjson_object_set(item, "kind", xjson_new_number(kind));
     if (detail) {
-        xlsp_json_object_set(item, "detail", xlsp_json_new_string(detail));
+        xjson_object_set(item, "detail", xjson_new_string(detail));
 
         // Add markdown documentation with syntax highlighting
         char doc_buf[XLSP_MAX_PATH];
         snprintf(doc_buf, sizeof(doc_buf), "```xray\n%s\n```", detail);
 
-        XrJsonValue *documentation = xlsp_json_new_object();
-        xlsp_json_object_set(documentation, "kind", xlsp_json_new_string("markdown"));
-        xlsp_json_object_set(documentation, "value", xlsp_json_new_string(doc_buf));
-        xlsp_json_object_set(item, "documentation", documentation);
+        XrJsonValue *documentation = xjson_new_object();
+        xjson_object_set(documentation, "kind", xjson_new_string("markdown"));
+        xjson_object_set(documentation, "value", xjson_new_string(doc_buf));
+        xjson_object_set(item, "documentation", documentation);
     }
     return item;
 }
 
 // Generate completions for enum value instance (name, value, ordinal, toString)
 static XrJsonValue *make_enum_value_completions(const char *enum_name) {
-    XrJsonValue *items = xlsp_json_new_array();
+    XrJsonValue *items = xjson_new_array();
     char detail[256];
 
     snprintf(detail, sizeof(detail), "%s.name: string", enum_name);
     XrJsonValue *i1 = make_completion_item("name", 10, detail);
-    xlsp_json_object_set(i1, "sortText", xlsp_json_new_string("0"));
-    xlsp_json_array_push(items, i1);
+    xjson_object_set(i1, "sortText", xjson_new_string("0"));
+    xjson_array_push(items, i1);
 
     snprintf(detail, sizeof(detail), "%s.value: any", enum_name);
     XrJsonValue *i2 = make_completion_item("value", 10, detail);
-    xlsp_json_object_set(i2, "sortText", xlsp_json_new_string("1"));
-    xlsp_json_array_push(items, i2);
+    xjson_object_set(i2, "sortText", xjson_new_string("1"));
+    xjson_array_push(items, i2);
 
     snprintf(detail, sizeof(detail), "%s.ordinal: int", enum_name);
     XrJsonValue *i3 = make_completion_item("ordinal", 10, detail);
-    xlsp_json_object_set(i3, "sortText", xlsp_json_new_string("2"));
-    xlsp_json_array_push(items, i3);
+    xjson_object_set(i3, "sortText", xjson_new_string("2"));
+    xjson_array_push(items, i3);
 
     snprintf(detail, sizeof(detail), "%s.toString(): string", enum_name);
     XrJsonValue *i4 = make_completion_item("toString", 2, detail);
-    xlsp_json_object_set(i4, "sortText", xlsp_json_new_string("3"));
-    xlsp_json_array_push(items, i4);
+    xjson_object_set(i4, "sortText", xjson_new_string("3"));
+    xjson_array_push(items, i4);
 
     return items;
 }
@@ -301,7 +301,7 @@ XlspBuiltinType xlsp_infer_variable_type(XrLspServer *server, XrLspDocument *doc
 }
 
 static XrJsonValue *complete_basic(XrLspServer *server, XrLspDocument *doc, XrLspPosition pos) {
-    XrJsonValue *items = xlsp_json_new_array();
+    XrJsonValue *items = xjson_new_array();
 
     XaAnalyzer *analyzer = server ? server->workspace_analyzer : NULL;
     if (doc && analyzer) {
@@ -377,30 +377,30 @@ static XrJsonValue *complete_basic(XrLspServer *server, XrLspDocument *doc, XrLs
             }
 
             XrJsonValue *item = make_completion_item(sym->name, kind, detail);
-            xlsp_json_object_set(item, "sortText", xlsp_json_new_string("0"));
-            xlsp_json_array_push(items, item);
+            xjson_object_set(item, "sortText", xjson_new_string("0"));
+            xjson_array_push(items, item);
         }
         xr_free(symbols);
     }
 
     for (int i = 0; xr_keywords[i]; i++) {
         XrJsonValue *item = make_completion_item(xr_keywords[i], 14, "keyword");
-        xlsp_json_object_set(item, "sortText", xlsp_json_new_string("2"));
-        xlsp_json_array_push(items, item);
+        xjson_object_set(item, "sortText", xjson_new_string("2"));
+        xjson_array_push(items, item);
     }
 
     for (int i = 0; xr_builtins[i]; i++) {
         XrJsonValue *item = make_completion_item(xr_builtins[i], 3, "builtin function");
-        xlsp_json_object_set(item, "sortText", xlsp_json_new_string("1"));
-        xlsp_json_array_push(items, item);
+        xjson_object_set(item, "sortText", xjson_new_string("1"));
+        xjson_array_push(items, item);
     }
 
     int module_count;
     const XlspModuleInfo *modules = xlsp_stdlib_get_modules(&module_count);
     for (int i = 0; i < module_count; i++) {
         XrJsonValue *item = make_completion_item(modules[i].name, 9, modules[i].documentation);
-        xlsp_json_object_set(item, "sortText", xlsp_json_new_string("3"));
-        xlsp_json_array_push(items, item);
+        xjson_object_set(item, "sortText", xjson_new_string("3"));
+        xjson_array_push(items, item);
     }
 
     // Enum type names from document AST (analyzer doesn't register enums)
@@ -421,8 +421,8 @@ static XrJsonValue *complete_basic(XrLspServer *server, XrLspDocument *doc, XrLs
                          enum_node->as.enum_decl.name, enum_node->as.enum_decl.member_count);
                 XrJsonValue *item = make_completion_item(
                     enum_node->as.enum_decl.name, 13, detail_buf2);
-                xlsp_json_object_set(item, "sortText", xlsp_json_new_string("0"));
-                xlsp_json_array_push(items, item);
+                xjson_object_set(item, "sortText", xjson_new_string("0"));
+                xjson_array_push(items, item);
             }
         }
     }
@@ -441,15 +441,15 @@ static XrJsonValue *complete_basic(XrLspServer *server, XrLspDocument *doc, XrLs
 static XrJsonValue *complete_stdlib_module(const char *prefix) {
     const XlspModuleInfo *module = xlsp_stdlib_find_module(prefix);
     if (!module) return NULL;
-    XrJsonValue *items = xlsp_json_new_array();
+    XrJsonValue *items = xjson_new_array();
     for (int i = 0; i < module->symbol_count; i++) {
         const XlspSymbolInfo *sym = &module->symbols[i];
-        XrJsonValue *item = xlsp_json_new_object();
-        xlsp_json_object_set(item, "label", xlsp_json_new_string(sym->name));
-        xlsp_json_object_set(item, "kind", xlsp_json_new_number(sym->kind));
+        XrJsonValue *item = xjson_new_object();
+        xjson_object_set(item, "label", xjson_new_string(sym->name));
+        xjson_object_set(item, "kind", xjson_new_number(sym->kind));
         if (sym->signature)
-            xlsp_json_object_set(item, "detail", xlsp_json_new_string(sym->signature));
-        xlsp_json_array_push(items, item);
+            xjson_object_set(item, "detail", xjson_new_string(sym->signature));
+        xjson_array_push(items, item);
     }
     return items;
 }
@@ -459,21 +459,21 @@ static XrJsonValue *complete_stdlib_module(const char *prefix) {
 static XrJsonValue *complete_runtime_module(const char *prefix) {
     const XaBuiltinModule *rt_mod = xa_builtin_get_module_info(prefix);
     if (!rt_mod) return NULL;
-    XrJsonValue *items = xlsp_json_new_array();
+    XrJsonValue *items = xjson_new_array();
     for (int i = 0; i < rt_mod->function_count; i++) {
         const XaBuiltinMember *fn = &rt_mod->functions[i];
-        XrJsonValue *item = xlsp_json_new_object();
-        xlsp_json_object_set(item, "label", xlsp_json_new_string(fn->name));
+        XrJsonValue *item = xjson_new_object();
+        xjson_object_set(item, "label", xjson_new_string(fn->name));
         int kind = fn->is_method ? XLSP_KIND_METHOD : XLSP_KIND_PROPERTY;
-        xlsp_json_object_set(item, "kind", xlsp_json_new_number(kind));
+        xjson_object_set(item, "kind", xjson_new_number(kind));
         if (fn->signature) {
             char detail[256];
             snprintf(detail, sizeof(detail), "%s%s", fn->name, fn->signature);
-            xlsp_json_object_set(item, "detail", xlsp_json_new_string(detail));
+            xjson_object_set(item, "detail", xjson_new_string(detail));
         }
         if (fn->doc)
-            xlsp_json_object_set(item, "documentation", xlsp_json_new_string(fn->doc));
-        xlsp_json_array_push(items, item);
+            xjson_object_set(item, "documentation", xjson_new_string(fn->doc));
+        xjson_array_push(items, item);
     }
     return items;
 }
@@ -492,8 +492,8 @@ static XrJsonValue *complete_literal_marker(const char *prefix) {
 // `import myMod from "...";`.
 static XrJsonValue *complete_import_namespace(XrLspDocument *doc, const char *prefix) {
     XrJsonValue *items = xlsp_get_import_completions(doc, prefix);
-    if (items && xlsp_json_array_len(items) > 0) return items;
-    if (items) xlsp_json_free(items);
+    if (items && xjson_array_len(items) > 0) return items;
+    if (items) xjson_free(items);
     return NULL;
 }
 
@@ -502,7 +502,7 @@ static XrJsonValue *complete_enum_decl(XrLspDocument *doc, const char *prefix) {
     if (!doc->ast) return NULL;
     AstNode *enum_node = find_enum_in_ast(doc->ast, prefix);
     if (!enum_node) return NULL;
-    XrJsonValue *items = xlsp_json_new_array();
+    XrJsonValue *items = xjson_new_array();
     char detail_buf[256];
     for (int i = 0; i < enum_node->as.enum_decl.member_count; i++) {
         AstNode *member = enum_node->as.enum_decl.members[i];
@@ -511,12 +511,12 @@ static XrJsonValue *complete_enum_decl(XrLspDocument *doc, const char *prefix) {
                      prefix, member->as.enum_member.name);
             XrJsonValue *item = make_completion_item(
                 member->as.enum_member.name, XR_COMPLETION_ENUM_MEMBER, detail_buf);
-            xlsp_json_object_set(item, "sortText", xlsp_json_new_string("0"));
-            xlsp_json_array_push(items, item);
+            xjson_object_set(item, "sortText", xjson_new_string("0"));
+            xjson_array_push(items, item);
         }
     }
-    if (xlsp_json_array_len(items) > 0) return items;
-    xlsp_json_free(items);
+    if (xjson_array_len(items) > 0) return items;
+    xjson_free(items);
     return NULL;
 }
 
@@ -630,8 +630,8 @@ static void append_static_field(XrJsonValue *items, XaAnalyzer *analyzer,
     snprintf(detail_buf, sizeof(detail_buf), "static %s.%s: %s",
              prefix, f->name, type_str);
     XrJsonValue *item = make_completion_item(f->name, 5, detail_buf);
-    xlsp_json_object_set(item, "sortText", xlsp_json_new_string("0"));
-    xlsp_json_array_push(items, item);
+    xjson_object_set(item, "sortText", xjson_new_string("0"));
+    xjson_array_push(items, item);
 }
 
 // Append one XaSymbol as a `static <cls>.<method>(params): ret` method item.
@@ -660,8 +660,8 @@ static void append_static_method(XrJsonValue *items, XaAnalyzer *analyzer,
     snprintf(detail_buf + sig_len, sizeof(detail_buf) - sig_len,
              "): %s", ret_type);
     XrJsonValue *item = make_completion_item(m->name, 2, detail_buf);
-    xlsp_json_object_set(item, "sortText", xlsp_json_new_string("1"));
-    xlsp_json_array_push(items, item);
+    xjson_object_set(item, "sortText", xjson_new_string("1"));
+    xjson_array_push(items, item);
 }
 
 // Static member completion: prefix IS a class name (e.g. "Math.divmod").
@@ -672,7 +672,7 @@ static XrJsonValue *complete_static_members(XaAnalyzer *analyzer,
         (static_cls->static_method_count == 0 && static_cls->static_field_count == 0))
         return NULL;
 
-    XrJsonValue *items = xlsp_json_new_array();
+    XrJsonValue *items = xjson_new_array();
     for (XrClassInfo *c = static_cls; c != NULL; c = c->base) {
         for (int i = 0; i < c->static_field_count; i++) {
             XaSymbol *f = c->static_fields[i];
@@ -685,8 +685,8 @@ static XrJsonValue *complete_static_members(XaAnalyzer *analyzer,
                 append_static_method(items, analyzer, m, prefix);
         }
     }
-    if (xlsp_json_array_len(items) > 0) return items;
-    xlsp_json_free(items);
+    if (xjson_array_len(items) > 0) return items;
+    xjson_free(items);
     return NULL;
 }
 
@@ -700,8 +700,8 @@ static void append_instance_field(XrJsonValue *items, XaAnalyzer *analyzer,
     snprintf(detail_buf, sizeof(detail_buf), "%s.%s: %s",
              class_name, f->name, type_str);
     XrJsonValue *item = make_completion_item(f->name, 5, detail_buf);
-    xlsp_json_object_set(item, "sortText", xlsp_json_new_string("0"));
-    xlsp_json_array_push(items, item);
+    xjson_object_set(item, "sortText", xjson_new_string("0"));
+    xjson_array_push(items, item);
 }
 
 // Append instance method `<cls>.<method>(params): ret`.
@@ -730,8 +730,8 @@ static void append_instance_method(XrJsonValue *items, XaAnalyzer *analyzer,
     snprintf(detail_buf + sig_len, sizeof(detail_buf) - sig_len,
              "): %s", ret_type);
     XrJsonValue *item = make_completion_item(m->name, 2, detail_buf);
-    xlsp_json_object_set(item, "sortText", xlsp_json_new_string("1"));
-    xlsp_json_array_push(items, item);
+    xjson_object_set(item, "sortText", xjson_new_string("1"));
+    xjson_array_push(items, item);
 }
 
 // Instance-member completion via scanned class name (from `new ClassName(...)`).
@@ -744,7 +744,7 @@ static XrJsonValue *complete_instance_members_by_name(XaAnalyzer *analyzer,
             cls_info ? cls_info->method_count : 0);
     if (!cls_info) return NULL;
 
-    XrJsonValue *items = xlsp_json_new_array();
+    XrJsonValue *items = xjson_new_array();
     for (XrClassInfo *c = cls_info; c != NULL; c = c->base) {
         for (int i = 0; i < c->field_count; i++) {
             XaSymbol *f = c->fields[i];
@@ -758,8 +758,8 @@ static XrJsonValue *complete_instance_members_by_name(XaAnalyzer *analyzer,
                 append_instance_method(items, analyzer, m, class_name);
         }
     }
-    if (xlsp_json_array_len(items) > 0) return items;
-    xlsp_json_free(items);
+    if (xjson_array_len(items) > 0) return items;
+    xjson_free(items);
     return NULL;
 }
 
@@ -775,7 +775,7 @@ static XrJsonValue *complete_instance_members_from_analyzer(XaAnalyzer *analyzer
     }
     const char *cls_name = type->instance.class_name
         ? type->instance.class_name : "class";
-    XrJsonValue *items = xlsp_json_new_array();
+    XrJsonValue *items = xjson_new_array();
     char detail_buf[512];
     for (int i = 0; i < member_count; i++) {
         XaSymbol *m = members[i];
@@ -802,18 +802,18 @@ static XrJsonValue *complete_instance_members_from_analyzer(XaAnalyzer *analyzer
             const char *rt = (links && links->return_type)
                 ? xr_type_to_string(links->return_type) : "unknown";
             snprintf(detail_buf + sl, sizeof(detail_buf) - sl, "): %s", rt);
-            xlsp_json_array_push(items, make_completion_item(m->name, 2, detail_buf));
+            xjson_array_push(items, make_completion_item(m->name, 2, detail_buf));
         } else {
             const char *ts = (links && links->type)
                 ? xr_type_to_string(links->type) : "unknown";
             snprintf(detail_buf, sizeof(detail_buf), "%s.%s: %s",
                      cls_name, m->name, ts);
-            xlsp_json_array_push(items, make_completion_item(m->name, 5, detail_buf));
+            xjson_array_push(items, make_completion_item(m->name, 5, detail_buf));
         }
     }
     xr_free(members);
-    if (xlsp_json_array_len(items) > 0) return items;
-    xlsp_json_free(items);
+    if (xjson_array_len(items) > 0) return items;
+    xjson_free(items);
     return NULL;
 }
 
@@ -909,7 +909,7 @@ XrJsonValue *xlsp_analyze_completion(XrLspServer *server, XrLspDocument *doc, Xr
     // Return empty list immediately if document has parse error - don't crash
     if (!doc || !doc->content) {
         lsp_log("xlsp_analyze_completion_with_server: no doc or content");
-        return xlsp_json_new_array();
+        return xjson_new_array();
     }
 
     XaAnalyzer *analyzer = server ? server->workspace_analyzer : NULL;
@@ -962,5 +962,5 @@ XrJsonValue *xlsp_analyze_completion(XrLspServer *server, XrLspDocument *doc, Xr
 
     // Prefix was a member access ("foo.") but no strategy matched — return
     // an empty list rather than falling back to global symbol completions.
-    return xlsp_json_new_array();
+    return xjson_new_array();
 }

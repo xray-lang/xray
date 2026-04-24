@@ -17,7 +17,7 @@
 #include "../base/xchecks.h"
 #include "xcoroutine.h"
 #include "xworker.h"
-#include "../vm/xvm_internal.h"
+#include "../runtime/xvm_call.h"         // XrVMResult
 #include "xnetpoll.h"
 #include "../runtime/xray_debug.h"
 #include "xresume.h"

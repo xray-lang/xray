@@ -11,7 +11,7 @@
 
 #include "xlsp_navigation.h"
 #include "xlsp_server.h"
-#include "xlsp_json.h"
+#include "../../base/xjson.h"
 #include "xlsp_analysis.h"
 #include "xlsp_imports.h"
 #include "xlsp_utils.h"
@@ -46,12 +46,12 @@ XrJsonValue *xlsp_analyze_definition(XrLspServer *server, XrLspDocument *doc, Xr
         if (sym && sym->location.line > 0) {
             const char *target_uri = (sym->location.file && sym->location.file[0])
                 ? sym->location.file : doc->uri;
-            result = xlsp_json_new_object();
-            xlsp_json_object_set(result, "uri", xlsp_json_new_string(target_uri));
+            result = xjson_new_object();
+            xjson_object_set(result, "uri", xjson_new_string(target_uri));
 
             int col = sym->location.column > 0 ? sym->location.column - 1 : 0;
-            xlsp_json_object_set(result, "range",
-                xlsp_json_make_range(sym->location.line - 1, col,
+            xjson_object_set(result, "range",
+                xjson_make_range(sym->location.line - 1, col,
                                      sym->location.line - 1, col + (int)strlen(sym->name)));
         }
     }
@@ -66,11 +66,11 @@ XrJsonValue *xlsp_analyze_definition(XrLspServer *server, XrLspDocument *doc, Xr
             if (strcmp(table.entries[i].name, word) == 0) {
                 SymbolEntry *entry = &table.entries[i];
 
-                result = xlsp_json_new_object();
-                xlsp_json_object_set(result, "uri", xlsp_json_new_string(doc->uri));
+                result = xjson_new_object();
+                xjson_object_set(result, "uri", xjson_new_string(doc->uri));
 
-                xlsp_json_object_set(result, "range",
-                    xlsp_json_make_range(entry->line, entry->start_char,
+                xjson_object_set(result, "range",
+                    xjson_make_range(entry->line, entry->start_char,
                                          entry->end_line, entry->end_char));
 
                 break;
@@ -120,7 +120,7 @@ XrJsonValue *xlsp_analyze_definition(XrLspServer *server, XrLspDocument *doc, Xr
 
 // Helper: create a reference location JSON object
 static XrJsonValue *make_ref_location(const char *uri, int line, int start_col, int end_col) {
-    return xlsp_json_make_location(uri, line, start_col, line, end_col);
+    return xjson_make_location(uri, line, start_col, line, end_col);
 }
 
 // Reference context for AST traversal
@@ -174,7 +174,7 @@ static XaScope *find_child_scope_for_refs(XaScope *parent, void *ast_node) {
 static void add_ref_if_visible(RefFindContext *ctx, int line, int col, int name_len) {
     if (can_see_definition(ctx)) {
         XrJsonValue *loc = make_ref_location(ctx->uri, line - 1, col - 1, col - 1 + name_len);
-        xlsp_json_array_push(ctx->refs, loc);
+        xjson_array_push(ctx->refs, loc);
     }
 }
 
@@ -433,13 +433,13 @@ static void scan_doc_for_refs_lexer(XrLspDocument *doc, const char *search_word,
             }
 
             XrJsonValue *loc = make_ref_location(doc->uri, line_idx, char_pos, char_pos + token.length);
-            xlsp_json_array_push(refs, loc);
+            xjson_array_push(refs, loc);
         }
     }
 }
 
 XrJsonValue *xlsp_analyze_references(XrLspServer *server, XrLspDocument *doc, XrLspPosition pos) {
-    XrJsonValue *refs = xlsp_json_new_array();
+    XrJsonValue *refs = xjson_new_array();
 
     if (!doc || !doc->content) return refs;
 
@@ -490,7 +490,7 @@ XrJsonValue *xlsp_analyze_references(XrLspServer *server, XrLspDocument *doc, Xr
             used_semantic_search = true;
 
             lsp_log("References (semantic): found %d refs for '%s' in %s",
-                    xlsp_json_array_len(refs), search_word, doc->uri);
+                    xjson_array_len(refs), search_word, doc->uri);
         }
     }
 
@@ -498,7 +498,7 @@ XrJsonValue *xlsp_analyze_references(XrLspServer *server, XrLspDocument *doc, Xr
     if (!used_semantic_search) {
         scan_doc_for_refs_lexer(doc, search_word, word_len, refs);
         lsp_log("References (lexer fallback): found %d refs for '%s' in %s",
-                xlsp_json_array_len(refs), search_word, doc->uri);
+                xjson_array_len(refs), search_word, doc->uri);
     }
 
     // =========================================================================
@@ -521,11 +521,11 @@ XrJsonValue *xlsp_analyze_references(XrLspServer *server, XrLspDocument *doc, Xr
             int col  = r->column > 0 ? (int)r->column - 1 : 0;
             int end_col = col + (int)strlen(search_word);
 
-            XrJsonValue *loc = xlsp_json_new_object();
-            xlsp_json_object_set(loc, "uri", xlsp_json_new_string(ref_uri));
-            xlsp_json_object_set(loc, "range",
-                xlsp_json_make_range(line, col, line, end_col));
-            xlsp_json_array_push(refs, loc);
+            XrJsonValue *loc = xjson_new_object();
+            xjson_object_set(loc, "uri", xjson_new_string(ref_uri));
+            xjson_object_set(loc, "range",
+                xjson_make_range(line, col, line, end_col));
+            xjson_array_push(refs, loc);
         }
 
         if (ref_count > 0) {
@@ -545,7 +545,7 @@ XrJsonValue *xlsp_analyze_references(XrLspServer *server, XrLspDocument *doc, Xr
 // ============================================================================
 
 XrJsonValue *xlsp_analyze_document_highlight(XrLspServer *server, XrLspDocument *doc, XrLspPosition pos) {
-    XrJsonValue *highlights = xlsp_json_new_array();
+    XrJsonValue *highlights = xjson_new_array();
     if (!doc || !doc->content) return highlights;
 
     XaAnalyzer *analyzer = server ? server->workspace_analyzer : NULL;
@@ -567,7 +567,7 @@ XrJsonValue *xlsp_analyze_document_highlight(XrLspServer *server, XrLspDocument 
             if (!def_scope) def_scope = analyzer->global_scope;
 
             // Collect references in this document only
-            XrJsonValue *refs = xlsp_json_new_array();
+            XrJsonValue *refs = xjson_new_array();
             RefFindContext ctx = {
                 .target_name = word,
                 .def_scope = def_scope,
@@ -579,36 +579,36 @@ XrJsonValue *xlsp_analyze_document_highlight(XrLspServer *server, XrLspDocument 
             collect_refs_from_ast(doc->ast, &ctx);
 
             // Convert Location objects to DocumentHighlight objects
-            for (int i = 0; i < xlsp_json_array_len(refs); i++) {
-                XrJsonValue *loc = xlsp_json_array_get(refs, i);
-                XrJsonValue *range = xlsp_json_get_object(loc, "range");
+            for (int i = 0; i < xjson_array_len(refs); i++) {
+                XrJsonValue *loc = xjson_array_get(refs, i);
+                XrJsonValue *range = xjson_get_object(loc, "range");
                 if (range) {
-                    XrJsonValue *hl = xlsp_json_new_object();
+                    XrJsonValue *hl = xjson_new_object();
                     // Deep copy range since we'll free refs
-                    XrJsonValue *r_start = xlsp_json_get_object(range, "start");
-                    XrJsonValue *r_end = xlsp_json_get_object(range, "end");
-                    xlsp_json_object_set(hl, "range",
-                        xlsp_json_make_range(
-                            xlsp_json_get_int(r_start, "line"),
-                            xlsp_json_get_int(r_start, "character"),
-                            xlsp_json_get_int(r_end, "line"),
-                            xlsp_json_get_int(r_end, "character")));
+                    XrJsonValue *r_start = xjson_get_object(range, "start");
+                    XrJsonValue *r_end = xjson_get_object(range, "end");
+                    xjson_object_set(hl, "range",
+                        xjson_make_range(
+                            xjson_get_int(r_start, "line"),
+                            xjson_get_int(r_start, "character"),
+                            xjson_get_int(r_end, "line"),
+                            xjson_get_int(r_end, "character")));
 
                     // Classify: definition vs read
                     int kind = LSP_HIGHLIGHT_READ;
                     if (sym->location.line > 0 && sym->location.column > 0) {
                         int def_line = sym->location.line - 1;
                         int def_col = sym->location.column - 1;
-                        if (xlsp_json_get_int(r_start, "line") == def_line &&
-                            xlsp_json_get_int(r_start, "character") == def_col) {
+                        if (xjson_get_int(r_start, "line") == def_line &&
+                            xjson_get_int(r_start, "character") == def_col) {
                             kind = LSP_HIGHLIGHT_WRITE;
                         }
                     }
-                    xlsp_json_object_set(hl, "kind", xlsp_json_new_number(kind));
-                    xlsp_json_array_push(highlights, hl);
+                    xjson_object_set(hl, "kind", xjson_new_number(kind));
+                    xjson_array_push(highlights, hl);
                 }
             }
-            xlsp_json_free(refs);
+            xjson_free(refs);
             used_semantic = true;
         }
     }
@@ -632,11 +632,11 @@ XrJsonValue *xlsp_analyze_document_highlight(XrLspServer *server, XrLspDocument 
                     p++;
                 }
                 int col = (int)(token.start - line_start);
-                XrJsonValue *hl = xlsp_json_new_object();
-                xlsp_json_object_set(hl, "range",
-                    xlsp_json_make_range(token.line - 1, col, token.line - 1, col + token.length));
-                xlsp_json_object_set(hl, "kind", xlsp_json_new_number(LSP_HIGHLIGHT_TEXT));
-                xlsp_json_array_push(highlights, hl);
+                XrJsonValue *hl = xjson_new_object();
+                xjson_object_set(hl, "range",
+                    xjson_make_range(token.line - 1, col, token.line - 1, col + token.length));
+                xjson_object_set(hl, "kind", xjson_new_number(LSP_HIGHLIGHT_TEXT));
+                xjson_array_push(highlights, hl);
             }
         }
     }

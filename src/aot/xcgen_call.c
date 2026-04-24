@@ -830,6 +830,50 @@ throw_check_done:
                 return;
             }
 
+            // Generic index get: CALL_C(xr_jit_index_get, encoded_tags)
+            // call_args[0] = obj, call_args[1] = key
+            if (fn_ptr == (void *)xr_jit_index_get) {
+                uint32_t dst_idx = XIR_REF_INDEX(ins->dst);
+                xcgen_buf_printf(b, "    v%u = xrt_index_get(", dst_idx);
+                if (cf->call_args_count > 0)
+                    emit_ref_as_tagged(b, func, cf->call_args[0]);
+                else
+                    xcgen_buf_printf(b, "(%s){0}", tagged_type);
+                xcgen_buf_puts(b, ", ");
+                if (cf->call_args_count > 1)
+                    emit_ref_as_tagged(b, func, cf->call_args[1]);
+                else
+                    xcgen_buf_printf(b, "(%s){0}", tagged_type);
+                xcgen_buf_puts(b, ");\n");
+                cf->needs_runtime = true;
+                cf->call_args_count = 0;
+                return;
+            }
+
+            // Generic index set: CALL_C(xr_jit_index_set, encoded_tags)
+            // call_args[0] = obj, call_args[1] = key, call_args[2] = value
+            if (fn_ptr == (void *)xr_jit_index_set) {
+                xcgen_buf_puts(b, "    xrt_index_set(");
+                if (cf->call_args_count > 0)
+                    emit_ref_as_tagged(b, func, cf->call_args[0]);
+                else
+                    xcgen_buf_printf(b, "(%s){0}", tagged_type);
+                xcgen_buf_puts(b, ", ");
+                if (cf->call_args_count > 1)
+                    emit_ref_as_tagged(b, func, cf->call_args[1]);
+                else
+                    xcgen_buf_printf(b, "(%s){0}", tagged_type);
+                xcgen_buf_puts(b, ", ");
+                if (cf->call_args_count > 2)
+                    emit_ref_as_tagged(b, func, cf->call_args[2]);
+                else
+                    xcgen_buf_printf(b, "(%s){0}", tagged_type);
+                xcgen_buf_puts(b, ");\n");
+                cf->needs_runtime = true;
+                cf->call_args_count = 0;
+                return;
+            }
+
             // StringBuilder new: CALL_C(xrt_strbuf_new_sentinel, 0)
             if (fn_ptr == (void *)xrt_strbuf_new_sentinel) {
                 uint32_t dst_idx = XIR_REF_INDEX(ins->dst);

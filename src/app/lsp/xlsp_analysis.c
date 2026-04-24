@@ -11,7 +11,7 @@
 #include "xlsp_analysis.h"
 #include "xlsp_ast_utils.h"
 #include "xlsp_cache.h"
-#include "xlsp_json.h"
+#include "../../base/xjson.h"
 #include "xlsp_workspace.h"
 #include "xlsp_utils.h"
 #include <string.h>
@@ -136,18 +136,18 @@ char *xlsp_word_at_position(XrLspDocument *doc, XrLspPosition pos,
 static XrJsonValue *make_diagnostic(int start_line, int start_char,
                                      int end_line, int end_char,
                                      int severity, const char *message) {
-    XrJsonValue *diag = xlsp_json_new_object();
+    XrJsonValue *diag = xjson_new_object();
 
-    xlsp_json_object_set(diag, "range", xlsp_json_make_range(start_line, start_char, end_line, end_char));
+    xjson_object_set(diag, "range", xjson_make_range(start_line, start_char, end_line, end_char));
 
     // Severity (1=Error, 2=Warning, 3=Info, 4=Hint)
-    xlsp_json_object_set(diag, "severity", xlsp_json_new_number(severity));
+    xjson_object_set(diag, "severity", xjson_new_number(severity));
 
     // Source
-    xlsp_json_object_set(diag, "source", xlsp_json_new_string("xray"));
+    xjson_object_set(diag, "source", xjson_new_string("xray"));
 
     // Message
-    xlsp_json_object_set(diag, "message", xlsp_json_new_string(message));
+    xjson_object_set(diag, "message", xjson_new_string(message));
 
     return diag;
 }
@@ -175,7 +175,7 @@ static void lsp_error_callback(void *user_data, int line, int column,
         message
     );
 
-    xlsp_json_array_push(ctx->diagnostics, diag);
+    xjson_array_push(ctx->diagnostics, diag);
 }
 
 // lsp_log declared in xlsp_server.h (included via xlsp_analysis.h)
@@ -356,7 +356,7 @@ void xlsp_parse_document(XrLspDocument *doc, XrLspServer *server) {
     xr_parser_init(&parser, isolate, doc->content, doc->uri, &doc->arena);
 
     // Set up error collection
-    LspErrorContext error_ctx = { .diagnostics = xlsp_json_new_array() };
+    LspErrorContext error_ctx = { .diagnostics = xjson_new_array() };
     xr_parser_set_error_callback(&parser, lsp_error_callback, &error_ctx, 100);
 
     // Parse with error recovery - returns partial AST even on errors
@@ -411,7 +411,7 @@ void xlsp_parse_document(XrLspDocument *doc, XrLspServer *server) {
                       (d->severity == XR_DIAG_SEV_HINT)    ? 4 : 1;
             XrJsonValue *diag = make_diagnostic(line, col, line, col + 1,
                                                 sev, d->message);
-            xlsp_json_array_push(error_ctx.diagnostics, diag);
+            xjson_array_push(error_ctx.diagnostics, diag);
         }
 
         // Check for cross-file dependencies that need re-analysis
@@ -437,18 +437,18 @@ void xlsp_parse_document(XrLspDocument *doc, XrLspServer *server) {
 
 XrJsonValue *xlsp_analyze_diagnostics(XrLspDocument *doc) {
     if (!doc || !doc->content) {
-        return xlsp_json_new_array();
+        return xjson_new_array();
     }
 
     // Use cached diagnostics from parser if available
     // Return a clone so caller can safely free it
     if (doc->cached_diagnostics) {
-        return xlsp_json_clone((XrJsonValue *)doc->cached_diagnostics);
+        return xjson_clone((XrJsonValue *)doc->cached_diagnostics);
     }
 
     // Fallback: simple lexical scan for obvious errors
     // This path should rarely trigger since xlsp_parse_document always sets cached_diagnostics
-    XrJsonValue *diagnostics = xlsp_json_new_array();
+    XrJsonValue *diagnostics = xjson_new_array();
     Scanner scanner;
     xr_scanner_init(&scanner, doc->content);
 
@@ -470,7 +470,7 @@ XrJsonValue *xlsp_analyze_diagnostics(XrLspDocument *doc) {
                 1,  // Error
                 token.start  // Error message is in start
             );
-            xlsp_json_array_push(diagnostics, diag);
+            xjson_array_push(diagnostics, diag);
             continue;
         }
 
@@ -484,7 +484,7 @@ XrJsonValue *xlsp_analyze_diagnostics(XrLspDocument *doc) {
                         token.line - 1, 0, token.line - 1, 1,
                         1, "Unmatched closing parenthesis"
                     );
-                    xlsp_json_array_push(diagnostics, diag);
+                    xjson_array_push(diagnostics, diag);
                     paren_depth = 0;
                 }
                 break;
@@ -496,7 +496,7 @@ XrJsonValue *xlsp_analyze_diagnostics(XrLspDocument *doc) {
                         token.line - 1, 0, token.line - 1, 1,
                         1, "Unmatched closing brace"
                     );
-                    xlsp_json_array_push(diagnostics, diag);
+                    xjson_array_push(diagnostics, diag);
                     brace_depth = 0;
                 }
                 break;
@@ -508,7 +508,7 @@ XrJsonValue *xlsp_analyze_diagnostics(XrLspDocument *doc) {
                         token.line - 1, 0, token.line - 1, 1,
                         1, "Unmatched closing bracket"
                     );
-                    xlsp_json_array_push(diagnostics, diag);
+                    xjson_array_push(diagnostics, diag);
                     bracket_depth = 0;
                 }
                 break;
@@ -523,21 +523,21 @@ XrJsonValue *xlsp_analyze_diagnostics(XrLspDocument *doc) {
             doc->line_count - 1, 0, doc->line_count - 1, 0,
             1, "Unclosed parenthesis"
         );
-        xlsp_json_array_push(diagnostics, diag);
+        xjson_array_push(diagnostics, diag);
     }
     if (brace_depth > 0) {
         XrJsonValue *diag = make_diagnostic(
             doc->line_count - 1, 0, doc->line_count - 1, 0,
             1, "Unclosed brace"
         );
-        xlsp_json_array_push(diagnostics, diag);
+        xjson_array_push(diagnostics, diag);
     }
     if (bracket_depth > 0) {
         XrJsonValue *diag = make_diagnostic(
             doc->line_count - 1, 0, doc->line_count - 1, 0,
             1, "Unclosed bracket"
         );
-        xlsp_json_array_push(diagnostics, diag);
+        xjson_array_push(diagnostics, diag);
     }
 
     return diagnostics;
@@ -692,17 +692,17 @@ cleanup_word:
     if (!description) return NULL;
 
     // Build hover response
-    XrJsonValue *hover = xlsp_json_new_object();
+    XrJsonValue *hover = xjson_new_object();
 
-    XrJsonValue *contents = xlsp_json_new_object();
-    xlsp_json_object_set(contents, "kind", xlsp_json_new_string("markdown"));
-    xlsp_json_object_set(contents, "value", xlsp_json_new_string(description));
-    xlsp_json_object_set(hover, "contents", contents);
+    XrJsonValue *contents = xjson_new_object();
+    xjson_object_set(contents, "kind", xjson_new_string("markdown"));
+    xjson_object_set(contents, "value", xjson_new_string(description));
+    xjson_object_set(hover, "contents", contents);
 
     XrLspPosition range_start = xlsp_offset_to_position(doc, start);
     XrLspPosition range_end = xlsp_offset_to_position(doc, end);
-    xlsp_json_object_set(hover, "range",
-        xlsp_json_make_range(range_start.line, range_start.character,
+    xjson_object_set(hover, "range",
+        xjson_make_range(range_start.line, range_start.character,
                              range_end.line, range_end.character));
 
     return hover;
@@ -924,14 +924,14 @@ static XrJsonValue *create_doc_symbol(const char *name, int kind,
                                        XrLspRange selection_range) {
     XR_DCHECK(name != NULL, "create_doc_symbol: NULL name");
 
-    XrJsonValue *symbol = xlsp_json_new_object();
-    xlsp_json_object_set(symbol, "name", xlsp_json_new_string(name));
-    xlsp_json_object_set(symbol, "kind", xlsp_json_new_number(kind));
-    xlsp_json_object_set(symbol, "range",
-        xlsp_json_make_range(full_range.start.line, full_range.start.character,
+    XrJsonValue *symbol = xjson_new_object();
+    xjson_object_set(symbol, "name", xjson_new_string(name));
+    xjson_object_set(symbol, "kind", xjson_new_number(kind));
+    xjson_object_set(symbol, "range",
+        xjson_make_range(full_range.start.line, full_range.start.character,
                              full_range.end.line,   full_range.end.character));
-    xlsp_json_object_set(symbol, "selectionRange",
-        xlsp_json_make_range(selection_range.start.line, selection_range.start.character,
+    xjson_object_set(symbol, "selectionRange",
+        xjson_make_range(selection_range.start.line, selection_range.start.character,
                              selection_range.end.line,   selection_range.end.character));
     return symbol;
 }
@@ -1010,7 +1010,7 @@ static void build_nested_symbols(AstNode *node, XrJsonValue *symbols) {
         case AST_FUNCTION_DECL: {
             XrJsonValue *sym = emit_decl_symbol(node,
                 node->as.function_decl.name, LSP_SYMBOL_FUNCTION);
-            if (sym) xlsp_json_array_push(symbols, sym);
+            if (sym) xjson_array_push(symbols, sym);
             break;
         }
 
@@ -1018,14 +1018,14 @@ static void build_nested_symbols(AstNode *node, XrJsonValue *symbols) {
             int kind = node->as.var_decl.is_const
                      ? LSP_SYMBOL_CONSTANT : LSP_SYMBOL_VARIABLE;
             XrJsonValue *sym = emit_decl_symbol(node, node->as.var_decl.name, kind);
-            if (sym) xlsp_json_array_push(symbols, sym);
+            if (sym) xjson_array_push(symbols, sym);
             break;
         }
 
         case AST_CONST_DECL: {
             XrJsonValue *sym = emit_decl_symbol(node,
                 node->as.var_decl.name, LSP_SYMBOL_CONSTANT);
-            if (sym) xlsp_json_array_push(symbols, sym);
+            if (sym) xjson_array_push(symbols, sym);
             break;
         }
 
@@ -1035,14 +1035,14 @@ static void build_nested_symbols(AstNode *node, XrJsonValue *symbols) {
                 node->as.class_decl.name, LSP_SYMBOL_CLASS);
             if (!sym) break;
 
-            XrJsonValue *children = xlsp_json_new_array();
+            XrJsonValue *children = xjson_new_array();
 
             for (int i = 0; i < node->as.class_decl.field_count; i++) {
                 AstNode *field = node->as.class_decl.fields[i];
                 if (field && field->type == AST_FIELD_DECL) {
                     XrJsonValue *child = emit_decl_symbol(field,
                         field->as.field_decl.name, LSP_SYMBOL_FIELD);
-                    if (child) xlsp_json_array_push(children, child);
+                    if (child) xjson_array_push(children, child);
                 }
             }
 
@@ -1053,23 +1053,23 @@ static void build_nested_symbols(AstNode *node, XrJsonValue *symbols) {
                              ? LSP_SYMBOL_CONSTRUCTOR : LSP_SYMBOL_METHOD;
                     XrJsonValue *child = emit_decl_symbol(method,
                         method->as.method_decl.name, kind);
-                    if (child) xlsp_json_array_push(children, child);
+                    if (child) xjson_array_push(children, child);
                 }
             }
 
-            if (xlsp_json_array_len(children) > 0) {
-                xlsp_json_object_set(sym, "children", children);
+            if (xjson_array_len(children) > 0) {
+                xjson_object_set(sym, "children", children);
             } else {
-                xlsp_json_free(children);
+                xjson_free(children);
             }
-            xlsp_json_array_push(symbols, sym);
+            xjson_array_push(symbols, sym);
             break;
         }
 
         case AST_INTERFACE_DECL: {
             XrJsonValue *sym = emit_decl_symbol(node,
                 node->as.interface_decl.name, LSP_SYMBOL_INTERFACE);
-            if (sym) xlsp_json_array_push(symbols, sym);
+            if (sym) xjson_array_push(symbols, sym);
             break;
         }
 
@@ -1079,22 +1079,22 @@ static void build_nested_symbols(AstNode *node, XrJsonValue *symbols) {
             if (!sym) break;
 
             if (node->as.enum_decl.members) {
-                XrJsonValue *children = xlsp_json_new_array();
+                XrJsonValue *children = xjson_new_array();
                 for (int i = 0; i < node->as.enum_decl.member_count; i++) {
                     AstNode *member = node->as.enum_decl.members[i];
                     if (member && member->type == AST_ENUM_MEMBER) {
                         XrJsonValue *child = emit_decl_symbol(member,
                             member->as.enum_member.name, LSP_SYMBOL_ENUM_MEMBER);
-                        if (child) xlsp_json_array_push(children, child);
+                        if (child) xjson_array_push(children, child);
                     }
                 }
-                if (xlsp_json_array_len(children) > 0) {
-                    xlsp_json_object_set(sym, "children", children);
+                if (xjson_array_len(children) > 0) {
+                    xjson_object_set(sym, "children", children);
                 } else {
-                    xlsp_json_free(children);
+                    xjson_free(children);
                 }
             }
-            xlsp_json_array_push(symbols, sym);
+            xjson_array_push(symbols, sym);
             break;
         }
 
@@ -1110,7 +1110,7 @@ static void build_nested_symbols(AstNode *node, XrJsonValue *symbols) {
 }
 
 XrJsonValue *xlsp_analyze_document_symbols(XrLspDocument *doc) {
-    XrJsonValue *symbols = xlsp_json_new_array();
+    XrJsonValue *symbols = xjson_new_array();
 
     if (!doc || !doc->content) {
         return symbols;
@@ -1156,7 +1156,7 @@ XrJsonValue *xlsp_analyze_document_symbols(XrLspDocument *doc) {
 
         XrJsonValue *sym = create_doc_symbol(entry->name, entry->kind,
                                              full_range, selection_range);
-        xlsp_json_array_push(symbols, sym);
+        xjson_array_push(symbols, sym);
     }
 
     xlsp_symbol_table_free(&table);
@@ -1278,25 +1278,25 @@ XrJsonValue *xlsp_analyze_signature_help(XrLspDocument *doc, XrLspPosition pos) 
     }
 
     // Build SignatureHelp response
-    XrJsonValue *result = xlsp_json_new_object();
-    XrJsonValue *signatures = xlsp_json_new_array();
-    XrJsonValue *sig_info = xlsp_json_new_object();
-    XrJsonValue *params = xlsp_json_new_array();
+    XrJsonValue *result = xjson_new_object();
+    XrJsonValue *signatures = xjson_new_array();
+    XrJsonValue *sig_info = xjson_new_object();
+    XrJsonValue *params = xjson_new_array();
     int param_count = 0;
 
     if (sig) {
         // Builtin function
-        xlsp_json_object_set(sig_info, "label", xlsp_json_new_string(sig->signature));
+        xjson_object_set(sig_info, "label", xjson_new_string(sig->signature));
         if (sig->documentation) {
-            xlsp_json_object_set(sig_info, "documentation", xlsp_json_new_string(sig->documentation));
+            xjson_object_set(sig_info, "documentation", xjson_new_string(sig->documentation));
         }
         for (int i = 0; i < sig->param_count; i++) {
-            XrJsonValue *param = xlsp_json_new_object();
-            xlsp_json_object_set(param, "label", xlsp_json_new_string(sig->param_names[i]));
+            XrJsonValue *param = xjson_new_object();
+            xjson_object_set(param, "label", xjson_new_string(sig->param_names[i]));
             if (sig->param_docs && sig->param_docs[i]) {
-                xlsp_json_object_set(param, "documentation", xlsp_json_new_string(sig->param_docs[i]));
+                xjson_object_set(param, "documentation", xjson_new_string(sig->param_docs[i]));
             }
-            xlsp_json_array_push(params, param);
+            xjson_array_push(params, param);
         }
         param_count = sig->param_count;
         xr_free(func_name);
@@ -1307,9 +1307,9 @@ XrJsonValue *xlsp_analyze_signature_help(XrLspDocument *doc, XrLspPosition pos) 
         xr_free(func_name);
 
         if (!sym || (sym->kind != XA_SYM_FUNCTION && sym->kind != XA_SYM_METHOD)) {
-            xlsp_json_free(result);
-            xlsp_json_free(sig_info);
-            xlsp_json_free(params);
+            xjson_free(result);
+            xjson_free(sig_info);
+            xjson_free(params);
             return NULL;
         }
 
@@ -1330,11 +1330,11 @@ XrJsonValue *xlsp_analyze_signature_help(XrLspDocument *doc, XrLspPosition pos) 
                 sig_len += snprintf(sig_label + sig_len, sizeof(sig_label) - sig_len, "%s: %s", pname, ptype);
 
                 // Add parameter info
-                XrJsonValue *param = xlsp_json_new_object();
+                XrJsonValue *param = xjson_new_object();
                 char param_label[128];
                 snprintf(param_label, sizeof(param_label), "%s: %s", pname, ptype);
-                xlsp_json_object_set(param, "label", xlsp_json_new_string(param_label));
-                xlsp_json_array_push(params, param);
+                xjson_object_set(param, "label", xjson_new_string(param_label));
+                xjson_array_push(params, param);
             }
             param_count = links->param_count;
         }
@@ -1343,17 +1343,17 @@ XrJsonValue *xlsp_analyze_signature_help(XrLspDocument *doc, XrLspPosition pos) 
             ? xr_type_to_string(links->return_type) : "unknown";
         snprintf(sig_label + sig_len, sizeof(sig_label) - sig_len, "): %s", ret_type);
 
-        xlsp_json_object_set(sig_info, "label", xlsp_json_new_string(sig_label));
+        xjson_object_set(sig_info, "label", xjson_new_string(sig_label));
     }
 
-    xlsp_json_object_set(sig_info, "parameters", params);
-    xlsp_json_array_push(signatures, sig_info);
-    xlsp_json_object_set(result, "signatures", signatures);
+    xjson_object_set(sig_info, "parameters", params);
+    xjson_array_push(signatures, sig_info);
+    xjson_object_set(result, "signatures", signatures);
 
     // Active signature and parameter
-    xlsp_json_object_set(result, "activeSignature", xlsp_json_new_number(0));
+    xjson_object_set(result, "activeSignature", xjson_new_number(0));
     int active = (param_count > 0 && active_param < param_count) ? active_param : 0;
-    xlsp_json_object_set(result, "activeParameter", xlsp_json_new_number(active));
+    xjson_object_set(result, "activeParameter", xjson_new_number(active));
 
     return result;
 }

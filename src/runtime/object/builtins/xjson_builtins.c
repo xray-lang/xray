@@ -27,12 +27,12 @@
 #include "xclass_system.h"
 #include "xisolate_api.h"
 #include "xreflect_registry.h"
-#include "xjson.h"
-#include "xmap.h"
-#include "xarray.h"
-#include "xstring.h"
-#include "xcoroutine.h"
-#include "xsymbol_table.h"
+#include "../xjson.h"
+#include "../xmap.h"
+#include "../xarray.h"
+#include "../xstring.h"
+#include "../../coro/xcoroutine.h"
+#include "../../symbol/xsymbol_table.h"
 #include <string.h>
 
 /* ========== Static Method Implementations ========== */

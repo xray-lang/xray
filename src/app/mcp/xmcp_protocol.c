@@ -15,34 +15,34 @@
 
 #include "xmcp_protocol.h"
 #include "xmcp_server.h"
-#include "../lsp/xlsp_json.h"
+#include "../../base/xjson.h"
 #include "../../base/xchecks.h"
 
 /* Build capabilities object from server feature flags. */
 static XrJsonValue *build_capabilities(XmcpServer *server) {
     XR_DCHECK(server != NULL, "build_capabilities: NULL server");
-    XrJsonValue *caps = xlsp_json_new_object();
+    XrJsonValue *caps = xjson_new_object();
 
     if (server->has_tools) {
-        XrJsonValue *tc = xlsp_json_new_object();
-        XLSP_JSON_SET_BOOL(tc, "listChanged", true);
-        xlsp_json_object_set(caps, "tools", tc);
+        XrJsonValue *tc = xjson_new_object();
+        XJSON_SET_BOOL(tc, "listChanged", true);
+        xjson_object_set(caps, "tools", tc);
     }
 
     if (server->has_resources) {
-        XrJsonValue *rc = xlsp_json_new_object();
-        XLSP_JSON_SET_BOOL(rc, "listChanged", false);
-        xlsp_json_object_set(caps, "resources", rc);
+        XrJsonValue *rc = xjson_new_object();
+        XJSON_SET_BOOL(rc, "listChanged", false);
+        xjson_object_set(caps, "resources", rc);
     }
 
     if (server->has_prompts) {
-        XrJsonValue *pc = xlsp_json_new_object();
-        XLSP_JSON_SET_BOOL(pc, "listChanged", true);
-        xlsp_json_object_set(caps, "prompts", pc);
+        XrJsonValue *pc = xjson_new_object();
+        XJSON_SET_BOOL(pc, "listChanged", true);
+        xjson_object_set(caps, "prompts", pc);
     }
 
     /* Logging is always available */
-    xlsp_json_object_set(caps, "logging", xlsp_json_new_object());
+    xjson_object_set(caps, "logging", xjson_new_object());
 
     return caps;
 }
@@ -51,19 +51,19 @@ XrJsonValue *xmcp_handle_initialize(XmcpServer *server, XrJsonValue *params) {
     (void)params;
     XR_DCHECK(server != NULL, "xmcp_handle_initialize: NULL server");
 
-    XrJsonValue *result = xlsp_json_new_object();
+    XrJsonValue *result = xjson_new_object();
 
     /* Protocol version */
-    XLSP_JSON_SET_STRING(result, "protocolVersion", XMCP_PROTOCOL_VERSION);
+    XJSON_SET_STRING(result, "protocolVersion", XMCP_PROTOCOL_VERSION);
 
     /* Dynamically inferred capabilities */
-    xlsp_json_object_set(result, "capabilities", build_capabilities(server));
+    xjson_object_set(result, "capabilities", build_capabilities(server));
 
     /* Server info */
-    XrJsonValue *info = xlsp_json_new_object();
-    XLSP_JSON_SET_STRING(info, "name", XMCP_SERVER_NAME);
-    XLSP_JSON_SET_STRING(info, "version", XMCP_SERVER_VERSION);
-    xlsp_json_object_set(result, "serverInfo", info);
+    XrJsonValue *info = xjson_new_object();
+    XJSON_SET_STRING(info, "name", XMCP_SERVER_NAME);
+    XJSON_SET_STRING(info, "version", XMCP_SERVER_VERSION);
+    xjson_object_set(result, "serverInfo", info);
 
     return result;
 }

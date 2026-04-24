@@ -16,14 +16,12 @@
 #include "xworker_internal.h"
 #include "../base/xchecks.h"
 #include "../base/xlog.h"
-#ifdef XRAY_HAS_JIT
-#include "../jit/xir_jit_debug.h"
-#endif
+#include "xjit_hooks.h"
 
 /* Arm guard pages for all running workers so JIT back-edges trigger safepoints.
  * Called by sysmon every ~2ms. Workers that are parked or in syscall are skipped. */
 static void sysmon_arm_guard_pages(XrRuntime *runtime) {
-#ifdef XRAY_HAS_JIT
+    if (!XR_JIT_AVAILABLE()) return;
     for (int i = 0; i < runtime->worker_count; i++) {
         XrWorker *w = &runtime->workers[i];
         XrMachine *wm = w->m;
@@ -33,11 +31,8 @@ static void sysmon_arm_guard_pages(XrRuntime *runtime) {
         if (st != M_RUNNING) continue;
 
         void *page = w->p.jit_scratch.safepoint_page;
-        if (page) jit_guard_page_arm(page);
+        if (page) xr_jit_hooks->guard_page_arm(page);
     }
-#else
-    (void)runtime;
-#endif
 }
 
 static void sysmon_check(XrRuntime *runtime) {

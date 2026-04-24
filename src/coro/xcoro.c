@@ -12,7 +12,10 @@
  *   Coroutines and their data are managed by GC.
  */
 
-#include "../vm/xvm_internal.h"
+#include "xcoroutine.h"
+#include "../runtime/xvm_call.h"         // XrVMResult
+#include "../runtime/xisolate_api.h"     // xr_runtime_error
+#include "../runtime/xisolate_internal.h" // XrayIsolate definition
 #include "../runtime/gc/xgc.h"
 #include "../base/xmalloc.h"
 #include "../base/xchecks.h"

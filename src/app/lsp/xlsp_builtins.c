@@ -70,7 +70,7 @@ XlspBuiltinType xlsp_builtin_type_from_name(const char *name) {
 // ============================================================================
 
 XrJsonValue *xlsp_builtin_get_completions(XlspBuiltinType type) {
-    XrJsonValue *items = xlsp_json_new_array();
+    XrJsonValue *items = xjson_new_array();
 
     XrType *xa_type = create_type_for_builtin(type);
     if (!xa_type) return items;
@@ -81,21 +81,21 @@ XrJsonValue *xlsp_builtin_get_completions(XlspBuiltinType type) {
     for (int i = 0; i < count; i++) {
         const XaBuiltinMember *m = &members[i];
 
-        XrJsonValue *item = xlsp_json_new_object();
-        xlsp_json_object_set(item, "label", xlsp_json_new_string(m->name));
+        XrJsonValue *item = xjson_new_object();
+        xjson_object_set(item, "label", xjson_new_string(m->name));
         int kind = m->is_method ? XLSP_KIND_METHOD : XLSP_KIND_PROPERTY;
-        xlsp_json_object_set(item, "kind", xlsp_json_new_number(kind));
+        xjson_object_set(item, "kind", xjson_new_number(kind));
 
         if (m->signature) {
             // Build full signature: name + signature
             char detail[256];
             snprintf(detail, sizeof(detail), "%s%s", m->name, m->signature);
-            xlsp_json_object_set(item, "detail", xlsp_json_new_string(detail));
+            xjson_object_set(item, "detail", xjson_new_string(detail));
         }
         if (m->doc) {
-            xlsp_json_object_set(item, "documentation", xlsp_json_new_string(m->doc));
+            xjson_object_set(item, "documentation", xjson_new_string(m->doc));
         }
-        xlsp_json_array_push(items, item);
+        xjson_array_push(items, item);
     }
 
     return items;

@@ -54,4 +54,13 @@ XR_FUNC XrValue xr_vm_call_closure(struct XrayIsolate *isolate,
 // Implementation in vm/xvm.c.
 XR_FUNC bool xr_vm_is_truthy(XrValue value);
 
+/* ========== VM Interpreter Entry (Phase 4: coro→vm decoupling) ========== */
+
+struct XrVMContext;
+
+// Execute bytecode from current frame.  Implementation in vm/xvm.c.
+// Declared here so coro/ (L3) can call the interpreter without
+// including vm/xvm_internal.h (L5).
+XR_FUNC XrVMResult run(struct XrayIsolate *isolate, struct XrVMContext *vm_ctx);
+
 #endif // XVM_CALL_H

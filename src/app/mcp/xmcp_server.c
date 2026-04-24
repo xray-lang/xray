@@ -22,7 +22,7 @@
 #include "xmcp_knowledge.h"
 #include "../../base/xmalloc.h"
 #include "../../base/xchecks.h"
-#include "../lsp/xlsp_json.h"
+#include "../../base/xjson.h"
 #include "../cli/xcli_isolate.h"
 #include "../cli/xcli_spec.h"
 #include "../cli/xcli_diag.h"
@@ -216,35 +216,35 @@ static char *mcp_read_message(XmcpServer *s) {
 
 static void mcp_send_response(XrJsonValue *id, XrJsonValue *result,
                                XrJsonValue *error) {
-    XrJsonValue *resp = xlsp_json_new_object();
-    XLSP_JSON_SET_STRING(resp, "jsonrpc", "2.0");
+    XrJsonValue *resp = xjson_new_object();
+    XJSON_SET_STRING(resp, "jsonrpc", "2.0");
 
     if (id) {
-        xlsp_json_object_set(resp, "id", xlsp_json_clone(id));
+        xjson_object_set(resp, "id", xjson_clone(id));
     } else {
-        XLSP_JSON_SET_NULL(resp, "id");
+        XJSON_SET_NULL(resp, "id");
     }
 
     if (error) {
-        xlsp_json_object_set(resp, "error", error);
+        xjson_object_set(resp, "error", error);
     } else {
-        xlsp_json_object_set(resp, "result",
-                             result ? result : xlsp_json_new_object());
+        xjson_object_set(resp, "result",
+                             result ? result : xjson_new_object());
     }
 
     size_t len = 0;
-    char *json = xlsp_json_stringify(resp, &len);
+    char *json = xjson_stringify(resp, &len);
     if (json) {
         xmcp_write_message(json, len);
         xr_free(json);
     }
-    xlsp_json_free(resp);
+    xjson_free(resp);
 }
 
 static void mcp_send_error(XrJsonValue *id, int code, const char *message) {
-    XrJsonValue *err = xlsp_json_new_object();
-    XLSP_JSON_SET_INT(err, "code", code);
-    XLSP_JSON_SET_STRING(err, "message", message);
+    XrJsonValue *err = xjson_new_object();
+    XJSON_SET_INT(err, "code", code);
+    XJSON_SET_STRING(err, "message", message);
     mcp_send_response(id, NULL, err);
 }
 
@@ -258,20 +258,20 @@ void xmcp_send_notification(XmcpServer *server, const char *method,
     XR_DCHECK(method != NULL, "xmcp_send_notification: NULL method");
     if (!server->initialized) return;
 
-    XrJsonValue *msg = xlsp_json_new_object();
-    XLSP_JSON_SET_STRING(msg, "jsonrpc", "2.0");
-    XLSP_JSON_SET_STRING(msg, "method", method);
+    XrJsonValue *msg = xjson_new_object();
+    XJSON_SET_STRING(msg, "jsonrpc", "2.0");
+    XJSON_SET_STRING(msg, "method", method);
     if (params) {
-        xlsp_json_object_set(msg, "params", params);
+        xjson_object_set(msg, "params", params);
     }
 
     size_t len = 0;
-    char *json = xlsp_json_stringify(msg, &len);
+    char *json = xjson_stringify(msg, &len);
     if (json) {
         xmcp_write_message(json, len);
         xr_free(json);
     }
-    xlsp_json_free(msg);
+    xjson_free(msg);
 }
 
 void xmcp_send_log_notification(XmcpServer *server, const char *level,
@@ -281,9 +281,9 @@ void xmcp_send_log_notification(XmcpServer *server, const char *level,
     XR_DCHECK(message != NULL, "xmcp_send_log_notification: NULL message");
     if (!server->initialized) return;
 
-    XrJsonValue *params = xlsp_json_new_object();
-    XLSP_JSON_SET_STRING(params, "level", level);
-    xlsp_json_object_set(params, "data", xlsp_json_new_string(message));
+    XrJsonValue *params = xjson_new_object();
+    XJSON_SET_STRING(params, "level", level);
+    xjson_object_set(params, "data", xjson_new_string(message));
     xmcp_send_notification(server, "notifications/message", params);
 }
 
@@ -294,11 +294,11 @@ void xmcp_send_progress_notification(XmcpServer *server,
     XR_DCHECK(server != NULL, "xmcp_send_progress_notification: NULL server");
     if (!server->initialized) return;
 
-    XrJsonValue *params = xlsp_json_new_object();
-    XLSP_JSON_SET_INT(params, "progressToken", progress_token);
-    XLSP_JSON_SET_INT(params, "progress", progress);
+    XrJsonValue *params = xjson_new_object();
+    XJSON_SET_INT(params, "progressToken", progress_token);
+    XJSON_SET_INT(params, "progress", progress);
     if (total > 0) {
-        XLSP_JSON_SET_INT(params, "total", total);
+        XJSON_SET_INT(params, "total", total);
     }
     xmcp_send_notification(server, "notifications/progress", params);
 }
@@ -316,7 +316,7 @@ static XrJsonValue *handle_initialized(XmcpServer *s, XrJsonValue *params) {
 
 static XrJsonValue *handle_ping(XmcpServer *s, XrJsonValue *params) {
     (void)s; (void)params;
-    return xlsp_json_new_object();
+    return xjson_new_object();
 }
 
 static XrJsonValue *handle_tools_list(XmcpServer *s, XrJsonValue *params) {
@@ -375,9 +375,9 @@ static void mcp_dispatch(XmcpServer *s, XrJsonValue *msg) {
     XR_DCHECK(s != NULL, "mcp_dispatch: NULL server");
     XR_DCHECK(msg != NULL, "mcp_dispatch: NULL msg");
 
-    const char *method = xlsp_json_get_string(msg, "method");
-    XrJsonValue *id = xlsp_json_get(msg, "id");
-    XrJsonValue *params = xlsp_json_get(msg, "params");
+    const char *method = xjson_get_string(msg, "method");
+    XrJsonValue *id = xjson_get(msg, "id");
+    XrJsonValue *params = xjson_get(msg, "params");
 
     if (!method) {
         if (id) mcp_send_error(id, XMCP_ERR_INVALID_REQ,
@@ -427,7 +427,7 @@ static void mcp_dispatch(XmcpServer *s, XrJsonValue *msg) {
         mcp_send_response(id, result, NULL);
     } else if (result) {
         /* Notification handler returned a value — free it */
-        xlsp_json_free(result);
+        xjson_free(result);
     }
 }
 
@@ -497,7 +497,7 @@ int xmcp_server_run(XmcpServer *s) {
             break;
         }
 
-        XrJsonValue *msg = xlsp_json_parse(body, strlen(body));
+        XrJsonValue *msg = xjson_parse(body, strlen(body));
         xr_free(body);
 
         if (!msg) {
@@ -507,7 +507,7 @@ int xmcp_server_run(XmcpServer *s) {
         }
 
         mcp_dispatch(s, msg);
-        xlsp_json_free(msg);
+        xjson_free(msg);
     }
 
     mcp_log(s, 2, "MCP server stopped");

@@ -11,7 +11,7 @@
 #ifndef XLSP_RENAME_H
 #define XLSP_RENAME_H
 
-#include "xlsp_json.h"
+#include "../../base/xjson.h"
 #include "xlsp_types.h"
 
 typedef struct XrLspDocument XrLspDocument;

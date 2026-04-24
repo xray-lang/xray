@@ -35,7 +35,7 @@
 
 XrJsonValue *xdap_inspect_stack_frames(XdapController *ctrl, XrCoroutine *coro,
                                         int *frame_id_out) {
-    XrJsonValue *frames = xlsp_json_new_array();
+    XrJsonValue *frames = xjson_new_array();
 
     if (!coro || !ctrl) {
         if (frame_id_out) *frame_id_out = 0;
@@ -51,18 +51,18 @@ XrJsonValue *xdap_inspect_stack_frames(XdapController *ctrl, XrCoroutine *coro,
 
         XrProto *proto = frame->closure->proto;
 
-        XrJsonValue *f = xlsp_json_new_object();
-        xlsp_json_object_set(f, "id", xlsp_json_new_number(frame_id));
+        XrJsonValue *f = xjson_new_object();
+        xjson_object_set(f, "id", xjson_new_number(frame_id));
 
         // Function name
         const char *name = proto->name ? XR_STRING_CHARS(proto->name) : "<anonymous>";
-        xlsp_json_object_set(f, "name", xlsp_json_new_string(name));
+        xjson_object_set(f, "name", xjson_new_string(name));
 
         // Source
         if (proto->source_file) {
-            XrJsonValue *source = xlsp_json_new_object();
-            xlsp_json_object_set(source, "path", xlsp_json_new_string(proto->source_file));
-            xlsp_json_object_set(f, "source", source);
+            XrJsonValue *source = xjson_new_object();
+            xjson_object_set(source, "path", xjson_new_string(proto->source_file));
+            xjson_object_set(f, "source", source);
         }
 
         // Line number
@@ -72,10 +72,10 @@ XrJsonValue *xdap_inspect_stack_frames(XdapController *ctrl, XrCoroutine *coro,
         if (pc_offset >= 0 && pc_offset < line_count) {
             line = PROTO_LINE(proto, pc_offset);
         }
-        xlsp_json_object_set(f, "line", xlsp_json_new_number(line));
-        xlsp_json_object_set(f, "column", xlsp_json_new_number(0));
+        xjson_object_set(f, "line", xjson_new_number(line));
+        xjson_object_set(f, "column", xjson_new_number(0));
 
-        xlsp_json_array_push(frames, f);
+        xjson_array_push(frames, f);
         frame_id++;
     }
 
@@ -123,7 +123,7 @@ bool xdap_inspect_get_frame_info(XdapController *ctrl, XrCoroutine *coro,
 
 XrJsonValue *xdap_inspect_locals(XdapController *ctrl, XrCoroutine *coro,
                                   int frame_idx) {
-    XrJsonValue *variables = xlsp_json_new_array();
+    XrJsonValue *variables = xjson_new_array();
 
     if (!ctrl || !coro) return variables;
 
@@ -141,16 +141,16 @@ XrJsonValue *xdap_inspect_locals(XdapController *ctrl, XrCoroutine *coro,
         XrLocVar locvar = PROTO_LOCVAR(proto, i);
         XrValue val = base[i];
 
-        XrJsonValue *var = xlsp_json_new_object();
-        xlsp_json_object_set(var, "name",
-            xlsp_json_new_string(locvar.name ? locvar.name : "<unnamed>"));
+        XrJsonValue *var = xjson_new_object();
+        xjson_object_set(var, "name",
+            xjson_new_string(locvar.name ? locvar.name : "<unnamed>"));
 
         char *value_str = xr_value_to_debug_string(ctrl->isolate, val);
-        xlsp_json_object_set(var, "value", xlsp_json_new_string(value_str));
+        xjson_object_set(var, "value", xjson_new_string(value_str));
         xr_free(value_str);
 
-        xlsp_json_object_set(var, "type",
-            xlsp_json_new_string(xr_value_type_name(val)));
+        xjson_object_set(var, "type",
+            xjson_new_string(xr_value_type_name(val)));
 
         // Variable reference for expandable values (directly use debug API)
         int var_ref = 0;
@@ -167,9 +167,9 @@ XrJsonValue *xdap_inspect_locals(XdapController *ctrl, XrCoroutine *coro,
                 var_ref = xr_debug_create_var_ref(ctrl->isolate, ref_type, frame_idx, val);
             }
         }
-        xlsp_json_object_set(var, "variablesReference", xlsp_json_new_number(var_ref));
+        xjson_object_set(var, "variablesReference", xjson_new_number(var_ref));
 
-        xlsp_json_array_push(variables, var);
+        xjson_array_push(variables, var);
     }
 
     return variables;
@@ -177,7 +177,7 @@ XrJsonValue *xdap_inspect_locals(XdapController *ctrl, XrCoroutine *coro,
 
 XrJsonValue *xdap_inspect_upvalues(XdapController *ctrl, XrCoroutine *coro,
                                     int frame_idx) {
-    XrJsonValue *variables = xlsp_json_new_array();
+    XrJsonValue *variables = xjson_new_array();
 
     if (!ctrl || !coro) return variables;
 
@@ -191,19 +191,19 @@ XrJsonValue *xdap_inspect_upvalues(XdapController *ctrl, XrCoroutine *coro,
     for (int i = 0; i < cl->upval_count; i++) {
         XrValue val = cl->upvals[i];
 
-        XrJsonValue *var = xlsp_json_new_object();
+        XrJsonValue *var = xjson_new_object();
 
         // Format name as upvalue[N]
         char name_buf[32];
         snprintf(name_buf, sizeof(name_buf), "upvalue[%d]", i);
-        xlsp_json_object_set(var, "name", xlsp_json_new_string(name_buf));
+        xjson_object_set(var, "name", xjson_new_string(name_buf));
 
         char *value_str = xr_value_to_debug_string(ctrl->isolate, val);
-        xlsp_json_object_set(var, "value", xlsp_json_new_string(value_str));
+        xjson_object_set(var, "value", xjson_new_string(value_str));
         xr_free(value_str);
 
-        xlsp_json_object_set(var, "type",
-            xlsp_json_new_string(xr_value_type_name(val)));
+        xjson_object_set(var, "type",
+            xjson_new_string(xr_value_type_name(val)));
 
         int var_ref = 0;
         if (ctrl->isolate && xr_debug_value_is_expandable(ctrl->isolate, val)) {
@@ -212,9 +212,9 @@ XrJsonValue *xdap_inspect_upvalues(XdapController *ctrl, XrCoroutine *coro,
                 var_ref = xr_debug_create_var_ref(ctrl->isolate, ref_type, frame_idx, val);
             }
         }
-        xlsp_json_object_set(var, "variablesReference", xlsp_json_new_number(var_ref));
+        xjson_object_set(var, "variablesReference", xjson_new_number(var_ref));
 
-        xlsp_json_array_push(variables, var);
+        xjson_array_push(variables, var);
     }
 
     return variables;
@@ -223,16 +223,16 @@ XrJsonValue *xdap_inspect_upvalues(XdapController *ctrl, XrCoroutine *coro,
 static void globals_collect_cb(const char *key, void *value, void *userdata) {
     (void)value;
     XrJsonValue *variables = (XrJsonValue *)userdata;
-    XrJsonValue *var = xlsp_json_new_object();
-    xlsp_json_object_set(var, "name", xlsp_json_new_string(key));
-    xlsp_json_object_set(var, "value", xlsp_json_new_string("<class>"));
-    xlsp_json_object_set(var, "type", xlsp_json_new_string("class"));
-    xlsp_json_object_set(var, "variablesReference", xlsp_json_new_number(0));
-    xlsp_json_array_push(variables, var);
+    XrJsonValue *var = xjson_new_object();
+    xjson_object_set(var, "name", xjson_new_string(key));
+    xjson_object_set(var, "value", xjson_new_string("<class>"));
+    xjson_object_set(var, "type", xjson_new_string("class"));
+    xjson_object_set(var, "variablesReference", xjson_new_number(0));
+    xjson_array_push(variables, var);
 }
 
 XrJsonValue *xdap_inspect_globals(XdapController *ctrl) {
-    XrJsonValue *variables = xlsp_json_new_array();
+    XrJsonValue *variables = xjson_new_array();
 
     if (!ctrl || !ctrl->isolate) return variables;
 
@@ -249,26 +249,26 @@ XrJsonValue *xdap_inspect_globals(XdapController *ctrl) {
 static XrJsonValue *var_info_to_json(XrayIsolate *isolate, int var_ref_id) {
     XdapVarInfo *vars = NULL;
     int count = xr_debug_get_var_children(isolate, var_ref_id, &vars);
-    if (count <= 0 || !vars) return xlsp_json_new_array();
+    if (count <= 0 || !vars) return xjson_new_array();
 
-    XrJsonValue *result = xlsp_json_new_array();
+    XrJsonValue *result = xjson_new_array();
     for (int i = 0; i < count; i++) {
-        XrJsonValue *var = xlsp_json_new_object();
-        xlsp_json_object_set(var, "name", xlsp_json_new_string(vars[i].name ? vars[i].name : "?"));
-        xlsp_json_object_set(var, "value", xlsp_json_new_string(vars[i].value ? vars[i].value : "?"));
-        xlsp_json_object_set(var, "type", xlsp_json_new_string(vars[i].type ? vars[i].type : "?"));
-        xlsp_json_object_set(var, "variablesReference", xlsp_json_new_number(vars[i].var_ref));
-        xlsp_json_array_push(result, var);
+        XrJsonValue *var = xjson_new_object();
+        xjson_object_set(var, "name", xjson_new_string(vars[i].name ? vars[i].name : "?"));
+        xjson_object_set(var, "value", xjson_new_string(vars[i].value ? vars[i].value : "?"));
+        xjson_object_set(var, "type", xjson_new_string(vars[i].type ? vars[i].type : "?"));
+        xjson_object_set(var, "variablesReference", xjson_new_number(vars[i].var_ref));
+        xjson_array_push(result, var);
     }
     xr_debug_var_info_array_free(vars, count);
     return result;
 }
 
 XrJsonValue *xdap_inspect_variables(XdapController *ctrl, int var_ref) {
-    if (!ctrl || !ctrl->isolate) return xlsp_json_new_array();
+    if (!ctrl || !ctrl->isolate) return xjson_new_array();
 
     XrDebugVarRef *ref = xr_debug_get_var_ref(ctrl->isolate, var_ref);
-    if (!ref) return xlsp_json_new_array();
+    if (!ref) return xjson_new_array();
 
     switch (ref->type) {
         case XDAP_REF_SCOPE_LOCALS: {
@@ -294,7 +294,7 @@ XrJsonValue *xdap_inspect_variables(XdapController *ctrl, int var_ref) {
             break;
     }
 
-    return xlsp_json_new_array();
+    return xjson_new_array();
 }
 
 // ============================================================================

@@ -10,7 +10,7 @@
 
 #include "xlsp_rename.h"
 #include "xlsp_analysis.h"
-#include "xlsp_json.h"
+#include "../../base/xjson.h"
 #include "xlsp_utils.h"
 #include "xlsp_keywords.h"
 #include "../../base/xmalloc.h"
@@ -461,11 +461,11 @@ static void find_symbol_definition(AstNode *node, RenameContext *ctx) {
 
 // Add a text edit for renaming
 static void add_rename_edit(RenameContext *ctx, int line, int col, int len) {
-    XrJsonValue *edit = xlsp_json_new_object();
-    xlsp_json_object_set(edit, "range",
-        xlsp_json_make_range(line - 1, col - 1, line - 1, col - 1 + len));
-    xlsp_json_object_set(edit, "newText", xlsp_json_new_string(ctx->new_name));
-    xlsp_json_array_push(ctx->edits, edit);
+    XrJsonValue *edit = xjson_new_object();
+    xjson_object_set(edit, "range",
+        xjson_make_range(line - 1, col - 1, line - 1, col - 1 + len));
+    xjson_object_set(edit, "newText", xjson_new_string(ctx->new_name));
+    xjson_array_push(ctx->edits, edit);
 }
 
 // Check if we should rename in the current context
@@ -825,9 +825,9 @@ XrJsonValue *xlsp_analyze_prepare_rename(XrLspDocument *doc, XrLspPosition pos) 
     XrLspPosition range_start = xlsp_offset_to_position(doc, start);
     XrLspPosition range_end = xlsp_offset_to_position(doc, end);
 
-    XrJsonValue *result = xlsp_json_new_object();
-    xlsp_json_object_set(result, "range",
-        xlsp_json_make_range(range_start.line, range_start.character,
+    XrJsonValue *result = xjson_new_object();
+    xjson_object_set(result, "range",
+        xjson_make_range(range_start.line, range_start.character,
                              range_end.line, range_end.character));
 
     return result;
@@ -844,9 +844,9 @@ XrJsonValue *xlsp_analyze_rename(XrLspServer *server, XrLspDocument *doc,
     if (!old_name) return NULL;
 
     // Build WorkspaceEdit with changes
-    XrJsonValue *result = xlsp_json_new_object();
-    XrJsonValue *changes = xlsp_json_new_object();
-    XrJsonValue *edits = xlsp_json_new_array();  // Always create, attach to result at end
+    XrJsonValue *result = xjson_new_object();
+    XrJsonValue *changes = xjson_new_object();
+    XrJsonValue *edits = xjson_new_array();  // Always create, attach to result at end
 
     // Use XaScope from analyzer for unified scope handling
     XaAnalyzer *analyzer = server ? server->workspace_analyzer : NULL;
@@ -874,7 +874,7 @@ XrJsonValue *xlsp_analyze_rename(XrLspServer *server, XrLspDocument *doc,
             collect_rename_locations(doc->ast, &ctx);
 
             lsp_log("Rename '%s' -> '%s': found %d locations",
-                    old_name, new_name, xlsp_json_array_len(edits));
+                    old_name, new_name, xjson_array_len(edits));
         } else {
             lsp_log("Rename '%s': symbol definition not found (line %d, col %d)",
                     old_name, pos.line + 1, pos.character + 1);
@@ -884,13 +884,13 @@ XrJsonValue *xlsp_analyze_rename(XrLspServer *server, XrLspDocument *doc,
     }
 
     // Always attach edits array to changes (may be empty)
-    if (xlsp_json_array_len(edits) > 0) {
-        xlsp_json_object_set(changes, doc->uri, edits);
+    if (xjson_array_len(edits) > 0) {
+        xjson_object_set(changes, doc->uri, edits);
     }
     // Note: if edits is empty, it will be freed when result is freed
 
     xr_free(old_name);
 
-    xlsp_json_object_set(result, "changes", changes);
+    xjson_object_set(result, "changes", changes);
     return result;
 }

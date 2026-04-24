@@ -10,7 +10,7 @@
 
 #include "xlsp_format.h"
 #include "xlsp_server.h"
-#include "xlsp_json.h"
+#include "../../base/xjson.h"
 #include "xlsp_utils.h"
 #include "../../frontend/format/xfmt.h"
 #include "../../frontend/parser/xparse.h"
@@ -24,7 +24,7 @@
 
 // AST-based formatting with comment preservation
 XrJsonValue *xlsp_analyze_format(XrLspDocument *doc) {
-    XrJsonValue *edits = xlsp_json_new_array();
+    XrJsonValue *edits = xjson_new_array();
 
     if (!doc || !doc->content || doc->length == 0) {
         return edits;
@@ -59,12 +59,12 @@ XrJsonValue *xlsp_analyze_format(XrLspDocument *doc) {
     }
 
     // Create single edit that replaces entire document
-    XrJsonValue *edit = xlsp_json_new_object();
-    xlsp_json_object_set(edit, "range",
-        xlsp_json_make_range(0, 0, doc->line_count, 0));
-    xlsp_json_object_set(edit, "newText", xlsp_json_new_string(formatted));
+    XrJsonValue *edit = xjson_new_object();
+    xjson_object_set(edit, "range",
+        xjson_make_range(0, 0, doc->line_count, 0));
+    xjson_object_set(edit, "newText", xjson_new_string(formatted));
 
-    xlsp_json_array_push(edits, edit);
+    xjson_array_push(edits, edit);
 
     xr_free(formatted);
     return edits;

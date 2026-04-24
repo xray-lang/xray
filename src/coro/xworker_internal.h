@@ -15,7 +15,7 @@
 #define XWORKER_INTERNAL_H
 
 #include "xworker.h"
-#include "../vm/xvm_internal.h"
+#include "../runtime/xvm_call.h"          // XrVMResult, run()
 #include "../runtime/xisolate_internal.h"
 #include "../runtime/xstrbuf.h"
 #include "../runtime/object/xstring.h"

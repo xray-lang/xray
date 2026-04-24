@@ -23,17 +23,17 @@
 // ============================================================================
 
 XrJsonValue *xlsp_handle_document_highlight(XrLspServer *server, XrJsonValue *params) {
-    XrJsonValue *textDocument = xlsp_json_get_object(params, "textDocument");
-    XrJsonValue *position = xlsp_json_get_object(params, "position");
-    if (!textDocument || !position) return xlsp_json_new_array();
+    XrJsonValue *textDocument = xjson_get_object(params, "textDocument");
+    XrJsonValue *position = xjson_get_object(params, "position");
+    if (!textDocument || !position) return xjson_new_array();
     
-    const char *uri = xlsp_json_get_string(textDocument, "uri");
+    const char *uri = xjson_get_string(textDocument, "uri");
     XrLspDocument *doc = xlsp_document_get(server, uri);
-    if (!doc || !doc->content) return xlsp_json_new_array();
+    if (!doc || !doc->content) return xjson_new_array();
     
     XrLspPosition pos = {
-        .line = (uint32_t)xlsp_json_get_int(position, "line"),
-        .character = (uint32_t)xlsp_json_get_int(position, "character")
+        .line = (uint32_t)xjson_get_int(position, "line"),
+        .character = (uint32_t)xjson_get_int(position, "character")
     };
     
     return xlsp_analyze_document_highlight(server, doc, pos);
@@ -44,10 +44,10 @@ XrJsonValue *xlsp_handle_document_highlight(XrLspServer *server, XrJsonValue *pa
 // ============================================================================
 
 XrJsonValue *xlsp_handle_workspace_symbol(XrLspServer *server, XrJsonValue *params) {
-    const char *query = xlsp_json_get_string(params, "query");
+    const char *query = xjson_get_string(params, "query");
     if (!query) query = "";
     
-    XrJsonValue *symbols = xlsp_json_new_array();
+    XrJsonValue *symbols = xjson_new_array();
     
     if (server->workspace_analyzer && server->workspace_analyzer->global_scope) {
         int count;
@@ -61,28 +61,28 @@ XrJsonValue *xlsp_handle_workspace_symbol(XrLspServer *server, XrJsonValue *para
             
             if (query[0] && !strstr(s->name, query)) continue;
             
-            XrJsonValue *sym = xlsp_json_new_object();
-            xlsp_json_object_set(sym, "name", xlsp_json_new_string(s->name));
+            XrJsonValue *sym = xjson_new_object();
+            xjson_object_set(sym, "name", xjson_new_string(s->name));
             
             int kind = LSP_SYMBOL_VARIABLE;
             if (s->kind == XA_SYM_FUNCTION || s->kind == XA_SYM_METHOD) kind = LSP_SYMBOL_FUNCTION;
             if (s->kind == XA_SYM_CLASS) kind = LSP_SYMBOL_CLASS;
             if (s->is_const) kind = LSP_SYMBOL_CONSTANT;
-            xlsp_json_object_set(sym, "kind", xlsp_json_new_number(kind));
+            xjson_object_set(sym, "kind", xjson_new_number(kind));
             
-            XrJsonValue *loc = xlsp_json_new_object();
+            XrJsonValue *loc = xjson_new_object();
             if (s->location.file) {
-                xlsp_json_object_set(loc, "uri", xlsp_json_new_string(s->location.file));
+                xjson_object_set(loc, "uri", xjson_new_string(s->location.file));
             }
             int start_line = s->location.line > 0 ? s->location.line - 1 : 0;
             int start_col = s->location.column > 0 ? s->location.column - 1 : 0;
             int end_line = s->location.end_line > 0 ? s->location.end_line - 1 : start_line;
             int end_col = s->location.end_column > 0 ? s->location.end_column - 1 : 0;
-            xlsp_json_object_set(loc, "range", 
-                xlsp_json_make_range(start_line, start_col, end_line, end_col));
-            xlsp_json_object_set(sym, "location", loc);
+            xjson_object_set(loc, "range", 
+                xjson_make_range(start_line, start_col, end_line, end_col));
+            xjson_object_set(sym, "location", loc);
             
-            xlsp_json_array_push(symbols, sym);
+            xjson_array_push(symbols, sym);
             added++;
         }
         
@@ -97,21 +97,21 @@ XrJsonValue *xlsp_handle_workspace_symbol(XrLspServer *server, XrJsonValue *para
 // ============================================================================
 
 XrJsonValue *xlsp_handle_selection_range(XrLspServer *server, XrJsonValue *params) {
-    XrJsonValue *textDocument = xlsp_json_get_object(params, "textDocument");
-    XrJsonValue *positions = xlsp_json_get(params, "positions");
-    if (!textDocument || !positions) return xlsp_json_new_array();
+    XrJsonValue *textDocument = xjson_get_object(params, "textDocument");
+    XrJsonValue *positions = xjson_get(params, "positions");
+    if (!textDocument || !positions) return xjson_new_array();
     
-    const char *uri = xlsp_json_get_string(textDocument, "uri");
+    const char *uri = xjson_get_string(textDocument, "uri");
     XrLspDocument *doc = xlsp_document_get(server, uri);
-    if (!doc || !doc->content) return xlsp_json_new_array();
+    if (!doc || !doc->content) return xjson_new_array();
     
-    XrJsonValue *ranges = xlsp_json_new_array();
+    XrJsonValue *ranges = xjson_new_array();
     
-    for (int i = 0; i < xlsp_json_array_len(positions); i++) {
-        XrJsonValue *pos_obj = xlsp_json_array_get(positions, i);
+    for (int i = 0; i < xjson_array_len(positions); i++) {
+        XrJsonValue *pos_obj = xjson_array_get(positions, i);
         XrLspPosition pos = {
-            .line = (uint32_t)xlsp_json_get_int(pos_obj, "line"),
-            .character = (uint32_t)xlsp_json_get_int(pos_obj, "character")
+            .line = (uint32_t)xjson_get_int(pos_obj, "line"),
+            .character = (uint32_t)xjson_get_int(pos_obj, "character")
         };
         
         uint32_t offset = xlsp_position_to_offset(doc, pos);
@@ -133,25 +133,25 @@ XrJsonValue *xlsp_handle_selection_range(XrLspServer *server, XrJsonValue *param
         while (line_end < doc->length && content[line_end] != '\n') line_end++;
         
         // Build nested selection ranges: word -> line -> document
-        XrJsonValue *doc_range = xlsp_json_new_object();
-        xlsp_json_object_set(doc_range, "range", 
-            xlsp_json_make_range(0, 0, doc->line_count - 1, 100));
+        XrJsonValue *doc_range = xjson_new_object();
+        xjson_object_set(doc_range, "range", 
+            xjson_make_range(0, 0, doc->line_count - 1, 100));
         
-        XrJsonValue *line_range = xlsp_json_new_object();
+        XrJsonValue *line_range = xjson_new_object();
         XrLspPosition ls = xlsp_offset_to_position(doc, line_start);
         XrLspPosition le = xlsp_offset_to_position(doc, line_end);
-        xlsp_json_object_set(line_range, "range",
-            xlsp_json_make_range(ls.line, ls.character, le.line, le.character));
-        xlsp_json_object_set(line_range, "parent", doc_range);
+        xjson_object_set(line_range, "range",
+            xjson_make_range(ls.line, ls.character, le.line, le.character));
+        xjson_object_set(line_range, "parent", doc_range);
         
-        XrJsonValue *word_range = xlsp_json_new_object();
+        XrJsonValue *word_range = xjson_new_object();
         XrLspPosition ws = xlsp_offset_to_position(doc, word_start);
         XrLspPosition we = xlsp_offset_to_position(doc, word_end);
-        xlsp_json_object_set(word_range, "range",
-            xlsp_json_make_range(ws.line, ws.character, we.line, we.character));
-        xlsp_json_object_set(word_range, "parent", line_range);
+        xjson_object_set(word_range, "range",
+            xjson_make_range(ws.line, ws.character, we.line, we.character));
+        xjson_object_set(word_range, "parent", line_range);
         
-        xlsp_json_array_push(ranges, word_range);
+        xjson_array_push(ranges, word_range);
     }
     
     return ranges;
@@ -162,14 +162,14 @@ XrJsonValue *xlsp_handle_selection_range(XrLspServer *server, XrJsonValue *param
 // ============================================================================
 
 XrJsonValue *xlsp_handle_document_link(XrLspServer *server, XrJsonValue *params) {
-    XrJsonValue *textDocument = xlsp_json_get_object(params, "textDocument");
-    if (!textDocument) return xlsp_json_new_array();
+    XrJsonValue *textDocument = xjson_get_object(params, "textDocument");
+    if (!textDocument) return xjson_new_array();
     
-    const char *uri = xlsp_json_get_string(textDocument, "uri");
+    const char *uri = xjson_get_string(textDocument, "uri");
     XrLspDocument *doc = xlsp_document_get(server, uri);
-    if (!doc || !doc->content) return xlsp_json_new_array();
+    if (!doc || !doc->content) return xjson_new_array();
     
-    XrJsonValue *links = xlsp_json_new_array();
+    XrJsonValue *links = xjson_new_array();
     const char *content = doc->content;
     
     const char *p = content;
@@ -191,21 +191,21 @@ XrJsonValue *xlsp_handle_document_link(XrLspServer *server, XrJsonValue *params)
                 
                 char *resolved = xlsp_resolve_import_path(doc->uri, path);
                 if (resolved) {
-                    XrJsonValue *link = xlsp_json_new_object();
+                    XrJsonValue *link = xjson_new_object();
                     
                     size_t quote_offset = path_start - content - 1;
                     XrLspPosition link_start = xlsp_offset_to_position(doc, quote_offset);
                     XrLspPosition link_end = xlsp_offset_to_position(doc, quote_offset + path_len + 2);
                     
-                    xlsp_json_object_set(link, "range",
-                        xlsp_json_make_range(link_start.line, link_start.character,
+                    xjson_object_set(link, "range",
+                        xjson_make_range(link_start.line, link_start.character,
                                              link_end.line, link_end.character));
                     
                     char target_uri[512];
                     snprintf(target_uri, sizeof(target_uri), "file://%s", resolved);
-                    xlsp_json_object_set(link, "target", xlsp_json_new_string(target_uri));
+                    xjson_object_set(link, "target", xjson_new_string(target_uri));
                     
-                    xlsp_json_array_push(links, link);
+                    xjson_array_push(links, link);
                     xr_free(resolved);
                 }
                 xr_free(path);

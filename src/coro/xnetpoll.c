@@ -14,7 +14,7 @@
 
 #include "xnetpoll.h"
 #include "../base/xchecks.h"
-#include "../vm/xvm_internal.h" // XrCoroutine
+#include "xcoroutine.h"                  // XrCoroutine
 #include "xworker.h" // XrRuntime, XrWorker
 #include "xyieldable.h" // XR_RESUME_TIMEOUT
 #include <stdlib.h>
@@ -764,6 +764,48 @@ void xr_netpoll_deadline_impl(XrPollDesc *pd, uintptr_t seq, bool read) {
     }
 }
 
+// Rebind pd to current worker when coro has migrated (Phase 1: CORO-02 fix).
+// Cancels any running timers on the old owner's wheel (via cross-worker cancel
+// queue), deregisters fd from old worker's local poll, and re-registers with
+// the current worker.  After this call pd->owner_worker_id == current->p.id.
+static void netpoll_rebind_worker(XrPollDesc *pd, XrWorker *current) {
+    XR_DCHECK(pd != NULL, "netpoll_rebind_worker: NULL pd");
+    XR_DCHECK(current != NULL, "netpoll_rebind_worker: NULL current");
+    int old_id = pd->owner_worker_id;
+    int new_id = current->p.id;
+    XR_DCHECK(old_id != new_id, "netpoll_rebind_worker: already owner");
+
+    XrRuntime *rt = current->p.runtime;
+    XR_DCHECK(rt != NULL, "netpoll_rebind_worker: NULL runtime");
+
+    // Cancel running timers on old owner's wheel via cross-worker cancel queue.
+    // Sequence bumps (done by caller) will invalidate stale callbacks.
+    if (old_id >= 0 && old_id < rt->worker_count) {
+        XrWorker *old_w = &rt->workers[old_id];
+        XrTimerWheel *old_tw = old_w->p.timer_wheel;
+        if (old_tw) {
+            if (pd->rrun) {
+                xr_timer_queue_cancel(old_tw, &pd->rt_storage, NULL);
+                pd->rrun = false;
+            }
+            if (pd->wrun) {
+                xr_timer_queue_cancel(old_tw, &pd->wt_storage, NULL);
+                pd->wrun = false;
+            }
+        }
+        // Deregister fd from old worker's local poll
+        if (pd->fd >= 0 && old_w->p.local_poll.poll_fd >= 0) {
+            xr_local_poll_del_fd(&old_w->p.local_poll, pd->fd);
+        }
+    }
+
+    // Bind to current worker
+    pd->owner_worker_id = new_id;
+    if (pd->fd >= 0 && current->p.local_poll.poll_fd >= 0) {
+        xr_local_poll_add_fd(&current->p.local_poll, pd->fd, pd);
+    }
+}
+
 // Set read/write timeout (fd bound to Worker)
 //
 // Key design:
@@ -771,21 +813,26 @@ void xr_netpoll_deadline_impl(XrPollDesc *pd, uintptr_t seq, bool read) {
 // 2. Use bound Worker's Timer Wheel (no cross-Worker access)
 // 3. Increment sequence to invalidate old timer callbacks
 //
-// Cross-worker safety: timer wheel operations (set/cancel) MUST only be
-// called from the owner worker. If coroutine migrated to a different worker,
-// skip timer operations - the I/O proceeds without timer-based timeout.
+// Phase 1 (CORO-02 fix): if the coroutine has migrated to a different worker,
+// rebind the pd to the current worker so that deadline timers are always set.
+// The old "skip timer ops" silent degradation is eliminated.
 void xr_netpoll_set_deadline(XrNetpoll *np, XrPollDesc *pd, int64_t deadline,
                               int mode, XrTimerWheel *tw) {
     (void)np;
     (void)tw;  // Ignore passed tw, use bound Worker's Timer Wheel
 
-    // bind fd to current Worker on first I/O
+    // Bind fd to current Worker on first I/O
     xr_netpoll_bind_worker(pd);
-    XrTimerWheel *bound_tw = xr_netpoll_get_timer_wheel(pd);
 
-    // Check if we're on the owner worker (timer ops require owner exclusivity)
+    // Phase 1: if coro migrated, rebind pd to current worker instead of
+    // silently skipping timer ops (CORO-02).
     XrWorker *current = xr_current_worker();
-    bool is_owner = current && (current->p.id == pd->owner_worker_id);
+    if (current && pd->owner_worker_id >= 0 &&
+        current->p.id != pd->owner_worker_id) {
+        netpoll_rebind_worker(pd, current);
+    }
+
+    XrTimerWheel *bound_tw = xr_netpoll_get_timer_wheel(pd);
 
     if (mode & XR_POLL_READ) {
         // Increment sequence to invalidate old read timer callbacks
@@ -793,22 +840,20 @@ void xr_netpoll_set_deadline(XrNetpoll *np, XrPollDesc *pd, int64_t deadline,
 
         pd->rd = deadline;
 
-        if (is_owner) {
-            // Same worker: direct timer cancel + set (safe)
-            if (pd->rrun && bound_tw) {
-                xr_twheel_cancel_timer(bound_tw, &pd->rt_storage);
-                pd->rrun = false;
-            }
-
-            if (deadline > 0 && bound_tw) {
-                pd->rseq_saved = seq;
-                pd->rt = &pd->rt_storage;
-                int64_t timeout_ms = deadline / 1000000;
-                xr_twheel_set_timer(bound_tw, pd->rt, read_deadline_callback, pd, timeout_ms);
-                pd->rrun = true;
-            }
+        // Cancel existing read timer
+        if (pd->rrun && bound_tw) {
+            xr_twheel_cancel_timer(bound_tw, &pd->rt_storage);
+            pd->rrun = false;
         }
-        // Cross-worker: skip timer ops (embedded node still in owner's wheel)
+
+        // Set new read timer
+        if (deadline > 0 && bound_tw) {
+            pd->rseq_saved = seq;
+            pd->rt = &pd->rt_storage;
+            int64_t timeout_ms = deadline / 1000000;
+            xr_twheel_set_timer(bound_tw, pd->rt, read_deadline_callback, pd, timeout_ms);
+            pd->rrun = true;
+        }
     }
 
     if (mode & XR_POLL_WRITE) {
@@ -817,22 +862,20 @@ void xr_netpoll_set_deadline(XrNetpoll *np, XrPollDesc *pd, int64_t deadline,
 
         pd->wd = deadline;
 
-        if (is_owner) {
-            // Same worker: direct timer cancel + set (safe)
-            if (pd->wrun && bound_tw) {
-                xr_twheel_cancel_timer(bound_tw, &pd->wt_storage);
-                pd->wrun = false;
-            }
-
-            if (deadline > 0 && bound_tw) {
-                pd->wseq_saved = seq;
-                pd->wt = &pd->wt_storage;
-                int64_t timeout_ms = deadline / 1000000;
-                xr_twheel_set_timer(bound_tw, pd->wt, write_deadline_callback, pd, timeout_ms);
-                pd->wrun = true;
-            }
+        // Cancel existing write timer
+        if (pd->wrun && bound_tw) {
+            xr_twheel_cancel_timer(bound_tw, &pd->wt_storage);
+            pd->wrun = false;
         }
-        // Cross-worker: skip timer ops (embedded node still in owner's wheel)
+
+        // Set new write timer
+        if (deadline > 0 && bound_tw) {
+            pd->wseq_saved = seq;
+            pd->wt = &pd->wt_storage;
+            int64_t timeout_ms = deadline / 1000000;
+            xr_twheel_set_timer(bound_tw, pd->wt, write_deadline_callback, pd, timeout_ms);
+            pd->wrun = true;
+        }
     }
 }
 

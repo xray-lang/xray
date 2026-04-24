@@ -502,4 +502,44 @@ typedef struct XrScheduler {
     struct XrCoroRegistry *coro_registry;  // Named coroutine registry (lazy init)
 } XrScheduler;
 
+/* ========== Coroutine API (moved from vm/xvm_internal.h, Phase 4) ========== */
+
+struct XrayIsolate;
+struct XrClosure;
+
+// Lifecycle
+XR_FUNC XrCoroutine *xr_coro_create(struct XrayIsolate *X, struct XrClosure *closure,
+                            XrValue *args, int arg_count,
+                            const char *name, const char *file, int line);
+XR_FUNC void xr_coro_free(XrCoroutine *coro);
+XR_FUNC void xr_coro_release_heap(XrCoroutine *coro);
+XR_FUNC void xr_coro_release_resources(XrCoroutine *coro);
+XR_FUNC void xr_coro_spawn(struct XrayIsolate *X, XrCoroutine *coro);
+
+// Scheduler
+XR_FUNC void xr_sched_init(XrScheduler *sched);
+XR_FUNC void xr_sched_destroy(XrScheduler *sched);
+XR_FUNC void xr_sched_enqueue(XrScheduler *sched, XrCoroutine *coro);
+XR_FUNC void xr_sched_remove(XrScheduler *sched, XrCoroutine *target);
+XR_FUNC XrCoroutine *xr_sched_dequeue(XrScheduler *sched);
+
+// Multicore runtime
+XR_FUNC void xr_multicore_init(struct XrayIsolate *X, int num_workers);
+XR_FUNC void xr_multicore_destroy(struct XrayIsolate *X);
+
+// Wake mechanism
+XR_FUNC void xr_coro_ready(struct XrayIsolate *X, XrCoroutine *gp, bool next);
+XR_FUNC XrCoroutine *xr_current_coro(struct XrayIsolate *X);
+XR_FUNC void xr_coro_wake_waiter(struct XrayIsolate *X, XrCoroutine *coro);
+
+// Channel wake (auto fallback to single-thread mode)
+XR_FUNC XrCoroutine *xr_runtime_wake_channel(struct XrayIsolate *X, void *channel, bool wake_sender);
+XR_FUNC void xr_runtime_wake_channel_all(struct XrayIsolate *X, void *channel);
+
+// Control
+XR_FUNC void xr_coro_cancel(XrCoroutine *coro);
+
+// Scope structured concurrency
+XR_FUNC void xr_scope_add_coro(XrScheduler *sched, XrCoroutine *coro, XrCoroutine *parent);
+
 #endif // XCOROUTINE_H

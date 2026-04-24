@@ -15,7 +15,7 @@
 #ifndef XLSP_BUILTINS_H
 #define XLSP_BUILTINS_H
 
-#include "xlsp_json.h"
+#include "../../base/xjson.h"
 #include "../../runtime/value/xtype_names.h"
 
 // LSP uses unified XrTypeId directly

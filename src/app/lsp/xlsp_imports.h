@@ -16,7 +16,7 @@
 #define XLSP_IMPORTS_H
 
 #include "xlsp_server.h"
-#include "xlsp_json.h"
+#include "../../base/xjson.h"
 #include <stdbool.h>
 #include <time.h>
 

@@ -180,11 +180,11 @@ add_xray_unit_test(test_api_defense api/test_api_defense.c)
 if(XR_BUILD_LSP)
     add_executable(test_lsp_json
         lsp/test_lsp_json.c
-        ${CMAKE_SOURCE_DIR}/src/app/lsp/xlsp_json.c
+        ${CMAKE_SOURCE_DIR}/src/base/xjson.c
         ${CMAKE_SOURCE_DIR}/src/runtime/object/xutf8.c
     )
     target_include_directories(test_lsp_json PRIVATE
-        ${CMAKE_SOURCE_DIR}/src/app/lsp
+        ${CMAKE_SOURCE_DIR}/src/base
         ${CMAKE_SOURCE_DIR}/src/runtime/object
     )
     add_test(NAME test_lsp_json COMMAND test_lsp_json)
@@ -252,11 +252,11 @@ endif()
 if(XR_BUILD_DAP)
     add_executable(test_dap_server
         dap/test_dap_server.c
-        ${CMAKE_SOURCE_DIR}/src/app/lsp/xlsp_json.c
+        ${CMAKE_SOURCE_DIR}/src/base/xjson.c
         ${CMAKE_SOURCE_DIR}/src/runtime/object/xutf8.c
     )
     target_include_directories(test_dap_server PRIVATE
-        ${CMAKE_SOURCE_DIR}/src/app/lsp
+        ${CMAKE_SOURCE_DIR}/src/base
         ${CMAKE_SOURCE_DIR}/src/app/dap
         ${CMAKE_SOURCE_DIR}/src/runtime/object
     )
@@ -293,13 +293,13 @@ if(XR_BUILD_MCP)
         ${CMAKE_SOURCE_DIR}/src/app/mcp/xmcp_resources.c
         ${CMAKE_SOURCE_DIR}/src/app/mcp/xmcp_prompts.c
         ${CMAKE_SOURCE_DIR}/src/app/mcp/xmcp_knowledge.c
-        ${CMAKE_SOURCE_DIR}/src/app/lsp/xlsp_json.c
+        ${CMAKE_SOURCE_DIR}/src/base/xjson.c
         ${CMAKE_SOURCE_DIR}/src/runtime/object/xutf8.c
     )
     target_include_directories(test_mcp_protocol PRIVATE
         ${XRAY_COMMON_INCLUDES}
         ${CMAKE_SOURCE_DIR}/src/app/mcp
-        ${CMAKE_SOURCE_DIR}/src/app/lsp
+        ${CMAKE_SOURCE_DIR}/src/base
         ${CMAKE_SOURCE_DIR}/src/runtime/object
     )
     target_link_libraries(test_mcp_protocol PRIVATE xray_core)

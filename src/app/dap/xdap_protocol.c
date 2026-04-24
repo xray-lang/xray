@@ -29,7 +29,7 @@
 // ============================================================================
 
 static inline XrJsonValue *json_get(XrJsonValue *obj, const char *key) {
-    return xlsp_json_get(obj, key);
+    return xjson_get(obj, key);
 }
 
 static inline double json_number(XrJsonValue *v) {
@@ -51,42 +51,42 @@ static inline bool json_bool(XrJsonValue *v) {
 void xdap_send_response(XdapController *ctrl, int request_seq,
                          const char *command, bool success,
                          XrJsonValue *body, const char *error_message) {
-    XrJsonValue *resp = xlsp_json_new_object();
-    xlsp_json_object_set(resp, "seq", xlsp_json_new_number(ctrl->seq++));
-    xlsp_json_object_set(resp, "type", xlsp_json_new_string("response"));
-    xlsp_json_object_set(resp, "request_seq", xlsp_json_new_number(request_seq));
-    xlsp_json_object_set(resp, "success", xlsp_json_new_bool(success));
-    xlsp_json_object_set(resp, "command", xlsp_json_new_string(command));
+    XrJsonValue *resp = xjson_new_object();
+    xjson_object_set(resp, "seq", xjson_new_number(ctrl->seq++));
+    xjson_object_set(resp, "type", xjson_new_string("response"));
+    xjson_object_set(resp, "request_seq", xjson_new_number(request_seq));
+    xjson_object_set(resp, "success", xjson_new_bool(success));
+    xjson_object_set(resp, "command", xjson_new_string(command));
 
     if (body) {
-        xlsp_json_object_set(resp, "body", body);
+        xjson_object_set(resp, "body", body);
     }
     if (error_message) {
-        xlsp_json_object_set(resp, "message", xlsp_json_new_string(error_message));
+        xjson_object_set(resp, "message", xjson_new_string(error_message));
     }
 
     size_t len = 0;
-    char *json = xlsp_json_stringify(resp, &len);
+    char *json = xjson_stringify(resp, &len);
     xdap_transport_write(ctrl->transport, json, len);
     xr_free(json);
-    xlsp_json_free(resp);
+    xjson_free(resp);
 }
 
 void xdap_send_event(XdapController *ctrl, const char *event, XrJsonValue *body) {
-    XrJsonValue *evt = xlsp_json_new_object();
-    xlsp_json_object_set(evt, "seq", xlsp_json_new_number(ctrl->seq++));
-    xlsp_json_object_set(evt, "type", xlsp_json_new_string("event"));
-    xlsp_json_object_set(evt, "event", xlsp_json_new_string(event));
+    XrJsonValue *evt = xjson_new_object();
+    xjson_object_set(evt, "seq", xjson_new_number(ctrl->seq++));
+    xjson_object_set(evt, "type", xjson_new_string("event"));
+    xjson_object_set(evt, "event", xjson_new_string(event));
 
     if (body) {
-        xlsp_json_object_set(evt, "body", body);
+        xjson_object_set(evt, "body", body);
     }
 
     size_t len = 0;
-    char *json = xlsp_json_stringify(evt, &len);
+    char *json = xjson_stringify(evt, &len);
     xdap_transport_write(ctrl->transport, json, len);
     xr_free(json);
-    xlsp_json_free(evt);
+    xjson_free(evt);
 }
 
 // ============================================================================
@@ -98,10 +98,10 @@ void xdap_send_initialized_event(XdapController *ctrl) {
 }
 
 void xdap_send_stopped_event(XdapController *ctrl, const char *reason, int thread_id) {
-    XrJsonValue *body = xlsp_json_new_object();
-    xlsp_json_object_set(body, "reason", xlsp_json_new_string(reason));
-    xlsp_json_object_set(body, "threadId", xlsp_json_new_number(thread_id));
-    xlsp_json_object_set(body, "allThreadsStopped", xlsp_json_new_bool(true));
+    XrJsonValue *body = xjson_new_object();
+    xjson_object_set(body, "reason", xjson_new_string(reason));
+    xjson_object_set(body, "threadId", xjson_new_number(thread_id));
+    xjson_object_set(body, "allThreadsStopped", xjson_new_bool(true));
     xdap_send_event(ctrl, "stopped", body);
 }
 
@@ -110,16 +110,16 @@ void xdap_send_terminated_event(XdapController *ctrl) {
 }
 
 void xdap_send_exited_event(XdapController *ctrl, int exit_code) {
-    XrJsonValue *body = xlsp_json_new_object();
-    xlsp_json_object_set(body, "exitCode", xlsp_json_new_number(exit_code));
+    XrJsonValue *body = xjson_new_object();
+    xjson_object_set(body, "exitCode", xjson_new_number(exit_code));
     xdap_send_event(ctrl, "exited", body);
 }
 
 void xdap_send_output_event(XdapController *ctrl, const char *category,
                              const char *output) {
-    XrJsonValue *body = xlsp_json_new_object();
-    xlsp_json_object_set(body, "category", xlsp_json_new_string(category));
-    xlsp_json_object_set(body, "output", xlsp_json_new_string(output));
+    XrJsonValue *body = xjson_new_object();
+    xjson_object_set(body, "category", xjson_new_string(category));
+    xjson_object_set(body, "output", xjson_new_string(output));
     xdap_send_event(ctrl, "output", body);
 }
 
@@ -130,40 +130,40 @@ void xdap_send_output_event(XdapController *ctrl, const char *category,
 static void handle_initialize(XdapController *ctrl, int seq, XrJsonValue *args) {
     (void)args;
 
-    XrJsonValue *body = xlsp_json_new_object();
+    XrJsonValue *body = xjson_new_object();
 
     // Capabilities
-    xlsp_json_object_set(body, "supportsConfigurationDoneRequest",
-                          xlsp_json_new_bool(true));
-    xlsp_json_object_set(body, "supportsConditionalBreakpoints", xlsp_json_new_bool(true));
-    xlsp_json_object_set(body, "supportsHitConditionalBreakpoints", xlsp_json_new_bool(true));
-    xlsp_json_object_set(body, "supportsLogPoints", xlsp_json_new_bool(true));
-    xlsp_json_object_set(body, "supportsFunctionBreakpoints", xlsp_json_new_bool(true));
-    xlsp_json_object_set(body, "supportsTerminateRequest", xlsp_json_new_bool(true));
-    xlsp_json_object_set(body, "supportsRestartRequest", xlsp_json_new_bool(true));
-    xlsp_json_object_set(body, "supportsSetVariable", xlsp_json_new_bool(true));
-    xlsp_json_object_set(body, "supportsEvaluateForHovers", xlsp_json_new_bool(true));
-    xlsp_json_object_set(body, "supportsDisassembleRequest", xlsp_json_new_bool(true));
-    xlsp_json_object_set(body, "supportTerminateDebuggee", xlsp_json_new_bool(true));
-    xlsp_json_object_set(body, "supportsPauseRequest", xlsp_json_new_bool(true));
-    xlsp_json_object_set(body, "supportsExceptionInfoRequest", xlsp_json_new_bool(true));
+    xjson_object_set(body, "supportsConfigurationDoneRequest",
+                          xjson_new_bool(true));
+    xjson_object_set(body, "supportsConditionalBreakpoints", xjson_new_bool(true));
+    xjson_object_set(body, "supportsHitConditionalBreakpoints", xjson_new_bool(true));
+    xjson_object_set(body, "supportsLogPoints", xjson_new_bool(true));
+    xjson_object_set(body, "supportsFunctionBreakpoints", xjson_new_bool(true));
+    xjson_object_set(body, "supportsTerminateRequest", xjson_new_bool(true));
+    xjson_object_set(body, "supportsRestartRequest", xjson_new_bool(true));
+    xjson_object_set(body, "supportsSetVariable", xjson_new_bool(true));
+    xjson_object_set(body, "supportsEvaluateForHovers", xjson_new_bool(true));
+    xjson_object_set(body, "supportsDisassembleRequest", xjson_new_bool(true));
+    xjson_object_set(body, "supportTerminateDebuggee", xjson_new_bool(true));
+    xjson_object_set(body, "supportsPauseRequest", xjson_new_bool(true));
+    xjson_object_set(body, "supportsExceptionInfoRequest", xjson_new_bool(true));
 
     // Exception breakpoint filters
-    XrJsonValue *filters = xlsp_json_new_array();
+    XrJsonValue *filters = xjson_new_array();
 
-    XrJsonValue *uncaught = xlsp_json_new_object();
-    xlsp_json_object_set(uncaught, "filter", xlsp_json_new_string("uncaught"));
-    xlsp_json_object_set(uncaught, "label", xlsp_json_new_string("Uncaught Exceptions"));
-    xlsp_json_object_set(uncaught, "default", xlsp_json_new_bool(true));
-    xlsp_json_array_push(filters, uncaught);
+    XrJsonValue *uncaught = xjson_new_object();
+    xjson_object_set(uncaught, "filter", xjson_new_string("uncaught"));
+    xjson_object_set(uncaught, "label", xjson_new_string("Uncaught Exceptions"));
+    xjson_object_set(uncaught, "default", xjson_new_bool(true));
+    xjson_array_push(filters, uncaught);
 
-    XrJsonValue *caught = xlsp_json_new_object();
-    xlsp_json_object_set(caught, "filter", xlsp_json_new_string("caught"));
-    xlsp_json_object_set(caught, "label", xlsp_json_new_string("Caught Exceptions"));
-    xlsp_json_object_set(caught, "default", xlsp_json_new_bool(false));
-    xlsp_json_array_push(filters, caught);
+    XrJsonValue *caught = xjson_new_object();
+    xjson_object_set(caught, "filter", xjson_new_string("caught"));
+    xjson_object_set(caught, "label", xjson_new_string("Caught Exceptions"));
+    xjson_object_set(caught, "default", xjson_new_bool(false));
+    xjson_array_push(filters, caught);
 
-    xlsp_json_object_set(body, "exceptionBreakpointFilters", filters);
+    xjson_object_set(body, "exceptionBreakpointFilters", filters);
 
     xdap_send_response(ctrl, seq, "initialize", true, body, NULL);
     ctrl->initialized = true;
@@ -232,8 +232,8 @@ static void handle_launch(XdapController *ctrl, int seq, XrJsonValue *args) {
     char **argv = NULL;
     int argc = 0;
 
-    if (args_array && xlsp_json_is_array(args_array)) {
-        argc = xlsp_json_array_len(args_array);
+    if (args_array && xjson_is_array(args_array)) {
+        argc = xjson_array_len(args_array);
         if (argc > 0) {
             argv = xr_calloc((size_t)argc, sizeof(char *));
             if (!argv) {
@@ -241,7 +241,7 @@ static void handle_launch(XdapController *ctrl, int seq, XrJsonValue *args) {
                 return;
             }
             for (int i = 0; i < argc; i++) {
-                XrJsonValue *arg = xlsp_json_array_get(args_array, i);
+                XrJsonValue *arg = xjson_array_get(args_array, i);
                 if (arg && arg->type == XR_JSON_STRING) {
                     argv[i] = xr_strdup(arg->as.string);
                     if (!argv[i]) {
@@ -302,8 +302,8 @@ static void handle_attach(XdapController *ctrl, int seq, XrJsonValue *args) {
         XrJsonValue *args_array = json_get(args, "args");
         char **argv = NULL;
         int argc = 0;
-        if (args_array && xlsp_json_is_array(args_array)) {
-            argc = xlsp_json_array_len(args_array);
+        if (args_array && xjson_is_array(args_array)) {
+            argc = xjson_array_len(args_array);
             if (argc > 0) {
                 argv = xr_calloc((size_t)argc, sizeof(char *));
                 if (!argv) {
@@ -311,7 +311,7 @@ static void handle_attach(XdapController *ctrl, int seq, XrJsonValue *args) {
                     return;
                 }
                 for (int i = 0; i < argc; i++) {
-                    XrJsonValue *arg = xlsp_json_array_get(args_array, i);
+                    XrJsonValue *arg = xjson_array_get(args_array, i);
                     if (arg && arg->type == XR_JSON_STRING) {
                         argv[i] = xr_strdup(arg->as.string);
                         if (!argv[i]) {
@@ -374,11 +374,11 @@ static void handle_set_breakpoints(XdapController *ctrl, int seq, XrJsonValue *a
         xr_debug_clear_breakpoints(ctrl->isolate, path);
     }
 
-    XrJsonValue *result_bps = xlsp_json_new_array();
+    XrJsonValue *result_bps = xjson_new_array();
 
-    int bp_count = breakpoints ? xlsp_json_array_len(breakpoints) : 0;
+    int bp_count = breakpoints ? xjson_array_len(breakpoints) : 0;
     for (int i = 0; i < bp_count; i++) {
-        XrJsonValue *bp = xlsp_json_array_get(breakpoints, i);
+        XrJsonValue *bp = xjson_array_get(breakpoints, i);
         int line = (int)json_number(json_get(bp, "line"));
         const char *condition = json_string(json_get(bp, "condition"));
         const char *log_message = json_string(json_get(bp, "logMessage"));
@@ -388,15 +388,15 @@ static void handle_set_breakpoints(XdapController *ctrl, int seq, XrJsonValue *a
         int id = xr_debug_add_breakpoint_ex(ctrl->isolate, path, line,
                                              condition, log_message, hit_condition);
 
-        XrJsonValue *result_bp = xlsp_json_new_object();
-        xlsp_json_object_set(result_bp, "id", xlsp_json_new_number(id));
-        xlsp_json_object_set(result_bp, "verified", xlsp_json_new_bool(id > 0));
-        xlsp_json_object_set(result_bp, "line", xlsp_json_new_number(line));
-        xlsp_json_array_push(result_bps, result_bp);
+        XrJsonValue *result_bp = xjson_new_object();
+        xjson_object_set(result_bp, "id", xjson_new_number(id));
+        xjson_object_set(result_bp, "verified", xjson_new_bool(id > 0));
+        xjson_object_set(result_bp, "line", xjson_new_number(line));
+        xjson_array_push(result_bps, result_bp);
     }
 
-    XrJsonValue *body = xlsp_json_new_object();
-    xlsp_json_object_set(body, "breakpoints", result_bps);
+    XrJsonValue *body = xjson_new_object();
+    xjson_object_set(body, "breakpoints", result_bps);
 
     xdap_send_response(ctrl, seq, "setBreakpoints", true, body, NULL);
 }
@@ -414,25 +414,25 @@ static void handle_set_function_breakpoints(XdapController *ctrl, int seq, XrJso
     // Clear existing function breakpoints (directly use debug API)
     xr_debug_clear_function_breakpoints(ctrl->isolate);
 
-    XrJsonValue *result_bps = xlsp_json_new_array();
+    XrJsonValue *result_bps = xjson_new_array();
 
-    int bp_count = breakpoints ? xlsp_json_array_len(breakpoints) : 0;
+    int bp_count = breakpoints ? xjson_array_len(breakpoints) : 0;
     for (int i = 0; i < bp_count; i++) {
-        XrJsonValue *bp = xlsp_json_array_get(breakpoints, i);
+        XrJsonValue *bp = xjson_array_get(breakpoints, i);
         const char *name = json_string(json_get(bp, "name"));
         const char *condition = json_string(json_get(bp, "condition"));
 
         // Directly use debug API
         int id = xr_debug_add_function_breakpoint(ctrl->isolate, name, condition);
 
-        XrJsonValue *result_bp = xlsp_json_new_object();
-        xlsp_json_object_set(result_bp, "id", xlsp_json_new_number(id));
-        xlsp_json_object_set(result_bp, "verified", xlsp_json_new_bool(id > 0));
-        xlsp_json_array_push(result_bps, result_bp);
+        XrJsonValue *result_bp = xjson_new_object();
+        xjson_object_set(result_bp, "id", xjson_new_number(id));
+        xjson_object_set(result_bp, "verified", xjson_new_bool(id > 0));
+        xjson_array_push(result_bps, result_bp);
     }
 
-    XrJsonValue *body = xlsp_json_new_object();
-    xlsp_json_object_set(body, "breakpoints", result_bps);
+    XrJsonValue *body = xjson_new_object();
+    xjson_object_set(body, "breakpoints", result_bps);
 
     xdap_send_response(ctrl, seq, "setFunctionBreakpoints", true, body, NULL);
 }
@@ -444,10 +444,10 @@ static void handle_set_exception_breakpoints(XdapController *ctrl, int seq, XrJs
     bool break_caught = false;
 
     // First pass: compute effective toggles.
-    int filter_count = filters && xlsp_json_is_array(filters)
-                     ? xlsp_json_array_len(filters) : 0;
+    int filter_count = filters && xjson_is_array(filters)
+                     ? xjson_array_len(filters) : 0;
     for (int i = 0; i < filter_count; i++) {
-        XrJsonValue *filter = xlsp_json_array_get(filters, i);
+        XrJsonValue *filter = xjson_array_get(filters, i);
         const char *filter_str = json_string(filter);
         if (!filter_str) continue;
         if (strcmp(filter_str, "uncaught") == 0) break_uncaught = true;
@@ -468,27 +468,27 @@ static void handle_set_exception_breakpoints(XdapController *ctrl, int seq, XrJs
     // style unsupported filters or show a warning bubble. Returning an
     // empty array was legal but caused VS Code 1.92+ to show every filter
     // as "not verified" regardless of what we actually support.
-    XrJsonValue *result_bps = xlsp_json_new_array();
+    XrJsonValue *result_bps = xjson_new_array();
     for (int i = 0; i < filter_count; i++) {
-        XrJsonValue *filter = xlsp_json_array_get(filters, i);
+        XrJsonValue *filter = xjson_array_get(filters, i);
         const char *filter_str = json_string(filter);
         bool verified = filter_str && (
             strcmp(filter_str, "uncaught") == 0 ||
             strcmp(filter_str, "caught")   == 0 ||
             strcmp(filter_str, "all")      == 0);
 
-        XrJsonValue *bp = xlsp_json_new_object();
-        xlsp_json_object_set(bp, "verified", xlsp_json_new_bool(verified));
+        XrJsonValue *bp = xjson_new_object();
+        xjson_object_set(bp, "verified", xjson_new_bool(verified));
         if (!verified && filter_str) {
             char msg[96];
             snprintf(msg, sizeof(msg), "Unknown exception filter '%s'", filter_str);
-            xlsp_json_object_set(bp, "message", xlsp_json_new_string(msg));
+            xjson_object_set(bp, "message", xjson_new_string(msg));
         }
-        xlsp_json_array_push(result_bps, bp);
+        xjson_array_push(result_bps, bp);
     }
 
-    XrJsonValue *body = xlsp_json_new_object();
-    xlsp_json_object_set(body, "breakpoints", result_bps);
+    XrJsonValue *body = xjson_new_object();
+    xjson_object_set(body, "breakpoints", result_bps);
 
     xdap_send_response(ctrl, seq, "setExceptionBreakpoints", true, body, NULL);
 }
@@ -496,7 +496,7 @@ static void handle_set_exception_breakpoints(XdapController *ctrl, int seq, XrJs
 static void handle_threads(XdapController *ctrl, int seq, XrJsonValue *args) {
     (void)args;
 
-    XrJsonValue *threads = xlsp_json_new_array();
+    XrJsonValue *threads = xjson_new_array();
 
     if (ctrl->isolate) {
         // Get all coroutines from the scheduler
@@ -509,8 +509,8 @@ static void handle_threads(XdapController *ctrl, int seq, XrJsonValue *args) {
                 const char *coro_state;
 
                 if (xr_debug_get_coro_info(ctrl->isolate, i, &coro_id, &coro_name, &coro_state)) {
-                    XrJsonValue *thread = xlsp_json_new_object();
-                    xlsp_json_object_set(thread, "id", xlsp_json_new_number(coro_id > 0 ? coro_id : 1));
+                    XrJsonValue *thread = xjson_new_object();
+                    xjson_object_set(thread, "id", xjson_new_number(coro_id > 0 ? coro_id : 1));
 
                     // Build thread name with state
                     char name_buf[128];
@@ -521,27 +521,27 @@ static void handle_threads(XdapController *ctrl, int seq, XrJsonValue *args) {
                     } else {
                         snprintf(name_buf, sizeof(name_buf), "coroutine-%d (%s)", coro_id, coro_state);
                     }
-                    xlsp_json_object_set(thread, "name", xlsp_json_new_string(name_buf));
-                    xlsp_json_array_push(threads, thread);
+                    xjson_object_set(thread, "name", xjson_new_string(name_buf));
+                    xjson_array_push(threads, thread);
                 }
             }
         } else {
             // No scheduler, just add main thread
-            XrJsonValue *main_thread = xlsp_json_new_object();
-            xlsp_json_object_set(main_thread, "id", xlsp_json_new_number(1));
-            xlsp_json_object_set(main_thread, "name", xlsp_json_new_string("main"));
-            xlsp_json_array_push(threads, main_thread);
+            XrJsonValue *main_thread = xjson_new_object();
+            xjson_object_set(main_thread, "id", xjson_new_number(1));
+            xjson_object_set(main_thread, "name", xjson_new_string("main"));
+            xjson_array_push(threads, main_thread);
         }
     } else {
         // No isolate, return empty (or default main thread)
-        XrJsonValue *main_thread = xlsp_json_new_object();
-        xlsp_json_object_set(main_thread, "id", xlsp_json_new_number(1));
-        xlsp_json_object_set(main_thread, "name", xlsp_json_new_string("main"));
-        xlsp_json_array_push(threads, main_thread);
+        XrJsonValue *main_thread = xjson_new_object();
+        xjson_object_set(main_thread, "id", xjson_new_number(1));
+        xjson_object_set(main_thread, "name", xjson_new_string("main"));
+        xjson_array_push(threads, main_thread);
     }
 
-    XrJsonValue *body = xlsp_json_new_object();
-    xlsp_json_object_set(body, "threads", threads);
+    XrJsonValue *body = xjson_new_object();
+    xjson_object_set(body, "threads", threads);
 
     xdap_send_response(ctrl, seq, "threads", true, body, NULL);
 }
@@ -562,25 +562,25 @@ static void handle_stack_trace(XdapController *ctrl, int seq, XrJsonValue *args)
     }
 
     if (!all_frames) {
-        all_frames = xlsp_json_new_array();
+        all_frames = xjson_new_array();
     }
 
-    int total = xlsp_json_array_len(all_frames);
+    int total = xjson_array_len(all_frames);
 
     // Apply pagination: startFrame + levels
     XrJsonValue *frames = all_frames;
     if (start_frame > 0 || (levels > 0 && levels < total)) {
-        frames = xlsp_json_new_array();
+        frames = xjson_new_array();
         int end = (levels > 0) ? start_frame + levels : total;
         if (end > total) end = total;
         for (int i = start_frame; i < end; i++) {
-            xlsp_json_array_push(frames, xlsp_json_array_get(all_frames, i));
+            xjson_array_push(frames, xjson_array_get(all_frames, i));
         }
     }
 
-    XrJsonValue *body = xlsp_json_new_object();
-    xlsp_json_object_set(body, "stackFrames", frames);
-    xlsp_json_object_set(body, "totalFrames", xlsp_json_new_number(total));
+    XrJsonValue *body = xjson_new_object();
+    xjson_object_set(body, "stackFrames", frames);
+    xjson_object_set(body, "totalFrames", xjson_new_number(total));
 
     xdap_send_response(ctrl, seq, "stackTrace", true, body, NULL);
 }
@@ -593,7 +593,7 @@ static void handle_scopes(XdapController *ctrl, int seq, XrJsonValue *args) {
         return;
     }
 
-    XrJsonValue *scopes = xlsp_json_new_array();
+    XrJsonValue *scopes = xjson_new_array();
 
     // Resolve frame for variable counts
     XrBcCallFrame *frame = NULL;
@@ -610,38 +610,38 @@ static void handle_scopes(XdapController *ctrl, int seq, XrJsonValue *args) {
                                               frame_id, XR_NULL_VAL);
     int local_count = (frame && frame->closure && frame->closure->proto)
         ? PROTO_LOCVAR_COUNT(frame->closure->proto) : 0;
-    XrJsonValue *local = xlsp_json_new_object();
-    xlsp_json_object_set(local, "name", xlsp_json_new_string("Locals"));
-    xlsp_json_object_set(local, "variablesReference", xlsp_json_new_number(locals_ref));
-    xlsp_json_object_set(local, "namedVariables", xlsp_json_new_number(local_count));
-    xlsp_json_object_set(local, "expensive", xlsp_json_new_bool(false));
-    xlsp_json_array_push(scopes, local);
+    XrJsonValue *local = xjson_new_object();
+    xjson_object_set(local, "name", xjson_new_string("Locals"));
+    xjson_object_set(local, "variablesReference", xjson_new_number(locals_ref));
+    xjson_object_set(local, "namedVariables", xjson_new_number(local_count));
+    xjson_object_set(local, "expensive", xjson_new_bool(false));
+    xjson_array_push(scopes, local);
 
     // Closure scope (only when frame has upvalues)
     if (frame && frame->closure && frame->closure->upval_count > 0) {
         int upval_ref = xr_debug_create_var_ref(ctrl->isolate,
             XDAP_REF_SCOPE_UPVALUES, frame_id, XR_NULL_VAL);
-        XrJsonValue *closure_scope = xlsp_json_new_object();
-        xlsp_json_object_set(closure_scope, "name", xlsp_json_new_string("Closure"));
-        xlsp_json_object_set(closure_scope, "variablesReference",
-            xlsp_json_new_number(upval_ref));
-        xlsp_json_object_set(closure_scope, "namedVariables",
-            xlsp_json_new_number(frame->closure->upval_count));
-        xlsp_json_object_set(closure_scope, "expensive", xlsp_json_new_bool(false));
-        xlsp_json_array_push(scopes, closure_scope);
+        XrJsonValue *closure_scope = xjson_new_object();
+        xjson_object_set(closure_scope, "name", xjson_new_string("Closure"));
+        xjson_object_set(closure_scope, "variablesReference",
+            xjson_new_number(upval_ref));
+        xjson_object_set(closure_scope, "namedVariables",
+            xjson_new_number(frame->closure->upval_count));
+        xjson_object_set(closure_scope, "expensive", xjson_new_bool(false));
+        xjson_array_push(scopes, closure_scope);
     }
 
     // Globals scope (always present, marked expensive)
     int globals_ref = xr_debug_create_var_ref(ctrl->isolate, XDAP_REF_SCOPE_GLOBALS,
                                                -1, XR_NULL_VAL);
-    XrJsonValue *global = xlsp_json_new_object();
-    xlsp_json_object_set(global, "name", xlsp_json_new_string("Globals"));
-    xlsp_json_object_set(global, "variablesReference", xlsp_json_new_number(globals_ref));
-    xlsp_json_object_set(global, "expensive", xlsp_json_new_bool(true));
-    xlsp_json_array_push(scopes, global);
+    XrJsonValue *global = xjson_new_object();
+    xjson_object_set(global, "name", xjson_new_string("Globals"));
+    xjson_object_set(global, "variablesReference", xjson_new_number(globals_ref));
+    xjson_object_set(global, "expensive", xjson_new_bool(true));
+    xjson_array_push(scopes, global);
 
-    XrJsonValue *body = xlsp_json_new_object();
-    xlsp_json_object_set(body, "scopes", scopes);
+    XrJsonValue *body = xjson_new_object();
+    xjson_object_set(body, "scopes", scopes);
 
     xdap_send_response(ctrl, seq, "scopes", true, body, NULL);
 }
@@ -652,22 +652,22 @@ static void handle_variables(XdapController *ctrl, int seq, XrJsonValue *args) {
     int count = (int)json_number(json_get(args, "count"));    // 0 if absent
 
     XrJsonValue *all_vars = xdap_inspect_variables(ctrl, var_ref);
-    if (!all_vars) all_vars = xlsp_json_new_array();
+    if (!all_vars) all_vars = xjson_new_array();
 
     // Apply pagination when start/count provided
     XrJsonValue *variables = all_vars;
-    int total = xlsp_json_array_len(all_vars);
+    int total = xjson_array_len(all_vars);
     if (start > 0 || (count > 0 && count < total)) {
-        variables = xlsp_json_new_array();
+        variables = xjson_new_array();
         int end = (count > 0) ? start + count : total;
         if (end > total) end = total;
         for (int i = start; i < end; i++) {
-            xlsp_json_array_push(variables, xlsp_json_array_get(all_vars, i));
+            xjson_array_push(variables, xjson_array_get(all_vars, i));
         }
     }
 
-    XrJsonValue *body = xlsp_json_new_object();
-    xlsp_json_object_set(body, "variables", variables);
+    XrJsonValue *body = xjson_new_object();
+    xjson_object_set(body, "variables", variables);
 
     xdap_send_response(ctrl, seq, "variables", true, body, NULL);
 }
@@ -685,8 +685,8 @@ static void handle_continue(XdapController *ctrl, int seq, XrJsonValue *args) {
     xdap_controller_continue(ctrl);
     ctrl->vm_state = XDAP_VM_RUNNING;
 
-    XrJsonValue *body = xlsp_json_new_object();
-    xlsp_json_object_set(body, "allThreadsContinued", xlsp_json_new_bool(true));
+    XrJsonValue *body = xjson_new_object();
+    xjson_object_set(body, "allThreadsContinued", xjson_new_bool(true));
     xdap_send_response(ctrl, seq, "continue", true, body, NULL);
 }
 
@@ -754,17 +754,17 @@ static void handle_evaluate(XdapController *ctrl, int seq, XrJsonValue *args) {
     const char *expression = json_string(json_get(args, "expression"));
     int frame_id = (int)json_number(json_get(args, "frameId"));
 
-    XrJsonValue *body = xlsp_json_new_object();
+    XrJsonValue *body = xjson_new_object();
 
     if (expression && ctrl->isolate) {
         int var_ref = 0;
         char *result = xdap_inspect_evaluate_ex(ctrl, expression, frame_id, &var_ref);
-        xlsp_json_object_set(body, "result", xlsp_json_new_string(result ? result : "<error>"));
-        xlsp_json_object_set(body, "variablesReference", xlsp_json_new_number(var_ref));
+        xjson_object_set(body, "result", xjson_new_string(result ? result : "<error>"));
+        xjson_object_set(body, "variablesReference", xjson_new_number(var_ref));
         xr_free(result);
     } else {
-        xlsp_json_object_set(body, "result", xlsp_json_new_string("<no expression>"));
-        xlsp_json_object_set(body, "variablesReference", xlsp_json_new_number(0));
+        xjson_object_set(body, "result", xjson_new_string("<no expression>"));
+        xjson_object_set(body, "variablesReference", xjson_new_number(0));
     }
 
     xdap_send_response(ctrl, seq, "evaluate", true, body, NULL);
@@ -786,8 +786,8 @@ static void handle_set_variable(XdapController *ctrl, int seq, XrJsonValue *args
         return;
     }
 
-    XrJsonValue *body = xlsp_json_new_object();
-    xlsp_json_object_set(body, "value", xlsp_json_new_string(new_value));
+    XrJsonValue *body = xjson_new_object();
+    xjson_object_set(body, "value", xjson_new_string(new_value));
     xr_free(new_value);
 
     xdap_send_response(ctrl, seq, "setVariable", true, body, NULL);
@@ -814,39 +814,39 @@ static void handle_disassemble(XdapController *ctrl, int seq, XrJsonValue *args)
 
     int current_pc = xr_debug_get_current_pc(ctrl->isolate, frame_idx);
 
-    XrJsonValue *instructions = xlsp_json_new_array();
+    XrJsonValue *instructions = xjson_new_array();
     for (int i = 0; i < count; i++) {
-        XrJsonValue *instr = xlsp_json_new_object();
+        XrJsonValue *instr = xjson_new_object();
 
         char addr_buf[32];
         snprintf(addr_buf, sizeof(addr_buf), "0x%08x", instrs[i].offset);
-        xlsp_json_object_set(instr, "address", xlsp_json_new_string(addr_buf));
+        xjson_object_set(instr, "address", xjson_new_string(addr_buf));
 
         char *text = instrs[i].instruction ? instrs[i].instruction : "???";
         if (instrs[i].comment) {
             char combined[512];
             snprintf(combined, sizeof(combined), "%s  ; %s", text, instrs[i].comment);
-            xlsp_json_object_set(instr, "instruction", xlsp_json_new_string(combined));
+            xjson_object_set(instr, "instruction", xjson_new_string(combined));
         } else {
-            xlsp_json_object_set(instr, "instruction", xlsp_json_new_string(text));
+            xjson_object_set(instr, "instruction", xjson_new_string(text));
         }
 
         if (instrs[i].line > 0) {
-            xlsp_json_object_set(instr, "line", xlsp_json_new_number(instrs[i].line));
+            xjson_object_set(instr, "line", xjson_new_number(instrs[i].line));
         }
 
         // Mark current instruction
         if (instrs[i].offset == current_pc) {
-            xlsp_json_object_set(instr, "symbol", xlsp_json_new_string(">>>"));
+            xjson_object_set(instr, "symbol", xjson_new_string(">>>"));
         }
 
-        xlsp_json_array_push(instructions, instr);
+        xjson_array_push(instructions, instr);
     }
 
     xr_debug_free_disasm(instrs, count);
 
-    XrJsonValue *body = xlsp_json_new_object();
-    xlsp_json_object_set(body, "instructions", instructions);
+    XrJsonValue *body = xjson_new_object();
+    xjson_object_set(body, "instructions", instructions);
 
     xdap_send_response(ctrl, seq, "disassemble", true, body, NULL);
 }
@@ -912,10 +912,10 @@ static void handle_exception_info(XdapController *ctrl, int seq, XrJsonValue *ar
     // breakMode: "always" | "unhandled" | "userUnhandled" | "never"
     const char *break_mode = (dbg && dbg->exception_is_uncaught) ? "unhandled" : "always";
 
-    XrJsonValue *body = xlsp_json_new_object();
-    xlsp_json_object_set(body, "exceptionId", xlsp_json_new_string(filter));
-    xlsp_json_object_set(body, "description", xlsp_json_new_string(message));
-    xlsp_json_object_set(body, "breakMode", xlsp_json_new_string(break_mode));
+    XrJsonValue *body = xjson_new_object();
+    xjson_object_set(body, "exceptionId", xjson_new_string(filter));
+    xjson_object_set(body, "description", xjson_new_string(message));
+    xjson_object_set(body, "breakMode", xjson_new_string(break_mode));
 
     xdap_send_response(ctrl, seq, "exceptionInfo", true, body, NULL);
 }
@@ -969,7 +969,7 @@ static void dispatch_request(XdapController *ctrl, int seq, const char *cmd, XrJ
 }
 
 bool xdap_handle_message(XdapController *ctrl, const char *json, size_t len) {
-    XrJsonValue *msg = xlsp_json_parse(json, len);
+    XrJsonValue *msg = xjson_parse(json, len);
     if (!msg) {
         // JSON parse failed - log and continue session
         fprintf(stderr, "[DAP] Failed to parse JSON message\n");
@@ -990,7 +990,7 @@ bool xdap_handle_message(XdapController *ctrl, const char *json, size_t len) {
         }
     }
 
-    xlsp_json_free(msg);
+    xjson_free(msg);
 
     return ctrl->vm_state != XDAP_VM_TERMINATED;
 }

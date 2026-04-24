@@ -18,12 +18,12 @@
 // Helper to create a call hierarchy item
 static XrJsonValue *create_call_hierarchy_item(const char *name, int kind,
     const char *uri, int line, int col, int end_line, int end_col) {
-    XrJsonValue *item = xlsp_json_new_object();
-    xlsp_json_object_set(item, "name", xlsp_json_new_string(name));
-    xlsp_json_object_set(item, "kind", xlsp_json_new_number(kind));
-    xlsp_json_object_set(item, "uri", xlsp_json_new_string(uri));
-    xlsp_json_object_set(item, "range", xlsp_json_make_range(line, col, end_line, end_col));
-    xlsp_json_object_set(item, "selectionRange", xlsp_json_make_range(line, col, end_line, end_col));
+    XrJsonValue *item = xjson_new_object();
+    xjson_object_set(item, "name", xjson_new_string(name));
+    xjson_object_set(item, "kind", xjson_new_number(kind));
+    xjson_object_set(item, "uri", xjson_new_string(uri));
+    xjson_object_set(item, "range", xjson_make_range(line, col, end_line, end_col));
+    xjson_object_set(item, "selectionRange", xjson_make_range(line, col, end_line, end_col));
     return item;
 }
 
@@ -32,20 +32,20 @@ static XrJsonValue *create_call_hierarchy_item(const char *name, int kind,
 // ============================================================================
 
 XrJsonValue *xlsp_handle_prepare_call_hierarchy(XrLspServer *server, XrJsonValue *params) {
-    XrJsonValue *textDocument = xlsp_json_get_object(params, "textDocument");
-    XrJsonValue *position = xlsp_json_get_object(params, "position");
-    if (!textDocument || !position) return xlsp_json_new_array();
+    XrJsonValue *textDocument = xjson_get_object(params, "textDocument");
+    XrJsonValue *position = xjson_get_object(params, "position");
+    if (!textDocument || !position) return xjson_new_array();
 
-    const char *uri = xlsp_json_get_string(textDocument, "uri");
+    const char *uri = xjson_get_string(textDocument, "uri");
     XrLspDocument *doc = xlsp_document_get(server, uri);
-    if (!doc || !doc->ast) return xlsp_json_new_array();
+    if (!doc || !doc->ast) return xjson_new_array();
 
     XrLspPosition pos = {
-        .line = (uint32_t)xlsp_json_get_int(position, "line"),
-        .character = (uint32_t)xlsp_json_get_int(position, "character")
+        .line = (uint32_t)xjson_get_int(position, "line"),
+        .character = (uint32_t)xjson_get_int(position, "character")
     };
 
-    XrJsonValue *items = xlsp_json_new_array();
+    XrJsonValue *items = xjson_new_array();
 
     AstNode *ast = doc->ast;
     if (ast->type == AST_PROGRAM) {
@@ -58,7 +58,7 @@ XrJsonValue *xlsp_handle_prepare_call_hierarchy(XrLspServer *server, XrJsonValue
                     stmt->as.function_decl.name, LSP_SYMBOL_FUNCTION, uri,
                     stmt->line - 1, 0, stmt->line - 1,
                     strlen(stmt->as.function_decl.name));
-                xlsp_json_array_push(items, item);
+                xjson_array_push(items, item);
                 break;
             }
         }
@@ -104,22 +104,22 @@ static void find_calls_in_ast(AstNode *node, CallHierarchyCtx *ctx) {
             if (callee && callee->type == AST_VARIABLE) {
                 const char *called_name = callee->as.variable.name;
                 if (called_name && strcmp(called_name, ctx->target_name) == 0) {
-                    XrJsonValue *call = xlsp_json_new_object();
+                    XrJsonValue *call = xjson_new_object();
                     XrJsonValue *from_item = create_call_hierarchy_item(
                         ctx->current_func ? ctx->current_func : "<global>",
                         LSP_SYMBOL_FUNCTION, ctx->uri,
                         node->line - 1, node->column > 0 ? node->column - 1 : 0,
                         node->line - 1, node->column > 0 ? node->column - 1 + (int)strlen(called_name) : 10);
-                    xlsp_json_object_set(call, "from", from_item);
+                    xjson_object_set(call, "from", from_item);
 
-                    XrJsonValue *from_ranges = xlsp_json_new_array();
+                    XrJsonValue *from_ranges = xjson_new_array();
                     int line = node->line - 1;
                     int col = node->column > 0 ? node->column - 1 : 0;
-                    xlsp_json_array_push(from_ranges,
-                        xlsp_json_make_range(line, col, line, col + strlen(called_name)));
-                    xlsp_json_object_set(call, "fromRanges", from_ranges);
+                    xjson_array_push(from_ranges,
+                        xjson_make_range(line, col, line, col + strlen(called_name)));
+                    xjson_object_set(call, "fromRanges", from_ranges);
 
-                    xlsp_json_array_push(ctx->calls, call);
+                    xjson_array_push(ctx->calls, call);
                 }
             }
             for (int i = 0; i < node->as.call_expr.arg_count; i++) {
@@ -180,14 +180,14 @@ static void find_calls_in_ast(AstNode *node, CallHierarchyCtx *ctx) {
 }
 
 XrJsonValue *xlsp_handle_call_hierarchy_incoming(XrLspServer *server, XrJsonValue *params) {
-    XrJsonValue *item = xlsp_json_get_object(params, "item");
-    if (!item) return xlsp_json_new_array();
+    XrJsonValue *item = xjson_get_object(params, "item");
+    if (!item) return xjson_new_array();
 
-    const char *name = xlsp_json_get_string(item, "name");
-    const char *uri = xlsp_json_get_string(item, "uri");
-    if (!name || !uri) return xlsp_json_new_array();
+    const char *name = xjson_get_string(item, "name");
+    const char *uri = xjson_get_string(item, "uri");
+    if (!name || !uri) return xjson_new_array();
 
-    XrJsonValue *calls = xlsp_json_new_array();
+    XrJsonValue *calls = xjson_new_array();
 
     // Search all open documents via AST traversal
     if (server && server->doc_table) {
@@ -235,17 +235,17 @@ XrJsonValue *xlsp_handle_call_hierarchy_incoming(XrLspServer *server, XrJsonValu
             // Create a call hierarchy incoming item.
             // The caller name is approximate (file-level) since we lack
             // the caller function context from the analyzer alone.
-            XrJsonValue *incoming = xlsp_json_new_object();
+            XrJsonValue *incoming = xjson_new_object();
             XrJsonValue *from = create_call_hierarchy_item(
                 name, 12 /* Function */, r->file,
                 line, col, line, col + (int)strlen(name));
-            xlsp_json_object_set(incoming, "from", from);
+            xjson_object_set(incoming, "from", from);
 
-            XrJsonValue *ranges = xlsp_json_new_array();
-            xlsp_json_array_push(ranges,
-                xlsp_json_make_range(line, col, line, col + (int)strlen(name)));
-            xlsp_json_object_set(incoming, "fromRanges", ranges);
-            xlsp_json_array_push(calls, incoming);
+            XrJsonValue *ranges = xjson_new_array();
+            xjson_array_push(ranges,
+                xjson_make_range(line, col, line, col + (int)strlen(name)));
+            xjson_object_set(incoming, "fromRanges", ranges);
+            xjson_array_push(calls, incoming);
         }
 
         xa_analyzer_free_references(arefs);
@@ -269,21 +269,21 @@ static void find_outgoing_calls(AstNode *node, const char *uri, XrJsonValue *cal
             if (callee && callee->type == AST_VARIABLE) {
                 const char *called_name = callee->as.variable.name;
                 if (called_name) {
-                    XrJsonValue *call = xlsp_json_new_object();
+                    XrJsonValue *call = xjson_new_object();
                     XrJsonValue *to_item = create_call_hierarchy_item(
                         called_name, LSP_SYMBOL_FUNCTION, uri,
                         node->line - 1, node->column > 0 ? node->column - 1 : 0,
                         node->line - 1, node->column > 0 ? node->column - 1 + (int)strlen(called_name) : 10);
-                    xlsp_json_object_set(call, "to", to_item);
+                    xjson_object_set(call, "to", to_item);
 
-                    XrJsonValue *from_ranges = xlsp_json_new_array();
+                    XrJsonValue *from_ranges = xjson_new_array();
                     int line = node->line - 1;
                     int col = node->column > 0 ? node->column - 1 : 0;
-                    xlsp_json_array_push(from_ranges,
-                        xlsp_json_make_range(line, col, line, col + strlen(called_name)));
-                    xlsp_json_object_set(call, "fromRanges", from_ranges);
+                    xjson_array_push(from_ranges,
+                        xjson_make_range(line, col, line, col + strlen(called_name)));
+                    xjson_object_set(call, "fromRanges", from_ranges);
 
-                    xlsp_json_array_push(calls, call);
+                    xjson_array_push(calls, call);
                 }
             }
             for (int i = 0; i < node->as.call_expr.arg_count; i++) {
@@ -343,17 +343,17 @@ static void find_outgoing_calls(AstNode *node, const char *uri, XrJsonValue *cal
 }
 
 XrJsonValue *xlsp_handle_call_hierarchy_outgoing(XrLspServer *server, XrJsonValue *params) {
-    XrJsonValue *item = xlsp_json_get_object(params, "item");
-    if (!item) return xlsp_json_new_array();
+    XrJsonValue *item = xjson_get_object(params, "item");
+    if (!item) return xjson_new_array();
 
-    const char *name = xlsp_json_get_string(item, "name");
-    const char *uri = xlsp_json_get_string(item, "uri");
-    if (!name || !uri) return xlsp_json_new_array();
+    const char *name = xjson_get_string(item, "name");
+    const char *uri = xjson_get_string(item, "uri");
+    if (!name || !uri) return xjson_new_array();
 
     XrLspDocument *doc = xlsp_document_get(server, uri);
-    if (!doc || !doc->ast) return xlsp_json_new_array();
+    if (!doc || !doc->ast) return xjson_new_array();
 
-    XrJsonValue *calls = xlsp_json_new_array();
+    XrJsonValue *calls = xjson_new_array();
 
     AstNode *ast = doc->ast;
     if (ast && ast->type == AST_PROGRAM) {
@@ -376,20 +376,20 @@ XrJsonValue *xlsp_handle_call_hierarchy_outgoing(XrLspServer *server, XrJsonValu
 // ============================================================================
 
 XrJsonValue *xlsp_handle_prepare_type_hierarchy(XrLspServer *server, XrJsonValue *params) {
-    XrJsonValue *textDocument = xlsp_json_get_object(params, "textDocument");
-    XrJsonValue *position = xlsp_json_get_object(params, "position");
-    if (!textDocument || !position) return xlsp_json_new_array();
+    XrJsonValue *textDocument = xjson_get_object(params, "textDocument");
+    XrJsonValue *position = xjson_get_object(params, "position");
+    if (!textDocument || !position) return xjson_new_array();
 
-    const char *uri = xlsp_json_get_string(textDocument, "uri");
+    const char *uri = xjson_get_string(textDocument, "uri");
     XrLspDocument *doc = xlsp_document_get(server, uri);
-    if (!doc || !doc->ast) return xlsp_json_new_array();
+    if (!doc || !doc->ast) return xjson_new_array();
 
     XrLspPosition pos = {
-        .line = (uint32_t)xlsp_json_get_int(position, "line"),
-        .character = (uint32_t)xlsp_json_get_int(position, "character")
+        .line = (uint32_t)xjson_get_int(position, "line"),
+        .character = (uint32_t)xjson_get_int(position, "character")
     };
 
-    XrJsonValue *items = xlsp_json_new_array();
+    XrJsonValue *items = xjson_new_array();
 
     AstNode *ast = doc->ast;
     if (ast->type == AST_PROGRAM) {
@@ -398,21 +398,21 @@ XrJsonValue *xlsp_handle_prepare_type_hierarchy(XrLspServer *server, XrJsonValue
             if (!stmt) continue;
 
             if (stmt->type == AST_CLASS_DECL && stmt->line - 1 == (int)pos.line) {
-                XrJsonValue *item = xlsp_json_new_object();
-                xlsp_json_object_set(item, "name", xlsp_json_new_string(stmt->as.class_decl.name));
-                xlsp_json_object_set(item, "kind", xlsp_json_new_number(LSP_SYMBOL_CLASS));
-                xlsp_json_object_set(item, "uri", xlsp_json_new_string(uri));
+                XrJsonValue *item = xjson_new_object();
+                xjson_object_set(item, "name", xjson_new_string(stmt->as.class_decl.name));
+                xjson_object_set(item, "kind", xjson_new_number(LSP_SYMBOL_CLASS));
+                xjson_object_set(item, "uri", xjson_new_string(uri));
 
                 if (stmt->as.class_decl.super_name) {
-                    xlsp_json_object_set(item, "detail",
-                        xlsp_json_new_string(stmt->as.class_decl.super_name));
+                    xjson_object_set(item, "detail",
+                        xjson_new_string(stmt->as.class_decl.super_name));
                 }
 
                 int line = stmt->line - 1;
-                xlsp_json_object_set(item, "range", xlsp_json_make_range(line, 0, line, 50));
-                xlsp_json_object_set(item, "selectionRange", xlsp_json_make_range(line, 0, line, 50));
+                xjson_object_set(item, "range", xjson_make_range(line, 0, line, 50));
+                xjson_object_set(item, "selectionRange", xjson_make_range(line, 0, line, 50));
 
-                xlsp_json_array_push(items, item);
+                xjson_array_push(items, item);
                 break;
             }
         }
@@ -422,17 +422,17 @@ XrJsonValue *xlsp_handle_prepare_type_hierarchy(XrLspServer *server, XrJsonValue
 }
 
 XrJsonValue *xlsp_handle_type_hierarchy_supertypes(XrLspServer *server, XrJsonValue *params) {
-    XrJsonValue *item = xlsp_json_get_object(params, "item");
-    if (!item) return xlsp_json_new_array();
+    XrJsonValue *item = xjson_get_object(params, "item");
+    if (!item) return xjson_new_array();
 
-    const char *super_name = xlsp_json_get_string(item, "detail");
-    const char *uri = xlsp_json_get_string(item, "uri");
-    if (!super_name || !uri) return xlsp_json_new_array();
+    const char *super_name = xjson_get_string(item, "detail");
+    const char *uri = xjson_get_string(item, "uri");
+    if (!super_name || !uri) return xjson_new_array();
 
     XrLspDocument *doc = xlsp_document_get(server, uri);
-    if (!doc || !doc->ast) return xlsp_json_new_array();
+    if (!doc || !doc->ast) return xjson_new_array();
 
-    XrJsonValue *supertypes = xlsp_json_new_array();
+    XrJsonValue *supertypes = xjson_new_array();
 
     AstNode *ast = doc->ast;
     if (ast->type == AST_PROGRAM) {
@@ -442,21 +442,21 @@ XrJsonValue *xlsp_handle_type_hierarchy_supertypes(XrLspServer *server, XrJsonVa
 
             if (stmt->type == AST_CLASS_DECL &&
                 strcmp(stmt->as.class_decl.name, super_name) == 0) {
-                XrJsonValue *super_item = xlsp_json_new_object();
-                xlsp_json_object_set(super_item, "name", xlsp_json_new_string(super_name));
-                xlsp_json_object_set(super_item, "kind", xlsp_json_new_number(LSP_SYMBOL_CLASS));
-                xlsp_json_object_set(super_item, "uri", xlsp_json_new_string(uri));
+                XrJsonValue *super_item = xjson_new_object();
+                xjson_object_set(super_item, "name", xjson_new_string(super_name));
+                xjson_object_set(super_item, "kind", xjson_new_number(LSP_SYMBOL_CLASS));
+                xjson_object_set(super_item, "uri", xjson_new_string(uri));
 
                 if (stmt->as.class_decl.super_name) {
-                    xlsp_json_object_set(super_item, "detail",
-                        xlsp_json_new_string(stmt->as.class_decl.super_name));
+                    xjson_object_set(super_item, "detail",
+                        xjson_new_string(stmt->as.class_decl.super_name));
                 }
 
                 int line = stmt->line - 1;
-                xlsp_json_object_set(super_item, "range", xlsp_json_make_range(line, 0, line, 50));
-                xlsp_json_object_set(super_item, "selectionRange", xlsp_json_make_range(line, 0, line, 50));
+                xjson_object_set(super_item, "range", xjson_make_range(line, 0, line, 50));
+                xjson_object_set(super_item, "selectionRange", xjson_make_range(line, 0, line, 50));
 
-                xlsp_json_array_push(supertypes, super_item);
+                xjson_array_push(supertypes, super_item);
                 break;
             }
         }
@@ -466,17 +466,17 @@ XrJsonValue *xlsp_handle_type_hierarchy_supertypes(XrLspServer *server, XrJsonVa
 }
 
 XrJsonValue *xlsp_handle_type_hierarchy_subtypes(XrLspServer *server, XrJsonValue *params) {
-    XrJsonValue *item = xlsp_json_get_object(params, "item");
-    if (!item) return xlsp_json_new_array();
+    XrJsonValue *item = xjson_get_object(params, "item");
+    if (!item) return xjson_new_array();
 
-    const char *class_name = xlsp_json_get_string(item, "name");
-    const char *uri = xlsp_json_get_string(item, "uri");
-    if (!class_name || !uri) return xlsp_json_new_array();
+    const char *class_name = xjson_get_string(item, "name");
+    const char *uri = xjson_get_string(item, "uri");
+    if (!class_name || !uri) return xjson_new_array();
 
     XrLspDocument *doc = xlsp_document_get(server, uri);
-    if (!doc || !doc->ast) return xlsp_json_new_array();
+    if (!doc || !doc->ast) return xjson_new_array();
 
-    XrJsonValue *subtypes = xlsp_json_new_array();
+    XrJsonValue *subtypes = xjson_new_array();
 
     AstNode *ast = doc->ast;
     if (ast->type == AST_PROGRAM) {
@@ -486,17 +486,17 @@ XrJsonValue *xlsp_handle_type_hierarchy_subtypes(XrLspServer *server, XrJsonValu
 
             if (stmt->type == AST_CLASS_DECL && stmt->as.class_decl.super_name &&
                 strcmp(stmt->as.class_decl.super_name, class_name) == 0) {
-                XrJsonValue *sub_item = xlsp_json_new_object();
-                xlsp_json_object_set(sub_item, "name",
-                    xlsp_json_new_string(stmt->as.class_decl.name));
-                xlsp_json_object_set(sub_item, "kind", xlsp_json_new_number(LSP_SYMBOL_CLASS));
-                xlsp_json_object_set(sub_item, "uri", xlsp_json_new_string(uri));
+                XrJsonValue *sub_item = xjson_new_object();
+                xjson_object_set(sub_item, "name",
+                    xjson_new_string(stmt->as.class_decl.name));
+                xjson_object_set(sub_item, "kind", xjson_new_number(LSP_SYMBOL_CLASS));
+                xjson_object_set(sub_item, "uri", xjson_new_string(uri));
 
                 int line = stmt->line - 1;
-                xlsp_json_object_set(sub_item, "range", xlsp_json_make_range(line, 0, line, 50));
-                xlsp_json_object_set(sub_item, "selectionRange", xlsp_json_make_range(line, 0, line, 50));
+                xjson_object_set(sub_item, "range", xjson_make_range(line, 0, line, 50));
+                xjson_object_set(sub_item, "selectionRange", xjson_make_range(line, 0, line, 50));
 
-                xlsp_json_array_push(subtypes, sub_item);
+                xjson_array_push(subtypes, sub_item);
             }
         }
     }
@@ -509,17 +509,17 @@ XrJsonValue *xlsp_handle_type_hierarchy_subtypes(XrLspServer *server, XrJsonValu
 // ============================================================================
 
 XrJsonValue *xlsp_handle_implementation(XrLspServer *server, XrJsonValue *params) {
-    XrJsonValue *textDocument = xlsp_json_get_object(params, "textDocument");
-    XrJsonValue *position = xlsp_json_get_object(params, "position");
-    if (!textDocument || !position) return xlsp_json_new_null();
+    XrJsonValue *textDocument = xjson_get_object(params, "textDocument");
+    XrJsonValue *position = xjson_get_object(params, "position");
+    if (!textDocument || !position) return xjson_new_null();
 
-    const char *uri = xlsp_json_get_string(textDocument, "uri");
+    const char *uri = xjson_get_string(textDocument, "uri");
     XrLspDocument *doc = xlsp_document_get(server, uri);
-    if (!doc) return xlsp_json_new_null();
+    if (!doc) return xjson_new_null();
 
     XrLspPosition pos = {
-        .line = (uint32_t)xlsp_json_get_int(position, "line"),
-        .character = (uint32_t)xlsp_json_get_int(position, "character")
+        .line = (uint32_t)xjson_get_int(position, "line"),
+        .character = (uint32_t)xjson_get_int(position, "character")
     };
 
     return xlsp_analyze_definition(server, doc, pos);

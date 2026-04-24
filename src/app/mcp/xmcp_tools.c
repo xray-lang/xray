@@ -18,7 +18,7 @@
 #include "xmcp_server.h"
 #include "xmcp_protocol.h"
 #include "xmcp_knowledge.h"
-#include "../lsp/xlsp_json.h"
+#include "../../base/xjson.h"
 #include "../../base/xmalloc.h"
 #include "../../base/xchecks.h"
 #include "../../frontend/parser/xparse.h"
@@ -128,28 +128,28 @@ static const XmcpToolDef TOOL_TABLE[] = {
 
 static XrJsonValue *xmcp_make_error_result(const char *message) {
     XR_DCHECK(message != NULL, "xmcp_make_error_result: NULL message");
-    XrJsonValue *r = xlsp_json_new_object();
-    XrJsonValue *c = xlsp_json_new_array();
-    XrJsonValue *item = xlsp_json_new_object();
-    XLSP_JSON_SET_STRING(item, "type", "text");
-    XLSP_JSON_SET_STRING(item, "text", message);
-    xlsp_json_array_push(c, item);
-    xlsp_json_object_set(r, "content", c);
-    XLSP_JSON_SET_BOOL(r, "isError", true);
+    XrJsonValue *r = xjson_new_object();
+    XrJsonValue *c = xjson_new_array();
+    XrJsonValue *item = xjson_new_object();
+    XJSON_SET_STRING(item, "type", "text");
+    XJSON_SET_STRING(item, "text", message);
+    xjson_array_push(c, item);
+    xjson_object_set(r, "content", c);
+    XJSON_SET_BOOL(r, "isError", true);
     return r;
 }
 
 static XrJsonValue *xmcp_make_text_result(const char *text, bool is_error) {
     XR_DCHECK(text != NULL, "xmcp_make_text_result: NULL text");
-    XrJsonValue *result = xlsp_json_new_object();
-    XrJsonValue *arr = xlsp_json_new_array();
-    XrJsonValue *item = xlsp_json_new_object();
-    XLSP_JSON_SET_STRING(item, "type", "text");
-    xlsp_json_object_set(item, "text", xlsp_json_new_string(text));
-    xlsp_json_array_push(arr, item);
-    xlsp_json_object_set(result, "content", arr);
+    XrJsonValue *result = xjson_new_object();
+    XrJsonValue *arr = xjson_new_array();
+    XrJsonValue *item = xjson_new_object();
+    XJSON_SET_STRING(item, "type", "text");
+    xjson_object_set(item, "text", xjson_new_string(text));
+    xjson_array_push(arr, item);
+    xjson_object_set(result, "content", arr);
     if (is_error) {
-        XLSP_JSON_SET_BOOL(result, "isError", true);
+        XJSON_SET_BOOL(result, "isError", true);
     }
     return result;
 }
@@ -157,10 +157,10 @@ static XrJsonValue *xmcp_make_text_result(const char *text, bool is_error) {
 /* Build a simple schema: { type:"object", properties:{<name>:{type,desc},...}, required:[...] } */
 static void schema_add_prop(XrJsonValue *props, const char *name,
                              const char *type, const char *desc) {
-    XrJsonValue *p = xlsp_json_new_object();
-    XLSP_JSON_SET_STRING(p, "type", type);
-    XLSP_JSON_SET_STRING(p, "description", desc);
-    xlsp_json_object_set(props, name, p);
+    XrJsonValue *p = xjson_new_object();
+    XJSON_SET_STRING(p, "type", type);
+    XJSON_SET_STRING(p, "description", desc);
+    xjson_object_set(props, name, p);
 }
 
 /* --------------------------------------------------------------------------
@@ -193,93 +193,93 @@ static void check_error_callback(void *user_data, int line, int column,
  * -------------------------------------------------------------------------- */
 
 static XrJsonValue *schema_check(void) {
-    XrJsonValue *s = xlsp_json_new_object();
-    XLSP_JSON_SET_STRING(s, "type", "object");
-    XrJsonValue *p = xlsp_json_new_object();
+    XrJsonValue *s = xjson_new_object();
+    XJSON_SET_STRING(s, "type", "object");
+    XrJsonValue *p = xjson_new_object();
     schema_add_prop(p, "code", "string",
         "Xray source code to check for syntax and type errors");
-    xlsp_json_object_set(s, "properties", p);
-    XrJsonValue *r = xlsp_json_new_array();
-    xlsp_json_array_push(r, xlsp_json_new_string("code"));
-    xlsp_json_object_set(s, "required", r);
+    xjson_object_set(s, "properties", p);
+    XrJsonValue *r = xjson_new_array();
+    xjson_array_push(r, xjson_new_string("code"));
+    xjson_object_set(s, "required", r);
     return s;
 }
 
 static XrJsonValue *schema_format(void) {
-    XrJsonValue *s = xlsp_json_new_object();
-    XLSP_JSON_SET_STRING(s, "type", "object");
-    XrJsonValue *p = xlsp_json_new_object();
+    XrJsonValue *s = xjson_new_object();
+    XJSON_SET_STRING(s, "type", "object");
+    XrJsonValue *p = xjson_new_object();
     schema_add_prop(p, "code", "string", "Xray source code to format");
     schema_add_prop(p, "indentSize", "integer", "Indent size in spaces (default: 4)");
     schema_add_prop(p, "useTabs", "boolean", "Use tabs instead of spaces (default: false)");
-    xlsp_json_object_set(s, "properties", p);
-    XrJsonValue *r = xlsp_json_new_array();
-    xlsp_json_array_push(r, xlsp_json_new_string("code"));
-    xlsp_json_object_set(s, "required", r);
+    xjson_object_set(s, "properties", p);
+    XrJsonValue *r = xjson_new_array();
+    xjson_array_push(r, xjson_new_string("code"));
+    xjson_object_set(s, "required", r);
     return s;
 }
 
 static XrJsonValue *schema_diagnostics(void) {
-    XrJsonValue *s = xlsp_json_new_object();
-    XLSP_JSON_SET_STRING(s, "type", "object");
-    XrJsonValue *p = xlsp_json_new_object();
+    XrJsonValue *s = xjson_new_object();
+    XJSON_SET_STRING(s, "type", "object");
+    XrJsonValue *p = xjson_new_object();
     schema_add_prop(p, "code", "string", "Xray source code to analyze");
-    xlsp_json_object_set(s, "properties", p);
-    XrJsonValue *r = xlsp_json_new_array();
-    xlsp_json_array_push(r, xlsp_json_new_string("code"));
-    xlsp_json_object_set(s, "required", r);
+    xjson_object_set(s, "properties", p);
+    XrJsonValue *r = xjson_new_array();
+    xjson_array_push(r, xjson_new_string("code"));
+    xjson_object_set(s, "required", r);
     return s;
 }
 
 static XrJsonValue *schema_run(void) {
-    XrJsonValue *s = xlsp_json_new_object();
-    XLSP_JSON_SET_STRING(s, "type", "object");
-    XrJsonValue *p = xlsp_json_new_object();
+    XrJsonValue *s = xjson_new_object();
+    XJSON_SET_STRING(s, "type", "object");
+    XrJsonValue *p = xjson_new_object();
     schema_add_prop(p, "code", "string", "Xray code to execute");
-    xlsp_json_object_set(s, "properties", p);
-    XrJsonValue *r = xlsp_json_new_array();
-    xlsp_json_array_push(r, xlsp_json_new_string("code"));
-    xlsp_json_object_set(s, "required", r);
+    xjson_object_set(s, "properties", p);
+    XrJsonValue *r = xjson_new_array();
+    xjson_array_push(r, xjson_new_string("code"));
+    xjson_object_set(s, "required", r);
     return s;
 }
 
 static XrJsonValue *schema_syntax(void) {
-    XrJsonValue *s = xlsp_json_new_object();
-    XLSP_JSON_SET_STRING(s, "type", "object");
-    XrJsonValue *p = xlsp_json_new_object();
+    XrJsonValue *s = xjson_new_object();
+    XJSON_SET_STRING(s, "type", "object");
+    XrJsonValue *p = xjson_new_object();
     schema_add_prop(p, "topic", "string",
         "Syntax topic to look up (e.g., channel, coroutine, class, enum)");
-    xlsp_json_object_set(s, "properties", p);
-    XrJsonValue *r = xlsp_json_new_array();
-    xlsp_json_array_push(r, xlsp_json_new_string("topic"));
-    xlsp_json_object_set(s, "required", r);
+    xjson_object_set(s, "properties", p);
+    XrJsonValue *r = xjson_new_array();
+    xjson_array_push(r, xjson_new_string("topic"));
+    xjson_object_set(s, "required", r);
     return s;
 }
 
 static XrJsonValue *schema_stdlib(void) {
-    XrJsonValue *s = xlsp_json_new_object();
-    XLSP_JSON_SET_STRING(s, "type", "object");
-    XrJsonValue *p = xlsp_json_new_object();
+    XrJsonValue *s = xjson_new_object();
+    XJSON_SET_STRING(s, "type", "object");
+    XrJsonValue *p = xjson_new_object();
     schema_add_prop(p, "query", "string", "Search query for standard library modules");
     schema_add_prop(p, "module", "string",
         "Optional: filter by specific module name (e.g., http, json, time)");
-    xlsp_json_object_set(s, "properties", p);
-    XrJsonValue *r = xlsp_json_new_array();
-    xlsp_json_array_push(r, xlsp_json_new_string("query"));
-    xlsp_json_object_set(s, "required", r);
+    xjson_object_set(s, "properties", p);
+    XrJsonValue *r = xjson_new_array();
+    xjson_array_push(r, xjson_new_string("query"));
+    xjson_object_set(s, "required", r);
     return s;
 }
 
 static XrJsonValue *schema_definition(void) {
-    XrJsonValue *s = xlsp_json_new_object();
-    XLSP_JSON_SET_STRING(s, "type", "object");
-    XrJsonValue *p = xlsp_json_new_object();
+    XrJsonValue *s = xjson_new_object();
+    XJSON_SET_STRING(s, "type", "object");
+    XrJsonValue *p = xjson_new_object();
     schema_add_prop(p, "symbol", "string",
         "Symbol name to look up (e.g., 'http.Server', 'println', 'chan')");
-    xlsp_json_object_set(s, "properties", p);
-    XrJsonValue *r = xlsp_json_new_array();
-    xlsp_json_array_push(r, xlsp_json_new_string("symbol"));
-    xlsp_json_object_set(s, "required", r);
+    xjson_object_set(s, "properties", p);
+    XrJsonValue *r = xjson_new_array();
+    xjson_array_push(r, xjson_new_string("symbol"));
+    xjson_object_set(s, "required", r);
     return s;
 }
 
@@ -291,11 +291,11 @@ static XrJsonValue *schema_definition(void) {
 #define XMCP_PAGE_SIZE 1000
 
 XrJsonValue *xmcp_handle_tools_list(XrJsonValue *params) {
-    XrJsonValue *result = xlsp_json_new_object();
-    XrJsonValue *tools = xlsp_json_new_array();
+    XrJsonValue *result = xjson_new_object();
+    XrJsonValue *tools = xjson_new_array();
 
     /* Parse cursor: skip entries whose name <= cursor (alphabetical) */
-    const char *cursor = params ? xlsp_json_get_string(params, "cursor") : NULL;
+    const char *cursor = params ? xjson_get_string(params, "cursor") : NULL;
     int count = 0;
 
     for (int i = 0; TOOL_TABLE[i].name != NULL; i++) {
@@ -304,28 +304,28 @@ XrJsonValue *xmcp_handle_tools_list(XrJsonValue *params) {
         /* Skip entries at or before cursor position */
         if (cursor && strcmp(td->name, cursor) <= 0) continue;
 
-        XrJsonValue *t = xlsp_json_new_object();
-        XLSP_JSON_SET_STRING(t, "name", td->name);
-        XLSP_JSON_SET_STRING(t, "description", td->description);
-        xlsp_json_object_set(t, "inputSchema", td->build_schema());
+        XrJsonValue *t = xjson_new_object();
+        XJSON_SET_STRING(t, "name", td->name);
+        XJSON_SET_STRING(t, "description", td->description);
+        xjson_object_set(t, "inputSchema", td->build_schema());
 
-        XrJsonValue *ann = xlsp_json_new_object();
-        XLSP_JSON_SET_STRING(ann, "title", td->title);
-        XLSP_JSON_SET_BOOL(ann, "readOnlyHint", td->read_only);
-        XLSP_JSON_SET_BOOL(ann, "destructiveHint", false);
-        XLSP_JSON_SET_BOOL(ann, "openWorldHint", td->open_world);
-        xlsp_json_object_set(t, "annotations", ann);
+        XrJsonValue *ann = xjson_new_object();
+        XJSON_SET_STRING(ann, "title", td->title);
+        XJSON_SET_BOOL(ann, "readOnlyHint", td->read_only);
+        XJSON_SET_BOOL(ann, "destructiveHint", false);
+        XJSON_SET_BOOL(ann, "openWorldHint", td->open_world);
+        xjson_object_set(t, "annotations", ann);
 
-        xlsp_json_array_push(tools, t);
+        xjson_array_push(tools, t);
         count++;
         if (count >= XMCP_PAGE_SIZE) {
             /* Set nextCursor to the last emitted tool name */
-            XLSP_JSON_SET_STRING(result, "nextCursor", td->name);
+            XJSON_SET_STRING(result, "nextCursor", td->name);
             break;
         }
     }
 
-    xlsp_json_object_set(result, "tools", tools);
+    xjson_object_set(result, "tools", tools);
     return result;
 }
 
@@ -337,7 +337,7 @@ static XrJsonValue *tool_xray_check(XmcpServer *server, XrJsonValue *arguments) 
     XR_DCHECK(server != NULL, "tool_xray_check: NULL server");
     XR_DCHECK(arguments != NULL, "tool_xray_check: NULL arguments");
 
-    const char *code = xlsp_json_get_string(arguments, "code");
+    const char *code = xjson_get_string(arguments, "code");
     if (!code || code[0] == '\0') {
         return xmcp_make_error_result("Error: 'code' parameter is required");
     }
@@ -394,15 +394,15 @@ static XrJsonValue *tool_xray_format(XmcpServer *server, XrJsonValue *arguments)
     XR_DCHECK(server != NULL, "tool_xray_format: NULL server");
     XR_DCHECK(arguments != NULL, "tool_xray_format: NULL arguments");
 
-    const char *code = xlsp_json_get_string(arguments, "code");
+    const char *code = xjson_get_string(arguments, "code");
     if (!code || code[0] == '\0') {
         return xmcp_make_error_result("Error: 'code' parameter is required");
     }
 
     XrFmtConfig config = xfmt_default_config;
-    int64_t indent = xlsp_json_get_int_or(arguments, "indentSize", 0);
+    int64_t indent = xjson_get_int_or(arguments, "indentSize", 0);
     if (indent > 0 && indent <= 16) config.indent_size = (int)indent;
-    if (xlsp_json_get_bool(arguments, "useTabs")) config.use_tabs = 1;
+    if (xjson_get_bool(arguments, "useTabs")) config.use_tabs = 1;
 
     AstNode *ast = xr_parse_with_trivia(server->isolate, code, "<mcp-format>");
     if (!ast) {
@@ -428,7 +428,7 @@ static XrJsonValue *tool_xray_diagnostics(XmcpServer *server, XrJsonValue *argum
     XR_DCHECK(server != NULL, "tool_xray_diagnostics: NULL server");
     XR_DCHECK(arguments != NULL, "tool_xray_diagnostics: NULL arguments");
 
-    const char *code = xlsp_json_get_string(arguments, "code");
+    const char *code = xjson_get_string(arguments, "code");
     if (!code || code[0] == '\0') {
         return xmcp_make_error_result("Error: 'code' parameter is required");
     }
@@ -483,7 +483,7 @@ static XrJsonValue *tool_xray_run(XmcpServer *server, XrJsonValue *arguments) {
     XR_DCHECK(server != NULL, "tool_xray_run: NULL server");
     XR_DCHECK(arguments != NULL, "tool_xray_run: NULL arguments");
 
-    const char *code = xlsp_json_get_string(arguments, "code");
+    const char *code = xjson_get_string(arguments, "code");
     if (!code || code[0] == '\0') {
         return xmcp_make_error_result("Error: 'code' parameter is required");
     }
@@ -560,7 +560,7 @@ static XrJsonValue *tool_xray_syntax_lookup(XmcpServer *server, XrJsonValue *arg
     XR_DCHECK(server != NULL, "tool_xray_syntax_lookup: NULL server");
     XR_DCHECK(arguments != NULL, "tool_xray_syntax_lookup: NULL arguments");
 
-    const char *topic = xlsp_json_get_string(arguments, "topic");
+    const char *topic = xjson_get_string(arguments, "topic");
     if (!topic || topic[0] == '\0') {
         return xmcp_make_error_result("Error: 'topic' parameter is required");
     }
@@ -586,8 +586,8 @@ static XrJsonValue *tool_xray_stdlib_search(XmcpServer *server, XrJsonValue *arg
     XR_DCHECK(server != NULL, "tool_xray_stdlib_search: NULL server");
     XR_DCHECK(arguments != NULL, "tool_xray_stdlib_search: NULL arguments");
 
-    const char *query = xlsp_json_get_string(arguments, "query");
-    const char *module = xlsp_json_get_string(arguments, "module");
+    const char *query = xjson_get_string(arguments, "query");
+    const char *module = xjson_get_string(arguments, "module");
     if (!query || query[0] == '\0') {
         return xmcp_make_error_result("Error: 'query' parameter is required");
     }
@@ -606,7 +606,7 @@ static XrJsonValue *tool_xray_definition(XmcpServer *server, XrJsonValue *argume
     XR_DCHECK(server != NULL, "tool_xray_definition: NULL server");
     XR_DCHECK(arguments != NULL, "tool_xray_definition: NULL arguments");
 
-    const char *symbol = xlsp_json_get_string(arguments, "symbol");
+    const char *symbol = xjson_get_string(arguments, "symbol");
     if (!symbol || symbol[0] == '\0') {
         return xmcp_make_error_result("Error: 'symbol' parameter is required");
     }
@@ -657,20 +657,20 @@ static XrJsonValue *tool_xray_definition(XmcpServer *server, XrJsonValue *argume
 XrJsonValue *xmcp_handle_tools_call(XmcpServer *server, XrJsonValue *params) {
     XR_DCHECK(server != NULL, "xmcp_handle_tools_call: NULL server");
 
-    const char *name = xlsp_json_get_string(params, "name");
+    const char *name = xjson_get_string(params, "name");
     if (!name) return xmcp_make_error_result("Error: tool 'name' is required");
 
     /* Extract progress token from _meta if present */
     server->current_progress_token = -1;
-    XrJsonValue *meta = xlsp_json_get_object(params, "_meta");
+    XrJsonValue *meta = xjson_get_object(params, "_meta");
     if (meta) {
-        server->current_progress_token = xlsp_json_get_int_or(meta, "progressToken", -1);
+        server->current_progress_token = xjson_get_int_or(meta, "progressToken", -1);
     }
 
-    XrJsonValue *arguments = xlsp_json_get_object(params, "arguments");
+    XrJsonValue *arguments = xjson_get_object(params, "arguments");
     XrJsonValue *empty_args = NULL;
     if (!arguments) {
-        empty_args = xlsp_json_new_object();
+        empty_args = xjson_new_object();
         arguments = empty_args;
     }
 
@@ -689,6 +689,6 @@ XrJsonValue *xmcp_handle_tools_call(XmcpServer *server, XrJsonValue *params) {
         result = xmcp_make_error_result(msg);
     }
 
-    if (empty_args) xlsp_json_free(empty_args);
+    if (empty_args) xjson_free(empty_args);
     return result;
 }

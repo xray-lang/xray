@@ -12,7 +12,7 @@
 #ifndef XLSP_NAVIGATION_H
 #define XLSP_NAVIGATION_H
 
-#include "xlsp_json.h"
+#include "../../base/xjson.h"
 #include "xlsp_types.h"
 
 typedef struct XrLspServer XrLspServer;

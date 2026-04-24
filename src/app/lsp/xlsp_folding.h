@@ -12,7 +12,7 @@
 #define XLSP_FOLDING_H
 
 #include "xlsp_server.h"
-#include "xlsp_json.h"
+#include "../../base/xjson.h"
 
 XR_FUNC XrJsonValue *xlsp_handle_folding_range(XrLspServer *server, XrJsonValue *params);
 

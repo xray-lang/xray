@@ -16,7 +16,7 @@
 #define XLSP_SEMANTIC_TOKENS_H
 
 #include "xlsp_server.h"
-#include "xlsp_json.h"
+#include "../../base/xjson.h"
 
 // LSP Semantic Token Types (indices into legend)
 typedef enum {

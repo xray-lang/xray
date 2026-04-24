@@ -18,14 +18,14 @@
 #define ADD_NODE_FOLD(ranges, start_line, node, kind) do {             \
     AstNode *_n = (node);                                              \
     if (_n && _n->end_line > 0 && _n->end_line - 1 > (start_line)) {   \
-        XrJsonValue *_range = xlsp_json_new_object();                  \
-        xlsp_json_object_set(_range, "startLine",                      \
-            xlsp_json_new_number(start_line));                         \
-        xlsp_json_object_set(_range, "endLine",                        \
-            xlsp_json_new_number(_n->end_line - 1));                   \
-        xlsp_json_object_set(_range, "kind",                           \
-            xlsp_json_new_string(kind));                               \
-        xlsp_json_array_push((ranges), _range);                        \
+        XrJsonValue *_range = xjson_new_object();                  \
+        xjson_object_set(_range, "startLine",                      \
+            xjson_new_number(start_line));                         \
+        xjson_object_set(_range, "endLine",                        \
+            xjson_new_number(_n->end_line - 1));                   \
+        xjson_object_set(_range, "kind",                           \
+            xjson_new_string(kind));                               \
+        xjson_array_push((ranges), _range);                        \
     }                                                                  \
 } while (0)
 
@@ -89,14 +89,14 @@ static void collect_folding_ranges(AstNode *node, XrJsonValue *ranges) {
 #undef ADD_NODE_FOLD
 
 XrJsonValue *xlsp_handle_folding_range(XrLspServer *server, XrJsonValue *params) {
-    XrJsonValue *textDocument = xlsp_json_get_object(params, "textDocument");
-    if (!textDocument) return xlsp_json_new_array();
+    XrJsonValue *textDocument = xjson_get_object(params, "textDocument");
+    if (!textDocument) return xjson_new_array();
 
-    const char *uri = xlsp_json_get_string(textDocument, "uri");
+    const char *uri = xjson_get_string(textDocument, "uri");
     XrLspDocument *doc = xlsp_document_get(server, uri);
-    if (!doc) return xlsp_json_new_array();
+    if (!doc) return xjson_new_array();
 
-    XrJsonValue *ranges = xlsp_json_new_array();
+    XrJsonValue *ranges = xjson_new_array();
 
     if (!doc->ast) return ranges;
 
