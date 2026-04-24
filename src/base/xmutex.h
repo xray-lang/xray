@@ -32,6 +32,7 @@
     #include <linux/futex.h>
     #include <sys/syscall.h>
     #include <unistd.h>
+    #include <sched.h>
 #elif defined(XR_OS_MACOS)
     #include <pthread.h>
     #include <sched.h>
@@ -108,14 +109,14 @@ static inline void xr_mutex_lock(XrMutex *m) {
             memory_order_acquire, memory_order_relaxed)) {
         return;
     }
-    
+
     // Slow path
     int wait = XR_MUTEX_LOCKED;
-    
+
     for (;;) {
         // Active spin with CPU pause
         for (int i = 0; i < XR_ACTIVE_SPIN; i++) {
-            while (atomic_load_explicit(&m->state, memory_order_relaxed) 
+            while (atomic_load_explicit(&m->state, memory_order_relaxed)
                    == XR_MUTEX_UNLOCKED) {
                 expected = XR_MUTEX_UNLOCKED;
                 if (atomic_compare_exchange_weak_explicit(
@@ -129,10 +130,10 @@ static inline void xr_mutex_lock(XrMutex *m) {
                 XR_CPU_PAUSE();
             }
         }
-        
+
         // Passive spin with sched_yield
         for (int i = 0; i < XR_PASSIVE_SPIN; i++) {
-            while (atomic_load_explicit(&m->state, memory_order_relaxed) 
+            while (atomic_load_explicit(&m->state, memory_order_relaxed)
                    == XR_MUTEX_UNLOCKED) {
                 expected = XR_MUTEX_UNLOCKED;
                 if (atomic_compare_exchange_weak_explicit(
@@ -147,9 +148,9 @@ static inline void xr_mutex_lock(XrMutex *m) {
                 sched_yield();
             #endif
         }
-        
+
         // True sleep
-        int v = atomic_exchange_explicit(&m->state, XR_MUTEX_SLEEPING, 
+        int v = atomic_exchange_explicit(&m->state, XR_MUTEX_SLEEPING,
                                          memory_order_acquire);
         if (v == XR_MUTEX_UNLOCKED) {
             return;
@@ -160,7 +161,7 @@ static inline void xr_mutex_lock(XrMutex *m) {
 }
 
 static inline void xr_mutex_unlock(XrMutex *m) {
-    int v = atomic_exchange_explicit(&m->state, XR_MUTEX_UNLOCKED, 
+    int v = atomic_exchange_explicit(&m->state, XR_MUTEX_UNLOCKED,
                                      memory_order_release);
     if (v == XR_MUTEX_SLEEPING) {
         // Wake up waiters
