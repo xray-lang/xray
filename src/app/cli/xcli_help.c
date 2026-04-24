@@ -135,7 +135,7 @@ void xr_cli_print_command_help(const XrCliCommandSpec *spec) {
     }
 
     print_options(spec->options);
-    printf("  -h, --help                     Show help\n");
+    printf("  -h, %-24s %s\n", "--help", "Show help");
     printf("\n");
 }
 

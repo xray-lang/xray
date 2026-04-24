@@ -1,0 +1,2 @@
+// Simple DAP test fixture: prints hello and exits
+print("hello from dap")

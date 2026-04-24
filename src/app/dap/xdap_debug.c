@@ -99,9 +99,12 @@ static bool debug_eval_condition_truthy(XrayIsolate *isolate, const char *condit
 // VM Debug Hook Callbacks (new unified interface)
 // ============================================================================
 
-// Record stop position (used by on_line when deciding to break)
-static void hook_record_stop(XrDebugState *dbg, const char *path, int line,
-                              XrClosure *closure, int frame_depth) {
+// Record stop position and signal the controller event loop.
+// stop_reason tells the controller why we stopped (entry/breakpoint/step/pause).
+static void hook_record_stop(XrayIsolate *isolate, XrDebugState *dbg,
+                              const char *path, int line,
+                              XrClosure *closure, int frame_depth,
+                              XdapStopReason stop_reason) {
     xr_free(dbg->last_path);
     dbg->last_path = path ? xr_strdup(path) : NULL;
     dbg->last_line = line;
@@ -112,6 +115,16 @@ static void hook_record_stop(XrDebugState *dbg, const char *path, int line,
     dbg->last_func_name = NULL;
     if (closure && closure->proto && closure->proto->name) {
         dbg->last_func_name = xr_strdup(XR_STRING_CHARS(closure->proto->name));
+    }
+
+    // Wire up the controller so the event loop sees PAUSED
+    XdapController *ctrl = (XdapController *)xray_isolate_get_userdata(isolate);
+    if (ctrl) {
+        ctrl->vm_state = XDAP_VM_PAUSED;
+        ctrl->stop_reason = stop_reason;
+        ctrl->stopped_coro_id = 1;  // main thread
+        XrCoroutine *coro = xr_debug_get_coro(isolate);
+        ctrl->stopped_coro = coro;
     }
 }
 
@@ -133,7 +146,7 @@ static XrDebugAction hook_on_line(XrayIsolate *isolate, const char *path,
         int cmd = atomic_load(&ctrl->pending_cmd);
         if (cmd == XDAP_CMD_PAUSE) {
             atomic_store(&ctrl->cmd_pending, false);
-            hook_record_stop(dbg, path, line, closure, frame_depth);
+            hook_record_stop(isolate, dbg, path, line, closure, frame_depth, XDAP_STOP_PAUSE);
             return XR_DBG_ACTION_BREAK;
         }
     }
@@ -151,7 +164,7 @@ static XrDebugAction hook_on_line(XrayIsolate *isolate, const char *path,
             // Fall through — don't return, check stepping too
         } else if (bp_result == 1) {
             xr_free(log_msg);
-            hook_record_stop(dbg, path, line, closure, frame_depth);
+            hook_record_stop(isolate, dbg, path, line, closure, frame_depth, XDAP_STOP_BREAKPOINT);
             return XR_DBG_ACTION_BREAK;
         } else {
             xr_free(log_msg);
@@ -162,7 +175,7 @@ static XrDebugAction hook_on_line(XrayIsolate *isolate, const char *path,
     if (line_changed && closure && closure->proto && closure->proto->name) {
         const char *func_name = XR_STRING_CHARS(closure->proto->name);
         if (xr_debug_check_function_breakpoint(isolate, func_name)) {
-            hook_record_stop(dbg, path, line, closure, frame_depth);
+            hook_record_stop(isolate, dbg, path, line, closure, frame_depth, XDAP_STOP_BREAKPOINT);
             return XR_DBG_ACTION_BREAK;
         }
     }
@@ -188,7 +201,7 @@ static XrDebugAction hook_on_line(XrayIsolate *isolate, const char *path,
     }
 
     if (should_break) {
-        hook_record_stop(dbg, path, line, closure, frame_depth);
+        hook_record_stop(isolate, dbg, path, line, closure, frame_depth, XDAP_STOP_STEP);
         return XR_DBG_ACTION_BREAK;
     }
 
@@ -207,6 +220,14 @@ static XrDebugAction hook_on_exception(XrayIsolate *isolate, const char *message
         dbg->exception_message = message ? xr_strdup(message) : NULL;
         dbg->exception_is_uncaught = is_uncaught;
         dbg->current_action = XR_DBG_ACTION_BREAK;
+
+        // Signal controller event loop
+        XdapController *ctrl = (XdapController *)xray_isolate_get_userdata(isolate);
+        if (ctrl) {
+            ctrl->vm_state = XDAP_VM_PAUSED;
+            ctrl->stop_reason = XDAP_STOP_EXCEPTION;
+            ctrl->stopped_coro_id = 1;
+        }
         return XR_DBG_ACTION_BREAK;
     }
     return XR_DBG_ACTION_CONTINUE;

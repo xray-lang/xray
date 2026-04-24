@@ -84,6 +84,14 @@ static XrProto* compile_ast_internal(XrayIsolate *isolate, AstNode *ast, const c
 
     xr_compiler_context_free(ctx);
 
+    // Restore type pool: compiler context freed its analyzer's pool,
+    // leaving current_type_pool as a dangling pointer.  Fall back to the
+    // isolate's long-lived analyzer_pool so later callers (e.g. import-time
+    // parsing that calls xr_type_new_class) can still allocate types safely.
+    if (isolate->analyzer_pool) {
+        isolate->current_type_pool = isolate->analyzer_pool;
+    }
+
     // Restore previous arena.
     xr_isolate_set_current_arena(isolate, saved_arena);
 
