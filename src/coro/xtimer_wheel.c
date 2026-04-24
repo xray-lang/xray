@@ -23,6 +23,7 @@
 #include "xtimer_wheel.h"
 #include "../base/xchecks.h"
 #include "xcoroutine.h"
+#include "xworker.h"  // xr_current_worker (Phase 1 owner assertions)
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
@@ -532,6 +533,9 @@ void xr_timer_cancel_queue_init(XrTimerCancelQueue *cq) {
     cq->stub.coro = NULL;
     atomic_store_explicit(&cq->head, &cq->stub, memory_order_relaxed);
     atomic_store_explicit(&cq->tail, &cq->stub, memory_order_relaxed);
+    // Post-condition: head == tail == &stub, queue is empty
+    XR_DCHECK(atomic_load(&cq->head) == &cq->stub,
+              "timer_cancel_queue_init: head invariant");
 }
 
 // Queue a timer for cancellation (called from ANY worker, lock-free MPSC enqueue)
@@ -564,6 +568,10 @@ void xr_timer_queue_cancel(XrTimerWheel *target_tw, XrTWheelTimer *timer, XrCoro
 // Returns number of timers processed
 int xr_timer_process_canceled_queue(XrTimerWheel *tw) {
     XR_DCHECK(tw != NULL, "timer_process_canceled_queue: NULL tw");
+    // Phase 1: owner-only assertion (skip during startup when TLS unset)
+    XrWorker *cur = xr_current_worker();
+    XR_DCHECK(cur == NULL || cur->p.id == tw->owner_worker_id,
+              "timer_process_canceled_queue: non-owner call");
     XrTimerCancelQueue *cq = &tw->canceled_queue;
     XrCanceledTimerNode *head, *next;
     int count = 0;
@@ -682,11 +690,15 @@ void xr_timer_wheel_destroy(XrTimerWheel *tw) {
     xr_free(tw);
 }
 
-// Set timer (MUST be called from owner worker only - )
+// Set timer (MUST be called from owner worker only)
 void xr_twheel_set_timer(XrTimerWheel *tw, XrTWheelTimer *p,
                          XrTimeoutProc timeout, void *arg, int64_t timeout_pos) {
     XR_DCHECK(tw != NULL, "twheel_set_timer: NULL tw");
     XR_DCHECK(p != NULL, "twheel_set_timer: NULL timer");
+    // Phase 1: owner-only assertion (skip during startup when TLS unset)
+    XrWorker *cur_w = xr_current_worker();
+    XR_DCHECK(cur_w == NULL || cur_w->p.id == tw->owner_worker_id,
+              "twheel_set_timer: non-owner call");
     int slot;
 
     // No mutex needed - owner worker exclusive access
@@ -734,11 +746,15 @@ void xr_twheel_set_timer(XrTimerWheel *tw, XrTWheelTimer *p,
     }
 }
 
-// Cancel timer (MUST be called from owner worker only - )
+// Cancel timer (MUST be called from owner worker only)
 // For cross-worker cancel, use xr_timer_queue_cancel() instead
 void xr_twheel_cancel_timer(XrTimerWheel *tw, XrTWheelTimer *p) {
     XR_DCHECK(tw != NULL, "twheel_cancel_timer: NULL tw");
     XR_DCHECK(p != NULL, "twheel_cancel_timer: NULL timer");
+    // Phase 1: owner-only assertion (skip during startup when TLS unset)
+    XrWorker *cur_w = xr_current_worker();
+    XR_DCHECK(cur_w == NULL || cur_w->p.id == tw->owner_worker_id,
+              "twheel_cancel_timer: non-owner call");
     // No mutex needed - owner worker exclusive access
     if (p->slot != XR_TW_SLOT_INACTIVE) {
         remove_timer(tw, p);

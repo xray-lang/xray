@@ -1,0 +1,35 @@
+// AOT test: method dispatch on typed class parameters.
+// Verifies that INVOKE_DIRECT resolves methods correctly when
+// the receiver is a function parameter with a class type annotation.
+
+class Counter {
+    value: int
+    constructor(init: int) {
+        this.value = init
+    }
+    get(): int {
+        return this.value
+    }
+    increment(): int {
+        this.value = this.value + 1
+        return this.value
+    }
+}
+
+fn use_counter(c: Counter): int {
+    return c.get()
+}
+
+fn bump_counter(c: Counter): int {
+    return c.increment()
+}
+
+// Direct method call (receiver created in same scope)
+let c = Counter(10)
+print(c.get())
+print(c.increment())
+
+// Method call through typed parameter
+print(use_counter(c))
+print(bump_counter(c))
+print(c.get())
