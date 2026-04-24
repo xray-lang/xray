@@ -21,6 +21,7 @@
 #include "xlsp_transport.h"
 #include "../../base/xmalloc.h"
 #include "../../base/xchecks.h"
+#include "../../base/xframing.h"
 #include <stdlib.h>
 #include <string.h>
 #include <ctype.h>
@@ -129,24 +130,6 @@ static bool ensure_capacity(char **buf, size_t *cap, size_t needed) {
     return true;
 }
 
-// Scan read_buf for "\r\n\r\n"; if found, cache header_end and return
-// the Content-Length value. Returns -1 when the header block is still
-// incomplete (the caller will try again on the next drain).
-static int parse_header(XrLspTransport *t) {
-    char *end = strstr(t->read_buf, "\r\n\r\n");
-    if (!end) return -1;
-
-    t->header_end = (size_t)(end - t->read_buf) + 4;
-
-    char *cl = strcasestr(t->read_buf, "Content-Length:");
-    if (!cl || cl >= end) return -1;
-
-    cl += strlen("Content-Length:");
-    while (*cl && isspace((unsigned char)*cl)) cl++;
-
-    int n = atoi(cl);
-    return n >= 0 ? n : -1;
-}
 
 // ---------------------------------------------------------------------------
 // Public API
@@ -220,11 +203,16 @@ char *xlsp_transport_try_read(XrLspTransport *t, size_t *out_len, bool *would_bl
     t->read_len += (size_t)n;
     t->read_buf[t->read_len] = '\0';
 
-    // Parse header lazily — re-run until we successfully capture the
-    // Content-Length. After that, pending_content_length stays set
-    // until we hand the frame to the caller.
+    // Parse header lazily via shared framing module.
     if (t->pending_content_length < 0) {
-        t->pending_content_length = parse_header(t);
+        XrFrameStatus fs = xr_frame_parse(t->read_buf, t->read_len,
+                                          &t->header_end,
+                                          &t->pending_content_length);
+        if (fs == XR_FRAME_ERROR) {
+            t->connected = false;
+            if (would_block) *would_block = false;
+            return NULL;
+        }
     }
 
     if (t->pending_content_length >= 0) {
@@ -272,10 +260,8 @@ void xlsp_transport_write(XrLspTransport *t, const char *json, size_t len) {
     if (!t || !t->connected) return;
 
     char header[64];
-    int header_len = snprintf(header, sizeof(header),
-                              "Content-Length: %zu\r\n\r\n", len);
-    XR_DCHECK(header_len > 0 && header_len < (int)sizeof(header),
-              "Content-Length header overflow");
+    int header_len = xr_frame_write_header(header, sizeof(header), len);
+    XR_DCHECK(header_len > 0, "Content-Length header overflow");
 
     if (write_all(t->write_fd, header, (size_t)header_len) < 0 ||
         write_all(t->write_fd, json, len) < 0) {

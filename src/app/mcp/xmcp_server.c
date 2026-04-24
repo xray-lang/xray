@@ -23,6 +23,7 @@
 #include "../../base/xmalloc.h"
 #include "../../base/xchecks.h"
 #include "../../base/xjson.h"
+#include "../../base/xframing.h"
 #include "../cli/xcli_isolate.h"
 #include "../cli/xcli_spec.h"
 #include "../cli/xcli_diag.h"
@@ -109,10 +110,8 @@ static void mcp_install_signals(XmcpServer *s) {
 void xmcp_write_message(const char *json, size_t len) {
     XR_DCHECK(json != NULL, "xmcp_write_message: NULL json");
     char header[64];
-    int hlen = snprintf(header, sizeof(header),
-                        "Content-Length: %zu\r\n\r\n", len);
-    XR_DCHECK(hlen > 0 && hlen < (int)sizeof(header),
-              "Content-Length header overflow");
+    int hlen = xr_frame_write_header(header, sizeof(header), len);
+    XR_DCHECK(hlen > 0, "Content-Length header overflow");
 
     size_t total = 0;
     while (total < (size_t)hlen) {
@@ -141,73 +140,51 @@ static bool mcp_ensure_buf(XmcpServer *s, size_t needed) {
     return true;
 }
 
-/* Read exactly `count` bytes from stdin (blocking). Returns false on EOF. */
-static bool mcp_read_exact(XmcpServer *s, size_t count) {
-    if (!mcp_ensure_buf(s, count)) return false;
-    size_t got = 0;
-    while (got < count) {
-        ssize_t n = read(STDIN_FILENO,
-                         s->read_buf + s->read_len + got,
-                         count - got);
-        if (n < 0) {
-            if (errno == EINTR) continue;
-            return false;
-        }
-        if (n == 0) return false; /* EOF */
-        got += (size_t)n;
-    }
-    s->read_len += count;
-    s->read_buf[s->read_len] = '\0';
-    return true;
-}
-
-/* Read one line from stdin (up to \n). Returns false on EOF. */
-static bool mcp_read_line(XmcpServer *s, char *line, size_t cap) {
-    (void)s;
-    size_t pos = 0;
-    while (pos < cap - 1) {
-        char c;
-        ssize_t n = read(STDIN_FILENO, &c, 1);
-        if (n < 0) {
-            if (errno == EINTR) continue;
-            return false;
-        }
-        if (n == 0) return false;
-        line[pos++] = c;
-        if (c == '\n') break;
-    }
-    line[pos] = '\0';
-    return true;
-}
-
 /* Read one complete JSON-RPC message from stdin. Caller must xr_free(). */
 static char *mcp_read_message(XmcpServer *s) {
     XR_DCHECK(s != NULL, "mcp_read_message: NULL server");
-    int content_length = -1;
-    char line[1024];
 
+    /* Accumulate bytes until a complete frame is available. */
     while (true) {
-        if (!mcp_read_line(s, line, sizeof(line))) return NULL;
-        if (strcmp(line, "\r\n") == 0 || strcmp(line, "\n") == 0) break;
-        if (strncasecmp(line, "Content-Length:", 15) == 0) {
-            content_length = atoi(line + 15);
+        size_t header_end = 0;
+        int content_length = -1;
+        XrFrameStatus fs = xr_frame_parse(s->read_buf, s->read_len,
+                                          &header_end, &content_length);
+        if (fs == XR_FRAME_ERROR) {
+            mcp_log(s, 0, "missing or invalid Content-Length");
+            return NULL;
         }
+        if (fs == XR_FRAME_OK) {
+            char *body = xr_malloc((size_t)content_length + 1);
+            if (!body) return NULL;
+            memcpy(body, s->read_buf + header_end, (size_t)content_length);
+            body[content_length] = '\0';
+
+            /* Slide remaining bytes down */
+            size_t consumed = header_end + (size_t)content_length;
+            size_t remaining = s->read_len - consumed;
+            if (remaining > 0) {
+                memmove(s->read_buf, s->read_buf + consumed, remaining);
+            }
+            s->read_len = remaining;
+            if (s->read_len < s->read_cap)
+                s->read_buf[s->read_len] = '\0';
+            return body;
+        }
+
+        /* XR_FRAME_PARTIAL — need more data; do a blocking read. */
+        if (!mcp_ensure_buf(s, 1024)) return NULL;
+        ssize_t n = read(STDIN_FILENO,
+                         s->read_buf + s->read_len,
+                         s->read_cap - s->read_len - 1);
+        if (n < 0) {
+            if (errno == EINTR) continue;
+            return NULL;
+        }
+        if (n == 0) return NULL; /* EOF */
+        s->read_len += (size_t)n;
+        s->read_buf[s->read_len] = '\0';
     }
-
-    if (content_length <= 0) {
-        mcp_log(s, 0, "missing or invalid Content-Length");
-        return NULL;
-    }
-
-    s->read_len = 0;
-    if (!mcp_read_exact(s, (size_t)content_length)) return NULL;
-
-    char *body = xr_malloc((size_t)content_length + 1);
-    if (!body) return NULL;
-    memcpy(body, s->read_buf, (size_t)content_length);
-    body[content_length] = '\0';
-    s->read_len = 0;
-    return body;
 }
 
 /* --------------------------------------------------------------------------

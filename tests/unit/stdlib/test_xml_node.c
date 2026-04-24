@@ -15,79 +15,79 @@
 #include "../test_framework.h"
 #include <string.h>
 
-#include "../../../stdlib/xml/xml_node.h"
+#include "../../../src/base/xxml.h"
 
 /* ========== Document ========== */
 
 TEST(xml_document_new) {
-    XmlDocument *doc = xml_document_new();
+    XrXmlDocument *doc = xr_xml_document_new();
     ASSERT_NOT_NULL(doc);
     // doc->root is NULL until populated by parser
     ASSERT_STR_EQ(doc->version, "1.0");
     ASSERT_STR_EQ(doc->encoding, "UTF-8");
-    xml_document_free(doc);
+    xr_xml_document_free(doc);
 }
 
 /* ========== Element ========== */
 
 TEST(xml_element_new_basic) {
-    XmlNode *node = xml_element_new("div", 3);
+    XrXmlNode *node = xr_xml_element_new("div", 3);
     ASSERT_NOT_NULL(node);
-    ASSERT_EQ_INT(node->type, XML_NODE_ELEMENT);
+    ASSERT_EQ_INT(node->type, XR_XML_ELEMENT);
     ASSERT_NOT_NULL(node->tag);
     ASSERT_EQ_INT((int)node->tag_len, 3);
     ASSERT_EQ_INT(strncmp(node->tag, "div", 3), 0);
     ASSERT_EQ_INT(node->child_count, 0);
     ASSERT_EQ_INT(node->attr_count, 0);
-    xml_node_free(node);
+    xr_xml_node_free(node);
 }
 
 TEST(xml_element_new_long_tag) {
     const char *tag = "my-custom-element";
-    XmlNode *node = xml_element_new(tag, strlen(tag));
+    XrXmlNode *node = xr_xml_element_new(tag, strlen(tag));
     ASSERT_NOT_NULL(node);
     ASSERT_EQ_INT((int)node->tag_len, (int)strlen(tag));
-    xml_node_free(node);
+    xr_xml_node_free(node);
 }
 
 /* ========== Text ========== */
 
 TEST(xml_text_new_basic) {
-    XmlNode *node = xml_text_new("Hello World", 11);
+    XrXmlNode *node = xr_xml_text_new("Hello World", 11);
     ASSERT_NOT_NULL(node);
-    ASSERT_EQ_INT(node->type, XML_NODE_TEXT);
+    ASSERT_EQ_INT(node->type, XR_XML_TEXT);
     ASSERT_NOT_NULL(node->content);
     ASSERT_EQ_INT((int)node->content_len, 11);
-    xml_node_free(node);
+    xr_xml_node_free(node);
 }
 
 /* ========== Comment ========== */
 
 TEST(xml_comment_new_basic) {
-    XmlNode *node = xml_comment_new("a comment", 9);
+    XrXmlNode *node = xr_xml_comment_new("a comment", 9);
     ASSERT_NOT_NULL(node);
-    ASSERT_EQ_INT(node->type, XML_NODE_COMMENT);
+    ASSERT_EQ_INT(node->type, XR_XML_COMMENT);
     ASSERT_NOT_NULL(node->content);
     ASSERT_EQ_INT((int)node->content_len, 9);
-    xml_node_free(node);
+    xr_xml_node_free(node);
 }
 
 /* ========== CDATA ========== */
 
 TEST(xml_cdata_new_basic) {
-    XmlNode *node = xml_cdata_new("<raw>data</raw>", 15);
+    XrXmlNode *node = xr_xml_cdata_new("<raw>data</raw>", 15);
     ASSERT_NOT_NULL(node);
-    ASSERT_EQ_INT(node->type, XML_NODE_CDATA);
+    ASSERT_EQ_INT(node->type, XR_XML_CDATA);
     ASSERT_EQ_INT((int)node->content_len, 15);
-    xml_node_free(node);
+    xr_xml_node_free(node);
 }
 
 /* ========== Append Child ========== */
 
 TEST(xml_append_child_single) {
-    XmlNode *parent = xml_element_new("div", 3);
-    XmlNode *child = xml_text_new("hello", 5);
-    xml_node_append_child(parent, child);
+    XrXmlNode *parent = xr_xml_element_new("div", 3);
+    XrXmlNode *child = xr_xml_text_new("hello", 5);
+    xr_xml_node_append_child(parent, child);
 
     ASSERT_EQ_INT(parent->child_count, 1);
     ASSERT_EQ_PTR(parent->first_child, child);
@@ -96,18 +96,18 @@ TEST(xml_append_child_single) {
     ASSERT_NULL(child->next_sibling);
     ASSERT_NULL(child->prev_sibling);
 
-    xml_node_free(parent);
+    xr_xml_node_free(parent);
 }
 
 TEST(xml_append_child_multiple) {
-    XmlNode *parent = xml_element_new("ul", 2);
-    XmlNode *c1 = xml_element_new("li", 2);
-    XmlNode *c2 = xml_element_new("li", 2);
-    XmlNode *c3 = xml_element_new("li", 2);
+    XrXmlNode *parent = xr_xml_element_new("ul", 2);
+    XrXmlNode *c1 = xr_xml_element_new("li", 2);
+    XrXmlNode *c2 = xr_xml_element_new("li", 2);
+    XrXmlNode *c3 = xr_xml_element_new("li", 2);
 
-    xml_node_append_child(parent, c1);
-    xml_node_append_child(parent, c2);
-    xml_node_append_child(parent, c3);
+    xr_xml_node_append_child(parent, c1);
+    xr_xml_node_append_child(parent, c2);
+    xr_xml_node_append_child(parent, c3);
 
     ASSERT_EQ_INT(parent->child_count, 3);
     ASSERT_EQ_PTR(parent->first_child, c1);
@@ -121,45 +121,45 @@ TEST(xml_append_child_multiple) {
     ASSERT_EQ_PTR(c2->prev_sibling, c1);
     ASSERT_EQ_PTR(c3->prev_sibling, c2);
 
-    xml_node_free(parent);
+    xr_xml_node_free(parent);
 }
 
 /* ========== Set Attribute ========== */
 
 TEST(xml_set_attr_single) {
-    XmlNode *node = xml_element_new("input", 5);
-    xml_node_set_attr(node, "type", 4, "text", 4);
+    XrXmlNode *node = xr_xml_element_new("input", 5);
+    xr_xml_node_set_attr(node, "type", 4, "text", 4);
 
     ASSERT_EQ_INT(node->attr_count, 1);
     ASSERT_NOT_NULL(node->attrs);
     ASSERT_EQ_INT(strncmp(node->attrs[0].name, "type", 4), 0);
     ASSERT_EQ_INT(strncmp(node->attrs[0].value, "text", 4), 0);
 
-    xml_node_free(node);
+    xr_xml_node_free(node);
 }
 
 TEST(xml_set_attr_multiple) {
-    XmlNode *node = xml_element_new("a", 1);
-    xml_node_set_attr(node, "href", 4, "/home", 5);
-    xml_node_set_attr(node, "class", 5, "link", 4);
-    xml_node_set_attr(node, "id", 2, "nav", 3);
+    XrXmlNode *node = xr_xml_element_new("a", 1);
+    xr_xml_node_set_attr(node, "href", 4, "/home", 5);
+    xr_xml_node_set_attr(node, "class", 5, "link", 4);
+    xr_xml_node_set_attr(node, "id", 2, "nav", 3);
 
     ASSERT_EQ_INT(node->attr_count, 3);
 
-    xml_node_free(node);
+    xr_xml_node_free(node);
 }
 
 /* ========== Deep Tree ========== */
 
 TEST(xml_deep_tree) {
-    XmlNode *html = xml_element_new("html", 4);
-    XmlNode *body = xml_element_new("body", 4);
-    XmlNode *p = xml_element_new("p", 1);
-    XmlNode *text = xml_text_new("Hello", 5);
+    XrXmlNode *html = xr_xml_element_new("html", 4);
+    XrXmlNode *body = xr_xml_element_new("body", 4);
+    XrXmlNode *p = xr_xml_element_new("p", 1);
+    XrXmlNode *text = xr_xml_text_new("Hello", 5);
 
-    xml_node_append_child(html, body);
-    xml_node_append_child(body, p);
-    xml_node_append_child(p, text);
+    xr_xml_node_append_child(html, body);
+    xr_xml_node_append_child(body, p);
+    xr_xml_node_append_child(p, text);
 
     ASSERT_EQ_INT(html->child_count, 1);
     ASSERT_EQ_INT(body->child_count, 1);
@@ -171,22 +171,22 @@ TEST(xml_deep_tree) {
     ASSERT_EQ_PTR(p->parent, body);
     ASSERT_EQ_PTR(body->parent, html);
 
-    xml_node_free(html);
+    xr_xml_node_free(html);
 }
 
 /* ========== Config Init ========== */
 
 TEST(xml_parse_config_defaults) {
-    XmlParseConfig config;
-    xml_parse_config_init(&config);
+    XrXmlParseConfig config;
+    xr_xml_parse_config_init(&config);
     // Defaults should be sensible
     ASSERT_FALSE(config.preserve_whitespace);
     ASSERT_FALSE(config.preserve_comments);
 }
 
 TEST(xml_write_config_defaults) {
-    XmlWriteConfig config;
-    xml_write_config_init(&config);
+    XrXmlWriteConfig config;
+    xr_xml_write_config_init(&config);
     ASSERT_EQ_INT(config.indent, 0);
 }
 

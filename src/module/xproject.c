@@ -21,24 +21,6 @@
 #include <dirent.h>
 
 /* ========== Helper Functions ========== */
-static char* join_path(const char *dir, const char *file) {
-    XR_DCHECK(dir != NULL && file != NULL, "join_path: NULL argument");
-    size_t dir_len = strlen(dir);
-    size_t file_len = strlen(file);
-
-    while (dir_len > 0 && dir[dir_len - 1] == '/') {
-        dir_len--;
-    }
-
-    char *result = (char*)xr_malloc(dir_len + 1 + file_len + 1);
-    if (!result) return NULL;
-    memcpy(result, dir, dir_len);
-    result[dir_len] = '/';
-    memcpy(result + dir_len + 1, file, file_len);
-    result[dir_len + 1 + file_len] = '\0';
-
-    return result;
-}
 
 /* Get a strdup'd string from a TOML table by key, or NULL. */
 static char *get_toml_str(XrTomlValue *tbl, const char *key) {
@@ -52,7 +34,7 @@ XrProject* xr_project_load(XrayIsolate *isolate, const char *project_root) {
     (void)isolate; /* no longer needed — base xtoml parser is pure C */
     if (!project_root) return NULL;
 
-    char *toml_path = join_path(project_root, "xray.toml");
+    char *toml_path = xr_path_join(project_root, "xray.toml");
     if (!toml_path) return NULL;
 
     size_t content_size;
@@ -169,7 +151,7 @@ char* xr_resolve_local_dependency(XrProject *project, const char *package_name) 
         return xr_strdup(dep->path);
     }
 
-    return join_path(project->root, dep->path);
+    return xr_path_join(project->root, dep->path);
 }
 
 /* ========== File Collection Utilities ========== */
@@ -189,7 +171,7 @@ static bool collect_files_recursive(const char *dir_path, char ***files,
             continue;
         }
 
-        char *full_path = join_path(dir_path, entry->d_name);
+        char *full_path = xr_path_join(dir_path, entry->d_name);
         if (!full_path) continue;
 
         struct stat st;
