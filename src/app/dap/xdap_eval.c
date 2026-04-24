@@ -25,6 +25,7 @@
 #include "../../runtime/object/xjson.h"
 #include "../../runtime/class/xinstance.h"
 #include "../../coro/xcoroutine.h"
+#include "../../runtime/closure/xcell.h"
 #include "../../frontend/parser/xparse.h"
 #include "../../frontend/parser/xast.h"
 #include <stdlib.h>
@@ -61,17 +62,89 @@ typedef struct {
 // Forward declaration
 static XrValue eval_ast(XrEvalContext *ctx, AstNode *node);
 
-// Lookup local variable by name
-static XrValue eval_lookup_local(XrEvalContext *ctx, const char *name) {
-    if (!ctx->proto) return xr_null();
+// Lookup local variable by name in a specific frame
+static bool lookup_in_frame(XrBcCallFrame *frame, XrValue *stack,
+                             const char *name, XrValue *out) {
+    if (!frame || !frame->closure || !frame->closure->proto) return false;
+    XrProto *proto = frame->closure->proto;
 
-    int locvar_count = PROTO_LOCVAR_COUNT(ctx->proto);
+    int locvar_count = PROTO_LOCVAR_COUNT(proto);
+    XrValue *base = stack + frame->base_offset;
     for (int i = 0; i < locvar_count; i++) {
-        XrLocVar locvar = PROTO_LOCVAR(ctx->proto, i);
+        XrLocVar locvar = PROTO_LOCVAR(proto, i);
         if (locvar.name && strcmp(locvar.name, name) == 0) {
-            return ctx->stack_base[i];
+            *out = base[i];
+            return true;
         }
     }
+    return false;
+}
+
+// Try to find a variable in closure upvalues by matching enclosing proto's locvar names
+static bool lookup_in_upvalues(XrClosure *closure, const char *name, XrValue *out) {
+    if (!closure || closure->upval_count == 0) return false;
+    XrProto *proto = closure->proto;
+    if (!proto) return false;
+
+    // Walk the proto's upvalue descriptors and match against enclosing locvar names
+    int upval_count = PROTO_UPVAL_COUNT(proto);
+    XrProto *enclosing = proto->enclosing;
+
+    for (int i = 0; i < upval_count && i < closure->upval_count; i++) {
+        UpvalInfo uinfo = PROTO_UPVALUE(proto, i);
+
+        // Direct capture from enclosing frame's register — match register to locvar name
+        if (uinfo.source == UPVAL_SRC_REG && enclosing) {
+            int locvar_count = PROTO_LOCVAR_COUNT(enclosing);
+            for (int j = 0; j < locvar_count; j++) {
+                XrLocVar lv = PROTO_LOCVAR(enclosing, j);
+                if (lv.reg == uinfo.index && lv.name && strcmp(lv.name, name) == 0) {
+                    XrValue val = closure->upvals[i];
+                    // If value is a cell, dereference it
+                    if (XR_IS_PTR(val)) {
+                        XrGCHeader *hdr = XR_TO_PTR(val);
+                        if (hdr->type == XR_TCELL) {
+                            val = ((XrCell *)hdr)->value;
+                        }
+                    }
+                    *out = val;
+                    return true;
+                }
+            }
+        }
+    }
+    return false;
+}
+
+// Lookup variable by name: locals → upvalues → enclosing frames
+static XrValue eval_lookup_local(XrEvalContext *ctx, const char *name) {
+    // 1. Current frame locals
+    if (ctx->frame) {
+        XrValue result;
+        XrDebugFrameCtx fctx;
+        xr_debug_get_frame_ctx_ex(ctx->isolate, &fctx);
+
+        // Search current frame
+        if (lookup_in_frame(ctx->frame, fctx.stack, name, &result)) {
+            return result;
+        }
+
+        // 2. Upvalue lookup (closure captures)
+        if (ctx->frame->closure) {
+            if (lookup_in_upvalues(ctx->frame->closure, name, &result)) {
+                return result;
+            }
+        }
+
+        // 3. Walk enclosing frames (outer scopes)
+        int actual_idx = fctx.frame_count - 1 - ctx->frame_idx;
+        for (int i = actual_idx - 1; i >= 0; i--) {
+            if (lookup_in_frame(&fctx.frames[i], fctx.stack, name, &result)) {
+                return result;
+            }
+        }
+    }
+
     return xr_null();
 }
 
