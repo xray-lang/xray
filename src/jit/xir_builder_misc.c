@@ -1023,9 +1023,30 @@ bool xir_translate_misc_ops(XirBuilder *b, XirBlock **cur_blk,
             return true;
         }
 
-        /* === Deopt-to-VM opcodes (rare in hot loops) === */
-        case OP_ABSTRACT_ERROR:
+        /* === Abstract method error (runtime guard) === */
+        case OP_ABSTRACT_ERROR: {
+            // OP_ABSTRACT_ERROR A: throw "cannot call abstract method K[A]"
+            // In AOT: emit unconditional abort (abstract calls are compile-time errors).
+            // In JIT: deopt to VM so the interpreter raises the proper exception.
+            if (b->aot_mode) {
+                // Emit fprintf + abort via inline C (XIR_THROW → abort in C codegen)
+                xir_emit_unary(b->func, blk, XIR_THROW, XR_REP_VOID, XIR_NONE);
+                blk->ins[blk->nins - 1].flags |= XIR_FLAG_SIDE_EFFECT;
+            } else {
+                int did = builder_add_deopt_info(b, pc);
+                XirRef did_ref = xir_const_i64(b->func, (int64_t)(did >= 0 ? did : 0xFFFF));
+                xir_emit_unary(b->func, blk, XIR_DEOPT, XR_REP_VOID, XIR_NONE);
+                blk->ins[blk->nins - 1].dst = did_ref;
+                blk->ins[blk->nins - 1].flags |= XIR_FLAG_SIDE_EFFECT;
+            }
+            b->ops_translated++;
+            return true;
+        }
+
+        /* === OP_GETSUPER: dead opcode (compiler never emits it) === */
         case OP_GETSUPER:
+            return false;
+
         /* === Channel (non-blocking) === */
         case OP_CHAN_NEW: {
             // R[A] = Channel(Bx) — create channel with buffer
