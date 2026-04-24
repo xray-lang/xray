@@ -25,6 +25,30 @@
 #include "../runtime/xisolate_api.h"
 
 /*
+ * Find the class name that owns a given method/constructor proto.
+ * Scans the enclosing module proto's constants for XrClassDescriptor
+ * entries whose method closure_index references the target proto.
+ * Returns NULL if not found.
+ */
+static const char *find_class_name_for_proto(XrProto *target) {
+    XrProto *module = target->enclosing;
+    if (!module) return NULL;
+    for (uint32_t k = 0; k < PROTO_CONST_COUNT(module); k++) {
+        XrValue cv = PROTO_CONSTANT(module, k);
+        if (!XR_IS_PTR(cv)) continue;
+        XrClassDescriptor *desc = (XrClassDescriptor *)XR_TO_PTR(cv);
+        if (!desc || !desc->class_name) continue;
+        for (uint32_t m = 0; m < desc->instance_method_count; m++) {
+            uint32_t ci = desc->instance_methods[m].closure_index;
+            if (ci < PROTO_PROTO_COUNT(module) &&
+                PROTO_PROTO(module, ci) == target)
+                return desc->class_name;
+        }
+    }
+    return NULL;
+}
+
+/*
  * CPS suspend pattern helper: shared by OP_AWAIT, OP_CHAN_SEND, OP_CHAN_RECV.
  *
  * Emits the deopt-marker compare, creates suspend_blk + cont_blk, emits
@@ -931,18 +955,20 @@ bool xir_translate_misc_ops(XirBuilder *b, XirBlock **cur_blk,
         /* === Super invocation (AOT: compile-time resolution) === */
         case OP_SUPERINVOKE: {
             // SUPERINVOKE A B C: call super method
-            // A=0 for ctor call (this in base[0]), B=method_name_const, C=nargs
+            // A=call_base, B=method_name_const, C=nargs
             int a = GETARG_A(inst);
             int method_name_idx = GETARG_B(inst);
             int nargs = GETARG_C(inst);
-            bool is_ctor_call = (a == 0);
 
             if (b->aot_mode && b->isolate) {
-                // Resolve this type → class → superclass → method
-                XrType *this_type = builder_find_reg_type(b, is_ctor_call ? 0 : a + 1);
+                // Resolve class from param 0 (this) type, or fallback to
+                // scanning enclosing module's class descriptors.
+                XrType *this_type = builder_find_reg_type(b, 0);
                 const char *cname = this_type ? xr_type_get_class_name(this_type) : NULL;
+                if (!cname)
+                    cname = find_class_name_for_proto(b->proto);
                 XrClass *klass = NULL;
-                if (cname && this_type->kind == XR_KIND_INSTANCE)
+                if (cname)
                     klass = xr_class_lookup_by_name(b->isolate, cname);
                 XrClass *super_class = klass ? klass->super : NULL;
 
@@ -951,7 +977,7 @@ bool xir_translate_misc_ops(XirBuilder *b, XirBlock **cur_blk,
                     if (XR_IS_STRING(name_val)) {
                         const char *mname = XR_TO_STRING(name_val)->data;
                         XrSymbolTable *st = (XrSymbolTable *)xr_isolate_get_symbol_table(b->isolate);
-                        int method_sym = (int)xr_symbol_register_in_table(st, mname);
+                        int method_sym = (int)xr_symbol_lookup_in_table(st, mname);
                         XrMethod *method = xr_class_lookup_method(super_class, method_sym);
 
                         if (method && method->type == XMETHOD_CLOSURE &&
@@ -967,9 +993,8 @@ bool xir_translate_misc_ops(XirBuilder *b, XirBlock **cur_blk,
                             XirRef cl_ptr = xir_const_ptr(b->func, (void *)method->as.closure);
                             ck_args[0] = xir_emit_unary(b->func, blk, XIR_CONST_I64,
                                                          XR_REP_I64, cl_ptr);
-                            // this is in slot 0 for ctor, slot a+1 otherwise
-                            int this_slot = is_ctor_call ? 0 : (a + 1);
-                            ck_args[1] = builder_get_slot(b, blk, this_slot);
+                            // Compiler places this in R[a+1] via OP_MOVE
+                            ck_args[1] = builder_get_slot(b, blk, a + 1);
                             for (int j = 0; j < nargs && j < 13; j++)
                                 ck_args[2 + j] = builder_get_slot(b, blk, a + 2 + j);
                             uint16_t ck_nca = (uint16_t)(2 + (nargs < 13 ? nargs : 13));
@@ -986,8 +1011,7 @@ bool xir_translate_misc_ops(XirBuilder *b, XirBlock **cur_blk,
                                 builder_tag_vreg(b, result, VTAG_PTR, 0);
                             if (a < 256 && (ret_type == XR_REP_I64 || ret_type == XR_REP_F64))
                                 b->slot_rep[a] = ret_type;
-                            if (!is_ctor_call)
-                                builder_set_slot(b, a, result);
+                            builder_set_slot(b, a, result);
                             b->ops_translated++;
                             return true;
                         }

@@ -8,8 +8,8 @@
  * xmcp_tools.h - MCP tool handlers
  *
  * KEY CONCEPT:
- *   Phase 1 tools: xray_check, xray_syntax_lookup, xray_stdlib_search.
- *   Each tool receives JSON params, returns a JSON result.
+ *   Built-in tools: xray_check, xray_format, xray_syntax_lookup,
+ *   xray_stdlib_search. Each tool receives JSON params, returns JSON.
  */
 
 #ifndef XMCP_TOOLS_H

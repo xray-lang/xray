@@ -8,10 +8,12 @@
  * xmcp_resources.h - MCP resource handlers
  *
  * KEY CONCEPT:
- *   Exposes static data as MCP resources:
- *   - xray://spec/cheatsheet
- *   - xray://spec/concurrency
- *   - xray://stdlib/modules
+ *   Static resources and URI template resources:
+ *   - xray://spec/cheatsheet       Full language cheatsheet
+ *   - xray://spec/concurrency      Concurrency model
+ *   - xray://stdlib/modules        Stdlib module list
+ *   - xray://spec/topic/{name}     Syntax topic by name (template)
+ *   - xray://stdlib/{module}       Stdlib module detail (template)
  */
 
 #ifndef XMCP_RESOURCES_H
@@ -28,5 +30,8 @@ XR_FUNC XrJsonValue *xmcp_handle_resources_list(XmcpServer *server);
 
 /* Handle "resources/read" request. */
 XR_FUNC XrJsonValue *xmcp_handle_resources_read(XmcpServer *server, XrJsonValue *params);
+
+/* Handle "resources/templates/list" request. */
+XR_FUNC XrJsonValue *xmcp_handle_resource_templates_list(XmcpServer *server);
 
 #endif // XMCP_RESOURCES_H

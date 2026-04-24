@@ -1,0 +1,32 @@
+class Shape {
+    kind: int
+    constructor(kind: int) {
+        this.kind = kind
+    }
+    area(): int {
+        return 0
+    }
+}
+
+class Rect extends Shape {
+    w: int
+    h: int
+    constructor(w: int, h: int) {
+        super(1)
+        this.w = w
+        this.h = h
+    }
+    area(): int {
+        return this.w * this.h
+    }
+}
+
+let s = Shape(0)
+print(s.kind)
+print(s.area())
+
+let r = Rect(3, 4)
+print(r.kind)
+print(r.area())
+print(r.w)
+print(r.h)

@@ -321,6 +321,11 @@ static XrJsonValue *handle_resources_read(XmcpServer *s, XrJsonValue *params) {
     return xmcp_handle_resources_read(s, params);
 }
 
+static XrJsonValue *handle_resource_templates_list(XmcpServer *s, XrJsonValue *params) {
+    (void)params;
+    return xmcp_handle_resource_templates_list(s);
+}
+
 static XrJsonValue *handle_prompts_list(XmcpServer *s, XrJsonValue *params) {
     (void)s; (void)params;
     return xmcp_handle_prompts_list();
@@ -344,6 +349,7 @@ static const XmcpMethodEntry METHOD_TABLE[] = {
     {"tools/call",                  handle_tools_call,      false,       true},
     {"resources/list",              handle_resources_list,   false,       true},
     {"resources/read",              handle_resources_read,   false,       true},
+    {"resources/templates/list",    handle_resource_templates_list, false, true},
     {"prompts/list",                handle_prompts_list,     false,       true},
     {"prompts/get",                 handle_prompts_get,      false,       true},
     {NULL, NULL, false, false}
@@ -441,7 +447,7 @@ XmcpServer *xmcp_server_new(void) {
     }
 
     /* Set feature flags for capability inference */
-    s->has_tools     = true;  /* 3 built-in tools */
+    s->has_tools     = true;  /* 4 built-in tools */
     s->has_resources = true;  /* 3 static resources */
     s->has_prompts   = true;  /* 5 built-in prompts */
 
