@@ -34,7 +34,7 @@
 #include "../../runtime/class/xclass_descriptor.h"
 #include "../../runtime/class/xmethod.h"
 #include "../../runtime/value/xvalue.h"
-#include "../parser/xparse.h" // xr_compile_type_to_string
+#include "../../runtime/value/xtype.h"  // xr_type_to_string
 #include <stdio.h>
 #include <string.h>
 
@@ -81,7 +81,7 @@ static int compile_method_and_get_index(XrCompilerContext *ctx, XrCompiler *comp
 
     // Set return type (if specified)
     if (method->return_type != NULL) {
-        const char *type_str = xr_compile_type_to_string(method->return_type);
+        const char *type_str = xr_type_to_string(method->return_type);
         method_compiler.proto->return_type = type_str ? strdup(type_str) : NULL;
         method_compiler.declared_return_type = method->return_type;
     }

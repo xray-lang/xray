@@ -29,6 +29,10 @@
  *   All Pratt-table internals (Precedence, ParseRule, parse-helper fns,
  *   token-stream helpers, error helpers, AST-builder helpers) live in
  *   xparse_internal.h and are NOT part of the public surface.
+ *
+ *   Type pretty-printing is provided by runtime/value/xtype_format.c
+ *   (xr_type_to_string); codegen calls that directly. The parser no
+ *   longer re-exports it.
  */
 
 #ifndef XPARSE_H
@@ -141,12 +145,5 @@ XR_FUNC void xr_parser_set_error_callback(Parser *parser,
 // owns the arena, so the returned node is NOT auto-released by
 // xr_program_destroy.
 XR_FUNC AstNode *xr_parse_recoverable(Parser *parser);
-
-/* ========== Type Printing (P-05 territory) ==========
- *
- * TODO(P-05): move to runtime/value/xtype_format.{c,h} and remove from
- * the parser's public surface. Until then, codegen depends on this here.
- */
-XR_FUNC const char *xr_compile_type_to_string(XrType *type);
 
 #endif // XPARSE_H
