@@ -665,6 +665,11 @@ void xr_coro_release_resources(XrCoroutine *coro) {
         }
         // Struct return arena: reset usage (keep buffer for reuse)
         coro->vm_ctx.struct_ret_arena_used = 0;
+        // Inline-cache tables are tied to a specific (coro, proto_id)
+        // pairing — recycling the coro to a fresh closure means the IC
+        // entries are no longer valid feedback for the next user, so
+        // drop them here rather than handing back stale state.
+        xr_vm_ctx_free_ic_tables(&coro->vm_ctx);
         // ext->io_buf: keep alive for reuse across coro lifetimes (free only on full destroy)
         // Add to pool
         coro->next = worker->p.local_free_list;
@@ -731,6 +736,8 @@ void xr_coro_release_resources(XrCoroutine *coro) {
         coro->vm_ctx.struct_ret_arena_used = 0;
         coro->vm_ctx.struct_ret_arena_cap = 0;
     }
+    // Per-coroutine inline caches
+    xr_vm_ctx_free_ic_tables(&coro->vm_ctx);
     if (coro->ext && coro->ext->io_buf) {
         xr_free(coro->ext->io_buf);
         coro->ext->io_buf = NULL;
@@ -793,6 +800,9 @@ void xr_coro_free(XrCoroutine *coro) {
         coro->vm_ctx.struct_ret_arena_used = 0;
         coro->vm_ctx.struct_ret_arena_cap = 0;
     }
+    // Per-coroutine inline caches (mirrors xr_coro_release_resources path
+    // for coros that go straight to the GC destructor).
+    xr_vm_ctx_free_ic_tables(&coro->vm_ctx);
     // Cold extension (io_buf, locals, watched_by)
     if (coro->ext) {
         if (coro->ext->io_buf) xr_free(coro->ext->io_buf);
@@ -1033,9 +1043,9 @@ XrCoroutine *xr_sched_dequeue(XrCoroState *sched) {
 // Note: xr_coro_save_context, xr_coro_restore_context, xr_coro_run removed.
 // All coroutine execution goes through xr_coro_run_on_worker (zero-copy path).
 
-// ========== Channel Wake (ownership-safe routing, Phase 0) ==========
+// ========== Channel Wake (ownership-safe routing) ==========
 //
-// Design (Phase 0 rewrite):
+// Design:
 //   - Local worker: direct wake via xr_worker_wake_one / xr_worker_wake_select
 //   - Remote workers: dispatch command via MPSC chan_wake_queue
 //   - Never directly access remote worker's blocked buckets or run queues
@@ -1332,7 +1342,7 @@ void xr_coro_ready(XrayIsolate *X, XrCoroutine *gp, bool next) {
 
 // xr_coro_wake_waiter - Wake waiter when coroutine completes
 //
-// All await coordination now lives on XrTask (Phase 0B/0C).
+// All await coordination lives on XrTask.
 // This function handles scope count decrement and delegates to xr_task_wake_waiter.
 void xr_coro_wake_waiter(XrayIsolate *X, XrCoroutine *coro) {
     if (!X || !coro) return;
@@ -1364,8 +1374,8 @@ void xr_coro_wake_waiter(XrayIsolate *X, XrCoroutine *coro) {
             }
         }
 
-        /* Phase 2 (CORO-10): protect scope child list with spinlock.
-         * Multiple children can complete on different workers concurrently. */
+        /* Protect scope child list with a spinlock — multiple children can
+         * complete on different workers concurrently. */
         while (atomic_exchange_explicit(&scope->child_lock, true, memory_order_acquire)) {}
 
         /* Remove this coro from scope's child list BEFORE sibling cancel.

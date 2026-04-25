@@ -324,6 +324,9 @@ static void builder_init(XirBuilder *b, XirFunc *func, XrProto *proto) {
     b->isolate = NULL;
     b->shared_protos = NULL;
     b->nshared_protos = 0;
+    b->ic_fields_snapshot = NULL;
+    b->ic_methods_snapshot = NULL;
+    b->ic_snapshots_owned = false;
     for (int i = 0; i < 256; i++) {
         b->slot_tag_refs[i] = XIR_NONE;
         b->slot_value_refs[i] = XIR_NONE;
@@ -393,6 +396,21 @@ static void builder_init(XirBuilder *b, XirFunc *func, XrProto *proto) {
 static void builder_cleanup(XirBuilder *b) {
     xr_free(b->pc_to_block);
     b->pc_to_block = NULL;
+
+    // Release IC snapshots only when the builder owns them (foreground
+    // JIT). Background JIT borrows from XirBgTask and the dispatching
+    // worker frees them after the task completes.
+    if (b->ic_snapshots_owned) {
+        if (b->ic_fields_snapshot) {
+            xr_ic_field_table_free(b->ic_fields_snapshot);
+            b->ic_fields_snapshot = NULL;
+        }
+        if (b->ic_methods_snapshot) {
+            xr_ic_method_table_free(b->ic_methods_snapshot);
+            b->ic_methods_snapshot = NULL;
+        }
+        b->ic_snapshots_owned = false;
+    }
 }
 
 // Forward declarations for Braun SSA (defined after slot helpers)
@@ -2463,6 +2481,28 @@ static XirFunc *build_from_proto_impl_ex(XrProto *proto,
     b.aot_export_slot_count = opts ? opts->export_slot_count : 0;
     memset(b.import_modules, 0, sizeof(b.import_modules));
 
+    // Wire inline-cache snapshots for type-feedback-driven optimisations.
+    // Three cases:
+    //   1. opts carries pre-captured snapshots (background JIT thread):
+    //      borrow them, do not free.
+    //   2. JIT mode with a live isolate (foreground JIT): snapshot from
+    //      the current ctx and free at teardown.
+    //   3. AOT or off-thread builds without IC data: leave NULL — IC
+    //      fast paths will simply skip.
+    b.ic_fields_snapshot = NULL;
+    b.ic_methods_snapshot = NULL;
+    b.ic_snapshots_owned = false;
+    if (opts && (opts->ic_fields_snapshot || opts->ic_methods_snapshot)) {
+        b.ic_fields_snapshot = opts->ic_fields_snapshot;
+        b.ic_methods_snapshot = opts->ic_methods_snapshot;
+        b.ic_snapshots_owned = false;
+    } else if (!aot_mode && isolate) {
+        XrVMContext *ctx = xr_vm_current_ctx(isolate);
+        b.ic_fields_snapshot = xr_vm_ic_fields_snapshot(ctx, proto);
+        b.ic_methods_snapshot = xr_vm_ic_methods_snapshot(ctx, proto);
+        b.ic_snapshots_owned = true;
+    }
+
     // Step 1: Create basic blocks from bb_leaders and jump targets
     builder_create_blocks(&b);
 
@@ -2798,6 +2838,16 @@ XirFunc *xir_build_from_proto_shaped(XrProto *proto,
                                       struct XrShape *dominant_shape) {
     XR_DCHECK(proto != NULL, "xir_build_from_proto_shaped: proto is NULL");
     return build_from_proto_impl(proto, NULL, 0, dominant_shape, false, NULL);
+}
+
+XirFunc *xir_build_from_proto_jit_ex(XrProto *proto,
+                                      XrProto **shared_protos, int nshared,
+                                      struct XrShape *dominant_shape,
+                                      XrayIsolate *isolate,
+                                      const XirAotOptions *opts) {
+    XR_DCHECK(proto != NULL, "xir_build_from_proto_jit_ex: proto is NULL");
+    return build_from_proto_impl_ex(proto, shared_protos, nshared,
+                                     dominant_shape, false, isolate, opts);
 }
 
 XirFunc *xir_build_from_proto_jit(XrProto *proto,

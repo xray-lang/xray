@@ -341,4 +341,9 @@ void xr_vm_cleanup(XrayIsolate *isolate) {
         xr_free(isolate->vm.defer_frame_marks);
         isolate->vm.defer_frame_marks = NULL;
     }
+
+    // Static-fallback VM context (used by xr_vm_current_ctx when no coro
+    // is active) carries its own per-proto IC tables; release them here
+    // alongside the rest of the embedded VM state.
+    xr_vm_ctx_free_ic_tables(&isolate->vm_ctx);
 }

@@ -289,7 +289,7 @@ typedef enum {
     /* === Coroutine === */
     OP_GO, // R[A] = go R[B](R[B+1]..R[B+C]), C=arg count
     OP_GO_INVOKE, // R[A] = go R[B].method(args), B=symbol, C=arg_count
-    OP_SPAWN_CONT, // scope-internal go: continuation stealing (Phase 5)
+    OP_SPAWN_CONT, // scope-internal go: continuation stealing
     OP_AWAIT, // R[A] = await R[B]
     OP_AWAIT_TIMEOUT, // R[A] = await(timeout: R[C]) R[B]
     OP_AWAIT_ALL, // R[A] = await R[B]:Array - wait all
@@ -537,8 +537,14 @@ typedef struct XrProto {
     // 0=normal, 1=has_defaults (fill missing params), 2=generator (yield support)
     uint8_t entry_type;
 
-    struct XrICMethodTable *ic_methods;  // method call IC table
-    struct XrICFieldTable *ic_fields;    // field access IC table
+    /*
+     * Monotonic proto identifier assigned at creation. Used as the index
+     * into per-coroutine inline-cache tables (see XrVMContext.ic_*_tables).
+     * Inline caches live ctx-side to keep XrProto immutable across workers;
+     * proto_id is the bridge between an immutable bytecode unit and the
+     * mutable IC slot it owns inside each coroutine.
+     */
+    uint32_t proto_id;
 
     uint8_t test_attr;      // test attribute type
     int test_timeout;       // test timeout (seconds)
@@ -590,7 +596,7 @@ typedef struct XrProto {
     // JIT runtime state (populated at runtime, not compile time)
     void *jit_entry;            // JIT compiled function pointer (NULL = not compiled)
     void *jit_fast_entry;       // Fast entry: skip param loading (register-passing calls)
-    void *jit_resume_entry;     // Phase 2: resume entry for JIT suspend/resume (NULL = none)
+    void *jit_resume_entry;     // Resume entry for JIT suspend/resume (NULL = none)
     void *_Atomic jit_entry_pending;  // Background JIT: compiled entry awaiting installation
     struct XirTypeFeedback *type_feedback; // runtime type profile (lazily allocated)
     _Atomic uint32_t call_count;  // runtime call count (hot function detection)

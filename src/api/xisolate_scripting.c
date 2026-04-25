@@ -28,6 +28,7 @@
 #include "../base/xglobal_indices.h"
 #include "../runtime/value/xvalue.h"
 #include "../vm/xic_method.h"
+#include "../vm/xvm_internal.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -41,19 +42,22 @@
 
 /* ========== IC Feedback Dump ========== */
 
-// Recursively dump IC type feedback for a proto tree
-static void dump_ic_feedback_recursive(XrProto *proto) {
-    if (!proto) return;
+// Recursively dump IC type feedback for a proto tree, reading the
+// per-coroutine IC tables on the resolved VM context (IC state lives
+// ctx-side now, not on the immutable proto).
+static void dump_ic_feedback_recursive(XrVMContext *ctx, XrProto *proto) {
+    if (!proto || !ctx) return;
 
     const char *name = proto->name ? (const char*)proto->name->data : "<script>";
-    if (proto->ic_methods) {
-        xr_ic_method_table_dump_feedback(proto->ic_methods, name);
+    XrICMethodTable *icm = xr_vm_ctx_get_ic_methods(ctx, proto);
+    if (icm) {
+        xr_ic_method_table_dump_feedback(icm, name);
     }
 
     // Recurse into nested functions
     int nprotos = PROTO_PROTO_COUNT(proto);
     for (int i = 0; i < nprotos; i++) {
-        dump_ic_feedback_recursive(PROTO_PROTO(proto, i));
+        dump_ic_feedback_recursive(ctx, PROTO_PROTO(proto, i));
     }
 }
 
@@ -65,7 +69,7 @@ static int execute_and_dump(XrayIsolate *isolate, XrProto *code, const char *lab
     int result = xr_execute(isolate, code);
     if (isolate->params.dump_ic_feedback) {
         fprintf(stderr, "\n========== IC Type Feedback ==========\n");
-        dump_ic_feedback_recursive(code);
+        dump_ic_feedback_recursive(xr_vm_current_ctx(isolate), code);
         fprintf(stderr, "======================================\n");
     }
     return result;

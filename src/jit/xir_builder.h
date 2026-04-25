@@ -68,12 +68,21 @@ typedef struct {
     int      shared_index;      // absolute shared index to write to
 } XirAotExportSlot;
 
-// Bundled AOT build options (keeps public API params <= 6)
+// Bundled build options shared by AOT and background JIT (keeps the
+// public API parameter list <= 6). Background JIT additionally uses
+// the ic_*_snapshot fields to ship pre-captured inline-cache state to
+// the worker thread, which has no live VM context to snapshot from.
 typedef struct {
     XirAotImportEntry  *import_map;
     int                 import_count;
     XirAotExportSlot   *export_slots;
     int                 export_slot_count;
+    // Caller-owned IC snapshots. NULL means "let the builder snapshot
+    // from xr_vm_current_ctx(isolate) instead". Non-NULL means "the
+    // caller already snapshotted on a thread that owns the live ctx;
+    // builder must read but not free them".
+    struct XrICFieldTable  *ic_fields_snapshot;
+    struct XrICMethodTable *ic_methods_snapshot;
 } XirAotOptions;
 
 /* ========== Builder State ========== */
@@ -168,6 +177,16 @@ typedef struct {
     // Emits generic CALL_C paths to avoid deopt on type-unstable functions.
     // Set when deopt_count >= 5 (adaptive recompile after frequent deopts).
     bool       conservative;
+
+    // Inline-cache snapshots for type feedback. JIT/AOT use these read-only
+    // copies of the proto's IC state to drive speculative devirtualization
+    // and Json shape guards. ic_snapshots_owned == true means the builder
+    // took the snapshots itself (foreground JIT) and must free them at
+    // teardown; false means the snapshots were supplied externally (eg.
+    // background JIT task) and the caller still owns them.
+    struct XrICFieldTable  *ic_fields_snapshot;
+    struct XrICMethodTable *ic_methods_snapshot;
+    bool                    ic_snapshots_owned;
 } XirBuilder;
 
 /* ========== API ========== */
@@ -187,11 +206,24 @@ XR_FUNC XirFunc *xir_build_from_proto_ex(XrProto *proto,
 XR_FUNC XirFunc *xir_build_from_proto_shaped(XrProto *proto,
                                       struct XrShape *dominant_shape);
 
-// Build XIR for JIT with shared_protos mapping and optional shape hint
+// Build XIR for JIT with shared_protos mapping and optional shape hint.
+// If isolate != NULL, the builder snapshots IC state from
+// xr_vm_current_ctx(isolate) to drive type-feedback-guided optimisations.
 XR_FUNC XirFunc *xir_build_from_proto_jit(XrProto *proto,
                                    XrProto **shared_protos, int nshared,
                                    struct XrShape *dominant_shape,
                                    struct XrayIsolate *isolate);
+
+// Build XIR for JIT using caller-supplied IC snapshots (background JIT).
+// The builder reads from opts->ic_fields_snapshot / ic_methods_snapshot
+// without taking ownership; the caller is responsible for freeing them
+// after this call returns. opts may also carry shared_protos overrides
+// inherited from the caller's task snapshot.
+XR_FUNC XirFunc *xir_build_from_proto_jit_ex(XrProto *proto,
+                                   XrProto **shared_protos, int nshared,
+                                   struct XrShape *dominant_shape,
+                                   struct XrayIsolate *isolate,
+                                   const XirAotOptions *opts);
 
 // Build XIR in AOT mode: generates closure/upvalue XIR instead of skipping.
 // If isolate is non-NULL, enables CHA devirtualization for class method calls.

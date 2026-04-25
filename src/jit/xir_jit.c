@@ -190,8 +190,8 @@ XirJitState *xir_jit_init(XrayIsolate *isolate, int threshold) {
         }
     }
 
-    // Phase 4: register JIT hooks so coro/ can call JIT without
-    // including jit/ headers (L3 → L5 decoupling).
+    // Register JIT hooks so coro/ can call JIT without including jit/
+    // headers (preserves the L3 → L5 dependency direction).
     static XrJitHooks hooks = {
         .call             = xir_jit_call,
         .resume           = xir_jit_resume,
@@ -241,7 +241,7 @@ void xir_jit_destroy(XirJitState *jit) {
         tfa_free(jit->tfa);
         xr_free(jit->tfa);
     }
-    // Phase 4: deregister hooks
+    // Deregister JIT hooks (mirrors the registration in xir_jit_init).
     xr_jit_hooks = NULL;
 
     xr_free(jit);
@@ -415,6 +415,15 @@ bool xir_jit_try_compile(XirJitState *jit, XrProto *proto) {
             }
         }
 
+        /* Inline-cache snapshots: must be captured on the main thread
+         * (the bg worker has no live ctx). The worker thread reads them
+         * read-only and frees them after compilation. */
+        if (jit->isolate) {
+            XrVMContext *cur_ctx = xr_vm_current_ctx(jit->isolate);
+            task.ic_fields_snapshot = xr_vm_ic_fields_snapshot(cur_ctx, proto);
+            task.ic_methods_snapshot = xr_vm_ic_methods_snapshot(cur_ctx, proto);
+        }
+
         // Set sentinel (0x1) to prevent duplicate queue entries from OSR triggers.
         // bg thread replaces this with the actual XirBgResult* when done.
         atomic_store_explicit(&proto->jit_entry_pending,
@@ -425,6 +434,9 @@ bool xir_jit_try_compile(XirJitState *jit, XrProto *proto) {
         // Queue full → clear sentinel, return false (NEVER fall through
         // to sync while bg thread may be using code_alloc concurrently)
         atomic_store_explicit(&proto->jit_entry_pending, NULL, memory_order_release);
+        // Drop snapshots that nobody will consume.
+        if (task.ic_fields_snapshot) xr_ic_field_table_free(task.ic_fields_snapshot);
+        if (task.ic_methods_snapshot) xr_ic_method_table_free(task.ic_methods_snapshot);
         return false;
     }
 

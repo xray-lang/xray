@@ -160,7 +160,34 @@ typedef struct XrVMContext {
     uint8_t *struct_ret_arena;
     uint32_t struct_ret_arena_used;
     uint32_t struct_ret_arena_cap;
+
+    /*
+     * Per-coroutine inline-cache tables, indexed by XrProto.proto_id. Each
+     * slot is lazily allocated on first IC site execution for that proto.
+     * Keeping IC state ctx-local means XrProto stays immutable even when
+     * the same proto is dispatched concurrently from multiple workers.
+     *
+     * ic_field_tables[id]  -> XrICFieldTable* (handles GETPROP/SETPROP/
+     *                          json shape ICs).
+     * ic_method_tables[id] -> XrICMethodTable* (handles INVOKE/SUPERINVOKE/
+     *                          constructor ICs).
+     *
+     * Both arrays grow in lockstep; ic_tables_capacity tracks the shared
+     * size. Entries beyond capacity (or NULL within capacity) mean "no IC
+     * recorded yet for this proto in this ctx".
+     */
+    struct XrICFieldTable  **ic_field_tables;
+    struct XrICMethodTable **ic_method_tables;
+    uint32_t ic_tables_capacity;
 } XrVMContext;
+
+/*
+** Free every per-proto IC table currently held by `ctx` and reset its
+** capacity. Defined in src/vm/xvm_ic.c; declared at the runtime layer
+** so the coroutine teardown code (src/coro) can release IC tables on
+** worker recycle without taking a direct dependency on src/vm.
+*/
+XR_FUNC void xr_vm_ctx_free_ic_tables(XrVMContext *ctx);
 
 /* ========== VM Context Access Macros ========== */
 

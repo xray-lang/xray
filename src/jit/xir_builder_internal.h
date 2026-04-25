@@ -21,6 +21,8 @@
 #include "../runtime/object/xstring.h"
 #include "../runtime/object/xshape.h"
 #include "../vm/xic_field_table.h"
+#include "../vm/xic_method.h"
+#include "../vm/xvm_internal.h"  // xr_vm_current_ctx, IC snapshot API
 #include "../frontend/analyzer/xanalyzer_symbol.h"
 #include "../runtime/gc/xgc_header.h"
 #include "xir_jit_runtime.h"
