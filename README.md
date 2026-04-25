@@ -4,7 +4,7 @@
 
 A statically-typed scripting language with native concurrency, built in C.
 
-```xray
+```ts
 import http
 
 fn dashboard(req) {
@@ -55,7 +55,7 @@ xray repl                 # interactive REPL
 
 ### Type System
 
-```xray
+```ts
 // Inference + explicit annotations
 let name = "Alice"
 const PI: float = 3.14159
@@ -87,7 +87,7 @@ if (r is int) { print("got int:", r) }
 
 ### Concurrency — go / await / Channel / scope
 
-```xray
+```ts
 // Launch a coroutine and await its result
 let task = go fn(): int { return 42 }
 print(await task)   // 42
@@ -122,7 +122,7 @@ scope {
 
 ### Structs — Value Types with Operator Overloading
 
-```xray
+```ts
 import math
 
 struct Vec2 {
@@ -146,7 +146,7 @@ print(c.x, c.y)    // 4 6
 
 ### Classes, Interfaces, Enums
 
-```xray
+```ts
 interface Serializable {
     serialize(): string
 }
@@ -179,7 +179,7 @@ let label = match s {
 
 Json is a first-class value type. Combined with `type` definitions, it supports a spectrum from fully dynamic to strictly typed — no need to choose between "define a full class" and "give up type checking".
 
-```xray
+```ts
 // Fully dynamic — add any field at any time
 let obj = { name: "Alice", age: 30 }
 obj.email = "alice@test.com"
@@ -218,7 +218,7 @@ for (k, v in obj) {
 
 ### Functional
 
-```xray
+```ts
 let nums = [3, 1, 4, 1, 5, 9, 2, 6]
 
 let result = nums
@@ -231,7 +231,7 @@ print(result)   // 158
 
 ### Error Handling
 
-```xray
+```ts
 try {
     let data = json.parse(raw)
     process(data)
@@ -255,7 +255,7 @@ Each connection runs in its own coroutine — no callbacks, no async/await cerem
 Handler return values are automatically converted: strings become text responses,
 Json objects are stringified with `Content-Type: application/json`.
 
-```xray
+```ts
 import http
 
 fn hello(req) {
@@ -314,7 +314,7 @@ http.listen(8080)
 
 No external dependencies. Named Channels, RPC, Pub/Sub, and LAN auto-discovery — all built in C.
 
-```xray
+```ts
 import cluster
 
 // Start a node
@@ -363,7 +363,7 @@ PHI Accrual failure detector, SHA-256 challenge-response auth, per-node writer c
 
 ### select — Channel Multiplexing
 
-```xray
+```ts
 shared const ch1 = Channel(2)
 shared const ch2 = Channel(2)
 
@@ -378,7 +378,7 @@ select {
 
 ### Coroutine Priority
 
-```xray
+```ts
 fn task(label: string): string { return label }
 
 // Inline priority (preferred)
@@ -396,7 +396,7 @@ await t3
 
 ### linked / supervisor scope — Error Propagation
 
-```xray
+```ts
 // linked scope: child error propagates to parent
 try {
     linked scope {
@@ -416,7 +416,7 @@ supervisor scope {
 
 ### Coroutine Naming
 
-```xray
+```ts
 fn worker(id: int): int { return id * 10 }
 
 let t1 = go(name: "worker-1") worker(1)
@@ -432,7 +432,7 @@ print(await t2)   // 10
 
 ### await.all — Await Multiple Tasks
 
-```xray
+```ts
 fn task1(): int { return 10 }
 fn task2(): int { return 20 }
 
@@ -449,7 +449,7 @@ print(x, y)   // 10 20
 
 ### cancelled() — Cooperative Cancellation
 
-```xray
+```ts
 fn worker(): string {
     for (i in 0..1000) {
         if (cancelled()) {
@@ -467,7 +467,7 @@ let result = await task   // null (cancelled before checked)
 
 ### shared / move — Ownership & Cross-Coroutine Safety
 
-```xray
+```ts
 // shared const: zero-copy concurrent read (reference counted)
 shared const config = { name: "app", port: 8080 }
 
