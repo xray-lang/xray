@@ -1,0 +1,55 @@
+// Test: per-coroutine IC tables under multi-goroutine method dispatch.
+//
+// Many coroutines run the same hot loop in parallel, dispatching the
+// same class method on the same instance. With the post-Phase-1
+// migration each coroutine owns an independent ic_method_table for
+// the proto, so there is no shared mutable state between them. If
+// the migration regressed (e.g. multiple coros aliased the same IC
+// slot through proto->ic_methods), the result counts would race and
+// the asserts would fail under load.
+
+class Adder {
+    base: int
+
+    constructor(b: int) {
+        this.base = b
+    }
+
+    apply(x: int): int {
+        return this.base + x * 2
+    }
+}
+
+fn worker(a: Adder, iters: int): int {
+    let s = 0
+    for (let i = 0; i < iters; i++) {
+        // Mono call site, same class across all coros.
+        s = s + a.apply(i)
+    }
+    return s
+}
+
+// closed-form sum used to assert each worker's return value:
+//   sum_{i=0..iters-1} (base + 2*i) = base*iters + iters*(iters-1)
+fn expected(base: int, iters: int): int {
+    return base * iters + iters * (iters - 1)
+}
+
+let a = new Adder(7)
+const ITERS = 2000
+const NCORO = 16
+
+let tasks: Array<Task> = []
+for (let i = 0; i < NCORO; i++) {
+    tasks.push(go worker(a, ITERS))
+}
+
+let results = await.all tasks
+let want = expected(7, ITERS)
+for (let i = 0; i < NCORO; i++) {
+    assert(results[i] == want,
+        "concurrent IC worker " + i + " got " + results[i] +
+        " expected " + want)
+}
+
+print("ic concurrent method JIT test passed")
