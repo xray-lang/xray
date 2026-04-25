@@ -12,12 +12,9 @@
  */
 
 #include <string.h>
-#include <stdlib.h>
-#include <ctype.h>
 #include "xlex.h"
 #include "../../base/xchecks.h"
 #include "../../base/xsimd.h"
-#include "../../runtime/value/xtype_names.h"
 #include "../../base/xmalloc.h"
 
 // ============================================================================
@@ -26,6 +23,7 @@
 
 XrTrivia *xr_trivia_new(XrTriviaType type, const char *start, int length, int line) {
     XrTrivia *trivia = (XrTrivia*)xr_malloc(sizeof(XrTrivia));
+    if (!trivia) return NULL;
     trivia->type = type;
     trivia->start = start;
     trivia->length = length;
@@ -159,7 +157,7 @@ static bool skip_whitespace(Scanner *scanner) {
                 scanner->current++;
             }
         }
-        
+
         char c = peek(scanner);
         switch (c) {
             case ' ':
@@ -251,7 +249,7 @@ static TokenType identifier_type(Scanner *scanner) {
     if (scanner->current - scanner->start == 1 && scanner->start[0] == '_') {
         return TK_UNDERSCORE;
     }
-    
+
     switch (scanner->start[0]) {
         case 'a':
             if (scanner->current - scanner->start > 1) {
@@ -280,7 +278,7 @@ static TokenType identifier_type(Scanner *scanner) {
                 switch (scanner->start[1]) {
                     case 'a':
                         return check_keyword(scanner, 2, 3, "tch", TK_CATCH);
-                    case 'l': 
+                    case 'l':
                         return check_keyword(scanner, 2, 3, "ass", TK_CLASS);
                     case 'o':
                         if (scanner->current - scanner->start > 2) {
@@ -311,7 +309,7 @@ static TokenType identifier_type(Scanner *scanner) {
                 switch (scanner->start[1]) {
                     case 'l': return check_keyword(scanner, 1, 3, "lse", TK_ELSE);
                     case 'n': return check_keyword(scanner, 1, 3, "num", TK_ENUM);
-                    case 'x': 
+                    case 'x':
                         if (scanner->current - scanner->start == 7) {
                             return check_keyword(scanner, 1, 6, "xtends", TK_EXTENDS);
                         }
@@ -322,7 +320,7 @@ static TokenType identifier_type(Scanner *scanner) {
         case 'f':
             if (scanner->current - scanner->start > 1) {
                 switch (scanner->start[1]) {
-                    case 'a': 
+                    case 'a':
                         return check_keyword(scanner, 2, 3, "lse", TK_FALSE);
                     case 'i':
                         // final (5) vs finally (7)
@@ -339,9 +337,9 @@ static TokenType identifier_type(Scanner *scanner) {
                             if (scanner->start[5] == '6') return check_keyword(scanner, 2, 5, "oat64", TK_FLOAT64);
                         }
                         break;
-                    case 'o': 
+                    case 'o':
                         return check_keyword(scanner, 2, 1, "r", TK_FOR);
-                    case 'n': 
+                    case 'n':
                         // 'fn' must be exactly 2 chars
                         if (scanner->current - scanner->start == 2) {
                             return TK_FN;
@@ -359,12 +357,12 @@ static TokenType identifier_type(Scanner *scanner) {
             if (scanner->current - scanner->start > 1) {
                 switch (scanner->start[1]) {
                     case 'f': return TK_IF; // if
-                    case 'm': 
+                    case 'm':
                         if (scanner->current - scanner->start == 6) {
                             return check_keyword(scanner, 2, 4, "port", TK_IMPORT); // import
                         }
                         return check_keyword(scanner, 2, 8, "plements", TK_IMPLEMENTS);
-                    case 'n': 
+                    case 'n':
                         // Check 'in', 'int', 'int8/16/32/64', or 'interface'
                         switch (scanner->current - scanner->start) {
                             case 2: return TK_IN;
@@ -475,7 +473,7 @@ static TokenType identifier_type(Scanner *scanner) {
         case 't':
             if (scanner->current - scanner->start > 1) {
                 switch (scanner->start[1]) {
-                    case 'h': 
+                    case 'h':
                         if (scanner->current - scanner->start == 4) {
                             return check_keyword(scanner, 2, 2, "is", TK_THIS);
                         }
@@ -483,7 +481,7 @@ static TokenType identifier_type(Scanner *scanner) {
                             return check_keyword(scanner, 2, 3, "row", TK_THROW);
                         }
                         break;
-                    case 'r': 
+                    case 'r':
                         if (scanner->current - scanner->start == 3) {
                             return check_keyword(scanner, 2, 1, "y", TK_TRY);
                         }
@@ -539,10 +537,6 @@ static Token identifier(Scanner *scanner) {
     return make_token(scanner, identifier_type(scanner));
 }
 
-static int is_hex_digit(char c) {
-    return XR_IS_HEX(c);
-}
-
 static int is_binary_digit(char c) {
     return c == '0' || c == '1';
 }
@@ -554,17 +548,17 @@ static int is_octal_digit(char c) {
 static Token number(Scanner *scanner) {
     TokenType type = TK_LITERAL_INT;
     char first = scanner->start[0];
-    
+
     if (first == '0' && !is_at_end(scanner)) {
         char prefix = peek(scanner);
-        
+
         // Hex: 0x or 0X
         if (prefix == 'x' || prefix == 'X') {
             advance(scanner);
-            if (!is_hex_digit(peek(scanner))) {
+            if (!XR_IS_HEX(peek(scanner))) {
                 return error_token(scanner, "Hex literal requires at least one digit");
             }
-            while (is_hex_digit(peek(scanner)) || peek(scanner) == '_') {
+            while (XR_IS_HEX(peek(scanner)) || peek(scanner) == '_') {
                 advance(scanner);
             }
             if (peek(scanner) == 'n') {
@@ -573,7 +567,7 @@ static Token number(Scanner *scanner) {
             }
             return make_token(scanner, TK_LITERAL_INT);
         }
-        
+
         // Binary: 0b or 0B
         if (prefix == 'b' || prefix == 'B') {
             advance(scanner);
@@ -589,7 +583,7 @@ static Token number(Scanner *scanner) {
             }
             return make_token(scanner, TK_LITERAL_INT);
         }
-        
+
         // Octal: 0o or 0O
         if (prefix == 'o' || prefix == 'O') {
             advance(scanner);
@@ -606,12 +600,12 @@ static Token number(Scanner *scanner) {
             return make_token(scanner, TK_LITERAL_INT);
         }
     }
-    
+
     // Decimal integer
     while (XR_IS_DIGIT(peek(scanner)) || peek(scanner) == '_') {
         advance(scanner);
     }
-    
+
     // Check decimal point
     if (peek(scanner) == '.') {
         if (peek_next(scanner) == '.') {
@@ -624,7 +618,7 @@ static Token number(Scanner *scanner) {
             }
         }
     }
-    
+
     // Scientific notation
     if (peek(scanner) == 'e' || peek(scanner) == 'E') {
         type = TK_LITERAL_FLOAT;
@@ -636,7 +630,7 @@ static Token number(Scanner *scanner) {
             advance(scanner);
         }
     }
-    
+
     // BigInt suffix 'n'
     if (peek(scanner) == 'n') {
         if (type == TK_LITERAL_FLOAT) {
@@ -645,7 +639,7 @@ static Token number(Scanner *scanner) {
         advance(scanner);
         return make_token(scanner, TK_LITERAL_BIGINT);
     }
-    
+
     return make_token(scanner, type);
 }
 
@@ -656,7 +650,7 @@ static Token string_with_quote(Scanner *scanner, char quote) {
     while (!is_at_end(scanner)) {
         size_t remaining = (size_t)(scanner->end - scanner->current);
         const char *found = xr_simd_find_string_end_quote(scanner->current, remaining, quote);
-        
+
         while (scanner->current < found) {
             // Detect ${} in SIMD-skipped region ($ is not a SIMD stop char)
             if (*scanner->current == '$' && (scanner->current + 1) < scanner->end
@@ -666,9 +660,9 @@ static Token string_with_quote(Scanner *scanner, char quote) {
             if (*scanner->current == '\n') scanner->line++;
             scanner->current++;
         }
-        
+
         if (is_at_end(scanner)) break;
-        
+
         char c = peek(scanner);
         if (c == quote) {
             advance(scanner);
@@ -688,7 +682,7 @@ static Token string_with_quote(Scanner *scanner, char quote) {
             advance(scanner);
         }
     }
-    
+
     return error_token(scanner, "Unterminated string");
 }
 
@@ -723,7 +717,7 @@ static Token raw_string_with_quote(Scanner *scanner, char quote) {
 static Token regex_literal(Scanner *scanner) {
     // scanner->start already points to '/'
     // scanner->current already skips the starting '/'
-    
+
     // Scan regex pattern
     while (!is_at_end(scanner) && peek(scanner) != '/') {
         if (peek(scanner) == '\\') {
@@ -753,14 +747,14 @@ static Token regex_literal(Scanner *scanner) {
             advance(scanner);
         }
     }
-    
+
     if (is_at_end(scanner)) {
         return error_token(scanner, "Unterminated regex");
     }
-    
+
     // Consume the ending '/'
     advance(scanner);
-    
+
     // Scan flags: i, m, s, g, u
     while (!is_at_end(scanner)) {
         char c = peek(scanner);
@@ -770,7 +764,7 @@ static Token regex_literal(Scanner *scanner) {
             break;
         }
     }
-    
+
     return make_token(scanner, TK_LITERAL_REGEX);
 }
 
@@ -778,25 +772,25 @@ static Token regex_literal(Scanner *scanner) {
 Token xr_scanner_try_regex(Scanner *scanner) {
     scanner->had_leading_space = skip_whitespace(scanner);
     scanner->start = scanner->current;
-    
+
     if (is_at_end(scanner) || peek(scanner) != '/') {
         return xr_scanner_scan(scanner);
     }
-    
+
     advance(scanner);
-    
+
     // Check for comment
     if (peek(scanner) == '/' || peek(scanner) == '*') {
         scanner->current = scanner->start;
         return xr_scanner_scan(scanner);
     }
-    
+
     // Check for /=
     if (peek(scanner) == '=') {
         scanner->current = scanner->start;
         return xr_scanner_scan(scanner);
     }
-    
+
     return regex_literal(scanner);
 }
 
@@ -804,30 +798,30 @@ Token xr_scanner_try_regex(Scanner *scanner) {
 Token xr_scanner_scan(Scanner *scanner) {
     scanner->had_leading_space = skip_whitespace(scanner);
     scanner->start = scanner->current;
-    
+
     // Check for errors detected during whitespace/comment skipping
     if (scanner->pending_error) {
         const char *msg = scanner->pending_error;
         scanner->pending_error = NULL;
         return error_token(scanner, msg);
     }
-    
+
     if (is_at_end(scanner)) {
         return make_token(scanner, TK_EOF);
     }
-    
+
     char c = advance(scanner);
-    
+
     // Identifier or keyword (ASCII alpha, underscore, or UTF-8 lead byte)
     if (XR_IS_ALPHA(c) || c == '_' || (unsigned char)c >= 0x80) {
         return identifier(scanner);
     }
-    
+
     // Number
     if (XR_IS_DIGIT(c)) {
         return number(scanner);
     }
-    
+
     // Other symbols
     switch (c) {
         case '(': return make_token(scanner, TK_LPAREN);
@@ -930,7 +924,7 @@ Token xr_scanner_scan(Scanner *scanner) {
         case '`':
             return error_token(scanner, "Backtick strings are deprecated, use \"\" or '' with ${} interpolation");
     }
-    
+
     return error_token(scanner, "Unknown character");
 }
 
