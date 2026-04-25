@@ -59,6 +59,22 @@ add_xray_unit_test(test_diag_fmt frontend/test_diag_fmt.c)
 add_xray_unit_test(test_xfmt_literal frontend/test_xfmt_literal.c)
 add_xray_unit_test(test_analyzer_remove_file frontend/test_analyzer_remove_file.c)
 
+# Phase 3: in-tree frontend architecture lint. Walks the project src/
+# tree at runtime, so it needs the absolute path baked in at build
+# time. The test does NOT link xray_core (it is a pure path/text
+# walker), so we add it directly without the helper macro.
+add_executable(test_frontend_architecture
+    frontend/test_frontend_architecture.c
+)
+target_include_directories(test_frontend_architecture PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}
+)
+target_compile_definitions(test_frontend_architecture PRIVATE
+    XR_TEST_SRC_DIR="${CMAKE_SOURCE_DIR}/src"
+)
+add_test(NAME test_frontend_architecture
+         COMMAND test_frontend_architecture)
+
 # ============================================================================
 # analyzer/ — Type inference, type checking
 # ============================================================================
