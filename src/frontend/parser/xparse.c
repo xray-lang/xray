@@ -886,11 +886,10 @@ AstNode *xr_parse_with_trivia(XrayIsolate *X, const char *source, const char *so
 
         AstNode *decl = xr_parse_declaration(&parser);
         if (decl != NULL) {
-            // Attach trivia to the declaration
+            // Attach leading trivia to the declaration
             if (leading_trivia) {
                 decl->leading_comments = leading_trivia;
             }
-            xr_ast_program_add(X, program, decl);
         } else if (leading_trivia) {
             // Free trivia if declaration failed
             xr_trivia_free_chain(leading_trivia);
@@ -908,6 +907,18 @@ AstNode *xr_parse_with_trivia(XrayIsolate *X, const char *source, const char *so
                     xr_parser_error_at_current(&parser, "multiple statements on same line must be separated by semicolon");
                 }
             }
+        }
+
+        // L-06: capture trailing AFTER smart-semicolon handling. The
+        // inline comment overwhelmingly lives on the trailing `;` (or
+        // closing `}` for block-bodied decls); waiting until parser
+        // .previous reflects that final token captures it correctly.
+        if (decl != NULL && parser.previous.trailing_trivia) {
+            decl->trailing_comments = parser.previous.trailing_trivia;
+            parser.previous.trailing_trivia = NULL;
+        }
+        if (decl != NULL) {
+            xr_ast_program_add(X, program, decl);
         }
     }
 
@@ -1558,18 +1569,20 @@ AstNode *xr_parse_block(Parser *parser) {
 
         AstNode *decl = xr_parse_declaration(parser);
         if (decl != NULL) {
-            // Attach trivia to the statement
+            // Attach leading trivia to the statement
             if (leading_trivia && !decl->leading_comments) {
                 decl->leading_comments = leading_trivia;
             } else if (leading_trivia) {
                 xr_trivia_free_chain(leading_trivia);
             }
-            xr_ast_block_add(parser->X, block, decl);
         } else if (leading_trivia) {
             xr_trivia_free_chain(leading_trivia);
         }
 
-        // Smart semicolon handling
+        // Smart semicolon handling (block-internal variant). The
+        // L-06 trailing capture happens AFTER this so we see the `;`
+        // or `}`-terminator's trailing trivia, not the final
+        // expression token's.
         if (xr_parser_check(parser, TK_SEMICOLON)) {
             xr_parser_advance(parser);
         } else {
@@ -1583,6 +1596,17 @@ AstNode *xr_parse_block(Parser *parser) {
                 }
                 break;
             }
+        }
+
+        // L-06: capture trailing AFTER smart-semicolon advance, then
+        // commit the statement to the block.
+        if (decl != NULL) {
+            if (parser->previous.trailing_trivia &&
+                !decl->trailing_comments) {
+                decl->trailing_comments = parser->previous.trailing_trivia;
+                parser->previous.trailing_trivia = NULL;
+            }
+            xr_ast_block_add(parser->X, block, decl);
         }
 
         if (parser->had_error) break;

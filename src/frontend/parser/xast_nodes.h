@@ -52,6 +52,12 @@ struct AstNode {
     // via xa_analyzer_get_node_type(analyzer, node). Type-alias-
     // specific resolved types live in TypeAliasNode::resolved_type.
     XrTrivia *leading_comments;   // Comments before this node (for formatter)
+    // L-06: trailing inline comment captured by the lexer on the LAST
+    // token consumed for this node (commonly `;` or `}` for stmts /
+    // block-bodied decls, the final expression token for expr stmts).
+    // Owned by the AST; freed with the node. NULL when the source had
+    // no inline comment on the same source line as the closing token.
+    XrTrivia *trailing_comments;
 
     union {
         LiteralNode literal;
