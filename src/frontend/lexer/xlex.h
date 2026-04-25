@@ -25,7 +25,7 @@
 // Trivia types (non-semantic tokens attached to real tokens)
 typedef enum {
     TRIVIA_LINE_COMMENT,    // // comment
-    TRIVIA_BLOCK_COMMENT,   // // comment
+    TRIVIA_BLOCK_COMMENT,   // /* comment */
 } XrTriviaType;
 
 // Single trivia item (comment)
@@ -62,7 +62,7 @@ typedef enum {
     TK_AMP = '&',       // & (bitwise and)
     TK_CARET = '^',     // ^ (bitwise xor)
     TK_TILDE = '~',     // ~ (bitwise not)
-    
+
     // Multi-character tokens (start from 256 to avoid ASCII collision)
     TK_EQ = 256,        // ==
     TK_NE,              // !=
@@ -90,7 +90,7 @@ typedef enum {
     TK_AND,             // &&
     TK_OR,              // ||
     TK_NOT,             // !
-    
+
     // Keywords (TK_FIRST_KEYWORD must be first, TK_LAST_KEYWORD must be last)
     TK_FIRST_KEYWORD,
     TK_LET = TK_FIRST_KEYWORD, // let
@@ -129,25 +129,25 @@ typedef enum {
     TK_ENUM,            // enum
     TK_MATCH,           // match
     TK_TYPE_ALIAS,      // type (type alias definition)
-    
+
     // Exception handling keywords
     TK_TRY,             // try
     TK_CATCH,           // catch
     TK_FINALLY,         // finally
     TK_THROW,           // throw
-    
+
     // Module system keywords
     TK_IMPORT,          // import
     TK_EXPORT,          // export
     TK_AS,              // as (infix operator: expr as Type)
-    
+
     // Coroutine keywords
     TK_GO,              // go - spawn coroutine
     TK_AWAIT,           // await - wait for coroutine
     TK_SELECT,          // select - multiplexing
     TK_DEFER,           // defer - deferred execution
     TK_SCOPE,           // scope - structured concurrency
-    
+
     // Type keywords
     TK_VOID,            // void
     TK_INT,             // int (= int64)
@@ -175,7 +175,7 @@ typedef enum {
     TK_TYPE_BYTES,      // Bytes (byte array type)
     TK_UNKNOWN,         // unknown
     TK_LAST_KEYWORD = TK_UNKNOWN,
-    
+
     // Contextual keywords (NOT in keyword range — can be used as identifiers)
     // These are recognized by the parser via string comparison, not by the lexer.
     TK_FROM,            // from (import/select context only)
@@ -184,7 +184,7 @@ typedef enum {
     TK_CANCELLED,       // cancelled() (coroutine context only)
     TK_REF,             // ref (parameter modifier context only)
     TK_MOVE,            // move (ownership transfer context only)
-    
+
     // Type operators
     TK_QUESTION,        // ? (optional type)
     TK_QUESTION_DOT,    // ?. (optional chaining)
@@ -194,12 +194,12 @@ typedef enum {
     TK_RANGE,           // .. (range operator)
     TK_NULLISH_COALESCE,// ?? (nullish coalescing operator)
     TK_UNDERSCORE,      // _ (wildcard pattern, for match expression)
-    
+
     // New syntax tokens
     TK_AT,              // @ - attribute marker (@test, @before_each etc.)
     TK_EMPTY_MAP_START, // #{ - empty Map literal start
     TK_SET_START,       // #[ - Set literal start
-    
+
     // Literals and identifiers
     TK_LITERAL_INT,     // integer literal
     TK_LITERAL_FLOAT,   // float literal
@@ -207,14 +207,14 @@ typedef enum {
     TK_LITERAL_STRING,  // string literal
     TK_LITERAL_REGEX,   // regex literal /pattern/flags
     TK_NAME,            // identifier
-    
+
     // Template string
     TK_TEMPLATE_STRING, // template string `hello ${name}`
-    
+
     // Raw string (r prefix, no escape processing)
     TK_RAW_STRING,           // r"..." or r'...' - raw string, no escapes
     TK_RAW_TEMPLATE_STRING,  // r`...` - raw template string, no escapes but ${} interpolation
-    
+
     // Special
     TK_EOF,             // end of file
     TK_ERROR            // error
