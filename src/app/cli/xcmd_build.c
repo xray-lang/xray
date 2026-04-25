@@ -398,8 +398,10 @@ static int build_shared_proto_map(XrProto *top, XrProto **shared_protos,
 // objects so xr_class_lookup_by_name works at AOT compile time.
 // Tracks register→XrClass* so that same-module inheritance (where
 // the compiler puts the parent class into R[A] as super_override)
-// resolves correctly.
-static void aot_preregister_classes(XrProto *proto, XrayIsolate *isolate) {
+// resolves correctly.  Also registers class metadata into comp for
+// type table codegen (xrt_type_register calls in generated code).
+static void aot_preregister_classes(XrProto *proto, XrayIsolate *isolate,
+                                     XcgenCompilation *comp) {
     if (!proto || !isolate) return;
     uint32_t code_count = (uint32_t)proto->code.count;
     const XrInstruction *code = (const XrInstruction *)proto->code.data;
@@ -437,6 +439,39 @@ static void aot_preregister_classes(XrProto *proto, XrayIsolate *isolate) {
 
         // Record this class in the register tracker
         if (a < 256) reg_class[a] = klass;
+
+        // Register class info for AOT type table codegen.
+        // Find the constructor proto by scanning CLOSURE instructions
+        // that target register A (same pattern as build_shared_proto_map).
+        if (comp) {
+            XrProto *ctor_proto = NULL;
+            for (int scan = (int)pc - 1; scan >= 0; scan--) {
+                OpCode sop = GET_OPCODE(code[scan]);
+                if (sop == OP_CLOSURE && GETARG_A(code[scan]) == a) {
+                    uint16_t pidx = GETARG_Bx(code[scan]);
+                    if (pidx < PROTO_PROTO_COUNT(proto)) {
+                        XrProto *cp = PROTO_PROTO(proto, pidx);
+                        if (cp && cp->name &&
+                            strcmp(XR_STRING_CHARS(cp->name), "constructor") == 0)
+                            ctor_proto = cp;
+                    }
+                } else if (ctor_proto) {
+                    break;
+                }
+            }
+            if (ctor_proto) {
+                // Get parent name: desc->super_name is NULL for same-module
+                // inheritance (resolved via register), fall back to the
+                // explicit super_override (not klass->super which includes
+                // the implicit Object parent for all classes)
+                const char *parent_name = desc->super_name;
+                if (!parent_name && super_override)
+                    parent_name = super_override->name;
+                xcgen_register_class(
+                    comp, (void *)ctor_proto, desc->class_name,
+                    parent_name, (int)desc->instance_field_count);
+            }
+        }
 
         // Patch method protos: set 'this' (param 0) type to the
         // enclosing class instance type so builder_find_reg_type works.
@@ -793,11 +828,13 @@ static int cmd_build_native(const char *input, const char *output,
     XcgenCompilation *comp = xcgen_compilation_new();
     comp->struct_reg = &struct_reg;
 
-    // Global shared_protos array (all modules combined)
-    XrProto *shared_protos[256];
-    bool shared_is_ctor[256];
-    memset(shared_protos, 0, sizeof(shared_protos));
-    memset(shared_is_ctor, 0, sizeof(shared_is_ctor));
+    // Global shared_protos array (all modules combined, heap-allocated)
+    int shared_cap = 256;
+    XrProto **shared_protos = (XrProto **)xr_calloc(
+        (size_t)shared_cap, sizeof(XrProto *));
+    bool *shared_is_ctor = (bool *)xr_calloc(
+        (size_t)shared_cap, sizeof(bool));
+    if (!shared_protos || !shared_is_ctor) goto fail_comp;
     int nshared = 0;
 
     int total_aot = 0, total_compiled = 0;
@@ -830,11 +867,29 @@ static int cmd_build_native(const char *input, const char *output,
             xcgen_collect_shapes(modules[m].aot_protos[i], &struct_reg, (void *)X);
 
         // Build shared_proto_map for this module
-        int ns = build_shared_proto_map(proto, shared_protos, shared_is_ctor, 256);
+        // Grow capacity if module's shared_offset suggests overflow
+        int needed = proto->shared_offset + (int)proto->code.count;
+        if (needed > shared_cap) {
+            int new_cap = needed * 2;
+            XrProto **tmp_p = (XrProto **)xr_realloc(
+                shared_protos, (size_t)new_cap * sizeof(XrProto *));
+            bool *tmp_c = (bool *)xr_realloc(
+                shared_is_ctor, (size_t)new_cap * sizeof(bool));
+            if (!tmp_p || !tmp_c) goto fail_comp;
+            memset(tmp_p + shared_cap, 0,
+                   (size_t)(new_cap - shared_cap) * sizeof(XrProto *));
+            memset(tmp_c + shared_cap, 0,
+                   (size_t)(new_cap - shared_cap) * sizeof(bool));
+            shared_protos = tmp_p;
+            shared_is_ctor = tmp_c;
+            shared_cap = new_cap;
+        }
+        int ns = build_shared_proto_map(proto, shared_protos, shared_is_ctor,
+                                         shared_cap);
         if (ns > nshared) nshared = ns;
 
-        // Pre-register classes
-        aot_preregister_classes(proto, X);
+        // Pre-register classes (also populates comp->class_infos)
+        aot_preregister_classes(proto, X, comp);
 
         // Allocate C name storage
         modules[m].aot_c_names = (char (*)[140])xr_malloc(
@@ -933,6 +988,8 @@ static int cmd_build_native(const char *input, const char *output,
 
     // Phase 6: Emit C source + main() + link
     char *aot_source = (total_compiled > 0) ? xcgen_emit_source(comp) : NULL;
+    xr_free(shared_protos);
+    xr_free(shared_is_ctor);
     xcgen_compilation_free(comp);
     comp = NULL;
 
@@ -986,6 +1043,8 @@ static int cmd_build_native(const char *input, const char *output,
 
     // Error cleanup paths
 fail_comp:
+    xr_free(shared_protos);
+    xr_free(shared_is_ctor);
     xcgen_compilation_free(comp);
 fail_isolate:
     xray_isolate_delete(X);

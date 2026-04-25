@@ -266,11 +266,35 @@ static void emit_call_known(XcgenBuf *b, XirFunc *func, XirIns *ins,
     }
 
     if (is_ctor_call && callee_name) {
-        // Class constructor call: allocate instance + call constructor + assign instance
+        // Class constructor call: allocate instance via xrt_obj_alloc + type registration
         int inst_bytes = ctor_nfields * 16; // sizeof(XrtValue) per field
         const char *tagged_type = "XrValue";
-        xcgen_buf_printf(b, "    { %s _inst = xrt_mkptr(xrt_arc_alloc(%d), XRT_TAG_PTR);\n",
-                         tagged_type, inst_bytes);
+
+        // Lookup class metadata for type registration
+        const XcgenClassInfo *cls = xcgen_lookup_class(mod->comp, callee_proto);
+        if (cls) {
+            // Emit lazy type registration: static _tid_ClassName variable
+            // initialized once via xrt_type_register.
+            // Parent type lookup: search class_infos for parent's type_id var.
+            const char *parent_tid = "0";
+            char parent_buf[160];
+            if (cls->parent_name) {
+                snprintf(parent_buf, sizeof(parent_buf), "_tid_%s", cls->parent_name);
+                parent_tid = parent_buf;
+            }
+            xcgen_buf_printf(b,
+                "    { if (!_tid_%s) _tid_%s = xrt_type_register(\"%s\", %s,"
+                " NULL, 0, NULL, %d);\n",
+                cls->class_name, cls->class_name, cls->class_name,
+                parent_tid, inst_bytes);
+            xcgen_buf_printf(b,
+                "      %s _inst = xrt_mkptr(xrt_obj_alloc(_tid_%s, %d), XRT_TAG_PTR);\n",
+                tagged_type, cls->class_name, inst_bytes);
+        } else {
+            // Fallback: no class info → raw allocation (legacy path)
+            xcgen_buf_printf(b, "    { %s _inst = xrt_mkptr(xrt_arc_alloc(%d), XRT_TAG_PTR);\n",
+                             tagged_type, inst_bytes);
+        }
         xcgen_buf_printf(b, "      %s(xrt_ctx, _inst", callee_name);
         // Pass call_args[1..nargs] as constructor args (skip closure at [0])
         for (int i = 0; i < nargs; i++) {

@@ -442,9 +442,11 @@ void xcgen_emit_struct_deinits(XcgenBuf *b, XcgenStructRegistry *reg) {
         }
     }
     if (!any_ptr) {
+        // No structs with PTR fields — emit class-only deinit via type table
         xcgen_buf_puts(b,
             "static void xrt_arc_deinit(void *p, uint16_t type) {\n"
-            "    (void)p; (void)type;\n"
+            "    if (type < xrt_type_count && xrt_type_table[type].destructor)\n"
+            "        xrt_type_table[type].destructor(p);\n"
             "}\n\n");
         return;
     }
@@ -482,10 +484,15 @@ void xcgen_emit_struct_deinits(XcgenBuf *b, XcgenStructRegistry *reg) {
     xcgen_buf_puts(b, "};\n\n");
 
     // Emit the actual definition of xrt_arc_deinit (forward-declared in ARC runtime)
+    // Checks struct deinit table first, then falls back to class type table
     xcgen_buf_puts(b,
         "static void xrt_arc_deinit(void *p, uint16_t type) {\n"
         "    if (type < (uint16_t)(sizeof(xrt_deinit_table)/sizeof(xrt_deinit_table[0]))\n"
-        "        && xrt_deinit_table[type])\n"
+        "        && xrt_deinit_table[type]) {\n"
         "        xrt_deinit_table[type](p);\n"
+        "        return;\n"
+        "    }\n"
+        "    if (type < xrt_type_count && xrt_type_table[type].destructor)\n"
+        "        xrt_type_table[type].destructor(p);\n"
         "}\n\n");
 }

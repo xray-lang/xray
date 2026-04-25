@@ -123,6 +123,15 @@ typedef struct XcgenFunc {
 
 typedef struct XcgenCompilation XcgenCompilation;
 
+/* ========== Class Info (for type registration in generated code) ========== */
+
+typedef struct {
+    void       *ctor_proto;     // constructor XrProto* (matching key)
+    const char *class_name;     // class name (e.g. "Shape")
+    const char *parent_name;    // parent class name (NULL = no parent)
+    int         nfields;        // instance field count
+} XcgenClassInfo;
+
 /* ========== Module-Level Export Entry ========== */
 
 typedef struct XcgenExport {
@@ -178,6 +187,11 @@ struct XcgenCompilation {
     // Shared variable tracking (for GETSHARED/SETSHARED → C globals)
     int             max_shared_index;  // highest shared index seen (-1 = none)
 
+    // Class info registry (for type registration codegen)
+    XcgenClassInfo *class_infos;
+    int             nclass_infos;
+    int             class_infos_cap;
+
     // Output configuration
     bool            emit_debug;     // true = #line directives
     bool            single_file;    // true = combine all modules into one .c
@@ -199,6 +213,15 @@ XR_FUNC XcgenModule *xcgen_compilation_add_module(XcgenCompilation *comp,
 // Register a proto → C name mapping in the global registry
 XR_FUNC void xcgen_register_proto(XcgenCompilation *comp, void *proto_ptr,
                                    const char *c_name);
+
+// Register a class for type registration codegen
+XR_FUNC void xcgen_register_class(XcgenCompilation *comp, void *ctor_proto,
+                                   const char *class_name,
+                                   const char *parent_name, int nfields);
+
+// Lookup class info by constructor proto; returns NULL if not found
+XR_FUNC const XcgenClassInfo *xcgen_lookup_class(XcgenCompilation *comp,
+                                                  void *ctor_proto);
 
 // Emit combined C source for all modules (single-file mode)
 // Caller must free the returned string

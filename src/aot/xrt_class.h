@@ -5,46 +5,40 @@
  * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
  * Licensed under the MIT License
  *
- * xrt_class.h - AOT class runtime: object header, type table, vtable dispatch
+ * xrt_class.h - AOT class runtime: type table, vtable dispatch, instanceof
  *
  * KEY CONCEPT:
- *   Heap-allocated class instances have an XrtObjHeader prefix containing
- *   type_id and ARC refcount.  Each class has an XrtTypeInfo entry in a
- *   global type table that records the parent type, vtable, and destructor.
+ *   All heap objects (class instances, promoted structs) share XrtArcHdr
+ *   from xrt_arc.h as their common header.  XrtArcHdr.type indexes into
+ *   xrt_type_table[] for class metadata (name, parent, vtable, destructor).
  *
  *   Field access is via C struct members (compile-time offsets).
  *   Method dispatch:
- *     - Known type → direct C call (most cases)
- *     - Polymorphic → vtable[slot_index] indirect call
- *     - instanceof → walk parent chain in type table
+ *     - Known type -> direct C call (most cases)
+ *     - Polymorphic -> vtable[slot_index] indirect call
+ *     - instanceof -> walk parent chain in type table
  *
  * GENERATED CODE PATTERN:
- *   // --- per-class struct ---
- *   typedef struct {
- *       XrtObjHeader hdr;   // type_id + refcount
- *       int64_t x;
- *       int64_t y;
- *   } XrtObj_Point;
+ *   // --- module init ---
+ *   static uint16_t _tid_Point;
+ *   _tid_Point = xrt_type_register("Point", 0, NULL, 0, NULL, nfields*16);
  *
- *   // --- constructor ---
- *   static XrtObj_Point *xr_Point_new(XrtContext ctx, int64_t x, int64_t y) {
- *       XrtObj_Point *self = (XrtObj_Point *)xrt_obj_alloc(TYPE_ID_POINT, sizeof(XrtObj_Point));
- *       self->x = x;
- *       self->y = y;
- *       return self;
- *   }
+ *   // --- constructor call ---
+ *   { XrValue _inst = xrt_mkptr(xrt_obj_alloc(_tid_Point, nfields*16), XRT_TAG_PTR);
+ *     xr_constructor(xrt_ctx, _inst, ...);
+ *     v5 = _inst; }
  *
  * RELATED MODULES:
- *   - xrt_arc.h: ARC retain/release (operates on XrtObjHeader)
+ *   - xrt_arc.h: XrtArcHdr, ARC retain/release, bump allocator
  *   - xrt_value.h: XrtValue tagged union (PTR tag carries object pointer)
- *   - xcgen.c: emits class structs and type table from class descriptors
+ *   - xcgen.c: emits class type registration and constructor calls
  */
 
 #ifndef XRT_CLASS_H
 #define XRT_CLASS_H
 
 #include "xrt_value.h"
-#include "xrt_arc.h" // XRT_CALLOC / XRT_FREE macros
+#include "xrt_arc.h" // XrtArcHdr, XRT_ARC_HDR, xrt_arc_alloc, macros
 #include <stdint.h>
 #include <stdbool.h>
 #include <stdlib.h>
@@ -52,20 +46,8 @@
 #include <stdio.h>
 
 /* =========================================================================
- * Object Header — prefix of every heap-allocated class instance
- *
- * Placed at offset 0 so (XrtObjHeader*)obj == obj.  Field access
- * casts to the concrete struct type: ((XrtObj_Foo*)obj)->field.
- * ========================================================================= */
-
-typedef struct {
-    uint16_t type_id;     // index into xrt_type_table[]
-    uint16_t _pad;        // alignment padding
-    uint32_t refcount;    // ARC reference count (0 = immortal/stack)
-} XrtObjHeader;
-
-/* =========================================================================
- * Type Info — one entry per class in the global type table
+ * Type Info — one entry per class/struct type in the global type table.
+ * XrtArcHdr.type is the index into xrt_type_table[].
  * ========================================================================= */
 
 typedef void (*XrtDestructor)(void *obj);
@@ -78,7 +60,7 @@ typedef struct {
     XrtMethodFn   *vtable;        // virtual method table (NULL if no virtuals)
     int            vtable_size;
     XrtDestructor  destructor;    // NULL for classes without custom dtor
-    uint32_t       instance_size; // sizeof(XrtObj_Foo)
+    uint32_t       instance_size; // byte size of instance fields
 } XrtTypeInfo;
 
 /* =========================================================================
@@ -90,8 +72,13 @@ typedef struct {
 
 #define XRT_MAX_TYPES 256
 
-static XrtTypeInfo xrt_type_table[XRT_MAX_TYPES];
-static uint16_t    xrt_type_count = 1;  // 0 reserved
+#ifdef XRT_IMPL
+  XrtTypeInfo xrt_type_table[XRT_MAX_TYPES];
+  uint16_t    xrt_type_count = 1;  // 0 reserved
+#else
+  extern XrtTypeInfo xrt_type_table[];
+  extern uint16_t    xrt_type_count;
+#endif
 
 /* Register a type; returns assigned type_id */
 static inline uint16_t xrt_type_register(const char *name, uint16_t parent_id,
@@ -114,59 +101,28 @@ static inline uint16_t xrt_type_register(const char *name, uint16_t parent_id,
 }
 
 /* =========================================================================
- * Object allocation — alloc + init header
+ * Object allocation — ARC alloc + set type in XrtArcHdr
+ *
+ * Uses xrt_arc_alloc (supports bump allocator) and stores the type_id
+ * in XrtArcHdr.type for vtable dispatch and instanceof.
  * ========================================================================= */
 
 static inline void *xrt_obj_alloc(uint16_t type_id, uint32_t size) {
-    void *obj = XRT_CALLOC(1, size);
-    if (!obj) {
-        fprintf(stderr, "xrt_obj_alloc: out of memory\n");
-        abort();
-    }
-    XrtObjHeader *hdr = (XrtObjHeader *)obj;
-    hdr->type_id  = type_id;
-    hdr->refcount = 1;  // born with refcount 1
+    void *obj = xrt_arc_alloc((size_t)size);
+    XrtArcHdr *h = XRT_ARC_HDR(obj);
+    h->type  = type_id;
+    h->flags |= XRT_ARC_HAS_DEINIT; // enable destructor dispatch on release
     return obj;
 }
 
 /* =========================================================================
- * ARC operations — retain / release operating on XrtObjHeader
- * ========================================================================= */
-
-static inline void xrt_obj_retain(void *obj) {
-    if (!obj) return;
-    XrtObjHeader *h = (XrtObjHeader *)obj;
-    if (h->refcount > 0) h->refcount++;  // 0 = immortal
-}
-
-static inline void xrt_obj_release(void *obj) {
-    if (!obj) return;
-    XrtObjHeader *h = (XrtObjHeader *)obj;
-    if (h->refcount == 0) return;  // immortal
-    if (--h->refcount == 0) {
-        XrtTypeInfo *ti = &xrt_type_table[h->type_id];
-        if (ti->destructor) ti->destructor(obj);
-        XRT_FREE(obj);
-    }
-}
-
-/* For XrtValue (tagged) — retain/release when tag == PTR */
-static inline void xrt_val_retain(XrtValue v) {
-    if (v.tag == XRT_TAG_PTR && v.ptr) xrt_obj_retain(v.ptr);
-}
-
-static inline void xrt_val_release(XrtValue v) {
-    if (v.tag == XRT_TAG_PTR && v.ptr) xrt_obj_release(v.ptr);
-}
-
-/* =========================================================================
- * instanceof — walk parent chain
+ * instanceof — walk parent chain using XrtArcHdr.type
  * ========================================================================= */
 
 static inline bool xrt_instanceof(void *obj, uint16_t target_type_id) {
     if (!obj) return false;
-    XrtObjHeader *h = (XrtObjHeader *)obj;
-    uint16_t tid = h->type_id;
+    XrtArcHdr *h = XRT_ARC_HDR(obj);
+    uint16_t tid = h->type;
     while (tid != 0) {
         if (tid == target_type_id) return true;
         tid = xrt_type_table[tid].parent_id;
@@ -175,17 +131,15 @@ static inline bool xrt_instanceof(void *obj, uint16_t target_type_id) {
 }
 
 /* =========================================================================
- * vtable dispatch helper
+ * vtable dispatch helper — uses XrtArcHdr.type -> xrt_type_table
  *
- * Usage:  result = XRT_VCALL(obj, slot_index, RetType, (ArgTypes...))(args);
- *
- * Inline helper for single-dispatch:
- *   xrt_vcall(obj, slot) returns the raw function pointer.
+ * Usage:  XrtMethodFn fn = xrt_vcall(obj, slot);
+ *         result = ((RetType(*)(ArgTypes))fn)(args...);
  * ========================================================================= */
 
 static inline XrtMethodFn xrt_vcall(void *obj, int slot) {
-    XrtObjHeader *h = (XrtObjHeader *)obj;
-    XrtTypeInfo *ti = &xrt_type_table[h->type_id];
+    XrtArcHdr *h = XRT_ARC_HDR(obj);
+    XrtTypeInfo *ti = &xrt_type_table[h->type];
     return ti->vtable[slot];
 }
 

@@ -1104,10 +1104,22 @@ void xcg_emit_instruction(XcgenBuf *b, XirFunc *func, XirIns *ins,
             return;
         }
 
-        // --- No-op categories: guards, ARC, GC barriers ---
+        // --- ARC retain/release ---
+        case XIR_RETAIN: case XIR_RELEASE: {
+            uint8_t t = xcg_ref_type(func, ins->args[0]);
+            bool tagged = (t == XR_REP_PTR || t == XR_REP_TAGGED || t == XR_REP_STR);
+            if (tagged) {
+                xcgen_buf_printf(b, "    %s(",
+                    ins->op == XIR_RETAIN ? "xrt_arc_retain_val" : "xrt_arc_release_val");
+                xcg_emit_ref(b, func, ins->args[0]);
+                xcgen_buf_puts(b, ");\n");
+            }
+            return;
+        }
+
+        // --- No-op categories: guards, GC barriers ---
         case XIR_GUARD_TAG: case XIR_GUARD_CLASS:
         case XIR_GUARD_NONNULL: case XIR_DEOPT:
-        case XIR_RETAIN: case XIR_RELEASE:
         case XIR_BARRIER_FWD: case XIR_BARRIER_BACK:
             return;
 

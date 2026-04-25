@@ -84,10 +84,17 @@ typedef struct XrtBumpBlock {
     char data[];
 } XrtBumpBlock;
 
-static char         *xrt_bump_cursor;
-static char         *xrt_bump_end;
-static XrtBumpBlock *xrt_bump_blocks;
-static int           xrt_bump_enabled = 0; // 0 = calloc (safe default); 1 = bump (fast, no per-object free)
+#ifdef XRT_IMPL
+  char         *xrt_bump_cursor;
+  char         *xrt_bump_end;
+  XrtBumpBlock *xrt_bump_blocks;
+  int           xrt_bump_enabled = 0; // 0 = calloc (safe default); 1 = bump (fast, no per-object free)
+#else
+  extern char         *xrt_bump_cursor;
+  extern char         *xrt_bump_end;
+  extern XrtBumpBlock *xrt_bump_blocks;
+  extern int           xrt_bump_enabled;
+#endif
 
 static void xrt_bump_new_block(size_t min_size) {
     size_t bsize = XRT_BUMP_BLOCK_SIZE;
