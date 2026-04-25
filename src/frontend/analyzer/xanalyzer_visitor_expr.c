@@ -109,7 +109,7 @@ XrType *xa_visit_variable(XaInferContext *ctx, AstNode *node) {
         // Never means unreachable flow path — fall back to declared type
         if (narrowed && narrowed != declared_type && !XR_TYPE_IS_NEVER(narrowed)) {
             // X-01 dual-write: keep field + side table in sync.
-            node->compile_type = narrowed;
+            node->compile_type_legacy = narrowed;
             xa_analyzer_set_node_type(ctx->analyzer, node, narrowed);
             return narrowed;
         }
@@ -117,7 +117,7 @@ XrType *xa_visit_variable(XaInferContext *ctx, AstNode *node) {
 
     // Store type on AST node for code generation phase
     // X-01 dual-write: keep field + side table in sync.
-    node->compile_type = declared_type;
+    node->compile_type_legacy = declared_type;
     xa_analyzer_set_node_type(ctx->analyzer, node, declared_type);
     return declared_type;
 }

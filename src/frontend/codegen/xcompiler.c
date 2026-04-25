@@ -407,9 +407,12 @@ XrLocalInfo* scope_define_local_reg(XrCompilerContext *ctx, XrCompiler *compiler
 XrType* get_expr_type(XrCompilerContext *ctx, XrCompiler *compiler, AstNode *expr) {
     if (!expr || !compiler) return NULL;
 
-    // Primary: Analyzer's cached result on AST node
-    if (expr->compile_type) {
-        XrType *ct = expr->compile_type;
+    // X-01 Phase 2.4b: read from the analyzer's side table instead of
+    // the (now legacy) inline AstNode field. Codegen always has access
+    // to the owning analyzer via ctx->analyzer.
+    XrType *ct_node = xa_analyzer_get_node_type(ctx->analyzer, expr);
+    if (ct_node) {
+        XrType *ct = ct_node;
         if (ct->kind != XR_KIND_UNKNOWN && ct->kind != XR_KIND_NEVER) {
             // For variables, prefer Codegen's local type (has native_width info)
             if (expr->type == AST_VARIABLE) {

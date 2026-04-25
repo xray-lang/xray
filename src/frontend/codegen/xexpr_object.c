@@ -42,7 +42,7 @@
  *   - Plain class name: load from global variable
  *   - module.Class: load from module property
  */
-static void load_class_to_reg(XrCompilerContext *ctx, XrCompiler *compiler, 
+static void load_class_to_reg(XrCompilerContext *ctx, XrCompiler *compiler,
                               const char *module_name, const char *class_name, int target_reg) {
     XR_DCHECK(ctx != NULL, "load_class_to_reg: NULL ctx");
     XR_DCHECK(compiler != NULL, "load_class_to_reg: NULL compiler");
@@ -50,7 +50,7 @@ static void load_class_to_reg(XrCompilerContext *ctx, XrCompiler *compiler,
     if (module_name != NULL) {
         // new module.Class() form: first load module, then get property
         XrString *mod_name_str = xr_compile_time_intern(ctx->X, module_name, strlen(module_name));
-        
+
         // Find module variable (local, shared, or predefined global)
         int module_reg = scope_resolve_local(compiler, mod_name_str);
         if (module_reg < 0) {
@@ -65,7 +65,7 @@ static void load_class_to_reg(XrCompilerContext *ctx, XrCompiler *compiler,
             }
             module_reg = target_reg;
         }
-        
+
         // Get class from module (using OP_GETPROP)
         int global_sym = xr_symbol_register_in_table((XrSymbolTable*)xr_isolate_get_symbol_table(ctx->X), class_name);
         int local_sym = emitter_add_symbol(compiler->emitter, global_sym);
@@ -73,7 +73,7 @@ static void load_class_to_reg(XrCompilerContext *ctx, XrCompiler *compiler,
     } else {
         // Plain class name: prefer local variable/upvalue, finally global variable
         XrString *class_name_str = xr_compile_time_intern(ctx->X, class_name, strlen(class_name));
-        
+
         // 1. Find local variable
         XrLocalInfo *local = compiler_get_local_by_name(compiler, class_name);
         if (local) {
@@ -110,7 +110,7 @@ static int compile_new_expr_internal(XrCompilerContext *ctx, XrCompiler *compile
     // ========== Built-in type construction (supports new syntax) ==========
     if (node->module_name == NULL) {
         const char *class_name = node->class_name;
-        
+
         // new Map() → OP_NEWMAP
         if (strcmp(class_name, TYPE_NAME_MAP) == 0 && node->arg_count == 0) {
             int result_reg = reg_alloc(ctx, compiler);
@@ -119,7 +119,7 @@ static int compile_new_expr_internal(XrCompilerContext *ctx, XrCompiler *compile
             emit_abc(compiler->emitter, OP_NEWMAP, result_reg, 0, c_field);
             return result_reg;
         }
-        
+
         // new WeakMap() → OP_NEWMAP with weak flag (C bit1 = weak)
         if (strcmp(class_name, TYPE_NAME_WEAKMAP) == 0 && node->arg_count == 0) {
             int result_reg = reg_alloc(ctx, compiler);
@@ -128,7 +128,7 @@ static int compile_new_expr_internal(XrCompilerContext *ctx, XrCompiler *compile
             emit_abc(compiler->emitter, OP_NEWMAP, result_reg, 0, c_field);
             return result_reg;
         }
-        
+
         // new Array() or new Array(a, b, c) -> OP_NEWARRAY
         if (strcmp(class_name, TYPE_NAME_ARRAY) == 0) {
             int result_reg = reg_alloc(ctx, compiler);
@@ -144,7 +144,7 @@ static int compile_new_expr_internal(XrCompilerContext *ctx, XrCompiler *compile
             }
             return result_reg;
         }
-        
+
         // new WeakSet() → OP_NEWSET with weak flag (B bit1 = weak)
         if (strcmp(class_name, TYPE_NAME_WEAKSET) == 0 && node->arg_count == 0) {
             int result_reg = reg_alloc(ctx, compiler);
@@ -152,7 +152,7 @@ static int compile_new_expr_internal(XrCompilerContext *ctx, XrCompiler *compile
             emit_abc(compiler->emitter, OP_NEWSET, result_reg, b_field, 0);
             return result_reg;
         }
-        
+
         // new Set() or new Set(a, b, c) -> OP_NEWSET
         if (strcmp(class_name, TYPE_NAME_SET) == 0) {
             int result_reg = reg_alloc(ctx, compiler);
@@ -168,14 +168,14 @@ static int compile_new_expr_internal(XrCompilerContext *ctx, XrCompiler *compile
             }
             return result_reg;
         }
-        
+
         // new StringBuilder() → OP_NEWSTRINGBUILDER
         if (strcmp(class_name, TYPE_NAME_STRINGBUILDER) == 0 && node->arg_count == 0) {
             int result_reg = reg_alloc(ctx, compiler);
             emit_abc(compiler->emitter, OP_NEWSTRINGBUILDER, result_reg, ctx->current_storage_mode, 0);
             return result_reg;
         }
-        
+
         // new Bytes(n) or new Bytes(n, value) -> OP_BYTES_NEW
         if (strcmp(class_name, TYPE_NAME_BYTES) == 0) {
             int arg_regs[2] = {-1, -1};
@@ -197,23 +197,23 @@ static int compile_new_expr_internal(XrCompilerContext *ctx, XrCompiler *compile
             }
             return base_reg;
         }
-        
+
         // new Channel(size) or new Channel(size, "name")
         if (strcmp(class_name, TYPE_NAME_CHANNEL) == 0) {
             // Compile size argument (supports runtime expressions)
             int result_reg = reg_alloc(ctx, compiler);
-            
+
             if (node->arg_count == 0) {
                 // new Channel() - unbuffered
                 emit_abx(compiler->emitter, OP_CHAN_NEW, result_reg, 0);
                 return result_reg;
             }
-            
+
             // Compile size expression to register
             XrExprDesc size_desc = xr_compile_expr(ctx, compiler, node->arguments[0]);
             int size_reg = xexpr_to_anyreg(ctx, compiler, &size_desc);
             if (size_reg < 0) return -1;
-            
+
             // Named Channel: new Channel(size, "name") → OP_CHAN_NEW_NAMED
             if (node->arg_count >= 2) {
                 XrExprDesc name_desc = xr_compile_expr(ctx, compiler, node->arguments[1]);
@@ -224,7 +224,7 @@ static int compile_new_expr_internal(XrCompilerContext *ctx, XrCompiler *compile
                 reg_free(compiler, size_reg);
                 return result_reg;
             }
-            
+
             // Anonymous Channel with dynamic size → OP_CHAN_NEW_NAMED with null name
             int null_reg = reg_alloc(ctx, compiler);
             emit_abx(compiler->emitter, OP_LOADNULL, null_reg, 0);
@@ -233,7 +233,7 @@ static int compile_new_expr_internal(XrCompilerContext *ctx, XrCompiler *compile
             reg_free(compiler, size_reg);
             return result_reg;
         }
-        
+
         // Value-type class: allocate struct in struct_area + call constructor with struct_ref
         // This avoids creating XrInstance for value types, which is incompatible with
         // OP_STRUCT_SET (expects struct_ref layout: [XrClass* 8B][fields...])
@@ -241,13 +241,13 @@ static int compile_new_expr_internal(XrCompilerContext *ctx, XrCompiler *compile
             ClassInfo *ci = xr_class_registry_lookup(ctx->class_registry, class_name);
             if (ci && ci->struct_layout) {
                 XrStructLayout *layout = ci->struct_layout;
-                
+
                 // Allocate space in struct_area: 8B class ptr + field data, rounded to 16B
                 int alloc_size = 8 + layout->total_size;
                 int aligned_size = (alloc_size + 15) & ~15;
                 int slot_offset = compiler->struct_area_offset / 16;
                 compiler->struct_area_offset += aligned_size;
-                
+
                 // Track layout in proto for JIT
                 XrProto *proto = compiler->emitter->proto;
                 if (slot_offset >= proto->struct_layout_count) {
@@ -259,39 +259,39 @@ static int compile_new_expr_internal(XrCompilerContext *ctx, XrCompiler *compile
                     proto->struct_layout_count = new_count;
                 }
                 proto->struct_layouts[slot_offset] = layout;
-                
+
                 // R[base] = return value, R[base+1] = this (struct_ref), R[base+2..] = args
                 int base = reg_alloc(ctx, compiler);
-                
+
                 // Load class to R[base+1], then OP_NEW_STRUCT overwrites with struct_ref
                 // (VM reads class from B before writing struct_ref to A)
                 load_class_to_reg(ctx, compiler, NULL, class_name, base + 1);
                 emit_abc(compiler->emitter, OP_NEW_STRUCT, base + 1, base + 1, slot_offset);
-                
+
                 // Compile constructor arguments to R[base+2], R[base+3], ...
                 int first_arg_reg = base + 2;
                 xreg_set_freereg(compiler->regalloc, first_arg_reg);
                 compile_args_to_base(ctx, compiler, node->arguments, node->arg_count, first_arg_reg);
-                
+
                 // Call constructor with struct_ref as receiver
                 int global_sym = xr_symbol_register_in_table(
                     (XrSymbolTable*)xr_isolate_get_symbol_table(ctx->X), XR_KEYWORD_CONSTRUCTOR);
                 int local_sym = emitter_add_symbol(compiler->emitter, global_sym);
                 emit_abc(compiler->emitter, OP_INVOKE, base, local_sym, node->arg_count);
-                
+
                 xreg_set_freereg(compiler->regalloc, base + 1);
                 return base;
             }
         }
     }
-    
+
     // ========== Generic path: constructor call (supports reflection, args, module classes) ==========
-    
+
     // If storage mode context exists, generate OP_SET_STORAGE_CTX instruction first
     if (ctx->current_storage_mode != 0) {
         emit_abc(compiler->emitter, OP_SET_STORAGE_CTX, ctx->current_storage_mode, 0, 0);
     }
-    
+
     /*
      * Unified calling convention:
      *   R[base]   = return value position
@@ -301,22 +301,22 @@ static int compile_new_expr_internal(XrCompilerContext *ctx, XrCompiler *compile
      *   ...
      */
     int base = reg_alloc(ctx, compiler);
-    
+
     // Load class object to R[base+1]
     load_class_to_reg(ctx, compiler, node->module_name, node->class_name, base + 1);
-    
+
     // Fix: set freereg to protect class register
     int first_arg_reg = base + 2;
     xreg_set_freereg(compiler->regalloc, first_arg_reg);
-    
+
     // Compile constructor arguments to R[base+2], R[base+3], ...
     compile_args_to_base(ctx, compiler, node->arguments, node->arg_count, first_arg_reg);
-    
+
     // Call constructor - register "constructor" in symbol system
     int global_sym = xr_symbol_register_in_table((XrSymbolTable*)xr_isolate_get_symbol_table(ctx->X), XR_KEYWORD_CONSTRUCTOR);
     int local_sym = emitter_add_symbol(compiler->emitter, global_sym);
     emit_abc(compiler->emitter, OP_INVOKE, base, local_sym, node->arg_count);
-    
+
     // Emit reified type args if present (e.g. new Box<int>(42))
     // Note: mono pass clears type_args for monomorphized classes, so this
     // is only reached for non-monomorphized (implicit inference) generics
@@ -327,10 +327,10 @@ static int compile_new_expr_internal(XrCompilerContext *ctx, XrCompiler *compile
         int packed = (argc & 0x03) | ((tid0 & 0x1F) << 2) | ((tid1 & 0x1F) << 7);
         emit_abx(compiler->emitter, OP_INST_TYPE_ARGS, base, packed);
     }
-    
+
     // After call, set freereg = base + 1 (keep return value in R[base])
     xreg_set_freereg(compiler->regalloc, base + 1);
-    
+
     return base;
 }
 
@@ -357,13 +357,13 @@ XrExprDesc compile_struct_literal(XrCompilerContext *ctx, XrCompiler *compiler, 
     XR_DCHECK(ctx != NULL, "compile_struct_literal: NULL ctx");
     XR_DCHECK(compiler != NULL, "compile_struct_literal: NULL compiler");
     XrExprDesc e = {0};
-    
+
     // Try fast path: check if all field indices are known at compile time
     ClassInfo *class_info = NULL;
     if (ctx->class_registry) {
         class_info = xr_class_registry_lookup(ctx->class_registry, node->struct_name);
     }
-    
+
     bool use_fast_path = false;
     if (class_info) {
         use_fast_path = true;
@@ -374,20 +374,20 @@ XrExprDesc compile_struct_literal(XrCompilerContext *ctx, XrCompiler *compiler, 
             }
         }
     }
-    
+
     // Fast path: stack-allocated struct (native storage)
     if (use_fast_path && class_info->struct_layout) {
         XrStructLayout *layout = class_info->struct_layout;
-        
+
         // Allocate space in struct_area: 8B class ptr + field data, rounded to 16B
         int alloc_size = 8 + layout->total_size;
         int aligned_size = (alloc_size + 15) & ~15;
         int slot_offset = compiler->struct_area_offset / 16;
         compiler->struct_area_offset += aligned_size;
-        
+
         int class_reg = reg_alloc(ctx, compiler);
         load_class_to_reg(ctx, compiler, NULL, node->struct_name, class_reg);
-        
+
         // Store struct_layout in proto for JIT: indexed by slot_offset
         XrProto *proto = compiler->emitter->proto;
         if (slot_offset >= proto->struct_layout_count) {
@@ -403,20 +403,20 @@ XrExprDesc compile_struct_literal(XrCompilerContext *ctx, XrCompiler *compiler, 
         int obj_reg = reg_alloc(ctx, compiler);
         emit_abc(compiler->emitter, OP_NEW_STRUCT, obj_reg, class_reg, slot_offset);
         reg_free(compiler, class_reg);
-        
+
         for (int i = 0; i < node->field_count; i++) {
             XrExprDesc val_expr = xr_compile_expr(ctx, compiler, node->field_values[i]);
             int value_reg = xexpr_to_anyreg(ctx, compiler, &val_expr);
-            
+
             int field_idx = xr_class_find_instance_field_index(class_info, node->field_names[i]);
             emit_abc(compiler->emitter, OP_STRUCT_SET, obj_reg, field_idx, value_reg);
             reg_free(compiler, value_reg);
         }
-        
+
         xexpr_init(&e, XEXPR_TEMP, obj_reg);
         return e;
     }
-    
+
     // Fallback: OP_INVOKE("constructor") + OP_SETPROP
     NewExprNode new_node = {0};
     new_node.class_name = node->struct_name;
@@ -425,20 +425,20 @@ XrExprDesc compile_struct_literal(XrCompilerContext *ctx, XrCompiler *compiler, 
     new_node.arg_count = 0;
     new_node.type_args = NULL;
     new_node.type_arg_count = 0;
-    
+
     int obj_reg = compile_new_expr_internal(ctx, compiler, &new_node);
-    
+
     for (int i = 0; i < node->field_count; i++) {
         XrExprDesc val_expr = xr_compile_expr(ctx, compiler, node->field_values[i]);
         int value_reg = xexpr_to_anyreg(ctx, compiler, &val_expr);
-        
+
         int global_sym = xr_symbol_register_in_table(
             (XrSymbolTable*)xr_isolate_get_symbol_table(ctx->X), node->field_names[i]);
         int local_sym = emitter_add_symbol(compiler->emitter, global_sym);
         emit_abc(compiler->emitter, OP_SETPROP, obj_reg, local_sym, value_reg);
         reg_free(compiler, value_reg);
     }
-    
+
     xexpr_init(&e, XEXPR_TEMP, obj_reg);
     return e;
 }
@@ -512,10 +512,11 @@ static int compile_member_access_internal(XrCompilerContext *ctx, XrCompiler *co
             xr_compiler_error(ctx, compiler, "Type has no member '%s'", node->name);
         }
     }
-    
+
     // Instance field access optimization (using frontend type inference)
     // Priority: local->compile_type (set by Analyzer-inferred param types or annotations)
-    //         > node->object->compile_type (set by Analyzer expression inference)
+    //         > xa_analyzer_get_node_type(ctx->analyzer, node->object)
+    //           (set by Analyzer expression inference, X-01 side table)
     XrType *obj_type = NULL;
 
     if (node->object->type == AST_VARIABLE) {
@@ -531,21 +532,21 @@ static int compile_member_access_internal(XrCompilerContext *ctx, XrCompiler *co
             }
         }
 
-        // Fallback to AST compile_type if local type is absent or generic
+        // Fallback to analyzer-inferred type if local type is absent or generic.
+        // X-01 Phase 2.4b: read via side table.
         if (!obj_type || XR_TYPE_IS_UNKNOWN(obj_type)) {
-            if (node->object->compile_type) {
-                XrType *ast_type = node->object->compile_type;
-                if (!XR_TYPE_IS_UNKNOWN(ast_type))
-                    obj_type = ast_type;
-            }
+            XrType *ast_type = xa_analyzer_get_node_type(ctx->analyzer, node->object);
+            if (ast_type && !XR_TYPE_IS_UNKNOWN(ast_type))
+                obj_type = ast_type;
         }
     } else {
-        // Non-variable: use AST compile_type set by Analyzer
-        if (node->object->compile_type)
-            obj_type = node->object->compile_type;
+        // Non-variable: use analyzer-inferred type. X-01 Phase 2.4b.
+        XrType *ast_type = xa_analyzer_get_node_type(ctx->analyzer, node->object);
+        if (ast_type)
+            obj_type = ast_type;
     }
-    
-    
+
+
     // CT_JSON (unified object type): behavior depends on allow_extension
     if (obj_type && obj_type->kind == XR_KIND_JSON) {
         // Search in known fields (skip NULL names from computed properties)
@@ -562,10 +563,10 @@ static int compile_member_access_internal(XrCompilerContext *ctx, XrCompiler *co
                 static_idx++;
             }
         }
-        
+
         XrExprDesc obj_expr = xr_compile_expr(ctx, compiler, node->object);
         int obj_reg = xexpr_to_anyreg_readonly(ctx, compiler, &obj_expr);
-        
+
         if (field_idx >= 0) {
             // Strict type alias (allow_extension=false): shape is stable,
             // safe to use OP_TFIELD_GET for typed primitive fields
@@ -600,32 +601,32 @@ static int compile_member_access_internal(XrCompilerContext *ctx, XrCompiler *co
             reg_free(compiler, obj_reg);
             const char *type_name = obj_type->object.type_name;
             if (!type_name) type_name = "type";
-            xr_compiler_error(ctx, compiler, 
-                "Type '%s' has no field '%s'", 
+            xr_compiler_error(ctx, compiler,
+                "Type '%s' has no field '%s'",
                 type_name, node->name);
             return reg_alloc(ctx, compiler);
         }
     }
-    
+
     if (obj_type && (obj_type->kind == XR_KIND_CLASS || obj_type->kind == XR_KIND_INSTANCE) && ctx->class_registry) {
         // Type is known! Get class name from compile-time type
         const char *class_name = obj_type->instance.class_name;
-        
+
         if (class_name) {
             ClassInfo *class_info = xr_class_registry_lookup(
                 ctx->class_registry, class_name);
-            
+
             if (class_info) {
                 // Find instance field index
                 int field_idx = xr_class_find_instance_field_index(
                     class_info, node->name);
-                
+
                 if (field_idx >= 0) {
                     XrExprDesc obj_expr = xr_compile_expr(ctx, compiler,
                                                           node->object);
                     int obj_reg = xexpr_to_anyreg(ctx, compiler, &obj_expr);
                     int pc;
-                    
+
                     // Struct: native field read
                     if (class_info->struct_layout) {
                         pc = emit_abc(compiler->emitter, OP_STRUCT_GET,
@@ -633,7 +634,7 @@ static int compile_member_access_internal(XrCompilerContext *ctx, XrCompiler *co
                         reg_free(compiler, obj_reg);
                         return pc;
                     }
-                    
+
                     // Class instance: heap field access
                     uint8_t fst = xr_class_get_field_slot_type(
                         class_info, node->name);
@@ -654,15 +655,15 @@ static int compile_member_access_internal(XrCompilerContext *ctx, XrCompiler *co
             }
         }
     }
-    
+
     // Optimization: this.field access (compile-time type known)
-    if (ctx->current_class_desc != NULL && 
+    if (ctx->current_class_desc != NULL &&
         node->object->type == AST_THIS_EXPR) {
-        
+
         // Find field index in current class
         XrClassDescriptor *desc = ctx->current_class_desc;
         int field_idx = -1;
-        
+
         // Use ClassInfo which has correct field indices including parent offset
         if (ctx->class_registry) {
             ClassInfo *class_info = xr_class_registry_lookup(ctx->class_registry, desc->class_name);
@@ -670,20 +671,20 @@ static int compile_member_access_internal(XrCompilerContext *ctx, XrCompiler *co
                 field_idx = xr_class_find_instance_field_index(class_info, node->name);
             }
         }
-        
+
         if (field_idx >= 0) {
             ClassInfo *ci = xr_class_registry_lookup(ctx->class_registry, desc->class_name);
             XrExprDesc obj_expr = xr_compile_expr(ctx, compiler, node->object);
             int obj_reg = xexpr_to_anyreg_readonly(ctx, compiler, &obj_expr);
             int pc;
-            
+
             // Struct: native field read
             if (ci && ci->struct_layout) {
                 pc = emit_abc(compiler->emitter, OP_STRUCT_GET,
                               0, obj_reg, field_idx);
                 return pc;
             }
-            
+
             // Class instance: heap field access
             uint8_t fst = ci ? xr_class_get_field_slot_type(ci, node->name) : 0;
             if (fst == 7 || fst == 10) {
@@ -700,22 +701,22 @@ static int compile_member_access_internal(XrCompilerContext *ctx, XrCompiler *co
             return pc;
         }
     }
-    
+
 
     // Compile object expression (fallback path) - use readonly to avoid redundant MOVE
     XrExprDesc obj_expr = xr_compile_expr(ctx, compiler, node->object);
     int obj_reg = xexpr_to_anyreg_readonly(ctx, compiler, &obj_expr);
-    
+
     // Fallback: runtime handling
     // Convert property name to Symbol
     int global_sym = xr_symbol_register_in_table((XrSymbolTable*)xr_isolate_get_symbol_table(ctx->X), node->name);
     int local_sym = emitter_add_symbol(compiler->emitter, global_sym);
-    
+
     // RELOC optimization: A=0 pending relocation
     int pc = emit_abc(compiler->emitter, OP_GETPROP, 0, obj_reg, local_sym);
-    
+
     // readonly version reuses original register, no need to free
-    
+
     // Return pc for subsequent writeback
     return pc;
 }
