@@ -496,9 +496,4 @@ static XrType* parse_type_annotation_base(Parser *parser) {
     return xr_type_new_unknown(NULL);
 }
 
-// Convert XrType to string (for debug / XrProto.return_type)
-const char* xr_compile_type_to_string(XrType *type) {
-    if (!type) return "unknown";
-    return xr_type_to_string(type);
-}
 
