@@ -57,6 +57,7 @@ add_xray_unit_test(test_lexer frontend/test_lexer.c)
 add_xray_unit_test(test_parser frontend/test_parser.c)
 add_xray_unit_test(test_diag_fmt frontend/test_diag_fmt.c)
 add_xray_unit_test(test_xfmt_literal frontend/test_xfmt_literal.c)
+add_xray_unit_test(test_analyzer_remove_file frontend/test_analyzer_remove_file.c)
 
 # ============================================================================
 # analyzer/ — Type inference, type checking

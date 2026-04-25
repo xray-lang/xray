@@ -189,7 +189,7 @@ static XaDependencyGraph *dep_graph_new(void) {
 static void dep_graph_free(XaDependencyGraph *g) {
     if (!g) return;
 
-    // Free forward edges
+    // Free forward edges (from-side allocations).
     for (int i = 0; i < g->bucket_count; i++) {
         XaDependency *dep = g->forward[i];
         while (dep) {
@@ -199,10 +199,32 @@ static void dep_graph_free(XaDependencyGraph *g) {
         }
     }
 
-    // Reverse edges point to same nodes, already freed
+    // A-01: each xa_dep_add() also xr_malloc()s a SEPARATE reverse-list
+    // node, so we must walk and free those too. Pre-A-01 a stale comment
+    // claimed they were already freed; that leaked one allocation per
+    // edge for the lifetime of the analyzer.
+    for (int i = 0; i < g->bucket_count; i++) {
+        XaDependency *dep = g->reverse[i];
+        while (dep) {
+            XaDependency *next = dep->next;
+            xr_free(dep);
+            dep = next;
+        }
+    }
+
     xr_free(g->forward);
     xr_free(g->reverse);
     xr_free(g);
+}
+
+// A-03 helper: linear membership test for the typical batch size
+// (symbols owned by one file). For very large batches a hash set would
+// be cheaper, but per-file symbol counts are bounded.
+static bool ids_contain(const uint32_t *ids, int n, uint32_t id) {
+    for (int i = 0; i < n; i++) {
+        if (ids[i] == id) return true;
+    }
+    return false;
 }
 
 void xa_dep_add(XaIncrementalCtx *ctx, uint32_t from, uint32_t to, XaDepKind kind) {
@@ -246,35 +268,48 @@ void xa_dep_add(XaIncrementalCtx *ctx, uint32_t from, uint32_t to, XaDepKind kin
     g->edge_count++;
 }
 
-void xa_dep_remove_symbol(XaIncrementalCtx *ctx, uint32_t symbol_id) {
-    if (!ctx || !ctx->deps) return;
+// A-03: batch-remove every edge that touches any symbol in `ids[]`.
+// Replaces the pre-A-03 xa_dep_remove_symbol() which (a) had no caller,
+// (b) only walked the buckets hashed from the target symbol so it left
+// dangling edges where the symbol appeared at the OTHER endpoint, and
+// (c) decremented edge_count only on the forward side. The new function
+// is the only sanctioned dependency-graph cleanup path; it is invoked
+// from xa_analyzer_remove_file().
+void xa_dep_remove_symbols(XaIncrementalCtx *ctx,
+                           const uint32_t *symbol_ids, int count) {
+    if (!ctx || !ctx->deps || !symbol_ids || count <= 0) return;
 
     XaDependencyGraph *g = ctx->deps;
 
-    // Remove from forward (where symbol is the source)
-    int bucket = symbol_id % g->bucket_count;
-    XaDependency **pp = &g->forward[bucket];
-    while (*pp) {
-        if ((*pp)->from_id == symbol_id) {
-            XaDependency *to_free = *pp;
-            *pp = to_free->next;
-            xr_free(to_free);
-            g->edge_count--;
-        } else {
-            pp = &(*pp)->next;
+    // Forward: drop every edge whose from_id OR to_id is being removed.
+    // edge_count tracks forward-side edges, so we decrement it here only.
+    for (int i = 0; i < g->bucket_count; i++) {
+        XaDependency **pp = &g->forward[i];
+        while (*pp) {
+            if (ids_contain(symbol_ids, count, (*pp)->from_id) ||
+                ids_contain(symbol_ids, count, (*pp)->to_id)) {
+                XaDependency *to_free = *pp;
+                *pp = to_free->next;
+                xr_free(to_free);
+                g->edge_count--;
+            } else {
+                pp = &(*pp)->next;
+            }
         }
     }
 
-    // Remove from reverse (where symbol is the target)
-    bucket = symbol_id % g->bucket_count;
-    pp = &g->reverse[bucket];
-    while (*pp) {
-        if ((*pp)->to_id == symbol_id) {
-            XaDependency *to_free = *pp;
-            *pp = to_free->next;
-            xr_free(to_free);
-        } else {
-            pp = &(*pp)->next;
+    // Reverse: same predicate; do NOT touch edge_count (already adjusted).
+    for (int i = 0; i < g->bucket_count; i++) {
+        XaDependency **pp = &g->reverse[i];
+        while (*pp) {
+            if (ids_contain(symbol_ids, count, (*pp)->from_id) ||
+                ids_contain(symbol_ids, count, (*pp)->to_id)) {
+                XaDependency *to_free = *pp;
+                *pp = to_free->next;
+                xr_free(to_free);
+            } else {
+                pp = &(*pp)->next;
+            }
         }
     }
 }
@@ -570,41 +605,9 @@ void xa_propagate_dirty(XaIncrementalCtx *ctx, XaChangeSet *changes) {
     }
 }
 
-// ============================================================================
-// Incremental Update
-// ============================================================================
-
-void xa_incremental_update(XaAnalyzer *analyzer, XaIncrementalCtx *incr,
-                           const char *file, AstNode *ast) {
-    if (!analyzer || !file || !ast) return;
-
-    // Get file cache
-    XaFileCache *fc = xa_cache_get_file(incr, file);
-
-    // Calculate file hash
-    // For now, we use a simple approach - full re-analysis with caching
-    // TODO: Implement true incremental parsing
-
-    if (!fc) {
-        // New file - full analysis
-        incr->full_analyses++;
-        xa_analyzer_analyze(analyzer, file, (XrAstNode*)ast);
-        return;
-    }
-
-    // File exists - check if content changed
-    uint64_t new_hash = xa_hash_ast_block(ast);
-    if (fc->file_hash == new_hash) {
-        // No change - skip analysis
-        incr->skipped_functions++;
-        return;
-    }
-
-    // Content changed - update
-    incr->incremental_updates++;
-    fc->file_hash = new_hash;
-
-    // For now, do full re-analysis but track statistics
-    // Future: only re-analyze modified functions
-    xa_analyzer_update(analyzer, file, (XrAstNode*)ast);
-}
+// A-02: xa_incremental_update() used to live here. It carried a
+// permanent "TODO: Implement true incremental parsing" comment, had no
+// caller in src/, and was just a poorly-named wrapper that delegated to
+// xa_analyzer_update(). The plan rule "无调用面的'备用 API' / 标注为
+// deprecated 但保留" forbids that. Use xa_analyzer_refresh_file() (the
+// renamed full-file rebuild) or xa_analyzer_invalidate_range() instead.

@@ -236,8 +236,8 @@ static void index_imports_on_demand(XrLspServer *server, AstNode *ast, const cha
             // Document is open - check if it needs re-analysis (dirty = has unsaved changes)
             if (open_doc->dirty && open_doc->ast) {
                 lsp_log("import: %s is open and dirty, re-analyzing", full_path);
-                xa_analyzer_update_incremental(server->workspace_analyzer, import_uri,
-                                               (XrAstNode*)open_doc->ast, open_doc->content_hash);
+                xa_analyzer_refresh_file(server->workspace_analyzer, import_uri,
+                                         (XrAstNode*)open_doc->ast, open_doc->content_hash);
                 open_doc->dirty = false;
             } else {
                 lsp_log("import: %s already open (symbols up to date)", full_path);
@@ -379,8 +379,8 @@ void xlsp_parse_document(XrLspDocument *doc, XrLspServer *server) {
     if (ast && server->workspace_analyzer) {
         lsp_log("parse_document: incremental update%s", doc->parse_error ? " (with parse errors)" : "");
         // Use incremental update with content hash for true change detection
-        xa_analyzer_update_incremental(server->workspace_analyzer, doc->uri,
-                                        (XrAstNode*)ast, doc->content_hash);
+        xa_analyzer_refresh_file(server->workspace_analyzer, doc->uri,
+                                 (XrAstNode*)ast, doc->content_hash);
         lsp_log("parse_document: incremental update done");
 
         // Run coroutine sharing validation (emits E0363 diagnostics for
