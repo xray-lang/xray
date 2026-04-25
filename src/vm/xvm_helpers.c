@@ -16,7 +16,6 @@
 #include "../coro/xworker.h"
 #include "../runtime/gc/xgc.h"
 #include "../runtime/gc/xcoro_gc.h"
-#include "../api/xglobal_object.h"
 #include "../runtime/xerror_codes.h"
 #include "../base/xsource_cache.h"
 
@@ -30,14 +29,8 @@
  * For catchable errors, use VM_RUNTIME_ERROR macro instead.
  */
 void xr_runtime_error(XrayIsolate *isolate, const char *format, ...) {
-    // Get execution context: prefer current coroutine, otherwise use main coroutine
-    XrWorker *worker = xr_current_worker();
-    XrVMContext *ctx = NULL;
-    if (worker && worker->m->current_coro) {
-        ctx = &((XrCoroutine *)worker->m->current_coro)->vm_ctx;
-    } else if (isolate && isolate->main_coro) {
-        ctx = &((XrCoroutine *)isolate->main_coro)->vm_ctx;
-    }
+    // Single authoritative ctx resolver — no bespoke fallback chain.
+    XrVMContext *ctx = isolate ? xr_vm_current_ctx(isolate) : NULL;
 
     // Print error message
     fprintf(stderr, "\033[1;31merror\033[0m: ");

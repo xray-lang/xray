@@ -21,16 +21,66 @@
 
 /* ========== VM Context Helper ========== */
 
-// Unified ctx retrieval: prefer coroutine ctx > worker ctx > isolate vm
-static XrVMContext* xr_vm_get_current_ctx(XrayIsolate *isolate) {
+/*
+** Single authoritative VM context resolver.
+** See xvm_internal.h for the documented resolution order and contract.
+*/
+XrVMContext* xr_vm_current_ctx(XrayIsolate *isolate) {
+    XR_DCHECK(isolate != NULL, "vm_current_ctx: NULL isolate");
     XrWorker *worker = xr_current_worker();
-    if (worker) {
-        if (worker->m->vm_ctx.current_coro) {
-            return &((XrCoroutine *)worker->m->vm_ctx.current_coro)->vm_ctx;
-        }
+    if (worker && worker->m) {
+        XrCoroutine *coro = (XrCoroutine *)worker->m->vm_ctx.current_coro;
+        if (coro) return &coro->vm_ctx;
         return &worker->m->vm_ctx;
     }
+    if (isolate->main_coro) {
+        return &((XrCoroutine *)isolate->main_coro)->vm_ctx;
+    }
     return &isolate->vm_ctx;
+}
+
+/*
+** Ensure ctx has room for one new entry frame plus extra_stack slots.
+** See xvm_internal.h for contract.
+**
+** xr_coro_grow_stack reallocates ctx->stack but does NOT update
+** ctx->stack_top. We snapshot stack_top as an offset before grow and
+** re-derive it afterwards so the invariant stack <= stack_top <= stack+cap
+** always holds across this call.
+*/
+bool xr_vm_prepare_entry(XrVMContext *ctx, int extra_stack) {
+    XR_DCHECK(ctx != NULL, "vm_prepare_entry: NULL ctx");
+    XR_DCHECK(extra_stack >= 0, "vm_prepare_entry: negative extra_stack");
+
+    int stack_used = (int)(ctx->stack_top - ctx->stack);
+    int stack_needed = stack_used + extra_stack;
+    int frames_needed = ctx->frame_count + 1;
+
+    bool need_stack = stack_needed > ctx->stack_capacity;
+    bool need_frames = frames_needed >= ctx->frame_capacity;
+
+    if (!need_stack && !need_frames) {
+        return true;
+    }
+
+    XrCoroutine *coro = (XrCoroutine *)ctx->current_coro;
+    if (!coro) {
+        // Static fallback ctx (isolate->vm_ctx with no main coro): cannot grow.
+        // Caller must surface XR_VM_RUNTIME_ERROR; we never silently truncate.
+        return false;
+    }
+
+    // xr_coro_grow_stack(coro, n>0) grows stack and (when frames near full)
+    // also doubles frame capacity. Use a small bump (64) when only frames
+    // need to grow so the underlying API contract (extra_slots > 0) holds.
+    int extra = need_stack ? (stack_needed - ctx->stack_capacity + 64) : 64;
+    if (!xr_coro_grow_stack(coro, extra)) {
+        return false;
+    }
+
+    // Re-derive stack_top from saved offset — old pointer is now freed.
+    ctx->stack_top = ctx->stack + stack_used;
+    return true;
 }
 
 /* ========== C Code Calling Closure API ========== */
@@ -66,8 +116,8 @@ XrValue xr_vm_call_closure(XrayIsolate *isolate, XrClosure *closure, XrValue *ar
         return xr_null();
     }
 
-    // Get execution context (coroutine-aware)
-    XrVMContext *ctx = xr_vm_get_current_ctx(isolate);
+    // Single authoritative ctx resolver.
+    XrVMContext *ctx = xr_vm_current_ctx(isolate);
 
     // Save current VM state
     int saved_frame_count = ctx->frame_count;
@@ -85,6 +135,20 @@ XrValue xr_vm_call_closure(XrayIsolate *isolate, XrClosure *closure, XrValue *ar
         }
     }
 
+    // Reserve room for: 1 function/return slot + maxstacksize register window.
+    // Advance ctx->stack_top to the projected start so prepare_entry computes
+    // the right grow amount, then re-derive saved_stack_top via offset since
+    // grow may relocate ctx->stack.
+    int stack_top_offset = (int)(saved_stack_top - ctx->stack);
+    XrValue *prev_stack_top = ctx->stack_top;
+    ctx->stack_top = saved_stack_top;
+    if (!xr_vm_prepare_entry(ctx, 1 + proto->maxstacksize)) {
+        ctx->stack_top = prev_stack_top;
+        xr_log_warning("vm", "vm_call_closure: stack/frame growth failed");
+        return xr_null();
+    }
+    saved_stack_top = ctx->stack + stack_top_offset;
+
     // Set module_base_frame so run() stops when returning past this point
     ctx->module_base_frame = saved_frame_count;
 
@@ -94,7 +158,7 @@ XrValue xr_vm_call_closure(XrayIsolate *isolate, XrClosure *closure, XrValue *ar
 
     // Create new call frame
     XR_DCHECK(ctx->frame_count >= 0 && ctx->frame_count < ctx->frame_capacity,
-              "vm_call_closure: call frame overflow");
+              "vm_call_closure: prepare_entry post-condition violated");
     XrBcCallFrame *frame = &ctx->frames[ctx->frame_count++];
     frame->closure = closure;
     frame->pc = PROTO_CODE_BASE(proto);
@@ -135,15 +199,18 @@ XrValue xr_vm_call_closure(XrayIsolate *isolate, XrClosure *closure, XrValue *ar
     // Update stack top
     ctx->stack_top = ctx->stack + frame->base_offset + proto->maxstacksize;
     XR_DCHECK(ctx->stack_top <= ctx->stack + ctx->stack_capacity,
-              "vm_call_closure: stack overflow");
+              "vm_call_closure: stack overflow post-prepare");
 
-    // Execute bytecode
+    // Execute bytecode. run() may grow the stack via xr_coro_grow_stack,
+    // invalidating saved_stack_top — re-derive from offset after return.
     XrVMResult exec_result = run(isolate, ctx);
+
+    XrValue *result_slot = ctx->stack + stack_top_offset;
 
     // Get return value
     XrValue return_value = xr_null();
     if (exec_result == XR_VM_OK) {
-        return_value = saved_stack_top[0];
+        return_value = result_slot[0];
     } else {
         if (!isolate->suppress_exception_print) {
             xr_log_warning("vm", "xr_vm_call_closure: execution failed with error %d", exec_result);
@@ -153,7 +220,7 @@ XrValue xr_vm_call_closure(XrayIsolate *isolate, XrClosure *closure, XrValue *ar
     // Restore VM state
     ctx->module_base_frame = saved_module_base;
     ctx->frame_count = saved_frame_count;
-    ctx->stack_top = saved_stack_top;
+    ctx->stack_top = result_slot;
 
     return return_value;
 }
@@ -167,29 +234,31 @@ XrValue xr_vm_call_closure(XrayIsolate *isolate, XrClosure *closure, XrValue *ar
 XrVMResult xr_vm_interpret_proto(XrayIsolate *isolate, XrProto *proto) {
     XR_DCHECK(isolate != NULL, "vm_interpret_proto: NULL isolate");
     XR_DCHECK(proto != NULL, "vm_interpret_proto: NULL proto");
-    // Create top-level closure on main coroutine's Immix heap
     XrCoroutine *main_coro = (XrCoroutine*)isolate->main_coro;
     XrClosure *closure = xr_closure_new(isolate, proto, main_coro);
     if (closure == NULL) {
         return XR_VM_RUNTIME_ERROR;
     }
 
-    // Get vm_ctx: prefer main coroutine, fallback to isolate->vm_ctx
-    XrVMContext *ctx = main_coro ? &main_coro->vm_ctx : &isolate->vm_ctx;
+    // Single authoritative ctx resolver.
+    XrVMContext *ctx = xr_vm_current_ctx(isolate);
 
-    // Initialize stack top
+    // Initialize stack top to base; prepare_entry then ensures capacity.
     ctx->stack_top = ctx->stack;
 
-    // Create call frame
+    // Reserve room for one entry frame at base + maxstacksize register window.
+    if (!xr_vm_prepare_entry(ctx, proto->maxstacksize)) {
+        return XR_VM_RUNTIME_ERROR;
+    }
+
     XR_DCHECK(ctx->frame_count >= 0 && ctx->frame_count < ctx->frame_capacity,
-              "vm_interpret_proto: call frame overflow");
+              "vm_interpret_proto: prepare_entry post-condition violated");
     XrBcCallFrame *frame = &ctx->frames[ctx->frame_count++];
     frame->closure = closure;
     frame->pc = PROTO_CODE_BASE(proto);
     frame->base_offset = 0;
     frame->u.l.pending_operator_check = false;
 
-    // Execute (using vm_ctx uniformly)
     return run(isolate, ctx);
 }
 
@@ -202,72 +271,39 @@ XrVMResult xr_vm_interpret_proto(XrayIsolate *isolate, XrProto *proto) {
 XrVMResult xr_vm_execute_module(XrayIsolate *isolate, XrProto *proto) {
     XR_DCHECK(isolate != NULL, "vm_execute_module: NULL isolate");
     XR_DCHECK(proto != NULL, "vm_execute_module: NULL proto");
-    // Create module closure on current coroutine's Immix heap
-    XrWorker *_mod_worker = xr_current_worker();
-    XrCoroutine *_mod_coro = (_mod_worker && _mod_worker->m->vm_ctx.current_coro)
-        ? (XrCoroutine *)_mod_worker->m->vm_ctx.current_coro : NULL;
-    XrClosure *closure = xr_closure_new(isolate, proto, _mod_coro);
+
+    // Single authoritative ctx resolver.
+    XrVMContext *ctx = xr_vm_current_ctx(isolate);
+
+    // Create module closure on current coroutine's Immix heap (if any).
+    XrCoroutine *coro = (XrCoroutine *)ctx->current_coro;
+    XrClosure *closure = xr_closure_new(isolate, proto, coro);
     if (closure == NULL) {
         return XR_VM_RUNTIME_ERROR;
     }
 
-    // Unified ctx: coroutine ctx > worker ctx > isolate vm
-    XrVMContext *ctx = xr_vm_get_current_ctx(isolate);
-
-    // Save current state
+    // Save state as offsets (pointer-stable across grow).
     int saved_frame_count = ctx->frame_count;
     int saved_module_base = ctx->module_base_frame;
-    XrValue *saved_stack_top = ctx->stack_top;
+    int saved_top_offset = (int)(ctx->stack_top - ctx->stack);
 
-    // Set base frame count for module execution, run() stops when returning to this count
+    // Reserve room for one entry frame plus the proto's full register window
+    // above the current stack_top. prepare_entry uses ctx->stack_top as the
+    // baseline for "extra_stack" computation.
+    if (!xr_vm_prepare_entry(ctx, proto->maxstacksize)) {
+        return XR_VM_RUNTIME_ERROR;
+    }
+
+    // Pointers may have moved; re-derive everything from the saved offset.
+    XrValue *module_base = ctx->stack + saved_top_offset;
+    int base_offset = saved_top_offset;
+
+    // Mark module boundary — run() stops returning past this frame depth.
     ctx->module_base_frame = saved_frame_count;
-
-    // Allocate space for module after current stack top
-    XrValue *module_base = ctx->stack_top;
-    int base_offset = (int)(module_base - ctx->stack);
-    int needed_top = base_offset + proto->maxstacksize;
-
-    // Ensure stack has enough space for module code (critical for coroutine stacks
-    // which start at 128 slots - module init code often needs more)
-    XrCoroutine *coro = ctx->current_coro ? (XrCoroutine *)ctx->current_coro : NULL;
-    if (needed_top > ctx->stack_capacity) {
-        if (coro) {
-            int extra = needed_top - ctx->stack_capacity + 64;
-            XrValue *old_stack = ctx->stack;
-            int old_cap = ctx->stack_capacity;
-            if (!xr_coro_grow_stack(coro, extra)) {
-                ctx->module_base_frame = saved_module_base;
-                return XR_VM_RUNTIME_ERROR;
-            }
-            // ctx IS &coro->vm_ctx, grow updates it in place
-            (void)old_cap;
-            // Recalculate module_base after potential realloc
-            module_base = ctx->stack + base_offset;
-            saved_stack_top = ctx->stack + (saved_stack_top - old_stack);
-        } else {
-            ctx->module_base_frame = saved_module_base;
-            return XR_VM_RUNTIME_ERROR;
-        }
-    }
-
-    // Ensure frame capacity
-    if (saved_frame_count + 1 >= ctx->frame_capacity) {
-        if (coro) {
-            // ctx IS &coro->vm_ctx, grow updates it in place
-            if (!xr_coro_grow_stack(coro, 0)) {
-                ctx->module_base_frame = saved_module_base;
-                return XR_VM_RUNTIME_ERROR;
-            }
-        } else {
-            ctx->module_base_frame = saved_module_base;
-            return XR_VM_RUNTIME_ERROR;
-        }
-    }
-
-    // Update stack_top so run() knows the valid range
     ctx->stack_top = module_base + proto->maxstacksize;
 
-    // Create new call frame
+    XR_DCHECK(saved_frame_count + 1 <= ctx->frame_capacity,
+              "vm_execute_module: prepare_entry post-condition violated");
     XrBcCallFrame *frame = &ctx->frames[saved_frame_count];
     frame->closure = closure;
     frame->pc = PROTO_CODE_BASE(proto);
@@ -276,17 +312,14 @@ XrVMResult xr_vm_execute_module(XrayIsolate *isolate, XrProto *proto) {
     frame->flags = 0;
     frame->call_status = 0;
     frame->u.l.pending_operator_check = false;
-
-    // Update frame count
     ctx->frame_count = saved_frame_count + 1;
 
-    // Execute module code (pass current context)
     XrVMResult result = run(isolate, ctx);
 
-    // Restore state
+    // run() may have grown the stack, so re-derive stack_top via offset.
     ctx->module_base_frame = saved_module_base;
     ctx->frame_count = saved_frame_count;
-    ctx->stack_top = saved_stack_top;
+    ctx->stack_top = ctx->stack + saved_top_offset;
 
     return result;
 }
@@ -316,7 +349,7 @@ void xr_vm_add_stacktrace(XrayIsolate *isolate, XrValue exception) {
         return;
     }
 
-    XrVMContext *ctx = xr_vm_get_current_ctx(isolate);
+    XrVMContext *ctx = xr_vm_current_ctx(isolate);
 
     int frame_count = ctx->frame_count;
     XrBcCallFrame *frames = ctx->frames;
@@ -357,7 +390,7 @@ void xr_vm_add_stacktrace(XrayIsolate *isolate, XrValue exception) {
 */
 void xr_vm_throw_exception(XrayIsolate *isolate, XrValue exception) {
     XR_DCHECK(isolate != NULL, "vm_throw_exception: NULL isolate");
-    XrVMContext *ctx = xr_vm_get_current_ctx(isolate);
+    XrVMContext *ctx = xr_vm_current_ctx(isolate);
 
     // Iterative exception propagation loop
     while (ctx->handler_count > 0) {
