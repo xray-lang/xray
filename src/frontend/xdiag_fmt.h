@@ -22,6 +22,26 @@
 
 #include <stdio.h>
 #include <string.h>
+#include "../base/xchecks.h"
+
+/*
+ * ROLE PIN (X-02):
+ *   This header is the SOLE diagnostic-formatting helper allowed to be
+ *   shared across the frontend (lexer / parser / analyzer / codegen).
+ *   It owns ONLY string assembly: ANSI colour wrapping, gutter padding,
+ *   caret underline, source-line slicing. It MUST NOT take on any
+ *   higher-level semantics -- no AST awareness, no parser-state lookup,
+ *   no error counting that callers do not pass in explicitly. If a
+ *   future caller is tempted to thread richer context through this
+ *   API, the right move is to add a thin wrapper at the call site
+ *   instead of growing this header.
+ *
+ *   The XR_DCHECK guards below pin the invariants the call sites
+ *   already rely on. Cases with an explicit graceful fallback in the
+ *   body (e.g. `file == NULL -> "<script>"`) intentionally do NOT
+ *   get a DCHECK -- the c-coding rule forbids the contradictory
+ *   pattern `DCHECK(ptr != NULL); if (!ptr) ...`.
+ */
 
 // ANSI color codes
 #define XR_CLR_RESET   "\033[0m"
@@ -42,6 +62,13 @@ typedef enum {
  * Returns pointer to the first character of that line.
  */
 static inline const char *xr_diag_find_line_start(const char *source, const char *pos) {
+    // Walking below `source` would deref out-of-bounds memory. The
+    // call sites already guarantee both invariants (token_start was
+    // captured FROM source by the lexer); a violation here is a
+    // corrupted token, not a recoverable user error.
+    XR_DCHECK(source != NULL, "xr_diag_find_line_start: NULL source");
+    XR_DCHECK(pos != NULL, "xr_diag_find_line_start: NULL pos");
+    XR_DCHECK(pos >= source, "xr_diag_find_line_start: pos before source");
     const char *p = pos;
     while (p > source && *(p - 1) != '\n') {
         p--;
@@ -53,6 +80,7 @@ static inline const char *xr_diag_find_line_start(const char *source, const char
  * Find the end of the line containing 'pos' (points to '\n' or '\0').
  */
 static inline const char *xr_diag_find_line_end(const char *pos) {
+    XR_DCHECK(pos != NULL, "xr_diag_find_line_end: NULL pos");
     const char *p = pos;
     while (*p != '\0' && *p != '\n') {
         p++;
@@ -64,6 +92,11 @@ static inline const char *xr_diag_find_line_end(const char *pos) {
  * Count digits in a number (for alignment).
  */
 static inline int xr_diag_num_digits(int n) {
+    // Negative line numbers are never legitimate; callers pass
+    // `line` from the lexer (1-indexed) or from a default of 0 for
+    // "unknown". A negative value would silently fall through to
+    // the `return 5` branch and corrupt gutter alignment.
+    XR_DCHECK(n >= 0, "xr_diag_num_digits: negative input");
     if (n < 10) return 1;
     if (n < 100) return 2;
     if (n < 1000) return 3;
@@ -96,6 +129,16 @@ static inline void xr_diag_print(
     const char *source,
     const char *token_start
 ) {
+    // Caller-side invariants (no graceful fallback exists for these):
+    //   - level must be a valid enum so the switch picks a colour;
+    //   - message must be non-NULL or fprintf("%s") explodes;
+    //   - line must be non-negative for digit-counting.
+    XR_DCHECK(level == XR_DIAG_ERROR || level == XR_DIAG_WARNING ||
+              level == XR_DIAG_NOTE,
+              "xr_diag_print: invalid level");
+    XR_DCHECK(message != NULL, "xr_diag_print: NULL message");
+    XR_DCHECK(line >= 0, "xr_diag_print: negative line");
+
     if (!file) file = "<script>";
     if (column <= 0) column = 1;
     if (token_len <= 0) token_len = 1;
@@ -192,6 +235,11 @@ static inline void xr_diag_print_summary(
     int warning_count,
     int max_errors_reached
 ) {
+    XR_DCHECK(error_count >= 0,
+              "xr_diag_print_summary: negative error_count");
+    XR_DCHECK(warning_count >= 0,
+              "xr_diag_print_summary: negative warning_count");
+
     if (!file) file = "<script>";
 
     if (max_errors_reached && error_count > 0) {
