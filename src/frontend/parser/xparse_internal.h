@@ -9,8 +9,8 @@
  *
  * KEY CONCEPT (P-02):
  *   Everything that USED to live in xparse.h but is only consumed by
- *   parser/*.c moved here. Downstream subsystems must NOT include this
- *   header — only xparse.h is the public contract.
+ *   the parser sources moved here. Downstream subsystems must NOT
+ *   include this header; only xparse.h is the public contract.
  */
 
 #ifndef XPARSE_INTERNAL_H
