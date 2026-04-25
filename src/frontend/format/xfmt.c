@@ -14,6 +14,7 @@
  */
 
 #include "xfmt.h"
+#include "xfmt_literal.h"
 #include "../parser/xparse.h"
 #include "../../runtime/value/xtype.h"
 #include "../../runtime/value/xtype_names.h"
@@ -326,11 +327,15 @@ static void fmt_literal(XrFmtContext *ctx, AstNode *node) {
             write_str(ctx, node->as.literal.raw_value.bigint_val);
             write_char(ctx, 'n');
             break;
-        case AST_LITERAL_STRING:
-            write_char(ctx, '"');
-            write_str(ctx, node->as.literal.raw_value.string_val);
-            write_char(ctx, '"');
+        case AST_LITERAL_STRING: {
+            // F-02: re-escape via xfmt_emit_string so quotes / backslashes /
+            // control bytes round-trip through the parser. Pre-F-02 this
+            // was a verbatim write that produced invalid source whenever
+            // the payload contained any of those bytes.
+            const char *s = node->as.literal.raw_value.string_val;
+            xfmt_emit_string(ctx, s, s ? (int)strlen(s) : 0);
             break;
+        }
         case AST_LITERAL_REGEX:
             write_char(ctx, '/');
             write_str(ctx, node->as.literal.raw_value.regex.pattern);
@@ -403,20 +408,11 @@ static void fmt_new_expr(XrFmtContext *ctx, AstNode *node) {
 }
 
 static void fmt_template_string(XrFmtContext *ctx, AstNode *node) {
+    // F-01: backticks were dropped from the lexer; emit a canonical
+    // double-quoted template via xfmt_emit_template_string. F-02: the
+    // helper escapes literal parts and `$` to keep round-trip safe.
     write_indent(ctx);
-    write_char(ctx, '`');
-    TemplateStringNode *tmpl = &node->as.template_str;
-    for (int i = 0; i < tmpl->part_count; i++) {
-        AstNode *part = tmpl->parts[i];
-        if (part->type == AST_LITERAL_STRING) {
-            write_str(ctx, part->as.literal.raw_value.string_val);
-        } else {
-            write_str(ctx, "${");
-            fmt_expression(ctx, part);
-            write_char(ctx, '}');
-        }
-    }
-    write_char(ctx, '`');
+    xfmt_emit_template_string(ctx, node, fmt_expression);
 }
 
 static void fmt_match_expr(XrFmtContext *ctx, AstNode *node) {
