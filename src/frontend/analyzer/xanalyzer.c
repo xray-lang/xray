@@ -17,6 +17,7 @@
 #include "xanalyzer_incremental.h"
 #include "xanalyzer_builtin_interfaces.h"
 #include "xanalyzer_jit.h"
+#include "xa_node_table.h"
 #include "../../base/xintmap.h"
 #include "../../base/xhashmap.h"
 #include "../../base/xmalloc.h"
@@ -217,6 +218,9 @@ XaAnalyzer *xa_analyzer_new(XrayIsolate *X) {
     // Initialize incremental analysis support
     analyzer->incremental = xa_incremental_new();
 
+    // X-01: AST -> inferred-type side table.
+    analyzer->node_table = xa_node_table_new();
+
     return analyzer;
 }
 
@@ -236,6 +240,12 @@ void xa_analyzer_free(XaAnalyzer *analyzer) {
     // Free incremental analysis context
     if (analyzer->incremental) {
         xa_incremental_free(analyzer->incremental);
+    }
+
+    // X-01: free AST -> inferred-type side table.
+    if (analyzer->node_table) {
+        xa_node_table_free((XaNodeTable *)analyzer->node_table);
+        analyzer->node_table = NULL;
     }
 
     // Free JIT metadata
@@ -868,6 +878,22 @@ void xa_analyzer_invalidate_range(XaAnalyzer *analyzer, const char *file,
     if (entry) {
         entry->dirty = true;
     }
+}
+
+// X-01: AST -> inferred type side table convenience wrappers.
+// These exist so callers (codegen, LSP, mono) do not need to include
+// xa_node_table.h directly -- xanalyzer.h is enough. Both functions
+// are NULL-safe in every direction.
+void xa_analyzer_set_node_type(XaAnalyzer *analyzer, struct AstNode *node,
+                               struct XrType *type) {
+    if (!analyzer || !node) return;
+    xa_node_table_set_type((XaNodeTable *)analyzer->node_table, node, type);
+}
+
+struct XrType *xa_analyzer_get_node_type(XaAnalyzer *analyzer,
+                                         const struct AstNode *node) {
+    if (!analyzer || !node) return NULL;
+    return xa_node_table_get_type((XaNodeTable *)analyzer->node_table, node);
 }
 
 void xa_analyzer_remove_file(XaAnalyzer *analyzer, const char *file) {

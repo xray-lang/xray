@@ -787,8 +787,11 @@ XrType *xa_visit_infer_expr(XaInferContext *ctx, AstNode *node) {
         }
     }
 
-    // Cache inferred type on AST node for codegen phase
+    // Cache inferred type on AST node for codegen phase.
+    // X-01 dual-write: also populate the side table so 2.4b can switch
+    // readers without changing semantics.
     node->compile_type = result;
+    xa_analyzer_set_node_type(ctx->analyzer, node, result);
     return result;
 }
 
