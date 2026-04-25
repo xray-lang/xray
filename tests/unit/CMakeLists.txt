@@ -54,12 +54,16 @@ add_xray_unit_test(test_xset object/test_xset.c)
 # ============================================================================
 
 add_xray_unit_test(test_lexer frontend/test_lexer.c)
+add_xray_unit_test(test_lexer_keywords frontend/test_lexer_keywords.c)
+add_xray_unit_test(test_lexer_positions frontend/test_lexer_positions.c)
 add_xray_unit_test(test_lexer_trivia frontend/test_lexer_trivia.c)
 add_xray_unit_test(test_parser frontend/test_parser.c)
+add_xray_unit_test(test_parser_type_scope frontend/test_parser_type_scope.c)
 add_xray_unit_test(test_diag_fmt frontend/test_diag_fmt.c)
 add_xray_unit_test(test_xfmt_literal frontend/test_xfmt_literal.c)
 add_xray_unit_test(test_formatter_comments frontend/test_formatter_comments.c)
 add_xray_unit_test(test_analyzer_remove_file frontend/test_analyzer_remove_file.c)
+add_xray_unit_test(test_analyzer_incremental frontend/test_analyzer_incremental.c)
 # Phase 3.5: X-01 AstNode -> XrType side table acceptance tests.
 add_xray_unit_test(test_ast_side_table frontend/test_ast_side_table.c)
 
