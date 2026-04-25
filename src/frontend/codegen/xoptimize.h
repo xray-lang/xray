@@ -25,17 +25,17 @@
 
 /*
 ** Try to fold binary operation constants
-** 
+**
 ** Parameters:
 **   op     - Operator type (TK_PLUS, TK_MINUS, etc.)
 **   left   - Left operand (must be number)
 **   right  - Right operand (must be number)
 **   result - Output result
-** 
+**
 ** Returns:
 **   true  - Fold successful, result contains computed value
 **   false - Cannot fold (non-numeric operands, division by zero, NaN, etc.)
-** 
+**
 ** Examples:
 **   Fold "3 + 5" -> 8
 **   Fold "10 * 2" -> 20
@@ -50,16 +50,16 @@ XR_FUNC bool xr_opt_fold_binary(
 
 /*
 ** Try to fold unary operation constants
-** 
+**
 ** Parameters:
 **   op     - Operator type (TK_MINUS, TK_NOT)
 **   value  - Operand
 **   result - Output result
-** 
+**
 ** Returns:
 **   true  - Fold successful
 **   false - Cannot fold
-** 
+**
 ** Examples:
 **   Fold "-5" -> -5
 **   Fold "!true" -> false
@@ -72,13 +72,13 @@ XR_FUNC bool xr_opt_fold_unary(
 
 /*
 ** Try to fold comparison operation constants
-** 
+**
 ** Parameters:
 **   op     - Operator type (TK_EQ, TK_NE, TK_LT, TK_LE, TK_GT, TK_GE)
 **   left   - Left operand (must be number)
 **   right  - Right operand (must be number)
 **   result - Output result
-** 
+**
 ** Returns:
 **   true  - Fold successful
 **   false - Cannot fold
@@ -92,43 +92,11 @@ XR_FUNC bool xr_opt_fold_comparison(
 
 /* ========== Type-Aware Optimization Hints ========== */
 
-// Forward declaration for XrType
-struct XrType;
-
-/*
- * Optimization hint from type analysis (FUTURE WORK)
- *
- * NOTE: xray uses a 16-byte tagged union, so int/float/bool are stored
- * inline WITHOUT heap allocation. "Unboxing" here means skipping type
- * checks, not memory layout changes.
- *
- * Current status:
- * - XR_OPT_UNBOX_*: Skip runtime type checks (minor benefit)
- * - XR_OPT_INLINE_*: Not implemented (needs IC support in VM)
- * - XR_OPT_DEVIRT_CALL: Not implemented (needs class hierarchy)
- * - XR_OPT_ELIM_NULL_CHECK: Can be useful with flow analysis
- */
-typedef enum XrOptHint {
-    XR_OPT_NONE = 0,
-    XR_OPT_KNOWN_INT,       // Type is definitely int, skip type check
-    XR_OPT_KNOWN_FLOAT,     // Type is definitely float
-    XR_OPT_KNOWN_BOOL,      // Type is definitely bool
-    XR_OPT_KNOWN_STRING,    // Type is definitely string
-    XR_OPT_KNOWN_NULL,      // Type is definitely null
-    XR_OPT_INLINE_ARRAY,    // (Future) Array access inline cache
-    XR_OPT_INLINE_MAP,      // (Future) Map access inline cache
-    XR_OPT_INLINE_FIELD,    // (Future) Field access inline cache
-    XR_OPT_DEVIRT_CALL,     // (Future) Devirtualize method call
-    XR_OPT_ELIM_NULL_CHECK, // Skip null check (non-nullable type)
-} XrOptHint;
-
-// Get optimization hint from type
-XR_FUNC XrOptHint xr_opt_get_hint(struct XrType *type);
-
-// Check if type allows unboxed arithmetic
-XR_FUNC bool xr_opt_can_unbox_arith(struct XrType *left, struct XrType *right);
-
-// Check if method call can be devirtualized (class is known)
-XR_FUNC bool xr_opt_can_devirt(struct XrType *receiver_type, const char *method);
+// Phase 3 (C-02): the XrType-classification helpers (XrOptHint enum
+// + xr_opt_get_hint / xr_opt_can_unbox_arith / xr_opt_can_devirt)
+// have moved to runtime/value/xtype_opt_hint.h so the analyzer's
+// Pass 3 JIT metadata can use them without pulling a downward
+// analyzer -> codegen include. xoptimize.{h,c} now only contains
+// the codegen-only constant-folding helpers (xr_opt_fold_*).
 
 #endif // XOPTIMIZE_H

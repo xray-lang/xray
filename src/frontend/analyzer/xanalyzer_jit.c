@@ -16,7 +16,7 @@
 #include "../../base/xchecks.h"
 #include "xanalyzer_visitor.h"
 #include "xanalyzer_infer.h"
-#include "../codegen/xoptimize.h"
+#include "../../runtime/value/xtype_opt_hint.h"
 #include "../parser/xast.h"
 #include "../../base/xmalloc.h"
 #include <string.h>
