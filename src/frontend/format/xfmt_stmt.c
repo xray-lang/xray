@@ -488,6 +488,13 @@ void xfmt_emit_statement(XrFmtContext *ctx, AstNode *node) {
             xfmt_write_newline(ctx);
             break;
     }
+
+    // L-06: every statement variant terminates in a newline; if the
+    // parser captured an inline trailing comment for this node, splice
+    // it in before the newline.
+    if (node->trailing_comments) {
+        xfmt_write_trailing_comment(ctx, node->trailing_comments);
+    }
 }
 
 // ----------------------------------------------------------------------------

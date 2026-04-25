@@ -120,6 +120,88 @@ static int match(Scanner *scanner, char expected) {
     return 1;
 }
 
+// L-06: After producing a token, scan ahead for an inline same-line
+// comment and return it as that token's trailing trivia. The caller
+// MUST attach the returned chain (or NULL) to token.trailing_trivia.
+//
+// Rules:
+//   - Only horizontal whitespace (' ', '\t', '\r') is consumed.
+//   - A `//` line comment that begins on the SAME line as the token
+//     is captured.
+//   - A `/* ... */` block comment is captured ONLY if it terminates
+//     on the same source line as the token. Multi-line block
+//     comments are deliberately left for skip_whitespace() to absorb
+//     into the next token's leading trivia.
+//   - If no inline comment is found we rewind any horizontal-
+//     whitespace skip so that the next call to skip_whitespace() can
+//     correctly compute `had_leading_space` for the following token
+//     (the parser's smart-semicolon / generic-vs-comparison
+//     disambiguation depends on it).
+static XrTrivia *scan_inline_trailing_trivia(Scanner *scanner) {
+    if (!scanner->collect_trivia) return NULL;
+
+    const char *save_current = scanner->current;
+
+    while (scanner->current < scanner->end) {
+        char c = *scanner->current;
+        if (c == ' ' || c == '\t' || c == '\r') {
+            scanner->current++;
+        } else {
+            break;
+        }
+    }
+
+    if (scanner->current >= scanner->end) {
+        scanner->current = save_current;
+        return NULL;
+    }
+
+    char c = *scanner->current;
+    char n = (scanner->current + 1 < scanner->end) ? scanner->current[1] : '\0';
+
+    if (c == '/' && n == '/') {
+        int comment_line = scanner->line;
+        scanner->current += 2;  // skip //
+        const char *cs = scanner->current;
+        while (scanner->current < scanner->end && *scanner->current != '\n') {
+            scanner->current++;
+        }
+        int len = (int)(scanner->current - cs);
+        return xr_trivia_new(TRIVIA_LINE_COMMENT, cs, len, comment_line);
+    }
+
+    if (c == '/' && n == '*') {
+        // Look ahead: only attach if `*/` appears before the next '\n'.
+        const char *p = scanner->current + 2;
+        bool same_line_terminator = false;
+        while (p + 1 < scanner->end) {
+            if (*p == '\n') break;
+            if (p[0] == '*' && p[1] == '/') {
+                same_line_terminator = true;
+                break;
+            }
+            p++;
+        }
+        if (!same_line_terminator) {
+            scanner->current = save_current;
+            return NULL;
+        }
+        int comment_line = scanner->line;
+        scanner->current += 2;  // /*
+        const char *cs = scanner->current;
+        while (scanner->current + 1 < scanner->end &&
+               !(scanner->current[0] == '*' && scanner->current[1] == '/')) {
+            scanner->current++;
+        }
+        int len = (int)(scanner->current - cs);
+        scanner->current += 2;  // */
+        return xr_trivia_new(TRIVIA_BLOCK_COMMENT, cs, len, comment_line);
+    }
+
+    scanner->current = save_current;
+    return NULL;
+}
+
 static Token make_token(Scanner *scanner, TokenType type) {
     Token token;
     token.type = type;
@@ -135,9 +217,12 @@ static Token make_token(Scanner *scanner, TokenType type) {
     token.error_message = NULL;
     // Attach pending trivia
     token.leading_trivia = scanner->pending_trivia;
-    token.trailing_trivia = NULL;
     scanner->pending_trivia = NULL;
     scanner->trivia_tail = NULL;
+    // L-06: same-line inline trailing comment, if any. EOF tokens never
+    // have trailing trivia (nothing follows).
+    token.trailing_trivia = (type == TK_EOF) ? NULL
+                                             : scan_inline_trailing_trivia(scanner);
     return token;
 }
 

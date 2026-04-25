@@ -51,6 +51,12 @@ XR_FUNC void xfmt_write_space(XrFmtContext *ctx);
 
 XR_FUNC void xfmt_write_leading_comments(XrFmtContext *ctx, XrTrivia *trivia);
 
+// L-06: emit a single inline trailing comment by rewinding the
+// just-written terminating newline and re-emitting it after the
+// comment body. Caller must invoke this AFTER the node's content
+// (and its terminating newline, if any) has been written.
+XR_FUNC void xfmt_write_trailing_comment(XrFmtContext *ctx, XrTrivia *trivia);
+
 // ---------------------------------------------------------------------------
 // Type / generic / destructure-pattern / operator-string helpers
 // (defined in xfmt_type.c)
