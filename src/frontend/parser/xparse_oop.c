@@ -16,7 +16,7 @@
 #include "xast.h"
 #include "../../runtime/value/xtype_names.h"
 #include "../../runtime/value/xtype.h"
-#include "../analyzer/xanalyzer_symbol.h"
+#include "xtype_scope.h"
 #include <string.h>
 #include <stdlib.h>
 #include <stdio.h>
@@ -98,13 +98,13 @@ AstNode *xr_parse_class_declaration(Parser *parser) {
         xr_parser_consume(parser, TK_GT, "expected '>' to close generic params");
     }
 
-    // Register generic type params in type_scope for field/method type parsing
-    XaScope *saved_scope = parser->type_scope;
+    // Register generic type params in type_scope for field/method type parsing.
+    XrTypeScope *saved_scope = parser->type_scope;
     if (type_param_count > 0) {
-        XaScope *generic_scope = xa_scope_new(XA_SCOPE_CLASS, parser->type_scope);
+        XrTypeScope *generic_scope = xr_type_scope_new(parser->type_scope);
         for (int i = 0; i < type_param_count; i++) {
             XrType *type_param = xr_type_new_type_param(parser->X, type_params[i]->name, i);
-            xa_scope_define_type_alias(generic_scope, type_params[i]->name, type_param);
+            xr_type_scope_define(generic_scope, type_params[i]->name, type_param);
         }
         parser->type_scope = generic_scope;
     }
@@ -311,13 +311,13 @@ AstNode *xr_parse_struct_declaration(Parser *parser) {
         xr_parser_consume(parser, TK_GT, "expected '>' to close generic params");
     }
 
-    // Register generic type params in type_scope for field/method type parsing
-    XaScope *saved_scope = parser->type_scope;
+    // Register generic type params in type_scope for field/method type parsing.
+    XrTypeScope *saved_scope = parser->type_scope;
     if (type_param_count > 0) {
-        XaScope *generic_scope = xa_scope_new(XA_SCOPE_CLASS, parser->type_scope);
+        XrTypeScope *generic_scope = xr_type_scope_new(parser->type_scope);
         for (int i = 0; i < type_param_count; i++) {
             XrType *tp = xr_type_new_type_param(parser->X, type_params[i]->name, i);
-            xa_scope_define_type_alias(generic_scope, type_params[i]->name, tp);
+            xr_type_scope_define(generic_scope, type_params[i]->name, tp);
         }
         parser->type_scope = generic_scope;
     }

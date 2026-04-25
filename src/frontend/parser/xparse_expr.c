@@ -16,7 +16,6 @@
 #include "../../base/xchecks.h"
 #include "../../base/xarena.h"
 #include "../../runtime/xisolate_api.h"
-#include "../analyzer/xanalyzer_symbol.h"
 #include "../xdiag_fmt.h"
 
 /* ========== Helpers ========== */

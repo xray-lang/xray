@@ -45,7 +45,7 @@ typedef enum {
 
 // Forward declarations
 typedef struct Parser Parser;
-typedef struct XaScope XaScope;
+typedef struct XrTypeScope XrTypeScope;
 
 // Parse function types
 // prefix: prefix parse function (handles prefix operators and literals)
@@ -79,7 +79,7 @@ struct Parser {
     int panic_mode;         // Whether in panic mode (error recovery)
     XrayIsolate *X;         // Xray isolate
     struct XrArena *arena;  // Optional arena for AST allocation (NULL = use malloc)
-    XaScope *type_scope;    // Scope for type aliases (uses XA_SYM_TYPE_ALIAS)
+    XrTypeScope *type_scope;    // Parser-owned scope for type aliases / generic params
     const char *source_file; // Source file path (for error reporting)
 
     // Error callback (for LSP)
