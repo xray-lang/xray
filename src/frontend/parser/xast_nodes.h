@@ -47,13 +47,10 @@ struct AstNode {
     int column;                   // 1-indexed column number (for LSP)
     int end_line;                 // 1-indexed end line, 0 = unset
     int end_column;               // 1-indexed exclusive end column, 0 = unset
-    // X-01 (Phase 2.4b): this field is being phased out in favour of
-    // the side table owned by XaAnalyzer. New readers MUST go through
-    // xa_analyzer_get_node_type(analyzer, node). The field is kept (1)
-    // for the parser type-alias hand-off and (2) so the post-mono
-    // re-analyse keeps working until 2.4c retires both. Do NOT add
-    // new readers; the rename to *_legacy is the canary.
-    struct XrType *compile_type_legacy;
+    // X-01 (Phase 2.4c done): the inline compile_type field has been
+    // removed. Inferred types live in XaAnalyzer's side table; access
+    // via xa_analyzer_get_node_type(analyzer, node). Type-alias-
+    // specific resolved types live in TypeAliasNode::resolved_type.
     XrTrivia *leading_comments;   // Comments before this node (for formatter)
 
     union {
