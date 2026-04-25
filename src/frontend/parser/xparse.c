@@ -925,6 +925,52 @@ AstNode *xr_parse_with_trivia(XrayIsolate *X, const char *source, const char *so
     return program;
 }
 
+// Parse a single expression as a self-contained translation unit (REPL/DAP).
+//
+// Returns an AST_PROGRAM node whose first child is the parsed expression,
+// so that callers release everything uniformly via xr_program_destroy().
+// Returns NULL on parse error (arena is auto-discarded).
+//
+// Example:
+//   AstNode *prog = xr_parse_expression_string(X, "a + b * 2", "<eval>");
+//   if (!prog) { /* report error */ return; }
+//   AstNode *expr = prog->as.program.statements[0];
+//   ... evaluate expr ...
+//   xr_program_destroy(prog);
+AstNode *xr_parse_expression_string(XrayIsolate *X, const char *source,
+                                    const char *source_file) {
+    XR_DCHECK(source != NULL, "xr_parse_expression_string: NULL source");
+
+    XrArena *saved_arena = NULL;
+    XrArena *arena = xr_parse_setup_arena(X, &saved_arena);
+
+    Parser parser;
+    xr_parser_init(&parser, X, source, source_file, arena);
+
+    AstNode *program = xr_ast_program(X);
+
+    xr_parser_advance(&parser);
+
+    AstNode *expr = xr_parse_expression(&parser);
+    if (expr != NULL) {
+        xr_ast_program_add(X, program, expr);
+    }
+
+    xr_type_scope_free(parser.type_scope);
+    parser.type_scope = NULL;
+
+    if (parser.had_error || expr == NULL) {
+        xr_parse_discard_arena(X, arena, saved_arena);
+        return NULL;
+    }
+
+    // Transfer arena ownership to the program node.
+    program->as.program.arena = arena;
+    program->as.program.owns_arena = true;
+    xr_isolate_set_current_arena(X, saved_arena);
+    return program;
+}
+
 // Parse with error recovery (for LSP)
 // Returns partial AST even if there are errors
 // Errors are reported via callback

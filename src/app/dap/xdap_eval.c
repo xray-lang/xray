@@ -470,25 +470,24 @@ static char *debug_evaluate_internal(XrayIsolate *isolate, const char *expressio
         }
     }
 
-    // Parse expression
-    Parser parser;
-    xr_parser_init(&parser, isolate, expression, "<eval>", NULL);
-    xr_parser_advance(&parser);
-
-    AstNode *ast = xr_parse_expression(&parser);
-
-    if (parser.had_error || !ast) {
+    // Parse expression as a self-contained translation unit. The returned
+    // node is an AST_PROGRAM whose first child is the parsed expression;
+    // xr_program_destroy() releases the program and its owning arena.
+    AstNode *program = xr_parse_expression_string(isolate, expression, "<eval>");
+    if (!program) {
         if (out_value) *out_value = xr_null();
         char buf[256];
         snprintf(buf, sizeof(buf), "<parse error: %s>", expression);
         return xr_strdup(buf);
     }
 
+    AstNode *ast = program->as.program.statements[0];
+
     // Evaluate AST
     XrValue result = eval_ast(&ctx, ast);
 
-    // Free AST
-    xr_program_destroy(ast);
+    // Free AST (also releases the owning arena)
+    xr_program_destroy(program);
 
     // Check for evaluation error
     if (ctx.error) {
