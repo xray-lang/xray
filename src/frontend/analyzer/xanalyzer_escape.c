@@ -517,10 +517,6 @@ static void ea_walk(EaContext *ctx, AstNode *node) {
         ea_walk(ctx, node->as.grouping);
         break;
 
-    case AST_YIELD_EXPR:
-        ea_walk(ctx, node->as.yield_expr.value);
-        break;
-
     case AST_IS_EXPR:
         ea_walk(ctx, node->as.is_expr.expr);
         break;

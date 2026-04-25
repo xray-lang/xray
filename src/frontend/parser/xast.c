@@ -613,13 +613,6 @@ AstNode *xr_ast_return_stmt(XrayIsolate *X, AstNode **values, int count, int lin
     return node;
 }
 
-// Create yield expression node (generator)
-AstNode *xr_ast_yield_expr(XrayIsolate *X, AstNode *value, int line) {
-    AstNode *node = alloc_node(X, AST_YIELD_EXPR, line);
-    node->as.yield_expr.value = value;
-    return node;
-}
-
 // Create is expression node (runtime type check)
 AstNode *xr_ast_is_expr(XrayIsolate *X, AstNode *expr, XrType *type, int line) {
     AstNode *node = alloc_node(X, AST_IS_EXPR, line);

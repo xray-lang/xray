@@ -105,7 +105,7 @@ typedef enum {
     TK_BREAK,           // break
     TK_CONTINUE,        // continue
     TK_RETURN,          // return
-    TK_YIELD,           // yield (reserved for coroutines)
+    TK_YIELD,           // yield (cooperative coroutine yield, statement form)
     TK_NULL,            // null
     TK_TRUE,            // true
     TK_FALSE,           // false

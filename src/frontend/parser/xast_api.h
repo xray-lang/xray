@@ -126,9 +126,6 @@ XR_FUNC AstNode *xr_ast_call_expr_generic(XrayIsolate *X, AstNode *callee,
 // Create return statement node
 XR_FUNC AstNode *xr_ast_return_stmt(XrayIsolate *X, AstNode **values, int count, int line);
 
-// Create yield expression node
-XR_FUNC AstNode *xr_ast_yield_expr(XrayIsolate *X, AstNode *value, int line);
-
 // Create is expression node (runtime type check)
 XR_FUNC AstNode *xr_ast_is_expr(XrayIsolate *X, AstNode *expr, XrType *type, int line);
 

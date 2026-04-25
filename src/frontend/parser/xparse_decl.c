@@ -481,46 +481,6 @@ AstNode *xr_parse_array_literal(Parser *parser) {
     }
 }
 
-// Parse Set literal: #{1, 2, 3}
-// Desugars to Set(1, 2, 3)
-AstNode *xr_parse_set_literal(Parser *parser) {
-    int line = parser->previous.line;
-
-    xr_parser_consume(parser, TK_LBRACE, "expected '{' after '#' (Set literal)");
-
-    if (xr_parser_match(parser, TK_RBRACE)) {
-        AstNode *setVar = xr_ast_variable(parser->X, "Set", line);
-        return xr_ast_call_expr(parser->X, setVar, NULL, 0, line);
-    }
-    AstNode **elements = NULL;
-    int count = 0;
-    int capacity = 0;
-
-    do {
-        XR_PARSE_PUSH(parser, elements, count, capacity, xr_parse_expression(parser));
-    } while (xr_parser_match(parser, TK_COMMA));
-
-    // Expect '}'
-    xr_parser_consume(parser, TK_RBRACE, "expected '}' after Set elements");
-
-    // Desugar to Set.from([...])
-    // 1. Create array literal AST
-    AstNode *array_lit = xr_ast_array_literal(parser->X, elements, count, line);
-
-    // 2. Create Set variable reference
-    AstNode *setVar = xr_ast_variable(parser->X, "Set", line);
-
-    // 3. Create member access: Set.from
-    AstNode *setFromMethod = xr_ast_member_access(parser->X, setVar, "from", line);
-
-    // 4. Create function call: Set.from([...])
-    AstNode **call_args = (AstNode **)ast_alloc(parser->X, sizeof(AstNode *));
-    call_args[0] = array_lit;
-
-    return xr_ast_call_expr(parser->X, setFromMethod, call_args, 1, line);
-}
-
-
 /*
  * Parse object literal {} or Map literal {key => value}
  * Distinguish by separator:
@@ -905,17 +865,6 @@ AstNode *xr_parse_return_statement(Parser *parser) {
     } while (xr_parser_match(parser, TK_COMMA));
 
     return xr_ast_return_stmt(parser->X, values, count, line);
-}
-
-/*
- * Parse yield expression
- *
- * The yield keyword is reserved for future coroutine implementation, currently not supported
- * If user uses yield, an error will be reported here
- */
-AstNode *xr_parse_yield_expr(Parser *parser) {
-    xr_parser_error(parser, "yield keyword not yet supported, coroutine feature planned for future version");
-    return NULL;
 }
 
 /*
