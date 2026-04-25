@@ -1,0 +1,47 @@
+// Test: monomorphic class method IC under JIT compilation.
+//
+// The hot loop calls the same method on instances of one class
+// thousands of times. The interpreter populates a monomorphic
+// method IC for the call site, then the JIT thresholds trip and
+// recompile the function. The JIT builder snapshots that IC from
+// the per-coroutine vm_ctx (post-Phase-1 IC migration) and uses
+// it to emit a speculative class guard + direct call.
+//
+// If snapshot ownership or IC indexing were broken, this test
+// would either crash, deopt forever, or produce wrong sums.
+
+class Counter {
+    n: int
+
+    constructor(n: int) {
+        this.n = n
+    }
+
+    add(x: int): int {
+        return this.n + x
+    }
+}
+
+fn hot_sum(c: Counter, iters: int): int {
+    let s = 0
+    for (let i = 0; i < iters; i++) {
+        // Same call site, same class → monomorphic IC.
+        s = c.add(i)
+        s = s + 1
+    }
+    return s
+}
+
+let c = new Counter(1000)
+let r1 = hot_sum(c, 5000)
+// Final iteration: c.add(4999) = 1000 + 4999 = 5999, then s = s + 1 = 6000
+assert(r1 == 6000, "mono JIT call returned wrong sum: got " + r1)
+
+// Run again with a different instance of the same class.
+// Must keep hitting the IC and produce the matching value.
+let c2 = new Counter(0)
+let r2 = hot_sum(c2, 3000)
+// c2.add(2999) = 0 + 2999 = 2999, then +1 = 3000
+assert(r2 == 3000, "mono JIT call with second instance: got " + r2)
+
+print("ic mono method JIT test passed")
