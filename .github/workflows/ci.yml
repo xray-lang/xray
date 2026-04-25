@@ -8,9 +8,27 @@ on:
 
 jobs:
   # ===========================================================================
+  # Architecture lint (Phase 3, X-01 / C-01 / C-02)
+  # Fast grep-only check that catches frontend boundary violations
+  # before we spend a build-budget. See scripts/check_frontend_arch.sh
+  # for the rule list.
+  # ===========================================================================
+  arch-lint:
+    runs-on: ubuntu-latest
+    name: Frontend Architecture Lint
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Run frontend architecture lint
+      run: |
+        chmod +x ./scripts/check_frontend_arch.sh
+        ./scripts/check_frontend_arch.sh
+
+  # ===========================================================================
   # Build & Test (multi-platform)
   # ===========================================================================
   build:
+    needs: arch-lint
     strategy:
       fail-fast: false
       matrix:
@@ -94,7 +112,7 @@ jobs:
           clang-tidy-14 -p build {} \
           --warnings-as-errors='bugprone-use-after-move,bugprone-double-free,clang-analyzer-core.*' \
           2>&1 | tee clang-tidy-output.txt
-        
+
         # Check for errors (warnings are allowed, errors fail the build)
         if grep -q "error:" clang-tidy-output.txt; then
           echo "clang-tidy found errors!"
@@ -201,14 +219,14 @@ jobs:
       run: |
         # Capture coverage data
         lcov --capture --directory build --output-file coverage.info
-        
+
         # Remove system headers and test files
         lcov --remove coverage.info \
           '/usr/*' \
           '*/tests/*' \
           '*/stdlib/*' \
           --output-file coverage.info
-        
+
         # Generate summary
         lcov --list coverage.info
 
@@ -222,7 +240,7 @@ jobs:
     - name: Generate HTML report
       run: |
         genhtml coverage.info --output-directory coverage-report
-        
+
     - name: Upload HTML report
       uses: actions/upload-artifact@v4
       with:
@@ -251,7 +269,7 @@ jobs:
         find src include stdlib \
           \( -name '*.c' -o -name '*.h' \) -type f | \
         xargs clang-format-14 --dry-run --Werror 2>&1 | tee format-check.txt
-        
+
         if [ -s format-check.txt ]; then
           echo "Code format issues found. Run 'make format' to fix."
           exit 1
