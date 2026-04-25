@@ -182,8 +182,10 @@ XrInputStatus xr_repl_check_input(const char *source) {
                 return XR_INPUT_COMPLETE;
 
             case TK_ERROR:
-                // Unterminated string/comment/regex → incomplete input
-                if (token.start && strstr(token.start, "nterminated") != NULL) {
+                // Unterminated string/comment/regex -> incomplete input.
+                // L-03: diagnostic text is in error_message; start points into source.
+                if (token.error_message &&
+                    strstr(token.error_message, "nterminated") != NULL) {
                     return XR_INPUT_INCOMPLETE;
                 }
                 // Other lexer errors: let compiler report them

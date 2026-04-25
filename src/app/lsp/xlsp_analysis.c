@@ -463,12 +463,13 @@ XrJsonValue *xlsp_analyze_diagnostics(XrLspDocument *doc) {
         if (token.type == TK_EOF) break;
 
         if (token.type == TK_ERROR) {
-            // Lexer error
+            // Lexer error: diagnostic text is in error_message (L-03).
+            const char *msg = token.error_message ? token.error_message : "lexical error";
             XrJsonValue *diag = make_diagnostic(
                 token.line - 1, 0,
                 token.line - 1, 100,
                 1,  // Error
-                token.start  // Error message is in start
+                msg
             );
             xjson_array_push(diagnostics, diag);
             continue;

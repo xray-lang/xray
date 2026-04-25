@@ -221,6 +221,16 @@ typedef enum {
 } TokenType;
 
 // Token structure
+//
+// Position contract (L-02):
+//   `line` and `column` are the START position of the token, even when the
+//   token spans multiple lines (string / raw string / template / block comment).
+//
+// Error contract (L-03):
+//   For type == TK_ERROR, `error_message` carries the diagnostic text and
+//   `start` continues to point at the offending character in source. For all
+//   other token types `error_message` is NULL. Callers MUST use
+//   `token.error_message` to format diagnostics, never `token.start`.
 typedef struct Token {
     TokenType type;
     const char *start;
@@ -228,6 +238,7 @@ typedef struct Token {
     int line;
     int column;             // 1-indexed column number
     bool has_leading_space; // true if whitespace before this token (for generic disambiguation)
+    const char *error_message;  // Diagnostic text for TK_ERROR tokens; NULL otherwise.
     XrTrivia *leading_trivia;   // Comments before this token
     XrTrivia *trailing_trivia;  // Inline comment after this token (same line)
 } Token;
@@ -238,8 +249,10 @@ typedef struct Scanner {
     const char *start;   // current token start position
     const char *current; // current scan position
     const char *end;     // end of source (past last char)
-    int line;            // current line number
-    const char *line_start; // start of current line (for column calculation)
+    int line;            // current line number (current scan position)
+    const char *line_start; // start of current line (current scan position)
+    int start_line;          // line number where the current token starts (L-02)
+    const char *start_line_start; // line_start at the moment the token began (L-02)
     bool had_leading_space; // tracks if whitespace was skipped before current token
     bool collect_trivia;    // whether to collect comments as trivia
     XrTrivia *pending_trivia; // collected trivia for next token

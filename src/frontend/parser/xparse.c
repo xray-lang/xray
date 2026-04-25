@@ -233,8 +233,9 @@ void xr_parser_advance(Parser *parser) {
         parser->current = xr_scanner_scan(&parser->scanner);
         if (parser->current.type != TK_ERROR) break;
 
-        // TK_ERROR token's start points to the error message string
-        xr_parser_error_at_current(parser, parser->current.start);
+        // TK_ERROR carries diagnostic text in error_message (L-03 contract).
+        const char *msg = parser->current.error_message;
+        xr_parser_error_at_current(parser, msg ? msg : "lexical error");
     }
 }
 

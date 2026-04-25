@@ -74,11 +74,24 @@ void xr_scanner_init_with_trivia(Scanner *scanner, const char *source, bool coll
     scanner->end = source + strlen(source);
     scanner->line = 1;
     scanner->line_start = source;
+    scanner->start_line = 1;
+    scanner->start_line_start = source;
     scanner->had_leading_space = false;
     scanner->collect_trivia = collect_trivia;
     scanner->pending_trivia = NULL;
     scanner->trivia_tail = NULL;
     scanner->pending_error = NULL;
+}
+
+// Capture the start position of a new token. Must be called once per token,
+// AFTER skip_whitespace() has run and BEFORE any character is consumed,
+// so that `start_line` / `start_line_start` reflect where the token begins
+// even if the token later spans multiple lines (e.g. multi-line strings,
+// raw strings, template strings, or block comments).
+static inline void scanner_begin_token(Scanner *scanner) {
+    scanner->start = scanner->current;
+    scanner->start_line = scanner->line;
+    scanner->start_line_start = scanner->line_start;
 }
 
 static int is_at_end(Scanner *scanner) {
@@ -112,9 +125,13 @@ static Token make_token(Scanner *scanner, TokenType type) {
     token.start = scanner->start;
     token.length = (int)(scanner->current - scanner->start);
     XR_DCHECK(token.length >= 0, "make_token: negative token length");
-    token.line = scanner->line;
-    token.column = (int)(scanner->start - scanner->line_start) + 1;  // 1-indexed
+    // L-02: report the START line/column of the token. For multi-line tokens
+    // scanner->line/line_start have already advanced to the token's last line,
+    // so we use the snapshots captured by scanner_begin_token().
+    token.line = scanner->start_line;
+    token.column = (int)(scanner->start - scanner->start_line_start) + 1;  // 1-indexed
     token.has_leading_space = scanner->had_leading_space;
+    token.error_message = NULL;
     // Attach pending trivia
     token.leading_trivia = scanner->pending_trivia;
     token.trailing_trivia = NULL;
@@ -126,11 +143,15 @@ static Token make_token(Scanner *scanner, TokenType type) {
 static Token error_token(Scanner *scanner, const char *message) {
     Token token;
     token.type = TK_ERROR;
-    token.start = message;
-    token.length = (int)strlen(message);
-    token.line = scanner->line;
-    token.column = (int)(scanner->current - scanner->line_start) + 1;
+    // L-03: error_message carries the diagnostic; start still points into the
+    // source buffer at the offending character so editors can place a caret.
+    token.start = scanner->start;
+    token.length = (int)(scanner->current - scanner->start);
+    if (token.length < 0) token.length = 0;
+    token.line = scanner->start_line;
+    token.column = (int)(scanner->start - scanner->start_line_start) + 1;
     token.has_leading_space = scanner->had_leading_space;
+    token.error_message = message;
     token.leading_trivia = scanner->pending_trivia;
     token.trailing_trivia = NULL;
     scanner->pending_trivia = NULL;
@@ -657,7 +678,10 @@ static Token string_with_quote(Scanner *scanner, char quote) {
                 && *(scanner->current + 1) == '{') {
                 has_interpolation = true;
             }
-            if (*scanner->current == '\n') scanner->line++;
+            if (*scanner->current == '\n') {
+                scanner->line++;
+                scanner->line_start = scanner->current + 1;
+            }
             scanner->current++;
         }
 
@@ -670,7 +694,10 @@ static Token string_with_quote(Scanner *scanner, char quote) {
         } else if (c == '\\') {
             advance(scanner);
             if (!is_at_end(scanner)) {
-                if (peek(scanner) == '\n') scanner->line++;
+                if (peek(scanner) == '\n') {
+                    scanner->line++;
+                    scanner->line_start = scanner->current + 1;
+                }
                 advance(scanner);
             }
         } else {
@@ -678,7 +705,10 @@ static Token string_with_quote(Scanner *scanner, char quote) {
             if (c == '$' && peek_next(scanner) == '{') {
                 has_interpolation = true;
             }
-            if (c == '\n') scanner->line++;
+            if (c == '\n') {
+                scanner->line++;
+                scanner->line_start = scanner->current + 1;
+            }
             advance(scanner);
         }
     }
@@ -701,7 +731,10 @@ static Token raw_string_with_quote(Scanner *scanner, char quote) {
         if (peek(scanner) == '$' && peek_next(scanner) == '{') {
             has_interpolation = true;
         }
-        if (peek(scanner) == '\n') scanner->line++;
+        if (peek(scanner) == '\n') {
+            scanner->line++;
+            scanner->line_start = scanner->current + 1;
+        }
         advance(scanner);
     }
     if (is_at_end(scanner)) {
@@ -771,7 +804,7 @@ static Token regex_literal(Scanner *scanner) {
 // Try to scan regex literal (called when expecting expression)
 Token xr_scanner_try_regex(Scanner *scanner) {
     scanner->had_leading_space = skip_whitespace(scanner);
-    scanner->start = scanner->current;
+    scanner_begin_token(scanner);
 
     if (is_at_end(scanner) || peek(scanner) != '/') {
         return xr_scanner_scan(scanner);
@@ -797,7 +830,7 @@ Token xr_scanner_try_regex(Scanner *scanner) {
 // Scan next token
 Token xr_scanner_scan(Scanner *scanner) {
     scanner->had_leading_space = skip_whitespace(scanner);
-    scanner->start = scanner->current;
+    scanner_begin_token(scanner);
 
     // Check for errors detected during whitespace/comment skipping
     if (scanner->pending_error) {
