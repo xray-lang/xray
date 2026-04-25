@@ -856,16 +856,6 @@ static void fmt_expression(XrFmtContext *ctx, AstNode *node) {
             write_str(ctx, "cancelled()");
             break;
 
-        // Yield expression
-        case AST_YIELD_EXPR:
-            write_indent(ctx);
-            write_str(ctx, "yield");
-            if (node->as.yield_expr.value) {
-                write_space(ctx);
-                fmt_expression(ctx, node->as.yield_expr.value);
-            }
-            break;
-
         // Pattern nodes (for match)
         case AST_PATTERN_LITERAL:
             fmt_expression(ctx, node->as.pattern_literal.value);

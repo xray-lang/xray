@@ -77,11 +77,6 @@ typedef struct CallExprNode {
     int type_arg_count;
 } CallExprNode;
 
-// yield expression node
-typedef struct YieldExprNode {
-    AstNode *value;
-} YieldExprNode;
-
 // is expression node (runtime type check)
 typedef struct IsExprNode {
     AstNode *expr;

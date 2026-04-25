@@ -74,7 +74,6 @@ struct AstNode {
         FunctionDeclNode function_expr;
         CallExprNode call_expr;
         ReturnStmtNode return_stmt;
-        YieldExprNode yield_expr;
         IsExprNode is_expr;
         AsExprNode as_expr;
         ArrayLiteralNode array_literal;

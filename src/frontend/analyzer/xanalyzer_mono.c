@@ -427,10 +427,6 @@ AstNode *xr_ast_clone(AstNode *node, XrMonoTypeMap *map, int mc) {
         n->as.return_stmt.values = clone_node_array(
             node->as.return_stmt.values, node->as.return_stmt.value_count, map, mc);
         break;
-    case AST_YIELD_EXPR:
-        n->as.yield_expr.value = xr_ast_clone(node->as.yield_expr.value, map, mc);
-        break;
-
     // === Type check ===
     case AST_IS_EXPR:
         n->as.is_expr.expr = xr_ast_clone(node->as.is_expr.expr, map, mc);
