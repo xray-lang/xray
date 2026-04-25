@@ -1,0 +1,17 @@
+# GitHub Linguist overrides for xray source files.
+#
+# Until xray has its own grammar registered with github-linguist,
+# map .xr / .xrc to TypeScript for transitional syntax highlighting.
+# TypeScript matches xray closely on:
+#   - type annotations (`name: int`, `: ReturnType`)
+#   - template strings with ${...} interpolation
+#   - class / extends / super / this / new / static / override
+#   - for (x in arr), import / export
+# Mismatch: `fn` keyword (TS uses `function`) — minor visual difference only.
+*.xr   linguist-language=TypeScript
+*.xrc  linguist-language=TypeScript
+
+# Ensure .xr files count toward repo language stats and are not treated
+# as vendored/generated/documentation.
+*.xr   linguist-detectable=true
+*.xrc  linguist-detectable=true
