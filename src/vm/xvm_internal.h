@@ -233,6 +233,37 @@ XR_FUNC bool xr_vm_is_truthy(XrValue value);
 
 /* ========== API Functions (in xvm_api.c) ========== */
 
+/*
+** Single authoritative VM context resolver.
+**
+** Resolution order:
+**   1. Current worker's M.vm_ctx.current_coro -> coro->vm_ctx
+**   2. Current worker's M.vm_ctx (no active coro on this M)
+**   3. isolate->main_coro->vm_ctx (fallback during bootstrap / non-worker thread)
+**   4. &isolate->vm_ctx (static fallback)
+**
+** This is the ONLY supported way to obtain the live execution context inside
+** the VM module. Internal helpers must accept ctx as a parameter; they MUST
+** NOT re-resolve via isolate->vm.* fields.
+*/
+XR_FUNC XrVMContext* xr_vm_current_ctx(XrayIsolate *isolate);
+
+/*
+** Ensure the context can host a new entry frame with the given prototype.
+**
+** Reserves stack capacity for `extra_stack` slots above current stack_top
+** (typically proto->maxstacksize) and frame capacity for one additional
+** call frame. Grows backing storage when ctx is coroutine-backed; returns
+** false on growth failure or when ctx is the static fallback that cannot
+** grow. Public entries (xr_vm_call_closure / xr_vm_interpret_proto /
+** xr_vm_execute_module) must call this before installing a frame.
+**
+** Maintains the invariant stack <= stack_top <= stack + capacity across
+** the call (re-derives stack_top via offset since xr_coro_grow_stack may
+** relocate the backing buffer).
+*/
+XR_FUNC bool xr_vm_prepare_entry(XrVMContext *ctx, int extra_stack);
+
 // Call closure from C code (coroutine-aware, unified implementation)
 XR_FUNC XrValue xr_vm_call_closure(XrayIsolate *isolate, XrClosure *closure, XrValue *args, int nargs);
 
@@ -247,105 +278,16 @@ XR_FUNC void xr_vm_throw_exception(XrayIsolate *isolate, XrValue exception);
 
 /* ========== Instruction Operation Helpers (in xvm_ops.c) ========== */
 
-// Helper: create new frame and set stack_top correctly
-static inline void vm_push_frame(XrayIsolate *isolate, XrBcCallFrame **frame_ptr,
-                                 XrClosure *closure, XrValue *base) {
-    CHECK_FRAME_OVERFLOW(isolate);
-
-    XrBcCallFrame *new_frame = &isolate->vm.frames[isolate->vm.frame_count++];
-    new_frame->closure = closure;
-    new_frame->pc = PROTO_CODE_BASE(closure->proto);
-    new_frame->base_offset = (int)(base - isolate->vm.stack);
-
-    // Critical: must update stack_top
-    isolate->vm.stack_top = base + closure->proto->maxstacksize;
-
-    *frame_ptr = new_frame;
-}
-
-/* ========== Unified Frame Creation Helpers ========== */
-
 /*
-** Create new frame for method call (unified entry point)
+** Frame-creation helpers (vm_push_frame, vm_create_method_frame,
+** vm_create_function_frame, vm_get_safe_stack_start) were removed.
 **
-** Calling convention:
-**   caller: R[a]=return_value, R[a+1]=this, R[a+2+]=args
-**   callee: R[0]=this, R[1+]=args
-**   Return value written to ci->base - 1 = caller.R[a]
-**
-** @param isolate     VM instance
-** @param ci          Current call frame (for bounds checking)
-** @param caller_base Caller's base pointer
-** @param a           Base register index
-** @param closure     Closure being called
-** @return Newly created frame
+** They read/wrote isolate->vm.* (the legacy embedded XrVMState), but live
+** execution state belongs to XrVMContext (per-coroutine). Frame creation
+** in the dispatch loop is performed inline via VM_FRAMES / VM_FRAME_COUNT
+** macros that operate on vm_ctx. Public C-callers must use
+** xr_vm_call_closure / xr_vm_interpret_proto / xr_vm_execute_module.
 */
-static inline XrBcCallFrame* vm_create_method_frame(
-    XrayIsolate *isolate,
-    XrBcCallFrame *ci,
-    XrValue *caller_base,
-    int a,
-    XrClosure *closure
-) {
-    XrValue *new_base = caller_base + a + 1;
-
-    CHECK_FRAME_OVERFLOW(isolate);
-    CHECK_FRAME_BOUNDARY(isolate, ci, new_base);
-
-    XrBcCallFrame *new_frame = &isolate->vm.frames[isolate->vm.frame_count++];
-    new_frame->closure = closure;
-    new_frame->pc = PROTO_CODE_BASE(closure->proto);
-    new_frame->base_offset = (int)(new_base - isolate->vm.stack);
-    new_frame->u.l.pending_operator_check = false;
-
-    return new_frame;
-}
-
-/*
-** Create new frame for regular function call
-**
-** Calling convention:
-**   caller: R[func]=function_object, R[func+1+]=args
-**   callee: R[0]=arg1, R[1]=arg2...
-**   Return value written to stack + base_offset - 1 = R[func] (overwrites function object)
-*/
-static inline XrBcCallFrame* vm_create_function_frame(
-    XrayIsolate *isolate,
-    XrBcCallFrame *ci,
-    XrValue *caller_base,
-    int func_reg,
-    XrClosure *closure
-) {
-    XrValue *new_base = caller_base + func_reg + 1;
-
-    CHECK_FRAME_OVERFLOW(isolate);
-    CHECK_FRAME_BOUNDARY(isolate, ci, new_base);
-
-    XrBcCallFrame *new_frame = &isolate->vm.frames[isolate->vm.frame_count++];
-    new_frame->closure = closure;
-    new_frame->pc = PROTO_CODE_BASE(closure->proto);
-    new_frame->base_offset = (int)(new_base - isolate->vm.stack);
-    new_frame->u.l.pending_operator_check = false;
-
-    return new_frame;
-}
-
-// Get safe stack start for C closure call (avoid frame overlap)
-static inline XrValue* vm_get_safe_stack_start(XrayIsolate *isolate) {
-    XrValue *safe_start = isolate->vm.stack_top;
-
-    if (isolate->vm.frame_count > 0) {
-        XrBcCallFrame *current = &isolate->vm.frames[isolate->vm.frame_count - 1];
-        if (current->closure && current->closure->proto) {
-            XrValue *frame_end = isolate->vm.stack + current->base_offset + current->closure->proto->maxstacksize;
-            if (safe_start < frame_end) {
-                safe_start = frame_end;
-            }
-        }
-    }
-
-    return safe_start;
-}
 
 // Type conversion: xr_value_to_string declared in runtime/value/xvalue_format.h.
 

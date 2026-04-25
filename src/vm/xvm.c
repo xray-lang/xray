@@ -465,20 +465,47 @@ startfunc:
         ci->u.c.has_cfunc_result = false;
     }
 
-    // Allocate struct_area for native struct storage
+    // Allocate struct_area for native struct storage.
+    // Allocation failures are unrecoverable here (the frame layout is already
+    // committed): emit a runtime error and unwind via VM_RUNTIME_ERROR.
     if (cl->proto->struct_area_size > 0) {
         int _sa_idx = VM_FRAME_COUNT - 1;
         if (!vm_ctx->struct_areas) {
             int cap = vm_ctx->frame_capacity;
-            vm_ctx->struct_areas = (uint8_t**)xr_calloc(cap, sizeof(uint8_t*));
-            vm_ctx->struct_area_caps = (uint16_t*)xr_calloc(cap, sizeof(uint16_t));
+            uint8_t **areas = (uint8_t**)xr_calloc(cap, sizeof(uint8_t*));
+            if (!areas) {
+                VM_RUNTIME_ERROR(XR_ERR_OUT_OF_MEMORY,
+                    "failed to allocate struct_areas (cap=%d)", cap);
+            }
+            uint16_t *caps = (uint16_t*)xr_calloc(cap, sizeof(uint16_t));
+            if (!caps) {
+                xr_free(areas);
+                VM_RUNTIME_ERROR(XR_ERR_OUT_OF_MEMORY,
+                    "failed to allocate struct_area_caps (cap=%d)", cap);
+            }
+            vm_ctx->struct_areas = areas;
+            vm_ctx->struct_area_caps = caps;
             vm_ctx->struct_areas_cap = cap;
         } else if (_sa_idx >= vm_ctx->struct_areas_cap) {
             int old_cap = vm_ctx->struct_areas_cap;
             int new_cap = vm_ctx->frame_capacity;
             if (new_cap <= _sa_idx) new_cap = _sa_idx + 1;
-            vm_ctx->struct_areas = (uint8_t**)xr_realloc(vm_ctx->struct_areas, new_cap * sizeof(uint8_t*));
-            vm_ctx->struct_area_caps = (uint16_t*)xr_realloc(vm_ctx->struct_area_caps, new_cap * sizeof(uint16_t));
+            // Temp pointer + null check (project memory rule):
+            // never overwrite the live pointer on realloc failure.
+            uint8_t **new_areas = (uint8_t**)xr_realloc(
+                vm_ctx->struct_areas, new_cap * sizeof(uint8_t*));
+            if (!new_areas) {
+                VM_RUNTIME_ERROR(XR_ERR_OUT_OF_MEMORY,
+                    "failed to grow struct_areas to cap=%d", new_cap);
+            }
+            vm_ctx->struct_areas = new_areas;
+            uint16_t *new_caps = (uint16_t*)xr_realloc(
+                vm_ctx->struct_area_caps, new_cap * sizeof(uint16_t));
+            if (!new_caps) {
+                VM_RUNTIME_ERROR(XR_ERR_OUT_OF_MEMORY,
+                    "failed to grow struct_area_caps to cap=%d", new_cap);
+            }
+            vm_ctx->struct_area_caps = new_caps;
             memset(vm_ctx->struct_areas + old_cap, 0, (new_cap - old_cap) * sizeof(uint8_t*));
             memset(vm_ctx->struct_area_caps + old_cap, 0, (new_cap - old_cap) * sizeof(uint16_t));
             vm_ctx->struct_areas_cap = new_cap;
@@ -486,7 +513,14 @@ startfunc:
         uint16_t need = cl->proto->struct_area_size;
         if (vm_ctx->struct_area_caps[_sa_idx] < need) {
             xr_free(vm_ctx->struct_areas[_sa_idx]);
-            vm_ctx->struct_areas[_sa_idx] = (uint8_t*)xr_calloc(1, need);
+            uint8_t *area = (uint8_t*)xr_calloc(1, need);
+            if (!area) {
+                vm_ctx->struct_areas[_sa_idx] = NULL;
+                vm_ctx->struct_area_caps[_sa_idx] = 0;
+                VM_RUNTIME_ERROR(XR_ERR_OUT_OF_MEMORY,
+                    "failed to allocate struct_area (size=%u)", need);
+            }
+            vm_ctx->struct_areas[_sa_idx] = area;
             vm_ctx->struct_area_caps[_sa_idx] = need;
         }
     }
@@ -4490,8 +4524,15 @@ startfunc:
                                     uint32_t new_cap = vm_ctx->struct_ret_arena_cap;
                                     if (new_cap < 512) new_cap = 512;
                                     while (new_cap < need) new_cap *= 2;
-                                    vm_ctx->struct_ret_arena = (uint8_t*)xr_realloc(
+                                    // Temp pointer + null check (project memory rule):
+                                    // never overwrite the live pointer on realloc failure.
+                                    uint8_t *new_arena = (uint8_t*)xr_realloc(
                                         vm_ctx->struct_ret_arena, new_cap);
+                                    if (!new_arena) {
+                                        VM_RUNTIME_ERROR(XR_ERR_OUT_OF_MEMORY,
+                                            "failed to grow struct_ret_arena to %u bytes", new_cap);
+                                    }
+                                    vm_ctx->struct_ret_arena = new_arena;
                                     vm_ctx->struct_ret_arena_cap = new_cap;
                                 }
                                 uint8_t *dst = vm_ctx->struct_ret_arena + vm_ctx->struct_ret_arena_used;
