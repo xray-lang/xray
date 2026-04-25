@@ -197,22 +197,28 @@ TEST(ast_clone_variable) {
 }
 
 TEST(ast_clone_with_type_substitution) {
-    // Variable with compile_type = TYPE_PARAM "T"
+    // X-01 Phase 2.4c: AstNode no longer carries an inline compile_type
+    // field; mono substitutes types only through legitimate per-node
+    // type fields (param types, var-decl annotations, return types, ...).
+    // This test now exercises that path via VarDeclNode::type_annotation.
     XrType param_t = { .kind = XR_KIND_TYPE_PARAM };
     param_t.type_param.name = "T";
 
-    AstNode node = { .type = AST_VARIABLE, .line = 1 };
-    node.as.variable.name = "result";
-    node.compile_type_legacy = &param_t;
+    AstNode node = { .type = AST_VAR_DECL, .line = 1 };
+    node.as.var_decl.name = "result";
+    node.as.var_decl.initializer = NULL;
+    node.as.var_decl.is_const = false;
+    node.as.var_decl.storage_mode = 0;
+    node.as.var_decl.type_annotation = &param_t;
 
     XrType int_t = { .kind = XR_KIND_INT };
     XrMonoTypeMap map[] = { { "T", &int_t } };
 
     AstNode *clone = xr_ast_clone(&node, map, 1);
     ASSERT(clone != NULL);
-    ASSERT(clone->compile_type_legacy != NULL);
-    ASSERT_EQ(clone->compile_type_legacy->kind, XR_KIND_INT);
-    free(clone->as.variable.name);
+    ASSERT(clone->as.var_decl.type_annotation != NULL);
+    ASSERT_EQ(clone->as.var_decl.type_annotation->kind, XR_KIND_INT);
+    free(clone->as.var_decl.name);
     free(clone);
 }
 

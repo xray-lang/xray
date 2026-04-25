@@ -482,18 +482,13 @@ void xa_visit_collect(XaInferContext *ctx, AstNode *node) {
                 XaSymbol *sym = xa_symbol_new(ta->name, XA_SYM_TYPE_ALIAS);
                 sym->location.line = node->line;
                 sym->is_const = true;
-                // X-01 Phase 2.4b: type-alias resolved type comes from
-                // the analyzer side table (the parser still seeds the
-                // legacy field, but compile_type_legacy is being
-                // retired in 2.4c).
-                XrType *resolved = xa_analyzer_get_node_type(ctx->analyzer, node);
-                if (!resolved) {
-                    // Parser-side alias write happens before analyzer
-                    // sees the node; consult the legacy field once.
-                    resolved = node->compile_type_legacy;
-                    if (resolved) {
-                        xa_analyzer_set_node_type(ctx->analyzer, node, resolved);
-                    }
+                // X-01 Phase 2.4c: parser stashes the resolved type
+                // in TypeAliasNode::resolved_type. Mirror it into the
+                // side table so downstream readers (codegen, LSP) get
+                // the same answer through the canonical lookup path.
+                XrType *resolved = ta->resolved_type;
+                if (resolved) {
+                    xa_analyzer_set_node_type(ctx->analyzer, node, resolved);
                 }
                 sym->alias_type = resolved;
                 xa_scope_add_symbol(ctx->analyzer->current_scope, sym);
@@ -801,10 +796,8 @@ XrType *xa_visit_infer_expr(XaInferContext *ctx, AstNode *node) {
         }
     }
 
-    // Cache inferred type on AST node for codegen phase.
-    // X-01 dual-write: also populate the side table so 2.4b can switch
-    // readers without changing semantics.
-    node->compile_type_legacy = result;
+    // Cache inferred type for codegen phase.
+    // X-01 Phase 2.4c: side-table is now the only store.
     xa_analyzer_set_node_type(ctx->analyzer, node, result);
     return result;
 }

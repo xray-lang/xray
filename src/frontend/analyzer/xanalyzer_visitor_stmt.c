@@ -57,9 +57,8 @@ void xa_visit_var_decl_stmt(XaInferContext *ctx, AstNode *node) {
         XrType *init_type = xa_visit_infer_expr(ctx, var->initializer);
         ctx->expected_type = saved_expected;
 
-        // Store type on initializer node for code generation.
-        // X-01 dual-write: keep field + side table in sync.
-        var->initializer->compile_type_legacy = init_type;
+        // Store inferred initializer type for code generation.
+        // X-01 Phase 2.4c: side-table is now the only store.
         xa_analyzer_set_node_type(ctx->analyzer, var->initializer, init_type);
 
         if (links->declared_type && !XR_TYPE_IS_UNKNOWN(links->declared_type)) {
@@ -135,9 +134,8 @@ void xa_visit_var_decl_stmt(XaInferContext *ctx, AstNode *node) {
         s = s->parent;
     }
 
-    // Store type on AST node for code generation phase.
-    // X-01 dual-write: keep field + side table in sync.
-    node->compile_type_legacy = var_type;
+    // Store inferred type on AST node for code generation phase.
+    // X-01 Phase 2.4c: side-table is now the only store.
     xa_analyzer_set_node_type(ctx->analyzer, node, var_type);
 
     // Create assignment flow node
@@ -424,8 +422,7 @@ void xa_visit_return_stmt(XaInferContext *ctx, AstNode *node) {
         return_type = xr_type_new_tuple(ctx->analyzer->isolate, element_types, ret->value_count);
 
         // Store return type info on the AST node.
-        // X-01 dual-write: keep field + side table in sync.
-        node->compile_type_legacy = return_type;
+        // X-01 Phase 2.4c: side-table is now the only store.
         xa_analyzer_set_node_type(ctx->analyzer, node, return_type);
 
         xr_free(element_types);
