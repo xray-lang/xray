@@ -11,6 +11,7 @@
  *   Tokenizes source code for the parser using SIMD optimization for whitespace.
  */
 
+#include <assert.h>
 #include <string.h>
 #include "xlex.h"
 #include "../../base/xchecks.h"
@@ -256,286 +257,59 @@ static bool skip_whitespace(Scanner *scanner) {
     }
 }
 
-static TokenType check_keyword(Scanner *scanner, int start, int length,
-                               const char *rest, TokenType type) {
-    if (scanner->current - scanner->start == start + length &&
-        memcmp(scanner->start + start, rest, length) == 0) {
-        return type;
-    }
-    return TK_NAME;
-}
+// ============================================================================
+// Keyword Table (single source of truth: xkeywords.def)
+// ============================================================================
+
+typedef struct {
+    const char *name;
+    int length;
+    TokenType type;
+} XrKeyword;
+
+// Sorted lookup table. Order MUST match xkeywords.def, which is itself
+// sorted by ASCII memcmp() then by length (matches our binary search).
+static const XrKeyword keywords[] = {
+#define XR_KW(name, len, type) { name, len, type },
+#include "xkeywords.def"
+#undef XR_KW
+};
+
+#define NUM_KEYWORDS (sizeof(keywords) / sizeof(keywords[0]))
+
+// Compile-time check: each entry's `length` field equals sizeof(spelling) - 1.
+// Catches manual-edit mistakes in xkeywords.def at build time.
+#define XR_KW(name, len, type) \
+    _Static_assert(sizeof(name) - 1 == (len), \
+                   "keyword length mismatch in xkeywords.def: " name);
+#include "xkeywords.def"
+#undef XR_KW
 
 static TokenType identifier_type(Scanner *scanner) {
-    // Single underscore '_' as wildcard pattern
-    if (scanner->current - scanner->start == 1 && scanner->start[0] == '_') {
+    const char *s = scanner->start;
+    int len = (int)(scanner->current - scanner->start);
+
+    // Single underscore is the match wildcard pattern, not an identifier.
+    if (len == 1 && s[0] == '_') {
         return TK_UNDERSCORE;
     }
 
-    switch (scanner->start[0]) {
-        case 'a':
-            if (scanner->current - scanner->start > 1) {
-                switch (scanner->start[1]) {
-                    case 'b': return check_keyword(scanner, 2, 6, "stract", TK_ABSTRACT); // abstract
-                    case 's':
-                        // 'as' must be exactly 2 chars
-                        if (scanner->current - scanner->start == 2) {
-                            return TK_AS; // as
-                        }
-                        break;
-                    case 'w': return check_keyword(scanner, 2, 3, "ait", TK_AWAIT); // await
-                }
-            }
-            break;
-        case 'b':
-            if (scanner->current - scanner->start > 1) {
-                switch (scanner->start[1]) {
-                    case 'o': return check_keyword(scanner, 2, 2, "ol", TK_BOOL); // bool
-                    case 'r': return check_keyword(scanner, 2, 3, "eak", TK_BREAK);
-                }
-            }
-            break;
-        case 'c':
-            if (scanner->current - scanner->start > 1) {
-                switch (scanner->start[1]) {
-                    case 'a':
-                        return check_keyword(scanner, 2, 3, "tch", TK_CATCH);
-                    case 'l':
-                        return check_keyword(scanner, 2, 3, "ass", TK_CLASS);
-                    case 'o':
-                        if (scanner->current - scanner->start > 2) {
-                            switch (scanner->start[2]) {
-                                case 'n':
-                                    if (scanner->current - scanner->start == 5) {
-                                        return check_keyword(scanner, 2, 3, "nst", TK_CONST);
-                                    }
-                                    if (scanner->current - scanner->start == 8) {
-                                        return check_keyword(scanner, 2, 6, "ntinue", TK_CONTINUE);
-                                    }
-                                    return check_keyword(scanner, 2, 9, "nstructor", TK_CONSTRUCTOR);
-                            }
-                        }
-                }
-            }
-            break;
-        case 'd':
-            if (scanner->current - scanner->start > 1) {
-                switch (scanner->start[1]) {
-                    case 'e':
-                        return check_keyword(scanner, 1, 4, "efer", TK_DEFER); // defer
-                }
-            }
-            break;
-        case 'e':
-            if (scanner->current - scanner->start > 1) {
-                switch (scanner->start[1]) {
-                    case 'l': return check_keyword(scanner, 1, 3, "lse", TK_ELSE);
-                    case 'n': return check_keyword(scanner, 1, 3, "num", TK_ENUM);
-                    case 'x':
-                        if (scanner->current - scanner->start == 7) {
-                            return check_keyword(scanner, 1, 6, "xtends", TK_EXTENDS);
-                        }
-                        return check_keyword(scanner, 1, 5, "xport", TK_EXPORT); // export
-                }
-            }
-            break;
-        case 'f':
-            if (scanner->current - scanner->start > 1) {
-                switch (scanner->start[1]) {
-                    case 'a':
-                        return check_keyword(scanner, 2, 3, "lse", TK_FALSE);
-                    case 'i':
-                        // final (5) vs finally (7)
-                        if (scanner->current - scanner->start == 5)
-                            return check_keyword(scanner, 2, 3, "nal", TK_FINAL);
-                        return check_keyword(scanner, 2, 5, "nally", TK_FINALLY);
-                    case 'l':
-                        // float (5), float32 (7), float64 (7)
-                        if (scanner->current - scanner->start == 5) {
-                            return check_keyword(scanner, 2, 3, "oat", TK_FLOAT);
-                        }
-                        if (scanner->current - scanner->start == 7) {
-                            if (scanner->start[5] == '3') return check_keyword(scanner, 2, 5, "oat32", TK_FLOAT32);
-                            if (scanner->start[5] == '6') return check_keyword(scanner, 2, 5, "oat64", TK_FLOAT64);
-                        }
-                        break;
-                    case 'o':
-                        return check_keyword(scanner, 2, 1, "r", TK_FOR);
-                    case 'n':
-                        // 'fn' must be exactly 2 chars
-                        if (scanner->current - scanner->start == 2) {
-                            return TK_FN;
-                        }
-                        break;
-                }
-            }
-            break;
-        case 'g':
-            if (scanner->current - scanner->start == 2) {
-                return check_keyword(scanner, 1, 1, "o", TK_GO); // go
-            }
-            break;
-        case 'i':
-            if (scanner->current - scanner->start > 1) {
-                switch (scanner->start[1]) {
-                    case 'f': return TK_IF; // if
-                    case 'm':
-                        if (scanner->current - scanner->start == 6) {
-                            return check_keyword(scanner, 2, 4, "port", TK_IMPORT); // import
-                        }
-                        return check_keyword(scanner, 2, 8, "plements", TK_IMPLEMENTS);
-                    case 'n':
-                        // Check 'in', 'int', 'int8/16/32/64', or 'interface'
-                        switch (scanner->current - scanner->start) {
-                            case 2: return TK_IN;
-                            case 3: return check_keyword(scanner, 2, 1, "t", TK_INT);
-                            case 4: return check_keyword(scanner, 2, 2, "t8", TK_INT8);
-                            case 5:
-                                if (scanner->start[3] == '1') return check_keyword(scanner, 2, 3, "t16", TK_INT16);
-                                if (scanner->start[3] == '3') return check_keyword(scanner, 2, 3, "t32", TK_INT32);
-                                if (scanner->start[3] == '6') return check_keyword(scanner, 2, 3, "t64", TK_INT64);
-                                break;
-                            case 9: return check_keyword(scanner, 2, 7, "terface", TK_INTERFACE);
-                        }
-                        break;
-                    case 's':
-                        // Check 'is'
-                        if (scanner->current - scanner->start == 2) {
-                            return TK_IS;
-                        }
-                        break;
-                }
-            }
-            break;
-        case 'l': return check_keyword(scanner, 1, 2, "et", TK_LET);
-        case 'm':
-            return check_keyword(scanner, 1, 4, "atch", TK_MATCH); // match
-        case 'n':
-            if (scanner->current - scanner->start > 1) {
-                switch (scanner->start[1]) {
-                    case 'e': return check_keyword(scanner, 2, 1, "w", TK_NEW);
-                    case 'u': return check_keyword(scanner, 2, 2, "ll", TK_NULL);
-                }
-            }
-            break;
-        case 'o':
-            if (scanner->current - scanner->start > 1) {
-                switch (scanner->start[1]) {
-                    case 'p': return check_keyword(scanner, 2, 6, "erator", TK_OPERATOR); // operator
-                    case 'v': return check_keyword(scanner, 2, 6, "erride", TK_OVERRIDE); // override
-                }
-            }
-            break;
-        case 'p':
-            if (scanner->current - scanner->start > 1) {
-                switch (scanner->start[1]) {
-                    case 'r': return check_keyword(scanner, 2, 5, "ivate", TK_PRIVATE);
-                    case 'u': return check_keyword(scanner, 2, 4, "blic", TK_PUBLIC);
-                }
-            }
-            break;
-        case 'r':
-            return check_keyword(scanner, 1, 5, "eturn", TK_RETURN);
-        case 's':
-            if (scanner->current - scanner->start > 1) {
-                switch (scanner->start[1]) {
-                    case 'c': return check_keyword(scanner, 2, 3, "ope", TK_SCOPE); // scope
-                    case 'e':
-                        if (scanner->current - scanner->start == 6) {
-                            if (scanner->start[2] == 'l') {
-                                return check_keyword(scanner, 2, 4, "lect", TK_SELECT); // select
-                            }
-                        }
-                        break;
-                    case 'h': return check_keyword(scanner, 2, 4, "ared", TK_SHARED); // shared
-                    case 't':
-                        // Distinguish 'string', 'struct' and 'static' (all 6 chars)
-                        if (scanner->current - scanner->start == 6) {
-                            if (scanner->start[2] == 'r') {
-                                if (scanner->start[3] == 'i') {
-                                    return check_keyword(scanner, 2, 4, "ring", TK_STRING); // string
-                                }
-                                return check_keyword(scanner, 2, 4, "ruct", TK_STRUCT); // struct
-                            }
-                            return check_keyword(scanner, 2, 4, "atic", TK_STATIC); // static
-                        }
-                        break;
-                    case 'u': return check_keyword(scanner, 2, 3, "per", TK_SUPER);
-                }
-            }
-            break;
-        case 'A':  // Array
-            return check_keyword(scanner, 1, 4, "rray", TK_TYPE_ARRAY);
-        case 'B':  // BigInt, Bytes
-            if (scanner->current - scanner->start == 6) {
-                return check_keyword(scanner, 1, 5, "igInt", TK_TYPE_BIGINT);
-            }
-            if (scanner->current - scanner->start == 5) {
-                return check_keyword(scanner, 1, 4, "ytes", TK_TYPE_BYTES);
-            }
-            break;
-        case 'C':  // Channel
-            return check_keyword(scanner, 1, 6, "hannel", TK_TYPE_CHANNEL);
-        case 'D':  // DateTime
-            if (scanner->current - scanner->start == 8) {
-                return check_keyword(scanner, 1, 7, "ateTime", TK_TYPE_DATETIME);
-            }
-            break;
-        case 'J':  // Json
-            return check_keyword(scanner, 1, 3, "son", TK_TYPE_JSON);
-        case 'M':  // Map
-            return check_keyword(scanner, 1, 2, "ap", TK_TYPE_MAP);
-        case 'R':  // Range
-            if (scanner->current - scanner->start == 5) {
-                return check_keyword(scanner, 1, 4, "ange", TK_TYPE_RANGE);
-            }
-            break;
-        case 'S':  // Set
-            return check_keyword(scanner, 1, 2, "et", TK_TYPE_SET);
-        case 't':
-            if (scanner->current - scanner->start > 1) {
-                switch (scanner->start[1]) {
-                    case 'h':
-                        if (scanner->current - scanner->start == 4) {
-                            return check_keyword(scanner, 2, 2, "is", TK_THIS);
-                        }
-                        if (scanner->current - scanner->start == 5) {
-                            return check_keyword(scanner, 2, 3, "row", TK_THROW);
-                        }
-                        break;
-                    case 'r':
-                        if (scanner->current - scanner->start == 3) {
-                            return check_keyword(scanner, 2, 1, "y", TK_TRY);
-                        }
-                        if (scanner->current - scanner->start == 4) {
-                            return check_keyword(scanner, 2, 2, "ue", TK_TRUE);
-                        }
-                        break;
-                    case 'y': return check_keyword(scanner, 2, 2, "pe", TK_TYPE_ALIAS);  // type
-                }
-            }
-            break;
-        case 'u':
-            if (scanner->current - scanner->start > 1) {
-                switch (scanner->start[1]) {
-                    case 'i':
-                        // uint8 (5), uint16 (6), uint32 (6), uint64 (6)
-                        switch (scanner->current - scanner->start) {
-                            case 5: return check_keyword(scanner, 1, 4, "int8", TK_UINT8);
-                            case 6:
-                                if (scanner->start[4] == '1') return check_keyword(scanner, 1, 5, "int16", TK_UINT16);
-                                if (scanner->start[4] == '3') return check_keyword(scanner, 1, 5, "int32", TK_UINT32);
-                                if (scanner->start[4] == '6') return check_keyword(scanner, 1, 5, "int64", TK_UINT64);
-                                break;
-                        }
-                        break;
-                    case 'n':
-                        return check_keyword(scanner, 1, 6, "nknown", TK_UNKNOWN);
-                }
-            }
-            break;
-        case 'v': return check_keyword(scanner, 1, 3, "oid", TK_VOID);
-        case 'w': return check_keyword(scanner, 1, 4, "hile", TK_WHILE);
-        case 'y': return check_keyword(scanner, 1, 4, "ield", TK_YIELD);
+    // Binary search keywords[] using lexicographic-then-length ordering.
+    // The same total order is used to sort xkeywords.def, so this is correct
+    // by construction; the lengths-differ branch ensures shorter prefixes
+    // (e.g. "in") are found instead of being conflated with longer keywords
+    // (e.g. "int" / "interface"), and prefixes of keywords (e.g. user-named
+    // `iffy`) cannot collide with the keyword (`if`) because length differs.
+    int lo = 0, hi = (int)NUM_KEYWORDS - 1;
+    while (lo <= hi) {
+        int mid = (lo + hi) >> 1;
+        const XrKeyword *kw = &keywords[mid];
+        int min_len = len < kw->length ? len : kw->length;
+        int cmp = memcmp(s, kw->name, (size_t)min_len);
+        if (cmp == 0) cmp = len - kw->length;
+        if (cmp == 0) return kw->type;
+        if (cmp < 0) hi = mid - 1;
+        else lo = mid + 1;
     }
     return TK_NAME;
 }

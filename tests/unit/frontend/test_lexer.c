@@ -407,6 +407,104 @@ TEST(lexer_multiline_block_comment_position) {
     ASSERT_EQ_INT(t.column, 1);
 }
 
+/* ========== Keyword-Prefix Identifiers (L-01) ========== */
+
+// Identifiers that share a prefix with a keyword must NOT be recognised as
+// the keyword. This is the regression test for the original `TK_IF` length
+// guard bug, but now applies structurally to every keyword via the X-macro
+// driven binary-search lookup table.
+TEST(lexer_keyword_prefix_identifiers) {
+    // 2-char keywords prefix-extended to identifiers
+    assert_token(scan_single("iffy"),    TK_NAME, "iffy");
+    assert_token(scan_single("ifElse"),  TK_NAME, "ifElse");
+    assert_token(scan_single("if_done"), TK_NAME, "if_done");
+    assert_token(scan_single("fnord"),   TK_NAME, "fnord");
+    assert_token(scan_single("isOpen"),  TK_NAME, "isOpen");
+    assert_token(scan_single("inflate"), TK_NAME, "inflate");
+    assert_token(scan_single("gophers"), TK_NAME, "gophers");
+    assert_token(scan_single("asana"),   TK_NAME, "asana");
+    // 3-char keywords prefix-extended
+    assert_token(scan_single("letter"),  TK_NAME, "letter");
+    assert_token(scan_single("intuit"),  TK_NAME, "intuit");
+    assert_token(scan_single("forge"),   TK_NAME, "forge");
+    assert_token(scan_single("newest"),  TK_NAME, "newest");
+    // 5-char keyword `class` prefixed
+    assert_token(scan_single("classy"),     TK_NAME, "classy");
+    assert_token(scan_single("classValue"), TK_NAME, "classValue");
+    // const vs constructor vs continue
+    assert_token(scan_single("consume"), TK_NAME, "consume");
+    assert_token(scan_single("contour"), TK_NAME, "contour");
+    // null vs nullable
+    assert_token(scan_single("nullable"), TK_NAME, "nullable");
+    // true vs truely
+    assert_token(scan_single("truely"),   TK_NAME, "truely");
+    // Case-sensitive: lowercase is NOT the type keyword
+    assert_token(scan_single("array"),    TK_NAME, "array");  // != Array
+    assert_token(scan_single("map"),      TK_NAME, "map");    // != Map
+}
+
+// Every keyword in xkeywords.def must round-trip to its declared TokenType.
+// This guards against silent coverage gaps when the table is edited.
+TEST(lexer_keyword_table_completeness) {
+    struct {
+        const char *spelling;
+        TokenType expected;
+    } cases[] = {
+        // Lowercase keywords
+        {"abstract", TK_ABSTRACT}, {"as", TK_AS}, {"await", TK_AWAIT},
+        {"bool", TK_BOOL}, {"break", TK_BREAK},
+        {"catch", TK_CATCH}, {"class", TK_CLASS},
+        {"const", TK_CONST}, {"constructor", TK_CONSTRUCTOR},
+        {"continue", TK_CONTINUE}, {"defer", TK_DEFER},
+        {"else", TK_ELSE}, {"enum", TK_ENUM},
+        {"export", TK_EXPORT}, {"extends", TK_EXTENDS},
+        {"false", TK_FALSE}, {"final", TK_FINAL}, {"finally", TK_FINALLY},
+        {"float", TK_FLOAT}, {"float32", TK_FLOAT32}, {"float64", TK_FLOAT64},
+        {"fn", TK_FN}, {"for", TK_FOR},
+        {"go", TK_GO}, {"if", TK_IF},
+        {"implements", TK_IMPLEMENTS}, {"import", TK_IMPORT},
+        {"in", TK_IN}, {"int", TK_INT}, {"int8", TK_INT8},
+        {"int16", TK_INT16}, {"int32", TK_INT32}, {"int64", TK_INT64},
+        {"interface", TK_INTERFACE}, {"is", TK_IS},
+        {"let", TK_LET}, {"match", TK_MATCH},
+        {"new", TK_NEW}, {"null", TK_NULL},
+        {"operator", TK_OPERATOR}, {"override", TK_OVERRIDE},
+        {"private", TK_PRIVATE}, {"public", TK_PUBLIC},
+        {"return", TK_RETURN},
+        {"scope", TK_SCOPE}, {"select", TK_SELECT}, {"shared", TK_SHARED},
+        {"static", TK_STATIC}, {"string", TK_STRING}, {"struct", TK_STRUCT},
+        {"super", TK_SUPER},
+        {"this", TK_THIS}, {"throw", TK_THROW},
+        {"true", TK_TRUE}, {"try", TK_TRY}, {"type", TK_TYPE_ALIAS},
+        {"uint8", TK_UINT8}, {"uint16", TK_UINT16},
+        {"uint32", TK_UINT32}, {"uint64", TK_UINT64},
+        {"unknown", TK_UNKNOWN},
+        {"void", TK_VOID}, {"while", TK_WHILE}, {"yield", TK_YIELD},
+        // Uppercase type keywords
+        {"Array", TK_TYPE_ARRAY}, {"BigInt", TK_TYPE_BIGINT},
+        {"Bytes", TK_TYPE_BYTES}, {"Channel", TK_TYPE_CHANNEL},
+        {"DateTime", TK_TYPE_DATETIME}, {"Json", TK_TYPE_JSON},
+        {"Map", TK_TYPE_MAP}, {"Range", TK_TYPE_RANGE}, {"Set", TK_TYPE_SET},
+    };
+    int n = (int)(sizeof(cases) / sizeof(cases[0]));
+    for (int i = 0; i < n; i++) {
+        Token t = scan_single(cases[i].spelling);
+        if (t.type != cases[i].expected) {
+            printf("FAIL: keyword '%s' expected type %d, got %d\n",
+                   cases[i].spelling, cases[i].expected, t.type);
+        }
+        ASSERT_EQ_INT(t.type, cases[i].expected);
+    }
+}
+
+// `r` alone is an identifier; only `r` followed by a quote is a raw string.
+TEST(lexer_lone_r_is_identifier) {
+    Token t = scan_single("r");
+    ASSERT_EQ_INT(t.type, TK_NAME);
+    t = scan_single("rusty");
+    ASSERT_EQ_INT(t.type, TK_NAME);
+}
+
 /* ========== Error Token Contract (L-03) ========== */
 
 // TK_ERROR carries the diagnostic in error_message; start/length point
@@ -514,6 +612,11 @@ static void run_all_tests(void) {
     RUN_TEST(lexer_multiline_string_start_position);
     RUN_TEST(lexer_multiline_raw_string_start_position);
     RUN_TEST(lexer_multiline_block_comment_position);
+
+    RUN_TEST_SUITE("Keyword-Prefix Identifiers (L-01)");
+    RUN_TEST(lexer_keyword_prefix_identifiers);
+    RUN_TEST(lexer_keyword_table_completeness);
+    RUN_TEST(lexer_lone_r_is_identifier);
 
     RUN_TEST_SUITE("Error Token Contract (L-03)");
     RUN_TEST(lexer_error_token_message_field);
