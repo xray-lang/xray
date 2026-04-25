@@ -99,6 +99,7 @@ add_xray_unit_test(test_mono analyzer/test_mono.c)
 add_xray_unit_test(test_instruction vm/test_instruction.c)
 add_xray_unit_test(test_opcode vm/test_opcode.c)
 add_xray_unit_test(test_vm_api vm/test_vm_api.c)
+add_xray_unit_test(test_ic vm/test_ic.c)
 
 # ============================================================================
 # symbol/ — Symbol table
