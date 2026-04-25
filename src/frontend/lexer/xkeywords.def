@@ -1,0 +1,108 @@
+/*
+ * xray - Lightweight typed scripting with native concurrency
+ * https://www.xray-lang.org
+ *
+ * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
+ * Licensed under the MIT License
+ *
+ * xkeywords.def - Single source of truth for all reserved keywords.
+ *
+ * USAGE:
+ *   This file is intentionally NOT a normal header. Consumers must define
+ *   XR_KW(spelling, length, token) before #include "xkeywords.def" and
+ *   #undef XR_KW afterwards.
+ *
+ *   Example (build sorted lookup table):
+ *     static const XrKeyword keywords[] = {
+ *     #define XR_KW(name, len, type) { name, len, type },
+ *     #include "xkeywords.def"
+ *     #undef XR_KW
+ *     };
+ *
+ * INVARIANTS (CHECKED):
+ *   1. Entries MUST be sorted by ASCII memcmp order, then by length
+ *      (i.e. by the same total order the lookup uses). Verified at
+ *      lexer init time and by the unit test test_lexer_keyword_table.
+ *   2. The `length` literal MUST equal sizeof(spelling) - 1. Verified at
+ *      compile time via _Static_assert in xlex.c.
+ *
+ * RAW STRING NOTE:
+ *   The single character `r` is NOT listed here because it is recognised
+ *   contextually by xr_scanner_scan() as a raw-string prefix when followed
+ *   by a quote. As a bare identifier it remains TK_NAME.
+ */
+
+/*           spelling       length  token             */
+XR_KW(       "Array",       5,      TK_TYPE_ARRAY    )
+XR_KW(       "BigInt",      6,      TK_TYPE_BIGINT   )
+XR_KW(       "Bytes",       5,      TK_TYPE_BYTES    )
+XR_KW(       "Channel",     7,      TK_TYPE_CHANNEL  )
+XR_KW(       "DateTime",    8,      TK_TYPE_DATETIME )
+XR_KW(       "Json",        4,      TK_TYPE_JSON     )
+XR_KW(       "Map",         3,      TK_TYPE_MAP      )
+XR_KW(       "Range",       5,      TK_TYPE_RANGE    )
+XR_KW(       "Set",         3,      TK_TYPE_SET      )
+XR_KW(       "abstract",    8,      TK_ABSTRACT      )
+XR_KW(       "as",          2,      TK_AS            )
+XR_KW(       "await",       5,      TK_AWAIT         )
+XR_KW(       "bool",        4,      TK_BOOL          )
+XR_KW(       "break",       5,      TK_BREAK         )
+XR_KW(       "catch",       5,      TK_CATCH         )
+XR_KW(       "class",       5,      TK_CLASS         )
+XR_KW(       "const",       5,      TK_CONST         )
+XR_KW(       "constructor", 11,     TK_CONSTRUCTOR   )
+XR_KW(       "continue",    8,      TK_CONTINUE      )
+XR_KW(       "defer",       5,      TK_DEFER         )
+XR_KW(       "else",        4,      TK_ELSE          )
+XR_KW(       "enum",        4,      TK_ENUM          )
+XR_KW(       "export",      6,      TK_EXPORT        )
+XR_KW(       "extends",     7,      TK_EXTENDS       )
+XR_KW(       "false",       5,      TK_FALSE         )
+XR_KW(       "final",       5,      TK_FINAL         )
+XR_KW(       "finally",     7,      TK_FINALLY       )
+XR_KW(       "float",       5,      TK_FLOAT         )
+XR_KW(       "float32",     7,      TK_FLOAT32       )
+XR_KW(       "float64",     7,      TK_FLOAT64       )
+XR_KW(       "fn",          2,      TK_FN            )
+XR_KW(       "for",         3,      TK_FOR           )
+XR_KW(       "go",          2,      TK_GO            )
+XR_KW(       "if",          2,      TK_IF            )
+XR_KW(       "implements",  10,     TK_IMPLEMENTS    )
+XR_KW(       "import",      6,      TK_IMPORT        )
+XR_KW(       "in",          2,      TK_IN            )
+XR_KW(       "int",         3,      TK_INT           )
+XR_KW(       "int16",       5,      TK_INT16         )
+XR_KW(       "int32",       5,      TK_INT32         )
+XR_KW(       "int64",       5,      TK_INT64         )
+XR_KW(       "int8",        4,      TK_INT8          )
+XR_KW(       "interface",   9,      TK_INTERFACE     )
+XR_KW(       "is",          2,      TK_IS            )
+XR_KW(       "let",         3,      TK_LET           )
+XR_KW(       "match",       5,      TK_MATCH         )
+XR_KW(       "new",         3,      TK_NEW           )
+XR_KW(       "null",        4,      TK_NULL          )
+XR_KW(       "operator",    8,      TK_OPERATOR      )
+XR_KW(       "override",    8,      TK_OVERRIDE      )
+XR_KW(       "private",     7,      TK_PRIVATE       )
+XR_KW(       "public",      6,      TK_PUBLIC        )
+XR_KW(       "return",      6,      TK_RETURN        )
+XR_KW(       "scope",       5,      TK_SCOPE         )
+XR_KW(       "select",      6,      TK_SELECT        )
+XR_KW(       "shared",      6,      TK_SHARED        )
+XR_KW(       "static",      6,      TK_STATIC        )
+XR_KW(       "string",      6,      TK_STRING        )
+XR_KW(       "struct",      6,      TK_STRUCT        )
+XR_KW(       "super",       5,      TK_SUPER         )
+XR_KW(       "this",        4,      TK_THIS          )
+XR_KW(       "throw",       5,      TK_THROW         )
+XR_KW(       "true",        4,      TK_TRUE          )
+XR_KW(       "try",         3,      TK_TRY           )
+XR_KW(       "type",        4,      TK_TYPE_ALIAS    )
+XR_KW(       "uint16",      6,      TK_UINT16        )
+XR_KW(       "uint32",      6,      TK_UINT32        )
+XR_KW(       "uint64",      6,      TK_UINT64        )
+XR_KW(       "uint8",       5,      TK_UINT8         )
+XR_KW(       "unknown",     7,      TK_UNKNOWN       )
+XR_KW(       "void",        4,      TK_VOID          )
+XR_KW(       "while",       5,      TK_WHILE         )
+XR_KW(       "yield",       5,      TK_YIELD         )
