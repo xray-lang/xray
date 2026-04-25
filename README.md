@@ -41,7 +41,7 @@ git clone https://github.com/xray-lang/xray.git
 cd xray
 cmake -B build -DCMAKE_BUILD_TYPE=Release
 cmake --build build -j8
-./build/xray --version   # xray v0.5.0 (JIT, arm64-darwin)
+./build/xray --version   # e.g. xray v0.5.x (JIT, arm64-darwin)
 ```
 
 ```bash
