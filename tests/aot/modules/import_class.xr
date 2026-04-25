@@ -1,0 +1,12 @@
+// AOT module test: cross-module class import
+import { Rect, add, mul } from "./shape_lib"
+
+let r = Rect(5, 3)
+print(r.area())
+print(r.perimeter())
+print(r.w)
+print(r.h)
+
+// Also test imported plain functions
+print(add(10, 20))
+print(mul(4, 7))

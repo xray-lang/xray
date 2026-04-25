@@ -138,6 +138,32 @@ static inline XrtValue xrt_method_0(XrtValue recv, int sym) {
             }
             return recv;
         }
+        if (sym == XRT_SYM_SORT && a->len > 1) {
+            /* In-place sort: int < float < string < other (by tag then value) */
+            for (int64_t gap = a->len / 2; gap > 0; gap /= 2) {
+                for (int64_t i = gap; i < a->len; i++) {
+                    XrtValue key = a->data[i];
+                    int64_t j = i;
+                    while (j >= gap) {
+                        XrtValue *b = &a->data[j - gap];
+                        int cmp = 0;
+                        if (b->tag == XRT_TAG_I64 && key.tag == XRT_TAG_I64)
+                            cmp = (b->i > key.i) - (b->i < key.i);
+                        else if (b->tag == XRT_TAG_F64 && key.tag == XRT_TAG_F64)
+                            cmp = (b->f > key.f) - (b->f < key.f);
+                        else if (XRT_IS_STR(*b) && XRT_IS_STR(key))
+                            cmp = strcmp((const char *)b->ptr, (const char *)key.ptr);
+                        else
+                            cmp = (int)b->tag - (int)key.tag;
+                        if (cmp <= 0) break;
+                        a->data[j] = *b;
+                        j -= gap;
+                    }
+                    a->data[j] = key;
+                }
+            }
+            return recv;
+        }
     }
     if (recv.tag == XRT_TAG_MAP) {
         xrt_map_t *m = (xrt_map_t *)recv.ptr;
