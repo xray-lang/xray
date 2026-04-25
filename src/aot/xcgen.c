@@ -233,6 +233,37 @@ void xcgen_register_proto(XcgenCompilation *comp, void *proto_ptr,
     e->num_upvals = 0;
 }
 
+void xcgen_register_class(XcgenCompilation *comp, void *ctor_proto,
+                           const char *class_name,
+                           const char *parent_name, int nfields) {
+    XR_DCHECK(comp != NULL, "xcgen_register_class: NULL comp");
+    if (!ctor_proto || !class_name) return;
+
+    if (comp->nclass_infos >= comp->class_infos_cap) {
+        int new_cap = comp->class_infos_cap > 0 ? comp->class_infos_cap * 2 : 8;
+        XcgenClassInfo *tmp = (XcgenClassInfo *)xr_realloc(
+            comp->class_infos, (size_t)new_cap * sizeof(XcgenClassInfo));
+        if (!tmp) return;
+        comp->class_infos = tmp;
+        comp->class_infos_cap = new_cap;
+    }
+    XcgenClassInfo *ci = &comp->class_infos[comp->nclass_infos++];
+    ci->ctor_proto  = ctor_proto;
+    ci->class_name  = class_name;
+    ci->parent_name = parent_name;
+    ci->nfields     = nfields;
+}
+
+const XcgenClassInfo *xcgen_lookup_class(XcgenCompilation *comp,
+                                          void *ctor_proto) {
+    if (!comp || !ctor_proto) return NULL;
+    for (int i = 0; i < comp->nclass_infos; i++) {
+        if (comp->class_infos[i].ctor_proto == ctor_proto)
+            return &comp->class_infos[i];
+    }
+    return NULL;
+}
+
 /* ========== Proto Lookup (via mod->comp global registry) ========== */
 
 const char *xcg_lookup_proto_name(XcgenModule *mod, void *proto_ptr) {
@@ -288,6 +319,7 @@ void xcgen_compilation_free(XcgenCompilation *comp) {
         xcgen_module_free(comp->modules[i]);
     xr_free(comp->modules);
     xr_free(comp->proto_map);
+    xr_free(comp->class_infos);
     xr_free(comp);
 }
 
@@ -1446,7 +1478,9 @@ char *xcgen_emit_source(XcgenCompilation *comp) {
         "#include <inttypes.h>\n"
     );
     if (any_needs_runtime)
-        xcgen_buf_puts(&out, "#include \"xrt.h\"\n");
+        xcgen_buf_puts(&out,
+            "#define XRT_IMPL  /* define globals once in this TU */\n"
+            "#include \"xrt.h\"\n");
     xcgen_buf_puts(&out, "\n");
 
     // Per-module custom headers
@@ -1464,6 +1498,16 @@ char *xcgen_emit_source(XcgenCompilation *comp) {
             "/* Module-level shared variables */\n"
             "static XrValue xrt_shared[%d];\n\n",
             comp->max_shared_index + 1);
+    }
+
+    // Class type_id variables (lazy-initialized via xrt_type_register)
+    if (comp->nclass_infos > 0) {
+        xcgen_buf_puts(&out, "/* Class type IDs (populated at first constructor call) */\n");
+        for (int i = 0; i < comp->nclass_infos; i++) {
+            xcgen_buf_printf(&out, "static uint16_t _tid_%s = 0;\n",
+                             comp->class_infos[i].class_name);
+        }
+        xcgen_buf_puts(&out, "\n");
     }
 
     // Struct typedefs (global, from Json promotion)

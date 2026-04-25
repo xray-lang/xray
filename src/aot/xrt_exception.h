@@ -53,7 +53,11 @@ typedef struct XrtExcFrame {
  * When concurrency (Phase C) is added, switch to _Thread_local.
  * ========================================================================= */
 
-static XrtExcFrame *xrt_exc_top = NULL;
+#ifdef XRT_IMPL
+  XrtExcFrame *xrt_exc_top = NULL;
+#else
+  extern XrtExcFrame *xrt_exc_top;
+#endif
 
 /* =========================================================================
  * xrt_throw - throw an exception value
