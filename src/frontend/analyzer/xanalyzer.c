@@ -724,8 +724,8 @@ void xa_analyzer_update(XaAnalyzer *analyzer, const char *file, XrAstNode *ast) 
     if (entry) entry->dirty = false;
 }
 
-void xa_analyzer_update_incremental(XaAnalyzer *analyzer, const char *file,
-                                     XrAstNode *ast, uint64_t content_hash) {
+void xa_analyzer_refresh_file(XaAnalyzer *analyzer, const char *file,
+                              XrAstNode *ast, uint64_t content_hash) {
     if (!analyzer || !ast) return;
 
     // Set current type pool and symbol ID counter
@@ -849,17 +849,81 @@ const char **xa_analyzer_get_dirty_files(XaAnalyzer *analyzer, int *count) {
     return result;
 }
 
+void xa_analyzer_invalidate_range(XaAnalyzer *analyzer, const char *file,
+                                  uint32_t start_line, uint32_t end_line) {
+    // A-02: today this degrades to whole-file dirty marking. The
+    // (start_line, end_line) range is currently unused but is part of
+    // the API contract so a future block-level incremental implementation
+    // can use it without breaking call sites.
+    //
+    // Calling invalidate_range() on an untracked file MUST register it.
+    // Pre-A-02 there was no public file-registration entry, so an LSP
+    // client that issued an edit before any save+analyze would silently
+    // lose the dirty signal. find_or_create_file() initialises
+    // entry->dirty = true so the next refresh_file() call rebuilds it.
+    (void)start_line;
+    (void)end_line;
+    if (!analyzer || !file) return;
+    XaFileEntry *entry = find_or_create_file(analyzer, file);
+    if (entry) {
+        entry->dirty = true;
+    }
+}
+
 void xa_analyzer_remove_file(XaAnalyzer *analyzer, const char *file) {
     if (!analyzer || !file) return;
 
-    // Remove symbols owned by this file
+    // A-03: this is the unified file-removal entry. It must keep the
+    // analyzer's three "size-of-everything" counters self-consistent:
+    //
+    //   files_map.size  ==  file_count       (one entry per tracked file)
+    //   dep_graph edges only reference live symbol IDs
+    //   symbol_table holds no symbols owned by `file` after return
+    //
+    // Order matters: collect dependency-graph edges to drop FIRST (we
+    // need the symbols' ids while they are still live), then remove the
+    // symbols, then remove the file entry, then clear diagnostics.
+
+    XaIncrementalCtx *incr = (XaIncrementalCtx *)analyzer->incremental;
+    int edges_before = (incr && incr->deps) ? incr->deps->edge_count : 0;
+    int file_count_before = analyzer->file_count;
+
+    // Step 1: collect symbol IDs owned by `file`. We need them BEFORE
+    // remove_file_symbols() destroys the symbols.
+    int total_count = 0;
+    XaSymbol **all_syms = xa_scope_get_all_symbols(analyzer->global_scope,
+                                                   &total_count);
+    uint32_t *file_ids = NULL;
+    int file_id_count = 0;
+    if (all_syms && total_count > 0) {
+        file_ids = xr_malloc(sizeof(uint32_t) * total_count);
+        if (file_ids) {
+            for (int i = 0; i < total_count; i++) {
+                XaSymbol *sym = all_syms[i];
+                XaSymbolLinks *links = xa_analyzer_get_links(analyzer, sym);
+                if (links && links->file_path &&
+                    strcmp(links->file_path, file) == 0) {
+                    file_ids[file_id_count++] = sym->id;
+                }
+            }
+        }
+        xr_free(all_syms);
+    }
+
+    // Step 2: drop dependency-graph edges that touch any of those symbols.
+    if (incr && file_ids && file_id_count > 0) {
+        xa_dep_remove_symbols(incr, file_ids, file_id_count);
+    }
+    xr_free(file_ids);
+
+    // Step 3: remove symbols owned by this file from the symbol table.
     remove_file_symbols(analyzer->global_scope, file, analyzer);
 
-    // Remove from hash map
+    // Step 4: remove file from hash map and linked list.
     XrHashMap *fmap = (XrHashMap *)analyzer->files_map;
+    bool was_tracked = (fmap && xr_hashmap_get(fmap, file) != NULL);
     if (fmap) xr_hashmap_delete(fmap, file);
 
-    // Remove file entry from linked list
     XaFileEntry **pp = &analyzer->files;
     while (*pp) {
         if ((*pp)->path && strcmp((*pp)->path, file) == 0) {
@@ -873,8 +937,21 @@ void xa_analyzer_remove_file(XaAnalyzer *analyzer, const char *file) {
         pp = &(*pp)->next;
     }
 
-    // Clear diagnostics
+    // Step 5: clear diagnostics for any subsequent re-analysis.
     xa_analyzer_clear_diagnostics(analyzer);
+
+    // Step 6: invariants. file_count drops by exactly one when the file
+    // was tracked, otherwise stays put. Dep-graph edge count never grows
+    // during a removal.
+    XR_DCHECK(analyzer->file_count ==
+                  (was_tracked ? file_count_before - 1 : file_count_before),
+              "xa_analyzer_remove_file: file_count drift");
+    XR_DCHECK(!incr || !incr->deps ||
+                  incr->deps->edge_count <= edges_before,
+              "xa_analyzer_remove_file: dep edge_count grew during removal");
+    (void)was_tracked;
+    (void)file_count_before;
+    (void)edges_before;
 }
 
 // Helper: find symbol at position with file filter

@@ -89,12 +89,12 @@ typedef struct XaIncrementalCtx {
     XaDependencyGraph *deps;    // Dependency graph
     XaFileCache *file_caches;   // Per-file caches
     int file_count;
-    
+
     // Working set for current update
     uint32_t *dirty_symbols;    // Symbols that need re-analysis
     int dirty_count;
     int dirty_capacity;
-    
+
     // Statistics
     int full_analyses;          // Count of full re-analyses
     int incremental_updates;    // Count of incremental updates
@@ -109,10 +109,15 @@ typedef struct XaIncrementalCtx {
 XR_FUNC XaIncrementalCtx *xa_incremental_new(void);
 XR_FUNC void xa_incremental_free(XaIncrementalCtx *ctx);
 
-// Dependency graph operations
+// Dependency graph operations.
+// A-03: per-symbol delete API was removed (no caller, half-broken). Use
+// xa_dep_remove_symbols() to drop every edge that touches any of `ids[]`;
+// it is the only sanctioned cleanup path and is called from
+// xa_analyzer_remove_file() in xanalyzer.c.
 XR_FUNC void xa_dep_add(XaIncrementalCtx *ctx, uint32_t from, uint32_t to, XaDepKind kind);
-XR_FUNC void xa_dep_remove_symbol(XaIncrementalCtx *ctx, uint32_t symbol_id);
-XR_FUNC void xa_dep_get_dependents(XaIncrementalCtx *ctx, uint32_t symbol_id, 
+XR_FUNC void xa_dep_remove_symbols(XaIncrementalCtx *ctx,
+                                   const uint32_t *symbol_ids, int count);
+XR_FUNC void xa_dep_get_dependents(XaIncrementalCtx *ctx, uint32_t symbol_id,
                            uint32_t **out_ids, int *out_count);
 
 // Cache operations
@@ -145,8 +150,9 @@ XR_FUNC void xa_changeset_free(XaChangeSet *cs);
 // Propagate changes through dependency graph
 XR_FUNC void xa_propagate_dirty(XaIncrementalCtx *ctx, XaChangeSet *changes);
 
-// Perform incremental update
-XR_FUNC void xa_incremental_update(XaAnalyzer *analyzer, XaIncrementalCtx *incr,
-                           const char *file, AstNode *ast);
+// A-02: xa_incremental_update() was deleted. The visible analyzer entry
+// points are now xa_analyzer_refresh_file() (full-file rebuild + dirty
+// propagation) and xa_analyzer_invalidate_range() (block-level invalidate
+// stub) -- both declared in xanalyzer.h.
 
 #endif // XANALYZER_INCREMENTAL_H
