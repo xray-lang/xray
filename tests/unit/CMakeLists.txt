@@ -58,6 +58,8 @@ add_xray_unit_test(test_parser frontend/test_parser.c)
 add_xray_unit_test(test_diag_fmt frontend/test_diag_fmt.c)
 add_xray_unit_test(test_xfmt_literal frontend/test_xfmt_literal.c)
 add_xray_unit_test(test_analyzer_remove_file frontend/test_analyzer_remove_file.c)
+# Phase 3.5: X-01 AstNode -> XrType side table acceptance tests.
+add_xray_unit_test(test_ast_side_table frontend/test_ast_side_table.c)
 
 # Phase 3: in-tree frontend architecture lint. Walks the project src/
 # tree at runtime, so it needs the absolute path baked in at build
