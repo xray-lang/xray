@@ -256,8 +256,8 @@ bool xir_translate_object_ops(XirBuilder *b, XirBlock **cur_blk,
 
             // IC-guided fast path: if VM collected a monomorphic Json Shape IC
             // for this bytecode offset, emit GUARD_SHAPE + LOAD_FIELD.
-            if (b->proto->ic_fields) {
-                XrICField *ic = xr_ic_field_table_get(b->proto->ic_fields, (int)pc);
+            if (b->ic_fields_snapshot) {
+                XrICField *ic = xr_ic_field_table_get(b->ic_fields_snapshot, (int)pc);
                 if (ic && ic->json_shape_id != 0 && ic->cached_symbol == (int)sym) {
                     struct XrShape *ic_shape = xr_shape_get_by_id(b->isolate, ic->json_shape_id);
                     if (ic_shape && ic_shape->symbol_to_index &&
@@ -423,8 +423,8 @@ bool xir_translate_object_ops(XirBuilder *b, XirBlock **cur_blk,
             }
 
             // IC-guided fast path: monomorphic Json Shape IC → GUARD_SHAPE + STORE_FIELD
-            if (b->proto->ic_fields) {
-                XrICField *ic = xr_ic_field_table_get(b->proto->ic_fields, (int)pc);
+            if (b->ic_fields_snapshot) {
+                XrICField *ic = xr_ic_field_table_get(b->ic_fields_snapshot, (int)pc);
                 if (ic && ic->json_shape_id != 0 && ic->cached_symbol == (int)sym) {
                     struct XrShape *ic_shape = xr_shape_get_by_id(b->isolate, ic->json_shape_id);
                     if (ic_shape && ic_shape->symbol_to_index &&
@@ -512,8 +512,8 @@ bool xir_translate_object_ops(XirBuilder *b, XirBlock **cur_blk,
             }
 
             // IC-guided fast path for JSON_SETK
-            if (b->proto->ic_fields) {
-                XrICField *ic = xr_ic_field_table_get(b->proto->ic_fields, (int)pc);
+            if (b->ic_fields_snapshot) {
+                XrICField *ic = xr_ic_field_table_get(b->ic_fields_snapshot, (int)pc);
                 if (ic && ic->json_shape_id != 0 && ic->cached_symbol == (int)sym) {
                     struct XrShape *ic_shape = xr_shape_get_by_id(b->isolate, ic->json_shape_id);
                     if (ic_shape && ic_shape->symbol_to_index &&
@@ -600,8 +600,8 @@ bool xir_translate_object_ops(XirBuilder *b, XirBlock **cur_blk,
             }
 
             // IC-guided fast path for JSON_GETK
-            if (b->proto->ic_fields) {
-                XrICField *ic = xr_ic_field_table_get(b->proto->ic_fields, (int)pc);
+            if (b->ic_fields_snapshot) {
+                XrICField *ic = xr_ic_field_table_get(b->ic_fields_snapshot, (int)pc);
                 if (ic && ic->json_shape_id != 0 && ic->cached_symbol == (int)sym) {
                     struct XrShape *ic_shape = xr_shape_get_by_id(b->isolate, ic->json_shape_id);
                     if (ic_shape && ic_shape->symbol_to_index &&

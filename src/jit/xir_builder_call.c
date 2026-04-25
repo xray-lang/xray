@@ -686,10 +686,10 @@ bool xir_translate_call_ops(XirBuilder *b, XirBlock **cur_blk,
             // On guard failure, deopt back to interpreter.
             if (!b->aot_mode && b->isolate &&
                 method_symbol >= SYMBOL_BUILTIN_COUNT &&
-                (a + 1) < 256 && b->proto->ic_methods)
+                (a + 1) < 256 && b->ic_methods_snapshot)
             {
                 size_t ic_index = b->cur_pc;
-                XrICMethod *ic = xr_ic_method_table_get(b->proto->ic_methods,
+                XrICMethod *ic = xr_ic_method_table_get(b->ic_methods_snapshot,
                                                          (int)ic_index);
                 if (!ic) goto skip_ic_devirt;
 
@@ -976,10 +976,10 @@ bool xir_translate_call_ops(XirBuilder *b, XirBlock **cur_blk,
             // --- IC-based speculative devirtualization for tail calls ---
             if (b->isolate &&
                 method_symbol >= SYMBOL_BUILTIN_COUNT &&
-                (a + 1) < 256 && b->proto->ic_methods)
+                (a + 1) < 256 && b->ic_methods_snapshot)
             {
                 size_t ic_idx_t = b->cur_pc;
-                XrICMethod *ic_t = xr_ic_method_table_get(b->proto->ic_methods,
+                XrICMethod *ic_t = xr_ic_method_table_get(b->ic_methods_snapshot,
                                                            (int)ic_idx_t);
                 if (!ic_t) goto skip_tail_ic;
 

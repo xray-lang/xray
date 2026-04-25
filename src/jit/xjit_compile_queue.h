@@ -79,6 +79,15 @@ typedef struct XirBgTask {
     int      nshared;           // number of valid shared_protos entries
     XrProto *shared_protos[XJIT_BG_SHARED_CAP];
     struct XrShape *shape_hint; // dominant-shape hint for param PTR shaping
+
+    /*
+     * Inline-cache snapshots captured on the foreground thread at task
+     * push time. Owned by the task: the bg worker hands them to the
+     * builder (read-only) and frees them after compilation completes.
+     * Either may be NULL when the live ctx had no IC recorded yet.
+     */
+    struct XrICFieldTable  *ic_fields_snapshot;
+    struct XrICMethodTable *ic_methods_snapshot;
 } XirBgTask;
 
 /* ========== MPSC Ring Buffer ========== */

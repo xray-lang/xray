@@ -17,15 +17,23 @@
 #include "../../base/xmalloc.h"
 #include "xtype_feedback.h"
 #include "../gc/xbc_stackmap.h"
+#include <stdatomic.h>
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
 #include "xopcode_info.h"
 #include "../../base/xchecks.h"
 
-void xr_ic_method_table_free(struct XrICMethodTable *table);
-void xr_ic_field_table_free(struct XrICFieldTable *table);
 void xr_blueprint_free(struct XrBlueprint *bp);
+
+/*
+ * Monotonic proto-id allocator. Each XrProto gets a fresh, never-reused
+ * identifier assigned at creation. The id is used as an index into the
+ * per-coroutine IC tables on XrVMContext, so two protos created in the
+ * same isolate get distinct slots even when they live on different
+ * workers. 32 bits is more than sufficient for any sane program.
+ */
+static _Atomic uint32_t s_proto_id_counter = 0;
 
 // xr_opcode_name is implemented in runtime/value/xopcode_info.c.
 
@@ -81,6 +89,11 @@ XrProto *xr_vm_proto_new(void) {
     DYNARRAY_INIT(&proto->upvalues, UpvalInfo);
     DYNARRAY_INIT(&proto->lineinfo, int);
     DYNARRAY_INIT(&proto->locvars, XrLocVar);
+
+    // Assign a globally-unique, never-reused id. IC tables on
+    // XrVMContext index by this value to keep XrProto immutable.
+    proto->proto_id = atomic_fetch_add_explicit(&s_proto_id_counter, 1u,
+                                                memory_order_relaxed);
 
     return proto;
 }
@@ -157,15 +170,8 @@ void xr_vm_proto_free(XrProto *proto) {
         proto->type_feedback = NULL;
     }
 
-    // Free inline caches
-    if (proto->ic_methods != NULL) {
-        xr_ic_method_table_free(proto->ic_methods);
-        proto->ic_methods = NULL;
-    }
-    if (proto->ic_fields != NULL) {
-        xr_ic_field_table_free(proto->ic_fields);
-        proto->ic_fields = NULL;
-    }
+    // Inline caches are owned by XrVMContext (per-coroutine), not the
+    // immutable proto. Nothing to free here for IC.
 
     // Free struct layout cache (pointer array only; layouts are owned by XrClass)
     if (proto->struct_layouts != NULL) {

@@ -32,6 +32,8 @@
 #include "../runtime/value/xchunk.h"
 #include "../runtime/value/xslot_type.h"
 #include "../runtime/object/xstring.h"
+#include "../vm/xic_field_table.h"  // xr_ic_field_table_free
+#include "../vm/xic_method.h"       // xr_ic_method_table_free
 #include "../base/xmalloc.h"
 #include "../base/xlog.h"
 #include "../base/xchecks.h"
@@ -78,13 +80,27 @@ static void bg_compile_one(XirCompileQueue *q, uint32_t worker_id,
      *   CALL_KNOWN for module-level fn calls without touching shared state.
      * - shape_hint also comes from the snapshot, captured on the main
      *   thread from dominant_shape analysis.
+     * - IC snapshots are caller-owned (this task); the builder reads
+     *   them read-only. We free them after the build returns regardless
+     *   of success.
      * - NULL isolate: class-registry dynarrays are not safe for bg
      *   concurrent access; builder works in a bg-safe subset. */
     XrProto **shared_protos = task->nshared > 0
         ? (XrProto **)task->shared_protos : NULL;
-    XirFunc *func = xir_build_from_proto_jit(proto, shared_protos,
-                                              task->nshared,
-                                              task->shape_hint, NULL);
+    XirAotOptions bg_opts;
+    memset(&bg_opts, 0, sizeof(bg_opts));
+    bg_opts.ic_fields_snapshot = task->ic_fields_snapshot;
+    bg_opts.ic_methods_snapshot = task->ic_methods_snapshot;
+    XirFunc *func = xir_build_from_proto_jit_ex(proto, shared_protos,
+                                                 task->nshared,
+                                                 task->shape_hint, NULL,
+                                                 &bg_opts);
+    // Snapshots are owned by the task; release them now that the
+    // builder has consumed (or rejected) them.
+    if (task->ic_fields_snapshot)
+        xr_ic_field_table_free(task->ic_fields_snapshot);
+    if (task->ic_methods_snapshot)
+        xr_ic_method_table_free(task->ic_methods_snapshot);
     if (!func) {
         xr_log_warning("jit-bg", "builder failed for %s",
                 proto->name ? XR_STRING_CHARS(proto->name) : "?");

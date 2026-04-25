@@ -459,10 +459,12 @@ int vm_invoke_class(XrayIsolate *isolate, XrVMContext *vm_ctx,
         XrInstance *inst = xr_instance_new(isolate, cls);
         XrValue inst_val = xr_value_from_instance(inst);
 
-        // Find constructor via inline cache
+        // Find constructor via inline cache (per-ctx, lazily ensured by hot dispatcher)
         size_t cache_index = pc - PROTO_CODE_BASE(frame->closure->proto) - 1;
         XR_VM_IC_ASSERT_INDEX(cache_index, frame->closure->proto);
-        XrICMethod *cache = xr_ic_method_table_get(frame->closure->proto->ic_methods, cache_index);
+        XrICMethodTable *ic_methods =
+            xr_vm_ctx_get_ic_methods(vm_ctx, frame->closure->proto);
+        XrICMethod *cache = xr_ic_method_table_get(ic_methods, cache_index);
         if (cache) { XR_VM_IC_METHOD_BIND(cache, (int)cache_index); }
 
         XrMethod *ctor = cache ? xr_ic_method_lookup(cache, cls, method_symbol)
@@ -2325,7 +2327,7 @@ int vm_spawn_cont(XrayIsolate *isolate, XrVMContext *vm_ctx,
             _scope = runtime->current_scope;
         if (_scope && parent) {
             coro->parent_scope = _scope;
-            // Phase 2 (CORO-10): protect child list prepend
+            // Protect child list prepend with the scope spinlock
             while (atomic_exchange_explicit(&_scope->child_lock, true, memory_order_acquire)) {}
             coro->scope_sibling = _scope->first_child;
             _scope->first_child = coro;
@@ -2450,7 +2452,7 @@ int vm_await(XrayIsolate *isolate, XrVMContext *vm_ctx,
             VM_COLD_THROW(frame, pc, XR_ERR_CORO_DEAD, "await: runtime not initialized");
         }
 
-        // CAS on task->await_state (Phase 0B: coordination moved from coro to task)
+        // CAS on task->await_state (await coordination lives on the task)
         if (current) {
             __atomic_store_n(&task->waiter_index, -1, __ATOMIC_RELAXED);
             __atomic_store_n(&task->waiter, current, __ATOMIC_RELEASE);
@@ -2556,7 +2558,7 @@ int vm_await_timeout(XrayIsolate *isolate, XrVMContext *vm_ctx,
             return VM_COLD_BREAK;
         }
 
-        // Woken from normal completion (Phase 0B: check task->await_state)
+        // Woken from normal completion (read task->await_state)
         if (caller && atomic_load_explicit(&task->await_state, memory_order_acquire) == XR_AWAIT_RESOLVED) {
             base[a] = vm_task_consume_result(isolate, task, caller, 0);
             atomic_store_explicit(&task->await_state, XR_AWAIT_NONE, memory_order_relaxed);
@@ -2882,7 +2884,7 @@ int vm_select_block(XrayIsolate *isolate, XrVMContext *vm_ctx,
     coro->select_wait = sw;
     coro->select_ready_case = -1;
 
-    // Phase 3: arm sleep timer so the worker wakes the coro when the timer
+    // Arm sleep timer so the worker wakes the coro when the timer
     // channel fires.  The tw_timer callback writes data to the buffer; when
     // the coro re-polls after wakeup, OP_CHAN_TRY_RECV will find it.
     // Clamp remaining to at least 1ms so that xr_bump_timers fires both the

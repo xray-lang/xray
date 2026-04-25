@@ -276,6 +276,51 @@ XR_FUNC XrVMResult xr_vm_interpret_proto_isolate(XrayIsolate *isolate, XrProto *
 XR_FUNC void xr_vm_add_stacktrace(XrayIsolate *isolate, XrValue exception);
 XR_FUNC void xr_vm_throw_exception(XrayIsolate *isolate, XrValue exception);
 
+/* ========== Per-coroutine Inline Caches (in xvm_ic.c) ========== */
+
+/*
+** Lazily allocate a per-(ctx, proto) field IC table sized to the proto's
+** instruction count. Returns NULL on OOM. All slots are pre-allocated so
+** cache_index = pc - PROTO_CODE_BASE remains a valid lookup index.
+*/
+XR_FUNC struct XrICFieldTable *xr_vm_ctx_ensure_ic_fields(XrVMContext *ctx,
+                                                          XrProto *proto);
+
+/*
+** Lazily allocate a per-(ctx, proto) method IC table. Slots are zeroed
+** by xr_ic_method_table_new and the count is set to PROTO_CODE_COUNT.
+*/
+XR_FUNC struct XrICMethodTable *xr_vm_ctx_ensure_ic_methods(XrVMContext *ctx,
+                                                            XrProto *proto);
+
+/*
+** Read-only IC table accessors. Return NULL when no IC has been recorded
+** for this proto in this ctx. Both are safe to call before the IC table
+** has been lazily allocated.
+*/
+XR_FUNC struct XrICFieldTable *xr_vm_ctx_get_ic_fields(const XrVMContext *ctx,
+                                                       const XrProto *proto);
+XR_FUNC struct XrICMethodTable *xr_vm_ctx_get_ic_methods(const XrVMContext *ctx,
+                                                         const XrProto *proto);
+
+/*
+** Deep-copy snapshot of the current IC state for `proto` in `ctx`. The
+** returned table is independently owned by the caller; concurrent ctx
+** mutation cannot tear the snapshot. Caller must release via
+** xr_ic_field_table_free / xr_ic_method_table_free. Returns NULL when no
+** IC has been recorded.
+*/
+XR_FUNC struct XrICFieldTable *xr_vm_ic_fields_snapshot(XrVMContext *ctx,
+                                                        XrProto *proto);
+XR_FUNC struct XrICMethodTable *xr_vm_ic_methods_snapshot(XrVMContext *ctx,
+                                                          XrProto *proto);
+
+/*
+** Free every IC table currently held by `ctx` and reset capacity. Called
+** on coroutine teardown and isolate cleanup.
+*/
+XR_FUNC void xr_vm_ctx_free_ic_tables(XrVMContext *ctx);
+
 /* ========== Instruction Operation Helpers (in xvm_ops.c) ========== */
 
 /*

@@ -3406,7 +3406,7 @@ startfunc:
 
                 /* GC safe point: function call boundary is ideal for GC.
                 ** Stack is consistent, all locals are valid.
-                ** Reductions check removed (Phase 4): only OP_JMP backward
+                ** Reductions check intentionally absent here: only OP_JMP backward
                 ** jumps check reductions. This reduces overhead from <3% to <1%.
                 ** Preemption for pure call chains relies on sysmon + handoff. */
                 VM_GC_SAFEPOINT();
@@ -3550,13 +3550,13 @@ startfunc:
                 if (xr_value_is_cfunction(func_val)) {
                     XrCFunction *cfunc = xr_value_to_cfunction(func_val);
 
-                    // Phase 3: Track current C function for sysmon auto-upgrade
+                    // Track current C function for sysmon auto-upgrade
                     {
                         XrWorker *_w = xr_current_worker();
                         if (_w && _w->m) _w->m->current_cfunc = cfunc;
                     }
 
-                    /* Phase 3: SLOW C functions release P before execution.
+                    /* SLOW C functions release P before execution.
                     ** This prevents long-running C code from blocking the
                     ** scheduler. Other coroutines continue on other M's. */
                     bool is_slow = (atomic_load_explicit(&cfunc->cfunc_class,
@@ -4755,18 +4755,17 @@ startfunc:
                 XrInstance *inst_obj = xr_value_to_instance(inst_val);
                 XrClass *cls = inst_obj->klass;
 
-                // Create field IC table on demand
-                if (frame->closure->proto->ic_fields == NULL) {
-                    int cache_count = PROTO_CODE_COUNT(frame->closure->proto);
-                    frame->closure->proto->ic_fields = xr_ic_field_table_new(cache_count);
-                    for (int ic_i = 0; ic_i < cache_count; ic_i++) {
-                        xr_ic_field_table_alloc(frame->closure->proto->ic_fields);
-                    }
+                // Lazily ensure the per-ctx IC table for this proto.
+                XrICFieldTable *ic_table =
+                    xr_vm_ctx_ensure_ic_fields(vm_ctx, frame->closure->proto);
+                if (!ic_table) {
+                    VM_RUNTIME_ERROR(XR_ERR_OUT_OF_MEMORY,
+                                     "OP_GETFIELD_IC: failed to allocate IC table");
                 }
 
                 size_t cache_index = pc - PROTO_CODE_BASE(frame->closure->proto) - 1;
                 XR_VM_IC_ASSERT_INDEX(cache_index, frame->closure->proto);
-                XrICField *cache = xr_ic_field_table_get(frame->closure->proto->ic_fields, (int)cache_index);
+                XrICField *cache = xr_ic_field_table_get(ic_table, (int)cache_index);
                 if (cache) { XR_VM_IC_FIELD_BIND(cache, (int)cache_index); }
 
                 int field_idx = -1;
@@ -4939,7 +4938,7 @@ startfunc:
                 invoke_is_tail = 0;
                 invoke_dispatch: ;
 
-                /* Reductions check removed (Phase 4): only OP_JMP checks.
+                /* Reductions check intentionally absent here: only OP_JMP checks.
                 ** GC safepoint handled at startfunc label. */
                 int a = GETARG_A(i);
                 int b = GETARG_B(i);
@@ -5351,12 +5350,12 @@ startfunc:
                     }
                 }
 
-                // Create inline cache table on demand (only for class methods)
-                if (frame->closure->proto->ic_methods == NULL) {
-                    int cache_count = PROTO_CODE_COUNT(frame->closure->proto);
-                    XrICMethodTable *ict = xr_ic_method_table_new(cache_count);
-                    ict->count = cache_count; // new() already zeroed all entries
-                    frame->closure->proto->ic_methods = ict;
+                // Lazily ensure the per-ctx method IC table for this proto.
+                XrICMethodTable *ic_method_table =
+                    xr_vm_ctx_ensure_ic_methods(vm_ctx, frame->closure->proto);
+                if (!ic_method_table) {
+                    VM_RUNTIME_ERROR(XR_ERR_OUT_OF_MEMORY,
+                                     "OP_INVOKE: failed to allocate IC table");
                 }
 
                 // Range method call
@@ -5477,7 +5476,7 @@ startfunc:
                     // Find method via polymorphic inline cache
                     size_t cache_index = pc - PROTO_CODE_BASE(frame->closure->proto) - 1;
                     XR_VM_IC_ASSERT_INDEX(cache_index, frame->closure->proto);
-                    XrICMethod *cache = xr_ic_method_table_get(frame->closure->proto->ic_methods, cache_index);
+                    XrICMethod *cache = xr_ic_method_table_get(ic_method_table, cache_index);
                     if (cache) { XR_VM_IC_METHOD_BIND(cache, (int)cache_index); }
 
                     XrMethod *method = NULL;
@@ -5797,16 +5796,15 @@ startfunc:
                     XrJson *json = xr_value_to_json(obj);
                     uint16_t shape_id = xr_gc_get_shape_id(&json->gc);
 
-                    // Ensure IC table exists (shared with Instance path)
-                    if (frame->closure->proto->ic_fields == NULL) {
-                        int cache_count = PROTO_CODE_COUNT(frame->closure->proto);
-                        frame->closure->proto->ic_fields = xr_ic_field_table_new(cache_count);
-                        for (int ji = 0; ji < cache_count; ji++) {
-                            xr_ic_field_table_alloc(frame->closure->proto->ic_fields);
-                        }
+                    // Lazily ensure the per-ctx IC table for this proto.
+                    XrICFieldTable *ic_table_j =
+                        xr_vm_ctx_ensure_ic_fields(vm_ctx, frame->closure->proto);
+                    if (!ic_table_j) {
+                        VM_RUNTIME_ERROR(XR_ERR_OUT_OF_MEMORY,
+                                         "OP_GETPROP: failed to allocate IC table");
                     }
                     size_t jic_index = pc - PROTO_CODE_BASE(frame->closure->proto) - 1;
-                    XrICField *jic = xr_ic_field_table_get(frame->closure->proto->ic_fields, (int)jic_index);
+                    XrICField *jic = xr_ic_field_table_get(ic_table_j, (int)jic_index);
 
                     // IC hit: shape_id + symbol match → direct field access (in-object only)
                     uint16_t jic_idx;
@@ -5867,22 +5865,18 @@ startfunc:
 
                 // No getter: access as regular field
 
-                // Field access Inline Cache optimization
-                // Create field IC table on demand
-                if (frame->closure->proto->ic_fields == NULL) {
-                    int cache_count = PROTO_CODE_COUNT(frame->closure->proto);
-                    frame->closure->proto->ic_fields = xr_ic_field_table_new(cache_count);
-
-                    // Pre-allocate all cache entries
-                    for (int i = 0; i < cache_count; i++) {
-                        xr_ic_field_table_alloc(frame->closure->proto->ic_fields);
-                    }
+                // Field access Inline Cache optimization (per-ctx)
+                XrICFieldTable *ic_table_g =
+                    xr_vm_ctx_ensure_ic_fields(vm_ctx, frame->closure->proto);
+                if (!ic_table_g) {
+                    VM_RUNTIME_ERROR(XR_ERR_OUT_OF_MEMORY,
+                                     "OP_GETPROP: failed to allocate IC table");
                 }
 
                 // Get IC for current instruction
                 size_t cache_index = pc - PROTO_CODE_BASE(frame->closure->proto) - 1;
                 XR_VM_IC_ASSERT_INDEX(cache_index, frame->closure->proto);
-                XrICField *cache = xr_ic_field_table_get(frame->closure->proto->ic_fields, cache_index);
+                XrICField *cache = xr_ic_field_table_get(ic_table_g, cache_index);
                 if (cache) { XR_VM_IC_FIELD_BIND(cache, (int)cache_index); }
 
                 XrClass *inst_class = inst->klass;
@@ -5954,16 +5948,15 @@ startfunc:
                     XrJson *json = xr_value_to_json(obj);
                     uint16_t shape_id = xr_gc_get_shape_id(&json->gc);
 
-                    // Ensure IC table exists
-                    if (frame->closure->proto->ic_fields == NULL) {
-                        int cache_count = PROTO_CODE_COUNT(frame->closure->proto);
-                        frame->closure->proto->ic_fields = xr_ic_field_table_new(cache_count);
-                        for (int ji = 0; ji < cache_count; ji++) {
-                            xr_ic_field_table_alloc(frame->closure->proto->ic_fields);
-                        }
+                    // Lazily ensure the per-ctx IC table for this proto.
+                    XrICFieldTable *ic_table_sj =
+                        xr_vm_ctx_ensure_ic_fields(vm_ctx, frame->closure->proto);
+                    if (!ic_table_sj) {
+                        VM_RUNTIME_ERROR(XR_ERR_OUT_OF_MEMORY,
+                                         "OP_SETPROP: failed to allocate IC table");
                     }
                     size_t jic_index = pc - PROTO_CODE_BASE(frame->closure->proto) - 1;
-                    XrICField *jic = xr_ic_field_table_get(frame->closure->proto->ic_fields, (int)jic_index);
+                    XrICField *jic = xr_ic_field_table_get(ic_table_sj, (int)jic_index);
 
                     // IC hit: shape_id + symbol match → direct field write (in-object only)
                     uint16_t jic_idx;
@@ -6025,18 +6018,17 @@ startfunc:
                 // No setter: assign as regular field
                 XrClass *inst_class = inst->klass;
 
-                // IC cache optimization: check or create field access cache
-                if (!frame->closure->proto->ic_fields) {
-                    int cache_count = PROTO_CODE_COUNT(frame->closure->proto);
-                    frame->closure->proto->ic_fields = xr_ic_field_table_new(cache_count);
-                    for (int j = 0; j < cache_count; j++) {
-                        xr_ic_field_table_alloc(frame->closure->proto->ic_fields);
-                    }
+                // Field access Inline Cache optimization (per-ctx)
+                XrICFieldTable *ic_table_s =
+                    xr_vm_ctx_ensure_ic_fields(vm_ctx, frame->closure->proto);
+                if (!ic_table_s) {
+                    VM_RUNTIME_ERROR(XR_ERR_OUT_OF_MEMORY,
+                                     "OP_SETPROP: failed to allocate IC table");
                 }
 
                 size_t cache_index = pc - PROTO_CODE_BASE(frame->closure->proto) - 1;
                 XR_VM_IC_ASSERT_INDEX(cache_index, frame->closure->proto);
-                XrICField *cache = xr_ic_field_table_get(frame->closure->proto->ic_fields, cache_index);
+                XrICField *cache = xr_ic_field_table_get(ic_table_s, cache_index);
                 if (cache) { XR_VM_IC_FIELD_BIND(cache, (int)cache_index); }
 
                 int field_index = -1;
@@ -6953,7 +6945,7 @@ startfunc:
                 }
                 XrChannel *ch = xr_value_to_channel(ch_val);
 
-                // Phase 3: timer channel no longer needs polling here.
+                // Timer channel no longer needs polling here.
                 // Timer wheel callback writes data to buffer; try_recv finds it.
 
                 // Non-blocking receive
@@ -7309,7 +7301,7 @@ startfunc:
                     VM_RUNTIME_ERROR(XR_ERR_OUT_OF_MEMORY, "time.after: out of memory");
                 }
 
-                // Phase 3: arm on current worker's timer wheel (no polling)
+                // Arm on current worker's timer wheel (no polling).
                 {
                     XrWorker *_w = xr_current_worker();
                     if (_w && _w->p.timer_wheel) {
