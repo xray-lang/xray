@@ -28,6 +28,7 @@
 #include "frontend/parser/xast_nodes.h"
 #include "frontend/format/xfmt.h"
 #include "xray.h"
+#include "xray_isolate.h"
 #include "base/xmalloc.h"
 
 /* ========== Test infrastructure ========== */
