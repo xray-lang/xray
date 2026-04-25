@@ -17,7 +17,7 @@
 #include "../../base/xchecks.h"
 #include "../../base/xarena.h"
 #include "../../runtime/xisolate_api.h"
-#include "../analyzer/xanalyzer_symbol.h"
+#include "xtype_scope.h"
 #include "../xdiag_fmt.h"
 
 /* ========== Local Cleanup Helpers ========== */
@@ -168,14 +168,13 @@ AstNode *xr_parse_function_declaration(Parser *parser) {
     }
 
     // Register generic type params in type_scope for type annotation parsing
-    // This allows T in "fn identity<T>(x: T): T" to be recognized as type param
-    XaScope *saved_scope = parser->type_scope;
+    // This allows T in "fn identity<T>(x: T): T" to be recognised as type param.
+    XrTypeScope *saved_scope = parser->type_scope;
     if (type_param_count > 0) {
-        // Create a new scope for generics if we have type params
-        XaScope *generic_scope = xa_scope_new(XA_SCOPE_FUNCTION, parser->type_scope);
+        XrTypeScope *generic_scope = xr_type_scope_new(parser->type_scope);
         for (int i = 0; i < type_param_count; i++) {
             XrType *type_param = xr_type_new_type_param(parser->X, type_params[i]->name, i);
-            xa_scope_define_type_alias(generic_scope, type_params[i]->name, type_param);
+            xr_type_scope_define(generic_scope, type_params[i]->name, type_param);
         }
         parser->type_scope = generic_scope;
     }
@@ -938,8 +937,11 @@ AstNode *xr_parse_type_alias_declaration(Parser *parser) {
     // Expect '='
     xr_parser_consume(parser, TK_ASSIGN, "expected '=' in type alias definition");
 
-    // Pre-register with NULL to block recursive self-reference (type A = A)
-    if (!xa_scope_define_type_alias(parser->type_scope, alias_name, NULL)) {
+    // Pre-register with NULL to block recursive self-reference (type A = A).
+    // We retain the entry pointer so we can patch its `type` field below
+    // once the RHS is fully parsed.
+    XrTypeAlias *alias_entry = xr_type_scope_define(parser->type_scope, alias_name, NULL);
+    if (!alias_entry) {
         xr_parser_error(parser, "duplicate type alias definition");
         return NULL;
     }
@@ -951,11 +953,8 @@ AstNode *xr_parse_type_alias_declaration(Parser *parser) {
         return NULL;
     }
 
-    // Update the placeholder with actual type
-    XaSymbol *alias_sym = xa_scope_lookup_local(parser->type_scope, alias_name);
-    if (alias_sym) {
-        alias_sym->alias_type = type_definition;
-    }
+    // Patch the placeholder with the actual type definition.
+    alias_entry->type = type_definition;
 
     // Create AST node so analyzer/LSP can see the declaration
     AstNode *node = xr_ast_type_alias(parser->X, alias_name, NULL, NULL, NULL, 0, line);

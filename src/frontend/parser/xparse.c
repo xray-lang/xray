@@ -19,7 +19,7 @@
 #include "../../base/xchecks.h"
 #include "../../base/xlog.h"
 #include "../../runtime/xisolate_api.h"
-#include "../analyzer/xanalyzer_symbol.h"
+#include "xtype_scope.h"
 #include "../xdiag_fmt.h"
 
 /* ========== Forward Declarations ========== */
@@ -736,7 +736,7 @@ static void xr_parser_init_internal(Parser *parser, XrayIsolate *X, const char *
     parser->previous.leading_trivia = NULL;
     parser->previous.trailing_trivia = NULL;
 
-    parser->type_scope = xa_scope_new(XA_SCOPE_GLOBAL, NULL);
+    parser->type_scope = xr_type_scope_new(NULL);
 
     // Initialize error callback fields
     parser->error_callback = NULL;
@@ -833,7 +833,7 @@ AstNode *xr_parse_with_source(XrayIsolate *X, const char *source, const char *so
             parser.error_count >= XR_PARSE_MAX_ERRORS);
     }
 
-    xa_scope_free(parser.type_scope);
+    xr_type_scope_free(parser.type_scope);
 
     if (parser.had_error) {
         xr_parse_discard_arena(X, arena, saved_arena);
@@ -911,7 +911,7 @@ AstNode *xr_parse_with_trivia(XrayIsolate *X, const char *source, const char *so
         }
     }
 
-    xa_scope_free(parser.type_scope);
+    xr_type_scope_free(parser.type_scope);
 
     if (parser.had_error) {
         xr_parse_discard_arena(X, arena, saved_arena);
@@ -990,7 +990,7 @@ AstNode *xr_parse_recoverable(Parser *parser) {
         // Don't break on error - continue to find more errors
     }
 
-    xa_scope_free(parser->type_scope);
+    xr_type_scope_free(parser->type_scope);
     parser->type_scope = NULL;
 
     // Restore previous arena

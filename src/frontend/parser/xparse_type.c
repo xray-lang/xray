@@ -15,7 +15,7 @@
 #include "../../base/xchecks.h"
 #include "../../base/xarena.h"
 #include "../../runtime/value/xtype_names.h"
-#include "../analyzer/xanalyzer_symbol.h"
+#include "xtype_scope.h"
 #include "../../runtime/value/xtype.h"
 #include "../../runtime/xisolate_api.h"
 #include <stdlib.h>
@@ -454,12 +454,12 @@ static XrType* parse_type_annotation_base(Parser *parser) {
 
         // Lookup type alias
         if (parser->type_scope) {
-            XrType *alias_type = xa_scope_resolve_type_alias(parser->type_scope, temp_name);
-            if (alias_type) {
-                // Use the symbol's name (heap-allocated, persistent)
-                XaSymbol *alias_sym = xa_scope_lookup(parser->type_scope, temp_name);
-                if (alias_sym) alias_type->alias_name = alias_sym->name;
-                return alias_type;
+            XrTypeAlias *alias = xr_type_scope_lookup(parser->type_scope, temp_name);
+            if (alias && alias->type) {
+                // The entry's name pointer is heap-allocated by the scope and
+                // lives until xr_type_scope_free, so it is safe to keep.
+                alias->type->alias_name = alias->name;
+                return alias->type;
             }
         }
 
