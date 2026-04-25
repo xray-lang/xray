@@ -203,15 +203,15 @@ TEST(ast_clone_with_type_substitution) {
 
     AstNode node = { .type = AST_VARIABLE, .line = 1 };
     node.as.variable.name = "result";
-    node.compile_type = &param_t;
+    node.compile_type_legacy = &param_t;
 
     XrType int_t = { .kind = XR_KIND_INT };
     XrMonoTypeMap map[] = { { "T", &int_t } };
 
     AstNode *clone = xr_ast_clone(&node, map, 1);
     ASSERT(clone != NULL);
-    ASSERT(clone->compile_type != NULL);
-    ASSERT_EQ(clone->compile_type->kind, XR_KIND_INT);
+    ASSERT(clone->compile_type_legacy != NULL);
+    ASSERT_EQ(clone->compile_type_legacy->kind, XR_KIND_INT);
     free(clone->as.variable.name);
     free(clone);
 }

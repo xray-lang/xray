@@ -1068,12 +1068,13 @@ static int compile_nullish_coalesce_internal(XrCompilerContext *ctx, XrCompiler 
         XrExprDesc left_expr = xr_compile_expr(ctx, compiler, node->left);
         return xexpr_to_anyreg(ctx, compiler, &left_expr);
     }
-    // Case 2: Analyzer compile_type is non-nullable and concrete (not unknown).
+    // Case 2: Analyzer-inferred type is non-nullable and concrete (not unknown).
     // Covers narrowed variables, const declarations, non-nullable function returns.
-    if (node->left->compile_type &&
-        !node->left->compile_type->is_nullable &&
-        node->left->compile_type->kind != XR_KIND_UNKNOWN &&
-        node->left->compile_type->kind != XR_KIND_NULL) {
+    // X-01 Phase 2.4b: read inferred type via the analyzer side table.
+    XrType *left_t = xa_analyzer_get_node_type(ctx->analyzer, node->left);
+    if (left_t && !left_t->is_nullable &&
+        left_t->kind != XR_KIND_UNKNOWN &&
+        left_t->kind != XR_KIND_NULL) {
         XrExprDesc left_expr = xr_compile_expr(ctx, compiler, node->left);
         return xexpr_to_anyreg(ctx, compiler, &left_expr);
     }

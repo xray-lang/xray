@@ -252,9 +252,10 @@ XrType *xa_substitute_generic_call(XaInferContext *ctx,
                 XrType *pt = param_types ? param_types[j] : NULL;
                 // Use cached type if available (avoid re-evaluating lambdas
                 // which would lose callback context and trigger duplicate warnings)
-                XrType *at = call->arguments[j]->compile_type
-                           ? call->arguments[j]->compile_type
-                           : xa_visit_infer_expr(ctx, call->arguments[j]);
+                XrType *cached = xa_analyzer_get_node_type(ctx->analyzer,
+                                                            call->arguments[j]);
+                XrType *at = cached ? cached
+                                    : xa_visit_infer_expr(ctx, call->arguments[j]);
                 if (pt && at) {
                     actual_types[i] = xa_infer_type_param_from_arg(pt, at, tp_name, 0);
                     if (actual_types[i]) break;
@@ -481,12 +482,25 @@ void xa_visit_collect(XaInferContext *ctx, AstNode *node) {
                 XaSymbol *sym = xa_symbol_new(ta->name, XA_SYM_TYPE_ALIAS);
                 sym->location.line = node->line;
                 sym->is_const = true;
-                sym->alias_type = node->compile_type;
+                // X-01 Phase 2.4b: type-alias resolved type comes from
+                // the analyzer side table (the parser still seeds the
+                // legacy field, but compile_type_legacy is being
+                // retired in 2.4c).
+                XrType *resolved = xa_analyzer_get_node_type(ctx->analyzer, node);
+                if (!resolved) {
+                    // Parser-side alias write happens before analyzer
+                    // sees the node; consult the legacy field once.
+                    resolved = node->compile_type_legacy;
+                    if (resolved) {
+                        xa_analyzer_set_node_type(ctx->analyzer, node, resolved);
+                    }
+                }
+                sym->alias_type = resolved;
                 xa_scope_add_symbol(ctx->analyzer->current_scope, sym);
 
                 XaSymbolLinks *links = xa_analyzer_get_links(ctx->analyzer, sym);
                 if (links) {
-                    links->type = node->compile_type ? node->compile_type : xr_type_new_unknown(NULL);
+                    links->type = resolved ? resolved : xr_type_new_unknown(NULL);
                     links->declared_type = links->type;
                 }
             }
@@ -790,7 +804,7 @@ XrType *xa_visit_infer_expr(XaInferContext *ctx, AstNode *node) {
     // Cache inferred type on AST node for codegen phase.
     // X-01 dual-write: also populate the side table so 2.4b can switch
     // readers without changing semantics.
-    node->compile_type = result;
+    node->compile_type_legacy = result;
     xa_analyzer_set_node_type(ctx->analyzer, node, result);
     return result;
 }

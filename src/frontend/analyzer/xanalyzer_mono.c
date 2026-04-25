@@ -273,7 +273,7 @@ AstNode *xr_ast_clone(AstNode *node, XrMonoTypeMap *map, int mc) {
     n->type = node->type;
     n->line = node->line;
     n->column = node->column;
-    n->compile_type = sub_type(node->compile_type, map, mc);
+    n->compile_type_legacy = sub_type(node->compile_type_legacy, map, mc);
     n->leading_comments = NULL; // Comments not needed for mono clones
 
     switch (node->type) {

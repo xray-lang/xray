@@ -908,7 +908,7 @@ AstNode *xr_parse_type_alias_declaration(Parser *parser) {
     // Create AST node so analyzer/LSP can see the declaration
     AstNode *node = xr_ast_type_alias(parser->X, alias_name, NULL, NULL, NULL, 0, line);
     if (node) {
-        node->compile_type = type_definition;
+        node->compile_type_legacy = type_definition;
     }
 
     return node;

@@ -260,7 +260,9 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
                                ? fn_links->param_types[i] : NULL;
             if (declared && !XR_TYPE_IS_UNKNOWN(declared)) continue;  // explicitly typed
 
-            XrType *arg_type = call->arguments[i]->compile_type;
+            // X-01 Phase 2.4b: side-table read.
+            XrType *arg_type = xa_analyzer_get_node_type(ctx->analyzer,
+                                                          call->arguments[i]);
             if (!arg_type || XR_TYPE_IS_UNKNOWN(arg_type))
                 continue;
 
@@ -293,8 +295,10 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
             // arr.map(fn) -> Array<callback_return_type>
             // Use cached type from argument evaluation above (avoid re-evaluation
             // which would lose callback context)
-            XrType *cb_type = call->arguments[0]->compile_type;
-            if (XR_TYPE_IS_FUNCTION(cb_type) && cb_type->function.return_type &&
+            // X-01 Phase 2.4b: side-table read.
+            XrType *cb_type = xa_analyzer_get_node_type(ctx->analyzer,
+                                                         call->arguments[0]);
+            if (cb_type && XR_TYPE_IS_FUNCTION(cb_type) && cb_type->function.return_type &&
                 !XR_TYPE_IS_UNKNOWN(cb_type->function.return_type)) {
                 return_type = xr_type_new_array(ctx->analyzer->isolate, cb_type->function.return_type);
             }
