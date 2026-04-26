@@ -2667,10 +2667,36 @@ static void x64_emit_osr_stubs(X64CodegenCtx *ctx, XirCodegenResult *result) {
          * the vreg load loop when a vreg is allocated to it. */
         x64_mov_rr(&ctx->buf, X64_SCRATCH_REG, X64_RSI);
 
-        /* === Pass 1: load vregs with bc_slot from values[] ===
-         * R11 (SCRATCH_REG) holds values_ptr throughout this loop. */
         XirBlock *osr_blk = (snap_block_id < ctx->func->nblk)
                             ? ctx->func->blocks[snap_block_id] : NULL;
+
+        /* === Pass 0: spill-only live vreg initialization ===
+         * vregs that have NO phys reg but DO have a spill slot AND a
+         * bc_slot must be seeded from values[bc_slot] into their spill
+         * slot, otherwise the first reload after OSR entry reads
+         * uninitialized stack memory. Has to run before Pass 1 because
+         * Pass 1 saturates the allocatable GP set; here alloc_regs[0]
+         * (RAX) is still free as transit, and Pass 1 will simply
+         * overwrite RAX with whatever vreg it actually owns — which is
+         * safe because the spill slot is already in memory by then.
+         * 8-byte mov works for both i64 and f64 bit patterns. */
+        for (uint32_t v = 0; v < ctx->func->nvreg; v++) {
+            if (xra_vreg_reg_at(ctx->xra, snap_block_id, v) >= 0) continue;
+            int16_t spill = xra_vreg_spill(ctx->xra, v);
+            if (spill < 0) continue;
+            int16_t bc_slot = ctx->func->vregs[v].bc_slot;
+            if (bc_slot < 0) continue;
+            /* ri=-1 disables phi-coalesce check; only "defined in osr_blk". */
+            if (x64_osr_should_skip_vreg(ctx, osr_blk, v, -1)) continue;
+            int32_t bc_off    = (int32_t)((uint32_t)bc_slot * 8);
+            int32_t spill_off = -(X64_SPILL_BASE + (int32_t)spill * 8);
+            X64Reg transit = x64_alloc_regs[0];  /* RAX */
+            x64_mov_rm(&ctx->buf, transit, X64_SCRATCH_REG, bc_off);
+            x64_mov_mr(&ctx->buf, X64_RBP, spill_off, transit);
+        }
+
+        /* === Pass 1: load vregs with bc_slot from values[] ===
+         * R11 (SCRATCH_REG) holds values_ptr throughout this loop. */
         uint16_t nslots = 0;
 
         for (uint32_t v = 0;

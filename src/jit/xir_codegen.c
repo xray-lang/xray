@@ -1234,7 +1234,6 @@ static void emit_prologue(CodegenCtx *ctx) {
         for (uint32_t i = 0; i < nparams; i++) {
             bool is_fp = (i < ctx->func->nvreg && ctx->func->vregs[i].rep == XR_REP_F64);
             int8_t ri = xra_vreg_first_reg(ctx->xra, i);
-            int16_t spill = xra_vreg_spill(ctx->xra, i);
             if (ri < 0) continue;
             if (is_fp) {
                 A64Reg dst = alloc_fp_regs[ri];
@@ -1969,6 +1968,27 @@ static void emit_osr_stubs(CodegenCtx *ctx, XirCodegenResult *result) {
             bool is_fp = (ctx->func->vregs[v].rep == XR_REP_F64);
             osr_materialize_const(ctx, ctx->func->vregs[v].def,
                                   is_fp ? -1 : ri, is_fp ? ri : -1);
+        }
+
+        // Pass 3: spill-only live vregs.
+        // A vreg with no phys reg at the OSR header but a spill slot AND a
+        // bc_slot is "live but spilled": the first reload after entering
+        // the loop will fault into uninitialized stack memory unless we
+        // seed the spill slot from values[bc_slot] here. SCRATCH_REG (X16)
+        // still holds values_ptr; SCRATCH_REG2 (X17) is free as transit.
+        // 8-byte LDR/STR works for both i64 and f64 bit patterns.
+        for (uint32_t v = 0; v < ctx->func->nvreg; v++) {
+            if (xra_vreg_reg_at(ctx->xra, snap->block_id, v) >= 0) continue;
+            int16_t spill = xra_vreg_spill(ctx->xra, v);
+            if (spill < 0) continue;
+            int16_t bc_slot = ctx->func->vregs[v].bc_slot;
+            if (bc_slot < 0) continue;
+            // ri=-1 disables phi-coalesce check; we only want "defined in osr_blk".
+            if (osr_should_skip_vreg(ctx, osr_blk, v, -1)) continue;
+            int32_t bc_off    = (int32_t)bc_slot * 8;
+            int32_t spill_off = SPILL_BASE + (int32_t)spill * 8;
+            a64_buf_emit(&ctx->buf, a64_ldr(SCRATCH_REG2, SCRATCH_REG, bc_off));
+            a64_buf_emit(&ctx->buf, a64_str(SCRATCH_REG2, A64_SP, spill_off));
         }
 
         entry->nslots = nslots;
