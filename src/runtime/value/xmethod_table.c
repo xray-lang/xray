@@ -33,6 +33,7 @@
 #include "../object/xarray_methods.h"
 #include "../object/xstring_methods.h"
 #include "../../../stdlib/datetime/datetime_methods.h"
+#include "../../../stdlib/regex/regex_methods.h"
 
 /*
  * Per-type method tables are declared as `extern const XrMethodSlot []`
@@ -40,21 +41,22 @@
  *
  * Each owner module exposes its slot here; types whose dispatch is
  * still routed through native_type_classes (Iterator, StringBuilder,
- * Regex, ...) keep their slot NULL until they migrate to an
+ * ...) keep their slot NULL until they migrate to an
  * XrMethodSlot table.
  */
 
 const XrMethodSlot *const xr_builtin_method_tables[XR_TID_COUNT] = {
-    [XR_TID_BOOL]   = xr_bool_method_table,
-    [XR_TID_INT]    = xr_int_method_table,
-    [XR_TID_FLOAT]  = xr_float_method_table,
-    [XR_TID_BIGINT] = xr_bigint_method_table,
-    [XR_TID_SET]    = xr_set_method_table,
-    [XR_TID_MAP]    = xr_map_method_table,
-    [XR_TID_JSON]   = xr_json_method_table,
-    [XR_TID_ARRAY]  = xr_array_method_table,
-    [XR_TID_STRING] = xr_string_method_table,
+    [XR_TID_BOOL]     = xr_bool_method_table,
+    [XR_TID_INT]      = xr_int_method_table,
+    [XR_TID_FLOAT]    = xr_float_method_table,
+    [XR_TID_BIGINT]   = xr_bigint_method_table,
+    [XR_TID_SET]      = xr_set_method_table,
+    [XR_TID_MAP]      = xr_map_method_table,
+    [XR_TID_JSON]     = xr_json_method_table,
+    [XR_TID_ARRAY]    = xr_array_method_table,
+    [XR_TID_STRING]   = xr_string_method_table,
     [XR_TID_DATETIME] = xr_datetime_method_table,
+    [XR_TID_REGEX]    = xr_regex_method_table,
 };
 
 /*
