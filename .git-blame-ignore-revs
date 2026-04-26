@@ -1,0 +1,12 @@
+# git-blame-ignore-revs
+#
+# Commits listed here are skipped by `git blame` so reformat-only
+# commits do not steal authorship from real edits.
+#
+# Activate locally with:
+#   git config blame.ignoreRevsFile .git-blame-ignore-revs
+#
+# GitHub's blame UI honours this file automatically.
+
+# style: normalize C source via clang-format-18 (837 files)
+0028b5ecd8914635c088f24cf1586a1fb03d527b
