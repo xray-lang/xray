@@ -155,6 +155,16 @@ void xray_isolate_delete(XrayIsolate *isolate) {
 
     xr_shape_registry_destroy(isolate);
 
+    // The globals table stores XrValue entries that reference fixedgc
+    // bodies (enum types and the like). Drop the table BEFORE
+    // xr_gc_cleanup so any post-VM hook that scans globals during
+    // teardown still sees consistent pointers, and so xr_gc_cleanup is
+    // the single authoritative free path for those bodies.
+    if (isolate->globals) {
+        xr_globals_destroy((XrGlobalsTable*)isolate->globals);
+        isolate->globals = NULL;
+    }
+
     xr_gc_cleanup(&isolate->gc);
 
     if (isolate->sys_heap) {
@@ -177,11 +187,6 @@ void xray_isolate_delete(XrayIsolate *isolate) {
     if (isolate->stdlib_cache) {
         xr_free(isolate->stdlib_cache);
         isolate->stdlib_cache = NULL;
-    }
-
-    if (isolate->globals) {
-        xr_globals_destroy((XrGlobalsTable*)isolate->globals);
-        isolate->globals = NULL;
     }
 
     if (isolate->config) {

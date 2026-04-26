@@ -94,7 +94,7 @@ struct XrParameterMetadata {
 
 struct ParameterWrapper {
     XrGCHeader gc;
-    XrParameterMetadata *metadata;
+    XrParameterMetadata metadata;
 };
 
 /* ========== Helpers ========== */

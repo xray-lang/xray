@@ -234,24 +234,40 @@ const char* xr_enum_value_name(XrEnumValue *enum_val) {
     return enum_val->member_name;
 }
 
-/* ========== Cleanup ========== */
+/* ========== Destroy Hooks ========== */
 
-void xr_enum_value_free(XrEnumValue *enum_val) {
-    if (!enum_val) return;
+/* Release malloc-backed side resources owned by the enum value.
+ * The body itself lives on the isolate fixedgc list and is freed by
+ * xr_gc_cleanup; this hook must NOT call xr_free(obj). */
+void xr_gc_destroy_enum_value(XrGCHeader *obj, XrCoroGC *owning_gc) {
+    (void)owning_gc;
+    if (!obj) return;
     // enum_name / member_name are interned (symbol table owns them).
-    xr_free(enum_val);
+    // XrEnumValue currently has no malloc-backed side tables, so this
+    // is a no-op — kept registered to make the owner contract explicit.
 }
 
-void xr_enum_type_free(XrEnumType *enum_type) {
-    if (!enum_type) return;
-    for (uint32_t i = 0; i < enum_type->member_count; i++) {
-        // members[i].name is interned; not owned.
-        xr_enum_value_free(enum_type->members[i].instance);
+/* Release malloc-backed side resources owned by the enum type. The
+ * member instances are individually owned by the fixedgc list, so this
+ * hook only frees the type's own side arrays and the members[] table. */
+void xr_gc_destroy_enum_type(XrGCHeader *obj, XrCoroGC *owning_gc) {
+    (void)owning_gc;
+    if (!obj) return;
+    XrEnumType *enum_type = (XrEnumType*)obj;
+    if (enum_type->members) {
+        // members[].instance bodies are freed by fixedgc cleanup; this
+        // table only stores pointers, so freeing the table is enough.
+        xr_free(enum_type->members);
+        enum_type->members = NULL;
     }
-    xr_free(enum_type->members);
-    xr_free(enum_type->symbol_to_index);
-    xr_free(enum_type->value_to_index);
+    if (enum_type->symbol_to_index) {
+        xr_free(enum_type->symbol_to_index);
+        enum_type->symbol_to_index = NULL;
+    }
+    if (enum_type->value_to_index) {
+        xr_free(enum_type->value_to_index);
+        enum_type->value_to_index = NULL;
+    }
     // enum_type->name is interned; not owned.
-    xr_free(enum_type);
 }
 
