@@ -5701,25 +5701,37 @@ startfunc:
 
 
             vmcase(OP_INVOKE_BUILTIN) {
-                /* ========== OP_INVOKE_BUILTIN - Builtin type method call (direct dispatch) ==========
+                /* ========== OP_INVOKE_BUILTIN — builtin-type method call ==========
                  *
                  * Format: OP_INVOKE_BUILTIN A B C
                  *   A = base register (return value in R[A], this in R[A+1])
                  *   B = method symbol
                  *   C = nargs (argument count, excluding this)
-                 *   D (high 8 bits) = type hint (BUILTIN_TYPE_*)
                  *
-                 * Type determined at compile time, dispatch directly to handler, no runtime type check!
+                 * Dispatch fast path (this opcode hits ~all .map/.push/.has
+                 * call sites in real code, so it has to be tight):
+                 *
+                 *   1. Per-call-site monomorphic IC keyed on (XrTypeId,
+                 *      slot*). On hit, jump straight to slot->fn — skipping
+                 *      both the 10-branch type chain and the unified
+                 *      table indirection.
+                 *
+                 *   2. On miss (uninitialized, type changed, etc.) fall
+                 *      into the unified xr_method_table_lookup over the
+                 *      ten migrated types. Cache (sticky first-write-wins)
+                 *      after a successful dispatch.
+                 *
+                 *   3. If the type isn't migrated (StringBuilder, slice,
+                 *      null, raw heap object), fall through to the
+                 *      type-specific branches at the bottom.
                  */
                 TRACE_EXECUTION();
                 int a = GETARG_A(i);
                 int method_symbol = PROTO_SYMBOL(cl->proto, GETARG_B(i));
                 int nargs = GETARG_C(i);
 
-                /* Get receiver (pass register pointer directly, zero-copy)
-                 * Note: xr_vm_call_closure uses safe starting point, won't overwrite current frame registers */
                 XrValue receiver = R(a + 1);
-                XrValue *args = &R(a + 2); // Pass pointer directly, no copy
+                XrValue *args = &R(a + 2);
 
                 /* Persist the local pc into the frame before calling
                  * any builtin handler. If the handler throws (see e.g.
@@ -5729,71 +5741,46 @@ startfunc:
                  * to the catch handler. */
                 savepc();
 
-                // Builtin type fast dispatch (compile-time determined as builtin type)
-                if (XR_IS_MAP(receiver)) {
-                    /* See invoke_map above. */
-                    const XrMethodSlot *_slot = xr_method_table_lookup(
-                        XR_TID_MAP, method_symbol, SYMBOL_BUILTIN_COUNT);
-                    R(a) = _slot ? _slot->fn(isolate, receiver, args, nargs)
-                                 : XR_NOTFOUND;
-                } else if (XR_IS_ARRAY(receiver)) {
-                    /* See invoke_array above. */
-                    const XrMethodSlot *_slot = xr_method_table_lookup(
-                        XR_TID_ARRAY, method_symbol, SYMBOL_BUILTIN_COUNT);
-                    R(a) = _slot ? _slot->fn(isolate, receiver, args, nargs)
-                                 : XR_NOTFOUND;
-                } else if (XR_IS_STRING(receiver)) {
-                    /* See invoke_string above. */
-                    const XrMethodSlot *_slot = xr_method_table_lookup(
-                        XR_TID_STRING, method_symbol, SYMBOL_BUILTIN_COUNT);
-                    R(a) = _slot ? _slot->fn(isolate, receiver, args, nargs)
-                                 : XR_NOTFOUND;
-                } else if (XR_IS_SET(receiver)) {
-                    /* See invoke_set above. */
-                    const XrMethodSlot *_slot = xr_method_table_lookup(
-                        XR_TID_SET, method_symbol, SYMBOL_BUILTIN_COUNT);
-                    R(a) = _slot ? _slot->fn(isolate, receiver, args, nargs)
-                                 : XR_NOTFOUND;
-                } else if (xr_value_is_json(receiver)) {
-                    /* See invoke_json above. */
-                    const XrMethodSlot *_slot = xr_method_table_lookup(
-                        XR_TID_JSON, method_symbol, SYMBOL_BUILTIN_COUNT);
-                    R(a) = _slot ? _slot->fn(isolate, receiver, args, nargs)
-                                 : XR_NOTFOUND;
-                } else if (XR_IS_INT(receiver)) {
-                    /* See invoke_int above. */
-                    const XrMethodSlot *_slot = xr_method_table_lookup(
-                        XR_TID_INT, method_symbol, SYMBOL_BUILTIN_COUNT);
-                    R(a) = _slot ? _slot->fn(isolate, receiver, args, nargs)
-                                 : XR_NOTFOUND;
-                } else if (XR_IS_FLOAT(receiver)) {
-                    /* See invoke_float above. */
-                    const XrMethodSlot *_slot = xr_method_table_lookup(
-                        XR_TID_FLOAT, method_symbol, SYMBOL_BUILTIN_COUNT);
-                    R(a) = _slot ? _slot->fn(isolate, receiver, args, nargs)
-                                 : XR_NOTFOUND;
-                } else if (XR_IS_BOOL(receiver)) {
-                    /* See invoke_bool above — unified method table dispatch. */
-                    const XrMethodSlot *_slot = xr_method_table_lookup(
-                        XR_TID_BOOL, method_symbol, SYMBOL_BUILTIN_COUNT);
-                    if (likely(_slot != NULL)) {
-                        R(a) = _slot->fn(isolate, receiver, args, nargs);
-                    } else {
-                        XrSymbolTable *st = (XrSymbolTable*)isolate->symbol_table;
-                        const char *name = xr_symbol_get_name_in_table(st, method_symbol);
-                        VM_RUNTIME_ERROR(XR_ERR_TYPE_NO_METHOD,
-                            "bool type has no method '%s'", name ? name : "?");
+                /* Lazy IC table allocation. cache_index = pc - 1 - base
+                 * because pc has already advanced past this instruction.
+                 * Pre-sized to PROTO_CODE_COUNT in xr_ic_builtin_table_new
+                 * so the index is always valid. */
+                XrICBuiltinTable *_btab =
+                    xr_vm_ctx_ensure_ic_builtin(vm_ctx, cl->proto);
+                if (unlikely(!_btab)) {
+                    VM_RUNTIME_ERROR(XR_ERR_OUT_OF_MEMORY,
+                        "OP_INVOKE_BUILTIN: failed to allocate IC table");
+                }
+                size_t _cidx = (size_t)(pc - 1 - PROTO_CODE_BASE(cl->proto));
+                XrICBuiltin *_ic = &_btab->caches[_cidx];
+
+                int _rcv_tid = (int)xr_value_typeid(receiver);
+
+                if (likely(_ic->slot != NULL && _ic->cached_tid == _rcv_tid)) {
+                    /* IC hit: direct dispatch, no chain, no table lookup. */
+                    if (likely(_ic->hits != UINT16_MAX)) _ic->hits++;
+                    R(a) = _ic->slot->fn(isolate, receiver, args, nargs);
+                } else {
+                    if (_ic->slot) {
+                        /* IC miss on already-filled cache (poly site).
+                         * We don't replace the cached slot — sticky
+                         * first-write-wins keeps the hot type fast. */
+                        if (likely(_ic->misses != UINT16_MAX)) _ic->misses++;
                     }
-                } else if (XR_IS_BIGINT(receiver)) {
-                    /* See invoke_bigint above. */
+
+                    /* Unified slow path: single lookup covers all ten
+                     * migrated types. */
                     const XrMethodSlot *_slot = xr_method_table_lookup(
-                        XR_TID_BIGINT, method_symbol, SYMBOL_BUILTIN_COUNT);
-                    if (likely(_slot != NULL)) {
+                        _rcv_tid, method_symbol, SYMBOL_BUILTIN_COUNT);
+                    if (_slot) {
                         R(a) = _slot->fn(isolate, receiver, args, nargs);
-                    } else {
-                        R(a) = XR_NOTFOUND;
-                    }
-                } else if (xr_is_stringbuilder(receiver)) {
+                        if (!_ic->slot) {
+                            /* First-write-wins. cached_tid fits in
+                             * int16_t because XR_TID_COUNT < 256. */
+                            _ic->slot = _slot;
+                            _ic->cached_tid = (int16_t)_rcv_tid;
+                        }
+                    } else if (xr_is_stringbuilder(receiver)) {
                     // StringBuilder: dispatch through native_type_classes
                     XrClass *klass = isolate->native_type_classes[XR_TSTRINGBUILDER];
                     if (klass) {
@@ -5851,6 +5838,7 @@ startfunc:
                         VM_RUNTIME_ERROR(XR_ERR_TYPE_NO_METHOD, "this type does not support builtin method call");
                     }
                 }
+                } /* close slow-path else (IC miss) */
                 // If a builtin handler threw a catchable exception
                 // (e.g. WeakMap.set with non-object key), the throw
                 // logic already redirected frame->pc to the matching

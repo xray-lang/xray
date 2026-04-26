@@ -18,6 +18,7 @@
 #include "../runtime/class/xmethod.h"
 #include "xic_method.h"
 #include "xic_field_table.h"
+#include "xic_builtin.h"
 #include "../runtime/value/xvalue_print.h"
 #include "../runtime/value/xvalue_format.h"
 #include "../base/xmalloc.h"
@@ -290,14 +291,24 @@ XR_FUNC struct XrICMethodTable *xr_vm_ctx_ensure_ic_methods(XrVMContext *ctx,
                                                             XrProto *proto);
 
 /*
+** Lazily allocate a per-(ctx, proto) builtin-invoke IC table. Slots are
+** zeroed and pre-allocated up to PROTO_CODE_COUNT so that
+** cache_index = pc - PROTO_CODE_BASE is always a valid lookup index.
+*/
+XR_FUNC struct XrICBuiltinTable *xr_vm_ctx_ensure_ic_builtin(XrVMContext *ctx,
+                                                             XrProto *proto);
+
+/*
 ** Read-only IC table accessors. Return NULL when no IC has been recorded
-** for this proto in this ctx. Both are safe to call before the IC table
-** has been lazily allocated.
+** for this proto in this ctx. All three are safe to call before the IC
+** table has been lazily allocated.
 */
 XR_FUNC struct XrICFieldTable *xr_vm_ctx_get_ic_fields(const XrVMContext *ctx,
                                                        const XrProto *proto);
 XR_FUNC struct XrICMethodTable *xr_vm_ctx_get_ic_methods(const XrVMContext *ctx,
                                                          const XrProto *proto);
+XR_FUNC struct XrICBuiltinTable *xr_vm_ctx_get_ic_builtin(const XrVMContext *ctx,
+                                                          const XrProto *proto);
 
 /*
 ** Deep-copy snapshot of the current IC state for `proto` in `ctx`. The
