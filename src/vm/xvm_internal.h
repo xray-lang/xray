@@ -204,7 +204,6 @@ XR_FUNC XrValue xr_enum_get_member_handler(XrayIsolate *isolate, XrValue receive
 // Method call dispatch functions (implemented in xvm_builtins.c)
 XR_FUNC XrValue string_method_call_by_symbol(XrayIsolate *isolate, XrString *str, int symbol, XrValue *args, int argc);
 XR_FUNC XrValue array_method_call_by_symbol(XrayIsolate *isolate, XrArray *array, int symbol, XrValue *args, int argc);
-XR_FUNC XrValue datetime_method_call_by_symbol(XrayIsolate *isolate, void *dt, int symbol, XrValue *args, int argc);
 
 /* ========== Helper Functions (in xvm_helpers.c) ========== */
 XR_FUNC void xr_runtime_error(XrayIsolate *isolate, const char *format, ...);

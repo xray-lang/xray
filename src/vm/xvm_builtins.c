@@ -20,7 +20,11 @@
 #include "../runtime/object/xjson.h"
 #include "../runtime/value/xmethod_table.h"
 #include "../runtime/xerror_codes.h"
-#include "../../stdlib/datetime/datetime.h"
+/* DateTime methods used to live here; they now dispatch through
+ * native_type_classes (registered by xr_register_native_type) and
+ * the per-type method table in stdlib/datetime/datetime_methods.c.
+ * stdlib/datetime/datetime.h is no longer included on this side of
+ * the architecture boundary. */
 #include "../../stdlib/regex/xregex.h"
 #include "../../stdlib/regex/xregex_binding.h"
 #include <stdio.h>
@@ -854,132 +858,13 @@ XrValue array_method_call_by_symbol(XrayIsolate *isolate, XrArray *array, int sy
 
 // Bound method value helpers now live in runtime/closure/xbound_method.c.
 
-/* ========== DateTime Method Dispatch ========== */
-
-// DateTime method dispatch
-XrValue datetime_method_call_by_symbol(XrayIsolate *isolate, void *dt, int symbol, XrValue *args, int argc) {
-    XR_DCHECK(isolate != NULL, "datetime_dispatch: NULL isolate");
-    XrDateTime *datetime = (XrDateTime*)dt;
-    (void)args; (void)argc;
-
-    // format(pattern) - format datetime
-    if (symbol == SYMBOL_FORMAT) {
-        const char *pattern = XR_DATETIME_DEFAULT_FORMAT;
-        if (argc > 0 && XR_IS_STRING(args[0])) {
-            pattern = xr_value_to_string(isolate, args[0])->data;
-        }
-        char buf[256];
-        int len = xr_datetime_format(datetime, pattern, buf, sizeof(buf));
-        return xr_string_value(xr_string_intern(isolate, buf, (size_t)len, 0));
-    }
-
-    // year() - get year
-    if (symbol == SYMBOL_YEAR) {
-        return xr_int(xr_datetime_year(datetime));
-    }
-
-    // month() - get month
-    if (symbol == SYMBOL_MONTH) {
-        return xr_int(xr_datetime_month(datetime));
-    }
-
-    // day() - get day
-    if (symbol == SYMBOL_DAY) {
-        return xr_int(xr_datetime_day(datetime));
-    }
-
-    // hour() - get hour
-    if (symbol == SYMBOL_HOUR) {
-        return xr_int(xr_datetime_hour(datetime));
-    }
-
-    // minute() - get minute
-    if (symbol == SYMBOL_MINUTE) {
-        return xr_int(xr_datetime_minute(datetime));
-    }
-
-    // second() - get second
-    if (symbol == SYMBOL_SECOND) {
-        return xr_int(xr_datetime_second(datetime));
-    }
-
-    // weekday() - get weekday
-    if (symbol == SYMBOL_WEEKDAY) {
-        return xr_int(xr_datetime_weekday(datetime));
-    }
-
-    // timestamp() - get timestamp
-    if (symbol == SYMBOL_TIMESTAMP) {
-        return xr_int(datetime->timestamp);
-    }
-
-    // toUTC() - convert to UTC
-    if (symbol == SYMBOL_TO_UTC) {
-        XrDateTime *utc_dt = xr_datetime_to_utc(isolate, datetime);
-        return utc_dt ? xr_datetime_value(utc_dt) : xr_null();
-    }
-
-    // toLocal() - convert to local time
-    if (symbol == SYMBOL_TO_LOCAL) {
-        XrDateTime *local_dt = xr_datetime_to_local(isolate, datetime);
-        return local_dt ? xr_datetime_value(local_dt) : xr_null();
-    }
-
-    // millisecond() - get millisecond
-    if (symbol == SYMBOL_MILLISECOND) {
-        return xr_int(xr_datetime_millisecond(datetime));
-    }
-
-    // yearday() - get day of year
-    if (symbol == SYMBOL_YEARDAY) {
-        return xr_int(xr_datetime_yearday(datetime));
-    }
-
-    // isBefore(other) - compare
-    if (symbol == SYMBOL_IS_BEFORE) {
-        if (argc < 1 || !XR_IS_DATETIME(args[0])) return XR_FALSE_VAL;
-        return xr_datetime_is_before(datetime, XR_TO_DATETIME(args[0])) ? XR_TRUE_VAL : XR_FALSE_VAL;
-    }
-
-    // isAfter(other) - compare
-    if (symbol == SYMBOL_IS_AFTER) {
-        if (argc < 1 || !XR_IS_DATETIME(args[0])) return XR_FALSE_VAL;
-        return xr_datetime_is_after(datetime, XR_TO_DATETIME(args[0])) ? XR_TRUE_VAL : XR_FALSE_VAL;
-    }
-
-    // equals(other) - compare
-    if (symbol == SYMBOL_EQUALS) {
-        if (argc < 1 || !XR_IS_DATETIME(args[0])) return XR_FALSE_VAL;
-        return xr_datetime_equals(datetime, XR_TO_DATETIME(args[0])) ? XR_TRUE_VAL : XR_FALSE_VAL;
-    }
-
-    // isLeapYear() - check leap year
-    if (symbol == SYMBOL_IS_LEAP_YEAR) {
-        return xr_datetime_is_leap_year(datetime) ? XR_TRUE_VAL : XR_FALSE_VAL;
-    }
-
-    // daysInMonth() - get days in month
-    if (symbol == SYMBOL_DAYS_IN_MONTH) {
-        return xr_int(xr_datetime_days_in_month(datetime));
-    }
-
-    // toISOString() - ISO 8601 format
-    if (symbol == SYMBOL_TO_ISO_STRING) {
-        char buf[64];
-        int len = xr_datetime_to_iso_string(datetime, buf, sizeof(buf));
-        return xr_string_value(xr_string_intern(isolate, buf, (size_t)len, 0));
-    }
-
-    // toString() - convert to string
-    if (symbol == SYMBOL_TOSTRING) {
-        char buf[256];
-        int len = xr_datetime_format(datetime, XR_DATETIME_DEFAULT_FORMAT, buf, sizeof(buf));
-        return xr_string_value(xr_string_intern(isolate, buf, (size_t)len, 0));
-    }
-
-    // Method not found — caller (OP_INVOKE_BUILTIN) throws catchable error
-    return XR_NOTFOUND;
-}
+/* DateTime instance methods now live in
+ * stdlib/datetime/datetime_methods.{c,h} as a per-type XrMethodSlot
+ * table. Actual VM dispatch for DateTime continues to flow through
+ * native_type_classes (registered at module load by
+ * xr_register_native_type) — the new table is staged for AOT
+ * codegen and the upcoming invoke-IC integration so DateTime
+ * methods become compile-time-foldable like the runtime types. */
 
 /* ========== BoundMethod Standalone Handlers ========== */
 

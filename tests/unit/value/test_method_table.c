@@ -43,6 +43,7 @@ TEST(registry_is_dense_and_typed) {
         XR_TID_SET,
         XR_TID_MAP,
         XR_TID_JSON,
+        XR_TID_DATETIME,
     };
     for (int tid = 0; tid < XR_TID_COUNT; tid++) {
         const XrMethodSlot *table = xr_builtin_method_tables[tid];
@@ -186,6 +187,26 @@ TEST(float_arity_caps) {
     ASSERT_EQ_INT(powslot->max_args, 1);
 }
 
+/* ========== DateTime migration ========== */
+
+TEST(datetime_method_table_exposes_full_surface) {
+    /* DateTime exports 19 instance methods. */
+    static const int symbols[] = {
+        SYMBOL_FORMAT, SYMBOL_YEAR, SYMBOL_MONTH, SYMBOL_DAY,
+        SYMBOL_HOUR, SYMBOL_MINUTE, SYMBOL_SECOND, SYMBOL_WEEKDAY,
+        SYMBOL_TIMESTAMP, SYMBOL_MILLISECOND, SYMBOL_YEARDAY,
+        SYMBOL_DAYS_IN_MONTH, SYMBOL_TO_UTC, SYMBOL_TO_LOCAL,
+        SYMBOL_IS_BEFORE, SYMBOL_IS_AFTER, SYMBOL_EQUALS,
+        SYMBOL_IS_LEAP_YEAR, SYMBOL_TO_ISO_STRING, SYMBOL_TOSTRING,
+    };
+    for (size_t i = 0; i < sizeof(symbols)/sizeof(symbols[0]); i++) {
+        const XrMethodSlot *slot = xr_method_table_lookup(
+            XR_TID_DATETIME, symbols[i], SYMBOL_BUILTIN_COUNT);
+        ASSERT_NOT_NULL(slot);
+        ASSERT_NOT_NULL(slot->fn);
+    }
+}
+
 /* ========== Json migration ========== */
 
 TEST(json_method_table_exposes_iterator_and_to_string) {
@@ -299,6 +320,9 @@ TEST_MAIN_BEGIN()
     RUN_TEST_SUITE("Float migration");
     RUN_TEST(float_method_table_exposes_full_surface);
     RUN_TEST(float_arity_caps);
+
+    RUN_TEST_SUITE("DateTime migration");
+    RUN_TEST(datetime_method_table_exposes_full_surface);
 
     RUN_TEST_SUITE("Json migration");
     RUN_TEST(json_method_table_exposes_iterator_and_to_string);
