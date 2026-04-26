@@ -297,14 +297,20 @@ XrJitResult xr_jit_invoke_method(XrCoroutine *coro, int64_t encoded) {
     // Unified dispatch — single switch covers all types
     XrValue result = XR_NULL_VAL;
     switch (recv_type) {
-    case JIT_TYPE_HINT_INT:
-        result = int_method_call_by_symbol(isolate, XR_TO_INT(receiver),
-                                           method_symbol, args, nargs);
+    case JIT_TYPE_HINT_INT: {
+        const XrMethodSlot *slot = xr_method_table_lookup(
+            XR_TID_INT, method_symbol, SYMBOL_BUILTIN_COUNT);
+        result = slot ? slot->fn(isolate, receiver, args, nargs)
+                      : XR_NOTFOUND;
         break;
-    case JIT_TYPE_HINT_FLOAT:
-        result = float_method_call_by_symbol(isolate, XR_TO_FLOAT(receiver),
-                                             method_symbol, args, nargs);
+    }
+    case JIT_TYPE_HINT_FLOAT: {
+        const XrMethodSlot *slot = xr_method_table_lookup(
+            XR_TID_FLOAT, method_symbol, SYMBOL_BUILTIN_COUNT);
+        result = slot ? slot->fn(isolate, receiver, args, nargs)
+                      : XR_NOTFOUND;
         break;
+    }
     case JIT_TYPE_HINT_BOOL: {
         /* Bool dispatches through the unified method table; missing
          * symbols return XR_NOTFOUND and let the post-switch

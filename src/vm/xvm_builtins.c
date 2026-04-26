@@ -1080,177 +1080,18 @@ XrValue set_method_call_by_symbol(XrayIsolate *isolate, XrSet *set, int symbol, 
     return XR_NOTFOUND;
 }
 
-/* ========== Float Method Handlers ========== */
-
-#include <math.h>
-
-// Float method dispatch
-XrValue float_method_call_by_symbol(XrayIsolate *isolate, xr_Number value, int symbol, XrValue *args, int argc) {
-    XR_DCHECK(isolate != NULL, "float_dispatch: NULL isolate");
-    (void)args; (void)argc;  // Most methods don't need extra args
-
-    // toString - convert to string
-    if (symbol == SYMBOL_TOSTRING) {
-        char buffer[64];
-        int len = snprintf(buffer, sizeof(buffer), "%g", value);
-        XrString *str = xr_string_intern(isolate, buffer, (size_t)len, 0);
-        return xr_string_value(str);
-    }
-
-    // toFixed(decimals) - format with fixed decimal places
-    if (symbol == SYMBOL_TOFIXED) {
-        int decimals = (argc >= 1 && XR_IS_INT(args[0])) ? (int)XR_TO_INT(args[0]) : 0;
-        if (decimals < 0) decimals = 0;
-        if (decimals > XR_TOFIXED_MAX_DECIMALS) decimals = XR_TOFIXED_MAX_DECIMALS;
-        char buffer[64];
-        int len = snprintf(buffer, sizeof(buffer), "%.*f", decimals, value);
-        XrString *str = xr_string_intern(isolate, buffer, (size_t)len, 0);
-        return xr_string_value(str);
-    }
-
-    // floor - round down
-    if (symbol == SYMBOL_FLOOR) {
-        return xr_int((xr_Integer)floor(value));
-    }
-
-    // ceil - round up
-    if (symbol == SYMBOL_CEIL) {
-        return xr_int((xr_Integer)ceil(value));
-    }
-
-    // round - round to nearest
-    if (symbol == SYMBOL_ROUND) {
-        return xr_int((xr_Integer)round(value));
-    }
-
-    // abs - absolute value
-    if (symbol == SYMBOL_ABS) {
-        return xr_float(fabs(value));
-    }
-
-    // sqrt - square root
-    if (symbol == SYMBOL_SQRT) {
-        if (value < 0) {
-            return xr_float(NAN);
-        }
-        return xr_float(sqrt(value));
-    }
-
-    // toInt - truncate to integer
-    if (symbol == SYMBOL_TOINT) {
-        return xr_int((xr_Integer)value);
-    }
-
-    // pow(exponent) - power operation
-    if (symbol == SYMBOL_POW) {
-        if (argc < 1) return xr_float(value);
-        xr_Number exponent;
-        if (XR_IS_FLOAT(args[0])) {
-            exponent = XR_TO_FLOAT(args[0]);
-        } else if (XR_IS_INT(args[0])) {
-            exponent = (xr_Number)XR_TO_INT(args[0]);
-        } else {
-            return xr_float(value);
-        }
-        return xr_float(pow(value, exponent));
-    }
-
-    // Method not found — caller (OP_INVOKE_BUILTIN) throws catchable error
-    return XR_NOTFOUND;
-}
-
-/* ========== Int Method Handlers ========== */
-
-// Int method dispatch
-XrValue int_method_call_by_symbol(XrayIsolate *isolate, xr_Integer value, int symbol, XrValue *args, int argc) {
-    XR_DCHECK(isolate != NULL, "int_dispatch: NULL isolate");
-    (void)args; (void)argc;
-
-    // toString - convert to string
-    if (symbol == SYMBOL_TOSTRING) {
-        char buffer[32];
-        int len = snprintf(buffer, sizeof(buffer), "%lld", (long long)value);
-        XrString *str = xr_string_intern(isolate, buffer, (size_t)len, 0);
-        return xr_string_value(str);
-    }
-
-    // abs - absolute value
-    if (symbol == SYMBOL_ABS) {
-        return xr_int(value < 0 ? -value : value);
-    }
-
-    // toBigInt - convert to BigInt
-    if (symbol == SYMBOL_TOBIGINT) {
-        XrBigInt *result = xr_bigint_new(xr_current_coro(isolate), value);
-        return XR_FROM_PTR(result);
-    }
-
-    // max(other) - return the larger value
-    if (symbol == SYMBOL_MAX) {
-        if (argc < 1) return xr_int(value);
-        if (XR_IS_INT(args[0])) {
-            xr_Integer other = XR_TO_INT(args[0]);
-            return xr_int(value > other ? value : other);
-        }
-        if (XR_IS_FLOAT(args[0])) {
-            xr_Number other = XR_TO_FLOAT(args[0]);
-            xr_Number self = (xr_Number)value;
-            return xr_float(self > other ? self : other);
-        }
-        return xr_int(value);
-    }
-
-    // min(other) - return the smaller value
-    if (symbol == SYMBOL_MIN) {
-        if (argc < 1) return xr_int(value);
-        if (XR_IS_INT(args[0])) {
-            xr_Integer other = XR_TO_INT(args[0]);
-            return xr_int(value < other ? value : other);
-        }
-        if (XR_IS_FLOAT(args[0])) {
-            xr_Number other = XR_TO_FLOAT(args[0]);
-            xr_Number self = (xr_Number)value;
-            return xr_float(self < other ? self : other);
-        }
-        return xr_int(value);
-    }
-
-    // toFloat - convert to float
-    if (symbol == SYMBOL_TOFLOAT) {
-        return xr_float((xr_Number)value);
-    }
-
-    // toHex - convert to hexadecimal string
-    if (symbol == SYMBOL_TOHEX) {
-        char buffer[32];
-        int len;
-        if (value < 0) {
-            len = snprintf(buffer, sizeof(buffer), "-0x%llX", (unsigned long long)(-value));
-        } else {
-            len = snprintf(buffer, sizeof(buffer), "0x%llX", (unsigned long long)value);
-        }
-        XrString *str = xr_string_intern(isolate, buffer, (size_t)len, 0);
-        return xr_string_value(str);
-    }
-
-    // Math methods (delegate to Float)
-    if (symbol == SYMBOL_FLOOR || symbol == SYMBOL_CEIL ||
-        symbol == SYMBOL_ROUND || symbol == SYMBOL_SQRT || symbol == SYMBOL_POW) {
-        return float_method_call_by_symbol(isolate, (xr_Number)value, symbol, args, argc);
-    }
-
-    // Method not found — caller (OP_INVOKE_BUILTIN) throws catchable error
-    return XR_NOTFOUND;
-}
-
-/* Bool method dispatch lives in src/runtime/value/xbool_methods.{c,h}.
- * The legacy bool_method_call_by_symbol used to be here; it was deleted
- * when bool migrated to the unified XrMethodSlot table. See
- * xr_bool_method_table[] for the single source of truth. */
-
-/* BigInt method dispatch lives in src/runtime/object/xbigint_methods.{c,h}.
- * The legacy bigint_method_call_by_symbol used to be here; it was deleted
- * when bigint migrated to the unified XrMethodSlot table. */
+/* Numeric and bool method dispatch lives next to the owning value
+ * representation:
+ *   - bool   -> src/runtime/value/xbool_methods.{c,h}
+ *   - int    -> src/runtime/value/xint_methods.{c,h}
+ *   - float  -> src/runtime/value/xfloat_methods.{c,h}
+ *   - bigint -> src/runtime/object/xbigint_methods.{c,h}
+ *
+ * Each module exports `xr_<type>_method_table[]` and registers it in
+ * runtime/value/xmethod_table.c. The legacy *_method_call_by_symbol
+ * dispatchers used to live here and were deleted as the migration
+ * sweep landed; OP_INVOKE_BUILTIN now resolves through the unified
+ * XrMethodSlot table for these types. */
 
 // Bound method value helpers now live in runtime/closure/xbound_method.c.
 

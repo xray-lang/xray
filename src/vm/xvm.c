@@ -5286,9 +5286,13 @@ startfunc:
                 /* === Int builtin methods === */
                 invoke_int:
                 if (XR_IS_INT(receiver)) {
-                    R(a) = int_method_call_by_symbol(isolate, XR_TO_INT(receiver), method_symbol, &R(a + 2), nargs);
-                    VM_BUILTIN_INVOKE_CHECK_EXC();
-                    if (unlikely(XR_IS_NOTFOUND(R(a)))) {
+                    /* See xint_methods.h — unified method table dispatch. */
+                    const XrMethodSlot *_slot = xr_method_table_lookup(
+                        XR_TID_INT, method_symbol, SYMBOL_BUILTIN_COUNT);
+                    if (likely(_slot != NULL)) {
+                        R(a) = _slot->fn(isolate, receiver, &R(a + 2), nargs);
+                        VM_BUILTIN_INVOKE_CHECK_EXC();
+                    } else {
                         XrSymbolTable *_st = (XrSymbolTable*)isolate->symbol_table;
                         const char *_mn = xr_symbol_get_name_in_table(_st, method_symbol);
                         VM_RUNTIME_ERROR(XR_ERR_TYPE_NO_METHOD, "int has no method '%s'", _mn ? _mn : "?");
@@ -5299,9 +5303,13 @@ startfunc:
                 /* === Float builtin methods === */
                 invoke_float:
                 if (XR_IS_FLOAT(receiver)) {
-                    R(a) = float_method_call_by_symbol(isolate, XR_TO_FLOAT(receiver), method_symbol, &R(a + 2), nargs);
-                    VM_BUILTIN_INVOKE_CHECK_EXC();
-                    if (unlikely(XR_IS_NOTFOUND(R(a)))) {
+                    /* See xfloat_methods.h — unified method table dispatch. */
+                    const XrMethodSlot *_slot = xr_method_table_lookup(
+                        XR_TID_FLOAT, method_symbol, SYMBOL_BUILTIN_COUNT);
+                    if (likely(_slot != NULL)) {
+                        R(a) = _slot->fn(isolate, receiver, &R(a + 2), nargs);
+                        VM_BUILTIN_INVOKE_CHECK_EXC();
+                    } else {
                         XrSymbolTable *_st = (XrSymbolTable*)isolate->symbol_table;
                         const char *_mn = xr_symbol_get_name_in_table(_st, method_symbol);
                         VM_RUNTIME_ERROR(XR_ERR_TYPE_NO_METHOD, "float has no method '%s'", _mn ? _mn : "?");
@@ -5716,11 +5724,17 @@ startfunc:
                     XrJson *json = xr_value_to_json(receiver);
                     R(a) = json_method_call_by_symbol(isolate, json, method_symbol, args, nargs);
                 } else if (XR_IS_INT(receiver)) {
-                    xr_Integer value = XR_TO_INT(receiver);
-                    R(a) = int_method_call_by_symbol(isolate, value, method_symbol, args, nargs);
+                    /* See invoke_int above. */
+                    const XrMethodSlot *_slot = xr_method_table_lookup(
+                        XR_TID_INT, method_symbol, SYMBOL_BUILTIN_COUNT);
+                    R(a) = _slot ? _slot->fn(isolate, receiver, args, nargs)
+                                 : XR_NOTFOUND;
                 } else if (XR_IS_FLOAT(receiver)) {
-                    xr_Number value = XR_TO_FLOAT(receiver);
-                    R(a) = float_method_call_by_symbol(isolate, value, method_symbol, args, nargs);
+                    /* See invoke_float above. */
+                    const XrMethodSlot *_slot = xr_method_table_lookup(
+                        XR_TID_FLOAT, method_symbol, SYMBOL_BUILTIN_COUNT);
+                    R(a) = _slot ? _slot->fn(isolate, receiver, args, nargs)
+                                 : XR_NOTFOUND;
                 } else if (XR_IS_BOOL(receiver)) {
                     /* See invoke_bool above — unified method table dispatch. */
                     const XrMethodSlot *_slot = xr_method_table_lookup(

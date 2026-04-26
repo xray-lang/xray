@@ -33,10 +33,12 @@ TEST(registry_is_dense_and_typed) {
      * array size is enforced at compile time inside xmethod_table.c.
      * Migrated types must point at a stable, non-NULL table; the rest
      * stay NULL until their owner module migrates. */
-    /* Migrated types so far: bool, bigint. Add new ids here as
-     * the migration sweeps the rest of xvm_builtins.c. */
+    /* Migrated types so far. Add new ids here as the migration
+     * sweeps the rest of xvm_builtins.c. */
     static const XrTypeId migrated[] = {
         XR_TID_BOOL,
+        XR_TID_INT,
+        XR_TID_FLOAT,
         XR_TID_BIGINT,
     };
     for (int tid = 0; tid < XR_TID_COUNT; tid++) {
@@ -112,11 +114,80 @@ TEST(bigint_pure_predicates_carry_flags) {
     }
 }
 
+/* ========== Int migration ========== */
+
+TEST(int_method_table_exposes_full_surface) {
+    /* All twelve int symbols (toString / abs / toBigInt / max / min /
+     * toFloat / toHex / floor / ceil / round / sqrt / pow) must
+     * resolve. */
+    static const int symbols[] = {
+        SYMBOL_TOSTRING, SYMBOL_ABS, SYMBOL_TOBIGINT,
+        SYMBOL_MAX, SYMBOL_MIN, SYMBOL_TOFLOAT, SYMBOL_TOHEX,
+        SYMBOL_FLOOR, SYMBOL_CEIL, SYMBOL_ROUND,
+        SYMBOL_SQRT, SYMBOL_POW,
+    };
+    for (size_t i = 0; i < sizeof(symbols)/sizeof(symbols[0]); i++) {
+        const XrMethodSlot *slot = xr_method_table_lookup(
+            XR_TID_INT, symbols[i], SYMBOL_BUILTIN_COUNT);
+        ASSERT_NOT_NULL(slot);
+        ASSERT_NOT_NULL(slot->fn);
+    }
+}
+
+TEST(int_floor_ceil_round_are_no_ops) {
+    /* Integer floor/ceil/round must reuse the same impl pointer
+     * (the no-op identity function), proving the migration removed
+     * the legacy float roundtrip. */
+    const XrMethodSlot *floor_slot = xr_method_table_lookup(
+        XR_TID_INT, SYMBOL_FLOOR, SYMBOL_BUILTIN_COUNT);
+    const XrMethodSlot *ceil_slot = xr_method_table_lookup(
+        XR_TID_INT, SYMBOL_CEIL, SYMBOL_BUILTIN_COUNT);
+    const XrMethodSlot *round_slot = xr_method_table_lookup(
+        XR_TID_INT, SYMBOL_ROUND, SYMBOL_BUILTIN_COUNT);
+    ASSERT_NOT_NULL(floor_slot);
+    ASSERT_NOT_NULL(ceil_slot);
+    ASSERT_NOT_NULL(round_slot);
+    /* All three must advertise pure / no-GC. */
+    ASSERT(floor_slot->flags & XR_METHOD_FLAG_PURE);
+    ASSERT(ceil_slot->flags  & XR_METHOD_FLAG_PURE);
+    ASSERT(round_slot->flags & XR_METHOD_FLAG_PURE);
+}
+
+/* ========== Float migration ========== */
+
+TEST(float_method_table_exposes_full_surface) {
+    static const int symbols[] = {
+        SYMBOL_TOSTRING, SYMBOL_TOFIXED,
+        SYMBOL_FLOOR, SYMBOL_CEIL, SYMBOL_ROUND,
+        SYMBOL_ABS, SYMBOL_SQRT, SYMBOL_TOINT, SYMBOL_POW,
+    };
+    for (size_t i = 0; i < sizeof(symbols)/sizeof(symbols[0]); i++) {
+        const XrMethodSlot *slot = xr_method_table_lookup(
+            XR_TID_FLOAT, symbols[i], SYMBOL_BUILTIN_COUNT);
+        ASSERT_NOT_NULL(slot);
+        ASSERT_NOT_NULL(slot->fn);
+    }
+}
+
+TEST(float_arity_caps) {
+    /* toFixed and pow accept up to one optional argument. */
+    const XrMethodSlot *tofixed = xr_method_table_lookup(
+        XR_TID_FLOAT, SYMBOL_TOFIXED, SYMBOL_BUILTIN_COUNT);
+    const XrMethodSlot *powslot = xr_method_table_lookup(
+        XR_TID_FLOAT, SYMBOL_POW, SYMBOL_BUILTIN_COUNT);
+    ASSERT_NOT_NULL(tofixed);
+    ASSERT_NOT_NULL(powslot);
+    ASSERT_EQ_INT(tofixed->min_args, 0);
+    ASSERT_EQ_INT(tofixed->max_args, 1);
+    ASSERT_EQ_INT(powslot->min_args, 0);
+    ASSERT_EQ_INT(powslot->max_args, 1);
+}
+
 /* ========== Lookup helper short-circuits ========== */
 
 TEST(lookup_returns_null_for_unmigrated_type) {
-    /* int has no table yet — every lookup must fail cleanly. */
-    const XrMethodSlot *slot = xr_method_table_lookup(XR_TID_INT, 0, 64);
+    /* string has no table yet — every lookup must fail cleanly. */
+    const XrMethodSlot *slot = xr_method_table_lookup(XR_TID_STRING, 0, 64);
     ASSERT(slot == NULL);
 }
 
@@ -130,11 +201,8 @@ TEST(lookup_rejects_out_of_range_type_id) {
 }
 
 TEST(lookup_rejects_out_of_range_symbol_id) {
-    /* Even with a hypothetical migrated type, an out-of-range symbol
-     * id must short-circuit. We exercise the path with NULL table
-     * which returns NULL before the symbol bounds check, so install
-     * a tiny local-test-only proxy by going through a known NULL
-     * slot type and a clearly invalid symbol. */
+    /* Symbol-id range check must short-circuit even when the
+     * receiver type DOES have a method table (XR_TID_INT). */
     const XrMethodSlot *slot = xr_method_table_lookup(XR_TID_INT, -1, 64);
     ASSERT(slot == NULL);
 
@@ -155,6 +223,14 @@ TEST_MAIN_BEGIN()
     RUN_TEST_SUITE("BigInt migration");
     RUN_TEST(bigint_method_table_exposes_full_surface);
     RUN_TEST(bigint_pure_predicates_carry_flags);
+
+    RUN_TEST_SUITE("Int migration");
+    RUN_TEST(int_method_table_exposes_full_surface);
+    RUN_TEST(int_floor_ceil_round_are_no_ops);
+
+    RUN_TEST_SUITE("Float migration");
+    RUN_TEST(float_method_table_exposes_full_surface);
+    RUN_TEST(float_arity_caps);
 
     RUN_TEST_SUITE("xr_method_table_lookup short-circuits");
     RUN_TEST(lookup_returns_null_for_unmigrated_type);
