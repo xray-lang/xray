@@ -333,6 +333,9 @@ file(GLOB FRONTEND_CODEGEN_SRC "src/frontend/codegen/*.c")
 file(GLOB FRONTEND_ANALYZER_SRC "src/frontend/analyzer/*.c")
 file(GLOB FRONTEND_FORMAT_SRC "src/frontend/format/*.c")
 file(GLOB VM_SRC "src/vm/*.c")
+# Dispatch case bodies live in *.inc.c files included from xvm.c inside
+# the computed-goto switch. They are not standalone translation units.
+list(FILTER VM_SRC EXCLUDE REGEX "\\.inc\\.c$")
 file(GLOB JIT_SRC "src/jit/*.c")
 file(GLOB MODULE_SRC "src/module/*.c")
 file(GLOB AOT_SRC "src/aot/*.c")
@@ -679,6 +682,10 @@ if(CLANG_TIDY)
         ${CMAKE_CURRENT_SOURCE_DIR}/src/runtime/object/*.c
         ${CMAKE_CURRENT_SOURCE_DIR}/src/frontend/analyzer/*.c
     )
+    # *.inc.c files are dispatch case bodies, analyzed transitively
+    # through xvm.c — running clang-tidy on them standalone breaks
+    # because they reference locals defined inside the switch.
+    list(FILTER CORE_ANALYSIS_FILES EXCLUDE REGEX "\\.inc\\.c$")
 
     # Full analysis target: make tidy (analyze core modules)
     add_custom_target(tidy
