@@ -9,6 +9,26 @@
  */
 
 #include "xstruct_layout.h"
+#include "xtype.h"
+
+int xr_type_kind_to_native(int kind, uint8_t native_width) {
+    switch ((XrTypeKind)kind) {
+        case XR_KIND_BOOL:
+            return XR_NATIVE_BOOL;
+        case XR_KIND_INT:
+            // native_width carries the explicit XrNativeType for sized
+            // integers (i8/i16/i32/u8/...). Zero means "default int" (i64).
+            if (native_width != 0) return (int)native_width;
+            return XR_NATIVE_I64;
+        case XR_KIND_FLOAT:
+            if (native_width == XR_NATIVE_F32) return XR_NATIVE_F32;
+            return XR_NATIVE_F64;
+        case XR_KIND_STRING:
+            return XR_NATIVE_STRING;
+        default:
+            return -1;
+    }
+}
 
 void xr_struct_layout_compute(XrStructLayout *layout) {
     if (!layout || layout->field_count == 0) {

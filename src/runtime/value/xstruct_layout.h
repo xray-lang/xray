@@ -114,22 +114,11 @@ XR_FUNC void xr_struct_layout_compute(XrStructLayout *layout);
  * Convert XrTypeKind + native_width to XrNativeType for struct fields.
  * native_width stores XrNativeType directly (0 = use default for kind).
  * Returns -1 if the type is not valid for struct fields.
+ *
+ * Implemented in xstruct_layout.c to avoid pulling xtype.h into this
+ * header (xtype.h already includes xstruct_layout.h, so a back-reference
+ * here would form an include cycle).
  */
-static inline int xr_type_kind_to_native(int kind, uint8_t native_width) {
-    switch (kind) {
-        case 3: // XR_KIND_BOOL
-            return XR_NATIVE_BOOL;
-        case 0: // XR_KIND_INT
-            if (native_width != 0) return (int)native_width; // XrNativeType stored directly
-            return XR_NATIVE_I64; // default int = int64
-        case 1: // XR_KIND_FLOAT
-            if (native_width == XR_NATIVE_F32) return XR_NATIVE_F32;
-            return XR_NATIVE_F64; // default float = float64
-        case 2: // XR_KIND_STRING
-            return XR_NATIVE_STRING;
-        default:
-            return -1; // not a valid struct field type
-    }
-}
+XR_FUNC int xr_type_kind_to_native(int kind, uint8_t native_width);
 
 #endif // XSTRUCT_LAYOUT_H
