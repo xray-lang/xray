@@ -316,9 +316,14 @@ jobs:
     - uses: actions/checkout@v4
 
     - name: Install clang-format
+      # The Ubuntu-bundled clang-format-18 lags on patch level and
+      # disagrees with Homebrew clang-format 18.1.8 on edge cases
+      # (e.g. brace-init macro bodies). Pull from the official LLVM
+      # repo so CI tracks the same 18.x as the developer's local
+      # install and the format verdict stays consistent.
       run: |
-        sudo apt-get update
-        sudo apt-get install -y clang-format-18
+        wget -qO- https://apt.llvm.org/llvm.sh | sudo bash -s -- 18
+        clang-format-18 --version
 
     - name: Check code format
       run: |
