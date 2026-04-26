@@ -65,12 +65,32 @@ bool xr_sysheap_init(XrSystemHeap *heap, const XrSysHeapConfig *config) {
     // Initialize class arena
     xr_arena_init(&heap->class_arena, class_arena_size);
 
+    // Initialize XrCoroGC L2 pool
+    pthread_mutex_init(&heap->gc_pool_mu, NULL);
+    heap->gc_pool_head = NULL;
+    heap->gc_pool_count = 0;
+
     heap->initialized = true;
     return true;
 }
 
 void xr_sysheap_destroy(XrSystemHeap *heap) {
     if (!heap || !heap->initialized) return;
+
+    // Drain XrCoroGC L2 pool: every recycled struct still owned by the
+    // pool must be returned to malloc. Walk the linked stack stored in
+    // the first sizeof(void*) bytes of each free struct.
+    pthread_mutex_lock(&heap->gc_pool_mu);
+    struct XrCoroGC *gc = heap->gc_pool_head;
+    while (gc) {
+        struct XrCoroGC *next = *(struct XrCoroGC**)gc;
+        xr_free(gc);
+        gc = next;
+    }
+    heap->gc_pool_head = NULL;
+    heap->gc_pool_count = 0;
+    pthread_mutex_unlock(&heap->gc_pool_mu);
+    pthread_mutex_destroy(&heap->gc_pool_mu);
 
     // Destroy coroutine pool
     if (heap->coro_pool) {
@@ -83,6 +103,34 @@ void xr_sysheap_destroy(XrSystemHeap *heap) {
     xr_arena_destroy(&heap->class_arena);
 
     heap->initialized = false;
+}
+
+/* ========== XrCoroGC Struct Pool (L2) ========== */
+
+struct XrCoroGC* xr_sysheap_gc_pool_pop(XrSystemHeap *heap) {
+    if (!heap || !heap->initialized) return NULL;
+    pthread_mutex_lock(&heap->gc_pool_mu);
+    struct XrCoroGC *gc = heap->gc_pool_head;
+    if (gc) {
+        heap->gc_pool_head = *(struct XrCoroGC**)gc;
+        heap->gc_pool_count--;
+    }
+    pthread_mutex_unlock(&heap->gc_pool_mu);
+    return gc;
+}
+
+bool xr_sysheap_gc_pool_push(XrSystemHeap *heap, struct XrCoroGC *gc) {
+    if (!heap || !heap->initialized || !gc) return false;
+    pthread_mutex_lock(&heap->gc_pool_mu);
+    if (heap->gc_pool_count >= XR_SYSHEAP_GC_POOL_MAX) {
+        pthread_mutex_unlock(&heap->gc_pool_mu);
+        return false;
+    }
+    *(struct XrCoroGC**)gc = heap->gc_pool_head;
+    heap->gc_pool_head = gc;
+    heap->gc_pool_count++;
+    pthread_mutex_unlock(&heap->gc_pool_mu);
+    return true;
 }
 
 /* ========== Coroutine Allocation API ========== */

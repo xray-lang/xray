@@ -38,41 +38,29 @@
 /* ========== GC Struct Two-Level Pool ========== */
 /*
  * L1: per-Worker gc_free_list (lock-free, max 32).
- * L2: global mutex-protected stack (max 256).
+ * L2: per-isolate stack on XrSystemHeap (mutex protected).
  *
  * L1 miss → L2 → xr_malloc.
  * L1 full → L2 → xr_free if L2 full.
  * Worker exit flushes L1 → L2 (xr_coro_gc_flush_pool).
+ *
+ * The L2 pool was previously a process-wide static (g_gc_pool_*), which
+ * crossed isolate boundaries and made teardown ordering observable
+ * across unrelated isolates. It is now scoped to XrSystemHeap so each
+ * isolate owns its recycle stack and xr_sysheap_destroy reclaims the
+ * remaining structs.
  */
 #define XR_GC_POOL_L1_MAX   32
-#define XR_GC_POOL_L2_MAX  256
 
-static pthread_mutex_t g_gc_pool_mu = PTHREAD_MUTEX_INITIALIZER;
-static XrCoroGC *g_gc_pool_head = NULL;
-static int g_gc_pool_count = 0;
-
-static XrCoroGC* gc_pool_l2_pop(void) {
-    pthread_mutex_lock(&g_gc_pool_mu);
-    XrCoroGC *gc = g_gc_pool_head;
-    if (gc) {
-        g_gc_pool_head = *(XrCoroGC**)gc;
-        g_gc_pool_count--;
-    }
-    pthread_mutex_unlock(&g_gc_pool_mu);
-    return gc;
+// Resolve the system heap that owns the L2 pool for a given coroutine
+// or coroutine GC. Returns NULL only when the bootstrap path has not
+// yet wired the isolate, in which case callers fall back to malloc/free.
+static inline XrSystemHeap* gc_pool_heap_from_coro(struct XrCoroutine *coro) {
+    return (coro && coro->isolate) ? coro->isolate->sys_heap : NULL;
 }
 
-static bool gc_pool_l2_push(XrCoroGC *gc) {
-    pthread_mutex_lock(&g_gc_pool_mu);
-    if (g_gc_pool_count >= XR_GC_POOL_L2_MAX) {
-        pthread_mutex_unlock(&g_gc_pool_mu);
-        return false;
-    }
-    *(XrCoroGC**)gc = g_gc_pool_head;
-    g_gc_pool_head = gc;
-    g_gc_pool_count++;
-    pthread_mutex_unlock(&g_gc_pool_mu);
-    return true;
+static inline XrSystemHeap* gc_pool_heap_from_gc(XrCoroGC *gc) {
+    return (gc && gc->owner) ? gc_pool_heap_from_coro(gc->owner) : NULL;
 }
 
 /* ========== Helper Functions ========== */
@@ -182,8 +170,10 @@ XrCoroGC* xr_coro_gc_create(struct XrCoroutine *coro, const XrCoroGCConfig *conf
         w->p.gc_free_list = *(XrCoroGC**)gc;
         w->p.gc_free_count--;
     } else {
-        // L2 global pool (mutex)
-        gc = gc_pool_l2_pop();
+        // L2 per-isolate pool (mutex). Bootstrap before sys_heap exists
+        // is rare and falls straight through to malloc.
+        XrSystemHeap *heap = gc_pool_heap_from_coro(coro);
+        gc = heap ? xr_sysheap_gc_pool_pop(heap) : NULL;
         if (!gc) {
             gc = (XrCoroGC*)xr_malloc(sizeof(XrCoroGC));
         }
@@ -302,26 +292,30 @@ void xr_coro_gc_destroy(XrCoroGC *gc) {
     if (gc->shared_refs) xr_free(gc->shared_refs);
     if (gc->prev_shared_refs) xr_free(gc->prev_shared_refs);
 
-    // Recycle: try L1 (per-Worker), then L2 (global), then free
+    // Recycle: try L1 (per-Worker), then L2 (per-isolate), then free
     XrWorker *w = xr_current_worker();
     if (w && w->p.gc_free_count < XR_GC_POOL_L1_MAX) {
         *(XrCoroGC**)gc = w->p.gc_free_list;
         w->p.gc_free_list = gc;
         w->p.gc_free_count++;
-    } else if (!gc_pool_l2_push(gc)) {
-        xr_free(gc);
+    } else {
+        XrSystemHeap *heap = gc_pool_heap_from_gc(gc);
+        if (!heap || !xr_sysheap_gc_pool_push(heap, gc)) {
+            xr_free(gc);
+        }
     }
 }
 
-// Flush a per-worker GC struct free list (L1) to the global pool (L2).
-// Structs that don't fit in L2 are freed immediately.
-void xr_coro_gc_flush_pool(XrCoroGC **free_list, int *count) {
+// Flush a per-worker GC struct free list (L1) to the per-isolate
+// pool (L2). Structs that don't fit in L2 are freed immediately.
+// `heap` is the L2 owner; passing NULL forces every struct to malloc/free.
+void xr_coro_gc_flush_pool(XrSystemHeap *heap, XrCoroGC **free_list, int *count) {
     XR_DCHECK(free_list != NULL, "flush_pool: NULL free_list");
     XR_DCHECK(count != NULL, "flush_pool: NULL count");
     while (*free_list) {
         XrCoroGC *gc = *free_list;
         *free_list = *(XrCoroGC**)gc;
-        if (!gc_pool_l2_push(gc)) {
+        if (!heap || !xr_sysheap_gc_pool_push(heap, gc)) {
             xr_free(gc);
         }
     }

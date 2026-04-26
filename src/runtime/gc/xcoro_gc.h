@@ -405,9 +405,12 @@ XR_FUNC XrCoroGC* xr_coro_gc_create(struct XrCoroutine *coro, const XrCoroGCConf
 XR_FUNC void xr_coro_gc_destroy(XrCoroGC *gc);
 XR_FUNC void xr_coro_gc_reset(XrCoroGC *gc, struct XrCoroutine *new_owner);
 
-// Flush per-worker GC struct free list (L1) to global pool (L2).
-// Called from worker destroy to avoid struct leaks.
-XR_FUNC void xr_coro_gc_flush_pool(struct XrCoroGC **free_list, int *count);
+// Flush per-worker GC struct free list (L1) to the isolate-owned
+// L2 pool stored on XrSystemHeap. Called from worker destroy to avoid
+// struct leaks. Pass `heap=NULL` to force every struct back to malloc.
+struct XrSystemHeap;
+XR_FUNC void xr_coro_gc_flush_pool(struct XrSystemHeap *heap,
+                                   struct XrCoroGC **free_list, int *count);
 
 /* ========== Coroutine GC Allocation API ========== */
 
