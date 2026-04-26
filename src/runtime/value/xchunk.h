@@ -86,7 +86,7 @@ typedef uint32_t XrInstruction;
  * one X-macro entry there; the three consumers stay in lockstep.
  */
 typedef enum {
-#define _XR_OPCODE_ENUM(name, fmt, desc) OP_##name,
+#define _XR_OPCODE_ENUM(name, fmt, kop, desc) OP_##name,
     XR_OPCODE_TABLE(_XR_OPCODE_ENUM)
 #undef _XR_OPCODE_ENUM
 } OpCode;

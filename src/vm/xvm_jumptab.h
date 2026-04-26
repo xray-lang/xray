@@ -39,7 +39,7 @@
                           } while(0)
 
 static const void *const disptab[NUM_OPCODES] = {
-#define _XR_OPCODE_LABEL(name, fmt, desc) [OP_##name] = &&L_OP_##name,
+#define _XR_OPCODE_LABEL(name, fmt, kop, desc) [OP_##name] = &&L_OP_##name,
     XR_OPCODE_TABLE(_XR_OPCODE_LABEL)
 #undef _XR_OPCODE_LABEL
 };
