@@ -174,10 +174,13 @@ XrValue xr_json_get(XrayIsolate *X, XrJson *json, SymbolId symbol) {
 // Allocate or grow overflow array. Initial capacity 8, doubles on grow.
 static XrJsonOverflow *overflow_grow(XrJsonOverflow *old, uint16_t min_cap) {
     XR_DCHECK(min_cap > 0, "overflow_grow: zero min_cap");
+    uint16_t old_cap = old ? old->capacity : 0;
     uint16_t new_cap = old ? old->capacity * 2 : 8;
     if (new_cap < min_cap) new_cap = min_cap;
+    size_t old_bytes = old ? (sizeof(XrJsonOverflow) + old_cap * sizeof(XrValue)) : 0;
+    size_t new_bytes = sizeof(XrJsonOverflow) + new_cap * sizeof(XrValue);
     XrJsonOverflow *ov = (XrJsonOverflow *)xr_realloc(
-        old, sizeof(XrJsonOverflow) + new_cap * sizeof(XrValue));
+        old, new_bytes);
     if (!ov) return old;
     if (!old) {
         ov->length = 0;
@@ -187,6 +190,10 @@ static XrJsonOverflow *overflow_grow(XrJsonOverflow *old, uint16_t min_cap) {
         ov->values[i] = xr_null();
     }
     ov->capacity = new_cap;
+    // Tell the per-coro GC about the buffer growth. xr_realloc may
+    // either expand in place or move; either way the delta between
+    // new_bytes and old_bytes is the new external footprint.
+    xr_gc_add_external(xr_current_coro_gc(), (int64_t)new_bytes - (int64_t)old_bytes);
     return ov;
 }
 
@@ -273,11 +280,15 @@ void xr_json_set_by_key(XrayIsolate *X, XrJson *json, const char *key, XrValue v
 
 // Destructor: release overflow malloc memory when Json is collected
 void xr_gc_destroy_json(XrGCHeader *obj, struct XrCoroGC *owning_gc) {
-    (void)owning_gc;
     XrJson *json = (XrJson*)obj;
     if (json && json->overflow) {
+        size_t bytes = sizeof(XrJsonOverflow)
+                     + (size_t)json->overflow->capacity * sizeof(XrValue);
         xr_free(json->overflow);
         json->overflow = NULL;
+        // Balance overflow_grow's add_external so totalbytes returns
+        // to the correct value when the json is reclaimed.
+        xr_gc_sub_external(owning_gc, (int64_t)bytes);
     }
 }
 

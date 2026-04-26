@@ -219,6 +219,9 @@ void xr_set_resize(XrSet *set, uint32_t new_capacity) {
     // loop below.
     XrSetEntry *new_entries = (XrSetEntry*)xr_malloc(alloc_bytes);
     if (!new_entries) return;
+    // Tell the per-coro GC about the new external buffer; the matching
+    // sub_external for the old buffer happens after the rehash below.
+    xr_gc_add_external(xr_current_coro_gc(), (int64_t)alloc_bytes);
 
     // Initialize new array (XR_SET_EMPTY=0x00 and xr_null() are all-zeros)
     memset(new_entries, 0, alloc_bytes);
@@ -226,6 +229,7 @@ void xr_set_resize(XrSet *set, uint32_t new_capacity) {
     // Save old data
     XrSetEntry *old_entries = set->entries;
     uint32_t old_capacity = set->capacity;
+    size_t old_alloc_bytes = sizeof(XrSetEntry) * old_capacity;
 
     // Update Set
     set->entries = new_entries;
@@ -254,6 +258,8 @@ void xr_set_resize(XrSet *set, uint32_t new_capacity) {
             }
         }
         xr_free(old_entries);
+        // Balance the add_external above: the old entries are gone.
+        xr_gc_sub_external(xr_current_coro_gc(), (int64_t)old_alloc_bytes);
     }
 }
 
@@ -606,11 +612,14 @@ bool xr_set_is_superset(XrSet *set1, XrSet *set2) {
 /* ========== GC Integration ========== */
 
 void xr_gc_destroy_set(XrGCHeader *obj, struct XrCoroGC *owning_gc) {
-    (void)owning_gc;
     XrSet *set = (XrSet*)obj;
     if (set->entries) {
+        size_t bytes = sizeof(XrSetEntry) * set->capacity;
         xr_free(set->entries);
         set->entries = NULL;
+        // Balance the add_external from xr_set_resize so totalbytes
+        // returns to the correct value when the set is reclaimed.
+        xr_gc_sub_external(owning_gc, (int64_t)bytes);
     }
 }
 

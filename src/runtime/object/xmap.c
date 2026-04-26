@@ -88,13 +88,13 @@ static inline uint32_t string_hash_fast(XrString *str) {
 
 /**
  * Calculate key's main position (ideal slot in hash table)
- * 
+ *
  * This is the key's "ideal" position in the hash table
  * Using bitwise AND for index (capacity is power of 2)
  */
 static XrMapNode* mainposition(XrMap *map, XrValue key) {
     uint32_t hash;
-    
+
     // Compute hash based on key type
     if (XR_LIKELY(XR_IS_STRING(key))) {
         hash = string_hash_fast((XrString*)key.ptr);
@@ -108,7 +108,7 @@ static XrMapNode* mainposition(XrMap *map, XrValue key) {
         // Other types: use pointer hash
         hash = (uint32_t)(uintptr_t)XR_TO_PTR(key);
     }
-    
+
     // Use bitwise AND for index (capacity is power of 2)
     uint32_t size = xr_map_sizenode(map);
     return &map->node[hash & (size - 1)];
@@ -125,7 +125,7 @@ static XrMapNode* mainpositionfromnode(XrMap *map, XrMapNode *n) {
 static inline bool keyequal(XrMapNode *n, XrValue key, uint8_t key_tt) {
     // Different type, return false
     if (n->key_tt != key_tt) return false;
-    
+
     // Compare by type (subtract 1 to restore XrTypeId)
     XrTypeId tid = (XrTypeId)(key_tt - 1);
     if (tid == XR_TID_STRING) {
@@ -155,10 +155,10 @@ static inline bool keyequal(XrMapNode *n, XrValue key, uint8_t key_tt) {
 // Find node for key, returns NULL if not found
 static XrMapNode* findnode(XrMap *map, XrValue key) {
     if (xr_map_isdummy(map)) return NULL;
-    
+
     uint8_t key_tt = get_key_tt(key);
     XrMapNode *n = mainposition(map, key);
-    
+
     // Traverse chain
     for (;;) {
         if (keyequal(n, key, key_tt)) {
@@ -175,7 +175,7 @@ static XrMapNode* findnode(XrMap *map, XrValue key) {
 // Find free node from back to front
 static XrMapNode* getfreepos(XrMap *map) {
     if (xr_map_isdummy(map)) return NULL;
-    
+
     while (map->lastfree > map->node) {
         map->lastfree--;
         if (XR_MAP_NODE_EMPTY(map->lastfree)) {
@@ -203,8 +203,9 @@ static void setnodevector(XrMap *map, uint32_t size) {
         }
         size = 1u << lsize;
         size_t alloc_bytes = sizeof(XrMapNode) * size;
-        
+
         XrMapNode *nodes = NULL;
+        bool malloc_path = false;
         if (map->flags & XR_MAP_FLAG_NODES_ON_GC) {
             // GC blob path: no free needed, GC reclaims old blob
             XrCoroGC *gc = xr_current_coro_gc();
@@ -215,18 +216,26 @@ static void setnodevector(XrMap *map, uint32_t size) {
                 // Fallback to malloc if no coro_gc
                 nodes = (XrMapNode*)xr_malloc(alloc_bytes);
                 map->flags &= ~XR_MAP_FLAG_NODES_ON_GC;
+                malloc_path = true;
             }
         } else {
             nodes = (XrMapNode*)xr_malloc(alloc_bytes);
+            malloc_path = true;
         }
         if (!nodes) return;
         XR_MAP_PROFILE_ALLOC_NODES(alloc_bytes);
-        
+        // Tell the per-coro GC about external memory. Only the malloc
+        // branch counts: the GC blob branch is already part of immix
+        // accounting via xr_coro_alloc_blob.
+        if (malloc_path) {
+            xr_gc_add_external(xr_current_coro_gc(), (int64_t)alloc_bytes);
+        }
+
         for (uint32_t i = 0; i < size; i++) {
             nodes[i].key_tt = XR_MAP_NODE_NIL_KEY;
             nodes[i].next = 0;
         }
-        
+
         map->node = nodes;
         map->lastfree = &nodes[size];
         map->lsizenode = lsize;
@@ -240,9 +249,9 @@ XrMap* xr_map_new(struct XrCoroutine *coro) {
     XR_DCHECK(coro != NULL, "map_new: NULL coro");
     XrMap *map = (XrMap*)xr_alloc(coro, sizeof(XrMap), XR_TMAP);
     if (!map) return NULL;
-    
+
     xr_gc_header_init_type(&map->gc, XR_TMAP);
-    
+
     map->count = 0;
     map->lsizenode = 0;
     map->flags = XR_MAP_FLAG_DUMMY | XR_MAP_FLAG_NODES_ON_GC;
@@ -250,22 +259,22 @@ XrMap* xr_map_new(struct XrCoroutine *coro) {
     map->value_tid = 0;
     map->node = &xr_map_dummynode;
     map->lastfree = NULL;
-    
+
     XR_MAP_PROFILE_COUNT_NEW();
     XR_MAP_PROFILE_ALLOC_HEADER(sizeof(XrMap));
-    
+
     return map;
 }
 
 XrMap* xr_map_with_capacity(struct XrCoroutine *coro, uint32_t capacity_hint) {
     XrMap *map = xr_map_new(coro);
     if (!map) return NULL;
-    
+
     // Pre-allocate node array
     if (capacity_hint > 0) {
         setnodevector(map, capacity_hint);
     }
-    
+
     return map;
 }
 
@@ -273,7 +282,7 @@ XrMap* xr_map_with_capacity(struct XrCoroutine *coro, uint32_t capacity_hint) {
 void xr_map_init_inplace(XrMap *map, uint32_t capacity_hint) {
     if (!map) return;
     XR_MAP_PROFILE_COUNT_NEW();
-    
+
     // Initialize as empty map (using dummynode)
     map->count = 0;
     map->lsizenode = 0;
@@ -282,7 +291,7 @@ void xr_map_init_inplace(XrMap *map, uint32_t capacity_hint) {
     map->value_tid = 0;
     map->node = &xr_map_dummynode;
     map->lastfree = NULL;
-    
+
     // Pre-allocate node array
     if (capacity_hint > 0) {
         setnodevector(map, capacity_hint);
@@ -298,12 +307,12 @@ void xr_map_init_inplace(XrMap *map, uint32_t capacity_hint) {
 //    - If yes, new key goes to free position and chains
 static bool insertkey(XrMap *map, XrValue key, XrValue value) {
     XrMapNode *mp = mainposition(map, key);
-    
+
     if (!XR_MAP_NODE_EMPTY(mp) || xr_map_isdummy(map)) {
         // Main position occupied
         XrMapNode *f = getfreepos(map);
         if (f == NULL) return false;  // No free position
-        
+
         XrMapNode *othern = mainpositionfromnode(map, mp);
         if (othern != mp) {
             // Occupier not at its main position, move it
@@ -326,13 +335,13 @@ static bool insertkey(XrMap *map, XrValue key, XrValue value) {
             mp = f;
         }
     }
-    
+
     // Write key-value
     mp->key = key;
     mp->key_tt = get_key_tt(key);
     mp->value = value;
     map->count++;
-    
+
     return true;
 }
 
@@ -343,15 +352,15 @@ static void rehash(XrMap *map) {
     bool was_dummy = xr_map_isdummy(map);
     uint32_t oldsize = was_dummy ? 0 : xr_map_sizenode(map);
     XrMapNode *oldnodes = map->node;
-    
+
     // Save old allocation mode before setnodevector may change it
     // (setnodevector clears XR_MAP_FLAG_NODES_ON_GC on malloc fallback)
     bool old_nodes_on_gc = (map->flags & XR_MAP_FLAG_NODES_ON_GC) != 0;
-    
+
     // New size: at least 2 nodes, or double current
     uint32_t newsize = (oldsize == 0) ? 2 : oldsize * 2;
     XR_DCHECK((newsize & (newsize - 1)) == 0, "rehash: new size not power-of-2");
-    
+
     // Allocate new array
     uint32_t saved_count = map->count;
 
@@ -364,7 +373,7 @@ static void rehash(XrMap *map) {
 
     setnodevector(map, newsize);
     map->count = 0;
-    
+
     // Re-insert all keys
     for (uint32_t i = 0; i < oldsize; i++) {
         XrMapNode *old = &oldnodes[i];
@@ -374,16 +383,20 @@ static void rehash(XrMap *map) {
             (void)ok;
         }
     }
-    
+
     XR_DCHECK(map->count == saved_count, "rehash: count mismatch after re-insert");
-    
+
     // Free old array (dummynode cannot be freed)
     if (!was_dummy && oldnodes) {
+        size_t old_bytes = sizeof(XrMapNode) * oldsize;
         if (!old_nodes_on_gc) {
             xr_free(oldnodes);
+            // Balance the add_external from the previous setnodevector
+            // call so totalbytes tracks what is actually live.
+            xr_gc_sub_external(xr_current_coro_gc(), (int64_t)old_bytes);
         }
         // GC blob: old nodes reclaimed automatically by Immix sweep
-        XR_MAP_PROFILE_FREE_NODES(sizeof(XrMapNode) * oldsize);
+        XR_MAP_PROFILE_FREE_NODES(old_bytes);
     }
 }
 
@@ -395,14 +408,14 @@ void xr_map_set(XrMap *map, XrValue key, XrValue value) {
     XR_DCHECK(!XR_IS_NULL(key), "map_set: NULL key");
     // Check if key exists
     XrMapNode *n = findnode(map, key);
-    
+
     if (n != NULL) {
         // Update existing value
         n->value = value;
         XR_GC_BARRIER_BACK_SAFE(xr_current_coro_gc(), map);
         return;
     }
-    
+
     // New key: try insert
     if (!insertkey(map, key, value)) {
         // Insert failed, need rehash
@@ -418,7 +431,7 @@ XrValue xr_map_get(XrMap *map, XrValue key, bool *found) {
     XR_DCHECK(map != NULL, "map_get: NULL map");
     XR_DCHECK(XR_GC_GET_TYPE(&map->gc) == XR_TMAP, "map_get: object is not a map");
     XrMapNode *n = findnode(map, key);
-    
+
     if (n != NULL) {
         if (found) *found = true;
         return n->value;
@@ -438,12 +451,12 @@ bool xr_map_delete(XrMap *map, XrValue key) {
     XR_DCHECK(map != NULL, "map_delete: NULL map");
     XR_DCHECK(XR_GC_GET_TYPE(&map->gc) == XR_TMAP, "map_delete: object is not a map");
     if (xr_map_isdummy(map)) return false;
-    
+
     uint8_t key_tt = get_key_tt(key);
     XrMapNode *mp = mainposition(map, key);
     XrMapNode *prev = NULL;
     XrMapNode *n = mp;
-    
+
     // Traverse chain
     for (;;) {
         if (keyequal(n, key, key_tt)) {
@@ -476,7 +489,7 @@ bool xr_map_delete(XrMap *map, XrValue key) {
             XR_DCHECK(map->count <= xr_map_sizenode(map), "map_delete: count > capacity");
             return true;
         }
-        
+
         if (n->next == 0) return false;  // Not found
         prev = n;
         n += n->next;
@@ -486,7 +499,7 @@ bool xr_map_delete(XrMap *map, XrValue key) {
 void xr_map_clear(XrMap *map) {
     XR_DCHECK(map != NULL, "map_clear: NULL map");
     if (xr_map_isdummy(map)) return;
-    
+
     // Clear all nodes
     uint32_t size = xr_map_sizenode(map);
     for (uint32_t i = 0; i < size; i++) {
@@ -513,7 +526,7 @@ XrArray* xr_map_keys(struct XrCoroutine *coro, XrMap *map) {
     XR_DCHECK(coro != NULL, "map_keys: NULL coro");
     XR_DCHECK(map != NULL, "map_keys: NULL map");
     XrArray *arr = xr_array_with_capacity(coro, map->count);
-    
+
     if (!xr_map_isdummy(map)) {
         uint32_t size = xr_map_sizenode(map);
         for (uint32_t i = 0; i < size; i++) {
@@ -530,7 +543,7 @@ XrArray* xr_map_values(struct XrCoroutine *coro, XrMap *map) {
     XR_DCHECK(coro != NULL, "map_values: NULL coro");
     XR_DCHECK(map != NULL, "map_values: NULL map");
     XrArray *arr = xr_array_with_capacity(coro, map->count);
-    
+
     if (!xr_map_isdummy(map)) {
         uint32_t size = xr_map_sizenode(map);
         for (uint32_t i = 0; i < size; i++) {
@@ -547,7 +560,7 @@ XrArray* xr_map_entries(struct XrCoroutine *coro, XrMap *map) {
     XR_DCHECK(coro != NULL, "map_entries: NULL coro");
     XR_DCHECK(map != NULL, "map_entries: NULL map");
     XrArray *arr = xr_array_with_capacity(coro, map->count);
-    
+
     if (!xr_map_isdummy(map)) {
         uint32_t size = xr_map_sizenode(map);
         for (uint32_t i = 0; i < size; i++) {
@@ -567,7 +580,7 @@ XrArray* xr_map_entries(struct XrCoroutine *coro, XrMap *map) {
 
 bool xr_map_has_value(XrMap *map, XrValue value) {
     if (xr_map_isdummy(map)) return false;
-    
+
     uint32_t size = xr_map_sizenode(map);
     for (uint32_t i = 0; i < size; i++) {
         XrMapNode *n = &map->node[i];
@@ -580,10 +593,10 @@ bool xr_map_has_value(XrMap *map, XrValue value) {
 
 void xr_map_foreach(XrayIsolate *isolate, XrMap *map, struct XrClosure *callback) {
     if (xr_map_isdummy(map)) return;
-    
+
     uint32_t size = xr_map_sizenode(map);
     XrValue args[3];
-    
+
     for (uint32_t i = 0; i < size; i++) {
         XrMapNode *n = &map->node[i];
         if (!XR_MAP_NODE_EMPTY(n)) {
@@ -603,9 +616,9 @@ XrIterator* xr_map_entries_iterator(XrayIsolate *iso, XrMap *map) {
 /* ========== Debug ========== */
 
 void xr_map_debug_print(XrMap *map) {
-    printf("Map[count=%u, lsizenode=%u, isdummy=%d]\n", 
+    printf("Map[count=%u, lsizenode=%u, isdummy=%d]\n",
            map->count, map->lsizenode, xr_map_isdummy(map));
-    
+
     if (!xr_map_isdummy(map)) {
         uint32_t size = xr_map_sizenode(map);
         for (uint32_t i = 0; i < size; i++) {
@@ -620,16 +633,19 @@ void xr_map_debug_print(XrMap *map) {
 /* ========== GC Integration ========== */
 
 void xr_gc_destroy_map(XrGCHeader *obj, struct XrCoroGC *owning_gc) {
-    (void)owning_gc;
     XrMap *map = (XrMap*)obj;
     if (!xr_map_isdummy(map) && map->node) {
-        XR_MAP_PROFILE_FREE_NODES(sizeof(XrMapNode) * xr_map_sizenode(map));
+        size_t bytes = sizeof(XrMapNode) * xr_map_sizenode(map);
+        XR_MAP_PROFILE_FREE_NODES(bytes);
         if (map->flags & XR_MAP_FLAG_NODES_ON_GC) {
             // GC blob: no free needed, Immix sweep reclaims
             map->node = NULL;
         } else {
             xr_free(map->node);
             map->node = NULL;
+            // Balance the add_external from setnodevector so totalbytes
+            // returns to the correct value when the map is reclaimed.
+            xr_gc_sub_external(owning_gc, (int64_t)bytes);
         }
     }
     XR_MAP_PROFILE_FREE_HEADER(sizeof(XrMap));
