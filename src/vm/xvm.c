@@ -2352,53 +2352,8 @@ startfunc:
                 vmbreak;
             }
 
-            /* ========================================================
-            ** Enum Operation Instructions
-            ** ======================================================== */
-
-            vmcase(OP_ENUM_ACCESS) {
-                int a = GETARG_A(i);
-                int b = GETARG_B(i);
-                int c = GETARG_C(i);
-                XrEnumType *enum_type = (XrEnumType*)XR_TO_PTR(R(b));
-                int member_index = (int)XR_TO_INT(R(c));
-                if (member_index < 0 || (uint32_t)member_index >= enum_type->member_count) {
-                    VM_RUNTIME_ERROR(XR_ERR_INDEX_OUT_OF_BOUNDS, "enum member index out of bounds");
-                }
-                R(a) = XR_FROM_PTR(enum_type->members[member_index].instance);
-                vmbreak;
-            }
-
-            vmcase(OP_ENUM_CONVERT) {
-                int a = GETARG_A(i);
-                int b = GETARG_B(i);
-                int c = GETARG_C(i);
-                XrEnumType *enum_type = (XrEnumType*)XR_TO_PTR(R(b));
-                XrEnumValue *result = xr_enum_from_value(enum_type, R(c));
-                R(a) = result ? XR_FROM_PTR(result) : xr_null();
-                vmbreak;
-            }
-
-            vmcase(OP_ENUM_NAME) {
-                int a = GETARG_A(i);
-                int b = GETARG_B(i);
-                XrValue enum_val = R(b);
-                if (!XR_IS_PTR(enum_val)) {
-                    R(a) = xr_null();
-                    vmbreak;
-                }
-                XrGCHeader *gc = (XrGCHeader*)XR_TO_PTR(enum_val);
-                if (XR_GC_GET_TYPE(gc) != XR_TENUM_VALUE) {
-                    R(a) = xr_null();
-                    vmbreak;
-                }
-                XrEnumValue *ev = (XrEnumValue*)gc;
-                size_t len = strlen(ev->member_name);
-                uint32_t hash = xr_string_hash(ev->member_name, len);
-                XrString *name_str = xr_string_intern(isolate, ev->member_name, len, hash);
-                R(a) = xr_string_value(name_str);
-                vmbreak;
-            }
+            /* Enum opcodes — see xvm_dispatch_enum.inc.c. */
+            #include "xvm_dispatch_enum.inc.c"
 
             /* ========================================================
             ** Container Creation Instructions
@@ -6468,109 +6423,11 @@ startfunc:
                 vmbreak;
             }
 
-            /* === Assertion instructions (test framework) === */
-
-            vmcase(OP_ASSERT) {
-                /* if !R[A] then throw AssertError(K[B])
-                 * A = condition register
-                 * B = location info constant index (string)
-                 * C = 0: assert/assert_true, 1: assert_false (negate)
-                 */
-                int cond_reg = GETARG_A(i);
-                int loc_idx = GETARG_B(i);
-                int negate = GETARG_C(i);
-
-                XrValue cond = R(cond_reg);
-                bool truthy = xr_vm_is_truthy(cond);
-
-                // C=1: assert_false — fail if truthy
-                bool failed = negate ? truthy : !truthy;
-
-                if (failed) {
-                    XrValue loc_val = K(loc_idx);
-                    const char *loc_str = XR_IS_STRING(loc_val) ? XR_TO_STRING(loc_val)->data : "unknown";
-                    const char *fn_name = negate ? "assert_false" : "assert";
-
-                    if (!isolate->suppress_exception_print) {
-                        fprintf(stderr, "\n");
-                        fprintf(stderr, "ASSERTION FAILED at %s\n", loc_str);
-                        fprintf(stderr, "  %s() condition is %s\n", fn_name, negate ? "true" : "false");
-                        fprintf(stderr, "\n");
-                    }
-                    VM_RUNTIME_ERROR(0, "assertion failed at %s", loc_str);
-                }
-                vmbreak;
-            }
-
-            vmcase(OP_ASSERT_EQ) {
-                /* if R[A] != R[B] then throw AssertError(K[C])
-                 * A = actual value register
-                 * B = expected value register
-                 * C = location info constant index
-                 */
-                int actual_reg = GETARG_A(i);
-                int expect_reg = GETARG_B(i);
-                int loc_idx = GETARG_C(i);
-
-                XrValue actual = R(actual_reg);
-                XrValue expect = R(expect_reg);
-
-                if (!xr_value_deep_eq(actual, expect)) {
-                    XrValue loc_val = K(loc_idx);
-                    const char *loc_str = XR_IS_STRING(loc_val) ? XR_TO_STRING(loc_val)->data : "unknown";
-                    if (!isolate->suppress_exception_print) {
-                        fprintf(stderr, "\n");
-                        fprintf(stderr, "ASSERTION FAILED at %s\n", loc_str);
-                        fprintf(stderr, "  assert_eq() values are not equal\n");
-                        fprintf(stderr, "    actual:   %s\n", xr_value_to_string(isolate, actual)->data);
-                        fprintf(stderr, "    expected: %s\n\n", xr_value_to_string(isolate, expect)->data);
-                    }
-                    VM_RUNTIME_ERROR(0, "assertion failed at %s: values not equal", loc_str);
-                }
-                vmbreak;
-            }
-
-            vmcase(OP_ASSERT_NE) {
-                /* if R[A] == R[B] then throw AssertError(K[C])
-                 * A = actual value register
-                 * B = unexpected value register
-                 * C = location info constant index
-                 */
-                int actual_reg = GETARG_A(i);
-                int unexpected_reg = GETARG_B(i);
-                int loc_idx = GETARG_C(i);
-
-                XrValue actual = R(actual_reg);
-                XrValue unexpected = R(unexpected_reg);
-
-                if (xr_value_deep_eq(actual, unexpected)) {
-                    XrValue loc_val = K(loc_idx);
-                    const char *loc_str = XR_IS_STRING(loc_val) ? XR_TO_STRING(loc_val)->data : "unknown";
-
-                    if (!isolate->suppress_exception_print) {
-                        fprintf(stderr, "\n");
-                        fprintf(stderr, "ASSERTION FAILED at %s\n", loc_str);
-                        fprintf(stderr, "  assert_ne() values should not be equal\n");
-                        fprintf(stderr, "    value: %s\n\n", xr_value_to_string(isolate, actual)->data);
-                    }
-                    VM_RUNTIME_ERROR(0, "assertion failed at %s: values should not be equal", loc_str);
-                }
-                vmbreak;
-            }
-
-            /* === Regex Literal === */
-            vmcase(OP_REGEX_COMPILE) {
-                /* R[A] = regex.compile(K[B], K[C]) — pattern and flags
-                 * are guaranteed string constants by the compiler.
-                 * The actual flag parse + xr_regex_compile() lives
-                 * behind xr_regex_compile_literal() in stdlib/regex
-                 * to keep src/vm free of stdlib reverse includes. */
-                int a = GETARG_A(i);
-                R(a) = xr_regex_compile_literal(isolate,
-                                                K(GETARG_B(i)),
-                                                K(GETARG_C(i)));
-                vmbreak;
-            }
+            /* Assertion + regex literal opcodes — see file comment in
+             * xvm_dispatch_assert.inc.c. The include expands inside
+             * the dispatch switch and pulls in the vmcase bodies for
+             * OP_ASSERT / OP_ASSERT_EQ / OP_ASSERT_NE / OP_REGEX_COMPILE. */
+            #include "xvm_dispatch_assert.inc.c"
 
             /* ========================================================
             ** Coroutine Instructions
