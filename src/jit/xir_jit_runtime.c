@@ -328,9 +328,10 @@ XrJitResult xr_jit_invoke_method(XrCoroutine *coro, int64_t encoded) {
         break;
     }
     case JIT_TYPE_HINT_ARRAY: {
-        XrArray *arr = XR_TO_ARRAY(receiver);
-        result = array_method_call_by_symbol(isolate, arr, method_symbol,
-                                             args, nargs);
+        const XrMethodSlot *slot = xr_method_table_lookup(
+            XR_TID_ARRAY, method_symbol, SYMBOL_BUILTIN_COUNT);
+        result = slot ? slot->fn(isolate, receiver, args, nargs)
+                      : XR_NOTFOUND;
         break;
     }
     case JIT_TYPE_HINT_MAP: {

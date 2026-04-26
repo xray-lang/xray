@@ -43,6 +43,7 @@ TEST(registry_is_dense_and_typed) {
         XR_TID_SET,
         XR_TID_MAP,
         XR_TID_JSON,
+        XR_TID_ARRAY,
         XR_TID_DATETIME,
     };
     for (int tid = 0; tid < XR_TID_COUNT; tid++) {
@@ -187,6 +188,51 @@ TEST(float_arity_caps) {
     ASSERT_EQ_INT(powslot->max_args, 1);
 }
 
+/* ========== Array migration ========== */
+
+TEST(array_method_table_exposes_full_surface) {
+    /* Twenty-three array methods migrated. */
+    static const int symbols[] = {
+        SYMBOL_PUSH, SYMBOL_POP, SYMBOL_SHIFT, SYMBOL_UNSHIFT,
+        SYMBOL_CLEAR, SYMBOL_REVERSE, SYMBOL_FILL, SYMBOL_SORT,
+        SYMBOL_IS_EMPTY, SYMBOL_HAS, SYMBOL_INCLUDES, SYMBOL_INDEXOF,
+        SYMBOL_SLICE, SYMBOL_CONCAT, SYMBOL_JOIN,
+        SYMBOL_FOREACH, SYMBOL_FILTER, SYMBOL_MAP_METHOD, SYMBOL_REDUCE,
+        SYMBOL_FIND, SYMBOL_FINDINDEX, SYMBOL_EVERY, SYMBOL_SOME,
+        SYMBOL_TOSTRING,
+    };
+    for (size_t i = 0; i < sizeof(symbols)/sizeof(symbols[0]); i++) {
+        const XrMethodSlot *slot = xr_method_table_lookup(
+            XR_TID_ARRAY, symbols[i], SYMBOL_BUILTIN_COUNT);
+        ASSERT_NOT_NULL(slot);
+        ASSERT_NOT_NULL(slot->fn);
+    }
+}
+
+TEST(array_pure_query_methods_carry_pure_no_gc) {
+    /* isEmpty / has / includes / indexOf are read-only, no allocation. */
+    static const int symbols[] = {
+        SYMBOL_IS_EMPTY, SYMBOL_HAS, SYMBOL_INCLUDES, SYMBOL_INDEXOF,
+    };
+    for (size_t i = 0; i < sizeof(symbols)/sizeof(symbols[0]); i++) {
+        const XrMethodSlot *slot = xr_method_table_lookup(
+            XR_TID_ARRAY, symbols[i], SYMBOL_BUILTIN_COUNT);
+        ASSERT_NOT_NULL(slot);
+        ASSERT(slot->flags & XR_METHOD_FLAG_PURE);
+        ASSERT(slot->flags & XR_METHOD_FLAG_NO_GC);
+    }
+}
+
+TEST(array_concat_accepts_variadic) {
+    /* concat takes 0..N arrays/values; encoded as max_args = -1 per
+     * the protocol contract documented in xmethod_table.h. */
+    const XrMethodSlot *slot = xr_method_table_lookup(
+        XR_TID_ARRAY, SYMBOL_CONCAT, SYMBOL_BUILTIN_COUNT);
+    ASSERT_NOT_NULL(slot);
+    ASSERT_EQ_INT(slot->min_args, 0);
+    ASSERT_EQ_INT(slot->max_args, -1);
+}
+
 /* ========== DateTime migration ========== */
 
 TEST(datetime_method_table_exposes_full_surface) {
@@ -320,6 +366,11 @@ TEST_MAIN_BEGIN()
     RUN_TEST_SUITE("Float migration");
     RUN_TEST(float_method_table_exposes_full_surface);
     RUN_TEST(float_arity_caps);
+
+    RUN_TEST_SUITE("Array migration");
+    RUN_TEST(array_method_table_exposes_full_surface);
+    RUN_TEST(array_pure_query_methods_carry_pure_no_gc);
+    RUN_TEST(array_concat_accepts_variadic);
 
     RUN_TEST_SUITE("DateTime migration");
     RUN_TEST(datetime_method_table_exposes_full_surface);

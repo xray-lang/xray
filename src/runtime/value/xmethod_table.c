@@ -30,6 +30,7 @@
 #include "../object/xset_methods.h"
 #include "../object/xmap_methods.h"
 #include "../object/xjson_methods.h"
+#include "../object/xarray_methods.h"
 #include "../../../stdlib/datetime/datetime_methods.h"
 
 /*
@@ -50,6 +51,7 @@ const XrMethodSlot *const xr_builtin_method_tables[XR_TID_COUNT] = {
     [XR_TID_SET]    = xr_set_method_table,
     [XR_TID_MAP]    = xr_map_method_table,
     [XR_TID_JSON]   = xr_json_method_table,
+    [XR_TID_ARRAY]  = xr_array_method_table,
     [XR_TID_DATETIME] = xr_datetime_method_table,
 };
 
