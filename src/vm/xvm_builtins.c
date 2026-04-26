@@ -30,7 +30,10 @@
 
 /* ========== Unified Method Call Dispatch (Jump Table Optimized) ========== */
 
-/* === Map Method Handlers === */
+/* === Map Method Handlers (legacy, kept ONLY for the bound-method
+ *     adapter wired via xr_map_get_handler below; the unified
+ *     dispatcher in OP_INVOKE_BUILTIN now reaches map methods through
+ *     runtime/object/xmap_methods.{c,h} directly). === */
 
 static XrValue map_has_handler(XrayIsolate *isolate, XrValue receiver, XrValue *args, int argc) {
     (void)isolate;
@@ -103,73 +106,6 @@ static XrValue map_has_value_handler(XrayIsolate *isolate, XrValue receiver, XrV
     if (argc < 1) return xr_bool(0);
     XrMap *map = XR_TO_MAP(receiver);
     return xr_bool(xr_map_has_value(map, args[0]));
-}
-
-// Map method dispatch - switch optimized to jump table by compiler
-XrValue map_method_call_by_symbol(XrayIsolate *isolate, XrMap *map, int symbol, XrValue *args, int argc) {
-    XR_DCHECK(isolate != NULL, "map_dispatch: NULL isolate");
-    XR_DCHECK(map != NULL, "map_dispatch: NULL map");
-    XR_DCHECK(XR_GC_GET_TYPE(&map->gc) == XR_TMAP, "map_dispatch: object is not a map");
-    XrValue receiver = xr_value_from_map(map);
-
-    bool is_weak = (map->flags & XR_MAP_FLAG_WEAK) != 0;
-
-    // Method dispatch
-    if (symbol == SYMBOL_IS_EMPTY) return map_is_empty_handler(isolate, receiver, args, argc);
-    if (symbol == SYMBOL_HAS) return map_has_handler(isolate, receiver, args, argc);
-    if (symbol == SYMBOL_GET) return map_get_handler(isolate, receiver, args, argc);
-    if (symbol == SYMBOL_DELETE) return map_delete_handler(isolate, receiver, args, argc);
-
-    if (symbol == SYMBOL_SET) {
-        // WeakMap: key must be a GC object (not int/float/string/bool/null).
-        // Contract violation — surface it as a catchable exception so
-        // user code can recover via try/catch instead of leaving a
-        // stderr breadcrumb and silently returning null.
-        if (is_weak && argc >= 1 && !XR_VALUE_NEEDS_GC(args[0])) {
-            XrValue exc = xr_exception_newf(isolate, XR_ERR_INVALID_ARG_TYPE,
-                "WeakMap key must be a heap object, got %s",
-                xr_typeid_name(xr_value_typeid(args[0])));
-            xr_vm_unwind_with_trace(isolate, exc);
-            return xr_null();
-        }
-        return map_set_handler(isolate, receiver, args, argc);
-    }
-
-    // WeakMap: block enumeration methods
-    if (is_weak) {
-        if (symbol == SYMBOL_KEYS || symbol == SYMBOL_VALUES ||
-            symbol == SYMBOL_ENTRIES || symbol == SYMBOL_CLEAR ||
-            symbol == SYMBOL_HAS_VALUE_MAP || symbol == SYMBOL_ITERATOR ||
-            symbol == SYMBOL_ENTRIES_ITERATOR) {
-            return XR_NOTFOUND;
-        }
-    }
-
-    if (symbol == SYMBOL_HAS_VALUE_MAP) return map_has_value_handler(isolate, receiver, args, argc);
-    if (symbol == SYMBOL_CLEAR) return map_clear_handler(isolate, receiver, args, argc);
-    if (symbol == SYMBOL_KEYS) return map_keys_handler(isolate, receiver, args, argc);
-    if (symbol == SYMBOL_VALUES) return map_values_handler(isolate, receiver, args, argc);
-    if (symbol == SYMBOL_ENTRIES) return map_entries_handler(isolate, receiver, args, argc);
-
-    // Iterator method
-    if (symbol == SYMBOL_ITERATOR) {
-        return xr_null();
-    }
-
-    // EntriesIterator method - for (key, value in map) support
-    if (symbol == SYMBOL_ENTRIES_ITERATOR) {
-        XrIterator *iter = xr_map_entries_iterator(isolate,  map);
-        return iter ? xr_value_from_iterator(iter) : xr_null();
-    }
-
-    // toString fallback
-    if (symbol == SYMBOL_TOSTRING) {
-        XrValue map_val = XR_FROM_PTR(map);
-        return xr_string_value(xr_value_to_string(isolate, map_val));
-    }
-
-    // Method not found — caller (OP_INVOKE_BUILTIN) throws catchable error
-    return XR_NOTFOUND;
 }
 
 // Json method dispatch

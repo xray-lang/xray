@@ -5216,8 +5216,13 @@ startfunc:
                 /* === Map builtin methods === */
                 invoke_map:
                 if (XR_IS_MAP(receiver)) {
-                    XrMap *map = XR_TO_MAP(receiver);
-                    R(a) = map_method_call_by_symbol(isolate, map, method_symbol, &R(a + 2), nargs);
+                    /* See xmap_methods.h — unified method table dispatch.
+                     * WeakMap-blocked methods return XR_NOTFOUND from the
+                     * method body itself. */
+                    const XrMethodSlot *_slot = xr_method_table_lookup(
+                        XR_TID_MAP, method_symbol, SYMBOL_BUILTIN_COUNT);
+                    R(a) = _slot ? _slot->fn(isolate, receiver, &R(a + 2), nargs)
+                                 : XR_NOTFOUND;
                     VM_BUILTIN_INVOKE_CHECK_EXC();
                     if (unlikely(XR_IS_NOTFOUND(R(a)))) {
                         XrSymbolTable *_st = (XrSymbolTable*)isolate->symbol_table;
@@ -5715,8 +5720,11 @@ startfunc:
 
                 // Builtin type fast dispatch (compile-time determined as builtin type)
                 if (XR_IS_MAP(receiver)) {
-                    XrMap *map = XR_TO_MAP(receiver);
-                    R(a) = map_method_call_by_symbol(isolate, map, method_symbol, args, nargs);
+                    /* See invoke_map above. */
+                    const XrMethodSlot *_slot = xr_method_table_lookup(
+                        XR_TID_MAP, method_symbol, SYMBOL_BUILTIN_COUNT);
+                    R(a) = _slot ? _slot->fn(isolate, receiver, args, nargs)
+                                 : XR_NOTFOUND;
                 } else if (XR_IS_ARRAY(receiver)) {
                     XrArray *array = XR_TO_ARRAY(receiver);
                     R(a) = array_method_call_by_symbol(isolate, array, method_symbol, args, nargs);

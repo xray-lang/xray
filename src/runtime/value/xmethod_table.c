@@ -28,6 +28,7 @@
 #include "xfloat_methods.h"
 #include "../object/xbigint_methods.h"
 #include "../object/xset_methods.h"
+#include "../object/xmap_methods.h"
 
 /*
  * Per-type method tables are declared as `extern const XrMethodSlot []`
@@ -45,6 +46,7 @@ const XrMethodSlot *const xr_builtin_method_tables[XR_TID_COUNT] = {
     [XR_TID_FLOAT]  = xr_float_method_table,
     [XR_TID_BIGINT] = xr_bigint_method_table,
     [XR_TID_SET]    = xr_set_method_table,
+    [XR_TID_MAP]    = xr_map_method_table,
 };
 
 /*

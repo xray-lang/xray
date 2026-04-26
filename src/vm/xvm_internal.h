@@ -202,7 +202,6 @@ XR_FUNC MethodHandler xr_iterator_get_handler(int symbol);
 XR_FUNC XrValue xr_enum_get_member_handler(XrayIsolate *isolate, XrValue receiver, XrValue *args, int argc);
 
 // Method call dispatch functions (implemented in xvm_builtins.c)
-XR_FUNC XrValue map_method_call_by_symbol(XrayIsolate *isolate, XrMap *map, int symbol, XrValue *args, int argc);
 XR_FUNC XrValue json_method_call_by_symbol(XrayIsolate *isolate, XrJson *json, int symbol, XrValue *args, int argc);
 XR_FUNC XrValue string_method_call_by_symbol(XrayIsolate *isolate, XrString *str, int symbol, XrValue *args, int argc);
 XR_FUNC XrValue array_method_call_by_symbol(XrayIsolate *isolate, XrArray *array, int symbol, XrValue *args, int argc);
