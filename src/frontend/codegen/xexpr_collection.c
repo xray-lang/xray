@@ -325,7 +325,7 @@ XrExprDesc compile_slice_expr(XrCompilerContext *ctx, XrCompiler *compiler, Slic
         }
     } else {
         // Omitted start, load 0 to start from beginning
-        emit_abx(compiler->emitter, OP_LOADI, start_reg, 0);
+        emit_asbx(compiler->emitter, OP_LOADI, start_reg, 0);
     }
 
     // Compile end index (if omitted, load -1 to use default value length)
@@ -337,7 +337,7 @@ XrExprDesc compile_slice_expr(XrCompilerContext *ctx, XrCompiler *compiler, Slic
         }
     } else {
         // Omitted end, load -1 to use default value
-        emit_abx(compiler->emitter, OP_LOADI, end_reg, -1);
+        emit_asbx(compiler->emitter, OP_LOADI, end_reg, -1);
     }
 
     // Result register

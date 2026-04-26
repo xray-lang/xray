@@ -133,8 +133,8 @@
 
 #define XR_OPCODE_TABLE(_) \
     _(MOVE                        , FMT_AB    , KOP_AB_UNARY        , "R[A] = R[B]") \
-    _(LOADI                       , FMT_AsBx  , KOP_SPECIAL         , "R[A] = sBx") \
-    _(LOADF                       , FMT_AsBx  , KOP_SPECIAL         , "R[A] = (float)sBx") \
+    _(LOADI                       , FMT_AsBx  , KOP_AsBx_LITS       , "R[A] = sBx") \
+    _(LOADF                       , FMT_AsBx  , KOP_AsBx_LITS       , "R[A] = (float)sBx") \
     _(LOADK                       , FMT_ABx   , KOP_ABx_K           , "R[A] = K[Bx]") \
     _(LOADNULL                    , FMT_A     , KOP_A_LOAD          , "R[A] = null") \
     _(LOADTRUE                    , FMT_A     , KOP_A_LOAD          , "R[A] = true") \
