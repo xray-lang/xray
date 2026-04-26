@@ -19,8 +19,20 @@
  *   - CompletionNode allows multiple listeners (monitor channels, callbacks)
  *   - 6-state machine tracks Completing/Cancelling transitions for children
  *
+ * ORTHOGONAL TO XrScopeContext:
+ *   The task tree (parent / first_child / next_sibling here) tracks
+ *   "who awaits whom" — one node per `go` expression. The scope chain
+ *   (XrScopeContext, xcoroutine.h) tracks "which coroutines run inside
+ *   the same `scope { ... }` block" — one node per scope statement,
+ *   carrying the structured-concurrency policy (linked / supervisor).
+ *   They overlap in shape but capture different parent/child concepts;
+ *   merging them would lose the policy dimension scope provides and
+ *   would force every standalone `go` to materialize a fake scope.
+ *   See the doc comment on XrScopeContext for the full breakdown.
+ *
  * RELATED MODULES:
- *   - xcoroutine.h: Executor (pool-allocated execution context)
+ *   - xcoroutine.h: Executor (pool-allocated execution context),
+ *                    XrScopeContext (orthogonal scope policy)
  *   - xvm_cold_paths.c: vm_await reads task->state/result
  *   - xworker.c: executor_complete writes task->result, recycles executor
  *   - linked go / monitored go syntax
