@@ -38,12 +38,12 @@ void xstmt_emit_value_copy(XrCompilerContext *ctx, XrCompiler *compiler,
                 int aligned_size = (alloc_size + 15) & ~15;
                 int slot_offset = compiler->struct_area_offset / 16;
                 compiler->struct_area_offset += aligned_size;
-                emit_abc(compiler->emitter, OP_STRUCT_COPY, dest_reg, src_reg, slot_offset);
+                xemit_struct_copy(compiler->emitter, dest_reg, src_reg, slot_offset);
                 return;
             }
         }
     }
-    emit_abc(compiler->emitter, OP_COPY, dest_reg, src_reg, 0);
+    xemit_copy(compiler->emitter, dest_reg, src_reg);
 }
 
 const char *xstmt_type_flag_name(XrType *type) {
@@ -87,9 +87,9 @@ const char *xstmt_type_flag_name(XrType *type) {
 
 void xstmt_emit_box_if_raw(XrEmitter *emitter, int reg, const XrExprDesc *expr) {
     if (xexpr_is_raw_i64(expr)) {
-        emit_abc(emitter, OP_BOX_I64, reg, reg, 0);
+        xemit_box_i64(emitter, reg, reg);
     } else if (xexpr_is_raw_f64(expr)) {
-        emit_abc(emitter, OP_BOX_F64, reg, reg, 0);
+        xemit_box_f64(emitter, reg, reg);
     }
 }
 
@@ -142,6 +142,6 @@ void xstmt_emit_json_checktype(XrCompilerContext *ctx, XrCompiler *compiler,
     int64_t mask = build_checktype_mask(declared_type);
     if (mask != 0) {
         int type_const = xr_vm_proto_add_constant(compiler->proto, xr_int(mask));
-        emit_abc(compiler->emitter, OP_CHECKTYPE, reg, type_const, 0);
+        xemit_checktype(compiler->emitter, reg, type_const);
     }
 }

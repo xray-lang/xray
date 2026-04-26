@@ -198,18 +198,18 @@ static int compile_concat_chain(XrCompilerContext *ctx, XrCompiler *compiler, As
     // STRBUF_NEW R[buf]; STRBUF_APPEND R[buf] R[op_i]; ...; STRBUF_FINISH R[buf]
 
     int buf_reg = reg_alloc(ctx, compiler);
-    emit_abc(compiler->emitter, OP_STRBUF_NEW, buf_reg, 0, 0);
+    xemit_strbuf_new(compiler->emitter, buf_reg);
 
     for (int i = 0; i < count; i++) {
         XrExprDesc expr = xr_compile_expr(ctx, compiler, operands[i]);
         int op_reg = xexpr_to_anyreg(ctx, compiler, &expr);
-        emit_abc(compiler->emitter, OP_STRBUF_APPEND, buf_reg, op_reg, 0);
+        xemit_strbuf_append(compiler->emitter, buf_reg, op_reg);
         if (op_reg != buf_reg) {
             reg_free(compiler, op_reg);
         }
     }
 
-    emit_abc(compiler->emitter, OP_STRBUF_FINISH, buf_reg, 0, 0);
+    xemit_strbuf_finish(compiler->emitter, buf_reg);
 
     return buf_reg;
 }
@@ -244,7 +244,7 @@ int compile_and(XrCompilerContext *ctx, XrCompiler *compiler, BinaryNode *node) 
     int rb = xexpr_to_anyreg(ctx, compiler, &left_expr);
 
     // Test left operand: if false, jump
-    emit_abc(compiler->emitter, OP_TESTSET, rb, rb, 0);
+    xemit_testset(compiler->emitter, rb, rb, 0);
     int jump = emit_jump(compiler->emitter, OP_JMP);
     false_list = jump;  // Initialize false list
 
@@ -254,8 +254,8 @@ int compile_and(XrCompilerContext *ctx, XrCompiler *compiler, BinaryNode *node) 
 
     // Move result to rb, then convert to bool (NOT+NOT)
     emit_move(compiler->emitter, rb, rc);
-    emit_abc(compiler->emitter, OP_NOT, rb, rb, 0);
-    emit_abc(compiler->emitter, OP_NOT, rb, rb, 0);
+    xemit_not(compiler->emitter, rb, rb);
+    xemit_not(compiler->emitter, rb, rb);
 
     // Set freereg = rb + 1, reclaim rc
     xreg_set_freereg(compiler->regalloc, rb + 1);
@@ -294,7 +294,7 @@ int compile_or(XrCompilerContext *ctx, XrCompiler *compiler, BinaryNode *node) {
     int rb = xexpr_to_anyreg(ctx, compiler, &left_expr);
 
     // Test left operand: if true, jump
-    emit_abc(compiler->emitter, OP_TESTSET, rb, rb, 1);
+    xemit_testset(compiler->emitter, rb, rb, 1);
     int jump = emit_jump(compiler->emitter, OP_JMP);
     true_list = jump;  // Initialize true list
 
@@ -304,8 +304,8 @@ int compile_or(XrCompilerContext *ctx, XrCompiler *compiler, BinaryNode *node) {
 
     // Move result to rb, then convert to bool (NOT+NOT)
     emit_move(compiler->emitter, rb, rc);
-    emit_abc(compiler->emitter, OP_NOT, rb, rb, 0);
-    emit_abc(compiler->emitter, OP_NOT, rb, rb, 0);
+    xemit_not(compiler->emitter, rb, rb);
+    xemit_not(compiler->emitter, rb, rb);
 
     // Set freereg = rb + 1, reclaim rc
     xreg_set_freereg(compiler->regalloc, rb + 1);
@@ -398,7 +398,7 @@ XrExprDesc compile_binary(XrCompilerContext *ctx, XrCompiler *compiler, BinaryNo
             int rc = xexpr_to_anyreg_readonly(ctx, compiler, &int_e);
 
             // Emit OP_STR_REPEAT, A=0 pending relocation
-            int pc = emit_abc(compiler->emitter, OP_STR_REPEAT, 0, rb, rc);
+            int pc = xemit_str_repeat(compiler->emitter, 0, rb, rc);
 
             e.kind = XEXPR_RELOC;
             e.u.pc = pc;
@@ -420,7 +420,7 @@ XrExprDesc compile_binary(XrCompilerContext *ctx, XrCompiler *compiler, BinaryNo
             XrExprDesc int_e = xr_compile_expr(ctx, compiler, node->right);
             int rc = xexpr_to_anyreg_readonly(ctx, compiler, &int_e);
 
-            int pc = emit_abc(compiler->emitter, OP_STR_REPEAT, 0, rb, rc);
+            int pc = xemit_str_repeat(compiler->emitter, 0, rb, rc);
             e.kind = XEXPR_RELOC;
             e.u.pc = pc;
             return e;
@@ -433,7 +433,7 @@ XrExprDesc compile_binary(XrCompilerContext *ctx, XrCompiler *compiler, BinaryNo
             XrExprDesc int_e = xr_compile_expr(ctx, compiler, node->left);
             int rc = xexpr_to_anyreg_readonly(ctx, compiler, &int_e);
 
-            int pc = emit_abc(compiler->emitter, OP_STR_REPEAT, 0, rb, rc);
+            int pc = xemit_str_repeat(compiler->emitter, 0, rb, rc);
             e.kind = XEXPR_RELOC;
             e.u.pc = pc;
             return e;
@@ -470,7 +470,7 @@ XrExprDesc compile_binary(XrCompilerContext *ctx, XrCompiler *compiler, BinaryNo
             if (xr_opt_fold_binary(op_token, left_val, right_val, &result)) {
                 // Folding succeeded! Emit LOADK, A=0 pending relocation
                 int kidx = xr_vm_proto_add_constant(compiler->proto, result);
-                int pc = emit_abx(compiler->emitter, OP_LOADK, 0, kidx);
+                int pc = xemit_loadk(compiler->emitter, 0, kidx);
                 e.kind = XEXPR_RELOC;
                 e.u.pc = pc;
                 e.compile_type = result_ct;
@@ -620,19 +620,19 @@ XrExprDesc compile_binary(XrCompilerContext *ctx, XrCompiler *compiler, BinaryNo
         // string + string → STRBUF sequence (two-operand fallback)
         if (left_str && right_str) {
             int buf_reg = reg_alloc(ctx, compiler);
-            emit_abc(compiler->emitter, OP_STRBUF_NEW, buf_reg, 0, 0);
+            xemit_strbuf_new(compiler->emitter, buf_reg);
 
             XrExprDesc left_e = xr_compile_expr(ctx, compiler, node->left);
             int rb_s = xexpr_to_anyreg(ctx, compiler, &left_e);
-            emit_abc(compiler->emitter, OP_STRBUF_APPEND, buf_reg, rb_s, 0);
+            xemit_strbuf_append(compiler->emitter, buf_reg, rb_s);
             if (rb_s != buf_reg) reg_free(compiler, rb_s);
 
             XrExprDesc right_e = xr_compile_expr(ctx, compiler, node->right);
             int rc_s = xexpr_to_anyreg(ctx, compiler, &right_e);
-            emit_abc(compiler->emitter, OP_STRBUF_APPEND, buf_reg, rc_s, 0);
+            xemit_strbuf_append(compiler->emitter, buf_reg, rc_s);
             if (rc_s != buf_reg) reg_free(compiler, rc_s);
 
-            emit_abc(compiler->emitter, OP_STRBUF_FINISH, buf_reg, 0, 0);
+            xemit_strbuf_finish(compiler->emitter, buf_reg);
             xexpr_init(&e, XEXPR_TEMP, buf_reg);
             e.compile_type = (XrType *)xr_type_new_string(NULL);
             return e;
@@ -807,11 +807,11 @@ static int compile_comparison_internal(XrCompilerContext *ctx, XrCompiler *compi
         int ra = reg_alloc(ctx, compiler);
 
         // Use OP_ISNULL_SET: R[ra] = (R[rb] == null)
-        emit_abc(compiler->emitter, OP_ISNULL_SET, ra, rb, 0);
+        xemit_isnull_set(compiler->emitter, ra, rb);
 
         // For != null, negate the result
         if (type == AST_BINARY_NE || type == AST_BINARY_NE_STRICT) {
-            emit_abc(compiler->emitter, OP_NOT, ra, ra, 0);
+            xemit_not(compiler->emitter, ra, ra);
         }
 
         xreg_set_freereg(compiler->regalloc, ra + 1);
@@ -986,7 +986,7 @@ XrExprDesc compile_is_expr(XrCompilerContext *ctx, XrCompiler *compiler, IsExprN
     int dest_reg = reg_alloc(ctx, compiler);
 
     // Emit OP_IS instruction
-    emit_abc(compiler->emitter, OP_IS, dest_reg, src_reg, type_const);
+    xemit_is(compiler->emitter, dest_reg, src_reg, type_const);
 
     // Free source register
     reg_free(compiler, src_reg);
@@ -1006,7 +1006,7 @@ static int compile_ternary_internal(XrCompilerContext *ctx, XrCompiler *compiler
     int cond_reg = xexpr_to_anyreg(ctx, compiler, &cond_expr);
 
     // Test condition, if false skip true branch
-    emit_abc(compiler->emitter, OP_TEST, cond_reg, 0, 0);
+    xemit_test(compiler->emitter, cond_reg, 0);
     int else_jump = emit_jump(compiler->emitter, OP_JMP);
     reg_free(compiler, cond_reg);
 
@@ -1091,7 +1091,7 @@ static int compile_nullish_coalesce_internal(XrCompilerContext *ctx, XrCompiler 
      */
     XrValue null_val = xr_null();
     int null_const = xr_vm_proto_add_constant(compiler->proto, null_val);
-    emit_abc(compiler->emitter, OP_EQK, left_reg, null_const, 1);
+    xemit_eqk(compiler->emitter, left_reg, null_const, 1);
     int use_default_jump = emit_jump(compiler->emitter, OP_JMP);
 
     // Left operand is not null, use left operand
@@ -1152,11 +1152,11 @@ static int compile_optional_chain_internal(XrCompilerContext *ctx, XrCompiler *c
             int global_sym = xr_symbol_register_in_table(
                 (XrSymbolTable*)xr_isolate_get_symbol_table(ctx->X), node->name);
             int local_sym = emitter_add_symbol(compiler->emitter, global_sym);
-            emit_abc(compiler->emitter, OP_GETPROP, result_reg, obj_reg, local_sym);
+            xemit_getprop(compiler->emitter, result_reg, obj_reg, local_sym);
         } else if (node->chain_type == 1) {
             XrExprDesc index_expr = xr_compile_expr(ctx, compiler, node->index);
             int index_reg = xexpr_to_anyreg(ctx, compiler, &index_expr);
-            emit_abc(compiler->emitter, OP_INDEX_GET, result_reg, obj_reg, index_reg);
+            xemit_index_get(compiler->emitter, result_reg, obj_reg, index_reg);
             reg_free(compiler, index_reg);
         }
 
@@ -1176,7 +1176,7 @@ static int compile_optional_chain_internal(XrCompilerContext *ctx, XrCompiler *c
      */
     XrValue null_val = xr_null();
     int null_const = xr_vm_proto_add_constant(compiler->proto, null_val);
-    emit_abc(compiler->emitter, OP_EQK, obj_reg, null_const, 1);
+    xemit_eqk(compiler->emitter, obj_reg, null_const, 1);
     int return_null_jump = emit_jump(compiler->emitter, OP_JMP);
 
     // Object is not null, execute access
@@ -1189,12 +1189,12 @@ static int compile_optional_chain_internal(XrCompilerContext *ctx, XrCompiler *c
         int global_sym = xr_symbol_register_in_table(
             (XrSymbolTable*)xr_isolate_get_symbol_table(ctx->X), node->name);
         int local_sym = emitter_add_symbol(compiler->emitter, global_sym);
-        emit_abc(compiler->emitter, OP_GETPROP, result_reg, obj_reg, local_sym);
+        xemit_getprop(compiler->emitter, result_reg, obj_reg, local_sym);
     } else if (node->chain_type == 1) {
         // Index access: obj?.[index]
         XrExprDesc index_expr = xr_compile_expr(ctx, compiler, node->index);
         int index_reg = xexpr_to_anyreg(ctx, compiler, &index_expr);
-        emit_abc(compiler->emitter, OP_INDEX_GET, result_reg, obj_reg, index_reg);
+        xemit_index_get(compiler->emitter, result_reg, obj_reg, index_reg);
         reg_free(compiler, index_reg);
     } else {
         // Method call: obj?.method() - should be handled in call resolution, error here
@@ -1251,7 +1251,7 @@ int compile_force_unwrap(XrCompilerContext *ctx, XrCompiler *compiler, UnaryNode
     //          val != null -> (0!=0)=false -> don't skip JMP -> jump to ok
     XrValue null_val = xr_null();
     int null_const = xr_vm_proto_add_constant(compiler->proto, null_val);
-    emit_abc(compiler->emitter, OP_EQK, val_reg, null_const, 0);
+    xemit_eqk(compiler->emitter, val_reg, null_const, 0);
     int ok_jump = emit_jump(compiler->emitter, OP_JMP);
 
     // Panic path (val == null): load error message and throw
@@ -1260,8 +1260,8 @@ int compile_force_unwrap(XrCompilerContext *ctx, XrCompiler *compiler, UnaryNode
     XrValue msg_val = xr_string_value(msg_str);
     int msg_const = xr_vm_proto_add_constant(compiler->proto, msg_val);
     int msg_reg = reg_alloc(ctx, compiler);
-    emit_abx(compiler->emitter, OP_LOADK, msg_reg, msg_const);
-    emit_abc(compiler->emitter, OP_THROW, msg_reg, 0, 0);
+    xemit_loadk(compiler->emitter, msg_reg, msg_const);
+    xemit_throw(compiler->emitter, msg_reg);
     reg_free(compiler, msg_reg);
 
     // Ok path (val != null): patch ok_jump to here
@@ -1313,21 +1313,21 @@ int compile_as_expr(XrCompilerContext *ctx, XrCompiler *compiler, AsExprNode *no
 
     // Allocate type_reg for typeof result
     int type_reg = reg_alloc(ctx, compiler);
-    emit_abc(compiler->emitter, OP_TYPEOF, type_reg, val_reg, 0);
+    xemit_typeof(compiler->emitter, type_reg, val_reg, 0);
 
     // OP_EQK type_reg, tid_const, 1:
     //   type == tid: (1!=1)=false -> don't skip JMP -> jump to ok
     //   type != tid: (0!=1)=true -> skip JMP -> fall into error path
     XrValue tid_val = xr_int(tid);
     int tid_const = xr_vm_proto_add_constant(compiler->proto, tid_val);
-    emit_abc(compiler->emitter, OP_EQK, type_reg, tid_const, 1);
+    xemit_eqk(compiler->emitter, type_reg, tid_const, 1);
     int ok_jump = emit_jump(compiler->emitter, OP_JMP);
     reg_free(compiler, type_reg);
 
     if (node->is_safe) {
         // Safe cast: type mismatch -> load null, then jump to after ok path
         // Layout: [LOADNULL] [JMP -> after_ok] [ok path]
-        emit_abc(compiler->emitter, OP_LOADNULL, val_reg, 0, 0);
+        xemit_loadnull(compiler->emitter, val_reg);
         int end_jump = emit_jump(compiler->emitter, OP_JMP);
         // Ok path: val stays as-is
         patch_jump(compiler->emitter, ok_jump, -1);
@@ -1341,8 +1341,8 @@ int compile_as_expr(XrCompilerContext *ctx, XrCompiler *compiler, AsExprNode *no
         XrValue err_val = xr_string_value(err_str);
         int err_const = xr_vm_proto_add_constant(compiler->proto, err_val);
         int err_reg = reg_alloc(ctx, compiler);
-        emit_abx(compiler->emitter, OP_LOADK, err_reg, err_const);
-        emit_abc(compiler->emitter, OP_THROW, err_reg, 0, 0);
+        xemit_loadk(compiler->emitter, err_reg, err_const);
+        xemit_throw(compiler->emitter, err_reg);
         reg_free(compiler, err_reg);
         // Ok path: val stays as-is (ok_jump skips the throw)
         patch_jump(compiler->emitter, ok_jump, -1);

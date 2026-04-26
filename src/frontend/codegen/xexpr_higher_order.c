@@ -54,7 +54,7 @@ static void emit_increment(XrCompilerContext *ctx, XrCompiler *compiler, int i_r
     int one_reg = reg_alloc(ctx, compiler);
     emit_loadk(compiler->emitter, one_reg, one_kidx);
     int inc_reg = reg_alloc(ctx, compiler);
-    emit_abc(compiler->emitter, OP_ADD, inc_reg, i_reg, one_reg);
+    xemit_add(compiler->emitter, inc_reg, i_reg, one_reg);
     emit_move(compiler->emitter, i_reg, inc_reg);
 }
 
@@ -100,7 +100,7 @@ static int compile_array_foreach_inline(XrCompilerContext *ctx, XrCompiler *comp
     emit_loadk(compiler->emitter, i_reg, zero_kidx);
 
     int len_reg = reg_alloc(ctx, compiler);
-    emit_abc(compiler->emitter, OP_GETPROP, len_reg, arr_reg, get_length_symbol(ctx, compiler));
+    xemit_getprop(compiler->emitter, len_reg, arr_reg, get_length_symbol(ctx, compiler));
 
     // 3. Compile callback once outside loop
     XrExprDesc callback_expr = xr_compile_expr(ctx, compiler, call->arguments[0]);
@@ -119,8 +119,8 @@ static int compile_array_foreach_inline(XrCompilerContext *ctx, XrCompiler *comp
     // Condition: i < len
     xreg_set_freereg(compiler->regalloc, loop_base);
     int cond_reg = reg_alloc(ctx, compiler);
-    emit_abc(compiler->emitter, OP_CMP_LT, cond_reg, i_reg, len_reg);
-    emit_abc(compiler->emitter, OP_TEST, cond_reg, 0, 0);
+    xemit_cmp_lt(compiler->emitter, cond_reg, i_reg, len_reg);
+    xemit_test(compiler->emitter, cond_reg, 0);
     int exit_jump = emit_jump(compiler->emitter, OP_JMP);
 
     // Loop body
@@ -128,7 +128,7 @@ static int compile_array_foreach_inline(XrCompilerContext *ctx, XrCompiler *comp
         // Place args directly after callback_reg
         xreg_set_freereg(compiler->regalloc, callback_reg + 1);
         int arg0 = xreg_alloc_next(compiler->regalloc);
-        emit_abc(compiler->emitter, OP_INDEX_GET, arg0, arr_reg, i_reg);
+        xemit_index_get(compiler->emitter, arg0, arr_reg, i_reg);
         if (call_nargs >= 2) {
             int arg1 = xreg_alloc_next(compiler->regalloc);
             emit_move(compiler->emitter, arg1, i_reg);
@@ -136,7 +136,7 @@ static int compile_array_foreach_inline(XrCompilerContext *ctx, XrCompiler *comp
         int discard_reg = xreg_alloc_next(compiler->regalloc);
 
         // CALL_KEEP: call callback, result to discard_reg, callback_reg preserved
-        emit_abc(compiler->emitter, OP_CALL_KEEP, callback_reg, call_nargs, discard_reg);
+        xemit_call_keep(compiler->emitter, callback_reg, call_nargs, discard_reg);
     }
 
     // i++
@@ -153,7 +153,7 @@ static int compile_array_foreach_inline(XrCompilerContext *ctx, XrCompiler *comp
     // 5. forEach returns null
     xreg_set_freereg(compiler->regalloc, base);
     int result_reg = reg_alloc(ctx, compiler);
-    emit_abc(compiler->emitter, OP_LOADNULL, result_reg, 0, 0);
+    xemit_loadnull(compiler->emitter, result_reg);
 
     return result_reg;
 }
@@ -200,14 +200,14 @@ static int compile_array_filter_inline(XrCompilerContext *ctx, XrCompiler *compi
     // 2. Allocate control registers
     int result_reg = reg_alloc(ctx, compiler);
     int c_arr_f = ((int)ctx->current_elem_tid << 2) | ctx->current_storage_mode;
-    emit_abc(compiler->emitter, OP_NEWARRAY, result_reg, 0, c_arr_f);
+    xemit_newarray(compiler->emitter, result_reg, 0, c_arr_f);
 
     int i_reg = reg_alloc(ctx, compiler);
     int zero_kidx = xr_vm_proto_add_constant(compiler->proto, xr_int(0));
     emit_loadk(compiler->emitter, i_reg, zero_kidx);
 
     int len_reg = reg_alloc(ctx, compiler);
-    emit_abc(compiler->emitter, OP_GETPROP, len_reg, arr_reg, get_length_symbol(ctx, compiler));
+    xemit_getprop(compiler->emitter, len_reg, arr_reg, get_length_symbol(ctx, compiler));
 
     // 3. Compile callback
     XrExprDesc callback_expr = xr_compile_expr(ctx, compiler, call->arguments[0]);
@@ -224,8 +224,8 @@ static int compile_array_filter_inline(XrCompilerContext *ctx, XrCompiler *compi
 
     xreg_set_freereg(compiler->regalloc, loop_base);
     int cond_reg = reg_alloc(ctx, compiler);
-    emit_abc(compiler->emitter, OP_CMP_LT, cond_reg, i_reg, len_reg);
-    emit_abc(compiler->emitter, OP_TEST, cond_reg, 0, 0);
+    xemit_cmp_lt(compiler->emitter, cond_reg, i_reg, len_reg);
+    xemit_test(compiler->emitter, cond_reg, 0);
     int exit_jump = emit_jump(compiler->emitter, OP_JMP);
 
     // Loop body
@@ -233,7 +233,7 @@ static int compile_array_filter_inline(XrCompilerContext *ctx, XrCompiler *compi
         // Place args after callback_reg: arg0 = arr[i]
         xreg_set_freereg(compiler->regalloc, callback_reg + 1);
         int arg0 = xreg_alloc_next(compiler->regalloc);
-        emit_abc(compiler->emitter, OP_INDEX_GET, arg0, arr_reg, i_reg);
+        xemit_index_get(compiler->emitter, arg0, arr_reg, i_reg);
         if (call_nargs_f >= 2) {
             int arg1 = xreg_alloc_next(compiler->regalloc);
             emit_move(compiler->emitter, arg1, i_reg);
@@ -241,16 +241,16 @@ static int compile_array_filter_inline(XrCompilerContext *ctx, XrCompiler *compi
         int call_result = xreg_alloc_next(compiler->regalloc);
 
         // CALL_KEEP: callback preserved, result in call_result
-        emit_abc(compiler->emitter, OP_CALL_KEEP, callback_reg, call_nargs_f, call_result);
+        xemit_call_keep(compiler->emitter, callback_reg, call_nargs_f, call_result);
 
         // if (call_result is truthy), include element
-        emit_abc(compiler->emitter, OP_TEST, call_result, 0, 0);
+        xemit_test(compiler->emitter, call_result, 0);
         int skip_jump = emit_jump(compiler->emitter, OP_JMP);
 
         // Re-read val (callee's stack frame may have overwritten earlier registers)
         int val_reg = xreg_alloc_next(compiler->regalloc);
-        emit_abc(compiler->emitter, OP_INDEX_GET, val_reg, arr_reg, i_reg);
-        emit_abc(compiler->emitter, OP_ARRAY_PUSH, result_reg, val_reg, 0);
+        xemit_index_get(compiler->emitter, val_reg, arr_reg, i_reg);
+        xemit_array_push(compiler->emitter, result_reg, val_reg);
 
         patch_jump(compiler->emitter, skip_jump, -1);
     }
@@ -310,14 +310,14 @@ static int compile_array_map_inline(XrCompilerContext *ctx, XrCompiler *compiler
     // 2. Allocate control registers
     int result_reg = reg_alloc(ctx, compiler);
     int c_arr_m = ((int)ctx->current_elem_tid << 2) | ctx->current_storage_mode;
-    emit_abc(compiler->emitter, OP_NEWARRAY, result_reg, 0, c_arr_m);
+    xemit_newarray(compiler->emitter, result_reg, 0, c_arr_m);
 
     int i_reg = reg_alloc(ctx, compiler);
     int zero_kidx = xr_vm_proto_add_constant(compiler->proto, xr_int(0));
     emit_loadk(compiler->emitter, i_reg, zero_kidx);
 
     int len_reg = reg_alloc(ctx, compiler);
-    emit_abc(compiler->emitter, OP_GETPROP, len_reg, arr_reg, get_length_symbol(ctx, compiler));
+    xemit_getprop(compiler->emitter, len_reg, arr_reg, get_length_symbol(ctx, compiler));
 
     // 3. Compile callback
     XrExprDesc callback_expr = xr_compile_expr(ctx, compiler, call->arguments[0]);
@@ -334,8 +334,8 @@ static int compile_array_map_inline(XrCompilerContext *ctx, XrCompiler *compiler
 
     xreg_set_freereg(compiler->regalloc, loop_base);
     int cond_reg = reg_alloc(ctx, compiler);
-    emit_abc(compiler->emitter, OP_CMP_LT, cond_reg, i_reg, len_reg);
-    emit_abc(compiler->emitter, OP_TEST, cond_reg, 0, 0);
+    xemit_cmp_lt(compiler->emitter, cond_reg, i_reg, len_reg);
+    xemit_test(compiler->emitter, cond_reg, 0);
     int exit_jump = emit_jump(compiler->emitter, OP_JMP);
 
     // Loop body
@@ -343,7 +343,7 @@ static int compile_array_map_inline(XrCompilerContext *ctx, XrCompiler *compiler
         // Place args after callback_reg
         xreg_set_freereg(compiler->regalloc, callback_reg + 1);
         int arg0 = xreg_alloc_next(compiler->regalloc);
-        emit_abc(compiler->emitter, OP_INDEX_GET, arg0, arr_reg, i_reg);
+        xemit_index_get(compiler->emitter, arg0, arr_reg, i_reg);
         if (call_nargs_m >= 2) {
             int arg1 = xreg_alloc_next(compiler->regalloc);
             emit_move(compiler->emitter, arg1, i_reg);
@@ -351,10 +351,10 @@ static int compile_array_map_inline(XrCompilerContext *ctx, XrCompiler *compiler
         int call_result = xreg_alloc_next(compiler->regalloc);
 
         // CALL_KEEP: callback preserved, result in call_result
-        emit_abc(compiler->emitter, OP_CALL_KEEP, callback_reg, call_nargs_m, call_result);
+        xemit_call_keep(compiler->emitter, callback_reg, call_nargs_m, call_result);
 
         // result.push(mapped_value)
-        emit_abc(compiler->emitter, OP_ARRAY_PUSH, result_reg, call_result, 0);
+        xemit_array_push(compiler->emitter, result_reg, call_result);
     }
 
     // i++
@@ -419,7 +419,7 @@ static int compile_array_reduce_inline(XrCompilerContext *ctx, XrCompiler *compi
     emit_loadk(compiler->emitter, i_reg, zero_kidx);
 
     int len_reg = reg_alloc(ctx, compiler);
-    emit_abc(compiler->emitter, OP_GETPROP, len_reg, arr_reg, get_length_symbol(ctx, compiler));
+    xemit_getprop(compiler->emitter, len_reg, arr_reg, get_length_symbol(ctx, compiler));
 
     // 4. Compile callback
     XrExprDesc callback_expr = xr_compile_expr(ctx, compiler, call->arguments[0]);
@@ -436,8 +436,8 @@ static int compile_array_reduce_inline(XrCompilerContext *ctx, XrCompiler *compi
 
     xreg_set_freereg(compiler->regalloc, loop_base);
     int cond_reg = reg_alloc(ctx, compiler);
-    emit_abc(compiler->emitter, OP_CMP_LT, cond_reg, i_reg, len_reg);
-    emit_abc(compiler->emitter, OP_TEST, cond_reg, 0, 0);
+    xemit_cmp_lt(compiler->emitter, cond_reg, i_reg, len_reg);
+    xemit_test(compiler->emitter, cond_reg, 0);
     int exit_jump = emit_jump(compiler->emitter, OP_JMP);
 
     // Loop body
@@ -447,7 +447,7 @@ static int compile_array_reduce_inline(XrCompilerContext *ctx, XrCompiler *compi
         int arg0 = xreg_alloc_next(compiler->regalloc);
         emit_move(compiler->emitter, arg0, acc_reg);
         int arg1 = xreg_alloc_next(compiler->regalloc);
-        emit_abc(compiler->emitter, OP_INDEX_GET, arg1, arr_reg, i_reg);
+        xemit_index_get(compiler->emitter, arg1, arr_reg, i_reg);
         if (call_nargs_r >= 3) {
             int arg2 = xreg_alloc_next(compiler->regalloc);
             emit_move(compiler->emitter, arg2, i_reg);
@@ -455,7 +455,7 @@ static int compile_array_reduce_inline(XrCompilerContext *ctx, XrCompiler *compi
         int call_result = xreg_alloc_next(compiler->regalloc);
 
         // CALL_KEEP: callback preserved, result in call_result
-        emit_abc(compiler->emitter, OP_CALL_KEEP, callback_reg, call_nargs_r, call_result);
+        xemit_call_keep(compiler->emitter, callback_reg, call_nargs_r, call_result);
 
         // acc = callback result
         emit_move(compiler->emitter, acc_reg, call_result);
@@ -523,7 +523,7 @@ static int compile_map_foreach_inline(XrCompilerContext *ctx, XrCompiler *compil
 
     // 2. Get keys array: keys = map.keys
     int keys_reg = reg_alloc(ctx, compiler);
-    emit_abc(compiler->emitter, OP_GETPROP, keys_reg, map_reg, get_keys_symbol(ctx, compiler));
+    xemit_getprop(compiler->emitter, keys_reg, map_reg, get_keys_symbol(ctx, compiler));
 
     // 3. Allocate loop control registers
     int i_reg = reg_alloc(ctx, compiler);
@@ -531,7 +531,7 @@ static int compile_map_foreach_inline(XrCompilerContext *ctx, XrCompiler *compil
     emit_loadk(compiler->emitter, i_reg, zero_kidx);
 
     int len_reg = reg_alloc(ctx, compiler);
-    emit_abc(compiler->emitter, OP_GETPROP, len_reg, keys_reg, get_length_symbol(ctx, compiler));
+    xemit_getprop(compiler->emitter, len_reg, keys_reg, get_length_symbol(ctx, compiler));
 
     // 4. Compile callback
     XrExprDesc callback_expr = xr_compile_expr(ctx, compiler, call->arguments[0]);
@@ -544,8 +544,8 @@ static int compile_map_foreach_inline(XrCompilerContext *ctx, XrCompiler *compil
 
     xreg_set_freereg(compiler->regalloc, loop_base);
     int cond_reg = reg_alloc(ctx, compiler);
-    emit_abc(compiler->emitter, OP_CMP_LT, cond_reg, i_reg, len_reg);
-    emit_abc(compiler->emitter, OP_TEST, cond_reg, 0, 0);
+    xemit_cmp_lt(compiler->emitter, cond_reg, i_reg, len_reg);
+    xemit_test(compiler->emitter, cond_reg, 0);
     int exit_jump = emit_jump(compiler->emitter, OP_JMP);
 
     // Loop body
@@ -554,9 +554,9 @@ static int compile_map_foreach_inline(XrCompilerContext *ctx, XrCompiler *compil
 
         // key = keys[i], val = map[key] (need both for callback args)
         int key_reg = reg_alloc(ctx, compiler);
-        emit_abc(compiler->emitter, OP_INDEX_GET, key_reg, keys_reg, i_reg);
+        xemit_index_get(compiler->emitter, key_reg, keys_reg, i_reg);
         int val_reg = reg_alloc(ctx, compiler);
-        emit_abc(compiler->emitter, OP_INDEX_GET, val_reg, map_reg, key_reg);
+        xemit_index_get(compiler->emitter, val_reg, map_reg, key_reg);
 
         // Place args after callback_reg: callback(val, key)
         xreg_set_freereg(compiler->regalloc, callback_reg + 1);
@@ -567,7 +567,7 @@ static int compile_map_foreach_inline(XrCompilerContext *ctx, XrCompiler *compil
         int discard_reg = xreg_alloc_next(compiler->regalloc);
 
         // CALL_KEEP: callback preserved
-        emit_abc(compiler->emitter, OP_CALL_KEEP, callback_reg, 2, discard_reg);
+        xemit_call_keep(compiler->emitter, callback_reg, 2, discard_reg);
 
         xreg_set_freereg(compiler->regalloc, body_base);
     }
@@ -584,7 +584,7 @@ static int compile_map_foreach_inline(XrCompilerContext *ctx, XrCompiler *compil
     // 6. forEach returns null
     xreg_set_freereg(compiler->regalloc, base);
     int result_reg = reg_alloc(ctx, compiler);
-    emit_abc(compiler->emitter, OP_LOADNULL, result_reg, 0, 0);
+    xemit_loadnull(compiler->emitter, result_reg);
 
     return result_reg;
 }
@@ -614,11 +614,11 @@ static int compile_map_map_inline(XrCompilerContext *ctx, XrCompiler *compiler, 
     int result_reg = reg_alloc(ctx, compiler);
     int ck_map = (ctx->current_key_tid == XR_TID_STRING) ? 1 : (ctx->current_key_tid == XR_TID_INT) ? 2 : 0;
     int c_map = (ck_map << 7) | (((int)ctx->current_elem_tid & 0x1F) << 2) | ctx->current_storage_mode;
-    emit_abc(compiler->emitter, OP_NEWMAP, result_reg, 0, c_map);
+    xemit_newmap(compiler->emitter, result_reg, 0, c_map);
 
     // 3. Get keys array
     int keys_reg = reg_alloc(ctx, compiler);
-    emit_abc(compiler->emitter, OP_GETPROP, keys_reg, map_reg, get_keys_symbol(ctx, compiler));
+    xemit_getprop(compiler->emitter, keys_reg, map_reg, get_keys_symbol(ctx, compiler));
 
     // 4. Loop control
     int i_reg = reg_alloc(ctx, compiler);
@@ -626,7 +626,7 @@ static int compile_map_map_inline(XrCompilerContext *ctx, XrCompiler *compiler, 
     emit_loadk(compiler->emitter, i_reg, zero_kidx);
 
     int len_reg = reg_alloc(ctx, compiler);
-    emit_abc(compiler->emitter, OP_GETPROP, len_reg, keys_reg, get_length_symbol(ctx, compiler));
+    xemit_getprop(compiler->emitter, len_reg, keys_reg, get_length_symbol(ctx, compiler));
 
     // 5. Compile callback
     XrExprDesc callback_expr = xr_compile_expr(ctx, compiler, call->arguments[0]);
@@ -639,8 +639,8 @@ static int compile_map_map_inline(XrCompilerContext *ctx, XrCompiler *compiler, 
 
     xreg_set_freereg(compiler->regalloc, loop_base);
     int cond_reg = reg_alloc(ctx, compiler);
-    emit_abc(compiler->emitter, OP_CMP_LT, cond_reg, i_reg, len_reg);
-    emit_abc(compiler->emitter, OP_TEST, cond_reg, 0, 0);
+    xemit_cmp_lt(compiler->emitter, cond_reg, i_reg, len_reg);
+    xemit_test(compiler->emitter, cond_reg, 0);
     int exit_jump = emit_jump(compiler->emitter, OP_JMP);
 
     {
@@ -648,11 +648,11 @@ static int compile_map_map_inline(XrCompilerContext *ctx, XrCompiler *compiler, 
 
         // key = keys[i] (needed for INDEX_SET later)
         int key_reg = reg_alloc(ctx, compiler);
-        emit_abc(compiler->emitter, OP_INDEX_GET, key_reg, keys_reg, i_reg);
+        xemit_index_get(compiler->emitter, key_reg, keys_reg, i_reg);
 
         // val = map[key]
         int val_reg = reg_alloc(ctx, compiler);
-        emit_abc(compiler->emitter, OP_INDEX_GET, val_reg, map_reg, key_reg);
+        xemit_index_get(compiler->emitter, val_reg, map_reg, key_reg);
 
         // Place args after callback_reg: callback(val, key)
         xreg_set_freereg(compiler->regalloc, callback_reg + 1);
@@ -663,10 +663,10 @@ static int compile_map_map_inline(XrCompilerContext *ctx, XrCompiler *compiler, 
         int call_result = xreg_alloc_next(compiler->regalloc);
 
         // CALL_KEEP: callback preserved, result in call_result
-        emit_abc(compiler->emitter, OP_CALL_KEEP, callback_reg, 2, call_result);
+        xemit_call_keep(compiler->emitter, callback_reg, 2, call_result);
 
         // result[key] = new_val
-        emit_abc(compiler->emitter, OP_INDEX_SET, result_reg, key_reg, call_result);
+        xemit_index_set(compiler->emitter, result_reg, key_reg, call_result);
 
         xreg_set_freereg(compiler->regalloc, body_base);
     }
@@ -713,11 +713,11 @@ static int compile_map_filter_inline(XrCompilerContext *ctx, XrCompiler *compile
     int result_reg = reg_alloc(ctx, compiler);
     int ck_map2 = (ctx->current_key_tid == XR_TID_STRING) ? 1 : (ctx->current_key_tid == XR_TID_INT) ? 2 : 0;
     int c_map2 = (ck_map2 << 7) | (((int)ctx->current_elem_tid & 0x1F) << 2) | ctx->current_storage_mode;
-    emit_abc(compiler->emitter, OP_NEWMAP, result_reg, 0, c_map2);
+    xemit_newmap(compiler->emitter, result_reg, 0, c_map2);
 
     // 3. Get keys array
     int keys_reg = reg_alloc(ctx, compiler);
-    emit_abc(compiler->emitter, OP_GETPROP, keys_reg, map_reg, get_keys_symbol(ctx, compiler));
+    xemit_getprop(compiler->emitter, keys_reg, map_reg, get_keys_symbol(ctx, compiler));
 
     // 4. Loop control
     int i_reg = reg_alloc(ctx, compiler);
@@ -725,7 +725,7 @@ static int compile_map_filter_inline(XrCompilerContext *ctx, XrCompiler *compile
     emit_loadk(compiler->emitter, i_reg, zero_kidx);
 
     int len_reg = reg_alloc(ctx, compiler);
-    emit_abc(compiler->emitter, OP_GETPROP, len_reg, keys_reg, get_length_symbol(ctx, compiler));
+    xemit_getprop(compiler->emitter, len_reg, keys_reg, get_length_symbol(ctx, compiler));
 
     // 5. Compile callback
     XrExprDesc callback_expr = xr_compile_expr(ctx, compiler, call->arguments[0]);
@@ -738,8 +738,8 @@ static int compile_map_filter_inline(XrCompilerContext *ctx, XrCompiler *compile
 
     xreg_set_freereg(compiler->regalloc, loop_base);
     int cond_reg = reg_alloc(ctx, compiler);
-    emit_abc(compiler->emitter, OP_CMP_LT, cond_reg, i_reg, len_reg);
-    emit_abc(compiler->emitter, OP_TEST, cond_reg, 0, 0);
+    xemit_cmp_lt(compiler->emitter, cond_reg, i_reg, len_reg);
+    xemit_test(compiler->emitter, cond_reg, 0);
     int exit_jump = emit_jump(compiler->emitter, OP_JMP);
 
     {
@@ -747,9 +747,9 @@ static int compile_map_filter_inline(XrCompilerContext *ctx, XrCompiler *compile
 
         // key = keys[i], val = map[key] (need both for INDEX_SET)
         int key_reg = reg_alloc(ctx, compiler);
-        emit_abc(compiler->emitter, OP_INDEX_GET, key_reg, keys_reg, i_reg);
+        xemit_index_get(compiler->emitter, key_reg, keys_reg, i_reg);
         int val_reg = reg_alloc(ctx, compiler);
-        emit_abc(compiler->emitter, OP_INDEX_GET, val_reg, map_reg, key_reg);
+        xemit_index_get(compiler->emitter, val_reg, map_reg, key_reg);
 
         // Place args after callback_reg: callback(val, key)
         xreg_set_freereg(compiler->regalloc, callback_reg + 1);
@@ -760,12 +760,12 @@ static int compile_map_filter_inline(XrCompilerContext *ctx, XrCompiler *compile
         int call_result = xreg_alloc_next(compiler->regalloc);
 
         // CALL_KEEP: callback preserved, result in call_result
-        emit_abc(compiler->emitter, OP_CALL_KEEP, callback_reg, 2, call_result);
+        xemit_call_keep(compiler->emitter, callback_reg, 2, call_result);
 
         // if (call_result is truthy), include element
-        emit_abc(compiler->emitter, OP_TEST, call_result, 0, 0);
+        xemit_test(compiler->emitter, call_result, 0);
         int skip_jump = emit_jump(compiler->emitter, OP_JMP);
-        emit_abc(compiler->emitter, OP_INDEX_SET, result_reg, key_reg, val_reg);
+        xemit_index_set(compiler->emitter, result_reg, key_reg, val_reg);
         patch_jump(compiler->emitter, skip_jump, -1);
 
         xreg_set_freereg(compiler->regalloc, body_base);
@@ -813,7 +813,7 @@ static int compile_map_reduce_inline(XrCompilerContext *ctx, XrCompiler *compile
 
     // 3. Get keys array
     int keys_reg = reg_alloc(ctx, compiler);
-    emit_abc(compiler->emitter, OP_GETPROP, keys_reg, map_reg, get_keys_symbol(ctx, compiler));
+    xemit_getprop(compiler->emitter, keys_reg, map_reg, get_keys_symbol(ctx, compiler));
 
     // 4. Loop control
     int i_reg = reg_alloc(ctx, compiler);
@@ -821,7 +821,7 @@ static int compile_map_reduce_inline(XrCompilerContext *ctx, XrCompiler *compile
     emit_loadk(compiler->emitter, i_reg, zero_kidx);
 
     int len_reg = reg_alloc(ctx, compiler);
-    emit_abc(compiler->emitter, OP_GETPROP, len_reg, keys_reg, get_length_symbol(ctx, compiler));
+    xemit_getprop(compiler->emitter, len_reg, keys_reg, get_length_symbol(ctx, compiler));
 
     // 5. Compile callback
     XrExprDesc callback_expr = xr_compile_expr(ctx, compiler, call->arguments[0]);
@@ -834,8 +834,8 @@ static int compile_map_reduce_inline(XrCompilerContext *ctx, XrCompiler *compile
 
     xreg_set_freereg(compiler->regalloc, loop_base);
     int cond_reg = reg_alloc(ctx, compiler);
-    emit_abc(compiler->emitter, OP_CMP_LT, cond_reg, i_reg, len_reg);
-    emit_abc(compiler->emitter, OP_TEST, cond_reg, 0, 0);
+    xemit_cmp_lt(compiler->emitter, cond_reg, i_reg, len_reg);
+    xemit_test(compiler->emitter, cond_reg, 0);
     int exit_jump = emit_jump(compiler->emitter, OP_JMP);
 
     {
@@ -846,18 +846,18 @@ static int compile_map_reduce_inline(XrCompilerContext *ctx, XrCompiler *compile
 
         // key = keys[i]
         int key_reg = reg_alloc(ctx, compiler);
-        emit_abc(compiler->emitter, OP_INDEX_GET, key_reg, keys_reg, i_reg);
+        xemit_index_get(compiler->emitter, key_reg, keys_reg, i_reg);
 
         // val = map[key] -> arg1
         int arg1 = xreg_alloc_next(compiler->regalloc);
-        emit_abc(compiler->emitter, OP_INDEX_GET, arg1, map_reg, key_reg);
+        xemit_index_get(compiler->emitter, arg1, map_reg, key_reg);
 
         int arg2 = xreg_alloc_next(compiler->regalloc);
         emit_move(compiler->emitter, arg2, key_reg);
         int call_result = xreg_alloc_next(compiler->regalloc);
 
         // CALL_KEEP: callback preserved, result in call_result
-        emit_abc(compiler->emitter, OP_CALL_KEEP, callback_reg, 3, call_result);
+        xemit_call_keep(compiler->emitter, callback_reg, 3, call_result);
 
         // acc = callback result
         emit_move(compiler->emitter, acc_reg, call_result);

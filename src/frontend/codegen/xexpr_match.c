@@ -76,7 +76,7 @@ int compile_match_expr(XrCompilerContext *ctx, XrCompiler *c, MatchExprNode *nod
                 // Has guard condition: test guard, if failed jump to next branch
                 XrExprDesc guard_e = xr_compile_expr(ctx, c, guard);
                 int guard_reg = xexpr_to_anyreg(ctx, c, &guard_e);
-                emit_abc(c->emitter, OP_TEST, guard_reg, 0, 0);
+                xemit_test(c->emitter, guard_reg, 0);
                 int skip_guard = emit_jump(c->emitter, OP_JMP);
                 
                 // guard success: compile branch body and jump to match end
@@ -122,7 +122,7 @@ int compile_match_expr(XrCompilerContext *ctx, XrCompiler *c, MatchExprNode *nod
                 // Compile guard condition
                 XrExprDesc guard_e = xr_compile_expr(ctx, c, guard);
                 int guard_reg = xexpr_to_anyreg(ctx, c, &guard_e);
-                emit_abc(c->emitter, OP_TEST, guard_reg, 0, 0);
+                xemit_test(c->emitter, guard_reg, 0);
                 int skip_guard = emit_jump(c->emitter, OP_JMP);
                 
                 // Guard success: compile branch body
@@ -145,7 +145,7 @@ int compile_match_expr(XrCompilerContext *ctx, XrCompiler *c, MatchExprNode *nod
             int test_reg = xexpr_to_anyreg(ctx, c, &test_e);
             
             // Generate comparison: EQ match_reg, test_reg, 0 (don't skip when equal)
-            emit_abc(c->emitter, OP_EQ, match_reg, test_reg, 0);
+            xemit_eq(c->emitter, match_reg, test_reg, 0);
             
             // Skip this branch body when not matching
             int skip_body = emit_jump(c->emitter, OP_JMP);
@@ -154,7 +154,7 @@ int compile_match_expr(XrCompilerContext *ctx, XrCompiler *c, MatchExprNode *nod
             if (guard) {
                 XrExprDesc guard_e = xr_compile_expr(ctx, c, guard);
                 int guard_reg = xexpr_to_anyreg(ctx, c, &guard_e);
-                emit_abc(c->emitter, OP_TEST, guard_reg, 0, 0);  // Test guard condition
+                xemit_test(c->emitter, guard_reg, 0);  // Test guard condition
                 int skip_guard = emit_jump(c->emitter, OP_JMP);   // Guard failed, jump to next branch
                 
                 // Compile branch body
@@ -205,18 +205,18 @@ int compile_match_expr(XrCompilerContext *ctx, XrCompiler *c, MatchExprNode *nod
              */
             
             // Test match >= start (i.e. !(match < start))
-            emit_abc(c->emitter, OP_LT, match_reg, start_reg, 1);  // match < start ? if yes, don't skip next
+            xemit_lt(c->emitter, match_reg, start_reg, 1);  // match < start ? if yes, don't skip next
             int fail1 = emit_jump(c->emitter, OP_JMP);              // executed when match < start, jump to next branch
             
             // Test match < end (i.e. match < end is false => skip next)
-            emit_abc(c->emitter, OP_LT, match_reg, end_reg, 0);    // match < end ? if no, don't skip next
+            xemit_lt(c->emitter, match_reg, end_reg, 0);    // match < end ? if no, don't skip next
             int fail2 = emit_jump(c->emitter, OP_JMP);              // executed when match >= end, jump to next branch
             
             // In range, if has guard condition, need to test
             if (guard) {
                 XrExprDesc guard_e = xr_compile_expr(ctx, c, guard);
                 int guard_reg = xexpr_to_anyreg(ctx, c, &guard_e);
-                emit_abc(c->emitter, OP_TEST, guard_reg, 0, 0);
+                xemit_test(c->emitter, guard_reg, 0);
                 int skip_guard = emit_jump(c->emitter, OP_JMP);
                 
                 // Compile branch body
@@ -259,7 +259,7 @@ int compile_match_expr(XrCompilerContext *ctx, XrCompiler *c, MatchExprNode *nod
                     int test_reg = xexpr_to_anyreg(ctx, c, &test_e);
                     
                     // Test equality
-                    emit_abc(c->emitter, OP_EQ, match_reg, test_reg, 1);  // skip next when equal
+                    xemit_eq(c->emitter, match_reg, test_reg, 1);  // skip next when equal
                     value_tests[j] = emit_jump(c->emitter, OP_JMP);        // jump to branch body when equal
                 }
             }
@@ -276,7 +276,7 @@ int compile_match_expr(XrCompilerContext *ctx, XrCompiler *c, MatchExprNode *nod
             if (guard) {
                 XrExprDesc guard_e = xr_compile_expr(ctx, c, guard);
                 int guard_reg = xexpr_to_anyreg(ctx, c, &guard_e);
-                emit_abc(c->emitter, OP_TEST, guard_reg, 0, 0);
+                xemit_test(c->emitter, guard_reg, 0);
                 int skip_guard = emit_jump(c->emitter, OP_JMP);
                 
                 // Compile branch body

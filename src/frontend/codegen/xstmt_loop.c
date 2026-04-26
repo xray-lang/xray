@@ -147,7 +147,7 @@ static int emit_leaf_cond_jump(
         int ra = xexpr_to_anyreg_readonly(ctx, compiler, &left_e);
         int k = (cond->type == AST_BINARY_NE) ? 1 : 0;
         k ^= k_extra;
-        emit_abc(compiler->emitter, OP_ISNULL, ra, k, 0);
+        xemit_isnull(compiler->emitter, ra, k);
         return emit_jump(compiler->emitter, OP_JMP);
     }
 
@@ -162,14 +162,14 @@ static int emit_leaf_cond_jump(
 
         int k = k_extra;
         if (cond->type == AST_BINARY_NE) k ^= 1;
-        emit_abc(compiler->emitter, OP_EQ, ra, rb, k);
+        xemit_eq(compiler->emitter, ra, rb, k);
         return emit_jump(compiler->emitter, OP_JMP);
     }
 
     // Generic: compile expression to register, then TEST + JMP
     XrExprDesc e = xr_compile_expr(ctx, compiler, cond);
     int reg = xexpr_to_anyreg(ctx, compiler, &e);
-    emit_abc(compiler->emitter, OP_TEST, reg, 0, k_extra);
+    xemit_test(compiler->emitter, reg, k_extra);
     return emit_jump(compiler->emitter, OP_JMP);
 }
 
@@ -279,7 +279,7 @@ void compile_while(XrCompilerContext *ctx, XrCompiler *compiler, WhileStmtNode *
          *   - k=0: if (is_null) != 0 then skip, else execute JMP to exit
          */
         int k = (cond->type == AST_BINARY_NE) ? 1 : 0;
-        emit_abc(compiler->emitter, OP_ISNULL, ra, k, 0);
+        xemit_isnull(compiler->emitter, ra, k);
         
         exit_jump = emit_jump(compiler->emitter, OP_JMP);
         
@@ -414,7 +414,7 @@ void compile_while(XrCompilerContext *ctx, XrCompiler *compiler, WhileStmtNode *
             // while(true) optimization: condition check executes only once
             XrExprDesc cond_expr = xr_compile_expr(ctx, compiler, cond);
             int cond_reg = xexpr_to_anyreg(ctx, compiler, &cond_expr);
-            emit_abc(compiler->emitter, OP_TEST, cond_reg, 0, 0);
+            xemit_test(compiler->emitter, cond_reg, 0);
             exit_jump = emit_jump(compiler->emitter, OP_JMP);
             
             // loop_start set after condition check, before loop body
@@ -425,7 +425,7 @@ void compile_while(XrCompilerContext *ctx, XrCompiler *compiler, WhileStmtNode *
             
             XrExprDesc cond_expr = xr_compile_expr(ctx, compiler, cond);
             int cond_reg = xexpr_to_anyreg(ctx, compiler, &cond_expr);
-            emit_abc(compiler->emitter, OP_TEST, cond_reg, 0, 0);
+            xemit_test(compiler->emitter, cond_reg, 0);
             exit_jump = emit_jump(compiler->emitter, OP_JMP);
         }
     }

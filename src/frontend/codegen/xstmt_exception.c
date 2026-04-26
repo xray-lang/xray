@@ -55,7 +55,7 @@ void compile_try_catch(XrCompilerContext *ctx, XrCompiler *compiler, TryCatchNod
     
     // Emit finally offset (placeholder)
     int finally_placeholder = PROTO_CODE_COUNT(compiler->proto);
-    emit_abc(compiler->emitter, OP_NOP, 0, 0, 0);
+    xemit_nop(compiler->emitter, 0, 0, 0);
     
     // 2. Compile try block
     scope_begin(compiler);
@@ -92,7 +92,7 @@ void compile_try_catch(XrCompilerContext *ctx, XrCompiler *compiler, TryCatchNod
         }
         
         // Emit OP_CATCH instruction
-        emit_abc(compiler->emitter, OP_CATCH, catch_var_reg, 0, 0);
+        xemit_catch(compiler->emitter, catch_var_reg);
         
         // Compile catch block content
         if (node->catch_body->type == AST_BLOCK) {
@@ -116,7 +116,7 @@ void compile_try_catch(XrCompilerContext *ctx, XrCompiler *compiler, TryCatchNod
         patch_jump(compiler->emitter, end_jump, -1);
         
         // Emit OP_FINALLY instruction
-        emit_abc(compiler->emitter, OP_FINALLY, 0, 0, 0);
+        xemit_finally(compiler->emitter);
         
         // Compile finally block content
         scope_begin(compiler);
@@ -133,7 +133,7 @@ void compile_try_catch(XrCompilerContext *ctx, XrCompiler *compiler, TryCatchNod
     }
     
     // 7. Emit OP_END_TRY
-    emit_abc(compiler->emitter, OP_END_TRY, 0, 0, 0);
+    xemit_end_try(compiler->emitter);
 }
 
 // ========== Throw Statement ==========
@@ -152,7 +152,7 @@ void compile_throw(XrCompilerContext *ctx, XrCompiler *compiler, ThrowStmtNode *
     int expr_reg = xexpr_to_anyreg(ctx, compiler, &expr);
     
     // Emit OP_THROW instruction
-    emit_abc(compiler->emitter, OP_THROW, expr_reg, 0, 0);
+    xemit_throw(compiler->emitter, expr_reg);
     
     reg_free(compiler, expr_reg);
 }

@@ -126,8 +126,8 @@ void compile_interface(XrCompilerContext *ctx, XrCompiler *compiler, InterfaceDe
     
     // 6. Generate code: load interface constant to register, then store to shared
     int iface_reg = reg_alloc(ctx, compiler);
-    EMIT_ABX(ctx, compiler, OP_LOADK, iface_reg, iface_const_idx);
-    EMIT_ABX(ctx, compiler, OP_SETSHARED, iface_reg, shared_index);
+    xemit_loadk((compiler)->emitter, iface_reg, iface_const_idx);
+    xemit_setshared((compiler)->emitter, iface_reg, shared_index);
     reg_free(compiler, iface_reg);
 }
 

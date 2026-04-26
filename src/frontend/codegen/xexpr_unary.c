@@ -86,7 +86,7 @@ static int compile_unary_internal(XrCompilerContext *ctx, XrCompiler *compiler, 
                 // Folding successful! Load constant
                 int dst = reg_alloc(ctx, compiler);
                 int kidx = xr_vm_proto_add_constant(compiler->proto, result);
-                emit_abx(compiler->emitter, OP_LOADK, dst, kidx);
+                xemit_loadk(compiler->emitter, dst, kidx);
                 xreg_set_freereg(compiler->regalloc, dst + 1);
                 return dst;
             }

@@ -53,7 +53,7 @@ XrExprDesc compile_literal(XrCompilerContext *ctx, XrCompiler *compiler, Literal
     switch (node->kind) {
         case LITERAL_KIND_NULL:
             // null constant: A=0 pending relocation
-            pc = emit_abc(compiler->emitter, OP_LOADNULL, 0, 0, 0);
+            pc = xemit_loadnull(compiler->emitter, 0);
             e.kind = XEXPR_RELOC;
             e.u.pc = pc;
             break;
@@ -61,9 +61,9 @@ XrExprDesc compile_literal(XrCompilerContext *ctx, XrCompiler *compiler, Literal
         case LITERAL_KIND_BOOL:
             // boolean constant: A=0 pending relocation
             if (node->raw_value.bool_val) {
-                pc = emit_abc(compiler->emitter, OP_LOADTRUE, 0, 0, 0);
+                pc = xemit_loadtrue(compiler->emitter, 0);
             } else {
-                pc = emit_abc(compiler->emitter, OP_LOADFALSE, 0, 0, 0);
+                pc = xemit_loadfalse(compiler->emitter, 0);
             }
             e.kind = XEXPR_RELOC;
             e.u.pc = pc;
@@ -75,14 +75,14 @@ XrExprDesc compile_literal(XrCompilerContext *ctx, XrCompiler *compiler, Literal
 
             if (ival >= -MAXARG_sBx && ival <= MAXARG_sBx) {
                 // Small integer: LOADI (AsBx format)
-                pc = emit_asbx(compiler->emitter, OP_LOADI, 0, (int)ival);
+                pc = xemit_loadi(compiler->emitter, 0, (int)ival);
                 e.kind = XEXPR_RELOC;
                 e.u.pc = pc;
             } else {
                 // Large integer: constant table (full 64-bit range)
                 XrValue val = xr_int(ival);
                 int kidx = xr_vm_proto_add_constant(compiler->proto, val);
-                pc = emit_abx(compiler->emitter, OP_LOADK, 0, kidx);
+                pc = xemit_loadk(compiler->emitter, 0, kidx);
                 e.kind = XEXPR_RELOC;
                 e.u.pc = pc;
             }
@@ -94,7 +94,7 @@ XrExprDesc compile_literal(XrCompilerContext *ctx, XrCompiler *compiler, Literal
             // float: A=0 pending relocation
             XrValue val = xr_float(node->raw_value.float_val);
             int kidx = xr_vm_proto_add_constant(compiler->proto, val);
-            pc = emit_abx(compiler->emitter, OP_LOADK, 0, kidx);
+            pc = xemit_loadk(compiler->emitter, 0, kidx);
             e.kind = XEXPR_RELOC;
             e.u.pc = pc;
             e.compile_type = xr_type_new_float(NULL);
@@ -107,7 +107,7 @@ XrExprDesc compile_literal(XrCompilerContext *ctx, XrCompiler *compiler, Literal
             XrBigInt *bigint = xr_bigint_from_string_on_gc(xr_isolate_get_gc(ctx->X), str);
             XrValue val = XR_FROM_PTR(bigint);
             int kidx = xr_vm_proto_add_constant(compiler->proto, val);
-            pc = emit_abx(compiler->emitter, OP_LOADK, 0, kidx);
+            pc = xemit_loadk(compiler->emitter, 0, kidx);
             e.kind = XEXPR_RELOC;
             e.u.pc = pc;
             break;
@@ -123,7 +123,7 @@ XrExprDesc compile_literal(XrCompilerContext *ctx, XrCompiler *compiler, Literal
             XrString *xstr = xr_compile_time_intern(ctx->X, str, strlen(str));
             XrValue val = xr_string_value(xstr);
             int kidx = xr_vm_proto_add_constant(compiler->proto, val);
-            pc = emit_abx(compiler->emitter, OP_LOADK, 0, kidx);
+            pc = xemit_loadk(compiler->emitter, 0, kidx);
             e.kind = XEXPR_RELOC;
             e.u.pc = pc;
             e.compile_type = xr_type_new_string(NULL);
@@ -148,7 +148,7 @@ XrExprDesc compile_literal(XrCompilerContext *ctx, XrCompiler *compiler, Literal
             int pattern_idx = xr_vm_proto_add_constant(compiler->proto, xr_string_value(pattern_str));
             int flags_idx = xr_vm_proto_add_constant(compiler->proto, xr_string_value(flags_str));
 
-            pc = emit_abc(compiler->emitter, OP_REGEX_COMPILE, 0, pattern_idx, flags_idx);
+            pc = xemit_regex_compile(compiler->emitter, 0, pattern_idx, flags_idx);
             e.kind = XEXPR_RELOC;
             e.u.pc = pc;
             break;

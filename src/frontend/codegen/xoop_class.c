@@ -119,8 +119,8 @@ static int compile_method_and_get_index(XrCompilerContext *ctx, XrCompiler *comp
     // Compile method body
     if (method->is_abstract) {
         // Abstract method: generate error instruction
-        EMIT_ABC(ctx, &method_compiler, OP_ABSTRACT_ERROR, 0, 0, 0);
-        EMIT_ABC(ctx, &method_compiler, OP_RETURN, 0, 0, 0);
+        xemit_abstract_error((&method_compiler)->emitter);
+        xemit_return((&method_compiler)->emitter, 0, 0);
     } else if (method->body != NULL) {
         // Constructor: auto-insert super() and compile field defaults (before method body)
         if ((method->is_constructor || strcmp(method->name, XR_KEYWORD_CONSTRUCTOR) == 0) &&
@@ -139,12 +139,12 @@ static int compile_method_and_get_index(XrCompilerContext *ctx, XrCompiler *comp
                     // Layout: R[base]=result, R[base+1]=this, no args
                     int base = xreg_get_freereg(method_compiler.regalloc);
                     xreg_set_freereg(method_compiler.regalloc, base + 2);
-                    EMIT_ABC(ctx, &method_compiler, OP_MOVE, base + 1, 0, 0);
+                    xemit_move((&method_compiler)->emitter, base + 1, 0);
                     XrString *ctor_str = xr_compile_time_intern(
                         ctx->X, XR_KEYWORD_CONSTRUCTOR, strlen(XR_KEYWORD_CONSTRUCTOR));
                     int ctor_const = xr_vm_proto_add_constant(
                         method_compiler.proto, xr_string_value(ctor_str));
-                    EMIT_ABC(ctx, &method_compiler, OP_SUPERINVOKE, base, ctor_const, 0);
+                    xemit_superinvoke((&method_compiler)->emitter, base, ctor_const, 0);
                     xreg_set_freereg(method_compiler.regalloc,
                         xreg_get_local_end(method_compiler.regalloc));
                 }
@@ -186,12 +186,12 @@ static int compile_method_and_get_index(XrCompilerContext *ctx, XrCompiler *comp
 
                 if (field_idx >= 0) {
                     // Use optimized OP_SETFIELD instruction: R[A].fields[B] = R[C]
-                    EMIT_ABC(ctx, &method_compiler, OP_SETFIELD, 0, field_idx, value_reg);
+                    xemit_setfield((&method_compiler)->emitter, 0, field_idx, value_reg);
                 } else {
                     // Fallback: use OP_SETPROP with per-function symbol table
                     int global_sym = xr_symbol_register_in_table((XrSymbolTable*)xr_isolate_get_symbol_table(ctx->X), field->name);
                     int local_sym = xr_proto_add_symbol(method_compiler.proto, global_sym);
-                    EMIT_ABC(ctx, &method_compiler, OP_SETPROP, 0, local_sym, value_reg);
+                    xemit_setprop((&method_compiler)->emitter, 0, local_sym, value_reg);
                 }
 
                 reg_free(&method_compiler, value_reg);
@@ -235,15 +235,13 @@ static int compile_method_and_get_index(XrCompilerContext *ctx, XrCompiler *comp
                             int sz2 = (8 + ci2->struct_layout->total_size + 15) & ~15;
                             int slot2 = method_compiler.struct_area_offset / 16;
                             method_compiler.struct_area_offset += sz2;
-                            EMIT_ABC(ctx, &method_compiler, OP_STRUCT_COPY,
-                                     plocal->reg, plocal->reg, slot2);
+                            xemit_struct_copy((&method_compiler)->emitter, plocal->reg, plocal->reg, slot2);
                             used_sc = true;
                         }
                     }
                 }
                 if (!used_sc)
-                    EMIT_ABC(ctx, &method_compiler, OP_COPY,
-                             plocal->reg, plocal->reg, 0);
+                    xemit_copy((&method_compiler)->emitter, plocal->reg, plocal->reg);
             }
         }
 
@@ -252,7 +250,7 @@ static int compile_method_and_get_index(XrCompilerContext *ctx, XrCompiler *comp
 
         // Constructor auto-returns this
         if (method->is_constructor || strcmp(method->name, XR_KEYWORD_CONSTRUCTOR) == 0) {
-            EMIT_ABC(ctx, &method_compiler, OP_RETURN, 0, 1, 0);
+            xemit_return((&method_compiler)->emitter, 0, 1);
         }
     }
 
@@ -269,7 +267,7 @@ static int compile_method_and_get_index(XrCompilerContext *ctx, XrCompiler *comp
     // Create closure
     *closure_reg = reg_alloc(ctx, compiler);
     emit_ctx_sync_before_closure(ctx, compiler);
-    EMIT_ABX(ctx, compiler, OP_CLOSURE, *closure_reg, proto_idx);
+    xemit_closure((compiler)->emitter, *closure_reg, proto_idx);
 
     // Restore context
     ctx->current_operator = old_operator;
@@ -713,19 +711,19 @@ static void compile_class_with_descriptor(
 
             XrLocalInfo *mlocal = compiler_get_local_by_name(compiler, node->super_module);
             if (mlocal) {
-                EMIT_ABC(ctx, compiler, OP_MOVE, class_reg, mlocal->reg, 0);
+                xemit_move((compiler)->emitter, class_reg, mlocal->reg);
             } else {
                 int upvalue_idx = scope_resolve_upvalue(ctx, compiler, module_name);
                 if (upvalue_idx >= 0) {
-                    emit_abc(compiler->emitter, OP_UPVAL_GET, class_reg, upvalue_idx, 0);
+                    xemit_upval_get(compiler->emitter, class_reg, upvalue_idx, 0);
                 } else {
                     int si = shared_get_in_scope(ctx, compiler, module_name);
                     if (si >= 0) {
-                        EMIT_ABX(ctx, compiler, OP_GETSHARED, class_reg, si);
+                        xemit_getshared((compiler)->emitter, class_reg, si);
                     } else {
                         int gi = builtin_get(ctx, module_name);
                         if (gi >= 0) {
-                            EMIT_ABX(ctx, compiler, OP_GETBUILTIN, class_reg, gi);
+                            xemit_getbuiltin((compiler)->emitter, class_reg, gi);
                         }
                     }
                 }
@@ -734,7 +732,7 @@ static void compile_class_with_descriptor(
             int global_sym = xr_symbol_register_in_table(
                 (XrSymbolTable*)xr_isolate_get_symbol_table(ctx->X), node->super_name);
             int local_sym = xr_proto_add_symbol(compiler->proto, global_sym);
-            EMIT_ABC(ctx, compiler, OP_GETPROP, class_reg, class_reg, local_sym);
+            xemit_getprop((compiler)->emitter, class_reg, class_reg, local_sym);
             super_via_reg = true;
         } else {
             // Simple form: extends Class — only local/upvalue parents
@@ -744,12 +742,12 @@ static void compile_class_with_descriptor(
             XrLocalInfo *slocal = compiler_get_local_by_name(compiler, node->super_name);
 
             if (slocal) {
-                EMIT_ABC(ctx, compiler, OP_MOVE, class_reg, slocal->reg, 0);
+                xemit_move((compiler)->emitter, class_reg, slocal->reg);
                 super_via_reg = true;
             } else {
                 int upvalue_idx = scope_resolve_upvalue(ctx, compiler, super_name);
                 if (upvalue_idx >= 0) {
-                    emit_abc(compiler->emitter, OP_UPVAL_GET, class_reg, upvalue_idx, 0);
+                    xemit_upval_get(compiler->emitter, class_reg, upvalue_idx, 0);
                     super_via_reg = true;
                 }
                 // Shared/builtin parents: leave class_reg uninitialised
@@ -762,12 +760,12 @@ static void compile_class_with_descriptor(
     //     non-class sentinel so R[A] does not leak a stale class from
     //     an earlier instruction into the super-override path.
     if (!super_via_reg) {
-        EMIT_ABC(ctx, compiler, OP_LOADNULL, class_reg, 0, 0);
+        xemit_loadnull((compiler)->emitter, class_reg);
     }
 
     // 6. Create the class. R[A] is consumed as super-override input and
     //    then overwritten with the freshly built class.
-    EMIT_ABX(ctx, compiler, OP_CLASS_CREATE_FROM_DESCRIPTOR, class_reg, desc_idx);
+    xemit_class_create_from_descriptor((compiler)->emitter, class_reg, desc_idx);
 
     /*
      * 7. Store class definition
@@ -781,23 +779,23 @@ static void compile_class_with_descriptor(
     if (is_inner_class) {
         // Inner class: move to pre-defined local (defined before method compilation
         // so static methods access the class via upvalue, not shared)
-        EMIT_ABC(ctx, compiler, OP_MOVE, inner_class_local->reg, class_reg, 0);
+        xemit_move((compiler)->emitter, inner_class_local->reg, class_reg);
         reg_free(compiler, class_reg);
         class_reg = inner_class_local->reg;
     } else if (is_repl_top_level(ctx, compiler)) {
         // REPL: store in shared variable for cross-input persistence
-        EMIT_ABX(ctx, compiler, OP_SETSHARED, class_reg, class_global_idx);
+        xemit_setshared((compiler)->emitter, class_reg, class_global_idx);
     } else if (is_module_level && !ctx->repl_mode) {
         // Module-level: local + shared (test runner and inner functions access via OP_GETSHARED)
         XrLocalInfo *local = scope_define_local(ctx, compiler, class_name_str);
         local->is_const = true;
-        EMIT_ABC(ctx, compiler, OP_MOVE, local->reg, class_reg, 0);
-        EMIT_ABX(ctx, compiler, OP_SETSHARED, class_reg, class_global_idx);
+        xemit_move((compiler)->emitter, local->reg, class_reg);
+        xemit_setshared((compiler)->emitter, class_reg, class_global_idx);
         reg_free(compiler, class_reg);
         class_reg = local->reg;
     } else {
         // Other non-module top-level: use shared variable
-        EMIT_ABX(ctx, compiler, OP_SETSHARED, class_reg, class_global_idx);
+        xemit_setshared((compiler)->emitter, class_reg, class_global_idx);
     }
 
     // 9. Call static constructor (if any)
@@ -807,7 +805,7 @@ static void compile_class_with_descriptor(
          * At this point class is already set as global, GETGLOBAL in static constructor works normally
          * Parameters: A=class register, B=descriptor constant index, C=unused
          */
-        EMIT_ABC(ctx, compiler, OP_CLINIT_CALL, class_reg, desc_idx, 0);
+        xemit_clinit_call((compiler)->emitter, class_reg);
     }
 
     // 10. Cleanup

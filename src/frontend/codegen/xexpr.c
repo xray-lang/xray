@@ -57,7 +57,7 @@ int compile_range(XrCompilerContext *ctx, XrCompiler *compiler, RangeNode *node)
     int result_reg = reg_alloc(ctx, compiler);
 
     // OP_NEWRANGE: R[result] = Range(R[start], R[end])
-    emit_abc(compiler->emitter, OP_NEWRANGE, result_reg, start_reg, end_reg);
+    xemit_newrange(compiler->emitter, result_reg, start_reg, end_reg);
 
     // Reclaim temporary registers
     xreg_set_freereg(compiler->regalloc, result_reg + 1);
@@ -266,7 +266,7 @@ XrExprDesc xr_compile_expr(XrCompilerContext *ctx, XrCompiler *c, AstNode *node)
             if (upvalue >= 0) {
                 int pc;
                 // 'this' is always const (immutable receiver), direct read
-                pc = emit_abc(c->emitter, OP_UPVAL_GET, 0, upvalue, 0);
+                pc = xemit_upval_get(c->emitter, 0, upvalue, 0);
                 xexpr_init(&e, XEXPR_RELOC, 0);
                 e.u.pc = pc;
                 break;
@@ -300,7 +300,7 @@ XrExprDesc xr_compile_expr(XrCompilerContext *ctx, XrCompiler *c, AstNode *node)
             xreg_reserve(c->regalloc, 2);
 
             // R[base+1] = this (copy from R[0])
-            emit_abc(c->emitter, OP_MOVE, call_base + 1, 0, 0);
+            xemit_move(c->emitter, call_base + 1, 0);
             xreg_set_freereg(c->regalloc, call_base + 2);
 
             /*
@@ -327,7 +327,7 @@ XrExprDesc xr_compile_expr(XrCompilerContext *ctx, XrCompiler *c, AstNode *node)
             int method_const = xr_vm_proto_add_constant(c->proto, xr_string_value(method_str));
 
             // Generate OP_SUPERINVOKE: A=call_base, B=method name constant, C=arg count
-            emit_abc(c->emitter, OP_SUPERINVOKE, call_base, method_const, arg_count);
+            xemit_superinvoke(c->emitter, call_base, method_const, arg_count);
 
             // Result in R[call_base]
             xexpr_init(&e, XEXPR_TEMP, call_base);
@@ -367,7 +367,7 @@ XrExprDesc xr_compile_expr(XrCompilerContext *ctx, XrCompiler *c, AstNode *node)
                 int proto_idx = xr_vm_proto_add_proto(c->proto, fn_proto);
                 int result_reg = reg_alloc(ctx, c);
                 emit_ctx_sync_before_closure(ctx, c);
-                emit_abx(c->emitter, OP_CLOSURE, result_reg, proto_idx);
+                xemit_closure(c->emitter, result_reg, proto_idx);
                 xexpr_init(&e, XEXPR_TEMP, result_reg);
             } else {
                 int result_reg = reg_alloc(ctx, c);
@@ -393,7 +393,7 @@ XrExprDesc xr_compile_expr(XrCompilerContext *ctx, XrCompiler *c, AstNode *node)
                     } else {
                         xr_compile_statement(ctx, c, stmt);
                         result_reg = reg_alloc(ctx, c);
-                        emit_abc(c->emitter, OP_LOADNULL, result_reg, 0, 0);
+                        xemit_loadnull(c->emitter, result_reg);
                     }
                 } else {
                     xr_compile_statement(ctx, c, stmt);
@@ -405,7 +405,7 @@ XrExprDesc xr_compile_expr(XrCompilerContext *ctx, XrCompiler *c, AstNode *node)
             int final_reg = reg_alloc(ctx, c);
 
             if (result_reg == -1) {
-                emit_abc(c->emitter, OP_LOADNULL, final_reg, 0, 0);
+                xemit_loadnull(c->emitter, final_reg);
             } else {
                 emit_move(c->emitter, final_reg, result_reg);
             }
@@ -459,7 +459,7 @@ XrExprDesc xr_compile_expr(XrCompilerContext *ctx, XrCompiler *c, AstNode *node)
                 int result_reg = reg_alloc(ctx, c);
                 XrString *empty = xr_compile_time_intern(ctx->X, "", 0);
                 int const_idx = xr_vm_proto_add_constant(c->proto, xr_string_value(empty));
-                emit_abx(c->emitter, OP_LOADK, result_reg, const_idx);
+                xemit_loadk(c->emitter, result_reg, const_idx);
                 xexpr_init(&e, XEXPR_TEMP, result_reg);
                 break;
             }
@@ -472,18 +472,18 @@ XrExprDesc xr_compile_expr(XrCompilerContext *ctx, XrCompiler *c, AstNode *node)
 
             // Use STRBUF sequence for template strings (implicit type conversion)
             int buf_reg = reg_alloc(ctx, c);
-            emit_abc(c->emitter, OP_STRBUF_NEW, buf_reg, 0, 0);
+            xemit_strbuf_new(c->emitter, buf_reg);
 
             for (int i = 0; i < tmpl->part_count; i++) {
                 XrExprDesc part = xr_compile_expr(ctx, c, tmpl->parts[i]);
                 int result = xexpr_to_anyreg(ctx, c, &part);
-                emit_abc(c->emitter, OP_STRBUF_APPEND, buf_reg, result, 0);
+                xemit_strbuf_append(c->emitter, buf_reg, result);
                 if (result != buf_reg) {
                     reg_free(c, result);
                 }
             }
 
-            emit_abc(c->emitter, OP_STRBUF_FINISH, buf_reg, 0, 0);
+            xemit_strbuf_finish(c->emitter, buf_reg);
             xexpr_init(&e, XEXPR_TEMP, buf_reg);
             break;
         }

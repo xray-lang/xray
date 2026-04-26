@@ -68,7 +68,7 @@ static void emit_ret_json_checktype(XrCompilerContext *ctx, XrCompiler *compiler
     int64_t mask = build_ret_checktype_mask(ret_type);
     if (mask != 0) {
         int tc = xr_vm_proto_add_constant(compiler->proto, xr_int(mask));
-        emit_abc(compiler->emitter, OP_CHECKTYPE, reg, tc, 0);
+        xemit_checktype(compiler->emitter, reg, tc);
     }
 }
 
@@ -285,7 +285,7 @@ void compile_if(XrCompilerContext *ctx, XrCompiler *compiler, IfStmtNode *node) 
             k = (cond_type == AST_BINARY_NE) ? 1 : 0;
 
             // Emit OP_ISNULL instruction and jump
-            emit_abc(compiler->emitter, OP_ISNULL, rb, k, 0);
+            xemit_isnull(compiler->emitter, rb, k);
             int else_jump = emit_jump(compiler->emitter, OP_JMP);
 
             // Compile then branch
@@ -366,7 +366,7 @@ void compile_if(XrCompilerContext *ctx, XrCompiler *compiler, IfStmtNode *node) 
         XrExprDesc cond_expr = xr_compile_expr(ctx, compiler, node->condition);
         int cond_reg = xexpr_to_anyreg(ctx, compiler, &cond_expr);
 
-        emit_abc(compiler->emitter, OP_TEST, cond_reg, 0, 0);
+        xemit_test(compiler->emitter, cond_reg, 0);
         int then_jump = emit_jump(compiler->emitter, OP_JMP);
         reg_free(compiler, cond_reg);
 

@@ -57,13 +57,13 @@ static int compile_enum_access_internal(XrCompilerContext *ctx, XrCompiler *comp
     // Load enum type object
     int enum_reg = reg_alloc(ctx, compiler);
     if (enum_shared_idx >= 0) {
-        emit_abx(compiler->emitter, OP_GETSHARED, enum_reg, enum_shared_idx);
+        xemit_getshared(compiler->emitter, enum_reg, enum_shared_idx);
     } else {
-        emit_abx(compiler->emitter, OP_GETBUILTIN, enum_reg, enum_global_idx);
+        xemit_getbuiltin(compiler->emitter, enum_reg, enum_global_idx);
     }
     
     // Access member
-    emit_abc(compiler->emitter, OP_MAP_GETK, result_reg, enum_reg, member_const_idx);
+    xemit_map_getk(compiler->emitter, result_reg, enum_reg, member_const_idx);
     
     // Set freereg = result_reg + 1, reclaim enum_reg
     xreg_set_freereg(compiler->regalloc, result_reg + 1);
@@ -101,9 +101,9 @@ static int compile_enum_convert_internal(XrCompilerContext *ctx, XrCompiler *com
     // Load enum type object
     int enum_reg = reg_alloc(ctx, compiler);
     if (enum_shared_idx >= 0) {
-        emit_abx(compiler->emitter, OP_GETSHARED, enum_reg, enum_shared_idx);
+        xemit_getshared(compiler->emitter, enum_reg, enum_shared_idx);
     } else {
-        emit_abx(compiler->emitter, OP_GETBUILTIN, enum_reg, enum_global_idx);
+        xemit_getbuiltin(compiler->emitter, enum_reg, enum_global_idx);
     }
     
     // Compile value expression
@@ -114,7 +114,7 @@ static int compile_enum_convert_internal(XrCompilerContext *ctx, XrCompiler *com
     int result_reg = reg_alloc(ctx, compiler);
     
     // Generate ENUM_CONVERT instruction
-    emit_abc(compiler->emitter, OP_ENUM_CONVERT, result_reg, enum_reg, value_reg);
+    xemit_enum_convert(compiler->emitter, result_reg, enum_reg, value_reg);
     
     // Free temporary registers
     reg_free(compiler, value_reg);
@@ -146,7 +146,7 @@ XrExprDesc compile_enum_index(XrCompilerContext *ctx, XrCompiler *compiler, Enum
     int result_reg = reg_alloc(ctx, compiler);
     
     // Emit OP_ENUM_ACCESS: R(a) = enum_type.members[R(c)]
-    emit_abc(compiler->emitter, OP_ENUM_ACCESS, result_reg, enum_reg, idx_reg);
+    xemit_enum_access(compiler->emitter, result_reg, enum_reg, idx_reg);
     
     // Free temporary registers
     reg_free(compiler, idx_reg);

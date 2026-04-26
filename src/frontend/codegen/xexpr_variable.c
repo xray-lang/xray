@@ -65,7 +65,7 @@ XrExprDesc compile_variable(XrCompilerContext *ctx, XrCompiler *compiler, Variab
             if (local_info->can_rematerialize) {
                 int temp = xreg_alloc_temp(compiler->regalloc);
                 // Regenerate constant value (faster than RELOAD)
-                emit_asbx(compiler->emitter, OP_LOADI, temp, (int)local_info->remat_value);
+                xemit_loadi(compiler->emitter, temp, (int)local_info->remat_value);
                 e.kind = XEXPR_TEMP;
                 e.reg = temp;
                 return e;
@@ -88,7 +88,7 @@ XrExprDesc compile_variable(XrCompilerContext *ctx, XrCompiler *compiler, Variab
                 case COMPTIME_FLOAT: {
                     XrValue val = xr_float(local_info->comptime.as.float_val);
                     int kidx = xr_vm_proto_add_constant(compiler->proto, val);
-                    int pc = emit_abx(compiler->emitter, OP_LOADK, 0, kidx);
+                    int pc = xemit_loadk(compiler->emitter, 0, kidx);
                     e.kind = XEXPR_RELOC;
                     e.u.pc = pc;
                     return e;
@@ -104,7 +104,7 @@ XrExprDesc compile_variable(XrCompilerContext *ctx, XrCompiler *compiler, Variab
         
         // Cellified variable: register holds a cell ref, deref to get value.
         if (local_info->is_cellified) {
-            int pc = emit_abc(compiler->emitter, OP_CELL_GET, 0, local_info->reg, 0);
+            int pc = xemit_cell_get(compiler->emitter, 0, local_info->reg);
             e.kind = XEXPR_RELOC;
             e.u.pc = pc;
             e.compile_type = local_info->compile_type;
@@ -134,7 +134,7 @@ XrExprDesc compile_variable(XrCompilerContext *ctx, XrCompiler *compiler, Variab
             return e;
         }
         
-        int pc = emit_abx(compiler->emitter, OP_GETSHARED, 0, shared_index);
+        int pc = xemit_getshared(compiler->emitter, 0, shared_index);
         e.kind = XEXPR_RELOC;
         e.u.pc = pc;
         return e;
@@ -148,11 +148,11 @@ XrExprDesc compile_variable(XrCompilerContext *ctx, XrCompiler *compiler, Variab
             case CONST_INT: {
                 int64_t value = const_entry->value.int_val;
                 if (value >= -MAXARG_sBx && value <= MAXARG_sBx) {
-                    pc = emit_asbx(compiler->emitter, OP_LOADI, 0, (int)value);
+                    pc = xemit_loadi(compiler->emitter, 0, (int)value);
                 } else {
                     XrValue val = xr_int(value);
                     int kidx = xr_vm_proto_add_constant(compiler->proto, val);
-                    pc = emit_abx(compiler->emitter, OP_LOADK, 0, kidx);
+                    pc = xemit_loadk(compiler->emitter, 0, kidx);
                 }
                 e.kind = XEXPR_RELOC;
                 e.u.pc = pc;
@@ -161,7 +161,7 @@ XrExprDesc compile_variable(XrCompilerContext *ctx, XrCompiler *compiler, Variab
             case CONST_FLOAT: {
                 XrValue val = xr_float(const_entry->value.float_val);
                 int kidx = xr_vm_proto_add_constant(compiler->proto, val);
-                pc = emit_abx(compiler->emitter, OP_LOADK, 0, kidx);
+                pc = xemit_loadk(compiler->emitter, 0, kidx);
                 e.kind = XEXPR_RELOC;
                 e.u.pc = pc;
                 return e;
@@ -169,7 +169,7 @@ XrExprDesc compile_variable(XrCompilerContext *ctx, XrCompiler *compiler, Variab
             case CONST_STRING: {
                 XrValue val = xr_string_value(const_entry->value.str_val);
                 int kidx = xr_vm_proto_add_constant(compiler->proto, val);
-                pc = emit_abx(compiler->emitter, OP_LOADK, 0, kidx);
+                pc = xemit_loadk(compiler->emitter, 0, kidx);
                 e.kind = XEXPR_RELOC;
                 e.u.pc = pc;
                 return e;
@@ -186,12 +186,12 @@ XrExprDesc compile_variable(XrCompilerContext *ctx, XrCompiler *compiler, Variab
         int pc;
         if (uv->is_const) {
             // const: upvals[j] holds the raw value
-            pc = emit_abc(compiler->emitter, OP_UPVAL_GET, 0, upvalue, 0);
+            pc = xemit_upval_get(compiler->emitter, 0, upvalue, 0);
         } else {
             // let: upvals[j] holds a cell ref, need UPVAL_GET + CELL_GET
             int tmp = reg_alloc(ctx, compiler);
-            emit_abc(compiler->emitter, OP_UPVAL_GET, tmp, upvalue, 0);
-            pc = emit_abc(compiler->emitter, OP_CELL_GET, 0, tmp, 0);
+            xemit_upval_get(compiler->emitter, tmp, upvalue, 0);
+            pc = xemit_cell_get(compiler->emitter, 0, tmp);
             reg_free(compiler, tmp);
         }
         e.kind = XEXPR_RELOC;
@@ -209,7 +209,7 @@ XrExprDesc compile_variable(XrCompilerContext *ctx, XrCompiler *compiler, Variab
     }
     
     // Global variable exists: generate GETGLOBAL, A=0 pending relocation
-    int pc = emit_abx(compiler->emitter, OP_GETBUILTIN, 0, global_index);
+    int pc = xemit_getbuiltin(compiler->emitter, 0, global_index);
     e.kind = XEXPR_RELOC;
     e.u.pc = pc;
     return e;

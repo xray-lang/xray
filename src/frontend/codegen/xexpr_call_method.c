@@ -86,7 +86,7 @@ int xr_compile_call_method(XrCompilerContext *ctx, XrCompiler *compiler,
             xreg_set_freereg(compiler->regalloc, first_arg_reg);
             compile_args_to_base(ctx, compiler, node->arguments,
                                  node->arg_count, first_arg_reg);
-            emit_abc(compiler->emitter, OP_LOOP_BACK, func_reg, node->arg_count, skip);
+            xemit_loop_back(compiler->emitter, func_reg, node->arg_count, skip);
             return -1;
         }
     }
@@ -103,7 +103,7 @@ int xr_compile_call_method(XrCompilerContext *ctx, XrCompiler *compiler,
             // Coro.stats()
             if (strcmp(member->name, "stats") == 0 && node->arg_count == 0) {
                 int result_reg = reg_alloc(ctx, compiler);
-                emit_abc(compiler->emitter, OP_CORO_CTRL, result_reg, 0, CORO_CTRL_STATS);
+                xemit_coro_ctrl(compiler->emitter, result_reg, 0, CORO_CTRL_STATS);
                 return result_reg;
             }
             // Coro.list() or Coro.list(limit, state)
@@ -114,23 +114,23 @@ int xr_compile_call_method(XrCompilerContext *ctx, XrCompiler *compiler,
                     limit_reg = xexpr_to_anyreg_readonly(ctx, compiler, &limit_desc);
                 } else {
                     limit_reg = reg_alloc(ctx, compiler);
-                    emit_asbx(compiler->emitter, OP_LOADI, limit_reg, 0);
+                    xemit_loadi(compiler->emitter, limit_reg, 0);
                 }
                 int result_reg = reg_alloc(ctx, compiler);
                 if (node->arg_count >= 2) {
                     XrExprDesc state_desc = xr_compile_expr(ctx, compiler, node->arguments[1]);
                     int state_reg = xexpr_to_anyreg_readonly(ctx, compiler, &state_desc);
-                    emit_abc(compiler->emitter, OP_MOVE, result_reg + 1, state_reg, 0);
+                    xemit_move(compiler->emitter, result_reg + 1, state_reg);
                 } else {
-                    emit_abc(compiler->emitter, OP_LOADNULL, result_reg + 1, 0, 0);
+                    xemit_loadnull(compiler->emitter, result_reg + 1);
                 }
-                emit_abc(compiler->emitter, OP_CORO_CTRL, result_reg, limit_reg, CORO_CTRL_LIST);
+                xemit_coro_ctrl(compiler->emitter, result_reg, limit_reg, CORO_CTRL_LIST);
                 return result_reg;
             }
             // Coro.deadlocks()
             if (strcmp(member->name, "deadlocks") == 0 && node->arg_count == 0) {
                 int result_reg = reg_alloc(ctx, compiler);
-                emit_abc(compiler->emitter, OP_CORO_CTRL, result_reg, 0, CORO_CTRL_DEADLOCKS);
+                xemit_coro_ctrl(compiler->emitter, result_reg, 0, CORO_CTRL_DEADLOCKS);
                 return result_reg;
             }
             // Coro.top(N, metric)
@@ -143,11 +143,11 @@ int xr_compile_call_method(XrCompilerContext *ctx, XrCompiler *compiler,
                 if (node->arg_count >= 2) {
                     XrExprDesc metric_desc = xr_compile_expr(ctx, compiler, node->arguments[1]);
                     int metric_reg = xexpr_to_anyreg_readonly(ctx, compiler, &metric_desc);
-                    emit_abc(compiler->emitter, OP_MOVE, result_reg + 1, metric_reg, 0);
+                    xemit_move(compiler->emitter, result_reg + 1, metric_reg);
                 } else {
-                    emit_abc(compiler->emitter, OP_LOADNULL, result_reg + 1, 0, 0);
+                    xemit_loadnull(compiler->emitter, result_reg + 1);
                 }
-                emit_abc(compiler->emitter, OP_CORO_CTRL, result_reg, n_reg, CORO_CTRL_TOP);
+                xemit_coro_ctrl(compiler->emitter, result_reg, n_reg, CORO_CTRL_TOP);
                 return result_reg;
             }
             // Coro.groupBy(field)
@@ -155,7 +155,7 @@ int xr_compile_call_method(XrCompilerContext *ctx, XrCompiler *compiler,
                 XrExprDesc field_desc = xr_compile_expr(ctx, compiler, node->arguments[0]);
                 int field_reg = xexpr_to_anyreg_readonly(ctx, compiler, &field_desc);
                 int result_reg = reg_alloc(ctx, compiler);
-                emit_abc(compiler->emitter, OP_CORO_CTRL, result_reg, field_reg, CORO_CTRL_GROUP_BY);
+                xemit_coro_ctrl(compiler->emitter, result_reg, field_reg, CORO_CTRL_GROUP_BY);
                 return result_reg;
             }
             // Coro.setLocal(key, value)
@@ -164,7 +164,7 @@ int xr_compile_call_method(XrCompilerContext *ctx, XrCompiler *compiler,
                 int key_reg = xexpr_to_anyreg_readonly(ctx, compiler, &key_desc);
                 XrExprDesc val_desc = xr_compile_expr(ctx, compiler, node->arguments[1]);
                 int val_reg = xexpr_to_anyreg_readonly(ctx, compiler, &val_desc);
-                emit_abc(compiler->emitter, OP_SET_LOCAL, key_reg, val_reg, 0);
+                xemit_set_local(compiler->emitter, key_reg, val_reg);
                 return -1;
             }
             // Coro.getLocal(key)
@@ -172,7 +172,7 @@ int xr_compile_call_method(XrCompilerContext *ctx, XrCompiler *compiler,
                 XrExprDesc key_desc = xr_compile_expr(ctx, compiler, node->arguments[0]);
                 int key_reg = xexpr_to_anyreg_readonly(ctx, compiler, &key_desc);
                 int result_reg = reg_alloc(ctx, compiler);
-                emit_abc(compiler->emitter, OP_GET_LOCAL, result_reg, key_reg, 0);
+                xemit_get_local(compiler->emitter, result_reg, key_reg);
                 return result_reg;
             }
             // Coro.setPriority(task, priority)
@@ -181,17 +181,17 @@ int xr_compile_call_method(XrCompilerContext *ctx, XrCompiler *compiler,
                 int task_reg = xexpr_to_anyreg_readonly(ctx, compiler, &task_desc);
                 XrExprDesc prio_desc = xr_compile_expr(ctx, compiler, node->arguments[1]);
                 int prio_reg = xexpr_to_anyreg_readonly(ctx, compiler, &prio_desc);
-                emit_abc(compiler->emitter, OP_SET_PRIORITY, task_reg, prio_reg, 0);
+                xemit_set_priority(compiler->emitter, task_reg, prio_reg);
                 return -1;
             }
             // Coro.lockThread()
             if (strcmp(member->name, "lockThread") == 0 && node->arg_count == 0) {
-                emit_abc(compiler->emitter, OP_LOCK_THREAD, 0, 0, 0);
+                xemit_lock_thread(compiler->emitter);
                 return -1;
             }
             // Coro.unlockThread()
             if (strcmp(member->name, "unlockThread") == 0 && node->arg_count == 0) {
-                emit_abc(compiler->emitter, OP_UNLOCK_THREAD, 0, 0, 0);
+                xemit_unlock_thread(compiler->emitter);
                 return -1;
             }
             // Coro.dump() or Coro.dump(limit)
@@ -200,9 +200,9 @@ int xr_compile_call_method(XrCompilerContext *ctx, XrCompiler *compiler,
                 if (node->arg_count == 1 && node->arguments[0]->type == AST_LITERAL_INT) {
                     limit = (int)node->arguments[0]->as.literal.raw_value.int_val;
                 }
-                emit_abc(compiler->emitter, OP_CORO_CTRL, limit, 0, CORO_CTRL_DUMP);
+                xemit_coro_ctrl(compiler->emitter, limit, 0, CORO_CTRL_DUMP);
                 int result_reg = reg_alloc(ctx, compiler);
-                emit_abc(compiler->emitter, OP_LOADNULL, result_reg, 0, 0);
+                xemit_loadnull(compiler->emitter, result_reg);
                 return result_reg;
             }
             // Coro.stalled() or Coro.stalled(timeout_ms)
@@ -213,10 +213,10 @@ int xr_compile_call_method(XrCompilerContext *ctx, XrCompiler *compiler,
                     timeout_reg = xexpr_to_anyreg_readonly(ctx, compiler, &timeout_desc);
                 } else {
                     timeout_reg = reg_alloc(ctx, compiler);
-                    emit_asbx(compiler->emitter, OP_LOADI, timeout_reg, 5000);
+                    xemit_loadi(compiler->emitter, timeout_reg, 5000);
                 }
                 int result_reg = reg_alloc(ctx, compiler);
-                emit_abc(compiler->emitter, OP_CORO_CTRL, result_reg, timeout_reg, CORO_CTRL_STALLED);
+                xemit_coro_ctrl(compiler->emitter, result_reg, timeout_reg, CORO_CTRL_STALLED);
                 return result_reg;
             }
             // Coro.whereis(name) -> bool
@@ -224,7 +224,7 @@ int xr_compile_call_method(XrCompilerContext *ctx, XrCompiler *compiler,
                 XrExprDesc name_desc = xr_compile_expr(ctx, compiler, node->arguments[0]);
                 int name_reg = xexpr_to_anyreg_readonly(ctx, compiler, &name_desc);
                 int result_reg = reg_alloc(ctx, compiler);
-                emit_abc(compiler->emitter, OP_CORO_CTRL, result_reg, name_reg, CORO_CTRL_WHEREIS);
+                xemit_coro_ctrl(compiler->emitter, result_reg, name_reg, CORO_CTRL_WHEREIS);
                 return result_reg;
             }
             // Coro.monitor(name) -> Channel
@@ -232,7 +232,7 @@ int xr_compile_call_method(XrCompilerContext *ctx, XrCompiler *compiler,
                 XrExprDesc name_desc = xr_compile_expr(ctx, compiler, node->arguments[0]);
                 int name_reg = xexpr_to_anyreg_readonly(ctx, compiler, &name_desc);
                 int result_reg = reg_alloc(ctx, compiler);
-                emit_abc(compiler->emitter, OP_CORO_CTRL, result_reg, name_reg, CORO_CTRL_MONITOR);
+                xemit_coro_ctrl(compiler->emitter, result_reg, name_reg, CORO_CTRL_MONITOR);
                 return result_reg;
             }
             // Coro.demonitor(name, channel)
@@ -243,14 +243,14 @@ int xr_compile_call_method(XrCompilerContext *ctx, XrCompiler *compiler,
                 int ch_reg = xexpr_to_anyreg_readonly(ctx, compiler, &ch_desc);
                 int result_reg = reg_alloc(ctx, compiler);
                 // A=result(unused), B=name_reg, C=DEMONITOR; channel in R[A+1]
-                emit_abc(compiler->emitter, OP_MOVE, result_reg + 1, ch_reg, 0);
-                emit_abc(compiler->emitter, OP_CORO_CTRL, result_reg, name_reg, CORO_CTRL_DEMONITOR);
+                xemit_move(compiler->emitter, result_reg + 1, ch_reg);
+                xemit_coro_ctrl(compiler->emitter, result_reg, name_reg, CORO_CTRL_DEMONITOR);
                 return result_reg;
             }
             // Coro.self() -> string|null
             if (strcmp(member->name, "self") == 0 && node->arg_count == 0) {
                 int result_reg = reg_alloc(ctx, compiler);
-                emit_abc(compiler->emitter, OP_CORO_CTRL, result_reg, 0, CORO_CTRL_SELF);
+                xemit_coro_ctrl(compiler->emitter, result_reg, 0, CORO_CTRL_SELF);
                 return result_reg;
             }
             // Coro.kill(name) or Coro.kill(name, reason) -> bool
@@ -259,7 +259,7 @@ int xr_compile_call_method(XrCompilerContext *ctx, XrCompiler *compiler,
                 int result_reg = reg_alloc(ctx, compiler);
                 XrExprDesc name_desc = xr_compile_expr(ctx, compiler, node->arguments[0]);
                 int name_reg = xexpr_to_anyreg(ctx, compiler, &name_desc);
-                emit_abc(compiler->emitter, OP_CORO_CTRL, result_reg, name_reg, CORO_CTRL_KILL);
+                xemit_coro_ctrl(compiler->emitter, result_reg, name_reg, CORO_CTRL_KILL);
                 return result_reg;
             }
         }
@@ -333,7 +333,7 @@ int xr_compile_call_method(XrCompilerContext *ctx, XrCompiler *compiler,
             int arg_reg = xexpr_to_anyreg(ctx, compiler, &arg_desc);
 
             // Emit OP_STRBUF_APPEND A B: strbuf(R[A]).append(R[B])
-            emit_abc(compiler->emitter, OP_STRBUF_APPEND, sb_reg, arg_reg, 0);
+            xemit_strbuf_append(compiler->emitter, sb_reg, arg_reg);
 
             // StringBuilder.append() returns this, so return sb_reg
             return sb_reg;
@@ -370,7 +370,7 @@ int xr_compile_call_method(XrCompilerContext *ctx, XrCompiler *compiler,
             int sb_reg = xexpr_to_anyreg(ctx, compiler, &obj_desc);
 
             // Emit OP_STRBUF_FINISH A: R[A] = strbuf(R[A]).to_string()
-            emit_abc(compiler->emitter, OP_STRBUF_FINISH, sb_reg, 0, 0);
+            xemit_strbuf_finish(compiler->emitter, sb_reg);
 
             return sb_reg;
         }
@@ -445,7 +445,7 @@ int xr_compile_call_method(XrCompilerContext *ctx, XrCompiler *compiler,
         xreg_set_freereg(compiler->regalloc, result_reg + 1);
 
         // 5. Emit OP_SUBSTRING result str_reg start_reg
-        emit_abc(compiler->emitter, OP_SUBSTRING, result_reg, str_reg, start_reg);
+        xemit_substring(compiler->emitter, result_reg, str_reg, start_reg);
 
         return result_reg;
     }
@@ -487,7 +487,7 @@ int xr_compile_call_method(XrCompilerContext *ctx, XrCompiler *compiler,
             int key_reg = xexpr_to_anyreg_readonly(ctx, compiler, &key_desc);
 
             // Emit OP_MAP_INCREMENT A B: map(R[A])[R[B]]++
-            emit_abc(compiler->emitter, OP_MAP_INCREMENT, map_reg, key_reg, 0);
+            xemit_map_increment(compiler->emitter, map_reg, key_reg);
 
             // increment has no return value
             return -1;
@@ -533,7 +533,7 @@ int xr_compile_call_method(XrCompilerContext *ctx, XrCompiler *compiler,
                 int key_const = xr_vm_proto_add_constant(compiler->proto, xr_string_value(key_intern));
 
                 int result_reg = reg_alloc(ctx, compiler);
-                emit_abc(compiler->emitter, OP_MAP_GETK, result_reg, map_reg, key_const);
+                xemit_map_getk(compiler->emitter, result_reg, map_reg, key_const);
                 return result_reg;
             } else {
                 // Dynamic key: use MAP_GET
@@ -541,7 +541,7 @@ int xr_compile_call_method(XrCompilerContext *ctx, XrCompiler *compiler,
                 int key_reg = xexpr_to_anyreg_readonly(ctx, compiler, &key_desc);
 
                 int result_reg = reg_alloc(ctx, compiler);
-                emit_abc(compiler->emitter, OP_MAP_GET, result_reg, map_reg, key_reg);
+                xemit_map_get(compiler->emitter, result_reg, map_reg, key_reg);
                 return result_reg;
             }
         }
@@ -589,7 +589,7 @@ int xr_compile_call_method(XrCompilerContext *ctx, XrCompiler *compiler,
                 XrExprDesc val_desc = xr_compile_expr(ctx, compiler, node->arguments[1]);
                 int val_reg = xexpr_to_anyreg(ctx, compiler, &val_desc);
 
-                emit_abc(compiler->emitter, OP_MAP_SETK, map_reg, key_const, val_reg);
+                xemit_map_setk(compiler->emitter, map_reg, key_const, val_reg);
                 return map_reg;  // Return map for chaining
             } else {
                 // Dynamic key: use MAP_SET
@@ -600,7 +600,7 @@ int xr_compile_call_method(XrCompilerContext *ctx, XrCompiler *compiler,
                 XrExprDesc val_desc = xr_compile_expr(ctx, compiler, node->arguments[1]);
                 int val_reg = xexpr_to_anyreg(ctx, compiler, &val_desc);
 
-                emit_abc(compiler->emitter, OP_MAP_SET, map_reg, key_reg, val_reg);
+                xemit_map_set(compiler->emitter, map_reg, key_reg, val_reg);
                 return map_reg;  // Return map for chaining
             }
         }
@@ -657,12 +657,12 @@ int xr_compile_call_method(XrCompilerContext *ctx, XrCompiler *compiler,
                 // Typed array: OP_TARRAY_PUSH (raw input, no BOX)
                 XrExprDesc item_desc = xr_compile_expr(ctx, compiler, node->arguments[0]);
                 int item_reg = xexpr_to_anyreg_readonly(ctx, compiler, &item_desc);
-                emit_abc(compiler->emitter, OP_TARRAY_PUSH, arr_reg, item_reg, 0);
+                xemit_tarray_push(compiler->emitter, arr_reg, item_reg);
             } else {
                 // Generic array: OP_ARRAY_PUSH (tagged input)
                 XrExprDesc item_desc = xr_compile_expr(ctx, compiler, node->arguments[0]);
                 int item_reg = xexpr_to_anyreg(ctx, compiler, &item_desc);
-                emit_abc(compiler->emitter, OP_ARRAY_PUSH, arr_reg, item_reg, 0);
+                xemit_array_push(compiler->emitter, arr_reg, item_reg);
             }
 
             // Return this (array itself), supports chaining arr.push(1).push(2)
@@ -721,13 +721,13 @@ int xr_compile_call_method(XrCompilerContext *ctx, XrCompiler *compiler,
             int arg_reg = xexpr_to_anyreg(ctx, compiler, &arg_desc);
 
             // Generate OP_SLEEP instruction
-            emit_abc(compiler->emitter, OP_SLEEP, arg_reg, 0, 0);
+            xemit_sleep(compiler->emitter, arg_reg);
 
             reg_free(compiler, arg_reg);
 
             // sleep has no return value, return null
             int result_reg = reg_alloc(ctx, compiler);
-            emit_abc(compiler->emitter, OP_LOADNULL, result_reg, 0, 0);
+            xemit_loadnull(compiler->emitter, result_reg);
             return result_reg;
         }
     }
@@ -745,7 +745,7 @@ int xr_compile_call_method(XrCompilerContext *ctx, XrCompiler *compiler,
             XrExprDesc val_desc = xr_compile_expr(ctx, compiler, node->arguments[0]);
             int val_reg = xexpr_to_anyreg_readonly(ctx, compiler, &val_desc);
             int result_reg = reg_alloc(ctx, compiler);
-            emit_abc(compiler->emitter, OP_CHAN_TRY_SEND, result_reg, ch_reg, val_reg);
+            xemit_chan_try_send(compiler->emitter, result_reg, ch_reg, val_reg);
             return result_reg;
         }
     }
@@ -763,7 +763,7 @@ int xr_compile_call_method(XrCompilerContext *ctx, XrCompiler *compiler,
             // Allocate two consecutive registers: R[A]=value, R[A+1]=ok
             int result_reg = reg_alloc(ctx, compiler);
             reg_alloc(ctx, compiler);  // Reserve second register for ok
-            emit_abc(compiler->emitter, OP_CHAN_TRY_RECV, result_reg, ch_reg, 0);
+            xemit_chan_try_recv(compiler->emitter, result_reg, ch_reg);
             return result_reg;
         }
     }
@@ -778,7 +778,7 @@ int xr_compile_call_method(XrCompilerContext *ctx, XrCompiler *compiler,
         if (is_channel) {
             XrExprDesc obj_desc = xr_compile_expr(ctx, compiler, member->object);
             int ch_reg = xexpr_to_anyreg_readonly(ctx, compiler, &obj_desc);
-            emit_abc(compiler->emitter, OP_CHAN_CLOSE, ch_reg, 0, 0);
+            xemit_chan_close(compiler->emitter, ch_reg);
             return -1;  // close has no return value
         }
     }
@@ -788,7 +788,7 @@ int xr_compile_call_method(XrCompilerContext *ctx, XrCompiler *compiler,
         XrExprDesc obj_desc = xr_compile_expr(ctx, compiler, member->object);
         int ch_reg = xexpr_to_anyreg_readonly(ctx, compiler, &obj_desc);
         int result_reg = reg_alloc(ctx, compiler);
-        emit_abc(compiler->emitter, OP_CHAN_IS_CLOSED, result_reg, ch_reg, 0);
+        xemit_chan_is_closed(compiler->emitter, result_reg, ch_reg);
         return result_reg;
     }
 
@@ -826,12 +826,12 @@ int xr_compile_call_method(XrCompilerContext *ctx, XrCompiler *compiler,
                 }
             }
             int result_reg = reg_alloc(ctx, compiler);
-            emit_abc(compiler->emitter, OP_CHAN_SEND, result_reg, ch_reg, val_reg);
+            xemit_chan_send(compiler->emitter, result_reg, ch_reg, val_reg);
 
             // Handle move semantics nullification
             if (move_null_shared_idx >= 0) {
-                emit_abc(compiler->emitter, OP_LOADNULL, result_reg, 0, 0);
-                emit_abx(compiler->emitter, OP_SETSHARED, result_reg, move_null_shared_idx);
+                xemit_loadnull(compiler->emitter, result_reg);
+                xemit_setshared(compiler->emitter, result_reg, move_null_shared_idx);
                 move_null_shared_idx = -1;
             }
             return result_reg;
@@ -870,7 +870,7 @@ int xr_compile_call_method(XrCompilerContext *ctx, XrCompiler *compiler,
             xreg_set_freereg(compiler->regalloc, base_reg + 2);
             int result_reg = reg_alloc(ctx, compiler);
             // OP_CHAN_SEND_TIMEOUT A B C: R[A] = R[B].send(R[C], timeout: R[C+1])
-            emit_abc(compiler->emitter, OP_CHAN_SEND_TIMEOUT, result_reg, ch_reg, base_reg);
+            xemit_chan_send_timeout(compiler->emitter, result_reg, ch_reg, base_reg);
             return result_reg;  // Return bool
         }
     }
@@ -888,7 +888,7 @@ int xr_compile_call_method(XrCompilerContext *ctx, XrCompiler *compiler,
             // Allocate two consecutive registers: R[A]=value, R[A+1]=ok
             int result_reg = reg_alloc(ctx, compiler);
             reg_alloc(ctx, compiler);  // Reserve second register for ok
-            emit_abc(compiler->emitter, OP_CHAN_RECV, result_reg, ch_reg, 0);
+            xemit_chan_recv(compiler->emitter, result_reg, ch_reg);
             return result_reg;
         }
     }
@@ -907,7 +907,7 @@ int xr_compile_call_method(XrCompilerContext *ctx, XrCompiler *compiler,
             int timeout_reg = xexpr_to_anyreg_readonly(ctx, compiler, &timeout_desc);
             int result_reg = reg_alloc(ctx, compiler);
             // OP_CHAN_RECV_TIMEOUT A B C: R[A] = R[B].recv(timeout: R[C])
-            emit_abc(compiler->emitter, OP_CHAN_RECV_TIMEOUT, result_reg, ch_reg, timeout_reg);
+            xemit_chan_recv_timeout(compiler->emitter, result_reg, ch_reg, timeout_reg);
             return result_reg;  // Return value or null
         }
     }
@@ -940,7 +940,7 @@ int xr_compile_call_method(XrCompilerContext *ctx, XrCompiler *compiler,
             XrExprDesc obj_desc = xr_compile_expr(ctx, compiler, member->object);
             int coro_reg = xexpr_to_anyreg_readonly(ctx, compiler, &obj_desc);
             int result_reg = reg_alloc(ctx, compiler);
-            emit_abc(compiler->emitter, OP_CORO_CTRL, result_reg, coro_reg, CORO_CTRL_INFO);
+            xemit_coro_ctrl(compiler->emitter, result_reg, coro_reg, CORO_CTRL_INFO);
             return result_reg;
         }
     }
@@ -1017,7 +1017,7 @@ int xr_compile_call_method(XrCompilerContext *ctx, XrCompiler *compiler,
                 obj_reg = xexpr_to_anyreg(ctx, compiler, &obj_desc);
             }
             if (obj_reg != base + 1) {
-                emit_abc(compiler->emitter, OP_MOVE, base + 1, obj_reg, 0);
+                xemit_move(compiler->emitter, base + 1, obj_reg);
             }
 
             // Use auto-protect API (base allocated, now protect base and base+1)
@@ -1032,7 +1032,7 @@ int xr_compile_call_method(XrCompilerContext *ctx, XrCompiler *compiler,
             // Get method symbol (local index via per-function symbol table)
             int local_sym = emitter_add_symbol(compiler->emitter, member_sym);
 
-            emit_abc(compiler->emitter, OP_INVOKE_BUILTIN, base, local_sym, node->arg_count);
+            xemit_invoke_builtin(compiler->emitter, base, local_sym, node->arg_count);
 
             // End protection
             xreg_protect_end(compiler->regalloc, protect_id);
@@ -1071,7 +1071,7 @@ int xr_compile_call_method(XrCompilerContext *ctx, XrCompiler *compiler,
                     if (is_tail && compiler->type == FUNCTION_FUNCTION) {
                         c_arg |= 0x80;  // tail flag in bit 7
                     }
-                    emit_abc(compiler->emitter, OP_INVOKE_DIRECT, base, method_idx, c_arg);
+                    xemit_invoke_direct(compiler->emitter, base, method_idx, c_arg);
 
                     xreg_protect_end(compiler->regalloc, protect_id);
                     if (is_tail && compiler->type == FUNCTION_FUNCTION) {
@@ -1098,7 +1098,7 @@ int xr_compile_call_method(XrCompilerContext *ctx, XrCompiler *compiler,
             (void)is_int_chain;
             int obj_reg = xexpr_to_anyreg_readonly(ctx, compiler, &obj_desc);
             if (obj_reg != base + 1) {
-                emit_abc(compiler->emitter, OP_MOVE, base + 1, obj_reg, 0);
+                xemit_move(compiler->emitter, base + 1, obj_reg);
             }
 
             int first_arg_reg = base + 2;
@@ -1110,7 +1110,7 @@ int xr_compile_call_method(XrCompilerContext *ctx, XrCompiler *compiler,
 
             int local_sym = emitter_add_symbol(compiler->emitter, member_sym);
 
-            emit_abc(compiler->emitter, OP_INVOKE_BUILTIN, base, local_sym, node->arg_count);
+            xemit_invoke_builtin(compiler->emitter, base, local_sym, node->arg_count);
 
             xreg_protect_end(compiler->regalloc, protect_id);
             xreg_set_freereg(compiler->regalloc, base + 1);
@@ -1130,11 +1130,11 @@ int xr_compile_call_method(XrCompilerContext *ctx, XrCompiler *compiler,
         int local_sym = emitter_add_symbol(compiler->emitter, member_sym);
 
         if (is_tail && compiler->type == FUNCTION_FUNCTION) {
-            emit_abc(compiler->emitter, OP_INVOKE_TAIL, base, local_sym, node->arg_count);
+            xemit_invoke_tail(compiler->emitter, base, local_sym, node->arg_count);
             xreg_protect_end(compiler->regalloc, protect_id);
             return -1;
         }
-        emit_abc(compiler->emitter, OP_INVOKE, base, local_sym, node->arg_count);
+        xemit_invoke(compiler->emitter, base, local_sym, node->arg_count);
 
         xreg_protect_end(compiler->regalloc, protect_id);
         xreg_set_freereg(compiler->regalloc, base + 1);
@@ -1165,17 +1165,17 @@ int xr_compile_call_method(XrCompilerContext *ctx, XrCompiler *compiler,
 
     // Generate OP_INVOKE or OP_INVOKE_TAIL instruction
     if (is_tail && compiler->type == FUNCTION_FUNCTION) {
-        emit_abc(compiler->emitter, OP_INVOKE_TAIL, base, local_sym, node->arg_count);
+        xemit_invoke_tail(compiler->emitter, base, local_sym, node->arg_count);
         xreg_protect_end(compiler->regalloc, protect_id);
         return -1;
     }
-    emit_abc(compiler->emitter, OP_INVOKE, base, local_sym, node->arg_count);
+    xemit_invoke(compiler->emitter, base, local_sym, node->arg_count);
 
     // Move semantics: nullify shared let variable after send completes
     if (move_null_shared_idx >= 0) {
         int tmp = reg_alloc(ctx, compiler);
-        emit_abc(compiler->emitter, OP_LOADNULL, tmp, 0, 0);
-        emit_abx(compiler->emitter, OP_SETSHARED, tmp, move_null_shared_idx);
+        xemit_loadnull(compiler->emitter, tmp);
+        xemit_setshared(compiler->emitter, tmp, move_null_shared_idx);
         reg_free(compiler, tmp);
     }
 

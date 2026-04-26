@@ -321,7 +321,7 @@ void compile_go_expr(XrCompilerContext *ctx, XrCompiler *c, GoExprNode *node, in
             int local_sym = emitter_add_symbol(c->emitter, global_sym);
 
             // Emit OP_GO_INVOKE base method_symbol arg_count
-            emit_abc(c->emitter, OP_GO_INVOKE, base, local_sym, arg_count);
+            xemit_go_invoke(c->emitter, base, local_sym, arg_count);
 
             // Emit coroutine name (if present)
             emit_coro_name_if_present(ctx, c, node->name);
@@ -334,7 +334,7 @@ void compile_go_expr(XrCompilerContext *ctx, XrCompiler *c, GoExprNode *node, in
 
             // Result in R[base], need to move to target
             if (target != base) {
-                emit_abc(c->emitter, OP_MOVE, target, base, 0);
+                xemit_move(c->emitter, target, base);
             }
             return;
         }
@@ -406,7 +406,7 @@ void compile_go_expr(XrCompilerContext *ctx, XrCompiler *c, GoExprNode *node, in
         // DFS execution: child runs first, parent pushed to cont_deque.
         // C bit 7: fire-and-forget flag (result never awaited, safe to recycle)
         int spawn_c = arg_count | (fire_and_forget ? 0x80 : 0);
-        emit_abc(c->emitter, OP_SPAWN_CONT, target, base_reg, spawn_c);
+        xemit_spawn_cont(c->emitter, target, base_reg, spawn_c);
 
         // Emit coroutine name (if present)
         emit_coro_name_if_present(ctx, c, node->name);
@@ -422,8 +422,8 @@ void compile_go_expr(XrCompilerContext *ctx, XrCompiler *c, GoExprNode *node, in
         if (moved_count > 0) {
             int tmp_reg = reg_alloc(ctx, c);
             for (int i = 0; i < moved_count; i++) {
-                emit_abc(c->emitter, OP_LOADNULL, tmp_reg, 0, 0);
-                emit_abx(c->emitter, OP_SETSHARED, tmp_reg, moved_shared[i]);
+                xemit_loadnull(c->emitter, tmp_reg);
+                xemit_setshared(c->emitter, tmp_reg, moved_shared[i]);
             }
             reg_free(c, tmp_reg);
         }
@@ -482,11 +482,11 @@ void compile_go_expr(XrCompilerContext *ctx, XrCompiler *c, GoExprNode *node, in
         if (proto != NULL) {
             int proto_idx = xr_vm_proto_add_proto(c->proto, proto);
             emit_ctx_sync_before_closure(ctx, c);
-            emit_abx(c->emitter, OP_CLOSURE, fn_reg, proto_idx);
+            xemit_closure(c->emitter, fn_reg, proto_idx);
         }
 
         // All go statements use OP_SPAWN_CONT for continuation stealing.
-        emit_abc(c->emitter, OP_SPAWN_CONT, target, fn_reg, fire_and_forget ? 0x80 : 0);
+        xemit_spawn_cont(c->emitter, target, fn_reg, fire_and_forget ? 0x80 : 0);
 
         // Emit coroutine name (if present)
         emit_coro_name_if_present(ctx, c, node->name);
@@ -503,7 +503,7 @@ void compile_go_expr(XrCompilerContext *ctx, XrCompiler *c, GoExprNode *node, in
         int fn_reg = xexpr_to_anyreg(ctx, c, &expr_desc);
 
         // All go statements use OP_SPAWN_CONT for continuation stealing.
-        emit_abc(c->emitter, OP_SPAWN_CONT, target, fn_reg, fire_and_forget ? 0x80 : 0);
+        xemit_spawn_cont(c->emitter, target, fn_reg, fire_and_forget ? 0x80 : 0);
 
         // Emit coroutine name (if present)
         emit_coro_name_if_present(ctx, c, node->name);
@@ -550,19 +550,19 @@ void compile_await_expr(XrCompilerContext *ctx, XrCompiler *c, AwaitExprNode *no
 
     if (node->is_any_success) {
         // await.anySuccess [tasks] - C=1 means success-only mode
-        emit_abc(c->emitter, OP_AWAIT_ANY, target, coro_reg, 1);
+        xemit_await_any(c->emitter, target, coro_reg, 1);
     } else if (node->is_any) {
         // await.any [tasks] - C=0 means any completion
-        emit_abc(c->emitter, OP_AWAIT_ANY, target, coro_reg, 0);
+        xemit_await_any(c->emitter, target, coro_reg, 0);
     } else if (node->is_all || node->expr->type == AST_ARRAY_LITERAL) {
         // await.all tasks or await [tasks] - wait for all
-        emit_abc(c->emitter, OP_AWAIT_ALL, target, coro_reg, 0);
+        xemit_await_all(c->emitter, target, coro_reg);
     } else if (node->timeout != NULL) {
         // await(timeout: N) task
-        emit_abc(c->emitter, OP_AWAIT_TIMEOUT, target, coro_reg, timeout_reg);
+        xemit_await_timeout(c->emitter, target, coro_reg, timeout_reg);
     } else {
         // await task - wait for single
-        emit_abc(c->emitter, OP_AWAIT, target, coro_reg, 0);
+        xemit_await(c->emitter, target, coro_reg, 0);
     }
 }
 
@@ -584,7 +584,7 @@ void compile_channel_new(XrCompilerContext *ctx, XrCompiler *c, ChannelNewNode *
 
     if (node->buffer_size == NULL) {
         // Channel() - unbuffered
-        emit_abx(c->emitter, OP_CHAN_NEW, target, 0);
+        xemit_chan_new(c->emitter, target, 0);
         return;
     }
 
@@ -604,15 +604,15 @@ void compile_channel_new(XrCompilerContext *ctx, XrCompiler *c, ChannelNewNode *
                 XR_CHANNEL_MAX_BUFFER_SIZE, buffer_size);
             return;
         }
-        emit_abx(c->emitter, OP_CHAN_NEW, target, buffer_size);
+        xemit_chan_new(c->emitter, target, buffer_size);
     } else {
         // Runtime expression: compile size to register, use OP_CHAN_NEW_NAMED
         // with null name to create anonymous channel with dynamic size
         XrExprDesc size_desc = xr_compile_expr(ctx, c, node->buffer_size);
         int size_reg = xexpr_to_anyreg(ctx, c, &size_desc);
         int null_reg = reg_alloc(ctx, c);
-        emit_abc(c->emitter, OP_LOADNULL, null_reg, 0, 0);
-        emit_abc(c->emitter, OP_CHAN_NEW_NAMED, target, size_reg, null_reg);
+        xemit_loadnull(c->emitter, null_reg);
+        xemit_chan_new_named(c->emitter, target, size_reg, null_reg);
         reg_free(c, null_reg);
         reg_free(c, size_reg);
     }
@@ -683,7 +683,7 @@ void compile_defer_stmt(XrCompilerContext *ctx, XrCompiler *c, DeferStmtNode *no
     }
 
     // Emit OP_DEFER A B
-    emit_abc(c->emitter, OP_DEFER, base_reg, arg_count, 0);
+    xemit_defer(c->emitter, base_reg, arg_count);
 }
 
 /* ========== select Statement Compilation ========== */
@@ -765,29 +765,29 @@ static void compile_select_nonblocking(XrCompilerContext *ctx, XrCompiler *c,
         if (sc->is_send) {
             XrExprDesc val_desc = xr_compile_expr(ctx, c, sc->value);
             int val_reg = xexpr_to_anyreg(ctx, c, &val_desc);
-            emit_abc(c->emitter, OP_CHAN_TRY_SEND, result_reg, ch_reg, val_reg);
-            emit_abc(c->emitter, OP_TEST, result_reg, 0, 0);
+            xemit_chan_try_send(c->emitter, result_reg, ch_reg, val_reg);
+            xemit_test(c->emitter, result_reg, 0);
         } else if (sc->is_timeout) {
             // timeout case: create timer channel and try to receive
             XrExprDesc timeout_desc = xr_compile_expr(ctx, c, sc->value);
             int timeout_reg = xexpr_to_anyreg(ctx, c, &timeout_desc);
             int timer_ch_reg = xreg_alloc_temp(c->regalloc);
-            emit_abc(c->emitter, OP_TIME_AFTER, timer_ch_reg, timeout_reg, 0);
-            emit_abc(c->emitter, OP_CHAN_TRY_RECV, result_reg, timer_ch_reg, 0);
-            emit_abc(c->emitter, OP_TEST, result_reg + 1, 0, 0);
+            xemit_time_after(c->emitter, timer_ch_reg, timeout_reg);
+            xemit_chan_try_recv(c->emitter, result_reg, timer_ch_reg);
+            xemit_test(c->emitter, result_reg + 1, 0);
         } else {
             // recv case
-            emit_abc(c->emitter, OP_CHAN_TRY_RECV, result_reg, ch_reg, 0);
+            xemit_chan_try_recv(c->emitter, result_reg, ch_reg);
             if (sc->var_name != NULL) {
                 XrString *var_str = xr_compile_time_intern(ctx->X, sc->var_name, strlen(sc->var_name));
                 int existing = scope_resolve_local(c, var_str);
                 if (existing < 0) {
                     scope_define_local_reg(ctx, c, var_str, result_reg);
                 } else {
-                    emit_abc(c->emitter, OP_MOVE, existing, result_reg, 0);
+                    xemit_move(c->emitter, existing, result_reg);
                 }
             }
-            emit_abc(c->emitter, OP_TEST, result_reg + 1, 0, 0);
+            xemit_test(c->emitter, result_reg + 1, 0);
         }
 
         int skip_jump = emit_jump(c->emitter, OP_JMP);
@@ -808,7 +808,7 @@ static void compile_select_nonblocking(XrCompilerContext *ctx, XrCompiler *c,
      * A=200: ~20 consecutive empty polls trigger a real yield.
      * This avoids both starvation (old: 4000 polls) and context-switch
      * storms (immediate yield on every default). */
-    emit_abc(c->emitter, OP_YIELD, 200, 0, 0);
+    xemit_yield(c->emitter, 200);
 
     // Compile default body
     SelectCaseNode *sc = &node->cases[default_case]->as.select_case;
@@ -847,7 +847,7 @@ static void compile_select_blocking(XrCompilerContext *ctx, XrCompiler *c,
             int timeout_reg = xexpr_to_anyreg(ctx, c, &timeout_desc);
             timer_ch_reg = ch_base_reg + ch_count;
             xreg_alloc_temp(c->regalloc);  // Reserve register
-            emit_abc(c->emitter, OP_TIME_AFTER, timer_ch_reg, timeout_reg, 0);
+            xemit_time_after(c->emitter, timer_ch_reg, timeout_reg);
             case_ch_regs[i] = timer_ch_reg;
             ch_count++;
             break;
@@ -892,10 +892,10 @@ static void compile_select_blocking(XrCompilerContext *ctx, XrCompiler *c,
         if (sc->is_send) {
             XrExprDesc val_desc = xr_compile_expr(ctx, c, sc->value);
             int val_reg = xexpr_to_anyreg(ctx, c, &val_desc);
-            emit_abc(c->emitter, OP_CHAN_TRY_SEND, result_reg, ch_reg, val_reg);
-            emit_abc(c->emitter, OP_TEST, result_reg, 0, 0);
+            xemit_chan_try_send(c->emitter, result_reg, ch_reg, val_reg);
+            xemit_test(c->emitter, result_reg, 0);
         } else {
-            emit_abc(c->emitter, OP_CHAN_TRY_RECV, result_reg, ch_reg, 0);
+            xemit_chan_try_recv(c->emitter, result_reg, ch_reg);
 
             if (sc->var_name != NULL && !sc->is_timeout) {
                 XrString *var_str = xr_compile_time_intern(ctx->X, sc->var_name, strlen(sc->var_name));
@@ -903,11 +903,11 @@ static void compile_select_blocking(XrCompilerContext *ctx, XrCompiler *c,
                 if (existing < 0) {
                     scope_define_local_reg(ctx, c, var_str, result_reg);
                 } else {
-                    emit_abc(c->emitter, OP_MOVE, existing, result_reg, 0);
+                    xemit_move(c->emitter, existing, result_reg);
                 }
             }
 
-            emit_abc(c->emitter, OP_TEST, ok_reg, 0, 0);
+            xemit_test(c->emitter, ok_reg, 0);
         }
 
         int skip_jump = emit_jump(c->emitter, OP_JMP);
@@ -924,7 +924,7 @@ static void compile_select_blocking(XrCompilerContext *ctx, XrCompiler *c,
      * A = channel array base register
      * B = channel count
      * Coroutine will be registered to all channels' wait queues, wakeup when any ready */
-    emit_abc(c->emitter, OP_SELECT_BLOCK, ch_base_reg, ch_count, channel_case_count);
+    xemit_select_block(c->emitter, ch_base_reg, ch_count, channel_case_count);
 
     // After wakeup, jump back to poll start and recheck
     int offset = loop_start - emit_get_current_pc(c->emitter) - 1;
@@ -967,7 +967,7 @@ void compile_scope_block(XrCompilerContext *ctx, XrCompiler *c, ScopeBlockNode *
 
     // Emit SCOPE_ENTER instruction - start tracking child coroutines
     // A = scope_mode (0=WAIT, 1=LINKED, 2=SUPERVISOR)
-    emit_abc(c->emitter, OP_SCOPE_ENTER, node->scope_mode, 0, 0);
+    xemit_scope_enter(c->emitter, node->scope_mode);
 
     // Track scope block depth for continuation stealing.
     // go statements inside scope{} emit OP_SPAWN_CONT instead of OP_GO.
@@ -985,7 +985,7 @@ void compile_scope_block(XrCompilerContext *ctx, XrCompiler *c, ScopeBlockNode *
     c->scope_block_depth--;
 
     // Emit SCOPE_EXIT: A=scope_mode, B=result_reg (supervisor: errors[])
-    emit_abc(c->emitter, OP_SCOPE_EXIT, node->scope_mode, result_reg, 0);
+    xemit_scope_exit(c->emitter, node->scope_mode, result_reg);
 
     if (node->scope_mode == XR_SCOPE_SUPERVISOR && target < 0) {
         reg_free(c, result_reg);
@@ -1001,6 +1001,6 @@ void compile_cancelled_expr(XrCompilerContext *ctx, XrCompiler *c, int target) {
     (void)ctx;  // Not used currently
 
     // Emit OP_CANCELLED instruction: R[A] = cancelled()
-    emit_abc(c->emitter, OP_CANCELLED, target, 0, 0);
+    xemit_cancelled(c->emitter, target);
 }
 

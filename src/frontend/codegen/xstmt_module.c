@@ -63,7 +63,7 @@ void compile_import(XrCompilerContext *ctx, XrCompiler *c, ImportStmtNode *node)
     int module_reg = reg_alloc(ctx, c);
     
     // Generate OP_IMPORT instruction: R[A] = import(K[Bx])
-    emit_abx(c->emitter, OP_IMPORT, module_reg, name_idx);
+    xemit_import(c->emitter, module_reg, name_idx);
     
     // Named import: import { a, b } from "module"
     if (node->member_count > 0) {
@@ -87,7 +87,7 @@ void compile_import(XrCompilerContext *ctx, XrCompiler *c, ImportStmtNode *node)
             int local_sym = emitter_add_symbol(c->emitter, global_sym);
             
             // Generate OP_GETPROP instruction: R[member_reg] = R[module_reg].symbol[local_sym]
-            emit_abc(c->emitter, OP_GETPROP, member_reg, module_reg, local_sym);
+            xemit_getprop(c->emitter, member_reg, module_reg, local_sym);
             
             // Define as local variable
             XrString *local_str = xr_compile_time_intern(ctx->X, local_name, strlen(local_name));
@@ -112,7 +112,7 @@ void compile_import(XrCompilerContext *ctx, XrCompiler *c, ImportStmtNode *node)
         // Store module in shared_array (global heap, coroutine-safe, not via upvalue)
         int shared_index = shared_get_or_add(ctx, c, var_name_str);
         shared_set_const(ctx, shared_index, true);
-        emit_abx(c->emitter, OP_SETSHARED, module_reg, shared_index);
+        xemit_setshared(c->emitter, module_reg, shared_index);
         reg_free(c, module_reg);
     }
 }
@@ -153,12 +153,12 @@ void compile_export(XrCompilerContext *ctx, XrCompiler *c, ExportStmtNode *node)
         int name_idx = xr_vm_proto_add_constant(c->proto, module_name_val);
         
         int module_reg = reg_alloc(ctx, c);
-        emit_abx(c->emitter, OP_IMPORT, module_reg, name_idx);
+        xemit_import(c->emitter, module_reg, name_idx);
         
         if (node->is_reexport_all) {
             // export * from "..." - export all members from module
             // Generate OP_EXPORT_ALL instruction: copy all exports from module to current module
-            emit_abc(c->emitter, OP_EXPORT_ALL, module_reg, 0, 0);
+            xemit_export_all(c->emitter, module_reg);
         } else {
             // export { a, b as c } from "..." - export specific members
             for (int i = 0; i < node->reexport_count; i++) {
@@ -170,13 +170,13 @@ void compile_export(XrCompilerContext *ctx, XrCompiler *c, ExportStmtNode *node)
                 int member_reg = reg_alloc(ctx, c);
                 int global_sym = xr_symbol_register_in_table(xr_isolate_get_symbol_table(ctx->X), src_name);
                 int local_sym = emitter_add_symbol(c->emitter, global_sym);
-                emit_abc(c->emitter, OP_GETPROP, member_reg, module_reg, local_sym);
+                xemit_getprop(c->emitter, member_reg, module_reg, local_sym);
                 
                 // Export to current module
                 XrString *dst_str = xr_compile_time_intern(ctx->X, dst_name, strlen(dst_name));
                 XrValue dst_val = xr_string_value(dst_str);
                 int dst_idx = xr_vm_proto_add_constant(c->proto, dst_val);
-                emit_abc(c->emitter, OP_EXPORT, dst_idx, member_reg, 0);
+                xemit_export(c->emitter, dst_idx, member_reg, 0);
                 
                 reg_free(c, member_reg);
             }
@@ -201,17 +201,17 @@ void compile_export(XrCompilerContext *ctx, XrCompiler *c, ExportStmtNode *node)
             if (local_info) {
                 // Found local variable, get is_const info
                 is_const = local_info->is_const ? 1 : 0;
-                emit_abc(c->emitter, OP_MOVE, value_reg, local_info->reg, 0);
+                xemit_move(c->emitter, value_reg, local_info->reg);
             } else if (c->scope_depth == 0) {
                 // Top-level scope: check shared first, then predefined globals
                 int si = shared_get_in_scope(ctx, c, name_str);
                 if (si >= 0) {
-                    emit_abx(c->emitter, OP_GETSHARED, value_reg, si);
+                    xemit_getshared(c->emitter, value_reg, si);
                     is_const = shared_is_const(ctx, si) ? 1 : 0;
                 } else {
                     int gi = builtin_get(ctx, name_str);
                     if (gi >= 0) {
-                        emit_abx(c->emitter, OP_GETBUILTIN, value_reg, gi);
+                        xemit_getbuiltin(c->emitter, value_reg, gi);
                     }
                 }
             } else {
@@ -223,7 +223,7 @@ void compile_export(XrCompilerContext *ctx, XrCompiler *c, ExportStmtNode *node)
             // Generate OP_EXPORT instruction
             XrValue name_val = xr_string_value(name_str);
             int name_idx = xr_vm_proto_add_constant(c->proto, name_val);
-            emit_abc(c->emitter, OP_EXPORT, name_idx, value_reg, is_const);
+            xemit_export(c->emitter, name_idx, value_reg, is_const);
             
             reg_free(c, value_reg);
         }
@@ -267,15 +267,15 @@ void compile_export(XrCompilerContext *ctx, XrCompiler *c, ExportStmtNode *node)
     
     if (local_slot >= 0) {
         // Local variable (non-pure function, regular variables, etc)
-        emit_abc(c->emitter, OP_MOVE, value_reg, local_slot, 0);
+        xemit_move(c->emitter, value_reg, local_slot);
     } else if (shared_idx >= 0) {
         // Shared variable (pure function, imported module, etc)
-        emit_abx(c->emitter, OP_GETSHARED, value_reg, shared_idx);
+        xemit_getshared(c->emitter, value_reg, shared_idx);
     } else if (c->scope_depth == 0) {
         // Predefined globals fallback (user variables already found via shared above)
         int gi = builtin_get(ctx, name_str);
         if (gi >= 0) {
-            emit_abx(c->emitter, OP_GETBUILTIN, value_reg, gi);
+            xemit_getbuiltin(c->emitter, value_reg, gi);
         }
     } else {
         xr_log_warning("compiler", "export: cannot find variable '%s'", export_name);
@@ -289,7 +289,7 @@ void compile_export(XrCompilerContext *ctx, XrCompiler *c, ExportStmtNode *node)
     
     XrValue name_val = xr_string_value(name_str);
     int name_idx = xr_vm_proto_add_constant(c->proto, name_val);
-    emit_abc(c->emitter, OP_EXPORT, name_idx, value_reg, is_const);
+    xemit_export(c->emitter, name_idx, value_reg, is_const);
     
     reg_free(c, value_reg);
 }
