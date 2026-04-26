@@ -326,6 +326,7 @@ static void builder_init(XirBuilder *b, XirFunc *func, XrProto *proto) {
     b->nshared_protos = 0;
     b->ic_fields_snapshot = NULL;
     b->ic_methods_snapshot = NULL;
+    b->ic_builtin_snapshot = NULL;
     b->ic_snapshots_owned = false;
     for (int i = 0; i < 256; i++) {
         b->slot_tag_refs[i] = XIR_NONE;
@@ -408,6 +409,10 @@ static void builder_cleanup(XirBuilder *b) {
         if (b->ic_methods_snapshot) {
             xr_ic_method_table_free(b->ic_methods_snapshot);
             b->ic_methods_snapshot = NULL;
+        }
+        if (b->ic_builtin_snapshot) {
+            xr_ic_builtin_table_free(b->ic_builtin_snapshot);
+            b->ic_builtin_snapshot = NULL;
         }
         b->ic_snapshots_owned = false;
     }
@@ -2491,16 +2496,20 @@ static XirFunc *build_from_proto_impl_ex(XrProto *proto,
     //      fast paths will simply skip.
     b.ic_fields_snapshot = NULL;
     b.ic_methods_snapshot = NULL;
+    b.ic_builtin_snapshot = NULL;
     b.ic_snapshots_owned = false;
-    if (opts && (opts->ic_fields_snapshot || opts->ic_methods_snapshot)) {
-        b.ic_fields_snapshot = opts->ic_fields_snapshot;
+    if (opts && (opts->ic_fields_snapshot || opts->ic_methods_snapshot ||
+                 opts->ic_builtin_snapshot)) {
+        b.ic_fields_snapshot  = opts->ic_fields_snapshot;
         b.ic_methods_snapshot = opts->ic_methods_snapshot;
-        b.ic_snapshots_owned = false;
+        b.ic_builtin_snapshot = opts->ic_builtin_snapshot;
+        b.ic_snapshots_owned  = false;
     } else if (!aot_mode && isolate) {
         XrVMContext *ctx = xr_vm_current_ctx(isolate);
-        b.ic_fields_snapshot = xr_vm_ic_fields_snapshot(ctx, proto);
+        b.ic_fields_snapshot  = xr_vm_ic_fields_snapshot(ctx, proto);
         b.ic_methods_snapshot = xr_vm_ic_methods_snapshot(ctx, proto);
-        b.ic_snapshots_owned = true;
+        b.ic_builtin_snapshot = xr_vm_ic_builtin_snapshot(ctx, proto);
+        b.ic_snapshots_owned  = true;
     }
 
     // Step 1: Create basic blocks from bb_leaders and jump targets

@@ -86,8 +86,9 @@ typedef struct XirBgTask {
      * builder (read-only) and frees them after compilation completes.
      * Either may be NULL when the live ctx had no IC recorded yet.
      */
-    struct XrICFieldTable  *ic_fields_snapshot;
-    struct XrICMethodTable *ic_methods_snapshot;
+    struct XrICFieldTable   *ic_fields_snapshot;
+    struct XrICMethodTable  *ic_methods_snapshot;
+    struct XrICBuiltinTable *ic_builtin_snapshot;
 } XirBgTask;
 
 /* ========== MPSC Ring Buffer ========== */

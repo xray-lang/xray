@@ -81,8 +81,9 @@ typedef struct {
     // from xr_vm_current_ctx(isolate) instead". Non-NULL means "the
     // caller already snapshotted on a thread that owns the live ctx;
     // builder must read but not free them".
-    struct XrICFieldTable  *ic_fields_snapshot;
-    struct XrICMethodTable *ic_methods_snapshot;
+    struct XrICFieldTable   *ic_fields_snapshot;
+    struct XrICMethodTable  *ic_methods_snapshot;
+    struct XrICBuiltinTable *ic_builtin_snapshot;
 } XirAotOptions;
 
 /* ========== Builder State ========== */
@@ -184,9 +185,10 @@ typedef struct {
     // took the snapshots itself (foreground JIT) and must free them at
     // teardown; false means the snapshots were supplied externally (eg.
     // background JIT task) and the caller still owns them.
-    struct XrICFieldTable  *ic_fields_snapshot;
-    struct XrICMethodTable *ic_methods_snapshot;
-    bool                    ic_snapshots_owned;
+    struct XrICFieldTable   *ic_fields_snapshot;
+    struct XrICMethodTable  *ic_methods_snapshot;
+    struct XrICBuiltinTable *ic_builtin_snapshot;
+    bool                     ic_snapshots_owned;
 } XirBuilder;
 
 /* ========== API ========== */
