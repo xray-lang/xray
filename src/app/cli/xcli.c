@@ -28,14 +28,16 @@
 #define __has_feature(x) 0
 #endif
 
-#if !defined(__SANITIZE_ADDRESS__) && !defined(__SANITIZE_THREAD__) && \
+#if !defined(__SANITIZE_ADDRESS__) && !defined(__SANITIZE_THREAD__) &&                             \
     !(__has_feature(address_sanitizer) || __has_feature(thread_sanitizer))
 static void crash_handler(int sig) {
     // Only use async-signal-safe functions: write(), _exit()
     const char *msg = "\n=== CRASH: signal unknown ===\n";
-    if (sig == SIGSEGV) msg = "\n=== CRASH: SIGSEGV ===\n";
+    if (sig == SIGSEGV)
+        msg = "\n=== CRASH: SIGSEGV ===\n";
 #ifdef SIGBUS
-    else if (sig == SIGBUS) msg = "\n=== CRASH: SIGBUS ===\n";
+    else if (sig == SIGBUS)
+        msg = "\n=== CRASH: SIGBUS ===\n";
 #endif
     write(STDERR_FILENO, msg, strlen(msg));
 #ifdef HAS_BACKTRACE
@@ -48,7 +50,7 @@ static void crash_handler(int sig) {
 #endif
 
 int main(int argc, char **argv) {
-#if !defined(__SANITIZE_ADDRESS__) && !defined(__SANITIZE_THREAD__) && \
+#if !defined(__SANITIZE_ADDRESS__) && !defined(__SANITIZE_THREAD__) &&                             \
     !(__has_feature(address_sanitizer) || __has_feature(thread_sanitizer))
     signal(SIGSEGV, crash_handler);
 #ifdef SIGBUS

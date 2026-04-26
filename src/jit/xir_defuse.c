@@ -23,14 +23,14 @@
 static inline void count_ref(uint32_t *cnt, uint32_t nv, XirRef ref) {
     if (xir_ref_is_vreg(ref)) {
         uint32_t idx = XIR_REF_INDEX(ref);
-        if (idx < nv) cnt[idx]++;
+        if (idx < nv)
+            cnt[idx]++;
     }
 }
 
 // Pass 2 helper: record a use and advance the write cursor
-static inline void record_use(XirDefUse *du, uint32_t vreg,
-                               uint32_t blk, uint32_t ins,
-                               uint8_t kind, uint8_t arg_idx) {
+static inline void record_use(XirDefUse *du, uint32_t vreg, uint32_t blk, uint32_t ins,
+                              uint8_t kind, uint8_t arg_idx) {
     uint32_t pos = du->offset[vreg] + du->count[vreg];
     du->uses[pos].blk = blk;
     du->uses[pos].ins = ins;
@@ -40,11 +40,13 @@ static inline void record_use(XirDefUse *du, uint32_t vreg,
 }
 
 void xir_defuse_build(XirDefUse *du, XirFunc *func) {
-    if (!du || !func) return;
+    if (!du || !func)
+        return;
     memset(du, 0, sizeof(*du));
 
     uint32_t nv = func->nvreg;
-    if (nv == 0) return;
+    if (nv == 0)
+        return;
 
     du->nvreg = nv;
     du->count = xr_calloc(nv, sizeof(uint32_t));
@@ -82,7 +84,8 @@ void xir_defuse_build(XirDefUse *du, XirFunc *func) {
     // Call arg pool refs: vregs used as CALL_C/CALL_KNOWN arguments
     if (func->call_arg_pool) {
         for (uint32_t v = 0; v < nv; v++) {
-            if (func->vregs[v].call_nargs == 0) continue;
+            if (func->vregs[v].call_nargs == 0)
+                continue;
             uint32_t start = func->vregs[v].call_arg_start;
             for (uint16_t a = 0; a < func->vregs[v].call_nargs; a++)
                 count_ref(du->count, nv, func->call_arg_pool[start + a]);
@@ -119,7 +122,7 @@ void xir_defuse_build(XirDefUse *du, XirFunc *func) {
                 if (xir_ref_is_vreg(ins->args[a])) {
                     uint32_t idx = XIR_REF_INDEX(ins->args[a]);
                     if (idx < nv)
-                        record_use(du, idx, bi, i, XIR_USE_INS_ARG, (uint8_t)a);
+                        record_use(du, idx, bi, i, XIR_USE_INS_ARG, (uint8_t) a);
                 }
             }
         }
@@ -130,7 +133,7 @@ void xir_defuse_build(XirDefUse *du, XirFunc *func) {
                 if (xir_ref_is_vreg(phi->args[p])) {
                     uint32_t idx = XIR_REF_INDEX(phi->args[p]);
                     if (idx < nv)
-                        record_use(du, idx, bi, UINT32_MAX, XIR_USE_PHI_ARG, (uint8_t)p);
+                        record_use(du, idx, bi, UINT32_MAX, XIR_USE_PHI_ARG, (uint8_t) p);
                 }
             }
         }
@@ -158,7 +161,8 @@ void xir_defuse_build(XirDefUse *du, XirFunc *func) {
     // Call arg pool refs
     if (func->call_arg_pool) {
         for (uint32_t v = 0; v < nv; v++) {
-            if (func->vregs[v].call_nargs == 0) continue;
+            if (func->vregs[v].call_nargs == 0)
+                continue;
             uint32_t start = func->vregs[v].call_arg_start;
             for (uint16_t a = 0; a < func->vregs[v].call_nargs; a++) {
                 XirRef ref = func->call_arg_pool[start + a];
@@ -173,7 +177,8 @@ void xir_defuse_build(XirDefUse *du, XirFunc *func) {
 }
 
 void xir_defuse_free(XirDefUse *du) {
-    if (!du) return;
+    if (!du)
+        return;
     xr_free(du->uses);
     xr_free(du->offset);
     xr_free(du->count);
@@ -181,18 +186,22 @@ void xir_defuse_free(XirDefUse *du) {
 }
 
 const XirDefUse *xir_func_get_defuse(XirFunc *func) {
-    if (!func || func->nvreg == 0) return NULL;
-    if (func->defuse) return func->defuse;
+    if (!func || func->nvreg == 0)
+        return NULL;
+    if (func->defuse)
+        return func->defuse;
 
-    XirDefUse *du = (XirDefUse *)xr_calloc(1, sizeof(XirDefUse));
-    if (!du) return NULL;
+    XirDefUse *du = (XirDefUse *) xr_calloc(1, sizeof(XirDefUse));
+    if (!du)
+        return NULL;
     xir_defuse_build(du, func);
     func->defuse = du;
     return du;
 }
 
 void xir_func_invalidate_defuse(XirFunc *func) {
-    if (!func || !func->defuse) return;
+    if (!func || !func->defuse)
+        return;
     xir_defuse_free(func->defuse);
     xr_free(func->defuse);
     func->defuse = NULL;

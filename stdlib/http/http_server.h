@@ -23,9 +23,9 @@
 
 /* ========== Constants ========== */
 
-#define XR_HTTP_MAX_HEADER_SIZE  8192
-#define XR_HTTP_MAX_BODY_SIZE    1048576
-#define XR_HTTP_BACKLOG          1024
+#define XR_HTTP_MAX_HEADER_SIZE 8192
+#define XR_HTTP_MAX_BODY_SIZE 1048576
+#define XR_HTTP_BACKLOG 1024
 
 /* ========== Forward Declarations ========== */
 
@@ -61,7 +61,8 @@ typedef struct XrHttpResp {
 /* ========== HTTP Server ========== */
 
 struct XrWebSocket;
-typedef void (*XrWsConnectionHandler)(struct XrayIsolate *X, struct XrWebSocket *ws, void *user_data);
+typedef void (*XrWsConnectionHandler)(struct XrayIsolate *X, struct XrWebSocket *ws,
+                                      void *user_data);
 
 typedef struct XrHttpServer {
     int listen_fd;
@@ -107,30 +108,25 @@ XR_FUNC XrHttpServer *xr_http_server_new(struct XrayIsolate *isolate);
 XR_FUNC void xr_http_server_free(XrHttpServer *server);
 
 // Add route (handler is xray closure)
-XR_FUNC void xr_http_server_route(XrHttpServer *server,
-                              XrHttpMethod method,
-                              const char *path,
-                              struct XrClosure *handler);
+XR_FUNC void xr_http_server_route(XrHttpServer *server, XrHttpMethod method, const char *path,
+                                  struct XrClosure *handler);
 
 // Add static response route
-XR_FUNC void xr_http_server_static(XrHttpServer *server,
-                           XrHttpMethod method,
-                           const char *path,
-                           const char *response,
-                           size_t response_len);
+XR_FUNC void xr_http_server_static(XrHttpServer *server, XrHttpMethod method, const char *path,
+                                   const char *response, size_t response_len);
 
 // Stop server
 XR_FUNC void xr_http_server_stop(XrHttpServer *server);
 
 // Set WebSocket handler
-XR_FUNC void xr_http_server_set_ws_handler(XrHttpServer *server,
-                                    XrWsConnectionHandler handler,
-                                    void *user_data);
+XR_FUNC void xr_http_server_set_ws_handler(XrHttpServer *server, XrWsConnectionHandler handler,
+                                           void *user_data);
 
 /* ========== Internal Functions ========== */
 
 // Read and parse HTTP request
-XR_FUNC int xr_http_read_request(struct XrayIsolate *X, int fd, XrHttpReq *req, char *buf, size_t buf_size);
+XR_FUNC int xr_http_read_request(struct XrayIsolate *X, int fd, XrHttpReq *req, char *buf,
+                                 size_t buf_size);
 
 // Send HTTP response
 XR_FUNC int xr_http_write_response(struct XrayIsolate *X, int fd, XrHttpResp *resp);
@@ -155,6 +151,6 @@ XR_FUNC int xr_http_send_redirect(struct XrayIsolate *X, int fd, int status, con
  *   Zero GC allocation: only stack variables used for route lookup.
  */
 XR_FUNC bool xr_http_try_prebuilt(XrRouter *router, const char *raw_data, size_t data_len,
-                          const char **out_resp, size_t *out_len);
+                                  const char **out_resp, size_t *out_len);
 
-#endif // XR_STDLIB_HTTP_SERVER_H
+#endif  // XR_STDLIB_HTTP_SERVER_H

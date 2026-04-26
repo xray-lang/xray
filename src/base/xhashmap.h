@@ -38,12 +38,12 @@
 #include "xdefs.h"
 
 // Tombstone sentinel: key==NULL && value==XR_HASHMAP_TOMBSTONE
-#define XR_HASHMAP_TOMBSTONE ((void*)(uintptr_t)1)
+#define XR_HASHMAP_TOMBSTONE ((void *) (uintptr_t) 1)
 
 typedef struct XrHashMapEntry {
     char *key;
     void *value;
-    uint32_t hash;      // Cached hash (avoids recompute on probe/rehash)
+    uint32_t hash;  // Cached hash (avoids recompute on probe/rehash)
 } XrHashMapEntry;
 
 typedef struct XrHashMap {
@@ -53,11 +53,11 @@ typedef struct XrHashMap {
     bool is_arena_allocated;
 } XrHashMap;
 
-XR_FUNC XrHashMap* xr_hashmap_new(void);
+XR_FUNC XrHashMap *xr_hashmap_new(void);
 
 struct XrArena;
 // Arena version - no need to free manually
-XR_FUNC XrHashMap* xr_hashmap_new_in_arena(struct XrArena *arena);
+XR_FUNC XrHashMap *xr_hashmap_new_in_arena(struct XrArena *arena);
 
 // Only for malloc version, not arena version
 XR_FUNC void xr_hashmap_free(XrHashMap *map);
@@ -65,7 +65,7 @@ XR_FUNC void xr_hashmap_free(XrHashMap *map);
 XR_FUNC void xr_hashmap_set(XrHashMap *map, const char *key, void *value);
 
 // Returns NULL if key not found
-XR_FUNC void* xr_hashmap_get(XrHashMap *map, const char *key);
+XR_FUNC void *xr_hashmap_get(XrHashMap *map, const char *key);
 
 XR_FUNC bool xr_hashmap_has(XrHashMap *map, const char *key);
 XR_FUNC bool xr_hashmap_delete(XrHashMap *map, const char *key);
@@ -84,4 +84,4 @@ static inline uint32_t xr_hashmap_count(XrHashMap *map) {
 // Load factor 75%: resize when count * 4 >= capacity * 3
 #define XR_HASHMAP_GROW_FACTOR 2
 
-#endif // XHASHMAP_H
+#endif  // XHASHMAP_H

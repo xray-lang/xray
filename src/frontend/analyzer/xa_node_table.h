@@ -44,15 +44,12 @@ XR_FUNC void xa_node_table_free(XaNodeTable *t);
 
 // Insert / overwrite the inferred type for `node`. Passing NULL for
 // `type` clears any existing entry.
-XR_FUNC void xa_node_table_set_type(XaNodeTable *t,
-                                    struct AstNode *node,
-                                    struct XrType *type);
+XR_FUNC void xa_node_table_set_type(XaNodeTable *t, struct AstNode *node, struct XrType *type);
 
 // Returns the previously set type, or NULL if no entry exists for
 // `node`. Callers MUST treat NULL as "unknown" (the field used to
 // degrade to NULL in the same way as a missing entry).
-XR_FUNC struct XrType *xa_node_table_get_type(const XaNodeTable *t,
-                                              const struct AstNode *node);
+XR_FUNC struct XrType *xa_node_table_get_type(const XaNodeTable *t, const struct AstNode *node);
 
 // Drop all entries, keep the bucket array allocated. Used between
 // analyses of the same file when the analyzer reuses its scratch state.
@@ -61,4 +58,4 @@ XR_FUNC void xa_node_table_clear(XaNodeTable *t);
 // Number of live entries (mostly for invariant checks in tests).
 XR_FUNC int xa_node_table_size(const XaNodeTable *t);
 
-#endif // XA_NODE_TABLE_H
+#endif  // XA_NODE_TABLE_H

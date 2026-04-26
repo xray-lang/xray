@@ -39,30 +39,30 @@
 
 // Native type tags for struct fields
 typedef enum {
-    XR_NATIVE_I64   = 0, // int64_t (8 bytes)
-    XR_NATIVE_F64   = 1, // double (8 bytes)
-    XR_NATIVE_BOOL  = 2, // uint8_t (1 byte, padded to alignment)
-    XR_NATIVE_I8    = 3, // int8_t (1 byte)
-    XR_NATIVE_I16   = 4, // int16_t (2 bytes)
-    XR_NATIVE_I32   = 5, // int32_t (4 bytes)
-    XR_NATIVE_U8    = 6, // uint8_t (1 byte)
-    XR_NATIVE_U16   = 7, // uint16_t (2 bytes)
-    XR_NATIVE_U32   = 8, // uint32_t (4 bytes)
-    XR_NATIVE_U64   = 9, // uint64_t (8 bytes)
-    XR_NATIVE_F32   = 10, // float (4 bytes)
-    XR_NATIVE_STRUCT = 11, // nested struct (variable size)
-    XR_NATIVE_ARRAY  = 12, // fixed-size inline array [N]T
-    XR_NATIVE_STRING = 13, // XrString* pointer (8 bytes, immutable, GC-traced)
+    XR_NATIVE_I64 = 0,      // int64_t (8 bytes)
+    XR_NATIVE_F64 = 1,      // double (8 bytes)
+    XR_NATIVE_BOOL = 2,     // uint8_t (1 byte, padded to alignment)
+    XR_NATIVE_I8 = 3,       // int8_t (1 byte)
+    XR_NATIVE_I16 = 4,      // int16_t (2 bytes)
+    XR_NATIVE_I32 = 5,      // int32_t (4 bytes)
+    XR_NATIVE_U8 = 6,       // uint8_t (1 byte)
+    XR_NATIVE_U16 = 7,      // uint16_t (2 bytes)
+    XR_NATIVE_U32 = 8,      // uint32_t (4 bytes)
+    XR_NATIVE_U64 = 9,      // uint64_t (8 bytes)
+    XR_NATIVE_F32 = 10,     // float (4 bytes)
+    XR_NATIVE_STRUCT = 11,  // nested struct (variable size)
+    XR_NATIVE_ARRAY = 12,   // fixed-size inline array [N]T
+    XR_NATIVE_STRING = 13,  // XrString* pointer (8 bytes, immutable, GC-traced)
 } XrNativeType;
 
 // Per-field descriptor within a struct layout
 typedef struct {
-    uint16_t offset; // byte offset within struct
-    uint8_t  native_type; // XrNativeType
-    uint16_t size; // field size in bytes
-    uint16_t sub_layout_id; // layout_id for nested struct (XR_NATIVE_STRUCT only)
-    uint8_t  elem_native_type; // element type for XR_NATIVE_ARRAY
-    uint16_t elem_count; // element count for XR_NATIVE_ARRAY
+    uint16_t offset;           // byte offset within struct
+    uint8_t native_type;       // XrNativeType
+    uint16_t size;             // field size in bytes
+    uint16_t sub_layout_id;    // layout_id for nested struct (XR_NATIVE_STRUCT only)
+    uint8_t elem_native_type;  // element type for XR_NATIVE_ARRAY
+    uint16_t elem_count;       // element count for XR_NATIVE_ARRAY
 } XrStructFieldLayout;
 
 #define XR_MAX_STRUCT_FIELDS 64
@@ -74,10 +74,10 @@ typedef struct {
  * Referenced by XrClass.struct_layout for VALUE_TYPE classes.
  */
 typedef struct XrStructLayout {
-    uint16_t total_size; // total struct size in bytes (aligned)
-    uint16_t alignment; // alignment requirement
-    uint16_t field_count; // number of fields
-    uint16_t layout_id; // global layout registry index
+    uint16_t total_size;   // total struct size in bytes (aligned)
+    uint16_t alignment;    // alignment requirement
+    uint16_t field_count;  // number of fields
+    uint16_t layout_id;    // global layout registry index
     XrStructFieldLayout fields[XR_MAX_STRUCT_FIELDS];
 } XrStructLayout;
 
@@ -86,16 +86,26 @@ typedef struct XrStructLayout {
 // Return native size for a given XrNativeType
 static inline uint8_t xr_native_type_size(uint8_t native_type) {
     switch (native_type) {
-        case XR_NATIVE_I64:  case XR_NATIVE_U64:
+        case XR_NATIVE_I64:
+        case XR_NATIVE_U64:
         case XR_NATIVE_F64:
-        case XR_NATIVE_STRING: return 8;
-        case XR_NATIVE_I32:  case XR_NATIVE_U32:
-        case XR_NATIVE_F32:  return 4;
-        case XR_NATIVE_I16:  case XR_NATIVE_U16:  return 2;
-        case XR_NATIVE_I8:   case XR_NATIVE_U8:
-        case XR_NATIVE_BOOL: return 1;
-        case XR_NATIVE_ARRAY: return 0; // variable: elem_count * elem_size
-        default:             return 8;
+        case XR_NATIVE_STRING:
+            return 8;
+        case XR_NATIVE_I32:
+        case XR_NATIVE_U32:
+        case XR_NATIVE_F32:
+            return 4;
+        case XR_NATIVE_I16:
+        case XR_NATIVE_U16:
+            return 2;
+        case XR_NATIVE_I8:
+        case XR_NATIVE_U8:
+        case XR_NATIVE_BOOL:
+            return 1;
+        case XR_NATIVE_ARRAY:
+            return 0;  // variable: elem_count * elem_size
+        default:
+            return 8;
     }
 }
 
@@ -121,4 +131,4 @@ XR_FUNC void xr_struct_layout_compute(XrStructLayout *layout);
  */
 XR_FUNC int xr_type_kind_to_native(int kind, uint8_t native_width);
 
-#endif // XSTRUCT_LAYOUT_H
+#endif  // XSTRUCT_LAYOUT_H

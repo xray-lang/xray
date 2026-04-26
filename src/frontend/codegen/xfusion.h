@@ -9,7 +9,7 @@
  *
  * KEY CONCEPT:
  *   Pattern recognition and optimization for instruction sequences.
-*/
+ */
 
 #ifndef XFUSION_H
 #define XFUSION_H
@@ -73,10 +73,10 @@ XR_FUNC bool xr_fusion_is_small_int(XrValue value, int *imm);
 /* ========== Optimization Statistics ========== */
 
 typedef struct FusionStats {
-    int loadk_to_loadi;      // LOADK to LOADI optimizations
-    int arith_to_imm;        // Arithmetic to immediate optimizations
-    int cmp_to_imm;          // Compare to immediate optimizations
-    int total_fusions;       // Total fusion count
+    int loadk_to_loadi;  // LOADK to LOADI optimizations
+    int arith_to_imm;    // Arithmetic to immediate optimizations
+    int cmp_to_imm;      // Compare to immediate optimizations
+    int total_fusions;   // Total fusion count
 } FusionStats;
 
 extern FusionStats g_fusion_stats;
@@ -84,4 +84,4 @@ extern FusionStats g_fusion_stats;
 XR_FUNC void xr_fusion_reset_stats(void);
 XR_FUNC void xr_fusion_print_stats(void);
 
-#endif // XFUSION_H
+#endif  // XFUSION_H

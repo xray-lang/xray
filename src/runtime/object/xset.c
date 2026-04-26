@@ -61,10 +61,10 @@ static uint32_t next_capacity(uint32_t current) {
 
 /* ========== Create and Destroy ========== */
 
-XrSet* xr_set_new(struct XrCoroutine *coro) {
+XrSet *xr_set_new(struct XrCoroutine *coro) {
     XR_DCHECK(coro != NULL, "set_new: NULL coro");
     // Allocate Set on coroutine heap
-    XrSet *set = (XrSet*)xr_alloc(coro, sizeof(XrSet), XR_TSET);
+    XrSet *set = (XrSet *) xr_alloc(coro, sizeof(XrSet), XR_TSET);
 
     if (!set) {
         return NULL;
@@ -84,14 +84,16 @@ XrSet* xr_set_new(struct XrCoroutine *coro) {
     return set;
 }
 
-XrSet* xr_set_new_with_capacity(struct XrCoroutine *coro, uint32_t capacity) {
+XrSet *xr_set_new_with_capacity(struct XrCoroutine *coro, uint32_t capacity) {
     XrSet *set = xr_set_new(coro);
-    if (!set) return NULL;
+    if (!set)
+        return NULL;
 
     if (capacity > 0) {
         // Round up to power of 2
         uint32_t cap = XR_SET_MIN_CAPACITY;
-        while (cap < capacity) cap *= 2;
+        while (cap < capacity)
+            cap *= 2;
         xr_set_resize(set, cap);
     }
     return set;
@@ -99,7 +101,8 @@ XrSet* xr_set_new_with_capacity(struct XrCoroutine *coro, uint32_t capacity) {
 
 // Initialize Set in-place on pre-allocated memory (for shared Set)
 void xr_set_init_inplace(XrSet *set) {
-    if (!set) return;
+    if (!set)
+        return;
 
     // Initialize Set data
     set->capacity = 0;
@@ -113,7 +116,7 @@ void xr_set_init_inplace(XrSet *set) {
 
 /* ========== Small Set Linear Scan ========== */
 
-XrSetEntry* xr_set_find_linear(XrSet *set, XrValue value, uint32_t *out_index) {
+XrSetEntry *xr_set_find_linear(XrSet *set, XrValue value, uint32_t *out_index) {
     XR_DCHECK(set != NULL, "set_find_linear: NULL set");
     XR_DCHECK(out_index != NULL, "set_find_linear: NULL out_index");
     // Empty Set
@@ -157,9 +160,8 @@ XrSetEntry* xr_set_find_linear(XrSet *set, XrValue value, uint32_t *out_index) {
 /* ========== Hash Lookup ========== */
 
 // Core lookup with pre-computed hash (avoids duplicate hash computation)
-static XrSetEntry* set_find_entry_hashed(XrSet *set, XrValue value,
-                                          uint32_t hash_index, uint8_t hash_prefix,
-                                          uint32_t *out_index) {
+static XrSetEntry *set_find_entry_hashed(XrSet *set, XrValue value, uint32_t hash_index,
+                                         uint8_t hash_prefix, uint32_t *out_index) {
     uint32_t first_tombstone = UINT32_MAX;
 
     // Linear probing
@@ -189,7 +191,7 @@ static XrSetEntry* set_find_entry_hashed(XrSet *set, XrValue value,
     return NULL;
 }
 
-XrSetEntry* xr_set_find_entry(XrSet *set, XrValue value, uint32_t *out_index) {
+XrSetEntry *xr_set_find_entry(XrSet *set, XrValue value, uint32_t *out_index) {
     if (set->capacity == 0) {
         *out_index = 0;
         return NULL;
@@ -202,7 +204,7 @@ XrSetEntry* xr_set_find_entry(XrSet *set, XrValue value, uint32_t *out_index) {
 
     uint64_t hash = xr_hash_value(value);
     uint32_t hash_index = hash & (set->capacity - 1);
-    uint8_t hash_prefix = (uint8_t)((hash >> 56) | 0x80);
+    uint8_t hash_prefix = (uint8_t) ((hash >> 56) | 0x80);
 
     return set_find_entry_hashed(set, value, hash_index, hash_prefix, out_index);
 }
@@ -217,11 +219,12 @@ void xr_set_resize(XrSet *set, uint32_t new_capacity) {
     // entries[] always lives on malloc — this avoids Immix line
     // recycling overlapping with the old entries during the rehash
     // loop below.
-    XrSetEntry *new_entries = (XrSetEntry*)xr_malloc(alloc_bytes);
-    if (!new_entries) return;
+    XrSetEntry *new_entries = (XrSetEntry *) xr_malloc(alloc_bytes);
+    if (!new_entries)
+        return;
     // Tell the per-coro GC about the new external buffer; the matching
     // sub_external for the old buffer happens after the rehash below.
-    xr_gc_add_external(xr_current_coro_gc(), (int64_t)alloc_bytes);
+    xr_gc_add_external(xr_current_coro_gc(), (int64_t) alloc_bytes);
 
     // Initialize new array (XR_SET_EMPTY=0x00 and xr_null() are all-zeros)
     memset(new_entries, 0, alloc_bytes);
@@ -234,7 +237,7 @@ void xr_set_resize(XrSet *set, uint32_t new_capacity) {
     // Update Set
     set->entries = new_entries;
     set->capacity = new_capacity;
-    set->count = 0;  // Recount
+    set->count = 0;       // Recount
     set->tombstones = 0;  // Tombstones cleared by rehash
 
     // Re-insert all elements using hash-based placement.
@@ -247,7 +250,7 @@ void xr_set_resize(XrSet *set, uint32_t new_capacity) {
             if (entry_is_valid(old_entry)) {
                 uint64_t hash = xr_hash_value(old_entry->value);
                 uint32_t idx = hash & (new_capacity - 1);
-                uint8_t prefix = (uint8_t)((hash >> 56) | 0x80);
+                uint8_t prefix = (uint8_t) ((hash >> 56) | 0x80);
                 // Linear probing into guaranteed-empty table
                 while (!entry_is_empty(&set->entries[idx])) {
                     idx = (idx + 1) & (new_capacity - 1);
@@ -259,7 +262,7 @@ void xr_set_resize(XrSet *set, uint32_t new_capacity) {
         }
         xr_free(old_entries);
         // Balance the add_external above: the old entries are gone.
-        xr_gc_sub_external(xr_current_coro_gc(), (int64_t)old_alloc_bytes);
+        xr_gc_sub_external(xr_current_coro_gc(), (int64_t) old_alloc_bytes);
     }
 }
 
@@ -276,7 +279,7 @@ bool xr_set_add(XrSet *set, XrValue value) {
 
     // Pre-compute hash once, reuse for both find and insert
     uint64_t hash = xr_hash_value(value);
-    uint8_t hash_prefix = (uint8_t)((hash >> 56) | 0x80);
+    uint8_t hash_prefix = (uint8_t) ((hash >> 56) | 0x80);
 
     uint32_t index;
     XrSetEntry *entry;
@@ -331,7 +334,8 @@ bool xr_set_delete(XrSet *set, XrValue value) {
     // Mark as tombstone
     entry->state = XR_SET_TOMBSTONE;
     set->count--;
-    XR_DCHECK(set->count + set->tombstones <= set->capacity, "set_delete: count+tombstones > capacity");
+    XR_DCHECK(set->count + set->tombstones <= set->capacity,
+              "set_delete: count+tombstones > capacity");
     set->tombstones++;
 
     // Rehash to clear tombstones when they exceed 25% of capacity
@@ -366,7 +370,7 @@ bool xr_set_is_empty(XrSet *set) {
 
 /* ========== Create from Array ========== */
 
-XrSet* xr_set_from_array(struct XrCoroutine *coro, struct XrArray *arr) {
+XrSet *xr_set_from_array(struct XrCoroutine *coro, struct XrArray *arr) {
     XR_DCHECK(coro != NULL, "set_from_array: NULL coro");
     XR_DCHECK(arr != NULL, "set_from_array: NULL arr");
     XrSet *set = xr_set_new(coro);
@@ -381,10 +385,10 @@ XrSet* xr_set_from_array(struct XrCoroutine *coro, struct XrArray *arr) {
 
 /* ========== Iteration Methods ========== */
 
-XrArray* xr_set_values(struct XrCoroutine *coro, XrSet *set) {
+XrArray *xr_set_values(struct XrCoroutine *coro, XrSet *set) {
     XR_DCHECK(coro != NULL, "set_values: NULL coro");
     XR_DCHECK(set != NULL, "set_values: NULL set");
-    XrArray *arr = xr_array_with_capacity(coro, (int32_t)set->count);
+    XrArray *arr = xr_array_with_capacity(coro, (int32_t) set->count);
 
     // Traverse Set, add all values
     if (set->entries != NULL) {
@@ -416,7 +420,7 @@ void xr_set_foreach(XrSet *set, XrayIsolate *isolate, struct XrClosure *callback
     }
 }
 
-XrSet* xr_set_map(XrSet *set, XrayIsolate *isolate, struct XrClosure *callback) {
+XrSet *xr_set_map(XrSet *set, XrayIsolate *isolate, struct XrClosure *callback) {
     XrSet *new_set = xr_set_new(xr_current_coro(isolate));
 
     if (set->entries == NULL || callback == NULL) {
@@ -440,7 +444,7 @@ XrSet* xr_set_map(XrSet *set, XrayIsolate *isolate, struct XrClosure *callback) 
     return new_set;
 }
 
-XrSet* xr_set_filter(XrSet *set, XrayIsolate *isolate, struct XrClosure *callback) {
+XrSet *xr_set_filter(XrSet *set, XrayIsolate *isolate, struct XrClosure *callback) {
     XrSet *new_set = xr_set_new(xr_current_coro(isolate));
 
     if (set->entries == NULL || callback == NULL) {
@@ -468,7 +472,7 @@ XrSet* xr_set_filter(XrSet *set, XrayIsolate *isolate, struct XrClosure *callbac
 
 /* ========== Set Operations ========== */
 
-XrSet* xr_set_union(struct XrCoroutine *coro, XrSet *set1, XrSet *set2) {
+XrSet *xr_set_union(struct XrCoroutine *coro, XrSet *set1, XrSet *set2) {
     XR_DCHECK(coro != NULL, "set_union: NULL coro");
     XR_DCHECK(set1 != NULL, "set_union: NULL set1");
     XR_DCHECK(set2 != NULL, "set_union: NULL set2");
@@ -497,7 +501,7 @@ XrSet* xr_set_union(struct XrCoroutine *coro, XrSet *set1, XrSet *set2) {
     return result;
 }
 
-XrSet* xr_set_intersection(struct XrCoroutine *coro, XrSet *set1, XrSet *set2) {
+XrSet *xr_set_intersection(struct XrCoroutine *coro, XrSet *set1, XrSet *set2) {
     XR_DCHECK(coro != NULL, "set_intersection: NULL coro");
     XR_DCHECK(set1 != NULL, "set_intersection: NULL set1");
     XR_DCHECK(set2 != NULL, "set_intersection: NULL set2");
@@ -523,7 +527,7 @@ XrSet* xr_set_intersection(struct XrCoroutine *coro, XrSet *set1, XrSet *set2) {
     return result;
 }
 
-XrSet* xr_set_difference(struct XrCoroutine *coro, XrSet *set1, XrSet *set2) {
+XrSet *xr_set_difference(struct XrCoroutine *coro, XrSet *set1, XrSet *set2) {
     XR_DCHECK(coro != NULL, "set_difference: NULL coro");
     XR_DCHECK(set1 != NULL, "set_difference: NULL set1");
     XR_DCHECK(set2 != NULL, "set_difference: NULL set2");
@@ -544,7 +548,7 @@ XrSet* xr_set_difference(struct XrCoroutine *coro, XrSet *set1, XrSet *set2) {
     return result;
 }
 
-XrSet* xr_set_symmetric_difference(struct XrCoroutine *coro, XrSet *set1, XrSet *set2) {
+XrSet *xr_set_symmetric_difference(struct XrCoroutine *coro, XrSet *set1, XrSet *set2) {
     XR_DCHECK(coro != NULL, "set_symmetric_difference: NULL coro");
     XR_DCHECK(set1 != NULL, "set_symmetric_difference: NULL set1");
     XR_DCHECK(set2 != NULL, "set_symmetric_difference: NULL set2");
@@ -612,15 +616,13 @@ bool xr_set_is_superset(XrSet *set1, XrSet *set2) {
 /* ========== GC Integration ========== */
 
 void xr_gc_destroy_set(XrGCHeader *obj, struct XrCoroGC *owning_gc) {
-    XrSet *set = (XrSet*)obj;
+    XrSet *set = (XrSet *) obj;
     if (set->entries) {
         size_t bytes = sizeof(XrSetEntry) * set->capacity;
         xr_free(set->entries);
         set->entries = NULL;
         // Balance the add_external from xr_set_resize so totalbytes
         // returns to the correct value when the set is reclaimed.
-        xr_gc_sub_external(owning_gc, (int64_t)bytes);
+        xr_gc_sub_external(owning_gc, (int64_t) bytes);
     }
 }
-
-

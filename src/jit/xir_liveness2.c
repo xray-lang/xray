@@ -100,8 +100,8 @@ static void compute_local_sets(XirLive *live, XirFunc *func) {
  *
  *   live_in[B]  = use[B] ∪ (live_out[B] \ def[B])
  */
-static void iterate_dataflow(XirLive *live, XirFunc *func,
-                            const uint32_t *id_to_idx, uint32_t id_map_size) {
+static void iterate_dataflow(XirLive *live, XirFunc *func, const uint32_t *id_to_idx,
+                             uint32_t id_map_size) {
     uint32_t nv = live->nvreg;
     XirBSet tmp;
     xir_bset_init(&tmp, nv);
@@ -111,7 +111,7 @@ static void iterate_dataflow(XirLive *live, XirFunc *func,
         changed = false;
 
         // Process blocks in reverse order for faster convergence
-        for (int bi = (int)func->nblk - 1; bi >= 0; bi--) {
+        for (int bi = (int) func->nblk - 1; bi >= 0; bi--) {
             XirBlock *blk = func->blocks[bi];
             XirBlockLive *bl = &live->blocks[bi];
 
@@ -121,15 +121,18 @@ static void iterate_dataflow(XirLive *live, XirFunc *func,
             // Compute live_out = union of successor live_in sets
             xir_bset_zero(&bl->live_out);
 
-            XirBlock *succs[2] = { blk->s1, blk->s2 };
+            XirBlock *succs[2] = {blk->s1, blk->s2};
             for (int s = 0; s < 2; s++) {
-                if (!succs[s]) continue;
+                if (!succs[s])
+                    continue;
 
                 // Map successor block ID → layout index
                 uint32_t sid = succs[s]->id;
-                if (sid >= id_map_size) continue;
+                if (sid >= id_map_size)
+                    continue;
                 uint32_t si = id_to_idx[sid];
-                if (si >= func->nblk) continue;
+                if (si >= func->nblk)
+                    continue;
 
                 xir_bset_union(&bl->live_out, &live->blocks[si].live_in);
             }
@@ -137,13 +140,15 @@ static void iterate_dataflow(XirLive *live, XirFunc *func,
             /* Add phi arguments: for each successor's phi, if B is
              * predecessor p, then phi->args[p] is live-out of B. */
             for (int s = 0; s < 2; s++) {
-                if (!succs[s]) continue;
+                if (!succs[s])
+                    continue;
                 XirBlock *succ = succs[s];
 
                 // Find which predecessor index B is in succ
                 for (XirPhi *phi = succ->phis; phi; phi = phi->next) {
                     for (uint32_t p = 0; p < phi->narg && p < succ->npred; p++) {
-                        if (succ->preds[p] != blk) continue;
+                        if (succ->preds[p] != blk)
+                            continue;
                         if (xir_ref_is_vreg(phi->args[p])) {
                             uint32_t idx = XIR_REF_INDEX(phi->args[p]);
                             if (idx < nv)
@@ -194,10 +199,12 @@ void xir_live_compute(XirLive *live, XirFunc *func) {
      * (which is indexed by layout position), producing wrong results. */
     uint32_t max_bid = 0;
     for (uint32_t i = 0; i < func->nblk; i++)
-        if (func->blocks[i]->id > max_bid) max_bid = func->blocks[i]->id;
+        if (func->blocks[i]->id > max_bid)
+            max_bid = func->blocks[i]->id;
     uint32_t id_map_size = max_bid + 1;
     uint32_t *id_to_idx = xr_calloc(id_map_size, sizeof(uint32_t));
-    for (uint32_t i = 0; i < id_map_size; i++) id_to_idx[i] = UINT32_MAX;
+    for (uint32_t i = 0; i < id_map_size; i++)
+        id_to_idx[i] = UINT32_MAX;
     for (uint32_t i = 0; i < func->nblk; i++)
         id_to_idx[func->blocks[i]->id] = i;
 
@@ -208,7 +215,8 @@ void xir_live_compute(XirLive *live, XirFunc *func) {
 }
 
 void xir_live_free(XirLive *live) {
-    if (!live->blocks) return;
+    if (!live->blocks)
+        return;
     for (uint32_t bi = 0; bi < live->nblk; bi++) {
         XirBlockLive *bl = &live->blocks[bi];
         xir_bset_free(&bl->def);

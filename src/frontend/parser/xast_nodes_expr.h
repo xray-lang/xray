@@ -86,7 +86,7 @@ typedef struct IsExprNode {
 typedef struct AsExprNode {
     AstNode *expr;
     struct XrType *type;
-    bool is_safe;              // true = safe cast (returns null on failure)
+    bool is_safe;  // true = safe cast (returns null on failure)
 } AsExprNode;
 
 /* ========== Aggregate / Indexed Exprs ========== */
@@ -158,7 +158,7 @@ typedef struct StructLiteralNode {
     char **field_names;
     AstNode **field_values;
     int field_count;
-    XrType **type_args;        // Generic type arguments (for monomorphization)
+    XrType **type_args;  // Generic type arguments (for monomorphization)
     int type_arg_count;
 } StructLiteralNode;
 
@@ -185,4 +185,4 @@ typedef struct RangeNode {
     AstNode *end;
 } RangeNode;
 
-#endif // XAST_NODES_EXPR_H
+#endif  // XAST_NODES_EXPR_H

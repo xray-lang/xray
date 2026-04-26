@@ -34,12 +34,12 @@
 
 // String/buffer size limits
 #define XR_MAX_PROPERTY_NAME_LEN 256
-#define XR_MAX_METHOD_NAME_LEN   256
-#define XR_TOSTRING_BUFFER_SIZE  512
+#define XR_MAX_METHOD_NAME_LEN 256
+#define XR_TOSTRING_BUFFER_SIZE 512
 
 // Defer limits
 #define XR_DEFER_ENTRIES_MAX 64
-#define XR_DEFER_ARGS_MAX    16
+#define XR_DEFER_ARGS_MAX 16
 
 /* ========== Coroutine Constants ========== */
 
@@ -99,14 +99,14 @@
 /* ========== VM Stack Growth ========== */
 
 // Default extra slots when growing stack
-#define XR_STACK_GROW_DEFAULT  128
+#define XR_STACK_GROW_DEFAULT 128
 
 // Minimum padding slots when growing stack
-#define XR_STACK_GROW_PADDING   64
+#define XR_STACK_GROW_PADDING 64
 
 /* ========== Bit Width ========== */
 
 // int64 bit width (for shift range checks)
 #define XR_INT64_BITS 64
 
-#endif // XCONSTANTS_H
+#endif  // XCONSTANTS_H

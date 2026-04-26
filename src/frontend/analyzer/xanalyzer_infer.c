@@ -17,7 +17,8 @@
 XaInferContext *xa_infer_context_new(XaAnalyzer *analyzer) {
     XR_DCHECK(analyzer != NULL, "infer_context_new: NULL analyzer");
     XaInferContext *ctx = xr_calloc(1, sizeof(XaInferContext));
-    if (!ctx) return NULL;
+    if (!ctx)
+        return NULL;
 
     ctx->analyzer = analyzer;
     ctx->flow = xa_flow_builder_new();
@@ -33,23 +34,27 @@ XaInferContext *xa_infer_context_new(XaAnalyzer *analyzer) {
 
 // Free inference context
 void xa_infer_context_free(XaInferContext *ctx) {
-    if (!ctx) return;
+    if (!ctx)
+        return;
 
-    if (ctx->flow) xa_flow_builder_free(ctx->flow);
-    if (ctx->cache) xa_flow_cache_free(ctx->cache);
-    if (ctx->return_types) xr_free(ctx->return_types);
+    if (ctx->flow)
+        xa_flow_builder_free(ctx->flow);
+    if (ctx->cache)
+        xa_flow_cache_free(ctx->cache);
+    if (ctx->return_types)
+        xr_free(ctx->return_types);
 
     xr_free(ctx);
 }
 
 // Add return type (for function return type inference)
 void xa_infer_add_return_type(XaInferContext *ctx, XrType *type) {
-    if (!ctx || !type) return;
+    if (!ctx || !type)
+        return;
 
     if (ctx->return_type_count >= ctx->return_type_capacity) {
         int new_cap = ctx->return_type_capacity == 0 ? 8 : ctx->return_type_capacity * 2;
-        XR_REALLOC_OR_ABORT(ctx->return_types,
-                            sizeof(XrType*) * (size_t)new_cap,
+        XR_REALLOC_OR_ABORT(ctx->return_types, sizeof(XrType *) * (size_t) new_cap,
                             "infer return_types grow");
         ctx->return_type_capacity = new_cap;
     }
@@ -74,4 +79,3 @@ XrType *xa_infer_compute_return_type(XaInferContext *ctx) {
 
     return result;
 }
-

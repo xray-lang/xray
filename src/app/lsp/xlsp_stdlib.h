@@ -39,7 +39,7 @@ typedef struct {
 typedef struct {
     const char *name;
     XlspSymbolKind kind;
-    const char *signature;      // e.g. "fn(ms: int): void"
+    const char *signature;  // e.g. "fn(ms: int): void"
     const char *documentation;
     const XlspParamInfo *params;
     int param_count;
@@ -60,7 +60,7 @@ XR_FUNC const XlspModuleInfo *xlsp_stdlib_get_modules(int *count);
 XR_FUNC const XlspModuleInfo *xlsp_stdlib_find_module(const char *name);
 
 // Find a symbol in a module
-XR_FUNC const XlspSymbolInfo *xlsp_stdlib_find_symbol(const XlspModuleInfo *module, 
-                                               const char *name);
+XR_FUNC const XlspSymbolInfo *xlsp_stdlib_find_symbol(const XlspModuleInfo *module,
+                                                      const char *name);
 
-#endif // XLSP_STDLIB_H
+#endif  // XLSP_STDLIB_H

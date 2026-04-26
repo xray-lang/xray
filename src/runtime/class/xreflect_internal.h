@@ -38,7 +38,7 @@
 #ifdef REFLECTION_API_DEBUG
 #define API_DEBUG_PRINT(...) fprintf(stderr, "[ReflectAPI] " __VA_ARGS__)
 #else
-#define API_DEBUG_PRINT(...) ((void)0)
+#define API_DEBUG_PRINT(...) ((void) 0)
 #endif
 
 typedef struct XrTypeMetadata XrTypeMetadata;
@@ -55,7 +55,7 @@ typedef struct ParameterWrapper ParameterWrapper;
 // klass is sole data source; NULL for special types like void
 struct XrTypeMetadata {
     XrClass *klass;
-    const char *name;             // Only used when klass==NULL
+    const char *name;  // Only used when klass==NULL
 };
 
 // Data fetched from owner->fields[field_index]
@@ -109,9 +109,9 @@ XR_FUNC XrValue xr_create_method_object(XrayIsolate *X, XrMethodMetadata *method
 XR_FUNC XrValue xr_create_constructor_object(XrayIsolate *X, XrMethodMetadata *ctor);
 XR_FUNC XrValue xr_create_parameter_object(XrayIsolate *X, XrParameterMetadata *param);
 
-XR_FUNC XrTypeMetadata* xr_get_type_metadata(XrValue type_obj);
-XR_FUNC XrFieldMetadata* xr_get_field_metadata(XrValue field_obj);
-XR_FUNC XrMethodMetadata* xr_get_method_metadata(XrValue method_obj);
-XR_FUNC XrParameterMetadata* xr_get_parameter_metadata(XrValue param_obj);
+XR_FUNC XrTypeMetadata *xr_get_type_metadata(XrValue type_obj);
+XR_FUNC XrFieldMetadata *xr_get_field_metadata(XrValue field_obj);
+XR_FUNC XrMethodMetadata *xr_get_method_metadata(XrValue method_obj);
+XR_FUNC XrParameterMetadata *xr_get_parameter_metadata(XrValue param_obj);
 
-#endif // XREFLECT_INTERNAL_H
+#endif  // XREFLECT_INTERNAL_H

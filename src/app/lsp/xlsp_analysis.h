@@ -66,7 +66,7 @@ XR_FUNC XrJsonValue *xlsp_analyze_signature_help(XrLspDocument *doc, XrLspPositi
 // Word at cursor position (shared utility to avoid code duplication)
 // Returns allocated word string, caller must free. Sets start/end offsets.
 // Returns NULL if no word at position.
-XR_FUNC char *xlsp_word_at_position(XrLspDocument *doc, XrLspPosition pos,
-                            uint32_t *out_start, uint32_t *out_end);
+XR_FUNC char *xlsp_word_at_position(XrLspDocument *doc, XrLspPosition pos, uint32_t *out_start,
+                                    uint32_t *out_end);
 
-#endif // XLSP_ANALYSIS_H
+#endif  // XLSP_ANALYSIS_H

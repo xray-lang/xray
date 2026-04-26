@@ -31,21 +31,18 @@
 
 // Format configuration
 typedef struct {
-    int indent_size;        // Indent spaces (default 4)
-    int use_tabs;           // Use tabs instead of spaces
-    int max_line_length;    // Max line length hint (default 100)
-    int trailing_newline;   // Ensure trailing newline at EOF
+    int indent_size;       // Indent spaces (default 4)
+    int use_tabs;          // Use tabs instead of spaces
+    int max_line_length;   // Max line length hint (default 100)
+    int trailing_newline;  // Ensure trailing newline at EOF
 } FmtConfig;
 
 static FmtConfig default_config = {
-    .indent_size = 4,
-    .use_tabs = 0,
-    .max_line_length = 100,
-    .trailing_newline = 1
-};
+    .indent_size = 4, .use_tabs = 0, .max_line_length = 100, .trailing_newline = 1};
 
 // Format source code using AST
-static char* format_source(XrayIsolate *X, const char *source, const char *path, FmtConfig *config) {
+static char *format_source(XrayIsolate *X, const char *source, const char *path,
+                           FmtConfig *config) {
     // Parse source to AST with trivia collection (preserves comments)
     AstNode *ast = xr_parse_with_trivia(X, source, path);
     if (!ast) {
@@ -54,18 +51,16 @@ static char* format_source(XrayIsolate *X, const char *source, const char *path,
     }
 
     // Convert to XrFmtConfig
-    XrFmtConfig xfmt_config = {
-        .indent_size = config->indent_size,
-        .use_tabs = config->use_tabs,
-        .max_line_length = config->max_line_length,
-        .trailing_newline = config->trailing_newline,
-        .blank_lines_around_functions = 1,
-        .blank_lines_around_classes = 1,
-        .space_around_operators = 1,
-        .space_after_comma = 1,
-        .space_in_parentheses = 0,
-        .brace_same_line = 1
-    };
+    XrFmtConfig xfmt_config = {.indent_size = config->indent_size,
+                               .use_tabs = config->use_tabs,
+                               .max_line_length = config->max_line_length,
+                               .trailing_newline = config->trailing_newline,
+                               .blank_lines_around_functions = 1,
+                               .blank_lines_around_classes = 1,
+                               .space_around_operators = 1,
+                               .space_after_comma = 1,
+                               .space_in_parentheses = 0,
+                               .brace_same_line = 1};
 
     // Format AST to string
     return xfmt_format_ast(ast, &xfmt_config, X);
@@ -73,7 +68,8 @@ static char* format_source(XrayIsolate *X, const char *source, const char *path,
 
 // Format single file
 // Returns: 0 = no change, 1 = formatted, -1 = error
-static int format_file(XrayIsolate *X, const char *path, FmtConfig *config, int check_only, int verbose) {
+static int format_file(XrayIsolate *X, const char *path, FmtConfig *config, int check_only,
+                       int verbose) {
     char *source = xr_cli_read_file(path);
     if (!source) {
         fprintf(stderr, "Error: cannot read file '%s'\n", path);
@@ -115,8 +111,8 @@ static int format_file(XrayIsolate *X, const char *path, FmtConfig *config, int 
 }
 
 // Recursively format directory
-static int format_directory(XrayIsolate *X, const char *path, FmtConfig *config,
-                           int check_only, int verbose, int *total, int *changed) {
+static int format_directory(XrayIsolate *X, const char *path, FmtConfig *config, int check_only,
+                            int verbose, int *total, int *changed) {
     DIR *dir = opendir(path);
     if (!dir) {
         fprintf(stderr, "Error: cannot open directory '%s'\n", path);
@@ -135,14 +131,13 @@ static int format_directory(XrayIsolate *X, const char *path, FmtConfig *config,
         snprintf(filepath, sizeof(filepath), "%s/%s", path, entry->d_name);
 
         struct stat st;
-        if (stat(filepath, &st) != 0) continue;
+        if (stat(filepath, &st) != 0)
+            continue;
 
         if (S_ISDIR(st.st_mode)) {
             // Skip hidden directories and build directories
-            if (entry->d_name[0] == '.' ||
-                strcmp(entry->d_name, "node_modules") == 0 ||
-                strcmp(entry->d_name, "build") == 0 ||
-                strcmp(entry->d_name, "build-asan") == 0 ||
+            if (entry->d_name[0] == '.' || strcmp(entry->d_name, "node_modules") == 0 ||
+                strcmp(entry->d_name, "build") == 0 || strcmp(entry->d_name, "build-asan") == 0 ||
                 strcmp(entry->d_name, "build-release") == 0) {
                 continue;
             }
@@ -150,8 +145,10 @@ static int format_directory(XrayIsolate *X, const char *path, FmtConfig *config,
         } else if (S_ISREG(st.st_mode) && xr_cli_is_xr_file(entry->d_name)) {
             (*total)++;
             int result = format_file(X, filepath, config, check_only, verbose);
-            if (result > 0) (*changed)++;
-            if (result < 0) errors++;
+            if (result > 0)
+                (*changed)++;
+            if (result < 0)
+                errors++;
         }
     }
 
@@ -164,7 +161,7 @@ XR_FUNC int cmd_fmt(const XrCliInvocation *inv) {
 
     FmtConfig config = default_config;
     bool check_only = xr_cli_opt_bool(&inv->options, "check");
-    bool verbose    = xr_cli_opt_bool(&inv->options, "verbose");
+    bool verbose = xr_cli_opt_bool(&inv->options, "verbose");
 
     if (xr_cli_opt_bool(&inv->options, "tabs")) {
         config.use_tabs = 1;
@@ -203,13 +200,14 @@ XR_FUNC int cmd_fmt(const XrCliInvocation *inv) {
             }
 
             if (S_ISDIR(st.st_mode)) {
-                errors += format_directory(X, path, &config, check_only, verbose,
-                                           &total, &changed);
+                errors += format_directory(X, path, &config, check_only, verbose, &total, &changed);
             } else if (S_ISREG(st.st_mode)) {
                 total++;
                 int result = format_file(X, path, &config, check_only, verbose);
-                if (result > 0) changed++;
-                if (result < 0) errors++;
+                if (result > 0)
+                    changed++;
+                if (result < 0)
+                    errors++;
             }
         }
     }
@@ -230,6 +228,5 @@ XR_FUNC int cmd_fmt(const XrCliInvocation *inv) {
         }
     }
 
-    return (check_only && changed > 0) || errors > 0
-        ? XR_CLI_EXIT_FAIL : XR_CLI_EXIT_OK;
+    return (check_only && changed > 0) || errors > 0 ? XR_CLI_EXIT_FAIL : XR_CLI_EXIT_OK;
 }

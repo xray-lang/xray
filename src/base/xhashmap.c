@@ -29,9 +29,10 @@ static inline bool entry_is_tombstone(const XrHashMapEntry *e) {
     return e->key == NULL && e->value == XR_HASHMAP_TOMBSTONE;
 }
 
-static XrHashMapEntry* find_entry(XrHashMap *map, const char *key,
-                                   uint32_t hash, uint32_t *out_index) {
-    if (!map || !key) return NULL;
+static XrHashMapEntry *find_entry(XrHashMap *map, const char *key, uint32_t hash,
+                                  uint32_t *out_index) {
+    if (!map || !key)
+        return NULL;
 
     uint32_t index = hash & (map->capacity - 1);
 
@@ -43,36 +44,40 @@ static XrHashMapEntry* find_entry(XrHashMap *map, const char *key,
 
         if (entry_is_empty(entry)) {
             if (out_index) {
-                *out_index = tombstone ? (uint32_t)(tombstone - map->entries) : probe_index;
+                *out_index = tombstone ? (uint32_t) (tombstone - map->entries) : probe_index;
             }
             return NULL;
         } else if (entry_is_tombstone(entry)) {
-            if (!tombstone) tombstone = entry;
+            if (!tombstone)
+                tombstone = entry;
         } else if (entry->hash == hash && strcmp(entry->key, key) == 0) {
             // Fast path: compare cached hash first, strcmp only on match
-            if (out_index) *out_index = probe_index;
+            if (out_index)
+                *out_index = probe_index;
             return entry;
         }
     }
 
     if (out_index && tombstone) {
-        *out_index = (uint32_t)(tombstone - map->entries);
+        *out_index = (uint32_t) (tombstone - map->entries);
     }
     return NULL;
 }
 
 static void resize(XrHashMap *map, uint32_t new_capacity) {
     if (map->is_arena_allocated) {
-        XR_CHECK(false, "hashmap resize: arena-allocated map hit load factor, consider larger initial capacity");
+        XR_CHECK(false, "hashmap resize: arena-allocated map hit load factor, consider larger "
+                        "initial capacity");
         return;
     }
 
     XR_DCHECK(new_capacity >= map->capacity, "New capacity must be >= current capacity");
     XR_DCHECK((new_capacity & (new_capacity - 1)) == 0, "hashmap resize: capacity not power-of-2");
 
-    XrHashMapEntry *new_entries = (XrHashMapEntry*)xr_malloc(
-        sizeof(XrHashMapEntry) * new_capacity);
-    if (!new_entries) return;
+    XrHashMapEntry *new_entries =
+        (XrHashMapEntry *) xr_malloc(sizeof(XrHashMapEntry) * new_capacity);
+    if (!new_entries)
+        return;
 
     memset(new_entries, 0, sizeof(XrHashMapEntry) * new_capacity);
 
@@ -102,12 +107,16 @@ static void resize(XrHashMap *map, uint32_t new_capacity) {
     xr_free(old_entries);
 }
 
-XrHashMap* xr_hashmap_new(void) {
-    XrHashMap *map = (XrHashMap*)xr_malloc(sizeof(XrHashMap));
-    if (!map) return NULL;
+XrHashMap *xr_hashmap_new(void) {
+    XrHashMap *map = (XrHashMap *) xr_malloc(sizeof(XrHashMap));
+    if (!map)
+        return NULL;
     uint32_t initial_capacity = 16;
-    map->entries = (XrHashMapEntry*)xr_malloc(sizeof(XrHashMapEntry) * initial_capacity);
-    if (!map->entries) { xr_free(map); return NULL; }
+    map->entries = (XrHashMapEntry *) xr_malloc(sizeof(XrHashMapEntry) * initial_capacity);
+    if (!map->entries) {
+        xr_free(map);
+        return NULL;
+    }
     map->capacity = initial_capacity;
     map->count = 0;
     map->is_arena_allocated = false;
@@ -116,15 +125,18 @@ XrHashMap* xr_hashmap_new(void) {
     return map;
 }
 
-XrHashMap* xr_hashmap_new_in_arena(XrArena *arena) {
-    if (!arena) return NULL;
+XrHashMap *xr_hashmap_new_in_arena(XrArena *arena) {
+    if (!arena)
+        return NULL;
 
     XrHashMap *map = xr_arena_new(arena, XrHashMap);
-    if (!map) return NULL;
+    if (!map)
+        return NULL;
 
     uint32_t initial_capacity = 16;
     map->entries = xr_arena_alloc(arena, sizeof(XrHashMapEntry) * initial_capacity);
-    if (!map->entries) return NULL;
+    if (!map->entries)
+        return NULL;
 
     map->capacity = initial_capacity;
     map->count = 0;
@@ -135,9 +147,12 @@ XrHashMap* xr_hashmap_new_in_arena(XrArena *arena) {
 }
 
 void xr_hashmap_free(XrHashMap *map) {
-    if (!map) return;
-    if (!map->is_arena_allocated && map->entries) xr_free(map->entries);
-    if (!map->is_arena_allocated) xr_free(map);
+    if (!map)
+        return;
+    if (!map->is_arena_allocated && map->entries)
+        xr_free(map->entries);
+    if (!map->is_arena_allocated)
+        xr_free(map);
 }
 
 void xr_hashmap_set(XrHashMap *map, const char *key, void *value) {
@@ -155,15 +170,16 @@ void xr_hashmap_set(XrHashMap *map, const char *key, void *value) {
 
     if (!entry) {
         entry = &map->entries[index];
-        entry->key = (char*)key;
+        entry->key = (char *) key;
         entry->hash = hash;
         map->count++;
     }
     entry->value = value;
 }
 
-void* xr_hashmap_get(XrHashMap *map, const char *key) {
-    if (!map || !key) return NULL;
+void *xr_hashmap_get(XrHashMap *map, const char *key) {
+    if (!map || !key)
+        return NULL;
     uint32_t hash = hash_string(key);
     uint32_t index;
     XrHashMapEntry *entry = find_entry(map, key, hash, &index);
@@ -171,7 +187,8 @@ void* xr_hashmap_get(XrHashMap *map, const char *key) {
 }
 
 bool xr_hashmap_has(XrHashMap *map, const char *key) {
-    if (!map || !key) return false;
+    if (!map || !key)
+        return false;
     uint32_t hash = hash_string(key);
     uint32_t index;
     XrHashMapEntry *entry = find_entry(map, key, hash, &index);
@@ -179,11 +196,13 @@ bool xr_hashmap_has(XrHashMap *map, const char *key) {
 }
 
 bool xr_hashmap_delete(XrHashMap *map, const char *key) {
-    if (!map || !key) return false;
+    if (!map || !key)
+        return false;
     uint32_t hash = hash_string(key);
     uint32_t index;
     XrHashMapEntry *entry = find_entry(map, key, hash, &index);
-    if (!entry) return false;
+    if (!entry)
+        return false;
 
     entry->key = NULL;
     entry->value = XR_HASHMAP_TOMBSTONE;
@@ -193,13 +212,15 @@ bool xr_hashmap_delete(XrHashMap *map, const char *key) {
 }
 
 void xr_hashmap_clear(XrHashMap *map) {
-    if (!map) return;
+    if (!map)
+        return;
     memset(map->entries, 0, sizeof(XrHashMapEntry) * map->capacity);
     map->count = 0;
 }
 
 void xr_hashmap_foreach(XrHashMap *map, XrHashMapIterFunc func, void *userdata) {
-    if (!map || !func) return;
+    if (!map || !func)
+        return;
     for (uint32_t i = 0; i < map->capacity; i++) {
         XrHashMapEntry *entry = &map->entries[i];
         if (entry->key != NULL) {
@@ -207,4 +228,3 @@ void xr_hashmap_foreach(XrHashMap *map, XrHashMapIterFunc func, void *userdata) 
         }
     }
 }
-

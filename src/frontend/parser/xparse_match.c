@@ -29,7 +29,7 @@ static AstNode *parse_pattern(Parser *parser) {
 
     // Wildcard pattern
     if (xr_parser_match(parser, TK_UNDERSCORE)) {
-            return xr_ast_pattern_wildcard(parser->X, line);
+        return xr_ast_pattern_wildcard(parser->X, line);
     }
 
     // Parse first value (may be literal or enum access)
@@ -54,7 +54,7 @@ static AstNode *parse_pattern(Parser *parser) {
     // Check if multi-value pattern
     if (xr_parser_check(parser, TK_COMMA)) {
         // Multi-value pattern: 1, 2, 3
-        AstNode **patterns = (AstNode **)ast_alloc_array(parser->X, sizeof(AstNode *), 16);
+        AstNode **patterns = (AstNode **) ast_alloc_array(parser->X, sizeof(AstNode *), 16);
         int count = 0;
         int capacity = 16;
 
@@ -66,11 +66,11 @@ static AstNode *parse_pattern(Parser *parser) {
             if (count >= capacity) {
                 int old_capacity = capacity;
                 capacity *= 2;
-                AstNode **_new_patterns = (AstNode **)ast_alloc_array(
-                    parser->X, sizeof(AstNode *), (size_t)capacity);
-                if (old_capacity > 0 && patterns) memcpy(_new_patterns, patterns, sizeof(AstNode *) * (size_t)old_capacity);
+                AstNode **_new_patterns =
+                    (AstNode **) ast_alloc_array(parser->X, sizeof(AstNode *), (size_t) capacity);
+                if (old_capacity > 0 && patterns)
+                    memcpy(_new_patterns, patterns, sizeof(AstNode *) * (size_t) old_capacity);
                 patterns = _new_patterns;
-
             }
 
             AstNode *value = xr_parse_precedence(parser, PREC_CALL);
@@ -165,7 +165,7 @@ AstNode *xr_parse_match_expr(Parser *parser) {
     xr_parser_consume(parser, TK_LBRACE, "expected '{' after match expression");
 
     // Parse all arms
-    AstNode **arms = (AstNode **)ast_alloc_array(parser->X, sizeof(AstNode *), 16);
+    AstNode **arms = (AstNode **) ast_alloc_array(parser->X, sizeof(AstNode *), 16);
     int arm_count = 0;
     int capacity = 16;
 
@@ -174,19 +174,18 @@ AstNode *xr_parse_match_expr(Parser *parser) {
         if (arm_count >= capacity) {
             int old_capacity = capacity;
             capacity *= 2;
-            AstNode **_new_arms = (AstNode **)ast_alloc_array(
-                parser->X, sizeof(AstNode *), (size_t)capacity);
-            if (old_capacity > 0 && arms) memcpy(_new_arms, arms, sizeof(AstNode *) * (size_t)old_capacity);
+            AstNode **_new_arms =
+                (AstNode **) ast_alloc_array(parser->X, sizeof(AstNode *), (size_t) capacity);
+            if (old_capacity > 0 && arms)
+                memcpy(_new_arms, arms, sizeof(AstNode *) * (size_t) old_capacity);
             arms = _new_arms;
-
         }
 
         // Parse one arm
         AstNode *arm = parse_match_arm(parser);
         if (!arm) {
             // Error recovery: skip to next arm or }
-            while (!xr_parser_check(parser, TK_COMMA) &&
-                   !xr_parser_check(parser, TK_RBRACE) &&
+            while (!xr_parser_check(parser, TK_COMMA) && !xr_parser_check(parser, TK_RBRACE) &&
                    !xr_parser_check(parser, TK_EOF)) {
                 xr_parser_advance(parser);
             }
@@ -206,7 +205,7 @@ AstNode *xr_parse_match_expr(Parser *parser) {
 
     // Consume '}'
     xr_parser_consume(parser, TK_RBRACE, "expected '}' at end of match expression");
-    int match_end_line   = parser->previous.line;
+    int match_end_line = parser->previous.line;
     int match_end_column = parser->previous.column + 1;
 
     // Check if at least one arm
@@ -216,7 +215,7 @@ AstNode *xr_parse_match_expr(Parser *parser) {
     }
 
     AstNode *node = xr_ast_match_expr(parser->X, expr, arms, arm_count, line);
-    node->end_line   = match_end_line;
+    node->end_line = match_end_line;
     node->end_column = match_end_column;
     return node;
 }

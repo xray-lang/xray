@@ -34,13 +34,13 @@ typedef enum {
     XMETHOD_OPERATOR,
 } XrMethodType;
 
-#define XMETHOD_FLAG_PRIVATE     0x01
-#define XMETHOD_FLAG_STATIC      0x02
+#define XMETHOD_FLAG_PRIVATE 0x01
+#define XMETHOD_FLAG_STATIC 0x02
 #define XMETHOD_FLAG_CONSTRUCTOR 0x04
-#define XMETHOD_FLAG_ABSTRACT    0x08
-#define XMETHOD_FLAG_FINAL       0x10
-#define XMETHOD_FLAG_PROTECTED   0x20
-#define XMETHOD_FLAG_NATIVE      0x40
+#define XMETHOD_FLAG_ABSTRACT 0x08
+#define XMETHOD_FLAG_FINAL 0x10
+#define XMETHOD_FLAG_PROTECTED 0x20
+#define XMETHOD_FLAG_NATIVE 0x40
 
 /*
  * Value-type method descriptor.
@@ -51,18 +51,18 @@ typedef struct XrMethod {
     XrMethodType type;
 
     union {
-        struct XrClosure* closure;    // CLOSURE/GETTER/SETTER/OPERATOR
-        XrCFunctionPtr primitive;     // PRIMITIVE
+        struct XrClosure *closure;  // CLOSURE/GETTER/SETTER/OPERATOR
+        XrCFunctionPtr primitive;   // PRIMITIVE
     } as;
 
     uint8_t flags;
-    uint8_t op_type;           // Valid only when type==OPERATOR
+    uint8_t op_type;  // Valid only when type==OPERATOR
     int32_t symbol;
 
     const char *name;
     uint8_t param_count;
 
-    int32_t vtable_index;      // -1 if not in vtable
+    int32_t vtable_index;  // -1 if not in vtable
 } XrMethod;
 
 /* ========== Property Accessors (inline) ========== */
@@ -86,6 +86,6 @@ static inline bool xr_method_is_abstract(const XrMethod *method) {
 /* ========== Debug ========== */
 
 XR_FUNC void xr_method_print(const XrMethod *method);
-XR_FUNC const char* xr_method_type_name(XrMethodType type);
+XR_FUNC const char *xr_method_type_name(XrMethodType type);
 
-#endif // XMETHOD_H
+#endif  // XMETHOD_H

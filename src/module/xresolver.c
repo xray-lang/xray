@@ -29,9 +29,10 @@
  * *out_ver to the version part (or DEFAULT_CONSTRAINT if no @).
  * Returns xr_malloc'd buffer that caller must xr_free().
  */
-static char* parse_dep_spec(const char *spec, const char **out_name, const char **out_ver) {
+static char *parse_dep_spec(const char *spec, const char **out_name, const char **out_ver) {
     char *buf = xr_strdup(spec);
-    if (!buf) return NULL;
+    if (!buf)
+        return NULL;
     char *at = strchr(buf, '@');
     if (at) {
         *at = '\0';
@@ -44,10 +45,11 @@ static char* parse_dep_spec(const char *spec, const char **out_name, const char 
     return buf;
 }
 
-static XrDepNode* node_new(const char *name, const char *constraint_str) {
+static XrDepNode *node_new(const char *name, const char *constraint_str) {
     XR_DCHECK(name != NULL, "node_new: NULL name");
-    XrDepNode *node = (XrDepNode*)xr_malloc(sizeof(XrDepNode));
-    if (!node) return NULL;
+    XrDepNode *node = (XrDepNode *) xr_malloc(sizeof(XrDepNode));
+    if (!node)
+        return NULL;
     memset(node, 0, sizeof(XrDepNode));
 
     node->name = xr_strdup(name);
@@ -58,9 +60,9 @@ static XrDepNode* node_new(const char *name, const char *constraint_str) {
     }
 
     node->dep_capacity = 8;
-    node->dependencies = (XrDepNode**)xr_malloc(node->dep_capacity * sizeof(XrDepNode*));
+    node->dependencies = (XrDepNode **) xr_malloc(node->dep_capacity * sizeof(XrDepNode *));
     if (node->dependencies) {
-        memset(node->dependencies, 0, node->dep_capacity * sizeof(XrDepNode*));
+        memset(node->dependencies, 0, node->dep_capacity * sizeof(XrDepNode *));
     }
 
     return node;
@@ -70,7 +72,8 @@ static XrDepNode* node_new(const char *name, const char *constraint_str) {
  * Free dependency node.
  */
 static void node_free(XrDepNode *node) {
-    if (!node) return;
+    if (!node)
+        return;
 
     xr_free(node->name);
     xr_free(node->constraint_str);
@@ -84,7 +87,8 @@ static void node_free(XrDepNode *node) {
  * Add dependency to node.
  */
 static bool node_add_dep(XrDepNode *node, XrDepNode *dep) {
-    if (!node || !dep) return false;
+    if (!node || !dep)
+        return false;
 
     // Check if already exists
     for (int i = 0; i < node->dep_count; i++) {
@@ -97,8 +101,10 @@ static bool node_add_dep(XrDepNode *node, XrDepNode *dep) {
     if (node->dep_count >= node->dep_capacity) {
         int old_cap = node->dep_capacity;
         int new_cap = old_cap * 2;
-        XrDepNode **new_deps = (XrDepNode**)xr_realloc(node->dependencies, new_cap * sizeof(XrDepNode*));
-        if (!new_deps) return false;
+        XrDepNode **new_deps =
+            (XrDepNode **) xr_realloc(node->dependencies, new_cap * sizeof(XrDepNode *));
+        if (!new_deps)
+            return false;
         node->dependencies = new_deps;
         node->dep_capacity = new_cap;
     }
@@ -111,7 +117,8 @@ static bool node_add_dep(XrDepNode *node, XrDepNode *dep) {
 /* ========== Package Info API ========== */
 
 void xr_package_info_free(XrPackageInfo *info) {
-    if (!info) return;
+    if (!info)
+        return;
 
     xr_free(info->name);
     xr_free(info->latest_version);
@@ -132,16 +139,17 @@ void xr_package_info_free(XrPackageInfo *info) {
 
 /* ========== Dependency Graph API Implementation ========== */
 
-XrDepGraph* xr_depgraph_new(void) {
-    XrDepGraph *graph = (XrDepGraph*)xr_malloc(sizeof(XrDepGraph));
-    if (!graph) return NULL;
+XrDepGraph *xr_depgraph_new(void) {
+    XrDepGraph *graph = (XrDepGraph *) xr_malloc(sizeof(XrDepGraph));
+    if (!graph)
+        return NULL;
     memset(graph, 0, sizeof(XrDepGraph));
 
     graph->node_capacity = INITIAL_CAPACITY;
-    graph->nodes = (XrDepNode**)xr_malloc(graph->node_capacity * sizeof(XrDepNode*));
+    graph->nodes = (XrDepNode **) xr_malloc(graph->node_capacity * sizeof(XrDepNode *));
 
     graph->root_capacity = INITIAL_CAPACITY;
-    graph->roots = (XrDepNode**)xr_malloc(graph->root_capacity * sizeof(XrDepNode*));
+    graph->roots = (XrDepNode **) xr_malloc(graph->root_capacity * sizeof(XrDepNode *));
     graph->index = xr_hashmap_new();
 
     if (!graph->nodes || !graph->roots || !graph->index) {
@@ -152,14 +160,15 @@ XrDepGraph* xr_depgraph_new(void) {
         return NULL;
     }
 
-    memset(graph->nodes, 0, graph->node_capacity * sizeof(XrDepNode*));
-    memset(graph->roots, 0, graph->root_capacity * sizeof(XrDepNode*));
+    memset(graph->nodes, 0, graph->node_capacity * sizeof(XrDepNode *));
+    memset(graph->roots, 0, graph->root_capacity * sizeof(XrDepNode *));
 
     return graph;
 }
 
 void xr_depgraph_free(XrDepGraph *graph) {
-    if (!graph) return;
+    if (!graph)
+        return;
 
     for (int i = 0; i < graph->node_count; i++) {
         node_free(graph->nodes[i]);
@@ -174,21 +183,23 @@ void xr_depgraph_free(XrDepGraph *graph) {
 /*
  * Get or create node.
  */
-static XrDepNode* graph_get_or_create_node(XrDepGraph *graph,
-                                           const char *name,
+static XrDepNode *graph_get_or_create_node(XrDepGraph *graph, const char *name,
                                            const char *constraint) {
     // Find existing node via hashmap O(1)
     XrDepNode *node = xr_depgraph_find(graph, name);
-    if (node) return node;
+    if (node)
+        return node;
 
     // Create new node
     node = node_new(name, constraint);
-    if (!node) return NULL;
+    if (!node)
+        return NULL;
 
     // Check capacity
     if (graph->node_count >= graph->node_capacity) {
         int new_cap = graph->node_capacity * 2;
-        XrDepNode **new_nodes = (XrDepNode**)xr_realloc(graph->nodes, new_cap * sizeof(XrDepNode*));
+        XrDepNode **new_nodes =
+            (XrDepNode **) xr_realloc(graph->nodes, new_cap * sizeof(XrDepNode *));
         if (!new_nodes) {
             node_free(node);
             return NULL;
@@ -202,12 +213,13 @@ static XrDepNode* graph_get_or_create_node(XrDepGraph *graph,
     return node;
 }
 
-bool xr_depgraph_add_root(XrDepGraph *graph, const char *name,
-                          const char *constraint) {
-    if (!graph || !name) return false;
+bool xr_depgraph_add_root(XrDepGraph *graph, const char *name, const char *constraint) {
+    if (!graph || !name)
+        return false;
 
     XrDepNode *node = graph_get_or_create_node(graph, name, constraint);
-    if (!node) return false;
+    if (!node)
+        return false;
 
     node->depth = 0;
 
@@ -215,8 +227,10 @@ bool xr_depgraph_add_root(XrDepGraph *graph, const char *name,
     if (graph->root_count >= graph->root_capacity) {
         int old_cap = graph->root_capacity;
         int new_cap = old_cap * 2;
-        XrDepNode **new_roots = (XrDepNode**)xr_realloc(graph->roots, new_cap * sizeof(XrDepNode*));
-        if (!new_roots) return false;
+        XrDepNode **new_roots =
+            (XrDepNode **) xr_realloc(graph->roots, new_cap * sizeof(XrDepNode *));
+        if (!new_roots)
+            return false;
         graph->roots = new_roots;
         graph->root_capacity = new_cap;
     }
@@ -225,9 +239,10 @@ bool xr_depgraph_add_root(XrDepGraph *graph, const char *name,
     return true;
 }
 
-XrDepNode* xr_depgraph_find(XrDepGraph *graph, const char *name) {
-    if (!graph || !name) return NULL;
-    return (XrDepNode*)xr_hashmap_get(graph->index, name);
+XrDepNode *xr_depgraph_find(XrDepGraph *graph, const char *name) {
+    if (!graph || !name)
+        return NULL;
+    return (XrDepNode *) xr_hashmap_get(graph->index, name);
 }
 
 /* ========== Cycle Detection ========== */
@@ -237,13 +252,12 @@ XrDepNode* xr_depgraph_find(XrDepGraph *graph, const char *name) {
 /*
  * DFS cycle detection with dynamic path buffer.
  */
-static bool detect_cycle_dfs(XrDepNode *node, char **cycle_path,
-                             char *path_buf, int path_len, int buf_size) {
+static bool detect_cycle_dfs(XrDepNode *node, char **cycle_path, char *path_buf, int path_len,
+                             int buf_size) {
     if (node->in_stack) {
         // Cycle found
-        if (cycle_path && path_len + strlen(node->name) + 5 < (size_t)buf_size) {
-            snprintf(path_buf + path_len, buf_size - path_len,
-                    " -> %s", node->name);
+        if (cycle_path && path_len + strlen(node->name) + 5 < (size_t) buf_size) {
+            snprintf(path_buf + path_len, buf_size - path_len, " -> %s", node->name);
             *cycle_path = xr_strdup(path_buf);
         }
         return true;
@@ -268,8 +282,7 @@ static bool detect_cycle_dfs(XrDepNode *node, char **cycle_path,
     }
 
     for (int i = 0; i < node->dep_count; i++) {
-        if (detect_cycle_dfs(node->dependencies[i], cycle_path,
-                            path_buf, new_len, buf_size)) {
+        if (detect_cycle_dfs(node->dependencies[i], cycle_path, path_buf, new_len, buf_size)) {
             node->in_stack = false;
             return true;
         }
@@ -280,7 +293,8 @@ static bool detect_cycle_dfs(XrDepNode *node, char **cycle_path,
 }
 
 bool xr_depgraph_has_cycle(XrDepGraph *graph, char **cycle_path) {
-    if (!graph) return false;
+    if (!graph)
+        return false;
 
     // Reset visit flags
     for (int i = 0; i < graph->node_count; i++) {
@@ -288,16 +302,16 @@ bool xr_depgraph_has_cycle(XrDepGraph *graph, char **cycle_path) {
         graph->nodes[i]->in_stack = false;
     }
 
-    char *path_buf = (char*)xr_malloc(CYCLE_PATH_BUF_SIZE);
-    if (!path_buf) return false;
+    char *path_buf = (char *) xr_malloc(CYCLE_PATH_BUF_SIZE);
+    if (!path_buf)
+        return false;
     memset(path_buf, 0, CYCLE_PATH_BUF_SIZE);
 
     bool has_cycle = false;
     // Traverse all nodes, not just roots, to detect cycles in unreachable subgraphs
     for (int i = 0; i < graph->node_count; i++) {
         if (!graph->nodes[i]->visited) {
-            if (detect_cycle_dfs(graph->nodes[i], cycle_path, path_buf, 0,
-                                CYCLE_PATH_BUF_SIZE)) {
+            if (detect_cycle_dfs(graph->nodes[i], cycle_path, path_buf, 0, CYCLE_PATH_BUF_SIZE)) {
                 has_cycle = true;
                 break;
             }
@@ -319,7 +333,8 @@ static bool topo_dfs(XrDepNode *node, XrDepNode **result, int *index, bool *has_
         *has_cycle = true;
         return false;
     }
-    if (node->visited) return true;
+    if (node->visited)
+        return true;
 
     node->visited = true;
     node->in_stack = true;
@@ -337,7 +352,8 @@ static bool topo_dfs(XrDepNode *node, XrDepNode **result, int *index, bool *has_
 }
 
 bool xr_depgraph_topo_sort(XrDepGraph *graph, XrDepNode ***order, int *count) {
-    if (!graph || !order || !count) return false;
+    if (!graph || !order || !count)
+        return false;
 
     // Reset visit flags
     for (int i = 0; i < graph->node_count; i++) {
@@ -346,9 +362,10 @@ bool xr_depgraph_topo_sort(XrDepGraph *graph, XrDepNode ***order, int *count) {
     }
 
     // Allocate result array
-    *order = (XrDepNode**)xr_malloc(graph->node_count * sizeof(XrDepNode*));
-    if (!*order) return false;
-    memset(*order, 0, graph->node_count * sizeof(XrDepNode*));
+    *order = (XrDepNode **) xr_malloc(graph->node_count * sizeof(XrDepNode *));
+    if (!*order)
+        return false;
+    memset(*order, 0, graph->node_count * sizeof(XrDepNode *));
 
     *count = 0;
     bool has_cycle = false;
@@ -371,12 +388,10 @@ bool xr_depgraph_topo_sort(XrDepGraph *graph, XrDepNode ***order, int *count) {
 /*
  * Recursively resolve dependencies.
  */
-static bool resolve_node(XrDepGraph *graph, XrDepNode *node,
-                         XrPackageInfoFn get_info,
-                         const XrLockfile *lockfile,
-                         void *user_data,
-                         char **error) {
-    if (node->resolved) return true;
+static bool resolve_node(XrDepGraph *graph, XrDepNode *node, XrPackageInfoFn get_info,
+                         const XrLockfile *lockfile, void *user_data, char **error) {
+    if (node->resolved)
+        return true;
 
     // 1. Check if version is pinned in lockfile
     if (lockfile) {
@@ -389,7 +404,8 @@ static bool resolve_node(XrDepGraph *graph, XrDepNode *node,
             for (int i = 0; i < locked->dep_count; i++) {
                 const char *dep_name, *dep_ver;
                 char *buf = parse_dep_spec(locked->dependencies[i], &dep_name, &dep_ver);
-                if (!buf) continue;
+                if (!buf)
+                    continue;
 
                 XrDepNode *dep = graph_get_or_create_node(graph, dep_name, dep_ver);
                 if (dep) {
@@ -401,8 +417,8 @@ static bool resolve_node(XrDepGraph *graph, XrDepNode *node,
 
             // Recursively resolve dependencies
             for (int i = 0; i < node->dep_count; i++) {
-                if (!resolve_node(graph, node->dependencies[i],
-                                 get_info, lockfile, user_data, error)) {
+                if (!resolve_node(graph, node->dependencies[i], get_info, lockfile, user_data,
+                                  error)) {
                     return false;
                 }
             }
@@ -454,9 +470,8 @@ static bool resolve_node(XrDepGraph *graph, XrDepNode *node,
     if (best_idx < 0) {
         if (error) {
             char buf[256];
-            snprintf(buf, sizeof(buf),
-                    "No version satisfying constraint %s: %s",
-                    node->constraint_str, node->name);
+            snprintf(buf, sizeof(buf), "No version satisfying constraint %s: %s",
+                     node->constraint_str, node->name);
             *error = xr_strdup(buf);
         }
         xr_package_info_free(info);
@@ -470,7 +485,8 @@ static bool resolve_node(XrDepGraph *graph, XrDepNode *node,
     for (int i = 0; i < info->dep_count; i++) {
         const char *dep_name, *dep_ver;
         char *buf = parse_dep_spec(info->deps[i], &dep_name, &dep_ver);
-        if (!buf) continue;
+        if (!buf)
+            continue;
 
         XrDepNode *dep = graph_get_or_create_node(graph, dep_name, dep_ver);
         if (dep) {
@@ -484,8 +500,7 @@ static bool resolve_node(XrDepGraph *graph, XrDepNode *node,
 
     // 5. Recursively resolve dependencies
     for (int i = 0; i < node->dep_count; i++) {
-        if (!resolve_node(graph, node->dependencies[i],
-                         get_info, lockfile, user_data, error)) {
+        if (!resolve_node(graph, node->dependencies[i], get_info, lockfile, user_data, error)) {
             return false;
         }
     }
@@ -493,20 +508,18 @@ static bool resolve_node(XrDepGraph *graph, XrDepNode *node,
     return true;
 }
 
-XrResolveResult* xr_resolve_dependencies(XrDepGraph *graph,
-                                         XrPackageInfoFn get_info,
-                                         const XrLockfile *lockfile,
-                                         void *user_data) {
-    XrResolveResult *result = (XrResolveResult*)xr_malloc(sizeof(XrResolveResult));
-    if (!result) return NULL;
+XrResolveResult *xr_resolve_dependencies(XrDepGraph *graph, XrPackageInfoFn get_info,
+                                         const XrLockfile *lockfile, void *user_data) {
+    XrResolveResult *result = (XrResolveResult *) xr_malloc(sizeof(XrResolveResult));
+    if (!result)
+        return NULL;
     memset(result, 0, sizeof(XrResolveResult));
 
     char *error = NULL;
 
     // 1. Resolve all root dependencies
     for (int i = 0; i < graph->root_count; i++) {
-        if (!resolve_node(graph, graph->roots[i],
-                         get_info, lockfile, user_data, &error)) {
+        if (!resolve_node(graph, graph->roots[i], get_info, lockfile, user_data, &error)) {
             result->success = false;
             result->error = error;
             return result;
@@ -524,11 +537,13 @@ XrResolveResult* xr_resolve_dependencies(XrDepGraph *graph,
     }
 
     // 4. Generate result
-    result->packages = (char**)xr_malloc(count * sizeof(char*));
-    result->versions = (char**)xr_malloc(count * sizeof(char*));
+    result->packages = (char **) xr_malloc(count * sizeof(char *));
+    result->versions = (char **) xr_malloc(count * sizeof(char *));
     result->count = count;
-    if (result->packages) memset(result->packages, 0, count * sizeof(char*));
-    if (result->versions) memset(result->versions, 0, count * sizeof(char*));
+    if (result->packages)
+        memset(result->packages, 0, count * sizeof(char *));
+    if (result->versions)
+        memset(result->versions, 0, count * sizeof(char *));
 
     for (int i = 0; i < count; i++) {
         result->packages[i] = xr_strdup(order[i]->name);
@@ -545,7 +560,8 @@ XrResolveResult* xr_resolve_dependencies(XrDepGraph *graph,
 }
 
 void xr_resolve_result_free(XrResolveResult *result) {
-    if (!result) return;
+    if (!result)
+        return;
 
     for (int i = 0; i < result->count; i++) {
         xr_free(result->packages[i]);
@@ -567,7 +583,8 @@ void xr_resolve_result_free(XrResolveResult *result) {
 
 static void print_node(const XrDepNode *node, int indent) {
     if (indent > MAX_PRINT_DEPTH) {
-        for (int i = 0; i < indent; i++) printf("  ");
+        for (int i = 0; i < indent; i++)
+            printf("  ");
         printf("... (depth limit reached)\n");
         return;
     }
@@ -581,8 +598,7 @@ static void print_node(const XrDepNode *node, int indent) {
         xr_semver_to_string(&node->resolved_version, ver_buf, sizeof(ver_buf));
     }
 
-    printf("%s@%s (%s)\n", node->name, ver_buf,
-           node->constraint_str ? node->constraint_str : "*");
+    printf("%s@%s (%s)\n", node->name, ver_buf, node->constraint_str ? node->constraint_str : "*");
 
     for (int i = 0; i < node->dep_count; i++) {
         print_node(node->dependencies[i], indent + 1);
@@ -590,7 +606,8 @@ static void print_node(const XrDepNode *node, int indent) {
 }
 
 void xr_depgraph_print(const XrDepGraph *graph) {
-    if (!graph) return;
+    if (!graph)
+        return;
 
     printf("Dependency tree:\n");
     for (int i = 0; i < graph->root_count; i++) {

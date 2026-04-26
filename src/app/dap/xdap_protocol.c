@@ -20,7 +20,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
-#include <unistd.h>   // chdir
+#include <unistd.h>  // chdir
 #include "../../vm/xvm_internal.h"
 #include "xray.h"
 
@@ -33,8 +33,9 @@ static inline XrJsonValue *json_get(XrJsonValue *obj, const char *key) {
 }
 
 static inline double json_number(XrJsonValue *v) {
-    if (!v || v->type != XR_JSON_NUMBER) return 0;
-    return v->is_integer ? (double)v->as.integer : v->as.number;
+    if (!v || v->type != XR_JSON_NUMBER)
+        return 0;
+    return v->is_integer ? (double) v->as.integer : v->as.number;
 }
 
 static inline const char *json_string(XrJsonValue *v) {
@@ -49,9 +50,8 @@ static inline bool json_bool(XrJsonValue *v) {
 // Message Sending
 // ============================================================================
 
-void xdap_send_response(XdapController *ctrl, int request_seq,
-                         const char *command, bool success,
-                         XrJsonValue *body, const char *error_message) {
+void xdap_send_response(XdapController *ctrl, int request_seq, const char *command, bool success,
+                        XrJsonValue *body, const char *error_message) {
     XrJsonValue *resp = xjson_new_object();
     xjson_object_set(resp, "seq", xjson_new_number(ctrl->seq++));
     xjson_object_set(resp, "type", xjson_new_string("response"));
@@ -116,8 +116,7 @@ void xdap_send_exited_event(XdapController *ctrl, int exit_code) {
     xdap_send_event(ctrl, "exited", body);
 }
 
-void xdap_send_output_event(XdapController *ctrl, const char *category,
-                             const char *output) {
+void xdap_send_output_event(XdapController *ctrl, const char *category, const char *output) {
     XrJsonValue *body = xjson_new_object();
     xjson_object_set(body, "category", xjson_new_string(category));
     xjson_object_set(body, "output", xjson_new_string(output));
@@ -129,13 +128,12 @@ void xdap_send_output_event(XdapController *ctrl, const char *category,
 // ============================================================================
 
 static void handle_initialize(XdapController *ctrl, int seq, XrJsonValue *args) {
-    (void)args;
+    (void) args;
 
     XrJsonValue *body = xjson_new_object();
 
     // Capabilities
-    xjson_object_set(body, "supportsConfigurationDoneRequest",
-                          xjson_new_bool(true));
+    xjson_object_set(body, "supportsConfigurationDoneRequest", xjson_new_bool(true));
     xjson_object_set(body, "supportsConditionalBreakpoints", xjson_new_bool(true));
     xjson_object_set(body, "supportsHitConditionalBreakpoints", xjson_new_bool(true));
     xjson_object_set(body, "supportsLogPoints", xjson_new_bool(true));
@@ -198,7 +196,8 @@ static bool apply_launch_cwd_env(XdapController *ctrl, int seq, XrJsonValue *arg
     if (env && env->type == XR_JSON_OBJECT) {
         for (int i = 0; i < env->as.object.count; i++) {
             XrJsonMember *m = &env->as.object.members[i];
-            if (!m->key) continue;
+            if (!m->key)
+                continue;
             XrJsonValue *v = m->value;
             if (v && v->type == XR_JSON_STRING && v->as.string) {
                 setenv(m->key, v->as.string, 1);
@@ -236,7 +235,7 @@ static void handle_launch(XdapController *ctrl, int seq, XrJsonValue *args) {
     if (args_array && xjson_is_array(args_array)) {
         argc = xjson_array_len(args_array);
         if (argc > 0) {
-            argv = xr_calloc((size_t)argc, sizeof(char *));
+            argv = xr_calloc((size_t) argc, sizeof(char *));
             if (!argv) {
                 xdap_send_response(ctrl, seq, "launch", false, NULL, "Out of memory");
                 return;
@@ -247,7 +246,8 @@ static void handle_launch(XdapController *ctrl, int seq, XrJsonValue *args) {
                     argv[i] = xr_strdup(arg->as.string);
                     if (!argv[i]) {
                         // Cleanup on failure
-                        for (int j = 0; j < i; j++) xr_free(argv[j]);
+                        for (int j = 0; j < i; j++)
+                            xr_free(argv[j]);
                         xr_free(argv);
                         xdap_send_response(ctrl, seq, "launch", false, NULL, "Out of memory");
                         return;
@@ -266,13 +266,15 @@ static void handle_launch(XdapController *ctrl, int seq, XrJsonValue *args) {
         xdap_send_response(ctrl, seq, "launch", false, NULL, "Failed to launch program");
 
         // Cleanup
-        for (int i = 0; i < argc; i++) xr_free(argv[i]);
+        for (int i = 0; i < argc; i++)
+            xr_free(argv[i]);
         xr_free(argv);
         return;
     }
 
     // Cleanup (controller made copies)
-    for (int i = 0; i < argc; i++) xr_free(argv[i]);
+    for (int i = 0; i < argc; i++)
+        xr_free(argv[i]);
     xr_free(argv);
 
     xdap_send_response(ctrl, seq, "launch", true, NULL, NULL);
@@ -306,7 +308,7 @@ static void handle_attach(XdapController *ctrl, int seq, XrJsonValue *args) {
         if (args_array && xjson_is_array(args_array)) {
             argc = xjson_array_len(args_array);
             if (argc > 0) {
-                argv = xr_calloc((size_t)argc, sizeof(char *));
+                argv = xr_calloc((size_t) argc, sizeof(char *));
                 if (!argv) {
                     xdap_send_response(ctrl, seq, "attach", false, NULL, "Out of memory");
                     return;
@@ -316,7 +318,8 @@ static void handle_attach(XdapController *ctrl, int seq, XrJsonValue *args) {
                     if (arg && arg->type == XR_JSON_STRING) {
                         argv[i] = xr_strdup(arg->as.string);
                         if (!argv[i]) {
-                            for (int j = 0; j < i; j++) xr_free(argv[j]);
+                            for (int j = 0; j < i; j++)
+                                xr_free(argv[j]);
                             xr_free(argv);
                             xdap_send_response(ctrl, seq, "attach", false, NULL, "Out of memory");
                             return;
@@ -328,11 +331,13 @@ static void handle_attach(XdapController *ctrl, int seq, XrJsonValue *args) {
 
         if (!xdap_controller_launch(ctrl, program, argv, argc, false)) {
             xdap_send_response(ctrl, seq, "attach", false, NULL, "Failed to start program");
-            for (int i = 0; i < argc; i++) xr_free(argv[i]);
+            for (int i = 0; i < argc; i++)
+                xr_free(argv[i]);
             xr_free(argv);
             return;
         }
-        for (int i = 0; i < argc; i++) xr_free(argv[i]);
+        for (int i = 0; i < argc; i++)
+            xr_free(argv[i]);
         xr_free(argv);
     }
     // If no program is given, the debuggee is expected to already be running
@@ -344,7 +349,7 @@ static void handle_attach(XdapController *ctrl, int seq, XrJsonValue *args) {
 }
 
 static void handle_configuration_done(XdapController *ctrl, int seq, XrJsonValue *args) {
-    (void)args;
+    (void) args;
     ctrl->configured = true;
     xdap_send_response(ctrl, seq, "configurationDone", true, NULL, NULL);
 
@@ -380,14 +385,14 @@ static void handle_set_breakpoints(XdapController *ctrl, int seq, XrJsonValue *a
     int bp_count = breakpoints ? xjson_array_len(breakpoints) : 0;
     for (int i = 0; i < bp_count; i++) {
         XrJsonValue *bp = xjson_array_get(breakpoints, i);
-        int line = (int)json_number(json_get(bp, "line"));
+        int line = (int) json_number(json_get(bp, "line"));
         const char *condition = json_string(json_get(bp, "condition"));
         const char *log_message = json_string(json_get(bp, "logMessage"));
         const char *hit_condition = json_string(json_get(bp, "hitCondition"));
 
         // Directly use debug API
-        int id = xr_debug_add_breakpoint_ex(ctrl->isolate, path, line,
-                                             condition, log_message, hit_condition);
+        int id = xr_debug_add_breakpoint_ex(ctrl->isolate, path, line, condition, log_message,
+                                            hit_condition);
 
         XrJsonValue *result_bp = xjson_new_object();
         xjson_object_set(result_bp, "id", xjson_new_number(id));
@@ -445,14 +450,16 @@ static void handle_set_exception_breakpoints(XdapController *ctrl, int seq, XrJs
     bool break_caught = false;
 
     // First pass: compute effective toggles.
-    int filter_count = filters && xjson_is_array(filters)
-                     ? xjson_array_len(filters) : 0;
+    int filter_count = filters && xjson_is_array(filters) ? xjson_array_len(filters) : 0;
     for (int i = 0; i < filter_count; i++) {
         XrJsonValue *filter = xjson_array_get(filters, i);
         const char *filter_str = json_string(filter);
-        if (!filter_str) continue;
-        if (strcmp(filter_str, "uncaught") == 0) break_uncaught = true;
-        else if (strcmp(filter_str, "caught") == 0) break_caught = true;
+        if (!filter_str)
+            continue;
+        if (strcmp(filter_str, "uncaught") == 0)
+            break_uncaught = true;
+        else if (strcmp(filter_str, "caught") == 0)
+            break_caught = true;
         else if (strcmp(filter_str, "all") == 0) {
             break_uncaught = true;
             break_caught = true;
@@ -473,10 +480,9 @@ static void handle_set_exception_breakpoints(XdapController *ctrl, int seq, XrJs
     for (int i = 0; i < filter_count; i++) {
         XrJsonValue *filter = xjson_array_get(filters, i);
         const char *filter_str = json_string(filter);
-        bool verified = filter_str && (
-            strcmp(filter_str, "uncaught") == 0 ||
-            strcmp(filter_str, "caught")   == 0 ||
-            strcmp(filter_str, "all")      == 0);
+        bool verified =
+            filter_str && (strcmp(filter_str, "uncaught") == 0 ||
+                           strcmp(filter_str, "caught") == 0 || strcmp(filter_str, "all") == 0);
 
         XrJsonValue *bp = xjson_new_object();
         xjson_object_set(bp, "verified", xjson_new_bool(verified));
@@ -495,7 +501,7 @@ static void handle_set_exception_breakpoints(XdapController *ctrl, int seq, XrJs
 }
 
 static void handle_threads(XdapController *ctrl, int seq, XrJsonValue *args) {
-    (void)args;
+    (void) args;
 
     XrJsonValue *threads = xjson_new_array();
 
@@ -520,7 +526,8 @@ static void handle_threads(XdapController *ctrl, int seq, XrJsonValue *args) {
                     } else if (i == 0) {
                         snprintf(name_buf, sizeof(name_buf), "main (%s)", coro_state);
                     } else {
-                        snprintf(name_buf, sizeof(name_buf), "coroutine-%d (%s)", coro_id, coro_state);
+                        snprintf(name_buf, sizeof(name_buf), "coroutine-%d (%s)", coro_id,
+                                 coro_state);
                     }
                     xjson_object_set(thread, "name", xjson_new_string(name_buf));
                     xjson_array_push(threads, thread);
@@ -548,9 +555,9 @@ static void handle_threads(XdapController *ctrl, int seq, XrJsonValue *args) {
 }
 
 static void handle_stack_trace(XdapController *ctrl, int seq, XrJsonValue *args) {
-    int thread_id = (int)json_number(json_get(args, "threadId"));
-    int start_frame = (int)json_number(json_get(args, "startFrame"));  // 0 if absent
-    int levels = (int)json_number(json_get(args, "levels"));            // 0 if absent
+    int thread_id = (int) json_number(json_get(args, "threadId"));
+    int start_frame = (int) json_number(json_get(args, "startFrame"));  // 0 if absent
+    int levels = (int) json_number(json_get(args, "levels"));           // 0 if absent
 
     // Find the coroutine for this thread
     XrCoroutine *coro = xdap_find_coro(ctrl, thread_id);
@@ -573,7 +580,8 @@ static void handle_stack_trace(XdapController *ctrl, int seq, XrJsonValue *args)
     if (start_frame > 0 || (levels > 0 && levels < total)) {
         frames = xjson_new_array();
         int end = (levels > 0) ? start_frame + levels : total;
-        if (end > total) end = total;
+        if (end > total)
+            end = total;
         for (int i = start_frame; i < end; i++) {
             xjson_array_push(frames, xjson_array_get(all_frames, i));
         }
@@ -587,7 +595,7 @@ static void handle_stack_trace(XdapController *ctrl, int seq, XrJsonValue *args)
 }
 
 static void handle_scopes(XdapController *ctrl, int seq, XrJsonValue *args) {
-    int frame_id = (int)json_number(json_get(args, "frameId"));
+    int frame_id = (int) json_number(json_get(args, "frameId"));
 
     if (!ctrl->isolate) {
         xdap_send_response(ctrl, seq, "scopes", false, NULL, "No active session");
@@ -607,10 +615,11 @@ static void handle_scopes(XdapController *ctrl, int seq, XrJsonValue *args) {
     }
 
     // Locals scope (always present)
-    int locals_ref = xr_debug_create_var_ref(ctrl->isolate, XDAP_REF_SCOPE_LOCALS,
-                                              frame_id, XR_NULL_VAL);
+    int locals_ref =
+        xr_debug_create_var_ref(ctrl->isolate, XDAP_REF_SCOPE_LOCALS, frame_id, XR_NULL_VAL);
     int local_count = (frame && frame->closure && frame->closure->proto)
-        ? PROTO_LOCVAR_COUNT(frame->closure->proto) : 0;
+                          ? PROTO_LOCVAR_COUNT(frame->closure->proto)
+                          : 0;
     XrJsonValue *local = xjson_new_object();
     xjson_object_set(local, "name", xjson_new_string("Locals"));
     xjson_object_set(local, "variablesReference", xjson_new_number(locals_ref));
@@ -620,21 +629,20 @@ static void handle_scopes(XdapController *ctrl, int seq, XrJsonValue *args) {
 
     // Closure scope (only when frame has upvalues)
     if (frame && frame->closure && frame->closure->upval_count > 0) {
-        int upval_ref = xr_debug_create_var_ref(ctrl->isolate,
-            XDAP_REF_SCOPE_UPVALUES, frame_id, XR_NULL_VAL);
+        int upval_ref =
+            xr_debug_create_var_ref(ctrl->isolate, XDAP_REF_SCOPE_UPVALUES, frame_id, XR_NULL_VAL);
         XrJsonValue *closure_scope = xjson_new_object();
         xjson_object_set(closure_scope, "name", xjson_new_string("Closure"));
-        xjson_object_set(closure_scope, "variablesReference",
-            xjson_new_number(upval_ref));
+        xjson_object_set(closure_scope, "variablesReference", xjson_new_number(upval_ref));
         xjson_object_set(closure_scope, "namedVariables",
-            xjson_new_number(frame->closure->upval_count));
+                         xjson_new_number(frame->closure->upval_count));
         xjson_object_set(closure_scope, "expensive", xjson_new_bool(false));
         xjson_array_push(scopes, closure_scope);
     }
 
     // Globals scope (always present, marked expensive)
-    int globals_ref = xr_debug_create_var_ref(ctrl->isolate, XDAP_REF_SCOPE_GLOBALS,
-                                               -1, XR_NULL_VAL);
+    int globals_ref =
+        xr_debug_create_var_ref(ctrl->isolate, XDAP_REF_SCOPE_GLOBALS, -1, XR_NULL_VAL);
     XrJsonValue *global = xjson_new_object();
     xjson_object_set(global, "name", xjson_new_string("Globals"));
     xjson_object_set(global, "variablesReference", xjson_new_number(globals_ref));
@@ -648,12 +656,13 @@ static void handle_scopes(XdapController *ctrl, int seq, XrJsonValue *args) {
 }
 
 static void handle_variables(XdapController *ctrl, int seq, XrJsonValue *args) {
-    int var_ref = (int)json_number(json_get(args, "variablesReference"));
-    int start = (int)json_number(json_get(args, "start"));    // 0 if absent
-    int count = (int)json_number(json_get(args, "count"));    // 0 if absent
+    int var_ref = (int) json_number(json_get(args, "variablesReference"));
+    int start = (int) json_number(json_get(args, "start"));  // 0 if absent
+    int count = (int) json_number(json_get(args, "count"));  // 0 if absent
 
     XrJsonValue *all_vars = xdap_inspect_variables(ctrl, var_ref);
-    if (!all_vars) all_vars = xjson_new_array();
+    if (!all_vars)
+        all_vars = xjson_new_array();
 
     // Apply pagination when start/count provided
     XrJsonValue *variables = all_vars;
@@ -661,7 +670,8 @@ static void handle_variables(XdapController *ctrl, int seq, XrJsonValue *args) {
     if (start > 0 || (count > 0 && count < total)) {
         variables = xjson_new_array();
         int end = (count > 0) ? start + count : total;
-        if (end > total) end = total;
+        if (end > total)
+            end = total;
         for (int i = start; i < end; i++) {
             xjson_array_push(variables, xjson_array_get(all_vars, i));
         }
@@ -674,7 +684,7 @@ static void handle_variables(XdapController *ctrl, int seq, XrJsonValue *args) {
 }
 
 static void handle_continue(XdapController *ctrl, int seq, XrJsonValue *args) {
-    int thread_id = (int)json_number(json_get(args, "threadId"));
+    int thread_id = (int) json_number(json_get(args, "threadId"));
 
     if (ctrl->vm_state != XDAP_VM_PAUSED) {
         xdap_send_response(ctrl, seq, "continue", false, NULL, "Not paused");
@@ -682,7 +692,8 @@ static void handle_continue(XdapController *ctrl, int seq, XrJsonValue *args) {
     }
 
     // Record target thread for future multi-coroutine support
-    if (thread_id > 0) ctrl->stopped_coro_id = thread_id;
+    if (thread_id > 0)
+        ctrl->stopped_coro_id = thread_id;
     xdap_controller_continue(ctrl);
     ctrl->vm_state = XDAP_VM_RUNNING;
 
@@ -692,8 +703,9 @@ static void handle_continue(XdapController *ctrl, int seq, XrJsonValue *args) {
 }
 
 static void handle_next(XdapController *ctrl, int seq, XrJsonValue *args) {
-    int thread_id = (int)json_number(json_get(args, "threadId"));
-    if (thread_id > 0) ctrl->stopped_coro_id = thread_id;
+    int thread_id = (int) json_number(json_get(args, "threadId"));
+    if (thread_id > 0)
+        ctrl->stopped_coro_id = thread_id;
 
     if (ctrl->vm_state != XDAP_VM_PAUSED) {
         xdap_send_response(ctrl, seq, "next", false, NULL, "Not paused");
@@ -707,8 +719,9 @@ static void handle_next(XdapController *ctrl, int seq, XrJsonValue *args) {
 }
 
 static void handle_step_in(XdapController *ctrl, int seq, XrJsonValue *args) {
-    int thread_id = (int)json_number(json_get(args, "threadId"));
-    if (thread_id > 0) ctrl->stopped_coro_id = thread_id;
+    int thread_id = (int) json_number(json_get(args, "threadId"));
+    if (thread_id > 0)
+        ctrl->stopped_coro_id = thread_id;
 
     if (ctrl->vm_state != XDAP_VM_PAUSED) {
         xdap_send_response(ctrl, seq, "stepIn", false, NULL, "Not paused");
@@ -722,8 +735,9 @@ static void handle_step_in(XdapController *ctrl, int seq, XrJsonValue *args) {
 }
 
 static void handle_step_out(XdapController *ctrl, int seq, XrJsonValue *args) {
-    int thread_id = (int)json_number(json_get(args, "threadId"));
-    if (thread_id > 0) ctrl->stopped_coro_id = thread_id;
+    int thread_id = (int) json_number(json_get(args, "threadId"));
+    if (thread_id > 0)
+        ctrl->stopped_coro_id = thread_id;
 
     if (ctrl->vm_state != XDAP_VM_PAUSED) {
         xdap_send_response(ctrl, seq, "stepOut", false, NULL, "Not paused");
@@ -737,8 +751,9 @@ static void handle_step_out(XdapController *ctrl, int seq, XrJsonValue *args) {
 }
 
 static void handle_pause(XdapController *ctrl, int seq, XrJsonValue *args) {
-    int thread_id = (int)json_number(json_get(args, "threadId"));
-    if (thread_id > 0) ctrl->stopped_coro_id = thread_id;
+    int thread_id = (int) json_number(json_get(args, "threadId"));
+    if (thread_id > 0)
+        ctrl->stopped_coro_id = thread_id;
 
     if (ctrl->vm_state != XDAP_VM_RUNNING) {
         xdap_send_response(ctrl, seq, "pause", false, NULL, "Not running");
@@ -753,7 +768,7 @@ static void handle_pause(XdapController *ctrl, int seq, XrJsonValue *args) {
 
 static void handle_evaluate(XdapController *ctrl, int seq, XrJsonValue *args) {
     const char *expression = json_string(json_get(args, "expression"));
-    int frame_id = (int)json_number(json_get(args, "frameId"));
+    int frame_id = (int) json_number(json_get(args, "frameId"));
 
     XrJsonValue *body = xjson_new_object();
 
@@ -772,7 +787,7 @@ static void handle_evaluate(XdapController *ctrl, int seq, XrJsonValue *args) {
 }
 
 static void handle_set_variable(XdapController *ctrl, int seq, XrJsonValue *args) {
-    int var_ref = (int)json_number(json_get(args, "variablesReference"));
+    int var_ref = (int) json_number(json_get(args, "variablesReference"));
     const char *name = json_string(json_get(args, "name"));
     const char *value = json_string(json_get(args, "value"));
 
@@ -795,7 +810,7 @@ static void handle_set_variable(XdapController *ctrl, int seq, XrJsonValue *args
 }
 
 static void handle_disassemble(XdapController *ctrl, int seq, XrJsonValue *args) {
-    (void)args;
+    (void) args;
 
     if (!ctrl->isolate) {
         xdap_send_response(ctrl, seq, "disassemble", false, NULL, "No active session");
@@ -853,7 +868,7 @@ static void handle_disassemble(XdapController *ctrl, int seq, XrJsonValue *args)
 }
 
 static void handle_restart(XdapController *ctrl, int seq, XrJsonValue *args) {
-    (void)args;
+    (void) args;
 
     if (!xdap_controller_restart(ctrl)) {
         xdap_send_response(ctrl, seq, "restart", false, NULL,
@@ -866,7 +881,7 @@ static void handle_restart(XdapController *ctrl, int seq, XrJsonValue *args) {
 }
 
 static void handle_terminate(XdapController *ctrl, int seq, XrJsonValue *args) {
-    (void)args;
+    (void) args;
 
     xdap_controller_terminate(ctrl);
 
@@ -898,15 +913,14 @@ static void handle_disconnect(XdapController *ctrl, int seq, XrJsonValue *args) 
 }
 
 static void handle_exception_info(XdapController *ctrl, int seq, XrJsonValue *args) {
-    (void)args;
+    (void) args;
 
     if (!ctrl->isolate || ctrl->stop_reason != XDAP_STOP_EXCEPTION) {
-        xdap_send_response(ctrl, seq, "exceptionInfo", false, NULL,
-                           "Not stopped on an exception");
+        xdap_send_response(ctrl, seq, "exceptionInfo", false, NULL, "Not stopped on an exception");
         return;
     }
 
-    XrDebugState *dbg = (XrDebugState *)xr_isolate_get_debug_state(ctrl->isolate);
+    XrDebugState *dbg = (XrDebugState *) xr_isolate_get_debug_state(ctrl->isolate);
     const char *message = (dbg && dbg->exception_message) ? dbg->exception_message : "<unknown>";
     const char *filter = (dbg && dbg->exception_is_uncaught) ? "uncaught" : "caught";
 
@@ -929,35 +943,34 @@ typedef void (*DapHandler)(XdapController *ctrl, int seq, XrJsonValue *args);
 
 typedef struct {
     const char *command;
-    DapHandler  handler;
+    DapHandler handler;
 } DapDispatchEntry;
 
 static const DapDispatchEntry dispatch_table[] = {
-    {"initialize",              handle_initialize},
-    {"launch",                  handle_launch},
-    {"attach",                  handle_attach},
-    {"configurationDone",       handle_configuration_done},
-    {"setBreakpoints",          handle_set_breakpoints},
-    {"setFunctionBreakpoints",  handle_set_function_breakpoints},
+    {"initialize", handle_initialize},
+    {"launch", handle_launch},
+    {"attach", handle_attach},
+    {"configurationDone", handle_configuration_done},
+    {"setBreakpoints", handle_set_breakpoints},
+    {"setFunctionBreakpoints", handle_set_function_breakpoints},
     {"setExceptionBreakpoints", handle_set_exception_breakpoints},
-    {"threads",                 handle_threads},
-    {"stackTrace",              handle_stack_trace},
-    {"scopes",                  handle_scopes},
-    {"variables",               handle_variables},
-    {"continue",                handle_continue},
-    {"next",                    handle_next},
-    {"stepIn",                  handle_step_in},
-    {"stepOut",                 handle_step_out},
-    {"pause",                   handle_pause},
-    {"evaluate",                handle_evaluate},
-    {"setVariable",             handle_set_variable},
-    {"exceptionInfo",            handle_exception_info},
-    {"disassemble",             handle_disassemble},
-    {"restart",                 handle_restart},
-    {"terminate",               handle_terminate},
-    {"disconnect",              handle_disconnect},
-    {NULL,                      NULL}
-};
+    {"threads", handle_threads},
+    {"stackTrace", handle_stack_trace},
+    {"scopes", handle_scopes},
+    {"variables", handle_variables},
+    {"continue", handle_continue},
+    {"next", handle_next},
+    {"stepIn", handle_step_in},
+    {"stepOut", handle_step_out},
+    {"pause", handle_pause},
+    {"evaluate", handle_evaluate},
+    {"setVariable", handle_set_variable},
+    {"exceptionInfo", handle_exception_info},
+    {"disassemble", handle_disassemble},
+    {"restart", handle_restart},
+    {"terminate", handle_terminate},
+    {"disconnect", handle_disconnect},
+    {NULL, NULL}};
 
 static void dispatch_request(XdapController *ctrl, int seq, const char *cmd, XrJsonValue *args) {
     for (const DapDispatchEntry *e = dispatch_table; e->command; e++) {
@@ -979,7 +992,7 @@ bool xdap_handle_message(XdapController *ctrl, const char *json, size_t len) {
 
     XrJsonValue *type = json_get(msg, "type");
     if (type && type->type == XR_JSON_STRING && strcmp(type->as.string, "request") == 0) {
-        int seq = (int)json_number(json_get(msg, "seq"));
+        int seq = (int) json_number(json_get(msg, "seq"));
         const char *cmd = json_string(json_get(msg, "command"));
         XrJsonValue *args = json_get(msg, "arguments");
 
@@ -987,7 +1000,8 @@ bool xdap_handle_message(XdapController *ctrl, const char *json, size_t len) {
             dispatch_request(ctrl, seq, cmd, args);
         } else {
             // Missing command field - send error response
-            xdap_send_response(ctrl, seq, "unknown", false, NULL, "Missing 'command' field in request");
+            xdap_send_response(ctrl, seq, "unknown", false, NULL,
+                               "Missing 'command' field in request");
         }
     }
 
@@ -1003,17 +1017,24 @@ bool xdap_handle_message(XdapController *ctrl, const char *json, size_t len) {
 // Get stop reason string for DAP event
 static const char *stop_reason_str(XdapStopReason reason) {
     switch (reason) {
-        case XDAP_STOP_ENTRY: return "entry";
-        case XDAP_STOP_BREAKPOINT: return "breakpoint";
-        case XDAP_STOP_STEP: return "step";
-        case XDAP_STOP_PAUSE: return "pause";
-        case XDAP_STOP_EXCEPTION: return "exception";
-        default: return "breakpoint";
+        case XDAP_STOP_ENTRY:
+            return "entry";
+        case XDAP_STOP_BREAKPOINT:
+            return "breakpoint";
+        case XDAP_STOP_STEP:
+            return "step";
+        case XDAP_STOP_PAUSE:
+            return "pause";
+        case XDAP_STOP_EXCEPTION:
+            return "exception";
+        default:
+            return "breakpoint";
     }
 }
 
 int xdap_run(XdapController *ctrl) {
-    if (!ctrl || !ctrl->transport) return 1;
+    if (!ctrl || !ctrl->transport)
+        return 1;
 
     XdapVMState prev_state = ctrl->vm_state;
 
@@ -1061,7 +1082,8 @@ int xdap_run(XdapController *ctrl) {
                 // First launch: compile and execute program
                 ctrl->program_launched = true;
                 XrProto *proto = NULL;
-                int result = xray_isolate_dofile_debug(ctrl->isolate, ctrl->program_path, (void**)&proto);
+                int result =
+                    xray_isolate_dofile_debug(ctrl->isolate, ctrl->program_path, (void **) &proto);
                 ctrl->debug_proto = proto;
 
                 if (ctrl->vm_state == XDAP_VM_PAUSED) {

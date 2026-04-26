@@ -21,4 +21,4 @@ XR_FUNC void xlsp_handle_lc_initialized(XrLspServer *server, XrJsonValue *params
 XR_FUNC XrJsonValue *xlsp_handle_lc_shutdown(XrLspServer *server, XrJsonValue *params);
 XR_FUNC void xlsp_handle_lc_exit(XrLspServer *server, XrJsonValue *params);
 
-#endif // XLSP_HANDLERS_LIFECYCLE_H
+#endif  // XLSP_HANDLERS_LIFECYCLE_H

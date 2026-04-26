@@ -34,7 +34,7 @@
 #include "xdefs.h"
 
 // Special marker values for empty/tombstone slots
-#define XR_INTMAP_EMPTY     0xFFFFFFFF
+#define XR_INTMAP_EMPTY 0xFFFFFFFF
 #define XR_INTMAP_TOMBSTONE 0xFFFFFFFE
 
 typedef struct XrIntMapEntry {
@@ -45,17 +45,17 @@ typedef struct XrIntMapEntry {
 typedef struct XrIntMap {
     XrIntMapEntry *entries;
     uint32_t capacity;
-    uint32_t count;      // Active entries (excluding tombstones)
-    uint32_t tombstones; // Tombstone count for rehash decision
+    uint32_t count;       // Active entries (excluding tombstones)
+    uint32_t tombstones;  // Tombstone count for rehash decision
     bool is_arena_allocated;
 } XrIntMap;
 
 // Create integer map (uses malloc)
-XR_FUNC XrIntMap* xr_intmap_new(void);
+XR_FUNC XrIntMap *xr_intmap_new(void);
 
 struct XrArena;
 // Arena version - no need to free manually
-XR_FUNC XrIntMap* xr_intmap_new_in_arena(struct XrArena *arena);
+XR_FUNC XrIntMap *xr_intmap_new_in_arena(struct XrArena *arena);
 
 // Only for malloc version, not arena version
 XR_FUNC void xr_intmap_free(XrIntMap *map);
@@ -64,7 +64,7 @@ XR_FUNC void xr_intmap_free(XrIntMap *map);
 XR_FUNC void xr_intmap_set(XrIntMap *map, uint32_t key, void *value);
 
 // Returns NULL if key not found
-XR_FUNC void* xr_intmap_get(XrIntMap *map, uint32_t key);
+XR_FUNC void *xr_intmap_get(XrIntMap *map, uint32_t key);
 
 // Check if key exists
 XR_FUNC bool xr_intmap_has(XrIntMap *map, uint32_t key);
@@ -83,4 +83,4 @@ XR_FUNC void xr_intmap_foreach(XrIntMap *map, XrIntMapIterFunc func, void *userd
 #define XR_INTMAP_LOAD_FACTOR 0.75
 #define XR_INTMAP_GROW_FACTOR 2
 
-#endif // XINTMAP_H
+#endif  // XINTMAP_H

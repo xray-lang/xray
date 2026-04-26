@@ -34,25 +34,31 @@
  * - If operand is literal, calculate result at compile time (constant folding)
  * - Otherwise generate runtime instruction
  */
-static int compile_unary_internal(XrCompilerContext *ctx, XrCompiler *compiler, UnaryNode *node, AstNodeType type, XrType **out_compile_type) {
+static int compile_unary_internal(XrCompilerContext *ctx, XrCompiler *compiler, UnaryNode *node,
+                                  AstNodeType type, XrType **out_compile_type) {
     XR_DCHECK(ctx != NULL, "compile_unary: NULL ctx");
     XR_DCHECK(compiler != NULL, "compile_unary: NULL compiler");
     // ===== Constant Folding Optimization =====
-    if (node->operand->type == AST_LITERAL_INT ||
-        node->operand->type == AST_LITERAL_FLOAT ||
-        node->operand->type == AST_LITERAL_TRUE ||
-        node->operand->type == AST_LITERAL_FALSE ||
+    if (node->operand->type == AST_LITERAL_INT || node->operand->type == AST_LITERAL_FLOAT ||
+        node->operand->type == AST_LITERAL_TRUE || node->operand->type == AST_LITERAL_FALSE ||
         node->operand->type == AST_LITERAL_NULL) {
-
-        LiteralNode *lit = (LiteralNode *)&node->operand->as;
+        LiteralNode *lit = (LiteralNode *) &node->operand->as;
 
         // Map AST node type to Token type
         TokenType op_token;
         switch (type) {
-            case AST_UNARY_NEG:  op_token = TK_MINUS; break;
-            case AST_UNARY_NOT:  op_token = TK_NOT; break;
-            case AST_UNARY_BNOT: op_token = TK_TILDE; break;
-            default: op_token = TK_EOF; break;
+            case AST_UNARY_NEG:
+                op_token = TK_MINUS;
+                break;
+            case AST_UNARY_NOT:
+                op_token = TK_NOT;
+                break;
+            case AST_UNARY_BNOT:
+                op_token = TK_TILDE;
+                break;
+            default:
+                op_token = TK_EOF;
+                break;
         }
 
         // Constant folding
@@ -101,9 +107,15 @@ static int compile_unary_internal(XrCompilerContext *ctx, XrCompiler *compiler, 
     OpCode op;
     XrType *result_type = NULL;
     switch (type) {
-        case AST_UNARY_NEG:  op = OP_UNM; break;
-        case AST_UNARY_NOT:  op = OP_NOT; break;
-        case AST_UNARY_BNOT: op = OP_BNOT; break;
+        case AST_UNARY_NEG:
+            op = OP_UNM;
+            break;
+        case AST_UNARY_NOT:
+            op = OP_NOT;
+            break;
+        case AST_UNARY_BNOT:
+            op = OP_BNOT;
+            break;
         default:
             xr_compiler_error(ctx, compiler, "unknown unary operator: %d", type);
             return ra;
@@ -115,7 +127,8 @@ static int compile_unary_internal(XrCompilerContext *ctx, XrCompiler *compiler, 
     // Set freereg = ra + 1, reclaim rb
     xreg_set_freereg(compiler->regalloc, ra + 1);
 
-    if (out_compile_type) *out_compile_type = result_type;
+    if (out_compile_type)
+        *out_compile_type = result_type;
     return ra;
 }
 
@@ -125,7 +138,8 @@ static int compile_unary_internal(XrCompilerContext *ctx, XrCompiler *compiler, 
  * Note: Returns TEMP instead of RELOC for now
  * Reason: RELOC requires more complex register lifetime management
  */
-XrExprDesc compile_unary(XrCompilerContext *ctx, XrCompiler *compiler, UnaryNode *node, AstNodeType type) {
+XrExprDesc compile_unary(XrCompilerContext *ctx, XrCompiler *compiler, UnaryNode *node,
+                         AstNodeType type) {
     XR_DCHECK(ctx != NULL, "compile_unary: NULL ctx");
     XR_DCHECK(compiler != NULL, "compile_unary: NULL compiler");
     XrExprDesc e = {0};
@@ -149,5 +163,3 @@ XrExprDesc compile_unary(XrCompilerContext *ctx, XrCompiler *compiler, UnaryNode
     }
     return e;
 }
-
-

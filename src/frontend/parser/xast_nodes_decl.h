@@ -21,25 +21,25 @@
 
 // Generic type parameter (for <T: Constraint> syntax)
 typedef struct XrGenericParam {
-    char *name;                    // Type parameter name: T, U, K, V
-    XrType *constraint;            // Constraint type (can be NULL)
+    char *name;          // Type parameter name: T, U, K, V
+    XrType *constraint;  // Constraint type (can be NULL)
 } XrGenericParam;
 
 // Function parameter passing mode for struct value types
-#define XR_PARAM_VALUE  0   // Default: deep copy at function entry
-#define XR_PARAM_IN     1   // Readonly reference: no copy, no mutation allowed
-#define XR_PARAM_REF    2   // Mutable reference: no copy, mutation reflected to caller
+#define XR_PARAM_VALUE 0  // Default: deep copy at function entry
+#define XR_PARAM_IN 1     // Readonly reference: no copy, no mutation allowed
+#define XR_PARAM_REF 2    // Mutable reference: no copy, mutation reflected to caller
 
 // Function parameter node — each parameter has its own position info for LSP.
 typedef struct XrParamNode {
-    char *name;                    // Parameter name
-    int line;                      // Line number (1-indexed)
-    int column;                    // Column number (1-indexed, for LSP)
-    uint8_t passing_mode;          // XR_PARAM_VALUE / XR_PARAM_IN / XR_PARAM_REF
-    XrType *type;                  // Type annotation (can be NULL)
-    AstNode *default_value;        // Default value expression (can be NULL)
-    XrDestructurePattern *pattern; // Destructure pattern (can be NULL)
-    bool is_rest;                  // Is this a rest parameter (...args)?
+    char *name;                     // Parameter name
+    int line;                       // Line number (1-indexed)
+    int column;                     // Column number (1-indexed, for LSP)
+    uint8_t passing_mode;           // XR_PARAM_VALUE / XR_PARAM_IN / XR_PARAM_REF
+    XrType *type;                   // Type annotation (can be NULL)
+    AstNode *default_value;         // Default value expression (can be NULL)
+    XrDestructurePattern *pattern;  // Destructure pattern (can be NULL)
+    bool is_rest;                   // Is this a rest parameter (...args)?
 } XrParamNode;
 
 /* ========== Function Declarations ========== */
@@ -48,7 +48,7 @@ typedef struct FunctionDeclNode {
     char *name;
     XrParamNode **params;
     int param_count;
-    int required_count;            // Number of required params (without defaults)
+    int required_count;  // Number of required params (without defaults)
     XrType *return_type;
     AstNode *body;
     bool is_generator;
@@ -63,7 +63,7 @@ typedef struct FunctionDeclNode {
 typedef struct ClassDeclNode {
     char *name;
     char *super_name;
-    char *super_module;            // Parent class module (extends module.Class)
+    char *super_module;  // Parent class module (extends module.Class)
     char **interfaces;
     int interface_count;
     AstNode **fields;
@@ -124,7 +124,7 @@ typedef struct MethodDeclNode {
     AstNode **default_values;
     bool is_operator;
     OperatorType op_type;
-    char **type_param_names;       // Generic type parameters
+    char **type_param_names;  // Generic type parameters
     int type_param_count;
 } MethodDeclNode;
 
@@ -141,7 +141,9 @@ typedef struct NewExprNode {
     int type_arg_count;
 } NewExprNode;
 
-typedef struct ThisExprNode { int placeholder; } ThisExprNode;
+typedef struct ThisExprNode {
+    int placeholder;
+} ThisExprNode;
 
 typedef struct SuperCallNode {
     char *method_name;
@@ -190,27 +192,27 @@ typedef struct EnumConvertNode {
 
 // Enum index node (compiler-generated for for-in desugaring)
 typedef struct EnumIndexNode {
-    AstNode *collection;    // enum type expression
-    AstNode *index_expr;    // index expression
+    AstNode *collection;  // enum type expression
+    AstNode *index_expr;  // index expression
 } EnumIndexNode;
 
 /* ========== Module System ========== */
 
 // Import member (selective imports)
 typedef struct ImportMember {
-    char *name;         // Original name
-    char *alias;        // Alias (optional, import { foo as bar })
+    char *name;   // Original name
+    char *alias;  // Alias (optional, import { foo as bar })
 } ImportMember;
 
 // Import statement node — supports two forms:
 //   1. import "module" as name      (whole module import)
 //   2. import { a, b as c } from "module"  (selective import)
 typedef struct ImportStmtNode {
-    char *module_name;          // Module path/name
-    char *alias;                // Alias for whole module import
+    char *module_name;  // Module path/name
+    char *alias;        // Alias for whole module import
     ImportType import_type;
-    ImportMember *members;      // Selective import member list
-    int member_count;           // 0 means whole module import
+    ImportMember *members;  // Selective import member list
+    int member_count;       // 0 means whole module import
 } ImportStmtNode;
 
 // Re-export member structure: export { a, b as c } from "./file"
@@ -224,16 +226,16 @@ typedef struct ReexportMember {
 //   2. export a, b, c
 //   3. export { a, b as c } from "./file"
 typedef struct ExportStmtNode {
-    AstNode *declaration;       // Declaration export (export let x = 1)
-    char *export_name;          // Single export name (declaration style)
-    char **export_names;        // Export name list (list style: export a, b)
+    AstNode *declaration;  // Declaration export (export let x = 1)
+    char *export_name;     // Single export name (declaration style)
+    char **export_names;   // Export name list (list style: export a, b)
     int export_count;
 
     // Re-export support
-    char *from_path;            // Source module path (e.g. "./user")
+    char *from_path;  // Source module path (e.g. "./user")
     ReexportMember *reexport_members;
     int reexport_count;
-    bool is_reexport_all;       // Whether it's `export * from "..."`
+    bool is_reexport_all;  // Whether it's `export * from "..."`
 } ExportStmtNode;
 
-#endif // XAST_NODES_DECL_H
+#endif  // XAST_NODES_DECL_H

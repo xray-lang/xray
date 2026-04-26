@@ -51,20 +51,20 @@ typedef enum {
 typedef struct XrOutFrame {
     uint8_t *data;
     uint32_t len;
-    bool     owned;         // if true, data is owned and freed by queue
+    bool owned;  // if true, data is owned and freed by queue
     struct XrOutFrame *next;
 } XrOutFrame;
 
 typedef struct XrOutputQueue {
     XrOutFrame *head;
     XrOutFrame *tail;
-    int64_t     total_bytes;      // total queued bytes
-    int         frame_count;      // queued frame count
-    int64_t     high_watermark;   // backpressure on  (default 4MB)
-    int64_t     low_watermark;    // backpressure off (default 1MB)
-    _Atomic(bool) is_full;        // above high watermark
-    int         notify_pipe[2];   // pipe for writer wakeup (-1 if unavailable)
-    XrMutex  lock;
+    int64_t total_bytes;     // total queued bytes
+    int frame_count;         // queued frame count
+    int64_t high_watermark;  // backpressure on  (default 4MB)
+    int64_t low_watermark;   // backpressure off (default 1MB)
+    _Atomic(bool) is_full;   // above high watermark
+    int notify_pipe[2];      // pipe for writer wakeup (-1 if unavailable)
+    XrMutex lock;
 } XrOutputQueue;
 
 /* ========== Node Metrics ========== */
@@ -76,7 +76,7 @@ typedef struct XrNodeMetrics {
     _Atomic(uint64_t) bytes_recv;
     _Atomic(uint64_t) send_errors;
     _Atomic(uint64_t) slow_consumer_events;
-    int64_t           last_rtt_ms;   // from heartbeat PONG
+    int64_t last_rtt_ms;  // from heartbeat PONG
 } XrNodeMetrics;
 
 /* ========== Phi Accrual Failure Detector ========== */
@@ -84,14 +84,14 @@ typedef struct XrNodeMetrics {
 #define XR_PHI_WINDOW_SIZE 100
 
 typedef struct XrPhiDetector {
-    double   intervals[XR_PHI_WINDOW_SIZE]; // heartbeat interval samples
-    int      sample_count;
-    int      write_idx;          // ring buffer index
-    double   mean;               // running mean
-    double   variance;           // running variance
-    double   sum;                // running sum for O(1) update
-    double   sum_sq;             // running sum of squares for O(1) update
-    int64_t  last_heartbeat_ts;  // last heartbeat timestamp (ms)
+    double intervals[XR_PHI_WINDOW_SIZE];  // heartbeat interval samples
+    int sample_count;
+    int write_idx;              // ring buffer index
+    double mean;                // running mean
+    double variance;            // running variance
+    double sum;                 // running sum for O(1) update
+    double sum_sq;              // running sum of squares for O(1) update
+    int64_t last_heartbeat_ts;  // last heartbeat timestamp (ms)
 } XrPhiDetector;
 
 /* ========== Pending Request (for safe connection multiplexing) ========== */
@@ -106,8 +106,8 @@ typedef struct XrPhiDetector {
  */
 typedef struct XrPendingRequest {
     uint64_t request_id;
-    struct XrChannel *response_ch;      // Unbuffered channel, caller blocks on recv
-    struct XrPendingRequest *next;      // chain pointer within its bucket
+    struct XrChannel *response_ch;  // Unbuffered channel, caller blocks on recv
+    struct XrPendingRequest *next;  // chain pointer within its bucket
 } XrPendingRequest;
 
 /*
@@ -124,27 +124,27 @@ typedef struct XrPendingRequest {
  *                             enforced before the hash upgrade. RPC
  *                             slots still bound memory per node.
  */
-#define XR_PENDING_BUCKETS      32
+#define XR_PENDING_BUCKETS 32
 #define XR_MAX_PENDING_REQUESTS 256
 
 /* ========== Cluster Node ========== */
 
 typedef struct XrClusterNode {
-    char          name[XR_NODE_NAME_MAX + 1];
-    char          host[256];
-    uint16_t      port;
-    XrNodeState   state;
-    XrIOConn     *conn;
-    int64_t       last_heartbeat_sent;
-    int64_t       last_heartbeat_recv;
-    uint32_t      flags;
-    uint32_t      missed_heartbeats;
+    char name[XR_NODE_NAME_MAX + 1];
+    char host[256];
+    uint16_t port;
+    XrNodeState state;
+    XrIOConn *conn;
+    int64_t last_heartbeat_sent;
+    int64_t last_heartbeat_recv;
+    uint32_t flags;
+    uint32_t missed_heartbeats;
 
     // Pending request table: per-bucket chaining keyed by request_id.
     // See XR_PENDING_BUCKETS above for sizing rationale.
     XrPendingRequest *pending_buckets[XR_PENDING_BUCKETS];
-    int               pending_count;
-    XrMutex        pending_lock;
+    int pending_count;
+    XrMutex pending_lock;
 
     /*
      * Isolate pointer — set when the node is attached to a cluster
@@ -157,8 +157,8 @@ typedef struct XrClusterNode {
     struct XrayIsolate *isolate;
 
     // Output queue (async writes via dedicated writer coroutine)
-    XrOutputQueue    outq;
-    _Atomic(bool)    writer_running;  // writer loop control
+    XrOutputQueue outq;
+    _Atomic(bool) writer_running;  // writer loop control
     /*
      * Flipped true by the writer coroutine as its very last action
      * before returning, so xr_cluster_node_free can spin-wait until
@@ -167,14 +167,14 @@ typedef struct XrClusterNode {
      * fd the writer may still have registered with netpoll). Starts
      * false for fresh nodes and for nodes whose writer never spawned.
      */
-    _Atomic(bool)    writer_exited;
-    _Atomic(bool)    reader_running;  // frame-processing reader loop control
+    _Atomic(bool) writer_exited;
+    _Atomic(bool) reader_running;  // frame-processing reader loop control
 
     // Metrics
-    XrNodeMetrics    metrics;
+    XrNodeMetrics metrics;
 
     // Phi Accrual failure detector
-    XrPhiDetector    phi;
+    XrPhiDetector phi;
 
     struct XrClusterNode *next;
 } XrClusterNode;
@@ -201,26 +201,23 @@ XR_FUNC XrClusterNode *xr_cluster_node_accept(struct XrCluster *cluster, XrIOCon
 
 // Enqueue a pre-built frame for async writing. Thread-safe.
 // Returns 0 on success, -1 if queue full (backpressure).
-XR_FUNC int xr_cluster_node_enqueue(XrClusterNode *node,
-                             const uint8_t *data, uint32_t len);
+XR_FUNC int xr_cluster_node_enqueue(XrClusterNode *node, const uint8_t *data, uint32_t len);
 
 // Send a frame via output queue (encode + enqueue).
 // Returns 0 on success, -1 on error/backpressure.
 XR_FUNC int xr_cluster_node_send_frame(XrClusterNode *node, uint8_t frame_type,
-                                const uint8_t *payload, uint32_t payload_len);
+                                       const uint8_t *payload, uint32_t payload_len);
 
 // Send a frame synchronously (bypassing output queue).
 // Used only during handshake before writer coroutine starts.
 XR_FUNC int xr_cluster_node_send_frame_sync(XrClusterNode *node, uint8_t frame_type,
-                                     const uint8_t *payload, uint32_t payload_len);
+                                            const uint8_t *payload, uint32_t payload_len);
 
 // Read a single frame from a node connection
 // Returns frame type, writes payload into provided buffer.
 // Returns -1 on error/disconnect.
-XR_FUNC int xr_cluster_node_recv_frame(XrClusterNode *node,
-                                uint8_t *frame_type_out,
-                                uint8_t *buf, uint32_t buf_size,
-                                uint32_t *payload_len_out);
+XR_FUNC int xr_cluster_node_recv_frame(XrClusterNode *node, uint8_t *frame_type_out, uint8_t *buf,
+                                       uint32_t buf_size, uint32_t *payload_len_out);
 
 // Send heartbeat ping
 XR_FUNC int xr_cluster_node_send_ping(XrClusterNode *node);
@@ -246,8 +243,7 @@ XR_FUNC void xr_cluster_node_writer_loop(void *arg);
 //
 // Safe to call twice — the second call is a no-op if the reader is
 // already running for this node.
-XR_FUNC void xr_cluster_node_start_reader(struct XrCluster *cluster,
-                                           XrClusterNode *node);
+XR_FUNC void xr_cluster_node_start_reader(struct XrCluster *cluster, XrClusterNode *node);
 
 /* ========== Output Queue Helpers ========== */
 
@@ -263,15 +259,15 @@ XR_FUNC void xr_outq_destroy(XrOutputQueue *q);
  */
 XR_FUNC void xr_outq_close_write_end(XrOutputQueue *q);
 
-XR_FUNC int  xr_outq_push(XrOutputQueue *q, const uint8_t *data, uint32_t len);
-XR_FUNC int  xr_outq_push_nocopy(XrOutputQueue *q, uint8_t *data, uint32_t len);
+XR_FUNC int xr_outq_push(XrOutputQueue *q, const uint8_t *data, uint32_t len);
+XR_FUNC int xr_outq_push_nocopy(XrOutputQueue *q, uint8_t *data, uint32_t len);
 XR_FUNC XrOutFrame *xr_outq_pop(XrOutputQueue *q);
 XR_FUNC XrOutFrame *xr_outq_pop_all(XrOutputQueue *q);
 
 /* ========== Phi Accrual Failure Detector ========== */
 
-XR_FUNC void   xr_phi_init(XrPhiDetector *det);
-XR_FUNC void   xr_phi_record_heartbeat(XrPhiDetector *det, int64_t now_ms);
+XR_FUNC void xr_phi_init(XrPhiDetector *det);
+XR_FUNC void xr_phi_record_heartbeat(XrPhiDetector *det, int64_t now_ms);
 XR_FUNC double xr_phi_value(XrPhiDetector *det, int64_t now_ms);
 
 /* ========== Slow Consumer Detection ========== */
@@ -283,20 +279,17 @@ XR_FUNC bool xr_cluster_node_is_slow(XrClusterNode *node);
 // Register a pending request. Returns the response Channel to block on,
 // or NULL if the node has reached `max_pending` in-flight requests.
 // Caller must recv from the returned Channel to get the response payload.
-XR_FUNC struct XrChannel *xr_cluster_node_add_pending(
-    XrClusterNode *node, uint64_t request_id, struct XrayIsolate *X,
-    int max_pending);
+XR_FUNC struct XrChannel *xr_cluster_node_add_pending(XrClusterNode *node, uint64_t request_id,
+                                                      struct XrayIsolate *X, int max_pending);
 
 // Find and remove a pending request by request_id.
 // Returns the response Channel, or NULL if not found.
-XR_FUNC struct XrChannel *xr_cluster_node_take_pending(
-    XrClusterNode *node, uint64_t request_id);
+XR_FUNC struct XrChannel *xr_cluster_node_take_pending(XrClusterNode *node, uint64_t request_id);
 
 /* ========== Handshake Helpers ========== */
 
 // Compute SHA-256 proof: SHA256(secret + nonce)
-XR_FUNC void xr_cluster_compute_proof(const char *secret, const uint8_t *nonce,
-                               uint8_t *proof_out);
+XR_FUNC void xr_cluster_compute_proof(const char *secret, const uint8_t *nonce, uint8_t *proof_out);
 
 // Get current monotonic time in milliseconds
 XR_FUNC int64_t xr_cluster_now_ms(void);

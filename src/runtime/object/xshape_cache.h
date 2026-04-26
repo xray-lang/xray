@@ -33,14 +33,10 @@ typedef struct XrShapeCache {
     int miss_count;
 } XrShapeCache;
 
-XR_FUNC XrShapeCache* xr_shape_cache_new(void);
+XR_FUNC XrShapeCache *xr_shape_cache_new(void);
 XR_FUNC void xr_shape_cache_free(XrShapeCache *cache);
 
-XR_FUNC XrShape* xr_shape_cache_get_or_create(
-    XrayIsolate *isolate,
-    XrShapeCache *cache,
-    XrString **interned_names,
-    uint32_t field_count
-);
+XR_FUNC XrShape *xr_shape_cache_get_or_create(XrayIsolate *isolate, XrShapeCache *cache,
+                                              XrString **interned_names, uint32_t field_count);
 
-#endif // XSHAPE_CACHE_H
+#endif  // XSHAPE_CACHE_H

@@ -19,7 +19,7 @@
 #define XJIT_HOOKS_H
 
 #include "../base/xdefs.h"
-#include "../runtime/xvm_call.h"   // XrVMResult, XrValue
+#include "../runtime/xvm_call.h"  // XrVMResult, XrValue
 #include <stdbool.h>
 
 /* Forward declarations (avoid pulling in full headers) */
@@ -29,9 +29,9 @@ struct XrType;
 
 /* ========== JIT result codes (mirror jit/xir_jit.h constants) ========== */
 
-#define XR_JIT_OK       0
-#define XR_JIT_DEOPT    1
-#define XR_JIT_SUSPEND  2
+#define XR_JIT_OK 0
+#define XR_JIT_DEOPT 1
+#define XR_JIT_SUSPEND 2
 
 /* ========== JIT Hooks Vtable ========== */
 
@@ -40,8 +40,8 @@ typedef struct XrJitHooks {
 
     // Call compiled code for a function entry.
     // Mirrors xir_jit_call() signature.
-    int (*call)(void *entry, struct XrCoroutine *coro, XrValue *args,
-                int nargs, struct XrType *return_type_info, XrValue *result);
+    int (*call)(void *entry, struct XrCoroutine *coro, XrValue *args, int nargs,
+                struct XrType *return_type_info, XrValue *result);
 
     // Resume from a JIT suspend point.
     // Mirrors xir_jit_resume() signature.
@@ -54,9 +54,9 @@ typedef struct XrJitHooks {
     /* --- Guard page safepoint --- */
 
     void *(*guard_page_alloc)(void);
-    void  (*guard_page_free)(void *page);
-    void  (*guard_page_arm)(void *page);
-    void  (*guard_page_disarm)(void *page);
+    void (*guard_page_free)(void *page);
+    void (*guard_page_arm)(void *page);
+    void (*guard_page_disarm)(void *page);
 } XrJitHooks;
 
 /* Global hooks pointer.  NULL when JIT is not available. */
@@ -64,6 +64,6 @@ XR_DATA XrJitHooks *xr_jit_hooks;
 
 /* ========== Convenience macros ========== */
 
-#define XR_JIT_AVAILABLE()  (xr_jit_hooks != NULL)
+#define XR_JIT_AVAILABLE() (xr_jit_hooks != NULL)
 
-#endif // XJIT_HOOKS_H
+#endif  // XJIT_HOOKS_H

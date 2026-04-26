@@ -31,12 +31,13 @@ static void ic_method_init(XrICMethod *ic) {
 #endif
 }
 
-XrICMethodTable* xr_ic_method_table_new(int initial_capacity) {
-    XrICMethodTable *table = (XrICMethodTable*)xr_malloc(sizeof(XrICMethodTable));
-    if (!table) return NULL;
+XrICMethodTable *xr_ic_method_table_new(int initial_capacity) {
+    XrICMethodTable *table = (XrICMethodTable *) xr_malloc(sizeof(XrICMethodTable));
+    if (!table)
+        return NULL;
     table->capacity = initial_capacity > 0 ? initial_capacity : 4;
     table->count = 0;
-    table->caches = (XrICMethod*)xr_malloc(sizeof(XrICMethod) * table->capacity);
+    table->caches = (XrICMethod *) xr_malloc(sizeof(XrICMethod) * table->capacity);
 
     for (int i = 0; i < table->capacity; i++) {
         ic_method_init(&table->caches[i]);
@@ -46,7 +47,8 @@ XrICMethodTable* xr_ic_method_table_new(int initial_capacity) {
 }
 
 void xr_ic_method_table_free(XrICMethodTable *table) {
-    if (!table) return;
+    if (!table)
+        return;
 
     if (table->caches) {
         for (int i = 0; i < table->count; i++) {
@@ -62,12 +64,15 @@ void xr_ic_method_table_free(XrICMethodTable *table) {
 
 int xr_ic_method_table_alloc(XrICMethodTable *table) {
     XR_DCHECK(table != NULL, "Inline cache table must not be NULL");
-    XR_DCHECK(table->count >= 0 && table->count <= table->capacity, "ic_method_table_alloc: count/capacity invariant violated");
+    XR_DCHECK(table->count >= 0 && table->count <= table->capacity,
+              "ic_method_table_alloc: count/capacity invariant violated");
 
     if (table->count >= table->capacity) {
         int new_capacity = table->capacity * 2;
-        XrICMethod *new_caches = (XrICMethod*)xr_realloc(table->caches, sizeof(XrICMethod) * new_capacity);
-        if (!new_caches) return -1;
+        XrICMethod *new_caches =
+            (XrICMethod *) xr_realloc(table->caches, sizeof(XrICMethod) * new_capacity);
+        if (!new_caches)
+            return -1;
         table->caches = new_caches;
 
         for (int i = table->capacity; i < new_capacity; i++) {
@@ -84,46 +89,50 @@ int xr_ic_method_table_alloc(XrICMethodTable *table) {
 
 static const char *ic_state_name(XrICState state) {
     switch (state) {
-        case XR_IC_STATE_UNINIT: return "uninit";
-        case XR_IC_STATE_MONO:   return "mono";
-        case XR_IC_STATE_POLY:   return "poly";
-        case XR_IC_STATE_MEGA:   return "mega";
-        default:                 return "?";
+        case XR_IC_STATE_UNINIT:
+            return "uninit";
+        case XR_IC_STATE_MONO:
+            return "mono";
+        case XR_IC_STATE_POLY:
+            return "poly";
+        case XR_IC_STATE_MEGA:
+            return "mega";
+        default:
+            return "?";
     }
 }
 
-void xr_ic_method_dump_feedback(const XrICMethod *cache, int pc_offset,
-                                const char *func_name) {
-    (void)func_name;
-    if (!cache || cache->total_count == 0) return;
+void xr_ic_method_dump_feedback(const XrICMethod *cache, int pc_offset, const char *func_name) {
+    (void) func_name;
+    if (!cache || cache->total_count == 0)
+        return;
 
     XrICState state = xr_ic_method_state(cache);
-    fprintf(stderr, "  [pc=%04d] %s  total=%u  types=%d",
-            pc_offset, ic_state_name(state),
-            cache->total_count, (int)cache->count);
+    fprintf(stderr, "  [pc=%04d] %s  total=%u  types=%d", pc_offset, ic_state_name(state),
+            cache->total_count, (int) cache->count);
 
     for (int i = 0; i < cache->count; i++) {
         const XrICEntry *e = &cache->entries[i];
-        double pct = cache->total_count > 0
-            ? 100.0 * e->hit_count / cache->total_count : 0.0;
-        fprintf(stderr, "  %s:%.1f%%",
-                e->klass ? e->klass->name : "?", pct);
+        double pct = cache->total_count > 0 ? 100.0 * e->hit_count / cache->total_count : 0.0;
+        fprintf(stderr, "  %s:%.1f%%", e->klass ? e->klass->name : "?", pct);
     }
     fprintf(stderr, "\n");
 }
 
-void xr_ic_method_table_dump_feedback(const XrICMethodTable *table,
-                                       const char *func_name) {
-    if (!table) return;
+void xr_ic_method_table_dump_feedback(const XrICMethodTable *table, const char *func_name) {
+    if (!table)
+        return;
 
     int active = 0;
     for (int i = 0; i < table->count; i++) {
-        if (table->caches[i].total_count > 0) active++;
+        if (table->caches[i].total_count > 0)
+            active++;
     }
-    if (active == 0) return;
+    if (active == 0)
+        return;
 
-    fprintf(stderr, "[ic-feedback] %s: %d active call sites\n",
-            func_name ? func_name : "?", active);
+    fprintf(stderr, "[ic-feedback] %s: %d active call sites\n", func_name ? func_name : "?",
+            active);
 
     for (int i = 0; i < table->count; i++) {
         xr_ic_method_dump_feedback(&table->caches[i], i, func_name);
@@ -191,11 +200,11 @@ void xr_ic_method_table_print_stats(const XrICMethodTable *table) {
 }
 
 double xr_ic_method_hit_rate(const XrICMethod *cache) {
-    if (!cache) return 0.0;
+    if (!cache)
+        return 0.0;
 
     uint64_t total = cache->hits + cache->misses;
-    return total > 0 ? ((double)cache->hits / total) : 0.0;
+    return total > 0 ? ((double) cache->hits / total) : 0.0;
 }
 
 #endif
-

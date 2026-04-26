@@ -29,13 +29,15 @@
 /* ========== Allocators ========== */
 
 static XrTomlValue *alloc_value(XrTomlType type) {
-    XrTomlValue *v = (XrTomlValue *)xr_calloc(1, sizeof(XrTomlValue));
-    if (v) v->type = type;
+    XrTomlValue *v = (XrTomlValue *) xr_calloc(1, sizeof(XrTomlValue));
+    if (v)
+        v->type = type;
     return v;
 }
 
 XR_FUNC void xtoml_free(XrTomlValue *v) {
-    if (!v) return;
+    if (!v)
+        return;
     switch (v->type) {
         case XR_TOML_STRING:
         case XR_TOML_DATETIME:
@@ -63,26 +65,33 @@ XR_FUNC void xtoml_free(XrTomlValue *v) {
 
 static XrTomlValue *new_table(void) {
     XrTomlValue *t = alloc_value(XR_TOML_TABLE);
-    if (!t) return NULL;
+    if (!t)
+        return NULL;
     t->as.table.capacity = 8;
-    t->as.table.members = (XrTomlMember *)xr_calloc(
-        (size_t)t->as.table.capacity, sizeof(XrTomlMember));
-    if (!t->as.table.members) { xr_free(t); return NULL; }
+    t->as.table.members =
+        (XrTomlMember *) xr_calloc((size_t) t->as.table.capacity, sizeof(XrTomlMember));
+    if (!t->as.table.members) {
+        xr_free(t);
+        return NULL;
+    }
     return t;
 }
 
 /* Find member by key. Returns index or -1. */
 static int table_find(XrTomlValue *t, const char *key) {
-    if (!t || t->type != XR_TOML_TABLE) return -1;
+    if (!t || t->type != XR_TOML_TABLE)
+        return -1;
     for (int i = 0; i < t->as.table.count; i++) {
-        if (strcmp(t->as.table.members[i].key, key) == 0) return i;
+        if (strcmp(t->as.table.members[i].key, key) == 0)
+            return i;
     }
     return -1;
 }
 
 /* Set key=value in table. If key exists, replaces value. */
 static bool table_set(XrTomlValue *t, const char *key, XrTomlValue *val) {
-    if (!t || t->type != XR_TOML_TABLE || !key) return false;
+    if (!t || t->type != XR_TOML_TABLE || !key)
+        return false;
 
     int idx = table_find(t, key);
     if (idx >= 0) {
@@ -93,9 +102,10 @@ static bool table_set(XrTomlValue *t, const char *key, XrTomlValue *val) {
 
     if (t->as.table.count >= t->as.table.capacity) {
         int new_cap = t->as.table.capacity * 2;
-        XrTomlMember *tmp = (XrTomlMember *)xr_realloc(
-            t->as.table.members, (size_t)new_cap * sizeof(XrTomlMember));
-        if (!tmp) return false;
+        XrTomlMember *tmp = (XrTomlMember *) xr_realloc(t->as.table.members,
+                                                        (size_t) new_cap * sizeof(XrTomlMember));
+        if (!tmp)
+            return false;
         t->as.table.members = tmp;
         t->as.table.capacity = new_cap;
     }
@@ -109,21 +119,27 @@ static bool table_set(XrTomlValue *t, const char *key, XrTomlValue *val) {
 
 static XrTomlValue *new_array(void) {
     XrTomlValue *a = alloc_value(XR_TOML_ARRAY);
-    if (!a) return NULL;
+    if (!a)
+        return NULL;
     a->as.array.capacity = 8;
-    a->as.array.items = (XrTomlValue **)xr_calloc(
-        (size_t)a->as.array.capacity, sizeof(XrTomlValue *));
-    if (!a->as.array.items) { xr_free(a); return NULL; }
+    a->as.array.items =
+        (XrTomlValue **) xr_calloc((size_t) a->as.array.capacity, sizeof(XrTomlValue *));
+    if (!a->as.array.items) {
+        xr_free(a);
+        return NULL;
+    }
     return a;
 }
 
 static bool array_push(XrTomlValue *a, XrTomlValue *val) {
-    if (!a || a->type != XR_TOML_ARRAY) return false;
+    if (!a || a->type != XR_TOML_ARRAY)
+        return false;
     if (a->as.array.count >= a->as.array.capacity) {
         int new_cap = a->as.array.capacity * 2;
-        XrTomlValue **tmp = (XrTomlValue **)xr_realloc(
-            a->as.array.items, (size_t)new_cap * sizeof(XrTomlValue *));
-        if (!tmp) return false;
+        XrTomlValue **tmp = (XrTomlValue **) xr_realloc(a->as.array.items,
+                                                        (size_t) new_cap * sizeof(XrTomlValue *));
+        if (!tmp)
+            return false;
         a->as.array.items = tmp;
         a->as.array.capacity = new_cap;
     }
@@ -149,7 +165,11 @@ typedef struct {
 
 #define PEEK(p) ((p)->pos < (p)->len ? (p)->data[(p)->pos] : '\0')
 #define AT_END(p) ((p)->pos >= (p)->len)
-#define ADV(p) do { (p)->pos++; (p)->col++; } while(0)
+#define ADV(p)                                                                                     \
+    do {                                                                                           \
+        (p)->pos++;                                                                                \
+        (p)->col++;                                                                                \
+    } while (0)
 
 static void ctx_init(TomlCtx *p, const char *data, size_t len) {
     memset(p, 0, sizeof(TomlCtx));
@@ -167,25 +187,34 @@ static void ctx_cleanup(TomlCtx *p) {
 /* ========== Buffer Helpers ========== */
 
 static void buf_ensure(TomlCtx *p, size_t needed) {
-    if (p->buf_cap >= needed) return;
+    if (p->buf_cap >= needed)
+        return;
     size_t new_cap = p->buf_cap ? p->buf_cap * 2 : 64;
-    while (new_cap < needed) new_cap *= 2;
-    char *tmp = (char *)xr_realloc(p->buf, new_cap);
-    if (!tmp) { p->error = true; return; }
+    while (new_cap < needed)
+        new_cap *= 2;
+    char *tmp = (char *) xr_realloc(p->buf, new_cap);
+    if (!tmp) {
+        p->error = true;
+        return;
+    }
     p->buf = tmp;
     p->buf_cap = new_cap;
 }
 
-static void buf_reset(TomlCtx *p) { p->buf_len = 0; }
+static void buf_reset(TomlCtx *p) {
+    p->buf_len = 0;
+}
 
 static void buf_char(TomlCtx *p, char c) {
     buf_ensure(p, p->buf_len + 2);
-    if (p->buf) p->buf[p->buf_len++] = c;
+    if (p->buf)
+        p->buf[p->buf_len++] = c;
 }
 
 static char *buf_dup(TomlCtx *p) {
     buf_ensure(p, p->buf_len + 1);
-    if (!p->buf) return xr_strdup("");
+    if (!p->buf)
+        return xr_strdup("");
     p->buf[p->buf_len] = '\0';
     return xr_strdup(p->buf);
 }
@@ -193,21 +222,34 @@ static char *buf_dup(TomlCtx *p) {
 /* ========== Skip Helpers ========== */
 
 static void skip_ws(TomlCtx *p) {
-    while (!AT_END(p) && (PEEK(p) == ' ' || PEEK(p) == '\t')) ADV(p);
+    while (!AT_END(p) && (PEEK(p) == ' ' || PEEK(p) == '\t'))
+        ADV(p);
 }
 
 static void skip_ws_nl(TomlCtx *p) {
     while (!AT_END(p)) {
         char c = PEEK(p);
-        if (c == ' ' || c == '\t') { ADV(p); continue; }
-        if (c == '\n') { ADV(p); p->line++; p->col = 1; continue; }
+        if (c == ' ' || c == '\t') {
+            ADV(p);
+            continue;
+        }
+        if (c == '\n') {
+            ADV(p);
+            p->line++;
+            p->col = 1;
+            continue;
+        }
         if (c == '\r') {
             ADV(p);
-            if (!AT_END(p) && PEEK(p) == '\n') ADV(p);
-            p->line++; p->col = 1; continue;
+            if (!AT_END(p) && PEEK(p) == '\n')
+                ADV(p);
+            p->line++;
+            p->col = 1;
+            continue;
         }
         if (c == '#') {
-            while (!AT_END(p) && PEEK(p) != '\n') ADV(p);
+            while (!AT_END(p) && PEEK(p) != '\n')
+                ADV(p);
             continue;
         }
         break;
@@ -215,36 +257,36 @@ static void skip_ws_nl(TomlCtx *p) {
 }
 
 static void skip_to_eol(TomlCtx *p) {
-    while (!AT_END(p) && PEEK(p) != '\n' && PEEK(p) != '\r') ADV(p);
+    while (!AT_END(p) && PEEK(p) != '\n' && PEEK(p) != '\r')
+        ADV(p);
 }
 
 static bool is_bare_key_char(char c) {
-    return isalnum((unsigned char)c) || c == '_' || c == '-';
+    return isalnum((unsigned char) c) || c == '_' || c == '-';
 }
 
 /* ========== Forward Declarations ========== */
 
 static XrTomlValue *parse_value(TomlCtx *p);
-static void set_nested(TomlCtx *p, XrTomlValue *root, char **keys, int nkeys,
-                       XrTomlValue *val);
+static void set_nested(TomlCtx *p, XrTomlValue *root, char **keys, int nkeys, XrTomlValue *val);
 
 /* ========== UTF-8 Encode ========== */
 
 static void utf8_encode(TomlCtx *p, unsigned int cp) {
     if (cp < 0x80) {
-        buf_char(p, (char)cp);
+        buf_char(p, (char) cp);
     } else if (cp < 0x800) {
-        buf_char(p, (char)(0xC0 | (cp >> 6)));
-        buf_char(p, (char)(0x80 | (cp & 0x3F)));
+        buf_char(p, (char) (0xC0 | (cp >> 6)));
+        buf_char(p, (char) (0x80 | (cp & 0x3F)));
     } else if (cp < 0x10000) {
-        buf_char(p, (char)(0xE0 | (cp >> 12)));
-        buf_char(p, (char)(0x80 | ((cp >> 6) & 0x3F)));
-        buf_char(p, (char)(0x80 | (cp & 0x3F)));
+        buf_char(p, (char) (0xE0 | (cp >> 12)));
+        buf_char(p, (char) (0x80 | ((cp >> 6) & 0x3F)));
+        buf_char(p, (char) (0x80 | (cp & 0x3F)));
     } else {
-        buf_char(p, (char)(0xF0 | (cp >> 18)));
-        buf_char(p, (char)(0x80 | ((cp >> 12) & 0x3F)));
-        buf_char(p, (char)(0x80 | ((cp >> 6) & 0x3F)));
-        buf_char(p, (char)(0x80 | (cp & 0x3F)));
+        buf_char(p, (char) (0xF0 | (cp >> 18)));
+        buf_char(p, (char) (0x80 | ((cp >> 12) & 0x3F)));
+        buf_char(p, (char) (0x80 | ((cp >> 6) & 0x3F)));
+        buf_char(p, (char) (0x80 | (cp & 0x3F)));
     }
 }
 
@@ -252,7 +294,10 @@ static void utf8_encode(TomlCtx *p, unsigned int cp) {
 
 /* Parse basic string (double-quoted, with escapes). */
 static XrTomlValue *parse_basic_string(TomlCtx *p) {
-    if (PEEK(p) != '"') { p->error = true; return NULL; }
+    if (PEEK(p) != '"') {
+        p->error = true;
+        return NULL;
+    }
     ADV(p);
 
     /* Check for multiline: """ */
@@ -264,16 +309,21 @@ static XrTomlValue *parse_basic_string(TomlCtx *p) {
             ADV(p);
             /* Skip first newline after opening """ */
             if (!AT_END(p) && PEEK(p) == '\n') {
-                ADV(p); p->line++; p->col = 1;
+                ADV(p);
+                p->line++;
+                p->col = 1;
             } else if (!AT_END(p) && PEEK(p) == '\r') {
                 ADV(p);
-                if (!AT_END(p) && PEEK(p) == '\n') ADV(p);
-                p->line++; p->col = 1;
+                if (!AT_END(p) && PEEK(p) == '\n')
+                    ADV(p);
+                p->line++;
+                p->col = 1;
             }
         } else {
             /* Empty string "" */
             XrTomlValue *v = alloc_value(XR_TOML_STRING);
-            if (v) v->as.string = xr_strdup("");
+            if (v)
+                v->as.string = xr_strdup("");
             return v;
         }
     }
@@ -282,56 +332,91 @@ static XrTomlValue *parse_basic_string(TomlCtx *p) {
 
     while (!AT_END(p)) {
         if (multiline) {
-            if (PEEK(p) == '"' && p->pos + 2 < p->len &&
-                p->data[p->pos + 1] == '"' && p->data[p->pos + 2] == '"') {
-                p->pos += 3; p->col += 3;
+            if (PEEK(p) == '"' && p->pos + 2 < p->len && p->data[p->pos + 1] == '"' &&
+                p->data[p->pos + 2] == '"') {
+                p->pos += 3;
+                p->col += 3;
                 goto done;
             }
         } else {
-            if (PEEK(p) == '"') { ADV(p); goto done; }
+            if (PEEK(p) == '"') {
+                ADV(p);
+                goto done;
+            }
             if (PEEK(p) == '\n' || PEEK(p) == '\r') {
-                p->error = true; return NULL;
+                p->error = true;
+                return NULL;
             }
         }
 
         if (PEEK(p) == '\\') {
             ADV(p);
-            if (AT_END(p)) break;
-            char c = PEEK(p); ADV(p);
+            if (AT_END(p))
+                break;
+            char c = PEEK(p);
+            ADV(p);
             switch (c) {
-                case 'n': buf_char(p, '\n'); break;
-                case 't': buf_char(p, '\t'); break;
-                case 'r': buf_char(p, '\r'); break;
-                case '\\': buf_char(p, '\\'); break;
-                case '"': buf_char(p, '"'); break;
-                case 'b': buf_char(p, '\b'); break;
-                case 'f': buf_char(p, '\f'); break;
-                case 'u': case 'U': {
+                case 'n':
+                    buf_char(p, '\n');
+                    break;
+                case 't':
+                    buf_char(p, '\t');
+                    break;
+                case 'r':
+                    buf_char(p, '\r');
+                    break;
+                case '\\':
+                    buf_char(p, '\\');
+                    break;
+                case '"':
+                    buf_char(p, '"');
+                    break;
+                case 'b':
+                    buf_char(p, '\b');
+                    break;
+                case 'f':
+                    buf_char(p, '\f');
+                    break;
+                case 'u':
+                case 'U': {
                     int digits = (c == 'u') ? 4 : 8;
                     unsigned int cp = 0;
                     for (int i = 0; i < digits && !AT_END(p); i++) {
                         char h = PEEK(p);
-                        if (!isxdigit((unsigned char)h)) { p->error = true; return NULL; }
+                        if (!isxdigit((unsigned char) h)) {
+                            p->error = true;
+                            return NULL;
+                        }
                         ADV(p);
                         cp <<= 4;
-                        if (h >= '0' && h <= '9') cp |= (unsigned)(h - '0');
-                        else if (h >= 'a' && h <= 'f') cp |= (unsigned)(h - 'a' + 10);
-                        else cp |= (unsigned)(h - 'A' + 10);
+                        if (h >= '0' && h <= '9')
+                            cp |= (unsigned) (h - '0');
+                        else if (h >= 'a' && h <= 'f')
+                            cp |= (unsigned) (h - 'a' + 10);
+                        else
+                            cp |= (unsigned) (h - 'A' + 10);
                     }
                     if ((cp >= 0xD800 && cp <= 0xDFFF) || cp > 0x10FFFF) {
-                        p->error = true; return NULL;
+                        p->error = true;
+                        return NULL;
                     }
                     utf8_encode(p, cp);
                     break;
                 }
-                case '\n': case '\r':
+                case '\n':
+                case '\r':
                     if (multiline) {
-                        if (c == '\r' && !AT_END(p) && PEEK(p) == '\n') ADV(p);
-                        p->line++; p->col = 1;
+                        if (c == '\r' && !AT_END(p) && PEEK(p) == '\n')
+                            ADV(p);
+                        p->line++;
+                        p->col = 1;
                         /* Trim whitespace continuation */
                         while (!AT_END(p) && (PEEK(p) == ' ' || PEEK(p) == '\t' ||
-                               PEEK(p) == '\n' || PEEK(p) == '\r')) {
-                            if (PEEK(p) == '\n') { p->line++; p->col = 1; }
+                                              PEEK(p) == '\n' || PEEK(p) == '\r')) {
+                            if (PEEK(p) == '\n') {
+                                p->line++;
+                                p->col = 1;
+                            }
                             ADV(p);
                         }
                     }
@@ -341,7 +426,10 @@ static XrTomlValue *parse_basic_string(TomlCtx *p) {
                     break;
             }
         } else {
-            if (PEEK(p) == '\n') { p->line++; p->col = 1; }
+            if (PEEK(p) == '\n') {
+                p->line++;
+                p->col = 1;
+            }
             buf_char(p, PEEK(p));
             ADV(p);
         }
@@ -352,14 +440,18 @@ static XrTomlValue *parse_basic_string(TomlCtx *p) {
 
 done: {
     XrTomlValue *v = alloc_value(XR_TOML_STRING);
-    if (v) v->as.string = buf_dup(p);
+    if (v)
+        v->as.string = buf_dup(p);
     return v;
-    }
+}
 }
 
 /* Parse literal string (single-quoted, no escapes). */
 static XrTomlValue *parse_literal_string(TomlCtx *p) {
-    if (PEEK(p) != '\'') { p->error = true; return NULL; }
+    if (PEEK(p) != '\'') {
+        p->error = true;
+        return NULL;
+    }
     ADV(p);
 
     bool multiline = false;
@@ -369,15 +461,20 @@ static XrTomlValue *parse_literal_string(TomlCtx *p) {
             multiline = true;
             ADV(p);
             if (!AT_END(p) && PEEK(p) == '\n') {
-                ADV(p); p->line++; p->col = 1;
+                ADV(p);
+                p->line++;
+                p->col = 1;
             } else if (!AT_END(p) && PEEK(p) == '\r') {
                 ADV(p);
-                if (!AT_END(p) && PEEK(p) == '\n') ADV(p);
-                p->line++; p->col = 1;
+                if (!AT_END(p) && PEEK(p) == '\n')
+                    ADV(p);
+                p->line++;
+                p->col = 1;
             }
         } else {
             XrTomlValue *v = alloc_value(XR_TOML_STRING);
-            if (v) v->as.string = xr_strdup("");
+            if (v)
+                v->as.string = xr_strdup("");
             return v;
         }
     }
@@ -387,18 +484,26 @@ static XrTomlValue *parse_literal_string(TomlCtx *p) {
 
     while (!AT_END(p)) {
         if (multiline) {
-            if (PEEK(p) == '\'' && p->pos + 2 < p->len &&
-                p->data[p->pos + 1] == '\'' && p->data[p->pos + 2] == '\'') {
-                p->pos += 3; p->col += 3;
+            if (PEEK(p) == '\'' && p->pos + 2 < p->len && p->data[p->pos + 1] == '\'' &&
+                p->data[p->pos + 2] == '\'') {
+                p->pos += 3;
+                p->col += 3;
                 goto lit_done;
             }
         } else {
-            if (PEEK(p) == '\'') { ADV(p); goto lit_done; }
+            if (PEEK(p) == '\'') {
+                ADV(p);
+                goto lit_done;
+            }
             if (PEEK(p) == '\n' || PEEK(p) == '\r') {
-                p->error = true; return NULL;
+                p->error = true;
+                return NULL;
             }
         }
-        if (PEEK(p) == '\n') { p->line++; p->col = 1; }
+        if (PEEK(p) == '\n') {
+            p->line++;
+            p->col = 1;
+        }
         ADV(p);
         slen++;
     }
@@ -407,13 +512,17 @@ static XrTomlValue *parse_literal_string(TomlCtx *p) {
 
 lit_done: {
     XrTomlValue *v = alloc_value(XR_TOML_STRING);
-    if (!v) return NULL;
-    v->as.string = (char *)xr_malloc(slen + 1);
-    if (!v->as.string) { xr_free(v); return NULL; }
+    if (!v)
+        return NULL;
+    v->as.string = (char *) xr_malloc(slen + 1);
+    if (!v->as.string) {
+        xr_free(v);
+        return NULL;
+    }
     memcpy(v->as.string, start, slen);
     v->as.string[slen] = '\0';
     return v;
-    }
+}
 }
 
 /* ========== Number Parsing ========== */
@@ -432,17 +541,21 @@ static XrTomlValue *parse_number(TomlCtx *p) {
     /* inf / nan */
     if (p->pos + 3 <= p->len) {
         if (strncmp(p->data + p->pos, "inf", 3) == 0 &&
-            (p->pos + 3 >= p->len || !isalnum((unsigned char)p->data[p->pos + 3]))) {
-            p->pos += 3; p->col += 3;
+            (p->pos + 3 >= p->len || !isalnum((unsigned char) p->data[p->pos + 3]))) {
+            p->pos += 3;
+            p->col += 3;
             XrTomlValue *v = alloc_value(XR_TOML_FLOAT);
-            if (v) v->as.number = negative ? -INFINITY : INFINITY;
+            if (v)
+                v->as.number = negative ? -INFINITY : INFINITY;
             return v;
         }
         if (strncmp(p->data + p->pos, "nan", 3) == 0 &&
-            (p->pos + 3 >= p->len || !isalnum((unsigned char)p->data[p->pos + 3]))) {
-            p->pos += 3; p->col += 3;
+            (p->pos + 3 >= p->len || !isalnum((unsigned char) p->data[p->pos + 3]))) {
+            p->pos += 3;
+            p->col += 3;
             XrTomlValue *v = alloc_value(XR_TOML_FLOAT);
-            if (v) v->as.number = NAN;
+            if (v)
+                v->as.number = NAN;
             return v;
         }
     }
@@ -450,35 +563,57 @@ static XrTomlValue *parse_number(TomlCtx *p) {
     /* Prefix: 0x, 0o, 0b */
     if (p->pos + 1 < p->len && p->data[p->pos] == '0') {
         char nx = p->data[p->pos + 1];
-        if (nx == 'x' || nx == 'X') { is_hex = true; p->pos += 2; p->col += 2; }
-        else if (nx == 'o' || nx == 'O') { is_oct = true; p->pos += 2; p->col += 2; }
-        else if (nx == 'b' || nx == 'B') { is_bin = true; p->pos += 2; p->col += 2; }
+        if (nx == 'x' || nx == 'X') {
+            is_hex = true;
+            p->pos += 2;
+            p->col += 2;
+        } else if (nx == 'o' || nx == 'O') {
+            is_oct = true;
+            p->pos += 2;
+            p->col += 2;
+        } else if (nx == 'b' || nx == 'B') {
+            is_bin = true;
+            p->pos += 2;
+            p->col += 2;
+        }
     }
 
     /* Consume digits (with underscores) */
     while (!AT_END(p)) {
         char c = PEEK(p);
-        if (c == '_') { ADV(p); continue; }
-        if (is_hex) { if (!isxdigit((unsigned char)c)) break; }
-        else if (is_oct) { if (c < '0' || c > '7') break; }
-        else if (is_bin) { if (c != '0' && c != '1') break; }
-        else {
-            if (!isdigit((unsigned char)c) && c != '.' &&
-                c != 'e' && c != 'E' && c != '+' && c != '-') break;
-            if (c == '.' || c == 'e' || c == 'E') is_float = true;
+        if (c == '_') {
+            ADV(p);
+            continue;
+        }
+        if (is_hex) {
+            if (!isxdigit((unsigned char) c))
+                break;
+        } else if (is_oct) {
+            if (c < '0' || c > '7')
+                break;
+        } else if (is_bin) {
+            if (c != '0' && c != '1')
+                break;
+        } else {
+            if (!isdigit((unsigned char) c) && c != '.' && c != 'e' && c != 'E' && c != '+' &&
+                c != '-')
+                break;
+            if (c == '.' || c == 'e' || c == 'E')
+                is_float = true;
         }
         ADV(p);
     }
 
     /* Strip underscores into temp buf */
-    size_t raw_len = (size_t)((p->data + p->pos) - start);
+    size_t raw_len = (size_t) ((p->data + p->pos) - start);
     buf_reset(p);
     for (size_t i = 0; i < raw_len; i++) {
-        if (start[i] != '_') buf_char(p, start[i]);
+        if (start[i] != '_')
+            buf_char(p, start[i]);
     }
     buf_char(p, '\0');
     char *num = p->buf;
-    (void)p->buf_len; /* num is NUL-terminated in buf */
+    (void) p->buf_len; /* num is NUL-terminated in buf */
 
     if (is_hex || is_oct || is_bin) {
         int base = is_hex ? 16 : (is_oct ? 8 : 2);
@@ -486,24 +621,33 @@ static XrTomlValue *parse_number(TomlCtx *p) {
         const char *digits = num + (negative ? 3 : 2);
         errno = 0;
         int64_t val = strtoll(digits, NULL, base);
-        if (errno == ERANGE) { p->error = true; return NULL; }
+        if (errno == ERANGE) {
+            p->error = true;
+            return NULL;
+        }
         XrTomlValue *v = alloc_value(XR_TOML_INTEGER);
-        if (v) v->as.integer = negative ? -val : val;
+        if (v)
+            v->as.integer = negative ? -val : val;
         return v;
     }
 
     if (is_float) {
         XrTomlValue *v = alloc_value(XR_TOML_FLOAT);
-        if (v) v->as.number = strtod(num, NULL);
+        if (v)
+            v->as.number = strtod(num, NULL);
         return v;
     }
 
     /* Decimal integer */
     errno = 0;
     int64_t ival = strtoll(num, NULL, 10);
-    if (errno == ERANGE) { p->error = true; return NULL; }
+    if (errno == ERANGE) {
+        p->error = true;
+        return NULL;
+    }
     XrTomlValue *v = alloc_value(XR_TOML_INTEGER);
-    if (v) v->as.integer = ival;
+    if (v)
+        v->as.integer = ival;
     return v;
 }
 
@@ -516,15 +660,15 @@ static XrTomlValue *parse_datetime(TomlCtx *p) {
 
     while (!AT_END(p)) {
         char c = PEEK(p);
-        if (isdigit((unsigned char)c) || c == '-' || c == ':' ||
-            c == 'T' || c == 't' || c == 'Z' || c == 'z' ||
-            c == '+' || c == '.') {
-            if (c == 'T' || c == 't') found_t = true;
+        if (isdigit((unsigned char) c) || c == '-' || c == ':' || c == 'T' || c == 't' ||
+            c == 'Z' || c == 'z' || c == '+' || c == '.') {
+            if (c == 'T' || c == 't')
+                found_t = true;
             ADV(p);
         } else if (c == ' ' && !found_t) {
             /* TOML v1.0: space can replace T */
             size_t ahead = p->pos + 1;
-            if (ahead < p->len && isdigit((unsigned char)p->data[ahead])) {
+            if (ahead < p->len && isdigit((unsigned char) p->data[ahead])) {
                 found_t = true;
                 ADV(p);
             } else {
@@ -535,11 +679,15 @@ static XrTomlValue *parse_datetime(TomlCtx *p) {
         }
     }
 
-    size_t slen = (size_t)((p->data + p->pos) - start);
+    size_t slen = (size_t) ((p->data + p->pos) - start);
     XrTomlValue *v = alloc_value(XR_TOML_DATETIME);
-    if (!v) return NULL;
-    v->as.string = (char *)xr_malloc(slen + 1);
-    if (!v->as.string) { xr_free(v); return NULL; }
+    if (!v)
+        return NULL;
+    v->as.string = (char *) xr_malloc(slen + 1);
+    if (!v->as.string) {
+        xr_free(v);
+        return NULL;
+    }
     memcpy(v->as.string, start, slen);
     v->as.string[slen] = '\0';
     return v;
@@ -548,26 +696,43 @@ static XrTomlValue *parse_datetime(TomlCtx *p) {
 /* ========== Array Parsing ========== */
 
 static XrTomlValue *parse_array_value(TomlCtx *p) {
-    if (PEEK(p) != '[') { p->error = true; return NULL; }
+    if (PEEK(p) != '[') {
+        p->error = true;
+        return NULL;
+    }
     ADV(p);
 
     XrTomlValue *arr = new_array();
-    if (!arr) return NULL;
+    if (!arr)
+        return NULL;
 
     skip_ws_nl(p);
 
-    if (!AT_END(p) && PEEK(p) == ']') { ADV(p); return arr; }
+    if (!AT_END(p) && PEEK(p) == ']') {
+        ADV(p);
+        return arr;
+    }
 
     while (!AT_END(p) && !p->error) {
         skip_ws_nl(p);
         XrTomlValue *val = parse_value(p);
-        if (!val) { xtoml_free(arr); return NULL; }
+        if (!val) {
+            xtoml_free(arr);
+            return NULL;
+        }
         array_push(arr, val);
 
         skip_ws_nl(p);
-        if (AT_END(p)) break;
-        if (PEEK(p) == ']') { ADV(p); return arr; }
-        if (PEEK(p) == ',') { ADV(p); continue; }
+        if (AT_END(p))
+            break;
+        if (PEEK(p) == ']') {
+            ADV(p);
+            return arr;
+        }
+        if (PEEK(p) == ',') {
+            ADV(p);
+            continue;
+        }
         p->error = true;
         xtoml_free(arr);
         return NULL;
@@ -589,38 +754,65 @@ static char **parse_key_path(TomlCtx *p, int *nkeys);
 static void free_keys(char **keys, int n);
 
 static XrTomlValue *parse_inline_table(TomlCtx *p) {
-    if (PEEK(p) != '{') { p->error = true; return NULL; }
+    if (PEEK(p) != '{') {
+        p->error = true;
+        return NULL;
+    }
     ADV(p);
 
     XrTomlValue *tbl = new_table();
-    if (!tbl) return NULL;
+    if (!tbl)
+        return NULL;
 
     skip_ws(p);
-    if (!AT_END(p) && PEEK(p) == '}') { ADV(p); return tbl; }
+    if (!AT_END(p) && PEEK(p) == '}') {
+        ADV(p);
+        return tbl;
+    }
 
     while (!AT_END(p) && !p->error) {
         skip_ws(p);
         int nkeys = 0;
         char **keys = parse_key_path(p, &nkeys);
-        if (!keys || nkeys == 0) { p->error = true; xtoml_free(tbl); return NULL; }
+        if (!keys || nkeys == 0) {
+            p->error = true;
+            xtoml_free(tbl);
+            return NULL;
+        }
 
         skip_ws(p);
         if (AT_END(p) || PEEK(p) != '=') {
-            free_keys(keys, nkeys); p->error = true; xtoml_free(tbl); return NULL;
+            free_keys(keys, nkeys);
+            p->error = true;
+            xtoml_free(tbl);
+            return NULL;
         }
         ADV(p);
         skip_ws(p);
 
         XrTomlValue *val = parse_value(p);
-        if (!val) { free_keys(keys, nkeys); xtoml_free(tbl); return NULL; }
+        if (!val) {
+            free_keys(keys, nkeys);
+            xtoml_free(tbl);
+            return NULL;
+        }
         set_nested(p, tbl, keys, nkeys, val);
         free_keys(keys, nkeys);
 
         skip_ws(p);
-        if (AT_END(p)) break;
-        if (PEEK(p) == '}') { ADV(p); return tbl; }
-        if (PEEK(p) == ',') { ADV(p); continue; }
-        p->error = true; xtoml_free(tbl); return NULL;
+        if (AT_END(p))
+            break;
+        if (PEEK(p) == '}') {
+            ADV(p);
+            return tbl;
+        }
+        if (PEEK(p) == ',') {
+            ADV(p);
+            continue;
+        }
+        p->error = true;
+        xtoml_free(tbl);
+        return NULL;
     }
 
     xtoml_free(tbl);
@@ -632,61 +824,75 @@ static XrTomlValue *parse_inline_table(TomlCtx *p) {
 
 static XrTomlValue *parse_value(TomlCtx *p) {
     skip_ws(p);
-    if (AT_END(p)) { p->error = true; return NULL; }
+    if (AT_END(p)) {
+        p->error = true;
+        return NULL;
+    }
 
     char c = PEEK(p);
 
-    if (c == '"') return parse_basic_string(p);
-    if (c == '\'') return parse_literal_string(p);
+    if (c == '"')
+        return parse_basic_string(p);
+    if (c == '\'')
+        return parse_literal_string(p);
 
     /* true / false */
     if (p->pos + 4 <= p->len && strncmp(p->data + p->pos, "true", 4) == 0 &&
-        (p->pos + 4 >= p->len || !isalnum((unsigned char)p->data[p->pos + 4]))) {
-        p->pos += 4; p->col += 4;
+        (p->pos + 4 >= p->len || !isalnum((unsigned char) p->data[p->pos + 4]))) {
+        p->pos += 4;
+        p->col += 4;
         XrTomlValue *v = alloc_value(XR_TOML_BOOL);
-        if (v) v->as.boolean = true;
+        if (v)
+            v->as.boolean = true;
         return v;
     }
     if (p->pos + 5 <= p->len && strncmp(p->data + p->pos, "false", 5) == 0 &&
-        (p->pos + 5 >= p->len || !isalnum((unsigned char)p->data[p->pos + 5]))) {
-        p->pos += 5; p->col += 5;
+        (p->pos + 5 >= p->len || !isalnum((unsigned char) p->data[p->pos + 5]))) {
+        p->pos += 5;
+        p->col += 5;
         XrTomlValue *v = alloc_value(XR_TOML_BOOL);
-        if (v) v->as.boolean = false;
+        if (v)
+            v->as.boolean = false;
         return v;
     }
 
-    if (c == '[') return parse_array_value(p);
-    if (c == '{') return parse_inline_table(p);
+    if (c == '[')
+        return parse_array_value(p);
+    if (c == '{')
+        return parse_inline_table(p);
 
     /* Bare inf/nan */
     if (p->pos + 3 <= p->len) {
         if (strncmp(p->data + p->pos, "inf", 3) == 0 &&
-            (p->pos + 3 >= p->len || !isalnum((unsigned char)p->data[p->pos + 3]))) {
-            p->pos += 3; p->col += 3;
+            (p->pos + 3 >= p->len || !isalnum((unsigned char) p->data[p->pos + 3]))) {
+            p->pos += 3;
+            p->col += 3;
             XrTomlValue *v = alloc_value(XR_TOML_FLOAT);
-            if (v) v->as.number = INFINITY;
+            if (v)
+                v->as.number = INFINITY;
             return v;
         }
         if (strncmp(p->data + p->pos, "nan", 3) == 0 &&
-            (p->pos + 3 >= p->len || !isalnum((unsigned char)p->data[p->pos + 3]))) {
-            p->pos += 3; p->col += 3;
+            (p->pos + 3 >= p->len || !isalnum((unsigned char) p->data[p->pos + 3]))) {
+            p->pos += 3;
+            p->col += 3;
             XrTomlValue *v = alloc_value(XR_TOML_FLOAT);
-            if (v) v->as.number = NAN;
+            if (v)
+                v->as.number = NAN;
             return v;
         }
     }
 
     /* Datetime heuristic: YYYY- */
-    if (isdigit((unsigned char)c) && p->pos + 10 <= p->len) {
+    if (isdigit((unsigned char) c) && p->pos + 10 <= p->len) {
         const char *d = p->data + p->pos;
-        if (isdigit(d[0]) && isdigit(d[1]) && isdigit(d[2]) &&
-            isdigit(d[3]) && d[4] == '-') {
+        if (isdigit(d[0]) && isdigit(d[1]) && isdigit(d[2]) && isdigit(d[3]) && d[4] == '-') {
             return parse_datetime(p);
         }
     }
 
     /* Number */
-    if (isdigit((unsigned char)c) || c == '+' || c == '-') {
+    if (isdigit((unsigned char) c) || c == '+' || c == '-') {
         return parse_number(p);
     }
 
@@ -699,7 +905,8 @@ static XrTomlValue *parse_value(TomlCtx *p) {
 static char *parse_key_seg(TomlCtx *p) {
     if (PEEK(p) == '"') {
         XrTomlValue *sv = parse_basic_string(p);
-        if (!sv) return NULL;
+        if (!sv)
+            return NULL;
         char *k = sv->as.string;
         sv->as.string = NULL;
         xr_free(sv);
@@ -707,7 +914,8 @@ static char *parse_key_seg(TomlCtx *p) {
     }
     if (PEEK(p) == '\'') {
         XrTomlValue *sv = parse_literal_string(p);
-        if (!sv) return NULL;
+        if (!sv)
+            return NULL;
         char *k = sv->as.string;
         sv->as.string = NULL;
         xr_free(sv);
@@ -717,42 +925,60 @@ static char *parse_key_seg(TomlCtx *p) {
     /* Bare key */
     const char *start = p->data + p->pos;
     size_t klen = 0;
-    while (!AT_END(p) && is_bare_key_char(PEEK(p))) { ADV(p); klen++; }
-    if (klen == 0) { p->error = true; return NULL; }
-    char *k = (char *)xr_malloc(klen + 1);
-    if (!k) return NULL;
+    while (!AT_END(p) && is_bare_key_char(PEEK(p))) {
+        ADV(p);
+        klen++;
+    }
+    if (klen == 0) {
+        p->error = true;
+        return NULL;
+    }
+    char *k = (char *) xr_malloc(klen + 1);
+    if (!k)
+        return NULL;
     memcpy(k, start, klen);
     k[klen] = '\0';
     return k;
 }
 
 static void free_keys(char **keys, int n) {
-    if (!keys) return;
-    for (int i = 0; i < n; i++) xr_free(keys[i]);
+    if (!keys)
+        return;
+    for (int i = 0; i < n; i++)
+        xr_free(keys[i]);
     xr_free(keys);
 }
 
 static char **parse_key_path(TomlCtx *p, int *nkeys) {
     *nkeys = 0;
     int cap = 4;
-    char **keys = (char **)xr_malloc((size_t)cap * sizeof(char *));
-    if (!keys) return NULL;
+    char **keys = (char **) xr_malloc((size_t) cap * sizeof(char *));
+    if (!keys)
+        return NULL;
 
     while (!AT_END(p)) {
         skip_ws(p);
         char *seg = parse_key_seg(p);
-        if (!seg) { free_keys(keys, *nkeys); return NULL; }
+        if (!seg) {
+            free_keys(keys, *nkeys);
+            return NULL;
+        }
 
         if (*nkeys >= cap) {
             cap *= 2;
-            char **tmp = (char **)xr_realloc(keys, (size_t)cap * sizeof(char *));
-            if (!tmp) { xr_free(seg); free_keys(keys, *nkeys); return NULL; }
+            char **tmp = (char **) xr_realloc(keys, (size_t) cap * sizeof(char *));
+            if (!tmp) {
+                xr_free(seg);
+                free_keys(keys, *nkeys);
+                return NULL;
+            }
             keys = tmp;
         }
         keys[(*nkeys)++] = seg;
 
         skip_ws(p);
-        if (AT_END(p) || PEEK(p) != '.') break;
+        if (AT_END(p) || PEEK(p) != '.')
+            break;
         ADV(p); /* skip '.' */
     }
     return keys;
@@ -762,8 +988,7 @@ static char **parse_key_path(TomlCtx *p, int *nkeys) {
 
 /* Get or create nested table along key path, then set the leaf value.
  * Keys array: keys[0..nkeys-2] are intermediate tables, keys[nkeys-1] is leaf. */
-static void set_nested(TomlCtx *p, XrTomlValue *root, char **keys, int nkeys,
-                       XrTomlValue *val) {
+static void set_nested(TomlCtx *p, XrTomlValue *root, char **keys, int nkeys, XrTomlValue *val) {
     XrTomlValue *cur = root;
     for (int i = 0; i < nkeys - 1; i++) {
         int idx = table_find(cur, keys[i]);
@@ -774,14 +999,20 @@ static void set_nested(TomlCtx *p, XrTomlValue *root, char **keys, int nkeys,
             } else {
                 /* Conflict: overwrite with new table */
                 XrTomlValue *nt = new_table();
-                if (!nt) { p->error = true; return; }
+                if (!nt) {
+                    p->error = true;
+                    return;
+                }
                 xtoml_free(existing);
                 cur->as.table.members[idx].value = nt;
                 cur = nt;
             }
         } else {
             XrTomlValue *nt = new_table();
-            if (!nt) { p->error = true; return; }
+            if (!nt) {
+                p->error = true;
+                return;
+            }
             table_set(cur, keys[i], nt);
             cur = nt;
         }
@@ -803,8 +1034,7 @@ static XrTomlValue *get_or_create_table(XrTomlValue *root, char **keys, int nkey
             XrTomlValue *existing = cur->as.table.members[idx].value;
             if (existing->type == XR_TOML_TABLE) {
                 cur = existing;
-            } else if (existing->type == XR_TOML_ARRAY &&
-                       existing->as.array.count > 0) {
+            } else if (existing->type == XR_TOML_ARRAY && existing->as.array.count > 0) {
                 /* For array-of-tables intermediate: use last element */
                 XrTomlValue *last = existing->as.array.items[existing->as.array.count - 1];
                 if (last->type == XR_TOML_TABLE) {
@@ -817,7 +1047,8 @@ static XrTomlValue *get_or_create_table(XrTomlValue *root, char **keys, int nkey
             }
         } else {
             XrTomlValue *nt = new_table();
-            if (!nt) return NULL;
+            if (!nt)
+                return NULL;
             table_set(cur, keys[i], nt);
             cur = nt;
         }
@@ -837,23 +1068,26 @@ static XrTomlValue *get_or_create_array_table(XrTomlValue *root, char **keys, in
             XrTomlValue *existing = cur->as.table.members[idx].value;
             if (existing->type == XR_TOML_TABLE) {
                 cur = existing;
-            } else if (existing->type == XR_TOML_ARRAY &&
-                       existing->as.array.count > 0) {
+            } else if (existing->type == XR_TOML_ARRAY && existing->as.array.count > 0) {
                 XrTomlValue *last = existing->as.array.items[existing->as.array.count - 1];
-                if (last->type == XR_TOML_TABLE) cur = last;
-                else return NULL;
+                if (last->type == XR_TOML_TABLE)
+                    cur = last;
+                else
+                    return NULL;
             } else {
                 return NULL;
             }
         } else {
             XrTomlValue *nt = new_table();
-            if (!nt) return NULL;
+            if (!nt)
+                return NULL;
             table_set(cur, keys[i], nt);
             cur = nt;
         }
     }
 
-    if (nkeys <= 0) return cur;
+    if (nkeys <= 0)
+        return cur;
 
     /* Last key: get or create array, append new table */
     const char *last_key = keys[nkeys - 1];
@@ -861,15 +1095,18 @@ static XrTomlValue *get_or_create_array_table(XrTomlValue *root, char **keys, in
     XrTomlValue *arr;
     if (idx >= 0) {
         arr = cur->as.table.members[idx].value;
-        if (arr->type != XR_TOML_ARRAY) return NULL;
+        if (arr->type != XR_TOML_ARRAY)
+            return NULL;
     } else {
         arr = new_array();
-        if (!arr) return NULL;
+        if (!arr)
+            return NULL;
         table_set(cur, last_key, arr);
     }
 
     XrTomlValue *nt = new_table();
-    if (!nt) return NULL;
+    if (!nt)
+        return NULL;
     array_push(arr, nt);
     return nt;
 }
@@ -877,19 +1114,24 @@ static XrTomlValue *get_or_create_array_table(XrTomlValue *root, char **keys, in
 /* ========== Main Parse Function ========== */
 
 XR_FUNC XrTomlValue *xtoml_parse(const char *data, size_t len) {
-    if (!data) return NULL;
+    if (!data)
+        return NULL;
 
     TomlCtx ctx;
     ctx_init(&ctx, data, len);
 
     XrTomlValue *root = new_table();
-    if (!root) { ctx_cleanup(&ctx); return NULL; }
+    if (!root) {
+        ctx_cleanup(&ctx);
+        return NULL;
+    }
 
     XrTomlValue *current_table = root;
 
     while (!AT_END(&ctx) && !ctx.error) {
         skip_ws_nl(&ctx);
-        if (AT_END(&ctx)) break;
+        if (AT_END(&ctx))
+            break;
 
         if (PEEK(&ctx) == '[') {
             ADV(&ctx);
@@ -987,7 +1229,8 @@ XR_FUNC XrTomlValue *xtoml_parse(const char *data, size_t len) {
 /* ========== Accessors ========== */
 
 XR_FUNC XrTomlValue *xtoml_get(XrTomlValue *table, const char *key) {
-    if (!table || table->type != XR_TOML_TABLE || !key) return NULL;
+    if (!table || table->type != XR_TOML_TABLE || !key)
+        return NULL;
     int idx = table_find(table, key);
     return idx >= 0 ? table->as.table.members[idx].value : NULL;
 }
@@ -1002,8 +1245,7 @@ XR_FUNC int64_t xtoml_get_int(XrTomlValue *table, const char *key) {
     return (v && v->type == XR_TOML_INTEGER) ? v->as.integer : 0;
 }
 
-XR_FUNC int64_t xtoml_get_int_or(XrTomlValue *table, const char *key,
-                                   int64_t default_val) {
+XR_FUNC int64_t xtoml_get_int_or(XrTomlValue *table, const char *key, int64_t default_val) {
     XrTomlValue *v = xtoml_get(table, key);
     return (v && v->type == XR_TOML_INTEGER) ? v->as.integer : default_val;
 }
@@ -1018,8 +1260,7 @@ XR_FUNC bool xtoml_get_bool(XrTomlValue *table, const char *key) {
     return (v && v->type == XR_TOML_BOOL) ? v->as.boolean : false;
 }
 
-XR_FUNC bool xtoml_get_bool_or(XrTomlValue *table, const char *key,
-                                 bool default_val) {
+XR_FUNC bool xtoml_get_bool_or(XrTomlValue *table, const char *key, bool default_val) {
     XrTomlValue *v = xtoml_get(table, key);
     return (v && v->type == XR_TOML_BOOL) ? v->as.boolean : default_val;
 }
@@ -1039,8 +1280,10 @@ XR_FUNC int xtoml_array_len(XrTomlValue *arr) {
 }
 
 XR_FUNC XrTomlValue *xtoml_array_get(XrTomlValue *arr, int index) {
-    if (!arr || arr->type != XR_TOML_ARRAY) return NULL;
-    if (index < 0 || index >= arr->as.array.count) return NULL;
+    if (!arr || arr->type != XR_TOML_ARRAY)
+        return NULL;
+    if (index < 0 || index >= arr->as.array.count)
+        return NULL;
     return arr->as.array.items[index];
 }
 

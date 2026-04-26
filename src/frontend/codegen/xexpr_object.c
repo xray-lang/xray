@@ -24,11 +24,11 @@
 #include "xregalloc.h"
 #include "../parser/xast.h"  // AST node definitions
 #include "../../runtime/value/xtype.h"
-#include "../../runtime/class/xclass.h"  // XrClass definition
+#include "../../runtime/class/xclass.h"             // XrClass definition
 #include "../../runtime/class/xclass_descriptor.h"  // XrClassDescriptor
-#include "../../runtime/value/xstruct_layout.h"  // XrStructLayout for native struct storage
-#include <string.h>  // strcmp
-#include "../../runtime/symbol/xsymbol_table.h"  // Unified symbol table system
+#include "../../runtime/value/xstruct_layout.h"     // XrStructLayout for native struct storage
+#include <string.h>                                 // strcmp
+#include "../../runtime/symbol/xsymbol_table.h"     // Unified symbol table system
 #include <stdio.h>
 #include <string.h>
 
@@ -42,8 +42,8 @@
  *   - Plain class name: load from global variable
  *   - module.Class: load from module property
  */
-static void load_class_to_reg(XrCompilerContext *ctx, XrCompiler *compiler,
-                              const char *module_name, const char *class_name, int target_reg) {
+static void load_class_to_reg(XrCompilerContext *ctx, XrCompiler *compiler, const char *module_name,
+                              const char *class_name, int target_reg) {
     XR_DCHECK(ctx != NULL, "load_class_to_reg: NULL ctx");
     XR_DCHECK(compiler != NULL, "load_class_to_reg: NULL compiler");
     XR_DCHECK(class_name != NULL, "load_class_to_reg: NULL class_name");
@@ -67,7 +67,8 @@ static void load_class_to_reg(XrCompilerContext *ctx, XrCompiler *compiler,
         }
 
         // Get class from module (using OP_GETPROP)
-        int global_sym = xr_symbol_register_in_table((XrSymbolTable*)xr_isolate_get_symbol_table(ctx->X), class_name);
+        int global_sym = xr_symbol_register_in_table(
+            (XrSymbolTable *) xr_isolate_get_symbol_table(ctx->X), class_name);
         int local_sym = emitter_add_symbol(compiler->emitter, global_sym);
         xemit_getprop(compiler->emitter, target_reg, module_reg, local_sym);
     } else {
@@ -106,7 +107,8 @@ static void load_class_to_reg(XrCompilerContext *ctx, XrCompiler *compiler,
  *   new ClassName()           - Normal class instantiation
  *   new module.ClassName()    - Module class instantiation
  */
-static int compile_new_expr_internal(XrCompilerContext *ctx, XrCompiler *compiler, NewExprNode *node) {
+static int compile_new_expr_internal(XrCompilerContext *ctx, XrCompiler *compiler,
+                                     NewExprNode *node) {
     // ========== Built-in type construction (supports new syntax) ==========
     if (node->module_name == NULL) {
         const char *class_name = node->class_name;
@@ -114,8 +116,11 @@ static int compile_new_expr_internal(XrCompilerContext *ctx, XrCompiler *compile
         // new Map() → OP_NEWMAP
         if (strcmp(class_name, TYPE_NAME_MAP) == 0 && node->arg_count == 0) {
             int result_reg = reg_alloc(ctx, compiler);
-            int key_kind = (ctx->current_key_tid == XR_TID_STRING) ? 1 : (ctx->current_key_tid == XR_TID_INT) ? 2 : 0;
-            int c_field = (key_kind << 7) | (((int)ctx->current_elem_tid & 0x1F) << 2) | ctx->current_storage_mode;
+            int key_kind = (ctx->current_key_tid == XR_TID_STRING) ? 1
+                           : (ctx->current_key_tid == XR_TID_INT)  ? 2
+                                                                   : 0;
+            int c_field = (key_kind << 7) | (((int) ctx->current_elem_tid & 0x1F) << 2) |
+                          ctx->current_storage_mode;
             xemit_newmap(compiler->emitter, result_reg, 0, c_field);
             return result_reg;
         }
@@ -123,8 +128,10 @@ static int compile_new_expr_internal(XrCompilerContext *ctx, XrCompiler *compile
         // new WeakMap() → OP_NEWMAP with weak flag (C bit1 = weak)
         if (strcmp(class_name, TYPE_NAME_WEAKMAP) == 0 && node->arg_count == 0) {
             int result_reg = reg_alloc(ctx, compiler);
-            int key_kind = (ctx->current_key_tid == XR_TID_STRING) ? 1 : (ctx->current_key_tid == XR_TID_INT) ? 2 : 0;
-            int c_field = (key_kind << 7) | (((int)ctx->current_elem_tid & 0x1F) << 2) | 0x02;
+            int key_kind = (ctx->current_key_tid == XR_TID_STRING) ? 1
+                           : (ctx->current_key_tid == XR_TID_INT)  ? 2
+                                                                   : 0;
+            int c_field = (key_kind << 7) | (((int) ctx->current_elem_tid & 0x1F) << 2) | 0x02;
             xemit_newmap(compiler->emitter, result_reg, 0, c_field);
             return result_reg;
         }
@@ -132,13 +139,14 @@ static int compile_new_expr_internal(XrCompilerContext *ctx, XrCompiler *compile
         // new Array() or new Array(a, b, c) -> OP_NEWARRAY
         if (strcmp(class_name, TYPE_NAME_ARRAY) == 0) {
             int result_reg = reg_alloc(ctx, compiler);
-            int c_field = ((int)ctx->current_elem_tid << 2) | ctx->current_storage_mode;
+            int c_field = ((int) ctx->current_elem_tid << 2) | ctx->current_storage_mode;
             if (node->arg_count == 0) {
                 xemit_newarray(compiler->emitter, result_reg, 0, c_field);
             } else {
                 int first_arg_reg = result_reg + 1;
                 xreg_set_freereg(compiler->regalloc, first_arg_reg);
-                compile_args_to_base(ctx, compiler, node->arguments, node->arg_count, first_arg_reg);
+                compile_args_to_base(ctx, compiler, node->arguments, node->arg_count,
+                                     first_arg_reg);
                 xemit_newarray(compiler->emitter, result_reg, node->arg_count, c_field);
                 xreg_set_freereg(compiler->regalloc, result_reg + 1);
             }
@@ -148,7 +156,7 @@ static int compile_new_expr_internal(XrCompilerContext *ctx, XrCompiler *compile
         // new WeakSet() → OP_NEWSET with weak flag (B bit1 = weak)
         if (strcmp(class_name, TYPE_NAME_WEAKSET) == 0 && node->arg_count == 0) {
             int result_reg = reg_alloc(ctx, compiler);
-            int b_field = ((int)ctx->current_elem_tid << 2) | 0x02;
+            int b_field = ((int) ctx->current_elem_tid << 2) | 0x02;
             xemit_newset(compiler->emitter, result_reg, b_field);
             return result_reg;
         }
@@ -156,13 +164,14 @@ static int compile_new_expr_internal(XrCompilerContext *ctx, XrCompiler *compile
         // new Set() or new Set(a, b, c) -> OP_NEWSET
         if (strcmp(class_name, TYPE_NAME_SET) == 0) {
             int result_reg = reg_alloc(ctx, compiler);
-            int b_field = ((int)ctx->current_elem_tid << 2) | ctx->current_storage_mode;
+            int b_field = ((int) ctx->current_elem_tid << 2) | ctx->current_storage_mode;
             if (node->arg_count == 0) {
                 xemit_newset(compiler->emitter, result_reg, b_field);
             } else {
                 int first_arg_reg = result_reg + 1;
                 xreg_set_freereg(compiler->regalloc, first_arg_reg);
-                compile_args_to_base(ctx, compiler, node->arguments, node->arg_count, first_arg_reg);
+                compile_args_to_base(ctx, compiler, node->arguments, node->arg_count,
+                                     first_arg_reg);
                 xemit_newset(compiler->emitter, result_reg, b_field);
                 xreg_set_freereg(compiler->regalloc, result_reg + 1);
             }
@@ -212,13 +221,15 @@ static int compile_new_expr_internal(XrCompilerContext *ctx, XrCompiler *compile
             // Compile size expression to register
             XrExprDesc size_desc = xr_compile_expr(ctx, compiler, node->arguments[0]);
             int size_reg = xexpr_to_anyreg(ctx, compiler, &size_desc);
-            if (size_reg < 0) return -1;
+            if (size_reg < 0)
+                return -1;
 
             // Named Channel: new Channel(size, "name") → OP_CHAN_NEW_NAMED
             if (node->arg_count >= 2) {
                 XrExprDesc name_desc = xr_compile_expr(ctx, compiler, node->arguments[1]);
                 int name_reg = xexpr_to_anyreg(ctx, compiler, &name_desc);
-                if (name_reg < 0) return -1;
+                if (name_reg < 0)
+                    return -1;
                 xemit_chan_new_named(compiler->emitter, result_reg, size_reg, name_reg);
                 reg_free(compiler, name_reg);
                 reg_free(compiler, size_reg);
@@ -252,8 +263,8 @@ static int compile_new_expr_internal(XrCompilerContext *ctx, XrCompiler *compile
                 XrProto *proto = compiler->emitter->proto;
                 if (slot_offset >= proto->struct_layout_count) {
                     int new_count = slot_offset + 1;
-                    proto->struct_layouts = (struct XrStructLayout**)xr_realloc(
-                        proto->struct_layouts, new_count * sizeof(struct XrStructLayout*));
+                    proto->struct_layouts = (struct XrStructLayout **) xr_realloc(
+                        proto->struct_layouts, new_count * sizeof(struct XrStructLayout *));
                     for (int si = proto->struct_layout_count; si < new_count; si++)
                         proto->struct_layouts[si] = NULL;
                     proto->struct_layout_count = new_count;
@@ -271,11 +282,12 @@ static int compile_new_expr_internal(XrCompilerContext *ctx, XrCompiler *compile
                 // Compile constructor arguments to R[base+2], R[base+3], ...
                 int first_arg_reg = base + 2;
                 xreg_set_freereg(compiler->regalloc, first_arg_reg);
-                compile_args_to_base(ctx, compiler, node->arguments, node->arg_count, first_arg_reg);
+                compile_args_to_base(ctx, compiler, node->arguments, node->arg_count,
+                                     first_arg_reg);
 
                 // Call constructor with struct_ref as receiver
                 int global_sym = xr_symbol_register_in_table(
-                    (XrSymbolTable*)xr_isolate_get_symbol_table(ctx->X), XR_KEYWORD_CONSTRUCTOR);
+                    (XrSymbolTable *) xr_isolate_get_symbol_table(ctx->X), XR_KEYWORD_CONSTRUCTOR);
                 int local_sym = emitter_add_symbol(compiler->emitter, global_sym);
                 xemit_invoke(compiler->emitter, base, local_sym, node->arg_count);
 
@@ -285,7 +297,8 @@ static int compile_new_expr_internal(XrCompilerContext *ctx, XrCompiler *compile
         }
     }
 
-    // ========== Generic path: constructor call (supports reflection, args, module classes) ==========
+    // ========== Generic path: constructor call (supports reflection, args, module classes)
+    // ==========
 
     // If storage mode context exists, generate OP_SET_STORAGE_CTX instruction first
     if (ctx->current_storage_mode != 0) {
@@ -313,7 +326,8 @@ static int compile_new_expr_internal(XrCompilerContext *ctx, XrCompiler *compile
     compile_args_to_base(ctx, compiler, node->arguments, node->arg_count, first_arg_reg);
 
     // Call constructor - register "constructor" in symbol system
-    int global_sym = xr_symbol_register_in_table((XrSymbolTable*)xr_isolate_get_symbol_table(ctx->X), XR_KEYWORD_CONSTRUCTOR);
+    int global_sym = xr_symbol_register_in_table(
+        (XrSymbolTable *) xr_isolate_get_symbol_table(ctx->X), XR_KEYWORD_CONSTRUCTOR);
     int local_sym = emitter_add_symbol(compiler->emitter, global_sym);
     xemit_invoke(compiler->emitter, base, local_sym, node->arg_count);
 
@@ -353,7 +367,8 @@ XrExprDesc compile_new_expr(XrCompilerContext *ctx, XrCompiler *compiler, NewExp
  * Fallback (OP_INVOKE + OP_SETPROP):
  *   When ClassRegistry info is unavailable (e.g. imported classes).
  */
-XrExprDesc compile_struct_literal(XrCompilerContext *ctx, XrCompiler *compiler, StructLiteralNode *node) {
+XrExprDesc compile_struct_literal(XrCompilerContext *ctx, XrCompiler *compiler,
+                                  StructLiteralNode *node) {
     XR_DCHECK(ctx != NULL, "compile_struct_literal: NULL ctx");
     XR_DCHECK(compiler != NULL, "compile_struct_literal: NULL compiler");
     XrExprDesc e = {0};
@@ -392,8 +407,8 @@ XrExprDesc compile_struct_literal(XrCompilerContext *ctx, XrCompiler *compiler, 
         XrProto *proto = compiler->emitter->proto;
         if (slot_offset >= proto->struct_layout_count) {
             int new_count = slot_offset + 1;
-            proto->struct_layouts = (struct XrStructLayout**)xr_realloc(
-                proto->struct_layouts, new_count * sizeof(struct XrStructLayout*));
+            proto->struct_layouts = (struct XrStructLayout **) xr_realloc(
+                proto->struct_layouts, new_count * sizeof(struct XrStructLayout *));
             for (int si = proto->struct_layout_count; si < new_count; si++)
                 proto->struct_layouts[si] = NULL;
             proto->struct_layout_count = new_count;
@@ -433,7 +448,7 @@ XrExprDesc compile_struct_literal(XrCompilerContext *ctx, XrCompiler *compiler, 
         int value_reg = xexpr_to_anyreg(ctx, compiler, &val_expr);
 
         int global_sym = xr_symbol_register_in_table(
-            (XrSymbolTable*)xr_isolate_get_symbol_table(ctx->X), node->field_names[i]);
+            (XrSymbolTable *) xr_isolate_get_symbol_table(ctx->X), node->field_names[i]);
         int local_sym = emitter_add_symbol(compiler->emitter, global_sym);
         xemit_setprop(compiler->emitter, obj_reg, local_sym, value_reg);
         reg_free(compiler, value_reg);
@@ -443,13 +458,14 @@ XrExprDesc compile_struct_literal(XrCompilerContext *ctx, XrCompiler *compiler, 
     return e;
 }
 
-
 // ========== Member Access ==========
 
 /*
  * Internal implementation: compile member access (returns register)
  */
-static int compile_member_access_internal(XrCompilerContext *ctx, XrCompiler *compiler, MemberAccessNode *node, XrType **out_compile_type, bool *out_is_raw) {
+static int compile_member_access_internal(XrCompilerContext *ctx, XrCompiler *compiler,
+                                          MemberAccessNode *node, XrType **out_compile_type,
+                                          bool *out_is_raw) {
     // Compile-time constants: Coro.LOW/NORMAL/HIGH, Type.xxx
     if (node->object->type == AST_VARIABLE) {
         const char *obj_name = node->object->as.variable.name;
@@ -469,43 +485,48 @@ static int compile_member_access_internal(XrCompilerContext *ctx, XrCompiler *co
         }
         // Type.xxx constants → compile to integer XrTypeId
         if (strcmp(obj_name, CLASS_NAME_TYPE) == 0) {
-            static const struct { const char *name; int tid; } type_consts[] = {
-                {"null",          XR_TID_NULL},
-                {"bool",          XR_TID_BOOL},
-                {"int8",          XR_TID_INT8},
-                {"uint8",         XR_TID_UINT8},
-                {"int16",         XR_TID_INT16},
-                {"uint16",        XR_TID_UINT16},
-                {"int32",         XR_TID_INT32},
-                {"uint32",        XR_TID_UINT32},
-                {"int",           XR_TID_INT},
-                {"int64",         XR_TID_INT},
-                {"uint64",        XR_TID_UINT64},
-                {"float32",       XR_TID_FLOAT32},
-                {"float",         XR_TID_FLOAT},
-                {"float64",       XR_TID_FLOAT},
-                {"string",        XR_TID_STRING},
-                {"function",      XR_TID_FUNCTION},
-                {"Array",         XR_TID_ARRAY},
-                {"Set",           XR_TID_SET},
-                {"Map",           XR_TID_MAP},
-                {"instance",      XR_TID_INSTANCE},
-                {"Json",          XR_TID_JSON},
-                {"BigInt",        XR_TID_BIGINT},
+            static const struct {
+                const char *name;
+                int tid;
+            } type_consts[] = {
+                {"null", XR_TID_NULL},
+                {"bool", XR_TID_BOOL},
+                {"int8", XR_TID_INT8},
+                {"uint8", XR_TID_UINT8},
+                {"int16", XR_TID_INT16},
+                {"uint16", XR_TID_UINT16},
+                {"int32", XR_TID_INT32},
+                {"uint32", XR_TID_UINT32},
+                {"int", XR_TID_INT},
+                {"int64", XR_TID_INT},
+                {"uint64", XR_TID_UINT64},
+                {"float32", XR_TID_FLOAT32},
+                {"float", XR_TID_FLOAT},
+                {"float64", XR_TID_FLOAT},
+                {"string", XR_TID_STRING},
+                {"function", XR_TID_FUNCTION},
+                {"Array", XR_TID_ARRAY},
+                {"Set", XR_TID_SET},
+                {"Map", XR_TID_MAP},
+                {"instance", XR_TID_INSTANCE},
+                {"Json", XR_TID_JSON},
+                {"BigInt", XR_TID_BIGINT},
                 {"StringBuilder", XR_TID_STRINGBUILDER},
-                {"Channel",       XR_TID_CHANNEL},
-                {"Regex",         XR_TID_REGEX},
-                {"DateTime",      XR_TID_DATETIME},
-                {"Exception",     XR_TID_EXCEPTION},
-                {"enum_value",    XR_TID_ENUM_VALUE},
-                {"enum_type",     XR_TID_ENUM_TYPE},
+                {"Channel", XR_TID_CHANNEL},
+                {"Regex", XR_TID_REGEX},
+                {"DateTime", XR_TID_DATETIME},
+                {"Exception", XR_TID_EXCEPTION},
+                {"enum_value", XR_TID_ENUM_VALUE},
+                {"enum_type", XR_TID_ENUM_TYPE},
             };
-            for (int ti = 0; ti < (int)(sizeof(type_consts)/sizeof(type_consts[0])); ti++) {
+            for (int ti = 0; ti < (int) (sizeof(type_consts) / sizeof(type_consts[0])); ti++) {
                 if (strcmp(node->name, type_consts[ti].name) == 0) {
                     int pc = xemit_loadi(compiler->emitter, 0, type_consts[ti].tid);
                     // OP_LOADI for Type constants produces raw I64
-                    if (out_compile_type) *out_compile_type = xr_type_new_int(NULL);
-                    if (out_is_raw) *out_is_raw = true;
+                    if (out_compile_type)
+                        *out_compile_type = xr_type_new_int(NULL);
+                    if (out_is_raw)
+                        *out_is_raw = true;
                     return pc;
                 }
             }
@@ -546,7 +567,6 @@ static int compile_member_access_internal(XrCompilerContext *ctx, XrCompiler *co
             obj_type = ast_type;
     }
 
-
     // CT_JSON (unified object type): behavior depends on allow_extension
     if (obj_type && obj_type->kind == XR_KIND_JSON) {
         // Search in known fields (skip NULL names from computed properties)
@@ -571,12 +591,12 @@ static int compile_member_access_internal(XrCompilerContext *ctx, XrCompiler *co
             // Strict type alias (allow_extension=false): shape is stable,
             // safe to use OP_TFIELD_GET for typed primitive fields
             if (!obj_type->object.allow_extension && obj_type->object.field_types) {
-                XrType *ft = (field_orig_idx >= 0)
-                           ? obj_type->object.field_types[field_orig_idx] : NULL;
+                XrType *ft =
+                    (field_orig_idx >= 0) ? obj_type->object.field_types[field_orig_idx] : NULL;
                 if (ft && (ft->kind == XR_KIND_INT || ft->kind == XR_KIND_FLOAT)) {
                     // Record float field in bitmap so JIT uses FP register (XR_REP_F64)
                     if (ft && (ft->kind == XR_KIND_FLOAT) && field_idx < 64) {
-                        compiler->emitter->proto->tfield_float_bitmap |= (uint64_t)1 << field_idx;
+                        compiler->emitter->proto->tfield_float_bitmap |= (uint64_t) 1 << field_idx;
                     }
                     int pc = xemit_tfield_get(compiler->emitter, 0, obj_reg, field_idx);
                     reg_free(compiler, obj_reg);
@@ -590,7 +610,7 @@ static int compile_member_access_internal(XrCompilerContext *ctx, XrCompiler *co
             return pc;
         } else if (obj_type->object.allow_extension) {
             // Allow extension: use OP_JSON_GETK (dynamic Symbol lookup)
-            XrSymbolTable *sym_table = (XrSymbolTable*)xr_isolate_get_symbol_table(ctx->X);
+            XrSymbolTable *sym_table = (XrSymbolTable *) xr_isolate_get_symbol_table(ctx->X);
             int global_sym = xr_symbol_register_in_table(sym_table, node->name);
             int local_sym = emitter_add_symbol(compiler->emitter, global_sym);
             int pc = xemit_json_getk(compiler->emitter, 0, obj_reg, local_sym);
@@ -600,30 +620,27 @@ static int compile_member_access_internal(XrCompilerContext *ctx, XrCompiler *co
             // No extension allowed (strict type): field doesn't exist, report compile error
             reg_free(compiler, obj_reg);
             const char *type_name = obj_type->object.type_name;
-            if (!type_name) type_name = "type";
-            xr_compiler_error(ctx, compiler,
-                "Type '%s' has no field '%s'",
-                type_name, node->name);
+            if (!type_name)
+                type_name = "type";
+            xr_compiler_error(ctx, compiler, "Type '%s' has no field '%s'", type_name, node->name);
             return reg_alloc(ctx, compiler);
         }
     }
 
-    if (obj_type && (obj_type->kind == XR_KIND_CLASS || obj_type->kind == XR_KIND_INSTANCE) && ctx->class_registry) {
+    if (obj_type && (obj_type->kind == XR_KIND_CLASS || obj_type->kind == XR_KIND_INSTANCE) &&
+        ctx->class_registry) {
         // Type is known! Get class name from compile-time type
         const char *class_name = obj_type->instance.class_name;
 
         if (class_name) {
-            ClassInfo *class_info = xr_class_registry_lookup(
-                ctx->class_registry, class_name);
+            ClassInfo *class_info = xr_class_registry_lookup(ctx->class_registry, class_name);
 
             if (class_info) {
                 // Find instance field index
-                int field_idx = xr_class_find_instance_field_index(
-                    class_info, node->name);
+                int field_idx = xr_class_find_instance_field_index(class_info, node->name);
 
                 if (field_idx >= 0) {
-                    XrExprDesc obj_expr = xr_compile_expr(ctx, compiler,
-                                                          node->object);
+                    XrExprDesc obj_expr = xr_compile_expr(ctx, compiler, node->object);
                     int obj_reg = xexpr_to_anyreg(ctx, compiler, &obj_expr);
                     int pc;
 
@@ -635,13 +652,12 @@ static int compile_member_access_internal(XrCompilerContext *ctx, XrCompiler *co
                     }
 
                     // Class instance: heap field access
-                    uint8_t fst = xr_class_get_field_slot_type(
-                        class_info, node->name);
+                    uint8_t fst = xr_class_get_field_slot_type(class_info, node->name);
                     if (fst == 7 || fst == 10) {
                         // XR_SLOT_I64(7) or XR_SLOT_F64(10): use OP_TFIELD_GET
                         if (fst == 10 && field_idx < 64)
-                            compiler->emitter->proto->tfield_float_bitmap |=
-                                (uint64_t)1 << field_idx;
+                            compiler->emitter->proto->tfield_float_bitmap |= (uint64_t) 1
+                                                                             << field_idx;
                         pc = xemit_tfield_get(compiler->emitter, 0, obj_reg, field_idx);
                     } else {
                         pc = xemit_getfield(compiler->emitter, 0, obj_reg, field_idx);
@@ -654,9 +670,7 @@ static int compile_member_access_internal(XrCompilerContext *ctx, XrCompiler *co
     }
 
     // Optimization: this.field access (compile-time type known)
-    if (ctx->current_class_desc != NULL &&
-        node->object->type == AST_THIS_EXPR) {
-
+    if (ctx->current_class_desc != NULL && node->object->type == AST_THIS_EXPR) {
         // Find field index in current class
         XrClassDescriptor *desc = ctx->current_class_desc;
         int field_idx = -1;
@@ -686,8 +700,7 @@ static int compile_member_access_internal(XrCompilerContext *ctx, XrCompiler *co
             if (fst == 7 || fst == 10) {
                 // XR_SLOT_I64(7) or XR_SLOT_F64(10): use OP_TFIELD_GET
                 if (fst == 10 && field_idx < 64)
-                    compiler->emitter->proto->tfield_float_bitmap |=
-                        (uint64_t)1 << field_idx;
+                    compiler->emitter->proto->tfield_float_bitmap |= (uint64_t) 1 << field_idx;
                 pc = xemit_tfield_get(compiler->emitter, 0, obj_reg, field_idx);
             } else {
                 pc = xemit_getfield(compiler->emitter, 0, obj_reg, field_idx);
@@ -696,14 +709,14 @@ static int compile_member_access_internal(XrCompilerContext *ctx, XrCompiler *co
         }
     }
 
-
     // Compile object expression (fallback path) - use readonly to avoid redundant MOVE
     XrExprDesc obj_expr = xr_compile_expr(ctx, compiler, node->object);
     int obj_reg = xexpr_to_anyreg_readonly(ctx, compiler, &obj_expr);
 
     // Fallback: runtime handling
     // Convert property name to Symbol
-    int global_sym = xr_symbol_register_in_table((XrSymbolTable*)xr_isolate_get_symbol_table(ctx->X), node->name);
+    int global_sym = xr_symbol_register_in_table(
+        (XrSymbolTable *) xr_isolate_get_symbol_table(ctx->X), node->name);
     int local_sym = emitter_add_symbol(compiler->emitter, global_sym);
 
     // RELOC optimization: A=0 pending relocation
@@ -715,7 +728,8 @@ static int compile_member_access_internal(XrCompilerContext *ctx, XrCompiler *co
     return pc;
 }
 
-XrExprDesc compile_member_access(XrCompilerContext *ctx, XrCompiler *compiler, MemberAccessNode *node) {
+XrExprDesc compile_member_access(XrCompilerContext *ctx, XrCompiler *compiler,
+                                 MemberAccessNode *node) {
     XR_DCHECK(ctx != NULL, "compile_member_access: NULL ctx");
     XR_DCHECK(compiler != NULL, "compile_member_access: NULL compiler");
     XrExprDesc e = {0};
@@ -728,5 +742,3 @@ XrExprDesc compile_member_access(XrCompilerContext *ctx, XrCompiler *compiler, M
     e.is_raw = is_raw;
     return e;
 }
-
-

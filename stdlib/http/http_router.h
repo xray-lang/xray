@@ -21,12 +21,12 @@
 
 /* ========== Route Parameters ========== */
 
-#define XR_ROUTER_MAX_PARAMS    16  // Max parameter count
+#define XR_ROUTER_MAX_PARAMS 16  // Max parameter count
 
 typedef struct {
-    const char *key;        // Parameter name (without :)
+    const char *key;  // Parameter name (without :)
     size_t key_len;
-    const char *value;      // Parameter value
+    const char *value;  // Parameter value
     size_t value_len;
 } XrRouteParam;
 
@@ -43,34 +43,34 @@ typedef void (*XrRouteHandler)(struct XrHttpConn *conn, void *user_data, XrRoute
 /* ========== Route Node ========== */
 
 typedef struct XrRouterNode {
-    char *path;                     // Path segment
+    char *path;  // Path segment
     size_t path_len;
-    
-    XrRouteHandler handler;         // Handler function
-    void *user_data;                // User data
-    
+
+    XrRouteHandler handler;  // Handler function
+    void *user_data;         // User data
+
     // Static response (optional, for zero-copy response)
     const char *static_response;
     size_t static_response_len;
-    
+
     // Prebuilt complete HTTP response (including headers, for ultra-fast response)
     char *prebuilt_response;
     size_t prebuilt_response_len;
-    
-    struct XrRouterNode **children; // Child node array
+
+    struct XrRouterNode **children;  // Child node array
     int child_count;
     int child_cap;
-    
+
     // Special nodes
-    struct XrRouterNode *param_child;    // :param child node
-    struct XrRouterNode *wildcard_child; // *wildcard child node
-    
-    char *param_name;               // Parameter name (for :param node)
+    struct XrRouterNode *param_child;     // :param child node
+    struct XrRouterNode *wildcard_child;  // *wildcard child node
+
+    char *param_name;  // Parameter name (for :param node)
     size_t param_name_len;
-    
-    bool is_param;                  // Is parameter node
-    bool is_wildcard;               // Is wildcard node
-    bool is_websocket;              // WebSocket upgrade route
+
+    bool is_param;      // Is parameter node
+    bool is_wildcard;   // Is wildcard node
+    bool is_websocket;  // WebSocket upgrade route
 } XrRouterNode;
 
 /* ========== Router ========== */
@@ -84,7 +84,7 @@ typedef struct {
 /*
  * Create router
  */
-XR_FUNC XrRouter* xr_router_new(void);
+XR_FUNC XrRouter *xr_router_new(void);
 
 /*
  * Free router
@@ -100,13 +100,13 @@ XR_FUNC void xr_router_free(XrRouter *router);
  *   /files/{*filepath}  - Wildcard path
  */
 XR_FUNC bool xr_router_add(XrRouter *router, XrHttpMethod method, const char *path,
-                   XrRouteHandler handler, void *user_data);
+                           XrRouteHandler handler, void *user_data);
 
 /*
  * Add static response route
  */
 XR_FUNC bool xr_router_add_static(XrRouter *router, XrHttpMethod method, const char *path,
-                          const char *response, size_t response_len);
+                                  const char *response, size_t response_len);
 
 /*
  * Find route
@@ -115,32 +115,31 @@ XR_FUNC bool xr_router_add_static(XrRouter *router, XrHttpMethod method, const c
  * params: output parameters, can be NULL
  * prebuilt_response/prebuilt_response_len: prebuilt complete HTTP response (optional)
  */
-XR_FUNC XrRouteHandler xr_router_find(XrRouter *router, XrHttpMethod method,
-                               const char *path, size_t path_len,
-                               XrRouteParams *params, void **user_data,
-                               const char **static_response, size_t *static_response_len,
-                               const char **prebuilt_response, size_t *prebuilt_response_len);
+XR_FUNC XrRouteHandler xr_router_find(XrRouter *router, XrHttpMethod method, const char *path,
+                                      size_t path_len, XrRouteParams *params, void **user_data,
+                                      const char **static_response, size_t *static_response_len,
+                                      const char **prebuilt_response,
+                                      size_t *prebuilt_response_len);
 
 /*
  * Add WebSocket upgrade route (handler receives upgraded WS connection).
  * Sentinel handler value distinguishes WS from HTTP routes in find results.
  */
-#define XR_ROUTE_HANDLER_WEBSOCKET  ((XrRouteHandler)2)
+#define XR_ROUTE_HANDLER_WEBSOCKET ((XrRouteHandler) 2)
 
-XR_FUNC bool xr_router_add_websocket(XrRouter *router, const char *path,
-                              void *user_data);
+XR_FUNC bool xr_router_add_websocket(XrRouter *router, const char *path, void *user_data);
 
 // Convenience macros
-#define xr_router_get(r, path, handler, data) \
+#define xr_router_get(r, path, handler, data)                                                      \
     xr_router_add(r, XR_HTTP_METHOD_GET, path, handler, data)
 
-#define xr_router_post(r, path, handler, data) \
+#define xr_router_post(r, path, handler, data)                                                     \
     xr_router_add(r, XR_HTTP_METHOD_POST, path, handler, data)
 
-#define xr_router_put(r, path, handler, data) \
+#define xr_router_put(r, path, handler, data)                                                      \
     xr_router_add(r, XR_HTTP_METHOD_PUT, path, handler, data)
 
-#define xr_router_delete(r, path, handler, data) \
+#define xr_router_delete(r, path, handler, data)                                                   \
     xr_router_add(r, XR_HTTP_METHOD_DELETE, path, handler, data)
 
 #endif

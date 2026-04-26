@@ -247,13 +247,13 @@ enum {
     SYMBOL_FINDALL,
     SYMBOL_PATTERN,
 
-    SYMBOL_BUILTIN_COUNT            // sentinel
+    SYMBOL_BUILTIN_COUNT  // sentinel
 };
 
 // Semantic aliases for readability
-#define SYMBOL_MAP_METHOD    SYMBOL_MAP
-#define SYMBOL_CHARCODEAT    SYMBOL_CODEPOINT_AT
-#define SYMBOL_LOG_ERROR     SYMBOL_ERROR
+#define SYMBOL_MAP_METHOD SYMBOL_MAP
+#define SYMBOL_CHARCODEAT SYMBOL_CODEPOINT_AT
+#define SYMBOL_LOG_ERROR SYMBOL_ERROR
 
 /* ========== Symbol Table Structure ========== */
 
@@ -267,12 +267,12 @@ typedef struct XrSymbolTable {
 
 /* ========== Symbol Table API ========== */
 
-XR_FUNC XrSymbolTable* xr_symbol_table_create(void);
+XR_FUNC XrSymbolTable *xr_symbol_table_create(void);
 XR_FUNC void xr_symbol_table_destroy(XrSymbolTable *table);
 XR_FUNC bool xr_symbol_table_init_builtins(XrSymbolTable *table);
 XR_FUNC SymbolId xr_symbol_register_in_table(XrSymbolTable *table, const char *name);
 XR_FUNC SymbolId xr_symbol_lookup_in_table(XrSymbolTable *table, const char *name);
-XR_FUNC const char* xr_symbol_get_name_in_table(XrSymbolTable *table, SymbolId id);
+XR_FUNC const char *xr_symbol_get_name_in_table(XrSymbolTable *table, SymbolId id);
 
 // Standalone builtin symbol lookup (no table instance needed).
 // Returns SYMBOL_INVALID if name is not a builtin symbol.
@@ -280,14 +280,14 @@ XR_FUNC SymbolId xr_builtin_symbol_from_name(const char *name);
 
 // Resolve symbol name by ID via isolate's symbol table.
 // Takes void* to avoid circular header dependency with XrayIsolate.
-XR_FUNC const char* xr_symbol_get_name_by_id(void *isolate, int symbol_id);
+XR_FUNC const char *xr_symbol_get_name_by_id(void *isolate, int symbol_id);
 
 // Intern a name through the isolate's symbol table.
 // Returns a stable pointer to the interned string, owned by the symbol
 // table for the lifetime of the isolate. Callers must not free it.
 // Returns NULL if isolate/name is NULL or allocation fails.
 // Takes void* to avoid circular header dependency with XrayIsolate.
-XR_FUNC const char* xr_symbol_intern(void *isolate, const char *name);
+XR_FUNC const char *xr_symbol_intern(void *isolate, const char *name);
 
 /* ========== Compile-time Checks ========== */
 
@@ -298,4 +298,4 @@ _Static_assert(SYMBOL_INVALID == 0, "SYMBOL_INVALID must be 0");
 _Static_assert(SYMBOL_BUILTIN_COUNT <= 256, "Too many builtin symbols");
 #endif
 
-#endif // XSYMBOL_TABLE_H
+#endif  // XSYMBOL_TABLE_H

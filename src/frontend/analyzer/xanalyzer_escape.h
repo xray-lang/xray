@@ -46,4 +46,4 @@ typedef struct XaAnalyzer XaAnalyzer;
  */
 void xa_escape_analyze(AstNode *ast, XaAnalyzer *analyzer);
 
-#endif // XANALYZER_ESCAPE_H
+#endif  // XANALYZER_ESCAPE_H

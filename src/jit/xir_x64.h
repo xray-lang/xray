@@ -46,39 +46,63 @@
  *   Special: rsp (stack pointer)
  */
 typedef enum {
-    X64_RAX = 0,  X64_RCX = 1,  X64_RDX = 2,  X64_RBX = 3,
-    X64_RSP = 4,  X64_RBP = 5,  X64_RSI = 6,  X64_RDI = 7,
-    X64_R8  = 8,  X64_R9  = 9,  X64_R10 = 10, X64_R11 = 11,
-    X64_R12 = 12, X64_R13 = 13, X64_R14 = 14, X64_R15 = 15,
+    X64_RAX = 0,
+    X64_RCX = 1,
+    X64_RDX = 2,
+    X64_RBX = 3,
+    X64_RSP = 4,
+    X64_RBP = 5,
+    X64_RSI = 6,
+    X64_RDI = 7,
+    X64_R8 = 8,
+    X64_R9 = 9,
+    X64_R10 = 10,
+    X64_R11 = 11,
+    X64_R12 = 12,
+    X64_R13 = 13,
+    X64_R14 = 14,
+    X64_R15 = 15,
 } X64Reg;
 
 /* XMM register encoding (0-15, same encoding space) */
 typedef enum {
-    X64_XMM0  = 0,  X64_XMM1  = 1,  X64_XMM2  = 2,  X64_XMM3  = 3,
-    X64_XMM4  = 4,  X64_XMM5  = 5,  X64_XMM6  = 6,  X64_XMM7  = 7,
-    X64_XMM8  = 8,  X64_XMM9  = 9,  X64_XMM10 = 10, X64_XMM11 = 11,
-    X64_XMM12 = 12, X64_XMM13 = 13, X64_XMM14 = 14, X64_XMM15 = 15,
+    X64_XMM0 = 0,
+    X64_XMM1 = 1,
+    X64_XMM2 = 2,
+    X64_XMM3 = 3,
+    X64_XMM4 = 4,
+    X64_XMM5 = 5,
+    X64_XMM6 = 6,
+    X64_XMM7 = 7,
+    X64_XMM8 = 8,
+    X64_XMM9 = 9,
+    X64_XMM10 = 10,
+    X64_XMM11 = 11,
+    X64_XMM12 = 12,
+    X64_XMM13 = 13,
+    X64_XMM14 = 14,
+    X64_XMM15 = 15,
 } X64Xmm;
 
 /* ========== Condition Codes ========== */
 
 typedef enum {
-    X64_CC_O   = 0x0,  // overflow
-    X64_CC_NO  = 0x1,  // no overflow
-    X64_CC_B   = 0x2,  // below (unsigned <)
-    X64_CC_AE  = 0x3,  // above or equal (unsigned >=)
-    X64_CC_E   = 0x4,  // equal (ZF=1)
-    X64_CC_NE  = 0x5,  // not equal (ZF=0)
-    X64_CC_BE  = 0x6,  // below or equal (unsigned <=)
-    X64_CC_A   = 0x7,  // above (unsigned >)
-    X64_CC_S   = 0x8,  // sign (SF=1)
-    X64_CC_NS  = 0x9,  // not sign (SF=0)
-    X64_CC_P   = 0xA,  // parity (PF=1)
-    X64_CC_NP  = 0xB,  // no parity (PF=0)
-    X64_CC_L   = 0xC,  // less (signed <)
-    X64_CC_GE  = 0xD,  // greater or equal (signed >=)
-    X64_CC_LE  = 0xE,  // less or equal (signed <=)
-    X64_CC_G   = 0xF,  // greater (signed >)
+    X64_CC_O = 0x0,   // overflow
+    X64_CC_NO = 0x1,  // no overflow
+    X64_CC_B = 0x2,   // below (unsigned <)
+    X64_CC_AE = 0x3,  // above or equal (unsigned >=)
+    X64_CC_E = 0x4,   // equal (ZF=1)
+    X64_CC_NE = 0x5,  // not equal (ZF=0)
+    X64_CC_BE = 0x6,  // below or equal (unsigned <=)
+    X64_CC_A = 0x7,   // above (unsigned >)
+    X64_CC_S = 0x8,   // sign (SF=1)
+    X64_CC_NS = 0x9,  // not sign (SF=0)
+    X64_CC_P = 0xA,   // parity (PF=1)
+    X64_CC_NP = 0xB,  // no parity (PF=0)
+    X64_CC_L = 0xC,   // less (signed <)
+    X64_CC_GE = 0xD,  // greater or equal (signed >=)
+    X64_CC_LE = 0xE,  // less or equal (signed <=)
+    X64_CC_G = 0xF,   // greater (signed >)
 } X64Cond;
 
 /* ========== Code Buffer ========== */
@@ -89,9 +113,9 @@ typedef enum {
  * encoding. The buffer tracks byte position rather than instruction count.
  */
 typedef struct {
-    uint8_t  *code;      // byte buffer
-    uint32_t  pos;       // current write position (bytes)
-    uint32_t  capacity;  // buffer capacity (bytes)
+    uint8_t *code;      // byte buffer
+    uint32_t pos;       // current write position (bytes)
+    uint32_t capacity;  // buffer capacity (bytes)
 } X64Buf;
 
 /* Initialize buffer with externally-allocated memory */
@@ -142,10 +166,14 @@ static inline uint32_t x64_buf_offset(X64Buf *buf) {
  */
 static inline void x64_rex(X64Buf *buf, bool w, bool r, bool x, bool b) {
     uint8_t rex = 0x40;
-    if (w) rex |= 0x08;
-    if (r) rex |= 0x04;
-    if (x) rex |= 0x02;
-    if (b) rex |= 0x01;
+    if (w)
+        rex |= 0x08;
+    if (r)
+        rex |= 0x04;
+    if (x)
+        rex |= 0x02;
+    if (b)
+        rex |= 0x01;
     x64_emit8(buf, rex);
 }
 
@@ -174,7 +202,7 @@ static inline void x64_modrm(X64Buf *buf, uint8_t mod, uint8_t reg, uint8_t rm) 
 
 /* Register-register ModR/M: mod=11 */
 static inline void x64_modrm_rr(X64Buf *buf, X64Reg reg, X64Reg rm) {
-    x64_modrm(buf, 0x3, (uint8_t)reg, (uint8_t)rm);
+    x64_modrm(buf, 0x3, (uint8_t) reg, (uint8_t) rm);
 }
 
 /*
@@ -193,8 +221,8 @@ static inline void x64_sib(X64Buf *buf, uint8_t scale, uint8_t index, uint8_t ba
  *   - rsp/r12 as base needs SIB byte (index=rsp=100 means no index)
  */
 static inline void x64_modrm_mem(X64Buf *buf, X64Reg reg, X64Reg base, int32_t disp) {
-    uint8_t base3 = (uint8_t)base & 7;
-    uint8_t reg3  = (uint8_t)reg & 7;
+    uint8_t base3 = (uint8_t) base & 7;
+    uint8_t reg3 = (uint8_t) reg & 7;
     bool need_sib = (base3 == 4);  // rsp or r12
 
     if (disp == 0 && base3 != 5) {
@@ -207,13 +235,13 @@ static inline void x64_modrm_mem(X64Buf *buf, X64Reg reg, X64Reg base, int32_t d
         x64_modrm(buf, 0x1, reg3, base3);
         if (need_sib)
             x64_sib(buf, 0, 4, base3);
-        x64_emit8(buf, (uint8_t)(int8_t)disp);
+        x64_emit8(buf, (uint8_t) (int8_t) disp);
     } else {
         /* mod=10: [base + disp32] */
         x64_modrm(buf, 0x2, reg3, base3);
         if (need_sib)
             x64_sib(buf, 0, 4, base3);
-        x64_emit32(buf, (uint32_t)disp);
+        x64_emit32(buf, (uint32_t) disp);
     }
 }
 
@@ -423,8 +451,8 @@ XR_FUNC void x64_xorpd(X64Buf *buf, X64Xmm dst, X64Xmm src);
 static inline void x64_patch_rel32(X64Buf *buf, uint32_t patch_pos, uint32_t target_offset) {
     /* rel32 displacement is relative to the end of the instruction,
      * which is patch_pos + 4 (the 4-byte displacement field itself). */
-    int32_t rel = (int32_t)(target_offset - (patch_pos + 4));
+    int32_t rel = (int32_t) (target_offset - (patch_pos + 4));
     memcpy(&buf->code[patch_pos], &rel, 4);
 }
 
-#endif // XIR_X64_H
+#endif  // XIR_X64_H

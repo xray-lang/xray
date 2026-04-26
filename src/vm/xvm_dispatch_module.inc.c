@@ -34,7 +34,8 @@ vmcase(OP_IMPORT) {
 
     /*
      * Update stack_top to point to current frame's stack top
-     * This ensures module execution uses stack space that doesn't overlap with current frame's local variables
+     * This ensures module execution uses stack space that doesn't overlap with current frame's
+     * local variables
      */
     VM_SET_STACK_TOP(base + frame->closure->proto->maxstacksize);
 
@@ -53,7 +54,8 @@ vmcase(OP_IMPORT) {
     base = VM_STACK + frame->base_offset;
 
     if (XR_IS_NULL(module_val)) {
-        VM_RUNTIME_ERROR(XR_ERR_MOD_LOAD_FAILED, "import: failed to load module '%s'", module_name->data);
+        VM_RUNTIME_ERROR(XR_ERR_MOD_LOAD_FAILED, "import: failed to load module '%s'",
+                         module_name->data);
     }
 
     R(reg) = module_val;
@@ -93,9 +95,8 @@ vmcase(OP_EXPORT_ALL) {
     XrModule *dst_module = isolate->current_module;
     if (dst_module) {
         for (uint16_t idx = 0; idx < src_module->export_count; idx++) {
-            xr_module_add_export_sym(isolate, dst_module,
-                src_module->export_symbols[idx],
-                src_module->export_values[idx], false);
+            xr_module_add_export_sym(isolate, dst_module, src_module->export_symbols[idx],
+                                     src_module->export_values[idx], false);
         }
     }
     vmbreak;

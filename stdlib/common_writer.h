@@ -78,7 +78,7 @@ static inline void xr_serw_free(XrSerWriter *w) {
     xr_ctxbuf_free(w);
 }
 
-static inline char* xr_serw_steal(XrSerWriter *w) {
+static inline char *xr_serw_steal(XrSerWriter *w) {
     return xr_ctxbuf_steal(w);
 }
 
@@ -97,7 +97,8 @@ static inline void xr_serw_append(XrSerWriter *w, const char *s, size_t n) {
 
 // Append a NUL-terminated C string. NULL is treated as empty.
 static inline void xr_serw_str(XrSerWriter *w, const char *s) {
-    if (!s) return;
+    if (!s)
+        return;
     xr_ctxbuf_append_cstr(w, s);
 }
 
@@ -113,7 +114,7 @@ static inline void xr_serw_printf(XrSerWriter *w, const char *fmt, ...)
 #if defined(__GNUC__) || defined(__clang__)
     __attribute__((format(printf, 2, 3)))
 #endif
-;
+    ;
 
 static inline void xr_serw_printf(XrSerWriter *w, const char *fmt, ...) {
     va_list ap;
@@ -122,11 +123,15 @@ static inline void xr_serw_printf(XrSerWriter *w, const char *fmt, ...) {
     va_copy(ap_copy, ap);
     int needed = vsnprintf(NULL, 0, fmt, ap_copy);
     va_end(ap_copy);
-    if (needed <= 0) { va_end(ap); return; }
-    xr_ctxbuf_reserve(w, (size_t)needed);
+    if (needed <= 0) {
+        va_end(ap);
+        return;
+    }
+    xr_ctxbuf_reserve(w, (size_t) needed);
     int written = vsnprintf(w->data + w->len, w->cap - w->len, fmt, ap);
     va_end(ap);
-    if (written > 0) w->len += (size_t)written;
+    if (written > 0)
+        w->len += (size_t) written;
     w->data[w->len] = '\0';
 }
 
@@ -134,8 +139,9 @@ static inline void xr_serw_printf(XrSerWriter *w, const char *fmt, ...) {
 
 // Write `level * indent_width` spaces. No-op if either is zero/negative.
 static inline void xr_serw_indent(XrSerWriter *w, int level, int indent_width) {
-    if (indent_width <= 0 || level <= 0) return;
-    size_t n = (size_t)level * (size_t)indent_width;
+    if (indent_width <= 0 || level <= 0)
+        return;
+    size_t n = (size_t) level * (size_t) indent_width;
     xr_ctxbuf_reserve(w, n);
     memset(w->data + w->len, ' ', n);
     w->len += n;
@@ -146,8 +152,9 @@ static inline void xr_serw_indent(XrSerWriter *w, int level, int indent_width) {
 // when indent_width > 0 (pretty-print). For indent_width == 0 this is
 // a no-op so callers can use the same writer for compact output.
 static inline void xr_serw_newline(XrSerWriter *w, int level, int indent_width) {
-    if (indent_width <= 0) return;
-    size_t pad = (size_t)level * (size_t)indent_width;
+    if (indent_width <= 0)
+        return;
+    size_t pad = (size_t) level * (size_t) indent_width;
     size_t need = 1 + pad;
     xr_ctxbuf_reserve(w, need);
     w->data[w->len++] = '\n';
@@ -158,4 +165,4 @@ static inline void xr_serw_newline(XrSerWriter *w, int level, int indent_width) 
     w->data[w->len] = '\0';
 }
 
-#endif // XR_STDLIB_COMMON_WRITER_H
+#endif  // XR_STDLIB_COMMON_WRITER_H

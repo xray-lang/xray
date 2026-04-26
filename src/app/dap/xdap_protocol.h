@@ -33,9 +33,8 @@ XR_FUNC bool xdap_handle_message(XdapController *ctrl, const char *json, size_t 
 // ============================================================================
 
 // Send response to a request
-XR_FUNC void xdap_send_response(XdapController *ctrl, int request_seq,
-                         const char *command, bool success,
-                         XrJsonValue *body, const char *error_message);
+XR_FUNC void xdap_send_response(XdapController *ctrl, int request_seq, const char *command,
+                                bool success, XrJsonValue *body, const char *error_message);
 
 // Send event
 XR_FUNC void xdap_send_event(XdapController *ctrl, const char *event, XrJsonValue *body);
@@ -57,8 +56,7 @@ XR_FUNC void xdap_send_terminated_event(XdapController *ctrl);
 XR_FUNC void xdap_send_exited_event(XdapController *ctrl, int exit_code);
 
 // Send "output" event (for logpoints and debug console)
-XR_FUNC void xdap_send_output_event(XdapController *ctrl, const char *category,
-                             const char *output);
+XR_FUNC void xdap_send_output_event(XdapController *ctrl, const char *category, const char *output);
 
 // ============================================================================
 // Main Loop
@@ -68,4 +66,4 @@ XR_FUNC void xdap_send_output_event(XdapController *ctrl, const char *category,
 // Returns: exit code
 XR_FUNC int xdap_run(XdapController *ctrl);
 
-#endif // XDAP_PROTOCOL_H
+#endif  // XDAP_PROTOCOL_H

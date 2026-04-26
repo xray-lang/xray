@@ -35,8 +35,7 @@
 
 #define XR_TW_ASSERT(E) assert(E)
 
-#define XR_TW_BUMP_LATER_WHEEL(tw) \
-    ((tw)->pos + XR_TW_LATER_WHEEL_SLOT_SIZE >= (tw)->later.pos)
+#define XR_TW_BUMP_LATER_WHEEL(tw) ((tw)->pos + XR_TW_LATER_WHEEL_SLOT_SIZE >= (tw)->later.pos)
 
 // ========== Helper Functions ==========
 
@@ -44,7 +43,7 @@
 int64_t xr_monotonic_ticks(void) {
     struct timespec ts;
     clock_gettime(CLOCK_MONOTONIC, &ts);
-    return (int64_t)ts.tv_sec * 1000 + ts.tv_nsec / 1000000;
+    return (int64_t) ts.tv_sec * 1000 + ts.tv_nsec / 1000000;
 }
 
 // Get slot count index
@@ -69,9 +68,8 @@ static inline void scnt_ix_dec(int64_t *scnt, int six) {
 }
 
 // Find next non-empty slot in wheel
-static inline void scnt_wheel_next(int *slotp, int *leftp, int64_t *posp,
-                                   int *sixp, int64_t *scnt, int first_slot,
-                                   int end_slot, int64_t slot_sz) {
+static inline void scnt_wheel_next(int *slotp, int *leftp, int64_t *posp, int *sixp, int64_t *scnt,
+                                   int first_slot, int end_slot, int64_t slot_sz) {
     int slot = *slotp;
     int left = *leftp;
     int ix;
@@ -105,26 +103,23 @@ static inline void scnt_wheel_next(int *slotp, int *leftp, int64_t *posp,
     XR_TW_ASSERT(left >= -1);
 
     if (posp)
-        *posp += slot_sz * ((int64_t)(*leftp - left));
+        *posp += slot_sz * ((int64_t) (*leftp - left));
     if (sixp)
         *sixp = slot >> XR_TW_SCNT_BITS;
     *leftp = left;
     *slotp = slot;
 }
 
-static inline void scnt_soon_wheel_next(int *slotp, int *leftp, int64_t *posp,
-                                        int *sixp, int64_t *scnt) {
-    scnt_wheel_next(slotp, leftp, posp, sixp, scnt,
-                    XR_TW_SOON_WHEEL_FIRST_SLOT,
+static inline void scnt_soon_wheel_next(int *slotp, int *leftp, int64_t *posp, int *sixp,
+                                        int64_t *scnt) {
+    scnt_wheel_next(slotp, leftp, posp, sixp, scnt, XR_TW_SOON_WHEEL_FIRST_SLOT,
                     XR_TW_SOON_WHEEL_END_SLOT, 1);
 }
 
-static inline void scnt_later_wheel_next(int *slotp, int *leftp, int64_t *posp,
-                                         int *sixp, int64_t *scnt) {
-    scnt_wheel_next(slotp, leftp, posp, sixp, scnt,
-                    XR_TW_LATER_WHEEL_FIRST_SLOT,
-                    XR_TW_LATER_WHEEL_END_SLOT,
-                    XR_TW_LATER_WHEEL_SLOT_SIZE);
+static inline void scnt_later_wheel_next(int *slotp, int *leftp, int64_t *posp, int *sixp,
+                                         int64_t *scnt) {
+    scnt_wheel_next(slotp, leftp, posp, sixp, scnt, XR_TW_LATER_WHEEL_FIRST_SLOT,
+                    XR_TW_LATER_WHEEL_END_SLOT, XR_TW_LATER_WHEEL_SLOT_SIZE);
 }
 
 // Calculate Soon Wheel slot
@@ -133,7 +128,7 @@ static inline int soon_slot(int64_t soon_pos) {
     slot &= XR_TW_SOON_WHEEL_MASK;
     XR_TW_ASSERT(XR_TW_SOON_WHEEL_FIRST_SLOT <= slot);
     XR_TW_ASSERT(slot < XR_TW_SOON_WHEEL_END_SLOT);
-    return (int)slot;
+    return (int) slot;
 }
 
 // Calculate Later Wheel slot
@@ -144,7 +139,7 @@ static inline int later_slot(int64_t later_pos) {
     slot += XR_TW_LATER_WHEEL_FIRST_SLOT;
     XR_TW_ASSERT(XR_TW_LATER_WHEEL_FIRST_SLOT <= slot);
     XR_TW_ASSERT(slot < XR_TW_LATER_WHEEL_END_SLOT);
-    return (int)slot;
+    return (int) slot;
 }
 
 // Insert timer into slot
@@ -219,21 +214,18 @@ static inline void remove_timer(XrTimerWheel *tw, XrTWheelTimer *p) {
                 // Set to current pos to force full scan on next find_next_timeout
                 tw->soon.min_tpos = tw->pos;
             }
-            if (tw->true_next_timeout_time &&
-                p->timeout_pos == tw->next_timeout_pos &&
+            if (tw->true_next_timeout_time && p->timeout_pos == tw->next_timeout_pos &&
                 tw->yield_slot == XR_TW_SLOT_INACTIVE) {
                 tw->true_next_timeout_time = 0;
             }
             if (--tw->soon.nto == 0)
                 tw->soon.min_tpos = XR_TW_MAX_TICKS;
         } else {
-            if (empty_slot && tw->true_next_timeout_time &&
-                tw->later.min_tpos_slot == slot) {
+            if (empty_slot && tw->true_next_timeout_time && tw->later.min_tpos_slot == slot) {
                 int64_t tpos = tw->later.min_tpos;
                 tpos &= XR_TW_LATER_WHEEL_POS_MASK;
                 tpos -= XR_TW_LATER_WHEEL_SLOT_SIZE;
-                if (tpos == tw->next_timeout_pos &&
-                    tw->yield_slot == XR_TW_SLOT_INACTIVE)
+                if (tpos == tw->next_timeout_pos && tw->yield_slot == XR_TW_SLOT_INACTIVE)
                     tw->true_next_timeout_time = 0;
             }
             if (--tw->later.nto == 0) {
@@ -298,7 +290,7 @@ static int64_t find_next_timeout(XrTimerWheel *tw) {
                 goto done;
             }
             tpos = min_tpos;
-            slots = XR_TW_LATER_WHEEL_SIZE - ((int)tmp);
+            slots = XR_TW_LATER_WHEEL_SIZE - ((int) tmp);
         }
 
         slot = later_slot(tpos);
@@ -346,7 +338,7 @@ static int64_t find_next_timeout(XrTimerWheel *tw) {
             int64_t tmp;
             tmp = tw->soon.min_tpos - tw->pos;
             XR_TW_ASSERT(XR_TW_SOON_WHEEL_SIZE > tmp);
-            slots = XR_TW_SOON_WHEEL_SIZE - ((int)tmp);
+            slots = XR_TW_SOON_WHEEL_SIZE - ((int) tmp);
             tpos = tw->soon.min_tpos;
         }
 
@@ -355,10 +347,11 @@ static int64_t find_next_timeout(XrTimerWheel *tw) {
         while (tpos < min_timeout_pos) {
             XrTWheelTimer *first = tw->w[slot];
             if (first) {
- // zombie check: skip zombie timers immediately (O(1))
+                // zombie check: skip zombie timers immediately (O(1))
                 // Zombie timers are marked atomically by cross-worker cancel,
                 // so we can safely skip them without traversing the entire slot.
-                if (atomic_load_explicit(&first->state, memory_order_acquire) != XR_TIMER_STATE_ZOMBIE) {
+                if (atomic_load_explicit(&first->state, memory_order_acquire) !=
+                    XR_TIMER_STATE_ZOMBIE) {
                     // Non-zombie timer found at slot head - use its timeout_pos
                     // Note: If min_tpos was stale and first->timeout_pos > tpos,
                     // it just means we wake up slightly early, which is harmless.
@@ -375,20 +368,20 @@ static int64_t find_next_timeout(XrTimerWheel *tw) {
     }
 
 done: {
-        int64_t timeout_pos_limit;
+    int64_t timeout_pos_limit;
 
-        timeout_pos_limit = tw->pos + XR_TW_TICKS_WEEK;
-        if (min_timeout_pos > timeout_pos_limit) {
-            min_timeout_pos = timeout_pos_limit;
-            true_min_timeout = 0;
-        }
-
-        tw->next_timeout_pos = min_timeout_pos;
-        tw->next_timeout_time = min_timeout_pos;
-        tw->true_next_timeout_time = true_min_timeout;
-
-        return min_timeout_pos;
+    timeout_pos_limit = tw->pos + XR_TW_TICKS_WEEK;
+    if (min_timeout_pos > timeout_pos_limit) {
+        min_timeout_pos = timeout_pos_limit;
+        true_min_timeout = 0;
     }
+
+    tw->next_timeout_pos = min_timeout_pos;
+    tw->next_timeout_time = min_timeout_pos;
+    tw->true_next_timeout_time = true_min_timeout;
+
+    return min_timeout_pos;
+}
 }
 
 // Process Later Wheel
@@ -427,7 +420,7 @@ static int bump_later_wheel(XrTimerWheel *tw, int *ycount_p) {
         tmp_slots -= later_pos;
         tmp_slots /= XR_TW_LATER_WHEEL_SLOT_SIZE;
         if (tmp_slots < XR_TW_LATER_WHEEL_SIZE)
-            slots = (int)tmp_slots;
+            slots = (int) tmp_slots;
         else
             slots = XR_TW_LATER_WHEEL_SIZE;
 
@@ -473,8 +466,9 @@ static int bump_later_wheel(XrTimerWheel *tw, int *ycount_p) {
                 // Set slot = INACTIVE immediately, allow safe external reuse
                 p->slot = XR_TW_SLOT_INACTIVE;
 
- // check zombie before processing
-                if (atomic_load_explicit(&p->state, memory_order_acquire) == XR_TIMER_STATE_ZOMBIE) {
+                // check zombie before processing
+                if (atomic_load_explicit(&p->state, memory_order_acquire) ==
+                    XR_TIMER_STATE_ZOMBIE) {
                     // Zombie timer, clean up without callback
                     atomic_store_explicit(&p->state, XR_TIMER_STATE_ACTIVE, memory_order_release);
                     scnt_ix_dec(bump_scnt, scnt_ix);
@@ -534,8 +528,7 @@ void xr_timer_cancel_queue_init(XrTimerCancelQueue *cq) {
     atomic_store_explicit(&cq->head, &cq->stub, memory_order_relaxed);
     atomic_store_explicit(&cq->tail, &cq->stub, memory_order_relaxed);
     // Post-condition: head == tail == &stub, queue is empty
-    XR_DCHECK(atomic_load(&cq->head) == &cq->stub,
-              "timer_cancel_queue_init: head invariant");
+    XR_DCHECK(atomic_load(&cq->head) == &cq->stub, "timer_cancel_queue_init: head invariant");
 }
 
 // Queue a timer for cancellation (called from ANY worker, lock-free MPSC enqueue)
@@ -550,18 +543,20 @@ void xr_timer_queue_cancel(XrTimerWheel *target_tw, XrTWheelTimer *timer, XrCoro
 
     // Step 2: Allocate cancel node (try per-worker freelist first)
     XrCanceledTimerNode *node = xr_cancel_node_alloc();
-    if (!node) return;  // Out of memory, zombie will be cleaned up when slot is processed
+    if (!node)
+        return;  // Out of memory, zombie will be cleaned up when slot is processed
 
     node->next = NULL;
     node->timer = timer;
     node->coro = coro;
 
     // Step 3: MPSC enqueue for owner to cleanup
-    XrCanceledTimerNode *prev = atomic_exchange_explicit(&target_tw->canceled_queue.tail,
-                                                          node, memory_order_acq_rel);
+    XrCanceledTimerNode *prev =
+        atomic_exchange_explicit(&target_tw->canceled_queue.tail, node, memory_order_acq_rel);
     // Link previous tail to new node
     // Note: There's a brief window where prev->next is NULL, handled by consumer
-    atomic_store_explicit((_Atomic(XrCanceledTimerNode *)*)&prev->next, node, memory_order_release);
+    atomic_store_explicit((_Atomic(XrCanceledTimerNode *) *) &prev->next, node,
+                          memory_order_release);
 }
 
 // Process canceled queue (called by owner worker ONLY, before bump)
@@ -585,7 +580,8 @@ int xr_timer_process_canceled_queue(XrTimerWheel *tw) {
     // Process all nodes from head
     while (1) {
         head = atomic_load_explicit(&cq->head, memory_order_acquire);
-        next = atomic_load_explicit((_Atomic(XrCanceledTimerNode *)*)&head->next, memory_order_acquire);
+        next = atomic_load_explicit((_Atomic(XrCanceledTimerNode *) *) &head->next,
+                                    memory_order_acquire);
 
         if (next == NULL) {
             // Either empty or in-progress enqueue
@@ -633,7 +629,7 @@ XrCanceledTimerNode *xr_cancel_node_alloc(void) {
         node->coro = NULL;
         return node;
     }
-    XrCanceledTimerNode *node = (XrCanceledTimerNode *)xr_malloc(sizeof(XrCanceledTimerNode));
+    XrCanceledTimerNode *node = (XrCanceledTimerNode *) xr_malloc(sizeof(XrCanceledTimerNode));
     if (node) {
         node->next = NULL;
         node->timer = NULL;
@@ -643,7 +639,8 @@ XrCanceledTimerNode *xr_cancel_node_alloc(void) {
 }
 
 void xr_cancel_node_free(XrCanceledTimerNode *node) {
-    if (!node) return;
+    if (!node)
+        return;
     XrWorker *w = xr_current_worker();
     if (w && w->p.cancel_node_free_count < XR_CANCEL_NODE_POOL_MAX) {
         node->next = w->p.cancel_node_free;
@@ -665,8 +662,9 @@ XrTimerWheel *xr_timer_wheel_create(XrRuntime *runtime, int owner_worker_id) {
     int64_t mtime;
     int i;
 
-    tw = (XrTimerWheel *)xr_calloc(1, sizeof(XrTimerWheel));
-    if (!tw) return NULL;
+    tw = (XrTimerWheel *) xr_calloc(1, sizeof(XrTimerWheel));
+    if (!tw)
+        return NULL;
 
     tw->w = &tw->slots[1];
     for (i = XR_TW_SLOT_AT_ONCE; i < XR_TW_LATER_WHEEL_END_SLOT; i++)
@@ -694,7 +692,7 @@ XrTimerWheel *xr_timer_wheel_create(XrRuntime *runtime, int owner_worker_id) {
     tw->sentinel.prev = &tw->sentinel;
     tw->sentinel.timeout = NULL;
     tw->sentinel.arg = NULL;
-     // record ownership and init canceled queue
+    // record ownership and init canceled queue
     tw->owner_worker_id = owner_worker_id;
     tw->runtime = runtime;
     xr_timer_cancel_queue_init(&tw->canceled_queue);
@@ -704,7 +702,8 @@ XrTimerWheel *xr_timer_wheel_create(XrRuntime *runtime, int owner_worker_id) {
 
 // Destroy timer wheel
 void xr_timer_wheel_destroy(XrTimerWheel *tw) {
-    if (!tw) return;
+    if (!tw)
+        return;
 
     // Cleanup canceled queue: drain all remaining allocated nodes.
     //
@@ -731,8 +730,8 @@ void xr_timer_wheel_destroy(XrTimerWheel *tw) {
 }
 
 // Set timer (MUST be called from owner worker only)
-void xr_twheel_set_timer(XrTimerWheel *tw, XrTWheelTimer *p,
-                         XrTimeoutProc timeout, void *arg, int64_t timeout_pos) {
+void xr_twheel_set_timer(XrTimerWheel *tw, XrTWheelTimer *p, XrTimeoutProc timeout, void *arg,
+                         int64_t timeout_pos) {
     XR_DCHECK(tw != NULL, "twheel_set_timer: NULL tw");
     XR_DCHECK(p != NULL, "twheel_set_timer: NULL timer");
     // Owner-only assertion (skip during startup when TLS is unset).
@@ -811,7 +810,7 @@ void xr_bump_timers(XrTimerWheel *tw, int64_t curr_time) {
 
     // No mutex needed - owner worker exclusive access
 
- // process cross-worker cancellation queue first
+    // process cross-worker cancellation queue first
     xr_timer_process_canceled_queue(tw);
 
     yield_count = XR_TW_BUMP_YIELD_LIMIT;
@@ -877,8 +876,9 @@ void xr_bump_timers(XrTimerWheel *tw, int64_t curr_time) {
                     // Set slot = INACTIVE immediately, allow safe external reuse
                     p->slot = XR_TW_SLOT_INACTIVE;
 
- // skip zombie timers (cancelled during bump)
-                    if (atomic_load_explicit(&p->state, memory_order_acquire) != XR_TIMER_STATE_ZOMBIE) {
+                    // skip zombie timers (cancelled during bump)
+                    if (atomic_load_explicit(&p->state, memory_order_acquire) !=
+                        XR_TIMER_STATE_ZOMBIE) {
                         timeout_timer(p);
                         yield_count -= XR_TW_COST_TIMEOUT;
                     }
@@ -914,7 +914,7 @@ void xr_bump_timers(XrTimerWheel *tw, int64_t curr_time) {
             if (tw->nto == 0)
                 goto empty_wheel;
 
-            memcpy((void *)bump_scnt, (void *)scnt, sizeof(int64_t) * XR_TW_SCNT_SIZE);
+            memcpy((void *) bump_scnt, (void *) scnt, sizeof(int64_t) * XR_TW_SCNT_SIZE);
 
             if (tw->soon.min_tpos > tw->pos) {
                 int64_t skip_until_pos = tw->soon.min_tpos;
@@ -931,7 +931,7 @@ void xr_bump_timers(XrTimerWheel *tw, int64_t curr_time) {
             {
                 int64_t tmp_slots = bump_to - tw->pos;
                 if (tmp_slots < XR_TW_SOON_WHEEL_SIZE)
-                    slots = (int)tmp_slots;
+                    slots = (int) tmp_slots;
                 else
                     slots = XR_TW_SOON_WHEEL_SIZE;
             }
@@ -961,7 +961,8 @@ void xr_bump_timers(XrTimerWheel *tw, int64_t curr_time) {
                     tw->w[slot] = NULL;
 
                     while (1) {
-                        // Timer may have been cancelled or reused during yield, skip if slot doesn't match
+                        // Timer may have been cancelled or reused during yield, skip if slot
+                        // doesn't match
                         if (p->slot != slot) {
                             goto restart_yielded_soon_slot;
                         }
@@ -973,23 +974,27 @@ void xr_bump_timers(XrTimerWheel *tw, int64_t curr_time) {
                         p->slot = XR_TW_SLOT_INACTIVE;
 
                         if (p->timeout_pos <= bump_to) {
- // skip zombie timers (cancelled during bump)
-                            if (atomic_load_explicit(&p->state, memory_order_acquire) != XR_TIMER_STATE_ZOMBIE) {
+                            // skip zombie timers (cancelled during bump)
+                            if (atomic_load_explicit(&p->state, memory_order_acquire) !=
+                                XR_TIMER_STATE_ZOMBIE) {
                                 timeout_timer(p);
                                 yield_count -= XR_TW_COST_TIMEOUT;
                             }
                             // Reset state for timer reuse
-                            atomic_store_explicit(&p->state, XR_TIMER_STATE_ACTIVE, memory_order_release);
+                            atomic_store_explicit(&p->state, XR_TIMER_STATE_ACTIVE,
+                                                  memory_order_release);
                             tw->nto--;
                             scnt_ix_dec(bump_scnt, scnt_ix);
                         } else {
                             // Timer not yet due, re-insert (may need to check zombie too)
-                            if (atomic_load_explicit(&p->state, memory_order_acquire) != XR_TIMER_STATE_ZOMBIE) {
+                            if (atomic_load_explicit(&p->state, memory_order_acquire) !=
+                                XR_TIMER_STATE_ZOMBIE) {
                                 insert_timer_into_slot(tw, slot, p);
                                 yield_count -= XR_TW_COST_SLOT_MOVE;
                             } else {
                                 // Zombie timer, just clean up
-                                atomic_store_explicit(&p->state, XR_TIMER_STATE_ACTIVE, memory_order_release);
+                                atomic_store_explicit(&p->state, XR_TIMER_STATE_ACTIVE,
+                                                      memory_order_release);
                                 tw->nto--;
                                 scnt_ix_dec(bump_scnt, scnt_ix);
                             }
@@ -1030,7 +1035,7 @@ void xr_bump_timers(XrTimerWheel *tw, int64_t curr_time) {
     tw->true_next_timeout_time = 0;
     XR_TW_ASSERT(tw->next_timeout_pos == bump_to);
 
-    (void)find_next_timeout(tw);
+    (void) find_next_timeout(tw);
 }
 
 // Check next timeout time (called by owner worker only - )

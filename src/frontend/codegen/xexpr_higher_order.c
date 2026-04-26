@@ -35,13 +35,14 @@
 // ========== Helper: Get "length" local symbol index ==========
 static int get_length_symbol(XrCompilerContext *ctx, XrCompiler *compiler) {
     int global_sym = xr_symbol_register_in_table(
-        (XrSymbolTable*)xr_isolate_get_symbol_table(ctx->X), "length");
+        (XrSymbolTable *) xr_isolate_get_symbol_table(ctx->X), "length");
     return emitter_add_symbol(compiler->emitter, global_sym);
 }
 
 // ========== Helper: Get callback parameter count from AST ==========
 static int get_callback_param_count(AstNode *callback_node) {
-    if (!callback_node) return -1;
+    if (!callback_node)
+        return -1;
     if (callback_node->type == AST_FUNCTION_DECL || callback_node->type == AST_FUNCTION_EXPR) {
         return callback_node->as.function_decl.param_count;
     }
@@ -79,7 +80,8 @@ static void emit_increment(XrCompilerContext *ctx, XrCompiler *compiler, int i_r
  * exit:
  *   LOADNULL  result_reg
  */
-static int compile_array_foreach_inline(XrCompilerContext *ctx, XrCompiler *compiler, CallExprNode *call) {
+static int compile_array_foreach_inline(XrCompilerContext *ctx, XrCompiler *compiler,
+                                        CallExprNode *call) {
     MemberAccessNode *member = &call->callee->as.member_access;
 
     if (call->arg_count < 1) {
@@ -183,7 +185,8 @@ static int compile_array_foreach_inline(XrCompilerContext *ctx, XrCompiler *comp
  *   JMP       loop
  * exit:
  */
-static int compile_array_filter_inline(XrCompilerContext *ctx, XrCompiler *compiler, CallExprNode *call) {
+static int compile_array_filter_inline(XrCompilerContext *ctx, XrCompiler *compiler,
+                                       CallExprNode *call) {
     MemberAccessNode *member = &call->callee->as.member_access;
 
     if (call->arg_count < 1) {
@@ -199,7 +202,7 @@ static int compile_array_filter_inline(XrCompilerContext *ctx, XrCompiler *compi
 
     // 2. Allocate control registers
     int result_reg = reg_alloc(ctx, compiler);
-    int c_arr_f = ((int)ctx->current_elem_tid << 2) | ctx->current_storage_mode;
+    int c_arr_f = ((int) ctx->current_elem_tid << 2) | ctx->current_storage_mode;
     xemit_newarray(compiler->emitter, result_reg, 0, c_arr_f);
 
     int i_reg = reg_alloc(ctx, compiler);
@@ -293,7 +296,8 @@ static int compile_array_filter_inline(XrCompilerContext *ctx, XrCompiler *compi
  *   JMP       loop
  * exit:
  */
-static int compile_array_map_inline(XrCompilerContext *ctx, XrCompiler *compiler, CallExprNode *call) {
+static int compile_array_map_inline(XrCompilerContext *ctx, XrCompiler *compiler,
+                                    CallExprNode *call) {
     MemberAccessNode *member = &call->callee->as.member_access;
 
     if (call->arg_count < 1) {
@@ -309,7 +313,7 @@ static int compile_array_map_inline(XrCompilerContext *ctx, XrCompiler *compiler
 
     // 2. Allocate control registers
     int result_reg = reg_alloc(ctx, compiler);
-    int c_arr_m = ((int)ctx->current_elem_tid << 2) | ctx->current_storage_mode;
+    int c_arr_m = ((int) ctx->current_elem_tid << 2) | ctx->current_storage_mode;
     xemit_newarray(compiler->emitter, result_reg, 0, c_arr_m);
 
     int i_reg = reg_alloc(ctx, compiler);
@@ -395,7 +399,8 @@ static int compile_array_map_inline(XrCompilerContext *ctx, XrCompiler *compiler
  *   JMP       loop
  * exit:
  */
-static int compile_array_reduce_inline(XrCompilerContext *ctx, XrCompiler *compiler, CallExprNode *call) {
+static int compile_array_reduce_inline(XrCompilerContext *ctx, XrCompiler *compiler,
+                                       CallExprNode *call) {
     MemberAccessNode *member = &call->callee->as.member_access;
 
     if (call->arg_count < 2) {
@@ -481,8 +486,8 @@ static int compile_array_reduce_inline(XrCompilerContext *ctx, XrCompiler *compi
 
 // ========== Helper: Get "keys" local symbol index ==========
 static int get_keys_symbol(XrCompilerContext *ctx, XrCompiler *compiler) {
-    int global_sym = xr_symbol_register_in_table(
-        (XrSymbolTable*)xr_isolate_get_symbol_table(ctx->X), "keys");
+    int global_sym =
+        xr_symbol_register_in_table((XrSymbolTable *) xr_isolate_get_symbol_table(ctx->X), "keys");
     return emitter_add_symbol(compiler->emitter, global_sym);
 }
 
@@ -507,7 +512,8 @@ static int get_keys_symbol(XrCompilerContext *ctx, XrCompiler *compiler) {
  * exit:
  *   LOADNULL  result_reg
  */
-static int compile_map_foreach_inline(XrCompilerContext *ctx, XrCompiler *compiler, CallExprNode *call) {
+static int compile_map_foreach_inline(XrCompilerContext *ctx, XrCompiler *compiler,
+                                      CallExprNode *call) {
     MemberAccessNode *member = &call->callee->as.member_access;
 
     if (call->arg_count < 1) {
@@ -596,7 +602,8 @@ static int compile_map_foreach_inline(XrCompilerContext *ctx, XrCompiler *compil
  *
  * Returns a new Map with transformed values.
  */
-static int compile_map_map_inline(XrCompilerContext *ctx, XrCompiler *compiler, CallExprNode *call) {
+static int compile_map_map_inline(XrCompilerContext *ctx, XrCompiler *compiler,
+                                  CallExprNode *call) {
     MemberAccessNode *member = &call->callee->as.member_access;
 
     if (call->arg_count < 1) {
@@ -612,8 +619,11 @@ static int compile_map_map_inline(XrCompilerContext *ctx, XrCompiler *compiler, 
 
     // 2. Create result map: result = #{}
     int result_reg = reg_alloc(ctx, compiler);
-    int ck_map = (ctx->current_key_tid == XR_TID_STRING) ? 1 : (ctx->current_key_tid == XR_TID_INT) ? 2 : 0;
-    int c_map = (ck_map << 7) | (((int)ctx->current_elem_tid & 0x1F) << 2) | ctx->current_storage_mode;
+    int ck_map = (ctx->current_key_tid == XR_TID_STRING) ? 1
+                 : (ctx->current_key_tid == XR_TID_INT)  ? 2
+                                                         : 0;
+    int c_map =
+        (ck_map << 7) | (((int) ctx->current_elem_tid & 0x1F) << 2) | ctx->current_storage_mode;
     xemit_newmap(compiler->emitter, result_reg, 0, c_map);
 
     // 3. Get keys array
@@ -695,7 +705,8 @@ static int compile_map_map_inline(XrCompilerContext *ctx, XrCompiler *compiler, 
  *
  * Returns a new Map with filtered key-value pairs.
  */
-static int compile_map_filter_inline(XrCompilerContext *ctx, XrCompiler *compiler, CallExprNode *call) {
+static int compile_map_filter_inline(XrCompilerContext *ctx, XrCompiler *compiler,
+                                     CallExprNode *call) {
     MemberAccessNode *member = &call->callee->as.member_access;
 
     if (call->arg_count < 1) {
@@ -711,8 +722,11 @@ static int compile_map_filter_inline(XrCompilerContext *ctx, XrCompiler *compile
 
     // 2. Create result map
     int result_reg = reg_alloc(ctx, compiler);
-    int ck_map2 = (ctx->current_key_tid == XR_TID_STRING) ? 1 : (ctx->current_key_tid == XR_TID_INT) ? 2 : 0;
-    int c_map2 = (ck_map2 << 7) | (((int)ctx->current_elem_tid & 0x1F) << 2) | ctx->current_storage_mode;
+    int ck_map2 = (ctx->current_key_tid == XR_TID_STRING) ? 1
+                  : (ctx->current_key_tid == XR_TID_INT)  ? 2
+                                                          : 0;
+    int c_map2 =
+        (ck_map2 << 7) | (((int) ctx->current_elem_tid & 0x1F) << 2) | ctx->current_storage_mode;
     xemit_newmap(compiler->emitter, result_reg, 0, c_map2);
 
     // 3. Get keys array
@@ -793,7 +807,8 @@ static int compile_map_filter_inline(XrCompilerContext *ctx, XrCompiler *compile
 /*
  * Inline compile Map.reduce
  */
-static int compile_map_reduce_inline(XrCompilerContext *ctx, XrCompiler *compiler, CallExprNode *call) {
+static int compile_map_reduce_inline(XrCompilerContext *ctx, XrCompiler *compiler,
+                                     CallExprNode *call) {
     MemberAccessNode *member = &call->callee->as.member_access;
 
     if (call->arg_count < 2) {
@@ -890,13 +905,16 @@ static int compile_map_reduce_inline(XrCompilerContext *ctx, XrCompiler *compile
  *
  * @return true if handled, false for runtime method call
  */
-bool try_compile_higher_order_call(XrCompilerContext *ctx, XrCompiler *compiler,
-                                   CallExprNode *call, int *result_reg) {
-    if (!call || !call->callee) return false;
-    if (call->callee->type != AST_MEMBER_ACCESS) return false;
+bool try_compile_higher_order_call(XrCompilerContext *ctx, XrCompiler *compiler, CallExprNode *call,
+                                   int *result_reg) {
+    if (!call || !call->callee)
+        return false;
+    if (call->callee->type != AST_MEMBER_ACCESS)
+        return false;
 
     MemberAccessNode *member = &call->callee->as.member_access;
-    if (!member->name) return false;
+    if (!member->name)
+        return false;
 
     // Check method name first
     bool is_forEach = strcmp(member->name, "forEach") == 0;

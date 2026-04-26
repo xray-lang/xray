@@ -61,7 +61,7 @@
 
 #include <stdatomic.h>
 #include "../base/xconstants.h"
-#include "xexec_frame.h" // XrBcCallFrame, XrClosure, XrValue
+#include "xexec_frame.h"  // XrBcCallFrame, XrClosure, XrValue
 #include "xcoro_flags.h"
 #include "xtimer_wheel.h"
 
@@ -81,11 +81,9 @@ typedef enum {
 
 #define XR_CORO_PRIORITY_COUNT 3
 
-
-#define XR_GC_FLG_NEED_GC       0x0001
-#define XR_GC_FLG_IN_GC         0x0002
-#define XR_GC_FLG_PROMOTED      0x0004
-
+#define XR_GC_FLG_NEED_GC 0x0001
+#define XR_GC_FLG_IN_GC 0x0002
+#define XR_GC_FLG_PROMOTED 0x0004
 
 /* ========== Coroutine Entry Type ========== */
 
@@ -98,10 +96,10 @@ typedef enum {
 typedef union {
     XrClosure *closure;
     struct {
-        void (*func)(void*);
+        void (*func)(void *);
         void *arg;
     } native;
-    XrCFuncResult (*cfunc)(struct XrayIsolate*, XrValue*, int, XrValue*);
+    XrCFuncResult (*cfunc)(struct XrayIsolate *, XrValue *, int, XrValue *);
 } XrCoroEntry;
 
 /* ========== JIT Scratch Space (per-Worker, not per-coroutine) ==========
@@ -119,9 +117,9 @@ typedef struct XrJitScratch {
     void *call_proto;           // Current proto for CALLSELF (XrProto*)
     void *call_closure;         // Current closure for upvalue access (XrClosure*)
     void *exception;            // Non-NULL when exception pending in JIT code
-    int64_t ret_count;          // Number of return values (0 = single via x0); int64_t for 8-byte alignment
-    uint32_t deopt_id;          // Deopt point ID (set by deopt stub)
-    uint32_t invoke_deopt_id;   // Valid deopt_id for CALL_C invoke recovery (deopt_id=0 safe)
+    int64_t ret_count;  // Number of return values (0 = single via x0); int64_t for 8-byte alignment
+    uint32_t deopt_id;  // Deopt point ID (set by deopt stub)
+    uint32_t invoke_deopt_id;  // Valid deopt_id for CALL_C invoke recovery (deopt_id=0 safe)
 
     /* Param tags: runtime XrValue.tag for each argument, set by xir_jit_call.
      * Used by JIT null-check codegen to distinguish int(0) from null
@@ -131,15 +129,15 @@ typedef struct XrJitScratch {
     /* Multi-return values: ret_vals[0] = 2nd return value, ret_vals[1] = 3rd, etc.
      * First return value goes through x0 as usual.
      * Tags for reconstruction stored in ret_tags[]. */
-    int64_t ret_vals[7];        // Extra return values (max 8 total, 1st in x0)
-    int64_t ret_tags[7];        // XrValue tags for ret_vals[] (int64_t for 8-byte alignment)
+    int64_t ret_vals[7];  // Extra return values (max 8 total, 1st in x0)
+    int64_t ret_tags[7];  // XrValue tags for ret_vals[] (int64_t for 8-byte alignment)
 
     /* Deopt register snapshot: saved by deopt stub before returning DEOPT_MARKER.
      * Indexed by physical register number for O(1) lookup.
      * GP: x0-x28 (29 slots), FP: d0-d15 (16 slots) */
     int64_t deopt_regs[29];
     int64_t deopt_fp_regs[16];
-    int64_t deopt_spill_base;   // Frame pointer at deopt (legacy, kept for GC)
+    int64_t deopt_spill_base;  // Frame pointer at deopt (legacy, kept for GC)
 
     /* Spill slot snapshot: copied from frame by deopt stub BEFORE epilogue.
      * Indexed by spill slot number: deopt_spill_save[slot] = frame[SPILL_BASE + slot*8].
@@ -147,15 +145,15 @@ typedef struct XrJitScratch {
      * Max slots = XIR_MAX_SPILL_SLOTS (32). */
     int64_t deopt_spill_save[32];
 
-    int32_t osr_deopt_pc;           // OSR deopt recovery: bytecode PC to resume (-1 = none)
+    int32_t osr_deopt_pc;  // OSR deopt recovery: bytecode PC to resume (-1 = none)
 
     /* GC stack map: compile-time bitmap for precise GC root scanning.
      * active_safepoint_id indexes into active_stack_map->entries[] to find
      * which registers/spill slots hold GC pointers at the current safepoint. */
-    uint32_t active_safepoint_id;   // current safepoint index (UINT32_MAX = none)
-    void *active_stack_map;         // XrStackMapTable* for current JIT function
-    void *jit_frame_sp;             // FP of current (innermost) JIT frame
-    void *safepoint_saved_sp;       // SP saved by safepoint stub (for reading saved regs)
+    uint32_t active_safepoint_id;  // current safepoint index (UINT32_MAX = none)
+    void *active_stack_map;        // XrStackMapTable* for current JIT function
+    void *jit_frame_sp;            // FP of current (innermost) JIT frame
+    void *safepoint_saved_sp;      // SP saved by safepoint stub (for reading saved regs)
 
     /* JIT frame stack: caller FPs pushed before cross-function JIT calls.
      *
@@ -190,9 +188,9 @@ typedef struct XrJitScratch {
      * populates the VM stack, pre-pushes an interpreter frame, and calls
      * the yieldable in normal mode. If BLOCKED/YIELD, these fields signal
      * the VM to skip deopt recovery and return the appropriate result. */
-    int32_t call_base_offset;       // callee base_offset (set by VM before xir_jit_call)
-    bool yield_frame_pushed;        // helper pre-pushed frame, yieldable blocked/yielded
-    uint8_t yield_vm_result;        // XR_VM_BLOCKED or XR_VM_YIELD
+    int32_t call_base_offset;  // callee base_offset (set by VM before xir_jit_call)
+    bool yield_frame_pushed;   // helper pre-pushed frame, yieldable blocked/yielded
+    uint8_t yield_vm_result;   // XR_VM_BLOCKED or XR_VM_YIELD
 
     /* Heartbeat pointer: set by run_on_worker to &machine->heartbeat.
      * Bumped by xr_coro_gc_safepoint so sysmon doesn't misdetect
@@ -204,44 +202,44 @@ typedef struct XrJitScratch {
      * Normal: PROT_READ, ldr wzr,[x20] succeeds (zero overhead).
      * Armed:  PROT_NONE, ldr faults → SIGSEGV → trampoline → safepoint.
      * Sysmon periodically arms via mprotect; trampoline disarms after work. */
-    void *safepoint_page;           // mmap'd guard page (one per worker)
-    void *safepoint_return_pc;      // saved PC+4 after guard page fault
+    void *safepoint_page;       // mmap'd guard page (one per worker)
+    void *safepoint_return_pc;  // saved PC+4 after guard page fault
 
 } XrJitScratch;
 
 /* ========== Await State Machine ========== */
 
 typedef enum {
-    XR_AWAIT_NONE     = 0,  // not awaited (initial / consumed)
-    XR_AWAIT_WAITING  = 1,  // parent suspended, waiting for child
+    XR_AWAIT_NONE = 0,      // not awaited (initial / consumed)
+    XR_AWAIT_WAITING = 1,   // parent suspended, waiting for child
     XR_AWAIT_RESOLVED = 2,  // child completed, result in coro->result
 } XrAwaitState;
 
 /* ========== XrCoroExt - Cold fields allocated on demand ========== */
 
 typedef struct XrCoroExt {
-    char *io_buf;                      // I/O read buffer (reused across calls)
+    char *io_buf;  // I/O read buffer (reused across calls)
     size_t io_buf_cap;
     struct XrMap *locals;              // Per-coroutine dynamic locals (debug/inspect)
     struct XrCoroMonitor *watched_by;  // Monitor list head (lifecycle watchers)
 
     /* === I/O yield state (only set during Yieldable I/O or sleep) === */
     struct {
-        int wait_fd;           // fd being waited on (-1 = no fd)
-        int wait_events;       // requested events (POLLIN/POLLOUT)
-        int result_events;     // events returned by netpoll
-        int64_t deadline;      // absolute deadline in microseconds (-1 = none)
+        int wait_fd;        // fd being waited on (-1 = no fd)
+        int wait_events;    // requested events (POLLIN/POLLOUT)
+        int result_events;  // events returned by netpoll
+        int64_t deadline;   // absolute deadline in microseconds (-1 = none)
         bool timed_out;
     } yield_info;
 
     /* === Thread-lock extras (only set when Coro.lockThread() is called) === */
-    _Atomic int lock_count;    // lock nesting depth (0 = unlocked)
-    int locked_worker;         // Worker ID that owns the lock (-1 = none)
+    _Atomic int lock_count;  // lock nesting depth (0 = unlocked)
+    int locked_worker;       // Worker ID that owns the lock (-1 = none)
 
     /* === Timer (only allocated on first sleep/timeout use) === */
     XrTWheelTimer timer;
     _Atomic bool timer_active;
-    int timer_wheel_owner;     // Worker ID that owns the timer (-1 = none)
+    int timer_wheel_owner;  // Worker ID that owns the timer (-1 = none)
     _Atomic uintptr_t timer_seq;
 } XrCoroExt;
 
@@ -275,33 +273,33 @@ typedef struct XrCoroExt {
  *   +200  spill[XIR_SUSPEND_SPILL_MAX] spill slots bridging old→new stack frame
  */
 typedef struct XrJitSuspendState {
-    int64_t caller_saved[15];   // x1-x15
-    int64_t callee_saved[8];    // x20-x27
-    int64_t result;             // await/channel result (written by block helper or waker)
-    int64_t result_tag;         // XR_TAG_* for result (resume writes to runtime_tags)
-    int64_t spill[XIR_SUSPEND_SPILL_MAX]; // spill slots (old frame → suspend → new frame)
+    int64_t caller_saved[15];  // x1-x15
+    int64_t callee_saved[8];   // x20-x27
+    int64_t result;            // await/channel result (written by block helper or waker)
+    int64_t result_tag;        // XR_TAG_* for result (resume writes to runtime_tags)
+    int64_t spill[XIR_SUSPEND_SPILL_MAX];  // spill slots (old frame → suspend → new frame)
 } XrJitSuspendState;
 
 typedef struct XrCoroutine {
     /* ================================================================
      * HOT ZONE (first 64 bytes) — accessed every schedule/yield cycle
      * ================================================================ */
-    XrGCHeader gc;                    // 16 bytes: GC header (must be first)
-    _Atomic uint32_t flags;           //  4 bytes: state flags (every dispatch)
-    int32_t reductions;               //  4 bytes: remaining before yield (JIT: check <= 0)
-    struct XrCoroutine *sched_link;   //  8 bytes: MPSC/steal queue linkage
-    struct XrCoroutine *next;         //  8 bytes: blocked/ready list linkage
-    struct XrCoroutine *prev;         //  8 bytes: blocked/ready list linkage
-    _Atomic int resume_status;        //  4 bytes: checked on every resume
-    _Atomic int affinity_p;           //  4 bytes: preferred worker for wake (relaxed ok, hint only)
-    int id;                           //  4 bytes: coroutine ID
-    int8_t schedule_count;            //  1 byte: schedule counter (max XR_RESCHEDULE_LOW=8)
-    _Atomic(uint8_t) coro_state;      //  1 byte: authoritative state (R4: replaces state bits in flags)
-    uint16_t gc_flags;                //  2 bytes: GC flags (bit 0: slab stack)
+    XrGCHeader gc;                   // 16 bytes: GC header (must be first)
+    _Atomic uint32_t flags;          //  4 bytes: state flags (every dispatch)
+    int32_t reductions;              //  4 bytes: remaining before yield (JIT: check <= 0)
+    struct XrCoroutine *sched_link;  //  8 bytes: MPSC/steal queue linkage
+    struct XrCoroutine *next;        //  8 bytes: blocked/ready list linkage
+    struct XrCoroutine *prev;        //  8 bytes: blocked/ready list linkage
+    _Atomic int resume_status;       //  4 bytes: checked on every resume
+    _Atomic int affinity_p;          //  4 bytes: preferred worker for wake (relaxed ok, hint only)
+    int id;                          //  4 bytes: coroutine ID
+    int8_t schedule_count;           //  1 byte: schedule counter (max XR_RESCHEDULE_LOW=8)
+    _Atomic(uint8_t) coro_state;  //  1 byte: authoritative state (R4: replaces state bits in flags)
+    uint16_t gc_flags;            //  2 bytes: GC flags (bit 0: slab stack)
     // --- 64 bytes boundary ---
 
     /* === Work Stealing Freshness (set on enqueue, read on steal peek) === */
-    int64_t submit_time;              //  8 bytes: monotonic ms when enqueued to run queue
+    int64_t submit_time;  //  8 bytes: monotonic ms when enqueued to run queue
 
     /* === VM Execution Context === */
     XrVMContext vm_ctx;
@@ -310,26 +308,26 @@ typedef struct XrCoroutine {
      * WARM ZONE (Cache Line 3, offset 192+) — JIT/GC/result hot fields
      * Grouped here to minimize cache misses on JIT entry and GC safepoint.
      * ================================================================ */
-    struct XrJitScratch *jit_ctx;     // JIT prologue loads x28 from this
-    struct XrCoroGC *coro_gc;         // GC safepoint: checked every loop back-edge
-    struct XrayIsolate *isolate;      // JIT runtime helpers use 22+ times
+    struct XrJitScratch *jit_ctx;  // JIT prologue loads x28 from this
+    struct XrCoroGC *coro_gc;      // GC safepoint: checked every loop back-edge
+    struct XrayIsolate *isolate;   // JIT runtime helpers use 22+ times
     XrValue result;
     XrValue error;
-    XrValue pending_closure_result;   // return value from xr_yield_call_closure
+    XrValue pending_closure_result;  // return value from xr_yield_call_closure
 
     /* === Task Handle (GC-managed user-visible handle) === */
-    struct XrTask *task;                      // back-pointer to associated XrTask (NULL for main coro)
+    struct XrTask *task;  // back-pointer to associated XrTask (NULL for main coro)
 
     /* === Await/Wait Support (caller-side only; awaited-side fields live on XrTask) === */
-    struct XrTask * _Atomic await_task;   // task being awaited (for post-check race detection)
+    struct XrTask *_Atomic await_task;  // task being awaited (for post-check race detection)
     _Atomic int wait_count;
     _Atomic bool any_done;
     struct XrArray *await_results;
     struct XrScopeContext *parent_scope;
-    struct XrCoroutine *scope_sibling;   // linked list within parent_scope
+    struct XrCoroutine *scope_sibling;  // linked list within parent_scope
 
     /* === Channel Blocking === */
-    struct XrCoroutine *wait_link;   // channel waitq linkage (separate from sched_link)
+    struct XrCoroutine *wait_link;  // channel waitq linkage (separate from sched_link)
     void *wait_channel;
     bool wait_send;
     XrValue send_value;
@@ -341,17 +339,17 @@ typedef struct XrCoroutine {
 
     /* === Resume State (extended) === */
     int16_t pending_result_slot;
-    bool jit_try_mode;              // JIT try-mode: yieldable should return WOULD_BLOCK instead of blocking
+    bool jit_try_mode;  // JIT try-mode: yieldable should return WOULD_BLOCK instead of blocking
 
     /* === JIT Suspend/Resume ===
      * When JIT code hits AWAIT and the child isn't done, it saves live
      * registers here and returns XIR_SUSPEND_MARKER. On resume, the
      * worker calls jit_resume_entry which reloads registers and jumps
      * to the continuation point via jit_suspend_id. */
-    void *jit_resume_entry;             // resume code address (NULL = not JIT-suspended)
-    void *jit_resume_proto;             // XrProto* that owns the resume code (for stack map)
-    uint32_t jit_suspend_id;            // resume point index (jump table dispatch)
-    uint32_t jit_suspend_smap_id;       // stack map id at suspend point (for GC)
+    void *jit_resume_entry;        // resume code address (NULL = not JIT-suspended)
+    void *jit_resume_proto;        // XrProto* that owns the resume code (for stack map)
+    uint32_t jit_suspend_id;       // resume point index (jump table dispatch)
+    uint32_t jit_suspend_smap_id;  // stack map id at suspend point (for GC)
 
     /*
      * JIT suspend state: saved registers across suspend/resume.
@@ -393,7 +391,7 @@ typedef struct XrCoroutine {
 
 static inline XrCoroExt *xr_coro_ensure_ext(XrCoroutine *coro) {
     if (!coro->ext) {
-        coro->ext = (XrCoroExt *)xr_calloc(1, sizeof(XrCoroExt));
+        coro->ext = (XrCoroExt *) xr_calloc(1, sizeof(XrCoroExt));
     }
     return coro->ext;
 }
@@ -447,7 +445,7 @@ typedef struct XrBlockedBucket {
     XrCoroutine *send_tail;
     XrCoroutine *recv_head;
     XrCoroutine *recv_tail;
-    XrSelectCase *select_head;       // Per-channel select case chain.
+    XrSelectCase *select_head;  // Per-channel select case chain.
     XrSelectCase *select_tail;
     struct XrBlockedBucket *next;
 } XrBlockedBucket;
@@ -521,7 +519,8 @@ typedef struct XrScopeContext {
     struct XrCoroutine *first_child;  // linked list of child coros in this scope
 } XrScopeContext;
 
-/* ========== Coroutine State (single-thread scheduler + isolate-level coro bookkeeping) ========== */
+/* ========== Coroutine State (single-thread scheduler + isolate-level coro bookkeeping) ==========
+ */
 
 typedef struct XrCoroState {
     XrCoroutine *ready_head[XR_CORO_PRIORITY_COUNT];
@@ -538,9 +537,8 @@ struct XrayIsolate;
 struct XrClosure;
 
 // Lifecycle
-XR_FUNC XrCoroutine *xr_coro_create(struct XrayIsolate *X, struct XrClosure *closure,
-                            XrValue *args, int arg_count,
-                            const char *name, const char *file, int line);
+XR_FUNC XrCoroutine *xr_coro_create(struct XrayIsolate *X, struct XrClosure *closure, XrValue *args,
+                                    int arg_count, const char *name, const char *file, int line);
 XR_FUNC void xr_coro_free(XrCoroutine *coro);
 XR_FUNC void xr_coro_release_heap(XrCoroutine *coro);
 XR_FUNC void xr_coro_release_resources(XrCoroutine *coro);
@@ -563,7 +561,8 @@ XR_FUNC XrCoroutine *xr_current_coro(struct XrayIsolate *X);
 XR_FUNC void xr_coro_wake_waiter(struct XrayIsolate *X, XrCoroutine *coro);
 
 // Channel wake (auto fallback to single-thread mode)
-XR_FUNC XrCoroutine *xr_runtime_wake_channel(struct XrayIsolate *X, void *channel, bool wake_sender);
+XR_FUNC XrCoroutine *xr_runtime_wake_channel(struct XrayIsolate *X, void *channel,
+                                             bool wake_sender);
 XR_FUNC void xr_runtime_wake_channel_all(struct XrayIsolate *X, void *channel);
 
 // Control
@@ -572,4 +571,4 @@ XR_FUNC void xr_coro_cancel(XrCoroutine *coro);
 // Scope structured concurrency
 XR_FUNC void xr_scope_add_coro(XrCoroState *sched, XrCoroutine *coro, XrCoroutine *parent);
 
-#endif // XCOROUTINE_H
+#endif  // XCOROUTINE_H

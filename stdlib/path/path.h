@@ -34,6 +34,6 @@
 #include "../../src/vm/xvm.h"
 #include "../../src/runtime/object/xstring.h"
 
-XrModule* xr_load_module_path(XrayIsolate *isolate);
+XrModule *xr_load_module_path(XrayIsolate *isolate);
 
 #endif

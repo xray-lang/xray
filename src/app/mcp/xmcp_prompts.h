@@ -28,4 +28,4 @@ XR_FUNC XrJsonValue *xmcp_handle_prompts_list(void);
 /* Handle "prompts/get" request. */
 XR_FUNC XrJsonValue *xmcp_handle_prompts_get(XmcpServer *server, XrJsonValue *params);
 
-#endif // XMCP_PROMPTS_H
+#endif  // XMCP_PROMPTS_H

@@ -84,7 +84,8 @@ static XrLspTask *queue_pop(XrLspTaskQueue *q) {
 
 // Mark tasks as cancelled by filter (traverses queue safely)
 // Returns count of tasks marked for cancellation
-static int queue_cancel_if(XrLspTaskQueue *q, bool (*filter)(XrLspTask *task, void *ctx), void *ctx) {
+static int queue_cancel_if(XrLspTaskQueue *q, bool (*filter)(XrLspTask *task, void *ctx),
+                           void *ctx) {
     int cancelled = 0;
 
     pthread_rwlock_wrlock(&q->traverse_lock);
@@ -118,7 +119,7 @@ static int queue_cancel_if(XrLspTaskQueue *q, bool (*filter)(XrLspTask *task, vo
 // ============================================================================
 
 static void *worker_thread(void *arg) {
-    XrLspAsync *async = (XrLspAsync *)arg;
+    XrLspAsync *async = (XrLspAsync *) arg;
 
     // Run the optional per-thread init (e.g. to install tls_server so
     // lsp_log inside task execution writes to the same file as the main
@@ -135,11 +136,13 @@ static void *worker_thread(void *arg) {
         }
         pthread_mutex_unlock(&async->pending_mutex);
 
-        if (!atomic_load(&async->running)) break;
+        if (!atomic_load(&async->running))
+            break;
 
         // Pop task from pending queue
         XrLspTask *task = queue_pop(&async->pending);
-        if (!task) continue;
+        if (!task)
+            continue;
 
         // Check if already cancelled before starting
         if (atomic_load(&task->cancel_requested)) {
@@ -151,7 +154,7 @@ static void *worker_thread(void *arg) {
             atomic_fetch_add(&async->completed_count, 1);
             char byte = 1;
             ssize_t n = write(async->notify_fd[1], &byte, 1);
-            (void)n;
+            (void) n;
             continue;
         }
 
@@ -166,7 +169,7 @@ static void *worker_thread(void *arg) {
             atomic_fetch_add(&async->completed_count, 1);
             char byte = 1;
             ssize_t n = write(async->notify_fd[1], &byte, 1);
-            (void)n;
+            (void) n;
             continue;
         }
 
@@ -206,7 +209,7 @@ static void *worker_thread(void *arg) {
         // Notify main thread
         char byte = 1;
         ssize_t n = write(async->notify_fd[1], &byte, 1);
-        (void)n;  // Ignore write errors
+        (void) n;  // Ignore write errors
     }
 
     return NULL;
@@ -218,7 +221,8 @@ static void *worker_thread(void *arg) {
 
 XrLspAsync *xlsp_async_new(void) {
     XrLspAsync *async = xr_calloc(1, sizeof(XrLspAsync));
-    if (!async) return NULL;
+    if (!async)
+        return NULL;
 
     // Create notification pipe
     if (pipe(async->notify_fd) < 0) {
@@ -260,7 +264,8 @@ XrLspAsync *xlsp_async_new(void) {
 }
 
 void xlsp_async_free(XrLspAsync *async) {
-    if (!async) return;
+    if (!async)
+        return;
 
     // Signal shutdown
     atomic_store(&async->running, false);
@@ -303,7 +308,8 @@ void xlsp_async_free(XrLspAsync *async) {
 }
 
 uint64_t xlsp_async_submit(XrLspAsync *async, XrLspTask *task) {
-    if (!async || !task) return 0;
+    if (!async || !task)
+        return 0;
 
     // Assign task ID
     task->task_id = atomic_fetch_add(&async->next_task_id, 1);
@@ -323,16 +329,16 @@ uint64_t xlsp_async_submit(XrLspAsync *async, XrLspTask *task) {
     return task->task_id;
 }
 
-XrLspTask *xlsp_task_new(XrLspTaskFn execute, XrLspCompleteFn complete,
-                          void *data, XrLspTaskPriority priority) {
+XrLspTask *xlsp_task_new(XrLspTaskFn execute, XrLspCompleteFn complete, void *data,
+                         XrLspTaskPriority priority) {
     return xlsp_task_new_ex(execute, complete, data, priority, XLSP_TASK_TYPE_GENERIC, 0);
 }
 
-XrLspTask *xlsp_task_new_ex(XrLspTaskFn execute, XrLspCompleteFn complete,
-                             void *data, XrLspTaskPriority priority,
-                             XrLspTaskType type, int64_t request_id) {
+XrLspTask *xlsp_task_new_ex(XrLspTaskFn execute, XrLspCompleteFn complete, void *data,
+                            XrLspTaskPriority priority, XrLspTaskType type, int64_t request_id) {
     XrLspTask *task = xr_calloc(1, sizeof(XrLspTask));
-    if (!task) return NULL;
+    if (!task)
+        return NULL;
 
     task->execute = execute;
     task->complete = complete;
@@ -354,7 +360,8 @@ void xlsp_task_free(XrLspTask *task) {
 }
 
 int xlsp_async_poll(XrLspAsync *async) {
-    if (!async) return 0;
+    if (!async)
+        return 0;
 
     // Drain notification pipe
     char buf[64];
@@ -399,34 +406,35 @@ typedef struct {
 
 // Filter: match by task ID
 static bool filter_by_task_id(XrLspTask *task, void *ctx) {
-    CancelFilterCtx *c = (CancelFilterCtx *)ctx;
+    CancelFilterCtx *c = (CancelFilterCtx *) ctx;
     return task->task_id == c->task_id;
 }
 
 // Filter: match by request ID
 static bool filter_by_request_id(XrLspTask *task, void *ctx) {
-    CancelFilterCtx *c = (CancelFilterCtx *)ctx;
+    CancelFilterCtx *c = (CancelFilterCtx *) ctx;
     return task->request_id == c->request_id;
 }
 
 // Filter: match by task type
 static bool filter_by_type(XrLspTask *task, void *ctx) {
-    CancelFilterCtx *c = (CancelFilterCtx *)ctx;
+    CancelFilterCtx *c = (CancelFilterCtx *) ctx;
     return task->type == c->type;
 }
 
 // Filter: match all
 static bool filter_all(XrLspTask *task, void *ctx) {
-    (void)task;
-    (void)ctx;
+    (void) task;
+    (void) ctx;
     return true;
 }
 
 // Cancel by task ID
 bool xlsp_async_cancel_task(XrLspAsync *async, uint64_t task_id) {
-    if (!async || task_id == 0) return false;
+    if (!async || task_id == 0)
+        return false;
 
-    CancelFilterCtx ctx = { .task_id = task_id };
+    CancelFilterCtx ctx = {.task_id = task_id};
 
     // First, check if this is the currently running task
     // Use mutex to prevent TOCTOU race with worker thread
@@ -446,9 +454,10 @@ bool xlsp_async_cancel_task(XrLspAsync *async, uint64_t task_id) {
 
 // Cancel by LSP request ID
 int xlsp_async_cancel_request(XrLspAsync *async, int64_t request_id) {
-    if (!async || request_id == 0) return 0;
+    if (!async || request_id == 0)
+        return 0;
 
-    CancelFilterCtx ctx = { .request_id = request_id };
+    CancelFilterCtx ctx = {.request_id = request_id};
     int cancelled = 0;
 
     // Check currently running task with mutex protection
@@ -467,9 +476,10 @@ int xlsp_async_cancel_request(XrLspAsync *async, int64_t request_id) {
 
 // Cancel by task type
 int xlsp_async_cancel_type(XrLspAsync *async, XrLspTaskType type) {
-    if (!async) return 0;
+    if (!async)
+        return 0;
 
-    CancelFilterCtx ctx = { .type = type };
+    CancelFilterCtx ctx = {.type = type};
     int cancelled = 0;
 
     // Check currently running task with mutex protection
@@ -488,7 +498,8 @@ int xlsp_async_cancel_type(XrLspAsync *async, XrLspTaskType type) {
 
 // Cancel with custom filter
 int xlsp_async_cancel(XrLspAsync *async, bool (*filter)(XrLspTask *task, void *ctx), void *ctx) {
-    if (!async || !filter) return 0;
+    if (!async || !filter)
+        return 0;
 
     int cancelled = 0;
 
@@ -508,7 +519,8 @@ int xlsp_async_cancel(XrLspAsync *async, bool (*filter)(XrLspTask *task, void *c
 
 // Cancel all pending tasks
 int xlsp_async_cancel_all(XrLspAsync *async) {
-    if (!async) return 0;
+    if (!async)
+        return 0;
 
     int cancelled = 0;
 

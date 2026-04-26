@@ -19,15 +19,15 @@
 #include <stdlib.h>
 #include <string.h>
 
-static char* copy_token_string(Parser *parser, Token *token) {
-    char *str = (char *)ast_alloc(parser->X, (size_t)token->length + 1);
+static char *copy_token_string(Parser *parser, Token *token) {
+    char *str = (char *) ast_alloc(parser->X, (size_t) token->length + 1);
     memcpy(str, token->start, token->length);
     str[token->length] = '\0';
     return str;
 }
 
 // Parse flat array destructuring: [a, b, c] or [a, _, c]
-XrDestructurePattern* xr_parse_array_pattern(Parser *parser) {
+XrDestructurePattern *xr_parse_array_pattern(Parser *parser) {
     XR_DCHECK(parser != NULL, "parse_array_pattern: NULL parser");
     // '[' already consumed
     XrDestructurePattern **elements = NULL;
@@ -38,11 +38,12 @@ XrDestructurePattern* xr_parse_array_pattern(Parser *parser) {
         if (count >= capacity) {
             int old_capacity = capacity;
             capacity = (capacity == 0) ? 4 : capacity * 2;
-            XrDestructurePattern **_new_elements = (XrDestructurePattern **)ast_alloc_array(
-                parser->X, sizeof(XrDestructurePattern *), (size_t)capacity);
-            if (old_capacity > 0 && elements) memcpy(_new_elements, elements, sizeof(XrDestructurePattern *) * (size_t)old_capacity);
+            XrDestructurePattern **_new_elements = (XrDestructurePattern **) ast_alloc_array(
+                parser->X, sizeof(XrDestructurePattern *), (size_t) capacity);
+            if (old_capacity > 0 && elements)
+                memcpy(_new_elements, elements,
+                       sizeof(XrDestructurePattern *) * (size_t) old_capacity);
             elements = _new_elements;
-
         }
 
         // Skip element: comma without identifier
@@ -60,9 +61,9 @@ XrDestructurePattern* xr_parse_array_pattern(Parser *parser) {
         else if (xr_parser_match(parser, TK_NAME)) {
             char *name = copy_token_string(parser, &parser->previous);
             elements[count++] = xr_pattern_identifier(parser->X, name, NULL);
-        }
-        else {
-            xr_parser_error_expected_name(parser, "expected identifier or '_' in array destructuring");
+        } else {
+            xr_parser_error_expected_name(parser,
+                                          "expected identifier or '_' in array destructuring");
             return NULL;
         }
 
@@ -80,7 +81,7 @@ XrDestructurePattern* xr_parse_array_pattern(Parser *parser) {
 
 // Parse flat object destructuring: {name, age}
 // Variable names must match field names exactly (no renaming, no defaults).
-XrDestructurePattern* xr_parse_object_pattern(Parser *parser) {
+XrDestructurePattern *xr_parse_object_pattern(Parser *parser) {
     XR_DCHECK(parser != NULL, "parse_object_pattern: NULL parser");
     // '{' already consumed
     char **field_names = NULL;
@@ -92,16 +93,18 @@ XrDestructurePattern* xr_parse_object_pattern(Parser *parser) {
         if (count >= capacity) {
             int old_capacity = capacity;
             capacity = (capacity == 0) ? 4 : capacity * 2;
-            char **_new_field_names = (char **)ast_alloc_array(
-                parser->X, sizeof(char *), (size_t)capacity);
-            if (old_capacity > 0 && field_names) memcpy(_new_field_names, field_names, sizeof(char *) * (size_t)old_capacity);
+            char **_new_field_names =
+                (char **) ast_alloc_array(parser->X, sizeof(char *), (size_t) capacity);
+            if (old_capacity > 0 && field_names)
+                memcpy(_new_field_names, field_names, sizeof(char *) * (size_t) old_capacity);
             field_names = _new_field_names;
 
-            XrDestructurePattern **_new_patterns = (XrDestructurePattern **)ast_alloc_array(
-                parser->X, sizeof(XrDestructurePattern *), (size_t)capacity);
-            if (old_capacity > 0 && patterns) memcpy(_new_patterns, patterns, sizeof(XrDestructurePattern *) * (size_t)old_capacity);
+            XrDestructurePattern **_new_patterns = (XrDestructurePattern **) ast_alloc_array(
+                parser->X, sizeof(XrDestructurePattern *), (size_t) capacity);
+            if (old_capacity > 0 && patterns)
+                memcpy(_new_patterns, patterns,
+                       sizeof(XrDestructurePattern *) * (size_t) old_capacity);
             patterns = _new_patterns;
-
         }
 
         if (!xr_parser_match(parser, TK_NAME)) {
@@ -114,7 +117,7 @@ XrDestructurePattern* xr_parse_object_pattern(Parser *parser) {
         // Reject renaming syntax: {name: alias}
         if (xr_parser_check(parser, TK_COLON)) {
             xr_parser_error(parser, "renaming in destructuring is not supported; "
-                            "variable name must match field name");
+                                    "variable name must match field name");
             return NULL;
         }
 
@@ -135,7 +138,7 @@ XrDestructurePattern* xr_parse_object_pattern(Parser *parser) {
 }
 
 // Unified entry point
-XrDestructurePattern* xr_parse_destructure_pattern(Parser *parser) {
+XrDestructurePattern *xr_parse_destructure_pattern(Parser *parser) {
     XR_DCHECK(parser != NULL, "parse_destructure_pattern: NULL parser");
     if (xr_parser_match(parser, TK_LBRACKET)) {
         return xr_parse_array_pattern(parser);
@@ -148,12 +151,13 @@ XrDestructurePattern* xr_parse_destructure_pattern(Parser *parser) {
 }
 
 // Parse destructuring declaration: let [a, b] = expr  or  const {x, y} = expr
-AstNode* xr_parse_destructure_declaration(Parser *parser, bool is_const) {
+AstNode *xr_parse_destructure_declaration(Parser *parser, bool is_const) {
     XR_DCHECK(parser != NULL, "parse_destructure_declaration: NULL parser");
     int line = parser->previous.line;
 
     XrDestructurePattern *pattern = xr_parse_destructure_pattern(parser);
-    if (!pattern) return NULL;
+    if (!pattern)
+        return NULL;
 
     if (!xr_parser_match(parser, TK_ASSIGN)) {
         xr_parser_error(parser, "destructuring declaration requires initializer");
@@ -168,4 +172,3 @@ AstNode* xr_parse_destructure_declaration(Parser *parser, bool is_const) {
 
     return xr_ast_destructure_decl(parser->X, pattern, initializer, is_const, line);
 }
-

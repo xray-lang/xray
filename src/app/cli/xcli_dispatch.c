@@ -26,24 +26,33 @@
 /* Levenshtein edit distance (single-row DP, O(min(m,n)) space).
  * Command names are short (<16 chars) so this is effectively free. */
 static int string_distance(const char *s1, const char *s2) {
-    int len1 = (int)strlen(s1);
-    int len2 = (int)strlen(s2);
-    if (len1 == 0) return len2;
-    if (len2 == 0) return len1;
+    int len1 = (int) strlen(s1);
+    int len2 = (int) strlen(s2);
+    if (len1 == 0)
+        return len2;
+    if (len2 == 0)
+        return len1;
     if (len1 > len2) {
-        const char *tmp_s = s1; s1 = s2; s2 = tmp_s;
-        int tmp_n = len1; len1 = len2; len2 = tmp_n;
+        const char *tmp_s = s1;
+        s1 = s2;
+        s2 = tmp_s;
+        int tmp_n = len1;
+        len1 = len2;
+        len2 = tmp_n;
     }
     int row[33];
-    for (int j = 0; j <= len1; j++) row[j] = j;
+    for (int j = 0; j <= len1; j++)
+        row[j] = j;
     for (int i = 1; i <= len2; i++) {
         int prev = row[0];
         row[0] = i;
         for (int j = 1; j <= len1; j++) {
             int cost = (s1[j - 1] == s2[i - 1]) ? 0 : 1;
             int val = prev + cost;
-            if (row[j] + 1 < val) val = row[j] + 1;
-            if (row[j - 1] + 1 < val) val = row[j - 1] + 1;
+            if (row[j] + 1 < val)
+                val = row[j] + 1;
+            if (row[j - 1] + 1 < val)
+                val = row[j - 1] + 1;
             prev = row[j];
             row[j] = val;
         }
@@ -79,23 +88,23 @@ XR_FUNC int cmd_mcp_server(const XrCliInvocation *inv);
 /* Register all command handlers into the spec table.
  * Must be called once before xr_cli_main(). */
 void xr_cli_register_all_handlers(void) {
-    xr_cli_register_handler("run",     cmd_run);
-    xr_cli_register_handler("eval",    cmd_eval);
-    xr_cli_register_handler("repl",    cmd_repl);
-    xr_cli_register_handler("test",    cmd_test);
-    xr_cli_register_handler("check",   cmd_check);
-    xr_cli_register_handler("fmt",     cmd_fmt);
+    xr_cli_register_handler("run", cmd_run);
+    xr_cli_register_handler("eval", cmd_eval);
+    xr_cli_register_handler("repl", cmd_repl);
+    xr_cli_register_handler("test", cmd_test);
+    xr_cli_register_handler("check", cmd_check);
+    xr_cli_register_handler("fmt", cmd_fmt);
     xr_cli_register_handler("compile", cmd_compile);
-    xr_cli_register_handler("build",   cmd_build);
-    xr_cli_register_handler("deps",    cmd_deps);
-    xr_cli_register_handler("pkg",     cmd_pkg);
-    xr_cli_register_handler("info",    cmd_info);
-    xr_cli_register_handler("help",    cmd_help);
+    xr_cli_register_handler("build", cmd_build);
+    xr_cli_register_handler("deps", cmd_deps);
+    xr_cli_register_handler("pkg", cmd_pkg);
+    xr_cli_register_handler("info", cmd_info);
+    xr_cli_register_handler("help", cmd_help);
 #ifdef XR_HAS_LSP
-    xr_cli_register_handler("lsp",     cmd_lsp);
+    xr_cli_register_handler("lsp", cmd_lsp);
 #endif
 #ifdef XR_HAS_DAP
-    xr_cli_register_handler("dap",     cmd_dap);
+    xr_cli_register_handler("dap", cmd_dap);
 #endif
 #ifdef XR_HAS_MCP
     xr_cli_register_handler("mcp-server", cmd_mcp_server);
@@ -106,18 +115,15 @@ void xr_cli_register_all_handlers(void) {
 
 /* Parse command args via unified parser, then call handler.
  * cmd_argc/cmd_argv start AFTER the command name. */
-static int dispatch_new_handler(const XrCliCommandSpec *spec,
-                                XrCliHandler handler,
-                                int cmd_argc, char **cmd_argv,
-                                const XrCliContext *ctx) {
+static int dispatch_new_handler(const XrCliCommandSpec *spec, XrCliHandler handler, int cmd_argc,
+                                char **cmd_argv, const XrCliContext *ctx) {
     XR_DCHECK(spec != NULL, "spec is NULL");
     XR_DCHECK(handler != NULL, "handler is NULL");
 
     XrCliInvocation inv;
-    XrCliExitCode rc = xr_cli_parse_command(spec, cmd_argc, cmd_argv,
-                                             ctx, &inv);
+    XrCliExitCode rc = xr_cli_parse_command(spec, cmd_argc, cmd_argv, ctx, &inv);
     if (rc != XR_CLI_EXIT_OK) {
-        return (int)rc;
+        return (int) rc;
     }
 
     int result = handler(&inv);
@@ -128,7 +134,7 @@ static int dispatch_new_handler(const XrCliCommandSpec *spec,
 /* ========== Info Command ========== */
 
 XR_FUNC int cmd_info(const XrCliInvocation *inv) {
-    (void)inv;
+    (void) inv;
     xr_cli_print_version();
     printf("\nEnvironment:\n");
     const char *home = getenv("HOME");
@@ -170,7 +176,8 @@ bool xr_cli_suggest_command(const char *input) {
     int best_dist = 999;
 
     for (int i = 0; cmds[i].name != NULL; i++) {
-        if (cmds[i].hidden) continue;
+        if (cmds[i].hidden)
+            continue;
         int dist = string_distance(input, cmds[i].name);
         if (dist < best_dist && dist <= 2) {
             best_dist = dist;
@@ -207,7 +214,7 @@ int xr_cli_main(int argc, char **argv) {
     }
 
     /* Adjust for consumed global flags */
-    int cmd_argc = argc - 1 - consumed;  /* skip argv[0] + consumed flags */
+    int cmd_argc = argc - 1 - consumed; /* skip argv[0] + consumed flags */
     char **cmd_argv = argv + 1 + consumed;
 
     /* Zero arguments after global flags -> default to REPL */
@@ -231,27 +238,23 @@ int xr_cli_main(int argc, char **argv) {
                 xr_cli_print_subcommand_help(spec);
                 return XR_CLI_EXIT_OK;
             }
-            if (strcmp(cmd_argv[1], "--help") == 0 ||
-                strcmp(cmd_argv[1], "-h") == 0) {
+            if (strcmp(cmd_argv[1], "--help") == 0 || strcmp(cmd_argv[1], "-h") == 0) {
                 xr_cli_print_subcommand_help(spec);
                 return XR_CLI_EXIT_OK;
             }
-            return dispatch_new_handler(spec, spec->handler,
-                                         cmd_argc - 1, cmd_argv + 1, &ctx);
+            return dispatch_new_handler(spec, spec->handler, cmd_argc - 1, cmd_argv + 1, &ctx);
         }
 
         /* --help check before full parse */
         for (int i = 1; i < cmd_argc; i++) {
-            if (strcmp(cmd_argv[i], "--help") == 0 ||
-                strcmp(cmd_argv[i], "-h") == 0) {
+            if (strcmp(cmd_argv[i], "--help") == 0 || strcmp(cmd_argv[i], "-h") == 0) {
                 xr_cli_print_command_help(spec);
                 return XR_CLI_EXIT_OK;
             }
         }
 
         /* Dispatch via unified parser -> handler */
-        return dispatch_new_handler(spec, spec->handler,
-                                     cmd_argc - 1, cmd_argv + 1, &ctx);
+        return dispatch_new_handler(spec, spec->handler, cmd_argc - 1, cmd_argv + 1, &ctx);
     }
 
     /* Route 2: argv[1] ends with .xr -> implicit "run" */
@@ -260,8 +263,7 @@ int xr_cli_main(int argc, char **argv) {
         spec = xr_cli_find_command("run");
         XR_DCHECK(spec != NULL, "run command not found");
         XR_DCHECK(spec->handler != NULL, "run handler not found");
-        return dispatch_new_handler(spec, spec->handler,
-                                     cmd_argc, cmd_argv, &ctx);
+        return dispatch_new_handler(spec, spec->handler, cmd_argc, cmd_argv, &ctx);
     }
 
     /* Route 3: xray -e 'code' -> shortcut for eval */
@@ -269,8 +271,7 @@ int xr_cli_main(int argc, char **argv) {
         spec = xr_cli_find_command("eval");
         XR_DCHECK(spec != NULL, "eval command not found");
         XR_DCHECK(spec->handler != NULL, "eval handler not found");
-        return dispatch_new_handler(spec, spec->handler,
-                                     cmd_argc - 1, cmd_argv + 1, &ctx);
+        return dispatch_new_handler(spec, spec->handler, cmd_argc - 1, cmd_argv + 1, &ctx);
     }
 
     /* Route 4: Unknown command -> error + suggestion */

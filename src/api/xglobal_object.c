@@ -23,10 +23,10 @@
 
 /* ========== Global Object Creation and Destruction ========== */
 
-XrGlobalObject* xr_global_object_create(XrayIsolate* isolate) {
+XrGlobalObject *xr_global_object_create(XrayIsolate *isolate) {
     xray_api_checkr(isolate != NULL, "global_object_create: NULL isolate", NULL);
 
-    XrGlobalObject* global = (XrGlobalObject*)xr_malloc(sizeof(XrGlobalObject));
+    XrGlobalObject *global = (XrGlobalObject *) xr_malloc(sizeof(XrGlobalObject));
     if (global == NULL) {
         xr_log_warning("global", "global_object_create: failed to allocate global object");
         return NULL;
@@ -53,8 +53,9 @@ XrGlobalObject* xr_global_object_create(XrayIsolate* isolate) {
     return global;
 }
 
-void xr_global_object_destroy(XrGlobalObject* global) {
-    if (global == NULL) return;
+void xr_global_object_destroy(XrGlobalObject *global) {
+    if (global == NULL)
+        return;
 
     /* xr_hashmap_free only frees the entries array and map struct.
     ** Keys are borrowed const strings (TYPE_NAME_* macros), not owned.
@@ -72,30 +73,28 @@ void xr_global_object_destroy(XrGlobalObject* global) {
 
 /* ========== Registration API ========== */
 
-bool xr_global_register_class(XrGlobalObject* global,
-                               const char* name,
-                               XrClass* klass) {
+bool xr_global_register_class(XrGlobalObject *global, const char *name, XrClass *klass) {
     if (global == NULL || name == NULL || klass == NULL) {
         return false;
     }
 
-    xr_hashmap_set(global->properties, name, (void*)klass);
+    xr_hashmap_set(global->properties, name, (void *) klass);
 
     global->registered_class_count++;
     return true;
 }
 
-bool xr_global_register_all_core_classes(XrGlobalObject* global,
-                                          XrayIsolate* isolate) {
+bool xr_global_register_all_core_classes(XrGlobalObject *global, XrayIsolate *isolate) {
     if (global == NULL || isolate == NULL || xr_isolate_get_core_classes(isolate) == NULL) {
         xr_log_warning("global", "register_all_core_classes: invalid parameters");
         return false;
     }
 
-    XrayCoreClasses* core = xr_isolate_get_core_classes(isolate);
+    XrayCoreClasses *core = xr_isolate_get_core_classes(isolate);
 
-    #define REG_OR_FAIL(name, klass) \
-        if ((klass) && !xr_global_register_class(global, (name), (klass))) return false
+#define REG_OR_FAIL(name, klass)                                                                   \
+    if ((klass) && !xr_global_register_class(global, (name), (klass)))                             \
+    return false
 
     REG_OR_FAIL(CLASS_NAME_OBJECT, core->objectClass);
 
@@ -125,12 +124,13 @@ bool xr_global_register_all_core_classes(XrGlobalObject* global,
 
     REG_OR_FAIL(TYPE_NAME_STRINGBUILDER, core->stringBuilderClass);
 
-    #undef REG_OR_FAIL
+#undef REG_OR_FAIL
     return true;
 }
 
-bool xr_global_register_all_builtin_functions(XrGlobalObject* global) {
-    if (global == NULL) return false;
+bool xr_global_register_all_builtin_functions(XrGlobalObject *global) {
+    if (global == NULL)
+        return false;
     // Builtin functions (print, etc.) are handled by VM opcodes directly.
     return true;
 }

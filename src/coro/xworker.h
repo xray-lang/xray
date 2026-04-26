@@ -24,11 +24,11 @@
 #include <pthread.h>
 #include <stdatomic.h>
 #include <stdbool.h>
-#include "../runtime/gc/xgc_internal.h" // XrLocalAlloc
-#include "xnetpoll.h" // XrNetpoll
-#include "xproc.h" // XrProc, XrRunQueue, XR_RUNQ_COUNT
-#include "xmachine.h" // XrMachine
-#include "xbalance.h" // XrMigrationPath
+#include "../runtime/gc/xgc_internal.h"  // XrLocalAlloc
+#include "xnetpoll.h"                    // XrNetpoll
+#include "xproc.h"                       // XrProc, XrRunQueue, XR_RUNQ_COUNT
+#include "xmachine.h"                    // XrMachine
+#include "xbalance.h"                    // XrMigrationPath
 
 /* ========== Worker Structure (P + M* pointer) ========== */
 
@@ -68,25 +68,25 @@ typedef struct XrRuntime {
      *   - idle_m_head      : M has been detached via handoff
      *                        (worker->m = NULL before xr_put_idle_m).
      */
-    _Atomic(XrProc *)    idle_p_head;      // Idle P Treiber stack (via p->idle_link)
-    _Atomic int          idle_p_count;     // Approximate, for heuristics
-    _Atomic(XrMachine *) idle_m_head;      // Idle M Treiber stack (via m->idle_link)
-    _Atomic int          idle_m_count;     // Approximate, for heuristics
-    _Atomic int          m_count;          // Total M count (grows on demand)
+    _Atomic(XrProc *) idle_p_head;     // Idle P Treiber stack (via p->idle_link)
+    _Atomic int idle_p_count;          // Approximate, for heuristics
+    _Atomic(XrMachine *) idle_m_head;  // Idle M Treiber stack (via m->idle_link)
+    _Atomic int idle_m_count;          // Approximate, for heuristics
+    _Atomic int m_count;               // Total M count (grows on demand)
 
     /* === O(1) Idle Worker Stack (lock-free Treiber stack) === */
     _Atomic(XrMachine *) idle_worker_list;  // Head of parked-worker stack
-    _Atomic int          idle_worker_count; // Approximate, for wake heuristic
+    _Atomic int idle_worker_count;          // Approximate, for wake heuristic
 
     /* === State (atomic) === */
     _Atomic bool running;
-    _Atomic bool threads_started;    // Worker/sysmon threads created (lazy start)
+    _Atomic bool threads_started;  // Worker/sysmon threads created (lazy start)
     _Atomic int started_workers;
-    _Atomic int exited_workers;      // Number of workers that have fully exited
+    _Atomic int exited_workers;  // Number of workers that have fully exited
     _Atomic int active_workers;
     _Atomic int spinning_count;
     _Atomic int wake_spinner;
-    _Atomic int needspinning;        // Last spinner notify protocol
+    _Atomic int needspinning;  // Last spinner notify protocol
 
     /* === Statistics === */
     _Atomic int64_t total_inbox_len;  // Global atomic counter for inbox items
@@ -94,7 +94,7 @@ typedef struct XrRuntime {
 
     /* === I/O & Async === */
     XrNetpoll netpoll;
-    pthread_t sysmon_thread;      // Sysmon: heartbeat monitoring + stuck detection
+    pthread_t sysmon_thread;  // Sysmon: heartbeat monitoring + stuck detection
     struct XrAsyncPool *async_pool;
 
     /* === Scope & Migration === */
@@ -108,8 +108,8 @@ typedef struct XrRuntime {
     /* === Sysmon Per-Worker State === */
     struct {
         uint64_t last_heartbeat;
-        int64_t  stuck_since_us;
-        bool     warned;
+        int64_t stuck_since_us;
+        bool warned;
     } sysmon_state[XR_MAX_WORKERS];
 } XrRuntime;
 
@@ -180,9 +180,8 @@ XR_FUNC void xr_chan_wake_queue_init(XrChanWakeCmdQueue *q);
 // Dispatch a channel wake command to a remote worker.
 // Allocates an XrChanWakeCmd, enqueues via MPSC, and wakes the target
 // worker if it is parked.  Must NOT be called for the local worker.
-XR_FUNC void xr_worker_dispatch_chan_wake(XrRuntime *runtime, int target_id,
-                                          void *channel, bool wake_sender,
-                                          bool is_close);
+XR_FUNC void xr_worker_dispatch_chan_wake(XrRuntime *runtime, int target_id, void *channel,
+                                          bool wake_sender, bool is_close);
 
 // Drain all pending channel wake commands on the calling worker's own
 // queue and execute local wake_one / wake_select / wake_all as needed.
@@ -200,11 +199,10 @@ XR_FUNC XrCoroutine *xr_worker_wake_one(XrWorker *worker, void *channel, bool wa
 XR_FUNC XrCoroutine *xr_worker_dequeue_blocked(XrWorker *worker, void *channel, bool wake_sender);
 XR_FUNC void xr_worker_wake_all(XrWorker *worker, void *channel);
 
-
 /* ========== Select Support ========== */
 
-XR_FUNC void xr_worker_block_select(XrWorker *worker, XrCoroutine *coro,
-                            void **channels, int count);
+XR_FUNC void xr_worker_block_select(XrWorker *worker, XrCoroutine *coro, void **channels,
+                                    int count);
 XR_FUNC XrCoroutine *xr_worker_wake_select(XrWorker *worker, void *channel);
 XR_FUNC void xr_worker_unblock_select(XrWorker *worker, XrCoroutine *coro);
 XR_FUNC int xr_runtime_next_coro_id(XrRuntime *runtime);
@@ -239,4 +237,4 @@ XR_FUNC int xr_main_thread_run(XrayIsolate *X, XrCoroutine *main_coro);
 // Resume execution after debug break, returns when next breakpoint hit or program ends
 XR_FUNC int xr_debug_resume_vm(XrayIsolate *isolate, XrCoroutine *coro);
 
-#endif // XWORKER_H
+#endif  // XWORKER_H

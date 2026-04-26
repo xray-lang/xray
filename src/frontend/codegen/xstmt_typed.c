@@ -55,7 +55,8 @@
 // Extract element/value XrTypeId from a container type annotation:
 // Array<T>/Set<T>/Channel<T> -> T's tid; Map<K,V> -> V's tid.
 static uint8_t extract_elem_tid(XrType *type) {
-    if (!type) return 0;
+    if (!type)
+        return 0;
     XrTypeKind k = type->kind;
     if (k == XR_KIND_ARRAY || k == XR_KIND_SET || k == XR_KIND_CHANNEL) {
         XrType *elem = xr_type_get_element(type);
@@ -70,7 +71,8 @@ static uint8_t extract_elem_tid(XrType *type) {
 
 // Extract key XrTypeId from Map<K,V> type annotation.
 static uint8_t extract_key_tid(XrType *type) {
-    if (!type) return 0;
+    if (!type)
+        return 0;
     if (type->kind == XR_KIND_MAP) {
         XrType *kt = type->map.key_type;
         return xr_type_to_tid(kt);
@@ -87,7 +89,8 @@ static uint8_t extract_key_tid(XrType *type) {
  * Otherwise returns false.
  */
 static bool try_extract_comptime_value(AstNode *expr, ComptimeValue *out_value) {
-    if (expr == NULL) return false;
+    if (expr == NULL)
+        return false;
 
     switch (expr->type) {
         case AST_LITERAL_INT:
@@ -118,8 +121,8 @@ static bool try_extract_comptime_value(AstNode *expr, ComptimeValue *out_value) 
         case AST_RANGE: {
             // Range expression: check if start and end are both integer constants
             RangeNode *range = &expr->as.range;
-            if (range->start && range->start->type == AST_LITERAL_INT &&
-                range->end && range->end->type == AST_LITERAL_INT) {
+            if (range->start && range->start->type == AST_LITERAL_INT && range->end &&
+                range->end->type == AST_LITERAL_INT) {
                 out_value->type = COMPTIME_RANGE;
                 out_value->as.range.start = range->start->as.literal.raw_value.int_val;
                 out_value->as.range.end = range->end->as.literal.raw_value.int_val;
@@ -145,7 +148,8 @@ void compile_var_decl(XrCompilerContext *ctx, XrCompiler *compiler, VarDeclNode 
     XR_DCHECK(node != NULL, "compile_var_decl: NULL node");
     // P0-1: Variable must have type annotation or initializer
     if (!node->initializer && !node->type_annotation) {
-        xr_compiler_error(ctx, compiler, "Variable '%s' must have a type annotation or initializer", node->name);
+        xr_compiler_error(ctx, compiler, "Variable '%s' must have a type annotation or initializer",
+                          node->name);
         return;
     }
 
@@ -157,7 +161,8 @@ void compile_var_decl(XrCompilerContext *ctx, XrCompiler *compiler, VarDeclNode 
     if (existing && existing->depth == compiler->scope_depth && !existing->is_hoisted) {
         // REPL mode: allow redefinition at top level
         if (!is_repl_top_level(ctx, compiler)) {
-            xr_compiler_error(ctx, compiler, "Variable '%s' already defined, cannot redefine", node->name);
+            xr_compiler_error(ctx, compiler, "Variable '%s' already defined, cannot redefine",
+                              node->name);
             return;
         }
     }
@@ -171,20 +176,20 @@ void compile_var_decl(XrCompilerContext *ctx, XrCompiler *compiler, VarDeclNode 
      * refcount + system-heap semantics. */
     if (is_channel && !node->is_const) {
         xr_compiler_error(ctx, compiler,
-            "Channel must be declared with 'const', not 'let'\n"
-            "hint: change 'let %s = Channel(...)' to 'const %s = Channel(...)'",
-            node->name, node->name);
+                          "Channel must be declared with 'const', not 'let'\n"
+                          "hint: change 'let %s = Channel(...)' to 'const %s = Channel(...)'",
+                          node->name, node->name);
         return;
     }
 
     // Check if variable already defined (top-level scope)
     // Skip for shared/Channel variables: they may have been pre-registered in Phase 1 hoisting
-    if (compiler->scope_depth == 0 && node->storage_mode != XR_STORAGE_SHARED &&
-        !is_channel &&
+    if (compiler->scope_depth == 0 && node->storage_mode != XR_STORAGE_SHARED && !is_channel &&
         shared_get_in_scope(ctx, compiler, name_str) >= 0) {
         // REPL mode: allow redefinition (shared_add handles reuse)
         if (!ctx->repl_mode) {
-            xr_compiler_error(ctx, compiler, "Variable '%s' already defined, cannot redefine", node->name);
+            xr_compiler_error(ctx, compiler, "Variable '%s' already defined, cannot redefine",
+                              node->name);
             return;
         }
     }
@@ -201,7 +206,8 @@ void compile_var_decl(XrCompilerContext *ctx, XrCompiler *compiler, VarDeclNode 
         int shared_index = shared_get_or_add(ctx, compiler, name_str);
         shared_set_const(ctx, shared_index, node->is_const);
 
-        // shared const constant inlining optimization: compile-time eval and register to constant table
+        // shared const constant inlining optimization: compile-time eval and register to constant
+        // table
         if (node->is_const && node->initializer) {
             XrConstEvalResult result = xr_const_eval_with_ctx(ctx, node->initializer);
             if (result.success) {
@@ -227,7 +233,8 @@ void compile_var_decl(XrCompilerContext *ctx, XrCompiler *compiler, VarDeclNode 
             ctx->current_key_tid = extract_key_tid(node->type_annotation);
             if (node->type_annotation) {
                 XrType *ta = node->type_annotation;
-                if ((ta->kind == XR_KIND_JSON) && !ta->object.allow_extension && ta->object.field_count > 0)
+                if ((ta->kind == XR_KIND_JSON) && !ta->object.allow_extension &&
+                    ta->object.field_count > 0)
                     ctx->current_object_type = ta;
             }
 
@@ -241,12 +248,9 @@ void compile_var_decl(XrCompilerContext *ctx, XrCompiler *compiler, VarDeclNode 
 
             // Non-direct creation types need conversion to system heap
             AstNodeType init_type = node->initializer->type;
-            bool is_direct = (init_type == AST_ARRAY_LITERAL ||
-                             init_type == AST_MAP_LITERAL ||
-                             init_type == AST_SET_LITERAL ||
-                             init_type == AST_OBJECT_LITERAL ||
-                             init_type == AST_NEW_EXPR ||
-                             init_type == AST_CHANNEL_NEW);
+            bool is_direct = (init_type == AST_ARRAY_LITERAL || init_type == AST_MAP_LITERAL ||
+                              init_type == AST_SET_LITERAL || init_type == AST_OBJECT_LITERAL ||
+                              init_type == AST_NEW_EXPR || init_type == AST_CHANNEL_NEW);
             if (!is_direct) {
                 xemit_to_shared(compiler->emitter, reg, reg);
             }
@@ -299,7 +303,8 @@ void compile_var_decl(XrCompilerContext *ctx, XrCompiler *compiler, VarDeclNode 
             if (local && local->is_hoisted) {
                 local->is_hoisted = false;  // Mark as now being defined
             } else if (local && local->depth == compiler->scope_depth) {
-                xr_compiler_error(ctx, compiler, "Variable '%s' already defined, cannot redefine", node->name);
+                xr_compiler_error(ctx, compiler, "Variable '%s' already defined, cannot redefine",
+                                  node->name);
                 return;
             } else {
                 local = scope_define_local(ctx, compiler, name_str);
@@ -313,7 +318,8 @@ void compile_var_decl(XrCompilerContext *ctx, XrCompiler *compiler, VarDeclNode 
             } else if (node->initializer) {
                 XrType *ct = get_expr_type(ctx, compiler, node->initializer);
                 // Pure null inferred type → treat as untyped (null is not a valid variable type)
-                if (ct && (ct->kind == XR_KIND_NULL)) ct = NULL;
+                if (ct && (ct->kind == XR_KIND_NULL))
+                    ct = NULL;
                 local_set_compile_type(local, ct);
             }
 
@@ -330,14 +336,15 @@ void compile_var_decl(XrCompilerContext *ctx, XrCompiler *compiler, VarDeclNode 
                 uint8_t old_storage_mode = ctx->current_storage_mode;
                 uint8_t old_elem_type = ctx->current_elem_tid;
                 uint8_t old_key_tid = ctx->current_key_tid;
-                (void)old_key_tid;
+                (void) old_key_tid;
                 XrType *old_object_type = ctx->current_object_type;
                 ctx->current_storage_mode = node->storage_mode;
                 ctx->current_elem_tid = extract_elem_tid(node->type_annotation);
                 ctx->current_key_tid = extract_key_tid(node->type_annotation);
                 if (node->type_annotation) {
                     XrType *ta = node->type_annotation;
-                    if ((ta->kind == XR_KIND_JSON) && !ta->object.allow_extension && ta->object.field_count > 0)
+                    if ((ta->kind == XR_KIND_JSON) && !ta->object.allow_extension &&
+                        ta->object.field_count > 0)
                         ctx->current_object_type = ta;
                 }
 
@@ -346,13 +353,15 @@ void compile_var_decl(XrCompilerContext *ctx, XrCompiler *compiler, VarDeclNode 
                 xstmt_emit_box_if_raw(compiler->emitter, m_init_reg, &expr);
 
                 // Json→concrete runtime type check
-                xstmt_emit_json_checktype(ctx, compiler, m_init_reg, node->type_annotation, node->initializer);
+                xstmt_emit_json_checktype(ctx, compiler, m_init_reg, node->type_annotation,
+                                          node->initializer);
 
                 // Struct value semantics: copy-on-assign
                 if (local->compile_type && local->compile_type->is_value_type) {
                     AstNodeType init_type = node->initializer->type;
                     if (init_type != AST_STRUCT_LITERAL && init_type != AST_NEW_EXPR) {
-                        xstmt_emit_value_copy(ctx, compiler, m_init_reg, m_init_reg, local->compile_type);
+                        xstmt_emit_value_copy(ctx, compiler, m_init_reg, m_init_reg,
+                                              local->compile_type);
                     }
                 }
 
@@ -378,8 +387,7 @@ void compile_var_decl(XrCompilerContext *ctx, XrCompiler *compiler, VarDeclNode 
 
         // Non-module top-level (e.g. REPL) - use global variable
         if (node->initializer && node->initializer->type == AST_LITERAL_INT) {
-
-            LiteralNode *lit = (LiteralNode *)&node->initializer->as;
+            LiteralNode *lit = (LiteralNode *) &node->initializer->as;
             xr_Integer value = lit->raw_value.int_val;
 
             // Create XrExprDesc
@@ -389,7 +397,7 @@ void compile_var_decl(XrCompilerContext *ctx, XrCompiler *compiler, VarDeclNode 
             // Small integer uses LOADI - AsBx format!
             if (value >= -MAXARG_sBx && value <= MAXARG_sBx) {
                 // LOADI is AsBx format, A=0 temporarily, sBx=value
-                int pc = xemit_loadi(compiler->emitter, 0, (int)value);
+                int pc = xemit_loadi(compiler->emitter, 0, (int) value);
                 expr.kind = XEXPR_RELOC;
                 expr.u.pc = pc;
                 expr.reg = -1;
@@ -438,7 +446,6 @@ void compile_var_decl(XrCompilerContext *ctx, XrCompiler *compiler, VarDeclNode 
         XrType *inferred_compile_type = NULL;
         XrType *xr_type_for_local = NULL;
 
-
         if (node->type_annotation) {
             // Has explicit type annotation (node->type_annotation is XrType*)
             xr_type_for_local = node->type_annotation;
@@ -460,14 +467,17 @@ void compile_var_decl(XrCompilerContext *ctx, XrCompiler *compiler, VarDeclNode 
                 XrType *check_init = init_type;
                 if (check_init && check_init->is_nullable) {
                     XrType *base = xr_type_non_nullable(ctx->X, check_init);
-                    if (base) check_init = base;
+                    if (base)
+                        check_init = base;
                 }
                 if (check_init && !xr_type_assignable(inferred_compile_type, check_init)) {
-                    // Json/JsonValue→primitive/union: allowed with runtime type check (OP_CHECKTYPE)
+                    // Json/JsonValue→primitive/union: allowed with runtime type check
+                    // (OP_CHECKTYPE)
                     if (!xr_is_json_coercion(inferred_compile_type, check_init)) {
                         xr_compiler_error(ctx, compiler,
-                            "Cannot initialize %s variable '%s' with %s value",
-                            xstmt_type_flag_name(inferred_compile_type), node->name, xstmt_type_flag_name(check_init));
+                                          "Cannot initialize %s variable '%s' with %s value",
+                                          xstmt_type_flag_name(inferred_compile_type), node->name,
+                                          xstmt_type_flag_name(check_init));
                         return;
                     }
                 }
@@ -498,7 +508,8 @@ void compile_var_decl(XrCompilerContext *ctx, XrCompiler *compiler, VarDeclNode 
                 hoisted->comptime.type = COMPTIME_NONE;
                 xexpr_to_specific_reg(ctx, compiler, &expr, hoisted->reg);
                 xstmt_emit_box_if_raw(compiler->emitter, hoisted->reg, &expr);
-                xstmt_emit_json_checktype(ctx, compiler, hoisted->reg, node->type_annotation, node->initializer);
+                xstmt_emit_json_checktype(ctx, compiler, hoisted->reg, node->type_annotation,
+                                          node->initializer);
                 if (hoisted->is_captured && hoisted->ctx_slot >= 0) {
                     if (hoisted->is_cellified) {
                         int tmp = reg_alloc(ctx, compiler);
@@ -522,7 +533,8 @@ void compile_var_decl(XrCompilerContext *ctx, XrCompiler *compiler, VarDeclNode 
             local->is_const = node->is_const;
             local->comptime.type = COMPTIME_NONE;
             xstmt_emit_box_if_raw(compiler->emitter, local->reg, &expr);
-            xstmt_emit_json_checktype(ctx, compiler, local->reg, node->type_annotation, node->initializer);
+            xstmt_emit_json_checktype(ctx, compiler, local->reg, node->type_annotation,
+                                      node->initializer);
             if (local->is_captured && local->ctx_slot >= 0) {
                 if (local->is_cellified) {
                     int tmp = reg_alloc(ctx, compiler);
@@ -577,8 +589,8 @@ void compile_var_decl(XrCompilerContext *ctx, XrCompiler *compiler, VarDeclNode 
         // to a temp register so we don't overwrite the cell ref in local_reg.
         int init_reg = local_reg;
         bool needs_cell_set = false;
-        bool may_cellify = local->is_captured && local->ctx_slot >= 0 &&
-                           (!local->is_const || local->is_hoisted);
+        bool may_cellify =
+            local->is_captured && local->ctx_slot >= 0 && (!local->is_const || local->is_hoisted);
         if (local->is_cellified || may_cellify) {
             init_reg = reg_alloc(ctx, compiler);
             needs_cell_set = true;
@@ -591,7 +603,7 @@ void compile_var_decl(XrCompilerContext *ctx, XrCompiler *compiler, VarDeclNode 
         }
         // Only handle simplest case: integer constant
         else if (node->initializer->type == AST_LITERAL_INT) {
-            LiteralNode *lit = (LiteralNode *)&node->initializer->as;
+            LiteralNode *lit = (LiteralNode *) &node->initializer->as;
             xr_Integer value = lit->raw_value.int_val;
 
             // Rematerialization optimization: mark small integer constant as rematerializable
@@ -619,7 +631,8 @@ void compile_var_decl(XrCompilerContext *ctx, XrCompiler *compiler, VarDeclNode 
             ctx->current_key_tid = extract_key_tid(node->type_annotation);
             if (node->type_annotation) {
                 XrType *ta = node->type_annotation;
-                if ((ta->kind == XR_KIND_JSON) && !ta->object.allow_extension && ta->object.field_count > 0)
+                if ((ta->kind == XR_KIND_JSON) && !ta->object.allow_extension &&
+                    ta->object.field_count > 0)
                     ctx->current_object_type = ta;
             }
 
@@ -628,19 +641,21 @@ void compile_var_decl(XrCompilerContext *ctx, XrCompiler *compiler, VarDeclNode 
 
             // Register reuse optimization: function call return value directly as local variable.
             if (!needs_cell_set) {
-                if ((expr.kind == XEXPR_CALL || expr.kind == XEXPR_TEMP) &&
-                    expr.reg >= 0 && expr.reg == local_reg) {
+                if ((expr.kind == XEXPR_CALL || expr.kind == XEXPR_TEMP) && expr.reg >= 0 &&
+                    expr.reg == local_reg) {
                     // Expression result is exactly in local_reg, perfect reuse
                 } else {
                     xexpr_to_specific_reg(ctx, compiler, &expr, local_reg);
                 }
                 xstmt_emit_box_if_raw(compiler->emitter, local_reg, &expr);
-                xstmt_emit_json_checktype(ctx, compiler, local_reg, node->type_annotation, node->initializer);
+                xstmt_emit_json_checktype(ctx, compiler, local_reg, node->type_annotation,
+                                          node->initializer);
             } else {
                 // Cellified: compile to init_reg (temp) to preserve cell ref in local_reg
                 xexpr_to_specific_reg(ctx, compiler, &expr, init_reg);
                 xstmt_emit_box_if_raw(compiler->emitter, init_reg, &expr);
-                xstmt_emit_json_checktype(ctx, compiler, init_reg, node->type_annotation, node->initializer);
+                xstmt_emit_json_checktype(ctx, compiler, init_reg, node->type_annotation,
+                                          node->initializer);
             }
 
             // Struct value semantics: copy-on-assign for value types

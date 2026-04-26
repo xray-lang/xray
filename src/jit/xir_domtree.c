@@ -32,13 +32,14 @@
  * "unreachable cannot dominate anything" semantics.
  */
 static XirDomTree *build_tree_from_idom(const uint32_t *idom, uint32_t nblk) {
-    XirDomTree *dt = (XirDomTree *)xr_calloc(1, sizeof(XirDomTree));
-    if (!dt) return NULL;
+    XirDomTree *dt = (XirDomTree *) xr_calloc(1, sizeof(XirDomTree));
+    if (!dt)
+        return NULL;
     dt->nblk = nblk;
-    dt->idom        = (uint32_t *)xr_malloc(nblk * sizeof(uint32_t));
-    dt->dfs_in      = (uint32_t *)xr_calloc(nblk, sizeof(uint32_t));
-    dt->dfs_out     = (uint32_t *)xr_calloc(nblk, sizeof(uint32_t));
-    dt->child_start = (uint32_t *)xr_calloc(nblk + 1, sizeof(uint32_t));
+    dt->idom = (uint32_t *) xr_malloc(nblk * sizeof(uint32_t));
+    dt->dfs_in = (uint32_t *) xr_calloc(nblk, sizeof(uint32_t));
+    dt->dfs_out = (uint32_t *) xr_calloc(nblk, sizeof(uint32_t));
+    dt->child_start = (uint32_t *) xr_calloc(nblk + 1, sizeof(uint32_t));
     if (!dt->idom || !dt->dfs_in || !dt->dfs_out || !dt->child_start) {
         xr_free(dt->idom);
         xr_free(dt->dfs_in);
@@ -53,14 +54,15 @@ static XirDomTree *build_tree_from_idom(const uint32_t *idom, uint32_t nblk) {
      * skipped so it is not wrongly listed as its own child. */
     for (uint32_t b = 1; b < nblk; b++) {
         uint32_t p = idom[b];
-        if (p == UINT32_MAX || p >= nblk) continue;
+        if (p == UINT32_MAX || p >= nblk)
+            continue;
         dt->child_start[p + 1]++;
     }
     for (uint32_t i = 1; i <= nblk; i++)
         dt->child_start[i] += dt->child_start[i - 1];
 
     uint32_t total = dt->child_start[nblk];
-    dt->children = total ? (uint32_t *)xr_malloc(total * sizeof(uint32_t)) : NULL;
+    dt->children = total ? (uint32_t *) xr_malloc(total * sizeof(uint32_t)) : NULL;
     if (total && !dt->children) {
         xr_free(dt->idom);
         xr_free(dt->dfs_in);
@@ -70,7 +72,7 @@ static XirDomTree *build_tree_from_idom(const uint32_t *idom, uint32_t nblk) {
         return NULL;
     }
 
-    uint32_t *cursor = (uint32_t *)xr_calloc(nblk, sizeof(uint32_t));
+    uint32_t *cursor = (uint32_t *) xr_calloc(nblk, sizeof(uint32_t));
     if (!cursor) {
         xr_free(dt->children);
         xr_free(dt->idom);
@@ -82,7 +84,8 @@ static XirDomTree *build_tree_from_idom(const uint32_t *idom, uint32_t nblk) {
     }
     for (uint32_t b = 1; b < nblk; b++) {
         uint32_t p = idom[b];
-        if (p == UINT32_MAX || p >= nblk) continue;
+        if (p == UINT32_MAX || p >= nblk)
+            continue;
         uint32_t slot = dt->child_start[p] + cursor[p]++;
         dt->children[slot] = b;
     }
@@ -92,8 +95,8 @@ static XirDomTree *build_tree_from_idom(const uint32_t *idom, uint32_t nblk) {
      * cannot blow the C stack).  Each block is visited exactly twice:
      * entry stamp on push, exit stamp on pop. */
     uint32_t tick = 0;
-    uint32_t *stack = (uint32_t *)xr_malloc(2 * nblk * sizeof(uint32_t));
-    uint32_t *child_iter = (uint32_t *)xr_calloc(nblk, sizeof(uint32_t));
+    uint32_t *stack = (uint32_t *) xr_malloc(2 * nblk * sizeof(uint32_t));
+    uint32_t *child_iter = (uint32_t *) xr_calloc(nblk, sizeof(uint32_t));
     if (!stack || !child_iter) {
         xr_free(stack);
         xr_free(child_iter);
@@ -107,7 +110,7 @@ static XirDomTree *build_tree_from_idom(const uint32_t *idom, uint32_t nblk) {
     }
 
     uint32_t sp = 0;
-    stack[sp++] = 0;             // start at the entry block
+    stack[sp++] = 0;  // start at the entry block
     dt->dfs_in[0] = tick++;
     while (sp > 0) {
         uint32_t top = stack[sp - 1];
@@ -129,7 +132,8 @@ static XirDomTree *build_tree_from_idom(const uint32_t *idom, uint32_t nblk) {
 }
 
 static void xir_domtree_free(XirDomTree *dt) {
-    if (!dt) return;
+    if (!dt)
+        return;
     xr_free(dt->idom);
     xr_free(dt->dfs_in);
     xr_free(dt->dfs_out);
@@ -139,23 +143,28 @@ static void xir_domtree_free(XirDomTree *dt) {
 }
 
 const XirDomTree *xir_func_get_domtree(XirFunc *func) {
-    if (!func || func->nblk == 0) return NULL;
-    if (func->domtree) return func->domtree;
+    if (!func || func->nblk == 0)
+        return NULL;
+    if (func->domtree)
+        return func->domtree;
 
-    uint32_t *idom = (uint32_t *)xr_malloc(func->nblk * sizeof(uint32_t));
-    if (!idom) return NULL;
+    uint32_t *idom = (uint32_t *) xr_malloc(func->nblk * sizeof(uint32_t));
+    if (!idom)
+        return NULL;
     xir_compute_idom(func, idom, func->nblk);
 
     XirDomTree *dt = build_tree_from_idom(idom, func->nblk);
     xr_free(idom);
-    if (!dt) return NULL;
+    if (!dt)
+        return NULL;
 
     func->domtree = dt;
     return dt;
 }
 
 void xir_func_invalidate_domtree(XirFunc *func) {
-    if (!func) return;
+    if (!func)
+        return;
     if (func->domtree) {
         xir_domtree_free(func->domtree);
         func->domtree = NULL;

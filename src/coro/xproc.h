@@ -32,8 +32,8 @@
 #include "xsteal_queue.h"
 #include "xmpsc_queue.h"
 #include "xcoroutine.h"
-#include "xnetpoll.h" // XrLocalPoll
-#include "../base/xplatform.h" // XR_CACHE_LINE
+#include "xnetpoll.h"           // XrLocalPoll
+#include "../base/xplatform.h"  // XR_CACHE_LINE
 
 // Forward declarations
 struct XrMachine;
@@ -55,16 +55,16 @@ struct XrCanceledTimerNode;
  */
 
 typedef struct XrChanWakeCmd {
-    void *channel;                     // Channel pointer
-    bool  wake_sender;                 // true = wake sender, false = wake receiver
-    bool  is_close;                    // true = wake_all (channel close fan-out)
-    struct XrChanWakeCmd *next;        // Intrusive MPSC link
+    void *channel;               // Channel pointer
+    bool wake_sender;            // true = wake sender, false = wake receiver
+    bool is_close;               // true = wake_all (channel close fan-out)
+    struct XrChanWakeCmd *next;  // Intrusive MPSC link
 } XrChanWakeCmd;
 
 typedef struct XrChanWakeCmdQueue {
-    _Atomic(XrChanWakeCmd *) head;     // Consumer reads here
-    _Atomic(XrChanWakeCmd *) tail;     // Producers push here
-    XrChanWakeCmd stub;                // Vyukov stub sentinel
+    _Atomic(XrChanWakeCmd *) head;  // Consumer reads here
+    _Atomic(XrChanWakeCmd *) tail;  // Producers push here
+    XrChanWakeCmd stub;             // Vyukov stub sentinel
 } XrChanWakeCmdQueue;
 
 /* ========== Per-P Statistics (cache-line aligned) ========== */
@@ -77,19 +77,19 @@ typedef struct XrChanWakeCmdQueue {
 // shared with lifo_slot / runq / cont_deque that other workers may be
 // concurrently reading during work-stealing.
 typedef struct XrProcStats {
-    uint64_t executed_count;       // Coros the owner has dispatched
-    uint64_t stolen_count;         // Coros the owner has stolen from peers
-    uint64_t yielded_count;        // Voluntary yields
-    uint64_t cont_steal_count;     // Continuations stolen (owner as stealer)
-    uint64_t completed_count;      // Coros that finished (replaces global)
-    uint64_t spawned_count;        // Coros spawned by this worker
+    uint64_t executed_count;    // Coros the owner has dispatched
+    uint64_t stolen_count;      // Coros the owner has stolen from peers
+    uint64_t yielded_count;     // Voluntary yields
+    uint64_t cont_steal_count;  // Continuations stolen (owner as stealer)
+    uint64_t completed_count;   // Coros that finished (replaces global)
+    uint64_t spawned_count;     // Coros spawned by this worker
 } XrProcStats __attribute__((aligned(XR_CACHE_LINE)));
 
 /* ========== Run Queue (Chase-Lev deque + overflow) ========== */
 
 typedef struct XrRunQueue {
-    XrStealQueue deque;            // Chase-Lev deque (lock-free)
-    XrCoroutine *overflow_first;   // RESCHEDULE_LOW delayed queue
+    XrStealQueue deque;           // Chase-Lev deque (lock-free)
+    XrCoroutine *overflow_first;  // RESCHEDULE_LOW delayed queue
     XrCoroutine *overflow_last;
     int overflow_len;
 } XrRunQueue;
@@ -107,11 +107,11 @@ static inline int xr_runq_len(XrRunQueue *rq) {
 /* ========== P Status ========== */
 
 typedef enum {
-    P_IDLE,       // Not bound to any M
-    P_RUNNING,    // Bound to M, actively scheduling
-    P_SYSCALL,    // M blocked in syscall, P awaiting handoff
-    P_HANDOFF,    // Handoff M is running this P
-    P_DEAD        // Shutting down
+    P_IDLE,     // Not bound to any M
+    P_RUNNING,  // Bound to M, actively scheduling
+    P_SYSCALL,  // M blocked in syscall, P awaiting handoff
+    P_HANDOFF,  // Handoff M is running this P
+    P_DEAD      // Shutting down
 } XrProcStatus;
 
 /* ========== XrProc (P) — Scheduling resource, count fixed = CPU cores ========== */
@@ -126,7 +126,8 @@ typedef struct XrProc {
 
     /* === LIFO Slot (locality optimization) === */
     _Atomic(XrCoroutine *) lifo_slot;
-    int lifo_slot_prio;    // Cached priority of lifo_slot occupant (avoids atomic flags load on eviction)
+    int lifo_slot_prio;  // Cached priority of lifo_slot occupant (avoids atomic flags load on
+                         // eviction)
     int lifo_polls;
 
     /* === Per-P Timer Wheel === */
@@ -155,29 +156,29 @@ typedef struct XrProc {
     XrCoroutine *pending_recycle_coro;
 
     /* === Per-Worker Arena Cache (batch alloc from global pool, avoids per-coro atomic) === */
-    uint32_t arena_cache_start;    // Next available slot in cached range
-    uint32_t arena_cache_end;      // End of cached range (exclusive)
-    void *arena_cache_block;       // Cached block pointer (invalidate if pool expands)
+    uint32_t arena_cache_start;  // Next available slot in cached range
+    uint32_t arena_cache_end;    // End of cached range (exclusive)
+    void *arena_cache_block;     // Cached block pointer (invalidate if pool expands)
 
     /* === Stack Slab Free List (avoids malloc/free per coroutine) === */
-    void *stack_slab_free;     // Free list of stack+frames blocks (1312B each)
-    int stack_slab_count;      // Number of blocks in free list
+    void *stack_slab_free;  // Free list of stack+frames blocks (1312B each)
+    int stack_slab_count;   // Number of blocks in free list
 
-    /* === Immix Block Cache L1 (per-worker, no lock needed) === */
-    #define XR_BLOCK_CACHE_L1_MAX 8
+/* === Immix Block Cache L1 (per-worker, no lock needed) === */
+#define XR_BLOCK_CACHE_L1_MAX 8
     void *block_cache[XR_BLOCK_CACHE_L1_MAX];  // Cached aligned blocks
-    int block_cache_count;                      // Number of cached blocks
+    int block_cache_count;                     // Number of cached blocks
 
     /* === CoroGC Free List (avoids malloc/free per coroutine that needs heap) === */
-    struct XrCoroGC *gc_free_list;   // Free list of XrCoroGC structs (320B each)
-    int gc_free_count;               // Number of XrCoroGC in free list
+    struct XrCoroGC *gc_free_list;  // Free list of XrCoroGC structs (320B each)
+    int gc_free_count;              // Number of XrCoroGC in free list
 
     /* === Per-P Coroutine ID Cache (avoids atomic_fetch_add per spawn) === */
-    int id_cache;              // Next available coroutine ID
-    int id_cache_end;          // End of cached ID range (exclusive)
+    int id_cache;      // Next available coroutine ID
+    int id_cache_end;  // End of cached ID range (exclusive)
 
     /* === Per-P Run Queue Length (avoids global atomic counter bounce) === */
-    int local_runq_len;        // Total coroutines in this P's queues + lifo_slot
+    int local_runq_len;  // Total coroutines in this P's queues + lifo_slot
 
     /* === Blocked Queue === */
     XrBlockedBucket *blocked_buckets[XR_BLOCKED_BUCKET_SIZE];
@@ -186,8 +187,8 @@ typedef struct XrProc {
     int blocked_count;
     int select_waiter_count;
 
-    /* === Canceled Timer Node Freelist (avoids malloc/free churn) === */
-    #define XR_CANCEL_NODE_POOL_MAX 64
+/* === Canceled Timer Node Freelist (avoids malloc/free churn) === */
+#define XR_CANCEL_NODE_POOL_MAX 64
     struct XrCanceledTimerNode *cancel_node_free;
     int cancel_node_free_count;
 
@@ -195,18 +196,18 @@ typedef struct XrProc {
     _Atomic(void *) deferred_free_head;
 
     /* === Handoff Signaling === */
-    _Atomic bool handoff_exit;     // Signal handoff M to release P
-    _Atomic int  handoff_sync;     // Futex word: exitsyscall waits, handoff M wakes after releasing P
+    _Atomic bool handoff_exit;  // Signal handoff M to release P
+    _Atomic int handoff_sync;   // Futex word: exitsyscall waits, handoff M wakes after releasing P
 
     /* === Continuation Stealing === */
-    XrStealQueue cont_deque;       // Chase-Lev deque for parent continuations
-    int yield_streak;              // Consecutive yields without block/completion (detect compute-bound)
+    XrStealQueue cont_deque;  // Chase-Lev deque for parent continuations
+    int yield_streak;         // Consecutive yields without block/completion (detect compute-bound)
 
     /* === Per-Worker I/O Poll (kqueue/epoll fd per worker) === */
-    XrLocalPoll local_poll;        // Per-worker kqueue/epoll for IO event collection
+    XrLocalPoll local_poll;  // Per-worker kqueue/epoll for IO event collection
 
     /* === Adaptive Poll Skip (I/O load feedback) === */
-    uint32_t io_poll_ewma;         // EWMA of I/O event frequency (0-256 fixed-point, 256=always busy)
+    uint32_t io_poll_ewma;  // EWMA of I/O event frequency (0-256 fixed-point, 256=always busy)
 
     /* === Per-Worker Active Coro Counter (replaces global atomic active_coros) === */
     int local_active_coros;
@@ -268,4 +269,4 @@ static inline int xr_proc_total_queue_len(XrProc *p) {
 XR_FUNC XrProc *xr_get_idle_p(struct XrRuntime *runtime);
 XR_FUNC void xr_put_idle_p(struct XrRuntime *runtime, XrProc *p);
 
-#endif // XPROC_H
+#endif  // XPROC_H

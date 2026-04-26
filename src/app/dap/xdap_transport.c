@@ -51,10 +51,11 @@
 static int set_nonblock(int fd) {
 #ifdef _WIN32
     u_long mode = 1;
-    return ioctlsocket((SOCKET)fd, FIONBIO, &mode);
+    return ioctlsocket((SOCKET) fd, FIONBIO, &mode);
 #else
     int flags = fcntl(fd, F_GETFL, 0);
-    if (flags < 0) return -1;
+    if (flags < 0)
+        return -1;
     return fcntl(fd, F_SETFL, flags | O_NONBLOCK);
 #endif
 }
@@ -63,17 +64,19 @@ static int set_nonblock(int fd) {
 // Returns: bytes read, 0 = would block, -1 = error/closed
 static ssize_t read_nonblock(int fd, char *buf, size_t len) {
 #ifdef _WIN32
-    int n = recv((SOCKET)fd, buf, (int)len, 0);
+    int n = recv((SOCKET) fd, buf, (int) len, 0);
     if (n < 0) {
         int err = WSAGetLastError();
-        if (err == WSAEWOULDBLOCK) return 0;
+        if (err == WSAEWOULDBLOCK)
+            return 0;
         return -1;
     }
     return n;
 #else
     ssize_t n = read(fd, buf, len);
     if (n < 0) {
-        if (errno == EAGAIN || errno == EWOULDBLOCK) return 0;
+        if (errno == EAGAIN || errno == EWOULDBLOCK)
+            return 0;
         return -1;
     }
     return n;
@@ -87,32 +90,39 @@ static ssize_t read_nonblock(int fd, char *buf, size_t len) {
 //   -1: fatal error / peer closed.
 static ssize_t write_nonblock(int fd, const char *buf, size_t len) {
 #ifdef _WIN32
-    int n = send((SOCKET)fd, buf, (int)len, 0);
+    int n = send((SOCKET) fd, buf, (int) len, 0);
     if (n < 0) {
         int err = WSAGetLastError();
-        if (err == WSAEWOULDBLOCK) return 0;
+        if (err == WSAEWOULDBLOCK)
+            return 0;
         return -1;
     }
     return n;
 #else
     ssize_t n = write(fd, buf, len);
     if (n < 0) {
-        if (errno == EINTR) return 0;
-        if (errno == EAGAIN || errno == EWOULDBLOCK) return 0;
+        if (errno == EINTR)
+            return 0;
+        if (errno == EAGAIN || errno == EWOULDBLOCK)
+            return 0;
         return -1;
     }
-    if (n == 0) return -1;
+    if (n == 0)
+        return -1;
     return n;
 #endif
 }
 
 // Ensure buffer has enough capacity
 static bool ensure_capacity(char **buf, size_t *cap, size_t needed) {
-    if (*cap >= needed) return true;
+    if (*cap >= needed)
+        return true;
     size_t new_cap = *cap * 2;
-    if (new_cap < needed) new_cap = needed;
+    if (new_cap < needed)
+        new_cap = needed;
     char *new_buf = xr_realloc(*buf, new_cap);
-    if (!new_buf) return false;
+    if (!new_buf)
+        return false;
     *buf = new_buf;
     *cap = new_cap;
     return true;
@@ -124,7 +134,8 @@ static bool ensure_capacity(char **buf, size_t *cap, size_t needed) {
 
 static XdapTransport *transport_alloc(XdapTransportType type) {
     XdapTransport *t = xr_calloc(1, sizeof(XdapTransport));
-    if (!t) return NULL;
+    if (!t)
+        return NULL;
 
     t->type = type;
     t->read_fd = -1;
@@ -150,7 +161,8 @@ static XdapTransport *transport_alloc(XdapTransportType type) {
 
 XdapTransport *xdap_transport_stdio(void) {
     XdapTransport *t = transport_alloc(XDAP_TRANSPORT_STDIO);
-    if (!t) return NULL;
+    if (!t)
+        return NULL;
 
     t->read_fd = STDIN_FILENO;
     t->write_fd = STDOUT_FILENO;
@@ -182,7 +194,8 @@ XdapTransport *xdap_transport_stdio(void) {
 
 XdapTransport *xdap_transport_tcp_server(int port) {
     XdapTransport *t = transport_alloc(XDAP_TRANSPORT_TCP_SERVER);
-    if (!t) return NULL;
+    if (!t)
+        return NULL;
 
 #ifdef _WIN32
     // Initialize Winsock
@@ -203,18 +216,18 @@ XdapTransport *xdap_transport_tcp_server(int port) {
 
     // Allow address reuse
     int opt = 1;
-    setsockopt(t->listen_fd, SOL_SOCKET, SO_REUSEADDR, (const char *)&opt, sizeof(opt));
+    setsockopt(t->listen_fd, SOL_SOCKET, SO_REUSEADDR, (const char *) &opt, sizeof(opt));
 #ifdef SO_REUSEPORT
-    setsockopt(t->listen_fd, SOL_SOCKET, SO_REUSEPORT, (const char *)&opt, sizeof(opt));
+    setsockopt(t->listen_fd, SOL_SOCKET, SO_REUSEPORT, (const char *) &opt, sizeof(opt));
 #endif
 
     // Bind to port
     struct sockaddr_in addr = {0};
     addr.sin_family = AF_INET;
     addr.sin_addr.s_addr = INADDR_ANY;
-    addr.sin_port = htons((uint16_t)port);
+    addr.sin_port = htons((uint16_t) port);
 
-    if (bind(t->listen_fd, (struct sockaddr *)&addr, sizeof(addr)) < 0) {
+    if (bind(t->listen_fd, (struct sockaddr *) &addr, sizeof(addr)) < 0) {
         fprintf(stderr, "[DAP] Failed to bind port %d: %s\n", port, strerror(errno));
         xdap_transport_free(t);
         return NULL;
@@ -222,7 +235,7 @@ XdapTransport *xdap_transport_tcp_server(int port) {
 
     // Get actual port
     socklen_t addr_len = sizeof(addr);
-    getsockname(t->listen_fd, (struct sockaddr *)&addr, &addr_len);
+    getsockname(t->listen_fd, (struct sockaddr *) &addr, &addr_len);
     t->listen_port = ntohs(addr.sin_port);
 
     // Listen
@@ -259,14 +272,17 @@ XdapTransport *xdap_transport_tcp_server(int port) {
         XrPollEvent ev[1];
         int n = xr_poll_wait(&accept_poll, ev, 1, 500);
         if (n < 0) {
-            if (errno == EINTR) continue;  // Signal, retry
+            if (errno == EINTR)
+                continue;  // Signal, retry
             fprintf(stderr, "[DAP] Accept poll error: %s\n", strerror(errno));
             break;
         }
         if (n > 0) {
-            client_fd = accept(t->listen_fd, (struct sockaddr *)&client_addr, &client_len);
-            if (client_fd >= 0) break;
-            if (errno == EAGAIN || errno == EWOULDBLOCK) continue;
+            client_fd = accept(t->listen_fd, (struct sockaddr *) &client_addr, &client_len);
+            if (client_fd >= 0)
+                break;
+            if (errno == EAGAIN || errno == EWOULDBLOCK)
+                continue;
             fprintf(stderr, "[DAP] Failed to accept connection: %s\n", strerror(errno));
             break;
         }
@@ -281,14 +297,15 @@ XdapTransport *xdap_transport_tcp_server(int port) {
 
     char client_ip[INET_ADDRSTRLEN];
     inet_ntop(AF_INET, &client_addr.sin_addr, client_ip, sizeof(client_ip));
-    fprintf(stderr, "[DAP] Debugger connected from %s:%d\n", client_ip, ntohs(client_addr.sin_port));
+    fprintf(stderr, "[DAP] Debugger connected from %s:%d\n", client_ip,
+            ntohs(client_addr.sin_port));
 
     t->read_fd = client_fd;
     t->write_fd = client_fd;
 
     // Disable Nagle's algorithm for low-latency DAP messages
     int nodelay = 1;
-    setsockopt(client_fd, IPPROTO_TCP, TCP_NODELAY, (const char *)&nodelay, sizeof(nodelay));
+    setsockopt(client_fd, IPPROTO_TCP, TCP_NODELAY, (const char *) &nodelay, sizeof(nodelay));
 
     // Set client socket to non-blocking
     set_nonblock(t->read_fd);
@@ -314,7 +331,8 @@ XdapTransport *xdap_transport_tcp_server(int port) {
 
 XdapTransport *xdap_transport_tcp_connect(const char *host, int port) {
     XdapTransport *t = transport_alloc(XDAP_TRANSPORT_TCP_CLIENT);
-    if (!t) return NULL;
+    if (!t)
+        return NULL;
 
 #ifdef _WIN32
     WSADATA wsaData;
@@ -367,7 +385,7 @@ XdapTransport *xdap_transport_tcp_connect(const char *host, int port) {
 
     // Disable Nagle's algorithm for low-latency DAP messages
     int nodelay = 1;
-    setsockopt(sock_fd, IPPROTO_TCP, TCP_NODELAY, (const char *)&nodelay, sizeof(nodelay));
+    setsockopt(sock_fd, IPPROTO_TCP, TCP_NODELAY, (const char *) &nodelay, sizeof(nodelay));
 
     // Set to non-blocking
     set_nonblock(t->read_fd);
@@ -391,17 +409,21 @@ XdapTransport *xdap_transport_tcp_connect(const char *host, int port) {
 }
 
 void xdap_transport_free(XdapTransport *t) {
-    if (!t) return;
+    if (!t)
+        return;
 
     if (t->poll_initialized) {
         xr_poll_destroy(&t->poll);
     }
 
     if (t->type == XDAP_TRANSPORT_TCP_SERVER || t->type == XDAP_TRANSPORT_TCP_CLIENT) {
-        if (t->read_fd >= 0) close(t->read_fd);
+        if (t->read_fd >= 0)
+            close(t->read_fd);
         // For TCP, write_fd == read_fd; for safety, only close if different
-        if (t->write_fd >= 0 && t->write_fd != t->read_fd) close(t->write_fd);
-        if (t->listen_fd >= 0) close(t->listen_fd);
+        if (t->write_fd >= 0 && t->write_fd != t->read_fd)
+            close(t->write_fd);
+        if (t->listen_fd >= 0)
+            close(t->listen_fd);
 #ifdef _WIN32
         WSACleanup();
 #endif
@@ -417,19 +439,20 @@ void xdap_transport_free(XdapTransport *t) {
 // ============================================================================
 
 int xdap_transport_poll(XdapTransport *t, int timeout_ms) {
-    if (!t || !t->poll_initialized) return -1;
+    if (!t || !t->poll_initialized)
+        return -1;
 
     XrPollEvent events[4];
     return xr_poll_wait(&t->poll, events, 4, timeout_ms);
 }
-
 
 // Forward decl — drain lives below try_read.
 static bool try_drain_write(XdapTransport *t);
 
 char *xdap_transport_try_read(XdapTransport *t, size_t *out_len, bool *would_block) {
     if (!t || !t->connected) {
-        if (would_block) *would_block = false;
+        if (would_block)
+            *would_block = false;
         return NULL;
     }
 
@@ -438,55 +461,58 @@ char *xdap_transport_try_read(XdapTransport *t, size_t *out_len, bool *would_blo
     // quiet, and piggybacks on poll events the main loop already
     // delivers for stdin — so there's no extra timer needed.
     if (!try_drain_write(t)) {
-        if (would_block) *would_block = false;
+        if (would_block)
+            *would_block = false;
         return NULL;
     }
 
     // Try to read more data into buffer
     if (!ensure_capacity(&t->read_buf, &t->read_cap, t->read_len + 1024)) {
         // OOM - treat as error
-        if (would_block) *would_block = false;
+        if (would_block)
+            *would_block = false;
         return NULL;
     }
 
-    ssize_t n = read_nonblock(t->read_fd, t->read_buf + t->read_len,
-                               t->read_cap - t->read_len - 1);
+    ssize_t n = read_nonblock(t->read_fd, t->read_buf + t->read_len, t->read_cap - t->read_len - 1);
     if (n > 0) {
-        t->read_len += (size_t)n;
+        t->read_len += (size_t) n;
         t->read_buf[t->read_len] = '\0';  // Null-terminate for string search
     } else if (n < 0) {
         // Connection closed or error
         t->connected = false;
-        if (would_block) *would_block = false;
+        if (would_block)
+            *would_block = false;
         return NULL;
     }
 
     // Try to parse header via shared framing module
     if (t->pending_content_length < 0) {
-        XrFrameStatus fs = xr_frame_parse(t->read_buf, t->read_len,
-                                          &t->header_end,
-                                          &t->pending_content_length);
+        XrFrameStatus fs =
+            xr_frame_parse(t->read_buf, t->read_len, &t->header_end, &t->pending_content_length);
         if (fs == XR_FRAME_ERROR) {
             t->connected = false;
-            if (would_block) *would_block = false;
+            if (would_block)
+                *would_block = false;
             return NULL;
         }
     }
 
     // Check if we have a complete message
     if (t->pending_content_length >= 0) {
-        size_t total_needed = t->header_end + (size_t)t->pending_content_length;
+        size_t total_needed = t->header_end + (size_t) t->pending_content_length;
 
         if (t->read_len >= total_needed) {
             // Extract message content
             int content_len = t->pending_content_length;
-            char *content = xr_malloc((size_t)content_len + 1);
+            char *content = xr_malloc((size_t) content_len + 1);
             if (!content) {
-                if (would_block) *would_block = false;
+                if (would_block)
+                    *would_block = false;
                 return NULL;
             }
 
-            memcpy(content, t->read_buf + t->header_end, (size_t)content_len);
+            memcpy(content, t->read_buf + t->header_end, (size_t) content_len);
             content[content_len] = '\0';
 
             // Remove consumed data from buffer
@@ -501,14 +527,17 @@ char *xdap_transport_try_read(XdapTransport *t, size_t *out_len, bool *would_blo
             t->pending_content_length = -1;
             t->header_end = 0;
 
-            if (out_len) *out_len = (size_t)content_len;
-            if (would_block) *would_block = false;
+            if (out_len)
+                *out_len = (size_t) content_len;
+            if (would_block)
+                *would_block = false;
             return content;
         }
     }
 
     // No complete message yet
-    if (would_block) *would_block = true;
+    if (would_block)
+        *would_block = true;
     return NULL;
 }
 
@@ -518,7 +547,8 @@ char *xdap_transport_try_read(XdapTransport *t, size_t *out_len, bool *would_blo
 // drained, or only a partial drain because the kernel buffer is full);
 // returns false on a fatal write error (peer closed, broken pipe).
 static bool try_drain_write(XdapTransport *t) {
-    if (!t || t->write_len == 0) return true;
+    if (!t || t->write_len == 0)
+        return true;
 
     ssize_t sent = write_nonblock(t->write_fd, t->write_buf, t->write_len);
     if (sent < 0) {
@@ -534,9 +564,9 @@ static bool try_drain_write(XdapTransport *t) {
         // Would-block: leave queue intact, caller retries later.
         return true;
     }
-    size_t remaining = t->write_len - (size_t)sent;
+    size_t remaining = t->write_len - (size_t) sent;
     if (remaining > 0) {
-        memmove(t->write_buf, t->write_buf + (size_t)sent, remaining);
+        memmove(t->write_buf, t->write_buf + (size_t) sent, remaining);
     }
     t->write_len = remaining;
     return true;
@@ -552,24 +582,26 @@ static bool try_drain_write(XdapTransport *t) {
 // transport disconnected so the DAP session is torn down cleanly
 // rather than accumulating unbounded memory against a dead peer.
 void xdap_transport_write(XdapTransport *t, const char *json, size_t len) {
-    if (!t || !t->connected) return;
+    if (!t || !t->connected)
+        return;
 
     // Opportunistic drain first — often the queue is empty and this
     // call writes the whole message in a single syscall.
-    if (!try_drain_write(t)) return;
+    if (!try_drain_write(t))
+        return;
 
     char header[64];
     int header_len = xr_frame_write_header(header, sizeof(header), len);
-    if (header_len < 0) return;
+    if (header_len < 0)
+        return;
 
-    size_t add = (size_t)header_len + len;
+    size_t add = (size_t) header_len + len;
     size_t needed = t->write_len + add;
 
     if (needed > XDAP_WRITE_BUF_MAX) {
         // Back-pressure guard: the peer is not consuming fast enough.
         // Drop the connection instead of OOMing the debugger.
-        fprintf(stderr,
-                "[DAP] Write queue exceeds %u bytes; dropping connection\n",
+        fprintf(stderr, "[DAP] Write queue exceeds %u bytes; dropping connection\n",
                 XDAP_WRITE_BUF_MAX);
         t->connected = false;
         t->write_len = 0;
@@ -583,8 +615,8 @@ void xdap_transport_write(XdapTransport *t, const char *json, size_t len) {
         return;
     }
 
-    memcpy(t->write_buf + t->write_len, header, (size_t)header_len);
-    t->write_len += (size_t)header_len;
+    memcpy(t->write_buf + t->write_len, header, (size_t) header_len);
+    t->write_len += (size_t) header_len;
     memcpy(t->write_buf + t->write_len, json, len);
     t->write_len += len;
 
@@ -594,7 +626,8 @@ void xdap_transport_write(XdapTransport *t, const char *json, size_t len) {
 }
 
 void xdap_transport_wakeup(XdapTransport *t) {
-    if (!t || !t->poll_initialized) return;
+    if (!t || !t->poll_initialized)
+        return;
     xr_poll_wakeup(&t->poll);
 }
 

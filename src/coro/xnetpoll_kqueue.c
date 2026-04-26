@@ -26,7 +26,8 @@
 
 static int kqueue_init(XrNetpoll *np) {
     np->poll_fd = kqueue();
-    if (np->poll_fd < 0) return -1;
+    if (np->poll_fd < 0)
+        return -1;
     np->backend_state = NULL;
 
     // Register wakeup pipe
@@ -49,7 +50,7 @@ static void kqueue_cleanup(XrNetpoll *np) {
 
 static int kqueue_add_fd(XrNetpoll *np, int fd, XrPollDesc *pd) {
     struct kevent kev[2];
-    EV_SET(&kev[0], fd, EVFILT_READ,  EV_ADD | EV_CLEAR, 0, 0, pd);
+    EV_SET(&kev[0], fd, EVFILT_READ, EV_ADD | EV_CLEAR, 0, 0, pd);
     EV_SET(&kev[1], fd, EVFILT_WRITE, EV_ADD | EV_CLEAR, 0, 0, pd);
     return kevent(np->poll_fd, kev, 2, NULL, 0, NULL);
 }
@@ -77,27 +78,34 @@ static int kqueue_poll_events(XrNetpoll *np, int64_t delta_ns, XrReadyList *list
 
     struct kevent events[128];
     int n = kevent(np->poll_fd, NULL, 0, events, 128, timeout);
-    if (n < 0) return (errno == EINTR) ? 0 : -1;
+    if (n < 0)
+        return (errno == EINTR) ? 0 : -1;
 
     for (int i = 0; i < n; i++) {
         struct kevent *ev = &events[i];
 
-        if ((int)ev->ident == np->wakeup_pipe[0]) {
+        if ((int) ev->ident == np->wakeup_pipe[0]) {
             char buf[16];
-            while (read(np->wakeup_pipe[0], buf, sizeof(buf)) > 0) {}
+            while (read(np->wakeup_pipe[0], buf, sizeof(buf)) > 0) {
+            }
             atomic_store(&np->break_pending, false);
             continue;
         }
 
-        XrPollDesc *pd = (XrPollDesc *)ev->udata;
-        if (!pd) continue;
+        XrPollDesc *pd = (XrPollDesc *) ev->udata;
+        if (!pd)
+            continue;
 
         int mode = 0;
-        if (ev->filter == EVFILT_READ)  mode = XR_POLL_READ;
-        else if (ev->filter == EVFILT_WRITE) mode = XR_POLL_WRITE;
-        if (ev->flags & EV_ERROR) mode = XR_POLL_BOTH;
+        if (ev->filter == EVFILT_READ)
+            mode = XR_POLL_READ;
+        else if (ev->filter == EVFILT_WRITE)
+            mode = XR_POLL_WRITE;
+        if (ev->flags & EV_ERROR)
+            mode = XR_POLL_BOTH;
 
-        if (mode) xr_netpoll_ready(list, pd, mode);
+        if (mode)
+            xr_netpoll_ready(list, pd, mode);
     }
     return n;
 }
@@ -108,17 +116,19 @@ static void kqueue_wakeup(XrNetpoll *np) {
         return;
     char c = 0;
     ssize_t n;
-    do { n = write(np->wakeup_pipe[1], &c, 1); } while (n < 0 && errno == EINTR);
+    do {
+        n = write(np->wakeup_pipe[1], &c, 1);
+    } while (n < 0 && errno == EINTR);
 }
 
 static const XrNetpollOps kqueue_ops = {
-    .name        = "kqueue",
-    .init        = kqueue_init,
-    .cleanup     = kqueue_cleanup,
-    .add_fd      = kqueue_add_fd,
-    .del_fd      = kqueue_del_fd,
+    .name = "kqueue",
+    .init = kqueue_init,
+    .cleanup = kqueue_cleanup,
+    .add_fd = kqueue_add_fd,
+    .del_fd = kqueue_del_fd,
     .poll_events = kqueue_poll_events,
-    .wakeup      = kqueue_wakeup,
+    .wakeup = kqueue_wakeup,
 };
 
-#endif // __APPLE__
+#endif  // __APPLE__

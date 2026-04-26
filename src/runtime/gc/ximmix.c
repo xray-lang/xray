@@ -20,7 +20,7 @@
 
 /* ========== Platform-Specific Aligned Allocation ========== */
 
-static char* alloc_aligned_block(void) {
+static char *alloc_aligned_block(void) {
     void *ptr = NULL;
 #if defined(_WIN32)
     ptr = _aligned_malloc(XR_IMMIX_BLOCK_SIZE, XR_IMMIX_BLOCK_SIZE);
@@ -29,7 +29,7 @@ static char* alloc_aligned_block(void) {
         return NULL;
     }
 #endif
-    return (char*)ptr;
+    return (char *) ptr;
 }
 
 static void free_aligned_block(char *data) {
@@ -72,7 +72,7 @@ static void block_cache_cleanup(void) {
 
     while (b) {
         XrImmixBlock *next = b->next;
-        free_aligned_block((char*)b);
+        free_aligned_block((char *) b);
         b = next;
     }
 }
@@ -86,7 +86,7 @@ static void block_cache_init_once(void) {
 }
 
 // L2 pop (caller holds no lock — we lock internally)
-static XrImmixBlock* block_cache_l2_pop(void) {
+static XrImmixBlock *block_cache_l2_pop(void) {
     pthread_mutex_lock(&g_block_cache_mu);
     XrImmixBlock *b = g_block_cache_head;
     if (b) {
@@ -112,11 +112,11 @@ static bool block_cache_l2_push(XrImmixBlock *block) {
 }
 
 // Pop: try L1 (per-worker), then L2 (global)
-static XrImmixBlock* block_cache_pop(void) {
+static XrImmixBlock *block_cache_pop(void) {
     XrWorker *w = xr_current_worker();
     if (w && w->p.block_cache_count > 0) {
         w->p.block_cache_count--;
-        return (XrImmixBlock*)w->p.block_cache[w->p.block_cache_count];
+        return (XrImmixBlock *) w->p.block_cache[w->p.block_cache_count];
     }
     return block_cache_l2_pop();
 }
@@ -129,7 +129,7 @@ static void block_cache_push(XrImmixBlock *block) {
         return;
     }
     if (!block_cache_l2_push(block)) {
-        free_aligned_block((char*)block);
+        free_aligned_block((char *) block);
     }
 }
 
@@ -139,9 +139,9 @@ void xr_immix_flush_block_cache(void *block_cache[], int *count) {
     XR_DCHECK(block_cache != NULL, "flush_block_cache: NULL cache array");
     XR_DCHECK(count != NULL, "flush_block_cache: NULL count");
     for (int i = 0; i < *count; i++) {
-        XrImmixBlock *b = (XrImmixBlock*)block_cache[i];
+        XrImmixBlock *b = (XrImmixBlock *) block_cache[i];
         if (!block_cache_l2_push(b)) {
-            free_aligned_block((char*)b);
+            free_aligned_block((char *) b);
         }
         block_cache[i] = NULL;
     }
@@ -150,15 +150,16 @@ void xr_immix_flush_block_cache(void *block_cache[], int *count) {
 
 /* ========== Block Management ========== */
 
-static XrImmixBlock* block_new(void) {
+static XrImmixBlock *block_new(void) {
     block_cache_init_once();
 
     // Try global cache first, then allocate fresh
     XrImmixBlock *block = block_cache_pop();
     if (!block) {
         char *data = alloc_aligned_block();
-        if (!data) return NULL;
-        block = (XrImmixBlock*)data;
+        if (!data)
+            return NULL;
+        block = (XrImmixBlock *) data;
     }
 
     // Common init: zero metadata line, set non-zero fields
@@ -167,16 +168,17 @@ static XrImmixBlock* block_new(void) {
     block->next_scan_line = XR_IMMIX_FIRST_LINE;
     block->is_young = 1;
 
-    XR_DCHECK(((uintptr_t)block & (XR_IMMIX_BLOCK_SIZE - 1)) == 0,
+    XR_DCHECK(((uintptr_t) block & (XR_IMMIX_BLOCK_SIZE - 1)) == 0,
               "block_new: block not aligned to BLOCK_SIZE");
     return block;
 }
 
 static void block_free(XrImmixBlock *block) {
-    if (!block) return;
-    XR_DCHECK(((uintptr_t)block & (XR_IMMIX_BLOCK_SIZE - 1)) == 0,
+    if (!block)
+        return;
+    XR_DCHECK(((uintptr_t) block & (XR_IMMIX_BLOCK_SIZE - 1)) == 0,
               "block_free: unaligned block pointer");
-    if ((uintptr_t)block & (XR_IMMIX_BLOCK_SIZE - 1)) {
+    if ((uintptr_t) block & (XR_IMMIX_BLOCK_SIZE - 1)) {
         return;
     }
     block_cache_push(block);
@@ -184,7 +186,7 @@ static void block_free(XrImmixBlock *block) {
 
 static void free_block_list(XrImmixBlock *list) {
     while (list) {
-        if ((uintptr_t)list & (XR_IMMIX_BLOCK_SIZE - 1)) {
+        if ((uintptr_t) list & (XR_IMMIX_BLOCK_SIZE - 1)) {
             break;
         }
         XrImmixBlock *next = list->next;
@@ -200,8 +202,7 @@ static void free_block_list(XrImmixBlock *list) {
  * run of unmarked lines (a "hole").
  * Returns true if found, sets *hole_start and *hole_end (exclusive).
  */
-static bool find_next_hole(XrImmixBlock *block, int start_line,
-                           int *hole_start, int *hole_end) {
+static bool find_next_hole(XrImmixBlock *block, int start_line, int *hole_start, int *hole_end) {
     XR_DCHECK(block != NULL, "find_next_hole: NULL block");
     XR_DCHECK(start_line >= XR_IMMIX_FIRST_LINE && start_line <= XR_IMMIX_LINES,
               "find_next_hole: start_line out of range");
@@ -303,16 +304,16 @@ static bool try_current_block_hole(XrImmixHeap *heap, size_t size) {
     XR_DCHECK(heap != NULL, "try_current_block_hole: NULL heap");
     XR_DCHECK(size > 0, "try_current_block_hole: zero size");
     XrImmixBlock *block = heap->current_block;
-    if (!block) return false;
+    if (!block)
+        return false;
 
     int hole_start, hole_end;
-    while (find_next_hole(block, block->next_scan_line,
-                          &hole_start, &hole_end)) {
-        size_t hole_size = (size_t)(hole_end - hole_start) * XR_IMMIX_LINE_SIZE;
-        block->next_scan_line = (uint8_t)hole_end;
+    while (find_next_hole(block, block->next_scan_line, &hole_start, &hole_end)) {
+        size_t hole_size = (size_t) (hole_end - hole_start) * XR_IMMIX_LINE_SIZE;
+        block->next_scan_line = (uint8_t) hole_end;
         if (hole_size >= size) {
-            heap->cursor = (char*)block + (size_t)hole_start * XR_IMMIX_LINE_SIZE;
-            heap->limit  = (char*)block + (size_t)hole_end   * XR_IMMIX_LINE_SIZE;
+            heap->cursor = (char *) block + (size_t) hole_start * XR_IMMIX_LINE_SIZE;
+            heap->limit = (char *) block + (size_t) hole_end * XR_IMMIX_LINE_SIZE;
             heap->mark_cursor = heap->cursor;
             return true;
         }
@@ -352,19 +353,20 @@ static bool try_recycle_blocks(XrImmixHeap *heap, size_t size) {
 static void activate_block(XrImmixHeap *heap, XrImmixBlock *block) {
     XR_DCHECK(heap != NULL, "activate_block: NULL heap");
     XR_DCHECK(block != NULL, "activate_block: NULL block");
-    block->alloc_marks[0] = 1ULL;   // Line 0 reserved
+    block->alloc_marks[0] = 1ULL;  // Line 0 reserved
     block->alloc_marks[1] = 0;
     block->next_scan_line = XR_IMMIX_FIRST_LINE;
 
-    heap->cursor = (char*)block + (size_t)XR_IMMIX_FIRST_LINE * XR_IMMIX_LINE_SIZE;
-    heap->limit  = (char*)block + XR_IMMIX_BLOCK_SIZE;
+    heap->cursor = (char *) block + (size_t) XR_IMMIX_FIRST_LINE * XR_IMMIX_LINE_SIZE;
+    heap->limit = (char *) block + XR_IMMIX_BLOCK_SIZE;
     heap->mark_cursor = heap->cursor;
     heap->current_block = block;
     XR_DCHECK(heap->cursor <= heap->limit, "activate_block: cursor > limit");
 }
 
 static bool try_free_block(XrImmixHeap *heap) {
-    if (!heap->free_blocks) return false;
+    if (!heap->free_blocks)
+        return false;
     XrImmixBlock *block = heap->free_blocks;
     heap->free_blocks = block->next;
     block->next = NULL;
@@ -382,11 +384,12 @@ static bool alloc_new_block(XrImmixHeap *heap) {
     }
 
     XrImmixBlock *block = block_new();
-    if (!block) return false;
+    if (!block)
+        return false;
 
     heap->current_block = block;
-    heap->cursor = (char*)block + (size_t)XR_IMMIX_FIRST_LINE * XR_IMMIX_LINE_SIZE;
-    heap->limit  = (char*)block + XR_IMMIX_BLOCK_SIZE;
+    heap->cursor = (char *) block + (size_t) XR_IMMIX_FIRST_LINE * XR_IMMIX_LINE_SIZE;
+    heap->limit = (char *) block + XR_IMMIX_BLOCK_SIZE;
     heap->mark_cursor = heap->cursor;
     heap->total_blocks++;
     heap->total_block_bytes += XR_IMMIX_BLOCK_SIZE;
@@ -396,7 +399,7 @@ static bool alloc_new_block(XrImmixHeap *heap) {
 
 /* ========== Allocation ========== */
 
-void* xr_immix_alloc_slow(XrImmixHeap *heap, size_t size) {
+void *xr_immix_alloc_slow(XrImmixHeap *heap, size_t size) {
     XR_DCHECK(heap != NULL, "immix_alloc_slow: NULL heap");
     XR_DCHECK(size > 0, "immix_alloc_slow: zero size");
     // Flush deferred alloc_marks before hole-scanning
@@ -424,7 +427,8 @@ void* xr_immix_alloc_slow(XrImmixHeap *heap, size_t size) {
     }
 
     // 4. Allocate new block
-    if (!alloc_new_block(heap)) return NULL;
+    if (!alloc_new_block(heap))
+        return NULL;
     char *result = heap->cursor;
     heap->cursor = result + size;
     XR_DCHECK(heap->cursor <= heap->limit, "alloc_slow: cursor > limit after alloc");
@@ -436,14 +440,15 @@ void* xr_immix_alloc_slow(XrImmixHeap *heap, size_t size) {
 /* ========== GC Integration (Single Bitmap) ========== */
 
 void xr_immix_mark_alloc_lines(void *obj_ptr, size_t obj_size) {
-    if (!obj_ptr || obj_size == 0) return;
+    if (!obj_ptr || obj_size == 0)
+        return;
     XrImmixBlock *block = XR_IMMIX_BLOCK_FROM_PTR(obj_ptr);
-    char *block_data = (char*)block;
-    uintptr_t base  = (uintptr_t)block_data;
-    uintptr_t start = (uintptr_t)obj_ptr;
-    uintptr_t end   = start + obj_size - 1;
-    int first_line = (int)((start - base) / XR_IMMIX_LINE_SIZE);
-    int last_line  = (int)((end   - base) / XR_IMMIX_LINE_SIZE);
+    char *block_data = (char *) block;
+    uintptr_t base = (uintptr_t) block_data;
+    uintptr_t start = (uintptr_t) obj_ptr;
+    uintptr_t end = start + obj_size - 1;
+    int first_line = (int) ((start - base) / XR_IMMIX_LINE_SIZE);
+    int last_line = (int) ((end - base) / XR_IMMIX_LINE_SIZE);
     XR_DCHECK(first_line >= 0 && first_line < XR_IMMIX_LINES,
               "mark_alloc_lines: first_line out of range");
     XR_DCHECK(last_line >= 0 && last_line < XR_IMMIX_LINES,
@@ -452,7 +457,6 @@ void xr_immix_mark_alloc_lines(void *obj_ptr, size_t obj_size) {
         XR_IMMIX_LINE_SET(block->alloc_marks, l);
     }
 }
-
 
 /*
  * Count live lines in a block (excluding the reserved line 0).
@@ -467,8 +471,14 @@ int xr_immix_count_live_lines(XrImmixBlock *block) {
     return __builtin_popcountll(w0) + __builtin_popcountll(w1);
 #else
     int count = 0;
-    while (w0) { count++; w0 &= w0 - 1; }
-    while (w1) { count++; w1 &= w1 - 1; }
+    while (w0) {
+        count++;
+        w0 &= w0 - 1;
+    }
+    while (w1) {
+        count++;
+        w1 &= w1 - 1;
+    }
     return count;
 #endif
 }
@@ -481,29 +491,30 @@ int xr_immix_count_live_lines(XrImmixBlock *block) {
  */
 void xr_immix_reclaim_young(XrImmixHeap *heap) {
     XR_DCHECK(heap != NULL, "immix_reclaim_young: NULL heap");
-    XrImmixBlock *new_full    = NULL;
+    XrImmixBlock *new_full = NULL;
     XrImmixBlock *new_recycle = NULL;
-    XrImmixBlock *new_free    = heap->free_blocks;
+    XrImmixBlock *new_free = heap->free_blocks;
     size_t young_count = 0;
 
-    #define CLASSIFY_BLOCK(blk, is_young_mode) do {             \
-        int live = xr_immix_count_live_lines(blk);              \
-        if (live == 0) {                                        \
-            if (is_young_mode) {                                \
-                (blk)->is_young = 1;                            \
-                (blk)->local_allgc = NULL;                      \
-            }                                                   \
-            (blk)->next = new_free;                             \
-            new_free = (blk);                                   \
-        } else if (live < XR_IMMIX_USABLE_LINES) {             \
-            (blk)->next_scan_line = XR_IMMIX_FIRST_LINE;        \
-            (blk)->next = new_recycle;                          \
-            new_recycle = (blk);                                \
-        } else {                                                \
-            (blk)->next = new_full;                             \
-            new_full = (blk);                                   \
-        }                                                       \
-        young_count++;                                          \
+#define CLASSIFY_BLOCK(blk, is_young_mode)                                                         \
+    do {                                                                                           \
+        int live = xr_immix_count_live_lines(blk);                                                 \
+        if (live == 0) {                                                                           \
+            if (is_young_mode) {                                                                   \
+                (blk)->is_young = 1;                                                               \
+                (blk)->local_allgc = NULL;                                                         \
+            }                                                                                      \
+            (blk)->next = new_free;                                                                \
+            new_free = (blk);                                                                      \
+        } else if (live < XR_IMMIX_USABLE_LINES) {                                                 \
+            (blk)->next_scan_line = XR_IMMIX_FIRST_LINE;                                           \
+            (blk)->next = new_recycle;                                                             \
+            new_recycle = (blk);                                                                   \
+        } else {                                                                                   \
+            (blk)->next = new_full;                                                                \
+            new_full = (blk);                                                                      \
+        }                                                                                          \
+        young_count++;                                                                             \
     } while (0)
 
     XrImmixBlock *b = heap->full_blocks;
@@ -522,43 +533,45 @@ void xr_immix_reclaim_young(XrImmixHeap *heap) {
         CLASSIFY_BLOCK(heap->current_block, true);
         heap->current_block = NULL;
     }
-    #undef CLASSIFY_BLOCK
+#undef CLASSIFY_BLOCK
 
-    heap->full_blocks    = new_full;
+    heap->full_blocks = new_full;
     heap->recycle_blocks = new_recycle;
-    heap->free_blocks    = new_free;
+    heap->free_blocks = new_free;
 
     heap->total_blocks = heap->old_block_count + young_count;
     heap->total_block_bytes = heap->total_blocks * XR_IMMIX_BLOCK_SIZE;
 
     heap->cursor = NULL;
-    heap->limit  = NULL;
+    heap->limit = NULL;
 }
 
 void xr_immix_reclaim(XrImmixHeap *heap) {
     XR_DCHECK(heap != NULL, "immix_reclaim: NULL heap");
-    XrImmixBlock *new_full    = NULL;
+    XrImmixBlock *new_full = NULL;
     XrImmixBlock *new_recycle = NULL;
-    XrImmixBlock *new_free    = heap->free_blocks;  // Keep existing free blocks
+    XrImmixBlock *new_free = heap->free_blocks;  // Keep existing free blocks
     size_t block_count = 0;
     // Count pre-existing free blocks (they won't go through CLASSIFY_BLOCK)
-    for (XrImmixBlock *p = new_free; p; p = p->next) block_count++;
+    for (XrImmixBlock *p = new_free; p; p = p->next)
+        block_count++;
 
-    // Helper: classify one block and count
-    #define CLASSIFY_BLOCK(blk) do {                        \
-        int live = xr_immix_count_live_lines(blk);          \
-        if (live == 0) {                                    \
-            (blk)->next = new_free;                         \
-            new_free = (blk);                               \
-        } else if (live < XR_IMMIX_USABLE_LINES) {         \
-            (blk)->next_scan_line = XR_IMMIX_FIRST_LINE;    \
-            (blk)->next = new_recycle;                      \
-            new_recycle = (blk);                            \
-        } else {                                            \
-            (blk)->next = new_full;                         \
-            new_full = (blk);                               \
-        }                                                   \
-        block_count++;                                      \
+// Helper: classify one block and count
+#define CLASSIFY_BLOCK(blk)                                                                        \
+    do {                                                                                           \
+        int live = xr_immix_count_live_lines(blk);                                                 \
+        if (live == 0) {                                                                           \
+            (blk)->next = new_free;                                                                \
+            new_free = (blk);                                                                      \
+        } else if (live < XR_IMMIX_USABLE_LINES) {                                                 \
+            (blk)->next_scan_line = XR_IMMIX_FIRST_LINE;                                           \
+            (blk)->next = new_recycle;                                                             \
+            new_recycle = (blk);                                                                   \
+        } else {                                                                                   \
+            (blk)->next = new_full;                                                                \
+            new_full = (blk);                                                                      \
+        }                                                                                          \
+        block_count++;                                                                             \
     } while (0)
 
     // Process full_blocks
@@ -583,18 +596,18 @@ void xr_immix_reclaim(XrImmixHeap *heap) {
         heap->current_block = NULL;
     }
 
-    #undef CLASSIFY_BLOCK
+#undef CLASSIFY_BLOCK
 
-    heap->full_blocks    = new_full;
+    heap->full_blocks = new_full;
     heap->recycle_blocks = new_recycle;
-    heap->free_blocks    = new_free;
+    heap->free_blocks = new_free;
 
     heap->total_blocks = block_count;
     heap->total_block_bytes = block_count * XR_IMMIX_BLOCK_SIZE;
 
     // Reset allocation state; next alloc will pick from recycle/free/new
     heap->cursor = NULL;
-    heap->limit  = NULL;
+    heap->limit = NULL;
 }
 
 /* ========== Debug ========== */
@@ -604,18 +617,19 @@ void xr_immix_get_stats(XrImmixHeap *heap, XrImmixStats *stats) {
     XR_DCHECK(stats != NULL, "immix_get_stats: NULL stats");
     memset(stats, 0, sizeof(XrImmixStats));
 
-    // Helper: accumulate stats for a block list
-    #define SCAN_LIST(list, counter) do {                          \
-        for (XrImmixBlock *b = (list); b; b = b->next) {          \
-            stats->total_blocks++;                                 \
-            stats->counter++;                                      \
-            int live = xr_immix_count_live_lines(b);                        \
-            stats->live_lines += (size_t)live;                     \
-            stats->free_lines += (size_t)(XR_IMMIX_USABLE_LINES - live); \
-        }                                                          \
+// Helper: accumulate stats for a block list
+#define SCAN_LIST(list, counter)                                                                   \
+    do {                                                                                           \
+        for (XrImmixBlock *b = (list); b; b = b->next) {                                           \
+            stats->total_blocks++;                                                                 \
+            stats->counter++;                                                                      \
+            int live = xr_immix_count_live_lines(b);                                               \
+            stats->live_lines += (size_t) live;                                                    \
+            stats->free_lines += (size_t) (XR_IMMIX_USABLE_LINES - live);                          \
+        }                                                                                          \
     } while (0)
 
-    SCAN_LIST(heap->full_blocks,    full_blocks);
+    SCAN_LIST(heap->full_blocks, full_blocks);
     SCAN_LIST(heap->recycle_blocks, recycle_blocks);
 
     // Free blocks: all usable lines are free
@@ -629,11 +643,11 @@ void xr_immix_get_stats(XrImmixHeap *heap, XrImmixStats *stats) {
     if (heap->current_block) {
         stats->total_blocks++;
         int live = xr_immix_count_live_lines(heap->current_block);
-        stats->live_lines += (size_t)live;
-        stats->free_lines += (size_t)(XR_IMMIX_USABLE_LINES - live);
+        stats->live_lines += (size_t) live;
+        stats->free_lines += (size_t) (XR_IMMIX_USABLE_LINES - live);
     }
 
-    #undef SCAN_LIST
+#undef SCAN_LIST
 
     stats->total_bytes = stats->total_blocks * XR_IMMIX_BLOCK_SIZE;
 }

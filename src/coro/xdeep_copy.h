@@ -56,13 +56,17 @@ static inline bool xr_value_needs_copy(XrValue value) {
 }
 
 XR_FUNC XrValue xr_deep_copy(struct XrayIsolate *X, XrValue value, struct XrGC *dst_gc);
-XR_FUNC XrValue xr_deep_copy_counted(struct XrayIsolate *X, XrValue value, struct XrGC *dst_gc, int *out_count);
-XR_FUNC XrValue xr_deep_copy_to_coro(struct XrayIsolate *X, XrValue value, struct XrCoroutine *dst_coro);
+XR_FUNC XrValue xr_deep_copy_counted(struct XrayIsolate *X, XrValue value, struct XrGC *dst_gc,
+                                     int *out_count);
+XR_FUNC XrValue xr_deep_copy_to_coro(struct XrayIsolate *X, XrValue value,
+                                     struct XrCoroutine *dst_coro);
 XR_FUNC XrValue xr_deep_copy_to_coro_counted(struct XrayIsolate *X, XrValue value,
-                                      struct XrCoroutine *dst_coro, int *out_count);
-XR_FUNC XrValue xr_deep_copy_array(struct XrayIsolate *X, struct XrArray *array, struct XrGC *dst_gc);
+                                             struct XrCoroutine *dst_coro, int *out_count);
+XR_FUNC XrValue xr_deep_copy_array(struct XrayIsolate *X, struct XrArray *array,
+                                   struct XrGC *dst_gc);
 XR_FUNC XrValue xr_deep_copy_map(struct XrayIsolate *X, struct XrMap *map, struct XrGC *dst_gc);
-XR_FUNC XrValue xr_deep_copy_closure(struct XrayIsolate *X, struct XrClosure *closure, struct XrGC *dst_gc);
+XR_FUNC XrValue xr_deep_copy_closure(struct XrayIsolate *X, struct XrClosure *closure,
+                                     struct XrGC *dst_gc);
 
 typedef struct XrSeenEntry {
     void *src;
@@ -87,7 +91,7 @@ typedef struct XrCopyContext {
     XrSeenEntry **buckets;
     int bucket_count;
     int objects_copied;
-    XrSeenArena *arena_head;       // arena block list for seen entries
+    XrSeenArena *arena_head;  // arena block list for seen entries
 } XrCopyContext;
 
 XR_FUNC void xr_copy_context_init(XrCopyContext *ctx, struct XrayIsolate *X, struct XrGC *dst_gc);
@@ -125,4 +129,4 @@ XR_FUNC XrValue xr_to_shared_closure(struct XrayIsolate *X, struct XrGCHeader *o
 XR_FUNC XrValue xr_to_shared_stringbuilder(struct XrayIsolate *X, struct XrGCHeader *obj);
 XR_FUNC XrValue xr_to_shared_datetime(struct XrayIsolate *X, struct XrGCHeader *obj);
 
-#endif // XDEEP_COPY_H
+#endif  // XDEEP_COPY_H

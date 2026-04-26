@@ -52,49 +52,46 @@
 
 const XrTypeOps g_type_ops[XGC_MAX_TYPES] = {
     // Containers — full lifecycle: destroy + traverse + deep_copy + to_shared.
-    [XR_TARRAY]         = { xr_gc_destroy_array,         xr_gc_traverse_array,
-                            xr_deep_copy_array_with_ctx, xr_to_shared_array },
-    [XR_TARRAY_SLICE]   = { NULL,                        xr_gc_traverse_array,
-                            xr_deep_copy_array_with_ctx, xr_to_shared_array },
-    [XR_TMAP]           = { xr_gc_destroy_map,           xr_gc_traverse_map,
-                            xr_deep_copy_map_with_ctx,   xr_to_shared_map },
-    [XR_TSET]           = { xr_gc_destroy_set,           xr_gc_traverse_set,
-                            xr_deep_copy_set_with_ctx,   xr_to_shared_set },
-    [XR_TJSON]          = { xr_gc_destroy_json,          xr_coro_gc_traverse_json,
-                            xr_deep_copy_json_with_ctx,  xr_to_shared_json },
-    [XR_TINSTANCE]      = { NULL,                        xr_gc_traverse_instance,
-                            xr_deep_copy_instance_with_ctx, xr_to_shared_instance },
-    [XR_TFUNCTION]      = { NULL,                        xr_gc_traverse_closure,
-                            xr_deep_copy_closure_with_ctx, xr_to_shared_closure },
+    [XR_TARRAY] = {xr_gc_destroy_array, xr_gc_traverse_array, xr_deep_copy_array_with_ctx,
+                   xr_to_shared_array},
+    [XR_TARRAY_SLICE] = {NULL, xr_gc_traverse_array, xr_deep_copy_array_with_ctx,
+                         xr_to_shared_array},
+    [XR_TMAP] = {xr_gc_destroy_map, xr_gc_traverse_map, xr_deep_copy_map_with_ctx,
+                 xr_to_shared_map},
+    [XR_TSET] = {xr_gc_destroy_set, xr_gc_traverse_set, xr_deep_copy_set_with_ctx,
+                 xr_to_shared_set},
+    [XR_TJSON] = {xr_gc_destroy_json, xr_coro_gc_traverse_json, xr_deep_copy_json_with_ctx,
+                  xr_to_shared_json},
+    [XR_TINSTANCE] = {NULL, xr_gc_traverse_instance, xr_deep_copy_instance_with_ctx,
+                      xr_to_shared_instance},
+    [XR_TFUNCTION] = {NULL, xr_gc_traverse_closure, xr_deep_copy_closure_with_ctx,
+                      xr_to_shared_closure},
 
     // Datetime — leaf payload, but shareable / cloneable (memcpy body).
-    [XR_TDATETIME]      = { NULL,                        NULL,
-                            xr_deep_copy_datetime_with_ctx, xr_to_shared_datetime },
+    [XR_TDATETIME] = {NULL, NULL, xr_deep_copy_datetime_with_ctx, xr_to_shared_datetime},
 
     // StringBuilder — has destroy hook for its internal buffer; only
     // shareable (no current need to deep-copy across coro).
-    [XR_TSTRINGBUILDER] = { xr_gc_destroy_stringbuilder, NULL,
-                            NULL,                        xr_to_shared_stringbuilder },
+    [XR_TSTRINGBUILDER] = {xr_gc_destroy_stringbuilder, NULL, NULL, xr_to_shared_stringbuilder},
 
     // Channels — already shared at construction; pass-through across coro.
-    [XR_TCHANNEL]       = { xr_gc_destroy_channel,       NULL,
-                            NULL,                        NULL },
+    [XR_TCHANNEL] = {xr_gc_destroy_channel, NULL, NULL, NULL},
 
     // Other GC types: have destroy or traverse responsibilities, but
     // are deliberately not transferable across coroutines (the
     // dispatchers return the raw value, matching the pre-table default).
-    [XR_TCOROUTINE]     = { xr_gc_destroy_coroutine,     NULL, NULL, NULL },
-    [XR_TREGEX]         = { regex_object_destroy,        NULL, NULL, NULL },
-    [XR_TLOGGER]        = { xr_gc_destroy_logger,        NULL, NULL, NULL },
-    [XR_TTASK]          = { xr_gc_destroy_task,          xr_gc_traverse_task, NULL, NULL },
-    [XR_TITERATOR]      = { NULL,                        xr_gc_traverse_iterator, NULL, NULL },
-    [XR_TCELL]          = { NULL,                        xr_gc_traverse_cell, NULL, NULL },
-    [XR_TBOUND_METHOD]  = { NULL,                        xr_gc_traverse_bound_method, NULL, NULL },
-    [XR_TMODULE]        = { NULL,                        xr_gc_traverse_module, NULL, NULL },
-    [XR_TEXCEPTION]     = { NULL,                        xr_gc_traverse_exception, NULL, NULL },
-    [XR_TERROR]         = { NULL,                        xr_gc_traverse_error, NULL, NULL },
-    [XR_TENUM_TYPE]     = { xr_gc_destroy_enum_type,     NULL, NULL, NULL },
-    [XR_TENUM_VALUE]    = { xr_gc_destroy_enum_value,    NULL, NULL, NULL },
+    [XR_TCOROUTINE] = {xr_gc_destroy_coroutine, NULL, NULL, NULL},
+    [XR_TREGEX] = {regex_object_destroy, NULL, NULL, NULL},
+    [XR_TLOGGER] = {xr_gc_destroy_logger, NULL, NULL, NULL},
+    [XR_TTASK] = {xr_gc_destroy_task, xr_gc_traverse_task, NULL, NULL},
+    [XR_TITERATOR] = {NULL, xr_gc_traverse_iterator, NULL, NULL},
+    [XR_TCELL] = {NULL, xr_gc_traverse_cell, NULL, NULL},
+    [XR_TBOUND_METHOD] = {NULL, xr_gc_traverse_bound_method, NULL, NULL},
+    [XR_TMODULE] = {NULL, xr_gc_traverse_module, NULL, NULL},
+    [XR_TEXCEPTION] = {NULL, xr_gc_traverse_exception, NULL, NULL},
+    [XR_TERROR] = {NULL, xr_gc_traverse_error, NULL, NULL},
+    [XR_TENUM_TYPE] = {xr_gc_destroy_enum_type, NULL, NULL, NULL},
+    [XR_TENUM_VALUE] = {xr_gc_destroy_enum_value, NULL, NULL, NULL},
 
     // XR_TRANGE / XR_TBLOB / XR_TSTRING are pure leaves with no
     // capabilities; their slots are zero-initialised by default.
@@ -102,7 +99,7 @@ const XrTypeOps g_type_ops[XGC_MAX_TYPES] = {
 
 /* ========== GC State ========== */
 
-#define xr_gc_gettype(o)  XR_GC_GET_TYPE(o)
+#define xr_gc_gettype(o) XR_GC_GET_TYPE(o)
 
 static XrGCDestroyFn get_destroy_func(uint8_t type) {
     return (type < XGC_MAX_TYPES) ? g_type_ops[type].destroy : NULL;
@@ -143,32 +140,31 @@ void xr_gc_cleanup(XrGC *gc) {
 
 /* ========== Allocation (Only for fixed objects during initialization) ========== */
 
-void* xr_gc_alloc(XrGC *gc, size_t size, uint8_t type) {
+void *xr_gc_alloc(XrGC *gc, size_t size, uint8_t type) {
     XR_DCHECK(gc != NULL, "gc_alloc: NULL gc");
     XR_DCHECK(size >= sizeof(XrGCHeader), "gc_alloc: size too small");
     XR_DCHECK(type < XGC_MAX_TYPES, "gc_alloc: invalid GC type");
     // Global GC: Allocate fixed objects using malloc
     // Note: Runtime objects should use xr_alloc() or xr_coro_gc_alloc()
-    XrGCHeader *obj = (XrGCHeader*)xr_malloc(size);
+    XrGCHeader *obj = (XrGCHeader *) xr_malloc(size);
     if (obj) {
         obj->type = type;
         obj->marked = 0;
         obj->extra = 0;
-        obj->objsize = (uint32_t)size;
+        obj->objsize = (uint32_t) size;
         // Link into fixedgc list so xr_gc_cleanup can free all objects
         obj->gc_next = gc->fixedgc;
         gc->fixedgc = obj;
-        gc->totalbytes += (int64_t)size;
+        gc->totalbytes += (int64_t) size;
         gc->object_count++;
     }
     return obj;
 }
 
-XrGCHeader* xr_gc_newobj(XrGC *gc, uint8_t type, size_t size) {
+XrGCHeader *xr_gc_newobj(XrGC *gc, uint8_t type, size_t size) {
     XR_DCHECK(gc != NULL, "gc_newobj: NULL gc");
-    return (XrGCHeader*)xr_gc_alloc(gc, size, type);
+    return (XrGCHeader *) xr_gc_alloc(gc, size, type);
 }
-
 
 /* ========== Debug ========== */
 
@@ -176,7 +172,7 @@ void xr_gc_printstats(XrGC *gc) {
     XR_DCHECK(gc != NULL, "gc_printstats: NULL gc");
     printf("=== XrGC Stats (Global/Fixed) ===\n");
     printf("Objects: %zu\n", gc->object_count);
-    printf("Total bytes: %lld\n", (long long)gc->totalbytes);
+    printf("Total bytes: %lld\n", (long long) gc->totalbytes);
     printf("=================================\n");
 }
 
@@ -187,7 +183,7 @@ void xr_gc_header_print(XrGCHeader *obj) {
         return;
     }
     printf("GC Header:\n");
-    printf("  gc_next: %p\n", (void*)obj->gc_next);
+    printf("  gc_next: %p\n", (void *) obj->gc_next);
     printf("  type: %d\n", obj->type);
     printf("  marked: 0x%02x\n", obj->marked);
     printf("  objsize: %u\n", obj->objsize);
@@ -198,19 +194,21 @@ void xr_gc_header_print(XrGCHeader *obj) {
 
 /* ========== Unified Allocation Interface ========== */
 
-void* xr_alloc(struct XrCoroutine *coro, size_t size, uint8_t type) {
+void *xr_alloc(struct XrCoroutine *coro, size_t size, uint8_t type) {
     XR_DCHECK(coro != NULL, "xr_alloc: coro must not be NULL");
-    XR_DCHECK(((XrGCHeader*)coro)->type == XR_TCOROUTINE,
+    XR_DCHECK(((XrGCHeader *) coro)->type == XR_TCOROUTINE,
               "xr_alloc: coro is not XrCoroutine (caller passed wrong type)");
-    if (!coro) return NULL;
+    if (!coro)
+        return NULL;
 
     // Lazy coro_gc creation on first heap allocation
     XrCoroGC *gc = xr_coro_ensure_gc(coro);
     if (gc) {
         XrGCHeader *obj = xr_coro_gc_newobj(gc, type, size);
-        if (obj) return obj;
-        xr_log_warning("gc", "xr_alloc: coro_gc allocation failed for type=%d size=%zu",
-                type, size);
+        if (obj)
+            return obj;
+        xr_log_warning("gc", "xr_alloc: coro_gc allocation failed for type=%d size=%zu", type,
+                       size);
         return NULL;
     }
 

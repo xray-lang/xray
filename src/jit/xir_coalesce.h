@@ -46,4 +46,4 @@
  */
 XR_FUNC uint32_t xir_coalesce(XirFunc *func);
 
-#endif // XIR_COALESCE_H
+#endif  // XIR_COALESCE_H

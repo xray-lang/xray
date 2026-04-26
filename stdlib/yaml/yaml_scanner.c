@@ -31,17 +31,17 @@ bool yaml_fast_parse_int(const char *s, size_t len, int64_t *result) {
 
 // ========== SIMD Scanning (using unified SIMD library) ==========
 
-const char* yaml_simd_find_special(const char *s, size_t len) {
+const char *yaml_simd_find_special(const char *s, size_t len) {
     // Find \n, :, #
     const char chars[3] = {'\n', ':', '#'};
     return xr_simd_find_any(s, len, chars, 3);
 }
 
-const char* yaml_simd_skip_ws(const char *s, size_t len) {
+const char *yaml_simd_skip_ws(const char *s, size_t len) {
     return xr_simd_skip_ws(s, len);
 }
 
-const char* yaml_simd_find_newline(const char *s, size_t len) {
+const char *yaml_simd_find_newline(const char *s, size_t len) {
     return xr_simd_find_newline(s, len);
 }
 
@@ -51,7 +51,7 @@ void yaml_skip_ws(YamlParser *p) {
     size_t remaining = p->end - p->ptr;
     if (remaining >= 16) {
         const char *new_ptr = yaml_simd_skip_ws(p->ptr, remaining);
-        int skipped = (int)(new_ptr - p->ptr);
+        int skipped = (int) (new_ptr - p->ptr);
         p->col += skipped;
         p->ptr = new_ptr;
     }
@@ -68,7 +68,7 @@ void yaml_skip_to_eol(YamlParser *p) {
         // SIMD path used to bypass column tracking, so any error
         // reported after `# comment` on a long line had a stale `col`.
         // Track bytes skipped so diagnostics stay accurate.
-        p->col += (int)(found - p->ptr);
+        p->col += (int) (found - p->ptr);
         p->ptr = found;
     } else {
         while (p->ptr < p->end && *p->ptr != '\n' && *p->ptr != '\r') {
@@ -102,8 +102,10 @@ void yaml_skip_empty_lines(YamlParser *p) {
         }
 
         if (p->ptr < p->end && (*p->ptr == '\n' || *p->ptr == '\r')) {
-            if (*p->ptr == '\r') p->ptr++;
-            if (p->ptr < p->end && *p->ptr == '\n') p->ptr++;
+            if (*p->ptr == '\r')
+                p->ptr++;
+            if (p->ptr < p->end && *p->ptr == '\n')
+                p->ptr++;
             p->line++;
             p->col = 1;
         } else {

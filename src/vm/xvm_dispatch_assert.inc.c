@@ -120,8 +120,6 @@ vmcase(OP_REGEX_COMPILE) {
      * behind xr_regex_compile_literal() in stdlib/regex
      * to keep src/vm free of stdlib reverse includes. */
     int a = GETARG_A(i);
-    R(a) = xr_regex_compile_literal(isolate,
-                                    K(GETARG_B(i)),
-                                    K(GETARG_C(i)));
+    R(a) = xr_regex_compile_literal(isolate, K(GETARG_B(i)), K(GETARG_C(i)));
     vmbreak;
 }

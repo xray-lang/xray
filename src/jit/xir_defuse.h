@@ -33,25 +33,25 @@
 
 // A single use site of a vreg
 typedef struct {
-    uint32_t blk; // block index in func->blocks[]
-    uint32_t ins; // instruction index within block (UINT32_MAX for phi/terminator)
-    uint8_t  kind; // XirUseKind: where in the instruction the vreg appears
-    uint8_t  arg_idx; // argument index (0 or 1 for ins, phi arg index, 0 for jmp)
+    uint32_t blk;     // block index in func->blocks[]
+    uint32_t ins;     // instruction index within block (UINT32_MAX for phi/terminator)
+    uint8_t kind;     // XirUseKind: where in the instruction the vreg appears
+    uint8_t arg_idx;  // argument index (0 or 1 for ins, phi arg index, 0 for jmp)
 } XirUse;
 
 typedef enum {
-    XIR_USE_INS_ARG  = 0, // instruction args[arg_idx]
-    XIR_USE_PHI_ARG  = 1, // phi node argument
-    XIR_USE_JMP_ARG  = 2, // terminator (BR cond / RET val)
+    XIR_USE_INS_ARG = 0,  // instruction args[arg_idx]
+    XIR_USE_PHI_ARG = 1,  // phi node argument
+    XIR_USE_JMP_ARG = 2,  // terminator (BR cond / RET val)
 } XirUseKind;
 
 // Def-use chains for an entire function
 typedef struct XirDefUse {
-    XirUse   *uses; // flat array of all use records
-    uint32_t *offset; // offset[v] = start index in uses[] for vreg v
-    uint32_t *count; // count[v]  = number of uses for vreg v
-    uint32_t  nvreg; // number of vregs
-    uint32_t  total_uses; // total entries in uses[]
+    XirUse *uses;         // flat array of all use records
+    uint32_t *offset;     // offset[v] = start index in uses[] for vreg v
+    uint32_t *count;      // count[v]  = number of uses for vreg v
+    uint32_t nvreg;       // number of vregs
+    uint32_t total_uses;  // total entries in uses[]
 } XirDefUse;
 
 /*
@@ -86,13 +86,15 @@ XR_FUNC void xir_func_invalidate_defuse(XirFunc *func);
 
 // Query: number of uses for vreg v
 static inline uint32_t xir_defuse_nuses(const XirDefUse *du, uint32_t v) {
-    if (v >= du->nvreg) return 0;
+    if (v >= du->nvreg)
+        return 0;
     return du->count[v];
 }
 
 // Query: get pointer to first use for vreg v (iterate count[v] entries)
 static inline const XirUse *xir_defuse_uses(const XirDefUse *du, uint32_t v) {
-    if (v >= du->nvreg || du->count[v] == 0) return NULL;
+    if (v >= du->nvreg || du->count[v] == 0)
+        return NULL;
     return &du->uses[du->offset[v]];
 }
 
@@ -106,4 +108,4 @@ static inline bool xir_defuse_single_use(const XirDefUse *du, uint32_t v) {
     return xir_defuse_nuses(du, v) == 1;
 }
 
-#endif // XIR_DEFUSE_H
+#endif  // XIR_DEFUSE_H

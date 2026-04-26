@@ -31,7 +31,8 @@ XirTypeFeedback *xfb_create(void) {
 }
 
 void xfb_destroy(XirTypeFeedback *fb) {
-    if (!fb) return;
+    if (!fb)
+        return;
     xr_free(fb);
 }
 
@@ -45,25 +46,38 @@ bool xfb_is_monomorphic(uint8_t type_flags) {
 uint8_t xfb_to_slot_type(uint8_t type_flags) {
     // Convert single-type feedback to XrSlotType
     switch (type_flags) {
-        case XFB_TYPE_INT:    return XR_SLOT_I64;
-        case XFB_TYPE_FLOAT:  return XR_SLOT_F64;
-        case XFB_TYPE_BOOL:   return XR_SLOT_BOOL;
-        case XFB_TYPE_STRING: return XR_SLOT_PTR;
-        case XFB_TYPE_OBJECT: return XR_SLOT_PTR;
-        default:              return XR_SLOT_ANY;  // mixed or unknown
+        case XFB_TYPE_INT:
+            return XR_SLOT_I64;
+        case XFB_TYPE_FLOAT:
+            return XR_SLOT_F64;
+        case XFB_TYPE_BOOL:
+            return XR_SLOT_BOOL;
+        case XFB_TYPE_STRING:
+            return XR_SLOT_PTR;
+        case XFB_TYPE_OBJECT:
+            return XR_SLOT_PTR;
+        default:
+            return XR_SLOT_ANY;  // mixed or unknown
     }
 }
 
 /* ========== Debug ========== */
 
 static const char *xfb_type_name(uint8_t flags) {
-    if (flags == XFB_TYPE_NONE)   return "none";
-    if (flags == XFB_TYPE_INT)    return "int";
-    if (flags == XFB_TYPE_FLOAT)  return "float";
-    if (flags == XFB_TYPE_BOOL)   return "bool";
-    if (flags == XFB_TYPE_STRING) return "string";
-    if (flags == XFB_TYPE_OBJECT) return "object";
-    if (flags == XFB_TYPE_NULL)   return "null";
+    if (flags == XFB_TYPE_NONE)
+        return "none";
+    if (flags == XFB_TYPE_INT)
+        return "int";
+    if (flags == XFB_TYPE_FLOAT)
+        return "float";
+    if (flags == XFB_TYPE_BOOL)
+        return "bool";
+    if (flags == XFB_TYPE_STRING)
+        return "string";
+    if (flags == XFB_TYPE_OBJECT)
+        return "object";
+    if (flags == XFB_TYPE_NULL)
+        return "null";
     return "mixed";
 }
 
@@ -73,16 +87,13 @@ void xfb_dump(const XirTypeFeedback *fb, int nparams, const char *func_name) {
         return;
     }
 
-    fprintf(stderr, "[feedback] %s: samples=%u stable=%s\n",
-            func_name ? func_name : "?",
-            fb->sample_count,
-            fb->stable ? "yes" : "no");
+    fprintf(stderr, "[feedback] %s: samples=%u stable=%s\n", func_name ? func_name : "?",
+            fb->sample_count, fb->stable ? "yes" : "no");
 
     for (int i = 0; i < nparams && i < XFB_MAX_PARAMS; i++) {
-        fprintf(stderr, "  arg[%d]: %s (0x%02x)\n",
-                i, xfb_type_name(fb->arg_types[i]), fb->arg_types[i]);
+        fprintf(stderr, "  arg[%d]: %s (0x%02x)\n", i, xfb_type_name(fb->arg_types[i]),
+                fb->arg_types[i]);
     }
 
-    fprintf(stderr, "  return: %s (0x%02x)\n",
-            xfb_type_name(fb->return_type), fb->return_type);
+    fprintf(stderr, "  return: %s (0x%02x)\n", xfb_type_name(fb->return_type), fb->return_type);
 }

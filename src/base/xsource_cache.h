@@ -35,10 +35,10 @@ typedef struct XrSourceCache {
 
 /* ========== API ========== */
 
-XR_FUNC XrSourceCache* xr_source_cache_new(void);
+XR_FUNC XrSourceCache *xr_source_cache_new(void);
 XR_FUNC void xr_source_cache_free(XrSourceCache *cache);
 XR_FUNC bool xr_source_cache_add(XrSourceCache *cache, const char *path, const char *content);
-XR_FUNC const char* xr_source_cache_get_line(XrSourceCache *cache, const char *path, int line);
+XR_FUNC const char *xr_source_cache_get_line(XrSourceCache *cache, const char *path, int line);
 XR_FUNC int xr_source_cache_get_line_length(XrSourceCache *cache, const char *path, int line);
 
-#endif // XSOURCE_CACHE_H
+#endif  // XSOURCE_CACHE_H

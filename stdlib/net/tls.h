@@ -26,14 +26,14 @@ typedef struct XrTlsConn XrTlsConn;
 // TLS error codes — aliases into unified XrNetError
 #include "xneterror.h"
 typedef XrNetError XrTlsError;
-#define XR_TLS_OK            XR_NERR_OK
-#define XR_TLS_ERR_INIT      XR_NERR_TLS_INIT
-#define XR_TLS_ERR_CERT      XR_NERR_TLS_CERT
+#define XR_TLS_OK XR_NERR_OK
+#define XR_TLS_ERR_INIT XR_NERR_TLS_INIT
+#define XR_TLS_ERR_CERT XR_NERR_TLS_CERT
 #define XR_TLS_ERR_HANDSHAKE XR_NERR_TLS_HANDSHAKE
-#define XR_TLS_ERR_READ      XR_NERR_READ
-#define XR_TLS_ERR_WRITE     XR_NERR_WRITE
-#define XR_TLS_ERR_CLOSED    XR_NERR_CLOSED
-#define XR_TLS_ERR_VERIFY    XR_NERR_TLS_VERIFY
+#define XR_TLS_ERR_READ XR_NERR_READ
+#define XR_TLS_ERR_WRITE XR_NERR_WRITE
+#define XR_TLS_ERR_CLOSED XR_NERR_CLOSED
+#define XR_TLS_ERR_VERIFY XR_NERR_TLS_VERIFY
 
 /* ========== Global Initialization ========== */
 
@@ -46,10 +46,10 @@ XR_FUNC void xr_tls_cleanup(void);
 /* ========== TLS Context Management ========== */
 
 // Create a client TLS context
-XR_FUNC XrTlsContext* xr_tls_context_new_client(void);
+XR_FUNC XrTlsContext *xr_tls_context_new_client(void);
 
 // Create a server TLS context
-XR_FUNC XrTlsContext* xr_tls_context_new_server(const char *cert_file, const char *key_file);
+XR_FUNC XrTlsContext *xr_tls_context_new_server(const char *cert_file, const char *key_file);
 
 // Free a TLS context
 XR_FUNC void xr_tls_context_free(XrTlsContext *ctx);
@@ -75,7 +75,7 @@ XR_FUNC int xr_tls_context_load_ca(XrTlsContext *ctx, const char *ca_file);
 /* ========== TLS Connection Management ========== */
 
 // Create a TLS connection (wrap an already connected socket)
-XR_FUNC XrTlsConn* xr_tls_conn_new(XrTlsContext *ctx, int fd);
+XR_FUNC XrTlsConn *xr_tls_conn_new(XrTlsContext *ctx, int fd);
 
 // Free a TLS connection
 XR_FUNC void xr_tls_conn_free(XrTlsConn *conn);
@@ -87,13 +87,13 @@ XR_FUNC int xr_tls_conn_set_hostname(XrTlsConn *conn, const char *hostname);
 XR_FUNC int xr_tls_context_set_alpn(XrTlsContext *ctx, const unsigned char *protocols, size_t len);
 
 // Get the negotiated ALPN protocol
-XR_FUNC const char* xr_tls_conn_get_alpn(XrTlsConn *conn);
+XR_FUNC const char *xr_tls_conn_get_alpn(XrTlsConn *conn);
 
 // Set the ALPN callback (server)
 typedef int (*XrAlpnSelectCallback)(const unsigned char **out, unsigned char *outlen,
-                                     const unsigned char *in, unsigned int inlen,
-                                     void *arg);
-XR_FUNC void xr_tls_context_set_alpn_callback(XrTlsContext *ctx, XrAlpnSelectCallback cb, void *arg);
+                                    const unsigned char *in, unsigned int inlen, void *arg);
+XR_FUNC void xr_tls_context_set_alpn_callback(XrTlsContext *ctx, XrAlpnSelectCallback cb,
+                                              void *arg);
 
 // Perform a TLS handshake (client) - blocking, uses xr_socket_read/write
 XR_FUNC XrTlsError xr_tls_conn_handshake_client(XrTlsConn *conn);
@@ -126,7 +126,7 @@ XR_FUNC void xr_tls_conn_close(XrTlsConn *conn);
 XR_FUNC int xr_tls_conn_get_fd(XrTlsConn *conn);
 
 // Get the error description
-XR_FUNC const char* xr_tls_error_string(XrTlsError err);
+XR_FUNC const char *xr_tls_error_string(XrTlsError err);
 
 /* ========== Production Features (P17) ========== */
 
@@ -135,9 +135,8 @@ XR_FUNC const char* xr_tls_error_string(XrTlsError err);
  * Both files must be PEM-encoded.
  * Returns 0 on success, -1 on error.
  */
-XR_FUNC int xr_tls_context_set_client_cert(XrTlsContext *ctx,
-                                             const char *cert_file,
-                                             const char *key_file);
+XR_FUNC int xr_tls_context_set_client_cert(XrTlsContext *ctx, const char *cert_file,
+                                           const char *key_file);
 
 /*
  * Enable TLS session caching on the context.
@@ -154,7 +153,7 @@ XR_FUNC int xr_tls_context_enable_session_cache(XrTlsContext *ctx);
  * The returned session must be freed with xr_tls_session_free().
  * Returns NULL if no session is available.
  */
-XR_FUNC void* xr_tls_conn_get_session(XrTlsConn *conn);
+XR_FUNC void *xr_tls_conn_get_session(XrTlsConn *conn);
 
 /*
  * Set a previously saved session for resumption.
@@ -184,4 +183,4 @@ XR_FUNC bool xr_tls_conn_is_resumed(XrTlsConn *conn);
  */
 XR_FUNC int xr_tls_context_enable_ocsp_stapling(XrTlsContext *ctx);
 
-#endif // XR_STDLIB_TLS_H
+#endif  // XR_STDLIB_TLS_H

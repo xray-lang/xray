@@ -75,4 +75,4 @@ XR_FUNC void xfmt_emit_template_string(XrFmtContext *ctx, AstNode *node,
 // without disturbing call sites).
 XR_FUNC void xfmt_emit_raw_string(XrFmtContext *ctx, const char *value, int len);
 
-#endif // XFMT_LITERAL_H
+#endif  // XFMT_LITERAL_H

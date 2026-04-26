@@ -24,14 +24,13 @@ static void ic_builtin_init(XrICBuiltin *ic) {
 }
 
 XrICBuiltinTable *xr_ic_builtin_table_new(int initial_capacity) {
-    XrICBuiltinTable *table =
-        (XrICBuiltinTable *)xr_malloc(sizeof(XrICBuiltinTable));
-    if (!table) return NULL;
+    XrICBuiltinTable *table = (XrICBuiltinTable *) xr_malloc(sizeof(XrICBuiltinTable));
+    if (!table)
+        return NULL;
 
     table->capacity = initial_capacity > 0 ? initial_capacity : 4;
     table->count = 0;
-    table->caches =
-        (XrICBuiltin *)xr_malloc(sizeof(XrICBuiltin) * (size_t)table->capacity);
+    table->caches = (XrICBuiltin *) xr_malloc(sizeof(XrICBuiltin) * (size_t) table->capacity);
     if (!table->caches) {
         xr_free(table);
         return NULL;
@@ -43,8 +42,10 @@ XrICBuiltinTable *xr_ic_builtin_table_new(int initial_capacity) {
 }
 
 void xr_ic_builtin_table_free(XrICBuiltinTable *table) {
-    if (!table) return;
-    if (table->caches) xr_free(table->caches);
+    if (!table)
+        return;
+    if (table->caches)
+        xr_free(table->caches);
     xr_free(table);
 }
 
@@ -55,9 +56,10 @@ int xr_ic_builtin_table_alloc(XrICBuiltinTable *table) {
 
     if (table->count >= table->capacity) {
         int new_cap = table->capacity * 2;
-        XrICBuiltin *new_caches = (XrICBuiltin *)xr_realloc(
-            table->caches, sizeof(XrICBuiltin) * (size_t)new_cap);
-        if (!new_caches) return -1;
+        XrICBuiltin *new_caches =
+            (XrICBuiltin *) xr_realloc(table->caches, sizeof(XrICBuiltin) * (size_t) new_cap);
+        if (!new_caches)
+            return -1;
         table->caches = new_caches;
         for (int i = table->capacity; i < new_cap; i++) {
             ic_builtin_init(&table->caches[i]);

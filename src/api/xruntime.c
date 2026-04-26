@@ -23,7 +23,7 @@
 
 // Allocate memory from global GC heap.
 // NOTE: Currently unused, objects use xr_alloc directly.
-void* xray_alloc(XrayIsolate *X, size_t size) {
+void *xray_alloc(XrayIsolate *X, size_t size) {
     xray_api_checkr(X != NULL, "xray_alloc: NULL isolate", NULL);
     xray_api_checkr(size > 0, "xray_alloc: zero size", NULL);
     return xr_gc_alloc(xr_isolate_get_gc(X), size, 0);
@@ -32,10 +32,8 @@ void* xray_alloc(XrayIsolate *X, size_t size) {
 // Reallocate memory.
 // NOTE: Currently unused. Coroutine heap uses Cheney GC (no in-place expansion).
 // This function is only for non-GC-managed memory (e.g., xr_malloc-allocated data).
-void* xray_realloc(XrayIsolate *X, void *ptr, size_t old_size, size_t new_size) {
+void *xray_realloc(XrayIsolate *X, void *ptr, size_t old_size, size_t new_size) {
     xray_api_checkr(X != NULL, "xray_realloc: NULL isolate", NULL);
-    (void)old_size;
+    (void) old_size;
     return xr_realloc(ptr, new_size);
 }
-
-

@@ -107,8 +107,8 @@ enum XrChanResult;
  * Local channels (dist == NULL) are not affected.
  */
 typedef struct XrChannelDistHooks {
-    int  (*send)(struct XrChannel *ch, XrValue value, struct XrCoroutine *coro);
-    int  (*recv)(struct XrChannel *ch, XrValue *out, struct XrCoroutine *coro);
+    int (*send)(struct XrChannel *ch, XrValue value, struct XrCoroutine *coro);
+    int (*recv)(struct XrChannel *ch, XrValue *out, struct XrCoroutine *coro);
     bool (*try_send)(struct XrChannel *ch, XrValue value);
     XrValue (*try_recv)(struct XrChannel *ch, bool *ok);
     void (*close)(struct XrChannel *ch);
@@ -126,15 +126,15 @@ typedef struct XrChannel {
     XrGCHeader gc_header;
 
     /* === Buffer (ring buffer for buffered channels) === */
-    XrValue *buffer;          // NULL for unbuffered
-    uint32_t buf_size;        // 0 for unbuffered
-    uint32_t buf_count;       // Current item count
-    uint32_t send_idx;        // Next write position
-    uint32_t recv_idx;        // Next read position
+    XrValue *buffer;     // NULL for unbuffered
+    uint32_t buf_size;   // 0 for unbuffered
+    uint32_t buf_count;  // Current item count
+    uint32_t send_idx;   // Next write position
+    uint32_t recv_idx;   // Next read position
 
     /* === Wait Queues === */
-    XrWaitQueue sendq;        // Blocked senders
-    XrWaitQueue recvq;        // Blocked receivers
+    XrWaitQueue sendq;  // Blocked senders
+    XrWaitQueue recvq;  // Blocked receivers
 
     /* === State (atomic) === */
     _Atomic(bool) closed;
@@ -146,11 +146,11 @@ typedef struct XrChannel {
     int64_t timer_start_ticks;
     _Atomic(bool) timer_fired;
     struct XrTWheelTimer tw_timer;  // Embedded timer wheel node (avoids polling).
-    uint8_t elem_tid;           // XrTypeId: element type for reified generics (0=any)
+    uint8_t elem_tid;               // XrTypeId: element type for reified generics (0=any)
 
     /* === Distributed Channel (cluster) === */
-    void *dist;               // Opaque pointer to cluster dist context (NULL = local)
-    const char *name;         // Named Channel identifier (NULL = anonymous)
+    void *dist;        // Opaque pointer to cluster dist context (NULL = local)
+    const char *name;  // Named Channel identifier (NULL = anonymous)
 
     /* === Waiter Worker Mask (ownership-safe wake routing) ===
      * Bit i is set when worker i has at least one coroutine blocked on this
@@ -191,7 +191,7 @@ typedef enum {
     XR_CHAN_CLOSED,
     XR_CHAN_BLOCK,
     XR_CHAN_NO_CORO,
-    XR_CHAN_FULL       // pending request table saturated (backpressure)
+    XR_CHAN_FULL  // pending request table saturated (backpressure)
 } XrChanResult;
 
 XR_FUNC XrChanResult xr_channel_send(XrChannel *ch, XrValue value, struct XrCoroutine *coro);
@@ -210,12 +210,13 @@ static inline XrValue xr_value_from_channel(XrChannel *ch) {
 }
 
 static inline bool xr_value_is_channel(XrValue v) {
-    if (!XR_IS_PTR(v)) return false;
-    return XR_GC_GET_TYPE((XrGCHeader*)XR_TO_PTR(v)) == XR_TCHANNEL;
+    if (!XR_IS_PTR(v))
+        return false;
+    return XR_GC_GET_TYPE((XrGCHeader *) XR_TO_PTR(v)) == XR_TCHANNEL;
 }
 
 static inline XrChannel *xr_value_to_channel(XrValue v) {
-    return (XrChannel*)XR_TO_PTR(v);
+    return (XrChannel *) XR_TO_PTR(v);
 }
 
-#endif // XCHANNEL_H
+#endif  // XCHANNEL_H

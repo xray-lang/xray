@@ -23,7 +23,8 @@
 
 // Get Json object's field count
 static inline int json_get_field_count(struct XrJson *json) {
-    if (!json) return 0;
+    if (!json)
+        return 0;
     XrShape *s = xr_json_shape(xray_isolate_current(), json);
     return s ? s->in_object_capacity : 0;
 }
@@ -31,7 +32,8 @@ static inline int json_get_field_count(struct XrJson *json) {
 /* ========== API Implementation ========== */
 
 void xr_json_pool_init(XrJsonPoolManager *pm) {
-    if (!pm) return;
+    if (!pm)
+        return;
 
     memset(pm, 0, sizeof(XrJsonPoolManager));
     pm->enabled = true;
@@ -46,7 +48,8 @@ void xr_json_pool_init(XrJsonPoolManager *pm) {
 }
 
 void xr_json_pool_cleanup(XrJsonPoolManager *pm) {
-    if (!pm) return;
+    if (!pm)
+        return;
 
     for (int i = 0; i < XR_JSON_POOL_MAX_FIELDS; i++) {
         XrJsonPool *pool = &pm->pools[i];
@@ -66,9 +69,10 @@ void xr_json_pool_cleanup(XrJsonPoolManager *pm) {
     }
 }
 
-struct XrJson* xr_json_pool_get(XrJsonPoolManager *pm, struct XrShape *shape, int field_count) {
+struct XrJson *xr_json_pool_get(XrJsonPoolManager *pm, struct XrShape *shape, int field_count) {
     XR_DCHECK(field_count >= 0, "json_pool_get: negative field_count");
-    if (!pm || !pm->enabled) return NULL;
+    if (!pm || !pm->enabled)
+        return NULL;
 
     pm->total_allocs++;
 
@@ -124,7 +128,8 @@ struct XrJson* xr_json_pool_get(XrJsonPoolManager *pm, struct XrShape *shape, in
 }
 
 bool xr_json_pool_return(XrJsonPoolManager *pm, struct XrJson *json) {
-    if (!pm || !json || !pm->enabled) return false;
+    if (!pm || !json || !pm->enabled)
+        return false;
 
     int field_count = json_get_field_count(json);
 
@@ -148,10 +153,8 @@ bool xr_json_pool_return(XrJsonPoolManager *pm, struct XrJson *json) {
             new_capacity = XR_JSON_POOL_MAX_SIZE;
         }
 
-        struct XrJson **new_slots = (struct XrJson**)xr_realloc(
-            pool->slots,
-            new_capacity * sizeof(struct XrJson*)
-        );
+        struct XrJson **new_slots =
+            (struct XrJson **) xr_realloc(pool->slots, new_capacity * sizeof(struct XrJson *));
         if (!new_slots) {
             return false;  // Allocation failed
         }
@@ -169,7 +172,8 @@ bool xr_json_pool_return(XrJsonPoolManager *pm, struct XrJson *json) {
 }
 
 void xr_json_pool_dump_stats(XrJsonPoolManager *pm) {
-    if (!pm) return;
+    if (!pm)
+        return;
 
     printf("\n=== Json Pool Statistics ===\n");
     printf("Enabled: %s\n", pm->enabled ? "yes" : "no");
@@ -183,14 +187,15 @@ void xr_json_pool_dump_stats(XrJsonPoolManager *pm) {
     for (int i = 0; i < XR_JSON_POOL_MAX_FIELDS; i++) {
         XrJsonPool *pool = &pm->pools[i];
         if (pool->hits > 0 || pool->misses > 0 || pool->count > 0) {
-            printf("  [%d fields] cached=%d hits=%llu misses=%llu returns=%llu overflows=%llu\n",
-                   i, pool->count, pool->hits, pool->misses, pool->returns, pool->overflows);
+            printf("  [%d fields] cached=%d hits=%llu misses=%llu returns=%llu overflows=%llu\n", i,
+                   pool->count, pool->hits, pool->misses, pool->returns, pool->overflows);
         }
     }
     printf("\n");
 }
 
 void xr_json_pool_set_enabled(XrJsonPoolManager *pm, bool enabled) {
-    if (!pm) return;
+    if (!pm)
+        return;
     pm->enabled = enabled;
 }

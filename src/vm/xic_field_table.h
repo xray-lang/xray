@@ -22,15 +22,15 @@ typedef struct XrICFieldTable {
     int capacity;
 } XrICFieldTable;
 
-XR_FUNC XrICFieldTable* xr_ic_field_table_new(int initial_capacity);
+XR_FUNC XrICFieldTable *xr_ic_field_table_new(int initial_capacity);
 XR_FUNC void xr_ic_field_table_free(XrICFieldTable *table);
 XR_FUNC int xr_ic_field_table_alloc(XrICFieldTable *table);
 
-static inline XrICField* xr_ic_field_table_get(XrICFieldTable *table, int index) {
+static inline XrICField *xr_ic_field_table_get(XrICFieldTable *table, int index) {
     if (!table || index < 0 || index >= table->count) {
         return NULL;
     }
     return &table->caches[index];
 }
 
-#endif // XIC_FIELD_TABLE_H
+#endif  // XIC_FIELD_TABLE_H

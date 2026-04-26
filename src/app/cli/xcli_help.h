@@ -30,4 +30,4 @@ XR_FUNC void xr_cli_print_command_help(const XrCliCommandSpec *spec);
 /* Print help for a subcommand parent (e.g. xray pkg --help). */
 XR_FUNC void xr_cli_print_subcommand_help(const XrCliCommandSpec *parent);
 
-#endif // XCLI_HELP_H
+#endif  // XCLI_HELP_H

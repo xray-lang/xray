@@ -49,11 +49,11 @@ typedef struct XrJsonMember {
 
 struct XrJsonValue {
     XrJsonType type;
-    bool is_integer;   /* true when number was parsed without '.' or 'e/E' */
+    bool is_integer; /* true when number was parsed without '.' or 'e/E' */
     union {
         bool boolean;
         double number;
-        int64_t integer;   /* valid when type==XR_JSON_NUMBER && is_integer */
+        int64_t integer; /* valid when type==XR_JSON_NUMBER && is_integer */
         char *string;
         struct {
             XrJsonValue **items;
@@ -84,16 +84,16 @@ XR_FUNC XrJsonValue *xjson_clone(XrJsonValue *value);
 /* ========== Object Accessors ========== */
 
 XR_FUNC XrJsonValue *xjson_get(XrJsonValue *obj, const char *key);
-XR_FUNC const char  *xjson_get_string(XrJsonValue *obj, const char *key);
-XR_FUNC int64_t      xjson_get_int(XrJsonValue *obj, const char *key);
-XR_FUNC int64_t      xjson_get_int_or(XrJsonValue *obj, const char *key, int64_t default_val);
-XR_FUNC bool         xjson_get_bool(XrJsonValue *obj, const char *key);
+XR_FUNC const char *xjson_get_string(XrJsonValue *obj, const char *key);
+XR_FUNC int64_t xjson_get_int(XrJsonValue *obj, const char *key);
+XR_FUNC int64_t xjson_get_int_or(XrJsonValue *obj, const char *key, int64_t default_val);
+XR_FUNC bool xjson_get_bool(XrJsonValue *obj, const char *key);
 XR_FUNC XrJsonValue *xjson_get_array(XrJsonValue *obj, const char *key);
 XR_FUNC XrJsonValue *xjson_get_object(XrJsonValue *obj, const char *key);
 
 /* ========== Array Accessors ========== */
 
-XR_FUNC int          xjson_array_len(XrJsonValue *arr);
+XR_FUNC int xjson_array_len(XrJsonValue *arr);
 XR_FUNC XrJsonValue *xjson_array_get(XrJsonValue *arr, int index);
 
 /* ========== Type Checks ========== */
@@ -131,23 +131,19 @@ XR_FUNC char *xjson_stringify(XrJsonValue *value, size_t *out_len);
 
 #define XJSON_SET(obj, key, val) xjson_object_set(obj, key, val)
 
-#define XJSON_SET_STRING(obj, key, val) \
-    xjson_object_set(obj, key, xjson_new_string(val))
+#define XJSON_SET_STRING(obj, key, val) xjson_object_set(obj, key, xjson_new_string(val))
 
-#define XJSON_SET_INT(obj, key, val) \
-    xjson_object_set(obj, key, xjson_new_number((double)(val)))
+#define XJSON_SET_INT(obj, key, val) xjson_object_set(obj, key, xjson_new_number((double) (val)))
 
-#define XJSON_SET_BOOL(obj, key, val) \
-    xjson_object_set(obj, key, xjson_new_bool(val))
+#define XJSON_SET_BOOL(obj, key, val) xjson_object_set(obj, key, xjson_new_bool(val))
 
-#define XJSON_SET_NULL(obj, key) \
-    xjson_object_set(obj, key, xjson_new_null())
+#define XJSON_SET_NULL(obj, key) xjson_object_set(obj, key, xjson_new_null())
 
 /* ========== Inline Helpers ========== */
 
 /* Build a range object { start: {line, character}, end: {line, character} } */
-static inline XrJsonValue *xjson_make_range(int start_line, int start_char,
-                                             int end_line, int end_char) {
+static inline XrJsonValue *xjson_make_range(int start_line, int start_char, int end_line,
+                                            int end_char) {
     XrJsonValue *range = xjson_new_object();
     XrJsonValue *start = xjson_new_object();
     XrJsonValue *end = xjson_new_object();
@@ -169,13 +165,12 @@ static inline XrJsonValue *xjson_make_position(int line, int character) {
 }
 
 /* Build a location object { uri, range } */
-static inline XrJsonValue *xjson_make_location(const char *uri,
-                                                int start_line, int start_char,
-                                                int end_line, int end_char) {
+static inline XrJsonValue *xjson_make_location(const char *uri, int start_line, int start_char,
+                                               int end_line, int end_char) {
     XrJsonValue *loc = xjson_new_object();
     XJSON_SET_STRING(loc, "uri", uri);
     XJSON_SET(loc, "range", xjson_make_range(start_line, start_char, end_line, end_char));
     return loc;
 }
 
-#endif // XJSON_DOM_H
+#endif  // XJSON_DOM_H

@@ -80,10 +80,8 @@ typedef struct XrArenaStats {
 XR_FUNC void xr_arena_get_stats(XrArena *arena, XrArenaStats *stats);
 
 // Convenience macros
-#define xr_arena_new(arena, Type) \
-    ((Type*)xr_arena_alloc(arena, sizeof(Type)))
+#define xr_arena_new(arena, Type) ((Type *) xr_arena_alloc(arena, sizeof(Type)))
 
-#define xr_arena_array(arena, Type, count) \
-    ((Type*)xr_arena_alloc(arena, sizeof(Type) * (count)))
+#define xr_arena_array(arena, Type, count) ((Type *) xr_arena_alloc(arena, sizeof(Type) * (count)))
 
-#endif // XARENA_H
+#endif  // XARENA_H

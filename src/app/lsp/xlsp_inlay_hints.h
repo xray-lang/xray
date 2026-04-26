@@ -24,6 +24,7 @@ typedef enum {
 } XlspInlayHintKind;
 
 // Analyze document for inlay hints in range
-XR_FUNC XrJsonValue *xlsp_analyze_inlay_hints(XrLspServer *server, XrLspDocument *doc, XrLspRange range);
+XR_FUNC XrJsonValue *xlsp_analyze_inlay_hints(XrLspServer *server, XrLspDocument *doc,
+                                              XrLspRange range);
 
-#endif // XLSP_INLAY_HINTS_H
+#endif  // XLSP_INLAY_HINTS_H

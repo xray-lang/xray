@@ -25,7 +25,6 @@
 #include "xmethod.h"
 #include "../value/xvalue.h"
 
-
 /* ========== Field Descriptor Entry ========== */
 
 typedef struct XrFieldDescriptorEntry {
@@ -122,8 +121,8 @@ XR_FUNC void xr_class_descriptor_print(const XrClassDescriptor *descriptor, bool
  * falls back to descriptor-encoded resolution (global_index first,
  * then name lookup via xr_class_lookup_by_name).
  */
-XR_FUNC XrClass* xr_class_from_descriptor(XrayIsolate *isolate, const XrClassDescriptor *descriptor,
-                                   XrProto *proto, struct XrClosure *cl, XrValue *base,
-                                   XrVMContext *vm_ctx, XrClass *super_override);
+XR_FUNC XrClass *xr_class_from_descriptor(XrayIsolate *isolate, const XrClassDescriptor *descriptor,
+                                          XrProto *proto, struct XrClosure *cl, XrValue *base,
+                                          XrVMContext *vm_ctx, XrClass *super_override);
 
-#endif // XCLASS_DESCRIPTOR_H
+#endif  // XCLASS_DESCRIPTOR_H

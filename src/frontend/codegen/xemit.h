@@ -50,7 +50,7 @@ typedef struct XrEmitter {
     bool debug_mode;
 } XrEmitter;
 
-XR_FUNC XrEmitter* emitter_new(XrCompilerContext *ctx, XrProto *proto, XRegAlloc *regalloc);
+XR_FUNC XrEmitter *emitter_new(XrCompilerContext *ctx, XrProto *proto, XRegAlloc *regalloc);
 XR_FUNC void emitter_free(XrEmitter *e);
 XR_FUNC void emitter_set_peephole(XrEmitter *e, bool enable);
 XR_FUNC void emitter_set_debug(XrEmitter *e, bool enable);
@@ -105,7 +105,7 @@ XR_FUNC bool try_optimize_sequence(XrEmitter *e, XrInstruction inst);
 XR_FUNC bool optimize_redundant_move(XrEmitter *e, XrInstruction inst);
 
 XR_FUNC void emit_patch_instruction_A(XrEmitter *e, int pc, int new_A);
-XR_FUNC XrInstruction* emit_get_instruction(XrEmitter *e, int pc);
+XR_FUNC XrInstruction *emit_get_instruction(XrEmitter *e, int pc);
 XR_FUNC int emit_get_current_pc(XrEmitter *e);
 
 XR_FUNC int emit_spill(XrEmitter *e, int slot, int reg);
@@ -116,4 +116,4 @@ XR_FUNC int emit_reload(XrEmitter *e, int reg, int slot);
 // already include xemit.h pick it up automatically.
 #include "xemit_typed.h"
 
-#endif // XEMIT_H
+#endif  // XEMIT_H

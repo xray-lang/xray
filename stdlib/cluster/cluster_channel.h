@@ -57,7 +57,7 @@ XR_FUNC void xr_cluster_channel_uninstall_hooks(struct XrayIsolate *X);
  *      unknown" and surface that to script code accordingly.
  */
 XR_FUNC int xr_cluster_channel_handle_send(XrCluster *c, const char *channel_name,
-                                    const uint8_t *value_data, uint32_t value_len);
+                                           const uint8_t *value_data, uint32_t value_len);
 
 /*
  * Handle an incoming CHANNEL_CLOSE frame from a remote node.
@@ -83,7 +83,7 @@ XR_FUNC void xr_cluster_channel_push_to_subscribers(XrCluster *c, const char *na
  * Writes value into Proxy channel's local buffer and wakes select waiters.
  */
 XR_FUNC int xr_cluster_channel_handle_push(XrCluster *c, const char *channel_name,
-                                    const uint8_t *value_data, uint32_t value_len);
+                                           const uint8_t *value_data, uint32_t value_len);
 
 /*
  * Send SUBSCRIBE frame to Owner node for a Proxy channel.

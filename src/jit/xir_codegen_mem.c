@@ -19,57 +19,63 @@ bool xir_emit_mem_ops(CodegenCtx *ctx, XirIns *ins, A64Reg rd) {
     switch (ins->op) {
         // Runtime helper: mixed-type binary arithmetic
         // Inline type conversion for known numeric combos (i64+f64, f64+i64)
-        case XIR_RT_ADD: case XIR_RT_SUB: case XIR_RT_MUL:
-        case XIR_RT_DIV: case XIR_RT_MOD: {
+        case XIR_RT_ADD:
+        case XIR_RT_SUB:
+        case XIR_RT_MUL:
+        case XIR_RT_DIV:
+        case XIR_RT_MOD: {
             uint8_t ta = XR_REP_I64, tb = XR_REP_I64;
             if (xir_ref_is_vreg(ins->args[0])) {
                 uint32_t ai = XIR_REF_INDEX(ins->args[0]);
-                if (ai < ctx->func->nvreg) ta = ctx->func->vregs[ai].rep;
+                if (ai < ctx->func->nvreg)
+                    ta = ctx->func->vregs[ai].rep;
             }
             if (xir_ref_is_vreg(ins->args[1])) {
                 uint32_t bi = XIR_REF_INDEX(ins->args[1]);
-                if (bi < ctx->func->nvreg) tb = ctx->func->vregs[bi].rep;
+                if (bi < ctx->func->nvreg)
+                    tb = ctx->func->vregs[bi].rep;
             }
 
             // Check ctype for operands to detect NUMERIC/TAGGED
             uint8_t tag_a = VTAG_TAGGED, tag_b = VTAG_TAGGED;
             if (xir_ref_is_vreg(ins->args[0])) {
                 tag_a = type_kind_to_vtag(xir_ref_ctype(ctx->func, ins->args[0]).kind);
-            } else { tag_a = VTAG_I64; } // const: not NUMERIC/TAGGED
+            } else {
+                tag_a = VTAG_I64;
+            }  // const: not NUMERIC/TAGGED
             if (xir_ref_is_vreg(ins->args[1])) {
                 tag_b = type_kind_to_vtag(xir_ref_ctype(ctx->func, ins->args[1]).kind);
-            } else { tag_b = VTAG_I64; } // const: not NUMERIC/TAGGED
+            } else {
+                tag_b = VTAG_I64;
+            }  // const: not NUMERIC/TAGGED
 
             // Both numeric: inline convert + float op
-            if ((ta == XR_REP_I64 || ta == XR_REP_F64) &&
-                (tb == XR_REP_I64 || tb == XR_REP_F64)) {
+            if ((ta == XR_REP_I64 || ta == XR_REP_F64) && (tb == XR_REP_I64 || tb == XR_REP_F64)) {
                 // Get or convert operand A to FP (d30 = scratch FP)
                 A64Reg fa;
                 if (ta == XR_REP_F64) {
                     fa = xra_arg(ctx, ins->args[0], SCRATCH_REG);
-                } else if (ta == XR_REP_I64 &&
-                           (tag_a == VTAG_NUMERIC ||
-                            tag_a == VTAG_TAGGED)) {
+                } else if (ta == XR_REP_I64 && (tag_a == VTAG_NUMERIC || tag_a == VTAG_TAGGED)) {
                     // Numeric union or unknown: might be float bits.
                     // Load saved tag from jit_ctx scratch and branch.
                     A64Reg ga = xra_arg(ctx, ins->args[0], SCRATCH_REG);
                     fa = 30;
                     // Load saved tag
-                    a64_buf_emit(&ctx->buf, a64_ldr(SCRATCH_REG2, JIT_CTX_REG,
-                                                    XIR_JIT_LOAD_TAG_SCRATCH));
+                    a64_buf_emit(&ctx->buf,
+                                 a64_ldr(SCRATCH_REG2, JIT_CTX_REG, XIR_JIT_LOAD_TAG_SCRATCH));
                     // fmov d30, x_ga (bit reinterpret: correct if float)
                     a64_buf_emit(&ctx->buf, a64_fmov_gp_to_fp(fa, ga));
                     // cmp tag, #4 (XR_TAG_F64)
                     a64_buf_emit(&ctx->buf, a64_cmp_imm(SCRATCH_REG2, 4));
                     // b.eq .skip_scvtf (tag == F64 means float → fmov was correct)
                     uint32_t patch_idx = ctx->buf.count;
-                    a64_buf_emit(&ctx->buf, a64_nop()); // placeholder for b.eq
+                    a64_buf_emit(&ctx->buf, a64_nop());  // placeholder for b.eq
                     // scvtf d30, x_ga (overwrite: correct if int)
                     a64_buf_emit(&ctx->buf, a64_scvtf(fa, ga));
                     // .skip_scvtf:
                     uint32_t skip_target = ctx->buf.count;
-                    int32_t branch_off = (int32_t)(skip_target - patch_idx);
-                    ctx->buf.code[patch_idx] = 0x54000000 | ((branch_off & 0x7FFFF) << 5); // b.eq
+                    int32_t branch_off = (int32_t) (skip_target - patch_idx);
+                    ctx->buf.code[patch_idx] = 0x54000000 | ((branch_off & 0x7FFFF) << 5);  // b.eq
                 } else {
                     A64Reg ga = xra_arg(ctx, ins->args[0], SCRATCH_REG);
                     fa = 30;  // scratch FP d30
@@ -79,13 +85,11 @@ bool xir_emit_mem_ops(CodegenCtx *ctx, XirIns *ins, A64Reg rd) {
                 A64Reg fb;
                 if (tb == XR_REP_F64) {
                     fb = xra_arg(ctx, ins->args[1], SCRATCH_REG2);
-                } else if (tb == XR_REP_I64 &&
-                           (tag_b == VTAG_NUMERIC ||
-                            tag_b == VTAG_TAGGED)) {
+                } else if (tb == XR_REP_I64 && (tag_b == VTAG_NUMERIC || tag_b == VTAG_TAGGED)) {
                     A64Reg gb = xra_arg(ctx, ins->args[1], SCRATCH_REG2);
                     fb = 31;
-                    a64_buf_emit(&ctx->buf, a64_ldr(SCRATCH_REG, JIT_CTX_REG,
-                                                    XIR_JIT_LOAD_TAG_SCRATCH));
+                    a64_buf_emit(&ctx->buf,
+                                 a64_ldr(SCRATCH_REG, JIT_CTX_REG, XIR_JIT_LOAD_TAG_SCRATCH));
                     a64_buf_emit(&ctx->buf, a64_fmov_gp_to_fp(fb, gb));
                     // cmp tag, #4 (XR_TAG_F64)
                     a64_buf_emit(&ctx->buf, a64_cmp_imm(SCRATCH_REG, 4));
@@ -94,8 +98,8 @@ bool xir_emit_mem_ops(CodegenCtx *ctx, XirIns *ins, A64Reg rd) {
                     a64_buf_emit(&ctx->buf, a64_nop());
                     a64_buf_emit(&ctx->buf, a64_scvtf(fb, gb));
                     uint32_t skip_target = ctx->buf.count;
-                    int32_t branch_off = (int32_t)(skip_target - patch_idx);
-                    ctx->buf.code[patch_idx] = 0x54000000 | ((branch_off & 0x7FFFF) << 5); // b.eq
+                    int32_t branch_off = (int32_t) (skip_target - patch_idx);
+                    ctx->buf.code[patch_idx] = 0x54000000 | ((branch_off & 0x7FFFF) << 5);  // b.eq
                 } else {
                     A64Reg gb = xra_arg(ctx, ins->args[1], SCRATCH_REG2);
                     fb = 31;  // scratch FP d31
@@ -103,10 +107,18 @@ bool xir_emit_mem_ops(CodegenCtx *ctx, XirIns *ins, A64Reg rd) {
                 }
                 // Emit float operation → rd (FP register)
                 switch (ins->op) {
-                    case XIR_RT_ADD: a64_buf_emit(&ctx->buf, a64_fadd(rd, fa, fb)); break;
-                    case XIR_RT_SUB: a64_buf_emit(&ctx->buf, a64_fsub(rd, fa, fb)); break;
-                    case XIR_RT_MUL: a64_buf_emit(&ctx->buf, a64_fmul(rd, fa, fb)); break;
-                    case XIR_RT_DIV: a64_buf_emit(&ctx->buf, a64_fdiv(rd, fa, fb)); break;
+                    case XIR_RT_ADD:
+                        a64_buf_emit(&ctx->buf, a64_fadd(rd, fa, fb));
+                        break;
+                    case XIR_RT_SUB:
+                        a64_buf_emit(&ctx->buf, a64_fsub(rd, fa, fb));
+                        break;
+                    case XIR_RT_MUL:
+                        a64_buf_emit(&ctx->buf, a64_fmul(rd, fa, fb));
+                        break;
+                    case XIR_RT_DIV:
+                        a64_buf_emit(&ctx->buf, a64_fdiv(rd, fa, fb));
+                        break;
                     case XIR_RT_MOD: {
                         // fmod: a - trunc(a/b) * b
                         a64_buf_emit(&ctx->buf, a64_fdiv(30, fa, fb));
@@ -116,7 +128,8 @@ bool xir_emit_mem_ops(CodegenCtx *ctx, XirIns *ins, A64Reg rd) {
                         a64_buf_emit(&ctx->buf, a64_fsub(rd, fa, 30));
                         break;
                     }
-                    default: break;
+                    default:
+                        break;
                 }
             } else {
                 // Unknown types: deopt
@@ -132,7 +145,8 @@ bool xir_emit_mem_ops(CodegenCtx *ctx, XirIns *ins, A64Reg rd) {
             uint8_t ta = XR_REP_I64;
             if (xir_ref_is_vreg(ins->args[0])) {
                 uint32_t ai = XIR_REF_INDEX(ins->args[0]);
-                if (ai < ctx->func->nvreg) ta = ctx->func->vregs[ai].rep;
+                if (ai < ctx->func->nvreg)
+                    ta = ctx->func->vregs[ai].rep;
             }
             if (ta == XR_REP_F64) {
                 A64Reg fa = xra_arg(ctx, ins->args[0], SCRATCH_REG);
@@ -150,19 +164,22 @@ bool xir_emit_mem_ops(CodegenCtx *ctx, XirIns *ins, A64Reg rd) {
         }
 
         // Runtime helper: mixed-type comparison (result is i64: 0 or 1)
-        case XIR_RT_LT: case XIR_RT_LE: case XIR_RT_EQ: {
+        case XIR_RT_LT:
+        case XIR_RT_LE:
+        case XIR_RT_EQ: {
             uint8_t ta = XR_REP_I64, tb = XR_REP_I64;
             if (xir_ref_is_vreg(ins->args[0])) {
                 uint32_t ai = XIR_REF_INDEX(ins->args[0]);
-                if (ai < ctx->func->nvreg) ta = ctx->func->vregs[ai].rep;
+                if (ai < ctx->func->nvreg)
+                    ta = ctx->func->vregs[ai].rep;
             }
             if (xir_ref_is_vreg(ins->args[1])) {
                 uint32_t bi = XIR_REF_INDEX(ins->args[1]);
-                if (bi < ctx->func->nvreg) tb = ctx->func->vregs[bi].rep;
+                if (bi < ctx->func->nvreg)
+                    tb = ctx->func->vregs[bi].rep;
             }
 
-            if ((ta == XR_REP_I64 || ta == XR_REP_F64) &&
-                (tb == XR_REP_I64 || tb == XR_REP_F64)) {
+            if ((ta == XR_REP_I64 || ta == XR_REP_F64) && (tb == XR_REP_I64 || tb == XR_REP_F64)) {
                 // Convert both to FP, FCMP, CSET
                 A64Reg fa;
                 if (ta == XR_REP_F64) {
@@ -182,9 +199,12 @@ bool xir_emit_mem_ops(CodegenCtx *ctx, XirIns *ins, A64Reg rd) {
                 }
                 a64_buf_emit(&ctx->buf, a64_fcmp(fa, fb));
                 A64Cond cc;
-                if (ins->op == XIR_RT_LT) cc = A64_CC_LT;
-                else if (ins->op == XIR_RT_LE) cc = A64_CC_LE;
-                else cc = A64_CC_EQ;
+                if (ins->op == XIR_RT_LT)
+                    cc = A64_CC_LT;
+                else if (ins->op == XIR_RT_LE)
+                    cc = A64_CC_LE;
+                else
+                    cc = A64_CC_EQ;
                 a64_buf_emit(&ctx->buf, a64_cset(rd, cc));
             } else {
                 add_patch(ctx, PATCH_DEOPT, 0, A64_XZR);
@@ -227,15 +247,15 @@ bool xir_emit_mem_ops(CodegenCtx *ctx, XirIns *ins, A64Reg rd) {
             int32_t offset = 0;
             if (xir_ref_is_const(ins->args[1])) {
                 uint32_t ci = XIR_REF_INDEX(ins->args[1]);
-                offset = (int32_t)ctx->func->consts[ci].val.i64;
+                offset = (int32_t) ctx->func->consts[ci].val.i64;
             }
             // LDRSW Xt, [Xn, #offset] — sign-extend 32-bit to 64-bit
             // Encoding: 1011 1001 10 imm12 Rn:5 Rt:5 = 0xB9800000
             // imm12 = offset / 4 (scaled)
             XR_DCHECK(offset >= 0 && (offset % 4) == 0, "assertion failed");
-            uint32_t imm12 = (uint32_t)(offset / 4);
+            uint32_t imm12 = (uint32_t) (offset / 4);
             XR_DCHECK(imm12 < 4096, "assertion failed");
-            uint32_t enc = 0xB9800000 | (imm12 << 10) | ((uint32_t)base << 5) | (uint32_t)rd;
+            uint32_t enc = 0xB9800000 | (imm12 << 10) | ((uint32_t) base << 5) | (uint32_t) rd;
             a64_buf_emit(&ctx->buf, enc);
             break;
         }
@@ -246,7 +266,7 @@ bool xir_emit_mem_ops(CodegenCtx *ctx, XirIns *ins, A64Reg rd) {
             A64Reg addr = xra_arg(ctx, ins->args[0], SCRATCH_REG);
             // LDRB Wt, [Xn] — load byte, zero-extend to 64-bit
             // Encoding: 0011 1001 01 imm12 Rn:5 Rt:5 = 0x39400000
-            a64_buf_emit(&ctx->buf, 0x39400000 | ((uint32_t)addr << 5) | (uint32_t)rd);
+            a64_buf_emit(&ctx->buf, 0x39400000 | ((uint32_t) addr << 5) | (uint32_t) rd);
             break;
         }
 
@@ -255,7 +275,7 @@ bool xir_emit_mem_ops(CodegenCtx *ctx, XirIns *ins, A64Reg rd) {
             A64Reg addr = xra_arg(ctx, ins->args[0], SCRATCH_REG);
             // LDRSB Xt, [Xn] — sign-extend byte to 64-bit
             // Encoding: 0011 1001 10 imm12 Rn:5 Rt:5 = 0x39800000
-            a64_buf_emit(&ctx->buf, 0x39800000 | ((uint32_t)addr << 5) | (uint32_t)rd);
+            a64_buf_emit(&ctx->buf, 0x39800000 | ((uint32_t) addr << 5) | (uint32_t) rd);
             break;
         }
 
@@ -265,7 +285,7 @@ bool xir_emit_mem_ops(CodegenCtx *ctx, XirIns *ins, A64Reg rd) {
             A64Reg val = xra_arg(ctx, ins->args[1], SCRATCH_REG2);
             // STRB Wt, [Xn] — store byte
             // Encoding: 0011 1001 00 imm12 Rn:5 Rt:5 = 0x39000000
-            a64_buf_emit(&ctx->buf, 0x39000000 | ((uint32_t)addr << 5) | (uint32_t)val);
+            a64_buf_emit(&ctx->buf, 0x39000000 | ((uint32_t) addr << 5) | (uint32_t) val);
             break;
         }
 
@@ -274,7 +294,7 @@ bool xir_emit_mem_ops(CodegenCtx *ctx, XirIns *ins, A64Reg rd) {
             A64Reg addr = xra_arg(ctx, ins->args[0], SCRATCH_REG);
             // LDRH Wt, [Xn] — load halfword, zero-extend to 64-bit
             // Encoding: 0111 1001 01 imm12 Rn:5 Rt:5 = 0x79400000
-            a64_buf_emit(&ctx->buf, 0x79400000 | ((uint32_t)addr << 5) | (uint32_t)rd);
+            a64_buf_emit(&ctx->buf, 0x79400000 | ((uint32_t) addr << 5) | (uint32_t) rd);
             break;
         }
 
@@ -283,7 +303,7 @@ bool xir_emit_mem_ops(CodegenCtx *ctx, XirIns *ins, A64Reg rd) {
             A64Reg addr = xra_arg(ctx, ins->args[0], SCRATCH_REG);
             // LDRSH Xt, [Xn] — sign-extend halfword to 64-bit
             // Encoding: 0111 1001 10 imm12 Rn:5 Rt:5 = 0x79800000
-            a64_buf_emit(&ctx->buf, 0x79800000 | ((uint32_t)addr << 5) | (uint32_t)rd);
+            a64_buf_emit(&ctx->buf, 0x79800000 | ((uint32_t) addr << 5) | (uint32_t) rd);
             break;
         }
 
@@ -293,7 +313,7 @@ bool xir_emit_mem_ops(CodegenCtx *ctx, XirIns *ins, A64Reg rd) {
             A64Reg val = xra_arg(ctx, ins->args[1], SCRATCH_REG2);
             // STRH Wt, [Xn] — store halfword
             // Encoding: 0111 1001 00 imm12 Rn:5 Rt:5 = 0x79000000
-            a64_buf_emit(&ctx->buf, 0x79000000 | ((uint32_t)addr << 5) | (uint32_t)val);
+            a64_buf_emit(&ctx->buf, 0x79000000 | ((uint32_t) addr << 5) | (uint32_t) val);
             break;
         }
 
@@ -302,7 +322,7 @@ bool xir_emit_mem_ops(CodegenCtx *ctx, XirIns *ins, A64Reg rd) {
             A64Reg addr = xra_arg(ctx, ins->args[0], SCRATCH_REG);
             // LDR Wt, [Xn] — load word, implicit zero-extend to 64-bit
             // Encoding: 1011 1001 01 imm12 Rn:5 Rt:5 = 0xB9400000
-            a64_buf_emit(&ctx->buf, 0xB9400000 | ((uint32_t)addr << 5) | (uint32_t)rd);
+            a64_buf_emit(&ctx->buf, 0xB9400000 | ((uint32_t) addr << 5) | (uint32_t) rd);
             break;
         }
 
@@ -312,7 +332,7 @@ bool xir_emit_mem_ops(CodegenCtx *ctx, XirIns *ins, A64Reg rd) {
             A64Reg val = xra_arg(ctx, ins->args[1], SCRATCH_REG2);
             // STR Wt, [Xn] — store word
             // Encoding: 1011 1001 00 imm12 Rn:5 Rt:5 = 0xB9000000
-            a64_buf_emit(&ctx->buf, 0xB9000000 | ((uint32_t)addr << 5) | (uint32_t)val);
+            a64_buf_emit(&ctx->buf, 0xB9000000 | ((uint32_t) addr << 5) | (uint32_t) val);
             break;
         }
 
@@ -322,10 +342,10 @@ bool xir_emit_mem_ops(CodegenCtx *ctx, XirIns *ins, A64Reg rd) {
             A64Reg addr = xra_arg(ctx, ins->args[0], SCRATCH_REG);
             // LDR St, [Xn, #0] — 32-bit FP load
             // Encoding: 1011 1101 01 imm12 Rn:5 Rt:5 = 0xBD400000
-            a64_buf_emit(&ctx->buf, 0xBD400000 | ((uint32_t)addr << 5) | (uint32_t)rd);
+            a64_buf_emit(&ctx->buf, 0xBD400000 | ((uint32_t) addr << 5) | (uint32_t) rd);
             // FCVT Dd, Sd — single-precision to double-precision
             // Encoding: 0001 1110 0010 0010 1100 00 Rn:5 Rd:5 = 0x1E22C000
-            a64_buf_emit(&ctx->buf, 0x1E22C000 | ((uint32_t)rd << 5) | (uint32_t)rd);
+            a64_buf_emit(&ctx->buf, 0x1E22C000 | ((uint32_t) rd << 5) | (uint32_t) rd);
             break;
         }
 
@@ -336,10 +356,10 @@ bool xir_emit_mem_ops(CodegenCtx *ctx, XirIns *ins, A64Reg rd) {
             A64Reg val = xra_arg(ctx, ins->args[1], SCRATCH_REG2);
             // FCVT S31, Dval — double to single into scratch FP reg 31
             // Encoding: 0001 1110 0110 0010 0100 00 Rn:5 Rd:5 = 0x1E624000
-            a64_buf_emit(&ctx->buf, 0x1E624000 | ((uint32_t)val << 5) | 31u);
+            a64_buf_emit(&ctx->buf, 0x1E624000 | ((uint32_t) val << 5) | 31u);
             // STR S31, [Xn, #0] — 32-bit FP store
             // Encoding: 1011 1101 00 imm12 Rn:5 Rt:5 = 0xBD000000
-            a64_buf_emit(&ctx->buf, 0xBD000000 | ((uint32_t)addr << 5) | 31u);
+            a64_buf_emit(&ctx->buf, 0xBD000000 | ((uint32_t) addr << 5) | 31u);
             break;
         }
 
@@ -355,7 +375,7 @@ bool xir_emit_mem_ops(CodegenCtx *ctx, XirIns *ins, A64Reg rd) {
                 uint16_t did = 0xFFFF;
                 if (!xir_ref_is_none(ins->dst) && xir_ref_is_const(ins->dst)) {
                     uint32_t dci = XIR_REF_INDEX(ins->dst);
-                    did = (uint16_t)ctx->func->consts[dci].val.raw;
+                    did = (uint16_t) ctx->func->consts[dci].val.raw;
                 }
                 a64_buf_emit(&ctx->buf, a64_movz(SCRATCH_REG2, did, 0));
             }
@@ -376,7 +396,7 @@ bool xir_emit_mem_ops(CodegenCtx *ctx, XirIns *ins, A64Reg rd) {
             int32_t offset = 0;
             if (xir_ref_is_const(ins->args[1])) {
                 uint32_t ci = XIR_REF_INDEX(ins->args[1]);
-                offset = (int32_t)ctx->func->consts[ci].val.i64;
+                offset = (int32_t) ctx->func->consts[ci].val.i64;
             }
             // When field type is unknown (Json dynamic fields), save the
             // runtime tag to jit_ctx scratch so rt.add can distinguish
@@ -384,13 +404,12 @@ bool xir_emit_mem_ops(CodegenCtx *ctx, XirIns *ins, A64Reg rd) {
             // MUST happen BEFORE payload load: rd may alias obj register.
             if (xir_ref_is_vreg(ins->dst)) {
                 uint32_t vi = XIR_REF_INDEX(ins->dst);
-                if (vi < ctx->func->nvreg &&
-                    ins->ctype.kind == XIR_TK_UNKNOWN &&
+                if (vi < ctx->func->nvreg && ins->ctype.kind == XIR_TK_UNKNOWN &&
                     ins->rep == XR_REP_I64) {
-                    a64_buf_emit(&ctx->buf, a64_ldrb(SCRATCH_REG2, obj,
-                                                     offset + XIR_XRVALUE_TAG_OFFSET));
-                    a64_buf_emit(&ctx->buf, a64_str(SCRATCH_REG2, JIT_CTX_REG,
-                                                    XIR_JIT_LOAD_TAG_SCRATCH));
+                    a64_buf_emit(&ctx->buf,
+                                 a64_ldrb(SCRATCH_REG2, obj, offset + XIR_XRVALUE_TAG_OFFSET));
+                    a64_buf_emit(&ctx->buf,
+                                 a64_str(SCRATCH_REG2, JIT_CTX_REG, XIR_JIT_LOAD_TAG_SCRATCH));
                 }
             }
             // Payload sits at byte 8 within the XrValue struct
@@ -413,7 +432,7 @@ bool xir_emit_mem_ops(CodegenCtx *ctx, XirIns *ins, A64Reg rd) {
             int32_t offset = 0;
             if (!xir_ref_is_none(ins->dst) && xir_ref_is_const(ins->dst)) {
                 uint32_t ci = XIR_REF_INDEX(ins->dst);
-                offset = (int32_t)ctx->func->consts[ci].val.i64;
+                offset = (int32_t) ctx->func->consts[ci].val.i64;
             }
 
             // Determine if payload is F64 (needs FP store instruction)
@@ -451,9 +470,12 @@ bool xir_emit_mem_ops(CodegenCtx *ctx, XirIns *ins, A64Reg rd) {
                         } else {
                             // Fall back to machine type inference
                             uint32_t vi = XIR_REF_INDEX(ins->args[1]);
-                            uint8_t vt = (vi < ctx->func->nvreg) ? ctx->func->vregs[vi].rep : XR_REP_TAGGED;
-                            if (vt == XR_REP_F64) tag_val = XR_TAG_F64;
-                            else if (vt == XR_REP_I64) tag_val = XR_TAG_I64;
+                            uint8_t vt =
+                                (vi < ctx->func->nvreg) ? ctx->func->vregs[vi].rep : XR_REP_TAGGED;
+                            if (vt == XR_REP_F64)
+                                tag_val = XR_TAG_F64;
+                            else if (vt == XR_REP_I64)
+                                tag_val = XR_TAG_I64;
                             is_ptr_val = (vt == XR_REP_PTR || vt == XR_REP_TAGGED);
                         }
                     }
@@ -465,21 +487,21 @@ bool xir_emit_mem_ops(CodegenCtx *ctx, XirIns *ins, A64Reg rd) {
                 if (is_ptr_val) {
                     // PTR: read gc_type, build tag|(gc_type<<16), single str_w
                     // SCRATCH_REG2 = gc_type (uint8 from GC header)
-                    a64_buf_emit(&ctx->buf, a64_ldrb(SCRATCH_REG2, val,
-                                                     XIR_GC_HDR_TYPE_OFFSET));
+                    a64_buf_emit(&ctx->buf, a64_ldrb(SCRATCH_REG2, val, XIR_GC_HDR_TYPE_OFFSET));
                     // SCRATCH_REG = tag_val (bits [0..15])
-                    a64_buf_emit(&ctx->buf, a64_movz(SCRATCH_REG, (uint16_t)tag_val, 0));
+                    a64_buf_emit(&ctx->buf, a64_movz(SCRATCH_REG, (uint16_t) tag_val, 0));
                     // MOVK scratch, gc_type, LSL#16 → gc_type in bits [16..31]
                     // Cannot use movk with register; use add_lsl instead:
                     // scratch = tag_val + (gc_type << 16)
-                    a64_buf_emit(&ctx->buf, a64_add_lsl(SCRATCH_REG, SCRATCH_REG, SCRATCH_REG2, 16));
-                    a64_buf_emit(&ctx->buf, a64_str_w(SCRATCH_REG, obj,
-                                                      offset + XIR_XRVALUE_TAG_OFFSET));
+                    a64_buf_emit(&ctx->buf,
+                                 a64_add_lsl(SCRATCH_REG, SCRATCH_REG, SCRATCH_REG2, 16));
+                    a64_buf_emit(&ctx->buf,
+                                 a64_str_w(SCRATCH_REG, obj, offset + XIR_XRVALUE_TAG_OFFSET));
                 } else {
                     // Non-PTR: tag with heap_type=0, single 32-bit store
-                    a64_buf_emit(&ctx->buf, a64_movz(SCRATCH_REG, (uint16_t)tag_val, 0));
-                    a64_buf_emit(&ctx->buf, a64_str_w(SCRATCH_REG, obj,
-                                                      offset + XIR_XRVALUE_TAG_OFFSET));
+                    a64_buf_emit(&ctx->buf, a64_movz(SCRATCH_REG, (uint16_t) tag_val, 0));
+                    a64_buf_emit(&ctx->buf,
+                                 a64_str_w(SCRATCH_REG, obj, offset + XIR_XRVALUE_TAG_OFFSET));
                 }
             }
 
@@ -499,7 +521,7 @@ bool xir_emit_mem_ops(CodegenCtx *ctx, XirIns *ins, A64Reg rd) {
             int32_t offset = 0;
             if (!xir_ref_is_none(ins->dst) && xir_ref_is_const(ins->dst)) {
                 uint32_t ci = XIR_REF_INDEX(ins->dst);
-                offset = (int32_t)ctx->func->consts[ci].val.i64;
+                offset = (int32_t) ctx->func->consts[ci].val.i64;
             }
             // F64 vreg → FP register → use FP store instruction
             bool val_fp = false;
@@ -522,7 +544,7 @@ bool xir_emit_mem_ops(CodegenCtx *ctx, XirIns *ins, A64Reg rd) {
             int32_t offset = 0;
             if (!xir_ref_is_none(ins->dst) && xir_ref_is_const(ins->dst)) {
                 uint32_t ci = XIR_REF_INDEX(ins->dst);
-                offset = (int32_t)ctx->func->consts[ci].val.i64;
+                offset = (int32_t) ctx->func->consts[ci].val.i64;
             }
             a64_buf_emit(&ctx->buf, a64_strb(val, JIT_CTX_REG, offset));
             break;
@@ -534,7 +556,7 @@ bool xir_emit_mem_ops(CodegenCtx *ctx, XirIns *ins, A64Reg rd) {
             int32_t offset = 0;
             if (!xir_ref_is_none(ins->args[0]) && xir_ref_is_const(ins->args[0])) {
                 uint32_t ci = XIR_REF_INDEX(ins->args[0]);
-                offset = (int32_t)ctx->func->consts[ci].val.i64;
+                offset = (int32_t) ctx->func->consts[ci].val.i64;
             }
             a64_buf_emit(&ctx->buf, a64_ldr(rd, JIT_CTX_REG, offset));
             xra_maybe_spill(ctx, ins->dst);
@@ -547,7 +569,7 @@ bool xir_emit_mem_ops(CodegenCtx *ctx, XirIns *ins, A64Reg rd) {
             int32_t offset = 0;
             if (!xir_ref_is_none(ins->args[0]) && xir_ref_is_const(ins->args[0])) {
                 uint32_t ci = XIR_REF_INDEX(ins->args[0]);
-                offset = (int32_t)ctx->func->consts[ci].val.i64;
+                offset = (int32_t) ctx->func->consts[ci].val.i64;
             }
             a64_buf_emit(&ctx->buf, a64_ldrb(rd, JIT_CTX_REG, offset));
             xra_maybe_spill(ctx, ins->dst);
@@ -563,7 +585,7 @@ bool xir_emit_mem_ops(CodegenCtx *ctx, XirIns *ins, A64Reg rd) {
             int32_t offset = 0;
             if (!xir_ref_is_none(ins->args[1]) && xir_ref_is_const(ins->args[1])) {
                 uint32_t ci = XIR_REF_INDEX(ins->args[1]);
-                offset = (int32_t)ctx->func->consts[ci].val.i64;
+                offset = (int32_t) ctx->func->consts[ci].val.i64;
             }
             a64_buf_emit(&ctx->buf, a64_ldrb(rd, ptr, offset));
             break;
@@ -576,7 +598,7 @@ bool xir_emit_mem_ops(CodegenCtx *ctx, XirIns *ins, A64Reg rd) {
             a64_buf_emit(&ctx->buf, a64_ldrb(SCRATCH_REG, val_reg, XIR_XRVALUE_TAG_OFFSET));
             if (xir_ref_is_const(ins->args[1])) {
                 uint32_t ci = XIR_REF_INDEX(ins->args[1]);
-                uint32_t expected = (uint32_t)ctx->func->consts[ci].val.raw;
+                uint32_t expected = (uint32_t) ctx->func->consts[ci].val.raw;
                 a64_buf_emit(&ctx->buf, a64_cmp_imm(SCRATCH_REG, expected & 0xFFF));
             } else {
                 A64Reg exp_reg = xra_arg(ctx, ins->args[1], SCRATCH_REG2);
@@ -596,7 +618,7 @@ bool xir_emit_mem_ops(CodegenCtx *ctx, XirIns *ins, A64Reg rd) {
             a64_buf_emit(&ctx->buf, a64_ldrh(SCRATCH_REG, obj, XIR_GC_EXTRA_OFFSET));
             if (xir_ref_is_const(ins->args[1])) {
                 uint32_t ci = XIR_REF_INDEX(ins->args[1]);
-                uint32_t expected = (uint32_t)ctx->func->consts[ci].val.raw;
+                uint32_t expected = (uint32_t) ctx->func->consts[ci].val.raw;
                 a64_buf_emit(&ctx->buf, a64_cmp_imm(SCRATCH_REG, expected & 0xFFF));
             } else {
                 A64Reg exp_reg = xra_arg(ctx, ins->args[1], SCRATCH_REG2);
@@ -665,12 +687,12 @@ bool xir_emit_mem_ops(CodegenCtx *ctx, XirIns *ins, A64Reg rd) {
             if (xir_ref_is_const(ins->args[0])) {
                 uint32_t ci = XIR_REF_INDEX(ins->args[0]);
                 int64_t packed = ctx->func->consts[ci].val.i64;
-                gc_type = (uint8_t)(packed & 0xFF);
-                gc_extra = (uint16_t)((packed >> 8) & 0xFFFF);
+                gc_type = (uint8_t) (packed & 0xFF);
+                gc_extra = (uint16_t) ((packed >> 8) & 0xFFFF);
             }
             if (xir_ref_is_const(ins->args[1])) {
                 uint32_t ci = XIR_REF_INDEX(ins->args[1]);
-                alloc_size = (uint32_t)ctx->func->consts[ci].val.i64;
+                alloc_size = (uint32_t) ctx->func->consts[ci].val.i64;
             }
             alloc_size = (alloc_size + 7) & ~7u;
 
@@ -701,7 +723,8 @@ bool xir_emit_mem_ops(CodegenCtx *ctx, XirIns *ins, A64Reg rd) {
             // STR xzr, [rd, #0]  — gc_next = NULL
             a64_buf_emit(&ctx->buf, a64_str(A64_XZR, rd, 0));
             // LDRB w17, [x16, #101]  — currentwhite
-            a64_buf_emit(&ctx->buf, a64_ldrb(SCRATCH_REG2, SCRATCH_REG, XIR_GC_CURRENTWHITE_OFFSET));
+            a64_buf_emit(&ctx->buf,
+                         a64_ldrb(SCRATCH_REG2, SCRATCH_REG, XIR_GC_CURRENTWHITE_OFFSET));
             // STRB w17, [rd, #9]  — marked = currentwhite
             a64_buf_emit(&ctx->buf, a64_strb(SCRATCH_REG2, rd, XIR_GC_HDR_MARKED_OFFSET));
             // MOV w17, #gc_type
@@ -725,38 +748,36 @@ bool xir_emit_mem_ops(CodegenCtx *ctx, XirIns *ins, A64Reg rd) {
 
             // 1. local_allgc linked list: block->local_allgc → obj → old_head
             //    block = rd & ~0x3FFF (16KB alignment)
-            a64_load_imm64(&ctx->buf, SCRATCH_REG2, ~(uint64_t)XIR_IMMIX_BLOCK_SIZE_MASK);
+            a64_load_imm64(&ctx->buf, SCRATCH_REG2, ~(uint64_t) XIR_IMMIX_BLOCK_SIZE_MASK);
             a64_buf_emit(&ctx->buf, a64_and(SCRATCH_REG2, rd, SCRATCH_REG2));  // x17 = block
             a64_buf_emit(&ctx->buf, a64_ldr(SCRATCH_REG, SCRATCH_REG2,
-                                             XIR_IMMIX_BLOCK_LOCAL_ALLGC_OFFSET));  // x16 = old_head
-            a64_buf_emit(&ctx->buf, a64_str(SCRATCH_REG, rd, 0));               // obj->gc_next = old_head
-            a64_buf_emit(&ctx->buf, a64_str(rd, SCRATCH_REG2,
-                                             XIR_IMMIX_BLOCK_LOCAL_ALLGC_OFFSET));  // block->local_allgc = obj
+                                            XIR_IMMIX_BLOCK_LOCAL_ALLGC_OFFSET));  // x16 = old_head
+            a64_buf_emit(&ctx->buf, a64_str(SCRATCH_REG, rd, 0));  // obj->gc_next = old_head
+            a64_buf_emit(&ctx->buf,
+                         a64_str(rd, SCRATCH_REG2,
+                                 XIR_IMMIX_BLOCK_LOCAL_ALLGC_OFFSET));  // block->local_allgc = obj
 
             // 1b. block->alloc_count++, block->alloc_bytes += alloc_size
-            a64_buf_emit(&ctx->buf, a64_ldr_w(SCRATCH_REG, SCRATCH_REG2,
-                                               XIR_IMMIX_BLOCK_ALLOC_COUNT_OFFSET));
+            a64_buf_emit(&ctx->buf,
+                         a64_ldr_w(SCRATCH_REG, SCRATCH_REG2, XIR_IMMIX_BLOCK_ALLOC_COUNT_OFFSET));
             a64_buf_emit(&ctx->buf, a64_add_imm(SCRATCH_REG, SCRATCH_REG, 1));
-            a64_buf_emit(&ctx->buf, a64_str_w(SCRATCH_REG, SCRATCH_REG2,
-                                               XIR_IMMIX_BLOCK_ALLOC_COUNT_OFFSET));
-            a64_buf_emit(&ctx->buf, a64_ldr(SCRATCH_REG, SCRATCH_REG2,
-                                             XIR_IMMIX_BLOCK_ALLOC_BYTES_OFFSET));
+            a64_buf_emit(&ctx->buf,
+                         a64_str_w(SCRATCH_REG, SCRATCH_REG2, XIR_IMMIX_BLOCK_ALLOC_COUNT_OFFSET));
+            a64_buf_emit(&ctx->buf,
+                         a64_ldr(SCRATCH_REG, SCRATCH_REG2, XIR_IMMIX_BLOCK_ALLOC_BYTES_OFFSET));
             a64_buf_emit(&ctx->buf, a64_add_imm(SCRATCH_REG, SCRATCH_REG, alloc_size));
-            a64_buf_emit(&ctx->buf, a64_str(SCRATCH_REG, SCRATCH_REG2,
-                                             XIR_IMMIX_BLOCK_ALLOC_BYTES_OFFSET));
+            a64_buf_emit(&ctx->buf,
+                         a64_str(SCRATCH_REG, SCRATCH_REG2, XIR_IMMIX_BLOCK_ALLOC_BYTES_OFFSET));
 
             // 2. GC stats: totalbytes += size, GCdebt += size
-            a64_buf_emit(&ctx->buf, a64_ldr(SCRATCH_REG2, CORO_REG, XIR_CORO_GC_OFFSET));  // x17 = gc
-            a64_buf_emit(&ctx->buf, a64_ldr(SCRATCH_REG, SCRATCH_REG2,
-                                             XIR_GC_TOTALBYTES_OFFSET));
+            a64_buf_emit(&ctx->buf,
+                         a64_ldr(SCRATCH_REG2, CORO_REG, XIR_CORO_GC_OFFSET));  // x17 = gc
+            a64_buf_emit(&ctx->buf, a64_ldr(SCRATCH_REG, SCRATCH_REG2, XIR_GC_TOTALBYTES_OFFSET));
             a64_buf_emit(&ctx->buf, a64_add_imm(SCRATCH_REG, SCRATCH_REG, alloc_size));
-            a64_buf_emit(&ctx->buf, a64_str(SCRATCH_REG, SCRATCH_REG2,
-                                             XIR_GC_TOTALBYTES_OFFSET));
-            a64_buf_emit(&ctx->buf, a64_ldr(SCRATCH_REG, SCRATCH_REG2,
-                                             XIR_GC_GCDEBT_OFFSET));
+            a64_buf_emit(&ctx->buf, a64_str(SCRATCH_REG, SCRATCH_REG2, XIR_GC_TOTALBYTES_OFFSET));
+            a64_buf_emit(&ctx->buf, a64_ldr(SCRATCH_REG, SCRATCH_REG2, XIR_GC_GCDEBT_OFFSET));
             a64_buf_emit(&ctx->buf, a64_add_imm(SCRATCH_REG, SCRATCH_REG, alloc_size));
-            a64_buf_emit(&ctx->buf, a64_str(SCRATCH_REG, SCRATCH_REG2,
-                                             XIR_GC_GCDEBT_OFFSET));
+            a64_buf_emit(&ctx->buf, a64_str(SCRATCH_REG, SCRATCH_REG2, XIR_GC_GCDEBT_OFFSET));
 
             // B alloc_done (skip slow path)
             uint32_t b_done_idx = ctx->buf.count;
@@ -766,15 +787,15 @@ bool xir_emit_mem_ops(CodegenCtx *ctx, XirIns *ins, A64Reg rd) {
             uint32_t slow_path_idx = ctx->buf.count;
 
             // Patch CBZ and B.HI to point here
-            int32_t cbz_off = (int32_t)slow_path_idx - (int32_t)cbz_idx;
+            int32_t cbz_off = (int32_t) slow_path_idx - (int32_t) cbz_idx;
             ctx->buf.code[cbz_idx] = a64_cbz(SCRATCH_REG, cbz_off);
-            int32_t bhi_off = (int32_t)slow_path_idx - (int32_t)bhi_idx;
+            int32_t bhi_off = (int32_t) slow_path_idx - (int32_t) bhi_idx;
             ctx->buf.code[bhi_idx] = a64_b_cond(A64_CC_HI, bhi_off);
 
             // Load func ptr and packed arg
-            uint64_t fn_ptr = (uint64_t)(uintptr_t)&xr_jit_alloc;
+            uint64_t fn_ptr = (uint64_t) (uintptr_t) &xr_jit_alloc;
             a64_load_imm64(&ctx->buf, SCRATCH_REG, fn_ptr);
-            uint64_t packed = ((uint64_t)gc_type << 32) | (uint64_t)alloc_size;
+            uint64_t packed = ((uint64_t) gc_type << 32) | (uint64_t) alloc_size;
             a64_load_imm64(&ctx->buf, SCRATCH_REG2, packed);
             // BL call_c_stub
             add_patch(ctx, PATCH_CALL_C, 0, A64_XZR);
@@ -799,7 +820,7 @@ bool xir_emit_mem_ops(CodegenCtx *ctx, XirIns *ins, A64Reg rd) {
 
             // Patch B to alloc_done
             uint32_t done_idx = ctx->buf.count;
-            int32_t b_done_off = (int32_t)done_idx - (int32_t)b_done_idx;
+            int32_t b_done_off = (int32_t) done_idx - (int32_t) b_done_idx;
             ctx->buf.code[b_done_idx] = a64_b(b_done_off);
 
             break;
@@ -830,7 +851,7 @@ bool xir_emit_mem_ops(CodegenCtx *ctx, XirIns *ins, A64Reg rd) {
         // Write barriers: move args to scratch regs, BL to shared stub
         case XIR_BARRIER_FWD: {
             A64Reg parent_reg = xra_arg(ctx, ins->args[0], SCRATCH_REG);
-            A64Reg child_reg  = xra_arg(ctx, ins->args[1], SCRATCH_REG2);
+            A64Reg child_reg = xra_arg(ctx, ins->args[1], SCRATCH_REG2);
             a64_buf_emit(&ctx->buf, a64_mov(SCRATCH_REG, parent_reg));
             a64_buf_emit(&ctx->buf, a64_mov(SCRATCH_REG2, child_reg));
             a64_buf_emit(&ctx->buf, a64_cbz(CORO_REG, 2));
@@ -858,7 +879,7 @@ bool xir_emit_mem_ops(CodegenCtx *ctx, XirIns *ins, A64Reg rd) {
             // Load expected tag
             if (xir_ref_is_const(ins->args[1])) {
                 uint32_t ci = XIR_REF_INDEX(ins->args[1]);
-                uint32_t expected = (uint32_t)ctx->func->consts[ci].val.raw;
+                uint32_t expected = (uint32_t) ctx->func->consts[ci].val.raw;
                 a64_buf_emit(&ctx->buf, a64_cmp_imm(SCRATCH_REG, expected & 0xFFF));
             } else {
                 A64Reg exp_reg = xra_arg(ctx, ins->args[1], SCRATCH_REG2);
@@ -869,7 +890,7 @@ bool xir_emit_mem_ops(CodegenCtx *ctx, XirIns *ins, A64Reg rd) {
                 uint16_t did = 0xFFFF;
                 if (!xir_ref_is_none(ins->dst) && xir_ref_is_const(ins->dst)) {
                     uint32_t dci = XIR_REF_INDEX(ins->dst);
-                    did = (uint16_t)ctx->func->consts[dci].val.raw;
+                    did = (uint16_t) ctx->func->consts[dci].val.raw;
                 }
                 a64_buf_emit(&ctx->buf, a64_movz(SCRATCH_REG2, did, 0));
             }
@@ -887,7 +908,7 @@ bool xir_emit_mem_ops(CodegenCtx *ctx, XirIns *ins, A64Reg rd) {
                 uint16_t did = 0xFFFF;
                 if (!xir_ref_is_none(ins->dst) && xir_ref_is_const(ins->dst)) {
                     uint32_t dci = XIR_REF_INDEX(ins->dst);
-                    did = (uint16_t)ctx->func->consts[dci].val.raw;
+                    did = (uint16_t) ctx->func->consts[dci].val.raw;
                 }
                 a64_buf_emit(&ctx->buf, a64_movz(SCRATCH_REG2, did, 0));
             }
@@ -907,7 +928,7 @@ bool xir_emit_mem_ops(CodegenCtx *ctx, XirIns *ins, A64Reg rd) {
                 uint16_t did = 0xFFFF;
                 if (!xir_ref_is_none(ins->dst) && xir_ref_is_const(ins->dst)) {
                     uint32_t dci = XIR_REF_INDEX(ins->dst);
-                    did = (uint16_t)ctx->func->consts[dci].val.raw;
+                    did = (uint16_t) ctx->func->consts[dci].val.raw;
                 }
                 a64_buf_emit(&ctx->buf, a64_movz(SCRATCH_REG2, did, 0));
             }
@@ -925,7 +946,7 @@ bool xir_emit_mem_ops(CodegenCtx *ctx, XirIns *ins, A64Reg rd) {
             uint16_t did = 0xFFFF;
             if (!xir_ref_is_none(ins->dst) && xir_ref_is_const(ins->dst)) {
                 uint32_t dci = XIR_REF_INDEX(ins->dst);
-                did = (uint16_t)ctx->func->consts[dci].val.raw;
+                did = (uint16_t) ctx->func->consts[dci].val.raw;
             }
             a64_buf_emit(&ctx->buf, a64_movz(SCRATCH_REG2, did, 0));
             // Null check: CBZ obj → deopt (prevents SIGSEGV on field access)
@@ -947,7 +968,7 @@ bool xir_emit_mem_ops(CodegenCtx *ctx, XirIns *ins, A64Reg rd) {
             a64_buf_emit(&ctx->buf, a64_lsr_imm(SCRATCH_REG, SCRATCH_REG, 2));
             // Compare with expected shape_id
             uint32_t ci = XIR_REF_INDEX(ins->args[1]);
-            uint32_t expected_id = (uint32_t)ctx->func->consts[ci].val.raw;
+            uint32_t expected_id = (uint32_t) ctx->func->consts[ci].val.raw;
             a64_buf_emit(&ctx->buf, a64_cmp_imm(SCRATCH_REG, expected_id));
             add_patch(ctx, PATCH_DEOPT_NE, 0, A64_XZR);
             a64_buf_emit(&ctx->buf, a64_nop());  // placeholder for B.NE
@@ -960,11 +981,11 @@ bool xir_emit_mem_ops(CodegenCtx *ctx, XirIns *ins, A64Reg rd) {
         // Result: ptr to XrArray in rd
         case XIR_RT_ARRAY_NEW: {
             // Load helper address to x16
-            a64_load_imm64(&ctx->buf, SCRATCH_REG, (uint64_t)(uintptr_t)xr_jit_rt_array_new);
+            a64_load_imm64(&ctx->buf, SCRATCH_REG, (uint64_t) (uintptr_t) xr_jit_rt_array_new);
             // Load capacity to x17
             if (xir_ref_is_const(ins->args[0])) {
                 uint32_t ci = XIR_REF_INDEX(ins->args[0]);
-                uint64_t cap = (uint64_t)ctx->func->consts[ci].val.i64;
+                uint64_t cap = (uint64_t) ctx->func->consts[ci].val.i64;
                 a64_load_imm64(&ctx->buf, SCRATCH_REG2, cap);
             } else {
                 A64Reg cap_reg = xra_arg(ctx, ins->args[0], SCRATCH_REG);
@@ -1005,18 +1026,19 @@ bool xir_emit_mem_ops(CodegenCtx *ctx, XirIns *ins, A64Reg rd) {
                 uint8_t vk = type_kind_to_vtag(vct.kind);
                 if (vk != VTAG_TAGGED && vk != VTAG_NUMERIC) {
                     uint8_t vval = vtag_to_value_tag(vk);
-                    if (vval != 0xFF) val_tag = vval;
+                    if (vval != 0xFF)
+                        val_tag = vval;
                 }
             }
             // Write val_tag to call_arg_tags[1] (helper reads it via call_arg_tags)
-            int32_t tag1_off = (int32_t)XIR_JIT_CALL_ARG_TAGS_OFFSET + 1;
+            int32_t tag1_off = (int32_t) XIR_JIT_CALL_ARG_TAGS_OFFSET + 1;
             if (val_tag == 0xFF && xir_ref_is_vreg(ins->args[1])) {
                 // Dynamic patch: load from slot_runtime_tags[bc_slot]
                 uint32_t vi = XIR_REF_INDEX(ins->args[1]);
                 if (vi < ctx->func->nvreg) {
                     int16_t bc_slot = ctx->func->vregs[vi].bc_slot;
                     if (bc_slot >= 0 && bc_slot < 256) {
-                        int32_t src_off = (int32_t)XIR_JIT_SLOT_RUNTIME_TAGS_OFFSET + bc_slot;
+                        int32_t src_off = (int32_t) XIR_JIT_SLOT_RUNTIME_TAGS_OFFSET + bc_slot;
                         a64_buf_emit(&ctx->buf, a64_ldrb(SCRATCH_REG2, JIT_CTX_REG, src_off));
                         a64_buf_emit(&ctx->buf, a64_strb(SCRATCH_REG2, JIT_CTX_REG, tag1_off));
                     } else {
@@ -1031,8 +1053,8 @@ bool xir_emit_mem_ops(CodegenCtx *ctx, XirIns *ins, A64Reg rd) {
                 a64_buf_emit(&ctx->buf, a64_movz(SCRATCH_REG2, val_tag, 0));
                 a64_buf_emit(&ctx->buf, a64_strb(SCRATCH_REG2, JIT_CTX_REG, tag1_off));
             }
-            a64_load_imm64(&ctx->buf, SCRATCH_REG, (uint64_t)(uintptr_t)xr_jit_rt_array_push);
-            a64_load_imm64(&ctx->buf, SCRATCH_REG2, (uint64_t)val_tag);
+            a64_load_imm64(&ctx->buf, SCRATCH_REG, (uint64_t) (uintptr_t) xr_jit_rt_array_push);
+            a64_load_imm64(&ctx->buf, SCRATCH_REG2, (uint64_t) val_tag);
             add_patch(ctx, PATCH_CALL_C, 0, A64_XZR);
             a64_buf_emit(&ctx->buf, a64_nop());
             ctx->has_call_c = true;
@@ -1045,7 +1067,7 @@ bool xir_emit_mem_ops(CodegenCtx *ctx, XirIns *ins, A64Reg rd) {
         case XIR_RT_ARRAY_LEN: {
             A64Reg arr_reg = xra_arg(ctx, ins->args[0], SCRATCH_REG);
             a64_buf_emit(&ctx->buf, a64_str(arr_reg, JIT_CTX_REG, 0));
-            a64_load_imm64(&ctx->buf, SCRATCH_REG, (uint64_t)(uintptr_t)xr_jit_rt_array_len);
+            a64_load_imm64(&ctx->buf, SCRATCH_REG, (uint64_t) (uintptr_t) xr_jit_rt_array_len);
             a64_load_imm64(&ctx->buf, SCRATCH_REG2, 0);
             add_patch(ctx, PATCH_CALL_C, 0, A64_XZR);
             a64_buf_emit(&ctx->buf, a64_nop());
@@ -1059,10 +1081,10 @@ bool xir_emit_mem_ops(CodegenCtx *ctx, XirIns *ins, A64Reg rd) {
         // args[0] = capacity (const or vreg i64)
         // Result: ptr to XrMap in rd
         case XIR_RT_MAP_NEW: {
-            a64_load_imm64(&ctx->buf, SCRATCH_REG, (uint64_t)(uintptr_t)xr_jit_rt_map_new);
+            a64_load_imm64(&ctx->buf, SCRATCH_REG, (uint64_t) (uintptr_t) xr_jit_rt_map_new);
             if (xir_ref_is_const(ins->args[0])) {
                 uint32_t ci = XIR_REF_INDEX(ins->args[0]);
-                uint64_t cap = (uint64_t)ctx->func->consts[ci].val.i64;
+                uint64_t cap = (uint64_t) ctx->func->consts[ci].val.i64;
                 a64_load_imm64(&ctx->buf, SCRATCH_REG2, cap);
             } else {
                 A64Reg cap_reg = xra_arg(ctx, ins->args[0], SCRATCH_REG);
@@ -1123,8 +1145,7 @@ bool xir_emit_mem_ops(CodegenCtx *ctx, XirIns *ins, A64Reg rd) {
             uint32_t smap_id = record_safepoint(ctx);
 
             // 2. Load suspend_state pointer: x16 = coro->jit_suspend
-            a64_buf_emit(&ctx->buf, a64_ldr(SCRATCH_REG, CORO_REG,
-                         XIR_CORO_SUSPEND_PTR_OFFSET));
+            a64_buf_emit(&ctx->buf, a64_ldr(SCRATCH_REG, CORO_REG, XIR_CORO_SUSPEND_PTR_OFFSET));
 
             // 3. Save x1-x15 to suspend_regs[0..14]
             a64_buf_emit(&ctx->buf, a64_stp(A64_X1, A64_X2, SCRATCH_REG, 0));
@@ -1147,10 +1168,11 @@ bool xir_emit_mem_ops(CodegenCtx *ctx, XirIns *ins, A64Reg rd) {
             // is uninitialized; these values bridge the old and new frames.
             {
                 uint32_t ns = ctx->xra ? ctx->xra->nspill : 0;
-                if (ns > XIR_SUSPEND_SPILL_MAX) ns = XIR_SUSPEND_SPILL_MAX;
+                if (ns > XIR_SUSPEND_SPILL_MAX)
+                    ns = XIR_SUSPEND_SPILL_MAX;
                 for (uint32_t s = 0; s < ns; s++) {
-                    int32_t frame_off = SPILL_BASE + (int32_t)s * 8;
-                    int32_t regs_off  = XIR_SUSPEND_SPILL_OFF + (int32_t)s * 8;
+                    int32_t frame_off = SPILL_BASE + (int32_t) s * 8;
+                    int32_t regs_off = XIR_SUSPEND_SPILL_OFF + (int32_t) s * 8;
                     // LDR x17, [SP, #frame_off]
                     a64_buf_emit(&ctx->buf, a64_ldr(SCRATCH_REG2, A64_SP, frame_off));
                     // STR x17, [x16, #regs_off]  (x16 = suspend_regs base)
@@ -1159,29 +1181,24 @@ bool xir_emit_mem_ops(CodegenCtx *ctx, XirIns *ins, A64Reg rd) {
             }
 
             // 5. Store suspend_id and smap_id
-            a64_buf_emit(&ctx->buf, a64_movz(SCRATCH_REG2, (uint16_t)suspend_id, 0));
-            a64_buf_emit(&ctx->buf, a64_str_w(SCRATCH_REG2, CORO_REG,
-                         XIR_CORO_SUSPEND_ID_OFFSET));
-            a64_buf_emit(&ctx->buf, a64_movz(SCRATCH_REG2, (uint16_t)smap_id, 0));
-            a64_buf_emit(&ctx->buf, a64_str_w(SCRATCH_REG2, CORO_REG,
-                         XIR_CORO_SUSPEND_SMAP_OFFSET));
+            a64_buf_emit(&ctx->buf, a64_movz(SCRATCH_REG2, (uint16_t) suspend_id, 0));
+            a64_buf_emit(&ctx->buf, a64_str_w(SCRATCH_REG2, CORO_REG, XIR_CORO_SUSPEND_ID_OFFSET));
+            a64_buf_emit(&ctx->buf, a64_movz(SCRATCH_REG2, (uint16_t) smap_id, 0));
+            a64_buf_emit(&ctx->buf,
+                         a64_str_w(SCRATCH_REG2, CORO_REG, XIR_CORO_SUSPEND_SMAP_OFFSET));
             // Update frame + jit_ctx smap for GC during blocked state
-            a64_buf_emit(&ctx->buf, a64_str_w(SCRATCH_REG2, A64_FP,
-                         FRAME_SMAP_ID_OFFSET));
-            a64_buf_emit(&ctx->buf, a64_str_w(SCRATCH_REG2, JIT_CTX_REG,
-                         XIR_JIT_ACTIVE_SMAP_ID_OFFSET));
+            a64_buf_emit(&ctx->buf, a64_str_w(SCRATCH_REG2, A64_FP, FRAME_SMAP_ID_OFFSET));
+            a64_buf_emit(&ctx->buf,
+                         a64_str_w(SCRATCH_REG2, JIT_CTX_REG, XIR_JIT_ACTIVE_SMAP_ID_OFFSET));
 
             // 6. Pre-store resume info BEFORE block helper (gopark pattern).
             // Once block_helper sets BLOCKED under lock, another worker may
             // wake and resume this coro immediately. resume_entry/proto must
             // already be valid at that point.
-            a64_buf_emit(&ctx->buf, a64_ldr(SCRATCH_REG, JIT_CTX_REG,
-                         XIR_JIT_CALL_PROTO_OFFSET));
-            a64_buf_emit(&ctx->buf, a64_str(SCRATCH_REG, CORO_REG,
-                         XIR_CORO_RESUME_PROTO_OFFSET));
+            a64_buf_emit(&ctx->buf, a64_ldr(SCRATCH_REG, JIT_CTX_REG, XIR_JIT_CALL_PROTO_OFFSET));
+            a64_buf_emit(&ctx->buf, a64_str(SCRATCH_REG, CORO_REG, XIR_CORO_RESUME_PROTO_OFFSET));
             a64_buf_emit(&ctx->buf, a64_ldr(SCRATCH_REG, SCRATCH_REG, 376));
-            a64_buf_emit(&ctx->buf, a64_str(SCRATCH_REG, CORO_REG,
-                         XIR_CORO_RESUME_ENTRY_OFFSET));
+            a64_buf_emit(&ctx->buf, a64_str(SCRATCH_REG, CORO_REG, XIR_CORO_RESUME_ENTRY_OFFSET));
 
             // 7. Call block helper(coro, extra_arg)
             // Block helper selection: func metadata takes priority over default.
@@ -1190,13 +1207,12 @@ bool xir_emit_mem_ops(CodegenCtx *ctx, XirIns *ins, A64Reg rd) {
             void *block_helper = ctx->func->suspend_block_helpers[suspend_id];
             int64_t helper_extra_arg = 0;
             if (!block_helper) {
-                block_helper = (void *)xr_jit_await_block;
+                block_helper = (void *) xr_jit_await_block;
                 helper_extra_arg = discard_result;
             }
             a64_buf_emit(&ctx->buf, a64_mov(A64_X0, CORO_REG));
-            a64_load_imm64(&ctx->buf, A64_X1, (uint64_t)helper_extra_arg);
-            a64_load_imm64(&ctx->buf, SCRATCH_REG,
-                           (uint64_t)(uintptr_t)block_helper);
+            a64_load_imm64(&ctx->buf, A64_X1, (uint64_t) helper_extra_arg);
+            a64_load_imm64(&ctx->buf, SCRATCH_REG, (uint64_t) (uintptr_t) block_helper);
             a64_buf_emit(&ctx->buf, a64_blr(SCRATCH_REG));
 
             // 8. Check result: x0 = 0 → blocked, x0 != 0 → inline resume
@@ -1209,7 +1225,7 @@ bool xir_emit_mem_ops(CodegenCtx *ctx, XirIns *ins, A64Reg rd) {
             // already been resumed by another worker (gopark race).
 
             // Load SUSPEND_MARKER (0xDEAD0002DEAD0002) into x0
-            a64_load_imm64(&ctx->buf, A64_X0, (uint64_t)XIR_SUSPEND_MARKER);
+            a64_load_imm64(&ctx->buf, A64_X0, (uint64_t) XIR_SUSPEND_MARKER);
             a64_buf_emit(&ctx->buf, a64_movz(A64_X1, 0, 0));  // tag = 0
 
             // Standard epilogue: restores all callee-saved registers and
@@ -1224,13 +1240,12 @@ bool xir_emit_mem_ops(CodegenCtx *ctx, XirIns *ins, A64Reg rd) {
             // === Not-blocked path (inline resume): reload regs + load result ===
             {
                 uint32_t here = ctx->buf.count;
-                int32_t off = (int32_t)here - (int32_t)cbnz_not_blocked;
+                int32_t off = (int32_t) here - (int32_t) cbnz_not_blocked;
                 ctx->buf.code[cbnz_not_blocked] = a64_cbnz(A64_X0, off);
             }
 
             // Reload suspend pointer (x16 clobbered by BLR)
-            a64_buf_emit(&ctx->buf, a64_ldr(SCRATCH_REG, CORO_REG,
-                         XIR_CORO_SUSPEND_PTR_OFFSET));
+            a64_buf_emit(&ctx->buf, a64_ldr(SCRATCH_REG, CORO_REG, XIR_CORO_SUSPEND_PTR_OFFSET));
 
             // Reload x1-x15 from suspend_regs (x20-x27 survived as callee-saved)
             a64_buf_emit(&ctx->buf, a64_ldp(A64_X1, A64_X2, SCRATCH_REG, 0));
@@ -1260,9 +1275,9 @@ bool xir_emit_mem_ops(CodegenCtx *ctx, XirIns *ins, A64Reg rd) {
                 if (res_bc_slot >= 0 && res_bc_slot < 256) {
                     // LDRB w17, [x16, #result_tag_off]
                     a64_buf_emit(&ctx->buf, a64_ldrb(SCRATCH_REG2, SCRATCH_REG,
-                                 (int32_t)XIR_SUSPEND_RESULT_TAG_OFF));
+                                                     (int32_t) XIR_SUSPEND_RESULT_TAG_OFF));
                     // STRB w17, [x28, #runtime_tags + bc_slot]
-                    int32_t tag_off = (int32_t)XIR_JIT_SLOT_RUNTIME_TAGS_OFFSET + res_bc_slot;
+                    int32_t tag_off = (int32_t) XIR_JIT_SLOT_RUNTIME_TAGS_OFFSET + res_bc_slot;
                     a64_buf_emit(&ctx->buf, a64_strb(SCRATCH_REG2, JIT_CTX_REG, tag_off));
                 }
                 // Record bc_slot for resume entry trampoline
@@ -1274,7 +1289,7 @@ bool xir_emit_mem_ops(CodegenCtx *ctx, XirIns *ins, A64Reg rd) {
             if (suspend_id < 16) {
                 ctx->suspend_cont_offsets[suspend_id] = ctx->buf.count;
                 ctx->suspend_smap_ids[suspend_id] = smap_id;
-                ctx->suspend_result_regs[suspend_id] = (uint8_t)rd;
+                ctx->suspend_result_regs[suspend_id] = (uint8_t) rd;
                 if (suspend_id >= ctx->nsuspend)
                     ctx->nsuspend = suspend_id + 1;
             }
@@ -1287,4 +1302,4 @@ bool xir_emit_mem_ops(CodegenCtx *ctx, XirIns *ins, A64Reg rd) {
     return true;
 }
 
-#endif // __aarch64__
+#endif  // __aarch64__

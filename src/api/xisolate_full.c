@@ -50,25 +50,27 @@ static int isolate_init_full(XrayIsolate *isolate) {
     XR_DCHECK(isolate != NULL, "isolate_init_full: NULL isolate");
     // Config
     isolate->config = xr_malloc(sizeof(XrayConfig));
-    if (!isolate->config) return -1;
-    xr_config_init((XrayConfig*)isolate->config);
+    if (!isolate->config)
+        return -1;
+    xr_config_init((XrayConfig *) isolate->config);
 
     // Process-level type singletons (idempotent, safe to call multiple times)
     xr_type_global_init();
 
     // Analyzer type pool
     isolate->analyzer_pool = xr_type_pool_new();
-    if (!isolate->analyzer_pool) return -1;
+    if (!isolate->analyzer_pool)
+        return -1;
     // Set on isolate directly (xray_isolate_enter not called yet)
     isolate->current_type_pool = isolate->analyzer_pool;
     // Also set TLS fallback for code that runs before enter
-    xr_type_set_current_pool(isolate->analyzer_pool,
-        &isolate->analyzer_pool->next_type_id);
+    xr_type_set_current_pool(isolate->analyzer_pool, &isolate->analyzer_pool->next_type_id);
 
     // Symbol table
     isolate->symbol_table = xr_symbol_table_create();
-    if (!isolate->symbol_table) return -1;
-    xr_symbol_table_init_builtins((XrSymbolTable*)isolate->symbol_table);
+    if (!isolate->symbol_table)
+        return -1;
+    xr_symbol_table_init_builtins((XrSymbolTable *) isolate->symbol_table);
 
     // Type registry (must be before core_init, which registers classes)
     xr_registry_init(isolate);
@@ -84,14 +86,13 @@ static int isolate_init_full(XrayIsolate *isolate) {
 
     // Global object + core classes + builtins
     isolate->global_object = xr_global_object_create(isolate);
-    if (!isolate->global_object) return -1;
-    if (!xr_global_register_all_core_classes(
-            (XrGlobalObject*)isolate->global_object, isolate)) {
+    if (!isolate->global_object)
+        return -1;
+    if (!xr_global_register_all_core_classes((XrGlobalObject *) isolate->global_object, isolate)) {
         xr_log_warning("isolate", "failed to register core classes");
         return -1;
     }
-    if (!xr_global_register_all_builtin_functions(
-            (XrGlobalObject*)isolate->global_object)) {
+    if (!xr_global_register_all_builtin_functions((XrGlobalObject *) isolate->global_object)) {
         xr_log_warning("isolate", "failed to register builtin functions");
         return -1;
     }
@@ -101,15 +102,12 @@ static int isolate_init_full(XrayIsolate *isolate) {
 
     // Compiler hooks for import
     {
-        typedef void *(*GenFn3)(void*, const char*, const char*);
-        typedef void *(*GenFn3b)(void*, void*, const char*);
-        typedef void  (*GenFn1)(void*);
+        typedef void *(*GenFn3)(void *, const char *, const char *);
+        typedef void *(*GenFn3b)(void *, void *, const char *);
+        typedef void (*GenFn1)(void *);
         xr_module_set_compiler_hooks(
-            isolate,
-            (GenFn3)xr_parse_with_source,
-            (GenFn3b)xr_compile_ast_with_source,
-            (GenFn3)xr_compile_source_with_path,
-            (GenFn1)xr_program_destroy);
+            isolate, (GenFn3) xr_parse_with_source, (GenFn3b) xr_compile_ast_with_source,
+            (GenFn3) xr_compile_source_with_path, (GenFn1) xr_program_destroy);
     }
 
     // Regex
@@ -122,17 +120,21 @@ static int isolate_init_full(XrayIsolate *isolate) {
     // init_globals() in xr_vm_init ran before init_extra, so isolate->core was NULL.
     if (isolate->core) {
         if (isolate->core->reflectClass)
-            isolate->vm.builtins[XR_GLOBAL_VAR_REFLECT] = xr_value_from_class(isolate->core->reflectClass);
+            isolate->vm.builtins[XR_GLOBAL_VAR_REFLECT] =
+                xr_value_from_class(isolate->core->reflectClass);
         if (isolate->core->arrayClass)
-            isolate->vm.builtins[XR_GLOBAL_VAR_ARRAY] = xr_value_from_class(isolate->core->arrayClass);
+            isolate->vm.builtins[XR_GLOBAL_VAR_ARRAY] =
+                xr_value_from_class(isolate->core->arrayClass);
         if (isolate->core->setClass)
             isolate->vm.builtins[XR_GLOBAL_VAR_SET] = xr_value_from_class(isolate->core->setClass);
         if (isolate->core->mapClass)
             isolate->vm.builtins[XR_GLOBAL_VAR_MAP] = xr_value_from_class(isolate->core->mapClass);
         if (isolate->core->stringClass)
-            isolate->vm.builtins[XR_GLOBAL_VAR_STRING] = xr_value_from_class(isolate->core->stringClass);
+            isolate->vm.builtins[XR_GLOBAL_VAR_STRING] =
+                xr_value_from_class(isolate->core->stringClass);
         if (isolate->core->jsonClass)
-            isolate->vm.builtins[XR_GLOBAL_VAR_JSON] = xr_value_from_class(isolate->core->jsonClass);
+            isolate->vm.builtins[XR_GLOBAL_VAR_JSON] =
+                xr_value_from_class(isolate->core->jsonClass);
         if (isolate->vm.builtin_count < XR_USER_GLOBALS_START)
             isolate->vm.builtin_count = XR_USER_GLOBALS_START;
     }
@@ -143,7 +145,6 @@ static int isolate_init_full(XrayIsolate *isolate) {
 /* ========== Full Cleanup Callback ========== */
 
 static void isolate_cleanup_full(XrayIsolate *isolate) {
-
     // Stdlib per-isolate cache. Must be freed before the module registry so
     // any XrShape it holds is released while the owning isolate state is
     // still intact.
@@ -159,7 +160,7 @@ static void isolate_cleanup_full(XrayIsolate *isolate) {
     }
 
     if (isolate->global_object) {
-        xr_global_object_destroy((XrGlobalObject*)isolate->global_object);
+        xr_global_object_destroy((XrGlobalObject *) isolate->global_object);
         isolate->global_object = NULL;
     }
 
@@ -174,7 +175,7 @@ static void isolate_cleanup_full(XrayIsolate *isolate) {
     }
 
     if (isolate->symbol_table) {
-        xr_symbol_table_destroy((XrSymbolTable*)isolate->symbol_table);
+        xr_symbol_table_destroy((XrSymbolTable *) isolate->symbol_table);
         isolate->symbol_table = NULL;
     }
 
@@ -193,8 +194,8 @@ static void isolate_cleanup_full(XrayIsolate *isolate) {
 /* ========== Public: Setup Full Runtime ========== */
 
 void xray_isolate_setup_full(XrayIsolateParams *params) {
-    if (!params) return;
+    if (!params)
+        return;
     params->init_extra = isolate_init_full;
     params->cleanup_extra = isolate_cleanup_full;
 }
-

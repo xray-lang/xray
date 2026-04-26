@@ -15,7 +15,7 @@
 #include "xcoroutine.h"
 #include "../base/xchecks.h"
 #include "xyieldable.h"
-#include "../runtime/xvm_call.h"         // XrVMResult, XR_VM_*
+#include "../runtime/xvm_call.h"  // XrVMResult, XR_VM_*
 #include "../runtime/xray_debug.h"
 #include <stdio.h>
 
@@ -54,25 +54,25 @@ XrVMResult xr_coro_resume_with_unroll(XrayIsolate *X, XrCoroutine *coro, int res
         }
 
         // Check if C function frame with continuation
-        if ((frame->call_status & XR_CALL_C) &&
-            (frame->call_status & XR_CALL_HAS_CONT) &&
+        if ((frame->call_status & XR_CALL_C) && (frame->call_status & XR_CALL_HAS_CONT) &&
             frame->u.c.continuation) {
-
             // Call continuation (new signature includes result parameter)
-            XrContinuation cont = (XrContinuation)frame->u.c.continuation;
+            XrContinuation cont = (XrContinuation) frame->u.c.continuation;
             void *user_ctx = frame->u.c.continuation_ctx;
             XrValue cfunc_result = xr_null();
 
             XrCFuncResult status = cont(X, resume_status, user_ctx, &cfunc_result);
 
-            XR_DBG_CORO("unroll: continuation returned %d, frame_count=%d", status, coro->vm_ctx.frame_count);
+            XR_DBG_CORO("unroll: continuation returned %d, frame_count=%d", status,
+                        coro->vm_ctx.frame_count);
 
             switch (status) {
                 case XR_CFUNC_DONE: {
                     // Continuation complete, use VM's startfunc mechanism to store return value
                     // This ensures return value is stored in correct frame context
                     XR_DBG_CORO("unroll DONE: result_slot=%d, base_offset=%d, frame_idx=%d",
-                                frame->u.c.result_slot, frame->base_offset, coro->vm_ctx.frame_count - 1);
+                                frame->u.c.result_slot, frame->base_offset,
+                                coro->vm_ctx.frame_count - 1);
 
                     // Critical fix: if this is coroutine's last frame (frame_count=1),
                     // store result in stack[0], as run_on_worker gets return value from there

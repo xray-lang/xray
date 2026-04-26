@@ -26,23 +26,23 @@ typedef struct XaInferContext {
     XaAnalyzer *analyzer;
     XaFlowBuilder *flow;
     XaFlowCache *cache;
-    
+
     // Current function being analyzed
     XaSymbol *current_function;
     XrType *expected_return_type;
-    
+
     // Collected return types (for inference)
     XrType **return_types;
     int return_type_count;
     int return_type_capacity;
-    
+
     // File info
     const char *file_path;
-    
+
     // Expected type for bidirectional inference (contextual typing)
     // Propagated from declaration to initializer expression
     XrType *expected_type;
-    
+
     // Generic type inference context (for callback parameters)
     // e.g., arr.map(x => x+1) - element_type is int, so x: int
     XrType *callback_element_type;      // Element type for callback first param
@@ -59,4 +59,4 @@ XR_FUNC void xa_infer_context_free(XaInferContext *ctx);
 XR_FUNC void xa_infer_add_return_type(XaInferContext *ctx, XrType *type);
 XR_FUNC XrType *xa_infer_compute_return_type(XaInferContext *ctx);
 
-#endif // XANALYZER_INFER_H
+#endif  // XANALYZER_INFER_H

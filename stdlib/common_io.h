@@ -60,25 +60,36 @@
 //
 // NOTE: synchronous. Blocks the worker thread for large files. See the
 // header comment for the P9 plan.
-static inline bool xrs_file_read_all_sync(const char *path,
-                                          char **out_data,
-                                          size_t *out_len)
-{
-    if (!path || !out_data || !out_len) return false;
+static inline bool xrs_file_read_all_sync(const char *path, char **out_data, size_t *out_len) {
+    if (!path || !out_data || !out_len)
+        return false;
     *out_data = NULL;
     *out_len = 0;
 
     FILE *f = fopen(path, "rb");
-    if (!f) return false;
+    if (!f)
+        return false;
 
-    if (fseek(f, 0, SEEK_END) != 0) { fclose(f); return false; }
+    if (fseek(f, 0, SEEK_END) != 0) {
+        fclose(f);
+        return false;
+    }
     long raw = ftell(f);
-    if (raw < 0) { fclose(f); return false; }
-    if (fseek(f, 0, SEEK_SET) != 0) { fclose(f); return false; }
+    if (raw < 0) {
+        fclose(f);
+        return false;
+    }
+    if (fseek(f, 0, SEEK_SET) != 0) {
+        fclose(f);
+        return false;
+    }
 
-    size_t size = (size_t)raw;
-    char *buf = (char *)xr_malloc(size + 1);
-    if (!buf) { fclose(f); return false; }
+    size_t size = (size_t) raw;
+    char *buf = (char *) xr_malloc(size + 1);
+    if (!buf) {
+        fclose(f);
+        return false;
+    }
 
     size_t got = fread(buf, 1, size, f);
     int read_err = ferror(f);
@@ -103,23 +114,26 @@ static inline bool xrs_file_read_all_sync(const char *path,
 // its current use cases.
 //
 // NOTE: synchronous. See the header comment for the P9 plan.
-static inline bool xrs_file_write_all_sync(const char *path,
-                                           const char *data, size_t len)
-{
-    if (!path) return false;
+static inline bool xrs_file_write_all_sync(const char *path, const char *data, size_t len) {
+    if (!path)
+        return false;
     // Allow data==NULL only when len==0 (empty file create).
-    if (!data && len != 0) return false;
+    if (!data && len != 0)
+        return false;
 
     FILE *f = fopen(path, "wb");
-    if (!f) return false;
+    if (!f)
+        return false;
 
     bool ok = true;
     if (len > 0) {
         size_t wrote = fwrite(data, 1, len, f);
-        if (wrote != len) ok = false;
+        if (wrote != len)
+            ok = false;
     }
-    if (fclose(f) != 0) ok = false;
+    if (fclose(f) != 0)
+        ok = false;
     return ok;
 }
 
-#endif // XR_STDLIB_COMMON_IO_H
+#endif  // XR_STDLIB_COMMON_IO_H

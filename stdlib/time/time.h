@@ -29,7 +29,6 @@ struct XrModule;
  * The per-function C bindings (time.now, time.clock, etc.) are file-private
  * to time.c; callers reach them through the registered module export table.
  */
-struct XrModule* xr_load_module_time(XrayIsolate *isolate);
+struct XrModule *xr_load_module_time(XrayIsolate *isolate);
 
-#endif // XR_STDLIB_TIME_H
-
+#endif  // XR_STDLIB_TIME_H

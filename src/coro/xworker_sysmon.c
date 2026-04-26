@@ -21,17 +21,21 @@
 /* Arm guard pages for all running workers so JIT back-edges trigger safepoints.
  * Called by sysmon every ~2ms. Workers that are parked or in syscall are skipped. */
 static void sysmon_arm_guard_pages(XrRuntime *runtime) {
-    if (!XR_JIT_AVAILABLE()) return;
+    if (!XR_JIT_AVAILABLE())
+        return;
     for (int i = 0; i < runtime->worker_count; i++) {
         XrWorker *w = &runtime->workers[i];
         XrMachine *wm = w->m;
-        if (!wm) continue;
+        if (!wm)
+            continue;
 
         int st = atomic_load_explicit(&wm->state, memory_order_relaxed);
-        if (st != M_RUNNING) continue;
+        if (st != M_RUNNING)
+            continue;
 
         void *page = w->p.jit_scratch.safepoint_page;
-        if (page) xr_jit_hooks->guard_page_arm(page);
+        if (page)
+            xr_jit_hooks->guard_page_arm(page);
     }
 }
 
@@ -93,18 +97,18 @@ static void sysmon_check(XrRuntime *runtime) {
             // All accesses are atomic; upgrade uses
             // one-way CAS to prevent ABA with concurrent VM reads.
             if (elapsed_us >= 10000 && wm->current_cfunc) {
-                XrCFunction *cfn = (XrCFunction *)wm->current_cfunc;
-                uint8_t cls = atomic_load_explicit(&cfn->cfunc_class,
-                                                    memory_order_relaxed);
+                XrCFunction *cfn = (XrCFunction *) wm->current_cfunc;
+                uint8_t cls = atomic_load_explicit(&cfn->cfunc_class, memory_order_relaxed);
                 if (cls == XR_CFUNC_FAST) {
-                    uint8_t cnt = atomic_fetch_add_explicit(
-                        &cfn->auto_slow_count, 1, memory_order_relaxed) + 1;
+                    uint8_t cnt =
+                        atomic_fetch_add_explicit(&cfn->auto_slow_count, 1, memory_order_relaxed) +
+                        1;
                     if (cnt >= 3) {
                         // One-way CAS: FAST → SLOW (never reverts)
                         uint8_t expected = XR_CFUNC_FAST;
-                        atomic_compare_exchange_strong_explicit(
-                            &cfn->cfunc_class, &expected, XR_CFUNC_SLOW,
-                            memory_order_release, memory_order_relaxed);
+                        atomic_compare_exchange_strong_explicit(&cfn->cfunc_class, &expected,
+                                                                XR_CFUNC_SLOW, memory_order_release,
+                                                                memory_order_relaxed);
                     }
                 }
             }
@@ -113,11 +117,12 @@ static void sysmon_check(XrRuntime *runtime) {
             if (!runtime->sysmon_state[i].warned && elapsed_us >= XR_SYSMON_WARN_US) {
                 runtime->sysmon_state[i].warned = true;
                 XrCoroutine *coro = wm->current_coro;
-                xr_log_warning("sysmon", "Worker %d stuck for %lldms"
-                                " (coroutine: %s, hb=%llu)",
-                        i, (long long)(elapsed_us / 1000),
-                        (coro && coro->name) ? coro->name : "unknown",
-                        (unsigned long long)hb);
+                xr_log_warning("sysmon",
+                               "Worker %d stuck for %lldms"
+                               " (coroutine: %s, hb=%llu)",
+                               i, (long long) (elapsed_us / 1000),
+                               (coro && coro->name) ? coro->name : "unknown",
+                               (unsigned long long) hb);
             }
 
             // === Level 3 (5s): mark coroutine for cancellation ===
@@ -138,15 +143,17 @@ static void sysmon_check(XrRuntime *runtime) {
                         }
                     }
                     const char *entry_str = "closure";
-                    if (coro->entry_type == XR_CORO_ENTRY_NATIVE) entry_str = "native";
-                    else if (coro->entry_type == XR_CORO_ENTRY_CFUNC) entry_str = "cfunc";
-                    xr_log_warning("sysmon", "Worker %d stuck for %lldms, "
-                                    "coro id=%d '%s' cancelled "
-                                    "(entry=%s, frame: %s, c=%d, fc=%d, reds=%d, flags=0x%x)",
-                            i, (long long)(elapsed_us / 1000),
-                            coro->id, coro->name ? coro->name : "unknown",
-                            entry_str, func_name, in_c, fc,
-                            coro->reductions, xr_coro_flags_load(coro));
+                    if (coro->entry_type == XR_CORO_ENTRY_NATIVE)
+                        entry_str = "native";
+                    else if (coro->entry_type == XR_CORO_ENTRY_CFUNC)
+                        entry_str = "cfunc";
+                    xr_log_warning("sysmon",
+                                   "Worker %d stuck for %lldms, "
+                                   "coro id=%d '%s' cancelled "
+                                   "(entry=%s, frame: %s, c=%d, fc=%d, reds=%d, flags=0x%x)",
+                                   i, (long long) (elapsed_us / 1000), coro->id,
+                                   coro->name ? coro->name : "unknown", entry_str, func_name, in_c,
+                                   fc, coro->reductions, xr_coro_flags_load(coro));
                 }
             }
         } else {
@@ -170,10 +177,12 @@ static void sysmon_assist(XrRuntime *runtime) {
     for (int i = 0; i < runtime->worker_count; i++) {
         XrWorker *w = &runtime->workers[i];
         XrMachine *wm = w->m;
-        if (!wm) continue;
+        if (!wm)
+            continue;
 
         int st = atomic_load_explicit(&wm->state, memory_order_relaxed);
-        if (st != M_PARKED && st != M_PARKING) continue;
+        if (st != M_PARKED && st != M_PARKING)
+            continue;
 
         // If this worker has a timer wheel with overdue ticks, wake it
         if (w->p.timer_wheel && now > w->p.last_timer_tick) {
@@ -188,7 +197,7 @@ static void sysmon_assist(XrRuntime *runtime) {
 // Sysmon thread: heartbeat monitoring + stuck Worker detection + assist.
 // Adaptive interval: busy system checks more frequently.
 void *sysmon_thread_func(void *arg) {
-    XrRuntime *runtime = (XrRuntime *)arg;
+    XrRuntime *runtime = (XrRuntime *) arg;
     int idle_rounds = 0;
 
     while (atomic_load(&runtime->running)) {
@@ -202,12 +211,12 @@ void *sysmon_thread_func(void *arg) {
             idle_rounds++;
             // Exponential backoff: 2ms → 5ms → 10ms
             if (idle_rounds < 5)
-                interval_ns = 5000000;   // 5ms
+                interval_ns = 5000000;  // 5ms
             else
                 interval_ns = 10000000;  // 10ms
         }
 
-        struct timespec ts = { .tv_sec = 0, .tv_nsec = interval_ns };
+        struct timespec ts = {.tv_sec = 0, .tv_nsec = interval_ns};
         nanosleep(&ts, NULL);
         sysmon_check(runtime);
         sysmon_assist(runtime);
@@ -218,7 +227,8 @@ void *sysmon_thread_func(void *arg) {
 
 // xr_runtime_next_coro_id - Allocate coroutine ID
 int xr_runtime_next_coro_id(XrRuntime *runtime) {
-    if (!runtime) return 0;
+    if (!runtime)
+        return 0;
     return atomic_fetch_add(&runtime->next_coro_id, 1);
 }
 
@@ -232,10 +242,12 @@ int xr_runtime_next_coro_id(XrRuntime *runtime) {
 // 3. Directly call worker_loop, no code duplication
 // 4. When main coroutine completes, worker_loop internally sets runtime->running = false
 int xr_main_thread_run(XrayIsolate *X, XrCoroutine *main_coro) {
-    if (!X || !main_coro) return -1;
+    if (!X || !main_coro)
+        return -1;
 
-    XrRuntime *runtime = (XrRuntime *)X->vm.runtime;
-    if (!runtime) return -1;
+    XrRuntime *runtime = (XrRuntime *) X->vm.runtime;
+    if (!runtime)
+        return -1;
 
     // Main thread reuses Worker 0
     XrWorker *worker = &runtime->workers[0];
@@ -248,7 +260,8 @@ int xr_main_thread_run(XrayIsolate *X, XrCoroutine *main_coro) {
             pthread_join(runtime->sysmon_thread, NULL);
             for (int i = 1; i < runtime->worker_count; i++) {
                 XrMachine *wm = runtime->workers[i].m;
-                if (wm) pthread_join(wm->thread, NULL);
+                if (wm)
+                    pthread_join(wm->thread, NULL);
             }
         }
 
@@ -259,7 +272,7 @@ int xr_main_thread_run(XrayIsolate *X, XrCoroutine *main_coro) {
         atomic_store(&runtime->running, true);
     }
 
- // Initialize main thread Worker's Timer Wheel (owner is worker 0)
+    // Initialize main thread Worker's Timer Wheel (owner is worker 0)
     if (!worker->p.timer_wheel) {
         worker->p.timer_wheel = xr_timer_wheel_create(runtime, 0);  // Worker 0 owns this
         worker->p.last_timer_tick = xr_monotonic_ticks();
@@ -272,11 +285,12 @@ int xr_main_thread_run(XrayIsolate *X, XrCoroutine *main_coro) {
     // Clear stale execution state from previous run (DONE, RUNNING, BLOCKED, etc.)
     // xr_coro_flags_set is atomic OR — without clearing first, old DONE flag persists
     // and worker_loop skips the coroutine (line 1263: "prevent re-executing completed coroutine").
-    xr_coro_flags_clear(main_coro,
-        XR_CORO_FLG_DONE | XR_CORO_FLG_RUNNING | XR_CORO_FLG_BLOCKED |
-        XR_CORO_FLG_CANCELLED | XR_CORO_FLG_IN_RUNQ | XR_CORO_FLG_STARTED);
+    xr_coro_flags_clear(main_coro, XR_CORO_FLG_DONE | XR_CORO_FLG_RUNNING | XR_CORO_FLG_BLOCKED |
+                                       XR_CORO_FLG_CANCELLED | XR_CORO_FLG_IN_RUNQ |
+                                       XR_CORO_FLG_STARTED);
     xr_coro_flags_set(main_coro, XR_CORO_FLG_READY | XR_CORO_FLG_MAIN);
-    atomic_store_explicit(&main_coro->affinity_p, 0, memory_order_relaxed);  // main coroutine bound to Worker 0
+    atomic_store_explicit(&main_coro->affinity_p, 0,
+                          memory_order_relaxed);  // main coroutine bound to Worker 0
     xr_worker_push(worker, main_coro);
 
     // Directly call worker_loop, reuse unified scheduling logic
@@ -308,7 +322,8 @@ int xr_main_thread_run(XrayIsolate *X, XrCoroutine *main_coro) {
         pthread_join(runtime->sysmon_thread, NULL);
         for (int i = 1; i < runtime->worker_count; i++) {
             XrMachine *wm = runtime->workers[i].m;
-            if (wm) pthread_join(wm->thread, NULL);
+            if (wm)
+                pthread_join(wm->thread, NULL);
         }
         // Mark threads as joined so next run doesn't double-join
         atomic_store(&runtime->threads_started, false);
@@ -326,10 +341,12 @@ int xr_main_thread_run(XrayIsolate *X, XrCoroutine *main_coro) {
 // Called by DAP server to resume execution after hitting a breakpoint.
 // Returns 0 if stopped again (breakpoint/step), 1 if program ended.
 int xr_debug_resume_vm(XrayIsolate *X, XrCoroutine *coro) {
-    if (!X || !coro) return -1;
+    if (!X || !coro)
+        return -1;
 
-    XrRuntime *runtime = (XrRuntime *)X->vm.runtime;
-    if (!runtime) return -1;
+    XrRuntime *runtime = (XrRuntime *) X->vm.runtime;
+    if (!runtime)
+        return -1;
 
     XrWorker *worker = &runtime->workers[0];
 
@@ -370,9 +387,9 @@ int xr_debug_resume_vm(XrayIsolate *X, XrCoroutine *coro) {
 // Each XrSelectCase embeds a bucket_next pointer, so the
 // case is linked into the corresponding bucket's select queue directly.
 // wake_select then traverses only the target bucket — O(waiters_on_channel).
-void xr_worker_block_select(XrWorker *worker, XrCoroutine *coro,
-                            void **channels, int count) {
-    if (!worker || !coro || !channels || count <= 0) return;
+void xr_worker_block_select(XrWorker *worker, XrCoroutine *coro, void **channels, int count) {
+    if (!worker || !coro || !channels || count <= 0)
+        return;
 
     XrSelectWait *sw = coro->select_wait;
     XR_DCHECK(sw != NULL, "block_select: coro has no select_wait");
@@ -381,10 +398,12 @@ void xr_worker_block_select(XrWorker *worker, XrCoroutine *coro,
     // Also set waiter_worker_mask on each channel for wake routing.
     for (int i = 0; i < count; i++) {
         void *channel = channels[i];
-        if (!channel) continue;
+        if (!channel)
+            continue;
 
         XrBlockedBucket *bucket = worker_blocked_bucket_find_or_create(worker, channel);
-        if (!bucket) continue;
+        if (!bucket)
+            continue;
 
         XR_DCHECK(i < sw->case_count, "block_select: case index out of bounds");
         XrSelectCase *sc = &sw->cases[i];
@@ -397,9 +416,9 @@ void xr_worker_block_select(XrWorker *worker, XrCoroutine *coro,
         bucket->select_tail = sc;
 
         // Set waiter mask bit for this worker on the channel
-        XrChannel *ch = (XrChannel *)channel;
-        atomic_fetch_or_explicit(&ch->waiter_worker_mask,
-                                 (uint64_t)1 << worker->p.id, memory_order_relaxed);
+        XrChannel *ch = (XrChannel *) channel;
+        atomic_fetch_or_explicit(&ch->waiter_worker_mask, (uint64_t) 1 << worker->p.id,
+                                 memory_order_relaxed);
     }
 
     // Add to Worker's linear blocked queue (for sysmon / timer traversal)
@@ -417,16 +436,19 @@ void xr_worker_block_select(XrWorker *worker, XrCoroutine *coro,
 // Traverse bucket->select_head (XrSelectCase chain) instead of
 // scanning all blocked coros.  Complexity = O(select waiters on this channel).
 XrCoroutine *xr_worker_wake_select(XrWorker *worker, void *channel) {
-    if (!worker || !channel) return NULL;
+    if (!worker || !channel)
+        return NULL;
     // MUST only be called from the owning worker thread.
     XR_DCHECK(xr_current_worker() == worker,
               "wake_select: cross-worker call detected (use chan_wake_queue)");
 
     // Fast path: no select waiters at all
-    if (worker->p.select_waiter_count == 0) return NULL;
+    if (worker->p.select_waiter_count == 0)
+        return NULL;
 
     XrBlockedBucket *bucket = worker_blocked_bucket_find(worker, channel);
-    if (!bucket || !bucket->select_head) return NULL;
+    if (!bucket || !bucket->select_head)
+        return NULL;
 
     // Walk the bucket's select case chain
     XrSelectCase *sc = bucket->select_head;
@@ -440,7 +462,7 @@ XrCoroutine *xr_worker_wake_select(XrWorker *worker, void *channel) {
             bool expected = false;
             if (atomic_compare_exchange_strong(&sw->triggered, &expected, true)) {
                 // Determine case index from pointer arithmetic
-                int case_idx = (int)(sc - sw->cases);
+                int case_idx = (int) (sc - sw->cases);
                 XR_DCHECK(case_idx >= 0 && case_idx < sw->case_count,
                           "wake_select: case index out of range");
                 coro->select_ready_case = case_idx;
@@ -465,10 +487,12 @@ XrCoroutine *xr_worker_wake_select(XrWorker *worker, void *channel) {
 
 // Remove a single XrSelectCase from its bucket's select queue.
 static void select_case_remove_from_bucket(XrWorker *worker, XrSelectCase *target) {
-    if (!target->channel) return;
+    if (!target->channel)
+        return;
 
     XrBlockedBucket *bucket = worker_blocked_bucket_find(worker, target->channel);
-    if (!bucket) return;
+    if (!bucket)
+        return;
 
     XrSelectCase *prev = NULL;
     XrSelectCase *curr = bucket->select_head;
@@ -495,16 +519,18 @@ static void select_case_remove_from_bucket(XrWorker *worker, XrSelectCase *targe
 // Iterate every case in the select and remove its node from the
 // corresponding bucket, instead of only the first channel.
 void xr_worker_unblock_select(XrWorker *worker, XrCoroutine *coro) {
-    if (!worker || !coro) return;
+    if (!worker || !coro)
+        return;
 
     XrSelectWait *sw = coro->select_wait;
-    if (!sw) return;
+    if (!sw)
+        return;
 
     // Notify dist channels about exiting select (unsubscribe from push model)
     XrChannelDistHooks *dhooks = coro->isolate ? coro->isolate->channel_dist_hooks : NULL;
     if (dhooks && dhooks->on_select_exit) {
         for (int i = 0; i < sw->case_count; i++) {
-            XrChannel *ch = (XrChannel *)sw->cases[i].channel;
+            XrChannel *ch = (XrChannel *) sw->cases[i].channel;
             if (ch && ch->dist) {
                 dhooks->on_select_exit(ch);
             }

@@ -18,4 +18,4 @@ typedef struct XrLspDocument XrLspDocument;
 // Format entire document
 XR_FUNC XrJsonValue *xlsp_analyze_format(XrLspDocument *doc);
 
-#endif // XLSP_FORMAT_H
+#endif  // XLSP_FORMAT_H

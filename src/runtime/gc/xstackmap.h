@@ -26,19 +26,19 @@
 /* One safepoint entry: records which registers and spill slots hold GC pointers.
  * Generated at compile time, queried by GC at runtime via safepoint_id index. */
 typedef struct {
-    uint32_t pc_offset;      // byte offset of safepoint in JIT code
-    uint32_t reg_bitmap;     // bit N = alloc_regs[N] holds a PTR-typed vreg
-    uint32_t spill_bitmap;   // bit N = spill_slot[N] holds a PTR-typed vreg
+    uint32_t pc_offset;     // byte offset of safepoint in JIT code
+    uint32_t reg_bitmap;    // bit N = alloc_regs[N] holds a PTR-typed vreg
+    uint32_t spill_bitmap;  // bit N = spill_slot[N] holds a PTR-typed vreg
 } XrStackMapEntry;
 
 // Per-function stack map table, attached to XrProto after compilation.
-#define XR_STACK_MAP_MAGIC 0x534D4150 // "SMAP" — validates JIT frame during FP chain walk
+#define XR_STACK_MAP_MAGIC 0x534D4150  // "SMAP" — validates JIT frame during FP chain walk
 
 typedef struct {
-    uint32_t magic;          // XR_STACK_MAP_MAGIC for FP chain walk validation
-    uint32_t count;          // number of safepoint entries
-    uint32_t frame_size;     // JIT frame size (for locating spill slots)
+    uint32_t magic;             // XR_STACK_MAP_MAGIC for FP chain walk validation
+    uint32_t count;             // number of safepoint entries
+    uint32_t frame_size;        // JIT frame size (for locating spill slots)
     XrStackMapEntry entries[];  // flexible array, sorted by pc_offset
 } XrStackMapTable;
 
-#endif // XSTACKMAP_H
+#endif  // XSTACKMAP_H

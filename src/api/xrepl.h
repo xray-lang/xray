@@ -35,7 +35,7 @@ typedef struct XrProto XrProto;
 
 typedef struct XrReplSymbol {
     XrString *name;
-    int shared_index;       // absolute index in isolate->vm.shared
+    int shared_index;  // absolute index in isolate->vm.shared
     bool is_const;
 } XrReplSymbol;
 
@@ -46,7 +46,7 @@ typedef struct XrReplSymbolTable {
 } XrReplSymbolTable;
 
 // Lifecycle
-XR_FUNC XrReplSymbolTable* xr_repl_symbols_new(void);
+XR_FUNC XrReplSymbolTable *xr_repl_symbols_new(void);
 XR_FUNC void xr_repl_symbols_free(XrReplSymbolTable *table);
 XR_FUNC void xr_repl_symbols_clear(XrReplSymbolTable *table);
 
@@ -55,13 +55,13 @@ XR_FUNC void xr_repl_symbols_seed_context(XrReplSymbolTable *table, XrCompilerCo
 
 // Collect new definitions from compiler context after compilation
 XR_FUNC void xr_repl_symbols_collect(XrReplSymbolTable *table, XrCompilerContext *ctx,
-                             int seeded_count);
+                                     int seeded_count);
 
 /* ========== REPL Input Completeness Check ========== */
 
 typedef enum {
-    XR_INPUT_COMPLETE,      // Structurally complete, ready to compile
-    XR_INPUT_INCOMPLETE,    // Unclosed brackets, strings, or comments
+    XR_INPUT_COMPLETE,    // Structurally complete, ready to compile
+    XR_INPUT_INCOMPLETE,  // Unclosed brackets, strings, or comments
 } XrInputStatus;
 
 /*
@@ -80,6 +80,6 @@ XR_FUNC XrInputStatus xr_repl_check_input(const char *source);
  * - Updates repl_symbols with new definitions
  * Returns compiled proto, or NULL on error.
  */
-XR_FUNC XrProto* xr_repl_compile(XrayIsolate *isolate, const char *source);
+XR_FUNC XrProto *xr_repl_compile(XrayIsolate *isolate, const char *source);
 
-#endif // XREPL_H
+#endif  // XREPL_H

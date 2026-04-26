@@ -25,7 +25,7 @@
 
 #include <stdint.h>
 #include "../base/xdefs.h"
-#include "../runtime/value/xvalue.h"  /* XR_TAG_*, XrValue */
+#include "../runtime/value/xvalue.h" /* XR_TAG_*, XrValue */
 
 struct XrCoroutine;
 struct XrGCHeader;
@@ -36,31 +36,34 @@ struct XrGCHeader;
 // All CALL_C value-returning helpers return this instead of int64_t,
 // eliminating the global jit_ctx->return_tag side-effect channel.
 typedef struct {
-    int64_t  payload;  // raw 64-bit value (int / float bits / pointer)
-    uint64_t tag;      // XrValue.tag (lower byte valid, upper bytes zero)
+    int64_t payload;  // raw 64-bit value (int / float bits / pointer)
+    uint64_t tag;     // XrValue.tag (lower byte valid, upper bytes zero)
 } XrJitResult;
 
 /* ========== Convenience macros for constructing XrJitResult ========== */
 
-#define XR_JIT_OK()       ((XrJitResult){ 0, 0 })
-#define XR_JIT_NULL()     ((XrJitResult){ 0, (uint64_t)XR_TAG_NULL })
-#define XR_JIT_INT(v)     ((XrJitResult){ (int64_t)(v), (uint64_t)XR_TAG_I64 })
-#define XR_JIT_BOOL(v)    ((XrJitResult){ (int64_t)(v), (uint64_t)XR_TAG_BOOL })
-#define XR_JIT_PTR(p)     ((XrJitResult){ (int64_t)(uintptr_t)(p), (uint64_t)XR_TAG_PTR })
-#define XR_JIT_VAL(v)     ((XrJitResult){ (v).i, (uint64_t)(v).tag })
+#define XR_JIT_OK() ((XrJitResult){0, 0})
+#define XR_JIT_NULL() ((XrJitResult){0, (uint64_t) XR_TAG_NULL})
+#define XR_JIT_INT(v) ((XrJitResult){(int64_t) (v), (uint64_t) XR_TAG_I64})
+#define XR_JIT_BOOL(v) ((XrJitResult){(int64_t) (v), (uint64_t) XR_TAG_BOOL})
+#define XR_JIT_PTR(p) ((XrJitResult){(int64_t) (uintptr_t) (p), (uint64_t) XR_TAG_PTR})
+#define XR_JIT_VAL(v) ((XrJitResult){(v).i, (uint64_t) (v).tag})
 
 static inline XrJitResult xr_jit_float_result(double v) {
-    union { double f; int64_t i; } u = { .f = v };
-    return (XrJitResult){ u.i, (uint64_t)XR_TAG_F64 };
+    union {
+        double f;
+        int64_t i;
+    } u = {.f = v};
+    return (XrJitResult){u.i, (uint64_t) XR_TAG_F64};
 }
-#define XR_JIT_FLOAT(v)   xr_jit_float_result(v)
+#define XR_JIT_FLOAT(v) xr_jit_float_result(v)
 
 /* ========== GC Helpers (defined in coro/xcoro.c, gc/xcoro_gc.c) ========== */
 
 XR_FUNC int xr_coro_gc_safepoint(struct XrCoroutine *coro);
 XR_FUNC void xr_jit_barrier_fwd(struct XrCoroutine *coro, void *parent, void *child);
 XR_FUNC void xr_jit_barrier_back(struct XrCoroutine *coro, void *container);
-XR_FUNC struct XrGCHeader* xr_jit_alloc(struct XrCoroutine *coro, uint64_t type_and_size);
+XR_FUNC struct XrGCHeader *xr_jit_alloc(struct XrCoroutine *coro, uint64_t type_and_size);
 XR_FUNC void xr_jit_alloc_post(struct XrCoroutine *coro, void *obj_ptr);
 XR_FUNC void xr_jit_mark_lines(struct XrCoroutine *coro, uint64_t obj_ptr);
 
@@ -194,4 +197,4 @@ XR_FUNC XrJitResult xr_jit_await_block(struct XrCoroutine *coro, int64_t extra_a
  * the continuation point via jit_suspend_id jump table. */
 XR_FUNC int xir_jit_resume(struct XrCoroutine *coro, struct XrValue *result);
 
-#endif // XIR_JIT_RUNTIME_H
+#endif  // XIR_JIT_RUNTIME_H

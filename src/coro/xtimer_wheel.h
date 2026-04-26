@@ -40,48 +40,48 @@ typedef struct XrWorker XrWorker;
 
 /* ========== Timer Wheel Configuration ========== */
 
-#define XR_TW_TICK_MS               1
-#define XR_TW_SOON_WHEEL_BITS       14
-#define XR_TW_SOON_WHEEL_SIZE       (1 << XR_TW_SOON_WHEEL_BITS)
-#define XR_TW_SOON_WHEEL_MASK       (XR_TW_SOON_WHEEL_SIZE - 1)
+#define XR_TW_TICK_MS 1
+#define XR_TW_SOON_WHEEL_BITS 14
+#define XR_TW_SOON_WHEEL_SIZE (1 << XR_TW_SOON_WHEEL_BITS)
+#define XR_TW_SOON_WHEEL_MASK (XR_TW_SOON_WHEEL_SIZE - 1)
 #define XR_TW_SOON_WHEEL_FIRST_SLOT 0
-#define XR_TW_SOON_WHEEL_END_SLOT   (XR_TW_SOON_WHEEL_FIRST_SLOT + XR_TW_SOON_WHEEL_SIZE)
-#define XR_TW_LATER_WHEEL_BITS      14
-#define XR_TW_LATER_WHEEL_SIZE      (1 << XR_TW_LATER_WHEEL_BITS)
-#define XR_TW_LATER_WHEEL_MASK      (XR_TW_LATER_WHEEL_SIZE - 1)
-#define XR_TW_LATER_WHEEL_SHIFT     (XR_TW_SOON_WHEEL_BITS - 1)
-#define XR_TW_LATER_WHEEL_SLOT_SIZE ((int64_t)(1 << XR_TW_LATER_WHEEL_SHIFT))
-#define XR_TW_LATER_WHEEL_POS_MASK  (~(XR_TW_LATER_WHEEL_SLOT_SIZE - 1))
+#define XR_TW_SOON_WHEEL_END_SLOT (XR_TW_SOON_WHEEL_FIRST_SLOT + XR_TW_SOON_WHEEL_SIZE)
+#define XR_TW_LATER_WHEEL_BITS 14
+#define XR_TW_LATER_WHEEL_SIZE (1 << XR_TW_LATER_WHEEL_BITS)
+#define XR_TW_LATER_WHEEL_MASK (XR_TW_LATER_WHEEL_SIZE - 1)
+#define XR_TW_LATER_WHEEL_SHIFT (XR_TW_SOON_WHEEL_BITS - 1)
+#define XR_TW_LATER_WHEEL_SLOT_SIZE ((int64_t) (1 << XR_TW_LATER_WHEEL_SHIFT))
+#define XR_TW_LATER_WHEEL_POS_MASK (~(XR_TW_LATER_WHEEL_SLOT_SIZE - 1))
 #define XR_TW_LATER_WHEEL_FIRST_SLOT XR_TW_SOON_WHEEL_SIZE
-#define XR_TW_LATER_WHEEL_END_SLOT  (XR_TW_LATER_WHEEL_FIRST_SLOT + XR_TW_LATER_WHEEL_SIZE)
-#define XR_TW_SLOT_INACTIVE         (-2)
-#define XR_TW_SLOT_AT_ONCE          (-1)
-#define XR_TW_SCNT_BITS             9
-#define XR_TW_SCNT_SIZE             ((XR_TW_SOON_WHEEL_SIZE + XR_TW_LATER_WHEEL_SIZE) >> XR_TW_SCNT_BITS)
-#define XR_TW_TICKS_WEEK            (7LL * 24 * 60 * 60 * 1000)
-#define XR_TW_MAX_TICKS             INT64_MAX
-#define XR_TW_BUMP_YIELD_LIMIT      10000
-#define XR_TW_COST_SLOT             1
-#define XR_TW_COST_SLOT_MOVE        5
-#define XR_TW_COST_TIMEOUT          100
+#define XR_TW_LATER_WHEEL_END_SLOT (XR_TW_LATER_WHEEL_FIRST_SLOT + XR_TW_LATER_WHEEL_SIZE)
+#define XR_TW_SLOT_INACTIVE (-2)
+#define XR_TW_SLOT_AT_ONCE (-1)
+#define XR_TW_SCNT_BITS 9
+#define XR_TW_SCNT_SIZE ((XR_TW_SOON_WHEEL_SIZE + XR_TW_LATER_WHEEL_SIZE) >> XR_TW_SCNT_BITS)
+#define XR_TW_TICKS_WEEK (7LL * 24 * 60 * 60 * 1000)
+#define XR_TW_MAX_TICKS INT64_MAX
+#define XR_TW_BUMP_YIELD_LIMIT 10000
+#define XR_TW_COST_SLOT 1
+#define XR_TW_COST_SLOT_MOVE 5
+#define XR_TW_COST_TIMEOUT 100
 
 /* ========== Timer Node ========== */
 
 typedef void (*XrTimeoutProc)(void *arg);
 
 // Timer state flags (zombie marking)
-#define XR_TIMER_STATE_ACTIVE   0x00  // Normal active timer
-#define XR_TIMER_STATE_ZOMBIE   0x01  // Marked for deletion (lazy delete)
+#define XR_TIMER_STATE_ACTIVE 0x00  // Normal active timer
+#define XR_TIMER_STATE_ZOMBIE 0x01  // Marked for deletion (lazy delete)
 
 typedef struct XrTWheelTimer {
     struct XrTWheelTimer *prev;
     struct XrTWheelTimer *next;
-    int64_t               timeout_pos;
-    int                   slot;
-    XrTimeoutProc         timeout;
-    void                 *arg;
-    int                   owner_worker_id;  // Worker that owns this timer
-    _Atomic(uint8_t)      state;            // Timer state (zombie flag, atomic for cross-worker)
+    int64_t timeout_pos;
+    int slot;
+    XrTimeoutProc timeout;
+    void *arg;
+    int owner_worker_id;     // Worker that owns this timer
+    _Atomic(uint8_t) state;  // Timer state (zombie flag, atomic for cross-worker)
 } XrTWheelTimer;
 
 /* ========== Canceled Timer Queue (MPSC) ========== */
@@ -105,42 +105,42 @@ typedef struct XrTimerCancelQueue {
 typedef struct XrTimerWheel {
     /* === Slot Array === */
     XrTWheelTimer *slots[1 + XR_TW_SOON_WHEEL_SIZE + XR_TW_LATER_WHEEL_SIZE];
-    XrTWheelTimer **w;            // Pointer to current slot
+    XrTWheelTimer **w;  // Pointer to current slot
 
     /* === Slot Counters === */
-    int64_t         scnt[XR_TW_SCNT_SIZE];
-    int64_t         bump_scnt[XR_TW_SCNT_SIZE];
-    int64_t         pos;          // Current wheel position
-    int             nto;          // Total active timers
+    int64_t scnt[XR_TW_SCNT_SIZE];
+    int64_t bump_scnt[XR_TW_SCNT_SIZE];
+    int64_t pos;  // Current wheel position
+    int nto;      // Total active timers
 
     /* === Wheel State === */
     struct {
         int nto;
-    } at_once;                    // Immediate timeout slot
+    } at_once;  // Immediate timeout slot
     struct {
         int64_t min_tpos;
-        int     nto;
-    } soon;                       // Soon wheel (1ms granularity)
+        int nto;
+    } soon;  // Soon wheel (1ms granularity)
     struct {
         int64_t min_tpos;
-        int     min_tpos_slot;
+        int min_tpos_slot;
         int64_t pos;
-        int     nto;
-    } later;                      // Later wheel (8s granularity)
+        int nto;
+    } later;  // Later wheel (8s granularity)
 
     /* === Bump State === */
-    int             yield_slot;
-    int             yield_slots_left;
-    XrTWheelTimer   sentinel;
+    int yield_slot;
+    int yield_slots_left;
+    XrTWheelTimer sentinel;
 
     /* === Next Timeout Cache === */
-    int             true_next_timeout_time;
-    int64_t         next_timeout_pos;
-    int64_t         next_timeout_time;
+    int true_next_timeout_time;
+    int64_t next_timeout_pos;
+    int64_t next_timeout_time;
 
     /* === Ownership === */
-    int             owner_worker_id;  // Worker that owns this timer wheel
-    XrRuntime      *runtime;
+    int owner_worker_id;  // Worker that owns this timer wheel
+    XrRuntime *runtime;
 
     /* === Canceled Timer Queue (cross-worker cancellation) === */
     XrTimerCancelQueue canceled_queue;
@@ -153,8 +153,8 @@ XR_FUNC XrTimerWheel *xr_timer_wheel_create(XrRuntime *runtime, int owner_worker
 XR_FUNC void xr_timer_wheel_destroy(XrTimerWheel *tw);
 
 // Set timer (must be called from owner worker)
-XR_FUNC void xr_twheel_set_timer(XrTimerWheel *tw, XrTWheelTimer *timer,
-                         XrTimeoutProc timeout, void *arg, int64_t timeout_pos);
+XR_FUNC void xr_twheel_set_timer(XrTimerWheel *tw, XrTWheelTimer *timer, XrTimeoutProc timeout,
+                                 void *arg, int64_t timeout_pos);
 
 // Cancel timer - local only (must be called from owner worker)
 // For cross-worker cancel, use xr_timer_queue_cancel()
@@ -174,7 +174,8 @@ XR_FUNC void xr_timer_cancel_queue_init(XrTimerCancelQueue *cq);
 
 // Queue a timer for cancellation (called from any worker)
 // This is lock-free MPSC enqueue
-XR_FUNC void xr_timer_queue_cancel(XrTimerWheel *target_tw, XrTWheelTimer *timer, XrCoroutine *coro);
+XR_FUNC void xr_timer_queue_cancel(XrTimerWheel *target_tw, XrTWheelTimer *timer,
+                                   XrCoroutine *coro);
 
 // Process canceled queue (called by owner worker before bump)
 // Returns number of timers processed
@@ -199,4 +200,4 @@ static inline bool xr_twheel_is_owner(XrTimerWheel *tw, int worker_id) {
     return tw->owner_worker_id == worker_id;
 }
 
-#endif // XTIMER_WHEEL_H
+#endif  // XTIMER_WHEEL_H

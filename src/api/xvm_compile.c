@@ -52,7 +52,7 @@ XrVMResult xr_vm_interpret_proto_isolate(XrayIsolate *isolate, XrProto *proto);
 // ProgramNode and the Isolate's pointer is restored to NULL.  We must
 // re-install the program's arena for the duration of compilation so the
 // desugaring allocations succeed, then restore the previous value.
-static XrProto* compile_ast_internal(XrayIsolate *isolate, AstNode *ast, const char *source_file) {
+static XrProto *compile_ast_internal(XrayIsolate *isolate, AstNode *ast, const char *source_file) {
     XR_DCHECK(isolate != NULL, "compile_ast_internal: NULL isolate");
     XR_DCHECK(ast != NULL, "compile_ast_internal: NULL ast");
 
@@ -99,18 +99,19 @@ static XrProto* compile_ast_internal(XrayIsolate *isolate, AstNode *ast, const c
 }
 
 // Compile AST to bytecode
-XrProto* xr_compile_ast(XrayIsolate *isolate, AstNode *ast) {
+XrProto *xr_compile_ast(XrayIsolate *isolate, AstNode *ast) {
     return compile_ast_internal(isolate, ast, NULL);
 }
 
 // Compile AST to bytecode (with source file path)
-XrProto* xr_compile_ast_with_source(XrayIsolate *isolate, AstNode *ast, const char *source_file) {
+XrProto *xr_compile_ast_with_source(XrayIsolate *isolate, AstNode *ast, const char *source_file) {
     return compile_ast_internal(isolate, ast, source_file);
 }
 
 // Compile source code to bytecode (creates compiler context before parsing)
 // This ensures type pool is valid during parsing for type annotations
-XrProto* xr_compile_source_with_path(XrayIsolate *isolate, const char *source, const char *source_file) {
+XrProto *xr_compile_source_with_path(XrayIsolate *isolate, const char *source,
+                                     const char *source_file) {
     XR_DCHECK(isolate != NULL, "compile_source_with_path: NULL isolate");
     XR_DCHECK(source != NULL, "compile_source_with_path: NULL source");
     // Create compiler context FIRST to ensure type pool is valid during parsing
@@ -167,7 +168,7 @@ int xr_execute(XrayIsolate *isolate, XrProto *proto) {
         return -1;
     }
 
-    XrRuntime *runtime = (XrRuntime *)isolate->vm.runtime;
+    XrRuntime *runtime = (XrRuntime *) isolate->vm.runtime;
     if (!runtime) {
         XrVMResult result = xr_vm_interpret_proto_isolate(isolate, proto);
         return (result == XR_VM_OK) ? 0 : -1;
@@ -204,7 +205,7 @@ void xr_free_code(XrayIsolate *isolate, XrProto *proto) {
         }
     }
 #else
-    (void)isolate;
+    (void) isolate;
 #endif
     if (proto != NULL) {
         xr_vm_proto_free(proto);
@@ -233,7 +234,7 @@ static void init_globals(XrayIsolate *isolate) {
 
 // Initialize coroutine state
 static void init_coro_state(XrayIsolate *isolate) {
-    XrCoroState *sched = (XrCoroState *)xr_malloc(sizeof(XrCoroState));
+    XrCoroState *sched = (XrCoroState *) xr_malloc(sizeof(XrCoroState));
     if (sched) {
         xr_sched_init(sched);
     }
@@ -320,7 +321,7 @@ void xr_vm_cleanup(XrayIsolate *isolate) {
 
     // Cleanup coroutine state
     if (isolate->vm.coro_state != NULL) {
-        xr_sched_destroy((XrCoroState *)isolate->vm.coro_state);
+        xr_sched_destroy((XrCoroState *) isolate->vm.coro_state);
         xr_free(isolate->vm.coro_state);
         isolate->vm.coro_state = NULL;
     }

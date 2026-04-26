@@ -75,7 +75,7 @@ void xr_worker_init(XrWorker *worker, int id, XrRuntime *runtime) {
     worker->p.lifo_polls = 0;
 
     // Initialize random seed
-    worker->p.rng_state = (uint32_t)(time(NULL) ^ (id * 0x9e3779b9));
+    worker->p.rng_state = (uint32_t) (time(NULL) ^ (id * 0x9e3779b9));
 
     // Initialize local coroutine object pool
     worker->p.local_free_list = NULL;
@@ -158,13 +158,14 @@ void xr_worker_destroy(XrWorker *worker) {
 
     // Flush Per-Worker CoroGC free list L1 → L2 (per-isolate pool)
     XrSystemHeap *gc_heap = (worker->p.runtime && worker->p.runtime->isolate)
-        ? worker->p.runtime->isolate->sys_heap : NULL;
+                                ? worker->p.runtime->isolate->sys_heap
+                                : NULL;
     xr_coro_gc_flush_pool(gc_heap, &worker->p.gc_free_list, &worker->p.gc_free_count);
 
     // Free Per-Worker stack slab free list
     while (worker->p.stack_slab_free) {
         void *block = worker->p.stack_slab_free;
-        worker->p.stack_slab_free = *(void**)block;
+        worker->p.stack_slab_free = *(void **) block;
         xr_free(block);
     }
     worker->p.stack_slab_count = 0;
@@ -182,16 +183,18 @@ XrRuntime *xr_runtime_create(XrayIsolate *isolate, int num_workers) {
             num_workers = atoi(env);
         } else {
             // Default to CPU core count
-            num_workers = (int)sysconf(_SC_NPROCESSORS_ONLN);
-            if (num_workers <= 0) num_workers = 1;
+            num_workers = (int) sysconf(_SC_NPROCESSORS_ONLN);
+            if (num_workers <= 0)
+                num_workers = 1;
         }
     }
     if (num_workers > XR_MAX_WORKERS) {
         num_workers = XR_MAX_WORKERS;
     }
 
-    XrRuntime *runtime = (XrRuntime *)xr_calloc(1, sizeof(XrRuntime));
-    if (!runtime) return NULL;
+    XrRuntime *runtime = (XrRuntime *) xr_calloc(1, sizeof(XrRuntime));
+    if (!runtime)
+        return NULL;
 
     runtime->isolate = isolate;
     runtime->worker_count = num_workers;
@@ -203,12 +206,12 @@ XrRuntime *xr_runtime_create(XrayIsolate *isolate, int num_workers) {
 
     // Initialize idle P/M management (lock-free Treiber stacks).
     // No sched_lock: all three idle lists use atomic CAS.
-    atomic_store(&runtime->idle_p_head, (XrProc *)NULL);
+    atomic_store(&runtime->idle_p_head, (XrProc *) NULL);
     atomic_store(&runtime->idle_p_count, 0);
-    atomic_store(&runtime->idle_m_head, (XrMachine *)NULL);
+    atomic_store(&runtime->idle_m_head, (XrMachine *) NULL);
     atomic_store(&runtime->idle_m_count, 0);
     atomic_store(&runtime->m_count, num_workers);
-    atomic_store(&runtime->idle_worker_list, (XrMachine *)NULL);
+    atomic_store(&runtime->idle_worker_list, (XrMachine *) NULL);
     atomic_store(&runtime->idle_worker_count, 0);
 
     // Initialize Spinning mechanism
@@ -235,14 +238,14 @@ XrRuntime *xr_runtime_create(XrayIsolate *isolate, int num_workers) {
     runtime->current_scope = NULL;
 
     // Allocate Machines (M) array — pre-allocated 1:1 with Workers
-    runtime->machines = (XrMachine *)xr_calloc(num_workers, sizeof(XrMachine));
+    runtime->machines = (XrMachine *) xr_calloc(num_workers, sizeof(XrMachine));
     if (!runtime->machines) {
         xr_free(runtime);
         return NULL;
     }
 
     // Allocate Workers (P + M* pointer)
-    runtime->workers = (XrWorker *)xr_calloc(num_workers, sizeof(XrWorker));
+    runtime->workers = (XrWorker *) xr_calloc(num_workers, sizeof(XrWorker));
     if (!runtime->workers) {
         xr_free(runtime->machines);
         xr_free(runtime);
@@ -259,7 +262,7 @@ XrRuntime *xr_runtime_create(XrayIsolate *isolate, int num_workers) {
 
     // Create async thread pool
     // For blocking syscalls (file I/O, DNS, etc.)
-    runtime->async_pool = (XrAsyncPool *)xr_calloc(1, sizeof(XrAsyncPool));
+    runtime->async_pool = (XrAsyncPool *) xr_calloc(1, sizeof(XrAsyncPool));
     if (runtime->async_pool) {
         xr_async_pool_init(runtime->async_pool, runtime, XR_ASYNC_THREAD_COUNT);
     }
@@ -272,7 +275,8 @@ XrRuntime *xr_runtime_create(XrayIsolate *isolate, int num_workers) {
 
 // Destroy Runtime
 void xr_runtime_destroy(XrRuntime *runtime) {
-    if (!runtime) return;
+    if (!runtime)
+        return;
 
     // Stop running (internally calls pthread_join to wait for all Workers to exit)
     xr_runtime_stop(runtime);
@@ -286,16 +290,16 @@ void xr_runtime_destroy(XrRuntime *runtime) {
         uint64_t completed = 0;
         for (int _wi = 0; _wi < runtime->worker_count; _wi++)
             completed += runtime->workers[_wi].p.stats.completed_count;
-        xr_log_warning("runtime", "%d coroutine(s) leaked "
-                "(spawned=%llu, completed=%llu)",
-                active, (unsigned long long)spawned,
-                (unsigned long long)completed);
+        xr_log_warning("runtime",
+                       "%d coroutine(s) leaked "
+                       "(spawned=%llu, completed=%llu)",
+                       active, (unsigned long long) spawned, (unsigned long long) completed);
         for (int i = 0; i < runtime->worker_count; i++) {
             XrProc *p = &runtime->workers[i].p;
             int runq_len = xr_proc_total_queue_len(p);
             if (runq_len > 0 || p->blocked_count > 0) {
-                xr_log_warning("runtime", "  W%d: runq=%d blocked=%d",
-                        i, runq_len, p->blocked_count);
+                xr_log_warning("runtime", "  W%d: runq=%d blocked=%d", i, runq_len,
+                               p->blocked_count);
             }
         }
     }
@@ -304,14 +308,14 @@ void xr_runtime_destroy(XrRuntime *runtime) {
     {
         uint64_t ch_closed = xr_channel_get_close_count(runtime->isolate);
         if (runtime->isolate && runtime->isolate->sys_heap) {
-            uint64_t ch_created = atomic_load(
-                &runtime->isolate->sys_heap->stats.channel_create_count);
+            uint64_t ch_created =
+                atomic_load(&runtime->isolate->sys_heap->stats.channel_create_count);
             if (ch_created > ch_closed) {
-                xr_log_warning("runtime", "%llu channel(s) not closed "
-                        "(created=%llu, closed=%llu)",
-                        (unsigned long long)(ch_created - ch_closed),
-                        (unsigned long long)ch_created,
-                        (unsigned long long)ch_closed);
+                xr_log_warning("runtime",
+                               "%llu channel(s) not closed "
+                               "(created=%llu, closed=%llu)",
+                               (unsigned long long) (ch_created - ch_closed),
+                               (unsigned long long) ch_created, (unsigned long long) ch_closed);
             }
         }
     }
@@ -356,7 +360,8 @@ void xr_runtime_destroy(XrRuntime *runtime) {
 // Worker 0 runs on main thread via xr_main_thread_run().
 void xr_runtime_start(XrRuntime *runtime) {
     XR_DCHECK(runtime != NULL, "runtime_start: NULL runtime");
-    if (atomic_load(&runtime->running)) return;
+    if (atomic_load(&runtime->running))
+        return;
     atomic_store(&runtime->running, true);
 }
 
@@ -378,9 +383,9 @@ void xr_runtime_ensure_workers(XrRuntime *runtime) {
         // sub-millisecond wakeup and zero spinning.
         int expected_workers = runtime->worker_count - 1;
         for (;;) {
-            int cur = atomic_load_explicit(&runtime->started_workers,
-                                            memory_order_acquire);
-            if (cur >= expected_workers) break;
+            int cur = atomic_load_explicit(&runtime->started_workers, memory_order_acquire);
+            if (cur >= expected_workers)
+                break;
             xr_park_futex_wait(&runtime->started_workers, cur, 1000 /* us */);
         }
         return;
@@ -410,9 +415,9 @@ void xr_runtime_ensure_workers(XrRuntime *runtime) {
     // Futex-based wait (1 ms timeout guards against missed wake).
     int expected_workers = runtime->worker_count - 1;
     for (;;) {
-        int cur = atomic_load_explicit(&runtime->started_workers,
-                                        memory_order_acquire);
-        if (cur >= expected_workers) break;
+        int cur = atomic_load_explicit(&runtime->started_workers, memory_order_acquire);
+        if (cur >= expected_workers)
+            break;
         xr_park_futex_wait(&runtime->started_workers, cur, 1000 /* us */);
     }
 }
@@ -459,7 +464,8 @@ void xr_runtime_stop(XrRuntime *runtime) {
     // Join Worker 1~N (guard against NULL m during handoff)
     for (int i = 1; i < runtime->worker_count; i++) {
         XrMachine *wm = runtime->workers[i].m;
-        if (wm) pthread_join(wm->thread, NULL);
+        if (wm)
+            pthread_join(wm->thread, NULL);
     }
 }
 
@@ -468,11 +474,11 @@ void xr_runtime_stop(XrRuntime *runtime) {
 // Also sets CANCEL_REQUESTED on all currently running coroutines so that
 // JIT safepoints and interpreter back-edges can detect and bail out.
 void xr_runtime_force_stop(XrRuntime *runtime) {
-    if (!runtime) return;
+    if (!runtime)
+        return;
     atomic_store(&runtime->running, false);
     for (int i = 0; i < runtime->worker_count; i++) {
-        XrCoroutine *coro = runtime->workers[i].m
-            ? runtime->workers[i].m->current_coro : NULL;
+        XrCoroutine *coro = runtime->workers[i].m ? runtime->workers[i].m->current_coro : NULL;
         if (coro) {
             xr_coro_flags_set(coro, XR_CORO_FLG_CANCEL_REQUESTED);
         }
@@ -531,45 +537,42 @@ void xr_runtime_spawn_local(XrWorker *worker, XrCoroutine *coro) {
 
 // Print per-worker scheduling statistics (for performance tuning)
 void xr_runtime_print_stats(XrRuntime *runtime) {
-    if (!runtime) return;
+    if (!runtime)
+        return;
 
     fprintf(stderr, "\n=== Xray Runtime Statistics ===\n");
     fprintf(stderr, "Workers: %d\n", runtime->worker_count);
-    { uint64_t _tc = 0;
-    for (int _wi = 0; _wi < runtime->worker_count; _wi++)
-        _tc += runtime->workers[_wi].p.stats.completed_count;
-    uint64_t _ts = 0;
-    for (int _wi2 = 0; _wi2 < runtime->worker_count; _wi2++)
-        _ts += runtime->workers[_wi2].p.stats.spawned_count;
-    fprintf(stderr, "Total spawned: %llu, completed: %llu\n",
-            (unsigned long long)_ts,
-            (unsigned long long)_tc); }
-    fprintf(stderr, "Active coros: %d\n",
-            xr_runtime_active_coros(runtime));
-    fprintf(stderr, "\n%-8s %12s %12s %12s %12s %8s\n",
-            "Worker", "Executed", "Stolen", "Yielded", "ContSteal", "Blocked");
-    fprintf(stderr, "%-8s %12s %12s %12s %12s %8s\n",
-            "------", "--------", "------", "-------", "---------", "-------");
+    {
+        uint64_t _tc = 0;
+        for (int _wi = 0; _wi < runtime->worker_count; _wi++)
+            _tc += runtime->workers[_wi].p.stats.completed_count;
+        uint64_t _ts = 0;
+        for (int _wi2 = 0; _wi2 < runtime->worker_count; _wi2++)
+            _ts += runtime->workers[_wi2].p.stats.spawned_count;
+        fprintf(stderr, "Total spawned: %llu, completed: %llu\n", (unsigned long long) _ts,
+                (unsigned long long) _tc);
+    }
+    fprintf(stderr, "Active coros: %d\n", xr_runtime_active_coros(runtime));
+    fprintf(stderr, "\n%-8s %12s %12s %12s %12s %8s\n", "Worker", "Executed", "Stolen", "Yielded",
+            "ContSteal", "Blocked");
+    fprintf(stderr, "%-8s %12s %12s %12s %12s %8s\n", "------", "--------", "------", "-------",
+            "---------", "-------");
 
     uint64_t total_exec = 0, total_steal = 0, total_yield = 0, total_cont = 0;
     for (int i = 0; i < runtime->worker_count; i++) {
         XrProc *p = &runtime->workers[i].p;
-        fprintf(stderr, "W%-7d %12llu %12llu %12llu %12llu %8d\n",
-                i,
-                (unsigned long long)p->stats.executed_count,
-                (unsigned long long)p->stats.stolen_count,
-                (unsigned long long)p->stats.yielded_count,
-                (unsigned long long)p->stats.cont_steal_count,
-                p->blocked_count);
+        fprintf(stderr, "W%-7d %12llu %12llu %12llu %12llu %8d\n", i,
+                (unsigned long long) p->stats.executed_count,
+                (unsigned long long) p->stats.stolen_count,
+                (unsigned long long) p->stats.yielded_count,
+                (unsigned long long) p->stats.cont_steal_count, p->blocked_count);
         total_exec += p->stats.executed_count;
         total_steal += p->stats.stolen_count;
         total_yield += p->stats.yielded_count;
         total_cont += p->stats.cont_steal_count;
     }
-    fprintf(stderr, "%-8s %12llu %12llu %12llu %12llu\n",
-            "TOTAL", (unsigned long long)total_exec,
-            (unsigned long long)total_steal,
-            (unsigned long long)total_yield,
-            (unsigned long long)total_cont);
+    fprintf(stderr, "%-8s %12llu %12llu %12llu %12llu\n", "TOTAL", (unsigned long long) total_exec,
+            (unsigned long long) total_steal, (unsigned long long) total_yield,
+            (unsigned long long) total_cont);
     fprintf(stderr, "===========================\n\n");
 }

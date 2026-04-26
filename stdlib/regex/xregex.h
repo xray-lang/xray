@@ -37,29 +37,29 @@ typedef struct XrMatchIter XrMatchIter;
 
 // Compile flags
 typedef enum {
-    XR_RE_NONE       = 0,
+    XR_RE_NONE = 0,
     XR_RE_IGNORECASE = 1 << 0,  // i: case-insensitive
-    XR_RE_MULTILINE  = 1 << 1,  // m: multiline mode (^ $ match each line)
-    XR_RE_DOTALL     = 1 << 2,  // s: . matches newline
-    XR_RE_EXTENDED   = 1 << 3,  // x: extended mode (ignore whitespace and comments)
-    XR_RE_UNICODE    = 1 << 4,  // u: Unicode mode
-    XR_RE_UNGREEDY   = 1 << 5,  // U: default non-greedy
+    XR_RE_MULTILINE = 1 << 1,   // m: multiline mode (^ $ match each line)
+    XR_RE_DOTALL = 1 << 2,      // s: . matches newline
+    XR_RE_EXTENDED = 1 << 3,    // x: extended mode (ignore whitespace and comments)
+    XR_RE_UNICODE = 1 << 4,     // u: Unicode mode
+    XR_RE_UNGREEDY = 1 << 5,    // U: default non-greedy
 } XrRegexFlags;
 
 // Error codes
 typedef enum {
     XR_RE_OK = 0,
-    XR_RE_ERR_SYNTAX,           // syntax error
-    XR_RE_ERR_UNMATCHED_PAREN,  // unmatched parenthesis
-    XR_RE_ERR_UNMATCHED_BRACKET,// unmatched bracket
-    XR_RE_ERR_INVALID_ESCAPE,   // invalid escape sequence
-    XR_RE_ERR_INVALID_RANGE,    // invalid character range [z-a]
-    XR_RE_ERR_INVALID_REPEAT,   // invalid repeat {5,3}
-    XR_RE_ERR_MISSING_OPERAND,  // missing operand
-    XR_RE_ERR_TOO_COMPLEX,      // pattern too complex
-    XR_RE_ERR_TOO_MANY_CAPTURES,// too many capture groups
-    XR_RE_ERR_INVALID_GROUP,    // invalid group syntax
-    XR_RE_ERR_NOMEM,            // out of memory
+    XR_RE_ERR_SYNTAX,             // syntax error
+    XR_RE_ERR_UNMATCHED_PAREN,    // unmatched parenthesis
+    XR_RE_ERR_UNMATCHED_BRACKET,  // unmatched bracket
+    XR_RE_ERR_INVALID_ESCAPE,     // invalid escape sequence
+    XR_RE_ERR_INVALID_RANGE,      // invalid character range [z-a]
+    XR_RE_ERR_INVALID_REPEAT,     // invalid repeat {5,3}
+    XR_RE_ERR_MISSING_OPERAND,    // missing operand
+    XR_RE_ERR_TOO_COMPLEX,        // pattern too complex
+    XR_RE_ERR_TOO_MANY_CAPTURES,  // too many capture groups
+    XR_RE_ERR_INVALID_GROUP,      // invalid group syntax
+    XR_RE_ERR_NOMEM,              // out of memory
 } XrRegexError;
 
 // Single capture group
@@ -75,7 +75,7 @@ typedef struct {
 #define XR_RE_MAX_CAPTURES 32
 
 typedef struct {
-    int group_count;                    // actual capture group count
+    int group_count;  // actual capture group count
     XrCapture groups[XR_RE_MAX_CAPTURES];
 } XrMatch;
 
@@ -90,8 +90,7 @@ typedef struct {
  * @param error     output error code (can be NULL)
  * @return regex object on success, NULL on failure
  */
-XrRegex* xr_regex_compile(const char *pattern, XrRegexFlags flags,
-                          XrRegexError *error);
+XrRegex *xr_regex_compile(const char *pattern, XrRegexFlags flags, XrRegexError *error);
 
 /*
  * Compile regular expression (with detailed error info)
@@ -103,9 +102,8 @@ XrRegex* xr_regex_compile(const char *pattern, XrRegexFlags flags,
  * @param msg_size  buffer size
  * @return regex object on success, NULL on failure
  */
-XrRegex* xr_regex_compile_ex(const char *pattern, XrRegexFlags flags,
-                             XrRegexError *error, int *error_pos,
-                             char *error_msg, size_t msg_size);
+XrRegex *xr_regex_compile_ex(const char *pattern, XrRegexFlags flags, XrRegexError *error,
+                             int *error_pos, char *error_msg, size_t msg_size);
 
 // Free regex object
 void xr_regex_free(XrRegex *re);
@@ -115,7 +113,7 @@ void xr_regex_free(XrRegex *re);
  * ======================================================================== */
 
 // Get original pattern string
-const char* xr_regex_pattern(const XrRegex *re);
+const char *xr_regex_pattern(const XrRegex *re);
 
 // Get capture group count (excluding full match)
 int xr_regex_capture_count(const XrRegex *re);
@@ -131,7 +129,7 @@ int xr_regex_named_group(const XrRegex *re, const char *name);
  * @param index group index (1-based)
  * @return name string, NULL if unnamed
  */
-const char* xr_regex_group_name(const XrRegex *re, int index);
+const char *xr_regex_group_name(const XrRegex *re, int index);
 
 /* ========================================================================
  * Match Operations
@@ -154,26 +152,23 @@ bool xr_regex_test(const XrRegex *re, const char *text, int len);
  * @param match output match result
  * @return whether match found
  */
-bool xr_regex_match(const XrRegex *re, const char *text, int len,
-                    XrMatch *match);
+bool xr_regex_match(const XrRegex *re, const char *text, int len, XrMatch *match);
 
 /*
  * Find from specified position
  * @param start_pos start position (byte offset)
  */
-bool xr_regex_match_at(const XrRegex *re, const char *text, int len,
-                       int start_pos, XrMatch *match);
+bool xr_regex_match_at(const XrRegex *re, const char *text, int len, int start_pos, XrMatch *match);
 
 // Full match (entire text must match pattern)
-bool xr_regex_full_match(const XrRegex *re, const char *text, int len,
-                         XrMatch *match);
+bool xr_regex_full_match(const XrRegex *re, const char *text, int len, XrMatch *match);
 
 /* ========================================================================
  * Iterator (find all matches)
  * ======================================================================== */
 
 // Create match iterator
-XrMatchIter* xr_regex_iter_new(const XrRegex *re, const char *text, int len);
+XrMatchIter *xr_regex_iter_new(const XrRegex *re, const char *text, int len);
 
 /*
  * Get next match
@@ -209,8 +204,7 @@ int xr_regex_count(const XrRegex *re, const char *text, int len);
  * @param out_count output actual match count
  * @return match array (must call xr_regex_find_all_free to free)
  */
-XrMatch* xr_regex_find_all(const XrRegex *re, const char *text, int len,
-                            int limit, int *out_count);
+XrMatch *xr_regex_find_all(const XrRegex *re, const char *text, int len, int limit, int *out_count);
 
 // Free array returned by xr_regex_find_all
 void xr_regex_find_all_free(XrMatch *matches);
@@ -228,8 +222,8 @@ void xr_regex_find_all_free(XrMatch *matches);
  * @param all         true = replace all, false = replace first
  * @return newly allocated string, caller must xr_re_free()
  */
-char* xr_regex_replace_alloc(const XrRegex *re, const char *text, int len,
-                             const char *replacement, bool all);
+char *xr_regex_replace_alloc(const XrRegex *re, const char *text, int len, const char *replacement,
+                             bool all);
 
 /* ========================================================================
  * Split Operations
@@ -237,8 +231,8 @@ char* xr_regex_replace_alloc(const XrRegex *re, const char *text, int len,
 
 // Split result
 typedef struct {
-    const char *str;    // split segment start
-    int len;            // segment length
+    const char *str;  // split segment start
+    int len;          // segment length
 } XrSplitPart;
 
 /*
@@ -251,8 +245,8 @@ typedef struct {
  * @param limit     max split count (-1 for unlimited)
  * @return actual split count
  */
-int xr_regex_split(const XrRegex *re, const char *text, int len,
-                   XrSplitPart *parts, int max_parts, int limit);
+int xr_regex_split(const XrRegex *re, const char *text, int len, XrSplitPart *parts, int max_parts,
+                   int limit);
 
 /* ========================================================================
  * Utility Functions
@@ -272,7 +266,7 @@ int xr_regex_escape(const char *text, int len, char *out, size_t out_size);
 bool xr_regex_is_valid(const char *pattern, XrRegexFlags flags);
 
 // Get error description
-const char* xr_regex_error_str(XrRegexError error);
+const char *xr_regex_error_str(XrRegexError error);
 
 /* ========================================================================
  * Debug
@@ -285,4 +279,4 @@ void xr_regex_dump(const XrRegex *re);
 }
 #endif
 
-#endif // XREGEX_H
+#endif  // XREGEX_H

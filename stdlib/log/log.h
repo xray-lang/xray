@@ -32,8 +32,8 @@ struct XrModule;
 
 typedef enum XrLogLevel {
     XR_LOG_DEBUG = 10,
-    XR_LOG_INFO  = 20,
-    XR_LOG_WARN  = 30,
+    XR_LOG_INFO = 20,
+    XR_LOG_WARN = 30,
     XR_LOG_ERROR = 40,
     XR_LOG_FATAL = 50
 } XrLogLevel;
@@ -50,15 +50,15 @@ typedef enum XrLogFormat {
 typedef struct XrLogger {
     XrLogLevel level;
     XrLogFormat format;
-    FILE *output;            // Default: stderr
+    FILE *output;  // Default: stderr
     bool add_source;
     bool async_mode;
 
     // Inherited context (pre-formatted for both output formats)
-    char   *json_ctx;       // JSON fragment: "key":"val","k2":123
-    size_t  json_ctx_len;
-    char   *text_ctx;       // Text fragment: key=val k2=123
-    size_t  text_ctx_len;
+    char *json_ctx;  // JSON fragment: "key":"val","k2":123
+    size_t json_ctx_len;
+    char *text_ctx;  // Text fragment: key=val k2=123
+    size_t text_ctx_len;
 
     struct XrLogger *parent;
 } XrLogger;
@@ -66,12 +66,12 @@ typedef struct XrLogger {
 /* ========== Logger Reference (GC-managed wrapper) ========== */
 
 typedef struct XrLoggerRef {
-    XrGCHeader gc;       // type = XR_TLOGGER
-    XrLogger *logger;    // Points to actual XrLogger (heap-allocated, shared)
+    XrGCHeader gc;     // type = XR_TLOGGER
+    XrLogger *logger;  // Points to actual XrLogger (heap-allocated, shared)
 } XrLoggerRef;
 
 /* ========== Module Loader ========== */
 
-struct XrModule* xr_load_module_log(XrayIsolate *isolate);
+struct XrModule *xr_load_module_log(XrayIsolate *isolate);
 
-#endif // XR_STDLIB_LOG_H
+#endif  // XR_STDLIB_LOG_H

@@ -43,11 +43,11 @@ typedef enum {
 // Task type for filtering
 typedef enum {
     XLSP_TASK_TYPE_GENERIC = 0,
-    XLSP_TASK_TYPE_INDEX,          // Workspace indexing
-    XLSP_TASK_TYPE_DIAGNOSTIC,     // Diagnostic computation
-    XLSP_TASK_TYPE_COMPLETION,     // Completion computation
-    XLSP_TASK_TYPE_REFERENCES,     // References search
-    XLSP_TASK_TYPE_RENAME,         // Rename preparation
+    XLSP_TASK_TYPE_INDEX,       // Workspace indexing
+    XLSP_TASK_TYPE_DIAGNOSTIC,  // Diagnostic computation
+    XLSP_TASK_TYPE_COMPLETION,  // Completion computation
+    XLSP_TASK_TYPE_REFERENCES,  // References search
+    XLSP_TASK_TYPE_RENAME,      // Rename preparation
 } XrLspTaskType;
 
 // Background task
@@ -57,9 +57,9 @@ typedef struct XrLspTask {
     void *data;                // Task data
     void *result;              // Task result
     XrLspTaskPriority priority;
-    XrLspTaskType type;        // Task type for filtering
-    uint64_t task_id;          // Unique task ID
-    int64_t request_id;        // Associated LSP request ID (0 if none)
+    XrLspTaskType type;  // Task type for filtering
+    uint64_t task_id;    // Unique task ID
+    int64_t request_id;  // Associated LSP request ID (0 if none)
     _Atomic int state;
     _Atomic bool cancel_requested;  // Cooperative cancellation flag
     struct XrLspTask *next;
@@ -128,11 +128,11 @@ XR_FUNC void xlsp_async_free(XrLspAsync *async);
 XR_FUNC uint64_t xlsp_async_submit(XrLspAsync *async, XrLspTask *task);
 
 // Create task with extended options
-XR_FUNC XrLspTask *xlsp_task_new(XrLspTaskFn execute, XrLspCompleteFn complete,
-                          void *data, XrLspTaskPriority priority);
-XR_FUNC XrLspTask *xlsp_task_new_ex(XrLspTaskFn execute, XrLspCompleteFn complete,
-                             void *data, XrLspTaskPriority priority,
-                             XrLspTaskType type, int64_t request_id);
+XR_FUNC XrLspTask *xlsp_task_new(XrLspTaskFn execute, XrLspCompleteFn complete, void *data,
+                                 XrLspTaskPriority priority);
+XR_FUNC XrLspTask *xlsp_task_new_ex(XrLspTaskFn execute, XrLspCompleteFn complete, void *data,
+                                    XrLspTaskPriority priority, XrLspTaskType type,
+                                    int64_t request_id);
 XR_FUNC void xlsp_task_free(XrLspTask *task);
 
 // Check for completed tasks (called from main thread)
@@ -155,7 +155,8 @@ XR_FUNC int xlsp_async_cancel_request(XrLspAsync *async, int64_t request_id);
 XR_FUNC int xlsp_async_cancel_type(XrLspAsync *async, XrLspTaskType type);
 
 // Cancel with custom filter
-XR_FUNC int xlsp_async_cancel(XrLspAsync *async, bool (*filter)(XrLspTask *task, void *ctx), void *ctx);
+XR_FUNC int xlsp_async_cancel(XrLspAsync *async, bool (*filter)(XrLspTask *task, void *ctx),
+                              void *ctx);
 
 // Cancel all pending tasks
 XR_FUNC int xlsp_async_cancel_all(XrLspAsync *async);
@@ -168,13 +169,13 @@ static inline bool xlsp_task_is_cancelled(XrLspTask *task) {
 
 // Check cancellation and return early if cancelled
 // Usage: XLSP_CHECK_CANCEL(task, cleanup_code);
-#define XLSP_CHECK_CANCEL(task, cleanup) \
-    do { \
-        if (xlsp_task_is_cancelled(task)) { \
-            cleanup; \
-            return; \
-        } \
-    } while(0)
+#define XLSP_CHECK_CANCEL(task, cleanup)                                                           \
+    do {                                                                                           \
+        if (xlsp_task_is_cancelled(task)) {                                                        \
+            cleanup;                                                                               \
+            return;                                                                                \
+        }                                                                                          \
+    } while (0)
 
 // Get pending task count
 static inline int xlsp_async_pending_count(XrLspAsync *async) {
@@ -186,4 +187,4 @@ static inline uint64_t xlsp_async_cancelled_count(XrLspAsync *async) {
     return atomic_load(&async->cancelled_tasks);
 }
 
-#endif // XLSP_ASYNC_H
+#endif  // XLSP_ASYNC_H

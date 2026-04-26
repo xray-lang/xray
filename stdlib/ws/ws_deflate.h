@@ -27,8 +27,8 @@
  * Caller must xr_free(*out) when done.
  * Returns 0 on success, -1 on error.
  */
-XR_FUNC int xr_ws_deflate_compress(const uint8_t *in, size_t in_len,
-                           uint8_t **out, size_t *out_len);
+XR_FUNC int xr_ws_deflate_compress(const uint8_t *in, size_t in_len, uint8_t **out,
+                                   size_t *out_len);
 
 /*
  * Decompress permessage-deflate payload.
@@ -41,8 +41,7 @@ XR_FUNC int xr_ws_deflate_compress(const uint8_t *in, size_t in_len,
  * Caller must xr_free(*out) when done.
  * Returns 0 on success, -1 on error or bomb-limit exceeded.
  */
-XR_FUNC int xr_ws_deflate_decompress(const uint8_t *in, size_t in_len,
-                             size_t max_out,
-                             uint8_t **out, size_t *out_len);
+XR_FUNC int xr_ws_deflate_decompress(const uint8_t *in, size_t in_len, size_t max_out,
+                                     uint8_t **out, size_t *out_len);
 
-#endif // XR_WS_DEFLATE_H
+#endif  // XR_WS_DEFLATE_H

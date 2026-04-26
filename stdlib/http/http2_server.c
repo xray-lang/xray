@@ -24,27 +24,27 @@
 #include <errno.h>
 
 #ifdef _WIN32
-    #define xr_close_socket closesocket
+#define xr_close_socket closesocket
 #else
-    #define xr_close_socket close
+#define xr_close_socket close
 #endif
 
 #if defined(__APPLE__)
-    #include <sys/event.h>
-    #define XR_USE_KQUEUE 1
+#include <sys/event.h>
+#define XR_USE_KQUEUE 1
 #elif defined(__linux__)
-    #include <sys/epoll.h>
-    #define XR_USE_EPOLL 1
+#include <sys/epoll.h>
+#define XR_USE_EPOLL 1
 #elif defined(_WIN32)
-    #define XR_USE_IOCP 1
+#define XR_USE_IOCP 1
 #endif
 
 /* ========== Constants ========== */
 
-#define H2_MAX_EVENTS       256
-#define H2_MAX_CONNS        1024
-#define H2_RECV_BUF_SIZE    16384
-#define H2_BACKLOG          1024
+#define H2_MAX_EVENTS 256
+#define H2_MAX_CONNS 1024
+#define H2_RECV_BUF_SIZE 16384
+#define H2_BACKLOG 1024
 
 /* ========== Connection State ========== */
 
@@ -79,7 +79,7 @@ typedef struct XrH2FastConn {
 
 static void h2_server_conn_pool_init(XrH2Server *server, int max_conns) {
     server->conn_pool.size = max_conns;
-    server->conn_pool.conns = (XrH2FastConn*)xr_calloc(max_conns, sizeof(XrH2FastConn));
+    server->conn_pool.conns = (XrH2FastConn *) xr_calloc(max_conns, sizeof(XrH2FastConn));
     for (int i = 0; i < max_conns; i++) {
         server->conn_pool.conns[i].fd = XR_INVALID_SOCKET;
         server->conn_pool.conns[i].state = H2_CONN_FREE;
@@ -105,8 +105,9 @@ static void h2_server_conn_pool_destroy(XrH2Server *server) {
     }
 }
 
-static __attribute__((unused)) XrH2FastConn* h2_conn_get(XrH2Server *server, int fd) {
-    if (fd < 0 || fd >= server->conn_pool.size) return NULL;
+static __attribute__((unused)) XrH2FastConn *h2_conn_get(XrH2Server *server, int fd) {
+    if (fd < 0 || fd >= server->conn_pool.size)
+        return NULL;
     return &server->conn_pool.conns[fd];
 }
 
@@ -117,7 +118,8 @@ static void h2_conn_reset(XrH2FastConn *conn) {
 }
 
 static void h2_conn_close(XrH2Server *server, XrH2FastConn *conn) {
-    if (conn->fd == XR_INVALID_SOCKET) return;
+    if (conn->fd == XR_INVALID_SOCKET)
+        return;
 
 #ifdef XR_USE_KQUEUE
     struct kevent ev;
@@ -149,7 +151,8 @@ static void h2_conn_close(XrH2Server *server, XrH2FastConn *conn) {
 /* ========== Request Processing ========== */
 
 static void process_streams(XrH2Server *server, XrH2FastConn *conn) {
-    if (!conn->h2 || !server->on_request) return;
+    if (!conn->h2 || !server->on_request)
+        return;
 
     // Traverse stream hash table
     for (uint32_t i = 0; i < conn->h2->stream_hash.nbuckets; i++) {
@@ -179,7 +182,7 @@ static void process_streams(XrH2Server *server, XrH2FastConn *conn) {
 /* ========== TLS Handshake Handling ========== */
 
 static int handle_tls_handshake(XrH2Server *server, XrH2FastConn *conn) {
-    (void)server;
+    (void) server;
 
     if (!conn->tls) {
         conn->state = H2_CONN_PREFACE;
@@ -203,28 +206,29 @@ static int handle_tls_handshake(XrH2Server *server, XrH2FastConn *conn) {
 /* ========== Preface Handling ========== */
 
 static int handle_preface(XrH2Server *server, XrH2FastConn *conn) {
-    (void)server;
+    (void) server;
 
     // Read data
     ssize_t n;
     if (conn->tls) {
-        n = xr_tls_conn_read(conn->tls,
-                             conn->recv_buf + conn->recv_len,
+        n = xr_tls_conn_read(conn->tls, conn->recv_buf + conn->recv_len,
                              H2_RECV_BUF_SIZE - conn->recv_len);
     } else {
-        n = recv(conn->fd, conn->recv_buf + conn->recv_len,
-                 H2_RECV_BUF_SIZE - conn->recv_len, 0);
+        n = recv(conn->fd, conn->recv_buf + conn->recv_len, H2_RECV_BUF_SIZE - conn->recv_len, 0);
     }
 
     if (n < 0) {
 #ifdef _WIN32
-        if (WSAGetLastError() == WSAEWOULDBLOCK) return 0;
+        if (WSAGetLastError() == WSAEWOULDBLOCK)
+            return 0;
 #else
-        if (errno == EAGAIN || errno == EWOULDBLOCK) return 0;
+        if (errno == EAGAIN || errno == EWOULDBLOCK)
+            return 0;
 #endif
         return -1;
     }
-    if (n == 0) return -1;
+    if (n == 0)
+        return -1;
 
     conn->recv_len += n;
 
@@ -251,7 +255,8 @@ static int handle_preface(XrH2Server *server, XrH2FastConn *conn) {
     if (!conn->settings_sent) {
         // Create HTTP/2 connection
         conn->h2 = xr_h2_conn_new(conn->fd, conn->tls, false);
-        if (!conn->h2) return -1;
+        if (!conn->h2)
+            return -1;
 
         if (xr_h2_send_settings(conn->h2) < 0) {
             return -1;
@@ -275,7 +280,8 @@ static int handle_read(XrH2Server *server, XrH2FastConn *conn) {
             return handle_preface(server, conn);
 
         case H2_CONN_ACTIVE:
-            if (!conn->h2) return -1;
+            if (!conn->h2)
+                return -1;
 
             // Receive HTTP/2 frames
             if (xr_h2_recv(conn->h2) < 0) {
@@ -300,17 +306,19 @@ static void handle_accept(XrH2Server *server) {
         struct sockaddr_in addr;
         socklen_t len = sizeof(addr);
 
-        xr_socket_t fd = accept(server->listen_fd, (struct sockaddr*)&addr, &len);
+        xr_socket_t fd = accept(server->listen_fd, (struct sockaddr *) &addr, &len);
         if (fd == XR_INVALID_SOCKET) {
 #ifdef _WIN32
-            if (WSAGetLastError() == WSAEWOULDBLOCK) break;
+            if (WSAGetLastError() == WSAEWOULDBLOCK)
+                break;
 #else
-            if (errno == EAGAIN || errno == EWOULDBLOCK) break;
+            if (errno == EAGAIN || errno == EWOULDBLOCK)
+                break;
 #endif
             break;
         }
 
-        if ((int)fd >= server->conn_pool.size) {
+        if ((int) fd >= server->conn_pool.size) {
             xr_close_socket(fd);
             continue;
         }
@@ -318,7 +326,7 @@ static void handle_accept(XrH2Server *server) {
         xr_socket_set_nonblocking(fd);
         xr_socket_set_nodelay(fd, true);
 
-        XrH2FastConn *conn = &server->conn_pool.conns[(int)fd];
+        XrH2FastConn *conn = &server->conn_pool.conns[(int) fd];
         conn->fd = fd;
         h2_conn_reset(conn);
 
@@ -360,20 +368,22 @@ static void event_loop_kqueue(XrH2Server *server) {
         int n = kevent(server->event_fd, NULL, 0, events, H2_MAX_EVENTS, NULL);
 
         if (n < 0) {
-            if (errno == EINTR) continue;
+            if (errno == EINTR)
+                continue;
             break;
         }
 
         for (int i = 0; i < n; i++) {
             struct kevent *ev = &events[i];
 
-            if ((int)ev->ident == server->listen_fd) {
+            if ((int) ev->ident == server->listen_fd) {
                 handle_accept(server);
                 continue;
             }
 
-            XrH2FastConn *conn = (XrH2FastConn*)ev->udata;
-            if (!conn) continue;
+            XrH2FastConn *conn = (XrH2FastConn *) ev->udata;
+            if (!conn)
+                continue;
 
             if (ev->flags & EV_EOF) {
                 h2_conn_close(server, conn);
@@ -400,7 +410,8 @@ static void event_loop_epoll(XrH2Server *server) {
         int n = epoll_wait(server->event_fd, events, H2_MAX_EVENTS, -1);
 
         if (n < 0) {
-            if (errno == EINTR) continue;
+            if (errno == EINTR)
+                continue;
             break;
         }
 
@@ -412,8 +423,9 @@ static void event_loop_epoll(XrH2Server *server) {
                 continue;
             }
 
-            XrH2FastConn *conn = (XrH2FastConn*)ev->data.ptr;
-            if (!conn) continue;
+            XrH2FastConn *conn = (XrH2FastConn *) ev->data.ptr;
+            if (!conn)
+                continue;
 
             if (ev->events & (EPOLLERR | EPOLLHUP)) {
                 h2_conn_close(server, conn);
@@ -433,7 +445,8 @@ static void event_loop_epoll(XrH2Server *server) {
 /* ========== Public API ========== */
 
 void xr_h2_server_config_init(XrH2ServerConfig *config) {
-    if (!config) return;
+    if (!config)
+        return;
     memset(config, 0, sizeof(XrH2ServerConfig));
     config->host = "0.0.0.0";
     config->port = 8443;
@@ -443,16 +456,18 @@ void xr_h2_server_config_init(XrH2ServerConfig *config) {
     config->max_frame_size = 16384;
 }
 
-XrH2Server* xr_h2_server_new(const XrH2ServerConfig *config) {
-    if (!config) return NULL;
+XrH2Server *xr_h2_server_new(const XrH2ServerConfig *config) {
+    if (!config)
+        return NULL;
 
 #ifdef _WIN32
     WSADATA wsa;
     WSAStartup(MAKEWORD(2, 2), &wsa);
 #endif
 
-    XrH2Server *server = (XrH2Server*)xr_calloc(1, sizeof(XrH2Server));
-    if (!server) return NULL;
+    XrH2Server *server = (XrH2Server *) xr_calloc(1, sizeof(XrH2Server));
+    if (!server)
+        return NULL;
 
     server->config = *config;
     server->max_connections = config->max_connections;
@@ -478,7 +493,8 @@ XrH2Server* xr_h2_server_new(const XrH2ServerConfig *config) {
 }
 
 void xr_h2_server_free(XrH2Server *server) {
-    if (!server) return;
+    if (!server)
+        return;
 
     xr_h2_server_stop(server);
 
@@ -486,15 +502,19 @@ void xr_h2_server_free(XrH2Server *server) {
 
     h2_server_conn_pool_destroy(server);
 
-    if (server->tls_ctx) xr_tls_context_free(server->tls_ctx);
+    if (server->tls_ctx)
+        xr_tls_context_free(server->tls_ctx);
 
 #ifdef XR_USE_KQUEUE
-    if (server->event_fd >= 0) close(server->event_fd);
+    if (server->event_fd >= 0)
+        close(server->event_fd);
 #elif defined(XR_USE_EPOLL)
-    if (server->event_fd >= 0) close(server->event_fd);
+    if (server->event_fd >= 0)
+        close(server->event_fd);
 #endif
 
-    if (server->listen_fd >= 0) xr_close_socket(server->listen_fd);
+    if (server->listen_fd >= 0)
+        xr_close_socket(server->listen_fd);
 
     xr_free(server);
 
@@ -503,20 +523,22 @@ void xr_h2_server_free(XrH2Server *server) {
 #endif
 }
 
-void xr_h2_server_on_request(XrH2Server *server,
-                              void (*handler)(XrH2Context *ctx, void *user_data),
-                              void *user_data) {
-    if (!server) return;
+void xr_h2_server_on_request(XrH2Server *server, void (*handler)(XrH2Context *ctx, void *user_data),
+                             void *user_data) {
+    if (!server)
+        return;
     server->on_request = handler;
     server->user_data = user_data;
 }
 
 int xr_h2_server_listen(XrH2Server *server) {
-    if (!server) return -1;
+    if (!server)
+        return -1;
 
     // Create socket
     server->listen_fd = socket(AF_INET, SOCK_STREAM, 0);
-    if (server->listen_fd < 0) return -1;
+    if (server->listen_fd < 0)
+        return -1;
 
     xr_socket_set_reuseaddr(server->listen_fd, true);
     xr_socket_set_nonblocking(server->listen_fd);
@@ -528,7 +550,7 @@ int xr_h2_server_listen(XrH2Server *server) {
     addr.sin_port = htons(server->config.port);
     addr.sin_addr.s_addr = inet_addr(server->config.host);
 
-    if (bind(server->listen_fd, (struct sockaddr*)&addr, sizeof(addr)) < 0) {
+    if (bind(server->listen_fd, (struct sockaddr *) &addr, sizeof(addr)) < 0) {
         xr_close_socket(server->listen_fd);
         server->listen_fd = -1;
         return -1;
@@ -578,7 +600,8 @@ int xr_h2_server_listen(XrH2Server *server) {
 }
 
 void xr_h2_server_stop(XrH2Server *server) {
-    if (!server) return;
+    if (!server)
+        return;
     server->running = false;
 
     if (server->listen_fd >= 0) {
@@ -590,9 +613,10 @@ void xr_h2_server_stop(XrH2Server *server) {
 
 /* ========== Response API ========== */
 
-int xr_h2_ctx_respond(XrH2Context *ctx, int status,
-                       const char **names, const char **values, int count) {
-    if (!ctx || !ctx->conn || !ctx->stream || ctx->headers_sent) return -1;
+int xr_h2_ctx_respond(XrH2Context *ctx, int status, const char **names, const char **values,
+                      int count) {
+    if (!ctx || !ctx->conn || !ctx->stream || ctx->headers_sent)
+        return -1;
 
     const char *all_names[33];
     size_t all_name_lens[33];
@@ -616,10 +640,8 @@ int xr_h2_ctx_respond(XrH2Context *ctx, int status,
         total++;
     }
 
-    if (xr_h2_send_headers(ctx->conn, ctx->stream,
-                           all_names, all_name_lens,
-                           all_values, all_value_lens,
-                           total, false) < 0) {
+    if (xr_h2_send_headers(ctx->conn, ctx->stream, all_names, all_name_lens, all_values,
+                           all_value_lens, total, false) < 0) {
         return -1;
     }
 
@@ -628,7 +650,8 @@ int xr_h2_ctx_respond(XrH2Context *ctx, int status,
 }
 
 int xr_h2_ctx_write(XrH2Context *ctx, const void *data, size_t len) {
-    if (!ctx || !ctx->conn || !ctx->stream) return -1;
+    if (!ctx || !ctx->conn || !ctx->stream)
+        return -1;
 
     if (!ctx->headers_sent) {
         if (xr_h2_ctx_respond(ctx, 200, NULL, NULL, 0) < 0) {
@@ -640,7 +663,8 @@ int xr_h2_ctx_write(XrH2Context *ctx, const void *data, size_t len) {
 }
 
 int xr_h2_ctx_end(XrH2Context *ctx) {
-    if (!ctx || !ctx->conn || !ctx->stream || ctx->response_ended) return -1;
+    if (!ctx || !ctx->conn || !ctx->stream || ctx->response_ended)
+        return -1;
 
     if (!ctx->headers_sent) {
         const char *names[] = {":status"};
@@ -648,9 +672,8 @@ int xr_h2_ctx_end(XrH2Context *ctx) {
         const char *values[] = {"200"};
         size_t value_lens[] = {3};
 
-        if (xr_h2_send_headers(ctx->conn, ctx->stream,
-                               names, name_lens, values, value_lens,
-                               1, true) < 0) {
+        if (xr_h2_send_headers(ctx->conn, ctx->stream, names, name_lens, values, value_lens, 1,
+                               true) < 0) {
             return -1;
         }
     } else {
@@ -663,10 +686,10 @@ int xr_h2_ctx_end(XrH2Context *ctx) {
     return 0;
 }
 
-int xr_h2_ctx_send(XrH2Context *ctx, int status,
-                    const char *content_type,
-                    const void *body, size_t body_len) {
-    if (!ctx) return -1;
+int xr_h2_ctx_send(XrH2Context *ctx, int status, const char *content_type, const void *body,
+                   size_t body_len) {
+    if (!ctx)
+        return -1;
 
     const char *names[2];
     const char *values[2];
@@ -697,13 +720,14 @@ int xr_h2_ctx_send(XrH2Context *ctx, int status,
     return xr_h2_ctx_end(ctx);
 }
 
-int xr_h2_ctx_push(XrH2Context *ctx, const char *path,
-                    const char *content_type,
-                    const void *data, size_t len) {
-    if (!ctx || !ctx->conn || !ctx->stream || !path) return -1;
+int xr_h2_ctx_push(XrH2Context *ctx, const char *path, const char *content_type, const void *data,
+                   size_t len) {
+    if (!ctx || !ctx->conn || !ctx->stream || !path)
+        return -1;
 
     XrH2Stream *push_stream = xr_h2_stream_new(ctx->conn);
-    if (!push_stream) return -1;
+    if (!push_stream)
+        return -1;
 
     uint8_t frame[1024];
     uint8_t *p = frame + XR_H2_FRAME_HEADER_SIZE;
@@ -715,24 +739,22 @@ int xr_h2_ctx_push(XrH2Context *ctx, const char *path,
 
     *p++ = 0x82;
     *p++ = 0x04;
-    *p++ = (uint8_t)strlen(path);
+    *p++ = (uint8_t) strlen(path);
     memcpy(p, path, strlen(path));
     p += strlen(path);
     *p++ = 0x87;
     *p++ = 0x01;
-    *p++ = (uint8_t)strlen(ctx->authority ? ctx->authority : "localhost");
+    *p++ = (uint8_t) strlen(ctx->authority ? ctx->authority : "localhost");
     memcpy(p, ctx->authority ? ctx->authority : "localhost",
            strlen(ctx->authority ? ctx->authority : "localhost"));
     p += strlen(ctx->authority ? ctx->authority : "localhost");
 
     size_t payload_len = p - (frame + XR_H2_FRAME_HEADER_SIZE);
 
-    XrH2FrameHeader header = {
-        .length = (uint32_t)payload_len,
-        .type = XR_H2_FRAME_PUSH_PROMISE,
-        .flags = XR_H2_FLAG_END_HEADERS,
-        .stream_id = ctx->stream->id
-    };
+    XrH2FrameHeader header = {.length = (uint32_t) payload_len,
+                              .type = XR_H2_FRAME_PUSH_PROMISE,
+                              .flags = XR_H2_FLAG_END_HEADERS,
+                              .stream_id = ctx->stream->id};
     xr_h2_write_frame_header(frame, &header);
 
     if (write(ctx->conn->fd, frame, XR_H2_FRAME_HEADER_SIZE + payload_len) < 0) {

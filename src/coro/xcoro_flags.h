@@ -67,76 +67,85 @@
 
 /* ========== Authoritative State (coro_state field) ========== */
 
-#define XR_CORO_STATE_NONE      0
-#define XR_CORO_STATE_READY     1
-#define XR_CORO_STATE_RUNNING   2
-#define XR_CORO_STATE_BLOCKED   3
-#define XR_CORO_STATE_DONE      4
+#define XR_CORO_STATE_NONE 0
+#define XR_CORO_STATE_READY 1
+#define XR_CORO_STATE_RUNNING 2
+#define XR_CORO_STATE_BLOCKED 3
+#define XR_CORO_STATE_DONE 4
 
 /* ========== Priority Encoding (flags bits 0-1) ========== */
 
-#define XR_CORO_PRIO_SHIFT          0
-#define XR_CORO_PRIO_MASK           (0x3 << XR_CORO_PRIO_SHIFT)
+#define XR_CORO_PRIO_SHIFT 0
+#define XR_CORO_PRIO_MASK (0x3 << XR_CORO_PRIO_SHIFT)
 
-#define XR_CORO_PRIO_LOW            0
-#define XR_CORO_PRIO_NORMAL         1
-#define XR_CORO_PRIO_HIGH           2
+#define XR_CORO_PRIO_LOW 0
+#define XR_CORO_PRIO_NORMAL 1
+#define XR_CORO_PRIO_HIGH 2
 
 /* ========== Wait Reason Encoding (flags bits 4-7) ========== */
 
-#define XR_CORO_WAIT_SHIFT          4
-#define XR_CORO_WAIT_MASK           (0xF << XR_CORO_WAIT_SHIFT)
+#define XR_CORO_WAIT_SHIFT 4
+#define XR_CORO_WAIT_MASK (0xF << XR_CORO_WAIT_SHIFT)
 
-#define XR_CORO_WAIT_NONE           (0 << XR_CORO_WAIT_SHIFT)
-#define XR_CORO_WAIT_CHANNEL_SEND   (1 << XR_CORO_WAIT_SHIFT)
-#define XR_CORO_WAIT_CHANNEL_RECV   (2 << XR_CORO_WAIT_SHIFT)
-#define XR_CORO_WAIT_AWAIT          (3 << XR_CORO_WAIT_SHIFT)
-#define XR_CORO_WAIT_AWAIT_ALL      (4 << XR_CORO_WAIT_SHIFT)
-#define XR_CORO_WAIT_SLEEP          (5 << XR_CORO_WAIT_SHIFT)
-#define XR_CORO_WAIT_IO             (6 << XR_CORO_WAIT_SHIFT)
-#define XR_CORO_WAIT_SELECT         (7 << XR_CORO_WAIT_SHIFT)
-#define XR_CORO_WAIT_SCOPE          (8 << XR_CORO_WAIT_SHIFT)
-#define XR_CORO_WAIT_AWAIT_ANY      (9 << XR_CORO_WAIT_SHIFT)
+#define XR_CORO_WAIT_NONE (0 << XR_CORO_WAIT_SHIFT)
+#define XR_CORO_WAIT_CHANNEL_SEND (1 << XR_CORO_WAIT_SHIFT)
+#define XR_CORO_WAIT_CHANNEL_RECV (2 << XR_CORO_WAIT_SHIFT)
+#define XR_CORO_WAIT_AWAIT (3 << XR_CORO_WAIT_SHIFT)
+#define XR_CORO_WAIT_AWAIT_ALL (4 << XR_CORO_WAIT_SHIFT)
+#define XR_CORO_WAIT_SLEEP (5 << XR_CORO_WAIT_SHIFT)
+#define XR_CORO_WAIT_IO (6 << XR_CORO_WAIT_SHIFT)
+#define XR_CORO_WAIT_SELECT (7 << XR_CORO_WAIT_SHIFT)
+#define XR_CORO_WAIT_SCOPE (8 << XR_CORO_WAIT_SHIFT)
+#define XR_CORO_WAIT_AWAIT_ANY (9 << XR_CORO_WAIT_SHIFT)
 
 /* ========== State Flags (shadow bits 8-11, mark bits 12+) ========== */
 
-#define XR_CORO_FLG_READY           (1 << 8)
-#define XR_CORO_FLG_RUNNING         (1 << 9)
-#define XR_CORO_FLG_BLOCKED         (1 << 10)
-#define XR_CORO_FLG_DONE            (1 << 11)
-#define XR_CORO_FLG_CANCELLED       (1 << 12)
-#define XR_CORO_FLG_IN_RUNQ         (1 << 13)
-#define XR_CORO_FLG_GC              (1 << 14)
-#define XR_CORO_FLG_STARTED         (1 << 15)
-#define XR_CORO_FLG_SUSPENDED       (1 << 16)
-#define XR_CORO_FLG_MAIN            (1 << 17)
-#define XR_CORO_FLG_DEAD            (1 << 18)
-#define XR_CORO_FLG_NO_AUTO_FREE    (1 << 19)
-#define XR_CORO_FLG_STACK_SCANNED   (1 << 20)
+#define XR_CORO_FLG_READY (1 << 8)
+#define XR_CORO_FLG_RUNNING (1 << 9)
+#define XR_CORO_FLG_BLOCKED (1 << 10)
+#define XR_CORO_FLG_DONE (1 << 11)
+#define XR_CORO_FLG_CANCELLED (1 << 12)
+#define XR_CORO_FLG_IN_RUNQ (1 << 13)
+#define XR_CORO_FLG_GC (1 << 14)
+#define XR_CORO_FLG_STARTED (1 << 15)
+#define XR_CORO_FLG_SUSPENDED (1 << 16)
+#define XR_CORO_FLG_MAIN (1 << 17)
+#define XR_CORO_FLG_DEAD (1 << 18)
+#define XR_CORO_FLG_NO_AUTO_FREE (1 << 19)
+#define XR_CORO_FLG_STACK_SCANNED (1 << 20)
 #define XR_CORO_FLG_CANCEL_REQUESTED (1 << 21)  // sysmon requests cancellation
-#define XR_CORO_FLG_SLAB_STACK       (1 << 22)  // stack+frames from arena slab (don't free)
+#define XR_CORO_FLG_SLAB_STACK (1 << 22)        // stack+frames from arena slab (don't free)
 
 // Mask for state shadow bits (READY|RUNNING|BLOCKED|DONE)
-#define XR_CORO_STATE_FLAG_MASK \
+#define XR_CORO_STATE_FLAG_MASK                                                                    \
     (XR_CORO_FLG_READY | XR_CORO_FLG_RUNNING | XR_CORO_FLG_BLOCKED | XR_CORO_FLG_DONE)
 
 /* ========== Internal: map between state enum and flag bits ========== */
 
 static inline uint32_t xr_state_to_flag(uint8_t state) {
     switch (state) {
-    case XR_CORO_STATE_READY:   return XR_CORO_FLG_READY;
-    case XR_CORO_STATE_RUNNING: return XR_CORO_FLG_RUNNING;
-    case XR_CORO_STATE_BLOCKED: return XR_CORO_FLG_BLOCKED;
-    case XR_CORO_STATE_DONE:    return XR_CORO_FLG_DONE;
-    default:                    return 0;
+        case XR_CORO_STATE_READY:
+            return XR_CORO_FLG_READY;
+        case XR_CORO_STATE_RUNNING:
+            return XR_CORO_FLG_RUNNING;
+        case XR_CORO_STATE_BLOCKED:
+            return XR_CORO_FLG_BLOCKED;
+        case XR_CORO_STATE_DONE:
+            return XR_CORO_FLG_DONE;
+        default:
+            return 0;
     }
 }
 
 static inline uint8_t xr_flag_to_state(uint32_t flag_bit) {
-    if (flag_bit & XR_CORO_FLG_RUNNING) return XR_CORO_STATE_RUNNING;
-    if (flag_bit & XR_CORO_FLG_BLOCKED) return XR_CORO_STATE_BLOCKED;
-    if (flag_bit & XR_CORO_FLG_READY)   return XR_CORO_STATE_READY;
-    if (flag_bit & XR_CORO_FLG_DONE)    return XR_CORO_STATE_DONE;
+    if (flag_bit & XR_CORO_FLG_RUNNING)
+        return XR_CORO_STATE_RUNNING;
+    if (flag_bit & XR_CORO_FLG_BLOCKED)
+        return XR_CORO_STATE_BLOCKED;
+    if (flag_bit & XR_CORO_FLG_READY)
+        return XR_CORO_STATE_READY;
+    if (flag_bit & XR_CORO_FLG_DONE)
+        return XR_CORO_STATE_DONE;
     return XR_CORO_STATE_NONE;
 }
 
@@ -147,47 +156,52 @@ static inline uint8_t xr_flag_to_state(uint32_t flag_bit) {
  * Returns a 32-bit value compatible with all existing flag-checking code.
  * Uses GCC statement expression ({...}) — supported by both GCC and Clang.
  */
-#define xr_coro_flags_load(coro) ({ \
-    uint32_t _f = atomic_load_explicit(&(coro)->flags, memory_order_acquire); \
-    uint8_t _s = atomic_load_explicit(&(coro)->coro_state, memory_order_acquire); \
-    (uint32_t)((_f & ~(uint32_t)XR_CORO_STATE_FLAG_MASK) | xr_state_to_flag(_s)); \
-})
+#define xr_coro_flags_load(coro)                                                                   \
+    ({                                                                                             \
+        uint32_t _f = atomic_load_explicit(&(coro)->flags, memory_order_acquire);                  \
+        uint8_t _s = atomic_load_explicit(&(coro)->coro_state, memory_order_acquire);              \
+        (uint32_t)((_f & ~(uint32_t) XR_CORO_STATE_FLAG_MASK) | xr_state_to_flag(_s));             \
+    })
 
 /*
  * Set flag bits. If any state bit (READY/RUNNING/BLOCKED/DONE) is included,
  * update coro_state with atomic store (no CAS needed for exclusive states).
  * All bits are also OR'd into flags for shadow sync.
  */
-#define xr_coro_flags_set(coro, f) do { \
-    uint32_t _ff = (uint32_t)(f); \
-    if (_ff & XR_CORO_STATE_FLAG_MASK) { \
-        uint8_t _ns = xr_flag_to_state(_ff); \
-        if (_ns) atomic_store_explicit(&(coro)->coro_state, _ns, memory_order_release); \
-    } \
-    atomic_fetch_or_explicit(&(coro)->flags, _ff, memory_order_release); \
-} while (0)
+#define xr_coro_flags_set(coro, f)                                                                 \
+    do {                                                                                           \
+        uint32_t _ff = (uint32_t) (f);                                                             \
+        if (_ff & XR_CORO_STATE_FLAG_MASK) {                                                       \
+            uint8_t _ns = xr_flag_to_state(_ff);                                                   \
+            if (_ns)                                                                               \
+                atomic_store_explicit(&(coro)->coro_state, _ns, memory_order_release);             \
+        }                                                                                          \
+        atomic_fetch_or_explicit(&(coro)->flags, _ff, memory_order_release);                       \
+    } while (0)
 
 /*
  * Clear flag bits. For state bits this only clears the shadow (authoritative
  * state is set by flags_set/flags_swap). For mark bits this is the real clear.
  */
-#define xr_coro_flags_clear(coro, f) \
-    atomic_fetch_and_explicit(&(coro)->flags, ~(uint32_t)(f), memory_order_release)
+#define xr_coro_flags_clear(coro, f)                                                               \
+    atomic_fetch_and_explicit(&(coro)->flags, ~(uint32_t) (f), memory_order_release)
 
 /*
  * Swap: clear some bits and set others atomically.
  * For state transitions (the hot path): single atomic store on coro_state.
  * Shadow sync on flags: AND then OR (non-CAS, lock-free).
  */
-#define xr_coro_flags_swap(coro, clear_mask, set_mask) do { \
-    uint32_t _set = (uint32_t)(set_mask); \
-    if (_set & XR_CORO_STATE_FLAG_MASK) { \
-        uint8_t _ns = xr_flag_to_state(_set); \
-        if (_ns) atomic_store_explicit(&(coro)->coro_state, _ns, memory_order_release); \
-    } \
-    atomic_fetch_and_explicit(&(coro)->flags, ~(uint32_t)(clear_mask), memory_order_relaxed); \
-    atomic_fetch_or_explicit(&(coro)->flags, _set, memory_order_release); \
-} while (0)
+#define xr_coro_flags_swap(coro, clear_mask, set_mask)                                             \
+    do {                                                                                           \
+        uint32_t _set = (uint32_t) (set_mask);                                                     \
+        if (_set & XR_CORO_STATE_FLAG_MASK) {                                                      \
+            uint8_t _ns = xr_flag_to_state(_set);                                                  \
+            if (_ns)                                                                               \
+                atomic_store_explicit(&(coro)->coro_state, _ns, memory_order_release);             \
+        }                                                                                          \
+        atomic_fetch_and_explicit(&(coro)->flags, ~(uint32_t) (clear_mask), memory_order_relaxed); \
+        atomic_fetch_or_explicit(&(coro)->flags, _set, memory_order_release);                      \
+    } while (0)
 
 /*
  * Check if flag is set. State bits check coro_state (authoritative).
@@ -196,37 +210,40 @@ static inline uint8_t xr_flag_to_state(uint32_t flag_bit) {
  *   reads coro_state only → single byte load.
  * For pure mark checks: reads flags only.
  */
-#define xr_coro_flags_has(coro, f) \
-    (((f) & XR_CORO_STATE_FLAG_MASK) \
-     ? (xr_state_to_flag(atomic_load_explicit(&(coro)->coro_state, memory_order_acquire)) & (f)) != 0 \
-     : (atomic_load_explicit(&(coro)->flags, memory_order_acquire) & (f)) != 0)
+#define xr_coro_flags_has(coro, f)                                                                 \
+    (((f) & XR_CORO_STATE_FLAG_MASK)                                                               \
+         ? (xr_state_to_flag(atomic_load_explicit(&(coro)->coro_state, memory_order_acquire)) &    \
+            (f)) != 0                                                                              \
+         : (atomic_load_explicit(&(coro)->flags, memory_order_acquire) & (f)) != 0)
 
 // Non-atomic fast variants (single-owner context only)
-#define xr_coro_flags_set_fast(coro, f) do { \
-    uint32_t _ff = (uint32_t)(f); \
-    if (_ff & XR_CORO_STATE_FLAG_MASK) { \
-        uint8_t _ns = xr_flag_to_state(_ff); \
-        if (_ns) (coro)->coro_state = _ns; \
-    } \
-    (coro)->flags |= _ff; \
-} while (0)
+#define xr_coro_flags_set_fast(coro, f)                                                            \
+    do {                                                                                           \
+        uint32_t _ff = (uint32_t) (f);                                                             \
+        if (_ff & XR_CORO_STATE_FLAG_MASK) {                                                       \
+            uint8_t _ns = xr_flag_to_state(_ff);                                                   \
+            if (_ns)                                                                               \
+                (coro)->coro_state = _ns;                                                          \
+        }                                                                                          \
+        (coro)->flags |= _ff;                                                                      \
+    } while (0)
 
-#define xr_coro_flags_clear_fast(coro, f) \
-    ((coro)->flags &= ~(uint32_t)(f))
+#define xr_coro_flags_clear_fast(coro, f) ((coro)->flags &= ~(uint32_t) (f))
 
-#define xr_coro_flags_has_fast(coro, f) \
-    (((coro)->flags & (f)) != 0)
+#define xr_coro_flags_has_fast(coro, f) (((coro)->flags & (f)) != 0)
 
 // CAS on flags (used by xr_coro_ready). Also updates coro_state on success.
-#define xr_coro_flags_cas(coro, expected, desired) ({ \
-    bool _ok = atomic_compare_exchange_strong_explicit(&(coro)->flags, \
-        (expected), (desired), memory_order_acq_rel, memory_order_acquire); \
-    if (_ok && ((desired) & XR_CORO_STATE_FLAG_MASK)) { \
-        uint8_t _ns = xr_flag_to_state(desired); \
-        if (_ns) atomic_store_explicit(&(coro)->coro_state, _ns, memory_order_release); \
-    } \
-    _ok; \
-})
+#define xr_coro_flags_cas(coro, expected, desired)                                                 \
+    ({                                                                                             \
+        bool _ok = atomic_compare_exchange_strong_explicit(                                        \
+            &(coro)->flags, (expected), (desired), memory_order_acq_rel, memory_order_acquire);    \
+        if (_ok && ((desired) & XR_CORO_STATE_FLAG_MASK)) {                                        \
+            uint8_t _ns = xr_flag_to_state(desired);                                               \
+            if (_ns)                                                                               \
+                atomic_store_explicit(&(coro)->coro_state, _ns, memory_order_release);             \
+        }                                                                                          \
+        _ok;                                                                                       \
+    })
 
 /* ========== State Transition Helpers ==========
  *
@@ -246,16 +263,16 @@ static inline uint8_t xr_flag_to_state(uint32_t flag_bit) {
  *
  * CALLERS SHOULD PREFER THESE over direct xr_coro_flags_swap.
  */
-#define xr_coro_transition_to_running(coro) \
+#define xr_coro_transition_to_running(coro)                                                        \
     xr_coro_flags_swap((coro), XR_CORO_FLG_READY | XR_CORO_FLG_BLOCKED, XR_CORO_FLG_RUNNING)
 
-#define xr_coro_transition_to_ready(coro) \
+#define xr_coro_transition_to_ready(coro)                                                          \
     xr_coro_flags_swap((coro), XR_CORO_FLG_RUNNING, XR_CORO_FLG_READY)
 
-#define xr_coro_transition_to_blocked(coro) \
+#define xr_coro_transition_to_blocked(coro)                                                        \
     xr_coro_flags_swap((coro), XR_CORO_FLG_RUNNING, XR_CORO_FLG_BLOCKED)
 
-#define xr_coro_transition_wake(coro) \
+#define xr_coro_transition_wake(coro)                                                              \
     xr_coro_flags_swap((coro), XR_CORO_FLG_BLOCKED, XR_CORO_FLG_READY)
 
 /* ========== Priority Operations ========== */
@@ -280,17 +297,17 @@ static inline uint32_t xr_coro_set_wait_reason_flags(uint32_t flags, int reason)
 
 /* ========== State Check Macros ========== */
 
-#define xr_coro_is_ready(coro)      xr_coro_flags_has(coro, XR_CORO_FLG_READY)
-#define xr_coro_is_running(coro)    xr_coro_flags_has(coro, XR_CORO_FLG_RUNNING)
-#define xr_coro_is_blocked(coro)    xr_coro_flags_has(coro, XR_CORO_FLG_BLOCKED)
-#define xr_coro_is_done_flag(coro)  xr_coro_flags_has(coro, XR_CORO_FLG_DONE)
+#define xr_coro_is_ready(coro) xr_coro_flags_has(coro, XR_CORO_FLG_READY)
+#define xr_coro_is_running(coro) xr_coro_flags_has(coro, XR_CORO_FLG_RUNNING)
+#define xr_coro_is_blocked(coro) xr_coro_flags_has(coro, XR_CORO_FLG_BLOCKED)
+#define xr_coro_is_done_flag(coro) xr_coro_flags_has(coro, XR_CORO_FLG_DONE)
 #define xr_coro_is_cancelled_flag(coro) xr_coro_flags_has(coro, XR_CORO_FLG_CANCELLED)
-#define xr_coro_is_main_flag(coro)  xr_coro_flags_has(coro, XR_CORO_FLG_MAIN)
-#define xr_coro_has_started(coro)   xr_coro_flags_has(coro, XR_CORO_FLG_STARTED)
-#define xr_coro_is_in_runq(coro)    xr_coro_flags_has(coro, XR_CORO_FLG_IN_RUNQ)
-#define xr_coro_is_gc(coro)         xr_coro_flags_has(coro, XR_CORO_FLG_GC)
-#define xr_coro_is_suspended(coro)  xr_coro_flags_has(coro, XR_CORO_FLG_SUSPENDED)
-#define xr_coro_is_dead(coro)       xr_coro_flags_has(coro, XR_CORO_FLG_DEAD)
+#define xr_coro_is_main_flag(coro) xr_coro_flags_has(coro, XR_CORO_FLG_MAIN)
+#define xr_coro_has_started(coro) xr_coro_flags_has(coro, XR_CORO_FLG_STARTED)
+#define xr_coro_is_in_runq(coro) xr_coro_flags_has(coro, XR_CORO_FLG_IN_RUNQ)
+#define xr_coro_is_gc(coro) xr_coro_flags_has(coro, XR_CORO_FLG_GC)
+#define xr_coro_is_suspended(coro) xr_coro_flags_has(coro, XR_CORO_FLG_SUSPENDED)
+#define xr_coro_is_dead(coro) xr_coro_flags_has(coro, XR_CORO_FLG_DEAD)
 
 /* ========== Init ========== */
 
@@ -307,10 +324,9 @@ static inline uint32_t xr_coro_init_flags(int priority, bool is_main) {
  * Use relaxed atomic: memory ordering is already provided by the surrounding
  * coro_state store(release) / load(acquire) pair.
  * These macros only ensure data-race-free access. */
-#define xr_coro_resume_load(coro) \
-    atomic_load_explicit(&(coro)->resume_status, memory_order_relaxed)
+#define xr_coro_resume_load(coro) atomic_load_explicit(&(coro)->resume_status, memory_order_relaxed)
 
-#define xr_coro_resume_store(coro, val) \
+#define xr_coro_resume_store(coro, val)                                                            \
     atomic_store_explicit(&(coro)->resume_status, (val), memory_order_relaxed)
 
-#endif // XCORO_FLAGS_H
+#endif  // XCORO_FLAGS_H

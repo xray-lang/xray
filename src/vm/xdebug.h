@@ -31,4 +31,4 @@ XR_FUNC int xr_disassemble_instruction(XrProto *proto, int offset);
 // Print constants table
 XR_FUNC void xr_print_constants(XrProto *proto);
 
-#endif // XDEBUG_H
+#endif  // XDEBUG_H

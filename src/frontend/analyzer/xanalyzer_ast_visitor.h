@@ -25,9 +25,9 @@ typedef void (*XaVisitFn)(AstNode *node, void *ctx);
 // Visitor structure with optional callbacks for different node types
 typedef struct XaAstVisitor {
     // General callbacks (called for all nodes)
-    XaVisitFn visit_pre;    // Called before visiting children
-    XaVisitFn visit_post;   // Called after visiting children
-    
+    XaVisitFn visit_pre;   // Called before visiting children
+    XaVisitFn visit_post;  // Called after visiting children
+
     // Declaration callbacks
     XaVisitFn visit_function_decl;
     XaVisitFn visit_var_decl;
@@ -36,7 +36,7 @@ typedef struct XaAstVisitor {
     XaVisitFn visit_method_decl;
     XaVisitFn visit_field_decl;
     XaVisitFn visit_interface_decl;
-    
+
     // Expression callbacks
     XaVisitFn visit_variable;
     XaVisitFn visit_assignment;
@@ -45,7 +45,7 @@ typedef struct XaAstVisitor {
     XaVisitFn visit_index_get;
     XaVisitFn visit_function_expr;
     XaVisitFn visit_literal;
-    
+
     // Statement callbacks
     XaVisitFn visit_block;
     XaVisitFn visit_if_stmt;
@@ -54,10 +54,10 @@ typedef struct XaAstVisitor {
     XaVisitFn visit_while_stmt;
     XaVisitFn visit_return_stmt;
     XaVisitFn visit_import_stmt;
-    
+
     // Control flag: set to true in callback to skip children
     bool skip_children;
-    
+
     // User context passed to callbacks
     void *user_ctx;
 } XaAstVisitor;
@@ -77,4 +77,4 @@ XR_FUNC void xa_ast_visit_refs(AstNode *root, XaVisitFn fn, void *ctx);
 // Convenience: visit only function/method calls
 XR_FUNC void xa_ast_visit_calls(AstNode *root, XaVisitFn fn, void *ctx);
 
-#endif // XANALYZER_AST_VISITOR_H
+#endif  // XANALYZER_AST_VISITOR_H

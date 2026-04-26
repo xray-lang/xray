@@ -53,74 +53,83 @@
 extern int xr_socket_wait_readable(struct XrayIsolate *X, int fd, int timeout_ms);
 
 // xr_coro_create_native is not declared in any public header
-extern struct XrCoroutine *xr_coro_create_native(struct XrayIsolate *X, void (*func)(void*), void *arg,
-                                                  const char *name);
+extern struct XrCoroutine *xr_coro_create_native(struct XrayIsolate *X, void (*func)(void *),
+                                                 void *arg, const char *name);
 extern void xr_coro_spawn(struct XrayIsolate *X, struct XrCoroutine *coro);
 
 /* ========== Announce Packet ========== */
 
 #define ANNOUNCE_MAX_SIZE 128
 
-static int build_announce(uint8_t *buf, size_t buf_size,
-                          const char *name, uint16_t port,
+static int build_announce(uint8_t *buf, size_t buf_size, const char *name, uint16_t port,
                           uint64_t cluster_hash) {
-    uint8_t name_len = (uint8_t)strlen(name);
+    uint8_t name_len = (uint8_t) strlen(name);
     size_t total = 4 + 1 + 1 + name_len + 2 + 8;
-    if (total > buf_size) return -1;
+    if (total > buf_size)
+        return -1;
 
     uint8_t *p = buf;
 
     // magic (BE)
     uint32_t magic = htonl(XR_DISCOVERY_MAGIC);
-    memcpy(p, &magic, 4); p += 4;
+    memcpy(p, &magic, 4);
+    p += 4;
 
     // version
     *p++ = XR_DISCOVERY_VERSION;
 
     // name
     *p++ = name_len;
-    memcpy(p, name, name_len); p += name_len;
+    memcpy(p, name, name_len);
+    p += name_len;
 
     // port (BE)
     uint16_t port_be = htons(port);
-    memcpy(p, &port_be, 2); p += 2;
+    memcpy(p, &port_be, 2);
+    p += 2;
 
     // cluster_hash (BE)
     uint64_t hash_be;
     for (int i = 0; i < 8; i++)
-        ((uint8_t *)&hash_be)[i] = (uint8_t)(cluster_hash >> (56 - i * 8));
-    memcpy(p, &hash_be, 8); p += 8;
+        ((uint8_t *) &hash_be)[i] = (uint8_t) (cluster_hash >> (56 - i * 8));
+    memcpy(p, &hash_be, 8);
+    p += 8;
 
-    return (int)(p - buf);
+    return (int) (p - buf);
 }
 
-static int parse_announce(const uint8_t *buf, size_t len,
-                          char *name_out, size_t name_cap,
-                          uint16_t *port_out,
-                          uint64_t *hash_out) {
-    if (len < 4 + 1 + 1 + 0 + 2 + 8) return -1;
+static int parse_announce(const uint8_t *buf, size_t len, char *name_out, size_t name_cap,
+                          uint16_t *port_out, uint64_t *hash_out) {
+    if (len < 4 + 1 + 1 + 0 + 2 + 8)
+        return -1;
     const uint8_t *p = buf;
 
     // magic (BE)
     uint32_t magic_be;
-    memcpy(&magic_be, p, 4); p += 4;
-    if (ntohl(magic_be) != XR_DISCOVERY_MAGIC) return -1;
+    memcpy(&magic_be, p, 4);
+    p += 4;
+    if (ntohl(magic_be) != XR_DISCOVERY_MAGIC)
+        return -1;
 
     // version
     uint8_t ver = *p++;
-    if (ver != XR_DISCOVERY_VERSION) return -1;
+    if (ver != XR_DISCOVERY_VERSION)
+        return -1;
 
     // name
     uint8_t name_len = *p++;
-    if (name_len == 0 || (size_t)(4 + 1 + 1 + name_len + 2 + 8) > len) return -1;
-    if (name_len >= name_cap) return -1;
+    if (name_len == 0 || (size_t) (4 + 1 + 1 + name_len + 2 + 8) > len)
+        return -1;
+    if (name_len >= name_cap)
+        return -1;
     memcpy(name_out, p, name_len);
     name_out[name_len] = '\0';
     p += name_len;
 
     // port (BE)
     uint16_t port_be;
-    memcpy(&port_be, p, 2); p += 2;
+    memcpy(&port_be, p, 2);
+    p += 2;
     *port_out = ntohs(port_be);
 
     // cluster_hash (BE)
@@ -136,7 +145,8 @@ static int parse_announce(const uint8_t *buf, size_t len,
 
 static int create_mcast_socket(uint16_t port) {
     int fd = socket(AF_INET, SOCK_DGRAM, 0);
-    if (fd < 0) return -1;
+    if (fd < 0)
+        return -1;
 
     // Allow multiple listeners on same port
     int reuse = 1;
@@ -152,7 +162,7 @@ static int create_mcast_socket(uint16_t port) {
     addr.sin_addr.s_addr = htonl(INADDR_ANY);
     addr.sin_port = htons(port);
 
-    if (bind(fd, (struct sockaddr *)&addr, sizeof(addr)) < 0) {
+    if (bind(fd, (struct sockaddr *) &addr, sizeof(addr)) < 0) {
         close(fd);
         return -1;
     }
@@ -161,8 +171,7 @@ static int create_mcast_socket(uint16_t port) {
     struct ip_mreq mreq;
     mreq.imr_multiaddr.s_addr = inet_addr(XR_DISCOVERY_MCAST_GROUP);
     mreq.imr_interface.s_addr = htonl(INADDR_ANY);
-    if (setsockopt(fd, IPPROTO_IP, IP_ADD_MEMBERSHIP,
-                   &mreq, sizeof(mreq)) < 0) {
+    if (setsockopt(fd, IPPROTO_IP, IP_ADD_MEMBERSHIP, &mreq, sizeof(mreq)) < 0) {
         close(fd);
         return -1;
     }
@@ -177,7 +186,8 @@ static int create_mcast_socket(uint16_t port) {
 
     // Non-blocking for poll
     int flags = fcntl(fd, F_GETFL, 0);
-    if (flags >= 0) fcntl(fd, F_SETFL, flags | O_NONBLOCK);
+    if (flags >= 0)
+        fcntl(fd, F_SETFL, flags | O_NONBLOCK);
 
     return fd;
 }
@@ -189,10 +199,12 @@ static int create_mcast_socket(uint16_t port) {
  */
 static bool should_connect(XrCluster *c, const char *name) {
     // Don't connect to self
-    if (strcmp(c->self_name, name) == 0) return false;
+    if (strcmp(c->self_name, name) == 0)
+        return false;
 
     // Don't connect if node is in tombstone
-    if (xr_cluster_is_dead(c, name)) return false;
+    if (xr_cluster_is_dead(c, name))
+        return false;
 
     // Don't connect if already connected
     xr_mutex_lock(&c->nodes_lock);
@@ -236,8 +248,9 @@ static bool should_connect(XrCluster *c, const char *name) {
  * holds via netpoll until exit).
  */
 static void discovery_coro(void *arg) {
-    XrClusterDiscovery *disc = (XrClusterDiscovery *)arg;
-    if (!disc) return;
+    XrClusterDiscovery *disc = (XrClusterDiscovery *) arg;
+    if (!disc)
+        return;
     XrCluster *c = disc->cluster;
 
     xr_io_set_isolate(c->isolate);
@@ -249,9 +262,8 @@ static void discovery_coro(void *arg) {
     mcast_addr.sin_port = htons(disc->mcast_port);
 
     uint8_t announce_buf[ANNOUNCE_MAX_SIZE];
-    int announce_len = build_announce(announce_buf, sizeof(announce_buf),
-                                      c->self_name, c->listen_port,
-                                      disc->cluster_hash);
+    int announce_len = build_announce(announce_buf, sizeof(announce_buf), c->self_name,
+                                      c->listen_port, disc->cluster_hash);
     if (announce_len < 0) {
         atomic_store(&disc->coro_exited, true);
         return;
@@ -259,8 +271,8 @@ static void discovery_coro(void *arg) {
 
     while (atomic_load(&c->running)) {
         // Send announce (best-effort; kernel-enqueue failures ignored).
-        (void)sendto(disc->mcast_fd, announce_buf, (size_t)announce_len, 0,
-                     (struct sockaddr *)&mcast_addr, sizeof(mcast_addr));
+        (void) sendto(disc->mcast_fd, announce_buf, (size_t) announce_len, 0,
+                      (struct sockaddr *) &mcast_addr, sizeof(mcast_addr));
 
         /*
          * Wait for announces up to interval_ms, yielding via netpoll.
@@ -282,20 +294,20 @@ static void discovery_coro(void *arg) {
             {
                 struct timespec ts;
                 clock_gettime(CLOCK_MONOTONIC, &ts);
-                t0_ns = (int64_t)ts.tv_sec * 1000000000LL + ts.tv_nsec;
+                t0_ns = (int64_t) ts.tv_sec * 1000000000LL + ts.tv_nsec;
             }
 
-            int r = xr_socket_wait_readable(c->isolate, disc->mcast_fd,
-                                            wait_ms);
+            int r = xr_socket_wait_readable(c->isolate, disc->mcast_fd, wait_ms);
 
             // Deduct the elapsed portion of the deadline so partial
             // wakes (early POLLIN) do not inflate total wait time.
             {
                 struct timespec ts;
                 clock_gettime(CLOCK_MONOTONIC, &ts);
-                int64_t t1_ns = (int64_t)ts.tv_sec * 1000000000LL + ts.tv_nsec;
-                int elapsed_ms = (int)((t1_ns - t0_ns) / 1000000LL);
-                if (elapsed_ms < 0) elapsed_ms = 0;
+                int64_t t1_ns = (int64_t) ts.tv_sec * 1000000000LL + ts.tv_nsec;
+                int elapsed_ms = (int) ((t1_ns - t0_ns) / 1000000LL);
+                if (elapsed_ms < 0)
+                    elapsed_ms = 0;
                 remaining_ms -= elapsed_ms;
             }
 
@@ -317,24 +329,25 @@ static void discovery_coro(void *arg) {
                 uint8_t recv_buf[ANNOUNCE_MAX_SIZE];
                 struct sockaddr_in sender;
                 socklen_t sender_len = sizeof(sender);
-                ssize_t n = recvfrom(disc->mcast_fd, recv_buf,
-                                     sizeof(recv_buf), 0,
-                                     (struct sockaddr *)&sender, &sender_len);
-                if (n <= 0) break;
+                ssize_t n = recvfrom(disc->mcast_fd, recv_buf, sizeof(recv_buf), 0,
+                                     (struct sockaddr *) &sender, &sender_len);
+                if (n <= 0)
+                    break;
 
                 char peer_name[XR_NODE_NAME_MAX + 1];
                 uint16_t peer_port;
                 uint64_t peer_hash;
-                if (parse_announce(recv_buf, (size_t)n,
-                                   peer_name, sizeof(peer_name),
-                                   &peer_port, &peer_hash) != 0) {
+                if (parse_announce(recv_buf, (size_t) n, peer_name, sizeof(peer_name), &peer_port,
+                                   &peer_hash) != 0) {
                     continue;
                 }
 
                 // Filter: must be same cluster (same secret hash).
-                if (peer_hash != disc->cluster_hash) continue;
+                if (peer_hash != disc->cluster_hash)
+                    continue;
 
-                if (!should_connect(c, peer_name)) continue;
+                if (!should_connect(c, peer_name))
+                    continue;
 
                 // Resolve sender IP → dotted-quad for xr_cluster_join.
                 char host[INET_ADDRSTRLEN];
@@ -352,11 +365,14 @@ static void discovery_coro(void *arg) {
 /* ========== Public API ========== */
 
 int xr_cluster_discovery_start(XrCluster *c) {
-    if (!c || !atomic_load(&c->running)) return -1;
-    if (c->discovery) return -1; // already started
+    if (!c || !atomic_load(&c->running))
+        return -1;
+    if (c->discovery)
+        return -1;  // already started
 
-    XrClusterDiscovery *disc = (XrClusterDiscovery *)xr_calloc(1, sizeof(*disc));
-    if (!disc) return -1;
+    XrClusterDiscovery *disc = (XrClusterDiscovery *) xr_calloc(1, sizeof(*disc));
+    if (!disc)
+        return -1;
 
     disc->cluster = c;
     disc->mcast_port = XR_DISCOVERY_MCAST_PORT;
@@ -364,9 +380,7 @@ int xr_cluster_discovery_start(XrCluster *c) {
 
     // Compute cluster hash from secret
     size_t slen = strlen(c->secret);
-    disc->cluster_hash = (slen > 0)
-        ? xr_hash_bytes64(c->secret, slen)
-        : 0;
+    disc->cluster_hash = (slen > 0) ? xr_hash_bytes64(c->secret, slen) : 0;
 
     // Create multicast socket
     disc->mcast_fd = create_mcast_socket(disc->mcast_port);
@@ -383,8 +397,8 @@ int xr_cluster_discovery_start(XrCluster *c) {
      * than a dedicated pthread: no private scheduling, no thread-block
      * on poll(), one isolate stop_pipe to wake every background task.
      */
-    XrCoroutine *coro = xr_coro_create_native(c->isolate, discovery_coro,
-                                              disc, "cluster_discovery");
+    XrCoroutine *coro =
+        xr_coro_create_native(c->isolate, discovery_coro, disc, "cluster_discovery");
     if (!coro) {
         close(disc->mcast_fd);
         c->discovery = NULL;
@@ -398,7 +412,8 @@ int xr_cluster_discovery_start(XrCluster *c) {
 }
 
 void xr_cluster_discovery_stop(XrCluster *c) {
-    if (!c || !c->discovery) return;
+    if (!c || !c->discovery)
+        return;
 
     XrClusterDiscovery *disc = c->discovery;
 
@@ -413,7 +428,7 @@ void xr_cluster_discovery_stop(XrCluster *c) {
      */
     if (disc->coro_spawned) {
         for (int i = 0; i < 100 && !atomic_load(&disc->coro_exited); i++) {
-            struct timespec ts = { .tv_sec = 0, .tv_nsec = 10 * 1000 * 1000 };
+            struct timespec ts = {.tv_sec = 0, .tv_nsec = 10 * 1000 * 1000};
             nanosleep(&ts, NULL);
         }
         disc->coro_spawned = false;
@@ -424,8 +439,7 @@ void xr_cluster_discovery_stop(XrCluster *c) {
         struct ip_mreq mreq;
         mreq.imr_multiaddr.s_addr = inet_addr(XR_DISCOVERY_MCAST_GROUP);
         mreq.imr_interface.s_addr = htonl(INADDR_ANY);
-        setsockopt(disc->mcast_fd, IPPROTO_IP, IP_DROP_MEMBERSHIP,
-                   &mreq, sizeof(mreq));
+        setsockopt(disc->mcast_fd, IPPROTO_IP, IP_DROP_MEMBERSHIP, &mreq, sizeof(mreq));
         close(disc->mcast_fd);
         disc->mcast_fd = -1;
     }

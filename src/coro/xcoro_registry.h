@@ -39,22 +39,22 @@ typedef struct XrChannel XrChannel;
 /* ========== Monitor Entry (intrusive linked list per coroutine) ========== */
 
 typedef struct XrCoroMonitor {
-    XrChannel *channel;              // notification channel (owned by caller)
+    XrChannel *channel;  // notification channel (owned by caller)
     struct XrCoroMonitor *next;
 } XrCoroMonitor;
 
 /* ========== Registry Entry ========== */
 
 typedef struct XrCoroRegEntry {
-    const char *name;                // key (borrowed from XrCoroutine.name)
-    XrCoroutine *coro;               // value
-    uint32_t hash;                   // cached hash (0 = empty slot)
+    const char *name;   // key (borrowed from XrCoroutine.name)
+    XrCoroutine *coro;  // value
+    uint32_t hash;      // cached hash (0 = empty slot)
 } XrCoroRegEntry;
 
 /* ========== Registry (per-isolate) ========== */
 
 #define XR_CORO_REG_INITIAL_CAP 32
-#define XR_CORO_REG_LOAD_FACTOR 75   // percent
+#define XR_CORO_REG_LOAD_FACTOR 75  // percent
 
 typedef struct XrCoroRegistry {
     XrCoroRegEntry *entries;
@@ -91,10 +91,11 @@ XR_FUNC void xr_coro_demonitor(XrCoroRegistry *reg, XrCoroutine *coro, XrChannel
 // Notify all monitors that a coroutine has exited. Acquires registry lock.
 // Called from exit path in xworker.c.
 // reason: "normal", "error", "cancelled"
-XR_FUNC void xr_coro_notify_monitors(XrayIsolate *X, XrCoroRegistry *reg, XrCoroutine *coro, const char *reason);
+XR_FUNC void xr_coro_notify_monitors(XrayIsolate *X, XrCoroRegistry *reg, XrCoroutine *coro,
+                                     const char *reason);
 
 // Auto-unregister named coroutine on exit.
 // Called from exit path in xworker.c after notify_monitors.
 XR_FUNC void xr_coro_on_exit(XrayIsolate *X, XrCoroutine *coro);
 
-#endif // XCORO_REGISTRY_H
+#endif  // XCORO_REGISTRY_H

@@ -22,36 +22,33 @@
 
 /* ========== Profile Configuration ========== */
 
-void xr_cli_isolate_params(XrCliIsolateProfile profile,
-                            XrayIsolateParams *out) {
+void xr_cli_isolate_params(XrCliIsolateProfile profile, XrayIsolateParams *out) {
     XR_DCHECK(out != NULL, "out must not be NULL");
 
     /* Start with defaults */
     xray_isolate_params_init(out);
 
     switch (profile) {
-    case XR_CLI_ISOLATE_RUN:
-    case XR_CLI_ISOLATE_EVAL:
-    case XR_CLI_ISOLATE_REPL:
-    case XR_CLI_ISOLATE_TEST:
-        /* Full runtime: all subsystems */
-        xray_isolate_setup_full(out);
-        break;
+        case XR_CLI_ISOLATE_RUN:
+        case XR_CLI_ISOLATE_EVAL:
+        case XR_CLI_ISOLATE_REPL:
+        case XR_CLI_ISOLATE_TEST:
+            /* Full runtime: all subsystems */
+            xray_isolate_setup_full(out);
+            break;
 
-    case XR_CLI_ISOLATE_PARSE:
-        /* Minimal: just compiler + source cache */
-        out->init_flags = XR_INIT_VM | XR_INIT_GC | XR_INIT_COMPILER |
-                          XR_INIT_SOURCE_CACHE;
-        xray_isolate_setup_full(out);
-        break;
+        case XR_CLI_ISOLATE_PARSE:
+            /* Minimal: just compiler + source cache */
+            out->init_flags = XR_INIT_VM | XR_INIT_GC | XR_INIT_COMPILER | XR_INIT_SOURCE_CACHE;
+            xray_isolate_setup_full(out);
+            break;
 
-    case XR_CLI_ISOLATE_ANALYZE:
-        /* Compiler + analyzer + source cache */
-        out->init_flags = XR_INIT_VM | XR_INIT_GC | XR_INIT_COMPILER |
-                          XR_INIT_ANALYZER | XR_INIT_SOURCE_CACHE |
-                          XR_INIT_CLASSES | XR_INIT_SYMBOLS;
-        xray_isolate_setup_full(out);
-        break;
+        case XR_CLI_ISOLATE_ANALYZE:
+            /* Compiler + analyzer + source cache */
+            out->init_flags = XR_INIT_VM | XR_INIT_GC | XR_INIT_COMPILER | XR_INIT_ANALYZER |
+                              XR_INIT_SOURCE_CACHE | XR_INIT_CLASSES | XR_INIT_SYMBOLS;
+            xray_isolate_setup_full(out);
+            break;
     }
 }
 

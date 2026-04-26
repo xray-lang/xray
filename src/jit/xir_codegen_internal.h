@@ -27,20 +27,20 @@
 /* ========== Constants ========== */
 
 #define MAX_PHYS_REGS 22
-#define MAX_FP_REGS   16
-#define MAX_VREGS     4096
-#define SCRATCH_REG   A64_X16
-#define SCRATCH_REG2  A64_X17
-#define CORO_REG      A64_X19
-#define SAFEPT_PAGE_REG    A64_X20   // guard page pointer (reserved, loaded in prologue)
-#define JIT_CTX_REG   A64_X28
+#define MAX_FP_REGS 16
+#define MAX_VREGS 4096
+#define SCRATCH_REG A64_X16
+#define SCRATCH_REG2 A64_X17
+#define CORO_REG A64_X19
+#define SAFEPT_PAGE_REG A64_X20  // guard page pointer (reserved, loaded in prologue)
+#define JIT_CTX_REG A64_X28
 
 // Frame-embedded GC stack map metadata (after callee-saved area)
-#define FRAME_SMAP_PTR_OFFSET  160   // XrStackMapTable* for this JIT function
-#define FRAME_SMAP_ID_OFFSET   168   // safepoint_id (uint32_t) at current point
+#define FRAME_SMAP_PTR_OFFSET 160  // XrStackMapTable* for this JIT function
+#define FRAME_SMAP_ID_OFFSET 168   // safepoint_id (uint32_t) at current point
 
-#define JIT_FRAME_BASE  176
-#define SPILL_BASE      176
+#define JIT_FRAME_BASE 176
+#define SPILL_BASE 176
 
 /* ========== Branch Patching ========== */
 
@@ -64,10 +64,10 @@ typedef enum {
 } PatchType;
 
 typedef struct {
-    uint32_t  emit_idx;
-    uint32_t  target_blk;
+    uint32_t emit_idx;
+    uint32_t target_blk;
     PatchType type;
-    A64Reg    reg;
+    A64Reg reg;
 } BranchPatch;
 
 #define INIT_PATCHES 256
@@ -80,68 +80,71 @@ typedef struct {
     uint32_t block_offset;
 } OsrSnapshot;
 
-typedef struct { uint32_t idx; uint8_t pair; } CsPatch;
+typedef struct {
+    uint32_t idx;
+    uint8_t pair;
+} CsPatch;
 
 typedef struct {
-    XirFunc      *func;
+    XirFunc *func;
     XirCodeAlloc *alloc;
-    A64Buf        buf;
+    A64Buf buf;
 
-    uint32_t     *block_offsets;
-    uint32_t      nblock_offsets;
+    uint32_t *block_offsets;
+    uint32_t nblock_offsets;
 
-    BranchPatch  *patches;
-    uint32_t      npatch;
-    uint32_t      patches_cap;
-    uint32_t      safepoint_stub;
-    uint32_t      barrier_fwd_stub;
-    uint32_t      barrier_back_stub;
-    uint32_t      deopt_stub;
-    uint32_t      call_c_stub;
-    bool          has_safepoints;
-    bool          has_barriers;
-    bool          has_deopt;
-    bool          has_call_c;
+    BranchPatch *patches;
+    uint32_t npatch;
+    uint32_t patches_cap;
+    uint32_t safepoint_stub;
+    uint32_t barrier_fwd_stub;
+    uint32_t barrier_back_stub;
+    uint32_t deopt_stub;
+    uint32_t call_c_stub;
+    bool has_safepoints;
+    bool has_barriers;
+    bool has_deopt;
+    bool has_call_c;
 
-    OsrSnapshot   osr_snaps[XIR_MAX_OSR_ENTRIES];
-    uint32_t      nosr_snap;
+    OsrSnapshot osr_snaps[XIR_MAX_OSR_ENTRIES];
+    uint32_t nosr_snap;
 
-    uint32_t      frame_patch_sub[8];
-    uint32_t      frame_patch_add[32];
-    uint32_t      nsub_patches;
-    uint32_t      nadd_patches;
+    uint32_t frame_patch_sub[8];
+    uint32_t frame_patch_add[32];
+    uint32_t nsub_patches;
+    uint32_t nadd_patches;
 
-    uint32_t      fast_entry_offset;
+    uint32_t fast_entry_offset;
 
-    CsPatch      *cs_patches;
-    uint32_t      ncs_patches;
-    uint32_t      cs_patches_cap;
+    CsPatch *cs_patches;
+    uint32_t ncs_patches;
+    uint32_t cs_patches_cap;
 
-    XraResult    *xra;
-    uint32_t      cur_blk_id;
-    int32_t       cur_ra_pos; // current RA position for segment lookup
-    uint32_t      cur_ins_idx; // current instruction index in block
-    uint32_t      gap_move_cursor; // index into xra->gap_moves for current block
-    int8_t       *vreg_override; // [nvreg] per-vreg register override from gap moves, -128=no override
+    XraResult *xra;
+    uint32_t cur_blk_id;
+    int32_t cur_ra_pos;        // current RA position for segment lookup
+    uint32_t cur_ins_idx;      // current instruction index in block
+    uint32_t gap_move_cursor;  // index into xra->gap_moves for current block
+    int8_t *vreg_override;  // [nvreg] per-vreg register override from gap moves, -128=no override
 
-    XirRef        fused_cmp_ref;
-    A64Cond       fused_false_cc;
-    bool          fused_is_float;
+    XirRef fused_cmp_ref;
+    A64Cond fused_false_cc;
+    bool fused_is_float;
 
     // Graceful error: set when regalloc has no assignment for a vreg
-    bool          had_error;
+    bool had_error;
 
     // GC stack map: collect safepoint bitmaps during codegen
     XrStackMapEntry smap_entries[XIR_MAX_STACK_MAP_ENTRIES];
-    uint32_t        nsmap;
+    uint32_t nsmap;
 
     // Suspend/resume tracking
-    uint32_t        suspend_cont_offsets[16];  // code offset of continuation point per suspend_id
-    uint32_t        suspend_smap_ids[16];      // stack map id at each suspend point
-    uint8_t         suspend_result_regs[16];   // physical register for await result per suspend_id
-    int16_t         suspend_result_bc_slots[16]; // bc_slot of await result vreg per suspend_id
-    uint32_t        nsuspend;                  // number of suspend points emitted
-    uint32_t        resume_entry_offset;       // code offset of resume entry (0 = none)
+    uint32_t suspend_cont_offsets[16];    // code offset of continuation point per suspend_id
+    uint32_t suspend_smap_ids[16];        // stack map id at each suspend point
+    uint8_t suspend_result_regs[16];      // physical register for await result per suspend_id
+    int16_t suspend_result_bc_slots[16];  // bc_slot of await result vreg per suspend_id
+    uint32_t nsuspend;                    // number of suspend points emitted
+    uint32_t resume_entry_offset;         // code offset of resume entry (0 = none)
 } CodegenCtx;
 
 // Register allocation tables (defined in xir_codegen.c)
@@ -173,4 +176,4 @@ XR_FUNC void emit_epilogue(CodegenCtx *ctx);
 XR_FUNC bool xir_emit_call_ops(CodegenCtx *ctx, XirIns *ins, A64Reg rd);
 XR_FUNC bool xir_emit_mem_ops(CodegenCtx *ctx, XirIns *ins, A64Reg rd);
 
-#endif // XIR_CODEGEN_INTERNAL_H
+#endif  // XIR_CODEGEN_INTERNAL_H

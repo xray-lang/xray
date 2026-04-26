@@ -18,20 +18,20 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-XrCompilerContext* xr_compiler_context_new(XrayIsolate *X) {
-    XrCompilerContext *ctx = (XrCompilerContext*)xr_malloc(sizeof(XrCompilerContext));
+XrCompilerContext *xr_compiler_context_new(XrayIsolate *X) {
+    XrCompilerContext *ctx = (XrCompilerContext *) xr_malloc(sizeof(XrCompilerContext));
     if (!ctx) {
         return NULL;
     }
 
-    ctx->global_vars = (XrGlobalVar*)xr_malloc(sizeof(XrGlobalVar) * MAX_GLOBALS);
+    ctx->global_vars = (XrGlobalVar *) xr_malloc(sizeof(XrGlobalVar) * MAX_GLOBALS);
     if (!ctx->global_vars) {
         xr_free(ctx);
         return NULL;
     }
 
-    #define SHARED_INITIAL_CAPACITY 64
-    ctx->shared_vars = (XrSharedVar*)xr_malloc(sizeof(XrSharedVar) * SHARED_INITIAL_CAPACITY);
+#define SHARED_INITIAL_CAPACITY 64
+    ctx->shared_vars = (XrSharedVar *) xr_malloc(sizeof(XrSharedVar) * SHARED_INITIAL_CAPACITY);
     if (!ctx->shared_vars) {
         xr_free(ctx->global_vars);
         xr_free(ctx);
@@ -89,7 +89,8 @@ XrCompilerContext* xr_compiler_context_new(XrayIsolate *X) {
 }
 
 void xr_compiler_context_free(XrCompilerContext *ctx) {
-    if (!ctx) return;
+    if (!ctx)
+        return;
 
     if (ctx->global_vars) {
         xr_free(ctx->global_vars);
@@ -134,7 +135,8 @@ void xr_compiler_context_free(XrCompilerContext *ctx) {
 }
 
 void xr_compiler_context_reset(XrCompilerContext *ctx) {
-    if (!ctx) return;
+    if (!ctx)
+        return;
 
     ctx->current = NULL;
     ctx->current_line = 1;
@@ -144,7 +146,8 @@ void xr_compiler_context_reset(XrCompilerContext *ctx) {
 }
 
 int xr_compiler_ctx_get_or_add_global(XrCompilerContext *ctx, XrString *name) {
-    if (!ctx || !name) return -1;
+    if (!ctx || !name)
+        return -1;
 
     for (int i = 0; i < ctx->global_var_count; i++) {
         if (ctx->global_vars[i].name == name) {
@@ -154,12 +157,9 @@ int xr_compiler_ctx_get_or_add_global(XrCompilerContext *ctx, XrString *name) {
 
     if (ctx->global_var_count >= ctx->max_globals) {
         char msg[128];
-        snprintf(msg, sizeof(msg),
-                 "too many global variables (max %d)", ctx->max_globals);
-        xr_diag_print(XR_DIAG_ERROR, 0, msg,
-                      ctx->source_file, ctx->current_line,
-                      ctx->current_column > 0 ? ctx->current_column : 1,
-                      0, NULL, NULL);
+        snprintf(msg, sizeof(msg), "too many global variables (max %d)", ctx->max_globals);
+        xr_diag_print(XR_DIAG_ERROR, 0, msg, ctx->source_file, ctx->current_line,
+                      ctx->current_column > 0 ? ctx->current_column : 1, 0, NULL, NULL);
         ctx->had_error = true;
         return -1;
     }
@@ -174,10 +174,10 @@ int xr_compiler_ctx_get_or_add_global(XrCompilerContext *ctx, XrString *name) {
 }
 
 int xr_compiler_ctx_find_global(XrCompilerContext *ctx, XrString *name) {
-    if (!ctx || !name) return -1;
+    if (!ctx || !name)
+        return -1;
 
     for (int i = 0; i < ctx->global_var_count; i++) {
-
         if (ctx->global_vars[i].name != NULL &&
             strcmp(ctx->global_vars[i].name->data, name->data) == 0) {
             return ctx->global_vars[i].index;
@@ -198,7 +198,8 @@ bool xr_compiler_ctx_has_error(XrCompilerContext *ctx) {
 }
 
 void xr_compiler_ctx_register_enum_type(XrCompilerContext *ctx, const char *enum_name) {
-    if (!ctx || !enum_name) return;
+    if (!ctx || !enum_name)
+        return;
 
     for (int i = 0; i < ctx->enum_type_count; i++) {
         if (ctx->enum_type_names[i] && strcmp(ctx->enum_type_names[i], enum_name) == 0) {
@@ -208,8 +209,9 @@ void xr_compiler_ctx_register_enum_type(XrCompilerContext *ctx, const char *enum
 
     if (ctx->enum_type_count >= ctx->enum_type_capacity) {
         int new_capacity = ctx->enum_type_capacity == 0 ? 8 : ctx->enum_type_capacity * 2;
-        char **new_array = (char**)xr_malloc(sizeof(char*) * new_capacity);
-        if (!new_array) return;
+        char **new_array = (char **) xr_malloc(sizeof(char *) * new_capacity);
+        if (!new_array)
+            return;
 
         if (ctx->enum_type_names) {
             for (int i = 0; i < ctx->enum_type_count; i++) {
@@ -224,11 +226,13 @@ void xr_compiler_ctx_register_enum_type(XrCompilerContext *ctx, const char *enum
 
     ctx->enum_type_names[ctx->enum_type_count] = strdup(enum_name);
     ctx->enum_type_count++;
-    XR_DCHECK(ctx->enum_type_count <= ctx->enum_type_capacity, "register_enum_type: count > capacity");
+    XR_DCHECK(ctx->enum_type_count <= ctx->enum_type_capacity,
+              "register_enum_type: count > capacity");
 }
 
 bool xr_compiler_ctx_is_enum_type(XrCompilerContext *ctx, const char *var_name) {
-    if (!ctx || !var_name) return false;
+    if (!ctx || !var_name)
+        return false;
 
     for (int i = 0; i < ctx->enum_type_count; i++) {
         if (ctx->enum_type_names[i] && strcmp(ctx->enum_type_names[i], var_name) == 0) {
@@ -242,8 +246,9 @@ bool xr_compiler_ctx_is_enum_type(XrCompilerContext *ctx, const char *var_name) 
 static void ensure_const_capacity(XrCompilerContext *ctx) {
     if (ctx->const_entry_count >= ctx->const_entry_capacity) {
         int new_capacity = ctx->const_entry_capacity == 0 ? 16 : ctx->const_entry_capacity * 2;
-        ConstEntry *new_entries = (ConstEntry*)xr_malloc(sizeof(ConstEntry) * new_capacity);
-        if (!new_entries) return;
+        ConstEntry *new_entries = (ConstEntry *) xr_malloc(sizeof(ConstEntry) * new_capacity);
+        if (!new_entries)
+            return;
 
         if (ctx->const_entries) {
             for (int i = 0; i < ctx->const_entry_count; i++) {
@@ -258,7 +263,8 @@ static void ensure_const_capacity(XrCompilerContext *ctx) {
 }
 
 void xr_compiler_ctx_add_const_int(XrCompilerContext *ctx, XrString *name, int64_t value) {
-    if (!ctx || !name) return;
+    if (!ctx || !name)
+        return;
 
     ensure_const_capacity(ctx);
 
@@ -269,7 +275,8 @@ void xr_compiler_ctx_add_const_int(XrCompilerContext *ctx, XrString *name, int64
 }
 
 void xr_compiler_ctx_add_const_float(XrCompilerContext *ctx, XrString *name, double value) {
-    if (!ctx || !name) return;
+    if (!ctx || !name)
+        return;
 
     ensure_const_capacity(ctx);
 
@@ -280,7 +287,8 @@ void xr_compiler_ctx_add_const_float(XrCompilerContext *ctx, XrString *name, dou
 }
 
 void xr_compiler_ctx_add_const_string(XrCompilerContext *ctx, XrString *name, XrString *value) {
-    if (!ctx || !name) return;
+    if (!ctx || !name)
+        return;
 
     ensure_const_capacity(ctx);
 
@@ -290,8 +298,9 @@ void xr_compiler_ctx_add_const_string(XrCompilerContext *ctx, XrString *name, Xr
     entry->value.str_val = value;
 }
 
-ConstEntry* xr_compiler_ctx_find_const(XrCompilerContext *ctx, XrString *name) {
-    if (!ctx || !name) return NULL;
+ConstEntry *xr_compiler_ctx_find_const(XrCompilerContext *ctx, XrString *name) {
+    if (!ctx || !name)
+        return NULL;
 
     for (int i = 0; i < ctx->const_entry_count; i++) {
         if (ctx->const_entries[i].name == name ||
@@ -303,4 +312,3 @@ ConstEntry* xr_compiler_ctx_find_const(XrCompilerContext *ctx, XrString *name) {
 
     return NULL;
 }
-

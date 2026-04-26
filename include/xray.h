@@ -36,7 +36,7 @@ typedef int64_t xr_Integer;
 
 // Create a new Xray isolate
 // Returns new isolate instance, or NULL on failure
-XRAY_API XrayIsolate* xray_new(void);
+XRAY_API XrayIsolate *xray_new(void);
 
 // Execute an Xray script file
 // @param iso       Isolate instance
@@ -55,7 +55,7 @@ XRAY_API int xray_dostring(XrayIsolate *iso, const char *source);
 // Get the last error message
 // @param iso  Isolate instance
 // @return Error message string, or NULL if no error
-XRAY_API const char* xray_get_error(XrayIsolate *iso);
+XRAY_API const char *xray_get_error(XrayIsolate *iso);
 
 // Check if there is an error
 // @param iso  Isolate instance
@@ -108,5 +108,4 @@ XRAY_API void xr_multicore_destroy(XrayIsolate *iso);
 // @param http_port          HTTP monitor port, 0 to disable
 XRAY_API void xr_coro_monitor_start(XrayIsolate *iso, int watch_interval_ms, int http_port);
 
-#endif // XRAY_H
-
+#endif  // XRAY_H

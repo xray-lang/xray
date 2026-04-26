@@ -37,149 +37,154 @@ static inline bool set_is_weak(const XrSet *s) {
     return (s->flags & XR_SET_FLAG_WEAK) != 0;
 }
 
-XrValue xr_set_method_has(XrayIsolate *iso, XrValue self,
-                          XrValue *args, int argc) {
-    (void)iso;
-    if (argc < 1) return xr_bool(0);
+XrValue xr_set_method_has(XrayIsolate *iso, XrValue self, XrValue *args, int argc) {
+    (void) iso;
+    if (argc < 1)
+        return xr_bool(0);
     return xr_bool(xr_set_has(set_self(self), args[0]));
 }
 
-XrValue xr_set_method_delete(XrayIsolate *iso, XrValue self,
-                             XrValue *args, int argc) {
-    (void)iso;
-    if (argc < 1) return xr_bool(0);
+XrValue xr_set_method_delete(XrayIsolate *iso, XrValue self, XrValue *args, int argc) {
+    (void) iso;
+    if (argc < 1)
+        return xr_bool(0);
     return xr_bool(xr_set_delete(set_self(self), args[0]));
 }
 
-XrValue xr_set_method_is_empty(XrayIsolate *iso, XrValue self,
-                               XrValue *args, int argc) {
-    (void)iso; (void)args; (void)argc;
+XrValue xr_set_method_is_empty(XrayIsolate *iso, XrValue self, XrValue *args, int argc) {
+    (void) iso;
+    (void) args;
+    (void) argc;
     return xr_bool(xr_set_is_empty(set_self(self)));
 }
 
-XrValue xr_set_method_add(XrayIsolate *iso, XrValue self,
-                          XrValue *args, int argc) {
+XrValue xr_set_method_add(XrayIsolate *iso, XrValue self, XrValue *args, int argc) {
     XrSet *s = set_self(self);
     /* WeakSet contract: value must be a heap object. */
     if (set_is_weak(s) && argc >= 1 && !XR_VALUE_NEEDS_GC(args[0])) {
         XrValue exc = xr_exception_newf(iso, XR_ERR_INVALID_ARG_TYPE,
-            "WeakSet value must be a heap object, got %s",
-            xr_typeid_name(xr_value_typeid(args[0])));
+                                        "WeakSet value must be a heap object, got %s",
+                                        xr_typeid_name(xr_value_typeid(args[0])));
         xr_vm_unwind_with_trace(iso, exc);
         return xr_null();
     }
-    if (argc < 1) return xr_bool(0);
+    if (argc < 1)
+        return xr_bool(0);
     return xr_bool(xr_set_add(s, args[0]));
 }
 
-XrValue xr_set_method_clear(XrayIsolate *iso, XrValue self,
-                            XrValue *args, int argc) {
-    (void)iso; (void)args; (void)argc;
+XrValue xr_set_method_clear(XrayIsolate *iso, XrValue self, XrValue *args, int argc) {
+    (void) iso;
+    (void) args;
+    (void) argc;
     XrSet *s = set_self(self);
-    if (set_is_weak(s)) return XR_NOTFOUND;  /* not exposed on WeakSet */
+    if (set_is_weak(s))
+        return XR_NOTFOUND; /* not exposed on WeakSet */
     xr_set_clear(s);
     return xr_null();
 }
 
-XrValue xr_set_method_union(XrayIsolate *iso, XrValue self,
-                            XrValue *args, int argc) {
+XrValue xr_set_method_union(XrayIsolate *iso, XrValue self, XrValue *args, int argc) {
     XrSet *s = set_self(self);
-    if (set_is_weak(s)) return XR_NOTFOUND;
-    if (argc < 1 || !XR_IS_SET(args[0])) return self;
+    if (set_is_weak(s))
+        return XR_NOTFOUND;
+    if (argc < 1 || !XR_IS_SET(args[0]))
+        return self;
     XrSet *result = xr_set_union(xr_current_coro(iso), s, XR_TO_SET(args[0]));
     return xr_value_from_set(result);
 }
 
-XrValue xr_set_method_intersection(XrayIsolate *iso, XrValue self,
-                                   XrValue *args, int argc) {
+XrValue xr_set_method_intersection(XrayIsolate *iso, XrValue self, XrValue *args, int argc) {
     XrSet *s = set_self(self);
-    if (set_is_weak(s)) return XR_NOTFOUND;
+    if (set_is_weak(s))
+        return XR_NOTFOUND;
     if (argc < 1 || !XR_IS_SET(args[0])) {
         return xr_value_from_set(xr_set_new(xr_current_coro(iso)));
     }
-    XrSet *result = xr_set_intersection(xr_current_coro(iso), s,
-                                        XR_TO_SET(args[0]));
+    XrSet *result = xr_set_intersection(xr_current_coro(iso), s, XR_TO_SET(args[0]));
     return xr_value_from_set(result);
 }
 
-XrValue xr_set_method_difference(XrayIsolate *iso, XrValue self,
-                                 XrValue *args, int argc) {
+XrValue xr_set_method_difference(XrayIsolate *iso, XrValue self, XrValue *args, int argc) {
     XrSet *s = set_self(self);
-    if (set_is_weak(s)) return XR_NOTFOUND;
-    if (argc < 1 || !XR_IS_SET(args[0])) return self;
-    XrSet *result = xr_set_difference(xr_current_coro(iso), s,
-                                      XR_TO_SET(args[0]));
+    if (set_is_weak(s))
+        return XR_NOTFOUND;
+    if (argc < 1 || !XR_IS_SET(args[0]))
+        return self;
+    XrSet *result = xr_set_difference(xr_current_coro(iso), s, XR_TO_SET(args[0]));
     return xr_value_from_set(result);
 }
 
-XrValue xr_set_method_symmetric_difference(XrayIsolate *iso, XrValue self,
-                                           XrValue *args, int argc) {
+XrValue xr_set_method_symmetric_difference(XrayIsolate *iso, XrValue self, XrValue *args,
+                                           int argc) {
     XrSet *s = set_self(self);
-    if (set_is_weak(s)) return XR_NOTFOUND;
-    if (argc < 1 || !XR_IS_SET(args[0])) return self;
-    XrSet *result = xr_set_symmetric_difference(xr_current_coro(iso), s,
-                                                XR_TO_SET(args[0]));
+    if (set_is_weak(s))
+        return XR_NOTFOUND;
+    if (argc < 1 || !XR_IS_SET(args[0]))
+        return self;
+    XrSet *result = xr_set_symmetric_difference(xr_current_coro(iso), s, XR_TO_SET(args[0]));
     return xr_value_from_set(result);
 }
 
-XrValue xr_set_method_is_subset(XrayIsolate *iso, XrValue self,
-                                XrValue *args, int argc) {
-    (void)iso;
+XrValue xr_set_method_is_subset(XrayIsolate *iso, XrValue self, XrValue *args, int argc) {
+    (void) iso;
     XrSet *s = set_self(self);
-    if (set_is_weak(s)) return XR_NOTFOUND;
-    if (argc < 1 || !XR_IS_SET(args[0])) return xr_bool(0);
+    if (set_is_weak(s))
+        return XR_NOTFOUND;
+    if (argc < 1 || !XR_IS_SET(args[0]))
+        return xr_bool(0);
     return xr_bool(xr_set_is_subset(s, XR_TO_SET(args[0])));
 }
 
-XrValue xr_set_method_is_superset(XrayIsolate *iso, XrValue self,
-                                  XrValue *args, int argc) {
-    (void)iso;
+XrValue xr_set_method_is_superset(XrayIsolate *iso, XrValue self, XrValue *args, int argc) {
+    (void) iso;
     XrSet *s = set_self(self);
-    if (set_is_weak(s)) return XR_NOTFOUND;
-    if (argc < 1 || !XR_IS_SET(args[0])) return xr_bool(0);
+    if (set_is_weak(s))
+        return XR_NOTFOUND;
+    if (argc < 1 || !XR_IS_SET(args[0]))
+        return xr_bool(0);
     return xr_bool(xr_set_is_superset(s, XR_TO_SET(args[0])));
 }
 
-XrValue xr_set_method_to_array(XrayIsolate *iso, XrValue self,
-                               XrValue *args, int argc) {
-    (void)args; (void)argc;
+XrValue xr_set_method_to_array(XrayIsolate *iso, XrValue self, XrValue *args, int argc) {
+    (void) args;
+    (void) argc;
     XrSet *s = set_self(self);
-    if (set_is_weak(s)) return XR_NOTFOUND;
+    if (set_is_weak(s))
+        return XR_NOTFOUND;
     XrArray *arr = xr_set_values(xr_current_coro(iso), s);
     return xr_value_from_array(arr);
 }
 
-XrValue xr_set_method_iterator(XrayIsolate *iso, XrValue self,
-                               XrValue *args, int argc) {
-    (void)args; (void)argc;
+XrValue xr_set_method_iterator(XrayIsolate *iso, XrValue self, XrValue *args, int argc) {
+    (void) args;
+    (void) argc;
     XrSet *s = set_self(self);
-    if (set_is_weak(s)) return XR_NOTFOUND;
+    if (set_is_weak(s))
+        return XR_NOTFOUND;
     XrIterator *iter = xr_iterator_new_from_set(xr_current_coro(iso), s);
     return iter ? xr_value_from_iterator(iter) : xr_null();
 }
 
-XrValue xr_set_method_to_string(XrayIsolate *iso, XrValue self,
-                                XrValue *args, int argc) {
-    (void)args; (void)argc;
+XrValue xr_set_method_to_string(XrayIsolate *iso, XrValue self, XrValue *args, int argc) {
+    (void) args;
+    (void) argc;
     return xr_string_value(xr_value_to_string(iso, self));
 }
 
 const XrMethodSlot xr_set_method_table[SYMBOL_BUILTIN_COUNT] = {
-    [SYMBOL_HAS]                  = { xr_set_method_has,                  1, 1, 0 },
-    [SYMBOL_DELETE]               = { xr_set_method_delete,               1, 1, 0 },
-    [SYMBOL_IS_EMPTY]             = { xr_set_method_is_empty,             0, 0,
-                                       XR_METHOD_FLAG_PURE | XR_METHOD_FLAG_NO_GC },
-    [SYMBOL_ADD]                  = { xr_set_method_add,                  0, 1,
-                                       XR_METHOD_FLAG_MAY_THROW },
-    [SYMBOL_CLEAR]                = { xr_set_method_clear,                0, 0, 0 },
-    [SYMBOL_UNION]                = { xr_set_method_union,                0, 1, 0 },
-    [SYMBOL_INTERSECTION]         = { xr_set_method_intersection,         0, 1, 0 },
-    [SYMBOL_DIFFERENCE]           = { xr_set_method_difference,           0, 1, 0 },
-    [SYMBOL_SYMMETRIC_DIFFERENCE] = { xr_set_method_symmetric_difference, 0, 1, 0 },
-    [SYMBOL_IS_SUBSET]            = { xr_set_method_is_subset,            0, 1, 0 },
-    [SYMBOL_IS_SUPERSET]          = { xr_set_method_is_superset,          0, 1, 0 },
-    [SYMBOL_TO_ARRAY]             = { xr_set_method_to_array,             0, 0, 0 },
-    [SYMBOL_ITERATOR]             = { xr_set_method_iterator,             0, 0, 0 },
-    [SYMBOL_TOSTRING]             = { xr_set_method_to_string,            0, 0,
-                                       XR_METHOD_FLAG_MAY_THROW },
+    [SYMBOL_HAS] = {xr_set_method_has, 1, 1, 0},
+    [SYMBOL_DELETE] = {xr_set_method_delete, 1, 1, 0},
+    [SYMBOL_IS_EMPTY] = {xr_set_method_is_empty, 0, 0, XR_METHOD_FLAG_PURE | XR_METHOD_FLAG_NO_GC},
+    [SYMBOL_ADD] = {xr_set_method_add, 0, 1, XR_METHOD_FLAG_MAY_THROW},
+    [SYMBOL_CLEAR] = {xr_set_method_clear, 0, 0, 0},
+    [SYMBOL_UNION] = {xr_set_method_union, 0, 1, 0},
+    [SYMBOL_INTERSECTION] = {xr_set_method_intersection, 0, 1, 0},
+    [SYMBOL_DIFFERENCE] = {xr_set_method_difference, 0, 1, 0},
+    [SYMBOL_SYMMETRIC_DIFFERENCE] = {xr_set_method_symmetric_difference, 0, 1, 0},
+    [SYMBOL_IS_SUBSET] = {xr_set_method_is_subset, 0, 1, 0},
+    [SYMBOL_IS_SUPERSET] = {xr_set_method_is_superset, 0, 1, 0},
+    [SYMBOL_TO_ARRAY] = {xr_set_method_to_array, 0, 0, 0},
+    [SYMBOL_ITERATOR] = {xr_set_method_iterator, 0, 0, 0},
+    [SYMBOL_TOSTRING] = {xr_set_method_to_string, 0, 0, XR_METHOD_FLAG_MAY_THROW},
 };

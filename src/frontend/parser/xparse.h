@@ -53,10 +53,8 @@ struct XrArena;                          // Defined in base/xarena.h
 // reported by invoking this on `user_data`. `end_line`/`end_column`
 // describe the affected range; `message` is owned by the parser and is
 // only valid for the duration of the call.
-typedef void (*XrParseErrorCallback)(void *user_data,
-                                     int line, int column,
-                                     int end_line, int end_column,
-                                     const char *message);
+typedef void (*XrParseErrorCallback)(void *user_data, int line, int column, int end_line,
+                                     int end_column, const char *message);
 
 /* ========== Parser State ==========
  *
@@ -68,21 +66,21 @@ typedef void (*XrParseErrorCallback)(void *user_data,
  * Every other field is parser-internal and should not be touched.
  */
 struct Parser {
-    Scanner scanner;        // Lexical scanner
-    Token current;          // Current token
-    Token previous;         // Previous token
-    int had_error;          // Whether there was a syntax error
-    int panic_mode;         // Whether in panic mode (error recovery)
-    XrayIsolate *X;         // Xray isolate
-    struct XrArena *arena;  // Optional arena for AST allocation (NULL = use malloc)
-    XrTypeScope *type_scope;    // Parser-owned scope for type aliases / generic params
-    const char *source_file; // Source file path (for error reporting)
+    Scanner scanner;          // Lexical scanner
+    Token current;            // Current token
+    Token previous;           // Previous token
+    int had_error;            // Whether there was a syntax error
+    int panic_mode;           // Whether in panic mode (error recovery)
+    XrayIsolate *X;           // Xray isolate
+    struct XrArena *arena;    // Optional arena for AST allocation (NULL = use malloc)
+    XrTypeScope *type_scope;  // Parser-owned scope for type aliases / generic params
+    const char *source_file;  // Source file path (for error reporting)
 
     // Error callback (for LSP)
     XrParseErrorCallback error_callback;
     void *error_callback_data;
-    int error_count;        // Number of errors collected
-    int max_errors;         // Max errors before stopping (0 = unlimited)
+    int error_count;  // Number of errors collected
+    int max_errors;   // Max errors before stopping (0 = unlimited)
 
     // Allow bare container types (Array, Map, Set, Channel) without generic params.
     // Set temporarily by 'is'/'as' parsers where runtime type checks don't need
@@ -97,20 +95,17 @@ struct Parser {
 XR_FUNC AstNode *xr_parse(XrayIsolate *X, const char *source);
 
 // Same as xr_parse but tags diagnostics with the given file path.
-XR_FUNC AstNode *xr_parse_with_source(XrayIsolate *X, const char *source,
-                                      const char *source_file);
+XR_FUNC AstNode *xr_parse_with_source(XrayIsolate *X, const char *source, const char *source_file);
 
 // Parse a program AND collect comments as trivia attached to AST nodes.
 // Used by the formatter; otherwise prefer xr_parse_with_source.
-XR_FUNC AstNode *xr_parse_with_trivia(XrayIsolate *X, const char *source,
-                                      const char *source_file);
+XR_FUNC AstNode *xr_parse_with_trivia(XrayIsolate *X, const char *source, const char *source_file);
 
 // Parse a single expression as a self-contained translation unit.
 // Returns an AST_PROGRAM node whose first declaration is the expression
 // (so xr_program_destroy() releases everything uniformly). Returns NULL
 // on parse error. Used by REPL completeness check and DAP eval.
-XR_FUNC AstNode *xr_parse_expression_string(XrayIsolate *X,
-                                            const char *source,
+XR_FUNC AstNode *xr_parse_expression_string(XrayIsolate *X, const char *source,
                                             const char *source_file);
 
 /* ========== LSP Recoverable Parsing ==========
@@ -129,14 +124,12 @@ XR_FUNC AstNode *xr_parse_expression_string(XrayIsolate *X,
 // AST allocation; it MUST already be installed on the isolate via
 // xr_isolate_set_current_arena. Pass NULL to leave the isolate's current
 // arena in place (caller manages lifetime).
-XR_FUNC void xr_parser_init(Parser *parser, XrayIsolate *X,
-                            const char *source, const char *source_file,
-                            struct XrArena *arena);
+XR_FUNC void xr_parser_init(Parser *parser, XrayIsolate *X, const char *source,
+                            const char *source_file, struct XrArena *arena);
 
 // Install a diagnostic callback. Pass NULL to disable. `max_errors == 0`
 // means "no limit".
-XR_FUNC void xr_parser_set_error_callback(Parser *parser,
-                                          XrParseErrorCallback callback,
+XR_FUNC void xr_parser_set_error_callback(Parser *parser, XrParseErrorCallback callback,
                                           void *user_data, int max_errors);
 
 // Parse with error recovery. Returns a (possibly partial) AST_PROGRAM
@@ -146,4 +139,4 @@ XR_FUNC void xr_parser_set_error_callback(Parser *parser,
 // xr_program_destroy.
 XR_FUNC AstNode *xr_parse_recoverable(Parser *parser);
 
-#endif // XPARSE_H
+#endif  // XPARSE_H

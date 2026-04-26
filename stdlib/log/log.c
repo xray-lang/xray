@@ -34,7 +34,7 @@
 
 /* ========== Async Write Buffer ========== */
 
-#define ASYNC_QUEUE_SIZE   256
+#define ASYNC_QUEUE_SIZE 256
 
 typedef struct {
     char *entries[ASYNC_QUEUE_SIZE];
@@ -43,8 +43,8 @@ typedef struct {
     int count;
     pthread_mutex_t mutex;
     pthread_cond_t not_empty;
-    pthread_cond_t not_full;       // legacy, no longer used by producers
-    pthread_cond_t drained;       // signaled when queue becomes empty
+    pthread_cond_t not_full;  // legacy, no longer used by producers
+    pthread_cond_t drained;   // signaled when queue becomes empty
     pthread_t thread;
     bool running;
     FILE *output;
@@ -65,8 +65,8 @@ typedef struct {
 // g_default_logger / g_async_queue / g_default_logger_mutex.
 typedef struct XrLogState {
     XrLogger default_logger;
-    pthread_mutex_t mutex;   // protects setLevel/setFormat/setOutput
-    AsyncLogQueue *async_queue;   // NULL until enableAsync(true)
+    pthread_mutex_t mutex;       // protects setLevel/setFormat/setOutput
+    AsyncLogQueue *async_queue;  // NULL until enableAsync(true)
     bool async_initialized;
 } XrLogState;
 
@@ -74,16 +74,18 @@ typedef struct XrLogState {
 static void log_state_destroy(void *opaque);
 
 // Retrieve (and lazily create) the per-isolate log state.
-static XrLogState* log_state_get(XrayIsolate *X) {
+static XrLogState *log_state_get(XrayIsolate *X) {
     XR_DCHECK(X != NULL, "log_state_get: isolate must not be NULL");
     XrStdlibCache *cache = xr_stdlib_cache_get(X);
-    if (cache->log_state) return (XrLogState *)cache->log_state;
+    if (cache->log_state)
+        return (XrLogState *) cache->log_state;
 
-    XrLogState *s = (XrLogState *)xr_malloc(sizeof(XrLogState));
-    if (!s) return NULL;
+    XrLogState *s = (XrLogState *) xr_malloc(sizeof(XrLogState));
+    if (!s)
+        return NULL;
     memset(s, 0, sizeof(*s));
 
-    s->default_logger.level  = XR_LOG_INFO;
+    s->default_logger.level = XR_LOG_INFO;
     s->default_logger.format = XR_LOG_FORMAT_TEXT;
     s->default_logger.output = stderr;
     pthread_mutex_init(&s->mutex, NULL);
@@ -94,7 +96,7 @@ static XrLogState* log_state_get(XrayIsolate *X) {
 }
 
 // Convenience: return the isolate's default logger.
-static XrLogger* log_default(XrayIsolate *X) {
+static XrLogger *log_default(XrayIsolate *X) {
     XrLogState *s = log_state_get(X);
     return s ? &s->default_logger : NULL;
 }
@@ -102,8 +104,8 @@ static XrLogger* log_default(XrayIsolate *X) {
 /* ========== Async Write Implementation ========== */
 
 // Background thread function (arg is the owning AsyncLogQueue*)
-static void* async_log_thread(void *arg) {
-    AsyncLogQueue *q = (AsyncLogQueue *)arg;
+static void *async_log_thread(void *arg) {
+    AsyncLogQueue *q = (AsyncLogQueue *) arg;
 
     while (1) {
         pthread_mutex_lock(&q->mutex);
@@ -128,7 +130,7 @@ static void* async_log_thread(void *arg) {
         // Snapshot the dropped counter so we can emit a synthetic marker
         // outside the mutex; we only report the new deltas so the user
         // sees a running total grow naturally instead of repeating.
-        size_t drop_now      = q->dropped;
+        size_t drop_now = q->dropped;
         size_t drop_reported = q->dropped_reported;
         if (drop_now > drop_reported) {
             q->dropped_reported = drop_now;
@@ -150,8 +152,7 @@ static void* async_log_thread(void *arg) {
         }
         // Emit dropped-marker once per drain cycle when new drops happened.
         if (drop_now > drop_reported) {
-            fprintf(out, "[log] dropped=%zu (async queue full)\n",
-                    drop_now - drop_reported);
+            fprintf(out, "[log] dropped=%zu (async queue full)\n", drop_now - drop_reported);
         }
         fflush(out);
     }
@@ -162,10 +163,12 @@ static void* async_log_thread(void *arg) {
 // Initialize async queue on the given log state.
 static void async_queue_init(XrLogState *ls, FILE *output) {
     XR_DCHECK(ls != NULL, "async_queue_init: log state must not be NULL");
-    if (ls->async_initialized) return;
+    if (ls->async_initialized)
+        return;
 
-    AsyncLogQueue *q = (AsyncLogQueue *)xr_malloc(sizeof(AsyncLogQueue));
-    if (!q) return;
+    AsyncLogQueue *q = (AsyncLogQueue *) xr_malloc(sizeof(AsyncLogQueue));
+    if (!q)
+        return;
     memset(q, 0, sizeof(AsyncLogQueue));
 
     pthread_mutex_init(&q->mutex, NULL);
@@ -183,7 +186,8 @@ static void async_queue_init(XrLogState *ls, FILE *output) {
 
 // Stop async queue.
 static void async_queue_stop(XrLogState *ls) {
-    if (!ls->async_initialized || !ls->async_queue) return;
+    if (!ls->async_initialized || !ls->async_queue)
+        return;
 
     AsyncLogQueue *q = ls->async_queue;
 
@@ -223,7 +227,10 @@ static void async_queue_stop(XrLogState *ls) {
 //     postmortem analysis; the writer thread later emits a synthetic
 //     "[log] dropped=N" marker so the user knows messages were lost.
 static void async_log_write(XrLogState *ls, char *msg) {
-    if (!ls->async_initialized || !ls->async_queue) { xr_free(msg); return; }
+    if (!ls->async_initialized || !ls->async_queue) {
+        xr_free(msg);
+        return;
+    }
 
     AsyncLogQueue *q = ls->async_queue;
 
@@ -255,7 +262,8 @@ static void async_log_write(XrLogState *ls, char *msg) {
 
 // Flush async queue (blocks until complete)
 static void async_queue_flush(XrLogState *ls) {
-    if (!ls->async_initialized || !ls->async_queue) return;
+    if (!ls->async_initialized || !ls->async_queue)
+        return;
 
     AsyncLogQueue *q = ls->async_queue;
 
@@ -274,31 +282,43 @@ static void async_queue_flush(XrLogState *ls) {
 // all allocation, growth, and OOM handling to the shared implementation.
 typedef XrCtxBuf CtxBuf;
 
-#define ctxbuf_init(b, cap)         xr_ctxbuf_init((b), (size_t)(cap))
-#define ctxbuf_append(b, s, slen)   xr_ctxbuf_append((b), (s), (size_t)(slen))
-#define ctxbuf_putc(b, c)           xr_ctxbuf_putc((b), (c))
-#define ctxbuf_printf(b, ...)       xr_ctxbuf_appendf((b), __VA_ARGS__)
+#define ctxbuf_init(b, cap) xr_ctxbuf_init((b), (size_t) (cap))
+#define ctxbuf_append(b, s, slen) xr_ctxbuf_append((b), (s), (size_t) (slen))
+#define ctxbuf_putc(b, c) xr_ctxbuf_putc((b), (c))
+#define ctxbuf_printf(b, ...) xr_ctxbuf_appendf((b), __VA_ARGS__)
 
 /* ========== Helper Functions ========== */
 
-static const char* xr_log_level_name(XrLogLevel level) {
+static const char *xr_log_level_name(XrLogLevel level) {
     switch (level) {
-        case XR_LOG_DEBUG: return "DEBUG";
-        case XR_LOG_INFO:  return "INFO";
-        case XR_LOG_WARN:  return "WARN";
-        case XR_LOG_ERROR: return "ERROR";
-        case XR_LOG_FATAL: return "FATAL";
-        default:           return "UNKNOWN";
+        case XR_LOG_DEBUG:
+            return "DEBUG";
+        case XR_LOG_INFO:
+            return "INFO";
+        case XR_LOG_WARN:
+            return "WARN";
+        case XR_LOG_ERROR:
+            return "ERROR";
+        case XR_LOG_FATAL:
+            return "FATAL";
+        default:
+            return "UNKNOWN";
     }
 }
 
 static XrLogLevel xr_log_level_parse(const char *name) {
-    if (strcasecmp(name, "debug") == 0) return XR_LOG_DEBUG;
-    if (strcasecmp(name, "info") == 0)  return XR_LOG_INFO;
-    if (strcasecmp(name, "warn") == 0)  return XR_LOG_WARN;
-    if (strcasecmp(name, "warning") == 0) return XR_LOG_WARN;
-    if (strcasecmp(name, "error") == 0) return XR_LOG_ERROR;
-    if (strcasecmp(name, "fatal") == 0) return XR_LOG_FATAL;
+    if (strcasecmp(name, "debug") == 0)
+        return XR_LOG_DEBUG;
+    if (strcasecmp(name, "info") == 0)
+        return XR_LOG_INFO;
+    if (strcasecmp(name, "warn") == 0)
+        return XR_LOG_WARN;
+    if (strcasecmp(name, "warning") == 0)
+        return XR_LOG_WARN;
+    if (strcasecmp(name, "error") == 0)
+        return XR_LOG_ERROR;
+    if (strcasecmp(name, "fatal") == 0)
+        return XR_LOG_FATAL;
     return XR_LOG_INFO;  // Default
 }
 
@@ -311,8 +331,8 @@ static void get_timestamp(char *buf, size_t size) {
     localtime_r(&tv.tv_sec, &tm);
 
     // Format: 2024-12-14T22:45:00.123
-    int len = (int)strftime(buf, size, "%Y-%m-%dT%H:%M:%S", &tm);
-    snprintf(buf + len, size - len, ".%03d", (int)(tv.tv_usec / 1000));
+    int len = (int) strftime(buf, size, "%Y-%m-%dT%H:%M:%S", &tm);
+    snprintf(buf + len, size - len, ".%03d", (int) (tv.tv_usec / 1000));
 }
 
 // Escape JSON string into CtxBuf.
@@ -329,28 +349,38 @@ static void write_json_string_buf(CtxBuf *b, const char *str) {
     const char *p = str;
     const char *end = str + len;
     while (p < end) {
-        unsigned char c = (unsigned char)*p;
+        unsigned char c = (unsigned char) *p;
         if (c < 0x80) {
             // Fast path: ASCII.
             switch (c) {
-                case '"':  ctxbuf_append(b, "\\\"", 2); break;
-                case '\\': ctxbuf_append(b, "\\\\", 2); break;
-                case '\n': ctxbuf_append(b, "\\n", 2);  break;
-                case '\r': ctxbuf_append(b, "\\r", 2);  break;
-                case '\t': ctxbuf_append(b, "\\t", 2);  break;
+                case '"':
+                    ctxbuf_append(b, "\\\"", 2);
+                    break;
+                case '\\':
+                    ctxbuf_append(b, "\\\\", 2);
+                    break;
+                case '\n':
+                    ctxbuf_append(b, "\\n", 2);
+                    break;
+                case '\r':
+                    ctxbuf_append(b, "\\r", 2);
+                    break;
+                case '\t':
+                    ctxbuf_append(b, "\\t", 2);
+                    break;
                 default:
                     if (c < 0x20) {
                         char esc[8];
                         int n = snprintf(esc, sizeof(esc), "\\u%04x", c);
                         ctxbuf_append(b, esc, n);
                     } else {
-                        ctxbuf_putc(b, (char)c);
+                        ctxbuf_putc(b, (char) c);
                     }
             }
             p++;
         } else {
             uint32_t cp = 0;
-            int size = xr_utf8_decode(p, (size_t)(end - p), &cp);
+            int size = xr_utf8_decode(p, (size_t) (end - p), &cp);
             if (size <= 0 || cp == XR_UNICODE_INVALID) {
                 // Invalid byte: emit U+FFFD (EF BF BD) and skip one byte.
                 ctxbuf_append(b, "\xEF\xBF\xBD", 3);
@@ -371,11 +401,11 @@ static void write_json_string_buf(CtxBuf *b, const char *str) {
 // exactly back to the original double value (the minimum guaranteed
 // precision for IEEE-754 binary64). The previous %.6g truncated meaningful
 // digits for sensor/metric payloads.
-static const char* value_to_string(XrValue val, char *buf, size_t size) {
+static const char *value_to_string(XrValue val, char *buf, size_t size) {
     if (XR_IS_STRING(val)) {
         return XR_STRING_CHARS(XR_TO_STRING(val));
     } else if (XR_IS_INT(val)) {
-        snprintf(buf, size, "%lld", (long long)XR_TO_INT(val));
+        snprintf(buf, size, "%lld", (long long) XR_TO_INT(val));
         return buf;
     } else if (XR_IS_FLOAT(val)) {
         snprintf(buf, size, "%.17g", XR_TO_FLOAT(val));
@@ -401,15 +431,15 @@ static bool needs_quoting(const char *str) {
 /* ========== Core Log Output ========== */
 
 // Get filename without path
-static const char* get_filename(const char *path) {
-    if (!path) return NULL;
+static const char *get_filename(const char *path) {
+    if (!path)
+        return NULL;
     const char *slash = strrchr(path, '/');
     return slash ? slash + 1 : path;
 }
 
-static void xr_log_write_ex(XrLogState *ls, XrLogger *logger, XrLogLevel level,
-                            const char *msg, XrValue *attrs, int nattrs,
-                            const char *source_file, int source_line) {
+static void xr_log_write_ex(XrLogState *ls, XrLogger *logger, XrLogLevel level, const char *msg,
+                            XrValue *attrs, int nattrs, const char *source_file, int source_line) {
     XR_DCHECK(msg != NULL, "xr_log_write_ex: NULL msg");
     XR_DCHECK(logger != NULL, "xr_log_write_ex: NULL logger");
 
@@ -421,7 +451,8 @@ static void xr_log_write_ex(XrLogState *ls, XrLogger *logger, XrLogLevel level,
     // Build log line into CtxBuf (cross-platform, no open_memstream)
     CtxBuf b;
     ctxbuf_init(&b, 512);
-    if (!b.data) return;
+    if (!b.data)
+        return;
 
     char timestamp[32];
     get_timestamp(timestamp, sizeof(timestamp));
@@ -432,8 +463,7 @@ static void xr_log_write_ex(XrLogState *ls, XrLogger *logger, XrLogLevel level,
 
     if (logger->format == XR_LOG_FORMAT_JSON) {
         // JSON format output
-        ctxbuf_printf(&b, "{\"time\":\"%s\",\"level\":\"%s\"",
-                      timestamp, xr_log_level_name(level));
+        ctxbuf_printf(&b, "{\"time\":\"%s\",\"level\":\"%s\"", timestamp, xr_log_level_name(level));
 
         // Source location
         if (show_source) {
@@ -465,12 +495,11 @@ static void xr_log_write_ex(XrLogState *ls, XrLogger *logger, XrLogLevel level,
             if (XR_IS_STRING(val)) {
                 write_json_string_buf(&b, XR_STRING_CHARS(XR_TO_STRING(val)));
             } else if (XR_IS_INT(val)) {
-                ctxbuf_printf(&b, "%lld", (long long)XR_TO_INT(val));
+                ctxbuf_printf(&b, "%lld", (long long) XR_TO_INT(val));
             } else if (XR_IS_FLOAT(val)) {
                 ctxbuf_printf(&b, "%.17g", XR_TO_FLOAT(val));
             } else if (XR_IS_BOOL(val)) {
-                ctxbuf_append(&b, XR_TO_BOOL(val) ? "true" : "false",
-                              XR_TO_BOOL(val) ? 4 : 5);
+                ctxbuf_append(&b, XR_TO_BOOL(val) ? "true" : "false", XR_TO_BOOL(val) ? 4 : 5);
             } else if (XR_IS_NULL(val)) {
                 ctxbuf_append(&b, "null", 4);
             } else {
@@ -483,11 +512,11 @@ static void xr_log_write_ex(XrLogState *ls, XrLogger *logger, XrLogLevel level,
         // Text format output
         if (show_source) {
             if (filename) {
-                ctxbuf_printf(&b, "%s %-5s [%s:%d] %s", timestamp,
-                              xr_log_level_name(level), filename, source_line, msg);
+                ctxbuf_printf(&b, "%s %-5s [%s:%d] %s", timestamp, xr_log_level_name(level),
+                              filename, source_line, msg);
             } else {
-                ctxbuf_printf(&b, "%s %-5s [L%d] %s", timestamp,
-                              xr_log_level_name(level), source_line, msg);
+                ctxbuf_printf(&b, "%s %-5s [L%d] %s", timestamp, xr_log_level_name(level),
+                              source_line, msg);
             }
         } else {
             ctxbuf_printf(&b, "%s %-5s %s", timestamp, xr_log_level_name(level), msg);
@@ -534,21 +563,22 @@ static void xr_log_write_ex(XrLogState *ls, XrLogger *logger, XrLogLevel level,
 }
 
 // Simplified version without source location
-static void xr_log_write(XrLogState *ls, XrLogger *logger, XrLogLevel level,
-                         const char *msg, XrValue *attrs, int nattrs) {
+static void xr_log_write(XrLogState *ls, XrLogger *logger, XrLogLevel level, const char *msg,
+                         XrValue *attrs, int nattrs) {
     xr_log_write_ex(ls, logger, level, msg, attrs, nattrs, NULL, 0);
 }
 
 /* ========== VM Binding Functions ========== */
 
 // Extract message and attributes from args
-static void extract_log_args(XrValue *args, int nargs,
-                             const char **msg, XrValue **attrs, int *nattrs) {
+static void extract_log_args(XrValue *args, int nargs, const char **msg, XrValue **attrs,
+                             int *nattrs) {
     *msg = "";
     *attrs = NULL;
     *nattrs = 0;
 
-    if (nargs < 1) return;
+    if (nargs < 1)
+        return;
 
     // First arg is message
     if (XR_IS_STRING(args[0])) {
@@ -566,19 +596,21 @@ static void extract_log_args(XrValue *args, int nargs,
 static void get_source_location(XrayIsolate *isolate, const char **out_file, int *out_line) {
     *out_file = NULL;
     *out_line = 0;
-    if (!isolate || isolate->vm.frame_count == 0) return;
+    if (!isolate || isolate->vm.frame_count == 0)
+        return;
 
     // Walk frame stack to find first valid xray frame
     for (int i = isolate->vm.frame_count - 1; i >= 0; i--) {
         XrBcCallFrame *frame = &isolate->vm.frames[i];
-        if (!frame->closure || !frame->closure->proto) continue;
+        if (!frame->closure || !frame->closure->proto)
+            continue;
 
         XrProto *proto = frame->closure->proto;
 
         // Get line number from lineinfo
         if (proto->lineinfo.count > 0 && frame->pc) {
-            int pc_offset = (int)(frame->pc - 1 - PROTO_CODE_BASE(proto));
-            if (pc_offset >= 0 && pc_offset < (int)proto->code.count) {
+            int pc_offset = (int) (frame->pc - 1 - PROTO_CODE_BASE(proto));
+            if (pc_offset >= 0 && pc_offset < (int) proto->code.count) {
                 int line = PROTO_LINE(proto, pc_offset);
                 if (line > 0) {
                     *out_line = line;
@@ -591,8 +623,8 @@ static void get_source_location(XrayIsolate *isolate, const char **out_file, int
 }
 
 // Log output with source location
-static void log_with_source(XrayIsolate *isolate, XrLogLevel level,
-                            const char *msg, XrValue *attrs, int nattrs) {
+static void log_with_source(XrayIsolate *isolate, XrLogLevel level, const char *msg, XrValue *attrs,
+                            int nattrs) {
     XrLogState *ls = log_state_get(isolate);
     XrLogger *logger = &ls->default_logger;
     const char *file = NULL;
@@ -649,7 +681,8 @@ static XrValue xr_log_fatal(XrayIsolate *isolate, XrValue *args, int nargs) {
     log_with_source(isolate, XR_LOG_FATAL, msg, attrs, nattrs);
     // Flush async queue before exit
     XrLogState *ls = log_state_get(isolate);
-    if (ls->async_initialized) async_queue_flush(ls);
+    if (ls->async_initialized)
+        async_queue_flush(ls);
     exit(1);
     return xr_null();  // Unreachable
 }
@@ -695,8 +728,8 @@ static XrValue xr_log_enable_async(XrayIsolate *isolate, XrValue *args, int narg
 }
 
 static XrValue xr_log_flush(XrayIsolate *isolate, XrValue *args, int nargs) {
-    (void)args;
-    (void)nargs;
+    (void) args;
+    (void) nargs;
 
     XrLogState *ls = log_state_get(isolate);
     XrLogger *logger = &ls->default_logger;
@@ -717,7 +750,7 @@ static XrValue xr_log_set_level(XrayIsolate *isolate, XrValue *args, int nargs) 
     XrLogger *logger = &ls->default_logger;
     pthread_mutex_lock(&ls->mutex);
     if (XR_IS_INT(args[0])) {
-        logger->level = (XrLogLevel)XR_TO_INT(args[0]);
+        logger->level = (XrLogLevel) XR_TO_INT(args[0]);
     } else if (XR_IS_STRING(args[0])) {
         logger->level = xr_log_level_parse(XR_STRING_CHARS(XR_TO_STRING(args[0])));
     }
@@ -786,7 +819,7 @@ static XrValue xr_log_set_output(XrayIsolate *isolate, XrValue *args, int nargs)
     if (old_out != NULL && old_out != stderr && old_out != stdout) {
         fclose(old_out);
     }
-    (void)opened_file;
+    (void) opened_file;
     return xr_null();
 }
 
@@ -796,7 +829,7 @@ static XrValue xr_log_is_enabled(XrayIsolate *isolate, XrValue *args, int nargs)
     }
 
     XrLogState *ls = log_state_get(isolate);
-    XrLogLevel level = (XrLogLevel)XR_TO_INT(args[0]);
+    XrLogLevel level = (XrLogLevel) XR_TO_INT(args[0]);
 
     return xr_bool(level >= ls->default_logger.level);
 }
@@ -805,25 +838,29 @@ static XrValue xr_log_is_enabled(XrayIsolate *isolate, XrValue *args, int nargs)
 
 static XrValue wrap_logger(XrayIsolate *X, XrLogger *logger) {
     XrCoroutine *coro = xr_current_coro(X);
-    XrLoggerRef *ref = (XrLoggerRef*)xr_alloc(coro, sizeof(XrLoggerRef), XR_TLOGGER);
-    if (!ref) return xr_null();
+    XrLoggerRef *ref = (XrLoggerRef *) xr_alloc(coro, sizeof(XrLoggerRef), XR_TLOGGER);
+    if (!ref)
+        return xr_null();
     ref->logger = logger;
     return XR_FROM_PTR(ref);
 }
 
-static XrLogger* unwrap_logger(XrayIsolate *X, XrValue v) {
-    (void)X;
-    if (!XR_IS_PTR(v)) return NULL;
-    XrGCHeader *gc = (XrGCHeader*)XR_TO_PTR(v);
-    if (XR_GC_GET_TYPE(gc) != XR_TLOGGER) return NULL;
-    return ((XrLoggerRef*)gc)->logger;
+static XrLogger *unwrap_logger(XrayIsolate *X, XrValue v) {
+    (void) X;
+    if (!XR_IS_PTR(v))
+        return NULL;
+    XrGCHeader *gc = (XrGCHeader *) XR_TO_PTR(v);
+    if (XR_GC_GET_TYPE(gc) != XR_TLOGGER)
+        return NULL;
+    return ((XrLoggerRef *) gc)->logger;
 }
 
 // Create child logger
-static XrLogger* create_child_logger(XrLogger *parent, XrValue *attrs, int nattrs) {
+static XrLogger *create_child_logger(XrLogger *parent, XrValue *attrs, int nattrs) {
     XR_DCHECK(parent != NULL, "create_child_logger: parent must not be NULL");
-    XrLogger *child = (XrLogger*)xr_malloc(sizeof(XrLogger));
-    if (!child) return NULL;
+    XrLogger *child = (XrLogger *) xr_malloc(sizeof(XrLogger));
+    if (!child)
+        return NULL;
 
     // Inherit parent logger configuration
     child->level = parent->level;
@@ -865,41 +902,45 @@ static XrLogger* create_child_logger(XrLogger *parent, XrValue *attrs, int nattr
         const char *key_str = value_to_string(key, vbuf, sizeof(vbuf));
 
         // === JSON context ===
-        if (jbuf.len > 0) ctxbuf_putc(&jbuf, ',');
+        if (jbuf.len > 0)
+            ctxbuf_putc(&jbuf, ',');
         ctxbuf_putc(&jbuf, '"');
-        ctxbuf_append(&jbuf, key_str, (int)strlen(key_str));
+        ctxbuf_append(&jbuf, key_str, (int) strlen(key_str));
         ctxbuf_append(&jbuf, "\":", 2);
 
         if (XR_IS_STRING(val)) {
             write_json_string_buf(&jbuf, XR_STRING_CHARS(XR_TO_STRING(val)));
         } else if (XR_IS_INT(val)) {
-            char tmp[32]; int n = snprintf(tmp, sizeof(tmp), "%lld", (long long)XR_TO_INT(val));
+            char tmp[32];
+            int n = snprintf(tmp, sizeof(tmp), "%lld", (long long) XR_TO_INT(val));
             ctxbuf_append(&jbuf, tmp, n);
         } else if (XR_IS_FLOAT(val)) {
             // 32 bytes is enough for the longest %.17g formatting of a
             // finite double: sign + 17 digits + 'e' + sign + 3-digit exp.
-            char tmp[32]; int n = snprintf(tmp, sizeof(tmp), "%.17g", XR_TO_FLOAT(val));
+            char tmp[32];
+            int n = snprintf(tmp, sizeof(tmp), "%.17g", XR_TO_FLOAT(val));
             ctxbuf_append(&jbuf, tmp, n);
         } else if (XR_IS_BOOL(val)) {
             const char *s = XR_TO_BOOL(val) ? "true" : "false";
-            ctxbuf_append(&jbuf, s, (int)strlen(s));
+            ctxbuf_append(&jbuf, s, (int) strlen(s));
         } else {
             ctxbuf_append(&jbuf, "null", 4);
         }
 
         // === Text context ===
-        if (tbuf.len > 0) ctxbuf_putc(&tbuf, ' ');
-        ctxbuf_append(&tbuf, key_str, (int)strlen(key_str));
+        if (tbuf.len > 0)
+            ctxbuf_putc(&tbuf, ' ');
+        ctxbuf_append(&tbuf, key_str, (int) strlen(key_str));
         ctxbuf_putc(&tbuf, '=');
 
         char val_buf[64];
         const char *val_str = value_to_string(val, val_buf, sizeof(val_buf));
         if (needs_quoting(val_str)) {
             ctxbuf_putc(&tbuf, '"');
-            ctxbuf_append(&tbuf, val_str, (int)strlen(val_str));
+            ctxbuf_append(&tbuf, val_str, (int) strlen(val_str));
             ctxbuf_putc(&tbuf, '"');
         } else {
-            ctxbuf_append(&tbuf, val_str, (int)strlen(val_str));
+            ctxbuf_append(&tbuf, val_str, (int) strlen(val_str));
         }
     }
 
@@ -914,15 +955,18 @@ static XrLogger* create_child_logger(XrLogger *parent, XrValue *attrs, int nattr
 static XrValue xr_log_child(XrayIsolate *isolate, XrValue *args, int nargs) {
     XrLogger *parent = log_default(isolate);
     XrLogger *child = create_child_logger(parent, args, nargs / 2);
-    if (!child) return xr_null();
+    if (!child)
+        return xr_null();
     return wrap_logger(isolate, child);
 }
 
 // Common implementation for child logger methods
 static XrValue logger_log_at(XrayIsolate *isolate, XrValue *args, int nargs, XrLogLevel level) {
-    if (nargs < 1) return xr_null();
+    if (nargs < 1)
+        return xr_null();
     XrLogger *logger = unwrap_logger(isolate, args[0]);
-    if (!logger) return xr_null();
+    if (!logger)
+        return xr_null();
 
     const char *msg = "";
     if (nargs > 1 && XR_IS_STRING(args[1])) {
@@ -937,30 +981,42 @@ static XrValue logger_log_at(XrayIsolate *isolate, XrValue *args, int nargs, XrL
     return xr_null();
 }
 
-static XrValue xr_logger_debug(XrayIsolate *X, XrValue *args, int n) { return logger_log_at(X, args, n, XR_LOG_DEBUG); }
-static XrValue xr_logger_info(XrayIsolate *X, XrValue *args, int n)  { return logger_log_at(X, args, n, XR_LOG_INFO); }
-static XrValue xr_logger_warn(XrayIsolate *X, XrValue *args, int n)  { return logger_log_at(X, args, n, XR_LOG_WARN); }
-static XrValue xr_logger_error(XrayIsolate *X, XrValue *args, int n) { return logger_log_at(X, args, n, XR_LOG_ERROR); }
+static XrValue xr_logger_debug(XrayIsolate *X, XrValue *args, int n) {
+    return logger_log_at(X, args, n, XR_LOG_DEBUG);
+}
+static XrValue xr_logger_info(XrayIsolate *X, XrValue *args, int n) {
+    return logger_log_at(X, args, n, XR_LOG_INFO);
+}
+static XrValue xr_logger_warn(XrayIsolate *X, XrValue *args, int n) {
+    return logger_log_at(X, args, n, XR_LOG_WARN);
+}
+static XrValue xr_logger_error(XrayIsolate *X, XrValue *args, int n) {
+    return logger_log_at(X, args, n, XR_LOG_ERROR);
+}
 
 static XrValue xr_logger_fatal(XrayIsolate *X, XrValue *args, int n) {
     logger_log_at(X, args, n, XR_LOG_FATAL);
     // Flush async queue before exit
     XrLogState *ls = log_state_get(X);
-    if (ls->async_initialized) async_queue_flush(ls);
+    if (ls->async_initialized)
+        async_queue_flush(ls);
     exit(1);
     return xr_null();
 }
 
 static XrValue xr_logger_child(XrayIsolate *isolate, XrValue *args, int nargs) {
-    if (nargs < 1) return xr_null();
+    if (nargs < 1)
+        return xr_null();
     XrLogger *parent = unwrap_logger(isolate, args[0]);
-    if (!parent) return xr_null();
+    if (!parent)
+        return xr_null();
 
     XrValue *attrs = (nargs > 1) ? &args[1] : NULL;
     int nattrs = (nargs > 1) ? (nargs - 1) / 2 : 0;
 
     XrLogger *child = create_child_logger(parent, attrs, nattrs);
-    if (!child) return xr_null();
+    if (!child)
+        return xr_null();
     return wrap_logger(isolate, child);
 }
 
@@ -969,8 +1025,9 @@ static XrValue xr_logger_child(XrayIsolate *isolate, XrValue *args, int nargs) {
 // Destroy the per-isolate log state. Called from xr_stdlib_cache_free via
 // the log_state_cleanup function pointer.
 static void log_state_destroy(void *opaque) {
-    XrLogState *ls = (XrLogState *)opaque;
-    if (!ls) return;
+    XrLogState *ls = (XrLogState *) opaque;
+    if (!ls)
+        return;
 
     // Tear down the async writer thread if it is still running.
     if (ls->async_initialized) {
@@ -992,8 +1049,8 @@ static void log_state_destroy(void *opaque) {
 // Declared (with XR_FUNC) in src/runtime/gc/xgc_internal.h.
 // Called by GC when XrLoggerRef is collected.
 void xr_gc_destroy_logger(XrGCHeader *obj, struct XrCoroGC *owning_gc) {
-    (void)owning_gc;
-    XrLoggerRef *ref = (XrLoggerRef*)obj;
+    (void) owning_gc;
+    XrLoggerRef *ref = (XrLoggerRef *) obj;
     if (ref->logger) {
         xr_free(ref->logger->json_ctx);
         xr_free(ref->logger->text_ctx);
@@ -1018,17 +1075,21 @@ XR_DEFINE_BUILTIN(xr_log_fatal, "fatal", "(...args: any): void", "Log fatal mess
 XR_DEFINE_BUILTIN(xr_log_set_level, "setLevel", "(level: int): void", "Set log level")
 XR_DEFINE_BUILTIN(xr_log_set_format, "setFormat", "(format: string): void", "Set log format")
 XR_DEFINE_BUILTIN(xr_log_set_output, "setOutput", "(path: string): void", "Set log output file")
-XR_DEFINE_BUILTIN(xr_log_is_enabled, "isEnabled", "(level: int): bool", "Check if log level enabled")
-XR_DEFINE_BUILTIN(xr_log_enable_source, "enableSource", "(enabled: bool): void", "Enable source location in logs")
-XR_DEFINE_BUILTIN(xr_log_enable_async, "enableAsync", "(enabled: bool): void", "Enable async logging")
+XR_DEFINE_BUILTIN(xr_log_is_enabled, "isEnabled", "(level: int): bool",
+                  "Check if log level enabled")
+XR_DEFINE_BUILTIN(xr_log_enable_source, "enableSource", "(enabled: bool): void",
+                  "Enable source location in logs")
+XR_DEFINE_BUILTIN(xr_log_enable_async, "enableAsync", "(enabled: bool): void",
+                  "Enable async logging")
 XR_DEFINE_BUILTIN(xr_log_flush, "flush", "(): void", "Flush log buffer")
 XR_DEFINE_BUILTIN(xr_log_child, "child", "(...fields: any): any", "Create child logger")
 
-XrModule* xr_load_module_log(XrayIsolate *isolate) {
+XrModule *xr_load_module_log(XrayIsolate *isolate) {
     XR_DCHECK(isolate != NULL, "xr_load_module_log: NULL isolate");
 
     XrModule *module = xr_module_create_native(isolate, "log");
-    if (!module) return NULL;
+    if (!module)
+        return NULL;
 
     // Log functions
     XRS_EXPORT(module, isolate, "debug", xr_log_debug);
@@ -1059,23 +1120,19 @@ XrModule* xr_load_module_log(XrayIsolate *isolate) {
     module->loaded = true;
 
     // Register Logger as native type for method dispatch via native_type_classes
-    static XrNativeMethod logger_methods[] = {
-        {"debug", xr_logger_debug, -1},
-        {"info",  xr_logger_info,  -1},
-        {"warn",  xr_logger_warn,  -1},
-        {"error", xr_logger_error, -1},
-        {"fatal", xr_logger_fatal, -1},
-        {"child", xr_logger_child, -1},
-        {NULL, NULL, 0}
-    };
+    static XrNativeMethod logger_methods[] = {{"debug", xr_logger_debug, -1},
+                                              {"info", xr_logger_info, -1},
+                                              {"warn", xr_logger_warn, -1},
+                                              {"error", xr_logger_error, -1},
+                                              {"fatal", xr_logger_fatal, -1},
+                                              {"child", xr_logger_child, -1},
+                                              {NULL, NULL, 0}};
 
-    XrNativeTypeInfo logger_type_info = {
-        .name = "Logger",
-        .gc_type = XR_TLOGGER,
-        .methods = logger_methods,
-        .getters = NULL,
-        .static_methods = NULL
-    };
+    XrNativeTypeInfo logger_type_info = {.name = "Logger",
+                                         .gc_type = XR_TLOGGER,
+                                         .methods = logger_methods,
+                                         .getters = NULL,
+                                         .static_methods = NULL};
 
     xr_register_native_type(isolate, &logger_type_info);
 

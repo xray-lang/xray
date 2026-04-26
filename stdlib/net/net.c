@@ -41,7 +41,8 @@ typedef struct {
 
 extern XrIOTryResult xr_socket_accept_try(struct XrayIsolate *X, int listen_fd);
 extern XrIOTryResult xr_socket_read_try(struct XrayIsolate *X, int fd, char *buf, int maxlen);
-extern XrIOTryResult xr_socket_write_try(struct XrayIsolate *X, int fd, const char *data, size_t len);
+extern XrIOTryResult xr_socket_write_try(struct XrayIsolate *X, int fd, const char *data,
+                                         size_t len);
 extern void xr_socket_close(struct XrayIsolate *X, int fd);
 
 #include <stdlib.h>
@@ -63,8 +64,9 @@ extern void xr_socket_close(struct XrayIsolate *X, int fd);
  * Safe to call with fd < 0 or NULL isolate.
  */
 static void net_close_fd(XrayIsolate *X, int fd) {
-    if (fd < 0) return;
-    XrRuntime *runtime = X ? (XrRuntime *)X->vm.runtime : NULL;
+    if (fd < 0)
+        return;
+    XrRuntime *runtime = X ? (XrRuntime *) X->vm.runtime : NULL;
     if (runtime) {
         XrPollDesc *pd = xr_fdmap_get(&runtime->netpoll, fd);
         if (pd && !atomic_load(&pd->closing))
@@ -83,10 +85,12 @@ static void net_close_fd(XrayIsolate *X, int fd) {
  */
 static int net_tcp_connect(const char *host, int port, int *out_ret) {
     XrSockAddr addr;
-    if (!xr_dns_resolve(host, &addr, XR_AF_UNSPEC)) return -1;
+    if (!xr_dns_resolve(host, &addr, XR_AF_UNSPEC))
+        return -1;
 
     int fd = socket(addr.family, SOCK_STREAM, 0);
-    if (fd < 0) return -1;
+    if (fd < 0)
+        return -1;
 
     xr_io_set_nonblocking(fd);
     int opt = 1;
@@ -96,18 +100,20 @@ static int net_tcp_connect(const char *host, int port, int *out_ret) {
     socklen_t sa_len;
     if (addr.family == AF_INET) {
         addr.addr.v4.sin_port = htons(port);
-        sa = (struct sockaddr *)&addr.addr.v4;
+        sa = (struct sockaddr *) &addr.addr.v4;
         sa_len = sizeof(struct sockaddr_in);
     } else {
         addr.addr.v6.sin6_port = htons(port);
-        sa = (struct sockaddr *)&addr.addr.v6;
+        sa = (struct sockaddr *) &addr.addr.v6;
         sa_len = sizeof(struct sockaddr_in6);
     }
 
     int ret = connect(fd, sa, sa_len);
-    if (out_ret) *out_ret = ret;
+    if (out_ret)
+        *out_ret = ret;
 
-    if (ret == 0 || errno == EINPROGRESS) return fd;
+    if (ret == 0 || errno == EINPROGRESS)
+        return fd;
 
     close(fd);
     return -1;
@@ -118,10 +124,10 @@ static int net_tcp_connect(const char *host, int port, int *out_ret) {
 struct XrUdpConn {
     int fd;
     XrNetAddr local_addr;
-    sa_family_t family;     // current address family
+    sa_family_t family;  // current address family
 };
 
-XrUdpConn* xr_udp_new(const char *local_addr, int local_port) {
+XrUdpConn *xr_udp_new(const char *local_addr, int local_port) {
     // Detect if address is IPv6
     sa_family_t family = AF_INET;
     if (local_addr && strchr(local_addr, ':')) {
@@ -129,7 +135,8 @@ XrUdpConn* xr_udp_new(const char *local_addr, int local_port) {
     }
 
     int fd = socket(family, SOCK_DGRAM, 0);
-    if (fd < 0) return NULL;
+    if (fd < 0)
+        return NULL;
 
     if (family == AF_INET) {
         struct sockaddr_in addr;
@@ -143,7 +150,7 @@ XrUdpConn* xr_udp_new(const char *local_addr, int local_port) {
             addr.sin_addr.s_addr = INADDR_ANY;
         }
 
-        if (bind(fd, (struct sockaddr*)&addr, sizeof(addr)) < 0) {
+        if (bind(fd, (struct sockaddr *) &addr, sizeof(addr)) < 0) {
             close(fd);
             return NULL;
         }
@@ -159,7 +166,7 @@ XrUdpConn* xr_udp_new(const char *local_addr, int local_port) {
             addr.sin6_addr = in6addr_any;
         }
 
-        if (bind(fd, (struct sockaddr*)&addr, sizeof(addr)) < 0) {
+        if (bind(fd, (struct sockaddr *) &addr, sizeof(addr)) < 0) {
             close(fd);
             return NULL;
         }
@@ -180,9 +187,9 @@ XrUdpConn* xr_udp_new(const char *local_addr, int local_port) {
     return conn;
 }
 
-int xr_udp_send_to(XrUdpConn *conn, const void *buf, size_t len,
-                   const char *host, int port) {
-    if (!conn || !buf) return -1;
+int xr_udp_send_to(XrUdpConn *conn, const void *buf, size_t len, const char *host, int port) {
+    if (!conn || !buf)
+        return -1;
 
     // Resolve target address (supports IPv4/IPv6)
     XrSockAddr resolved;
@@ -193,42 +200,45 @@ int xr_udp_send_to(XrUdpConn *conn, const void *buf, size_t len,
 
     if (resolved.family == AF_INET) {
         resolved.addr.v4.sin_port = htons(port);
-        return (int)sendto(conn->fd, buf, len, 0,
-                          (struct sockaddr*)&resolved.addr.v4, sizeof(struct sockaddr_in));
+        return (int) sendto(conn->fd, buf, len, 0, (struct sockaddr *) &resolved.addr.v4,
+                            sizeof(struct sockaddr_in));
     } else {
         resolved.addr.v6.sin6_port = htons(port);
-        return (int)sendto(conn->fd, buf, len, 0,
-                          (struct sockaddr*)&resolved.addr.v6, sizeof(struct sockaddr_in6));
+        return (int) sendto(conn->fd, buf, len, 0, (struct sockaddr *) &resolved.addr.v6,
+                            sizeof(struct sockaddr_in6));
     }
 }
 
 int xr_udp_recv_from(XrUdpConn *conn, void *buf, size_t len, XrNetAddr *from) {
-    if (!conn || !buf) return -1;
+    if (!conn || !buf)
+        return -1;
 
     struct sockaddr_storage addr;
     socklen_t addr_len = sizeof(addr);
 
-    ssize_t n = recvfrom(conn->fd, buf, len, 0, (struct sockaddr*)&addr, &addr_len);
-    if (n < 0) return -1;
+    ssize_t n = recvfrom(conn->fd, buf, len, 0, (struct sockaddr *) &addr, &addr_len);
+    if (n < 0)
+        return -1;
 
     if (from) {
         if (addr.ss_family == AF_INET) {
-            struct sockaddr_in *sin = (struct sockaddr_in*)&addr;
+            struct sockaddr_in *sin = (struct sockaddr_in *) &addr;
             from->family = XR_NET_IPV4;
             inet_ntop(AF_INET, &sin->sin_addr, from->host, sizeof(from->host));
             from->port = ntohs(sin->sin_port);
         } else {
-            struct sockaddr_in6 *sin6 = (struct sockaddr_in6*)&addr;
+            struct sockaddr_in6 *sin6 = (struct sockaddr_in6 *) &addr;
             from->family = XR_NET_IPV6;
             inet_ntop(AF_INET6, &sin6->sin6_addr, from->host, sizeof(from->host));
             from->port = ntohs(sin6->sin6_port);
         }
     }
-    return (int)n;
+    return (int) n;
 }
 
 void xr_udp_close(XrUdpConn *conn) {
-    if (!conn) return;
+    if (!conn)
+        return;
     if (conn->fd >= 0) {
         close(conn->fd);
     }
@@ -238,7 +248,8 @@ void xr_udp_close(XrUdpConn *conn) {
 // ========== DNS Implementation (proxy to http_dns) ==========
 
 int xr_dns_lookup(const char *hostname, XrNetAddr *addrs, int max_addrs) {
-    if (!hostname || !addrs || max_addrs <= 0) return 0;
+    if (!hostname || !addrs || max_addrs <= 0)
+        return 0;
 
     XrSockAddr resolved[8];
     int count = xr_dns_resolve_all(hostname, resolved, max_addrs > 8 ? 8 : max_addrs, XR_AF_UNSPEC);
@@ -249,7 +260,8 @@ int xr_dns_lookup(const char *hostname, XrNetAddr *addrs, int max_addrs) {
             inet_ntop(AF_INET, &resolved[i].addr.v4.sin_addr, addrs[i].host, sizeof(addrs[i].host));
         } else {
             addrs[i].family = XR_NET_IPV6;
-            inet_ntop(AF_INET6, &resolved[i].addr.v6.sin6_addr, addrs[i].host, sizeof(addrs[i].host));
+            inet_ntop(AF_INET6, &resolved[i].addr.v6.sin6_addr, addrs[i].host,
+                      sizeof(addrs[i].host));
         }
         addrs[i].port = 0;
     }
@@ -257,7 +269,8 @@ int xr_dns_lookup(const char *hostname, XrNetAddr *addrs, int max_addrs) {
 }
 
 bool xr_net_resolve(const char *hostname, XrNetAddr *addr) {
-    if (!hostname || !addr) return false;
+    if (!hostname || !addr)
+        return false;
 
     XrSockAddr resolved;
     if (!xr_dns_resolve(hostname, &resolved, XR_AF_UNSPEC)) {
@@ -278,7 +291,8 @@ bool xr_net_resolve(const char *hostname, XrNetAddr *addr) {
 // ========== Utility Functions ==========
 
 int xr_net_parse_addr(const char *addr_str, char *host, size_t host_len, int *port) {
-    if (!addr_str) return -1;
+    if (!addr_str)
+        return -1;
 
     const char *colon = strrchr(addr_str, ':');
     if (!colon) {
@@ -286,13 +300,15 @@ int xr_net_parse_addr(const char *addr_str, char *host, size_t host_len, int *po
             strncpy(host, addr_str, host_len - 1);
             host[host_len - 1] = '\0';
         }
-        if (port) *port = 0;
+        if (port)
+            *port = 0;
         return 0;
     }
 
     size_t host_part_len = colon - addr_str;
     if (host && host_len > 0) {
-        if (host_part_len >= host_len) host_part_len = host_len - 1;
+        if (host_part_len >= host_len)
+            host_part_len = host_len - 1;
         memcpy(host, addr_str, host_part_len);
         host[host_part_len] = '\0';
     }
@@ -303,7 +319,8 @@ int xr_net_parse_addr(const char *addr_str, char *host, size_t host_len, int *po
 }
 
 int xr_net_format_addr(const XrNetAddr *addr, char *buf, size_t buf_len) {
-    if (!addr || !buf || buf_len == 0) return -1;
+    if (!addr || !buf || buf_len == 0)
+        return -1;
     return snprintf(buf, buf_len, "%s:%d", addr->host, addr->port);
 }
 
@@ -323,7 +340,6 @@ void xr_net_shutdown(void) {
 
 // ========== Script Bindings ==========
 
-
 // ========== TLS fd-indexed storage ==========
 
 #ifdef XR_ENABLE_TLS
@@ -340,13 +356,17 @@ static pthread_once_t g_tls_client_once = PTHREAD_ONCE_INIT;
 
 // Grow g_tls_conns array to hold fd. Caller must hold g_tls_conns_mutex.
 static bool tls_fd_ensure_locked(int fd) {
-    if (fd < 0) return false;
-    if (fd < g_tls_conns_cap) return true;
+    if (fd < 0)
+        return false;
+    if (fd < g_tls_conns_cap)
+        return true;
     int new_cap = (g_tls_conns_cap == 0) ? NET_FD_INIT_CAP : g_tls_conns_cap;
-    while (new_cap <= fd) new_cap *= 2;
-    XrTlsConn **new_arr = (XrTlsConn **)xr_realloc(g_tls_conns, sizeof(XrTlsConn*) * new_cap);
-    if (!new_arr) return false;
-    memset(new_arr + g_tls_conns_cap, 0, sizeof(XrTlsConn*) * (new_cap - g_tls_conns_cap));
+    while (new_cap <= fd)
+        new_cap *= 2;
+    XrTlsConn **new_arr = (XrTlsConn **) xr_realloc(g_tls_conns, sizeof(XrTlsConn *) * new_cap);
+    if (!new_arr)
+        return false;
+    memset(new_arr + g_tls_conns_cap, 0, sizeof(XrTlsConn *) * (new_cap - g_tls_conns_cap));
     g_tls_conns = new_arr;
     g_tls_conns_cap = new_cap;
     return true;
@@ -356,12 +376,12 @@ static void tls_client_ctx_init(void) {
     g_tls_client_ctx = xr_tls_context_new_client();
 }
 
-static XrTlsContext* get_tls_client_ctx(void) {
+static XrTlsContext *get_tls_client_ctx(void) {
     pthread_once(&g_tls_client_once, tls_client_ctx_init);
     return g_tls_client_ctx;
 }
 
-static XrTlsConn* get_tls_conn(int fd) {
+static XrTlsConn *get_tls_conn(int fd) {
     pthread_mutex_lock(&g_tls_conns_mutex);
     XrTlsConn *tls = (fd >= 0 && fd < g_tls_conns_cap) ? g_tls_conns[fd] : NULL;
     pthread_mutex_unlock(&g_tls_conns_mutex);
@@ -371,7 +391,8 @@ static XrTlsConn* get_tls_conn(int fd) {
 static bool set_tls_conn(int fd, XrTlsConn *tls) {
     pthread_mutex_lock(&g_tls_conns_mutex);
     bool ok = tls_fd_ensure_locked(fd);
-    if (ok) g_tls_conns[fd] = tls;
+    if (ok)
+        g_tls_conns[fd] = tls;
     pthread_mutex_unlock(&g_tls_conns_mutex);
     return ok;
 }
@@ -393,28 +414,29 @@ static SymbolId sym_tls = -1;
 static SymbolId sym_port = -1;
 
 // Handle type enum (replaces string for compact Level 0)
-#define NET_TYPE_CONN      0
-#define NET_TYPE_TLS_CONN  1
-#define NET_TYPE_LISTENER  2
-#define NET_TYPE_UDP       3
+#define NET_TYPE_CONN 0
+#define NET_TYPE_TLS_CONN 1
+#define NET_TYPE_LISTENER 2
+#define NET_TYPE_UDP 3
 
-static XrShape *shape_conn = NULL;     // {fd, type, tls}
-static XrShape *shape_listener = NULL; // {fd, type, port}
+static XrShape *shape_conn = NULL;      // {fd, type, tls}
+static XrShape *shape_listener = NULL;  // {fd, type, port}
 
 // Direct field indices
-#define HANDLE_FD_IDX   0
+#define HANDLE_FD_IDX 0
 #define HANDLE_TYPE_IDX 1
-#define HANDLE_TLS_IDX  2
+#define HANDLE_TLS_IDX 2
 #define HANDLE_PORT_IDX 2
 
 // Called once per isolate during module load.
 // Must rebuild every time because SymbolIds are per-isolate.
 static void net_ensure_symbols(XrayIsolate *X) {
-    XrSymbolTable *table = (XrSymbolTable*)xr_isolate_get_symbol_table(X);
-    if (!table) return;
-    sym_fd   = xr_symbol_register_in_table(table, "fd");
+    XrSymbolTable *table = (XrSymbolTable *) xr_isolate_get_symbol_table(X);
+    if (!table)
+        return;
+    sym_fd = xr_symbol_register_in_table(table, "fd");
     sym_type = xr_symbol_register_in_table(table, "type");
-    sym_tls  = xr_symbol_register_in_table(table, "tls");
+    sym_tls = xr_symbol_register_in_table(table, "tls");
     sym_port = xr_symbol_register_in_table(table, "port");
 
     {
@@ -437,48 +459,54 @@ static void net_ensure_symbols(XrayIsolate *X) {
 
 static XrValue make_conn_handle(XrayIsolate *X, int fd, bool is_tls) {
     XrJson *json = xr_json_new_with_shape(xr_current_coro(X), shape_conn);
-    if (!json) return XR_NULL_VAL;
-    json->fields[HANDLE_FD_IDX]   = xr_int((int64_t)fd);
+    if (!json)
+        return XR_NULL_VAL;
+    json->fields[HANDLE_FD_IDX] = xr_int((int64_t) fd);
     json->fields[HANDLE_TYPE_IDX] = xr_int(is_tls ? NET_TYPE_TLS_CONN : NET_TYPE_CONN);
-    json->fields[HANDLE_TLS_IDX]  = xr_bool(is_tls);
+    json->fields[HANDLE_TLS_IDX] = xr_bool(is_tls);
     return xr_json_value(json);
 }
 
 static XrValue make_listener_handle(XrayIsolate *X, int fd, int port_num) {
     XrJson *json = xr_json_new_with_shape(xr_current_coro(X), shape_listener);
-    if (!json) return XR_NULL_VAL;
-    json->fields[HANDLE_FD_IDX]   = xr_int((int64_t)fd);
+    if (!json)
+        return XR_NULL_VAL;
+    json->fields[HANDLE_FD_IDX] = xr_int((int64_t) fd);
     json->fields[HANDLE_TYPE_IDX] = xr_int(NET_TYPE_LISTENER);
-    json->fields[HANDLE_PORT_IDX] = xr_int((int64_t)port_num);
+    json->fields[HANDLE_PORT_IDX] = xr_int((int64_t) port_num);
     return xr_json_value(json);
 }
 
 static XrValue make_udp_handle(XrayIsolate *X, int fd) {
     XrJson *json = xr_json_new_with_shape(xr_current_coro(X), shape_conn);
-    if (!json) return XR_NULL_VAL;
-    json->fields[HANDLE_FD_IDX]   = xr_int((int64_t)fd);
+    if (!json)
+        return XR_NULL_VAL;
+    json->fields[HANDLE_FD_IDX] = xr_int((int64_t) fd);
     json->fields[HANDLE_TYPE_IDX] = xr_int(NET_TYPE_UDP);
-    json->fields[HANDLE_TLS_IDX]  = xr_bool(false);
+    json->fields[HANDLE_TLS_IDX] = xr_bool(false);
     return xr_json_value(json);
 }
 
 static int handle_get_fd(XrayIsolate *X, XrValue handle) {
-    if (!XR_IS_JSON(handle)) return -1;
-    XrJson *json = (XrJson*)XR_TO_PTR(handle);
+    if (!XR_IS_JSON(handle))
+        return -1;
+    XrJson *json = (XrJson *) XR_TO_PTR(handle);
     XrValue v = xr_json_get(X, json, sym_fd);
-    return XR_IS_INT(v) ? (int)XR_TO_INT(v) : -1;
+    return XR_IS_INT(v) ? (int) XR_TO_INT(v) : -1;
 }
 
 static bool handle_is_tls(XrayIsolate *X, XrValue handle) {
-    if (!XR_IS_JSON(handle)) return false;
-    XrJson *json = (XrJson*)XR_TO_PTR(handle);
+    if (!XR_IS_JSON(handle))
+        return false;
+    XrJson *json = (XrJson *) XR_TO_PTR(handle);
     XrValue v = xr_json_get(X, json, sym_tls);
     return XR_IS_BOOL(v) ? XR_TO_BOOL(v) : false;
 }
 
 static void handle_set_fd(XrayIsolate *X, XrValue handle, int new_fd) {
-    if (!XR_IS_JSON(handle)) return;
-    XrJson *json = (XrJson*)XR_TO_PTR(handle);
+    if (!XR_IS_JSON(handle))
+        return;
+    XrJson *json = (XrJson *) XR_TO_PTR(handle);
     xr_json_set(X, json, sym_fd, xr_int(new_fd));
 }
 
@@ -494,7 +522,7 @@ typedef struct {
 static XrCFuncResult net_dial_step(XrayIsolate *X, NetDialState *state, XrValue *result);
 
 static XrCFuncResult net_dial_continue(XrayIsolate *X, int status, void *ctx, XrValue *result) {
-    NetDialState *state = (NetDialState *)ctx;
+    NetDialState *state = (NetDialState *) ctx;
     if (status == XR_RESUME_TIMEOUT || status == XR_RESUME_CANCELLED) {
         net_close_fd(X, state->fd);
         xr_free(state);
@@ -532,7 +560,7 @@ static XrCFuncResult net_dial_yieldable(XrayIsolate *X, XrValue *args, int nargs
     }
 
     XrString *host = XR_TO_STRING(args[0]);
-    int port_num = (int)XR_TO_INT(args[1]);
+    int port_num = (int) XR_TO_INT(args[1]);
 
     int conn_ret;
     int fd = net_tcp_connect(XR_STRING_CHARS(host), port_num, &conn_ret);
@@ -547,7 +575,7 @@ static XrCFuncResult net_dial_yieldable(XrayIsolate *X, XrValue *args, int nargs
     }
 
     // EINPROGRESS: yield for write, then check connect result
-    NetDialState *state = (NetDialState *)xr_malloc(sizeof(NetDialState));
+    NetDialState *state = (NetDialState *) xr_malloc(sizeof(NetDialState));
     if (!state) {
         close(fd);
         *result = XR_NULL_VAL;
@@ -556,7 +584,7 @@ static XrCFuncResult net_dial_yieldable(XrayIsolate *X, XrValue *args, int nargs
     state->fd = fd;
     state->phase = 1;
 
-    int timeout_ms = (nargs > 2 && XR_IS_INT(args[2])) ? (int)XR_TO_INT(args[2]) : 30000;
+    int timeout_ms = (nargs > 2 && XR_IS_INT(args[2])) ? (int) XR_TO_INT(args[2]) : 30000;
     return xr_yield_for_io(X, fd, XR_WAIT_WRITE, timeout_ms, net_dial_continue, state, result);
 }
 
@@ -569,7 +597,7 @@ typedef struct {
 static XrCFuncResult net_accept_step(XrayIsolate *X, NetAcceptState *state, XrValue *result);
 
 static XrCFuncResult net_accept_continue(XrayIsolate *X, int status, void *ctx, XrValue *result) {
-    NetAcceptState *state = (NetAcceptState *)ctx;
+    NetAcceptState *state = (NetAcceptState *) ctx;
     if (status == XR_RESUME_TIMEOUT || status == XR_RESUME_CANCELLED) {
         xr_free(state);
         *result = XR_NULL_VAL;
@@ -593,15 +621,16 @@ static XrCFuncResult net_accept_step(XrayIsolate *X, NetAcceptState *state, XrVa
         return XR_CFUNC_DONE;
     }
     // EAGAIN - yield for read
-    return xr_yield_for_io(X, state->listen_fd, XR_WAIT_READ, -1,
-                           net_accept_continue, state, result);
+    return xr_yield_for_io(X, state->listen_fd, XR_WAIT_READ, -1, net_accept_continue, state,
+                           result);
 }
 
 /*
  * net.accept(listener_handle) -> Json handle | null
  * Yieldable: loop acceptFast + yield
  */
-static XrCFuncResult net_accept_handle_yieldable(XrayIsolate *X, XrValue *args, int nargs, XrValue *result) {
+static XrCFuncResult net_accept_handle_yieldable(XrayIsolate *X, XrValue *args, int nargs,
+                                                 XrValue *result) {
     if (nargs < 1) {
         *result = XR_NULL_VAL;
         return XR_CFUNC_DONE;
@@ -613,7 +642,7 @@ static XrCFuncResult net_accept_handle_yieldable(XrayIsolate *X, XrValue *args, 
         return XR_CFUNC_DONE;
     }
 
-    NetAcceptState *state = (NetAcceptState *)xr_malloc(sizeof(NetAcceptState));
+    NetAcceptState *state = (NetAcceptState *) xr_malloc(sizeof(NetAcceptState));
     if (!state) {
         *result = XR_NULL_VAL;
         return XR_CFUNC_ERROR;
@@ -627,15 +656,20 @@ static XrCFuncResult net_accept_handle_yieldable(XrayIsolate *X, XrValue *args, 
 // Ensure coroutine has I/O buffer of at least `needed` bytes.
 // Returns buffer pointer, or NULL on allocation failure.
 // Buffer is lazily allocated (initial 4KB) and grows up to 256KB.
-static inline char* xr_coro_ensure_io_buf(XrCoroutine *coro, size_t needed) {
+static inline char *xr_coro_ensure_io_buf(XrCoroutine *coro, size_t needed) {
     XrCoroExt *ext = xr_coro_ensure_ext(coro);
-    if (!ext) return NULL;
-    if (ext->io_buf && ext->io_buf_cap >= needed) return ext->io_buf;
+    if (!ext)
+        return NULL;
+    if (ext->io_buf && ext->io_buf_cap >= needed)
+        return ext->io_buf;
     size_t cap = ext->io_buf_cap ? ext->io_buf_cap : 4096;
-    while (cap < needed && cap < 262144) cap *= 2;
-    if (cap < needed) cap = needed;
-    char *buf = (char *)xr_realloc(ext->io_buf, cap);
-    if (!buf) return NULL;
+    while (cap < needed && cap < 262144)
+        cap *= 2;
+    if (cap < needed)
+        cap = needed;
+    char *buf = (char *) xr_realloc(ext->io_buf, cap);
+    if (!buf)
+        return NULL;
     ext->io_buf = buf;
     ext->io_buf_cap = cap;
     return buf;
@@ -643,15 +677,17 @@ static inline char* xr_coro_ensure_io_buf(XrCoroutine *coro, size_t needed) {
 
 typedef struct {
     int fd;
-    char *buf;        // Points to coroutine's io_buf (not owned)
+    char *buf;  // Points to coroutine's io_buf (not owned)
     size_t max_len;
     bool is_tls;
 } NetReadHandleState;
 
-static XrCFuncResult net_read_handle_step(XrayIsolate *X, NetReadHandleState *state, XrValue *result);
+static XrCFuncResult net_read_handle_step(XrayIsolate *X, NetReadHandleState *state,
+                                          XrValue *result);
 
-static XrCFuncResult net_read_handle_continue(XrayIsolate *X, int status, void *ctx, XrValue *result) {
-    NetReadHandleState *state = (NetReadHandleState *)ctx;
+static XrCFuncResult net_read_handle_continue(XrayIsolate *X, int status, void *ctx,
+                                              XrValue *result) {
+    NetReadHandleState *state = (NetReadHandleState *) ctx;
     if (status == XR_RESUME_TIMEOUT || status == XR_RESUME_CANCELLED) {
         xr_free(state);
         *result = XR_NULL_VAL;
@@ -660,7 +696,8 @@ static XrCFuncResult net_read_handle_continue(XrayIsolate *X, int status, void *
     return net_read_handle_step(X, state, result);
 }
 
-static XrCFuncResult net_read_handle_step(XrayIsolate *X, NetReadHandleState *state, XrValue *result) {
+static XrCFuncResult net_read_handle_step(XrayIsolate *X, NetReadHandleState *state,
+                                          XrValue *result) {
 #ifdef XR_ENABLE_TLS
     if (state->is_tls) {
         XrTlsConn *tls = get_tls_conn(state->fd);
@@ -669,7 +706,7 @@ static XrCFuncResult net_read_handle_step(XrayIsolate *X, NetReadHandleState *st
             *result = XR_NULL_VAL;
             return XR_CFUNC_DONE;
         }
-        int n = xr_tls_conn_read_try(tls, state->buf, (int)state->max_len);
+        int n = xr_tls_conn_read_try(tls, state->buf, (int) state->max_len);
         if (n > 0) {
             *result = xr_string_value(xr_string_new(X, state->buf, n));
             xr_free(state);
@@ -687,8 +724,8 @@ static XrCFuncResult net_read_handle_step(XrayIsolate *X, NetReadHandleState *st
         }
         // -1=WANT_READ, -2=WANT_WRITE
         int wait_mode = (n == -1) ? XR_WAIT_READ : XR_WAIT_WRITE;
-        return xr_yield_for_io(X, state->fd, wait_mode, -1,
-                               net_read_handle_continue, state, result);
+        return xr_yield_for_io(X, state->fd, wait_mode, -1, net_read_handle_continue, state,
+                               result);
     }
 #endif
 
@@ -705,8 +742,8 @@ static XrCFuncResult net_read_handle_step(XrayIsolate *X, NetReadHandleState *st
         return XR_CFUNC_DONE;
     }
     if (errno == EAGAIN || errno == EWOULDBLOCK) {
-        return xr_yield_for_io(X, state->fd, XR_WAIT_READ, -1,
-                               net_read_handle_continue, state, result);
+        return xr_yield_for_io(X, state->fd, XR_WAIT_READ, -1, net_read_handle_continue, state,
+                               result);
     }
     xr_free(state);
     *result = XR_NULL_VAL;
@@ -717,7 +754,8 @@ static XrCFuncResult net_read_handle_step(XrayIsolate *X, NetReadHandleState *st
  * net.read(conn_handle, maxlen?) -> string | null
  * Yieldable: handle-based, dispatches TCP/TLS
  */
-static XrCFuncResult net_read_handle_yieldable(XrayIsolate *X, XrValue *args, int nargs, XrValue *result) {
+static XrCFuncResult net_read_handle_yieldable(XrayIsolate *X, XrValue *args, int nargs,
+                                               XrValue *result) {
     if (nargs < 1) {
         *result = XR_NULL_VAL;
         return XR_CFUNC_ERROR;
@@ -730,8 +768,9 @@ static XrCFuncResult net_read_handle_yieldable(XrayIsolate *X, XrValue *args, in
     }
 
     bool is_tls = handle_is_tls(X, args[0]);
-    int max_len = (nargs >= 2 && XR_IS_INT(args[1])) ? (int)XR_TO_INT(args[1]) : 4096;
-    if (max_len > 1048576) max_len = 1048576;
+    int max_len = (nargs >= 2 && XR_IS_INT(args[1])) ? (int) XR_TO_INT(args[1]) : 4096;
+    if (max_len > 1048576)
+        max_len = 1048576;
     if (max_len <= 0) {
         *result = XR_NULL_VAL;
         return XR_CFUNC_ERROR;
@@ -742,16 +781,17 @@ static XrCFuncResult net_read_handle_yieldable(XrayIsolate *X, XrValue *args, in
     char *buf = coro ? xr_coro_ensure_io_buf(coro, max_len) : NULL;
     if (!buf) {
         // Fallback to malloc if no coroutine context
-        buf = (char *)xr_malloc(max_len);
+        buf = (char *) xr_malloc(max_len);
     }
     if (!buf) {
         *result = XR_NULL_VAL;
         return XR_CFUNC_ERROR;
     }
 
-    NetReadHandleState *state = (NetReadHandleState *)xr_malloc(sizeof(NetReadHandleState));
+    NetReadHandleState *state = (NetReadHandleState *) xr_malloc(sizeof(NetReadHandleState));
     if (!state) {
-        if (!coro) xr_free(buf);
+        if (!coro)
+            xr_free(buf);
         *result = XR_NULL_VAL;
         return XR_CFUNC_ERROR;
     }
@@ -766,16 +806,18 @@ static XrCFuncResult net_read_handle_yieldable(XrayIsolate *X, XrValue *args, in
 
 typedef struct {
     int fd;
-    const char *data; // Points directly into XrString (zero-copy, not owned)
+    const char *data;  // Points directly into XrString (zero-copy, not owned)
     size_t len;
     size_t written;
     bool is_tls;
 } NetWriteHandleState;
 
-static XrCFuncResult net_write_handle_step(XrayIsolate *X, NetWriteHandleState *state, XrValue *result);
+static XrCFuncResult net_write_handle_step(XrayIsolate *X, NetWriteHandleState *state,
+                                           XrValue *result);
 
-static XrCFuncResult net_write_handle_continue(XrayIsolate *X, int status, void *ctx, XrValue *result) {
-    NetWriteHandleState *state = (NetWriteHandleState *)ctx;
+static XrCFuncResult net_write_handle_continue(XrayIsolate *X, int status, void *ctx,
+                                               XrValue *result) {
+    NetWriteHandleState *state = (NetWriteHandleState *) ctx;
     if (status == XR_RESUME_TIMEOUT || status == XR_RESUME_CANCELLED) {
         xr_free(state);
         *result = XR_FROM_INT(-1);
@@ -784,7 +826,8 @@ static XrCFuncResult net_write_handle_continue(XrayIsolate *X, int status, void 
     return net_write_handle_step(X, state, result);
 }
 
-static XrCFuncResult net_write_handle_step(XrayIsolate *X, NetWriteHandleState *state, XrValue *result) {
+static XrCFuncResult net_write_handle_step(XrayIsolate *X, NetWriteHandleState *state,
+                                           XrValue *result) {
 #ifdef XR_ENABLE_TLS
     if (state->is_tls) {
         XrTlsConn *tls = get_tls_conn(state->fd);
@@ -794,9 +837,8 @@ static XrCFuncResult net_write_handle_step(XrayIsolate *X, NetWriteHandleState *
             return XR_CFUNC_DONE;
         }
         while (state->written < state->len) {
-            int n = xr_tls_conn_write_try(tls,
-                state->data + state->written,
-                (int)(state->len - state->written));
+            int n = xr_tls_conn_write_try(tls, state->data + state->written,
+                                          (int) (state->len - state->written));
             if (n > 0) {
                 state->written += n;
                 continue;
@@ -807,10 +849,10 @@ static XrCFuncResult net_write_handle_step(XrayIsolate *X, NetWriteHandleState *
             }
             // -1=WANT_WRITE, -2=WANT_READ
             int wait_mode = (n == -1) ? XR_WAIT_WRITE : XR_WAIT_READ;
-            return xr_yield_for_io(X, state->fd, wait_mode, -1,
-                                   net_write_handle_continue, state, result);
+            return xr_yield_for_io(X, state->fd, wait_mode, -1, net_write_handle_continue, state,
+                                   result);
         }
-        int total = (int)state->written;
+        int total = (int) state->written;
         xr_free(state);
         *result = XR_FROM_INT(total);
         return XR_CFUNC_DONE;
@@ -819,21 +861,21 @@ static XrCFuncResult net_write_handle_step(XrayIsolate *X, NetWriteHandleState *
 
     // TCP write
     while (state->written < state->len) {
-        ssize_t n = write(state->fd, state->data + state->written,
-                          state->len - state->written);
+        ssize_t n = write(state->fd, state->data + state->written, state->len - state->written);
         if (n > 0) {
             state->written += n;
             continue;
         }
-        if (n == 0) break;
+        if (n == 0)
+            break;
         if (errno == EAGAIN || errno == EWOULDBLOCK) {
-            return xr_yield_for_io(X, state->fd, XR_WAIT_WRITE, -1,
-                                   net_write_handle_continue, state, result);
+            return xr_yield_for_io(X, state->fd, XR_WAIT_WRITE, -1, net_write_handle_continue,
+                                   state, result);
         }
         // Other error
         break;
     }
-    int total = (int)state->written;
+    int total = (int) state->written;
     xr_free(state);
     *result = XR_FROM_INT(total);
     return XR_CFUNC_DONE;
@@ -843,7 +885,8 @@ static XrCFuncResult net_write_handle_step(XrayIsolate *X, NetWriteHandleState *
  * net.write(conn_handle, data) -> int
  * Yieldable: handle-based, dispatches TCP/TLS
  */
-static XrCFuncResult net_write_handle_yieldable(XrayIsolate *X, XrValue *args, int nargs, XrValue *result) {
+static XrCFuncResult net_write_handle_yieldable(XrayIsolate *X, XrValue *args, int nargs,
+                                                XrValue *result) {
     if (nargs < 2 || !XR_IS_STRING(args[1])) {
         *result = XR_FROM_INT(-1);
         return XR_CFUNC_ERROR;
@@ -863,7 +906,7 @@ static XrCFuncResult net_write_handle_yieldable(XrayIsolate *X, XrValue *args, i
         return XR_CFUNC_DONE;
     }
 
-    NetWriteHandleState *state = (NetWriteHandleState *)xr_calloc(1, sizeof(NetWriteHandleState));
+    NetWriteHandleState *state = (NetWriteHandleState *) xr_calloc(1, sizeof(NetWriteHandleState));
     if (!state) {
         *result = XR_FROM_INT(-1);
         return XR_CFUNC_ERROR;
@@ -885,13 +928,15 @@ static XrCFuncResult net_write_handle_yieldable(XrayIsolate *X, XrValue *args, i
  * net.listen(port, backlog?) -> Json listener handle | null
  */
 static XrValue net_listen_handle(XrayIsolate *X, XrValue *args, int nargs) {
-    if (nargs < 1 || !XR_IS_INT(args[0])) return XR_NULL_VAL;
+    if (nargs < 1 || !XR_IS_INT(args[0]))
+        return XR_NULL_VAL;
 
-    int port_num = (int)XR_TO_INT(args[0]);
-    int backlog = (nargs > 1 && XR_IS_INT(args[1])) ? (int)XR_TO_INT(args[1]) : 1024;
+    int port_num = (int) XR_TO_INT(args[0]);
+    int backlog = (nargs > 1 && XR_IS_INT(args[1])) ? (int) XR_TO_INT(args[1]) : 1024;
 
     int fd = xr_io_listen(NULL, port_num, backlog);
-    if (fd < 0) return XR_NULL_VAL;
+    if (fd < 0)
+        return XR_NULL_VAL;
 
     return make_listener_handle(X, fd, port_num);
 }
@@ -903,10 +948,12 @@ static XrValue net_listen_handle(XrayIsolate *X, XrValue *args, int nargs) {
  * Close connection, listener, or UDP socket. Safe to call multiple times.
  */
 static XrValue net_close_handle(XrayIsolate *X, XrValue *args, int nargs) {
-    if (nargs < 1) return XR_NULL_VAL;
+    if (nargs < 1)
+        return XR_NULL_VAL;
 
     int fd = handle_get_fd(X, args[0]);
-    if (fd < 0) return XR_NULL_VAL;
+    if (fd < 0)
+        return XR_NULL_VAL;
 
     // Mark handle as closed
     handle_set_fd(X, args[0], -1);
@@ -924,7 +971,7 @@ static XrValue net_close_handle(XrayIsolate *X, XrValue *args, int nargs) {
         }
     }
 #else
-    (void)is_tls;
+    (void) is_tls;
 #endif
 
     net_close_fd(X, fd);
@@ -938,7 +985,8 @@ static XrValue net_close_handle(XrayIsolate *X, XrValue *args, int nargs) {
  * net.fd(handle) -> int
  */
 static XrValue net_fd_handle(XrayIsolate *X, XrValue *args, int nargs) {
-    if (nargs < 1) return xr_int(-1);
+    if (nargs < 1)
+        return xr_int(-1);
     return xr_int(handle_get_fd(X, args[0]));
 }
 
@@ -948,7 +996,9 @@ static XrValue net_fd_handle(XrayIsolate *X, XrValue *args, int nargs) {
  * net.hasTLS() -> bool
  */
 static XrValue net_has_tls(XrayIsolate *X, XrValue *args, int nargs) {
-    (void)X; (void)args; (void)nargs;
+    (void) X;
+    (void) args;
+    (void) nargs;
 #ifdef XR_ENABLE_TLS
     return xr_bool(true);
 #else
@@ -984,7 +1034,7 @@ static void net_dial_tls_cleanup(XrayIsolate *X, NetDialTLSState *state) {
 }
 
 static XrCFuncResult net_dial_tls_continue(XrayIsolate *X, int status, void *ctx, XrValue *result) {
-    NetDialTLSState *state = (NetDialTLSState *)ctx;
+    NetDialTLSState *state = (NetDialTLSState *) ctx;
     if (status == XR_RESUME_TIMEOUT || status == XR_RESUME_CANCELLED) {
         net_dial_tls_cleanup(X, state);
         xr_free(state);
@@ -1052,8 +1102,8 @@ static XrCFuncResult net_dial_tls_step(XrayIsolate *X, NetDialTLSState *state, X
         }
         // 1=WANT_READ, 2=WANT_WRITE
         int wait_mode = (hs == 1) ? XR_WAIT_READ : XR_WAIT_WRITE;
-        return xr_yield_for_io(X, state->fd, wait_mode, 30000,
-                               net_dial_tls_continue, state, result);
+        return xr_yield_for_io(X, state->fd, wait_mode, 30000, net_dial_tls_continue, state,
+                               result);
     }
 
     // Should not reach here
@@ -1066,14 +1116,15 @@ static XrCFuncResult net_dial_tls_step(XrayIsolate *X, NetDialTLSState *state, X
  * net.dialTLS(host, port, timeout?) -> Json handle | null
  * Yieldable: TCP connect + TLS handshake
  */
-static XrCFuncResult net_dial_tls_yieldable(XrayIsolate *X, XrValue *args, int nargs, XrValue *result) {
+static XrCFuncResult net_dial_tls_yieldable(XrayIsolate *X, XrValue *args, int nargs,
+                                            XrValue *result) {
     if (nargs < 2 || !XR_IS_STRING(args[0]) || !XR_IS_INT(args[1])) {
         *result = XR_NULL_VAL;
         return XR_CFUNC_DONE;
     }
 
     XrString *host = XR_TO_STRING(args[0]);
-    int port_num = (int)XR_TO_INT(args[1]);
+    int port_num = (int) XR_TO_INT(args[1]);
 
     int conn_ret;
     int fd = net_tcp_connect(XR_STRING_CHARS(host), port_num, &conn_ret);
@@ -1082,7 +1133,7 @@ static XrCFuncResult net_dial_tls_yieldable(XrayIsolate *X, XrValue *args, int n
         return XR_CFUNC_DONE;
     }
 
-    NetDialTLSState *state = (NetDialTLSState *)xr_calloc(1, sizeof(NetDialTLSState));
+    NetDialTLSState *state = (NetDialTLSState *) xr_calloc(1, sizeof(NetDialTLSState));
     if (!state) {
         close(fd);
         *result = XR_NULL_VAL;
@@ -1098,7 +1149,7 @@ static XrCFuncResult net_dial_tls_yieldable(XrayIsolate *X, XrValue *args, int n
 
     // EINPROGRESS: yield for write
     state->phase = 1;
-    int timeout_ms = (nargs > 2 && XR_IS_INT(args[2])) ? (int)XR_TO_INT(args[2]) : 30000;
+    int timeout_ms = (nargs > 2 && XR_IS_INT(args[2])) ? (int) XR_TO_INT(args[2]) : 30000;
     return xr_yield_for_io(X, fd, XR_WAIT_WRITE, timeout_ms, net_dial_tls_continue, state, result);
 }
 
@@ -1109,10 +1160,12 @@ typedef struct {
     XrValue handle;  // kept for updating tls flag on success
 } NetUpgradeTLSState;
 
-static XrCFuncResult net_upgrade_tls_step(XrayIsolate *X, NetUpgradeTLSState *state, XrValue *result);
+static XrCFuncResult net_upgrade_tls_step(XrayIsolate *X, NetUpgradeTLSState *state,
+                                          XrValue *result);
 
-static XrCFuncResult net_upgrade_tls_continue(XrayIsolate *X, int status, void *ctx, XrValue *result) {
-    NetUpgradeTLSState *state = (NetUpgradeTLSState *)ctx;
+static XrCFuncResult net_upgrade_tls_continue(XrayIsolate *X, int status, void *ctx,
+                                              XrValue *result) {
+    NetUpgradeTLSState *state = (NetUpgradeTLSState *) ctx;
     if (status == XR_RESUME_TIMEOUT || status == XR_RESUME_CANCELLED) {
         // Cleanup TLS
         XrTlsConn *tls = get_tls_conn(state->fd);
@@ -1128,7 +1181,8 @@ static XrCFuncResult net_upgrade_tls_continue(XrayIsolate *X, int status, void *
     return net_upgrade_tls_step(X, state, result);
 }
 
-static XrCFuncResult net_upgrade_tls_step(XrayIsolate *X, NetUpgradeTLSState *state, XrValue *result) {
+static XrCFuncResult net_upgrade_tls_step(XrayIsolate *X, NetUpgradeTLSState *state,
+                                          XrValue *result) {
     XrTlsConn *tls = get_tls_conn(state->fd);
     if (!tls) {
         xr_free(state);
@@ -1139,8 +1193,8 @@ static XrCFuncResult net_upgrade_tls_step(XrayIsolate *X, NetUpgradeTLSState *st
     if (hs == 0) {
         // Update handle to reflect TLS
         if (XR_IS_JSON(state->handle)) {
-            XrJson *json = (XrJson*)XR_TO_PTR(state->handle);
-            json->fields[HANDLE_TLS_IDX]  = xr_bool(true);
+            XrJson *json = (XrJson *) XR_TO_PTR(state->handle);
+            json->fields[HANDLE_TLS_IDX] = xr_bool(true);
             json->fields[HANDLE_TYPE_IDX] = xr_int(NET_TYPE_TLS_CONN);
         }
         XrValue h = state->handle;
@@ -1157,15 +1211,15 @@ static XrCFuncResult net_upgrade_tls_step(XrayIsolate *X, NetUpgradeTLSState *st
         return XR_CFUNC_DONE;
     }
     int wait_mode = (hs == 1) ? XR_WAIT_READ : XR_WAIT_WRITE;
-    return xr_yield_for_io(X, state->fd, wait_mode, 30000,
-                           net_upgrade_tls_continue, state, result);
+    return xr_yield_for_io(X, state->fd, wait_mode, 30000, net_upgrade_tls_continue, state, result);
 }
 
 /*
  * net.upgradeTLS(conn_handle, hostname) -> conn_handle | null
  * Yieldable: TLS wrap + handshake on existing TCP connection
  */
-static XrCFuncResult net_upgrade_tls_yieldable(XrayIsolate *X, XrValue *args, int nargs, XrValue *result) {
+static XrCFuncResult net_upgrade_tls_yieldable(XrayIsolate *X, XrValue *args, int nargs,
+                                               XrValue *result) {
     if (nargs < 2 || !XR_IS_STRING(args[1])) {
         *result = XR_NULL_VAL;
         return XR_CFUNC_DONE;
@@ -1192,7 +1246,7 @@ static XrCFuncResult net_upgrade_tls_yieldable(XrayIsolate *X, XrValue *args, in
     xr_tls_conn_set_hostname(tls, XR_STRING_CHARS(hostname));
     set_tls_conn(fd, tls);
 
-    NetUpgradeTLSState *state = (NetUpgradeTLSState *)xr_malloc(sizeof(NetUpgradeTLSState));
+    NetUpgradeTLSState *state = (NetUpgradeTLSState *) xr_malloc(sizeof(NetUpgradeTLSState));
     if (!state) {
         xr_tls_conn_close(tls);
         xr_tls_conn_free(tls);
@@ -1206,7 +1260,7 @@ static XrCFuncResult net_upgrade_tls_yieldable(XrayIsolate *X, XrValue *args, in
     return net_upgrade_tls_step(X, state, result);
 }
 
-#endif // XR_ENABLE_TLS
+#endif  // XR_ENABLE_TLS
 
 // ========== Handle-based UDP functions ==========
 
@@ -1214,34 +1268,46 @@ static XrCFuncResult net_upgrade_tls_yieldable(XrayIsolate *X, XrValue *args, in
  * net.udpBind(port, addr?) -> Json handle | null
  */
 static XrValue net_udp_bind_handle(XrayIsolate *X, XrValue *args, int nargs) {
-    int port_num = (nargs >= 1 && XR_IS_INT(args[0])) ? (int)XR_TO_INT(args[0]) : 0;
+    int port_num = (nargs >= 1 && XR_IS_INT(args[0])) ? (int) XR_TO_INT(args[0]) : 0;
     const char *addr = NULL;
     if (nargs >= 2 && XR_IS_STRING(args[1]))
         addr = XR_STRING_CHARS(XR_TO_STRING(args[1]));
 
     // Detect IPv6 and create socket directly (no XrUdpConn overhead)
     sa_family_t family = AF_INET;
-    if (addr && strchr(addr, ':')) family = AF_INET6;
+    if (addr && strchr(addr, ':'))
+        family = AF_INET6;
 
     int fd = socket(family, SOCK_DGRAM, 0);
-    if (fd < 0) return XR_NULL_VAL;
+    if (fd < 0)
+        return XR_NULL_VAL;
 
     if (family == AF_INET) {
         struct sockaddr_in sa;
         memset(&sa, 0, sizeof(sa));
         sa.sin_family = AF_INET;
         sa.sin_port = htons(port_num);
-        if (addr && addr[0]) inet_pton(AF_INET, addr, &sa.sin_addr);
-        else sa.sin_addr.s_addr = INADDR_ANY;
-        if (bind(fd, (struct sockaddr *)&sa, sizeof(sa)) < 0) { close(fd); return XR_NULL_VAL; }
+        if (addr && addr[0])
+            inet_pton(AF_INET, addr, &sa.sin_addr);
+        else
+            sa.sin_addr.s_addr = INADDR_ANY;
+        if (bind(fd, (struct sockaddr *) &sa, sizeof(sa)) < 0) {
+            close(fd);
+            return XR_NULL_VAL;
+        }
     } else {
         struct sockaddr_in6 sa;
         memset(&sa, 0, sizeof(sa));
         sa.sin6_family = AF_INET6;
         sa.sin6_port = htons(port_num);
-        if (addr && addr[0]) inet_pton(AF_INET6, addr, &sa.sin6_addr);
-        else sa.sin6_addr = in6addr_any;
-        if (bind(fd, (struct sockaddr *)&sa, sizeof(sa)) < 0) { close(fd); return XR_NULL_VAL; }
+        if (addr && addr[0])
+            inet_pton(AF_INET6, addr, &sa.sin6_addr);
+        else
+            sa.sin6_addr = in6addr_any;
+        if (bind(fd, (struct sockaddr *) &sa, sizeof(sa)) < 0) {
+            close(fd);
+            return XR_NULL_VAL;
+        }
     }
 
     extern int xr_socket_set_nonblock(int fd);
@@ -1263,7 +1329,7 @@ typedef struct {
 static XrCFuncResult net_send_to_step(XrayIsolate *X, NetSendToState *state, XrValue *result);
 
 static XrCFuncResult net_send_to_continue(XrayIsolate *X, int status, void *ctx, XrValue *result) {
-    NetSendToState *state = (NetSendToState *)ctx;
+    NetSendToState *state = (NetSendToState *) ctx;
     if (status == XR_RESUME_TIMEOUT || status == XR_RESUME_CANCELLED) {
         xr_free(state->data);
         xr_free(state);
@@ -1274,18 +1340,18 @@ static XrCFuncResult net_send_to_continue(XrayIsolate *X, int status, void *ctx,
 }
 
 static XrCFuncResult net_send_to_step(XrayIsolate *X, NetSendToState *state, XrValue *result) {
-    (void)X;
-    ssize_t n = sendto(state->fd, state->data, state->len, 0,
-                       (struct sockaddr*)&state->addr, state->addr_len);
+    (void) X;
+    ssize_t n = sendto(state->fd, state->data, state->len, 0, (struct sockaddr *) &state->addr,
+                       state->addr_len);
     if (n >= 0) {
         xr_free(state->data);
         xr_free(state);
-        *result = xr_int((int)n);
+        *result = xr_int((int) n);
         return XR_CFUNC_DONE;
     }
     if (errno == EAGAIN || errno == EWOULDBLOCK) {
-        return xr_yield_for_io(X, state->fd, XR_WAIT_WRITE, 5000,
-                               net_send_to_continue, state, result);
+        return xr_yield_for_io(X, state->fd, XR_WAIT_WRITE, 5000, net_send_to_continue, state,
+                               result);
     }
     xr_free(state->data);
     xr_free(state);
@@ -1297,7 +1363,8 @@ static XrCFuncResult net_send_to_step(XrayIsolate *X, NetSendToState *state, XrV
  * net.sendTo(handle, data, host, port) -> int
  * Yieldable: handle-based UDP send with EAGAIN retry
  */
-static XrCFuncResult net_send_to_yieldable(XrayIsolate *X, XrValue *args, int nargs, XrValue *result) {
+static XrCFuncResult net_send_to_yieldable(XrayIsolate *X, XrValue *args, int nargs,
+                                           XrValue *result) {
     if (nargs < 4 || !XR_IS_STRING(args[1]) || !XR_IS_STRING(args[2]) || !XR_IS_INT(args[3])) {
         *result = xr_int(-1);
         return XR_CFUNC_DONE;
@@ -1311,7 +1378,7 @@ static XrCFuncResult net_send_to_yieldable(XrayIsolate *X, XrValue *args, int na
 
     XrString *data = XR_TO_STRING(args[1]);
     XrString *host = XR_TO_STRING(args[2]);
-    int port_num = (int)XR_TO_INT(args[3]);
+    int port_num = (int) XR_TO_INT(args[3]);
 
     // DNS resolve for dual-stack support
     XrSockAddr resolved;
@@ -1334,10 +1401,10 @@ static XrCFuncResult net_send_to_yieldable(XrayIsolate *X, XrValue *args, int na
     }
 
     // Try first
-    ssize_t n = sendto(fd, XR_STRING_CHARS(data), data->length, 0,
-                       (struct sockaddr*)&addr, addr_len);
+    ssize_t n =
+        sendto(fd, XR_STRING_CHARS(data), data->length, 0, (struct sockaddr *) &addr, addr_len);
     if (n >= 0) {
-        *result = xr_int((int)n);
+        *result = xr_int((int) n);
         return XR_CFUNC_DONE;
     }
     if (errno != EAGAIN && errno != EWOULDBLOCK) {
@@ -1346,7 +1413,7 @@ static XrCFuncResult net_send_to_yieldable(XrayIsolate *X, XrValue *args, int na
     }
 
     // EAGAIN - yield
-    NetSendToState *state = (NetSendToState *)xr_malloc(sizeof(NetSendToState));
+    NetSendToState *state = (NetSendToState *) xr_malloc(sizeof(NetSendToState));
     if (!state) {
         *result = xr_int(-1);
         return XR_CFUNC_ERROR;
@@ -1355,7 +1422,7 @@ static XrCFuncResult net_send_to_yieldable(XrayIsolate *X, XrValue *args, int na
     state->addr = addr;
     state->addr_len = addr_len;
     state->len = data->length;
-    state->data = (char *)xr_malloc(data->length);
+    state->data = (char *) xr_malloc(data->length);
     if (!state->data) {
         xr_free(state);
         *result = xr_int(-1);
@@ -1375,8 +1442,9 @@ typedef struct {
 
 static XrCFuncResult net_recv_from_step(XrayIsolate *X, NetRecvFromState *state, XrValue *result);
 
-static XrCFuncResult net_recv_from_continue(XrayIsolate *X, int status, void *ctx, XrValue *result) {
-    NetRecvFromState *state = (NetRecvFromState *)ctx;
+static XrCFuncResult net_recv_from_continue(XrayIsolate *X, int status, void *ctx,
+                                            XrValue *result) {
+    NetRecvFromState *state = (NetRecvFromState *) ctx;
     if (status == XR_RESUME_TIMEOUT || status == XR_RESUME_CANCELLED) {
         xr_free(state);
         *result = XR_NULL_VAL;
@@ -1387,24 +1455,23 @@ static XrCFuncResult net_recv_from_continue(XrayIsolate *X, int status, void *ct
 
 static XrCFuncResult net_recv_from_step(XrayIsolate *X, NetRecvFromState *state, XrValue *result) {
     int maxlen = state->max_len;
-    if (maxlen > (int)sizeof(g_udp_recv_buf)) maxlen = (int)sizeof(g_udp_recv_buf);
+    if (maxlen > (int) sizeof(g_udp_recv_buf))
+        maxlen = (int) sizeof(g_udp_recv_buf);
 
     struct sockaddr_storage saddr;
     socklen_t slen = sizeof(saddr);
 
-    ssize_t n = recvfrom(state->fd, g_udp_recv_buf, maxlen, 0,
-                         (struct sockaddr*)&saddr, &slen);
+    ssize_t n = recvfrom(state->fd, g_udp_recv_buf, maxlen, 0, (struct sockaddr *) &saddr, &slen);
     if (n >= 0) {
         // Store sender address
         memset(&g_udp_recv_addr, 0, sizeof(g_udp_recv_addr));
         if (saddr.ss_family == AF_INET) {
-            struct sockaddr_in *sin = (struct sockaddr_in*)&saddr;
+            struct sockaddr_in *sin = (struct sockaddr_in *) &saddr;
             g_udp_recv_addr.family = XR_NET_IPV4;
-            inet_ntop(AF_INET, &sin->sin_addr, g_udp_recv_addr.host,
-                      sizeof(g_udp_recv_addr.host));
+            inet_ntop(AF_INET, &sin->sin_addr, g_udp_recv_addr.host, sizeof(g_udp_recv_addr.host));
             g_udp_recv_addr.port = ntohs(sin->sin_port);
         } else if (saddr.ss_family == AF_INET6) {
-            struct sockaddr_in6 *sin6 = (struct sockaddr_in6*)&saddr;
+            struct sockaddr_in6 *sin6 = (struct sockaddr_in6 *) &saddr;
             g_udp_recv_addr.family = XR_NET_IPV6;
             inet_ntop(AF_INET6, &sin6->sin6_addr, g_udp_recv_addr.host,
                       sizeof(g_udp_recv_addr.host));
@@ -1419,13 +1486,13 @@ static XrCFuncResult net_recv_from_step(XrayIsolate *X, NetRecvFromState *state,
             return XR_CFUNC_DONE;
         }
         xr_json_set_by_key(X, json, "data",
-            xr_string_value(xr_string_intern(X, g_udp_recv_buf, n, 0)));
+                           xr_string_value(xr_string_intern(X, g_udp_recv_buf, n, 0)));
 
         XrJson *addr_json = xr_json_new(xr_current_coro(X), 4);
         if (addr_json) {
             xr_json_set_by_key(X, addr_json, "host",
-                xr_string_value(xr_string_intern(X, g_udp_recv_addr.host,
-                    strlen(g_udp_recv_addr.host), 0)));
+                               xr_string_value(xr_string_intern(X, g_udp_recv_addr.host,
+                                                                strlen(g_udp_recv_addr.host), 0)));
             xr_json_set_by_key(X, addr_json, "port", xr_int(g_udp_recv_addr.port));
             xr_json_set_by_key(X, json, "addr", xr_json_value(addr_json));
         }
@@ -1436,8 +1503,8 @@ static XrCFuncResult net_recv_from_step(XrayIsolate *X, NetRecvFromState *state,
     }
 
     if (errno == EAGAIN || errno == EWOULDBLOCK) {
-        return xr_yield_for_io(X, state->fd, XR_WAIT_READ, -1,
-                               net_recv_from_continue, state, result);
+        return xr_yield_for_io(X, state->fd, XR_WAIT_READ, -1, net_recv_from_continue, state,
+                               result);
     }
 
     // Error
@@ -1450,7 +1517,8 @@ static XrCFuncResult net_recv_from_step(XrayIsolate *X, NetRecvFromState *state,
  * net.recvFrom(handle, maxlen?) -> { data, addr: { host, port } } | null
  * Yieldable: handle-based UDP receive
  */
-static XrCFuncResult net_recv_from_yieldable(XrayIsolate *X, XrValue *args, int nargs, XrValue *result) {
+static XrCFuncResult net_recv_from_yieldable(XrayIsolate *X, XrValue *args, int nargs,
+                                             XrValue *result) {
     if (nargs < 1) {
         *result = XR_NULL_VAL;
         return XR_CFUNC_DONE;
@@ -1462,9 +1530,9 @@ static XrCFuncResult net_recv_from_yieldable(XrayIsolate *X, XrValue *args, int 
         return XR_CFUNC_DONE;
     }
 
-    int maxlen = (nargs >= 2 && XR_IS_INT(args[1])) ? (int)XR_TO_INT(args[1]) : 4096;
+    int maxlen = (nargs >= 2 && XR_IS_INT(args[1])) ? (int) XR_TO_INT(args[1]) : 4096;
 
-    NetRecvFromState *state = (NetRecvFromState *)xr_malloc(sizeof(NetRecvFromState));
+    NetRecvFromState *state = (NetRecvFromState *) xr_malloc(sizeof(NetRecvFromState));
     if (!state) {
         *result = XR_NULL_VAL;
         return XR_CFUNC_ERROR;
@@ -1488,7 +1556,8 @@ static XrValue net_dns_lookup(XrayIsolate *isolate, XrValue *args, int nargs) {
     XrNetAddr addrs[8];
     int count = xr_dns_lookup(XR_STRING_CHARS(hostname), addrs, 8);
 
-    if (count <= 0) return XR_NULL_VAL;
+    if (count <= 0)
+        return XR_NULL_VAL;
 
     return xr_string_value(xr_string_intern(isolate, addrs[0].host, strlen(addrs[0].host), 0));
 }
@@ -1502,75 +1571,58 @@ static XrValue net_dns_lookup(XrayIsolate *isolate, XrValue *args, int nargs) {
 // @handle Listener { const fd: int, const type: string, const port: int }
 // @handle UdpSocket { const fd: int, const type: string }
 
-XR_DEFINE_BUILTIN(net_dial_yieldable, "dial",
-    "(host: string, port: int, timeout?: int): Json?",
-    "Dial a TCP connection")
-XR_DEFINE_BUILTIN(net_listen_handle, "listen",
-    "(port: int, backlog?: int): Json?",
-    "Start listening on a port")
-XR_DEFINE_BUILTIN(net_accept_handle_yieldable, "accept",
-    "(listener: Json): Json?",
-    "Accept a new connection")
-XR_DEFINE_BUILTIN(net_read_handle_yieldable, "read",
-    "(conn: Json, maxlen?: int): string?",
-    "Read data from connection")
-XR_DEFINE_BUILTIN(net_write_handle_yieldable, "write",
-    "(conn: Json, data: string): int",
-    "Write data to connection")
-XR_DEFINE_BUILTIN(net_close_handle, "close",
-    "(handle: Json): void",
-    "Close a connection or listener")
-XR_DEFINE_BUILTIN(net_fd_handle, "fd",
-    "(handle: Json): int",
-    "Get fd from handle")
-XR_DEFINE_BUILTIN(net_dns_lookup, "lookup",
-    "(hostname: string): string?",
-    "DNS lookup")
-XR_DEFINE_BUILTIN(net_has_tls, "hasTLS",
-    "(): bool",
-    "Check if TLS support is available")
+XR_DEFINE_BUILTIN(net_dial_yieldable, "dial", "(host: string, port: int, timeout?: int): Json?",
+                  "Dial a TCP connection")
+XR_DEFINE_BUILTIN(net_listen_handle, "listen", "(port: int, backlog?: int): Json?",
+                  "Start listening on a port")
+XR_DEFINE_BUILTIN(net_accept_handle_yieldable, "accept", "(listener: Json): Json?",
+                  "Accept a new connection")
+XR_DEFINE_BUILTIN(net_read_handle_yieldable, "read", "(conn: Json, maxlen?: int): string?",
+                  "Read data from connection")
+XR_DEFINE_BUILTIN(net_write_handle_yieldable, "write", "(conn: Json, data: string): int",
+                  "Write data to connection")
+XR_DEFINE_BUILTIN(net_close_handle, "close", "(handle: Json): void",
+                  "Close a connection or listener")
+XR_DEFINE_BUILTIN(net_fd_handle, "fd", "(handle: Json): int", "Get fd from handle")
+XR_DEFINE_BUILTIN(net_dns_lookup, "lookup", "(hostname: string): string?", "DNS lookup")
+XR_DEFINE_BUILTIN(net_has_tls, "hasTLS", "(): bool", "Check if TLS support is available")
 XR_DEFINE_BUILTIN(net_dial_tls_yieldable, "dialTLS",
-    "(host: string, port: int, timeout?: int): Json?",
-    "Dial a TLS connection")
-XR_DEFINE_BUILTIN(net_upgrade_tls_yieldable, "upgradeTLS",
-    "(conn: Json, hostname: string): Json?",
-    "Upgrade connection to TLS")
-XR_DEFINE_BUILTIN(net_udp_bind_handle, "udpBind",
-    "(port: int, addr?: string): Json?",
-    "Bind a UDP socket")
+                  "(host: string, port: int, timeout?: int): Json?", "Dial a TLS connection")
+XR_DEFINE_BUILTIN(net_upgrade_tls_yieldable, "upgradeTLS", "(conn: Json, hostname: string): Json?",
+                  "Upgrade connection to TLS")
+XR_DEFINE_BUILTIN(net_udp_bind_handle, "udpBind", "(port: int, addr?: string): Json?",
+                  "Bind a UDP socket")
 XR_DEFINE_BUILTIN(net_send_to_yieldable, "sendTo",
-    "(handle: Json, data: string, host: string, port: int): int",
-    "Send UDP datagram")
-XR_DEFINE_BUILTIN(net_recv_from_yieldable, "recvFrom",
-    "(handle: Json, maxlen?: int): Json?",
-    "Receive UDP datagram")
+                  "(handle: Json, data: string, host: string, port: int): int", "Send UDP datagram")
+XR_DEFINE_BUILTIN(net_recv_from_yieldable, "recvFrom", "(handle: Json, maxlen?: int): Json?",
+                  "Receive UDP datagram")
 
-XrModule* xr_load_module_net(XrayIsolate *isolate) {
+XrModule *xr_load_module_net(XrayIsolate *isolate) {
     XrModule *mod = xr_module_create_native(isolate, "net");
 
     // Initialize symbols and shapes once per isolate
     net_ensure_symbols(isolate);
 
     // User-level API (handle-based)
-    XRS_EXPORT_YIELDABLE(mod, isolate, "dial",        net_dial_yieldable);
-    XRS_EXPORT(mod, isolate, "listen",           net_listen_handle);
-    XRS_EXPORT_YIELDABLE(mod, isolate, "accept",      net_accept_handle_yieldable);
-    XRS_EXPORT_YIELDABLE(mod, isolate, "read",        net_read_handle_yieldable);
-    XRS_EXPORT_YIELDABLE(mod, isolate, "write",       net_write_handle_yieldable);
-    XRS_EXPORT(mod, isolate, "close",            net_close_handle);
-    XRS_EXPORT(mod, isolate, "fd",               net_fd_handle);
-    XRS_EXPORT(mod, isolate, "lookup",           net_dns_lookup);
-    XRS_EXPORT(mod, isolate, "hasTLS",           net_has_tls);
+    XRS_EXPORT_YIELDABLE(mod, isolate, "dial", net_dial_yieldable);
+    XRS_EXPORT(mod, isolate, "listen", net_listen_handle);
+    XRS_EXPORT_YIELDABLE(mod, isolate, "accept", net_accept_handle_yieldable);
+    XRS_EXPORT_YIELDABLE(mod, isolate, "read", net_read_handle_yieldable);
+    XRS_EXPORT_YIELDABLE(mod, isolate, "write", net_write_handle_yieldable);
+    XRS_EXPORT(mod, isolate, "close", net_close_handle);
+    XRS_EXPORT(mod, isolate, "fd", net_fd_handle);
+    XRS_EXPORT(mod, isolate, "lookup", net_dns_lookup);
+    XRS_EXPORT(mod, isolate, "hasTLS", net_has_tls);
 
 #ifdef XR_ENABLE_TLS
-    XRS_EXPORT_YIELDABLE(mod, isolate, "dialTLS",     net_dial_tls_yieldable);
-    XRS_EXPORT_YIELDABLE(mod, isolate, "upgradeTLS",  net_upgrade_tls_yieldable);
+    XRS_EXPORT_YIELDABLE(mod, isolate, "dialTLS", net_dial_tls_yieldable);
+    XRS_EXPORT_YIELDABLE(mod, isolate, "upgradeTLS", net_upgrade_tls_yieldable);
 #endif
 
     // UDP (handle-based)
-    XRS_EXPORT(mod, isolate, "udpBind",          net_udp_bind_handle);
-    XRS_EXPORT_YIELDABLE(mod, isolate, "sendTo",      net_send_to_yieldable);
-    XRS_EXPORT_YIELDABLE(mod, isolate, "recvFrom",    net_recv_from_yieldable);
+    XRS_EXPORT(mod, isolate, "udpBind", net_udp_bind_handle);
+    XRS_EXPORT_YIELDABLE(mod, isolate, "sendTo", net_send_to_yieldable);
+    XRS_EXPORT_YIELDABLE(mod, isolate, "recvFrom", net_recv_from_yieldable);
 
     return mod;
 }

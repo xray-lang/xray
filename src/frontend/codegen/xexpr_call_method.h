@@ -64,9 +64,7 @@ struct CallExprNode;
  * call) -- the caller treats it the same way the original inline
  * path did.
  */
-XR_FUNC int xr_compile_call_method(struct XrCompilerContext *ctx,
-                                   struct XrCompiler *compiler,
-                                   struct CallExprNode *node,
-                                   bool is_tail);
+XR_FUNC int xr_compile_call_method(struct XrCompilerContext *ctx, struct XrCompiler *compiler,
+                                   struct CallExprNode *node, bool is_tail);
 
-#endif // XEXPR_CALL_METHOD_H
+#endif  // XEXPR_CALL_METHOD_H

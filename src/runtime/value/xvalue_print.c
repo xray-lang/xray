@@ -34,7 +34,7 @@
 #include "xvalue_format.h"
 
 // Max recursion depth for dump functions
-#define XR_PRINT_MAX_DEPTH   5
+#define XR_PRINT_MAX_DEPTH 5
 
 // ========== Core Implementation ==========
 
@@ -49,12 +49,19 @@ void xr_value_fprint(FILE *stream, XrValue value) {
         fprintf(stream, "%s", str->data);
     } else {
         // Fallback when no isolate (early init or shutdown)
-        if (XR_IS_INT(value)) fprintf(stream, "%lld", (long long)XR_TO_INT(value));
-        else if (XR_IS_FLOAT(value)) fprintf(stream, "%g", XR_TO_FLOAT(value));
-        else if (XR_IS_BOOL(value)) fprintf(stream, "%s", XR_TO_BOOL(value) ? "true" : "false");
-        else if (XR_IS_NULL(value)) fprintf(stream, "null");
-        else if (XR_IS_STRING(value)) { XrString *_s = XR_TO_STRING(value); fprintf(stream, "%.*s", (int)_s->length, _s->data); }
-        else fprintf(stream, "<value>");
+        if (XR_IS_INT(value))
+            fprintf(stream, "%lld", (long long) XR_TO_INT(value));
+        else if (XR_IS_FLOAT(value))
+            fprintf(stream, "%g", XR_TO_FLOAT(value));
+        else if (XR_IS_BOOL(value))
+            fprintf(stream, "%s", XR_TO_BOOL(value) ? "true" : "false");
+        else if (XR_IS_NULL(value))
+            fprintf(stream, "null");
+        else if (XR_IS_STRING(value)) {
+            XrString *_s = XR_TO_STRING(value);
+            fprintf(stream, "%.*s", (int) _s->length, _s->data);
+        } else
+            fprintf(stream, "<value>");
     }
 }
 
@@ -73,8 +80,8 @@ void xr_value_println(XrValue value) {
 
 // Dump context
 typedef struct {
-    int indent;     // Indent spaces
-    int depth;      // Current depth
+    int indent;  // Indent spaces
+    int depth;   // Current depth
 } DumpContext;
 
 // Forward declaration
@@ -112,7 +119,8 @@ static void dump_array(XrArray *arr, DumpContext *ctx) {
 
     ctx->depth++;
     for (int32_t i = 0; i < count; i++) {
-        if (i > 0) printf(",");
+        if (i > 0)
+            printf(",");
         dump_newline(ctx);
         dump_value_internal(xr_array_get_element(arr, i), ctx);
     }
@@ -136,7 +144,8 @@ static void dump_map(XrMap *map, DumpContext *ctx) {
     for (size_t i = 0; i < size; i++) {
         XrMapNode *node = xr_map_node(map, i);
         if (!XR_MAP_NODE_EMPTY(node)) {
-            if (output > 0) printf(",");
+            if (output > 0)
+                printf(",");
             dump_newline(ctx);
 
             // Print key
@@ -167,7 +176,8 @@ static void dump_set(XrSet *set, DumpContext *ctx) {
     for (size_t i = 0; i < set->capacity; i++) {
         XrSetEntry *entry = &set->entries[i];
         if (entry->state & XR_SET_VALID) {
-            if (output > 0) printf(",");
+            if (output > 0)
+                printf(",");
             dump_newline(ctx);
             dump_value_internal(entry->value, ctx);
             output++;
@@ -194,7 +204,7 @@ static void dump_json(XrJson *json, DumpContext *ctx) {
     }
 
     // Fields stored in fields[] array
-    XrSymbolTable *table = X ? (XrSymbolTable*)xr_isolate_get_symbol_table(X) : NULL;
+    XrSymbolTable *table = X ? (XrSymbolTable *) xr_isolate_get_symbol_table(X) : NULL;
 
     if (shape->field_count == 0) {
         printf("}");
@@ -203,7 +213,8 @@ static void dump_json(XrJson *json, DumpContext *ctx) {
 
     ctx->depth++;
     for (uint16_t i = 0; i < shape->field_count; i++) {
-        if (i > 0) printf(",");
+        if (i > 0)
+            printf(",");
         dump_newline(ctx);
 
         // Field name
@@ -243,9 +254,11 @@ static void dump_instance(XrInstance *inst, DumpContext *ctx) {
 
     ctx->depth++;
     for (uint16_t i = 0; i < cls->field_count; i++) {
-        if (cls->fields[i].flags & XR_FIELD_STATIC) continue;
+        if (cls->fields[i].flags & XR_FIELD_STATIC)
+            continue;
 
-        if (i > 0) printf(",");
+        if (i > 0)
+            printf(",");
         dump_newline(ctx);
 
         const char *name = cls->fields[i].name;
@@ -276,37 +289,38 @@ static void dump_value_internal(XrValue value, DumpContext *ctx) {
 
     // Container types: indented formatting
     if (XR_IS_PTR(value)) {
-        XrGCHeader *gc = (XrGCHeader*)XR_TO_PTR(value);
+        XrGCHeader *gc = (XrGCHeader *) XR_TO_PTR(value);
         XrObjType type = XR_GC_GET_TYPE(gc);
         switch (type) {
-        case XR_TARRAY:
-        case XR_TARRAY_SLICE:
-            dump_array((XrArray*)gc, ctx);
-            return;
-        case XR_TMAP:
-            dump_map((XrMap*)gc, ctx);
-            return;
-        case XR_TSET:
-            dump_set((XrSet*)gc, ctx);
-            return;
-        case XR_TJSON:
-            dump_json(xr_value_to_json(value), ctx);
-            return;
-        case XR_TINSTANCE:
-            dump_instance((XrInstance*)gc, ctx);
-            return;
-        case XR_TDATETIME: {
-            char buf[64];
-            int n = xr_datetime_format((void*)gc, XR_DATETIME_DEFAULT_FORMAT, buf, sizeof(buf));
-            if (n > 0) {
-                printf("%s", buf);
-            } else {
-                printf("<DateTime>");
+            case XR_TARRAY:
+            case XR_TARRAY_SLICE:
+                dump_array((XrArray *) gc, ctx);
+                return;
+            case XR_TMAP:
+                dump_map((XrMap *) gc, ctx);
+                return;
+            case XR_TSET:
+                dump_set((XrSet *) gc, ctx);
+                return;
+            case XR_TJSON:
+                dump_json(xr_value_to_json(value), ctx);
+                return;
+            case XR_TINSTANCE:
+                dump_instance((XrInstance *) gc, ctx);
+                return;
+            case XR_TDATETIME: {
+                char buf[64];
+                int n =
+                    xr_datetime_format((void *) gc, XR_DATETIME_DEFAULT_FORMAT, buf, sizeof(buf));
+                if (n > 0) {
+                    printf("%s", buf);
+                } else {
+                    printf("<DateTime>");
+                }
+                return;
             }
-            return;
-        }
-        default:
-            break;
+            default:
+                break;
         }
     }
 
@@ -316,7 +330,7 @@ static void dump_value_internal(XrValue value, DumpContext *ctx) {
         XrString *str = xr_value_to_string(X, value);
         printf("%s", str->data);
     } else if (XR_IS_INT(value)) {
-        printf("%lld", (long long)XR_TO_INT(value));
+        printf("%lld", (long long) XR_TO_INT(value));
     } else if (XR_IS_FLOAT(value)) {
         printf("%g", XR_TO_FLOAT(value));
     } else if (XR_IS_BOOL(value)) {
@@ -331,11 +345,12 @@ static void dump_value_internal(XrValue value, DumpContext *ctx) {
 // Formatted print value (with indentation)
 // Maintains xray native syntax format
 void xr_value_dump(XrValue value, int indent) {
-    if (indent < 0) indent = 0;
-    if (indent > 8) indent = 8;
+    if (indent < 0)
+        indent = 0;
+    if (indent > 8)
+        indent = 8;
 
-    DumpContext ctx = { .indent = indent, .depth = 0 };
+    DumpContext ctx = {.indent = indent, .depth = 0};
     dump_value_internal(value, &ctx);
     printf("\n");
 }
-

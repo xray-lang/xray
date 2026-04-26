@@ -25,16 +25,16 @@
 // is set at the translation-unit level. Provide the standard constants here
 // so this file compiles cleanly on every supported toolchain.
 #ifndef M_PI
-#define M_PI    3.14159265358979323846
+#define M_PI 3.14159265358979323846
 #endif
 #ifndef M_E
-#define M_E     2.71828182845904523536
+#define M_E 2.71828182845904523536
 #endif
 #ifndef M_LN2
-#define M_LN2   0.69314718055994530942
+#define M_LN2 0.69314718055994530942
 #endif
 #ifndef M_LN10
-#define M_LN10  2.30258509299404568402
+#define M_LN10 2.30258509299404568402
 #endif
 #ifndef M_LOG2E
 #define M_LOG2E 1.44269504088896340736
@@ -47,70 +47,84 @@
 #endif
 
 // Safe range for double-to-int64 cast: [INT64_MIN, INT64_MAX]
-#define DOUBLE_FITS_INT64(d) \
-    ((d) >= (double)INT64_MIN && (d) < (double)INT64_MAX + 1.0)
+#define DOUBLE_FITS_INT64(d) ((d) >= (double) INT64_MIN && (d) < (double) INT64_MAX + 1.0)
 
 // Return a NaN for non-numeric inputs instead of silently clamping to 0.
 // `math.sqrt("foo")` previously produced `sqrt(0) == 0`, which hid bugs at
 // the call site. NaN propagation makes the failure observable and matches
 // the standard IEEE-754 contract.
 static double get_number(XrValue v) {
-    if (XR_IS_INT(v)) return (double)XR_TO_INT(v);
-    if (XR_IS_FLOAT(v)) return XR_TO_FLOAT(v);
+    if (XR_IS_INT(v))
+        return (double) XR_TO_INT(v);
+    if (XR_IS_FLOAT(v))
+        return XR_TO_FLOAT(v);
     return NAN;
 }
 
 /* ========== Basic Math ========== */
 
 static XrValue math_abs(XrayIsolate *X, XrValue *args, int argc) {
-    (void)X;
-    if (argc < 1) return xr_int(0);
+    (void) X;
+    if (argc < 1)
+        return xr_int(0);
     if (XR_IS_INT(args[0])) {
         int64_t v = XR_TO_INT(args[0]);
         // INT64_MIN overflow: |INT64_MIN| = 2^63, exceeds INT64_MAX
-        if (v == INT64_MIN) return xr_float((double)INT64_MAX + 1.0);
+        if (v == INT64_MIN)
+            return xr_float((double) INT64_MAX + 1.0);
         return xr_int(v < 0 ? -v : v);
     }
     return xr_float(fabs(get_number(args[0])));
 }
 
 static XrValue math_floor(XrayIsolate *X, XrValue *args, int argc) {
-    (void)X;
-    if (argc < 1) return xr_int(0);
-    if (XR_IS_INT(args[0])) return args[0];
+    (void) X;
+    if (argc < 1)
+        return xr_int(0);
+    if (XR_IS_INT(args[0]))
+        return args[0];
     double result = floor(get_number(args[0]));
-    if (DOUBLE_FITS_INT64(result)) return xr_int((int64_t)result);
+    if (DOUBLE_FITS_INT64(result))
+        return xr_int((int64_t) result);
     return xr_float(result);
 }
 
 static XrValue math_ceil(XrayIsolate *X, XrValue *args, int argc) {
-    (void)X;
-    if (argc < 1) return xr_int(0);
-    if (XR_IS_INT(args[0])) return args[0];
+    (void) X;
+    if (argc < 1)
+        return xr_int(0);
+    if (XR_IS_INT(args[0]))
+        return args[0];
     double result = ceil(get_number(args[0]));
-    if (DOUBLE_FITS_INT64(result)) return xr_int((int64_t)result);
+    if (DOUBLE_FITS_INT64(result))
+        return xr_int((int64_t) result);
     return xr_float(result);
 }
 
 static XrValue math_round(XrayIsolate *X, XrValue *args, int argc) {
-    (void)X;
-    if (argc < 1) return xr_int(0);
-    if (XR_IS_INT(args[0])) return args[0];
+    (void) X;
+    if (argc < 1)
+        return xr_int(0);
+    if (XR_IS_INT(args[0]))
+        return args[0];
     double result = round(get_number(args[0]));
-    if (DOUBLE_FITS_INT64(result)) return xr_int((int64_t)result);
+    if (DOUBLE_FITS_INT64(result))
+        return xr_int((int64_t) result);
     return xr_float(result);
 }
 
 static XrValue math_sqrt(XrayIsolate *X, XrValue *args, int argc) {
-    (void)X;
-    if (argc < 1) return xr_float(0.0);
+    (void) X;
+    if (argc < 1)
+        return xr_float(0.0);
     double v = get_number(args[0]);
     return xr_float(sqrt(v));
 }
 
 static XrValue math_pow(XrayIsolate *X, XrValue *args, int argc) {
-    (void)X;
-    if (argc < 2) return xr_float(0.0);
+    (void) X;
+    if (argc < 2)
+        return xr_float(0.0);
     double x = get_number(args[0]);
     double y = get_number(args[1]);
     return xr_float(pow(x, y));
@@ -119,50 +133,57 @@ static XrValue math_pow(XrayIsolate *X, XrValue *args, int argc) {
 /* ========== Trigonometric ========== */
 
 static XrValue math_sin(XrayIsolate *X, XrValue *args, int argc) {
-    (void)X;
-    if (argc < 1) return xr_float(0.0);
+    (void) X;
+    if (argc < 1)
+        return xr_float(0.0);
     double v = get_number(args[0]);
     return xr_float(sin(v));
 }
 
 static XrValue math_cos(XrayIsolate *X, XrValue *args, int argc) {
-    (void)X;
-    if (argc < 1) return xr_float(0.0);
+    (void) X;
+    if (argc < 1)
+        return xr_float(0.0);
     double v = get_number(args[0]);
     return xr_float(cos(v));
 }
 
 static XrValue math_tan(XrayIsolate *X, XrValue *args, int argc) {
-    (void)X;
-    if (argc < 1) return xr_float(0.0);
+    (void) X;
+    if (argc < 1)
+        return xr_float(0.0);
     double v = get_number(args[0]);
     return xr_float(tan(v));
 }
 
 static XrValue math_asin(XrayIsolate *X, XrValue *args, int argc) {
-    (void)X;
-    if (argc < 1) return xr_float(0.0);
+    (void) X;
+    if (argc < 1)
+        return xr_float(0.0);
     double v = get_number(args[0]);
     return xr_float(asin(v));
 }
 
 static XrValue math_acos(XrayIsolate *X, XrValue *args, int argc) {
-    (void)X;
-    if (argc < 1) return xr_float(0.0);
+    (void) X;
+    if (argc < 1)
+        return xr_float(0.0);
     double v = get_number(args[0]);
     return xr_float(acos(v));
 }
 
 static XrValue math_atan(XrayIsolate *X, XrValue *args, int argc) {
-    (void)X;
-    if (argc < 1) return xr_float(0.0);
+    (void) X;
+    if (argc < 1)
+        return xr_float(0.0);
     double v = get_number(args[0]);
     return xr_float(atan(v));
 }
 
 static XrValue math_atan2(XrayIsolate *X, XrValue *args, int argc) {
-    (void)X;
-    if (argc < 2) return xr_float(0.0);
+    (void) X;
+    if (argc < 2)
+        return xr_float(0.0);
     double y = get_number(args[0]);
     double x = get_number(args[1]);
     return xr_float(atan2(y, x));
@@ -171,29 +192,33 @@ static XrValue math_atan2(XrayIsolate *X, XrValue *args, int argc) {
 /* ========== Logarithmic & Exponential ========== */
 
 static XrValue math_log(XrayIsolate *X, XrValue *args, int argc) {
-    (void)X;
-    if (argc < 1) return xr_float(0.0);
+    (void) X;
+    if (argc < 1)
+        return xr_float(0.0);
     double v = get_number(args[0]);
     return xr_float(log(v));
 }
 
 static XrValue math_log10(XrayIsolate *X, XrValue *args, int argc) {
-    (void)X;
-    if (argc < 1) return xr_float(0.0);
+    (void) X;
+    if (argc < 1)
+        return xr_float(0.0);
     double v = get_number(args[0]);
     return xr_float(log10(v));
 }
 
 static XrValue math_log2(XrayIsolate *X, XrValue *args, int argc) {
-    (void)X;
-    if (argc < 1) return xr_float(0.0);
+    (void) X;
+    if (argc < 1)
+        return xr_float(0.0);
     double v = get_number(args[0]);
     return xr_float(log2(v));
 }
 
 static XrValue math_exp(XrayIsolate *X, XrValue *args, int argc) {
-    (void)X;
-    if (argc < 1) return xr_float(0.0);
+    (void) X;
+    if (argc < 1)
+        return xr_float(0.0);
     double v = get_number(args[0]);
     return xr_float(exp(v));
 }
@@ -201,67 +226,79 @@ static XrValue math_exp(XrayIsolate *X, XrValue *args, int argc) {
 /* ========== Hyperbolic ========== */
 
 static XrValue math_sinh(XrayIsolate *X, XrValue *args, int argc) {
-    (void)X;
-    if (argc < 1) return xr_float(0.0);
+    (void) X;
+    if (argc < 1)
+        return xr_float(0.0);
     return xr_float(sinh(get_number(args[0])));
 }
 
 static XrValue math_cosh(XrayIsolate *X, XrValue *args, int argc) {
-    (void)X;
-    if (argc < 1) return xr_float(1.0);
+    (void) X;
+    if (argc < 1)
+        return xr_float(1.0);
     return xr_float(cosh(get_number(args[0])));
 }
 
 static XrValue math_tanh(XrayIsolate *X, XrValue *args, int argc) {
-    (void)X;
-    if (argc < 1) return xr_float(0.0);
+    (void) X;
+    if (argc < 1)
+        return xr_float(0.0);
     return xr_float(tanh(get_number(args[0])));
 }
 
 /* ========== Additional Math ========== */
 
 static XrValue math_hypot(XrayIsolate *X, XrValue *args, int argc) {
-    (void)X;
-    if (argc < 2) return xr_float(0.0);
+    (void) X;
+    if (argc < 2)
+        return xr_float(0.0);
     return xr_float(hypot(get_number(args[0]), get_number(args[1])));
 }
 
 static XrValue math_cbrt(XrayIsolate *X, XrValue *args, int argc) {
-    (void)X;
-    if (argc < 1) return xr_float(0.0);
+    (void) X;
+    if (argc < 1)
+        return xr_float(0.0);
     return xr_float(cbrt(get_number(args[0])));
 }
 
 static XrValue math_trunc(XrayIsolate *X, XrValue *args, int argc) {
-    (void)X;
-    if (argc < 1) return xr_int(0);
-    if (XR_IS_INT(args[0])) return args[0];
+    (void) X;
+    if (argc < 1)
+        return xr_int(0);
+    if (XR_IS_INT(args[0]))
+        return args[0];
     double result = trunc(get_number(args[0]));
-    if (DOUBLE_FITS_INT64(result)) return xr_int((int64_t)result);
+    if (DOUBLE_FITS_INT64(result))
+        return xr_int((int64_t) result);
     return xr_float(result);
 }
 
 static XrValue math_fmod(XrayIsolate *X, XrValue *args, int argc) {
-    (void)X;
-    if (argc < 2) return xr_float(0.0);
+    (void) X;
+    if (argc < 2)
+        return xr_float(0.0);
     return xr_float(fmod(get_number(args[0]), get_number(args[1])));
 }
 
 static XrValue math_log1p(XrayIsolate *X, XrValue *args, int argc) {
-    (void)X;
-    if (argc < 1) return xr_float(0.0);
+    (void) X;
+    if (argc < 1)
+        return xr_float(0.0);
     return xr_float(log1p(get_number(args[0])));
 }
 
 static XrValue math_expm1(XrayIsolate *X, XrValue *args, int argc) {
-    (void)X;
-    if (argc < 1) return xr_float(0.0);
+    (void) X;
+    if (argc < 1)
+        return xr_float(0.0);
     return xr_float(expm1(get_number(args[0])));
 }
 
 static XrValue math_lerp(XrayIsolate *X, XrValue *args, int argc) {
-    (void)X;
-    if (argc < 3) return xr_float(0.0);
+    (void) X;
+    if (argc < 3)
+        return xr_float(0.0);
     double a = get_number(args[0]);
     double b = get_number(args[1]);
     double t = get_number(args[2]);
@@ -269,148 +306,177 @@ static XrValue math_lerp(XrayIsolate *X, XrValue *args, int argc) {
 }
 
 static XrValue math_degToRad(XrayIsolate *X, XrValue *args, int argc) {
-    (void)X;
-    if (argc < 1) return xr_float(0.0);
+    (void) X;
+    if (argc < 1)
+        return xr_float(0.0);
     return xr_float(get_number(args[0]) * (M_PI / 180.0));
 }
 
 static XrValue math_radToDeg(XrayIsolate *X, XrValue *args, int argc) {
-    (void)X;
-    if (argc < 1) return xr_float(0.0);
+    (void) X;
+    if (argc < 1)
+        return xr_float(0.0);
     return xr_float(get_number(args[0]) * (180.0 / M_PI));
 }
 
 /* ========== Comparison ========== */
 
 static XrValue math_min(XrayIsolate *X, XrValue *args, int argc) {
-    (void)X;
-    if (argc < 2) return argc == 1 ? args[0] : xr_null();
+    (void) X;
+    if (argc < 2)
+        return argc == 1 ? args[0] : xr_null();
     bool all_int = true;
     for (int i = 0; i < argc; i++) {
-        if (!XR_IS_INT(args[i])) { all_int = false; break; }
+        if (!XR_IS_INT(args[i])) {
+            all_int = false;
+            break;
+        }
     }
     if (all_int) {
         int64_t result = XR_TO_INT(args[0]);
         for (int i = 1; i < argc; i++) {
             int64_t v = XR_TO_INT(args[i]);
-            if (v < result) result = v;
+            if (v < result)
+                result = v;
         }
         return xr_int(result);
     }
     double result = get_number(args[0]);
     for (int i = 1; i < argc; i++) {
         double v = get_number(args[i]);
-        if (v < result) result = v;
+        if (v < result)
+            result = v;
     }
     return xr_float(result);
 }
 
 static XrValue math_max(XrayIsolate *X, XrValue *args, int argc) {
-    (void)X;
-    if (argc < 2) return argc == 1 ? args[0] : xr_null();
+    (void) X;
+    if (argc < 2)
+        return argc == 1 ? args[0] : xr_null();
     bool all_int = true;
     for (int i = 0; i < argc; i++) {
-        if (!XR_IS_INT(args[i])) { all_int = false; break; }
+        if (!XR_IS_INT(args[i])) {
+            all_int = false;
+            break;
+        }
     }
     if (all_int) {
         int64_t result = XR_TO_INT(args[0]);
         for (int i = 1; i < argc; i++) {
             int64_t v = XR_TO_INT(args[i]);
-            if (v > result) result = v;
+            if (v > result)
+                result = v;
         }
         return xr_int(result);
     }
     double result = get_number(args[0]);
     for (int i = 1; i < argc; i++) {
         double v = get_number(args[i]);
-        if (v > result) result = v;
+        if (v > result)
+            result = v;
     }
     return xr_float(result);
 }
 
 static XrValue math_clamp(XrayIsolate *X, XrValue *args, int argc) {
-    (void)X;
-    if (argc < 3) return xr_null();
+    (void) X;
+    if (argc < 3)
+        return xr_null();
     if (XR_IS_INT(args[0]) && XR_IS_INT(args[1]) && XR_IS_INT(args[2])) {
         int64_t x = XR_TO_INT(args[0]);
         int64_t lo = XR_TO_INT(args[1]);
         int64_t hi = XR_TO_INT(args[2]);
-        if (x < lo) return xr_int(lo);
-        if (x > hi) return xr_int(hi);
+        if (x < lo)
+            return xr_int(lo);
+        if (x > hi)
+            return xr_int(hi);
         return xr_int(x);
     }
     double x = get_number(args[0]);
     double lo = get_number(args[1]);
     double hi = get_number(args[2]);
-    if (x < lo) return xr_float(lo);
-    if (x > hi) return xr_float(hi);
+    if (x < lo)
+        return xr_float(lo);
+    if (x > hi)
+        return xr_float(hi);
     return xr_float(x);
 }
 
 /* ========== Random ========== */
 
 static XrValue math_random(XrayIsolate *X, XrValue *args, int argc) {
-    (void)X; (void)args; (void)argc;
+    (void) X;
+    (void) args;
+    (void) argc;
     uint64_t r;
-    xr_random_bytes((unsigned char *)&r, sizeof(r));
+    xr_random_bytes((unsigned char *) &r, sizeof(r));
     // Top 53 bits → full double mantissa precision, result in [0, 1)
-    return xr_float((r >> 11) * (1.0 / ((uint64_t)1 << 53)));
+    return xr_float((r >> 11) * (1.0 / ((uint64_t) 1 << 53)));
 }
 
 static XrValue math_randomInt(XrayIsolate *X, XrValue *args, int argc) {
-    (void)X;
-    if (argc < 2) return xr_int(0);
+    (void) X;
+    if (argc < 2)
+        return xr_int(0);
 
-    int64_t min_val = XR_IS_INT(args[0]) ? XR_TO_INT(args[0]) : (int64_t)get_number(args[0]);
-    int64_t max_val = XR_IS_INT(args[1]) ? XR_TO_INT(args[1]) : (int64_t)get_number(args[1]);
+    int64_t min_val = XR_IS_INT(args[0]) ? XR_TO_INT(args[0]) : (int64_t) get_number(args[0]);
+    int64_t max_val = XR_IS_INT(args[1]) ? XR_TO_INT(args[1]) : (int64_t) get_number(args[1]);
 
     if (min_val > max_val) {
         int64_t tmp = min_val;
         min_val = max_val;
         max_val = tmp;
     }
-    if (min_val == max_val) return xr_int(min_val);
+    if (min_val == max_val)
+        return xr_int(min_val);
 
     // Use unsigned arithmetic to avoid overflow when range spans full int64
-    uint64_t range = (uint64_t)(max_val - min_val) + 1;
+    uint64_t range = (uint64_t) (max_val - min_val) + 1;
     uint64_t r;
 
     if (range == 0) {
         // Full 2^64 range (min=INT64_MIN, max=INT64_MAX)
-        xr_random_bytes((unsigned char *)&r, sizeof(r));
+        xr_random_bytes((unsigned char *) &r, sizeof(r));
     } else {
         // Rejection sampling to eliminate modulo bias
         uint64_t threshold = (-range) % range;
         do {
-            xr_random_bytes((unsigned char *)&r, sizeof(r));
+            xr_random_bytes((unsigned char *) &r, sizeof(r));
         } while (r < threshold);
         r = r % range;
     }
-    return xr_int(min_val + (int64_t)r);
+    return xr_int(min_val + (int64_t) r);
 }
 
 /* ========== Utilities ========== */
 
 static XrValue math_sign(XrayIsolate *X, XrValue *args, int argc) {
-    (void)X;
-    if (argc < 1) return xr_int(0);
+    (void) X;
+    if (argc < 1)
+        return xr_int(0);
     double v = get_number(args[0]);
-    if (v > 0) return xr_int(1);
-    if (v < 0) return xr_int(-1);
+    if (v > 0)
+        return xr_int(1);
+    if (v < 0)
+        return xr_int(-1);
     return xr_int(0);
 }
 
 static XrValue math_isNaN(XrayIsolate *X, XrValue *args, int argc) {
-    (void)X;
-    if (argc < 1) return xr_bool(false);
-    if (!XR_IS_FLOAT(args[0])) return xr_bool(false);
+    (void) X;
+    if (argc < 1)
+        return xr_bool(false);
+    if (!XR_IS_FLOAT(args[0]))
+        return xr_bool(false);
     double v = XR_TO_FLOAT(args[0]);
     return xr_bool(isnan(v));
 }
 
 static XrValue math_isFinite(XrayIsolate *X, XrValue *args, int argc) {
-    (void)X;
-    if (argc < 1) return xr_bool(false);
+    (void) X;
+    if (argc < 1)
+        return xr_bool(false);
     double v = get_number(args[0]);
     return xr_bool(isfinite(v));
 }
@@ -440,9 +506,11 @@ XR_DEFINE_BUILTIN(math_log2, "log2", "(x: float): float", "Base-2 logarithm")
 XR_DEFINE_BUILTIN(math_exp, "exp", "(x: float): float", "Exponential e^x")
 XR_DEFINE_BUILTIN(math_min, "min", "(...args: float): float", "Minimum (preserves int)")
 XR_DEFINE_BUILTIN(math_max, "max", "(...args: float): float", "Maximum (preserves int)")
-XR_DEFINE_BUILTIN(math_clamp, "clamp", "(x: float, min: float, max: float): float", "Clamp (preserves int)")
+XR_DEFINE_BUILTIN(math_clamp, "clamp", "(x: float, min: float, max: float): float",
+                  "Clamp (preserves int)")
 XR_DEFINE_BUILTIN(math_random, "random", "(): float", "Random float in [0, 1)")
-XR_DEFINE_BUILTIN(math_randomInt, "randomInt", "(min: int, max: int): int", "Random integer in [min, max]")
+XR_DEFINE_BUILTIN(math_randomInt, "randomInt", "(min: int, max: int): int",
+                  "Random integer in [min, max]")
 XR_DEFINE_BUILTIN(math_sign, "sign", "(x: float): int", "Sign of value (-1, 0, 1)")
 XR_DEFINE_BUILTIN(math_sinh, "sinh", "(x: float): float", "Hyperbolic sine")
 XR_DEFINE_BUILTIN(math_cosh, "cosh", "(x: float): float", "Hyperbolic cosine")
@@ -453,7 +521,8 @@ XR_DEFINE_BUILTIN(math_trunc, "trunc", "(x: float): int", "Truncate toward zero"
 XR_DEFINE_BUILTIN(math_fmod, "fmod", "(x: float, y: float): float", "Floating-point remainder")
 XR_DEFINE_BUILTIN(math_log1p, "log1p", "(x: float): float", "log(1+x) accurate for small x")
 XR_DEFINE_BUILTIN(math_expm1, "expm1", "(x: float): float", "exp(x)-1 accurate for small x")
-XR_DEFINE_BUILTIN(math_lerp, "lerp", "(a: float, b: float, t: float): float", "Linear interpolation")
+XR_DEFINE_BUILTIN(math_lerp, "lerp", "(a: float, b: float, t: float): float",
+                  "Linear interpolation")
 XR_DEFINE_BUILTIN(math_degToRad, "degToRad", "(deg: float): float", "Degrees to radians")
 XR_DEFINE_BUILTIN(math_radToDeg, "radToDeg", "(rad: float): float", "Radians to degrees")
 XR_DEFINE_BUILTIN(math_isNaN, "isNaN", "(x: float): bool", "Check if NaN")
@@ -461,11 +530,12 @@ XR_DEFINE_BUILTIN(math_isFinite, "isFinite", "(x: float): bool", "Check if finit
 
 /* ========== Module Loading ========== */
 
-XrModule* xr_load_module_math(XrayIsolate *isolate) {
+XrModule *xr_load_module_math(XrayIsolate *isolate) {
     XR_DCHECK(isolate != NULL, "xr_load_module_math: NULL isolate");
 
     XrModule *mod = xr_module_create_native(isolate, "math");
-    if (!mod) return NULL;
+    if (!mod)
+        return NULL;
 
     XRS_EXPORT(mod, isolate, "abs", math_abs);
     XRS_EXPORT(mod, isolate, "floor", math_floor);

@@ -30,7 +30,7 @@ vmcase(OP_DEFER) {
      *   [2..n+1] = argument values
      */
     int a = GETARG_A(i);
-    int b = GETARG_B(i); // Argument count
+    int b = GETARG_B(i);  // Argument count
     XrValue closure_val = R(a);
 
     // Required stack space: closure + arg count + arg values
@@ -50,8 +50,8 @@ vmcase(OP_DEFER) {
     while (isolate->vm.defer_count + needed > isolate->vm.defer_capacity) {
         isolate->vm.defer_capacity *= 2;
         XR_REALLOC_OR_ABORT(isolate->vm.defer_stack,
-            sizeof(XrValue) * (size_t)isolate->vm.defer_capacity,
-            "vm defer_stack grow");
+                            sizeof(XrValue) * (size_t) isolate->vm.defer_capacity,
+                            "vm defer_stack grow");
     }
 
     // Push to defer stack: closure + arg count + args
@@ -83,8 +83,9 @@ vmcase(OP_BYTES_NEW) {
     } else if (nargs == 1) {
         XrValue arg = R(a + 1);
         if (XR_IS_INT(arg)) {
-            len = (int32_t)XR_TO_INT(arg);
-            if (len < 0) len = 0;
+            len = (int32_t) XR_TO_INT(arg);
+            if (len < 0)
+                len = 0;
             has_fill = true;
             fill_val = 0;
         } else if (XR_IS_ARRAY(arg)) {
@@ -99,9 +100,10 @@ vmcase(OP_BYTES_NEW) {
         if (!XR_IS_INT(arg1) || !XR_IS_INT(arg2)) {
             VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, "Bytes(n, value): both args must be integers");
         }
-        len = (int32_t)XR_TO_INT(arg1);
-        if (len < 0) len = 0;
-        fill_val = (uint8_t)(XR_TO_INT(arg2) & 0xFF);
+        len = (int32_t) XR_TO_INT(arg1);
+        if (len < 0)
+            len = 0;
+        fill_val = (uint8_t) (XR_TO_INT(arg2) & 0xFF);
         has_fill = true;
     } else {
         VM_RUNTIME_ERROR(XR_ERR_WRONG_ARG_COUNT, "Bytes() requires 0, 1 or 2 arguments");
@@ -110,7 +112,7 @@ vmcase(OP_BYTES_NEW) {
     XrArray *arr = NULL;
     if (storage_mode != 0 && isolate->sys_heap) {
         // Shared: allocate on system heap
-        arr = (XrArray*)xr_sysheap_alloc_shared(isolate->sys_heap, sizeof(XrArray), XR_TARRAY);
+        arr = (XrArray *) xr_sysheap_alloc_shared(isolate->sys_heap, sizeof(XrArray), XR_TARRAY);
         if (arr) {
             xr_array_init_inplace(arr, len > 0 ? len : 4, XR_ELEM_U8);
             XR_GC_SET_STORAGE(&arr->gc, XR_GC_STORAGE_SHARED);
@@ -123,10 +125,10 @@ vmcase(OP_BYTES_NEW) {
     if (arr) {
         if (src_arr) {
             // Copy from source array
-            uint8_t *dst = (uint8_t*)arr->data;
+            uint8_t *dst = (uint8_t *) arr->data;
             for (int32_t j = 0; j < len; j++) {
-                XrValue elem = ((XrValue*)src_arr->data)[j];
-                dst[j] = XR_IS_INT(elem) ? (uint8_t)(XR_TO_INT(elem) & 0xFF) : 0;
+                XrValue elem = ((XrValue *) src_arr->data)[j];
+                dst[j] = XR_IS_INT(elem) ? (uint8_t) (XR_TO_INT(elem) & 0xFF) : 0;
             }
             arr->length = len;
         } else if (has_fill && len > 0) {
@@ -136,7 +138,8 @@ vmcase(OP_BYTES_NEW) {
     }
 
     R(a) = arr ? xr_value_from_array(arr) : xr_null();
-    if (storage_mode == 0) checkGC(base + a + 1);
+    if (storage_mode == 0)
+        checkGC(base + a + 1);
     vmbreak;
 }
 
@@ -144,7 +147,7 @@ vmcase(OP_BYTES_NEW) {
 
 vmcase(OP_SCOPE_ENTER) {
     // Enter structured concurrency scope
-    XrCoroutine *current = (XrCoroutine *)VM_CURRENT_CORO;
+    XrCoroutine *current = (XrCoroutine *) VM_CURRENT_CORO;
     if (current) {
         atomic_store(&current->wait_count, 0);
         atomic_store(&current->any_done, false);
@@ -152,10 +155,10 @@ vmcase(OP_SCOPE_ENTER) {
 
     // Create scope context — per-coroutine tracking
     int scope_mode = GETARG_A(i);
-    XrScopeContext *scope = (XrScopeContext *)xr_malloc(sizeof(XrScopeContext));
+    XrScopeContext *scope = (XrScopeContext *) xr_malloc(sizeof(XrScopeContext));
     if (scope) {
         atomic_store(&scope->count, 0);
-        scope->mode = (uint8_t)scope_mode;
+        scope->mode = (uint8_t) scope_mode;
         atomic_store(&scope->cancel_requested, false);
         atomic_init(&scope->child_lock, false);
         scope->first_error = xr_null();
@@ -172,7 +175,7 @@ vmcase(OP_SCOPE_ENTER) {
             current->current_scope = scope;
         } else {
             // Main thread fallback: use scheduler global
-            XrCoroState *sched = (XrCoroState *)isolate->vm.coro_state;
+            XrCoroState *sched = (XrCoroState *) isolate->vm.coro_state;
             if (sched) {
                 scope->parent = sched->current_scope;
                 sched->current_scope = scope;
@@ -187,18 +190,19 @@ vmcase(OP_SCOPE_EXIT) {
      * A = scope_mode, B = result_reg (supervisor: errors[]) */
     int scope_mode = GETARG_A(i);
     int result_reg = GETARG_B(i);
-    XrCoroutine *current = (XrCoroutine *)VM_CURRENT_CORO;
+    XrCoroutine *current = (XrCoroutine *) VM_CURRENT_CORO;
 
     if (current) {
         XrScopeContext *scope = current->current_scope;
-        if (!scope) vmbreak;
+        if (!scope)
+            vmbreak;
 
         if (atomic_load(&current->wait_count) > 0) {
             // Children still running — block and re-execute on resume
             frame->pc = pc - 1;
             uint32_t old_flags = xr_coro_flags_load(current);
-            atomic_store(&current->flags,
-                xr_coro_set_wait_reason_flags(old_flags, XR_CORO_WAIT_SCOPE >> XR_CORO_WAIT_SHIFT));
+            atomic_store(&current->flags, xr_coro_set_wait_reason_flags(
+                                              old_flags, XR_CORO_WAIT_SCOPE >> XR_CORO_WAIT_SHIFT));
             return XR_VM_BLOCKED;
         }
 
@@ -214,7 +218,8 @@ vmcase(OP_SCOPE_EXIT) {
             }
             savepc();
             xr_vm_unwind_with_trace(isolate, exc);
-            if (VM_HANDLER_COUNT == 0) return XR_VM_RUNTIME_ERROR;
+            if (VM_HANDLER_COUNT == 0)
+                return XR_VM_RUNTIME_ERROR;
             goto startfunc;
         }
         if (scope_mode == XR_SCOPE_SUPERVISOR) {
@@ -223,21 +228,24 @@ vmcase(OP_SCOPE_EXIT) {
                 base[result_reg] = xr_value_from_array(scope->errors);
             } else {
                 XrArray *empty = xr_array_new(current);
-                base[result_reg] = empty ? xr_value_from_array(empty)
-                                         : xr_null();
+                base[result_reg] = empty ? xr_value_from_array(empty) : xr_null();
             }
         }
         current->current_scope = scope->parent;
         xr_free(scope);
     } else {
         // Main thread fallback
-        XrCoroState *sched = (XrCoroState *)isolate->vm.coro_state;
-        if (!sched || !sched->current_scope) vmbreak;
+        XrCoroState *sched = (XrCoroState *) isolate->vm.coro_state;
+        if (!sched || !sched->current_scope)
+            vmbreak;
 
         XrScopeContext *scope = sched->current_scope;
         int spin = 0;
         while (atomic_load(&scope->count) > 0) {
-            if (++spin > 1000) { spin = 0; sched_yield(); }
+            if (++spin > 1000) {
+                spin = 0;
+                sched_yield();
+            }
         }
         if (scope_mode == XR_SCOPE_SUPERVISOR) {
             // Main thread: no coro for array alloc, use null
@@ -268,10 +276,11 @@ vmcase(OP_TIME_AFTER) {
     if (XR_IS_INT(timeout_val)) {
         timeout_ms = XR_TO_INT(timeout_val);
     } else if (XR_IS_FLOAT(timeout_val)) {
-        timeout_ms = (int64_t)XR_TO_FLOAT(timeout_val);
+        timeout_ms = (int64_t) XR_TO_FLOAT(timeout_val);
     }
 
-    if (timeout_ms < 0) timeout_ms = 0;
+    if (timeout_ms < 0)
+        timeout_ms = 0;
 
     // Create Timer Channel
     XrChannel *timer_ch = xr_channel_new_timer(isolate, timeout_ms);
@@ -305,7 +314,7 @@ vmcase(OP_SLEEP) {
     if (XR_IS_INT(val)) {
         milliseconds = XR_TO_INT(val);
     } else if (XR_IS_FLOAT(val)) {
-        milliseconds = (int64_t)XR_TO_FLOAT(val);
+        milliseconds = (int64_t) XR_TO_FLOAT(val);
     }
 
     if (milliseconds <= 0) {
@@ -313,11 +322,11 @@ vmcase(OP_SLEEP) {
     }
 
     // Check if in coroutine
-    XrCoroutine *coro = (XrCoroutine *)VM_CURRENT_CORO;
+    XrCoroutine *coro = (XrCoroutine *) VM_CURRENT_CORO;
     if (coro) {
         // Coroutine mode: use Timer Wheel for precise timed wake
-        XrRuntime *rt = (XrRuntime *)isolate->vm.runtime;
-        (void)rt;
+        XrRuntime *rt = (XrRuntime *) isolate->vm.runtime;
+        (void) rt;
 
         // First set as pure sleep (no fd)
         XrCoroExt *sleep_ext = xr_coro_ensure_ext(coro);
@@ -327,7 +336,8 @@ vmcase(OP_SLEEP) {
         }
         // Set wait reason in flags
         uint32_t old_flags = xr_coro_flags_load(coro);
-        uint32_t new_flags = xr_coro_set_wait_reason_flags(old_flags, XR_CORO_WAIT_SLEEP >> XR_CORO_WAIT_SHIFT);
+        uint32_t new_flags =
+            xr_coro_set_wait_reason_flags(old_flags, XR_CORO_WAIT_SLEEP >> XR_CORO_WAIT_SHIFT);
         atomic_store(&coro->flags, new_flags);
 
         // Add timer to current Worker's Timer Wheel (Per-Worker lock-free)
@@ -336,14 +346,14 @@ vmcase(OP_SLEEP) {
 
         if (tw) {
             // Use Per-Worker Timer Wheel (lock-free)
-            XR_DBG_TIMER("Add timer: coro=%d, ms=%lld, worker=%d, tw=%p",
-                         coro->id, (long long)milliseconds, worker->p.id, (void*)tw);
+            XR_DBG_TIMER("Add timer: coro=%d, ms=%lld, worker=%d, tw=%p", coro->id,
+                         (long long) milliseconds, worker->p.id, (void *) tw);
             xr_worker_add_sleep_timer(worker, coro, milliseconds);
         } else {
             /* Timer wheel must exist for all workers.
              * If missing, fall back to blocking sleep to avoid
              * setting timer_active without timer wheel registration. */
-            usleep((useconds_t)(milliseconds * 1000));
+            usleep((useconds_t) (milliseconds * 1000));
             vmbreak;
         }
 
@@ -357,7 +367,7 @@ vmcase(OP_SLEEP) {
     }
 
     // Non-coroutine mode: blocking sleep - milliseconds to microseconds
-    usleep((useconds_t)(milliseconds * 1000));
+    usleep((useconds_t) (milliseconds * 1000));
     vmbreak;
 }
 

@@ -34,9 +34,9 @@ typedef struct {
     bool jitless;
     bool jit_force;
     bool jit_stats;
-    int num_workers;           // 0 = auto-detect
-    int coro_watch_interval;   // 0 = disabled, >0 = refresh interval(ms)
-    int coro_http_port;        // 0 = disabled, >0 = HTTP port
+    int num_workers;          // 0 = auto-detect
+    int coro_watch_interval;  // 0 = disabled, >0 = refresh interval(ms)
+    int coro_http_port;       // 0 = disabled, >0 = HTTP port
 } RunOptions;
 
 /* Create isolate via profile factory, then apply run-specific overrides */
@@ -47,11 +47,13 @@ static XrayIsolate *create_run_isolate(const RunOptions *opts) {
     params.dump_bytecode = opts->dump_bytecode;
     params.dump_ic_feedback = opts->dump_ic;
     params.enable_jit = !opts->jitless;
-    if (opts->jit_force) params.jit_threshold = 1;
+    if (opts->jit_force)
+        params.jit_threshold = 1;
     params.jit_stats = opts->jit_stats;
 
     XrayIsolate *iso = xr_cli_isolate_create(&params);
-    if (!iso) return NULL;
+    if (!iso)
+        return NULL;
     xr_multicore_init(iso, opts->num_workers);
     return iso;
 }
@@ -59,7 +61,8 @@ static XrayIsolate *create_run_isolate(const RunOptions *opts) {
 // Execute code string and cleanup isolate
 static int run_string(const RunOptions *opts, const char *code) {
     XrayIsolate *iso = create_run_isolate(opts);
-    if (!iso) return 1;
+    if (!iso)
+        return 1;
 
     int result = xray_isolate_dostring(iso, code);
     xr_multicore_destroy(iso);
@@ -72,13 +75,13 @@ static void fill_run_options(RunOptions *opts, const XrCliInvocation *inv) {
     XR_DCHECK(opts != NULL, "opts is NULL");
     XR_DCHECK(inv != NULL, "inv is NULL");
 
-    opts->trace          = xr_cli_opt_bool(&inv->options, "trace");
-    opts->dump_bytecode  = xr_cli_opt_bool(&inv->options, "dump-bytecode");
-    opts->dump_ic        = xr_cli_opt_bool(&inv->options, "dump-ic");
-    opts->jitless        = xr_cli_opt_bool(&inv->options, "no-jit");
-    opts->jit_force      = xr_cli_opt_bool(&inv->options, "jit-force");
-    opts->jit_stats      = xr_cli_opt_bool(&inv->options, "jit-stats");
-    opts->num_workers    = xr_cli_opt_int(&inv->options, "workers", 0);
+    opts->trace = xr_cli_opt_bool(&inv->options, "trace");
+    opts->dump_bytecode = xr_cli_opt_bool(&inv->options, "dump-bytecode");
+    opts->dump_ic = xr_cli_opt_bool(&inv->options, "dump-ic");
+    opts->jitless = xr_cli_opt_bool(&inv->options, "no-jit");
+    opts->jit_force = xr_cli_opt_bool(&inv->options, "jit-force");
+    opts->jit_stats = xr_cli_opt_bool(&inv->options, "jit-stats");
+    opts->num_workers = xr_cli_opt_int(&inv->options, "workers", 0);
     opts->coro_watch_interval = xr_cli_opt_int(&inv->options, "coro-watch", 0);
     opts->coro_http_port = xr_cli_opt_int(&inv->options, "coro-http", 0);
 }
@@ -116,7 +119,8 @@ XR_FUNC int cmd_run(const XrCliInvocation *inv) {
 
     /* Create isolate with runtime */
     XrayIsolate *iso = create_run_isolate(&opts);
-    if (!iso) return XR_CLI_EXIT_INTERNAL;
+    if (!iso)
+        return XR_CLI_EXIT_INTERNAL;
 
     /* Set script info (for args/__file__/__dir__) */
     xray_isolate_set_script_info(iso, file, script_argc, script_argv);

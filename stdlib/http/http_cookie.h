@@ -44,14 +44,14 @@ typedef enum {
 } XrSameSite;
 
 typedef struct XrHttpCookie {
-    char *name;             // Cookie name
-    char *value;            // Cookie value
-    char *domain;           // Domain
-    char *path;             // Path
-    time_t expires;         // Expiration time (0 = session cookie)
-    bool secure;            // HTTPS only
-    bool http_only;         // No JS access
-    XrSameSite same_site;   // SameSite attribute (RFC 6265bis)
+    char *name;            // Cookie name
+    char *value;           // Cookie value
+    char *domain;          // Domain
+    char *path;            // Path
+    time_t expires;        // Expiration time (0 = session cookie)
+    bool secure;           // HTTPS only
+    bool http_only;        // No JS access
+    XrSameSite same_site;  // SameSite attribute (RFC 6265bis)
 
     struct XrHttpCookie *next;  // Next in linked list
 } XrHttpCookie;
@@ -71,9 +71,8 @@ typedef struct XrCookieJar {
  * Parse Set-Cookie header
  * Returns: new cookie (caller must free)
  */
-XR_FUNC XrHttpCookie* xr_cookie_parse(const char *set_cookie_header,
-                               const char *request_domain,
-                               const char *request_path);
+XR_FUNC XrHttpCookie *xr_cookie_parse(const char *set_cookie_header, const char *request_domain,
+                                      const char *request_path);
 
 /*
  * Free cookie
@@ -84,14 +83,14 @@ XR_FUNC void xr_cookie_free(XrHttpCookie *cookie);
  * Serialize cookie (generate Cookie header value)
  * Returns: newly allocated string (caller must free)
  */
-XR_FUNC char* xr_cookie_serialize(XrHttpCookie *cookie);
+XR_FUNC char *xr_cookie_serialize(XrHttpCookie *cookie);
 
 /* ========== Cookie Jar API ========== */
 
 /*
  * Create cookie jar
  */
-XR_FUNC XrCookieJar* xr_cookie_jar_new(void);
+XR_FUNC XrCookieJar *xr_cookie_jar_new(void);
 
 /*
  * Free cookie jar
@@ -112,20 +111,16 @@ XR_FUNC void xr_cookie_jar_add(XrCookieJar *jar, XrHttpCookie *cookie);
  * headers: "Set-Cookie: ..." header array
  * count: Header count
  */
-XR_FUNC void xr_cookie_jar_add_from_response(XrCookieJar *jar,
-                                      const char **set_cookie_headers,
-                                      int count,
-                                      const char *request_domain,
-                                      const char *request_path);
+XR_FUNC void xr_cookie_jar_add_from_response(XrCookieJar *jar, const char **set_cookie_headers,
+                                             int count, const char *request_domain,
+                                             const char *request_path);
 
 /*
  * Get Cookie header value for specified URL
  * Returns: newly allocated string "name1=value1; name2=value2" (caller must free)
  */
-XR_FUNC char* xr_cookie_jar_get_header(XrCookieJar *jar,
-                                const char *domain,
-                                const char *path,
-                                bool is_secure);
+XR_FUNC char *xr_cookie_jar_get_header(XrCookieJar *jar, const char *domain, const char *path,
+                                       bool is_secure);
 
 /*
  * Clear expired cookies
@@ -147,7 +142,7 @@ XR_FUNC void xr_cookie_jar_clear(XrCookieJar *jar);
 /*
  * Get Isolate's cookie jar (auto-create)
  */
-XR_FUNC XrCookieJar* xr_get_cookie_jar(XrayIsolate *X);
+XR_FUNC XrCookieJar *xr_get_cookie_jar(XrayIsolate *X);
 
 /*
  * Set whether cookie jar is enabled

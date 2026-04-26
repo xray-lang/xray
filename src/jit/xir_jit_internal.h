@@ -28,17 +28,22 @@ typedef XrJitResult (*XirJitFn)(intptr_t, int64_t *);
 
 /* ========== Convenience alias ========== */
 
-#define XR_JIT_RESULT(val)  XR_JIT_VAL(val)
+#define XR_JIT_RESULT(val) XR_JIT_VAL(val)
 
 /* ========== Tag conversion ========== */
 
 static inline uint8_t slot_type_to_xr_tag(uint8_t slot_type) {
     switch (slot_type) {
-    case XR_SLOT_I64:  return XR_TAG_I64;
-    case XR_SLOT_F64:  return XR_TAG_F64;
-    case XR_SLOT_PTR:  return XR_TAG_PTR;
-    case XR_SLOT_BOOL: return XR_TAG_BOOL;
-    default:           return XR_RTAG_UNKNOWN;
+        case XR_SLOT_I64:
+            return XR_TAG_I64;
+        case XR_SLOT_F64:
+            return XR_TAG_F64;
+        case XR_SLOT_PTR:
+            return XR_TAG_PTR;
+        case XR_SLOT_BOOL:
+            return XR_TAG_BOOL;
+        default:
+            return XR_RTAG_UNKNOWN;
     }
 }
 
@@ -51,40 +56,40 @@ static inline XrValue jit_value_from_tag(int64_t raw, uint8_t xr_tag) {
     XrValue v;
     v.descriptor = 0;
     switch (xr_tag) {
-    case XR_TAG_F64:
-        memcpy(&v.f, &raw, sizeof(double));
-        v.tag = XR_TAG_F64;
-        break;
-    case XR_TAG_NULL:
-        v.tag = XR_TAG_NULL;
-        v.i = 0;
-        break;
-    case XR_TAG_BOOL:
-        v.i = raw;
-        v.tag = XR_TAG_BOOL;
-        break;
-    case XR_TAG_PTR:
-        if (raw == 0) {
+        case XR_TAG_F64:
+            memcpy(&v.f, &raw, sizeof(double));
+            v.tag = XR_TAG_F64;
+            break;
+        case XR_TAG_NULL:
             v.tag = XR_TAG_NULL;
             v.i = 0;
-        } else if ((uint64_t)raw >= 0x1000 && (raw & 0x7) == 0) {
-            v.ptr = (void *)raw;
-            v.tag = XR_TAG_PTR;
-            v.heap_type = (uint16_t)((XrGCHeader *)v.ptr)->type;
-        } else {
+            break;
+        case XR_TAG_BOOL:
+            v.i = raw;
+            v.tag = XR_TAG_BOOL;
+            break;
+        case XR_TAG_PTR:
+            if (raw == 0) {
+                v.tag = XR_TAG_NULL;
+                v.i = 0;
+            } else if ((uint64_t) raw >= 0x1000 && (raw & 0x7) == 0) {
+                v.ptr = (void *) raw;
+                v.tag = XR_TAG_PTR;
+                v.heap_type = (uint16_t) ((XrGCHeader *) v.ptr)->type;
+            } else {
+                v.i = raw;
+                v.tag = XR_TAG_I64;
+            }
+            break;
+        case XR_RTAG_NUMERIC:
+        case XR_RTAG_UNKNOWN:
             v.i = raw;
             v.tag = XR_TAG_I64;
-        }
-        break;
-    case XR_RTAG_NUMERIC:
-    case XR_RTAG_UNKNOWN:
-        v.i = raw;
-        v.tag = XR_TAG_I64;
-        break;
-    default:
-        v.i = raw;
-        v.tag = xr_tag;
-        break;
+            break;
+        default:
+            v.i = raw;
+            v.tag = xr_tag;
+            break;
     }
     return v;
 }
@@ -115,8 +120,8 @@ static inline XrValue deopt_reconstruct(int64_t raw, uint8_t xir_type, uint8_t x
             } else {
                 v.tag = XR_TAG_PTR;
                 if ((raw & 0x7) == 0) {
-                    XrGCHeader *gc = (XrGCHeader *)(intptr_t)raw;
-                    v.heap_type = (uint16_t)gc->type;
+                    XrGCHeader *gc = (XrGCHeader *) (intptr_t) raw;
+                    v.heap_type = (uint16_t) gc->type;
                 }
             }
         } else {
@@ -128,31 +133,31 @@ static inline XrValue deopt_reconstruct(int64_t raw, uint8_t xir_type, uint8_t x
 
     // Unknown tag: infer from XIR representation type
     switch (xir_type) {
-    case XR_REP_F64:
-        memcpy(&v.f, &raw, sizeof(double));
-        v.tag = XR_TAG_F64;
-        break;
-    case XR_REP_PTR:
-        v.i = raw;
-        if (raw == 0) {
-            v.tag = XR_TAG_NULL;
-        } else if ((raw & 0x7) == 0) {
-            v.tag = XR_TAG_PTR;
-            XrGCHeader *gc = (XrGCHeader *)(intptr_t)raw;
-            v.heap_type = (uint16_t)gc->type;
-        } else {
-            v.tag = XR_TAG_I64;
-        }
-        break;
-    case XR_REP_TAGGED:
-    default:
-        // Unknown rep + unknown tag: safe default to I64.
-        // Never guess pointer from address range — an integer that happens
-        // to be aligned > 0x10000 would SIGSEGV when dereferencing GC header.
-        // The interpreter will do proper type checking after deopt.
-        v.i = raw;
-        v.tag = (raw == 0) ? XR_TAG_NULL : XR_TAG_I64;
-        break;
+        case XR_REP_F64:
+            memcpy(&v.f, &raw, sizeof(double));
+            v.tag = XR_TAG_F64;
+            break;
+        case XR_REP_PTR:
+            v.i = raw;
+            if (raw == 0) {
+                v.tag = XR_TAG_NULL;
+            } else if ((raw & 0x7) == 0) {
+                v.tag = XR_TAG_PTR;
+                XrGCHeader *gc = (XrGCHeader *) (intptr_t) raw;
+                v.heap_type = (uint16_t) gc->type;
+            } else {
+                v.tag = XR_TAG_I64;
+            }
+            break;
+        case XR_REP_TAGGED:
+        default:
+            // Unknown rep + unknown tag: safe default to I64.
+            // Never guess pointer from address range — an integer that happens
+            // to be aligned > 0x10000 would SIGSEGV when dereferencing GC header.
+            // The interpreter will do proper type checking after deopt.
+            v.i = raw;
+            v.tag = (raw == 0) ? XR_TAG_NULL : XR_TAG_I64;
+            break;
     }
     return v;
 }
@@ -162,9 +167,10 @@ static inline XrValue deopt_reconstruct(int64_t raw, uint8_t xir_type, uint8_t x
 // Decode xr_tag from a 64-bit tag bitmap stored in call_args[15].
 // Each slot occupies 4 bits: slot i is at bits[(i+1)*4-1 : i*4].
 static inline uint8_t jit_bitmap_tag(int64_t bitmap, int slot) {
-    uint8_t nibble = (uint8_t)((bitmap >> (slot * 4)) & 0xF);
-    if (nibble <= 7) return nibble;
+    uint8_t nibble = (uint8_t) ((bitmap >> (slot * 4)) & 0xF);
+    if (nibble <= 7)
+        return nibble;
     return XR_RTAG_UNKNOWN;
 }
 
-#endif // XIR_JIT_INTERNAL_H
+#endif  // XIR_JIT_INTERNAL_H

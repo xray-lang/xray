@@ -43,15 +43,16 @@
  */
 struct XrCFunction;
 struct XrayIsolate;
-typedef XrValue (*XrCFunctionPtr)(struct XrayIsolate*, XrValue*, int);
-extern struct XrCFunction* xr_vm_cfunction_new(struct XrayIsolate *isolate, XrCFunctionPtr func, const char *name);
+typedef XrValue (*XrCFunctionPtr)(struct XrayIsolate *, XrValue *, int);
+extern struct XrCFunction *xr_vm_cfunction_new(struct XrayIsolate *isolate, XrCFunctionPtr func,
+                                               const char *name);
 extern XrValue xr_value_from_cfunction(struct XrCFunction *cfunc);
 
-#define XR_MODULE_EXPORT(mod, isolate, name_str, func_ptr) \
-    do { \
-        struct XrCFunction *cfunc = xr_vm_cfunction_new(isolate, func_ptr, name_str); \
-        XrValue fn_val = xr_value_from_cfunction(cfunc); \
-        xr_module_add_export(isolate, mod, name_str, fn_val); \
-    } while(0)
+#define XR_MODULE_EXPORT(mod, isolate, name_str, func_ptr)                                         \
+    do {                                                                                           \
+        struct XrCFunction *cfunc = xr_vm_cfunction_new(isolate, func_ptr, name_str);              \
+        XrValue fn_val = xr_value_from_cfunction(cfunc);                                           \
+        xr_module_add_export(isolate, mod, name_str, fn_val);                                      \
+    } while (0)
 
-#endif // XBUILTIN_DECL_H
+#endif  // XBUILTIN_DECL_H

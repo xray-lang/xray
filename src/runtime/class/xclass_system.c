@@ -33,7 +33,7 @@
 
 void xr_core_init(XrayIsolate *X) {
     XR_DCHECK(X != NULL, "xr_core_init: NULL isolate");
-    X->core = (XrayCoreClasses*)xr_malloc(sizeof(XrayCoreClasses));
+    X->core = (XrayCoreClasses *) xr_malloc(sizeof(XrayCoreClasses));
     if (!X->core) {
         xr_log_warning("class", "Fatal: Failed to allocate core classes");
         return;
@@ -85,7 +85,8 @@ void xr_core_init(XrayIsolate *X) {
 }
 
 void xr_core_free(XrayIsolate *X) {
-    if (!X || !X->core) return;
+    if (!X || !X->core)
+        return;
 
     // Core classes are GC-managed, just free the container
     xr_free(X->core);

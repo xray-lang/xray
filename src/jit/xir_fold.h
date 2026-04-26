@@ -41,13 +41,13 @@
  *
  * Parameters are identical to xir_emit().
  */
-XR_FUNC XirRef xir_fold_emit(XirFunc *func, XirBlock *blk,
-                     uint16_t op, uint8_t type, XirRef a, XirRef b);
+XR_FUNC XirRef xir_fold_emit(XirFunc *func, XirBlock *blk, uint16_t op, uint8_t type, XirRef a,
+                             XirRef b);
 
 /*
  * Optimizing unary emit: wrapper for single-operand instructions.
  */
-XR_FUNC XirRef xir_fold_emit_unary(XirFunc *func, XirBlock *blk,
-                           uint16_t op, uint8_t type, XirRef a);
+XR_FUNC XirRef xir_fold_emit_unary(XirFunc *func, XirBlock *blk, uint16_t op, uint8_t type,
+                                   XirRef a);
 
-#endif // XIR_FOLD_H
+#endif  // XIR_FOLD_H

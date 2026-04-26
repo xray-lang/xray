@@ -47,15 +47,14 @@ static XrValue xr_json_static_keys(XrayIsolate *isolate, XrValue *args, int narg
         return xr_value_from_array(xr_array_new(xr_current_coro(isolate)));
 
     XrArray *keys = xr_array_new(xr_current_coro(isolate));
-    XrSymbolTable *symtab = (XrSymbolTable*)xr_isolate_get_symbol_table(isolate);
+    XrSymbolTable *symtab = (XrSymbolTable *) xr_isolate_get_symbol_table(isolate);
 
     XrShape *shape = xr_json_shape(isolate, json);
     for (uint16_t i = 0; i < shape->field_count; i++) {
         SymbolId sym = shape->field_symbols[i];
         const char *name = xr_symbol_get_name_in_table(symtab, sym);
         if (name) {
-            xr_array_push(keys, xr_string_value(
-                xr_string_intern(isolate, name, strlen(name), 0)));
+            xr_array_push(keys, xr_string_value(xr_string_intern(isolate, name, strlen(name), 0)));
         }
     }
 
@@ -91,7 +90,7 @@ static XrValue xr_json_static_entries(XrayIsolate *isolate, XrValue *args, int n
         return xr_value_from_array(xr_array_new(xr_current_coro(isolate)));
 
     XrArray *entries = xr_array_new(xr_current_coro(isolate));
-    XrSymbolTable *symtab = (XrSymbolTable*)xr_isolate_get_symbol_table(isolate);
+    XrSymbolTable *symtab = (XrSymbolTable *) xr_isolate_get_symbol_table(isolate);
 
     XrShape *shape = xr_json_shape(isolate, json);
     for (uint16_t i = 0; i < shape->field_count; i++) {
@@ -99,8 +98,7 @@ static XrValue xr_json_static_entries(XrayIsolate *isolate, XrValue *args, int n
         SymbolId sym = shape->field_symbols[i];
         const char *name = xr_symbol_get_name_in_table(symtab, sym);
         if (name) {
-            xr_array_push(pair, xr_string_value(
-                xr_string_intern(isolate, name, strlen(name), 0)));
+            xr_array_push(pair, xr_string_value(xr_string_intern(isolate, name, strlen(name), 0)));
         }
         xr_array_push(pair, xr_json_get_field_any(isolate, json, i));
         xr_array_push(entries, xr_value_from_array(pair));
@@ -111,79 +109,91 @@ static XrValue xr_json_static_entries(XrayIsolate *isolate, XrValue *args, int n
 
 // Json.has(obj, key) -> bool
 static XrValue xr_json_static_has(XrayIsolate *isolate, XrValue *args, int nargs) {
-    if (nargs < 2 || !xr_value_is_json(args[0])) return xr_bool(false);
+    if (nargs < 2 || !xr_value_is_json(args[0]))
+        return xr_bool(false);
 
     XrJson *json = xr_value_to_json(args[0]);
-    if (!json || !xr_json_shape(isolate, json)) return xr_bool(false);
-    if (!XR_IS_STRING(args[1])) return xr_bool(false);
+    if (!json || !xr_json_shape(isolate, json))
+        return xr_bool(false);
+    if (!XR_IS_STRING(args[1]))
+        return xr_bool(false);
 
     XrString *key_str = XR_TO_STRING(args[1]);
-    XrSymbolTable *symtab = (XrSymbolTable*)xr_isolate_get_symbol_table(isolate);
+    XrSymbolTable *symtab = (XrSymbolTable *) xr_isolate_get_symbol_table(isolate);
     SymbolId sym = xr_symbol_lookup_in_table(symtab, key_str->data);
-    if (sym == SYMBOL_INVALID) return xr_bool(false);
+    if (sym == SYMBOL_INVALID)
+        return xr_bool(false);
 
     return xr_bool(xr_json_has_field(isolate, json, sym));
 }
 
 // Json.get(obj, key, default?) -> any
 static XrValue xr_json_static_get(XrayIsolate *isolate, XrValue *args, int nargs) {
-    if (nargs < 2) return xr_null();
-    if (!xr_value_is_json(args[0])) return (nargs >= 3) ? args[2] : xr_null();
+    if (nargs < 2)
+        return xr_null();
+    if (!xr_value_is_json(args[0]))
+        return (nargs >= 3) ? args[2] : xr_null();
 
     XrJson *json = xr_value_to_json(args[0]);
-    if (!json || !xr_json_shape(isolate, json)) return (nargs >= 3) ? args[2] : xr_null();
-    if (!XR_IS_STRING(args[1])) return (nargs >= 3) ? args[2] : xr_null();
+    if (!json || !xr_json_shape(isolate, json))
+        return (nargs >= 3) ? args[2] : xr_null();
+    if (!XR_IS_STRING(args[1]))
+        return (nargs >= 3) ? args[2] : xr_null();
 
     XrString *key_str = XR_TO_STRING(args[1]);
-    XrSymbolTable *symtab = (XrSymbolTable*)xr_isolate_get_symbol_table(isolate);
+    XrSymbolTable *symtab = (XrSymbolTable *) xr_isolate_get_symbol_table(isolate);
     SymbolId sym = xr_symbol_lookup_in_table(symtab, key_str->data);
-    if (sym == SYMBOL_INVALID) return (nargs >= 3) ? args[2] : xr_null();
+    if (sym == SYMBOL_INVALID)
+        return (nargs >= 3) ? args[2] : xr_null();
 
-    if (!xr_json_has_field(isolate, json, sym)) return (nargs >= 3) ? args[2] : xr_null();
+    if (!xr_json_has_field(isolate, json, sym))
+        return (nargs >= 3) ? args[2] : xr_null();
     return xr_json_get_by_key(isolate, json, key_str->data);
 }
 
 // Json.size(obj) -> int
 static XrValue xr_json_static_size(XrayIsolate *isolate, XrValue *args, int nargs) {
-    if (nargs < 1 || !xr_value_is_json(args[0])) return xr_int(0);
+    if (nargs < 1 || !xr_value_is_json(args[0]))
+        return xr_int(0);
 
     XrJson *json = xr_value_to_json(args[0]);
-    if (!json || !xr_json_shape(isolate, json)) return xr_int(0);
+    if (!json || !xr_json_shape(isolate, json))
+        return xr_int(0);
 
-    return xr_int((xr_Integer)xr_json_field_count(isolate, json));
+    return xr_int((xr_Integer) xr_json_field_count(isolate, json));
 }
 
 // Json.isEmpty(obj) -> bool
 static XrValue xr_json_static_isEmpty(XrayIsolate *isolate, XrValue *args, int nargs) {
-    if (nargs < 1 || !xr_value_is_json(args[0])) return xr_bool(true);
+    if (nargs < 1 || !xr_value_is_json(args[0]))
+        return xr_bool(true);
 
     XrJson *json = xr_value_to_json(args[0]);
-    if (!json || !xr_json_shape(isolate, json)) return xr_bool(true);
+    if (!json || !xr_json_shape(isolate, json))
+        return xr_bool(true);
 
     return xr_bool(xr_json_field_count(isolate, json) == 0);
 }
 
 /* ========== Class Creation ========== */
 
-static XrClass* create_json_utility_class(XrayIsolate *X) {
+static XrClass *create_json_utility_class(XrayIsolate *X) {
     XR_DCHECK(X != NULL, "create_json_utility_class: NULL isolate");
-    XrClassBuilder *builder = xr_class_builder_new(X, "Json", xr_isolate_get_core_classes(X)->objectClass);
-    if (!builder) return NULL;
+    XrClassBuilder *builder =
+        xr_class_builder_new(X, "Json", xr_isolate_get_core_classes(X)->objectClass);
+    if (!builder)
+        return NULL;
 
-    xr_class_builder_add_static_method(builder, "keys",
-        (XrCFunctionPtr)xr_json_static_keys, 1, 0);
-    xr_class_builder_add_static_method(builder, "values",
-        (XrCFunctionPtr)xr_json_static_values, 1, 0);
-    xr_class_builder_add_static_method(builder, "entries",
-        (XrCFunctionPtr)xr_json_static_entries, 1, 0);
-    xr_class_builder_add_static_method(builder, "has",
-        (XrCFunctionPtr)xr_json_static_has, 2, 0);
-    xr_class_builder_add_static_method(builder, "get",
-        (XrCFunctionPtr)xr_json_static_get, 2, 0);
-    xr_class_builder_add_static_method(builder, "size",
-        (XrCFunctionPtr)xr_json_static_size, 1, 0);
-    xr_class_builder_add_static_method(builder, "isEmpty",
-        (XrCFunctionPtr)xr_json_static_isEmpty, 1, 0);
+    xr_class_builder_add_static_method(builder, "keys", (XrCFunctionPtr) xr_json_static_keys, 1, 0);
+    xr_class_builder_add_static_method(builder, "values", (XrCFunctionPtr) xr_json_static_values, 1,
+                                       0);
+    xr_class_builder_add_static_method(builder, "entries", (XrCFunctionPtr) xr_json_static_entries,
+                                       1, 0);
+    xr_class_builder_add_static_method(builder, "has", (XrCFunctionPtr) xr_json_static_has, 2, 0);
+    xr_class_builder_add_static_method(builder, "get", (XrCFunctionPtr) xr_json_static_get, 2, 0);
+    xr_class_builder_add_static_method(builder, "size", (XrCFunctionPtr) xr_json_static_size, 1, 0);
+    xr_class_builder_add_static_method(builder, "isEmpty", (XrCFunctionPtr) xr_json_static_isEmpty,
+                                       1, 0);
 
     return xr_class_builder_finalize(builder);
 }

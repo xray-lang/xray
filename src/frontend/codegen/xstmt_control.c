@@ -31,40 +31,53 @@
  */
 static int kind_to_tid_ret(XrTypeKind kind) {
     switch (kind) {
-    case XR_KIND_INT:    return XR_TID_INT;
-    case XR_KIND_FLOAT:  return XR_TID_FLOAT;
-    case XR_KIND_STRING: return XR_TID_STRING;
-    case XR_KIND_BOOL:   return XR_TID_BOOL;
-    case XR_KIND_JSON:   return XR_TID_JSON;
-    case XR_KIND_NULL:   return XR_TID_NULL;
-    default:             return -1;
+        case XR_KIND_INT:
+            return XR_TID_INT;
+        case XR_KIND_FLOAT:
+            return XR_TID_FLOAT;
+        case XR_KIND_STRING:
+            return XR_TID_STRING;
+        case XR_KIND_BOOL:
+            return XR_TID_BOOL;
+        case XR_KIND_JSON:
+            return XR_TID_JSON;
+        case XR_KIND_NULL:
+            return XR_TID_NULL;
+        default:
+            return -1;
     }
 }
 
 static int64_t build_ret_checktype_mask(XrType *target) {
-    if (!target) return 0;
+    if (!target)
+        return 0;
     int tid = kind_to_tid_ret(target->kind);
-    if (tid >= 0) return (1LL << tid);
+    if (tid >= 0)
+        return (1LL << tid);
     if (target->kind == XR_KIND_UNION) {
         int64_t mask = 0;
         for (int i = 0; i < target->union_type.member_count; i++) {
             int mt = kind_to_tid_ret(target->union_type.members[i]->kind);
-            if (mt < 0) return 0;
+            if (mt < 0)
+                return 0;
             mask |= (1LL << mt);
         }
-        if (target->is_nullable) mask |= (1LL << XR_TID_NULL);
+        if (target->is_nullable)
+            mask |= (1LL << XR_TID_NULL);
         return mask;
     }
     return 0;
 }
 
-static void emit_ret_json_checktype(XrCompilerContext *ctx, XrCompiler *compiler,
-                                     int reg, AstNode *value_expr) {
+static void emit_ret_json_checktype(XrCompilerContext *ctx, XrCompiler *compiler, int reg,
+                                    AstNode *value_expr) {
     XrType *ret_type = compiler->declared_return_type;
-    if (!ret_type || !value_expr) return;
-    XrType *expr_type = ctx->analyzer
-        ? xa_analyzer_infer_expr_type(ctx->analyzer, value_expr) : NULL;
-    if (!expr_type || !xr_is_json_coercion(ret_type, expr_type)) return;
+    if (!ret_type || !value_expr)
+        return;
+    XrType *expr_type =
+        ctx->analyzer ? xa_analyzer_infer_expr_type(ctx->analyzer, value_expr) : NULL;
+    if (!expr_type || !xr_is_json_coercion(ret_type, expr_type))
+        return;
     int64_t mask = build_ret_checktype_mask(ret_type);
     if (mask != 0) {
         int tc = xr_vm_proto_add_constant(compiler->proto, xr_int(mask));
@@ -106,7 +119,7 @@ void compile_return(XrCompilerContext *ctx, XrCompiler *compiler, ReturnStmtNode
 
         // Detect tail call: if return expression is function call, this is tail position
         if (value->type == AST_CALL_EXPR) {
-            CallExprNode *call = (CallExprNode *)&value->as;
+            CallExprNode *call = (CallExprNode *) &value->as;
 
             // Method calls: enable tail call for user-defined class methods.
             // Safe patterns: this.method() and ClassName.staticMethod().
@@ -153,7 +166,8 @@ void compile_return(XrCompilerContext *ctx, XrCompiler *compiler, ReturnStmtNode
             } else {
                 // Other calls: tail call optimization
                 compile_call_internal(ctx, compiler, call, true, NULL);
-                // TAILCALL instruction already contains return semantics, no additional RETURN needed
+                // TAILCALL instruction already contains return semantics, no additional RETURN
+                // needed
             }
         } else {
             // Normal single value return
@@ -230,12 +244,10 @@ void compile_if(XrCompilerContext *ctx, XrCompiler *compiler, IfStmtNode *node) 
     // Optimization: directly compile comparison expression to conditional jump
     AstNodeType cond_type = node->condition->type;
 
-    if (cond_type == AST_BINARY_LE || cond_type == AST_BINARY_LT ||
-        cond_type == AST_BINARY_GT || cond_type == AST_BINARY_GE ||
-        cond_type == AST_BINARY_EQ || cond_type == AST_BINARY_NE) {
-
+    if (cond_type == AST_BINARY_LE || cond_type == AST_BINARY_LT || cond_type == AST_BINARY_GT ||
+        cond_type == AST_BINARY_GE || cond_type == AST_BINARY_EQ || cond_type == AST_BINARY_NE) {
         // Directly compile comparison and conditional jump
-        BinaryNode *cmp = (BinaryNode *)&node->condition->as;
+        BinaryNode *cmp = (BinaryNode *) &node->condition->as;
 
         int rb = 0, rc = -1;
         OpCode op = OP_LT;
@@ -245,7 +257,7 @@ void compile_if(XrCompilerContext *ctx, XrCompiler *compiler, IfStmtNode *node) 
 
         // Optimization: check if right operand is small integer constant
         if (cmp->right->type == AST_LITERAL_INT) {
-            LiteralNode *lit = (LiteralNode *)&cmp->right->as;
+            LiteralNode *lit = (LiteralNode *) &cmp->right->as;
             xr_Integer value = XR_TO_INT(xr_int(lit->raw_value.int_val));
 
             if (value >= -128 && value <= 127) {
@@ -253,16 +265,34 @@ void compile_if(XrCompilerContext *ctx, XrCompiler *compiler, IfStmtNode *node) 
                 rb = xexpr_to_anyreg_readonly(ctx, compiler, &left_expr);
                 rb = xexpr_ensure_boxed(ctx, compiler, &left_expr, rb);
                 use_immediate = true;
-                imm_value = (int)value;
+                imm_value = (int) value;
 
                 switch (cond_type) {
-                    case AST_BINARY_EQ: op = OP_EQI; break;
-                    case AST_BINARY_NE: op = OP_EQI; k = 1; break;
-                    case AST_BINARY_LT: op = OP_LTI; break;
-                    case AST_BINARY_LE: op = OP_LEI; break;
-                    case AST_BINARY_GT: op = OP_LEI; k = !k; break;
-                    case AST_BINARY_GE: op = OP_LTI; k = !k; break;
-                    default: op = OP_LT; use_immediate = false; break;
+                    case AST_BINARY_EQ:
+                        op = OP_EQI;
+                        break;
+                    case AST_BINARY_NE:
+                        op = OP_EQI;
+                        k = 1;
+                        break;
+                    case AST_BINARY_LT:
+                        op = OP_LTI;
+                        break;
+                    case AST_BINARY_LE:
+                        op = OP_LEI;
+                        break;
+                    case AST_BINARY_GT:
+                        op = OP_LEI;
+                        k = !k;
+                        break;
+                    case AST_BINARY_GE:
+                        op = OP_LTI;
+                        k = !k;
+                        break;
+                    default:
+                        op = OP_LT;
+                        use_immediate = false;
+                        break;
                 }
             }
         }
@@ -270,7 +300,6 @@ void compile_if(XrCompilerContext *ctx, XrCompiler *compiler, IfStmtNode *node) 
         // null comparison optimization: use OP_ISNULL to avoid constant loading
         if (!use_immediate && cmp->right->type == AST_LITERAL_NULL &&
             (cond_type == AST_BINARY_EQ || cond_type == AST_BINARY_NE)) {
-
             XrExprDesc left_expr = xr_compile_expr(ctx, compiler, cmp->left);
             rb = xexpr_to_anyreg_readonly(ctx, compiler, &left_expr);
 
@@ -319,19 +348,44 @@ void compile_if(XrCompilerContext *ctx, XrCompiler *compiler, IfStmtNode *node) 
             rb = xexpr_ensure_boxed(ctx, compiler, &left_expr, rb);
             rc = xexpr_ensure_boxed(ctx, compiler, &right_expr, rc);
             switch (cond_type) {
-                case AST_BINARY_EQ: op = OP_EQ; break;
-                case AST_BINARY_NE: op = OP_EQ; k = 1; break;
-                case AST_BINARY_LT: op = OP_LT; break;
-                case AST_BINARY_LE: op = OP_LE; break;
-                case AST_BINARY_GT: op = OP_LT; { int tmp = rb; rb = rc; rc = tmp; } break;
-                case AST_BINARY_GE: op = OP_LE; { int tmp = rb; rb = rc; rc = tmp; } break;
-                default: op = OP_LT; break;
+                case AST_BINARY_EQ:
+                    op = OP_EQ;
+                    break;
+                case AST_BINARY_NE:
+                    op = OP_EQ;
+                    k = 1;
+                    break;
+                case AST_BINARY_LT:
+                    op = OP_LT;
+                    break;
+                case AST_BINARY_LE:
+                    op = OP_LE;
+                    break;
+                case AST_BINARY_GT:
+                    op = OP_LT;
+                    {
+                        int tmp = rb;
+                        rb = rc;
+                        rc = tmp;
+                    }
+                    break;
+                case AST_BINARY_GE:
+                    op = OP_LE;
+                    {
+                        int tmp = rb;
+                        rb = rc;
+                        rc = tmp;
+                    }
+                    break;
+                default:
+                    op = OP_LT;
+                    break;
             }
         }
 
         // Emit comparison instruction
         if (use_immediate) {
-            uint8_t c_val = (uint8_t)(imm_value & 0xFF);
+            uint8_t c_val = (uint8_t) (imm_value & 0xFF);
             emit_abc(compiler->emitter, op, rb, c_val, k);
         } else {
             emit_abc(compiler->emitter, op, rb, rc, k);

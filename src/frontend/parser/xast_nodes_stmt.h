@@ -36,13 +36,13 @@ typedef struct VarDeclNode {
     char *name;
     AstNode *initializer;
     bool is_const;
-    uint8_t storage_mode;       // 0 = normal, 1 = shared
+    uint8_t storage_mode;  // 0 = normal, 1 = shared
     XrType *type_annotation;
 } VarDeclNode;
 
 // Storage mode constants
-#define XR_STORAGE_NORMAL  0
-#define XR_STORAGE_SHARED  1
+#define XR_STORAGE_NORMAL 0
+#define XR_STORAGE_SHARED 1
 
 // Destructure declaration node
 typedef struct DestructureDeclNode {
@@ -80,16 +80,20 @@ typedef struct ForInStmtNode {
     AstNode *body;
 } ForInStmtNode;
 
-typedef struct BreakStmtNode    { int placeholder; } BreakStmtNode;
-typedef struct ContinueStmtNode { int placeholder; } ContinueStmtNode;
+typedef struct BreakStmtNode {
+    int placeholder;
+} BreakStmtNode;
+typedef struct ContinueStmtNode {
+    int placeholder;
+} ContinueStmtNode;
 
 /* ========== Exception Handling ========== */
 
 typedef struct TryCatchNode {
     AstNode *try_body;
     char *catch_var;
-    int catch_var_line;      // Line of catch variable (1-indexed)
-    int catch_var_column;    // Column of catch variable (1-indexed)
+    int catch_var_line;    // Line of catch variable (1-indexed)
+    int catch_var_column;  // Column of catch variable (1-indexed)
     AstNode *catch_body;
     AstNode *finally_body;
 } TryCatchNode;
@@ -128,7 +132,9 @@ typedef struct PatternRangeNode {
     AstNode *end;
 } PatternRangeNode;
 
-typedef struct PatternWildcardNode { int placeholder; } PatternWildcardNode;
+typedef struct PatternWildcardNode {
+    int placeholder;
+} PatternWildcardNode;
 
 typedef struct PatternMultiNode {
     AstNode **patterns;
@@ -145,10 +151,10 @@ typedef struct PatternMultiNode {
  *   monitored go fn()             - one-way completion notification
  */
 typedef struct GoExprNode {
-    AstNode *expr;              // Expression to execute (function call or closure)
-    const char *name;           // Coroutine name (optional, for debugging)
-    AstNode *priority;          // Priority expression (optional)
-    uint8_t link_mode;          // XR_LINK_NONE / XR_LINK_LINKED / XR_LINK_MONITORED
+    AstNode *expr;      // Expression to execute (function call or closure)
+    const char *name;   // Coroutine name (optional, for debugging)
+    AstNode *priority;  // Priority expression (optional)
+    uint8_t link_mode;  // XR_LINK_NONE / XR_LINK_LINKED / XR_LINK_MONITORED
 } GoExprNode;
 
 typedef struct AwaitExprNode {
@@ -184,15 +190,17 @@ typedef struct DeferStmtNode {
 
 typedef struct ScopeBlockNode {
     AstNode *body;
-    uint8_t scope_mode;         // XR_SCOPE_WAIT / XR_SCOPE_LINKED / XR_SCOPE_SUPERVISOR
+    uint8_t scope_mode;  // XR_SCOPE_WAIT / XR_SCOPE_LINKED / XR_SCOPE_SUPERVISOR
 } ScopeBlockNode;
 
 // move expression: move var (explicit ownership transfer)
 typedef struct MoveExprNode {
-    AstNode *expr;              // must be a variable reference
+    AstNode *expr;  // must be a variable reference
 } MoveExprNode;
 
 // cancelled() expression
-typedef struct CancelledExprNode { int placeholder; } CancelledExprNode;
+typedef struct CancelledExprNode {
+    int placeholder;
+} CancelledExprNode;
 
-#endif // XAST_NODES_STMT_H
+#endif  // XAST_NODES_STMT_H

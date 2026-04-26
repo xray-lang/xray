@@ -76,8 +76,8 @@ struct XrXmlNode {
 
 typedef struct {
     XrXmlNode *root;
-    char version[8];     /* "1.0" */
-    char encoding[32];   /* "UTF-8" */
+    char version[8];   /* "1.0" */
+    char encoding[32]; /* "UTF-8" */
 } XrXmlDocument;
 
 /* ========== Parse configuration ========== */
@@ -92,7 +92,7 @@ typedef struct {
 /* ========== Serialization configuration ========== */
 
 typedef struct {
-    int indent;              /* Indent spaces, 0 = compact */
+    int indent; /* Indent spaces, 0 = compact */
     bool declaration;
     char encoding[32];
 } XrXmlWriteConfig;
@@ -121,19 +121,18 @@ XR_FUNC void xr_xml_write_config_init(XrXmlWriteConfig *config);
 
 /* ========== Node creation (xr_malloc, caller must free) ========== */
 
-XR_FUNC XrXmlDocument* xr_xml_document_new(void);
-XR_FUNC XrXmlNode* xr_xml_element_new(const char *tag, size_t tag_len);
-XR_FUNC XrXmlNode* xr_xml_text_new(const char *text, size_t len);
-XR_FUNC XrXmlNode* xr_xml_comment_new(const char *text, size_t len);
-XR_FUNC XrXmlNode* xr_xml_cdata_new(const char *text, size_t len);
-XR_FUNC XrXmlNode* xr_xml_pi_new(const char *text, size_t len);
+XR_FUNC XrXmlDocument *xr_xml_document_new(void);
+XR_FUNC XrXmlNode *xr_xml_element_new(const char *tag, size_t tag_len);
+XR_FUNC XrXmlNode *xr_xml_text_new(const char *text, size_t len);
+XR_FUNC XrXmlNode *xr_xml_comment_new(const char *text, size_t len);
+XR_FUNC XrXmlNode *xr_xml_cdata_new(const char *text, size_t len);
+XR_FUNC XrXmlNode *xr_xml_pi_new(const char *text, size_t len);
 
 /* ========== Node manipulation ========== */
 
 XR_FUNC void xr_xml_node_append_child(XrXmlNode *parent, XrXmlNode *child);
-XR_FUNC void xr_xml_node_set_attr(XrXmlNode *node,
-                                    const char *name, size_t name_len,
-                                    const char *value, size_t value_len);
+XR_FUNC void xr_xml_node_set_attr(XrXmlNode *node, const char *name, size_t name_len,
+                                  const char *value, size_t value_len);
 
 /* ========== Parsing ========== */
 
@@ -141,8 +140,7 @@ XR_FUNC void xr_xml_node_set_attr(XrXmlNode *node,
  * Parse XML data into a DOM tree.
  * config may be NULL for defaults. Caller must free result with xr_xml_free_result().
  */
-XR_FUNC XrXmlParseResult xr_xml_parse(const char *data, size_t len,
-                                       const XrXmlParseConfig *config);
+XR_FUNC XrXmlParseResult xr_xml_parse(const char *data, size_t len, const XrXmlParseConfig *config);
 
 /* ========== Cleanup ========== */
 
@@ -150,4 +148,4 @@ XR_FUNC void xr_xml_node_free(XrXmlNode *node);
 XR_FUNC void xr_xml_document_free(XrXmlDocument *doc);
 XR_FUNC void xr_xml_free_result(XrXmlParseResult *result);
 
-#endif // XXML_H
+#endif  // XXML_H

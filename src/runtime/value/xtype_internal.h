@@ -24,4 +24,4 @@ XR_FUNC XrTypePool *xr_type_get_current_pool(void);
 // Internal: check class inheritance (walks superclass chain)
 XR_FUNC bool xr_type_is_subclass_of(XrType *type, XrType *target);
 
-#endif // XTYPE_INTERNAL_H
+#endif  // XTYPE_INTERNAL_H

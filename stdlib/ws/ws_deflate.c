@@ -19,16 +19,11 @@
 #include "ws_deflate.h"
 #include "../compress/compress.h"
 
-int xr_ws_deflate_compress(const uint8_t *in, size_t in_len,
-                           uint8_t **out, size_t *out_len)
-{
-    return xr_deflate_sync_flush(in, in_len, out, out_len,
-                                  6 /* Z_DEFAULT_COMPRESSION */);
+int xr_ws_deflate_compress(const uint8_t *in, size_t in_len, uint8_t **out, size_t *out_len) {
+    return xr_deflate_sync_flush(in, in_len, out, out_len, 6 /* Z_DEFAULT_COMPRESSION */);
 }
 
-int xr_ws_deflate_decompress(const uint8_t *in, size_t in_len,
-                             size_t max_out,
-                             uint8_t **out, size_t *out_len)
-{
+int xr_ws_deflate_decompress(const uint8_t *in, size_t in_len, size_t max_out, uint8_t **out,
+                             size_t *out_len) {
     return xr_inflate_bounded(in, in_len, max_out, out, out_len);
 }

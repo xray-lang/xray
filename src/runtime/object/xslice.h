@@ -27,8 +27,10 @@ static inline int32_t xr_normalize_index(int32_t index, int32_t length) {
     if (index < 0) {
         index += length;
     }
-    if (index < 0) return 0;
-    if (index > length) return length;
+    if (index < 0)
+        return 0;
+    if (index > length)
+        return length;
     return index;
 }
 
@@ -52,19 +54,19 @@ static inline XrValue xr_array_slice_get(XrArraySlice *slice, int32_t index) {
     if (!slice || index < 0 || index >= slice->length) {
         return XR_NULL_VAL;
     }
-    return ((XrValue*)slice->data)[index];
+    return ((XrValue *) slice->data)[index];
 }
 
 static inline void xr_array_slice_set(XrArraySlice *slice, int32_t index, XrValue value) {
     if (!slice || index < 0 || index >= slice->length) {
         return;
     }
-    ((XrValue*)slice->data)[index] = value;
+    ((XrValue *) slice->data)[index] = value;
 }
 
 // XrValue Operations
 XR_FUNC XrValue xr_value_from_array_slice(XrArraySlice *slice);
 XR_FUNC bool xr_value_is_array_slice(XrValue v);
-XR_FUNC XrArraySlice* xr_value_to_array_slice(XrValue v);
+XR_FUNC XrArraySlice *xr_value_to_array_slice(XrValue v);
 
-#endif // XSLICE_H
+#endif  // XSLICE_H

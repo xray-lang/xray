@@ -81,7 +81,7 @@ static inline uint64_t vm_profiler_get_ms(void) {
 #if XR_PROFILE_TIMING
     struct timespec ts;
     clock_gettime(CLOCK_MONOTONIC, &ts);
-    return (uint64_t)ts.tv_sec * 1000ULL + (uint64_t)ts.tv_nsec / 1000000ULL;
+    return (uint64_t) ts.tv_sec * 1000ULL + (uint64_t) ts.tv_nsec / 1000000ULL;
 #else
     return 0;
 #endif
@@ -91,7 +91,7 @@ static inline uint64_t vm_profiler_get_ms(void) {
 static inline uint64_t vm_profiler_get_ns(void) {
     struct timespec ts;
     clock_gettime(CLOCK_MONOTONIC, &ts);
-    return (uint64_t)ts.tv_sec * 1000000000ULL + (uint64_t)ts.tv_nsec;
+    return (uint64_t) ts.tv_sec * 1000000000ULL + (uint64_t) ts.tv_nsec;
 }
 #endif
 
@@ -101,7 +101,8 @@ static inline uint64_t vm_profiler_get_ns(void) {
  * ctx. The hot path checks the pointer once and the branch predictor
  * pins it firmly to one direction per process. */
 static inline void vm_profiler_init(VMProfiler *p) {
-    if (!p) return;
+    if (!p)
+        return;
     memset(p, 0, sizeof(*p));
     p->start_time_ms = vm_profiler_get_ms();
 #if XR_PROFILE_TIMING
@@ -112,14 +113,16 @@ static inline void vm_profiler_init(VMProfiler *p) {
 }
 
 static inline void vm_profiler_count(VMProfiler *p, int op) {
-    if (!p) return;
+    if (!p)
+        return;
     p->op_stats[op].count++;
     p->total_instructions++;
 }
 
 #if XR_PROFILE_TIMING
 static inline void vm_profiler_record(VMProfiler *p, int op, uint64_t elapsed_ns) {
-    if (!p) return;
+    if (!p)
+        return;
     p->op_stats[op].count++;
     p->op_stats[op].total_ns += elapsed_ns;
     if (elapsed_ns < p->op_stats[op].min_ns) {
@@ -144,32 +147,32 @@ XR_FUNC void vm_profiler_report(const VMProfiler *p);
 
 #if XR_PROFILE_TIMING
 
-#define VM_PROFILE_VARS() \
-    uint64_t _prof_start_ns = 0; \
+#define VM_PROFILE_VARS()                                                                          \
+    uint64_t _prof_start_ns = 0;                                                                   \
     int _prof_last_op = -1
 
-#define VM_PROFILE_COUNT(op) \
-    do { \
-        uint64_t _now = vm_profiler_get_ns(); \
-        if (_prof_last_op >= 0) { \
-            vm_profiler_record(_vm_prof, _prof_last_op, _now - _prof_start_ns); \
-        } \
-        _prof_last_op = (op); \
-        _prof_start_ns = _now; \
-    } while(0)
+#define VM_PROFILE_COUNT(op)                                                                       \
+    do {                                                                                           \
+        uint64_t _now = vm_profiler_get_ns();                                                      \
+        if (_prof_last_op >= 0) {                                                                  \
+            vm_profiler_record(_vm_prof, _prof_last_op, _now - _prof_start_ns);                    \
+        }                                                                                          \
+        _prof_last_op = (op);                                                                      \
+        _prof_start_ns = _now;                                                                     \
+    } while (0)
 
-#define VM_PROFILE_FINISH() \
-    do { \
-        if (_prof_last_op >= 0) { \
-            vm_profiler_record(_vm_prof, _prof_last_op, vm_profiler_get_ns() - _prof_start_ns); \
-        } \
-    } while(0)
+#define VM_PROFILE_FINISH()                                                                        \
+    do {                                                                                           \
+        if (_prof_last_op >= 0) {                                                                  \
+            vm_profiler_record(_vm_prof, _prof_last_op, vm_profiler_get_ns() - _prof_start_ns);    \
+        }                                                                                          \
+    } while (0)
 
 #else
 
-#define VM_PROFILE_VARS() ((void)0)
+#define VM_PROFILE_VARS() ((void) 0)
 #define VM_PROFILE_COUNT(op) vm_profiler_count(_vm_prof, op)
-#define VM_PROFILE_FINISH() ((void)0)
+#define VM_PROFILE_FINISH() ((void) 0)
 
 #endif
 
@@ -178,12 +181,12 @@ XR_FUNC void vm_profiler_report(const VMProfiler *p);
 /* Disabled: zero overhead. The macros silently swallow any local
  * `_vm_prof` declaration so the dispatch loop compiles identically
  * to a profiler-free build. */
-#define vm_profiler_init(p)      ((void)(p))
-#define vm_profiler_report(p)    ((void)(p))
-#define VM_PROFILE_VARS()        ((void)0)
-#define VM_PROFILE_COUNT(op)     ((void)0)
-#define VM_PROFILE_FINISH()      ((void)0)
+#define vm_profiler_init(p) ((void) (p))
+#define vm_profiler_report(p) ((void) (p))
+#define VM_PROFILE_VARS() ((void) 0)
+#define VM_PROFILE_COUNT(op) ((void) 0)
+#define VM_PROFILE_FINISH() ((void) 0)
 
 #endif
 
-#endif // XVM_PROFILER_H
+#endif  // XVM_PROFILER_H

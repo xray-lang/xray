@@ -21,9 +21,11 @@
 
 // Convert file:// URI to filesystem path (returns pointer into uri, no allocation)
 static inline const char *xlsp_uri_to_path(const char *uri) {
-    if (!uri) return NULL;
-    if (strncmp(uri, "file://", 7) == 0) return uri + 7;
+    if (!uri)
+        return NULL;
+    if (strncmp(uri, "file://", 7) == 0)
+        return uri + 7;
     return uri;
 }
 
-#endif // XLSP_UTILS_H
+#endif  // XLSP_UTILS_H

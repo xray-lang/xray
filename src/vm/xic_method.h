@@ -39,24 +39,24 @@
 // Key = XrClass pointer, Value = XrMethod pointer.
 // Linear probing with max XR_MEGA_CACHE_SIZE probes.
 typedef struct XrMegaCache {
-    XrClass  *keys[XR_MEGA_CACHE_SIZE];
+    XrClass *keys[XR_MEGA_CACHE_SIZE];
     XrMethod *values[XR_MEGA_CACHE_SIZE];
 } XrMegaCache;
 
 /* ========== Polymorphic IC Entry ========== */
 
 typedef struct XrICEntry {
-    XrClass  *klass;
+    XrClass *klass;
     XrMethod *method;
-    uint32_t  hit_count;   // per-entry hit counter (always-on, JIT type feedback)
+    uint32_t hit_count;  // per-entry hit counter (always-on, JIT type feedback)
 } XrICEntry;
 
 // Per-call-site polymorphic inline cache
 typedef struct XrICMethod {
     XrICEntry entries[XR_IC_POLY_MAX];
-    uint8_t   count;          // 0..XR_IC_POLY_MAX entries filled
-    uint8_t   is_megamorphic; // once set, skip IC and use direct lookup
-    uint32_t  total_count;    // total invocations at this call site (always-on)
+    uint8_t count;            // 0..XR_IC_POLY_MAX entries filled
+    uint8_t is_megamorphic;   // once set, skip IC and use direct lookup
+    uint32_t total_count;     // total invocations at this call site (always-on)
     XrMegaCache *mega_cache;  // lazily allocated on megamorphic transition
 
 #ifndef NDEBUG
@@ -78,12 +78,12 @@ typedef struct XrICMethodTable {
 
 /* ========== Cache Operations ========== */
 
-XR_FUNC XrICMethodTable* xr_ic_method_table_new(int initial_capacity);
+XR_FUNC XrICMethodTable *xr_ic_method_table_new(int initial_capacity);
 XR_FUNC void xr_ic_method_table_free(XrICMethodTable *table);
 
 XR_FUNC int xr_ic_method_table_alloc(XrICMethodTable *table);
 
-static inline XrICMethod* xr_ic_method_table_get(XrICMethodTable *table, int index) {
+static inline XrICMethod *xr_ic_method_table_get(XrICMethodTable *table, int index) {
     if (!table || index < 0 || index >= table->count) {
         return NULL;
     }
@@ -92,31 +92,28 @@ static inline XrICMethod* xr_ic_method_table_get(XrICMethodTable *table, int ind
 
 // Polymorphic IC lookup (hot path)
 // Returns cached method on hit, or does full lookup and adds entry on miss
-static inline XrMethod* xr_ic_method_lookup(
-    XrICMethod *cache,
-    XrClass *klass,
-    int symbol
-) {
+static inline XrMethod *xr_ic_method_lookup(XrICMethod *cache, XrClass *klass, int symbol) {
     // Megamorphic: hash cache lookup
     if (cache->is_megamorphic) {
         cache->total_count++;
 
         XrMegaCache *mc = cache->mega_cache;
         if (mc) {
-            unsigned h = ((uintptr_t)klass >> 4) & XR_MEGA_CACHE_MASK;
+            unsigned h = ((uintptr_t) klass >> 4) & XR_MEGA_CACHE_MASK;
             for (int p = 0; p < XR_MEGA_CACHE_SIZE; p++) {
                 unsigned idx = (h + p) & XR_MEGA_CACHE_MASK;
                 if (mc->keys[idx] == klass) {
                     return mc->values[idx];  // mega cache hit
                 }
-                if (mc->keys[idx] == NULL) break;  // empty slot = miss
+                if (mc->keys[idx] == NULL)
+                    break;  // empty slot = miss
             }
         }
 
         // Mega cache miss: full lookup and insert
         XrMethod *method = xr_class_lookup_method(klass, symbol);
         if (method && mc) {
-            unsigned h = ((uintptr_t)klass >> 4) & XR_MEGA_CACHE_MASK;
+            unsigned h = ((uintptr_t) klass >> 4) & XR_MEGA_CACHE_MASK;
             for (int p = 0; p < XR_MEGA_CACHE_SIZE; p++) {
                 unsigned idx = (h + p) & XR_MEGA_CACHE_MASK;
                 if (mc->keys[idx] == NULL || mc->keys[idx] == klass) {
@@ -149,7 +146,8 @@ static inline XrMethod* xr_ic_method_lookup(
     cache->misses++;
 #endif
 
-    if (method == NULL) return NULL;
+    if (method == NULL)
+        return NULL;
 
     cache->total_count++;
 
@@ -158,18 +156,18 @@ static inline XrMethod* xr_ic_method_lookup(
         cache->entries[n].klass = klass;
         cache->entries[n].method = method;
         cache->entries[n].hit_count = 1;
-        cache->count = (uint8_t)(n + 1);
+        cache->count = (uint8_t) (n + 1);
     } else {
         cache->is_megamorphic = 1;
         // Allocate mega cache and seed with existing poly entries
-        cache->mega_cache = (XrMegaCache*)xr_calloc(1, sizeof(XrMegaCache));
+        cache->mega_cache = (XrMegaCache *) xr_calloc(1, sizeof(XrMegaCache));
         if (cache->mega_cache) {
             // Seed existing poly entries into hash cache
             for (int j = 0; j < XR_IC_POLY_MAX; j++) {
                 XrClass *ek = cache->entries[j].klass;
                 XrMethod *em = cache->entries[j].method;
                 if (ek && em) {
-                    unsigned h = ((uintptr_t)ek >> 4) & XR_MEGA_CACHE_MASK;
+                    unsigned h = ((uintptr_t) ek >> 4) & XR_MEGA_CACHE_MASK;
                     for (int p = 0; p < XR_MEGA_CACHE_SIZE; p++) {
                         unsigned idx = (h + p) & XR_MEGA_CACHE_MASK;
                         if (cache->mega_cache->keys[idx] == NULL) {
@@ -181,7 +179,7 @@ static inline XrMethod* xr_ic_method_lookup(
                 }
             }
             // Also insert the new entry that caused the transition
-            unsigned h = ((uintptr_t)klass >> 4) & XR_MEGA_CACHE_MASK;
+            unsigned h = ((uintptr_t) klass >> 4) & XR_MEGA_CACHE_MASK;
             for (int p = 0; p < XR_MEGA_CACHE_SIZE; p++) {
                 unsigned idx = (h + p) & XR_MEGA_CACHE_MASK;
                 if (cache->mega_cache->keys[idx] == NULL) {
@@ -215,19 +213,21 @@ typedef enum {
 
 // Get IC state classification
 static inline XrICState xr_ic_method_state(const XrICMethod *cache) {
-    if (!cache || cache->count == 0) return XR_IC_STATE_UNINIT;
-    if (cache->is_megamorphic) return XR_IC_STATE_MEGA;
-    if (cache->count == 1) return XR_IC_STATE_MONO;
+    if (!cache || cache->count == 0)
+        return XR_IC_STATE_UNINIT;
+    if (cache->is_megamorphic)
+        return XR_IC_STATE_MEGA;
+    if (cache->count == 1)
+        return XR_IC_STATE_MONO;
     return XR_IC_STATE_POLY;
 }
 
 // Get the dominant (most frequently hit) class at this call site
 // Returns NULL if no entries. Sets *out_ratio to hit_count/total (0.0-1.0).
-static inline XrClass* xr_ic_method_dominant_class(
-    const XrICMethod *cache, double *out_ratio
-) {
+static inline XrClass *xr_ic_method_dominant_class(const XrICMethod *cache, double *out_ratio) {
     if (!cache || cache->count == 0) {
-        if (out_ratio) *out_ratio = 0.0;
+        if (out_ratio)
+            *out_ratio = 0.0;
         return NULL;
     }
     int best = 0;
@@ -238,8 +238,8 @@ static inline XrClass* xr_ic_method_dominant_class(
     }
     if (out_ratio) {
         *out_ratio = cache->total_count > 0
-            ? (double)cache->entries[best].hit_count / cache->total_count
-            : 0.0;
+                         ? (double) cache->entries[best].hit_count / cache->total_count
+                         : 0.0;
     }
     return cache->entries[best].klass;
 }
@@ -248,11 +248,10 @@ static inline XrClass* xr_ic_method_dominant_class(
 
 // Dump IC type feedback for a single call site (always available)
 XR_FUNC void xr_ic_method_dump_feedback(const XrICMethod *cache, int pc_offset,
-                                const char *func_name);
+                                        const char *func_name);
 
 // Dump all IC type feedback for a function
-XR_FUNC void xr_ic_method_table_dump_feedback(const XrICMethodTable *table,
-                                       const char *func_name);
+XR_FUNC void xr_ic_method_table_dump_feedback(const XrICMethodTable *table, const char *func_name);
 
 #ifdef XR_DEBUG_INLINE_CACHE
 
@@ -262,4 +261,4 @@ XR_FUNC double xr_ic_method_hit_rate(const XrICMethod *cache);
 
 #endif
 
-#endif // XIC_METHOD_H
+#endif  // XIC_METHOD_H

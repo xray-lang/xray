@@ -38,12 +38,13 @@ static void registry_grow(XrCoroRegistry *reg) {
 
     uint32_t new_cap = old_cap * 2;
     XR_DCHECK((new_cap & (new_cap - 1)) == 0, "registry_grow: capacity not power-of-2");
-    XrCoroRegEntry *new_entries = (XrCoroRegEntry *)xr_calloc(new_cap, sizeof(XrCoroRegEntry));
+    XrCoroRegEntry *new_entries = (XrCoroRegEntry *) xr_calloc(new_cap, sizeof(XrCoroRegEntry));
     XR_CHECK(new_entries != NULL, "coro registry grow allocation failed");
 
     // Rehash all existing entries
     for (uint32_t i = 0; i < old_cap; i++) {
-        if (old_entries[i].hash == 0) continue;
+        if (old_entries[i].hash == 0)
+            continue;
         uint32_t idx = old_entries[i].hash & (new_cap - 1);
         while (new_entries[idx].hash != 0) {
             idx = (idx + 1) & (new_cap - 1);
@@ -63,8 +64,7 @@ static uint32_t registry_find_slot(XrCoroRegistry *reg, const char *name, uint32
     uint32_t mask = reg->capacity - 1;
     uint32_t idx = h & mask;
     while (reg->entries[idx].hash != 0) {
-        if (reg->entries[idx].hash == h &&
-            strcmp(reg->entries[idx].name, name) == 0) {
+        if (reg->entries[idx].hash == h && strcmp(reg->entries[idx].name, name) == 0) {
             return idx;  // found
         }
         idx = (idx + 1) & mask;
@@ -78,7 +78,7 @@ void xr_coro_registry_init(XrCoroRegistry *reg) {
     XR_DCHECK(reg != NULL, "coro_registry_init: NULL reg");
     reg->capacity = XR_CORO_REG_INITIAL_CAP;
     reg->count = 0;
-    reg->entries = (XrCoroRegEntry *)xr_calloc(reg->capacity, sizeof(XrCoroRegEntry));
+    reg->entries = (XrCoroRegEntry *) xr_calloc(reg->capacity, sizeof(XrCoroRegEntry));
     XR_CHECK(reg->entries != NULL, "coro registry init allocation failed");
     xr_mutex_init(&reg->lock);
 }
@@ -88,7 +88,7 @@ void xr_coro_registry_destroy(XrCoroRegistry *reg) {
     if (reg->entries) {
         for (uint32_t i = 0; i < reg->capacity; i++) {
             if (reg->entries[i].hash != 0 && reg->entries[i].name) {
-                xr_free((void *)reg->entries[i].name);
+                xr_free((void *) reg->entries[i].name);
             }
         }
         xr_free(reg->entries);
@@ -99,7 +99,8 @@ void xr_coro_registry_destroy(XrCoroRegistry *reg) {
 }
 
 bool xr_coro_registry_register(XrCoroRegistry *reg, const char *name, XrCoroutine *coro) {
-    if (!reg || !name || !coro) return false;
+    if (!reg || !name || !coro)
+        return false;
 
     xr_mutex_lock(&reg->lock);
 
@@ -128,7 +129,8 @@ bool xr_coro_registry_register(XrCoroRegistry *reg, const char *name, XrCoroutin
 }
 
 void xr_coro_registry_unregister(XrCoroRegistry *reg, const char *name) {
-    if (!reg || !name) return;
+    if (!reg || !name)
+        return;
 
     xr_mutex_lock(&reg->lock);
 
@@ -138,7 +140,7 @@ void xr_coro_registry_unregister(XrCoroRegistry *reg, const char *name) {
     if (reg->entries[idx].hash != 0) {
         // Delete: mark slot empty and rehash following cluster
         reg->entries[idx].hash = 0;
-        xr_free((void *)reg->entries[idx].name);
+        xr_free((void *) reg->entries[idx].name);
         reg->entries[idx].name = NULL;
         reg->entries[idx].coro = NULL;
         reg->count--;
@@ -166,7 +168,8 @@ void xr_coro_registry_unregister(XrCoroRegistry *reg, const char *name) {
 }
 
 XrCoroutine *xr_coro_registry_whereis(XrCoroRegistry *reg, const char *name) {
-    if (!reg || !name) return NULL;
+    if (!reg || !name)
+        return NULL;
 
     xr_mutex_lock(&reg->lock);
 
@@ -185,11 +188,13 @@ XrCoroutine *xr_coro_registry_whereis(XrCoroRegistry *reg, const char *name) {
 /* ========== Monitor API ========== */
 
 XrChannel *xr_coro_monitor(XrayIsolate *X, XrCoroRegistry *reg, const char *name) {
-    if (!X || !reg || !name) return NULL;
+    if (!X || !reg || !name)
+        return NULL;
 
     // Create notification channel (buffered=1 so send never blocks)
     XrChannel *ch = xr_channel_new(X, 1);
-    if (!ch) return NULL;
+    if (!ch)
+        return NULL;
 
     xr_mutex_lock(&reg->lock);
 
@@ -217,7 +222,7 @@ XrChannel *xr_coro_monitor(XrayIsolate *X, XrCoroRegistry *reg, const char *name
     // Add monitor to coroutine's watched_by list (lazy-alloc ext)
     XrCoroExt *ext = xr_coro_ensure_ext(coro);
     XR_CHECK(ext != NULL, "coro ext allocation failed");
-    XrCoroMonitor *mon = (XrCoroMonitor *)xr_malloc(sizeof(XrCoroMonitor));
+    XrCoroMonitor *mon = (XrCoroMonitor *) xr_malloc(sizeof(XrCoroMonitor));
     XR_CHECK(mon != NULL, "coro monitor allocation failed");
     mon->channel = ch;
     mon->next = ext->watched_by;
@@ -228,12 +233,16 @@ XrChannel *xr_coro_monitor(XrayIsolate *X, XrCoroRegistry *reg, const char *name
 }
 
 void xr_coro_demonitor(XrCoroRegistry *reg, XrCoroutine *coro, XrChannel *ch) {
-    if (!reg || !coro || !ch) return;
+    if (!reg || !coro || !ch)
+        return;
 
     xr_mutex_lock(&reg->lock);
 
     // Walk watched_by list and remove matching entry
-    if (!coro->ext) { xr_mutex_unlock(&reg->lock); return; }
+    if (!coro->ext) {
+        xr_mutex_unlock(&reg->lock);
+        return;
+    }
     XrCoroMonitor **pp = &coro->ext->watched_by;
     while (*pp) {
         if ((*pp)->channel == ch) {
@@ -248,9 +257,12 @@ void xr_coro_demonitor(XrCoroRegistry *reg, XrCoroutine *coro, XrChannel *ch) {
     xr_mutex_unlock(&reg->lock);
 }
 
-void xr_coro_notify_monitors(XrayIsolate *X, XrCoroRegistry *reg, XrCoroutine *coro, const char *reason) {
-    if (!coro) return;
-    if (!coro->ext || !coro->ext->watched_by) return;  // fast path: no monitors
+void xr_coro_notify_monitors(XrayIsolate *X, XrCoroRegistry *reg, XrCoroutine *coro,
+                             const char *reason) {
+    if (!coro)
+        return;
+    if (!coro->ext || !coro->ext->watched_by)
+        return;  // fast path: no monitors
 
     // Detach the list under lock, then send notifications outside lock
     XrCoroMonitor *mon = NULL;
@@ -277,10 +289,12 @@ void xr_coro_notify_monitors(XrayIsolate *X, XrCoroRegistry *reg, XrCoroutine *c
 }
 
 void xr_coro_on_exit(XrayIsolate *X, XrCoroutine *coro) {
-    if (!X || !coro) return;
-    if (!coro->name) return;  // fast path: anonymous coroutines
+    if (!X || !coro)
+        return;
+    if (!coro->name)
+        return;  // fast path: anonymous coroutines
 
-    XrCoroState *sched = (XrCoroState *)xr_isolate_get_vm_state(X)->coro_state;
+    XrCoroState *sched = (XrCoroState *) xr_isolate_get_vm_state(X)->coro_state;
     if (sched && sched->coro_registry) {
         xr_coro_registry_unregister(sched->coro_registry, coro->name);
     }

@@ -28,15 +28,15 @@ typedef struct XrayGCConfig {
     size_t heap_min;
     size_t heap_max;
     double heap_growth_factor;
-    
+
     // Debug options
     bool debug;
     bool enable_stats;
-    
+
     // Incremental GC
     size_t step_size;
     uint64_t pause_target_us;
-    
+
 } XrayGCConfig;
 
 /* ========== Compiler Config ========== */
@@ -62,12 +62,12 @@ typedef struct XrayConfig {
     const char *version;
     bool debug;
     bool verbose;
-    
+
     // Module configs
     XrayGCConfig gc;
     XrayCompilerConfig compiler;
     XrayVMConfig vm;
-    
+
 } XrayConfig;
 
 /* ========== Config API ========== */
@@ -78,4 +78,4 @@ XRAY_API XrayConfig xray_config_default(void);
 
 XR_FUNC void xr_config_init(void *isolate_config);
 
-#endif // XCONFIG_H
+#endif  // XCONFIG_H

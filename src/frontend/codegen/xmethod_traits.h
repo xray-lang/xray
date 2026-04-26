@@ -29,4 +29,4 @@ XR_FUNC bool xr_method_is_mutating(const char *type_name, const char *method_nam
 // Get method trait for a given type and method
 XR_FUNC XrMethodTrait xr_method_get_trait(const char *type_name, const char *method_name);
 
-#endif // XMETHOD_TRAITS_H
+#endif  // XMETHOD_TRAITS_H

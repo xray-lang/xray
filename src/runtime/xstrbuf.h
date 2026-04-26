@@ -32,8 +32,8 @@ typedef struct XrStrBuf {
     XrayIsolate *X;
 } XrStrBuf;
 
-#define XR_STRBUF_MIN_CAP    64
-#define XR_STRBUF_MAX_CAP    (1 << 30)  // 1GB
+#define XR_STRBUF_MIN_CAP 64
+#define XR_STRBUF_MAX_CAP (1 << 30)  // 1GB
 
 /* ========== Creation and Destruction ========== */
 
@@ -63,4 +63,4 @@ XR_FUNC XrString *xr_strbuf_to_string(XrStrBuf *sb);
 
 XR_FUNC void xr_strbuf_reset(XrStrBuf *sb);
 
-#endif // XSTRBUF_H
+#endif  // XSTRBUF_H

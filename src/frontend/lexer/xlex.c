@@ -23,8 +23,9 @@
 // ============================================================================
 
 XrTrivia *xr_trivia_new(XrTriviaType type, const char *start, int length, int line) {
-    XrTrivia *trivia = (XrTrivia*)xr_malloc(sizeof(XrTrivia));
-    if (!trivia) return NULL;
+    XrTrivia *trivia = (XrTrivia *) xr_malloc(sizeof(XrTrivia));
+    if (!trivia)
+        return NULL;
     trivia->type = type;
     trivia->start = start;
     trivia->length = length;
@@ -109,13 +110,16 @@ static char peek(Scanner *scanner) {
 }
 
 static char peek_next(Scanner *scanner) {
-    if (scanner->current + 1 >= scanner->end) return '\0';
+    if (scanner->current + 1 >= scanner->end)
+        return '\0';
     return scanner->current[1];
 }
 
 static int match(Scanner *scanner, char expected) {
-    if (is_at_end(scanner)) return 0;
-    if (*scanner->current != expected) return 0;
+    if (is_at_end(scanner))
+        return 0;
+    if (*scanner->current != expected)
+        return 0;
     scanner->current++;
     return 1;
 }
@@ -138,7 +142,8 @@ static int match(Scanner *scanner, char expected) {
 //     (the parser's smart-semicolon / generic-vs-comparison
 //     disambiguation depends on it).
 static XrTrivia *scan_inline_trailing_trivia(Scanner *scanner) {
-    if (!scanner->collect_trivia) return NULL;
+    if (!scanner->collect_trivia)
+        return NULL;
 
     const char *save_current = scanner->current;
 
@@ -166,7 +171,7 @@ static XrTrivia *scan_inline_trailing_trivia(Scanner *scanner) {
         while (scanner->current < scanner->end && *scanner->current != '\n') {
             scanner->current++;
         }
-        int len = (int)(scanner->current - cs);
+        int len = (int) (scanner->current - cs);
         return xr_trivia_new(TRIVIA_LINE_COMMENT, cs, len, comment_line);
     }
 
@@ -175,7 +180,8 @@ static XrTrivia *scan_inline_trailing_trivia(Scanner *scanner) {
         const char *p = scanner->current + 2;
         bool same_line_terminator = false;
         while (p + 1 < scanner->end) {
-            if (*p == '\n') break;
+            if (*p == '\n')
+                break;
             if (p[0] == '*' && p[1] == '/') {
                 same_line_terminator = true;
                 break;
@@ -193,7 +199,7 @@ static XrTrivia *scan_inline_trailing_trivia(Scanner *scanner) {
                !(scanner->current[0] == '*' && scanner->current[1] == '/')) {
             scanner->current++;
         }
-        int len = (int)(scanner->current - cs);
+        int len = (int) (scanner->current - cs);
         scanner->current += 2;  // */
         return xr_trivia_new(TRIVIA_BLOCK_COMMENT, cs, len, comment_line);
     }
@@ -206,13 +212,13 @@ static Token make_token(Scanner *scanner, TokenType type) {
     Token token;
     token.type = type;
     token.start = scanner->start;
-    token.length = (int)(scanner->current - scanner->start);
+    token.length = (int) (scanner->current - scanner->start);
     XR_DCHECK(token.length >= 0, "make_token: negative token length");
     // L-02: report the START line/column of the token. For multi-line tokens
     // scanner->line/line_start have already advanced to the token's last line,
     // so we use the snapshots captured by scanner_begin_token().
     token.line = scanner->start_line;
-    token.column = (int)(scanner->start - scanner->start_line_start) + 1;  // 1-indexed
+    token.column = (int) (scanner->start - scanner->start_line_start) + 1;  // 1-indexed
     token.has_leading_space = scanner->had_leading_space;
     token.error_message = NULL;
     // Attach pending trivia
@@ -221,8 +227,7 @@ static Token make_token(Scanner *scanner, TokenType type) {
     scanner->trivia_tail = NULL;
     // L-06: same-line inline trailing comment, if any. EOF tokens never
     // have trailing trivia (nothing follows).
-    token.trailing_trivia = (type == TK_EOF) ? NULL
-                                             : scan_inline_trailing_trivia(scanner);
+    token.trailing_trivia = (type == TK_EOF) ? NULL : scan_inline_trailing_trivia(scanner);
     return token;
 }
 
@@ -232,10 +237,11 @@ static Token error_token(Scanner *scanner, const char *message) {
     // L-03: error_message carries the diagnostic; start still points into the
     // source buffer at the offending character so editors can place a caret.
     token.start = scanner->start;
-    token.length = (int)(scanner->current - scanner->start);
-    if (token.length < 0) token.length = 0;
+    token.length = (int) (scanner->current - scanner->start);
+    if (token.length < 0)
+        token.length = 0;
     token.line = scanner->start_line;
-    token.column = (int)(scanner->start - scanner->start_line_start) + 1;
+    token.column = (int) (scanner->start - scanner->start_line_start) + 1;
     token.has_leading_space = scanner->had_leading_space;
     token.error_message = message;
     token.leading_trivia = scanner->pending_trivia;
@@ -250,7 +256,7 @@ static bool skip_whitespace(Scanner *scanner) {
     bool skipped = false;
     for (;;) {
         // SIMD fast path: batch skip whitespace
-        size_t remaining = (size_t)(scanner->end - scanner->current);
+        size_t remaining = (size_t) (scanner->end - scanner->current);
         if (remaining >= 16) {
             const char *non_ws = xr_simd_skip_whitespace(scanner->current, remaining);
             if (non_ws > scanner->current) {
@@ -284,10 +290,10 @@ static bool skip_whitespace(Scanner *scanner) {
                     // Single-line comment - use SIMD to find line end
                     skipped = true;
                     int comment_line = scanner->line;
-                    advance(scanner); // /
-                    advance(scanner); // /
+                    advance(scanner);  // /
+                    advance(scanner);  // /
                     const char *comment_start = scanner->current;
-                    remaining = (size_t)(scanner->end - scanner->current);
+                    remaining = (size_t) (scanner->end - scanner->current);
                     if (remaining >= 16) {
                         const char *eol = xr_simd_find_newline(scanner->current, remaining);
                         scanner->current = eol;
@@ -297,27 +303,29 @@ static bool skip_whitespace(Scanner *scanner) {
                     }
                     // Collect trivia if enabled
                     if (scanner->collect_trivia) {
-                        int comment_len = (int)(scanner->current - comment_start);
-                        XrTrivia *trivia = xr_trivia_new(TRIVIA_LINE_COMMENT, comment_start, comment_len, comment_line);
+                        int comment_len = (int) (scanner->current - comment_start);
+                        XrTrivia *trivia = xr_trivia_new(TRIVIA_LINE_COMMENT, comment_start,
+                                                         comment_len, comment_line);
                         trivia_append(scanner, trivia);
                     }
                 } else if (peek_next(scanner) == '*') {
                     // Multi-line comment
                     skipped = true;
                     int comment_line = scanner->line;
-                    advance(scanner); // /
-                    advance(scanner); // *
+                    advance(scanner);  // /
+                    advance(scanner);  // *
                     const char *comment_start = scanner->current;
                     while (!is_at_end(scanner)) {
                         if (peek(scanner) == '*' && peek_next(scanner) == '/') {
                             // Collect trivia before consuming */
                             if (scanner->collect_trivia) {
-                                int comment_len = (int)(scanner->current - comment_start);
-                                XrTrivia *trivia = xr_trivia_new(TRIVIA_BLOCK_COMMENT, comment_start, comment_len, comment_line);
+                                int comment_len = (int) (scanner->current - comment_start);
+                                XrTrivia *trivia = xr_trivia_new(
+                                    TRIVIA_BLOCK_COMMENT, comment_start, comment_len, comment_line);
                                 trivia_append(scanner, trivia);
                             }
-                            advance(scanner); // *
-                            advance(scanner); // /
+                            advance(scanner);  // *
+                            advance(scanner);  // /
                             break;
                         }
                         if (peek(scanner) == '\n') {
@@ -327,8 +335,9 @@ static bool skip_whitespace(Scanner *scanner) {
                         advance(scanner);
                     }
                     // Unterminated block comment
-                    if (is_at_end(scanner) && !(scanner->current >= comment_start + 2 &&
-                        scanner->current[-2] == '*' && scanner->current[-1] == '/')) {
+                    if (is_at_end(scanner) &&
+                        !(scanner->current >= comment_start + 2 && scanner->current[-2] == '*' &&
+                          scanner->current[-1] == '/')) {
                         scanner->pending_error = "unterminated block comment";
                         return skipped;
                     }
@@ -355,7 +364,7 @@ typedef struct {
 // Sorted lookup table. Order MUST match xkeywords.def, which is itself
 // sorted by ASCII memcmp() then by length (matches our binary search).
 static const XrKeyword keywords[] = {
-#define XR_KW(name, len, type) { name, len, type },
+#define XR_KW(name, len, type) {name, len, type},
 #include "xkeywords.def"
 #undef XR_KW
 };
@@ -364,15 +373,14 @@ static const XrKeyword keywords[] = {
 
 // Compile-time check: each entry's `length` field equals sizeof(spelling) - 1.
 // Catches manual-edit mistakes in xkeywords.def at build time.
-#define XR_KW(name, len, type) \
-    _Static_assert(sizeof(name) - 1 == (len), \
-                   "keyword length mismatch in xkeywords.def: " name);
+#define XR_KW(name, len, type)                                                                     \
+    _Static_assert(sizeof(name) - 1 == (len), "keyword length mismatch in xkeywords.def: " name);
 #include "xkeywords.def"
 #undef XR_KW
 
 static TokenType identifier_type(Scanner *scanner) {
     const char *s = scanner->start;
-    int len = (int)(scanner->current - scanner->start);
+    int len = (int) (scanner->current - scanner->start);
 
     // Single underscore is the match wildcard pattern, not an identifier.
     if (len == 1 && s[0] == '_') {
@@ -385,16 +393,20 @@ static TokenType identifier_type(Scanner *scanner) {
     // (e.g. "in") are found instead of being conflated with longer keywords
     // (e.g. "int" / "interface"), and prefixes of keywords (e.g. user-named
     // `iffy`) cannot collide with the keyword (`if`) because length differs.
-    int lo = 0, hi = (int)NUM_KEYWORDS - 1;
+    int lo = 0, hi = (int) NUM_KEYWORDS - 1;
     while (lo <= hi) {
         int mid = (lo + hi) >> 1;
         const XrKeyword *kw = &keywords[mid];
         int min_len = len < kw->length ? len : kw->length;
-        int cmp = memcmp(s, kw->name, (size_t)min_len);
-        if (cmp == 0) cmp = len - kw->length;
-        if (cmp == 0) return kw->type;
-        if (cmp < 0) hi = mid - 1;
-        else lo = mid + 1;
+        int cmp = memcmp(s, kw->name, (size_t) min_len);
+        if (cmp == 0)
+            cmp = len - kw->length;
+        if (cmp == 0)
+            return kw->type;
+        if (cmp < 0)
+            hi = mid - 1;
+        else
+            lo = mid + 1;
     }
     return TK_NAME;
 }
@@ -406,7 +418,7 @@ static Token identifier(Scanner *scanner) {
         advance(scanner);
     }
     // Detect raw string prefix: single 'r' followed by quote
-    int len = (int)(scanner->current - scanner->start);
+    int len = (int) (scanner->current - scanner->start);
     if (len == 1 && scanner->start[0] == 'r') {
         char next = peek(scanner);
         if (next == '"' || next == '\'') {
@@ -528,13 +540,13 @@ static Token number(Scanner *scanner) {
 static Token string_with_quote(Scanner *scanner, char quote) {
     bool has_interpolation = false;
     while (!is_at_end(scanner)) {
-        size_t remaining = (size_t)(scanner->end - scanner->current);
+        size_t remaining = (size_t) (scanner->end - scanner->current);
         const char *found = xr_simd_find_string_end_quote(scanner->current, remaining, quote);
 
         while (scanner->current < found) {
             // Detect ${} in SIMD-skipped region ($ is not a SIMD stop char)
-            if (*scanner->current == '$' && (scanner->current + 1) < scanner->end
-                && *(scanner->current + 1) == '{') {
+            if (*scanner->current == '$' && (scanner->current + 1) < scanner->end &&
+                *(scanner->current + 1) == '{') {
                 has_interpolation = true;
             }
             if (*scanner->current == '\n') {
@@ -544,7 +556,8 @@ static Token string_with_quote(Scanner *scanner, char quote) {
             scanner->current++;
         }
 
-        if (is_at_end(scanner)) break;
+        if (is_at_end(scanner))
+            break;
 
         char c = peek(scanner);
         if (c == quote) {
@@ -627,14 +640,16 @@ static Token regex_literal(Scanner *scanner) {
             while (!is_at_end(scanner) && peek(scanner) != ']') {
                 if (peek(scanner) == '\\') {
                     advance(scanner);
-                    if (!is_at_end(scanner)) advance(scanner);
+                    if (!is_at_end(scanner))
+                        advance(scanner);
                 } else if (peek(scanner) == '\n') {
                     return error_token(scanner, "Regex cannot contain newline");
                 } else {
                     advance(scanner);
                 }
             }
-            if (!is_at_end(scanner)) advance(scanner);
+            if (!is_at_end(scanner))
+                advance(scanner);
         } else {
             advance(scanner);
         }
@@ -705,7 +720,7 @@ Token xr_scanner_scan(Scanner *scanner) {
     char c = advance(scanner);
 
     // Identifier or keyword (ASCII alpha, underscore, or UTF-8 lead byte)
-    if (XR_IS_ALPHA(c) || c == '_' || (unsigned char)c >= 0x80) {
+    if (XR_IS_ALPHA(c) || c == '_' || (unsigned char) c >= 0x80) {
         return identifier(scanner);
     }
 
@@ -716,14 +731,20 @@ Token xr_scanner_scan(Scanner *scanner) {
 
     // Other symbols
     switch (c) {
-        case '(': return make_token(scanner, TK_LPAREN);
-        case ')': return make_token(scanner, TK_RPAREN);
-        case '{': return make_token(scanner, TK_LBRACE);
-        case '}': return make_token(scanner, TK_RBRACE);
+        case '(':
+            return make_token(scanner, TK_LPAREN);
+        case ')':
+            return make_token(scanner, TK_RPAREN);
+        case '{':
+            return make_token(scanner, TK_LBRACE);
+        case '}':
+            return make_token(scanner, TK_RBRACE);
         case '[':
-            return make_token(scanner, TK_LBRACKET); // [
-        case ']': return make_token(scanner, TK_RBRACKET);
-        case ',': return make_token(scanner, TK_COMMA);
+            return make_token(scanner, TK_LBRACKET);  // [
+        case ']':
+            return make_token(scanner, TK_RBRACKET);
+        case ',':
+            return make_token(scanner, TK_COMMA);
         case '.':
             if (match(scanner, '.')) {
                 if (match(scanner, '.')) {
@@ -732,16 +753,18 @@ Token xr_scanner_scan(Scanner *scanner) {
                 return make_token(scanner, TK_RANGE);
             }
             return make_token(scanner, TK_DOT);
-        case ':': return make_token(scanner, TK_COLON);
-        case ';': return make_token(scanner, TK_SEMICOLON);
+        case ':':
+            return make_token(scanner, TK_COLON);
+        case ';':
+            return make_token(scanner, TK_SEMICOLON);
         case '+':
             if (match(scanner, '+')) {
-                return make_token(scanner, TK_INC); // ++
+                return make_token(scanner, TK_INC);  // ++
             }
             return make_token(scanner, match(scanner, '=') ? TK_PLUS_ASSIGN : TK_PLUS);
         case '-':
             if (match(scanner, '-')) {
-                return make_token(scanner, TK_DEC); // --
+                return make_token(scanner, TK_DEC);  // --
             }
             return make_token(scanner, match(scanner, '=') ? TK_MINUS_ASSIGN : TK_MINUS);
         case '*':
@@ -751,7 +774,8 @@ Token xr_scanner_scan(Scanner *scanner) {
         case '%':
             return make_token(scanner, match(scanner, '=') ? TK_MOD_ASSIGN : TK_PERCENT);
         case '@':
-            if (XR_IS_ALPHA(peek(scanner)) || peek(scanner) == '_' || (unsigned char)peek(scanner) >= 0x80) {
+            if (XR_IS_ALPHA(peek(scanner)) || peek(scanner) == '_' ||
+                (unsigned char) peek(scanner) >= 0x80) {
                 return make_token(scanner, TK_AT);
             }
             return error_token(scanner, "@ must be followed by identifier");
@@ -788,11 +812,12 @@ Token xr_scanner_scan(Scanner *scanner) {
             }
             return make_token(scanner, match(scanner, '=') ? TK_GE : TK_GT);
         case '&':
-            if (match(scanner, '&')) return make_token(scanner, TK_AND);
+            if (match(scanner, '&'))
+                return make_token(scanner, TK_AND);
             return make_token(scanner, match(scanner, '=') ? TK_AND_ASSIGN : TK_AMP);
         case '|':
             if (match(scanner, '|')) {
-                return make_token(scanner, TK_OR); // ||
+                return make_token(scanner, TK_OR);  // ||
             }
             return make_token(scanner, match(scanner, '=') ? TK_OR_ASSIGN : TK_PIPE);
         case '^':
@@ -814,7 +839,8 @@ Token xr_scanner_scan(Scanner *scanner) {
         case '\'':
             return single_quote_string(scanner);
         case '`':
-            return error_token(scanner, "Backtick strings are deprecated, use \"\" or '' with ${} interpolation");
+            return error_token(
+                scanner, "Backtick strings are deprecated, use \"\" or '' with ${} interpolation");
     }
 
     return error_token(scanner, "Unknown character");
@@ -823,105 +849,180 @@ Token xr_scanner_scan(Scanner *scanner) {
 // Token name lookup table (indexed by TokenType value)
 static const char *token_names[] = {
     // Single character tokens (ASCII values as index)
-    [TK_LPAREN]    = "(", [TK_RPAREN]    = ")", [TK_LBRACE]    = "{",
-    [TK_RBRACE]    = "}", [TK_LBRACKET]  = "[", [TK_RBRACKET]  = "]",
-    [TK_COMMA]     = ",", [TK_DOT]       = ".", [TK_COLON]     = ":",
-    [TK_SEMICOLON] = ";", [TK_PLUS]      = "+", [TK_MINUS]     = "-",
-    [TK_STAR]      = "*", [TK_SLASH]     = "/", [TK_PERCENT]   = "%",
-    [TK_HASH]      = "#", [TK_AMP]       = "&", [TK_CARET]     = "^",
-    [TK_TILDE]     = "~",
+    [TK_LPAREN] = "(",
+    [TK_RPAREN] = ")",
+    [TK_LBRACE] = "{",
+    [TK_RBRACE] = "}",
+    [TK_LBRACKET] = "[",
+    [TK_RBRACKET] = "]",
+    [TK_COMMA] = ",",
+    [TK_DOT] = ".",
+    [TK_COLON] = ":",
+    [TK_SEMICOLON] = ";",
+    [TK_PLUS] = "+",
+    [TK_MINUS] = "-",
+    [TK_STAR] = "*",
+    [TK_SLASH] = "/",
+    [TK_PERCENT] = "%",
+    [TK_HASH] = "#",
+    [TK_AMP] = "&",
+    [TK_CARET] = "^",
+    [TK_TILDE] = "~",
 
     // Multi-character tokens (>= 256)
-    [TK_EQ]        = "==",  [TK_NE]          = "!=",  [TK_EQ_STRICT]  = "===",
-    [TK_NE_STRICT] = "!==", [TK_LT]          = "<",   [TK_LE]         = "<=",
-    [TK_GT]        = ">",   [TK_GE]          = ">=",  [TK_LSHIFT]     = "<<",
-    [TK_RSHIFT]    = ">>",  [TK_ASSIGN]      = "=",   [TK_PLUS_ASSIGN] = "+=",
-    [TK_MINUS_ASSIGN] = "-=", [TK_MUL_ASSIGN] = "*=", [TK_DIV_ASSIGN] = "/=",
-    [TK_MOD_ASSIGN] = "%=", [TK_AND_ASSIGN]  = "&=",  [TK_OR_ASSIGN]  = "|=",
-    [TK_XOR_ASSIGN] = "^=", [TK_LSHIFT_ASSIGN] = "<<=", [TK_RSHIFT_ASSIGN] = ">>=",
-    [TK_INC]       = "++",  [TK_DEC]         = "--",  [TK_AND]        = "&&",
-    [TK_OR]        = "||",  [TK_NOT]         = "!",
+    [TK_EQ] = "==",
+    [TK_NE] = "!=",
+    [TK_EQ_STRICT] = "===",
+    [TK_NE_STRICT] = "!==",
+    [TK_LT] = "<",
+    [TK_LE] = "<=",
+    [TK_GT] = ">",
+    [TK_GE] = ">=",
+    [TK_LSHIFT] = "<<",
+    [TK_RSHIFT] = ">>",
+    [TK_ASSIGN] = "=",
+    [TK_PLUS_ASSIGN] = "+=",
+    [TK_MINUS_ASSIGN] = "-=",
+    [TK_MUL_ASSIGN] = "*=",
+    [TK_DIV_ASSIGN] = "/=",
+    [TK_MOD_ASSIGN] = "%=",
+    [TK_AND_ASSIGN] = "&=",
+    [TK_OR_ASSIGN] = "|=",
+    [TK_XOR_ASSIGN] = "^=",
+    [TK_LSHIFT_ASSIGN] = "<<=",
+    [TK_RSHIFT_ASSIGN] = ">>=",
+    [TK_INC] = "++",
+    [TK_DEC] = "--",
+    [TK_AND] = "&&",
+    [TK_OR] = "||",
+    [TK_NOT] = "!",
 
     // Keywords
-    [TK_LET]       = "let",       [TK_CONST]      = "const",
-    [TK_SHARED]    = "shared",    [TK_IF]         = "if",
-    [TK_ELSE]      = "else",      [TK_WHILE]      = "while",
-    [TK_FOR]       = "for",       [TK_IN]         = "in",
-    [TK_IS]        = "is",        [TK_BREAK]      = "break",
-    [TK_CONTINUE]  = "continue",  [TK_RETURN]     = "return",
-    [TK_YIELD]     = "yield",     [TK_NULL]       = "null",
-    [TK_TRUE]      = "true",      [TK_FALSE]      = "false",
-    [TK_CLASS]     = "class",     [TK_STRUCT]     = "struct",
-    [TK_EXTENDS]   = "extends",   [TK_INTERFACE]  = "interface",
-    [TK_IMPLEMENTS]= "implements",[TK_FN]         = "fn",
-    [TK_NEW]       = "new",       [TK_THIS]       = "this",
-    [TK_SUPER]     = "super",     [TK_CONSTRUCTOR]= "constructor",
-    [TK_STATIC]    = "static",    [TK_PRIVATE]    = "private",
-    [TK_PUBLIC]    = "public",    [TK_OPERATOR]   = "operator",
-    [TK_ABSTRACT]  = "abstract",  [TK_OVERRIDE]   = "override",
-    [TK_FINAL]     = "final",     [TK_ENUM]       = "enum",
-    [TK_MATCH]     = "match",     [TK_TYPE_ALIAS] = "type",
+    [TK_LET] = "let",
+    [TK_CONST] = "const",
+    [TK_SHARED] = "shared",
+    [TK_IF] = "if",
+    [TK_ELSE] = "else",
+    [TK_WHILE] = "while",
+    [TK_FOR] = "for",
+    [TK_IN] = "in",
+    [TK_IS] = "is",
+    [TK_BREAK] = "break",
+    [TK_CONTINUE] = "continue",
+    [TK_RETURN] = "return",
+    [TK_YIELD] = "yield",
+    [TK_NULL] = "null",
+    [TK_TRUE] = "true",
+    [TK_FALSE] = "false",
+    [TK_CLASS] = "class",
+    [TK_STRUCT] = "struct",
+    [TK_EXTENDS] = "extends",
+    [TK_INTERFACE] = "interface",
+    [TK_IMPLEMENTS] = "implements",
+    [TK_FN] = "fn",
+    [TK_NEW] = "new",
+    [TK_THIS] = "this",
+    [TK_SUPER] = "super",
+    [TK_CONSTRUCTOR] = "constructor",
+    [TK_STATIC] = "static",
+    [TK_PRIVATE] = "private",
+    [TK_PUBLIC] = "public",
+    [TK_OPERATOR] = "operator",
+    [TK_ABSTRACT] = "abstract",
+    [TK_OVERRIDE] = "override",
+    [TK_FINAL] = "final",
+    [TK_ENUM] = "enum",
+    [TK_MATCH] = "match",
+    [TK_TYPE_ALIAS] = "type",
 
     // Exception handling
-    [TK_TRY]       = "try",       [TK_CATCH]      = "catch",
-    [TK_FINALLY]   = "finally",   [TK_THROW]      = "throw",
+    [TK_TRY] = "try",
+    [TK_CATCH] = "catch",
+    [TK_FINALLY] = "finally",
+    [TK_THROW] = "throw",
 
     // Module system
-    [TK_IMPORT]    = "import",    [TK_EXPORT]     = "export",
-    [TK_AS]        = "as",
+    [TK_IMPORT] = "import",
+    [TK_EXPORT] = "export",
+    [TK_AS] = "as",
 
     // Coroutine
-    [TK_GO]        = "go",        [TK_AWAIT]      = "await",
-    [TK_SELECT]    = "select",    [TK_DEFER]      = "defer",
-    [TK_SCOPE]     = "scope",
+    [TK_GO] = "go",
+    [TK_AWAIT] = "await",
+    [TK_SELECT] = "select",
+    [TK_DEFER] = "defer",
+    [TK_SCOPE] = "scope",
 
     // Contextual keywords (not in keyword range, identified by parser)
-    [TK_FROM]      = "from",      [TK_TO]         = "to",
-    [TK_DEFAULT]   = "default",   [TK_CANCELLED]  = "cancelled",
-    [TK_REF]       = "ref",       [TK_MOVE]       = "move",
+    [TK_FROM] = "from",
+    [TK_TO] = "to",
+    [TK_DEFAULT] = "default",
+    [TK_CANCELLED] = "cancelled",
+    [TK_REF] = "ref",
+    [TK_MOVE] = "move",
 
     // Type keywords
-    [TK_VOID]      = "void",      [TK_INT]        = "int",
-    [TK_FLOAT]     = "float",     [TK_STRING]     = "string",
-    [TK_BOOL]      = "bool",      [TK_INT8]       = "int8",
-    [TK_INT16]     = "int16",     [TK_INT32]      = "int32",
-    [TK_INT64]     = "int64",     [TK_UINT8]      = "uint8",
-    [TK_UINT16]    = "uint16",    [TK_UINT32]     = "uint32",
-    [TK_UINT64]    = "uint64",    [TK_FLOAT32]    = "float32",
-    [TK_FLOAT64]   = "float64",   [TK_TYPE_ARRAY] = "Array",
-    [TK_TYPE_MAP]  = "Map",       [TK_TYPE_SET]   = "Set",
-    [TK_TYPE_JSON] = "Json",      [TK_TYPE_CHANNEL]= "Channel",
-    [TK_TYPE_BIGINT]= "BigInt",   [TK_TYPE_RANGE] = "Range",
-    [TK_TYPE_DATETIME]= "DateTime", [TK_TYPE_BYTES] = "Bytes",
-    [TK_UNKNOWN]    = "unknown",
+    [TK_VOID] = "void",
+    [TK_INT] = "int",
+    [TK_FLOAT] = "float",
+    [TK_STRING] = "string",
+    [TK_BOOL] = "bool",
+    [TK_INT8] = "int8",
+    [TK_INT16] = "int16",
+    [TK_INT32] = "int32",
+    [TK_INT64] = "int64",
+    [TK_UINT8] = "uint8",
+    [TK_UINT16] = "uint16",
+    [TK_UINT32] = "uint32",
+    [TK_UINT64] = "uint64",
+    [TK_FLOAT32] = "float32",
+    [TK_FLOAT64] = "float64",
+    [TK_TYPE_ARRAY] = "Array",
+    [TK_TYPE_MAP] = "Map",
+    [TK_TYPE_SET] = "Set",
+    [TK_TYPE_JSON] = "Json",
+    [TK_TYPE_CHANNEL] = "Channel",
+    [TK_TYPE_BIGINT] = "BigInt",
+    [TK_TYPE_RANGE] = "Range",
+    [TK_TYPE_DATETIME] = "DateTime",
+    [TK_TYPE_BYTES] = "Bytes",
+    [TK_UNKNOWN] = "unknown",
 
     // Type operators / special
-    [TK_QUESTION]  = "?",         [TK_QUESTION_DOT] = "?.",
-    [TK_PIPE]      = "|",         [TK_ARROW]      = "=>",
-    [TK_DOT_DOT_DOT] = "...",     [TK_RANGE]      = "..",
-    [TK_NULLISH_COALESCE] = "??", [TK_UNDERSCORE] = "_",
+    [TK_QUESTION] = "?",
+    [TK_QUESTION_DOT] = "?.",
+    [TK_PIPE] = "|",
+    [TK_ARROW] = "=>",
+    [TK_DOT_DOT_DOT] = "...",
+    [TK_RANGE] = "..",
+    [TK_NULLISH_COALESCE] = "??",
+    [TK_UNDERSCORE] = "_",
 
     // Syntax tokens
-    [TK_AT]        = "@",         [TK_EMPTY_MAP_START] = "#{",
+    [TK_AT] = "@",
+    [TK_EMPTY_MAP_START] = "#{",
     [TK_SET_START] = "#[",
 
     // Literals
-    [TK_LITERAL_INT]   = "LITERAL_INT",   [TK_LITERAL_FLOAT] = "LITERAL_FLOAT",
-    [TK_LITERAL_BIGINT]= "LITERAL_BIGINT",[TK_LITERAL_STRING]= "LITERAL_STRING",
-    [TK_LITERAL_REGEX] = "LITERAL_REGEX", [TK_NAME]          = "NAME",
+    [TK_LITERAL_INT] = "LITERAL_INT",
+    [TK_LITERAL_FLOAT] = "LITERAL_FLOAT",
+    [TK_LITERAL_BIGINT] = "LITERAL_BIGINT",
+    [TK_LITERAL_STRING] = "LITERAL_STRING",
+    [TK_LITERAL_REGEX] = "LITERAL_REGEX",
+    [TK_NAME] = "NAME",
     [TK_TEMPLATE_STRING] = "TEMPLATE_STRING",
-    [TK_RAW_STRING]    = "RAW_STRING",
+    [TK_RAW_STRING] = "RAW_STRING",
     [TK_RAW_TEMPLATE_STRING] = "RAW_TEMPLATE_STRING",
 
     // Special
-    [TK_EOF]       = "EOF",       [TK_ERROR]      = "ERROR",
+    [TK_EOF] = "EOF",
+    [TK_ERROR] = "ERROR",
 };
 
 const char *xr_token_name(TokenType type) {
-    if (type >= 0 && type < (TokenType)(sizeof(token_names) / sizeof(token_names[0]))
-        && token_names[type]) {
+    if (type >= 0 && type < (TokenType) (sizeof(token_names) / sizeof(token_names[0])) &&
+        token_names[type]) {
         return token_names[type];
     }
     return "UNKNOWN";
 }
-

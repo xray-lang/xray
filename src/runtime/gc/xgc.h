@@ -42,13 +42,13 @@
 struct XrCoroutine;
 struct XrayIsolate;
 
-XR_FUNC void* xr_alloc(struct XrCoroutine *coro, size_t size, uint8_t type);
-XR_FUNC struct XrCoroutine* xr_current_coro(struct XrayIsolate *X);
+XR_FUNC void *xr_alloc(struct XrCoroutine *coro, size_t size, uint8_t type);
+XR_FUNC struct XrCoroutine *xr_current_coro(struct XrayIsolate *X);
 
 /* ========== Debug ========== */
 
-#define xr_gc_stats(gc)        xr_gc_printstats(gc)
+#define xr_gc_stats(gc) xr_gc_printstats(gc)
 
 XR_FUNC void xr_gc_header_print(XrGCHeader *obj);
 
-#endif // XGC_H
+#endif  // XGC_H

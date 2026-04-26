@@ -27,26 +27,26 @@
 
 // XrCoroDebugInfo - Coroutine debug info (creation location and name)
 typedef struct XrCoroDebugInfo {
-    const char *name;           // Coroutine name (optional)
-    const char *source_file;    // Creation location: source file
-    int source_line;            // Creation location: line number
-    uint64_t create_time_ns;    // Creation time (nanoseconds)
+    const char *name;         // Coroutine name (optional)
+    const char *source_file;  // Creation location: source file
+    int source_line;          // Creation location: line number
+    uint64_t create_time_ns;  // Creation time (nanoseconds)
 } XrCoroDebugInfo;
 
 // ========== Debug Info Pool ==========
 
-#define XR_DEBUG_POOL_INIT_SIZE     1024              // Initial capacity
-#define XR_DEBUG_POOL_MAX_SIZE      (1024 * 1024)     // Max capacity
-#define XR_DEBUG_IDX_INVALID        0xFFFFFFFF        // Invalid index
+#define XR_DEBUG_POOL_INIT_SIZE 1024          // Initial capacity
+#define XR_DEBUG_POOL_MAX_SIZE (1024 * 1024)  // Max capacity
+#define XR_DEBUG_IDX_INVALID 0xFFFFFFFF       // Invalid index
 
 // XrCoroDebugPool - Global shared debug info storage
 // Uses atomic counter for index allocation, supports concurrent registration
 typedef struct XrCoroDebugPool {
-    XrCoroDebugInfo *entries;       // Entry array
-    _Atomic uint32_t count;         // Current entry count
-    uint32_t capacity;              // Capacity
-    pthread_mutex_t expand_lock;    // Expansion lock
-    bool initialized;               // Initialized flag
+    XrCoroDebugInfo *entries;     // Entry array
+    _Atomic uint32_t count;       // Current entry count
+    uint32_t capacity;            // Capacity
+    pthread_mutex_t expand_lock;  // Expansion lock
+    bool initialized;             // Initialized flag
 } XrCoroDebugPool;
 
 // ========== Pool Lifecycle API ==========
@@ -62,14 +62,12 @@ XR_FUNC void xr_coro_debug_pool_destroy(XrCoroDebugPool *pool);
 
 // Register debug info for new coroutine, returns index
 // Returns XR_DEBUG_IDX_INVALID on failure
-XR_FUNC uint32_t xr_coro_debug_register(XrCoroDebugPool *pool,
-                                 const char *name,
-                                 const char *file,
-                                 int line);
+XR_FUNC uint32_t xr_coro_debug_register(XrCoroDebugPool *pool, const char *name, const char *file,
+                                        int line);
 
 // Get debug info by index
 // Returns NULL for invalid index
-XR_FUNC XrCoroDebugInfo* xr_coro_debug_get(XrCoroDebugPool *pool, uint32_t idx);
+XR_FUNC XrCoroDebugInfo *xr_coro_debug_get(XrCoroDebugPool *pool, uint32_t idx);
 
 // ========== Global Pool API (convenience interface) ==========
 
@@ -80,11 +78,9 @@ XR_FUNC bool xr_coro_debug_global_init(void);
 XR_FUNC void xr_coro_debug_global_destroy(void);
 
 // Register debug info in global pool
-XR_FUNC uint32_t xr_coro_debug_global_register(const char *name,
-                                        const char *file,
-                                        int line);
+XR_FUNC uint32_t xr_coro_debug_global_register(const char *name, const char *file, int line);
 
 // Get debug info from global pool
-XR_FUNC XrCoroDebugInfo* xr_coro_debug_global_get(uint32_t idx);
+XR_FUNC XrCoroDebugInfo *xr_coro_debug_global_get(uint32_t idx);
 
-#endif // XCORO_DEBUG_H
+#endif  // XCORO_DEBUG_H

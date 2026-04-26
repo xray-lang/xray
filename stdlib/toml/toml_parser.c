@@ -47,16 +47,13 @@ static void add_error(TomlParser *parser, TomlErrorType type, const char *msg);
 static void add_expect_error(TomlParser *parser, const char *expected) {
     char buf[128];
     if (parser->pos >= parser->len) {
-        snprintf(buf, sizeof(buf),
-                 "Expected %s but reached end of input", expected);
+        snprintf(buf, sizeof(buf), "Expected %s but reached end of input", expected);
     } else {
-        unsigned char c = (unsigned char)parser->data[parser->pos];
+        unsigned char c = (unsigned char) parser->data[parser->pos];
         if (c >= 0x20 && c < 0x7F) {
-            snprintf(buf, sizeof(buf),
-                     "Expected %s but got '%c'", expected, c);
+            snprintf(buf, sizeof(buf), "Expected %s but got '%c'", expected, c);
         } else {
-            snprintf(buf, sizeof(buf),
-                     "Expected %s but got byte 0x%02X", expected, c);
+            snprintf(buf, sizeof(buf), "Expected %s but got byte 0x%02X", expected, c);
         }
     }
     add_error(parser, TOML_ERROR_SYNTAX, buf);
@@ -65,29 +62,48 @@ static void add_expect_error(TomlParser *parser, const char *expected) {
 static void add_error(TomlParser *parser, TomlErrorType type, const char *msg) {
     const char *type_str = "Unknown";
     switch (type) {
-        case TOML_ERROR_SYNTAX:              type_str = "SyntaxError";        break;
-        case TOML_ERROR_DUPLICATE_KEY:       type_str = "DuplicateKey";       break;
-        case TOML_ERROR_INVALID_KEY:         type_str = "InvalidKey";         break;
-        case TOML_ERROR_INVALID_VALUE:       type_str = "InvalidValue";       break;
-        case TOML_ERROR_UNTERMINATED_STRING: type_str = "UnterminatedString"; break;
-        case TOML_ERROR_INVALID_ESCAPE:      type_str = "InvalidEscape";      break;
-        case TOML_ERROR_INVALID_NUMBER:      type_str = "InvalidNumber";      break;
-        case TOML_ERROR_INVALID_DATETIME:    type_str = "InvalidDatetime";    break;
-        case TOML_ERROR_TABLE_CONFLICT:      type_str = "TableConflict";      break;
-        default: break;
+        case TOML_ERROR_SYNTAX:
+            type_str = "SyntaxError";
+            break;
+        case TOML_ERROR_DUPLICATE_KEY:
+            type_str = "DuplicateKey";
+            break;
+        case TOML_ERROR_INVALID_KEY:
+            type_str = "InvalidKey";
+            break;
+        case TOML_ERROR_INVALID_VALUE:
+            type_str = "InvalidValue";
+            break;
+        case TOML_ERROR_UNTERMINATED_STRING:
+            type_str = "UnterminatedString";
+            break;
+        case TOML_ERROR_INVALID_ESCAPE:
+            type_str = "InvalidEscape";
+            break;
+        case TOML_ERROR_INVALID_NUMBER:
+            type_str = "InvalidNumber";
+            break;
+        case TOML_ERROR_INVALID_DATETIME:
+            type_str = "InvalidDatetime";
+            break;
+        case TOML_ERROR_TABLE_CONFLICT:
+            type_str = "TableConflict";
+            break;
+        default:
+            break;
     }
-    xrs_error_push(parser->isolate, parser->result.errors,
-                   type_str,
+    xrs_error_push(parser->isolate, parser->result.errors, type_str,
                    /*line=*/parser->line,
                    /*row=*/-1,
-                   /*column=*/parser->column,
-                   msg);
+                   /*column=*/parser->column, msg);
 }
 
 static void ensure_buf_cap(TomlParser *parser, size_t needed) {
-    if (parser->temp_cap >= needed) return;
+    if (parser->temp_cap >= needed)
+        return;
     size_t new_cap = parser->temp_cap ? parser->temp_cap * 2 : 64;
-    while (new_cap < needed) new_cap *= 2;
+    while (new_cap < needed)
+        new_cap *= 2;
     // Abort instead of silently returning — downstream buf_append_char
     // and memcpy would otherwise write past the old tail on OOM.
     XR_REALLOC_OR_ABORT(parser->temp_buf, new_cap, "toml parser temp buffer");
@@ -112,14 +128,15 @@ void toml_config_init(TomlConfig *config) {
 
 void toml_config_from_json(XrayIsolate *X, TomlConfig *config, XrJson *json) {
     toml_config_init(config);
-    if (!json) return;
+    if (!json)
+        return;
 
-    xrs_cfg_get_bool(X, json, "strict",             &config->strict);
+    xrs_cfg_get_bool(X, json, "strict", &config->strict);
     xrs_cfg_get_bool(X, json, "allowDuplicateKeys", &config->allow_duplicate_keys);
 }
 
-void toml_parser_init(TomlParser *parser, XrayIsolate *isolate,
-                      const char *data, size_t len, TomlConfig *config) {
+void toml_parser_init(TomlParser *parser, XrayIsolate *isolate, const char *data, size_t len,
+                      TomlConfig *config) {
     memset(parser, 0, sizeof(TomlParser));
 
     parser->isolate = isolate;
@@ -157,7 +174,11 @@ void toml_parser_cleanup(TomlParser *parser) {
 // ========== Parsing Helpers ==========
 
 #define PEEK() (parser->pos < parser->len ? parser->data[parser->pos] : '\0')
-#define ADVANCE() do { parser->pos++; parser->column++; } while(0)
+#define ADVANCE()                                                                                  \
+    do {                                                                                           \
+        parser->pos++;                                                                             \
+        parser->column++;                                                                          \
+    } while (0)
 #define AT_END() (parser->pos >= parser->len)
 
 static void skip_ws(TomlParser *parser) {
@@ -177,11 +198,13 @@ static void skip_ws_and_newlines(TomlParser *parser) {
             parser->column = 1;
         } else if (c == '\r') {
             ADVANCE();
-            if (!AT_END() && PEEK() == '\n') ADVANCE();
+            if (!AT_END() && PEEK() == '\n')
+                ADVANCE();
             parser->line++;
             parser->column = 1;
         } else if (c == '#') {
-            while (!AT_END() && PEEK() != '\n') ADVANCE();
+            while (!AT_END() && PEEK() != '\n')
+                ADVANCE();
         } else {
             break;
         }
@@ -195,15 +218,14 @@ static void skip_to_eol(TomlParser *parser) {
 }
 
 static bool is_bare_key_char(char c) {
-    return isalnum((unsigned char)c) || c == '_' || c == '-';
+    return isalnum((unsigned char) c) || c == '_' || c == '-';
 }
 
 // ========== Forward Declarations ==========
 
 static XrValue parse_value(TomlParser *parser);
-static XrArray* parse_key_path(TomlParser *parser);
-static void set_nested_value(TomlParser *parser, XrMap *root,
-                             XrArray *keys, XrValue val);
+static XrArray *parse_key_path(TomlParser *parser);
+static void set_nested_value(TomlParser *parser, XrMap *root, XrArray *keys, XrValue val);
 
 // ========== Value Parsing ==========
 
@@ -226,7 +248,8 @@ static XrValue parse_bare_key(TomlParser *parser) {
 }
 
 static XrValue parse_basic_string(TomlParser *parser) {
-    if (PEEK() != '"') return xr_null();
+    if (PEEK() != '"')
+        return xr_null();
     ADVANCE();
 
     bool multiline = false;
@@ -251,8 +274,7 @@ static XrValue parse_basic_string(TomlParser *parser) {
     while (!AT_END()) {
         if (multiline) {
             if (PEEK() == '"' && parser->pos + 2 < parser->len &&
-                parser->data[parser->pos + 1] == '"' &&
-                parser->data[parser->pos + 2] == '"') {
+                parser->data[parser->pos + 1] == '"' && parser->data[parser->pos + 2] == '"') {
                 parser->pos += 3;
                 parser->column += 3;
                 break;
@@ -270,31 +292,51 @@ static XrValue parse_basic_string(TomlParser *parser) {
 
         if (PEEK() == '\\') {
             ADVANCE();
-            if (AT_END()) break;
+            if (AT_END())
+                break;
 
             char c = PEEK();
             ADVANCE();
 
             switch (c) {
-                case 'n': buf_append_char(parser, '\n'); break;
-                case 't': buf_append_char(parser, '\t'); break;
-                case 'r': buf_append_char(parser, '\r'); break;
-                case '\\': buf_append_char(parser, '\\'); break;
-                case '"': buf_append_char(parser, '"'); break;
-                case 'b': buf_append_char(parser, '\b'); break;
-                case 'f': buf_append_char(parser, '\f'); break;
-                case 'u': case 'U': {
+                case 'n':
+                    buf_append_char(parser, '\n');
+                    break;
+                case 't':
+                    buf_append_char(parser, '\t');
+                    break;
+                case 'r':
+                    buf_append_char(parser, '\r');
+                    break;
+                case '\\':
+                    buf_append_char(parser, '\\');
+                    break;
+                case '"':
+                    buf_append_char(parser, '"');
+                    break;
+                case 'b':
+                    buf_append_char(parser, '\b');
+                    break;
+                case 'f':
+                    buf_append_char(parser, '\f');
+                    break;
+                case 'u':
+                case 'U': {
                     int digits = (c == 'u') ? 4 : 8;
                     unsigned int cp = 0;
                     int actual = 0;
                     for (int i = 0; i < digits && !AT_END(); i++) {
                         char h = PEEK();
-                        if ((h >= '0' && h <= '9') || (h >= 'a' && h <= 'f') || (h >= 'A' && h <= 'F')) {
+                        if ((h >= '0' && h <= '9') || (h >= 'a' && h <= 'f') ||
+                            (h >= 'A' && h <= 'F')) {
                             ADVANCE();
                             cp <<= 4;
-                            if (h >= '0' && h <= '9') cp |= h - '0';
-                            else if (h >= 'a' && h <= 'f') cp |= h - 'a' + 10;
-                            else cp |= h - 'A' + 10;
+                            if (h >= '0' && h <= '9')
+                                cp |= h - '0';
+                            else if (h >= 'a' && h <= 'f')
+                                cp |= h - 'a' + 10;
+                            else
+                                cp |= h - 'A' + 10;
                             actual++;
                         } else {
                             break;
@@ -312,29 +354,31 @@ static XrValue parse_basic_string(TomlParser *parser) {
                         break;
                     }
                     if (cp < 0x80) {
-                        buf_append_char(parser, (char)cp);
+                        buf_append_char(parser, (char) cp);
                     } else if (cp < 0x800) {
-                        buf_append_char(parser, (char)(0xC0 | (cp >> 6)));
-                        buf_append_char(parser, (char)(0x80 | (cp & 0x3F)));
+                        buf_append_char(parser, (char) (0xC0 | (cp >> 6)));
+                        buf_append_char(parser, (char) (0x80 | (cp & 0x3F)));
                     } else if (cp < 0x10000) {
-                        buf_append_char(parser, (char)(0xE0 | (cp >> 12)));
-                        buf_append_char(parser, (char)(0x80 | ((cp >> 6) & 0x3F)));
-                        buf_append_char(parser, (char)(0x80 | (cp & 0x3F)));
+                        buf_append_char(parser, (char) (0xE0 | (cp >> 12)));
+                        buf_append_char(parser, (char) (0x80 | ((cp >> 6) & 0x3F)));
+                        buf_append_char(parser, (char) (0x80 | (cp & 0x3F)));
                     } else {
-                        buf_append_char(parser, (char)(0xF0 | (cp >> 18)));
-                        buf_append_char(parser, (char)(0x80 | ((cp >> 12) & 0x3F)));
-                        buf_append_char(parser, (char)(0x80 | ((cp >> 6) & 0x3F)));
-                        buf_append_char(parser, (char)(0x80 | (cp & 0x3F)));
+                        buf_append_char(parser, (char) (0xF0 | (cp >> 18)));
+                        buf_append_char(parser, (char) (0x80 | ((cp >> 12) & 0x3F)));
+                        buf_append_char(parser, (char) (0x80 | ((cp >> 6) & 0x3F)));
+                        buf_append_char(parser, (char) (0x80 | (cp & 0x3F)));
                     }
                     break;
                 }
-                case '\n': case '\r':
+                case '\n':
+                case '\r':
                     if (multiline) {
-                        if (c == '\r' && !AT_END() && PEEK() == '\n') ADVANCE();
+                        if (c == '\r' && !AT_END() && PEEK() == '\n')
+                            ADVANCE();
                         parser->line++;
                         parser->column = 1;
-                        while (!AT_END() && (PEEK() == ' ' || PEEK() == '\t' ||
-                               PEEK() == '\n' || PEEK() == '\r')) {
+                        while (!AT_END() && (PEEK() == ' ' || PEEK() == '\t' || PEEK() == '\n' ||
+                                             PEEK() == '\r')) {
                             if (PEEK() == '\n') {
                                 parser->line++;
                                 parser->column = 1;
@@ -357,14 +401,14 @@ static XrValue parse_basic_string(TomlParser *parser) {
         }
     }
 
-    XrString *str = xr_string_intern(parser->isolate,
-                                      parser->temp_buf ? parser->temp_buf : "",
-                                      parser->temp_len, 0);
+    XrString *str = xr_string_intern(parser->isolate, parser->temp_buf ? parser->temp_buf : "",
+                                     parser->temp_len, 0);
     return xr_string_value(str);
 }
 
 static XrValue parse_literal_string(TomlParser *parser) {
-    if (PEEK() != '\'') return xr_null();
+    if (PEEK() != '\'')
+        return xr_null();
     ADVANCE();
 
     bool multiline = false;
@@ -390,8 +434,7 @@ static XrValue parse_literal_string(TomlParser *parser) {
     while (!AT_END()) {
         if (multiline) {
             if (PEEK() == '\'' && parser->pos + 2 < parser->len &&
-                parser->data[parser->pos + 1] == '\'' &&
-                parser->data[parser->pos + 2] == '\'') {
+                parser->data[parser->pos + 1] == '\'' && parser->data[parser->pos + 2] == '\'') {
                 parser->pos += 3;
                 parser->column += 3;
                 break;
@@ -464,8 +507,7 @@ static XrValue parse_number(TomlParser *parser) {
     // TOML spec forbids a '+'/'-' sign on hex / oct / bin literals.
     // Example: '-0xFF' must be rejected.
     if (negative && (is_hex || is_oct || is_bin)) {
-        add_error(parser, TOML_ERROR_INVALID_NUMBER,
-                  "sign prefix only allowed on decimal numbers");
+        add_error(parser, TOML_ERROR_INVALID_NUMBER, "sign prefix only allowed on decimal numbers");
     }
 
     // Track the previous non-underscore character so we can validate
@@ -484,32 +526,41 @@ static XrValue parse_number(TomlParser *parser) {
             // base, otherwise the underscore is trailing / before non-digit.
             char next = (parser->pos + 1 < parser->len) ? parser->data[parser->pos + 1] : 0;
             bool next_ok = false;
-            if (is_hex) next_ok = isxdigit((unsigned char)next);
-            else if (is_oct) next_ok = (next >= '0' && next <= '7');
-            else if (is_bin) next_ok = (next == '0' || next == '1');
-            else next_ok = isdigit((unsigned char)next);
-            if (!next_ok) bad_underscore = true;
+            if (is_hex)
+                next_ok = isxdigit((unsigned char) next);
+            else if (is_oct)
+                next_ok = (next >= '0' && next <= '7');
+            else if (is_bin)
+                next_ok = (next == '0' || next == '1');
+            else
+                next_ok = isdigit((unsigned char) next);
+            if (!next_ok)
+                bad_underscore = true;
             prev_digit = '_';
             ADVANCE();
             continue;
         }
         if (is_hex) {
-            if (!isxdigit((unsigned char)c)) break;
+            if (!isxdigit((unsigned char) c))
+                break;
         } else if (is_oct) {
-            if (c < '0' || c > '7') break;
+            if (c < '0' || c > '7')
+                break;
         } else if (is_bin) {
-            if (c != '0' && c != '1') break;
+            if (c != '0' && c != '1')
+                break;
         } else {
-            if (!isdigit((unsigned char)c) && c != '.' &&
-                c != 'e' && c != 'E' && c != '+' && c != '-') break;
-            if (c == '.' || c == 'e' || c == 'E') is_float = true;
+            if (!isdigit((unsigned char) c) && c != '.' && c != 'e' && c != 'E' && c != '+' &&
+                c != '-')
+                break;
+            if (c == '.' || c == 'e' || c == 'E')
+                is_float = true;
         }
         prev_digit = c;
         ADVANCE();
     }
     if (bad_underscore) {
-        add_error(parser, TOML_ERROR_INVALID_NUMBER,
-                  "underscore must be surrounded by digits");
+        add_error(parser, TOML_ERROR_INVALID_NUMBER, "underscore must be surrounded by digits");
     }
 
     // Strip underscores into temp_buf (reuse parser buffer, no malloc per number)
@@ -556,16 +607,16 @@ static XrValue parse_datetime(TomlParser *parser) {
 
     while (!AT_END()) {
         char c = PEEK();
-        if (isdigit((unsigned char)c) || c == '-' || c == ':' ||
-            c == 'T' || c == 't' || c == 'Z' || c == 'z' ||
-            c == '+' || c == '.') {
-            if (c == 'T' || c == 't') found_date_part = true;
+        if (isdigit((unsigned char) c) || c == '-' || c == ':' || c == 'T' || c == 't' ||
+            c == 'Z' || c == 'z' || c == '+' || c == '.') {
+            if (c == 'T' || c == 't')
+                found_date_part = true;
             ADVANCE();
         } else if (c == ' ' && !found_date_part) {
             // TOML v1.0: space can replace T between date and time
             // e.g. "1979-05-27 07:32:00"
             size_t ahead = parser->pos + 1;
-            if (ahead < parser->len && isdigit((unsigned char)parser->data[ahead])) {
+            if (ahead < parser->len && isdigit((unsigned char) parser->data[ahead])) {
                 found_date_part = true;
                 ADVANCE();
             } else {
@@ -586,7 +637,7 @@ static XrValue parse_datetime(TomlParser *parser) {
     char small[64];
     char *buf = small;
     if (len + 1 > sizeof(small)) {
-        buf = (char*)xr_malloc(len + 1);
+        buf = (char *) xr_malloc(len + 1);
         if (!buf) {
             XrString *str = xr_string_intern(parser->isolate, start, len, 0);
             return xr_string_value(str);
@@ -595,7 +646,8 @@ static XrValue parse_datetime(TomlParser *parser) {
     memcpy(buf, start, len);
     buf[len] = '\0';
     XrDateTime *dt = xr_datetime_parse(parser->isolate, buf, NULL);
-    if (buf != small) xr_free(buf);
+    if (buf != small)
+        xr_free(buf);
     if (dt) {
         return xr_datetime_value(dt);
     }
@@ -606,7 +658,8 @@ static XrValue parse_datetime(TomlParser *parser) {
 }
 
 static XrValue parse_array(TomlParser *parser) {
-    if (PEEK() != '[') return xr_null();
+    if (PEEK() != '[')
+        return xr_null();
     ADVANCE();
 
     XrArray *arr = xr_array_new(xr_current_coro(parser->isolate));
@@ -626,7 +679,8 @@ static XrValue parse_array(TomlParser *parser) {
 
         skip_ws_and_newlines(parser);
 
-        if (AT_END()) break;
+        if (AT_END())
+            break;
 
         if (PEEK() == ']') {
             ADVANCE();
@@ -646,7 +700,8 @@ static XrValue parse_array(TomlParser *parser) {
 }
 
 static XrValue parse_inline_table(TomlParser *parser) {
-    if (PEEK() != '{') return xr_null();
+    if (PEEK() != '{')
+        return xr_null();
     ADVANCE();
 
     XrMap *map = xr_map_new(xr_current_coro(parser->isolate));
@@ -679,7 +734,8 @@ static XrValue parse_inline_table(TomlParser *parser) {
 
         skip_ws(parser);
 
-        if (AT_END()) break;
+        if (AT_END())
+            break;
 
         if (PEEK() == '}') {
             ADVANCE();
@@ -708,48 +764,53 @@ static XrValue parse_value(TomlParser *parser) {
 
     char c = PEEK();
 
-    if (c == '"') return parse_basic_string(parser);
-    if (c == '\'') return parse_literal_string(parser);
+    if (c == '"')
+        return parse_basic_string(parser);
+    if (c == '\'')
+        return parse_literal_string(parser);
 
-    if (parser->pos + 4 <= parser->len &&
-        strncmp(parser->data + parser->pos, "true", 4) == 0 &&
-        (parser->pos + 4 >= parser->len || !isalnum((unsigned char)parser->data[parser->pos + 4]))) {
+    if (parser->pos + 4 <= parser->len && strncmp(parser->data + parser->pos, "true", 4) == 0 &&
+        (parser->pos + 4 >= parser->len ||
+         !isalnum((unsigned char) parser->data[parser->pos + 4]))) {
         parser->pos += 4;
         parser->column += 4;
         return xr_bool(true);
     }
-    if (parser->pos + 5 <= parser->len &&
-        strncmp(parser->data + parser->pos, "false", 5) == 0 &&
-        (parser->pos + 5 >= parser->len || !isalnum((unsigned char)parser->data[parser->pos + 5]))) {
+    if (parser->pos + 5 <= parser->len && strncmp(parser->data + parser->pos, "false", 5) == 0 &&
+        (parser->pos + 5 >= parser->len ||
+         !isalnum((unsigned char) parser->data[parser->pos + 5]))) {
         parser->pos += 5;
         parser->column += 5;
         return xr_bool(false);
     }
 
-    if (c == '[') return parse_array(parser);
-    if (c == '{') return parse_inline_table(parser);
+    if (c == '[')
+        return parse_array(parser);
+    if (c == '{')
+        return parse_inline_table(parser);
 
     // Bare inf/nan (without +/- prefix)
     if (parser->pos + 3 <= parser->len) {
         if (strncmp(parser->data + parser->pos, "inf", 3) == 0 &&
-            (parser->pos + 3 >= parser->len || !isalnum((unsigned char)parser->data[parser->pos + 3]))) {
+            (parser->pos + 3 >= parser->len ||
+             !isalnum((unsigned char) parser->data[parser->pos + 3]))) {
             parser->pos += 3;
             parser->column += 3;
             return xr_float(INFINITY);
         }
         if (strncmp(parser->data + parser->pos, "nan", 3) == 0 &&
-            (parser->pos + 3 >= parser->len || !isalnum((unsigned char)parser->data[parser->pos + 3]))) {
+            (parser->pos + 3 >= parser->len ||
+             !isalnum((unsigned char) parser->data[parser->pos + 3]))) {
             parser->pos += 3;
             parser->column += 3;
             return xr_float(NAN);
         }
     }
 
-    if (isdigit((unsigned char)c) || c == '+' || c == '-') {
-        if (parser->pos + 10 <= parser->len && isdigit((unsigned char)c)) {
+    if (isdigit((unsigned char) c) || c == '+' || c == '-') {
+        if (parser->pos + 10 <= parser->len && isdigit((unsigned char) c)) {
             const char *p = parser->data + parser->pos;
-            if (isdigit(p[0]) && isdigit(p[1]) && isdigit(p[2]) &&
-                isdigit(p[3]) && p[4] == '-') {
+            if (isdigit(p[0]) && isdigit(p[1]) && isdigit(p[2]) && isdigit(p[3]) && p[4] == '-') {
                 return parse_datetime(parser);
             }
         }
@@ -762,7 +823,7 @@ static XrValue parse_value(TomlParser *parser) {
 
 // ========== Key Path Parsing ==========
 
-static XrArray* parse_key_path(TomlParser *parser) {
+static XrArray *parse_key_path(TomlParser *parser) {
     XrArray *keys = xr_array_new(xr_current_coro(parser->isolate));
 
     while (!AT_END()) {
@@ -781,7 +842,8 @@ static XrArray* parse_key_path(TomlParser *parser) {
 
         skip_ws(parser);
 
-        if (AT_END() || PEEK() != '.') break;
+        if (AT_END() || PEEK() != '.')
+            break;
         ADVANCE();
     }
 
@@ -790,8 +852,7 @@ static XrArray* parse_key_path(TomlParser *parser) {
 
 // ========== Table Operations ==========
 
-static void set_nested_value(TomlParser *parser, XrMap *root,
-                             XrArray *keys, XrValue val) {
+static void set_nested_value(TomlParser *parser, XrMap *root, XrArray *keys, XrValue val) {
     XrMap *current = root;
     int count = keys->length;
 
@@ -836,14 +897,16 @@ static void set_nested_value(TomlParser *parser, XrMap *root,
 // parser's reusable temp buffer. Returns the NUL-terminated path; the
 // buffer lives until the next buf_reset / ensure_buf_cap call, so the
 // caller must consume it before any other buffer operation.
-static const char* build_table_path(TomlParser *parser, XrArray *keys) {
+static const char *build_table_path(TomlParser *parser, XrArray *keys) {
     buf_reset(parser);
     int n = keys->length;
     for (int i = 0; i < n; i++) {
         XrValue v = xr_array_get(keys, i);
-        if (!XR_IS_STRING(v)) continue;
+        if (!XR_IS_STRING(v))
+            continue;
         XrString *s = XR_TO_STRING(v);
-        if (i > 0) buf_append_char(parser, '.');
+        if (i > 0)
+            buf_append_char(parser, '.');
         ensure_buf_cap(parser, parser->temp_len + s->length + 1);
         memcpy(parser->temp_buf + parser->temp_len, s->data, s->length);
         parser->temp_len += s->length;
@@ -858,8 +921,7 @@ static const char* build_table_path(TomlParser *parser, XrArray *keys) {
 // header is a duplicate of a previous `[path]` declaration.
 static bool mark_table_defined(TomlParser *parser, XrArray *keys) {
     const char *path = build_table_path(parser, keys);
-    XrString *pkey = xr_string_intern(parser->isolate, path,
-                                      parser->temp_len, 0);
+    XrString *pkey = xr_string_intern(parser->isolate, path, parser->temp_len, 0);
     XrValue key = xr_string_value(pkey);
     if (!XR_IS_NULL(xr_map_get(parser->defined_tables, key, NULL))) {
         return false;  // already seen
@@ -868,14 +930,13 @@ static bool mark_table_defined(TomlParser *parser, XrArray *keys) {
     return true;
 }
 
-static XrMap* get_or_create_table(TomlParser *parser, XrArray *keys) {
+static XrMap *get_or_create_table(TomlParser *parser, XrArray *keys) {
     // Duplicate-header detection (TOML spec §Table): two `[same.path]`
     // headers in the same document are an error. Dotted-key implicit
     // tables are intentionally NOT recorded in defined_tables, so
     // `a.b = 1` followed by `[a]` remains legal.
     if (!mark_table_defined(parser, keys)) {
-        add_error(parser, TOML_ERROR_DUPLICATE_KEY,
-                  "Table already defined");
+        add_error(parser, TOML_ERROR_DUPLICATE_KEY, "Table already defined");
         // Return the existing leaf so subsequent key/value lines still
         // land in a sensible place and the rest of the document keeps
         // parsing; the error has already been recorded.
@@ -903,7 +964,7 @@ static XrMap* get_or_create_table(TomlParser *parser, XrArray *keys) {
     return current;
 }
 
-static XrMap* get_or_create_array_table(TomlParser *parser, XrArray *keys) {
+static XrMap *get_or_create_array_table(TomlParser *parser, XrArray *keys) {
     XrMap *current = parser->root;
     int count = keys->length;
 
@@ -961,7 +1022,8 @@ static XrMap* get_or_create_array_table(TomlParser *parser, XrArray *keys) {
 TomlResult toml_parser_parse(TomlParser *parser) {
     while (!AT_END()) {
         skip_ws_and_newlines(parser);
-        if (AT_END()) break;
+        if (AT_END())
+            break;
 
         if (PEEK() == '[') {
             ADVANCE();
@@ -1023,4 +1085,3 @@ TomlResult toml_parser_parse(TomlParser *parser) {
     parser->result.meta.lines = parser->line;
     return parser->result;
 }
-

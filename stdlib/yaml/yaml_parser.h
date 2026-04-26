@@ -28,25 +28,25 @@
 // ========== Parse Configuration ==========
 
 typedef struct {
-    bool safe;                    // Safe mode (disable dangerous tags)
-    bool allow_duplicate_keys;    // Allow duplicate keys
-    int max_depth;                // Max nesting depth, default 64
+    bool safe;                  // Safe mode (disable dangerous tags)
+    bool allow_duplicate_keys;  // Allow duplicate keys
+    int max_depth;              // Max nesting depth, default 64
 } YamlConfig;
 
 // ========== Parse Metadata ==========
 
 typedef struct {
-    int lines;                    // Total lines
-    int documents;                // Document count
-    int anchors;                  // Anchor count
+    int lines;      // Total lines
+    int documents;  // Document count
+    int anchors;    // Anchor count
 } YamlMeta;
 
 // ========== Parse Result ==========
 
 typedef struct {
-    XrValue data;                 // Parsed data
-    XrArray *errors;              // Error list
-    YamlMeta meta;                // Metadata
+    XrValue data;     // Parsed data
+    XrArray *errors;  // Error list
+    YamlMeta meta;    // Metadata
 } YamlResult;
 
 // ========== Anchor Storage ==========
@@ -108,14 +108,14 @@ XR_FUNC void yaml_config_init(YamlConfig *config);
 XR_FUNC void yaml_config_from_json(XrayIsolate *X, YamlConfig *config, XrJson *json);
 
 // Initialize parser
-XR_FUNC void yaml_parser_init(YamlParser *parser, XrayIsolate *isolate,
-                              const char *data, size_t len, YamlConfig *config);
+XR_FUNC void yaml_parser_init(YamlParser *parser, XrayIsolate *isolate, const char *data,
+                              size_t len, YamlConfig *config);
 
 // Parse single document
 XR_FUNC XrValue yaml_parser_parse(YamlParser *parser);
 
 // Parse all documents
-XR_FUNC XrArray* yaml_parser_parse_all(YamlParser *parser);
+XR_FUNC XrArray *yaml_parser_parse_all(YamlParser *parser);
 
 // Strict mode parsing
 XR_FUNC YamlResult yaml_parser_parse_strict(YamlParser *parser);

@@ -41,8 +41,7 @@
  * Total: 11 allocatable */
 static const int x64_gpr_alloc[] = {
     /* Caller-saved (first 8 entries) */
-    X64_RAX, X64_RCX, X64_RDX, X64_RSI, X64_RDI,
-    X64_R8,  X64_R9,  X64_R10,
+    X64_RAX, X64_RCX, X64_RDX, X64_RSI, X64_RDI, X64_R8, X64_R9, X64_R10,
     /* Callee-saved (next 3 entries) */
     X64_RBX, X64_R12, X64_R13,
     /* Note: r11=scratch, r14=jit_ctx, r15=coro, rbp=FP → not allocatable */
@@ -77,31 +76,32 @@ static const int x64_fpr_alloc[] = {
  *   spill_base = 64
  */
 const XirTarget xir_target_x64 = {
-    .name               = "x86-64",
+    .name = "x86-64",
 
-    .ngpr               = 11,       // 8 caller-saved + 3 callee-saved (minus r11,r14,r15,rbp,rsp)
-    .nfpr               = 15,       // xmm0-xmm14 (xmm15 reserved as scratch)
+    .ngpr = 11,  // 8 caller-saved + 3 callee-saved (minus r11,r14,r15,rbp,rsp)
+    .nfpr = 15,  // xmm0-xmm14 (xmm15 reserved as scratch)
 
-    .gpr_alloc          = x64_gpr_alloc,
-    .fpr_alloc          = x64_fpr_alloc,
+    .gpr_alloc = x64_gpr_alloc,
+    .fpr_alloc = x64_fpr_alloc,
 
-    .ngpr_caller_save   = 8,        // rax,rcx,rdx,rsi,rdi,r8,r9,r10
-    .nfpr_caller_save   = 15,       // System V: all xmm are caller-saved (xmm15 is scratch, not allocatable)
+    .ngpr_caller_save = 8,  // rax,rcx,rdx,rsi,rdi,r8,r9,r10
+    .nfpr_caller_save =
+        15,  // System V: all xmm are caller-saved (xmm15 is scratch, not allocatable)
 
-    .scratch_gpr        = { X64_R11, -1 },  // r11 = scratch; no second scratch
-    .coro_reg           = X64_R15,
-    .sp_reg             = X64_RSP,
-    .fp_reg             = X64_RBP,
-    .lr_reg             = -1,       // x86-64 has no link register (uses stack)
+    .scratch_gpr = {X64_R11, -1},  // r11 = scratch; no second scratch
+    .coro_reg = X64_R15,
+    .sp_reg = X64_RSP,
+    .fp_reg = X64_RBP,
+    .lr_reg = -1,  // x86-64 has no link register (uses stack)
 
-    .frame_base         = 64,       // callee-saved(48) + stack_map_ptr(8) + safepoint_id(8)
-    .spill_base         = 64,       // spill slots start after frame metadata
-    .max_spill_slots    = 32,       // match ARM64 limit (uint32_t spill_bitmap)
+    .frame_base = 64,       // callee-saved(48) + stack_map_ptr(8) + safepoint_id(8)
+    .spill_base = 64,       // spill slots start after frame metadata
+    .max_spill_slots = 32,  // match ARM64 limit (uint32_t spill_bitmap)
 
-    .max_vregs          = 4096,
+    .max_vregs = 4096,
 };
 
 // Global current target pointer — set to this platform's target
 const XirTarget *xir_current_target = &xir_target_x64;
 
-#endif // __x86_64__
+#endif  // __x86_64__

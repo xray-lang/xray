@@ -31,42 +31,44 @@
 
 #include <zlib.h>
 #include <string.h>
-#include <strings.h>  /* strcasecmp */
+#include <strings.h> /* strcasecmp */
 
 /* ========== Custom zlib allocator routing ========== */
 
 static voidpf zlib_alloc(voidpf opaque, uInt items, uInt size) {
-    (void)opaque;
-    return xr_calloc((size_t)items, (size_t)size);
+    (void) opaque;
+    return xr_calloc((size_t) items, (size_t) size);
 }
 
 static void zlib_free(voidpf opaque, voidpf address) {
-    (void)opaque;
+    (void) opaque;
     xr_free(address);
 }
 
 /* ========== XrZlibStream — Stateful Compress/Decompress ========== */
 
 struct XrZlibStream {
-    z_stream  zs;
-    bool      is_deflate;    /* true = deflate (compress), false = inflate */
-    bool      finished;      /* Z_STREAM_END received or emitted */
+    z_stream zs;
+    bool is_deflate; /* true = deflate (compress), false = inflate */
+    bool finished;   /* Z_STREAM_END received or emitted */
 };
 
 XR_FUNC XrZlibStream *xr_zlib_stream_new_deflate(int level, int window_bits) {
-    if (level < 0) level = Z_DEFAULT_COMPRESSION;
-    if (level > 9) level = 9;
+    if (level < 0)
+        level = Z_DEFAULT_COMPRESSION;
+    if (level > 9)
+        level = 9;
 
-    XrZlibStream *s = (XrZlibStream *)xr_calloc(1, sizeof(XrZlibStream));
-    if (!s) return NULL;
+    XrZlibStream *s = (XrZlibStream *) xr_calloc(1, sizeof(XrZlibStream));
+    if (!s)
+        return NULL;
 
     s->zs.zalloc = zlib_alloc;
-    s->zs.zfree  = zlib_free;
+    s->zs.zfree = zlib_free;
     s->zs.opaque = NULL;
     s->is_deflate = true;
 
-    int rc = deflateInit2(&s->zs, level, Z_DEFLATED,
-                          window_bits, 8, Z_DEFAULT_STRATEGY);
+    int rc = deflateInit2(&s->zs, level, Z_DEFLATED, window_bits, 8, Z_DEFAULT_STRATEGY);
     if (rc != Z_OK) {
         xr_free(s);
         return NULL;
@@ -75,11 +77,12 @@ XR_FUNC XrZlibStream *xr_zlib_stream_new_deflate(int level, int window_bits) {
 }
 
 XR_FUNC XrZlibStream *xr_zlib_stream_new_inflate(int window_bits) {
-    XrZlibStream *s = (XrZlibStream *)xr_calloc(1, sizeof(XrZlibStream));
-    if (!s) return NULL;
+    XrZlibStream *s = (XrZlibStream *) xr_calloc(1, sizeof(XrZlibStream));
+    if (!s)
+        return NULL;
 
     s->zs.zalloc = zlib_alloc;
-    s->zs.zfree  = zlib_free;
+    s->zs.zfree = zlib_free;
     s->zs.opaque = NULL;
     s->is_deflate = false;
 
@@ -91,16 +94,15 @@ XR_FUNC XrZlibStream *xr_zlib_stream_new_inflate(int window_bits) {
     return s;
 }
 
-XR_FUNC int xr_zlib_stream_process(XrZlibStream *s,
-                                    const uint8_t *in, size_t in_len,
-                                    uint8_t *out, size_t out_cap,
-                                    size_t *out_written, int flush) {
-    if (!s || !out || !out_written) return -1;
+XR_FUNC int xr_zlib_stream_process(XrZlibStream *s, const uint8_t *in, size_t in_len, uint8_t *out,
+                                   size_t out_cap, size_t *out_written, int flush) {
+    if (!s || !out || !out_written)
+        return -1;
 
-    s->zs.next_in  = (Bytef *)(in ? in : (const uint8_t *)"");
-    s->zs.avail_in = (uInt)(in ? in_len : 0);
-    s->zs.next_out  = (Bytef *)out;
-    s->zs.avail_out = (uInt)out_cap;
+    s->zs.next_in = (Bytef *) (in ? in : (const uint8_t *) "");
+    s->zs.avail_in = (uInt) (in ? in_len : 0);
+    s->zs.next_out = (Bytef *) out;
+    s->zs.avail_out = (uInt) out_cap;
 
     int rc;
     if (s->is_deflate) {
@@ -109,16 +111,16 @@ XR_FUNC int xr_zlib_stream_process(XrZlibStream *s,
         rc = inflate(&s->zs, flush);
     }
 
-    *out_written = out_cap - (size_t)s->zs.avail_out;
+    *out_written = out_cap - (size_t) s->zs.avail_out;
 
     if (rc == Z_STREAM_END) {
         s->finished = true;
-        return 1;  /* stream complete */
+        return 1; /* stream complete */
     }
     if (rc == Z_OK || rc == Z_BUF_ERROR) {
-        return 0;  /* OK, may need more input or output space */
+        return 0; /* OK, may need more input or output space */
     }
-    return -1;  /* error */
+    return -1; /* error */
 }
 
 XR_FUNC bool xr_zlib_stream_finished(const XrZlibStream *s) {
@@ -126,7 +128,8 @@ XR_FUNC bool xr_zlib_stream_finished(const XrZlibStream *s) {
 }
 
 XR_FUNC void xr_zlib_stream_free(XrZlibStream *s) {
-    if (!s) return;
+    if (!s)
+        return;
     if (s->is_deflate) {
         deflateEnd(&s->zs);
     } else {
@@ -144,24 +147,24 @@ XR_FUNC void xr_zlib_stream_free(XrZlibStream *s) {
  *
  * Returns 0 on success. Caller must xr_free(*out).
  */
-XR_FUNC int xr_deflate_sync_flush(const uint8_t *in, size_t in_len,
-                                   uint8_t **out, size_t *out_len,
-                                   int level) {
-    if (!in || !out || !out_len) return -1;
+XR_FUNC int xr_deflate_sync_flush(const uint8_t *in, size_t in_len, uint8_t **out, size_t *out_len,
+                                  int level) {
+    if (!in || !out || !out_len)
+        return -1;
 
     XrZlibStream *s = xr_zlib_stream_new_deflate(level, -15);
-    if (!s) return -1;
+    if (!s)
+        return -1;
 
-    size_t bound = (size_t)deflateBound(&s->zs, (uLong)in_len);
-    uint8_t *buf = (uint8_t *)xr_malloc(bound);
+    size_t bound = (size_t) deflateBound(&s->zs, (uLong) in_len);
+    uint8_t *buf = (uint8_t *) xr_malloc(bound);
     if (!buf) {
         xr_zlib_stream_free(s);
         return -1;
     }
 
     size_t written = 0;
-    int rc = xr_zlib_stream_process(s, in, in_len, buf, bound, &written,
-                                     Z_SYNC_FLUSH);
+    int rc = xr_zlib_stream_process(s, in, in_len, buf, bound, &written, Z_SYNC_FLUSH);
     xr_zlib_stream_free(s);
 
     if (rc < 0) {
@@ -188,16 +191,17 @@ XR_FUNC int xr_deflate_sync_flush(const uint8_t *in, size_t in_len,
  *
  * Returns 0 on success. Caller must xr_free(*out).
  */
-XR_FUNC int xr_inflate_bounded(const uint8_t *in, size_t in_len,
-                                size_t max_out,
-                                uint8_t **out, size_t *out_len) {
-    if (!in || !out || !out_len) return -1;
+XR_FUNC int xr_inflate_bounded(const uint8_t *in, size_t in_len, size_t max_out, uint8_t **out,
+                               size_t *out_len) {
+    if (!in || !out || !out_len)
+        return -1;
 
     /* Append the stripped trailer before inflating */
     static const uint8_t TRAILER[4] = {0x00, 0x00, 0xff, 0xff};
     size_t total_in = in_len + 4;
-    uint8_t *input = (uint8_t *)xr_malloc(total_in);
-    if (!input) return -1;
+    uint8_t *input = (uint8_t *) xr_malloc(total_in);
+    if (!input)
+        return -1;
     memcpy(input, in, in_len);
     memcpy(input + in_len, TRAILER, 4);
 
@@ -209,28 +213,30 @@ XR_FUNC int xr_inflate_bounded(const uint8_t *in, size_t in_len,
 
     /* Start at 4x, grow up to max_out */
     size_t buf_cap = in_len * 4;
-    if (buf_cap < 256) buf_cap = 256;
-    if (max_out > 0 && buf_cap > max_out) buf_cap = max_out;
+    if (buf_cap < 256)
+        buf_cap = 256;
+    if (max_out > 0 && buf_cap > max_out)
+        buf_cap = max_out;
 
-    uint8_t *buf = (uint8_t *)xr_malloc(buf_cap);
+    uint8_t *buf = (uint8_t *) xr_malloc(buf_cap);
     if (!buf) {
         xr_zlib_stream_free(s);
         xr_free(input);
         return -1;
     }
 
-    s->zs.next_in  = input;
-    s->zs.avail_in = (uInt)total_in;
+    s->zs.next_in = input;
+    s->zs.avail_in = (uInt) total_in;
 
     size_t total_written = 0;
 
     while (1) {
-        s->zs.next_out  = buf + total_written;
-        s->zs.avail_out = (uInt)(buf_cap - total_written);
+        s->zs.next_out = buf + total_written;
+        s->zs.avail_out = (uInt) (buf_cap - total_written);
 
         int rc = inflate(&s->zs, Z_SYNC_FLUSH);
 
-        total_written = buf_cap - (size_t)s->zs.avail_out;
+        total_written = buf_cap - (size_t) s->zs.avail_out;
 
         if (rc == Z_STREAM_END || (rc == Z_OK && s->zs.avail_in == 0)) {
             break;
@@ -244,8 +250,9 @@ XR_FUNC int xr_inflate_bounded(const uint8_t *in, size_t in_len,
                 return -1;
             }
             size_t new_cap = buf_cap * 2;
-            if (max_out > 0 && new_cap > max_out) new_cap = max_out;
-            uint8_t *tmp = (uint8_t *)xr_realloc(buf, new_cap);
+            if (max_out > 0 && new_cap > max_out)
+                new_cap = max_out;
+            uint8_t *tmp = (uint8_t *) xr_realloc(buf, new_cap);
             if (!tmp) {
                 xr_free(buf);
                 xr_zlib_stream_free(s);
@@ -279,29 +286,33 @@ XR_FUNC int xr_inflate_bounded(const uint8_t *in, size_t in_len,
 
 /* ========== HTTP helpers: gzip/deflate with auto-alloc ========== */
 
-XR_FUNC int xr_zlib_gzip_compress(const void *in, size_t in_len,
-                                   void **out, size_t *out_len, int level) {
-    if (!in || in_len == 0 || !out || !out_len) return -1;
-    if (level < 1) level = 1;
-    if (level > 9) level = 9;
+XR_FUNC int xr_zlib_gzip_compress(const void *in, size_t in_len, void **out, size_t *out_len,
+                                  int level) {
+    if (!in || in_len == 0 || !out || !out_len)
+        return -1;
+    if (level < 1)
+        level = 1;
+    if (level > 9)
+        level = 9;
 
     /* 16 + MAX_WBITS = gzip format */
     XrZlibStream *s = xr_zlib_stream_new_deflate(level, 16 + MAX_WBITS);
-    if (!s) return -1;
+    if (!s)
+        return -1;
 
-    size_t bound = (size_t)deflateBound(&s->zs, (uLong)in_len) + 18;
-    uint8_t *buf = (uint8_t *)xr_malloc(bound);
+    size_t bound = (size_t) deflateBound(&s->zs, (uLong) in_len) + 18;
+    uint8_t *buf = (uint8_t *) xr_malloc(bound);
     if (!buf) {
         xr_zlib_stream_free(s);
         return -1;
     }
 
     size_t written = 0;
-    int rc = xr_zlib_stream_process(s, (const uint8_t *)in, in_len,
-                                     buf, bound, &written, Z_FINISH);
+    int rc =
+        xr_zlib_stream_process(s, (const uint8_t *) in, in_len, buf, bound, &written, Z_FINISH);
     xr_zlib_stream_free(s);
 
-    if (rc != 1) {  /* must be Z_STREAM_END */
+    if (rc != 1) { /* must be Z_STREAM_END */
         xr_free(buf);
         return -1;
     }
@@ -311,38 +322,41 @@ XR_FUNC int xr_zlib_gzip_compress(const void *in, size_t in_len,
     return 0;
 }
 
-XR_FUNC int xr_zlib_gzip_decompress(const void *in, size_t in_len,
-                                     void **out, size_t *out_len) {
-    if (!in || in_len == 0 || !out || !out_len) return -1;
+XR_FUNC int xr_zlib_gzip_decompress(const void *in, size_t in_len, void **out, size_t *out_len) {
+    if (!in || in_len == 0 || !out || !out_len)
+        return -1;
 
     /* 16 + MAX_WBITS = gzip format */
     XrZlibStream *s = xr_zlib_stream_new_inflate(16 + MAX_WBITS);
-    if (!s) return -1;
+    if (!s)
+        return -1;
 
     size_t buf_cap = in_len * 4;
-    if (buf_cap < 1024) buf_cap = 1024;
-    uint8_t *buf = (uint8_t *)xr_malloc(buf_cap);
+    if (buf_cap < 1024)
+        buf_cap = 1024;
+    uint8_t *buf = (uint8_t *) xr_malloc(buf_cap);
     if (!buf) {
         xr_zlib_stream_free(s);
         return -1;
     }
 
-    s->zs.next_in  = (Bytef *)in;
-    s->zs.avail_in = (uInt)in_len;
+    s->zs.next_in = (Bytef *) in;
+    s->zs.avail_in = (uInt) in_len;
 
     size_t total = 0;
 
     while (1) {
-        s->zs.next_out  = buf + total;
-        s->zs.avail_out = (uInt)(buf_cap - total);
+        s->zs.next_out = buf + total;
+        s->zs.avail_out = (uInt) (buf_cap - total);
 
         int rc = inflate(&s->zs, Z_NO_FLUSH);
-        total = buf_cap - (size_t)s->zs.avail_out;
+        total = buf_cap - (size_t) s->zs.avail_out;
 
-        if (rc == Z_STREAM_END) break;
+        if (rc == Z_STREAM_END)
+            break;
         if (rc == Z_OK && s->zs.avail_out == 0) {
             size_t new_cap = buf_cap * 2;
-            uint8_t *tmp = (uint8_t *)xr_realloc(buf, new_cap);
+            uint8_t *tmp = (uint8_t *) xr_realloc(buf, new_cap);
             if (!tmp) {
                 xr_free(buf);
                 xr_zlib_stream_free(s);
@@ -366,26 +380,30 @@ XR_FUNC int xr_zlib_gzip_decompress(const void *in, size_t in_len,
     return 0;
 }
 
-XR_FUNC int xr_zlib_deflate_compress(const void *in, size_t in_len,
-                                      void **out, size_t *out_len, int level) {
-    if (!in || in_len == 0 || !out || !out_len) return -1;
-    if (level < 1) level = 1;
-    if (level > 9) level = 9;
+XR_FUNC int xr_zlib_deflate_compress(const void *in, size_t in_len, void **out, size_t *out_len,
+                                     int level) {
+    if (!in || in_len == 0 || !out || !out_len)
+        return -1;
+    if (level < 1)
+        level = 1;
+    if (level > 9)
+        level = 9;
 
     /* -MAX_WBITS = raw deflate */
     XrZlibStream *s = xr_zlib_stream_new_deflate(level, -MAX_WBITS);
-    if (!s) return -1;
+    if (!s)
+        return -1;
 
-    size_t bound = (size_t)deflateBound(&s->zs, (uLong)in_len);
-    uint8_t *buf = (uint8_t *)xr_malloc(bound);
+    size_t bound = (size_t) deflateBound(&s->zs, (uLong) in_len);
+    uint8_t *buf = (uint8_t *) xr_malloc(bound);
     if (!buf) {
         xr_zlib_stream_free(s);
         return -1;
     }
 
     size_t written = 0;
-    int rc = xr_zlib_stream_process(s, (const uint8_t *)in, in_len,
-                                     buf, bound, &written, Z_FINISH);
+    int rc =
+        xr_zlib_stream_process(s, (const uint8_t *) in, in_len, buf, bound, &written, Z_FINISH);
     xr_zlib_stream_free(s);
 
     if (rc != 1) {
@@ -398,38 +416,41 @@ XR_FUNC int xr_zlib_deflate_compress(const void *in, size_t in_len,
     return 0;
 }
 
-XR_FUNC int xr_zlib_deflate_decompress(const void *in, size_t in_len,
-                                        void **out, size_t *out_len) {
-    if (!in || in_len == 0 || !out || !out_len) return -1;
+XR_FUNC int xr_zlib_deflate_decompress(const void *in, size_t in_len, void **out, size_t *out_len) {
+    if (!in || in_len == 0 || !out || !out_len)
+        return -1;
 
     /* Try raw deflate first, then zlib-wrapped */
     XrZlibStream *s = xr_zlib_stream_new_inflate(-MAX_WBITS);
-    if (!s) return -1;
+    if (!s)
+        return -1;
 
     size_t buf_cap = in_len * 4;
-    if (buf_cap < 1024) buf_cap = 1024;
-    uint8_t *buf = (uint8_t *)xr_malloc(buf_cap);
+    if (buf_cap < 1024)
+        buf_cap = 1024;
+    uint8_t *buf = (uint8_t *) xr_malloc(buf_cap);
     if (!buf) {
         xr_zlib_stream_free(s);
         return -1;
     }
 
-    s->zs.next_in  = (Bytef *)in;
-    s->zs.avail_in = (uInt)in_len;
+    s->zs.next_in = (Bytef *) in;
+    s->zs.avail_in = (uInt) in_len;
 
     size_t total = 0;
 
     while (1) {
-        s->zs.next_out  = buf + total;
-        s->zs.avail_out = (uInt)(buf_cap - total);
+        s->zs.next_out = buf + total;
+        s->zs.avail_out = (uInt) (buf_cap - total);
 
         int rc = inflate(&s->zs, Z_NO_FLUSH);
-        total = buf_cap - (size_t)s->zs.avail_out;
+        total = buf_cap - (size_t) s->zs.avail_out;
 
-        if (rc == Z_STREAM_END) break;
+        if (rc == Z_STREAM_END)
+            break;
         if (rc == Z_OK && s->zs.avail_out == 0) {
             size_t new_cap = buf_cap * 2;
-            uint8_t *tmp = (uint8_t *)xr_realloc(buf, new_cap);
+            uint8_t *tmp = (uint8_t *) xr_realloc(buf, new_cap);
             if (!tmp) {
                 xr_free(buf);
                 xr_zlib_stream_free(s);
@@ -456,9 +477,9 @@ XR_FUNC int xr_zlib_deflate_decompress(const void *in, size_t in_len,
 /* ========== Content-Encoding detection (moved from http_compress) ========== */
 
 XR_FUNC XrContentEncoding xr_detect_content_encoding(const char *encoding) {
-    if (!encoding) return XR_CONTENT_ENC_NONE;
-    if (strcasecmp(encoding, "gzip") == 0 ||
-        strcasecmp(encoding, "x-gzip") == 0) {
+    if (!encoding)
+        return XR_CONTENT_ENC_NONE;
+    if (strcasecmp(encoding, "gzip") == 0 || strcasecmp(encoding, "x-gzip") == 0) {
         return XR_CONTENT_ENC_GZIP;
     }
     if (strcasecmp(encoding, "deflate") == 0) {

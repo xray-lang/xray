@@ -45,11 +45,10 @@
 
 /* ========== Cold Path: OP_INVOKE Channel Methods ========== */
 
-__attribute__((noinline))
-int vm_invoke_channel(XrayIsolate *isolate, XrVMContext *vm_ctx,
-                             XrChannel *ch, int method_symbol, int nargs,
-                             XrValue *base, int a, XrBcCallFrame *frame,
-                             XrInstruction *pc) {
+__attribute__((noinline)) int vm_invoke_channel(XrayIsolate *isolate, XrVMContext *vm_ctx,
+                                                XrChannel *ch, int method_symbol, int nargs,
+                                                XrValue *base, int a, XrBcCallFrame *frame,
+                                                XrInstruction *pc) {
     XR_DCHECK(isolate != NULL, "vm_invoke_channel: NULL isolate");
     XR_DCHECK(ch != NULL, "vm_invoke_channel: NULL channel");
     XR_DCHECK(base != NULL, "vm_invoke_channel: NULL base");
@@ -77,7 +76,7 @@ int vm_invoke_channel(XrayIsolate *isolate, XrVMContext *vm_ctx,
 
     // ch.send(value) - blocking send
     if (nargs == 1 && method_symbol == SYMBOL_SEND) {
-        XrCoroutine *current = (XrCoroutine *)vm_ctx->current_coro;
+        XrCoroutine *current = (XrCoroutine *) vm_ctx->current_coro;
         if (current && xr_coro_resume_load(current) == XR_RESUME_CHANNEL) {
             xr_coro_resume_store(current, XR_RESUME_OK);
             base[a] = xr_null();
@@ -85,7 +84,8 @@ int vm_invoke_channel(XrayIsolate *isolate, XrVMContext *vm_ctx,
         }
         XrValue send_v = vm_chan_copy_send(isolate, base[a + 2]);
         // Pre-save frame — see hot path comment.
-        if (current) current->send_value = send_v;
+        if (current)
+            current->send_value = send_v;
         frame->pc = pc - 1;
         frame->call_status |= XR_CALL_YIELDED;
         XrChanResult result = xr_channel_send(ch, send_v, current);
@@ -106,10 +106,10 @@ int vm_invoke_channel(XrayIsolate *isolate, XrVMContext *vm_ctx,
 
     // ch.recv() - blocking receive
     if (nargs == 0 && method_symbol == SYMBOL_RECV) {
-        XrCoroutine *current = (XrCoroutine *)vm_ctx->current_coro;
+        XrCoroutine *current = (XrCoroutine *) vm_ctx->current_coro;
         if (current && xr_coro_resume_load(current) == XR_RESUME_CHANNEL) {
             xr_coro_resume_store(current, XR_RESUME_OK);
-            base[a] = vm_chan_copy_recv(isolate, base[a], vm_ctx); // Deep copy recv_slot value
+            base[a] = vm_chan_copy_recv(isolate, base[a], vm_ctx);  // Deep copy recv_slot value
             return VM_COLD_BREAK;
         }
         if (current && xr_coro_resume_load(current) == XR_RESUME_CHANNEL_CLOSED) {
@@ -159,7 +159,7 @@ int vm_invoke_channel(XrayIsolate *isolate, XrVMContext *vm_ctx,
 
     // ch.sendTimeout(value, timeout) - send with timeout
     if (nargs == 2 && method_symbol == SYMBOL_SENDTIMEOUT) {
-        XrCoroutine *current = (XrCoroutine *)vm_ctx->current_coro;
+        XrCoroutine *current = (XrCoroutine *) vm_ctx->current_coro;
         int64_t timeout_ms = XR_TO_INT(base[a + 3]);
 
         // Check if woken from timeout
@@ -210,7 +210,7 @@ int vm_invoke_channel(XrayIsolate *isolate, XrVMContext *vm_ctx,
 
     // ch.recvTimeout(timeout) - receive with timeout
     if (nargs == 1 && method_symbol == SYMBOL_RECVTIMEOUT) {
-        XrCoroutine *current = (XrCoroutine *)vm_ctx->current_coro;
+        XrCoroutine *current = (XrCoroutine *) vm_ctx->current_coro;
         int64_t timeout_ms = XR_TO_INT(base[a + 2]);
 
         // Check if woken from timeout
@@ -222,7 +222,7 @@ int vm_invoke_channel(XrayIsolate *isolate, XrVMContext *vm_ctx,
         }
         if (current && xr_coro_resume_load(current) == XR_RESUME_CHANNEL) {
             xr_coro_resume_store(current, XR_RESUME_OK);
-            return VM_COLD_BREAK; // Value already in recv_slot
+            return VM_COLD_BREAK;  // Value already in recv_slot
         }
         if (current && xr_coro_resume_load(current) == XR_RESUME_CHANNEL_CLOSED) {
             xr_coro_resume_store(current, XR_RESUME_OK);
@@ -265,11 +265,12 @@ int vm_invoke_channel(XrayIsolate *isolate, XrVMContext *vm_ctx,
     }
 
     // Unknown method
-    XrSymbolTable *sym_table = (XrSymbolTable*)isolate->symbol_table;
+    XrSymbolTable *sym_table = (XrSymbolTable *) isolate->symbol_table;
     const char *method_name = xr_symbol_get_name_in_table(sym_table, method_symbol);
     VM_COLD_THROW(frame, pc, XR_ERR_TYPE_NO_METHOD,
-        "Channel has no method '%s', available: send(), recv(), trySend(), tryRecv(), sendTimeout(), recvTimeout(), close(), isClosed()",
-        method_name ? method_name : "?");
+                  "Channel has no method '%s', available: send(), recv(), trySend(), tryRecv(), "
+                  "sendTimeout(), recvTimeout(), close(), isClosed()",
+                  method_name ? method_name : "?");
 }
 
 /* ========== Cold Path: OP_INVOKE Task Handle ========== */
@@ -279,11 +280,10 @@ int vm_invoke_channel(XrayIsolate *isolate, XrVMContext *vm_ctx,
  * cancel(): if executor alive and task pending, cancel it; otherwise no-op.
  * toString(): returns string representation.
  */
-__attribute__((noinline))
-int vm_invoke_task_handle(XrayIsolate *isolate,
-                                 XrValue receiver, int method_symbol, int nargs,
-                                 XrValue *base, int a,
-                                 XrBcCallFrame *frame, XrInstruction *pc) {
+__attribute__((noinline)) int vm_invoke_task_handle(XrayIsolate *isolate, XrValue receiver,
+                                                    int method_symbol, int nargs, XrValue *base,
+                                                    int a, XrBcCallFrame *frame,
+                                                    XrInstruction *pc) {
     XrTask *task = xr_value_to_task(receiver);
     if (nargs == 0 && method_symbol == SYMBOL_CANCEL) {
         XrCoroutine *coro = task->coro;
@@ -306,7 +306,7 @@ int vm_invoke_task_handle(XrayIsolate *isolate,
             xr_channel_notify_send(ch, xr_value_from_task(task));
         } else {
             // Task still running: register completion listener
-            XrCompletionNode *cn = (XrCompletionNode *)xr_calloc(1, sizeof(XrCompletionNode));
+            XrCompletionNode *cn = (XrCompletionNode *) xr_calloc(1, sizeof(XrCompletionNode));
             if (cn) {
                 cn->type = XR_COMPLETION_CHANNEL;
                 cn->as.channel = ch;
@@ -320,8 +320,7 @@ int vm_invoke_task_handle(XrayIsolate *isolate,
         // task.link(other) — bidirectional error propagation
         XrValue arg = base[a + 2];
         if (!xr_value_is_task(arg)) {
-            VM_COLD_THROW(frame, pc, XR_ERR_TYPE_MISMATCH,
-                "task.link: argument must be a Task");
+            VM_COLD_THROW(frame, pc, XR_ERR_TYPE_MISMATCH, "task.link: argument must be a Task");
         }
         XrTask *other = xr_value_to_task(arg);
         xr_task_link(task, other);
@@ -332,8 +331,7 @@ int vm_invoke_task_handle(XrayIsolate *isolate,
         // task.unlink(other) — remove bidirectional link
         XrValue arg = base[a + 2];
         if (!xr_value_is_task(arg)) {
-            VM_COLD_THROW(frame, pc, XR_ERR_TYPE_MISMATCH,
-                "task.unlink: argument must be a Task");
+            VM_COLD_THROW(frame, pc, XR_ERR_TYPE_MISMATCH, "task.unlink: argument must be a Task");
         }
         XrTask *other = xr_value_to_task(arg);
         xr_task_unlink(task, other);
@@ -344,17 +342,15 @@ int vm_invoke_task_handle(XrayIsolate *isolate,
         base[a] = xr_string_value(xr_value_to_string(isolate, receiver));
         return VM_COLD_BREAK;
     }
-    VM_COLD_THROW(frame, pc, XR_ERR_TYPE_NO_METHOD,
-        "task handle does not support this method");
+    VM_COLD_THROW(frame, pc, XR_ERR_TYPE_NO_METHOD, "task handle does not support this method");
 }
 
 /* ========== Cold Path: OP_INVOKE Coroutine Handle ========== */
 
-__attribute__((noinline))
-int vm_invoke_coro_handle(XrayIsolate *isolate,
-                                 XrValue receiver, int method_symbol, int nargs,
-                                 XrValue *base, int a,
-                                 XrBcCallFrame *frame, XrInstruction *pc) {
+__attribute__((noinline)) int vm_invoke_coro_handle(XrayIsolate *isolate, XrValue receiver,
+                                                    int method_symbol, int nargs, XrValue *base,
+                                                    int a, XrBcCallFrame *frame,
+                                                    XrInstruction *pc) {
     XrCoroutine *handle = xr_value_to_coro(receiver);
     if (nargs == 0 && method_symbol == SYMBOL_CANCEL) {
         xr_coro_cancel(handle);
@@ -370,21 +366,20 @@ int vm_invoke_coro_handle(XrayIsolate *isolate,
         return VM_COLD_BREAK;
     }
     VM_COLD_THROW(frame, pc, XR_ERR_TYPE_NO_METHOD,
-        "coroutine handle does not support this method");
+                  "coroutine handle does not support this method");
 }
 
 /* ========== Cold Path: OP_INVOKE Enum Methods ========== */
 
-__attribute__((noinline))
-int vm_invoke_enum(XrayIsolate *isolate,
-                          XrValue receiver, int method_symbol, int nargs,
-                          XrValue *base, int a,
-                          XrBcCallFrame *frame, XrInstruction *pc) {
-    if (!XR_IS_PTR(receiver)) return VM_COLD_CONTINUE;
-    XrGCHeader *gc = (XrGCHeader*)XR_TO_PTR(receiver);
+__attribute__((noinline)) int vm_invoke_enum(XrayIsolate *isolate, XrValue receiver,
+                                             int method_symbol, int nargs, XrValue *base, int a,
+                                             XrBcCallFrame *frame, XrInstruction *pc) {
+    if (!XR_IS_PTR(receiver))
+        return VM_COLD_CONTINUE;
+    XrGCHeader *gc = (XrGCHeader *) XR_TO_PTR(receiver);
 
     if (XR_GC_GET_TYPE(gc) == XR_TENUM_VALUE) {
-        XrEnumValue *enum_val = (XrEnumValue*)gc;
+        XrEnumValue *enum_val = (XrEnumValue *) gc;
 
         if (nargs == 0 && method_symbol == SYMBOL_NAME) {
             size_t len = strlen(enum_val->member_name);
@@ -407,8 +402,7 @@ int vm_invoke_enum(XrayIsolate *isolate,
                 VM_COLD_THROW(frame, pc, XR_ERR_OVERFLOW, "enum name too long");
             }
             char buffer[XR_TOSTRING_BUFFER_SIZE];
-            snprintf(buffer, sizeof(buffer), "%s.%s",
-                   enum_val->enum_name, enum_val->member_name);
+            snprintf(buffer, sizeof(buffer), "%s.%s", enum_val->enum_name, enum_val->member_name);
             size_t len = strlen(buffer);
             XrString *str = xr_string_intern(isolate, buffer, len, 0);
             base[a] = xr_string_value(str);
@@ -419,13 +413,13 @@ int vm_invoke_enum(XrayIsolate *isolate,
     }
 
     if (XR_GC_GET_TYPE(gc) == XR_TENUM_TYPE) {
-        XrEnumType *enum_type = (XrEnumType*)gc;
+        XrEnumType *enum_type = (XrEnumType *) gc;
 
         if (nargs == 1 && method_symbol == SYMBOL_GET_MEMBER) {
             XrValue index_val = base[a + 2];
             if (XR_IS_INT(index_val)) {
                 int index = XR_TO_INT(index_val);
-                if (index >= 0 && index < (int)enum_type->member_count) {
+                if (index >= 0 && index < (int) enum_type->member_count) {
                     XrEnumValue *eval = enum_type->members[index].instance;
                     base[a] = XR_FROM_PTR(eval);
                 } else {
@@ -448,13 +442,11 @@ int vm_invoke_enum(XrayIsolate *isolate,
  * Returns VM_COLD_BREAK on direct result, VM_COLD_STARTFUNC for closure call,
  * or VM_COLD_ERROR on error.
  */
-__attribute__((noinline))
-int vm_invoke_class(XrayIsolate *isolate, XrVMContext *vm_ctx,
-                            XrValue receiver, int method_symbol,
-                            const char *method_name_chars, int nargs,
-                            XrValue *base, int a,
-                            XrBcCallFrame *frame, XrInstruction *pc,
-                            int is_tail) {
+__attribute__((noinline)) int vm_invoke_class(XrayIsolate *isolate, XrVMContext *vm_ctx,
+                                              XrValue receiver, int method_symbol,
+                                              const char *method_name_chars, int nargs,
+                                              XrValue *base, int a, XrBcCallFrame *frame,
+                                              XrInstruction *pc, int is_tail) {
     XR_DCHECK(isolate != NULL, "vm_invoke_class: NULL isolate");
     XR_DCHECK(base != NULL, "vm_invoke_class: NULL base");
     XR_DCHECK(method_name_chars != NULL, "vm_invoke_class: NULL method_name");
@@ -462,7 +454,8 @@ int vm_invoke_class(XrayIsolate *isolate, XrVMContext *vm_ctx,
 
     if (strcmp(method_name_chars, XR_KEYWORD_CONSTRUCTOR) == 0) {
         if (!xr_class_can_instantiate(cls)) {
-            VM_COLD_THROW(frame, pc, XR_ERR_TYPE_NO_CALL, "cannot instantiate abstract class '%s'", cls->name);
+            VM_COLD_THROW(frame, pc, XR_ERR_TYPE_NO_CALL, "cannot instantiate abstract class '%s'",
+                          cls->name);
         }
 
         XrInstance *inst = xr_instance_new(isolate, cls);
@@ -471,10 +464,11 @@ int vm_invoke_class(XrayIsolate *isolate, XrVMContext *vm_ctx,
         // Find constructor via inline cache (per-ctx, lazily ensured by hot dispatcher)
         size_t cache_index = pc - PROTO_CODE_BASE(frame->closure->proto) - 1;
         XR_VM_IC_ASSERT_INDEX(cache_index, frame->closure->proto);
-        XrICMethodTable *ic_methods =
-            xr_vm_ctx_get_ic_methods(vm_ctx, frame->closure->proto);
+        XrICMethodTable *ic_methods = xr_vm_ctx_get_ic_methods(vm_ctx, frame->closure->proto);
         XrICMethod *cache = xr_ic_method_table_get(ic_methods, cache_index);
-        if (cache) { XR_VM_IC_METHOD_BIND(cache, (int)cache_index); }
+        if (cache) {
+            XR_VM_IC_METHOD_BIND(cache, (int) cache_index);
+        }
 
         XrMethod *ctor = cache ? xr_ic_method_lookup(cache, cls, method_symbol)
                                : xr_class_lookup_method(cls, method_symbol);
@@ -492,16 +486,17 @@ int vm_invoke_class(XrayIsolate *isolate, XrVMContext *vm_ctx,
             XrProto *proto = closure->proto;
 
             if (nargs + 1 != proto->numparams) {
-                VM_COLD_THROW(frame, pc, XR_ERR_WRONG_ARG_COUNT, "constructor expects %d arguments, got %d",
-                               proto->numparams - 1, nargs);
+                VM_COLD_THROW(frame, pc, XR_ERR_WRONG_ARG_COUNT,
+                              "constructor expects %d arguments, got %d", proto->numparams - 1,
+                              nargs);
             }
             if (vm_ctx->frame_count >= XR_FRAMES_MAX) {
                 VM_COLD_THROW(frame, pc, XR_ERR_STACK_OVERFLOW, "stack overflow");
             }
 
-            base[a + 1] = inst_val; // this
+            base[a + 1] = inst_val;  // this
 
-            frame->pc = pc; // savepc
+            frame->pc = pc;  // savepc
 
             int fidx = vm_ctx->frame_count;
             memset(&vm_ctx->frames[fidx], 0, sizeof(XrBcCallFrame));
@@ -509,7 +504,7 @@ int vm_invoke_class(XrayIsolate *isolate, XrVMContext *vm_ctx,
             XrBcCallFrame *new_frame = &vm_ctx->frames[fidx];
             new_frame->closure = closure;
             new_frame->pc = PROTO_CODE_BASE(proto);
-            new_frame->base_offset = (int)((base + a + 1) - vm_ctx->stack);
+            new_frame->base_offset = (int) ((base + a + 1) - vm_ctx->stack);
 
             return VM_COLD_STARTFUNC;
         }
@@ -522,8 +517,9 @@ int vm_invoke_class(XrayIsolate *isolate, XrVMContext *vm_ctx,
         XrMethod *method = xr_class_lookup_method(cls, method_symbol);
 
         if (method == NULL || !(method->flags & XMETHOD_FLAG_STATIC)) {
-            VM_COLD_THROW(frame, pc, XR_ERR_TYPE_NO_METHOD, "static method '%s' not found on class '%s'",
-                           method_name_chars, cls->name);
+            VM_COLD_THROW(frame, pc, XR_ERR_TYPE_NO_METHOD,
+                          "static method '%s' not found on class '%s'", method_name_chars,
+                          cls->name);
         }
 
         if (method->type == XMETHOD_PRIMITIVE && method->as.primitive != NULL) {
@@ -552,7 +548,7 @@ int vm_invoke_class(XrayIsolate *isolate, XrVMContext *vm_ctx,
                 return VM_COLD_STARTFUNC;
             }
 
-            frame->pc = pc; // savepc
+            frame->pc = pc;  // savepc
 
             int fidx = vm_ctx->frame_count;
             memset(&vm_ctx->frames[fidx], 0, sizeof(XrBcCallFrame));
@@ -560,11 +556,12 @@ int vm_invoke_class(XrayIsolate *isolate, XrVMContext *vm_ctx,
             XrBcCallFrame *new_frame = &vm_ctx->frames[fidx];
             new_frame->closure = closure;
             new_frame->pc = PROTO_CODE_BASE(proto);
-            new_frame->base_offset = (int)((base + a + 1) - vm_ctx->stack);
+            new_frame->base_offset = (int) ((base + a + 1) - vm_ctx->stack);
 
             return VM_COLD_STARTFUNC;
         } else {
-            VM_COLD_THROW(frame, pc, XR_ERR_TYPE_NO_METHOD, "invalid static method '%s'", method_name_chars);
+            VM_COLD_THROW(frame, pc, XR_ERR_TYPE_NO_METHOD, "invalid static method '%s'",
+                          method_name_chars);
         }
     }
 }
@@ -575,10 +572,9 @@ int vm_invoke_class(XrayIsolate *isolate, XrVMContext *vm_ctx,
  * Handles the entire OP_SUPERINVOKE: constructor :super() and super.method() calls.
  * Returns VM_COLD_STARTFUNC on success, VM_COLD_ERROR on error.
  */
-__attribute__((noinline))
-int vm_superinvoke(XrayIsolate *isolate, XrVMContext *vm_ctx,
-                           XrInstruction instr, XrValue *base,
-                           XrBcCallFrame *frame, XrInstruction *pc) {
+__attribute__((noinline)) int vm_superinvoke(XrayIsolate *isolate, XrVMContext *vm_ctx,
+                                             XrInstruction instr, XrValue *base,
+                                             XrBcCallFrame *frame, XrInstruction *pc) {
     int a = GETARG_A(instr);
     int b = GETARG_B(instr);
     int nargs = GETARG_C(instr);
@@ -587,7 +583,8 @@ int vm_superinvoke(XrayIsolate *isolate, XrVMContext *vm_ctx,
     XrValue this_val = is_ctor_call ? base[0] : base[a + 1];
 
     if (!xr_value_is_instance(this_val)) {
-        VM_COLD_THROW(frame, pc, XR_ERR_TYPE_MISMATCH, "super can only be called on class instance");
+        VM_COLD_THROW(frame, pc, XR_ERR_TYPE_MISMATCH,
+                      "super can only be called on class instance");
     }
 
     XrInstance *inst_obj = xr_value_to_instance(this_val);
@@ -595,7 +592,8 @@ int vm_superinvoke(XrayIsolate *isolate, XrVMContext *vm_ctx,
 
     XrClass *current_method_class;
     if (isolate->vm.ctor_call_depth > 0) {
-        current_method_class = (XrClass*)isolate->vm.ctor_call_stack[isolate->vm.ctor_call_depth - 1].class_ptr;
+        current_method_class =
+            (XrClass *) isolate->vm.ctor_call_stack[isolate->vm.ctor_call_depth - 1].class_ptr;
     } else {
         current_method_class = inst_class;
     }
@@ -606,7 +604,8 @@ int vm_superinvoke(XrayIsolate *isolate, XrVMContext *vm_ctx,
 
     XrClass *super_class = current_method_class->super;
     if (super_class == NULL) {
-        VM_COLD_THROW(frame, pc, XR_ERR_TYPE_MISMATCH, "class '%s' has no superclass", current_method_class->name);
+        VM_COLD_THROW(frame, pc, XR_ERR_TYPE_MISMATCH, "class '%s' has no superclass",
+                      current_method_class->name);
     }
 
     XrValue method_name_val = PROTO_CONSTANT(frame->closure->proto, b);
@@ -616,26 +615,29 @@ int vm_superinvoke(XrayIsolate *isolate, XrVMContext *vm_ctx,
 
     const char *method_name = xr_value_str_data(&method_name_val);
 
-    XrSymbolTable *sym_table = (XrSymbolTable*)isolate->symbol_table;
+    XrSymbolTable *sym_table = (XrSymbolTable *) isolate->symbol_table;
     int method_symbol = xr_symbol_register_in_table(sym_table, method_name);
 
     XrMethod *method = xr_class_lookup_method(super_class, method_symbol);
 
     if (method == NULL || method->type == XMETHOD_NONE) {
-        VM_COLD_THROW(frame, pc, XR_ERR_TYPE_NO_METHOD, "superclass method '%s' not found in class '%s'",
-                       method_name, super_class->name);
+        VM_COLD_THROW(frame, pc, XR_ERR_TYPE_NO_METHOD,
+                      "superclass method '%s' not found in class '%s'", method_name,
+                      super_class->name);
     }
 
     if (method->type != XMETHOD_CLOSURE || method->as.closure == NULL) {
-        VM_COLD_THROW(frame, pc, XR_ERR_TYPE_NO_METHOD, "superclass method '%s' has invalid type", method_name);
+        VM_COLD_THROW(frame, pc, XR_ERR_TYPE_NO_METHOD, "superclass method '%s' has invalid type",
+                      method_name);
     }
 
     XrClosure *closure = method->as.closure;
     XrProto *proto = closure->proto;
 
     if (nargs + 1 != proto->numparams) {
-        VM_COLD_THROW(frame, pc, XR_ERR_TYPE_NO_METHOD, "superclass method '%s' expects %d arguments but got %d",
-                       method_name, proto->numparams - 1, nargs);
+        VM_COLD_THROW(frame, pc, XR_ERR_TYPE_NO_METHOD,
+                      "superclass method '%s' expects %d arguments but got %d", method_name,
+                      proto->numparams - 1, nargs);
     }
 
     if (vm_ctx->frame_count >= XR_FRAMES_MAX) {
@@ -658,7 +660,7 @@ int vm_superinvoke(XrayIsolate *isolate, XrVMContext *vm_ctx,
         isolate->vm.ctor_call_stack[isolate->vm.ctor_call_depth].frame_count = vm_ctx->frame_count;
         isolate->vm.ctor_call_depth++;
 
-        frame->pc = pc; // savepc
+        frame->pc = pc;  // savepc
 
         int fidx = vm_ctx->frame_count;
         memset(&vm_ctx->frames[fidx], 0, sizeof(XrBcCallFrame));
@@ -666,7 +668,7 @@ int vm_superinvoke(XrayIsolate *isolate, XrVMContext *vm_ctx,
         XrBcCallFrame *new_frame = &vm_ctx->frames[fidx];
         new_frame->closure = closure;
         new_frame->pc = PROTO_CODE_BASE(proto);
-        new_frame->base_offset = (int)((base + call_base_offset) - vm_ctx->stack);
+        new_frame->base_offset = (int) ((base + call_base_offset) - vm_ctx->stack);
     } else {
         if (isolate->vm.ctor_call_depth >= XR_CTOR_CALL_STACK_MAX) {
             VM_COLD_THROW(frame, pc, XR_ERR_STACK_OVERFLOW, "super call depth exceeded");
@@ -675,7 +677,7 @@ int vm_superinvoke(XrayIsolate *isolate, XrVMContext *vm_ctx,
         isolate->vm.ctor_call_stack[isolate->vm.ctor_call_depth].frame_count = vm_ctx->frame_count;
         isolate->vm.ctor_call_depth++;
 
-        frame->pc = pc; // savepc
+        frame->pc = pc;  // savepc
 
         int fidx = vm_ctx->frame_count;
         memset(&vm_ctx->frames[fidx], 0, sizeof(XrBcCallFrame));
@@ -683,7 +685,7 @@ int vm_superinvoke(XrayIsolate *isolate, XrVMContext *vm_ctx,
         XrBcCallFrame *new_frame = &vm_ctx->frames[fidx];
         new_frame->closure = closure;
         new_frame->pc = PROTO_CODE_BASE(proto);
-        new_frame->base_offset = (int)((base + a + 1) - vm_ctx->stack);
+        new_frame->base_offset = (int) ((base + a + 1) - vm_ctx->stack);
     }
 
     return VM_COLD_STARTFUNC;

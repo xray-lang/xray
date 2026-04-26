@@ -28,59 +28,59 @@
 
 // Frame types
 typedef enum {
-    XR_H2_FRAME_DATA          = 0x0,
-    XR_H2_FRAME_HEADERS       = 0x1,
-    XR_H2_FRAME_PRIORITY      = 0x2,
-    XR_H2_FRAME_RST_STREAM    = 0x3,
-    XR_H2_FRAME_SETTINGS      = 0x4,
-    XR_H2_FRAME_PUSH_PROMISE  = 0x5,
-    XR_H2_FRAME_PING          = 0x6,
-    XR_H2_FRAME_GOAWAY        = 0x7,
+    XR_H2_FRAME_DATA = 0x0,
+    XR_H2_FRAME_HEADERS = 0x1,
+    XR_H2_FRAME_PRIORITY = 0x2,
+    XR_H2_FRAME_RST_STREAM = 0x3,
+    XR_H2_FRAME_SETTINGS = 0x4,
+    XR_H2_FRAME_PUSH_PROMISE = 0x5,
+    XR_H2_FRAME_PING = 0x6,
+    XR_H2_FRAME_GOAWAY = 0x7,
     XR_H2_FRAME_WINDOW_UPDATE = 0x8,
-    XR_H2_FRAME_CONTINUATION  = 0x9
+    XR_H2_FRAME_CONTINUATION = 0x9
 } XrH2FrameType;
 
 // Frame flags
-#define XR_H2_FLAG_END_STREAM   0x1
-#define XR_H2_FLAG_END_HEADERS  0x4
-#define XR_H2_FLAG_PADDED       0x8
-#define XR_H2_FLAG_PRIORITY     0x20
-#define XR_H2_FLAG_ACK          0x1
+#define XR_H2_FLAG_END_STREAM 0x1
+#define XR_H2_FLAG_END_HEADERS 0x4
+#define XR_H2_FLAG_PADDED 0x8
+#define XR_H2_FLAG_PRIORITY 0x20
+#define XR_H2_FLAG_ACK 0x1
 
 // SETTINGS parameter IDs
 typedef enum {
-    XR_H2_SETTINGS_HEADER_TABLE_SIZE      = 0x1,
-    XR_H2_SETTINGS_ENABLE_PUSH            = 0x2,
+    XR_H2_SETTINGS_HEADER_TABLE_SIZE = 0x1,
+    XR_H2_SETTINGS_ENABLE_PUSH = 0x2,
     XR_H2_SETTINGS_MAX_CONCURRENT_STREAMS = 0x3,
-    XR_H2_SETTINGS_INITIAL_WINDOW_SIZE    = 0x4,
-    XR_H2_SETTINGS_MAX_FRAME_SIZE         = 0x5,
-    XR_H2_SETTINGS_MAX_HEADER_LIST_SIZE   = 0x6
+    XR_H2_SETTINGS_INITIAL_WINDOW_SIZE = 0x4,
+    XR_H2_SETTINGS_MAX_FRAME_SIZE = 0x5,
+    XR_H2_SETTINGS_MAX_HEADER_LIST_SIZE = 0x6
 } XrH2SettingsId;
 
 // Default values
-#define XR_H2_DEFAULT_HEADER_TABLE_SIZE      4096
-#define XR_H2_DEFAULT_ENABLE_PUSH            1
+#define XR_H2_DEFAULT_HEADER_TABLE_SIZE 4096
+#define XR_H2_DEFAULT_ENABLE_PUSH 1
 #define XR_H2_DEFAULT_MAX_CONCURRENT_STREAMS 100
-#define XR_H2_DEFAULT_INITIAL_WINDOW_SIZE    65535
-#define XR_H2_DEFAULT_MAX_FRAME_SIZE         16384
-#define XR_H2_DEFAULT_MAX_HEADER_LIST_SIZE   UINT32_MAX
+#define XR_H2_DEFAULT_INITIAL_WINDOW_SIZE 65535
+#define XR_H2_DEFAULT_MAX_FRAME_SIZE 16384
+#define XR_H2_DEFAULT_MAX_HEADER_LIST_SIZE UINT32_MAX
 
 // Error codes
 typedef enum {
-    XR_H2_NO_ERROR            = 0x0,
-    XR_H2_PROTOCOL_ERROR      = 0x1,
-    XR_H2_INTERNAL_ERROR      = 0x2,
-    XR_H2_FLOW_CONTROL_ERROR  = 0x3,
-    XR_H2_SETTINGS_TIMEOUT    = 0x4,
-    XR_H2_STREAM_CLOSED       = 0x5,
-    XR_H2_FRAME_SIZE_ERROR    = 0x6,
-    XR_H2_REFUSED_STREAM      = 0x7,
-    XR_H2_CANCEL              = 0x8,
-    XR_H2_COMPRESSION_ERROR   = 0x9,
-    XR_H2_CONNECT_ERROR       = 0xa,
-    XR_H2_ENHANCE_YOUR_CALM   = 0xb,
+    XR_H2_NO_ERROR = 0x0,
+    XR_H2_PROTOCOL_ERROR = 0x1,
+    XR_H2_INTERNAL_ERROR = 0x2,
+    XR_H2_FLOW_CONTROL_ERROR = 0x3,
+    XR_H2_SETTINGS_TIMEOUT = 0x4,
+    XR_H2_STREAM_CLOSED = 0x5,
+    XR_H2_FRAME_SIZE_ERROR = 0x6,
+    XR_H2_REFUSED_STREAM = 0x7,
+    XR_H2_CANCEL = 0x8,
+    XR_H2_COMPRESSION_ERROR = 0x9,
+    XR_H2_CONNECT_ERROR = 0xa,
+    XR_H2_ENHANCE_YOUR_CALM = 0xb,
     XR_H2_INADEQUATE_SECURITY = 0xc,
-    XR_H2_HTTP_1_1_REQUIRED   = 0xd
+    XR_H2_HTTP_1_1_REQUIRED = 0xd
 } XrH2ErrorCode;
 
 /* ========== Frame Header ========== */
@@ -154,13 +154,13 @@ typedef struct XrH2Stream {
 
 /* ========== HTTP/2 Stream Hash Table ========== */
 
-#define XR_H2_STREAM_HASH_INIT_CAP 16   // Initial bucket count (must be power of 2)
-#define XR_H2_STREAM_HASH_LOAD_NUM 3    // Resize when count * 4 > nbuckets * 3
-#define XR_H2_STREAM_HASH_LOAD_DEN 4    // i.e. load factor 75%
+#define XR_H2_STREAM_HASH_INIT_CAP 16  // Initial bucket count (must be power of 2)
+#define XR_H2_STREAM_HASH_LOAD_NUM 3   // Resize when count * 4 > nbuckets * 3
+#define XR_H2_STREAM_HASH_LOAD_DEN 4   // i.e. load factor 75%
 
 typedef struct {
-    XrH2Stream **buckets;   // Heap-allocated bucket array
-    uint32_t nbuckets;      // Current capacity (always power of 2)
+    XrH2Stream **buckets;  // Heap-allocated bucket array
+    uint32_t nbuckets;     // Current capacity (always power of 2)
     uint32_t count;
 } XrH2StreamHash;
 
@@ -203,56 +203,51 @@ XR_FUNC void xr_hpack_init(XrHpackTable *table, size_t max_size);
 XR_FUNC void xr_hpack_free(XrHpackTable *table);
 
 // HPACK encode header, returns encoded length or -1
-XR_FUNC int xr_hpack_encode(XrHpackTable *table,
-                    const char *name, size_t name_len,
-                    const char *value, size_t value_len,
-                    uint8_t *buf, size_t buf_len);
+XR_FUNC int xr_hpack_encode(XrHpackTable *table, const char *name, size_t name_len,
+                            const char *value, size_t value_len, uint8_t *buf, size_t buf_len);
 
 // HPACK decode header block
-XR_FUNC int xr_hpack_decode(XrHpackTable *table,
-                    const uint8_t *buf, size_t buf_len,
-                    void (*callback)(const char *name, size_t name_len,
-                                    const char *value, size_t value_len,
-                                    void *user_data),
-                    void *user_data);
+XR_FUNC int xr_hpack_decode(XrHpackTable *table, const uint8_t *buf, size_t buf_len,
+                            void (*callback)(const char *name, size_t name_len, const char *value,
+                                             size_t value_len, void *user_data),
+                            void *user_data);
 
 /* ========== HTTP/2 Connection API ========== */
 
 struct XrHttpHeader;
 
-XR_FUNC XrH2Conn* xr_h2_conn_new(int fd, void *tls_conn, bool is_client);
-XR_FUNC XrH2Conn* xr_h2_conn_new_client(int fd, void *tls_conn);
+XR_FUNC XrH2Conn *xr_h2_conn_new(int fd, void *tls_conn, bool is_client);
+XR_FUNC XrH2Conn *xr_h2_conn_new_client(int fd, void *tls_conn);
 XR_FUNC void xr_h2_conn_free(XrH2Conn *conn);
 XR_FUNC int xr_h2_conn_init(XrH2Conn *conn);
-XR_FUNC XrH2Stream* xr_h2_stream_new(XrH2Conn *conn);
+XR_FUNC XrH2Stream *xr_h2_stream_new(XrH2Conn *conn);
 
 /* ========== Stream Hash Table API ========== */
 
 XR_FUNC void xr_h2_stream_hash_init(XrH2StreamHash *hash);
 XR_FUNC void xr_h2_stream_hash_add(XrH2StreamHash *hash, XrH2Stream *stream);
-XR_FUNC XrH2Stream* xr_h2_stream_hash_find(XrH2StreamHash *hash, uint32_t stream_id);
+XR_FUNC XrH2Stream *xr_h2_stream_hash_find(XrH2StreamHash *hash, uint32_t stream_id);
 XR_FUNC void xr_h2_stream_hash_remove(XrH2StreamHash *hash, uint32_t stream_id);
 XR_FUNC void xr_h2_stream_hash_free(XrH2StreamHash *hash);
 
 // Send HEADERS frame
-XR_FUNC int xr_h2_send_headers(XrH2Conn *conn, XrH2Stream *stream,
-                       const char **names, const size_t *name_lens,
-                       const char **values, const size_t *value_lens,
-                       int count, bool end_stream);
+XR_FUNC int xr_h2_send_headers(XrH2Conn *conn, XrH2Stream *stream, const char **names,
+                               const size_t *name_lens, const char **values,
+                               const size_t *value_lens, int count, bool end_stream);
 
 // Send DATA frame
-XR_FUNC int xr_h2_send_data(XrH2Conn *conn, XrH2Stream *stream,
-                    const void *data, size_t len, bool end_stream);
+XR_FUNC int xr_h2_send_data(XrH2Conn *conn, XrH2Stream *stream, const void *data, size_t len,
+                            bool end_stream);
 
 // Receive stream data (blocking)
-XR_FUNC int xr_h2_recv_stream_data(XrH2Conn *conn, XrH2Stream *stream,
-                            char **out_data, size_t *out_len);
+XR_FUNC int xr_h2_recv_stream_data(XrH2Conn *conn, XrH2Stream *stream, char **out_data,
+                                   size_t *out_len);
 
 // Receive and process frames
 XR_FUNC int xr_h2_recv(XrH2Conn *conn);
 
 // Get stream response
-XR_FUNC XrH2Stream* xr_h2_get_stream(XrH2Conn *conn, uint32_t stream_id);
+XR_FUNC XrH2Stream *xr_h2_get_stream(XrH2Conn *conn, uint32_t stream_id);
 
 /* ========== Frame Parsing/Generation ========== */
 
@@ -276,10 +271,9 @@ XR_FUNC int xr_h2_send_rst_stream(XrH2Conn *conn, uint32_t stream_id, XrH2ErrorC
 /* ========== Trailers API ========== */
 
 // Send Trailers (HEADERS after DATA)
-XR_FUNC int xr_h2_send_trailers(XrH2Conn *conn, XrH2Stream *stream,
-                         const char **names, const size_t *name_lens,
-                         const char **values, const size_t *value_lens,
-                         int count);
+XR_FUNC int xr_h2_send_trailers(XrH2Conn *conn, XrH2Stream *stream, const char **names,
+                                const size_t *name_lens, const char **values,
+                                const size_t *value_lens, int count);
 
 /* ========== PING API ========== */
 
@@ -293,4 +287,4 @@ XR_FUNC int xr_h2_upgrade_from_http1(XrH2Conn *conn, const char *settings_payloa
 // Start h2c connection directly (Prior Knowledge)
 XR_FUNC int xr_h2_start_h2c(XrH2Conn *conn);
 
-#endif // XR_STDLIB_HTTP2_H
+#endif  // XR_STDLIB_HTTP2_H

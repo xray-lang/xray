@@ -42,47 +42,35 @@ typedef struct {
 } PromptDef;
 
 static const PromptDef PROMPTS[] = {
-    {
-        "code-review",
-        "Review Xray code for best practices, correctness, and style. "
-        "Provides actionable feedback with code examples.",
-        1,
-        {{"code", "Xray source code to review", true}}
-    },
-    {
-        "explain-error",
-        "Explain an Xray compile error or runtime error in plain language. "
-        "Suggests fixes with corrected code examples.",
-        1,
-        {{"error", "The error message to explain", true}}
-    },
-    {
-        "convert-to-xray",
-        "Convert code from another programming language to idiomatic Xray. "
-        "Preserves logic while using Xray-specific features.",
-        2,
-        {
-            {"code", "Source code to convert", true},
-            {"sourceLanguage", "Original language (e.g., Python, JavaScript, Go)", false}
-        }
-    },
-    {
-        "concurrency-pattern",
-        "Recommend the best Xray concurrency pattern for a given task. "
-        "Covers channels, go/await, scope, select, and shared const.",
-        1,
-        {{"description", "Description of what the concurrent code should do", true}}
-    },
-    {
-        "write-test",
-        "Generate @test functions for the given Xray code. "
-        "Uses assert_eq, assert_true, assert_throws, etc.",
-        1,
-        {{"code", "Xray source code to write tests for", true}}
-    },
+    {"code-review",
+     "Review Xray code for best practices, correctness, and style. "
+     "Provides actionable feedback with code examples.",
+     1,
+     {{"code", "Xray source code to review", true}}},
+    {"explain-error",
+     "Explain an Xray compile error or runtime error in plain language. "
+     "Suggests fixes with corrected code examples.",
+     1,
+     {{"error", "The error message to explain", true}}},
+    {"convert-to-xray",
+     "Convert code from another programming language to idiomatic Xray. "
+     "Preserves logic while using Xray-specific features.",
+     2,
+     {{"code", "Source code to convert", true},
+      {"sourceLanguage", "Original language (e.g., Python, JavaScript, Go)", false}}},
+    {"concurrency-pattern",
+     "Recommend the best Xray concurrency pattern for a given task. "
+     "Covers channels, go/await, scope, select, and shared const.",
+     1,
+     {{"description", "Description of what the concurrent code should do", true}}},
+    {"write-test",
+     "Generate @test functions for the given Xray code. "
+     "Uses assert_eq, assert_true, assert_throws, etc.",
+     1,
+     {{"code", "Xray source code to write tests for", true}}},
 };
 
-#define PROMPT_COUNT ((int)(sizeof(PROMPTS) / sizeof(PROMPTS[0])))
+#define PROMPT_COUNT ((int) (sizeof(PROMPTS) / sizeof(PROMPTS[0])))
 
 /* --------------------------------------------------------------------------
  * System message content (embedded language knowledge for prompts)
@@ -191,8 +179,7 @@ XrJsonValue *xmcp_handle_prompts_list(void) {
  * -------------------------------------------------------------------------- */
 
 /* Build a messages array with system + user messages. */
-static XrJsonValue *build_prompt_messages(const char *system_text,
-                                           const char *user_text) {
+static XrJsonValue *build_prompt_messages(const char *system_text, const char *user_text) {
     XR_DCHECK(system_text != NULL, "build_prompt_messages: NULL system");
     XR_DCHECK(user_text != NULL, "build_prompt_messages: NULL user");
 
@@ -237,7 +224,7 @@ static XrJsonValue *build_prompt_messages(const char *system_text,
 }
 
 XrJsonValue *xmcp_handle_prompts_get(XmcpServer *server, XrJsonValue *params) {
-    (void)server;
+    (void) server;
     XR_DCHECK(params != NULL, "xmcp_handle_prompts_get: NULL params");
 
     const char *name = xjson_get_string(params, "name");
@@ -270,8 +257,8 @@ XrJsonValue *xmcp_handle_prompts_get(XmcpServer *server, XrJsonValue *params) {
             const char *lang = xjson_get_string(arguments, "sourceLanguage");
             const char *code = xjson_get_string(arguments, "code");
             if (lang && code) {
-                snprintf(user_buf, sizeof(user_buf),
-                         "Source language: %s\n\n```\n%s\n```", lang, code);
+                snprintf(user_buf, sizeof(user_buf), "Source language: %s\n\n```\n%s\n```", lang,
+                         code);
                 user_arg = user_buf;
             }
         }
@@ -296,7 +283,8 @@ XrJsonValue *xmcp_handle_prompts_get(XmcpServer *server, XrJsonValue *params) {
     if (!user_arg && arguments && user_arg_key) {
         user_arg = xjson_get_string(arguments, user_arg_key);
     }
-    if (!user_arg) user_arg = "(no input provided)";
+    if (!user_arg)
+        user_arg = "(no input provided)";
 
     /* Build result */
     XrJsonValue *result = xjson_new_object();
@@ -309,7 +297,6 @@ XrJsonValue *xmcp_handle_prompts_get(XmcpServer *server, XrJsonValue *params) {
         }
     }
 
-    xjson_object_set(result, "messages",
-                         build_prompt_messages(system_text, user_arg));
+    xjson_object_set(result, "messages", build_prompt_messages(system_text, user_arg));
     return result;
 }

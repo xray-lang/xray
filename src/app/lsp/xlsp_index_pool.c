@@ -31,10 +31,11 @@
 // ============================================================================
 
 // Create a new index symbol
-static XrLspIndexSymbol *create_symbol(const char *name, XrLspSymbolKind kind,
-                                        int line, int column, bool is_exported) {
+static XrLspIndexSymbol *create_symbol(const char *name, XrLspSymbolKind kind, int line, int column,
+                                       bool is_exported) {
     XrLspIndexSymbol *sym = xr_calloc(1, sizeof(XrLspIndexSymbol));
-    if (!sym) return NULL;
+    if (!sym)
+        return NULL;
 
     sym->name = name ? xr_strdup(name) : NULL;
     sym->kind = kind;
@@ -48,7 +49,8 @@ static XrLspIndexSymbol *create_symbol(const char *name, XrLspSymbolKind kind,
 
 // Add symbol to result
 static void add_symbol_to_result(XrLspIndexResult *result, XrLspIndexSymbol *sym) {
-    if (!result || !sym) return;
+    if (!result || !sym)
+        return;
 
     sym->next = result->symbols;
     result->symbols = sym;
@@ -57,7 +59,8 @@ static void add_symbol_to_result(XrLspIndexResult *result, XrLspIndexSymbol *sym
 
 // Extract symbols from AST node (recursive)
 static void extract_symbols(XrLspIndexResult *result, AstNode *node, bool in_export) {
-    if (!node) return;
+    if (!node)
+        return;
 
     switch (node->type) {
         case AST_PROGRAM: {
@@ -80,10 +83,9 @@ static void extract_symbols(XrLspIndexResult *result, AstNode *node, bool in_exp
         case AST_VAR_DECL: {
             const char *name = node->as.var_decl.name;
             if (name) {
-                XrLspSymbolKind kind = node->as.var_decl.is_const ?
-                                       XR_SYMBOL_CONSTANT : XR_SYMBOL_VARIABLE;
-                XrLspIndexSymbol *sym = create_symbol(name, kind,
-                                                       node->line - 1, 0, in_export);
+                XrLspSymbolKind kind =
+                    node->as.var_decl.is_const ? XR_SYMBOL_CONSTANT : XR_SYMBOL_VARIABLE;
+                XrLspIndexSymbol *sym = create_symbol(name, kind, node->line - 1, 0, in_export);
                 add_symbol_to_result(result, sym);
             }
             break;
@@ -92,8 +94,8 @@ static void extract_symbols(XrLspIndexResult *result, AstNode *node, bool in_exp
         case AST_FUNCTION_DECL: {
             const char *name = node->as.function_decl.name;
             if (name) {
-                XrLspIndexSymbol *sym = create_symbol(name, XR_SYMBOL_FUNCTION,
-                                                       node->line - 1, 0, in_export);
+                XrLspIndexSymbol *sym =
+                    create_symbol(name, XR_SYMBOL_FUNCTION, node->line - 1, 0, in_export);
                 add_symbol_to_result(result, sym);
             }
             // Also extract symbols from function body
@@ -105,8 +107,8 @@ static void extract_symbols(XrLspIndexResult *result, AstNode *node, bool in_exp
         case AST_STRUCT_DECL: {
             const char *name = node->as.class_decl.name;
             if (name) {
-                XrLspIndexSymbol *sym = create_symbol(name, XR_SYMBOL_CLASS,
-                                                       node->line - 1, 0, in_export);
+                XrLspIndexSymbol *sym =
+                    create_symbol(name, XR_SYMBOL_CLASS, node->line - 1, 0, in_export);
                 add_symbol_to_result(result, sym);
             }
             // Extract methods
@@ -116,7 +118,7 @@ static void extract_symbols(XrLspIndexResult *result, AstNode *node, bool in_exp
                     const char *method_name = method->as.function_decl.name;
                     if (method_name) {
                         XrLspIndexSymbol *msym = create_symbol(method_name, XR_SYMBOL_METHOD,
-                                                                method->line - 1, 0, false);
+                                                               method->line - 1, 0, false);
                         add_symbol_to_result(result, msym);
                     }
                 }
@@ -127,8 +129,8 @@ static void extract_symbols(XrLspIndexResult *result, AstNode *node, bool in_exp
         case AST_ENUM_DECL: {
             const char *name = node->as.enum_decl.name;
             if (name) {
-                XrLspIndexSymbol *sym = create_symbol(name, XR_SYMBOL_ENUM,
-                                                       node->line - 1, 0, in_export);
+                XrLspIndexSymbol *sym =
+                    create_symbol(name, XR_SYMBOL_ENUM, node->line - 1, 0, in_export);
                 add_symbol_to_result(result, sym);
             }
             // Extract enum members
@@ -138,7 +140,7 @@ static void extract_symbols(XrLspIndexResult *result, AstNode *node, bool in_exp
                     const char *member_name = member->as.enum_member.name;
                     if (member_name) {
                         XrLspIndexSymbol *msym = create_symbol(member_name, XR_SYMBOL_ENUM_MEMBER,
-                                                                member->line - 1, 0, false);
+                                                               member->line - 1, 0, false);
                         add_symbol_to_result(result, msym);
                     }
                 }
@@ -149,8 +151,8 @@ static void extract_symbols(XrLspIndexResult *result, AstNode *node, bool in_exp
         case AST_INTERFACE_DECL: {
             const char *name = node->as.interface_decl.name;
             if (name) {
-                XrLspIndexSymbol *sym = create_symbol(name, XR_SYMBOL_INTERFACE,
-                                                       node->line - 1, 0, in_export);
+                XrLspIndexSymbol *sym =
+                    create_symbol(name, XR_SYMBOL_INTERFACE, node->line - 1, 0, in_export);
                 add_symbol_to_result(result, sym);
             }
             break;
@@ -159,8 +161,8 @@ static void extract_symbols(XrLspIndexResult *result, AstNode *node, bool in_exp
         case AST_TYPE_ALIAS: {
             const char *name = node->as.type_alias.name;
             if (name) {
-                XrLspIndexSymbol *sym = create_symbol(name, XR_SYMBOL_TYPE_PARAMETER,
-                                                       node->line - 1, 0, in_export);
+                XrLspIndexSymbol *sym =
+                    create_symbol(name, XR_SYMBOL_TYPE_PARAMETER, node->line - 1, 0, in_export);
                 add_symbol_to_result(result, sym);
             }
             break;
@@ -186,7 +188,8 @@ static void extract_symbols(XrLspIndexResult *result, AstNode *node, bool in_exp
 
 static XrLspIndexResult *parse_file(XrayIsolate *isolate, const char *path, const char *uri) {
     XrLspIndexResult *result = xr_calloc(1, sizeof(XrLspIndexResult));
-    if (!result) return NULL;
+    if (!result)
+        return NULL;
 
     result->path = xr_strdup(path);
     result->uri = xr_strdup(uri);
@@ -243,7 +246,7 @@ static XrLspIndexResult *parse_file(XrayIsolate *isolate, const char *path, cons
 // ============================================================================
 
 static void *worker_thread(void *arg) {
-    XrLspIndexWorker *worker = (XrLspIndexWorker *)arg;
+    XrLspIndexWorker *worker = (XrLspIndexWorker *) arg;
     XrLspIndexPool *pool = worker->pool;
 
     // Share the main loop's log routing (file + stderr) on this worker
@@ -292,7 +295,8 @@ static void *worker_thread(void *arg) {
         }
         pthread_mutex_unlock(&pool->work_mutex);
 
-        if (!work) continue;
+        if (!work)
+            continue;
 
         atomic_fetch_add(&pool->active_workers, 1);
 
@@ -320,7 +324,7 @@ static void *worker_thread(void *arg) {
             // Notify main thread
             char byte = 1;
             ssize_t n = write(pool->notify_fd[1], &byte, 1);
-            (void)n;
+            (void) n;
         }
 
         atomic_fetch_add(&pool->files_completed, 1);
@@ -342,7 +346,8 @@ static void *worker_thread(void *arg) {
 
 XrLspIndexPool *xlsp_index_pool_new(XrLspServer *server) {
     XrLspIndexPool *pool = xr_calloc(1, sizeof(XrLspIndexPool));
-    if (!pool) return NULL;
+    if (!pool)
+        return NULL;
 
     pool->server = server;
 
@@ -382,7 +387,8 @@ XrLspIndexPool *xlsp_index_pool_new(XrLspServer *server) {
 }
 
 void xlsp_index_pool_free(XrLspIndexPool *pool) {
-    if (!pool) return;
+    if (!pool)
+        return;
 
     // Signal shutdown
     atomic_store(&pool->running, false);
@@ -422,10 +428,12 @@ void xlsp_index_pool_free(XrLspIndexPool *pool) {
 }
 
 void xlsp_index_pool_submit(XrLspIndexPool *pool, const char *path, const char *uri) {
-    if (!pool || !path) return;
+    if (!pool || !path)
+        return;
 
     XrLspIndexWork *work = xr_calloc(1, sizeof(XrLspIndexWork));
-    if (!work) return;
+    if (!work)
+        return;
 
     work->path = xr_strdup(path);
     work->uri = uri ? xr_strdup(uri) : NULL;
@@ -452,15 +460,18 @@ void xlsp_index_pool_submit(XrLspIndexPool *pool, const char *path, const char *
 }
 
 void xlsp_index_pool_submit_batch(XrLspIndexPool *pool, char **paths, int count) {
-    if (!pool || !paths || count <= 0) return;
+    if (!pool || !paths || count <= 0)
+        return;
 
     pthread_mutex_lock(&pool->work_mutex);
 
     for (int i = 0; i < count; i++) {
-        if (!paths[i]) continue;
+        if (!paths[i])
+            continue;
 
         XrLspIndexWork *work = xr_calloc(1, sizeof(XrLspIndexWork));
-        if (!work) continue;
+        if (!work)
+            continue;
 
         work->path = xr_strdup(paths[i]);
         char uri_buf[1200];
@@ -489,7 +500,8 @@ int xlsp_index_pool_get_notify_fd(XrLspIndexPool *pool) {
 }
 
 XrLspIndexResult *xlsp_index_pool_poll(XrLspIndexPool *pool) {
-    if (!pool) return NULL;
+    if (!pool)
+        return NULL;
 
     // Drain notification pipe
     char buf[64];
@@ -509,20 +521,25 @@ XrLspIndexResult *xlsp_index_pool_poll(XrLspIndexPool *pool) {
 }
 
 bool xlsp_index_pool_is_idle(XrLspIndexPool *pool) {
-    if (!pool) return true;
+    if (!pool)
+        return true;
 
     return pool->work_count == 0 && atomic_load(&pool->active_workers) == 0;
 }
 
 void xlsp_index_pool_get_progress(XrLspIndexPool *pool, int *submitted, int *completed) {
     if (!pool) {
-        if (submitted) *submitted = 0;
-        if (completed) *completed = 0;
+        if (submitted)
+            *submitted = 0;
+        if (completed)
+            *completed = 0;
         return;
     }
 
-    if (submitted) *submitted = atomic_load(&pool->files_submitted);
-    if (completed) *completed = atomic_load(&pool->files_completed);
+    if (submitted)
+        *submitted = atomic_load(&pool->files_submitted);
+    if (completed)
+        *completed = atomic_load(&pool->files_completed);
 }
 
 // ============================================================================
@@ -530,14 +547,16 @@ void xlsp_index_pool_get_progress(XrLspIndexPool *pool, int *submitted, int *com
 // ============================================================================
 
 void xlsp_index_symbol_free(XrLspIndexSymbol *sym) {
-    if (!sym) return;
+    if (!sym)
+        return;
     xr_free(sym->name);
     xr_free(sym->type_str);
     xr_free(sym);
 }
 
 void xlsp_index_result_free(XrLspIndexResult *result) {
-    if (!result) return;
+    if (!result)
+        return;
 
     // Free symbols
     XrLspIndexSymbol *sym = result->symbols;

@@ -40,23 +40,21 @@
 #endif
 
 #if XR_GC_DEBUG
-#define XGC_LOG(fmt, ...) \
-    fprintf(stderr, "[XGC] " fmt "\n", ##__VA_ARGS__)
+#define XGC_LOG(fmt, ...) fprintf(stderr, "[XGC] " fmt "\n", ##__VA_ARGS__)
 #define XGC_ASSERT(expr) XR_DCHECK(expr, #expr)
 #else
-#define XGC_LOG(fmt, ...) ((void)0)
-#define XGC_ASSERT(expr) ((void)0)
-#endif // ========== GC Utility Macros ==========
+#define XGC_LOG(fmt, ...) ((void) 0)
+#define XGC_ASSERT(expr) ((void) 0)
+#endif  // ========== GC Utility Macros ==========
 
 #define XGC_ALIGN_SIZE 8
-#define XGC_ALIGN(size) \
-    (((size) + XGC_ALIGN_SIZE - 1) & ~(XGC_ALIGN_SIZE - 1))
+#define XGC_ALIGN(size) (((size) + XGC_ALIGN_SIZE - 1) & ~(XGC_ALIGN_SIZE - 1))
 
 // Get current time (nanoseconds)
 static inline uint64_t xr_gc_time_ns(void) {
     struct timespec ts;
     clock_gettime(CLOCK_MONOTONIC, &ts);
-    return (uint64_t)ts.tv_sec * 1000000000ULL + (uint64_t)ts.tv_nsec;
+    return (uint64_t) ts.tv_sec * 1000000000ULL + (uint64_t) ts.tv_nsec;
 }
 
 // Forward declarations
@@ -99,10 +97,10 @@ typedef enum {
     XR_TREGEX,
     XR_TLOGGER,
     XR_TRANGE,
-    XR_TBLOB,           // Raw byte buffer on Immix heap (no traverse/destroy)
-    XR_TCONTEXT,        // DEPRECATED: kept for enum stability, no longer allocated
-    XR_TCELL,           // Single-slot mutable capture cell (32B)
-    XR_TTASK,           // Lightweight GC-managed coroutine handle (Task/Executor separation)
+    XR_TBLOB,     // Raw byte buffer on Immix heap (no traverse/destroy)
+    XR_TCONTEXT,  // DEPRECATED: kept for enum stability, no longer allocated
+    XR_TCELL,     // Single-slot mutable capture cell (32B)
+    XR_TTASK,     // Lightweight GC-managed coroutine handle (Task/Executor separation)
 } XrObjType;
 
 /* ========== Unified GC Header (16 bytes) ========== */
@@ -119,19 +117,19 @@ _Static_assert(sizeof(XrGCHeader) == 16, "XrGCHeader must be 16 bytes");
 
 /* ========== Access Macros ========== */
 
-#define XR_GC_GET_TYPE(gc)      ((XrObjType)((gc)->type))
-#define XR_GC_SET_TYPE(gc, t)   ((gc)->type = (uint8_t)(t))
-#define XR_GC_GET_MARKED(gc)    ((gc)->marked)
-#define XR_GC_SET_MARKED(gc, m) ((gc)->marked = (uint8_t)(m))
+#define XR_GC_GET_TYPE(gc) ((XrObjType) ((gc)->type))
+#define XR_GC_SET_TYPE(gc, t) ((gc)->type = (uint8_t) (t))
+#define XR_GC_GET_MARKED(gc) ((gc)->marked)
+#define XR_GC_SET_MARKED(gc, m) ((gc)->marked = (uint8_t) (m))
 
 /* ========== Shared Storage Mode (uses extra field bit 0) ========== */
 
-#define XR_GC_STORAGE_NORMAL  0
-#define XR_GC_STORAGE_SHARED  1
+#define XR_GC_STORAGE_NORMAL 0
+#define XR_GC_STORAGE_SHARED 1
 
-#define XR_GC_GET_STORAGE(gc)      ((gc)->extra & 0x01)
-#define XR_GC_SET_STORAGE(gc, m)   ((gc)->extra = ((gc)->extra & ~0x01) | ((m) & 0x01))
-#define XR_GC_IS_SHARED(gc)        (XR_GC_GET_STORAGE(gc) == XR_GC_STORAGE_SHARED)
+#define XR_GC_GET_STORAGE(gc) ((gc)->extra & 0x01)
+#define XR_GC_SET_STORAGE(gc, m) ((gc)->extra = ((gc)->extra & ~0x01) | ((m) & 0x01))
+#define XR_GC_IS_SHARED(gc) (XR_GC_GET_STORAGE(gc) == XR_GC_STORAGE_SHARED)
 
 /* ========== Instance Reified Type Args (uses extra bits 1-12) ========== */
 /*
@@ -139,12 +137,12 @@ _Static_assert(sizeof(XrGCHeader) == 16, "XrGCHeader must be 16 bytes");
  *   argc: 0-3 type arguments
  *   tid0/tid1: XrTypeId (5 bits each, 0-31)
  */
-#define XR_INST_TYPE_ARGC(gc)      (((gc)->extra >> 1) & 0x03)
-#define XR_INST_TYPE_ARG0(gc)      (((gc)->extra >> 3) & 0x1F)
-#define XR_INST_TYPE_ARG1(gc)      (((gc)->extra >> 8) & 0x1F)
-#define XR_INST_SET_TYPE_ARGS(gc, argc, tid0, tid1) \
-    ((gc)->extra = ((gc)->extra & 0x01) | \
-        (((argc) & 0x03) << 1) | (((tid0) & 0x1F) << 3) | (((tid1) & 0x1F) << 8))
+#define XR_INST_TYPE_ARGC(gc) (((gc)->extra >> 1) & 0x03)
+#define XR_INST_TYPE_ARG0(gc) (((gc)->extra >> 3) & 0x1F)
+#define XR_INST_TYPE_ARG1(gc) (((gc)->extra >> 8) & 0x1F)
+#define XR_INST_SET_TYPE_ARGS(gc, argc, tid0, tid1)                                                \
+    ((gc)->extra = ((gc)->extra & 0x01) | (((argc) & 0x03) << 1) | (((tid0) & 0x1F) << 3) |        \
+                   (((tid1) & 0x1F) << 8))
 
 /* ========== MMAP Flag (extra field bit 13) ========== */
 /*
@@ -152,14 +150,14 @@ _Static_assert(sizeof(XrGCHeader) == 16, "XrGCHeader must be 16 bytes");
  * Used by both system heap (shared objects) and per-coro GC (large objects).
  * Bit 13 of extra is spare (bits 0-12 used by storage + type args).
  */
-#define XR_GC_FLAG_MMAP       0x2000
-#define XR_GC_IS_MMAP(gc)     (((gc)->extra & XR_GC_FLAG_MMAP) != 0)
-#define XR_GC_SET_MMAP(gc)    ((gc)->extra |= XR_GC_FLAG_MMAP)
+#define XR_GC_FLAG_MMAP 0x2000
+#define XR_GC_IS_MMAP(gc) (((gc)->extra & XR_GC_FLAG_MMAP) != 0)
+#define XR_GC_SET_MMAP(gc) ((gc)->extra |= XR_GC_FLAG_MMAP)
 
 /* ========== Initialization Functions ========== */
 
 static inline void xr_gc_header_init_type(XrGCHeader *gc, XrObjType type) {
-    gc->type = (uint8_t)type;
+    gc->type = (uint8_t) type;
 }
 
 /* ========== Helper Functions ========== */
@@ -167,23 +165,47 @@ static inline void xr_gc_header_init_type(XrGCHeader *gc, XrObjType type) {
 static inline size_t xr_gc_header_size(void) {
     return sizeof(XrGCHeader);
 }
-static inline const char* xr_obj_type_name(XrObjType type) {
-    static const char* names[] = {
-        TYPE_NAME_NULL, TYPE_NAME_BOOL, TYPE_NAME_INT, TYPE_NAME_FLOAT, TYPE_NAME_STRING,
-        TYPE_NAME_FUNCTION, TYPE_NAME_CFUNCTION,
-        TYPE_NAME_ARRAY, TYPE_NAME_SET, TYPE_NAME_MAP,
-        TYPE_NAME_CLASS, TYPE_NAME_CLASS_BUILDER, TYPE_NAME_INSTANCE, TYPE_NAME_BOUND_METHOD,
-        TYPE_NAME_ENUM_TYPE, TYPE_NAME_ENUM_VALUE,
-        TYPE_NAME_ERROR, TYPE_NAME_EXCEPTION, TYPE_NAME_MODULE, TYPE_NAME_ITERATOR, "reserved",
-        TYPE_NAME_STRINGBUILDER, TYPE_NAME_JSON, TYPE_NAME_SHAPE,
-        TYPE_NAME_COROUTINE, TYPE_NAME_CHANNEL, TYPE_NAME_BIGINT, TYPE_NAME_COROPOOL,
-        TYPE_NAME_ARRAY_SLICE,
-        TYPE_NAME_DATETIME, TYPE_NAME_REGEX,
-        TYPE_NAME_LOGGER, TYPE_NAME_RANGE, "blob", "context", "cell", TYPE_NAME_TASK
-    };
-    _Static_assert(sizeof(names)/sizeof(names[0]) == XR_TTASK + 1,
+static inline const char *xr_obj_type_name(XrObjType type) {
+    static const char *names[] = {TYPE_NAME_NULL,
+                                  TYPE_NAME_BOOL,
+                                  TYPE_NAME_INT,
+                                  TYPE_NAME_FLOAT,
+                                  TYPE_NAME_STRING,
+                                  TYPE_NAME_FUNCTION,
+                                  TYPE_NAME_CFUNCTION,
+                                  TYPE_NAME_ARRAY,
+                                  TYPE_NAME_SET,
+                                  TYPE_NAME_MAP,
+                                  TYPE_NAME_CLASS,
+                                  TYPE_NAME_CLASS_BUILDER,
+                                  TYPE_NAME_INSTANCE,
+                                  TYPE_NAME_BOUND_METHOD,
+                                  TYPE_NAME_ENUM_TYPE,
+                                  TYPE_NAME_ENUM_VALUE,
+                                  TYPE_NAME_ERROR,
+                                  TYPE_NAME_EXCEPTION,
+                                  TYPE_NAME_MODULE,
+                                  TYPE_NAME_ITERATOR,
+                                  "reserved",
+                                  TYPE_NAME_STRINGBUILDER,
+                                  TYPE_NAME_JSON,
+                                  TYPE_NAME_SHAPE,
+                                  TYPE_NAME_COROUTINE,
+                                  TYPE_NAME_CHANNEL,
+                                  TYPE_NAME_BIGINT,
+                                  TYPE_NAME_COROPOOL,
+                                  TYPE_NAME_ARRAY_SLICE,
+                                  TYPE_NAME_DATETIME,
+                                  TYPE_NAME_REGEX,
+                                  TYPE_NAME_LOGGER,
+                                  TYPE_NAME_RANGE,
+                                  "blob",
+                                  "context",
+                                  "cell",
+                                  TYPE_NAME_TASK};
+    _Static_assert(sizeof(names) / sizeof(names[0]) == XR_TTASK + 1,
                    "xr_obj_type_name: names array out of sync with XrObjType enum");
-    if (type < sizeof(names)/sizeof(names[0])) {
+    if (type < sizeof(names) / sizeof(names[0])) {
         return names[type];
     }
     /* Extension types (allocated dynamically per isolate).
@@ -194,4 +216,4 @@ static inline const char* xr_obj_type_name(XrObjType type) {
     return TYPE_NAME_UNKNOWN;
 }
 
-#endif // XGC_HEADER_H
+#endif  // XGC_HEADER_H

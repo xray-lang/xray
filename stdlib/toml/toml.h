@@ -58,6 +58,6 @@ XR_FUNC XrValue xr_toml_parse(XrayIsolate *isolate, const char *data, size_t len
 XR_FUNC XrValue xr_toml_stringify(XrayIsolate *isolate, XrValue value, int indent);
 
 // Load toml module
-XR_FUNC XrModule* xr_load_module_toml(XrayIsolate *isolate);
+XR_FUNC XrModule *xr_load_module_toml(XrayIsolate *isolate);
 
 #endif

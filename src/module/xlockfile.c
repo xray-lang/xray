@@ -27,11 +27,13 @@
 #define LOCKFILE_VERSION 1
 #define INITIAL_CAPACITY 16
 
-static const char* skip_whitespace_and_comments(const char *s) {
+static const char *skip_whitespace_and_comments(const char *s) {
     while (*s) {
-        while (*s && isspace(*s)) s++;
+        while (*s && isspace(*s))
+            s++;
         if (*s == '#') {
-            while (*s && *s != '\n') s++;
+            while (*s && *s != '\n')
+                s++;
             continue;
         }
 
@@ -44,22 +46,26 @@ static const char* skip_whitespace_and_comments(const char *s) {
  * Parse a quoted string value.
  * Returns a copied string (caller must free).
  */
-static char* parse_quoted_string(const char **p) {
+static char *parse_quoted_string(const char **p) {
     const char *s = *p;
 
     // Skip whitespace
-    while (*s && isspace(*s)) s++;
+    while (*s && isspace(*s))
+        s++;
 
-    if (*s != '"') return NULL;
+    if (*s != '"')
+        return NULL;
     s++;  // Skip opening quote
 
     const char *start = s;
-    while (*s && *s != '"' && *s != '\n') s++;
+    while (*s && *s != '"' && *s != '\n')
+        s++;
 
-    if (*s != '"') return NULL;
+    if (*s != '"')
+        return NULL;
 
     size_t len = s - start;
-    char *result = (char*)xr_malloc(len + 1);
+    char *result = (char *) xr_malloc(len + 1);
     if (result) {
         memcpy(result, start, len);
         result[len] = '\0';
@@ -75,24 +81,28 @@ static void free_dependencies(char **deps, int count);
  * Parse array value ["a", "b", "c"].
  * Returns string array (caller must free each element and array itself).
  */
-static char** parse_string_array(const char **p, int *count) {
+static char **parse_string_array(const char **p, int *count) {
     const char *s = *p;
     *count = 0;
 
     // Skip whitespace
-    while (*s && isspace(*s)) s++;
+    while (*s && isspace(*s))
+        s++;
 
-    if (*s != '[') return NULL;
+    if (*s != '[')
+        return NULL;
     s++;  // Skip '['
 
     // Estimate capacity
     int capacity = 8;
-    char **result = (char**)xr_malloc(capacity * sizeof(char*));
-    if (!result) return NULL;
+    char **result = (char **) xr_malloc(capacity * sizeof(char *));
+    if (!result)
+        return NULL;
 
     while (*s) {
         // Skip whitespace
-        while (*s && isspace(*s)) s++;
+        while (*s && isspace(*s))
+            s++;
 
         if (*s == ']') {
             s++;
@@ -104,7 +114,7 @@ static char** parse_string_array(const char **p, int *count) {
             if (item) {
                 if (*count >= capacity) {
                     capacity *= 2;
-                    char** _new_result = (char**)xr_realloc(result, capacity * sizeof(char*));
+                    char **_new_result = (char **) xr_realloc(result, capacity * sizeof(char *));
                     if (!_new_result) {
                         xr_free(item);
                         free_dependencies(result, *count);
@@ -118,8 +128,10 @@ static char** parse_string_array(const char **p, int *count) {
         }
 
         // Skip comma
-        while (*s && isspace(*s)) s++;
-        if (*s == ',') s++;
+        while (*s && isspace(*s))
+            s++;
+        if (*s == ',')
+            s++;
     }
 
     *p = s;
@@ -130,7 +142,8 @@ static char** parse_string_array(const char **p, int *count) {
  * Free locked package dependencies array.
  */
 static void free_dependencies(char **deps, int count) {
-    if (!deps) return;
+    if (!deps)
+        return;
     for (int i = 0; i < count; i++) {
         xr_free(deps[i]);
     }
@@ -141,7 +154,8 @@ static void free_dependencies(char **deps, int count) {
  * Free a single locked package.
  */
 static void free_locked_package(XrLockedPackage *pkg) {
-    if (!pkg) return;
+    if (!pkg)
+        return;
     xr_free(pkg->name);
     xr_free(pkg->version);
     xr_free(pkg->resolved);
@@ -151,14 +165,16 @@ static void free_locked_package(XrLockedPackage *pkg) {
 
 /* ========== Lockfile API Implementation ========== */
 
-XrLockfile* xr_lockfile_new(void) {
-    XrLockfile *lock = (XrLockfile*)xr_malloc(sizeof(XrLockfile));
-    if (!lock) return NULL;
+XrLockfile *xr_lockfile_new(void) {
+    XrLockfile *lock = (XrLockfile *) xr_malloc(sizeof(XrLockfile));
+    if (!lock)
+        return NULL;
     memset(lock, 0, sizeof(XrLockfile));
 
     lock->version = LOCKFILE_VERSION;
     lock->package_capacity = INITIAL_CAPACITY;
-    lock->packages = (XrLockedPackage*)xr_malloc(lock->package_capacity * sizeof(XrLockedPackage));
+    lock->packages =
+        (XrLockedPackage *) xr_malloc(lock->package_capacity * sizeof(XrLockedPackage));
 
     if (!lock->packages) {
         xr_free(lock);
@@ -169,10 +185,11 @@ XrLockfile* xr_lockfile_new(void) {
     return lock;
 }
 
-XrLockfile* xr_lockfile_load(const char *path) {
+XrLockfile *xr_lockfile_load(const char *path) {
     XR_DCHECK(path != NULL, "lockfile_load: NULL path");
     char *content = xr_file_read_all(path, "r", NULL);
-    if (!content) return NULL;
+    if (!content)
+        return NULL;
 
     // Create lockfile
     XrLockfile *lock = xr_lockfile_new();
@@ -187,7 +204,8 @@ XrLockfile* xr_lockfile_load(const char *path) {
 
     while (*p) {
         p = skip_whitespace_and_comments(p);
-        if (!*p) break;
+        if (!*p)
+            break;
 
         // Parse section header [package.xxx]
         if (*p == '[') {
@@ -199,7 +217,8 @@ XrLockfile* xr_lockfile_load(const char *path) {
 
                 // Extract package name
                 const char *start = p;
-                while (*p && *p != ']' && *p != '\n') p++;
+                while (*p && *p != ']' && *p != '\n')
+                    p++;
 
                 size_t len = p - start;
                 if (len < sizeof(current_package)) {
@@ -207,15 +226,17 @@ XrLockfile* xr_lockfile_load(const char *path) {
                     current_package[len] = '\0';
 
                     // Add package
-                    xr_lockfile_add_package(lock, current_package,
-                                           "0.0.0", "", "");
+                    xr_lockfile_add_package(lock, current_package, "0.0.0", "", "");
                 }
 
-                if (*p == ']') p++;
+                if (*p == ']')
+                    p++;
             } else {
                 // Skip other sections
-                while (*p && *p != ']') p++;
-                if (*p == ']') p++;
+                while (*p && *p != ']')
+                    p++;
+                if (*p == ']')
+                    p++;
                 current_package[0] = '\0';
             }
             continue;
@@ -225,7 +246,8 @@ XrLockfile* xr_lockfile_load(const char *path) {
         if (current_package[0] && isalpha(*p)) {
             const char *key_start = p;
             // Fix: allow alphanumeric and underscore in key names
-            while (*p && (isalnum(*p) || *p == '_')) p++;
+            while (*p && (isalnum(*p) || *p == '_'))
+                p++;
 
             size_t key_len = p - key_start;
             char key[64];
@@ -237,9 +259,12 @@ XrLockfile* xr_lockfile_load(const char *path) {
             }
 
             // Skip =
-            while (*p && isspace(*p)) p++;
-            if (*p == '=') p++;
-            while (*p && isspace(*p)) p++;
+            while (*p && isspace(*p))
+                p++;
+            if (*p == '=')
+                p++;
+            while (*p && isspace(*p))
+                p++;
 
             // Find package
             XrLockedPackage *pkg = NULL;
@@ -268,8 +293,10 @@ XrLockfile* xr_lockfile_load(const char *path) {
         }
 
         // Skip to next line
-        while (*p && *p != '\n') p++;
-        if (*p == '\n') p++;
+        while (*p && *p != '\n')
+            p++;
+        if (*p == '\n')
+            p++;
     }
 
     xr_free(content);
@@ -277,10 +304,12 @@ XrLockfile* xr_lockfile_load(const char *path) {
 }
 
 bool xr_lockfile_save(const XrLockfile *lock, const char *path) {
-    if (!lock || !path) return false;
+    if (!lock || !path)
+        return false;
 
     FILE *f = fopen(path, "w");
-    if (!f) return false;
+    if (!f)
+        return false;
 
     // Write header
     fprintf(f, "# xray.lock - Auto-generated, do not edit manually\n");
@@ -304,7 +333,8 @@ bool xr_lockfile_save(const XrLockfile *lock, const char *path) {
         // Write dependencies
         fprintf(f, "dependencies = [");
         for (int j = 0; j < pkg->dep_count; j++) {
-            if (j > 0) fprintf(f, ", ");
+            if (j > 0)
+                fprintf(f, ", ");
             fprintf(f, "\"%s\"", pkg->dependencies[j]);
         }
         fprintf(f, "]\n\n");
@@ -315,7 +345,8 @@ bool xr_lockfile_save(const XrLockfile *lock, const char *path) {
 }
 
 void xr_lockfile_free(XrLockfile *lock) {
-    if (!lock) return;
+    if (!lock)
+        return;
 
     for (int i = 0; i < lock->package_count; i++) {
         free_locked_package(&lock->packages[i]);
@@ -327,12 +358,10 @@ void xr_lockfile_free(XrLockfile *lock) {
 
 /* ========== Package Operations API Implementation ========== */
 
-bool xr_lockfile_add_package(XrLockfile *lock,
-                             const char *name,
-                             const char *version,
-                             const char *resolved,
-                             const char *checksum) {
-    if (!lock || !name) return false;
+bool xr_lockfile_add_package(XrLockfile *lock, const char *name, const char *version,
+                             const char *resolved, const char *checksum) {
+    if (!lock || !name)
+        return false;
 
     // Check if already exists
     for (int i = 0; i < lock->package_count; i++) {
@@ -353,8 +382,10 @@ bool xr_lockfile_add_package(XrLockfile *lock,
     if (lock->package_count >= lock->package_capacity) {
         int old_cap = lock->package_capacity;
         int new_cap = old_cap * 2;
-        XrLockedPackage *new_pkgs = (XrLockedPackage*)xr_realloc(lock->packages, new_cap * sizeof(XrLockedPackage));
-        if (!new_pkgs) return false;
+        XrLockedPackage *new_pkgs =
+            (XrLockedPackage *) xr_realloc(lock->packages, new_cap * sizeof(XrLockedPackage));
+        if (!new_pkgs)
+            return false;
         lock->packages = new_pkgs;
         lock->package_capacity = new_cap;
     }
@@ -370,10 +401,9 @@ bool xr_lockfile_add_package(XrLockfile *lock,
     return true;
 }
 
-bool xr_lockfile_add_dependency(XrLockfile *lock,
-                                const char *package_name,
-                                const char *dep_spec) {
-    if (!lock || !package_name || !dep_spec) return false;
+bool xr_lockfile_add_dependency(XrLockfile *lock, const char *package_name, const char *dep_spec) {
+    if (!lock || !package_name || !dep_spec)
+        return false;
 
     // Find package
     XrLockedPackage *pkg = NULL;
@@ -384,13 +414,15 @@ bool xr_lockfile_add_dependency(XrLockfile *lock,
         }
     }
 
-    if (!pkg) return false;
+    if (!pkg)
+        return false;
 
     // Expand dependencies array (doubling strategy)
     if (pkg->dep_count >= pkg->dep_capacity) {
         int new_cap = (pkg->dep_capacity < 4) ? 4 : pkg->dep_capacity * 2;
-        char **new_deps = (char**)xr_realloc(pkg->dependencies, new_cap * sizeof(char*));
-        if (!new_deps) return false;
+        char **new_deps = (char **) xr_realloc(pkg->dependencies, new_cap * sizeof(char *));
+        if (!new_deps)
+            return false;
         pkg->dependencies = new_deps;
         pkg->dep_capacity = new_cap;
     }
@@ -400,8 +432,9 @@ bool xr_lockfile_add_dependency(XrLockfile *lock,
     return true;
 }
 
-const XrLockedPackage* xr_lockfile_find(const XrLockfile *lock, const char *name) {
-    if (!lock || !name) return NULL;
+const XrLockedPackage *xr_lockfile_find(const XrLockfile *lock, const char *name) {
+    if (!lock || !name)
+        return NULL;
 
     for (int i = 0; i < lock->package_count; i++) {
         if (strcmp(lock->packages[i].name, name) == 0) {
@@ -417,7 +450,8 @@ bool xr_lockfile_has(const XrLockfile *lock, const char *name) {
 }
 
 bool xr_lockfile_remove(XrLockfile *lock, const char *name) {
-    if (!lock || !name) return false;
+    if (!lock || !name)
+        return false;
 
     for (int i = 0; i < lock->package_count; i++) {
         if (strcmp(lock->packages[i].name, name) == 0) {
@@ -443,17 +477,19 @@ bool xr_lockfile_remove(XrLockfile *lock, const char *name) {
  * Calculate SHA256 checksum using xray built-in crypto library.
  */
 bool xr_lockfile_checksum_file(const char *filepath, char *out_checksum) {
-    if (!filepath || !out_checksum) return false;
+    if (!filepath || !out_checksum)
+        return false;
 
     // Read file content
     FILE *f = fopen(filepath, "rb");
-    if (!f) return false;
+    if (!f)
+        return false;
 
     fseek(f, 0, SEEK_END);
     long size = ftell(f);
     fseek(f, 0, SEEK_SET);
 
-    uint8_t *data = (uint8_t*)xr_malloc(size);
+    uint8_t *data = (uint8_t *) xr_malloc(size);
     if (!data) {
         fclose(f);
         return false;
@@ -483,7 +519,8 @@ bool xr_lockfile_checksum_file(const char *filepath, char *out_checksum) {
 }
 
 bool xr_lockfile_verify_checksum(const char *filepath, const char *expected) {
-    if (!filepath || !expected) return false;
+    if (!filepath || !expected)
+        return false;
 
     char actual[72];
     if (!xr_lockfile_checksum_file(filepath, actual)) {

@@ -33,9 +33,9 @@
 
 /* Growable list of file paths collected by traversal. */
 typedef struct XrCliFileList {
-    char **paths;       /* Array of heap-allocated paths */
-    int count;          /* Number of paths */
-    int capacity;       /* Allocated slots */
+    char **paths; /* Array of heap-allocated paths */
+    int count;    /* Number of paths */
+    int capacity; /* Allocated slots */
 } XrCliFileList;
 
 /* Initialize an empty file list. */
@@ -54,9 +54,9 @@ XR_FUNC void xr_cli_filelist_sort(XrCliFileList *fl);
 
 /* Traversal options */
 typedef struct XrCliWalkOpts {
-    bool xr_only;               /* Only collect .xr files (default: true) */
-    bool skip_hidden;            /* Skip hidden dirs/files (default: true) */
-    bool skip_underscore;        /* Skip _prefixed dirs (default: false) */
+    bool xr_only;                    /* Only collect .xr files (default: true) */
+    bool skip_hidden;                /* Skip hidden dirs/files (default: true) */
+    bool skip_underscore;            /* Skip _prefixed dirs (default: false) */
     const char *const *extra_ignore; /* Extra ignore patterns (NULL-terminated, may be NULL) */
 } XrCliWalkOpts;
 
@@ -67,9 +67,7 @@ XR_FUNC XrCliWalkOpts xr_cli_walk_defaults(void);
  * If path is a file, adds it directly.
  * If path is a directory, walks recursively with ignore rules.
  * Returns 0 on success, -1 on error. */
-XR_FUNC int xr_cli_collect_files(const char *path,
-                                  const XrCliWalkOpts *opts,
-                                  XrCliFileList *fl);
+XR_FUNC int xr_cli_collect_files(const char *path, const XrCliWalkOpts *opts, XrCliFileList *fl);
 
 /* ========== File I/O ========== */
 
@@ -99,4 +97,4 @@ XR_FUNC bool xr_cli_parse_int(const char *str, int *out);
 /* Parse port number (0-65535). Returns false on error. */
 XR_FUNC bool xr_cli_parse_port(const char *str, int *out);
 
-#endif // XCLI_FS_H
+#endif  // XCLI_FS_H

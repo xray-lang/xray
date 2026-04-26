@@ -25,6 +25,6 @@ XR_FUNC XrValue xr_builtin_stringbuilder_length(XrayIsolate *isolate, XrValue *a
 
 // Create StringBuilder class (using XrClassBuilder)
 typedef struct XrClass XrClass;
-XR_FUNC XrClass* xr_stringbuilder_create_class(XrayIsolate *X, XrClass *objectClass);
+XR_FUNC XrClass *xr_stringbuilder_create_class(XrayIsolate *X, XrClass *objectClass);
 
-#endif // XSTRINGBUILDER_BUILTINS_H
+#endif  // XSTRINGBUILDER_BUILTINS_H

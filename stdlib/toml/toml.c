@@ -37,7 +37,8 @@
 
 // Convert xtoml DOM tree to runtime XrValue, analogous to the JSON bridge.
 static XrValue dom_to_xrvalue(XrayIsolate *X, XrTomlValue *v) {
-    if (!v) return xr_null();
+    if (!v)
+        return xr_null();
     switch (v->type) {
         case XR_TOML_STRING: {
             size_t slen = strlen(v->as.string);
@@ -53,7 +54,8 @@ static XrValue dom_to_xrvalue(XrayIsolate *X, XrTomlValue *v) {
         case XR_TOML_DATETIME: {
             // Try runtime datetime parse; fall back to string.
             XrDateTime *dt = xr_datetime_parse(X, v->as.string, NULL);
-            if (dt) return xr_datetime_value(dt);
+            if (dt)
+                return xr_datetime_value(dt);
             size_t slen = strlen(v->as.string);
             XrString *str = xr_string_intern(X, v->as.string, slen, 0);
             return xr_string_value(str);
@@ -71,8 +73,7 @@ static XrValue dom_to_xrvalue(XrayIsolate *X, XrTomlValue *v) {
                 XrTomlMember *m = &v->as.table.members[i];
                 size_t klen = strlen(m->key);
                 XrString *key = xr_string_intern(X, m->key, klen, 0);
-                xr_map_set(map, xr_string_value(key),
-                           dom_to_xrvalue(X, m->value));
+                xr_map_set(map, xr_string_value(key), dom_to_xrvalue(X, m->value));
             }
             return xr_value_from_map(map);
         }
@@ -96,7 +97,7 @@ XrValue xr_toml_parse(XrayIsolate *X, const char *data, size_t len) {
 // ========== TOML Serialization ==========
 
 typedef struct {
-    XrSerWriter sw;       // shared buffer: sw.data / sw.len / sw.cap
+    XrSerWriter sw;  // shared buffer: sw.data / sw.len / sw.cap
     XrayIsolate *isolate;
 
     // Requested indentation (0 = flat). NOTE: currently reserved — the
@@ -107,7 +108,7 @@ typedef struct {
     // this field in `write_table` to prefix nested-table entries.
     int indent;
 
-    int depth;            // nesting depth for stringify cycle guard
+    int depth;  // nesting depth for stringify cycle guard
 } TomlWriter;
 
 // Share the stdlib-wide nesting cap so parse and stringify always agree
@@ -140,11 +141,12 @@ static inline void tw_char(TomlWriter *w, char c) {
 
 // Check if key is a valid TOML bare key (only [A-Za-z0-9_-])
 static bool is_bare_key(const char *key, size_t len) {
-    if (len == 0) return false;
+    if (len == 0)
+        return false;
     for (size_t i = 0; i < len; i++) {
         char c = key[i];
-        if (!((c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') ||
-              (c >= '0' && c <= '9') || c == '-' || c == '_')) {
+        if (!((c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') ||
+              c == '-' || c == '_')) {
             return false;
         }
     }
@@ -157,13 +159,27 @@ static bool is_bare_key(const char *key, size_t len) {
 // same range because line-endings are handled separately by the caller.
 static void tw_escape_byte(TomlWriter *w, unsigned char c) {
     switch (c) {
-        case '"':  tw_str(w, "\\\""); return;
-        case '\\': tw_str(w, "\\\\"); return;
-        case '\b': tw_str(w, "\\b"); return;
-        case '\f': tw_str(w, "\\f"); return;
-        case '\n': tw_str(w, "\\n"); return;
-        case '\r': tw_str(w, "\\r"); return;
-        case '\t': tw_str(w, "\\t"); return;
+        case '"':
+            tw_str(w, "\\\"");
+            return;
+        case '\\':
+            tw_str(w, "\\\\");
+            return;
+        case '\b':
+            tw_str(w, "\\b");
+            return;
+        case '\f':
+            tw_str(w, "\\f");
+            return;
+        case '\n':
+            tw_str(w, "\\n");
+            return;
+        case '\r':
+            tw_str(w, "\\r");
+            return;
+        case '\t':
+            tw_str(w, "\\t");
+            return;
     }
     if (c < 0x20 || c == 0x7F) {
         char buf[8];
@@ -171,7 +187,7 @@ static void tw_escape_byte(TomlWriter *w, unsigned char c) {
         tw_str(w, buf);
         return;
     }
-    tw_char(w, (char)c);
+    tw_char(w, (char) c);
 }
 
 static void write_string_value(TomlWriter *w, XrString *str) {
@@ -180,19 +196,25 @@ static void write_string_value(TomlWriter *w, XrString *str) {
     // spec-compliant on round-trip.
     bool has_newline = false;
     for (size_t i = 0; i < str->length; i++) {
-        if (str->data[i] == '\n') { has_newline = true; break; }
+        if (str->data[i] == '\n') {
+            has_newline = true;
+            break;
+        }
     }
 
     if (has_newline) {
         tw_str(w, "\"\"\"\n");
         for (size_t i = 0; i < str->length; i++) {
-            unsigned char c = (unsigned char)str->data[i];
+            unsigned char c = (unsigned char) str->data[i];
             // Real newlines stay as-is inside a literal triple-quoted
             // block (they are part of the payload).
-            if (c == '\n') { tw_char(w, '\n'); continue; }
+            if (c == '\n') {
+                tw_char(w, '\n');
+                continue;
+            }
             // Escape sequences of three+ quotes inside multiline
-            if (c == '"' && i + 2 < str->length
-                && str->data[i + 1] == '"' && str->data[i + 2] == '"') {
+            if (c == '"' && i + 2 < str->length && str->data[i + 1] == '"' &&
+                str->data[i + 2] == '"') {
                 tw_str(w, "\\\"\\\"\\\"");
                 i += 2;
                 continue;
@@ -203,7 +225,7 @@ static void write_string_value(TomlWriter *w, XrString *str) {
     } else {
         tw_char(w, '"');
         for (size_t i = 0; i < str->length; i++) {
-            tw_escape_byte(w, (unsigned char)str->data[i]);
+            tw_escape_byte(w, (unsigned char) str->data[i]);
         }
         tw_char(w, '"');
     }
@@ -224,7 +246,8 @@ static void write_table(TomlWriter *w, XrMap *map, const char *prefix);
 static void write_array(TomlWriter *w, XrArray *arr) {
     tw_char(w, '[');
     for (int i = 0; i < arr->length; i++) {
-        if (i > 0) tw_str(w, ", ");
+        if (i > 0)
+            tw_str(w, ", ");
         write_value(w, xr_array_get(arr, i));
     }
     tw_char(w, ']');
@@ -246,7 +269,7 @@ static void write_value(TomlWriter *w, XrValue val) {
         tw_str(w, XR_TO_BOOL(val) ? "true" : "false");
     } else if (XR_IS_INT(val)) {
         char buf[32];
-        snprintf(buf, sizeof(buf), "%lld", (long long)XR_TO_INT(val));
+        snprintf(buf, sizeof(buf), "%lld", (long long) XR_TO_INT(val));
         tw_str(w, buf);
     } else if (XR_IS_FLOAT(val)) {
         double d = XR_TO_FLOAT(val);
@@ -273,8 +296,10 @@ static void write_value(TomlWriter *w, XrValue val) {
         // Emit as TOML offset / local date-time in RFC 3339 format.
         char buf[64];
         int n = xr_datetime_to_iso_string(XR_TO_DATETIME(val), buf, sizeof(buf));
-        if (n > 0) tw_append(w, buf, (size_t)n);
-        else tw_str(w, "\"\"");
+        if (n > 0)
+            tw_append(w, buf, (size_t) n);
+        else
+            tw_str(w, "\"\"");
     } else if (XR_IS_STRING(val)) {
         write_string_value(w, XR_TO_STRING(val));
     } else if (XR_IS_ARRAY(val)) {
@@ -283,7 +308,7 @@ static void write_value(TomlWriter *w, XrValue val) {
         // XrJson -> inline table form {k1 = v1, k2 = v2, ...}
         XrJson *json = xr_value_to_json(val);
         XrShape *shape = xr_json_shape(w->isolate, json);
-        XrSymbolTable *symtab = (XrSymbolTable*)w->isolate->symbol_table;
+        XrSymbolTable *symtab = (XrSymbolTable *) w->isolate->symbol_table;
         tw_char(w, '{');
         w->depth++;
         if (shape) {
@@ -291,8 +316,10 @@ static void write_value(TomlWriter *w, XrValue val) {
             for (uint16_t i = 0; i < shape->field_count; i++) {
                 SymbolId sym = shape->field_symbols[i];
                 const char *name = xr_symbol_get_name_in_table(symtab, sym);
-                if (!name) continue;
-                if (!first) tw_str(w, ", ");
+                if (!name)
+                    continue;
+                if (!first)
+                    tw_str(w, ", ");
                 first = false;
                 size_t nlen = strlen(name);
                 if (is_bare_key(name, nlen)) {
@@ -301,7 +328,7 @@ static void write_value(TomlWriter *w, XrValue val) {
                     // Quote using basic-string escape.
                     tw_char(w, '"');
                     for (size_t k = 0; k < nlen; k++) {
-                        tw_escape_byte(w, (unsigned char)name[k]);
+                        tw_escape_byte(w, (unsigned char) name[k]);
                     }
                     tw_char(w, '"');
                 }
@@ -320,8 +347,10 @@ static void write_value(TomlWriter *w, XrValue val) {
             w->depth++;
             for (uint32_t i = 0; i < size; i++) {
                 XrMapNode *node = xr_map_node(map, i);
-                if (XR_MAP_NODE_EMPTY(node)) continue;
-                if (!first) tw_str(w, ", ");
+                if (XR_MAP_NODE_EMPTY(node))
+                    continue;
+                if (!first)
+                    tw_str(w, ", ");
                 first = false;
                 if (XR_IS_STRING(node->key)) {
                     write_key(w, XR_TO_STRING(node->key));
@@ -337,17 +366,19 @@ static void write_value(TomlWriter *w, XrValue val) {
 
 // Build dotted prefix: "parent.child" or just "child"
 // Caller releases via xr_free().
-static char* make_prefix(const char *prefix, XrString *key) {
+static char *make_prefix(const char *prefix, XrString *key) {
     char *result;
     if (prefix && prefix[0]) {
         size_t plen = strlen(prefix);
-        size_t total = plen + key->length + 2; // '.' + NUL
-        result = (char*)xr_malloc(total);
-        if (!result) return NULL;
-        snprintf(result, total, "%s.%.*s", prefix, (int)key->length, key->data);
+        size_t total = plen + key->length + 2;  // '.' + NUL
+        result = (char *) xr_malloc(total);
+        if (!result)
+            return NULL;
+        snprintf(result, total, "%s.%.*s", prefix, (int) key->length, key->data);
     } else {
-        result = (char*)xr_malloc(key->length + 1);
-        if (!result) return NULL;
+        result = (char *) xr_malloc(key->length + 1);
+        if (!result)
+            return NULL;
         memcpy(result, key->data, key->length);
         result[key->length] = '\0';
     }
@@ -356,20 +387,24 @@ static char* make_prefix(const char *prefix, XrString *key) {
 
 // Check if value is an array-of-tables (array whose first element is a Map)
 static bool is_array_of_tables(XrValue val) {
-    if (!XR_IS_ARRAY(val)) return false;
+    if (!XR_IS_ARRAY(val))
+        return false;
     XrArray *arr = XR_TO_ARRAY(val);
     return arr->length > 0 && XR_IS_MAP(xr_array_get(arr, 0));
 }
 
 static void write_table(TomlWriter *w, XrMap *map, const char *prefix) {
-    if (xr_map_isdummy(map)) return;
+    if (xr_map_isdummy(map))
+        return;
     uint32_t size = xr_map_sizenode(map);
 
     // Pass 1: simple key-value pairs
     for (uint32_t i = 0; i < size; i++) {
         XrMapNode *node = xr_map_node(map, i);
-        if (XR_MAP_NODE_EMPTY(node)) continue;
-        if (XR_IS_MAP(node->value) || is_array_of_tables(node->value)) continue;
+        if (XR_MAP_NODE_EMPTY(node))
+            continue;
+        if (XR_IS_MAP(node->value) || is_array_of_tables(node->value))
+            continue;
         if (XR_IS_STRING(node->key)) {
             write_key(w, XR_TO_STRING(node->key));
         }
@@ -381,9 +416,11 @@ static void write_table(TomlWriter *w, XrMap *map, const char *prefix) {
     // Pass 2: sub-tables [key]
     for (uint32_t i = 0; i < size; i++) {
         XrMapNode *node = xr_map_node(map, i);
-        if (XR_MAP_NODE_EMPTY(node) || !XR_IS_MAP(node->value)) continue;
+        if (XR_MAP_NODE_EMPTY(node) || !XR_IS_MAP(node->value))
+            continue;
         XrString *key = XR_IS_STRING(node->key) ? XR_TO_STRING(node->key) : NULL;
-        if (!key) continue;
+        if (!key)
+            continue;
 
         char *new_prefix = make_prefix(prefix, key);
         tw_char(w, '\n');
@@ -397,9 +434,11 @@ static void write_table(TomlWriter *w, XrMap *map, const char *prefix) {
     // Pass 3: array-of-tables [[key]]
     for (uint32_t i = 0; i < size; i++) {
         XrMapNode *node = xr_map_node(map, i);
-        if (XR_MAP_NODE_EMPTY(node) || !is_array_of_tables(node->value)) continue;
+        if (XR_MAP_NODE_EMPTY(node) || !is_array_of_tables(node->value))
+            continue;
         XrString *key = XR_IS_STRING(node->key) ? XR_TO_STRING(node->key) : NULL;
-        if (!key) continue;
+        if (!key)
+            continue;
 
         char *new_prefix = make_prefix(prefix, key);
         XrArray *arr = XR_TO_ARRAY(node->value);
@@ -445,12 +484,10 @@ static XrValue toml_parse(XrayIsolate *X, XrValue *args, int argc) {
 static XrValue toml_parse_strict(XrayIsolate *X, XrValue *args, int argc) {
     if (argc < 1 || !XR_IS_STRING(args[0])) {
         XrMap *result = xr_map_new(xr_current_coro(X));
-        xr_map_set(result,
-            xr_string_value(xr_string_intern(X, "data", 4, 0)),
-            xr_value_from_map(xr_map_new(xr_current_coro(X))));
-        xr_map_set(result,
-            xr_string_value(xr_string_intern(X, "errors", 6, 0)),
-            xr_value_from_array(xr_array_new(xr_current_coro(X))));
+        xr_map_set(result, xr_string_value(xr_string_intern(X, "data", 4, 0)),
+                   xr_value_from_map(xr_map_new(xr_current_coro(X))));
+        xr_map_set(result, xr_string_value(xr_string_intern(X, "errors", 6, 0)),
+                   xr_value_from_array(xr_array_new(xr_current_coro(X))));
         return xr_value_from_map(result);
     }
     XrString *str = XR_TO_STRING(args[0]);
@@ -465,23 +502,17 @@ static XrValue toml_parse_strict(XrayIsolate *X, XrValue *args, int argc) {
     toml_parser_cleanup(&parser);
 
     XrMap *result = xr_map_new(xr_current_coro(X));
-    xr_map_set(result,
-        xr_string_value(xr_string_intern(X, "data", 4, 0)),
-        xr_value_from_map(parse_result.data));
-    xr_map_set(result,
-        xr_string_value(xr_string_intern(X, "errors", 6, 0)),
-        xr_value_from_array(parse_result.errors));
+    xr_map_set(result, xr_string_value(xr_string_intern(X, "data", 4, 0)),
+               xr_value_from_map(parse_result.data));
+    xr_map_set(result, xr_string_value(xr_string_intern(X, "errors", 6, 0)),
+               xr_value_from_array(parse_result.errors));
 
     XrMap *meta = xr_map_new(xr_current_coro(X));
-    xr_map_set(meta,
-        xr_string_value(xr_string_intern(X, "lines", 5, 0)),
-        xr_int(parse_result.meta.lines));
-    xr_map_set(meta,
-        xr_string_value(xr_string_intern(X, "keys", 4, 0)),
-        xr_int(parse_result.meta.keys));
-    xr_map_set(result,
-        xr_string_value(xr_string_intern(X, "meta", 4, 0)),
-        xr_value_from_map(meta));
+    xr_map_set(meta, xr_string_value(xr_string_intern(X, "lines", 5, 0)),
+               xr_int(parse_result.meta.lines));
+    xr_map_set(meta, xr_string_value(xr_string_intern(X, "keys", 4, 0)),
+               xr_int(parse_result.meta.keys));
+    xr_map_set(result, xr_string_value(xr_string_intern(X, "meta", 4, 0)), xr_value_from_map(meta));
 
     return xr_value_from_map(result);
 }
@@ -496,7 +527,7 @@ static XrValue toml_stringify(XrayIsolate *X, XrValue *args, int argc) {
         XrJson *json = xr_value_to_json(args[1]);
         xrs_cfg_get_int(X, json, "indent", &indent);
     } else if (argc >= 2 && XR_IS_INT(args[1])) {
-        indent = (int)XR_TO_INT(args[1]);
+        indent = (int) XR_TO_INT(args[1]);
     }
 
     return xr_toml_stringify(X, args[0], indent);
@@ -548,11 +579,13 @@ XR_DEFINE_BUILTIN(toml_parse, "parse", "(data: string): Json?", "Parse TOML stri
 XR_DEFINE_BUILTIN(toml_parse_strict, "parseStrict", "(data: string): Json?", "Parse TOML strictly")
 XR_DEFINE_BUILTIN(toml_stringify, "stringify", "(value: Json): string", "Convert to TOML string")
 XR_DEFINE_BUILTIN(toml_parse_file, "parseFile", "(path: string): Json?", "Parse TOML file")
-XR_DEFINE_BUILTIN(toml_write_file, "writeFile", "(path: string, value: Json): bool", "Write TOML file")
+XR_DEFINE_BUILTIN(toml_write_file, "writeFile", "(path: string, value: Json): bool",
+                  "Write TOML file")
 
-XrModule* xr_load_module_toml(XrayIsolate *isolate) {
+XrModule *xr_load_module_toml(XrayIsolate *isolate) {
     XrModule *mod = xr_module_create_native(isolate, "toml");
-    if (!mod) return NULL;
+    if (!mod)
+        return NULL;
 
     XRS_EXPORT(mod, isolate, "parse", toml_parse);
     XRS_EXPORT(mod, isolate, "parseStrict", toml_parse_strict);

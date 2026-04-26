@@ -67,9 +67,8 @@ static void idle_worker_push(XrRuntime *rt, XrMachine *m) {
     // Idempotency guard: skip if this M is already in the list. Prevents
     // the double-push cycle described in XrMachine::in_idle_worker_list.
     bool expected = false;
-    if (!atomic_compare_exchange_strong_explicit(
-            &m->in_idle_worker_list, &expected, true,
-            memory_order_acq_rel, memory_order_relaxed)) {
+    if (!atomic_compare_exchange_strong_explicit(&m->in_idle_worker_list, &expected, true,
+                                                 memory_order_acq_rel, memory_order_relaxed)) {
         return;
     }
 
@@ -77,23 +76,21 @@ static void idle_worker_push(XrRuntime *rt, XrMachine *m) {
     do {
         head = atomic_load_explicit(&rt->idle_worker_list, memory_order_relaxed);
         m->idle_link = head;
-    } while (!atomic_compare_exchange_weak_explicit(
-        &rt->idle_worker_list, &head, m,
-        memory_order_release, memory_order_relaxed));
+    } while (!atomic_compare_exchange_weak_explicit(&rt->idle_worker_list, &head, m,
+                                                    memory_order_release, memory_order_relaxed));
     atomic_fetch_add_explicit(&rt->idle_worker_count, 1, memory_order_relaxed);
 }
 
 static XrMachine *idle_worker_pop(XrRuntime *rt) {
     for (int retry = 0; retry < 8; retry++) {
         XrMachine *head = atomic_load_explicit(&rt->idle_worker_list, memory_order_acquire);
-        if (!head) return NULL;
+        if (!head)
+            return NULL;
         XrMachine *next = head->idle_link;
-        if (atomic_compare_exchange_weak_explicit(
-                &rt->idle_worker_list, &head, next,
-                memory_order_acq_rel, memory_order_acquire)) {
+        if (atomic_compare_exchange_weak_explicit(&rt->idle_worker_list, &head, next,
+                                                  memory_order_acq_rel, memory_order_acquire)) {
             head->idle_link = NULL;
-            atomic_store_explicit(&head->in_idle_worker_list, false,
-                                   memory_order_release);
+            atomic_store_explicit(&head->in_idle_worker_list, false, memory_order_release);
             atomic_fetch_sub_explicit(&rt->idle_worker_count, 1, memory_order_relaxed);
             return head;
         }
@@ -105,20 +102,23 @@ static XrMachine *idle_worker_pop(XrRuntime *rt) {
 // No-op if the stack is empty.
 void wake_idle_worker(XrRuntime *rt) {
     XrMachine *m = idle_worker_pop(rt);
-    if (!m) return;
+    if (!m)
+        return;
     atomic_store_explicit(&m->park_state, XR_PARK_WOKEN, memory_order_release);
     xr_park_futex_wake(&m->park_state);
 }
 
 // Public API: wake one idle worker (for use by xcoro.c etc.)
 void xr_runtime_wake_idle_worker(XrRuntime *runtime) {
-    if (runtime) wake_idle_worker(runtime);
+    if (runtime)
+        wake_idle_worker(runtime);
 }
 
 // Wake Worker (simple futex wake via park_state)
 void worker_unpark(XrWorker *worker) {
     XrMachine *m = worker->m;
-    if (!m) return;  // M detached during handoff
+    if (!m)
+        return;  // M detached during handoff
     atomic_store_explicit(&m->park_state, XR_PARK_WOKEN, memory_order_release);
     xr_park_futex_wake(&m->park_state);
 }
@@ -156,10 +156,12 @@ static void try_immigrate(XrWorker *worker) {
     for (int p = 0; p < XR_RUNQ_COUNT; p++) {
         XrMigrationPath *mp = &runtime->migration_paths[worker->p.id];
         int source_id = mp->prio[p].target_worker;
-        if (source_id < 0 || source_id >= runtime->worker_count) continue;
+        if (source_id < 0 || source_id >= runtime->worker_count)
+            continue;
 
         // Only immigrate if our queue for this priority is empty
-        if (xr_runq_len(&worker->p.runq[p]) > 0) continue;
+        if (xr_runq_len(&worker->p.runq[p]) > 0)
+            continue;
 
         XrWorker *source = &runtime->workers[source_id];
         int stolen = xr_runq_steal(&source->p.runq[p], &worker->p.runq[p], 50);
@@ -227,8 +229,7 @@ XrCoroutine *worker_poll_sources(XrWorker *worker) {
         // worker — skip queue push/pop, return directly for execution.
         if (ready.count == 1 && ready.head) {
             XrCoroutine *io_coro = ready.head;
-            int aff = atomic_load_explicit(&io_coro->affinity_p,
-                                           memory_order_relaxed);
+            int aff = atomic_load_explicit(&io_coro->affinity_p, memory_order_relaxed);
             if (aff == p->id) {
                 io_coro->sched_link = NULL;
                 XR_DCHECK(!xr_coro_flags_has(io_coro, XR_CORO_FLG_DONE),
@@ -260,8 +261,7 @@ after_netpoll:
     // Adaptive poll_skip feedback: EWMA of I/O event frequency.
     // Decay 7/8: io_ewma = io_ewma * 7/8 + sample * 1/8
     // Sample: 256 if events, 0 if none. Range [0, 256].
-    p->io_poll_ewma = p->io_poll_ewma - (p->io_poll_ewma >> 3)
-                    + (total_io_events > 0 ? 32 : 0);
+    p->io_poll_ewma = p->io_poll_ewma - (p->io_poll_ewma >> 3) + (total_io_events > 0 ? 32 : 0);
 
     // Async thread pool completions
     if (runtime->async_pool) {
@@ -274,8 +274,8 @@ after_netpoll:
     // burst of 10000 timers requires ~100 iterations.
     int64_t now = xr_monotonic_ticks();
     if (p->timer_wheel && now > p->last_timer_tick) {
-        int32_t inbox_before = atomic_load_explicit(
-            &runtime->total_inbox_len, memory_order_relaxed);
+        int32_t inbox_before =
+            atomic_load_explicit(&runtime->total_inbox_len, memory_order_relaxed);
         do {
             xr_bump_timers(p->timer_wheel, now);
         } while (p->timer_wheel->yield_slot != XR_TW_SLOT_INACTIVE);
@@ -283,14 +283,16 @@ after_netpoll:
         // After timer batch: wake idle workers to help process burst.
         // Wake count = min(new_items, idle_workers) — no point waking
         // more workers than available work or idle capacity.
-        int32_t new_items = atomic_load_explicit(
-            &runtime->total_inbox_len, memory_order_relaxed) - inbox_before;
+        int32_t new_items =
+            atomic_load_explicit(&runtime->total_inbox_len, memory_order_relaxed) - inbox_before;
         if (new_items > 0) {
-            int idle_count = atomic_load_explicit(
-                &runtime->idle_worker_count, memory_order_relaxed);
-            if (idle_count < 0) idle_count = 0;
+            int idle_count =
+                atomic_load_explicit(&runtime->idle_worker_count, memory_order_relaxed);
+            if (idle_count < 0)
+                idle_count = 0;
             int wakes = new_items < idle_count ? new_items : idle_count;
-            if (wakes < 1) wakes = 1;
+            if (wakes < 1)
+                wakes = 1;
             for (int _w = 0; _w < wakes; _w++)
                 wake_idle_worker(runtime);
         }
@@ -319,11 +321,13 @@ after_netpoll:
 // 1. Normal sleep: directly wake coroutine
 // 2. Select wait: use CAS to prevent duplicate wake, remove from blocked queue
 static void worker_sleep_timeout_callback(void *arg) {
-    XrCoroutine *coro = (XrCoroutine *)arg;
-    if (!coro) return;
+    XrCoroutine *coro = (XrCoroutine *) arg;
+    if (!coro)
+        return;
 
-    XR_DBG_TIMER("Worker callback triggered: coro=%d, timer_active=%d", coro->id,
-                 coro->ext ? (int)atomic_load_explicit(&coro->ext->timer_active, memory_order_relaxed) : 0);
+    XR_DBG_TIMER(
+        "Worker callback triggered: coro=%d, timer_active=%d", coro->id,
+        coro->ext ? (int) atomic_load_explicit(&coro->ext->timer_active, memory_order_relaxed) : 0);
 
     // Check if timer was cancelled (coroutine recycle cancels timer)
     if (!coro->ext || !atomic_load_explicit(&coro->ext->timer_active, memory_order_relaxed)) {
@@ -342,7 +346,8 @@ static void worker_sleep_timeout_callback(void *arg) {
     // Get Runtime (from current Worker)
     XrWorker *worker = xr_current_worker();
     XrRuntime *runtime = worker ? worker->p.runtime : NULL;
-    if (!runtime) return;
+    if (!runtime)
+        return;
 
     // Check if runtime is running (avoid waking during exit)
     if (!atomic_load(&runtime->running)) {
@@ -367,7 +372,7 @@ static void worker_sleep_timeout_callback(void *arg) {
         // Check if waiting on channel (sendTimeout/recvTimeout)
         if (coro->wait_channel) {
             // Remove from channel wait queue
-            XrChannel *ch = (XrChannel*)coro->wait_channel;
+            XrChannel *ch = (XrChannel *) coro->wait_channel;
             xr_channel_remove_waiter(ch, coro);
             coro->wait_channel = NULL;
         }
@@ -395,14 +400,17 @@ static void worker_sleep_timeout_callback(void *arg) {
 
 // Add sleep timer to Worker's Timer Wheel (lock-free, owner-private)
 void xr_worker_add_sleep_timer(XrWorker *worker, XrCoroutine *coro, int64_t delay_ms) {
-    if (!worker || !coro || delay_ms < 0) return;
+    if (!worker || !coro || delay_ms < 0)
+        return;
 
     XrTimerWheel *tw = worker->p.timer_wheel;
-    if (!tw) return;
+    if (!tw)
+        return;
 
     // Use coroutine's ext timer node (lazy-alloc ext on first sleep)
     XrCoroExt *text = xr_coro_ensure_ext(coro);
-    if (!text) return;
+    if (!text)
+        return;
     XrTWheelTimer *timer = &text->timer;
 
     // Initialize timer node
@@ -421,8 +429,8 @@ void xr_worker_add_sleep_timer(XrWorker *worker, XrCoroutine *coro, int64_t dela
     int64_t timeout_pos = xr_monotonic_ticks() + delay_ms;
 
     // Set timer (must be called from owner worker)
-    XR_DBG_TIMER("Worker set_timer: tw=%p, timeout_pos=%lld, tw->pos=%lld, owner=%d",
-                 (void*)tw, (long long)timeout_pos, (long long)tw->pos, worker->p.id);
+    XR_DBG_TIMER("Worker set_timer: tw=%p, timeout_pos=%lld, tw->pos=%lld, owner=%d", (void *) tw,
+                 (long long) timeout_pos, (long long) tw->pos, worker->p.id);
     xr_twheel_set_timer(tw, timer, worker_sleep_timeout_callback, coro, timeout_pos);
 }
 
@@ -432,12 +440,15 @@ void xr_worker_add_sleep_timer(XrWorker *worker, XrCoroutine *coro, int64_t dela
 // - If current worker owns the timer: direct cancel (lock-free)
 // - If other worker owns the timer: enqueue to owner's canceled_queue
 void xr_worker_cancel_timer(XrWorker *current_worker, XrCoroutine *coro) {
-    if (!coro || !coro->ext) return;
-    if (!atomic_load_explicit(&coro->ext->timer_active, memory_order_relaxed)) return;
+    if (!coro || !coro->ext)
+        return;
+    if (!atomic_load_explicit(&coro->ext->timer_active, memory_order_relaxed))
+        return;
 
     int owner_id = coro->ext->timer_wheel_owner;
     XrRuntime *runtime = current_worker ? current_worker->p.runtime : NULL;
-    if (!runtime) return;
+    if (!runtime)
+        return;
 
     // Get owner worker's timer wheel
     if (owner_id < 0 || owner_id >= runtime->worker_count) {
@@ -462,8 +473,8 @@ void xr_worker_cancel_timer(XrWorker *current_worker, XrCoroutine *coro) {
         // Cross-worker: enqueue to owner's canceled_queue (async)
         xr_timer_queue_cancel(owner_tw, &coro->ext->timer, coro);
         atomic_store_explicit(&coro->ext->timer_active, false, memory_order_relaxed);
-        XR_DBG_TIMER("Timer cancel queued: coro=%d, owner=%d, current=%d",
-                     coro->id, owner_id, current_worker ? current_worker->p.id : -1);
+        XR_DBG_TIMER("Timer cancel queued: coro=%d, owner=%d, current=%d", coro->id, owner_id,
+                     current_worker ? current_worker->p.id : -1);
     }
 }
 
@@ -472,11 +483,14 @@ void xr_worker_cancel_timer(XrWorker *current_worker, XrCoroutine *coro) {
 // Check for work by scanning actual deque sizes (accurate, used only before park)
 static bool runtime_has_work(XrRuntime *runtime) {
     for (int i = 0; i < runtime->worker_count; i++) {
-        if (atomic_load_explicit(&runtime->workers[i].p.lifo_slot, memory_order_relaxed)) return true;
-        if (xr_proc_total_queue_len(&runtime->workers[i].p) > 0) return true;
+        if (atomic_load_explicit(&runtime->workers[i].p.lifo_slot, memory_order_relaxed))
+            return true;
+        if (xr_proc_total_queue_len(&runtime->workers[i].p) > 0)
+            return true;
         // Check continuation deque: parent coros waiting while child
         // runs JIT code without yielding are stealable work.
-        if (xr_steal_queue_size(&runtime->workers[i].p.cont_deque) > 0) return true;
+        if (xr_steal_queue_size(&runtime->workers[i].p.cont_deque) > 0)
+            return true;
     }
     if (atomic_load_explicit(&runtime->total_inbox_len, memory_order_relaxed) > 0)
         return true;
@@ -571,9 +585,9 @@ static void worker_park(XrWorker *worker) {
         // io_poll_ewma > 128 means >50% of polls had IO events.
         int64_t timeout_ms;
         if (worker->p.io_poll_ewma > 128) {
-            timeout_ms = 2;    // IO heavy: wake quickly for IO events
+            timeout_ms = 2;  // IO heavy: wake quickly for IO events
         } else {
-            timeout_ms = 10;   // CPU heavy: longer sleep, less overhead
+            timeout_ms = 10;  // CPU heavy: longer sleep, less overhead
         }
 
         // Timer-aware: clamp timeout to next timer expiry
@@ -582,15 +596,17 @@ static void worker_park(XrWorker *worker) {
             int64_t now_ticks = xr_monotonic_ticks();
             if (next > now_ticks) {
                 int64_t delta = next - now_ticks;
-                if (delta < timeout_ms) timeout_ms = delta;
+                if (delta < timeout_ms)
+                    timeout_ms = delta;
             } else {
                 timeout_ms = 1;
             }
         }
-        if (timeout_ms < 1) timeout_ms = 1;
+        if (timeout_ms < 1)
+            timeout_ms = 1;
 
         // Futex-based sleep with timeout
-        uint32_t timeout_us = (uint32_t)(timeout_ms * 1000);
+        uint32_t timeout_us = (uint32_t) (timeout_ms * 1000);
         atomic_store_explicit(&worker->m->park_state, XR_PARK_IDLE, memory_order_release);
         xr_park_futex_wait(&worker->m->park_state, XR_PARK_IDLE, timeout_us);
     }
@@ -612,10 +628,9 @@ static void worker_park(XrWorker *worker) {
 // Set CPU affinity for the worker's thread (best effort; advisory on mac).
 static void worker_bind_cpu(XrWorker *worker) {
 #ifdef __APPLE__
-    thread_affinity_policy_data_t policy = { worker->p.id };
-    thread_policy_set(pthread_mach_thread_np(pthread_self()),
-                      THREAD_AFFINITY_POLICY,
-                      (thread_policy_t)&policy, 1);
+    thread_affinity_policy_data_t policy = {worker->p.id};
+    thread_policy_set(pthread_mach_thread_np(pthread_self()), THREAD_AFFINITY_POLICY,
+                      (thread_policy_t) &policy, 1);
 #elif defined(__linux__)
     cpu_set_t cpuset;
     CPU_ZERO(&cpuset);
@@ -627,15 +642,15 @@ static void worker_bind_cpu(XrWorker *worker) {
     DWORD_PTR mask = 1ULL << (worker->p.id % sysinfo.dwNumberOfProcessors);
     SetThreadAffinityMask(GetCurrentThread(), mask);
 #else
-    (void)worker;
+    (void) worker;
 #endif
 }
 
 // Run one round of housekeeping when local queue is empty: poll sources
 // (netpoll + async + timer), reductions-based balance check, and per-priority
 // migration. Returns false if runtime is shutting down.
-static bool worker_housekeeping(XrWorker *worker, XrRuntime *runtime,
-                                 int *poll_skip_io, XrCoroutine **io_fast_out) {
+static bool worker_housekeeping(XrWorker *worker, XrRuntime *runtime, int *poll_skip_io,
+                                XrCoroutine **io_fast_out) {
     *io_fast_out = NULL;
     if (*poll_skip_io <= 0) {
         *io_fast_out = worker_poll_sources(worker);
@@ -653,7 +668,8 @@ static bool worker_housekeeping(XrWorker *worker, XrRuntime *runtime,
     for (int pi = 0; pi < XR_RUNQ_COUNT; pi++) {
         XrMigrationLimit *ml = &runtime->migration_paths[worker->p.id].prio[pi];
         int len = xr_runq_len(&worker->p.runq[pi]);
-        if (len > 0) need_immigrate = false;
+        if (len > 0)
+            need_immigrate = false;
         if (len > ml->limit_here && ml->target_worker >= 0) {
             need_emigrate = true;
         }
@@ -675,9 +691,8 @@ static bool worker_housekeeping(XrWorker *worker, XrRuntime *runtime,
 // Sets *out_delay_hint to the shortest remaining-freshness window (used to
 // decide a brief sched_yield when all candidates are too fresh to steal).
 static XrCoroutine *worker_try_steal(XrWorker *worker, XrRuntime *runtime,
-                                      _Atomic bool *running_ptr,
-                                      int64_t *out_delay_hint,
-                                      bool *should_exit) {
+                                     _Atomic bool *running_ptr, int64_t *out_delay_hint,
+                                     bool *should_exit) {
     *out_delay_hint = 0;
     *should_exit = false;
     atomic_store(&worker->m->state, M_STEALING);
@@ -693,7 +708,8 @@ static XrCoroutine *worker_try_steal(XrWorker *worker, XrRuntime *runtime,
                 return NULL;
             }
             int i = (start + j) % runtime->worker_count;
-            if (i == worker->p.id) continue;
+            if (i == worker->p.id)
+                continue;
 
             XrWorker *victim = &runtime->workers[i];
 
@@ -711,8 +727,7 @@ static XrCoroutine *worker_try_steal(XrWorker *worker, XrRuntime *runtime,
                     }
                 }
 
-                int stolen = xr_runq_steal(&victim->p.runq[p],
-                                            &worker->p.runq[p], 50);
+                int stolen = xr_runq_steal(&victim->p.runq[p], &worker->p.runq[p], 50);
                 if (stolen > 0) {
                     worker->p.local_runq_len += stolen;
                     worker->p.stats.stolen_count += stolen;
@@ -737,8 +752,8 @@ static XrCoroutine *worker_try_steal(XrWorker *worker, XrRuntime *runtime,
 
 // Limited spinning for new work after stealing failed. Handles spinning-count
 // accounting and periodic inbox drain + timer wheel bump. Returns coro or NULL.
-static XrCoroutine *worker_spin(XrWorker *worker, XrRuntime *runtime,
-                                 _Atomic bool *running_ptr, bool *should_exit) {
+static XrCoroutine *worker_spin(XrWorker *worker, XrRuntime *runtime, _Atomic bool *running_ptr,
+                                bool *should_exit) {
     *should_exit = false;
     if (!worker->m->spinning) {
         int cur_spin = atomic_load_explicit(&runtime->spinning_count, memory_order_relaxed);
@@ -748,7 +763,8 @@ static XrCoroutine *worker_spin(XrWorker *worker, XrRuntime *runtime,
             atomic_fetch_add(&runtime->spinning_count, 1);
         }
     }
-    if (!worker->m->spinning) return NULL;
+    if (!worker->m->spinning)
+        return NULL;
 
     XrCoroutine *coro = NULL;
     int64_t cached_now = xr_monotonic_ticks();
@@ -773,7 +789,8 @@ static XrCoroutine *worker_spin(XrWorker *worker, XrRuntime *runtime,
 // Resetspinning: called after finding work. If we were the last spinner,
 // wake one idle worker so newly-arrived work does not sit undiscovered.
 static inline void worker_reset_spinning(XrWorker *worker, XrRuntime *runtime) {
-    if (!worker->m->spinning) return;
+    if (!worker->m->spinning)
+        return;
     worker->m->spinning = false;
     int prev_spin = atomic_fetch_sub(&runtime->spinning_count, 1);
     if (prev_spin == 1) {
@@ -792,7 +809,7 @@ static inline void worker_reset_spinning(XrWorker *worker, XrRuntime *runtime) {
 // worker_try_steal, worker_spin, and worker_reset_spinning. The main
 // function remains the state machine but stays under the 150-line limit.
 void *worker_loop(void *arg) {
-    XrWorker *worker = (XrWorker *)arg;
+    XrWorker *worker = (XrWorker *) arg;
     XrRuntime *runtime = worker->p.runtime;
     _Atomic bool *running_ptr = &runtime->running;
 
@@ -842,9 +859,9 @@ void *worker_loop(void *arg) {
             int64_t min_steal_delay = 0;
             if (!coro && atomic_load(running_ptr)) {
                 bool exit_flag = false;
-                coro = worker_try_steal(worker, runtime, running_ptr,
-                                         &min_steal_delay, &exit_flag);
-                if (exit_flag) goto exit_loop;
+                coro = worker_try_steal(worker, runtime, running_ptr, &min_steal_delay, &exit_flag);
+                if (exit_flag)
+                    goto exit_loop;
                 if (!coro && min_steal_delay > 0) {
                     sched_yield();
                 }
@@ -854,7 +871,8 @@ void *worker_loop(void *arg) {
             if (!coro) {
                 bool exit_flag = false;
                 coro = worker_spin(worker, runtime, running_ptr, &exit_flag);
-                if (exit_flag) goto exit_loop;
+                if (exit_flag)
+                    goto exit_loop;
             }
 
         found_work:
@@ -867,8 +885,9 @@ void *worker_loop(void *arg) {
 
                 // Adaptive polling: EWMA-based continuous poll_skip.
                 // io_poll_ewma range [0,256], poll_skip range [1,8].
-                poll_skip = 8 - (int)(worker->p.io_poll_ewma >> 5);
-                if (poll_skip < 1) poll_skip = 1;
+                poll_skip = 8 - (int) (worker->p.io_poll_ewma >> 5);
+                if (poll_skip < 1)
+                    poll_skip = 1;
 
                 atomic_store(&worker->m->state, M_RUNNING);
                 worker_exec_with_cont_stealing(worker, coro);
@@ -883,9 +902,11 @@ void *worker_loop(void *arg) {
 
             // No work: ensure next iteration polls, then park.
             poll_skip = 0;
-            if (!atomic_load(running_ptr)) goto exit_loop;
+            if (!atomic_load(running_ptr))
+                goto exit_loop;
             worker_park(worker);
-            if (!atomic_load(running_ptr)) goto exit_loop;
+            if (!atomic_load(running_ptr))
+                goto exit_loop;
         }
     }
 

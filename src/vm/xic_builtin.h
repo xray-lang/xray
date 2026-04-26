@@ -53,7 +53,7 @@ extern "C" {
  */
 typedef struct XrICBuiltin {
     const XrMethodSlot *slot;
-    int16_t  cached_tid;
+    int16_t cached_tid;
     uint16_t hits;
     uint16_t misses;
     uint16_t _reserved;
@@ -63,14 +63,14 @@ typedef struct XrICBuiltin {
 
 typedef struct XrICBuiltinTable {
     XrICBuiltin *caches;
-    int count;     /* total slots in use; equals PROTO_CODE_COUNT(proto) */
-    int capacity;  /* underlying storage capacity */
+    int count;    /* total slots in use; equals PROTO_CODE_COUNT(proto) */
+    int capacity; /* underlying storage capacity */
 } XrICBuiltinTable;
 
 /* ========== Construction / teardown ========== */
 
 XR_FUNC XrICBuiltinTable *xr_ic_builtin_table_new(int initial_capacity);
-XR_FUNC void              xr_ic_builtin_table_free(XrICBuiltinTable *table);
+XR_FUNC void xr_ic_builtin_table_free(XrICBuiltinTable *table);
 
 /*
  * Returns the index of a freshly allocated, zero-initialized slot,
@@ -79,9 +79,9 @@ XR_FUNC void              xr_ic_builtin_table_free(XrICBuiltinTable *table);
  */
 XR_FUNC int xr_ic_builtin_table_alloc(XrICBuiltinTable *table);
 
-static inline XrICBuiltin *xr_ic_builtin_table_get(XrICBuiltinTable *table,
-                                                   int index) {
-    if (!table || index < 0 || index >= table->count) return NULL;
+static inline XrICBuiltin *xr_ic_builtin_table_get(XrICBuiltinTable *table, int index) {
+    if (!table || index < 0 || index >= table->count)
+        return NULL;
     return &table->caches[index];
 }
 

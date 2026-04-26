@@ -24,7 +24,8 @@
 // attribute/ABI matches the definition; previously it was a bare
 // `extern` which works on every current platform but would diverge from
 // the definition on a hypothetical amalgamated build.
-XR_FUNC XrValue yaml_emit(XrayIsolate *isolate, XrValue value, int indent, int flow_level, int line_width);
+XR_FUNC XrValue yaml_emit(XrayIsolate *isolate, XrValue value, int indent, int flow_level,
+                          int line_width);
 
 // ========== Public API ==========
 
@@ -85,12 +86,9 @@ static XrValue yaml_parse(XrayIsolate *X, XrValue *args, int argc) {
 static XrValue yaml_parse_strict(XrayIsolate *X, XrValue *args, int argc) {
     if (argc < 1 || !XR_IS_STRING(args[0])) {
         XrMap *result = xr_map_new(xr_current_coro(X));
-        xr_map_set(result,
-            xr_string_value(xr_string_intern(X, "data", 4, 0)),
-            xr_null());
-        xr_map_set(result,
-            xr_string_value(xr_string_intern(X, "errors", 6, 0)),
-            xr_value_from_array(xr_array_new(xr_current_coro(X))));
+        xr_map_set(result, xr_string_value(xr_string_intern(X, "data", 4, 0)), xr_null());
+        xr_map_set(result, xr_string_value(xr_string_intern(X, "errors", 6, 0)),
+                   xr_value_from_array(xr_array_new(xr_current_coro(X))));
         return xr_value_from_map(result);
     }
     XrString *str = XR_TO_STRING(args[0]);
@@ -105,26 +103,18 @@ static XrValue yaml_parse_strict(XrayIsolate *X, XrValue *args, int argc) {
     yaml_parser_cleanup(&parser);
 
     XrMap *result = xr_map_new(xr_current_coro(X));
-    xr_map_set(result,
-        xr_string_value(xr_string_intern(X, "data", 4, 0)),
-        parse_result.data);
-    xr_map_set(result,
-        xr_string_value(xr_string_intern(X, "errors", 6, 0)),
-        xr_value_from_array(parse_result.errors));
+    xr_map_set(result, xr_string_value(xr_string_intern(X, "data", 4, 0)), parse_result.data);
+    xr_map_set(result, xr_string_value(xr_string_intern(X, "errors", 6, 0)),
+               xr_value_from_array(parse_result.errors));
 
     XrMap *meta = xr_map_new(xr_current_coro(X));
-    xr_map_set(meta,
-        xr_string_value(xr_string_intern(X, "lines", 5, 0)),
-        xr_int(parse_result.meta.lines));
-    xr_map_set(meta,
-        xr_string_value(xr_string_intern(X, "documents", 9, 0)),
-        xr_int(parse_result.meta.documents));
-    xr_map_set(meta,
-        xr_string_value(xr_string_intern(X, "anchors", 7, 0)),
-        xr_int(parse_result.meta.anchors));
-    xr_map_set(result,
-        xr_string_value(xr_string_intern(X, "meta", 4, 0)),
-        xr_value_from_map(meta));
+    xr_map_set(meta, xr_string_value(xr_string_intern(X, "lines", 5, 0)),
+               xr_int(parse_result.meta.lines));
+    xr_map_set(meta, xr_string_value(xr_string_intern(X, "documents", 9, 0)),
+               xr_int(parse_result.meta.documents));
+    xr_map_set(meta, xr_string_value(xr_string_intern(X, "anchors", 7, 0)),
+               xr_int(parse_result.meta.anchors));
+    xr_map_set(result, xr_string_value(xr_string_intern(X, "meta", 4, 0)), xr_value_from_map(meta));
 
     return xr_value_from_map(result);
 }
@@ -150,11 +140,11 @@ static XrValue yaml_stringify(XrayIsolate *X, XrValue *args, int argc) {
 
     if (argc >= 2 && xr_value_is_json(args[1])) {
         XrJson *json = xr_value_to_json(args[1]);
-        xrs_cfg_get_int(X, json, "indent",    &indent);
+        xrs_cfg_get_int(X, json, "indent", &indent);
         xrs_cfg_get_int(X, json, "flowLevel", &flow_level);
         xrs_cfg_get_int(X, json, "lineWidth", &line_width);
     } else if (argc >= 2 && XR_IS_INT(args[1])) {
-        indent = (int)XR_TO_INT(args[1]);
+        indent = (int) XR_TO_INT(args[1]);
     }
 
     return yaml_emit(X, args[0], indent, flow_level, line_width);
@@ -188,7 +178,8 @@ static XrValue yaml_write_file(XrayIsolate *X, XrValue *args, int argc) {
     XrString *path = XR_TO_STRING(args[0]);
     XrValue yaml_str = xr_yaml_stringify(X, args[1], 2);
 
-    if (!XR_IS_STRING(yaml_str)) return xr_bool(false);
+    if (!XR_IS_STRING(yaml_str))
+        return xr_bool(false);
     XrString *str = XR_TO_STRING(yaml_str);
 
     return xr_bool(xrs_file_write_all_sync(path->data, str->data, str->length));
@@ -204,14 +195,17 @@ static XrValue yaml_write_file(XrayIsolate *X, XrValue *args, int argc) {
 
 XR_DEFINE_BUILTIN(yaml_parse, "parse", "(data: string): Json?", "Parse YAML string")
 XR_DEFINE_BUILTIN(yaml_parse_strict, "parseStrict", "(data: string): Json?", "Parse YAML strictly")
-XR_DEFINE_BUILTIN(yaml_parse_all, "parseAll", "(data: string): Array<Json>", "Parse all YAML documents")
+XR_DEFINE_BUILTIN(yaml_parse_all, "parseAll", "(data: string): Array<Json>",
+                  "Parse all YAML documents")
 XR_DEFINE_BUILTIN(yaml_stringify, "stringify", "(value: Json): string", "Convert to YAML string")
 XR_DEFINE_BUILTIN(yaml_parse_file, "parseFile", "(path: string): Json?", "Parse YAML file")
-XR_DEFINE_BUILTIN(yaml_write_file, "writeFile", "(path: string, value: Json): bool", "Write YAML file")
+XR_DEFINE_BUILTIN(yaml_write_file, "writeFile", "(path: string, value: Json): bool",
+                  "Write YAML file")
 
-XrModule* xr_load_module_yaml(XrayIsolate *isolate) {
+XrModule *xr_load_module_yaml(XrayIsolate *isolate) {
     XrModule *mod = xr_module_create_native(isolate, "yaml");
-    if (!mod) return NULL;
+    if (!mod)
+        return NULL;
 
     XRS_EXPORT(mod, isolate, "parse", yaml_parse);
     XRS_EXPORT(mod, isolate, "parseStrict", yaml_parse_strict);

@@ -27,12 +27,14 @@
 // ============================================================================
 
 XrJsonValue *xlsp_analyze_definition(XrLspServer *server, XrLspDocument *doc, XrLspPosition pos) {
-    if (!doc || !doc->content) return NULL;
+    if (!doc || !doc->content)
+        return NULL;
     XaAnalyzer *analyzer = server ? server->workspace_analyzer : NULL;
 
     uint32_t start, end;
     char *word = xlsp_word_at_position(doc, pos, &start, &end);
-    if (!word) return NULL;
+    if (!word)
+        return NULL;
 
     const char *content = doc->content;
     XrJsonValue *result = NULL;
@@ -41,18 +43,19 @@ XrJsonValue *xlsp_analyze_definition(XrLspServer *server, XrLspDocument *doc, Xr
     if (analyzer) {
         // lookup_at resolves the correct symbol even with shadowing
         XaSymbol *sym = xa_analyzer_lookup_at(analyzer, doc->uri, pos.line + 1, pos.character + 1);
-        if (!sym) sym = xa_analyzer_lookup(analyzer, word);
+        if (!sym)
+            sym = xa_analyzer_lookup(analyzer, word);
 
         if (sym && sym->location.line > 0) {
-            const char *target_uri = (sym->location.file && sym->location.file[0])
-                ? sym->location.file : doc->uri;
+            const char *target_uri =
+                (sym->location.file && sym->location.file[0]) ? sym->location.file : doc->uri;
             result = xjson_new_object();
             xjson_object_set(result, "uri", xjson_new_string(target_uri));
 
             int col = sym->location.column > 0 ? sym->location.column - 1 : 0;
             xjson_object_set(result, "range",
-                xjson_make_range(sym->location.line - 1, col,
-                                     sym->location.line - 1, col + (int)strlen(sym->name)));
+                             xjson_make_range(sym->location.line - 1, col, sym->location.line - 1,
+                                              col + (int) strlen(sym->name)));
         }
     }
 
@@ -70,8 +73,8 @@ XrJsonValue *xlsp_analyze_definition(XrLspServer *server, XrLspDocument *doc, Xr
                 xjson_object_set(result, "uri", xjson_new_string(doc->uri));
 
                 xjson_object_set(result, "range",
-                    xjson_make_range(entry->line, entry->start_char,
-                                         entry->end_line, entry->end_char));
+                                 xjson_make_range(entry->line, entry->start_char, entry->end_line,
+                                                  entry->end_char));
 
                 break;
             }
@@ -83,10 +86,11 @@ XrJsonValue *xlsp_analyze_definition(XrLspServer *server, XrLspDocument *doc, Xr
     if (!result && start > 1 && content[start - 1] == '.') {
         uint32_t mod_end = start - 1;
         uint32_t mod_start = mod_end;
-        while (mod_start > 0 && (content[mod_start - 1] == '_' ||
-               (content[mod_start - 1] >= 'a' && content[mod_start - 1] <= 'z') ||
-               (content[mod_start - 1] >= 'A' && content[mod_start - 1] <= 'Z') ||
-               (content[mod_start - 1] >= '0' && content[mod_start - 1] <= '9'))) {
+        while (mod_start > 0 &&
+               (content[mod_start - 1] == '_' ||
+                (content[mod_start - 1] >= 'a' && content[mod_start - 1] <= 'z') ||
+                (content[mod_start - 1] >= 'A' && content[mod_start - 1] <= 'Z') ||
+                (content[mod_start - 1] >= '0' && content[mod_start - 1] <= '9'))) {
             mod_start--;
         }
 
@@ -125,12 +129,12 @@ static XrJsonValue *make_ref_location(const char *uri, int line, int start_col, 
 
 // Reference context for AST traversal
 typedef struct {
-    const char *target_name;    // Name to search for
-    XaScope *def_scope;         // Scope where symbol is defined (for scoping)
-    XaScope *current_scope;     // Current scope during traversal
-    XaScope *global_scope;      // Global scope
-    XrJsonValue *refs;          // Collected references (JSON array)
-    const char *uri;            // Document URI
+    const char *target_name;  // Name to search for
+    XaScope *def_scope;       // Scope where symbol is defined (for scoping)
+    XaScope *current_scope;   // Current scope during traversal
+    XaScope *global_scope;    // Global scope
+    XrJsonValue *refs;        // Collected references (JSON array)
+    const char *uri;          // Document URI
 } RefFindContext;
 
 // Forward declarations
@@ -139,7 +143,8 @@ static XaScope *find_child_scope_for_refs(XaScope *parent, void *ast_node);
 
 // Check if the current scope can see the definition scope (handles shadowing)
 static bool can_see_definition(RefFindContext *ctx) {
-    if (!ctx->def_scope || !ctx->current_scope) return false;
+    if (!ctx->def_scope || !ctx->current_scope)
+        return false;
 
     // Check if current scope is the definition scope or a descendant
     if (!xa_scope_is_descendant(ctx->current_scope, ctx->def_scope)) {
@@ -161,7 +166,8 @@ static bool can_see_definition(RefFindContext *ctx) {
 
 // Helper: find child scope by AST node (same as rename)
 static XaScope *find_child_scope_for_refs(XaScope *parent, void *ast_node) {
-    if (!parent) return NULL;
+    if (!parent)
+        return NULL;
     for (int i = 0; i < parent->child_count; i++) {
         if (parent->children[i]->ast_node == ast_node) {
             return parent->children[i];
@@ -180,7 +186,8 @@ static void add_ref_if_visible(RefFindContext *ctx, int line, int col, int name_
 
 // Collect references from AST with scope tracking
 static void collect_refs_from_ast(AstNode *node, RefFindContext *ctx) {
-    if (!node) return;
+    if (!node)
+        return;
 
     switch (node->type) {
         case AST_PROGRAM:
@@ -195,20 +202,21 @@ static void collect_refs_from_ast(AstNode *node, RefFindContext *ctx) {
             // Check function name (defined in parent scope)
             if (fn->name && strcmp(fn->name, ctx->target_name) == 0) {
                 add_ref_if_visible(ctx, node->line, node->column > 0 ? node->column : 1,
-                                   (int)strlen(fn->name));
+                                   (int) strlen(fn->name));
             }
 
             // Enter function scope
             XaScope *saved_scope = ctx->current_scope;
             XaScope *fn_scope = find_child_scope_for_refs(ctx->current_scope, node);
-            if (fn_scope) ctx->current_scope = fn_scope;
+            if (fn_scope)
+                ctx->current_scope = fn_scope;
 
             // Check parameters
             for (int i = 0; i < fn->param_count; i++) {
                 XrParamNode *param = fn->params[i];
                 if (param && param->name && strcmp(param->name, ctx->target_name) == 0) {
                     add_ref_if_visible(ctx, param->line, param->column > 0 ? param->column : 1,
-                                       (int)strlen(param->name));
+                                       (int) strlen(param->name));
                 }
             }
 
@@ -222,7 +230,7 @@ static void collect_refs_from_ast(AstNode *node, RefFindContext *ctx) {
             VarDeclNode *var = &node->as.var_decl;
             if (var->name && strcmp(var->name, ctx->target_name) == 0) {
                 add_ref_if_visible(ctx, node->line, node->column > 0 ? node->column : 1,
-                                   (int)strlen(var->name));
+                                   (int) strlen(var->name));
             }
             collect_refs_from_ast(var->initializer, ctx);
             break;
@@ -231,15 +239,16 @@ static void collect_refs_from_ast(AstNode *node, RefFindContext *ctx) {
         case AST_VARIABLE: {
             if (node->as.variable.name && strcmp(node->as.variable.name, ctx->target_name) == 0) {
                 add_ref_if_visible(ctx, node->line, node->column > 0 ? node->column : 1,
-                                   (int)strlen(node->as.variable.name));
+                                   (int) strlen(node->as.variable.name));
             }
             break;
         }
 
         case AST_ASSIGNMENT: {
-            if (node->as.assignment.name && strcmp(node->as.assignment.name, ctx->target_name) == 0) {
+            if (node->as.assignment.name &&
+                strcmp(node->as.assignment.name, ctx->target_name) == 0) {
                 add_ref_if_visible(ctx, node->line, node->column > 0 ? node->column : 1,
-                                   (int)strlen(node->as.assignment.name));
+                                   (int) strlen(node->as.assignment.name));
             }
             collect_refs_from_ast(node->as.assignment.value, ctx);
             break;
@@ -248,7 +257,8 @@ static void collect_refs_from_ast(AstNode *node, RefFindContext *ctx) {
         case AST_BLOCK: {
             XaScope *saved_scope = ctx->current_scope;
             XaScope *block_scope = find_child_scope_for_refs(ctx->current_scope, node);
-            if (block_scope) ctx->current_scope = block_scope;
+            if (block_scope)
+                ctx->current_scope = block_scope;
 
             for (int i = 0; i < node->as.block.count; i++) {
                 collect_refs_from_ast(node->as.block.statements[i], ctx);
@@ -271,7 +281,8 @@ static void collect_refs_from_ast(AstNode *node, RefFindContext *ctx) {
         case AST_FOR_STMT: {
             XaScope *saved_scope = ctx->current_scope;
             XaScope *for_scope = find_child_scope_for_refs(ctx->current_scope, node);
-            if (for_scope) ctx->current_scope = for_scope;
+            if (for_scope)
+                ctx->current_scope = for_scope;
 
             collect_refs_from_ast(node->as.for_stmt.initializer, ctx);
             collect_refs_from_ast(node->as.for_stmt.condition, ctx);
@@ -287,12 +298,13 @@ static void collect_refs_from_ast(AstNode *node, RefFindContext *ctx) {
 
             XaScope *saved_scope = ctx->current_scope;
             XaScope *for_scope = find_child_scope_for_refs(ctx->current_scope, node);
-            if (for_scope) ctx->current_scope = for_scope;
+            if (for_scope)
+                ctx->current_scope = for_scope;
 
             // Check loop variable
             if (fi->item_name && strcmp(fi->item_name, ctx->target_name) == 0) {
                 add_ref_if_visible(ctx, node->line, node->column > 0 ? node->column : 1,
-                                   (int)strlen(fi->item_name));
+                                   (int) strlen(fi->item_name));
             }
 
             collect_refs_from_ast(fi->body, ctx);
@@ -305,14 +317,15 @@ static void collect_refs_from_ast(AstNode *node, RefFindContext *ctx) {
 
             XaScope *saved_scope = ctx->current_scope;
             XaScope *fn_scope = find_child_scope_for_refs(ctx->current_scope, node);
-            if (fn_scope) ctx->current_scope = fn_scope;
+            if (fn_scope)
+                ctx->current_scope = fn_scope;
 
             // Check parameters
             for (int i = 0; i < fn_expr->param_count; i++) {
                 XrParamNode *param = fn_expr->params[i];
                 if (param && param->name && strcmp(param->name, ctx->target_name) == 0) {
                     add_ref_if_visible(ctx, param->line, param->column > 0 ? param->column : 1,
-                                       (int)strlen(param->name));
+                                       (int) strlen(param->name));
                 }
             }
 
@@ -381,7 +394,7 @@ static void collect_refs_from_ast(AstNode *node, RefFindContext *ctx) {
             if (node->as.class_decl.name &&
                 strcmp(node->as.class_decl.name, ctx->target_name) == 0) {
                 add_ref_if_visible(ctx, node->line, node->column > 0 ? node->column : 1,
-                                   (int)strlen(node->as.class_decl.name));
+                                   (int) strlen(node->as.class_decl.name));
             }
 
             // Process methods
@@ -398,9 +411,10 @@ static void collect_refs_from_ast(AstNode *node, RefFindContext *ctx) {
 
 // Helper: lexer-based fallback scan for references (when AST/analyzer unavailable)
 // Uses line_offsets for O(1) column calculation instead of O(N) linear scan.
-static void scan_doc_for_refs_lexer(XrLspDocument *doc, const char *search_word,
-                                     size_t word_len, XrJsonValue *refs) {
-    if (!doc || !doc->content || !search_word) return;
+static void scan_doc_for_refs_lexer(XrLspDocument *doc, const char *search_word, size_t word_len,
+                                    XrJsonValue *refs) {
+    if (!doc || !doc->content || !search_word)
+        return;
 
     Scanner scanner;
     xr_scanner_init(&scanner, doc->content);
@@ -408,31 +422,33 @@ static void scan_doc_for_refs_lexer(XrLspDocument *doc, const char *search_word,
     Token token;
     while (1) {
         token = xr_scanner_scan(&scanner);
-        if (token.type == TK_EOF) break;
-        if (token.type == TK_ERROR) continue;
+        if (token.type == TK_EOF)
+            break;
+        if (token.type == TK_ERROR)
+            continue;
 
-        if (token.type == TK_NAME &&
-            (size_t)token.length == word_len &&
+        if (token.type == TK_NAME && (size_t) token.length == word_len &&
             strncmp(token.start, search_word, word_len) == 0) {
-
             // O(1) column calculation using line_offsets
             int line_idx = token.line - 1;
             int char_pos = 0;
             if (doc->line_offsets && line_idx >= 0 && line_idx < doc->line_count) {
-                uint32_t token_offset = (uint32_t)(token.start - doc->content);
-                char_pos = (int)(token_offset - doc->line_offsets[line_idx]);
+                uint32_t token_offset = (uint32_t) (token.start - doc->content);
+                char_pos = (int) (token_offset - doc->line_offsets[line_idx]);
             } else {
                 // Fallback: linear scan (only if line_offsets unavailable)
                 const char *line_start = doc->content;
                 const char *p = doc->content;
                 while (p < token.start) {
-                    if (*p == '\n') line_start = p + 1;
+                    if (*p == '\n')
+                        line_start = p + 1;
                     p++;
                 }
-                char_pos = (int)(token.start - line_start);
+                char_pos = (int) (token.start - line_start);
             }
 
-            XrJsonValue *loc = make_ref_location(doc->uri, line_idx, char_pos, char_pos + token.length);
+            XrJsonValue *loc =
+                make_ref_location(doc->uri, line_idx, char_pos, char_pos + token.length);
             xjson_array_push(refs, loc);
         }
     }
@@ -441,13 +457,15 @@ static void scan_doc_for_refs_lexer(XrLspDocument *doc, const char *search_word,
 XrJsonValue *xlsp_analyze_references(XrLspServer *server, XrLspDocument *doc, XrLspPosition pos) {
     XrJsonValue *refs = xjson_new_array();
 
-    if (!doc || !doc->content) return refs;
+    if (!doc || !doc->content)
+        return refs;
 
     XaAnalyzer *analyzer = server ? server->workspace_analyzer : NULL;
 
     uint32_t start, end;
     char *search_word = xlsp_word_at_position(doc, pos, &start, &end);
-    if (!search_word) return refs;
+    if (!search_word)
+        return refs;
 
     size_t word_len = end - start;
 
@@ -477,28 +495,26 @@ XrJsonValue *xlsp_analyze_references(XrLspServer *server, XrLspDocument *doc, Xr
             }
 
             // Use scope-aware AST traversal
-            RefFindContext ctx = {
-                .target_name = search_word,
-                .def_scope = def_scope,
-                .current_scope = analyzer->global_scope,
-                .global_scope = analyzer->global_scope,
-                .refs = refs,
-                .uri = doc->uri
-            };
+            RefFindContext ctx = {.target_name = search_word,
+                                  .def_scope = def_scope,
+                                  .current_scope = analyzer->global_scope,
+                                  .global_scope = analyzer->global_scope,
+                                  .refs = refs,
+                                  .uri = doc->uri};
 
             collect_refs_from_ast(doc->ast, &ctx);
             used_semantic_search = true;
 
-            lsp_log("References (semantic): found %d refs for '%s' in %s",
-                    xjson_array_len(refs), search_word, doc->uri);
+            lsp_log("References (semantic): found %d refs for '%s' in %s", xjson_array_len(refs),
+                    search_word, doc->uri);
         }
     }
 
     // Fallback to lexer-based search if semantic search not available
     if (!used_semantic_search) {
         scan_doc_for_refs_lexer(doc, search_word, word_len, refs);
-        lsp_log("References (lexer fallback): found %d refs for '%s' in %s",
-                xjson_array_len(refs), search_word, doc->uri);
+        lsp_log("References (lexer fallback): found %d refs for '%s' in %s", xjson_array_len(refs),
+                search_word, doc->uri);
     }
 
     // =========================================================================
@@ -509,28 +525,27 @@ XrJsonValue *xlsp_analyze_references(XrLspServer *server, XrLspDocument *doc, Xr
 
     if (analyzer) {
         int ref_count = 0;
-        XaSymbolRef *arefs = xa_analyzer_find_references_at(
-            analyzer, doc->uri, pos.line + 1, pos.character + 1, &ref_count);
+        XaSymbolRef *arefs = xa_analyzer_find_references_at(analyzer, doc->uri, pos.line + 1,
+                                                            pos.character + 1, &ref_count);
 
         for (XaSymbolRef *r = arefs; r; r = r->next) {
             // Skip refs already covered by the in-document search above
-            if (r->file && strcmp(r->file, doc->uri) == 0) continue;
+            if (r->file && strcmp(r->file, doc->uri) == 0)
+                continue;
 
             const char *ref_uri = r->file ? r->file : doc->uri;
-            int line = r->line > 0 ? (int)r->line - 1 : 0;
-            int col  = r->column > 0 ? (int)r->column - 1 : 0;
-            int end_col = col + (int)strlen(search_word);
+            int line = r->line > 0 ? (int) r->line - 1 : 0;
+            int col = r->column > 0 ? (int) r->column - 1 : 0;
+            int end_col = col + (int) strlen(search_word);
 
             XrJsonValue *loc = xjson_new_object();
             xjson_object_set(loc, "uri", xjson_new_string(ref_uri));
-            xjson_object_set(loc, "range",
-                xjson_make_range(line, col, line, end_col));
+            xjson_object_set(loc, "range", xjson_make_range(line, col, line, end_col));
             xjson_array_push(refs, loc);
         }
 
         if (ref_count > 0) {
-            lsp_log("References (cross-file analyzer): %d refs for '%s'",
-                    ref_count, search_word);
+            lsp_log("References (cross-file analyzer): %d refs for '%s'", ref_count, search_word);
         }
 
         xa_analyzer_free_references(arefs);
@@ -544,15 +559,18 @@ XrJsonValue *xlsp_analyze_references(XrLspServer *server, XrLspDocument *doc, Xr
 // Document Highlight (scope-aware, single-file)
 // ============================================================================
 
-XrJsonValue *xlsp_analyze_document_highlight(XrLspServer *server, XrLspDocument *doc, XrLspPosition pos) {
+XrJsonValue *xlsp_analyze_document_highlight(XrLspServer *server, XrLspDocument *doc,
+                                             XrLspPosition pos) {
     XrJsonValue *highlights = xjson_new_array();
-    if (!doc || !doc->content) return highlights;
+    if (!doc || !doc->content)
+        return highlights;
 
     XaAnalyzer *analyzer = server ? server->workspace_analyzer : NULL;
 
     uint32_t start, end;
     char *word = xlsp_word_at_position(doc, pos, &start, &end);
-    if (!word) return highlights;
+    if (!word)
+        return highlights;
 
     size_t word_len = end - start;
     bool used_semantic = false;
@@ -560,22 +578,22 @@ XrJsonValue *xlsp_analyze_document_highlight(XrLspServer *server, XrLspDocument 
     // Scope-aware highlight using analyzer
     if (doc->ast && analyzer && analyzer->global_scope) {
         XaSymbol *sym = xa_analyzer_lookup_at(analyzer, doc->uri, pos.line + 1, pos.character + 1);
-        if (!sym) sym = xa_analyzer_lookup(analyzer, word);
+        if (!sym)
+            sym = xa_analyzer_lookup(analyzer, word);
 
         if (sym) {
             XaScope *def_scope = xa_scope_find_definition(analyzer->global_scope, sym->name);
-            if (!def_scope) def_scope = analyzer->global_scope;
+            if (!def_scope)
+                def_scope = analyzer->global_scope;
 
             // Collect references in this document only
             XrJsonValue *refs = xjson_new_array();
-            RefFindContext ctx = {
-                .target_name = word,
-                .def_scope = def_scope,
-                .current_scope = analyzer->global_scope,
-                .global_scope = analyzer->global_scope,
-                .refs = refs,
-                .uri = doc->uri
-            };
+            RefFindContext ctx = {.target_name = word,
+                                  .def_scope = def_scope,
+                                  .current_scope = analyzer->global_scope,
+                                  .global_scope = analyzer->global_scope,
+                                  .refs = refs,
+                                  .uri = doc->uri};
             collect_refs_from_ast(doc->ast, &ctx);
 
             // Convert Location objects to DocumentHighlight objects
@@ -588,11 +606,10 @@ XrJsonValue *xlsp_analyze_document_highlight(XrLspServer *server, XrLspDocument 
                     XrJsonValue *r_start = xjson_get_object(range, "start");
                     XrJsonValue *r_end = xjson_get_object(range, "end");
                     xjson_object_set(hl, "range",
-                        xjson_make_range(
-                            xjson_get_int(r_start, "line"),
-                            xjson_get_int(r_start, "character"),
-                            xjson_get_int(r_end, "line"),
-                            xjson_get_int(r_end, "character")));
+                                     xjson_make_range(xjson_get_int(r_start, "line"),
+                                                      xjson_get_int(r_start, "character"),
+                                                      xjson_get_int(r_end, "line"),
+                                                      xjson_get_int(r_end, "character")));
 
                     // Classify: definition vs read
                     int kind = LSP_HIGHLIGHT_READ;
@@ -620,20 +637,23 @@ XrJsonValue *xlsp_analyze_document_highlight(XrLspServer *server, XrLspDocument 
         Token token;
         while (1) {
             token = xr_scanner_scan(&scanner);
-            if (token.type == TK_EOF) break;
-            if (token.type == TK_ERROR) continue;
-            if (token.type == TK_NAME &&
-                (size_t)token.length == word_len &&
+            if (token.type == TK_EOF)
+                break;
+            if (token.type == TK_ERROR)
+                continue;
+            if (token.type == TK_NAME && (size_t) token.length == word_len &&
                 strncmp(token.start, word, word_len) == 0) {
                 const char *line_start = doc->content;
                 const char *p = doc->content;
                 while (p < token.start) {
-                    if (*p == '\n') line_start = p + 1;
+                    if (*p == '\n')
+                        line_start = p + 1;
                     p++;
                 }
-                int col = (int)(token.start - line_start);
+                int col = (int) (token.start - line_start);
                 XrJsonValue *hl = xjson_new_object();
-                xjson_object_set(hl, "range",
+                xjson_object_set(
+                    hl, "range",
                     xjson_make_range(token.line - 1, col, token.line - 1, col + token.length));
                 xjson_object_set(hl, "kind", xjson_new_number(LSP_HIGHLIGHT_TEXT));
                 xjson_array_push(highlights, hl);

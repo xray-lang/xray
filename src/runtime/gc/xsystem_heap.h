@@ -51,13 +51,13 @@ struct XrCoroGC;
 /* ========== Configuration ========== */
 
 typedef struct XrSysHeapConfig {
-    size_t coro_pool_init_size;     // Initial coroutine pool size (default 1024)
-    size_t class_arena_init_size;   // Initial class arena size (default 64KB)
-    bool enable_stats;              // Enable statistics tracking
+    size_t coro_pool_init_size;    // Initial coroutine pool size (default 1024)
+    size_t class_arena_init_size;  // Initial class arena size (default 64KB)
+    bool enable_stats;             // Enable statistics tracking
 } XrSysHeapConfig;
 
 // Defaults
-#define XR_SYSHEAP_DEFAULT_CORO_POOL_SIZE   1024
+#define XR_SYSHEAP_DEFAULT_CORO_POOL_SIZE 1024
 #define XR_SYSHEAP_DEFAULT_CLASS_ARENA_SIZE (64 * 1024)
 
 /* ========== Statistics ========== */
@@ -75,7 +75,7 @@ typedef struct XrSysHeapStats {
 
     // Shared object stats
     _Atomic uint64_t shared_alloc_count;
-    _Atomic uint64_t shared_mmap_count;   // Large objects allocated via mmap
+    _Atomic uint64_t shared_mmap_count;  // Large objects allocated via mmap
 
     // Channel stats (for leak detection)
     _Atomic uint64_t channel_create_count;
@@ -86,7 +86,7 @@ typedef struct XrSysHeapStats {
 
 typedef struct XrSystemHeap {
     struct XrCoroStructPool *coro_pool;  // Coroutine object pool
-    XrArena class_arena;                  // Class/module arena
+    XrArena class_arena;                 // Class/module arena
     XrSysHeapStats stats;
 
     /* Per-isolate L2 pool for recycled XrCoroGC structs. The L1 cache
@@ -112,7 +112,7 @@ XR_FUNC void xr_sysheap_destroy(XrSystemHeap *heap);
 /* ========== Coroutine Allocation ========== */
 
 // Allocate coroutine from pool (reuses freed coroutines)
-XR_FUNC struct XrCoroutine* xr_sysheap_alloc_coro(XrSystemHeap *heap);
+XR_FUNC struct XrCoroutine *xr_sysheap_alloc_coro(XrSystemHeap *heap);
 
 // Return coroutine to pool for reuse
 XR_FUNC void xr_sysheap_free_coro(XrSystemHeap *heap, struct XrCoroutine *coro);
@@ -120,16 +120,16 @@ XR_FUNC void xr_sysheap_free_coro(XrSystemHeap *heap, struct XrCoroutine *coro);
 /* ========== Class/Module Allocation ========== */
 
 // Allocate class from arena (freed when isolate destroyed)
-XR_FUNC void* xr_sysheap_alloc_class(XrSystemHeap *heap, size_t size);
+XR_FUNC void *xr_sysheap_alloc_class(XrSystemHeap *heap, size_t size);
 
 // Allocate module from arena
-XR_FUNC void* xr_sysheap_alloc_module(XrSystemHeap *heap, size_t size);
+XR_FUNC void *xr_sysheap_alloc_module(XrSystemHeap *heap, size_t size);
 
 /* ========== Shared Object Allocation ========== */
 
 // Allocate shared object with atomic refcount (freed when refcount=0)
 // Large objects (>=64KB) use mmap, small ones use malloc
-XR_FUNC void* xr_sysheap_alloc_shared(XrSystemHeap *heap, size_t size, uint8_t type);
+XR_FUNC void *xr_sysheap_alloc_shared(XrSystemHeap *heap, size_t size, uint8_t type);
 
 // Free shared object (handles both malloc and mmap)
 XR_FUNC void xr_sysheap_free_shared(void *ptr, size_t size);
@@ -142,7 +142,7 @@ XR_FUNC void xr_sysheap_free_shared(void *ptr, size_t size);
 
 #define XR_SYSHEAP_GC_POOL_MAX 256
 
-XR_FUNC struct XrCoroGC* xr_sysheap_gc_pool_pop(XrSystemHeap *heap);
+XR_FUNC struct XrCoroGC *xr_sysheap_gc_pool_pop(XrSystemHeap *heap);
 XR_FUNC bool xr_sysheap_gc_pool_push(XrSystemHeap *heap, struct XrCoroGC *gc);
 
 // XR_GC_FLAG_MMAP now defined in xgc_header.h (extra bit 13, shared by both
@@ -153,4 +153,4 @@ XR_FUNC bool xr_sysheap_gc_pool_push(XrSystemHeap *heap, struct XrCoroGC *gc);
 XR_FUNC void xr_sysheap_get_stats(XrSystemHeap *heap, XrSysHeapStats *stats);
 XR_FUNC void xr_sysheap_print_stats(XrSystemHeap *heap);
 
-#endif // XSYSTEM_HEAP_H
+#endif  // XSYSTEM_HEAP_H

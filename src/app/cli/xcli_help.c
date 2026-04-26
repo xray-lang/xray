@@ -19,8 +19,7 @@
 #include <string.h>
 
 void xr_cli_print_version(void) {
-    printf("xray v%d.%d.%d (", XRAY_VERSION_MAJOR, XRAY_VERSION_MINOR,
-           XRAY_VERSION_PATCH);
+    printf("xray v%d.%d.%d (", XRAY_VERSION_MAJOR, XRAY_VERSION_MINOR, XRAY_VERSION_PATCH);
 #ifdef XRAY_HAS_JIT
     printf("JIT");
 #elif defined(XRAY_HAS_AOT)
@@ -51,26 +50,25 @@ void xr_cli_print_version(void) {
 /* Print option help lines for a command's option spec. */
 static void print_options(const XrCliOptionSpec *opts) {
     printf("\nOptions:\n");
-    if (!opts || !opts[0].long_name) return;
+    if (!opts || !opts[0].long_name)
+        return;
     for (int i = 0; opts[i].long_name != NULL; i++) {
         const XrCliOptionSpec *o = &opts[i];
         char short_buf[8] = "";
         if (o->short_name) {
-            snprintf(short_buf, sizeof(short_buf), "-%c, ", (char)o->short_name);
+            snprintf(short_buf, sizeof(short_buf), "-%c, ", (char) o->short_name);
         } else {
             snprintf(short_buf, sizeof(short_buf), "    ");
         }
 
         char long_buf[40];
         if (o->value_kind != XR_CLI_VALUE_NONE && o->value_name) {
-            snprintf(long_buf, sizeof(long_buf), "--%s <%s>", o->long_name,
-                     o->value_name);
+            snprintf(long_buf, sizeof(long_buf), "--%s <%s>", o->long_name, o->value_name);
         } else {
             snprintf(long_buf, sizeof(long_buf), "--%s", o->long_name);
         }
 
-        printf("  %s%-24s %s\n", short_buf, long_buf,
-               o->help ? o->help : "");
+        printf("  %s%-24s %s\n", short_buf, long_buf, o->help ? o->help : "");
     }
 }
 
@@ -85,9 +83,9 @@ void xr_cli_print_usage(void) {
     const XrCliCommandSpec *cmds = xr_cli_get_commands();
     XR_DCHECK(cmds != NULL, "command table is NULL");
     for (int i = 0; cmds[i].name != NULL; i++) {
-        if (cmds[i].hidden) continue;
-        printf("  %-14s %s\n", cmds[i].name,
-               cmds[i].summary ? cmds[i].summary : "");
+        if (cmds[i].hidden)
+            continue;
+        printf("  %-14s %s\n", cmds[i].name, cmds[i].summary ? cmds[i].summary : "");
     }
 
     printf("\nGlobal Options:\n");
@@ -150,11 +148,11 @@ void xr_cli_print_subcommand_help(const XrCliCommandSpec *parent) {
     printf("\nSubcommands:\n");
     for (int i = 0; i < parent->subcommand_count; i++) {
         const XrCliCommandSpec *sub = &parent->subcommands[i];
-        if (!sub->name) break;
-        if (sub->hidden) continue;
-        printf("  %-14s %s\n", sub->name,
-               sub->summary ? sub->summary : "");
+        if (!sub->name)
+            break;
+        if (sub->hidden)
+            continue;
+        printf("  %-14s %s\n", sub->name, sub->summary ? sub->summary : "");
     }
-    printf("\nRun 'xray %s <subcommand> --help' for subcommand details.\n",
-           parent->name);
+    printf("\nRun 'xray %s <subcommand> --help' for subcommand details.\n", parent->name);
 }

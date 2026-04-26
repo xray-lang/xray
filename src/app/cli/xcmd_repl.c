@@ -35,21 +35,20 @@
 #include <readline/history.h>
 #endif
 
-#define REPL_BUFFER_SIZE    8192
-#define REPL_HISTORY_FILE   ".xray_history"
-#define REPL_MAX_HISTORY    1000
-
+#define REPL_BUFFER_SIZE 8192
+#define REPL_HISTORY_FILE ".xray_history"
+#define REPL_MAX_HISTORY 1000
 
 // Proto list for tracking compiled protos (freed on .reset / exit)
 #define REPL_PROTO_INITIAL_CAP 32
 
 typedef struct {
     XrayIsolate *isolate;
-    char *buffer;               // Current input buffer
+    char *buffer;  // Current input buffer
     size_t buffer_size;
     size_t buffer_len;
-    bool use_color;             // Use color output
-    XrProto **protos;           // Compiled protos (not freed per-input)
+    bool use_color;    // Use color output
+    XrProto **protos;  // Compiled protos (not freed per-input)
     int proto_count;
     int proto_capacity;
 } ReplState;
@@ -58,24 +57,27 @@ typedef struct {
 static volatile sig_atomic_t g_repl_interrupted = 0;
 
 static void repl_sigint_handler(int sig) {
-    (void)sig;
+    (void) sig;
     g_repl_interrupted = 1;
 }
 
 // Check if terminal supports color
 static bool terminal_supports_color(void) {
     const char *term = getenv("TERM");
-    if (!term) return false;
-    if (strcmp(term, "dumb") == 0) return false;
+    if (!term)
+        return false;
+    if (strcmp(term, "dumb") == 0)
+        return false;
     return isatty(STDOUT_FILENO);
 }
 
 // Get history file path
-static char* get_history_file(void) {
+static char *get_history_file(void) {
     const char *home = getenv("HOME");
-    if (!home) return NULL;
+    if (!home)
+        return NULL;
 
-    char *path = (char*)xr_malloc(512);
+    char *path = (char *) xr_malloc(512);
     snprintf(path, 512, "%s/%s", home, REPL_HISTORY_FILE);
     return path;
 }
@@ -97,12 +99,11 @@ static void print_welcome(ReplState *state) {
 
     if (state->use_color) {
         printf("  %s----------------------------------------%s\n", XR_CLR_BLUE, XR_CLR_RESET);
-        printf("  %s%s* Xray%s %sv%d.%d.%d%s\n",
-               XR_CLR_BOLD, XR_CLR_CYAN, XR_CLR_RESET,
-               XR_CLR_GRAY, XRAY_VERSION_MAJOR, XRAY_VERSION_MINOR, XRAY_VERSION_PATCH, XR_CLR_RESET);
+        printf("  %s%s* Xray%s %sv%d.%d.%d%s\n", XR_CLR_BOLD, XR_CLR_CYAN, XR_CLR_RESET,
+               XR_CLR_GRAY, XRAY_VERSION_MAJOR, XRAY_VERSION_MINOR, XRAY_VERSION_PATCH,
+               XR_CLR_RESET);
         printf("  %s----------------------------------------%s\n", XR_CLR_BLUE, XR_CLR_RESET);
-        printf("  %sType .help for commands, .exit to quit%s\n",
-               XR_CLR_GRAY, XR_CLR_RESET);
+        printf("  %sType .help for commands, .exit to quit%s\n", XR_CLR_GRAY, XR_CLR_RESET);
     } else {
         printf("  ----------------------------------------\n");
         printf("  * Xray v%d.%d.%d\n", XRAY_VERSION_MAJOR, XRAY_VERSION_MINOR, XRAY_VERSION_PATCH);
@@ -245,7 +246,8 @@ static void print_help(ReplState *state, const char *topic) {
     }
 
     // Skip leading spaces
-    while (*topic == ' ') topic++;
+    while (*topic == ' ')
+        topic++;
 
     if (strcmp(topic, "syntax") == 0) {
         print_help_syntax(state);
@@ -281,7 +283,7 @@ static void append_to_buffer(ReplState *state, const char *line) {
     // Ensure capacity
     if (state->buffer_len + len + 2 >= state->buffer_size) {
         state->buffer_size *= 2;
-        state->buffer = (char*)xr_realloc(state->buffer, state->buffer_size);
+        state->buffer = (char *) xr_realloc(state->buffer, state->buffer_size);
     }
 
     // Append
@@ -320,8 +322,7 @@ static void execute_code(ReplState *state, const char *code) {
     // Track proto for later cleanup (closures reference sub-protos)
     if (state->proto_count >= state->proto_capacity) {
         state->proto_capacity *= 2;
-        XR_REALLOC_OR_ABORT(state->protos,
-                            (size_t)state->proto_capacity * sizeof(XrProto*),
+        XR_REALLOC_OR_ABORT(state->protos, (size_t) state->proto_capacity * sizeof(XrProto *),
                             "repl protos grow");
     }
     state->protos[state->proto_count++] = proto;
@@ -339,7 +340,8 @@ static void cmd_load(ReplState *state, const char *filename) {
     }
 
     // Skip leading spaces
-    while (*filename == ' ') filename++;
+    while (*filename == ' ')
+        filename++;
 
     char *source = xr_cli_read_file(filename);
     if (!source) {
@@ -362,15 +364,14 @@ static void cmd_time(ReplState *state, const char *expr) {
     }
 
     // Skip leading spaces
-    while (*expr == ' ') expr++;
+    while (*expr == ' ')
+        expr++;
 
     double start = get_time_ms();
     execute_code(state, expr);
     double end = get_time_ms();
 
-    printf("%s%.3f ms%s\n",
-           state->use_color ? XR_CLR_GRAY : "",
-           end - start,
+    printf("%s%.3f ms%s\n", state->use_color ? XR_CLR_GRAY : "", end - start,
            state->use_color ? XR_CLR_RESET : "");
 }
 
@@ -434,11 +435,8 @@ static bool handle_command(ReplState *state, const char *input) {
         for (int i = start; i <= len; i++) {
             HIST_ENTRY *entry = history_get(i);
             if (entry) {
-                printf("%s%4d%s  %s\n",
-                       state->use_color ? XR_CLR_GRAY : "",
-                       i,
-                       state->use_color ? XR_CLR_RESET : "",
-                       entry->line);
+                printf("%s%4d%s  %s\n", state->use_color ? XR_CLR_GRAY : "", i,
+                       state->use_color ? XR_CLR_RESET : "", entry->line);
             }
         }
         return true;
@@ -459,20 +457,26 @@ static bool handle_command(ReplState *state, const char *input) {
 // Get prompt
 // readline requires non-printing chars (ANSI escapes) wrapped in \001..\002
 // so it can correctly calculate visible prompt width for cursor positioning.
-static const char* get_prompt(ReplState *state, bool is_continuation) {
+static const char *get_prompt(ReplState *state, bool is_continuation) {
     static char prompt[128];
 
     if (is_continuation) {
         if (state->use_color) {
             snprintf(prompt, sizeof(prompt),
-                     "\001" XR_CLR_GRAY "\002" "....." "\001" XR_CLR_RESET "\002" " ");
+                     "\001" XR_CLR_GRAY "\002"
+                     "....."
+                     "\001" XR_CLR_RESET "\002"
+                     " ");
         } else {
             snprintf(prompt, sizeof(prompt), "..... ");
         }
     } else {
         if (state->use_color) {
             snprintf(prompt, sizeof(prompt),
-                     "\001" XR_CLR_BLUE "\002" "xray>" "\001" XR_CLR_RESET "\002" " ");
+                     "\001" XR_CLR_BLUE "\002"
+                     "xray>"
+                     "\001" XR_CLR_RESET "\002"
+                     " ");
         } else {
             snprintf(prompt, sizeof(prompt), "xray> ");
         }
@@ -482,7 +486,7 @@ static const char* get_prompt(ReplState *state, bool is_continuation) {
 }
 
 // Read one line of input
-static char* read_line(ReplState *state, bool is_continuation) {
+static char *read_line(ReplState *state, bool is_continuation) {
     const char *prompt = get_prompt(state, is_continuation);
 
 #ifdef HAS_READLINE
@@ -504,8 +508,8 @@ static char* read_line(ReplState *state, bool is_continuation) {
 
     // Remove newline
     size_t len = strlen(buffer);
-    if (len > 0 && buffer[len-1] == '\n') {
-        buffer[len-1] = '\0';
+    if (len > 0 && buffer[len - 1] == '\n') {
+        buffer[len - 1] = '\0';
     }
 
     return xr_strdup(buffer);
@@ -522,13 +526,13 @@ XR_FUNC int cmd_repl(const XrCliInvocation *inv) {
 
     /* Initialize buffer */
     state.buffer_size = REPL_BUFFER_SIZE;
-    state.buffer = (char*)xr_malloc(state.buffer_size);
+    state.buffer = (char *) xr_malloc(state.buffer_size);
     state.buffer[0] = '\0';
     state.buffer_len = 0;
 
     // Initialize proto tracking
     state.proto_capacity = REPL_PROTO_INITIAL_CAP;
-    state.protos = (XrProto**)xr_malloc(state.proto_capacity * sizeof(XrProto*));
+    state.protos = (XrProto **) xr_malloc(state.proto_capacity * sizeof(XrProto *));
     state.proto_count = 0;
 
     // Setup SIGINT handler
@@ -605,8 +609,7 @@ XR_FUNC int cmd_repl(const XrCliInvocation *inv) {
         }
 
         // Check exit command
-        if (state.buffer_len == 0 &&
-            (strcmp(line, ".exit") == 0 || strcmp(line, ".quit") == 0)) {
+        if (state.buffer_len == 0 && (strcmp(line, ".exit") == 0 || strcmp(line, ".quit") == 0)) {
             xr_free(line);
             break;
         }

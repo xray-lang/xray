@@ -50,6 +50,6 @@
 #include "../../src/vm/xvm.h"
 
 // Load csv module
-XR_FUNC XrModule* xr_load_module_csv(XrayIsolate *isolate);
+XR_FUNC XrModule *xr_load_module_csv(XrayIsolate *isolate);
 
 #endif

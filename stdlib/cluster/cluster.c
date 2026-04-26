@@ -37,8 +37,8 @@
 #include <errno.h>
 
 // xr_coro_create_native is not declared in any public header
-extern struct XrCoroutine *xr_coro_create_native(struct XrayIsolate *X, void (*func)(void*), void *arg,
-                                                  const char *name);
+extern struct XrCoroutine *xr_coro_create_native(struct XrayIsolate *X, void (*func)(void *),
+                                                 void *arg, const char *name);
 
 /*
  * xr_socket_read / xr_socket_set_read_timeout live in
@@ -77,9 +77,12 @@ static inline uint32_t str_hash(const char *s) {
  * and c->isolate bound (always true for cluster coroutines).
  */
 bool xr_cluster_sleep_interruptible(XrCluster *c, int ms) {
-    if (!c) return false;
-    if (!atomic_load(&c->running)) return false;
-    if (ms <= 0) return atomic_load(&c->running);
+    if (!c)
+        return false;
+    if (!atomic_load(&c->running))
+        return false;
+    if (ms <= 0)
+        return atomic_load(&c->running);
 
     XR_DCHECK(c->stop_pipe[0] >= 0, "cluster: stop_pipe required");
     XR_DCHECK(c->isolate != NULL, "cluster: isolate required for sleep");
@@ -90,8 +93,10 @@ bool xr_cluster_sleep_interruptible(XrCluster *c, int ms) {
     int n = xr_socket_read(c->isolate, rfd, &byte, 1);
     xr_socket_set_read_timeout(c->isolate, rfd, 0);
 
-    if (n == 0)  return false;            // EOF — stop closed write end
-    if (n > 0)   return false;            // targeted wake (treat as stop)
+    if (n == 0)
+        return false;  // EOF — stop closed write end
+    if (n > 0)
+        return false;  // targeted wake (treat as stop)
     return atomic_load(&c->running);
 }
 
@@ -108,8 +113,9 @@ bool xr_cluster_sleep_interruptible(XrCluster *c, int ms) {
  * is bounded.
  */
 static void cluster_heartbeat_coro(void *arg) {
-    XrCluster *c = (XrCluster *)arg;
-    if (!c) return;
+    XrCluster *c = (XrCluster *) arg;
+    if (!c)
+        return;
 
     xr_io_set_isolate(c->isolate);
     atomic_store(&c->heartbeat_running, true);
@@ -117,10 +123,12 @@ static void cluster_heartbeat_coro(void *arg) {
     /* Use half the heartbeat interval for check frequency.
      * This ensures we detect dead nodes within ~1.5x the interval. */
     int sleep_ms = c->heartbeat_interval_ms / 2;
-    if (sleep_ms < 500) sleep_ms = 500;
+    if (sleep_ms < 500)
+        sleep_ms = 500;
 
     while (atomic_load(&c->running)) {
-        if (!xr_cluster_sleep_interruptible(c, sleep_ms)) break;
+        if (!xr_cluster_sleep_interruptible(c, sleep_ms))
+            break;
 
         xr_cluster_send_heartbeats(c);
         xr_cluster_check_heartbeats(c);
@@ -142,7 +150,7 @@ static void cluster_heartbeat_coro(void *arg) {
  * (EBADF from a closed listen_fd) exits the loop.
  */
 static void cluster_accept_loop(void *arg) {
-    XrCluster *c = (XrCluster *)arg;
+    XrCluster *c = (XrCluster *) arg;
     if (!c) {
         return;
     }
@@ -182,8 +190,10 @@ static void cluster_accept_loop(void *arg) {
              * nanosleep so that a concurrent xr_cluster_stop() wakes
              * us immediately rather than after the full 10ms, and —
              * more importantly — so we never pin the worker thread. */
-            if (!atomic_load(&c->running)) break;
-            if (!xr_cluster_sleep_interruptible(c, 10)) break;
+            if (!atomic_load(&c->running))
+                break;
+            if (!xr_cluster_sleep_interruptible(c, 10))
+                break;
             continue;
         }
 
@@ -205,7 +215,8 @@ static void cluster_accept_loop(void *arg) {
         xr_cluster_add_node(c, node);
         xr_cluster_node_start_writer(node, c->isolate);
         xr_cluster_node_start_reader(c, node);
-        if (c->on_node_added) c->on_node_added(node->name);
+        if (c->on_node_added)
+            c->on_node_added(node->name);
     }
 
     atomic_store(&c->accept_running, false);
@@ -213,8 +224,7 @@ static void cluster_accept_loop(void *arg) {
 
 /* ========== Cluster Lifecycle ========== */
 
-int xr_cluster_start(XrayIsolate *X, const char *name,
-                      uint16_t port, const char *secret) {
+int xr_cluster_start(XrayIsolate *X, const char *name, uint16_t port, const char *secret) {
     // Legacy entry point: plain TCP, no TLS. Forwards to the extended
     // implementation so both paths share one code flow.
     return xr_cluster_start_ex(X, name, port, secret, NULL);
@@ -233,7 +243,8 @@ int xr_cluster_start(XrayIsolate *X, const char *name,
 static int build_cluster_tls(XrCluster *c, const XrClusterTlsOptions *opts) {
     // Client context covers outgoing xr_cluster_join / reconnect traffic.
     XrTlsContext *client_ctx = xr_tls_context_new_client();
-    if (!client_ctx) return -1;
+    if (!client_ctx)
+        return -1;
 
     if (opts->ca_file) {
         if (xr_tls_context_load_ca(client_ctx, opts->ca_file) != 0) {
@@ -254,8 +265,7 @@ static int build_cluster_tls(XrCluster *c, const XrClusterTlsOptions *opts) {
     // rather than silently downgrading to plaintext (see the
     // `tls_enabled && !tls_server_ctx` branch in cluster_accept_loop).
     if (opts->cert_file && opts->key_file) {
-        XrTlsContext *server_ctx =
-            xr_tls_context_new_server(opts->cert_file, opts->key_file);
+        XrTlsContext *server_ctx = xr_tls_context_new_server(opts->cert_file, opts->key_file);
         if (!server_ctx) {
             xr_tls_context_free(client_ctx);
             c->tls_client_ctx = NULL;
@@ -275,22 +285,25 @@ static int build_cluster_tls(XrCluster *c, const XrClusterTlsOptions *opts) {
     return 0;
 }
 
-int xr_cluster_start_ex(XrayIsolate *X, const char *name,
-                         uint16_t port, const char *secret,
-                         const XrClusterTlsOptions *tls) {
-    if (X->cluster) return -1; // already running
-    if (!name || name[0] == '\0') return -1; // name required
+int xr_cluster_start_ex(XrayIsolate *X, const char *name, uint16_t port, const char *secret,
+                        const XrClusterTlsOptions *tls) {
+    if (X->cluster)
+        return -1;  // already running
+    if (!name || name[0] == '\0')
+        return -1;  // name required
 
     // Validate name: printable ASCII, max XR_NODE_NAME_MAX bytes
     size_t name_len = strlen(name);
-    if (name_len > XR_NODE_NAME_MAX) return -1;
+    if (name_len > XR_NODE_NAME_MAX)
+        return -1;
     for (size_t i = 0; i < name_len; i++) {
-        if ((unsigned char)name[i] < 0x20 || (unsigned char)name[i] > 0x7E)
+        if ((unsigned char) name[i] < 0x20 || (unsigned char) name[i] > 0x7E)
             return -1;
     }
 
-    XrCluster *c = (XrCluster *)xr_calloc(1, sizeof(XrCluster));
-    if (!c) return -1;
+    XrCluster *c = (XrCluster *) xr_calloc(1, sizeof(XrCluster));
+    if (!c)
+        return -1;
 
     strncpy(c->self_name, name, XR_NODE_NAME_MAX);
     c->self_name[XR_NODE_NAME_MAX] = '\0';
@@ -323,8 +336,10 @@ int xr_cluster_start_ex(XrayIsolate *X, const char *name,
      * worry about a NULL root under the lock. Failure here is fatal to
      * start: pub/sub is a first-class feature, not a best-effort add-on. */
     if (xr_cluster_topics_init(c) != 0) {
-        if (c->tls_client_ctx) xr_tls_context_free(c->tls_client_ctx);
-        if (c->tls_server_ctx) xr_tls_context_free(c->tls_server_ctx);
+        if (c->tls_client_ctx)
+            xr_tls_context_free(c->tls_client_ctx);
+        if (c->tls_server_ctx)
+            xr_tls_context_free(c->tls_server_ctx);
         xr_secure_wipe(c->secret, sizeof(c->secret));
         xr_free(c);
         return -1;
@@ -336,7 +351,7 @@ int xr_cluster_start_ex(XrayIsolate *X, const char *name,
     c->max_pending_requests = XR_MAX_PENDING_REQUESTS;
     // Dynamic tombstone array
     c->tombstone_cap = 16;
-    c->tombstones = xr_calloc((size_t)c->tombstone_cap, sizeof(c->tombstones[0]));
+    c->tombstones = xr_calloc((size_t) c->tombstone_cap, sizeof(c->tombstones[0]));
     c->tombstone_count = 0;
     c->on_node_added = NULL;
     c->on_node_removed = NULL;
@@ -349,8 +364,10 @@ int xr_cluster_start_ex(XrayIsolate *X, const char *name,
     if (c->listen_fd < 0) {
         // Release TLS contexts that build_cluster_tls may have created
         // before the listen failure so we do not leak OpenSSL handles.
-        if (c->tls_client_ctx) xr_tls_context_free(c->tls_client_ctx);
-        if (c->tls_server_ctx) xr_tls_context_free(c->tls_server_ctx);
+        if (c->tls_client_ctx)
+            xr_tls_context_free(c->tls_client_ctx);
+        if (c->tls_server_ctx)
+            xr_tls_context_free(c->tls_server_ctx);
         xr_secure_wipe(c->secret, sizeof(c->secret));
         xr_free(c);
         return -1;
@@ -368,8 +385,10 @@ int xr_cluster_start_ex(XrayIsolate *X, const char *name,
     c->stop_pipe[1] = -1;
     if (pipe(c->stop_pipe) != 0) {
         close(c->listen_fd);
-        if (c->tls_client_ctx) xr_tls_context_free(c->tls_client_ctx);
-        if (c->tls_server_ctx) xr_tls_context_free(c->tls_server_ctx);
+        if (c->tls_client_ctx)
+            xr_tls_context_free(c->tls_client_ctx);
+        if (c->tls_server_ctx)
+            xr_tls_context_free(c->tls_server_ctx);
         xr_secure_wipe(c->secret, sizeof(c->secret));
         xr_free(c);
         return -1;
@@ -387,8 +406,7 @@ int xr_cluster_start_ex(XrayIsolate *X, const char *name,
      * shares scheduling and liveness tracking with the rest of the
      * cluster machinery.
      */
-    XrCoroutine *hb_coro = xr_coro_create_native(X, cluster_heartbeat_coro,
-                                                 c, "cluster_heartbeat");
+    XrCoroutine *hb_coro = xr_coro_create_native(X, cluster_heartbeat_coro, c, "cluster_heartbeat");
     if (hb_coro) {
         xr_coro_spawn(X, hb_coro);
         c->heartbeat_coro_spawned = true;
@@ -401,8 +419,7 @@ int xr_cluster_start_ex(XrayIsolate *X, const char *name,
      * accept_coro_spawned flag so xr_cluster_stop does not wait for
      * something that never ran.
      */
-    XrCoroutine *accept_coro = xr_coro_create_native(X, cluster_accept_loop,
-                                                     c, "cluster_accept");
+    XrCoroutine *accept_coro = xr_coro_create_native(X, cluster_accept_loop, c, "cluster_accept");
     if (accept_coro) {
         xr_coro_spawn(X, accept_coro);
         c->accept_coro_spawned = true;
@@ -412,7 +429,8 @@ int xr_cluster_start_ex(XrayIsolate *X, const char *name,
 }
 
 void xr_cluster_stop(XrCluster *c) {
-    if (!c) return;
+    if (!c)
+        return;
 
     atomic_store(&c->running, false);
 
@@ -455,7 +473,7 @@ void xr_cluster_stop(XrCluster *c) {
      */
     if (c->accept_coro_spawned) {
         for (int i = 0; i < 100 && atomic_load(&c->accept_running); i++) {
-            struct timespec ts = { .tv_sec = 0, .tv_nsec = 10 * 1000 * 1000 };
+            struct timespec ts = {.tv_sec = 0, .tv_nsec = 10 * 1000 * 1000};
             nanosleep(&ts, NULL);
         }
         c->accept_coro_spawned = false;
@@ -468,7 +486,7 @@ void xr_cluster_stop(XrCluster *c) {
      */
     if (c->heartbeat_coro_spawned) {
         for (int i = 0; i < 100 && atomic_load(&c->heartbeat_running); i++) {
-            struct timespec ts = { .tv_sec = 0, .tv_nsec = 10 * 1000 * 1000 };
+            struct timespec ts = {.tv_sec = 0, .tv_nsec = 10 * 1000 * 1000};
             nanosleep(&ts, NULL);
         }
         c->heartbeat_coro_spawned = false;
@@ -579,7 +597,8 @@ void xr_cluster_stop(XrCluster *c) {
         c->stop_pipe[0] = -1;
     }
 
-    if (c->isolate) c->isolate->cluster = NULL;
+    if (c->isolate)
+        c->isolate->cluster = NULL;
     xr_free(c);
 }
 
@@ -594,7 +613,8 @@ const char *xr_cluster_self_name(XrCluster *c) {
 /* ========== Node Management ========== */
 
 XrClusterNode *xr_cluster_find_node(XrCluster *c, const char *name) {
-    if (!c) return NULL;
+    if (!c)
+        return NULL;
     xr_mutex_lock(&c->nodes_lock);
     XrClusterNode *node = c->nodes;
     while (node) {
@@ -609,7 +629,8 @@ XrClusterNode *xr_cluster_find_node(XrCluster *c, const char *name) {
 }
 
 void xr_cluster_add_node(XrCluster *c, XrClusterNode *node) {
-    if (!c || !node) return;
+    if (!c || !node)
+        return;
 
     xr_mutex_lock(&c->nodes_lock);
     node->next = c->nodes;
@@ -619,7 +640,8 @@ void xr_cluster_add_node(XrCluster *c, XrClusterNode *node) {
 }
 
 void xr_cluster_remove_node(XrCluster *c, XrClusterNode *node) {
-    if (!c || !node) return;
+    if (!c || !node)
+        return;
 
     xr_mutex_lock(&c->nodes_lock);
     XrClusterNode **pp = &c->nodes;
@@ -635,10 +657,12 @@ void xr_cluster_remove_node(XrCluster *c, XrClusterNode *node) {
 }
 
 int xr_cluster_join(XrCluster *c, const char *host, uint16_t port) {
-    if (!c) return -1;
+    if (!c)
+        return -1;
 
     XrClusterNode *node = xr_cluster_node_new(NULL, host, port);
-    if (!node) return -1;
+    if (!node)
+        return -1;
 
     if (xr_cluster_node_connect(c, node) != 0) {
         xr_cluster_node_free(node);
@@ -661,10 +685,12 @@ int xr_cluster_join(XrCluster *c, const char *host, uint16_t port) {
 /* ========== Named Channel Registry ========== */
 
 void xr_cluster_register_channel(XrCluster *c, const char *name, struct XrChannel *ch) {
-    if (!c || !name || !ch) return;
+    if (!c || !name || !ch)
+        return;
 
-    XrDistChannel *dc = (XrDistChannel *)xr_calloc(1, sizeof(XrDistChannel));
-    if (!dc) return;
+    XrDistChannel *dc = (XrDistChannel *) xr_calloc(1, sizeof(XrDistChannel));
+    if (!dc)
+        return;
 
     strncpy(dc->name, name, XR_CHANNEL_NAME_MAX);
     dc->name[XR_CHANNEL_NAME_MAX] = '\0';
@@ -687,7 +713,8 @@ void xr_cluster_register_channel(XrCluster *c, const char *name, struct XrChanne
 }
 
 XrDistChannel *xr_cluster_find_channel(XrCluster *c, const char *name) {
-    if (!c || !name) return NULL;
+    if (!c || !name)
+        return NULL;
 
     uint32_t bucket = str_hash(name) % XR_CLUSTER_CHANNEL_BUCKETS;
 
@@ -705,7 +732,8 @@ XrDistChannel *xr_cluster_find_channel(XrCluster *c, const char *name) {
 }
 
 void xr_cluster_unregister_channel(XrCluster *c, const char *name) {
-    if (!c || !name) return;
+    if (!c || !name)
+        return;
 
     uint32_t bucket = str_hash(name) % XR_CLUSTER_CHANNEL_BUCKETS;
 
@@ -732,11 +760,13 @@ void xr_cluster_unregister_channel(XrCluster *c, const char *name) {
 /* ========== Service Registry ========== */
 
 XrChannel *xr_cluster_register_service(XrayIsolate *X, const char *name) {
-    XrCluster *c = (XrCluster *)X->cluster;
-    if (!c || !name) return NULL;
+    XrCluster *c = (XrCluster *) X->cluster;
+    if (!c || !name)
+        return NULL;
 
-    XrServiceEntry *se = (XrServiceEntry *)xr_calloc(1, sizeof(XrServiceEntry));
-    if (!se) return NULL;
+    XrServiceEntry *se = (XrServiceEntry *) xr_calloc(1, sizeof(XrServiceEntry));
+    if (!se)
+        return NULL;
 
     strncpy(se->name, name, XR_SERVICE_NAME_MAX);
     se->name[XR_SERVICE_NAME_MAX] = '\0';
@@ -760,7 +790,8 @@ XrChannel *xr_cluster_register_service(XrayIsolate *X, const char *name) {
 }
 
 XrServiceEntry *xr_cluster_find_service(XrCluster *c, const char *name) {
-    if (!c || !name) return NULL;
+    if (!c || !name)
+        return NULL;
 
     uint32_t bucket = str_hash(name) % XR_CLUSTER_SERVICE_BUCKETS;
 
@@ -780,7 +811,8 @@ XrServiceEntry *xr_cluster_find_service(XrCluster *c, const char *name) {
 /* ========== Subscriber Management (for select push model) ========== */
 
 void xr_cluster_add_subscriber(XrCluster *c, const char *channel_name, XrClusterNode *node) {
-    if (!c || !channel_name || !node) return;
+    if (!c || !channel_name || !node)
+        return;
 
     xr_mutex_lock(&c->channels_lock);
     uint32_t bucket = str_hash(channel_name) % XR_CLUSTER_CHANNEL_BUCKETS;
@@ -792,7 +824,7 @@ void xr_cluster_add_subscriber(XrCluster *c, const char *channel_name, XrCluster
             for (int i = 0; i < subs->count; i++) {
                 if (subs->nodes[i] == node) {
                     xr_mutex_unlock(&c->channels_lock);
-                    return; // already subscribed
+                    return;  // already subscribed
                 }
             }
             // Add new subscriber if room
@@ -807,7 +839,8 @@ void xr_cluster_add_subscriber(XrCluster *c, const char *channel_name, XrCluster
 }
 
 void xr_cluster_remove_subscriber(XrCluster *c, const char *channel_name, XrClusterNode *node) {
-    if (!c || !channel_name || !node) return;
+    if (!c || !channel_name || !node)
+        return;
 
     xr_mutex_lock(&c->channels_lock);
     uint32_t bucket = str_hash(channel_name) % XR_CLUSTER_CHANNEL_BUCKETS;
@@ -831,7 +864,8 @@ void xr_cluster_remove_subscriber(XrCluster *c, const char *channel_name, XrClus
 }
 
 void xr_cluster_remove_all_subscribers_for_node(XrCluster *c, XrClusterNode *node) {
-    if (!c || !node) return;
+    if (!c || !node)
+        return;
 
     xr_mutex_lock(&c->channels_lock);
     for (int i = 0; i < XR_CLUSTER_CHANNEL_BUCKETS; i++) {
@@ -839,7 +873,7 @@ void xr_cluster_remove_all_subscribers_for_node(XrCluster *c, XrClusterNode *nod
         while (dc) {
             if (dc->is_owner) {
                 XrChannelSubscribers *subs = &dc->subscribers;
-                for (int j = 0; j < subs->count; ) {
+                for (int j = 0; j < subs->count;) {
                     if (subs->nodes[j] == node) {
                         subs->nodes[j] = subs->nodes[subs->count - 1];
                         subs->count--;
@@ -871,17 +905,19 @@ void xr_cluster_remove_all_subscribers_for_node(XrCluster *c, XrClusterNode *nod
 // call — cluster_start_ex copies them into OpenSSL contexts before it
 // returns, so no lifetime surprise.
 static XrValue cluster_start(XrayIsolate *X, XrValue *args, int argc) {
-    if (argc < 1 || !XR_IS_JSON(args[0])) return xr_null();
+    if (argc < 1 || !XR_IS_JSON(args[0]))
+        return xr_null();
 
-    XrJson *config = (XrJson *)XR_TO_PTR(args[0]);
+    XrJson *config = (XrJson *) XR_TO_PTR(args[0]);
     XrValue v_name = xr_json_get_by_key(X, config, "name");
     XrValue v_port = xr_json_get_by_key(X, config, "port");
     XrValue v_secret = xr_json_get_by_key(X, config, "secret");
 
-    if (!XR_IS_STRING(v_name) || !XR_IS_INT(v_port)) return xr_null();
+    if (!XR_IS_STRING(v_name) || !XR_IS_INT(v_port))
+        return xr_null();
 
     XrString *name = XR_TO_STRING(v_name);
-    uint16_t port = (uint16_t)XR_TO_INT(v_port);
+    uint16_t port = (uint16_t) XR_TO_INT(v_port);
     const char *secret = "";
     if (XR_IS_STRING(v_secret)) {
         secret = XR_TO_STRING(v_secret)->data;
@@ -894,7 +930,7 @@ static XrValue cluster_start(XrayIsolate *X, XrValue *args, int argc) {
 
     XrValue v_tls = xr_json_get_by_key(X, config, "tls");
     if (XR_IS_JSON(v_tls)) {
-        XrJson *tls_cfg = (XrJson *)XR_TO_PTR(v_tls);
+        XrJson *tls_cfg = (XrJson *) XR_TO_PTR(v_tls);
 
         XrValue v_enabled = xr_json_get_by_key(X, tls_cfg, "enabled");
         if (XR_IS_BOOL(v_enabled)) {
@@ -906,15 +942,19 @@ static XrValue cluster_start(XrayIsolate *X, XrValue *args, int argc) {
             tls_opts.enabled = true;
         }
 
-        XrValue v_ca   = xr_json_get_by_key(X, tls_cfg, "caFile");
+        XrValue v_ca = xr_json_get_by_key(X, tls_cfg, "caFile");
         XrValue v_cert = xr_json_get_by_key(X, tls_cfg, "certFile");
-        XrValue v_key  = xr_json_get_by_key(X, tls_cfg, "keyFile");
-        XrValue v_ins  = xr_json_get_by_key(X, tls_cfg, "insecure");
+        XrValue v_key = xr_json_get_by_key(X, tls_cfg, "keyFile");
+        XrValue v_ins = xr_json_get_by_key(X, tls_cfg, "insecure");
 
-        if (XR_IS_STRING(v_ca))   tls_opts.ca_file   = XR_TO_STRING(v_ca)->data;
-        if (XR_IS_STRING(v_cert)) tls_opts.cert_file = XR_TO_STRING(v_cert)->data;
-        if (XR_IS_STRING(v_key))  tls_opts.key_file  = XR_TO_STRING(v_key)->data;
-        if (XR_IS_BOOL(v_ins))    tls_opts.insecure  = XR_TO_BOOL(v_ins);
+        if (XR_IS_STRING(v_ca))
+            tls_opts.ca_file = XR_TO_STRING(v_ca)->data;
+        if (XR_IS_STRING(v_cert))
+            tls_opts.cert_file = XR_TO_STRING(v_cert)->data;
+        if (XR_IS_STRING(v_key))
+            tls_opts.key_file = XR_TO_STRING(v_key)->data;
+        if (XR_IS_BOOL(v_ins))
+            tls_opts.insecure = XR_TO_BOOL(v_ins);
 
         tls_ptr = &tls_opts;
     }
@@ -925,8 +965,9 @@ static XrValue cluster_start(XrayIsolate *X, XrValue *args, int argc) {
 
 // cluster.join(addr) - addr is "host:port" string
 static XrValue cluster_join(XrayIsolate *X, XrValue *args, int argc) {
-    XrCluster *c = (XrCluster *)X->cluster;
-    if (!c || argc < 1 || !XR_IS_STRING(args[0])) return xr_bool(0);
+    XrCluster *c = (XrCluster *) X->cluster;
+    if (!c || argc < 1 || !XR_IS_STRING(args[0]))
+        return xr_bool(0);
 
     XrString *addr = XR_TO_STRING(args[0]);
     char host[256] = {0};
@@ -934,13 +975,15 @@ static XrValue cluster_join(XrayIsolate *X, XrValue *args, int argc) {
 
     // Parse "host:port"
     const char *colon = strrchr(addr->data, ':');
-    if (!colon) return xr_bool(0);
+    if (!colon)
+        return xr_bool(0);
 
-    size_t host_len = (size_t)(colon - addr->data);
-    if (host_len >= sizeof(host)) return xr_bool(0);
+    size_t host_len = (size_t) (colon - addr->data);
+    if (host_len >= sizeof(host))
+        return xr_bool(0);
     memcpy(host, addr->data, host_len);
     host[host_len] = '\0';
-    port = (uint16_t)atoi(colon + 1);
+    port = (uint16_t) atoi(colon + 1);
 
     int rc = xr_cluster_join(c, host, port);
     return xr_bool(rc == 0);
@@ -948,27 +991,30 @@ static XrValue cluster_join(XrayIsolate *X, XrValue *args, int argc) {
 
 // cluster.self() - returns node name
 static XrValue cluster_self(XrayIsolate *X, XrValue *args, int argc) {
-    (void)args; (void)argc;
-    XrCluster *c = (XrCluster *)X->cluster;
+    (void) args;
+    (void) argc;
+    XrCluster *c = (XrCluster *) X->cluster;
     const char *name = xr_cluster_self_name(c);
-    XrString *str = xr_string_intern(X, name, (uint32_t)strlen(name), 0);
+    XrString *str = xr_string_intern(X, name, (uint32_t) strlen(name), 0);
     return xr_string_value(str);
 }
 
 // cluster.nodes() - returns array of connected node names
 static XrValue cluster_nodes(XrayIsolate *X, XrValue *args, int argc) {
-    (void)args; (void)argc;
-    XrCluster *c = (XrCluster *)X->cluster;
-    if (!c) return xr_null();
+    (void) args;
+    (void) argc;
+    XrCluster *c = (XrCluster *) X->cluster;
+    if (!c)
+        return xr_null();
 
     XrArray *arr = xr_array_new(NULL);
-    if (!arr) return xr_null();
+    if (!arr)
+        return xr_null();
 
     xr_mutex_lock(&c->nodes_lock);
     XrClusterNode *node = c->nodes;
     while (node) {
-        XrString *name = xr_string_intern(X, node->name,
-                                            (uint32_t)strlen(node->name), 0);
+        XrString *name = xr_string_intern(X, node->name, (uint32_t) strlen(node->name), 0);
         xr_array_push(arr, xr_string_value(name));
         node = node->next;
     }
@@ -979,15 +1025,16 @@ static XrValue cluster_nodes(XrayIsolate *X, XrValue *args, int argc) {
 
 // cluster.channel(name, size) - create or get Named Channel
 static XrValue cluster_channel_fn(XrayIsolate *X, XrValue *args, int argc) {
-    if (argc < 1 || !XR_IS_STRING(args[0])) return xr_null();
+    if (argc < 1 || !XR_IS_STRING(args[0]))
+        return xr_null();
 
     XrString *name_str = XR_TO_STRING(args[0]);
     uint32_t buf_size = 0;
     if (argc >= 2 && XR_IS_INT(args[1])) {
-        buf_size = (uint32_t)XR_TO_INT(args[1]);
+        buf_size = (uint32_t) XR_TO_INT(args[1]);
     }
 
-    XrCluster *c = (XrCluster *)X->cluster;
+    XrCluster *c = (XrCluster *) X->cluster;
 
     // If cluster running, check for existing channel (e.g. Proxy from CHANNEL_SYNC)
     if (xr_cluster_is_running(c)) {
@@ -998,7 +1045,8 @@ static XrValue cluster_channel_fn(XrayIsolate *X, XrValue *args, int argc) {
     }
 
     XrChannel *ch = xr_channel_new(X, buf_size);
-    if (!ch) return xr_null();
+    if (!ch)
+        return xr_null();
 
     if (xr_cluster_is_running(c)) {
         xr_cluster_register_channel(c, name_str->data, ch);
@@ -1009,11 +1057,13 @@ static XrValue cluster_channel_fn(XrayIsolate *X, XrValue *args, int argc) {
 
 // cluster.serve(name) - register service + return request Channel
 static XrValue cluster_serve_fn(XrayIsolate *X, XrValue *args, int argc) {
-    if (argc < 1 || !XR_IS_STRING(args[0])) return xr_null();
+    if (argc < 1 || !XR_IS_STRING(args[0]))
+        return xr_null();
 
     XrString *name_str = XR_TO_STRING(args[0]);
     XrChannel *ch = xr_cluster_register_service(X, name_str->data);
-    if (!ch) return xr_null();
+    if (!ch)
+        return xr_null();
 
     return xr_value_from_channel(ch);
 }
@@ -1021,8 +1071,9 @@ static XrValue cluster_serve_fn(XrayIsolate *X, XrValue *args, int argc) {
 // cluster.reply(req, result) - simplified: auto-extract id/from from req Json
 // Also supports legacy: cluster.reply(id, from, result)
 static XrValue cluster_reply_fn(XrayIsolate *X, XrValue *args, int argc) {
-    XrCluster *c = (XrCluster *)X->cluster;
-    if (!c) return xr_bool(0);
+    XrCluster *c = (XrCluster *) X->cluster;
+    if (!c)
+        return xr_bool(0);
 
     uint64_t request_id;
     const char *from_name;
@@ -1030,13 +1081,13 @@ static XrValue cluster_reply_fn(XrayIsolate *X, XrValue *args, int argc) {
 
     if (argc >= 2 && XR_IS_JSON(args[0])) {
         // Simplified form: cluster.reply(req, result)
-        XrJson *req = (XrJson *)XR_TO_PTR(args[0]);
+        XrJson *req = (XrJson *) XR_TO_PTR(args[0]);
         result = args[1];
 
         // Check for local reply_ch first (local service call path)
         XrValue reply_ch_val = xr_json_get_by_key(X, req, "reply_ch");
         if (XR_IS_CHANNEL(reply_ch_val)) {
-            XrChannel *reply_ch = (XrChannel *)XR_TO_PTR(reply_ch_val);
+            XrChannel *reply_ch = (XrChannel *) XR_TO_PTR(reply_ch_val);
             xr_channel_try_send(reply_ch, result);
             return xr_bool(1);
         }
@@ -1044,12 +1095,13 @@ static XrValue cluster_reply_fn(XrayIsolate *X, XrValue *args, int argc) {
         // Remote reply: extract id and from
         XrValue v_id = xr_json_get_by_key(X, req, "id");
         XrValue v_from = xr_json_get_by_key(X, req, "from");
-        if (!XR_IS_INT(v_id) || !XR_IS_STRING(v_from)) return xr_bool(0);
-        request_id = (uint64_t)XR_TO_INT(v_id);
+        if (!XR_IS_INT(v_id) || !XR_IS_STRING(v_from))
+            return xr_bool(0);
+        request_id = (uint64_t) XR_TO_INT(v_id);
         from_name = XR_TO_STRING(v_from)->data;
     } else if (argc >= 3 && XR_IS_INT(args[0]) && XR_IS_STRING(args[1])) {
         // Legacy form: cluster.reply(id, from, result)
-        request_id = (uint64_t)XR_TO_INT(args[0]);
+        request_id = (uint64_t) XR_TO_INT(args[0]);
         from_name = XR_TO_STRING(args[1])->data;
         result = args[2];
     } else {
@@ -1061,8 +1113,7 @@ static XrValue cluster_reply_fn(XrayIsolate *X, XrValue *args, int argc) {
     XrClusterNode *target = NULL;
     XrClusterNode *node = c->nodes;
     while (node) {
-        if (strcmp(node->name, from_name) == 0 &&
-            node->state == XR_NODE_CONNECTED) {
+        if (strcmp(node->name, from_name) == 0 && node->state == XR_NODE_CONNECTED) {
             target = node;
             break;
         }
@@ -1070,7 +1121,8 @@ static XrValue cluster_reply_fn(XrayIsolate *X, XrValue *args, int argc) {
     }
     xr_mutex_unlock(&c->nodes_lock);
 
-    if (!target) return xr_bool(0);
+    if (!target)
+        return xr_bool(0);
 
     // Serialize result
     XrSerialBuf sbuf;
@@ -1084,24 +1136,26 @@ static XrValue cluster_reply_fn(XrayIsolate *X, XrValue *args, int argc) {
     size_t frame_size = 4 + 1 + 8 + 1 + sbuf.len;
     uint8_t stack_frame[4096];
     uint8_t *frame = (frame_size + 16 <= sizeof(stack_frame))
-        ? stack_frame : (uint8_t *)xr_malloc(frame_size + 16);
+                         ? stack_frame
+                         : (uint8_t *) xr_malloc(frame_size + 16);
     if (!frame) {
         xr_serial_buf_free(&sbuf);
         return xr_bool(0);
     }
 
-    int flen = xr_frame_encode_service_reply(frame, frame_size + 16,
-                                              request_id, false,
-                                              sbuf.data, (uint32_t)sbuf.len);
+    int flen = xr_frame_encode_service_reply(frame, frame_size + 16, request_id, false, sbuf.data,
+                                             (uint32_t) sbuf.len);
     xr_serial_buf_free(&sbuf);
 
     if (flen < 0) {
-        if (frame != stack_frame) xr_free(frame);
+        if (frame != stack_frame)
+            xr_free(frame);
         return xr_bool(0);
     }
 
-    int rc = xr_cluster_node_enqueue(target, frame, (uint32_t)flen);
-    if (frame != stack_frame) xr_free(frame);
+    int rc = xr_cluster_node_enqueue(target, frame, (uint32_t) flen);
+    if (frame != stack_frame)
+        xr_free(frame);
     return xr_bool(rc == 0);
 }
 
@@ -1109,14 +1163,16 @@ static XrValue cluster_reply_fn(XrayIsolate *X, XrValue *args, int argc) {
 // Uses pending request table: sends SERVICE_CALL, then blocks on a temp Channel
 // that process_node will deliver the result to. No direct socket read.
 static XrValue cluster_call_fn(XrayIsolate *X, XrValue *args, int argc) {
-    if (argc < 2 || !XR_IS_STRING(args[0])) return xr_null();
+    if (argc < 2 || !XR_IS_STRING(args[0]))
+        return xr_null();
 
-    XrCluster *c = (XrCluster *)X->cluster;
-    if (!c) return xr_null();
+    XrCluster *c = (XrCluster *) X->cluster;
+    if (!c)
+        return xr_null();
 
     XrString *service_name = XR_TO_STRING(args[0]);
     XrValue call_args = args[1];
-    (void)argc; // timeout not yet used for pending approach
+    (void) argc;  // timeout not yet used for pending approach
 
     // Check if service is local
     XrServiceEntry *se = xr_cluster_find_service(c, service_name->data);
@@ -1124,13 +1180,16 @@ static XrValue cluster_call_fn(XrayIsolate *X, XrValue *args, int argc) {
         // Local service: directly send to request channel
         uint64_t req_id = atomic_fetch_add(&c->next_request_id, 1);
         XrChannel *rsp_ch = xr_channel_new(X, 1);
-        if (!rsp_ch) return xr_null();
+        if (!rsp_ch)
+            return xr_null();
 
         XrJson *req_json = xr_json_new(NULL, 4);
-        if (!req_json) return xr_null();
-        xr_json_set_by_key(X, req_json, "id", xr_int((int64_t)req_id));
-        xr_json_set_by_key(X, req_json, "from", xr_string_value(
-            xr_string_intern(X, c->self_name, (uint32_t)strlen(c->self_name), 0)));
+        if (!req_json)
+            return xr_null();
+        xr_json_set_by_key(X, req_json, "id", xr_int((int64_t) req_id));
+        xr_json_set_by_key(
+            X, req_json, "from",
+            xr_string_value(xr_string_intern(X, c->self_name, (uint32_t) strlen(c->self_name), 0)));
         xr_json_set_by_key(X, req_json, "args", call_args);
         xr_json_set_by_key(X, req_json, "reply_ch", xr_value_from_channel(rsp_ch));
         xr_channel_try_send(se->request_ch, xr_json_value(req_json));
@@ -1166,8 +1225,7 @@ static XrValue cluster_call_fn(XrayIsolate *X, XrValue *args, int argc) {
     }
 
     // Register pending request BEFORE sending (avoid race)
-    XrChannel *rsp_ch = xr_cluster_node_add_pending(
-        target, req_id, X, c->max_pending_requests);
+    XrChannel *rsp_ch = xr_cluster_node_add_pending(target, req_id, X, c->max_pending_requests);
     if (!rsp_ch) {
         xr_serial_buf_free(&sbuf);
         return xr_null();
@@ -1177,25 +1235,27 @@ static XrValue cluster_call_fn(XrayIsolate *X, XrValue *args, int argc) {
     size_t frame_size = 4 + 1 + 8 + 1 + strlen(service_name->data) + sbuf.len;
     uint8_t stack_frame[4096];
     uint8_t *frame = (frame_size + 16 <= sizeof(stack_frame))
-        ? stack_frame : (uint8_t *)xr_malloc(frame_size + 16);
+                         ? stack_frame
+                         : (uint8_t *) xr_malloc(frame_size + 16);
     if (!frame) {
         xr_serial_buf_free(&sbuf);
         return xr_null();
     }
 
-    int flen = xr_frame_encode_service_call(frame, frame_size + 16,
-                                             req_id, service_name->data,
-                                             sbuf.data, (uint32_t)sbuf.len);
+    int flen = xr_frame_encode_service_call(frame, frame_size + 16, req_id, service_name->data,
+                                            sbuf.data, (uint32_t) sbuf.len);
     xr_serial_buf_free(&sbuf);
 
     if (flen < 0) {
-        if (frame != stack_frame) xr_free(frame);
-        xr_cluster_node_take_pending(target, req_id); // cleanup
+        if (frame != stack_frame)
+            xr_free(frame);
+        xr_cluster_node_take_pending(target, req_id);  // cleanup
         return xr_null();
     }
 
-    int rc = xr_cluster_node_enqueue(target, frame, (uint32_t)flen);
-    if (frame != stack_frame) xr_free(frame);
+    int rc = xr_cluster_node_enqueue(target, frame, (uint32_t) flen);
+    if (frame != stack_frame)
+        xr_free(frame);
     if (rc != 0) {
         xr_cluster_node_take_pending(target, req_id);
         return xr_null();
@@ -1210,20 +1270,24 @@ static XrValue cluster_call_fn(XrayIsolate *X, XrValue *args, int argc) {
 // cluster.monitor(node_name) - returns Channel that receives notification on disconnect
 // Use "*" to monitor all nodes
 static __attribute__((unused)) XrValue cluster_monitor_fn(XrayIsolate *X, XrValue *args, int argc) {
-    if (argc < 1 || !XR_IS_STRING(args[0])) return xr_null();
+    if (argc < 1 || !XR_IS_STRING(args[0]))
+        return xr_null();
 
     XrString *name_str = XR_TO_STRING(args[0]);
     XrChannel *ch = xr_cluster_monitor_node(X, name_str->data);
-    if (!ch) return xr_null();
+    if (!ch)
+        return xr_null();
 
     return xr_value_from_channel(ch);
 }
 
 // cluster.discover() - start LAN auto-discovery via UDP multicast
 static XrValue cluster_discover_fn(XrayIsolate *X, XrValue *args, int argc) {
-    (void)args; (void)argc;
-    XrCluster *c = (XrCluster *)X->cluster;
-    if (!c) return xr_bool(0);
+    (void) args;
+    (void) argc;
+    XrCluster *c = (XrCluster *) X->cluster;
+    if (!c)
+        return xr_bool(0);
 
     int rc = xr_cluster_discovery_start(c);
     return xr_bool(rc == 0);
@@ -1231,8 +1295,9 @@ static XrValue cluster_discover_fn(XrayIsolate *X, XrValue *args, int argc) {
 
 // cluster.stop()
 static XrValue cluster_stop_fn(XrayIsolate *X, XrValue *args, int argc) {
-    (void)args; (void)argc;
-    xr_cluster_stop((XrCluster *)X->cluster);
+    (void) args;
+    (void) argc;
+    xr_cluster_stop((XrCluster *) X->cluster);
     return xr_null();
 }
 
@@ -1241,366 +1306,369 @@ static XrValue cluster_stop_fn(XrayIsolate *X, XrValue *args, int argc) {
 void xr_cluster_process_node(XrCluster *c, XrClusterNode *node) {
     XR_DCHECK(c != NULL, "cluster must be initialized");
     XR_DCHECK(node != NULL, "node must not be NULL");
-    if (!c || !node) return;
+    if (!c || !node)
+        return;
 
     // Heap-allocated receive buffer (avoid 64KB on coroutine stack)
-    uint8_t *recv_buf = (uint8_t *)xr_malloc(65536);
-    if (!recv_buf) return;
+    uint8_t *recv_buf = (uint8_t *) xr_malloc(65536);
+    if (!recv_buf)
+        return;
     uint8_t frame_type;
     uint32_t payload_len;
 
     while (atomic_load(&c->running) && node->state == XR_NODE_CONNECTED) {
-        if (xr_cluster_node_recv_frame(node, &frame_type, recv_buf,
-                                        65536, &payload_len) != 0) {
-            break; // Disconnect
+        if (xr_cluster_node_recv_frame(node, &frame_type, recv_buf, 65536, &payload_len) != 0) {
+            break;  // Disconnect
         }
 
         switch (frame_type) {
-        case XR_FRAME_HEARTBEAT_PING: {
-            // Reply with PONG via output queue
-            int64_t ts;
-            if (xr_frame_decode_heartbeat(recv_buf, payload_len, &ts) == 0) {
-                uint8_t pong[32];
-                int plen = xr_frame_encode_heartbeat(pong, sizeof(pong),
-                                                      XR_FRAME_HEARTBEAT_PONG, ts);
-                if (plen > 0) {
-                    xr_cluster_node_enqueue(node, pong, (uint32_t)plen);
-                }
-            }
-            int64_t now_hb = xr_cluster_now_ms();
-            node->last_heartbeat_recv = now_hb;
-            node->missed_heartbeats = 0;
-            xr_phi_record_heartbeat(&node->phi, now_hb);
-            atomic_fetch_add(&node->metrics.frames_recv, 1);
-            break;
-        }
-
-        case XR_FRAME_HEARTBEAT_PONG: {
-            int64_t now_pong = xr_cluster_now_ms();
-            // Compute RTT from ping timestamp
-            int64_t ping_ts;
-            if (xr_frame_decode_heartbeat(recv_buf, payload_len, &ping_ts) == 0) {
-                node->metrics.last_rtt_ms = now_pong - ping_ts;
-            }
-            node->last_heartbeat_recv = now_pong;
-            node->missed_heartbeats = 0;
-            xr_phi_record_heartbeat(&node->phi, now_pong);
-            atomic_fetch_add(&node->metrics.frames_recv, 1);
-            break;
-        }
-
-        case XR_FRAME_CHANNEL_SEND: {
-            XrFrameChannelSend cs;
-            if (xr_frame_decode_channel_send(recv_buf, payload_len, &cs) == 0) {
-                xr_cluster_channel_handle_send(c, cs.channel_name,
-                                                cs.value_data, cs.value_len);
-            }
-            break;
-        }
-
-        case XR_FRAME_CHANNEL_CLOSE: {
-            char ch_name[XR_CHANNEL_NAME_MAX + 1];
-            if (xr_frame_decode_channel_close(recv_buf, payload_len,
-                                               ch_name, sizeof(ch_name)) == 0) {
-                xr_cluster_channel_handle_close(c, ch_name);
-            }
-            break;
-        }
-
-        case XR_FRAME_CHANNEL_RECV_RSP: {
-            // Format: [request_id 8B] [has_value 1B] [value_data ...]
-            if (payload_len < 9) break;
-            uint64_t rsp_req_id = 0;
-            for (int j = 0; j < 8; j++)
-                rsp_req_id = (rsp_req_id << 8) | recv_buf[j];
-
-            XrChannel *rsp_ch = xr_cluster_node_take_pending(node, rsp_req_id);
-            if (!rsp_ch) break;
-
-            if (recv_buf[8] == 0) {
-                // No value — close channel to unblock caller
-                xr_channel_close(rsp_ch);
-            } else {
-                XrValue val;
-                if (xr_cluster_decode_value(c->isolate, recv_buf + 9,
-                                             payload_len - 9, &val) == 0) {
-                    xr_channel_try_send(rsp_ch, val);
-                } else {
-                    xr_channel_close(rsp_ch);
-                }
-            }
-            break;
-        }
-
-        case XR_FRAME_CHANNEL_RECV_REQ: {
-            // Format: [request_id 8B] [name_len 1B] [name ...]
-            if (payload_len < 9) break;
-            uint64_t recv_req_id = 0;
-            for (int j = 0; j < 8; j++)
-                recv_req_id = (recv_req_id << 8) | recv_buf[j];
-            uint8_t name_len = recv_buf[8];
-            if (name_len > XR_CHANNEL_NAME_MAX || payload_len < (uint32_t)(9 + name_len))
-                break;
-            char ch_name[XR_CHANNEL_NAME_MAX + 1];
-            memcpy(ch_name, recv_buf + 9, name_len);
-            ch_name[name_len] = '\0';
-
-            // Response format: [request_id 8B] [has_value 1B] [value_data ...]
-            // Use heap buffer to avoid large stack allocation
-            uint8_t *rsp_payload = recv_buf; // reuse recv_buf (safe: we finished reading)
-            for (int j = 7; j >= 0; j--) {
-                rsp_payload[j] = (uint8_t)(recv_req_id & 0xFF);
-                recv_req_id >>= 8;
-            }
-
-            XrDistChannel *dc = xr_cluster_find_channel(c, ch_name);
-            if (dc && dc->is_owner && dc->channel) {
-                XrValue out;
-                bool ok = false;
-                out = xr_channel_try_recv(dc->channel, &ok);
-                if (ok) {
-                    XrSerialBuf sbuf;
-                    xr_serial_buf_init(&sbuf);
-                    if (xr_cluster_encode(c->isolate, out, &sbuf) == 0) {
-                        rsp_payload[8] = 1; // has_value = true
-                        memcpy(rsp_payload + 9, sbuf.data, sbuf.len);
-                        xr_cluster_node_send_frame(node, XR_FRAME_CHANNEL_RECV_RSP,
-                                                    rsp_payload, 9 + (uint32_t)sbuf.len);
+            case XR_FRAME_HEARTBEAT_PING: {
+                // Reply with PONG via output queue
+                int64_t ts;
+                if (xr_frame_decode_heartbeat(recv_buf, payload_len, &ts) == 0) {
+                    uint8_t pong[32];
+                    int plen =
+                        xr_frame_encode_heartbeat(pong, sizeof(pong), XR_FRAME_HEARTBEAT_PONG, ts);
+                    if (plen > 0) {
+                        xr_cluster_node_enqueue(node, pong, (uint32_t) plen);
                     }
-                    xr_serial_buf_free(&sbuf);
-                } else {
-                    rsp_payload[8] = 0; // has_value = false
-                    xr_cluster_node_send_frame(node, XR_FRAME_CHANNEL_RECV_RSP,
-                                                rsp_payload, 9);
                 }
-            } else {
-                rsp_payload[8] = 0;
-                xr_cluster_node_send_frame(node, XR_FRAME_CHANNEL_RECV_RSP,
-                                            rsp_payload, 9);
+                int64_t now_hb = xr_cluster_now_ms();
+                node->last_heartbeat_recv = now_hb;
+                node->missed_heartbeats = 0;
+                xr_phi_record_heartbeat(&node->phi, now_hb);
+                atomic_fetch_add(&node->metrics.frames_recv, 1);
+                break;
             }
-            break;
-        }
 
-        case XR_FRAME_SERVICE_CALL: {
-            XrFrameServiceCall sc;
-            if (xr_frame_decode_service_call(recv_buf, payload_len, &sc) != 0)
+            case XR_FRAME_HEARTBEAT_PONG: {
+                int64_t now_pong = xr_cluster_now_ms();
+                // Compute RTT from ping timestamp
+                int64_t ping_ts;
+                if (xr_frame_decode_heartbeat(recv_buf, payload_len, &ping_ts) == 0) {
+                    node->metrics.last_rtt_ms = now_pong - ping_ts;
+                }
+                node->last_heartbeat_recv = now_pong;
+                node->missed_heartbeats = 0;
+                xr_phi_record_heartbeat(&node->phi, now_pong);
+                atomic_fetch_add(&node->metrics.frames_recv, 1);
                 break;
-
-            XrServiceEntry *se = xr_cluster_find_service(c, sc.service_name);
-            if (!se || !se->request_ch) break;
-
-            // Decode args
-            XrValue decoded_args;
-            if (xr_cluster_decode_value(c->isolate, sc.args_data,
-                                         sc.args_len, &decoded_args) != 0)
-                break;
-
-            // Build request Json: {id: int, from: string, args: value}
-            XrJson *req_json = xr_json_new(NULL, 3);
-            if (req_json) {
-                xr_json_set_by_key(c->isolate, req_json, "id",
-                                    xr_int((int64_t)sc.request_id));
-                XrString *from_str = xr_string_intern(c->isolate, node->name,
-                                                       (uint32_t)strlen(node->name), 0);
-                xr_json_set_by_key(c->isolate, req_json, "from",
-                                    xr_string_value(from_str));
-                xr_json_set_by_key(c->isolate, req_json, "args", decoded_args);
-
-                // Send to service request channel (non-blocking)
-                xr_channel_try_send(se->request_ch, xr_json_value(req_json));
             }
-            break;
-        }
 
-        case XR_FRAME_SERVICE_REPLY: {
-            XrFrameServiceReply reply;
-            if (xr_frame_decode_service_reply(recv_buf, payload_len, &reply) != 0)
+            case XR_FRAME_CHANNEL_SEND: {
+                XrFrameChannelSend cs;
+                if (xr_frame_decode_channel_send(recv_buf, payload_len, &cs) == 0) {
+                    xr_cluster_channel_handle_send(c, cs.channel_name, cs.value_data, cs.value_len);
+                }
                 break;
+            }
 
-            // Find pending request by request_id
-            XrChannel *rsp_ch = xr_cluster_node_take_pending(node, reply.request_id);
-            if (!rsp_ch) break;
+            case XR_FRAME_CHANNEL_CLOSE: {
+                char ch_name[XR_CHANNEL_NAME_MAX + 1];
+                if (xr_frame_decode_channel_close(recv_buf, payload_len, ch_name,
+                                                  sizeof(ch_name)) == 0) {
+                    xr_cluster_channel_handle_close(c, ch_name);
+                }
+                break;
+            }
 
-            if (reply.is_error || reply.result_len == 0) {
-                // Signal error by closing the channel
-                xr_channel_close(rsp_ch);
-            } else {
-                // Decode result and deliver to waiting caller
-                XrValue result;
-                if (xr_cluster_decode_value(c->isolate, reply.result_data,
-                                             reply.result_len, &result) == 0) {
-                    xr_channel_try_send(rsp_ch, result);
-                } else {
+            case XR_FRAME_CHANNEL_RECV_RSP: {
+                // Format: [request_id 8B] [has_value 1B] [value_data ...]
+                if (payload_len < 9)
+                    break;
+                uint64_t rsp_req_id = 0;
+                for (int j = 0; j < 8; j++)
+                    rsp_req_id = (rsp_req_id << 8) | recv_buf[j];
+
+                XrChannel *rsp_ch = xr_cluster_node_take_pending(node, rsp_req_id);
+                if (!rsp_ch)
+                    break;
+
+                if (recv_buf[8] == 0) {
+                    // No value — close channel to unblock caller
                     xr_channel_close(rsp_ch);
-                }
-            }
-            break;
-        }
-
-        case XR_FRAME_NODE_INFO: {
-            xr_cluster_handle_node_info(c, recv_buf, payload_len);
-            break;
-        }
-
-        case XR_FRAME_CHANNEL_SYNC: {
-            // Remote node telling us about their Named Channels
-            // Parse: [name_len 1B] [name] [owner_len 1B] [owner] [buf_size 4B]
-            if (payload_len < 2) break;
-            const uint8_t *p = recv_buf;
-            uint8_t name_len = *p++;
-            if (name_len > XR_CHANNEL_NAME_MAX) break;
-            char ch_name[XR_CHANNEL_NAME_MAX + 1];
-            memcpy(ch_name, p, name_len);
-            ch_name[name_len] = '\0';
-            p += name_len;
-
-            // Read buf_size from payload (after owner name)
-            uint32_t remote_buf_size = 16; // default
-            if (p < recv_buf + payload_len) {
-                uint8_t owner_len = *p++;
-                p += owner_len; // skip owner name
-                if (p + 4 <= recv_buf + payload_len) {
-                    remote_buf_size = ((uint32_t)p[0] << 24) | ((uint32_t)p[1] << 16) |
-                                      ((uint32_t)p[2] << 8) | p[3];
-                    if (remote_buf_size == 0) remote_buf_size = 16;
-                }
-            }
-
-            // Check if we already know this channel
-            if (!xr_cluster_find_channel(c, ch_name)) {
-                // Create a proxy channel entry with local buffer for push model
-                XrDistChannel *dc = (XrDistChannel *)xr_calloc(1, sizeof(XrDistChannel));
-                if (dc) {
-                    strncpy(dc->name, ch_name, XR_CHANNEL_NAME_MAX);
-                    dc->is_owner = false;
-                    dc->owner_node = node;
-                    dc->cluster = c;
-                    // Create local buffered channel for receiving PUSH data
-                    dc->channel = xr_channel_new(c->isolate, remote_buf_size);
-                    if (dc->channel) {
-                        dc->channel->name = dc->name;
-                        dc->channel->dist = dc;
+                } else {
+                    XrValue val;
+                    if (xr_cluster_decode_value(c->isolate, recv_buf + 9, payload_len - 9, &val) ==
+                        0) {
+                        xr_channel_try_send(rsp_ch, val);
+                    } else {
+                        xr_channel_close(rsp_ch);
                     }
-
-                    uint32_t bucket = str_hash(ch_name) % XR_CLUSTER_CHANNEL_BUCKETS;
-
-                    xr_mutex_lock(&c->channels_lock);
-                    dc->next = c->channel_buckets[bucket];
-                    c->channel_buckets[bucket] = dc;
-                    c->channel_count++;
-                    xr_mutex_unlock(&c->channels_lock);
                 }
+                break;
             }
-            break;
-        }
 
-        case XR_FRAME_CHANNEL_SUBSCRIBE: {
-            XrFrameChannelSubscribe sub;
-            if (xr_frame_decode_channel_subscribe(recv_buf, payload_len, &sub) == 0) {
-                xr_cluster_add_subscriber(c, sub.channel_name, node);
+            case XR_FRAME_CHANNEL_RECV_REQ: {
+                // Format: [request_id 8B] [name_len 1B] [name ...]
+                if (payload_len < 9)
+                    break;
+                uint64_t recv_req_id = 0;
+                for (int j = 0; j < 8; j++)
+                    recv_req_id = (recv_req_id << 8) | recv_buf[j];
+                uint8_t name_len = recv_buf[8];
+                if (name_len > XR_CHANNEL_NAME_MAX || payload_len < (uint32_t) (9 + name_len))
+                    break;
+                char ch_name[XR_CHANNEL_NAME_MAX + 1];
+                memcpy(ch_name, recv_buf + 9, name_len);
+                ch_name[name_len] = '\0';
+
+                // Response format: [request_id 8B] [has_value 1B] [value_data ...]
+                // Use heap buffer to avoid large stack allocation
+                uint8_t *rsp_payload = recv_buf;  // reuse recv_buf (safe: we finished reading)
+                for (int j = 7; j >= 0; j--) {
+                    rsp_payload[j] = (uint8_t) (recv_req_id & 0xFF);
+                    recv_req_id >>= 8;
+                }
+
+                XrDistChannel *dc = xr_cluster_find_channel(c, ch_name);
+                if (dc && dc->is_owner && dc->channel) {
+                    XrValue out;
+                    bool ok = false;
+                    out = xr_channel_try_recv(dc->channel, &ok);
+                    if (ok) {
+                        XrSerialBuf sbuf;
+                        xr_serial_buf_init(&sbuf);
+                        if (xr_cluster_encode(c->isolate, out, &sbuf) == 0) {
+                            rsp_payload[8] = 1;  // has_value = true
+                            memcpy(rsp_payload + 9, sbuf.data, sbuf.len);
+                            xr_cluster_node_send_frame(node, XR_FRAME_CHANNEL_RECV_RSP, rsp_payload,
+                                                       9 + (uint32_t) sbuf.len);
+                        }
+                        xr_serial_buf_free(&sbuf);
+                    } else {
+                        rsp_payload[8] = 0;  // has_value = false
+                        xr_cluster_node_send_frame(node, XR_FRAME_CHANNEL_RECV_RSP, rsp_payload, 9);
+                    }
+                } else {
+                    rsp_payload[8] = 0;
+                    xr_cluster_node_send_frame(node, XR_FRAME_CHANNEL_RECV_RSP, rsp_payload, 9);
+                }
+                break;
             }
-            break;
-        }
 
-        case XR_FRAME_CHANNEL_UNSUBSCRIBE: {
-            char unsub_name[XR_CHANNEL_NAME_MAX + 1];
-            if (xr_frame_decode_channel_unsubscribe(recv_buf, payload_len,
-                                                     unsub_name, sizeof(unsub_name)) == 0) {
-                xr_cluster_remove_subscriber(c, unsub_name, node);
+            case XR_FRAME_SERVICE_CALL: {
+                XrFrameServiceCall sc;
+                if (xr_frame_decode_service_call(recv_buf, payload_len, &sc) != 0)
+                    break;
+
+                XrServiceEntry *se = xr_cluster_find_service(c, sc.service_name);
+                if (!se || !se->request_ch)
+                    break;
+
+                // Decode args
+                XrValue decoded_args;
+                if (xr_cluster_decode_value(c->isolate, sc.args_data, sc.args_len, &decoded_args) !=
+                    0)
+                    break;
+
+                // Build request Json: {id: int, from: string, args: value}
+                XrJson *req_json = xr_json_new(NULL, 3);
+                if (req_json) {
+                    xr_json_set_by_key(c->isolate, req_json, "id", xr_int((int64_t) sc.request_id));
+                    XrString *from_str =
+                        xr_string_intern(c->isolate, node->name, (uint32_t) strlen(node->name), 0);
+                    xr_json_set_by_key(c->isolate, req_json, "from", xr_string_value(from_str));
+                    xr_json_set_by_key(c->isolate, req_json, "args", decoded_args);
+
+                    // Send to service request channel (non-blocking)
+                    xr_channel_try_send(se->request_ch, xr_json_value(req_json));
+                }
+                break;
             }
-            break;
-        }
 
-        case XR_FRAME_CHANNEL_PUSH: {
-            XrFrameChannelPush push;
-            if (xr_frame_decode_channel_push(recv_buf, payload_len, &push) == 0) {
-                xr_cluster_channel_handle_push(c, push.channel_name,
-                                                push.value_data, push.value_len);
+            case XR_FRAME_SERVICE_REPLY: {
+                XrFrameServiceReply reply;
+                if (xr_frame_decode_service_reply(recv_buf, payload_len, &reply) != 0)
+                    break;
+
+                // Find pending request by request_id
+                XrChannel *rsp_ch = xr_cluster_node_take_pending(node, reply.request_id);
+                if (!rsp_ch)
+                    break;
+
+                if (reply.is_error || reply.result_len == 0) {
+                    // Signal error by closing the channel
+                    xr_channel_close(rsp_ch);
+                } else {
+                    // Decode result and deliver to waiting caller
+                    XrValue result;
+                    if (xr_cluster_decode_value(c->isolate, reply.result_data, reply.result_len,
+                                                &result) == 0) {
+                        xr_channel_try_send(rsp_ch, result);
+                    } else {
+                        xr_channel_close(rsp_ch);
+                    }
+                }
+                break;
             }
-            break;
-        }
 
-        case XR_FRAME_TOPIC_PUBLISH: {
-            /*
-             * Wire format (see xr_cluster_topic_publish for rationale):
-             *
-             *   Legacy (pre-P17):
-             *     [topic_len 1B] [topic ...] [value_data ...]
-             *
-             *   Current (P17, hop-limited forwarding):
-             *     [topic_len 1B] [topic ...] [value_data ...] [hop 1B]
-             *
-             * Both are accepted here because the trailing hop byte was
-             * added without bumping the frame type or version. We
-             * detect the P17 form by requiring at least one byte
-             * beyond the advertised topic region AND accepting any
-             * value in [0, 255] as a legal hop count — a malformed
-             * payload that happens to have an extra byte would at
-             * worst cause an additional round of forwarding, bounded
-             * by the receiver's own hop decrement.
-             *
-             * A cleaner future version can bump to a dedicated
-             * TOPIC_PUBLISH_FWD frame type and deprecate the legacy
-             * form, but backward-compat during rolling upgrade is
-             * more valuable right now than wire-format purity.
-             */
-            if (payload_len >= 2) {
-                uint8_t topic_len = recv_buf[0];
-                if (topic_len > 0 && 1 + topic_len <= payload_len) {
-                    char topic[XR_TOPIC_PATTERN_MAX + 1];
-                    if (topic_len <= XR_TOPIC_PATTERN_MAX) {
-                        memcpy(topic, recv_buf + 1, topic_len);
-                        topic[topic_len] = '\0';
-                        uint32_t val_offset = 1 + topic_len;
-                        uint32_t val_len = payload_len - val_offset;
+            case XR_FRAME_NODE_INFO: {
+                xr_cluster_handle_node_info(c, recv_buf, payload_len);
+                break;
+            }
 
-                        // Detect presence of the trailing hop byte:
-                        // the value region must be at least 1 byte
-                        // AND we cannot tell a zero-length value with
-                        // a single hop byte from an old zero-byte
-                        // payload, so we treat val_len == 0 as legacy
-                        // (no forwarding). Real publishes always have
-                        // a non-empty serialized value.
-                        uint8_t hop_limit = 0;
-                        if (val_len >= 1) {
-                            hop_limit = recv_buf[payload_len - 1];
-                            val_len -= 1;  // exclude trailing hop byte
+            case XR_FRAME_CHANNEL_SYNC: {
+                // Remote node telling us about their Named Channels
+                // Parse: [name_len 1B] [name] [owner_len 1B] [owner] [buf_size 4B]
+                if (payload_len < 2)
+                    break;
+                const uint8_t *p = recv_buf;
+                uint8_t name_len = *p++;
+                if (name_len > XR_CHANNEL_NAME_MAX)
+                    break;
+                char ch_name[XR_CHANNEL_NAME_MAX + 1];
+                memcpy(ch_name, p, name_len);
+                ch_name[name_len] = '\0';
+                p += name_len;
+
+                // Read buf_size from payload (after owner name)
+                uint32_t remote_buf_size = 16;  // default
+                if (p < recv_buf + payload_len) {
+                    uint8_t owner_len = *p++;
+                    p += owner_len;  // skip owner name
+                    if (p + 4 <= recv_buf + payload_len) {
+                        remote_buf_size = ((uint32_t) p[0] << 24) | ((uint32_t) p[1] << 16) |
+                                          ((uint32_t) p[2] << 8) | p[3];
+                        if (remote_buf_size == 0)
+                            remote_buf_size = 16;
+                    }
+                }
+
+                // Check if we already know this channel
+                if (!xr_cluster_find_channel(c, ch_name)) {
+                    // Create a proxy channel entry with local buffer for push model
+                    XrDistChannel *dc = (XrDistChannel *) xr_calloc(1, sizeof(XrDistChannel));
+                    if (dc) {
+                        strncpy(dc->name, ch_name, XR_CHANNEL_NAME_MAX);
+                        dc->is_owner = false;
+                        dc->owner_node = node;
+                        dc->cluster = c;
+                        // Create local buffered channel for receiving PUSH data
+                        dc->channel = xr_channel_new(c->isolate, remote_buf_size);
+                        if (dc->channel) {
+                            dc->channel->name = dc->name;
+                            dc->channel->dist = dc;
                         }
 
-                        xr_cluster_topic_handle_publish(c, node, topic,
-                            recv_buf + val_offset, val_len, hop_limit);
+                        uint32_t bucket = str_hash(ch_name) % XR_CLUSTER_CHANNEL_BUCKETS;
+
+                        xr_mutex_lock(&c->channels_lock);
+                        dc->next = c->channel_buckets[bucket];
+                        c->channel_buckets[bucket] = dc;
+                        c->channel_count++;
+                        xr_mutex_unlock(&c->channels_lock);
                     }
                 }
+                break;
             }
-            break;
-        }
 
-        case XR_FRAME_CORO_MONITOR: {
-            char coro_name[XR_CORO_NAME_MAX + 1];
-            if (xr_frame_decode_coro_monitor(recv_buf, payload_len,
-                    coro_name, sizeof(coro_name)) == 0) {
-                xr_cluster_handle_coro_monitor(c, node, coro_name);
+            case XR_FRAME_CHANNEL_SUBSCRIBE: {
+                XrFrameChannelSubscribe sub;
+                if (xr_frame_decode_channel_subscribe(recv_buf, payload_len, &sub) == 0) {
+                    xr_cluster_add_subscriber(c, sub.channel_name, node);
+                }
+                break;
             }
-            break;
-        }
 
-        case XR_FRAME_CORO_EXIT: {
-            char coro_name[XR_CORO_NAME_MAX + 1];
-            char reason[128];
-            if (xr_frame_decode_coro_exit(recv_buf, payload_len,
-                    coro_name, sizeof(coro_name),
-                    reason, sizeof(reason)) == 0) {
-                xr_cluster_handle_coro_exit(c, coro_name, reason);
+            case XR_FRAME_CHANNEL_UNSUBSCRIBE: {
+                char unsub_name[XR_CHANNEL_NAME_MAX + 1];
+                if (xr_frame_decode_channel_unsubscribe(recv_buf, payload_len, unsub_name,
+                                                        sizeof(unsub_name)) == 0) {
+                    xr_cluster_remove_subscriber(c, unsub_name, node);
+                }
+                break;
             }
-            break;
-        }
 
-        case XR_FRAME_CORO_DEMONITOR:
-            // Future: remove remote monitor
-            break;
+            case XR_FRAME_CHANNEL_PUSH: {
+                XrFrameChannelPush push;
+                if (xr_frame_decode_channel_push(recv_buf, payload_len, &push) == 0) {
+                    xr_cluster_channel_handle_push(c, push.channel_name, push.value_data,
+                                                   push.value_len);
+                }
+                break;
+            }
 
-        default:
-            break;
+            case XR_FRAME_TOPIC_PUBLISH: {
+                /*
+                 * Wire format (see xr_cluster_topic_publish for rationale):
+                 *
+                 *   Legacy (pre-P17):
+                 *     [topic_len 1B] [topic ...] [value_data ...]
+                 *
+                 *   Current (P17, hop-limited forwarding):
+                 *     [topic_len 1B] [topic ...] [value_data ...] [hop 1B]
+                 *
+                 * Both are accepted here because the trailing hop byte was
+                 * added without bumping the frame type or version. We
+                 * detect the P17 form by requiring at least one byte
+                 * beyond the advertised topic region AND accepting any
+                 * value in [0, 255] as a legal hop count — a malformed
+                 * payload that happens to have an extra byte would at
+                 * worst cause an additional round of forwarding, bounded
+                 * by the receiver's own hop decrement.
+                 *
+                 * A cleaner future version can bump to a dedicated
+                 * TOPIC_PUBLISH_FWD frame type and deprecate the legacy
+                 * form, but backward-compat during rolling upgrade is
+                 * more valuable right now than wire-format purity.
+                 */
+                if (payload_len >= 2) {
+                    uint8_t topic_len = recv_buf[0];
+                    if (topic_len > 0 && 1 + topic_len <= payload_len) {
+                        char topic[XR_TOPIC_PATTERN_MAX + 1];
+                        if (topic_len <= XR_TOPIC_PATTERN_MAX) {
+                            memcpy(topic, recv_buf + 1, topic_len);
+                            topic[topic_len] = '\0';
+                            uint32_t val_offset = 1 + topic_len;
+                            uint32_t val_len = payload_len - val_offset;
+
+                            // Detect presence of the trailing hop byte:
+                            // the value region must be at least 1 byte
+                            // AND we cannot tell a zero-length value with
+                            // a single hop byte from an old zero-byte
+                            // payload, so we treat val_len == 0 as legacy
+                            // (no forwarding). Real publishes always have
+                            // a non-empty serialized value.
+                            uint8_t hop_limit = 0;
+                            if (val_len >= 1) {
+                                hop_limit = recv_buf[payload_len - 1];
+                                val_len -= 1;  // exclude trailing hop byte
+                            }
+
+                            xr_cluster_topic_handle_publish(c, node, topic, recv_buf + val_offset,
+                                                            val_len, hop_limit);
+                        }
+                    }
+                }
+                break;
+            }
+
+            case XR_FRAME_CORO_MONITOR: {
+                char coro_name[XR_CORO_NAME_MAX + 1];
+                if (xr_frame_decode_coro_monitor(recv_buf, payload_len, coro_name,
+                                                 sizeof(coro_name)) == 0) {
+                    xr_cluster_handle_coro_monitor(c, node, coro_name);
+                }
+                break;
+            }
+
+            case XR_FRAME_CORO_EXIT: {
+                char coro_name[XR_CORO_NAME_MAX + 1];
+                char reason[128];
+                if (xr_frame_decode_coro_exit(recv_buf, payload_len, coro_name, sizeof(coro_name),
+                                              reason, sizeof(reason)) == 0) {
+                    xr_cluster_handle_coro_exit(c, coro_name, reason);
+                }
+                break;
+            }
+
+            case XR_FRAME_CORO_DEMONITOR:
+                // Future: remove remote monitor
+                break;
+
+            default:
+                break;
         }
     }
 
@@ -1608,7 +1676,8 @@ void xr_cluster_process_node(XrCluster *c, XrClusterNode *node) {
     xr_free(recv_buf);
     xr_cluster_remove_all_subscribers_for_node(c, node);
     xr_cluster_fire_monitors(c, node->name);
-    if (c->on_node_removed) c->on_node_removed(node->name);
+    if (c->on_node_removed)
+        c->on_node_removed(node->name);
     xr_cluster_remove_node(c, node);
     xr_cluster_node_free(node);
 }
@@ -1616,16 +1685,19 @@ void xr_cluster_process_node(XrCluster *c, XrClusterNode *node) {
 /* ========== Event Callbacks ========== */
 
 void xr_cluster_on_node_added(XrCluster *c, void (*cb)(const char *name)) {
-    if (c) c->on_node_added = cb;
+    if (c)
+        c->on_node_added = cb;
 }
 
 void xr_cluster_on_node_removed(XrCluster *c, void (*cb)(const char *name)) {
-    if (c) c->on_node_removed = cb;
+    if (c)
+        c->on_node_removed = cb;
 }
 
 // xray binding: cluster.publish(topic, value)
 static XrValue cluster_publish_fn(XrayIsolate *X, XrValue *args, int argc) {
-    if (argc < 2 || !XR_IS_STRING(args[0])) return xr_bool(false);
+    if (argc < 2 || !XR_IS_STRING(args[0]))
+        return xr_bool(false);
 
     XrString *topic_str = XR_TO_STRING(args[0]);
     int rc = xr_cluster_topic_publish(X, topic_str->data, args[1]);
@@ -1634,27 +1706,31 @@ static XrValue cluster_publish_fn(XrayIsolate *X, XrValue *args, int argc) {
 
 // xray binding: cluster.subscribe(pattern)
 static XrValue cluster_subscribe_fn(XrayIsolate *X, XrValue *args, int argc) {
-    if (argc < 1 || !XR_IS_STRING(args[0])) return xr_null();
+    if (argc < 1 || !XR_IS_STRING(args[0]))
+        return xr_null();
 
     XrString *pattern_str = XR_TO_STRING(args[0]);
     XrChannel *ch = xr_cluster_topic_subscribe(X, pattern_str->data);
-    if (!ch) return xr_null();
+    if (!ch)
+        return xr_null();
     return xr_value_from_channel(ch);
 }
 
 /* ========== Cluster Info API ========== */
 
 static XrValue cluster_info_fn(XrayIsolate *X, XrValue *args, int argc) {
-    (void)args; (void)argc;
-    XrCluster *c = (XrCluster *)X->cluster;
-    if (!c) return xr_null();
+    (void) args;
+    (void) argc;
+    XrCluster *c = (XrCluster *) X->cluster;
+    if (!c)
+        return xr_null();
 
     XrJson *info = xr_json_new(NULL, 8);
-    if (!info) return xr_null();
+    if (!info)
+        return xr_null();
 
     // Self name
-    XrString *self = xr_string_intern(X, c->self_name,
-                                       (uint32_t)strlen(c->self_name), 0);
+    XrString *self = xr_string_intern(X, c->self_name, (uint32_t) strlen(c->self_name), 0);
     xr_json_set_by_key(X, info, "self", xr_string_value(self));
     xr_json_set_by_key(X, info, "port", xr_int(c->listen_port));
     xr_json_set_by_key(X, info, "running", xr_bool(atomic_load(&c->running)));
@@ -1667,12 +1743,10 @@ static XrValue cluster_info_fn(XrayIsolate *X, XrValue *args, int argc) {
         while (node) {
             XrJson *nj = xr_json_new(NULL, 10);
             if (nj) {
-                XrString *nname = xr_string_intern(X, node->name,
-                                                    (uint32_t)strlen(node->name), 0);
+                XrString *nname = xr_string_intern(X, node->name, (uint32_t) strlen(node->name), 0);
                 xr_json_set_by_key(X, nj, "name", xr_string_value(nname));
 
-                XrString *nhost = xr_string_intern(X, node->host,
-                                                    (uint32_t)strlen(node->host), 0);
+                XrString *nhost = xr_string_intern(X, node->host, (uint32_t) strlen(node->host), 0);
                 xr_json_set_by_key(X, nj, "host", xr_string_value(nhost));
                 xr_json_set_by_key(X, nj, "port", xr_int(node->port));
                 xr_json_set_by_key(X, nj, "state", xr_int(node->state));
@@ -1688,42 +1762,38 @@ static XrValue cluster_info_fn(XrayIsolate *X, XrValue *args, int argc) {
                  * tradeoff is acceptable for a diagnostic JSON.
                  */
                 xr_json_set_by_key(X, nj, "frames_sent",
-                    xr_int((int64_t)atomic_load(&node->metrics.frames_sent)));
+                                   xr_int((int64_t) atomic_load(&node->metrics.frames_sent)));
                 xr_json_set_by_key(X, nj, "frames_recv",
-                    xr_int((int64_t)atomic_load(&node->metrics.frames_recv)));
+                                   xr_int((int64_t) atomic_load(&node->metrics.frames_recv)));
                 xr_json_set_by_key(X, nj, "bytes_sent",
-                    xr_int((int64_t)atomic_load(&node->metrics.bytes_sent)));
+                                   xr_int((int64_t) atomic_load(&node->metrics.bytes_sent)));
                 xr_json_set_by_key(X, nj, "bytes_recv",
-                    xr_int((int64_t)atomic_load(&node->metrics.bytes_recv)));
+                                   xr_int((int64_t) atomic_load(&node->metrics.bytes_recv)));
                 // send_errors: writev short/fail counter — high values
                 // flag a slow or lossy link; correlate with the slow
                 // flag below.
                 xr_json_set_by_key(X, nj, "send_errors",
-                    xr_int((int64_t)atomic_load(&node->metrics.send_errors)));
+                                   xr_int((int64_t) atomic_load(&node->metrics.send_errors)));
                 // slow_consumer_events: total times this peer hit the
                 // high watermark (4 MiB by default) since start. Each
                 // event corresponds to one outq_bytes >= high_watermark
                 // transition in cluster_node.
-                xr_json_set_by_key(X, nj, "slow_consumer_events",
-                    xr_int((int64_t)atomic_load(&node->metrics.slow_consumer_events)));
-                xr_json_set_by_key(X, nj, "rtt_ms",
-                    xr_int(node->metrics.last_rtt_ms));
-                xr_json_set_by_key(X, nj, "outq_bytes",
-                    xr_int(node->outq.total_bytes));
-                xr_json_set_by_key(X, nj, "outq_frames",
-                    xr_int(node->outq.frame_count));
-                xr_json_set_by_key(X, nj, "slow",
-                    xr_bool(xr_cluster_node_is_slow(node)));
+                xr_json_set_by_key(
+                    X, nj, "slow_consumer_events",
+                    xr_int((int64_t) atomic_load(&node->metrics.slow_consumer_events)));
+                xr_json_set_by_key(X, nj, "rtt_ms", xr_int(node->metrics.last_rtt_ms));
+                xr_json_set_by_key(X, nj, "outq_bytes", xr_int(node->outq.total_bytes));
+                xr_json_set_by_key(X, nj, "outq_frames", xr_int(node->outq.frame_count));
+                xr_json_set_by_key(X, nj, "slow", xr_bool(xr_cluster_node_is_slow(node)));
 
                 // Phi accrual failure-detector score. Higher = more
                 // likely dead. Threshold for "kill" is set by
                 // cluster policy in cluster_health.c.
                 int64_t now = xr_cluster_now_ms();
                 double phi = xr_phi_value(&node->phi, now);
-                xr_json_set_by_key(X, nj, "phi",
-                    xr_float(phi));
+                xr_json_set_by_key(X, nj, "phi", xr_float(phi));
                 xr_json_set_by_key(X, nj, "missed_heartbeats",
-                    xr_int((int64_t)node->missed_heartbeats));
+                                   xr_int((int64_t) node->missed_heartbeats));
 
                 xr_array_push(node_arr, xr_json_value(nj));
             }
@@ -1760,12 +1830,9 @@ static XrValue cluster_info_fn(XrayIsolate *X, XrValue *args, int argc) {
      * runtime but live at the XrCluster level so a snapshot is
      * trivially consistent.
      */
-    xr_json_set_by_key(X, info, "heartbeat_interval_ms",
-        xr_int(c->heartbeat_interval_ms));
-    xr_json_set_by_key(X, info, "heartbeat_timeout_ms",
-        xr_int(c->heartbeat_timeout_ms));
-    xr_json_set_by_key(X, info, "max_missed_heartbeats",
-        xr_int(c->max_missed_heartbeats));
+    xr_json_set_by_key(X, info, "heartbeat_interval_ms", xr_int(c->heartbeat_interval_ms));
+    xr_json_set_by_key(X, info, "heartbeat_timeout_ms", xr_int(c->heartbeat_timeout_ms));
+    xr_json_set_by_key(X, info, "max_missed_heartbeats", xr_int(c->max_missed_heartbeats));
 
     /*
      * TLS posture — one integer encoded as a small bitmap so a
@@ -1782,9 +1849,12 @@ static XrValue cluster_info_fn(XrayIsolate *X, XrValue *args, int argc) {
      * lets the operator notice.
      */
     int tls_posture = 0;
-    if (c->tls_enabled)    tls_posture |= 1;
-    if (c->tls_client_ctx) tls_posture |= 2;
-    if (c->tls_server_ctx) tls_posture |= 4;
+    if (c->tls_enabled)
+        tls_posture |= 1;
+    if (c->tls_client_ctx)
+        tls_posture |= 2;
+    if (c->tls_server_ctx)
+        tls_posture |= 4;
     xr_json_set_by_key(X, info, "tls", xr_int(tls_posture));
 
     return xr_json_value(info);
@@ -1792,23 +1862,27 @@ static XrValue cluster_info_fn(XrayIsolate *X, XrValue *args, int argc) {
 
 // Extended cluster.monitor: 1 arg = node monitor, 2 args = remote coro monitor
 static XrValue cluster_monitor_coro_fn(XrayIsolate *X, XrValue *args, int argc) {
-    if (argc < 1 || !XR_IS_STRING(args[0])) return xr_null();
+    if (argc < 1 || !XR_IS_STRING(args[0]))
+        return xr_null();
 
     if (argc == 1) {
         // Node-level monitor: cluster.monitor("node_name")
         XrString *name_str = XR_TO_STRING(args[0]);
         XrChannel *ch = xr_cluster_monitor_node(X, name_str->data);
-        if (!ch) return xr_null();
+        if (!ch)
+            return xr_null();
         return xr_value_from_channel(ch);
     }
 
     // Remote coroutine monitor: cluster.monitor("node_name", "coro_name")
-    if (!XR_IS_STRING(args[1])) return xr_null();
+    if (!XR_IS_STRING(args[1]))
+        return xr_null();
     XrString *node_str = XR_TO_STRING(args[0]);
     XrString *coro_str = XR_TO_STRING(args[1]);
 
     XrChannel *ch = xr_cluster_monitor_coro(X, node_str->data, coro_str->data);
-    if (!ch) return xr_null();
+    if (!ch)
+        return xr_null();
     return xr_value_from_channel(ch);
 }
 

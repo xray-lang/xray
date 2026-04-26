@@ -30,7 +30,7 @@
 int64_t get_current_time_us(void) {
     struct timespec ts;
     clock_gettime(CLOCK_MONOTONIC, &ts);
-    return (int64_t)ts.tv_sec * 1000000 + ts.tv_nsec / 1000;
+    return (int64_t) ts.tv_sec * 1000000 + ts.tv_nsec / 1000;
 }
 
 // ========== Syscall Enter/Exit (P Handoff) ==========
@@ -38,10 +38,12 @@ int64_t get_current_time_us(void) {
 void xr_worker_entersyscall(void) {
     XrWorker *worker = tls_current_worker;
     XrMachine *m = tls_current_machine;
-    if (!worker || !m) return;
+    if (!worker || !m)
+        return;
 
     XrRuntime *runtime = worker->p.runtime;
-    if (!runtime) return;
+    if (!runtime)
+        return;
 
     // Single worker: just mark P_SYSCALL, no handoff possible
     if (runtime->worker_count <= 1) {
@@ -70,13 +72,15 @@ void xr_worker_entersyscall(void) {
 
 void xr_worker_exitsyscall(void) {
     XrMachine *m = tls_current_machine;
-    if (!m) return;
+    if (!m)
+        return;
 
     XrWorker *worker = m->blocked_worker;
     if (!worker) {
         // Single-worker fallback path
         worker = tls_current_worker;
-        if (worker) atomic_store(&worker->p.status, P_RUNNING);
+        if (worker)
+            atomic_store(&worker->p.status, P_RUNNING);
         return;
     }
     m->blocked_worker = NULL;
@@ -126,7 +130,7 @@ void xr_worker_exitsyscall(void) {
 // Exits when: handoff_exit is signaled, no work remains, or runtime stops.
 
 void *xr_handoff_thread_entry(void *arg) {
-    XrMachine *m = (XrMachine *)arg;
+    XrMachine *m = (XrMachine *) arg;
     XrRuntime *runtime = m->runtime;
 
 handoff_restart:;
@@ -170,14 +174,16 @@ handoff_restart:;
         int idle_iterations = 0;
 
         while (atomic_load(&runtime->running)) {
-            if (atomic_load(&p->handoff_exit)) break;
+            if (atomic_load(&p->handoff_exit))
+                break;
 
             XrCoroutine *fast_io = worker_poll_sources(worker);
 
             XrCoroutine *coro = fast_io ? fast_io : xr_worker_pop(worker);
 
             if (!coro) {
-                if (++idle_iterations > 100) break;
+                if (++idle_iterations > 100)
+                    break;
                 struct timespec ts = {0, 100000};
                 nanosleep(&ts, NULL);
                 continue;
@@ -189,7 +195,8 @@ handoff_restart:;
                 break;
             }
 
-            if (xr_coro_flags_has(coro, XR_CORO_FLG_DONE)) continue;
+            if (xr_coro_flags_has(coro, XR_CORO_FLG_DONE))
+                continue;
 
             worker_exec_with_cont_stealing(worker, coro);
         }

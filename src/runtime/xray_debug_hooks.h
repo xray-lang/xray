@@ -55,14 +55,12 @@ typedef struct XrDebugHooks {
      * Replaces the old check_breakpoint + on_breakpoint_hit + get_action +
      * get_step_depth + set_last_line + get_last_line — all in one call.
      * Hook impl decides: breakpoint? step? pause? logpoint? function bp? */
-    XrDebugAction (*on_line)(XrayIsolate *isolate, const char *path,
-                             int line, XrClosure *closure,
+    XrDebugAction (*on_line)(XrayIsolate *isolate, const char *path, int line, XrClosure *closure,
                              XrBcCallFrame *frame, int frame_depth);
 
     /* Called by VM/runtime when exception is thrown.
      * Returns BREAK to stop, CONTINUE to propagate normally. */
-    XrDebugAction (*on_exception)(XrayIsolate *isolate, const char *message,
-                                  bool is_uncaught);
+    XrDebugAction (*on_exception)(XrayIsolate *isolate, const char *message, bool is_uncaught);
 
     /* Quick check — allows VM to skip on_line entirely. */
     bool (*is_enabled)(XrayIsolate *isolate);
@@ -74,4 +72,4 @@ typedef struct XrDebugHooks {
 XR_FUNC void xr_debug_register_hooks(XrayIsolate *isolate, XrDebugHooks *hooks);
 XR_FUNC XrDebugHooks *xr_debug_get_hooks(XrayIsolate *isolate);
 
-#endif // XRAY_DEBUG_HOOKS_H
+#endif  // XRAY_DEBUG_HOOKS_H

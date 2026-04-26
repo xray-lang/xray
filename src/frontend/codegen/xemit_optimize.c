@@ -35,25 +35,24 @@ bool optimize_redundant_move(XrEmitter *e, XrInstruction inst) {
     if (!is_move(inst)) {
         return false;
     }
-    
+
     if (!is_move(e->window.last_inst)) {
         return false;
     }
-    
+
     int last_dest = get_dest(e->window.last_inst);
     int curr_dest = get_dest(inst);
-    
+
     if (last_dest == curr_dest) {
         if (e->debug_mode) {
             printf("[Optimize] Redundant MOVE eliminated: R[%d]\n", last_dest);
         }
-        
+
         replace_instruction(e, e->window.last_pc, inst);
         e->window.last_inst = inst;
-        
+
         return true;
     }
-    
+
     return false;
 }
-

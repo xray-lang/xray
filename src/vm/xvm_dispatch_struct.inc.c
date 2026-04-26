@@ -30,26 +30,48 @@ vmcase(OP_TARRAY_GET) {
     int b = GETARG_B(i);
     int c = GETARG_C(i);
     XrArray *arr = XR_TO_ARRAY(R(b));
-    int32_t idx = (int32_t)R(c).i;
+    int32_t idx = (int32_t) R(c).i;
     if (unlikely(idx < 0 || idx >= arr->length)) {
-        VM_RUNTIME_ERROR(XR_ERR_INDEX_OUT_OF_BOUNDS,
-            "typed array index %d out of bounds [0, %d)", idx, arr->length);
+        VM_RUNTIME_ERROR(XR_ERR_INDEX_OUT_OF_BOUNDS, "typed array index %d out of bounds [0, %d)",
+                         idx, arr->length);
     }
     switch (arr->elem_type) {
-    case XR_ELEM_I64:  XR_SET_INT(R(a), ((int64_t*)arr->data)[idx]); break;
-    case XR_ELEM_F64:  XR_SET_FLOAT(R(a), ((double*)arr->data)[idx]); break;
-    case XR_ELEM_I32:  XR_SET_INT(R(a), (int64_t)((int32_t*)arr->data)[idx]); break;
-    case XR_ELEM_U8:   XR_SET_INT(R(a), (int64_t)((uint8_t*)arr->data)[idx]); break;
-    case XR_ELEM_I8:   XR_SET_INT(R(a), (int64_t)((int8_t*)arr->data)[idx]); break;
-    case XR_ELEM_U16:  XR_SET_INT(R(a), (int64_t)((uint16_t*)arr->data)[idx]); break;
-    case XR_ELEM_I16:  XR_SET_INT(R(a), (int64_t)((int16_t*)arr->data)[idx]); break;
-    case XR_ELEM_U32:  XR_SET_INT(R(a), (int64_t)((uint32_t*)arr->data)[idx]); break;
-    case XR_ELEM_U64:  XR_SET_INT(R(a), (int64_t)((uint64_t*)arr->data)[idx]); break;
-    case XR_ELEM_F32:  XR_SET_FLOAT(R(a), (double)((float*)arr->data)[idx]); break;
-    case XR_ELEM_BOOL: XR_SET_INT(R(a), (int64_t)((uint8_t*)arr->data)[idx]); break;
-    default:
-        R(a) = ((XrValue*)arr->data)[idx];
-        break;
+        case XR_ELEM_I64:
+            XR_SET_INT(R(a), ((int64_t *) arr->data)[idx]);
+            break;
+        case XR_ELEM_F64:
+            XR_SET_FLOAT(R(a), ((double *) arr->data)[idx]);
+            break;
+        case XR_ELEM_I32:
+            XR_SET_INT(R(a), (int64_t) ((int32_t *) arr->data)[idx]);
+            break;
+        case XR_ELEM_U8:
+            XR_SET_INT(R(a), (int64_t) ((uint8_t *) arr->data)[idx]);
+            break;
+        case XR_ELEM_I8:
+            XR_SET_INT(R(a), (int64_t) ((int8_t *) arr->data)[idx]);
+            break;
+        case XR_ELEM_U16:
+            XR_SET_INT(R(a), (int64_t) ((uint16_t *) arr->data)[idx]);
+            break;
+        case XR_ELEM_I16:
+            XR_SET_INT(R(a), (int64_t) ((int16_t *) arr->data)[idx]);
+            break;
+        case XR_ELEM_U32:
+            XR_SET_INT(R(a), (int64_t) ((uint32_t *) arr->data)[idx]);
+            break;
+        case XR_ELEM_U64:
+            XR_SET_INT(R(a), (int64_t) ((uint64_t *) arr->data)[idx]);
+            break;
+        case XR_ELEM_F32:
+            XR_SET_FLOAT(R(a), (double) ((float *) arr->data)[idx]);
+            break;
+        case XR_ELEM_BOOL:
+            XR_SET_INT(R(a), (int64_t) ((uint8_t *) arr->data)[idx]);
+            break;
+        default:
+            R(a) = ((XrValue *) arr->data)[idx];
+            break;
     }
     vmbreak;
 }
@@ -61,24 +83,46 @@ vmcase(OP_TARRAY_GETC) {
     int c = GETARG_C(i);
     XrArray *arr = XR_TO_ARRAY(R(b));
     if (unlikely(c < 0 || c >= arr->length)) {
-        VM_RUNTIME_ERROR(XR_ERR_INDEX_OUT_OF_BOUNDS,
-            "typed array index %d out of bounds [0, %d)", c, arr->length);
+        VM_RUNTIME_ERROR(XR_ERR_INDEX_OUT_OF_BOUNDS, "typed array index %d out of bounds [0, %d)",
+                         c, arr->length);
     }
     switch (arr->elem_type) {
-    case XR_ELEM_I64:  XR_SET_INT(R(a), ((int64_t*)arr->data)[c]); break;
-    case XR_ELEM_F64:  XR_SET_FLOAT(R(a), ((double*)arr->data)[c]); break;
-    case XR_ELEM_I32:  XR_SET_INT(R(a), (int64_t)((int32_t*)arr->data)[c]); break;
-    case XR_ELEM_U8:   XR_SET_INT(R(a), (int64_t)((uint8_t*)arr->data)[c]); break;
-    case XR_ELEM_I8:   XR_SET_INT(R(a), (int64_t)((int8_t*)arr->data)[c]); break;
-    case XR_ELEM_U16:  XR_SET_INT(R(a), (int64_t)((uint16_t*)arr->data)[c]); break;
-    case XR_ELEM_I16:  XR_SET_INT(R(a), (int64_t)((int16_t*)arr->data)[c]); break;
-    case XR_ELEM_U32:  XR_SET_INT(R(a), (int64_t)((uint32_t*)arr->data)[c]); break;
-    case XR_ELEM_U64:  XR_SET_INT(R(a), (int64_t)((uint64_t*)arr->data)[c]); break;
-    case XR_ELEM_F32:  XR_SET_FLOAT(R(a), (double)((float*)arr->data)[c]); break;
-    case XR_ELEM_BOOL: XR_SET_INT(R(a), (int64_t)((uint8_t*)arr->data)[c]); break;
-    default:
-        R(a) = ((XrValue*)arr->data)[c];
-        break;
+        case XR_ELEM_I64:
+            XR_SET_INT(R(a), ((int64_t *) arr->data)[c]);
+            break;
+        case XR_ELEM_F64:
+            XR_SET_FLOAT(R(a), ((double *) arr->data)[c]);
+            break;
+        case XR_ELEM_I32:
+            XR_SET_INT(R(a), (int64_t) ((int32_t *) arr->data)[c]);
+            break;
+        case XR_ELEM_U8:
+            XR_SET_INT(R(a), (int64_t) ((uint8_t *) arr->data)[c]);
+            break;
+        case XR_ELEM_I8:
+            XR_SET_INT(R(a), (int64_t) ((int8_t *) arr->data)[c]);
+            break;
+        case XR_ELEM_U16:
+            XR_SET_INT(R(a), (int64_t) ((uint16_t *) arr->data)[c]);
+            break;
+        case XR_ELEM_I16:
+            XR_SET_INT(R(a), (int64_t) ((int16_t *) arr->data)[c]);
+            break;
+        case XR_ELEM_U32:
+            XR_SET_INT(R(a), (int64_t) ((uint32_t *) arr->data)[c]);
+            break;
+        case XR_ELEM_U64:
+            XR_SET_INT(R(a), (int64_t) ((uint64_t *) arr->data)[c]);
+            break;
+        case XR_ELEM_F32:
+            XR_SET_FLOAT(R(a), (double) ((float *) arr->data)[c]);
+            break;
+        case XR_ELEM_BOOL:
+            XR_SET_INT(R(a), (int64_t) ((uint8_t *) arr->data)[c]);
+            break;
+        default:
+            R(a) = ((XrValue *) arr->data)[c];
+            break;
     }
     vmbreak;
 }
@@ -89,27 +133,49 @@ vmcase(OP_TARRAY_SET) {
     int b = GETARG_B(i);
     int c = GETARG_C(i);
     XrArray *arr = XR_TO_ARRAY(R(a));
-    int32_t idx = (int32_t)R(b).i;
+    int32_t idx = (int32_t) R(b).i;
     if (unlikely(idx < 0 || idx >= arr->length)) {
-        VM_RUNTIME_ERROR(XR_ERR_INDEX_OUT_OF_BOUNDS,
-            "typed array index %d out of bounds [0, %d)", idx, arr->length);
+        VM_RUNTIME_ERROR(XR_ERR_INDEX_OUT_OF_BOUNDS, "typed array index %d out of bounds [0, %d)",
+                         idx, arr->length);
     }
     switch (arr->elem_type) {
-    case XR_ELEM_I64:  ((int64_t*)arr->data)[idx] = R(c).i; break;
-    case XR_ELEM_F64:  ((double*)arr->data)[idx] = R(c).f; break;
-    case XR_ELEM_I32:  ((int32_t*)arr->data)[idx] = (int32_t)R(c).i; break;
-    case XR_ELEM_U8:   ((uint8_t*)arr->data)[idx] = (uint8_t)R(c).i; break;
-    case XR_ELEM_I8:   ((int8_t*)arr->data)[idx] = (int8_t)R(c).i; break;
-    case XR_ELEM_U16:  ((uint16_t*)arr->data)[idx] = (uint16_t)R(c).i; break;
-    case XR_ELEM_I16:  ((int16_t*)arr->data)[idx] = (int16_t)R(c).i; break;
-    case XR_ELEM_U32:  ((uint32_t*)arr->data)[idx] = (uint32_t)R(c).i; break;
-    case XR_ELEM_U64:  ((uint64_t*)arr->data)[idx] = (uint64_t)R(c).i; break;
-    case XR_ELEM_F32:  ((float*)arr->data)[idx] = (float)R(c).f; break;
-    case XR_ELEM_BOOL: ((uint8_t*)arr->data)[idx] = (uint8_t)R(c).i; break;
-    default:
-        // ANY array: BOX raw int64 to tagged XrValue
-        ((XrValue*)arr->data)[idx] = xr_int(R(c).i);
-        break;
+        case XR_ELEM_I64:
+            ((int64_t *) arr->data)[idx] = R(c).i;
+            break;
+        case XR_ELEM_F64:
+            ((double *) arr->data)[idx] = R(c).f;
+            break;
+        case XR_ELEM_I32:
+            ((int32_t *) arr->data)[idx] = (int32_t) R(c).i;
+            break;
+        case XR_ELEM_U8:
+            ((uint8_t *) arr->data)[idx] = (uint8_t) R(c).i;
+            break;
+        case XR_ELEM_I8:
+            ((int8_t *) arr->data)[idx] = (int8_t) R(c).i;
+            break;
+        case XR_ELEM_U16:
+            ((uint16_t *) arr->data)[idx] = (uint16_t) R(c).i;
+            break;
+        case XR_ELEM_I16:
+            ((int16_t *) arr->data)[idx] = (int16_t) R(c).i;
+            break;
+        case XR_ELEM_U32:
+            ((uint32_t *) arr->data)[idx] = (uint32_t) R(c).i;
+            break;
+        case XR_ELEM_U64:
+            ((uint64_t *) arr->data)[idx] = (uint64_t) R(c).i;
+            break;
+        case XR_ELEM_F32:
+            ((float *) arr->data)[idx] = (float) R(c).f;
+            break;
+        case XR_ELEM_BOOL:
+            ((uint8_t *) arr->data)[idx] = (uint8_t) R(c).i;
+            break;
+        default:
+            // ANY array: BOX raw int64 to tagged XrValue
+            ((XrValue *) arr->data)[idx] = xr_int(R(c).i);
+            break;
     }
     vmbreak;
 }
@@ -127,35 +193,57 @@ vmcase(OP_TARRAY_PUSH) {
     }
     int32_t idx = arr->length++;
     switch (arr->elem_type) {
-    case XR_ELEM_I64:  ((int64_t*)arr->data)[idx] = R(b).i; break;
-    case XR_ELEM_F64:  ((double*)arr->data)[idx] = R(b).f; break;
-    case XR_ELEM_I32:  ((int32_t*)arr->data)[idx] = (int32_t)R(b).i; break;
-    case XR_ELEM_U8:   ((uint8_t*)arr->data)[idx] = (uint8_t)R(b).i; break;
-    case XR_ELEM_I8:   ((int8_t*)arr->data)[idx] = (int8_t)R(b).i; break;
-    case XR_ELEM_U16:  ((uint16_t*)arr->data)[idx] = (uint16_t)R(b).i; break;
-    case XR_ELEM_I16:  ((int16_t*)arr->data)[idx] = (int16_t)R(b).i; break;
-    case XR_ELEM_U32:  ((uint32_t*)arr->data)[idx] = (uint32_t)R(b).i; break;
-    case XR_ELEM_U64:  ((uint64_t*)arr->data)[idx] = (uint64_t)R(b).i; break;
-    case XR_ELEM_F32:  ((float*)arr->data)[idx] = (float)R(b).f; break;
-    case XR_ELEM_BOOL: ((uint8_t*)arr->data)[idx] = (uint8_t)R(b).i; break;
-    default:
-        // ANY array: BOX raw int64 to tagged XrValue
-        ((XrValue*)arr->data)[idx] = xr_int(R(b).i);
-        break;
+        case XR_ELEM_I64:
+            ((int64_t *) arr->data)[idx] = R(b).i;
+            break;
+        case XR_ELEM_F64:
+            ((double *) arr->data)[idx] = R(b).f;
+            break;
+        case XR_ELEM_I32:
+            ((int32_t *) arr->data)[idx] = (int32_t) R(b).i;
+            break;
+        case XR_ELEM_U8:
+            ((uint8_t *) arr->data)[idx] = (uint8_t) R(b).i;
+            break;
+        case XR_ELEM_I8:
+            ((int8_t *) arr->data)[idx] = (int8_t) R(b).i;
+            break;
+        case XR_ELEM_U16:
+            ((uint16_t *) arr->data)[idx] = (uint16_t) R(b).i;
+            break;
+        case XR_ELEM_I16:
+            ((int16_t *) arr->data)[idx] = (int16_t) R(b).i;
+            break;
+        case XR_ELEM_U32:
+            ((uint32_t *) arr->data)[idx] = (uint32_t) R(b).i;
+            break;
+        case XR_ELEM_U64:
+            ((uint64_t *) arr->data)[idx] = (uint64_t) R(b).i;
+            break;
+        case XR_ELEM_F32:
+            ((float *) arr->data)[idx] = (float) R(b).f;
+            break;
+        case XR_ELEM_BOOL:
+            ((uint8_t *) arr->data)[idx] = (uint8_t) R(b).i;
+            break;
+        default:
+            // ANY array: BOX raw int64 to tagged XrValue
+            ((XrValue *) arr->data)[idx] = xr_int(R(b).i);
+            break;
     }
     vmbreak;
 }
 
 vmcase(OP_TFIELD_GET) {
     TRACE_EXECUTION();
-    XrJson *json = (XrJson*)XR_TO_PTR(R(GETARG_B(i)));
+    XrJson *json = (XrJson *) XR_TO_PTR(R(GETARG_B(i)));
     R(GETARG_A(i)) = json->fields[GETARG_C(i)];
     vmbreak;
 }
 
 vmcase(OP_TFIELD_SET) {
     TRACE_EXECUTION();
-    XrJson *json = (XrJson*)XR_TO_PTR(R(GETARG_A(i)));
+    XrJson *json = (XrJson *) XR_TO_PTR(R(GETARG_A(i)));
     XrValue _tfv = R(GETARG_C(i));
     json->fields[GETARG_B(i)] = _tfv;
     VM_BARRIER_VAL(json, _tfv);
@@ -175,7 +263,7 @@ vmcase(OP_INST_TYPE_ARGS) {
     int tid1 = (bx >> 7) & 0x1F;
     XrValue val = R(a);
     if (XR_IS_PTR(val) && XR_HEAP_TYPE(val) == XR_TINSTANCE) {
-        XrGCHeader *gc = &((XrInstance*)XR_VALUE_GCPTR(val))->gc;
+        XrGCHeader *gc = &((XrInstance *) XR_VALUE_GCPTR(val))->gc;
         XR_INST_SET_TYPE_ARGS(gc, argc, tid0, tid1);
     }
     vmbreak;
@@ -199,32 +287,57 @@ vmcase(OP_NEW_STRUCT) {
               "OP_NEW_STRUCT requires allocated struct_area");
 
     uint8_t *struct_ptr = vm_ctx->struct_areas[VM_FRAME_COUNT - 1] + c * 16;
-    *(XrClass**)struct_ptr = cls;
+    *(XrClass **) struct_ptr = cls;
     memset(struct_ptr + 8, 0, layout->total_size);
 
     // Apply field default values from class descriptor
     if (cls->field_default_values) {
-        int fc = layout->field_count < cls->field_count
-               ? layout->field_count : cls->field_count;
+        int fc = layout->field_count < cls->field_count ? layout->field_count : cls->field_count;
         for (int fi = 0; fi < fc; fi++) {
             XrValue dv = cls->field_default_values[fi];
-            if (dv.tag == XR_TAG_NULL) continue;
+            if (dv.tag == XR_TAG_NULL)
+                continue;
             XrStructFieldLayout *fl = &layout->fields[fi];
             uint8_t *fp = struct_ptr + 8 + fl->offset;
             switch (fl->native_type) {
-                case XR_NATIVE_I64:  *(int64_t*)fp  = XR_TO_INT(dv); break;
-                case XR_NATIVE_U64:  *(uint64_t*)fp = (uint64_t)XR_TO_INT(dv); break;
-                case XR_NATIVE_F64:  *(double*)fp   = XR_TO_FLOAT(dv); break;
-                case XR_NATIVE_BOOL: *(uint8_t*)fp  = (uint8_t)dv.i; break;
-                case XR_NATIVE_I32:  *(int32_t*)fp  = (int32_t)XR_TO_INT(dv); break;
-                case XR_NATIVE_U32:  *(uint32_t*)fp = (uint32_t)XR_TO_INT(dv); break;
-                case XR_NATIVE_I16:  *(int16_t*)fp  = (int16_t)XR_TO_INT(dv); break;
-                case XR_NATIVE_U16:  *(uint16_t*)fp = (uint16_t)XR_TO_INT(dv); break;
-                case XR_NATIVE_I8:   *(int8_t*)fp   = (int8_t)XR_TO_INT(dv); break;
-                case XR_NATIVE_U8:   *(uint8_t*)fp  = (uint8_t)XR_TO_INT(dv); break;
-                case XR_NATIVE_F32:  *(float*)fp    = (float)XR_TO_FLOAT(dv); break;
-                case XR_NATIVE_STRING: *(XrString**)fp = (XrString*)dv.ptr; break;
-                default: break;
+                case XR_NATIVE_I64:
+                    *(int64_t *) fp = XR_TO_INT(dv);
+                    break;
+                case XR_NATIVE_U64:
+                    *(uint64_t *) fp = (uint64_t) XR_TO_INT(dv);
+                    break;
+                case XR_NATIVE_F64:
+                    *(double *) fp = XR_TO_FLOAT(dv);
+                    break;
+                case XR_NATIVE_BOOL:
+                    *(uint8_t *) fp = (uint8_t) dv.i;
+                    break;
+                case XR_NATIVE_I32:
+                    *(int32_t *) fp = (int32_t) XR_TO_INT(dv);
+                    break;
+                case XR_NATIVE_U32:
+                    *(uint32_t *) fp = (uint32_t) XR_TO_INT(dv);
+                    break;
+                case XR_NATIVE_I16:
+                    *(int16_t *) fp = (int16_t) XR_TO_INT(dv);
+                    break;
+                case XR_NATIVE_U16:
+                    *(uint16_t *) fp = (uint16_t) XR_TO_INT(dv);
+                    break;
+                case XR_NATIVE_I8:
+                    *(int8_t *) fp = (int8_t) XR_TO_INT(dv);
+                    break;
+                case XR_NATIVE_U8:
+                    *(uint8_t *) fp = (uint8_t) XR_TO_INT(dv);
+                    break;
+                case XR_NATIVE_F32:
+                    *(float *) fp = (float) XR_TO_FLOAT(dv);
+                    break;
+                case XR_NATIVE_STRING:
+                    *(XrString **) fp = (XrString *) dv.ptr;
+                    break;
+                default:
+                    break;
             }
         }
     }
@@ -241,34 +354,62 @@ vmcase(OP_STRUCT_GET) {
     int b = GETARG_B(i);
     int c = GETARG_C(i);
 
-    uint8_t *struct_ptr = (uint8_t*)xr_to_struct_ptr(R(b));
-    XrClass *cls = *(XrClass**)struct_ptr;
+    uint8_t *struct_ptr = (uint8_t *) xr_to_struct_ptr(R(b));
+    XrClass *cls = *(XrClass **) struct_ptr;
     XrStructLayout *layout = cls->struct_layout;
     XrStructFieldLayout *field = &layout->fields[c];
     uint8_t *fp = struct_ptr + 8 + field->offset;
 
     switch (field->native_type) {
-        case XR_NATIVE_I64:  R(a) = XR_FROM_INT(*(int64_t*)fp); break;
-        case XR_NATIVE_U64:  R(a) = XR_FROM_INT((int64_t)*(uint64_t*)fp); break;
-        case XR_NATIVE_F64:  R(a) = XR_FROM_FLOAT(*(double*)fp); break;
-        case XR_NATIVE_BOOL: R(a).descriptor = 0; R(a).i = *(uint8_t*)fp ? 1 : 0; R(a).tag = XR_TAG_BOOL; break;
-        case XR_NATIVE_I32:  R(a) = XR_FROM_INT((int64_t)*(int32_t*)fp); break;
-        case XR_NATIVE_U32:  R(a) = XR_FROM_INT((int64_t)*(uint32_t*)fp); break;
-        case XR_NATIVE_I16:  R(a) = XR_FROM_INT((int64_t)*(int16_t*)fp); break;
-        case XR_NATIVE_U16:  R(a) = XR_FROM_INT((int64_t)*(uint16_t*)fp); break;
-        case XR_NATIVE_I8:   R(a) = XR_FROM_INT((int64_t)*(int8_t*)fp); break;
-        case XR_NATIVE_U8:   R(a) = XR_FROM_INT((int64_t)*(uint8_t*)fp); break;
-        case XR_NATIVE_F32:  R(a) = XR_FROM_FLOAT((double)*(float*)fp); break;
+        case XR_NATIVE_I64:
+            R(a) = XR_FROM_INT(*(int64_t *) fp);
+            break;
+        case XR_NATIVE_U64:
+            R(a) = XR_FROM_INT((int64_t) * (uint64_t *) fp);
+            break;
+        case XR_NATIVE_F64:
+            R(a) = XR_FROM_FLOAT(*(double *) fp);
+            break;
+        case XR_NATIVE_BOOL:
+            R(a).descriptor = 0;
+            R(a).i = *(uint8_t *) fp ? 1 : 0;
+            R(a).tag = XR_TAG_BOOL;
+            break;
+        case XR_NATIVE_I32:
+            R(a) = XR_FROM_INT((int64_t) * (int32_t *) fp);
+            break;
+        case XR_NATIVE_U32:
+            R(a) = XR_FROM_INT((int64_t) * (uint32_t *) fp);
+            break;
+        case XR_NATIVE_I16:
+            R(a) = XR_FROM_INT((int64_t) * (int16_t *) fp);
+            break;
+        case XR_NATIVE_U16:
+            R(a) = XR_FROM_INT((int64_t) * (uint16_t *) fp);
+            break;
+        case XR_NATIVE_I8:
+            R(a) = XR_FROM_INT((int64_t) * (int8_t *) fp);
+            break;
+        case XR_NATIVE_U8:
+            R(a) = XR_FROM_INT((int64_t) * (uint8_t *) fp);
+            break;
+        case XR_NATIVE_F32:
+            R(a) = XR_FROM_FLOAT((double) *(float *) fp);
+            break;
         case XR_NATIVE_STRING: {
-            XrString *s = *(XrString**)fp;
+            XrString *s = *(XrString **) fp;
             R(a) = s ? XR_FROM_STR(s) : xr_null();
             break;
         }
-        case XR_NATIVE_STRUCT: R(a) = xr_struct_ref(fp, field->sub_layout_id); break;
+        case XR_NATIVE_STRUCT:
+            R(a) = xr_struct_ref(fp, field->sub_layout_id);
+            break;
         case XR_NATIVE_ARRAY:
             R(a) = xr_array_ref(fp, field->elem_native_type, field->elem_count);
             break;
-        default: R(a) = xr_null(); break;
+        default:
+            R(a) = xr_null();
+            break;
     }
     vmbreak;
 }
@@ -281,54 +422,95 @@ vmcase(OP_STRUCT_SET) {
     int b = GETARG_B(i);
     int c = GETARG_C(i);
 
-    uint8_t *struct_ptr = (uint8_t*)xr_to_struct_ptr(R(a));
-    XrClass *cls = *(XrClass**)struct_ptr;
+    uint8_t *struct_ptr = (uint8_t *) xr_to_struct_ptr(R(a));
+    XrClass *cls = *(XrClass **) struct_ptr;
     XrStructLayout *layout = cls->struct_layout;
     XrStructFieldLayout *field = &layout->fields[b];
     uint8_t *fp = struct_ptr + 8 + field->offset;
     XrValue src = R(c);
 
     switch (field->native_type) {
-        case XR_NATIVE_I64:  *(int64_t*)fp  = XR_TO_INT(src); break;
-        case XR_NATIVE_F64:  *(double*)fp   = XR_TO_FLOAT(src); break;
-        case XR_NATIVE_BOOL: *(uint8_t*)fp  = (uint8_t)src.i; break;
-        case XR_NATIVE_I32:  *(int32_t*)fp  = (int32_t)XR_TO_INT(src); break;
-        case XR_NATIVE_U32:  *(uint32_t*)fp = (uint32_t)XR_TO_INT(src); break;
-        case XR_NATIVE_I16:  *(int16_t*)fp  = (int16_t)XR_TO_INT(src); break;
-        case XR_NATIVE_U16:  *(uint16_t*)fp = (uint16_t)XR_TO_INT(src); break;
-        case XR_NATIVE_I8:   *(int8_t*)fp   = (int8_t)XR_TO_INT(src); break;
-        case XR_NATIVE_U8:   *(uint8_t*)fp  = (uint8_t)XR_TO_INT(src); break;
-        case XR_NATIVE_F32:  *(float*)fp    = (float)XR_TO_FLOAT(src); break;
+        case XR_NATIVE_I64:
+            *(int64_t *) fp = XR_TO_INT(src);
+            break;
+        case XR_NATIVE_F64:
+            *(double *) fp = XR_TO_FLOAT(src);
+            break;
+        case XR_NATIVE_BOOL:
+            *(uint8_t *) fp = (uint8_t) src.i;
+            break;
+        case XR_NATIVE_I32:
+            *(int32_t *) fp = (int32_t) XR_TO_INT(src);
+            break;
+        case XR_NATIVE_U32:
+            *(uint32_t *) fp = (uint32_t) XR_TO_INT(src);
+            break;
+        case XR_NATIVE_I16:
+            *(int16_t *) fp = (int16_t) XR_TO_INT(src);
+            break;
+        case XR_NATIVE_U16:
+            *(uint16_t *) fp = (uint16_t) XR_TO_INT(src);
+            break;
+        case XR_NATIVE_I8:
+            *(int8_t *) fp = (int8_t) XR_TO_INT(src);
+            break;
+        case XR_NATIVE_U8:
+            *(uint8_t *) fp = (uint8_t) XR_TO_INT(src);
+            break;
+        case XR_NATIVE_F32:
+            *(float *) fp = (float) XR_TO_FLOAT(src);
+            break;
         case XR_NATIVE_STRING: {
-            *(XrString**)fp = (XrString*)src.ptr;
+            *(XrString **) fp = (XrString *) src.ptr;
             break;
         }
         case XR_NATIVE_STRUCT: {
-            uint8_t *src_ptr = (uint8_t*)xr_to_struct_ptr(src);
+            uint8_t *src_ptr = (uint8_t *) xr_to_struct_ptr(src);
             memcpy(fp, src_ptr, field->size);
             break;
         }
         case XR_NATIVE_ARRAY: {
             // Copy from heap Array into inline storage
             if (XR_IS_ARRAY(src)) {
-                XrArray *arr = (XrArray*)src.ptr;
+                XrArray *arr = (XrArray *) src.ptr;
                 int count = arr->length < field->elem_count ? arr->length : field->elem_count;
                 uint8_t es = xr_native_type_size(field->elem_native_type);
                 for (int idx = 0; idx < count; idx++) {
                     XrValue elem = xr_array_get(arr, idx);
                     uint8_t *ep = fp + idx * es;
                     switch (field->elem_native_type) {
-                        case XR_NATIVE_I64:  *(int64_t*)ep  = XR_TO_INT(elem); break;
-                        case XR_NATIVE_F64:  *(double*)ep   = XR_TO_FLOAT(elem); break;
-                        case XR_NATIVE_BOOL: *(uint8_t*)ep  = (uint8_t)elem.i; break;
-                        case XR_NATIVE_I32:  *(int32_t*)ep  = (int32_t)XR_TO_INT(elem); break;
-                        case XR_NATIVE_U32:  *(uint32_t*)ep = (uint32_t)XR_TO_INT(elem); break;
-                        case XR_NATIVE_I16:  *(int16_t*)ep  = (int16_t)XR_TO_INT(elem); break;
-                        case XR_NATIVE_U16:  *(uint16_t*)ep = (uint16_t)XR_TO_INT(elem); break;
-                        case XR_NATIVE_I8:   *(int8_t*)ep   = (int8_t)XR_TO_INT(elem); break;
-                        case XR_NATIVE_U8:   *(uint8_t*)ep  = (uint8_t)XR_TO_INT(elem); break;
-                        case XR_NATIVE_F32:  *(float*)ep    = (float)XR_TO_FLOAT(elem); break;
-                        default: break;
+                        case XR_NATIVE_I64:
+                            *(int64_t *) ep = XR_TO_INT(elem);
+                            break;
+                        case XR_NATIVE_F64:
+                            *(double *) ep = XR_TO_FLOAT(elem);
+                            break;
+                        case XR_NATIVE_BOOL:
+                            *(uint8_t *) ep = (uint8_t) elem.i;
+                            break;
+                        case XR_NATIVE_I32:
+                            *(int32_t *) ep = (int32_t) XR_TO_INT(elem);
+                            break;
+                        case XR_NATIVE_U32:
+                            *(uint32_t *) ep = (uint32_t) XR_TO_INT(elem);
+                            break;
+                        case XR_NATIVE_I16:
+                            *(int16_t *) ep = (int16_t) XR_TO_INT(elem);
+                            break;
+                        case XR_NATIVE_U16:
+                            *(uint16_t *) ep = (uint16_t) XR_TO_INT(elem);
+                            break;
+                        case XR_NATIVE_I8:
+                            *(int8_t *) ep = (int8_t) XR_TO_INT(elem);
+                            break;
+                        case XR_NATIVE_U8:
+                            *(uint8_t *) ep = (uint8_t) XR_TO_INT(elem);
+                            break;
+                        case XR_NATIVE_F32:
+                            *(float *) ep = (float) XR_TO_FLOAT(elem);
+                            break;
+                        default:
+                            break;
                     }
                 }
                 // Zero remaining elements if array shorter than field
@@ -341,7 +523,8 @@ vmcase(OP_STRUCT_SET) {
             }
             break;
         }
-        default: break;
+        default:
+            break;
     }
     vmbreak;
 }
@@ -354,8 +537,8 @@ vmcase(OP_STRUCT_COPY) {
     int b = GETARG_B(i);
     int c = GETARG_C(i);
 
-    uint8_t *src_ptr = (uint8_t*)xr_to_struct_ptr(R(b));
-    XrClass *cls = *(XrClass**)src_ptr;
+    uint8_t *src_ptr = (uint8_t *) xr_to_struct_ptr(R(b));
+    XrClass *cls = *(XrClass **) src_ptr;
     XrStructLayout *layout = cls->struct_layout;
 
     uint8_t *dst_ptr = vm_ctx->struct_areas[VM_FRAME_COUNT - 1] + c * 16;

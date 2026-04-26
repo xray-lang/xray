@@ -33,17 +33,19 @@
 // Variable Reference API (for object expansion)
 // ============================================================================
 
-int xr_debug_create_var_ref(XrayIsolate *isolate, XdapVarRefType type,
-                             int frame_idx, XrValue value) {
-    XrDebugState *dbg = (XrDebugState *)xr_isolate_get_debug_state(isolate);
-    if (!dbg) return 0;
+int xr_debug_create_var_ref(XrayIsolate *isolate, XdapVarRefType type, int frame_idx,
+                            XrValue value) {
+    XrDebugState *dbg = (XrDebugState *) xr_isolate_get_debug_state(isolate);
+    if (!dbg)
+        return 0;
 
     // Grow array if needed
     if (dbg->var_refs_count >= dbg->var_refs_capacity) {
         int new_cap = dbg->var_refs_capacity ? dbg->var_refs_capacity * 2 : 32;
-        XrDebugVarRef *new_arr = (XrDebugVarRef *)xr_realloc(
-            dbg->var_refs, (size_t)new_cap * sizeof(XrDebugVarRef));
-        if (!new_arr) return 0;
+        XrDebugVarRef *new_arr =
+            (XrDebugVarRef *) xr_realloc(dbg->var_refs, (size_t) new_cap * sizeof(XrDebugVarRef));
+        if (!new_arr)
+            return 0;
         dbg->var_refs = new_arr;
         dbg->var_refs_capacity = new_cap;
     }
@@ -59,33 +61,39 @@ int xr_debug_create_var_ref(XrayIsolate *isolate, XdapVarRefType type,
 }
 
 XrDebugVarRef *xr_debug_get_var_ref(XrayIsolate *isolate, int ref_id) {
-    XrDebugState *dbg = (XrDebugState *)xr_isolate_get_debug_state(isolate);
-    if (!dbg) return NULL;
+    XrDebugState *dbg = (XrDebugState *) xr_isolate_get_debug_state(isolate);
+    if (!dbg)
+        return NULL;
 
     // O(1) lookup: IDs are sequential from XDAP_VAR_REF_ID_BASE
     int idx = ref_id - XDAP_VAR_REF_ID_BASE;
-    if (idx < 0 || idx >= dbg->var_refs_count) return NULL;
-    if (dbg->var_refs[idx].id != ref_id) return NULL;
+    if (idx < 0 || idx >= dbg->var_refs_count)
+        return NULL;
+    if (dbg->var_refs[idx].id != ref_id)
+        return NULL;
     return &dbg->var_refs[idx];
 }
 
 void xr_debug_clear_var_refs(XrayIsolate *isolate) {
-    XrDebugState *dbg = (XrDebugState *)xr_isolate_get_debug_state(isolate);
-    if (!dbg) return;
+    XrDebugState *dbg = (XrDebugState *) xr_isolate_get_debug_state(isolate);
+    if (!dbg)
+        return;
 
     dbg->var_refs_count = 0;
     dbg->next_var_ref_id = XDAP_VAR_REF_ID_BASE;
 }
 
 void xr_debug_var_info_free(XdapVarInfo *info) {
-    if (!info) return;
+    if (!info)
+        return;
     xr_free(info->name);
     xr_free(info->value);
     xr_free(info->type);
 }
 
 void xr_debug_var_info_array_free(XdapVarInfo *vars, int count) {
-    if (!vars) return;
+    if (!vars)
+        return;
     for (int i = 0; i < count; i++) {
         xr_free(vars[i].name);
         xr_free(vars[i].value);
@@ -95,26 +103,36 @@ void xr_debug_var_info_array_free(XdapVarInfo *vars, int count) {
 }
 
 bool xr_debug_value_is_expandable(XrayIsolate *isolate, XrValue value) {
-    (void)isolate;
-    if (XR_IS_ARRAY(value)) return true;
-    if (XR_IS_MAP(value)) return true;
-    if (XR_IS_JSON(value)) return true;
+    (void) isolate;
+    if (XR_IS_ARRAY(value))
+        return true;
+    if (XR_IS_MAP(value))
+        return true;
+    if (XR_IS_JSON(value))
+        return true;
     if (XR_IS_PTR(value)) {
         XrGCHeader *hdr = XR_TO_PTR(value);
-        if (hdr->type == XR_TINSTANCE) return true;
-        if (hdr->type == XR_TARRAY_SLICE) return true;
+        if (hdr->type == XR_TINSTANCE)
+            return true;
+        if (hdr->type == XR_TARRAY_SLICE)
+            return true;
     }
     return false;
 }
 
 XdapVarRefType xr_debug_get_ref_type(XrValue value) {
-    if (XR_IS_ARRAY(value)) return XDAP_REF_ARRAY;
-    if (XR_IS_MAP(value)) return XDAP_REF_MAP;
-    if (XR_IS_JSON(value)) return XDAP_REF_OBJECT;
+    if (XR_IS_ARRAY(value))
+        return XDAP_REF_ARRAY;
+    if (XR_IS_MAP(value))
+        return XDAP_REF_MAP;
+    if (XR_IS_JSON(value))
+        return XDAP_REF_OBJECT;
     if (XR_IS_PTR(value)) {
         XrGCHeader *hdr = XR_TO_PTR(value);
-        if (hdr->type == XR_TINSTANCE) return XDAP_REF_INSTANCE;
-        if (hdr->type == XR_TARRAY_SLICE) return XDAP_REF_ARRAY;
+        if (hdr->type == XR_TINSTANCE)
+            return XDAP_REF_INSTANCE;
+        if (hdr->type == XR_TARRAY_SLICE)
+            return XDAP_REF_ARRAY;
     }
     return XDAP_REF_INVALID;
 }
@@ -130,7 +148,7 @@ static int get_array_children(XrayIsolate *isolate, XrArray *arr, XdapVarInfo **
         return 0;
     }
 
-    XdapVarInfo *vars = (XdapVarInfo *)xr_calloc(count, sizeof(XdapVarInfo));
+    XdapVarInfo *vars = (XdapVarInfo *) xr_calloc(count, sizeof(XdapVarInfo));
     if (!vars) {
         *out_vars = NULL;
         return 0;
@@ -147,8 +165,8 @@ static int get_array_children(XrayIsolate *isolate, XrArray *arr, XdapVarInfo **
         vars[i].indexed_count = count;
 
         if (xr_debug_value_is_expandable(isolate, elem)) {
-            vars[i].var_ref = xr_debug_create_var_ref(isolate,
-                xr_debug_get_ref_type(elem), -1, elem);
+            vars[i].var_ref =
+                xr_debug_create_var_ref(isolate, xr_debug_get_ref_type(elem), -1, elem);
         }
     }
 
@@ -163,13 +181,14 @@ static int get_map_children(XrayIsolate *isolate, XrMap *map, XdapVarInfo **out_
         return 0;
     }
 
-    XdapVarInfo *vars = (XdapVarInfo *)xr_calloc(count, sizeof(XdapVarInfo));
+    XdapVarInfo *vars = (XdapVarInfo *) xr_calloc(count, sizeof(XdapVarInfo));
     int idx = 0;
     uint32_t size = xr_map_sizenode(map);
 
-    for (uint32_t i = 0; i < size && idx < (int)count; i++) {
+    for (uint32_t i = 0; i < size && idx < (int) count; i++) {
         XrMapNode *node = xr_map_node(map, i);
-        if (XR_MAP_NODE_EMPTY(node)) continue;
+        if (XR_MAP_NODE_EMPTY(node))
+            continue;
 
         char *key_str = xr_value_to_debug_string(isolate, node->key);
         vars[idx].name = key_str;
@@ -178,8 +197,8 @@ static int get_map_children(XrayIsolate *isolate, XrMap *map, XdapVarInfo **out_
         vars[idx].named_count = count;
 
         if (xr_debug_value_is_expandable(isolate, node->value)) {
-            vars[idx].var_ref = xr_debug_create_var_ref(isolate,
-                xr_debug_get_ref_type(node->value), -1, node->value);
+            vars[idx].var_ref = xr_debug_create_var_ref(isolate, xr_debug_get_ref_type(node->value),
+                                                        -1, node->value);
         }
         idx++;
     }
@@ -195,7 +214,7 @@ static int get_json_children(XrayIsolate *isolate, XrJson *json, XdapVarInfo **o
         return 0;
     }
 
-    XdapVarInfo *vars = (XdapVarInfo *)xr_calloc(count, sizeof(XdapVarInfo));
+    XdapVarInfo *vars = (XdapVarInfo *) xr_calloc(count, sizeof(XdapVarInfo));
 
     XrShape *shape = xr_json_shape(isolate, json);
     for (int i = 0; i < count; i++) {
@@ -215,8 +234,7 @@ static int get_json_children(XrayIsolate *isolate, XrJson *json, XdapVarInfo **o
         vars[i].named_count = count;
 
         if (xr_debug_value_is_expandable(isolate, val)) {
-            vars[i].var_ref = xr_debug_create_var_ref(isolate,
-                xr_debug_get_ref_type(val), -1, val);
+            vars[i].var_ref = xr_debug_create_var_ref(isolate, xr_debug_get_ref_type(val), -1, val);
         }
     }
 
@@ -236,7 +254,7 @@ static int get_instance_children(XrayIsolate *isolate, XrInstance *inst, XdapVar
         return 0;
     }
 
-    XdapVarInfo *vars = (XdapVarInfo *)xr_calloc(count, sizeof(XdapVarInfo));
+    XdapVarInfo *vars = (XdapVarInfo *) xr_calloc(count, sizeof(XdapVarInfo));
 
     for (int i = 0; i < count; i++) {
         XrValue val = inst->fields[i];
@@ -253,8 +271,7 @@ static int get_instance_children(XrayIsolate *isolate, XrInstance *inst, XdapVar
         vars[i].named_count = count;
 
         if (xr_debug_value_is_expandable(isolate, val)) {
-            vars[i].var_ref = xr_debug_create_var_ref(isolate,
-                xr_debug_get_ref_type(val), -1, val);
+            vars[i].var_ref = xr_debug_create_var_ref(isolate, xr_debug_get_ref_type(val), -1, val);
         }
     }
 
@@ -286,7 +303,7 @@ static int get_scope_locals(XrayIsolate *isolate, int frame_idx, XdapVarInfo **o
         return 0;
     }
 
-    XdapVarInfo *vars = (XdapVarInfo *)xr_calloc(count, sizeof(XdapVarInfo));
+    XdapVarInfo *vars = (XdapVarInfo *) xr_calloc(count, sizeof(XdapVarInfo));
     XrValue *base = fctx.stack + frame->base_offset;
 
     for (int i = 0; i < count; i++) {
@@ -298,8 +315,8 @@ static int get_scope_locals(XrayIsolate *isolate, int frame_idx, XdapVarInfo **o
         vars[i].type = xr_strdup(xr_value_type_name(val));
 
         if (xr_debug_value_is_expandable(isolate, val)) {
-            vars[i].var_ref = xr_debug_create_var_ref(isolate,
-                xr_debug_get_ref_type(val), frame_idx, val);
+            vars[i].var_ref =
+                xr_debug_create_var_ref(isolate, xr_debug_get_ref_type(val), frame_idx, val);
         }
     }
 
@@ -307,8 +324,7 @@ static int get_scope_locals(XrayIsolate *isolate, int frame_idx, XdapVarInfo **o
     return count;
 }
 
-int xr_debug_get_var_children(XrayIsolate *isolate, int ref_id,
-                               XdapVarInfo **out_vars) {
+int xr_debug_get_var_children(XrayIsolate *isolate, int ref_id, XdapVarInfo **out_vars) {
     XrDebugVarRef *ref = xr_debug_get_var_ref(isolate, ref_id);
     if (!ref) {
         *out_vars = NULL;
@@ -326,7 +342,7 @@ int xr_debug_get_var_children(XrayIsolate *isolate, int ref_id,
             if (XR_IS_PTR(ref->value)) {
                 XrGCHeader *hdr = XR_TO_PTR(ref->value);
                 if (hdr->type == XR_TARRAY_SLICE) {
-                    return get_array_children(isolate, (XrArray *)hdr, out_vars);
+                    return get_array_children(isolate, (XrArray *) hdr, out_vars);
                 }
             }
             break;
@@ -341,7 +357,7 @@ int xr_debug_get_var_children(XrayIsolate *isolate, int ref_id,
             if (XR_IS_PTR(ref->value)) {
                 XrGCHeader *hdr = XR_TO_PTR(ref->value);
                 if (hdr->type == XR_TJSON) {
-                    return get_json_children(isolate, (XrJson *)hdr, out_vars);
+                    return get_json_children(isolate, (XrJson *) hdr, out_vars);
                 }
             }
             break;
@@ -350,7 +366,7 @@ int xr_debug_get_var_children(XrayIsolate *isolate, int ref_id,
             if (XR_IS_PTR(ref->value)) {
                 XrGCHeader *hdr = XR_TO_PTR(ref->value);
                 if (hdr->type == XR_TINSTANCE) {
-                    return get_instance_children(isolate, (XrInstance *)hdr, out_vars);
+                    return get_instance_children(isolate, (XrInstance *) hdr, out_vars);
                 }
             }
             break;
@@ -385,8 +401,8 @@ int xr_debug_get_local_count(XrayIsolate *isolate, int frame_idx) {
     return PROTO_LOCVAR_COUNT(frame->closure->proto);
 }
 
-bool xr_debug_get_local(XrayIsolate *isolate, int frame_idx, int local_idx,
-                         const char **out_name, char **out_value, char **out_type) {
+bool xr_debug_get_local(XrayIsolate *isolate, int frame_idx, int local_idx, const char **out_name,
+                        char **out_value, char **out_type) {
     XrDebugFrameCtx fctx;
     xr_debug_get_frame_ctx_ex(isolate, &fctx);
 
@@ -439,7 +455,8 @@ bool xr_debug_get_local(XrayIsolate *isolate, int frame_idx, int local_idx,
 
 // Parse a debug value string into XrValue. Returns true on success.
 static bool parse_debug_value(XrayIsolate *isolate, const char *value, XrValue *out) {
-    if (!value) return false;
+    if (!value)
+        return false;
 
     if (strcmp(value, "null") == 0) {
         *out = xr_null();
@@ -477,15 +494,18 @@ static bool parse_debug_value(XrayIsolate *isolate, const char *value, XrValue *
     return false;
 }
 
-char *xr_debug_set_variable(XrayIsolate *isolate, int var_ref,
-                             const char *name, const char *value) {
-    if (!isolate || !name || !value) return NULL;
+char *xr_debug_set_variable(XrayIsolate *isolate, int var_ref, const char *name,
+                            const char *value) {
+    if (!isolate || !name || !value)
+        return NULL;
 
-    XrDebugState *dbg = (XrDebugState *)xr_isolate_get_debug_state(isolate);
-    if (!dbg) return NULL;
+    XrDebugState *dbg = (XrDebugState *) xr_isolate_get_debug_state(isolate);
+    if (!dbg)
+        return NULL;
 
     XrValue new_val;
-    if (!parse_debug_value(isolate, value, &new_val)) return NULL;
+    if (!parse_debug_value(isolate, value, &new_val))
+        return NULL;
 
     // Find the variable reference
     XrDebugVarRef *ref = xr_debug_get_var_ref(isolate, var_ref);
@@ -496,11 +516,13 @@ char *xr_debug_set_variable(XrayIsolate *isolate, int var_ref,
         XrDebugFrameCtx fctx;
         xr_debug_get_frame_ctx_ex(isolate, &fctx);
 
-        if (frame_idx < 0 || frame_idx >= fctx.frame_count) return NULL;
+        if (frame_idx < 0 || frame_idx >= fctx.frame_count)
+            return NULL;
 
         int actual_idx = fctx.frame_count - 1 - frame_idx;
         XrBcCallFrame *frame = &fctx.frames[actual_idx];
-        if (!frame->closure || !frame->closure->proto) return NULL;
+        if (!frame->closure || !frame->closure->proto)
+            return NULL;
 
         XrProto *proto = frame->closure->proto;
         XrValue *base = fctx.stack + frame->base_offset;
@@ -518,7 +540,7 @@ char *xr_debug_set_variable(XrayIsolate *isolate, int var_ref,
 
     // Array element: name is "[N]"
     if (ref->type == XDAP_REF_ARRAY && XR_IS_PTR(ref->value)) {
-        XrArray *arr = (XrArray *)XR_TO_PTR(ref->value);
+        XrArray *arr = (XrArray *) XR_TO_PTR(ref->value);
         int idx = atoi(name[0] == '[' ? name + 1 : name);
         if (idx >= 0 && idx < xr_array_size(arr)) {
             xr_array_set(arr, idx, new_val);
@@ -529,12 +551,13 @@ char *xr_debug_set_variable(XrayIsolate *isolate, int var_ref,
 
     // Map entry: name is the key display string
     if (ref->type == XDAP_REF_MAP && XR_IS_PTR(ref->value)) {
-        XrMap *map = (XrMap *)XR_TO_PTR(ref->value);
+        XrMap *map = (XrMap *) XR_TO_PTR(ref->value);
         // Try to find the entry by iterating and matching display name
         uint32_t size = xr_map_sizenode(map);
         for (uint32_t i = 0; i < size; i++) {
             XrMapNode *node = xr_map_node(map, i);
-            if (XR_MAP_NODE_EMPTY(node)) continue;
+            if (XR_MAP_NODE_EMPTY(node))
+                continue;
             char *key_str = xr_value_to_debug_string(isolate, node->key);
             bool match = key_str && strcmp(key_str, name) == 0;
             xr_free(key_str);
@@ -548,14 +571,14 @@ char *xr_debug_set_variable(XrayIsolate *isolate, int var_ref,
 
     // Json object field
     if (ref->type == XDAP_REF_OBJECT && XR_IS_PTR(ref->value)) {
-        XrJson *json = (XrJson *)XR_TO_PTR(ref->value);
+        XrJson *json = (XrJson *) XR_TO_PTR(ref->value);
         xr_json_set_by_key(isolate, json, name, new_val);
         return xr_value_to_debug_string(isolate, new_val);
     }
 
     // Instance field
     if (ref->type == XDAP_REF_INSTANCE && XR_IS_PTR(ref->value)) {
-        XrInstance *inst = (XrInstance *)XR_TO_PTR(ref->value);
+        XrInstance *inst = (XrInstance *) XR_TO_PTR(ref->value);
         xr_instance_set_field(isolate, inst, name, new_val);
         return xr_value_to_debug_string(isolate, new_val);
     }
@@ -571,31 +594,44 @@ char *xr_debug_set_variable(XrayIsolate *isolate, int var_ref,
 static const char *coro_state_string(XrCoroutine *coro) {
     uint8_t st = atomic_load_explicit(&coro->coro_state, memory_order_relaxed);
     switch (st) {
-        case XR_CORO_STATE_RUNNING: return "running";
-        case XR_CORO_STATE_READY:   return "ready";
-        case XR_CORO_STATE_DONE:    return "done";
+        case XR_CORO_STATE_RUNNING:
+            return "running";
+        case XR_CORO_STATE_READY:
+            return "ready";
+        case XR_CORO_STATE_DONE:
+            return "done";
         case XR_CORO_STATE_BLOCKED: {
             uint32_t flags = atomic_load_explicit(&coro->flags, memory_order_relaxed);
             uint32_t wait = flags & XR_CORO_WAIT_MASK;
             switch (wait) {
-                case XR_CORO_WAIT_CHANNEL_SEND: return "blocked (channel send)";
-                case XR_CORO_WAIT_CHANNEL_RECV: return "blocked (channel recv)";
-                case XR_CORO_WAIT_AWAIT:        return "blocked (await)";
-                case XR_CORO_WAIT_AWAIT_ALL:    return "blocked (await.all)";
-                case XR_CORO_WAIT_SLEEP:        return "blocked (sleep)";
-                case XR_CORO_WAIT_IO:           return "blocked (I/O)";
-                case XR_CORO_WAIT_SELECT:       return "blocked (select)";
-                default:                        return "blocked";
+                case XR_CORO_WAIT_CHANNEL_SEND:
+                    return "blocked (channel send)";
+                case XR_CORO_WAIT_CHANNEL_RECV:
+                    return "blocked (channel recv)";
+                case XR_CORO_WAIT_AWAIT:
+                    return "blocked (await)";
+                case XR_CORO_WAIT_AWAIT_ALL:
+                    return "blocked (await.all)";
+                case XR_CORO_WAIT_SLEEP:
+                    return "blocked (sleep)";
+                case XR_CORO_WAIT_IO:
+                    return "blocked (I/O)";
+                case XR_CORO_WAIT_SELECT:
+                    return "blocked (select)";
+                default:
+                    return "blocked";
             }
         }
-        default: return "unknown";
+        default:
+            return "unknown";
     }
 }
 
 int xr_debug_get_coro_count(XrayIsolate *isolate) {
-    if (!xr_isolate_get_vm_state(isolate)->coro_state) return 0;
+    if (!xr_isolate_get_vm_state(isolate)->coro_state)
+        return 0;
 
-    XrCoroState *sched = (XrCoroState *)xr_isolate_get_vm_state(isolate)->coro_state;
+    XrCoroState *sched = (XrCoroState *) xr_isolate_get_vm_state(isolate)->coro_state;
     int count = 0;
 
     // Ready queues (all priority levels)
@@ -608,7 +644,7 @@ int xr_debug_get_coro_count(XrayIsolate *isolate) {
     }
 
     // Blocked coroutines in per-worker queues
-    XrRuntime *rt = (XrRuntime *)xr_isolate_get_vm_state(isolate)->runtime;
+    XrRuntime *rt = (XrRuntime *) xr_isolate_get_vm_state(isolate)->runtime;
     if (rt) {
         for (int w = 0; w < rt->worker_count; w++) {
             XrCoroutine *bc = rt->workers[w].p.blocked_head;
@@ -622,11 +658,12 @@ int xr_debug_get_coro_count(XrayIsolate *isolate) {
     return count;
 }
 
-bool xr_debug_get_coro_info(XrayIsolate *isolate, int coro_idx,
-                             int *out_id, const char **out_name, const char **out_state) {
-    if (!xr_isolate_get_vm_state(isolate)->coro_state) return false;
+bool xr_debug_get_coro_info(XrayIsolate *isolate, int coro_idx, int *out_id, const char **out_name,
+                            const char **out_state) {
+    if (!xr_isolate_get_vm_state(isolate)->coro_state)
+        return false;
 
-    XrCoroState *sched = (XrCoroState *)xr_isolate_get_vm_state(isolate)->coro_state;
+    XrCoroState *sched = (XrCoroState *) xr_isolate_get_vm_state(isolate)->coro_state;
     int idx = 0;
     XrCoroutine *target = NULL;
 
@@ -635,7 +672,8 @@ bool xr_debug_get_coro_info(XrayIsolate *isolate, int coro_idx,
         for (int p = 0; p < XR_CORO_PRIORITY_COUNT && !target; p++) {
             XrCoroutine *coro = sched->ready_head[p];
             while (coro && !target) {
-                if (idx == coro_idx) target = coro;
+                if (idx == coro_idx)
+                    target = coro;
                 idx++;
                 coro = coro->sched_link;
             }
@@ -644,12 +682,13 @@ bool xr_debug_get_coro_info(XrayIsolate *isolate, int coro_idx,
 
     // Blocked coroutines in per-worker queues
     if (!target) {
-        XrRuntime *rt = (XrRuntime *)xr_isolate_get_vm_state(isolate)->runtime;
+        XrRuntime *rt = (XrRuntime *) xr_isolate_get_vm_state(isolate)->runtime;
         if (rt) {
             for (int w = 0; w < rt->worker_count && !target; w++) {
                 XrCoroutine *bc = rt->workers[w].p.blocked_head;
                 while (bc && !target) {
-                    if (idx == coro_idx) target = bc;
+                    if (idx == coro_idx)
+                        target = bc;
                     idx++;
                     bc = bc->sched_link;
                 }
@@ -657,11 +696,15 @@ bool xr_debug_get_coro_info(XrayIsolate *isolate, int coro_idx,
         }
     }
 
-    if (!target) return false;
+    if (!target)
+        return false;
 
-    if (out_id) *out_id = target->id;
-    if (out_name) *out_name = target->name ? target->name : "<unnamed>";
-    if (out_state) *out_state = coro_state_string(target);
+    if (out_id)
+        *out_id = target->id;
+    if (out_name)
+        *out_name = target->name ? target->name : "<unnamed>";
+    if (out_state)
+        *out_state = coro_state_string(target);
 
     return true;
 }
@@ -681,10 +724,9 @@ static char *format_instruction(XrProto *proto, int offset) {
     uint8_t c = GETARG_C(inst);
     int sbx = GETARG_sBx(inst);
     uint16_t bx = GETARG_Bx(inst);
-    (void)proto;
+    (void) proto;
 
-    snprintf(buf, sizeof(buf), "%-16s A=%d B=%d C=%d Bx=%d sBx=%d",
-             name, a, b, c, bx, sbx);
+    snprintf(buf, sizeof(buf), "%-16s A=%d B=%d C=%d Bx=%d sBx=%d", name, a, b, c, bx, sbx);
 
     return xr_strdup(buf);
 }
@@ -695,17 +737,17 @@ static char *get_instruction_comment(XrProto *proto, int offset) {
     uint16_t bx = GETARG_Bx(inst);
 
     // Show constant value for LOADK
-    if (op == OP_LOADK && bx < (uint16_t)PROTO_CONST_COUNT(proto)) {
+    if (op == OP_LOADK && bx < (uint16_t) PROTO_CONST_COUNT(proto)) {
         XrValue val = PROTO_CONSTANT(proto, bx);
         if (XR_IS_STRING(val)) {
             XrString *str = XR_TO_STRING(val);
             char buf[64];
-            snprintf(buf, sizeof(buf), "; \"%.*s\"",
-                     (int)(str->length > 40 ? 40 : str->length), str->data);
+            snprintf(buf, sizeof(buf), "; \"%.*s\"", (int) (str->length > 40 ? 40 : str->length),
+                     str->data);
             return xr_strdup(buf);
         } else if (XR_IS_INT(val)) {
             char buf[32];
-            snprintf(buf, sizeof(buf), "; %lld", (long long)XR_TO_INT(val));
+            snprintf(buf, sizeof(buf), "; %lld", (long long) XR_TO_INT(val));
             return xr_strdup(buf);
         } else if (XR_IS_FLOAT(val)) {
             char buf[32];
@@ -715,7 +757,7 @@ static char *get_instruction_comment(XrProto *proto, int offset) {
     }
 
     // Show function name for CLOSURE
-    if (op == OP_CLOSURE && bx < (uint16_t)PROTO_PROTO_COUNT(proto)) {
+    if (op == OP_CLOSURE && bx < (uint16_t) PROTO_PROTO_COUNT(proto)) {
         XrProto *child = PROTO_PROTO(proto, bx);
         if (child && child->name) {
             char buf[64];
@@ -727,9 +769,10 @@ static char *get_instruction_comment(XrProto *proto, int offset) {
     return NULL;
 }
 
-int xr_debug_get_disassembly(XrayIsolate *isolate, int frame_idx,
-                              XdapDisasmInstr **out_instrs, int *out_count) {
-    if (!isolate || !out_instrs || !out_count) return -1;
+int xr_debug_get_disassembly(XrayIsolate *isolate, int frame_idx, XdapDisasmInstr **out_instrs,
+                             int *out_count) {
+    if (!isolate || !out_instrs || !out_count)
+        return -1;
 
     *out_instrs = NULL;
     *out_count = 0;
@@ -737,19 +780,22 @@ int xr_debug_get_disassembly(XrayIsolate *isolate, int frame_idx,
     XrDebugFrameCtx fctx;
     xr_debug_get_frame_ctx_ex(isolate, &fctx);
 
-    if (frame_idx < 0 || frame_idx >= fctx.frame_count) return -1;
+    if (frame_idx < 0 || frame_idx >= fctx.frame_count)
+        return -1;
 
     int actual_idx = fctx.frame_count - 1 - frame_idx;
     XrBcCallFrame *frame = &fctx.frames[actual_idx];
 
-    if (!frame->closure || !frame->closure->proto) return -1;
+    if (!frame->closure || !frame->closure->proto)
+        return -1;
 
     XrProto *proto = frame->closure->proto;
     int code_count = PROTO_CODE_COUNT(proto);
 
-    if (code_count == 0) return 0;
+    if (code_count == 0)
+        return 0;
 
-    XdapDisasmInstr *instrs = (XdapDisasmInstr *)xr_calloc(code_count, sizeof(XdapDisasmInstr));
+    XdapDisasmInstr *instrs = (XdapDisasmInstr *) xr_calloc(code_count, sizeof(XdapDisasmInstr));
 
     for (int i = 0; i < code_count; i++) {
         instrs[i].offset = i;
@@ -769,29 +815,33 @@ int xr_debug_get_disassembly(XrayIsolate *isolate, int frame_idx,
 }
 
 int xr_debug_get_current_pc(XrayIsolate *isolate, int frame_idx) {
-    if (!isolate) return -1;
+    if (!isolate)
+        return -1;
 
     XrDebugFrameCtx fctx;
     xr_debug_get_frame_ctx_ex(isolate, &fctx);
 
-    if (frame_idx < 0 || frame_idx >= fctx.frame_count) return -1;
+    if (frame_idx < 0 || frame_idx >= fctx.frame_count)
+        return -1;
 
     int actual_idx = fctx.frame_count - 1 - frame_idx;
     XrBcCallFrame *frame = &fctx.frames[actual_idx];
 
-    if (!frame->closure || !frame->closure->proto) return -1;
+    if (!frame->closure || !frame->closure->proto)
+        return -1;
 
     // PC is stored as pointer, convert to offset
     XrProto *proto = frame->closure->proto;
     XrInstruction *code_start = &PROTO_CODE(proto, 0);
-    int pc = (int)(frame->pc - code_start);
+    int pc = (int) (frame->pc - code_start);
 
     // PC points to next instruction, so current is pc-1
     return (pc > 0) ? pc - 1 : 0;
 }
 
 void xr_debug_free_disasm(XdapDisasmInstr *instrs, int count) {
-    if (!instrs) return;
+    if (!instrs)
+        return;
 
     for (int i = 0; i < count; i++) {
         xr_free(instrs[i].instruction);
@@ -804,22 +854,27 @@ void xr_debug_free_disasm(XdapDisasmInstr *instrs, int count) {
 // Async Stack Trace (lazy capture - walk parent chain)
 // ============================================================================
 
-bool xr_debug_get_async_stack(XrayIsolate *isolate, int *out_depth,
-                               const char ***out_names, const char ***out_files,
-                               int **out_lines) {
-    if (!isolate || !out_depth) return false;
+bool xr_debug_get_async_stack(XrayIsolate *isolate, int *out_depth, const char ***out_names,
+                              const char ***out_files, int **out_lines) {
+    if (!isolate || !out_depth)
+        return false;
 
-    XrDebugState *dbg = (XrDebugState *)xr_isolate_get_debug_state(isolate);
-    if (!dbg) return false;
+    XrDebugState *dbg = (XrDebugState *) xr_isolate_get_debug_state(isolate);
+    if (!dbg)
+        return false;
 
     *out_depth = 0;
-    if (out_names) *out_names = NULL;
-    if (out_files) *out_files = NULL;
-    if (out_lines) *out_lines = NULL;
+    if (out_names)
+        *out_names = NULL;
+    if (out_files)
+        *out_files = NULL;
+    if (out_lines)
+        *out_lines = NULL;
 
     // Get current coroutine from VM state
-    XrCoroutine *coro = (XrCoroutine *)xr_isolate_get_vm_state(isolate)->current_coro;
-    if (!coro || !coro->parent_coro) return false;
+    XrCoroutine *coro = (XrCoroutine *) xr_isolate_get_vm_state(isolate)->current_coro;
+    if (!coro || !coro->parent_coro)
+        return false;
 
     // Walk parent chain to build async stack trace
     int depth = 0;
@@ -835,12 +890,16 @@ bool xr_debug_get_async_stack(XrayIsolate *isolate, int *out_depth,
         c = c->parent_coro;
     }
 
-    if (depth == 0) return false;
+    if (depth == 0)
+        return false;
 
     *out_depth = depth;
-    if (out_names) *out_names = dbg->async_names;
-    if (out_files) *out_files = dbg->async_files;
-    if (out_lines) *out_lines = dbg->async_lines;
+    if (out_names)
+        *out_names = dbg->async_names;
+    if (out_files)
+        *out_files = dbg->async_files;
+    if (out_lines)
+        *out_lines = dbg->async_lines;
 
     return true;
 }
@@ -850,7 +909,7 @@ bool xr_debug_get_async_stack(XrayIsolate *isolate, int *out_depth,
 // ============================================================================
 
 bool xr_debug_hot_reload(XrayIsolate *isolate, const char *path) {
-    (void)isolate;
-    (void)path;
+    (void) isolate;
+    (void) path;
     return false;
 }

@@ -19,9 +19,9 @@
 #include "../../base/xchecks.h"
 #include "../../runtime/value/xtype.h"
 #include "../../runtime/class/xclass.h"
-#include "../../runtime/xisolate_api.h"  // XrayIsolate full definition
+#include "../../runtime/xisolate_api.h"    // XrayIsolate full definition
 #include "../../runtime/xglobals_table.h"  // xr_globals_get
-#include "../parser/xast.h"  // AST node types
+#include "../parser/xast.h"                // AST node types
 #include "../../base/xmalloc.h"
 #include "../../runtime/value/xvalue.h"
 #include "../analyzer/xanalyzer.h"
@@ -43,7 +43,8 @@
  * @return      Corresponding XrValue, unsupported types return xr_null()
  */
 static XrValue ast_literal_to_value(XrayIsolate *X, AstNode *node) {
-    if (!node) return xr_null();
+    if (!node)
+        return xr_null();
 
     // Handle based on AST node type
     switch (node->type) {
@@ -86,7 +87,8 @@ static XrValue ast_literal_to_value(XrayIsolate *X, AstNode *node) {
 static uint32_t count_instance_fields(ClassDeclNode *node) {
     uint32_t count = 0;
     for (int i = 0; i < node->field_count; i++) {
-        if (node->fields[i]->type != AST_FIELD_DECL) continue;
+        if (node->fields[i]->type != AST_FIELD_DECL)
+            continue;
         FieldDeclNode *field = &node->fields[i]->as.field_decl;
         if (!field->is_static) {
             count++;
@@ -101,7 +103,8 @@ static uint32_t count_instance_fields(ClassDeclNode *node) {
 static uint32_t count_instance_methods(ClassDeclNode *node) {
     uint32_t count = 0;
     for (int i = 0; i < node->method_count; i++) {
-        if (node->methods[i]->type != AST_METHOD_DECL) continue;
+        if (node->methods[i]->type != AST_METHOD_DECL)
+            continue;
         MethodDeclNode *method = &node->methods[i]->as.method_decl;
         if (!method->is_static) {
             count++;
@@ -116,7 +119,8 @@ static uint32_t count_instance_methods(ClassDeclNode *node) {
 static uint32_t count_static_fields(ClassDeclNode *node) {
     uint32_t count = 0;
     for (int i = 0; i < node->field_count; i++) {
-        if (node->fields[i]->type != AST_FIELD_DECL) continue;
+        if (node->fields[i]->type != AST_FIELD_DECL)
+            continue;
         FieldDeclNode *field = &node->fields[i]->as.field_decl;
         if (field->is_static) {
             count++;
@@ -131,7 +135,8 @@ static uint32_t count_static_fields(ClassDeclNode *node) {
 static uint32_t count_static_methods(ClassDeclNode *node) {
     uint32_t count = 0;
     for (int i = 0; i < node->method_count; i++) {
-        if (node->methods[i]->type != AST_METHOD_DECL) continue;
+        if (node->methods[i]->type != AST_METHOD_DECL)
+            continue;
         MethodDeclNode *method = &node->methods[i]->as.method_decl;
         // Only count static methods, exclude static constructor (handled separately)
         if (method->is_static && !method->is_static_constructor) {
@@ -144,29 +149,29 @@ static uint32_t count_static_methods(ClassDeclNode *node) {
 /*
  * Collect instance fields
  */
-static XrFieldDescriptorEntry* collect_instance_fields_mvp(
-    XrayIsolate *X,
-    ClassDeclNode *node,
-    uint32_t *count_out
-) {
+static XrFieldDescriptorEntry *collect_instance_fields_mvp(XrayIsolate *X, ClassDeclNode *node,
+                                                           uint32_t *count_out) {
     uint32_t count = count_instance_fields(node);
     *count_out = count;
 
-    if (count == 0) return NULL;
+    if (count == 0)
+        return NULL;
 
     // Allocate array
-    XrFieldDescriptorEntry *fields = (XrFieldDescriptorEntry*)xr_malloc(
-        count * sizeof(XrFieldDescriptorEntry)
-    );
-    if (!fields) return NULL;
+    XrFieldDescriptorEntry *fields =
+        (XrFieldDescriptorEntry *) xr_malloc(count * sizeof(XrFieldDescriptorEntry));
+    if (!fields)
+        return NULL;
 
     // Fill field info
     uint32_t idx = 0;
     for (int i = 0; i < node->field_count; i++) {
-        if (node->fields[i]->type != AST_FIELD_DECL) continue;
+        if (node->fields[i]->type != AST_FIELD_DECL)
+            continue;
         FieldDeclNode *field = &node->fields[i]->as.field_decl;
 
-        if (field->is_static) continue;  // Skip static fields
+        if (field->is_static)
+            continue;  // Skip static fields
 
         // Compile-time error detection: duplicate field definition
         for (uint32_t j = 0; j < idx; j++) {
@@ -201,28 +206,29 @@ static XrFieldDescriptorEntry* collect_instance_fields_mvp(
 /*
  * Collect instance methods
  */
-static XrMethodDescriptorEntry* collect_instance_methods_mvp(
-    ClassDeclNode *node,
-    uint32_t *count_out
-) {
+static XrMethodDescriptorEntry *collect_instance_methods_mvp(ClassDeclNode *node,
+                                                             uint32_t *count_out) {
     uint32_t count = count_instance_methods(node);
     *count_out = count;
 
-    if (count == 0) return NULL;
+    if (count == 0)
+        return NULL;
 
     // Allocate array
-    XrMethodDescriptorEntry *methods = (XrMethodDescriptorEntry*)xr_malloc(
-        count * sizeof(XrMethodDescriptorEntry)
-    );
-    if (!methods) return NULL;
+    XrMethodDescriptorEntry *methods =
+        (XrMethodDescriptorEntry *) xr_malloc(count * sizeof(XrMethodDescriptorEntry));
+    if (!methods)
+        return NULL;
 
     // Fill method info
     uint32_t idx = 0;
     for (int i = 0; i < node->method_count; i++) {
-        if (node->methods[i]->type != AST_METHOD_DECL) continue;
+        if (node->methods[i]->type != AST_METHOD_DECL)
+            continue;
         MethodDeclNode *method = &node->methods[i]->as.method_decl;
 
-        if (method->is_static) continue;  // Skip static methods
+        if (method->is_static)
+            continue;  // Skip static methods
 
         // Compile-time error detection: duplicate method definition
         for (uint32_t j = 0; j < idx; j++) {
@@ -235,7 +241,8 @@ static XrMethodDescriptorEntry* collect_instance_methods_mvp(
         }
 
         methods[idx].name = strdup(method->name);
-        methods[idx].return_type_name = method->return_type ? xr_type_to_string(method->return_type) : NULL;
+        methods[idx].return_type_name =
+            method->return_type ? xr_type_to_string(method->return_type) : NULL;
         methods[idx].param_count = method->param_count;
         methods[idx].flags = 0;
         methods[idx].is_operator = method->is_operator;
@@ -267,29 +274,29 @@ static XrMethodDescriptorEntry* collect_instance_methods_mvp(
 /*
  * Collect static fields
  */
-static XrFieldDescriptorEntry* collect_static_fields(
-    XrayIsolate *X,
-    ClassDeclNode *node,
-    uint32_t *count_out
-) {
+static XrFieldDescriptorEntry *collect_static_fields(XrayIsolate *X, ClassDeclNode *node,
+                                                     uint32_t *count_out) {
     uint32_t count = count_static_fields(node);
     *count_out = count;
 
-    if (count == 0) return NULL;
+    if (count == 0)
+        return NULL;
 
     // Allocate array
-    XrFieldDescriptorEntry *fields = (XrFieldDescriptorEntry*)xr_malloc(
-        count * sizeof(XrFieldDescriptorEntry)
-    );
-    if (!fields) return NULL;
+    XrFieldDescriptorEntry *fields =
+        (XrFieldDescriptorEntry *) xr_malloc(count * sizeof(XrFieldDescriptorEntry));
+    if (!fields)
+        return NULL;
 
     // Fill field info
     uint32_t idx = 0;
     for (int i = 0; i < node->field_count; i++) {
-        if (node->fields[i]->type != AST_FIELD_DECL) continue;
+        if (node->fields[i]->type != AST_FIELD_DECL)
+            continue;
         FieldDeclNode *field = &node->fields[i]->as.field_decl;
 
-        if (!field->is_static) continue;  // Only collect static fields
+        if (!field->is_static)
+            continue;  // Only collect static fields
 
         fields[idx].name = strdup(field->name);
         fields[idx].type_name = field->field_type ? xr_type_to_string(field->field_type) : NULL;
@@ -314,32 +321,33 @@ static XrFieldDescriptorEntry* collect_static_fields(
 /*
  * Collect static methods
  */
-static XrMethodDescriptorEntry* collect_static_methods(
-    ClassDeclNode *node,
-    uint32_t *count_out
-) {
+static XrMethodDescriptorEntry *collect_static_methods(ClassDeclNode *node, uint32_t *count_out) {
     uint32_t count = count_static_methods(node);
     *count_out = count;
 
-    if (count == 0) return NULL;
+    if (count == 0)
+        return NULL;
 
     // Allocate array
-    XrMethodDescriptorEntry *methods = (XrMethodDescriptorEntry*)xr_malloc(
-        count * sizeof(XrMethodDescriptorEntry)
-    );
-    if (!methods) return NULL;
+    XrMethodDescriptorEntry *methods =
+        (XrMethodDescriptorEntry *) xr_malloc(count * sizeof(XrMethodDescriptorEntry));
+    if (!methods)
+        return NULL;
 
     // Fill method info
     uint32_t idx = 0;
     for (int i = 0; i < node->method_count; i++) {
-        if (node->methods[i]->type != AST_METHOD_DECL) continue;
+        if (node->methods[i]->type != AST_METHOD_DECL)
+            continue;
         MethodDeclNode *method = &node->methods[i]->as.method_decl;
 
         // Only collect static methods, but exclude static constructor (handled separately)
-        if (!method->is_static || method->is_static_constructor) continue;
+        if (!method->is_static || method->is_static_constructor)
+            continue;
 
         methods[idx].name = strdup(method->name);
-        methods[idx].return_type_name = method->return_type ? xr_type_to_string(method->return_type) : NULL;
+        methods[idx].return_type_name =
+            method->return_type ? xr_type_to_string(method->return_type) : NULL;
         methods[idx].param_count = method->param_count;
         methods[idx].flags = XMETHOD_FLAG_STATIC;
         methods[idx].is_operator = method->is_operator;
@@ -367,19 +375,18 @@ static XrMethodDescriptorEntry* collect_static_methods(
 /*
  * Create ClassDescriptor
  */
-XrClassDescriptor* xoop_create_class_descriptor(
-    XrCompilerContext *ctx,
-    XrCompiler *compiler,
-    ClassDeclNode *node
-) {
+XrClassDescriptor *xoop_create_class_descriptor(XrCompilerContext *ctx, XrCompiler *compiler,
+                                                ClassDeclNode *node) {
     // Check getter/setter name conflict with fields
 
     for (int m = 0; m < node->method_count; m++) {
         AstNode *method_node = node->methods[m];
-        if (method_node->type != AST_METHOD_DECL) continue;
+        if (method_node->type != AST_METHOD_DECL)
+            continue;
 
         MethodDeclNode *method = &method_node->as.method_decl;
-        if (!method->is_getter && !method->is_setter) continue;
+        if (!method->is_getter && !method->is_setter)
+            continue;
 
         // Extract actual property name (remove "get:" or "set:" prefix)
         const char *prop_name = method->name;
@@ -403,15 +410,16 @@ XrClassDescriptor* xoop_create_class_descriptor(
             if (field_name && strcmp(prop_name, field_name) == 0) {
                 const char *kind = method->is_getter ? "getter" : "setter";
                 xr_compiler_error(ctx, compiler,
-                    "class '%s' %s '%s' has same name as field, use different name (suggest field with '_%s' prefix)",
-                    node->name, kind, prop_name, prop_name);
+                                  "class '%s' %s '%s' has same name as field, use different name "
+                                  "(suggest field with '_%s' prefix)",
+                                  node->name, kind, prop_name, prop_name);
                 return NULL;
             }
         }
     }
 
     // Allocate descriptor
-    XrClassDescriptor *desc = (XrClassDescriptor*)xr_malloc(sizeof(XrClassDescriptor));
+    XrClassDescriptor *desc = (XrClassDescriptor *) xr_malloc(sizeof(XrClassDescriptor));
     if (!desc) {
         xr_log_warning("class", "failed to allocate descriptor");
         return NULL;
@@ -427,12 +435,16 @@ XrClassDescriptor* xoop_create_class_descriptor(
      * and xr_class_from_descriptor defaults its super to Object if no
      * override is provided.
      */
-    desc->super_name = (node->super_module != NULL || !node->super_name) ? NULL : strdup(node->super_name);
+    desc->super_name =
+        (node->super_module != NULL || !node->super_name) ? NULL : strdup(node->super_name);
     desc->super_global_index = -1;  // Default -1 (no parent or unknown)
     desc->flags = 0;
-    if (node->is_abstract) desc->flags |= XR_CLASS_ABSTRACT;
-    if (node->is_final) desc->flags |= XR_CLASS_FINAL;
-    if (ctx->is_compiling_struct) desc->flags |= XR_CLASS_VALUE_TYPE;
+    if (node->is_abstract)
+        desc->flags |= XR_CLASS_ABSTRACT;
+    if (node->is_final)
+        desc->flags |= XR_CLASS_FINAL;
+    if (ctx->is_compiling_struct)
+        desc->flags |= XR_CLASS_VALUE_TYPE;
     desc->descriptor_version = XR_CLASS_DESCRIPTOR_VERSION;
     desc->checksum = 0;
 
@@ -450,7 +462,8 @@ XrClassDescriptor* xoop_create_class_descriptor(
                 break;
             }
         }
-        if (flat) desc->flags |= XR_CLASS_FLAT_COPYABLE;
+        if (flat)
+            desc->flags |= XR_CLASS_FLAT_COPYABLE;
     }
 
     // Set struct_layout from analyzer (for native struct storage)
@@ -466,23 +479,18 @@ XrClassDescriptor* xoop_create_class_descriptor(
     }
 
     // Collect instance methods
-    desc->instance_methods = collect_instance_methods_mvp(
-        node, &desc->instance_method_count
-    );
+    desc->instance_methods = collect_instance_methods_mvp(node, &desc->instance_method_count);
 
     // Collect static fields
     desc->static_fields = collect_static_fields(ctx->X, node, &desc->static_field_count);
 
     // Collect static methods
-    desc->static_methods = collect_static_methods(
-        node, &desc->static_method_count
-    );
+    desc->static_methods = collect_static_methods(node, &desc->static_method_count);
 
     // Collect interfaces (store pointers directly)
     if (node->interface_count > 0) {
-        desc->interfaces = (XrInterfaceDescriptorEntry*)xr_malloc(
-            node->interface_count * sizeof(XrInterfaceDescriptorEntry)
-        );
+        desc->interfaces = (XrInterfaceDescriptorEntry *) xr_malloc(
+            node->interface_count * sizeof(XrInterfaceDescriptorEntry));
         if (desc->interfaces) {
             for (int i = 0; i < node->interface_count; i++) {
                 const char *iface_name = node->interfaces[i];
@@ -492,7 +500,7 @@ XrClassDescriptor* xoop_create_class_descriptor(
                 desc->interfaces[i].interface_ptr = NULL;
                 desc->interfaces[i].interface_name = iface_name;
             }
-            desc->interface_count = (uint8_t)node->interface_count;
+            desc->interface_count = (uint8_t) node->interface_count;
         } else {
             desc->interface_count = 0;
         }
@@ -512,7 +520,8 @@ XrClassDescriptor* xoop_create_class_descriptor(
  * Add ClassDescriptor to constant pool
  */
 int xoop_add_descriptor_to_constant_pool(XrProto *proto, XrClassDescriptor *desc) {
-    if (!proto || !desc) return -1;
+    if (!proto || !desc)
+        return -1;
 
     // Wrap descriptor pointer as XrValue
     XrValue desc_val = XR_FROM_PTR(desc);
@@ -525,32 +534,45 @@ int xoop_add_descriptor_to_constant_pool(XrProto *proto, XrClassDescriptor *desc
  * Free ClassDescriptor
  */
 void xoop_free_class_descriptor(XrClassDescriptor *desc) {
-    if (!desc) return;
+    if (!desc)
+        return;
 
     // Free strdup'd strings
-    if (desc->class_name) xr_free((void*)desc->class_name);
-    if (desc->super_name) xr_free((void*)desc->super_name);
+    if (desc->class_name)
+        xr_free((void *) desc->class_name);
+    if (desc->super_name)
+        xr_free((void *) desc->super_name);
 
     // Free field/method name strings
     for (uint32_t i = 0; i < desc->instance_field_count; i++) {
-        if (desc->instance_fields[i].name) xr_free((void*)desc->instance_fields[i].name);
+        if (desc->instance_fields[i].name)
+            xr_free((void *) desc->instance_fields[i].name);
     }
     for (uint32_t i = 0; i < desc->static_field_count; i++) {
-        if (desc->static_fields[i].name) xr_free((void*)desc->static_fields[i].name);
+        if (desc->static_fields[i].name)
+            xr_free((void *) desc->static_fields[i].name);
     }
     for (uint32_t i = 0; i < desc->instance_method_count; i++) {
-        if (desc->instance_methods[i].name) xr_free((void*)desc->instance_methods[i].name);
+        if (desc->instance_methods[i].name)
+            xr_free((void *) desc->instance_methods[i].name);
     }
     for (uint32_t i = 0; i < desc->static_method_count; i++) {
-        if (desc->static_methods[i].name) xr_free((void*)desc->static_methods[i].name);
+        if (desc->static_methods[i].name)
+            xr_free((void *) desc->static_methods[i].name);
     }
 
-    if (desc->instance_fields) xr_free(desc->instance_fields);
-    if (desc->static_fields) xr_free(desc->static_fields);
-    if (desc->instance_methods) xr_free(desc->instance_methods);
-    if (desc->static_methods) xr_free(desc->static_methods);
-    if (desc->interfaces) xr_free(desc->interfaces);
-    if (desc->abstract_method_names) xr_free(desc->abstract_method_names);
+    if (desc->instance_fields)
+        xr_free(desc->instance_fields);
+    if (desc->static_fields)
+        xr_free(desc->static_fields);
+    if (desc->instance_methods)
+        xr_free(desc->instance_methods);
+    if (desc->static_methods)
+        xr_free(desc->static_methods);
+    if (desc->interfaces)
+        xr_free(desc->interfaces);
+    if (desc->abstract_method_names)
+        xr_free(desc->abstract_method_names);
 
     xr_free(desc);
 }

@@ -30,17 +30,17 @@
 
 // Per-block liveness sets
 typedef struct {
-    XirBSet def; // vregs defined in this block
-    XirBSet use; // vregs used before being defined in this block
-    XirBSet live_in; // vregs live at block entry
-    XirBSet live_out; // vregs live at block exit
+    XirBSet def;       // vregs defined in this block
+    XirBSet use;       // vregs used before being defined in this block
+    XirBSet live_in;   // vregs live at block entry
+    XirBSet live_out;  // vregs live at block exit
 } XirBlockLive;
 
 // Per-function liveness result
 typedef struct {
-    XirBlockLive *blocks; // array indexed by block layout order [0..nblk)
-    uint32_t      nblk;
-    uint32_t      nvreg; // bitset width
+    XirBlockLive *blocks;  // array indexed by block layout order [0..nblk)
+    uint32_t nblk;
+    uint32_t nvreg;  // bitset width
 } XirLive;
 
 /*
@@ -62,14 +62,16 @@ XR_FUNC void xir_live_free(XirLive *live);
 
 // Query: is vreg v live at the entry of block bi?
 static inline bool xir_live_at_entry(const XirLive *live, uint32_t bi, uint32_t v) {
-    if (bi >= live->nblk || v >= live->nvreg) return false;
+    if (bi >= live->nblk || v >= live->nvreg)
+        return false;
     return xir_bset_has(&live->blocks[bi].live_in, v);
 }
 
 // Query: is vreg v live at the exit of block bi?
 static inline bool xir_live_at_exit(const XirLive *live, uint32_t bi, uint32_t v) {
-    if (bi >= live->nblk || v >= live->nvreg) return false;
+    if (bi >= live->nblk || v >= live->nvreg)
+        return false;
     return xir_bset_has(&live->blocks[bi].live_out, v);
 }
 
-#endif // XIR_LIVENESS2_H
+#endif  // XIR_LIVENESS2_H

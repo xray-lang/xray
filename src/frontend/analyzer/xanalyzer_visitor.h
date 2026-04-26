@@ -65,4 +65,4 @@ XR_FUNC void xa_visit_block_stmt(XaInferContext *ctx, AstNode *node);
 // Full analysis entry point
 XR_FUNC void xa_analyze_ast(XaAnalyzer *analyzer, AstNode *ast);
 
-#endif // XANALYZER_VISITOR_H
+#endif  // XANALYZER_VISITOR_H

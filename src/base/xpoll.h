@@ -49,52 +49,52 @@
 // ============================================================================
 
 #if defined(__linux__)
-    #define XR_POLL_EPOLL 1
-    #include <sys/epoll.h>
-    #include <unistd.h>
-    #include <fcntl.h>
+#define XR_POLL_EPOLL 1
+#include <sys/epoll.h>
+#include <unistd.h>
+#include <fcntl.h>
 #elif defined(__APPLE__) || defined(__FreeBSD__) || defined(__OpenBSD__) || defined(__NetBSD__)
-    #define XR_POLL_KQUEUE 1
-    #include <sys/types.h>
-    #include <sys/event.h>
-    #include <sys/time.h>
-    #include <unistd.h>
-    #include <fcntl.h>
+#define XR_POLL_KQUEUE 1
+#include <sys/types.h>
+#include <sys/event.h>
+#include <sys/time.h>
+#include <unistd.h>
+#include <fcntl.h>
 #elif defined(_WIN32)
-    #define XR_POLL_IOCP 1
-    #ifndef WIN32_LEAN_AND_MEAN
-    #define WIN32_LEAN_AND_MEAN
-    #endif
-    #include <winsock2.h>
-    #include <ws2tcpip.h>
-    #include <windows.h>
-    #pragma comment(lib, "ws2_32.lib")
+#define XR_POLL_IOCP 1
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
+#include <winsock2.h>
+#include <ws2tcpip.h>
+#include <windows.h>
+#pragma comment(lib, "ws2_32.lib")
 #else
-    #define XR_POLL_SELECT 1
-    #include <sys/select.h>
-    #include <unistd.h>
-    #include <fcntl.h>
+#define XR_POLL_SELECT 1
+#include <sys/select.h>
+#include <unistd.h>
+#include <fcntl.h>
 #endif
 
 // ============================================================================
 // Event Flags (compatible with xnetpoll)
 // ============================================================================
 
-#define XR_POLL_IN   0x01   // Readable
-#define XR_POLL_OUT  0x02   // Writable
-#define XR_POLL_ERR  0x04   // Error
-#define XR_POLL_HUP  0x08   // Hangup
+#define XR_POLL_IN 0x01   // Readable
+#define XR_POLL_OUT 0x02  // Writable
+#define XR_POLL_ERR 0x04  // Error
+#define XR_POLL_HUP 0x08  // Hangup
 
 // ============================================================================
 // Configuration
 // ============================================================================
 
 #ifndef XR_POLL_MAX_EVENTS
-#define XR_POLL_MAX_EVENTS 128   // Max events per poll (same as xnetpoll)
+#define XR_POLL_MAX_EVENTS 128  // Max events per poll (same as xnetpoll)
 #endif
 
 #ifndef XR_POLL_MAX_FDS
-#define XR_POLL_MAX_FDS 64       // Max tracked fds for simple use cases
+#define XR_POLL_MAX_FDS 64  // Max tracked fds for simple use cases
 #endif
 
 // ============================================================================
@@ -103,9 +103,9 @@
 
 // Event structure returned by poll
 typedef struct XrPollEvent {
-    int fd;              // File descriptor
-    int events;          // Ready events (XR_POLL_IN/OUT/ERR/HUP)
-    void *user_data;     // User data associated with fd
+    int fd;           // File descriptor
+    int events;       // Ready events (XR_POLL_IN/OUT/ERR/HUP)
+    void *user_data;  // User data associated with fd
 } XrPollEvent;
 
 // Tracked fd entry (for maintaining fd -> user_data mapping)
@@ -119,7 +119,7 @@ typedef struct XrPollEntry {
 // Main poll structure
 typedef struct XrPoll {
     bool initialized;
-    
+
     // Platform-specific handle
 #if defined(XR_POLL_EPOLL)
     int epfd;
@@ -129,11 +129,11 @@ typedef struct XrPoll {
     HANDLE iocp;
     bool winsock_inited;
 #endif
-    
+
     // Wakeup mechanism (from xnetpoll: pipe for interrupt)
     int wakeup_pipe[2];
-    bool wakeup_pending;    // Avoid duplicate wakeup (xnetpoll optimization)
-    
+    bool wakeup_pending;  // Avoid duplicate wakeup (xnetpoll optimization)
+
     // fd tracking (for del and user_data lookup)
     XrPollEntry entries[XR_POLL_MAX_FDS];
     int entry_count;
@@ -147,10 +147,11 @@ typedef struct XrPoll {
 static inline int xr_poll_set_nonblock(int fd) {
 #ifdef _WIN32
     u_long mode = 1;
-    return ioctlsocket((SOCKET)fd, FIONBIO, &mode);
+    return ioctlsocket((SOCKET) fd, FIONBIO, &mode);
 #else
     int flags = fcntl(fd, F_GETFL, 0);
-    if (flags < 0) return -1;
+    if (flags < 0)
+        return -1;
     return fcntl(fd, F_SETFL, flags | O_NONBLOCK);
 #endif
 }
@@ -161,46 +162,46 @@ static inline int xr_poll_create_wakeup_pipe(int pipe_fds[2]) {
 #ifdef _WIN32
     // Windows: create self-connected TCP socket pair
     // (xnetpoll_iocp uses PostQueuedCompletionStatus, but for select we need pipe)
-    
+
     SOCKET listener = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
     if (listener == INVALID_SOCKET) {
         return -1;
     }
-    
+
     struct sockaddr_in addr;
     memset(&addr, 0, sizeof(addr));
     addr.sin_family = AF_INET;
     addr.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
     addr.sin_port = 0;  // Let OS choose port
-    
-    if (bind(listener, (struct sockaddr*)&addr, sizeof(addr)) == SOCKET_ERROR) {
+
+    if (bind(listener, (struct sockaddr *) &addr, sizeof(addr)) == SOCKET_ERROR) {
         closesocket(listener);
         return -1;
     }
-    
+
     int addrlen = sizeof(addr);
-    if (getsockname(listener, (struct sockaddr*)&addr, &addrlen) == SOCKET_ERROR) {
+    if (getsockname(listener, (struct sockaddr *) &addr, &addrlen) == SOCKET_ERROR) {
         closesocket(listener);
         return -1;
     }
-    
+
     if (listen(listener, 1) == SOCKET_ERROR) {
         closesocket(listener);
         return -1;
     }
-    
+
     // Create client socket (write end)
     SOCKET client = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
     if (client == INVALID_SOCKET) {
         closesocket(listener);
         return -1;
     }
-    
+
     // Set non-blocking for connect
     u_long mode = 1;
     ioctlsocket(client, FIONBIO, &mode);
-    
-    if (connect(client, (struct sockaddr*)&addr, sizeof(addr)) == SOCKET_ERROR) {
+
+    if (connect(client, (struct sockaddr *) &addr, sizeof(addr)) == SOCKET_ERROR) {
         int err = WSAGetLastError();
         if (err != WSAEWOULDBLOCK && err != WSAEINPROGRESS) {
             closesocket(client);
@@ -208,34 +209,34 @@ static inline int xr_poll_create_wakeup_pipe(int pipe_fds[2]) {
             return -1;
         }
     }
-    
+
     // Accept connection (read end)
     SOCKET server = accept(listener, NULL, NULL);
     closesocket(listener);  // No longer needed
-    
+
     if (server == INVALID_SOCKET) {
         closesocket(client);
         return -1;
     }
-    
+
     // Set both to non-blocking
     mode = 1;
     ioctlsocket(client, FIONBIO, &mode);
     ioctlsocket(server, FIONBIO, &mode);
-    
-    pipe_fds[0] = (int)server;  // Read end
-    pipe_fds[1] = (int)client;  // Write end
+
+    pipe_fds[0] = (int) server;  // Read end
+    pipe_fds[1] = (int) client;  // Write end
     return 0;
 #else
     // Unix: use pipe() (from xnetpoll.c)
     if (pipe(pipe_fds) < 0) {
         return -1;
     }
-    
+
     // Set non-blocking (from xnetpoll.c)
     fcntl(pipe_fds[0], F_SETFL, O_NONBLOCK);
     fcntl(pipe_fds[1], F_SETFL, O_NONBLOCK);
-    
+
     return 0;
 #endif
 }
@@ -243,11 +244,15 @@ static inline int xr_poll_create_wakeup_pipe(int pipe_fds[2]) {
 // Close wakeup pipe (from xnetpoll.c: close_wakeup_pipe)
 static inline void xr_poll_close_wakeup_pipe(int pipe_fds[2]) {
 #ifdef _WIN32
-    if (pipe_fds[0] >= 0) closesocket((SOCKET)pipe_fds[0]);
-    if (pipe_fds[1] >= 0) closesocket((SOCKET)pipe_fds[1]);
+    if (pipe_fds[0] >= 0)
+        closesocket((SOCKET) pipe_fds[0]);
+    if (pipe_fds[1] >= 0)
+        closesocket((SOCKET) pipe_fds[1]);
 #else
-    if (pipe_fds[0] >= 0) close(pipe_fds[0]);
-    if (pipe_fds[1] >= 0) close(pipe_fds[1]);
+    if (pipe_fds[0] >= 0)
+        close(pipe_fds[0]);
+    if (pipe_fds[1] >= 0)
+        close(pipe_fds[1]);
 #endif
     pipe_fds[0] = pipe_fds[1] = -1;
 }
@@ -256,10 +261,12 @@ static inline void xr_poll_close_wakeup_pipe(int pipe_fds[2]) {
 static inline void xr_poll_drain_wakeup(int fd) {
 #ifdef _WIN32
     char buf[16];
-    while (recv((SOCKET)fd, buf, sizeof(buf), 0) > 0) {}
+    while (recv((SOCKET) fd, buf, sizeof(buf), 0) > 0) {
+    }
 #else
     char buf[16];
-    while (read(fd, buf, sizeof(buf)) > 0) {}
+    while (read(fd, buf, sizeof(buf)) > 0) {
+    }
 #endif
 }
 
@@ -267,7 +274,7 @@ static inline void xr_poll_drain_wakeup(int fd) {
 static inline void xr_poll_signal_wakeup(int fd) {
 #ifdef _WIN32
     char c = 0;
-    send((SOCKET)fd, &c, 1, 0);
+    send((SOCKET) fd, &c, 1, 0);
 #else
     char c = 0;
     ssize_t n;
@@ -292,4 +299,4 @@ static inline int xr_poll_get_wakeup_fd(XrPoll *p) {
     return p->wakeup_pipe[0];
 }
 
-#endif // XPOLL_H
+#endif  // XPOLL_H

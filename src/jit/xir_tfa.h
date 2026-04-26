@@ -58,14 +58,19 @@
 // Join two XrType* lattice elements (least upper bound)
 // NULL = BOTTOM, xr_type_new_unknown() = TOP
 static inline XrType *tfa_join(XrType *a, XrType *b) {
-    if (!a) return b;                      // BOTTOM ∨ X = X
-    if (!b) return a;                      // X ∨ BOTTOM = X
-    if (a == b) return a;                  // same canonical
-    if (a == xr_type_new_unknown(NULL)) return a;  // TOP ∨ X = TOP
-    if (b == xr_type_new_unknown(NULL)) return b;  // X ∨ TOP = TOP
+    if (!a)
+        return b;  // BOTTOM ∨ X = X
+    if (!b)
+        return a;  // X ∨ BOTTOM = X
+    if (a == b)
+        return a;  // same canonical
+    if (a == xr_type_new_unknown(NULL))
+        return a;  // TOP ∨ X = TOP
+    if (b == xr_type_new_unknown(NULL))
+        return b;  // X ∨ TOP = TOP
     // Nullable widening: T ∨ T? = T?
     if (a->kind == b->kind && a->is_nullable != b->is_nullable) {
-        return a->is_nullable ? a : b;     // return the nullable one
+        return a->is_nullable ? a : b;  // return the nullable one
     }
     // Numeric promotion: int ∨ float = float
     if ((a->kind == XR_KIND_INT && b->kind == XR_KIND_FLOAT) ||
@@ -83,17 +88,17 @@ static inline XrType *tfa_join(XrType *a, XrType *b) {
 typedef struct TfaCallSite TfaCallSite;
 
 typedef struct TfaSummary {
-    XrProto *proto; // owning function
+    XrProto *proto;  // owning function
 
-    XrType *param_types[TFA_MAX_PARAMS]; // inferred parameter types (NULL=BOTTOM)
-    XrType *return_type; // inferred return type (NULL=BOTTOM)
-    uint8_t nparam; // number of parameters (capped)
+    XrType *param_types[TFA_MAX_PARAMS];  // inferred parameter types (NULL=BOTTOM)
+    XrType *return_type;                  // inferred return type (NULL=BOTTOM)
+    uint8_t nparam;                       // number of parameters (capped)
 
-    bool on_worklist; // currently queued for re-analysis
-    bool stable; // types did not change in last iteration
-    uint32_t iteration; // last analysis iteration
+    bool on_worklist;    // currently queued for re-analysis
+    bool stable;         // types did not change in last iteration
+    uint32_t iteration;  // last analysis iteration
 
-    TfaCallSite *call_sites; // linked list of call sites targeting this func
+    TfaCallSite *call_sites;  // linked list of call sites targeting this func
 } TfaSummary;
 
 /* ========== Call Site ========== */
@@ -104,7 +109,7 @@ typedef struct TfaCallSite {
     TfaSummary *callee;
     XrType *arg_types[TFA_MAX_PARAMS];  // argument types at this call site
     uint8_t nargs;
-    struct TfaCallSite *next;           // linked list per callee
+    struct TfaCallSite *next;  // linked list per callee
 } TfaCallSite;
 
 /* ========== TFA State ========== */
@@ -114,7 +119,7 @@ typedef struct TfaCallSite {
 // Initial capacities (grow as needed)
 #define TFA_INIT_FUNCS 64
 #define TFA_INIT_CALLS 256
-#define TFA_INIT_HASH  128
+#define TFA_INIT_HASH 128
 
 #define TFA_MAX_MODULES 32  // max modules with independent TFA analysis
 
@@ -126,8 +131,8 @@ typedef struct TfaState {
 
     // Hash table: proto pointer → summary index (0 = empty, idx+1 stored)
     uint32_t *hash_table;
-    uint32_t hash_size;     // must be power of 2
-    uint32_t hash_mask;     // hash_size - 1
+    uint32_t hash_size;  // must be power of 2
+    uint32_t hash_mask;  // hash_size - 1
 
     // Call sites (dynamically allocated)
     TfaCallSite *calls;
@@ -166,7 +171,7 @@ XR_FUNC TfaSummary *tfa_lookup(TfaState *tfa, XrProto *proto);
 
 // Record a call site: caller invokes callee with given arg types
 XR_FUNC void tfa_add_call(TfaState *tfa, TfaSummary *caller, TfaSummary *callee,
-                  XrType *const *arg_types, uint8_t nargs);
+                          XrType *const *arg_types, uint8_t nargs);
 
 // Run fixed-point iteration until all types stabilize
 XR_FUNC void tfa_solve(TfaState *tfa);
@@ -181,15 +186,18 @@ XR_FUNC void tfa_analyze_module(TfaState *tfa, XrProto *main_proto);
 
 // Walk up proto->enclosing chain to find module root.
 static inline XrProto *tfa_find_root(XrProto *proto) {
-    while (proto && proto->enclosing) proto = proto->enclosing;
+    while (proto && proto->enclosing)
+        proto = proto->enclosing;
     return proto;
 }
 
 // Check if a module root has already been analyzed.
 static inline bool tfa_is_module_analyzed(TfaState *tfa, XrProto *root) {
-    if (!tfa || !root) return false;
+    if (!tfa || !root)
+        return false;
     for (uint32_t i = 0; i < tfa->n_analyzed_roots; i++) {
-        if (tfa->analyzed_roots[i] == root) return true;
+        if (tfa->analyzed_roots[i] == root)
+            return true;
     }
     return false;
 }
@@ -197,4 +205,4 @@ static inline bool tfa_is_module_analyzed(TfaState *tfa, XrProto *root) {
 // Print TFA statistics (debug)
 XR_FUNC void tfa_dump_stats(TfaState *tfa);
 
-#endif // XIR_TFA_H
+#endif  // XIR_TFA_H

@@ -25,7 +25,8 @@
 // Forward declarations
 XrExprDesc compile_ternary(XrCompilerContext *ctx, XrCompiler *compiler, TernaryNode *node);
 XrExprDesc compile_nullish_coalesce(XrCompilerContext *ctx, XrCompiler *compiler, BinaryNode *node);
-XrExprDesc compile_optional_chain(XrCompilerContext *ctx, XrCompiler *compiler, OptionalChainNode *node);
+XrExprDesc compile_optional_chain(XrCompilerContext *ctx, XrCompiler *compiler,
+                                  OptionalChainNode *node);
 int compile_force_unwrap(XrCompilerContext *ctx, XrCompiler *compiler, UnaryNode *node);
 int compile_as_expr(XrCompilerContext *ctx, XrCompiler *compiler, AsExprNode *node);
 int compile_range(XrCompilerContext *ctx, XrCompiler *compiler, RangeNode *node);
@@ -92,7 +93,7 @@ XrExprDesc xr_compile_expr(XrCompilerContext *ctx, XrCompiler *c, AstNode *node)
         case AST_LITERAL_NULL:
         case AST_LITERAL_TRUE:
         case AST_LITERAL_FALSE:
-            e = compile_literal(ctx, c, (LiteralNode*)&node->as);
+            e = compile_literal(ctx, c, (LiteralNode *) &node->as);
             break;
 
         // === Binary Operations ===
@@ -106,7 +107,7 @@ XrExprDesc xr_compile_expr(XrCompilerContext *ctx, XrCompiler *c, AstNode *node)
         case AST_BINARY_BXOR:
         case AST_BINARY_LSHIFT:
         case AST_BINARY_RSHIFT:
-            e = compile_binary(ctx, c, (BinaryNode*)&node->as, node->type);
+            e = compile_binary(ctx, c, (BinaryNode *) &node->as, node->type);
             break;
 
         // === Comparison Operations ===
@@ -118,58 +119,58 @@ XrExprDesc xr_compile_expr(XrCompilerContext *ctx, XrCompiler *c, AstNode *node)
         case AST_BINARY_LE:
         case AST_BINARY_GT:
         case AST_BINARY_GE:
-            e = compile_comparison(ctx, c, (BinaryNode*)&node->as, node->type);
+            e = compile_comparison(ctx, c, (BinaryNode *) &node->as, node->type);
             break;
 
         // === Type Check (is) ===
         case AST_IS_EXPR:
-            e = compile_is_expr(ctx, c, (IsExprNode*)&node->as);
+            e = compile_is_expr(ctx, c, (IsExprNode *) &node->as);
             break;
 
         // === Logical Operations (short-circuit evaluation) ===
         case AST_BINARY_AND: {
-            int reg = compile_and(ctx, c, (BinaryNode*)&node->as);
+            int reg = compile_and(ctx, c, (BinaryNode *) &node->as);
             xexpr_init(&e, XEXPR_TEMP, reg);
             break;
         }
         case AST_BINARY_OR: {
-            int reg = compile_or(ctx, c, (BinaryNode*)&node->as);
+            int reg = compile_or(ctx, c, (BinaryNode *) &node->as);
             xexpr_init(&e, XEXPR_TEMP, reg);
             break;
         }
 
         // === Ternary Expression ===
         case AST_TERNARY:
-            e = compile_ternary(ctx, c, (TernaryNode*)&node->as);
+            e = compile_ternary(ctx, c, (TernaryNode *) &node->as);
             break;
 
         // === Nullish Coalescing ===
         case AST_NULLISH_COALESCE:
-            e = compile_nullish_coalesce(ctx, c, (BinaryNode*)&node->as);
+            e = compile_nullish_coalesce(ctx, c, (BinaryNode *) &node->as);
             break;
 
         // === Optional Chaining ===
         case AST_OPTIONAL_CHAIN:
-            e = compile_optional_chain(ctx, c, (OptionalChainNode*)&node->as);
+            e = compile_optional_chain(ctx, c, (OptionalChainNode *) &node->as);
             break;
 
         // === Force Unwrap ===
         case AST_FORCE_UNWRAP: {
-            int reg = compile_force_unwrap(ctx, c, (UnaryNode*)&node->as);
+            int reg = compile_force_unwrap(ctx, c, (UnaryNode *) &node->as);
             xexpr_init(&e, XEXPR_TEMP, reg);
             break;
         }
 
         // === As Type Cast ===
         case AST_AS_EXPR: {
-            int reg = compile_as_expr(ctx, c, (AsExprNode*)&node->as);
+            int reg = compile_as_expr(ctx, c, (AsExprNode *) &node->as);
             xexpr_init(&e, XEXPR_TEMP, reg);
             break;
         }
 
         // === Range Expression ===
         case AST_RANGE: {
-            int reg = compile_range(ctx, c, (RangeNode*)&node->as);
+            int reg = compile_range(ctx, c, (RangeNode *) &node->as);
             xexpr_init(&e, XEXPR_TEMP, reg);
             break;
         }
@@ -178,47 +179,47 @@ XrExprDesc xr_compile_expr(XrCompilerContext *ctx, XrCompiler *c, AstNode *node)
         case AST_UNARY_NEG:
         case AST_UNARY_NOT:
         case AST_UNARY_BNOT:
-            e = compile_unary(ctx, c, (UnaryNode*)&node->as, node->type);
+            e = compile_unary(ctx, c, (UnaryNode *) &node->as, node->type);
             break;
 
         // === Variable Access ===
         case AST_VARIABLE:
-            e = compile_variable(ctx, c, (VariableNode*)&node->as);
+            e = compile_variable(ctx, c, (VariableNode *) &node->as);
             break;
 
         // === Function Call ===
         case AST_CALL_EXPR:
-            e = compile_call(ctx, c, (CallExprNode*)&node->as);
+            e = compile_call(ctx, c, (CallExprNode *) &node->as);
             break;
 
         // === Arrays and Collections ===
         case AST_ARRAY_LITERAL:
-            e = compile_array_literal(ctx, c, (ArrayLiteralNode*)&node->as);
+            e = compile_array_literal(ctx, c, (ArrayLiteralNode *) &node->as);
             break;
 
         case AST_OBJECT_LITERAL:
-            e = compile_object_literal(ctx, c, (ObjectLiteralNode*)&node->as);
+            e = compile_object_literal(ctx, c, (ObjectLiteralNode *) &node->as);
             break;
 
         case AST_MAP_LITERAL:
-            e = compile_map_literal(ctx, c, (MapLiteralNode*)&node->as);
+            e = compile_map_literal(ctx, c, (MapLiteralNode *) &node->as);
             break;
 
         case AST_SET_LITERAL:
-            e = compile_set_literal(ctx, c, (SetLiteralNode*)&node->as);
+            e = compile_set_literal(ctx, c, (SetLiteralNode *) &node->as);
             break;
 
         case AST_INDEX_GET:
-            e = compile_index_get(ctx, c, (IndexGetNode*)&node->as);
+            e = compile_index_get(ctx, c, (IndexGetNode *) &node->as);
             break;
 
         case AST_SLICE_EXPR:
-            e = compile_slice_expr(ctx, c, (SliceExprNode*)&node->as);
+            e = compile_slice_expr(ctx, c, (SliceExprNode *) &node->as);
             break;
 
         // === Objects and Classes ===
         case AST_NEW_EXPR:
-            e = compile_new_expr(ctx, c, (NewExprNode*)&node->as);
+            e = compile_new_expr(ctx, c, (NewExprNode *) &node->as);
             break;
 
         case AST_STRUCT_LITERAL:
@@ -226,25 +227,25 @@ XrExprDesc xr_compile_expr(XrCompilerContext *ctx, XrCompiler *c, AstNode *node)
             break;
 
         case AST_MEMBER_ACCESS:
-            e = compile_member_access(ctx, c, (MemberAccessNode*)&node->as);
+            e = compile_member_access(ctx, c, (MemberAccessNode *) &node->as);
             break;
 
         // === Enums ===
         case AST_ENUM_ACCESS:
-            e = compile_enum_access(ctx, c, (EnumAccessNode*)&node->as);
+            e = compile_enum_access(ctx, c, (EnumAccessNode *) &node->as);
             break;
 
         case AST_ENUM_CONVERT:
-            e = compile_enum_convert(ctx, c, (EnumConvertNode*)&node->as);
+            e = compile_enum_convert(ctx, c, (EnumConvertNode *) &node->as);
             break;
 
         case AST_ENUM_INDEX:
-            e = compile_enum_index(ctx, c, (EnumIndexNode*)&node->as);
+            e = compile_enum_index(ctx, c, (EnumIndexNode *) &node->as);
             break;
 
         // === Match Expression ===
         case AST_MATCH_EXPR: {
-            int reg = compile_match_expr(ctx, c, (MatchExprNode*)&node->as);
+            int reg = compile_match_expr(ctx, c, (MatchExprNode *) &node->as);
             xexpr_init(&e, XEXPR_TEMP, reg);
             break;
         }
@@ -254,7 +255,8 @@ XrExprDesc xr_compile_expr(XrCompilerContext *ctx, XrCompiler *c, AstNode *node)
             // this expression: first lookup local variable, then upvalue
             XrString *this_str = xr_compile_time_intern(ctx->X, "this", 4);
 
-            // 1. Lookup local variable (when current function is class method, this is in register 0)
+            // 1. Lookup local variable (when current function is class method, this is in register
+            // 0)
             XrLocalInfo *local_info = compiler_get_local_by_name(c, this_str->data);
             if (local_info) {
                 xexpr_init(&e, XEXPR_LOCAL, local_info->reg);
@@ -283,10 +285,10 @@ XrExprDesc xr_compile_expr(XrCompilerContext *ctx, XrCompiler *c, AstNode *node)
             SuperCallNode *super_call = &node->as.super_call;
             int arg_count = super_call->arg_count;
 
-            // Determine method name: super() uses "constructor", super.method() uses actual method name
-            const char *method_name = super_call->method_name != NULL
-                                      ? super_call->method_name
-                                      : XR_KEYWORD_CONSTRUCTOR;
+            // Determine method name: super() uses "constructor", super.method() uses actual method
+            // name
+            const char *method_name =
+                super_call->method_name != NULL ? super_call->method_name : XR_KEYWORD_CONSTRUCTOR;
 
             /*
              * super.method() call
@@ -322,8 +324,7 @@ XrExprDesc xr_compile_expr(XrCompilerContext *ctx, XrCompiler *c, AstNode *node)
             xreg_set_freereg(c->regalloc, call_base + 1);
 
             // Method name constant
-            XrString *method_str = xr_compile_time_intern(ctx->X, method_name,
-                                                    strlen(method_name));
+            XrString *method_str = xr_compile_time_intern(ctx->X, method_name, strlen(method_name));
             int method_const = xr_vm_proto_add_constant(c->proto, xr_string_value(method_str));
 
             // Generate OP_SUPERINVOKE: A=call_base, B=method name constant, C=arg count
@@ -351,13 +352,16 @@ XrExprDesc xr_compile_expr(XrCompilerContext *ctx, XrCompiler *c, AstNode *node)
             // Define parameters as local variables (using registers 0, 1, 2...)
             for (int i = 0; i < func_expr->param_count; i++) {
                 XrParamNode *param = func_expr->params[i];
-                if (!param) continue;
-                XrString *param_str = xr_compile_time_intern(ctx->X, param->name, strlen(param->name));
+                if (!param)
+                    continue;
+                XrString *param_str =
+                    xr_compile_time_intern(ctx->X, param->name, strlen(param->name));
                 scope_define_local_reg(ctx, &function_compiler, param_str, i);
             }
 
             if (function_compiler.regalloc) {
-                xreg_set_freereg(function_compiler.regalloc, xreg_get_local_end(function_compiler.regalloc));
+                xreg_set_freereg(function_compiler.regalloc,
+                                 xreg_get_local_end(function_compiler.regalloc));
             }
 
             xr_compile_statement(ctx, &function_compiler, func_expr->body);
@@ -550,4 +554,3 @@ XrExprDesc xr_compile_expr(XrCompilerContext *ctx, XrCompiler *c, AstNode *node)
 
     return e;
 }
-

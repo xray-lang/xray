@@ -40,10 +40,8 @@ struct AstNode;
 // Emit value-type copy: OP_STRUCT_COPY for structs with a known
 // layout, OP_COPY as fallback. Allocates new struct_area space and
 // encodes the slot offset in the C operand.
-XR_FUNC void xstmt_emit_value_copy(struct XrCompilerContext *ctx,
-                                   struct XrCompiler *compiler,
-                                   int dest_reg, int src_reg,
-                                   struct XrType *compile_type);
+XR_FUNC void xstmt_emit_value_copy(struct XrCompilerContext *ctx, struct XrCompiler *compiler,
+                                   int dest_reg, int src_reg, struct XrType *compile_type);
 
 // Human-readable type name for diagnostics. Result is either a
 // static string (primitive types) or a thread-unsafe static buffer
@@ -60,10 +58,8 @@ XR_FUNC void xstmt_emit_box_if_raw(struct XrEmitter *emitter, int reg,
 // Uses bitmask encoding: single primitive = one bit, union = OR of
 // member bits. No-op when the source type is not a JSON coercion
 // candidate.
-XR_FUNC void xstmt_emit_json_checktype(struct XrCompilerContext *ctx,
-                                       struct XrCompiler *compiler,
-                                       int reg,
-                                       struct XrType *declared_type,
+XR_FUNC void xstmt_emit_json_checktype(struct XrCompilerContext *ctx, struct XrCompiler *compiler,
+                                       int reg, struct XrType *declared_type,
                                        struct AstNode *init_expr);
 
-#endif // XSTMT_HELPERS_H
+#endif  // XSTMT_HELPERS_H

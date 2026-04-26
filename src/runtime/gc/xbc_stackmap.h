@@ -31,15 +31,15 @@
 
 #include <stdint.h>
 #include <stdbool.h>
-#include <stddef.h>  // NULL
+#include <stddef.h>            // NULL
 #include "../../base/xdefs.h"  // XR_FUNC
 
 /* One safepoint: which slots are live at this bytecode PC. */
 typedef struct {
-    uint32_t pc;              // Bytecode PC (instruction index)
-    uint32_t bitmap_offset;   // Word offset into bitmap_pool
-    uint16_t live_count;      // Number of live slots (for stats)
-    uint16_t num_words;       // Number of uint64_t words in bitmap
+    uint32_t pc;             // Bytecode PC (instruction index)
+    uint32_t bitmap_offset;  // Word offset into bitmap_pool
+    uint16_t live_count;     // Number of live slots (for stats)
+    uint16_t num_words;      // Number of uint64_t words in bitmap
 } XrBcStackMapEntry;
 
 /*
@@ -47,21 +47,21 @@ typedef struct {
  * Entries sorted by pc for O(log n) binary search.
  */
 typedef struct {
-    uint32_t count;           // Number of safepoint entries
-    uint16_t maxslots;        // Max slot index across all entries
+    uint32_t count;     // Number of safepoint entries
+    uint16_t maxslots;  // Max slot index across all entries
     uint16_t _pad;
-    XrBcStackMapEntry *entries;   // [count] sorted by pc
-    uint64_t *bitmap_pool;        // Shared bitmap storage
-    uint32_t bitmap_pool_words;   // Total words in bitmap_pool
+    XrBcStackMapEntry *entries;  // [count] sorted by pc
+    uint64_t *bitmap_pool;       // Shared bitmap storage
+    uint32_t bitmap_pool_words;  // Total words in bitmap_pool
 } XrBcStackMap;
 
 /*
  * Lookup safepoint entry for a given PC.
  * Returns NULL if no safepoint recorded (caller should use conservative scan).
  */
-static inline const XrBcStackMapEntry*
-xr_bc_stackmap_lookup(const XrBcStackMap *map, uint32_t pc) {
-    if (!map || map->count == 0) return NULL;
+static inline const XrBcStackMapEntry *xr_bc_stackmap_lookup(const XrBcStackMap *map, uint32_t pc) {
+    if (!map || map->count == 0)
+        return NULL;
 
     // Binary search on sorted entries
     uint32_t lo = 0, hi = map->count;
@@ -81,13 +81,12 @@ xr_bc_stackmap_lookup(const XrBcStackMap *map, uint32_t pc) {
 /*
  * Check if slot `slot` is live according to the bitmap entry.
  */
-static inline bool
-xr_bc_stackmap_slot_live(const XrBcStackMap *map,
-                         const XrBcStackMapEntry *entry,
-                         uint32_t slot) {
+static inline bool xr_bc_stackmap_slot_live(const XrBcStackMap *map, const XrBcStackMapEntry *entry,
+                                            uint32_t slot) {
     uint32_t word_idx = slot / 64;
-    uint32_t bit_idx  = slot % 64;
-    if (word_idx >= entry->num_words) return false;
+    uint32_t bit_idx = slot % 64;
+    if (word_idx >= entry->num_words)
+        return false;
     return (map->bitmap_pool[entry->bitmap_offset + word_idx] >> bit_idx) & 1;
 }
 
@@ -97,21 +96,20 @@ struct XrBcStackMapBuilder;
 typedef struct XrBcStackMapBuilder XrBcStackMapBuilder;
 
 // Create a builder for a function with maxslots stack slots.
-XR_FUNC XrBcStackMapBuilder* xr_bc_stackmap_builder_create(uint16_t maxslots);
+XR_FUNC XrBcStackMapBuilder *xr_bc_stackmap_builder_create(uint16_t maxslots);
 
 // Record a safepoint at `pc` with the given live slot bitmap.
 // `live_bitmap` has `(maxslots+63)/64` words. Builder copies the data.
-XR_FUNC void xr_bc_stackmap_builder_add(XrBcStackMapBuilder *b,
-                                         uint32_t pc,
-                                         const uint64_t *live_bitmap);
+XR_FUNC void xr_bc_stackmap_builder_add(XrBcStackMapBuilder *b, uint32_t pc,
+                                        const uint64_t *live_bitmap);
 
 // Finalize: sort entries by pc and produce a compact XrBcStackMap.
 // Each entry currently owns its own slice in bitmap_pool; bitmaps are
 // not deduplicated (identical live-prefix maps occupy separate slots).
 // Caller takes ownership of the returned map. Builder is freed.
-XR_FUNC XrBcStackMap* xr_bc_stackmap_builder_finish(XrBcStackMapBuilder *b);
+XR_FUNC XrBcStackMap *xr_bc_stackmap_builder_finish(XrBcStackMapBuilder *b);
 
 // Free a completed stackmap.
 XR_FUNC void xr_bc_stackmap_destroy(XrBcStackMap *map);
 
-#endif // XBC_STACKMAP_H
+#endif  // XBC_STACKMAP_H

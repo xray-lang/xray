@@ -53,8 +53,8 @@
 
 // Invoke C compiler to link generated C source (+ optional .o) into executable
 static int invoke_cc(const char *cc, const char *opt_flag, const char *output_file,
-                     const char *c_file, const char *obj_file,
-                     bool strip_symbols, const char *sysroot) {
+                     const char *c_file, const char *obj_file, bool strip_symbols,
+                     const char *sysroot) {
     const char *xray_include = getenv("XRAY_INCLUDE");
     const char *xray_lib = getenv("XRAY_LIB");
 
@@ -65,8 +65,10 @@ static int invoke_cc(const char *cc, const char *opt_flag, const char *output_fi
         xray_include = include_path;
         xray_lib = lib_path;
     } else {
-        if (!xray_include) xray_include = "/usr/local/include/xray";
-        if (!xray_lib) xray_lib = "/usr/local/lib";
+        if (!xray_include)
+            xray_include = "/usr/local/include/xray";
+        if (!xray_lib)
+            xray_lib = "/usr/local/lib";
     }
 
     char include_flag[600], lib_flag[600];
@@ -80,7 +82,8 @@ static int invoke_cc(const char *cc, const char *opt_flag, const char *output_fi
     spawn_argv[ai++] = "-o";
     spawn_argv[ai++] = output_file;
     spawn_argv[ai++] = c_file;
-    if (obj_file) spawn_argv[ai++] = obj_file;
+    if (obj_file)
+        spawn_argv[ai++] = obj_file;
     spawn_argv[ai++] = include_flag;
 #ifdef XRT_AOT_INCLUDE_DIR
     spawn_argv[ai++] = "-I" XRT_AOT_INCLUDE_DIR;
@@ -94,16 +97,18 @@ static int invoke_cc(const char *cc, const char *opt_flag, const char *output_fi
 #else
     spawn_argv[ai++] = "-Wl,--gc-sections";
 #endif
-    if (strip_symbols) spawn_argv[ai++] = "-Wl,-x";
+    if (strip_symbols)
+        spawn_argv[ai++] = "-Wl,-x";
     spawn_argv[ai] = NULL;
 
     printf("Linking:");
-    for (int i = 0; spawn_argv[i]; i++) printf(" %s", spawn_argv[i]);
+    for (int i = 0; spawn_argv[i]; i++)
+        printf(" %s", spawn_argv[i]);
     printf("\n");
 
     extern char **environ;
     pid_t pid;
-    int spawn_err = posix_spawnp(&pid, cc, NULL, NULL, (char *const *)spawn_argv, environ);
+    int spawn_err = posix_spawnp(&pid, cc, NULL, NULL, (char *const *) spawn_argv, environ);
     if (spawn_err != 0) {
         fprintf(stderr, "Error: failed to start compiler '%s': %s\n", cc, strerror(spawn_err));
         return 1;
@@ -123,9 +128,8 @@ static int invoke_cc(const char *cc, const char *opt_flag, const char *output_fi
 }
 
 // Invoke C compiler for standalone AOT binary (no libxray_core)
-static int invoke_cc_standalone(const char *cc, const char *opt_flag,
-                                const char *output_file, const char *c_file,
-                                bool strip_symbols, const char *sysroot) {
+static int invoke_cc_standalone(const char *cc, const char *opt_flag, const char *output_file,
+                                const char *c_file, bool strip_symbols, const char *sysroot) {
     char aot_include[600] = "";
 #ifdef XRT_AOT_INCLUDE_DIR
     snprintf(aot_include, sizeof(aot_include), "-I" XRT_AOT_INCLUDE_DIR);
@@ -147,27 +151,28 @@ static int invoke_cc_standalone(const char *cc, const char *opt_flag,
     spawn_argv[ai++] = "-o";
     spawn_argv[ai++] = output_file;
     spawn_argv[ai++] = c_file;
-    if (aot_include[0]) spawn_argv[ai++] = aot_include;
+    if (aot_include[0])
+        spawn_argv[ai++] = aot_include;
     spawn_argv[ai++] = "-lm";
 #ifdef __APPLE__
     spawn_argv[ai++] = "-Wl,-dead_strip";
 #else
     spawn_argv[ai++] = "-Wl,--gc-sections";
 #endif
-    if (strip_symbols) spawn_argv[ai++] = "-Wl,-x";
+    if (strip_symbols)
+        spawn_argv[ai++] = "-Wl,-x";
     spawn_argv[ai] = NULL;
 
     printf("Linking (standalone):");
-    for (int i = 0; spawn_argv[i]; i++) printf(" %s", spawn_argv[i]);
+    for (int i = 0; spawn_argv[i]; i++)
+        printf(" %s", spawn_argv[i]);
     printf("\n");
 
     extern char **environ;
     pid_t pid;
-    int spawn_err = posix_spawnp(&pid, cc, NULL, NULL,
-                                  (char *const *)spawn_argv, environ);
+    int spawn_err = posix_spawnp(&pid, cc, NULL, NULL, (char *const *) spawn_argv, environ);
     if (spawn_err != 0) {
-        fprintf(stderr, "Error: failed to start compiler '%s': %s\n",
-                cc, strerror(spawn_err));
+        fprintf(stderr, "Error: failed to start compiler '%s': %s\n", cc, strerror(spawn_err));
         return 1;
     }
 
@@ -185,64 +190,65 @@ static int invoke_cc_standalone(const char *cc, const char *opt_flag,
 // bundle_source is the output of xr_bundle_to_c_source()
 static void write_bytecode_main(FILE *f, const char *bundle_source) {
     // Headers (bundle source uses strcmp but doesn't include string.h)
-    fprintf(f,
-        "#include <stdio.h>\n"
-        "#include <stdlib.h>\n"
-        "#include <string.h>\n"
-        "#include <stdint.h>\n"
-        "#include <stddef.h>\n\n"
-    );
+    fprintf(f, "#include <stdio.h>\n"
+               "#include <stdlib.h>\n"
+               "#include <string.h>\n"
+               "#include <stdint.h>\n"
+               "#include <stddef.h>\n\n");
 
     // Bundle-generated data (module bytecode arrays, module table, lookup function)
     fprintf(f, "%s\n\n", bundle_source);
 
     // Main: use XR_INIT_RUNTIME for minimal footprint (no compiler/analyzer/stdlib)
-    fprintf(f,
-        "#include \"xray_isolate.h\"\n"
-        "extern int xr_eval_bytecode(void*, const uint8_t*, size_t);\n"
-        "extern void xr_multicore_init(void*, int);\n"
-        "extern void xr_multicore_destroy(void*);\n"
-        "\n"
-        "int main(int argc, char **argv) {\n"
-        "    XrayIsolateParams params;\n"
-        "    xray_isolate_params_init(&params);\n"
-        "    params.init_flags = XR_INIT_RUNTIME;\n"
-        "    params.script_argc = argc > 1 ? argc - 1 : 0;\n"
-        "    params.script_argv = argc > 1 ? argv + 1 : NULL;\n"
-        "    XrayIsolate *X = xray_isolate_new(&params);\n"
-        "    if (!X) { fprintf(stderr, \"Failed to create runtime\\n\"); return 1; }\n"
-        "    xr_multicore_init(X, 0);\n"
-        "    const XrEmbeddedModule *entry = &xr_app_modules[xr_app_entry_index];\n"
-        "    int result = xr_eval_bytecode(X, entry->bc, entry->size);\n"
-        "    xr_multicore_destroy(X);\n"
-        "    xray_isolate_delete(X);\n"
-        "    return result;\n"
-        "}\n"
-    );
+    fprintf(f, "#include \"xray_isolate.h\"\n"
+               "extern int xr_eval_bytecode(void*, const uint8_t*, size_t);\n"
+               "extern void xr_multicore_init(void*, int);\n"
+               "extern void xr_multicore_destroy(void*);\n"
+               "\n"
+               "int main(int argc, char **argv) {\n"
+               "    XrayIsolateParams params;\n"
+               "    xray_isolate_params_init(&params);\n"
+               "    params.init_flags = XR_INIT_RUNTIME;\n"
+               "    params.script_argc = argc > 1 ? argc - 1 : 0;\n"
+               "    params.script_argv = argc > 1 ? argv + 1 : NULL;\n"
+               "    XrayIsolate *X = xray_isolate_new(&params);\n"
+               "    if (!X) { fprintf(stderr, \"Failed to create runtime\\n\"); return 1; }\n"
+               "    xr_multicore_init(X, 0);\n"
+               "    const XrEmbeddedModule *entry = &xr_app_modules[xr_app_entry_index];\n"
+               "    int result = xr_eval_bytecode(X, entry->bc, entry->size);\n"
+               "    xr_multicore_destroy(X);\n"
+               "    xray_isolate_delete(X);\n"
+               "    return result;\n"
+               "}\n");
 }
 
 /* ========== Optimization Flag ========== */
 
 static const char *make_opt_flag(const char *level) {
-    if (!level) return "-O2";
-    if (strcmp(level, "0") == 0) return "-O0";
-    if (strcmp(level, "1") == 0) return "-O1";
-    if (strcmp(level, "2") == 0) return "-O2";
-    if (strcmp(level, "3") == 0) return "-O3";
-    if (strcmp(level, "s") == 0) return "-Os";
-    if (strcmp(level, "fast") == 0) return "-Ofast";
+    if (!level)
+        return "-O2";
+    if (strcmp(level, "0") == 0)
+        return "-O0";
+    if (strcmp(level, "1") == 0)
+        return "-O1";
+    if (strcmp(level, "2") == 0)
+        return "-O2";
+    if (strcmp(level, "3") == 0)
+        return "-O3";
+    if (strcmp(level, "s") == 0)
+        return "-Os";
+    if (strcmp(level, "fast") == 0)
+        return "-Ofast";
     fprintf(stderr, "Warning: unknown optimization level '%s', using -O2\n", level);
     return "-O2";
 }
 
 /* ========== Build Sub-Modes (forward declarations) ========== */
 
-static int cmd_build_bytecode(const char *input, const char *output,
-                              const char *cc, const char *opt_flag,
-                              bool c_only, bool strip, const char *sysroot);
-static int cmd_build_native(const char *input, const char *output,
-                            const char *cc, const char *opt_flag,
-                            bool c_only, bool strip, const char *sysroot);
+static int cmd_build_bytecode(const char *input, const char *output, const char *cc,
+                              const char *opt_flag, bool c_only, bool strip, const char *sysroot);
+static int cmd_build_native(const char *input, const char *output, const char *cc,
+                            const char *opt_flag, bool c_only, bool strip, const char *sysroot);
 
 /* ========== CLI Entry Point ========== */
 
@@ -250,34 +256,39 @@ XR_FUNC int cmd_build(const XrCliInvocation *inv) {
     XR_DCHECK(inv != NULL, "inv is NULL");
     XR_DCHECK(inv->positional_count == 1, "build expects exactly 1 positional");
 
-    const char *input_file  = inv->positionals[0];
+    const char *input_file = inv->positionals[0];
     const char *output_file = xr_cli_opt_string(&inv->options, "output", NULL);
-    const char *cc          = xr_cli_opt_string(&inv->options, "cc", "cc");
-    const char *opt_level   = xr_cli_opt_string(&inv->options, "opt", NULL);
-    const char *sysroot     = xr_cli_opt_string(&inv->options, "sysroot", NULL);
-    bool c_only             = xr_cli_opt_bool(&inv->options, "c-only");
-    bool strip_symbols      = xr_cli_opt_bool(&inv->options, "strip");
-    bool native_mode        = xr_cli_opt_bool(&inv->options, "native");
+    const char *cc = xr_cli_opt_string(&inv->options, "cc", "cc");
+    const char *opt_level = xr_cli_opt_string(&inv->options, "opt", NULL);
+    const char *sysroot = xr_cli_opt_string(&inv->options, "sysroot", NULL);
+    bool c_only = xr_cli_opt_bool(&inv->options, "c-only");
+    bool strip_symbols = xr_cli_opt_bool(&inv->options, "strip");
+    bool native_mode = xr_cli_opt_bool(&inv->options, "native");
 
-    if (!output_file) output_file = c_only ? "app.c" : "a.out";
+    if (!output_file)
+        output_file = c_only ? "app.c" : "a.out";
 
     const char *opt_flag = make_opt_flag(opt_level);
 
     if (native_mode) {
-        return cmd_build_native(input_file, output_file, cc, opt_flag, c_only, strip_symbols, sysroot);
+        return cmd_build_native(input_file, output_file, cc, opt_flag, c_only, strip_symbols,
+                                sysroot);
     }
-    return cmd_build_bytecode(input_file, output_file, cc, opt_flag, c_only, strip_symbols, sysroot);
+    return cmd_build_bytecode(input_file, output_file, cc, opt_flag, c_only, strip_symbols,
+                              sysroot);
 }
 
 /* ========== Bytecode Bundling (default mode) ========== */
 
-static int cmd_build_bytecode(const char *input, const char *output,
-                              const char *cc, const char *opt_flag,
-                              bool c_only, bool strip, const char *sysroot) {
+static int cmd_build_bytecode(const char *input, const char *output, const char *cc,
+                              const char *opt_flag, bool c_only, bool strip, const char *sysroot) {
     printf("[bytecode] Building: %s\n", input);
 
     XrayIsolate *X = xr_cli_isolate_new(XR_CLI_ISOLATE_RUN);
-    if (!X) { fprintf(stderr, "Error: failed to create isolate\n"); return 1; }
+    if (!X) {
+        fprintf(stderr, "Error: failed to create isolate\n");
+        return 1;
+    }
 
     XrBundle *bundle = xr_bundle_create_ex(X, input, XR_BUNDLE_DEFAULT);
     if (!bundle) {
@@ -293,23 +304,36 @@ static int cmd_build_bytecode(const char *input, const char *output,
 
     char *bc_source = xr_bundle_to_c_source(bundle, "xr_app");
     xr_bundle_free(bundle);
-    if (!bc_source) { fprintf(stderr, "Error: C source generation failed\n"); return 1; }
+    if (!bc_source) {
+        fprintf(stderr, "Error: C source generation failed\n");
+        return 1;
+    }
 
     char c_file[512];
-    if (c_only) snprintf(c_file, sizeof(c_file), "%s", output);
-    else snprintf(c_file, sizeof(c_file), "/tmp/xray_bc_%d.c", getpid());
+    if (c_only)
+        snprintf(c_file, sizeof(c_file), "%s", output);
+    else
+        snprintf(c_file, sizeof(c_file), "/tmp/xray_bc_%d.c", getpid());
 
     FILE *f = fopen(c_file, "w");
-    if (!f) { fprintf(stderr, "Error: cannot create '%s'\n", c_file); xr_free(bc_source); return 1; }
+    if (!f) {
+        fprintf(stderr, "Error: cannot create '%s'\n", c_file);
+        xr_free(bc_source);
+        return 1;
+    }
     write_bytecode_main(f, bc_source);
     fclose(f);
     xr_free(bc_source);
 
-    if (c_only) { printf("Generated: %s\n", output); return 0; }
+    if (c_only) {
+        printf("Generated: %s\n", output);
+        return 0;
+    }
 
     int ret = invoke_cc(cc, opt_flag, output, c_file, NULL, strip, sysroot);
     unlink(c_file);
-    if (ret == 0) printf("Generated: %s\n", output);
+    if (ret == 0)
+        printf("Generated: %s\n", output);
     return ret;
 }
 
@@ -324,12 +348,13 @@ static int cmd_build_bytecode(const char *input, const char *output,
 //      → maps to constructor proto (first CLOSURE before CLASS_FROM_DESC)
 // shared_is_ctor[i] is set when shared_protos[i] is a class constructor.
 // Returns max shared index + 1 (size of shared_protos array).
-static int build_shared_proto_map(XrProto *top, XrProto **shared_protos,
-                                   bool *shared_is_ctor, int max_shared) {
-    if (!top) return 0;
+static int build_shared_proto_map(XrProto *top, XrProto **shared_protos, bool *shared_is_ctor,
+                                  int max_shared) {
+    if (!top)
+        return 0;
     int max_idx = 0;
-    uint32_t code_count = (uint32_t)top->code.count;
-    const XrInstruction *code = (const XrInstruction *)top->code.data;
+    uint32_t code_count = (uint32_t) top->code.count;
+    const XrInstruction *code = (const XrInstruction *) top->code.data;
     for (uint32_t pc = 0; pc + 1 < code_count; pc++) {
         XrInstruction inst0 = code[pc];
         XrInstruction inst1 = code[pc + 1];
@@ -344,10 +369,10 @@ static int build_shared_proto_map(XrProto *top, XrProto **shared_protos,
                 uint16_t proto_idx = GETARG_Bx(inst0);
                 int shared_bx = GETARG_Bx(inst1);
                 int abs_idx = shared_bx + top->shared_offset;
-                if (abs_idx >= 0 && abs_idx < max_shared &&
-                    proto_idx < PROTO_PROTO_COUNT(top)) {
+                if (abs_idx >= 0 && abs_idx < max_shared && proto_idx < PROTO_PROTO_COUNT(top)) {
                     shared_protos[abs_idx] = PROTO_PROTO(top, proto_idx);
-                    if (abs_idx + 1 > max_idx) max_idx = abs_idx + 1;
+                    if (abs_idx + 1 > max_idx)
+                        max_idx = abs_idx + 1;
                 }
             }
         }
@@ -358,12 +383,11 @@ static int build_shared_proto_map(XrProto *top, XrProto **shared_protos,
             // Look ahead for SETSHARED (with optional MOVE in between)
             int ss_pc = -1;
             if (op1 == OP_SETSHARED && GETARG_A(inst1) == class_reg) {
-                ss_pc = (int)pc + 1;
+                ss_pc = (int) pc + 1;
             } else if (op1 == OP_MOVE && pc + 2 < code_count) {
                 XrInstruction inst2 = code[pc + 2];
-                if (GET_OPCODE(inst2) == OP_SETSHARED &&
-                    GETARG_A(inst2) == class_reg) {
-                    ss_pc = (int)pc + 2;
+                if (GET_OPCODE(inst2) == OP_SETSHARED && GETARG_A(inst2) == class_reg) {
+                    ss_pc = (int) pc + 2;
                 }
             }
             if (ss_pc >= 0) {
@@ -371,19 +395,20 @@ static int build_shared_proto_map(XrProto *top, XrProto **shared_protos,
                 int abs_idx = shared_bx + top->shared_offset;
                 // Scan backward for first CLOSURE targeting class_reg
                 int ctor_pc = -1;
-                for (int scan = (int)pc - 1; scan >= 0; scan--) {
+                for (int scan = (int) pc - 1; scan >= 0; scan--) {
                     OpCode sop = GET_OPCODE(code[scan]);
                     if (sop == OP_CLOSURE && GETARG_A(code[scan]) == class_reg)
-                        ctor_pc = scan; // keep updating → earliest wins
+                        ctor_pc = scan;  // keep updating → earliest wins
                     else if (ctor_pc >= 0)
-                        break; // passed CLOSURE block
+                        break;  // passed CLOSURE block
                 }
                 if (ctor_pc >= 0 && abs_idx >= 0 && abs_idx < max_shared) {
                     uint16_t ctor_proto_idx = GETARG_Bx(code[ctor_pc]);
                     if (ctor_proto_idx < PROTO_PROTO_COUNT(top)) {
                         shared_protos[abs_idx] = PROTO_PROTO(top, ctor_proto_idx);
                         shared_is_ctor[abs_idx] = true;
-                        if (abs_idx + 1 > max_idx) max_idx = abs_idx + 1;
+                        if (abs_idx + 1 > max_idx)
+                            max_idx = abs_idx + 1;
                     }
                 }
             }
@@ -400,11 +425,11 @@ static int build_shared_proto_map(XrProto *top, XrProto **shared_protos,
 // the compiler puts the parent class into R[A] as super_override)
 // resolves correctly.  Also registers class metadata into comp for
 // type table codegen (xrt_type_register calls in generated code).
-static void aot_preregister_classes(XrProto *proto, XrayIsolate *isolate,
-                                     XcgenCompilation *comp) {
-    if (!proto || !isolate) return;
-    uint32_t code_count = (uint32_t)proto->code.count;
-    const XrInstruction *code = (const XrInstruction *)proto->code.data;
+static void aot_preregister_classes(XrProto *proto, XrayIsolate *isolate, XcgenCompilation *comp) {
+    if (!proto || !isolate)
+        return;
+    uint32_t code_count = (uint32_t) proto->code.count;
+    const XrInstruction *code = (const XrInstruction *) proto->code.data;
 
     // Simple register→class tracker (covers OP_MOVE + OP_CLASS_CREATE)
     XrClass *reg_class[256];
@@ -423,36 +448,40 @@ static void aot_preregister_classes(XrProto *proto, XrayIsolate *isolate,
             continue;
         }
 
-        if (op != OP_CLASS_CREATE_FROM_DESCRIPTOR) continue;
+        if (op != OP_CLASS_CREATE_FROM_DESCRIPTOR)
+            continue;
         int a = GETARG_A(inst);
         int bx = GETARG_Bx(inst);
-        if (bx >= (int)PROTO_CONST_COUNT(proto)) continue;
+        if (bx >= (int) PROTO_CONST_COUNT(proto))
+            continue;
         XrValue desc_val = PROTO_CONSTANT(proto, bx);
-        XrClassDescriptor *desc = (XrClassDescriptor *)XR_TO_PTR(desc_val);
-        if (!desc) continue;
+        XrClassDescriptor *desc = (XrClassDescriptor *) XR_TO_PTR(desc_val);
+        if (!desc)
+            continue;
 
         // R[A] may hold the parent class (same-module inheritance)
         XrClass *super_override = (a < 256) ? reg_class[a] : NULL;
-        XrClass *klass = xr_class_from_descriptor(
-            isolate, desc, proto, NULL, NULL, NULL, super_override);
-        if (!klass) continue;
+        XrClass *klass =
+            xr_class_from_descriptor(isolate, desc, proto, NULL, NULL, NULL, super_override);
+        if (!klass)
+            continue;
 
         // Record this class in the register tracker
-        if (a < 256) reg_class[a] = klass;
+        if (a < 256)
+            reg_class[a] = klass;
 
         // Register class info for AOT type table codegen.
         // Find the constructor proto by scanning CLOSURE instructions
         // that target register A (same pattern as build_shared_proto_map).
         if (comp) {
             XrProto *ctor_proto = NULL;
-            for (int scan = (int)pc - 1; scan >= 0; scan--) {
+            for (int scan = (int) pc - 1; scan >= 0; scan--) {
                 OpCode sop = GET_OPCODE(code[scan]);
                 if (sop == OP_CLOSURE && GETARG_A(code[scan]) == a) {
                     uint16_t pidx = GETARG_Bx(code[scan]);
                     if (pidx < PROTO_PROTO_COUNT(proto)) {
                         XrProto *cp = PROTO_PROTO(proto, pidx);
-                        if (cp && cp->name &&
-                            strcmp(XR_STRING_CHARS(cp->name), "constructor") == 0)
+                        if (cp && cp->name && strcmp(XR_STRING_CHARS(cp->name), "constructor") == 0)
                             ctor_proto = cp;
                     }
                 } else if (ctor_proto) {
@@ -467,9 +496,8 @@ static void aot_preregister_classes(XrProto *proto, XrayIsolate *isolate,
                 const char *parent_name = desc->super_name;
                 if (!parent_name && super_override)
                     parent_name = super_override->name;
-                xcgen_register_class(
-                    comp, (void *)ctor_proto, desc->class_name,
-                    parent_name, (int)desc->instance_field_count);
+                xcgen_register_class(comp, (void *) ctor_proto, desc->class_name, parent_name,
+                                     (int) desc->instance_field_count);
             }
         }
 
@@ -477,15 +505,18 @@ static void aot_preregister_classes(XrProto *proto, XrayIsolate *isolate,
         // enclosing class instance type so builder_find_reg_type works.
         for (uint32_t mi = 0; mi < desc->instance_method_count && mi < klass->method_count; mi++) {
             XrMethod *method = &klass->methods[mi];
-            if (method->type != XMETHOD_CLOSURE || !method->as.closure) continue;
+            if (method->type != XMETHOD_CLOSURE || !method->as.closure)
+                continue;
             XrProto *mp = method->as.closure->proto;
-            if (!mp || mp->numparams < 1 || mp->numparams > 200) continue;
+            if (!mp || mp->numparams < 1 || mp->numparams > 200)
+                continue;
             // Allocate param_types if not present
             if (!mp->param_types) {
-                mp->param_types = (struct XrType **)xr_calloc(
-                    (size_t)mp->numparams, sizeof(struct XrType *));
-                if (!mp->param_types) continue;
-                mp->param_types_count = (uint8_t)mp->numparams;
+                mp->param_types =
+                    (struct XrType **) xr_calloc((size_t) mp->numparams, sizeof(struct XrType *));
+                if (!mp->param_types)
+                    continue;
+                mp->param_types_count = (uint8_t) mp->numparams;
             }
             // Patch 'this' (param 0) with enclosing class instance type
             if (mp->param_types_count > 0 && !mp->param_types[0]) {
@@ -499,20 +530,24 @@ static void aot_preregister_classes(XrProto *proto, XrayIsolate *isolate,
 // Pattern: OP_SETSHARED R[A], shared_idx; ... OP_EXPORT K[name_idx], R[A], is_const
 // For const exports without SETSHARED, allocates synthetic shared indices and
 // populates out_slots/out_nslots so the XIR builder can emit SETSHARED at export time.
-static void collect_exports(XrProto *proto, XcgenModule *mod,
-                            XirAotExportSlot **out_slots, int *out_nslots) {
-    if (out_slots) *out_slots = NULL;
-    if (out_nslots) *out_nslots = 0;
-    if (!proto || !mod) return;
-    uint32_t code_count = (uint32_t)proto->code.count;
-    const XrInstruction *code = (const XrInstruction *)proto->code.data;
+static void collect_exports(XrProto *proto, XcgenModule *mod, XirAotExportSlot **out_slots,
+                            int *out_nslots) {
+    if (out_slots)
+        *out_slots = NULL;
+    if (out_nslots)
+        *out_nslots = 0;
+    if (!proto || !mod)
+        return;
+    uint32_t code_count = (uint32_t) proto->code.count;
+    const XrInstruction *code = (const XrInstruction *) proto->code.data;
 
     // Find max local Bx in SETSHARED to allocate synthetic indices beyond it
     int max_local_bx = -1;
     for (uint32_t pc = 0; pc < code_count; pc++) {
         if (GET_OPCODE(code[pc]) == OP_SETSHARED) {
             int bx = GETARG_Bx(code[pc]);
-            if (bx > max_local_bx) max_local_bx = bx;
+            if (bx > max_local_bx)
+                max_local_bx = bx;
         }
     }
     int next_local_bx = max_local_bx + 1;
@@ -523,16 +558,19 @@ static void collect_exports(XrProto *proto, XcgenModule *mod,
 
     for (uint32_t pc = 0; pc < code_count; pc++) {
         XrInstruction inst = code[pc];
-        if (GET_OPCODE(inst) != OP_EXPORT) continue;
+        if (GET_OPCODE(inst) != OP_EXPORT)
+            continue;
 
         int name_idx = GETARG_A(inst);
         int value_reg = GETARG_B(inst);
         int is_const = GETARG_C(inst);
 
         // Get export name from constant pool
-        if (name_idx >= (int)VALUEARRAY_COUNT(&proto->constants)) continue;
+        if (name_idx >= (int) VALUEARRAY_COUNT(&proto->constants))
+            continue;
         XrValue name_val = VALUEARRAY_GET(&proto->constants, name_idx);
-        if (!XR_IS_STRING(name_val)) continue;
+        if (!XR_IS_STRING(name_val))
+            continue;
         const char *export_name = XR_STRING_CHARS(XR_TO_STRING(name_val));
 
         // Scan backwards for the shared_index, tracing through OP_MOVE chains.
@@ -542,14 +580,13 @@ static void collect_exports(XrProto *proto, XcgenModule *mod,
         int chain[16];
         int chain_len = 0;
         chain[chain_len++] = value_reg;
-        for (int bpc = (int)pc - 1; bpc >= 0 && chain_len < 16; bpc--) {
+        for (int bpc = (int) pc - 1; bpc >= 0 && chain_len < 16; bpc--) {
             XrInstruction prev = code[bpc];
-            if (GET_OPCODE(prev) == OP_MOVE &&
-                GETARG_A(prev) == chain[chain_len - 1]) {
+            if (GET_OPCODE(prev) == OP_MOVE && GETARG_A(prev) == chain[chain_len - 1]) {
                 chain[chain_len++] = GETARG_B(prev);
             }
         }
-        for (int bpc = (int)pc - 1; bpc >= 0 && shared_idx < 0; bpc--) {
+        for (int bpc = (int) pc - 1; bpc >= 0 && shared_idx < 0; bpc--) {
             XrInstruction prev = code[bpc];
             OpCode prev_op = GET_OPCODE(prev);
             if (prev_op == OP_GETSHARED || prev_op == OP_SETSHARED) {
@@ -579,8 +616,7 @@ static void collect_exports(XrProto *proto, XcgenModule *mod,
 
     // Copy synthetic slots to caller-owned array
     if (nsynth > 0 && out_slots && out_nslots) {
-        *out_slots = (XirAotExportSlot *)xr_malloc(
-                         nsynth * sizeof(XirAotExportSlot));
+        *out_slots = (XirAotExportSlot *) xr_malloc(nsynth * sizeof(XirAotExportSlot));
         if (*out_slots) {
             memcpy(*out_slots, synth, nsynth * sizeof(XirAotExportSlot));
             *out_nslots = nsynth;
@@ -592,7 +628,8 @@ static void collect_exports(XrProto *proto, XcgenModule *mod,
 // Untyped parameters are treated as tagged (XR_SLOT_ANY) — lower performance
 // but still faster than VM interpreter for complex function bodies.
 static void collect_aot_protos(XrProto *proto, XrProto **out, int *count, int max) {
-    if (!proto || *count >= max) return;
+    if (!proto || *count >= max)
+        return;
 
     if (proto->bb_leaders) {
         out[*count] = proto;
@@ -600,7 +637,7 @@ static void collect_aot_protos(XrProto *proto, XrProto **out, int *count, int ma
     }
 
     for (int i = 0; i < proto->protos.count; i++) {
-        XrProto *child = *(XrProto **)xr_dynarray_get_raw(&proto->protos, i);
+        XrProto *child = *(XrProto **) xr_dynarray_get_raw(&proto->protos, i);
         collect_aot_protos(child, out, count, max);
     }
 }
@@ -609,17 +646,17 @@ static void collect_aot_protos(XrProto *proto, XrProto **out, int *count, int ma
 
 // Per-module state during AOT compilation
 typedef struct {
-    const char   *path;              // absolute source path (owned)
-    const char   *mod_name;          // module name for C codegen (owned)
-    XrProto      *proto;             // compiled bytecode (owned by isolate)
-    XcgenModule  *cmod;              // C codegen module (owned by comp)
-    XrProto     **aot_protos;        // AOT-eligible protos (owned)
-    char        (*aot_c_names)[140]; // C function names (owned)
-    int           aot_count;
-    int           aot_cap;
+    const char *path;          // absolute source path (owned)
+    const char *mod_name;      // module name for C codegen (owned)
+    XrProto *proto;            // compiled bytecode (owned by isolate)
+    XcgenModule *cmod;         // C codegen module (owned by comp)
+    XrProto **aot_protos;      // AOT-eligible protos (owned)
+    char (*aot_c_names)[140];  // C function names (owned)
+    int aot_count;
+    int aot_cap;
     // Synthetic export slots for const exports without OP_SETSHARED
     XirAotExportSlot *export_slots;  // owned, passed to XIR builder
-    int               export_slot_count;
+    int export_slot_count;
 } AotModuleInfo;
 
 // Derive a C-safe module name from absolute path (caller must free)
@@ -631,8 +668,9 @@ static char *aot_derive_module_name(const char *path) {
     // Strip .xr extension
     if (len > 3 && strcmp(base + len - 3, ".xr") == 0)
         len -= 3;
-    char *name = (char *)xr_malloc(len + 1);
-    if (!name) return NULL;
+    char *name = (char *) xr_malloc(len + 1);
+    if (!name)
+        return NULL;
     for (size_t i = 0; i < len; i++)
         name[i] = (base[i] == '-' || base[i] == '.') ? '_' : base[i];
     name[len] = '\0';
@@ -641,22 +679,21 @@ static char *aot_derive_module_name(const char *path) {
 
 // Derive the import string that would be used to reach target_path from
 // importer_dir. E.g. "/a/b/math.xr" from "/a/b" → "./math"
-static char *aot_derive_import_string(const char *target_path,
-                                       const char *importer_dir) {
+static char *aot_derive_import_string(const char *target_path, const char *importer_dir) {
     XR_DCHECK(target_path != NULL, "aot_derive_import_string: NULL target");
     XR_DCHECK(importer_dir != NULL, "aot_derive_import_string: NULL dir");
     size_t dir_len = strlen(importer_dir);
     // Check if target is in the same directory
-    if (strncmp(target_path, importer_dir, dir_len) == 0 &&
-        target_path[dir_len] == '/') {
+    if (strncmp(target_path, importer_dir, dir_len) == 0 && target_path[dir_len] == '/') {
         const char *filename = target_path + dir_len + 1;
         size_t flen = strlen(filename);
         // Strip .xr extension
         if (flen > 3 && strcmp(filename + flen - 3, ".xr") == 0)
             flen -= 3;
         // Build "./basename"
-        char *result = (char *)xr_malloc(2 + flen + 1);
-        if (!result) return NULL;
+        char *result = (char *) xr_malloc(2 + flen + 1);
+        if (!result)
+            return NULL;
         result[0] = '.';
         result[1] = '/';
         memcpy(result + 2, filename, flen);
@@ -667,10 +704,13 @@ static char *aot_derive_import_string(const char *target_path,
     const char *base = strrchr(target_path, '/');
     base = base ? base + 1 : target_path;
     size_t blen = strlen(base);
-    if (blen > 3 && strcmp(base + blen - 3, ".xr") == 0) blen -= 3;
-    char *result = (char *)xr_malloc(2 + blen + 1);
-    if (!result) return NULL;
-    result[0] = '.'; result[1] = '/';
+    if (blen > 3 && strcmp(base + blen - 3, ".xr") == 0)
+        blen -= 3;
+    char *result = (char *) xr_malloc(2 + blen + 1);
+    if (!result)
+        return NULL;
+    result[0] = '.';
+    result[1] = '/';
     memcpy(result + 2, base, blen);
     result[2 + blen] = '\0';
     return result;
@@ -679,15 +719,13 @@ static char *aot_derive_import_string(const char *target_path,
 // Build cross-module export map for AOT import resolution.
 // For each non-entry module, creates entries mapping
 // (import_string, export_name) → absolute shared index.
-static XirAotImportEntry *aot_build_export_map(AotModuleInfo *modules,
-                                                 int nmodules,
-                                                 int entry_index,
-                                                 int *out_count) {
+static XirAotImportEntry *aot_build_export_map(AotModuleInfo *modules, int nmodules,
+                                               int entry_index, int *out_count) {
     *out_count = 0;
     int cap = 64;
-    XirAotImportEntry *map = (XirAotImportEntry *)xr_malloc(
-        cap * sizeof(XirAotImportEntry));
-    if (!map) return NULL;
+    XirAotImportEntry *map = (XirAotImportEntry *) xr_malloc(cap * sizeof(XirAotImportEntry));
+    if (!map)
+        return NULL;
 
     // Derive the entry module's directory for relative path resolution
     char *entry_dir = NULL;
@@ -695,34 +733,42 @@ static XirAotImportEntry *aot_build_export_map(AotModuleInfo *modules,
         const char *ep = modules[entry_index].path;
         const char *last_slash = strrchr(ep, '/');
         if (last_slash) {
-            size_t dlen = (size_t)(last_slash - ep);
-            entry_dir = (char *)xr_malloc(dlen + 1);
-            if (entry_dir) { memcpy(entry_dir, ep, dlen); entry_dir[dlen] = '\0'; }
+            size_t dlen = (size_t) (last_slash - ep);
+            entry_dir = (char *) xr_malloc(dlen + 1);
+            if (entry_dir) {
+                memcpy(entry_dir, ep, dlen);
+                entry_dir[dlen] = '\0';
+            }
         }
     }
 
     for (int m = 0; m < nmodules; m++) {
-        if (m == entry_index) continue; // Entry module is not imported
+        if (m == entry_index)
+            continue;  // Entry module is not imported
         XcgenModule *cmod = modules[m].cmod;
-        if (!cmod || cmod->nexports == 0) continue;
+        if (!cmod || cmod->nexports == 0)
+            continue;
 
         // Compute what import string would reference this module
-        char *import_str = entry_dir
-            ? aot_derive_import_string(modules[m].path, entry_dir)
-            : NULL;
-        if (!import_str) continue;
+        char *import_str = entry_dir ? aot_derive_import_string(modules[m].path, entry_dir) : NULL;
+        if (!import_str)
+            continue;
 
         for (int e = 0; e < cmod->nexports; e++) {
             // Grow if needed
             if (*out_count >= cap) {
                 int new_cap = cap * 2;
-                XirAotImportEntry *tmp = (XirAotImportEntry *)xr_realloc(
-                    map, new_cap * sizeof(XirAotImportEntry));
-                if (!tmp) { xr_free(import_str); xr_free(entry_dir); return map; }
+                XirAotImportEntry *tmp =
+                    (XirAotImportEntry *) xr_realloc(map, new_cap * sizeof(XirAotImportEntry));
+                if (!tmp) {
+                    xr_free(import_str);
+                    xr_free(entry_dir);
+                    return map;
+                }
                 map = tmp;
                 cap = new_cap;
             }
-            map[*out_count].module_path = import_str; // shared, freed later
+            map[*out_count].module_path = import_str;  // shared, freed later
             map[*out_count].export_name = cmod->exports[e].name;
             map[*out_count].shared_index = cmod->exports[e].shared_index;
             (*out_count)++;
@@ -736,13 +782,13 @@ static XirAotImportEntry *aot_build_export_map(AotModuleInfo *modules,
 
 // Write multi-module standalone main() to file
 static void aot_write_main(FILE *f, AotModuleInfo *modules, int nmodules) {
-    fprintf(f,
-        "/* --- Standalone Main (multi-module, no VM) --- */\n"
-        "\nint main(int argc, char **argv) {\n"
-        "    (void)argc; (void)argv;\n");
+    fprintf(f, "/* --- Standalone Main (multi-module, no VM) --- */\n"
+               "\nint main(int argc, char **argv) {\n"
+               "    (void)argc; (void)argv;\n");
     // Call module inits in topo order (bundle order = leaves first, entry last)
     for (int m = 0; m < nmodules; m++) {
-        if (!modules[m].cmod) continue;
+        if (!modules[m].cmod)
+            continue;
         // Find the init function name (proto with no name = top-level)
         const char *init_name = NULL;
         for (int i = 0; i < modules[m].aot_count; i++) {
@@ -756,16 +802,14 @@ static void aot_write_main(FILE *f, AotModuleInfo *modules, int nmodules) {
             fprintf(f, "    %s(NULL);\n", init_name);
         }
     }
-    fprintf(f,
-        "    return 0;\n"
-        "}\n");
+    fprintf(f, "    return 0;\n"
+               "}\n");
 }
 
 /* ========== Native Build (--native, standalone AOT) ========== */
 
-static int cmd_build_native(const char *input, const char *output,
-                            const char *cc, const char *opt_flag,
-                            bool c_only, bool strip, const char *sysroot) {
+static int cmd_build_native(const char *input, const char *output, const char *cc,
+                            const char *opt_flag, bool c_only, bool strip, const char *sysroot) {
     printf("[native] Building: %s (AOT)\n", input);
 
     // Phase 1: Discover modules via bundle (topo order, entry last)
@@ -774,22 +818,27 @@ static int cmd_build_native(const char *input, const char *output,
     AotModuleInfo *modules = NULL;
     {
         XrayIsolate *Xb = xr_cli_isolate_new(XR_CLI_ISOLATE_RUN);
-        if (!Xb) { fprintf(stderr, "Error: failed to create isolate\n"); return 1; }
+        if (!Xb) {
+            fprintf(stderr, "Error: failed to create isolate\n");
+            return 1;
+        }
         XrBundle *bundle = xr_bundle_create_ex(Xb, input, XR_BUNDLE_DEFAULT);
         if (!bundle) {
             fprintf(stderr, "Error: bundling failed\n");
-            xray_isolate_delete(Xb); return 1;
+            xray_isolate_delete(Xb);
+            return 1;
         }
         nmodules = bundle->count;
-        modules = (AotModuleInfo *)xr_calloc(nmodules, sizeof(AotModuleInfo));
+        modules = (AotModuleInfo *) xr_calloc(nmodules, sizeof(AotModuleInfo));
         if (!modules) {
-            xr_bundle_free(bundle); xray_isolate_delete(Xb); return 1;
+            xr_bundle_free(bundle);
+            xray_isolate_delete(Xb);
+            return 1;
         }
         for (int i = 0; i < nmodules; i++) {
             modules[i].path = xr_strdup(bundle->entries[i].path);
             modules[i].mod_name = aot_derive_module_name(bundle->entries[i].path);
-            if (bundle->entry_path &&
-                strcmp(bundle->entries[i].path, bundle->entry_path) == 0)
+            if (bundle->entry_path && strcmp(bundle->entries[i].path, bundle->entry_path) == 0)
                 entry_index = i;
         }
         xr_bundle_free(bundle);
@@ -800,13 +849,15 @@ static int cmd_build_native(const char *input, const char *output,
     if (nmodules > 1) {
         printf("[native] %d modules (topo order):\n", nmodules);
         for (int i = 0; i < nmodules; i++)
-            printf("  [%d] %s%s\n", i, modules[i].path,
-                   i == entry_index ? " (entry)" : "");
+            printf("  [%d] %s%s\n", i, modules[i].path, i == entry_index ? " (entry)" : "");
     }
 
     // Phase 2: Compile all modules to XrProto (topo order, shared offsets accumulate)
     XrayIsolate *X = xr_cli_isolate_new(XR_CLI_ISOLATE_RUN);
-    if (!X) { fprintf(stderr, "Error: failed to create isolate\n"); goto fail_early; }
+    if (!X) {
+        fprintf(stderr, "Error: failed to create isolate\n");
+        goto fail_early;
+    }
 
     for (int m = 0; m < nmodules; m++) {
         char *src = xr_cli_read_file(modules[m].path);
@@ -830,11 +881,10 @@ static int cmd_build_native(const char *input, const char *output,
 
     // Global shared_protos array (all modules combined, heap-allocated)
     int shared_cap = 256;
-    XrProto **shared_protos = (XrProto **)xr_calloc(
-        (size_t)shared_cap, sizeof(XrProto *));
-    bool *shared_is_ctor = (bool *)xr_calloc(
-        (size_t)shared_cap, sizeof(bool));
-    if (!shared_protos || !shared_is_ctor) goto fail_comp;
+    XrProto **shared_protos = (XrProto **) xr_calloc((size_t) shared_cap, sizeof(XrProto *));
+    bool *shared_is_ctor = (bool *) xr_calloc((size_t) shared_cap, sizeof(bool));
+    if (!shared_protos || !shared_is_ctor)
+        goto fail_comp;
     int nshared = 0;
 
     int total_aot = 0, total_compiled = 0;
@@ -848,53 +898,49 @@ static int cmd_build_native(const char *input, const char *output,
         XR_DCHECK(modules[m].cmod != NULL, "cmd_build_native: add_module failed");
 
         // Collect exports (+ synthetic const export slots)
-        collect_exports(proto, modules[m].cmod,
-                        &modules[m].export_slots,
+        collect_exports(proto, modules[m].cmod, &modules[m].export_slots,
                         &modules[m].export_slot_count);
 
         // Collect AOT-eligible protos
         modules[m].aot_cap = 64;
-        modules[m].aot_protos = (XrProto **)xr_malloc(
-            modules[m].aot_cap * sizeof(XrProto *));
-        if (!modules[m].aot_protos) goto fail_comp;
+        modules[m].aot_protos = (XrProto **) xr_malloc(modules[m].aot_cap * sizeof(XrProto *));
+        if (!modules[m].aot_protos)
+            goto fail_comp;
         modules[m].aot_count = 0;
-        collect_aot_protos(proto, modules[m].aot_protos,
-                           &modules[m].aot_count, modules[m].aot_cap);
+        collect_aot_protos(proto, modules[m].aot_protos, &modules[m].aot_count, modules[m].aot_cap);
 
         // Collect shapes for struct promotion
-        xcgen_collect_shapes(proto, &struct_reg, (void *)X);
+        xcgen_collect_shapes(proto, &struct_reg, (void *) X);
         for (int i = 0; i < modules[m].aot_count; i++)
-            xcgen_collect_shapes(modules[m].aot_protos[i], &struct_reg, (void *)X);
+            xcgen_collect_shapes(modules[m].aot_protos[i], &struct_reg, (void *) X);
 
         // Build shared_proto_map for this module
         // Grow capacity if module's shared_offset suggests overflow
-        int needed = proto->shared_offset + (int)proto->code.count;
+        int needed = proto->shared_offset + (int) proto->code.count;
         if (needed > shared_cap) {
             int new_cap = needed * 2;
-            XrProto **tmp_p = (XrProto **)xr_realloc(
-                shared_protos, (size_t)new_cap * sizeof(XrProto *));
-            bool *tmp_c = (bool *)xr_realloc(
-                shared_is_ctor, (size_t)new_cap * sizeof(bool));
-            if (!tmp_p || !tmp_c) goto fail_comp;
-            memset(tmp_p + shared_cap, 0,
-                   (size_t)(new_cap - shared_cap) * sizeof(XrProto *));
-            memset(tmp_c + shared_cap, 0,
-                   (size_t)(new_cap - shared_cap) * sizeof(bool));
+            XrProto **tmp_p =
+                (XrProto **) xr_realloc(shared_protos, (size_t) new_cap * sizeof(XrProto *));
+            bool *tmp_c = (bool *) xr_realloc(shared_is_ctor, (size_t) new_cap * sizeof(bool));
+            if (!tmp_p || !tmp_c)
+                goto fail_comp;
+            memset(tmp_p + shared_cap, 0, (size_t) (new_cap - shared_cap) * sizeof(XrProto *));
+            memset(tmp_c + shared_cap, 0, (size_t) (new_cap - shared_cap) * sizeof(bool));
             shared_protos = tmp_p;
             shared_is_ctor = tmp_c;
             shared_cap = new_cap;
         }
-        int ns = build_shared_proto_map(proto, shared_protos, shared_is_ctor,
-                                         shared_cap);
-        if (ns > nshared) nshared = ns;
+        int ns = build_shared_proto_map(proto, shared_protos, shared_is_ctor, shared_cap);
+        if (ns > nshared)
+            nshared = ns;
 
         // Pre-register classes (also populates comp->class_infos)
         aot_preregister_classes(proto, X, comp);
 
         // Allocate C name storage
-        modules[m].aot_c_names = (char (*)[140])xr_malloc(
-            modules[m].aot_count * 140);
-        if (!modules[m].aot_c_names && modules[m].aot_count > 0) goto fail_comp;
+        modules[m].aot_c_names = (char(*)[140]) xr_malloc(modules[m].aot_count * 140);
+        if (!modules[m].aot_c_names && modules[m].aot_count > 0)
+            goto fail_comp;
 
         // Generate unique C function names with module prefix
         for (int i = 0; i < modules[m].aot_count; i++) {
@@ -903,23 +949,20 @@ static int cmd_build_native(const char *input, const char *output,
             if (m == entry_index)
                 snprintf(modules[m].aot_c_names[i], 140, "xr_%s", fname);
             else
-                snprintf(modules[m].aot_c_names[i], 140, "xr_%s__%s",
-                         modules[m].mod_name, fname);
+                snprintf(modules[m].aot_c_names[i], 140, "xr_%s__%s", modules[m].mod_name, fname);
             // Dedup: append index if collision with ANY prior name
             for (int pm = 0; pm <= m; pm++) {
                 int jmax = (pm == m) ? i : modules[pm].aot_count;
                 for (int j = 0; j < jmax; j++) {
-                    if (strcmp(modules[m].aot_c_names[i],
-                               modules[pm].aot_c_names[j]) == 0) {
-                        snprintf(modules[m].aot_c_names[i], 140,
-                                 "xr_%s__%s_%d", modules[m].mod_name, fname,
-                                 total_aot + i);
+                    if (strcmp(modules[m].aot_c_names[i], modules[pm].aot_c_names[j]) == 0) {
+                        snprintf(modules[m].aot_c_names[i], 140, "xr_%s__%s_%d",
+                                 modules[m].mod_name, fname, total_aot + i);
                         goto dedup_done;
                     }
                 }
             }
-            dedup_done:
-            xcgen_register_proto(comp, (void *)modules[m].aot_protos[i],
+        dedup_done:
+            xcgen_register_proto(comp, (void *) modules[m].aot_protos[i],
                                  modules[m].aot_c_names[i]);
         }
         total_aot += modules[m].aot_count;
@@ -929,8 +972,8 @@ static int cmd_build_native(const char *input, const char *output,
 
     // Phase 4: Build cross-module export map for import resolution
     int import_map_count = 0;
-    XirAotImportEntry *import_map = aot_build_export_map(
-        modules, nmodules, entry_index, &import_map_count);
+    XirAotImportEntry *import_map =
+        aot_build_export_map(modules, nmodules, entry_index, &import_map_count);
     if (import_map_count > 0) {
         printf("[native] Cross-module exports: %d entries\n", import_map_count);
     }
@@ -938,8 +981,8 @@ static int cmd_build_native(const char *input, const char *output,
     // Phase 5: Lower each module to XIR → C
     for (int m = 0; m < nmodules; m++) {
         if (nmodules > 1)
-            printf("[native] Module: %s (%d functions)\n",
-                   modules[m].mod_name, modules[m].aot_count);
+            printf("[native] Module: %s (%d functions)\n", modules[m].mod_name,
+                   modules[m].aot_count);
 
         for (int i = 0; i < modules[m].aot_count; i++) {
             XrProto *p = modules[m].aot_protos[i];
@@ -948,8 +991,7 @@ static int cmd_build_native(const char *input, const char *output,
             // Use extended builder with import/export opts for init functions
             XirFunc *xfunc;
             bool is_init = (p->name == NULL);
-            bool needs_opts = is_init && (import_map_count > 0 ||
-                                           modules[m].export_slot_count > 0);
+            bool needs_opts = is_init && (import_map_count > 0 || modules[m].export_slot_count > 0);
             if (needs_opts) {
                 XirAotOptions opts = {
                     .import_map = import_map,
@@ -957,8 +999,7 @@ static int cmd_build_native(const char *input, const char *output,
                     .export_slots = modules[m].export_slots,
                     .export_slot_count = modules[m].export_slot_count,
                 };
-                xfunc = xir_build_from_proto_aot_ex(
-                    p, shared_protos, nshared, X, &opts);
+                xfunc = xir_build_from_proto_aot_ex(p, shared_protos, nshared, X, &opts);
             } else {
                 xfunc = xir_build_from_proto_aot(p, shared_protos, nshared, X);
             }
@@ -968,8 +1009,7 @@ static int cmd_build_native(const char *input, const char *output,
                 continue;
             }
             xir_run_pipeline(xfunc, XIR_OPT_FULL);
-            XcgenFunc *cf = xcgen_compile_func(modules[m].cmod, xfunc,
-                                                modules[m].aot_c_names[i]);
+            XcgenFunc *cf = xcgen_compile_func(modules[m].cmod, xfunc, modules[m].aot_c_names[i]);
             xir_func_destroy(xfunc);
             if (cf) {
                 printf("  [C] %s → %zu bytes\n", fname, cf->body.len);
@@ -983,8 +1023,8 @@ static int cmd_build_native(const char *input, const char *output,
     xray_isolate_delete(X);
     X = NULL;
 
-    printf("AOT: %d/%d functions transpiled across %d modules\n",
-           total_compiled, total_aot, nmodules);
+    printf("AOT: %d/%d functions transpiled across %d modules\n", total_compiled, total_aot,
+           nmodules);
 
     // Phase 6: Emit C source + main() + link
     char *aot_source = (total_compiled > 0) ? xcgen_emit_source(comp) : NULL;
@@ -994,8 +1034,10 @@ static int cmd_build_native(const char *input, const char *output,
     comp = NULL;
 
     char c_file[512];
-    if (c_only) snprintf(c_file, sizeof(c_file), "%s", output);
-    else snprintf(c_file, sizeof(c_file), "/tmp/xray_native_%d.c", getpid());
+    if (c_only)
+        snprintf(c_file, sizeof(c_file), "%s", output);
+    else
+        snprintf(c_file, sizeof(c_file), "/tmp/xray_native_%d.c", getpid());
 
     FILE *f = fopen(c_file, "w");
     if (!f) {
@@ -1003,20 +1045,20 @@ static int cmd_build_native(const char *input, const char *output,
         goto fail_final;
     }
 
-    fprintf(f,
-        "#include <stdio.h>\n#include <stdlib.h>\n#include <string.h>\n"
-        "#include <stdint.h>\n#include <stddef.h>\n\n");
+    fprintf(f, "#include <stdio.h>\n#include <stdlib.h>\n#include <string.h>\n"
+               "#include <stdint.h>\n#include <stddef.h>\n\n");
     if (aot_source) {
         fprintf(f, "/* --- AOT Transpiled Functions --- */\n%s\n\n", aot_source);
-        xr_free(aot_source); aot_source = NULL;
+        xr_free(aot_source);
+        aot_source = NULL;
     }
     aot_write_main(f, modules, nmodules);
     fclose(f);
 
     // Free module info and import map
     for (int m = 0; m < nmodules; m++) {
-        xr_free((void *)modules[m].path);
-        xr_free((void *)modules[m].mod_name);
+        xr_free((void *) modules[m].path);
+        xr_free((void *) modules[m].mod_name);
         xr_free(modules[m].aot_protos);
         xr_free(modules[m].aot_c_names);
         xr_free(modules[m].export_slots);
@@ -1027,18 +1069,22 @@ static int cmd_build_native(const char *input, const char *output,
         const char *prev = NULL;
         for (int i = 0; i < import_map_count; i++) {
             if (import_map[i].module_path != prev) {
-                xr_free((void *)import_map[i].module_path);
+                xr_free((void *) import_map[i].module_path);
                 prev = import_map[i].module_path;
             }
         }
         xr_free(import_map);
     }
 
-    if (c_only) { printf("Generated: %s\n", output); return 0; }
+    if (c_only) {
+        printf("Generated: %s\n", output);
+        return 0;
+    }
 
     int ret = invoke_cc_standalone(cc, opt_flag, output, c_file, strip, sysroot);
     unlink(c_file);
-    if (ret == 0) printf("Generated: %s\n", output);
+    if (ret == 0)
+        printf("Generated: %s\n", output);
     return ret;
 
     // Error cleanup paths
@@ -1050,8 +1096,8 @@ fail_isolate:
     xray_isolate_delete(X);
 fail_early:
     for (int m = 0; m < nmodules; m++) {
-        xr_free((void *)modules[m].path);
-        xr_free((void *)modules[m].mod_name);
+        xr_free((void *) modules[m].path);
+        xr_free((void *) modules[m].mod_name);
         xr_free(modules[m].aot_protos);
         xr_free(modules[m].aot_c_names);
         xr_free(modules[m].export_slots);
@@ -1060,10 +1106,11 @@ fail_early:
     return 1;
 
 fail_final:
-    if (aot_source) xr_free(aot_source);
+    if (aot_source)
+        xr_free(aot_source);
     for (int m = 0; m < nmodules; m++) {
-        xr_free((void *)modules[m].path);
-        xr_free((void *)modules[m].mod_name);
+        xr_free((void *) modules[m].path);
+        xr_free((void *) modules[m].mod_name);
         xr_free(modules[m].aot_protos);
         xr_free(modules[m].aot_c_names);
         xr_free(modules[m].export_slots);
@@ -1074,10 +1121,15 @@ fail_final:
 
 #else
 
-static int cmd_build_native(const char *input, const char *output,
-                            const char *cc, const char *opt_flag,
-                            bool c_only, bool strip, const char *sysroot) {
-    (void)input; (void)output; (void)cc; (void)opt_flag; (void)c_only; (void)strip; (void)sysroot;
+static int cmd_build_native(const char *input, const char *output, const char *cc,
+                            const char *opt_flag, bool c_only, bool strip, const char *sysroot) {
+    (void) input;
+    (void) output;
+    (void) cc;
+    (void) opt_flag;
+    (void) c_only;
+    (void) strip;
+    (void) sysroot;
     fprintf(stderr, "Error: --native requires JIT support\n");
     return 1;
 }

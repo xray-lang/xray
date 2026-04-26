@@ -19,8 +19,9 @@
 
 // Helper: propagate `body->end_*` as the enclosing statement's end span.
 static inline void inherit_block_end(AstNode *stmt, AstNode *body) {
-    if (!stmt || !body) return;
-    stmt->end_line   = body->end_line;
+    if (!stmt || !body)
+        return;
+    stmt->end_line = body->end_line;
     stmt->end_column = body->end_column;
 }
 
@@ -42,11 +43,9 @@ AstNode *xr_parse_if_statement(Parser *parser) {
 
     AstNode *else_branch = NULL;
     // Detect 'elif' (Python habit) — must check before else
-    if (xr_parser_check(parser, TK_NAME) &&
-        parser->current.length == 4 &&
+    if (xr_parser_check(parser, TK_NAME) && parser->current.length == 4 &&
         memcmp(parser->current.start, "elif", 4) == 0) {
-        xr_parser_error_at_current(parser,
-            "unknown keyword 'elif'. Use 'else if' in Xray");
+        xr_parser_error_at_current(parser, "unknown keyword 'elif'. Use 'else if' in Xray");
         AstNode *stmt = xr_ast_if_stmt(parser->X, condition, then_branch, NULL, line);
         inherit_block_end(stmt, then_branch);
         return stmt;
@@ -146,7 +145,7 @@ AstNode *xr_parse_for_in_statement(Parser *parser) {
         return NULL;
     }
     xr_parser_advance(parser);
-    char *first_name = (char *)ast_alloc(parser->X, (size_t)parser->previous.length + 1);
+    char *first_name = (char *) ast_alloc(parser->X, (size_t) parser->previous.length + 1);
     memcpy(first_name, parser->previous.start, parser->previous.length);
     first_name[parser->previous.length] = '\0';
 
@@ -164,7 +163,7 @@ AstNode *xr_parse_for_in_statement(Parser *parser) {
         }
         xr_parser_advance(parser);
 
-        second_name = (char *)ast_alloc(parser->X, (size_t)parser->previous.length + 1);
+        second_name = (char *) ast_alloc(parser->X, (size_t) parser->previous.length + 1);
         memcpy(second_name, parser->previous.start, parser->previous.length);
         second_name[parser->previous.length] = '\0';
     }
@@ -172,8 +171,7 @@ AstNode *xr_parse_for_in_statement(Parser *parser) {
     // Optional type annotation (not supported yet)
     XrType *item_type = NULL;
     if (xr_parser_match(parser, TK_COLON)) {
-        while (!xr_parser_check(parser, TK_IN) &&
-               !xr_parser_check(parser, TK_EOF)) {
+        while (!xr_parser_check(parser, TK_IN) && !xr_parser_check(parser, TK_EOF)) {
             xr_parser_advance(parser);
         }
     }
@@ -191,10 +189,10 @@ AstNode *xr_parse_for_in_statement(Parser *parser) {
     xr_parser_advance(parser);
     AstNode *body = xr_parse_block(parser);
 
-    AstNode *stmt = is_keyvalue
-        ? xr_ast_for_in_keyvalue_stmt(parser->X, first_name, second_name,
-                                      item_type, collection, body, line)
-        : xr_ast_for_in_stmt(parser->X, first_name, item_type, collection, body, line);
+    AstNode *stmt =
+        is_keyvalue ? xr_ast_for_in_keyvalue_stmt(parser->X, first_name, second_name, item_type,
+                                                  collection, body, line)
+                    : xr_ast_for_in_stmt(parser->X, first_name, item_type, collection, body, line);
     inherit_block_end(stmt, body);
     return stmt;
 }

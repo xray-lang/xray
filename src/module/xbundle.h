@@ -52,17 +52,17 @@ typedef enum {
 } XrBundleFlags;
 
 // Create bundle from entry file, returns NULL on failure
-XR_FUNC XrBundle* xr_bundle_create(XrayIsolate *X, const char *entry_file);
+XR_FUNC XrBundle *xr_bundle_create(XrayIsolate *X, const char *entry_file);
 
 // Create bundle with options
-XR_FUNC XrBundle* xr_bundle_create_ex(XrayIsolate *X, const char *entry_file, XrBundleFlags flags);
+XR_FUNC XrBundle *xr_bundle_create_ex(XrayIsolate *X, const char *entry_file, XrBundleFlags flags);
 
 XR_FUNC void xr_bundle_free(XrBundle *bundle);
 
 // Generate C source code, caller must free returned string
-XR_FUNC char* xr_bundle_to_c_source(XrBundle *bundle, const char *var_prefix);
+XR_FUNC char *xr_bundle_to_c_source(XrBundle *bundle, const char *var_prefix);
 
-#define XR_BUNDLE_MAGIC     "XRPK"
-#define XR_BUNDLE_VERSION   1
+#define XR_BUNDLE_MAGIC "XRPK"
+#define XR_BUNDLE_VERSION 1
 
-#endif // XBUNDLE_H
+#endif  // XBUNDLE_H

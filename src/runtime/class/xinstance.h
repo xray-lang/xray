@@ -59,35 +59,34 @@
 struct XrInstance {
     XrGCHeader gc;
     struct XrClass *klass;
-    XrValue fields[];          // Flexible array member
+    XrValue fields[];  // Flexible array member
 };
 
 /* ========== Instance Operations ========== */
 
 // All fields initialized to null, constructor not called
-XR_FUNC XrInstance* xr_instance_new(XrayIsolate *X, XrClass *cls);
+XR_FUNC XrInstance *xr_instance_new(XrayIsolate *X, XrClass *cls);
 
 XR_FUNC void xr_instance_init_inplace(XrInstance *inst, XrClass *cls);
 XR_FUNC size_t xr_instance_size(XrClass *cls);
 XR_FUNC void xr_instance_free(XrInstance *inst);
 
 XR_FUNC XrValue xr_instance_get_field(XrayIsolate *X, XrInstance *inst, const char *name);
-XR_FUNC void xr_instance_set_field(XrayIsolate *X, XrInstance *inst, const char *name, XrValue value);
+XR_FUNC void xr_instance_set_field(XrayIsolate *X, XrInstance *inst, const char *name,
+                                   XrValue value);
 
 // Fast path by index
 XR_FUNC XrValue xr_instance_get_field_by_index(XrInstance *inst, int index);
 XR_FUNC void xr_instance_set_field_by_index(XrInstance *inst, int index, XrValue value);
 
-XR_FUNC XrValue xr_instance_call_method(XrayIsolate *X, XrInstance *inst,
-                                 const char *name,
-                                 XrValue *args, int argc);
+XR_FUNC XrValue xr_instance_call_method(XrayIsolate *X, XrInstance *inst, const char *name,
+                                        XrValue *args, int argc);
 
 // Allocate + init fields + call constructor
-XR_FUNC XrValue xr_instance_construct(XrayIsolate *X, XrClass *cls,
-                               XrValue *args, int argc);
+XR_FUNC XrValue xr_instance_construct(XrayIsolate *X, XrClass *cls, XrValue *args, int argc);
 
 // Shallow clone: allocate new instance, copy all field values
-XR_FUNC XrInstance* xr_instance_clone(XrayIsolate *X, XrInstance *src);
+XR_FUNC XrInstance *xr_instance_clone(XrayIsolate *X, XrInstance *src);
 
 /* ========== Debug ========== */
 
@@ -96,7 +95,7 @@ XR_FUNC bool xr_instance_is_a(XrInstance *inst, XrClass *cls);
 
 /* ========== Inline Accessors ========== */
 
-static inline XrClass* xr_instance_get_class(XrInstance *inst) {
+static inline XrClass *xr_instance_get_class(XrInstance *inst) {
     return inst->klass;
 }
 
@@ -108,4 +107,4 @@ static inline void xr_instance_set_field_fast(XrInstance *inst, int index, XrVal
     inst->fields[index] = value;
 }
 
-#endif // XINSTANCE_H
+#endif  // XINSTANCE_H

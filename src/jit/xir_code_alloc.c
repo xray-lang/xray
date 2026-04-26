@@ -24,12 +24,12 @@
 #ifdef __APPLE__
 #include <pthread.h>
 #include <libkern/OSCacheControl.h>
-#endif // ========== Platform Helpers ==========
+#endif  // ========== Platform Helpers ==========
 
 static size_t get_page_size(void) {
     static size_t ps = 0;
     if (ps == 0) {
-        ps = (size_t)sysconf(_SC_PAGESIZE);
+        ps = (size_t) sysconf(_SC_PAGESIZE);
     }
     return ps;
 }
@@ -61,13 +61,13 @@ static XirCodePage *alloc_code_page(size_t min_size) {
         return NULL;
     }
 
-    XirCodePage *page = (XirCodePage *)xr_malloc(sizeof(XirCodePage));
+    XirCodePage *page = (XirCodePage *) xr_malloc(sizeof(XirCodePage));
     if (!page) {
         munmap(mem, size);
         return NULL;
     }
 
-    page->base = (uint8_t *)mem;
+    page->base = (uint8_t *) mem;
     page->size = size;
     page->used = 0;
     page->next = NULL;
@@ -123,8 +123,10 @@ void xir_code_alloc_destroy(XirCodeAlloc *alloc) {
 
 void *xir_code_alloc(XirCodeAlloc *alloc, size_t size, size_t alignment) {
     XR_DCHECK(alloc != NULL, "code_alloc: NULL alloc");
-    if (size == 0) return NULL;
-    if (alignment == 0) alignment = 16;
+    if (size == 0)
+        return NULL;
+    if (alignment == 0)
+        alignment = 16;
 
     // Try current page first
     if (alloc->current) {
@@ -142,11 +144,11 @@ void *xir_code_alloc(XirCodeAlloc *alloc, size_t size, size_t alignment) {
     // Need a new page
     size_t needed = size + alignment;  // worst case alignment waste
     XirCodePage *page = alloc_code_page(needed);
-    if (!page) return NULL;
+    if (!page)
+        return NULL;
 
     // Budget check: refuse allocation if over budget
-    if (alloc->budget > 0 &&
-        alloc->total_allocated + page->size > alloc->budget) {
+    if (alloc->budget > 0 && alloc->total_allocated + page->size > alloc->budget) {
         free_code_page(page);
         return NULL;
     }
@@ -167,32 +169,32 @@ void *xir_code_alloc(XirCodeAlloc *alloc, size_t size, size_t alignment) {
 }
 
 void xir_code_make_executable(void *ptr, size_t size) {
-    (void)ptr;
-    (void)size;
+    (void) ptr;
+    (void) size;
 #ifdef __APPLE__
     // macOS: per-thread W^X switch (MAP_JIT pages)
     pthread_jit_write_protect_np(1);  // enable execute, disable write
 #else
     // Linux: per-page mprotect
     size_t ps = get_page_size();
-    void *page_start = (void *)((uintptr_t)ptr & ~(ps - 1));
-    size_t total = ((uintptr_t)ptr + size) - (uintptr_t)page_start;
+    void *page_start = (void *) ((uintptr_t) ptr & ~(ps - 1));
+    size_t total = ((uintptr_t) ptr + size) - (uintptr_t) page_start;
     total = page_align(total);
     mprotect(page_start, total, PROT_READ | PROT_EXEC);
 #endif
 }
 
 void xir_code_make_writable(void *ptr, size_t size) {
-    (void)ptr;
-    (void)size;
+    (void) ptr;
+    (void) size;
 #ifdef __APPLE__
     // macOS: per-thread W^X switch (MAP_JIT pages)
     pthread_jit_write_protect_np(0);  // enable write, disable execute
 #else
     // Linux: per-page mprotect
     size_t ps = get_page_size();
-    void *page_start = (void *)((uintptr_t)ptr & ~(ps - 1));
-    size_t total = ((uintptr_t)ptr + size) - (uintptr_t)page_start;
+    void *page_start = (void *) ((uintptr_t) ptr & ~(ps - 1));
+    size_t total = ((uintptr_t) ptr + size) - (uintptr_t) page_start;
     total = page_align(total);
     mprotect(page_start, total, PROT_READ | PROT_WRITE);
 #endif
@@ -207,10 +209,12 @@ void xir_code_alloc_set_budget(XirCodeAlloc *alloc, size_t budget_bytes) {
 
 void xir_code_alloc_retire(XirCodeAlloc *alloc, void *code, size_t size) {
     XR_DCHECK(alloc != NULL, "code_alloc_retire: NULL alloc");
-    if (!code || size == 0) return;
+    if (!code || size == 0)
+        return;
 
-    XirCodeGarbage *g = (XirCodeGarbage *)xr_malloc(sizeof(XirCodeGarbage));
-    if (!g) return;  // leak is acceptable under OOM
+    XirCodeGarbage *g = (XirCodeGarbage *) xr_malloc(sizeof(XirCodeGarbage));
+    if (!g)
+        return;  // leak is acceptable under OOM
 
     g->code = code;
     g->size = size;
@@ -248,22 +252,22 @@ void xir_code_flush_icache(void *ptr, size_t size) {
     sys_icache_invalidate(ptr, size);
 #elif defined(__aarch64__)
     // Linux ARM64: manual cache flush
-    uint64_t start = (uint64_t)ptr;
+    uint64_t start = (uint64_t) ptr;
     uint64_t end = start + size;
     // Clean data cache
     for (uint64_t addr = start & ~63ULL; addr < end; addr += 64) {
-        __asm__ volatile("dc cvau, %0" :: "r"(addr));
+        __asm__ volatile("dc cvau, %0" ::"r"(addr));
     }
     __asm__ volatile("dsb ish");
     // Invalidate instruction cache
     for (uint64_t addr = start & ~63ULL; addr < end; addr += 64) {
-        __asm__ volatile("ic ivau, %0" :: "r"(addr));
+        __asm__ volatile("ic ivau, %0" ::"r"(addr));
     }
     __asm__ volatile("dsb ish");
     __asm__ volatile("isb");
 #else
     // x86_64: coherent i-cache, no flush needed
-    (void)ptr;
-    (void)size;
+    (void) ptr;
+    (void) size;
 #endif
 }

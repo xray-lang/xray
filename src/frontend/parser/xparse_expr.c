@@ -25,7 +25,8 @@
 static int strip_underscores(const char *src, int src_len, char *dst, int dst_size) {
     int n = 0;
     for (int i = 0; i < src_len && n < dst_size - 1; i++) {
-        if (src[i] != '_') dst[n++] = src[i];
+        if (src[i] != '_')
+            dst[n++] = src[i];
     }
     dst[n] = '\0';
     return n;
@@ -45,9 +46,9 @@ static xr_Integer parse_integer_literal(const char *start, int length) {
         if (prefix == 'x' || prefix == 'X') {
             return strtoll(buf + 2, NULL, 16);  // Hex
         } else if (prefix == 'b' || prefix == 'B') {
-            return strtoll(buf + 2, NULL, 2);   // Binary
+            return strtoll(buf + 2, NULL, 2);  // Binary
         } else if (prefix == 'o' || prefix == 'O') {
-            return strtoll(buf + 2, NULL, 8);   // Octal
+            return strtoll(buf + 2, NULL, 8);  // Octal
         }
     }
 
@@ -60,10 +61,8 @@ AstNode *xr_parse_literal(Parser *parser) {
     int column = parser->previous.column;
     switch (parser->previous.type) {
         case TK_LITERAL_INT: {
-            xr_Integer value = parse_integer_literal(
-                parser->previous.start,
-                parser->previous.length
-            );
+            xr_Integer value =
+                parse_integer_literal(parser->previous.start, parser->previous.length);
             // Full int64 range allowed at parse time.
             // The compiler decides per-context: int64 targets use LOADK_RAW,
             // untyped (any) targets with >64-bit values get a compile error.
@@ -84,7 +83,7 @@ AstNode *xr_parse_literal(Parser *parser) {
         case TK_LITERAL_BIGINT: {
             // Strip 'n' suffix and underscores
             int length = parser->previous.length - 1;  // Strip 'n' suffix
-            char *buf = (char *)xr_malloc(length + 1);
+            char *buf = (char *) xr_malloc(length + 1);
             strip_underscores(parser->previous.start, length, buf, length + 1);
             AstNode *node = xr_ast_literal_bigint(parser->X, buf, parser->previous.line);
             node->column = column;
@@ -95,7 +94,7 @@ AstNode *xr_parse_literal(Parser *parser) {
         case TK_LITERAL_STRING: {
             const char *src = parser->previous.start + 1;
             size_t src_len = parser->previous.length - 2;
-            char *str = (char *)xr_malloc(src_len + 1);
+            char *str = (char *) xr_malloc(src_len + 1);
             size_t dst_pos = xr_process_escapes(src, src_len, str);
             str[dst_pos] = '\0';
             AstNode *node = xr_ast_literal_string(parser->X, str, parser->previous.line);
@@ -108,7 +107,7 @@ AstNode *xr_parse_literal(Parser *parser) {
             // r"content" or r'content' - no escape processing
             const char *src = parser->previous.start + 2;
             size_t src_len = parser->previous.length - 3;
-            char *str = (char *)xr_malloc(src_len + 1);
+            char *str = (char *) xr_malloc(src_len + 1);
             memcpy(str, src, src_len);
             str[src_len] = '\0';
             AstNode *node = xr_ast_literal_string(parser->X, str, parser->previous.line);
@@ -185,15 +184,15 @@ AstNode *xr_parse_regex_literal(Parser *parser) {
     }
 
     // Extract pattern
-    int pattern_len = (int)(end_slash - start);
-    char *pattern = (char *)xr_malloc(pattern_len + 1);
+    int pattern_len = (int) (end_slash - start);
+    char *pattern = (char *) xr_malloc(pattern_len + 1);
     memcpy(pattern, start, pattern_len);
     pattern[pattern_len] = '\0';
 
     // Extract flags
     const char *flags_start = end_slash + 1;
     int flags_len = length - pattern_len - 1;
-    char *flags = (char *)xr_malloc(flags_len + 1);
+    char *flags = (char *) xr_malloc(flags_len + 1);
     if (flags_len > 0) {
         memcpy(flags, flags_start, flags_len);
     }
@@ -213,10 +212,18 @@ AstNode *xr_parse_type_cast(Parser *parser) {
     XR_DCHECK(parser != NULL, "parse_type_cast: NULL parser");
     const char *type_name = NULL;
     switch (parser->previous.type) {
-        case TK_INT:    type_name = "int";    break;
-        case TK_FLOAT:  type_name = "float";  break;
-        case TK_STRING: type_name = "string"; break;
-        case TK_BOOL:   type_name = "bool";   break;
+        case TK_INT:
+            type_name = "int";
+            break;
+        case TK_FLOAT:
+            type_name = "float";
+            break;
+        case TK_STRING:
+            type_name = "string";
+            break;
+        case TK_BOOL:
+            type_name = "bool";
+            break;
         default:
             xr_parser_error(parser, "expected type keyword");
             return NULL;
@@ -236,7 +243,7 @@ AstNode *xr_parse_type_cast(Parser *parser) {
     xr_parser_consume(parser, TK_RPAREN, "expected ')' after type cast argument");
 
     AstNode *callee = xr_ast_variable(parser->X, type_name, line);
-    AstNode **arguments = (AstNode **)ast_alloc_array(parser->X, sizeof(AstNode *), 1);
+    AstNode **arguments = (AstNode **) ast_alloc_array(parser->X, sizeof(AstNode *), 1);
     arguments[0] = arg;
 
     return xr_ast_call_expr(parser->X, callee, arguments, 1, line);
@@ -247,10 +254,18 @@ AstNode *xr_parse_type_cast(Parser *parser) {
 AstNode *xr_parse_type_keyword_as_variable(Parser *parser) {
     const char *name = NULL;
     switch (parser->previous.type) {
-        case TK_TYPE_JSON:      name = "Json"; break;
-        case TK_TYPE_DATETIME:  name = "DateTime"; break;
-        case TK_TYPE_BYTES:     name = "Bytes"; break;
-        case TK_TYPE_BIGINT:    name = "BigInt"; break;
+        case TK_TYPE_JSON:
+            name = "Json";
+            break;
+        case TK_TYPE_DATETIME:
+            name = "DateTime";
+            break;
+        case TK_TYPE_BYTES:
+            name = "Bytes";
+            break;
+        case TK_TYPE_BIGINT:
+            name = "BigInt";
+            break;
         default:
             xr_parser_error(parser, "unexpected type keyword in expression");
             return NULL;
@@ -262,9 +277,15 @@ AstNode *xr_parse_container_constructor(Parser *parser) {
     XR_DCHECK(parser != NULL, "parse_container_constructor: NULL parser");
     const char *type_name = NULL;
     switch (parser->previous.type) {
-        case TK_TYPE_ARRAY: type_name = "Array"; break;
-        case TK_TYPE_MAP:   type_name = "Map";   break;
-        case TK_TYPE_SET:   type_name = "Set";   break;
+        case TK_TYPE_ARRAY:
+            type_name = "Array";
+            break;
+        case TK_TYPE_MAP:
+            type_name = "Map";
+            break;
+        case TK_TYPE_SET:
+            type_name = "Set";
+            break;
         default:
             xr_parser_error(parser, "expected container type keyword");
             return NULL;
@@ -297,7 +318,7 @@ AstNode *xr_parse_container_constructor(Parser *parser) {
 // For normal template strings, applies escape processing.
 // For raw template strings, copies verbatim.
 static AstNode *make_template_part(Parser *parser, const char *src, int len, bool is_raw) {
-    char *buf = (char*)xr_malloc(len + 1);
+    char *buf = (char *) xr_malloc(len + 1);
     size_t out_len;
     if (is_raw) {
         memcpy(buf, src, len);
@@ -322,7 +343,7 @@ AstNode *xr_parse_template_string(Parser *parser) {
     int part_count = 0;
     int part_capacity = 4;
 
-    parts = (AstNode **)ast_alloc_array(parser->X, sizeof(AstNode *), (size_t)part_capacity);
+    parts = (AstNode **) ast_alloc_array(parser->X, sizeof(AstNode *), (size_t) part_capacity);
     if (!parts) {
         xr_parser_error(parser, "memory allocation failed");
         return NULL;
@@ -384,7 +405,7 @@ AstNode *xr_parse_template_string(Parser *parser) {
         // Parse interpolation expression
         int expr_len = expr_end - (expr_start + 2);
         if (expr_len > 0) {
-            char *expr_code = (char*)xr_malloc(expr_len + 1);
+            char *expr_code = (char *) xr_malloc(expr_len + 1);
             memcpy(expr_code, tmpl + expr_start + 2, expr_len);
             expr_code[expr_len] = '\0';
 
@@ -434,7 +455,8 @@ AstNode *xr_parse_grouping(Parser *parser) {
         }
         if (xr_parser_match(parser, TK_ARROW)) {
             AstNode *fn = xr_parse_arrow_function_body(parser, NULL, 0, line);
-            if (fn && return_type) fn->as.function_expr.return_type = return_type;
+            if (fn && return_type)
+                fn->as.function_expr.return_type = return_type;
             return fn;
         }
         if (return_type) {
@@ -455,15 +477,16 @@ AstNode *xr_parse_grouping(Parser *parser) {
             // May be arrow function, collect params as XrParamNode.
             // Params array is shallow-copied into function_expr AST node, so it
             // must live in the parse arena (not on the heap).
-            XrParamNode **params = (XrParamNode **)ast_alloc_array(
-                parser->X, sizeof(XrParamNode *), 10);
+            XrParamNode **params =
+                (XrParamNode **) ast_alloc_array(parser->X, sizeof(XrParamNode *), 10);
             int param_count = 0;
             bool has_type_annotation = false;
 
             // First param
             char name_buf[256];
             snprintf(name_buf, sizeof(name_buf), "%.*s", first_name.length, first_name.start);
-            params[param_count] = xr_param_node_new(parser->X, name_buf, first_name.line, first_name.column);
+            params[param_count] =
+                xr_param_node_new(parser->X, name_buf, first_name.line, first_name.column);
             if (xr_parser_match(parser, TK_COLON)) {
                 params[param_count]->type = xr_parse_type_annotation(parser);
                 has_type_annotation = true;
@@ -475,7 +498,8 @@ AstNode *xr_parse_grouping(Parser *parser) {
                 xr_parser_consume(parser, TK_NAME, "expected parameter name");
                 Token param = parser->previous;
                 snprintf(name_buf, sizeof(name_buf), "%.*s", param.length, param.start);
-                params[param_count] = xr_param_node_new(parser->X, name_buf, param.line, param.column);
+                params[param_count] =
+                    xr_param_node_new(parser->X, name_buf, param.line, param.column);
                 if (xr_parser_match(parser, TK_COLON)) {
                     params[param_count]->type = xr_parse_type_annotation(parser);
                     has_type_annotation = true;
@@ -497,7 +521,8 @@ AstNode *xr_parse_grouping(Parser *parser) {
 
             if (xr_parser_match(parser, TK_ARROW)) {
                 AstNode *fn = xr_parse_arrow_function_body(parser, params, param_count, line);
-                if (fn && return_type) fn->as.function_expr.return_type = return_type;
+                if (fn && return_type)
+                    fn->as.function_expr.return_type = return_type;
                 return fn;
             }
 
@@ -509,7 +534,7 @@ AstNode *xr_parse_grouping(Parser *parser) {
 
             // Single (name) without => is a regular grouping expression
             if (param_count == 1) {
-                char *var_name = (char*)xr_malloc(first_name.length + 1);
+                char *var_name = (char *) xr_malloc(first_name.length + 1);
                 memcpy(var_name, first_name.start, first_name.length);
                 var_name[first_name.length] = '\0';
                 AstNode *expr = xr_ast_variable(parser->X, var_name, line);
@@ -522,7 +547,7 @@ AstNode *xr_parse_grouping(Parser *parser) {
         }
 
         // Not arrow function params, regular expression
-        char *var_name = (char*)xr_malloc(first_name.length + 1);
+        char *var_name = (char *) xr_malloc(first_name.length + 1);
         strncpy(var_name, first_name.start, first_name.length);
         var_name[first_name.length] = '\0';
         AstNode *expr = xr_ast_variable(parser->X, var_name, line);
@@ -551,7 +576,8 @@ AstNode *xr_parse_grouping(Parser *parser) {
 
 // Parse arrow function body
 // Supports: => expr (auto return) or => { ... } (block)
-AstNode *xr_parse_arrow_function_body(Parser *parser, XrParamNode **params, int param_count, int line) {
+AstNode *xr_parse_arrow_function_body(Parser *parser, XrParamNode **params, int param_count,
+                                      int line) {
     AstNode *body;
 
     if (xr_parser_match(parser, TK_LBRACE)) {
@@ -562,7 +588,7 @@ AstNode *xr_parse_arrow_function_body(Parser *parser, XrParamNode **params, int 
         AstNode *expr = xr_parse_expression(parser);
 
         // return_stmt shallow-copies values into the AST node; must be arena.
-        AstNode **values = (AstNode **)ast_alloc_array(parser->X, sizeof(AstNode *), 1);
+        AstNode **values = (AstNode **) ast_alloc_array(parser->X, sizeof(AstNode *), 1);
         values[0] = expr;
         AstNode *return_stmt = xr_ast_return_stmt(parser->X, values, 1, expr->line);
 
@@ -593,13 +619,13 @@ AstNode *xr_parse_fn_expression(Parser *parser) {
             char param_name[256];
             snprintf(param_name, sizeof(param_name), "%.*s", param_token.length, param_token.start);
 
-            XrParamNode *param = xr_param_node_new(parser->X, param_name, param_token.line, param_token.column);
+            XrParamNode *param =
+                xr_param_node_new(parser->X, param_name, param_token.line, param_token.column);
 
             // Parse optional type annotation
             if (xr_parser_match(parser, TK_COLON)) {
                 param->type = xr_parse_type_annotation(parser);
             }
-
 
             XR_PARSE_PUSH(parser, params, param_count, param_capacity, param);
         } while (xr_parser_match(parser, TK_COMMA));
@@ -615,9 +641,8 @@ AstNode *xr_parse_fn_expression(Parser *parser) {
         // Detect common mistake: fn() -> Type (should be fn(): Type)
         xr_parser_advance(parser);  // consume '-'
         if (xr_parser_match(parser, TK_GT)) {
-            xr_parser_error(parser,
-                "use ':' instead of '->' for return type annotation, "
-                "e.g. fn(): int");
+            xr_parser_error(parser, "use ':' instead of '->' for return type annotation, "
+                                    "e.g. fn(): int");
             parser->panic_mode = 0;
             return_type = xr_parse_type_annotation(parser);
         }
@@ -676,7 +701,8 @@ static AstNode *try_parse_generic_call(Parser *parser, AstNode *callee) {
 
     // Already consumed '<', now parse type list
     do {
-        if (type_arg_count >= 16) break;
+        if (type_arg_count >= 16)
+            break;
 
         XrType *type = xr_parse_type_annotation(parser);
         if (!type || parser->had_error) {
@@ -728,8 +754,8 @@ static AstNode *try_parse_generic_call(Parser *parser, AstNode *callee) {
 
     xr_parser_consume(parser, TK_RPAREN, "expected ')' after argument list");
 
-    return xr_ast_call_expr_generic(parser->X, callee, arguments, arg_count,
-                                     type_args, type_arg_count, line);
+    return xr_ast_call_expr_generic(parser->X, callee, arguments, arg_count, type_args,
+                                    type_arg_count, line);
 }
 
 // Parse '<' which could be comparison or generic call
@@ -760,16 +786,26 @@ AstNode *xr_parse_lt_or_generic(Parser *parser, AstNode *left) {
 
 // TokenType -> AstNodeType mapping for binary operators
 static const AstNodeType binary_op_map[] = {
-    [TK_PLUS]      = AST_BINARY_ADD,    [TK_MINUS]     = AST_BINARY_SUB,
-    [TK_STAR]      = AST_BINARY_MUL,    [TK_SLASH]     = AST_BINARY_DIV,
-    [TK_PERCENT]   = AST_BINARY_MOD,    [TK_AMP]       = AST_BINARY_BAND,
-    [TK_PIPE]      = AST_BINARY_BOR,    [TK_CARET]     = AST_BINARY_BXOR,
-    [TK_LSHIFT]    = AST_BINARY_LSHIFT, [TK_RSHIFT]    = AST_BINARY_RSHIFT,
-    [TK_EQ]        = AST_BINARY_EQ,     [TK_NE]        = AST_BINARY_NE,
-    [TK_EQ_STRICT] = AST_BINARY_EQ_STRICT, [TK_NE_STRICT] = AST_BINARY_NE_STRICT,
-    [TK_LT]        = AST_BINARY_LT,     [TK_LE]        = AST_BINARY_LE,
-    [TK_GT]        = AST_BINARY_GT,      [TK_GE]        = AST_BINARY_GE,
-    [TK_AND]       = AST_BINARY_AND,     [TK_OR]        = AST_BINARY_OR,
+    [TK_PLUS] = AST_BINARY_ADD,
+    [TK_MINUS] = AST_BINARY_SUB,
+    [TK_STAR] = AST_BINARY_MUL,
+    [TK_SLASH] = AST_BINARY_DIV,
+    [TK_PERCENT] = AST_BINARY_MOD,
+    [TK_AMP] = AST_BINARY_BAND,
+    [TK_PIPE] = AST_BINARY_BOR,
+    [TK_CARET] = AST_BINARY_BXOR,
+    [TK_LSHIFT] = AST_BINARY_LSHIFT,
+    [TK_RSHIFT] = AST_BINARY_RSHIFT,
+    [TK_EQ] = AST_BINARY_EQ,
+    [TK_NE] = AST_BINARY_NE,
+    [TK_EQ_STRICT] = AST_BINARY_EQ_STRICT,
+    [TK_NE_STRICT] = AST_BINARY_NE_STRICT,
+    [TK_LT] = AST_BINARY_LT,
+    [TK_LE] = AST_BINARY_LE,
+    [TK_GT] = AST_BINARY_GT,
+    [TK_GE] = AST_BINARY_GE,
+    [TK_AND] = AST_BINARY_AND,
+    [TK_OR] = AST_BINARY_OR,
 };
 
 // Parse binary operators: left op right
@@ -784,8 +820,8 @@ AstNode *xr_parse_binary(Parser *parser, AstNode *left) {
     AstNode *right = xr_parse_precedence(parser, rule->precedence + 1);
 
     AstNodeType ast_type = 0;
-    if (operator_type >= 0
-        && operator_type < (TokenType)(sizeof(binary_op_map) / sizeof(binary_op_map[0]))) {
+    if (operator_type >= 0 &&
+        operator_type < (TokenType) (sizeof(binary_op_map) / sizeof(binary_op_map[0]))) {
         ast_type = binary_op_map[operator_type];
     }
     if (ast_type == 0) {
@@ -874,7 +910,7 @@ AstNode *xr_parse_optional_chain(Parser *parser, AstNode *object) {
         xr_parser_advance(parser);
         const char *name = parser->previous.start;
         int name_len = parser->previous.length;
-        char *name_str = (char *)ast_alloc(parser->X, name_len + 1);
+        char *name_str = (char *) ast_alloc(parser->X, name_len + 1);
         memcpy(name_str, name, name_len);
         name_str[name_len] = '\0';
 
@@ -905,4 +941,3 @@ AstNode *xr_parse_range(Parser *parser, AstNode *start) {
 
     return xr_ast_range(parser->X, start, end, line);
 }
-

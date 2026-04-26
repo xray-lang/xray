@@ -57,15 +57,15 @@ XrJsonValue *xlsp_handle_lc_initialize(XrLspServer *server, XrJsonValue *params)
                 server->workspace_folders[idx].path = xr_strdup(xlsp_uri_to_path(root_uri));
             }
             lsp_log("Folded rootUri/rootPath into workspace folder[0]: %s",
-                     server->workspace_folders[0].path ? server->workspace_folders[0].path : "(null)");
+                    server->workspace_folders[0].path ? server->workspace_folders[0].path
+                                                      : "(null)");
         }
     }
 
     // Load project-specific config from xray.toml (first folder wins)
     for (int i = 0; i < server->workspace_folder_count; i++) {
         if (server->workspace_folders[i].path) {
-            if (xlsp_config_load_from_toml(&server->config,
-                                           server->workspace_folders[i].path)) {
+            if (xlsp_config_load_from_toml(&server->config, server->workspace_folders[i].path)) {
                 server->workspace_folders[i].config_loaded = true;
                 lsp_log("Loaded LSP config from xray.toml in: %s",
                         server->workspace_folders[i].path);
@@ -74,8 +74,8 @@ XrJsonValue *xlsp_handle_lc_initialize(XrLspServer *server, XrJsonValue *params)
         }
     }
 
-    const char *display_root = server->workspace_folder_count > 0
-        ? server->workspace_folders[0].path : "(none)";
+    const char *display_root =
+        server->workspace_folder_count > 0 ? server->workspace_folders[0].path : "(none)";
     lsp_log("Initializing with root: %s", display_root);
 
     // Build capabilities response
@@ -164,7 +164,7 @@ XrJsonValue *xlsp_handle_lc_initialize(XrLspServer *server, XrJsonValue *params)
 
     // CodeLens
     xjson_object_set_new(capabilities, "codeLensProvider",
-        xjson_new_object());  // empty object = supported, no resolve
+                         xjson_new_object());  // empty object = supported, no resolve
 
     // Folding range
     xjson_object_set_new(capabilities, "foldingRangeProvider", xjson_new_bool(true));
@@ -211,8 +211,7 @@ XrJsonValue *xlsp_handle_lc_initialize(XrLspServer *server, XrJsonValue *params)
     // xlsp_offset_to_position, so declare that explicitly — clients that
     // advertised UTF-8 / UTF-32 then fall back to UTF-16, and we avoid
     // silent mismatches for files containing astral-plane characters.
-    xjson_object_set_new(capabilities, "positionEncoding",
-                             xjson_new_string("utf-16"));
+    xjson_object_set_new(capabilities, "positionEncoding", xjson_new_string("utf-16"));
 
     xjson_object_set_new(result, "capabilities", capabilities);
 
@@ -228,7 +227,7 @@ XrJsonValue *xlsp_handle_lc_initialize(XrLspServer *server, XrJsonValue *params)
 }
 
 void xlsp_handle_lc_initialized(XrLspServer *server, XrJsonValue *params) {
-    (void)params;
+    (void) params;
     lsp_log("Client initialized");
 
     // Register for file watching via client/registerCapability
@@ -238,7 +237,8 @@ void xlsp_handle_lc_initialized(XrLspServer *server, XrJsonValue *params) {
 
     XrJsonValue *registration = xjson_new_object();
     xjson_object_set_new(registration, "id", xjson_new_string("xray-file-watcher"));
-    xjson_object_set_new(registration, "method", xjson_new_string("workspace/didChangeWatchedFiles"));
+    xjson_object_set_new(registration, "method",
+                         xjson_new_string("workspace/didChangeWatchedFiles"));
 
     XrJsonValue *reg_options = xjson_new_object();
     XrJsonValue *watchers = xjson_new_array();
@@ -277,7 +277,7 @@ void xlsp_handle_lc_initialized(XrLspServer *server, XrJsonValue *params) {
 }
 
 XrJsonValue *xlsp_handle_lc_shutdown(XrLspServer *server, XrJsonValue *params) {
-    (void)params;
+    (void) params;
     lsp_log("Shutdown requested");
     // Per LSP spec: shutdown is a request, not an exit trigger. We
     // flush state, reply with null, then wait for the mandatory
@@ -288,10 +288,9 @@ XrJsonValue *xlsp_handle_lc_shutdown(XrLspServer *server, XrJsonValue *params) {
 }
 
 void xlsp_handle_lc_exit(XrLspServer *server, XrJsonValue *params) {
-    (void)params;
+    (void) params;
     lsp_log("Exit notification received");
     // Only `exit` drops us out of xlsp_server_run. A process-wide
     // exit code of 0 vs 1 is decided later based on shutdown_received.
     server->exit_received = true;
 }
-

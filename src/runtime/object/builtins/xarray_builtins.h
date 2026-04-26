@@ -25,4 +25,4 @@ XR_FUNC XrValue xr_builtin_array_from(XrayIsolate *isolate, XrValue *args, int n
 XR_FUNC XrValue xr_builtin_array_range(XrayIsolate *isolate, XrValue *args, int nargs);
 XR_FUNC XrValue xr_builtin_array_with_capacity(XrayIsolate *isolate, XrValue *args, int nargs);
 
-#endif // XARRAY_BUILTINS_H
+#endif  // XARRAY_BUILTINS_H

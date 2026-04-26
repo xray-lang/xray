@@ -15,22 +15,21 @@
 // Nodes with an unset end (end_line == 0) are silently skipped — parsers
 // guarantee spans for every folding-capable construct, so an unset end
 // signals an incomplete parse where folding is not meaningful anyway.
-#define ADD_NODE_FOLD(ranges, start_line, node, kind) do {             \
-    AstNode *_n = (node);                                              \
-    if (_n && _n->end_line > 0 && _n->end_line - 1 > (start_line)) {   \
-        XrJsonValue *_range = xjson_new_object();                  \
-        xjson_object_set(_range, "startLine",                      \
-            xjson_new_number(start_line));                         \
-        xjson_object_set(_range, "endLine",                        \
-            xjson_new_number(_n->end_line - 1));                   \
-        xjson_object_set(_range, "kind",                           \
-            xjson_new_string(kind));                               \
-        xjson_array_push((ranges), _range);                        \
-    }                                                                  \
-} while (0)
+#define ADD_NODE_FOLD(ranges, start_line, node, kind)                                              \
+    do {                                                                                           \
+        AstNode *_n = (node);                                                                      \
+        if (_n && _n->end_line > 0 && _n->end_line - 1 > (start_line)) {                           \
+            XrJsonValue *_range = xjson_new_object();                                              \
+            xjson_object_set(_range, "startLine", xjson_new_number(start_line));                   \
+            xjson_object_set(_range, "endLine", xjson_new_number(_n->end_line - 1));               \
+            xjson_object_set(_range, "kind", xjson_new_string(kind));                              \
+            xjson_array_push((ranges), _range);                                                    \
+        }                                                                                          \
+    } while (0)
 
 static void collect_folding_ranges(AstNode *node, XrJsonValue *ranges) {
-    if (!node) return;
+    if (!node)
+        return;
 
     switch (node->type) {
         case AST_PROGRAM:
@@ -90,15 +89,18 @@ static void collect_folding_ranges(AstNode *node, XrJsonValue *ranges) {
 
 XrJsonValue *xlsp_handle_folding_range(XrLspServer *server, XrJsonValue *params) {
     XrJsonValue *textDocument = xjson_get_object(params, "textDocument");
-    if (!textDocument) return xjson_new_array();
+    if (!textDocument)
+        return xjson_new_array();
 
     const char *uri = xjson_get_string(textDocument, "uri");
     XrLspDocument *doc = xlsp_document_get(server, uri);
-    if (!doc) return xjson_new_array();
+    if (!doc)
+        return xjson_new_array();
 
     XrJsonValue *ranges = xjson_new_array();
 
-    if (!doc->ast) return ranges;
+    if (!doc->ast)
+        return ranges;
 
     collect_folding_ranges(doc->ast, ranges);
 

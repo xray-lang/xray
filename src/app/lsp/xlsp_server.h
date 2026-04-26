@@ -21,7 +21,7 @@
 #include "xray_isolate.h"
 #include "../../base/xarena.h"
 #include <stdbool.h>
-#include <stdio.h>     // FILE *log_file in XrLspServer
+#include <stdio.h>  // FILE *log_file in XrLspServer
 
 // Forward declarations
 typedef struct XrLspDocument XrLspDocument;
@@ -32,7 +32,7 @@ typedef struct XaAnalyzer XaAnalyzer;
 // Document in the workspace
 struct XrLspDocument {
     char *uri;
-    char *content;          // Separately managed (needs incremental update)
+    char *content;  // Separately managed (needs incremental update)
     size_t length;
     int version;
 
@@ -41,8 +41,8 @@ struct XrLspDocument {
 
     // Diagnostic debounce: timer-based (no background thread sleep)
     uint64_t last_change_time;
-    uint64_t diagnostic_deadline;    // 0 = no pending diagnostic
-    bool diag_pending;              // true while queued in pending_diag[]
+    uint64_t diagnostic_deadline;  // 0 = no pending diagnostic
+    bool diag_pending;             // true while queued in pending_diag[]
 
     // Line index for position conversion
     uint32_t *line_offsets;
@@ -54,23 +54,23 @@ struct XrLspDocument {
 
     // Analysis cache (allocated from arena)
     bool dirty;
-    AstNode *ast;           // Arena allocated
+    AstNode *ast;  // Arena allocated
     bool parse_error;
-    char *error_message;    // Arena allocated
+    char *error_message;  // Arena allocated
     int error_line;
 
     // Cached diagnostics from parser (XrJsonValue*, arena allocated)
     void *cached_diagnostics;
 
     // Incremental parsing support
-    uint64_t content_hash;      // Hash for quick change detection
-    int last_change_line;       // Line where last change occurred
-    int last_change_offset;     // Offset where last change occurred
+    uint64_t content_hash;   // Hash for quick change detection
+    int last_change_line;    // Line where last change occurred
+    int last_change_offset;  // Offset where last change occurred
 
     // Semantic tokens cache (for delta encoding)
-    uint32_t *prev_sem_tokens;      // Previous encoded token data
-    int prev_sem_token_count;       // Number of uint32_t values
-    uint32_t sem_token_result_id;   // Monotonically increasing result ID
+    uint32_t *prev_sem_tokens;     // Previous encoded token data
+    int prev_sem_token_count;      // Number of uint32_t values
+    uint32_t sem_token_result_id;  // Monotonically increasing result ID
 
     // Import cache (invalidated on content change)
     // Forward declared, defined in xlsp_imports.h
@@ -125,25 +125,25 @@ typedef struct XlspPendingAnalysis {
 // clients like VS Code always use integers, but correctness-wise we
 // MUST echo back the exact shape the client sent us.
 typedef enum {
-    XLSP_ID_NONE = 0,   // Notification (no id field / id == null)
-    XLSP_ID_NUMBER,     // Integer or real id
-    XLSP_ID_STRING,     // String id (owned, xr_free on clear)
+    XLSP_ID_NONE = 0,  // Notification (no id field / id == null)
+    XLSP_ID_NUMBER,    // Integer or real id
+    XLSP_ID_STRING,    // String id (owned, xr_free on clear)
 } XlspRequestIdKind;
 
 typedef struct XlspRequestId {
     XlspRequestIdKind kind;
     union {
         double number;
-        char  *string;  // xr_strdup'd when kind == XLSP_ID_STRING
+        char *string;  // xr_strdup'd when kind == XLSP_ID_STRING
     } as;
 } XlspRequestId;
 
 // Pending request entry (for $/cancelRequest support)
 typedef struct XlspPendingRequest {
-    XlspRequestId id;           // Request id (number or string, owned)
-    const char *method;         // Method name (static, for logging)
-    bool cancelled;             // Whether this request was cancelled
-    uint64_t start_time;        // Start time (monotonic ms)
+    XlspRequestId id;     // Request id (number or string, owned)
+    const char *method;   // Method name (static, for logging)
+    bool cancelled;       // Whether this request was cancelled
+    uint64_t start_time;  // Start time (monotonic ms)
 } XlspPendingRequest;
 
 // Pending requests tracker (ring buffer)
@@ -157,17 +157,17 @@ typedef struct XlspPendingRequests {
 typedef struct XlspWorkspaceFolder {
     char *uri;
     char *name;
-    char *path;           // Derived from uri
-    bool config_loaded;   // xray.toml loaded for this folder
-    bool index_requested; // Background indexing requested
-    bool index_completed; // Background indexing finished
+    char *path;            // Derived from uri
+    bool config_loaded;    // xray.toml loaded for this folder
+    bool index_requested;  // Background indexing requested
+    bool index_completed;  // Background indexing finished
 } XlspWorkspaceFolder;
 
 // Ignore pattern for workspace scanning
 typedef struct XlspIgnorePattern {
-    char *pattern;         // Pattern string (e.g., "build", "build-*", "*.test.xr")
-    bool is_glob;          // true if contains glob wildcards (* or ?)
-    bool is_dir_only;      // true if pattern applies only to directories
+    char *pattern;     // Pattern string (e.g., "build", "build-*", "*.test.xr")
+    bool is_glob;      // true if contains glob wildcards (* or ?)
+    bool is_dir_only;  // true if pattern applies only to directories
 } XlspIgnorePattern;
 
 // Server configuration (from workspace/configuration and xray.toml)
@@ -193,8 +193,8 @@ typedef struct XlspConfig {
     int ignore_pattern_capacity;
 
     // Logging settings
-    char *log_path;           // Log file path (NULL = no file logging, "" = default)
-    bool log_to_stderr;       // Also log to stderr (default: true)
+    char *log_path;      // Log file path (NULL = no file logging, "" = default)
+    bool log_to_stderr;  // Also log to stderr (default: true)
 } XlspConfig;
 
 // Ignore pattern API
@@ -302,10 +302,9 @@ XR_FUNC void xlsp_server_free(XrLspServer *server);
 XR_FUNC int xlsp_server_run(XrLspServer *server);
 
 // Document management
-XR_FUNC XrLspDocument *xlsp_document_open(XrLspServer *server, const char *uri,
-                                   const char *text, int version);
-XR_FUNC void xlsp_document_change(XrLspDocument *doc, XrLspRange *range,
-                          const char *text);
+XR_FUNC XrLspDocument *xlsp_document_open(XrLspServer *server, const char *uri, const char *text,
+                                          int version);
+XR_FUNC void xlsp_document_change(XrLspDocument *doc, XrLspRange *range, const char *text);
 XR_FUNC void xlsp_document_close(XrLspServer *server, const char *uri);
 XR_FUNC XrLspDocument *xlsp_document_get(XrLspServer *server, const char *uri);
 
@@ -318,10 +317,10 @@ XR_FUNC uint32_t xlsp_position_to_offset(XrLspDocument *doc, XrLspPosition pos);
 XR_FUNC XrLspPosition xlsp_offset_to_position(XrLspDocument *doc, uint32_t offset);
 
 // Progress reporting (for workspace indexing)
-XR_FUNC char *xlsp_progress_begin(XrLspServer *server, const char *title,
-                          const char *message, bool cancellable);
-XR_FUNC void xlsp_progress_report(XrLspServer *server, const char *token,
-                          const char *message, int percentage);
+XR_FUNC char *xlsp_progress_begin(XrLspServer *server, const char *title, const char *message,
+                                  bool cancellable);
+XR_FUNC void xlsp_progress_report(XrLspServer *server, const char *token, const char *message,
+                                  int percentage);
 XR_FUNC void xlsp_progress_end(XrLspServer *server, const char *token, const char *message);
 
 // Logging
@@ -333,10 +332,8 @@ XR_FUNC void xlsp_set_log_server(XrLspServer *server);
 // ============================================================================
 
 // JSON-RPC transport helpers
-XR_FUNC void xlsp_send_notification(XrLspServer *server, const char *method,
-                                     XrJsonValue *params);
-XR_FUNC void xlsp_send_request(XrLspServer *server, const char *method,
-                                XrJsonValue *params);
+XR_FUNC void xlsp_send_notification(XrLspServer *server, const char *method, XrJsonValue *params);
+XR_FUNC void xlsp_send_request(XrLspServer *server, const char *method, XrJsonValue *params);
 
 // URI/path conversion (defined as static inline in xlsp_utils.h)
 
@@ -345,4 +342,4 @@ XR_FUNC void xlsp_publish_diagnostics(XrLspServer *server, XrLspDocument *doc);
 XR_FUNC void xlsp_schedule_diagnostics(XrLspServer *server, XrLspDocument *doc);
 XR_FUNC void xlsp_clear_all_diagnostics(XrLspServer *server);
 
-#endif // XLSP_SERVER_H
+#endif  // XLSP_SERVER_H

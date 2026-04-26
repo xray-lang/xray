@@ -31,35 +31,21 @@
 extern "C" {
 #endif
 
-XR_FUNC XrValue xr_set_method_has(XrayIsolate *iso, XrValue self,
-                                  XrValue *args, int argc);
-XR_FUNC XrValue xr_set_method_delete(XrayIsolate *iso, XrValue self,
-                                     XrValue *args, int argc);
-XR_FUNC XrValue xr_set_method_is_empty(XrayIsolate *iso, XrValue self,
-                                       XrValue *args, int argc);
-XR_FUNC XrValue xr_set_method_add(XrayIsolate *iso, XrValue self,
-                                  XrValue *args, int argc);
-XR_FUNC XrValue xr_set_method_clear(XrayIsolate *iso, XrValue self,
-                                    XrValue *args, int argc);
-XR_FUNC XrValue xr_set_method_union(XrayIsolate *iso, XrValue self,
-                                    XrValue *args, int argc);
-XR_FUNC XrValue xr_set_method_intersection(XrayIsolate *iso, XrValue self,
-                                           XrValue *args, int argc);
-XR_FUNC XrValue xr_set_method_difference(XrayIsolate *iso, XrValue self,
-                                         XrValue *args, int argc);
-XR_FUNC XrValue xr_set_method_symmetric_difference(XrayIsolate *iso,
-                                                   XrValue self,
-                                                   XrValue *args, int argc);
-XR_FUNC XrValue xr_set_method_is_subset(XrayIsolate *iso, XrValue self,
-                                        XrValue *args, int argc);
-XR_FUNC XrValue xr_set_method_is_superset(XrayIsolate *iso, XrValue self,
-                                          XrValue *args, int argc);
-XR_FUNC XrValue xr_set_method_to_array(XrayIsolate *iso, XrValue self,
-                                       XrValue *args, int argc);
-XR_FUNC XrValue xr_set_method_iterator(XrayIsolate *iso, XrValue self,
-                                       XrValue *args, int argc);
-XR_FUNC XrValue xr_set_method_to_string(XrayIsolate *iso, XrValue self,
-                                        XrValue *args, int argc);
+XR_FUNC XrValue xr_set_method_has(XrayIsolate *iso, XrValue self, XrValue *args, int argc);
+XR_FUNC XrValue xr_set_method_delete(XrayIsolate *iso, XrValue self, XrValue *args, int argc);
+XR_FUNC XrValue xr_set_method_is_empty(XrayIsolate *iso, XrValue self, XrValue *args, int argc);
+XR_FUNC XrValue xr_set_method_add(XrayIsolate *iso, XrValue self, XrValue *args, int argc);
+XR_FUNC XrValue xr_set_method_clear(XrayIsolate *iso, XrValue self, XrValue *args, int argc);
+XR_FUNC XrValue xr_set_method_union(XrayIsolate *iso, XrValue self, XrValue *args, int argc);
+XR_FUNC XrValue xr_set_method_intersection(XrayIsolate *iso, XrValue self, XrValue *args, int argc);
+XR_FUNC XrValue xr_set_method_difference(XrayIsolate *iso, XrValue self, XrValue *args, int argc);
+XR_FUNC XrValue xr_set_method_symmetric_difference(XrayIsolate *iso, XrValue self, XrValue *args,
+                                                   int argc);
+XR_FUNC XrValue xr_set_method_is_subset(XrayIsolate *iso, XrValue self, XrValue *args, int argc);
+XR_FUNC XrValue xr_set_method_is_superset(XrayIsolate *iso, XrValue self, XrValue *args, int argc);
+XR_FUNC XrValue xr_set_method_to_array(XrayIsolate *iso, XrValue self, XrValue *args, int argc);
+XR_FUNC XrValue xr_set_method_iterator(XrayIsolate *iso, XrValue self, XrValue *args, int argc);
+XR_FUNC XrValue xr_set_method_to_string(XrayIsolate *iso, XrValue self, XrValue *args, int argc);
 
 extern const XrMethodSlot xr_set_method_table[SYMBOL_BUILTIN_COUNT];
 

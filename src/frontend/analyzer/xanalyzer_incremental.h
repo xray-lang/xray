@@ -36,24 +36,24 @@ typedef struct AstNode AstNode;
 
 // Dependency kind
 typedef enum XaDepKind {
-    XA_DEP_REFERENCE,       // Symbol is referenced
-    XA_DEP_CALL,            // Function is called
-    XA_DEP_INHERITANCE,     // Class inherits from another
-    XA_DEP_TYPE_USE,        // Type is used in annotation
+    XA_DEP_REFERENCE,    // Symbol is referenced
+    XA_DEP_CALL,         // Function is called
+    XA_DEP_INHERITANCE,  // Class inherits from another
+    XA_DEP_TYPE_USE,     // Type is used in annotation
 } XaDepKind;
 
 // Single dependency edge
 typedef struct XaDependency {
-    uint32_t from_id;           // Symbol that depends
-    uint32_t to_id;             // Symbol being depended on
+    uint32_t from_id;  // Symbol that depends
+    uint32_t to_id;    // Symbol being depended on
     XaDepKind kind;
     struct XaDependency *next;  // Next in bucket
 } XaDependency;
 
 // Dependency graph
 typedef struct XaDependencyGraph {
-    XaDependency **forward;     // from_id -> list of dependencies
-    XaDependency **reverse;     // to_id -> list of dependents
+    XaDependency **forward;  // from_id -> list of dependencies
+    XaDependency **reverse;  // to_id -> list of dependents
     int bucket_count;
     int edge_count;
 } XaDependencyGraph;
@@ -64,19 +64,19 @@ typedef struct XaDependencyGraph {
 
 // Cached analysis result for a function/block
 typedef struct XaBlockCache {
-    uint32_t symbol_id;         // Owning function symbol ID (0 for top-level)
-    uint64_t content_hash;      // Hash of the block's source content
-    uint32_t start_line;        // Start line of the block
-    uint32_t end_line;          // End line of the block
-    XrType *inferred_type;      // Cached inferred type (for functions)
+    uint32_t symbol_id;     // Owning function symbol ID (0 for top-level)
+    uint64_t content_hash;  // Hash of the block's source content
+    uint32_t start_line;    // Start line of the block
+    uint32_t end_line;      // End line of the block
+    XrType *inferred_type;  // Cached inferred type (for functions)
     struct XaBlockCache *next;
 } XaBlockCache;
 
 // File-level cache
 typedef struct XaFileCache {
     const char *path;
-    uint64_t file_hash;         // Hash of entire file content
-    XaBlockCache *blocks;       // Cached blocks in this file
+    uint64_t file_hash;    // Hash of entire file content
+    XaBlockCache *blocks;  // Cached blocks in this file
     int block_count;
     struct XaFileCache *next;
 } XaFileCache;
@@ -86,19 +86,19 @@ typedef struct XaFileCache {
 // ============================================================================
 
 typedef struct XaIncrementalCtx {
-    XaDependencyGraph *deps;    // Dependency graph
-    XaFileCache *file_caches;   // Per-file caches
+    XaDependencyGraph *deps;   // Dependency graph
+    XaFileCache *file_caches;  // Per-file caches
     int file_count;
 
     // Working set for current update
-    uint32_t *dirty_symbols;    // Symbols that need re-analysis
+    uint32_t *dirty_symbols;  // Symbols that need re-analysis
     int dirty_count;
     int dirty_capacity;
 
     // Statistics
-    int full_analyses;          // Count of full re-analyses
-    int incremental_updates;    // Count of incremental updates
-    int skipped_functions;      // Functions skipped due to cache hit
+    int full_analyses;        // Count of full re-analyses
+    int incremental_updates;  // Count of incremental updates
+    int skipped_functions;    // Functions skipped due to cache hit
 } XaIncrementalCtx;
 
 // ============================================================================
@@ -115,18 +115,16 @@ XR_FUNC void xa_incremental_free(XaIncrementalCtx *ctx);
 // it is the only sanctioned cleanup path and is called from
 // xa_analyzer_remove_file() in xanalyzer.c.
 XR_FUNC void xa_dep_add(XaIncrementalCtx *ctx, uint32_t from, uint32_t to, XaDepKind kind);
-XR_FUNC void xa_dep_remove_symbols(XaIncrementalCtx *ctx,
-                                   const uint32_t *symbol_ids, int count);
-XR_FUNC void xa_dep_get_dependents(XaIncrementalCtx *ctx, uint32_t symbol_id,
-                           uint32_t **out_ids, int *out_count);
+XR_FUNC void xa_dep_remove_symbols(XaIncrementalCtx *ctx, const uint32_t *symbol_ids, int count);
+XR_FUNC void xa_dep_get_dependents(XaIncrementalCtx *ctx, uint32_t symbol_id, uint32_t **out_ids,
+                                   int *out_count);
 
 // Cache operations
 XR_FUNC XaFileCache *xa_cache_get_file(XaIncrementalCtx *ctx, const char *path);
 XR_FUNC XaBlockCache *xa_cache_get_block(XaFileCache *file, uint32_t symbol_id);
-XR_FUNC void xa_cache_update_block(XaIncrementalCtx *ctx, const char *path,
-                           uint32_t symbol_id, uint64_t hash,
-                           uint32_t start_line, uint32_t end_line,
-                           XrType *inferred_type);
+XR_FUNC void xa_cache_update_block(XaIncrementalCtx *ctx, const char *path, uint32_t symbol_id,
+                                   uint64_t hash, uint32_t start_line, uint32_t end_line,
+                                   XrType *inferred_type);
 XR_FUNC void xa_cache_invalidate_file(XaIncrementalCtx *ctx, const char *path);
 
 // Change detection
@@ -144,7 +142,7 @@ typedef struct XaChangeSet {
 } XaChangeSet;
 
 XR_FUNC XaChangeSet *xa_detect_changes(XaIncrementalCtx *ctx, XaAnalyzer *analyzer,
-                               const char *file, AstNode *old_ast, AstNode *new_ast);
+                                       const char *file, AstNode *old_ast, AstNode *new_ast);
 XR_FUNC void xa_changeset_free(XaChangeSet *cs);
 
 // Propagate changes through dependency graph
@@ -155,4 +153,4 @@ XR_FUNC void xa_propagate_dirty(XaIncrementalCtx *ctx, XaChangeSet *changes);
 // propagation) and xa_analyzer_invalidate_range() (block-level invalidate
 // stub) -- both declared in xanalyzer.h.
 
-#endif // XANALYZER_INCREMENTAL_H
+#endif  // XANALYZER_INCREMENTAL_H

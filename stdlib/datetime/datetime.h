@@ -30,22 +30,22 @@
 
 typedef struct XrDateTime {
     XrGCHeader gc;
-    int64_t timestamp;      // Unix timestamp (seconds)
-    int32_t milliseconds;   // Millisecond part (0-999)
-    int16_t tz_offset;      // Timezone offset (minutes)
-    uint8_t is_utc;         // 1 if UTC, 0 if local time
-    uint8_t _pad;           // Explicit padding
+    int64_t timestamp;     // Unix timestamp (seconds)
+    int32_t milliseconds;  // Millisecond part (0-999)
+    int16_t tz_offset;     // Timezone offset (minutes)
+    uint8_t is_utc;        // 1 if UTC, 0 if local time
+    uint8_t _pad;          // Explicit padding
 } XrDateTime;
 
 /* ========== Creation API ========== */
 
-XR_FUNC XrDateTime* xr_datetime_now(XrayIsolate *isolate);
-XR_FUNC XrDateTime* xr_datetime_utc(XrayIsolate *isolate);
-XR_FUNC XrDateTime* xr_datetime_create(XrayIsolate *isolate, int year, int month, int day,
-                                       int hour, int minute, int second, int is_utc);
-XR_FUNC XrDateTime* xr_datetime_from_timestamp(XrayIsolate *isolate, int64_t timestamp);
-XR_FUNC XrDateTime* xr_datetime_from_timestamp_ms(XrayIsolate *isolate, int64_t timestamp_ms);
-XR_FUNC XrDateTime* xr_datetime_parse(XrayIsolate *isolate, const char *str, const char *format);
+XR_FUNC XrDateTime *xr_datetime_now(XrayIsolate *isolate);
+XR_FUNC XrDateTime *xr_datetime_utc(XrayIsolate *isolate);
+XR_FUNC XrDateTime *xr_datetime_create(XrayIsolate *isolate, int year, int month, int day, int hour,
+                                       int minute, int second, int is_utc);
+XR_FUNC XrDateTime *xr_datetime_from_timestamp(XrayIsolate *isolate, int64_t timestamp);
+XR_FUNC XrDateTime *xr_datetime_from_timestamp_ms(XrayIsolate *isolate, int64_t timestamp_ms);
+XR_FUNC XrDateTime *xr_datetime_parse(XrayIsolate *isolate, const char *str, const char *format);
 
 /* ========== Format API ========== */
 
@@ -77,13 +77,14 @@ XR_FUNC int xr_datetime_days_in_month(XrDateTime *dt);
 
 /* ========== Date Arithmetic API ========== */
 
-XR_FUNC XrDateTime* xr_datetime_add(XrayIsolate *isolate, XrDateTime *dt, int64_t amount, const char *unit);
+XR_FUNC XrDateTime *xr_datetime_add(XrayIsolate *isolate, XrDateTime *dt, int64_t amount,
+                                    const char *unit);
 XR_FUNC int64_t xr_datetime_diff(XrDateTime *dt1, XrDateTime *dt2, const char *unit);
 
 /* ========== Timezone API ========== */
 
-XR_FUNC XrDateTime* xr_datetime_to_utc(XrayIsolate *isolate, XrDateTime *dt);
-XR_FUNC XrDateTime* xr_datetime_to_local(XrayIsolate *isolate, XrDateTime *dt);
+XR_FUNC XrDateTime *xr_datetime_to_utc(XrayIsolate *isolate, XrDateTime *dt);
+XR_FUNC XrDateTime *xr_datetime_to_local(XrayIsolate *isolate, XrDateTime *dt);
 XR_FUNC int xr_datetime_local_offset(void);
 
 /* ========== Utility Functions ========== */
@@ -97,10 +98,10 @@ static inline XrValue xr_datetime_value(XrDateTime *dt) {
 }
 
 #define XR_IS_DATETIME(v) (XR_IS_PTR(v) && XR_HEAP_TYPE(v) == XR_TDATETIME)
-#define XR_TO_DATETIME(v) ((XrDateTime*)XR_TO_PTR(v))
+#define XR_TO_DATETIME(v) ((XrDateTime *) XR_TO_PTR(v))
 
 /* ========== Module Loading ========== */
 
-XrModule* xr_load_module_datetime(XrayIsolate *isolate);
+XrModule *xr_load_module_datetime(XrayIsolate *isolate);
 
 #endif

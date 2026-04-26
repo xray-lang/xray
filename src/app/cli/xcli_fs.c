@@ -30,36 +30,31 @@
 /* Directories always skipped during recursive traversal.
  * This is the single source of truth for CLI ignore behavior. */
 static const char *const s_default_ignore_dirs[] = {
-    ".git",
-    ".svn",
-    ".hg",
-    "build",
-    "build-asan",
-    "build-release",
-    "node_modules",
-    ".xray",
-    NULL
-};
+    ".git", ".svn", ".hg", "build", "build-asan", "build-release", "node_modules", ".xray", NULL};
 
 static bool is_ignored_dir(const char *name, const XrCliWalkOpts *opts) {
     XR_DCHECK(name != NULL, "name must not be NULL");
     XR_DCHECK(opts != NULL, "opts must not be NULL");
 
     /* Hidden directories (starting with .) */
-    if (opts->skip_hidden && name[0] == '.') return true;
+    if (opts->skip_hidden && name[0] == '.')
+        return true;
 
     /* Underscore-prefixed directories */
-    if (opts->skip_underscore && name[0] == '_') return true;
+    if (opts->skip_underscore && name[0] == '_')
+        return true;
 
     /* Check hardcoded ignore list */
     for (const char *const *p = s_default_ignore_dirs; *p; p++) {
-        if (strcmp(name, *p) == 0) return true;
+        if (strcmp(name, *p) == 0)
+            return true;
     }
 
     /* Check extra ignore patterns (simple name match for now) */
     if (opts->extra_ignore) {
         for (const char *const *p = opts->extra_ignore; *p; p++) {
-            if (strcmp(name, *p) == 0) return true;
+            if (strcmp(name, *p) == 0)
+                return true;
         }
     }
 
@@ -76,7 +71,8 @@ void xr_cli_filelist_init(XrCliFileList *fl) {
 }
 
 void xr_cli_filelist_free(XrCliFileList *fl) {
-    if (!fl) return;
+    if (!fl)
+        return;
     for (int i = 0; i < fl->count; i++) {
         xr_free(fl->paths[i]);
     }
@@ -90,32 +86,34 @@ void xr_cli_filelist_add(XrCliFileList *fl, const char *path) {
     XR_DCHECK(fl != NULL, "fl must not be NULL");
     XR_DCHECK(path != NULL, "path must not be NULL");
 
-    if (fl->count >= XR_CLI_MAX_FILES) return;
+    if (fl->count >= XR_CLI_MAX_FILES)
+        return;
 
     if (fl->count >= fl->capacity) {
         int new_cap = fl->capacity == 0 ? 64 : fl->capacity * 2;
-        char **tmp = (char **)xr_realloc(fl->paths,
-                                          (size_t)new_cap * sizeof(char *));
-        if (!tmp) return;
+        char **tmp = (char **) xr_realloc(fl->paths, (size_t) new_cap * sizeof(char *));
+        if (!tmp)
+            return;
         fl->paths = tmp;
         fl->capacity = new_cap;
     }
 
     size_t len = strlen(path);
-    char *copy = (char *)xr_malloc(len + 1);
-    if (!copy) return;
+    char *copy = (char *) xr_malloc(len + 1);
+    if (!copy)
+        return;
     memcpy(copy, path, len + 1);
     fl->paths[fl->count++] = copy;
 }
 
 static int cmp_strings(const void *a, const void *b) {
-    return strcmp(*(const char **)a, *(const char **)b);
+    return strcmp(*(const char **) a, *(const char **) b);
 }
 
 void xr_cli_filelist_sort(XrCliFileList *fl) {
     XR_DCHECK(fl != NULL, "fl must not be NULL");
     if (fl->count > 1) {
-        qsort(fl->paths, (size_t)fl->count, sizeof(char *), cmp_strings);
+        qsort(fl->paths, (size_t) fl->count, sizeof(char *), cmp_strings);
     }
 }
 
@@ -130,11 +128,10 @@ XrCliWalkOpts xr_cli_walk_defaults(void) {
     };
 }
 
-static void walk_recursive(const char *dirpath,
-                            const XrCliWalkOpts *opts,
-                            XrCliFileList *fl) {
+static void walk_recursive(const char *dirpath, const XrCliWalkOpts *opts, XrCliFileList *fl) {
     DIR *dir = opendir(dirpath);
-    if (!dir) return;
+    if (!dir)
+        return;
 
     struct dirent *entry;
     char filepath[XR_CLI_PATH_MAX];
@@ -142,17 +139,17 @@ static void walk_recursive(const char *dirpath,
     while ((entry = readdir(dir)) != NULL) {
         /* Always skip . and .. */
         if (entry->d_name[0] == '.' &&
-            (entry->d_name[1] == '\0' ||
-             (entry->d_name[1] == '.' && entry->d_name[2] == '\0'))) {
+            (entry->d_name[1] == '\0' || (entry->d_name[1] == '.' && entry->d_name[2] == '\0'))) {
             continue;
         }
 
-        int n = snprintf(filepath, sizeof(filepath), "%s/%s",
-                         dirpath, entry->d_name);
-        if (n < 0 || (size_t)n >= sizeof(filepath)) continue;
+        int n = snprintf(filepath, sizeof(filepath), "%s/%s", dirpath, entry->d_name);
+        if (n < 0 || (size_t) n >= sizeof(filepath))
+            continue;
 
         struct stat st;
-        if (stat(filepath, &st) != 0) continue;
+        if (stat(filepath, &st) != 0)
+            continue;
 
         if (S_ISDIR(st.st_mode)) {
             if (!is_ignored_dir(entry->d_name, opts)) {
@@ -169,17 +166,17 @@ static void walk_recursive(const char *dirpath,
     closedir(dir);
 }
 
-int xr_cli_collect_files(const char *path,
-                          const XrCliWalkOpts *opts,
-                          XrCliFileList *fl) {
+int xr_cli_collect_files(const char *path, const XrCliWalkOpts *opts, XrCliFileList *fl) {
     XR_DCHECK(path != NULL, "path must not be NULL");
     XR_DCHECK(fl != NULL, "fl must not be NULL");
 
     XrCliWalkOpts defaults = xr_cli_walk_defaults();
-    if (!opts) opts = &defaults;
+    if (!opts)
+        opts = &defaults;
 
     struct stat st;
-    if (stat(path, &st) != 0) return -1;
+    if (stat(path, &st) != 0)
+        return -1;
 
     if (S_ISREG(st.st_mode)) {
         /* Single file — add directly (ignore xr_only filter for explicit files) */
@@ -202,7 +199,8 @@ char *xr_cli_read_file(const char *path) {
     XR_DCHECK(path != NULL, "path must not be NULL");
 
     FILE *f = fopen(path, "rb");
-    if (!f) return NULL;
+    if (!f)
+        return NULL;
 
     fseek(f, 0, SEEK_END);
     long size = ftell(f);
@@ -212,13 +210,13 @@ char *xr_cli_read_file(const char *path) {
     }
     fseek(f, 0, SEEK_SET);
 
-    char *content = (char *)xr_malloc((size_t)size + 1);
+    char *content = (char *) xr_malloc((size_t) size + 1);
     if (!content) {
         fclose(f);
         return NULL;
     }
 
-    size_t nread = fread(content, 1, (size_t)size, f);
+    size_t nread = fread(content, 1, (size_t) size, f);
     content[nread] = '\0';
     fclose(f);
 
@@ -228,15 +226,16 @@ char *xr_cli_read_file(const char *path) {
 char *xr_cli_read_stdin(void) {
     size_t capacity = 4096;
     size_t length = 0;
-    char *buf = (char *)xr_malloc(capacity);
-    if (!buf) return NULL;
+    char *buf = (char *) xr_malloc(capacity);
+    if (!buf)
+        return NULL;
 
     size_t n;
     while ((n = fread(buf + length, 1, capacity - length - 1, stdin)) > 0) {
         length += n;
         if (length + 1 >= capacity) {
             capacity *= 2;
-            char *tmp = (char *)xr_realloc(buf, capacity);
+            char *tmp = (char *) xr_realloc(buf, capacity);
             if (!tmp) {
                 xr_free(buf);
                 return NULL;
@@ -253,7 +252,8 @@ int xr_cli_write_file(const char *path, const char *content) {
     XR_DCHECK(content != NULL, "content must not be NULL");
 
     FILE *f = fopen(path, "wb");
-    if (!f) return -1;
+    if (!f)
+        return -1;
 
     size_t len = strlen(content);
     size_t written = fwrite(content, 1, len, f);
@@ -270,10 +270,12 @@ int xr_cli_write_file_atomic(const char *path, const char *content) {
      * This avoids partial writes corrupting the original. */
     char tmp_path[XR_CLI_PATH_MAX];
     int n = snprintf(tmp_path, sizeof(tmp_path), "%s.xrtmp", path);
-    if (n < 0 || (size_t)n >= sizeof(tmp_path)) return -1;
+    if (n < 0 || (size_t) n >= sizeof(tmp_path))
+        return -1;
 
     FILE *f = fopen(tmp_path, "wb");
-    if (!f) return -1;
+    if (!f)
+        return -1;
 
     size_t len = strlen(content);
     size_t written = fwrite(content, 1, len, f);
@@ -307,36 +309,44 @@ bool xr_cli_file_exists(const char *path) {
 
 bool xr_cli_is_directory(const char *path) {
     struct stat st;
-    if (!path || stat(path, &st) != 0) return false;
+    if (!path || stat(path, &st) != 0)
+        return false;
     return S_ISDIR(st.st_mode);
 }
 
 bool xr_cli_is_xr_file(const char *filename) {
-    if (!filename) return false;
+    if (!filename)
+        return false;
     size_t len = strlen(filename);
-    if (len < 4) return false;
+    if (len < 4)
+        return false;
     return strcmp(filename + len - 3, ".xr") == 0;
 }
 
 /* ========== Safe Parsing Helpers ========== */
 
 bool xr_cli_parse_int(const char *str, int *out) {
-    if (!str || !*str) return false;
+    if (!str || !*str)
+        return false;
 
     char *endptr;
     long val = strtol(str, &endptr, 10);
 
-    if (endptr == str || *endptr != '\0') return false;
-    if (val < INT_MIN || val > INT_MAX) return false;
+    if (endptr == str || *endptr != '\0')
+        return false;
+    if (val < INT_MIN || val > INT_MAX)
+        return false;
 
-    *out = (int)val;
+    *out = (int) val;
     return true;
 }
 
 bool xr_cli_parse_port(const char *str, int *out) {
     int val;
-    if (!xr_cli_parse_int(str, &val)) return false;
-    if (val < 0 || val > 65535) return false;
+    if (!xr_cli_parse_int(str, &val))
+        return false;
+    if (val < 0 || val > 65535)
+        return false;
     *out = val;
     return true;
 }

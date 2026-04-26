@@ -51,37 +51,37 @@ typedef enum {
 
 typedef enum {
     TOML_ERROR_NONE,
-    TOML_ERROR_SYNTAX,            // Syntax error
-    TOML_ERROR_DUPLICATE_KEY,     // Duplicate key
-    TOML_ERROR_INVALID_KEY,       // Invalid key
-    TOML_ERROR_INVALID_VALUE,     // Invalid value
-    TOML_ERROR_UNTERMINATED_STRING, // Unterminated string
-    TOML_ERROR_INVALID_ESCAPE,    // Invalid escape
-    TOML_ERROR_INVALID_NUMBER,    // Invalid number
-    TOML_ERROR_INVALID_DATETIME,  // Invalid datetime
-    TOML_ERROR_TABLE_CONFLICT     // Table definition conflict
+    TOML_ERROR_SYNTAX,               // Syntax error
+    TOML_ERROR_DUPLICATE_KEY,        // Duplicate key
+    TOML_ERROR_INVALID_KEY,          // Invalid key
+    TOML_ERROR_INVALID_VALUE,        // Invalid value
+    TOML_ERROR_UNTERMINATED_STRING,  // Unterminated string
+    TOML_ERROR_INVALID_ESCAPE,       // Invalid escape
+    TOML_ERROR_INVALID_NUMBER,       // Invalid number
+    TOML_ERROR_INVALID_DATETIME,     // Invalid datetime
+    TOML_ERROR_TABLE_CONFLICT        // Table definition conflict
 } TomlErrorType;
 
 // ========== Parser Configuration ==========
 
 typedef struct {
-    bool strict;                  // Strict mode
-    bool allow_duplicate_keys;    // Allow duplicate keys
+    bool strict;                // Strict mode
+    bool allow_duplicate_keys;  // Allow duplicate keys
 } TomlConfig;
 
 // ========== Parse Metadata ==========
 
 typedef struct {
-    int lines;                    // Total lines
-    int keys;                     // Key count
+    int lines;  // Total lines
+    int keys;   // Key count
 } TomlMeta;
 
 // ========== Parse Result ==========
 
 typedef struct {
-    XrMap *data;                  // Parsed data
-    XrArray *errors;              // Error list
-    TomlMeta meta;                // Metadata
+    XrMap *data;      // Parsed data
+    XrArray *errors;  // Error list
+    TomlMeta meta;    // Metadata
 } TomlResult;
 
 // ========== Parser Context ==========
@@ -102,9 +102,9 @@ typedef struct {
     TomlState state;
 
     // Current parsing context
-    XrMap *root;                  // Root table
-    XrMap *current_table;         // Current table
-    XrArray *current_key_path;    // Current key path
+    XrMap *root;                // Root table
+    XrMap *current_table;       // Current table
+    XrArray *current_key_path;  // Current key path
 
     // Set of table header paths explicitly declared via `[a.b]` syntax.
     // Used to diagnose duplicate `[a] ... [a]` declarations. The map is
@@ -135,8 +135,8 @@ XR_FUNC void toml_config_init(TomlConfig *config);
 XR_FUNC void toml_config_from_json(XrayIsolate *X, TomlConfig *config, XrJson *json);
 
 // Initialize parser
-XR_FUNC void toml_parser_init(TomlParser *parser, XrayIsolate *isolate,
-                              const char *data, size_t len, TomlConfig *config);
+XR_FUNC void toml_parser_init(TomlParser *parser, XrayIsolate *isolate, const char *data,
+                              size_t len, TomlConfig *config);
 
 // Execute parsing
 XR_FUNC TomlResult toml_parser_parse(TomlParser *parser);

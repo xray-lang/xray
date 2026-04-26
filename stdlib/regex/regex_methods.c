@@ -40,7 +40,7 @@ static inline XrRegex *re_self(XrValue self) {
 static inline const char *value_text(XrValue v, int *len) {
     if (XR_IS_STRING(v)) {
         XrString *s = XR_TO_STRING(v);
-        *len = (int)s->length;
+        *len = (int) s->length;
         return s->data;
     }
     *len = 0;
@@ -50,26 +50,28 @@ static inline const char *value_text(XrValue v, int *len) {
 /* ========== Method bodies ========== */
 
 // regex.test(text) -> bool
-static XrValue m_test(XrayIsolate *iso, XrValue self,
-                      XrValue *args, int argc) {
-    (void)iso;
-    if (argc < 1) return XR_FALSE_VAL;
+static XrValue m_test(XrayIsolate *iso, XrValue self, XrValue *args, int argc) {
+    (void) iso;
+    if (argc < 1)
+        return XR_FALSE_VAL;
     int tlen = 0;
     const char *text = value_text(args[0], &tlen);
-    if (!text) return XR_FALSE_VAL;
+    if (!text)
+        return XR_FALSE_VAL;
     return xr_regex_test(re_self(self), text, tlen) ? XR_TRUE_VAL : XR_FALSE_VAL;
 }
 
 // regex.find(text [, offset]) -> Json|null
-static XrValue m_find(XrayIsolate *iso, XrValue self,
-                      XrValue *args, int argc) {
-    if (argc < 1) return xr_null();
+static XrValue m_find(XrayIsolate *iso, XrValue self, XrValue *args, int argc) {
+    if (argc < 1)
+        return xr_null();
     int tlen = 0;
     const char *text = value_text(args[0], &tlen);
-    if (!text) return xr_null();
+    if (!text)
+        return xr_null();
     int offset = 0;
     if (argc >= 2 && XR_IS_INT(args[1])) {
-        offset = (int)XR_TO_INT(args[1]);
+        offset = (int) XR_TO_INT(args[1]);
     }
     XrMatch match;
     if (!xr_regex_match_at(re_self(self), text, tlen, offset, &match)) {
@@ -79,16 +81,17 @@ static XrValue m_find(XrayIsolate *iso, XrValue self,
 }
 
 // regex.findAll(text [, limit]) -> Array<Json>
-static XrValue m_find_all(XrayIsolate *iso, XrValue self,
-                          XrValue *args, int argc) {
+static XrValue m_find_all(XrayIsolate *iso, XrValue self, XrValue *args, int argc) {
     XrArray *out = xr_array_new(xr_current_coro(iso));
-    if (argc < 1) return xr_value_from_array(out);
+    if (argc < 1)
+        return xr_value_from_array(out);
     int tlen = 0;
     const char *text = value_text(args[0], &tlen);
-    if (!text) return xr_value_from_array(out);
+    if (!text)
+        return xr_value_from_array(out);
     int limit = -1;
     if (argc >= 2 && XR_IS_INT(args[1])) {
-        limit = (int)XR_TO_INT(args[1]);
+        limit = (int) XR_TO_INT(args[1]);
     }
     int count = 0;
     XrMatch *matches = xr_regex_find_all(re_self(self), text, tlen, limit, &count);
@@ -101,20 +104,22 @@ static XrValue m_find_all(XrayIsolate *iso, XrValue self,
     return xr_value_from_array(out);
 }
 
-static XrValue regex_replace_common(XrayIsolate *iso, XrValue self,
-                                    XrValue *args, int argc, bool replace_all) {
-    if (argc < 2) return self;  // nothing to replace, return receiver
+static XrValue regex_replace_common(XrayIsolate *iso, XrValue self, XrValue *args, int argc,
+                                    bool replace_all) {
+    if (argc < 2)
+        return self;  // nothing to replace, return receiver
     int tlen = 0;
     const char *text = value_text(args[0], &tlen);
-    if (!text) return self;
-    if (!XR_IS_STRING(args[1])) return self;
+    if (!text)
+        return self;
+    if (!XR_IS_STRING(args[1]))
+        return self;
     const char *repl = XR_TO_STRING(args[1])->data;
 
-    char *out = xr_regex_replace_alloc(re_self(self), text, tlen,
-                                        repl, replace_all);
+    char *out = xr_regex_replace_alloc(re_self(self), text, tlen, repl, replace_all);
     if (!out) {
         // No matches -> engine returned NULL; emit original text.
-        return xr_string_value(xr_string_intern(iso, text, (size_t)tlen, 0));
+        return xr_string_value(xr_string_intern(iso, text, (size_t) tlen, 0));
     }
     XrString *result = xr_string_intern(iso, out, strlen(out), 0);
     xr_free_raw(out);
@@ -122,41 +127,38 @@ static XrValue regex_replace_common(XrayIsolate *iso, XrValue self,
 }
 
 // regex.replace(text, repl) -> string
-static XrValue m_replace(XrayIsolate *iso, XrValue self,
-                         XrValue *args, int argc) {
+static XrValue m_replace(XrayIsolate *iso, XrValue self, XrValue *args, int argc) {
     return regex_replace_common(iso, self, args, argc, false);
 }
 
 // regex.replaceAll(text, repl) -> string
-static XrValue m_replace_all(XrayIsolate *iso, XrValue self,
-                             XrValue *args, int argc) {
+static XrValue m_replace_all(XrayIsolate *iso, XrValue self, XrValue *args, int argc) {
     return regex_replace_common(iso, self, args, argc, true);
 }
 
 // regex.split(text [, limit]) -> Array<string>
-static XrValue m_split(XrayIsolate *iso, XrValue self,
-                       XrValue *args, int argc) {
+static XrValue m_split(XrayIsolate *iso, XrValue self, XrValue *args, int argc) {
     XrArray *out = xr_array_new(xr_current_coro(iso));
-    if (argc < 1) return xr_value_from_array(out);
+    if (argc < 1)
+        return xr_value_from_array(out);
     int tlen = 0;
     const char *text = value_text(args[0], &tlen);
-    if (!text) return xr_value_from_array(out);
+    if (!text)
+        return xr_value_from_array(out);
 
     int limit = -1;
     if (argc >= 2 && XR_IS_INT(args[1])) {
-        limit = (int)XR_TO_INT(args[1]);
+        limit = (int) XR_TO_INT(args[1]);
     }
 
     int max_parts = (limit > 0 ? limit : tlen + 1);
-    XrSplitPart *parts = (XrSplitPart *)xr_malloc(
-        (size_t)max_parts * sizeof(XrSplitPart));
-    if (!parts) return xr_value_from_array(out);
+    XrSplitPart *parts = (XrSplitPart *) xr_malloc((size_t) max_parts * sizeof(XrSplitPart));
+    if (!parts)
+        return xr_value_from_array(out);
 
-    int n = xr_regex_split(re_self(self), text, tlen,
-                           parts, max_parts, limit);
+    int n = xr_regex_split(re_self(self), text, tlen, parts, max_parts, limit);
     for (int i = 0; i < n; i++) {
-        XrString *piece = xr_string_intern(iso, parts[i].str,
-                                           (size_t)parts[i].len, 0);
+        XrString *piece = xr_string_intern(iso, parts[i].str, (size_t) parts[i].len, 0);
         xr_array_push(out, xr_string_value(piece));
     }
     xr_free(parts);
@@ -164,11 +166,12 @@ static XrValue m_split(XrayIsolate *iso, XrValue self,
 }
 
 // regex.pattern -> string (the source pattern that compiled this regex)
-static XrValue m_pattern(XrayIsolate *iso, XrValue self,
-                         XrValue *args, int argc) {
-    (void)args; (void)argc;
+static XrValue m_pattern(XrayIsolate *iso, XrValue self, XrValue *args, int argc) {
+    (void) args;
+    (void) argc;
     const char *pat = xr_regex_pattern(re_self(self));
-    if (!pat) return xr_null();
+    if (!pat)
+        return xr_null();
     return xr_string_value(xr_string_intern(iso, pat, strlen(pat), 0));
 }
 
@@ -177,13 +180,13 @@ static XrValue m_pattern(XrayIsolate *iso, XrValue self,
 #define MAY_THROW XR_METHOD_FLAG_MAY_THROW
 
 const XrMethodSlot xr_regex_method_table[SYMBOL_BUILTIN_COUNT] = {
-    [SYMBOL_TEST]       = { m_test,        1, 1, XR_METHOD_FLAG_PURE },
-    [SYMBOL_FIND]       = { m_find,        1, 2, MAY_THROW },
-    [SYMBOL_FINDALL]    = { m_find_all,    1, 2, MAY_THROW },
-    [SYMBOL_REPLACE]    = { m_replace,     2, 2, MAY_THROW },
-    [SYMBOL_REPLACEALL] = { m_replace_all, 2, 2, MAY_THROW },
-    [SYMBOL_SPLIT]      = { m_split,       1, 2, MAY_THROW },
-    [SYMBOL_PATTERN]    = { m_pattern,     0, 0, XR_METHOD_FLAG_PURE },
+    [SYMBOL_TEST] = {m_test, 1, 1, XR_METHOD_FLAG_PURE},
+    [SYMBOL_FIND] = {m_find, 1, 2, MAY_THROW},
+    [SYMBOL_FINDALL] = {m_find_all, 1, 2, MAY_THROW},
+    [SYMBOL_REPLACE] = {m_replace, 2, 2, MAY_THROW},
+    [SYMBOL_REPLACEALL] = {m_replace_all, 2, 2, MAY_THROW},
+    [SYMBOL_SPLIT] = {m_split, 1, 2, MAY_THROW},
+    [SYMBOL_PATTERN] = {m_pattern, 0, 0, XR_METHOD_FLAG_PURE},
 };
 
 #undef MAY_THROW

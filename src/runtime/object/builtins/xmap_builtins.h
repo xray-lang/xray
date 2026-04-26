@@ -22,6 +22,6 @@ XR_FUNC XrValue xr_builtin_map_from(XrayIsolate *isolate, XrValue *args, int nar
 
 // Class creation (using XrClassBuilder)
 // Forward declarations via xforward_decl.h
-XR_FUNC XrClass* xr_map_create_class(XrayIsolate *X, XrClass *objectClass);
+XR_FUNC XrClass *xr_map_create_class(XrayIsolate *X, XrClass *objectClass);
 
-#endif // XMAP_BUILTINS_H
+#endif  // XMAP_BUILTINS_H

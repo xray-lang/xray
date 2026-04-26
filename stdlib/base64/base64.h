@@ -21,16 +21,16 @@
 /* ========== C-level API ========== */
 
 // Encode data to standard Base64 (caller must free with xr_free)
-char* xr_base64_encode(const unsigned char *data, size_t len, size_t *out_len);
+char *xr_base64_encode(const unsigned char *data, size_t len, size_t *out_len);
 
 // URL-safe Base64 encoding (+ -> -, / -> _, no padding; caller must free with xr_free)
-char* xr_base64_encode_url(const unsigned char *data, size_t len, size_t *out_len);
+char *xr_base64_encode_url(const unsigned char *data, size_t len, size_t *out_len);
 
 // Decode standard Base64 to binary data (caller must free with xr_free)
-unsigned char* xr_base64_decode(const char *data, size_t len, size_t *out_len);
+unsigned char *xr_base64_decode(const char *data, size_t len, size_t *out_len);
 
 // Decode URL-safe Base64 to binary data (caller must free with xr_free)
-unsigned char* xr_base64_decode_url(const char *data, size_t len, size_t *out_len);
+unsigned char *xr_base64_decode_url(const char *data, size_t len, size_t *out_len);
 
 // Validate Base64 string (checks characters and length)
 bool xr_base64_is_valid(const char *data, size_t len);
@@ -55,6 +55,6 @@ bool xr_base64_is_valid(const char *data, size_t len);
  *   - decodeToBytes(str)    Decode Base64 to Array<uint8>
  *   - isValid(str)          Check if string is valid Base64
  */
-XrModule* xr_load_module_base64(XrayIsolate *isolate);
+XrModule *xr_load_module_base64(XrayIsolate *isolate);
 
 #endif

@@ -17,17 +17,19 @@
 
 // Helper: extract string value from literal node
 static const char *get_string_literal(AstNode *node) {
-    if (!node || node->type != AST_LITERAL_STRING) return NULL;
+    if (!node || node->type != AST_LITERAL_STRING)
+        return NULL;
     return node->as.literal.raw_value.string_val;
 }
 
 // Apply type narrowing based on condition expression
 // Analyzes common patterns: x != null, x == null, typeof x == "type", truthiness
-static XrType *apply_condition_narrowing(XrAstNode *expr, const char *var_name,
-                                          XrType *base_type, bool assume_true) {
-    if (!expr || !var_name || !base_type) return base_type;
+static XrType *apply_condition_narrowing(XrAstNode *expr, const char *var_name, XrType *base_type,
+                                         bool assume_true) {
+    if (!expr || !var_name || !base_type)
+        return base_type;
 
-    AstNode *node = (AstNode *)expr;
+    AstNode *node = (AstNode *) expr;
     AstNodeType type = node->type;
 
     // Pattern: x (truthiness check - variable used directly as condition)
@@ -41,8 +43,8 @@ static XrType *apply_condition_narrowing(XrAstNode *expr, const char *var_name,
     // Pattern: !x (negated truthiness)
     if (type == AST_UNARY_NOT) {
         AstNode *operand = node->as.unary.operand;
-        if (operand && operand->type == AST_VARIABLE &&
-            operand->as.variable.name && strcmp(operand->as.variable.name, var_name) == 0) {
+        if (operand && operand->type == AST_VARIABLE && operand->as.variable.name &&
+            strcmp(operand->as.variable.name, var_name) == 0) {
             return xa_narrow_by_truthiness(base_type, !assume_true);
         }
         return base_type;
@@ -50,18 +52,18 @@ static XrType *apply_condition_narrowing(XrAstNode *expr, const char *var_name,
 
     // Pattern: x == null, x != null, x === null, x !== null
     // Pattern: typeof x == "type", typeof x === "type"
-    if (type == AST_BINARY_EQ || type == AST_BINARY_NE ||
-        type == AST_BINARY_EQ_STRICT || type == AST_BINARY_NE_STRICT) {
+    if (type == AST_BINARY_EQ || type == AST_BINARY_NE || type == AST_BINARY_EQ_STRICT ||
+        type == AST_BINARY_NE_STRICT) {
         AstNode *left = node->as.binary.left;
         AstNode *right = node->as.binary.right;
 
         bool is_equal = (type == AST_BINARY_EQ || type == AST_BINARY_EQ_STRICT);
 
         // Check if comparing variable to null
-        bool var_on_left = (left && left->type == AST_VARIABLE &&
-                           left->as.variable.name && strcmp(left->as.variable.name, var_name) == 0);
-        bool var_on_right = (right && right->type == AST_VARIABLE &&
-                            right->as.variable.name && strcmp(right->as.variable.name, var_name) == 0);
+        bool var_on_left = (left && left->type == AST_VARIABLE && left->as.variable.name &&
+                            strcmp(left->as.variable.name, var_name) == 0);
+        bool var_on_right = (right && right->type == AST_VARIABLE && right->as.variable.name &&
+                             strcmp(right->as.variable.name, var_name) == 0);
         bool null_on_left = (left && left->type == AST_LITERAL_NULL);
         bool null_on_right = (right && right->type == AST_LITERAL_NULL);
 
@@ -75,8 +77,8 @@ static XrType *apply_condition_narrowing(XrAstNode *expr, const char *var_name,
         const char *type_name = NULL;
 
         // Check left side for typeof(x) call
-        if (left && left->type == AST_CALL_EXPR &&
-            left->as.call_expr.callee && left->as.call_expr.callee->type == AST_VARIABLE &&
+        if (left && left->type == AST_CALL_EXPR && left->as.call_expr.callee &&
+            left->as.call_expr.callee->type == AST_VARIABLE &&
             left->as.call_expr.callee->as.variable.name &&
             strcmp(left->as.call_expr.callee->as.variable.name, "typeof") == 0 &&
             left->as.call_expr.arg_count == 1) {
@@ -84,8 +86,8 @@ static XrType *apply_condition_narrowing(XrAstNode *expr, const char *var_name,
             type_name = get_string_literal(right);
         }
         // Check right side for typeof(x) call
-        else if (right && right->type == AST_CALL_EXPR &&
-                 right->as.call_expr.callee && right->as.call_expr.callee->type == AST_VARIABLE &&
+        else if (right && right->type == AST_CALL_EXPR && right->as.call_expr.callee &&
+                 right->as.call_expr.callee->type == AST_VARIABLE &&
                  right->as.call_expr.callee->as.variable.name &&
                  strcmp(right->as.call_expr.callee->as.variable.name, "typeof") == 0 &&
                  right->as.call_expr.arg_count == 1) {
@@ -93,8 +95,7 @@ static XrType *apply_condition_narrowing(XrAstNode *expr, const char *var_name,
             type_name = get_string_literal(left);
         }
 
-        if (typeof_operand && type_name &&
-            typeof_operand->type == AST_VARIABLE &&
+        if (typeof_operand && type_name && typeof_operand->type == AST_VARIABLE &&
             typeof_operand->as.variable.name &&
             strcmp(typeof_operand->as.variable.name, var_name) == 0) {
             // typeof(x) == "type" with assume_true => narrow to type
@@ -109,10 +110,10 @@ static XrType *apply_condition_narrowing(XrAstNode *expr, const char *var_name,
     // false branch: at least one is false (cannot narrow safely)
     if (type == AST_BINARY_AND) {
         if (assume_true) {
-            XrType *narrowed = apply_condition_narrowing(
-                (XrAstNode *)node->as.binary.left, var_name, base_type, true);
-            return apply_condition_narrowing(
-                (XrAstNode *)node->as.binary.right, var_name, narrowed, true);
+            XrType *narrowed = apply_condition_narrowing((XrAstNode *) node->as.binary.left,
+                                                         var_name, base_type, true);
+            return apply_condition_narrowing((XrAstNode *) node->as.binary.right, var_name,
+                                             narrowed, true);
         }
         return base_type;
     }
@@ -122,10 +123,10 @@ static XrType *apply_condition_narrowing(XrAstNode *expr, const char *var_name,
     // true branch: at least one is true (cannot narrow safely)
     if (type == AST_BINARY_OR) {
         if (!assume_true) {
-            XrType *narrowed = apply_condition_narrowing(
-                (XrAstNode *)node->as.binary.left, var_name, base_type, false);
-            return apply_condition_narrowing(
-                (XrAstNode *)node->as.binary.right, var_name, narrowed, false);
+            XrType *narrowed = apply_condition_narrowing((XrAstNode *) node->as.binary.left,
+                                                         var_name, base_type, false);
+            return apply_condition_narrowing((XrAstNode *) node->as.binary.right, var_name,
+                                             narrowed, false);
         }
         return base_type;
     }
@@ -135,8 +136,7 @@ static XrType *apply_condition_narrowing(XrAstNode *expr, const char *var_name,
         IsExprNode *is_expr = &node->as.is_expr;
         if (is_expr->expr && is_expr->expr->type == AST_VARIABLE &&
             is_expr->expr->as.variable.name &&
-            strcmp(is_expr->expr->as.variable.name, var_name) == 0 &&
-            is_expr->type) {
+            strcmp(is_expr->expr->as.variable.name, var_name) == 0 && is_expr->type) {
             // Extract class name from the type
             const char *class_name = NULL;
             if (XR_TYPE_IS_INSTANCE(is_expr->type) && is_expr->type->instance.class_name) {
@@ -162,7 +162,8 @@ static XrType *apply_condition_narrowing(XrAstNode *expr, const char *var_name,
 static XaFlowNode *flow_node_alloc(XaFlowBuilder *builder, uint32_t flags) {
     XR_DCHECK(builder != NULL, "flow_node_alloc: NULL builder");
     XaFlowNode *node = xr_calloc(1, sizeof(XaFlowNode));
-    if (!node) return NULL;
+    if (!node)
+        return NULL;
 
     node->flags = flags;
     node->id = builder->next_id++;
@@ -170,8 +171,7 @@ static XaFlowNode *flow_node_alloc(XaFlowBuilder *builder, uint32_t flags) {
     // Track all nodes for cleanup
     if (builder->node_count >= builder->node_capacity) {
         int new_cap = builder->node_capacity == 0 ? 64 : builder->node_capacity * 2;
-        XR_REALLOC_OR_ABORT(builder->all_nodes,
-                            sizeof(XaFlowNode*) * (size_t)new_cap,
+        XR_REALLOC_OR_ABORT(builder->all_nodes, sizeof(XaFlowNode *) * (size_t) new_cap,
                             "flow all_nodes grow");
         builder->node_capacity = new_cap;
     }
@@ -183,7 +183,8 @@ static XaFlowNode *flow_node_alloc(XaFlowBuilder *builder, uint32_t flags) {
 // Create flow builder
 XaFlowBuilder *xa_flow_builder_new(void) {
     XaFlowBuilder *builder = xr_calloc(1, sizeof(XaFlowBuilder));
-    if (!builder) return NULL;
+    if (!builder)
+        return NULL;
 
     builder->next_id = 1;
     builder->unreachable_flow = flow_node_alloc(builder, XA_FLOW_UNREACHABLE);
@@ -194,15 +195,18 @@ XaFlowBuilder *xa_flow_builder_new(void) {
 
 // Free flow builder
 void xa_flow_builder_free(XaFlowBuilder *builder) {
-    if (!builder) return;
+    if (!builder)
+        return;
 
     // Free all nodes
     for (int i = 0; i < builder->node_count; i++) {
         XaFlowNode *node = builder->all_nodes[i];
-        if (node->antecedents) xr_free(node->antecedents);
+        if (node->antecedents)
+            xr_free(node->antecedents);
         xr_free(node);
     }
-    if (builder->all_nodes) xr_free(builder->all_nodes);
+    if (builder->all_nodes)
+        xr_free(builder->all_nodes);
 
     xr_free(builder);
 }
@@ -225,8 +229,8 @@ XaFlowNode *xa_flow_create_loop_label(XaFlowBuilder *builder) {
 }
 
 // Create assignment node
-XaFlowNode *xa_flow_create_assignment(XaFlowBuilder *builder, XrAstNode *node,
-                                       const char *name, XrType *type) {
+XaFlowNode *xa_flow_create_assignment(XaFlowBuilder *builder, XrAstNode *node, const char *name,
+                                      XrType *type) {
     if (builder->current_flow->flags & XA_FLOW_UNREACHABLE) {
         return builder->current_flow;
     }
@@ -244,8 +248,7 @@ XaFlowNode *xa_flow_create_assignment(XaFlowBuilder *builder, XrAstNode *node,
 }
 
 // Create condition node
-XaFlowNode *xa_flow_create_condition(XaFlowBuilder *builder, XrAstNode *expr,
-                                      bool is_true_branch) {
+XaFlowNode *xa_flow_create_condition(XaFlowBuilder *builder, XrAstNode *expr, bool is_true_branch) {
     if (builder->current_flow->flags & XA_FLOW_UNREACHABLE) {
         return builder->current_flow;
     }
@@ -277,19 +280,21 @@ XaFlowNode *xa_flow_create_call(XaFlowBuilder *builder, XrAstNode *call) {
 
 // Add antecedent to a node
 void xa_flow_add_antecedent(XaFlowNode *node, XaFlowNode *antecedent) {
-    if (!node || !antecedent) return;
-    if (antecedent->flags & XA_FLOW_UNREACHABLE) return;
+    if (!node || !antecedent)
+        return;
+    if (antecedent->flags & XA_FLOW_UNREACHABLE)
+        return;
 
     // Check if already present
     for (int i = 0; i < node->antecedent_count; i++) {
-        if (node->antecedents[i] == antecedent) return;
+        if (node->antecedents[i] == antecedent)
+            return;
     }
 
     // Add to array
     if (node->antecedent_count >= node->antecedent_capacity) {
         int new_cap = node->antecedent_capacity == 0 ? 4 : node->antecedent_capacity * 2;
-        XR_REALLOC_OR_ABORT(node->antecedents,
-                            sizeof(XaFlowNode*) * (size_t)new_cap,
+        XR_REALLOC_OR_ABORT(node->antecedents, sizeof(XaFlowNode *) * (size_t) new_cap,
                             "flow antecedents grow");
         node->antecedent_capacity = new_cap;
     }
@@ -305,7 +310,8 @@ void xa_flow_add_antecedent(XaFlowNode *node, XaFlowNode *antecedent) {
 
 // Finish a label node
 XaFlowNode *xa_flow_finish_label(XaFlowBuilder *builder, XaFlowNode *label) {
-    if (!label) return builder->unreachable_flow;
+    if (!label)
+        return builder->unreachable_flow;
 
     // If no antecedents, unreachable
     if (label->antecedent_count == 0) {
@@ -322,7 +328,8 @@ XaFlowNode *xa_flow_finish_label(XaFlowBuilder *builder, XaFlowNode *label) {
 
 // Set current flow
 void xa_flow_set_current(XaFlowBuilder *builder, XaFlowNode *flow) {
-    if (builder) builder->current_flow = flow ? flow : builder->unreachable_flow;
+    if (builder)
+        builder->current_flow = flow ? flow : builder->unreachable_flow;
 }
 
 // Get current flow
@@ -338,37 +345,45 @@ bool xa_flow_is_unreachable(XaFlowBuilder *builder) {
 // Create flow cache (open-addressing hash, power-of-2 capacity)
 XaFlowCache *xa_flow_cache_new(void) {
     XaFlowCache *cache = xr_calloc(1, sizeof(XaFlowCache));
-    if (!cache) return NULL;
+    if (!cache)
+        return NULL;
     cache->capacity = 64;
     cache->ids = xr_calloc(cache->capacity, sizeof(uint32_t));
-    cache->types = xr_calloc(cache->capacity, sizeof(XrType*));
+    cache->types = xr_calloc(cache->capacity, sizeof(XrType *));
     return cache;
 }
 
 // Free flow cache
 void xa_flow_cache_free(XaFlowCache *cache) {
-    if (!cache) return;
-    if (cache->ids) xr_free(cache->ids);
-    if (cache->types) xr_free(cache->types);
+    if (!cache)
+        return;
+    if (cache->ids)
+        xr_free(cache->ids);
+    if (cache->types)
+        xr_free(cache->types);
     xr_free(cache);
 }
 
 // Clear flow cache
 void xa_flow_cache_clear(XaFlowCache *cache) {
-    if (!cache) return;
+    if (!cache)
+        return;
     memset(cache->ids, 0, sizeof(uint32_t) * cache->capacity);
     cache->count = 0;
 }
 
 // Get from cache (open-addressing probe with node->id as key)
 XrType *xa_flow_cache_get(XaFlowCache *cache, XaFlowNode *node) {
-    if (!cache || !node || node->id == 0) return NULL;
-    uint32_t mask = (uint32_t)(cache->capacity - 1);
+    if (!cache || !node || node->id == 0)
+        return NULL;
+    uint32_t mask = (uint32_t) (cache->capacity - 1);
     uint32_t idx = node->id & mask;
     for (int probe = 0; probe < cache->capacity; probe++) {
         uint32_t slot = (idx + probe) & mask;
-        if (cache->ids[slot] == 0) return NULL;
-        if (cache->ids[slot] == node->id) return cache->types[slot];
+        if (cache->ids[slot] == 0)
+            return NULL;
+        if (cache->ids[slot] == node->id)
+            return cache->types[slot];
     }
     return NULL;
 }
@@ -381,14 +396,16 @@ static void flow_cache_rehash(XaFlowCache *cache) {
 
     cache->capacity = old_cap * 2;
     cache->ids = xr_calloc(cache->capacity, sizeof(uint32_t));
-    cache->types = xr_calloc(cache->capacity, sizeof(XrType*));
+    cache->types = xr_calloc(cache->capacity, sizeof(XrType *));
     cache->count = 0;
 
-    uint32_t mask = (uint32_t)(cache->capacity - 1);
+    uint32_t mask = (uint32_t) (cache->capacity - 1);
     for (int i = 0; i < old_cap; i++) {
-        if (old_ids[i] == 0) continue;
+        if (old_ids[i] == 0)
+            continue;
         uint32_t idx = old_ids[i] & mask;
-        while (cache->ids[idx] != 0) idx = (idx + 1) & mask;
+        while (cache->ids[idx] != 0)
+            idx = (idx + 1) & mask;
         cache->ids[idx] = old_ids[i];
         cache->types[idx] = old_types[i];
         cache->count++;
@@ -400,14 +417,15 @@ static void flow_cache_rehash(XaFlowCache *cache) {
 
 // Set in cache
 void xa_flow_cache_set(XaFlowCache *cache, XaFlowNode *node, XrType *type) {
-    if (!cache || !node || node->id == 0) return;
+    if (!cache || !node || node->id == 0)
+        return;
 
     // Rehash at 70% load
     if (cache->count * 10 >= cache->capacity * 7) {
         flow_cache_rehash(cache);
     }
 
-    uint32_t mask = (uint32_t)(cache->capacity - 1);
+    uint32_t mask = (uint32_t) (cache->capacity - 1);
     uint32_t idx = node->id & mask;
     for (;;) {
         if (cache->ids[idx] == 0) {
@@ -425,12 +443,9 @@ void xa_flow_cache_set(XaFlowCache *cache, XaFlowNode *node, XrType *type) {
 }
 
 // Get type at a flow node (core narrowing algorithm)
-static XrType *get_type_at_flow_node(XaFlowBuilder *builder,
-                                      const char *name,
-                                      XrType *declared_type,
-                                      XaFlowNode *flow,
-                                      XaFlowCache *cache,
-                                      int depth) {
+static XrType *get_type_at_flow_node(XaFlowBuilder *builder, const char *name,
+                                     XrType *declared_type, XaFlowNode *flow, XaFlowCache *cache,
+                                     int depth) {
     // Depth limit to prevent stack overflow
     if (depth > 100) {
         return declared_type;
@@ -443,7 +458,8 @@ static XrType *get_type_at_flow_node(XaFlowBuilder *builder,
     // Check cache for shared nodes
     if (flow->flags & XA_FLOW_SHARED) {
         XrType *cached = xa_flow_cache_get(cache, flow);
-        if (cached) return cached;
+        if (cached)
+            return cached;
     }
 
     XrType *result = NULL;
@@ -456,42 +472,39 @@ static XrType *get_type_at_flow_node(XaFlowBuilder *builder,
         } else {
             // Continue to antecedent
             if (flow->antecedent_count > 0) {
-                result = get_type_at_flow_node(builder, name, declared_type,
-                                               flow->antecedents[0], cache, depth + 1);
+                result = get_type_at_flow_node(builder, name, declared_type, flow->antecedents[0],
+                                               cache, depth + 1);
             } else {
                 result = declared_type;
             }
         }
-    }
-    else if (flow->flags & XA_FLOW_TRUE_CONDITION) {
+    } else if (flow->flags & XA_FLOW_TRUE_CONDITION) {
         // Narrow type based on condition being true
         if (flow->antecedent_count > 0) {
-            XrType *base = get_type_at_flow_node(builder, name, declared_type,
-                                                  flow->antecedents[0], cache, depth + 1);
+            XrType *base = get_type_at_flow_node(builder, name, declared_type, flow->antecedents[0],
+                                                 cache, depth + 1);
             // Apply narrowing based on condition expression
             result = apply_condition_narrowing(flow->condition_expr, name, base, true);
         } else {
             result = declared_type;
         }
-    }
-    else if (flow->flags & XA_FLOW_FALSE_CONDITION) {
+    } else if (flow->flags & XA_FLOW_FALSE_CONDITION) {
         // Narrow type based on condition being false
         if (flow->antecedent_count > 0) {
-            XrType *base = get_type_at_flow_node(builder, name, declared_type,
-                                                  flow->antecedents[0], cache, depth + 1);
+            XrType *base = get_type_at_flow_node(builder, name, declared_type, flow->antecedents[0],
+                                                 cache, depth + 1);
             // Apply narrowing based on condition expression
             result = apply_condition_narrowing(flow->condition_expr, name, base, false);
         } else {
             result = declared_type;
         }
-    }
-    else if (flow->flags & XA_FLOW_BRANCH_LABEL) {
+    } else if (flow->flags & XA_FLOW_BRANCH_LABEL) {
         // Branch merge: union of all antecedent types
         if (flow->antecedent_count == 0) {
             result = xr_type_new_never(NULL);
         } else if (flow->antecedent_count == 1) {
-            result = get_type_at_flow_node(builder, name, declared_type,
-                                           flow->antecedents[0], cache, depth + 1);
+            result = get_type_at_flow_node(builder, name, declared_type, flow->antecedents[0],
+                                           cache, depth + 1);
         } else {
             // Compute union of all paths
             XrType *union_type = NULL;
@@ -502,15 +515,14 @@ static XrType *get_type_at_flow_node(XaFlowBuilder *builder,
             }
             result = union_type;
         }
-    }
-    else if (flow->flags & XA_FLOW_LOOP_LABEL) {
+    } else if (flow->flags & XA_FLOW_LOOP_LABEL) {
         // Loop: union of all antecedents (entry path + back-edges).
         // Same logic as BRANCH_LABEL — loop body may assign different types.
         if (flow->antecedent_count == 0) {
             result = declared_type;
         } else if (flow->antecedent_count == 1) {
-            result = get_type_at_flow_node(builder, name, declared_type,
-                                           flow->antecedents[0], cache, depth + 1);
+            result = get_type_at_flow_node(builder, name, declared_type, flow->antecedents[0],
+                                           cache, depth + 1);
         } else {
             XrType *union_type = NULL;
             for (int i = 0; i < flow->antecedent_count; i++) {
@@ -520,16 +532,14 @@ static XrType *get_type_at_flow_node(XaFlowBuilder *builder,
             }
             result = union_type;
         }
-    }
-    else if (flow->flags & XA_FLOW_START) {
+    } else if (flow->flags & XA_FLOW_START) {
         // Function start: use declared type
         result = declared_type;
-    }
-    else {
+    } else {
         // Default: follow antecedent
         if (flow->antecedent_count > 0) {
-            result = get_type_at_flow_node(builder, name, declared_type,
-                                           flow->antecedents[0], cache, depth + 1);
+            result = get_type_at_flow_node(builder, name, declared_type, flow->antecedents[0],
+                                           cache, depth + 1);
         } else {
             result = declared_type;
         }
@@ -544,11 +554,9 @@ static XrType *get_type_at_flow_node(XaFlowBuilder *builder,
 }
 
 // Public API: Get narrowed type
-XrType *xa_flow_get_type_of_reference(XaFlowBuilder *builder,
-                                       const char *name,
-                                       XrType *declared_type,
-                                       XaFlowNode *flow_node,
-                                       XaFlowCache *cache) {
+XrType *xa_flow_get_type_of_reference(XaFlowBuilder *builder, const char *name,
+                                      XrType *declared_type, XaFlowNode *flow_node,
+                                      XaFlowCache *cache) {
     if (!builder || !name || !declared_type) {
         return declared_type;
     }
@@ -566,13 +574,15 @@ XrType *xa_flow_get_type_of_reference(XaFlowBuilder *builder,
 
 // Narrow by typeof
 XrType *xa_narrow_by_typeof(XrType *type, const char *type_name, bool assume_true) {
-    if (!type || !type_name) return type;
+    if (!type || !type_name)
+        return type;
 
     // Use -1 as sentinel since XR_KIND_INT == 0
     int target_kind = -1;
     if (strcmp(type_name, TYPE_NAME_INT64) == 0 || strcmp(type_name, TYPE_NAME_INT) == 0) {
         target_kind = XR_KIND_INT;
-    } else if (strcmp(type_name, TYPE_NAME_FLOAT64) == 0 || strcmp(type_name, TYPE_NAME_FLOAT) == 0) {
+    } else if (strcmp(type_name, TYPE_NAME_FLOAT64) == 0 ||
+               strcmp(type_name, TYPE_NAME_FLOAT) == 0) {
         target_kind = XR_KIND_FLOAT;
     } else if (strcmp(type_name, TYPE_NAME_STRING) == 0) {
         target_kind = XR_KIND_STRING;
@@ -588,18 +598,20 @@ XrType *xa_narrow_by_typeof(XrType *type, const char *type_name, bool assume_tru
         target_kind = XR_KIND_NULL;
     }
 
-    if (target_kind < 0) return type;
+    if (target_kind < 0)
+        return type;
 
     if (assume_true) {
-        return xr_type_filter(NULL, type, (XrTypeKind)target_kind);
+        return xr_type_filter(NULL, type, (XrTypeKind) target_kind);
     } else {
-        return xr_type_exclude(NULL, type, (XrTypeKind)target_kind);
+        return xr_type_exclude(NULL, type, (XrTypeKind) target_kind);
     }
 }
 
 // Narrow by null check
 XrType *xa_narrow_by_null_check(XrType *type, bool is_equal_null, bool assume_true) {
-    if (!type) return type;
+    if (!type)
+        return type;
 
     // x == null && assumeTrue  => x is null
     // x == null && !assumeTrue => x is non-null
@@ -617,7 +629,8 @@ XrType *xa_narrow_by_null_check(XrType *type, bool is_equal_null, bool assume_tr
 
 // Narrow by truthiness
 XrType *xa_narrow_by_truthiness(XrType *type, bool assume_true) {
-    if (!type) return type;
+    if (!type)
+        return type;
 
     if (assume_true) {
         // Truthy: exclude null, undefined
@@ -637,7 +650,8 @@ static bool type_is_class_instance(XrType *t, const char *class_name) {
 
 // Narrow by instanceof
 XrType *xa_narrow_by_instanceof(XrType *type, const char *class_name, bool assume_true) {
-    if (!type || !class_name) return type;
+    if (!type || !class_name)
+        return type;
 
     if (assume_true) {
         // x instanceof ClassName is true => x is ClassName instance
@@ -660,8 +674,10 @@ XrType *xa_narrow_by_instanceof(XrType *type, const char *class_name, bool assum
                     remaining[count++] = m;
                 }
             }
-            if (count == 0) return xr_type_new_never(NULL);
-            if (count == 1) return remaining[0];
+            if (count == 0)
+                return xr_type_new_never(NULL);
+            if (count == 1)
+                return remaining[0];
             XrType *result = xr_type_new_union(NULL, remaining, count);
             return result ? result : type;
         }
@@ -679,10 +695,12 @@ XrType *xa_narrow_by_instanceof(XrType *type, const char *class_name, bool assum
 // ============================================================================
 
 XaFlowNode *xa_flow_create_move(XaFlowBuilder *builder, const char *name) {
-    if (!builder || !name) return NULL;
+    if (!builder || !name)
+        return NULL;
 
     XaFlowNode *node = flow_node_alloc(builder, XA_FLOW_MOVE);
-    if (!node) return NULL;
+    if (!node)
+        return NULL;
 
     node->assigned_name = name;
 
@@ -696,7 +714,8 @@ XaFlowNode *xa_flow_create_move(XaFlowBuilder *builder, const char *name) {
 // Recursive helper: check if variable is moved at a given flow node
 // Returns: 1 = definitely moved, 0 = not moved, -1 = maybe moved (some paths moved)
 static int flow_is_moved_at(const char *name, XaFlowNode *node, int depth) {
-    if (!node || depth > 64) return 0;
+    if (!node || depth > 64)
+        return 0;
 
     // Moved: variable was moved on this path
     if ((node->flags & XA_FLOW_MOVE) && node->assigned_name &&
@@ -711,9 +730,11 @@ static int flow_is_moved_at(const char *name, XaFlowNode *node, int depth) {
     }
 
     // Start node: variable was never moved
-    if (node->flags & XA_FLOW_START) return 0;
+    if (node->flags & XA_FLOW_START)
+        return 0;
 
-    if (node->antecedent_count == 0) return 0;
+    if (node->antecedent_count == 0)
+        return 0;
 
     if (node->antecedent_count == 1) {
         return flow_is_moved_at(name, node->antecedents[0], depth + 1);
@@ -724,17 +745,22 @@ static int flow_is_moved_at(const char *name, XaFlowNode *node, int depth) {
     int any_moved = 0;
     for (int i = 0; i < node->antecedent_count; i++) {
         int r = flow_is_moved_at(name, node->antecedents[i], depth + 1);
-        if (r == 0) all_moved = 0;
-        if (r != 0) any_moved = 1;
+        if (r == 0)
+            all_moved = 0;
+        if (r != 0)
+            any_moved = 1;
     }
-    if (all_moved) return 1;
-    if (any_moved) return -1;  // maybe moved
+    if (all_moved)
+        return 1;
+    if (any_moved)
+        return -1;  // maybe moved
     return 0;
 }
 
 // Check if variable is moved at a given flow node (walks back through flow graph)
 // Returns true if the variable is DEFINITELY moved on all reaching paths.
 bool xa_flow_is_moved(XaFlowBuilder *builder, const char *name, XaFlowNode *at_node) {
-    if (!builder || !name || !at_node) return false;
+    if (!builder || !name || !at_node)
+        return false;
     return flow_is_moved_at(name, at_node, 0) == 1;
 }

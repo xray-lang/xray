@@ -11,7 +11,7 @@
  *   Delayed evaluation: records expression info instead of immediate code gen.
  *   Smart reuse: automatically determines register reusability.
  *   Zero overhead: temp values modified in-place, locals auto-protected.
-*/
+ */
 
 #ifndef XEXPR_DESC_H
 #define XEXPR_DESC_H
@@ -28,29 +28,29 @@ typedef struct XrCompilerContext XrCompilerContext;
 // Expression types
 typedef enum {
     // Constant values
-    XEXPR_VOID,        // No value (empty expression)
-    XEXPR_NULL,        // null constant
-    XEXPR_TRUE,        // true constant
-    XEXPR_FALSE,       // false constant
-    XEXPR_INT,         // Integer constant (uses ival)
-    XEXPR_FLOAT,       // Float constant (uses nval)
-    XEXPR_NUMBER,      // Number constant (in constant table, uses const_idx)
-    XEXPR_STRING,      // String constant
-    
+    XEXPR_VOID,    // No value (empty expression)
+    XEXPR_NULL,    // null constant
+    XEXPR_TRUE,    // true constant
+    XEXPR_FALSE,   // false constant
+    XEXPR_INT,     // Integer constant (uses ival)
+    XEXPR_FLOAT,   // Float constant (uses nval)
+    XEXPR_NUMBER,  // Number constant (in constant table, uses const_idx)
+    XEXPR_STRING,  // String constant
+
     // Values in registers
-    XEXPR_TEMP,        // Temporary value (can be overwritten in-place)
-    XEXPR_LOCAL,       // Local variable (needs protection)
-    XEXPR_PARAM,       // Function parameter (needs protection)
-    
+    XEXPR_TEMP,   // Temporary value (can be overwritten in-place)
+    XEXPR_LOCAL,  // Local variable (needs protection)
+    XEXPR_PARAM,  // Function parameter (needs protection)
+
     // Special expressions
-    XEXPR_GLOBAL,      // Global variable (reload each time)
-    XEXPR_UPVAL,       // Upvalue
-    XEXPR_INDEXED,     // Table/array index
-    XEXPR_CALL,        // Function call (return value)
-    
+    XEXPR_GLOBAL,   // Global variable (reload each time)
+    XEXPR_UPVAL,    // Upvalue
+    XEXPR_INDEXED,  // Table/array index
+    XEXPR_CALL,     // Function call (return value)
+
     // Jump-related (for short-circuit evaluation)
-    XEXPR_JMP,         // Expression with jumps
-    XEXPR_RELOC,       // Relocatable expression
+    XEXPR_JMP,    // Expression with jumps
+    XEXPR_RELOC,  // Relocatable expression
 } XExprKind;
 
 // Expression descriptor
@@ -60,46 +60,44 @@ typedef enum {
 // 2. Choose optimal code generation strategy based on usage context
 // 3. Distinguish "overwritable" and "protected" registers
 typedef struct XrExprDesc {
-    XExprKind kind;    // Expression type
-    int reg;           // Register number (-1 means not in register)
-    
+    XExprKind kind;  // Expression type
+    int reg;         // Register number (-1 means not in register)
+
     // Constant value (different fields used based on kind)
     union {
-        int64_t ival;      // XEXPR_NUMBER (integer)
-        double nval;       // XEXPR_NUMBER (float)
-        int symbol;        // XEXPR_STRING (symbol)
-        int const_idx;     // Constant table index
-        int global_idx;    // XEXPR_GLOBAL (global variable index)
-        int pc;            // XEXPR_RELOC (instruction position for patching)
+        int64_t ival;    // XEXPR_NUMBER (integer)
+        double nval;     // XEXPR_NUMBER (float)
+        int symbol;      // XEXPR_STRING (symbol)
+        int const_idx;   // Constant table index
+        int global_idx;  // XEXPR_GLOBAL (global variable index)
+        int pc;          // XEXPR_RELOC (instruction position for patching)
     } u;
-    
+
     // Jump lists (for short-circuit evaluation)
     int t;  // True jump list head
     int f;  // False jump list head
-    
+
     // Metadata
-    bool has_jumps;    // Has pending jumps
-    bool is_const;     // Is compile-time constant
-    bool is_raw;       // Register holds raw (unboxed) I64/F64 value
-    
+    bool has_jumps;  // Has pending jumps
+    bool is_const;   // Is compile-time constant
+    bool is_raw;     // Register holds raw (unboxed) I64/F64 value
+
     // Compile-time type: single source of truth for semantic type.
     // NULL = unknown/any (tagged XrValue). Drives inst_types[pc]
     // propagation. Combined with is_raw for BOX/UNBOX decisions.
-    struct XrType *compile_type; // NULL = unknown/any
+    struct XrType *compile_type;  // NULL = unknown/any
 } XrExprDesc;
 
 /* ========== Compile-Type Helpers ========== */
 
 // Check if expression holds a raw (unboxed) int64 value.
 static inline bool xexpr_is_raw_i64(const XrExprDesc *e) {
-    return e->is_raw && e->compile_type
-        && e->compile_type->kind == XR_KIND_INT;
+    return e->is_raw && e->compile_type && e->compile_type->kind == XR_KIND_INT;
 }
 
 // Check if expression holds a raw (unboxed) float64 value.
 static inline bool xexpr_is_raw_f64(const XrExprDesc *e) {
-    return e->is_raw && e->compile_type
-        && e->compile_type->kind == XR_KIND_FLOAT;
+    return e->is_raw && e->compile_type && e->compile_type->kind == XR_KIND_FLOAT;
 }
 
 // Check if expression holds any raw (unboxed) numeric value.
@@ -166,8 +164,8 @@ XR_FUNC void xexpr_to_reg(XrCompilerContext *ctx, XrCompiler *compiler, XrExprDe
 // Discharge expression to specific register
 // If expression is in another register, generates MOVE instruction
 // If XEXPR_RELOC, patches instruction's A field
-XR_FUNC void xexpr_to_specific_reg(XrCompilerContext *ctx, XrCompiler *compiler, 
-                           XrExprDesc *e, int target_reg);
+XR_FUNC void xexpr_to_specific_reg(XrCompilerContext *ctx, XrCompiler *compiler, XrExprDesc *e,
+                                   int target_reg);
 
 // Check if expression is relocatable
 XR_FUNC bool xexpr_is_relocatable(const XrExprDesc *e);
@@ -226,13 +224,13 @@ XR_FUNC int xexpr_goiftrue(XrCompilerContext *ctx, XrCompiler *compiler, XrExprD
 // Ensure register value is tagged for generic instructions.
 // If expression is raw-typed (I64/F64), BOX to a new temp register.
 // Returns the (possibly new) register number.
-XR_FUNC int xexpr_ensure_boxed(XrCompilerContext *ctx, XrCompiler *compiler,
-                       XrExprDesc *e, int reg);
+XR_FUNC int xexpr_ensure_boxed(XrCompilerContext *ctx, XrCompiler *compiler, XrExprDesc *e,
+                               int reg);
 
 /* ========== Helper Functions ========== */
 
 // Get expression kind name (for debugging)
-XR_FUNC const char* xexpr_kind_name(XExprKind kind);
+XR_FUNC const char *xexpr_kind_name(XExprKind kind);
 
 // Print expression descriptor (for debugging)
 XR_FUNC void xexpr_debug_print(const XrExprDesc *e);
@@ -240,4 +238,4 @@ XR_FUNC void xexpr_debug_print(const XrExprDesc *e);
 // Copy expression descriptor
 XR_FUNC void xexpr_copy(XrExprDesc *dest, const XrExprDesc *src);
 
-#endif // XEXPR_DESC_H
+#endif  // XEXPR_DESC_H

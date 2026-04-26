@@ -125,9 +125,9 @@ static inline int xr_socket_set_reuseaddr_simple(int fd) {
 
 // Accept state
 typedef struct XrAcceptState {
-    int listen_fd;              // Listen fd
-    XrPollDesc *pd;             // Poll descriptor
-    int result_fd;              // Result fd
+    int listen_fd;   // Listen fd
+    XrPollDesc *pd;  // Poll descriptor
+    int result_fd;   // Result fd
 } XrAcceptState;
 
 // Yieldable accept (supports coroutine yield)
@@ -139,16 +139,17 @@ typedef struct XrAcceptState {
 XR_FUNC XrCFuncResult xr_socket_accept_yieldable(struct XrayIsolate *X, XrAcceptState *state);
 
 // Accept continuation (new signature: added result param)
-XR_FUNC XrCFuncResult xr_socket_accept_continue(struct XrayIsolate *X, int status, void *ctx, XrValue *result);
+XR_FUNC XrCFuncResult xr_socket_accept_continue(struct XrayIsolate *X, int status, void *ctx,
+                                                XrValue *result);
 
 // ========== Non-blocking Try API (hybrid: C-level try + xray yield) ==========
 
 // I/O try result
 // ready=true means operation succeeded, ready=false means need to wait
 typedef struct XrIOTryResult {
-    bool ready;         // Whether ready
-    int value;          // Result value (fd/bytes)
-    int error;          // Error code (0 = no error)
+    bool ready;  // Whether ready
+    int value;   // Result value (fd/bytes)
+    int error;   // Error code (0 = no error)
 } XrIOTryResult;
 
 // Non-blocking accept try
@@ -161,10 +162,11 @@ XR_FUNC XrIOTryResult xr_socket_read_try(struct XrayIsolate *X, int fd, char *bu
 
 // Non-blocking write try
 // Returns immediately, no blocking. If buffer full, returns ready=false
-XR_FUNC XrIOTryResult xr_socket_write_try(struct XrayIsolate *X, int fd, const char *buf, size_t len);
+XR_FUNC XrIOTryResult xr_socket_write_try(struct XrayIsolate *X, int fd, const char *buf,
+                                          size_t len);
 
 // Register I/O wait (called before xray layer yield)
 // Register fd with netpoll, coroutine can retry after resume
 XR_FUNC void xr_socket_register_wait(struct XrayIsolate *X, int fd, int mode);
 
-#endif // XSOCKET_H
+#endif  // XSOCKET_H

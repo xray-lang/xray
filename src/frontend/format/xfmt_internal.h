@@ -39,8 +39,7 @@
 XR_FUNC void xfmt_ensure_capacity(XrFmtContext *ctx, size_t additional);
 XR_FUNC void xfmt_write_char(XrFmtContext *ctx, char c);
 XR_FUNC void xfmt_write_str(XrFmtContext *ctx, const char *str);
-XR_FUNC void xfmt_write_fmt(XrFmtContext *ctx, const char *fmt, ...)
-    XR_PRINTF_FMT(2, 3);
+XR_FUNC void xfmt_write_fmt(XrFmtContext *ctx, const char *fmt, ...) XR_PRINTF_FMT(2, 3);
 XR_FUNC void xfmt_write_indent(XrFmtContext *ctx);
 XR_FUNC void xfmt_write_newline(XrFmtContext *ctx);
 XR_FUNC void xfmt_write_space(XrFmtContext *ctx);
@@ -63,12 +62,9 @@ XR_FUNC void xfmt_write_trailing_comment(XrFmtContext *ctx, XrTrivia *trivia);
 // ---------------------------------------------------------------------------
 
 XR_FUNC void xfmt_emit_type(XrFmtContext *ctx, XrType *type);
-XR_FUNC void xfmt_emit_generic_params(XrFmtContext *ctx,
-                                      XrGenericParam **params, int count);
-XR_FUNC void xfmt_emit_generic_args(XrFmtContext *ctx,
-                                    XrType **args, int count);
-XR_FUNC void xfmt_emit_pattern(XrFmtContext *ctx,
-                               XrDestructurePattern *pattern);
+XR_FUNC void xfmt_emit_generic_params(XrFmtContext *ctx, XrGenericParam **params, int count);
+XR_FUNC void xfmt_emit_generic_args(XrFmtContext *ctx, XrType **args, int count);
+XR_FUNC void xfmt_emit_pattern(XrFmtContext *ctx, XrDestructurePattern *pattern);
 XR_FUNC const char *xfmt_binary_op(AstNodeType type);
 XR_FUNC const char *xfmt_compound_op(TokenType type);
 
@@ -94,4 +90,4 @@ XR_FUNC void xfmt_emit_interface_decl(XrFmtContext *ctx, AstNode *node);
 XR_FUNC void xfmt_emit_enum_decl(XrFmtContext *ctx, AstNode *node);
 XR_FUNC void xfmt_emit_type_alias(XrFmtContext *ctx, AstNode *node);
 
-#endif // XFMT_INTERNAL_H
+#endif  // XFMT_INTERNAL_H

@@ -41,12 +41,7 @@
 **   Fold "10 * 2" -> 20
 **   Cannot fold "1 / 0" -> false (division by zero)
 */
-XR_FUNC bool xr_opt_fold_binary(
-    TokenType op,
-    XrValue left,
-    XrValue right,
-    XrValue *result
-);
+XR_FUNC bool xr_opt_fold_binary(TokenType op, XrValue left, XrValue right, XrValue *result);
 
 /*
 ** Try to fold unary operation constants
@@ -64,11 +59,7 @@ XR_FUNC bool xr_opt_fold_binary(
 **   Fold "-5" -> -5
 **   Fold "!true" -> false
 */
-XR_FUNC bool xr_opt_fold_unary(
-    TokenType op,
-    XrValue value,
-    XrValue *result
-);
+XR_FUNC bool xr_opt_fold_unary(TokenType op, XrValue value, XrValue *result);
 
 /*
 ** Try to fold comparison operation constants
@@ -83,12 +74,7 @@ XR_FUNC bool xr_opt_fold_unary(
 **   true  - Fold successful
 **   false - Cannot fold
 */
-XR_FUNC bool xr_opt_fold_comparison(
-    TokenType op,
-    XrValue left,
-    XrValue right,
-    XrValue *result
-);
+XR_FUNC bool xr_opt_fold_comparison(TokenType op, XrValue left, XrValue right, XrValue *result);
 
 /* ========== Type-Aware Optimization Hints ========== */
 
@@ -99,4 +85,4 @@ XR_FUNC bool xr_opt_fold_comparison(
 // analyzer -> codegen include. xoptimize.{h,c} now only contains
 // the codegen-only constant-folding helpers (xr_opt_fold_*).
 
-#endif // XOPTIMIZE_H
+#endif  // XOPTIMIZE_H

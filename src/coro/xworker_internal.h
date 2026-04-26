@@ -15,7 +15,7 @@
 #define XWORKER_INTERNAL_H
 
 #include "xworker.h"
-#include "../runtime/xvm_call.h"          // XrVMResult, run()
+#include "../runtime/xvm_call.h"  // XrVMResult, run()
 #include "../runtime/xisolate_internal.h"
 #include "../runtime/xstrbuf.h"
 #include "../runtime/object/xstring.h"
@@ -74,11 +74,11 @@ XR_FUNC void worker_drain_inbox(XrWorker *worker);
 XR_FUNC XrCoroutine *worker_poll_sources(XrWorker *worker);
 
 // Sysmon constants
-#define XR_SYSMON_WARN_US       100000
-#define XR_SYSMON_CANCEL_US     5000000
-#define XR_SYSMON_STEAL_US      1000
+#define XR_SYSMON_WARN_US 100000
+#define XR_SYSMON_CANCEL_US 5000000
+#define XR_SYSMON_STEAL_US 1000
 
 // Sysmon function (defined in xworker_sysmon.c)
 XR_FUNC void *sysmon_thread_func(void *arg);
 
-#endif // XWORKER_INTERNAL_H
+#endif  // XWORKER_INTERNAL_H

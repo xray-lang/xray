@@ -35,15 +35,15 @@ typedef struct XirFunc XirFunc;
 typedef uint32_t XirRef;
 
 typedef enum {
-    XIR_ALIAS_UNKNOWN,        // conservative default
-    XIR_ALIAS_FRESH_ALLOC,    // provenance is a non-escaped XIR_ALLOC
-    XIR_ALIAS_PARAM,          // comes from an incoming parameter vreg
-    XIR_ALIAS_GLOBAL,         // comes from module-level / builtin reads
+    XIR_ALIAS_UNKNOWN,      // conservative default
+    XIR_ALIAS_FRESH_ALLOC,  // provenance is a non-escaped XIR_ALLOC
+    XIR_ALIAS_PARAM,        // comes from an incoming parameter vreg
+    XIR_ALIAS_GLOBAL,       // comes from module-level / builtin reads
 } XirAliasSource;
 
 typedef struct {
     XirAliasSource source;
-    XirRef         origin;    // the ALLOC/PARAM ref, or 0 when unknown
+    XirRef origin;  // the ALLOC/PARAM ref, or 0 when unknown
 } XirAliasInfo;
 
 /*
@@ -62,4 +62,4 @@ XR_FUNC const XirAliasInfo *xir_func_get_alias(XirFunc *func, XirRef vreg_ref);
  */
 XR_FUNC void xir_func_invalidate_alias(XirFunc *func);
 
-#endif // XIR_ALIAS_H
+#endif  // XIR_ALIAS_H

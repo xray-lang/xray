@@ -34,8 +34,8 @@ typedef struct XrLspIndexTaskData {
 XR_FUNC void xlsp_workspace_start_background_index(XrLspServer *server, const char *root_path);
 
 // Start background indexing for multiple roots (all scanned into one batch)
-XR_FUNC void xlsp_workspace_start_background_index_roots(XrLspServer *server,
-                                                          const char **roots, int root_count);
+XR_FUNC void xlsp_workspace_start_background_index_roots(XrLspServer *server, const char **roots,
+                                                         int root_count);
 
 // Background task execute function (runs in worker thread)
 XR_FUNC void xlsp_workspace_index_task_execute(void *data);
@@ -67,7 +67,7 @@ XR_FUNC void xlsp_workspace_purge_prefix(XrLspServer *server, const char *path_p
 
 // Pending analysis queue helpers
 XR_FUNC void xlsp_enqueue_analysis(XrLspServer *server, const char *uri, const char *path);
-XR_FUNC int  xlsp_drain_pending_analysis(XrLspServer *server);
+XR_FUNC int xlsp_drain_pending_analysis(XrLspServer *server);
 XR_FUNC void xlsp_free_pending_analysis(XrLspServer *server);
 
-#endif // XLSP_WORKSPACE_H
+#endif  // XLSP_WORKSPACE_H

@@ -42,7 +42,8 @@ struct XrTlsConn {
 static int tls_initialized = 0;
 
 void xr_tls_init(void) {
-    if (tls_initialized) return;
+    if (tls_initialized)
+        return;
 
     // OpenSSL 1.1.0+ auto-initializes, but explicit call is safer
     OPENSSL_init_ssl(OPENSSL_INIT_LOAD_SSL_STRINGS | OPENSSL_INIT_LOAD_CRYPTO_STRINGS, NULL);
@@ -51,7 +52,8 @@ void xr_tls_init(void) {
 }
 
 void xr_tls_cleanup(void) {
-    if (!tls_initialized) return;
+    if (!tls_initialized)
+        return;
 
     // OpenSSL 1.1.0+ auto-cleans
     tls_initialized = 0;
@@ -59,11 +61,12 @@ void xr_tls_cleanup(void) {
 
 /* ========== TLS Context ========== */
 
-XrTlsContext* xr_tls_context_new_client(void) {
+XrTlsContext *xr_tls_context_new_client(void) {
     xr_tls_init();
 
-    XrTlsContext *ctx = (XrTlsContext*)xr_calloc(1, sizeof(XrTlsContext));
-    if (!ctx) return NULL;
+    XrTlsContext *ctx = (XrTlsContext *) xr_calloc(1, sizeof(XrTlsContext));
+    if (!ctx)
+        return NULL;
 
     ctx->is_client = true;
     ctx->verify_peer = true;  // Verify certificate by default
@@ -91,13 +94,15 @@ XrTlsContext* xr_tls_context_new_client(void) {
     return ctx;
 }
 
-XrTlsContext* xr_tls_context_new_server(const char *cert_file, const char *key_file) {
+XrTlsContext *xr_tls_context_new_server(const char *cert_file, const char *key_file) {
     xr_tls_init();
 
-    if (!cert_file || !key_file) return NULL;
+    if (!cert_file || !key_file)
+        return NULL;
 
-    XrTlsContext *ctx = (XrTlsContext*)xr_calloc(1, sizeof(XrTlsContext));
-    if (!ctx) return NULL;
+    XrTlsContext *ctx = (XrTlsContext *) xr_calloc(1, sizeof(XrTlsContext));
+    if (!ctx)
+        return NULL;
 
     ctx->is_client = false;
 
@@ -136,7 +141,8 @@ XrTlsContext* xr_tls_context_new_server(const char *cert_file, const char *key_f
 }
 
 void xr_tls_context_free(XrTlsContext *ctx) {
-    if (!ctx) return;
+    if (!ctx)
+        return;
 
     if (ctx->ssl_ctx) {
         SSL_CTX_free(ctx->ssl_ctx);
@@ -145,7 +151,8 @@ void xr_tls_context_free(XrTlsContext *ctx) {
 }
 
 void xr_tls_context_set_verify(XrTlsContext *ctx, bool verify) {
-    if (!ctx || !ctx->ssl_ctx) return;
+    if (!ctx || !ctx->ssl_ctx)
+        return;
 
     ctx->verify_peer = verify;
 
@@ -157,7 +164,8 @@ void xr_tls_context_set_verify(XrTlsContext *ctx, bool verify) {
 }
 
 int xr_tls_context_load_ca(XrTlsContext *ctx, const char *ca_file) {
-    if (!ctx || !ctx->ssl_ctx) return -1;
+    if (!ctx || !ctx->ssl_ctx)
+        return -1;
 
     // NULL resets to the system default trust store so callers can strip
     // a previously pinned CA without rebuilding the context.
@@ -188,11 +196,13 @@ int xr_tls_context_load_ca(XrTlsContext *ctx, const char *ca_file) {
 
 /* ========== TLS Connection ========== */
 
-XrTlsConn* xr_tls_conn_new(XrTlsContext *ctx, int fd) {
-    if (!ctx || fd < 0) return NULL;
+XrTlsConn *xr_tls_conn_new(XrTlsContext *ctx, int fd) {
+    if (!ctx || fd < 0)
+        return NULL;
 
-    XrTlsConn *conn = (XrTlsConn*)xr_calloc(1, sizeof(XrTlsConn));
-    if (!conn) return NULL;
+    XrTlsConn *conn = (XrTlsConn *) xr_calloc(1, sizeof(XrTlsConn));
+    if (!conn)
+        return NULL;
 
     conn->ctx = ctx;
     conn->fd = fd;
@@ -215,7 +225,8 @@ XrTlsConn* xr_tls_conn_new(XrTlsContext *ctx, int fd) {
 }
 
 void xr_tls_conn_free(XrTlsConn *conn) {
-    if (!conn) return;
+    if (!conn)
+        return;
 
     if (conn->ssl) {
         SSL_free(conn->ssl);
@@ -224,7 +235,8 @@ void xr_tls_conn_free(XrTlsConn *conn) {
 }
 
 int xr_tls_conn_set_hostname(XrTlsConn *conn, const char *hostname) {
-    if (!conn || !conn->ssl || !hostname) return -1;
+    if (!conn || !conn->ssl || !hostname)
+        return -1;
 
     // Set SNI
     if (SSL_set_tlsext_host_name(conn->ssl, hostname) != 1) {
@@ -241,27 +253,31 @@ int xr_tls_conn_set_hostname(XrTlsConn *conn, const char *hostname) {
 }
 
 int xr_tls_context_set_alpn(XrTlsContext *ctx, const unsigned char *protocols, size_t len) {
-    if (!ctx || !ctx->ssl_ctx || !protocols || len == 0) return -1;
+    if (!ctx || !ctx->ssl_ctx || !protocols || len == 0)
+        return -1;
 
     // Set client ALPN protocol list
-    if (SSL_CTX_set_alpn_protos(ctx->ssl_ctx, protocols, (unsigned int)len) != 0) {
+    if (SSL_CTX_set_alpn_protos(ctx->ssl_ctx, protocols, (unsigned int) len) != 0) {
         return -1;
     }
     return 0;
 }
 
-const char* xr_tls_conn_get_alpn(XrTlsConn *conn) {
-    if (!conn || !conn->ssl) return NULL;
+const char *xr_tls_conn_get_alpn(XrTlsConn *conn) {
+    if (!conn || !conn->ssl)
+        return NULL;
 
     const unsigned char *alpn = NULL;
     unsigned int alpn_len = 0;
 
     SSL_get0_alpn_selected(conn->ssl, &alpn, &alpn_len);
 
-    if (!alpn || alpn_len == 0) return NULL;
+    if (!alpn || alpn_len == 0)
+        return NULL;
 
     static _Thread_local char alpn_str[32];
-    if (alpn_len >= sizeof(alpn_str)) alpn_len = sizeof(alpn_str) - 1;
+    if (alpn_len >= sizeof(alpn_str))
+        alpn_len = sizeof(alpn_str) - 1;
     memcpy(alpn_str, alpn, alpn_len);
     alpn_str[alpn_len] = '\0';
 
@@ -271,8 +287,8 @@ const char* xr_tls_conn_get_alpn(XrTlsConn *conn) {
 // ALPN server selection callback
 static int alpn_select_cb(SSL *ssl, const unsigned char **out, unsigned char *outlen,
                           const unsigned char *in, unsigned int inlen, void *arg) {
-    (void)ssl;
-    XrAlpnSelectCallback cb = (XrAlpnSelectCallback)arg;
+    (void) ssl;
+    XrAlpnSelectCallback cb = (XrAlpnSelectCallback) arg;
     if (cb) {
         return cb(out, outlen, in, inlen, NULL);
     }
@@ -283,7 +299,8 @@ static int alpn_select_cb(SSL *ssl, const unsigned char **out, unsigned char *ou
 
     while (p < end) {
         unsigned char len = *p++;
-        if (p + len > end) break;
+        if (p + len > end)
+            break;
 
         // Prefer h2
         if (len == 2 && memcmp(p, "h2", 2) == 0) {
@@ -298,7 +315,8 @@ static int alpn_select_cb(SSL *ssl, const unsigned char **out, unsigned char *ou
     p = in;
     while (p < end) {
         unsigned char len = *p++;
-        if (p + len > end) break;
+        if (p + len > end)
+            break;
 
         if (len == 8 && memcmp(p, "http/1.1", 8) == 0) {
             *out = p;
@@ -312,10 +330,11 @@ static int alpn_select_cb(SSL *ssl, const unsigned char **out, unsigned char *ou
 }
 
 void xr_tls_context_set_alpn_callback(XrTlsContext *ctx, XrAlpnSelectCallback cb, void *arg) {
-    if (!ctx || !ctx->ssl_ctx) return;
-    (void)arg;
+    if (!ctx || !ctx->ssl_ctx)
+        return;
+    (void) arg;
 
-    SSL_CTX_set_alpn_select_cb(ctx->ssl_ctx, alpn_select_cb, (void*)cb);
+    SSL_CTX_set_alpn_select_cb(ctx->ssl_ctx, alpn_select_cb, (void *) cb);
 }
 
 // External: coroutine-safe socket API
@@ -323,10 +342,11 @@ extern int xr_socket_read(struct XrayIsolate *X, int fd, char *buf, size_t len);
 extern int xr_socket_write(struct XrayIsolate *X, int fd, const char *buf, size_t len);
 
 // Thread-local: current VM instance
-extern struct XrayIsolate* xr_io_get_isolate(void);
+extern struct XrayIsolate *xr_io_get_isolate(void);
 
 XrTlsError xr_tls_conn_handshake_client(XrTlsConn *conn) {
-    if (!conn || !conn->ssl) return XR_TLS_ERR_INIT;
+    if (!conn || !conn->ssl)
+        return XR_TLS_ERR_INIT;
 
     while (1) {
         int ret = SSL_connect(conn->ssl);
@@ -347,7 +367,7 @@ XrTlsError xr_tls_conn_handshake_client(XrTlsConn *conn) {
                         int wait_ret = xr_socket_read(X, conn->fd, tmp, 0);
                         if (wait_ret == -2) {
                             // Coroutine yielded
-                            return (XrTlsError)-2;
+                            return (XrTlsError) -2;
                         }
                     }
                     continue;
@@ -360,7 +380,7 @@ XrTlsError xr_tls_conn_handshake_client(XrTlsConn *conn) {
                     if (X) {
                         int wait_ret = xr_socket_write(X, conn->fd, NULL, 0);
                         if (wait_ret == -2) {
-                            return (XrTlsError)-2;
+                            return (XrTlsError) -2;
                         }
                     }
                     continue;
@@ -382,7 +402,8 @@ XrTlsError xr_tls_conn_handshake_client(XrTlsConn *conn) {
 }
 
 XrTlsError xr_tls_conn_handshake_server(XrTlsConn *conn) {
-    if (!conn || !conn->ssl) return XR_TLS_ERR_INIT;
+    if (!conn || !conn->ssl)
+        return XR_TLS_ERR_INIT;
 
     while (1) {
         int ret = SSL_accept(conn->ssl);
@@ -402,7 +423,7 @@ XrTlsError xr_tls_conn_handshake_server(XrTlsConn *conn) {
                         char tmp[1];
                         int wait_ret = xr_socket_read(X, conn->fd, tmp, 0);
                         if (wait_ret == -2) {
-                            return (XrTlsError)-2;
+                            return (XrTlsError) -2;
                         }
                     }
                     continue;
@@ -415,7 +436,7 @@ XrTlsError xr_tls_conn_handshake_server(XrTlsConn *conn) {
                     if (X) {
                         int wait_ret = xr_socket_write(X, conn->fd, NULL, 0);
                         if (wait_ret == -2) {
-                            return (XrTlsError)-2;
+                            return (XrTlsError) -2;
                         }
                     }
                     continue;
@@ -428,10 +449,11 @@ XrTlsError xr_tls_conn_handshake_server(XrTlsConn *conn) {
 }
 
 int xr_tls_conn_read(XrTlsConn *conn, void *buf, size_t len) {
-    if (!conn || !conn->ssl) return -1;
+    if (!conn || !conn->ssl)
+        return -1;
 
     while (1) {
-        int ret = SSL_read(conn->ssl, buf, (int)len);
+        int ret = SSL_read(conn->ssl, buf, (int) len);
 
         if (ret > 0) {
             return ret;
@@ -480,10 +502,11 @@ int xr_tls_conn_read(XrTlsConn *conn, void *buf, size_t len) {
 }
 
 int xr_tls_conn_write(XrTlsConn *conn, const void *buf, size_t len) {
-    if (!conn || !conn->ssl) return -1;
+    if (!conn || !conn->ssl)
+        return -1;
 
     while (1) {
-        int ret = SSL_write(conn->ssl, buf, (int)len);
+        int ret = SSL_write(conn->ssl, buf, (int) len);
 
         if (ret > 0) {
             return ret;
@@ -533,79 +556,96 @@ int xr_tls_conn_write(XrTlsConn *conn, const void *buf, size_t len) {
 // ========== Non-blocking Try API ==========
 
 int xr_tls_conn_handshake_try(XrTlsConn *conn) {
-    if (!conn || !conn->ssl) return -1;
+    if (!conn || !conn->ssl)
+        return -1;
 
     int ret = SSL_connect(conn->ssl);
-    if (ret == 1) return 0; // success
+    if (ret == 1)
+        return 0;  // success
 
     int err = SSL_get_error(conn->ssl, ret);
     switch (err) {
-        case SSL_ERROR_WANT_READ:  return 1;
-        case SSL_ERROR_WANT_WRITE: return 2;
-        default:                   return -1;
+        case SSL_ERROR_WANT_READ:
+            return 1;
+        case SSL_ERROR_WANT_WRITE:
+            return 2;
+        default:
+            return -1;
     }
 }
 
 int xr_tls_conn_read_try(XrTlsConn *conn, void *buf, size_t len) {
-    if (!conn || !conn->ssl) return -3;
+    if (!conn || !conn->ssl)
+        return -3;
 
-    int ret = SSL_read(conn->ssl, buf, (int)len);
-    if (ret > 0) return ret;
-    if (ret == 0) return 0; // EOF
+    int ret = SSL_read(conn->ssl, buf, (int) len);
+    if (ret > 0)
+        return ret;
+    if (ret == 0)
+        return 0;  // EOF
 
     int err = SSL_get_error(conn->ssl, ret);
     switch (err) {
-        case SSL_ERROR_WANT_READ:    return -1;
-        case SSL_ERROR_WANT_WRITE:   return -2;
-        case SSL_ERROR_ZERO_RETURN:  return 0;
-        default:                     return -3;
+        case SSL_ERROR_WANT_READ:
+            return -1;
+        case SSL_ERROR_WANT_WRITE:
+            return -2;
+        case SSL_ERROR_ZERO_RETURN:
+            return 0;
+        default:
+            return -3;
     }
 }
 
 int xr_tls_conn_write_try(XrTlsConn *conn, const void *buf, size_t len) {
-    if (!conn || !conn->ssl) return -3;
+    if (!conn || !conn->ssl)
+        return -3;
 
-    int ret = SSL_write(conn->ssl, buf, (int)len);
-    if (ret > 0) return ret;
+    int ret = SSL_write(conn->ssl, buf, (int) len);
+    if (ret > 0)
+        return ret;
 
     int err = SSL_get_error(conn->ssl, ret);
     switch (err) {
-        case SSL_ERROR_WANT_WRITE:   return -1;
-        case SSL_ERROR_WANT_READ:    return -2;
-        case SSL_ERROR_ZERO_RETURN:  return 0;
-        default:                     return -3;
+        case SSL_ERROR_WANT_WRITE:
+            return -1;
+        case SSL_ERROR_WANT_READ:
+            return -2;
+        case SSL_ERROR_ZERO_RETURN:
+            return 0;
+        default:
+            return -3;
     }
 }
 
 void xr_tls_conn_close(XrTlsConn *conn) {
-    if (!conn || !conn->ssl) return;
+    if (!conn || !conn->ssl)
+        return;
 
     // Send close_notify
     SSL_shutdown(conn->ssl);
 }
 
 int xr_tls_conn_get_fd(XrTlsConn *conn) {
-    if (!conn) return -1;
+    if (!conn)
+        return -1;
     return conn->fd;
 }
 
-const char* xr_tls_error_string(XrTlsError err) {
+const char *xr_tls_error_string(XrTlsError err) {
     return xr_net_error_string(err);
 }
 
 /* ========== Production Features (P17) ========== */
 
-int xr_tls_context_set_client_cert(XrTlsContext *ctx,
-                                    const char *cert_file,
-                                    const char *key_file) {
-    if (!ctx || !ctx->ssl_ctx || !cert_file || !key_file) return -1;
+int xr_tls_context_set_client_cert(XrTlsContext *ctx, const char *cert_file, const char *key_file) {
+    if (!ctx || !ctx->ssl_ctx || !cert_file || !key_file)
+        return -1;
 
-    if (SSL_CTX_use_certificate_file(ctx->ssl_ctx, cert_file,
-                                      SSL_FILETYPE_PEM) <= 0) {
+    if (SSL_CTX_use_certificate_file(ctx->ssl_ctx, cert_file, SSL_FILETYPE_PEM) <= 0) {
         return -1;
     }
-    if (SSL_CTX_use_PrivateKey_file(ctx->ssl_ctx, key_file,
-                                     SSL_FILETYPE_PEM) <= 0) {
+    if (SSL_CTX_use_PrivateKey_file(ctx->ssl_ctx, key_file, SSL_FILETYPE_PEM) <= 0) {
         return -1;
     }
     if (!SSL_CTX_check_private_key(ctx->ssl_ctx)) {
@@ -615,30 +655,32 @@ int xr_tls_context_set_client_cert(XrTlsContext *ctx,
 }
 
 int xr_tls_context_enable_session_cache(XrTlsContext *ctx) {
-    if (!ctx || !ctx->ssl_ctx) return -1;
+    if (!ctx || !ctx->ssl_ctx)
+        return -1;
 
     // Enable client-side session caching. The internal cache stores
     // sessions keyed by server address so SSL_connect can resume.
     SSL_CTX_set_session_cache_mode(ctx->ssl_ctx,
-                                    SSL_SESS_CACHE_CLIENT |
-                                    SSL_SESS_CACHE_NO_INTERNAL_LOOKUP);
+                                   SSL_SESS_CACHE_CLIENT | SSL_SESS_CACHE_NO_INTERNAL_LOOKUP);
     // Cap the cache at 256 entries to bound memory
     SSL_CTX_sess_set_cache_size(ctx->ssl_ctx, 256);
     return 0;
 }
 
-void* xr_tls_conn_get_session(XrTlsConn *conn) {
-    if (!conn || !conn->ssl) return NULL;
+void *xr_tls_conn_get_session(XrTlsConn *conn) {
+    if (!conn || !conn->ssl)
+        return NULL;
 
     SSL_SESSION *sess = SSL_get1_session(conn->ssl);
-    return (void *)sess;
+    return (void *) sess;
 }
 
 int xr_tls_conn_set_session(XrTlsConn *conn, void *session) {
-    if (!conn || !conn->ssl || !session) return -1;
+    if (!conn || !conn->ssl || !session)
+        return -1;
 
     // SSL_set_session increments the reference count internally
-    if (SSL_set_session(conn->ssl, (SSL_SESSION *)session) != 1) {
+    if (SSL_set_session(conn->ssl, (SSL_SESSION *) session) != 1) {
         return -1;
     }
     return 0;
@@ -646,62 +688,162 @@ int xr_tls_conn_set_session(XrTlsConn *conn, void *session) {
 
 void xr_tls_session_free(void *session) {
     if (session) {
-        SSL_SESSION_free((SSL_SESSION *)session);
+        SSL_SESSION_free((SSL_SESSION *) session);
     }
 }
 
 bool xr_tls_conn_is_resumed(XrTlsConn *conn) {
-    if (!conn || !conn->ssl) return false;
+    if (!conn || !conn->ssl)
+        return false;
     return SSL_session_reused(conn->ssl) != 0;
 }
 
 int xr_tls_context_enable_ocsp_stapling(XrTlsContext *ctx) {
-    if (!ctx || !ctx->ssl_ctx) return -1;
+    if (!ctx || !ctx->ssl_ctx)
+        return -1;
 
     // Request the server to staple an OCSP response during the handshake.
     // OpenSSL will verify the stapled response automatically when
     // X509_V_FLAG_CRL_CHECK is not set (default) — the status_request
     // extension is enough for most deployments.
-    if (SSL_CTX_set_tlsext_status_type(ctx->ssl_ctx,
-                                        TLSEXT_STATUSTYPE_ocsp) != 1) {
+    if (SSL_CTX_set_tlsext_status_type(ctx->ssl_ctx, TLSEXT_STATUSTYPE_ocsp) != 1) {
         return -1;
     }
     return 0;
 }
 
-#else // !XR_ENABLE_TLS
+#else  // !XR_ENABLE_TLS
 
 // Empty implementations when TLS is disabled
 
-void xr_tls_init(void) { }
-void xr_tls_cleanup(void) {}
-XrTlsContext* xr_tls_context_new_client(void) { return NULL; }
-XrTlsContext* xr_tls_context_new_server(const char *cert_file, const char *key_file) { (void)cert_file; (void)key_file; return NULL; }
-void xr_tls_context_free(XrTlsContext *ctx) { (void)ctx; }
-void xr_tls_context_set_verify(XrTlsContext *ctx, bool verify) { (void)ctx; (void)verify; }
-int xr_tls_context_load_ca(XrTlsContext *ctx, const char *ca_file) { (void)ctx; (void)ca_file; return -1; }
-int xr_tls_context_set_alpn(XrTlsContext *ctx, const unsigned char *protocols, size_t len) { (void)ctx; (void)protocols; (void)len; return -1; }
-void xr_tls_context_set_alpn_callback(XrTlsContext *ctx, XrAlpnSelectCallback cb, void *arg) { (void)ctx; (void)cb; (void)arg; }
-XrTlsConn* xr_tls_conn_new(XrTlsContext *ctx, int fd) { (void)ctx; (void)fd; return NULL; }
-void xr_tls_conn_free(XrTlsConn *conn) { (void)conn; }
-int xr_tls_conn_set_hostname(XrTlsConn *conn, const char *hostname) { (void)conn; (void)hostname; return -1; }
-const char* xr_tls_conn_get_alpn(XrTlsConn *conn) { (void)conn; return NULL; }
-XrTlsError xr_tls_conn_handshake_client(XrTlsConn *conn) { (void)conn; return XR_TLS_ERR_INIT; }
-XrTlsError xr_tls_conn_handshake_server(XrTlsConn *conn) { (void)conn; return XR_TLS_ERR_INIT; }
-int xr_tls_conn_handshake_try(XrTlsConn *conn) { (void)conn; return -1; }
-int xr_tls_conn_read(XrTlsConn *conn, void *buf, size_t len) { (void)conn; (void)buf; (void)len; return -1; }
-int xr_tls_conn_read_try(XrTlsConn *conn, void *buf, size_t len) { (void)conn; (void)buf; (void)len; return -3; }
-int xr_tls_conn_write(XrTlsConn *conn, const void *buf, size_t len) { (void)conn; (void)buf; (void)len; return -1; }
-int xr_tls_conn_write_try(XrTlsConn *conn, const void *buf, size_t len) { (void)conn; (void)buf; (void)len; return -3; }
-void xr_tls_conn_close(XrTlsConn *conn) { (void)conn; }
-int xr_tls_conn_get_fd(XrTlsConn *conn) { (void)conn; return -1; }
-const char* xr_tls_error_string(XrTlsError err) { (void)err; return "TLS not enabled"; }
-int xr_tls_context_set_client_cert(XrTlsContext *ctx, const char *cert_file, const char *key_file) { (void)ctx; (void)cert_file; (void)key_file; return -1; }
-int xr_tls_context_enable_session_cache(XrTlsContext *ctx) { (void)ctx; return -1; }
-void* xr_tls_conn_get_session(XrTlsConn *conn) { (void)conn; return NULL; }
-int xr_tls_conn_set_session(XrTlsConn *conn, void *session) { (void)conn; (void)session; return -1; }
-void xr_tls_session_free(void *session) { (void)session; }
-bool xr_tls_conn_is_resumed(XrTlsConn *conn) { (void)conn; return false; }
-int xr_tls_context_enable_ocsp_stapling(XrTlsContext *ctx) { (void)ctx; return -1; }
+void xr_tls_init(void) {
+}
+void xr_tls_cleanup(void) {
+}
+XrTlsContext *xr_tls_context_new_client(void) {
+    return NULL;
+}
+XrTlsContext *xr_tls_context_new_server(const char *cert_file, const char *key_file) {
+    (void) cert_file;
+    (void) key_file;
+    return NULL;
+}
+void xr_tls_context_free(XrTlsContext *ctx) {
+    (void) ctx;
+}
+void xr_tls_context_set_verify(XrTlsContext *ctx, bool verify) {
+    (void) ctx;
+    (void) verify;
+}
+int xr_tls_context_load_ca(XrTlsContext *ctx, const char *ca_file) {
+    (void) ctx;
+    (void) ca_file;
+    return -1;
+}
+int xr_tls_context_set_alpn(XrTlsContext *ctx, const unsigned char *protocols, size_t len) {
+    (void) ctx;
+    (void) protocols;
+    (void) len;
+    return -1;
+}
+void xr_tls_context_set_alpn_callback(XrTlsContext *ctx, XrAlpnSelectCallback cb, void *arg) {
+    (void) ctx;
+    (void) cb;
+    (void) arg;
+}
+XrTlsConn *xr_tls_conn_new(XrTlsContext *ctx, int fd) {
+    (void) ctx;
+    (void) fd;
+    return NULL;
+}
+void xr_tls_conn_free(XrTlsConn *conn) {
+    (void) conn;
+}
+int xr_tls_conn_set_hostname(XrTlsConn *conn, const char *hostname) {
+    (void) conn;
+    (void) hostname;
+    return -1;
+}
+const char *xr_tls_conn_get_alpn(XrTlsConn *conn) {
+    (void) conn;
+    return NULL;
+}
+XrTlsError xr_tls_conn_handshake_client(XrTlsConn *conn) {
+    (void) conn;
+    return XR_TLS_ERR_INIT;
+}
+XrTlsError xr_tls_conn_handshake_server(XrTlsConn *conn) {
+    (void) conn;
+    return XR_TLS_ERR_INIT;
+}
+int xr_tls_conn_handshake_try(XrTlsConn *conn) {
+    (void) conn;
+    return -1;
+}
+int xr_tls_conn_read(XrTlsConn *conn, void *buf, size_t len) {
+    (void) conn;
+    (void) buf;
+    (void) len;
+    return -1;
+}
+int xr_tls_conn_read_try(XrTlsConn *conn, void *buf, size_t len) {
+    (void) conn;
+    (void) buf;
+    (void) len;
+    return -3;
+}
+int xr_tls_conn_write(XrTlsConn *conn, const void *buf, size_t len) {
+    (void) conn;
+    (void) buf;
+    (void) len;
+    return -1;
+}
+int xr_tls_conn_write_try(XrTlsConn *conn, const void *buf, size_t len) {
+    (void) conn;
+    (void) buf;
+    (void) len;
+    return -3;
+}
+void xr_tls_conn_close(XrTlsConn *conn) {
+    (void) conn;
+}
+int xr_tls_conn_get_fd(XrTlsConn *conn) {
+    (void) conn;
+    return -1;
+}
+const char *xr_tls_error_string(XrTlsError err) {
+    (void) err;
+    return "TLS not enabled";
+}
+int xr_tls_context_set_client_cert(XrTlsContext *ctx, const char *cert_file, const char *key_file) {
+    (void) ctx;
+    (void) cert_file;
+    (void) key_file;
+    return -1;
+}
+int xr_tls_context_enable_session_cache(XrTlsContext *ctx) {
+    (void) ctx;
+    return -1;
+}
+void *xr_tls_conn_get_session(XrTlsConn *conn) {
+    (void) conn;
+    return NULL;
+}
+int xr_tls_conn_set_session(XrTlsConn *conn, void *session) {
+    (void) conn;
+    (void) session;
+    return -1;
+}
+void xr_tls_session_free(void *session) {
+    (void) session;
+}
+bool xr_tls_conn_is_resumed(XrTlsConn *conn) {
+    (void) conn;
+    return false;
+}
+int xr_tls_context_enable_ocsp_stapling(XrTlsContext *ctx) {
+    (void) ctx;
+    return -1;
+}
 
 #endif

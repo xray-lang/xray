@@ -34,13 +34,12 @@
 #include <sys/types.h>
 #include <sys/sysctl.h>
 #include <unistd.h>
-#endif // ========== Code Region Registry ==========
+#endif  // ========== Code Region Registry ==========
 
 static JitCodeRegion g_regions[JIT_DEBUG_MAX_REGIONS];
 static uint32_t g_nregions = 0;
 
-void jit_debug_register(const char *name, void *code, uint32_t size,
-                        uint32_t fast_entry_offset) {
+void jit_debug_register(const char *name, void *code, uint32_t size, uint32_t fast_entry_offset) {
     XR_DCHECK(name != NULL, "jit_debug_register: NULL name");
     XR_DCHECK(code != NULL, "jit_debug_register: NULL code");
     if (g_nregions >= JIT_DEBUG_MAX_REGIONS) {
@@ -58,9 +57,9 @@ void jit_debug_register(const char *name, void *code, uint32_t size,
 const JitCodeRegion *jit_debug_lookup(const void *pc) {
     for (uint32_t i = 0; i < g_nregions; i++) {
         const JitCodeRegion *r = &g_regions[i];
-        uintptr_t start = (uintptr_t)r->code;
-        uintptr_t end   = start + r->code_size;
-        if ((uintptr_t)pc >= start && (uintptr_t)pc < end)
+        uintptr_t start = (uintptr_t) r->code;
+        uintptr_t end = start + r->code_size;
+        if ((uintptr_t) pc >= start && (uintptr_t) pc < end)
             return r;
     }
     return NULL;
@@ -68,14 +67,13 @@ const JitCodeRegion *jit_debug_lookup(const void *pc) {
 
 /* ========== Disassembly Dump ========== */
 
-void jit_debug_dump(const char *name, const void *code, uint32_t size,
-                    uint32_t fast_entry_offset) {
+void jit_debug_dump(const char *name, const void *code, uint32_t size, uint32_t fast_entry_offset) {
     XR_DCHECK(code != NULL, "jit_debug_dump: NULL code");
     uint32_t n_inst = size / 4;
-    const uint32_t *insts = (const uint32_t *)code;
+    const uint32_t *insts = (const uint32_t *) code;
 
-    fprintf(stderr, "\n===== JIT disasm: %s (%u bytes, %u instructions) =====\n",
-            name ? name : "?", size, n_inst);
+    fprintf(stderr, "\n===== JIT disasm: %s (%u bytes, %u instructions) =====\n", name ? name : "?",
+            size, n_inst);
     fprintf(stderr, "  normal_entry: 0x0000\n");
     fprintf(stderr, "  fast_entry:   0x%04x\n", fast_entry_offset);
     fprintf(stderr, "-----\n");
@@ -91,23 +89,26 @@ static void *g_safepoint_trampoline = NULL;  // global trampoline code (mmap'd e
 static uint32_t g_trampoline_size = 0;
 
 void *jit_guard_page_alloc(void) {
-    void *page = mmap(NULL, 4096, PROT_READ,
-                      MAP_PRIVATE | MAP_ANON, -1, 0);
-    if (page == MAP_FAILED) return NULL;
+    void *page = mmap(NULL, 4096, PROT_READ, MAP_PRIVATE | MAP_ANON, -1, 0);
+    if (page == MAP_FAILED)
+        return NULL;
     // Start disarmed (PROT_READ). Sysmon will arm periodically.
     return page;
 }
 
 void jit_guard_page_free(void *page) {
-    if (page) munmap(page, 4096);
+    if (page)
+        munmap(page, 4096);
 }
 
 void jit_guard_page_arm(void *page) {
-    if (page) mprotect(page, 4096, PROT_NONE);
+    if (page)
+        mprotect(page, 4096, PROT_NONE);
 }
 
 void jit_guard_page_disarm(void *page) {
-    if (page) mprotect(page, 4096, PROT_READ);
+    if (page)
+        mprotect(page, 4096, PROT_READ);
 }
 
 /*
@@ -127,7 +128,8 @@ void jit_guard_page_disarm(void *page) {
  *   4. Jump to saved return PC
  */
 void jit_guard_page_init_trampoline(void) {
-    if (g_safepoint_trampoline) return;  // already initialized
+    if (g_safepoint_trampoline)
+        return;  // already initialized
 
     // Allocate buffer for trampoline instructions (stack buffer, copy to mmap later)
     uint32_t code[128];
@@ -136,27 +138,25 @@ void jit_guard_page_init_trampoline(void) {
 
     // Save caller-saved GP (x0-x15, LR) + FP (d0-d7) = 24*8 = 192 bytes
     a64_buf_emit(&buf, a64_sub_imm(A64_SP, A64_SP, 256));
-    a64_buf_emit(&buf, a64_stp(A64_X0,  A64_X1,  A64_SP, 0));
-    a64_buf_emit(&buf, a64_stp(A64_X2,  A64_X3,  A64_SP, 16));
-    a64_buf_emit(&buf, a64_stp(A64_X4,  A64_X5,  A64_SP, 32));
-    a64_buf_emit(&buf, a64_stp(A64_X6,  A64_X7,  A64_SP, 48));
-    a64_buf_emit(&buf, a64_stp(A64_X8,  A64_X9,  A64_SP, 64));
+    a64_buf_emit(&buf, a64_stp(A64_X0, A64_X1, A64_SP, 0));
+    a64_buf_emit(&buf, a64_stp(A64_X2, A64_X3, A64_SP, 16));
+    a64_buf_emit(&buf, a64_stp(A64_X4, A64_X5, A64_SP, 32));
+    a64_buf_emit(&buf, a64_stp(A64_X6, A64_X7, A64_SP, 48));
+    a64_buf_emit(&buf, a64_stp(A64_X8, A64_X9, A64_SP, 64));
     a64_buf_emit(&buf, a64_stp(A64_X10, A64_X11, A64_SP, 80));
     a64_buf_emit(&buf, a64_stp(A64_X12, A64_X13, A64_SP, 96));
     a64_buf_emit(&buf, a64_stp(A64_X14, A64_X15, A64_SP, 112));
-    a64_buf_emit(&buf, a64_str(A64_LR,  A64_SP, 128));
+    a64_buf_emit(&buf, a64_str(A64_LR, A64_SP, 128));
     // FP caller-saved d0-d7
     for (int i = 0; i < 8; i++)
         a64_buf_emit(&buf, a64_str_fp(i, A64_SP, 136 + i * 8));
 
     // Save SP to jit_ctx for GC stack map access
-    a64_buf_emit(&buf, a64_str(A64_SP, A64_X28,
-                               (int32_t)XIR_JIT_SAFEPOINT_SAVED_SP_OFFSET));
+    a64_buf_emit(&buf, a64_str(A64_SP, A64_X28, (int32_t) XIR_JIT_SAFEPOINT_SAVED_SP_OFFSET));
 
     // Call xr_coro_gc_safepoint(coro)
     a64_buf_emit(&buf, a64_mov(A64_X0, A64_X19));  // x0 = coro
-    a64_load_imm64(&buf, A64_X16,
-                   (uint64_t)(uintptr_t)xr_coro_gc_safepoint);
+    a64_load_imm64(&buf, A64_X16, (uint64_t) (uintptr_t) xr_coro_gc_safepoint);
     a64_buf_emit(&buf, a64_blr(A64_X16));
     // x0 = return value (0=continue, non-zero=cancel) — ignored for v1
 
@@ -164,26 +164,25 @@ void jit_guard_page_init_trampoline(void) {
     for (int i = 0; i < 8; i++)
         a64_buf_emit(&buf, a64_ldr_fp(i, A64_SP, 136 + i * 8));
     // Restore GP
-    a64_buf_emit(&buf, a64_ldp(A64_X0,  A64_X1,  A64_SP, 0));
-    a64_buf_emit(&buf, a64_ldp(A64_X2,  A64_X3,  A64_SP, 16));
-    a64_buf_emit(&buf, a64_ldp(A64_X4,  A64_X5,  A64_SP, 32));
-    a64_buf_emit(&buf, a64_ldp(A64_X6,  A64_X7,  A64_SP, 48));
-    a64_buf_emit(&buf, a64_ldp(A64_X8,  A64_X9,  A64_SP, 64));
+    a64_buf_emit(&buf, a64_ldp(A64_X0, A64_X1, A64_SP, 0));
+    a64_buf_emit(&buf, a64_ldp(A64_X2, A64_X3, A64_SP, 16));
+    a64_buf_emit(&buf, a64_ldp(A64_X4, A64_X5, A64_SP, 32));
+    a64_buf_emit(&buf, a64_ldp(A64_X6, A64_X7, A64_SP, 48));
+    a64_buf_emit(&buf, a64_ldp(A64_X8, A64_X9, A64_SP, 64));
     a64_buf_emit(&buf, a64_ldp(A64_X10, A64_X11, A64_SP, 80));
     a64_buf_emit(&buf, a64_ldp(A64_X12, A64_X13, A64_SP, 96));
     a64_buf_emit(&buf, a64_ldp(A64_X14, A64_X15, A64_SP, 112));
-    a64_buf_emit(&buf, a64_ldr(A64_LR,  A64_SP, 128));
+    a64_buf_emit(&buf, a64_ldr(A64_LR, A64_SP, 128));
     a64_buf_emit(&buf, a64_add_imm(A64_SP, A64_SP, 256));
 
     // Jump to saved return PC: jit_ctx->safepoint_return_pc
-    a64_buf_emit(&buf, a64_ldr(A64_X16, A64_X28,
-                               (int32_t)XIR_JIT_SAFEPOINT_RETURN_PC_OFFSET));
+    a64_buf_emit(&buf, a64_ldr(A64_X16, A64_X28, (int32_t) XIR_JIT_SAFEPOINT_RETURN_PC_OFFSET));
     a64_buf_emit(&buf, a64_br(A64_X16));
 
     // Copy to executable memory
     g_trampoline_size = buf.count * 4;
-    g_safepoint_trampoline = mmap(NULL, 4096, PROT_READ | PROT_WRITE,
-                                  MAP_PRIVATE | MAP_ANON, -1, 0);
+    g_safepoint_trampoline =
+        mmap(NULL, 4096, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANON, -1, 0);
     if (g_safepoint_trampoline == MAP_FAILED) {
         g_safepoint_trampoline = NULL;
         fprintf(stderr, "[JIT] FATAL: failed to allocate safepoint trampoline\n");
@@ -194,7 +193,7 @@ void jit_guard_page_init_trampoline(void) {
 
     // Clear instruction cache for the trampoline
     __builtin___clear_cache(g_safepoint_trampoline,
-                            (char *)g_safepoint_trampoline + g_trampoline_size);
+                            (char *) g_safepoint_trampoline + g_trampoline_size);
 }
 
 /* ========== Crash Handler ========== */
@@ -208,27 +207,29 @@ static struct sigaction g_old_sigbus;
  * Returns true if handled (execution will resume at trampoline).
  * Returns false if this is a real crash.
  */
-static bool try_handle_guard_page_fault(void *fault_pc, void *fault_addr,
-                                         void *ucontext) {
+static bool try_handle_guard_page_fault(void *fault_pc, void *fault_addr, void *ucontext) {
 #if defined(__aarch64__) || defined(__arm64__)
-    if (!fault_pc || !fault_addr) return false;
+    if (!fault_pc || !fault_addr)
+        return false;
 
-    ucontext_t *uc = (ucontext_t *)ucontext;
+    ucontext_t *uc = (ucontext_t *) ucontext;
 
     // Read x28 (JIT_CTX_REG) from ucontext to get jit_ctx
-  #if defined(__APPLE__)
+#if defined(__APPLE__)
     uint64_t x28_val = uc->uc_mcontext->__ss.__x[28];
-  #elif defined(__linux__)
+#elif defined(__linux__)
     uint64_t x28_val = uc->uc_mcontext.regs[28];
-  #else
+#else
     return false;
-  #endif
+#endif
 
-    if (!x28_val) return false;
+    if (!x28_val)
+        return false;
 
     // Verify fault_addr matches jit_ctx->safepoint_page
-    XrJitScratch *jit_ctx = (XrJitScratch *)(uintptr_t)x28_val;
-    if (fault_addr != jit_ctx->safepoint_page) return false;
+    XrJitScratch *jit_ctx = (XrJitScratch *) (uintptr_t) x28_val;
+    if (fault_addr != jit_ctx->safepoint_page)
+        return false;
 
     // This IS a guard page fault. Disarm first.
     jit_guard_page_disarm(jit_ctx->safepoint_page);
@@ -243,19 +244,19 @@ static bool try_handle_guard_page_fault(void *fault_pc, void *fault_addr,
 
     // JIT code fault: redirect to safepoint trampoline.
     // 1. Look up smap_id from fault PC offset in stack map table
-    uint32_t fault_offset = (uint32_t)((uintptr_t)fault_pc - (uintptr_t)region->code);
-    XrStackMapTable *smap = (XrStackMapTable *)jit_ctx->active_stack_map;
+    uint32_t fault_offset = (uint32_t) ((uintptr_t) fault_pc - (uintptr_t) region->code);
+    XrStackMapTable *smap = (XrStackMapTable *) jit_ctx->active_stack_map;
     if (smap && smap->magic == XR_STACK_MAP_MAGIC) {
         for (uint32_t i = 0; i < smap->count; i++) {
             if (smap->entries[i].pc_offset == fault_offset) {
                 jit_ctx->active_safepoint_id = i;
-              #if defined(__APPLE__)
+#if defined(__APPLE__)
                 uint64_t fp_val = uc->uc_mcontext->__ss.__fp;
-              #elif defined(__linux__)
+#elif defined(__linux__)
                 uint64_t fp_val = uc->uc_mcontext.regs[29];
-              #endif
+#endif
                 if (fp_val) {
-                    *(uint32_t *)((uintptr_t)fp_val + 168) = i;  // FRAME_SMAP_ID_OFFSET
+                    *(uint32_t *) ((uintptr_t) fp_val + 168) = i;  // FRAME_SMAP_ID_OFFSET
                 }
                 break;
             }
@@ -263,18 +264,20 @@ static bool try_handle_guard_page_fault(void *fault_pc, void *fault_addr,
     }
 
     // 2. Save return PC (instruction after the faulting LDR)
-    jit_ctx->safepoint_return_pc = (void *)((uintptr_t)fault_pc + 4);
+    jit_ctx->safepoint_return_pc = (void *) ((uintptr_t) fault_pc + 4);
 
     // 3. Redirect execution to global safepoint trampoline
-  #if defined(__APPLE__)
-    uc->uc_mcontext->__ss.__pc = (uint64_t)(uintptr_t)g_safepoint_trampoline;
-  #elif defined(__linux__)
-    uc->uc_mcontext.pc = (uint64_t)(uintptr_t)g_safepoint_trampoline;
-  #endif
+#if defined(__APPLE__)
+    uc->uc_mcontext->__ss.__pc = (uint64_t) (uintptr_t) g_safepoint_trampoline;
+#elif defined(__linux__)
+    uc->uc_mcontext.pc = (uint64_t) (uintptr_t) g_safepoint_trampoline;
+#endif
 
     return true;
 #else
-    (void)fault_pc; (void)fault_addr; (void)ucontext;
+    (void) fault_pc;
+    (void) fault_addr;
+    (void) ucontext;
     return false;
 #endif
 }
@@ -285,19 +288,19 @@ static void jit_crash_handler(int sig, siginfo_t *info, void *ucontext) {
     // Get faulting PC from ucontext
     void *fault_pc = NULL;
 #if defined(__aarch64__) || defined(__arm64__)
-    ucontext_t *uc = (ucontext_t *)ucontext;
-  #if defined(__APPLE__)
-    fault_pc = (void *)uc->uc_mcontext->__ss.__pc;
-  #elif defined(__linux__)
-    fault_pc = (void *)uc->uc_mcontext.pc;
-  #endif
+    ucontext_t *uc = (ucontext_t *) ucontext;
+#if defined(__APPLE__)
+    fault_pc = (void *) uc->uc_mcontext->__ss.__pc;
+#elif defined(__linux__)
+    fault_pc = (void *) uc->uc_mcontext.pc;
+#endif
 #elif defined(__x86_64__)
-    ucontext_t *uc = (ucontext_t *)ucontext;
-  #if defined(__APPLE__)
-    fault_pc = (void *)uc->uc_mcontext->__ss.__rip;
-  #elif defined(__linux__)
-    fault_pc = (void *)uc->uc_mcontext.gregs[16]; // REG_RIP
-  #endif
+    ucontext_t *uc = (ucontext_t *) ucontext;
+#if defined(__APPLE__)
+    fault_pc = (void *) uc->uc_mcontext->__ss.__rip;
+#elif defined(__linux__)
+    fault_pc = (void *) uc->uc_mcontext.gregs[16];  // REG_RIP
+#endif
 #endif
 
     // Try guard page safepoint first (returns true if handled).
@@ -306,18 +309,17 @@ static void jit_crash_handler(int sig, siginfo_t *info, void *ucontext) {
         try_handle_guard_page_fault(fault_pc, info->si_addr, ucontext))
         return;
 
-    fprintf(stderr, "\n[JIT-CRASH] %s at pc=%p fault_addr=%p\n",
-            signame, fault_pc, info->si_addr);
+    fprintf(stderr, "\n[JIT-CRASH] %s at pc=%p fault_addr=%p\n", signame, fault_pc, info->si_addr);
 
     // Lookup in JIT code registry
     if (fault_pc) {
         const JitCodeRegion *r = jit_debug_lookup(fault_pc);
         if (r) {
-            uint32_t offset = (uint32_t)((uintptr_t)fault_pc - (uintptr_t)r->code);
+            uint32_t offset = (uint32_t) ((uintptr_t) fault_pc - (uintptr_t) r->code);
             fprintf(stderr, "[JIT-CRASH] In function '%s' at offset 0x%04x (instruction #%u)\n",
                     r->name ? r->name : "?", offset, offset / 4);
-            fprintf(stderr, "[JIT-CRASH] Code range: %p - %p (%u bytes)\n",
-                    r->code, (char *)r->code + r->code_size, r->code_size);
+            fprintf(stderr, "[JIT-CRASH] Code range: %p - %p (%u bytes)\n", r->code,
+                    (char *) r->code + r->code_size, r->code_size);
 
             // Dump surrounding context: 5 instructions before and after
             uint32_t crash_inst = offset / 4;
@@ -326,23 +328,22 @@ static void jit_crash_handler(int sig, siginfo_t *info, void *ucontext) {
             uint32_t end = (crash_inst + 10 < n_inst) ? crash_inst + 10 : n_inst;
 
             fprintf(stderr, "[JIT-CRASH] Disassembly around crash point:\n");
-            const uint32_t *code = (const uint32_t *)r->code;
+            const uint32_t *code = (const uint32_t *) r->code;
             char line[256];
             for (uint32_t i = start; i < end; i++) {
                 uint32_t off = i * 4;
                 a64_disasm_one(line, sizeof(line), code[i], off);
-                fprintf(stderr, "  %s %04x: %08x  %s\n",
-                        (i == crash_inst) ? ">>>" : "   ", off, code[i], line);
+                fprintf(stderr, "  %s %04x: %08x  %s\n", (i == crash_inst) ? ">>>" : "   ", off,
+                        code[i], line);
             }
 
             // Also dump full disassembly to /tmp
             char fname[256];
-            snprintf(fname, sizeof(fname), "/tmp/jit_crash_%s.txt",
-                     r->name ? r->name : "unknown");
+            snprintf(fname, sizeof(fname), "/tmp/jit_crash_%s.txt", r->name ? r->name : "unknown");
             FILE *f = fopen(fname, "w");
             if (f) {
-                fprintf(f, "JIT crash in '%s' at offset 0x%04x\n\n",
-                        r->name ? r->name : "?", offset);
+                fprintf(f, "JIT crash in '%s' at offset 0x%04x\n\n", r->name ? r->name : "?",
+                        offset);
                 a64_disasm_dump(f, code, n_inst, 0);
                 fclose(f);
                 fprintf(stderr, "[JIT-CRASH] Full disassembly saved to %s\n", fname);
@@ -354,28 +355,28 @@ static void jit_crash_handler(int sig, siginfo_t *info, void *ucontext) {
             fprintf(stderr, "[JIT-CRASH] Known JIT regions (%u):\n", g_nregions);
             for (uint32_t i = 0; i < g_nregions; i++) {
                 const JitCodeRegion *ri = &g_regions[i];
-                fprintf(stderr, "  [%u] %s: %p - %p (%u bytes)\n",
-                        i, ri->name ? ri->name : "?",
-                        ri->code, (char *)ri->code + ri->code_size, ri->code_size);
+                fprintf(stderr, "  [%u] %s: %p - %p (%u bytes)\n", i, ri->name ? ri->name : "?",
+                        ri->code, (char *) ri->code + ri->code_size, ri->code_size);
             }
         }
     }
 
 #if defined(__aarch64__) || defined(__arm64__)
     // Print key registers for diagnosis
-    ucontext_t *uc2 = (ucontext_t *)ucontext;
-  #if defined(__APPLE__)
+    ucontext_t *uc2 = (ucontext_t *) ucontext;
+#if defined(__APPLE__)
     fprintf(stderr, "[JIT-CRASH] Registers:\n");
     for (int i = 0; i < 29; i++) {
         fprintf(stderr, "  x%-2d = 0x%016llx", i,
-                (unsigned long long)uc2->uc_mcontext->__ss.__x[i]);
-        if (i % 4 == 3) fprintf(stderr, "\n");
+                (unsigned long long) uc2->uc_mcontext->__ss.__x[i]);
+        if (i % 4 == 3)
+            fprintf(stderr, "\n");
     }
     fprintf(stderr, "\n  fp  = 0x%016llx  lr  = 0x%016llx  sp  = 0x%016llx\n",
-            (unsigned long long)uc2->uc_mcontext->__ss.__fp,
-            (unsigned long long)uc2->uc_mcontext->__ss.__lr,
-            (unsigned long long)uc2->uc_mcontext->__ss.__sp);
-  #endif
+            (unsigned long long) uc2->uc_mcontext->__ss.__fp,
+            (unsigned long long) uc2->uc_mcontext->__ss.__lr,
+            (unsigned long long) uc2->uc_mcontext->__ss.__sp);
+#endif
 #endif
 
     fprintf(stderr, "[JIT-CRASH] Aborting.\n");
@@ -394,7 +395,7 @@ static void jit_crash_handler(int sig, siginfo_t *info, void *ucontext) {
 // Uses macOS sysctl P_TRACED flag; returns false on other platforms.
 static bool jit_debugger_attached(void) {
 #if defined(__APPLE__)
-    int mib[4] = { CTL_KERN, KERN_PROC, KERN_PROC_PID, getpid() };
+    int mib[4] = {CTL_KERN, KERN_PROC, KERN_PROC_PID, getpid()};
     struct kinfo_proc info;
     memset(&info, 0, sizeof(info));
     size_t size = sizeof(info);
@@ -415,9 +416,9 @@ void jit_debug_install_crash_handler(void) {
         return;
     }
 
-    // Allocate alternate signal stack so handler works during stack overflow
-    // Use fixed 64KB instead of SIGSTKSZ which is not a compile-time constant on glibc 2.34+
-    #define JIT_ALT_STACK_SIZE (64 * 1024)
+// Allocate alternate signal stack so handler works during stack overflow
+// Use fixed 64KB instead of SIGSTKSZ which is not a compile-time constant on glibc 2.34+
+#define JIT_ALT_STACK_SIZE (64 * 1024)
     static char alt_stack_buf[JIT_ALT_STACK_SIZE];
     stack_t ss;
     ss.ss_sp = alt_stack_buf;
@@ -439,4 +440,4 @@ void jit_debug_install_crash_handler(void) {
     fprintf(stderr, "[JIT-debug] crash handler installed (with alt stack)\n");
 }
 
-#endif // __aarch64__
+#endif  // __aarch64__

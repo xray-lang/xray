@@ -27,11 +27,21 @@ static void fprint_json_string(FILE *f, const char *s) {
     fputc('"', f);
     for (; *s; s++) {
         switch (*s) {
-            case '"':  fputs("\\\"", f); break;
-            case '\\': fputs("\\\\", f); break;
-            case '\n': fputs("\\n", f);  break;
-            case '\t': fputs("\\t", f);  break;
-            default:   fputc(*s, f);     break;
+            case '"':
+                fputs("\\\"", f);
+                break;
+            case '\\':
+                fputs("\\\\", f);
+                break;
+            case '\n':
+                fputs("\\n", f);
+                break;
+            case '\t':
+                fputs("\\t", f);
+                break;
+            default:
+                fputc(*s, f);
+                break;
         }
     }
     fputc('"', f);
@@ -51,9 +61,12 @@ XR_FUNC int cmd_deps(const XrCliInvocation *inv) {
     const char *output_file = xr_cli_opt_string(&inv->options, "output", NULL);
 
     OutputFormat format = OUTPUT_SHELL;
-    if (xr_cli_opt_present(&inv->options, "json")) format = OUTPUT_JSON;
-    else if (xr_cli_opt_present(&inv->options, "list")) format = OUTPUT_LIST;
-    else if (xr_cli_opt_present(&inv->options, "shell")) format = OUTPUT_SHELL;
+    if (xr_cli_opt_present(&inv->options, "json"))
+        format = OUTPUT_JSON;
+    else if (xr_cli_opt_present(&inv->options, "list"))
+        format = OUTPUT_LIST;
+    else if (xr_cli_opt_present(&inv->options, "shell"))
+        format = OUTPUT_SHELL;
 
     /* Create isolate and analyze dependencies */
     XrayIsolate *X = xr_cli_isolate_new(XR_CLI_ISOLATE_RUN);
@@ -112,21 +125,24 @@ XR_FUNC int cmd_deps(const XrCliInvocation *inv) {
 
             fprintf(out, "  \"stdlib\": [");
             for (int i = 0; i < bundle->stdlib.count; i++) {
-                if (i > 0) fprintf(out, ", ");
+                if (i > 0)
+                    fprintf(out, ", ");
                 fprint_json_string(out, bundle->stdlib.deps[i]);
             }
             fprintf(out, "],\n");
 
             fprintf(out, "  \"packages\": [");
             for (int i = 0; i < bundle->packages.count; i++) {
-                if (i > 0) fprintf(out, ", ");
+                if (i > 0)
+                    fprintf(out, ", ");
                 fprint_json_string(out, bundle->packages.deps[i]);
             }
             fprintf(out, "],\n");
 
             fprintf(out, "  \"local_modules\": [");
             for (int i = 0; i < bundle->count - 1; i++) {
-                if (i > 0) fprintf(out, ", ");
+                if (i > 0)
+                    fprintf(out, ", ");
                 fprint_json_string(out, bundle->entries[i].path);
             }
             fprintf(out, "]\n");

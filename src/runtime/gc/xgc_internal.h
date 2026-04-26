@@ -23,24 +23,24 @@
 
 #ifndef XR_VALUE_DEFINED
 typedef struct XrValue XrValue;
-#endif // Thread-local storage macro
+#endif  // Thread-local storage macro
 #ifdef __GNUC__
-    #define XR_THREAD_LOCAL __thread
+#define XR_THREAD_LOCAL __thread
 #elif defined(_MSC_VER)
-    #define XR_THREAD_LOCAL __declspec(thread)
+#define XR_THREAD_LOCAL __declspec(thread)
 #else
-    #define XR_THREAD_LOCAL
-#endif // Use unified GC header
+#define XR_THREAD_LOCAL
+#endif  // Use unified GC header
 #include "xgc_header.h"
 
 /* ========== GC State ========== */
 
-#define XGC_IDLE        0
+#define XGC_IDLE 0
 
 /* ========== Marked Field Access ========== */
 
-#define xr_gc_getmarked(o)      ((o)->marked)
-#define xr_gc_setmarked(o, m)   ((o)->marked = (uint8_t)(m))
+#define xr_gc_getmarked(o) ((o)->marked)
+#define xr_gc_setmarked(o, m) ((o)->marked = (uint8_t) (m))
 
 /*
  * Color bit definitions are ONLY in xcoro_gc.h (dual-white).
@@ -55,7 +55,7 @@ typedef struct XrGC XrGC;
 typedef struct XrCoroGC XrCoroGC;
 
 // Maximum GC type ID
-#define XGC_MAX_TYPES   64
+#define XGC_MAX_TYPES 64
 
 /* ========== Type Function Types (must be before XrGC) ========== */
 
@@ -67,7 +67,7 @@ typedef void (*XrGCDestroyFn)(XrGCHeader *obj, XrCoroGC *owning_gc);
 typedef void (*XrGCTraverseFn)(XrCoroGC *gc, XrGCHeader *obj);
 typedef XrValue (*XrGCDeepCopyFn)(struct XrCopyContext *ctx, XrGCHeader *obj);
 typedef XrValue (*XrGCToSharedFn)(struct XrayIsolate *X, XrGCHeader *obj);
-typedef struct XrGCHeader** (*XrGCGetGCListFn)(XrGCHeader *obj);
+typedef struct XrGCHeader **(*XrGCGetGCListFn)(XrGCHeader *obj);
 
 /* ========== Per-Type Operations Table ==========
  *
@@ -93,10 +93,10 @@ typedef struct XrGCHeader** (*XrGCGetGCListFn)(XrGCHeader *obj);
  * XrayIsolate and are consulted as a fallback when this table's slot
  * is empty. */
 typedef struct {
-    XrGCDestroyFn   destroy;    // Release malloc-backed side resources
-    XrGCTraverseFn  traverse;   // Mark GC-traced children
-    XrGCDeepCopyFn  deep_copy;  // Cross-coroutine deep copy (Immix heap)
-    XrGCToSharedFn  to_shared;  // Cross-coroutine shared/refcount copy
+    XrGCDestroyFn destroy;     // Release malloc-backed side resources
+    XrGCTraverseFn traverse;   // Mark GC-traced children
+    XrGCDeepCopyFn deep_copy;  // Cross-coroutine deep copy (Immix heap)
+    XrGCToSharedFn to_shared;  // Cross-coroutine shared/refcount copy
 } XrTypeOps;
 
 typedef struct XrGC {
@@ -104,7 +104,7 @@ typedef struct XrGC {
     uint8_t _pad[7];
     struct XrayIsolate *isolate;
     int64_t totalbytes;
-    XrGCHeader *fixedgc;      // Fixed objects (compile-time)
+    XrGCHeader *fixedgc;  // Fixed objects (compile-time)
     size_t object_count;
 } XrGC;
 
@@ -112,8 +112,8 @@ typedef struct XrGC {
 
 XR_FUNC void xr_gc_init(XrGC *gc, struct XrayIsolate *isolate);
 XR_FUNC void xr_gc_cleanup(XrGC *gc);
-XR_FUNC void* xr_gc_alloc(XrGC *gc, size_t size, uint8_t type);
-XR_FUNC XrGCHeader* xr_gc_newobj(XrGC *gc, uint8_t type, size_t size);
+XR_FUNC void *xr_gc_alloc(XrGC *gc, size_t size, uint8_t type);
+XR_FUNC XrGCHeader *xr_gc_newobj(XrGC *gc, uint8_t type, size_t size);
 
 /* ========== Compile-Time Type Function Tables ========== */
 
@@ -159,4 +159,4 @@ XR_FUNC void xr_gc_traverse_task(XrCoroGC *gc, XrGCHeader *obj);
 
 XR_FUNC void xr_gc_printstats(XrGC *gc);
 
-#endif // XGC_INTERNAL_H
+#endif  // XGC_INTERNAL_H

@@ -36,49 +36,50 @@
 
 /* ========== Futex-based Park/Unpark ========== */
 
-#define XR_PARK_IDLE    0   // Parked, waiting for wake
-#define XR_PARK_WOKEN   1   // Woken by signal
+#define XR_PARK_IDLE 0      // Parked, waiting for wake
+#define XR_PARK_WOKEN 1     // Woken by signal
 #define XR_PARK_NOTIFIED 2  // Pre-notification before park
 
 #ifdef XR_OS_LINUX
-  #include <linux/futex.h>
-  #include <sys/syscall.h>
-  #include <unistd.h>
-  #include <errno.h>
-  #include <time.h>
-  static inline void xr_park_futex_wait(_Atomic int *addr, int expected, uint32_t timeout_us) {
-      if (timeout_us == 0) {
-          syscall(SYS_futex, addr, FUTEX_WAIT_PRIVATE, expected, NULL, NULL, 0);
-      } else {
-          struct timespec ts = { .tv_sec = timeout_us / 1000000, .tv_nsec = (timeout_us % 1000000) * 1000 };
-          syscall(SYS_futex, addr, FUTEX_WAIT_PRIVATE, expected, &ts, NULL, 0);
-      }
-  }
-  static inline void xr_park_futex_wake(_Atomic int *addr) {
-      syscall(SYS_futex, addr, FUTEX_WAKE_PRIVATE, 1, NULL, NULL, 0);
-  }
+#include <linux/futex.h>
+#include <sys/syscall.h>
+#include <unistd.h>
+#include <errno.h>
+#include <time.h>
+static inline void xr_park_futex_wait(_Atomic int *addr, int expected, uint32_t timeout_us) {
+    if (timeout_us == 0) {
+        syscall(SYS_futex, addr, FUTEX_WAIT_PRIVATE, expected, NULL, NULL, 0);
+    } else {
+        struct timespec ts = {.tv_sec = timeout_us / 1000000,
+                              .tv_nsec = (timeout_us % 1000000) * 1000};
+        syscall(SYS_futex, addr, FUTEX_WAIT_PRIVATE, expected, &ts, NULL, 0);
+    }
+}
+static inline void xr_park_futex_wake(_Atomic int *addr) {
+    syscall(SYS_futex, addr, FUTEX_WAKE_PRIVATE, 1, NULL, NULL, 0);
+}
 #elif defined(XR_OS_MACOS)
-  #include <errno.h>
-  #include <time.h>
-  extern int __ulock_wait(uint32_t operation, void *addr, uint64_t value, uint32_t timeout_us);
-  extern int __ulock_wake(uint32_t operation, void *addr, uint64_t wake_value);
-  #define XR_UL_COMPARE_AND_WAIT_M  1
-  static inline void xr_park_futex_wait(_Atomic int *addr, int expected, uint32_t timeout_us) {
-      __ulock_wait(XR_UL_COMPARE_AND_WAIT_M, addr, (uint64_t)(uint32_t)expected, timeout_us);
-  }
-  static inline void xr_park_futex_wake(_Atomic int *addr) {
-      __ulock_wake(XR_UL_COMPARE_AND_WAIT_M, addr, 0);
-  }
+#include <errno.h>
+#include <time.h>
+extern int __ulock_wait(uint32_t operation, void *addr, uint64_t value, uint32_t timeout_us);
+extern int __ulock_wake(uint32_t operation, void *addr, uint64_t wake_value);
+#define XR_UL_COMPARE_AND_WAIT_M 1
+static inline void xr_park_futex_wait(_Atomic int *addr, int expected, uint32_t timeout_us) {
+    __ulock_wait(XR_UL_COMPARE_AND_WAIT_M, addr, (uint64_t) (uint32_t) expected, timeout_us);
+}
+static inline void xr_park_futex_wake(_Atomic int *addr) {
+    __ulock_wake(XR_UL_COMPARE_AND_WAIT_M, addr, 0);
+}
 #elif defined(XR_OS_WINDOWS)
-  #include <windows.h>
-  static inline void xr_park_futex_wait(_Atomic int *addr, int expected, uint32_t timeout_us) {
-      DWORD ms = (timeout_us == 0) ? INFINITE : (timeout_us / 1000);
-      WaitOnAddress(addr, &expected, sizeof(int), ms);
-  }
-  static inline void xr_park_futex_wake(_Atomic int *addr) {
-      WakeByAddressSingle(addr);
-  }
-#endif // Forward declarations
+#include <windows.h>
+static inline void xr_park_futex_wait(_Atomic int *addr, int expected, uint32_t timeout_us) {
+    DWORD ms = (timeout_us == 0) ? INFINITE : (timeout_us / 1000);
+    WaitOnAddress(addr, &expected, sizeof(int), ms);
+}
+static inline void xr_park_futex_wake(_Atomic int *addr) {
+    WakeByAddressSingle(addr);
+}
+#endif  // Forward declarations
 struct XrProc;
 struct XrRuntime;
 struct XrCoroutine;
@@ -87,14 +88,14 @@ struct XrWorker;
 /* ========== M State ========== */
 
 typedef enum {
-    M_IDLE,       // Woke from park, no coroutine yet
-    M_RUNNING,    // Actively executing a coroutine
-    M_SPINNING,   // Looking for work (spinning)
-    M_STEALING,   // Stealing from another P's run queue
-    M_PARKING,    // Transitioning to parked (entering sleep)
-    M_PARKED,     // Sleeping, waiting to be woken
-    M_BLOCKED,    // Blocked in C code / syscall (no P)
-    M_SHUTDOWN    // Shutting down
+    M_IDLE,      // Woke from park, no coroutine yet
+    M_RUNNING,   // Actively executing a coroutine
+    M_SPINNING,  // Looking for work (spinning)
+    M_STEALING,  // Stealing from another P's run queue
+    M_PARKING,   // Transitioning to parked (entering sleep)
+    M_PARKED,    // Sleeping, waiting to be woken
+    M_BLOCKED,   // Blocked in C code / syscall (no P)
+    M_SHUTDOWN   // Shutting down
 } XrMachineState;
 
 /* ========== Machine VM Storage ========== */
@@ -125,11 +126,11 @@ typedef struct XrMachine {
     struct XrCoroutine *current_coro;
 
     /* === State === */
-    _Atomic int state;    // XrMachineState
+    _Atomic int state;  // XrMachineState
     bool spinning;
 
     /* === Sleep/Wake Mechanism (futex-based, replaces pthread mutex+cond) === */
-    _Atomic int park_state;   // XR_PARK_IDLE / XR_PARK_WOKEN / XR_PARK_NOTIFIED
+    _Atomic int park_state;  // XR_PARK_IDLE / XR_PARK_WOKEN / XR_PARK_NOTIFIED
 
     /* === Heartbeat (sysmon uses) === */
     _Atomic uint64_t heartbeat;
@@ -144,9 +145,9 @@ typedef struct XrMachine {
     struct XrWorker *blocked_worker;
 
     /* === M Linked Lists === */
-    struct XrMachine *all_link;     // Global all-M list
-    struct XrMachine *idle_link;   // Idle list link (shared by idle_worker_list
-                                    // OR idle_m_head at any moment — see xworker.h)
+    struct XrMachine *all_link;   // Global all-M list
+    struct XrMachine *idle_link;  // Idle list link (shared by idle_worker_list
+                                  // OR idle_m_head at any moment — see xworker.h)
 
     /* === Idle-stack guard ===
      * Prevents the same M from being pushed twice onto idle_worker_list.
@@ -162,7 +163,7 @@ typedef struct XrMachine {
     struct XrRuntime *runtime;
 
     /* === Thread Reuse (handoff M keeps thread alive) === */
-    _Atomic bool has_thread;   // true if M has a parked thread waiting for next_p
+    _Atomic bool has_thread;  // true if M has a parked thread waiting for next_p
 } XrMachine;
 
 /* ========== M Lifecycle API ========== */
@@ -195,4 +196,4 @@ XR_FUNC void xr_put_idle_m(struct XrRuntime *runtime, XrMachine *m);
 // Reference: Go src/runtime/proc.go startm()
 XR_FUNC void xr_startm(struct XrProc *p, bool spinning);
 
-#endif // XMACHINE_H
+#endif  // XMACHINE_H

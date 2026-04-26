@@ -23,4 +23,4 @@ XR_FUNC XrJsonValue *xlsp_handle_workspace_symbol(XrLspServer *server, XrJsonVal
 XR_FUNC XrJsonValue *xlsp_handle_selection_range(XrLspServer *server, XrJsonValue *params);
 XR_FUNC XrJsonValue *xlsp_handle_document_link(XrLspServer *server, XrJsonValue *params);
 
-#endif // XLSP_EXTRA_HANDLERS_H
+#endif  // XLSP_EXTRA_HANDLERS_H

@@ -46,16 +46,16 @@ typedef struct XrICFieldEntry {
 typedef struct XrICField {
     XrICFieldState state;
     uint8_t entry_count;
-    int cached_symbol;         // For cache validity check
-    XrICFieldEntry entries[4]; // Max 4 types cached
+    int cached_symbol;          // For cache validity check
+    XrICFieldEntry entries[4];  // Max 4 types cached
     uint32_t miss_count;
 
     // Json Shape IC: caches (shape_id, field_index) for monomorphic Json access.
     // Same OP_GETPROP either hits Json or Instance path, never both simultaneously.
-    uint16_t json_shape_id;    // Cached shape id (0 = uninit)
-    uint16_t json_field_idx;   // Cached field index within fields[]
+    uint16_t json_shape_id;   // Cached shape id (0 = uninit)
+    uint16_t json_field_idx;  // Cached field index within fields[]
 #ifndef NDEBUG
-    int debug_instruction_offset; // Expected instruction offset for cache validation
+    int debug_instruction_offset;  // Expected instruction offset for cache validation
 #endif
 } XrICField;
 
@@ -80,10 +80,9 @@ static inline void xr_ic_field_init(XrICField *ic) {
 
 // Fast path - monomorphic lookup (Class/Instance)
 // Returns true on hit, false on miss
-static inline bool xr_ic_field_lookup_mono(XrICField *ic, XrClass *cls, int symbol, int *out_offset) {
-    if (ic->state == XR_IC_FIELD_MONO && 
-        ic->cached_symbol == symbol && 
-        ic->entries[0].cls == cls) {
+static inline bool xr_ic_field_lookup_mono(XrICField *ic, XrClass *cls, int symbol,
+                                           int *out_offset) {
+    if (ic->state == XR_IC_FIELD_MONO && ic->cached_symbol == symbol && ic->entries[0].cls == cls) {
         *out_offset = ic->entries[0].offset;
         ic->entries[0].hit_count++;
         return true;
@@ -93,7 +92,8 @@ static inline bool xr_ic_field_lookup_mono(XrICField *ic, XrClass *cls, int symb
 
 // Fast path - polymorphic lookup
 // Returns true on hit, false on miss
-static inline bool xr_ic_field_lookup_poly(XrICField *ic, XrClass *cls, int symbol, int *out_offset) {
+static inline bool xr_ic_field_lookup_poly(XrICField *ic, XrClass *cls, int symbol,
+                                           int *out_offset) {
     if (ic->state == XR_IC_FIELD_POLY && ic->cached_symbol == symbol) {
         for (int i = 0; i < ic->entry_count; i++) {
             if (ic->entries[i].cls == cls) {
@@ -108,7 +108,8 @@ static inline bool xr_ic_field_lookup_poly(XrICField *ic, XrClass *cls, int symb
 
 // Json Shape IC: monomorphic lookup by shape_id
 // Returns true on hit with field index in *out_idx
-static inline bool xr_ic_json_lookup(XrICField *ic, uint16_t shape_id, int symbol, uint16_t *out_idx) {
+static inline bool xr_ic_json_lookup(XrICField *ic, uint16_t shape_id, int symbol,
+                                     uint16_t *out_idx) {
     if (ic->json_shape_id == shape_id && ic->cached_symbol == symbol && shape_id != 0) {
         *out_idx = ic->json_field_idx;
         return true;
@@ -117,7 +118,8 @@ static inline bool xr_ic_json_lookup(XrICField *ic, uint16_t shape_id, int symbo
 }
 
 // Json Shape IC: update cache after miss
-static inline void xr_ic_json_update(XrICField *ic, uint16_t shape_id, uint16_t field_idx, int symbol) {
+static inline void xr_ic_json_update(XrICField *ic, uint16_t shape_id, uint16_t field_idx,
+                                     int symbol) {
     ic->json_shape_id = shape_id;
     ic->json_field_idx = field_idx;
     ic->cached_symbol = symbol;
@@ -139,4 +141,4 @@ typedef struct XrICFieldStats {
 XR_FUNC void xr_ic_field_collect_stats(XrICField *ic, XrICFieldStats *stats);
 XR_FUNC void xr_ic_field_print_stats(XrICFieldStats *stats);
 
-#endif // XIC_FIELD_H
+#endif  // XIC_FIELD_H

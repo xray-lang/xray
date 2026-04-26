@@ -47,12 +47,20 @@ typedef struct LsChunk {
     _Alignas(8) uint8_t data[LS_CHUNK_SIZE];
 } LsChunk;
 
-typedef struct { LsChunk *cur; } LsPool;
+typedef struct {
+    LsChunk *cur;
+} LsPool;
 
-static void pool_init(LsPool *p) { p->cur = xr_calloc(1, sizeof(LsChunk)); }
+static void pool_init(LsPool *p) {
+    p->cur = xr_calloc(1, sizeof(LsChunk));
+}
 
 static void pool_free(LsPool *p) {
-    for (LsChunk *c = p->cur; c; ) { LsChunk *n = c->next; xr_free(c); c = n; }
+    for (LsChunk *c = p->cur; c;) {
+        LsChunk *n = c->next;
+        xr_free(c);
+        c = n;
+    }
     p->cur = NULL;
 }
 
@@ -82,59 +90,60 @@ typedef struct LsUsePos {
 
 typedef struct LsRange {
     uint32_t vreg;
-    uint8_t  rep;
-    bool     is_fp;
-    bool     is_fixed; // fixed interval (CALL clobber), never evicted
-    int8_t   assigned;
-    int16_t  spill;
+    uint8_t rep;
+    bool is_fp;
+    bool is_fixed;  // fixed interval (CALL clobber), never evicted
+    int8_t assigned;
+    int16_t spill;
     LsInterval *first_iv, *last_iv;
-    LsUsePos   *uses;
-    int8_t   hint;
-    uint32_t bundle_id; // union-find root vreg, or UINT32_MAX if none
+    LsUsePos *uses;
+    int8_t hint;
+    uint32_t bundle_id;  // union-find root vreg, or UINT32_MAX if none
     struct LsRange *next_sibling, *parent;
 } LsRange;
 
 // Dynamic list for Active/Inactive tracking
 typedef struct {
     LsRange **items;
-    uint32_t  len, cap;
+    uint32_t len, cap;
 } LsList;
 
 typedef struct {
     XirFunc *func;
-    XirLive  live;
-    int32_t  max_pos;
+    XirLive live;
+    int32_t max_pos;
     int32_t *blk_start, *blk_end;
-    bool    *blk_deferred; // true for cold blocks (catch, deopt, throw)
+    bool *blk_deferred;  // true for cold blocks (catch, deopt, throw)
     LsRange **vreg_ranges;
-    uint32_t  nvreg;
+    uint32_t nvreg;
     LsRange **all_ranges;
-    uint32_t  nall, all_cap;
-    int16_t   next_spill;
-    int32_t   slot_end[XIR_MAX_SPILL_SLOTS]; // last-end position per slot
-    bool      slot_is_ptr[XIR_MAX_SPILL_SLOTS]; // true if slot last used by PTR vreg
+    uint32_t nall, all_cap;
+    int16_t next_spill;
+    int32_t slot_end[XIR_MAX_SPILL_SLOTS];  // last-end position per slot
+    bool slot_is_ptr[XIR_MAX_SPILL_SLOTS];  // true if slot last used by PTR vreg
 
     // Active/Inactive state machine
-    LsList   active; // ranges assigned + covering current pos
-    LsList   inactive; // ranges assigned + in a hole at current pos
+    LsList active;    // ranges assigned + covering current pos
+    LsList inactive;  // ranges assigned + in a hole at current pos
 
     // LiveRange bundles (Phi/MOV-connected non-overlapping ranges)
-    uint32_t *bundle_parent; // union-find parent array [nvreg]
-    int8_t   *bundle_hint; // per-bundle hint register [nvreg]
-    int16_t  *bundle_spill; // per-bundle spill slot [nvreg]
+    uint32_t *bundle_parent;  // union-find parent array [nvreg]
+    int8_t *bundle_hint;      // per-bundle hint register [nvreg]
+    int16_t *bundle_spill;    // per-bundle spill slot [nvreg]
 
     // Block ID → internal index mapping for O(1) lookup
-    uint32_t *blk_id_to_idx; // [max_blk_id+1] block.id → index in blocks[]
-    uint32_t  blk_id_map_size; // size of blk_id_to_idx array
+    uint32_t *blk_id_to_idx;   // [max_blk_id+1] block.id → index in blocks[]
+    uint32_t blk_id_map_size;  // size of blk_id_to_idx array
 
-    LsPool    pool;
+    LsPool pool;
 } LsCtx;
 
 /* ========== Helpers ========== */
 
 // O(1) block ID → internal index lookup
 static uint32_t blk_idx(const LsCtx *ctx, uint32_t blk_id) {
-    if (blk_id < ctx->blk_id_map_size) return ctx->blk_id_to_idx[blk_id];
+    if (blk_id < ctx->blk_id_map_size)
+        return ctx->blk_id_to_idx[blk_id];
     return 0;
 }
 
@@ -143,23 +152,22 @@ static bool vfp(XirFunc *f, uint32_t v) {
 }
 
 static bool is_remat(XirFunc *f, uint32_t v) {
-    if (v >= f->nvreg) return false;
+    if (v >= f->nvreg)
+        return false;
     XirIns *d = f->vregs[v].def;
-    if (!d) return false;
+    if (!d)
+        return false;
     /* Constants: single-instruction immediate load. */
-    if (d->op == XIR_CONST_I64 || d->op == XIR_CONST_F64 ||
-        d->op == XIR_CONST_PTR)
+    if (d->op == XIR_CONST_I64 || d->op == XIR_CONST_F64 || d->op == XIR_CONST_PTR)
         return true;
     /* LOAD_CORO_BYTE with a const offset: single LDRB from the
      * callee-saved jit_ctx register (x28), always available. */
-    if (d->op == XIR_LOAD_CORO_BYTE &&
-        xir_ref_is_const(d->args[0]))
+    if (d->op == XIR_LOAD_CORO_BYTE && xir_ref_is_const(d->args[0]))
         return true;
     /* I2F / F2I with a const operand: 2-instruction sequence
      * (load const + SCVTF/FCVTZS).  Still cheaper than a spill
      * round-trip through the stack. */
-    if ((d->op == XIR_I2F || d->op == XIR_F2I) &&
-        xir_ref_is_const(d->args[0]))
+    if ((d->op == XIR_I2F || d->op == XIR_F2I) && xir_ref_is_const(d->args[0]))
         return true;
     return false;
 }
@@ -167,8 +175,7 @@ static bool is_remat(XirFunc *f, uint32_t v) {
 static void ctx_track(LsCtx *ctx, LsRange *r) {
     if (ctx->nall >= ctx->all_cap) {
         ctx->all_cap *= 2;
-        XR_REALLOC_OR_ABORT(ctx->all_ranges,
-                            ctx->all_cap * sizeof(LsRange *),
+        XR_REALLOC_OR_ABORT(ctx->all_ranges, ctx->all_cap * sizeof(LsRange *),
                             "regalloc ctx_track");
     }
     ctx->all_ranges[ctx->nall++] = r;
@@ -188,13 +195,15 @@ static int32_t next_use_after(const LsRange *r, int32_t pos);
 static void ls_list_init(LsList *l, uint32_t cap) {
     XR_DCHECK(l != NULL, "ls_list_init: NULL list");
     l->items = xr_malloc(cap * sizeof(LsRange *));
-    l->len = 0; l->cap = cap;
+    l->len = 0;
+    l->cap = cap;
 }
 
 static void ls_list_free(LsList *l) {
     XR_DCHECK(l != NULL, "ls_list_free: NULL list");
     xr_free(l->items);
-    l->items = NULL; l->len = l->cap = 0;
+    l->items = NULL;
+    l->len = l->cap = 0;
 }
 
 static void ls_list_add(LsList *l, LsRange *r) {
@@ -202,9 +211,7 @@ static void ls_list_add(LsList *l, LsRange *r) {
     XR_DCHECK(r != NULL, "ls_list_add: NULL range");
     if (l->len >= l->cap) {
         l->cap = l->cap ? l->cap * 2 : 16;
-        XR_REALLOC_OR_ABORT(l->items,
-                            l->cap * sizeof(LsRange *),
-                            "regalloc ls_list_add");
+        XR_REALLOC_OR_ABORT(l->items, l->cap * sizeof(LsRange *), "regalloc ls_list_add");
     }
     l->items[l->len++] = r;
 }
@@ -217,8 +224,10 @@ static void ls_list_remove_at(LsList *l, uint32_t idx) {
 // Does the range cover a specific position? (not in a hole)
 static bool covers(const LsRange *r, int32_t pos) {
     for (LsInterval *iv = r->first_iv; iv; iv = iv->next) {
-        if (iv->start <= pos && pos < iv->end) return true;
-        if (iv->start > pos) break;
+        if (iv->start <= pos && pos < iv->end)
+            return true;
+        if (iv->start > pos)
+            break;
     }
     return false;
 }
@@ -226,8 +235,8 @@ static bool covers(const LsRange *r, int32_t pos) {
 // Is this a CALL-family opcode that clobbers caller-saved registers?
 static bool is_call_op(uint16_t op) {
     return op == XIR_CALL || op == XIR_CALL_C || op == XIR_CALL_C_LEAF ||
-           op == XIR_CALL_SELF_DIRECT || op == XIR_CALL_DIRECT ||
-           op == XIR_CALL_KNOWN || op == XIR_CALL_KNOWN_REG;
+           op == XIR_CALL_SELF_DIRECT || op == XIR_CALL_DIRECT || op == XIR_CALL_KNOWN ||
+           op == XIR_CALL_KNOWN_REG;
 }
 
 /*
@@ -240,7 +249,7 @@ static bool is_call_op(uint16_t op) {
  */
 static void forward_state_to(LsCtx *ctx, int32_t pos) {
     // Active list
-    for (uint32_t i = 0; i < ctx->active.len; ) {
+    for (uint32_t i = 0; i < ctx->active.len;) {
         LsRange *r = ctx->active.items[i];
         if (range_end(r) <= pos) {
             ls_list_remove_at(&ctx->active, i);
@@ -255,7 +264,7 @@ static void forward_state_to(LsCtx *ctx, int32_t pos) {
     }
 
     // Inactive list
-    for (uint32_t i = 0; i < ctx->inactive.len; ) {
+    for (uint32_t i = 0; i < ctx->inactive.len;) {
         LsRange *r = ctx->inactive.items[i];
         if (range_end(r) <= pos) {
             ls_list_remove_at(&ctx->inactive, i);
@@ -274,30 +283,42 @@ static void forward_state_to(LsCtx *ctx, int32_t pos) {
 
 static LsInterval *iv_new(LsCtx *c, int32_t s, int32_t e) {
     LsInterval *iv = pool_alloc(&c->pool, sizeof(LsInterval));
-    iv->start = s; iv->end = e; iv->next = NULL;
+    iv->start = s;
+    iv->end = e;
+    iv->next = NULL;
     return iv;
 }
 
 static void range_add_iv(LsCtx *c, LsRange *r, int32_t s, int32_t e) {
-    if (s >= e) return;
+    if (s >= e)
+        return;
     if (!r->first_iv) {
         LsInterval *iv = iv_new(c, s, e);
         r->first_iv = r->last_iv = iv;
         return;
     }
     LsInterval *prev = NULL, *cur = r->first_iv;
-    while (cur && cur->end < s) { prev = cur; cur = cur->next; }
+    while (cur && cur->end < s) {
+        prev = cur;
+        cur = cur->next;
+    }
     int32_t ns = s, ne = e;
     while (cur && cur->start <= e) {
-        if (cur->start < ns) ns = cur->start;
-        if (cur->end > ne) ne = cur->end;
+        if (cur->start < ns)
+            ns = cur->start;
+        if (cur->end > ne)
+            ne = cur->end;
         cur = cur->next;
     }
     LsInterval *m = iv_new(c, ns, ne);
     m->next = cur;
-    if (prev) prev->next = m; else r->first_iv = m;
+    if (prev)
+        prev->next = m;
+    else
+        r->first_iv = m;
     LsInterval *l = m;
-    while (l->next) l = l->next;
+    while (l->next)
+        l = l->next;
     r->last_iv = l;
 }
 
@@ -309,23 +330,36 @@ static void range_shorten(LsRange *r, int32_t ns) {
         r->first_iv->start = ns;
 }
 
-static int32_t range_start(const LsRange *r) { return r->first_iv ? r->first_iv->start : INT32_MAX; }
-static int32_t range_end(const LsRange *r)   { return r->last_iv  ? r->last_iv->end    : -1; }
+static int32_t range_start(const LsRange *r) {
+    return r->first_iv ? r->first_iv->start : INT32_MAX;
+}
+static int32_t range_end(const LsRange *r) {
+    return r->last_iv ? r->last_iv->end : -1;
+}
 
 /* ========== UsePosition Operations ========== */
 
 static void range_add_use(LsCtx *c, LsRange *r, int32_t pos) {
     LsUsePos *prev = NULL, *cur = r->uses;
-    while (cur && cur->pos < pos) { prev = cur; cur = cur->next; }
-    if (cur && cur->pos == pos) return;
+    while (cur && cur->pos < pos) {
+        prev = cur;
+        cur = cur->next;
+    }
+    if (cur && cur->pos == pos)
+        return;
     LsUsePos *u = pool_alloc(&c->pool, sizeof(LsUsePos));
-    u->pos = pos; u->next = cur;
-    if (prev) prev->next = u; else r->uses = u;
+    u->pos = pos;
+    u->next = cur;
+    if (prev)
+        prev->next = u;
+    else
+        r->uses = u;
 }
 
 static int32_t next_use_after(const LsRange *r, int32_t pos) {
     for (LsUsePos *u = r->uses; u; u = u->next)
-        if (u->pos >= pos) return u->pos;
+        if (u->pos >= pos)
+            return u->pos;
     return INT32_MAX;
 }
 
@@ -358,13 +392,17 @@ static int32_t first_isect(const LsRange *a, const LsRange *b) {
         }
         /* Advance whichever list finishes earlier so we make
          * monotonic progress through the timeline. */
-        if (ia->end <= ib->start) ia = ia->next;
-        else                      ib = ib->next;
+        if (ia->end <= ib->start)
+            ia = ia->next;
+        else
+            ib = ib->next;
     }
     return INT32_MAX;
 }
 
-static bool isects(const LsRange *a, const LsRange *b) { return first_isect(a, b) < INT32_MAX; }
+static bool isects(const LsRange *a, const LsRange *b) {
+    return first_isect(a, b) < INT32_MAX;
+}
 
 /* PHI-safe conflict check: can PHI dst and arg share a register?
  *
@@ -379,9 +417,9 @@ static bool phi_ranges_conflict(const LsRange *dst, const LsRange *arg) {
     // Check if dst has any actual use at or after arg's definition
     for (const LsUsePos *u = dst->uses; u; u = u->next) {
         if (u->pos >= arg_start)
-            return true; // dst still needed when arg is defined
+            return true;  // dst still needed when arg is defined
     }
-    return false; // arg defined after dst's last use → safe to coalesce
+    return false;  // arg defined after dst's last use → safe to coalesce
 }
 
 /* ========== Deferred Block Analysis ========== */
@@ -418,20 +456,26 @@ static void compute_deferred(LsCtx *ctx) {
     for (int round = 0; round < 4; round++) {
         bool changed = false;
         for (uint32_t i = 1; i < n; i++) {
-            if (ctx->blk_deferred[i]) continue;
+            if (ctx->blk_deferred[i])
+                continue;
             XirBlock *b = f->blocks[i];
-            if (b->npred == 0) continue;
+            if (b->npred == 0)
+                continue;
             bool all_def = true;
             for (uint32_t p = 0; p < b->npred; p++) {
                 uint32_t pi = blk_idx(ctx, b->preds[p]->id);
-                if (!ctx->blk_deferred[pi]) { all_def = false; break; }
+                if (!ctx->blk_deferred[pi]) {
+                    all_def = false;
+                    break;
+                }
             }
             if (all_def) {
                 ctx->blk_deferred[i] = true;
                 changed = true;
             }
         }
-        if (!changed) break;
+        if (!changed)
+            break;
     }
 }
 
@@ -441,7 +485,7 @@ static void number_pos(LsCtx *ctx) {
     int32_t pos = 0;
     for (uint32_t i = 0; i < ctx->func->nblk; i++) {
         ctx->blk_start[i] = pos;
-        pos += 2 + 2 * (int32_t)ctx->func->blocks[i]->nins + 2;
+        pos += 2 + 2 * (int32_t) ctx->func->blocks[i]->nins + 2;
         ctx->blk_end[i] = pos;
     }
     ctx->max_pos = pos;
@@ -452,9 +496,12 @@ static uint32_t pos_to_blk(const LsCtx *ctx, int32_t pos) {
     uint32_t lo = 0, hi = ctx->func->nblk;
     while (lo < hi) {
         uint32_t mid = lo + (hi - lo) / 2;
-        if (ctx->blk_end[mid] <= pos) lo = mid + 1;
-        else if (ctx->blk_start[mid] > pos) hi = mid;
-        else return mid;
+        if (ctx->blk_end[mid] <= pos)
+            lo = mid + 1;
+        else if (ctx->blk_start[mid] > pos)
+            hi = mid;
+        else
+            return mid;
     }
     return 0;
 }
@@ -494,7 +541,7 @@ static void build_ranges(LsCtx *ctx) {
             const XirBSet *lo = &live->blocks[bi].live_out;
             int iter = 0, bit;
             while ((bit = xir_bset_iter(lo, &iter)) >= 0) {
-                if ((uint32_t)bit < ctx->nvreg)
+                if ((uint32_t) bit < ctx->nvreg)
                     range_add_iv(ctx, ctx->vreg_ranges[bit], bs, be);
             }
         }
@@ -506,24 +553,25 @@ static void build_ranges(LsCtx *ctx) {
          */
         for (XirPhi *p = blk->phis; p; p = p->next) {
             for (uint32_t a = 0; a < p->narg; a++) {
-                if (!xir_ref_is_vreg(p->args[a])) continue;
+                if (!xir_ref_is_vreg(p->args[a]))
+                    continue;
                 uint32_t v = XIR_REF_INDEX(p->args[a]);
-                if (v >= ctx->nvreg) continue;
+                if (v >= ctx->nvreg)
+                    continue;
                 XirBlock *pred = (a < blk->npred) ? blk->preds[a] : NULL;
-                if (!pred) continue;
+                if (!pred)
+                    continue;
                 uint32_t pi = blk_idx(ctx, pred->id);
-                range_add_iv(ctx, ctx->vreg_ranges[v],
-                             ctx->blk_start[pi], ctx->blk_end[pi]);
-                range_add_use(ctx, ctx->vreg_ranges[v],
-                              ctx->blk_end[pi] - 1);
+                range_add_iv(ctx, ctx->vreg_ranges[v], ctx->blk_start[pi], ctx->blk_end[pi]);
+                range_add_use(ctx, ctx->vreg_ranges[v], ctx->blk_end[pi] - 1);
             }
         }
 
         // Backward scan instructions
-        for (int32_t ii = (int32_t)blk->nins - 1; ii >= 0; ii--) {
+        for (int32_t ii = (int32_t) blk->nins - 1; ii >= 0; ii--) {
             XirIns *ins = &blk->ins[ii];
-            int32_t upos = bs + 2 + 2 * ii; // use (even)
-            int32_t dpos = bs + 2 + 2 * ii + 1; // def (odd)
+            int32_t upos = bs + 2 + 2 * ii;      // use (even)
+            int32_t dpos = bs + 2 + 2 * ii + 1;  // def (odd)
 
             if (xir_ref_is_vreg(ins->dst)) {
                 uint32_t v = XIR_REF_INDEX(ins->dst);
@@ -589,7 +637,7 @@ static void build_ranges(LsCtx *ctx) {
             const XirBSet *li = &live->blocks[bi].live_in;
             int iter = 0, bit;
             while ((bit = xir_bset_iter(li, &iter)) >= 0) {
-                if ((uint32_t)bit < ctx->nvreg)
+                if ((uint32_t) bit < ctx->nvreg)
                     range_add_iv(ctx, ctx->vreg_ranges[bit], bs, be);
             }
         }
@@ -605,7 +653,7 @@ static void build_ranges(LsCtx *ctx) {
             if (xir_ref_is_vreg(ins->dst)) {
                 uint32_t v = XIR_REF_INDEX(ins->dst);
                 if (v < ctx->nvreg && !ctx->vreg_ranges[v]->first_iv) {
-                    int32_t dpos = bs + 2 + 2 * (int32_t)ii + 1;
+                    int32_t dpos = bs + 2 + 2 * (int32_t) ii + 1;
                     range_add_iv(ctx, ctx->vreg_ranges[v], dpos, dpos + 1);
                     range_add_use(ctx, ctx->vreg_ranges[v], dpos);
                 }
@@ -645,9 +693,10 @@ static void build_fixed_intervals(LsCtx *ctx) {
 
         for (uint32_t ii = 0; ii < blk->nins; ii++) {
             XirIns *ins = &blk->ins[ii];
-            if (!is_call_op(ins->op)) continue;
+            if (!is_call_op(ins->op))
+                continue;
 
-            int32_t call_pos = bs + 2 + 2 * (int32_t)ii;
+            int32_t call_pos = bs + 2 + 2 * (int32_t) ii;
 
             // GP caller-saved: alloc_regs[0..14] = X1-X15
             for (int ci = 0; ci < NUM_CALLER_SAVED_GP; ci++) {
@@ -657,7 +706,7 @@ static void build_fixed_intervals(LsCtx *ctx) {
                     fr->vreg = UINT32_MAX;
                     fr->is_fp = false;
                     fr->is_fixed = true;
-                    fr->assigned = (int8_t)ci;
+                    fr->assigned = (int8_t) ci;
                     fr->spill = XRA_SPILL_NONE;
                     fr->hint = -1;
                     fr->bundle_id = UINT32_MAX;
@@ -675,7 +724,7 @@ static void build_fixed_intervals(LsCtx *ctx) {
                     fr->vreg = UINT32_MAX;
                     fr->is_fp = true;
                     fr->is_fixed = true;
-                    fr->assigned = (int8_t)ci;
+                    fr->assigned = (int8_t) ci;
                     fr->spill = XRA_SPILL_NONE;
                     fr->hint = -1;
                     fr->bundle_id = UINT32_MAX;
@@ -696,25 +745,33 @@ static void build_fixed_intervals(LsCtx *ctx) {
  * unnecessary MOVs at Phi edges and enabling TryReuseSpillForPhi.
  */
 static uint32_t bundle_find(uint32_t *parent, uint32_t x) {
-    while (parent[x] != x) { parent[x] = parent[parent[x]]; x = parent[x]; }
+    while (parent[x] != x) {
+        parent[x] = parent[parent[x]];
+        x = parent[x];
+    }
     return x;
 }
 
 static void bundle_union(uint32_t *parent, uint32_t x, uint32_t y) {
     x = bundle_find(parent, x);
     y = bundle_find(parent, y);
-    if (x == y) return;
+    if (x == y)
+        return;
     // Merge smaller vreg id into larger to keep stable roots
-    if (x > y) parent[x] = y; else parent[y] = x;
+    if (x > y)
+        parent[x] = y;
+    else
+        parent[y] = x;
 }
 
 static void compute_bundles(LsCtx *ctx) {
     uint32_t nv = ctx->nvreg;
-    if (nv == 0) return;
+    if (nv == 0)
+        return;
 
     ctx->bundle_parent = xr_malloc(nv * sizeof(uint32_t));
-    ctx->bundle_hint   = xr_malloc(nv * sizeof(int8_t));
-    ctx->bundle_spill  = xr_malloc(nv * sizeof(int16_t));
+    ctx->bundle_hint = xr_malloc(nv * sizeof(int8_t));
+    ctx->bundle_spill = xr_malloc(nv * sizeof(int16_t));
     for (uint32_t i = 0; i < nv; i++) {
         ctx->bundle_parent[i] = i;
         ctx->bundle_hint[i] = -1;
@@ -729,19 +786,26 @@ static void compute_bundles(LsCtx *ctx) {
      * the PHI arg writing during this hole is safe (it IS the new PHI value). */
     for (uint32_t bi = 0; bi < f->nblk; bi++) {
         for (XirPhi *p = f->blocks[bi]->phis; p; p = p->next) {
-            if (!xir_ref_is_vreg(p->dst)) continue;
+            if (!xir_ref_is_vreg(p->dst))
+                continue;
             uint32_t dv = XIR_REF_INDEX(p->dst);
-            if (dv >= nv) continue;
+            if (dv >= nv)
+                continue;
             LsRange *dr = ctx->vreg_ranges[dv];
-            if (!dr || !dr->first_iv) continue;
+            if (!dr || !dr->first_iv)
+                continue;
 
             for (uint32_t a = 0; a < p->narg; a++) {
-                if (!xir_ref_is_vreg(p->args[a])) continue;
+                if (!xir_ref_is_vreg(p->args[a]))
+                    continue;
                 uint32_t av = XIR_REF_INDEX(p->args[a]);
-                if (av >= nv || av == dv) continue;
+                if (av >= nv || av == dv)
+                    continue;
                 LsRange *ar = ctx->vreg_ranges[av];
-                if (!ar || !ar->first_iv) continue;
-                if (dr->is_fp != ar->is_fp) continue;
+                if (!ar || !ar->first_iv)
+                    continue;
+                if (dr->is_fp != ar->is_fp)
+                    continue;
 
                 if (!phi_ranges_conflict(dr, ar))
                     bundle_union(ctx->bundle_parent, dv, av);
@@ -754,14 +818,19 @@ static void compute_bundles(LsCtx *ctx) {
         XirBlock *blk = f->blocks[bi];
         for (uint32_t ii = 0; ii < blk->nins; ii++) {
             XirIns *ins = &blk->ins[ii];
-            if (!xir_op_is_copy(ins->op)) continue;
-            if (!xir_ref_is_vreg(ins->dst) || !xir_ref_is_vreg(ins->args[0])) continue;
+            if (!xir_op_is_copy(ins->op))
+                continue;
+            if (!xir_ref_is_vreg(ins->dst) || !xir_ref_is_vreg(ins->args[0]))
+                continue;
             uint32_t dv = XIR_REF_INDEX(ins->dst);
             uint32_t sv = XIR_REF_INDEX(ins->args[0]);
-            if (dv >= nv || sv >= nv || dv == sv) continue;
+            if (dv >= nv || sv >= nv || dv == sv)
+                continue;
             LsRange *dr = ctx->vreg_ranges[dv], *sr = ctx->vreg_ranges[sv];
-            if (!dr || !sr || !dr->first_iv || !sr->first_iv) continue;
-            if (dr->is_fp != sr->is_fp) continue;
+            if (!dr || !sr || !dr->first_iv || !sr->first_iv)
+                continue;
+            if (dr->is_fp != sr->is_fp)
+                continue;
 
             if (!isects(dr, sr))
                 bundle_union(ctx->bundle_parent, dv, sv);
@@ -771,7 +840,8 @@ static void compute_bundles(LsCtx *ctx) {
     // Store bundle_id in each range
     for (uint32_t v = 0; v < nv; v++) {
         LsRange *r = ctx->vreg_ranges[v];
-        if (r) r->bundle_id = bundle_find(ctx->bundle_parent, v);
+        if (r)
+            r->bundle_id = bundle_find(ctx->bundle_parent, v);
     }
 }
 
@@ -793,8 +863,13 @@ static void compute_hints(LsCtx *ctx) {
     uint32_t gpi = 0, fpi = 0;
     for (uint32_t v = 0; v < f->num_params && v < nv; v++) {
         LsRange *r = ctx->vreg_ranges[v];
-        if (r->is_fp) { if (fpi < xir_current_target->nfpr) r->hint = (int8_t)fpi++; }
-        else           { if (gpi < xir_current_target->ngpr) r->hint = (int8_t)gpi++; }
+        if (r->is_fp) {
+            if (fpi < xir_current_target->nfpr)
+                r->hint = (int8_t) fpi++;
+        } else {
+            if (gpi < xir_current_target->ngpr)
+                r->hint = (int8_t) gpi++;
+        }
     }
 
     // Pass 2-4: iterative Phi + MOV + Bundle propagation (max 3 rounds)
@@ -806,34 +881,47 @@ static void compute_hints(LsCtx *ctx) {
 
             // Phi hints: propagate between dst and args
             for (XirPhi *p = blk->phis; p; p = p->next) {
-                if (!xir_ref_is_vreg(p->dst)) continue;
+                if (!xir_ref_is_vreg(p->dst))
+                    continue;
                 uint32_t dv = XIR_REF_INDEX(p->dst);
-                if (dv >= nv) continue;
+                if (dv >= nv)
+                    continue;
                 LsRange *dr = ctx->vreg_ranges[dv];
                 for (uint32_t a = 0; a < p->narg; a++) {
-                    if (!xir_ref_is_vreg(p->args[a])) continue;
+                    if (!xir_ref_is_vreg(p->args[a]))
+                        continue;
                     uint32_t av = XIR_REF_INDEX(p->args[a]);
-                    if (av >= nv) continue;
+                    if (av >= nv)
+                        continue;
                     LsRange *ar = ctx->vreg_ranges[av];
-                    if (dr->hint >= 0 && ar->hint < 0)
-                        { ar->hint = dr->hint; changed = true; }
-                    else if (ar->hint >= 0 && dr->hint < 0)
-                        { dr->hint = ar->hint; changed = true; }
+                    if (dr->hint >= 0 && ar->hint < 0) {
+                        ar->hint = dr->hint;
+                        changed = true;
+                    } else if (ar->hint >= 0 && dr->hint < 0) {
+                        dr->hint = ar->hint;
+                        changed = true;
+                    }
                 }
             }
 
             // MOV hints: propagate between dst and src
             for (uint32_t ii = 0; ii < blk->nins; ii++) {
                 XirIns *ins = &blk->ins[ii];
-                if (!xir_op_is_copy(ins->op)) continue;
-                if (!xir_ref_is_vreg(ins->dst) || !xir_ref_is_vreg(ins->args[0])) continue;
+                if (!xir_op_is_copy(ins->op))
+                    continue;
+                if (!xir_ref_is_vreg(ins->dst) || !xir_ref_is_vreg(ins->args[0]))
+                    continue;
                 uint32_t dv = XIR_REF_INDEX(ins->dst), sv = XIR_REF_INDEX(ins->args[0]);
-                if (dv >= nv || sv >= nv) continue;
+                if (dv >= nv || sv >= nv)
+                    continue;
                 LsRange *dr = ctx->vreg_ranges[dv], *sr = ctx->vreg_ranges[sv];
-                if (dr->hint >= 0 && sr->hint < 0)
-                    { sr->hint = dr->hint; changed = true; }
-                else if (sr->hint >= 0 && dr->hint < 0)
-                    { dr->hint = sr->hint; changed = true; }
+                if (dr->hint >= 0 && sr->hint < 0) {
+                    sr->hint = dr->hint;
+                    changed = true;
+                } else if (sr->hint >= 0 && dr->hint < 0) {
+                    dr->hint = sr->hint;
+                    changed = true;
+                }
             }
         }
 
@@ -841,7 +929,8 @@ static void compute_hints(LsCtx *ctx) {
         if (ctx->bundle_parent) {
             for (uint32_t v = 0; v < nv; v++) {
                 LsRange *r = ctx->vreg_ranges[v];
-                if (!r || r->hint < 0) continue;
+                if (!r || r->hint < 0)
+                    continue;
                 uint32_t bid = bundle_find(ctx->bundle_parent, v);
                 if (ctx->bundle_hint[bid] < 0) {
                     ctx->bundle_hint[bid] = r->hint;
@@ -850,7 +939,8 @@ static void compute_hints(LsCtx *ctx) {
             }
             for (uint32_t v = 0; v < nv; v++) {
                 LsRange *r = ctx->vreg_ranges[v];
-                if (!r || r->hint >= 0) continue;
+                if (!r || r->hint >= 0)
+                    continue;
                 uint32_t bid = bundle_find(ctx->bundle_parent, v);
                 if (ctx->bundle_hint[bid] >= 0) {
                     r->hint = ctx->bundle_hint[bid];
@@ -859,7 +949,8 @@ static void compute_hints(LsCtx *ctx) {
             }
         }
 
-        if (!changed) break;
+        if (!changed)
+            break;
     }
 }
 
@@ -883,39 +974,53 @@ static LsRange *split_at(LsCtx *ctx, LsRange *range, int32_t pos) {
 
     // Split intervals
     LsInterval *prev = NULL;
-    for (LsInterval *iv = range->first_iv; iv; ) {
+    for (LsInterval *iv = range->first_iv; iv;) {
         LsInterval *next = iv->next;
         if (iv->start >= pos) {
-            if (!tail->first_iv) tail->first_iv = iv;
-            if (prev) prev->next = NULL; else range->first_iv = NULL;
+            if (!tail->first_iv)
+                tail->first_iv = iv;
+            if (prev)
+                prev->next = NULL;
+            else
+                range->first_iv = NULL;
             range->last_iv = prev;
-            LsInterval *l = iv; while (l->next) l = l->next;
+            LsInterval *l = iv;
+            while (l->next)
+                l = l->next;
             tail->last_iv = l;
             goto split_uses;
         }
         if (iv->start < pos && iv->end > pos) {
             LsInterval *ni = iv_new(ctx, pos, iv->end);
             ni->next = iv->next;
-            iv->end = pos; iv->next = NULL;
+            iv->end = pos;
+            iv->next = NULL;
             range->last_iv = iv;
             tail->first_iv = ni;
-            LsInterval *l = ni; while (l->next) l = l->next;
+            LsInterval *l = ni;
+            while (l->next)
+                l = l->next;
             tail->last_iv = l;
             goto split_uses;
         }
-        prev = iv; iv = next;
+        prev = iv;
+        iv = next;
     }
 
 split_uses:;
     LsUsePos *pu = NULL;
-    for (LsUsePos *u = range->uses; u; ) {
+    for (LsUsePos *u = range->uses; u;) {
         LsUsePos *next = u->next;
         if (u->pos >= pos) {
             tail->uses = u;
-            if (pu) pu->next = NULL; else range->uses = NULL;
+            if (pu)
+                pu->next = NULL;
+            else
+                range->uses = NULL;
             break;
         }
-        pu = u; u = next;
+        pu = u;
+        u = next;
     }
 
     ctx_track(ctx, tail);
@@ -936,10 +1041,10 @@ static LsRange *split_between(LsCtx *ctx, LsRange *r, int32_t from, int32_t to) 
 
     for (uint32_t i = 0; i < ctx->func->nblk; i++) {
         int32_t bs = ctx->blk_start[i];
-        if (bs <= from || bs >= to) continue;
+        if (bs <= from || bs >= to)
+            continue;
 
-        int depth = (int)xir_block_loop_depth(ctx->func,
-                                                ctx->func->blocks[i]->id);
+        int depth = (int) xir_block_loop_depth(ctx->func, ctx->func->blocks[i]->id);
 
         if (sp < 0 || depth < best_depth || (depth == best_depth && bs > sp)) {
             sp = bs;
@@ -950,10 +1055,14 @@ static LsRange *split_between(LsCtx *ctx, LsRange *r, int32_t from, int32_t to) 
     // No block boundary: fall back to even-aligned position in (from, to)
     if (sp < 0) {
         sp = to;
-        if (sp & 1) sp--;
-        if (sp <= from) sp = from + 2;
-        if (sp & 1) sp++;
-        if (sp >= to) sp = to;
+        if (sp & 1)
+            sp--;
+        if (sp <= from)
+            sp = from + 2;
+        if (sp & 1)
+            sp++;
+        if (sp >= to)
+            sp = to;
     }
     return split_at(ctx, r, sp);
 }
@@ -973,12 +1082,11 @@ static void assign_spill_slot(LsCtx *ctx, LsRange *r) {
             r->spill = ctx->bundle_spill[bid];
             // Assert type compatibility: bundle members share rep
             XR_DCHECK(r->spill >= XIR_MAX_SPILL_SLOTS ||
-                      ctx->slot_is_ptr[r->spill] ==
-                      (ctx->func->vregs[r->vreg].rep == XR_REP_PTR),
+                          ctx->slot_is_ptr[r->spill] ==
+                              (ctx->func->vregs[r->vreg].rep == XR_REP_PTR),
                       "bundle spill slot type mismatch (PTR vs non-PTR)");
             int32_t rend = range_end(r);
-            if (r->spill >= 0 && r->spill < XIR_MAX_SPILL_SLOTS &&
-                rend > ctx->slot_end[r->spill])
+            if (r->spill >= 0 && r->spill < XIR_MAX_SPILL_SLOTS && rend > ctx->slot_end[r->spill])
                 ctx->slot_end[r->spill] = rend;
             return;
         }
@@ -988,14 +1096,14 @@ static void assign_spill_slot(LsCtx *ctx, LsRange *r) {
      * PTR and non-PTR vregs must not share slots: emit_ptr_spill_writeback
      * writes all live PTR regs to their spill slots before CALL_C, which
      * would corrupt a non-PTR value stored in a shared slot. */
-    bool is_ptr = r->vreg < ctx->nvreg &&
-                  ctx->func->vregs[r->vreg].rep == XR_REP_PTR;
+    bool is_ptr = r->vreg < ctx->nvreg && ctx->func->vregs[r->vreg].rep == XR_REP_PTR;
     int32_t rstart = range_start(r);
     for (int16_t s = 0; s < ctx->next_spill && s < XIR_MAX_SPILL_SLOTS; s++) {
         if (ctx->slot_end[s] <= rstart && ctx->slot_is_ptr[s] == is_ptr) {
             r->spill = s;
             int32_t rend = range_end(r);
-            if (rend > ctx->slot_end[s]) ctx->slot_end[s] = rend;
+            if (rend > ctx->slot_end[s])
+                ctx->slot_end[s] = rend;
             ctx->slot_is_ptr[s] = is_ptr;
             goto update_bundle;
         }
@@ -1017,7 +1125,8 @@ static void assign_spill_slot(LsCtx *ctx, LsRange *r) {
     if (r->vreg < ctx->nvreg && ctx->vreg_ranges[r->vreg]) {
         for (LsRange *s = ctx->vreg_ranges[r->vreg]; s; s = s->next_sibling) {
             int32_t e = range_end(s);
-            if (e > vreg_last) vreg_last = e;
+            if (e > vreg_last)
+                vreg_last = e;
         }
     }
     {
@@ -1044,9 +1153,7 @@ update_bundle:
  * second chance at register allocation. This ensures each spill is
  * "minimal range spill" rather than "permanent spill".
  */
-static void spill_range(LsCtx *ctx, LsRange *r,
-                         LsRange ***wl, uint32_t *wl_len, uint32_t *wl_cap)
-{
+static void spill_range(LsCtx *ctx, LsRange *r, LsRange ***wl, uint32_t *wl_len, uint32_t *wl_cap) {
     r->assigned = -1;
     if (is_remat(ctx->func, r->vreg)) {
         r->spill = XRA_SPILL_REMAT;
@@ -1074,22 +1181,23 @@ static void spill_range(LsCtx *ctx, LsRange *r,
  * Tie-break: longer range first (more constrained), then by vreg.
  */
 static int wl_cmp(const void *a, const void *b) {
-    const LsRange *ra = *(const LsRange *const *)a;
-    const LsRange *rb = *(const LsRange *const *)b;
+    const LsRange *ra = *(const LsRange *const *) a;
+    const LsRange *rb = *(const LsRange *const *) b;
     int32_t sa = range_start(ra), sb = range_start(rb);
-    if (sa != sb) return (sa < sb) ? -1 : 1;
+    if (sa != sb)
+        return (sa < sb) ? -1 : 1;
     int32_t la = range_end(ra) - sa;
     int32_t lb = range_end(rb) - sb;
-    if (la != lb) return (la > lb) ? -1 : 1; // longer first
-    return (int)ra->vreg - (int)rb->vreg;
+    if (la != lb)
+        return (la > lb) ? -1 : 1;  // longer first
+    return (int) ra->vreg - (int) rb->vreg;
 }
 
 static void wl_insert(LsRange ***wl, uint32_t *len, uint32_t *cap, LsRange *r) {
     if (*len >= *cap) {
         uint32_t new_cap = (*cap) * 2;
         LsRange **buf = *wl;
-        XR_REALLOC_OR_ABORT(buf, new_cap * sizeof(LsRange *),
-                            "regalloc wl_insert");
+        XR_REALLOC_OR_ABORT(buf, new_cap * sizeof(LsRange *), "regalloc wl_insert");
         *wl = buf;
         *cap = new_cap;
     }
@@ -1111,27 +1219,32 @@ static void wl_insert(LsRange ***wl, uint32_t *len, uint32_t *cap, LsRange *r) {
  * Two-tier metric: free_hot (non-deferred conflicts) and free_any (all conflicts).
  * SpillMode: deferred-only conflicts don't block hot-path allocation.
  */
-static bool alloc_free_reg(LsCtx *ctx, LsRange *range,
-                           LsRange ***wl, uint32_t *wl_len, uint32_t *wl_cap)
-{
+static bool alloc_free_reg(LsCtx *ctx, LsRange *range, LsRange ***wl, uint32_t *wl_len,
+                           uint32_t *wl_cap) {
     bool isfp = range->is_fp;
     int mx = isfp ? xir_current_target->nfpr : xir_current_target->ngpr;
     int32_t rend = range_end(range);
     int32_t rstart = range_start(range);
 
     int32_t free_hot[32], free_any[32];
-    for (int i = 0; i < mx; i++) { free_hot[i] = INT32_MAX; free_any[i] = INT32_MAX; }
+    for (int i = 0; i < mx; i++) {
+        free_hot[i] = INT32_MAX;
+        free_any[i] = INT32_MAX;
+    }
 
     // Bundle ID for same-bundle skipping (PHI coalescing)
     uint32_t rbid = (ctx->bundle_parent && range->vreg < ctx->nvreg)
-                    ? bundle_find(ctx->bundle_parent, range->vreg) : UINT32_MAX;
+                        ? bundle_find(ctx->bundle_parent, range->vreg)
+                        : UINT32_MAX;
 
     // Active ranges: definitely conflict at rstart (they cover current pos)
     for (uint32_t i = 0; i < ctx->active.len; i++) {
         LsRange *o = ctx->active.items[i];
-        if (o->is_fp != isfp) continue;
+        if (o->is_fp != isfp)
+            continue;
         int8_t reg = o->assigned;
-        if (reg < 0 || reg >= mx) continue;
+        if (reg < 0 || reg >= mx)
+            continue;
         /* Skip same-bundle ranges: PHI dst/arg verified non-conflicting
          * at use-position level by phi_ranges_conflict() */
         if (rbid != UINT32_MAX && o->vreg < ctx->nvreg &&
@@ -1146,15 +1259,18 @@ static bool alloc_free_reg(LsCtx *ctx, LsRange *range,
     // Inactive ranges: may conflict at intersection points
     for (uint32_t i = 0; i < ctx->inactive.len; i++) {
         LsRange *o = ctx->inactive.items[i];
-        if (o->is_fp != isfp) continue;
+        if (o->is_fp != isfp)
+            continue;
         int8_t reg = o->assigned;
-        if (reg < 0 || reg >= mx) continue;
+        if (reg < 0 || reg >= mx)
+            continue;
         // Skip same-bundle ranges
         if (rbid != UINT32_MAX && o->vreg < ctx->nvreg &&
             bundle_find(ctx->bundle_parent, o->vreg) == rbid)
             continue;
         int32_t is = first_isect(range, o);
-        if (is < free_any[reg]) free_any[reg] = is;
+        if (is < free_any[reg])
+            free_any[reg] = is;
         if (is < free_hot[reg] && !pos_is_deferred(ctx, is))
             free_hot[reg] = is;
     }
@@ -1167,9 +1283,9 @@ static bool alloc_free_reg(LsCtx *ctx, LsRange *range,
     if (hint < 0 && rbid != UINT32_MAX) {
         for (uint32_t i = 0; i < ctx->active.len; i++) {
             LsRange *o = ctx->active.items[i];
-            if (o->is_fp != isfp || o->assigned < 0) continue;
-            if (o->vreg < ctx->nvreg &&
-                bundle_find(ctx->bundle_parent, o->vreg) == rbid) {
+            if (o->is_fp != isfp || o->assigned < 0)
+                continue;
+            if (o->vreg < ctx->nvreg && bundle_find(ctx->bundle_parent, o->vreg) == rbid) {
                 hint = o->assigned;
                 break;
             }
@@ -1190,9 +1306,13 @@ static bool alloc_free_reg(LsCtx *ctx, LsRange *range,
     int8_t best = -1;
     int32_t best_hot = 0;
     for (int r = 0; r < mx; r++) {
-        if (free_hot[r] > best_hot) { best_hot = free_hot[r]; best = (int8_t)r; }
+        if (free_hot[r] > best_hot) {
+            best_hot = free_hot[r];
+            best = (int8_t) r;
+        }
     }
-    if (best < 0) return false;
+    if (best < 0)
+        return false;
 
     if (best_hot >= rend) {
         range->assigned = best;
@@ -1219,9 +1339,8 @@ static bool alloc_free_reg(LsCtx *ctx, LsRange *range,
  * All registers blocked: find best eviction candidate from Active/Inactive.
  * Fixed intervals are never evicted (CALL clobber constraints).
  */
-static void alloc_blocked_reg(LsCtx *ctx, LsRange *range,
-                              LsRange ***wl, uint32_t *wl_len, uint32_t *wl_cap)
-{
+static void alloc_blocked_reg(LsCtx *ctx, LsRange *range, LsRange ***wl, uint32_t *wl_len,
+                              uint32_t *wl_cap) {
     bool isfp = range->is_fp;
     int mx = isfp ? xir_current_target->nfpr : xir_current_target->ngpr;
     int32_t rstart = range_start(range);
@@ -1229,38 +1348,60 @@ static void alloc_blocked_reg(LsCtx *ctx, LsRange *range,
 
     // next_use_after for each register (from all conflicting ranges)
     int32_t nuse[32];
-    bool    has_fixed[32];
-    for (int i = 0; i < mx; i++) { nuse[i] = INT32_MAX; has_fixed[i] = false; }
+    bool has_fixed[32];
+    for (int i = 0; i < mx; i++) {
+        nuse[i] = INT32_MAX;
+        has_fixed[i] = false;
+    }
 
     // Scan active ranges
     for (uint32_t i = 0; i < ctx->active.len; i++) {
         LsRange *o = ctx->active.items[i];
-        if (o->is_fp != isfp) continue;
+        if (o->is_fp != isfp)
+            continue;
         int8_t reg = o->assigned;
-        if (reg < 0 || reg >= mx) continue;
-        if (o->is_fixed) { has_fixed[reg] = true; nuse[reg] = 0; continue; }
+        if (reg < 0 || reg >= mx)
+            continue;
+        if (o->is_fixed) {
+            has_fixed[reg] = true;
+            nuse[reg] = 0;
+            continue;
+        }
         int32_t nu = next_use_after(o, rstart);
-        if (nu < nuse[reg]) nuse[reg] = nu;
+        if (nu < nuse[reg])
+            nuse[reg] = nu;
     }
 
     // Scan inactive ranges
     for (uint32_t i = 0; i < ctx->inactive.len; i++) {
         LsRange *o = ctx->inactive.items[i];
-        if (o->is_fp != isfp) continue;
+        if (o->is_fp != isfp)
+            continue;
         int8_t reg = o->assigned;
-        if (reg < 0 || reg >= mx) continue;
-        if (!isects(range, o)) continue;
-        if (o->is_fixed) { has_fixed[reg] = true; nuse[reg] = 0; continue; }
+        if (reg < 0 || reg >= mx)
+            continue;
+        if (!isects(range, o))
+            continue;
+        if (o->is_fixed) {
+            has_fixed[reg] = true;
+            nuse[reg] = 0;
+            continue;
+        }
         int32_t nu = next_use_after(o, rstart);
-        if (nu < nuse[reg]) nuse[reg] = nu;
+        if (nu < nuse[reg])
+            nuse[reg] = nu;
     }
 
     // Pick register with latest next-use, excluding fixed-blocked registers
     int8_t best = -1;
     int32_t best_pos = 0;
     for (int r = 0; r < mx; r++) {
-        if (has_fixed[r]) continue;
-        if (nuse[r] > best_pos) { best_pos = nuse[r]; best = (int8_t)r; }
+        if (has_fixed[r])
+            continue;
+        if (nuse[r] > best_pos) {
+            best_pos = nuse[r];
+            best = (int8_t) r;
+        }
     }
 
     int32_t our_first = next_use_after(range, rstart);
@@ -1278,11 +1419,17 @@ static void alloc_blocked_reg(LsCtx *ctx, LsRange *range,
      * current scan position. The Active/Inactive state machine only
      * moves forward, so a backward worklist entry would miss ranges
      * that were already expired, leading to register conflicts. */
-    for (uint32_t i = 0; i < ctx->active.len; ) {
+    for (uint32_t i = 0; i < ctx->active.len;) {
         LsRange *o = ctx->active.items[i];
-        if (o->is_fp != isfp || o->assigned != best || o->is_fixed) { i++; continue; }
+        if (o->is_fp != isfp || o->assigned != best || o->is_fixed) {
+            i++;
+            continue;
+        }
         int32_t isect = first_isect(range, o);
-        if (isect >= INT32_MAX) { i++; continue; }
+        if (isect >= INT32_MAX) {
+            i++;
+            continue;
+        }
         ls_list_remove_at(&ctx->active, i);
         int32_t ostart = range_start(o);
         int32_t split_lo = (rstart > ostart) ? rstart : ostart;
@@ -1299,11 +1446,17 @@ static void alloc_blocked_reg(LsCtx *ctx, LsRange *range,
             spill_range(ctx, o, wl, wl_len, wl_cap);
         }
     }
-    for (uint32_t i = 0; i < ctx->inactive.len; ) {
+    for (uint32_t i = 0; i < ctx->inactive.len;) {
         LsRange *o = ctx->inactive.items[i];
-        if (o->is_fp != isfp || o->assigned != best || o->is_fixed) { i++; continue; }
+        if (o->is_fp != isfp || o->assigned != best || o->is_fixed) {
+            i++;
+            continue;
+        }
         int32_t isect = first_isect(range, o);
-        if (isect >= INT32_MAX) { i++; continue; }
+        if (isect >= INT32_MAX) {
+            i++;
+            continue;
+        }
         ls_list_remove_at(&ctx->inactive, i);
         int32_t ostart = range_start(o);
         int32_t split_lo = (rstart > ostart) ? rstart : ostart;
@@ -1341,7 +1494,8 @@ static void ls_allocate(LsCtx *ctx) {
     // Populate worklist: all vreg ranges with live intervals
     for (uint32_t v = 0; v < ctx->nvreg; v++) {
         LsRange *r = ctx->vreg_ranges[v];
-        if (r->first_iv) wl[wl_len++] = r;
+        if (r->first_iv)
+            wl[wl_len++] = r;
     }
     qsort(wl, wl_len, sizeof(LsRange *), wl_cmp);
 
@@ -1360,7 +1514,8 @@ static void ls_allocate(LsCtx *ctx) {
         LsRange *r = wl[0];
         memmove(wl, wl + 1, (wl_len - 1) * sizeof(LsRange *));
         wl_len--;
-        if (!r->first_iv || r->assigned >= 0) continue;
+        if (!r->first_iv || r->assigned >= 0)
+            continue;
 
         // Advance state machine to current range's start position
         int32_t pos = range_start(r);
@@ -1383,17 +1538,19 @@ static void ls_allocate(LsCtx *ctx) {
 static uint16_t pos_to_ins_idx(const LsCtx *ctx, int32_t pos) {
     uint32_t bi = pos_to_blk(ctx, pos);
     int32_t rel = pos - ctx->blk_start[bi];
-    if (rel < 2) return 0;
+    if (rel < 2)
+        return 0;
     uint32_t nins = ctx->func->blocks[bi]->nins;
-    uint16_t idx = (uint16_t)((rel - 2) / 2);
-    return (idx < nins) ? idx : (uint16_t)nins;
+    uint16_t idx = (uint16_t) ((rel - 2) / 2);
+    return (idx < nins) ? idx : (uint16_t) nins;
 }
 
 static int gap_cmp(const void *a, const void *b) {
-    const XraGapMove *ga = (const XraGapMove *)a;
-    const XraGapMove *gb = (const XraGapMove *)b;
-    if (ga->gap_blk != gb->gap_blk) return (ga->gap_blk < gb->gap_blk) ? -1 : 1;
-    return (int)ga->gap_ins_idx - (int)gb->gap_ins_idx;
+    const XraGapMove *ga = (const XraGapMove *) a;
+    const XraGapMove *gb = (const XraGapMove *) b;
+    if (ga->gap_blk != gb->gap_blk)
+        return (ga->gap_blk < gb->gap_blk) ? -1 : 1;
+    return (int) ga->gap_ins_idx - (int) gb->gap_ins_idx;
 }
 
 /*
@@ -1416,7 +1573,8 @@ static void build_result(LsCtx *ctx, XraResult *res) {
         XraVRegAlloc *va = &res->valloc[v];
         va->spill = XRA_SPILL_NONE;
 
-        if (!r) continue;
+        if (!r)
+            continue;
 
         // Count total intervals across all siblings
         uint16_t niv = 0;
@@ -1431,7 +1589,10 @@ static void build_result(LsCtx *ctx, XraResult *res) {
         }
 
         va->segs = xr_malloc(niv * sizeof(XraSegment));
-        if (!va->segs) { va->nseg = 0; continue; }
+        if (!va->segs) {
+            va->nseg = 0;
+            continue;
+        }
         va->nseg = niv;
 
         // Fill one segment per interval
@@ -1462,46 +1623,53 @@ static void connect_ranges(LsCtx *ctx, XraResult *res) {
 
     for (uint32_t v = 0; v < ctx->nvreg; v++) {
         LsRange *r = ctx->vreg_ranges[v];
-        if (!r || !r->next_sibling) continue;
+        if (!r || !r->next_sibling)
+            continue;
 
         for (LsRange *s = r; s; s = s->next_sibling) {
             LsRange *next = s->next_sibling;
-            if (!next) break;
+            if (!next)
+                break;
 
             int32_t s_end = range_end(s);
             int32_t n_start = range_start(next);
-            if (s_end != n_start) continue; // not adjacent at split point
+            if (s_end != n_start)
+                continue;  // not adjacent at split point
 
             // Both spilled or same register: no move needed
-            if (s->assigned == next->assigned) continue;
-            if (s->assigned < 0 && next->assigned < 0) continue;
+            if (s->assigned == next->assigned)
+                continue;
+            if (s->assigned < 0 && next->assigned < 0)
+                continue;
 
             // Check if split is at a block boundary (O(log n) via binary search)
             uint32_t bi = pos_to_blk(ctx, s_end);
-            if (ctx->blk_start[bi] == s_end) continue; // handled by edge copies
+            if (ctx->blk_start[bi] == s_end)
+                continue;  // handled by edge copies
 
             // Mid-block split: generate gap move
             uint16_t ins_idx = pos_to_ins_idx(ctx, s_end);
 
             if (n >= cap) {
                 cap *= 2;
-                XR_REALLOC_OR_ABORT(moves,
-                                    cap * sizeof(XraGapMove),
+                XR_REALLOC_OR_ABORT(moves, cap * sizeof(XraGapMove),
                                     "regalloc connect_ranges moves");
             }
             XraGapMove *gm = &moves[n++];
             gm->gap_blk = ctx->func->blocks[bi]->id;
             gm->gap_ins_idx = ins_idx;
-            gm->vreg = (uint16_t)v;
+            gm->vreg = (uint16_t) v;
             gm->src_reg = s->assigned;
             gm->dst_reg = next->assigned;
-            gm->spill_slot = (s->assigned < 0) ? s->spill :
-                             (next->assigned < 0) ? next->spill : XRA_SPILL_NONE;
+            gm->spill_slot = (s->assigned < 0)      ? s->spill
+                             : (next->assigned < 0) ? next->spill
+                                                    : XRA_SPILL_NONE;
             gm->is_fp = s->is_fp;
         }
     }
 
-    if (n > 1) qsort(moves, n, sizeof(XraGapMove), gap_cmp);
+    if (n > 1)
+        qsort(moves, n, sizeof(XraGapMove), gap_cmp);
     res->gap_moves = moves;
     res->ngap_move = n;
 }
@@ -1510,9 +1678,15 @@ static uint32_t compute_callee_saved(LsCtx *ctx) {
     uint32_t cs = 0;
     for (uint32_t i = 0; i < ctx->nall; i++) {
         LsRange *r = ctx->all_ranges[i];
-        if (r->assigned < 0) continue;
-        if (!r->is_fp) { if (r->assigned >= 15) cs |= (1u << (r->assigned - 15)); }
-        else            { if (r->assigned >= 8)  cs |= (1u << (16 + r->assigned - 8)); }
+        if (r->assigned < 0)
+            continue;
+        if (!r->is_fp) {
+            if (r->assigned >= 15)
+                cs |= (1u << (r->assigned - 15));
+        } else {
+            if (r->assigned >= 8)
+                cs |= (1u << (16 + r->assigned - 8));
+        }
     }
     return cs;
 }
@@ -1520,21 +1694,29 @@ static uint32_t compute_callee_saved(LsCtx *ctx) {
 static void compute_blk_masks(LsCtx *ctx, XraResult *res) {
     for (uint32_t bi = 0; bi < ctx->func->nblk; bi++) {
         uint32_t bid = ctx->func->blocks[bi]->id;
-        if (bid >= res->nblk) continue;
+        if (bid >= res->nblk)
+            continue;
         int32_t bs = ctx->blk_start[bi], be = ctx->blk_end[bi];
         uint32_t gp = 0, fp = 0, pt = 0;
         for (uint32_t ri = 0; ri < ctx->nall; ri++) {
             LsRange *r = ctx->all_ranges[ri];
-            if (r->assigned < 0) continue;
+            if (r->assigned < 0)
+                continue;
             bool active = false;
             for (LsInterval *iv = r->first_iv; iv; iv = iv->next) {
-                if (iv->start < be && iv->end > bs) { active = true; break; }
-                if (iv->start >= be) break;
+                if (iv->start < be && iv->end > bs) {
+                    active = true;
+                    break;
+                }
+                if (iv->start >= be)
+                    break;
             }
-            if (!active) continue;
+            if (!active)
+                continue;
             int8_t reg = r->assigned;
-            if (r->is_fp) { fp |= (1u << reg); }
-            else {
+            if (r->is_fp) {
+                fp |= (1u << reg);
+            } else {
                 gp |= (1u << reg);
                 if (r->vreg < ctx->func->nvreg && ctx->func->vregs[r->vreg].rep == XR_REP_PTR)
                     pt |= (1u << reg);
@@ -1549,7 +1731,8 @@ static void compute_blk_masks(LsCtx *ctx, XraResult *res) {
 /* ========== Main Entry ========== */
 
 XraResult *xra_run(XirFunc *func) {
-    if (!func || func->nblk == 0) return NULL;
+    if (!func || func->nblk == 0)
+        return NULL;
 
     LsCtx ctx;
     memset(&ctx, 0, sizeof(ctx));
@@ -1560,14 +1743,15 @@ XraResult *xra_run(XirFunc *func) {
     xir_live_compute(&ctx.live, func);
 
     ctx.blk_start = xr_calloc(func->nblk, sizeof(int32_t));
-    ctx.blk_end   = xr_calloc(func->nblk, sizeof(int32_t));
+    ctx.blk_end = xr_calloc(func->nblk, sizeof(int32_t));
     number_pos(&ctx);
 
     // Build block ID → internal index mapping for O(1) lookup
     {
         uint32_t max_bid = 0;
         for (uint32_t i = 0; i < func->nblk; i++)
-            if (func->blocks[i]->id > max_bid) max_bid = func->blocks[i]->id;
+            if (func->blocks[i]->id > max_bid)
+                max_bid = func->blocks[i]->id;
         ctx.blk_id_map_size = max_bid + 1;
         ctx.blk_id_to_idx = xr_calloc(ctx.blk_id_map_size, sizeof(uint32_t));
         for (uint32_t i = 0; i < func->nblk; i++)
@@ -1588,32 +1772,34 @@ XraResult *xra_run(XirFunc *func) {
 
     uint32_t max_id = 0;
     for (uint32_t i = 0; i < func->nblk; i++)
-        if (func->blocks[i]->id > max_id) max_id = func->blocks[i]->id;
+        if (func->blocks[i]->id > max_id)
+            max_id = func->blocks[i]->id;
     uint32_t msz = max_id + 1;
 
     XraResult *res = xr_calloc(1, sizeof(XraResult));
-    if (!res) goto done;
+    if (!res)
+        goto done;
     res->nvreg = ctx.nvreg;
     res->nblk = msz;
 
     // Export RA position mapping (indexed by block ID)
     res->blk_start = xr_calloc(msz, sizeof(int32_t));
-    res->blk_end   = xr_calloc(msz, sizeof(int32_t));
+    res->blk_end = xr_calloc(msz, sizeof(int32_t));
     for (uint32_t bi = 0; bi < func->nblk; bi++) {
         uint32_t bid = func->blocks[bi]->id;
         if (bid < msz) {
             res->blk_start[bid] = ctx.blk_start[bi];
-            res->blk_end[bid]   = ctx.blk_end[bi];
+            res->blk_end[bid] = ctx.blk_end[bi];
         }
     }
 
     res->blk_gp_live = xr_calloc(msz, sizeof(uint32_t));
     res->blk_fp_live = xr_calloc(msz, sizeof(uint32_t));
-    res->blk_ptr_live= xr_calloc(msz, sizeof(uint32_t));
+    res->blk_ptr_live = xr_calloc(msz, sizeof(uint32_t));
 
     build_result(&ctx, res);
     connect_ranges(&ctx, res);
-    res->nspill = (uint32_t)ctx.next_spill;
+    res->nspill = (uint32_t) ctx.next_spill;
     res->callee_saved = compute_callee_saved(&ctx);
     compute_blk_masks(&ctx, res);
 
@@ -1656,26 +1842,29 @@ XraResult *xra_run(XirFunc *func) {
             // Collect assigned GP and FP registers at this position
             for (uint32_t va = 0; va < ctx.nvreg; va++) {
                 int8_t ra = xra_reg_at_pos(res, va, pos);
-                if (ra < 0) continue;
+                if (ra < 0)
+                    continue;
                 bool fa = (func->vregs[va].rep == XR_REP_F64);
                 for (uint32_t vb = va + 1; vb < ctx.nvreg; vb++) {
                     int8_t rb = xra_reg_at_pos(res, vb, pos);
-                    if (rb < 0 || rb != ra) continue;
+                    if (rb < 0 || rb != ra)
+                        continue;
                     bool fb = (func->vregs[vb].rep == XR_REP_F64);
-                    if (fa != fb) continue; // GP vs FP — no conflict
+                    if (fa != fb)
+                        continue;  // GP vs FP — no conflict
                     /* Same-bundle ranges are intentionally allowed to share
                      * a register: phi_ranges_conflict verified no actual
                      * use conflict at overlapping positions. */
                     if (ctx.bundle_parent) {
                         uint32_t ba = bundle_find(ctx.bundle_parent, va);
                         uint32_t bb = bundle_find(ctx.bundle_parent, vb);
-                        if (ba == bb) continue;
+                        if (ba == bb)
+                            continue;
                     }
                     fprintf(stderr,
-                        "[REGALLOC VERIFY] %s: v%u and v%u both assigned "
-                        "%s reg %d at pos %d (block %u)\n",
-                        func->name ? func->name : "?",
-                        va, vb, fa ? "FP" : "GP", ra, pos, bi);
+                            "[REGALLOC VERIFY] %s: v%u and v%u both assigned "
+                            "%s reg %d at pos %d (block %u)\n",
+                            func->name ? func->name : "?", va, vb, fa ? "FP" : "GP", ra, pos, bi);
                     XR_DCHECK(false, "regalloc: overlapping register assignment");
                 }
             }
@@ -1701,7 +1890,8 @@ done:
 }
 
 void xra_result_free(XraResult *r) {
-    if (!r) return;
+    if (!r)
+        return;
     if (r->valloc) {
         for (uint32_t i = 0; i < r->nvreg; i++)
             xr_free(r->valloc[i].segs);
@@ -1718,10 +1908,8 @@ void xra_result_free(XraResult *r) {
 
 /* ========== Edge Copies (Phi + Split Transitions) ========== */
 
-uint32_t xra_edge_copies(const XraResult *r, XirFunc *func,
-                          XirBlock *target, XirBlock *from,
-                          XraEdgeCopy *out, uint32_t mx)
-{
+uint32_t xra_edge_copies(const XraResult *r, XirFunc *func, XirBlock *target, XirBlock *from,
+                         XraEdgeCopy *out, uint32_t mx) {
     uint32_t n = 0;
     uint32_t from_bid = from->id;
     uint32_t to_bid = target->id;
@@ -1729,17 +1917,24 @@ uint32_t xra_edge_copies(const XraResult *r, XirFunc *func,
     // Part 1: Phi resolution copies
     int pi = -1;
     for (uint32_t i = 0; i < target->npred; i++)
-        if (target->preds[i] == from) { pi = (int)i; break; }
+        if (target->preds[i] == from) {
+            pi = (int) i;
+            break;
+        }
 
     if (pi >= 0) {
         for (XirPhi *p = target->phis; p; p = p->next) {
-            if (!xir_ref_is_vreg(p->dst)) continue;
-            if ((uint32_t)pi >= p->narg) continue;
+            if (!xir_ref_is_vreg(p->dst))
+                continue;
+            if ((uint32_t) pi >= p->narg)
+                continue;
             XirRef sr = p->args[pi];
-            if (xir_ref_is_none(sr) || !xir_ref_is_vreg(sr)) continue;
+            if (xir_ref_is_none(sr) || !xir_ref_is_vreg(sr))
+                continue;
             uint32_t dv = XIR_REF_INDEX(p->dst);
             uint32_t sv = XIR_REF_INDEX(sr);
-            if (dv >= r->nvreg || sv >= r->nvreg) continue;
+            if (dv >= r->nvreg || sv >= r->nvreg)
+                continue;
             /* Use per-block registers: dst at target start, src at from END.
              * Source must be queried at block end because the PHI arg vreg
              * may be defined mid-block (e.g. loop increment before back-edge);
@@ -1755,7 +1950,8 @@ uint32_t xra_edge_copies(const XraResult *r, XirFunc *func,
             {
                 int8_t s_start = xra_vreg_reg_at(r, from_bid, sv);
                 if (s < 0 && s_start >= 0 && d >= 0) {
-                    fprintf(stderr, "[JIT WARN] PHI edge copy: v%u has reg %d "
+                    fprintf(stderr,
+                            "[JIT WARN] PHI edge copy: v%u has reg %d "
                             "at blk %u start but none at end (dst v%u reg %d "
                             "at blk %u). Possible liveness/split bug.\n",
                             sv, s_start, from_bid, dv, d, to_bid);
@@ -1764,7 +1960,7 @@ uint32_t xra_edge_copies(const XraResult *r, XirFunc *func,
 #endif
             if (d >= 0 && s >= 0 && d != s && n < mx) {
                 bool fp = (p->rep == XR_REP_F64);
-                out[n++] = (XraEdgeCopy){ (uint8_t)d, (uint8_t)s, fp, false, 0 };
+                out[n++] = (XraEdgeCopy){(uint8_t) d, (uint8_t) s, fp, false, 0};
             }
         }
     }
@@ -1772,9 +1968,11 @@ uint32_t xra_edge_copies(const XraResult *r, XirFunc *func,
     // Part 2: Split transition copies (vreg changes register across edge)
     for (uint32_t v = 0; v < r->nvreg && n < mx; v++) {
         int8_t from_reg = xra_vreg_reg_at_end(r, from_bid, v);
-        int8_t to_reg   = xra_vreg_reg_at(r, to_bid, v);
-        if (from_reg == to_reg) continue;
-        if (from_reg < 0 && to_reg < 0) continue;
+        int8_t to_reg = xra_vreg_reg_at(r, to_bid, v);
+        if (from_reg == to_reg)
+            continue;
+        if (from_reg < 0 && to_reg < 0)
+            continue;
 
         // Skip vregs handled by Phi copies above
         bool is_phi = false;
@@ -1784,16 +1982,17 @@ uint32_t xra_edge_copies(const XraResult *r, XirFunc *func,
                     is_phi = true;
             }
         }
-        if (is_phi) continue;
+        if (is_phi)
+            continue;
 
         bool fp = (v < func->nvreg && func->vregs[v].rep == XR_REP_F64);
 
         if (from_reg >= 0 && to_reg >= 0) {
-            out[n++] = (XraEdgeCopy){ (uint8_t)to_reg, (uint8_t)from_reg, fp, false, 0 };
+            out[n++] = (XraEdgeCopy){(uint8_t) to_reg, (uint8_t) from_reg, fp, false, 0};
         } else if (from_reg < 0 && to_reg >= 0) {
             int16_t slot = xra_vreg_spill(r, v);
             if (slot >= 0)
-                out[n++] = (XraEdgeCopy){ (uint8_t)to_reg, 0, fp, true, slot };
+                out[n++] = (XraEdgeCopy){(uint8_t) to_reg, 0, fp, true, slot};
         }
     }
 

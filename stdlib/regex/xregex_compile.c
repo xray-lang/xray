@@ -37,9 +37,7 @@ static int alloc_inst(XrCompiler *c) {
         if (new_cap > XR_RE_MAX_PROG_INST) {
             return -1;  // too large
         }
-        XR_REALLOC_OR_ABORT(prog->inst,
-                            (size_t)new_cap * sizeof(XrInst),
-                            "regex prog inst grow");
+        XR_REALLOC_OR_ABORT(prog->inst, (size_t) new_cap * sizeof(XrInst), "regex prog inst grow");
         prog->inst_cap = new_cap;
     }
 
@@ -56,7 +54,8 @@ static void set_inst(XrCompiler *c, int id, XrOpcode op, int out) {
 // Create NOP instruction (for placeholder, fill later)
 static int emit_nop(XrCompiler *c) {
     int id = alloc_inst(c);
-    if (id < 0) return -1;
+    if (id < 0)
+        return -1;
     set_inst(c, id, XR_OP_NOP, 0);
     return id;
 }
@@ -64,7 +63,8 @@ static int emit_nop(XrCompiler *c) {
 // Create MATCH instruction
 static int emit_match(XrCompiler *c) {
     int id = alloc_inst(c);
-    if (id < 0) return -1;
+    if (id < 0)
+        return -1;
     set_inst(c, id, XR_OP_MATCH, 0);
     return id;
 }
@@ -72,7 +72,8 @@ static int emit_match(XrCompiler *c) {
 // Create BYTE instruction
 static int emit_byte(XrCompiler *c, uint8_t byte, int out) {
     int id = alloc_inst(c);
-    if (id < 0) return -1;
+    if (id < 0)
+        return -1;
     set_inst(c, id, XR_OP_BYTE, out);
     c->prog->inst[id].byte = byte;
     return id;
@@ -81,7 +82,8 @@ static int emit_byte(XrCompiler *c, uint8_t byte, int out) {
 // Create BYTE_RANGE instruction
 static int emit_byte_range(XrCompiler *c, uint8_t lo, uint8_t hi, int out) {
     int id = alloc_inst(c);
-    if (id < 0) return -1;
+    if (id < 0)
+        return -1;
     set_inst(c, id, XR_OP_BYTE_RANGE, out);
     c->prog->inst[id].lo = lo;
     c->prog->inst[id].hi = hi;
@@ -91,7 +93,8 @@ static int emit_byte_range(XrCompiler *c, uint8_t lo, uint8_t hi, int out) {
 // Create ANY_BYTE instruction
 static int emit_any_byte(XrCompiler *c, bool dotall, int out) {
     int id = alloc_inst(c);
-    if (id < 0) return -1;
+    if (id < 0)
+        return -1;
     set_inst(c, id, dotall ? XR_OP_ANY_BYTE_NL : XR_OP_ANY_BYTE, out);
     return id;
 }
@@ -99,7 +102,8 @@ static int emit_any_byte(XrCompiler *c, bool dotall, int out) {
 // Create ALT instruction
 static int emit_alt(XrCompiler *c, int out, int out1) {
     int id = alloc_inst(c);
-    if (id < 0) return -1;
+    if (id < 0)
+        return -1;
     set_inst(c, id, XR_OP_ALT, out);
     c->prog->inst[id].out1 = out1;
     return id;
@@ -108,7 +112,8 @@ static int emit_alt(XrCompiler *c, int out, int out1) {
 // Create CAPTURE instruction
 static int emit_capture(XrCompiler *c, int cap, int out) {
     int id = alloc_inst(c);
-    if (id < 0) return -1;
+    if (id < 0)
+        return -1;
     set_inst(c, id, XR_OP_CAPTURE, out);
     c->prog->inst[id].cap = cap;
     return id;
@@ -117,7 +122,8 @@ static int emit_capture(XrCompiler *c, int cap, int out) {
 // Create EMPTY_WIDTH instruction
 static int emit_empty_width(XrCompiler *c, uint32_t flags, int out) {
     int id = alloc_inst(c);
-    if (id < 0) return -1;
+    if (id < 0)
+        return -1;
     set_inst(c, id, XR_OP_EMPTY_WIDTH, out);
     c->prog->inst[id].empty = flags;
     return id;
@@ -129,8 +135,7 @@ static int alloc_unicode_prop(XrCompiler *c, uint32_t prop_id, bool negated) {
 
     if (prog->unicode_range_count >= prog->unicode_range_cap) {
         int new_cap = prog->unicode_range_cap ? prog->unicode_range_cap * 2 : 16;
-        XR_REALLOC_OR_ABORT(prog->unicode_ranges,
-                            (size_t)new_cap * sizeof(XrProgUnicodeRange),
+        XR_REALLOC_OR_ABORT(prog->unicode_ranges, (size_t) new_cap * sizeof(XrProgUnicodeRange),
                             "regex unicode_ranges grow");
         prog->unicode_range_cap = new_cap;
     }
@@ -144,10 +149,12 @@ static int alloc_unicode_prop(XrCompiler *c, uint32_t prop_id, bool negated) {
 // Create UNICODE_RANGE instruction
 static int emit_unicode_prop(XrCompiler *c, uint32_t prop_id, bool negated, int out) {
     int prop_idx = alloc_unicode_prop(c, prop_id, negated);
-    if (prop_idx < 0) return -1;
+    if (prop_idx < 0)
+        return -1;
 
     int id = alloc_inst(c);
-    if (id < 0) return -1;
+    if (id < 0)
+        return -1;
     set_inst(c, id, XR_OP_UNICODE_RANGE, out);
     c->prog->inst[id].unicode_idx = prop_idx;
     return id;
@@ -161,8 +168,8 @@ static int emit_unicode_prop(XrCompiler *c, uint32_t prop_id, bool negated, int 
  * ======================================================================== */
 
 typedef struct {
-    int start;      // entry instruction index
-    int *patch;     // list of out pointers to be filled
+    int start;   // entry instruction index
+    int *patch;  // list of out pointers to be filled
     int patch_count;
     int patch_cap;
 } XrFragment;
@@ -188,9 +195,7 @@ static void frag_free(XrFragment *f) {
 static void frag_add_patch(XrFragment *f, int inst_id, bool is_out1) {
     if (f->patch_count >= f->patch_cap) {
         int new_cap = f->patch_cap ? f->patch_cap * 2 : 4;
-        XR_REALLOC_OR_ABORT(f->patch,
-                            (size_t)new_cap * sizeof(int),
-                            "regex fragment patch grow");
+        XR_REALLOC_OR_ABORT(f->patch, (size_t) new_cap * sizeof(int), "regex fragment patch grow");
         f->patch_cap = new_cap;
     }
     // Encoding: positive for out, negative for out1 (offset by 1 to avoid 0 ambiguity)
@@ -219,8 +224,7 @@ static void frag_merge(XrFragment *dst, XrFragment *src) {
     for (int i = 0; i < src->patch_count; i++) {
         if (dst->patch_count >= dst->patch_cap) {
             int new_cap = dst->patch_cap ? dst->patch_cap * 2 : 4;
-            XR_REALLOC_OR_ABORT(dst->patch,
-                                (size_t)new_cap * sizeof(int),
+            XR_REALLOC_OR_ABORT(dst->patch, (size_t) new_cap * sizeof(int),
                                 "regex fragment patch merge grow");
             dst->patch_cap = new_cap;
         }
@@ -239,8 +243,7 @@ static bool compile_node(XrCompiler *c, XrAstNode *node, XrFragment *frag);
  * For letters: return ALT node ID, return two BYTE node IDs via lo_out/hi_out
  * For non-letters: return BYTE node ID, lo_out/hi_out set to -1
  */
-static int emit_byte_ignorecase_ex(XrCompiler *c, uint8_t byte, int out,
-                                   int *lo_out, int *hi_out) {
+static int emit_byte_ignorecase_ex(XrCompiler *c, uint8_t byte, int out, int *lo_out, int *hi_out) {
     // Check if it's a letter
     if ((byte >= 'a' && byte <= 'z') || (byte >= 'A' && byte <= 'Z')) {
         // Convert to case-insensitive character class
@@ -250,10 +253,13 @@ static int emit_byte_ignorecase_ex(XrCompiler *c, uint8_t byte, int out,
         // Create two branches: match uppercase or lowercase
         int lo_id = emit_byte(c, lower, out);
         int hi_id = emit_byte(c, upper, out);
-        if (lo_id < 0 || hi_id < 0) return -1;
+        if (lo_id < 0 || hi_id < 0)
+            return -1;
 
-        if (lo_out) *lo_out = lo_id;
-        if (hi_out) *hi_out = hi_id;
+        if (lo_out)
+            *lo_out = lo_id;
+        if (hi_out)
+            *hi_out = hi_id;
 
         // Connect with ALT
         return emit_alt(c, lo_id, hi_id);
@@ -261,8 +267,10 @@ static int emit_byte_ignorecase_ex(XrCompiler *c, uint8_t byte, int out,
 
     // Non-letter: return BYTE node directly
     int id = emit_byte(c, byte, out);
-    if (lo_out) *lo_out = -1;
-    if (hi_out) *hi_out = -1;
+    if (lo_out)
+        *lo_out = -1;
+    if (hi_out)
+        *hi_out = -1;
     return id;
 }
 
@@ -293,9 +301,9 @@ static bool compile_literal(XrCompiler *c, XrAstNode *node, XrFragment *frag) {
         int lo_id = -1, hi_id = -1;
 
         if (ignorecase) {
-            id = emit_byte_ignorecase_ex(c, (uint8_t)str[i], 0, &lo_id, &hi_id);
+            id = emit_byte_ignorecase_ex(c, (uint8_t) str[i], 0, &lo_id, &hi_id);
         } else {
-            id = emit_byte(c, (uint8_t)str[i], 0);
+            id = emit_byte(c, (uint8_t) str[i], 0);
         }
         if (id < 0) {
             frag_free(frag);
@@ -306,7 +314,7 @@ static bool compile_literal(XrCompiler *c, XrAstNode *node, XrFragment *frag) {
             first = id;
             frag_init(frag, first);
         } else {
-                // Connect all BYTE nodes of previous character to current node
+            // Connect all BYTE nodes of previous character to current node
             for (int j = 0; j < prev_byte_count; j++) {
                 int prev_id = prev_bytes[j];
                 int op = XR_INST_OP(&c->prog->inst[prev_id]);
@@ -339,8 +347,7 @@ static bool compile_literal(XrCompiler *c, XrAstNode *node, XrFragment *frag) {
  * Helper function: expand character ranges for ignorecase support
  * Expand ranges containing letters to include both cases
  */
-static int expand_ranges_ignorecase(XrCharRange *ranges, int count,
-                                     XrCharRange *out, int max_out) {
+static int expand_ranges_ignorecase(XrCharRange *ranges, int count, XrCharRange *out, int max_out) {
     int out_count = 0;
 
     for (int i = 0; i < count && out_count < max_out; i++) {
@@ -374,8 +381,7 @@ static int expand_ranges_ignorecase(XrCharRange *ranges, int count,
                 out[out_count].hi = lower_end - 32;
                 out_count++;
             }
-        }
-        else if (lo <= 'Z' && hi >= 'A' && out_count < max_out) {
+        } else if (lo <= 'Z' && hi >= 'A' && out_count < max_out) {
             // Range contains some uppercase letters
             uint8_t upper_start = (lo > 'A') ? lo : 'A';
             uint8_t upper_end = (hi < 'Z') ? hi : 'Z';
@@ -416,7 +422,8 @@ static bool compile_char_class(XrCompiler *c, XrAstNode *node, XrFragment *frag)
         } else {
             // Empty character class [] never matches
             int id = alloc_inst(c);
-            if (id < 0) return false;
+            if (id < 0)
+                return false;
             set_inst(c, id, XR_OP_FAIL, 0);
             frag_init(frag, id);
             return true;
@@ -426,7 +433,8 @@ static bool compile_char_class(XrCompiler *c, XrAstNode *node, XrFragment *frag)
     // Handle Unicode property character class
     if (has_unicode) {
         int id = emit_unicode_prop(c, unicode_prop, negated, 0);
-        if (id < 0) return false;
+        if (id < 0)
+            return false;
         frag_init(frag, id);
         frag_add_patch(frag, id, false);
         return true;
@@ -444,7 +452,8 @@ static bool compile_char_class(XrCompiler *c, XrAstNode *node, XrFragment *frag)
 
         // Create first range
         int first = emit_byte_range(c, ranges[0].lo, ranges[0].hi, 0);
-        if (first < 0) return false;
+        if (first < 0)
+            return false;
 
         frag_init(frag, first);
         frag_add_patch(frag, first, false);
@@ -495,16 +504,24 @@ static bool compile_char_class(XrCompiler *c, XrAstNode *node, XrFragment *frag)
         for (int gi = 0; gi <= merged; gi++) {
             int gap_lo = prev;
             int gap_hi = (gi < merged) ? ranges[gi].lo - 1 : 255;
-            if (gi < merged) prev = ranges[gi].hi + 1;
-            if (gap_lo > gap_hi || gap_lo > 255) continue;
-            int rid = emit_byte_range(c, (uint8_t)gap_lo, (uint8_t)gap_hi, 0);
-            if (rid < 0) { frag_free(&result); return false; }
+            if (gi < merged)
+                prev = ranges[gi].hi + 1;
+            if (gap_lo > gap_hi || gap_lo > 255)
+                continue;
+            int rid = emit_byte_range(c, (uint8_t) gap_lo, (uint8_t) gap_hi, 0);
+            if (rid < 0) {
+                frag_free(&result);
+                return false;
+            }
             if (result.start < 0) {
                 result.start = rid;
                 frag_add_patch(&result, rid, false);
             } else {
                 int aid = emit_alt(c, result.start, rid);
-                if (aid < 0) { frag_free(&result); return false; }
+                if (aid < 0) {
+                    frag_free(&result);
+                    return false;
+                }
                 result.start = aid;
                 frag_add_patch(&result, rid, false);
             }
@@ -513,7 +530,8 @@ static bool compile_char_class(XrCompiler *c, XrAstNode *node, XrFragment *frag)
         if (result.start < 0) {
             // Complement is empty (original is full set), match fails
             int id = alloc_inst(c);
-            if (id < 0) return false;
+            if (id < 0)
+                return false;
             set_inst(c, id, XR_OP_FAIL, 0);
             frag_init(frag, id);
             return true;
@@ -527,7 +545,8 @@ static bool compile_char_class(XrCompiler *c, XrAstNode *node, XrFragment *frag)
 // Compile any character .
 static bool compile_any(XrCompiler *c, XrAstNode *node, XrFragment *frag) {
     int id = emit_any_byte(c, node->any_dotall, 0);
-    if (id < 0) return false;
+    if (id < 0)
+        return false;
     frag_init(frag, id);
     frag_add_patch(frag, id, false);
     return true;
@@ -536,7 +555,8 @@ static bool compile_any(XrCompiler *c, XrAstNode *node, XrFragment *frag) {
 // Compile zero-width assertion
 static bool compile_empty_match(XrCompiler *c, XrAstNode *node, XrFragment *frag) {
     int id = emit_empty_width(c, node->empty_flags, 0);
-    if (id < 0) return false;
+    if (id < 0)
+        return false;
     frag_init(frag, id);
     frag_add_patch(frag, id, false);
     return true;
@@ -658,7 +678,8 @@ static bool compile_repeat(XrCompiler *c, XrAstNode *node, XrFragment *frag) {
     for (int i = 0; i < min; i++) {
         XrFragment copy;
         if (!compile_node(c, child, &copy)) {
-            if (has_prev) frag_free(&prev);
+            if (has_prev)
+                frag_free(&prev);
             return false;
         }
 
@@ -677,7 +698,8 @@ static bool compile_repeat(XrCompiler *c, XrAstNode *node, XrFragment *frag) {
         // a{n,} unlimited repeat
         XrFragment loop;
         if (!compile_node(c, child, &loop)) {
-            if (has_prev) frag_free(&prev);
+            if (has_prev)
+                frag_free(&prev);
             return false;
         }
 
@@ -686,7 +708,8 @@ static bool compile_repeat(XrCompiler *c, XrAstNode *node, XrFragment *frag) {
         int alt = emit_alt(c, greedy ? loop.start : nop, greedy ? nop : loop.start);
         if (alt < 0 || nop < 0) {
             frag_free(&loop);
-            if (has_prev) frag_free(&prev);
+            if (has_prev)
+                frag_free(&prev);
             return false;
         }
 
@@ -711,7 +734,8 @@ static bool compile_repeat(XrCompiler *c, XrAstNode *node, XrFragment *frag) {
         for (int i = min; i < max; i++) {
             XrFragment opt;
             if (!compile_node(c, child, &opt)) {
-                if (has_prev) frag_free(&prev);
+                if (has_prev)
+                    frag_free(&prev);
                 frag_free(frag);
                 return false;
             }
@@ -720,7 +744,8 @@ static bool compile_repeat(XrCompiler *c, XrAstNode *node, XrFragment *frag) {
             int alt = emit_alt(c, greedy ? opt.start : nop, greedy ? nop : opt.start);
             if (alt < 0 || nop < 0) {
                 frag_free(&opt);
-                if (has_prev) frag_free(&prev);
+                if (has_prev)
+                    frag_free(&prev);
                 frag_free(frag);
                 return false;
             }
@@ -784,7 +809,8 @@ static bool compile_capture(XrCompiler *c, XrAstNode *node, XrFragment *frag) {
     // Start capture (+1 because caps[0,1] is full match)
     int cap_start_idx = (index + 1) * 2;
     int start_cap = emit_capture(c, cap_start_idx, 0);
-    if (start_cap < 0) return false;
+    if (start_cap < 0)
+        return false;
 
     // Compile child node
     XrFragment child_frag;
@@ -818,7 +844,8 @@ static bool compile_capture(XrCompiler *c, XrAstNode *node, XrFragment *frag) {
 // Compile empty node
 static bool compile_empty(XrCompiler *c, XrFragment *frag) {
     int id = emit_nop(c);
-    if (id < 0) return false;
+    if (id < 0)
+        return false;
     frag_init(frag, id);
     frag_add_patch(frag, id, false);
     return true;
@@ -857,8 +884,8 @@ static bool compile_node(XrCompiler *c, XrAstNode *node, XrFragment *frag) {
 // Forward declaration
 static void xr_prog_analyze(XrProg *prog, XrAstNode *ast);
 
-XrProg* xr_regex_compile_prog(XrAstNode *ast, XrRegexFlags flags) {
-    XrProg *prog = (XrProg*)xr_re_alloc(sizeof(XrProg));
+XrProg *xr_regex_compile_prog(XrAstNode *ast, XrRegexFlags flags) {
+    XrProg *prog = (XrProg *) xr_re_alloc(sizeof(XrProg));
     memset(prog, 0, sizeof(XrProg));
     prog->flags = flags;
 
@@ -913,7 +940,8 @@ XrProg* xr_regex_compile_prog(XrAstNode *ast, XrRegexFlags flags) {
 }
 
 void xr_prog_free(XrProg *prog) {
-    if (!prog) return;
+    if (!prog)
+        return;
 
     xr_re_free(prog->inst);
     xr_re_free(prog->prefix);
@@ -1003,7 +1031,8 @@ void xr_prog_compute_bytemap(XrProg *prog) {
 
 // Check if AST starts with anchor ^
 static bool ast_is_anchored(XrAstNode *node) {
-    if (!node) return false;
+    if (!node)
+        return false;
 
     switch (node->type) {
         case XR_AST_EMPTY_MATCH:
@@ -1039,14 +1068,16 @@ static bool ast_is_anchored(XrAstNode *node) {
  * Return number of bytes extracted
  */
 static int ast_extract_prefix(XrAstNode *node, char *buf, int max_len) {
-    if (!node || max_len <= 0) return 0;
+    if (!node || max_len <= 0)
+        return 0;
 
     switch (node->type) {
         case XR_AST_LITERAL:
             // Literal: copy directly
             {
                 int len = node->literal.len;
-                if (len > max_len) len = max_len;
+                if (len > max_len)
+                    len = max_len;
                 memcpy(buf, node->literal.str, len);
                 return len;
             }
@@ -1058,11 +1089,14 @@ static int ast_extract_prefix(XrAstNode *node, char *buf, int max_len) {
                 for (int i = 0; i < node->list.count && total < max_len; i++) {
                     XrAstNode *child = node->list.children[i];
                     // Skip zero-width assertions (^, $, \b etc.)
-                    if (child->type == XR_AST_EMPTY_MATCH) continue;
+                    if (child->type == XR_AST_EMPTY_MATCH)
+                        continue;
                     // Only literals and literals inside capture groups can be extracted
-                    if (child->type != XR_AST_LITERAL) break;
+                    if (child->type != XR_AST_LITERAL)
+                        break;
                     int n = ast_extract_prefix(child, buf + total, max_len - total);
-                    if (n == 0) break;
+                    if (n == 0)
+                        break;
                     total += n;
                 }
                 return total;
@@ -1082,7 +1116,8 @@ static int ast_extract_prefix(XrAstNode *node, char *buf, int max_len) {
  * In OnePass mode, each byte has only one possible next step
  */
 static bool ast_is_onepass(XrAstNode *node) {
-    if (!node) return true;
+    if (!node)
+        return true;
 
     switch (node->type) {
         case XR_AST_LITERAL:
@@ -1118,7 +1153,8 @@ static bool ast_is_onepass(XrAstNode *node) {
             return false;
 
         case XR_AST_ALT:
-            // Alternation: if first char sets don't overlap then OnePass, but detection is complex, return false for now
+            // Alternation: if first char sets don't overlap then OnePass, but detection is complex,
+            // return false for now
             return false;
 
         default:
@@ -1138,12 +1174,12 @@ static bool prog_is_literal(XrProg *prog, char **out_literal, int *out_len) {
         XrOpcode op = XR_INST_OP(ip);
 
         if (op == XR_OP_BYTE) {
-            buf[len++] = (char)ip->byte;
+            buf[len++] = (char) ip->byte;
             pc = XR_INST_OUT(ip);
         } else if (op == XR_OP_MATCH) {
             // Success: pure literal
             if (len > 0) {
-                *out_literal = (char*)xr_re_alloc(len + 1);
+                *out_literal = (char *) xr_re_alloc(len + 1);
                 memcpy(*out_literal, buf, len);
                 (*out_literal)[len] = '\0';
                 *out_len = len;
@@ -1182,12 +1218,13 @@ static void xr_prog_analyze(XrProg *prog, XrAstNode *ast) {
     }
 
     // 3. Prefix extraction (max 32 bytes)
-    // Note: IGNORECASE mode cannot use prefix optimization, as prefix is lowercase but input may be uppercase
+    // Note: IGNORECASE mode cannot use prefix optimization, as prefix is lowercase but input may be
+    // uppercase
     if (!prog->is_literal && !(prog->flags & XR_RE_IGNORECASE)) {
         char prefix_buf[33];
         int prefix_len = ast_extract_prefix(ast, prefix_buf, 32);
         if (prefix_len > 0) {
-            prog->prefix = (char*)xr_re_alloc(prefix_len + 1);
+            prog->prefix = (char *) xr_re_alloc(prefix_len + 1);
             memcpy(prog->prefix, prefix_buf, prefix_len);
             prog->prefix[prefix_len] = '\0';
             prog->prefix_len = prefix_len;
@@ -1207,26 +1244,37 @@ static void xr_prog_analyze(XrProg *prog, XrAstNode *ast) {
  * Debug Output
  * ======================================================================== */
 
-static const char* opcode_name(XrOpcode op) {
+static const char *opcode_name(XrOpcode op) {
     switch (op) {
-        case XR_OP_NOP: return "NOP";
-        case XR_OP_MATCH: return "MATCH";
-        case XR_OP_FAIL: return "FAIL";
-        case XR_OP_BYTE: return "BYTE";
-        case XR_OP_BYTE_RANGE: return "RANGE";
-        case XR_OP_ANY_BYTE: return "ANY";
-        case XR_OP_ANY_BYTE_NL: return "ANY_NL";
-        case XR_OP_ALT: return "ALT";
-        case XR_OP_CAPTURE: return "CAP";
-        case XR_OP_EMPTY_WIDTH: return "EMPTY";
-        case XR_OP_UNICODE_RANGE: return "URANGE";
-        default: return "?";
+        case XR_OP_NOP:
+            return "NOP";
+        case XR_OP_MATCH:
+            return "MATCH";
+        case XR_OP_FAIL:
+            return "FAIL";
+        case XR_OP_BYTE:
+            return "BYTE";
+        case XR_OP_BYTE_RANGE:
+            return "RANGE";
+        case XR_OP_ANY_BYTE:
+            return "ANY";
+        case XR_OP_ANY_BYTE_NL:
+            return "ANY_NL";
+        case XR_OP_ALT:
+            return "ALT";
+        case XR_OP_CAPTURE:
+            return "CAP";
+        case XR_OP_EMPTY_WIDTH:
+            return "EMPTY";
+        case XR_OP_UNICODE_RANGE:
+            return "URANGE";
+        default:
+            return "?";
     }
 }
 
 void xr_prog_dump(XrProg *prog) {
-    printf("=== Prog (%d instructions, %d captures) ===\n",
-           prog->inst_count, prog->capture_count);
+    printf("=== Prog (%d instructions, %d captures) ===\n", prog->inst_count, prog->capture_count);
     printf("start: %d, bytemap_range: %d\n", prog->start, prog->bytemap_range);
 
     for (int i = 0; i < prog->inst_count; i++) {
@@ -1238,8 +1286,7 @@ void xr_prog_dump(XrProg *prog) {
 
         switch (op) {
             case XR_OP_BYTE:
-                printf("'%c' (0x%02x) -> %d",
-                       ip->byte >= 32 && ip->byte < 127 ? ip->byte : '.',
+                printf("'%c' (0x%02x) -> %d", ip->byte >= 32 && ip->byte < 127 ? ip->byte : '.',
                        ip->byte, out);
                 break;
             case XR_OP_BYTE_RANGE:
@@ -1249,8 +1296,7 @@ void xr_prog_dump(XrProg *prog) {
                 printf("-> %d | %d", out, ip->out1);
                 break;
             case XR_OP_CAPTURE:
-                printf("%d (%s) -> %d", ip->cap,
-                       ip->cap % 2 == 0 ? "start" : "end", out);
+                printf("%d (%s) -> %d", ip->cap, ip->cap % 2 == 0 ? "start" : "end", out);
                 break;
             case XR_OP_EMPTY_WIDTH:
                 printf("0x%x -> %d", ip->empty, out);

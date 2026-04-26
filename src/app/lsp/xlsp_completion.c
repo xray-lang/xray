@@ -34,8 +34,8 @@
 
 // Literal type markers
 #define LITERAL_STRING "__string__"
-#define LITERAL_ARRAY  "__array__"
-#define LITERAL_MAP    "__map__"
+#define LITERAL_ARRAY "__array__"
+#define LITERAL_MAP "__map__"
 
 // Create a completion item with markdown documentation for syntax highlighting
 static XrJsonValue *make_completion_item(const char *label, int kind, const char *detail) {
@@ -87,10 +87,12 @@ static XrJsonValue *make_enum_value_completions(const char *enum_name) {
 
 // Find enum declaration by name in document AST
 static AstNode *find_enum_in_ast(AstNode *ast, const char *name) {
-    if (!ast || ast->type != AST_PROGRAM) return NULL;
+    if (!ast || ast->type != AST_PROGRAM)
+        return NULL;
     for (int i = 0; i < ast->as.program.count; i++) {
         AstNode *stmt = ast->as.program.statements[i];
-        if (!stmt) continue;
+        if (!stmt)
+            continue;
         // Direct enum declaration
         if (stmt->type == AST_ENUM_DECL && stmt->as.enum_decl.name &&
             strcmp(stmt->as.enum_decl.name, name) == 0) {
@@ -110,11 +112,13 @@ static AstNode *find_enum_in_ast(AstNode *ast, const char *name) {
 // Check if prefix is an enum member access (e.g., "Red" after "Color.Red.")
 // Returns the enum name if found, NULL otherwise
 static const char *find_enum_for_member_prefix(XrLspDocument *doc, XrLspPosition pos,
-                                                 const char *prefix) {
-    if (!doc || !doc->ast || !doc->content || !prefix) return NULL;
+                                               const char *prefix) {
+    if (!doc || !doc->ast || !doc->content || !prefix)
+        return NULL;
 
     uint32_t offset = xlsp_position_to_offset(doc, pos);
-    if (offset < 2) return NULL;
+    if (offset < 2)
+        return NULL;
     const char *content = doc->content;
 
     // Scan backward past prefix text and the dot before it
@@ -123,36 +127,41 @@ static const char *find_enum_for_member_prefix(XrLspDocument *doc, XrLspPosition
     // We need to find "EnumName" before that
     uint32_t scan = offset;
     // Skip back past any partial text after last dot
-    while (scan > 0 && content[scan - 1] != '.' && content[scan - 1] != '\n') scan--;
-    if (scan == 0 || content[scan - 1] != '.') return NULL;
-    uint32_t dot2 = scan - 1; // position of second dot (MemberName.)
+    while (scan > 0 && content[scan - 1] != '.' && content[scan - 1] != '\n')
+        scan--;
+    if (scan == 0 || content[scan - 1] != '.')
+        return NULL;
+    uint32_t dot2 = scan - 1;  // position of second dot (MemberName.)
 
     // Now scan back past the member name
     uint32_t member_end = dot2;
     while (member_end > 0 && ((content[member_end - 1] >= 'a' && content[member_end - 1] <= 'z') ||
-           (content[member_end - 1] >= 'A' && content[member_end - 1] <= 'Z') ||
-           (content[member_end - 1] >= '0' && content[member_end - 1] <= '9') ||
-           content[member_end - 1] == '_')) {
+                              (content[member_end - 1] >= 'A' && content[member_end - 1] <= 'Z') ||
+                              (content[member_end - 1] >= '0' && content[member_end - 1] <= '9') ||
+                              content[member_end - 1] == '_')) {
         member_end--;
     }
 
     // Check for first dot
-    if (member_end == 0 || content[member_end - 1] != '.') return NULL;
+    if (member_end == 0 || content[member_end - 1] != '.')
+        return NULL;
     uint32_t dot1 = member_end - 1;
 
     // Extract enum name before first dot
     uint32_t enum_end = dot1;
     uint32_t enum_start = enum_end;
     while (enum_start > 0 && ((content[enum_start - 1] >= 'a' && content[enum_start - 1] <= 'z') ||
-           (content[enum_start - 1] >= 'A' && content[enum_start - 1] <= 'Z') ||
-           (content[enum_start - 1] >= '0' && content[enum_start - 1] <= '9') ||
-           content[enum_start - 1] == '_')) {
+                              (content[enum_start - 1] >= 'A' && content[enum_start - 1] <= 'Z') ||
+                              (content[enum_start - 1] >= '0' && content[enum_start - 1] <= '9') ||
+                              content[enum_start - 1] == '_')) {
         enum_start--;
     }
 
-    if (enum_start == enum_end) return NULL;
+    if (enum_start == enum_end)
+        return NULL;
     size_t len = enum_end - enum_start;
-    if (len >= 64) return NULL;
+    if (len >= 64)
+        return NULL;
 
     static char enum_name_buf[64];
     memcpy(enum_name_buf, content + enum_start, len);
@@ -166,10 +175,11 @@ static const char *find_enum_for_member_prefix(XrLspDocument *doc, XrLspPosition
 }
 
 // Find module prefix before dot (e.g., "time" in "time.now")
-static const char *find_module_prefix(XrLspDocument *doc, XrLspPosition pos,
-                                       char *buf, size_t buf_size) {
+static const char *find_module_prefix(XrLspDocument *doc, XrLspPosition pos, char *buf,
+                                      size_t buf_size) {
     uint32_t offset = xlsp_position_to_offset(doc, pos);
-    if (offset == 0) return NULL;
+    if (offset == 0)
+        return NULL;
 
     const char *content = doc->content;
     uint32_t dot_idx = 0;
@@ -178,11 +188,14 @@ static const char *find_module_prefix(XrLspDocument *doc, XrLspPosition pos,
         dot_idx = offset - 1;
     } else {
         uint32_t scan = offset;
-        while (scan > 0 && content[scan - 1] != '.' && content[scan - 1] != '\n') scan--;
-        if (scan > 0 && content[scan - 1] == '.') dot_idx = scan - 1;
+        while (scan > 0 && content[scan - 1] != '.' && content[scan - 1] != '\n')
+            scan--;
+        if (scan > 0 && content[scan - 1] == '.')
+            dot_idx = scan - 1;
     }
 
-    if (dot_idx == 0) return NULL;
+    if (dot_idx == 0)
+        return NULL;
 
     char before_dot = content[dot_idx - 1];
 
@@ -202,11 +215,14 @@ static const char *find_module_prefix(XrLspDocument *doc, XrLspPosition pos,
         uint32_t brace_start = 0;
         bool has_arrow = false;
         while (scan > 0 && brace_count > 0) {
-            if (content[scan] == '}') brace_count++;
+            if (content[scan] == '}')
+                brace_count++;
             else if (content[scan] == '{') {
                 brace_count--;
-                if (brace_count == 0) brace_start = scan;
-            } else if (brace_count == 1 && content[scan] == '>' && scan > 0 && content[scan-1] == '=') {
+                if (brace_count == 0)
+                    brace_start = scan;
+            } else if (brace_count == 1 && content[scan] == '>' && scan > 0 &&
+                       content[scan - 1] == '=') {
                 has_arrow = true;
             }
             scan--;
@@ -216,19 +232,21 @@ static const char *find_module_prefix(XrLspDocument *doc, XrLspPosition pos,
         buf[buf_size - 1] = '\0';
         return buf;
     }
-    if (before_dot == ')') return NULL;
+    if (before_dot == ')')
+        return NULL;
 
     uint32_t name_end = dot_idx;
     uint32_t name_start = dot_idx;
     while (name_start > 0 && (content[name_start - 1] == '_' ||
-           (content[name_start - 1] >= 'a' && content[name_start - 1] <= 'z') ||
-           (content[name_start - 1] >= 'A' && content[name_start - 1] <= 'Z') ||
-           (content[name_start - 1] >= '0' && content[name_start - 1] <= '9'))) {
+                              (content[name_start - 1] >= 'a' && content[name_start - 1] <= 'z') ||
+                              (content[name_start - 1] >= 'A' && content[name_start - 1] <= 'Z') ||
+                              (content[name_start - 1] >= '0' && content[name_start - 1] <= '9'))) {
         name_start--;
     }
 
     size_t name_len = name_end - name_start;
-    if (name_len == 0 || name_len >= buf_size) return NULL;
+    if (name_len == 0 || name_len >= buf_size)
+        return NULL;
 
     memcpy(buf, content + name_start, name_len);
     buf[name_len] = '\0';
@@ -242,37 +260,53 @@ static XrTypeId xr_type_to_builtin(XrType *type) {
 
 // Fallback: infer type by scanning source text (used when analyzer unavailable)
 static XlspBuiltinType infer_type_from_source(const char *content, const char *var_name) {
-    if (!content || !var_name) return XLSP_TYPE_UNKNOWN;
+    if (!content || !var_name)
+        return XLSP_TYPE_UNKNOWN;
 
     size_t var_len = strlen(var_name);
     const char *p = content;
 
     while ((p = strstr(p, var_name)) != NULL) {
         const char *line_start = p;
-        while (line_start > content && line_start[-1] != '\n') line_start--;
-        while (*line_start == ' ' || *line_start == '\t') line_start++;
+        while (line_start > content && line_start[-1] != '\n')
+            line_start--;
+        while (*line_start == ' ' || *line_start == '\t')
+            line_start++;
 
         if (strncmp(line_start, "let ", 4) == 0 || strncmp(line_start, "const ", 6) == 0) {
             const char *after = p + var_len;
-            while (*after == ' ' || *after == '\t') after++;
+            while (*after == ' ' || *after == '\t')
+                after++;
 
             if (*after == ':') {
                 after++;
-                while (*after == ' ' || *after == '\t') after++;
-                if (strncmp(after, TYPE_NAME_INT, 3) == 0) return XLSP_TYPE_INT;
-                if (strncmp(after, TYPE_NAME_FLOAT, 5) == 0) return XLSP_TYPE_FLOAT;
-                if (strncmp(after, TYPE_NAME_STRING, 6) == 0) return XLSP_TYPE_STRING;
-                if (strncmp(after, TYPE_NAME_BOOL, 4) == 0) return XLSP_TYPE_BOOL;
-                if (strncmp(after, TYPE_NAME_ARRAY, 5) == 0) return XLSP_TYPE_ARRAY;
-                if (strncmp(after, TYPE_NAME_MAP, 3) == 0) return XLSP_TYPE_MAP;
-                if (strncmp(after, TYPE_NAME_SET, 3) == 0) return XLSP_TYPE_SET;
-                if (strncmp(after, "Bytes", 5) == 0) return XLSP_TYPE_ARRAY;
-                if (strncmp(after, TYPE_NAME_CHANNEL, 7) == 0) return XLSP_TYPE_CHANNEL;
-                if (strncmp(after, TYPE_NAME_JSON, 4) == 0) return XLSP_TYPE_JSON;
+                while (*after == ' ' || *after == '\t')
+                    after++;
+                if (strncmp(after, TYPE_NAME_INT, 3) == 0)
+                    return XLSP_TYPE_INT;
+                if (strncmp(after, TYPE_NAME_FLOAT, 5) == 0)
+                    return XLSP_TYPE_FLOAT;
+                if (strncmp(after, TYPE_NAME_STRING, 6) == 0)
+                    return XLSP_TYPE_STRING;
+                if (strncmp(after, TYPE_NAME_BOOL, 4) == 0)
+                    return XLSP_TYPE_BOOL;
+                if (strncmp(after, TYPE_NAME_ARRAY, 5) == 0)
+                    return XLSP_TYPE_ARRAY;
+                if (strncmp(after, TYPE_NAME_MAP, 3) == 0)
+                    return XLSP_TYPE_MAP;
+                if (strncmp(after, TYPE_NAME_SET, 3) == 0)
+                    return XLSP_TYPE_SET;
+                if (strncmp(after, "Bytes", 5) == 0)
+                    return XLSP_TYPE_ARRAY;
+                if (strncmp(after, TYPE_NAME_CHANNEL, 7) == 0)
+                    return XLSP_TYPE_CHANNEL;
+                if (strncmp(after, TYPE_NAME_JSON, 4) == 0)
+                    return XLSP_TYPE_JSON;
             }
             if (*after == '=' && after[1] != '=') {
                 after++;
-                while (*after == ' ' || *after == '\t') after++;
+                while (*after == ' ' || *after == '\t')
+                    after++;
                 return xlsp_infer_literal_type(after);
             }
         }
@@ -282,8 +316,10 @@ static XlspBuiltinType infer_type_from_source(const char *content, const char *v
 }
 
 // Infer variable type: prioritize XaAnalyzer, fallback to source scanning
-XlspBuiltinType xlsp_infer_variable_type(XrLspServer *server, XrLspDocument *doc, const char *var_name) {
-    if (!doc || !var_name) return XLSP_TYPE_UNKNOWN;
+XlspBuiltinType xlsp_infer_variable_type(XrLspServer *server, XrLspDocument *doc,
+                                         const char *var_name) {
+    if (!doc || !var_name)
+        return XLSP_TYPE_UNKNOWN;
 
     // Use XaAnalyzer if available (preferred: accurate type from AST)
     XaAnalyzer *analyzer = server ? server->workspace_analyzer : NULL;
@@ -292,7 +328,8 @@ XlspBuiltinType xlsp_infer_variable_type(XrLspServer *server, XrLspDocument *doc
         if (sym) {
             XrType *type = xa_analyzer_get_type(analyzer, sym);
             XlspBuiltinType bt = xr_type_to_builtin(type);
-            if (bt != XLSP_TYPE_UNKNOWN) return bt;
+            if (bt != XLSP_TYPE_UNKNOWN)
+                return bt;
         }
     }
 
@@ -310,8 +347,10 @@ static XrJsonValue *complete_basic(XrLspServer *server, XrLspDocument *doc, XrLs
 
         for (int i = 0; i < sym_count; i++) {
             XaSymbol *sym = symbols[i];
-            if (!sym || !sym->name) continue;
-            if (sym->location.line > (uint32_t)(pos.line + 1)) continue;
+            if (!sym || !sym->name)
+                continue;
+            if (sym->location.line > (uint32_t) (pos.line + 1))
+                continue;
 
             int kind;
             const char *detail;
@@ -325,22 +364,27 @@ static XrJsonValue *complete_basic(XrLspServer *server, XrLspDocument *doc, XrLs
                 XaSymbolLinks *links = xa_analyzer_get_links(analyzer, sym);
                 char sig_buf[512];
                 int sig_len = 0;
-                sig_len += snprintf(sig_buf + sig_len, sizeof(sig_buf) - sig_len, "fn %s(", sym->name);
+                sig_len +=
+                    snprintf(sig_buf + sig_len, sizeof(sig_buf) - sig_len, "fn %s(", sym->name);
 
                 if (links && links->param_count > 0) {
                     for (int p = 0; p < links->param_count; p++) {
-                        if (p > 0) sig_len += snprintf(sig_buf + sig_len, sizeof(sig_buf) - sig_len, ", ");
+                        if (p > 0)
+                            sig_len += snprintf(sig_buf + sig_len, sizeof(sig_buf) - sig_len, ", ");
                         const char *pname = (links->param_names && links->param_names[p])
-                            ? links->param_names[p] : "_";
+                                                ? links->param_names[p]
+                                                : "_";
                         const char *ptype = (links->param_types && links->param_types[p])
-                            ? xr_type_to_string(links->param_types[p]) : "unknown";
-                        sig_len += snprintf(sig_buf + sig_len, sizeof(sig_buf) - sig_len, "%s: %s", pname, ptype);
+                                                ? xr_type_to_string(links->param_types[p])
+                                                : "unknown";
+                        sig_len += snprintf(sig_buf + sig_len, sizeof(sig_buf) - sig_len, "%s: %s",
+                                            pname, ptype);
                     }
                 }
 
                 const char *ret_type = (links && links->return_type)
-                    ? xr_type_to_string(links->return_type)
-                    : (type ? xr_type_to_string(type) : "unknown");
+                                           ? xr_type_to_string(links->return_type)
+                                           : (type ? xr_type_to_string(type) : "unknown");
                 snprintf(sig_buf + sig_len, sizeof(sig_buf) - sig_len, "): %s", ret_type);
 
                 strncpy(detail_buf, sig_buf, sizeof(detail_buf) - 1);
@@ -360,7 +404,7 @@ static XrJsonValue *complete_basic(XrLspServer *server, XrLspDocument *doc, XrLs
                 detail = detail_buf;
             } else if (sym->kind == XA_SYM_TYPE_ALIAS) {
                 kind = 25;  // LSP TypeParameter kind
-                XrType *alias_type = (XrType *)sym->alias_type;
+                XrType *alias_type = (XrType *) sym->alias_type;
                 const char *alias_str = alias_type ? xr_type_to_string(alias_type) : "unknown";
                 snprintf(detail_buf, sizeof(detail_buf), "type %s = %s", sym->name, alias_str);
                 detail = detail_buf;
@@ -371,8 +415,8 @@ static XrJsonValue *complete_basic(XrLspServer *server, XrLspDocument *doc, XrLs
             } else {
                 kind = 6;
                 const char *type_str = type ? xr_type_to_string(type) : "unknown";
-                snprintf(detail_buf, sizeof(detail_buf), "%s: %s",
-                         sym->is_const ? "const" : "let", type_str);
+                snprintf(detail_buf, sizeof(detail_buf), "%s: %s", sym->is_const ? "const" : "let",
+                         type_str);
                 detail = detail_buf;
             }
 
@@ -408,7 +452,8 @@ static XrJsonValue *complete_basic(XrLspServer *server, XrLspDocument *doc, XrLs
         char detail_buf2[256];
         for (int i = 0; i < doc->ast->as.program.count; i++) {
             AstNode *stmt = doc->ast->as.program.statements[i];
-            if (!stmt) continue;
+            if (!stmt)
+                continue;
             AstNode *enum_node = NULL;
             if (stmt->type == AST_ENUM_DECL) {
                 enum_node = stmt;
@@ -419,8 +464,8 @@ static XrJsonValue *complete_basic(XrLspServer *server, XrLspDocument *doc, XrLs
             if (enum_node && enum_node->as.enum_decl.name) {
                 snprintf(detail_buf2, sizeof(detail_buf2), "enum %s { %d members }",
                          enum_node->as.enum_decl.name, enum_node->as.enum_decl.member_count);
-                XrJsonValue *item = make_completion_item(
-                    enum_node->as.enum_decl.name, 13, detail_buf2);
+                XrJsonValue *item =
+                    make_completion_item(enum_node->as.enum_decl.name, 13, detail_buf2);
                 xjson_object_set(item, "sortText", xjson_new_string("0"));
                 xjson_array_push(items, item);
             }
@@ -440,7 +485,8 @@ static XrJsonValue *complete_basic(XrLspServer *server, XrLspDocument *doc, XrLs
 // the registered stdlib module.
 static XrJsonValue *complete_stdlib_module(const char *prefix) {
     const XlspModuleInfo *module = xlsp_stdlib_find_module(prefix);
-    if (!module) return NULL;
+    if (!module)
+        return NULL;
     XrJsonValue *items = xjson_new_array();
     for (int i = 0; i < module->symbol_count; i++) {
         const XlspSymbolInfo *sym = &module->symbols[i];
@@ -458,7 +504,8 @@ static XrJsonValue *complete_stdlib_module(const char *prefix) {
 // in xanalyzer_builtins).
 static XrJsonValue *complete_runtime_module(const char *prefix) {
     const XaBuiltinModule *rt_mod = xa_builtin_get_module_info(prefix);
-    if (!rt_mod) return NULL;
+    if (!rt_mod)
+        return NULL;
     XrJsonValue *items = xjson_new_array();
     for (int i = 0; i < rt_mod->function_count; i++) {
         const XaBuiltinMember *fn = &rt_mod->functions[i];
@@ -481,10 +528,14 @@ static XrJsonValue *complete_runtime_module(const char *prefix) {
 // Literal-typed prefix markers emitted by find_module_prefix for
 // expressions like "[1,2,3]." or '"hello".'.
 static XrJsonValue *complete_literal_marker(const char *prefix) {
-    if (strcmp(prefix, LITERAL_STRING) == 0) return xlsp_builtin_get_completions(XLSP_TYPE_STRING);
-    if (strcmp(prefix, LITERAL_ARRAY)  == 0) return xlsp_builtin_get_completions(XLSP_TYPE_ARRAY);
-    if (strcmp(prefix, LITERAL_MAP)    == 0) return xlsp_builtin_get_completions(XLSP_TYPE_MAP);
-    if (strcmp(prefix, "__json__")     == 0) return xlsp_builtin_get_completions(XLSP_TYPE_JSON);
+    if (strcmp(prefix, LITERAL_STRING) == 0)
+        return xlsp_builtin_get_completions(XLSP_TYPE_STRING);
+    if (strcmp(prefix, LITERAL_ARRAY) == 0)
+        return xlsp_builtin_get_completions(XLSP_TYPE_ARRAY);
+    if (strcmp(prefix, LITERAL_MAP) == 0)
+        return xlsp_builtin_get_completions(XLSP_TYPE_MAP);
+    if (strcmp(prefix, "__json__") == 0)
+        return xlsp_builtin_get_completions(XLSP_TYPE_JSON);
     return NULL;
 }
 
@@ -492,30 +543,34 @@ static XrJsonValue *complete_literal_marker(const char *prefix) {
 // `import myMod from "...";`.
 static XrJsonValue *complete_import_namespace(XrLspDocument *doc, const char *prefix) {
     XrJsonValue *items = xlsp_get_import_completions(doc, prefix);
-    if (items && xjson_array_len(items) > 0) return items;
-    if (items) xjson_free(items);
+    if (items && xjson_array_len(items) > 0)
+        return items;
+    if (items)
+        xjson_free(items);
     return NULL;
 }
 
 // Enum declaration: prefix IS the enum name (e.g. "Color.").
 static XrJsonValue *complete_enum_decl(XrLspDocument *doc, const char *prefix) {
-    if (!doc->ast) return NULL;
+    if (!doc->ast)
+        return NULL;
     AstNode *enum_node = find_enum_in_ast(doc->ast, prefix);
-    if (!enum_node) return NULL;
+    if (!enum_node)
+        return NULL;
     XrJsonValue *items = xjson_new_array();
     char detail_buf[256];
     for (int i = 0; i < enum_node->as.enum_decl.member_count; i++) {
         AstNode *member = enum_node->as.enum_decl.members[i];
         if (member && member->type == AST_ENUM_MEMBER && member->as.enum_member.name) {
-            snprintf(detail_buf, sizeof(detail_buf), "%s.%s",
-                     prefix, member->as.enum_member.name);
-            XrJsonValue *item = make_completion_item(
-                member->as.enum_member.name, XR_COMPLETION_ENUM_MEMBER, detail_buf);
+            snprintf(detail_buf, sizeof(detail_buf), "%s.%s", prefix, member->as.enum_member.name);
+            XrJsonValue *item = make_completion_item(member->as.enum_member.name,
+                                                     XR_COMPLETION_ENUM_MEMBER, detail_buf);
             xjson_object_set(item, "sortText", xjson_new_string("0"));
             xjson_array_push(items, item);
         }
     }
-    if (xjson_array_len(items) > 0) return items;
+    if (xjson_array_len(items) > 0)
+        return items;
     xjson_free(items);
     return NULL;
 }
@@ -525,21 +580,28 @@ static XrJsonValue *complete_enum_decl(XrLspDocument *doc, const char *prefix) {
 // bytes (whole-word). `*out_after` points at the first byte AFTER the
 // identifier on success, ready for `: Type` or `= expr` parsing.
 // Returns true on success (match found), false when no more matches.
-static bool scan_next_binding(const char **p_io, const char *content_begin,
-                              const char *prefix, size_t prefix_len,
-                              const char **out_after) {
+static bool scan_next_binding(const char **p_io, const char *content_begin, const char *prefix,
+                              size_t prefix_len, const char **out_after) {
     const char *p = *p_io;
     char let_pat[128], const_pat[128];
-    snprintf(let_pat,   sizeof(let_pat),   "let %s",   prefix);
+    snprintf(let_pat, sizeof(let_pat), "let %s", prefix);
     snprintf(const_pat, sizeof(const_pat), "const %s", prefix);
     while (p && *p) {
         const char *lm = strstr(p, let_pat);
         const char *cm = strstr(p, const_pat);
         const char *match = NULL;
         int skip = 0;
-        if (lm && (!cm || lm < cm)) { match = lm; skip = 4 + (int)prefix_len; }
-        else if (cm) { match = cm; skip = 6 + (int)prefix_len; }
-        if (!match) { *p_io = p; return false; }
+        if (lm && (!cm || lm < cm)) {
+            match = lm;
+            skip = 4 + (int) prefix_len;
+        } else if (cm) {
+            match = cm;
+            skip = 6 + (int) prefix_len;
+        }
+        if (!match) {
+            *p_io = p;
+            return false;
+        }
         // Boundary: char before the `let`/`const` must not be identifier.
         if (match > content_begin) {
             char prev = match[-1];
@@ -556,7 +618,8 @@ static bool scan_next_binding(const char **p_io, const char *content_begin,
             p = match + 1;
             continue;
         }
-        while (*after == ' ' || *after == '\t') after++;
+        while (*after == ' ' || *after == '\t')
+            after++;
         *p_io = match + 1;
         *out_after = after;
         return true;
@@ -571,8 +634,7 @@ static bool scan_next_binding(const char **p_io, const char *content_begin,
 // Output: *early_items = non-null for direct completions (caller returns it).
 //         *class_name_out = non-null char* when we found a `new Foo` RHS.
 static void scan_let_const_assignment(XrLspDocument *doc, const char *prefix,
-                                      XrJsonValue **early_items,
-                                      const char **class_name_out) {
+                                      XrJsonValue **early_items, const char **class_name_out) {
     *early_items = NULL;
     *class_name_out = NULL;
 
@@ -581,34 +643,68 @@ static void scan_let_const_assignment(XrLspDocument *doc, const char *prefix,
     const char *after = NULL;
 
     while (scan_next_binding(&p, doc->content, prefix, prefix_len, &after)) {
-        if (!(*after == '=' && after[1] != '=')) continue;
+        if (!(*after == '=' && after[1] != '='))
+            continue;
         after++;  // past '='
-        while (*after == ' ' || *after == '\t') after++;
+        while (*after == ' ' || *after == '\t')
+            after++;
 
         // Literal RHS → emit typed builtin completions directly.
-        if (*after == '[') { *early_items = xlsp_builtin_get_completions(XLSP_TYPE_ARRAY);  return; }
-        if (*after == '"' || *after == '\'') { *early_items = xlsp_builtin_get_completions(XLSP_TYPE_STRING); return; }
-        if (*after == '#' && after[1] == '{') { *early_items = xlsp_builtin_get_completions(XLSP_TYPE_MAP); return; }
-        if (*after == '#' && after[1] == '[') { *early_items = xlsp_builtin_get_completions(XLSP_TYPE_SET); return; }
-        if (*after == '{') { *early_items = xlsp_builtin_get_completions(XLSP_TYPE_JSON); return; }
+        if (*after == '[') {
+            *early_items = xlsp_builtin_get_completions(XLSP_TYPE_ARRAY);
+            return;
+        }
+        if (*after == '"' || *after == '\'') {
+            *early_items = xlsp_builtin_get_completions(XLSP_TYPE_STRING);
+            return;
+        }
+        if (*after == '#' && after[1] == '{') {
+            *early_items = xlsp_builtin_get_completions(XLSP_TYPE_MAP);
+            return;
+        }
+        if (*after == '#' && after[1] == '[') {
+            *early_items = xlsp_builtin_get_completions(XLSP_TYPE_SET);
+            return;
+        }
+        if (*after == '{') {
+            *early_items = xlsp_builtin_get_completions(XLSP_TYPE_JSON);
+            return;
+        }
 
         // Constructor RHS → emit typed builtin completions directly.
-        if (strncmp(after, TYPE_NAME_ARRAY,   5) == 0) { *early_items = xlsp_builtin_get_completions(XLSP_TYPE_ARRAY);   return; }
-        if (strncmp(after, TYPE_NAME_MAP,     3) == 0) { *early_items = xlsp_builtin_get_completions(XLSP_TYPE_MAP);     return; }
-        if (strncmp(after, TYPE_NAME_SET,     3) == 0) { *early_items = xlsp_builtin_get_completions(XLSP_TYPE_SET);     return; }
-        if (strncmp(after, "Bytes",           5) == 0) { *early_items = xlsp_builtin_get_completions(XLSP_TYPE_ARRAY);   return; }
-        if (strncmp(after, TYPE_NAME_CHANNEL, 7) == 0) { *early_items = xlsp_builtin_get_completions(XLSP_TYPE_CHANNEL); return; }
+        if (strncmp(after, TYPE_NAME_ARRAY, 5) == 0) {
+            *early_items = xlsp_builtin_get_completions(XLSP_TYPE_ARRAY);
+            return;
+        }
+        if (strncmp(after, TYPE_NAME_MAP, 3) == 0) {
+            *early_items = xlsp_builtin_get_completions(XLSP_TYPE_MAP);
+            return;
+        }
+        if (strncmp(after, TYPE_NAME_SET, 3) == 0) {
+            *early_items = xlsp_builtin_get_completions(XLSP_TYPE_SET);
+            return;
+        }
+        if (strncmp(after, "Bytes", 5) == 0) {
+            *early_items = xlsp_builtin_get_completions(XLSP_TYPE_ARRAY);
+            return;
+        }
+        if (strncmp(after, TYPE_NAME_CHANNEL, 7) == 0) {
+            *early_items = xlsp_builtin_get_completions(XLSP_TYPE_CHANNEL);
+            return;
+        }
 
         // new ClassName(...) → capture class name for later member lookup.
         if (strncmp(after, "new ", 4) == 0) {
             after += 4;
-            while (*after == ' ' || *after == '\t') after++;
+            while (*after == ' ' || *after == '\t')
+                after++;
             const char *name_start = after;
             while ((*after >= 'a' && *after <= 'z') || (*after >= 'A' && *after <= 'Z') ||
-                   (*after >= '0' && *after <= '9') || *after == '_') after++;
+                   (*after >= '0' && *after <= '9') || *after == '_')
+                after++;
             if (after > name_start) {
                 static char found_class[64];
-                size_t len = (size_t)(after - name_start);
+                size_t len = (size_t) (after - name_start);
                 if (len < sizeof(found_class)) {
                     memcpy(found_class, name_start, len);
                     found_class[len] = '\0';
@@ -621,52 +717,46 @@ static void scan_let_const_assignment(XrLspDocument *doc, const char *prefix,
 }
 
 // Append one XaSymbol as a `static <cls>.<field>: <type>` field item.
-static void append_static_field(XrJsonValue *items, XaAnalyzer *analyzer,
-                                XaSymbol *f, const char *prefix) {
+static void append_static_field(XrJsonValue *items, XaAnalyzer *analyzer, XaSymbol *f,
+                                const char *prefix) {
     XaSymbolLinks *links = xa_analyzer_get_links(analyzer, f);
-    const char *type_str = (links && links->type)
-        ? xr_type_to_string(links->type) : "unknown";
+    const char *type_str = (links && links->type) ? xr_type_to_string(links->type) : "unknown";
     char detail_buf[512];
-    snprintf(detail_buf, sizeof(detail_buf), "static %s.%s: %s",
-             prefix, f->name, type_str);
+    snprintf(detail_buf, sizeof(detail_buf), "static %s.%s: %s", prefix, f->name, type_str);
     XrJsonValue *item = make_completion_item(f->name, 5, detail_buf);
     xjson_object_set(item, "sortText", xjson_new_string("0"));
     xjson_array_push(items, item);
 }
 
 // Append one XaSymbol as a `static <cls>.<method>(params): ret` method item.
-static void append_static_method(XrJsonValue *items, XaAnalyzer *analyzer,
-                                 XaSymbol *m, const char *prefix) {
+static void append_static_method(XrJsonValue *items, XaAnalyzer *analyzer, XaSymbol *m,
+                                 const char *prefix) {
     XaSymbolLinks *links = xa_analyzer_get_links(analyzer, m);
     char detail_buf[512];
-    int sig_len = snprintf(detail_buf, sizeof(detail_buf),
-                           "static %s.%s(", prefix, m->name);
+    int sig_len = snprintf(detail_buf, sizeof(detail_buf), "static %s.%s(", prefix, m->name);
     if (links && links->param_count > 0) {
         for (int p = 0; p < links->param_count; p++) {
             if (p > 0)
-                sig_len += snprintf(detail_buf + sig_len,
-                                    sizeof(detail_buf) - sig_len, ", ");
-            const char *pname = (links->param_names && links->param_names[p])
-                ? links->param_names[p] : "_";
+                sig_len += snprintf(detail_buf + sig_len, sizeof(detail_buf) - sig_len, ", ");
+            const char *pname =
+                (links->param_names && links->param_names[p]) ? links->param_names[p] : "_";
             const char *ptype = (links->param_types && links->param_types[p])
-                ? xr_type_to_string(links->param_types[p]) : "unknown";
-            sig_len += snprintf(detail_buf + sig_len,
-                                sizeof(detail_buf) - sig_len,
-                                "%s: %s", pname, ptype);
+                                    ? xr_type_to_string(links->param_types[p])
+                                    : "unknown";
+            sig_len += snprintf(detail_buf + sig_len, sizeof(detail_buf) - sig_len, "%s: %s", pname,
+                                ptype);
         }
     }
-    const char *ret_type = (links && links->return_type)
-        ? xr_type_to_string(links->return_type) : "unknown";
-    snprintf(detail_buf + sig_len, sizeof(detail_buf) - sig_len,
-             "): %s", ret_type);
+    const char *ret_type =
+        (links && links->return_type) ? xr_type_to_string(links->return_type) : "unknown";
+    snprintf(detail_buf + sig_len, sizeof(detail_buf) - sig_len, "): %s", ret_type);
     XrJsonValue *item = make_completion_item(m->name, 2, detail_buf);
     xjson_object_set(item, "sortText", xjson_new_string("1"));
     xjson_array_push(items, item);
 }
 
 // Static member completion: prefix IS a class name (e.g. "Math.divmod").
-static XrJsonValue *complete_static_members(XaAnalyzer *analyzer,
-                                            const char *prefix) {
+static XrJsonValue *complete_static_members(XaAnalyzer *analyzer, const char *prefix) {
     XrClassInfo *static_cls = xa_analyzer_get_class(analyzer, prefix);
     if (!static_cls ||
         (static_cls->static_method_count == 0 && static_cls->static_field_count == 0))
@@ -685,50 +775,46 @@ static XrJsonValue *complete_static_members(XaAnalyzer *analyzer,
                 append_static_method(items, analyzer, m, prefix);
         }
     }
-    if (xjson_array_len(items) > 0) return items;
+    if (xjson_array_len(items) > 0)
+        return items;
     xjson_free(items);
     return NULL;
 }
 
 // Append instance field `<cls>.<field>: <type>`.
-static void append_instance_field(XrJsonValue *items, XaAnalyzer *analyzer,
-                                  XaSymbol *f, const char *class_name) {
+static void append_instance_field(XrJsonValue *items, XaAnalyzer *analyzer, XaSymbol *f,
+                                  const char *class_name) {
     XaSymbolLinks *links = xa_analyzer_get_links(analyzer, f);
-    const char *type_str = (links && links->type)
-        ? xr_type_to_string(links->type) : "unknown";
+    const char *type_str = (links && links->type) ? xr_type_to_string(links->type) : "unknown";
     char detail_buf[512];
-    snprintf(detail_buf, sizeof(detail_buf), "%s.%s: %s",
-             class_name, f->name, type_str);
+    snprintf(detail_buf, sizeof(detail_buf), "%s.%s: %s", class_name, f->name, type_str);
     XrJsonValue *item = make_completion_item(f->name, 5, detail_buf);
     xjson_object_set(item, "sortText", xjson_new_string("0"));
     xjson_array_push(items, item);
 }
 
 // Append instance method `<cls>.<method>(params): ret`.
-static void append_instance_method(XrJsonValue *items, XaAnalyzer *analyzer,
-                                   XaSymbol *m, const char *class_name) {
+static void append_instance_method(XrJsonValue *items, XaAnalyzer *analyzer, XaSymbol *m,
+                                   const char *class_name) {
     XaSymbolLinks *links = xa_analyzer_get_links(analyzer, m);
     char detail_buf[512];
-    int sig_len = snprintf(detail_buf, sizeof(detail_buf),
-                           "%s.%s(", class_name, m->name);
+    int sig_len = snprintf(detail_buf, sizeof(detail_buf), "%s.%s(", class_name, m->name);
     if (links && links->param_count > 0) {
         for (int p = 0; p < links->param_count; p++) {
             if (p > 0)
-                sig_len += snprintf(detail_buf + sig_len,
-                                    sizeof(detail_buf) - sig_len, ", ");
-            const char *pname = (links->param_names && links->param_names[p])
-                ? links->param_names[p] : "_";
+                sig_len += snprintf(detail_buf + sig_len, sizeof(detail_buf) - sig_len, ", ");
+            const char *pname =
+                (links->param_names && links->param_names[p]) ? links->param_names[p] : "_";
             const char *ptype = (links->param_types && links->param_types[p])
-                ? xr_type_to_string(links->param_types[p]) : "unknown";
-            sig_len += snprintf(detail_buf + sig_len,
-                                sizeof(detail_buf) - sig_len,
-                                "%s: %s", pname, ptype);
+                                    ? xr_type_to_string(links->param_types[p])
+                                    : "unknown";
+            sig_len += snprintf(detail_buf + sig_len, sizeof(detail_buf) - sig_len, "%s: %s", pname,
+                                ptype);
         }
     }
-    const char *ret_type = (links && links->return_type)
-        ? xr_type_to_string(links->return_type) : "unknown";
-    snprintf(detail_buf + sig_len, sizeof(detail_buf) - sig_len,
-             "): %s", ret_type);
+    const char *ret_type =
+        (links && links->return_type) ? xr_type_to_string(links->return_type) : "unknown";
+    snprintf(detail_buf + sig_len, sizeof(detail_buf) - sig_len, "): %s", ret_type);
     XrJsonValue *item = make_completion_item(m->name, 2, detail_buf);
     xjson_object_set(item, "sortText", xjson_new_string("1"));
     xjson_array_push(items, item);
@@ -738,11 +824,11 @@ static void append_instance_method(XrJsonValue *items, XaAnalyzer *analyzer,
 static XrJsonValue *complete_instance_members_by_name(XaAnalyzer *analyzer,
                                                       const char *class_name) {
     XrClassInfo *cls_info = xa_analyzer_get_class(analyzer, class_name);
-    lsp_log("completion: xa_analyzer_get_class(%s) returned %p, fields=%d, methods=%d",
-            class_name, (void *)cls_info,
-            cls_info ? cls_info->field_count : 0,
+    lsp_log("completion: xa_analyzer_get_class(%s) returned %p, fields=%d, methods=%d", class_name,
+            (void *) cls_info, cls_info ? cls_info->field_count : 0,
             cls_info ? cls_info->method_count : 0);
-    if (!cls_info) return NULL;
+    if (!cls_info)
+        return NULL;
 
     XrJsonValue *items = xjson_new_array();
     for (XrClassInfo *c = cls_info; c != NULL; c = c->base) {
@@ -753,97 +839,109 @@ static XrJsonValue *complete_instance_members_by_name(XaAnalyzer *analyzer,
         }
         for (int i = 0; i < c->method_count; i++) {
             XaSymbol *m = c->methods[i];
-            if (m && m->name && !m->is_private &&
-                strcmp(m->name, XR_KEYWORD_CONSTRUCTOR) != 0)
+            if (m && m->name && !m->is_private && strcmp(m->name, XR_KEYWORD_CONSTRUCTOR) != 0)
                 append_instance_method(items, analyzer, m, class_name);
         }
     }
-    if (xjson_array_len(items) > 0) return items;
+    if (xjson_array_len(items) > 0)
+        return items;
     xjson_free(items);
     return NULL;
 }
 
 // Instance-member completion via XaAnalyzer type lookup (prefix is a
 // variable; type comes from analyzer inference).
-static XrJsonValue *complete_instance_members_from_analyzer(XaAnalyzer *analyzer,
-                                                            XrType *type) {
+static XrJsonValue *complete_instance_members_from_analyzer(XaAnalyzer *analyzer, XrType *type) {
     int member_count = 0;
     XaSymbol **members = xa_analyzer_get_members(analyzer, type, &member_count);
     if (!members || member_count == 0) {
-        if (members) xr_free(members);
+        if (members)
+            xr_free(members);
         return NULL;
     }
-    const char *cls_name = type->instance.class_name
-        ? type->instance.class_name : "class";
+    const char *cls_name = type->instance.class_name ? type->instance.class_name : "class";
     XrJsonValue *items = xjson_new_array();
     char detail_buf[512];
     for (int i = 0; i < member_count; i++) {
         XaSymbol *m = members[i];
-        if (!m || !m->name || m->is_private) continue;
-        if (m->kind == XA_SYM_METHOD &&
-            strcmp(m->name, XR_KEYWORD_CONSTRUCTOR) == 0) continue;
+        if (!m || !m->name || m->is_private)
+            continue;
+        if (m->kind == XA_SYM_METHOD && strcmp(m->name, XR_KEYWORD_CONSTRUCTOR) == 0)
+            continue;
         XaSymbolLinks *links = xa_analyzer_get_links(analyzer, m);
         if (m->kind == XA_SYM_METHOD) {
-            int sl = snprintf(detail_buf, sizeof(detail_buf),
-                              "%s.%s(", cls_name, m->name);
+            int sl = snprintf(detail_buf, sizeof(detail_buf), "%s.%s(", cls_name, m->name);
             if (links && links->param_count > 0) {
                 for (int p = 0; p < links->param_count; p++) {
                     if (p > 0)
-                        sl += snprintf(detail_buf + sl,
-                                       sizeof(detail_buf) - sl, ", ");
-                    const char *pn = (links->param_names && links->param_names[p])
-                        ? links->param_names[p] : "_";
+                        sl += snprintf(detail_buf + sl, sizeof(detail_buf) - sl, ", ");
+                    const char *pn =
+                        (links->param_names && links->param_names[p]) ? links->param_names[p] : "_";
                     const char *pt = (links->param_types && links->param_types[p])
-                        ? xr_type_to_string(links->param_types[p]) : "unknown";
-                    sl += snprintf(detail_buf + sl, sizeof(detail_buf) - sl,
-                                   "%s: %s", pn, pt);
+                                         ? xr_type_to_string(links->param_types[p])
+                                         : "unknown";
+                    sl += snprintf(detail_buf + sl, sizeof(detail_buf) - sl, "%s: %s", pn, pt);
                 }
             }
-            const char *rt = (links && links->return_type)
-                ? xr_type_to_string(links->return_type) : "unknown";
+            const char *rt =
+                (links && links->return_type) ? xr_type_to_string(links->return_type) : "unknown";
             snprintf(detail_buf + sl, sizeof(detail_buf) - sl, "): %s", rt);
             xjson_array_push(items, make_completion_item(m->name, 2, detail_buf));
         } else {
-            const char *ts = (links && links->type)
-                ? xr_type_to_string(links->type) : "unknown";
-            snprintf(detail_buf, sizeof(detail_buf), "%s.%s: %s",
-                     cls_name, m->name, ts);
+            const char *ts = (links && links->type) ? xr_type_to_string(links->type) : "unknown";
+            snprintf(detail_buf, sizeof(detail_buf), "%s.%s: %s", cls_name, m->name, ts);
             xjson_array_push(items, make_completion_item(m->name, 5, detail_buf));
         }
     }
     xr_free(members);
-    if (xjson_array_len(items) > 0) return items;
+    if (xjson_array_len(items) > 0)
+        return items;
     xjson_free(items);
     return NULL;
 }
 
 // Map an XrType to a builtin type bucket for completion lookup.
 static XlspBuiltinType type_to_builtin_bucket(XrType *type) {
-    if (XR_TYPE_IS_STRING(type))  return XLSP_TYPE_STRING;
-    if (XR_TYPE_IS_ARRAY(type))   return XLSP_TYPE_ARRAY;
-    if (XR_TYPE_IS_MAP(type))     return XLSP_TYPE_MAP;
-    if (type->kind == XR_KIND_SET)     return XLSP_TYPE_SET;
-    if (type->kind == XR_KIND_CHANNEL) return XLSP_TYPE_CHANNEL;
-    if (XR_TYPE_IS_INT(type))     return XLSP_TYPE_INT;
-    if (XR_TYPE_IS_FLOAT(type))   return XLSP_TYPE_FLOAT;
-    if (XR_TYPE_IS_BOOL(type))    return XLSP_TYPE_BOOL;
-    if (XR_TYPE_IS_JSON(type))    return XLSP_TYPE_JSON;
-    if (xr_type_is_named_class(type, "BigInt"))        return XLSP_TYPE_BIGINT;
-    if (xr_type_is_named_class(type, "StringBuilder")) return XLSP_TYPE_STRINGBUILDER;
-    if (xr_type_is_named_class(type, "Regex"))         return XLSP_TYPE_REGEX;
-    if (xr_type_is_named_class(type, "Exception"))     return XLSP_TYPE_EXCEPTION;
-    if (xr_type_is_named_class(type, "Task"))          return XLSP_TYPE_COROUTINE;
+    if (XR_TYPE_IS_STRING(type))
+        return XLSP_TYPE_STRING;
+    if (XR_TYPE_IS_ARRAY(type))
+        return XLSP_TYPE_ARRAY;
+    if (XR_TYPE_IS_MAP(type))
+        return XLSP_TYPE_MAP;
+    if (type->kind == XR_KIND_SET)
+        return XLSP_TYPE_SET;
+    if (type->kind == XR_KIND_CHANNEL)
+        return XLSP_TYPE_CHANNEL;
+    if (XR_TYPE_IS_INT(type))
+        return XLSP_TYPE_INT;
+    if (XR_TYPE_IS_FLOAT(type))
+        return XLSP_TYPE_FLOAT;
+    if (XR_TYPE_IS_BOOL(type))
+        return XLSP_TYPE_BOOL;
+    if (XR_TYPE_IS_JSON(type))
+        return XLSP_TYPE_JSON;
+    if (xr_type_is_named_class(type, "BigInt"))
+        return XLSP_TYPE_BIGINT;
+    if (xr_type_is_named_class(type, "StringBuilder"))
+        return XLSP_TYPE_STRINGBUILDER;
+    if (xr_type_is_named_class(type, "Regex"))
+        return XLSP_TYPE_REGEX;
+    if (xr_type_is_named_class(type, "Exception"))
+        return XLSP_TYPE_EXCEPTION;
+    if (xr_type_is_named_class(type, "Task"))
+        return XLSP_TYPE_COROUTINE;
     return XLSP_TYPE_UNKNOWN;
 }
 
 // XaAnalyzer-driven completion: covers for-in iteration variables, typed
 // declarations, return type inference, etc.
-static XrJsonValue *complete_from_analyzer_type(XaAnalyzer *analyzer,
-                                                const char *prefix) {
+static XrJsonValue *complete_from_analyzer_type(XaAnalyzer *analyzer, const char *prefix) {
     XaSymbol *sym = xa_analyzer_lookup_deep(analyzer, prefix);
-    if (!sym) return NULL;
+    if (!sym)
+        return NULL;
     XrType *type = xa_analyzer_get_type(analyzer, sym);
-    if (!type) return NULL;
+    if (!type)
+        return NULL;
 
     if (XR_TYPE_IS_ENUM(type)) {
         const char *ename = type->enum_type.enum_name;
@@ -851,7 +949,8 @@ static XrJsonValue *complete_from_analyzer_type(XaAnalyzer *analyzer,
     }
     if (XR_TYPE_IS_INSTANCE(type)) {
         XrJsonValue *r = complete_instance_members_from_analyzer(analyzer, type);
-        if (r) return r;
+        if (r)
+            return r;
         // Fall through: some instances (built-in classes) still have
         // useful completions in the builtin bucket below.
     }
@@ -862,33 +961,36 @@ static XrJsonValue *complete_from_analyzer_type(XaAnalyzer *analyzer,
 }
 
 // Enum instance completion: `Color.Red.` → name / value / ordinal / toString.
-static XrJsonValue *complete_enum_instance(XrLspDocument *doc,
-                                            XrLspPosition pos,
-                                            const char *prefix) {
+static XrJsonValue *complete_enum_instance(XrLspDocument *doc, XrLspPosition pos,
+                                           const char *prefix) {
     const char *enum_name = find_enum_for_member_prefix(doc, pos, prefix);
-    if (!enum_name) return NULL;
+    if (!enum_name)
+        return NULL;
     return make_enum_value_completions(enum_name);
 }
 
 // Variable assigned from an enum member: `let c = Color.Green; c.` → name/...
-static XrJsonValue *complete_variable_from_enum_assignment(XrLspDocument *doc,
-                                                           const char *prefix) {
-    if (!doc->content || !doc->ast) return NULL;
+static XrJsonValue *complete_variable_from_enum_assignment(XrLspDocument *doc, const char *prefix) {
+    if (!doc->content || !doc->ast)
+        return NULL;
     size_t prefix_len = strlen(prefix);
     const char *p = doc->content;
     const char *after = NULL;
 
     while (scan_next_binding(&p, doc->content, prefix, prefix_len, &after)) {
-        if (!(*after == '=' && after[1] != '=')) continue;
+        if (!(*after == '=' && after[1] != '='))
+            continue;
         after++;
-        while (*after == ' ' || *after == '\t') after++;
+        while (*after == ' ' || *after == '\t')
+            after++;
 
         const char *name_start = after;
         while ((*after >= 'a' && *after <= 'z') || (*after >= 'A' && *after <= 'Z') ||
-               (*after >= '0' && *after <= '9') || *after == '_') after++;
+               (*after >= '0' && *after <= '9') || *after == '_')
+            after++;
         if (*after == '.' && after > name_start) {
             char candidate[64];
-            size_t clen = (size_t)(after - name_start);
+            size_t clen = (size_t) (after - name_start);
             if (clen < sizeof(candidate)) {
                 memcpy(candidate, name_start, clen);
                 candidate[clen] = '\0';
@@ -915,22 +1017,27 @@ XrJsonValue *xlsp_analyze_completion(XrLspServer *server, XrLspDocument *doc, Xr
     XaAnalyzer *analyzer = server ? server->workspace_analyzer : NULL;
     char module_name[64];
     const char *prefix = find_module_prefix(doc, pos, module_name, sizeof(module_name));
-    lsp_log("xlsp_analyze_completion_with_server: prefix=%s",
-            prefix ? prefix : "(null)");
+    lsp_log("xlsp_analyze_completion_with_server: prefix=%s", prefix ? prefix : "(null)");
 
-    if (!prefix) return complete_basic(server, doc, pos);
+    if (!prefix)
+        return complete_basic(server, doc, pos);
 
     XrJsonValue *r;
-    if ((r = complete_stdlib_module(prefix))) return r;
+    if ((r = complete_stdlib_module(prefix)))
+        return r;
 
     XlspBuiltinType builtin_type = xlsp_builtin_type_from_name(prefix);
     if (builtin_type != XLSP_TYPE_UNKNOWN)
         return xlsp_builtin_get_completions(builtin_type);
 
-    if ((r = complete_runtime_module(prefix))) return r;
-    if ((r = complete_literal_marker(prefix))) return r;
-    if ((r = complete_import_namespace(doc, prefix))) return r;
-    if ((r = complete_enum_decl(doc, prefix))) return r;
+    if ((r = complete_runtime_module(prefix)))
+        return r;
+    if ((r = complete_literal_marker(prefix)))
+        return r;
+    if ((r = complete_import_namespace(doc, prefix)))
+        return r;
+    if ((r = complete_enum_decl(doc, prefix)))
+        return r;
 
     // Class-instance path via text scan for `let x = <rhs>` / `const x = <rhs>`.
     // scan_let_const_assignment() handles literal RHS directly and extracts
@@ -939,14 +1046,15 @@ XrJsonValue *xlsp_analyze_completion(XrLspServer *server, XrLspDocument *doc, Xr
         XrJsonValue *early = NULL;
         const char *class_name = NULL;
         scan_let_const_assignment(doc, prefix, &early, &class_name);
-        if (early) return early;
+        if (early)
+            return early;
 
         if (!class_name) {
-            if ((r = complete_static_members(analyzer, prefix))) return r;
+            if ((r = complete_static_members(analyzer, prefix)))
+                return r;
         }
 
-        lsp_log("completion: prefix=%s, class_name=%s",
-                prefix, class_name ? class_name : "(null)");
+        lsp_log("completion: prefix=%s, class_name=%s", prefix, class_name ? class_name : "(null)");
         if (class_name) {
             if ((r = complete_instance_members_by_name(analyzer, class_name)))
                 return r;
@@ -954,11 +1062,14 @@ XrJsonValue *xlsp_analyze_completion(XrLspServer *server, XrLspDocument *doc, Xr
     }
 
     if (analyzer) {
-        if ((r = complete_from_analyzer_type(analyzer, prefix))) return r;
+        if ((r = complete_from_analyzer_type(analyzer, prefix)))
+            return r;
     }
 
-    if ((r = complete_enum_instance(doc, pos, prefix))) return r;
-    if ((r = complete_variable_from_enum_assignment(doc, prefix))) return r;
+    if ((r = complete_enum_instance(doc, pos, prefix)))
+        return r;
+    if ((r = complete_variable_from_enum_assignment(doc, prefix)))
+        return r;
 
     // Prefix was a member access ("foo.") but no strategy matched — return
     // an empty list rather than falling back to global symbol completions.

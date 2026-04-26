@@ -42,16 +42,21 @@
 
 // Check if constructor body contains an explicit super() call (top-level only)
 static bool constructor_has_super_call(MethodDeclNode *method) {
-    if (!method || !method->body) return false;
+    if (!method || !method->body)
+        return false;
     AstNode *body = method->body;
-    if (body->type != AST_BLOCK) return false;
+    if (body->type != AST_BLOCK)
+        return false;
     BlockNode *block = &body->as.block;
     for (int i = 0; i < block->count; i++) {
         AstNode *stmt = block->statements[i];
-        if (!stmt) continue;
-        if (stmt->type == AST_SUPER_CALL) return true;
+        if (!stmt)
+            continue;
+        if (stmt->type == AST_SUPER_CALL)
+            return true;
         if (stmt->type == AST_EXPR_STMT && stmt->as.expr_stmt &&
-            stmt->as.expr_stmt->type == AST_SUPER_CALL) return true;
+            stmt->as.expr_stmt->type == AST_SUPER_CALL)
+            return true;
     }
     return false;
 }
@@ -93,7 +98,8 @@ static int compile_method_and_get_index(XrCompilerContext *ctx, XrCompiler *comp
 
         // Directly add explicit params (registers 0, 1, 2...)
         for (int p = 0; p < method->param_count; p++) {
-            XrString *param_name = xr_compile_time_intern(ctx->X, method->parameters[p], strlen(method->parameters[p]));
+            XrString *param_name = xr_compile_time_intern(ctx->X, method->parameters[p],
+                                                          strlen(method->parameters[p]));
             scope_define_local_reg(ctx, &method_compiler, param_name, p);
         }
     } else {
@@ -106,7 +112,8 @@ static int compile_method_and_get_index(XrCompilerContext *ctx, XrCompiler *comp
 
         // Add explicit params (registers 1, 2, 3...)
         for (int p = 0; p < method->param_count; p++) {
-            XrString *param_name = xr_compile_time_intern(ctx->X, method->parameters[p], strlen(method->parameters[p]));
+            XrString *param_name = xr_compile_time_intern(ctx->X, method->parameters[p],
+                                                          strlen(method->parameters[p]));
             scope_define_local_reg(ctx, &method_compiler, param_name, p + 1);
         }
     }
@@ -125,14 +132,14 @@ static int compile_method_and_get_index(XrCompilerContext *ctx, XrCompiler *comp
         // Constructor: auto-insert super() and compile field defaults (before method body)
         if ((method->is_constructor || strcmp(method->name, XR_KEYWORD_CONSTRUCTOR) == 0) &&
             ctx->current_class_node != NULL) {
-            ClassDeclNode *class_node = (ClassDeclNode*)ctx->current_class_node;
+            ClassDeclNode *class_node = (ClassDeclNode *) ctx->current_class_node;
 
             // Auto-insert super() if: subclass constructor has no explicit super()
             // and parent has a constructor with 0 required params
             if (class_node->super_name && !constructor_has_super_call(method) &&
                 ctx->class_registry) {
-                ClassInfo *parent_ci = xr_class_registry_lookup(
-                    ctx->class_registry, class_node->super_name);
+                ClassInfo *parent_ci =
+                    xr_class_registry_lookup(ctx->class_registry, class_node->super_name);
                 if (parent_ci && parent_ci->has_constructor &&
                     parent_ci->constructor_required_params == 0) {
                     // Emit: super.constructor() with 0 args
@@ -140,31 +147,30 @@ static int compile_method_and_get_index(XrCompilerContext *ctx, XrCompiler *comp
                     int base = xreg_get_freereg(method_compiler.regalloc);
                     xreg_set_freereg(method_compiler.regalloc, base + 2);
                     xemit_move((&method_compiler)->emitter, base + 1, 0);
-                    XrString *ctor_str = xr_compile_time_intern(
-                        ctx->X, XR_KEYWORD_CONSTRUCTOR, strlen(XR_KEYWORD_CONSTRUCTOR));
-                    int ctor_const = xr_vm_proto_add_constant(
-                        method_compiler.proto, xr_string_value(ctor_str));
+                    XrString *ctor_str = xr_compile_time_intern(ctx->X, XR_KEYWORD_CONSTRUCTOR,
+                                                                strlen(XR_KEYWORD_CONSTRUCTOR));
+                    int ctor_const =
+                        xr_vm_proto_add_constant(method_compiler.proto, xr_string_value(ctor_str));
                     xemit_superinvoke((&method_compiler)->emitter, base, ctor_const, 0);
                     xreg_set_freereg(method_compiler.regalloc,
-                        xreg_get_local_end(method_compiler.regalloc));
+                                     xreg_get_local_end(method_compiler.regalloc));
                 }
             }
 
             for (int i = 0; i < class_node->field_count; i++) {
-                if (class_node->fields[i]->type != AST_FIELD_DECL) continue;
+                if (class_node->fields[i]->type != AST_FIELD_DECL)
+                    continue;
                 FieldDeclNode *field = &class_node->fields[i]->as.field_decl;
 
                 // Skip static fields and fields without initializer
-                if (field->is_static || field->initializer == NULL) continue;
+                if (field->is_static || field->initializer == NULL)
+                    continue;
 
                 // Skip simple literals (already handled in ClassDescriptor)
                 AstNodeType init_type = field->initializer->type;
-                if (init_type == AST_LITERAL_NULL ||
-                    init_type == AST_LITERAL_TRUE ||
-                    init_type == AST_LITERAL_FALSE ||
-                    init_type == AST_LITERAL_INT ||
-                    init_type == AST_LITERAL_FLOAT ||
-                    init_type == AST_LITERAL_STRING) {
+                if (init_type == AST_LITERAL_NULL || init_type == AST_LITERAL_TRUE ||
+                    init_type == AST_LITERAL_FALSE || init_type == AST_LITERAL_INT ||
+                    init_type == AST_LITERAL_FLOAT || init_type == AST_LITERAL_STRING) {
                     continue;
                 }
 
@@ -178,7 +184,7 @@ static int compile_method_and_get_index(XrCompilerContext *ctx, XrCompiler *comp
                     XrClassDescriptor *desc = ctx->current_class_desc;
                     for (uint32_t fi = 0; fi < desc->instance_field_count; fi++) {
                         if (strcmp(desc->instance_fields[fi].name, field->name) == 0) {
-                            field_idx = (int)fi;
+                            field_idx = (int) fi;
                             break;
                         }
                     }
@@ -189,7 +195,8 @@ static int compile_method_and_get_index(XrCompilerContext *ctx, XrCompiler *comp
                     xemit_setfield((&method_compiler)->emitter, 0, field_idx, value_reg);
                 } else {
                     // Fallback: use OP_SETPROP with per-function symbol table
-                    int global_sym = xr_symbol_register_in_table((XrSymbolTable*)xr_isolate_get_symbol_table(ctx->X), field->name);
+                    int global_sym = xr_symbol_register_in_table(
+                        (XrSymbolTable *) xr_isolate_get_symbol_table(ctx->X), field->name);
                     int local_sym = xr_proto_add_symbol(method_compiler.proto, global_sym);
                     xemit_setprop((&method_compiler)->emitter, 0, local_sym, value_reg);
                 }
@@ -198,18 +205,21 @@ static int compile_method_and_get_index(XrCompilerContext *ctx, XrCompiler *comp
             }
 
             // Restore freereg
-            xreg_set_freereg(method_compiler.regalloc, xreg_get_local_end(method_compiler.regalloc));
+            xreg_set_freereg(method_compiler.regalloc,
+                             xreg_get_local_end(method_compiler.regalloc));
         }
 
         // Struct value semantics: copy struct-typed params at method entry
         // Skip for in/ref params (they pass by reference, no copy needed)
         for (int p = 0; p < method->param_count; p++) {
-            uint8_t pmode = (method->param_passing_modes)
-                            ? method->param_passing_modes[p] : XR_PARAM_VALUE;
-            if (pmode != XR_PARAM_VALUE) continue;
-            XrLocalInfo *plocal = compiler_get_local_by_name(
-                &method_compiler, method->parameters[p]);
-            if (!plocal) continue;
+            uint8_t pmode =
+                (method->param_passing_modes) ? method->param_passing_modes[p] : XR_PARAM_VALUE;
+            if (pmode != XR_PARAM_VALUE)
+                continue;
+            XrLocalInfo *plocal =
+                compiler_get_local_by_name(&method_compiler, method->parameters[p]);
+            if (!plocal)
+                continue;
             bool is_vt = plocal->compile_type && plocal->compile_type->is_value_type;
             if (!is_vt && plocal->compile_type && ctx->analyzer) {
                 const char *cn = NULL;
@@ -220,7 +230,8 @@ static int compile_method_and_get_index(XrCompilerContext *ctx, XrCompiler *comp
                     XaSymbol *cs = xa_analyzer_lookup(ctx->analyzer, cn);
                     if (cs && cs->kind == XA_SYM_CLASS) {
                         XaSymbolLinks *cl = xa_analyzer_get_links(ctx->analyzer, cs);
-                        if (cl && cl->type && cl->type->is_value_type) is_vt = true;
+                        if (cl && cl->type && cl->type->is_value_type)
+                            is_vt = true;
                     }
                 }
             }
@@ -235,7 +246,8 @@ static int compile_method_and_get_index(XrCompilerContext *ctx, XrCompiler *comp
                             int sz2 = (8 + ci2->struct_layout->total_size + 15) & ~15;
                             int slot2 = method_compiler.struct_area_offset / 16;
                             method_compiler.struct_area_offset += sz2;
-                            xemit_struct_copy((&method_compiler)->emitter, plocal->reg, plocal->reg, slot2);
+                            xemit_struct_copy((&method_compiler)->emitter, plocal->reg, plocal->reg,
+                                              slot2);
                             used_sc = true;
                         }
                     }
@@ -280,11 +292,8 @@ static int compile_method_and_get_index(XrCompilerContext *ctx, XrCompiler *comp
 /*
  * Compile class using ClassDescriptor
  */
-static void compile_class_with_descriptor(
-    XrCompilerContext *ctx,
-    XrCompiler *compiler,
-    ClassDeclNode *node
-) {
+static void compile_class_with_descriptor(XrCompilerContext *ctx, XrCompiler *compiler,
+                                          ClassDeclNode *node) {
     // Compile class
 
     // 1. Validate interface implementation (if any)
@@ -295,7 +304,8 @@ static void compile_class_with_descriptor(
             const char *iface_name = node->interfaces[i];
 
             // Find interface definition (check shared first, then globals)
-            XrString *iface_name_str = xr_compile_time_intern(ctx->X, iface_name, strlen(iface_name));
+            XrString *iface_name_str =
+                xr_compile_time_intern(ctx->X, iface_name, strlen(iface_name));
             int iface_idx = shared_get_in_scope(ctx, compiler, iface_name_str);
             if (iface_idx < 0) {
                 iface_idx = builtin_get(ctx, iface_name_str);
@@ -303,7 +313,8 @@ static void compile_class_with_descriptor(
 
             if (iface_idx == -1) {
                 xr_compiler_error(ctx, compiler,
-                    "Interface '%s' not defined (class '%s' trying to implement)", iface_name, node->name);
+                                  "Interface '%s' not defined (class '%s' trying to implement)",
+                                  iface_name, node->name);
                 continue;
             }
 
@@ -324,12 +335,13 @@ static void compile_class_with_descriptor(
             }
 
             if (iface_obj && iface_obj->abstract_method_count > 0) {
-                XrSymbolTable *symtab = (XrSymbolTable*)xr_isolate_get_symbol_table(ctx->X);
+                XrSymbolTable *symtab = (XrSymbolTable *) xr_isolate_get_symbol_table(ctx->X);
 
                 for (int m = 0; m < iface_obj->abstract_method_count; m++) {
                     int sym = iface_obj->abstract_methods[m];
                     const char *method_name = xr_symbol_get_name_in_table(symtab, sym);
-                    if (!method_name) continue;
+                    if (!method_name)
+                        continue;
 
                     // Get expected param count from interface method
                     int expected_params = -1;
@@ -350,10 +362,10 @@ static void compile_class_with_descriptor(
                                     int actual = node->methods[j]->as.method_decl.param_count;
                                     if (actual != expected_params) {
                                         xr_compiler_error(ctx, compiler,
-                                            "class '%s' method '%s' has %d params, "
-                                            "interface '%s' expects %d",
-                                            node->name, method_name, actual,
-                                            iface_name, expected_params);
+                                                          "class '%s' method '%s' has %d params, "
+                                                          "interface '%s' expects %d",
+                                                          node->name, method_name, actual,
+                                                          iface_name, expected_params);
                                     }
                                 }
                                 break;
@@ -362,8 +374,8 @@ static void compile_class_with_descriptor(
                     }
                     if (!found) {
                         xr_compiler_error(ctx, compiler,
-                            "class '%s' does not implement interface method '%s.%s'",
-                            node->name, iface_name, method_name);
+                                          "class '%s' does not implement interface method '%s.%s'",
+                                          node->name, iface_name, method_name);
                     }
                 }
             }
@@ -373,8 +385,8 @@ static void compile_class_with_descriptor(
     // 2. Create ClassDescriptor
     XrClassDescriptor *desc = xoop_create_class_descriptor(ctx, compiler, node);
     if (!desc) {
-        xr_compiler_error(ctx, compiler,
-            "Failed to create ClassDescriptor for class '%s'", node->name);
+        xr_compiler_error(ctx, compiler, "Failed to create ClassDescriptor for class '%s'",
+                          node->name);
         return;
     }
 
@@ -396,7 +408,8 @@ static void compile_class_with_descriptor(
             // Copy all parent fields first (so instance_field_count reflects total)
             int parent_field_count = 0;
             if (node->super_name != NULL && node->super_module == NULL) {
-                ClassInfo *parent_info = xr_class_registry_lookup(ctx->class_registry, node->super_name);
+                ClassInfo *parent_info =
+                    xr_class_registry_lookup(ctx->class_registry, node->super_name);
                 if (parent_info) {
                     parent_field_count = parent_info->instance_field_count;
                     for (int i = 0; i < parent_info->instance_field_count; i++) {
@@ -415,15 +428,16 @@ static void compile_class_with_descriptor(
                     if (strcmp(tn, "int") == 0 || strcmp(tn, "int64") == 0)
                         slot_type = 7;  // XR_SLOT_I64
                     else if (strcmp(tn, "float") == 0 || strcmp(tn, "float64") == 0)
-                        slot_type = 10; // XR_SLOT_F64
+                        slot_type = 10;  // XR_SLOT_F64
                 }
                 xr_class_add_instance_field_typed(class_info, desc->instance_fields[i].name,
-                                                  parent_field_count + (int)i, slot_type);
+                                                  parent_field_count + (int) i, slot_type);
             }
 
             // Record constructor info for smart super() auto-insertion
             for (int i = 0; i < node->method_count; i++) {
-                if (node->methods[i]->type != AST_METHOD_DECL) continue;
+                if (node->methods[i]->type != AST_METHOD_DECL)
+                    continue;
                 MethodDeclNode *md = &node->methods[i]->as.method_decl;
                 if (md->is_constructor) {
                     class_info->has_constructor = true;
@@ -451,11 +465,11 @@ static void compile_class_with_descriptor(
 
             // Flatten parent methods into ClassInfo (matches runtime flattened layout)
             if (node->super_name != NULL && node->super_module == NULL) {
-                ClassInfo *parent_info = xr_class_registry_lookup(ctx->class_registry, node->super_name);
+                ClassInfo *parent_info =
+                    xr_class_registry_lookup(ctx->class_registry, node->super_name);
                 if (parent_info) {
                     for (int i = 0; i < parent_info->method_count; i++) {
-                        xr_class_add_method(class_info,
-                                            parent_info->methods[i].name,
+                        xr_class_add_method(class_info, parent_info->methods[i].name,
                                             parent_info->methods[i].index);
                     }
                 }
@@ -484,7 +498,8 @@ static void compile_class_with_descriptor(
             desc->super_name = NULL;
             desc->super_global_index = -1;
         } else {
-            XrString *super_name_str = xr_compile_time_intern(ctx->X, node->super_name, strlen(node->super_name));
+            XrString *super_name_str =
+                xr_compile_time_intern(ctx->X, node->super_name, strlen(node->super_name));
             XrLocalInfo *local = compiler_get_local_by_name(compiler, node->super_name);
             int upvalue_idx = scope_resolve_upvalue(ctx, compiler, super_name_str);
 
@@ -523,8 +538,7 @@ static void compile_class_with_descriptor(
             if (iface_ptr) {
                 desc->interfaces[i].interface_ptr = iface_ptr;
             } else {
-                xr_compiler_error(ctx, compiler,
-                                  "interface '%s' not found in constants pool",
+                xr_compiler_error(ctx, compiler, "interface '%s' not found in constants pool",
                                   iface_name);
             }
         }
@@ -546,11 +560,13 @@ static void compile_class_with_descriptor(
         ClassInfo *ci = xr_class_registry_lookup(ctx->class_registry, node->name);
         if (ci) {
             uint32_t pre_idx = 0;
-            (void)pre_idx;
+            (void) pre_idx;
             for (int j = 0; j < node->method_count; j++) {
-                if (node->methods[j]->type != AST_METHOD_DECL) continue;
+                if (node->methods[j]->type != AST_METHOD_DECL)
+                    continue;
                 MethodDeclNode *method = &node->methods[j]->as.method_decl;
-                if (method->is_static) continue;
+                if (method->is_static)
+                    continue;
 
                 int flat_idx = xr_class_find_method_index(ci, method->name);
                 if (flat_idx < 0) {
@@ -567,9 +583,11 @@ static void compile_class_with_descriptor(
         // Find corresponding method AST node
         uint32_t method_idx = 0;
         for (int j = 0; j < node->method_count; j++) {
-            if (node->methods[j]->type != AST_METHOD_DECL) continue;
+            if (node->methods[j]->type != AST_METHOD_DECL)
+                continue;
             MethodDeclNode *method = &node->methods[j]->as.method_decl;
-            if (method->is_static) continue;
+            if (method->is_static)
+                continue;
 
             if (method_idx == i) {
                 // Compile method
@@ -583,14 +601,14 @@ static void compile_class_with_descriptor(
                 ctx->current_class_desc = saved_class_desc;  // Restore
                 ctx->current_class_node = saved_class_node;
                 if (proto_idx < 0) {
-                    xr_compiler_error(ctx, compiler,
-                        "Failed to compile instance method '%s'", method->name);
+                    xr_compiler_error(ctx, compiler, "Failed to compile instance method '%s'",
+                                      method->name);
                     xoop_free_class_descriptor(desc);
                     return;
                 }
 
                 // Store proto_idx, VM will get XrProto from subprotos at execution
-                desc->instance_methods[i].closure_index = (uint32_t)proto_idx;
+                desc->instance_methods[i].closure_index = (uint32_t) proto_idx;
 
                 // Register method in ClassInfo for OP_INVOKE_DIRECT optimization
                 // xr_class_add_method handles override: if method name already exists
@@ -621,7 +639,8 @@ static void compile_class_with_descriptor(
     // 3b. Check and compile static constructor (priority processing)
     MethodDeclNode *static_ctor = NULL;
     for (int j = 0; j < node->method_count; j++) {
-        if (node->methods[j]->type != AST_METHOD_DECL) continue;
+        if (node->methods[j]->type != AST_METHOD_DECL)
+            continue;
         MethodDeclNode *method = &node->methods[j]->as.method_decl;
 
         if (method->is_static_constructor) {
@@ -635,8 +654,8 @@ static void compile_class_with_descriptor(
         int closure_reg;
         int proto_idx = compile_method_and_get_index(ctx, compiler, static_ctor, &closure_reg);
         if (proto_idx < 0) {
-            xr_compiler_error(ctx, compiler,
-                "Failed to compile static constructor for class '%s'", node->name);
+            xr_compiler_error(ctx, compiler, "Failed to compile static constructor for class '%s'",
+                              node->name);
             xoop_free_class_descriptor(desc);
             return;
         }
@@ -655,23 +674,25 @@ static void compile_class_with_descriptor(
         // Find corresponding method AST node
         uint32_t method_idx = 0;
         for (int j = 0; j < node->method_count; j++) {
-            if (node->methods[j]->type != AST_METHOD_DECL) continue;
+            if (node->methods[j]->type != AST_METHOD_DECL)
+                continue;
             MethodDeclNode *method = &node->methods[j]->as.method_decl;
-            if (!method->is_static || method->is_static_constructor) continue;  // Skip static constructor
+            if (!method->is_static || method->is_static_constructor)
+                continue;  // Skip static constructor
 
             if (method_idx == i) {
                 // Compile static method
                 int closure_reg;
                 int proto_idx = compile_method_and_get_index(ctx, compiler, method, &closure_reg);
                 if (proto_idx < 0) {
-                    xr_compiler_error(ctx, compiler,
-                        "Failed to compile static method '%s'", method->name);
+                    xr_compiler_error(ctx, compiler, "Failed to compile static method '%s'",
+                                      method->name);
                     xoop_free_class_descriptor(desc);
                     return;
                 }
 
                 // Store proto_idx
-                desc->static_methods[i].closure_index = (uint32_t)proto_idx;
+                desc->static_methods[i].closure_index = (uint32_t) proto_idx;
 
                 reg_free(compiler, closure_reg);
                 break;
@@ -683,8 +704,7 @@ static void compile_class_with_descriptor(
     // 4. Store ClassDescriptor in constant pool
     int desc_idx = xoop_add_descriptor_to_constant_pool(compiler->proto, desc);
     if (desc_idx < 0) {
-        xr_compiler_error(ctx, compiler,
-            "Failed to add ClassDescriptor to constant pool");
+        xr_compiler_error(ctx, compiler, "Failed to add ClassDescriptor to constant pool");
         xoop_free_class_descriptor(desc);
         return;
     }
@@ -707,7 +727,8 @@ static void compile_class_with_descriptor(
     if (node->super_name != NULL) {
         if (node->super_module != NULL) {
             // Module member access form: extends module.Class
-            XrString *module_name = xr_compile_time_intern(ctx->X, node->super_module, strlen(node->super_module));
+            XrString *module_name =
+                xr_compile_time_intern(ctx->X, node->super_module, strlen(node->super_module));
 
             XrLocalInfo *mlocal = compiler_get_local_by_name(compiler, node->super_module);
             if (mlocal) {
@@ -730,7 +751,7 @@ static void compile_class_with_descriptor(
             }
 
             int global_sym = xr_symbol_register_in_table(
-                (XrSymbolTable*)xr_isolate_get_symbol_table(ctx->X), node->super_name);
+                (XrSymbolTable *) xr_isolate_get_symbol_table(ctx->X), node->super_name);
             int local_sym = xr_proto_add_symbol(compiler->proto, global_sym);
             xemit_getprop((compiler)->emitter, class_reg, class_reg, local_sym);
             super_via_reg = true;
@@ -738,7 +759,8 @@ static void compile_class_with_descriptor(
             // Simple form: extends Class — only local/upvalue parents
             // require runtime override; same-module names are resolved
             // by the descriptor itself.
-            XrString *super_name = xr_compile_time_intern(ctx->X, node->super_name, strlen(node->super_name));
+            XrString *super_name =
+                xr_compile_time_intern(ctx->X, node->super_name, strlen(node->super_name));
             XrLocalInfo *slocal = compiler_get_local_by_name(compiler, node->super_name);
 
             if (slocal) {
@@ -802,8 +824,8 @@ static void compile_class_with_descriptor(
     if (desc->clinit_proto_index >= 0) {
         /*
          * Generate OP_CLINIT_CALL instruction
-         * At this point class is already set as global, GETGLOBAL in static constructor works normally
-         * Parameters: A=class register, B=descriptor constant index, C=unused
+         * At this point class is already set as global, GETGLOBAL in static constructor works
+         * normally Parameters: A=class register, B=descriptor constant index, C=unused
          */
         xemit_clinit_call((compiler)->emitter, class_reg);
     }
@@ -819,6 +841,7 @@ void compile_class(XrCompilerContext *ctx, XrCompiler *compiler, ClassDeclNode *
     XR_DCHECK(ctx != NULL, "compile_class: NULL ctx");
     XR_DCHECK(compiler != NULL, "compile_class: NULL compiler");
     XR_DCHECK(node != NULL, "compile_class: NULL node");
-    // Use ClassDescriptor approach (supports inheritance, static members, interfaces and all OOP features)
+    // Use ClassDescriptor approach (supports inheritance, static members, interfaces and all OOP
+    // features)
     compile_class_with_descriptor(ctx, compiler, node);
 }

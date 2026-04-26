@@ -30,47 +30,47 @@ typedef enum {
     XR_NERR_OK = 0,
 
     // Connection lifecycle
-    XR_NERR_CONNECT, // Connection failed
-    XR_NERR_CLOSED, // Connection closed by peer
-    XR_NERR_TIMEOUT, // Operation timed out
-    XR_NERR_WOULDBLOCK, // Would block (internal, retry)
+    XR_NERR_CONNECT,     // Connection failed
+    XR_NERR_CLOSED,      // Connection closed by peer
+    XR_NERR_TIMEOUT,     // Operation timed out
+    XR_NERR_WOULDBLOCK,  // Would block (internal, retry)
 
     // I/O
-    XR_NERR_READ, // Read failed
-    XR_NERR_WRITE, // Write / send failed
+    XR_NERR_READ,   // Read failed
+    XR_NERR_WRITE,  // Write / send failed
 
     // DNS
-    XR_NERR_DNS, // DNS resolution failed
+    XR_NERR_DNS,  // DNS resolution failed
 
     // TLS
-    XR_NERR_TLS, // General TLS error
-    XR_NERR_TLS_INIT, // TLS library init failed
-    XR_NERR_TLS_CERT, // Certificate error
-    XR_NERR_TLS_HANDSHAKE, // TLS handshake failed
-    XR_NERR_TLS_VERIFY, // Certificate verification failed
+    XR_NERR_TLS,            // General TLS error
+    XR_NERR_TLS_INIT,       // TLS library init failed
+    XR_NERR_TLS_CERT,       // Certificate error
+    XR_NERR_TLS_HANDSHAKE,  // TLS handshake failed
+    XR_NERR_TLS_VERIFY,     // Certificate verification failed
 
     // Protocol
-    XR_NERR_URL_PARSE, // URL parse failed
-    XR_NERR_PARSE, // Protocol parse error (HTTP, WS)
-    XR_NERR_HANDSHAKE, // Application-level handshake failed (WS)
-    XR_NERR_PROTOCOL, // Protocol violation
-    XR_NERR_TOO_LARGE, // Payload / response too large
+    XR_NERR_URL_PARSE,  // URL parse failed
+    XR_NERR_PARSE,      // Protocol parse error (HTTP, WS)
+    XR_NERR_HANDSHAKE,  // Application-level handshake failed (WS)
+    XR_NERR_PROTOCOL,   // Protocol violation
+    XR_NERR_TOO_LARGE,  // Payload / response too large
 
     // Server
-    XR_NERR_BIND, // Bind failed
-    XR_NERR_LISTEN, // Listen failed
-    XR_NERR_ACCEPT, // Accept failed
+    XR_NERR_BIND,    // Bind failed
+    XR_NERR_LISTEN,  // Listen failed
+    XR_NERR_ACCEPT,  // Accept failed
 
     // Validation
-    XR_NERR_INVALID, // Invalid argument
+    XR_NERR_INVALID,  // Invalid argument
 
     // Resource
-    XR_NERR_MEMORY, // Memory allocation failed
+    XR_NERR_MEMORY,  // Memory allocation failed
 
-    XR_NERR__COUNT // Sentinel (not an error)
+    XR_NERR__COUNT  // Sentinel (not an error)
 } XrNetError;
 
 // Human-readable error string (never NULL).
-XR_FUNC const char* xr_net_error_string(XrNetError err);
+XR_FUNC const char *xr_net_error_string(XrNetError err);
 
-#endif // XR_STDLIB_NETERROR_H
+#endif  // XR_STDLIB_NETERROR_H

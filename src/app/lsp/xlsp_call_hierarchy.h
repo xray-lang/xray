@@ -21,10 +21,11 @@ XR_FUNC XrJsonValue *xlsp_handle_call_hierarchy_outgoing(XrLspServer *server, Xr
 
 // Type hierarchy
 XR_FUNC XrJsonValue *xlsp_handle_prepare_type_hierarchy(XrLspServer *server, XrJsonValue *params);
-XR_FUNC XrJsonValue *xlsp_handle_type_hierarchy_supertypes(XrLspServer *server, XrJsonValue *params);
+XR_FUNC XrJsonValue *xlsp_handle_type_hierarchy_supertypes(XrLspServer *server,
+                                                           XrJsonValue *params);
 XR_FUNC XrJsonValue *xlsp_handle_type_hierarchy_subtypes(XrLspServer *server, XrJsonValue *params);
 
 // Implementation (delegates to definition)
 XR_FUNC XrJsonValue *xlsp_handle_implementation(XrLspServer *server, XrJsonValue *params);
 
-#endif // XLSP_CALL_HIERARCHY_H
+#endif  // XLSP_CALL_HIERARCHY_H

@@ -48,7 +48,7 @@ static XrJsonValue *build_capabilities(XmcpServer *server) {
 }
 
 XrJsonValue *xmcp_handle_initialize(XmcpServer *server, XrJsonValue *params) {
-    (void)params;
+    (void) params;
     XR_DCHECK(server != NULL, "xmcp_handle_initialize: NULL server");
 
     XrJsonValue *result = xjson_new_object();

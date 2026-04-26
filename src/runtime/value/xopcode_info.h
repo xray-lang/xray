@@ -43,22 +43,22 @@ typedef enum {
 // instruction-construction site instead of waiting for VM dispatch to
 // blow up. Together with InstrFormat it forms the contract of an opcode.
 typedef enum {
-    XR_OPF_NONE = 0,        // unused; must be 0 in this slot
-    XR_OPF_REG_OUT,         // destination register: VM writes R[slot]
-    XR_OPF_REG_IN,          // source register: VM reads R[slot]
-    XR_OPF_REG_INOUT,       // both read and written
-    XR_OPF_REG_BASE,        // base register; VM accesses R[slot..slot+N-1]
-    XR_OPF_LIT,             // unsigned literal value (0..255 in ABC)
-    XR_OPF_LIT_S,           // signed literal (sB / sC / sBx)
-    XR_OPF_LIT_FLAG,        // 0 or 1 only
-    XR_OPF_K_IDX,           // constant table index (typically Bx)
-    XR_OPF_SYMBOL_IDX,      // proto->symbols index (property/method name dispatch)
-    XR_OPF_PROTO_IDX,       // sub-proto index (Bx)
-    XR_OPF_GLOBAL_IDX,      // shared/global index (Bx)
-    XR_OPF_BUILTIN_IDX,     // builtin slot (Bx)
-    XR_OPF_JUMP,            // sJ relative offset
-    XR_OPF_SUB_OPCODE,      // composite sub-operation discriminator
-    XR_OPF_SPECIAL,         // composite/encoded; skip standard range checks
+    XR_OPF_NONE = 0,     // unused; must be 0 in this slot
+    XR_OPF_REG_OUT,      // destination register: VM writes R[slot]
+    XR_OPF_REG_IN,       // source register: VM reads R[slot]
+    XR_OPF_REG_INOUT,    // both read and written
+    XR_OPF_REG_BASE,     // base register; VM accesses R[slot..slot+N-1]
+    XR_OPF_LIT,          // unsigned literal value (0..255 in ABC)
+    XR_OPF_LIT_S,        // signed literal (sB / sC / sBx)
+    XR_OPF_LIT_FLAG,     // 0 or 1 only
+    XR_OPF_K_IDX,        // constant table index (typically Bx)
+    XR_OPF_SYMBOL_IDX,   // proto->symbols index (property/method name dispatch)
+    XR_OPF_PROTO_IDX,    // sub-proto index (Bx)
+    XR_OPF_GLOBAL_IDX,   // shared/global index (Bx)
+    XR_OPF_BUILTIN_IDX,  // builtin slot (Bx)
+    XR_OPF_JUMP,         // sJ relative offset
+    XR_OPF_SUB_OPCODE,   // composite sub-operation discriminator
+    XR_OPF_SPECIAL,      // composite/encoded; skip standard range checks
 } XrOpFieldKind;
 
 // Per-opcode metadata.
@@ -86,4 +86,4 @@ XR_FUNC const char *xr_opcode_field_kind_name(XrOpFieldKind kind);
 // The canonical implementation lives in xopcode_info.c.
 // Included by xchunk.h via indirect include through shared headers.
 
-#endif // XOPCODE_INFO_H
+#endif  // XOPCODE_INFO_H

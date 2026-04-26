@@ -40,10 +40,12 @@
  * This enables mutual recursion by registering all function names
  * before compiling any function bodies.
  */
-void compile_function_decl_only(XrCompilerContext *ctx, XrCompiler *compiler, FunctionDeclNode *node) {
+void compile_function_decl_only(XrCompilerContext *ctx, XrCompiler *compiler,
+                                FunctionDeclNode *node) {
     XR_DCHECK(ctx != NULL, "compile_function_decl_only: NULL ctx");
     XR_DCHECK(compiler != NULL, "compile_function_decl_only: NULL compiler");
-    if (!node || !node->name) return;
+    if (!node || !node->name)
+        return;
 
     bool is_module_level = (compiler->scope_depth == 0 && compiler->type == FUNCTION_SCRIPT);
 
@@ -53,7 +55,7 @@ void compile_function_decl_only(XrCompilerContext *ctx, XrCompiler *compiler, Fu
         // Pre-allocate shared slot (shared_add handles redefine in repl_mode)
         int shared_index = shared_add(ctx, compiler, name_str);
         shared_set_const(ctx, shared_index, true);
-        (void)shared_index;
+        (void) shared_index;
         return;
     }
 
@@ -62,7 +64,8 @@ void compile_function_decl_only(XrCompilerContext *ctx, XrCompiler *compiler, Fu
 
         // Check if already defined (avoid duplicate)
         XrLocalInfo *existing = compiler_get_local_by_name(compiler, node->name);
-        if (existing) return;  // Already hoisted
+        if (existing)
+            return;  // Already hoisted
 
         // Pre-define as local, will be assigned actual closure later
         XrLocalInfo *local = scope_define_local(ctx, compiler, name_str);
@@ -84,7 +87,8 @@ void compile_function_decl_only(XrCompilerContext *ctx, XrCompiler *compiler, Fu
 static void ps_mark_captured(XrCompiler *compiler, const char *name) {
     for (int i = 0; i < compiler->prescan_captured.count; i++) {
         if (compiler->prescan_captured.data[i] &&
-            strcmp(compiler->prescan_captured.data[i], name) == 0) return;
+            strcmp(compiler->prescan_captured.data[i], name) == 0)
+            return;
     }
     XR_AVEC_PUSH(compiler->arena, compiler->prescan_captured, name);
 }
@@ -95,227 +99,254 @@ static void ps_mark_captured(XrCompiler *compiler, const char *name) {
 // names[]/ncount is the accumulated set of outer-scope variable names.
 // When a FUNCTION_DECL/EXPR is found at any depth, we enter it at depth+1 to find
 // all references (transitively), so deep nesting works correctly.
-static void ps_walk(AstNode *node, const char **names, int *ncount,
-                    XrCompiler *compiler, int depth) {
-    if (!node) return;
+static void ps_walk(AstNode *node, const char **names, int *ncount, XrCompiler *compiler,
+                    int depth) {
+    if (!node)
+        return;
     switch (node->type) {
+        // ---- Leaf nodes (no children) ----
+        case AST_LITERAL_INT:
+        case AST_LITERAL_FLOAT:
+        case AST_LITERAL_BIGINT:
+        case AST_LITERAL_STRING:
+        case AST_LITERAL_NULL:
+        case AST_LITERAL_TRUE:
+        case AST_LITERAL_FALSE:
+        case AST_BREAK_STMT:
+        case AST_CONTINUE_STMT:
+        case AST_THIS_EXPR:
+        case AST_YIELD_STMT:
+        case AST_CANCELLED_EXPR:
+        case AST_MOVE_EXPR:
+            break;
 
-    // ---- Leaf nodes (no children) ----
-    case AST_LITERAL_INT: case AST_LITERAL_FLOAT: case AST_LITERAL_BIGINT:
-    case AST_LITERAL_STRING: case AST_LITERAL_NULL: case AST_LITERAL_TRUE:
-    case AST_LITERAL_FALSE: case AST_BREAK_STMT: case AST_CONTINUE_STMT:
-    case AST_THIS_EXPR: case AST_YIELD_STMT: case AST_CANCELLED_EXPR: case AST_MOVE_EXPR:
-        break;
-
-    // ---- Variable reference ----
-    case AST_VARIABLE:
-        if (depth > 0) {
-            for (int i = 0; i < *ncount; i++) {
-                if (names[i] && strcmp(names[i], node->as.variable.name) == 0) {
-                    ps_mark_captured(compiler, names[i]);
-                    break;
+        // ---- Variable reference ----
+        case AST_VARIABLE:
+            if (depth > 0) {
+                for (int i = 0; i < *ncount; i++) {
+                    if (names[i] && strcmp(names[i], node->as.variable.name) == 0) {
+                        ps_mark_captured(compiler, names[i]);
+                        break;
+                    }
                 }
             }
-        }
-        break;
+            break;
 
-    // ---- Variable declarations (add names at depth=0) ----
-    case AST_VAR_DECL: case AST_CONST_DECL:
-        if (depth == 0 && node->as.var_decl.name && *ncount < 256)
-            names[(*ncount)++] = node->as.var_decl.name;
-        ps_walk(node->as.var_decl.initializer, names, ncount, compiler, depth);
-        break;
-    case AST_MULTI_VAR_DECL:
-        if (depth == 0) {
-            for (int i = 0; i < node->as.multi_var_decl.name_count && *ncount < 256; i++)
-                if (node->as.multi_var_decl.names[i])
-                    names[(*ncount)++] = node->as.multi_var_decl.names[i];
-        }
-        for (int i = 0; i < node->as.multi_var_decl.value_count; i++)
-            ps_walk(node->as.multi_var_decl.values[i], names, ncount, compiler, depth);
-        break;
-    case AST_DESTRUCTURE_DECL:
-        if (depth == 0 && node->as.destructure_decl.pattern) {
-            XrDestructurePattern *pat = node->as.destructure_decl.pattern;
-            if (pat->type == 2 && *ncount < 256)
-                if (pat->as.identifier.name) names[(*ncount)++] = pat->as.identifier.name;
-        }
-        break;
-
-    // ---- Nested functions: record name (depth=0), enter body at depth+1 ----
-    case AST_FUNCTION_DECL:
-        if (depth == 0 && node->as.function_decl.name && *ncount < 256)
-            names[(*ncount)++] = node->as.function_decl.name;
-        if (node->as.function_decl.body)
-            ps_walk(node->as.function_decl.body, names, ncount, compiler, depth + 1);
-        break;
-    case AST_FUNCTION_EXPR:
-        if (node->as.function_expr.body)
-            ps_walk(node->as.function_expr.body, names, ncount, compiler, depth + 1);
-        break;
-
-    // ---- Expressions ----
-    case AST_BINARY_ADD: case AST_BINARY_SUB: case AST_BINARY_MUL:
-    case AST_BINARY_DIV: case AST_BINARY_MOD: case AST_BINARY_BAND:
-    case AST_BINARY_BOR: case AST_BINARY_BXOR: case AST_BINARY_LSHIFT:
-    case AST_BINARY_RSHIFT: case AST_BINARY_EQ: case AST_BINARY_NE:
-    case AST_BINARY_EQ_STRICT: case AST_BINARY_NE_STRICT: case AST_BINARY_LT:
-    case AST_BINARY_LE: case AST_BINARY_GT: case AST_BINARY_GE:
-    case AST_BINARY_AND: case AST_BINARY_OR:
-    case AST_NULLISH_COALESCE:
-        ps_walk(node->as.binary.left, names, ncount, compiler, depth);
-        ps_walk(node->as.binary.right, names, ncount, compiler, depth);
-        break;
-    case AST_OPTIONAL_CHAIN:
-        ps_walk(node->as.optional_chain.object, names, ncount, compiler, depth);
-        if (node->as.optional_chain.index)
-            ps_walk(node->as.optional_chain.index, names, ncount, compiler, depth);
-        break;
-    case AST_UNARY_NEG: case AST_UNARY_NOT: case AST_UNARY_BNOT:
-    case AST_FORCE_UNWRAP:
-        ps_walk(node->as.unary.operand, names, ncount, compiler, depth);
-        break;
-    case AST_GROUPING:
-        ps_walk(node->as.grouping, names, ncount, compiler, depth);
-        break;
-    case AST_TERNARY:
-        ps_walk(node->as.ternary.condition, names, ncount, compiler, depth);
-        ps_walk(node->as.ternary.true_expr, names, ncount, compiler, depth);
-        ps_walk(node->as.ternary.false_expr, names, ncount, compiler, depth);
-        break;
-    case AST_ASSIGNMENT:
-        if (depth > 0) {
-            for (int i = 0; i < *ncount; i++) {
-                if (names[i] && strcmp(names[i], node->as.assignment.name) == 0)
-                    ps_mark_captured(compiler, names[i]);
+        // ---- Variable declarations (add names at depth=0) ----
+        case AST_VAR_DECL:
+        case AST_CONST_DECL:
+            if (depth == 0 && node->as.var_decl.name && *ncount < 256)
+                names[(*ncount)++] = node->as.var_decl.name;
+            ps_walk(node->as.var_decl.initializer, names, ncount, compiler, depth);
+            break;
+        case AST_MULTI_VAR_DECL:
+            if (depth == 0) {
+                for (int i = 0; i < node->as.multi_var_decl.name_count && *ncount < 256; i++)
+                    if (node->as.multi_var_decl.names[i])
+                        names[(*ncount)++] = node->as.multi_var_decl.names[i];
             }
-        }
-        ps_walk(node->as.assignment.value, names, ncount, compiler, depth);
-        break;
-    case AST_COMPOUND_ASSIGNMENT:
-        if (depth > 0) {
-            for (int i = 0; i < *ncount; i++) {
-                if (names[i] && strcmp(names[i], node->as.compound_assignment.name) == 0)
-                    ps_mark_captured(compiler, names[i]);
+            for (int i = 0; i < node->as.multi_var_decl.value_count; i++)
+                ps_walk(node->as.multi_var_decl.values[i], names, ncount, compiler, depth);
+            break;
+        case AST_DESTRUCTURE_DECL:
+            if (depth == 0 && node->as.destructure_decl.pattern) {
+                XrDestructurePattern *pat = node->as.destructure_decl.pattern;
+                if (pat->type == 2 && *ncount < 256)
+                    if (pat->as.identifier.name)
+                        names[(*ncount)++] = pat->as.identifier.name;
             }
-        }
-        ps_walk(node->as.compound_assignment.value, names, ncount, compiler, depth);
-        break;
-    case AST_INC: case AST_DEC:
-        if (depth > 0) {
-            for (int i = 0; i < *ncount; i++) {
-                if (names[i] && strcmp(names[i], node->as.inc.name) == 0)
-                    ps_mark_captured(compiler, names[i]);
-            }
-        }
-        break;
-    case AST_CALL_EXPR:
-        ps_walk(node->as.call_expr.callee, names, ncount, compiler, depth);
-        for (int i = 0; i < node->as.call_expr.arg_count; i++)
-            ps_walk(node->as.call_expr.arguments[i], names, ncount, compiler, depth);
-        break;
-    case AST_INDEX_GET:
-        ps_walk(node->as.index_get.array, names, ncount, compiler, depth);
-        ps_walk(node->as.index_get.index, names, ncount, compiler, depth);
-        break;
-    case AST_INDEX_SET:
-        ps_walk(node->as.index_set.array, names, ncount, compiler, depth);
-        ps_walk(node->as.index_set.index, names, ncount, compiler, depth);
-        ps_walk(node->as.index_set.value, names, ncount, compiler, depth);
-        break;
-    case AST_MEMBER_ACCESS:
-        ps_walk(node->as.member_access.object, names, ncount, compiler, depth);
-        break;
-    case AST_MEMBER_SET:
-        ps_walk(node->as.member_set.object, names, ncount, compiler, depth);
-        ps_walk(node->as.member_set.value, names, ncount, compiler, depth);
-        break;
-    case AST_ARRAY_LITERAL:
-        for (int i = 0; i < node->as.array_literal.count; i++)
-            ps_walk(node->as.array_literal.elements[i], names, ncount, compiler, depth);
-        break;
-    case AST_TEMPLATE_STRING:
-        for (int i = 0; i < node->as.template_str.part_count; i++)
-            ps_walk(node->as.template_str.parts[i], names, ncount, compiler, depth);
-        break;
-    case AST_NEW_EXPR:
-        for (int i = 0; i < node->as.new_expr.arg_count; i++)
-            ps_walk(node->as.new_expr.arguments[i], names, ncount, compiler, depth);
-        break;
-    case AST_RANGE:
-        ps_walk(node->as.range.start, names, ncount, compiler, depth);
-        ps_walk(node->as.range.end, names, ncount, compiler, depth);
-        break;
-    case AST_AS_EXPR:
-        ps_walk(node->as.as_expr.expr, names, ncount, compiler, depth);
-        break;
-    case AST_IS_EXPR:
-        ps_walk(node->as.is_expr.expr, names, ncount, compiler, depth);
-        break;
-    case AST_GO_EXPR:
-        if (node->as.go_expr.expr)
-            ps_walk(node->as.go_expr.expr, names, ncount, compiler, depth);
-        break;
-    case AST_AWAIT_EXPR:
-        ps_walk(node->as.await_expr.expr, names, ncount, compiler, depth);
-        break;
+            break;
 
-    // ---- Statements ----
-    case AST_BLOCK:
-        for (int i = 0; i < node->as.block.count; i++)
-            ps_walk(node->as.block.statements[i], names, ncount, compiler, depth);
-        break;
-    case AST_EXPR_STMT:
-        ps_walk(node->as.expr_stmt, names, ncount, compiler, depth);
-        break;
-    case AST_PRINT_STMT:
-        for (int i = 0; i < node->as.print_stmt.expr_count; i++)
-            ps_walk(node->as.print_stmt.exprs[i], names, ncount, compiler, depth);
-        break;
-    case AST_RETURN_STMT:
-        for (int i = 0; i < node->as.return_stmt.value_count; i++)
-            ps_walk(node->as.return_stmt.values[i], names, ncount, compiler, depth);
-        break;
-    case AST_THROW_STMT:
-        ps_walk(node->as.throw_stmt.expression, names, ncount, compiler, depth);
-        break;
-    case AST_IF_STMT:
-        ps_walk(node->as.if_stmt.condition, names, ncount, compiler, depth);
-        ps_walk(node->as.if_stmt.then_branch, names, ncount, compiler, depth);
-        ps_walk(node->as.if_stmt.else_branch, names, ncount, compiler, depth);
-        break;
-    case AST_WHILE_STMT:
-        ps_walk(node->as.while_stmt.condition, names, ncount, compiler, depth);
-        ps_walk(node->as.while_stmt.body, names, ncount, compiler, depth);
-        break;
-    case AST_FOR_STMT:
-        ps_walk(node->as.for_stmt.initializer, names, ncount, compiler, depth);
-        ps_walk(node->as.for_stmt.condition, names, ncount, compiler, depth);
-        ps_walk(node->as.for_stmt.increment, names, ncount, compiler, depth);
-        ps_walk(node->as.for_stmt.body, names, ncount, compiler, depth);
-        break;
-    case AST_FOR_IN_STMT:
-        if (depth == 0) {
-            if (node->as.for_in_stmt.item_name && *ncount < 256)
-                names[(*ncount)++] = node->as.for_in_stmt.item_name;
-            if (node->as.for_in_stmt.value_name && *ncount < 256)
-                names[(*ncount)++] = node->as.for_in_stmt.value_name;
-        }
-        ps_walk(node->as.for_in_stmt.collection, names, ncount, compiler, depth);
-        ps_walk(node->as.for_in_stmt.body, names, ncount, compiler, depth);
-        break;
-    case AST_TRY_CATCH:
-        if (depth == 0 && node->as.try_catch.catch_var && *ncount < 256)
-            names[(*ncount)++] = node->as.try_catch.catch_var;
-        ps_walk(node->as.try_catch.try_body, names, ncount, compiler, depth);
-        ps_walk(node->as.try_catch.catch_body, names, ncount, compiler, depth);
-        ps_walk(node->as.try_catch.finally_body, names, ncount, compiler, depth);
-        break;
-    case AST_SCOPE_BLOCK:
-        ps_walk(node->as.scope_block.body, names, ncount, compiler, depth);
-        break;
-    default:
-        break;
+        // ---- Nested functions: record name (depth=0), enter body at depth+1 ----
+        case AST_FUNCTION_DECL:
+            if (depth == 0 && node->as.function_decl.name && *ncount < 256)
+                names[(*ncount)++] = node->as.function_decl.name;
+            if (node->as.function_decl.body)
+                ps_walk(node->as.function_decl.body, names, ncount, compiler, depth + 1);
+            break;
+        case AST_FUNCTION_EXPR:
+            if (node->as.function_expr.body)
+                ps_walk(node->as.function_expr.body, names, ncount, compiler, depth + 1);
+            break;
+
+        // ---- Expressions ----
+        case AST_BINARY_ADD:
+        case AST_BINARY_SUB:
+        case AST_BINARY_MUL:
+        case AST_BINARY_DIV:
+        case AST_BINARY_MOD:
+        case AST_BINARY_BAND:
+        case AST_BINARY_BOR:
+        case AST_BINARY_BXOR:
+        case AST_BINARY_LSHIFT:
+        case AST_BINARY_RSHIFT:
+        case AST_BINARY_EQ:
+        case AST_BINARY_NE:
+        case AST_BINARY_EQ_STRICT:
+        case AST_BINARY_NE_STRICT:
+        case AST_BINARY_LT:
+        case AST_BINARY_LE:
+        case AST_BINARY_GT:
+        case AST_BINARY_GE:
+        case AST_BINARY_AND:
+        case AST_BINARY_OR:
+        case AST_NULLISH_COALESCE:
+            ps_walk(node->as.binary.left, names, ncount, compiler, depth);
+            ps_walk(node->as.binary.right, names, ncount, compiler, depth);
+            break;
+        case AST_OPTIONAL_CHAIN:
+            ps_walk(node->as.optional_chain.object, names, ncount, compiler, depth);
+            if (node->as.optional_chain.index)
+                ps_walk(node->as.optional_chain.index, names, ncount, compiler, depth);
+            break;
+        case AST_UNARY_NEG:
+        case AST_UNARY_NOT:
+        case AST_UNARY_BNOT:
+        case AST_FORCE_UNWRAP:
+            ps_walk(node->as.unary.operand, names, ncount, compiler, depth);
+            break;
+        case AST_GROUPING:
+            ps_walk(node->as.grouping, names, ncount, compiler, depth);
+            break;
+        case AST_TERNARY:
+            ps_walk(node->as.ternary.condition, names, ncount, compiler, depth);
+            ps_walk(node->as.ternary.true_expr, names, ncount, compiler, depth);
+            ps_walk(node->as.ternary.false_expr, names, ncount, compiler, depth);
+            break;
+        case AST_ASSIGNMENT:
+            if (depth > 0) {
+                for (int i = 0; i < *ncount; i++) {
+                    if (names[i] && strcmp(names[i], node->as.assignment.name) == 0)
+                        ps_mark_captured(compiler, names[i]);
+                }
+            }
+            ps_walk(node->as.assignment.value, names, ncount, compiler, depth);
+            break;
+        case AST_COMPOUND_ASSIGNMENT:
+            if (depth > 0) {
+                for (int i = 0; i < *ncount; i++) {
+                    if (names[i] && strcmp(names[i], node->as.compound_assignment.name) == 0)
+                        ps_mark_captured(compiler, names[i]);
+                }
+            }
+            ps_walk(node->as.compound_assignment.value, names, ncount, compiler, depth);
+            break;
+        case AST_INC:
+        case AST_DEC:
+            if (depth > 0) {
+                for (int i = 0; i < *ncount; i++) {
+                    if (names[i] && strcmp(names[i], node->as.inc.name) == 0)
+                        ps_mark_captured(compiler, names[i]);
+                }
+            }
+            break;
+        case AST_CALL_EXPR:
+            ps_walk(node->as.call_expr.callee, names, ncount, compiler, depth);
+            for (int i = 0; i < node->as.call_expr.arg_count; i++)
+                ps_walk(node->as.call_expr.arguments[i], names, ncount, compiler, depth);
+            break;
+        case AST_INDEX_GET:
+            ps_walk(node->as.index_get.array, names, ncount, compiler, depth);
+            ps_walk(node->as.index_get.index, names, ncount, compiler, depth);
+            break;
+        case AST_INDEX_SET:
+            ps_walk(node->as.index_set.array, names, ncount, compiler, depth);
+            ps_walk(node->as.index_set.index, names, ncount, compiler, depth);
+            ps_walk(node->as.index_set.value, names, ncount, compiler, depth);
+            break;
+        case AST_MEMBER_ACCESS:
+            ps_walk(node->as.member_access.object, names, ncount, compiler, depth);
+            break;
+        case AST_MEMBER_SET:
+            ps_walk(node->as.member_set.object, names, ncount, compiler, depth);
+            ps_walk(node->as.member_set.value, names, ncount, compiler, depth);
+            break;
+        case AST_ARRAY_LITERAL:
+            for (int i = 0; i < node->as.array_literal.count; i++)
+                ps_walk(node->as.array_literal.elements[i], names, ncount, compiler, depth);
+            break;
+        case AST_TEMPLATE_STRING:
+            for (int i = 0; i < node->as.template_str.part_count; i++)
+                ps_walk(node->as.template_str.parts[i], names, ncount, compiler, depth);
+            break;
+        case AST_NEW_EXPR:
+            for (int i = 0; i < node->as.new_expr.arg_count; i++)
+                ps_walk(node->as.new_expr.arguments[i], names, ncount, compiler, depth);
+            break;
+        case AST_RANGE:
+            ps_walk(node->as.range.start, names, ncount, compiler, depth);
+            ps_walk(node->as.range.end, names, ncount, compiler, depth);
+            break;
+        case AST_AS_EXPR:
+            ps_walk(node->as.as_expr.expr, names, ncount, compiler, depth);
+            break;
+        case AST_IS_EXPR:
+            ps_walk(node->as.is_expr.expr, names, ncount, compiler, depth);
+            break;
+        case AST_GO_EXPR:
+            if (node->as.go_expr.expr)
+                ps_walk(node->as.go_expr.expr, names, ncount, compiler, depth);
+            break;
+        case AST_AWAIT_EXPR:
+            ps_walk(node->as.await_expr.expr, names, ncount, compiler, depth);
+            break;
+
+        // ---- Statements ----
+        case AST_BLOCK:
+            for (int i = 0; i < node->as.block.count; i++)
+                ps_walk(node->as.block.statements[i], names, ncount, compiler, depth);
+            break;
+        case AST_EXPR_STMT:
+            ps_walk(node->as.expr_stmt, names, ncount, compiler, depth);
+            break;
+        case AST_PRINT_STMT:
+            for (int i = 0; i < node->as.print_stmt.expr_count; i++)
+                ps_walk(node->as.print_stmt.exprs[i], names, ncount, compiler, depth);
+            break;
+        case AST_RETURN_STMT:
+            for (int i = 0; i < node->as.return_stmt.value_count; i++)
+                ps_walk(node->as.return_stmt.values[i], names, ncount, compiler, depth);
+            break;
+        case AST_THROW_STMT:
+            ps_walk(node->as.throw_stmt.expression, names, ncount, compiler, depth);
+            break;
+        case AST_IF_STMT:
+            ps_walk(node->as.if_stmt.condition, names, ncount, compiler, depth);
+            ps_walk(node->as.if_stmt.then_branch, names, ncount, compiler, depth);
+            ps_walk(node->as.if_stmt.else_branch, names, ncount, compiler, depth);
+            break;
+        case AST_WHILE_STMT:
+            ps_walk(node->as.while_stmt.condition, names, ncount, compiler, depth);
+            ps_walk(node->as.while_stmt.body, names, ncount, compiler, depth);
+            break;
+        case AST_FOR_STMT:
+            ps_walk(node->as.for_stmt.initializer, names, ncount, compiler, depth);
+            ps_walk(node->as.for_stmt.condition, names, ncount, compiler, depth);
+            ps_walk(node->as.for_stmt.increment, names, ncount, compiler, depth);
+            ps_walk(node->as.for_stmt.body, names, ncount, compiler, depth);
+            break;
+        case AST_FOR_IN_STMT:
+            if (depth == 0) {
+                if (node->as.for_in_stmt.item_name && *ncount < 256)
+                    names[(*ncount)++] = node->as.for_in_stmt.item_name;
+                if (node->as.for_in_stmt.value_name && *ncount < 256)
+                    names[(*ncount)++] = node->as.for_in_stmt.value_name;
+            }
+            ps_walk(node->as.for_in_stmt.collection, names, ncount, compiler, depth);
+            ps_walk(node->as.for_in_stmt.body, names, ncount, compiler, depth);
+            break;
+        case AST_TRY_CATCH:
+            if (depth == 0 && node->as.try_catch.catch_var && *ncount < 256)
+                names[(*ncount)++] = node->as.try_catch.catch_var;
+            ps_walk(node->as.try_catch.try_body, names, ncount, compiler, depth);
+            ps_walk(node->as.try_catch.catch_body, names, ncount, compiler, depth);
+            ps_walk(node->as.try_catch.finally_body, names, ncount, compiler, depth);
+            break;
+        case AST_SCOPE_BLOCK:
+            ps_walk(node->as.scope_block.body, names, ncount, compiler, depth);
+            break;
+        default:
+            break;
     }
 }
 
@@ -324,7 +355,8 @@ static void ps_walk(AstNode *node, const char **names, int *ncount,
 // Must be called BEFORE scope_define_local_reg for params.
 // Params are seeded from fn_node->params so they are available for capture detection.
 void prescan_fn_body(XrCompiler *compiler, FunctionDeclNode *fn_node, AstNode *body) {
-    if (!body || !compiler) return;
+    if (!body || !compiler)
+        return;
     XR_AVEC_INIT(compiler->prescan_captured);
 
     // Seed names with the function's parameter names
@@ -333,7 +365,8 @@ void prescan_fn_body(XrCompiler *compiler, FunctionDeclNode *fn_node, AstNode *b
     if (fn_node) {
         for (int i = 0; i < fn_node->param_count && ncount < 256; i++) {
             XrParamNode *p = fn_node->params[i];
-            if (p && p->name) names[ncount++] = p->name;
+            if (p && p->name)
+                names[ncount++] = p->name;
         }
     }
 
@@ -445,7 +478,7 @@ void compile_function(XrCompilerContext *ctx, XrCompiler *compiler, FunctionDecl
     // Set test attributes (if any)
     if (node->attr_count > 0 && node->attributes != NULL) {
         XrAttribute *attr = node->attributes[0];
-        function_compiler.proto->test_attr = (uint8_t)attr->kind;
+        function_compiler.proto->test_attr = (uint8_t) attr->kind;
         function_compiler.proto->test_timeout = attr->timeout;
     }
 
@@ -461,7 +494,8 @@ void compile_function(XrCompilerContext *ctx, XrCompiler *compiler, FunctionDecl
     // Define parameters as local variables (directly use registers 0, 1, 2...)
     for (int i = 0; i < node->param_count; i++) {
         XrParamNode *param = node->params[i];
-        if (!param) continue;
+        if (!param)
+            continue;
         XrString *param_str = xr_compile_time_intern(ctx->X, param->name, strlen(param->name));
         XrLocalInfo *local = scope_define_local_reg(ctx, &function_compiler, param_str, i);
         // Set parameter's compile-time type (for native I64/F64 codegen)
@@ -472,8 +506,7 @@ void compile_function(XrCompilerContext *ctx, XrCompiler *compiler, FunctionDecl
             XaSymbol *fn_sym = xa_analyzer_lookup(ctx->analyzer, node->name);
             if (fn_sym) {
                 XaSymbolLinks *links = xa_analyzer_get_links(ctx->analyzer, fn_sym);
-                if (links && links->inferred_param_types &&
-                    i < links->inferred_param_count) {
+                if (links && links->inferred_param_types && i < links->inferred_param_count) {
                     XrType *pt = links->inferred_param_types[i];
                     if (pt && !XR_TYPE_IS_UNKNOWN(pt)) {
                         // Inferred object types from single-pass analysis may be
@@ -492,23 +525,25 @@ void compile_function(XrCompilerContext *ctx, XrCompiler *compiler, FunctionDecl
 
     // After parameter definition, freereg should equal local_end
     if (function_compiler.regalloc) {
-        xreg_set_freereg(function_compiler.regalloc, xreg_get_local_end(function_compiler.regalloc));
+        xreg_set_freereg(function_compiler.regalloc,
+                         xreg_get_local_end(function_compiler.regalloc));
     }
 
     // Save return type info (single source of truth for JIT return type)
     // Parameter types are carried via param_types (generated in xr_compiler_end)
     {
         if (node->return_type != NULL) {
-            function_compiler.proto->return_type_info = (struct XrType *)node->return_type;
+            function_compiler.proto->return_type_info = (struct XrType *) node->return_type;
         }
         // No explicit return annotation: read inferred return type from Analyzer
         else if (node->name && ctx->analyzer) {
             XaSymbol *fn_sym = xa_analyzer_lookup(ctx->analyzer, node->name);
             if (fn_sym) {
                 XaSymbolLinks *links = xa_analyzer_get_links(ctx->analyzer, fn_sym);
-                if (links && links->return_type && !XR_TYPE_IS_UNKNOWN(links->return_type)
-                    && !XR_TYPE_IS_VOID(links->return_type)) {
-                    function_compiler.proto->return_type_info = (struct XrType *)links->return_type;
+                if (links && links->return_type && !XR_TYPE_IS_UNKNOWN(links->return_type) &&
+                    !XR_TYPE_IS_VOID(links->return_type)) {
+                    function_compiler.proto->return_type_info =
+                        (struct XrType *) links->return_type;
                 }
             }
         }
@@ -532,7 +567,8 @@ void compile_function(XrCompilerContext *ctx, XrCompiler *compiler, FunctionDecl
             int skip_jmp = emit_jump(function_compiler.emitter, OP_JMP);
 
             // Compile default value expression
-            XrExprDesc default_desc = xr_compile_expr(ctx, &function_compiler, param->default_value);
+            XrExprDesc default_desc =
+                xr_compile_expr(ctx, &function_compiler, param->default_value);
             xexpr_to_specific_reg(ctx, &function_compiler, &default_desc, param_reg);
 
             // Patch jump
@@ -545,10 +581,13 @@ void compile_function(XrCompilerContext *ctx, XrCompiler *compiler, FunctionDecl
     // Skip for in/ref params (they pass by reference, no copy needed)
     for (int i = 0; i < node->param_count; i++) {
         XrParamNode *param = node->params[i];
-        if (!param) continue;
-        if (param->passing_mode != XR_PARAM_VALUE) continue;
+        if (!param)
+            continue;
+        if (param->passing_mode != XR_PARAM_VALUE)
+            continue;
         XrLocalInfo *plocal = compiler_get_local_by_name(&function_compiler, param->name);
-        if (!plocal) continue;
+        if (!plocal)
+            continue;
         // Check compile_type directly (set by analyzer or type annotation)
         bool is_vt = plocal->compile_type && plocal->compile_type->is_value_type;
         // Fallback: look up class symbol in analyzer for type annotations
@@ -581,7 +620,8 @@ void compile_function(XrCompilerContext *ctx, XrCompiler *compiler, FunctionDecl
                         int sz = (8 + ci->struct_layout->total_size + 15) & ~15;
                         int slot = function_compiler.struct_area_offset / 16;
                         function_compiler.struct_area_offset += sz;
-                        xemit_struct_copy(function_compiler.emitter, plocal->reg, plocal->reg, slot);
+                        xemit_struct_copy(function_compiler.emitter, plocal->reg, plocal->reg,
+                                          slot);
                         used_struct_copy = true;
                     }
                 }
@@ -632,7 +672,8 @@ void compile_function(XrCompilerContext *ctx, XrCompiler *compiler, FunctionDecl
                 xemit_setshared(compiler->emitter, func_reg, shared_fn_index);
                 reg_free(compiler, func_reg);
             } else if (is_module_level && is_pure_function) {
-                // Pure function: store in shared_array (cross-coroutine access), keep local variable (recursive call)
+                // Pure function: store in shared_array (cross-coroutine access), keep local
+                // variable (recursive call)
                 emit_ctx_sync_before_closure(ctx, compiler);
                 xemit_closure(compiler->emitter, func_reg, proto_idx);
 
@@ -678,7 +719,8 @@ void compile_function(XrCompilerContext *ctx, XrCompiler *compiler, FunctionDecl
                         local->closure_proto = proto;
                         local->is_hoisted = false;
                         // Cellify if captured mutable (const fn decls use raw snapshot)
-                        if (!local->is_const && local->is_captured && local->ctx_slot >= 0 && !local->is_cellified) {
+                        if (!local->is_const && local->is_captured && local->ctx_slot >= 0 &&
+                            !local->is_cellified) {
                             xemit_cell_new(compiler->emitter, func_reg);
                             local->is_cellified = true;
                         }
@@ -711,4 +753,3 @@ void compile_function(XrCompilerContext *ctx, XrCompiler *compiler, FunctionDecl
         }
     }
 }
-

@@ -48,48 +48,50 @@ typedef struct {
 } XlspDocEntry;
 
 static const XlspDocEntry keyword_docs[] = {
-    {"let",     "```xray\nlet <name> = <value>\n```\n\nDeclares a mutable variable."},
-    {"const",   "```xray\nconst <name> = <value>\n```\n\nDeclares an immutable constant."},
-    {"fn",      "```xray\nfn <name>(<params>) { <body> }\n```\n\nDeclares a function."},
-    {"class",   "```xray\nclass <name> { <members> }\n```\n\nDeclares a class."},
-    {"go",      "```xray\ngo <expr>\n```\n\nSpawns a new coroutine."},
-    {"await",   "```xray\nawait <task>\n```\n\nWaits for a coroutine to complete."},
+    {"let", "```xray\nlet <name> = <value>\n```\n\nDeclares a mutable variable."},
+    {"const", "```xray\nconst <name> = <value>\n```\n\nDeclares an immutable constant."},
+    {"fn", "```xray\nfn <name>(<params>) { <body> }\n```\n\nDeclares a function."},
+    {"class", "```xray\nclass <name> { <members> }\n```\n\nDeclares a class."},
+    {"go", "```xray\ngo <expr>\n```\n\nSpawns a new coroutine."},
+    {"await", "```xray\nawait <task>\n```\n\nWaits for a coroutine to complete."},
     {"Channel", "```xray\nChannel(size?)\n```\n\nCreates a channel for coroutine communication."},
-    {"shared",  "```xray\nshared const|let <name> = <value>\n```\n\nDeclares a variable shared across coroutines."},
-    {"if",      "```xray\nif (<cond>) { ... } else { ... }\n```\n\nConditional statement."},
-    {"else",    "```xray\nif (<cond>) { ... } else { ... }\n```\n\nAlternate branch of if statement."},
-    {"while",   "```xray\nwhile (<cond>) { ... }\n```\n\nLoop while condition is true."},
-    {"for",     "```xray\nfor (<init>; <cond>; <step>) { ... }\nfor (<item> in <iter>) { ... }\n```\n\nLoop statement."},
-    {"return",  "```xray\nreturn <value>?\n```\n\nReturns from a function."},
-    {"break",   "```xray\nbreak\n```\n\nExits the innermost loop."},
-    {"continue","```xray\ncontinue\n```\n\nSkips to the next loop iteration."},
-    {"import",  "```xray\nimport <module>\n```\n\nImports a module."},
-    {"true",    "Boolean literal `true`."},
-    {"false",   "Boolean literal `false`."},
-    {"null",    "Null literal representing absence of value."},
-    {"new",     "```xray\nnew <Class>(<args>)\n```\n\nCreates a new class instance."},
-    {"this",    "Reference to the current class instance."},
-    {"super",   "Reference to the parent class."},
-    {NULL, NULL}
-};
+    {"shared", "```xray\nshared const|let <name> = <value>\n```\n\nDeclares a variable shared "
+               "across coroutines."},
+    {"if", "```xray\nif (<cond>) { ... } else { ... }\n```\n\nConditional statement."},
+    {"else", "```xray\nif (<cond>) { ... } else { ... }\n```\n\nAlternate branch of if statement."},
+    {"while", "```xray\nwhile (<cond>) { ... }\n```\n\nLoop while condition is true."},
+    {"for", "```xray\nfor (<init>; <cond>; <step>) { ... }\nfor (<item> in <iter>) { ... "
+            "}\n```\n\nLoop statement."},
+    {"return", "```xray\nreturn <value>?\n```\n\nReturns from a function."},
+    {"break", "```xray\nbreak\n```\n\nExits the innermost loop."},
+    {"continue", "```xray\ncontinue\n```\n\nSkips to the next loop iteration."},
+    {"import", "```xray\nimport <module>\n```\n\nImports a module."},
+    {"true", "Boolean literal `true`."},
+    {"false", "Boolean literal `false`."},
+    {"null", "Null literal representing absence of value."},
+    {"new", "```xray\nnew <Class>(<args>)\n```\n\nCreates a new class instance."},
+    {"this", "Reference to the current class instance."},
+    {"super", "Reference to the parent class."},
+    {NULL, NULL}};
 
 static const XlspDocEntry builtin_docs[] = {
-    {"print",   "```xray\nprint(value, ...)\n```\n\nPrints values to stdout."},
-    {"typeof",  "```xray\ntypeof(value): string\n```\n\nReturns the type name of a value."},
-    {"assert",  "```xray\nassert(condition, message?)\n```\n\nAsserts that condition is true."},
-    {"assert_true",  "```xray\nassert_true(value)\n```\n\nAsserts that value is truthy."},
-    {"assert_false",  "```xray\nassert_false(value)\n```\n\nAsserts that value is falsy."},
-    {"assert_eq",  "```xray\nassert_eq(actual, expected)\n```\n\nAsserts that actual equals expected."},
-    {"assert_ne",  "```xray\nassert_ne(actual, unexpected)\n```\n\nAsserts that actual does not equal unexpected."},
-    {"len",     "```xray\nlen(value): int\n```\n\nReturns the length of a string, array, or map."},
-    {"range",   "```xray\nrange(start, end, step?): Array\n```\n\nCreates an array of numbers."},
-    {"int",     "```xray\nint(value): int\n```\n\nConverts value to integer."},
-    {"float",   "```xray\nfloat(value): float\n```\n\nConverts value to float."},
-    {"string",  "```xray\nstring(value): string\n```\n\nConverts value to string."},
-    {"input",   "```xray\ninput(prompt?): string\n```\n\nReads a line from stdin."},
-    {"sleep",   "```xray\nsleep(ms)\n```\n\nPauses execution for milliseconds."},
-    {NULL, NULL}
-};
+    {"print", "```xray\nprint(value, ...)\n```\n\nPrints values to stdout."},
+    {"typeof", "```xray\ntypeof(value): string\n```\n\nReturns the type name of a value."},
+    {"assert", "```xray\nassert(condition, message?)\n```\n\nAsserts that condition is true."},
+    {"assert_true", "```xray\nassert_true(value)\n```\n\nAsserts that value is truthy."},
+    {"assert_false", "```xray\nassert_false(value)\n```\n\nAsserts that value is falsy."},
+    {"assert_eq",
+     "```xray\nassert_eq(actual, expected)\n```\n\nAsserts that actual equals expected."},
+    {"assert_ne", "```xray\nassert_ne(actual, unexpected)\n```\n\nAsserts that actual does not "
+                  "equal unexpected."},
+    {"len", "```xray\nlen(value): int\n```\n\nReturns the length of a string, array, or map."},
+    {"range", "```xray\nrange(start, end, step?): Array\n```\n\nCreates an array of numbers."},
+    {"int", "```xray\nint(value): int\n```\n\nConverts value to integer."},
+    {"float", "```xray\nfloat(value): float\n```\n\nConverts value to float."},
+    {"string", "```xray\nstring(value): string\n```\n\nConverts value to string."},
+    {"input", "```xray\ninput(prompt?): string\n```\n\nReads a line from stdin."},
+    {"sleep", "```xray\nsleep(ms)\n```\n\nPauses execution for milliseconds."},
+    {NULL, NULL}};
 
 static const char *lookup_doc(const XlspDocEntry *table, const char *name) {
     for (int i = 0; table[i].name; i++) {
@@ -105,37 +107,44 @@ static const char *lookup_doc(const XlspDocEntry *table, const char *name) {
 
 // xlsp_is_ident_char now in xlsp_ast_utils.h
 
-char *xlsp_word_at_position(XrLspDocument *doc, XrLspPosition pos,
-                            uint32_t *out_start, uint32_t *out_end) {
-    if (!doc || !doc->content) return NULL;
+char *xlsp_word_at_position(XrLspDocument *doc, XrLspPosition pos, uint32_t *out_start,
+                            uint32_t *out_end) {
+    if (!doc || !doc->content)
+        return NULL;
 
     uint32_t offset = xlsp_position_to_offset(doc, pos);
-    if (offset >= doc->length) return NULL;
+    if (offset >= doc->length)
+        return NULL;
 
     const char *content = doc->content;
     uint32_t start = offset;
     uint32_t end = offset;
 
-    while (start > 0 && xlsp_is_ident_char(content[start - 1])) start--;
-    while (end < doc->length && xlsp_is_ident_char(content[end])) end++;
+    while (start > 0 && xlsp_is_ident_char(content[start - 1]))
+        start--;
+    while (end < doc->length && xlsp_is_ident_char(content[end]))
+        end++;
 
-    if (start == end) return NULL;
+    if (start == end)
+        return NULL;
 
     size_t word_len = end - start;
     char *word = xr_malloc(word_len + 1);
-    if (!word) return NULL;
+    if (!word)
+        return NULL;
     memcpy(word, content + start, word_len);
     word[word_len] = '\0';
 
-    if (out_start) *out_start = start;
-    if (out_end) *out_end = end;
+    if (out_start)
+        *out_start = start;
+    if (out_end)
+        *out_end = end;
     return word;
 }
 
 // Create a diagnostic JSON object
-static XrJsonValue *make_diagnostic(int start_line, int start_char,
-                                     int end_line, int end_char,
-                                     int severity, const char *message) {
+static XrJsonValue *make_diagnostic(int start_line, int start_char, int end_line, int end_char,
+                                    int severity, const char *message) {
     XrJsonValue *diag = xjson_new_object();
 
     xjson_object_set(diag, "range", xjson_make_range(start_line, start_char, end_line, end_char));
@@ -162,18 +171,14 @@ typedef struct {
 } LspErrorContext;
 
 // Error callback for parser
-static void lsp_error_callback(void *user_data, int line, int column,
-                                int end_line, int end_column,
-                                const char *message) {
-    LspErrorContext *ctx = (LspErrorContext *)user_data;
+static void lsp_error_callback(void *user_data, int line, int column, int end_line, int end_column,
+                               const char *message) {
+    LspErrorContext *ctx = (LspErrorContext *) user_data;
 
     // Create diagnostic (LSP uses 0-indexed lines)
-    XrJsonValue *diag = make_diagnostic(
-        line - 1, column,
-        end_line - 1, end_column,
-        1,  // Error severity
-        message
-    );
+    XrJsonValue *diag = make_diagnostic(line - 1, column, end_line - 1, end_column,
+                                        1,  // Error severity
+                                        message);
 
     xjson_array_push(ctx->diagnostics, diag);
 }
@@ -182,8 +187,10 @@ static void lsp_error_callback(void *user_data, int line, int column,
 
 // Parse and index imported files on demand
 static void index_imports_on_demand(XrLspServer *server, AstNode *ast, const char *base_uri) {
-    if (!server || !ast || !base_uri || !server->workspace_analyzer) return;
-    if (ast->type != AST_PROGRAM) return;
+    if (!server || !ast || !base_uri || !server->workspace_analyzer)
+        return;
+    if (ast->type != AST_PROGRAM)
+        return;
 
     // Extract base directory from URI
     char base_dir[XLSP_MAX_PATH];
@@ -192,18 +199,22 @@ static void index_imports_on_demand(XrLspServer *server, AstNode *ast, const cha
     strncpy(base_dir, uri_path, sizeof(base_dir) - 1);
     base_dir[sizeof(base_dir) - 1] = '\0';
     char *last_slash = strrchr(base_dir, '/');
-    if (last_slash) *last_slash = '\0';
+    if (last_slash)
+        *last_slash = '\0';
 
     // Scan for import statements
     for (int i = 0; i < ast->as.program.count; i++) {
         AstNode *stmt = ast->as.program.statements[i];
-        if (!stmt || stmt->type != AST_IMPORT_STMT) continue;
+        if (!stmt || stmt->type != AST_IMPORT_STMT)
+            continue;
 
         const char *import_path = stmt->as.import_stmt.module_name;
-        if (!import_path) continue;
+        if (!import_path)
+            continue;
 
         // Skip stdlib imports
-        if (import_path[0] != '.' && import_path[0] != '/') continue;
+        if (import_path[0] != '.' && import_path[0] != '/')
+            continue;
 
         // Resolve relative path
         char full_path[XLSP_MAX_PATH];
@@ -218,7 +229,8 @@ static void index_imports_on_demand(XrLspServer *server, AstNode *ast, const cha
             const char *rel = import_path;
             while (strncmp(rel, "../", 3) == 0) {
                 char *slash = strrchr(parent_dir, '/');
-                if (slash) *slash = '\0';
+                if (slash)
+                    *slash = '\0';
                 rel += 3;
             }
             snprintf(full_path, sizeof(full_path), "%s/%s", parent_dir, rel);
@@ -237,7 +249,7 @@ static void index_imports_on_demand(XrLspServer *server, AstNode *ast, const cha
             if (open_doc->dirty && open_doc->ast) {
                 lsp_log("import: %s is open and dirty, re-analyzing", full_path);
                 xa_analyzer_refresh_file(server->workspace_analyzer, import_uri,
-                                         (XrAstNode*)open_doc->ast, open_doc->content_hash);
+                                         (XrAstNode *) open_doc->ast, open_doc->content_hash);
                 open_doc->dirty = false;
             } else {
                 lsp_log("import: %s already open (symbols up to date)", full_path);
@@ -288,7 +300,7 @@ static void index_imports_on_demand(XrLspServer *server, AstNode *ast, const cha
 
         // Analyze even with parse errors to get partial symbols for completion
         if (import_ast) {
-            xa_analyzer_analyze(server->workspace_analyzer, import_uri, (XrAstNode*)import_ast);
+            xa_analyzer_analyze(server->workspace_analyzer, import_uri, (XrAstNode *) import_ast);
             lsp_log("import: indexed %s%s", full_path, parser.had_error ? " (with errors)" : "");
         } else {
             lsp_log("import: failed to parse %s", full_path);
@@ -302,7 +314,8 @@ static void index_imports_on_demand(XrLspServer *server, AstNode *ast, const cha
 }
 
 void xlsp_parse_document(XrLspDocument *doc, XrLspServer *server) {
-    if (!doc || !doc->content || !server) return;
+    if (!doc || !doc->content || !server)
+        return;
 
     // Short-circuit: if the document is not dirty and we already hold
     // a valid AST + cached diagnostics, there is nothing to do. This
@@ -356,7 +369,7 @@ void xlsp_parse_document(XrLspDocument *doc, XrLspServer *server) {
     xr_parser_init(&parser, isolate, doc->content, doc->uri, &doc->arena);
 
     // Set up error collection
-    LspErrorContext error_ctx = { .diagnostics = xjson_new_array() };
+    LspErrorContext error_ctx = {.diagnostics = xjson_new_array()};
     xr_parser_set_error_callback(&parser, lsp_error_callback, &error_ctx, 100);
 
     // Parse with error recovery - returns partial AST even on errors
@@ -377,47 +390,47 @@ void xlsp_parse_document(XrLspDocument *doc, XrLspServer *server) {
     // Run static analysis using workspace-level analyzer (incremental update)
     // Always try incremental update even with parse errors - we need symbols for completion
     if (ast && server->workspace_analyzer) {
-        lsp_log("parse_document: incremental update%s", doc->parse_error ? " (with parse errors)" : "");
+        lsp_log("parse_document: incremental update%s",
+                doc->parse_error ? " (with parse errors)" : "");
         // Use incremental update with content hash for true change detection
-        xa_analyzer_refresh_file(server->workspace_analyzer, doc->uri,
-                                 (XrAstNode*)ast, doc->content_hash);
+        xa_analyzer_refresh_file(server->workspace_analyzer, doc->uri, (XrAstNode *) ast,
+                                 doc->content_hash);
         lsp_log("parse_document: incremental update done");
 
         // Run coroutine sharing validation (emits E0363 diagnostics for
         // illegal `go` captures and `move` targets under the explicit
         // sharing model). The pass is pure diagnostic, no AST mutation.
-        xa_escape_analyze((AstNode*)ast, server->workspace_analyzer);
+        xa_escape_analyze((AstNode *) ast, server->workspace_analyzer);
 
         // Drain analyzer diagnostics into this file's diagnostic array.
         // The analyzer's list is cleared at the next update_incremental,
         // so we must capture them now.
         int a_count = 0;
-        XaDiagnostic *a_list = xa_analyzer_get_diagnostics(
-            server->workspace_analyzer, &a_count);
+        XaDiagnostic *a_list = xa_analyzer_get_diagnostics(server->workspace_analyzer, &a_count);
         for (XaDiagnostic *d = a_list; d; d = d->next) {
-            if (!d->message || d->code == 0) continue;
+            if (!d->message || d->code == 0)
+                continue;
             // Only include diagnostics for this file (analyzer is shared
             // across the workspace). Location.file may be NULL if the
             // analyzer did not tag it; in that case, assume current file.
-            if (d->location.file && doc->uri &&
-                strcmp(d->location.file, doc->uri) != 0) {
+            if (d->location.file && doc->uri && strcmp(d->location.file, doc->uri) != 0) {
                 continue;
             }
             int line = d->location.line > 0 ? d->location.line - 1 : 0;
             int col = d->location.column > 0 ? d->location.column - 1 : 0;
             // LSP severity: 1=Error, 2=Warning, 3=Info, 4=Hint
-            int sev = (d->severity == XR_DIAG_SEV_WARNING) ? 2 :
-                      (d->severity == XR_DIAG_SEV_INFO)    ? 3 :
-                      (d->severity == XR_DIAG_SEV_HINT)    ? 4 : 1;
-            XrJsonValue *diag = make_diagnostic(line, col, line, col + 1,
-                                                sev, d->message);
+            int sev = (d->severity == XR_DIAG_SEV_WARNING) ? 2
+                      : (d->severity == XR_DIAG_SEV_INFO)  ? 3
+                      : (d->severity == XR_DIAG_SEV_HINT)  ? 4
+                                                           : 1;
+            XrJsonValue *diag = make_diagnostic(line, col, line, col + 1, sev, d->message);
             xjson_array_push(error_ctx.diagnostics, diag);
         }
 
         // Check for cross-file dependencies that need re-analysis
         int dirty_count = 0;
-        const char **dirty_files = xa_analyzer_get_dirty_files(
-            server->workspace_analyzer, &dirty_count);
+        const char **dirty_files =
+            xa_analyzer_get_dirty_files(server->workspace_analyzer, &dirty_count);
         if (dirty_files && dirty_count > 0) {
             lsp_log("parse_document: %d dirty files", dirty_count);
             // Mark affected documents as needing re-analysis
@@ -443,7 +456,7 @@ XrJsonValue *xlsp_analyze_diagnostics(XrLspDocument *doc) {
     // Use cached diagnostics from parser if available
     // Return a clone so caller can safely free it
     if (doc->cached_diagnostics) {
-        return xjson_clone((XrJsonValue *)doc->cached_diagnostics);
+        return xjson_clone((XrJsonValue *) doc->cached_diagnostics);
     }
 
     // Fallback: simple lexical scan for obvious errors
@@ -460,55 +473,53 @@ XrJsonValue *xlsp_analyze_diagnostics(XrLspDocument *doc) {
     while (1) {
         token = xr_scanner_scan(&scanner);
 
-        if (token.type == TK_EOF) break;
+        if (token.type == TK_EOF)
+            break;
 
         if (token.type == TK_ERROR) {
             // Lexer error: diagnostic text is in error_message (L-03).
             const char *msg = token.error_message ? token.error_message : "lexical error";
-            XrJsonValue *diag = make_diagnostic(
-                token.line - 1, 0,
-                token.line - 1, 100,
-                1,  // Error
-                msg
-            );
+            XrJsonValue *diag = make_diagnostic(token.line - 1, 0, token.line - 1, 100,
+                                                1,  // Error
+                                                msg);
             xjson_array_push(diagnostics, diag);
             continue;
         }
 
         // Track balanced delimiters
         switch (token.type) {
-            case TK_LPAREN: paren_depth++; break;
+            case TK_LPAREN:
+                paren_depth++;
+                break;
             case TK_RPAREN:
                 paren_depth--;
                 if (paren_depth < 0) {
-                    XrJsonValue *diag = make_diagnostic(
-                        token.line - 1, 0, token.line - 1, 1,
-                        1, "Unmatched closing parenthesis"
-                    );
+                    XrJsonValue *diag = make_diagnostic(token.line - 1, 0, token.line - 1, 1, 1,
+                                                        "Unmatched closing parenthesis");
                     xjson_array_push(diagnostics, diag);
                     paren_depth = 0;
                 }
                 break;
-            case TK_LBRACE: brace_depth++; break;
+            case TK_LBRACE:
+                brace_depth++;
+                break;
             case TK_RBRACE:
                 brace_depth--;
                 if (brace_depth < 0) {
-                    XrJsonValue *diag = make_diagnostic(
-                        token.line - 1, 0, token.line - 1, 1,
-                        1, "Unmatched closing brace"
-                    );
+                    XrJsonValue *diag = make_diagnostic(token.line - 1, 0, token.line - 1, 1, 1,
+                                                        "Unmatched closing brace");
                     xjson_array_push(diagnostics, diag);
                     brace_depth = 0;
                 }
                 break;
-            case TK_LBRACKET: bracket_depth++; break;
+            case TK_LBRACKET:
+                bracket_depth++;
+                break;
             case TK_RBRACKET:
                 bracket_depth--;
                 if (bracket_depth < 0) {
-                    XrJsonValue *diag = make_diagnostic(
-                        token.line - 1, 0, token.line - 1, 1,
-                        1, "Unmatched closing bracket"
-                    );
+                    XrJsonValue *diag = make_diagnostic(token.line - 1, 0, token.line - 1, 1, 1,
+                                                        "Unmatched closing bracket");
                     xjson_array_push(diagnostics, diag);
                     bracket_depth = 0;
                 }
@@ -520,38 +531,33 @@ XrJsonValue *xlsp_analyze_diagnostics(XrLspDocument *doc) {
 
     // Check unclosed delimiters at end of file
     if (paren_depth > 0) {
-        XrJsonValue *diag = make_diagnostic(
-            doc->line_count - 1, 0, doc->line_count - 1, 0,
-            1, "Unclosed parenthesis"
-        );
+        XrJsonValue *diag = make_diagnostic(doc->line_count - 1, 0, doc->line_count - 1, 0, 1,
+                                            "Unclosed parenthesis");
         xjson_array_push(diagnostics, diag);
     }
     if (brace_depth > 0) {
-        XrJsonValue *diag = make_diagnostic(
-            doc->line_count - 1, 0, doc->line_count - 1, 0,
-            1, "Unclosed brace"
-        );
+        XrJsonValue *diag =
+            make_diagnostic(doc->line_count - 1, 0, doc->line_count - 1, 0, 1, "Unclosed brace");
         xjson_array_push(diagnostics, diag);
     }
     if (bracket_depth > 0) {
-        XrJsonValue *diag = make_diagnostic(
-            doc->line_count - 1, 0, doc->line_count - 1, 0,
-            1, "Unclosed bracket"
-        );
+        XrJsonValue *diag =
+            make_diagnostic(doc->line_count - 1, 0, doc->line_count - 1, 0, 1, "Unclosed bracket");
         xjson_array_push(diagnostics, diag);
     }
 
     return diagnostics;
 }
 
-
 XrJsonValue *xlsp_analyze_hover(XrLspServer *server, XrLspDocument *doc, XrLspPosition pos) {
-    if (!doc || !doc->content) return NULL;
+    if (!doc || !doc->content)
+        return NULL;
     XaAnalyzer *analyzer = server ? server->workspace_analyzer : NULL;
 
     uint32_t start, end;
     char *word = xlsp_word_at_position(doc, pos, &start, &end);
-    if (!word) return NULL;
+    if (!word)
+        return NULL;
 
     const char *content = doc->content;
 
@@ -568,9 +574,8 @@ XrJsonValue *xlsp_analyze_hover(XrLspServer *server, XrLspDocument *doc, XrLspPo
     if (!description) {
         const XlspModuleInfo *module = xlsp_stdlib_find_module(word);
         if (module) {
-            snprintf(hover_buf, sizeof(hover_buf),
-                "```xray\nimport %s\n```\n\n%s\n\nMembers: %d",
-                module->name, module->documentation, module->symbol_count);
+            snprintf(hover_buf, sizeof(hover_buf), "```xray\nimport %s\n```\n\n%s\n\nMembers: %d",
+                     module->name, module->documentation, module->symbol_count);
             description = hover_buf;
         }
     }
@@ -579,38 +584,32 @@ XrJsonValue *xlsp_analyze_hover(XrLspServer *server, XrLspDocument *doc, XrLspPo
     // Prefer position-aware lookup to resolve shadowed names correctly,
     // then fall back to global name lookup.
     if (!description && analyzer) {
-        XaSymbol *sym = xa_analyzer_lookup_at(analyzer, doc->uri,
-                                              pos.line + 1, pos.character + 1);
-        if (!sym) sym = xa_analyzer_lookup(analyzer, word);
+        XaSymbol *sym = xa_analyzer_lookup_at(analyzer, doc->uri, pos.line + 1, pos.character + 1);
+        if (!sym)
+            sym = xa_analyzer_lookup(analyzer, word);
         if (sym) {
             XrType *type = xa_analyzer_get_type(analyzer, sym);
             const char *type_str = type ? xr_type_to_string(type) : "unknown";
 
             if (sym->kind == XA_SYM_FUNCTION || sym->kind == XA_SYM_METHOD) {
-                snprintf(hover_buf, sizeof(hover_buf),
-                    "```xray\nfn %s(...): %s\n```\n\n%s",
-                    sym->name, type_str,
-                    sym->is_exported ? "(exported function)" : "(function)");
+                snprintf(hover_buf, sizeof(hover_buf), "```xray\nfn %s(...): %s\n```\n\n%s",
+                         sym->name, type_str,
+                         sym->is_exported ? "(exported function)" : "(function)");
             } else if (sym->kind == XA_SYM_CLASS) {
                 snprintf(hover_buf, sizeof(hover_buf),
-                    "```xray\nclass %s\n```\n\n(class definition)",
-                    sym->name);
+                         "```xray\nclass %s\n```\n\n(class definition)", sym->name);
             } else if (sym->kind == XA_SYM_TYPE_ALIAS) {
-                XrType *alias_type = (XrType *)sym->alias_type;
+                XrType *alias_type = (XrType *) sym->alias_type;
                 const char *alias_str = alias_type ? xr_type_to_string(alias_type) : "unknown";
-                snprintf(hover_buf, sizeof(hover_buf),
-                    "```xray\ntype %s = %s\n```\n\n(type alias)",
-                    sym->name, alias_str);
+                snprintf(hover_buf, sizeof(hover_buf), "```xray\ntype %s = %s\n```\n\n(type alias)",
+                         sym->name, alias_str);
             } else if (sym->kind == XA_SYM_ENUM) {
-                snprintf(hover_buf, sizeof(hover_buf),
-                    "```xray\nenum %s\n```\n\n(enum definition)",
-                    sym->name);
+                snprintf(hover_buf, sizeof(hover_buf), "```xray\nenum %s\n```\n\n(enum definition)",
+                         sym->name);
             } else {
-                snprintf(hover_buf, sizeof(hover_buf),
-                    "```xray\n%s %s: %s\n```\n\n%s",
-                    sym->is_const ? "const" : "let",
-                    sym->name, type_str,
-                    sym->kind == XA_SYM_PARAMETER ? "(parameter)" : "(local variable)");
+                snprintf(hover_buf, sizeof(hover_buf), "```xray\n%s %s: %s\n```\n\n%s",
+                         sym->is_const ? "const" : "let", sym->name, type_str,
+                         sym->kind == XA_SYM_PARAMETER ? "(parameter)" : "(local variable)");
             }
             description = hover_buf;
         }
@@ -621,17 +620,19 @@ XrJsonValue *xlsp_analyze_hover(XrLspServer *server, XrLspDocument *doc, XrLspPo
         // Find module name before dot
         uint32_t mod_end = start - 1;
         uint32_t mod_start = mod_end;
-        while (mod_start > 0 && (content[mod_start - 1] == '_' ||
-               (content[mod_start - 1] >= 'a' && content[mod_start - 1] <= 'z') ||
-               (content[mod_start - 1] >= 'A' && content[mod_start - 1] <= 'Z') ||
-               (content[mod_start - 1] >= '0' && content[mod_start - 1] <= '9'))) {
+        while (mod_start > 0 &&
+               (content[mod_start - 1] == '_' ||
+                (content[mod_start - 1] >= 'a' && content[mod_start - 1] <= 'z') ||
+                (content[mod_start - 1] >= 'A' && content[mod_start - 1] <= 'Z') ||
+                (content[mod_start - 1] >= '0' && content[mod_start - 1] <= '9'))) {
             mod_start--;
         }
 
         if (mod_start < mod_end) {
             size_t mod_len = mod_end - mod_start;
             char *mod_name = xr_malloc(mod_len + 1);
-            if (!mod_name) goto cleanup_word;  // Skip module resolution on alloc failure
+            if (!mod_name)
+                goto cleanup_word;  // Skip module resolution on alloc failure
 
             memcpy(mod_name, content + mod_start, mod_len);
             mod_name[mod_len] = '\0';
@@ -641,19 +642,17 @@ XrJsonValue *xlsp_analyze_hover(XrLspServer *server, XrLspDocument *doc, XrLspPo
             if (module) {
                 const XlspSymbolInfo *sym = xlsp_stdlib_find_symbol(module, word);
                 if (sym) {
-                    snprintf(hover_buf, sizeof(hover_buf),
-                        "```xray\n%s.%s\n%s\n```\n\n%s",
-                        mod_name, sym->name,
-                        sym->signature ? sym->signature : "",
-                        sym->documentation ? sym->documentation : "");
+                    snprintf(hover_buf, sizeof(hover_buf), "```xray\n%s.%s\n%s\n```\n\n%s",
+                             mod_name, sym->name, sym->signature ? sym->signature : "",
+                             sym->documentation ? sym->documentation : "");
                     description = hover_buf;
                 }
             }
 
             // Try local import
             if (!description) {
-                const char *import_hover = xlsp_get_import_hover(doc, mod_name, word,
-                                                                  hover_buf, sizeof(hover_buf));
+                const char *import_hover =
+                    xlsp_get_import_hover(doc, mod_name, word, hover_buf, sizeof(hover_buf));
                 if (import_hover) {
                     description = import_hover;
                 }
@@ -663,8 +662,8 @@ XrJsonValue *xlsp_analyze_hover(XrLspServer *server, XrLspDocument *doc, XrLspPo
             if (!description) {
                 XlspBuiltinType bt = xlsp_builtin_type_from_name(mod_name);
                 if (bt != XLSP_TYPE_UNKNOWN) {
-                    const char *builtin_hover = xlsp_builtin_get_hover(
-                        bt, word, hover_buf, sizeof(hover_buf));
+                    const char *builtin_hover =
+                        xlsp_builtin_get_hover(bt, word, hover_buf, sizeof(hover_buf));
                     if (builtin_hover) {
                         description = builtin_hover;
                     }
@@ -675,8 +674,8 @@ XrJsonValue *xlsp_analyze_hover(XrLspServer *server, XrLspDocument *doc, XrLspPo
             if (!description) {
                 XlspBuiltinType var_type = xlsp_infer_variable_type(server, doc, mod_name);
                 if (var_type != XLSP_TYPE_UNKNOWN) {
-                    const char *var_hover = xlsp_builtin_get_hover(
-                        var_type, word, hover_buf, sizeof(hover_buf));
+                    const char *var_hover =
+                        xlsp_builtin_get_hover(var_type, word, hover_buf, sizeof(hover_buf));
                     if (var_hover) {
                         description = var_hover;
                     }
@@ -690,7 +689,8 @@ XrJsonValue *xlsp_analyze_hover(XrLspServer *server, XrLspDocument *doc, XrLspPo
 cleanup_word:
     xr_free(word);
 
-    if (!description) return NULL;
+    if (!description)
+        return NULL;
 
     // Build hover response
     XrJsonValue *hover = xjson_new_object();
@@ -703,8 +703,8 @@ cleanup_word:
     XrLspPosition range_start = xlsp_offset_to_position(doc, start);
     XrLspPosition range_end = xlsp_offset_to_position(doc, end);
     xjson_object_set(hover, "range",
-        xjson_make_range(range_start.line, range_start.character,
-                             range_end.line, range_end.character));
+                     xjson_make_range(range_start.line, range_start.character, range_end.line,
+                                      range_end.character));
 
     return hover;
 }
@@ -733,12 +733,11 @@ void xlsp_symbol_table_free(SymbolTable *table) {
     table->capacity = 0;
 }
 
-static void symbol_table_add(SymbolTable *table, const char *name, int kind,
-                             int line, int start_char, int end_line, int end_char) {
+static void symbol_table_add(SymbolTable *table, const char *name, int kind, int line,
+                             int start_char, int end_line, int end_char) {
     if (table->count >= table->capacity) {
         int new_cap = table->capacity == 0 ? 16 : table->capacity * 2;
-        XR_REALLOC_OR_ABORT(table->entries,
-                            (size_t)new_cap * sizeof(SymbolEntry),
+        XR_REALLOC_OR_ABORT(table->entries, (size_t) new_cap * sizeof(SymbolEntry),
                             "lsp symbol_table grow");
         table->capacity = new_cap;
     }
@@ -753,90 +752,76 @@ static void symbol_table_add(SymbolTable *table, const char *name, int kind,
 
 // Visitor callback for symbol extraction
 static void symbol_extract_visitor(AstNode *node, void *ctx) {
-    SymbolTable *table = (SymbolTable *)ctx;
+    SymbolTable *table = (SymbolTable *) ctx;
 
     switch (node->type) {
         case AST_FUNCTION_DECL:
             if (node->as.function_decl.name) {
-                symbol_table_add(table, node->as.function_decl.name,
-                               LSP_SYMBOL_FUNCTION,
-                               node->line - 1, 0, node->line - 1,
-                               (int)strlen(node->as.function_decl.name));
+                symbol_table_add(table, node->as.function_decl.name, LSP_SYMBOL_FUNCTION,
+                                 node->line - 1, 0, node->line - 1,
+                                 (int) strlen(node->as.function_decl.name));
             }
             break;
 
         case AST_VAR_DECL:
             if (node->as.var_decl.name) {
-                int kind = node->as.var_decl.is_const ?
-                          LSP_SYMBOL_CONSTANT : LSP_SYMBOL_VARIABLE;
-                symbol_table_add(table, node->as.var_decl.name, kind,
-                               node->line - 1, 0, node->line - 1,
-                               (int)strlen(node->as.var_decl.name));
+                int kind = node->as.var_decl.is_const ? LSP_SYMBOL_CONSTANT : LSP_SYMBOL_VARIABLE;
+                symbol_table_add(table, node->as.var_decl.name, kind, node->line - 1, 0,
+                                 node->line - 1, (int) strlen(node->as.var_decl.name));
             }
             break;
 
         case AST_CONST_DECL:
             if (node->as.var_decl.name) {
-                symbol_table_add(table, node->as.var_decl.name,
-                               LSP_SYMBOL_CONSTANT,
-                               node->line - 1, 0, node->line - 1,
-                               (int)strlen(node->as.var_decl.name));
+                symbol_table_add(table, node->as.var_decl.name, LSP_SYMBOL_CONSTANT, node->line - 1,
+                                 0, node->line - 1, (int) strlen(node->as.var_decl.name));
             }
             break;
 
         case AST_CLASS_DECL:
         case AST_STRUCT_DECL:
             if (node->as.class_decl.name) {
-                symbol_table_add(table, node->as.class_decl.name,
-                               LSP_SYMBOL_CLASS,
-                               node->line - 1, 0, node->line - 1,
-                               (int)strlen(node->as.class_decl.name));
+                symbol_table_add(table, node->as.class_decl.name, LSP_SYMBOL_CLASS, node->line - 1,
+                                 0, node->line - 1, (int) strlen(node->as.class_decl.name));
             }
             break;
 
         case AST_METHOD_DECL:
             if (node->as.method_decl.name) {
-                int kind = node->as.method_decl.is_constructor ?
-                          LSP_SYMBOL_CONSTRUCTOR : LSP_SYMBOL_METHOD;
-                symbol_table_add(table, node->as.method_decl.name, kind,
-                               node->line - 1, 0, node->line - 1,
-                               (int)strlen(node->as.method_decl.name));
+                int kind = node->as.method_decl.is_constructor ? LSP_SYMBOL_CONSTRUCTOR
+                                                               : LSP_SYMBOL_METHOD;
+                symbol_table_add(table, node->as.method_decl.name, kind, node->line - 1, 0,
+                                 node->line - 1, (int) strlen(node->as.method_decl.name));
             }
             break;
 
         case AST_FIELD_DECL:
             if (node->as.field_decl.name) {
-                symbol_table_add(table, node->as.field_decl.name,
-                               LSP_SYMBOL_FIELD,
-                               node->line - 1, 0, node->line - 1,
-                               (int)strlen(node->as.field_decl.name));
+                symbol_table_add(table, node->as.field_decl.name, LSP_SYMBOL_FIELD, node->line - 1,
+                                 0, node->line - 1, (int) strlen(node->as.field_decl.name));
             }
             break;
 
         case AST_INTERFACE_DECL:
             if (node->as.interface_decl.name) {
-                symbol_table_add(table, node->as.interface_decl.name,
-                               LSP_SYMBOL_INTERFACE,
-                               node->line - 1, 0, node->line - 1,
-                               (int)strlen(node->as.interface_decl.name));
+                symbol_table_add(table, node->as.interface_decl.name, LSP_SYMBOL_INTERFACE,
+                                 node->line - 1, 0, node->line - 1,
+                                 (int) strlen(node->as.interface_decl.name));
             }
             break;
 
         case AST_ENUM_DECL:
             if (node->as.enum_decl.name) {
-                symbol_table_add(table, node->as.enum_decl.name,
-                               LSP_SYMBOL_ENUM,
-                               node->line - 1, 0, node->line - 1,
-                               (int)strlen(node->as.enum_decl.name));
+                symbol_table_add(table, node->as.enum_decl.name, LSP_SYMBOL_ENUM, node->line - 1, 0,
+                                 node->line - 1, (int) strlen(node->as.enum_decl.name));
             }
             break;
 
         case AST_ENUM_MEMBER:
             if (node->as.enum_member.name) {
-                symbol_table_add(table, node->as.enum_member.name,
-                               LSP_SYMBOL_ENUM_MEMBER,
-                               node->line - 1, 0, node->line - 1,
-                               (int)strlen(node->as.enum_member.name));
+                symbol_table_add(table, node->as.enum_member.name, LSP_SYMBOL_ENUM_MEMBER,
+                                 node->line - 1, 0, node->line - 1,
+                                 (int) strlen(node->as.enum_member.name));
             }
             break;
 
@@ -847,7 +832,8 @@ static void symbol_extract_visitor(AstNode *node, void *ctx) {
 
 // Extract symbols from AST using visitor framework
 static void extract_symbols_from_ast(AstNode *node, SymbolTable *table) {
-    if (!node) return;
+    if (!node)
+        return;
     xa_ast_walk(node, symbol_extract_visitor, NULL, table);
 }
 
@@ -861,43 +847,45 @@ static void extract_symbols_lexer(XrLspDocument *doc, SymbolTable *table) {
 
     while (1) {
         token = xr_scanner_scan(&scanner);
-        if (token.type == TK_EOF) break;
-        if (token.type == TK_ERROR) continue;
+        if (token.type == TK_EOF)
+            break;
+        if (token.type == TK_ERROR)
+            continue;
 
         // fn <name>
         if (prev.type == TK_FN && token.type == TK_NAME) {
             char *name = strndup(token.start, token.length);
-            symbol_table_add(table, name, LSP_SYMBOL_FUNCTION,
-                            token.line - 1, 0, token.line - 1, (int)strlen(name));
+            symbol_table_add(table, name, LSP_SYMBOL_FUNCTION, token.line - 1, 0, token.line - 1,
+                             (int) strlen(name));
             xr_free(name);
         }
         // class <name>
         else if (prev.type == TK_CLASS && token.type == TK_NAME) {
             char *name = strndup(token.start, token.length);
-            symbol_table_add(table, name, LSP_SYMBOL_CLASS,
-                            token.line - 1, 0, token.line - 1, (int)strlen(name));
+            symbol_table_add(table, name, LSP_SYMBOL_CLASS, token.line - 1, 0, token.line - 1,
+                             (int) strlen(name));
             xr_free(name);
         }
         // interface <name>
         else if (prev.type == TK_INTERFACE && token.type == TK_NAME) {
             char *name = strndup(token.start, token.length);
-            symbol_table_add(table, name, LSP_SYMBOL_INTERFACE,
-                            token.line - 1, 0, token.line - 1, (int)strlen(name));
+            symbol_table_add(table, name, LSP_SYMBOL_INTERFACE, token.line - 1, 0, token.line - 1,
+                             (int) strlen(name));
             xr_free(name);
         }
         // enum <name>
         else if (prev.type == TK_ENUM && token.type == TK_NAME) {
             char *name = strndup(token.start, token.length);
-            symbol_table_add(table, name, LSP_SYMBOL_ENUM,
-                            token.line - 1, 0, token.line - 1, (int)strlen(name));
+            symbol_table_add(table, name, LSP_SYMBOL_ENUM, token.line - 1, 0, token.line - 1,
+                             (int) strlen(name));
             xr_free(name);
         }
         // let <name> or const <name>
         else if ((prev.type == TK_LET || prev.type == TK_CONST) && token.type == TK_NAME) {
             char *name = strndup(token.start, token.length);
             int kind = (prev.type == TK_CONST) ? LSP_SYMBOL_CONSTANT : LSP_SYMBOL_VARIABLE;
-            symbol_table_add(table, name, kind,
-                            token.line - 1, 0, token.line - 1, (int)strlen(name));
+            symbol_table_add(table, name, kind, token.line - 1, 0, token.line - 1,
+                             (int) strlen(name));
             xr_free(name);
         }
 
@@ -920,20 +908,19 @@ void xlsp_extract_symbols(XrLspDocument *doc, SymbolTable *table) {
 // LSP spec and validated by VS Code. Both ranges come directly from AST
 // location fields (line, column, end_line, end_column) so there is no guessing
 // or clamping here: the AST is the single source of truth.
-static XrJsonValue *create_doc_symbol(const char *name, int kind,
-                                       XrLspRange full_range,
-                                       XrLspRange selection_range) {
+static XrJsonValue *create_doc_symbol(const char *name, int kind, XrLspRange full_range,
+                                      XrLspRange selection_range) {
     XR_DCHECK(name != NULL, "create_doc_symbol: NULL name");
 
     XrJsonValue *symbol = xjson_new_object();
     xjson_object_set(symbol, "name", xjson_new_string(name));
     xjson_object_set(symbol, "kind", xjson_new_number(kind));
     xjson_object_set(symbol, "range",
-        xjson_make_range(full_range.start.line, full_range.start.character,
-                             full_range.end.line,   full_range.end.character));
+                     xjson_make_range(full_range.start.line, full_range.start.character,
+                                      full_range.end.line, full_range.end.character));
     xjson_object_set(symbol, "selectionRange",
-        xjson_make_range(selection_range.start.line, selection_range.start.character,
-                             selection_range.end.line,   selection_range.end.character));
+                     xjson_make_range(selection_range.start.line, selection_range.start.character,
+                                      selection_range.end.line, selection_range.end.character));
     return symbol;
 }
 
@@ -949,34 +936,31 @@ static XrJsonValue *create_doc_symbol(const char *name, int kind,
 // Preconditions (checked by parser): node->line >= 1, node->column >= 1,
 // node->end_line >= node->line, and when end_line == line:
 // end_column >= column + strlen(name).
-static void ast_decl_ranges(const AstNode *node, const char *name,
-                            XrLspRange *full_range,
+static void ast_decl_ranges(const AstNode *node, const char *name, XrLspRange *full_range,
                             XrLspRange *selection_range) {
     XR_DCHECK(node != NULL && name != NULL, "ast_decl_ranges: NULL arg");
     XR_DCHECK(node->line >= 1 && node->column >= 1,
               "ast_decl_ranges: node missing identifier location");
-    XR_DCHECK(node->end_line >= node->line,
-              "ast_decl_ranges: end_line precedes start line");
+    XR_DCHECK(node->end_line >= node->line, "ast_decl_ranges: end_line precedes start line");
 
     int start_line = node->line - 1;
-    int start_col  = node->column - 1;
-    int name_len   = (int)strlen(name);
+    int start_col = node->column - 1;
+    int name_len = (int) strlen(name);
 
-    selection_range->start.line      = start_line;
+    selection_range->start.line = start_line;
     selection_range->start.character = start_col;
-    selection_range->end.line        = start_line;
-    selection_range->end.character   = start_col + name_len;
+    selection_range->end.line = start_line;
+    selection_range->end.character = start_col + name_len;
 
-    full_range->start.line      = start_line;
+    full_range->start.line = start_line;
     full_range->start.character = start_col;
-    full_range->end.line        = node->end_line - 1;
-    full_range->end.character   = (node->end_column > 0) ? node->end_column - 1 : 0;
+    full_range->end.line = node->end_line - 1;
+    full_range->end.character = (node->end_column > 0) ? node->end_column - 1 : 0;
 
-    XR_DCHECK(
-        full_range->end.line > full_range->start.line ||
-        (full_range->end.line == full_range->start.line &&
-         full_range->end.character >= selection_range->end.character),
-        "ast_decl_ranges: selectionRange not contained in fullRange");
+    XR_DCHECK(full_range->end.line > full_range->start.line ||
+                  (full_range->end.line == full_range->start.line &&
+                   full_range->end.character >= selection_range->end.character),
+              "ast_decl_ranges: selectionRange not contained in fullRange");
 }
 
 // Emit a DocumentSymbol for a declaring node. Returns NULL if the node has
@@ -999,7 +983,8 @@ static XrJsonValue *emit_decl_symbol(const AstNode *node, const char *name, int 
 // `AstNode`. This function is therefore pure projection: no heuristics, no
 // range guessing.
 static void build_nested_symbols(AstNode *node, XrJsonValue *symbols) {
-    if (!node) return;
+    if (!node)
+        return;
 
     switch (node->type) {
         case AST_PROGRAM:
@@ -1009,52 +994,55 @@ static void build_nested_symbols(AstNode *node, XrJsonValue *symbols) {
             break;
 
         case AST_FUNCTION_DECL: {
-            XrJsonValue *sym = emit_decl_symbol(node,
-                node->as.function_decl.name, LSP_SYMBOL_FUNCTION);
-            if (sym) xjson_array_push(symbols, sym);
+            XrJsonValue *sym =
+                emit_decl_symbol(node, node->as.function_decl.name, LSP_SYMBOL_FUNCTION);
+            if (sym)
+                xjson_array_push(symbols, sym);
             break;
         }
 
         case AST_VAR_DECL: {
-            int kind = node->as.var_decl.is_const
-                     ? LSP_SYMBOL_CONSTANT : LSP_SYMBOL_VARIABLE;
+            int kind = node->as.var_decl.is_const ? LSP_SYMBOL_CONSTANT : LSP_SYMBOL_VARIABLE;
             XrJsonValue *sym = emit_decl_symbol(node, node->as.var_decl.name, kind);
-            if (sym) xjson_array_push(symbols, sym);
+            if (sym)
+                xjson_array_push(symbols, sym);
             break;
         }
 
         case AST_CONST_DECL: {
-            XrJsonValue *sym = emit_decl_symbol(node,
-                node->as.var_decl.name, LSP_SYMBOL_CONSTANT);
-            if (sym) xjson_array_push(symbols, sym);
+            XrJsonValue *sym = emit_decl_symbol(node, node->as.var_decl.name, LSP_SYMBOL_CONSTANT);
+            if (sym)
+                xjson_array_push(symbols, sym);
             break;
         }
 
         case AST_CLASS_DECL:
         case AST_STRUCT_DECL: {
-            XrJsonValue *sym = emit_decl_symbol(node,
-                node->as.class_decl.name, LSP_SYMBOL_CLASS);
-            if (!sym) break;
+            XrJsonValue *sym = emit_decl_symbol(node, node->as.class_decl.name, LSP_SYMBOL_CLASS);
+            if (!sym)
+                break;
 
             XrJsonValue *children = xjson_new_array();
 
             for (int i = 0; i < node->as.class_decl.field_count; i++) {
                 AstNode *field = node->as.class_decl.fields[i];
                 if (field && field->type == AST_FIELD_DECL) {
-                    XrJsonValue *child = emit_decl_symbol(field,
-                        field->as.field_decl.name, LSP_SYMBOL_FIELD);
-                    if (child) xjson_array_push(children, child);
+                    XrJsonValue *child =
+                        emit_decl_symbol(field, field->as.field_decl.name, LSP_SYMBOL_FIELD);
+                    if (child)
+                        xjson_array_push(children, child);
                 }
             }
 
             for (int i = 0; i < node->as.class_decl.method_count; i++) {
                 AstNode *method = node->as.class_decl.methods[i];
                 if (method && method->type == AST_METHOD_DECL) {
-                    int kind = method->as.method_decl.is_constructor
-                             ? LSP_SYMBOL_CONSTRUCTOR : LSP_SYMBOL_METHOD;
-                    XrJsonValue *child = emit_decl_symbol(method,
-                        method->as.method_decl.name, kind);
-                    if (child) xjson_array_push(children, child);
+                    int kind = method->as.method_decl.is_constructor ? LSP_SYMBOL_CONSTRUCTOR
+                                                                     : LSP_SYMBOL_METHOD;
+                    XrJsonValue *child =
+                        emit_decl_symbol(method, method->as.method_decl.name, kind);
+                    if (child)
+                        xjson_array_push(children, child);
                 }
             }
 
@@ -1068,25 +1056,27 @@ static void build_nested_symbols(AstNode *node, XrJsonValue *symbols) {
         }
 
         case AST_INTERFACE_DECL: {
-            XrJsonValue *sym = emit_decl_symbol(node,
-                node->as.interface_decl.name, LSP_SYMBOL_INTERFACE);
-            if (sym) xjson_array_push(symbols, sym);
+            XrJsonValue *sym =
+                emit_decl_symbol(node, node->as.interface_decl.name, LSP_SYMBOL_INTERFACE);
+            if (sym)
+                xjson_array_push(symbols, sym);
             break;
         }
 
         case AST_ENUM_DECL: {
-            XrJsonValue *sym = emit_decl_symbol(node,
-                node->as.enum_decl.name, LSP_SYMBOL_ENUM);
-            if (!sym) break;
+            XrJsonValue *sym = emit_decl_symbol(node, node->as.enum_decl.name, LSP_SYMBOL_ENUM);
+            if (!sym)
+                break;
 
             if (node->as.enum_decl.members) {
                 XrJsonValue *children = xjson_new_array();
                 for (int i = 0; i < node->as.enum_decl.member_count; i++) {
                     AstNode *member = node->as.enum_decl.members[i];
                     if (member && member->type == AST_ENUM_MEMBER) {
-                        XrJsonValue *child = emit_decl_symbol(member,
-                            member->as.enum_member.name, LSP_SYMBOL_ENUM_MEMBER);
-                        if (child) xjson_array_push(children, child);
+                        XrJsonValue *child = emit_decl_symbol(member, member->as.enum_member.name,
+                                                              LSP_SYMBOL_ENUM_MEMBER);
+                        if (child)
+                            xjson_array_push(children, child);
                     }
                 }
                 if (xjson_array_len(children) > 0) {
@@ -1132,31 +1122,29 @@ XrJsonValue *xlsp_analyze_document_symbols(XrLspDocument *doc) {
 
     for (int i = 0; i < table.count; i++) {
         SymbolEntry *entry = &table.entries[i];
-        int name_len = (int)strlen(entry->name);
+        int name_len = (int) strlen(entry->name);
 
         XrLspRange selection_range = {
-            .start = { entry->line, entry->start_char },
-            .end   = { entry->line, entry->start_char + name_len },
+            .start = {entry->line, entry->start_char},
+            .end = {entry->line, entry->start_char + name_len},
         };
         // Ensure fullRange covers the identifier (lexer path may return an
         // end column before the identifier's end when the symbol is followed
         // by no initializer; clamp locally to keep the invariant).
         int full_end_line = entry->end_line;
-        int full_end_col  = entry->end_char;
+        int full_end_col = entry->end_char;
         if (full_end_line < entry->line) {
             full_end_line = entry->line;
-            full_end_col  = entry->start_char + name_len;
-        } else if (full_end_line == entry->line &&
-                   full_end_col < entry->start_char + name_len) {
+            full_end_col = entry->start_char + name_len;
+        } else if (full_end_line == entry->line && full_end_col < entry->start_char + name_len) {
             full_end_col = entry->start_char + name_len;
         }
         XrLspRange full_range = {
-            .start = { entry->line, entry->start_char },
-            .end   = { full_end_line, full_end_col },
+            .start = {entry->line, entry->start_char},
+            .end = {full_end_line, full_end_col},
         };
 
-        XrJsonValue *sym = create_doc_symbol(entry->name, entry->kind,
-                                             full_range, selection_range);
+        XrJsonValue *sym = create_doc_symbol(entry->name, entry->kind, full_range, selection_range);
         xjson_array_push(symbols, sym);
     }
 
@@ -1197,28 +1185,28 @@ static const char *assert_ne_params[] = {"actual", "unexpected"};
 static const char *assert_ne_param_docs[] = {"Actual value", "Unexpected value"};
 
 static const FunctionSignature builtin_signatures[] = {
-    {"print", "print(value, ...)", "Prints values to stdout",
-     print_params, print_param_docs, 2},
-    {"typeof", "typeof(value): string", "Returns type name of value",
-     typeof_params, typeof_param_docs, 1},
-    {"assert", "assert(condition, message?)", "Asserts condition is true",
-     assert_params, assert_param_docs, 2},
-    {"assert_true", "assert_true(value)", "Asserts value is truthy",
-     assert_one_params, assert_one_param_docs, 1},
-    {"assert_false", "assert_false(value)", "Asserts value is falsy",
-     assert_one_params, assert_one_param_docs, 1},
-    {"assert_eq", "assert_eq(actual, expected)", "Asserts values are equal",
-     assert_eq_params, assert_eq_param_docs, 2},
-    {"assert_ne", "assert_ne(actual, unexpected)", "Asserts values are not equal",
-     assert_ne_params, assert_ne_param_docs, 2},
-    {NULL, NULL, NULL, NULL, NULL, 0}
-};
+    {"print", "print(value, ...)", "Prints values to stdout", print_params, print_param_docs, 2},
+    {"typeof", "typeof(value): string", "Returns type name of value", typeof_params,
+     typeof_param_docs, 1},
+    {"assert", "assert(condition, message?)", "Asserts condition is true", assert_params,
+     assert_param_docs, 2},
+    {"assert_true", "assert_true(value)", "Asserts value is truthy", assert_one_params,
+     assert_one_param_docs, 1},
+    {"assert_false", "assert_false(value)", "Asserts value is falsy", assert_one_params,
+     assert_one_param_docs, 1},
+    {"assert_eq", "assert_eq(actual, expected)", "Asserts values are equal", assert_eq_params,
+     assert_eq_param_docs, 2},
+    {"assert_ne", "assert_ne(actual, unexpected)", "Asserts values are not equal", assert_ne_params,
+     assert_ne_param_docs, 2},
+    {NULL, NULL, NULL, NULL, NULL, 0}};
 
 XrJsonValue *xlsp_analyze_signature_help(XrLspDocument *doc, XrLspPosition pos) {
-    if (!doc || !doc->content) return NULL;
+    if (!doc || !doc->content)
+        return NULL;
 
     uint32_t offset = xlsp_position_to_offset(doc, pos);
-    if (offset == 0 || offset > doc->length) return NULL;
+    if (offset == 0 || offset > doc->length)
+        return NULL;
 
     // Look backwards for function name and opening paren
     const char *content = doc->content;
@@ -1248,23 +1236,26 @@ XrJsonValue *xlsp_analyze_signature_help(XrLspDocument *doc, XrLspPosition pos) 
         }
     }
 
-    if (!found_paren || func_end == 0) return NULL;
+    if (!found_paren || func_end == 0)
+        return NULL;
 
     // Find function name
     func_start = func_end;
     while (func_start > 0 && (content[func_start - 1] == '_' ||
-           (content[func_start - 1] >= 'a' && content[func_start - 1] <= 'z') ||
-           (content[func_start - 1] >= 'A' && content[func_start - 1] <= 'Z') ||
-           (content[func_start - 1] >= '0' && content[func_start - 1] <= '9'))) {
+                              (content[func_start - 1] >= 'a' && content[func_start - 1] <= 'z') ||
+                              (content[func_start - 1] >= 'A' && content[func_start - 1] <= 'Z') ||
+                              (content[func_start - 1] >= '0' && content[func_start - 1] <= '9'))) {
         func_start--;
     }
 
-    if (func_start == func_end) return NULL;
+    if (func_start == func_end)
+        return NULL;
 
     // Extract function name
     size_t name_len = func_end - func_start;
     char *func_name = xr_malloc(name_len + 1);
-    if (!func_name) return NULL;
+    if (!func_name)
+        return NULL;
 
     memcpy(func_name, content + func_start, name_len);
     func_name[name_len] = '\0';
@@ -1323,12 +1314,15 @@ XrJsonValue *xlsp_analyze_signature_help(XrLspDocument *doc, XrLspPosition pos) 
 
         if (links && links->param_count > 0) {
             for (int p = 0; p < links->param_count; p++) {
-                if (p > 0) sig_len += snprintf(sig_label + sig_len, sizeof(sig_label) - sig_len, ", ");
-                const char *pname = (links->param_names && links->param_names[p])
-                    ? links->param_names[p] : "_";
+                if (p > 0)
+                    sig_len += snprintf(sig_label + sig_len, sizeof(sig_label) - sig_len, ", ");
+                const char *pname =
+                    (links->param_names && links->param_names[p]) ? links->param_names[p] : "_";
                 const char *ptype = (links->param_types && links->param_types[p])
-                    ? xr_type_to_string(links->param_types[p]) : "unknown";
-                sig_len += snprintf(sig_label + sig_len, sizeof(sig_label) - sig_len, "%s: %s", pname, ptype);
+                                        ? xr_type_to_string(links->param_types[p])
+                                        : "unknown";
+                sig_len += snprintf(sig_label + sig_len, sizeof(sig_label) - sig_len, "%s: %s",
+                                    pname, ptype);
 
                 // Add parameter info
                 XrJsonValue *param = xjson_new_object();
@@ -1340,8 +1334,8 @@ XrJsonValue *xlsp_analyze_signature_help(XrLspDocument *doc, XrLspPosition pos) 
             param_count = links->param_count;
         }
 
-        const char *ret_type = (links && links->return_type)
-            ? xr_type_to_string(links->return_type) : "unknown";
+        const char *ret_type =
+            (links && links->return_type) ? xr_type_to_string(links->return_type) : "unknown";
         snprintf(sig_label + sig_len, sizeof(sig_label) - sig_len, "): %s", ret_type);
 
         xjson_object_set(sig_info, "label", xjson_new_string(sig_label));
@@ -1358,5 +1352,3 @@ XrJsonValue *xlsp_analyze_signature_help(XrLspDocument *doc, XrLspPosition pos) 
 
     return result;
 }
-
-

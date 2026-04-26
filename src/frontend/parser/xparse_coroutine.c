@@ -33,7 +33,7 @@ static AstNode *parse_go_body(Parser *parser, uint8_t link_mode) {
     XR_DCHECK(parser != NULL, "parse_go_body: NULL parser");
     int line = parser->previous.line;  // go keyword already consumed
     char *name = NULL;                 // Coroutine name (optional, owned heap)
-    AstNode *priority = NULL;          // Priority expression (optional, Coro.LOW/NORMAL/HIGH or number)
+    AstNode *priority = NULL;  // Priority expression (optional, Coro.LOW/NORMAL/HIGH or number)
 
     // Check if has option parameters go(name: "xxx") or go(priority: Coro.HIGH)
     if (xr_parser_check(parser, TK_LPAREN)) {
@@ -71,7 +71,7 @@ static AstNode *parse_go_body(Parser *parser, uint8_t link_mode) {
                 // simply overwrite the pointer (old buffers are bulk-released
                 // with the arena).
                 int str_len = str_token.length - 2;  // Remove quotes
-                char *str_copy = (char *)ast_alloc(parser->X, (size_t)str_len + 1);
+                char *str_copy = (char *) ast_alloc(parser->X, (size_t) str_len + 1);
                 memcpy(str_copy, str_token.start + 1, str_len);
                 str_copy[str_len] = '\0';
                 name = str_copy;
@@ -88,11 +88,11 @@ static AstNode *parse_go_body(Parser *parser, uint8_t link_mode) {
                 // Parse priority expression (support Coro.LOW/NORMAL/HIGH or number)
                 priority = xr_parse_precedence(parser, PREC_UNARY);
                 if (!priority) {
-                    xr_parser_error(parser, "expected priority expression (Coro.LOW/NORMAL/HIGH or number)");
+                    xr_parser_error(
+                        parser, "expected priority expression (Coro.LOW/NORMAL/HIGH or number)");
                     goto fail;
                 }
-            }
-            else {
+            } else {
                 xr_parser_error(parser, "go(...) only supports name: and priority: options");
                 goto fail;
             }
@@ -323,7 +323,7 @@ AstNode *xr_parse_select_statement(Parser *parser) {
     AstNode **cases = NULL;
     int case_count = 0;
     int case_capacity = 8;
-    cases = (AstNode **)ast_alloc_array(parser->X, sizeof(AstNode *), (size_t)case_capacity);
+    cases = (AstNode **) ast_alloc_array(parser->X, sizeof(AstNode *), (size_t) case_capacity);
 
     while (!xr_parser_check(parser, TK_RBRACE) && !xr_parser_check(parser, TK_EOF)) {
         AstNode *case_node = NULL;
@@ -345,7 +345,8 @@ AstNode *xr_parse_select_statement(Parser *parser) {
             } else {
                 body = xr_parse_expression(parser);
             }
-            case_node = xr_ast_select_case(parser->X, NULL, NULL, NULL, body, false, true, false, case_line);
+            case_node = xr_ast_select_case(parser->X, NULL, NULL, NULL, body, false, true, false,
+                                           case_line);
         } else {
             // Parse expression, then check if from or to
             // var from ch => ... (recv) or val to ch => ... (send)
@@ -387,7 +388,8 @@ AstNode *xr_parse_select_statement(Parser *parser) {
                 } else {
                     body = xr_parse_expression(parser);
                 }
-                case_node = xr_ast_select_case(parser->X, var_name, channel, NULL, body, false, false, false, case_line);
+                case_node = xr_ast_select_case(parser->X, var_name, channel, NULL, body, false,
+                                               false, false, case_line);
 
             } else if (xr_parser_check_name(parser, "to")) {
                 // send case: val to ch => ...
@@ -416,13 +418,15 @@ AstNode *xr_parse_select_statement(Parser *parser) {
                 } else {
                     body = xr_parse_expression(parser);
                 }
-                case_node = xr_ast_select_case(parser->X, NULL, channel, value, body, true, false, false, case_line);
+                case_node = xr_ast_select_case(parser->X, NULL, channel, value, body, true, false,
+                                               false, case_line);
 
             } else if (xr_parser_check(parser, TK_ARROW)) {
                 // Check if after case: after ms => ...
                 if (first_expr->type == AST_VARIABLE &&
                     strcmp(first_expr->as.variable.name, "after") == 0) {
-                    xr_parser_error(parser, "after requires timeout expression, format: after 1000 => ...");
+                    xr_parser_error(parser,
+                                    "after requires timeout expression, format: after 1000 => ...");
                     return NULL;
                 }
                 // Possibly after ms => ... form, first_expr is number
@@ -454,7 +458,8 @@ AstNode *xr_parse_select_statement(Parser *parser) {
                     body = xr_parse_expression(parser);
                 }
                 // is_timeout = true, value = timeout_expr
-                case_node = xr_ast_select_case(parser->X, NULL, NULL, timeout_expr, body, false, false, true, case_line);
+                case_node = xr_ast_select_case(parser->X, NULL, NULL, timeout_expr, body, false,
+                                               false, true, case_line);
 
             } else {
                 xr_parser_error(parser, "expected 'from', 'to' or 'after' in select case");
@@ -501,7 +506,7 @@ static AstNode *parse_scope_body(Parser *parser, uint8_t scope_mode) {
 
     AstNode *node = xr_ast_scope_block(parser->X, body, scope_mode, line);
     if (body) {
-        node->end_line   = body->end_line;
+        node->end_line = body->end_line;
         node->end_column = body->end_column;
     }
     return node;

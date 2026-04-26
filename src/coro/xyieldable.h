@@ -59,17 +59,17 @@ typedef enum {
 //
 // Passed to continuation function to indicate why it was resumed
 typedef enum XrResumeStatus {
-    XR_RESUME_OK = 0,        // Normal resume
-    XR_RESUME_IO_READY,      // I/O ready
-    XR_RESUME_TIMEOUT,       // Timeout
-    XR_RESUME_CANCELLED,     // Cancelled
-    XR_RESUME_CHANNEL,       // Channel operation complete (value ready)
-    XR_RESUME_CHANNEL_CLOSED,// Channel closed (need to recheck buffer)
-    XR_RESUME_ERROR,         // Error
-    XR_RESUME_DEBUG,         // Debug break resume (skip unroll)
-    XR_RESUME_CONTINUATION,  // Continuation stealing resume (vm_ctx already set, skip unroll)
-    XR_RESUME_CLOSURE_DONE,  // Closure called via xr_yield_call_closure returned normally
-    XR_RESUME_CLOSURE_ERROR  // Closure called via xr_yield_call_closure threw exception
+    XR_RESUME_OK = 0,          // Normal resume
+    XR_RESUME_IO_READY,        // I/O ready
+    XR_RESUME_TIMEOUT,         // Timeout
+    XR_RESUME_CANCELLED,       // Cancelled
+    XR_RESUME_CHANNEL,         // Channel operation complete (value ready)
+    XR_RESUME_CHANNEL_CLOSED,  // Channel closed (need to recheck buffer)
+    XR_RESUME_ERROR,           // Error
+    XR_RESUME_DEBUG,           // Debug break resume (skip unroll)
+    XR_RESUME_CONTINUATION,    // Continuation stealing resume (vm_ctx already set, skip unroll)
+    XR_RESUME_CLOSURE_DONE,    // Closure called via xr_yield_call_closure returned normally
+    XR_RESUME_CLOSURE_ERROR    // Closure called via xr_yield_call_closure threw exception
 } XrResumeStatus;
 
 // ========== Continuation Function Type ==========
@@ -91,8 +91,8 @@ typedef enum XrResumeStatus {
 // Design note:
 //   Added result parameter for clearer return value passing, unroll mechanism handles storage.
 //   Continuation only needs to focus on business logic, no manual frame manipulation.
-typedef XrCFuncResult (*XrContinuation)(struct XrayIsolate *X, int status, 
-                                         void *ctx, XrValue *result);
+typedef XrCFuncResult (*XrContinuation)(struct XrayIsolate *X, int status, void *ctx,
+                                        XrValue *result);
 
 // ========== Blocking Context ==========
 
@@ -101,34 +101,34 @@ typedef XrCFuncResult (*XrContinuation)(struct XrayIsolate *X, int status,
 // Saves C function state when blocked, used for resume execution.
 typedef struct XrYieldContext {
     // User data
-    void *user_data;            // User state data pointer
-    size_t user_data_size;      // User data size (for memory management)
-    bool user_data_owned;       // Whether memory is managed by coroutine
-    
+    void *user_data;        // User state data pointer
+    size_t user_data_size;  // User data size (for memory management)
+    bool user_data_owned;   // Whether memory is managed by coroutine
+
     // Continuation function
-    XrContinuation cont;        // Continuation function
-    
+    XrContinuation cont;  // Continuation function
+
     // I/O wait conditions
-    int wait_fd;                // fd to wait on (-1 means none)
-    int wait_events;            // POLLIN/POLLOUT
-    
+    int wait_fd;      // fd to wait on (-1 means none)
+    int wait_events;  // POLLIN/POLLOUT
+
     // Timeout
-    int64_t timeout_ms;         // Timeout (milliseconds, -1 means forever)
-    int64_t deadline;           // Absolute deadline (microseconds)
-    
+    int64_t timeout_ms;  // Timeout (milliseconds, -1 means forever)
+    int64_t deadline;    // Absolute deadline (microseconds)
+
     // Result
-    int result_events;          // Actually triggered events
-    bool timed_out;             // Whether timed out
-    
+    int result_events;  // Actually triggered events
+    bool timed_out;     // Whether timed out
+
     // Linked list (for nested blocking)
     struct XrYieldContext *next;
 } XrYieldContext;
 
 // ========== Wait Event Constants ==========
 
-#define XR_WAIT_READ    POLLIN      // Wait for readable
-#define XR_WAIT_WRITE   POLLOUT     // Wait for writable
-#define XR_WAIT_BOTH    (POLLIN | POLLOUT)  // Wait for both
+#define XR_WAIT_READ POLLIN              // Wait for readable
+#define XR_WAIT_WRITE POLLOUT            // Wait for writable
+#define XR_WAIT_BOTH (POLLIN | POLLOUT)  // Wait for both
 
 // ========== API Function Declarations ==========
 
@@ -149,8 +149,7 @@ typedef struct XrYieldContext {
 //
 // Returns: XR_CFUNC_BLOCKED
 XR_FUNC XrCFuncResult xr_yield_for_io(struct XrayIsolate *X, int fd, int events, int64_t timeout_ms,
-                               XrContinuation cont, void *user_data,
-                               XrValue *result);
+                                      XrContinuation cont, void *user_data, XrValue *result);
 
 // xr_yield_for_timeout - Wait for timeout and yield (convenience function)
 //
@@ -164,8 +163,7 @@ XR_FUNC XrCFuncResult xr_yield_for_io(struct XrayIsolate *X, int fd, int events,
 //
 // Returns: XR_CFUNC_BLOCKED
 XR_FUNC XrCFuncResult xr_yield_for_timeout(struct XrayIsolate *X, int64_t timeout_ms,
-                                    XrContinuation cont, void *user_data,
-                                    XrValue *result);
+                                           XrContinuation cont, void *user_data, XrValue *result);
 
 // xr_yield - Voluntarily yield (no wait condition)
 //
@@ -225,11 +223,11 @@ typedef XrCFuncResult (*XrStateFunc)(struct XrayIsolate *X, void *state);
 // First field of all state machine state structs must be this structure.
 // This allows accessing state machine control info via pointer cast.
 typedef struct XrStateMachine {
-    int current_state;          // Current state index
-    int state_count;            // Total state count
-    XrStateFunc *states;        // State function array
-    bool done;                  // Whether state machine is complete
-    int error_code;             // Error code (0 means no error)
+    int current_state;    // Current state index
+    int state_count;      // Total state count
+    XrStateFunc *states;  // State function array
+    bool done;            // Whether state machine is complete
+    int error_code;       // Error code (0 means no error)
 } XrStateMachine;
 
 // xr_sm_init - Initialize state machine
@@ -288,40 +286,40 @@ static inline void xr_sm_error(XrStateMachine *sm, int error_code) {
 // Returns:
 //   Final execution result
 static inline XrCFuncResult xr_sm_run(struct XrayIsolate *X, void *state) {
-    XrStateMachine *sm = (XrStateMachine *)state;
-    
+    XrStateMachine *sm = (XrStateMachine *) state;
+
     while (!sm->done && sm->current_state < sm->state_count) {
         XrStateFunc func = sm->states[sm->current_state];
         if (!func) {
             sm->error_code = -1;
             return XR_CFUNC_ERROR;
         }
-        
+
         XrCFuncResult result = func(X, state);
-        
+
         switch (result) {
             case XR_CFUNC_DONE:
                 sm->done = true;
                 return XR_CFUNC_DONE;
-                
+
             case XR_CFUNC_BLOCKED:
                 // Keep current state, wait for wake
                 return XR_CFUNC_BLOCKED;
-                
+
             case XR_CFUNC_YIELD:
                 // Continue to next state (loop)
                 break;
-                
+
             case XR_CFUNC_CALL_CLOSURE:
                 // State function called xr_yield_call_closure
                 return XR_CFUNC_CALL_CLOSURE;
-                
+
             case XR_CFUNC_ERROR:
                 sm->done = true;
                 return XR_CFUNC_ERROR;
         }
     }
-    
+
     return sm->error_code ? XR_CFUNC_ERROR : XR_CFUNC_DONE;
 }
 
@@ -329,10 +327,11 @@ static inline XrCFuncResult xr_sm_run(struct XrayIsolate *X, void *state) {
 //
 // Generic continuation function, for resuming state machine execution from blocked state.
 // Can be passed directly to xr_yield_for_io etc.
-static inline XrCFuncResult xr_sm_continuation(struct XrayIsolate *X, int status, void *state, XrValue *result) {
+static inline XrCFuncResult xr_sm_continuation(struct XrayIsolate *X, int status, void *state,
+                                               XrValue *result) {
     // State machine can get status via xr_get_resume_status
-    (void)status;  // Ignore status for now, state machine gets from X
-    (void)result;  // State machine doesn't use return value
+    (void) status;  // Ignore status for now, state machine gets from X
+    (void) result;  // State machine doesn't use return value
     return xr_sm_run(X, state);
 }
 
@@ -346,29 +345,28 @@ static inline XrCFuncResult xr_sm_continuation(struct XrayIsolate *X, int status
 //       state_process,
 //       state_cleanup
 //   );
-#define XR_SM_DEFINE_STATES(name, ...) \
-    static XrStateFunc name##_states[] = { __VA_ARGS__ }; \
+#define XR_SM_DEFINE_STATES(name, ...)                                                             \
+    static XrStateFunc name##_states[] = {__VA_ARGS__};                                            \
     static const int name##_state_count = sizeof(name##_states) / sizeof(XrStateFunc)
 
 // XR_SM_INIT - Initialize state machine (using macro-defined state array)
 //
 // Usage:
 //   XR_SM_INIT(&state->sm, http_listener);
-#define XR_SM_INIT(sm, name) \
-    xr_sm_init(sm, name##_states, name##_state_count)
+#define XR_SM_INIT(sm, name) xr_sm_init(sm, name##_states, name##_state_count)
 
 // XR_SM_YIELD_FOR_IO - Block waiting for I/O in state machine
 //
 // Usage:
 //   return XR_SM_YIELD_FOR_IO(X, fd, XR_WAIT_READ, state);
-#define XR_SM_YIELD_FOR_IO(X, fd, events, state, result) \
+#define XR_SM_YIELD_FOR_IO(X, fd, events, state, result)                                           \
     xr_yield_for_io(X, fd, events, -1, xr_sm_continuation, state, result)
 
 // XR_SM_YIELD_FOR_TIMEOUT - Block waiting for timeout in state machine
 //
 // Usage:
 //   return XR_SM_YIELD_FOR_TIMEOUT(X, 1000, state);
-#define XR_SM_YIELD_FOR_TIMEOUT(X, timeout_ms, state, result) \
+#define XR_SM_YIELD_FOR_TIMEOUT(X, timeout_ms, state, result)                                      \
     xr_yield_for_timeout(X, timeout_ms, xr_sm_continuation, state, result)
 
 // ========== Closure Call from C Layer ==========
@@ -381,13 +379,9 @@ static inline XrCFuncResult xr_sm_continuation(struct XrayIsolate *X, int status
 //
 // Must be called from a yieldable C function or continuation.
 // Always returns XR_CFUNC_CALL_CLOSURE.
-XR_FUNC XrCFuncResult xr_yield_call_closure(
-    struct XrayIsolate *X,
-    struct XrClosure *closure,
-    XrValue *args, int nargs,
-    XrContinuation on_complete,
-    void *user_ctx,
-    XrValue *result);
+XR_FUNC XrCFuncResult xr_yield_call_closure(struct XrayIsolate *X, struct XrClosure *closure,
+                                            XrValue *args, int nargs, XrContinuation on_complete,
+                                            void *user_ctx, XrValue *result);
 
 // xr_get_closure_result - Retrieve closure return value inside on_complete
 //
@@ -395,4 +389,4 @@ XR_FUNC XrCFuncResult xr_yield_call_closure(
 // by the closure that was called via xr_yield_call_closure.
 XR_FUNC XrValue xr_get_closure_result(struct XrayIsolate *X);
 
-#endif // XYIELDABLE_H
+#endif  // XYIELDABLE_H

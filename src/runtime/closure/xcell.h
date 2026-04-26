@@ -32,11 +32,11 @@
  *   Total = 32 bytes
  */
 typedef struct XrCell {
-    XrGCHeader gc;       // GC header, type = XR_TCELL
-    XrValue value;       // captured variable value
+    XrGCHeader gc;  // GC header, type = XR_TCELL
+    XrValue value;  // captured variable value
 } XrCell;
 
-#define XR_CELL_SIZE  (sizeof(XrCell))
+#define XR_CELL_SIZE (sizeof(XrCell))
 
 _Static_assert(sizeof(XrCell) == 32, "XrCell must be 32 bytes");
 
@@ -44,7 +44,6 @@ struct XrCoroutine;
 struct XrayIsolate;
 
 // Allocate a new Cell on the coroutine Immix heap.
-XR_FUNC XrCell *xr_cell_new(struct XrayIsolate *isolate,
-                            struct XrCoroutine *coro);
+XR_FUNC XrCell *xr_cell_new(struct XrayIsolate *isolate, struct XrCoroutine *coro);
 
-#endif // XCELL_H
+#endif  // XCELL_H

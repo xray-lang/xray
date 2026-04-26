@@ -18,8 +18,8 @@
 #include "io.h"
 #include "../../src/base/xhash.h"
 #include "../../src/coro/xnetpoll.h"
-#include "../../src/coro/xworker.h"       // For XrRuntime
-#include "../../src/vm/xvm_internal.h"    // For XrayIsolate->vm.runtime
+#include "../../src/coro/xworker.h"     // For XrRuntime
+#include "../../src/vm/xvm_internal.h"  // For XrayIsolate->vm.runtime
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -47,14 +47,14 @@ extern int xr_socket_write(struct XrayIsolate *X, int fd, const char *buf, size_
 static uint64_t now_ms(void) {
     struct timespec ts;
     clock_gettime(CLOCK_MONOTONIC, &ts);
-    return (uint64_t)ts.tv_sec * 1000 + (uint64_t)ts.tv_nsec / 1000000;
+    return (uint64_t) ts.tv_sec * 1000 + (uint64_t) ts.tv_nsec / 1000000;
 }
 
 /* ========== Helper Functions ========== */
 
 // Generate host key: "host:port:https"
-static void make_host_key(char *key, size_t key_len,
-                          const char *host, uint16_t port, bool is_https) {
+static void make_host_key(char *key, size_t key_len, const char *host, uint16_t port,
+                          bool is_https) {
     snprintf(key, key_len, "%s:%d:%d", host, port, is_https ? 1 : 0);
 }
 
@@ -68,20 +68,23 @@ static uint32_t hash_string(const char *str) {
 // the worker can service other coroutines until the socket is writable.
 // Returns 0 on success, -1 on failure (socket closed by caller on error).
 static int coro_tcp_connect(int fd, const struct sockaddr *sa, socklen_t sa_len,
-                             struct XrayIsolate *X) {
+                            struct XrayIsolate *X) {
     int ret = connect(fd, sa, sa_len);
-    if (ret == 0) return 0;
-    if (errno != EINPROGRESS && errno != EWOULDBLOCK) return -1;
+    if (ret == 0)
+        return 0;
+    if (errno != EINPROGRESS && errno != EWOULDBLOCK)
+        return -1;
 
     // Caller expected us to be on a coroutine but we have no runtime: fall
     // back to a blocking poll loop on SO_ERROR. This keeps the pool usable
     // from non-VM contexts (tests, CLI tools) without crashing.
-    XrRuntime *runtime = X ? (XrRuntime *)X->vm.runtime : NULL;
+    XrRuntime *runtime = X ? (XrRuntime *) X->vm.runtime : NULL;
     if (!runtime) {
         // 30 s upper bound so a black-holed peer can't hang the
         // caller forever in non-VM contexts (CLI, unit tests).
-        struct pollfd pfd = { .fd = fd, .events = POLLOUT };
-        if (poll(&pfd, 1, 30000) <= 0) return -1;
+        struct pollfd pfd = {.fd = fd, .events = POLLOUT};
+        if (poll(&pfd, 1, 30000) <= 0)
+            return -1;
         int soerr = 0;
         socklen_t sl = sizeof(soerr);
         if (getsockopt(fd, SOL_SOCKET, SO_ERROR, &soerr, &sl) < 0 || soerr != 0) {
@@ -91,13 +94,15 @@ static int coro_tcp_connect(int fd, const struct sockaddr *sa, socklen_t sa_len,
     }
 
     XrPollDesc *pd = xr_netpoll_open(&runtime->netpoll, fd);
-    if (!pd) return -1;
+    if (!pd)
+        return -1;
 
     // xr_netpoll_block sleeps the current coroutine until the fd is
     // writable (connect completion) or the pd is closed. On spurious
     // wake it returns true but the SO_ERROR check below catches any real
     // failure, so a single check after resume is sufficient.
-    if (!xr_netpoll_block(pd, XR_POLL_WRITE, X)) return -1;
+    if (!xr_netpoll_block(pd, XR_POLL_WRITE, X))
+        return -1;
 
     int soerr = 0;
     socklen_t sl = sizeof(soerr);
@@ -110,12 +115,13 @@ static int coro_tcp_connect(int fd, const struct sockaddr *sa, socklen_t sa_len,
 // Create new connection with DNS resolution and optional TLS. Made fd
 // non-blocking from creation so all subsequent pooled_conn_read/write calls
 // can go through xr_socket_read/write and yield the coroutine cleanly.
-static XrPooledConn* create_connection(XrConnPool *pool, const char *host, uint16_t port, bool is_https) {
+static XrPooledConn *create_connection(XrConnPool *pool, const char *host, uint16_t port,
+                                       bool is_https) {
 #ifndef XR_ENABLE_TLS
     // When TLS is compiled out the pool handle is only needed for the
     // tls_ctx lookup below; silence -Wunused-parameter without touching
     // the prototype (which is shared with TLS-enabled builds).
-    (void)pool;
+    (void) pool;
 #endif
     // Resolve all addresses (dual-stack, IPv6/IPv4 interleaved) and try
     // them in order, bailing out on first success. This is a coarse
@@ -128,13 +134,15 @@ static XrPooledConn* create_connection(XrConnPool *pool, const char *host, uint1
     // an async DNS path is not yet implemented.
     XrSockAddr addrs[XR_DNS_MAX_ADDRS];
     int n = xr_dns_resolve_all(host, addrs, XR_DNS_MAX_ADDRS, XR_AF_UNSPEC);
-    if (n <= 0) return NULL;
+    if (n <= 0)
+        return NULL;
 
     struct XrayIsolate *X = xr_io_get_isolate();
     int fd = -1;
     for (int i = 0; i < n; i++) {
         int try_fd = socket(addrs[i].family, SOCK_STREAM, 0);
-        if (try_fd < 0) continue;
+        if (try_fd < 0)
+            continue;
         xr_io_set_nonblocking(try_fd);
         int flag = 1;
         setsockopt(try_fd, IPPROTO_TCP, TCP_NODELAY, &flag, sizeof(flag));
@@ -143,11 +151,11 @@ static XrPooledConn* create_connection(XrConnPool *pool, const char *host, uint1
         socklen_t sa_len;
         if (addrs[i].family == AF_INET) {
             addrs[i].addr.v4.sin_port = htons(port);
-            sa = (struct sockaddr*)&addrs[i].addr.v4;
+            sa = (struct sockaddr *) &addrs[i].addr.v4;
             sa_len = sizeof(struct sockaddr_in);
         } else {
             addrs[i].addr.v6.sin6_port = htons(port);
-            sa = (struct sockaddr*)&addrs[i].addr.v6;
+            sa = (struct sockaddr *) &addrs[i].addr.v6;
             sa_len = sizeof(struct sockaddr_in6);
         }
 
@@ -158,7 +166,7 @@ static XrPooledConn* create_connection(XrConnPool *pool, const char *host, uint1
         // Failed: close this fd (also releases its netpoll pd since
         // coro_tcp_connect registered one) and try the next address.
         if (X && X->vm.runtime) {
-            XrRuntime *runtime = (XrRuntime *)X->vm.runtime;
+            XrRuntime *runtime = (XrRuntime *) X->vm.runtime;
             XrPollDesc *pd = xr_fdmap_get(&runtime->netpoll, try_fd);
             if (pd && !atomic_load(&pd->closing)) {
                 xr_netpoll_close(&runtime->netpoll, pd);
@@ -166,10 +174,11 @@ static XrPooledConn* create_connection(XrConnPool *pool, const char *host, uint1
         }
         close(try_fd);
     }
-    if (fd < 0) return NULL;
+    if (fd < 0)
+        return NULL;
 
     // Create pooled connection
-    XrPooledConn *conn = (XrPooledConn*)xr_calloc(1, sizeof(XrPooledConn));
+    XrPooledConn *conn = (XrPooledConn *) xr_calloc(1, sizeof(XrPooledConn));
     if (!conn) {
         close(fd);
         return NULL;
@@ -209,13 +218,17 @@ static XrPooledConn* create_connection(XrConnPool *pool, const char *host, uint1
                 bool hs_ok = false;
                 for (;;) {
                     int hs = xr_tls_conn_handshake_try(conn->tls_conn);
-                    if (hs == 0) { hs_ok = true; break; }  // Success
-                    if (hs < 0) { break; }                  // Fatal error
+                    if (hs == 0) {
+                        hs_ok = true;
+                        break;
+                    }  // Success
+                    if (hs < 0) {
+                        break;
+                    }  // Fatal error
 
                     // hs == 1 → WANT_READ, hs == 2 → WANT_WRITE
-                    XrPollMode mode = (hs == 1) ? XR_POLL_READ
-                                                : XR_POLL_WRITE;
-                    XrRuntime *rt = X ? (XrRuntime *)X->vm.runtime : NULL;
+                    XrPollMode mode = (hs == 1) ? XR_POLL_READ : XR_POLL_WRITE;
+                    XrRuntime *rt = X ? (XrRuntime *) X->vm.runtime : NULL;
                     if (rt) {
                         XrPollDesc *pd = xr_netpoll_open(&rt->netpoll, fd);
                         if (!pd || !xr_netpoll_block(pd, mode, X)) {
@@ -225,10 +238,10 @@ static XrPooledConn* create_connection(XrConnPool *pool, const char *host, uint1
                         // Non-VM fallback: bounded poll so we don't spin
                         struct pollfd pfd = {
                             .fd = fd,
-                            .events = (short)((mode == XR_POLL_READ)
-                                              ? POLLIN : POLLOUT)
-                        };
-                        if (poll(&pfd, 1, 30000) <= 0) { break; }
+                            .events = (short) ((mode == XR_POLL_READ) ? POLLIN : POLLOUT)};
+                        if (poll(&pfd, 1, 30000) <= 0) {
+                            break;
+                        }
                     }
                 }
 
@@ -249,7 +262,8 @@ static XrPooledConn* create_connection(XrConnPool *pool, const char *host, uint1
 // runtime's netpoll (if the fd ever went through coro_tcp_connect or
 // xr_socket_read/write) so that no stale pollDesc survives the close.
 static void close_connection(XrPooledConn *conn) {
-    if (!conn) return;
+    if (!conn)
+        return;
 
 #ifdef XR_ENABLE_TLS
     if (conn->tls_conn) {
@@ -264,7 +278,7 @@ static void close_connection(XrPooledConn *conn) {
         // pollDesc keyed on a reused fd. xr_fdmap_get is O(1) and
         // returns NULL if the fd was never registered.
         struct XrayIsolate *X = xr_io_get_isolate();
-        XrRuntime *runtime = X ? (XrRuntime *)X->vm.runtime : NULL;
+        XrRuntime *runtime = X ? (XrRuntime *) X->vm.runtime : NULL;
         if (runtime) {
             XrPollDesc *pd = xr_fdmap_get(&runtime->netpoll, conn->fd);
             if (pd && !atomic_load(&pd->closing)) {
@@ -280,27 +294,30 @@ static void close_connection(XrPooledConn *conn) {
 
 /* ========== Connection Pool API ========== */
 
-XrConnPool* xr_conn_pool_new(void) {
-    XrConnPool *pool = (XrConnPool*)xr_calloc(1, sizeof(XrConnPool));
-    if (!pool) return NULL;
+XrConnPool *xr_conn_pool_new(void) {
+    XrConnPool *pool = (XrConnPool *) xr_calloc(1, sizeof(XrConnPool));
+    if (!pool)
+        return NULL;
 
     pthread_mutex_init(&pool->lock, NULL);
     pool->initialized = true;
-    pool->idle_timeout_ms = (uint64_t)XR_POOL_MAX_IDLE_TIME * 1000;
+    pool->idle_timeout_ms = (uint64_t) XR_POOL_MAX_IDLE_TIME * 1000;
     return pool;
 }
 
 void xr_conn_pool_init(XrConnPool *pool) {
-    if (!pool || pool->initialized) return;
+    if (!pool || pool->initialized)
+        return;
 
     memset(pool, 0, sizeof(XrConnPool));
     pthread_mutex_init(&pool->lock, NULL);
     pool->initialized = true;
-    pool->idle_timeout_ms = (uint64_t)XR_POOL_MAX_IDLE_TIME * 1000;
+    pool->idle_timeout_ms = (uint64_t) XR_POOL_MAX_IDLE_TIME * 1000;
 }
 
 void xr_conn_pool_destroy(XrConnPool *pool) {
-    if (!pool || !pool->initialized) return;
+    if (!pool || !pool->initialized)
+        return;
 
     pthread_mutex_lock(&pool->lock);
 
@@ -338,11 +355,9 @@ void xr_conn_pool_destroy(XrConnPool *pool) {
     pthread_mutex_destroy(&pool->lock);
 }
 
-XrPooledConn* xr_conn_pool_get(XrConnPool *pool,
-                                const char *host,
-                                uint16_t port,
-                                bool is_https) {
-    if (!pool || !pool->initialized || !host) return NULL;
+XrPooledConn *xr_conn_pool_get(XrConnPool *pool, const char *host, uint16_t port, bool is_https) {
+    if (!pool || !pool->initialized || !host)
+        return NULL;
 
     char key[XR_POOL_HOST_KEY_LEN];
     make_host_key(key, sizeof(key), host, port, is_https);
@@ -398,13 +413,10 @@ XrPooledConn* xr_conn_pool_get(XrConnPool *pool,
     return result;
 }
 
-void xr_conn_pool_put(XrConnPool *pool,
-                       XrPooledConn *conn,
-                       const char *host,
-                       uint16_t port,
-                       bool is_https,
-                       bool keep_alive) {
-    if (!pool || !pool->initialized || !conn) return;
+void xr_conn_pool_put(XrConnPool *pool, XrPooledConn *conn, const char *host, uint16_t port,
+                      bool is_https, bool keep_alive) {
+    if (!pool || !pool->initialized || !conn)
+        return;
 
     // Not keeping alive, close directly
     if (!keep_alive) {
@@ -427,7 +439,7 @@ void xr_conn_pool_put(XrConnPool *pool,
 
     if (!hp) {
         // Create new host pool
-        hp = (XrHostPool*)xr_calloc(1, sizeof(XrHostPool));
+        hp = (XrHostPool *) xr_calloc(1, sizeof(XrHostPool));
         if (!hp) {
             pthread_mutex_unlock(&pool->lock);
             close_connection(conn);
@@ -465,14 +477,16 @@ void xr_conn_pool_put(XrConnPool *pool,
 }
 
 void xr_conn_pool_close(XrConnPool *pool, XrPooledConn *conn) {
-    (void)pool;
-    if (!conn) return;
+    (void) pool;
+    if (!conn)
+        return;
     close_connection(conn);
     xr_free(conn);
 }
 
 int xr_conn_pool_evict_idle(XrConnPool *pool) {
-    if (!pool || !pool->initialized) return 0;
+    if (!pool || !pool->initialized)
+        return 0;
 
     uint64_t now = now_ms();
     int evicted = 0;
@@ -512,8 +526,10 @@ void xr_conn_pool_cleanup(XrConnPool *pool) {
 
 void xr_conn_pool_stats(XrConnPool *pool, int *total, int *idle) {
     if (!pool || !pool->initialized) {
-        if (total) *total = 0;
-        if (idle) *idle = 0;
+        if (total)
+            *total = 0;
+        if (idle)
+            *idle = 0;
         return;
     }
 
@@ -529,8 +545,10 @@ void xr_conn_pool_stats(XrConnPool *pool, int *total, int *idle) {
         }
     }
 
-    if (total) *total = t;
-    if (idle) *idle = i;
+    if (total)
+        *total = t;
+    if (idle)
+        *idle = i;
 
     pthread_mutex_unlock(&pool->lock);
 }
@@ -538,7 +556,8 @@ void xr_conn_pool_stats(XrConnPool *pool, int *total, int *idle) {
 /* ========== Connection Read/Write Helpers ========== */
 
 int xr_pooled_conn_read(XrPooledConn *conn, void *buf, size_t len) {
-    if (!conn || conn->fd < 0 || !buf || len == 0) return -1;
+    if (!conn || conn->fd < 0 || !buf || len == 0)
+        return -1;
 
 #ifdef XR_ENABLE_TLS
     // TLS read path already yields via xr_socket_read internally.
@@ -555,13 +574,14 @@ int xr_pooled_conn_read(XrPooledConn *conn, void *buf, size_t len) {
     // instead of hanging a non-VM thread forever.
     struct XrayIsolate *X = xr_io_get_isolate();
     if (X) {
-        return xr_socket_read(X, conn->fd, (char *)buf, len);
+        return xr_socket_read(X, conn->fd, (char *) buf, len);
     }
-    return (int)recv(conn->fd, buf, len, 0);
+    return (int) recv(conn->fd, buf, len, 0);
 }
 
 int xr_pooled_conn_write(XrPooledConn *conn, const void *buf, size_t len) {
-    if (!conn || conn->fd < 0 || !buf || len == 0) return -1;
+    if (!conn || conn->fd < 0 || !buf || len == 0)
+        return -1;
 
 #ifdef XR_ENABLE_TLS
     // TLS write path already yields via xr_socket_write internally.
@@ -575,7 +595,7 @@ int xr_pooled_conn_write(XrPooledConn *conn, const void *buf, size_t len) {
     // sufficient (no outer "keep writing" loop needed in http_client).
     struct XrayIsolate *X = xr_io_get_isolate();
     if (X) {
-        return xr_socket_write(X, conn->fd, (const char *)buf, len);
+        return xr_socket_write(X, conn->fd, (const char *) buf, len);
     }
-    return (int)send(conn->fd, buf, len, 0);
+    return (int) send(conn->fd, buf, len, 0);
 }

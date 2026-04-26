@@ -27,11 +27,11 @@
 
 /* ========== Instance Operations ========== */
 
-XrInstance* xr_instance_new(XrayIsolate *X, XrClass *cls) {
+XrInstance *xr_instance_new(XrayIsolate *X, XrClass *cls) {
     XR_DCHECK(cls != NULL, "Class must not be NULL");
 
     uint32_t field_count = xr_class_instance_field_count(cls);
-    const char* class_name = cls->name ? cls->name : "<unnamed>";
+    const char *class_name = cls->name ? cls->name : "<unnamed>";
 
     size_t size = sizeof(XrInstance) + sizeof(XrValue) * field_count;
     // Instances are regular GC objects on the running coroutine's heap:
@@ -42,9 +42,9 @@ XrInstance* xr_instance_new(XrayIsolate *X, XrClass *cls) {
     XrInstance *inst = NULL;
     XrCoroutine *coro = xr_current_coro(X);
     if (coro) {
-        inst = (XrInstance*)xr_alloc(coro, size, XR_TINSTANCE);
+        inst = (XrInstance *) xr_alloc(coro, size, XR_TINSTANCE);
     } else {
-        inst = (XrInstance*)xr_gc_alloc(xr_isolate_get_gc(X), size, XR_TINSTANCE);
+        inst = (XrInstance *) xr_gc_alloc(xr_isolate_get_gc(X), size, XR_TINSTANCE);
     }
 
     if (!inst) {
@@ -69,7 +69,8 @@ XrInstance* xr_instance_new(XrayIsolate *X, XrClass *cls) {
 }
 
 void xr_instance_init_inplace(XrInstance *inst, XrClass *cls) {
-    if (!inst || !cls) return;
+    if (!inst || !cls)
+        return;
 
     inst->klass = cls;
 
@@ -93,11 +94,11 @@ size_t xr_instance_size(XrClass *cls) {
 }
 
 void xr_instance_free(XrInstance *inst) {
-    (void)inst;
+    (void) inst;
     // Fields managed by GC, flexible array released with object
 }
 
-XrInstance* xr_instance_clone(XrayIsolate *X, XrInstance *src) {
+XrInstance *xr_instance_clone(XrayIsolate *X, XrInstance *src) {
     XR_DCHECK(src != NULL, "instance_clone: NULL src");
     XrClass *cls = src->klass;
     XR_DCHECK(cls != NULL, "instance_clone: NULL klass");
@@ -109,11 +110,12 @@ XrInstance* xr_instance_clone(XrayIsolate *X, XrInstance *src) {
     XrInstance *dst = NULL;
     XrCoroutine *coro = xr_current_coro(X);
     if (coro) {
-        dst = (XrInstance*)xr_alloc(coro, size, XR_TINSTANCE);
+        dst = (XrInstance *) xr_alloc(coro, size, XR_TINSTANCE);
     } else {
-        dst = (XrInstance*)xr_gc_alloc(xr_isolate_get_gc(X), size, XR_TINSTANCE);
+        dst = (XrInstance *) xr_gc_alloc(xr_isolate_get_gc(X), size, XR_TINSTANCE);
     }
-    if (!dst) return NULL;
+    if (!dst)
+        return NULL;
 
     xr_gc_header_init_type(&dst->gc, XR_TINSTANCE);
     dst->klass = cls;
@@ -123,23 +125,24 @@ XrInstance* xr_instance_clone(XrayIsolate *X, XrInstance *src) {
 
 // Access control handled by compiler/interpreter
 XrValue xr_instance_get_field(XrayIsolate *X, XrInstance *inst, const char *name) {
-    if (!X || !inst || !name) return xr_null();
+    if (!X || !inst || !name)
+        return xr_null();
 
     XrClass *klass = xr_instance_get_class(inst);
-    if (!klass) return xr_null();
+    if (!klass)
+        return xr_null();
 
     int index = xr_class_lookup_field_by_name(X, klass, name);
     if (index < 0) {
-        xr_log_warning("instance", "field '%s' not found in class '%s'",
-                       name, klass->name ? klass->name : "<unnamed>");
+        xr_log_warning("instance", "field '%s' not found in class '%s'", name,
+                       klass->name ? klass->name : "<unnamed>");
         return xr_null();
     }
 
     // Bounds check: ensure index is within instance field range
     int ifc = xr_class_instance_field_count(klass);
     if (index >= ifc) {
-        xr_log_warning("instance", "field index %d out of bounds (max %d)",
-                       index, ifc - 1);
+        xr_log_warning("instance", "field index %d out of bounds (max %d)", index, ifc - 1);
         return xr_null();
     }
 
@@ -147,23 +150,24 @@ XrValue xr_instance_get_field(XrayIsolate *X, XrInstance *inst, const char *name
 }
 
 void xr_instance_set_field(XrayIsolate *X, XrInstance *inst, const char *name, XrValue value) {
-    if (!X || !inst || !name) return;
+    if (!X || !inst || !name)
+        return;
 
     XrClass *klass = xr_instance_get_class(inst);
-    if (!klass) return;
+    if (!klass)
+        return;
 
     int index = xr_class_lookup_field_by_name(X, klass, name);
     if (index < 0) {
-        xr_log_warning("instance", "field '%s' not found in class '%s'",
-                       name, klass->name ? klass->name : "<unnamed>");
+        xr_log_warning("instance", "field '%s' not found in class '%s'", name,
+                       klass->name ? klass->name : "<unnamed>");
         return;
     }
 
     // Bounds check: ensure index is within instance field range
     int ifc = xr_class_instance_field_count(klass);
     if (index >= ifc) {
-        xr_log_warning("instance", "field index %d out of bounds (max %d)",
-                       index, ifc - 1);
+        xr_log_warning("instance", "field index %d out of bounds (max %d)", index, ifc - 1);
         return;
     }
 
@@ -175,7 +179,7 @@ XrValue xr_instance_get_field_by_index(XrInstance *inst, int index) {
     XR_DCHECK(inst != NULL, "Instance must not be NULL");
     XrClass *klass = xr_instance_get_class(inst);
     XR_DCHECK_BOUNDS(index, klass->field_count, "field index out of bounds");
-    (void)klass;
+    (void) klass;
     return inst->fields[index];
 }
 
@@ -183,21 +187,22 @@ void xr_instance_set_field_by_index(XrInstance *inst, int index, XrValue value) 
     XR_DCHECK(inst != NULL, "Instance must not be NULL");
     XrClass *klass = xr_instance_get_class(inst);
     XR_DCHECK_BOUNDS(index, klass->field_count, "field index out of bounds");
-    (void)klass;
+    (void) klass;
     inst->fields[index] = value;
     XR_GC_BARRIER_BACK_SAFE(xr_current_coro_gc(), inst);
 }
 
-XrValue xr_instance_call_method(XrayIsolate *X, XrInstance *inst,
-                                 const char *name,
-                                XrValue *args, int argc) {
-    if (!X || !inst || !name) return xr_null();
+XrValue xr_instance_call_method(XrayIsolate *X, XrInstance *inst, const char *name, XrValue *args,
+                                int argc) {
+    if (!X || !inst || !name)
+        return xr_null();
 
     XrClass *klass = xr_instance_get_class(inst);
-    if (!klass) return xr_null();
+    if (!klass)
+        return xr_null();
 
     // Convert method name to symbol
-    XrSymbolTable *sym_table = (XrSymbolTable*)xr_isolate_get_symbol_table(X);
+    XrSymbolTable *sym_table = (XrSymbolTable *) xr_isolate_get_symbol_table(X);
     if (!sym_table) {
         xr_log_warning("instance", "symbol table not available");
         return xr_null();
@@ -205,15 +210,15 @@ XrValue xr_instance_call_method(XrayIsolate *X, XrInstance *inst,
 
     SymbolId method_symbol = xr_symbol_lookup_in_table(sym_table, name);
     if (method_symbol == SYMBOL_INVALID) {
-        xr_log_warning("instance", "method '%s' not found in class '%s'",
-                       name, klass->name ? klass->name : "<unnamed>");
+        xr_log_warning("instance", "method '%s' not found in class '%s'", name,
+                       klass->name ? klass->name : "<unnamed>");
         return xr_null();
     }
 
     XrMethod *method = xr_class_lookup_method(klass, method_symbol);
     if (!method) {
-        xr_log_warning("instance", "method '%s' not found in class '%s'",
-                       name, klass->name ? klass->name : "<unnamed>");
+        xr_log_warning("instance", "method '%s' not found in class '%s'", name,
+                       klass->name ? klass->name : "<unnamed>");
         return xr_null();
     }
 
@@ -221,8 +226,8 @@ XrValue xr_instance_call_method(XrayIsolate *X, XrInstance *inst,
 
     // Stack buffer for small arg counts, heap fallback for large
     XrValue stack_buf[9];
-    XrValue *full_args = (argc + 1 <= 9) ? stack_buf
-        : (XrValue*)xr_malloc(sizeof(XrValue) * (argc + 1));
+    XrValue *full_args =
+        (argc + 1 <= 9) ? stack_buf : (XrValue *) xr_malloc(sizeof(XrValue) * (argc + 1));
     if (!full_args) {
         xr_log_warning("instance", "failed to allocate argument array");
         return xr_null();
@@ -240,7 +245,8 @@ XrValue xr_instance_call_method(XrayIsolate *X, XrInstance *inst,
         result = xr_vm_call_closure(X, method->as.closure, full_args, argc + 1);
     }
 
-    if (full_args != stack_buf) xr_free(full_args);
+    if (full_args != stack_buf)
+        xr_free(full_args);
     return result;
 }
 
@@ -266,7 +272,8 @@ void xr_instance_print(XrInstance *inst) {
 
     for (int i = 0; i < ifc; i++) {
         const char *field_name = (klass->fields && i < klass->field_count && klass->fields[i].name)
-            ? klass->fields[i].name : "unknown";
+                                     ? klass->fields[i].name
+                                     : "unknown";
         printf("  %s: ", field_name);
 
         XrValue val = inst->fields[i];
@@ -290,6 +297,7 @@ void xr_instance_print(XrInstance *inst) {
 }
 
 bool xr_instance_is_a(XrInstance *inst, XrClass *cls) {
-    if (!inst || !cls) return false;
+    if (!inst || !cls)
+        return false;
     return xr_class_instanceof(xr_instance_get_class(inst), cls);
 }

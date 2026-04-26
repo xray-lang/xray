@@ -52,36 +52,36 @@
 
 // Public API: visible to embedders
 #if defined(_WIN32) || defined(__CYGWIN__)
-  #ifdef XRAY_BUILD_DLL
-    #define XRAY_API __declspec(dllexport)
-  #elif defined(XRAY_USE_DLL)
-    #define XRAY_API __declspec(dllimport)
-  #else
-    #define XRAY_API extern
-  #endif
-#elif defined(XR_GCC_COMPAT)
-  #define XRAY_API __attribute__((visibility("default"))) extern
+#ifdef XRAY_BUILD_DLL
+#define XRAY_API __declspec(dllexport)
+#elif defined(XRAY_USE_DLL)
+#define XRAY_API __declspec(dllimport)
 #else
-  #define XRAY_API extern
+#define XRAY_API extern
+#endif
+#elif defined(XR_GCC_COMPAT)
+#define XRAY_API __attribute__((visibility("default"))) extern
+#else
+#define XRAY_API extern
 #endif
 
 // Internal cross-module functions/data
 #if defined(xray_amalg_c)
-  // Amalgamated build: all internal symbols become static
-  #define XR_FUNC   static
-  #define XR_DATA   static
+// Amalgamated build: all internal symbols become static
+#define XR_FUNC static
+#define XR_DATA static
 #else
-  #define XR_FUNC   extern
-  #define XR_DATA   extern
+#define XR_FUNC extern
+#define XR_DATA extern
 #endif
 
 // For function definitions (in .c files) that match XR_FUNC declarations
 #if defined(xray_amalg_c)
-  #define XR_FUNCDEF  static
-  #define XR_DATADEF  static
+#define XR_FUNCDEF static
+#define XR_DATADEF static
 #else
-  #define XR_FUNCDEF
-  #define XR_DATADEF
+#define XR_FUNCDEF
+#define XR_DATADEF
 #endif
 
 /* === End Visibility Macros === */
@@ -89,67 +89,76 @@
 /* === Function Attributes === */
 
 #ifdef XR_GCC_COMPAT
-  #define XR_NORET      __attribute__((noreturn))
-  #define XR_AINLINE     inline __attribute__((always_inline))
-  #define XR_NOINLINE   __attribute__((noinline))
-  #define XR_UNUSED     __attribute__((unused))
-  #define XR_LIKELY(x)   __builtin_expect(!!(x), 1)
-  #define XR_UNLIKELY(x) __builtin_expect(!!(x), 0)
-  #define XR_PRINTF_FMT(fmtarg, firstvararg) \
-      __attribute__((format(printf, fmtarg, firstvararg)))
+#define XR_NORET __attribute__((noreturn))
+#define XR_AINLINE inline __attribute__((always_inline))
+#define XR_NOINLINE __attribute__((noinline))
+#define XR_UNUSED __attribute__((unused))
+#define XR_LIKELY(x) __builtin_expect(!!(x), 1)
+#define XR_UNLIKELY(x) __builtin_expect(!!(x), 0)
+#define XR_PRINTF_FMT(fmtarg, firstvararg) __attribute__((format(printf, fmtarg, firstvararg)))
 #elif defined(_MSC_VER)
-  #define XR_NORET      __declspec(noreturn)
-  #define XR_AINLINE     __forceinline
-  #define XR_NOINLINE   __declspec(noinline)
-  #define XR_UNUSED
-  #define XR_LIKELY(x)   (x)
-  #define XR_UNLIKELY(x) (x)
-  #define XR_PRINTF_FMT(fmtarg, firstvararg)
+#define XR_NORET __declspec(noreturn)
+#define XR_AINLINE __forceinline
+#define XR_NOINLINE __declspec(noinline)
+#define XR_UNUSED
+#define XR_LIKELY(x) (x)
+#define XR_UNLIKELY(x) (x)
+#define XR_PRINTF_FMT(fmtarg, firstvararg)
 #else
-  #define XR_NORET
-  #define XR_AINLINE     inline
-  #define XR_NOINLINE
-  #define XR_UNUSED
-  #define XR_LIKELY(x)   (x)
-  #define XR_UNLIKELY(x) (x)
-  #define XR_PRINTF_FMT(fmtarg, firstvararg)
-#endif // Combined: noreturn + visibility
-#define XR_FUNC_NORET   XR_FUNC XR_NORET
-#define XRAY_API_NORET  XRAY_API XR_NORET
+#define XR_NORET
+#define XR_AINLINE inline
+#define XR_NOINLINE
+#define XR_UNUSED
+#define XR_LIKELY(x) (x)
+#define XR_UNLIKELY(x) (x)
+#define XR_PRINTF_FMT(fmtarg, firstvararg)
+#endif  // Combined: noreturn + visibility
+#define XR_FUNC_NORET XR_FUNC XR_NORET
+#define XRAY_API_NORET XRAY_API XR_NORET
 
 /* === Function Attributes === */
 
 /* === Alignment & Packing === */
 
 #ifdef XR_GCC_COMPAT
-  #define XR_ALIGN(n)   __attribute__((aligned(n)))
-  #define XR_PACKED      __attribute__((packed))
+#define XR_ALIGN(n) __attribute__((aligned(n)))
+#define XR_PACKED __attribute__((packed))
 #elif defined(_MSC_VER)
-  #define XR_ALIGN(n)   __declspec(align(n))
-  #define XR_PACKED
+#define XR_ALIGN(n) __declspec(align(n))
+#define XR_PACKED
 #else
-  #define XR_ALIGN(n)
-  #define XR_PACKED
+#define XR_ALIGN(n)
+#define XR_PACKED
 #endif
 
 /* === End Alignment & Packing === */
 
 /* === Basic Helpers === */
 
-#define XR_UNUSED_VAR(x) ((void)(x))
+#define XR_UNUSED_VAR(x) ((void) (x))
 
 // Array element count
 #define XR_COUNTOF(a) (sizeof(a) / sizeof((a)[0]))
 
 // Min/Max (safe: evaluate arguments exactly once)
 #ifdef XR_GCC_COMPAT
-  #define XR_MIN(a, b) ({ __typeof__(a) _a = (a); __typeof__(b) _b = (b); _a < _b ? _a : _b; })
-  #define XR_MAX(a, b) ({ __typeof__(a) _a = (a); __typeof__(b) _b = (b); _a > _b ? _a : _b; })
+#define XR_MIN(a, b)                                                                               \
+    ({                                                                                             \
+        __typeof__(a) _a = (a);                                                                    \
+        __typeof__(b) _b = (b);                                                                    \
+        _a < _b ? _a : _b;                                                                         \
+    })
+#define XR_MAX(a, b)                                                                               \
+    ({                                                                                             \
+        __typeof__(a) _a = (a);                                                                    \
+        __typeof__(b) _b = (b);                                                                    \
+        _a > _b ? _a : _b;                                                                         \
+    })
 #else
-  #define XR_MIN(a, b) ((a) < (b) ? (a) : (b))
-  #define XR_MAX(a, b) ((a) > (b) ? (a) : (b))
+#define XR_MIN(a, b) ((a) < (b) ? (a) : (b))
+#define XR_MAX(a, b) ((a) > (b) ? (a) : (b))
 #endif
 
 /* === End Basic Helpers === */
 
-#endif // XDEFS_H
+#endif  // XDEFS_H

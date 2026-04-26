@@ -17,7 +17,6 @@
 
 #include "../value/xvalue.h"
 
-
 /* ========== Enum Instance Methods ========== */
 
 // Status.Success.name -> "Success"
@@ -40,4 +39,4 @@ XR_FUNC XrValue xr_enum_type_get_member_count(XrayIsolate *isolate, XrValue *arg
 // Status.getMember(0) -> Status.OK
 XR_FUNC XrValue xr_enum_type_get_member(XrayIsolate *isolate, XrValue *args, int nargs);
 
-#endif // XENUM_BUILTINS_H
+#endif  // XENUM_BUILTINS_H

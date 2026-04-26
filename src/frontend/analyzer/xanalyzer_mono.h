@@ -44,8 +44,8 @@ XR_FUNC const char *xr_mono_type_tag(XrType *t);
 // type_map: if non-NULL, maps type param names to concrete types during clone.
 // type_map_count: number of entries in type_map.
 typedef struct {
-    const char *param_name;   // Type parameter name (e.g., "T")
-    XrType *concrete_type;    // Concrete type to substitute
+    const char *param_name;  // Type parameter name (e.g., "T")
+    XrType *concrete_type;   // Concrete type to substitute
 } XrMonoTypeMap;
 
 XR_FUNC AstNode *xr_ast_clone(AstNode *node, XrMonoTypeMap *type_map, int type_map_count);
@@ -60,11 +60,11 @@ XR_FUNC XrType *xr_mono_type_substitute(XrType *type, XrMonoTypeMap *type_map, i
 /* ========== Mono Instance Tracking ========== */
 
 typedef struct {
-    const char *generic_name;    // Original generic name
-    XrType **type_args;          // Concrete type arguments
+    const char *generic_name;  // Original generic name
+    XrType **type_args;        // Concrete type arguments
     int type_arg_count;
-    const char *mangled_name;    // Mangled name (heap-allocated)
-    uint32_t rep_signature;      // Combined slot-type signature for dedup
+    const char *mangled_name;  // Mangled name (heap-allocated)
+    uint32_t rep_signature;    // Combined slot-type signature for dedup
 } XaMonoInstance;
 
 typedef struct {
@@ -79,7 +79,7 @@ XR_FUNC void xa_mono_collector_free(XaMonoCollector *c);
 // Add a generic instantiation. Returns the mangled name (owned by collector).
 // Returns NULL if duplicate (same generic + same rep signature).
 XR_FUNC const char *xa_mono_collector_add(XaMonoCollector *c, const char *generic_name,
-                                  XrType **type_args, int type_arg_count);
+                                          XrType **type_args, int type_arg_count);
 
 /* ========== Mono Pass ========== */
 
@@ -89,4 +89,4 @@ XR_FUNC const char *xa_mono_collector_add(XaMonoCollector *c, const char *generi
 // Safe to call on programs with no generics (no-op).
 XR_FUNC void xa_mono_pass(AstNode *root);
 
-#endif // XANALYZER_MONO_H
+#endif  // XANALYZER_MONO_H

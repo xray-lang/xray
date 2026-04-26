@@ -62,9 +62,9 @@ static bool consume_gt_in_generic(Parser *parser) {
 // - User-defined types / class names
 // - Function types: fn(int, int): int
 // - Optional types: int?, string?, Array<int>?
-static XrType* parse_type_annotation_base(Parser *parser);
+static XrType *parse_type_annotation_base(Parser *parser);
 
-XrType* xr_parse_type_annotation(Parser *parser) {
+XrType *xr_parse_type_annotation(Parser *parser) {
     XR_DCHECK(parser != NULL, "parse_type_annotation: NULL parser");
     XrType *base = parse_type_annotation_base(parser);
 
@@ -87,7 +87,8 @@ XrType* xr_parse_type_annotation(Parser *parser) {
             XrType *next = parse_type_annotation_base(parser);
             // Reject nested union alias at parse time
             if (XR_TYPE_IS_UNION(next)) {
-                xr_parser_error(parser,
+                xr_parser_error(
+                    parser,
                     "nested union alias not allowed in union type, expand members directly");
                 return xr_type_new_unknown(NULL);
             }
@@ -110,9 +111,9 @@ XrType* xr_parse_type_annotation(Parser *parser) {
     return base;
 }
 
-static XrType* parse_type_annotation_base(Parser *parser) {
+static XrType *parse_type_annotation_base(Parser *parser) {
     XR_DCHECK(parser != NULL, "parse_type_annotation_base: NULL parser");
-    (void)parser->X;  // XrayIsolate no longer needed for XrType creation
+    (void) parser->X;  // XrayIsolate no longer needed for XrType creation
 
     // Fixed-length array type: [N]T (compile-time length, runtime Array<T>)
     if (xr_parser_check(parser, TK_LBRACKET)) {
@@ -121,7 +122,7 @@ static XrType* parse_type_annotation_base(Parser *parser) {
         Token saved_current = parser->current;
         xr_parser_advance(parser);  // consume '['
         if (parser->current.type == TK_LITERAL_INT) {
-            int length = (int)strtol(parser->current.start, NULL, 10);
+            int length = (int) strtol(parser->current.start, NULL, 10);
             xr_parser_advance(parser);  // consume number
             if (xr_parser_match(parser, TK_RBRACKET)) {
                 XrType *elem = parse_type_annotation_base(parser);
@@ -154,23 +155,32 @@ static XrType* parse_type_annotation_base(Parser *parser) {
     }
 
     // Native-width integer types
-    if (xr_parser_match(parser, TK_INT8))  return xr_type_new_int_width(parser->X, XR_NATIVE_I8);
-    if (xr_parser_match(parser, TK_INT16)) return xr_type_new_int_width(parser->X, XR_NATIVE_I16);
-    if (xr_parser_match(parser, TK_INT32)) return xr_type_new_int_width(parser->X, XR_NATIVE_I32);
-    if (xr_parser_match(parser, TK_INT64)) return xr_type_new_int_width(parser->X, XR_NATIVE_I64);
-    if (xr_parser_match(parser, TK_UINT8))  return xr_type_new_int_width(parser->X, XR_NATIVE_U8);
-    if (xr_parser_match(parser, TK_UINT16)) return xr_type_new_int_width(parser->X, XR_NATIVE_U16);
-    if (xr_parser_match(parser, TK_UINT32)) return xr_type_new_int_width(parser->X, XR_NATIVE_U32);
-    if (xr_parser_match(parser, TK_UINT64)) return xr_type_new_int_width(parser->X, XR_NATIVE_U64);
-    if (xr_parser_match(parser, TK_FLOAT32)) return xr_type_new_float_width(parser->X, XR_NATIVE_F32);
-    if (xr_parser_match(parser, TK_FLOAT64)) return xr_type_new_float_width(parser->X, XR_NATIVE_F64);
+    if (xr_parser_match(parser, TK_INT8))
+        return xr_type_new_int_width(parser->X, XR_NATIVE_I8);
+    if (xr_parser_match(parser, TK_INT16))
+        return xr_type_new_int_width(parser->X, XR_NATIVE_I16);
+    if (xr_parser_match(parser, TK_INT32))
+        return xr_type_new_int_width(parser->X, XR_NATIVE_I32);
+    if (xr_parser_match(parser, TK_INT64))
+        return xr_type_new_int_width(parser->X, XR_NATIVE_I64);
+    if (xr_parser_match(parser, TK_UINT8))
+        return xr_type_new_int_width(parser->X, XR_NATIVE_U8);
+    if (xr_parser_match(parser, TK_UINT16))
+        return xr_type_new_int_width(parser->X, XR_NATIVE_U16);
+    if (xr_parser_match(parser, TK_UINT32))
+        return xr_type_new_int_width(parser->X, XR_NATIVE_U32);
+    if (xr_parser_match(parser, TK_UINT64))
+        return xr_type_new_int_width(parser->X, XR_NATIVE_U64);
+    if (xr_parser_match(parser, TK_FLOAT32))
+        return xr_type_new_float_width(parser->X, XR_NATIVE_F32);
+    if (xr_parser_match(parser, TK_FLOAT64))
+        return xr_type_new_float_width(parser->X, XR_NATIVE_F64);
 
     // Array<T> — generic parameter is mandatory in type annotations
     if (xr_parser_match(parser, TK_TYPE_ARRAY)) {
         if (!xr_parser_match(parser, TK_LT)) {
             if (!parser->allow_bare_container)
-                xr_parser_error(parser,
-                    "Array requires a type parameter, e.g. Array<int>");
+                xr_parser_error(parser, "Array requires a type parameter, e.g. Array<int>");
             return xr_type_new_array(parser->X, xr_type_new_unknown(NULL));
         }
         XrType *elem_type = xr_parse_type_annotation(parser);
@@ -182,8 +192,7 @@ static XrType* parse_type_annotation_base(Parser *parser) {
     if (xr_parser_match(parser, TK_TYPE_MAP)) {
         if (!xr_parser_match(parser, TK_LT)) {
             if (!parser->allow_bare_container)
-                xr_parser_error(parser,
-                    "Map requires type parameters, e.g. Map<string, int>");
+                xr_parser_error(parser, "Map requires type parameters, e.g. Map<string, int>");
             return xr_type_new_map(parser->X, xr_type_new_unknown(NULL), xr_type_new_unknown(NULL));
         }
         XrType *key_type = xr_parse_type_annotation(parser);
@@ -199,8 +208,7 @@ static XrType* parse_type_annotation_base(Parser *parser) {
     if (xr_parser_match(parser, TK_TYPE_SET)) {
         if (!xr_parser_match(parser, TK_LT)) {
             if (!parser->allow_bare_container)
-                xr_parser_error(parser,
-                    "Set requires a type parameter, e.g. Set<int>");
+                xr_parser_error(parser, "Set requires a type parameter, e.g. Set<int>");
             return xr_type_new_set(parser->X, xr_type_new_unknown(NULL));
         }
         XrType *elem_type = xr_parse_type_annotation(parser);
@@ -230,7 +238,10 @@ static XrType* parse_type_annotation_base(Parser *parser) {
 
     // Range type
     if (xr_parser_match(parser, TK_TYPE_RANGE)) {
-        XrType *t = xr_type_new(parser->X, XR_KIND_INSTANCE); if (t) t->instance.class_name = "Range"; return t;
+        XrType *t = xr_type_new(parser->X, XR_KIND_INSTANCE);
+        if (t)
+            t->instance.class_name = "Range";
+        return t;
     }
 
     // Struct type literal: { x: float, y: float } or { x: float, ... }
@@ -238,26 +249,25 @@ static XrType* parse_type_annotation_base(Parser *parser) {
         // Dynamic array, supports arbitrary fields (initial capacity 16, expands as needed)
         int capacity = 16;
         int field_count = 0;
-        bool allow_extension = false;  // Whether extension is allowed (set true when ... is encountered)
-        const char **field_names = xr_malloc(capacity * sizeof(const char*));
-        XrType **field_types = xr_malloc(capacity * sizeof(XrType*));
+        bool allow_extension =
+            false;  // Whether extension is allowed (set true when ... is encountered)
+        const char **field_names = xr_malloc(capacity * sizeof(const char *));
+        XrType **field_types = xr_malloc(capacity * sizeof(XrType *));
 
         while (!xr_parser_check(parser, TK_RBRACE) && !xr_parser_check(parser, TK_EOF)) {
             // Check ... extensibility marker
             if (xr_parser_match(parser, TK_DOT_DOT_DOT)) {
                 allow_extension = true;
                 xr_parser_match(parser, TK_COMMA);  // Optional comma
-                continue;  // ... is not a field, continue parsing
+                continue;                           // ... is not a field, continue parsing
             }
 
             // Dynamic expansion
             if (field_count >= capacity) {
                 int new_cap = capacity * 2;
-                XR_REALLOC_OR_ABORT(field_names,
-                                    (size_t)new_cap * sizeof(const char*),
+                XR_REALLOC_OR_ABORT(field_names, (size_t) new_cap * sizeof(const char *),
                                     "parse_type field_names grow");
-                XR_REALLOC_OR_ABORT(field_types,
-                                    (size_t)new_cap * sizeof(XrType*),
+                XR_REALLOC_OR_ABORT(field_types, (size_t) new_cap * sizeof(XrType *),
                                     "parse_type field_types grow");
                 capacity = new_cap;
             }
@@ -292,11 +302,11 @@ static XrType* parse_type_annotation_base(Parser *parser) {
 
         // Create object type (allow_extension determines extensibility)
         XrType *result = xr_type_new_object(parser->X, field_names, field_types, field_count,
-                                             allow_extension, NULL);
+                                            allow_extension, NULL);
 
         // Free temporary arrays (field_names strings are copied by xr_type_new_object)
         for (int i = 0; i < field_count; i++) {
-            xr_free((void*)field_names[i]);
+            xr_free((void *) field_names[i]);
         }
         xr_free(field_names);
         xr_free(field_types);
@@ -361,8 +371,7 @@ static XrType* parse_type_annotation_base(Parser *parser) {
     if (xr_parser_match(parser, TK_TYPE_CHANNEL)) {
         if (!xr_parser_match(parser, TK_LT)) {
             if (!parser->allow_bare_container)
-                xr_parser_error(parser,
-                    "Channel requires a type parameter, e.g. Channel<int>");
+                xr_parser_error(parser, "Channel requires a type parameter, e.g. Channel<int>");
             return xr_type_new_channel(parser->X, xr_type_new_unknown(NULL));
         }
         XrType *elem_type = xr_parse_type_annotation(parser);
@@ -371,18 +380,28 @@ static XrType* parse_type_annotation_base(Parser *parser) {
     }
 
     // Native-width integer types (first-class keywords)
-    if (xr_parser_match(parser, TK_INT8))  return xr_type_new_int_width(parser->X, XR_NATIVE_I8);
-    if (xr_parser_match(parser, TK_INT16)) return xr_type_new_int_width(parser->X, XR_NATIVE_I16);
-    if (xr_parser_match(parser, TK_INT32)) return xr_type_new_int_width(parser->X, XR_NATIVE_I32);
-    if (xr_parser_match(parser, TK_INT64)) return xr_type_new_int_width(parser->X, XR_NATIVE_I64);
-    if (xr_parser_match(parser, TK_UINT8))  return xr_type_new_int_width(parser->X, XR_NATIVE_U8);
-    if (xr_parser_match(parser, TK_UINT16)) return xr_type_new_int_width(parser->X, XR_NATIVE_U16);
-    if (xr_parser_match(parser, TK_UINT32)) return xr_type_new_int_width(parser->X, XR_NATIVE_U32);
-    if (xr_parser_match(parser, TK_UINT64)) return xr_type_new_int_width(parser->X, XR_NATIVE_U64);
+    if (xr_parser_match(parser, TK_INT8))
+        return xr_type_new_int_width(parser->X, XR_NATIVE_I8);
+    if (xr_parser_match(parser, TK_INT16))
+        return xr_type_new_int_width(parser->X, XR_NATIVE_I16);
+    if (xr_parser_match(parser, TK_INT32))
+        return xr_type_new_int_width(parser->X, XR_NATIVE_I32);
+    if (xr_parser_match(parser, TK_INT64))
+        return xr_type_new_int_width(parser->X, XR_NATIVE_I64);
+    if (xr_parser_match(parser, TK_UINT8))
+        return xr_type_new_int_width(parser->X, XR_NATIVE_U8);
+    if (xr_parser_match(parser, TK_UINT16))
+        return xr_type_new_int_width(parser->X, XR_NATIVE_U16);
+    if (xr_parser_match(parser, TK_UINT32))
+        return xr_type_new_int_width(parser->X, XR_NATIVE_U32);
+    if (xr_parser_match(parser, TK_UINT64))
+        return xr_type_new_int_width(parser->X, XR_NATIVE_U64);
 
     // Native-width float types
-    if (xr_parser_match(parser, TK_FLOAT32)) return xr_type_new_float_width(parser->X, XR_NATIVE_F32);
-    if (xr_parser_match(parser, TK_FLOAT64)) return xr_type_new_float_width(parser->X, XR_NATIVE_F64);
+    if (xr_parser_match(parser, TK_FLOAT32))
+        return xr_type_new_float_width(parser->X, XR_NATIVE_F32);
+    if (xr_parser_match(parser, TK_FLOAT64))
+        return xr_type_new_float_width(parser->X, XR_NATIVE_F64);
 
     // User-defined type or type alias (with optional generic parameters)
     if (xr_parser_match(parser, TK_NAME)) {
@@ -408,17 +427,22 @@ static XrType* parse_type_annotation_base(Parser *parser) {
             }
             return xr_type_new_task(parser->X, result_type);
         }
-        if (strcmp(temp_name, "BigInt") == 0) return xr_type_new_bigint(parser->X);
-        if (strcmp(temp_name, "Regex") == 0) return xr_type_new_regex(parser->X);
-        if (strcmp(temp_name, "StringBuilder") == 0) return xr_type_new_stringbuilder(parser->X);
-        if (strcmp(temp_name, "DateTime") == 0) return xr_type_new_datetime(parser->X);
-        if (strcmp(temp_name, "Exception") == 0) return xr_type_new_named_instance(parser->X, "Exception");
+        if (strcmp(temp_name, "BigInt") == 0)
+            return xr_type_new_bigint(parser->X);
+        if (strcmp(temp_name, "Regex") == 0)
+            return xr_type_new_regex(parser->X);
+        if (strcmp(temp_name, "StringBuilder") == 0)
+            return xr_type_new_stringbuilder(parser->X);
+        if (strcmp(temp_name, "DateTime") == 0)
+            return xr_type_new_datetime(parser->X);
+        if (strcmp(temp_name, "Exception") == 0)
+            return xr_type_new_named_instance(parser->X, "Exception");
 
         // 'any' type has been removed from xray.
         // Use concrete types or Json for dynamic values.
         if (strcmp(temp_name, "any") == 0) {
             xr_parser_error(parser, "'any' type is not supported. "
-                "Use a concrete type or 'Json' for dynamic values.");
+                                    "Use a concrete type or 'Json' for dynamic values.");
             return xr_type_new_unknown(NULL);
         }
 
@@ -480,12 +504,13 @@ static XrType* parse_type_annotation_base(Parser *parser) {
             // Create generic instance type with type arguments
             XrType **args_copy = NULL;
             if (type_arg_count > 0) {
-                args_copy = xr_malloc(sizeof(XrType*) * type_arg_count);
+                args_copy = xr_malloc(sizeof(XrType *) * type_arg_count);
                 for (int i = 0; i < type_arg_count; i++) {
                     args_copy[i] = type_args[i];
                 }
             }
-            return xr_type_new_generic_instance(parser->X, temp_name, NULL, args_copy, type_arg_count);
+            return xr_type_new_generic_instance(parser->X, temp_name, NULL, args_copy,
+                                                type_arg_count);
         }
 
         return xr_type_new_class(parser->X, temp_name);
@@ -495,5 +520,3 @@ static XrType* parse_type_annotation_base(Parser *parser) {
     xr_parser_error_expected_name(parser, "expected type name");
     return xr_type_new_unknown(NULL);
 }
-
-

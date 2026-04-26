@@ -29,24 +29,25 @@
 #include <string.h>
 
 // Generate C variable name from filename
-static char* generate_var_name(const char *filename) {
+static char *generate_var_name(const char *filename) {
     const char *base = strrchr(filename, '/');
     base = base ? base + 1 : filename;
 
     // Remove extension
     const char *dot = strrchr(base, '.');
-    size_t len = dot ? (size_t)(dot - base) : strlen(base);
+    size_t len = dot ? (size_t) (dot - base) : strlen(base);
 
     char *name = xr_malloc(len + 8);
-    if (!name) return NULL;
+    if (!name)
+        return NULL;
 
     strcpy(name, "xr_bc_");
     size_t j = 6;
 
     for (size_t i = 0; i < len; i++) {
         char c = base[i];
-        if ((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') ||
-            (c >= '0' && c <= '9') || c == '_') {
+        if ((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') ||
+            c == '_') {
             name[j++] = c;
         } else {
             name[j++] = '_';
@@ -78,8 +79,10 @@ XR_FUNC int cmd_compile(const XrCliInvocation *inv) {
     const char *fmt_str = xr_cli_opt_string(&inv->options, "format", NULL);
 
     int flags = 0;
-    if (xr_cli_opt_present(&inv->options, "strip-debug"))  flags |= XR_BC_STRIP_DEBUG;
-    if (xr_cli_opt_present(&inv->options, "strip-source")) flags |= XR_BC_STRIP_SOURCE;
+    if (xr_cli_opt_present(&inv->options, "strip-debug"))
+        flags |= XR_BC_STRIP_DEBUG;
+    if (xr_cli_opt_present(&inv->options, "strip-source"))
+        flags |= XR_BC_STRIP_SOURCE;
 
     /* Parse explicit format */
     XrOutputFormat explicit_format = XR_OUTPUT_AUTO;
@@ -97,8 +100,8 @@ XR_FUNC int cmd_compile(const XrCliInvocation *inv) {
         const char *base = strrchr(input_file, '/');
         base = base ? base + 1 : input_file;
         const char *dot = strrchr(base, '.');
-        size_t len = dot ? (size_t)(dot - base) : strlen(base);
-        snprintf(default_output, sizeof(default_output), "%.*s.xrc", (int)len, base);
+        size_t len = dot ? (size_t) (dot - base) : strlen(base);
+        snprintf(default_output, sizeof(default_output), "%.*s.xrc", (int) len, base);
         output_file = default_output;
     }
 
@@ -191,7 +194,8 @@ cleanup:
         xr_program_destroy(ast);
     }
     xr_free(source);
-    if (X) xray_isolate_delete(X);
+    if (X)
+        xray_isolate_delete(X);
     xr_free(gen_var_name);
     return result;
 }

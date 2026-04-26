@@ -36,4 +36,4 @@
  */
 XR_FUNC uint32_t xir_peephole(A64Buf *buf);
 
-#endif // XIR_PEEPHOLE_H
+#endif  // XIR_PEEPHOLE_H

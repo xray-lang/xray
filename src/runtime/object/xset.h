@@ -31,9 +31,9 @@ typedef struct XrSetEntry {
     uint8_t state;
 } XrSetEntry;
 
-#define XR_SET_EMPTY     0x00
+#define XR_SET_EMPTY 0x00
 #define XR_SET_TOMBSTONE 0x7F
-#define XR_SET_VALID     0x80
+#define XR_SET_VALID 0x80
 
 /* ========== Set Object ========== */
 
@@ -44,11 +44,11 @@ typedef struct XrSet {
     uint32_t tombstones;
     XrSetEntry *entries;
     uint8_t flags;
-    uint8_t elem_tid;          // XrTypeId: element type for reified generics (0=any)
-    uint8_t _pad[2];           // Alignment
+    uint8_t elem_tid;  // XrTypeId: element type for reified generics (0=any)
+    uint8_t _pad[2];   // Alignment
 } XrSet;
 
-#define XR_SET_FLAG_WEAK           0x01
+#define XR_SET_FLAG_WEAK 0x01
 
 /* ========== Set Parameters ========== */
 
@@ -60,11 +60,11 @@ typedef struct XrSet {
 /* ========== Basic Operations ========== */
 
 struct XrCoroutine;
-XR_FUNC XrSet* xr_set_new(struct XrCoroutine *coro);
-XR_FUNC XrSet* xr_set_new_with_capacity(struct XrCoroutine *coro, uint32_t capacity);
+XR_FUNC XrSet *xr_set_new(struct XrCoroutine *coro);
+XR_FUNC XrSet *xr_set_new_with_capacity(struct XrCoroutine *coro, uint32_t capacity);
 XR_FUNC void xr_set_init_inplace(XrSet *set);
 struct XrArray;
-XR_FUNC XrSet* xr_set_from_array(struct XrCoroutine *coro, struct XrArray *arr);
+XR_FUNC XrSet *xr_set_from_array(struct XrCoroutine *coro, struct XrArray *arr);
 XR_FUNC bool xr_set_add(XrSet *set, XrValue value);
 XR_FUNC bool xr_set_has(XrSet *set, XrValue value);
 XR_FUNC bool xr_set_delete(XrSet *set, XrValue value);
@@ -74,25 +74,25 @@ XR_FUNC bool xr_set_is_empty(XrSet *set);
 
 /* ========== Set Operations ========== */
 
-XR_FUNC XrSet* xr_set_union(struct XrCoroutine *coro, XrSet *set1, XrSet *set2);
-XR_FUNC XrSet* xr_set_intersection(struct XrCoroutine *coro, XrSet *set1, XrSet *set2);
-XR_FUNC XrSet* xr_set_difference(struct XrCoroutine *coro, XrSet *set1, XrSet *set2);
-XR_FUNC XrSet* xr_set_symmetric_difference(struct XrCoroutine *coro, XrSet *set1, XrSet *set2);
+XR_FUNC XrSet *xr_set_union(struct XrCoroutine *coro, XrSet *set1, XrSet *set2);
+XR_FUNC XrSet *xr_set_intersection(struct XrCoroutine *coro, XrSet *set1, XrSet *set2);
+XR_FUNC XrSet *xr_set_difference(struct XrCoroutine *coro, XrSet *set1, XrSet *set2);
+XR_FUNC XrSet *xr_set_symmetric_difference(struct XrCoroutine *coro, XrSet *set1, XrSet *set2);
 XR_FUNC bool xr_set_is_subset(XrSet *set1, XrSet *set2);
 XR_FUNC bool xr_set_is_superset(XrSet *set1, XrSet *set2);
 
 /* ========== Iteration Methods ========== */
 
-XR_FUNC XrArray* xr_set_values(struct XrCoroutine *coro, XrSet *set);
+XR_FUNC XrArray *xr_set_values(struct XrCoroutine *coro, XrSet *set);
 struct XrClosure;
 XR_FUNC void xr_set_foreach(XrSet *set, XrayIsolate *isolate, struct XrClosure *callback);
-XR_FUNC XrSet* xr_set_map(XrSet *set, XrayIsolate *isolate, struct XrClosure *callback);
-XR_FUNC XrSet* xr_set_filter(XrSet *set, XrayIsolate *isolate, struct XrClosure *callback);
+XR_FUNC XrSet *xr_set_map(XrSet *set, XrayIsolate *isolate, struct XrClosure *callback);
+XR_FUNC XrSet *xr_set_filter(XrSet *set, XrayIsolate *isolate, struct XrClosure *callback);
 
 /* ========== Internal Functions ========== */
 
-XR_FUNC XrSetEntry* xr_set_find_entry(XrSet *set, XrValue value, uint32_t *out_index);
+XR_FUNC XrSetEntry *xr_set_find_entry(XrSet *set, XrValue value, uint32_t *out_index);
 XR_FUNC void xr_set_resize(XrSet *set, uint32_t new_capacity);
-XR_FUNC XrSetEntry* xr_set_find_linear(XrSet *set, XrValue value, uint32_t *out_index);
+XR_FUNC XrSetEntry *xr_set_find_linear(XrSet *set, XrValue value, uint32_t *out_index);
 
-#endif // XSET_H
+#endif  // XSET_H

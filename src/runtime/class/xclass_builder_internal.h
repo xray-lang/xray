@@ -32,28 +32,28 @@
 /* ========== Build Item Containers ========== */
 
 typedef struct XrFieldBuildItem {
-    const char *name;   // Interned in symbol table; not owned.
+    const char *name;  // Interned in symbol table; not owned.
     int symbol;
     XrValue default_value;
     uint32_t flags;
-    uint16_t offset;         // Computed on finalize
+    uint16_t offset;  // Computed on finalize
 } XrFieldBuildItem;
 
 typedef struct XrMethodBuildItem {
-    const char *name;   // Interned in symbol table; not owned.
+    const char *name;  // Interned in symbol table; not owned.
     int symbol;
-    XrMethodType method_type;    // CLOSURE/PRIMITIVE/GETTER/SETTER/OPERATOR
+    XrMethodType method_type;  // CLOSURE/PRIMITIVE/GETTER/SETTER/OPERATOR
     union {
         XrCFunctionPtr primitive;
         XrClosure *closure;
     } impl;
     int param_count;
     uint32_t flags;
-    uint8_t op_type;             // for operator methods
+    uint8_t op_type;  // for operator methods
 } XrMethodBuildItem;
 
 typedef struct XrStaticFieldBuildItem {
-    const char *name;   // Interned in symbol table; not owned.
+    const char *name;  // Interned in symbol table; not owned.
     int symbol;
     XrValue value;
     uint32_t flags;
@@ -70,7 +70,7 @@ typedef struct XrStaticFieldBuildItem {
 struct XrClassBuilder {
     // Basic info
     XrayIsolate *isolate;
-    const char *name;   // Interned in symbol table; not owned.
+    const char *name;  // Interned in symbol table; not owned.
     XrClass *super;
 
     // Fields (dynamic array)
@@ -108,4 +108,4 @@ struct XrClassBuilder {
     bool finalized;
 };
 
-#endif // XCLASS_BUILDER_INTERNAL_H
+#endif  // XCLASS_BUILDER_INTERNAL_H

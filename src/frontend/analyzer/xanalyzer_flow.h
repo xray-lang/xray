@@ -27,22 +27,22 @@
 
 // Flow node flags
 typedef enum XrFlowFlags {
-    XA_FLOW_UNREACHABLE     = 1 << 0,   // Dead code
-    XA_FLOW_START           = 1 << 1,   // Function entry
-    XA_FLOW_BRANCH_LABEL    = 1 << 2,   // Join point (multiple paths merge)
-    XA_FLOW_LOOP_LABEL      = 1 << 3,   // Loop header
-    XA_FLOW_ASSIGNMENT      = 1 << 4,   // Variable assignment
-    XA_FLOW_TRUE_CONDITION  = 1 << 5,   // True branch of condition
-    XA_FLOW_FALSE_CONDITION = 1 << 6,   // False branch of condition
-    XA_FLOW_SWITCH_CLAUSE   = 1 << 7,   // Switch case clause
-    XA_FLOW_CALL            = 1 << 8,   // Function call (may affect types)
-    XA_FLOW_RETURN          = 1 << 9,   // Return statement
-    XA_FLOW_THROW           = 1 << 10,  // Throw statement
-    XA_FLOW_MOVE            = 1 << 11,  // Variable moved (shared let send)
+    XA_FLOW_UNREACHABLE = 1 << 0,      // Dead code
+    XA_FLOW_START = 1 << 1,            // Function entry
+    XA_FLOW_BRANCH_LABEL = 1 << 2,     // Join point (multiple paths merge)
+    XA_FLOW_LOOP_LABEL = 1 << 3,       // Loop header
+    XA_FLOW_ASSIGNMENT = 1 << 4,       // Variable assignment
+    XA_FLOW_TRUE_CONDITION = 1 << 5,   // True branch of condition
+    XA_FLOW_FALSE_CONDITION = 1 << 6,  // False branch of condition
+    XA_FLOW_SWITCH_CLAUSE = 1 << 7,    // Switch case clause
+    XA_FLOW_CALL = 1 << 8,             // Function call (may affect types)
+    XA_FLOW_RETURN = 1 << 9,           // Return statement
+    XA_FLOW_THROW = 1 << 10,           // Throw statement
+    XA_FLOW_MOVE = 1 << 11,            // Variable moved (shared let send)
 
     // Internal flags
-    XA_FLOW_REFERENCED      = 1 << 16,  // Has been referenced
-    XA_FLOW_SHARED          = 1 << 17,  // Multiple references (cache results)
+    XA_FLOW_REFERENCED = 1 << 16,  // Has been referenced
+    XA_FLOW_SHARED = 1 << 17,      // Multiple references (cache results)
 } XrFlowFlags;
 
 // Forward declaration
@@ -52,9 +52,9 @@ typedef struct AstNode XrAstNode;
 // Flow node structure
 struct XaFlowNode {
     uint32_t flags;
-    uint32_t id;                        // Unique ID for caching
+    uint32_t id;  // Unique ID for caching
 
-    XrAstNode *node;                    // Associated AST node
+    XrAstNode *node;  // Associated AST node
 
     // Antecedents (predecessor nodes in flow graph)
     XaFlowNode **antecedents;
@@ -84,8 +84,8 @@ typedef struct XrFlowLabel {
 
 // Flow builder context
 typedef struct XaFlowBuilder {
-    XaFlowNode *current_flow;           // Current flow node
-    XaFlowNode *unreachable_flow;       // Singleton for unreachable
+    XaFlowNode *current_flow;      // Current flow node
+    XaFlowNode *unreachable_flow;  // Singleton for unreachable
 
     // For loops
     XrFlowLabel *current_break_target;
@@ -115,9 +115,9 @@ XR_FUNC XaFlowNode *xa_flow_create_start(XaFlowBuilder *builder);
 XR_FUNC XaFlowNode *xa_flow_create_branch_label(XaFlowBuilder *builder);
 XR_FUNC XaFlowNode *xa_flow_create_loop_label(XaFlowBuilder *builder);
 XR_FUNC XaFlowNode *xa_flow_create_assignment(XaFlowBuilder *builder, XrAstNode *node,
-                                       const char *name, XrType *type);
+                                              const char *name, XrType *type);
 XR_FUNC XaFlowNode *xa_flow_create_condition(XaFlowBuilder *builder, XrAstNode *expr,
-                                      bool is_true_branch);
+                                             bool is_true_branch);
 XR_FUNC XaFlowNode *xa_flow_create_call(XaFlowBuilder *builder, XrAstNode *call);
 
 // API: Connect flow nodes
@@ -131,9 +131,9 @@ XR_FUNC bool xa_flow_is_unreachable(XaFlowBuilder *builder);
 
 // Type narrowing cache (open-addressing hash table, keyed by node->id)
 typedef struct XaFlowCache {
-    uint32_t *ids;      // node IDs (0 = empty slot)
-    XrType **types;     // corresponding types
-    int capacity;       // always power of 2
+    uint32_t *ids;   // node IDs (0 = empty slot)
+    XrType **types;  // corresponding types
+    int capacity;    // always power of 2
     int count;
 } XaFlowCache;
 
@@ -144,11 +144,9 @@ XR_FUNC XrType *xa_flow_cache_get(XaFlowCache *cache, XaFlowNode *node);
 XR_FUNC void xa_flow_cache_set(XaFlowCache *cache, XaFlowNode *node, XrType *type);
 
 // API: Type narrowing
-XR_FUNC XrType *xa_flow_get_type_of_reference(XaFlowBuilder *builder,
-                                       const char *name,
-                                       XrType *declared_type,
-                                       XaFlowNode *flow_node,
-                                       XaFlowCache *cache);
+XR_FUNC XrType *xa_flow_get_type_of_reference(XaFlowBuilder *builder, const char *name,
+                                              XrType *declared_type, XaFlowNode *flow_node,
+                                              XaFlowCache *cache);
 
 // API: Move tracking for shared let variables (use-after-move detection)
 XR_FUNC XaFlowNode *xa_flow_create_move(XaFlowBuilder *builder, const char *name);
@@ -160,4 +158,4 @@ XR_FUNC XrType *xa_narrow_by_null_check(XrType *type, bool is_equal_null, bool a
 XR_FUNC XrType *xa_narrow_by_truthiness(XrType *type, bool assume_true);
 XR_FUNC XrType *xa_narrow_by_instanceof(XrType *type, const char *class_name, bool assume_true);
 
-#endif // XANALYZER_FLOW_H
+#endif  // XANALYZER_FLOW_H

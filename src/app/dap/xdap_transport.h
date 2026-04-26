@@ -32,39 +32,39 @@
 
 typedef enum {
     XDAP_TRANSPORT_STDIO,
-    XDAP_TRANSPORT_TCP_SERVER,   // Listen and accept
-    XDAP_TRANSPORT_TCP_CLIENT,   // Connect to remote
+    XDAP_TRANSPORT_TCP_SERVER,  // Listen and accept
+    XDAP_TRANSPORT_TCP_CLIENT,  // Connect to remote
 } XdapTransportType;
 
 typedef struct XdapTransport {
     XdapTransportType type;
     bool connected;
-    
+
     // Poll subsystem (for non-blocking I/O)
     XrPoll poll;
     bool poll_initialized;
-    
+
     // File descriptors
-    int read_fd;            // Input fd (stdin or client socket)
-    int write_fd;           // Output fd (stdout or client socket)
-    int listen_fd;          // Server socket (TCP server mode only)
-    
+    int read_fd;    // Input fd (stdin or client socket)
+    int write_fd;   // Output fd (stdout or client socket)
+    int listen_fd;  // Server socket (TCP server mode only)
+
     // Read buffer (for message framing)
     char *read_buf;
-    size_t read_len;        // Data in buffer
-    size_t read_cap;        // Buffer capacity
-    
+    size_t read_len;  // Data in buffer
+    size_t read_cap;  // Buffer capacity
+
     // Partial header parsing state
     int pending_content_length;  // -1 = not yet parsed
     size_t header_end;           // Position after \r\n\r\n
-    
+
     // Write buffer (for batching writes)
     char *write_buf;
     size_t write_len;
     size_t write_cap;
-    
+
     // TCP server info
-    int listen_port;        // Actual port (0 = use assigned port)
+    int listen_port;  // Actual port (0 = use assigned port)
 } XdapTransport;
 
 // ============================================================================
@@ -119,4 +119,4 @@ XR_FUNC int xdap_transport_get_port(XdapTransport *t);
 // Get read fd for external poll integration
 XR_FUNC int xdap_transport_get_fd(XdapTransport *t);
 
-#endif // XDAP_TRANSPORT_H
+#endif  // XDAP_TRANSPORT_H

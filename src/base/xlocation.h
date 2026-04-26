@@ -19,11 +19,11 @@
 #include <stdint.h>
 
 typedef struct XrLocation {
-    const char *file;       // File path
-    uint32_t line;          // 1-indexed line number
-    uint32_t column;        // 1-indexed column number
-    uint32_t end_line;      // End line (for ranges)
-    uint32_t end_column;    // End column
+    const char *file;     // File path
+    uint32_t line;        // 1-indexed line number
+    uint32_t column;      // 1-indexed column number
+    uint32_t end_line;    // End line (for ranges)
+    uint32_t end_column;  // End column
 } XrLocation;
 
-#endif // XLOCATION_H
+#endif  // XLOCATION_H

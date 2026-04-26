@@ -43,24 +43,24 @@
 // not in GC linked lists, so gc_next is unused).
 // This preserves objsize for correct munmap on mmap-allocated objects.
 static inline _Atomic(uintptr_t) *xr_shared_refc_ptr(XrGCHeader *gc) {
-    return (_Atomic(uintptr_t) *)&gc->gc_next;
+    return (_Atomic(uintptr_t) *) &gc->gc_next;
 }
 
 static inline int xr_shared_get_refc(XrGCHeader *gc) {
-    return (int)atomic_load(xr_shared_refc_ptr(gc));
+    return (int) atomic_load(xr_shared_refc_ptr(gc));
 }
 
 static inline void xr_shared_set_refc(XrGCHeader *gc, int refc) {
-    atomic_store(xr_shared_refc_ptr(gc), (uintptr_t)refc);
+    atomic_store(xr_shared_refc_ptr(gc), (uintptr_t) refc);
 }
 
 static inline int xr_shared_incref(XrGCHeader *gc) {
-    return (int)atomic_fetch_add(xr_shared_refc_ptr(gc), 1) + 1;
+    return (int) atomic_fetch_add(xr_shared_refc_ptr(gc), 1) + 1;
 }
 
 static inline int xr_shared_decref(XrGCHeader *gc) {
     uintptr_t old = atomic_fetch_sub(xr_shared_refc_ptr(gc), 1);
-    return (old <= 1) ? 0 : (int)(old - 1);
+    return (old <= 1) ? 0 : (int) (old - 1);
 }
 
 static inline void xr_shared_init(XrGCHeader *gc) {
@@ -74,4 +74,4 @@ static inline void xr_shared_init(XrGCHeader *gc) {
 // Must be called when refcount reaches 0
 XR_FUNC void xr_shared_destroy(XrGCHeader *obj);
 
-#endif // XSHARED_H
+#endif  // XSHARED_H

@@ -46,12 +46,12 @@ typedef struct XrJsonOverflow {
 
 struct XrJson {
     XrGCHeader gc;
-    XrJsonOverflow *overflow;   // NULL when all fields fit in-object
+    XrJsonOverflow *overflow;  // NULL when all fields fit in-object
     XrValue fields[];
 };
 
 // Retrieve shape via shape_id stored in GC header extra (replaces json->shape)
-static inline XrShape* xr_json_shape(XrayIsolate *X, XrJson *json) {
+static inline XrShape *xr_json_shape(XrayIsolate *X, XrJson *json) {
     return xr_shape_get_by_id(X, xr_gc_get_shape_id(&json->gc));
 }
 
@@ -92,24 +92,27 @@ static inline XrValue xr_json_get_field_any(XrayIsolate *X, XrJson *json, uint16
         return json->fields[index];
     }
     XrJsonOverflow *ov = json->overflow;
-    if (!ov) return xr_null();
+    if (!ov)
+        return xr_null();
     uint16_t ov_idx = index - shape->in_object_capacity;
-    if (ov_idx >= ov->length) return xr_null();
+    if (ov_idx >= ov->length)
+        return xr_null();
     return ov->values[ov_idx];
 }
 
 /* ========== Query API ========== */
 
 static inline uint16_t xr_json_field_count(XrayIsolate *X, XrJson *json) {
-    if (!json) return 0;
+    if (!json)
+        return 0;
     return xr_json_shape(X, json)->field_count;
 }
 
 static inline bool xr_json_has_field(XrayIsolate *X, XrJson *json, SymbolId symbol) {
-    if (!json) return false;
+    if (!json)
+        return false;
     return xr_shape_has_field(xr_json_shape(X, json), symbol);
 }
-
 
 /* ========== XrValue Conversion ========== */
 
@@ -118,11 +121,11 @@ static inline XrValue xr_json_value(XrJson *json) {
 }
 
 static inline bool xr_value_is_json(XrValue v) {
-    return XR_IS_PTR(v) && XR_GC_GET_TYPE((XrGCHeader*)XR_TO_PTR(v)) == XR_TJSON;
+    return XR_IS_PTR(v) && XR_GC_GET_TYPE((XrGCHeader *) XR_TO_PTR(v)) == XR_TJSON;
 }
 
-static inline XrJson* xr_value_to_json(XrValue v) {
-    return (XrJson*)XR_TO_PTR(v);
+static inline XrJson *xr_value_to_json(XrValue v) {
+    return (XrJson *) XR_TO_PTR(v);
 }
 
-#endif // XJSON_H
+#endif  // XJSON_H

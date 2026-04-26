@@ -44,7 +44,8 @@
 // xr_http_module_context_free() during Isolate teardown.
 static XrConnPool *http_client_pool(XrayIsolate *X) {
     XrHttpContext *ctx = xr_http_get_context(X);
-    if (!ctx) return NULL;
+    if (!ctx)
+        return NULL;
     if (!ctx->conn_pool) {
         ctx->conn_pool = xr_conn_pool_new();
     }
@@ -54,7 +55,8 @@ static XrConnPool *http_client_pool(XrayIsolate *X) {
 /* ========== URL Parsing ========== */
 
 int xr_http_url_parse(const char *url, XrHttpUrl *out) {
-    if (!url || !out) return -1;
+    if (!url || !out)
+        return -1;
 
     memset(out, 0, sizeof(XrHttpUrl));
 
@@ -68,8 +70,8 @@ int xr_http_url_parse(const char *url, XrHttpUrl *out) {
         out->is_https = false;
         out->port = XR_HTTP_DEFAULT_PORT;
     } else {
-        int scheme_len = (int)(scheme_end - p);
-        out->scheme = (char*)xr_malloc(scheme_len + 1);
+        int scheme_len = (int) (scheme_end - p);
+        out->scheme = (char *) xr_malloc(scheme_len + 1);
         memcpy(out->scheme, p, scheme_len);
         out->scheme[scheme_len] = '\0';
 
@@ -95,7 +97,10 @@ int xr_http_url_parse(const char *url, XrHttpUrl *out) {
         const char *scan = p;
         const char *at = NULL;
         while (*scan && *scan != '/' && *scan != '?' && *scan != '#') {
-            if (*scan == '@') { at = scan; break; }
+            if (*scan == '@') {
+                at = scan;
+                break;
+            }
             if (*scan == '[') {
                 // IPv6 host begins; any earlier '@' would have been found
                 // above. Since we didn't, there is no userinfo — stop.
@@ -103,7 +108,8 @@ int xr_http_url_parse(const char *url, XrHttpUrl *out) {
             }
             scan++;
         }
-        if (at) p = at + 1;
+        if (at)
+            p = at + 1;
     }
 
     // Parse host + port. Two shapes per RFC 3986 §3.2.2:
@@ -130,10 +136,12 @@ int xr_http_url_parse(const char *url, XrHttpUrl *out) {
         if (*p == ':') {
             port_start = p + 1;
             p++;
-            while (*p >= '0' && *p <= '9') p++;
+            while (*p >= '0' && *p <= '9')
+                p++;
         }
         // Consume remaining authority chars up to path/query/fragment.
-        while (*p && *p != '/' && *p != '?' && *p != '#') p++;
+        while (*p && *p != '/' && *p != '?' && *p != '#')
+            p++;
     } else {
         // reg-name or IPv4. Scan to first ':' (port delimiter) or authority
         // terminator. Since reg-name / IPv4 contain no colons, the first
@@ -147,17 +155,18 @@ int xr_http_url_parse(const char *url, XrHttpUrl *out) {
             }
             p++;
         }
-        if (!host_end) host_end = p;
+        if (!host_end)
+            host_end = p;
     }
 
     // Copy host
-    int host_len = (int)(host_end - host_start);
+    int host_len = (int) (host_end - host_start);
     if (host_len == 0) {
         xr_http_url_free(out);
         return -1;
     }
 
-    out->host = (char*)xr_malloc(host_len + 1);
+    out->host = (char *) xr_malloc(host_len + 1);
     memcpy(out->host, host_start, host_len);
     out->host[host_len] = '\0';
 
@@ -168,8 +177,7 @@ int xr_http_url_parse(const char *url, XrHttpUrl *out) {
         // IPv6 branch (which didn't set `p` to the port boundary); this is
         // a no-op for the reg-name branch where `p == port_end` already.
         int port = 0;
-        while (port_start < port_end &&
-               *port_start >= '0' && *port_start <= '9') {
+        while (port_start < port_end && *port_start >= '0' && *port_start <= '9') {
             port = port * 10 + (*port_start - '0');
             port_start++;
         }
@@ -194,10 +202,20 @@ int xr_http_url_parse(const char *url, XrHttpUrl *out) {
 }
 
 void xr_http_url_free(XrHttpUrl *url) {
-    if (!url) return;
-    if (url->scheme) { xr_free(url->scheme); url->scheme = NULL; }
-    if (url->host) { xr_free(url->host); url->host = NULL; }
-    if (url->path) { xr_free(url->path); url->path = NULL; }
+    if (!url)
+        return;
+    if (url->scheme) {
+        xr_free(url->scheme);
+        url->scheme = NULL;
+    }
+    if (url->host) {
+        xr_free(url->host);
+        url->host = NULL;
+    }
+    if (url->path) {
+        xr_free(url->path);
+        url->path = NULL;
+    }
 }
 
 /* ========== Request Config Initialization ========== */
@@ -212,7 +230,7 @@ void xr_http_request_config_init(XrHttpRequestConfig *config) {
 
 /* ========== Error Description ========== */
 
-const char* xr_http_error_string(XrHttpError err) {
+const char *xr_http_error_string(XrHttpError err) {
     return xr_net_error_string(err);
 }
 
@@ -225,9 +243,9 @@ const char* xr_http_error_string(XrHttpError err) {
  * Header name/value pointers in the array point into (2).
  * Returns 0 on success, -1 on allocation failure.
  */
-static int copy_headers_compact(XrHttpResult *result,
-                                const XrHttpHeader *src, size_t count) {
-    if (count == 0) return 0;
+static int copy_headers_compact(XrHttpResult *result, const XrHttpHeader *src, size_t count) {
+    if (count == 0)
+        return 0;
 
     // Pass 1: compute total string bytes
     size_t total = 0;
@@ -235,10 +253,14 @@ static int copy_headers_compact(XrHttpResult *result,
         total += src[i].name_len + 1 + src[i].value_len + 1;
     }
 
-    XrHttpHeader *hdrs = (XrHttpHeader *)xr_malloc(sizeof(XrHttpHeader) * count);
-    if (!hdrs) return -1;
-    char *data = (char *)xr_malloc(total);
-    if (!data) { xr_free(hdrs); return -1; }
+    XrHttpHeader *hdrs = (XrHttpHeader *) xr_malloc(sizeof(XrHttpHeader) * count);
+    if (!hdrs)
+        return -1;
+    char *data = (char *) xr_malloc(total);
+    if (!data) {
+        xr_free(hdrs);
+        return -1;
+    }
 
     // Pass 2: pack strings
     char *p = data;
@@ -257,7 +279,7 @@ static int copy_headers_compact(XrHttpResult *result,
     }
 
     result->headers = hdrs;
-    result->header_count = (int)count;
+    result->header_count = (int) count;
     result->_header_data = data;
     return 0;
 }
@@ -265,12 +287,28 @@ static int copy_headers_compact(XrHttpResult *result,
 /* ========== Result Cleanup ========== */
 
 void xr_http_result_free(XrHttpResult *result) {
-    if (!result) return;
-    if (result->status_text) { xr_free(result->status_text); result->status_text = NULL; }
-    if (result->_header_data) { xr_free(result->_header_data); result->_header_data = NULL; }
-    if (result->headers) { xr_free(result->headers); result->headers = NULL; }
-    if (result->body) { xr_free(result->body); result->body = NULL; }
-    if (result->error_msg) { xr_free(result->error_msg); result->error_msg = NULL; }
+    if (!result)
+        return;
+    if (result->status_text) {
+        xr_free(result->status_text);
+        result->status_text = NULL;
+    }
+    if (result->_header_data) {
+        xr_free(result->_header_data);
+        result->_header_data = NULL;
+    }
+    if (result->headers) {
+        xr_free(result->headers);
+        result->headers = NULL;
+    }
+    if (result->body) {
+        xr_free(result->body);
+        result->body = NULL;
+    }
+    if (result->error_msg) {
+        xr_free(result->error_msg);
+        result->error_msg = NULL;
+    }
     // Clean up stream resources if caller forgot to close
     if (result->_stream_conn || result->_stream_buf) {
         xr_http_stream_close(result);
@@ -279,10 +317,8 @@ void xr_http_result_free(XrHttpResult *result) {
 
 /* ========== Build Request ========== */
 
-static char* build_request(XrayIsolate *isolate,
-                           const XrHttpRequestConfig *config,
-                           const XrHttpUrl *url,
-                           size_t *out_len) {
+static char *build_request(XrayIsolate *isolate, const XrHttpRequestConfig *config,
+                           const XrHttpUrl *url, size_t *out_len) {
     // Estimate buffer size
     size_t buf_size = 1024;
     if (config->body_len > 0) {
@@ -293,8 +329,9 @@ static char* build_request(XrayIsolate *isolate,
         buf_size += config->headers[i].name_len + config->headers[i].value_len + 4;
     }
 
-    char *buf = (char*)xr_malloc(buf_size);
-    if (!buf) return NULL;
+    char *buf = (char *) xr_malloc(buf_size);
+    if (!buf)
+        return NULL;
 
     char *p = buf;
 
@@ -331,17 +368,22 @@ static char* build_request(XrayIsolate *isolate,
 
         // Check special headers (switch on length for jump table)
         switch (h->name_len) {
-        case 6:
-            if (strncasecmp(h->name, "Accept", 6) == 0) has_accept = true;
-            break;
-        case 10:
-            if (strncasecmp(h->name, "User-Agent", 10) == 0) has_user_agent = true;
-            else if (strncasecmp(h->name, "Connection", 10) == 0) has_connection = true;
-            break;
-        case 14:
-            if (strncasecmp(h->name, "Content-Length", 14) == 0) has_content_length = true;
-            break;
-        default: break;
+            case 6:
+                if (strncasecmp(h->name, "Accept", 6) == 0)
+                    has_accept = true;
+                break;
+            case 10:
+                if (strncasecmp(h->name, "User-Agent", 10) == 0)
+                    has_user_agent = true;
+                else if (strncasecmp(h->name, "Connection", 10) == 0)
+                    has_connection = true;
+                break;
+            case 14:
+                if (strncasecmp(h->name, "Content-Length", 14) == 0)
+                    has_content_length = true;
+                break;
+            default:
+                break;
         }
     }
 
@@ -352,14 +394,12 @@ static char* build_request(XrayIsolate *isolate,
     // addresses never contain one.
     if (!has_host) {
         bool is_v6 = (strchr(url->host, ':') != NULL);
-        bool default_port = (url->port == XR_HTTP_DEFAULT_PORT ||
-                             url->port == XR_HTTP_DEFAULT_HTTPS_PORT);
+        bool default_port =
+            (url->port == XR_HTTP_DEFAULT_PORT || url->port == XR_HTTP_DEFAULT_HTTPS_PORT);
         if (default_port) {
-            p += sprintf(p, is_v6 ? "Host: [%s]\r\n" : "Host: %s\r\n",
-                         url->host);
+            p += sprintf(p, is_v6 ? "Host: [%s]\r\n" : "Host: %s\r\n", url->host);
         } else {
-            p += sprintf(p, is_v6 ? "Host: [%s]:%d\r\n" : "Host: %s:%d\r\n",
-                         url->host, url->port);
+            p += sprintf(p, is_v6 ? "Host: [%s]:%d\r\n" : "Host: %s:%d\r\n", url->host, url->port);
         }
     }
 
@@ -375,9 +415,7 @@ static char* build_request(XrayIsolate *isolate,
     }
 
     // Accept-Encoding (supports gzip decompression)
-    {
-        p += sprintf(p, "Accept-Encoding: gzip, deflate\r\n");
-    }
+    { p += sprintf(p, "Accept-Encoding: gzip, deflate\r\n"); }
 
     // Content-Length
     if (config->body_len > 0 && !has_content_length) {
@@ -388,7 +426,8 @@ static char* build_request(XrayIsolate *isolate,
     if (isolate && xr_is_cookie_jar_enabled(isolate)) {
         XrCookieJar *jar = xr_get_cookie_jar(isolate);
         if (jar) {
-            char *cookie_header = xr_cookie_jar_get_header(jar, url->host, url->path, url->is_https);
+            char *cookie_header =
+                xr_cookie_jar_get_header(jar, url->host, url->path, url->is_https);
             if (cookie_header) {
                 p += sprintf(p, "Cookie: %s\r\n", cookie_header);
                 xr_free(cookie_header);
@@ -411,7 +450,7 @@ static char* build_request(XrayIsolate *isolate,
 }
 
 // Get Location from response headers
-static char* get_redirect_location(XrHttpResult *result) {
+static char *get_redirect_location(XrHttpResult *result) {
     for (int i = 0; i < result->header_count; i++) {
         if (result->headers[i].name_len == 8 &&
             strncasecmp(result->headers[i].name, "Location", 8) == 0) {
@@ -423,12 +462,12 @@ static char* get_redirect_location(XrHttpResult *result) {
 
 // Check if redirect status code
 static bool is_redirect_status(int status) {
-    return status == 301 || status == 302 || status == 303 ||
-           status == 307 || status == 308;
+    return status == 301 || status == 302 || status == 303 || status == 307 || status == 308;
 }
 
 // Internal request function (single request, no redirect handling)
-static XrHttpResult xr_http_request_internal(XrayIsolate *X, const XrHttpRequestConfig *config, const char *url_str);
+static XrHttpResult xr_http_request_internal(XrayIsolate *X, const XrHttpRequestConfig *config,
+                                             const char *url_str);
 
 /* ========== Main Request Function ========== */
 
@@ -453,10 +492,8 @@ XrHttpResult xr_http_request(XrayIsolate *X, const XrHttpRequestConfig *config) 
         result = xr_http_request_internal(X, config, current_url);
 
         // Check if redirect needed
-        if (follow_redirects &&
-            is_redirect_status(result.status_code) &&
+        if (follow_redirects && is_redirect_status(result.status_code) &&
             redirect_count < max_redirects) {
-
             char *location = get_redirect_location(&result);
             if (location) {
                 // Handle relative URL
@@ -466,9 +503,8 @@ XrHttpResult xr_http_request(XrayIsolate *X, const XrHttpRequestConfig *config) 
                     XrHttpUrl parsed;
                     if (xr_http_url_parse(current_url, &parsed) == 0) {
                         size_t len = strlen(parsed.host) + strlen(location) + 16;
-                        new_url = (char*)xr_malloc(len);
-                        snprintf(new_url, len, "%s://%s%s",
-                                 parsed.is_https ? "https" : "http",
+                        new_url = (char *) xr_malloc(len);
+                        snprintf(new_url, len, "%s://%s%s", parsed.is_https ? "https" : "http",
                                  parsed.host, location);
                         xr_http_url_free(&parsed);
                     }
@@ -490,7 +526,7 @@ XrHttpResult xr_http_request(XrayIsolate *X, const XrHttpRequestConfig *config) 
 
                     // 303 redirect forces GET method
                     if (result.status_code == 303) {
-                        XrHttpRequestConfig *mutable_config = (XrHttpRequestConfig*)config;
+                        XrHttpRequestConfig *mutable_config = (XrHttpRequestConfig *) config;
                         mutable_config->method = XR_HTTP_METHOD_GET;
                         mutable_config->body = NULL;
                         mutable_config->body_len = 0;
@@ -509,7 +545,8 @@ XrHttpResult xr_http_request(XrayIsolate *X, const XrHttpRequestConfig *config) 
 }
 
 // Internal request function implementation
-static XrHttpResult xr_http_request_internal(XrayIsolate *X, const XrHttpRequestConfig *config, const char *url_str) {
+static XrHttpResult xr_http_request_internal(XrayIsolate *X, const XrHttpRequestConfig *config,
+                                             const char *url_str) {
     XrHttpResult result;
     memset(&result, 0, sizeof(result));
 
@@ -522,12 +559,12 @@ static XrHttpResult xr_http_request_internal(XrayIsolate *X, const XrHttpRequest
     }
 
     int timeout_ms = config->timeout_ms > 0 ? config->timeout_ms : XR_HTTP_DEFAULT_TIMEOUT;
-    (void)timeout_ms;
+    (void) timeout_ms;
     char *request_buf = NULL;
     XrNetBuffer *recv_buf = NULL;
     XrPooledConn *pooled = NULL;
     XrConnPool *pool = NULL;
-    bool conn_ok = false;   // Whether connection can be returned to pool
+    bool conn_ok = false;  // Whether connection can be returned to pool
 
     // Resolve this Isolate's connection pool (lazy-init on first request).
     pool = http_client_pool(X);
@@ -538,7 +575,7 @@ static XrHttpResult xr_http_request_internal(XrayIsolate *X, const XrHttpRequest
     }
 
     // Try to get pooled connection (handles DNS, connect, TLS internally)
-    pooled = xr_conn_pool_get(pool, url.host, (uint16_t)url.port, url.is_https);
+    pooled = xr_conn_pool_get(pool, url.host, (uint16_t) url.port, url.is_https);
     if (!pooled) {
         result.error = XR_HTTP_ERR_CONNECT;
         result.error_msg = xr_strdup("Connection failed");
@@ -599,7 +636,7 @@ static XrHttpResult xr_http_request_internal(XrayIsolate *X, const XrHttpRequest
         // Receive data via pooled connection
         size_t avail = xr_netbuf_available(recv_buf);
         int n = xr_pooled_conn_read(pooled, recv_buf->bytes + recv_buf->size,
-                                     avail > 0 ? avail - 1 : 0);
+                                    avail > 0 ? avail - 1 : 0);
         if (n < 0) {
             result.error = XR_HTTP_ERR_RECV;
             result.error_msg = xr_strdup("Receive failed");
@@ -615,15 +652,15 @@ static XrHttpResult xr_http_request_internal(XrayIsolate *X, const XrHttpRequest
         recv_buf->bytes[recv_buf->size] = '\0';
 
         // Try to parse response
-        XrHttpParseResult parse_result = xr_http_parse_response(&parser, &resp,
-                                                                 recv_buf->bytes, recv_buf->size);
+        XrHttpParseResult parse_result =
+            xr_http_parse_response(&parser, &resp, recv_buf->bytes, recv_buf->size);
 
         if (parse_result == XR_HTTP_PARSE_OK) {
             // Stream mode: return headers immediately, keep connection open
             if (config->stream) {
                 result.status_code = resp.status_code;
                 if (resp.status_text && resp.status_text_len > 0) {
-                    result.status_text = (char *)xr_malloc(resp.status_text_len + 1);
+                    result.status_text = (char *) xr_malloc(resp.status_text_len + 1);
                     memcpy(result.status_text, resp.status_text, resp.status_text_len);
                     result.status_text[resp.status_text_len] = '\0';
                 }
@@ -638,7 +675,7 @@ static XrHttpResult xr_http_request_internal(XrayIsolate *X, const XrHttpRequest
 
                 result._stream_conn = pooled;
                 result._stream_buf = recv_buf;
-                result._stream_remaining = resp.content_length; // -1 if unknown
+                result._stream_remaining = resp.content_length;  // -1 if unknown
                 result._stream_chunked = resp.chunked;
                 result.error = XR_HTTP_OK;
                 // Prevent cleanup from closing conn / freeing buf
@@ -665,8 +702,8 @@ static XrHttpResult xr_http_request_internal(XrayIsolate *X, const XrHttpRequest
     }
 
     // Final parse
-    XrHttpParseResult parse_result = xr_http_parse_response(&parser, &resp,
-                                                             recv_buf->bytes, recv_buf->size);
+    XrHttpParseResult parse_result =
+        xr_http_parse_response(&parser, &resp, recv_buf->bytes, recv_buf->size);
     if (parse_result == XR_HTTP_PARSE_ERROR) {
         result.error = XR_HTTP_ERR_PARSE;
         result.error_msg = xr_strdup("Response parse error");
@@ -680,7 +717,7 @@ static XrHttpResult xr_http_request_internal(XrayIsolate *X, const XrHttpRequest
     result.status_code = resp.status_code;
 
     if (resp.status_text && resp.status_text_len > 0) {
-        result.status_text = (char*)xr_malloc(resp.status_text_len + 1);
+        result.status_text = (char *) xr_malloc(resp.status_text_len + 1);
         memcpy(result.status_text, resp.status_text, resp.status_text_len);
         result.status_text[resp.status_text_len] = '\0';
     }
@@ -705,8 +742,8 @@ static XrHttpResult xr_http_request_internal(XrayIsolate *X, const XrHttpRequest
         if (set_cookie_count > 0 && X && xr_is_cookie_jar_enabled(X)) {
             XrCookieJar *jar = xr_get_cookie_jar(X);
             if (jar) {
-                xr_cookie_jar_add_from_response(jar, set_cookies, set_cookie_count,
-                                                 url.host, url.path);
+                xr_cookie_jar_add_from_response(jar, set_cookies, set_cookie_count, url.host,
+                                                url.path);
             }
         }
     }
@@ -716,9 +753,9 @@ static XrHttpResult xr_http_request_internal(XrayIsolate *X, const XrHttpRequest
     size_t raw_body_len = 0;
 
     if (resp.body && resp.body_len > 0) {
-        raw_body = (char*)resp.body;
+        raw_body = (char *) resp.body;
         raw_body_len = resp.body_len;
-    } else if (resp.content_length < 0 && recv_buf->size > (size_t)resp.header_bytes) {
+    } else if (resp.content_length < 0 && recv_buf->size > (size_t) resp.header_bytes) {
         raw_body = recv_buf->bytes + resp.header_bytes;
         raw_body_len = recv_buf->size - resp.header_bytes;
     }
@@ -726,7 +763,7 @@ static XrHttpResult xr_http_request_internal(XrayIsolate *X, const XrHttpRequest
     // Handle chunked encoding
     char *decoded_body = NULL;
     if (resp.chunked && raw_body && raw_body_len > 0) {
-        decoded_body = (char*)xr_malloc(raw_body_len + 1);
+        decoded_body = (char *) xr_malloc(raw_body_len + 1);
         memcpy(decoded_body, raw_body, raw_body_len);
 
         XrChunkedDecoder decoder;
@@ -770,28 +807,29 @@ static XrHttpResult xr_http_request_internal(XrayIsolate *X, const XrHttpRequest
             int dc_rc = -1;
             switch (compress_type) {
                 case XR_CONTENT_ENC_GZIP:
-                    dc_rc = xr_zlib_gzip_decompress(raw_body, raw_body_len,
-                                                    &decompressed, &decompressed_len);
+                    dc_rc = xr_zlib_gzip_decompress(raw_body, raw_body_len, &decompressed,
+                                                    &decompressed_len);
                     break;
                 case XR_CONTENT_ENC_DEFLATE:
-                    dc_rc = xr_zlib_deflate_decompress(raw_body, raw_body_len,
-                                                      &decompressed, &decompressed_len);
+                    dc_rc = xr_zlib_deflate_decompress(raw_body, raw_body_len, &decompressed,
+                                                       &decompressed_len);
                     break;
-                default: break;
+                default:
+                    break;
             }
             if (dc_rc == 0) {
-                result.body = (char*)decompressed;
+                result.body = (char *) decompressed;
                 result.body_len = decompressed_len;
             } else {
                 // Decompress failed, use original data
-                result.body = (char*)xr_malloc(raw_body_len + 1);
+                result.body = (char *) xr_malloc(raw_body_len + 1);
                 memcpy(result.body, raw_body, raw_body_len);
                 result.body[raw_body_len] = '\0';
                 result.body_len = raw_body_len;
             }
         } else {
             // No compression, copy directly
-            result.body = (char*)xr_malloc(raw_body_len + 1);
+            result.body = (char *) xr_malloc(raw_body_len + 1);
             memcpy(result.body, raw_body, raw_body_len);
             result.body[raw_body_len] = '\0';
             result.body_len = raw_body_len;
@@ -801,7 +839,8 @@ static XrHttpResult xr_http_request_internal(XrayIsolate *X, const XrHttpRequest
     result.error = XR_HTTP_OK;
 
     // Free chunked decode buffer
-    if (decoded_body) xr_free(decoded_body);
+    if (decoded_body)
+        xr_free(decoded_body);
 
 cleanup:
     // Return connection to pool (or close if error/no keep-alive). `pool` is
@@ -809,12 +848,13 @@ cleanup:
     // successful http_client_pool() resolution.
     if (pooled) {
         if (result.error == XR_HTTP_OK && conn_ok) {
-            xr_conn_pool_put(pool, pooled, url.host, (uint16_t)url.port, url.is_https, true);
+            xr_conn_pool_put(pool, pooled, url.host, (uint16_t) url.port, url.is_https, true);
         } else {
             xr_conn_pool_close(pool, pooled);
         }
     }
-    if (request_buf) xr_free(request_buf);
+    if (request_buf)
+        xr_free(request_buf);
     xr_netbuf_release(recv_buf);
     xr_http_url_free(&url);
 
@@ -885,17 +925,19 @@ XrHttpResult xr_http_delete(XrayIsolate *X, const char *url) {
 
 /* ========== Request Context Implementation ========== */
 
-XrHttpReqContext* xr_http_context_new(void) {
-    XrHttpReqContext *ctx = (XrHttpReqContext*)xr_calloc(1, sizeof(XrHttpReqContext));
+XrHttpReqContext *xr_http_context_new(void) {
+    XrHttpReqContext *ctx = (XrHttpReqContext *) xr_calloc(1, sizeof(XrHttpReqContext));
     return ctx;
 }
 
 void xr_http_context_set_timeout(XrHttpReqContext *ctx, int timeout_ms) {
-    if (ctx) ctx->deadline_ms = timeout_ms;
+    if (ctx)
+        ctx->deadline_ms = timeout_ms;
 }
 
 void xr_http_context_cancel(XrHttpReqContext *ctx) {
-    if (ctx) ctx->cancelled = true;
+    if (ctx)
+        ctx->cancelled = true;
 }
 
 bool xr_http_context_is_cancelled(XrHttpReqContext *ctx) {
@@ -908,18 +950,20 @@ void xr_http_context_free(XrHttpReqContext *ctx) {
 
 /* ========== Streaming Response API ========== */
 
-int xr_http_stream_read(XrHttpResult *result, char *buf, int max_bytes)
-{
-    if (!result || !buf || max_bytes <= 0) return -1;
-    if (!result->_stream_conn) return 0; // already closed
+int xr_http_stream_read(XrHttpResult *result, char *buf, int max_bytes) {
+    if (!result || !buf || max_bytes <= 0)
+        return -1;
+    if (!result->_stream_conn)
+        return 0;  // already closed
 
-    XrPooledConn *conn = (XrPooledConn *)result->_stream_conn;
-    XrNetBuffer *nb = (XrNetBuffer *)result->_stream_buf;
+    XrPooledConn *conn = (XrPooledConn *) result->_stream_conn;
+    XrNetBuffer *nb = (XrNetBuffer *) result->_stream_buf;
 
     // First drain any leftover data in the recv buffer
     if (nb && nb->size > 0) {
-        int copy = (int)nb->size;
-        if (copy > max_bytes) copy = max_bytes;
+        int copy = (int) nb->size;
+        if (copy > max_bytes)
+            copy = max_bytes;
         memcpy(buf, nb->bytes, copy);
         nb->size -= copy;
         if (nb->size > 0) {
@@ -932,32 +976,34 @@ int xr_http_stream_read(XrHttpResult *result, char *buf, int max_bytes)
     }
 
     // Check if body is fully consumed
-    if (result->_stream_remaining == 0) return 0;
+    if (result->_stream_remaining == 0)
+        return 0;
 
     // Read from connection
     int n = xr_pooled_conn_read(conn, buf, max_bytes);
-    if (n <= 0) return n == 0 ? 0 : -1;
+    if (n <= 0)
+        return n == 0 ? 0 : -1;
 
     if (result->_stream_remaining > 0) {
         result->_stream_remaining -= n;
-        if (result->_stream_remaining < 0) result->_stream_remaining = 0;
+        if (result->_stream_remaining < 0)
+            result->_stream_remaining = 0;
     }
     return n;
 }
 
-void xr_http_stream_close(XrHttpResult *result)
-{
-    if (!result) return;
+void xr_http_stream_close(XrHttpResult *result) {
+    if (!result)
+        return;
 
     if (result->_stream_buf) {
-        xr_netbuf_release((XrNetBuffer *)result->_stream_buf);
+        xr_netbuf_release((XrNetBuffer *) result->_stream_buf);
         result->_stream_buf = NULL;
     }
     if (result->_stream_conn) {
-        XrPooledConn *conn = (XrPooledConn *)result->_stream_conn;
+        XrPooledConn *conn = (XrPooledConn *) result->_stream_conn;
         // Don't return to pool — caller consumed partially, state unknown
         xr_conn_pool_close(NULL, conn);
         result->_stream_conn = NULL;
     }
 }
-
