@@ -24,6 +24,7 @@
 
 #include "xmethod_table.h"
 #include "xbool_methods.h"
+#include "../object/xbigint_methods.h"
 
 /*
  * Per-type method tables are declared as `extern const XrMethodSlot []`
@@ -36,7 +37,8 @@
  */
 
 const XrMethodSlot *const xr_builtin_method_tables[XR_TID_COUNT] = {
-    [XR_TID_BOOL] = xr_bool_method_table,
+    [XR_TID_BOOL]   = xr_bool_method_table,
+    [XR_TID_BIGINT] = xr_bigint_method_table,
 };
 
 /*

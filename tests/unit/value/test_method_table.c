@@ -33,9 +33,19 @@ TEST(registry_is_dense_and_typed) {
      * array size is enforced at compile time inside xmethod_table.c.
      * Migrated types must point at a stable, non-NULL table; the rest
      * stay NULL until their owner module migrates. */
+    /* Migrated types so far: bool, bigint. Add new ids here as
+     * the migration sweeps the rest of xvm_builtins.c. */
+    static const XrTypeId migrated[] = {
+        XR_TID_BOOL,
+        XR_TID_BIGINT,
+    };
     for (int tid = 0; tid < XR_TID_COUNT; tid++) {
         const XrMethodSlot *table = xr_builtin_method_tables[tid];
-        if (tid == XR_TID_BOOL) {
+        bool is_migrated = false;
+        for (size_t i = 0; i < sizeof(migrated)/sizeof(migrated[0]); i++) {
+            if (migrated[i] == (XrTypeId)tid) { is_migrated = true; break; }
+        }
+        if (is_migrated) {
             ASSERT(table != NULL);
         } else {
             ASSERT(table == NULL);
@@ -62,6 +72,44 @@ TEST(bool_method_table_unknown_symbol_returns_null) {
     const XrMethodSlot *slot = xr_method_table_lookup(
         XR_TID_BOOL, SYMBOL_PUSH, SYMBOL_BUILTIN_COUNT);
     ASSERT(slot == NULL);
+}
+
+/* ========== BigInt migration ========== */
+
+TEST(bigint_method_table_exposes_full_surface) {
+    /* All eight migrated symbols must resolve. The flag bits are
+     * deliberately not asserted here; xbigint_methods.c is the
+     * authoritative source. */
+    static const int symbols[] = {
+        SYMBOL_TOSTRING, SYMBOL_ABS, SYMBOL_SIGN,
+        SYMBOL_ISZERO, SYMBOL_ISNEGATIVE, SYMBOL_ISPOSITIVE,
+        SYMBOL_TOINT, SYMBOL_TOFLOAT,
+    };
+    for (size_t i = 0; i < sizeof(symbols)/sizeof(symbols[0]); i++) {
+        const XrMethodSlot *slot = xr_method_table_lookup(
+            XR_TID_BIGINT, symbols[i], SYMBOL_BUILTIN_COUNT);
+        ASSERT_NOT_NULL(slot);
+        ASSERT_NOT_NULL(slot->fn);
+        /* All bigint methods take exactly the receiver. */
+        ASSERT_EQ_INT(slot->min_args, 0);
+        ASSERT_EQ_INT(slot->max_args, 0);
+    }
+}
+
+TEST(bigint_pure_predicates_carry_flags) {
+    /* Pure / no-GC predicates must advertise both flags so JIT and
+     * AOT specializers can lift them above safepoints. */
+    static const int pure_symbols[] = {
+        SYMBOL_SIGN, SYMBOL_ISZERO, SYMBOL_ISNEGATIVE,
+        SYMBOL_ISPOSITIVE, SYMBOL_TOINT, SYMBOL_TOFLOAT,
+    };
+    for (size_t i = 0; i < sizeof(pure_symbols)/sizeof(pure_symbols[0]); i++) {
+        const XrMethodSlot *slot = xr_method_table_lookup(
+            XR_TID_BIGINT, pure_symbols[i], SYMBOL_BUILTIN_COUNT);
+        ASSERT_NOT_NULL(slot);
+        ASSERT(slot->flags & XR_METHOD_FLAG_PURE);
+        ASSERT(slot->flags & XR_METHOD_FLAG_NO_GC);
+    }
 }
 
 /* ========== Lookup helper short-circuits ========== */
@@ -103,6 +151,10 @@ TEST_MAIN_BEGIN()
     RUN_TEST_SUITE("Bool migration");
     RUN_TEST(bool_method_table_exposes_toString);
     RUN_TEST(bool_method_table_unknown_symbol_returns_null);
+
+    RUN_TEST_SUITE("BigInt migration");
+    RUN_TEST(bigint_method_table_exposes_full_surface);
+    RUN_TEST(bigint_pure_predicates_carry_flags);
 
     RUN_TEST_SUITE("xr_method_table_lookup short-circuits");
     RUN_TEST(lookup_returns_null_for_unmigrated_type);
