@@ -2198,8 +2198,10 @@ int vm_go_invoke(XrayIsolate *isolate, XrVMContext *vm_ctx,
         result = slot ? slot->fn(isolate, receiver, &base[a + 2], nargs)
                       : XR_NOTFOUND;
     } else if (XR_IS_STRING(receiver)) {
-        XrString *str = xr_value_to_string(isolate, receiver);
-        result = string_method_call_by_symbol(isolate, str, method_symbol, &base[a + 2], nargs);
+        const XrMethodSlot *slot = xr_method_table_lookup(
+            XR_TID_STRING, method_symbol, SYMBOL_BUILTIN_COUNT);
+        result = slot ? slot->fn(isolate, receiver, &base[a + 2], nargs)
+                      : XR_NOTFOUND;
     } else if (XR_IS_PTR(receiver)) {
         uint8_t gc_type = XR_HEAP_TYPE(receiver);
         XrClass *native_class = isolate->native_type_classes[gc_type];

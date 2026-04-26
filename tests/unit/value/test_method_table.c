@@ -44,6 +44,7 @@ TEST(registry_is_dense_and_typed) {
         XR_TID_MAP,
         XR_TID_JSON,
         XR_TID_ARRAY,
+        XR_TID_STRING,
         XR_TID_DATETIME,
     };
     for (int tid = 0; tid < XR_TID_COUNT; tid++) {
@@ -186,6 +187,66 @@ TEST(float_arity_caps) {
     ASSERT_EQ_INT(tofixed->max_args, 1);
     ASSERT_EQ_INT(powslot->min_args, 0);
     ASSERT_EQ_INT(powslot->max_args, 1);
+}
+
+/* ========== String migration ========== */
+
+TEST(string_method_table_exposes_full_surface) {
+    /* Thirty-eight string methods (CHARCODEAT shares a slot with
+     * CODEPOINT_AT, so unique symbols total 38). */
+    static const int symbols[] = {
+        SYMBOL_CHARAT, SYMBOL_CODEPOINT_AT, SYMBOL_CHARCODEAT,
+        SYMBOL_SUBSTRING, SYMBOL_SLICE, SYMBOL_BYTE_AT,
+        SYMBOL_INDEXOF, SYMBOL_LASTINDEXOF, SYMBOL_CONTAINS, SYMBOL_HAS,
+        SYMBOL_STARTSWITH, SYMBOL_ENDSWITH,
+        SYMBOL_TOLOWERCASE, SYMBOL_TOUPPERCASE,
+        SYMBOL_TRIM, SYMBOL_TRIM_START, SYMBOL_TRIM_END,
+        SYMBOL_PAD_START, SYMBOL_PAD_END,
+        SYMBOL_SPLIT, SYMBOL_REPLACE, SYMBOL_REPLACEALL,
+        SYMBOL_REPEAT, SYMBOL_CONCAT,
+        SYMBOL_REVERSE, SYMBOL_REVERSE_BYTES,
+        SYMBOL_TRANSLATE_BYTES, SYMBOL_TRANSLATE,
+        SYMBOL_IS_EMPTY, SYMBOL_IS_LETTER, SYMBOL_IS_NUMBER,
+        SYMBOL_IS_ALNUM, SYMBOL_IS_WHITESPACE,
+        SYMBOL_TOINT, SYMBOL_TOFLOAT, SYMBOL_ORD,
+        SYMBOL_MATCH, SYMBOL_TOSTRING,
+    };
+    for (size_t i = 0; i < sizeof(symbols)/sizeof(symbols[0]); i++) {
+        const XrMethodSlot *slot = xr_method_table_lookup(
+            XR_TID_STRING, symbols[i], SYMBOL_BUILTIN_COUNT);
+        ASSERT_NOT_NULL(slot);
+        ASSERT_NOT_NULL(slot->fn);
+    }
+}
+
+TEST(string_search_methods_are_pure_no_gc) {
+    /* Search/predicate methods read the buffer; they neither mutate
+     * the heap nor allocate. */
+    static const int symbols[] = {
+        SYMBOL_INDEXOF, SYMBOL_LASTINDEXOF, SYMBOL_CONTAINS, SYMBOL_HAS,
+        SYMBOL_STARTSWITH, SYMBOL_ENDSWITH,
+        SYMBOL_IS_EMPTY, SYMBOL_IS_LETTER, SYMBOL_IS_NUMBER,
+        SYMBOL_IS_ALNUM, SYMBOL_IS_WHITESPACE,
+    };
+    for (size_t i = 0; i < sizeof(symbols)/sizeof(symbols[0]); i++) {
+        const XrMethodSlot *slot = xr_method_table_lookup(
+            XR_TID_STRING, symbols[i], SYMBOL_BUILTIN_COUNT);
+        ASSERT_NOT_NULL(slot);
+        ASSERT(slot->flags & XR_METHOD_FLAG_PURE);
+        ASSERT(slot->flags & XR_METHOD_FLAG_NO_GC);
+    }
+}
+
+TEST(string_codepoint_at_and_charcodeat_share_handler) {
+    /* SYMBOL_CHARCODEAT is the legacy alias for SYMBOL_CODEPOINT_AT;
+     * both must resolve to the same XrMethodFn. */
+    const XrMethodSlot *cp = xr_method_table_lookup(
+        XR_TID_STRING, SYMBOL_CODEPOINT_AT, SYMBOL_BUILTIN_COUNT);
+    const XrMethodSlot *cc = xr_method_table_lookup(
+        XR_TID_STRING, SYMBOL_CHARCODEAT, SYMBOL_BUILTIN_COUNT);
+    ASSERT_NOT_NULL(cp);
+    ASSERT_NOT_NULL(cc);
+    ASSERT(cp->fn == cc->fn);
 }
 
 /* ========== Array migration ========== */
@@ -366,6 +427,11 @@ TEST_MAIN_BEGIN()
     RUN_TEST_SUITE("Float migration");
     RUN_TEST(float_method_table_exposes_full_surface);
     RUN_TEST(float_arity_caps);
+
+    RUN_TEST_SUITE("String migration");
+    RUN_TEST(string_method_table_exposes_full_surface);
+    RUN_TEST(string_search_methods_are_pure_no_gc);
+    RUN_TEST(string_codepoint_at_and_charcodeat_share_handler);
 
     RUN_TEST_SUITE("Array migration");
     RUN_TEST(array_method_table_exposes_full_surface);

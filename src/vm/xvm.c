@@ -5252,8 +5252,13 @@ startfunc:
                 /* === String builtin methods === */
                 invoke_string:
                 if (XR_IS_STRING(receiver)) {
-                    XrString *str = xr_value_to_string(isolate, receiver);
-                    R(a) = string_method_call_by_symbol(isolate, str, method_symbol, &R(a + 2), nargs);
+                    /* See xstring_methods.h — unified method table dispatch.
+                     * Receiver stays in heap form to skip the SSO→promote
+                     * round-trip the legacy dispatcher used to do. */
+                    const XrMethodSlot *_slot = xr_method_table_lookup(
+                        XR_TID_STRING, method_symbol, SYMBOL_BUILTIN_COUNT);
+                    R(a) = _slot ? _slot->fn(isolate, receiver, &R(a + 2), nargs)
+                                 : XR_NOTFOUND;
                     VM_BUILTIN_INVOKE_CHECK_EXC();
                     if (unlikely(XR_IS_NOTFOUND(R(a)))) {
                         XrSymbolTable *_st = (XrSymbolTable*)isolate->symbol_table;
@@ -5738,8 +5743,11 @@ startfunc:
                     R(a) = _slot ? _slot->fn(isolate, receiver, args, nargs)
                                  : XR_NOTFOUND;
                 } else if (XR_IS_STRING(receiver)) {
-                    XrString *str = xr_value_to_string(isolate, receiver);
-                    R(a) = string_method_call_by_symbol(isolate, str, method_symbol, args, nargs);
+                    /* See invoke_string above. */
+                    const XrMethodSlot *_slot = xr_method_table_lookup(
+                        XR_TID_STRING, method_symbol, SYMBOL_BUILTIN_COUNT);
+                    R(a) = _slot ? _slot->fn(isolate, receiver, args, nargs)
+                                 : XR_NOTFOUND;
                 } else if (XR_IS_SET(receiver)) {
                     /* See invoke_set above. */
                     const XrMethodSlot *_slot = xr_method_table_lookup(
