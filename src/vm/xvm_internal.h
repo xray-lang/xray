@@ -309,13 +309,15 @@ XR_FUNC struct XrICBuiltinTable *xr_vm_ctx_get_ic_builtin(const XrVMContext *ctx
 ** Deep-copy snapshot of the current IC state for `proto` in `ctx`. The
 ** returned table is independently owned by the caller; concurrent ctx
 ** mutation cannot tear the snapshot. Caller must release via
-** xr_ic_field_table_free / xr_ic_method_table_free. Returns NULL when no
-** IC has been recorded.
+** xr_ic_field_table_free / xr_ic_method_table_free /
+** xr_ic_builtin_table_free. Returns NULL when no IC has been recorded.
 */
 XR_FUNC struct XrICFieldTable *xr_vm_ic_fields_snapshot(XrVMContext *ctx,
                                                         XrProto *proto);
 XR_FUNC struct XrICMethodTable *xr_vm_ic_methods_snapshot(XrVMContext *ctx,
                                                           XrProto *proto);
+XR_FUNC struct XrICBuiltinTable *xr_vm_ic_builtin_snapshot(XrVMContext *ctx,
+                                                           XrProto *proto);
 
 /*
 ** Free every IC table currently held by `ctx` and reset capacity. Called

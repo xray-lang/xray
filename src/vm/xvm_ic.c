@@ -248,6 +248,25 @@ XrICMethodTable *xr_vm_ic_methods_snapshot(XrVMContext *ctx, XrProto *proto) {
     return dst;
 }
 
+XrICBuiltinTable *xr_vm_ic_builtin_snapshot(XrVMContext *ctx, XrProto *proto) {
+    XrICBuiltinTable *src = xr_vm_ctx_get_ic_builtin(ctx, proto);
+    if (!src || src->count == 0) return NULL;
+
+    XrICBuiltinTable *dst = xr_ic_builtin_table_new(src->count);
+    if (!dst) return NULL;
+    for (int i = 0; i < src->count; i++) {
+        if (xr_ic_builtin_table_alloc(dst) < 0) {
+            xr_ic_builtin_table_free(dst);
+            return NULL;
+        }
+    }
+    XR_DCHECK(dst->count == src->count, "snapshot: count mismatch");
+    if (src->count > 0) {
+        memcpy(dst->caches, src->caches, sizeof(XrICBuiltin) * (size_t)src->count);
+    }
+    return dst;
+}
+
 /* ========== Teardown ========== */
 
 void xr_vm_ctx_free_ic_tables(XrVMContext *ctx) {

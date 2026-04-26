@@ -34,6 +34,7 @@
 #include "../runtime/object/xstring.h"
 #include "../vm/xic_field_table.h"  // xr_ic_field_table_free
 #include "../vm/xic_method.h"       // xr_ic_method_table_free
+#include "../vm/xic_builtin.h"      // xr_ic_builtin_table_free
 #include "../base/xmalloc.h"
 #include "../base/xlog.h"
 #include "../base/xchecks.h"
@@ -89,8 +90,9 @@ static void bg_compile_one(XirCompileQueue *q, uint32_t worker_id,
         ? (XrProto **)task->shared_protos : NULL;
     XirAotOptions bg_opts;
     memset(&bg_opts, 0, sizeof(bg_opts));
-    bg_opts.ic_fields_snapshot = task->ic_fields_snapshot;
+    bg_opts.ic_fields_snapshot  = task->ic_fields_snapshot;
     bg_opts.ic_methods_snapshot = task->ic_methods_snapshot;
+    bg_opts.ic_builtin_snapshot = task->ic_builtin_snapshot;
     XirFunc *func = xir_build_from_proto_jit_ex(proto, shared_protos,
                                                  task->nshared,
                                                  task->shape_hint, NULL,
@@ -101,6 +103,8 @@ static void bg_compile_one(XirCompileQueue *q, uint32_t worker_id,
         xr_ic_field_table_free(task->ic_fields_snapshot);
     if (task->ic_methods_snapshot)
         xr_ic_method_table_free(task->ic_methods_snapshot);
+    if (task->ic_builtin_snapshot)
+        xr_ic_builtin_table_free(task->ic_builtin_snapshot);
     if (!func) {
         xr_log_warning("jit-bg", "builder failed for %s",
                 proto->name ? XR_STRING_CHARS(proto->name) : "?");
