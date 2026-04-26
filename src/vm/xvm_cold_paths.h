@@ -70,8 +70,7 @@
 #define VM_COLD_THROW(frame_ptr, pc_ptr, code, ...) do { \
     (frame_ptr)->pc = (pc_ptr); \
     XrValue _exc = xr_exception_newf(isolate, (code), __VA_ARGS__); \
-    xr_vm_add_stacktrace(isolate, _exc); \
-    xr_vm_throw_exception(isolate, _exc); \
+    xr_vm_unwind_with_trace(isolate, _exc); \
     return VM_COLD_ERROR; \
 } while(0)
 

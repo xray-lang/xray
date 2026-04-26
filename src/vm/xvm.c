@@ -176,7 +176,6 @@ XrVMResult run(XrayIsolate *isolate, XrVMContext *vm_ctx) {
     #define VM_RUNTIME_ERROR(code, fmt, ...) do { \
         XrValue _exc = xr_exception_newf(isolate, (code), fmt, ##__VA_ARGS__); \
         savepc(); \
-        xr_vm_add_stacktrace(isolate, _exc); \
         { \
             XrDebugHooks *_eh = (XrDebugHooks *)isolate->debug_hooks; \
             if (_eh && _eh->on_exception) { \
@@ -190,7 +189,7 @@ XrVMResult run(XrayIsolate *isolate, XrVMContext *vm_ctx) {
                 } \
             } \
         } \
-        xr_vm_throw_exception(isolate, _exc); \
+        xr_vm_unwind_with_trace(isolate, _exc); \
         if (VM_HANDLER_COUNT == 0) return XR_VM_RUNTIME_ERROR; \
         goto startfunc; \
     } while(0)
@@ -6265,9 +6264,9 @@ startfunc:
                     exception = xr_exception_from_value(isolate, exception);
                 }
 
-                // Add current position to stack trace
+                // Record full call chain into the exception trace
+                // and rewind to the matching handler in one step.
                 savepc();
-                xr_vm_add_stacktrace(isolate, exception);
 
                 // Debug hook: check exception breakpoint before unwinding
                 {
@@ -6284,8 +6283,9 @@ startfunc:
                     }
                 }
 
-                // Throw exception (stack unwinding)
-                xr_vm_throw_exception(isolate, exception);
+                // Throw exception (records full call-chain trace
+                // before unwinding to the matching handler).
+                xr_vm_unwind_with_trace(isolate, exception);
 
                 // Check if uncaught exception
                 if (VM_HANDLER_COUNT == 0) {
@@ -7295,8 +7295,7 @@ startfunc:
                             exc = xr_exception_from_value(isolate, exc);
                         }
                         savepc();
-                        xr_vm_add_stacktrace(isolate, exc);
-                        xr_vm_throw_exception(isolate, exc);
+                        xr_vm_unwind_with_trace(isolate, exc);
                         if (VM_HANDLER_COUNT == 0) return XR_VM_RUNTIME_ERROR;
                         goto startfunc;
                     }

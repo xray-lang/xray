@@ -276,6 +276,14 @@ XR_FUNC XrVMResult xr_vm_interpret_proto_isolate(XrayIsolate *isolate, XrProto *
 XR_FUNC void xr_vm_add_stacktrace(XrayIsolate *isolate, XrValue exception);
 XR_FUNC void xr_vm_throw_exception(XrayIsolate *isolate, XrValue exception);
 
+/*
+ * Single-call throw helper: records the full call chain into
+ * exc.stackTrace then performs the unwind. New code should prefer
+ * this over the add_stacktrace + throw_exception pair so the
+ * trace mechanism stays in one place. Defined in xvm_exception.c.
+ */
+XR_FUNC void xr_vm_unwind_with_trace(XrayIsolate *isolate, XrValue exception);
+
 /* ========== Per-coroutine Inline Caches (in xvm_ic.c) ========== */
 
 /*

@@ -128,8 +128,7 @@ XrValue map_method_call_by_symbol(XrayIsolate *isolate, XrMap *map, int symbol, 
             XrValue exc = xr_exception_newf(isolate, XR_ERR_INVALID_ARG_TYPE,
                 "WeakMap key must be a heap object, got %s",
                 xr_typeid_name(xr_value_typeid(args[0])));
-            xr_vm_add_stacktrace(isolate, exc);
-            xr_vm_throw_exception(isolate, exc);
+            xr_vm_unwind_with_trace(isolate, exc);
             return xr_null();
         }
         return map_set_handler(isolate, receiver, args, argc);
@@ -1037,8 +1036,7 @@ XrValue set_method_call_by_symbol(XrayIsolate *isolate, XrSet *set, int symbol, 
             XrValue exc = xr_exception_newf(isolate, XR_ERR_INVALID_ARG_TYPE,
                 "WeakSet value must be a heap object, got %s",
                 xr_typeid_name(xr_value_typeid(args[0])));
-            xr_vm_add_stacktrace(isolate, exc);
-            xr_vm_throw_exception(isolate, exc);
+            xr_vm_unwind_with_trace(isolate, exc);
             return xr_null();
         }
         return set_add_handler(isolate, receiver, args, argc);
