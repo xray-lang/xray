@@ -18,6 +18,7 @@
 #include "../runtime/gc/xcoro_gc.h"
 #include "../runtime/object/xbigint.h"
 #include "../runtime/object/xjson.h"
+#include "../runtime/value/xmethod_table.h"
 #include "../runtime/xerror_codes.h"
 #include "../../stdlib/datetime/datetime.h"
 #include "../../stdlib/regex/xregex.h"
@@ -915,170 +916,10 @@ XrValue array_method_call_by_symbol(XrayIsolate *isolate, XrArray *array, int sy
     return XR_NOTFOUND;
 }
 
-/* ========== Set Method Handlers ========== */
-
-static XrValue set_add_handler(XrayIsolate *isolate, XrValue receiver, XrValue *args, int argc) {
-    (void)isolate;
-    if (argc < 1) return xr_bool(0);
-    XrSet *set = XR_TO_SET(receiver);
-    return xr_bool(xr_set_add(set, args[0]));
-}
-
-static XrValue set_has_handler(XrayIsolate *isolate, XrValue receiver, XrValue *args, int argc) {
-    (void)isolate;
-    if (argc < 1) return xr_bool(0);
-    XrSet *set = XR_TO_SET(receiver);
-    return xr_bool(xr_set_has(set, args[0]));
-}
-
-static XrValue set_delete_handler(XrayIsolate *isolate, XrValue receiver, XrValue *args, int argc) {
-    (void)isolate;
-    if (argc < 1) return xr_bool(0);
-    XrSet *set = XR_TO_SET(receiver);
-    return xr_bool(xr_set_delete(set, args[0]));
-}
-
-static XrValue set_clear_handler(XrayIsolate *isolate, XrValue receiver, XrValue *args, int argc) {
-    (void)isolate; (void)args; (void)argc;
-    XrSet *set = XR_TO_SET(receiver);
-    xr_set_clear(set);
-    return xr_null();
-}
-
-
-static XrValue set_is_empty_handler(XrayIsolate *isolate, XrValue receiver, XrValue *args, int argc) {
-    (void)isolate; (void)args; (void)argc;
-    XrSet *set = XR_TO_SET(receiver);
-    return xr_bool(xr_set_is_empty(set));
-}
-
-// Set operation methods
-static XrValue set_union_handler(XrayIsolate *isolate, XrValue receiver, XrValue *args, int argc) {
-    if (argc < 1) return receiver;
-    if (!XR_IS_SET(args[0])) return receiver;
-    XrSet *set1 = XR_TO_SET(receiver);
-    XrSet *set2 = XR_TO_SET(args[0]);
-    XrSet *result = xr_set_union(xr_current_coro(isolate), set1, set2);
-    return xr_value_from_set(result);
-}
-
-static XrValue set_intersection_handler(XrayIsolate *isolate, XrValue receiver, XrValue *args, int argc) {
-    if (argc < 1) return xr_value_from_set(xr_set_new(xr_current_coro(isolate)));
-    if (!XR_IS_SET(args[0])) return xr_value_from_set(xr_set_new(xr_current_coro(isolate)));
-    XrSet *set1 = XR_TO_SET(receiver);
-    XrSet *set2 = XR_TO_SET(args[0]);
-    XrSet *result = xr_set_intersection(xr_current_coro(isolate), set1, set2);
-    return xr_value_from_set(result);
-}
-
-static XrValue set_difference_handler(XrayIsolate *isolate, XrValue receiver, XrValue *args, int argc) {
-    if (argc < 1) return receiver;
-    if (!XR_IS_SET(args[0])) return receiver;
-    XrSet *set1 = XR_TO_SET(receiver);
-    XrSet *set2 = XR_TO_SET(args[0]);
-    XrSet *result = xr_set_difference(xr_current_coro(isolate), set1, set2);
-    return xr_value_from_set(result);
-}
-
-static XrValue set_symmetric_difference_handler(XrayIsolate *isolate, XrValue receiver, XrValue *args, int argc) {
-    if (argc < 1) return receiver;
-    if (!XR_IS_SET(args[0])) return receiver;
-    XrSet *set1 = XR_TO_SET(receiver);
-    XrSet *set2 = XR_TO_SET(args[0]);
-    XrSet *result = xr_set_symmetric_difference(xr_current_coro(isolate), set1, set2);
-    return xr_value_from_set(result);
-}
-
-static XrValue set_is_subset_handler(XrayIsolate *isolate, XrValue receiver, XrValue *args, int argc) {
-    (void)isolate;
-    if (argc < 1) return xr_bool(0);
-    if (!XR_IS_SET(args[0])) return xr_bool(0);
-    XrSet *set1 = XR_TO_SET(receiver);
-    XrSet *set2 = XR_TO_SET(args[0]);
-    return xr_bool(xr_set_is_subset(set1, set2));
-}
-
-static XrValue set_is_superset_handler(XrayIsolate *isolate, XrValue receiver, XrValue *args, int argc) {
-    (void)isolate;
-    if (argc < 1) return xr_bool(0);
-    if (!XR_IS_SET(args[0])) return xr_bool(0);
-    XrSet *set1 = XR_TO_SET(receiver);
-    XrSet *set2 = XR_TO_SET(args[0]);
-    return xr_bool(xr_set_is_superset(set1, set2));
-}
-
-static XrValue set_to_array_handler(XrayIsolate *isolate, XrValue receiver, XrValue *args, int argc) {
-    (void)args; (void)argc;
-    XrSet *set = XR_TO_SET(receiver);
-    XrArray *arr = xr_set_values(xr_current_coro(isolate), set);
-    return xr_value_from_array(arr);
-}
-
-// Set method dispatch - if-else optimized to jump table by compiler
-XrValue set_method_call_by_symbol(XrayIsolate *isolate, XrSet *set, int symbol, XrValue *args, int argc) {
-    XR_DCHECK(isolate != NULL, "set_dispatch: NULL isolate");
-    XR_DCHECK(set != NULL, "set_dispatch: NULL set");
-    XR_DCHECK(XR_GC_GET_TYPE(&set->gc) == XR_TSET, "set_dispatch: object is not a set");
-    XrValue receiver = xr_value_from_set(set);
-
-    bool is_weak = (set->flags & XR_SET_FLAG_WEAK) != 0;
-
-    // Method dispatch
-    if (symbol == SYMBOL_HAS) return set_has_handler(isolate, receiver, args, argc);
-    if (symbol == SYMBOL_DELETE) return set_delete_handler(isolate, receiver, args, argc);
-    if (symbol == SYMBOL_IS_EMPTY) return set_is_empty_handler(isolate, receiver, args, argc);
-
-    if (symbol == SYMBOL_ADD) {
-        // WeakSet: value must be a GC object (not int/float/string/bool/null).
-        // Contract violation throws a catchable exception (mirrors the
-        // WeakMap.set guard above).
-        if (is_weak && argc >= 1 && !XR_VALUE_NEEDS_GC(args[0])) {
-            XrValue exc = xr_exception_newf(isolate, XR_ERR_INVALID_ARG_TYPE,
-                "WeakSet value must be a heap object, got %s",
-                xr_typeid_name(xr_value_typeid(args[0])));
-            xr_vm_unwind_with_trace(isolate, exc);
-            return xr_null();
-        }
-        return set_add_handler(isolate, receiver, args, argc);
-    }
-
-    // WeakSet: block enumeration and set-algebra methods
-    if (is_weak) {
-        if (symbol == SYMBOL_CLEAR || symbol == SYMBOL_UNION ||
-            symbol == SYMBOL_INTERSECTION || symbol == SYMBOL_DIFFERENCE ||
-            symbol == SYMBOL_SYMMETRIC_DIFFERENCE || symbol == SYMBOL_IS_SUBSET ||
-            symbol == SYMBOL_IS_SUPERSET || symbol == SYMBOL_TO_ARRAY ||
-            symbol == SYMBOL_ITERATOR) {
-            return XR_NOTFOUND;
-        }
-    }
-
-    if (symbol == SYMBOL_CLEAR) return set_clear_handler(isolate, receiver, args, argc);
-
-    // Set operations - call handlers directly
-    if (symbol == SYMBOL_UNION) return set_union_handler(isolate, receiver, args, argc);
-    if (symbol == SYMBOL_INTERSECTION) return set_intersection_handler(isolate, receiver, args, argc);
-    if (symbol == SYMBOL_DIFFERENCE) return set_difference_handler(isolate, receiver, args, argc);
-    if (symbol == SYMBOL_SYMMETRIC_DIFFERENCE) return set_symmetric_difference_handler(isolate, receiver, args, argc);
-    if (symbol == SYMBOL_IS_SUBSET) return set_is_subset_handler(isolate, receiver, args, argc);
-    if (symbol == SYMBOL_IS_SUPERSET) return set_is_superset_handler(isolate, receiver, args, argc);
-    if (symbol == SYMBOL_TO_ARRAY) return set_to_array_handler(isolate, receiver, args, argc);
-
-    // Iterator method
-    if (symbol == SYMBOL_ITERATOR) {
-        XrIterator *iter = xr_iterator_new_from_set(xr_current_coro(isolate), set);
-        return iter ? xr_value_from_iterator(iter) : xr_null();
-    }
-
-    // toString fallback
-    if (symbol == SYMBOL_TOSTRING) {
-        XrValue set_val = XR_FROM_PTR(set);
-        return xr_string_value(xr_value_to_string(isolate, set_val));
-    }
-
-    // Method not found — caller (OP_INVOKE_BUILTIN) throws catchable error
-    return XR_NOTFOUND;
-}
+/* Set / WeakSet method dispatch lives in
+ * src/runtime/object/xset_methods.{c,h}. The legacy
+ * set_method_call_by_symbol used to be here; it was deleted when
+ * set migrated to the unified XrMethodSlot table. */
 
 /* Numeric and bool method dispatch lives next to the owning value
  * representation:
@@ -1295,15 +1136,13 @@ MethodHandler xr_array_get_handler(int symbol) {
 }
 
 MethodHandler xr_set_get_handler(int symbol) {
-    if (symbol == SYMBOL_ADD) return set_add_handler;
-    if (symbol == SYMBOL_HAS) return set_has_handler;
-    if (symbol == SYMBOL_DELETE) return set_delete_handler;
-    if (symbol == SYMBOL_CLEAR) return set_clear_handler;
-    if (symbol == SYMBOL_UNION) return set_union_handler;
-    if (symbol == SYMBOL_INTERSECTION) return set_intersection_handler;
-    if (symbol == SYMBOL_DIFFERENCE) return set_difference_handler;
-    if (symbol == SYMBOL_TO_ARRAY) return set_to_array_handler;
-    if (symbol == SYMBOL_IS_EMPTY) return set_is_empty_handler;
+    /* Bound-method dispatch reuses the unified XrMethodFn signature
+     * defined in runtime/value/xmethod_table.h. Look the slot up
+     * once and return its fn; foreach / map / filter do not have
+     * direct handlers and resolve through the closure adapter. */
+    const XrMethodSlot *slot = xr_method_table_lookup(
+        XR_TID_SET, symbol, SYMBOL_BUILTIN_COUNT);
+    if (slot) return (MethodHandler)slot->fn;
     if (symbol == SYMBOL_FOREACH) return bound_method_stub;
     if (symbol == SYMBOL_MAP_METHOD) return bound_method_stub;
     if (symbol == SYMBOL_FILTER) return bound_method_stub;

@@ -40,6 +40,7 @@ TEST(registry_is_dense_and_typed) {
         XR_TID_INT,
         XR_TID_FLOAT,
         XR_TID_BIGINT,
+        XR_TID_SET,
     };
     for (int tid = 0; tid < XR_TID_COUNT; tid++) {
         const XrMethodSlot *table = xr_builtin_method_tables[tid];
@@ -183,6 +184,34 @@ TEST(float_arity_caps) {
     ASSERT_EQ_INT(powslot->max_args, 1);
 }
 
+/* ========== Set / WeakSet migration ========== */
+
+TEST(set_method_table_exposes_full_surface) {
+    /* All fourteen migrated set symbols must resolve. */
+    static const int symbols[] = {
+        SYMBOL_HAS, SYMBOL_DELETE, SYMBOL_IS_EMPTY, SYMBOL_ADD,
+        SYMBOL_CLEAR, SYMBOL_UNION, SYMBOL_INTERSECTION,
+        SYMBOL_DIFFERENCE, SYMBOL_SYMMETRIC_DIFFERENCE,
+        SYMBOL_IS_SUBSET, SYMBOL_IS_SUPERSET,
+        SYMBOL_TO_ARRAY, SYMBOL_ITERATOR, SYMBOL_TOSTRING,
+    };
+    for (size_t i = 0; i < sizeof(symbols)/sizeof(symbols[0]); i++) {
+        const XrMethodSlot *slot = xr_method_table_lookup(
+            XR_TID_SET, symbols[i], SYMBOL_BUILTIN_COUNT);
+        ASSERT_NOT_NULL(slot);
+        ASSERT_NOT_NULL(slot->fn);
+    }
+}
+
+TEST(set_add_advertises_may_throw) {
+    /* WeakSet.add validates its argument and throws on
+     * contract violation, so the slot must claim MAY_THROW. */
+    const XrMethodSlot *slot = xr_method_table_lookup(
+        XR_TID_SET, SYMBOL_ADD, SYMBOL_BUILTIN_COUNT);
+    ASSERT_NOT_NULL(slot);
+    ASSERT(slot->flags & XR_METHOD_FLAG_MAY_THROW);
+}
+
 /* ========== Lookup helper short-circuits ========== */
 
 TEST(lookup_returns_null_for_unmigrated_type) {
@@ -231,6 +260,10 @@ TEST_MAIN_BEGIN()
     RUN_TEST_SUITE("Float migration");
     RUN_TEST(float_method_table_exposes_full_surface);
     RUN_TEST(float_arity_caps);
+
+    RUN_TEST_SUITE("Set / WeakSet migration");
+    RUN_TEST(set_method_table_exposes_full_surface);
+    RUN_TEST(set_add_advertises_may_throw);
 
     RUN_TEST_SUITE("xr_method_table_lookup short-circuits");
     RUN_TEST(lookup_returns_null_for_unmigrated_type);
