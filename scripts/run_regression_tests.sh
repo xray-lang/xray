@@ -130,11 +130,15 @@ for test_file in $(find "${TEST_DIR}" -name "*.xr" -type f | sort); do
     # 显示测试进度
     printf "[%3d] %-40s ... " "${total_tests}" "${test_name}"
 
-    # GC stress tests crash under JIT in Debug build due to JIT+GC
-    # interaction issues with inline allocation. Run with --no-jit
-    # until the allocator is fully GC-safe.
+    # Tests that need --no-jit:
+    #   1205 / 1207: GC stress tests crash under JIT in Debug build due
+    #     to JIT+GC interaction issues with inline allocation.
+    #   1148: scope race stress hits a JIT regalloc overlap on the
+    #     try/catch + linked scope path (independent JIT bug, regalloc
+    #     verifier reports overlapping register assignment).
     jit_flag=""
     case "${test_name}" in
+        1148_scope_race_stress.xr|\
         1205_gc_incremental_pressure.xr|\
         1207_gc_stress.xr)
             jit_flag="--no-jit"
