@@ -24,6 +24,22 @@
 #include "../../../src/runtime/value/xvalue.h"
 #include "../../../src/coro/xcoroutine.h"
 
+/*
+ * Pick the native JIT backend for this host. xir_codegen_arm64 and
+ * xir_codegen_x64 live in separate translation units that the build
+ * conditionally compiles; only the host arch's symbol is linked, so
+ * the test must dispatch through this alias instead of hardcoding one
+ * backend (otherwise the Linux x86_64 link fails on undefined
+ * xir_codegen_arm64).
+ */
+#if defined(__aarch64__) || defined(__arm64__) || defined(_M_ARM64)
+#  define xir_codegen_native(func, alloc) xir_codegen_arm64((func), (alloc))
+#elif defined(__x86_64__) || defined(__amd64__) || defined(_M_X64)
+#  define xir_codegen_native(func, alloc) xir_codegen_x64((func), (alloc))
+#else
+#  error "test_jit_e2e: unsupported architecture"
+#endif
+
 // Unified JIT calling convention: (coro, args_ptr) -> raw result
 typedef int64_t (*JitFn)(intptr_t, int64_t *);
 
@@ -142,7 +158,7 @@ static XirCodegenResult safe_codegen(XirFunc *f, XirCodeAlloc *a) {
     xir_rebuild_preds(f);
     if (!skip_auto_pipeline) xir_run_pipeline(f, XIR_OPT_BASIC);
     skip_auto_pipeline = false;
-    return xir_codegen_arm64(f, a);
+    return xir_codegen_native(f, a);
 }
 
 static void crash_handler(int sig) {
@@ -1557,7 +1573,7 @@ static void test_osr_entry(void) {
     // codegen — keep them consistent by skipping the rebuild.
     XirCodeAlloc alloc;
     xir_code_alloc_init(&alloc);
-    XirCodegenResult res = xir_codegen_arm64(func, &alloc);
+    XirCodegenResult res = xir_codegen_native(func, &alloc);
     assert(res.success);
     fprintf(stderr, " code=%u nosr=%u", res.code_size, res.nosr);
 
@@ -2355,7 +2371,7 @@ static void test_osr_entry_pressure(void) {
     // Match test_osr_entry: bypass safe_codegen because phi args are
     // already wired manually and xir_rebuild_preds would re-allocate
     // them mid-snapshot.
-    XirCodegenResult res = xir_codegen_arm64(func, &alloc);
+    XirCodegenResult res = xir_codegen_native(func, &alloc);
     assert(res.success);
     fprintf(stderr, " code=%u nosr=%u", res.code_size, res.nosr);
 
@@ -2417,7 +2433,7 @@ static void test_spill_only_param_init(void) {
 
     XirCodeAlloc alloc;
     xir_code_alloc_init(&alloc);
-    XirCodegenResult res = xir_codegen_arm64(func, &alloc);
+    XirCodegenResult res = xir_codegen_native(func, &alloc);
     assert(res.success);
     fprintf(stderr, " code=%u", res.code_size);
 

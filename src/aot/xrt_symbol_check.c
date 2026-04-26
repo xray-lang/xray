@@ -27,7 +27,14 @@
  *     not match.
  */
 
-#include "xrt_method.h"
+/*
+ * Use the lightweight constants-only header. Including the full
+ * xrt_method.h here would drag in xrt_arc.h's static-inline allocator
+ * helpers, which leave unresolved references to AOT-only globals
+ * (xrt_bump_cursor / xrt_bump_blocks / xrt_bump_end / xrt_bump_enabled)
+ * inside this xray_core translation unit on GNU ld.
+ */
+#include "xrt_method_symbols.h"
 #include "../runtime/symbol/xsymbol_table.h"
 
 _Static_assert(XRT_SYM_LENGTH      == SYMBOL_LENGTH,

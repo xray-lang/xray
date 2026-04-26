@@ -36,7 +36,7 @@
 #include <inttypes.h>
 
 #include "../jit/xir_sentinels.h"
-#include "xrt_method.h"   // XRT_SYM_* constants for method inlining
+#include "xrt_method_symbols.h"   // XRT_SYM_* constants only (avoids xrt_arc.h)
 
 /*
  * JIT_CALL_ARGS_OFFSET = 688 (from xir_offsets.h)
