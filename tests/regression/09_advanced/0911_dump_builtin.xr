@@ -1,0 +1,127 @@
+// 0911_dump_builtin.xr
+// 作者：xingleixu@gmail.com
+// 测试：全局 dump() builtin
+//
+// dump() 没有返回值（写到 stdout），无法直接断言输出内容。但 codegen
+// 出错时通常表现为：1) 进程崩溃；2) 寄存器分配被破坏，dump() 之后变量
+// 失效。这个测试覆盖第二类——每个 dump() 之后都用 assert 验证原变量
+// 仍然可用，能抓到 OP_DUMP 字段错位等导致的寄存器读写串扰。
+
+@test
+fn test_dump_int(): void {
+    let x = 42
+    dump(x)
+    assert_eq(x, 42)
+}
+
+@test
+fn test_dump_float(): void {
+    let f = 3.14
+    dump(f)
+    assert(f > 3.13 && f < 3.15)
+}
+
+@test
+fn test_dump_string(): void {
+    let s = "hello"
+    dump(s)
+    assert_eq(s, "hello")
+    assert_eq(s.length, 5)
+}
+
+@test
+fn test_dump_bool(): void {
+    let b = true
+    dump(b)
+    assert_eq(b, true)
+}
+
+@test
+fn test_dump_null(): void {
+    let n: int? = null
+    dump(n)
+    assert_eq(n == null, true)
+}
+
+@test
+fn test_dump_array(): void {
+    let a = [1, 2, 3]
+    dump(a)
+    assert_eq(a.length, 3)
+    assert_eq(a[0], 1)
+    assert_eq(a[1], 2)
+    assert_eq(a[2], 3)
+}
+
+@test
+fn test_dump_map(): void {
+    // The original reported bug: dump(map) printed last value (92) instead
+    // of the map. Even though stdout cannot be asserted, the codegen bug
+    // also corrupted the register holding the map. This case verifies the
+    // map is intact after dump().
+    let scores = {"alice" => 95, "bob" => 87, "charlie" => 92}
+    dump(scores)
+    assert_eq(scores["alice"], 95)
+    assert_eq(scores["bob"], 87)
+    assert_eq(scores["charlie"], 92)
+}
+
+@test
+fn test_dump_set(): void {
+    let s = #[1, 2, 3]
+    dump(s)
+    assert_eq(s.length, 3)
+    assert_eq(s.has(2), true)
+}
+
+@test
+fn test_dump_with_indent(): void {
+    let data = {"name" => "alice", "score" => 95}
+    dump(data, 2)
+    dump(data, 4)
+    dump(data, 0)
+    // After three dump() calls with different indents, the map must
+    // still be intact — covers OP_DUMP B-field literal handling.
+    assert_eq(data["name"], "alice")
+    assert_eq(data["score"], 95)
+}
+
+@test
+fn test_dump_inside_function(): void {
+    // Regression for: dump() inside a function body must not interfere
+    // with the function's return register or local variables.
+    fn helper(v: int): int {
+        let doubled = v * 2
+        dump(doubled)
+        return doubled + 1
+    }
+    assert_eq(helper(10), 21)
+    assert_eq(helper(0), 1)
+}
+
+@test
+fn test_dump_nested_expr(): void {
+    let arr = [10, 20, 30]
+    let idx = 1
+    dump(arr[idx])
+    assert_eq(arr[idx], 20)
+    assert_eq(idx, 1)
+    assert_eq(arr.length, 3)
+}
+
+@test
+fn test_dump_in_loop(): void {
+    let total = 0
+    for (i in 0..5) {
+        dump(i)
+        total = total + i
+    }
+    assert_eq(total, 10)
+}
+
+@test
+fn test_dump_return_is_null(): void {
+    // dump() must return null so that `let x = dump(...)` does not crash.
+    let r = dump(42)
+    assert_eq(r == null, true)
+}

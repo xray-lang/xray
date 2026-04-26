@@ -1,0 +1,92 @@
+// 0912_typename_builtin.xr
+// 作者：xingleixu@gmail.com
+// 测试：typename() builtin —— 返回运行时类型的字符串名
+
+// ===== 基本类型 =====
+
+@test
+fn test_typename_int(): void {
+    assert_eq(typename(42), "int")
+    assert_eq(typename(0), "int")
+    assert_eq(typename(-100), "int")
+}
+
+@test
+fn test_typename_float(): void {
+    assert_eq(typename(3.14), "float")
+    assert_eq(typename(0.0), "float")
+}
+
+@test
+fn test_typename_string(): void {
+    assert_eq(typename("hello"), "string")
+    assert_eq(typename(""), "string")
+}
+
+@test
+fn test_typename_bool(): void {
+    assert_eq(typename(true), "bool")
+    assert_eq(typename(false), "bool")
+}
+
+@test
+fn test_typename_null(): void {
+    let n: int? = null
+    assert_eq(typename(n), "null")
+}
+
+// ===== 容器类型 =====
+
+@test
+fn test_typename_array(): void {
+    let a = [1, 2, 3]
+    assert_eq(typename(a), "Array")
+}
+
+@test
+fn test_typename_map(): void {
+    let m = {"a" => 1}
+    assert_eq(typename(m), "Map")
+}
+
+@test
+fn test_typename_set(): void {
+    let s = #[1, 2, 3]
+    assert_eq(typename(s), "Set")
+}
+
+// ===== 实例 =====
+
+class Point {
+    x: int
+    y: int
+    constructor(x: int, y: int) {
+        this.x = x
+        this.y = y
+    }
+}
+
+@test
+fn test_typename_instance(): void {
+    let p = Point(3, 4)
+    // For class instances typename() returns the class name.
+    assert_eq(typename(p), "Point")
+}
+
+// ===== 寄存器使用 =====
+
+@test
+fn test_typename_does_not_corrupt_argument(): void {
+    // typename() reads R[B]; verify the source register is intact afterwards.
+    let v = 42
+    let n = typename(v)
+    assert_eq(n, "int")
+    assert_eq(v, 42)
+}
+
+@test
+fn test_typename_in_expression(): void {
+    let s = "hello"
+    let result = typename(s) + ":" + s
+    assert_eq(result, "string:hello")
+}
