@@ -21,6 +21,7 @@
 
 // Xray runtime headers
 #include "../../src/runtime/value/xvalue.h"
+#include "../../src/runtime/value/xvalue_format.h"
 #include "../../src/runtime/object/xstring.h"
 #include "../../src/runtime/object/xarray.h"
 #include "../../src/runtime/object/xjson.h"
@@ -158,6 +159,34 @@ static XrRegex* unwrap_regex(XrayIsolate *isolate, XrValue v) {
 // Public API: wrap XrRegex as XrValue
 XrValue xr_regex_wrap(XrayIsolate *isolate, XrRegex *re) {
     return wrap_regex(isolate, re);
+}
+
+// Public API: compile a regex literal (OP_REGEX_COMPILE bytecode helper).
+// Both arguments must be strings; flag chars 'i' / 'm' / 's' map to
+// XR_RE_IGNORECASE / MULTILINE / DOTALL, anything else is silently
+// ignored to preserve the inline-parser behavior the VM dispatch had
+// before the bridge existed.
+XrValue xr_regex_compile_literal(XrayIsolate *isolate, XrValue pattern_val,
+                                 XrValue flags_val) {
+    XrString *pattern_str = xr_value_to_string(isolate, pattern_val);
+    XrString *flags_str = xr_value_to_string(isolate, flags_val);
+    if (!pattern_str || !flags_str) {
+        return xr_null();
+    }
+
+    XrRegexFlags regex_flags = XR_RE_NONE;
+    for (const char *p = flags_str->data; *p; p++) {
+        switch (*p) {
+            case 'i': regex_flags |= XR_RE_IGNORECASE; break;
+            case 'm': regex_flags |= XR_RE_MULTILINE; break;
+            case 's': regex_flags |= XR_RE_DOTALL; break;
+            default: break; /* unknown flag chars are silently ignored */
+        }
+    }
+
+    XrRegexError error;
+    XrRegex *re = xr_regex_compile(pattern_str->data, regex_flags, &error);
+    return re ? wrap_regex(isolate, re) : xr_null();
 }
 
 // Public API: check if value is Regex object

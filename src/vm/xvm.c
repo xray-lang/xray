@@ -66,8 +66,6 @@
 #include "../runtime/object/xjson.h"
 #include "../runtime/class/xclass_descriptor.h"
 #include "../module/xmodule.h"
-#include "../../stdlib/regex/xregex.h"
-#include "../../stdlib/regex/xregex_binding.h"
 #include "../coro/xchannel.h"
 #include "../coro/xdeep_copy.h"
 #include "../runtime/object/xbigint.h"
@@ -6562,46 +6560,15 @@ startfunc:
 
             /* === Regex Literal === */
             vmcase(OP_REGEX_COMPILE) {
-                /* R[A] = regex.compile(K[B], K[C])
-                 * A = destination register
-                 * B = pattern constant index
-                 * C = flags constant index
-                 */
+                /* R[A] = regex.compile(K[B], K[C]) — pattern and flags
+                 * are guaranteed string constants by the compiler.
+                 * The actual flag parse + xr_regex_compile() lives
+                 * behind xr_regex_compile_literal() in stdlib/regex
+                 * to keep src/vm free of stdlib reverse includes. */
                 int a = GETARG_A(i);
-                int b = GETARG_B(i);
-                int c = GETARG_C(i);
-
-                XrValue pattern_val = K(b);
-                XrValue flags_val = K(c);
-
-                // Get pattern and flags strings
-                XrString *pattern_str = xr_value_to_string(isolate, pattern_val);
-                XrString *flags_str = xr_value_to_string(isolate, flags_val);
-                const char *pattern = pattern_str->data;
-                const char *flags = flags_str->data;
-
-                // Parse flags into XrRegexFlags
-                XrRegexFlags regex_flags = 0;
-                for (const char *p = flags; *p; p++) {
-                    switch (*p) {
-                        case 'i': regex_flags |= XR_RE_IGNORECASE; break;
-                        case 'm': regex_flags |= XR_RE_MULTILINE; break;
-                        case 's': regex_flags |= XR_RE_DOTALL; break;
-                        // 'g' global flag not yet supported in xray
-                    }
-                }
-
-                // Compile regex
-                XrRegexError error;
-                XrRegex *re = xr_regex_compile(pattern, regex_flags, &error);
-
-                if (re) {
-                    // Success: wrap as XrValue
-                    R(a) = xr_regex_wrap(isolate, re);
-                } else {
-                    // Failure: return null
-                    R(a) = xr_null();
-                }
+                R(a) = xr_regex_compile_literal(isolate,
+                                                K(GETARG_B(i)),
+                                                K(GETARG_C(i)));
                 vmbreak;
             }
 

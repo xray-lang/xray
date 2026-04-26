@@ -45,6 +45,21 @@ XR_FUNC struct XrRegex* xr_value_to_regex(XrValue v);
 // Initialize regex native type in isolate
 XR_FUNC void xr_regex_init_native_type(struct XrayIsolate *isolate);
 
+/*
+ * Compile a regex literal (the OP_REGEX_COMPILE bytecode helper).
+ * Both arguments must be strings; flag chars 'i' / 'm' / 's' are
+ * recognized, anything else is silently ignored to mirror the old
+ * inline parser. Returns a wrapped XrRegex value on success, or
+ * xr_null() on parse / compile failure.
+ *
+ * Lives in stdlib/regex but is forward-declared here so the VM
+ * dispatch loop can reach it without pulling stdlib headers into
+ * src/vm — the same pattern xr_datetime_format / xr_value_to_regex
+ * already use.
+ */
+XR_FUNC XrValue xr_regex_compile_literal(struct XrayIsolate *isolate,
+                                         XrValue pattern, XrValue flags);
+
 /* ========== Cluster Bridge ========== */
 
 // Check if cluster mode is active
