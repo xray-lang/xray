@@ -1,0 +1,87 @@
+// 0913_copy_builtin.xr
+// 作者：xingleixu@gmail.com
+// 测试：copy() builtin —— deep copy
+
+@test
+fn test_copy_int(): void {
+    // Primitives are value-typed; copy() is essentially a passthrough.
+    let x = 42
+    let y = copy(x)
+    assert_eq(y, 42)
+    assert_eq(x, 42)
+}
+
+@test
+fn test_copy_string(): void {
+    let s = "hello"
+    let t = copy(s)
+    assert_eq(t, "hello")
+    assert_eq(s, "hello")
+}
+
+@test
+fn test_copy_array_independent(): void {
+    let a = [1, 2, 3]
+    let b = copy(a)
+    a.push(4)
+    // b must not see the mutation on a (deep copy semantics).
+    assert_eq(b.length, 3)
+    assert_eq(a.length, 4)
+}
+
+@test
+fn test_copy_array_mutate_element(): void {
+    let a = [10, 20, 30]
+    let b = copy(a)
+    a[0] = 999
+    assert_eq(b[0], 10)
+    assert_eq(a[0], 999)
+}
+
+@test
+fn test_copy_nested_array(): void {
+    let outer = [[1, 2], [3, 4]]
+    let copied = copy(outer)
+    // Mutating the inner array of the original must not propagate to the copy.
+    outer[0].push(99)
+    assert_eq(copied[0].length, 2)
+    assert_eq(outer[0].length, 3)
+}
+
+@test
+fn test_copy_map_independent(): void {
+    let m = {"a" => 1, "b" => 2}
+    let n = copy(m)
+    m["c"] = 3
+    assert_eq(n.length, 2)
+    assert_eq(m.length, 3)
+    assert_eq(n["c"] == null, true)
+}
+
+@test
+fn test_copy_does_not_corrupt_source(): void {
+    // copy() reads R[B] and writes R[A]; verify the source register survives.
+    let a = [1, 2, 3]
+    let b = copy(a)
+    assert_eq(a.length, 3)
+    assert_eq(a[0], 1)
+    assert_eq(a[1], 2)
+    assert_eq(a[2], 3)
+    assert_eq(b.length, 3)
+}
+
+@test
+fn test_copy_in_expression(): void {
+    let a = [10, 20, 30]
+    let total = copy(a).length + a.length
+    assert_eq(total, 6)
+}
+
+@test
+fn test_copy_chain(): void {
+    let a = [1, 2, 3]
+    let b = copy(copy(a))
+    a.push(4)
+    assert_eq(b.length, 3)
+    assert_eq(a.length, 4)
+}
