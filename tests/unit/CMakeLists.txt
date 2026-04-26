@@ -103,6 +103,7 @@ add_xray_unit_test(test_ic vm/test_ic.c)
 # xray_core already PUBLIC-links pthread (coroutines need it), so the
 # concurrent IC test inherits the dependency through xray_core.
 add_xray_unit_test(test_ic_concurrent vm/test_ic_concurrent.c)
+add_xray_unit_test(test_vm_exception vm/test_vm_exception.c)
 
 # ============================================================================
 # symbol/ — Symbol table
