@@ -40,8 +40,8 @@
 #include <pthread.h>
 
 // Thread-local: current Worker and Machine pointers
-__thread XrWorker *tls_current_worker = NULL;
-__thread XrMachine *tls_current_machine = NULL;
+XR_THREAD_LOCAL XrWorker *tls_current_worker = NULL;
+XR_THREAD_LOCAL XrMachine *tls_current_machine = NULL;
 
 // Get current thread's Worker
 XrWorker *xr_current_worker(void) {

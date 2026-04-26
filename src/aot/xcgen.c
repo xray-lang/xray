@@ -80,7 +80,7 @@ void xcgen_buf_append(XcgenBuf *dst, const XcgenBuf *src) {
     dst->data[dst->len] = '\0';
 }
 
-__attribute__((format(printf, 2, 3))) void xcgen_buf_printf(XcgenBuf *b, const char *fmt, ...) {
+XR_PRINTF_FMT(2, 3) void xcgen_buf_printf(XcgenBuf *b, const char *fmt, ...) {
     va_list ap;
     va_start(ap, fmt);
     int needed = vsnprintf(NULL, 0, fmt, ap);

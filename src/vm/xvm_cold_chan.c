@@ -39,9 +39,8 @@
 #include "../coro/xtask.h"
 #include "../coro/xdeep_copy.h"
 
-__attribute__((noinline)) int vm_select_block(XrayIsolate *isolate, XrVMContext *vm_ctx,
-                                              XrInstruction instr, XrValue *base,
-                                              XrBcCallFrame *frame, XrInstruction *pc) {
+XR_NOINLINE int vm_select_block(XrayIsolate *isolate, XrVMContext *vm_ctx, XrInstruction instr,
+                                XrValue *base, XrBcCallFrame *frame, XrInstruction *pc) {
     int base_reg = GETARG_A(instr);
     int ch_count = GETARG_B(instr);
     int case_count = GETARG_C(instr);
@@ -146,9 +145,8 @@ __attribute__((noinline)) int vm_select_block(XrayIsolate *isolate, XrVMContext 
     return VM_COLD_BLOCKED;
 }
 
-__attribute__((noinline)) int vm_chan_send_timeout(XrayIsolate *isolate, XrVMContext *vm_ctx,
-                                                   XrInstruction instr, XrValue *base,
-                                                   XrBcCallFrame *frame, XrInstruction *pc) {
+XR_NOINLINE int vm_chan_send_timeout(XrayIsolate *isolate, XrVMContext *vm_ctx, XrInstruction instr,
+                                     XrValue *base, XrBcCallFrame *frame, XrInstruction *pc) {
     int a = GETARG_A(instr);
     int b = GETARG_B(instr);
     int c = GETARG_C(instr);
@@ -241,9 +239,8 @@ __attribute__((noinline)) int vm_chan_send_timeout(XrayIsolate *isolate, XrVMCon
     return VM_COLD_BREAK;
 }
 
-__attribute__((noinline)) int vm_chan_recv_timeout(XrayIsolate *isolate, XrVMContext *vm_ctx,
-                                                   XrInstruction instr, XrValue *base,
-                                                   XrBcCallFrame *frame, XrInstruction *pc) {
+XR_NOINLINE int vm_chan_recv_timeout(XrayIsolate *isolate, XrVMContext *vm_ctx, XrInstruction instr,
+                                     XrValue *base, XrBcCallFrame *frame, XrInstruction *pc) {
     int a = GETARG_A(instr);
     int b = GETARG_B(instr);
     int c = GETARG_C(instr);

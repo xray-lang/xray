@@ -13,7 +13,7 @@
  *   file size while keeping the hot dispatch loop in one place.
  *
  * WHY THIS DESIGN:
- *   All cold path functions are __attribute__((noinline)), so extracting
+ *   All cold path functions are XR_NOINLINE, so extracting
  *   them to a separate compilation unit has zero performance impact.
  */
 

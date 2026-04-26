@@ -36,17 +36,8 @@
 #include "../runtime/xexec_state.h"  // XrVMState - VM execution state
 #include "object/xnative_type.h"     // XR_NATIVE_TYPE_MAX
 
-/* ========== Thread Local Storage ========== */
-
-// Thread-local storage macro definitions
-#ifdef __GNUC__
-#define XRAY_THREAD_LOCAL __thread
-#elif defined(_MSC_VER)
-#define XRAY_THREAD_LOCAL __declspec(thread)
-#else
-#warning "Thread local storage not supported on this compiler"
-#define XRAY_THREAD_LOCAL
-#endif  // ========== Required Headers ==========
+// Thread-local storage class is provided by base/xdefs.h as
+// XR_THREAD_LOCAL. Use it directly here; do not redefine the macro.
 
 // xray_runtime_interface.h removed - single backend, no abstraction layer
 // VM type definitions in core/xforward_decl.h
@@ -143,7 +134,7 @@ struct XrayIsolate {
     // Per-isolate root shape cache (for json creation)
     struct XrShape *root_shape_cache[32];
 
-    // Per-isolate active type pool (replaces __thread g_current_pool)
+    // Per-isolate active type pool (replaces XR_THREAD_LOCAL g_current_pool)
     struct XrTypePool *current_type_pool;
 
     // Per-isolate cached JsonValue union type (replaces static s_json_value_type)
@@ -269,7 +260,7 @@ XR_FUNC void xray_isolate_cleanup_common(XrayIsolate *isolate);
 
 // Global thread-local Isolate pointer
 // Each thread has its own Isolate instance
-extern XRAY_THREAD_LOCAL XrayIsolate *g_current_isolate;
+extern XR_THREAD_LOCAL XrayIsolate *g_current_isolate;
 
 // Get current thread's Isolate (fast inline version)
 // Returns NULL if not set

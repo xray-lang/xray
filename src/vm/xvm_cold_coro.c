@@ -107,8 +107,8 @@ int vm_collect_all_coros(XrayIsolate *isolate, VmCoroEntry *out, int max_out) {
 
 /* ========== Cold Path: OP_CORO_CTRL Sub-operations ========== */
 
-__attribute__((noinline)) int vm_coro_ctrl(XrayIsolate *isolate, XrVMContext *vm_ctx,
-                                           XrInstruction instr, XrValue *base) {
+XR_NOINLINE int vm_coro_ctrl(XrayIsolate *isolate, XrVMContext *vm_ctx, XrInstruction instr,
+                             XrValue *base) {
     XR_DCHECK(isolate != NULL, "vm_coro_ctrl: NULL isolate");
     XR_DCHECK(base != NULL, "vm_coro_ctrl: NULL base");
     int coro_sub = GETARG_C(instr);
@@ -590,8 +590,8 @@ __attribute__((noinline)) int vm_coro_ctrl(XrayIsolate *isolate, XrVMContext *vm
 // cold-object / cold-chan TUs can call it without an owning .c
 // file having to re-export it.
 
-__attribute__((noinline)) int vm_go(XrayIsolate *isolate, XrVMContext *vm_ctx, XrInstruction instr,
-                                    XrValue *base, XrBcCallFrame *frame) {
+XR_NOINLINE int vm_go(XrayIsolate *isolate, XrVMContext *vm_ctx, XrInstruction instr, XrValue *base,
+                      XrBcCallFrame *frame) {
     int a = GETARG_A(instr);
     int b = GETARG_B(instr);
     int c = GETARG_C(instr);
@@ -672,9 +672,8 @@ __attribute__((noinline)) int vm_go(XrayIsolate *isolate, XrVMContext *vm_ctx, X
     return VM_COLD_BREAK;
 }
 
-__attribute__((noinline)) int vm_go_invoke(XrayIsolate *isolate, XrVMContext *vm_ctx,
-                                           XrInstruction instr, XrValue *base, XrBcCallFrame *frame,
-                                           XrInstruction *pc) {
+XR_NOINLINE int vm_go_invoke(XrayIsolate *isolate, XrVMContext *vm_ctx, XrInstruction instr,
+                             XrValue *base, XrBcCallFrame *frame, XrInstruction *pc) {
     (void) vm_ctx;
     int a = GETARG_A(instr);
     int b = GETARG_B(instr);
@@ -737,9 +736,8 @@ __attribute__((noinline)) int vm_go_invoke(XrayIsolate *isolate, XrVMContext *vm
     return VM_COLD_BREAK;
 }
 
-__attribute__((noinline)) int vm_spawn_cont(XrayIsolate *isolate, XrVMContext *vm_ctx,
-                                            XrInstruction instr, XrValue *base,
-                                            XrBcCallFrame *frame) {
+XR_NOINLINE int vm_spawn_cont(XrayIsolate *isolate, XrVMContext *vm_ctx, XrInstruction instr,
+                              XrValue *base, XrBcCallFrame *frame) {
     int a = GETARG_A(instr);
     int b = GETARG_B(instr);
     int c_raw = GETARG_C(instr);
@@ -922,9 +920,8 @@ static inline XrValue vm_await_read_result(XrayIsolate *isolate, XrCoroutine *co
     return v;
 }
 
-__attribute__((noinline)) int vm_await(XrayIsolate *isolate, XrVMContext *vm_ctx,
-                                       XrInstruction instr, XrValue *base, XrBcCallFrame *frame,
-                                       XrInstruction *pc) {
+XR_NOINLINE int vm_await(XrayIsolate *isolate, XrVMContext *vm_ctx, XrInstruction instr,
+                         XrValue *base, XrBcCallFrame *frame, XrInstruction *pc) {
     int a = GETARG_A(instr);
     int b = GETARG_B(instr);
     int discard_result = GETARG_C(instr);
@@ -1021,9 +1018,8 @@ __attribute__((noinline)) int vm_await(XrayIsolate *isolate, XrVMContext *vm_ctx
     VM_COLD_THROW(frame, pc, XR_ERR_TYPE_MISMATCH, "await: expected task");
 }
 
-__attribute__((noinline)) int vm_await_timeout(XrayIsolate *isolate, XrVMContext *vm_ctx,
-                                               XrInstruction instr, XrValue *base,
-                                               XrBcCallFrame *frame, XrInstruction *pc) {
+XR_NOINLINE int vm_await_timeout(XrayIsolate *isolate, XrVMContext *vm_ctx, XrInstruction instr,
+                                 XrValue *base, XrBcCallFrame *frame, XrInstruction *pc) {
     int a = GETARG_A(instr);
     int b = GETARG_B(instr);
     int c = GETARG_C(instr);
@@ -1128,9 +1124,8 @@ __attribute__((noinline)) int vm_await_timeout(XrayIsolate *isolate, XrVMContext
     VM_COLD_THROW(frame, pc, XR_ERR_TYPE_MISMATCH, "await: expected task");
 }
 
-__attribute__((noinline)) int vm_await_all(XrayIsolate *isolate, XrVMContext *vm_ctx,
-                                           XrInstruction instr, XrValue *base, XrBcCallFrame *frame,
-                                           XrInstruction *pc) {
+XR_NOINLINE int vm_await_all(XrayIsolate *isolate, XrVMContext *vm_ctx, XrInstruction instr,
+                             XrValue *base, XrBcCallFrame *frame, XrInstruction *pc) {
     int a = GETARG_A(instr);
     int b = GETARG_B(instr);
 
@@ -1243,9 +1238,8 @@ __attribute__((noinline)) int vm_await_all(XrayIsolate *isolate, XrVMContext *vm
 #undef ELEM_IS_TASK
 }
 
-__attribute__((noinline)) int vm_await_any(XrayIsolate *isolate, XrVMContext *vm_ctx,
-                                           XrInstruction instr, XrValue *base, XrBcCallFrame *frame,
-                                           XrInstruction *pc) {
+XR_NOINLINE int vm_await_any(XrayIsolate *isolate, XrVMContext *vm_ctx, XrInstruction instr,
+                             XrValue *base, XrBcCallFrame *frame, XrInstruction *pc) {
     int a = GETARG_A(instr);
     int b = GETARG_B(instr);
     int mode = GETARG_C(instr);

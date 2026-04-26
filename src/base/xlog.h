@@ -68,7 +68,7 @@ static inline XrLogLevel xr_log_get_level(void) {
 
 // Low-level log function (use macros below instead)
 XR_FUNC void xr_log_impl(XrLogLevel level, const char *module, const char *file, int line,
-                         const char *fmt, ...) __attribute__((format(printf, 5, 6)));
+                         const char *fmt, ...) XR_PRINTF_FMT(5, 6);
 
 /* ========== Logging Macros ========== */
 

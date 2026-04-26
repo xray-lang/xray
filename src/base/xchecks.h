@@ -15,6 +15,8 @@
 #ifndef XCHECKS_H
 #define XCHECKS_H
 
+#include "xdefs.h"
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdint.h>

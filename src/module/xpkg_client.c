@@ -35,7 +35,7 @@
 #include <libgen.h>
 
 // Thread-local config for multi-Isolate support
-static __thread XrPkgClientConfig tls_config = {
+static XR_THREAD_LOCAL XrPkgClientConfig tls_config = {
     .registry_url = PKG_REGISTRY_URL, .auth_token = NULL, .timeout_ms = 30000, .verbose = false};
 
 /*
@@ -188,7 +188,7 @@ static char **json_get_string_array(const char *json, const char *key, int *coun
 /* ========== Client API Implementation ========== */
 
 // Thread-local Isolate pointer for multi-Isolate support
-static __thread XrayIsolate *tls_isolate = NULL;
+static XR_THREAD_LOCAL XrayIsolate *tls_isolate = NULL;
 
 bool xr_pkg_client_init(void) {
     // Connection pool is now per-isolate, no global init needed

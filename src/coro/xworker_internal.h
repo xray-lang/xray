@@ -34,8 +34,8 @@
 #include "xcoro_registry.h"
 
 // TLS variables (defined in xworker.c)
-extern __thread XrWorker *tls_current_worker;
-extern __thread XrMachine *tls_current_machine;
+extern XR_THREAD_LOCAL XrWorker *tls_current_worker;
+extern XR_THREAD_LOCAL XrMachine *tls_current_machine;
 
 // ========== Shared Helpers (inline) ==========
 

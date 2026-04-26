@@ -20,7 +20,7 @@
 
 // ========== Thread-Local Debug Info Pool (per-Isolate support) ==========
 
-static __thread XrCoroDebugPool tls_debug_pool = {0};
+static XR_THREAD_LOCAL XrCoroDebugPool tls_debug_pool = {0};
 
 // ========== Helper Functions ==========
 

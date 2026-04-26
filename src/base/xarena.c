@@ -19,7 +19,7 @@
 
 // Thread-local segment cache for multi-Isolate support (no lock needed).
 // Exempt from "no mutable file-scope globals" rule:
-// __thread gives per-thread isolation with no shared mutable state.
+// XR_THREAD_LOCAL gives per-thread isolation with no shared mutable state.
 
 #define XR_ARENA_MAX_CACHED_SEGMENTS 8
 
@@ -28,7 +28,7 @@ typedef struct {
     int count;
 } XrArenaSegmentCache;
 
-static __thread XrArenaSegmentCache tls_cache = {NULL, 0};
+static XR_THREAD_LOCAL XrArenaSegmentCache tls_cache = {NULL, 0};
 
 // Align to 8-byte boundary
 static inline size_t align_size(size_t size) {

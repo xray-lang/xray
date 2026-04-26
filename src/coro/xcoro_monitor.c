@@ -26,11 +26,11 @@
 
 // ========== Thread-Local State (per-Isolate monitor support) ==========
 
-static __thread XrayIsolate *tls_monitor_isolate = NULL;
-static __thread int tls_watch_interval_ms = 0;
-static __thread int tls_http_port = 0;
-static __thread volatile bool tls_monitor_running = false;
-static __thread pthread_t tls_watch_thread;
+static XR_THREAD_LOCAL XrayIsolate *tls_monitor_isolate = NULL;
+static XR_THREAD_LOCAL int tls_watch_interval_ms = 0;
+static XR_THREAD_LOCAL int tls_http_port = 0;
+static XR_THREAD_LOCAL volatile bool tls_monitor_running = false;
+static XR_THREAD_LOCAL pthread_t tls_watch_thread;
 
 // ========== ANSI Escape Sequences ==========
 
@@ -228,7 +228,7 @@ void xr_coro_monitor_start(XrayIsolate *X, int watch_interval_ms, int http_port)
     }
 }
 
-static __attribute__((unused)) void xr_coro_monitor_stop(void) {
+static XR_UNUSED void xr_coro_monitor_stop(void) {
     if (tls_monitor_running) {
         tls_monitor_running = false;
         pthread_join(tls_watch_thread, NULL);
