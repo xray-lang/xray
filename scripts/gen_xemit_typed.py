@@ -107,6 +107,8 @@ KOP_SIGS: dict[str, tuple[list[tuple[str, str]], str, tuple[str, ...]]] = {
                           "abx", ("src", "global_idx")),
     "KOP_ABx_LAYOUT":    ([("int", "dst"), ("int", "layout_id")],
                           "abx", ("dst", "layout_id")),
+    "KOP_ABx_LIT":       ([("int", "dst"), ("int", "value")],
+                          "abx", ("dst", "value")),
 
     # Calls / invokes / opcode-specific shapes.
     "KOP_CALL":          ([("int", "base"), ("int", "nargs"), ("int", "nresults")],

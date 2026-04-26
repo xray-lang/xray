@@ -836,9 +836,9 @@ static inline int xemit_coro_ctrl(XrEmitter *e, int a, int b, int c) {
     return emit_abc(e, OP_CORO_CTRL, a, b, c);
 }
 
-// FMT_AB / KOP_AB_NEW_LIT : R[A] = Channel(B)
-static inline int xemit_chan_new(XrEmitter *e, int dst, int storage) {
-    return emit_abc(e, OP_CHAN_NEW, dst, storage, 0);
+// FMT_ABx / KOP_ABx_LIT : R[A] = Channel(Bx) — buffer size
+static inline int xemit_chan_new(XrEmitter *e, int dst, int value) {
+    return emit_abx(e, OP_CHAN_NEW, dst, value);
 }
 
 // FMT_ABC / KOP_ABC_BIN : R[A] = Channel(R[B], R[C]) - named
