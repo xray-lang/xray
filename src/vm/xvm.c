@@ -76,6 +76,7 @@
 #include "../runtime/value/xslot_type.h"
 #include "../runtime/value/xtype.h"
 #include "../runtime/value/xstruct_layout.h"
+#include "../runtime/value/xmethod_table.h"
 #include "../runtime/xray_debug.h"
 #include "../runtime/xisolate_api.h"
 #include "../runtime/value/xtype_feedback.h"
@@ -5311,9 +5312,17 @@ startfunc:
                 /* === Bool builtin methods === */
                 invoke_bool:
                 if (XR_IS_BOOL(receiver)) {
-                    R(a) = bool_method_call_by_symbol(isolate, XR_TO_BOOL(receiver), method_symbol);
-                    VM_BUILTIN_INVOKE_CHECK_EXC();
-                    if (unlikely(XR_IS_NOTFOUND(R(a)))) {
+                    /* Bool dispatches through the unified method table.
+                     * Hot small methods (e.g. toString) are static-inline
+                     * in xbool_methods.h, so AOT inlines them at the call
+                     * site; the VM reaches the same body via this table
+                     * indirection. */
+                    const XrMethodSlot *_slot = xr_method_table_lookup(
+                        XR_TID_BOOL, method_symbol, SYMBOL_BUILTIN_COUNT);
+                    if (likely(_slot != NULL)) {
+                        R(a) = _slot->fn(isolate, receiver, &R(a + 2), nargs);
+                        VM_BUILTIN_INVOKE_CHECK_EXC();
+                    } else {
                         XrSymbolTable *_st = (XrSymbolTable*)isolate->symbol_table;
                         const char *_mn = xr_symbol_get_name_in_table(_st, method_symbol);
                         VM_RUNTIME_ERROR(XR_ERR_TYPE_NO_METHOD, "bool has no method '%s'", _mn ? _mn : "?");
@@ -5705,8 +5714,12 @@ startfunc:
                     xr_Number value = XR_TO_FLOAT(receiver);
                     R(a) = float_method_call_by_symbol(isolate, value, method_symbol, args, nargs);
                 } else if (XR_IS_BOOL(receiver)) {
-                    R(a) = bool_method_call_by_symbol(isolate, XR_TO_BOOL(receiver), method_symbol);
-                    if (unlikely(XR_IS_NOTFOUND(R(a)))) {
+                    /* See invoke_bool above — unified method table dispatch. */
+                    const XrMethodSlot *_slot = xr_method_table_lookup(
+                        XR_TID_BOOL, method_symbol, SYMBOL_BUILTIN_COUNT);
+                    if (likely(_slot != NULL)) {
+                        R(a) = _slot->fn(isolate, receiver, args, nargs);
+                    } else {
                         XrSymbolTable *st = (XrSymbolTable*)isolate->symbol_table;
                         const char *name = xr_symbol_get_name_in_table(st, method_symbol);
                         VM_RUNTIME_ERROR(XR_ERR_TYPE_NO_METHOD,

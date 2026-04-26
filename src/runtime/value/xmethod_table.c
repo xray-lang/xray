@@ -23,28 +23,20 @@
  */
 
 #include "xmethod_table.h"
+#include "xbool_methods.h"
 
 /*
  * Per-type method tables are declared as `extern const XrMethodSlot []`
  * by their owning modules and published here.
  *
- * No types have migrated yet — the registry is intentionally all NULL.
- * Each migration step (Phase 3c) flips one entry from NULL to its
- * owning module's table.
+ * Migration is incremental: each owner module flips its slot from NULL
+ * to its own table. Until a type is migrated, its slot stays NULL and
+ * the VM keeps using the legacy hand-rolled dispatcher in
+ * src/vm/xvm_builtins.c.
  */
 
 const XrMethodSlot *const xr_builtin_method_tables[XR_TID_COUNT] = {
-    /* Initialized to NULL for every XrTypeId. Migrations populate
-     * specific slots, e.g.
-     *
-     *   [XR_TID_BOOL]   = xr_bool_method_table,
-     *   [XR_TID_INT]    = xr_int_method_table,
-     *
-     * but until a type is migrated its slot stays NULL and the VM
-     * keeps using the legacy hand-rolled dispatcher in
-     * src/vm/xvm_builtins.c.
-     */
-    [0] = NULL,
+    [XR_TID_BOOL] = xr_bool_method_table,
 };
 
 /*
