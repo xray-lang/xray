@@ -75,6 +75,19 @@
     return VM_COLD_ERROR; \
 } while(0)
 
+/* ========== Current Coroutine (used by every cold-path TU) ========== */
+
+// Resolve the current coroutine for cold-path code running outside
+// run(): prefer the ctx slot, fall back to the worker-local cache.
+// Defined here so xvm_cold_call.c / cold_object.c / cold_coro.c /
+// cold_chan.c all share a single inline body without any of them
+// owning the symbol.
+static inline XrCoroutine *vm_cold_get_coro(XrVMContext *vm_ctx) {
+    if (vm_ctx->current_coro) return (XrCoroutine*)vm_ctx->current_coro;
+    XrWorker *w = xr_current_worker();
+    return w ? (XrCoroutine*)w->m->current_coro : NULL;
+}
+
 /* ========== Channel Deep Copy Helpers ========== */
 
 // Deep copy mutable value to fixed GC before entering channel buffer
