@@ -2380,6 +2380,70 @@ static void test_osr_entry_pressure(void) {
 }
 
 /*
+ * test_spill_only_param_init: 24-param ADD chain that forces several
+ * params to be spill-only at function entry. Validates that the LSRA
+ * spill-slot allocator does not reuse a slot across two vregs whose
+ * full live ranges overlap.
+ *
+ * f(p0..p23) = p0 + p1 + ... + p23.
+ *
+ * 24 simultaneously live i64 params exceed ARM64 (22) and x64 (11)
+ * allocatable GP. Before the fix, two distinct params (e.g. p1 with
+ * seg[0]=[0,44)/r1 seg[1]=[44,50)/r-1 and p22 with seg[0]=[0,44)/r-1
+ * seg[1]=[44,50)/r-1) could be assigned the same spill slot because
+ * the reuse check used the LsRange sibling's end (which is only the
+ * spill-segment end), not the full vreg's last-live position. Pos 44
+ * then saves p1's reg into the slot, clobbering the value p22 still
+ * needs to read in [0, 50).
+ *
+ * The fix: don't reuse spill slots across distinct vregs. Phi bundles
+ * still reuse safely because their members are non-overlapping by
+ * construction.
+ */
+static void test_spill_only_param_init(void) {
+    fprintf(stderr, "  test_spill_only_param_init...");
+
+    enum { NPARAM = 24 };
+    XirFunc *func = xir_func_new("spill_only_param");
+    func->num_params = NPARAM;
+    XirRef ps[NPARAM];
+    for (int i = 0; i < NPARAM; i++) ps[i] = xir_new_vreg(func, XR_REP_I64);
+
+    XirBlock *entry = xir_func_add_block(func, "entry");
+    XirRef acc = ps[0];
+    for (int i = 1; i < NPARAM; i++)
+        acc = xir_emit(func, entry, XIR_ADD, XR_REP_I64, acc, ps[i]);
+    xir_block_set_ret(entry, acc);
+
+    XirCodeAlloc alloc;
+    xir_code_alloc_init(&alloc);
+    XirCodegenResult res = xir_codegen_arm64(func, &alloc);
+    assert(res.success);
+    fprintf(stderr, " code=%u", res.code_size);
+
+    int64_t buf[NPARAM];
+
+    for (int i = 0; i < NPARAM; i++) buf[i] = 1;
+    int64_t r1 = jit_calln(res.code, buf);
+    fprintf(stderr, " ones=%lld", (long long)r1);
+    assert(r1 == 24);
+
+    for (int i = 0; i < NPARAM; i++) buf[i] = i + 1;
+    int64_t r2 = jit_calln(res.code, buf);
+    fprintf(stderr, " seq=%lld", (long long)r2);
+    assert(r2 == 300);  // 1+2+...+24
+
+    for (int i = 0; i < NPARAM; i++) buf[i] = (i % 2 == 0) ? -(i + 1) : (i + 1);
+    int64_t r3 = jit_calln(res.code, buf);
+    fprintf(stderr, " mix=%lld", (long long)r3);
+    assert(r3 == 12);
+
+    xir_code_alloc_destroy(&alloc);
+    xir_func_destroy(func);
+    fprintf(stderr, "\n  PASS\n");
+}
+
+/*
  * test_alloc_inline: XIR_ALLOC with inline bump-pointer fast path
  *
  * XIR:
@@ -2537,6 +2601,7 @@ int main(void) {
     test_deopt_with_spill_pressure();
     test_call_self_direct();
     test_osr_entry_pressure();
+    test_spill_only_param_init();
 
     // Phase 7: ALLOC codegen (inline bump-pointer)
     test_alloc_inline();
