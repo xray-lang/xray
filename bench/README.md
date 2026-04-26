@@ -73,3 +73,34 @@ If a future change to the VM regresses median by more than 1%
 relative to the surrounding commits, that's a real regression
 worth investigating; below 1% is below the measurement floor on
 this workload.
+
+## `vm_invoke_microbench.xr` (focused invoke-IC bench)
+
+Sibling micro-benchmark targeted specifically at OP_INVOKE_BUILTIN
+monomorphic invoke-IC throughput. Each section calls one builtin
+method on a single, type-stable receiver in a tight loop, so after
+warm-up the IC slot at every call site is locked to
+(receiver-type, &XrMethodSlot) and the hot path collapses to one
+cmp + one indirect call.
+
+Sections:
+
+| Section | Methods exercised | Receiver type |
+|---------|-------------------|---------------|
+| `bench_string_methods` | `length`, `charAt` | `String` |
+| `bench_array_methods`  | `push`, `length`, indexed get | `Array<int>` |
+| `bench_map_methods`    | `set`, `has`, `length` | `Map` |
+| `bench_int_methods`    | `toString`, `abs` | `int` (raw-receiver) |
+
+Reference run (Apr 2026, 3 iterations, MacBook, Release build):
+
+```
+real 1.31  real 1.28  real 1.31
+```
+
+Use this whenever a change touches `xic_builtin.{c,h}`, the
+per-type method tables under `runtime/{value,object}/x*_methods.*`,
+or the `OP_INVOKE_BUILTIN` dispatch path in
+`xvm_dispatch_invoke.inc.c`. Run the same section count before /
+after the change; deltas above ~3% on the median signal a real
+shift in the IC fast path.
