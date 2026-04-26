@@ -51,13 +51,17 @@ XrBoundMethod *xr_value_to_bound_method(XrValue v) {
 /* ========== Symbol -> MethodHandler bridges ========== */
 
 /* Closure-taking methods (foreach / map / filter / reduce / find / ...)
- * need a special bytecode-interpreting adapter; until that lands, the
- * stub returns null so a bound `arr.foreach` doesn't blow up — the
- * call site just gets nothing back. */
+ * and the lazy iterator entry need a bytecode-interpreting adapter
+ * that hasn't been wired up to the bound-method path. Returning a real
+ * value here would silently skip the user's callback; instead emit
+ * XR_NOTFOUND so the VM's bound-method dispatcher in
+ * xvm_dispatch_call.inc.c raises XR_ERR_TYPE_NO_METHOD with the
+ * caller's PC. The error surfaces immediately at the call site
+ * rather than masking the missing method as a null result. */
 static XrValue bound_method_stub(XrayIsolate *isolate, XrValue receiver,
                                  XrValue *args, int argc) {
     (void)isolate; (void)receiver; (void)args; (void)argc;
-    return xr_null();
+    return XR_NOTFOUND;
 }
 
 MethodHandler xr_map_get_handler(int symbol) {
