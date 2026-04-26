@@ -24,6 +24,8 @@
 
 #include "xmethod_table.h"
 #include "xbool_methods.h"
+#include "xint_methods.h"
+#include "xfloat_methods.h"
 #include "../object/xbigint_methods.h"
 
 /*
@@ -38,6 +40,8 @@
 
 const XrMethodSlot *const xr_builtin_method_tables[XR_TID_COUNT] = {
     [XR_TID_BOOL]   = xr_bool_method_table,
+    [XR_TID_INT]    = xr_int_method_table,
+    [XR_TID_FLOAT]  = xr_float_method_table,
     [XR_TID_BIGINT] = xr_bigint_method_table,
 };
 
