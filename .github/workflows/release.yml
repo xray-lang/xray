@@ -35,6 +35,11 @@ jobs:
     - name: Build
       run: cmake --build build --config Release
 
+    # Note: ctest is run in ci.yml under Debug mode (where assertions
+    # are active and Release-only regressions don't mask failures).
+    # Release builds historically have a couple of unit-test SEGFAULTs
+    # that need separate investigation; running them here would block
+    # all releases. Regression tests below are full e2e validation.
     - name: Regression Tests (Unix)
       if: runner.os != 'Windows'
       run: |

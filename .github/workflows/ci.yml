@@ -80,6 +80,43 @@ jobs:
     #   run: ...
 
   # ===========================================================================
+  # Unit Tests (ctest, Debug mode)
+  # Runs the full unit-test suite under tests/unit/, including
+  # test_jit_e2e which contains the §10.1-§10.7 JIT codegen hardening
+  # regressions. Debug mode is used because:
+  #   - assertions are active (Release strips DCHECK)
+  #   - matches the local development build mode used by the project
+  # ubuntu-latest (x86_64) is the only native-x64 path for the JIT
+  # backend tests; the dev host is Apple Silicon ARM64.
+  # ===========================================================================
+  unit-tests:
+    needs: arch-lint
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            name: Linux x86_64
+          - os: macos-latest
+            name: macOS ARM64
+
+    runs-on: ${{ matrix.os }}
+    name: Unit Tests (${{ matrix.name }})
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Configure (Debug)
+      run: cmake -B build -DCMAKE_BUILD_TYPE=Debug
+
+    - name: Build
+      run: cmake --build build -j
+
+    - name: Run ctest
+      working-directory: build
+      run: ctest --output-on-failure --timeout 120
+
+  # ===========================================================================
   # Static Analysis (clang-tidy)
   # ===========================================================================
   static-analysis:
