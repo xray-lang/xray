@@ -76,3 +76,15 @@ tests/fuzz/corpus/
 *_go
 tests/network/ws_tests/autobahn/reports/
 osr_debug.log
+
+# ============================================================================
+# Editor / IDE checkpoints
+# ============================================================================
+.windsurf-backup/
+
+# ============================================================================
+# AOT scratch output
+# ============================================================================
+# `xray build --native` writes the generated C alongside the .xr source by
+# default; ignore the common scratch name so it doesn't pollute git status.
+/app.c
