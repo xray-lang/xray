@@ -210,7 +210,6 @@ XR_FUNC XrValue set_method_call_by_symbol(XrayIsolate *isolate, XrSet *set, int 
 XR_FUNC XrValue float_method_call_by_symbol(XrayIsolate *isolate, xr_Number value, int symbol, XrValue *args, int argc);
 XR_FUNC XrValue datetime_method_call_by_symbol(XrayIsolate *isolate, void *dt, int symbol, XrValue *args, int argc);
 XR_FUNC XrValue int_method_call_by_symbol(XrayIsolate *isolate, xr_Integer value, int symbol, XrValue *args, int argc);
-XR_FUNC XrValue bool_method_call_by_symbol(XrayIsolate *isolate, bool value, int symbol);
 XR_FUNC XrValue bigint_method_call_by_symbol(XrayIsolate *isolate, XrBigInt *bigint, int symbol, XrValue *args, int argc);
 
 /* ========== Helper Functions (in xvm_helpers.c) ========== */

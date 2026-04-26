@@ -1243,20 +1243,10 @@ XrValue int_method_call_by_symbol(XrayIsolate *isolate, xr_Integer value, int sy
     return XR_NOTFOUND;
 }
 
-/* ========== Bool Method Handlers ========== */
-
-// Bool method dispatch
-XrValue bool_method_call_by_symbol(XrayIsolate *isolate, bool value, int symbol) {
-    XR_DCHECK(isolate != NULL, "bool_dispatch: NULL isolate");
-    if (symbol == SYMBOL_TOSTRING) {
-        return value
-            ? xr_string_value(xr_string_intern(isolate, "true", 4, 0))
-            : xr_string_value(xr_string_intern(isolate, "false", 5, 0));
-    }
-
-    // Method not found — caller (OP_INVOKE_BUILTIN) throws catchable error
-    return XR_NOTFOUND;
-}
+/* Bool method dispatch lives in src/runtime/value/xbool_methods.{c,h}.
+ * The legacy bool_method_call_by_symbol used to be here; it was deleted
+ * when bool migrated to the unified XrMethodSlot table. See
+ * xr_bool_method_table[] for the single source of truth. */
 
 /* ========== BigInt Method Handlers ========== */
 

@@ -11,10 +11,6 @@
  *   C functions callable from JIT-compiled ARM64 code via CALL_C stubs.
  *   All value-returning helpers use the XrJitResult convention
  *   (x0=payload, x1=tag) to avoid global side-effect channels.
- *
- * SPLIT FROM:
- *   Originally part of xir_jit.c; extracted during Phase 7 to keep
- *   each .c file under the 3000-line coding standard limit.
  */
 
 #include "xir_jit.h"
@@ -57,6 +53,8 @@
 #include "../coro/xcoro_pool.h"
 #include "../vm/xvm.h"
 #include "../vm/xvm_internal.h"
+#include "../runtime/value/xmethod_table.h"
+#include "../runtime/symbol/xsymbol_table.h"
 #include "../module/xmodule.h"
 #include "xir_codegen.h"
 #include "xir_jit_debug.h"
@@ -307,10 +305,16 @@ XrJitResult xr_jit_invoke_method(XrCoroutine *coro, int64_t encoded) {
         result = float_method_call_by_symbol(isolate, XR_TO_FLOAT(receiver),
                                              method_symbol, args, nargs);
         break;
-    case JIT_TYPE_HINT_BOOL:
-        result = bool_method_call_by_symbol(isolate, XR_TO_BOOL(receiver),
-                                            method_symbol);
+    case JIT_TYPE_HINT_BOOL: {
+        /* Bool dispatches through the unified method table; missing
+         * symbols return XR_NOTFOUND and let the post-switch
+         * "method not found" path produce a uniform diagnostic. */
+        const XrMethodSlot *slot = xr_method_table_lookup(
+            XR_TID_BOOL, method_symbol, SYMBOL_BUILTIN_COUNT);
+        result = slot ? slot->fn(isolate, receiver, args, nargs)
+                      : XR_NOTFOUND;
         break;
+    }
     case JIT_TYPE_HINT_STRING: {
         XrString *str = (XrString *)XR_TO_PTR(receiver);
         result = string_method_call_by_symbol(isolate, str, method_symbol,
@@ -429,8 +433,8 @@ XrJitResult xr_jit_invoke_method(XrCoroutine *coro, int64_t encoded) {
                     if (fn_hdr->type == XR_TCFUNCTION) {
                         XrCFunction *cfunc = (XrCFunction *)export_val.ptr;
                         if (cfunc->is_yieldable) {
-                            /* Phase 0: try-mode fast path. If IO is ready,
-                             * completes inline (zero deopt). */
+                            /* Try-mode fast path: if IO is ready, completes
+                             * inline (zero deopt). */
                             coro->jit_try_mode = true;
                             XrValue try_result;
                             XrCFuncResult status = cfunc->as.yieldable(
@@ -441,11 +445,11 @@ XrJitResult xr_jit_invoke_method(XrCoroutine *coro, int64_t encoded) {
                                 return (XrJitResult){ try_result.i, 0 };
                             }
 
-                            /* Phase 2: WOULD_BLOCK — pre-push interpreter
-                             * frame and call yieldable in normal mode.
-                             * Avoids deopt + interpreter re-execution of
-                             * OP_INVOKE. If pre-push fails, fall back to
-                             * Phase 0+1 deopt path. */
+                            /* WOULD_BLOCK: pre-push interpreter frame and
+                             * call yieldable in normal mode. Avoids deopt +
+                             * interpreter re-execution of OP_INVOKE. If
+                             * pre-push fails, fall back to the deopt path
+                             * below. */
                             if (jit_prepush_yield_frame(coro, (uint32_t)deopt_id) >= 0) {
                                 XrValue normal_result;
                                 XrCFuncResult st2 = cfunc->as.yieldable(
