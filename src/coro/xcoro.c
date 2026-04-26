@@ -1340,84 +1340,148 @@ void xr_coro_ready(XrayIsolate *X, XrCoroutine *gp, bool next) {
     xr_runtime_wake_idle_worker(runtime);
 }
 
-// xr_coro_wake_waiter - Wake waiter when coroutine completes
+/* ========== Scope Child List — Lock Helpers ==========
+ *
+ * scope->child_lock is a spin-lock guarding three pieces of state:
+ *
+ *   - scope->first_child / coro->scope_sibling      (the child list)
+ *   - scope->cancel_requested                       (linked-mode latch)
+ *   - sib->parent_scope clearing during sibling cancel
+ *
+ * Hold time is bounded (a single list mutation or a small sibling
+ * walk); callers must not perform GC-triggering allocations or call
+ * back into the scheduler while holding it. */
+static inline void scope_lock_acquire(XrScopeContext *scope) {
+    while (atomic_exchange_explicit(&scope->child_lock, true,
+                                    memory_order_acquire)) {}
+}
+
+static inline void scope_lock_release(XrScopeContext *scope) {
+    atomic_store_explicit(&scope->child_lock, false, memory_order_release);
+}
+
+/* ========== Wake-Waiter Sub-Steps ==========
+ *
+ * xr_coro_wake_waiter has four ordered responsibilities when the
+ * completing coroutine belongs to a scope (linked / supervisor / wait):
+ *
+ *   1. Record this child's error into the scope's policy state
+ *      (linked: first_error; supervisor: errors[]). Runs OUTSIDE the
+ *      scope lock because the supervisor branch may allocate an
+ *      XrArray (a GC-touching path that must not run under a spinlock).
+ *
+ *   2. Unlink this coroutine from scope->first_child. Runs INSIDE
+ *      the scope lock — this is the canonical race surface (multiple
+ *      children completing on different workers).
+ *
+ *   3. linked-mode only: on the first child failure, cancel every
+ *      remaining sibling and wake their waiters. Runs INSIDE the
+ *      scope lock so cancel_requested + the sibling walk are atomic
+ *      with the unlink above.
+ *
+ *   4. Decrement scope->count and clear coro->parent_scope. Runs
+ *      OUTSIDE the lock — neither value is observed by other workers.
+ *
+ * Step 5 (delegating to xr_task_wake_waiter) is purely local to this
+ * coroutine and stays inline at the bottom of xr_coro_wake_waiter. */
+
+// Step 1: read this child's error and update scope->first_error /
+// scope->errors per the scope's policy mode. Returns true iff the
+// child reported a non-null string error.
+static bool wake_waiter_record_child_error(XrCoroutine *coro,
+                                           XrScopeContext *scope) {
+    if (scope->mode == XR_SCOPE_WAIT || !coro->task) return false;
+    XrValue err = coro->task->error;
+    if (XR_IS_NULL(err) || !XR_IS_STRING(err)) return false;
+
+    if (scope->mode == XR_SCOPE_LINKED) {
+        // linked scope: record only the first error observed.
+        if (XR_IS_NULL(scope->first_error)) {
+            scope->first_error = err;
+        }
+    } else if (scope->mode == XR_SCOPE_SUPERVISOR) {
+        // supervisor scope: collect every error into an array.
+        if (!scope->errors) {
+            scope->errors = xr_array_with_capacity(coro, 4);
+        }
+        if (scope->errors) {
+            xr_array_push(scope->errors, err);
+        }
+    }
+    return true;
+}
+
+// Step 2: unlink coro from scope->first_child. Caller must hold
+// scope->child_lock. Critical because the coroutine pool may recycle
+// the slot once this coroutine is fully done — a stale entry in
+// scope->first_child would corrupt subsequent child completions.
+static void wake_waiter_unlink_from_scope_locked(XrCoroutine *coro,
+                                                 XrScopeContext *scope) {
+    XrCoroutine **pp = &scope->first_child;
+    while (*pp) {
+        if (*pp == coro) {
+            *pp = coro->scope_sibling;
+            coro->scope_sibling = NULL;
+            return;
+        }
+        pp = &(*pp)->scope_sibling;
+    }
+}
+
+// Step 3: linked-mode "first failure cancels all siblings" path.
+// Caller must hold scope->child_lock and must have already unlinked
+// the failing child from scope->first_child (so we walk only the
+// still-live siblings). Each cancelled sibling has parent_scope
+// cleared and scope->count decremented because xr_coro_cancel does
+// not flow through the worker completion path that normally does it.
+static void wake_waiter_cancel_linked_siblings_locked(XrayIsolate *X,
+                                                      XrScopeContext *scope) {
+    for (XrCoroutine *sib = scope->first_child; sib; sib = sib->scope_sibling) {
+        if (xr_coro_flags_has(sib, XR_CORO_FLG_DONE)) continue;
+        xr_coro_cancel(sib);
+        if (sib->task) {
+            xr_task_cancel(sib->task);
+        }
+        sib->parent_scope = NULL;
+        atomic_fetch_sub(&scope->count, 1);
+        if (sib->task) {
+            xr_task_wake_waiter(X, sib->task);
+        }
+    }
+}
+
+// xr_coro_wake_waiter - Wake waiter when coroutine completes.
 //
-// All await coordination lives on XrTask.
-// This function handles scope count decrement and delegates to xr_task_wake_waiter.
+// All await coordination lives on XrTask. This function handles the
+// scope-side bookkeeping (which is orthogonal to the task tree, see
+// the doc comments on XrScopeContext / XrTask) and then delegates to
+// xr_task_wake_waiter for the per-task await/listener path.
 void xr_coro_wake_waiter(XrayIsolate *X, XrCoroutine *coro) {
     if (!X || !coro) return;
 
-    // Decrement scope count (if created in scope)
     XrScopeContext *scope = coro->parent_scope;
     if (scope) {
-        /* Check child failure for linked/supervisor scope BEFORE clearing parent_scope.
-         * task->error is already set by xr_task_fail() in xworker.c error path. */
-        bool child_failed = false;
-        if (scope->mode != XR_SCOPE_WAIT && coro->task) {
-            XrValue err = coro->task->error;
-            if (!XR_IS_NULL(err) && XR_IS_STRING(err)) {
-                child_failed = true;
-                if (scope->mode == XR_SCOPE_LINKED) {
-                    // linked scope: record first error only
-                    if (XR_IS_NULL(scope->first_error)) {
-                        scope->first_error = err;
-                    }
-                } else if (scope->mode == XR_SCOPE_SUPERVISOR) {
-                    // supervisor scope: collect ALL errors into array
-                    if (!scope->errors) {
-                        scope->errors = xr_array_with_capacity(coro, 4);
-                    }
-                    if (scope->errors) {
-                        xr_array_push(scope->errors, err);
-                    }
-                }
-            }
-        }
+        // Step 1 (lock-free): record error policy state. Must run before
+        // taking the lock because this branch may trigger a GC-touching
+        // XrArray allocation in the supervisor mode.
+        bool child_failed = wake_waiter_record_child_error(coro, scope);
 
-        /* Protect scope child list with a spinlock — multiple children can
-         * complete on different workers concurrently. */
-        while (atomic_exchange_explicit(&scope->child_lock, true, memory_order_acquire)) {}
-
-        /* Remove this coro from scope's child list BEFORE sibling cancel.
-         * Critical: coro pool recycle can reuse memory, causing list corruption
-         * if a completed coro remains in the list. */
-        XrCoroutine **pp = &scope->first_child;
-        while (*pp) {
-            if (*pp == coro) {
-                *pp = coro->scope_sibling;
-                coro->scope_sibling = NULL;
-                break;
-            }
-            pp = &(*pp)->scope_sibling;
-        }
-
-        /* linked scope: cancel all siblings on first child failure.
-         * Must also decrement scope count + wake waiter for each cancelled sib,
-         * because xr_coro_cancel() doesn't go through the xworker completion path. */
+        scope_lock_acquire(scope);
+        // Step 2: detach this coroutine from the child list.
+        wake_waiter_unlink_from_scope_locked(coro, scope);
+        // Step 3: linked-mode propagation, latch via cancel_requested.
         if (child_failed && scope->mode == XR_SCOPE_LINKED &&
             !atomic_exchange(&scope->cancel_requested, true)) {
-            for (XrCoroutine *sib = scope->first_child; sib; sib = sib->scope_sibling) {
-                if (!xr_coro_flags_has(sib, XR_CORO_FLG_DONE)) {
-                    xr_coro_cancel(sib);
-                    if (sib->task) {
-                        xr_task_cancel(sib->task);
-                    }
-                    sib->parent_scope = NULL;
-                    atomic_fetch_sub(&scope->count, 1);
-                    if (sib->task) {
-                        xr_task_wake_waiter(X, sib->task);
-                    }
-                }
-            }
+            wake_waiter_cancel_linked_siblings_locked(X, scope);
         }
+        scope_lock_release(scope);
 
-        atomic_store_explicit(&scope->child_lock, false, memory_order_release);
-
+        // Step 4 (lock-free): decrement scope count + drop the back-pointer.
         atomic_fetch_sub(&scope->count, 1);
         coro->parent_scope = NULL;
     }
 
-    // Delegate to xr_task_wake_waiter (all go creates Task)
+    // Step 5: delegate to xr_task_wake_waiter (every `go` creates a Task).
     if (coro->task) {
         xr_task_wake_waiter(X, coro->task);
     }
