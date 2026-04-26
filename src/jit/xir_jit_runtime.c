@@ -2392,6 +2392,10 @@ XrJitResult xr_jit_scope_enter(XrCoroutine *coro, int64_t extra_arg) {
     XrScopeContext *scope = (XrScopeContext *)xr_malloc(sizeof(XrScopeContext));
     if (scope) {
         atomic_store(&scope->count, 0);
+        // JIT only handles the WAIT mode here; LINKED / SUPERVISOR
+        // scopes deopt to the interpreter (see OP_SCOPE_ENTER in
+        // xvm_dispatch_misc.inc.c) which is the path that allocates
+        // errors[] eagerly for the supervisor case.
         scope->mode = XR_SCOPE_WAIT;
         atomic_init(&scope->cancel_requested, false);
         atomic_init(&scope->child_lock, false);
