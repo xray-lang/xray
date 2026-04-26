@@ -1900,8 +1900,12 @@ static void emit_osr_stubs(CodegenCtx *ctx, XirCodegenResult *result) {
                             ? ctx->func->blocks[snap->block_id] : NULL;
         uint16_t nslots = 0;
 
-        // Look up Blueprint loop info for this header
-        XrBlueprint *bp = (XrBlueprint *)ctx->func->proto->blueprint;
+        // Look up Blueprint loop info for this header.
+        // proto can be NULL when codegen is invoked outside a normal JIT
+        // pipeline (e.g. unit tests that build XirFunc directly).
+        XrBlueprint *bp = ctx->func->proto
+            ? (XrBlueprint *)ctx->func->proto->blueprint
+            : NULL;
         XrBpLoopInfo *bp_loop = NULL;
         if (bp && bp->loops) {
             uint32_t bc_off = entry->bc_offset;
