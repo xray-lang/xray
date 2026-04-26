@@ -137,7 +137,10 @@ add_xray_unit_test(test_code_alloc jit/test_code_alloc.c)
 # E2E tests: require full JIT runtime (coro + jit_ctx), excluded from default build
 # Covered by regression tests (scripts/run_regression_tests.sh)
 # add_xray_unit_test(test_aot_e2e jit/test_aot_e2e.c)
-# add_xray_unit_test(test_jit_e2e jit/test_jit_e2e.c)
+# test_jit_e2e: covers IR -> codegen -> execute end-to-end with a minimal
+# fake coro/jit_ctx env (see jit_env_init() in the test file). Includes the
+# §10.1-§10.6 hardening regressions from docs/tasks/010-x64-jit-hardening.md.
+add_xray_unit_test(test_jit_e2e jit/test_jit_e2e.c)
 
 # ============================================================================
 # base/ — Config, logging, SIMD, SWAR, mutex, intmap, mem_profiler
