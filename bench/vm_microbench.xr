@@ -1,0 +1,144 @@
+// vm_microbench.xr — exercises every dispatch include category
+// at high iteration counts.  Used to verify Phase 4 dispatch
+// split (.inc.c files) introduces no measurable performance
+// regression vs the pre-split baseline.
+//
+// Run: time xray bench/vm_microbench.xr
+
+// ---------- 1. Arithmetic + control loop (arith + compare + jump) ----------
+fn bench_arith(iters: int): int {
+    let acc = 0
+    for (let i = 0; i < iters; i++) {
+        acc = acc + i * 3 - 1
+        if (acc % 7 == 0) {
+            acc = acc + 1
+        }
+    }
+    return acc
+}
+
+// ---------- 2. Bitwise (bitwise) ----------
+fn bench_bitwise(iters: int): int {
+    let acc = 0
+    for (let i = 0; i < iters; i++) {
+        acc = (acc ^ i) | ((i & 0xFF) << 3)
+        acc = acc >> 1
+    }
+    return acc
+}
+
+// ---------- 3. Array push + index + length (collection + invoke-IC) ----------
+fn bench_array(iters: int): int {
+    let arr: Array<int> = []
+    for (let i = 0; i < iters; i++) {
+        arr.push(i)
+    }
+    let total = 0
+    for (let i = 0; i < arr.length; i++) {
+        total = total + arr[i]
+    }
+    return total
+}
+
+// ---------- 4. Map insert + lookup (collection + INVOKE_BUILTIN) ----------
+fn bench_map(iters: int): int {
+    let m: Map<int, int> = #{}
+    for (let i = 0; i < iters; i++) {
+        m.set(i, i * 2)
+    }
+    let total = 0
+    for (let i = 0; i < iters; i++) {
+        total = total + m.get(i)
+    }
+    return total
+}
+
+// ---------- 5. String methods (invoke-IC monomorphic site) ----------
+fn bench_string(iters: int): int {
+    let s = "abcdefghijklmnop"
+    let total = 0
+    for (let i = 0; i < iters; i++) {
+        total = total + s.length
+        if (s.startsWith("abc")) {
+            total = total + 1
+        }
+    }
+    return total
+}
+
+// ---------- 6. Function calls (call include) ----------
+fn add(a: int, b: int): int {
+    return a + b
+}
+
+fn bench_calls(iters: int): int {
+    let acc = 0
+    for (let i = 0; i < iters; i++) {
+        acc = add(acc, i)
+    }
+    return acc
+}
+
+// ---------- 7. Object field IC (object include) ----------
+class Point {
+    x: int = 0
+    y: int = 0
+}
+
+fn bench_field_ic(iters: int): int {
+    let p = new Point()
+    for (let i = 0; i < iters; i++) {
+        p.x = p.x + i
+        p.y = p.y - 1
+    }
+    return p.x + p.y
+}
+
+// ---------- 8. Method dispatch (object invoke + invoke-IC) ----------
+class Counter {
+    n: int = 0
+
+    bump(): int {
+        this.n = this.n + 1
+        return this.n
+    }
+}
+
+fn bench_method(iters: int): int {
+    let c = new Counter()
+    let last = 0
+    for (let i = 0; i < iters; i++) {
+        last = c.bump()
+    }
+    return last
+}
+
+// ---------- main ----------
+fn main() {
+    // Per-section iteration count tuned to make each block contribute
+    // ~10x process-startup so wall-clock dominates the dispatch path.
+    let nHot = 20000000  // tight loops: arith / bitwise / calls / method
+    let nMid = 4000000   // string + field IC (some allocation)
+    let nLow = 2000000   // array / map (heap-heavy)
+
+    // Warm up the IC tables / proto pools
+    bench_arith(1000)
+    bench_array(1000)
+    bench_method(1000)
+
+    let r1 = bench_arith(nHot)
+    let r2 = bench_bitwise(nHot)
+    let r3 = bench_array(nLow)
+    let r4 = bench_map(nLow)
+    let r5 = bench_string(nMid)
+    let r6 = bench_calls(nHot)
+    let r7 = bench_field_ic(nMid)
+    let r8 = bench_method(nHot)
+
+    // Print every result so the optimizer can't dead-code anything,
+    // but route through a single println so wall-clock measurement
+    // covers the work, not stdout flush.
+    print("arith=${r1} bitwise=${r2} array=${r3} map=${r4} string=${r5} calls=${r6} fic=${r7} mc=${r8}")
+}
+
+main()
