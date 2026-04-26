@@ -5266,8 +5266,11 @@ startfunc:
                 /* === Array builtin methods === */
                 invoke_array:
                 if (XR_IS_ARRAY(receiver)) {
-                    XrArray *array = XR_TO_ARRAY(receiver);
-                    R(a) = array_method_call_by_symbol(isolate, array, method_symbol, &R(a + 2), nargs);
+                    /* See xarray_methods.h — unified method table dispatch. */
+                    const XrMethodSlot *_slot = xr_method_table_lookup(
+                        XR_TID_ARRAY, method_symbol, SYMBOL_BUILTIN_COUNT);
+                    R(a) = _slot ? _slot->fn(isolate, receiver, &R(a + 2), nargs)
+                                 : XR_NOTFOUND;
                     VM_BUILTIN_INVOKE_CHECK_EXC();
                     if (unlikely(XR_IS_NOTFOUND(R(a)))) {
                         XrSymbolTable *_st = (XrSymbolTable*)isolate->symbol_table;
@@ -5729,8 +5732,11 @@ startfunc:
                     R(a) = _slot ? _slot->fn(isolate, receiver, args, nargs)
                                  : XR_NOTFOUND;
                 } else if (XR_IS_ARRAY(receiver)) {
-                    XrArray *array = XR_TO_ARRAY(receiver);
-                    R(a) = array_method_call_by_symbol(isolate, array, method_symbol, args, nargs);
+                    /* See invoke_array above. */
+                    const XrMethodSlot *_slot = xr_method_table_lookup(
+                        XR_TID_ARRAY, method_symbol, SYMBOL_BUILTIN_COUNT);
+                    R(a) = _slot ? _slot->fn(isolate, receiver, args, nargs)
+                                 : XR_NOTFOUND;
                 } else if (XR_IS_STRING(receiver)) {
                     XrString *str = xr_value_to_string(isolate, receiver);
                     R(a) = string_method_call_by_symbol(isolate, str, method_symbol, args, nargs);

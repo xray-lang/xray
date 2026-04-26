@@ -2188,8 +2188,10 @@ int vm_go_invoke(XrayIsolate *isolate, XrVMContext *vm_ctx,
     XrValue result = xr_null();
 
     if (XR_IS_ARRAY(receiver)) {
-        XrArray *array = XR_TO_ARRAY(receiver);
-        result = array_method_call_by_symbol(isolate, array, method_symbol, &base[a + 2], nargs);
+        const XrMethodSlot *slot = xr_method_table_lookup(
+            XR_TID_ARRAY, method_symbol, SYMBOL_BUILTIN_COUNT);
+        result = slot ? slot->fn(isolate, receiver, &base[a + 2], nargs)
+                      : XR_NOTFOUND;
     } else if (XR_IS_MAP(receiver)) {
         const XrMethodSlot *slot = xr_method_table_lookup(
             XR_TID_MAP, method_symbol, SYMBOL_BUILTIN_COUNT);
