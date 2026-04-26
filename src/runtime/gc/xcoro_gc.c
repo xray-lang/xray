@@ -626,13 +626,30 @@ static void mark_struct_string_fields(XrCoroGC *gc, XrVMContext *vm_ctx) {
             // Verify pointer is within this frame's struct_area
             if (sptr < area || sptr >= area + area_size) continue;
             XrClass *cls = *(XrClass**)sptr;
-            if (!cls || !cls->struct_layout) continue;
+            if (!cls) continue;
+            // A struct_ref in the area must point to a class that owns a
+            // layout; otherwise the layout/area pairing has drifted and
+            // this loop would reach into the area with a stale offset
+            // table. Fail loudly in debug builds; release builds skip
+            // the entry to avoid undefined reads.
+            XR_DCHECK(cls->struct_layout != NULL,
+                      "mark_struct_string_fields: struct_ref class has no struct_layout");
+            if (!cls->struct_layout) continue;
             XrStructLayout *layout = cls->struct_layout;
+            // Every layout offset is encoded relative to sptr+8 (the data
+            // payload follows the embedded XrClass*). The deepest read is
+            // at offset+sizeof(XrString*); if that crosses the frame's
+            // declared area_size the bytecode/codegen and the runtime
+            // disagree about the struct shape.
             for (int i = 0; i < layout->field_count; i++) {
-                if (layout->fields[i].native_type == XR_NATIVE_STRING) {
-                    XrString *s = *(XrString**)(sptr + 8 + layout->fields[i].offset);
-                    if (s) xr_coro_gc_markobject(gc, (XrGCHeader*)s);
-                }
+                if (layout->fields[i].native_type != XR_NATIVE_STRING) continue;
+                size_t field_end = (size_t)8 + (size_t)layout->fields[i].offset
+                                 + sizeof(XrString*);
+                XR_DCHECK(field_end <= (size_t)area_size,
+                          "mark_struct_string_fields: layout field offset overruns area_size");
+                if (field_end > (size_t)area_size) continue;
+                XrString *s = *(XrString**)(sptr + 8 + layout->fields[i].offset);
+                if (s) xr_coro_gc_markobject(gc, (XrGCHeader*)s);
             }
         }
     }
