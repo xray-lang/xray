@@ -87,6 +87,15 @@ XrayIsolate* xray_isolate_new(const XrayIsolateParams *params) {
     // --- Core: VM engine ---
     if (xr_vm_init(isolate) != 0) goto fail;
 
+#if XR_ENABLE_VM_PROFILER
+    /* Allocate the per-isolate profiler eagerly when the build opted
+     * in. The struct is small (~5KB) and pre-allocating avoids a
+     * branch on every VM dispatch entry. NULL slot in disabled builds
+     * keeps the field zero-cost. */
+    isolate->profiler = xr_calloc(1, sizeof(VMProfiler));
+    if (!isolate->profiler) goto fail_after_vm;
+#endif
+
     // --- Core: shape registry (hidden classes) ---
     xr_shape_registry_init(isolate);
 
@@ -118,7 +127,15 @@ fail:
 void xray_isolate_delete(XrayIsolate *isolate) {
     if (!isolate) return;
 
-    vm_profiler_report();
+    /* Drain the per-isolate profiler before any structure that
+     * powers the report (opcode info, isolate pointer) goes away.
+     * vm_profiler_report tolerates NULL so this is a no-op when
+     * the build never compiled the profiler in. */
+    vm_profiler_report((const VMProfiler *)isolate->profiler);
+    if (isolate->profiler) {
+        xr_free(isolate->profiler);
+        isolate->profiler = NULL;
+    }
 
     if (g_current_isolate == isolate) {
         xray_isolate_exit();
