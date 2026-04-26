@@ -1233,25 +1233,41 @@ static void emit_prologue(CodegenCtx *ctx) {
         a64_buf_emit(&ctx->buf, a64_mov(SCRATCH_REG2, A64_X1));
         for (uint32_t i = 0; i < nparams; i++) {
             bool is_fp = (i < ctx->func->nvreg && ctx->func->vregs[i].rep == XR_REP_F64);
-            int8_t ri = xra_vreg_first_reg(ctx->xra, i);
-            if (ri < 0) continue;
-            if (is_fp) {
-                A64Reg dst = alloc_fp_regs[ri];
-                a64_buf_emit(&ctx->buf, a64_ldr_fp(dst, SCRATCH_REG2, (int32_t)(i * 8)));
-            } else {
-                A64Reg dst = alloc_regs[ri];
-                a64_buf_emit(&ctx->buf, a64_ldr(dst, SCRATCH_REG2, (int32_t)(i * 8)));
-            }
-            // If this param vreg has a spill slot, store immediately.
-            // The RA may split the param range and reload from the spill
-            // slot later; without this store the slot is uninitialized.
-            int16_t slot = xra_vreg_spill(ctx->xra, i);
-            if (slot >= 0) {
-                int32_t offset = SPILL_BASE + slot * 8;
-                if (is_fp)
-                    a64_buf_emit(&ctx->buf, a64_str_fp(alloc_fp_regs[ri], A64_SP, offset));
-                else
-                    a64_buf_emit(&ctx->buf, a64_str(alloc_regs[ri], A64_SP, offset));
+            // Drive loading from the position the param actually occupies
+            // at function entry (pos 0). xra_vreg_first_reg returns the
+            // first reg of any segment, so when the leading segment is
+            // spill it would point at a later post-reload reg the RA has
+            // not yet committed; the spill slot would be left
+            // uninitialized.
+            int8_t  ri    = xra_reg_at_pos(ctx->xra, i, 0);
+            int16_t slot  = xra_vreg_spill(ctx->xra, i);
+            bool    live0 = xra_vreg_live_at(ctx->xra, i, 0);
+            if (!live0) continue;  // dead at entry
+
+            int32_t arg_off = (int32_t)(i * 8);
+            if (ri >= 0) {
+                // Leading segment is a reg: load there, mirror to spill
+                // slot (if any) so later spill segments reload correctly.
+                if (is_fp) {
+                    A64Reg dst = alloc_fp_regs[ri];
+                    a64_buf_emit(&ctx->buf, a64_ldr_fp(dst, SCRATCH_REG2, arg_off));
+                    if (slot >= 0)
+                        a64_buf_emit(&ctx->buf, a64_str_fp(dst, A64_SP,
+                                     SPILL_BASE + slot * 8));
+                } else {
+                    A64Reg dst = alloc_regs[ri];
+                    a64_buf_emit(&ctx->buf, a64_ldr(dst, SCRATCH_REG2, arg_off));
+                    if (slot >= 0)
+                        a64_buf_emit(&ctx->buf, a64_str(dst, A64_SP,
+                                     SPILL_BASE + slot * 8));
+                }
+            } else if (slot >= 0) {
+                // Leading segment is spill: seed the slot from args[i] via
+                // SCRATCH_REG. SCRATCH_REG2 holds args_ptr. 8-byte LDR/STR
+                // works for both i64 and f64 bit patterns.
+                a64_buf_emit(&ctx->buf, a64_ldr(SCRATCH_REG, SCRATCH_REG2, arg_off));
+                a64_buf_emit(&ctx->buf, a64_str(SCRATCH_REG, A64_SP,
+                             SPILL_BASE + slot * 8));
             }
         }
         // Init slot_runtime_tags for TAGGED (any/Json) params from param_tags[].

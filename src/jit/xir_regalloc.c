@@ -1001,12 +1001,30 @@ static void assign_spill_slot(LsCtx *ctx, LsRange *r) {
         }
     }
 
-    // No reusable slot: allocate a new one
+    /* No reusable slot: allocate a new one.
+     *
+     * Set slot_end to the FULL vreg's last-live position, not just this
+     * sibling's range_end. Reason: when a vreg is split into siblings
+     * (head reg + tail spill), each sibling calls assign_spill_slot
+     * independently, and the tail walks the bundle path
+     * (TryReuseSpillForPhi) to land on the same slot the head used.
+     * The bundle path doesn't go through reuse-by-lifetime, so it will
+     * silently overlap with whatever vreg occupied the slot in between.
+     * Pre-reserving the slot for the entire vreg's lifespan prevents
+     * any later reuse-by-lifetime from picking it.
+     */
+    int32_t vreg_last = range_end(r);
+    if (r->vreg < ctx->nvreg && ctx->vreg_ranges[r->vreg]) {
+        for (LsRange *s = ctx->vreg_ranges[r->vreg]; s; s = s->next_sibling) {
+            int32_t e = range_end(s);
+            if (e > vreg_last) vreg_last = e;
+        }
+    }
     {
         int16_t slot = ctx->next_spill++;
         r->spill = slot;
         if (slot < XIR_MAX_SPILL_SLOTS) {
-            ctx->slot_end[slot] = range_end(r);
+            ctx->slot_end[slot] = vreg_last;
             ctx->slot_is_ptr[slot] = is_ptr;
         }
     }
