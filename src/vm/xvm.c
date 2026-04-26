@@ -651,9 +651,14 @@ startfunc:
             /* CALL / RETURN / TAILCALL family — see xvm_dispatch_call.inc.c. */
             #include "xvm_dispatch_call.inc.c"
 
-            /* OOP / field IC / Json / invoke / property family —
+            /* Class / field IC / Json / property family --
              * see xvm_dispatch_object.inc.c. */
             #include "xvm_dispatch_object.inc.c"
+
+            /* OOP method invocation family (INVOKE / INVOKE_TAIL /
+             * SUPERINVOKE / INVOKE_DIRECT / INVOKE_BUILTIN) --
+             * see xvm_dispatch_invoke.inc.c. */
+            #include "xvm_dispatch_invoke.inc.c"
 
             /* Exception opcodes — see xvm_dispatch_exception.inc.c. */
             #include "xvm_dispatch_exception.inc.c"
