@@ -5333,10 +5333,18 @@ startfunc:
                 /* === BigInt builtin methods === */
                 invoke_bigint:
                 if (XR_IS_BIGINT(receiver)) {
-                    XrBigInt *bigint = (XrBigInt*)XR_TO_PTR(receiver);
-                    R(a) = bigint_method_call_by_symbol(isolate, bigint, method_symbol, &R(a + 2), nargs);
-                    VM_BUILTIN_INVOKE_CHECK_EXC();
-                    if (unlikely(XR_IS_NOTFOUND(R(a)))) {
+                    /* BigInt dispatches through the unified method table.
+                     * See xbigint_methods.h — every method is a static
+                     * inline wrapper around an extern xr_bigint_*
+                     * primitive, so AOT inlines the wrapper at the call
+                     * site and the VM reaches a single out-of-line copy
+                     * via this indirection. */
+                    const XrMethodSlot *_slot = xr_method_table_lookup(
+                        XR_TID_BIGINT, method_symbol, SYMBOL_BUILTIN_COUNT);
+                    if (likely(_slot != NULL)) {
+                        R(a) = _slot->fn(isolate, receiver, &R(a + 2), nargs);
+                        VM_BUILTIN_INVOKE_CHECK_EXC();
+                    } else {
                         XrSymbolTable *_st = (XrSymbolTable*)isolate->symbol_table;
                         const char *_mn = xr_symbol_get_name_in_table(_st, method_symbol);
                         VM_RUNTIME_ERROR(XR_ERR_TYPE_NO_METHOD, "BigInt has no method '%s'", _mn ? _mn : "?");
@@ -5726,8 +5734,14 @@ startfunc:
                             "bool type has no method '%s'", name ? name : "?");
                     }
                 } else if (XR_IS_BIGINT(receiver)) {
-                    XrBigInt *bigint = (XrBigInt*)XR_TO_PTR(receiver);
-                    R(a) = bigint_method_call_by_symbol(isolate, bigint, method_symbol, args, nargs);
+                    /* See invoke_bigint above. */
+                    const XrMethodSlot *_slot = xr_method_table_lookup(
+                        XR_TID_BIGINT, method_symbol, SYMBOL_BUILTIN_COUNT);
+                    if (likely(_slot != NULL)) {
+                        R(a) = _slot->fn(isolate, receiver, args, nargs);
+                    } else {
+                        R(a) = XR_NOTFOUND;
+                    }
                 } else if (xr_is_stringbuilder(receiver)) {
                     // StringBuilder: dispatch through native_type_classes
                     XrClass *klass = isolate->native_type_classes[XR_TSTRINGBUILDER];

@@ -1248,69 +1248,9 @@ XrValue int_method_call_by_symbol(XrayIsolate *isolate, xr_Integer value, int sy
  * when bool migrated to the unified XrMethodSlot table. See
  * xr_bool_method_table[] for the single source of truth. */
 
-/* ========== BigInt Method Handlers ========== */
-
-// BigInt method dispatch
-XrValue bigint_method_call_by_symbol(XrayIsolate *isolate, XrBigInt *bigint, int symbol, XrValue *args, int argc) {
-    XR_DCHECK(isolate != NULL, "bigint_dispatch: NULL isolate");
-    XR_DCHECK(bigint != NULL, "bigint_dispatch: NULL bigint");
-    (void)args; (void)argc;
-
-    // toString - convert to string
-    if (symbol == SYMBOL_TOSTRING) {
-        char *str = xr_bigint_to_string(bigint);
-        if (!str) return xr_null();
-        XrString *result = xr_string_intern(isolate, str, strlen(str), 0);
-        xr_free(str);
-        return xr_string_value(result);
-    }
-
-    // abs - absolute value
-    if (symbol == SYMBOL_ABS) {
-        XrBigInt *result = xr_bigint_abs(xr_current_coro(isolate), bigint);
-        return XR_FROM_PTR(result);
-    }
-
-    // sign - sign value (-1, 0, 1)
-    if (symbol == SYMBOL_SIGN) {
-        if (xr_bigint_is_zero(bigint)) {
-            return xr_int(0);
-        }
-        return xr_int(bigint->sign);
-    }
-
-    // isZero - check if zero
-    if (symbol == SYMBOL_ISZERO) {
-        return xr_bool(xr_bigint_is_zero(bigint));
-    }
-
-    // isNegative - check if negative
-    if (symbol == SYMBOL_ISNEGATIVE) {
-        return xr_bool(bigint->sign < 0 && !xr_bigint_is_zero(bigint));
-    }
-
-    // isPositive - check if positive
-    if (symbol == SYMBOL_ISPOSITIVE) {
-        return xr_bool(bigint->sign > 0 && !xr_bigint_is_zero(bigint));
-    }
-
-    // toInt - convert to regular integer (returns null on overflow)
-    if (symbol == SYMBOL_TOINT) {
-        bool overflow = false;
-        int64_t value = xr_bigint_to_int64(bigint, &overflow);
-        if (overflow) return xr_null();
-        return xr_int(value);
-    }
-
-    // toFloat - convert to float
-    if (symbol == SYMBOL_TOFLOAT) {
-        double value = xr_bigint_to_double(bigint);
-        return xr_float(value);
-    }
-
-    // Method not found — caller (OP_INVOKE_BUILTIN) throws catchable error
-    return XR_NOTFOUND;
-}
+/* BigInt method dispatch lives in src/runtime/object/xbigint_methods.{c,h}.
+ * The legacy bigint_method_call_by_symbol used to be here; it was deleted
+ * when bigint migrated to the unified XrMethodSlot table. */
 
 // Bound method value helpers now live in runtime/closure/xbound_method.c.
 
