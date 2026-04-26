@@ -1366,9 +1366,12 @@ static inline void scope_lock_release(XrScopeContext *scope) {
  * completing coroutine belongs to a scope (linked / supervisor / wait):
  *
  *   1. Record this child's error into the scope's policy state
- *      (linked: first_error; supervisor: errors[]). Runs OUTSIDE the
- *      scope lock because the supervisor branch may allocate an
- *      XrArray (a GC-touching path that must not run under a spinlock).
+ *      (linked: first_error; supervisor: errors[]). Runs INSIDE the
+ *      scope lock — this serializes the lazy reads/writes of
+ *      first_error and the push into errors[] so concurrent failing
+ *      children cannot lose updates or tear the array. The supervisor
+ *      errors[] is preallocated at OP_SCOPE_ENTER time precisely so
+ *      this step does not need to allocate under the spinlock.
  *
  *   2. Unlink this coroutine from scope->first_child. Runs INSIDE
  *      the scope lock — this is the canonical race surface (multiple
@@ -1386,24 +1389,30 @@ static inline void scope_lock_release(XrScopeContext *scope) {
  * coroutine and stays inline at the bottom of xr_coro_wake_waiter. */
 
 // Step 1: read this child's error and update scope->first_error /
-// scope->errors per the scope's policy mode. Returns true iff the
-// child reported a non-null string error.
-static bool wake_waiter_record_child_error(XrCoroutine *coro,
-                                           XrScopeContext *scope) {
+// scope->errors per the scope's policy mode. Caller must hold
+// scope->child_lock so concurrent failing children cannot race on
+// the lazy first_error write or on errors[] push.
+//
+// Critical invariants on the supervisor path:
+//   - scope->errors is preallocated by OP_SCOPE_ENTER (see
+//     xvm_dispatch_misc.inc.c); this function does not allocate.
+//   - xr_array_push may xr_realloc its backing data buffer (malloc,
+//     not coroutine GC), which is bounded and lock-safe.
+//
+// Returns true iff the child reported a non-null string error.
+static bool wake_waiter_record_child_error_locked(XrCoroutine *coro,
+                                                  XrScopeContext *scope) {
     if (scope->mode == XR_SCOPE_WAIT || !coro->task) return false;
     XrValue err = coro->task->error;
     if (XR_IS_NULL(err) || !XR_IS_STRING(err)) return false;
 
     if (scope->mode == XR_SCOPE_LINKED) {
-        // linked scope: record only the first error observed.
+        // linked scope: deterministic "first failure wins" under the lock.
         if (XR_IS_NULL(scope->first_error)) {
             scope->first_error = err;
         }
     } else if (scope->mode == XR_SCOPE_SUPERVISOR) {
-        // supervisor scope: collect every error into an array.
-        if (!scope->errors) {
-            scope->errors = xr_array_with_capacity(coro, 4);
-        }
+        // supervisor scope: append every error; errors[] is preallocated.
         if (scope->errors) {
             xr_array_push(scope->errors, err);
         }
@@ -1461,12 +1470,11 @@ void xr_coro_wake_waiter(XrayIsolate *X, XrCoroutine *coro) {
 
     XrScopeContext *scope = coro->parent_scope;
     if (scope) {
-        // Step 1 (lock-free): record error policy state. Must run before
-        // taking the lock because this branch may trigger a GC-touching
-        // XrArray allocation in the supervisor mode.
-        bool child_failed = wake_waiter_record_child_error(coro, scope);
-
         scope_lock_acquire(scope);
+        // Step 1: record error policy state under the scope lock so
+        // concurrent failing children cannot race on first_error /
+        // errors[] (errors[] is preallocated at OP_SCOPE_ENTER time).
+        bool child_failed = wake_waiter_record_child_error_locked(coro, scope);
         // Step 2: detach this coroutine from the child list.
         wake_waiter_unlink_from_scope_locked(coro, scope);
         // Step 3: linked-mode propagation, latch via cancel_requested.

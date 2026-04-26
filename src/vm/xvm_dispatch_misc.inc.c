@@ -159,7 +159,13 @@ vmcase(OP_SCOPE_ENTER) {
         atomic_store(&scope->cancel_requested, false);
         atomic_init(&scope->child_lock, false);
         scope->first_error = xr_null();
-        scope->errors = NULL;
+        // Eager-allocate the supervisor errors[] on the scope owner's
+        // GC heap so wake_waiter can push under the scope lock without
+        // touching the allocator. The owner is the coroutine running
+        // this OP_SCOPE_ENTER (its lifetime brackets the scope block).
+        scope->errors = (scope_mode == XR_SCOPE_SUPERVISOR && current)
+                            ? xr_array_with_capacity(current, 4)
+                            : NULL;
         scope->first_child = NULL;
         if (current) {
             scope->parent = current->current_scope;
