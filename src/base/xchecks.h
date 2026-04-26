@@ -43,11 +43,28 @@
         } \
     } while(0)
 
+// XR_CHECK_FMT - Always-on check with printf-style formatted message.
+// Useful when the failure context needs to embed runtime values (an
+// out-of-range index, the offending opcode name, etc.). The format
+// string is concatenated with a fixed prefix at the call site, so the
+// caller writes only the message portion. The GCC/Clang ##__VA_ARGS__
+// extension is required so the macro works with zero variadic args.
+#define XR_CHECK_FMT(cond, fmt, ...) \
+    do { \
+        if (!(cond)) { \
+            fprintf(stderr, "[FATAL] %s:%d: " fmt "\n", \
+                    __FILE__, __LINE__, ##__VA_ARGS__); \
+            abort(); \
+        } \
+    } while(0)
+
 // XR_DCHECK - Debug-only check (removed in Release)
 #if XR_DEBUG
     #define XR_DCHECK(cond, msg) XR_CHECK(cond, msg)
+    #define XR_DCHECK_FMT(cond, fmt, ...) XR_CHECK_FMT(cond, fmt, ##__VA_ARGS__)
 #else
     #define XR_DCHECK(cond, msg) ((void)0)
+    #define XR_DCHECK_FMT(cond, fmt, ...) ((void)0)
 #endif
 
 // Comparison check macros
