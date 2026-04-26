@@ -25,7 +25,7 @@
 #include <inttypes.h>
 #include "../base/xmalloc.h"
 #include "../jit/xir_sentinels.h"  // xrt_invoke_method_sentinel
-#include "xrt_method.h"              // XRT_SYM_* constants
+#include "xrt_method_symbols.h"     // XRT_SYM_* constants only (avoids xrt_arc.h)
 
 /* ========== Dynamic String Buffer ========== */
 

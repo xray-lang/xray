@@ -42,48 +42,11 @@
 /* =========================================================================
  * Builtin method symbol IDs.
  *
- * Every constant below is paired with its runtime SYMBOL_X counterpart
- * via _Static_assert in xrt_symbol_check.c. Adding a new method here
- * means adding the matching SYMBOL_X to xsymbol_table.h and a new
- * static_assert to xrt_symbol_check.c.
+ * The numeric constants live in xrt_method_symbols.h so that xray_core
+ * TUs can consume them without dragging xrt_arc.h into link. They are
+ * paired with SYMBOL_X via _Static_assert in xrt_symbol_check.c.
  * ========================================================================= */
-
-/* IDs must match SYMBOL_* enum in xsymbol_table.h (verified by xrt_symbol_check.c). */
-#define XRT_SYM_LENGTH      1
-#define XRT_SYM_SIZE        1   /* alias — compiler always emits LENGTH */
-#define XRT_SYM_IS_EMPTY    2
-#define XRT_SYM_HAS         3
-#define XRT_SYM_GET         4
-#define XRT_SYM_SET         5
-#define XRT_SYM_DELETE      6
-#define XRT_SYM_CLEAR       7
-#define XRT_SYM_KEYS        8
-#define XRT_SYM_VALUES      9
-#define XRT_SYM_SLICE       16
-#define XRT_SYM_INDEXOF     19
-#define XRT_SYM_CONTAINS    20
-#define XRT_SYM_STARTSWITH  21
-#define XRT_SYM_ENDSWITH    22
-#define XRT_SYM_TOLOWER     23
-#define XRT_SYM_TOUPPER     24
-#define XRT_SYM_TRIM        25
-#define XRT_SYM_SPLIT       26
-#define XRT_SYM_REPLACE     27
-#define XRT_SYM_REPEAT      29
-#define XRT_SYM_PUSH        48
-#define XRT_SYM_POP         49
-#define XRT_SYM_JOIN        52
-#define XRT_SYM_REVERSE     53
-#define XRT_SYM_SORT        169  /* SYMBOL_SORT */
-#define XRT_SYM_INCLUDES    170  /* SYMBOL_INCLUDES */
-#define XRT_SYM_FLOOR       58
-#define XRT_SYM_CEIL        59
-#define XRT_SYM_ROUND       60
-#define XRT_SYM_ABS         61
-#define XRT_SYM_SQRT        62
-#define XRT_SYM_POW         63
-#define XRT_SYM_TOFIXED     64
-#define XRT_SYM_TOSTRING    85
+#include "xrt_method_symbols.h"
 
 /* =========================================================================
  * toString helper
