@@ -4951,6 +4951,26 @@ startfunc:
                 int b = GETARG_B(i);
                 int nargs = GETARG_C(i);
 
+                /* Persist pc once for every dispatch path. Builtin
+                 * handlers that throw a contract exception (e.g.
+                 * WeakMap.set / WeakSet.add receiver-type guards)
+                 * call xr_vm_throw_exception, which reads frame->pc
+                 * to compute the throw line and rewrites it to the
+                 * matching catch handler. */
+                savepc();
+
+                /* After a builtin handler returns, surface any
+                 * pending exception thrown from inside it. The throw
+                 * already redirected frame->pc, so we just refresh
+                 * dispatch locals via startfunc (or fall out to the
+                 * embedder when no handler is on the stack). */
+                #define VM_BUILTIN_INVOKE_CHECK_EXC() do { \
+                    if (unlikely(!XR_IS_NULL(VM_EXCEPTION))) { \
+                        if (VM_HANDLER_COUNT == 0) return XR_VM_RUNTIME_ERROR; \
+                        goto startfunc; \
+                    } \
+                } while (0)
+
                 // Declared here (before all invoke_* labels) so jumps past
                 // the assignment below still observe a deterministic NULL.
                 const char *method_name_chars = NULL;
@@ -5198,6 +5218,7 @@ startfunc:
                 if (XR_IS_MAP(receiver)) {
                     XrMap *map = XR_TO_MAP(receiver);
                     R(a) = map_method_call_by_symbol(isolate, map, method_symbol, &R(a + 2), nargs);
+                    VM_BUILTIN_INVOKE_CHECK_EXC();
                     if (unlikely(XR_IS_NOTFOUND(R(a)))) {
                         XrSymbolTable *_st = (XrSymbolTable*)isolate->symbol_table;
                         const char *_mn = xr_symbol_get_name_in_table(_st, method_symbol);
@@ -5211,6 +5232,7 @@ startfunc:
                 if (xr_value_is_json(receiver)) {
                     XrJson *json = xr_value_to_json(receiver);
                     R(a) = json_method_call_by_symbol(isolate, json, method_symbol, &R(a + 2), nargs);
+                    VM_BUILTIN_INVOKE_CHECK_EXC();
                     if (unlikely(XR_IS_NOTFOUND(R(a)))) {
                         XrSymbolTable *_st = (XrSymbolTable*)isolate->symbol_table;
                         const char *_mn = xr_symbol_get_name_in_table(_st, method_symbol);
@@ -5224,6 +5246,7 @@ startfunc:
                 if (XR_IS_STRING(receiver)) {
                     XrString *str = xr_value_to_string(isolate, receiver);
                     R(a) = string_method_call_by_symbol(isolate, str, method_symbol, &R(a + 2), nargs);
+                    VM_BUILTIN_INVOKE_CHECK_EXC();
                     if (unlikely(XR_IS_NOTFOUND(R(a)))) {
                         XrSymbolTable *_st = (XrSymbolTable*)isolate->symbol_table;
                         const char *_mn = xr_symbol_get_name_in_table(_st, method_symbol);
@@ -5237,6 +5260,7 @@ startfunc:
                 if (XR_IS_ARRAY(receiver)) {
                     XrArray *array = XR_TO_ARRAY(receiver);
                     R(a) = array_method_call_by_symbol(isolate, array, method_symbol, &R(a + 2), nargs);
+                    VM_BUILTIN_INVOKE_CHECK_EXC();
                     if (unlikely(XR_IS_NOTFOUND(R(a)))) {
                         XrSymbolTable *_st = (XrSymbolTable*)isolate->symbol_table;
                         const char *_mn = xr_symbol_get_name_in_table(_st, method_symbol);
@@ -5250,6 +5274,7 @@ startfunc:
                 if (XR_IS_SET(receiver)) {
                     XrSet *set = XR_TO_SET(receiver);
                     R(a) = set_method_call_by_symbol(isolate, set, method_symbol, &R(a + 2), nargs);
+                    VM_BUILTIN_INVOKE_CHECK_EXC();
                     if (unlikely(XR_IS_NOTFOUND(R(a)))) {
                         XrSymbolTable *_st = (XrSymbolTable*)isolate->symbol_table;
                         const char *_mn = xr_symbol_get_name_in_table(_st, method_symbol);
@@ -5262,6 +5287,7 @@ startfunc:
                 invoke_int:
                 if (XR_IS_INT(receiver)) {
                     R(a) = int_method_call_by_symbol(isolate, XR_TO_INT(receiver), method_symbol, &R(a + 2), nargs);
+                    VM_BUILTIN_INVOKE_CHECK_EXC();
                     if (unlikely(XR_IS_NOTFOUND(R(a)))) {
                         XrSymbolTable *_st = (XrSymbolTable*)isolate->symbol_table;
                         const char *_mn = xr_symbol_get_name_in_table(_st, method_symbol);
@@ -5274,6 +5300,7 @@ startfunc:
                 invoke_float:
                 if (XR_IS_FLOAT(receiver)) {
                     R(a) = float_method_call_by_symbol(isolate, XR_TO_FLOAT(receiver), method_symbol, &R(a + 2), nargs);
+                    VM_BUILTIN_INVOKE_CHECK_EXC();
                     if (unlikely(XR_IS_NOTFOUND(R(a)))) {
                         XrSymbolTable *_st = (XrSymbolTable*)isolate->symbol_table;
                         const char *_mn = xr_symbol_get_name_in_table(_st, method_symbol);
@@ -5286,6 +5313,7 @@ startfunc:
                 invoke_bool:
                 if (XR_IS_BOOL(receiver)) {
                     R(a) = bool_method_call_by_symbol(isolate, XR_TO_BOOL(receiver), method_symbol);
+                    VM_BUILTIN_INVOKE_CHECK_EXC();
                     if (unlikely(XR_IS_NOTFOUND(R(a)))) {
                         XrSymbolTable *_st = (XrSymbolTable*)isolate->symbol_table;
                         const char *_mn = xr_symbol_get_name_in_table(_st, method_symbol);
@@ -5299,6 +5327,7 @@ startfunc:
                 if (XR_IS_BIGINT(receiver)) {
                     XrBigInt *bigint = (XrBigInt*)XR_TO_PTR(receiver);
                     R(a) = bigint_method_call_by_symbol(isolate, bigint, method_symbol, &R(a + 2), nargs);
+                    VM_BUILTIN_INVOKE_CHECK_EXC();
                     if (unlikely(XR_IS_NOTFOUND(R(a)))) {
                         XrSymbolTable *_st = (XrSymbolTable*)isolate->symbol_table;
                         const char *_mn = xr_symbol_get_name_in_table(_st, method_symbol);
@@ -5646,6 +5675,14 @@ startfunc:
                 XrValue receiver = R(a + 1);
                 XrValue *args = &R(a + 2); // Pass pointer directly, no copy
 
+                /* Persist the local pc into the frame before calling
+                 * any builtin handler. If the handler throws (see e.g.
+                 * the WeakMap.set / WeakSet.add receiver-type guards),
+                 * xr_vm_add_stacktrace and xr_vm_throw_exception read
+                 * frame->pc to record the throw site and to redirect
+                 * to the catch handler. */
+                savepc();
+
                 // Builtin type fast dispatch (compile-time determined as builtin type)
                 if (XR_IS_MAP(receiver)) {
                     XrMap *map = XR_TO_MAP(receiver);
@@ -5736,6 +5773,17 @@ startfunc:
                     } else {
                         VM_RUNTIME_ERROR(XR_ERR_TYPE_NO_METHOD, "this type does not support builtin method call");
                     }
+                }
+                // If a builtin handler threw a catchable exception
+                // (e.g. WeakMap.set with non-object key), the throw
+                // logic already redirected frame->pc to the matching
+                // handler and stashed the exception on the ctx; we
+                // just need to refresh the dispatch locals and either
+                // continue at the catch site or surface the error to
+                // the embedder when nothing caught it.
+                if (unlikely(!XR_IS_NULL(VM_EXCEPTION))) {
+                    if (VM_HANDLER_COUNT == 0) return XR_VM_RUNTIME_ERROR;
+                    goto startfunc;
                 }
                 // Unified method-not-found check for all builtin dispatch functions
                 if (XR_IS_NOTFOUND(R(a))) {
@@ -6151,6 +6199,14 @@ startfunc:
                         // Clear consumed exception; if catch rethrows,
                         // xr_vm_throw_exception will set a new one.
                         handler->exception = xr_null();
+                        // Also clear the ctx-wide pending-exception
+                        // slot. Subsequent dispatch hot paths (notably
+                        // OP_INVOKE / OP_INVOKE_BUILTIN) treat a
+                        // non-null current_exception as "the most
+                        // recently called builtin threw"; leaving the
+                        // caught value in place would cause the next
+                        // builtin call to spuriously unwind.
+                        VM_SET_EXCEPTION(xr_null());
                     }
                 }
 

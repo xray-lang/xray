@@ -120,9 +120,16 @@ XrValue map_method_call_by_symbol(XrayIsolate *isolate, XrMap *map, int symbol, 
     if (symbol == SYMBOL_DELETE) return map_delete_handler(isolate, receiver, args, argc);
 
     if (symbol == SYMBOL_SET) {
-        // WeakMap: key must be a GC object (not int/float/string/bool/null)
+        // WeakMap: key must be a GC object (not int/float/string/bool/null).
+        // Contract violation — surface it as a catchable exception so
+        // user code can recover via try/catch instead of leaving a
+        // stderr breadcrumb and silently returning null.
         if (is_weak && argc >= 1 && !XR_VALUE_NEEDS_GC(args[0])) {
-            fprintf(stderr, "[WeakMap] key must be an object, got a value type\n");
+            XrValue exc = xr_exception_newf(isolate, XR_ERR_INVALID_ARG_TYPE,
+                "WeakMap key must be a heap object, got %s",
+                xr_typeid_name(xr_value_typeid(args[0])));
+            xr_vm_add_stacktrace(isolate, exc);
+            xr_vm_throw_exception(isolate, exc);
             return xr_null();
         }
         return map_set_handler(isolate, receiver, args, argc);
@@ -1023,9 +1030,15 @@ XrValue set_method_call_by_symbol(XrayIsolate *isolate, XrSet *set, int symbol, 
     if (symbol == SYMBOL_IS_EMPTY) return set_is_empty_handler(isolate, receiver, args, argc);
 
     if (symbol == SYMBOL_ADD) {
-        // WeakSet: value must be a GC object (not int/float/string/bool/null)
+        // WeakSet: value must be a GC object (not int/float/string/bool/null).
+        // Contract violation throws a catchable exception (mirrors the
+        // WeakMap.set guard above).
         if (is_weak && argc >= 1 && !XR_VALUE_NEEDS_GC(args[0])) {
-            fprintf(stderr, "[WeakSet] value must be an object, got a value type\n");
+            XrValue exc = xr_exception_newf(isolate, XR_ERR_INVALID_ARG_TYPE,
+                "WeakSet value must be a heap object, got %s",
+                xr_typeid_name(xr_value_typeid(args[0])));
+            xr_vm_add_stacktrace(isolate, exc);
+            xr_vm_throw_exception(isolate, exc);
             return xr_null();
         }
         return set_add_handler(isolate, receiver, args, argc);
