@@ -143,18 +143,31 @@ KOP_SIGS: dict[str, tuple[list[tuple[str, str]], str, tuple[str, ...]]] = {
 }
 
 ENTRY_RE = re.compile(
-    r"^\s*_\(\s*(?P<name>\w+)\s*,\s*(?P<fmt>FMT_\w+)\s*,\s*"
-    r"(?P<kop>KOP_\w+)\s*,\s*\"(?P<desc>[^\"]*)\"\s*\)\s*\\?\s*$"
+    r"_\(\s*(?P<name>\w+)\s*,\s*(?P<fmt>FMT_\w+)\s*,\s*"
+    r"(?P<kop>KOP_\w+)\s*,\s*\"(?P<desc>[^\"]*)\"\s*\)",
+    re.DOTALL,
 )
 
 
 def parse_opcodes(def_path: Path) -> list[tuple[str, str, str, str]]:
-    """Return [(NAME, FMT, KOP, DESC), ...] in declaration order."""
+    """Return [(NAME, FMT, KOP, DESC), ...] in declaration order.
+
+    xopcode_def.h is a `_(NAME, FMT, KOP, "desc") \\` table inside a
+    macro list, so individual entries may span more than one source
+    line via trailing-backslash continuations (SPAWN_CONT, NEW_STRUCT,
+    SELECT_BLOCK, INST_TYPE_ARGS, ...). Splice the continuations away
+    first, then run a single DOTALL regex scan so each opcode entry
+    is matched whether or not it crosses line boundaries.
+    """
+    text = def_path.read_text()
+    # Strip comments first so docstring placeholders such as
+    # `_(NAME, FMT_TAG, KOP_TAG, "...")` cannot be matched as real
+    # opcode entries.
+    text = re.sub(r"/\*.*?\*/", "", text, flags=re.DOTALL)
+    text = re.sub(r"//[^\n]*", "", text)
+    spliced = re.sub(r"\\\s*\n\s*", " ", text)
     out = []
-    for line in def_path.read_text().splitlines():
-        m = ENTRY_RE.match(line)
-        if not m:
-            continue
+    for m in ENTRY_RE.finditer(spliced):
         out.append((m.group("name"), m.group("fmt"),
                     m.group("kop"), m.group("desc")))
     return out
@@ -232,19 +245,22 @@ def render_function(name: str, fmt: str, kop: str, desc: str) -> str:
     full_decl = "XrEmitter *e" if not param_decl else f"XrEmitter *e, {param_decl}"
     body = emit_call(encoder, name, args)
     func_name = f"xemit_{name.lower()}"
+    # Compact two-line form: doc comment + one-line function body.
+    # The whole block is wrapped in clang-format off/on (see
+    # render_header) so the formatter cannot expand the body across
+    # four lines, which would push this generated header past the
+    # 800-line frontend cap (R10).
     return (
         f"// {fmt} / {kop} : {desc}\n"
-        f"static inline int {func_name}({full_decl}) {{\n"
-        f"    return {body};\n"
-        f"}}\n"
+        f"static inline int {func_name}({full_decl}) {{ return {body}; }}\n"
     )
 
 
 def render_header(opcodes: list[tuple[str, str, str, str]]) -> str:
-    parts = [HEADER_PROLOGUE]
+    parts = [HEADER_PROLOGUE, "// clang-format off\n\n"]
     for name, fmt, kop, desc in opcodes:
         parts.append(render_function(name, fmt, kop, desc))
-        parts.append("\n")
+    parts.append("\n// clang-format on\n")
     parts.append(HEADER_EPILOGUE)
     return "".join(parts)
 
