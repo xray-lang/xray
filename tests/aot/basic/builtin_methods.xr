@@ -1,0 +1,49 @@
+// AOT test: comprehensive builtin methods (string, array, map, number)
+
+// --- String new methods ---
+let s = "  hello  "
+print(s.trimStart())        // hello
+print(s.trimEnd())          //   hello
+
+print("hello".charAt(1))    // e
+print("hello".concat(" world")) // hello world
+print("hello".lastIndexOf("l")) // 3
+print("hello".byteAt(0))    // 104
+
+print("aabaa".replaceAll("a", "x"))  // xxbxx
+print("hello".substring(1, 4))       // ell
+print("42".padStart(5, "0"))         // 00042
+print("hi".padEnd(5, "!"))           // hi!!!
+
+print("123".toInt())         // 123
+print("3.14".toFloat())      // 3.14
+print("A".ord())             // 65
+print("hello".reverse())     // olleh
+
+// --- Array new methods ---
+let arr = [3, 1, 2]
+arr.unshift(0)
+print(arr[0])               // 0
+print(arr.length)           // 4
+
+let first = arr.shift()
+print(first)                // 0
+print(arr.length)           // 3
+
+let arr2 = [0, 0, 0]
+arr2.fill(7)
+print(arr2[0])              // 7
+print(arr2[1])              // 7
+print(arr2[2])              // 7
+
+// --- Number new methods ---
+let x = 3.14159
+print(x.toFixed(2))         // 3.14
+
+let a = 5
+let b = 10
+print(a.max(b))             // 10
+print(a.min(b))             // 5
+
+let hex = 255
+print(hex.toHex())          // ff
