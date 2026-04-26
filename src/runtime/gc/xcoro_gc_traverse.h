@@ -17,28 +17,14 @@
 
 #include "xcoro_gc.h"
 #include "xgc_header.h"
+#include "xgc_internal.h"  // Per-type traverse function declarations + g_type_ops
 
-// Forward declarations
-struct XrArray;
-struct XrMap;
-struct XrSet;
-struct XrJson;
-struct XrClosure;
-struct XrInstance;
-struct XrIterator;
-struct XrCoroutine;
-
-/* ========== Type Traversal Functions ========== */
-
-XR_FUNC void xr_gc_traverse_array(XrCoroGC *gc, struct XrArray *arr);
-XR_FUNC void xr_gc_traverse_map(XrCoroGC *gc, struct XrMap *map);
-XR_FUNC void xr_gc_traverse_set(XrCoroGC *gc, struct XrSet *set);
-XR_FUNC void xr_coro_gc_traverse_json(XrCoroGC *gc, struct XrJson *json);
-XR_FUNC void xr_gc_traverse_closure(XrCoroGC *gc, struct XrClosure *closure);
-XR_FUNC void xr_gc_traverse_instance(XrCoroGC *gc, struct XrInstance *inst);
-XR_FUNC void xr_gc_traverse_iterator(XrCoroGC *gc, struct XrIterator *iter);
-
-/* ========== Generic Traversal Dispatcher ========== */
+/* ========== Generic Traversal Dispatcher ==========
+ *
+ * Resolves the type's traverse callback through g_type_ops (compile-time
+ * types) or per-isolate ext_traverse_funcs (extension types). Per-type
+ * traverse function declarations live in xgc_internal.h alongside the
+ * destroy ones so a single header pulls in the entire ops table contract. */
 
 XR_FUNC void xr_gc_traverse_object(XrCoroGC *gc, XrGCHeader *obj);
 

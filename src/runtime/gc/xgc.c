@@ -33,21 +33,41 @@
 #include <stdio.h>
 #include "../../base/xmalloc.h"
 
-/* ========== Compile-Time Type Function Tables (.rodata) ========== */
+/* ========== Compile-Time Per-Type Operations Table (.rodata) ==========
+ *
+ * One entry per GC type, holding both the destroy hook (run at sweep /
+ * fixedgc cleanup) and the traverse hook (run at mark phase). Slots
+ * left at zero describe leaf-and-resourceless types (e.g. XR_TRANGE,
+ * XR_TDATETIME) and allow the GC fast path to skip both phases via a
+ * single NULL check.
+ *
+ * Adding a new compile-time type is a one-liner here; the four helpers
+ * below derive every per-type capability the GC asks about. */
 
-const XrGCDestroyFn g_destroy_funcs[XGC_MAX_TYPES] = {
-    [XR_TARRAY]         = xr_gc_destroy_array,
-    [XR_TMAP]           = xr_gc_destroy_map,
-    [XR_TSET]           = xr_gc_destroy_set,
-    [XR_TSTRINGBUILDER] = xr_gc_destroy_stringbuilder,
-    [XR_TCHANNEL]       = xr_gc_destroy_channel,
-    [XR_TCOROUTINE]     = xr_gc_destroy_coroutine,
-    [XR_TREGEX]         = regex_object_destroy,
-    [XR_TLOGGER]        = xr_gc_destroy_logger,
-    [XR_TJSON]          = xr_gc_destroy_json,
-    [XR_TTASK]          = xr_gc_destroy_task,
-    [XR_TENUM_TYPE]     = xr_gc_destroy_enum_type,
-    [XR_TENUM_VALUE]    = xr_gc_destroy_enum_value,
+const XrTypeOps g_type_ops[XGC_MAX_TYPES] = {
+    [XR_TARRAY]         = { xr_gc_destroy_array,         xr_gc_traverse_array },
+    [XR_TARRAY_SLICE]   = { NULL,                        xr_gc_traverse_array },
+    [XR_TMAP]           = { xr_gc_destroy_map,           xr_gc_traverse_map },
+    [XR_TSET]           = { xr_gc_destroy_set,           xr_gc_traverse_set },
+    [XR_TSTRINGBUILDER] = { xr_gc_destroy_stringbuilder, NULL },
+    [XR_TCHANNEL]       = { xr_gc_destroy_channel,       NULL },
+    [XR_TCOROUTINE]     = { xr_gc_destroy_coroutine,     NULL },
+    [XR_TREGEX]         = { regex_object_destroy,        NULL },
+    [XR_TLOGGER]        = { xr_gc_destroy_logger,        NULL },
+    [XR_TJSON]          = { xr_gc_destroy_json,          xr_coro_gc_traverse_json },
+    [XR_TTASK]          = { xr_gc_destroy_task,          xr_gc_traverse_task },
+    [XR_TFUNCTION]      = { NULL,                        xr_gc_traverse_closure },
+    [XR_TINSTANCE]      = { NULL,                        xr_gc_traverse_instance },
+    [XR_TITERATOR]      = { NULL,                        xr_gc_traverse_iterator },
+    [XR_TCELL]          = { NULL,                        xr_gc_traverse_cell },
+    [XR_TBOUND_METHOD]  = { NULL,                        xr_gc_traverse_bound_method },
+    [XR_TMODULE]        = { NULL,                        xr_gc_traverse_module },
+    [XR_TEXCEPTION]     = { NULL,                        xr_gc_traverse_exception },
+    [XR_TERROR]         = { NULL,                        xr_gc_traverse_error },
+    [XR_TENUM_TYPE]     = { xr_gc_destroy_enum_type,     NULL },
+    [XR_TENUM_VALUE]    = { xr_gc_destroy_enum_value,    NULL },
+    // XR_TRANGE / XR_TDATETIME / XR_TBLOB / XR_TSTRING are leaf types
+    // with no malloc-backed resources; both slots stay NULL.
 };
 
 /* ========== GC State ========== */
@@ -55,7 +75,7 @@ const XrGCDestroyFn g_destroy_funcs[XGC_MAX_TYPES] = {
 #define xr_gc_gettype(o)  XR_GC_GET_TYPE(o)
 
 static XrGCDestroyFn get_destroy_func(uint8_t type) {
-    return (type < XGC_MAX_TYPES) ? g_destroy_funcs[type] : NULL;
+    return (type < XGC_MAX_TYPES) ? g_type_ops[type].destroy : NULL;
 }
 
 /* ========== Init/Cleanup ========== */

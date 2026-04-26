@@ -65,57 +65,34 @@ static inline XrSystemHeap* gc_pool_heap_from_gc(XrCoroGC *gc) {
 
 /* ========== Helper Functions ========== */
 
-// Bitmap: types that contain GC references (need gray list traversal)
-static const uint64_t HAS_REFS_BITMAP =
-    (1ULL << XR_TARRAY) | (1ULL << XR_TARRAY_SLICE) |
-    (1ULL << XR_TMAP) | (1ULL << XR_TSET) | (1ULL << XR_TJSON) |
-    (1ULL << XR_TFUNCTION) | (1ULL << XR_TINSTANCE) |
-    (1ULL << XR_TITERATOR) |
-    (1ULL << XR_TCELL) | (1ULL << XR_TMODULE) |
-    (1ULL << XR_TBOUND_METHOD) |
-    (1ULL << XR_TEXCEPTION) |
-    (1ULL << XR_TERROR); // has message/file/stackTrace/userData
-
-static inline bool xr_gc_has_refs(uint8_t type) {
-    return type < XR_NATIVE_TYPE_MAX && (HAS_REFS_BITMAP & (1ULL << type));
-}
-
-// Bitmap: types that need finalization (have external malloc'd resources)
-static const uint64_t NEEDS_FINALIZE_BITMAP =
-    (1ULL << XR_TARRAY) | (1ULL << XR_TMAP) | (1ULL << XR_TSET) |
-    (1ULL << XR_TSTRINGBUILDER) |
-    (1ULL << XR_TREGEX) | (1ULL << XR_TCOROUTINE) |
-    (1ULL << XR_TLOGGER) | (1ULL << XR_TTASK);
-
-static inline bool xr_gc_needs_finalize(uint8_t type) {
-    return type < XR_NATIVE_TYPE_MAX && (NEEDS_FINALIZE_BITMAP & (1ULL << type));
-}
-
-// Get global destroy function for type (const table defined in xgc.c)
-static inline XrGCDestroyFn get_destroy_func(uint8_t type) {
-    return (type < XGC_MAX_TYPES) ? g_destroy_funcs[type] : NULL;
-}
-
-/* Extension-aware variants: consult per-isolate tables for dynamic types */
+// Per-type GC capability lookups derived from g_type_ops.
+//
+// Compile-time types: ops table slot is NULL when the type is a leaf
+// (no traverse) or resource-less (no destroy). Extension types
+// registered via xr_register_extension_destroy / _traverse fall through
+// to the per-isolate tables on XrayIsolate.
 
 static inline XrayIsolate* gc_get_isolate(XrCoroGC *gc) {
     return (gc && gc->owner) ? gc->owner->isolate : NULL;
 }
 
 static inline bool xr_gc_has_refs_ext(XrCoroGC *gc, uint8_t type) {
-    if (xr_gc_has_refs(type)) return true;
+    if (type >= XR_NATIVE_TYPE_MAX) return false;
+    if (g_type_ops[type].traverse) return true;
     XrayIsolate *iso = gc_get_isolate(gc);
     return iso && (iso->ext_has_refs_bitmap & (1ULL << type));
 }
 
 static inline bool xr_gc_needs_finalize_ext(XrCoroGC *gc, uint8_t type) {
-    if (xr_gc_needs_finalize(type)) return true;
+    if (type >= XR_NATIVE_TYPE_MAX) return false;
+    if (g_type_ops[type].destroy) return true;
     XrayIsolate *iso = gc_get_isolate(gc);
     return iso && (iso->ext_finalize_bitmap & (1ULL << type));
 }
 
 static inline XrGCDestroyFn get_destroy_func_ext(XrCoroGC *gc, uint8_t type) {
-    XrGCDestroyFn fn = get_destroy_func(type);
+    if (type >= XGC_MAX_TYPES) return NULL;
+    XrGCDestroyFn fn = g_type_ops[type].destroy;
     if (fn) return fn;
     XrayIsolate *iso = gc_get_isolate(gc);
     return iso ? iso->ext_destroy_funcs[type] : NULL;

@@ -61,7 +61,29 @@ typedef struct XrCoroGC XrCoroGC;
 
 struct XrGC;  // Forward declaration
 typedef void (*XrGCDestroyFn)(XrGCHeader *obj, XrCoroGC *owning_gc);
+typedef void (*XrGCTraverseFn)(XrCoroGC *gc, XrGCHeader *obj);
 typedef struct XrGCHeader** (*XrGCGetGCListFn)(XrGCHeader *obj);
+
+/* ========== Per-Type Operations Table ==========
+ *
+ * Single source of truth for every compile-time GC type. Entries with
+ * NULL traverse describe leaf types (no GC-traced children); entries
+ * with NULL destroy describe types with no malloc-backed side resources.
+ *
+ * The two booleans previously expressed as HAS_REFS_BITMAP /
+ * NEEDS_FINALIZE_BITMAP are now derived directly from the function
+ * pointers — has_refs(t) == g_type_ops[t].traverse != NULL and
+ * needs_finalize(t) == g_type_ops[t].destroy != NULL — eliminating the
+ * three places where the same per-type capability used to be encoded.
+ *
+ * Extension types (registered via xr_register_extension_destroy /
+ * xr_register_extension_traverse) live in per-isolate tables on
+ * XrayIsolate and are consulted as a fallback when this table's slot
+ * is empty. See xr_type_ops_destroy_ext / xr_type_ops_traverse_ext. */
+typedef struct {
+    XrGCDestroyFn   destroy;   // Release malloc-backed side resources; NULL = leaf
+    XrGCTraverseFn  traverse;  // Mark GC-traced children; NULL = no refs
+} XrTypeOps;
 
 typedef struct XrGC {
     uint8_t gcstate;
@@ -81,7 +103,10 @@ XR_FUNC XrGCHeader* xr_gc_newobj(XrGC *gc, uint8_t type, size_t size);
 
 /* ========== Compile-Time Type Function Tables ========== */
 
-extern const XrGCDestroyFn g_destroy_funcs[XGC_MAX_TYPES];
+// Single per-type operations table. Defined in xgc.c, referenced by
+// xr_gc_cleanup, xcoro_gc.c (sweep / finalize) and xcoro_gc_traverse.c
+// (mark dispatcher). One entry per XGC_MAX_TYPES slot.
+extern const XrTypeOps g_type_ops[XGC_MAX_TYPES];
 
 // Destroy functions (non-static, referenced by const tables)
 XR_FUNC void xr_gc_destroy_array(XrGCHeader *obj, XrCoroGC *owning_gc);
@@ -96,6 +121,25 @@ XR_FUNC void xr_gc_destroy_json(XrGCHeader *obj, XrCoroGC *owning_gc);
 XR_FUNC void xr_gc_destroy_task(XrGCHeader *obj, XrCoroGC *owning_gc);
 XR_FUNC void xr_gc_destroy_enum_type(XrGCHeader *obj, XrCoroGC *owning_gc);
 XR_FUNC void xr_gc_destroy_enum_value(XrGCHeader *obj, XrCoroGC *owning_gc);
+
+// Traverse functions (non-static, referenced by g_type_ops).
+// Each marks the type's GC-traced children via xr_coro_gc_markvalue /
+// xr_coro_gc_markobject. All share the XrGCTraverseFn signature so
+// they can populate the table without a cast. Definitions live in
+// xcoro_gc_traverse.c.
+XR_FUNC void xr_gc_traverse_array(XrCoroGC *gc, XrGCHeader *obj);
+XR_FUNC void xr_gc_traverse_map(XrCoroGC *gc, XrGCHeader *obj);
+XR_FUNC void xr_gc_traverse_set(XrCoroGC *gc, XrGCHeader *obj);
+XR_FUNC void xr_coro_gc_traverse_json(XrCoroGC *gc, XrGCHeader *obj);
+XR_FUNC void xr_gc_traverse_closure(XrCoroGC *gc, XrGCHeader *obj);
+XR_FUNC void xr_gc_traverse_instance(XrCoroGC *gc, XrGCHeader *obj);
+XR_FUNC void xr_gc_traverse_iterator(XrCoroGC *gc, XrGCHeader *obj);
+XR_FUNC void xr_gc_traverse_cell(XrCoroGC *gc, XrGCHeader *obj);
+XR_FUNC void xr_gc_traverse_bound_method(XrCoroGC *gc, XrGCHeader *obj);
+XR_FUNC void xr_gc_traverse_module(XrCoroGC *gc, XrGCHeader *obj);
+XR_FUNC void xr_gc_traverse_exception(XrCoroGC *gc, XrGCHeader *obj);
+XR_FUNC void xr_gc_traverse_error(XrCoroGC *gc, XrGCHeader *obj);
+XR_FUNC void xr_gc_traverse_task(XrCoroGC *gc, XrGCHeader *obj);
 
 /* ========== Debug API ========== */
 
