@@ -164,7 +164,8 @@ static void xr_copy_context_record(XrCopyContext *ctx, void *src, XrValue dst) {
     ctx->buckets[idx] = entry;
 }
 
-static XrValue xr_deep_copy_array_with_ctx(XrCopyContext *ctx, XrArray *array) {
+XrValue xr_deep_copy_array_with_ctx(XrCopyContext *ctx, XrGCHeader *obj) {
+    XrArray *array = (XrArray *)obj;
     if (!array || !ctx->dst_gc) return XR_NULL_VAL;
     XrValue cached = xr_copy_context_lookup(ctx, array);
     if (!XR_IS_NULL(cached)) return cached;
@@ -214,7 +215,8 @@ static XrValue xr_deep_copy_array_with_ctx(XrCopyContext *ctx, XrArray *array) {
     return result;
 }
 
-static XrValue xr_deep_copy_map_with_ctx(XrCopyContext *ctx, XrMap *map) {
+XrValue xr_deep_copy_map_with_ctx(XrCopyContext *ctx, XrGCHeader *obj) {
+    XrMap *map = (XrMap *)obj;
     if (!map || !ctx->dst_gc) return XR_NULL_VAL;
     XrValue cached = xr_copy_context_lookup(ctx, map);
     if (!XR_IS_NULL(cached)) return cached;
@@ -259,7 +261,8 @@ static XrValue xr_deep_copy_map_with_ctx(XrCopyContext *ctx, XrMap *map) {
     return result;
 }
 
-static XrValue xr_deep_copy_closure_with_ctx(XrCopyContext *ctx, XrClosure *closure) {
+XrValue xr_deep_copy_closure_with_ctx(XrCopyContext *ctx, XrGCHeader *obj) {
+    XrClosure *closure = (XrClosure *)obj;
     if (!closure || !ctx->dst_gc) return XR_NULL_VAL;
     XrValue cached = xr_copy_context_lookup(ctx, closure);
     if (!XR_IS_NULL(cached)) return cached;
@@ -282,7 +285,8 @@ static XrValue xr_deep_copy_closure_with_ctx(XrCopyContext *ctx, XrClosure *clos
     return result;
 }
 
-static XrValue xr_deep_copy_set_with_ctx(XrCopyContext *ctx, XrSet *set) {
+XrValue xr_deep_copy_set_with_ctx(XrCopyContext *ctx, XrGCHeader *obj) {
+    XrSet *set = (XrSet *)obj;
     if (!set || !ctx->dst_gc) return XR_NULL_VAL;
     XrValue cached = xr_copy_context_lookup(ctx, set);
     if (!XR_IS_NULL(cached)) return cached;
@@ -303,7 +307,8 @@ static XrValue xr_deep_copy_set_with_ctx(XrCopyContext *ctx, XrSet *set) {
 }
 
 
-static XrValue xr_deep_copy_instance_with_ctx(XrCopyContext *ctx, XrInstance *inst) {
+XrValue xr_deep_copy_instance_with_ctx(XrCopyContext *ctx, XrGCHeader *obj) {
+    XrInstance *inst = (XrInstance *)obj;
     if (!inst || !ctx->dst_gc) return XR_NULL_VAL;
     XrValue cached = xr_copy_context_lookup(ctx, inst);
     if (!XR_IS_NULL(cached)) return cached;
@@ -333,7 +338,8 @@ static XrValue xr_deep_copy_instance_with_ctx(XrCopyContext *ctx, XrInstance *in
     return result;
 }
 
-static XrValue xr_deep_copy_json_with_ctx(XrCopyContext *ctx, XrJson *json) {
+XrValue xr_deep_copy_json_with_ctx(XrCopyContext *ctx, XrGCHeader *obj) {
+    XrJson *json = (XrJson *)obj;
     if (!json || !ctx->dst_gc) return XR_NULL_VAL;
     XrValue cached = xr_copy_context_lookup(ctx, json);
     if (!XR_IS_NULL(cached)) return cached;
@@ -386,6 +392,17 @@ static XrValue xr_deep_copy_json_with_ctx(XrCopyContext *ctx, XrJson *json) {
     return result;
 }
 
+// DateTime has no child GC references, shallow copy of the payload
+// suffices. Exposed so g_type_ops can dispatch to it directly.
+XrValue xr_deep_copy_datetime_with_ctx(XrCopyContext *ctx, XrGCHeader *obj) {
+    XrGCHeader *copy = (XrGCHeader*)copy_ctx_alloc(ctx, obj->objsize, XR_TDATETIME);
+    if (!copy) return XR_NULL_VAL;
+    memcpy((char*)copy + sizeof(XrGCHeader),
+           (char*)obj + sizeof(XrGCHeader),
+           obj->objsize - sizeof(XrGCHeader));
+    return XR_FROM_PTR(copy);
+}
+
 XrValue xr_deep_copy_with_ctx(XrCopyContext *ctx, XrValue value) {
     XR_DCHECK(ctx != NULL, "deep_copy_with_ctx: NULL context");
     if (!XR_IS_PTR(value)) return value;
@@ -394,25 +411,15 @@ XrValue xr_deep_copy_with_ctx(XrCopyContext *ctx, XrValue value) {
     if (XR_GC_IS_SHARED(obj)) { xr_shared_incref(obj); return value; }
 
     uint8_t type = XR_GC_GET_TYPE(obj);
-    switch (type) {
-        case XR_TSTRING: return value;
-        case XR_TARRAY:
-        case XR_TARRAY_SLICE: return xr_deep_copy_array_with_ctx(ctx, (XrArray *)obj);
-        case XR_TMAP: return xr_deep_copy_map_with_ctx(ctx, (XrMap *)obj);
-        case XR_TFUNCTION: return xr_deep_copy_closure_with_ctx(ctx, (XrClosure *)obj);
-        case XR_TSET: return xr_deep_copy_set_with_ctx(ctx, (XrSet *)obj);
-        case XR_TINSTANCE: return xr_deep_copy_instance_with_ctx(ctx, (XrInstance *)obj);
-        case XR_TJSON: return xr_deep_copy_json_with_ctx(ctx, (XrJson *)obj);
-        case XR_TDATETIME: {
-            // DateTime has no child GC references, shallow copy suffices
-            XrGCHeader *copy = (XrGCHeader*)copy_ctx_alloc(ctx, obj->objsize, XR_TDATETIME);
-            memcpy((char*)copy + sizeof(XrGCHeader),
-                   (char*)obj + sizeof(XrGCHeader),
-                   obj->objsize - sizeof(XrGCHeader));
-            return XR_FROM_PTR(copy);
-        }
-        default: return value;
-    }
+    if (type >= XGC_MAX_TYPES) return value;
+
+    // Compile-time types resolve through g_type_ops in O(1). Slot is
+    // NULL for types that are either immutable across coroutines (TSTRING,
+    // TBLOB) or simply not transferable (TCHANNEL, TCOROUTINE, TTASK,
+    // TCELL, TBOUND_METHOD, TEXCEPTION, TERROR). The dispatcher returns
+    // the raw value for those, matching the previous default branch.
+    XrGCDeepCopyFn fn = g_type_ops[type].deep_copy;
+    return fn ? fn(ctx, obj) : value;
 }
 
 XrValue xr_deep_copy(struct XrayIsolate *X, XrValue value, struct XrGC *dst_gc) {
@@ -484,7 +491,7 @@ XrValue xr_deep_copy_array(struct XrayIsolate *X, struct XrArray *array, struct 
     if (!dst_gc) dst_gc = xr_isolate_get_gc(X);
     XrCopyContext ctx;
     xr_copy_context_init(&ctx, X, dst_gc);
-    XrValue result = xr_deep_copy_array_with_ctx(&ctx, array);
+    XrValue result = xr_deep_copy_array_with_ctx(&ctx, (XrGCHeader*)array);
     xr_copy_context_cleanup(&ctx);
     return result;
 }
@@ -495,7 +502,7 @@ XrValue xr_deep_copy_map(struct XrayIsolate *X, struct XrMap *map, struct XrGC *
     if (!dst_gc) dst_gc = xr_isolate_get_gc(X);
     XrCopyContext ctx;
     xr_copy_context_init(&ctx, X, dst_gc);
-    XrValue result = xr_deep_copy_map_with_ctx(&ctx, map);
+    XrValue result = xr_deep_copy_map_with_ctx(&ctx, (XrGCHeader*)map);
     xr_copy_context_cleanup(&ctx);
     return result;
 }
@@ -506,7 +513,7 @@ XrValue xr_deep_copy_closure(struct XrayIsolate *X, struct XrClosure *closure, s
     if (!dst_gc) dst_gc = xr_isolate_get_gc(X);
     XrCopyContext ctx;
     xr_copy_context_init(&ctx, X, dst_gc);
-    XrValue result = xr_deep_copy_closure_with_ctx(&ctx, (XrClosure *)closure);
+    XrValue result = xr_deep_copy_closure_with_ctx(&ctx, (XrGCHeader*)closure);
     xr_copy_context_cleanup(&ctx);
     return result;
 }
@@ -523,7 +530,8 @@ bool xr_can_relocate(XrValue value) {
     return true;
 }
 
-static XrValue deep_copy_array_to_shared(struct XrayIsolate *X, XrArray *array) {
+XrValue xr_to_shared_array(struct XrayIsolate *X, XrGCHeader *obj) {
+    XrArray *array = (XrArray *)obj;
     if (!array || !xr_isolate_get_sys_heap(X)) return XR_NULL_VAL;
     int32_t length = array->length;
     XrArray *new_arr = (XrArray*)xr_sysheap_alloc_shared(xr_isolate_get_sys_heap(X), sizeof(XrArray), XR_TARRAY);
@@ -545,7 +553,8 @@ static XrValue deep_copy_array_to_shared(struct XrayIsolate *X, XrArray *array) 
     return XR_FROM_PTR(new_arr);
 }
 
-static XrValue deep_copy_map_to_shared(struct XrayIsolate *X, XrMap *map) {
+XrValue xr_to_shared_map(struct XrayIsolate *X, XrGCHeader *obj) {
+    XrMap *map = (XrMap *)obj;
     if (!map || !xr_isolate_get_sys_heap(X)) return XR_NULL_VAL;
     XrMap *new_map = (XrMap*)xr_sysheap_alloc_shared(xr_isolate_get_sys_heap(X), sizeof(XrMap), XR_TMAP);
     if (!new_map) return XR_NULL_VAL;
@@ -564,7 +573,8 @@ static XrValue deep_copy_map_to_shared(struct XrayIsolate *X, XrMap *map) {
     return XR_FROM_PTR(new_map);
 }
 
-static XrValue deep_copy_set_to_shared(struct XrayIsolate *X, XrSet *set) {
+XrValue xr_to_shared_set(struct XrayIsolate *X, XrGCHeader *obj) {
+    XrSet *set = (XrSet *)obj;
     if (!set || !xr_isolate_get_sys_heap(X)) return XR_NULL_VAL;
     XrSet *new_set = (XrSet*)xr_sysheap_alloc_shared(xr_isolate_get_sys_heap(X), sizeof(XrSet), XR_TSET);
     if (!new_set) return XR_NULL_VAL;
@@ -580,7 +590,8 @@ static XrValue deep_copy_set_to_shared(struct XrayIsolate *X, XrSet *set) {
 }
 
 
-static XrValue deep_copy_instance_to_shared(struct XrayIsolate *X, XrInstance *inst) {
+XrValue xr_to_shared_instance(struct XrayIsolate *X, XrGCHeader *obj) {
+    XrInstance *inst = (XrInstance *)obj;
     if (!inst || !xr_isolate_get_sys_heap(X)) return XR_NULL_VAL;
     XrClass *cls = inst->klass;
     XrInstance *new_inst = (XrInstance*)xr_sysheap_alloc_shared(xr_isolate_get_sys_heap(X), xr_instance_size(cls), XR_TINSTANCE);
@@ -595,7 +606,8 @@ static XrValue deep_copy_instance_to_shared(struct XrayIsolate *X, XrInstance *i
     return XR_FROM_PTR(new_inst);
 }
 
-static XrValue deep_copy_json_to_shared(struct XrayIsolate *X, XrJson *json) {
+XrValue xr_to_shared_json(struct XrayIsolate *X, XrGCHeader *obj) {
+    XrJson *json = (XrJson *)obj;
     if (!json || !xr_isolate_get_sys_heap(X)) return XR_NULL_VAL;
     XrShape *shape = xr_json_shape(X, json);
     uint16_t in_obj = shape->in_object_capacity;
@@ -634,7 +646,8 @@ static XrValue deep_copy_json_to_shared(struct XrayIsolate *X, XrJson *json) {
     return XR_FROM_PTR(new_json);
 }
 
-static XrValue deep_copy_stringbuilder_to_shared(struct XrayIsolate *X, XrStringBuilder *sb) {
+XrValue xr_to_shared_stringbuilder(struct XrayIsolate *X, XrGCHeader *obj) {
+    XrStringBuilder *sb = (XrStringBuilder *)obj;
     if (!sb || !xr_isolate_get_sys_heap(X)) return XR_NULL_VAL;
     XrStringBuilder *new_sb = (XrStringBuilder*)xr_sysheap_alloc_shared(
         xr_isolate_get_sys_heap(X), sizeof(XrStringBuilder), XR_TSTRINGBUILDER);
@@ -649,7 +662,8 @@ static XrValue deep_copy_stringbuilder_to_shared(struct XrayIsolate *X, XrString
     return XR_FROM_PTR(new_sb);
 }
 
-static XrValue deep_copy_closure_to_shared(struct XrayIsolate *X, XrClosure *closure) {
+XrValue xr_to_shared_closure(struct XrayIsolate *X, XrGCHeader *obj) {
+    XrClosure *closure = (XrClosure *)obj;
     if (!closure || !xr_isolate_get_sys_heap(X)) return XR_NULL_VAL;
     XrClosure *new_cl = (XrClosure*)xr_sysheap_alloc_shared(
         xr_isolate_get_sys_heap(X), sizeof(XrClosure), XR_TFUNCTION);
@@ -661,7 +675,7 @@ static XrValue deep_copy_closure_to_shared(struct XrayIsolate *X, XrClosure *clo
     return XR_FROM_PTR(new_cl);
 }
 
-static XrValue deep_copy_datetime_to_shared(struct XrayIsolate *X, XrGCHeader *obj) {
+XrValue xr_to_shared_datetime(struct XrayIsolate *X, XrGCHeader *obj) {
     if (!obj || !xr_isolate_get_sys_heap(X)) return XR_NULL_VAL;
     XrGCHeader *new_dt = (XrGCHeader*)xr_sysheap_alloc_shared(
         xr_isolate_get_sys_heap(X), obj->objsize, XR_TDATETIME);
@@ -680,19 +694,17 @@ XrValue xr_to_shared(struct XrayIsolate *X, XrValue value) {
     XrGCHeader *obj = XR_VALUE_GCPTR(value);
     if (!obj) return value;
     // Already shared: no-op (do NOT incref — caller already owns the reference)
-    if (XR_GC_IS_SHARED(obj)) { return value; }
+    if (XR_GC_IS_SHARED(obj)) return value;
+    // Strings are interned: pointer-shareable as-is, no copy required.
     if (XR_GC_GET_TYPE(obj) == XR_TSTRING) return value;
+
     uint8_t type = XR_GC_GET_TYPE(obj);
-    switch (type) {
-        case XR_TARRAY:
-        case XR_TARRAY_SLICE: return deep_copy_array_to_shared(X, (XrArray*)obj);
-        case XR_TMAP: return deep_copy_map_to_shared(X, (XrMap*)obj);
-        case XR_TSET: return deep_copy_set_to_shared(X, (XrSet*)obj);
-        case XR_TINSTANCE: return deep_copy_instance_to_shared(X, (XrInstance*)obj);
-        case XR_TJSON: return deep_copy_json_to_shared(X, (XrJson*)obj);
-        case XR_TSTRINGBUILDER: return deep_copy_stringbuilder_to_shared(X, (XrStringBuilder*)obj);
-        case XR_TFUNCTION: return deep_copy_closure_to_shared(X, (XrClosure*)obj);
-        case XR_TDATETIME: return deep_copy_datetime_to_shared(X, obj);
-        default: return value;
-    }
+    if (type >= XGC_MAX_TYPES) return value;
+
+    // Compile-time types resolve through g_type_ops in O(1). Slot is
+    // NULL for types that have no shared form (channels are already
+    // shared at construction; coroutines / tasks / cells / bound-methods
+    // / exceptions / errors are deliberately not transferable).
+    XrGCToSharedFn fn = g_type_ops[type].to_shared;
+    return fn ? fn(X, obj) : value;
 }

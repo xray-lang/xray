@@ -60,29 +60,43 @@ typedef struct XrCoroGC XrCoroGC;
 /* ========== Type Function Types (must be before XrGC) ========== */
 
 struct XrGC;  // Forward declaration
+struct XrayIsolate;
+struct XrCopyContext;
+
 typedef void (*XrGCDestroyFn)(XrGCHeader *obj, XrCoroGC *owning_gc);
 typedef void (*XrGCTraverseFn)(XrCoroGC *gc, XrGCHeader *obj);
+typedef XrValue (*XrGCDeepCopyFn)(struct XrCopyContext *ctx, XrGCHeader *obj);
+typedef XrValue (*XrGCToSharedFn)(struct XrayIsolate *X, XrGCHeader *obj);
 typedef struct XrGCHeader** (*XrGCGetGCListFn)(XrGCHeader *obj);
 
 /* ========== Per-Type Operations Table ==========
  *
- * Single source of truth for every compile-time GC type. Entries with
- * NULL traverse describe leaf types (no GC-traced children); entries
- * with NULL destroy describe types with no malloc-backed side resources.
+ * Single source of truth for every compile-time GC type. Each slot
+ * either provides a callback or stays NULL to express the absence of
+ * that capability:
  *
- * The two booleans previously expressed as HAS_REFS_BITMAP /
- * NEEDS_FINALIZE_BITMAP are now derived directly from the function
- * pointers — has_refs(t) == g_type_ops[t].traverse != NULL and
- * needs_finalize(t) == g_type_ops[t].destroy != NULL — eliminating the
- * three places where the same per-type capability used to be encoded.
+ *   destroy   == NULL  -> leaf-and-resourceless: nothing to free.
+ *   traverse  == NULL  -> no GC-traced children (range, datetime, ...).
+ *   deep_copy == NULL  -> not deep-copyable across coroutines; the
+ *                          dispatcher passes the value through unchanged.
+ *   to_shared == NULL  -> no shared-storage form available; xr_to_shared
+ *                          returns the value unchanged.
+ *
+ * The booleans previously expressed as HAS_REFS_BITMAP and
+ * NEEDS_FINALIZE_BITMAP are derived directly from the pointers —
+ * has_refs(t) == traverse != NULL, needs_finalize(t) == destroy != NULL
+ * — eliminating the three locations where the same capability used to
+ * be encoded.
  *
  * Extension types (registered via xr_register_extension_destroy /
  * xr_register_extension_traverse) live in per-isolate tables on
  * XrayIsolate and are consulted as a fallback when this table's slot
- * is empty. See xr_type_ops_destroy_ext / xr_type_ops_traverse_ext. */
+ * is empty. */
 typedef struct {
-    XrGCDestroyFn   destroy;   // Release malloc-backed side resources; NULL = leaf
-    XrGCTraverseFn  traverse;  // Mark GC-traced children; NULL = no refs
+    XrGCDestroyFn   destroy;    // Release malloc-backed side resources
+    XrGCTraverseFn  traverse;   // Mark GC-traced children
+    XrGCDeepCopyFn  deep_copy;  // Cross-coroutine deep copy (Immix heap)
+    XrGCToSharedFn  to_shared;  // Cross-coroutine shared/refcount copy
 } XrTypeOps;
 
 typedef struct XrGC {

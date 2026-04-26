@@ -28,6 +28,7 @@
 #include "../xisolate_internal.h"
 #include "../../coro/xcoroutine.h"
 #include "../../coro/xworker.h"
+#include "../../coro/xdeep_copy.h"  // Per-type deep_copy / to_shared hooks
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
@@ -35,39 +36,68 @@
 
 /* ========== Compile-Time Per-Type Operations Table (.rodata) ==========
  *
- * One entry per GC type, holding both the destroy hook (run at sweep /
- * fixedgc cleanup) and the traverse hook (run at mark phase). Slots
- * left at zero describe leaf-and-resourceless types (e.g. XR_TRANGE,
- * XR_TDATETIME) and allow the GC fast path to skip both phases via a
- * single NULL check.
+ * One entry per GC type. Each callback is optional:
  *
- * Adding a new compile-time type is a one-liner here; the four helpers
- * below derive every per-type capability the GC asks about. */
+ *   destroy   — release malloc-backed side resources (sweep / fixedgc cleanup)
+ *   traverse  — mark GC-traced children at the mark phase
+ *   deep_copy — produce a per-coroutine deep clone (cross-coro send)
+ *   to_shared — produce a sysheap shared/refcounted copy (shared store)
+ *
+ * NULL means "this capability does not apply to this type": it skips
+ * the corresponding GC fast path (destroy/traverse) or makes the
+ * cross-coroutine dispatcher pass the value through unchanged
+ * (deep_copy/to_shared).
+ *
+ * Adding a new compile-time GC type is a one-liner here. */
 
 const XrTypeOps g_type_ops[XGC_MAX_TYPES] = {
-    [XR_TARRAY]         = { xr_gc_destroy_array,         xr_gc_traverse_array },
-    [XR_TARRAY_SLICE]   = { NULL,                        xr_gc_traverse_array },
-    [XR_TMAP]           = { xr_gc_destroy_map,           xr_gc_traverse_map },
-    [XR_TSET]           = { xr_gc_destroy_set,           xr_gc_traverse_set },
-    [XR_TSTRINGBUILDER] = { xr_gc_destroy_stringbuilder, NULL },
-    [XR_TCHANNEL]       = { xr_gc_destroy_channel,       NULL },
-    [XR_TCOROUTINE]     = { xr_gc_destroy_coroutine,     NULL },
-    [XR_TREGEX]         = { regex_object_destroy,        NULL },
-    [XR_TLOGGER]        = { xr_gc_destroy_logger,        NULL },
-    [XR_TJSON]          = { xr_gc_destroy_json,          xr_coro_gc_traverse_json },
-    [XR_TTASK]          = { xr_gc_destroy_task,          xr_gc_traverse_task },
-    [XR_TFUNCTION]      = { NULL,                        xr_gc_traverse_closure },
-    [XR_TINSTANCE]      = { NULL,                        xr_gc_traverse_instance },
-    [XR_TITERATOR]      = { NULL,                        xr_gc_traverse_iterator },
-    [XR_TCELL]          = { NULL,                        xr_gc_traverse_cell },
-    [XR_TBOUND_METHOD]  = { NULL,                        xr_gc_traverse_bound_method },
-    [XR_TMODULE]        = { NULL,                        xr_gc_traverse_module },
-    [XR_TEXCEPTION]     = { NULL,                        xr_gc_traverse_exception },
-    [XR_TERROR]         = { NULL,                        xr_gc_traverse_error },
-    [XR_TENUM_TYPE]     = { xr_gc_destroy_enum_type,     NULL },
-    [XR_TENUM_VALUE]    = { xr_gc_destroy_enum_value,    NULL },
-    // XR_TRANGE / XR_TDATETIME / XR_TBLOB / XR_TSTRING are leaf types
-    // with no malloc-backed resources; both slots stay NULL.
+    // Containers — full lifecycle: destroy + traverse + deep_copy + to_shared.
+    [XR_TARRAY]         = { xr_gc_destroy_array,         xr_gc_traverse_array,
+                            xr_deep_copy_array_with_ctx, xr_to_shared_array },
+    [XR_TARRAY_SLICE]   = { NULL,                        xr_gc_traverse_array,
+                            xr_deep_copy_array_with_ctx, xr_to_shared_array },
+    [XR_TMAP]           = { xr_gc_destroy_map,           xr_gc_traverse_map,
+                            xr_deep_copy_map_with_ctx,   xr_to_shared_map },
+    [XR_TSET]           = { xr_gc_destroy_set,           xr_gc_traverse_set,
+                            xr_deep_copy_set_with_ctx,   xr_to_shared_set },
+    [XR_TJSON]          = { xr_gc_destroy_json,          xr_coro_gc_traverse_json,
+                            xr_deep_copy_json_with_ctx,  xr_to_shared_json },
+    [XR_TINSTANCE]      = { NULL,                        xr_gc_traverse_instance,
+                            xr_deep_copy_instance_with_ctx, xr_to_shared_instance },
+    [XR_TFUNCTION]      = { NULL,                        xr_gc_traverse_closure,
+                            xr_deep_copy_closure_with_ctx, xr_to_shared_closure },
+
+    // Datetime — leaf payload, but shareable / cloneable (memcpy body).
+    [XR_TDATETIME]      = { NULL,                        NULL,
+                            xr_deep_copy_datetime_with_ctx, xr_to_shared_datetime },
+
+    // StringBuilder — has destroy hook for its internal buffer; only
+    // shareable (no current need to deep-copy across coro).
+    [XR_TSTRINGBUILDER] = { xr_gc_destroy_stringbuilder, NULL,
+                            NULL,                        xr_to_shared_stringbuilder },
+
+    // Channels — already shared at construction; pass-through across coro.
+    [XR_TCHANNEL]       = { xr_gc_destroy_channel,       NULL,
+                            NULL,                        NULL },
+
+    // Other GC types: have destroy or traverse responsibilities, but
+    // are deliberately not transferable across coroutines (the
+    // dispatchers return the raw value, matching the pre-table default).
+    [XR_TCOROUTINE]     = { xr_gc_destroy_coroutine,     NULL, NULL, NULL },
+    [XR_TREGEX]         = { regex_object_destroy,        NULL, NULL, NULL },
+    [XR_TLOGGER]        = { xr_gc_destroy_logger,        NULL, NULL, NULL },
+    [XR_TTASK]          = { xr_gc_destroy_task,          xr_gc_traverse_task, NULL, NULL },
+    [XR_TITERATOR]      = { NULL,                        xr_gc_traverse_iterator, NULL, NULL },
+    [XR_TCELL]          = { NULL,                        xr_gc_traverse_cell, NULL, NULL },
+    [XR_TBOUND_METHOD]  = { NULL,                        xr_gc_traverse_bound_method, NULL, NULL },
+    [XR_TMODULE]        = { NULL,                        xr_gc_traverse_module, NULL, NULL },
+    [XR_TEXCEPTION]     = { NULL,                        xr_gc_traverse_exception, NULL, NULL },
+    [XR_TERROR]         = { NULL,                        xr_gc_traverse_error, NULL, NULL },
+    [XR_TENUM_TYPE]     = { xr_gc_destroy_enum_type,     NULL, NULL, NULL },
+    [XR_TENUM_VALUE]    = { xr_gc_destroy_enum_value,    NULL, NULL, NULL },
+
+    // XR_TRANGE / XR_TBLOB / XR_TSTRING are pure leaves with no
+    // capabilities; their slots are zero-initialised by default.
 };
 
 /* ========== GC State ========== */

@@ -97,4 +97,32 @@ XR_FUNC XrValue xr_deep_copy_with_ctx(XrCopyContext *ctx, XrValue value);
 XR_FUNC bool xr_can_relocate(XrValue value);
 XR_FUNC XrValue xr_to_shared(struct XrayIsolate *X, XrValue value);
 
+/* ========== Per-Type Hooks Used by g_type_ops ==========
+ *
+ * One pair of callbacks per deep-copyable / shareable type, all sharing
+ * the XrGCDeepCopyFn / XrGCToSharedFn signatures so g_type_ops can
+ * dispatch directly without casts. The dispatchers above
+ * (xr_deep_copy_with_ctx, xr_to_shared) consult these slots; any GC
+ * type without a hook is simply not deep-copyable / not shareable
+ * across coroutines and the dispatcher returns the value unchanged. */
+
+#include "../runtime/gc/xgc_header.h"
+
+XR_FUNC XrValue xr_deep_copy_array_with_ctx(struct XrCopyContext *ctx, struct XrGCHeader *obj);
+XR_FUNC XrValue xr_deep_copy_map_with_ctx(struct XrCopyContext *ctx, struct XrGCHeader *obj);
+XR_FUNC XrValue xr_deep_copy_set_with_ctx(struct XrCopyContext *ctx, struct XrGCHeader *obj);
+XR_FUNC XrValue xr_deep_copy_instance_with_ctx(struct XrCopyContext *ctx, struct XrGCHeader *obj);
+XR_FUNC XrValue xr_deep_copy_json_with_ctx(struct XrCopyContext *ctx, struct XrGCHeader *obj);
+XR_FUNC XrValue xr_deep_copy_closure_with_ctx(struct XrCopyContext *ctx, struct XrGCHeader *obj);
+XR_FUNC XrValue xr_deep_copy_datetime_with_ctx(struct XrCopyContext *ctx, struct XrGCHeader *obj);
+
+XR_FUNC XrValue xr_to_shared_array(struct XrayIsolate *X, struct XrGCHeader *obj);
+XR_FUNC XrValue xr_to_shared_map(struct XrayIsolate *X, struct XrGCHeader *obj);
+XR_FUNC XrValue xr_to_shared_set(struct XrayIsolate *X, struct XrGCHeader *obj);
+XR_FUNC XrValue xr_to_shared_instance(struct XrayIsolate *X, struct XrGCHeader *obj);
+XR_FUNC XrValue xr_to_shared_json(struct XrayIsolate *X, struct XrGCHeader *obj);
+XR_FUNC XrValue xr_to_shared_closure(struct XrayIsolate *X, struct XrGCHeader *obj);
+XR_FUNC XrValue xr_to_shared_stringbuilder(struct XrayIsolate *X, struct XrGCHeader *obj);
+XR_FUNC XrValue xr_to_shared_datetime(struct XrayIsolate *X, struct XrGCHeader *obj);
+
 #endif // XDEEP_COPY_H
