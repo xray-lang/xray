@@ -87,8 +87,8 @@ fail:
     // Single cleanup site: xr_reflect_cache_free tolerates NULL entries
     // and NULL field/method arrays, so handing it the partially-built
     // cache is enough regardless of which step of the construction
-    // failed. The individual wrapper objects themselves are GC-managed
-    // and will be reclaimed by the collector.
+    // failed. xr_reflect_cache_free is responsible for releasing every
+    // wrapper allocated above, including any partially constructed slot.
     xr_reflect_cache_free(cache);
     return NULL;
 }

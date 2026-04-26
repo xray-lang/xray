@@ -105,8 +105,10 @@ XR_FUNC void xr_bc_stackmap_builder_add(XrBcStackMapBuilder *b,
                                          uint32_t pc,
                                          const uint64_t *live_bitmap);
 
-// Finalize: sort entries, deduplicate bitmaps, produce compact XrBcStackMap.
-// Caller takes ownership. Builder is freed.
+// Finalize: sort entries by pc and produce a compact XrBcStackMap.
+// Each entry currently owns its own slice in bitmap_pool; bitmaps are
+// not deduplicated (identical live-prefix maps occupy separate slots).
+// Caller takes ownership of the returned map. Builder is freed.
 XR_FUNC XrBcStackMap* xr_bc_stackmap_builder_finish(XrBcStackMapBuilder *b);
 
 // Free a completed stackmap.

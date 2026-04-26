@@ -8,13 +8,20 @@
  * xgc.h - Garbage Collector public API
  *
  * KEY CONCEPT:
- *   - Per-Coroutine GC: each coroutine has isolated heap (XrCoroGC)
- * - incremental Mark-Sweep with Arena allocation
- *   - Bulk deallocation when coroutine ends (Arena bulk free)
- *   - System heap for global objects (Class, Module) - not GC'd
+ *   - Per-coroutine Immix mark-region GC (XrCoroGC) is the primary heap
+ *     for runtime objects. See xcoro_gc.h for the full state machine,
+ *     tri-color invariants, and block/line layout.
+ *   - Isolate-level fixedgc (XrGC) is a malloc-backed linked list used
+ *     for bootstrap, fallback, and a small set of fixed-lifetime objects
+ *     (e.g. enum metadata, bound methods). It does not run mark/sweep;
+ *     destroy hooks are invoked once at isolate cleanup.
+ *   - System heap (xsysheap) holds class metadata and shared/refcounted
+ *     objects (channels, deep-copied shared values). These are not GC'd.
  *
  * ALLOCATION PATH:
- *   xr_alloc(coro, size, type) -> coro->coro_gc (Mark-Sweep GC)
+ *   xr_alloc(coro, size, type) routes to coro->coro_gc when available,
+ *   otherwise falls back to the isolate fixedgc. Most callers should
+ *   resolve a coroutine via xr_current_coro(X) and pass it explicitly.
  */
 
 #ifndef XGC_H
