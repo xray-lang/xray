@@ -348,9 +348,10 @@ XrJitResult xr_jit_invoke_method(XrCoroutine *coro, int64_t encoded) {
         break;
     }
     case JIT_TYPE_HINT_JSON: {
-        XrJson *json = xr_value_to_json(receiver);
-        result = json_method_call_by_symbol(isolate, json, method_symbol,
-                                            args, nargs);
+        const XrMethodSlot *slot = xr_method_table_lookup(
+            XR_TID_JSON, method_symbol, SYMBOL_BUILTIN_COUNT);
+        result = slot ? slot->fn(isolate, receiver, args, nargs)
+                      : XR_NOTFOUND;
         break;
     }
     case JIT_TYPE_HINT_ITERATOR: {

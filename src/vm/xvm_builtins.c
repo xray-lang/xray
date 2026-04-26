@@ -108,27 +108,9 @@ static XrValue map_has_value_handler(XrayIsolate *isolate, XrValue receiver, XrV
     return xr_bool(xr_map_has_value(map, args[0]));
 }
 
-// Json method dispatch
-XrValue json_method_call_by_symbol(XrayIsolate *isolate, XrJson *json, int symbol, XrValue *args, int argc) {
-    XR_DCHECK(isolate != NULL, "json_dispatch: NULL isolate");
-    (void)args; (void)argc;
-
-    // Internal protocol: for (key, value in obj) support
-    if (symbol == SYMBOL_ENTRIES_ITERATOR) {
-        XrCoroutine *coro = xr_current_coro(isolate);
-        XrIterator *iter = xr_iterator_new_from_json(coro, json, isolate);
-        return iter ? xr_value_from_iterator(iter) : xr_null();
-    }
-
-    // toString fallback
-    if (symbol == SYMBOL_TOSTRING) {
-        XrValue json_val = xr_json_value(json);
-        return xr_string_value(xr_value_to_string(isolate, json_val));
-    }
-
-    // All other methods removed: use Json.xxx(obj) static methods instead
-    return XR_NOTFOUND;
-}
+/* Json instance method dispatch lives in
+ * src/runtime/object/xjson_methods.{c,h}. The legacy
+ * json_method_call_by_symbol used to be here. */
 
 /* === String Method Handlers === */
 
