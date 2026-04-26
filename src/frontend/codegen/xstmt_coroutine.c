@@ -422,7 +422,7 @@ void compile_go_expr(XrCompilerContext *ctx, XrCompiler *c, GoExprNode *node, in
         if (moved_count > 0) {
             int tmp_reg = reg_alloc(ctx, c);
             for (int i = 0; i < moved_count; i++) {
-                emit_abx(c->emitter, OP_LOADNULL, tmp_reg, 0);
+                emit_abc(c->emitter, OP_LOADNULL, tmp_reg, 0, 0);
                 emit_abx(c->emitter, OP_SETSHARED, tmp_reg, moved_shared[i]);
             }
             reg_free(c, tmp_reg);
@@ -611,7 +611,7 @@ void compile_channel_new(XrCompilerContext *ctx, XrCompiler *c, ChannelNewNode *
         XrExprDesc size_desc = xr_compile_expr(ctx, c, node->buffer_size);
         int size_reg = xexpr_to_anyreg(ctx, c, &size_desc);
         int null_reg = reg_alloc(ctx, c);
-        emit_abx(c->emitter, OP_LOADNULL, null_reg, 0);
+        emit_abc(c->emitter, OP_LOADNULL, null_reg, 0, 0);
         emit_abc(c->emitter, OP_CHAN_NEW_NAMED, target, size_reg, null_reg);
         reg_free(c, null_reg);
         reg_free(c, size_reg);

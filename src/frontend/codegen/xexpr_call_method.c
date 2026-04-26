@@ -830,7 +830,7 @@ int xr_compile_call_method(XrCompilerContext *ctx, XrCompiler *compiler,
 
             // Handle move semantics nullification
             if (move_null_shared_idx >= 0) {
-                emit_abx(compiler->emitter, OP_LOADNULL, result_reg, 0);
+                emit_abc(compiler->emitter, OP_LOADNULL, result_reg, 0, 0);
                 emit_abx(compiler->emitter, OP_SETSHARED, result_reg, move_null_shared_idx);
                 move_null_shared_idx = -1;
             }

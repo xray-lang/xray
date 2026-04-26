@@ -98,6 +98,8 @@
     XR_OPF_REG_IN, XR_OPF_GLOBAL_IDX, XR_OPF_NONE
 #define KOP_ABx_LAYOUT                                                        \
     XR_OPF_REG_OUT, XR_OPF_LIT, XR_OPF_NONE
+#define KOP_ABx_LIT                                                           \
+    XR_OPF_REG_OUT, XR_OPF_LIT, XR_OPF_NONE
 #define KOP_CALL                                                              \
     XR_OPF_REG_BASE, XR_OPF_LIT, XR_OPF_LIT
 #define KOP_CALL_KEEP                                                         \
@@ -292,7 +294,7 @@
     _(GET_LOCAL                   , FMT_AB    , KOP_AB_UNARY        , "R[A] = Coro.getLocal(R[B])") \
     _(SET_PRIORITY                , FMT_AB    , KOP_AB_INOUT_IN     , "Coro.setPriority(R[A], R[B])") \
     _(CORO_CTRL                   , FMT_ABC   , KOP_SPECIAL         , "coro monitoring, C=sub_op") \
-    _(CHAN_NEW                    , FMT_AB    , KOP_AB_NEW_LIT      , "R[A] = Channel(B)") \
+    _(CHAN_NEW                    , FMT_ABx   , KOP_ABx_LIT         , "R[A] = Channel(Bx) — buffer size") \
     _(CHAN_NEW_NAMED              , FMT_ABC   , KOP_ABC_BIN         , "R[A] = Channel(R[B], R[C]) - named") \
     _(CHAN_SEND                   , FMT_ABC   , KOP_SPECIAL         , "R[B].send(R[C])") \
     _(CHAN_RECV                   , FMT_AB    , KOP_AB_RECV         , "R[A], R[A+1] = R[B].recv()") \

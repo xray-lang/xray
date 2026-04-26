@@ -227,7 +227,7 @@ static int compile_new_expr_internal(XrCompilerContext *ctx, XrCompiler *compile
 
             // Anonymous Channel with dynamic size → OP_CHAN_NEW_NAMED with null name
             int null_reg = reg_alloc(ctx, compiler);
-            emit_abx(compiler->emitter, OP_LOADNULL, null_reg, 0);
+            emit_abc(compiler->emitter, OP_LOADNULL, null_reg, 0, 0);
             emit_abc(compiler->emitter, OP_CHAN_NEW_NAMED, result_reg, size_reg, null_reg);
             reg_free(compiler, null_reg);
             reg_free(compiler, size_reg);
