@@ -24,4 +24,4 @@ XR_FUNC void xlsp_handle_ws_did_change_configuration(XrLspServer *server, XrJson
 XR_FUNC void xlsp_handle_ws_add_folder(XrLspServer *server, const char *uri, const char *name);
 XR_FUNC void xlsp_handle_ws_remove_folder(XrLspServer *server, const char *uri);
 
-#endif // XLSP_HANDLERS_WORKSPACE_H
+#endif  // XLSP_HANDLERS_WORKSPACE_H

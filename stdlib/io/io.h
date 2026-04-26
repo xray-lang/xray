@@ -63,6 +63,6 @@
  *   - tempFile()                  Create temporary file
  *   - tempDir()                   Create temporary directory
  */
-XrModule* xr_load_module_io(XrayIsolate *isolate);
+XrModule *xr_load_module_io(XrayIsolate *isolate);
 
 #endif

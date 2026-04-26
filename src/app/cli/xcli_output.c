@@ -29,11 +29,13 @@ void xr_cli_set_color(XrCliColorMode mode) {
 
 bool xr_cli_color_enabled(void) {
     switch (s_color_mode) {
-    case XR_COLOR_ON:  return true;
-    case XR_COLOR_OFF: return false;
-    case XR_COLOR_AUTO:
-    default:
-        return isatty(STDOUT_FILENO) != 0;
+        case XR_COLOR_ON:
+            return true;
+        case XR_COLOR_OFF:
+            return false;
+        case XR_COLOR_AUTO:
+        default:
+            return isatty(STDOUT_FILENO) != 0;
     }
 }
 
@@ -57,7 +59,8 @@ XrCliOutputLevel xr_cli_output_level(void) {
 
 void xr_cli_set_json(bool on) {
     s_json_output = on;
-    if (on) xr_cli_set_color(XR_COLOR_OFF);
+    if (on)
+        xr_cli_set_color(XR_COLOR_OFF);
 }
 
 bool xr_cli_json_output(void) {

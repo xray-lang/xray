@@ -16,7 +16,7 @@
 
 #ifdef __cplusplus
 extern "C" {
-#endif // ========== Type Definitions ==========
+#endif  // ========== Type Definitions ==========
 
 typedef struct XrayVM XrayVM;
 
@@ -24,27 +24,27 @@ typedef struct XrayVM XrayVM;
 typedef int (*XrayCFunction)(XrayVM *vm);
 
 // Error codes
-#define XRAY_OK          0
-#define XRAY_ERRRUN      1 // Runtime error
-#define XRAY_ERRSYNTAX   2 // Syntax error
-#define XRAY_ERRMEM      3 // Memory error
-#define XRAY_ERRTYPE     4 // Type error
+#define XRAY_OK 0
+#define XRAY_ERRRUN 1     // Runtime error
+#define XRAY_ERRSYNTAX 2  // Syntax error
+#define XRAY_ERRMEM 3     // Memory error
+#define XRAY_ERRTYPE 4    // Type error
 
 // Type tags
-#define XRAY_TNONE       (-1)
-#define XRAY_TNULL        0
-#define XRAY_TBOOLEAN    1
-#define XRAY_TINTEGER    2
-#define XRAY_TNUMBER     3
-#define XRAY_TSTRING     4
-#define XRAY_TARRAY      5
-#define XRAY_TMAP        6
-#define XRAY_TFUNCTION   7
-#define XRAY_TUSERDATA   8
+#define XRAY_TNONE (-1)
+#define XRAY_TNULL 0
+#define XRAY_TBOOLEAN 1
+#define XRAY_TINTEGER 2
+#define XRAY_TNUMBER 3
+#define XRAY_TSTRING 4
+#define XRAY_TARRAY 5
+#define XRAY_TMAP 6
+#define XRAY_TFUNCTION 7
+#define XRAY_TUSERDATA 8
 
 // Stack indices
-#define XRAY_REGISTRYINDEX  (-10000)
-#define XRAY_GLOBALSINDEX   (-10001)
+#define XRAY_REGISTRYINDEX (-10000)
+#define XRAY_GLOBALSINDEX (-10001)
 
 /* ========== VM Management ========== */
 
@@ -52,13 +52,13 @@ typedef int (*XrayCFunction)(XrayVM *vm);
 ** Create a new Xray VM
 ** Returns NULL on failure
 */
-XrayVM* xray_vm_new(void);
+XrayVM *xray_vm_new(void);
 
 /*
 ** Create a new Xray VM with specified backend
 ** backend: "vm" (default), "llvm-jit"
 */
-XrayVM* xray_vm_new_backend(const char *backend);
+XrayVM *xray_vm_new_backend(const char *backend);
 
 /*
 ** Close VM and free all resources
@@ -68,7 +68,7 @@ void xray_vm_close(XrayVM *vm);
 /*
 ** Get Xray version string
 */
-const char* xray_version(void);
+const char *xray_version(void);
 
 /* ========== Code Execution ========== */
 
@@ -165,7 +165,7 @@ void xray_pushlstring(XrayVM *vm, const char *s, size_t len);
 /*
 ** Push a formatted string
 */
-const char* xray_pushfstring(XrayVM *vm, const char *fmt, ...);
+const char *xray_pushfstring(XrayVM *vm, const char *fmt, ...);
 
 /*
 ** Push a C function
@@ -183,7 +183,7 @@ void xray_pushlightuserdata(XrayVM *vm, void *p);
 ** Get type
 */
 int xray_type(XrayVM *vm, int index);
-const char* xray_typename(XrayVM *vm, int tp);
+const char *xray_typename(XrayVM *vm, int tp);
 
 /*
 ** Type checks
@@ -203,10 +203,10 @@ int xray_isuserdata(XrayVM *vm, int index);
 int xray_toboolean(XrayVM *vm, int index);
 int64_t xray_tointeger(XrayVM *vm, int index);
 double xray_tonumber(XrayVM *vm, int index);
-const char* xray_tostring(XrayVM *vm, int index);
-const char* xray_tolstring(XrayVM *vm, int index, size_t *len);
+const char *xray_tostring(XrayVM *vm, int index);
+const char *xray_tolstring(XrayVM *vm, int index, size_t *len);
 XrayCFunction xray_tocfunction(XrayVM *vm, int index);
-void* xray_touserdata(XrayVM *vm, int index);
+void *xray_touserdata(XrayVM *vm, int index);
 
 /* ========== Global Variables and Table Operations ========== */
 
@@ -291,7 +291,7 @@ void xray_register_lib(XrayVM *vm, const XrayReg *lib);
 ** Returns pointer to userdata memory
 ** Managed by Xray's GC automatically
 */
-void* xray_newuserdata(XrayVM *vm, size_t size);
+void *xray_newuserdata(XrayVM *vm, size_t size);
 
 /*
 ** Set userdata metatable
@@ -313,7 +313,7 @@ int xray_newmetatable(XrayVM *vm, const char *tname);
 ** Check userdata type
 ** Returns userdata pointer if type matches, otherwise raises error
 */
-void* xray_checkudata(XrayVM *vm, int index, const char *tname);
+void *xray_checkudata(XrayVM *vm, int index, const char *tname);
 
 /* ========== Auxiliary Functions (Convenience API) ========== */
 
@@ -325,14 +325,14 @@ void xray_checkany(XrayVM *vm, int arg);
 
 int64_t xray_checkinteger(XrayVM *vm, int arg);
 double xray_checknumber(XrayVM *vm, int arg);
-const char* xray_checkstring(XrayVM *vm, int arg);
+const char *xray_checkstring(XrayVM *vm, int arg);
 
 /*
 ** Optional arguments (with defaults)
 */
 int64_t xray_optinteger(XrayVM *vm, int arg, int64_t def);
 double xray_optnumber(XrayVM *vm, int arg, double def);
-const char* xray_optstring(XrayVM *vm, int arg, const char *def);
+const char *xray_optstring(XrayVM *vm, int arg, const char *def);
 
 /*
 ** Error handling
@@ -362,11 +362,11 @@ void xray_unref(XrayVM *vm, int t, int ref);
 */
 int xray_gc(XrayVM *vm, int what, int data);
 
-#define XRAY_GCSTOP       0
-#define XRAY_GCRESTART    1
-#define XRAY_GCCOLLECT    2
-#define XRAY_GCCOUNT      3
-#define XRAY_GCSTEP       4
+#define XRAY_GCSTOP 0
+#define XRAY_GCRESTART 1
+#define XRAY_GCCOLLECT 2
+#define XRAY_GCCOUNT 3
+#define XRAY_GCSTEP 4
 
 /* ========== Backend Control ========== */
 
@@ -379,7 +379,7 @@ int xray_set_backend(XrayVM *vm, const char *backend);
 /*
 ** Get current backend
 */
-const char* xray_get_backend(XrayVM *vm);
+const char *xray_get_backend(XrayVM *vm);
 
 /*
 ** AOT compile to file (LLVM backend)
@@ -390,13 +390,13 @@ int xray_compile_to_file(XrayVM *vm, const char *source, const char *output, con
 /* ========== Macros (Convenience) ========== */
 
 // Pop n elements
-#define xray_pop(vm, n)  xray_settop(vm, -(n)-1)
+#define xray_pop(vm, n) xray_settop(vm, -(n) - 1)
 
 // Is none or null
-#define xray_isnoneornull(vm, n)  (xray_type(vm, (n)) <= 0)
+#define xray_isnoneornull(vm, n) (xray_type(vm, (n)) <= 0)
 
 // Register function (convenience macro)
-#define xray_register(vm, n, f)  (xray_pushcfunction(vm, (f)), xray_setglobal(vm, (n)))
+#define xray_register(vm, n, f) (xray_pushcfunction(vm, (f)), xray_setglobal(vm, (n)))
 
 /* ========== Usage Examples ========== */
 
@@ -475,5 +475,4 @@ Example 4: Userdata (C Objects)
 }
 #endif
 
-#endif // XRAY_EMBEDDING_H
-
+#endif  // XRAY_EMBEDDING_H

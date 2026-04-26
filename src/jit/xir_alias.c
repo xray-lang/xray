@@ -20,21 +20,26 @@
 #include "../base/xchecks.h"
 #include "../base/xmalloc.h"
 
-#define XIR_REF_VREG_MASK  0x80000000u
+#define XIR_REF_VREG_MASK 0x80000000u
 #define XIR_REF_INDEX_MASK 0x0FFFFFFFu
 
-static inline bool ref_is_vreg(XirRef r)  { return (r & XIR_REF_VREG_MASK) != 0; }
-static inline uint32_t ref_index(XirRef r) { return r & XIR_REF_INDEX_MASK; }
+static inline bool ref_is_vreg(XirRef r) {
+    return (r & XIR_REF_VREG_MASK) != 0;
+}
+static inline uint32_t ref_index(XirRef r) {
+    return r & XIR_REF_INDEX_MASK;
+}
 
 typedef struct {
-    XirAliasInfo *infos;   // [nvreg]
-    uint32_t      nvreg;
+    XirAliasInfo *infos;  // [nvreg]
+    uint32_t nvreg;
 } AliasTable;
 
 /* Classify a vreg by walking its defining instruction. */
 static XirAliasInfo classify(XirFunc *func, uint32_t v) {
-    XirAliasInfo out = { XIR_ALIAS_UNKNOWN, 0 };
-    if (v >= func->nvreg) return out;
+    XirAliasInfo out = {XIR_ALIAS_UNKNOWN, 0};
+    if (v >= func->nvreg)
+        return out;
 
     XirIns *def = func->vregs[v].def;
     if (!def) {
@@ -49,7 +54,8 @@ static XirAliasInfo classify(XirFunc *func, uint32_t v) {
      * count — well-formed SSA never chains beyond a handful of MOVs. */
     uint32_t cur = v;
     for (int hop = 0; hop < 32; hop++) {
-        if (cur >= func->nvreg) break;
+        if (cur >= func->nvreg)
+            break;
         XirIns *d = func->vregs[cur].def;
         if (!d) {
             out.source = XIR_ALIAS_PARAM;
@@ -71,18 +77,23 @@ static XirAliasInfo classify(XirFunc *func, uint32_t v) {
 }
 
 const XirAliasInfo *xir_func_get_alias(XirFunc *func, XirRef vreg_ref) {
-    if (!func || !ref_is_vreg(vreg_ref)) return NULL;
+    if (!func || !ref_is_vreg(vreg_ref))
+        return NULL;
     uint32_t v = ref_index(vreg_ref);
-    if (v >= func->nvreg) return NULL;
+    if (v >= func->nvreg)
+        return NULL;
 
-    AliasTable *tab = (AliasTable *)func->alias;
+    AliasTable *tab = (AliasTable *) func->alias;
     if (!tab) {
-        tab = (AliasTable *)xr_calloc(1, sizeof(AliasTable));
-        if (!tab) return NULL;
+        tab = (AliasTable *) xr_calloc(1, sizeof(AliasTable));
+        if (!tab)
+            return NULL;
         tab->nvreg = func->nvreg;
-        tab->infos = (XirAliasInfo *)xr_calloc(tab->nvreg,
-                                                 sizeof(XirAliasInfo));
-        if (!tab->infos) { xr_free(tab); return NULL; }
+        tab->infos = (XirAliasInfo *) xr_calloc(tab->nvreg, sizeof(XirAliasInfo));
+        if (!tab->infos) {
+            xr_free(tab);
+            return NULL;
+        }
         func->alias = tab;
     }
 
@@ -96,8 +107,9 @@ const XirAliasInfo *xir_func_get_alias(XirFunc *func, XirRef vreg_ref) {
 }
 
 void xir_func_invalidate_alias(XirFunc *func) {
-    if (!func || !func->alias) return;
-    AliasTable *tab = (AliasTable *)func->alias;
+    if (!func || !func->alias)
+        return;
+    AliasTable *tab = (AliasTable *) func->alias;
     xr_free(tab->infos);
     xr_free(tab);
     func->alias = NULL;

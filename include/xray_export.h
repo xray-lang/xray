@@ -17,17 +17,17 @@
 #define XRAY_EXPORT_H
 
 #if defined(_WIN32) || defined(__CYGWIN__)
-  #ifdef XRAY_BUILD_DLL
-    #define XRAY_API __declspec(dllexport)
-  #elif defined(XRAY_USE_DLL)
-    #define XRAY_API __declspec(dllimport)
-  #else
-    #define XRAY_API extern
-  #endif
-#elif defined(__GNUC__) || defined(__clang__)
-  #define XRAY_API __attribute__((visibility("default"))) extern
+#ifdef XRAY_BUILD_DLL
+#define XRAY_API __declspec(dllexport)
+#elif defined(XRAY_USE_DLL)
+#define XRAY_API __declspec(dllimport)
 #else
-  #define XRAY_API extern
+#define XRAY_API extern
+#endif
+#elif defined(__GNUC__) || defined(__clang__)
+#define XRAY_API __attribute__((visibility("default"))) extern
+#else
+#define XRAY_API extern
 #endif
 
-#endif // XRAY_EXPORT_H
+#endif  // XRAY_EXPORT_H

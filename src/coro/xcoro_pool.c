@@ -24,10 +24,11 @@
 // ========== Internal Functions ==========
 
 // Create new pool block with embedded stack+frames slab
-static XrCoroPoolBlock* xr_coro_pool_block_create(size_t capacity) {
+static XrCoroPoolBlock *xr_coro_pool_block_create(size_t capacity) {
     XR_DCHECK(capacity > 0, "coro_pool_block_create: zero capacity");
     XrCoroPoolBlock *block = xr_malloc(sizeof(XrCoroPoolBlock));
-    if (!block) return NULL;
+    if (!block)
+        return NULL;
 
     block->coros = xr_calloc(capacity, sizeof(XrCoroutine));
     if (!block->coros) {
@@ -55,7 +56,8 @@ static XrCoroPoolBlock* xr_coro_pool_block_create(size_t capacity) {
 
 // Destroy pool block
 static void xr_coro_pool_block_destroy(XrCoroPoolBlock *block) {
-    if (!block) return;
+    if (!block)
+        return;
 
     // Free lazily-allocated jit_suspend state for each coroutine
     if (block->coros) {
@@ -75,7 +77,8 @@ static void xr_coro_pool_block_destroy(XrCoroPoolBlock *block) {
 // Expand pool
 static bool xr_coro_pool_grow(XrCoroStructPool *pool) {
     XrCoroPoolBlock *new_block = xr_coro_pool_block_create(XR_CORO_POOL_GROW_SIZE);
-    if (!new_block) return false;
+    if (!new_block)
+        return false;
 
     // Add to block list head
     new_block->next = pool->blocks;
@@ -97,7 +100,8 @@ static bool xr_coro_pool_grow(XrCoroStructPool *pool) {
 // ========== Pool Lifecycle API ==========
 
 bool xr_coro_pool_init(XrCoroStructPool *pool, size_t init_size) {
-    if (!pool) return false;
+    if (!pool)
+        return false;
 
     memset(pool, 0, sizeof(XrCoroStructPool));
 
@@ -108,13 +112,14 @@ bool xr_coro_pool_init(XrCoroStructPool *pool, size_t init_size) {
 
     // Create initial block
     pool->blocks = xr_coro_pool_block_create(init_size);
-    if (!pool->blocks) return false;
+    if (!pool->blocks)
+        return false;
 
     pool->current_block = pool->blocks;
     atomic_store(&pool->alloc_idx, 0);
 
     // Initialize lock-free free list (Treiber stack).
-    atomic_store(&pool->free_list, (XrCoroutine *)NULL);
+    atomic_store(&pool->free_list, (XrCoroutine *) NULL);
 
     // Only grow_lock remains — protects block-list expansion (low-frequency).
     if (pthread_mutex_init(&pool->grow_lock, NULL) != 0) {
@@ -136,7 +141,8 @@ bool xr_coro_pool_init(XrCoroStructPool *pool, size_t init_size) {
 }
 
 void xr_coro_pool_destroy(XrCoroStructPool *pool) {
-    if (!pool || !pool->initialized) return;
+    if (!pool || !pool->initialized)
+        return;
 
     // Destroy all blocks
     XrCoroPoolBlock *block = pool->blocks;
@@ -154,8 +160,9 @@ void xr_coro_pool_destroy(XrCoroStructPool *pool) {
 
 /* ========== Allocate/Free API ========== */
 
-XrCoroutine* xr_coro_pool_alloc(XrCoroStructPool *pool) {
-    if (!pool || !pool->initialized) return NULL;
+XrCoroutine *xr_coro_pool_alloc(XrCoroStructPool *pool) {
+    if (!pool || !pool->initialized)
+        return NULL;
 
     XrCoroutine *coro = NULL;
 
@@ -178,11 +185,11 @@ XrCoroutine* xr_coro_pool_alloc(XrCoroStructPool *pool) {
     // failures — fall through to expansion rather than spin forever.
     for (int retry = 0; retry < 8; retry++) {
         XrCoroutine *head = atomic_load_explicit(&pool->free_list, memory_order_acquire);
-        if (!head) break;
+        if (!head)
+            break;
         XrCoroutine *next = head->next;
-        if (atomic_compare_exchange_weak_explicit(
-                &pool->free_list, &head, next,
-                memory_order_acq_rel, memory_order_acquire)) {
+        if (atomic_compare_exchange_weak_explicit(&pool->free_list, &head, next,
+                                                  memory_order_acq_rel, memory_order_acquire)) {
             coro = head;
             atomic_fetch_add_explicit(&pool->free_alloc, 1, memory_order_relaxed);
             atomic_fetch_add_explicit(&pool->total_alloc, 1, memory_order_relaxed);
@@ -242,7 +249,8 @@ XrCoroutine* xr_coro_pool_alloc(XrCoroStructPool *pool) {
 }
 
 void xr_coro_struct_pool_free(XrCoroStructPool *pool, XrCoroutine *coro) {
-    if (!pool || !pool->initialized || !coro) return;
+    if (!pool || !pool->initialized || !coro)
+        return;
 
     // Check if from pool via gc_flags bit (O(1) instead of block list traversal)
     bool from_pool = (coro->gc_flags & XR_CORO_GC_FROM_POOL) != 0;
@@ -254,8 +262,7 @@ void xr_coro_struct_pool_free(XrCoroStructPool *pool, XrCoroutine *coro) {
             head = atomic_load_explicit(&pool->free_list, memory_order_relaxed);
             coro->next = head;
         } while (!atomic_compare_exchange_weak_explicit(
-            &pool->free_list, &head, coro,
-            memory_order_release, memory_order_relaxed));
+            &pool->free_list, &head, coro, memory_order_release, memory_order_relaxed));
     } else {
         // From malloc: free directly
         xr_free(coro);
@@ -266,21 +273,24 @@ void xr_coro_struct_pool_free(XrCoroStructPool *pool, XrCoroutine *coro) {
 
 // ========== Query API ==========
 
-void xr_coro_pool_stats(XrCoroStructPool *pool,
-                        uint64_t *total_alloc,
-                        uint64_t *fast_alloc,
-                        uint64_t *free_alloc,
-                        uint64_t *total_free) {
-    if (!pool) return;
+void xr_coro_pool_stats(XrCoroStructPool *pool, uint64_t *total_alloc, uint64_t *fast_alloc,
+                        uint64_t *free_alloc, uint64_t *total_free) {
+    if (!pool)
+        return;
 
-    if (total_alloc) *total_alloc = atomic_load_explicit(&pool->total_alloc, memory_order_relaxed);
-    if (fast_alloc) *fast_alloc = atomic_load_explicit(&pool->fast_alloc, memory_order_relaxed);
-    if (free_alloc) *free_alloc = atomic_load_explicit(&pool->free_alloc, memory_order_relaxed);
-    if (total_free) *total_free = atomic_load_explicit(&pool->total_free, memory_order_relaxed);
+    if (total_alloc)
+        *total_alloc = atomic_load_explicit(&pool->total_alloc, memory_order_relaxed);
+    if (fast_alloc)
+        *fast_alloc = atomic_load_explicit(&pool->fast_alloc, memory_order_relaxed);
+    if (free_alloc)
+        *free_alloc = atomic_load_explicit(&pool->free_alloc, memory_order_relaxed);
+    if (total_free)
+        *total_free = atomic_load_explicit(&pool->total_free, memory_order_relaxed);
 }
 
 void xr_coro_pool_print_stats(XrCoroStructPool *pool) {
-    if (!pool) return;
+    if (!pool)
+        return;
 
     uint64_t total = atomic_load_explicit(&pool->total_alloc, memory_order_relaxed);
     uint64_t fast = atomic_load_explicit(&pool->fast_alloc, memory_order_relaxed);
@@ -288,13 +298,11 @@ void xr_coro_pool_print_stats(XrCoroStructPool *pool) {
     uint64_t freed = atomic_load_explicit(&pool->total_free, memory_order_relaxed);
 
     printf("=== Coroutine Pool Stats ===\n");
-    printf("  Total allocations: %llu\n", (unsigned long long)total);
-    printf("  Fast path (no-lock): %llu (%.1f%%)\n",
-           (unsigned long long)fast,
-           total > 0 ? (double)fast * 100.0 / total : 0.0);
-    printf("  From free list: %llu (%.1f%%)\n",
-           (unsigned long long)from_free,
-           total > 0 ? (double)from_free * 100.0 / total : 0.0);
-    printf("  Total freed: %llu\n", (unsigned long long)freed);
-    printf("  Currently in use: %llu\n", (unsigned long long)(total - freed));
+    printf("  Total allocations: %llu\n", (unsigned long long) total);
+    printf("  Fast path (no-lock): %llu (%.1f%%)\n", (unsigned long long) fast,
+           total > 0 ? (double) fast * 100.0 / total : 0.0);
+    printf("  From free list: %llu (%.1f%%)\n", (unsigned long long) from_free,
+           total > 0 ? (double) from_free * 100.0 / total : 0.0);
+    printf("  Total freed: %llu\n", (unsigned long long) freed);
+    printf("  Currently in use: %llu\n", (unsigned long long) (total - freed));
 }

@@ -27,37 +27,37 @@
 
 /* ========== Code Page ========== */
 
-#define XIR_CODE_PAGE_SIZE   (64 * 1024)       // 64KB per page
-#define XIR_CODE_CACHE_DEFAULT  (64 * 1024 * 1024) // 64MB default budget
-#define XIR_CODE_CACHE_MAX     (256 * 1024 * 1024) // 256MB hard ceiling
+#define XIR_CODE_PAGE_SIZE (64 * 1024)             // 64KB per page
+#define XIR_CODE_CACHE_DEFAULT (64 * 1024 * 1024)  // 64MB default budget
+#define XIR_CODE_CACHE_MAX (256 * 1024 * 1024)     // 256MB hard ceiling
 
 typedef struct XirCodePage {
-    uint8_t *base;              // page base address (mmap'd)
-    size_t size;                // total page size
-    size_t used;                // bytes used (bump pointer offset)
-    struct XirCodePage *next;   // linked list
+    uint8_t *base;             // page base address (mmap'd)
+    size_t size;               // total page size
+    size_t used;               // bytes used (bump pointer offset)
+    struct XirCodePage *next;  // linked list
 } XirCodePage;
 
 /* ========== Code Garbage (Epoch-based reclaim) ========== */
 
 typedef struct XirCodeGarbage {
-    void   *code;               // retired code pointer
-    size_t  size;               // code size (for accounting)
-    uint64_t retire_epoch;      // epoch when code was retired
+    void *code;             // retired code pointer
+    size_t size;            // code size (for accounting)
+    uint64_t retire_epoch;  // epoch when code was retired
     struct XirCodeGarbage *next;
 } XirCodeGarbage;
 
 /* ========== Code Allocator ========== */
 
 typedef struct XirCodeAlloc {
-    XirCodePage *pages;         // linked list of allocated pages
-    XirCodePage *current;       // current page for bump allocation
-    size_t total_allocated;     // total bytes mmap'd
-    size_t total_used;          // total bytes of JIT code
-    size_t budget;              // max bytes allowed (0 = unlimited)
-    uint32_t n_pages;           // page count
-    uint64_t epoch;             // monotonically increasing epoch (bumped at safepoints)
-    XirCodeGarbage *garbage;    // retired code awaiting safe reclaim
+    XirCodePage *pages;       // linked list of allocated pages
+    XirCodePage *current;     // current page for bump allocation
+    size_t total_allocated;   // total bytes mmap'd
+    size_t total_used;        // total bytes of JIT code
+    size_t budget;            // max bytes allowed (0 = unlimited)
+    uint32_t n_pages;         // page count
+    uint64_t epoch;           // monotonically increasing epoch (bumped at safepoints)
+    XirCodeGarbage *garbage;  // retired code awaiting safe reclaim
 } XirCodeAlloc;
 
 /* ========== API ========== */
@@ -119,4 +119,4 @@ static inline size_t xir_code_alloc_used(XirCodeAlloc *alloc) {
     return alloc->total_used;
 }
 
-#endif // XIR_CODE_ALLOC_H
+#endif  // XIR_CODE_ALLOC_H

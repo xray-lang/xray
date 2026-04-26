@@ -36,4 +36,4 @@ XR_FUNC void xlsp_free_document_cache(XrLspDocument *doc);
 // Smart reparse - only reparse if content actually changed
 XR_FUNC bool xlsp_smart_reparse(XrLspDocument *doc, XrLspServer *server);
 
-#endif // XLSP_CACHE_H
+#endif  // XLSP_CACHE_H

@@ -61,11 +61,11 @@ typedef enum {
 
 // Semantic token entry
 typedef struct XlspSemanticToken {
-    int line;           // 0-indexed
-    int start_char;     // 0-indexed
+    int line;        // 0-indexed
+    int start_char;  // 0-indexed
     int length;
     XlspSemanticTokenType type;
-    int modifiers;      // Bit flags
+    int modifiers;  // Bit flags
 } XlspSemanticToken;
 
 // Semantic tokens result
@@ -91,4 +91,4 @@ XR_FUNC XrJsonValue *xlsp_semantic_tokens_encode(XlspSemanticTokensResult *resul
 // Returns malloc'd array, caller owns. Sets *out_count to number of uint32_t values.
 XR_FUNC uint32_t *xlsp_semantic_tokens_encode_raw(XlspSemanticTokensResult *result, int *out_count);
 
-#endif // XLSP_SEMANTIC_TOKENS_H
+#endif  // XLSP_SEMANTIC_TOKENS_H

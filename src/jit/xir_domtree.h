@@ -48,7 +48,7 @@ typedef struct XirDomTree {
     uint32_t *dfs_out;      // [nblk] DFS exit timestamp (exclusive)
     uint32_t *children;     // flattened child index list
     uint32_t *child_start;  // [nblk+1] offsets into children[]
-    uint32_t  nblk;
+    uint32_t nblk;
 } XirDomTree;
 
 /* O(1) dominance test: does |a| dominate |b|?
@@ -56,7 +56,8 @@ typedef struct XirDomTree {
  * Encoded as a DFS-interval containment check: a dominates b iff b's
  * DFS timestamp falls inside a's DFS subtree interval. */
 static inline bool xir_dom_covers(const XirDomTree *dt, uint32_t a, uint32_t b) {
-    if (!dt || a >= dt->nblk || b >= dt->nblk) return false;
+    if (!dt || a >= dt->nblk || b >= dt->nblk)
+        return false;
     return dt->dfs_in[a] <= dt->dfs_in[b] && dt->dfs_in[b] < dt->dfs_out[a];
 }
 
@@ -67,7 +68,8 @@ static inline bool xir_dom_covers(const XirDomTree *dt, uint32_t a, uint32_t b) 
  * callers that do not want to reach into the struct directly.
  */
 static inline uint32_t xir_dom_idom(const XirDomTree *dt, uint32_t blk_id) {
-    if (!dt || blk_id >= dt->nblk) return UINT32_MAX;
+    if (!dt || blk_id >= dt->nblk)
+        return UINT32_MAX;
     return dt->idom[blk_id];
 }
 
@@ -78,13 +80,17 @@ static inline uint32_t xir_dom_idom(const XirDomTree *dt, uint32_t blk_id) {
  * the count and the return value points at the first child id.  Do
  * not free the returned pointer — it is owned by the tree.
  */
-static inline const uint32_t *xir_dom_children(const XirDomTree *dt,
-                                                uint32_t blk_id,
-                                                uint32_t *out_n) {
-    if (!dt || blk_id >= dt->nblk) { if (out_n) *out_n = 0; return NULL; }
+static inline const uint32_t *xir_dom_children(const XirDomTree *dt, uint32_t blk_id,
+                                               uint32_t *out_n) {
+    if (!dt || blk_id >= dt->nblk) {
+        if (out_n)
+            *out_n = 0;
+        return NULL;
+    }
     uint32_t s = dt->child_start[blk_id];
     uint32_t e = dt->child_start[blk_id + 1];
-    if (out_n) *out_n = e - s;
+    if (out_n)
+        *out_n = e - s;
     return dt->children + s;
 }
 
@@ -101,4 +107,4 @@ XR_FUNC const XirDomTree *xir_func_get_domtree(XirFunc *func);
  */
 XR_FUNC void xir_func_invalidate_domtree(XirFunc *func);
 
-#endif // XIR_DOMTREE_H
+#endif  // XIR_DOMTREE_H

@@ -17,11 +17,11 @@
 #include <stdatomic.h>
 
 #ifdef XR_OS_POSIX
-    #include <unistd.h>
+#include <unistd.h>
 #elif defined(XR_OS_WINDOWS)
-    #include <io.h>
-    #define isatty _isatty
-    #define fileno _fileno
+#include <io.h>
+#define isatty _isatty
+#define fileno _fileno
 #endif
 
 /* ========== Global State ========== */
@@ -30,14 +30,9 @@
 XrLogLevel xr_log_min_level = XR_LOG_DEBUG;
 #else
 XrLogLevel xr_log_min_level = XR_LOG_NOTICE;
-#endif // ========== Level Names ==========
+#endif  // ========== Level Names ==========
 
-static const char *level_names[] = {
-    "DEBUG",
-    "VERBOSE",
-    "NOTICE",
-    "WARNING"
-};
+static const char *level_names[] = {"DEBUG", "VERBOSE", "NOTICE", "WARNING"};
 
 static const char *level_colors[] = {
     "\033[36m",    // DEBUG: cyan
@@ -64,11 +59,12 @@ static inline void log_release(void) {
 
 /* ========== Core Implementation ========== */
 
-void xr_log_impl(XrLogLevel level, const char *module,
-                  const char *file, int line,
-                  const char *fmt, ...) {
-    if (level < xr_log_min_level) return;
-    if (level > XR_LOG_WARNING) return;
+void xr_log_impl(XrLogLevel level, const char *module, const char *file, int line, const char *fmt,
+                 ...) {
+    if (level < xr_log_min_level)
+        return;
+    if (level > XR_LOG_WARNING)
+        return;
 
     // Extract filename from path
     const char *basename = strrchr(file, '/');
@@ -80,7 +76,7 @@ void xr_log_impl(XrLogLevel level, const char *module,
     va_start(args, fmt);
     int len = vsnprintf(buf, sizeof(buf), fmt, args);
     va_end(args);
-    (void)len;
+    (void) len;
 
     // Detect color support once (atomic for thread safety)
     static _Atomic int use_color = -1;
@@ -94,21 +90,10 @@ void xr_log_impl(XrLogLevel level, const char *module,
     log_acquire();
 
     if (color) {
-        fprintf(stderr, "%s[%s]%s [%s] %s (%s:%d)\n",
-                level_colors[level],
-                level_names[level],
-                "\033[0m",
-                module,
-                buf,
-                basename,
-                line);
+        fprintf(stderr, "%s[%s]%s [%s] %s (%s:%d)\n", level_colors[level], level_names[level],
+                "\033[0m", module, buf, basename, line);
     } else {
-        fprintf(stderr, "[%s] [%s] %s (%s:%d)\n",
-                level_names[level],
-                module,
-                buf,
-                basename,
-                line);
+        fprintf(stderr, "[%s] [%s] %s (%s:%d)\n", level_names[level], module, buf, basename, line);
     }
 
     log_release();

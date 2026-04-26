@@ -36,11 +36,11 @@
 #define LSP_WATCH_CREATE 1
 #define LSP_WATCH_CHANGE 2
 #define LSP_WATCH_DELETE 4
-#define LSP_WATCH_ALL    7
+#define LSP_WATCH_ALL 7
 
 // DocumentHighlightKind
-#define LSP_HIGHLIGHT_TEXT  1
-#define LSP_HIGHLIGHT_READ  2
+#define LSP_HIGHLIGHT_TEXT 1
+#define LSP_HIGHLIGHT_READ 2
 #define LSP_HIGHLIGHT_WRITE 3
 
 // SymbolKind constants (used in various handlers)
@@ -228,4 +228,4 @@ typedef enum {
     XR_MSG_LOG = 4
 } XrLspMessageType;
 
-#endif // XLSP_TYPES_H
+#endif  // XLSP_TYPES_H

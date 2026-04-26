@@ -59,10 +59,10 @@ typedef enum {
 // ============================================================================
 
 typedef enum {
-    XDAP_VM_INITIALIZING,   // Isolate created, not started
-    XDAP_VM_RUNNING,        // VM executing bytecode
-    XDAP_VM_PAUSED,         // VM stopped at breakpoint/step/pause
-    XDAP_VM_TERMINATED,     // VM finished or terminated
+    XDAP_VM_INITIALIZING,  // Isolate created, not started
+    XDAP_VM_RUNNING,       // VM executing bytecode
+    XDAP_VM_PAUSED,        // VM stopped at breakpoint/step/pause
+    XDAP_VM_TERMINATED,    // VM finished or terminated
 } XdapVMState;
 
 // ============================================================================
@@ -71,11 +71,11 @@ typedef enum {
 
 typedef enum {
     XDAP_STOP_NONE = 0,
-    XDAP_STOP_ENTRY,        // Stopped on entry
-    XDAP_STOP_BREAKPOINT,   // Hit a breakpoint
-    XDAP_STOP_STEP,         // Step completed
-    XDAP_STOP_PAUSE,        // User requested pause
-    XDAP_STOP_EXCEPTION,    // Exception thrown
+    XDAP_STOP_ENTRY,       // Stopped on entry
+    XDAP_STOP_BREAKPOINT,  // Hit a breakpoint
+    XDAP_STOP_STEP,        // Step completed
+    XDAP_STOP_PAUSE,       // User requested pause
+    XDAP_STOP_EXCEPTION,   // Exception thrown
 } XdapStopReason;
 
 // ============================================================================
@@ -91,7 +91,7 @@ typedef struct XdapController {
     char *program_path;
     char **program_args;
     int arg_count;
-    XrProto *debug_proto;    // Keep alive for resume
+    XrProto *debug_proto;  // Keep alive for resume
 
     // Session state
     XdapVMState vm_state;
@@ -103,7 +103,7 @@ typedef struct XdapController {
     // Stopped state (single authoritative source)
     XdapStopReason stop_reason;
     XrCoroutine *stopped_coro;
-    int stopped_coro_id;    // DAP threadId
+    int stopped_coro_id;  // DAP threadId
 
     // Pending command (from IO to VM, accessed cross-thread)
     _Atomic XdapCommand pending_cmd;
@@ -126,8 +126,8 @@ XR_FUNC void xdap_controller_free(XdapController *ctrl);
 // ============================================================================
 
 // Launch program for debugging
-XR_FUNC bool xdap_controller_launch(XdapController *ctrl, const char *program,
-                             char **args, int arg_count, bool stop_on_entry);
+XR_FUNC bool xdap_controller_launch(XdapController *ctrl, const char *program, char **args,
+                                    int arg_count, bool stop_on_entry);
 
 // Continue/step execution
 XR_FUNC void xdap_controller_continue(XdapController *ctrl);
@@ -154,4 +154,4 @@ XR_FUNC XrCoroutine *xdap_find_coro(XdapController *ctrl, int thread_id);
 // Get DAP threadId for coroutine
 XR_FUNC int xdap_coro_to_thread_id(XrCoroutine *coro);
 
-#endif // XDAP_CONTROLLER_H
+#endif  // XDAP_CONTROLLER_H

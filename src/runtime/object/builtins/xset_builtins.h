@@ -21,4 +21,4 @@ XR_FUNC XrValue xr_builtin_set_construct(XrayIsolate *isolate, XrValue *args, in
 XR_FUNC XrValue xr_builtin_set_from(XrayIsolate *isolate, XrValue *args, int nargs);
 XR_FUNC XrValue xr_builtin_set_range(XrayIsolate *isolate, XrValue *args, int nargs);
 
-#endif // XSET_BUILTINS_H
+#endif  // XSET_BUILTINS_H

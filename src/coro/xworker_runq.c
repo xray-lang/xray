@@ -39,8 +39,10 @@ void xr_runq_enqueue(XrRunQueue *rq, XrCoroutine *coro) {
     if (!xr_steal_queue_push(&rq->deque, coro)) {
         // Deque full: overflow to linked list (never discard)
         coro->sched_link = NULL;
-        if (rq->overflow_last) rq->overflow_last->sched_link = coro;
-        else rq->overflow_first = coro;
+        if (rq->overflow_last)
+            rq->overflow_last->sched_link = coro;
+        else
+            rq->overflow_first = coro;
         rq->overflow_last = coro;
         rq->overflow_len++;
     }
@@ -57,25 +59,30 @@ XrCoroutine *xr_runq_dequeue(XrRunQueue *rq) {
 int xr_runq_steal(XrRunQueue *src, XrRunQueue *dst, int max_steal) {
     int src_len = xr_steal_queue_size(&src->deque);
     int actual_max = src_len / 2;
-    if (actual_max > 32) actual_max = 32;
-    if (actual_max > max_steal) actual_max = max_steal;
-    if (actual_max <= 0) actual_max = 1;
+    if (actual_max > 32)
+        actual_max = 32;
+    if (actual_max > max_steal)
+        actual_max = max_steal;
+    if (actual_max <= 0)
+        actual_max = 1;
 
     int stolen = 0;
     for (int i = 0; i < actual_max; i++) {
         XrCoroutine *c = xr_steal_queue_steal(&src->deque);
-        if (!c) break;
+        if (!c)
+            break;
         // Stolen coros come out of the Chase-Lev deque, which never exposes
         // items that are also on the overflow linked-list.  Assert the
         // invariant so any future regression (e.g. sched_link aliasing via
         // MPSC inbox or delay list) surfaces immediately in debug builds.
-        XR_DCHECK(c->sched_link == NULL,
-                  "runq_steal: stolen coro sched_link must be NULL");
+        XR_DCHECK(c->sched_link == NULL, "runq_steal: stolen coro sched_link must be NULL");
         if (!xr_steal_queue_push(&dst->deque, c)) {
             // Destination full: put back via overflow
             c->sched_link = NULL;
-            if (dst->overflow_last) dst->overflow_last->sched_link = c;
-            else dst->overflow_first = c;
+            if (dst->overflow_last)
+                dst->overflow_last->sched_link = c;
+            else
+                dst->overflow_first = c;
             dst->overflow_last = c;
             dst->overflow_len++;
         }
@@ -125,7 +132,8 @@ XrCoroutine *xr_worker_pop(XrWorker *worker) {
     if (nq->overflow_first && --nq->overflow_first->schedule_count <= 0) {
         c = nq->overflow_first;
         nq->overflow_first = c->sched_link;
-        if (!nq->overflow_first) nq->overflow_last = NULL;
+        if (!nq->overflow_first)
+            nq->overflow_last = NULL;
         nq->overflow_len--;
         c->sched_link = NULL;
         worker->p.local_runq_len--;
@@ -135,13 +143,15 @@ XrCoroutine *xr_worker_pop(XrWorker *worker) {
     // 3. NORMAL deque (with retry loop for LOW priority delay)
 retry:
     c = xr_steal_queue_pop(&nq->deque);
-    if (c && xr_coro_get_priority(xr_coro_flags_load(c)) == CORO_PRIORITY_LOW
-        && c->schedule_count > 1) {
+    if (c && xr_coro_get_priority(xr_coro_flags_load(c)) == CORO_PRIORITY_LOW &&
+        c->schedule_count > 1) {
         // LOW coroutine with remaining delay: put to overflow
         c->schedule_count--;
         c->sched_link = NULL;
-        if (nq->overflow_last) nq->overflow_last->sched_link = c;
-        else nq->overflow_first = c;
+        if (nq->overflow_last)
+            nq->overflow_last->sched_link = c;
+        else
+            nq->overflow_first = c;
         nq->overflow_last = c;
         nq->overflow_len++;
         goto retry;
@@ -151,7 +161,8 @@ retry:
     while (!c && nq->overflow_first) {
         c = nq->overflow_first;
         nq->overflow_first = c->sched_link;
-        if (!nq->overflow_first) nq->overflow_last = NULL;
+        if (!nq->overflow_first)
+            nq->overflow_last = NULL;
         nq->overflow_len--;
         c->sched_link = NULL;
         // Try to push back into deque for future stealing
@@ -165,7 +176,8 @@ retry:
         break;
     }
 
-    if (c) worker->p.local_runq_len--;
+    if (c)
+        worker->p.local_runq_len--;
     return c;
 }
 
@@ -209,14 +221,16 @@ void xr_worker_push(XrWorker *worker, XrCoroutine *coro) {
     XR_DCHECK(xr_current_worker() == NULL || xr_current_worker() == worker,
               "worker_push: cross-worker push detected (use inbox)");
     int priority = xr_coro_get_priority(xr_coro_flags_load(coro));
-    if (priority < 0) priority = 0;
-    if (priority >= XR_CORO_PRIORITY_COUNT) priority = XR_CORO_PRIORITY_COUNT - 1;
+    if (priority < 0)
+        priority = 0;
+    if (priority >= XR_CORO_PRIORITY_COUNT)
+        priority = XR_CORO_PRIORITY_COUNT - 1;
 
     // LOW goes to NORMAL queue, controlled by schedule_count
     int runq_idx;
     if (priority == CORO_PRIORITY_LOW) {
         coro->schedule_count = XR_RESCHEDULE_LOW;  // 8 times delay
-        runq_idx = 0;  // NORMAL queue
+        runq_idx = 0;                              // NORMAL queue
     } else if (priority == CORO_PRIORITY_NORMAL) {
         coro->schedule_count = 1;
         runq_idx = 0;  // NORMAL queue

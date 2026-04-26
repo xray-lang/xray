@@ -44,12 +44,14 @@ void xfmt_emit_multi_var_decl(XrFmtContext *ctx, AstNode *node) {
 
     xfmt_write_str(ctx, decl->is_const ? "const " : "let ");
     for (int i = 0; i < decl->name_count; i++) {
-        if (i > 0) xfmt_write_str(ctx, ", ");
+        if (i > 0)
+            xfmt_write_str(ctx, ", ");
         xfmt_write_str(ctx, decl->names[i]);
     }
     xfmt_write_str(ctx, " = ");
     for (int i = 0; i < decl->value_count; i++) {
-        if (i > 0) xfmt_write_str(ctx, ", ");
+        if (i > 0)
+            xfmt_write_str(ctx, ", ");
         xfmt_emit_expression(ctx, decl->values[i]);
     }
     xfmt_write_newline(ctx);
@@ -76,7 +78,8 @@ void xfmt_emit_function_decl(XrFmtContext *ctx, AstNode *node) {
 
     xfmt_write_char(ctx, '(');
     for (int i = 0; i < fn->param_count; i++) {
-        if (i > 0) xfmt_write_str(ctx, ", ");
+        if (i > 0)
+            xfmt_write_str(ctx, ", ");
         XrParamNode *param = fn->params[i];
         xfmt_write_str(ctx, param->name);
         if (param->type) {
@@ -104,7 +107,8 @@ void xfmt_emit_class_decl(XrFmtContext *ctx, AstNode *node) {
     xfmt_write_indent(ctx);
     ClassDeclNode *cls = &node->as.class_decl;
 
-    if (cls->is_abstract) xfmt_write_str(ctx, "abstract ");
+    if (cls->is_abstract)
+        xfmt_write_str(ctx, "abstract ");
     xfmt_write_str(ctx, "class ");
     xfmt_write_str(ctx, cls->name);
     xfmt_emit_generic_params(ctx, cls->type_params, cls->type_param_count);
@@ -121,7 +125,8 @@ void xfmt_emit_class_decl(XrFmtContext *ctx, AstNode *node) {
     if (cls->interface_count > 0) {
         xfmt_write_str(ctx, " implements ");
         for (int i = 0; i < cls->interface_count; i++) {
-            if (i > 0) xfmt_write_str(ctx, ", ");
+            if (i > 0)
+                xfmt_write_str(ctx, ", ");
             xfmt_write_str(ctx, cls->interfaces[i]);
         }
     }
@@ -136,8 +141,10 @@ void xfmt_emit_class_decl(XrFmtContext *ctx, AstNode *node) {
         FieldDeclNode *f = &field->as.field_decl;
 
         xfmt_write_indent(ctx);
-        if (f->is_private) xfmt_write_str(ctx, "private ");
-        if (f->is_static) xfmt_write_str(ctx, "static ");
+        if (f->is_private)
+            xfmt_write_str(ctx, "private ");
+        if (f->is_static)
+            xfmt_write_str(ctx, "static ");
         xfmt_write_str(ctx, f->name);
         if (f->field_type) {
             xfmt_write_str(ctx, ": ");
@@ -160,11 +167,16 @@ void xfmt_emit_class_decl(XrFmtContext *ctx, AstNode *node) {
         MethodDeclNode *m = &method->as.method_decl;
 
         xfmt_write_indent(ctx);
-        if (m->is_private) xfmt_write_str(ctx, "private ");
-        if (m->is_static) xfmt_write_str(ctx, "static ");
-        if (m->is_abstract) xfmt_write_str(ctx, "abstract ");
-        if (m->is_getter) xfmt_write_str(ctx, "get ");
-        if (m->is_setter) xfmt_write_str(ctx, "set ");
+        if (m->is_private)
+            xfmt_write_str(ctx, "private ");
+        if (m->is_static)
+            xfmt_write_str(ctx, "static ");
+        if (m->is_abstract)
+            xfmt_write_str(ctx, "abstract ");
+        if (m->is_getter)
+            xfmt_write_str(ctx, "get ");
+        if (m->is_setter)
+            xfmt_write_str(ctx, "set ");
 
         if (m->is_constructor) {
             xfmt_write_str(ctx, XR_KEYWORD_CONSTRUCTOR);
@@ -175,7 +187,8 @@ void xfmt_emit_class_decl(XrFmtContext *ctx, AstNode *node) {
         if (m->type_param_count > 0) {
             xfmt_write_char(ctx, '<');
             for (int j = 0; j < m->type_param_count; j++) {
-                if (j > 0) xfmt_write_str(ctx, ", ");
+                if (j > 0)
+                    xfmt_write_str(ctx, ", ");
                 xfmt_write_str(ctx, m->type_param_names[j]);
             }
             xfmt_write_char(ctx, '>');
@@ -183,7 +196,8 @@ void xfmt_emit_class_decl(XrFmtContext *ctx, AstNode *node) {
 
         xfmt_write_char(ctx, '(');
         for (int j = 0; j < m->param_count; j++) {
-            if (j > 0) xfmt_write_str(ctx, ", ");
+            if (j > 0)
+                xfmt_write_str(ctx, ", ");
             xfmt_write_str(ctx, m->parameters[j]);
             if (m->param_types && m->param_types[j]) {
                 xfmt_write_str(ctx, ": ");
@@ -226,7 +240,8 @@ void xfmt_emit_interface_decl(XrFmtContext *ctx, AstNode *node) {
     if (iface->extends_count > 0) {
         xfmt_write_str(ctx, " extends ");
         for (int i = 0; i < iface->extends_count; i++) {
-            if (i > 0) xfmt_write_str(ctx, ", ");
+            if (i > 0)
+                xfmt_write_str(ctx, ", ");
             xfmt_write_str(ctx, iface->extends[i]);
         }
     }
@@ -243,7 +258,8 @@ void xfmt_emit_interface_decl(XrFmtContext *ctx, AstNode *node) {
         xfmt_write_str(ctx, m->name);
         xfmt_write_char(ctx, '(');
         for (int j = 0; j < m->param_count; j++) {
-            if (j > 0) xfmt_write_str(ctx, ", ");
+            if (j > 0)
+                xfmt_write_str(ctx, ", ");
             xfmt_write_str(ctx, m->parameters[j]);
             if (m->param_types && m->param_types[j]) {
                 xfmt_write_str(ctx, ": ");
@@ -309,7 +325,8 @@ void xfmt_emit_type_alias(XrFmtContext *ctx, AstNode *node) {
     xfmt_write_str(ctx, " = { ");
 
     for (int i = 0; i < ta->field_count; i++) {
-        if (i > 0) xfmt_write_str(ctx, ", ");
+        if (i > 0)
+            xfmt_write_str(ctx, ", ");
         xfmt_write_str(ctx, ta->field_names[i]);
         if (ta->field_optional && ta->field_optional[i]) {
             xfmt_write_char(ctx, '?');

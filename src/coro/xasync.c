@@ -35,7 +35,7 @@ static XrAsyncJob *ready_queue_pop(XrAsyncReadyQueue *q);
 // Loop: 1. Get task from queue, 2. Execute invoke (blocking op),
 //       3. Put result in Worker's completion queue
 static void *async_thread_main(void *arg) {
-    XrAsyncPool *pool = (XrAsyncPool *)arg;
+    XrAsyncPool *pool = (XrAsyncPool *) arg;
 
     while (atomic_load(&pool->running)) {
         // Get task from queue
@@ -123,20 +123,19 @@ static void ready_queue_push(XrAsyncReadyQueue *q, XrAsyncJob *job) {
     do {
         head = atomic_load_explicit(&q->head, memory_order_relaxed);
         job->next = head;
-    } while (!atomic_compare_exchange_weak_explicit(
-        &q->head, &head, job,
-        memory_order_release, memory_order_relaxed));
+    } while (!atomic_compare_exchange_weak_explicit(&q->head, &head, job, memory_order_release,
+                                                    memory_order_relaxed));
 }
 
 // Pop one element (CAS). Used only by destroy path.
 static XrAsyncJob *ready_queue_pop(XrAsyncReadyQueue *q) {
     for (int retry = 0; retry < 8; retry++) {
         XrAsyncJob *head = atomic_load_explicit(&q->head, memory_order_acquire);
-        if (!head) return NULL;
+        if (!head)
+            return NULL;
         XrAsyncJob *next = head->next;
-        if (atomic_compare_exchange_weak_explicit(
-                &q->head, &head, next,
-                memory_order_acq_rel, memory_order_acquire)) {
+        if (atomic_compare_exchange_weak_explicit(&q->head, &head, next, memory_order_acq_rel,
+                                                  memory_order_acquire)) {
             head->next = NULL;
             return head;
         }
@@ -155,7 +154,8 @@ static XrAsyncJob *ready_queue_drain_all(XrAsyncReadyQueue *q) {
 // Initialize async thread pool (data structures only, no threads created)
 void xr_async_pool_init(XrAsyncPool *pool, struct XrRuntime *runtime, int thread_count) {
     XR_DCHECK(runtime != NULL, "async_pool_init: NULL runtime");
-    if (!pool) return;
+    if (!pool)
+        return;
 
     memset(pool, 0, sizeof(XrAsyncPool));
 
@@ -175,7 +175,7 @@ void xr_async_pool_init(XrAsyncPool *pool, struct XrRuntime *runtime, int thread
 
     // Initialize completion queues (lock-free MPSC; no mutex).
     for (int i = 0; i < XR_MAX_WORKERS; i++) {
-        atomic_store(&pool->ready_queues[i].head, (XrAsyncJob *)NULL);
+        atomic_store(&pool->ready_queues[i].head, (XrAsyncJob *) NULL);
     }
 
     // Set running flag
@@ -184,9 +184,10 @@ void xr_async_pool_init(XrAsyncPool *pool, struct XrRuntime *runtime, int thread
 
 // Create async threads (called lazily on first spawn)
 void xr_async_pool_start_threads(XrAsyncPool *pool) {
-    if (!pool) return;
+    if (!pool)
+        return;
 
-    pool->threads = (pthread_t *)xr_calloc(pool->thread_count, sizeof(pthread_t));
+    pool->threads = (pthread_t *) xr_calloc(pool->thread_count, sizeof(pthread_t));
     if (!pool->threads) {
         xr_log_warning("async", "failed to allocate thread array");
         return;
@@ -208,7 +209,8 @@ void xr_async_pool_start_threads(XrAsyncPool *pool) {
 
 // Destroy async thread pool
 void xr_async_pool_destroy(XrAsyncPool *pool) {
-    if (!pool) return;
+    if (!pool)
+        return;
 
     // Set shutdown flag
     atomic_store(&pool->running, false);
@@ -251,7 +253,8 @@ void xr_async_pool_destroy(XrAsyncPool *pool) {
 // Submit async task
 // Coroutine will be suspended until task completes
 void xr_async_submit(XrAsyncPool *pool, XrAsyncJob *job) {
-    if (!pool || !job) return;
+    if (!pool || !job)
+        return;
 
     // Mark coroutine as blocked
     if (job->coro) {
@@ -274,7 +277,8 @@ int xr_async_check_ready(XrAsyncPool *pool, int worker_id) {
     // O(1) drain — grab entire list in one atomic_exchange,
     // then walk locally without further CAS contention.
     XrAsyncJob *list = ready_queue_drain_all(q);
-    if (!list) return 0;
+    if (!list)
+        return 0;
 
     int count = 0;
     while (list) {
@@ -308,10 +312,11 @@ int xr_async_check_ready(XrAsyncPool *pool, int worker_id) {
 }
 
 // Create async task
-XrAsyncJob *xr_async_job_create(struct XrCoroutine *coro, int worker_id,
-                                 void (*invoke)(void *), void *data) {
-    XrAsyncJob *job = (XrAsyncJob *)xr_calloc(1, sizeof(XrAsyncJob));
-    if (!job) return NULL;
+XrAsyncJob *xr_async_job_create(struct XrCoroutine *coro, int worker_id, void (*invoke)(void *),
+                                void *data) {
+    XrAsyncJob *job = (XrAsyncJob *) xr_calloc(1, sizeof(XrAsyncJob));
+    if (!job)
+        return NULL;
 
     job->coro = coro;
     job->worker_id = worker_id;

@@ -37,7 +37,8 @@ void xr_chan_wake_queue_init(XrChanWakeCmdQueue *q) {
 }
 
 void xr_chan_wake_queue_destroy(XrChanWakeCmdQueue *q) {
-    if (!q) return;
+    if (!q)
+        return;
 
     // Drain residual nodes (head may be stub or a real node)
     XrChanWakeCmd *node = atomic_load(&q->head);
@@ -64,21 +65,21 @@ static void chan_wake_queue_push(XrChanWakeCmdQueue *q, XrChanWakeCmd *cmd) {
 
     // Vyukov MPSC enqueue: swap tail, link previous tail to new node
     XrChanWakeCmd *prev = atomic_exchange_explicit(&q->tail, cmd, memory_order_acq_rel);
-    atomic_store_explicit((_Atomic(XrChanWakeCmd *)*)&prev->next, cmd, memory_order_release);
+    atomic_store_explicit((_Atomic(XrChanWakeCmd *) *) &prev->next, cmd, memory_order_release);
 }
 
 /* ========== Dispatch (called from any thread for remote worker) ========== */
 
-void xr_worker_dispatch_chan_wake(XrRuntime *runtime, int target_id,
-                                  void *channel, bool wake_sender,
-                                  bool is_close) {
+void xr_worker_dispatch_chan_wake(XrRuntime *runtime, int target_id, void *channel,
+                                  bool wake_sender, bool is_close) {
     XR_DCHECK(runtime != NULL, "dispatch_chan_wake: NULL runtime");
     XR_DCHECK(channel != NULL, "dispatch_chan_wake: NULL channel");
     XR_DCHECK(target_id >= 0 && target_id < runtime->worker_count,
               "dispatch_chan_wake: target_id out of range");
 
-    XrChanWakeCmd *cmd = (XrChanWakeCmd *)xr_malloc(sizeof(XrChanWakeCmd));
-    if (!cmd) return;  // OOM: waiter stays blocked until timeout / next event
+    XrChanWakeCmd *cmd = (XrChanWakeCmd *) xr_malloc(sizeof(XrChanWakeCmd));
+    if (!cmd)
+        return;  // OOM: waiter stays blocked until timeout / next event
 
     cmd->channel = channel;
     cmd->wake_sender = wake_sender;
@@ -106,8 +107,8 @@ void xr_worker_drain_chan_wake_queue(XrWorker *worker) {
     // Vyukov MPSC consumer: advance head past stub/old nodes
     while (1) {
         XrChanWakeCmd *head = atomic_load_explicit(&q->head, memory_order_acquire);
-        XrChanWakeCmd *next = atomic_load_explicit(
-            (_Atomic(XrChanWakeCmd *)*)&head->next, memory_order_acquire);
+        XrChanWakeCmd *next =
+            atomic_load_explicit((_Atomic(XrChanWakeCmd *) *) &head->next, memory_order_acquire);
 
         if (next == NULL) {
             // Empty or in-progress enqueue

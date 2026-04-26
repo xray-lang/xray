@@ -28,14 +28,14 @@
  * Protect Region (for consecutive arguments, etc.)
  * ============================================================ */
 typedef struct XProtectRegion {
-    int base;              // Protect region start register
-    int count;             // Number of protected registers
-    const char *reason;    // Reason for protection (debug)
+    int base;            // Protect region start register
+    int count;           // Number of protected registers
+    const char *reason;  // Reason for protection (debug)
 } XProtectRegion;
 
 /* ============================================================
  * Register Allocator (LIFO simplified version)
- * 
+ *
  * Core concept:
  *   - freereg is the only state, representing "stack top"
  *   - num_locals marks local variable region, registers in this region cannot be freed
@@ -44,21 +44,21 @@ typedef struct XProtectRegion {
  * ============================================================ */
 typedef struct XRegAlloc {
     /* === Core State === */
-    int num_locals;        // Local variable count (fixed region, cannot be freed)
-    int freereg;           // First free register (stack top)
-    int watermark;         // Historical max usage (for maxstacksize)
-    
+    int num_locals;  // Local variable count (fixed region, cannot be freed)
+    int freereg;     // First free register (stack top)
+    int watermark;   // Historical max usage (for maxstacksize)
+
     /* === Protect Region Stack (for consecutive arguments) === */
     XProtectRegion protect_stack[XREG_PROTECT_STACK];
-    int protect_depth;     // Current protect region nesting depth
-    
+    int protect_depth;  // Current protect region nesting depth
+
     /* === Scope Tracking === */
-    int scope_depth;       // Current scope depth
+    int scope_depth;                 // Current scope depth
     int scope_base[XREG_SCOPE_MAX];  // num_locals start value for each scope
-    
+
     /* === Debug === */
     bool enable_debug;
-    
+
 } XRegAlloc;
 
 /* ============================================================
@@ -66,7 +66,7 @@ typedef struct XRegAlloc {
  * ============================================================ */
 
 // Create new register allocator
-XR_FUNC XRegAlloc* xreg_new(void);
+XR_FUNC XRegAlloc *xreg_new(void);
 
 // Destroy allocator
 XR_FUNC void xreg_free(XRegAlloc *ra);
@@ -101,7 +101,7 @@ XR_FUNC int xreg_reserve(XRegAlloc *ra, int n);
 
 /* ============================================================
  * API: Stack Pointer Control (Core)
- * 
+ *
  * Key to LIFO model: direct control of freereg
  * - Batch reclaim: xreg_set_freereg(ra, saved_base)
  * - Consecutive allocation: loop xreg_alloc_temp or directly set_freereg
@@ -121,7 +121,7 @@ XR_FUNC void xreg_set_local_end(XRegAlloc *ra, int local_end);
 
 /* ============================================================
  * API: Protect Region Management
- * 
+ *
  * For scenarios that need to protect intermediate results (e.g., consecutive argument compilation)
  * ============================================================ */
 
@@ -188,29 +188,32 @@ XR_FUNC void xreg_set_debug(XRegAlloc *ra, bool enable);
  * ============================================================ */
 
 #ifdef XREG_DEBUG_ASSERTS
-    #define ASSERT_REG_VALID(reg) do { \
-        if ((reg) < 0 || (reg) >= XREG_MAX) { \
-            fprintf(stderr, "[XReg] Invalid register: %d\n", (reg)); \
-        } \
-    } while(0)
-    
-    #define ASSERT_FREEREG(ra, expected) do { \
-        int actual = xreg_get_freereg(ra); \
-        if (actual != (expected)) { \
-            fprintf(stderr, "[XReg] freereg mismatch: %d != %d\n", actual, (expected)); \
-        } \
-    } while(0)
-    
-    #define ASSERT_FREEREG_GE(ra, min_val) do { \
-        int actual = xreg_get_freereg(ra); \
-        if (actual < (min_val)) { \
-            fprintf(stderr, "[XReg] freereg too small: %d < %d\n", actual, (min_val)); \
-        } \
-    } while(0)
+#define ASSERT_REG_VALID(reg)                                                                      \
+    do {                                                                                           \
+        if ((reg) < 0 || (reg) >= XREG_MAX) {                                                      \
+            fprintf(stderr, "[XReg] Invalid register: %d\n", (reg));                               \
+        }                                                                                          \
+    } while (0)
+
+#define ASSERT_FREEREG(ra, expected)                                                               \
+    do {                                                                                           \
+        int actual = xreg_get_freereg(ra);                                                         \
+        if (actual != (expected)) {                                                                \
+            fprintf(stderr, "[XReg] freereg mismatch: %d != %d\n", actual, (expected));            \
+        }                                                                                          \
+    } while (0)
+
+#define ASSERT_FREEREG_GE(ra, min_val)                                                             \
+    do {                                                                                           \
+        int actual = xreg_get_freereg(ra);                                                         \
+        if (actual < (min_val)) {                                                                  \
+            fprintf(stderr, "[XReg] freereg too small: %d < %d\n", actual, (min_val));             \
+        }                                                                                          \
+    } while (0)
 #else
-    #define ASSERT_REG_VALID(reg) ((void)0)
-    #define ASSERT_FREEREG(ra, expected) ((void)0)
-    #define ASSERT_FREEREG_GE(ra, min_val) ((void)0)
+#define ASSERT_REG_VALID(reg) ((void) 0)
+#define ASSERT_FREEREG(ra, expected) ((void) 0)
+#define ASSERT_FREEREG_GE(ra, min_val) ((void) 0)
 #endif
 
-#endif // XREGALLOC_H
+#endif  // XREGALLOC_H

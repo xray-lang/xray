@@ -26,40 +26,40 @@
 
 /* ========== Constants ========== */
 
-#define X64_MAX_PHYS_REGS   11  // allocatable GP registers (see xir_target_x64.c)
-#define X64_MAX_FP_REGS     15
-#define X64_MAX_VREGS       4096
-#define X64_SCRATCH_REG     X64_R11
-#define X64_SCRATCH_XMM     15       // xmm15 as FP scratch
-#define X64_CORO_REG        X64_R15
-#define X64_JIT_CTX_REG     X64_R14  // jit_ctx pointer (XrJitScratch*)
-#define X64_SPILL_BASE      64   // must match xir_target_x64.c
-#define X64_JIT_FRAME_BASE  64
+#define X64_MAX_PHYS_REGS 11  // allocatable GP registers (see xir_target_x64.c)
+#define X64_MAX_FP_REGS 15
+#define X64_MAX_VREGS 4096
+#define X64_SCRATCH_REG X64_R11
+#define X64_SCRATCH_XMM 15  // xmm15 as FP scratch
+#define X64_CORO_REG X64_R15
+#define X64_JIT_CTX_REG X64_R14  // jit_ctx pointer (XrJitScratch*)
+#define X64_SPILL_BASE 64        // must match xir_target_x64.c
+#define X64_JIT_FRAME_BASE 64
 
 /* ========== Branch Patch ========== */
 
 /* Extra-arg scratch: reuse call_args[15] slot to pass extra_arg to call_c_stub.
  * This slot is safe because call_args are written before the call and the
  * extra_arg is consumed before any call_args are read by the callee. */
-#define X64_EXTRA_ARG_OFFSET   XIR_JIT_LOAD_TAG_SCRATCH
+#define X64_EXTRA_ARG_OFFSET XIR_JIT_LOAD_TAG_SCRATCH
 
 typedef enum {
-    X64_PATCH_JMP,           // unconditional JMP rel32
-    X64_PATCH_JCC,           // conditional Jcc rel32
-    X64_PATCH_DEOPT_JCC,     // deopt: conditional Jcc to deopt stub
-    X64_PATCH_DEOPT_JMP,     // deopt: unconditional JMP rel32 to deopt stub
-    X64_PATCH_CALL_C,        // CALL rel32 to shared call_c_stub
-    X64_PATCH_CALL_SELF,     // CALL rel32 to function entry (offset 0)
-    X64_PATCH_CALL_SELF_FAST,// CALL rel32 to fast_entry_offset
-    X64_PATCH_BARRIER_FWD,   // CALL rel32 to barrier_fwd_stub
-    X64_PATCH_BARRIER_BACK,  // CALL rel32 to barrier_back_stub
+    X64_PATCH_JMP,             // unconditional JMP rel32
+    X64_PATCH_JCC,             // conditional Jcc rel32
+    X64_PATCH_DEOPT_JCC,       // deopt: conditional Jcc to deopt stub
+    X64_PATCH_DEOPT_JMP,       // deopt: unconditional JMP rel32 to deopt stub
+    X64_PATCH_CALL_C,          // CALL rel32 to shared call_c_stub
+    X64_PATCH_CALL_SELF,       // CALL rel32 to function entry (offset 0)
+    X64_PATCH_CALL_SELF_FAST,  // CALL rel32 to fast_entry_offset
+    X64_PATCH_BARRIER_FWD,     // CALL rel32 to barrier_fwd_stub
+    X64_PATCH_BARRIER_BACK,    // CALL rel32 to barrier_back_stub
 } X64PatchType;
 
 typedef struct {
-    uint32_t    emit_pos;    // byte offset of the rel32 field in code buffer
-    uint32_t    target_blk;  // target block id
+    uint32_t emit_pos;    // byte offset of the rel32 field in code buffer
+    uint32_t target_blk;  // target block id
     X64PatchType type;
-    X64Cond     cc;          // condition code (for JCC patches)
+    X64Cond cc;  // condition code (for JCC patches)
 } X64BranchPatch;
 
 #define X64_INIT_PATCHES 256
@@ -67,62 +67,62 @@ typedef struct {
 /* ========== Codegen Context ========== */
 
 typedef struct {
-    XirFunc      *func;
+    XirFunc *func;
     XirCodeAlloc *alloc;
-    X64Buf        buf;
+    X64Buf buf;
 
-    uint32_t     *block_offsets;    // byte offset of each block's start
-    uint32_t      nblock_offsets;
+    uint32_t *block_offsets;  // byte offset of each block's start
+    uint32_t nblock_offsets;
 
-    X64BranchPatch *patches;       // deferred branch patches
-    uint32_t      npatch;
-    uint32_t      patches_cap;
+    X64BranchPatch *patches;  // deferred branch patches
+    uint32_t npatch;
+    uint32_t patches_cap;
 
-    XraResult    *xra;             // register allocation result
-    int8_t       *vreg_override;   // gap-move overrides (-128 = no override)
+    XraResult *xra;         // register allocation result
+    int8_t *vreg_override;  // gap-move overrides (-128 = no override)
 
-    uint32_t      cur_blk_id;
-    int32_t       cur_ra_pos;
-    uint32_t      cur_ins_idx;
-    uint32_t      gap_move_cursor;
+    uint32_t cur_blk_id;
+    int32_t cur_ra_pos;
+    uint32_t cur_ins_idx;
+    uint32_t gap_move_cursor;
 
-    uint32_t      fast_entry_offset;  // byte offset of fast-path entry
+    uint32_t fast_entry_offset;  // byte offset of fast-path entry
 
     /* Frame size patch locations (byte offsets where sub rsp/add rsp imm32 lives).
      * Capacity 16 covers normal + fast prologue + up to XIR_MAX_OSR_ENTRIES (8)
      * OSR stubs, each of which emits its own SUB RSP, imm32. */
-    uint32_t      frame_patch_sub[16];
-    uint32_t      frame_patch_add[8];
-    uint32_t      nsub_patches;
-    uint32_t      nadd_patches;
+    uint32_t frame_patch_sub[16];
+    uint32_t frame_patch_add[8];
+    uint32_t nsub_patches;
+    uint32_t nadd_patches;
 
     /* Loop-header snapshots for later OSR stub emission. Filled by
      * x64_emit_block when it sees a loop_header block; consumed by
      * x64_emit_osr_stubs to materialize a stub per snapshot. */
-    OsrSnapshot   osr_snaps[XIR_MAX_OSR_ENTRIES];
-    uint32_t      nosr_snap;
+    OsrSnapshot osr_snaps[XIR_MAX_OSR_ENTRIES];
+    uint32_t nosr_snap;
 
-    uint32_t      call_c_stub;       // byte offset of call_c_stub in code buffer
-    uint32_t      deopt_stub;        // byte offset of deopt stub
-    uint32_t      barrier_fwd_stub;  // byte offset of forward barrier stub
-    uint32_t      barrier_back_stub; // byte offset of back barrier stub
+    uint32_t call_c_stub;        // byte offset of call_c_stub in code buffer
+    uint32_t deopt_stub;         // byte offset of deopt stub
+    uint32_t barrier_fwd_stub;   // byte offset of forward barrier stub
+    uint32_t barrier_back_stub;  // byte offset of back barrier stub
 
     /* GC stack map: collect safepoint bitmaps during codegen */
     XrStackMapEntry smap_entries[XIR_MAX_STACK_MAP_ENTRIES];
-    uint32_t      nsmap;
+    uint32_t nsmap;
 
-    bool          had_error;
-    bool          has_deopt;
-    bool          has_call_c;
-    bool          has_barriers;
+    bool had_error;
+    bool has_deopt;
+    bool has_call_c;
+    bool has_barriers;
 
     /* Suspend/resume tracking (coroutine support) */
-    uint32_t      suspend_cont_offsets[16];   // byte offset of continuation per suspend_id
-    uint32_t      suspend_smap_ids[16];       // smap id at each suspend point
-    uint8_t       suspend_result_regs[16];    // physical register for result per suspend_id
-    int16_t       suspend_result_bc_slots[16];// bc_slot of result vreg per suspend_id
-    uint32_t      nsuspend;                   // number of suspend points emitted
-    uint32_t      resume_entry_offset;        // byte offset of resume entry (0 = none)
+    uint32_t suspend_cont_offsets[16];    // byte offset of continuation per suspend_id
+    uint32_t suspend_smap_ids[16];        // smap id at each suspend point
+    uint8_t suspend_result_regs[16];      // physical register for result per suspend_id
+    int16_t suspend_result_bc_slots[16];  // bc_slot of result vreg per suspend_id
+    uint32_t nsuspend;                    // number of suspend points emitted
+    uint32_t resume_entry_offset;         // byte offset of resume entry (0 = none)
 } X64CodegenCtx;
 
 /* ========== Register Mapping ========== */
@@ -150,8 +150,7 @@ XR_FUNC void x64_load_imm64(X64Buf *buf, X64Reg dst, uint64_t val);
 XR_FUNC void x64_maybe_spill(X64CodegenCtx *ctx, XirRef dst_ref);
 
 /* Add a deferred branch patch */
-XR_FUNC void x64_add_patch(X64CodegenCtx *ctx, X64PatchType type,
-                            uint32_t target_blk, X64Cond cc);
+XR_FUNC void x64_add_patch(X64CodegenCtx *ctx, X64PatchType type, uint32_t target_blk, X64Cond cc);
 
 /* ========== Shared helpers (defined in xir_codegen_x64.c) ========== */
 
@@ -184,4 +183,4 @@ XR_FUNC void x64_emit_epilogue(X64CodegenCtx *ctx);
 /* Call ops: CALL_C, CALL_C_LEAF, CALL_SELF_DIRECT, CALL_KNOWN, etc. */
 XR_FUNC bool x64_emit_call_ins(X64CodegenCtx *ctx, XirIns *ins, X64Reg rd);
 
-#endif // XIR_CODEGEN_X64_INTERNAL_H
+#endif  // XIR_CODEGEN_X64_INTERNAL_H

@@ -26,17 +26,15 @@
 
 // Token type names for legend
 static const char *token_type_names[] = {
-    "namespace", "type", "class", "enum", "interface", "struct",
-    "typeParameter", "parameter", "variable", "property", "enumMember",
-    "event", "function", "method", "macro", "keyword", "modifier",
-    "comment", "string", "number", "regexp", "operator"
-};
+    "namespace",     "type",      "class",    "enum",     "interface",  "struct",
+    "typeParameter", "parameter", "variable", "property", "enumMember", "event",
+    "function",      "method",    "macro",    "keyword",  "modifier",   "comment",
+    "string",        "number",    "regexp",   "operator"};
 
 // Token modifier names for legend
 static const char *token_modifier_names[] = {
-    "declaration", "definition", "readonly", "static", "deprecated",
-    "abstract", "async", "modification", "documentation", "defaultLibrary"
-};
+    "declaration", "definition", "readonly",     "static",        "deprecated",
+    "abstract",    "async",      "modification", "documentation", "defaultLibrary"};
 
 // Get semantic tokens legend
 XrJsonValue *xlsp_semantic_tokens_legend(void) {
@@ -68,12 +66,11 @@ static XlspSemanticTokensResult *result_new(void) {
 }
 
 // Add token to result
-static void result_add(XlspSemanticTokensResult *r, int line, int start,
-                       int length, XlspSemanticTokenType type, int mods) {
+static void result_add(XlspSemanticTokensResult *r, int line, int start, int length,
+                       XlspSemanticTokenType type, int mods) {
     if (r->count >= r->capacity) {
         r->capacity *= 2;
-        XR_REALLOC_OR_ABORT(r->tokens,
-                            (size_t)r->capacity * sizeof(XlspSemanticToken),
+        XR_REALLOC_OR_ABORT(r->tokens, (size_t) r->capacity * sizeof(XlspSemanticToken),
                             "lsp semantic_tokens grow");
     }
 
@@ -87,7 +84,8 @@ static void result_add(XlspSemanticTokensResult *r, int line, int start,
 
 // Free result
 void xlsp_semantic_tokens_free(XlspSemanticTokensResult *result) {
-    if (!result) return;
+    if (!result)
+        return;
     xr_free(result->tokens);
     xr_free(result);
 }
@@ -96,7 +94,8 @@ void xlsp_semantic_tokens_free(XlspSemanticTokensResult *result) {
 static int compare_tokens(const void *a, const void *b) {
     const XlspSemanticToken *ta = a;
     const XlspSemanticToken *tb = b;
-    if (ta->line != tb->line) return ta->line - tb->line;
+    if (ta->line != tb->line)
+        return ta->line - tb->line;
     return ta->start_char - tb->start_char;
 }
 
@@ -108,7 +107,8 @@ typedef struct {
 } SemanticTokenContext;
 
 // Determine token type for a variable reference based on analyzer info
-static XlspSemanticTokenType get_var_token_type(SemanticTokenContext *ctx, const char *name, int *out_mods) {
+static XlspSemanticTokenType get_var_token_type(SemanticTokenContext *ctx, const char *name,
+                                                int *out_mods) {
     *out_mods = 0;
 
     if (!ctx->analyzer || !ctx->current_scope) {
@@ -122,9 +122,12 @@ static XlspSemanticTokenType get_var_token_type(SemanticTokenContext *ctx, const
     }
 
     // Set modifiers
-    if (sym->is_const) *out_mods |= XLSP_MOD_READONLY;
-    if (sym->is_static) *out_mods |= XLSP_MOD_STATIC;
-    if (sym->is_builtin) *out_mods |= XLSP_MOD_DEFAULT_LIBRARY;
+    if (sym->is_const)
+        *out_mods |= XLSP_MOD_READONLY;
+    if (sym->is_static)
+        *out_mods |= XLSP_MOD_STATIC;
+    if (sym->is_builtin)
+        *out_mods |= XLSP_MOD_DEFAULT_LIBRARY;
 
     // Determine type based on symbol kind
     switch (sym->kind) {
@@ -135,7 +138,8 @@ static XlspSemanticTokenType get_var_token_type(SemanticTokenContext *ctx, const
         case XA_SYM_PARAMETER:
             return XLSP_TOKEN_PARAMETER;
         case XA_SYM_VARIABLE:
-            if (sym->is_const) *out_mods |= XLSP_MOD_READONLY;
+            if (sym->is_const)
+                *out_mods |= XLSP_MOD_READONLY;
             return XLSP_TOKEN_VARIABLE;
         case XA_SYM_FIELD:
         case XA_SYM_PROPERTY:
@@ -151,7 +155,8 @@ static XlspSemanticTokenType get_var_token_type(SemanticTokenContext *ctx, const
 
 // Helper: find child scope by AST node
 static XaScope *find_child_scope(XaScope *parent, void *ast_node) {
-    if (!parent) return NULL;
+    if (!parent)
+        return NULL;
     for (int i = 0; i < parent->child_count; i++) {
         if (parent->children[i]->ast_node == ast_node) {
             return parent->children[i];
@@ -162,7 +167,8 @@ static XaScope *find_child_scope(XaScope *parent, void *ast_node) {
 
 // Collect tokens from AST with analyzer context
 static void collect_tokens_ast(SemanticTokenContext *ctx, AstNode *node) {
-    if (!node) return;
+    if (!node)
+        return;
 
     XlspSemanticTokensResult *result = ctx->result;
 
@@ -182,7 +188,8 @@ static void collect_tokens_ast(SemanticTokenContext *ctx, AstNode *node) {
         case AST_BLOCK: {
             XaScope *saved = ctx->current_scope;
             XaScope *block_scope = find_child_scope(ctx->current_scope, node);
-            if (block_scope) ctx->current_scope = block_scope;
+            if (block_scope)
+                ctx->current_scope = block_scope;
 
             int count = node->as.block.count;
             for (int i = 0; i < count; i++) {
@@ -201,8 +208,7 @@ static void collect_tokens_ast(SemanticTokenContext *ctx, AstNode *node) {
                     mods |= XLSP_MOD_READONLY;
                 }
                 int col = node->column > 0 ? node->column - 1 : 0;
-                result_add(result, node->line - 1, col, strlen(name),
-                           XLSP_TOKEN_VARIABLE, mods);
+                result_add(result, node->line - 1, col, strlen(name), XLSP_TOKEN_VARIABLE, mods);
             }
             collect_tokens_ast(ctx, node->as.var_decl.initializer);
             break;
@@ -213,23 +219,25 @@ static void collect_tokens_ast(SemanticTokenContext *ctx, AstNode *node) {
             if (fn->name) {
                 int col = node->column > 0 ? node->column - 1 : 0;
                 int mods = XLSP_MOD_DECLARATION | XLSP_MOD_DEFINITION;
-                result_add(result, node->line - 1, col, strlen(fn->name),
-                           XLSP_TOKEN_FUNCTION, mods);
+                result_add(result, node->line - 1, col, strlen(fn->name), XLSP_TOKEN_FUNCTION,
+                           mods);
             }
 
             // Enter function scope
             XaScope *saved = ctx->current_scope;
             XaScope *fn_scope = find_child_scope(ctx->current_scope, node);
-            if (fn_scope) ctx->current_scope = fn_scope;
+            if (fn_scope)
+                ctx->current_scope = fn_scope;
 
             // Parameters
             for (int i = 0; i < fn->param_count; i++) {
                 XrParamNode *p = fn->params[i];
-                if (!p || !p->name) continue;
+                if (!p || !p->name)
+                    continue;
                 int param_col = p->column > 0 ? p->column - 1 : 0;
                 int param_line = p->line > 0 ? p->line - 1 : node->line - 1;
-                result_add(result, param_line, param_col, strlen(p->name),
-                           XLSP_TOKEN_PARAMETER, XLSP_MOD_DECLARATION);
+                result_add(result, param_line, param_col, strlen(p->name), XLSP_TOKEN_PARAMETER,
+                           XLSP_MOD_DECLARATION);
             }
 
             collect_tokens_ast(ctx, fn->body);
@@ -243,16 +251,18 @@ static void collect_tokens_ast(SemanticTokenContext *ctx, AstNode *node) {
             // Enter function scope
             XaScope *saved = ctx->current_scope;
             XaScope *fn_scope = find_child_scope(ctx->current_scope, node);
-            if (fn_scope) ctx->current_scope = fn_scope;
+            if (fn_scope)
+                ctx->current_scope = fn_scope;
 
             // Parameters
             for (int i = 0; i < fn->param_count; i++) {
                 XrParamNode *p = fn->params[i];
-                if (!p || !p->name) continue;
+                if (!p || !p->name)
+                    continue;
                 int param_col = p->column > 0 ? p->column - 1 : 0;
                 int param_line = p->line > 0 ? p->line - 1 : node->line - 1;
-                result_add(result, param_line, param_col, strlen(p->name),
-                           XLSP_TOKEN_PARAMETER, XLSP_MOD_DECLARATION);
+                result_add(result, param_line, param_col, strlen(p->name), XLSP_TOKEN_PARAMETER,
+                           XLSP_MOD_DECLARATION);
             }
 
             collect_tokens_ast(ctx, fn->body);
@@ -266,15 +276,16 @@ static void collect_tokens_ast(SemanticTokenContext *ctx, AstNode *node) {
             if (cls->name) {
                 int col = node->column > 0 ? node->column - 1 : 0;
                 int mods = XLSP_MOD_DECLARATION | XLSP_MOD_DEFINITION;
-                if (cls->is_abstract) mods |= XLSP_MOD_ABSTRACT;
-                result_add(result, node->line - 1, col, strlen(cls->name),
-                           XLSP_TOKEN_CLASS, mods);
+                if (cls->is_abstract)
+                    mods |= XLSP_MOD_ABSTRACT;
+                result_add(result, node->line - 1, col, strlen(cls->name), XLSP_TOKEN_CLASS, mods);
             }
 
             // Enter class scope
             XaScope *saved = ctx->current_scope;
             XaScope *cls_scope = find_child_scope(ctx->current_scope, node);
-            if (cls_scope) ctx->current_scope = cls_scope;
+            if (cls_scope)
+                ctx->current_scope = cls_scope;
 
             // Fields
             for (int i = 0; i < cls->field_count; i++) {
@@ -296,11 +307,13 @@ static void collect_tokens_ast(SemanticTokenContext *ctx, AstNode *node) {
                     // Method parameters and body
                     XaScope *method_saved = ctx->current_scope;
                     XaScope *method_scope = find_child_scope(ctx->current_scope, method);
-                    if (method_scope) ctx->current_scope = method_scope;
+                    if (method_scope)
+                        ctx->current_scope = method_scope;
 
                     for (int j = 0; j < m->param_count; j++) {
                         XrParamNode *p = m->params[j];
-                        if (!p || !p->name) continue;
+                        if (!p || !p->name)
+                            continue;
                         int param_col = p->column > 0 ? p->column - 1 : 0;
                         int param_line = p->line > 0 ? p->line - 1 : method->line - 1;
                         result_add(result, param_line, param_col, strlen(p->name),
@@ -320,8 +333,8 @@ static void collect_tokens_ast(SemanticTokenContext *ctx, AstNode *node) {
             EnumDeclNode *en = &node->as.enum_decl;
             if (en->name) {
                 int col = node->column > 0 ? node->column - 1 : 0;
-                result_add(result, node->line - 1, col, strlen(en->name),
-                           XLSP_TOKEN_ENUM, XLSP_MOD_DECLARATION | XLSP_MOD_DEFINITION);
+                result_add(result, node->line - 1, col, strlen(en->name), XLSP_TOKEN_ENUM,
+                           XLSP_MOD_DECLARATION | XLSP_MOD_DEFINITION);
             }
             // Enum members
             for (int i = 0; i < en->member_count; i++) {
@@ -342,8 +355,8 @@ static void collect_tokens_ast(SemanticTokenContext *ctx, AstNode *node) {
             InterfaceDeclNode *iface = &node->as.interface_decl;
             if (iface->name) {
                 int col = node->column > 0 ? node->column - 1 : 0;
-                result_add(result, node->line - 1, col, strlen(iface->name),
-                           XLSP_TOKEN_INTERFACE, XLSP_MOD_DECLARATION | XLSP_MOD_DEFINITION);
+                result_add(result, node->line - 1, col, strlen(iface->name), XLSP_TOKEN_INTERFACE,
+                           XLSP_MOD_DECLARATION | XLSP_MOD_DEFINITION);
             }
             // Interface methods
             for (int i = 0; i < iface->method_count; i++) {
@@ -352,8 +365,8 @@ static void collect_tokens_ast(SemanticTokenContext *ctx, AstNode *node) {
                     const char *mname = method->as.interface_method.name;
                     if (mname) {
                         int mcol = method->column > 0 ? method->column - 1 : 0;
-                        result_add(result, method->line - 1, mcol, strlen(mname),
-                                   XLSP_TOKEN_METHOD, XLSP_MOD_ABSTRACT);
+                        result_add(result, method->line - 1, mcol, strlen(mname), XLSP_TOKEN_METHOD,
+                                   XLSP_MOD_ABSTRACT);
                     }
                 }
             }
@@ -414,8 +427,8 @@ static void collect_tokens_ast(SemanticTokenContext *ctx, AstNode *node) {
                     const char *name = callee->as.member_access.name;
                     if (name) {
                         int col = callee->column > 0 ? callee->column - 1 : 0;
-                        result_add(result, callee->line - 1, col, strlen(name),
-                                   XLSP_TOKEN_METHOD, 0);
+                        result_add(result, callee->line - 1, col, strlen(name), XLSP_TOKEN_METHOD,
+                                   0);
                     }
                 } else {
                     collect_tokens_ast(ctx, callee);
@@ -434,8 +447,7 @@ static void collect_tokens_ast(SemanticTokenContext *ctx, AstNode *node) {
             const char *name = node->as.member_access.name;
             if (name) {
                 int col = node->column > 0 ? node->column - 1 : 0;
-                result_add(result, node->line - 1, col, strlen(name),
-                           XLSP_TOKEN_PROPERTY, 0);
+                result_add(result, node->line - 1, col, strlen(name), XLSP_TOKEN_PROPERTY, 0);
             }
             break;
         }
@@ -446,16 +458,16 @@ static void collect_tokens_ast(SemanticTokenContext *ctx, AstNode *node) {
             // Loop variable (item or key depending on is_keyvalue)
             if (fi->item_name) {
                 int col = node->column > 0 ? node->column - 1 : 0;
-                result_add(result, node->line - 1, col, strlen(fi->item_name),
-                           XLSP_TOKEN_VARIABLE, XLSP_MOD_DECLARATION);
+                result_add(result, node->line - 1, col, strlen(fi->item_name), XLSP_TOKEN_VARIABLE,
+                           XLSP_MOD_DECLARATION);
             }
 
             // Value variable in key-value iteration (for k, v in map)
             if (fi->is_keyvalue && fi->value_name) {
                 // Value is after item in "for key, value in ..."
                 int col = node->column > 0 ? node->column - 1 : 0;
-                result_add(result, node->line - 1, col, strlen(fi->value_name),
-                           XLSP_TOKEN_VARIABLE, XLSP_MOD_DECLARATION);
+                result_add(result, node->line - 1, col, strlen(fi->value_name), XLSP_TOKEN_VARIABLE,
+                           XLSP_MOD_DECLARATION);
             }
 
             collect_tokens_ast(ctx, fi->collection);
@@ -463,7 +475,8 @@ static void collect_tokens_ast(SemanticTokenContext *ctx, AstNode *node) {
             // Enter loop scope
             XaScope *saved = ctx->current_scope;
             XaScope *loop_scope = find_child_scope(ctx->current_scope, node);
-            if (loop_scope) ctx->current_scope = loop_scope;
+            if (loop_scope)
+                ctx->current_scope = loop_scope;
 
             collect_tokens_ast(ctx, fi->body);
             ctx->current_scope = saved;
@@ -484,7 +497,8 @@ static void collect_tokens_ast(SemanticTokenContext *ctx, AstNode *node) {
         case AST_FOR_STMT: {
             XaScope *saved = ctx->current_scope;
             XaScope *for_scope = find_child_scope(ctx->current_scope, node);
-            if (for_scope) ctx->current_scope = for_scope;
+            if (for_scope)
+                ctx->current_scope = for_scope;
 
             collect_tokens_ast(ctx, node->as.for_stmt.initializer);
             collect_tokens_ast(ctx, node->as.for_stmt.condition);
@@ -507,7 +521,8 @@ static void collect_tokens_ast(SemanticTokenContext *ctx, AstNode *node) {
 
             XaScope *saved = ctx->current_scope;
             XaScope *catch_scope = find_child_scope(ctx->current_scope, tc->catch_body);
-            if (catch_scope) ctx->current_scope = catch_scope;
+            if (catch_scope)
+                ctx->current_scope = catch_scope;
 
             collect_tokens_ast(ctx, tc->catch_body);
             ctx->current_scope = saved;
@@ -588,8 +603,7 @@ static void collect_tokens_ast(SemanticTokenContext *ctx, AstNode *node) {
             const char *name = node->as.new_expr.class_name;
             if (name) {
                 int col = node->column > 0 ? node->column - 1 : 0;
-                result_add(result, node->line - 1, col, strlen(name),
-                           XLSP_TOKEN_CLASS, 0);
+                result_add(result, node->line - 1, col, strlen(name), XLSP_TOKEN_CLASS, 0);
             }
             for (int i = 0; i < node->as.new_expr.arg_count; i++) {
                 collect_tokens_ast(ctx, node->as.new_expr.arguments[i]);
@@ -603,12 +617,11 @@ static void collect_tokens_ast(SemanticTokenContext *ctx, AstNode *node) {
             const char *member_name = node->as.enum_access.member_name;
             int col = node->column > 0 ? node->column - 1 : 0;
             if (enum_name) {
-                result_add(result, node->line - 1, col, strlen(enum_name),
-                           XLSP_TOKEN_ENUM, 0);
+                result_add(result, node->line - 1, col, strlen(enum_name), XLSP_TOKEN_ENUM, 0);
             }
             if (member_name) {
-                result_add(result, node->line - 1, col + strlen(enum_name) + 1,
-                           strlen(member_name), XLSP_TOKEN_ENUM_MEMBER, XLSP_MOD_READONLY);
+                result_add(result, node->line - 1, col + strlen(enum_name) + 1, strlen(member_name),
+                           XLSP_TOKEN_ENUM_MEMBER, XLSP_MOD_READONLY);
             }
             break;
         }
@@ -622,15 +635,15 @@ static void collect_tokens_ast(SemanticTokenContext *ctx, AstNode *node) {
 XlspSemanticTokensResult *xlsp_analyze_semantic_tokens(XrLspDocument *doc) {
     XlspSemanticTokensResult *result = result_new();
 
-    if (!doc || !doc->content) return result;
+    if (!doc || !doc->content)
+        return result;
 
     // Use AST if available
     if (doc->ast) {
-        SemanticTokenContext ctx = {
-            .result = result,
-            .analyzer = doc->server ? doc->server->workspace_analyzer : NULL,
-            .current_scope = NULL
-        };
+        SemanticTokenContext ctx = {.result = result,
+                                    .analyzer =
+                                        doc->server ? doc->server->workspace_analyzer : NULL,
+                                    .current_scope = NULL};
 
         // Initialize scope from analyzer if available
         if (ctx.analyzer) {
@@ -663,11 +676,11 @@ uint32_t *xlsp_semantic_tokens_encode_raw(XlspSemanticTokensResult *result, int 
         int delta_line = t->line - prev_line;
         int delta_char = (delta_line == 0) ? (t->start_char - prev_char) : t->start_char;
         int idx = i * 5;
-        data[idx]     = (uint32_t)delta_line;
-        data[idx + 1] = (uint32_t)delta_char;
-        data[idx + 2] = (uint32_t)t->length;
-        data[idx + 3] = (uint32_t)t->type;
-        data[idx + 4] = (uint32_t)t->modifiers;
+        data[idx] = (uint32_t) delta_line;
+        data[idx + 1] = (uint32_t) delta_char;
+        data[idx + 2] = (uint32_t) t->length;
+        data[idx + 3] = (uint32_t) t->type;
+        data[idx + 4] = (uint32_t) t->modifiers;
         prev_line = t->line;
         prev_char = t->start_char;
     }

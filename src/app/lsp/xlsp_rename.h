@@ -23,7 +23,7 @@ XR_FUNC XrJsonValue *xlsp_analyze_prepare_rename(XrLspDocument *doc, XrLspPositi
 
 // Rename symbol at position (single-document, scope-aware)
 // Returns WorkspaceEdit JSON or NULL if rename not possible
-XR_FUNC XrJsonValue *xlsp_analyze_rename(XrLspServer *server, XrLspDocument *doc,
-                                          XrLspPosition pos, const char *new_name);
+XR_FUNC XrJsonValue *xlsp_analyze_rename(XrLspServer *server, XrLspDocument *doc, XrLspPosition pos,
+                                         const char *new_name);
 
-#endif // XLSP_RENAME_H
+#endif  // XLSP_RENAME_H

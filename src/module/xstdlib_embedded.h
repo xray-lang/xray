@@ -21,10 +21,10 @@
 
 // Get pre-compiled bytecode for a stdlib module.
 // Returns NULL if module not found or no bytecode available.
-XR_FUNC const uint8_t* xr_get_embedded_stdlib_bytecode(const char *module_name, size_t *out_size);
+XR_FUNC const uint8_t *xr_get_embedded_stdlib_bytecode(const char *module_name, size_t *out_size);
 
 // Get source code for a stdlib module (fallback).
 // Returns NULL if module not found.
-XR_FUNC const char* xr_get_embedded_stdlib(const char *module_name);
+XR_FUNC const char *xr_get_embedded_stdlib(const char *module_name);
 
 #endif

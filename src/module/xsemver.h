@@ -28,19 +28,19 @@ typedef struct XrSemVer {
     int major;
     int minor;
     int patch;
-    char *prerelease;       // e.g. alpha, beta.1
-    char *build;            // e.g. build.123
+    char *prerelease;  // e.g. alpha, beta.1
+    char *build;       // e.g. build.123
 } XrSemVer;
 
 typedef enum {
-    SEMVER_OP_EQ,           // =
-    SEMVER_OP_GT,           // >
-    SEMVER_OP_GE,           // >=
-    SEMVER_OP_LT,           // <
-    SEMVER_OP_LE,           // <=
-    SEMVER_OP_CARET,        // ^ compatible
-    SEMVER_OP_TILDE,        // ~ patch-level
-    SEMVER_OP_ANY           // *
+    SEMVER_OP_EQ,     // =
+    SEMVER_OP_GT,     // >
+    SEMVER_OP_GE,     // >=
+    SEMVER_OP_LT,     // <
+    SEMVER_OP_LE,     // <=
+    SEMVER_OP_CARET,  // ^ compatible
+    SEMVER_OP_TILDE,  // ~ patch-level
+    SEMVER_OP_ANY     // *
 } XrSemVerOp;
 
 typedef struct XrVersionConstraint {
@@ -71,7 +71,7 @@ XR_FUNC int xr_constraint_to_string(const XrVersionConstraint *constraint, char 
 XR_FUNC bool xr_semver_is_valid(const char *str);
 
 // Returns index of best matching version, or -1 if none match
-XR_FUNC int xr_semver_select_best(const XrSemVer *versions, int count, 
-                          const XrVersionConstraint *constraint);
+XR_FUNC int xr_semver_select_best(const XrSemVer *versions, int count,
+                                  const XrVersionConstraint *constraint);
 
-#endif // XSEMVER_H
+#endif  // XSEMVER_H

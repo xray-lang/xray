@@ -45,25 +45,25 @@ typedef enum {
 // - Breakpoint IDs: 1-999
 // - Variable reference IDs: 1000-4999 (avoid collision with frameId which starts at 0)
 // - Function breakpoint IDs: 5000+
-#define XDAP_VAR_REF_ID_BASE    1000
-#define XDAP_FUNC_BP_ID_BASE    5000
+#define XDAP_VAR_REF_ID_BASE 1000
+#define XDAP_FUNC_BP_ID_BASE 5000
 
 typedef enum {
     XDAP_REF_INVALID = 0,
-    XDAP_REF_SCOPE_LOCALS,   // Local variables scope
-    XDAP_REF_SCOPE_GLOBALS,  // Global variables scope
-    XDAP_REF_SCOPE_UPVALUES, // Closure upvalues scope
-    XDAP_REF_ARRAY,          // Array elements
-    XDAP_REF_MAP,            // Map key-value pairs
-    XDAP_REF_OBJECT,         // Object/Json properties
-    XDAP_REF_INSTANCE,       // Class instance fields
+    XDAP_REF_SCOPE_LOCALS,    // Local variables scope
+    XDAP_REF_SCOPE_GLOBALS,   // Global variables scope
+    XDAP_REF_SCOPE_UPVALUES,  // Closure upvalues scope
+    XDAP_REF_ARRAY,           // Array elements
+    XDAP_REF_MAP,             // Map key-value pairs
+    XDAP_REF_OBJECT,          // Object/Json properties
+    XDAP_REF_INSTANCE,        // Class instance fields
 } XdapVarRefType;
 
 typedef struct XrDebugVarRef {
-    int id;                  // Unique ID returned to DAP client
+    int id;  // Unique ID returned to DAP client
     XdapVarRefType type;
-    int frame_idx;           // Associated stack frame (-1 for global)
-    XrValue value;           // The value being referenced
+    int frame_idx;  // Associated stack frame (-1 for global)
+    XrValue value;  // The value being referenced
 } XrDebugVarRef;
 
 // Variable info returned by expansion
@@ -71,9 +71,9 @@ typedef struct XdapVarInfo {
     char *name;
     char *value;
     char *type;
-    int var_ref;             // >0 if expandable
-    int named_count;         // Number of named children
-    int indexed_count;       // Number of indexed children
+    int var_ref;        // >0 if expandable
+    int named_count;    // Number of named children
+    int indexed_count;  // Number of indexed children
 } XdapVarInfo;
 
 // Function breakpoint structure
@@ -98,20 +98,20 @@ typedef struct XrBpHashTable {
 
 typedef struct XrDebugState {
     // Execution control
-    bool enabled;               // Debug mode enabled
+    bool enabled;  // Debug mode enabled
     XrDebugAction current_action;
-    int step_depth;             // Frame depth for step-over/step-out
+    int step_depth;  // Frame depth for step-over/step-out
 
     // Breakpoints (list + hash table for fast lookup)
     struct XrBreakpoint {
         int id;
-        char *path;             // Source file path
-        int line;               // Line number
+        char *path;  // Source file path
+        int line;    // Line number
         bool enabled;
-        char *condition;        // Optional condition expression
-        char *log_message;      // Log message for logpoints (NULL = normal breakpoint)
-        int hit_count;          // Number of times this breakpoint was hit
-        char *hit_condition;    // Hit count condition (e.g., ">5", "==10")
+        char *condition;            // Optional condition expression
+        char *log_message;          // Log message for logpoints (NULL = normal breakpoint)
+        int hit_count;              // Number of times this breakpoint was hit
+        char *hit_condition;        // Hit count condition (e.g., ">5", "==10")
         struct XrBreakpoint *next;  // For linked list
     } *breakpoints;
     int next_bp_id;
@@ -134,21 +134,21 @@ typedef struct XrDebugState {
     // Last stop location (for step-over, owned copy via strdup)
     char *last_path;
     int last_line;
-    char *last_func_name;       // Function name at last stop (owned)
+    char *last_func_name;  // Function name at last stop (owned)
 
     // Exception breakpoints
-    bool break_on_uncaught;     // Break on uncaught exceptions
-    bool break_on_caught;       // Break on caught exceptions
+    bool break_on_uncaught;  // Break on uncaught exceptions
+    bool break_on_caught;    // Break on caught exceptions
 
     // Current exception info (when stopped on exception)
     char *exception_message;
     bool exception_is_uncaught;
 
     // Variable references for object expansion (dynamic array, O(1) lookup by ID)
-    XrDebugVarRef *var_refs;    // Array indexed by (id - XDAP_VAR_REF_ID_BASE)
-    int var_refs_count;         // Number of allocated refs
-    int var_refs_capacity;      // Allocated capacity
-    int next_var_ref_id;        // Next ID (starts at XDAP_VAR_REF_ID_BASE)
+    XrDebugVarRef *var_refs;  // Array indexed by (id - XDAP_VAR_REF_ID_BASE)
+    int var_refs_count;       // Number of allocated refs
+    int var_refs_capacity;    // Allocated capacity
+    int next_var_ref_id;      // Next ID (starts at XDAP_VAR_REF_ID_BASE)
 
     // Async stack trace scratch buffers (per-isolate, avoids global state)
     const char *async_names[8];
@@ -182,16 +182,17 @@ XR_FUNC void xr_bp_free_fields(struct XrBreakpoint *bp);
 XR_FUNC struct XrBreakpoint *xr_bp_hash_find(XrBpHashTable *table, const char *path, int line);
 
 // Breakpoint management
-XR_FUNC int xr_debug_add_breakpoint(XrayIsolate *isolate, const char *path, int line, const char *condition);
+XR_FUNC int xr_debug_add_breakpoint(XrayIsolate *isolate, const char *path, int line,
+                                    const char *condition);
 XR_FUNC int xr_debug_add_breakpoint_ex(XrayIsolate *isolate, const char *path, int line,
-                                const char *condition, const char *log_message,
-                                const char *hit_condition);
+                                       const char *condition, const char *log_message,
+                                       const char *hit_condition);
 XR_FUNC bool xr_debug_remove_breakpoint(XrayIsolate *isolate, int id);
 XR_FUNC void xr_debug_clear_breakpoints(XrayIsolate *isolate, const char *path);
 
 // Returns: 0 = no breakpoint, 1 = should break, 2 = logpoint (message printed)
 XR_FUNC int xr_debug_check_breakpoint_ex(XrayIsolate *isolate, const char *path, int line,
-                                  char **out_log_message);
+                                         char **out_log_message);
 XR_FUNC bool xr_debug_check_breakpoint(XrayIsolate *isolate, const char *path, int line);
 
 // Watch expression management
@@ -211,14 +212,13 @@ XR_FUNC XdapResumeResult xr_debug_resume_execution(XrayIsolate *isolate);
 // Stack inspection
 XR_FUNC int xr_debug_get_stack_depth(XrayIsolate *isolate);
 XR_FUNC bool xr_debug_get_frame_info(XrayIsolate *isolate, int frame_idx,
-                              const char **out_func_name,
-                              const char **out_source,
-                              int *out_line);
+                                     const char **out_func_name, const char **out_source,
+                                     int *out_line);
 
 // Variable inspection
 XR_FUNC int xr_debug_get_local_count(XrayIsolate *isolate, int frame_idx);
 XR_FUNC bool xr_debug_get_local(XrayIsolate *isolate, int frame_idx, int local_idx,
-                         const char **out_name, char **out_value, char **out_type);
+                                const char **out_name, char **out_value, char **out_type);
 
 // Value formatting (shared with xdap_inspect and xdap_eval)
 XR_FUNC const char *xr_value_type_name(XrValue val);
@@ -232,17 +232,18 @@ XR_FUNC char *xr_debug_evaluate(XrayIsolate *isolate, const char *expression, in
 
 // Enhanced expression evaluation with expandable result support
 // Returns result string, sets out_var_ref if result is expandable (>0)
-XR_FUNC char *xr_debug_evaluate_ex(XrayIsolate *isolate, const char *expression,
-                            int frame_idx, int *out_var_ref);
+XR_FUNC char *xr_debug_evaluate_ex(XrayIsolate *isolate, const char *expression, int frame_idx,
+                                   int *out_var_ref);
 
 // Exception breakpoints
 XR_FUNC void xr_debug_set_exception_breakpoints(XrayIsolate *isolate, bool uncaught, bool caught);
-XR_FUNC XrDebugAction xr_debug_on_exception(XrayIsolate *isolate, const char *message, bool is_uncaught);
+XR_FUNC XrDebugAction xr_debug_on_exception(XrayIsolate *isolate, const char *message,
+                                            bool is_uncaught);
 
 // Coroutine debugging
 XR_FUNC int xr_debug_get_coro_count(XrayIsolate *isolate);
-XR_FUNC bool xr_debug_get_coro_info(XrayIsolate *isolate, int coro_idx,
-                             int *out_id, const char **out_name, const char **out_state);
+XR_FUNC bool xr_debug_get_coro_info(XrayIsolate *isolate, int coro_idx, int *out_id,
+                                    const char **out_name, const char **out_state);
 
 // Hot reload
 XR_FUNC bool xr_debug_hot_reload(XrayIsolate *isolate, const char *path);
@@ -253,16 +254,16 @@ XR_FUNC bool xr_debug_hot_reload(XrayIsolate *isolate, const char *path);
 
 // Disassembled instruction info
 typedef struct XdapDisasmInstr {
-    int offset;             // Instruction offset (address)
-    int line;               // Source line number (-1 if unknown)
-    char *instruction;      // Disassembled instruction text
-    char *comment;          // Optional comment (constant value, etc.)
+    int offset;         // Instruction offset (address)
+    int line;           // Source line number (-1 if unknown)
+    char *instruction;  // Disassembled instruction text
+    char *comment;      // Optional comment (constant value, etc.)
 } XdapDisasmInstr;
 
 // Get disassembly for current frame
 // Returns array of instructions, caller must free with xr_debug_free_disasm()
 XR_FUNC int xr_debug_get_disassembly(XrayIsolate *isolate, int frame_idx,
-                              XdapDisasmInstr **out_instrs, int *out_count);
+                                     XdapDisasmInstr **out_instrs, int *out_count);
 
 // Get current instruction offset (PC) for frame
 XR_FUNC int xr_debug_get_current_pc(XrayIsolate *isolate, int frame_idx);
@@ -277,17 +278,16 @@ XR_FUNC void xr_debug_free_disasm(XdapDisasmInstr *instrs, int count);
 // Get async stack trace (spawn point of current coroutine)
 // Returns true if async stack is available
 // Caller must NOT free the returned arrays (they point to coroutine internal data)
-XR_FUNC bool xr_debug_get_async_stack(XrayIsolate *isolate, int *out_depth,
-                               const char ***out_names, const char ***out_files,
-                               int **out_lines);
+XR_FUNC bool xr_debug_get_async_stack(XrayIsolate *isolate, int *out_depth, const char ***out_names,
+                                      const char ***out_files, int **out_lines);
 
 // ============================================================================
 // Variable Reference API (for object expansion)
 // ============================================================================
 
 // Create a variable reference, returns ID for DAP client
-XR_FUNC int xr_debug_create_var_ref(XrayIsolate *isolate, XdapVarRefType type,
-                             int frame_idx, XrValue value);
+XR_FUNC int xr_debug_create_var_ref(XrayIsolate *isolate, XdapVarRefType type, int frame_idx,
+                                    XrValue value);
 
 // Get variable reference by ID
 XR_FUNC XrDebugVarRef *xr_debug_get_var_ref(XrayIsolate *isolate, int ref_id);
@@ -297,8 +297,7 @@ XR_FUNC void xr_debug_clear_var_refs(XrayIsolate *isolate);
 
 // Get children of a variable reference
 // Returns count, caller must free each item and the array
-XR_FUNC int xr_debug_get_var_children(XrayIsolate *isolate, int ref_id,
-                               XdapVarInfo **out_vars);
+XR_FUNC int xr_debug_get_var_children(XrayIsolate *isolate, int ref_id, XdapVarInfo **out_vars);
 
 // Free a single XdapVarInfo
 XR_FUNC void xr_debug_var_info_free(XdapVarInfo *info);
@@ -313,13 +312,13 @@ XR_FUNC bool xr_debug_value_is_expandable(XrayIsolate *isolate, XrValue value);
 XR_FUNC XdapVarRefType xr_debug_get_ref_type(XrValue value);
 
 // Set variable value (returns new value string, caller must free)
-XR_FUNC char *xr_debug_set_variable(XrayIsolate *isolate, int var_ref,
-                             const char *name, const char *value);
+XR_FUNC char *xr_debug_set_variable(XrayIsolate *isolate, int var_ref, const char *name,
+                                    const char *value);
 
 // Function breakpoints
 XR_FUNC int xr_debug_add_function_breakpoint(XrayIsolate *isolate, const char *func_name,
-                                      const char *condition);
+                                             const char *condition);
 XR_FUNC void xr_debug_clear_function_breakpoints(XrayIsolate *isolate);
 XR_FUNC bool xr_debug_check_function_breakpoint(XrayIsolate *isolate, const char *func_name);
 
-#endif // XDAP_DEBUG_H
+#endif  // XDAP_DEBUG_H

@@ -32,9 +32,9 @@ struct XrCoroutine;
 // determined by proto->upvalues at allocation time.
 typedef struct XrClosure {
     XrGCHeader gc;
-    XrProto *proto;              // compiled function prototype
-    uint16_t upval_count;        // number of entries in upvals[]
-    XrValue upvals[];            // flat upvalue array (const values + cell refs)
+    XrProto *proto;        // compiled function prototype
+    uint16_t upval_count;  // number of entries in upvals[]
+    XrValue upvals[];      // flat upvalue array (const values + cell refs)
 } XrClosure;
 
 // Create a closure and allocate its upvalue array.
@@ -43,4 +43,4 @@ typedef struct XrClosure {
 XR_FUNC XrClosure *xr_closure_new(struct XrayIsolate *isolate, XrProto *proto,
                                   struct XrCoroutine *coro);
 
-#endif // XCLOSURE_H
+#endif  // XCLOSURE_H

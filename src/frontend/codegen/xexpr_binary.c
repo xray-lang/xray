@@ -30,8 +30,8 @@
 #include <stdio.h>
 
 // Thin wrapper for the public xexpr_ensure_boxed
-static inline int ensure_boxed(XrCompilerContext *ctx, XrCompiler *compiler,
-                               XrExprDesc *e, int reg) {
+static inline int ensure_boxed(XrCompilerContext *ctx, XrCompiler *compiler, XrExprDesc *e,
+                               int reg) {
     return xexpr_ensure_boxed(ctx, compiler, e, reg);
 }
 
@@ -182,7 +182,8 @@ static int compile_concat_chain(XrCompilerContext *ctx, XrCompiler *compiler, As
     // Rule 3: check if all operands are confirmed string for CONCAT optimization
     bool all_confirmed_string = true;
     for (int i = 0; i < count; i++) {
-        if (operands[i]->type == AST_LITERAL_STRING) continue;
+        if (operands[i]->type == AST_LITERAL_STRING)
+            continue;
         XrType *ct = get_expr_type(ctx, compiler, operands[i]);
         if (!ct || !XR_TYPE_IS_STRING(ct)) {
             all_confirmed_string = false;
@@ -328,7 +329,8 @@ int compile_or(XrCompilerContext *ctx, XrCompiler *compiler, BinaryNode *node) {
  *
  * This avoids MOVE instruction in `var x = a + b` scenario.
  */
-XrExprDesc compile_binary(XrCompilerContext *ctx, XrCompiler *compiler, BinaryNode *node, AstNodeType type) {
+XrExprDesc compile_binary(XrCompilerContext *ctx, XrCompiler *compiler, BinaryNode *node,
+                          AstNodeType type) {
     XR_DCHECK(ctx != NULL, "compile_binary: NULL ctx");
     XR_DCHECK(compiler != NULL, "compile_binary: NULL compiler");
     XR_DCHECK(node != NULL, "compile_binary: NULL node");
@@ -344,8 +346,10 @@ XrExprDesc compile_binary(XrCompilerContext *ctx, XrCompiler *compiler, BinaryNo
         if (lct && rct) {
             bool li = XR_TYPE_IS_INT(lct), lf = XR_TYPE_IS_FLOAT(lct);
             bool ri = XR_TYPE_IS_INT(rct), rf = XR_TYPE_IS_FLOAT(rct);
-            if (li && ri) result_ct = (XrType *)xr_type_new_int(NULL);
-            else if ((li || lf) && (ri || rf)) result_ct = (XrType *)xr_type_new_float(NULL);
+            if (li && ri)
+                result_ct = (XrType *) xr_type_new_int(NULL);
+            else if ((li || lf) && (ri || rf))
+                result_ct = (XrType *) xr_type_new_float(NULL);
         }
     }
 
@@ -381,10 +385,10 @@ XrExprDesc compile_binary(XrCompilerContext *ctx, XrCompiler *compiler, BinaryNo
     // ===== Optimization 0b: string repeat OP_STR_REPEAT =====
     // Detect pattern: string * int or int * string
     if (type == AST_BINARY_MUL) {
-        bool is_str_mul_int = (node->left->type == AST_LITERAL_STRING &&
-                               node->right->type == AST_LITERAL_INT);
-        bool is_int_mul_str = (node->left->type == AST_LITERAL_INT &&
-                               node->right->type == AST_LITERAL_STRING);
+        bool is_str_mul_int =
+            (node->left->type == AST_LITERAL_STRING && node->right->type == AST_LITERAL_INT);
+        bool is_int_mul_str =
+            (node->left->type == AST_LITERAL_INT && node->right->type == AST_LITERAL_STRING);
 
         if (is_str_mul_int || is_int_mul_str) {
             // Compile string and integer to registers
@@ -443,28 +447,39 @@ XrExprDesc compile_binary(XrCompilerContext *ctx, XrCompiler *compiler, BinaryNo
     // ===== Optimization 1: constant folding =====
     if ((node->left->type == AST_LITERAL_INT || node->left->type == AST_LITERAL_FLOAT) &&
         (node->right->type == AST_LITERAL_INT || node->right->type == AST_LITERAL_FLOAT)) {
-
-        LiteralNode *left_lit = (LiteralNode *)&node->left->as;
-        LiteralNode *right_lit = (LiteralNode *)&node->right->as;
+        LiteralNode *left_lit = (LiteralNode *) &node->left->as;
+        LiteralNode *right_lit = (LiteralNode *) &node->right->as;
 
         TokenType op_token;
         switch (type) {
-            case AST_BINARY_ADD: op_token = TK_PLUS; break;
-            case AST_BINARY_SUB: op_token = TK_MINUS; break;
-            case AST_BINARY_MUL: op_token = TK_STAR; break;
-            case AST_BINARY_DIV: op_token = TK_SLASH; break;
-            case AST_BINARY_MOD: op_token = TK_PERCENT; break;
-            default: op_token = TK_EOF; break;
+            case AST_BINARY_ADD:
+                op_token = TK_PLUS;
+                break;
+            case AST_BINARY_SUB:
+                op_token = TK_MINUS;
+                break;
+            case AST_BINARY_MUL:
+                op_token = TK_STAR;
+                break;
+            case AST_BINARY_DIV:
+                op_token = TK_SLASH;
+                break;
+            case AST_BINARY_MOD:
+                op_token = TK_PERCENT;
+                break;
+            default:
+                op_token = TK_EOF;
+                break;
         }
 
         if (op_token != TK_EOF) {
-            XrValue left_val = (node->left->type == AST_LITERAL_INT) ?
-                xr_int(left_lit->raw_value.int_val) :
-                xr_float(left_lit->raw_value.float_val);
+            XrValue left_val = (node->left->type == AST_LITERAL_INT)
+                                   ? xr_int(left_lit->raw_value.int_val)
+                                   : xr_float(left_lit->raw_value.float_val);
 
-            XrValue right_val = (node->right->type == AST_LITERAL_INT) ?
-                xr_int(right_lit->raw_value.int_val) :
-                xr_float(right_lit->raw_value.float_val);
+            XrValue right_val = (node->right->type == AST_LITERAL_INT)
+                                    ? xr_int(right_lit->raw_value.int_val)
+                                    : xr_float(right_lit->raw_value.float_val);
 
             XrValue result;
             if (xr_opt_fold_binary(op_token, left_val, right_val, &result)) {
@@ -499,7 +514,7 @@ XrExprDesc compile_binary(XrCompilerContext *ctx, XrCompiler *compiler, BinaryNo
             } else {
                 // Also check ConstEntry (top-level / upvalue constants)
                 XrString *ns = xr_compile_time_intern(ctx->X, op->as.variable.name,
-                                                       strlen(op->as.variable.name));
+                                                      strlen(op->as.variable.name));
                 ConstEntry *ce = xr_compiler_ctx_find_const(ctx, ns);
                 if (ce) {
                     if (ce->type == CONST_INT) {
@@ -527,11 +542,11 @@ XrExprDesc compile_binary(XrCompilerContext *ctx, XrCompiler *compiler, BinaryNo
 
     // ===== Optimization 2: immediate operand optimization (small integer: -128~127) =====
     if (node->right->type == AST_LITERAL_INT) {
-        LiteralNode *lit = (LiteralNode *)&node->right->as;
+        LiteralNode *lit = (LiteralNode *) &node->right->as;
         xr_Integer value = lit->raw_value.int_val;
 
         if (value >= -128 && value <= 127) {
-            OpCode op = (OpCode)0;
+            OpCode op = (OpCode) 0;
             bool use_optimized = true;
 
             // Exclude string multiplication (handled by OP_STR_REPEAT)
@@ -543,17 +558,25 @@ XrExprDesc compile_binary(XrCompilerContext *ctx, XrCompiler *compiler, BinaryNo
             }
 
             switch (type) {
-                case AST_BINARY_ADD: op = OP_ADDI; break;
-                case AST_BINARY_SUB: op = OP_SUBI; break;
-                case AST_BINARY_MUL: op = OP_MULI; break;
-                default: use_optimized = false; break;
+                case AST_BINARY_ADD:
+                    op = OP_ADDI;
+                    break;
+                case AST_BINARY_SUB:
+                    op = OP_SUBI;
+                    break;
+                case AST_BINARY_MUL:
+                    op = OP_MULI;
+                    break;
+                default:
+                    use_optimized = false;
+                    break;
             }
 
             if (use_optimized) {
                 XrExprDesc left_e = xr_compile_expr(ctx, compiler, node->left);
                 int rb = xexpr_to_anyreg_readonly(ctx, compiler, &left_e);
 
-                uint8_t c_val = (uint8_t)((int)value & 0xFF);
+                uint8_t c_val = (uint8_t) ((int) value & 0xFF);
                 int pc = emit_abc(compiler->emitter, op, 0, rb, c_val);
 
                 e.kind = XEXPR_RELOC;
@@ -567,15 +590,25 @@ XrExprDesc compile_binary(XrCompilerContext *ctx, XrCompiler *compiler, BinaryNo
     // ===== Optimization 3: constant table optimization (ADDK/SUBK/MULK/DIVK) =====
     // Right operand is numeric constant (float or integer out of immediate range)
     if (node->right->type == AST_LITERAL_INT || node->right->type == AST_LITERAL_FLOAT) {
-        OpCode op = (OpCode)0;
+        OpCode op = (OpCode) 0;
         bool use_k_op = true;
 
         switch (type) {
-            case AST_BINARY_ADD: op = OP_ADDK; break;
-            case AST_BINARY_SUB: op = OP_SUBK; break;
-            case AST_BINARY_MUL: op = OP_MULK; break;
-            case AST_BINARY_DIV: op = OP_DIVK; break;
-            default: use_k_op = false; break;
+            case AST_BINARY_ADD:
+                op = OP_ADDK;
+                break;
+            case AST_BINARY_SUB:
+                op = OP_SUBK;
+                break;
+            case AST_BINARY_MUL:
+                op = OP_MULK;
+                break;
+            case AST_BINARY_DIV:
+                op = OP_DIVK;
+                break;
+            default:
+                use_k_op = false;
+                break;
         }
 
         if (use_k_op) {
@@ -584,10 +617,10 @@ XrExprDesc compile_binary(XrCompilerContext *ctx, XrCompiler *compiler, BinaryNo
             int rb = xexpr_to_anyreg_readonly(ctx, compiler, &left_e);
 
             // Add constant to constant table
-            LiteralNode *lit = (LiteralNode *)&node->right->as;
-            XrValue kval = (node->right->type == AST_LITERAL_INT) ?
-                xr_int(lit->raw_value.int_val) :
-                xr_float(lit->raw_value.float_val);
+            LiteralNode *lit = (LiteralNode *) &node->right->as;
+            XrValue kval = (node->right->type == AST_LITERAL_INT)
+                               ? xr_int(lit->raw_value.int_val)
+                               : xr_float(lit->raw_value.float_val);
             int kidx = xr_vm_proto_add_constant(compiler->proto, kval);
 
             // Emit ADDK/SUBK/MULK/DIVK, A=0 pending relocation
@@ -625,16 +658,18 @@ XrExprDesc compile_binary(XrCompilerContext *ctx, XrCompiler *compiler, BinaryNo
             XrExprDesc left_e = xr_compile_expr(ctx, compiler, node->left);
             int rb_s = xexpr_to_anyreg(ctx, compiler, &left_e);
             xemit_strbuf_append(compiler->emitter, buf_reg, rb_s);
-            if (rb_s != buf_reg) reg_free(compiler, rb_s);
+            if (rb_s != buf_reg)
+                reg_free(compiler, rb_s);
 
             XrExprDesc right_e = xr_compile_expr(ctx, compiler, node->right);
             int rc_s = xexpr_to_anyreg(ctx, compiler, &right_e);
             xemit_strbuf_append(compiler->emitter, buf_reg, rc_s);
-            if (rc_s != buf_reg) reg_free(compiler, rc_s);
+            if (rc_s != buf_reg)
+                reg_free(compiler, rc_s);
 
             xemit_strbuf_finish(compiler->emitter, buf_reg);
             xexpr_init(&e, XEXPR_TEMP, buf_reg);
-            e.compile_type = (XrType *)xr_type_new_string(NULL);
+            e.compile_type = (XrType *) xr_type_new_string(NULL);
             return e;
         }
 
@@ -643,8 +678,8 @@ XrExprDesc compile_binary(XrCompilerContext *ctx, XrCompiler *compiler, BinaryNo
         if ((left_str && !right_str && !right_unknown) ||
             (!left_str && !left_unknown && right_str)) {
             xr_compiler_error(ctx, compiler,
-                "operator '+' requires both operands to be the same type; "
-                "use \"${expr}\" interpolation or .toString() for string conversion");
+                              "operator '+' requires both operands to be the same type; "
+                              "use \"${expr}\" interpolation or .toString() for string conversion");
             e.kind = XEXPR_VOID;
             return e;
         }
@@ -653,7 +688,7 @@ XrExprDesc compile_binary(XrCompilerContext *ctx, XrCompiler *compiler, BinaryNo
         if ((left_num && !right_num && !right_unknown && !right_str) ||
             (!left_num && !left_unknown && !left_str && right_num)) {
             xr_compiler_error(ctx, compiler,
-                "operator '+' requires both operands to be numeric or both string");
+                              "operator '+' requires both operands to be numeric or both string");
             e.kind = XEXPR_VOID;
             return e;
         }
@@ -671,16 +706,36 @@ XrExprDesc compile_binary(XrCompilerContext *ctx, XrCompiler *compiler, BinaryNo
 
     OpCode op;
     switch (type) {
-        case AST_BINARY_ADD:    op = OP_ADD; break;
-        case AST_BINARY_SUB:    op = OP_SUB; break;
-        case AST_BINARY_MUL:    op = OP_MUL; break;
-        case AST_BINARY_DIV:    op = OP_DIV; break;
-        case AST_BINARY_MOD:    op = OP_MOD; break;
-        case AST_BINARY_BAND:   op = OP_BAND; break;
-        case AST_BINARY_BOR:    op = OP_BOR; break;
-        case AST_BINARY_BXOR:   op = OP_BXOR; break;
-        case AST_BINARY_LSHIFT: op = OP_SHL; break;
-        case AST_BINARY_RSHIFT: op = OP_SHR; break;
+        case AST_BINARY_ADD:
+            op = OP_ADD;
+            break;
+        case AST_BINARY_SUB:
+            op = OP_SUB;
+            break;
+        case AST_BINARY_MUL:
+            op = OP_MUL;
+            break;
+        case AST_BINARY_DIV:
+            op = OP_DIV;
+            break;
+        case AST_BINARY_MOD:
+            op = OP_MOD;
+            break;
+        case AST_BINARY_BAND:
+            op = OP_BAND;
+            break;
+        case AST_BINARY_BOR:
+            op = OP_BOR;
+            break;
+        case AST_BINARY_BXOR:
+            op = OP_BXOR;
+            break;
+        case AST_BINARY_LSHIFT:
+            op = OP_SHL;
+            break;
+        case AST_BINARY_RSHIFT:
+            op = OP_SHR;
+            break;
 
         default:
             xr_log_warning("compiler", "unknown binary operator: %d", type);
@@ -709,7 +764,8 @@ XrExprDesc compile_binary(XrCompilerContext *ctx, XrCompiler *compiler, BinaryNo
  *
  * This function still returns int (register) for backward compatibility.
  */
-static int compile_comparison_internal(XrCompilerContext *ctx, XrCompiler *compiler, BinaryNode *node, AstNodeType type) {
+static int compile_comparison_internal(XrCompilerContext *ctx, XrCompiler *compiler,
+                                       BinaryNode *node, AstNodeType type) {
     // ===== Operator overload recursion warning =====
     // Check if using same operator inside operator method
     if (ctx->current_operator != NULL) {
@@ -717,15 +773,32 @@ static int compile_comparison_internal(XrCompilerContext *ctx, XrCompiler *compi
 
         // Determine currently used operator
         switch (type) {
-            case AST_BINARY_EQ: op_name = "=="; break;
-            case AST_BINARY_NE: op_name = "!="; break;
-            case AST_BINARY_LT: op_name = "<"; break;
-            case AST_BINARY_LE: op_name = "<="; break;
-            case AST_BINARY_GT: op_name = ">"; break;
-            case AST_BINARY_GE: op_name = ">="; break;
-            case AST_BINARY_EQ_STRICT: op_name = "==="; break;
-            case AST_BINARY_NE_STRICT: op_name = "!=="; break;
-            default: break;
+            case AST_BINARY_EQ:
+                op_name = "==";
+                break;
+            case AST_BINARY_NE:
+                op_name = "!=";
+                break;
+            case AST_BINARY_LT:
+                op_name = "<";
+                break;
+            case AST_BINARY_LE:
+                op_name = "<=";
+                break;
+            case AST_BINARY_GT:
+                op_name = ">";
+                break;
+            case AST_BINARY_GE:
+                op_name = ">=";
+                break;
+            case AST_BINARY_EQ_STRICT:
+                op_name = "===";
+                break;
+            case AST_BINARY_NE_STRICT:
+                op_name = "!==";
+                break;
+            default:
+                break;
         }
 
         // If using == inside operator== (but not ===), emit warning
@@ -734,16 +807,12 @@ static int compile_comparison_internal(XrCompilerContext *ctx, XrCompiler *compi
             if (type != AST_BINARY_EQ_STRICT && type != AST_BINARY_NE_STRICT) {
                 char msg[256];
                 snprintf(msg, sizeof(msg),
-                    "using %s inside operator%s may cause infinite recursion; "
-                    "use %s%s for reference comparison, or ensure recursion is intentional",
-                    ctx->current_operator,
-                    op_name,
-                    op_name,
-                    (type == AST_BINARY_EQ || type == AST_BINARY_NE) ? "=" : "");
-                xr_diag_print(XR_DIAG_WARNING, 0, msg,
-                              ctx->source_file, ctx->current_line,
-                              ctx->current_column > 0 ? ctx->current_column : 1,
-                              0, NULL, NULL);
+                         "using %s inside operator%s may cause infinite recursion; "
+                         "use %s%s for reference comparison, or ensure recursion is intentional",
+                         ctx->current_operator, op_name, op_name,
+                         (type == AST_BINARY_EQ || type == AST_BINARY_NE) ? "=" : "");
+                xr_diag_print(XR_DIAG_WARNING, 0, msg, ctx->source_file, ctx->current_line,
+                              ctx->current_column > 0 ? ctx->current_column : 1, 0, NULL, NULL);
             }
         }
     }
@@ -751,31 +820,48 @@ static int compile_comparison_internal(XrCompilerContext *ctx, XrCompiler *compi
     // ===== Optimization 1: constant folding =====
     if ((node->left->type == AST_LITERAL_INT || node->left->type == AST_LITERAL_FLOAT) &&
         (node->right->type == AST_LITERAL_INT || node->right->type == AST_LITERAL_FLOAT)) {
-
-        LiteralNode *left_lit = (LiteralNode *)&node->left->as;
-        LiteralNode *right_lit = (LiteralNode *)&node->right->as;
+        LiteralNode *left_lit = (LiteralNode *) &node->left->as;
+        LiteralNode *right_lit = (LiteralNode *) &node->right->as;
 
         // Convert to XrValue
-        XrValue left_val = (node->left->type == AST_LITERAL_INT) ?
-            xr_int(left_lit->raw_value.int_val) :
-            xr_float(left_lit->raw_value.float_val);
+        XrValue left_val = (node->left->type == AST_LITERAL_INT)
+                               ? xr_int(left_lit->raw_value.int_val)
+                               : xr_float(left_lit->raw_value.float_val);
 
-        XrValue right_val = (node->right->type == AST_LITERAL_INT) ?
-            xr_int(right_lit->raw_value.int_val) :
-            xr_float(right_lit->raw_value.float_val);
+        XrValue right_val = (node->right->type == AST_LITERAL_INT)
+                                ? xr_int(right_lit->raw_value.int_val)
+                                : xr_float(right_lit->raw_value.float_val);
 
         // Convert AST type to Token type
         TokenType op_token;
         switch (type) {
-            case AST_BINARY_EQ: op_token = TK_EQ; break;
-            case AST_BINARY_NE: op_token = TK_NE; break;
-            case AST_BINARY_EQ_STRICT: op_token = TK_EQ_STRICT; break;
-            case AST_BINARY_NE_STRICT: op_token = TK_NE_STRICT; break;
-            case AST_BINARY_LT: op_token = TK_LT; break;
-            case AST_BINARY_LE: op_token = TK_LE; break;
-            case AST_BINARY_GT: op_token = TK_GT; break;
-            case AST_BINARY_GE: op_token = TK_GE; break;
-            default: op_token = TK_EOF; break;
+            case AST_BINARY_EQ:
+                op_token = TK_EQ;
+                break;
+            case AST_BINARY_NE:
+                op_token = TK_NE;
+                break;
+            case AST_BINARY_EQ_STRICT:
+                op_token = TK_EQ_STRICT;
+                break;
+            case AST_BINARY_NE_STRICT:
+                op_token = TK_NE_STRICT;
+                break;
+            case AST_BINARY_LT:
+                op_token = TK_LT;
+                break;
+            case AST_BINARY_LE:
+                op_token = TK_LE;
+                break;
+            case AST_BINARY_GT:
+                op_token = TK_GT;
+                break;
+            case AST_BINARY_GE:
+                op_token = TK_GE;
+                break;
+            default:
+                op_token = TK_EOF;
+                break;
         }
 
         // Try constant folding
@@ -796,9 +882,8 @@ static int compile_comparison_internal(XrCompilerContext *ctx, XrCompiler *compi
     // ===== Optimization 2: null comparison optimization =====
     // Use OP_ISNULL_SET: R[A] = (R[B] == null), single instruction
     if (node->right->type == AST_LITERAL_NULL &&
-        (type == AST_BINARY_EQ || type == AST_BINARY_NE ||
-         type == AST_BINARY_EQ_STRICT || type == AST_BINARY_NE_STRICT)) {
-
+        (type == AST_BINARY_EQ || type == AST_BINARY_NE || type == AST_BINARY_EQ_STRICT ||
+         type == AST_BINARY_NE_STRICT)) {
         // Compile left operand
         XrExprDesc left_e = xr_compile_expr(ctx, compiler, node->left);
         int rb = xexpr_to_anyreg_readonly(ctx, compiler, &left_e);
@@ -819,9 +904,10 @@ static int compile_comparison_internal(XrCompilerContext *ctx, XrCompiler *compi
     }
 
     // ===== Optimization 3: immediate comparison =====
-    // Optimization: if right operand is small integer constant, use immediate comparison instruction
+    // Optimization: if right operand is small integer constant, use immediate comparison
+    // instruction
     if (node->right->type == AST_LITERAL_INT) {
-        LiteralNode *lit = (LiteralNode *)&node->right->as;
+        LiteralNode *lit = (LiteralNode *) &node->right->as;
         xr_Integer value = lit->raw_value.int_val;
 
         // Small integer range
@@ -868,7 +954,7 @@ static int compile_comparison_internal(XrCompilerContext *ctx, XrCompiler *compi
 
             // Format: CMP_IMM R[rb] imm 1 (using emit_absc wrapper)
             // ABsC format: A=rb, B=(int)value (full value), sC=1
-            uint8_t c_imm = (uint8_t)((int)value & 0xFF);
+            uint8_t c_imm = (uint8_t) ((int) value & 0xFF);
             emit_abc(compiler->emitter, op_imm, rb, c_imm, 1);
 
             // Jump when comparison is true
@@ -918,14 +1004,40 @@ general_path:
 
         OpCode op;
         switch (type) {
-            case AST_BINARY_EQ: op = OP_CMP_EQ; break;
-            case AST_BINARY_NE: op = OP_CMP_NE; break;
-            case AST_BINARY_EQ_STRICT: op = OP_CMP_EQ_STRICT; break;
-            case AST_BINARY_NE_STRICT: op = OP_CMP_NE_STRICT; break;
-            case AST_BINARY_LT: op = OP_CMP_LT; break;
-            case AST_BINARY_LE: op = OP_CMP_LE; break;
-            case AST_BINARY_GT: op = OP_CMP_LT; { int tmp = rb; rb = rc; rc = tmp; } break;
-            case AST_BINARY_GE: op = OP_CMP_LE; { int tmp = rb; rb = rc; rc = tmp; } break;
+            case AST_BINARY_EQ:
+                op = OP_CMP_EQ;
+                break;
+            case AST_BINARY_NE:
+                op = OP_CMP_NE;
+                break;
+            case AST_BINARY_EQ_STRICT:
+                op = OP_CMP_EQ_STRICT;
+                break;
+            case AST_BINARY_NE_STRICT:
+                op = OP_CMP_NE_STRICT;
+                break;
+            case AST_BINARY_LT:
+                op = OP_CMP_LT;
+                break;
+            case AST_BINARY_LE:
+                op = OP_CMP_LE;
+                break;
+            case AST_BINARY_GT:
+                op = OP_CMP_LT;
+                {
+                    int tmp = rb;
+                    rb = rc;
+                    rc = tmp;
+                }
+                break;
+            case AST_BINARY_GE:
+                op = OP_CMP_LE;
+                {
+                    int tmp = rb;
+                    rb = rc;
+                    rc = tmp;
+                }
+                break;
 
             default:
                 xr_log_warning("compiler", "unknown comparison operator: %d", type);
@@ -944,7 +1056,8 @@ general_path:
 /*
  * Compile comparison operation (returns XrExprDesc)
  */
-XrExprDesc compile_comparison(XrCompilerContext *ctx, XrCompiler *compiler, BinaryNode *node, AstNodeType type) {
+XrExprDesc compile_comparison(XrCompilerContext *ctx, XrCompiler *compiler, BinaryNode *node,
+                              AstNodeType type) {
     XrExprDesc e = {0};
     int reg = compile_comparison_internal(ctx, compiler, node, type);
     xexpr_init(&e, XEXPR_TEMP, reg);
@@ -966,17 +1079,27 @@ XrExprDesc compile_is_expr(XrCompilerContext *ctx, XrCompiler *compiler, IsExprN
     // Get the type kind as XrTypeId constant
     int type_kind = -1;  // -1 means unknown type (always false)
     if (node->type) {
-        XrType *t = (XrType*)node->type;
-        if (t->kind == XR_KIND_INT) type_kind = XR_TID_INT;
-        else if (t->kind == XR_KIND_FLOAT) type_kind = XR_TID_FLOAT;
-        else if (t->kind == XR_KIND_STRING) type_kind = XR_TID_STRING;
-        else if (t->kind == XR_KIND_BOOL) type_kind = XR_TID_BOOL;
-        else if (t->kind == XR_KIND_NULL) type_kind = XR_TID_NULL;
-        else if (t->kind == XR_KIND_ARRAY) type_kind = XR_TID_ARRAY;
-        else if (t->kind == XR_KIND_MAP) type_kind = XR_TID_MAP;
-        else if (t->kind == XR_KIND_SET) type_kind = XR_TID_SET;
-        else if (t->kind == XR_KIND_CLASS || t->kind == XR_KIND_INSTANCE) type_kind = XR_TID_INSTANCE;
-        else if (t->kind == XR_KIND_FUNCTION) type_kind = XR_TID_FUNCTION;
+        XrType *t = (XrType *) node->type;
+        if (t->kind == XR_KIND_INT)
+            type_kind = XR_TID_INT;
+        else if (t->kind == XR_KIND_FLOAT)
+            type_kind = XR_TID_FLOAT;
+        else if (t->kind == XR_KIND_STRING)
+            type_kind = XR_TID_STRING;
+        else if (t->kind == XR_KIND_BOOL)
+            type_kind = XR_TID_BOOL;
+        else if (t->kind == XR_KIND_NULL)
+            type_kind = XR_TID_NULL;
+        else if (t->kind == XR_KIND_ARRAY)
+            type_kind = XR_TID_ARRAY;
+        else if (t->kind == XR_KIND_MAP)
+            type_kind = XR_TID_MAP;
+        else if (t->kind == XR_KIND_SET)
+            type_kind = XR_TID_SET;
+        else if (t->kind == XR_KIND_CLASS || t->kind == XR_KIND_INSTANCE)
+            type_kind = XR_TID_INSTANCE;
+        else if (t->kind == XR_KIND_FUNCTION)
+            type_kind = XR_TID_FUNCTION;
     }
 
     // Add type constant
@@ -1000,7 +1123,8 @@ XrExprDesc compile_is_expr(XrCompilerContext *ctx, XrCompiler *compiler, IsExprN
 /*
  * Internal implementation: compile ternary expression (returns register)
  */
-static int compile_ternary_internal(XrCompilerContext *ctx, XrCompiler *compiler, TernaryNode *node) {
+static int compile_ternary_internal(XrCompilerContext *ctx, XrCompiler *compiler,
+                                    TernaryNode *node) {
     // Compile condition expression
     XrExprDesc cond_expr = xr_compile_expr(ctx, compiler, node->condition);
     int cond_reg = xexpr_to_anyreg(ctx, compiler, &cond_expr);
@@ -1049,7 +1173,6 @@ XrExprDesc compile_ternary(XrCompilerContext *ctx, XrCompiler *compiler, Ternary
     return e;
 }
 
-
 /* ========== Nullish Coalescing ========== */
 
 /*
@@ -1058,13 +1181,13 @@ XrExprDesc compile_ternary(XrCompilerContext *ctx, XrCompiler *compiler, Ternary
  * Optimization: If compile-time type analysis proves left operand is non-nullable,
  * skip the null check entirely and just return the left operand.
  */
-static int compile_nullish_coalesce_internal(XrCompilerContext *ctx, XrCompiler *compiler, BinaryNode *node) {
+static int compile_nullish_coalesce_internal(XrCompilerContext *ctx, XrCompiler *compiler,
+                                             BinaryNode *node) {
     // Skip null check when left operand is provably non-null at compile time.
     // Case 1: Literal values (int, float, string, true, false) are never null
     AstNodeType ltype = node->left->type;
-    if (ltype == AST_LITERAL_INT || ltype == AST_LITERAL_FLOAT ||
-        ltype == AST_LITERAL_STRING || ltype == AST_LITERAL_TRUE ||
-        ltype == AST_LITERAL_FALSE) {
+    if (ltype == AST_LITERAL_INT || ltype == AST_LITERAL_FLOAT || ltype == AST_LITERAL_STRING ||
+        ltype == AST_LITERAL_TRUE || ltype == AST_LITERAL_FALSE) {
         XrExprDesc left_expr = xr_compile_expr(ctx, compiler, node->left);
         return xexpr_to_anyreg(ctx, compiler, &left_expr);
     }
@@ -1072,8 +1195,7 @@ static int compile_nullish_coalesce_internal(XrCompilerContext *ctx, XrCompiler 
     // Covers narrowed variables, const declarations, non-nullable function returns.
     // Read the inferred type via the analyzer side table.
     XrType *left_t = xa_analyzer_get_node_type(ctx->analyzer, node->left);
-    if (left_t && !left_t->is_nullable &&
-        left_t->kind != XR_KIND_UNKNOWN &&
+    if (left_t && !left_t->is_nullable && left_t->kind != XR_KIND_UNKNOWN &&
         left_t->kind != XR_KIND_NULL) {
         XrExprDesc left_expr = xr_compile_expr(ctx, compiler, node->left);
         return xexpr_to_anyreg(ctx, compiler, &left_expr);
@@ -1121,13 +1243,13 @@ static int compile_nullish_coalesce_internal(XrCompilerContext *ctx, XrCompiler 
 /*
  * Compile nullish coalescing (returns XrExprDesc)
  */
-XrExprDesc compile_nullish_coalesce(XrCompilerContext *ctx, XrCompiler *compiler, BinaryNode *node) {
+XrExprDesc compile_nullish_coalesce(XrCompilerContext *ctx, XrCompiler *compiler,
+                                    BinaryNode *node) {
     XrExprDesc e = {0};
     int reg = compile_nullish_coalesce_internal(ctx, compiler, node);
     xexpr_init(&e, XEXPR_TEMP, reg);
     return e;
 }
-
 
 /* ========== Optional Chaining ========== */
 
@@ -1137,20 +1259,20 @@ XrExprDesc compile_nullish_coalesce(XrCompilerContext *ctx, XrCompiler *compiler
  * Optimization: If compile-time type analysis proves object is non-nullable,
  * skip the null check and generate direct property/index access.
  */
-static int compile_optional_chain_internal(XrCompilerContext *ctx, XrCompiler *compiler, OptionalChainNode *node) {
+static int compile_optional_chain_internal(XrCompilerContext *ctx, XrCompiler *compiler,
+                                           OptionalChainNode *node) {
     // Only skip null check for literal values known non-null at compile time
     // Variable types may be nullable even if compile_type doesn't have is_nullable set
     AstNodeType otype = node->object->type;
-    if (otype == AST_LITERAL_INT || otype == AST_LITERAL_FLOAT ||
-        otype == AST_LITERAL_STRING || otype == AST_LITERAL_TRUE ||
-        otype == AST_LITERAL_FALSE) {
+    if (otype == AST_LITERAL_INT || otype == AST_LITERAL_FLOAT || otype == AST_LITERAL_STRING ||
+        otype == AST_LITERAL_TRUE || otype == AST_LITERAL_FALSE) {
         XrExprDesc obj_expr = xr_compile_expr(ctx, compiler, node->object);
         int obj_reg = xexpr_to_anyreg(ctx, compiler, &obj_expr);
         int result_reg = reg_alloc(ctx, compiler);
 
         if (node->chain_type == 0) {
             int global_sym = xr_symbol_register_in_table(
-                (XrSymbolTable*)xr_isolate_get_symbol_table(ctx->X), node->name);
+                (XrSymbolTable *) xr_isolate_get_symbol_table(ctx->X), node->name);
             int local_sym = emitter_add_symbol(compiler->emitter, global_sym);
             xemit_getprop(compiler->emitter, result_reg, obj_reg, local_sym);
         } else if (node->chain_type == 1) {
@@ -1187,7 +1309,7 @@ static int compile_optional_chain_internal(XrCompilerContext *ctx, XrCompiler *c
          * Note: OP_GETPROP's C parameter is symbol, not constant index
          */
         int global_sym = xr_symbol_register_in_table(
-            (XrSymbolTable*)xr_isolate_get_symbol_table(ctx->X), node->name);
+            (XrSymbolTable *) xr_isolate_get_symbol_table(ctx->X), node->name);
         int local_sym = emitter_add_symbol(compiler->emitter, global_sym);
         xemit_getprop(compiler->emitter, result_reg, obj_reg, local_sym);
     } else if (node->chain_type == 1) {
@@ -1222,7 +1344,8 @@ static int compile_optional_chain_internal(XrCompilerContext *ctx, XrCompiler *c
 /*
  * Compile optional chaining (returns XrExprDesc)
  */
-XrExprDesc compile_optional_chain(XrCompilerContext *ctx, XrCompiler *compiler, OptionalChainNode *node) {
+XrExprDesc compile_optional_chain(XrCompilerContext *ctx, XrCompiler *compiler,
+                                  OptionalChainNode *node) {
     XrExprDesc e = {0};
     int reg = compile_optional_chain_internal(ctx, compiler, node);
     xexpr_init(&e, XEXPR_TEMP, reg);
@@ -1256,7 +1379,7 @@ int compile_force_unwrap(XrCompilerContext *ctx, XrCompiler *compiler, UnaryNode
 
     // Panic path (val == null): load error message and throw
     const char *msg = "Force unwrap of null value";
-    XrString *msg_str = xr_compile_time_intern(ctx->X, msg, (int)strlen(msg));
+    XrString *msg_str = xr_compile_time_intern(ctx->X, msg, (int) strlen(msg));
     XrValue msg_val = xr_string_value(msg_str);
     int msg_const = xr_vm_proto_add_constant(compiler->proto, msg_val);
     int msg_reg = reg_alloc(ctx, compiler);
@@ -1275,15 +1398,23 @@ int compile_force_unwrap(XrCompilerContext *ctx, XrCompiler *compiler, UnaryNode
  * Returns -1 if the type is not a primitive/known type.
  */
 static int xrtype_to_typeid(XrType *type) {
-    if (!type) return -1;
+    if (!type)
+        return -1;
     switch (type->kind) {
-    case XR_KIND_INT:    return XR_TID_INT;
-    case XR_KIND_FLOAT:  return XR_TID_FLOAT;
-    case XR_KIND_STRING: return XR_TID_STRING;
-    case XR_KIND_BOOL:   return XR_TID_BOOL;
-    case XR_KIND_JSON:   return XR_TID_JSON;
-    case XR_KIND_ARRAY:  return XR_TID_ARRAY;
-    default:             return -1;
+        case XR_KIND_INT:
+            return XR_TID_INT;
+        case XR_KIND_FLOAT:
+            return XR_TID_FLOAT;
+        case XR_KIND_STRING:
+            return XR_TID_STRING;
+        case XR_KIND_BOOL:
+            return XR_TID_BOOL;
+        case XR_KIND_JSON:
+            return XR_TID_JSON;
+        case XR_KIND_ARRAY:
+            return XR_TID_ARRAY;
+        default:
+            return -1;
     }
 }
 
@@ -1337,7 +1468,7 @@ int compile_as_expr(XrCompilerContext *ctx, XrCompiler *compiler, AsExprNode *no
         const char *type_name = xr_type_to_string(target);
         char err_buf[128];
         snprintf(err_buf, sizeof(err_buf), "Type cast failed: expected %s", type_name);
-        XrString *err_str = xr_compile_time_intern(ctx->X, err_buf, (int)strlen(err_buf));
+        XrString *err_str = xr_compile_time_intern(ctx->X, err_buf, (int) strlen(err_buf));
         XrValue err_val = xr_string_value(err_str);
         int err_const = xr_vm_proto_add_constant(compiler->proto, err_val);
         int err_reg = reg_alloc(ctx, compiler);
@@ -1350,5 +1481,3 @@ int compile_as_expr(XrCompilerContext *ctx, XrCompiler *compiler, AsExprNode *no
 
     return val_reg;
 }
-
-

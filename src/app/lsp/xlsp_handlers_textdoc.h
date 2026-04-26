@@ -38,4 +38,4 @@ XR_FUNC XrJsonValue *xlsp_handle_td_semantic_tokens_delta(XrLspServer *server, X
 XR_FUNC XrJsonValue *xlsp_handle_td_semantic_tokens_range(XrLspServer *server, XrJsonValue *params);
 XR_FUNC XrJsonValue *xlsp_handle_td_inlay_hint(XrLspServer *server, XrJsonValue *params);
 
-#endif // XLSP_HANDLERS_TEXTDOC_H
+#endif  // XLSP_HANDLERS_TEXTDOC_H

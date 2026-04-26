@@ -79,9 +79,9 @@
 
 /* ========== Compression Levels ========== */
 
-#define XR_COMPRESS_NO_COMPRESSION      0
-#define XR_COMPRESS_BEST_SPEED          1
-#define XR_COMPRESS_BEST_COMPRESSION    9
+#define XR_COMPRESS_NO_COMPRESSION 0
+#define XR_COMPRESS_BEST_SPEED 1
+#define XR_COMPRESS_BEST_COMPRESSION 9
 #define XR_COMPRESS_DEFAULT_COMPRESSION 6
 
 /* ========== Error Codes ========== */
@@ -99,13 +99,12 @@ typedef enum {
 /* ========== Deflate Compression/Decompression ========== */
 
 // Raw deflate compression (no header)
-XrCompressError xr_deflate(const uint8_t *input, size_t in_len,
-                           uint8_t *output, size_t out_cap, size_t *out_len,
-                           int level);
+XrCompressError xr_deflate(const uint8_t *input, size_t in_len, uint8_t *output, size_t out_cap,
+                           size_t *out_len, int level);
 
 // Raw deflate decompression
-XrCompressError xr_inflate(const uint8_t *input, size_t in_len,
-                           uint8_t *output, size_t out_cap, size_t *out_len);
+XrCompressError xr_inflate(const uint8_t *input, size_t in_len, uint8_t *output, size_t out_cap,
+                           size_t *out_len);
 
 // Estimate maximum compressed size
 size_t xr_deflate_bound(size_t in_len);
@@ -113,13 +112,12 @@ size_t xr_deflate_bound(size_t in_len);
 /* ========== Gzip Compression/Decompression ========== */
 
 // Gzip compression
-XrCompressError xr_gzip(const uint8_t *input, size_t in_len,
-                        uint8_t *output, size_t out_cap, size_t *out_len,
-                        int level);
+XrCompressError xr_gzip(const uint8_t *input, size_t in_len, uint8_t *output, size_t out_cap,
+                        size_t *out_len, int level);
 
 // Gzip decompression
-XrCompressError xr_gunzip(const uint8_t *input, size_t in_len,
-                          uint8_t *output, size_t out_cap, size_t *out_len);
+XrCompressError xr_gunzip(const uint8_t *input, size_t in_len, uint8_t *output, size_t out_cap,
+                          size_t *out_len);
 
 // Check if data is valid gzip format
 bool xr_is_gzip(const uint8_t *data, size_t len);
@@ -130,13 +128,12 @@ uint32_t xr_gzip_original_size(const uint8_t *data, size_t len);
 /* ========== Zlib Format Compression/Decompression ========== */
 
 // Zlib compression (with header and checksum)
-XrCompressError xr_zlib_compress(const uint8_t *input, size_t in_len,
-                                  uint8_t *output, size_t out_cap, size_t *out_len,
-                                  int level);
+XrCompressError xr_zlib_compress(const uint8_t *input, size_t in_len, uint8_t *output,
+                                 size_t out_cap, size_t *out_len, int level);
 
 // Zlib decompression
-XrCompressError xr_zlib_decompress(const uint8_t *input, size_t in_len,
-                                    uint8_t *output, size_t out_cap, size_t *out_len);
+XrCompressError xr_zlib_decompress(const uint8_t *input, size_t in_len, uint8_t *output,
+                                   size_t out_cap, size_t *out_len);
 
 // Check if data is valid zlib format
 bool xr_is_zlib(const uint8_t *data, size_t len);
@@ -161,16 +158,15 @@ uint32_t xr_adler32_update(uint32_t adler, const uint8_t *data, size_t len);
 
 // Gzip compression with automatic memory allocation
 // Returns compressed data (caller must free), NULL on failure
-uint8_t* xr_gzip_alloc(const uint8_t *input, size_t in_len,
-                        size_t *out_len, int level);
+uint8_t *xr_gzip_alloc(const uint8_t *input, size_t in_len, size_t *out_len, int level);
 
 // Gunzip decompression with automatic memory allocation
 // Returns decompressed data (caller must free), NULL on failure
-uint8_t* xr_gunzip_alloc(const uint8_t *input, size_t in_len, size_t *out_len);
+uint8_t *xr_gunzip_alloc(const uint8_t *input, size_t in_len, size_t *out_len);
 
 /* ========== Error Message ========== */
 
-const char* xr_compress_error_str(XrCompressError err);
+const char *xr_compress_error_str(XrCompressError err);
 
 /* ========== Zlib-Backed Stream API (compress_zlib.c) ========== */
 
@@ -193,10 +189,8 @@ XR_FUNC XrZlibStream *xr_zlib_stream_new_inflate(int window_bits);
 
 // Feed input and produce output. flush: Z_NO_FLUSH, Z_SYNC_FLUSH, Z_FINISH.
 // Returns: 0 = OK (may need more calls), 1 = stream end, -1 = error.
-XR_FUNC int xr_zlib_stream_process(XrZlibStream *s,
-                                    const uint8_t *in, size_t in_len,
-                                    uint8_t *out, size_t out_cap,
-                                    size_t *out_written, int flush);
+XR_FUNC int xr_zlib_stream_process(XrZlibStream *s, const uint8_t *in, size_t in_len, uint8_t *out,
+                                   size_t out_cap, size_t *out_written, int flush);
 
 // Check if stream has reached Z_STREAM_END.
 XR_FUNC bool xr_zlib_stream_finished(const XrZlibStream *s);
@@ -208,25 +202,22 @@ XR_FUNC void xr_zlib_stream_free(XrZlibStream *s);
 
 // Raw deflate + Z_SYNC_FLUSH with trailing 0x00 0x00 0xff 0xff stripped.
 // Caller must xr_free(*out).
-XR_FUNC int xr_deflate_sync_flush(const uint8_t *in, size_t in_len,
-                                   uint8_t **out, size_t *out_len, int level);
+XR_FUNC int xr_deflate_sync_flush(const uint8_t *in, size_t in_len, uint8_t **out, size_t *out_len,
+                                  int level);
 
 // Raw inflate with RFC 7692 trailer appended + output cap (zip-bomb guard).
 // Caller must xr_free(*out).
-XR_FUNC int xr_inflate_bounded(const uint8_t *in, size_t in_len,
-                                size_t max_out,
-                                uint8_t **out, size_t *out_len);
+XR_FUNC int xr_inflate_bounded(const uint8_t *in, size_t in_len, size_t max_out, uint8_t **out,
+                               size_t *out_len);
 
 /* --- Convenience: HTTP gzip/deflate --- */
 
-XR_FUNC int xr_zlib_gzip_compress(const void *in, size_t in_len,
-                                   void **out, size_t *out_len, int level);
-XR_FUNC int xr_zlib_gzip_decompress(const void *in, size_t in_len,
-                                     void **out, size_t *out_len);
-XR_FUNC int xr_zlib_deflate_compress(const void *in, size_t in_len,
-                                      void **out, size_t *out_len, int level);
-XR_FUNC int xr_zlib_deflate_decompress(const void *in, size_t in_len,
-                                        void **out, size_t *out_len);
+XR_FUNC int xr_zlib_gzip_compress(const void *in, size_t in_len, void **out, size_t *out_len,
+                                  int level);
+XR_FUNC int xr_zlib_gzip_decompress(const void *in, size_t in_len, void **out, size_t *out_len);
+XR_FUNC int xr_zlib_deflate_compress(const void *in, size_t in_len, void **out, size_t *out_len,
+                                     int level);
+XR_FUNC int xr_zlib_deflate_decompress(const void *in, size_t in_len, void **out, size_t *out_len);
 
 /* --- Content-Encoding detection --- */
 
@@ -240,6 +231,6 @@ XR_FUNC XrContentEncoding xr_detect_content_encoding(const char *encoding);
 
 /* ========== Module Loading ========== */
 
-XR_FUNC XrModule* xr_load_module_compress(XrayIsolate *isolate);
+XR_FUNC XrModule *xr_load_module_compress(XrayIsolate *isolate);
 
-#endif // XR_STDLIB_COMPRESS_H
+#endif  // XR_STDLIB_COMPRESS_H

@@ -43,8 +43,7 @@ static bool xcg_vreg_has_ins_use(XirFunc *func, uint32_t vi) {
     return false;
 }
 
-void xcg_emit_phi_copies_for_edge(XcgenBuf *b, XirFunc *func,
-                                   XirBlock *from, XirBlock *to) {
+void xcg_emit_phi_copies_for_edge(XcgenBuf *b, XirFunc *func, XirBlock *from, XirBlock *to) {
     XR_DCHECK(b != NULL, "xcg_emit_phi_copies_for_edge: NULL buf");
     XR_DCHECK(func != NULL, "xcg_emit_phi_copies_for_edge: NULL func");
     XR_DCHECK(from != NULL, "xcg_emit_phi_copies_for_edge: NULL from");
@@ -52,7 +51,10 @@ void xcg_emit_phi_copies_for_edge(XcgenBuf *b, XirFunc *func,
     // Find which predecessor index 'from' is in 'to'
     uint32_t pred_idx = 0;
     for (uint32_t i = 0; i < to->npred; i++) {
-        if (to->preds[i] == from) { pred_idx = i; break; }
+        if (to->preds[i] == from) {
+            pred_idx = i;
+            break;
+        }
     }
 
     for (XirPhi *phi = to->phis; phi; phi = phi->next) {
@@ -60,8 +62,10 @@ void xcg_emit_phi_copies_for_edge(XcgenBuf *b, XirFunc *func,
             XirRef src = phi->args[pred_idx];
             uint8_t dst_type = phi->rep;
             uint8_t src_type = xcg_ref_type(func, src);
-            bool dst_tagged = (dst_type == XR_REP_STR || dst_type == XR_REP_PTR || dst_type == XR_REP_TAGGED);
-            bool src_tagged = (src_type == XR_REP_STR || src_type == XR_REP_PTR || src_type == XR_REP_TAGGED);
+            bool dst_tagged =
+                (dst_type == XR_REP_STR || dst_type == XR_REP_PTR || dst_type == XR_REP_TAGGED);
+            bool src_tagged =
+                (src_type == XR_REP_STR || src_type == XR_REP_PTR || src_type == XR_REP_TAGGED);
 
             xcgen_buf_printf(b, "    phi_v%u = ", XIR_REF_INDEX(phi->dst));
             if (dst_tagged && !src_tagged) {
@@ -84,9 +88,9 @@ void xcg_emit_phi_copies_for_edge(XcgenBuf *b, XirFunc *func,
                 // same slot carries different-typed values on different paths. When the
                 // phi dst is unused (dead), emit a zero literal instead of a bogus unbox.
                 uint32_t phi_vi = XIR_REF_INDEX(phi->dst);
-                bool phi_dst_dead = (src_type == XR_REP_PTR) ||
-                                    (src_type == XR_REP_TAGGED &&
-                                     !xcg_vreg_has_ins_use(func, phi_vi));
+                bool phi_dst_dead =
+                    (src_type == XR_REP_PTR) ||
+                    (src_type == XR_REP_TAGGED && !xcg_vreg_has_ins_use(func, phi_vi));
                 if (phi_dst_dead) {
                     if (dst_type == XR_REP_F64)
                         xcgen_buf_puts(b, "0.0 /* dead-phi: struct!=float */");
@@ -113,12 +117,12 @@ void xcg_emit_phi_copies_for_edge(XcgenBuf *b, XirFunc *func,
 
 /* ========== Block Terminators ========== */
 
-void xcg_emit_terminator(XcgenBuf *b, XirFunc *func, XirBlock *blk,
-                          const char *self_name, XcgenFunc *cf) {
+void xcg_emit_terminator(XcgenBuf *b, XirFunc *func, XirBlock *blk, const char *self_name,
+                         XcgenFunc *cf) {
     XR_DCHECK(b != NULL, "xcg_emit_terminator: NULL buf");
     XR_DCHECK(func != NULL, "xcg_emit_terminator: NULL func");
     XR_DCHECK(blk != NULL, "xcg_emit_terminator: NULL blk");
-    (void)self_name;
+    (void) self_name;
     switch (blk->jmp.type) {
         case XIR_JMP_JMP:
             if (blk->s1) {
@@ -130,7 +134,8 @@ void xcg_emit_terminator(XcgenBuf *b, XirFunc *func, XirBlock *blk,
 
         case XIR_JMP_BR: {
             uint8_t br_type = xcg_ref_type(func, blk->jmp.arg);
-            bool br_tagged = (br_type == XR_REP_STR || br_type == XR_REP_PTR || br_type == XR_REP_TAGGED);
+            bool br_tagged =
+                (br_type == XR_REP_STR || br_type == XR_REP_PTR || br_type == XR_REP_TAGGED);
             xcgen_buf_puts(b, "    if (");
             if (br_tagged) {
                 // XrtValue → truthy: matches VM semantics
@@ -144,11 +149,13 @@ void xcg_emit_terminator(XcgenBuf *b, XirFunc *func, XirBlock *blk,
             xcgen_buf_puts(b, ") {\n");
             if (blk->s1 && block_has_phis(blk->s1))
                 xcg_emit_phi_copies_for_edge(b, func, blk, blk->s1);
-            if (blk->s1) xcgen_buf_printf(b, "        goto L%u;\n", blk->s1->id);
+            if (blk->s1)
+                xcgen_buf_printf(b, "        goto L%u;\n", blk->s1->id);
             xcgen_buf_puts(b, "    } else {\n");
             if (blk->s2 && block_has_phis(blk->s2))
                 xcg_emit_phi_copies_for_edge(b, func, blk, blk->s2);
-            if (blk->s2) xcgen_buf_printf(b, "        goto L%u;\n", blk->s2->id);
+            if (blk->s2)
+                xcgen_buf_printf(b, "        goto L%u;\n", blk->s2->id);
             xcgen_buf_puts(b, "    }\n");
             break;
         }
@@ -162,15 +169,14 @@ void xcg_emit_terminator(XcgenBuf *b, XirFunc *func, XirBlock *blk,
             if (cf && cf->defer_count > 0) {
                 for (int di = cf->defer_count - 1; di >= 0; di--) {
                     int nargs = func->defer_entries[di].arg_count;
-                    xcgen_buf_printf(b,
-                        "    if (_defer_%d_set) ((void (*)(XrtContext, xrt_closure_t*",
-                        di);
+                    xcgen_buf_printf(
+                        b, "    if (_defer_%d_set) ((void (*)(XrtContext, xrt_closure_t*", di);
                     for (int ai = 0; ai < nargs; ai++)
                         xcgen_buf_puts(b, ", XrValue");
                     xcgen_buf_printf(b,
-                        "))((xrt_closure_t*)_defer_%d.ptr)->fn)"
-                        "(xrt_ctx, (xrt_closure_t*)_defer_%d.ptr",
-                        di, di);
+                                     "))((xrt_closure_t*)_defer_%d.ptr)->fn)"
+                                     "(xrt_ctx, (xrt_closure_t*)_defer_%d.ptr",
+                                     di, di);
                     for (int ai = 0; ai < nargs; ai++)
                         xcgen_buf_printf(b, ", _defer_%d_arg%d", di, ai);
                     xcgen_buf_puts(b, ");\n");
@@ -185,9 +191,12 @@ void xcg_emit_terminator(XcgenBuf *b, XirFunc *func, XirBlock *blk,
 
             uint8_t val_type = xcg_ref_type(func, blk->jmp.arg);
             uint8_t ret_type = (func->proto && func->proto->return_type_info)
-                ? xr_type_rep(func->proto->return_type_info) : XR_REP_TAGGED;
-            bool val_tagged = (val_type == XR_REP_STR || val_type == XR_REP_PTR || val_type == XR_REP_TAGGED);
-            bool ret_tagged = (ret_type == XR_REP_STR || ret_type == XR_REP_PTR || ret_type == XR_REP_TAGGED);
+                                   ? xr_type_rep(func->proto->return_type_info)
+                                   : XR_REP_TAGGED;
+            bool val_tagged =
+                (val_type == XR_REP_STR || val_type == XR_REP_PTR || val_type == XR_REP_TAGGED);
+            bool ret_tagged =
+                (ret_type == XR_REP_STR || ret_type == XR_REP_PTR || ret_type == XR_REP_TAGGED);
 
             if (!ret_tagged && val_tagged) {
                 // Auto-unbox: XrtValue → int64_t/double
@@ -195,12 +204,14 @@ void xcg_emit_terminator(XcgenBuf *b, XirFunc *func, XirBlock *blk,
                     xcgen_buf_puts(b, "    return xrt_unbox_int(");
                     xcg_emit_ref(b, func, blk->jmp.arg);
                     xcgen_buf_puts(b, ");\n");
-                    if (cf) cf->needs_runtime = true;
+                    if (cf)
+                        cf->needs_runtime = true;
                 } else if (ret_type == XR_REP_F64) {
                     xcgen_buf_puts(b, "    return xrt_unbox_float(");
                     xcg_emit_ref(b, func, blk->jmp.arg);
                     xcgen_buf_puts(b, ");\n");
-                    if (cf) cf->needs_runtime = true;
+                    if (cf)
+                        cf->needs_runtime = true;
                 } else {
                     xcgen_buf_puts(b, "    return ");
                     xcg_emit_ref(b, func, blk->jmp.arg);
@@ -212,12 +223,14 @@ void xcg_emit_terminator(XcgenBuf *b, XirFunc *func, XirBlock *blk,
                     xcgen_buf_puts(b, "    return xrt_box_int(");
                     xcg_emit_ref(b, func, blk->jmp.arg);
                     xcgen_buf_puts(b, ");\n");
-                    if (cf) cf->needs_runtime = true;
+                    if (cf)
+                        cf->needs_runtime = true;
                 } else if (val_type == XR_REP_F64) {
                     xcgen_buf_puts(b, "    return xrt_box_float(");
                     xcg_emit_ref(b, func, blk->jmp.arg);
                     xcgen_buf_puts(b, ");\n");
-                    if (cf) cf->needs_runtime = true;
+                    if (cf)
+                        cf->needs_runtime = true;
                 } else {
                     xcgen_buf_puts(b, "    return ");
                     xcg_emit_ref(b, func, blk->jmp.arg);

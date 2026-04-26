@@ -26,7 +26,8 @@ bool xr_value_is_array_slice(XrValue v) {
     return XR_IS_PTR(v) && XR_HEAP_TYPE(v) == XR_TARRAY_SLICE;
 }
 
-XrArraySlice* xr_value_to_array_slice(XrValue v) {
-    if (!xr_value_is_array_slice(v)) return NULL;
-    return (XrArraySlice*)XR_TO_PTR(v);
+XrArraySlice *xr_value_to_array_slice(XrValue v) {
+    if (!xr_value_is_array_slice(v))
+        return NULL;
+    return (XrArraySlice *) XR_TO_PTR(v);
 }

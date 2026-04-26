@@ -50,13 +50,13 @@
  */
 
 // Maximum virtual registers the JIT will attempt to allocate for.
-#define XIR_MAX_FUNC_VREGS        4096
+#define XIR_MAX_FUNC_VREGS 4096
 
 // Maximum basic blocks per JIT-compiled function.
-#define XIR_MAX_FUNC_BLOCKS       4096
+#define XIR_MAX_FUNC_BLOCKS 4096
 
 // Maximum total instructions summed over every block.
-#define XIR_MAX_FUNC_TOTAL_INS    65536
+#define XIR_MAX_FUNC_TOTAL_INS 65536
 
 /* ========== CSE / GVN Hash Tables ==========
  *
@@ -64,10 +64,10 @@
  * bounds.  Exceeding MAX means the pass stops expanding and accepts
  * some collision-driven misses rather than unbounded memory use.
  */
-#define XIR_CSE_MIN_TABLE         64
-#define XIR_CSE_MAX_TABLE         1024
+#define XIR_CSE_MIN_TABLE 64
+#define XIR_CSE_MAX_TABLE 1024
 
-#define XIR_GVN_MIN_TABLE         128
+#define XIR_GVN_MIN_TABLE 128
 
 /* ========== LICM ==========
  *
@@ -79,7 +79,7 @@
  * representation, not a fixed-size LicmLoop[] array, so a static cap
  * would be redundant.
  */
-#define XIR_LICM_MAX_ITERATIONS   8      // previously 4
+#define XIR_LICM_MAX_ITERATIONS 8  // previously 4
 
 /* ========== If-Conversion ==========
  *
@@ -87,8 +87,8 @@
  * code.  Raising these values enables more CMOV-style collapses at the
  * cost of speculatively executing both arms.
  */
-#define XIR_IFCONV_MAX_INS        6      // previously 2 — allow richer bodies
-#define XIR_IFCONV_MAX_PHIS       4      // previously 2
+#define XIR_IFCONV_MAX_INS 6   // previously 2 — allow richer bodies
+#define XIR_IFCONV_MAX_PHIS 4  // previously 2
 
 /* ========== Dead Store Elimination ==========
  *
@@ -96,7 +96,7 @@
  * block scan.  DSE falls back to a conservative "all stores live" view
  * once this is exceeded.
  */
-#define XIR_DSE_MAX_TRACKED       32
+#define XIR_DSE_MAX_TRACKED 32
 
 /* ========== Global Code Motion ==========
  *
@@ -111,10 +111,10 @@
  * function's value graph.  Per-vreg arrays are heap-allocated from
  * func->nvreg; no separate cap — XIR_MAX_FUNC_VREGS applies.
  */
-#define XIR_RA_MAX_ROUNDS         4
+#define XIR_RA_MAX_ROUNDS 4
 
 /* ========== Inlining (reserved for the inliner pass) ========== */
-#define XIR_INLINE_MAX_COUNT      16
-#define XIR_INLINE_MAX_SIZE       500
+#define XIR_INLINE_MAX_COUNT 16
+#define XIR_INLINE_MAX_SIZE 500
 
-#endif // XIR_PASS_LIMITS_H
+#endif  // XIR_PASS_LIMITS_H

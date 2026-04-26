@@ -1011,5 +1011,4 @@ static inline int xemit_nop(XrEmitter *e, int a, int b, int c) {
     return emit_abc(e, OP_NOP, a, b, c);
 }
 
-
-#endif // XEMIT_TYPED_H
+#endif  // XEMIT_TYPED_H

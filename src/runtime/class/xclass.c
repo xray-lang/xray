@@ -37,38 +37,63 @@
 // Written as a dense switch so the compiler emits a jump table instead
 // of the 22 sequential compares the old chain produced.
 uint32_t xr_symbol_to_op_flag(int symbol) {
-    if (symbol <= 0) return 0;
+    if (symbol <= 0)
+        return 0;
 
     switch (symbol) {
-        case SYMBOL_OP_ADD:       return XR_OP_ADD_FLAG;
-        case SYMBOL_OP_SUB:       return XR_OP_SUB_FLAG;
-        case SYMBOL_OP_MUL:       return XR_OP_MUL_FLAG;
-        case SYMBOL_OP_DIV:       return XR_OP_DIV_FLAG;
-        case SYMBOL_OP_MOD:       return XR_OP_MOD_FLAG;
-        case SYMBOL_OP_EQ:        return XR_OP_EQ_FLAG;
-        case SYMBOL_OP_NE:        return XR_OP_NE_FLAG;
-        case SYMBOL_OP_LT:        return XR_OP_LT_FLAG;
-        case SYMBOL_OP_LE:        return XR_OP_LE_FLAG;
-        case SYMBOL_OP_GT:        return XR_OP_GT_FLAG;
-        case SYMBOL_OP_GE:        return XR_OP_GE_FLAG;
-        case SYMBOL_OP_BAND:      return XR_OP_BAND_FLAG;
-        case SYMBOL_OP_BOR:       return XR_OP_BOR_FLAG;
-        case SYMBOL_OP_BXOR:      return XR_OP_BXOR_FLAG;
-        case SYMBOL_OP_BNOT:      return XR_OP_BNOT_FLAG;
-        case SYMBOL_OP_LSHIFT:    return XR_OP_LSHIFT_FLAG;
-        case SYMBOL_OP_RSHIFT:    return XR_OP_RSHIFT_FLAG;
-        case SYMBOL_OP_INDEX:     return XR_OP_INDEX_FLAG;
-        case SYMBOL_OP_INDEX_SET: return XR_OP_INDEX_SET_FLAG;
-        case SYMBOL_OP_INC:       return XR_OP_INC_FLAG;
-        case SYMBOL_OP_DEC:       return XR_OP_DEC_FLAG;
-        case SYMBOL_OP_NOT:       return XR_OP_NOT_FLAG;
-        default:                  return 0;
+        case SYMBOL_OP_ADD:
+            return XR_OP_ADD_FLAG;
+        case SYMBOL_OP_SUB:
+            return XR_OP_SUB_FLAG;
+        case SYMBOL_OP_MUL:
+            return XR_OP_MUL_FLAG;
+        case SYMBOL_OP_DIV:
+            return XR_OP_DIV_FLAG;
+        case SYMBOL_OP_MOD:
+            return XR_OP_MOD_FLAG;
+        case SYMBOL_OP_EQ:
+            return XR_OP_EQ_FLAG;
+        case SYMBOL_OP_NE:
+            return XR_OP_NE_FLAG;
+        case SYMBOL_OP_LT:
+            return XR_OP_LT_FLAG;
+        case SYMBOL_OP_LE:
+            return XR_OP_LE_FLAG;
+        case SYMBOL_OP_GT:
+            return XR_OP_GT_FLAG;
+        case SYMBOL_OP_GE:
+            return XR_OP_GE_FLAG;
+        case SYMBOL_OP_BAND:
+            return XR_OP_BAND_FLAG;
+        case SYMBOL_OP_BOR:
+            return XR_OP_BOR_FLAG;
+        case SYMBOL_OP_BXOR:
+            return XR_OP_BXOR_FLAG;
+        case SYMBOL_OP_BNOT:
+            return XR_OP_BNOT_FLAG;
+        case SYMBOL_OP_LSHIFT:
+            return XR_OP_LSHIFT_FLAG;
+        case SYMBOL_OP_RSHIFT:
+            return XR_OP_RSHIFT_FLAG;
+        case SYMBOL_OP_INDEX:
+            return XR_OP_INDEX_FLAG;
+        case SYMBOL_OP_INDEX_SET:
+            return XR_OP_INDEX_SET_FLAG;
+        case SYMBOL_OP_INC:
+            return XR_OP_INC_FLAG;
+        case SYMBOL_OP_DEC:
+            return XR_OP_DEC_FLAG;
+        case SYMBOL_OP_NOT:
+            return XR_OP_NOT_FLAG;
+        default:
+            return 0;
     }
 }
 
 // Compute operator overload flags (call once after class creation)
 void xr_class_compute_operator_flags(XrClass *cls) {
-    if (!cls) return;
+    if (!cls)
+        return;
 
     cls->operator_flags = 0;
 
@@ -93,7 +118,7 @@ void xr_class_compute_operator_flags(XrClass *cls) {
 
 /* ========== Class Object Implementation ========== */
 
-XrClass* xr_class_new(XrayIsolate *X, const char *name, XrClass *super) {
+XrClass *xr_class_new(XrayIsolate *X, const char *name, XrClass *super) {
     XR_DCHECK(name != NULL, "Class name must not be NULL");
 
     // xr_class_new used to allocate a raw XrClass by hand and then, when a
@@ -123,7 +148,7 @@ XrClass* xr_class_new(XrayIsolate *X, const char *name, XrClass *super) {
 // longer a supported API for patching a class's super link after the
 // class has been frozen.
 
-const XrFieldDescriptor* xr_class_get_field(const XrClass *cls, int index) {
+const XrFieldDescriptor *xr_class_get_field(const XrClass *cls, int index) {
     if (!cls || index < 0 || index >= cls->field_count) {
         return NULL;
     }
@@ -132,24 +157,28 @@ const XrFieldDescriptor* xr_class_get_field(const XrClass *cls, int index) {
 }
 
 int xr_class_lookup_field_by_name(XrayIsolate *X, XrClass *cls, const char *name) {
-    if (!X || !cls || !name) return -1;
+    if (!X || !cls || !name)
+        return -1;
 
     // Resolve the name through the symbol table (O(1) hash) rather
     // than scanning every field descriptor with strcmp. The symbol
     // table owns every interned name and xr_class_lookup_field has
     // its own O(1) symbol -> index mapping, so the full path is a
     // pair of hash hits without any string compares.
-    XrSymbolTable *tab = (XrSymbolTable*)xr_isolate_get_symbol_table(X);
-    if (!tab) return -1;
+    XrSymbolTable *tab = (XrSymbolTable *) xr_isolate_get_symbol_table(X);
+    if (!tab)
+        return -1;
     SymbolId sym = xr_symbol_lookup_in_table(tab, name);
-    if (sym == SYMBOL_INVALID) return -1;
+    if (sym == SYMBOL_INVALID)
+        return -1;
 
-    return xr_class_lookup_field(cls, (int)sym);
+    return xr_class_lookup_field(cls, (int) sym);
 }
 
 // O(1) lookup + O(depth) recursive parent lookup
 int xr_class_lookup_field(XrClass *cls, int symbol) {
-    if (!cls || symbol < 0) return -1;
+    if (!cls || symbol < 0)
+        return -1;
 
     // O(1) symbol mapping lookup
     if (cls->field_symbol_to_index && cls->field_map_capacity > 0) {
@@ -175,8 +204,9 @@ int xr_class_lookup_field(XrClass *cls, int symbol) {
 // created via xr_class_new() that have no methods leave the mapping NULL;
 // in that case we fall through to super. There is no O(n) sweep: if a
 // symbol is absent from the mapping, it is absent from this class.
-XrMethod* xr_class_lookup_method(XrClass *cls, int symbol) {
-    if (!cls || symbol < 0) return NULL;
+XrMethod *xr_class_lookup_method(XrClass *cls, int symbol) {
+    if (!cls || symbol < 0)
+        return NULL;
 
     if (cls->method_symbol_to_index && symbol < cls->method_map_capacity) {
         int method_idx = cls->method_symbol_to_index[symbol];
@@ -187,9 +217,7 @@ XrMethod* xr_class_lookup_method(XrClass *cls, int symbol) {
             if (method->symbol == symbol && method->type != XMETHOD_NONE) {
                 // VTable optimization for closure methods only;
                 // primitive methods do not use vtable dispatch.
-                if (method->type != XMETHOD_PRIMITIVE &&
-                    method->vtable_index >= 0 &&
-                    cls->vtable &&
+                if (method->type != XMETHOD_PRIMITIVE && method->vtable_index >= 0 && cls->vtable &&
                     method->vtable_index < cls->vtable_size) {
                     XrMethod *vtable_method = cls->vtable[method->vtable_index];
                     if (vtable_method && vtable_method->type != XMETHOD_NONE) {
@@ -211,29 +239,30 @@ XrMethod* xr_class_lookup_method(XrClass *cls, int symbol) {
 /* ========== Value Type Access ========== */
 
 // Get class for any value (unified object model)
-XrClass* xr_value_get_class(XrayIsolate *X, XrValue value) {
+XrClass *xr_value_get_class(XrayIsolate *X, XrValue value) {
     XR_DCHECK(X != NULL, "value_get_class: NULL isolate");
     if (XR_IS_PTR(value)) {
-        XrGCHeader *gc = (XrGCHeader*)XR_TO_PTR(value);
+        XrGCHeader *gc = (XrGCHeader *) XR_TO_PTR(value);
         XrObjType type = XR_GC_GET_TYPE(gc);
 
         if (type == XR_TINSTANCE) {
-            XrInstance *inst = (XrInstance*)gc;
+            XrInstance *inst = (XrInstance *) gc;
             return inst->klass;
         }
 
         if (type == XR_TENUM_VALUE) {
-            XrEnumValue *ev = (XrEnumValue*)gc;
+            XrEnumValue *ev = (XrEnumValue *) gc;
             if (ev->enum_name) {
                 XrClass *cls = xr_class_lookup_by_name(X, ev->enum_name);
-                if (cls) return cls;
+                if (cls)
+                    return cls;
             }
             XrayCoreClasses *core = xr_isolate_get_core_classes(X);
             return core ? core->enumClass : NULL;
         }
 
         if (type == XR_TENUM_TYPE) {
-            XrEnumType *et = (XrEnumType*)gc;
+            XrEnumType *et = (XrEnumType *) gc;
             return et->enum_class;
         }
 
@@ -271,7 +300,7 @@ XrClass* xr_value_get_class(XrayIsolate *X, XrValue value) {
     }
 
     if (XR_IS_PTR(value)) {
-        XrGCHeader *gc = (XrGCHeader*)XR_TO_PTR(value);
+        XrGCHeader *gc = (XrGCHeader *) XR_TO_PTR(value);
         XrObjType type = XR_GC_GET_TYPE(gc);
 
         switch (type) {
@@ -313,7 +342,8 @@ void xr_class_print(XrClass *cls) {
 
     int method_count = 0;
     for (int i = 0; i < cls->method_count; i++) {
-        if (cls->methods[i].type != XMETHOD_NONE) method_count++;
+        if (cls->methods[i].type != XMETHOD_NONE)
+            method_count++;
     }
     printf("  Methods: %d (array size: %d)\n", method_count, cls->method_count);
     printf("  Static methods: %d\n", cls->static_method_count);
@@ -326,7 +356,7 @@ void xr_class_print(XrClass *cls) {
 
 /* ========== Interface Support ========== */
 
-XrClass* xr_interface_new(XrayIsolate *X, const char *name) {
+XrClass *xr_interface_new(XrayIsolate *X, const char *name) {
     XR_DCHECK(X != NULL, "interface_new: NULL isolate");
     XR_DCHECK(name != NULL, "Interface name must not be NULL");
 
@@ -334,14 +364,17 @@ XrClass* xr_interface_new(XrayIsolate *X, const char *name) {
     // Build them through the same path as any other class so there is a
     // single code path for the (name + super) + finalize pipeline.
     XrClassBuilder *builder = xr_class_builder_new(X, name, NULL);
-    if (!builder) return NULL;
+    if (!builder)
+        return NULL;
     XrClass *iface = xr_class_builder_finalize(builder);
-    if (iface) iface->flags |= XR_CLASS_INTERFACE;
+    if (iface)
+        iface->flags |= XR_CLASS_INTERFACE;
     return iface;
 }
 
 bool xr_class_implements_interface(XrClass *cls, XrClass *iface) {
-    if (!cls || !iface || !(iface->flags & XR_CLASS_INTERFACE)) return false;
+    if (!cls || !iface || !(iface->flags & XR_CLASS_INTERFACE))
+        return false;
 
     // Walk the inheritance chain iteratively; an interface declared on
     // any ancestor counts as implemented. Pointer identity compare
@@ -356,11 +389,11 @@ bool xr_class_implements_interface(XrClass *cls, XrClass *iface) {
     return false;
 }
 
-
 /* ========== ITable Generation ========== */
 
 int xr_class_build_itable(XrClass *cls) {
-    if (!cls) return -1;
+    if (!cls)
+        return -1;
 
     // Free existing itable (including per-entry methods[] and per-entry
     // method_symbol_to_index maps that a previous build may have left).
@@ -383,7 +416,7 @@ int xr_class_build_itable(XrClass *cls) {
     }
 
     cls->itable_size = cls->interface_count;
-    cls->itable = (XrItableEntry*)xr_malloc(cls->itable_size * sizeof(XrItableEntry));
+    cls->itable = (XrItableEntry *) xr_malloc(cls->itable_size * sizeof(XrItableEntry));
     if (!cls->itable) {
         cls->itable_size = 0;
         return -1;
@@ -394,14 +427,15 @@ int xr_class_build_itable(XrClass *cls) {
 
     for (int i = 0; i < cls->interface_count; i++) {
         XrClass *iface = cls->interfaces[i];
-        if (!iface) continue;
+        if (!iface)
+            continue;
 
         cls->itable[i].interface = iface;
         cls->itable[i].method_count = iface->method_count;
 
         if (iface->method_count > 0) {
-            cls->itable[i].methods = (XrMethod**)xr_malloc(
-                iface->method_count * sizeof(XrMethod*));
+            cls->itable[i].methods =
+                (XrMethod **) xr_malloc(iface->method_count * sizeof(XrMethod *));
             if (!cls->itable[i].methods) {
                 // methods[] alloc failed -> unwind every itable entry built
                 // so far. Centralised in the `fail` label so we never mix
@@ -421,8 +455,7 @@ int xr_class_build_itable(XrClass *cls) {
                 XrMethod *impl = NULL;
 
                 int sym = iface_method->symbol;
-                if (cls->method_symbol_to_index && sym >= 0
-                    && sym < cls->method_map_capacity) {
+                if (cls->method_symbol_to_index && sym >= 0 && sym < cls->method_map_capacity) {
                     int idx = cls->method_symbol_to_index[sym];
                     if (idx >= 0 && idx < cls->method_count) {
                         impl = &cls->methods[idx];
@@ -430,7 +463,8 @@ int xr_class_build_itable(XrClass *cls) {
                 }
 
                 cls->itable[i].methods[j] = impl;
-                if (sym > max_symbol) max_symbol = sym;
+                if (sym > max_symbol)
+                    max_symbol = sym;
             }
 
             // Build the per-entry symbol -> slot map so the runtime
@@ -441,12 +475,14 @@ int xr_class_build_itable(XrClass *cls) {
             // a direct "entry has no map => return NULL" fallback.
             if (max_symbol >= 0) {
                 int cap = max_symbol + 1;
-                int *map = (int*)xr_malloc(cap * sizeof(int));
+                int *map = (int *) xr_malloc(cap * sizeof(int));
                 if (map) {
-                    for (int k = 0; k < cap; k++) map[k] = -1;
+                    for (int k = 0; k < cap; k++)
+                        map[k] = -1;
                     for (int j = 0; j < iface->method_count; j++) {
                         int sym = iface->methods[j].symbol;
-                        if (sym >= 0 && sym < cap) map[sym] = j;
+                        if (sym >= 0 && sym < cap)
+                            map[sym] = j;
                     }
                     cls->itable[i].method_symbol_to_index = map;
                     cls->itable[i].method_map_capacity = cap;
@@ -483,16 +519,19 @@ fail:
 /* ========== Abstract Class Support ========== */
 
 void xr_class_mark_abstract(XrClass *cls) {
-    if (!cls) return;
+    if (!cls)
+        return;
     cls->flags |= XR_CLASS_ABSTRACT;
 }
 
 void xr_class_add_abstract_method(XrClass *cls, int method_symbol) {
-    if (!cls || method_symbol < 0) return;
+    if (!cls || method_symbol < 0)
+        return;
 
     int new_count = cls->abstract_method_count + 1;
-    int *new_methods = (int*)xr_realloc(cls->abstract_methods, sizeof(int) * new_count);
-    if (!new_methods) return;
+    int *new_methods = (int *) xr_realloc(cls->abstract_methods, sizeof(int) * new_count);
+    if (!new_methods)
+        return;
     cls->abstract_methods = new_methods;
     cls->abstract_method_count = new_count;
     cls->abstract_methods[new_count - 1] = method_symbol;
@@ -500,16 +539,17 @@ void xr_class_add_abstract_method(XrClass *cls, int method_symbol) {
 
 // Check if class can be instantiated (not abstract and all abstract methods implemented)
 bool xr_class_can_instantiate(XrClass *cls) {
-    if (!cls) return false;
+    if (!cls)
+        return false;
 
-    if (cls->flags & XR_CLASS_ABSTRACT) return false;
+    if (cls->flags & XR_CLASS_ABSTRACT)
+        return false;
 
     for (int i = 0; i < cls->abstract_method_count; i++) {
         int symbol = cls->abstract_methods[i];
         XrMethod *method = xr_class_lookup_method(cls, symbol);
 
-        if (!method || method->type == XMETHOD_NONE ||
-            xr_method_is_abstract(method)) {
+        if (!method || method->type == XMETHOD_NONE || xr_method_is_abstract(method)) {
             return false;
         }
     }
@@ -519,9 +559,11 @@ bool xr_class_can_instantiate(XrClass *cls) {
 
 // Inherit abstract methods from parent
 void xr_class_inherit_abstract_methods(XrClass *child, XrClass *parent) {
-    if (!child || !parent) return;
+    if (!child || !parent)
+        return;
 
-    if (parent->abstract_method_count == 0) return;
+    if (parent->abstract_method_count == 0)
+        return;
 
     for (int i = 0; i < parent->abstract_method_count; i++) {
         int symbol = parent->abstract_methods[i];
@@ -535,7 +577,8 @@ void xr_class_inherit_abstract_methods(XrClass *child, XrClass *parent) {
 }
 
 bool xr_class_is_abstract_method(XrClass *cls, int method_symbol) {
-    if (!cls || method_symbol < 0) return false;
+    if (!cls || method_symbol < 0)
+        return false;
 
     for (int i = 0; i < cls->abstract_method_count; i++) {
         if (cls->abstract_methods[i] == method_symbol) {
@@ -552,14 +595,14 @@ bool xr_instance_of(void *obj, const XrClass *target) {
         return false;
     }
 
-    XrGCHeader *gc = (XrGCHeader*)obj;
+    XrGCHeader *gc = (XrGCHeader *) obj;
     XrObjType type = XR_GC_GET_TYPE(gc);
 
     if (type != XR_TINSTANCE) {
         return false;
     }
 
-    XrInstance *inst = (XrInstance*)obj;
+    XrInstance *inst = (XrInstance *) obj;
     XrClass *obj_class = inst->klass;
 
     if (obj_class == NULL) {
@@ -581,7 +624,8 @@ bool xr_instance_of(void *obj, const XrClass *target) {
  * Note: Classes are typically GC-managed; this is for explicit cleanup during error paths
  */
 void xr_class_free(XrClass *cls) {
-    if (!cls) return;
+    if (!cls)
+        return;
 
     // Free method table
     if (cls->methods) {
@@ -668,4 +712,3 @@ void xr_class_free(XrClass *cls) {
 
     xr_free(cls);
 }
-

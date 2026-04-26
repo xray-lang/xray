@@ -36,21 +36,18 @@ typedef struct XrClosure XrClosure;
 // SymbolId and the interned (stable) name pointer. All field/method
 // name storage in the class module goes through this intern pool; the
 // char* returned here must never be freed by callers.
-static inline void xr_builder_intern_name(XrClassBuilder *builder,
-                                          const char *name,
-                                          int *out_symbol,
-                                          const char **out_name) {
-    XrSymbolTable *table = (XrSymbolTable*)xr_isolate_get_symbol_table(builder->isolate);
+static inline void xr_builder_intern_name(XrClassBuilder *builder, const char *name,
+                                          int *out_symbol, const char **out_name) {
+    XrSymbolTable *table = (XrSymbolTable *) xr_isolate_get_symbol_table(builder->isolate);
     SymbolId id = xr_symbol_register_in_table(table, name);
-    *out_symbol = (id == SYMBOL_INVALID) ? 0 : (int)id;
+    *out_symbol = (id == SYMBOL_INVALID) ? 0 : (int) id;
     *out_name = (id == SYMBOL_INVALID)
-        ? name  // fall back to caller-owned literal; rare failure path
-        : xr_symbol_get_name_in_table(table, id);
+                    ? name  // fall back to caller-owned literal; rare failure path
+                    : xr_symbol_get_name_in_table(table, id);
 }
 
 // Return a stable interned pointer for a class name (no symbol id needed).
-static inline const char* xr_builder_intern_class_name(XrClassBuilder *builder,
-                                                       const char *name) {
+static inline const char *xr_builder_intern_class_name(XrClassBuilder *builder, const char *name) {
     const char *interned = xr_symbol_intern(builder->isolate, name);
     return interned ? interned : name;
 }
@@ -64,15 +61,15 @@ static inline const char* xr_builder_intern_class_name(XrClassBuilder *builder,
 #define INITIAL_INTERFACE_CAPACITY 4
 #define INITIAL_ABSTRACT_METHOD_CAPACITY 4
 
-#define ENSURE_NOT_FINALIZED(builder) \
-    if ((builder)->finalized) { \
-        xr_log_warning("class", "ClassBuilder: already finalized"); \
-        return -1; \
+#define ENSURE_NOT_FINALIZED(builder)                                                              \
+    if ((builder)->finalized) {                                                                    \
+        xr_log_warning("class", "ClassBuilder: already finalized");                                \
+        return -1;                                                                                 \
     }
 
 /* ========== Dynamic Array Resize ========== */
 
-static void* resize_array(void *array, int *capacity, size_t elem_size) {
+static void *resize_array(void *array, int *capacity, size_t elem_size) {
     int new_capacity = (*capacity) * 2;
     void *new_array = xr_realloc(array, new_capacity * elem_size);
     if (new_array == NULL) {
@@ -85,9 +82,7 @@ static void* resize_array(void *array, int *capacity, size_t elem_size) {
 
 /* ========== Builder Creation ========== */
 
-XrClassBuilder* xr_class_builder_new(XrayIsolate *isolate,
-                                      const char *name,
-                                      XrClass *super) {
+XrClassBuilder *xr_class_builder_new(XrayIsolate *isolate, const char *name, XrClass *super) {
     XR_DCHECK(isolate != NULL, "class_builder_new: NULL isolate");
     XR_DCHECK(name != NULL, "class_builder_new: NULL name");
     if (isolate == NULL || name == NULL) {
@@ -95,7 +90,7 @@ XrClassBuilder* xr_class_builder_new(XrayIsolate *isolate,
         return NULL;
     }
 
-    XrClassBuilder *builder = (XrClassBuilder*)xr_malloc(sizeof(XrClassBuilder));
+    XrClassBuilder *builder = (XrClassBuilder *) xr_malloc(sizeof(XrClassBuilder));
     if (builder == NULL) {
         xr_log_warning("class", "class_builder_new: failed to allocate builder");
         return NULL;
@@ -111,31 +106,29 @@ XrClassBuilder* xr_class_builder_new(XrayIsolate *isolate,
     builder->finalized = false;
 
     builder->field_capacity = INITIAL_FIELD_CAPACITY;
-    builder->fields = (XrFieldBuildItem*)xr_calloc(builder->field_capacity,
-                                                    sizeof(XrFieldBuildItem));
+    builder->fields =
+        (XrFieldBuildItem *) xr_calloc(builder->field_capacity, sizeof(XrFieldBuildItem));
 
     builder->method_capacity = INITIAL_METHOD_CAPACITY;
-    builder->methods = (XrMethodBuildItem*)xr_calloc(builder->method_capacity,
-                                                      sizeof(XrMethodBuildItem));
+    builder->methods =
+        (XrMethodBuildItem *) xr_calloc(builder->method_capacity, sizeof(XrMethodBuildItem));
 
     builder->static_field_capacity = INITIAL_STATIC_FIELD_CAPACITY;
-    builder->static_fields = (XrStaticFieldBuildItem*)xr_calloc(
-        builder->static_field_capacity, sizeof(XrStaticFieldBuildItem));
+    builder->static_fields = (XrStaticFieldBuildItem *) xr_calloc(builder->static_field_capacity,
+                                                                  sizeof(XrStaticFieldBuildItem));
 
     builder->static_method_capacity = INITIAL_STATIC_METHOD_CAPACITY;
-    builder->static_methods = (XrMethodBuildItem*)xr_calloc(
-        builder->static_method_capacity, sizeof(XrMethodBuildItem));
+    builder->static_methods =
+        (XrMethodBuildItem *) xr_calloc(builder->static_method_capacity, sizeof(XrMethodBuildItem));
 
     builder->interface_capacity = INITIAL_INTERFACE_CAPACITY;
-    builder->interfaces = (XrClass**)xr_calloc(builder->interface_capacity,
-                                                sizeof(XrClass*));
+    builder->interfaces = (XrClass **) xr_calloc(builder->interface_capacity, sizeof(XrClass *));
 
     builder->abstract_method_capacity = INITIAL_ABSTRACT_METHOD_CAPACITY;
-    builder->abstract_methods = (int*)xr_calloc(builder->abstract_method_capacity,
-                                                 sizeof(int));
+    builder->abstract_methods = (int *) xr_calloc(builder->abstract_method_capacity, sizeof(int));
 
-    if (!builder->fields || !builder->methods || !builder->static_fields ||
-        !builder->interfaces || !builder->abstract_methods) {
+    if (!builder->fields || !builder->methods || !builder->static_fields || !builder->interfaces ||
+        !builder->abstract_methods) {
         xr_class_builder_destroy(builder);
         return NULL;
     }
@@ -153,7 +146,8 @@ bool xr_class_builder_has_field(const XrClassBuilder *builder, const char *name)
     // canonical pointer and reduces duplicate-check to a single
     // pointer comparison per slot.
     const char *interned = xr_symbol_intern(builder->isolate, name);
-    if (!interned) return false;
+    if (!interned)
+        return false;
     for (int i = 0; i < builder->field_count; i++) {
         if (builder->fields[i].name == interned) {
             return true;
@@ -162,9 +156,7 @@ bool xr_class_builder_has_field(const XrClassBuilder *builder, const char *name)
     return false;
 }
 
-int xr_class_builder_add_field(XrClassBuilder *builder,
-                                const char *name,
-                                uint32_t flags) {
+int xr_class_builder_add_field(XrClassBuilder *builder, const char *name, uint32_t flags) {
     XR_DCHECK(builder != NULL, "add_field: NULL builder");
     ENSURE_NOT_FINALIZED(builder);
 
@@ -179,9 +171,10 @@ int xr_class_builder_add_field(XrClassBuilder *builder,
     }
 
     if (builder->field_count >= builder->field_capacity) {
-        builder->fields = (XrFieldBuildItem*)resize_array(
+        builder->fields = (XrFieldBuildItem *) resize_array(
             builder->fields, &builder->field_capacity, sizeof(XrFieldBuildItem));
-        if (builder->fields == NULL) return -1;
+        if (builder->fields == NULL)
+            return -1;
     }
 
     XrFieldBuildItem *item = &builder->fields[builder->field_count];
@@ -200,7 +193,8 @@ int xr_class_builder_add_field(XrClassBuilder *builder,
 bool xr_class_builder_has_method(const XrClassBuilder *builder, const char *name) {
     XR_DCHECK(builder != NULL, "has_method: NULL builder");
     const char *interned = xr_symbol_intern(builder->isolate, name);
-    if (!interned) return false;
+    if (!interned)
+        return false;
     for (int i = 0; i < builder->method_count; i++) {
         if (builder->methods[i].name == interned) {
             return true;
@@ -209,11 +203,8 @@ bool xr_class_builder_has_method(const XrClassBuilder *builder, const char *name
     return false;
 }
 
-int xr_class_builder_add_method(XrClassBuilder *builder,
-                                 const char *name,
-                                 XrCFunctionPtr impl,
-                                 int param_count,
-                                 uint32_t flags) {
+int xr_class_builder_add_method(XrClassBuilder *builder, const char *name, XrCFunctionPtr impl,
+                                int param_count, uint32_t flags) {
     XR_DCHECK(builder != NULL, "add_method: NULL builder");
     ENSURE_NOT_FINALIZED(builder);
 
@@ -228,9 +219,10 @@ int xr_class_builder_add_method(XrClassBuilder *builder,
     }
 
     if (builder->method_count >= builder->method_capacity) {
-        builder->methods = (XrMethodBuildItem*)resize_array(
+        builder->methods = (XrMethodBuildItem *) resize_array(
             builder->methods, &builder->method_capacity, sizeof(XrMethodBuildItem));
-        if (builder->methods == NULL) return -1;
+        if (builder->methods == NULL)
+            return -1;
     }
 
     XrMethodBuildItem *item = &builder->methods[builder->method_count];
@@ -246,13 +238,9 @@ int xr_class_builder_add_method(XrClassBuilder *builder,
     return 0;
 }
 
-int xr_class_builder_add_method_closure(XrClassBuilder *builder,
-                                         const char *name,
-                                         XrClosure *closure,
-                                         XrMethodType method_type,
-                                         int param_count,
-                                         uint32_t flags,
-                                         uint8_t op_type) {
+int xr_class_builder_add_method_closure(XrClassBuilder *builder, const char *name,
+                                        XrClosure *closure, XrMethodType method_type,
+                                        int param_count, uint32_t flags, uint8_t op_type) {
     XR_DCHECK(builder != NULL, "add_method_closure: NULL builder");
     ENSURE_NOT_FINALIZED(builder);
 
@@ -262,9 +250,10 @@ int xr_class_builder_add_method_closure(XrClassBuilder *builder,
     }
 
     if (builder->method_count >= builder->method_capacity) {
-        builder->methods = (XrMethodBuildItem*)resize_array(
+        builder->methods = (XrMethodBuildItem *) resize_array(
             builder->methods, &builder->method_capacity, sizeof(XrMethodBuildItem));
-        if (builder->methods == NULL) return -1;
+        if (builder->methods == NULL)
+            return -1;
     }
 
     XrMethodBuildItem *item = &builder->methods[builder->method_count];
@@ -281,10 +270,8 @@ int xr_class_builder_add_method_closure(XrClassBuilder *builder,
 
 /* ========== Static Field Operations ========== */
 
-int xr_class_builder_add_static_field(XrClassBuilder *builder,
-                                       const char *name,
-                                       XrValue value,
-                                       uint32_t flags) {
+int xr_class_builder_add_static_field(XrClassBuilder *builder, const char *name, XrValue value,
+                                      uint32_t flags) {
     XR_DCHECK(builder != NULL, "add_static_field: NULL builder");
     ENSURE_NOT_FINALIZED(builder);
 
@@ -294,10 +281,11 @@ int xr_class_builder_add_static_field(XrClassBuilder *builder,
     }
 
     if (builder->static_field_count >= builder->static_field_capacity) {
-        builder->static_fields = (XrStaticFieldBuildItem*)resize_array(
+        builder->static_fields = (XrStaticFieldBuildItem *) resize_array(
             builder->static_fields, &builder->static_field_capacity,
             sizeof(XrStaticFieldBuildItem));
-        if (builder->static_fields == NULL) return -1;
+        if (builder->static_fields == NULL)
+            return -1;
     }
 
     XrStaticFieldBuildItem *item = &builder->static_fields[builder->static_field_count];
@@ -311,11 +299,8 @@ int xr_class_builder_add_static_field(XrClassBuilder *builder,
 
 /* ========== Static Method Operations ========== */
 
-int xr_class_builder_add_static_method(XrClassBuilder *builder,
-                                        const char *name,
-                                        XrCFunctionPtr impl,
-                                        int param_count,
-                                        uint32_t flags) {
+int xr_class_builder_add_static_method(XrClassBuilder *builder, const char *name,
+                                       XrCFunctionPtr impl, int param_count, uint32_t flags) {
     XR_DCHECK(builder != NULL, "add_static_method: NULL builder");
     ENSURE_NOT_FINALIZED(builder);
 
@@ -325,10 +310,10 @@ int xr_class_builder_add_static_method(XrClassBuilder *builder,
     }
 
     if (builder->static_method_count >= builder->static_method_capacity) {
-        builder->static_methods = (XrMethodBuildItem*)resize_array(
-            builder->static_methods, &builder->static_method_capacity,
-            sizeof(XrMethodBuildItem));
-        if (builder->static_methods == NULL) return -1;
+        builder->static_methods = (XrMethodBuildItem *) resize_array(
+            builder->static_methods, &builder->static_method_capacity, sizeof(XrMethodBuildItem));
+        if (builder->static_methods == NULL)
+            return -1;
     }
 
     XrMethodBuildItem *item = &builder->static_methods[builder->static_method_count];
@@ -343,11 +328,9 @@ int xr_class_builder_add_static_method(XrClassBuilder *builder,
     return 0;
 }
 
-int xr_class_builder_add_static_method_closure(XrClassBuilder *builder,
-                                                const char *name,
-                                                XrClosure *closure,
-                                                int param_count,
-                                                uint32_t flags) {
+int xr_class_builder_add_static_method_closure(XrClassBuilder *builder, const char *name,
+                                               XrClosure *closure, int param_count,
+                                               uint32_t flags) {
     XR_DCHECK(builder != NULL, "add_static_method_closure: NULL builder");
     ENSURE_NOT_FINALIZED(builder);
 
@@ -357,10 +340,10 @@ int xr_class_builder_add_static_method_closure(XrClassBuilder *builder,
     }
 
     if (builder->static_method_count >= builder->static_method_capacity) {
-        builder->static_methods = (XrMethodBuildItem*)resize_array(
-            builder->static_methods, &builder->static_method_capacity,
-            sizeof(XrMethodBuildItem));
-        if (builder->static_methods == NULL) return -1;
+        builder->static_methods = (XrMethodBuildItem *) resize_array(
+            builder->static_methods, &builder->static_method_capacity, sizeof(XrMethodBuildItem));
+        if (builder->static_methods == NULL)
+            return -1;
     }
 
     XrMethodBuildItem *item = &builder->static_methods[builder->static_method_count];
@@ -377,8 +360,7 @@ int xr_class_builder_add_static_method_closure(XrClassBuilder *builder,
 
 /* ========== Interface Operations ========== */
 
-int xr_class_builder_add_interface(XrClassBuilder *builder,
-                                    XrClass *interface) {
+int xr_class_builder_add_interface(XrClassBuilder *builder, XrClass *interface) {
     XR_DCHECK(builder != NULL, "add_interface: NULL builder");
     ENSURE_NOT_FINALIZED(builder);
 
@@ -388,9 +370,10 @@ int xr_class_builder_add_interface(XrClassBuilder *builder,
     }
 
     if (builder->interface_count >= builder->interface_capacity) {
-        builder->interfaces = (XrClass**)resize_array(
-            builder->interfaces, &builder->interface_capacity, sizeof(XrClass*));
-        if (builder->interfaces == NULL) return -1;
+        builder->interfaces = (XrClass **) resize_array(
+            builder->interfaces, &builder->interface_capacity, sizeof(XrClass *));
+        if (builder->interfaces == NULL)
+            return -1;
     }
 
     builder->interfaces[builder->interface_count] = interface;
@@ -401,15 +384,15 @@ int xr_class_builder_add_interface(XrClassBuilder *builder,
 
 /* ========== Abstract Method Operations ========== */
 
-int xr_class_builder_add_abstract_method(XrClassBuilder *builder,
-                                          int method_symbol) {
+int xr_class_builder_add_abstract_method(XrClassBuilder *builder, int method_symbol) {
     XR_DCHECK(builder != NULL, "add_abstract_method: NULL builder");
     ENSURE_NOT_FINALIZED(builder);
 
     if (builder->abstract_method_count >= builder->abstract_method_capacity) {
-        builder->abstract_methods = (int*)resize_array(
+        builder->abstract_methods = (int *) resize_array(
             builder->abstract_methods, &builder->abstract_method_capacity, sizeof(int));
-        if (builder->abstract_methods == NULL) return -1;
+        if (builder->abstract_methods == NULL)
+            return -1;
     }
 
     builder->abstract_methods[builder->abstract_method_count] = method_symbol;
@@ -439,7 +422,8 @@ void xr_class_builder_set_flags(XrClassBuilder *builder, uint32_t flags) {
 /* ========== Builder Destroy ========== */
 
 void xr_class_builder_destroy(XrClassBuilder *builder) {
-    if (builder == NULL) return;
+    if (builder == NULL)
+        return;
 
     // All name fields below point into the symbol table's intern pool and
     // must not be freed here; only the dynamic arrays themselves are ours.

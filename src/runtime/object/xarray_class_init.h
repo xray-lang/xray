@@ -18,6 +18,6 @@
 #include "../../base/xdefs.h"
 
 // Create Array class with all methods (using XrClassBuilder)
-XR_FUNC XrClass* xr_array_create_class(XrayIsolate *X, XrClass *objectClass);
+XR_FUNC XrClass *xr_array_create_class(XrayIsolate *X, XrClass *objectClass);
 
-#endif // XARRAY_CLASS_INIT_H
+#endif  // XARRAY_CLASS_INIT_H

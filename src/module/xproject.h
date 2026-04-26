@@ -48,15 +48,15 @@ typedef struct XrProject {
 
 /* ========== Project API ========== */
 
-XR_FUNC XrProject* xr_project_load(XrayIsolate *isolate, const char *project_root);
+XR_FUNC XrProject *xr_project_load(XrayIsolate *isolate, const char *project_root);
 XR_FUNC void xr_project_free(XrProject *project);
 
 // Returns local path (caller frees), or NULL for non-local dependencies
-XR_FUNC char* xr_resolve_local_dependency(XrProject *project, const char *package_name);
+XR_FUNC char *xr_resolve_local_dependency(XrProject *project, const char *package_name);
 
 /* ========== File Utilities ========== */
 
 XR_FUNC bool xr_project_collect_files(const char *dir_path, char ***files, int *count);
 XR_FUNC void xr_project_free_files(char **files, int count);
 
-#endif // XPROJECT_H
+#endif  // XPROJECT_H

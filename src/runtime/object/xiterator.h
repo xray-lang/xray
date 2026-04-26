@@ -46,31 +46,31 @@ typedef enum {
  * - Early exit: if loop breaks, unvisited elements are never created
  */
 typedef struct XrIterator {
-    XrGCHeader gc;          // GC header
-    XrIteratorType type;    // iterator type (Map or Set)
+    XrGCHeader gc;        // GC header
+    XrIteratorType type;  // iterator type (Map or Set)
     union {
-        struct XrMap *map;  // Map iterator: reference to source Map
-        struct XrSet *set;  // Set iterator: reference to source Set
-        struct XrJson *json; // Json iterator: reference to source Json
-    } source;               // source object (union, selected by type)
-    uint32_t scan_index;    // internal scan position
-    uint32_t total_count;   // total field count (Json fast mode only)
-    struct XrCoroutine *coro; // coroutine (for creating temp arrays)
-    void *context;          // extra context (Json: XrSymbolTable*)
+        struct XrMap *map;     // Map iterator: reference to source Map
+        struct XrSet *set;     // Set iterator: reference to source Set
+        struct XrJson *json;   // Json iterator: reference to source Json
+    } source;                  // source object (union, selected by type)
+    uint32_t scan_index;       // internal scan position
+    uint32_t total_count;      // total field count (Json fast mode only)
+    struct XrCoroutine *coro;  // coroutine (for creating temp arrays)
+    void *context;             // extra context (Json: XrSymbolTable*)
 } XrIterator;
 
 /* ========== Iterator API ========== */
 
 // Create iterator from Map (lazy, no pre-generation)
 struct XrCoroutine;
-XR_FUNC XrIterator* xr_iterator_new_from_map(struct XrCoroutine *coro, struct XrMap *map);
+XR_FUNC XrIterator *xr_iterator_new_from_map(struct XrCoroutine *coro, struct XrMap *map);
 
 // Create iterator from Set (lazy, no pre-generation)
-XR_FUNC XrIterator* xr_iterator_new_from_set(struct XrCoroutine *coro, struct XrSet *set);
+XR_FUNC XrIterator *xr_iterator_new_from_set(struct XrCoroutine *coro, struct XrSet *set);
 
 // Create iterator from Json (lazy, converts SymbolId keys to strings)
-XR_FUNC XrIterator* xr_iterator_new_from_json(struct XrCoroutine *coro, struct XrJson *json,
-                                       struct XrayIsolate *isolate);
+XR_FUNC XrIterator *xr_iterator_new_from_json(struct XrCoroutine *coro, struct XrJson *json,
+                                              struct XrayIsolate *isolate);
 
 // Check if more elements available
 XR_FUNC bool xr_iterator_has_next(XrIterator *iter);
@@ -81,10 +81,10 @@ XR_FUNC XrValue xr_iterator_next(XrIterator *iter);
 /* ========== XrValue Operations ========== */
 
 XR_FUNC XrValue xr_value_from_iterator(XrIterator *iter);
-XR_FUNC XrIterator* xr_value_to_iterator(XrValue value);
+XR_FUNC XrIterator *xr_value_to_iterator(XrValue value);
 
 static inline bool xr_is_iterator(XrValue value) {
     return XR_IS_ITERATOR(value);
 }
 
-#endif // XITERATOR_H
+#endif  // XITERATOR_H

@@ -21,23 +21,23 @@
 
 /* ========== ANSI Color Codes ========== */
 
-#define XR_CLR_RESET   "\033[0m"
-#define XR_CLR_BOLD    "\033[1m"
-#define XR_CLR_DIM     "\033[2m"
-#define XR_CLR_RED     "\033[1;31m"
-#define XR_CLR_GREEN   "\033[32m"
-#define XR_CLR_YELLOW  "\033[33m"
-#define XR_CLR_BLUE    "\033[34m"
+#define XR_CLR_RESET "\033[0m"
+#define XR_CLR_BOLD "\033[1m"
+#define XR_CLR_DIM "\033[2m"
+#define XR_CLR_RED "\033[1;31m"
+#define XR_CLR_GREEN "\033[32m"
+#define XR_CLR_YELLOW "\033[33m"
+#define XR_CLR_BLUE "\033[34m"
 #define XR_CLR_MAGENTA "\033[35m"
-#define XR_CLR_CYAN    "\033[36m"
-#define XR_CLR_GRAY    "\033[90m"
+#define XR_CLR_CYAN "\033[36m"
+#define XR_CLR_GRAY "\033[90m"
 
 /* ========== Color Control ========== */
 
 typedef enum {
-    XR_COLOR_AUTO,   /* Detect from terminal (default) */
-    XR_COLOR_ON,     /* Force color on */
-    XR_COLOR_OFF,    /* Force color off */
+    XR_COLOR_AUTO, /* Detect from terminal (default) */
+    XR_COLOR_ON,   /* Force color on */
+    XR_COLOR_OFF,  /* Force color off */
 } XrCliColorMode;
 
 /* Set global color mode. Called by dispatch after parsing --color/--no-color. */
@@ -53,9 +53,9 @@ XR_FUNC const char *xr_cli_clr(const char *code);
 /* ========== Output Verbosity ========== */
 
 typedef enum {
-    XR_OUTPUT_NORMAL,   /* Default */
-    XR_OUTPUT_VERBOSE,  /* --verbose: extra detail */
-    XR_OUTPUT_QUIET,    /* --quiet: errors only */
+    XR_OUTPUT_NORMAL,  /* Default */
+    XR_OUTPUT_VERBOSE, /* --verbose: extra detail */
+    XR_OUTPUT_QUIET,   /* --quiet: errors only */
 } XrCliOutputLevel;
 
 /* Set/query output level. Called by dispatch after parsing global flags. */
@@ -71,4 +71,4 @@ XR_FUNC bool xr_cli_json_output(void);
 /* Monotonic time in milliseconds. */
 XR_FUNC double xr_cli_get_time_ms(void);
 
-#endif // XCLI_OUTPUT_H
+#endif  // XCLI_OUTPUT_H

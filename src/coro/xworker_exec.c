@@ -36,20 +36,16 @@
 
 // ========== Forward Declarations ==========
 
-static XrVMResult run_finalize(XrayIsolate *isolate, XrWorker *worker,
-                                XrCoroutine *coro, XrVMContext *ctx,
-                                XrVMContext *coro_ctx, XrVMResult result);
+static XrVMResult run_finalize(XrayIsolate *isolate, XrWorker *worker, XrCoroutine *coro,
+                               XrVMContext *ctx, XrVMContext *coro_ctx, XrVMResult result);
 
-static XrVMResult run_first_exec(XrayIsolate *isolate, XrWorker *worker,
-                                  XrCoroutine *coro, XrVMContext *ctx,
-                                  XrVMContext *coro_ctx);
+static XrVMResult run_first_exec(XrayIsolate *isolate, XrWorker *worker, XrCoroutine *coro,
+                                 XrVMContext *ctx, XrVMContext *coro_ctx);
 
-static XrVMResult run_resume_path(XrayIsolate *isolate, XrWorker *worker,
-                                   XrCoroutine *coro, XrVMContext *ctx,
-                                   XrVMContext *coro_ctx);
+static XrVMResult run_resume_path(XrayIsolate *isolate, XrWorker *worker, XrCoroutine *coro,
+                                  XrVMContext *ctx, XrVMContext *coro_ctx);
 
-static XrVMResult run_cfunc_coro(XrWorker *worker, XrCoroutine *coro,
-                                  XrayIsolate *isolate);
+static XrVMResult run_cfunc_coro(XrWorker *worker, XrCoroutine *coro, XrayIsolate *isolate);
 
 /*
  * post-check after setting BLOCKED flag.
@@ -116,7 +112,8 @@ bool worker_process_blocked(XrWorker *worker, XrCoroutine *coro) {
     }
 
     // Select wait: already handled by select infrastructure
-    if (coro->select_wait) return false;
+    if (coro->select_wait)
+        return false;
 
     // Timer active: add to blocked queue for tracking
     if (coro->ext && atomic_load_explicit(&coro->ext->timer_active, memory_order_relaxed))
@@ -146,8 +143,9 @@ static bool worker_handle_vm_result(XrWorker *worker, XrCoroutine *coro, XrVMRes
 
             // Inline fast path: skip extern calls for anonymous coros without monitors
             if (__builtin_expect(coro->name != NULL || (coro->ext && coro->ext->watched_by), 0)) {
-                XrCoroState *_s = (XrCoroState *)runtime->isolate->vm.coro_state;
-                xr_coro_notify_monitors(runtime->isolate, _s ? _s->coro_registry : NULL, coro, "normal");
+                XrCoroState *_s = (XrCoroState *) runtime->isolate->vm.coro_state;
+                xr_coro_notify_monitors(runtime->isolate, _s ? _s->coro_registry : NULL, coro,
+                                        "normal");
                 xr_coro_on_exit(runtime->isolate, coro);
             }
             worker->p.stats.completed_count++;
@@ -191,8 +189,11 @@ static bool worker_handle_vm_result(XrWorker *worker, XrCoroutine *coro, XrVMRes
             if (coro->task) {
                 xr_task_cancel(coro->task);
             }
-            { XrCoroState *_s = (XrCoroState *)runtime->isolate->vm.coro_state;
-            xr_coro_notify_monitors(runtime->isolate, _s ? _s->coro_registry : NULL, coro, "cancelled"); }
+            {
+                XrCoroState *_s = (XrCoroState *) runtime->isolate->vm.coro_state;
+                xr_coro_notify_monitors(runtime->isolate, _s ? _s->coro_registry : NULL, coro,
+                                        "cancelled");
+            }
             xr_coro_on_exit(runtime->isolate, coro);
             worker->p.stats.completed_count++;
             xr_coro_wake_waiter(runtime->isolate, coro);
@@ -219,8 +220,11 @@ static bool worker_handle_vm_result(XrWorker *worker, XrCoroutine *coro, XrVMRes
                     xr_task_fail(coro->task, coro->error);
                 }
             }
-            { XrCoroState *_s = (XrCoroState *)runtime->isolate->vm.coro_state;
-            xr_coro_notify_monitors(runtime->isolate, _s ? _s->coro_registry : NULL, coro, "error"); }
+            {
+                XrCoroState *_s = (XrCoroState *) runtime->isolate->vm.coro_state;
+                xr_coro_notify_monitors(runtime->isolate, _s ? _s->coro_registry : NULL, coro,
+                                        "error");
+            }
             xr_coro_on_exit(runtime->isolate, coro);
             worker->p.stats.completed_count++;
             xr_coro_wake_waiter(runtime->isolate, coro);
@@ -252,8 +256,7 @@ void worker_exec_with_cont_stealing(XrWorker *worker, XrCoroutine *coro) {
 cont_exec:
     // Invariant: coro must not be NULL or DONE when entering execution
     XR_DCHECK(coro != NULL, "cont_exec: NULL coroutine");
-    XR_DCHECK(!xr_coro_flags_has(coro, XR_CORO_FLG_DONE),
-              "cont_exec: executing DONE coroutine");
+    XR_DCHECK(!xr_coro_flags_has(coro, XR_CORO_FLG_DONE), "cont_exec: executing DONE coroutine");
     SCHED_TRACE_CORO(worker, coro, "exec");
     m->current_coro = coro;
     p->local_active_coros++;
@@ -264,8 +267,8 @@ exec_fast:  // Fast re-dispatch entry: local_active_coros already correct
     result = xr_coro_run_on_worker(worker, coro);
     // Single-writer store: only owner thread writes, sysmon reads via relaxed load
     atomic_store_explicit(&m->heartbeat,
-        atomic_load_explicit(&m->heartbeat, memory_order_relaxed) + 1,
-        memory_order_relaxed);
+                          atomic_load_explicit(&m->heartbeat, memory_order_relaxed) + 1,
+                          memory_order_relaxed);
 
     // Continuation stealing: child-first dispatch.
     // Push parent to cont_deque, switch to child for immediate execution.
@@ -296,8 +299,7 @@ exec_fast:  // Fast re-dispatch entry: local_active_coros already correct
             // monopolize the current worker, and parked workers
             // never discover the parent continuation in cont_deque.
             XrRuntime *_rt = p->runtime;
-            if (_rt && atomic_load_explicit(&_rt->spinning_count,
-                                            memory_order_relaxed) == 0) {
+            if (_rt && atomic_load_explicit(&_rt->spinning_count, memory_order_relaxed) == 0) {
                 wake_idle_worker(_rt);
             }
         }
@@ -309,7 +311,8 @@ exec_fast:  // Fast re-dispatch entry: local_active_coros already correct
     // BLOCKED fast re-dispatch: skip full handle_vm_result/reductions tracking
     // for maximum throughput. Optimal for serial message chains (pingpong, ring).
     // BLOCKED flag already set by run_on_worker/run_cfunc_coro.
-    if (result == XR_VM_BLOCKED && atomic_load_explicit(&p->lifo_slot, memory_order_relaxed) && --fast_dispatch_budget > 0) {
+    if (result == XR_VM_BLOCKED && atomic_load_explicit(&p->lifo_slot, memory_order_relaxed) &&
+        --fast_dispatch_budget > 0) {
         SCHED_TRACE_CORO(worker, coro, "fast_dispatch_blocked");
         p->yield_streak = 0;
         worker_process_blocked(worker, coro);
@@ -352,10 +355,9 @@ exec_fast:  // Fast re-dispatch entry: local_active_coros already correct
     // has already been added to channel waitq (spinlock released). Another
     // thread may have woken it and started executing it on a different worker.
     // In that case we must NOT touch any coro fields — the coro is "gone".
-    if (result == XR_VM_BLOCKED &&
-        (xr_coro_resume_load(coro) == XR_RESUME_CHANNEL ||
-         xr_coro_resume_load(coro) == XR_RESUME_CHANNEL_CLOSED ||
-         (xr_coro_flags_load(coro) & XR_CORO_FLG_READY))) {
+    if (result == XR_VM_BLOCKED && (xr_coro_resume_load(coro) == XR_RESUME_CHANNEL ||
+                                    xr_coro_resume_load(coro) == XR_RESUME_CHANNEL_CLOSED ||
+                                    (xr_coro_flags_load(coro) & XR_CORO_FLG_READY))) {
         // Coro already woken by another thread — skip all coro field access
         p->local_active_coros--;
         goto pop_continuation;
@@ -363,7 +365,8 @@ exec_fast:  // Fast re-dispatch entry: local_active_coros already correct
 
     // Reductions tracking (safe: coro is still owned by this worker)
     int reds_used = XR_CORO_REDUCTIONS - coro->reductions;
-    if (reds_used < 0) reds_used = XR_CORO_REDUCTIONS;
+    if (reds_used < 0)
+        reds_used = XR_CORO_REDUCTIONS;
     int prio = xr_coro_get_priority(xr_coro_flags_load(coro));
     xr_worker_reductions_executed(worker, prio, reds_used);
 
@@ -396,12 +399,12 @@ pop_continuation:
 
 // First call of a cfunc coroutine: build the C frame, run the body.
 static XrVMResult run_cfunc_first_exec(XrayIsolate *isolate, XrCoroutine *coro,
-                                        XrVMContext *coro_ctx, uint32_t cur_flags) {
+                                       XrVMContext *coro_ctx, uint32_t cur_flags) {
     atomic_store_explicit(&coro->coro_state, XR_CORO_STATE_RUNNING, memory_order_release);
     atomic_store_explicit(&coro->flags,
-        (cur_flags & ~(XR_CORO_FLG_READY | XR_CORO_FLG_BLOCKED))
-        | XR_CORO_FLG_RUNNING | XR_CORO_FLG_STARTED,
-        memory_order_release);
+                          (cur_flags & ~(XR_CORO_FLG_READY | XR_CORO_FLG_BLOCKED)) |
+                              XR_CORO_FLG_RUNNING | XR_CORO_FLG_STARTED,
+                          memory_order_release);
 
     // Initialize first frame (for Yieldable support).
     coro_ctx->frame_count = 1;
@@ -424,66 +427,72 @@ static XrVMResult run_cfunc_first_exec(XrayIsolate *isolate, XrCoroutine *coro,
     coro_ctx->stack_top = coro_ctx->stack + 1 + coro->arg_count;
 
     XrValue cfunc_result = xr_null();
-    XrCFuncResult status = coro->entry.cfunc(isolate, coro->args, coro->arg_count,
-                                              &cfunc_result);
+    XrCFuncResult status = coro->entry.cfunc(isolate, coro->args, coro->arg_count, &cfunc_result);
     switch (status) {
-    case XR_CFUNC_DONE:
-        coro_ctx->stack[0] = cfunc_result;
-        return XR_VM_OK;
-    case XR_CFUNC_BLOCKED:  return XR_VM_BLOCKED;
-    case XR_CFUNC_YIELD:    return XR_VM_YIELD;
-    case XR_CFUNC_CALL_CLOSURE:
-        // Closure frame pushed by xr_yield_call_closure, execute via VM.
-        coro_ctx->module_base_frame = 0;
-        return run(isolate, coro_ctx);
-    default:
-        return XR_VM_RUNTIME_ERROR;
+        case XR_CFUNC_DONE:
+            coro_ctx->stack[0] = cfunc_result;
+            return XR_VM_OK;
+        case XR_CFUNC_BLOCKED:
+            return XR_VM_BLOCKED;
+        case XR_CFUNC_YIELD:
+            return XR_VM_YIELD;
+        case XR_CFUNC_CALL_CLOSURE:
+            // Closure frame pushed by xr_yield_call_closure, execute via VM.
+            coro_ctx->module_base_frame = 0;
+            return run(isolate, coro_ctx);
+        default:
+            return XR_VM_RUNTIME_ERROR;
     }
 }
 
 // Resume a previously-suspended cfunc coroutine. Includes an inline fast
 // path for the common "single C frame with continuation" case (HTTP/WS
 // handlers); falls back to xr_coro_resume_with_unroll otherwise.
-static XrVMResult run_cfunc_resume(XrayIsolate *isolate, XrCoroutine *coro,
-                                    XrVMContext *coro_ctx, uint32_t cur_flags) {
+static XrVMResult run_cfunc_resume(XrayIsolate *isolate, XrCoroutine *coro, XrVMContext *coro_ctx,
+                                   uint32_t cur_flags) {
     atomic_store_explicit(&coro->coro_state, XR_CORO_STATE_RUNNING, memory_order_release);
     atomic_store_explicit(&coro->flags,
-        (cur_flags & ~(XR_CORO_FLG_READY | XR_CORO_FLG_BLOCKED))
-        | XR_CORO_FLG_RUNNING,
-        memory_order_release);
+                          (cur_flags & ~(XR_CORO_FLG_READY | XR_CORO_FLG_BLOCKED)) |
+                              XR_CORO_FLG_RUNNING,
+                          memory_order_release);
 
     int resume_status = xr_coro_resume_load(coro);
-    if (!resume_status) resume_status = XR_RESUME_IO_READY;
+    if (!resume_status)
+        resume_status = XR_RESUME_IO_READY;
 
     // Inline fast path: single C frame with continuation.
     if (coro_ctx->frame_count == 1) {
         XrBcCallFrame *frame = &coro_ctx->frames[0];
         uint8_t need = XR_CALL_C | XR_CALL_HAS_CONT | XR_CALL_YIELDED;
         if ((frame->call_status & need) == need && frame->u.c.continuation) {
-            XrContinuation cont = (XrContinuation)frame->u.c.continuation;
+            XrContinuation cont = (XrContinuation) frame->u.c.continuation;
             void *user_ctx = frame->u.c.continuation_ctx;
             XrValue cfunc_result;
             XrCFuncResult status = cont(isolate, resume_status, user_ctx, &cfunc_result);
             switch (status) {
-            case XR_CFUNC_DONE:
-                coro_ctx->stack[0] = cfunc_result;
-                frame->call_status &= ~(XR_CALL_C | XR_CALL_HAS_CONT | XR_CALL_YIELDED);
-                frame->u.c.continuation = NULL;
-                coro_ctx->frame_count = 0;
-                return XR_VM_OK;
-            case XR_CFUNC_BLOCKED:  return XR_VM_BLOCKED;
-            case XR_CFUNC_YIELD:    return XR_VM_YIELD;
-            case XR_CFUNC_CALL_CLOSURE:
-                coro_ctx->module_base_frame = 0;
-                return run(isolate, coro_ctx);
-            default:                return XR_VM_RUNTIME_ERROR;
+                case XR_CFUNC_DONE:
+                    coro_ctx->stack[0] = cfunc_result;
+                    frame->call_status &= ~(XR_CALL_C | XR_CALL_HAS_CONT | XR_CALL_YIELDED);
+                    frame->u.c.continuation = NULL;
+                    coro_ctx->frame_count = 0;
+                    return XR_VM_OK;
+                case XR_CFUNC_BLOCKED:
+                    return XR_VM_BLOCKED;
+                case XR_CFUNC_YIELD:
+                    return XR_VM_YIELD;
+                case XR_CFUNC_CALL_CLOSURE:
+                    coro_ctx->module_base_frame = 0;
+                    return run(isolate, coro_ctx);
+                default:
+                    return XR_VM_RUNTIME_ERROR;
             }
         }
     }
 
     // Slow path: full unroll.
     XrVMResult result = xr_coro_resume_with_unroll(isolate, coro, resume_status);
-    if (result != XR_VM_OK) return result;
+    if (result != XR_VM_OK)
+        return result;
 
     // Single-frame result short-circuit after successful unroll.
     if (coro_ctx->frame_count == 1) {
@@ -495,7 +504,8 @@ static XrVMResult run_cfunc_resume(XrayIsolate *isolate, XrCoroutine *coro,
         }
     }
     coro_ctx->module_base_frame = 0;
-    if (coro_ctx->frame_count == 0) return XR_VM_OK;
+    if (coro_ctx->frame_count == 0)
+        return XR_VM_OK;
     return run(isolate, coro_ctx);
 }
 
@@ -503,8 +513,7 @@ static XrVMResult run_cfunc_resume(XrayIsolate *isolate, XrCoroutine *coro,
 //
 // First-exec and resume are factored into helpers above so the
 // orchestration here stays small and obvious.
-static XrVMResult run_cfunc_coro(XrWorker *worker, XrCoroutine *coro,
-                                  XrayIsolate *isolate) {
+static XrVMResult run_cfunc_coro(XrWorker *worker, XrCoroutine *coro, XrayIsolate *isolate) {
     XrVMContext *ctx = &worker->m->vm_ctx;
     XrVMContext *coro_ctx = &coro->vm_ctx;
 
@@ -532,13 +541,12 @@ static XrVMResult run_cfunc_coro(XrWorker *worker, XrCoroutine *coro,
         // under lock.  Non-channel blocks (await,
         // timer): coro is still RUNNING.  CAS handles both correctly.
         uint8_t _exp = XR_CORO_STATE_RUNNING;
-        if (atomic_compare_exchange_strong_explicit(
-                &coro->coro_state, &_exp, XR_CORO_STATE_BLOCKED,
-                memory_order_release, memory_order_relaxed)) {
-            atomic_fetch_and_explicit(&coro->flags,
-                ~(uint32_t)XR_CORO_FLG_RUNNING, memory_order_relaxed);
-            atomic_fetch_or_explicit(&coro->flags,
-                (uint32_t)XR_CORO_FLG_BLOCKED, memory_order_release);
+        if (atomic_compare_exchange_strong_explicit(&coro->coro_state, &_exp, XR_CORO_STATE_BLOCKED,
+                                                    memory_order_release, memory_order_relaxed)) {
+            atomic_fetch_and_explicit(&coro->flags, ~(uint32_t) XR_CORO_FLG_RUNNING,
+                                      memory_order_relaxed);
+            atomic_fetch_or_explicit(&coro->flags, (uint32_t) XR_CORO_FLG_BLOCKED,
+                                     memory_order_release);
         }
     } else if (result == XR_VM_YIELD) {
         xr_coro_transition_to_ready(coro);
@@ -565,10 +573,9 @@ static XrVMResult run_cfunc_coro(XrWorker *worker, XrCoroutine *coro,
 // every execution path in xr_coro_run_on_worker must perform.
 // Assumes ctx->current_coro == coro; clears it before returning (except for
 // continuation-stealing / debug-break which leave the caller in charge).
-static XrVMResult run_finalize(XrayIsolate *isolate, XrWorker *worker,
-                                XrCoroutine *coro, XrVMContext *ctx,
-                                XrVMContext *coro_ctx, XrVMResult result) {
-    (void)worker;
+static XrVMResult run_finalize(XrayIsolate *isolate, XrWorker *worker, XrCoroutine *coro,
+                               XrVMContext *ctx, XrVMContext *coro_ctx, XrVMResult result) {
+    (void) worker;
     if (result == XR_VM_SPAWN_CONT) {
         // Continuation stealing: parent saved state, child ready to run inline.
         ctx->current_coro = NULL;
@@ -589,25 +596,25 @@ static XrVMResult run_finalize(XrayIsolate *isolate, XrWorker *worker,
             // Channel blocks set BLOCKED under lock; await/timer leave RUNNING.
             // CAS handles both: only swap if still RUNNING.
             uint8_t _exp = XR_CORO_STATE_RUNNING;
-            if (atomic_compare_exchange_strong_explicit(
-                    &coro->coro_state, &_exp, XR_CORO_STATE_BLOCKED,
-                    memory_order_release, memory_order_relaxed)) {
-                atomic_fetch_and_explicit(&coro->flags,
-                    ~(uint32_t)XR_CORO_FLG_RUNNING, memory_order_relaxed);
-                atomic_fetch_or_explicit(&coro->flags,
-                    (uint32_t)XR_CORO_FLG_BLOCKED, memory_order_release);
+            if (atomic_compare_exchange_strong_explicit(&coro->coro_state, &_exp,
+                                                        XR_CORO_STATE_BLOCKED, memory_order_release,
+                                                        memory_order_relaxed)) {
+                atomic_fetch_and_explicit(&coro->flags, ~(uint32_t) XR_CORO_FLG_RUNNING,
+                                          memory_order_relaxed);
+                atomic_fetch_or_explicit(&coro->flags, (uint32_t) XR_CORO_FLG_BLOCKED,
+                                         memory_order_release);
             }
         }
-        if (result == XR_VM_BLOCKED &&
-            coro->ext && atomic_load_explicit(&coro->ext->timer_active, memory_order_relaxed)) {
+        if (result == XR_VM_BLOCKED && coro->ext &&
+            atomic_load_explicit(&coro->ext->timer_active, memory_order_relaxed)) {
             XR_DBG_CORO("coro id=%d timer blocked, waiting for Timer Wheel callback", coro->id);
         }
     } else if (result == XR_VM_OK) {
         // Coroutine completed — save result but do NOT set FLG_DONE here.
         // FLG_DONE is set in worker_handle_vm_result right before wake_waiter.
         coro->result = coro_ctx->stack[0];
-        XR_DBG_CORO("run_on_worker: coro id=%d completed, result tag=%u",
-                    coro->id, coro_ctx->stack[0].tag);
+        XR_DBG_CORO("run_on_worker: coro id=%d completed, result tag=%u", coro->id,
+                    coro_ctx->stack[0].tag);
     } else {
         // Error: capture actual exception message from vm_ctx.
         coro->result = xr_null();
@@ -644,10 +651,9 @@ static XrVMResult run_finalize(XrayIsolate *isolate, XrWorker *worker,
 // Precondition: caller has already set RUNNING|STARTED on coro->flags and
 // bound current_coro on both ctx and coro_ctx. coro->entry.closure must be
 // a non-NULL closure with a non-NULL proto (validated upstream).
-static XrVMResult run_first_exec(XrayIsolate *isolate, XrWorker *worker,
-                                  XrCoroutine *coro, XrVMContext *ctx,
-                                  XrVMContext *coro_ctx) {
-    (void)worker;
+static XrVMResult run_first_exec(XrayIsolate *isolate, XrWorker *worker, XrCoroutine *coro,
+                                 XrVMContext *ctx, XrVMContext *coro_ctx) {
+    (void) worker;
     XrClosure *closure = coro->entry.closure;
     XrProto *proto = closure->proto;
 
@@ -664,7 +670,7 @@ static XrVMResult run_first_exec(XrayIsolate *isolate, XrWorker *worker,
     XrBcCallFrame *frame = &coro_ctx->frames[0];
     frame->closure = closure;
     frame->pc = PROTO_CODE_BASE(proto);
-    frame->base_offset = (int)(func_base - coro_ctx->stack);
+    frame->base_offset = (int) (func_base - coro_ctx->stack);
     frame->flags = 0;
     frame->u.l.pending_operator_check = false;
     frame->call_status = 0;
@@ -684,20 +690,18 @@ static XrVMResult run_first_exec(XrayIsolate *isolate, XrWorker *worker,
     // prevents replaying a proto whose first coroutine deopted.
     if (XR_JIT_AVAILABLE() && proto->numparams == coro->arg_count) {
         if (!proto->jit_entry) {
-            void *pending = atomic_load_explicit(
-                &proto->jit_entry_pending, memory_order_acquire);
-            if (pending && (uintptr_t)pending > 1) {
+            void *pending = atomic_load_explicit(&proto->jit_entry_pending, memory_order_acquire);
+            if (pending && (uintptr_t) pending > 1) {
                 xr_jit_hooks->install_bg_result(proto);
             }
         }
         if (proto->jit_entry && proto->deopt_count < 20) {
             coro->jit_ctx->call_proto = proto;
             coro->jit_ctx->call_closure = closure;
-            coro->jit_ctx->call_base_offset = (int32_t)(func_base - coro_ctx->stack);
+            coro->jit_ctx->call_base_offset = (int32_t) (func_base - coro_ctx->stack);
             XrValue jit_result;
-            int _jrc = xr_jit_hooks->call(proto->jit_entry, coro, func_base,
-                                           coro->arg_count, proto->return_type_info,
-                                           &jit_result);
+            int _jrc = xr_jit_hooks->call(proto->jit_entry, coro, func_base, coro->arg_count,
+                                          proto->return_type_info, &jit_result);
             if (_jrc == XR_JIT_OK) {
                 coro_ctx->stack[0] = jit_result;
                 return run_finalize(isolate, worker, coro, ctx, coro_ctx, XR_VM_OK);
@@ -721,8 +725,8 @@ static XrVMResult run_first_exec(XrayIsolate *isolate, XrWorker *worker,
 //
 // Returns: XR_JIT_OK, XR_JIT_SUSPEND, XR_JIT_DEOPT (fall through), or
 // -1 for channel-close (caller should clear jit_resume_entry and deopt).
-static int run_jit_resume(XrayIsolate *isolate, XrCoroutine *coro,
-                           XrVMContext *coro_ctx, XrValue *jit_result_out) {
+static int run_jit_resume(XrayIsolate *isolate, XrCoroutine *coro, XrVMContext *coro_ctx,
+                          XrValue *jit_result_out) {
     XR_DCHECK(coro->jit_resume_entry != NULL, "run_jit_resume: no resume entry");
     XR_DCHECK(coro->jit_ctx != NULL, "run_jit_resume: no jit_ctx");
     XR_DCHECK(XR_JIT_AVAILABLE(), "run_jit_resume: JIT hooks not registered");
@@ -774,10 +778,9 @@ static int run_jit_resume(XrayIsolate *isolate, XrCoroutine *coro,
 //   - JIT suspend/resume (run_jit_resume re-enters compiled code)
 //   - XR_RESUME_CONTINUATION / XR_RESUME_DEBUG (run() directly)
 //   - Default unroll via xr_coro_resume_with_unroll then run()
-static XrVMResult run_resume_path(XrayIsolate *isolate, XrWorker *worker,
-                                   XrCoroutine *coro, XrVMContext *ctx,
-                                   XrVMContext *coro_ctx) {
-    (void)worker;
+static XrVMResult run_resume_path(XrayIsolate *isolate, XrWorker *worker, XrCoroutine *coro,
+                                  XrVMContext *ctx, XrVMContext *coro_ctx) {
+    (void) worker;
     xr_coro_transition_to_running(coro);
     XR_DBG_CORO("run_on_worker: resuming coro id=%d", coro->id);
 
@@ -817,8 +820,8 @@ static XrVMResult run_resume_path(XrayIsolate *isolate, XrWorker *worker,
     // Default: unroll then run.
     int resume_status = xr_coro_resume_load(coro) ? xr_coro_resume_load(coro) : XR_RESUME_IO_READY;
     XrVMResult unroll_result = xr_coro_resume_with_unroll(isolate, coro, resume_status);
-    XR_DBG_CORO("run_on_worker: coro id=%d, unroll result=%d, frame_count=%d",
-                coro->id, unroll_result, coro_ctx->frame_count);
+    XR_DBG_CORO("run_on_worker: coro id=%d, unroll result=%d, frame_count=%d", coro->id,
+                unroll_result, coro_ctx->frame_count);
 
     if (unroll_result == XR_VM_OK) {
         coro_ctx->module_base_frame = 0;
@@ -850,7 +853,8 @@ static XrVMResult run_resume_path(XrayIsolate *isolate, XrWorker *worker,
 // hands off to run_first_exec / run_resume_path / run_cfunc_coro /
 // run_finalize as appropriate.
 XrVMResult xr_coro_run_on_worker(XrWorker *worker, XrCoroutine *coro) {
-    if (!worker || !coro) return XR_VM_RUNTIME_ERROR;
+    if (!worker || !coro)
+        return XR_VM_RUNTIME_ERROR;
 
     if (xr_coro_flags_has(coro, XR_CORO_FLG_DONE)) {
         return XR_VM_OK;
@@ -876,8 +880,7 @@ XrVMResult xr_coro_run_on_worker(XrWorker *worker, XrCoroutine *coro) {
     // recv_slot is visible before we enter run().
     // Handles both VM bytecode and JIT coroutines (the redundant separate
     // !jit_resume_entry exclusion — JIT now uses run_jit_resume directly).
-    if (_fast_resume == XR_RESUME_CHANNEL &&
-        (_fast_flags & XR_CORO_FLG_STARTED)) {
+    if (_fast_resume == XR_RESUME_CHANNEL && (_fast_flags & XR_CORO_FLG_STARTED)) {
         ctx->current_coro = coro;
         coro_ctx->current_coro = coro;
         coro->next = NULL;
@@ -931,17 +934,17 @@ XrVMResult xr_coro_run_on_worker(XrWorker *worker, XrCoroutine *coro) {
             coro->prev = NULL;
             atomic_store_explicit(&coro->coro_state, XR_CORO_STATE_RUNNING, memory_order_release);
             atomic_store_explicit(&coro->flags,
-                (_fast_flags & ~(XR_CORO_FLG_READY | XR_CORO_FLG_BLOCKED))
-                | XR_CORO_FLG_RUNNING | XR_CORO_FLG_STARTED,
-                memory_order_release);
+                                  (_fast_flags & ~(XR_CORO_FLG_READY | XR_CORO_FLG_BLOCKED)) |
+                                      XR_CORO_FLG_RUNNING | XR_CORO_FLG_STARTED,
+                                  memory_order_release);
             return run_first_exec(isolate, worker, coro, ctx, coro_ctx);
         }
     }
 
     // ========== Slow Path ==========
     XR_DBG_FRAME("run_on_worker: coro=%p, id=%d, stack=%p, frames=%p, frame_count=%d",
-                 (void*)coro, coro->id, (void*)coro->vm_ctx.stack,
-                 (void*)coro->vm_ctx.frames, coro->vm_ctx.frame_count);
+                 (void *) coro, coro->id, (void *) coro->vm_ctx.stack, (void *) coro->vm_ctx.frames,
+                 coro->vm_ctx.frame_count);
 
     if (ctx->isolate != isolate) {
         ctx->isolate = isolate;
@@ -970,7 +973,7 @@ XrVMResult xr_coro_run_on_worker(XrWorker *worker, XrCoroutine *coro) {
 
     if (!coro->vm_ctx.stack || !coro->vm_ctx.frames) {
         xr_log_warning("coro", "coroutine stack not allocated (stack=%p, frames=%p, coro=%p)",
-                (void*)coro->vm_ctx.stack, (void*)coro->vm_ctx.frames, (void*)coro);
+                       (void *) coro->vm_ctx.stack, (void *) coro->vm_ctx.frames, (void *) coro);
         coro->result = xr_null();
         xr_coro_flags_set(coro, XR_CORO_FLG_DONE);
         return XR_VM_RUNTIME_ERROR;
@@ -985,15 +988,16 @@ XrVMResult xr_coro_run_on_worker(XrWorker *worker, XrCoroutine *coro) {
     uint32_t _flags_snap = atomic_load_explicit(&coro->flags, memory_order_relaxed);
     if (!(_flags_snap & XR_CORO_FLG_STARTED)) {
         atomic_store_explicit(&coro->coro_state, XR_CORO_STATE_RUNNING, memory_order_release);
-        atomic_store_explicit(&coro->flags,
-            (_flags_snap & ~(uint32_t)(XR_CORO_FLG_READY | XR_CORO_FLG_BLOCKED))
-            | XR_CORO_FLG_RUNNING | XR_CORO_FLG_STARTED,
+        atomic_store_explicit(
+            &coro->flags,
+            (_flags_snap & ~(uint32_t) (XR_CORO_FLG_READY | XR_CORO_FLG_BLOCKED)) |
+                XR_CORO_FLG_RUNNING | XR_CORO_FLG_STARTED,
             memory_order_release);
 
         XrClosure *_slow_cl = coro->entry.closure;
         if (!_slow_cl || !_slow_cl->proto) {
             xr_log_warning("coro", "coroutine closure invalid (closure=%p, coro=%p)",
-                    (void*)_slow_cl, (void*)coro);
+                           (void *) _slow_cl, (void *) coro);
             coro->result = xr_null();
             xr_coro_flags_set(coro, XR_CORO_FLG_DONE);
             return XR_VM_RUNTIME_ERROR;

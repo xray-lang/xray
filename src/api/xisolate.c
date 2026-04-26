@@ -45,8 +45,8 @@
 
 /* ========== Isolate Creation ========== */
 
-XrayIsolate* xray_isolate_new(const XrayIsolateParams *params) {
-    XrayIsolate *isolate = (XrayIsolate *)xr_malloc(sizeof(XrayIsolate));
+XrayIsolate *xray_isolate_new(const XrayIsolateParams *params) {
+    XrayIsolate *isolate = (XrayIsolate *) xr_malloc(sizeof(XrayIsolate));
     if (!isolate) {
         xr_log_warning("isolate", "failed to allocate isolate");
         return NULL;
@@ -65,7 +65,8 @@ XrayIsolate* xray_isolate_new(const XrayIsolateParams *params) {
 
     // --- Core: string pool ---
     isolate->global_string_pool = xr_malloc(sizeof(XrGlobalStringPool));
-    if (!isolate->global_string_pool) goto fail;
+    if (!isolate->global_string_pool)
+        goto fail;
     memset(isolate->global_string_pool, 0, sizeof(XrGlobalStringPool));
     xr_global_pool_init(isolate->global_string_pool);
 
@@ -74,18 +75,23 @@ XrayIsolate* xray_isolate_new(const XrayIsolateParams *params) {
 
     // --- Core: system heap + main coroutine ---
     isolate->sys_heap = xr_malloc(sizeof(XrSystemHeap));
-    if (!isolate->sys_heap) goto fail;
-    if (!xr_sysheap_init(isolate->sys_heap, NULL)) goto fail;
+    if (!isolate->sys_heap)
+        goto fail;
+    if (!xr_sysheap_init(isolate->sys_heap, NULL))
+        goto fail;
 
     isolate->main_coro = xr_coro_create_bootstrap(isolate);
-    if (!isolate->main_coro) goto fail;
+    if (!isolate->main_coro)
+        goto fail;
 
     // --- Core: globals table ---
     isolate->globals = xr_globals_create(64);
-    if (!isolate->globals) goto fail;
+    if (!isolate->globals)
+        goto fail;
 
     // --- Core: VM engine ---
-    if (xr_vm_init(isolate) != 0) goto fail;
+    if (xr_vm_init(isolate) != 0)
+        goto fail;
 
 #if XR_ENABLE_VM_PROFILER
     /* Allocate the per-isolate profiler eagerly when the build opted
@@ -93,7 +99,8 @@ XrayIsolate* xray_isolate_new(const XrayIsolateParams *params) {
      * branch on every VM dispatch entry. NULL slot in disabled builds
      * keeps the field zero-cost. */
     isolate->profiler = xr_calloc(1, sizeof(VMProfiler));
-    if (!isolate->profiler) goto fail_after_vm;
+    if (!isolate->profiler)
+        goto fail_after_vm;
 #endif
 
     // --- Core: shape registry (hidden classes) ---
@@ -114,10 +121,17 @@ XrayIsolate* xray_isolate_new(const XrayIsolateParams *params) {
 fail_after_vm:
     xr_vm_cleanup(isolate);
 fail:
-    if (isolate->globals) xr_globals_destroy((XrGlobalsTable*)isolate->globals);
-    if (isolate->sys_heap) { xr_sysheap_destroy(isolate->sys_heap); xr_free(isolate->sys_heap); }
+    if (isolate->globals)
+        xr_globals_destroy((XrGlobalsTable *) isolate->globals);
+    if (isolate->sys_heap) {
+        xr_sysheap_destroy(isolate->sys_heap);
+        xr_free(isolate->sys_heap);
+    }
     xr_gc_cleanup(&isolate->gc);
-    if (isolate->global_string_pool) { xr_global_pool_free(isolate->global_string_pool); xr_free(isolate->global_string_pool); }
+    if (isolate->global_string_pool) {
+        xr_global_pool_free(isolate->global_string_pool);
+        xr_free(isolate->global_string_pool);
+    }
     xr_free(isolate);
     return NULL;
 }
@@ -125,13 +139,14 @@ fail:
 /* ========== Isolate Deletion ========== */
 
 void xray_isolate_delete(XrayIsolate *isolate) {
-    if (!isolate) return;
+    if (!isolate)
+        return;
 
     /* Drain the per-isolate profiler before any structure that
      * powers the report (opcode info, isolate pointer) goes away.
      * vm_profiler_report tolerates NULL so this is a no-op when
      * the build never compiled the profiler in. */
-    vm_profiler_report((const VMProfiler *)isolate->profiler);
+    vm_profiler_report((const VMProfiler *) isolate->profiler);
     if (isolate->profiler) {
         xr_free(isolate->profiler);
         isolate->profiler = NULL;
@@ -161,7 +176,7 @@ void xray_isolate_delete(XrayIsolate *isolate) {
     // teardown still sees consistent pointers, and so xr_gc_cleanup is
     // the single authoritative free path for those bodies.
     if (isolate->globals) {
-        xr_globals_destroy((XrGlobalsTable*)isolate->globals);
+        xr_globals_destroy((XrGlobalsTable *) isolate->globals);
         isolate->globals = NULL;
     }
 
@@ -198,8 +213,9 @@ void xray_isolate_delete(XrayIsolate *isolate) {
 }
 
 // For bytecode serialization
-void* xr_isolate_get_symbol_table(XrayIsolate *isolate) {
-    if (!isolate) return NULL;
+void *xr_isolate_get_symbol_table(XrayIsolate *isolate) {
+    if (!isolate)
+        return NULL;
     return isolate->symbol_table;
 }
 
@@ -215,28 +231,28 @@ void xray_isolate_set_userdata(XrayIsolate *isolate, void *userdata) {
     isolate->userdata = userdata;
 }
 
-void* xray_isolate_get_userdata(XrayIsolate *isolate) {
+void *xray_isolate_get_userdata(XrayIsolate *isolate) {
     xray_api_checkr(isolate != NULL, "xray_isolate_get_userdata: NULL isolate", NULL);
     return isolate->userdata;
 }
 
 /* ========== Statistics and Debugging ========== */
 
-void xray_isolate_get_stats(XrayIsolate *isolate,
-                            size_t *bytes_allocated,
-                            int *gc_count) {
+void xray_isolate_get_stats(XrayIsolate *isolate, size_t *bytes_allocated, int *gc_count) {
     xray_api_check(isolate != NULL, "xray_isolate_get_stats: NULL isolate");
-    if (bytes_allocated) *bytes_allocated = (size_t)isolate->gc.totalbytes;
+    if (bytes_allocated)
+        *bytes_allocated = (size_t) isolate->gc.totalbytes;
     if (gc_count) {
         XrCoroGC *coro_gc = xr_isolate_get_coro_gc(isolate);
-        *gc_count = coro_gc ? (int)coro_gc->gc_count : 0;
+        *gc_count = coro_gc ? (int) coro_gc->gc_count : 0;
     }
 }
 
 void xray_isolate_collect_garbage(XrayIsolate *isolate) {
     xray_api_check(isolate != NULL, "xray_isolate_collect_garbage: NULL isolate");
     XrCoroGC *coro_gc = xr_isolate_get_coro_gc(isolate);
-    if (coro_gc) xr_coro_gc_fullgc(coro_gc);
+    if (coro_gc)
+        xr_coro_gc_fullgc(coro_gc);
 }
 
 void xray_isolate_set_trace(XrayIsolate *isolate, bool enable) {

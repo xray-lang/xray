@@ -24,8 +24,8 @@
 #include <stdio.h>
 
 // Get isolate's symbol table
-static inline XrSymbolTable* get_symbol_table(XrayIsolate *isolate) {
-    return (XrSymbolTable*)xr_isolate_get_symbol_table(isolate);
+static inline XrSymbolTable *get_symbol_table(XrayIsolate *isolate) {
+    return (XrSymbolTable *) xr_isolate_get_symbol_table(isolate);
 }
 
 /* ========== Internal Functions ========== */
@@ -68,12 +68,14 @@ XrJson *xr_json_new(struct XrCoroutine *coro, uint16_t capacity) {
     // Get or create cached root shape for this capacity
     XrayIsolate *X = xr_coro_get_isolate(coro);
     XrShape *shape = get_or_create_root_shape(X, capacity);
-    if (!shape) return NULL;
+    if (!shape)
+        return NULL;
 
     // Allocate Json on coroutine heap
     size_t size = json_size(capacity);
-    XrJson *json = (XrJson*)xr_alloc(coro, size, XR_TJSON);
-    if (!json) return NULL;
+    XrJson *json = (XrJson *) xr_alloc(coro, size, XR_TJSON);
+    if (!json)
+        return NULL;
 
     xr_json_set_shape(json, shape);
     json->overflow = NULL;
@@ -88,17 +90,20 @@ XrJson *xr_json_new(struct XrCoroutine *coro, uint16_t capacity) {
 // Create Json object with specified Shape
 XrJson *xr_json_new_with_shape(struct XrCoroutine *coro, XrShape *shape) {
     XR_DCHECK(coro != NULL, "json_new_with_shape: NULL coro");
-    if (!shape) return NULL;
+    if (!shape)
+        return NULL;
 
     int field_count = shape->in_object_capacity;
 
     // Allocate Json on coroutine heap — lazy coro_gc creation
     size_t size = json_size(field_count);
     XrCoroGC *gc = xr_coro_ensure_gc(coro);
-    if (!gc) return NULL;
+    if (!gc)
+        return NULL;
     XrGCHeader *obj = xr_coro_gc_newobj(gc, XR_TJSON, size);
-    if (!obj) return NULL;
-    XrJson *json = (XrJson *)obj;
+    if (!obj)
+        return NULL;
+    XrJson *json = (XrJson *) obj;
 
     xr_json_set_shape(json, shape);
     json->overflow = NULL;
@@ -113,16 +118,19 @@ XrJson *xr_json_new_with_shape(struct XrCoroutine *coro, XrShape *shape) {
 // Create Json object with specified Shape, skip field initialization.
 // Caller MUST set all fields before any GC can run.
 XrJson *xr_json_new_with_shape_noinit(struct XrCoroutine *coro, XrShape *shape) {
-    if (!shape) return NULL;
+    if (!shape)
+        return NULL;
 
     int field_count = shape->in_object_capacity;
 
     size_t size = json_size(field_count);
     XrCoroGC *gc2 = xr_coro_ensure_gc(coro);
-    if (!gc2) return NULL;
+    if (!gc2)
+        return NULL;
     XrGCHeader *obj = xr_coro_gc_newobj(gc2, XR_TJSON, size);
-    if (!obj) return NULL;
-    XrJson *json = (XrJson *)obj;
+    if (!obj)
+        return NULL;
+    XrJson *json = (XrJson *) obj;
 
     xr_json_set_shape(json, shape);
     json->overflow = NULL;
@@ -131,7 +139,8 @@ XrJson *xr_json_new_with_shape_noinit(struct XrCoroutine *coro, XrShape *shape) 
 
 // Initialize Json in-place on pre-allocated memory (for shared Json)
 void xr_json_init_inplace(XrJson *json, XrShape *shape) {
-    if (!json || !shape) return;
+    if (!json || !shape)
+        return;
 
     xr_json_set_shape(json, shape);
     json->overflow = NULL;
@@ -151,11 +160,13 @@ size_t xr_json_size(int field_count) {
 
 // Get field by Symbol — O(1) via Shape index lookup
 XrValue xr_json_get(XrayIsolate *X, XrJson *json, SymbolId symbol) {
-    if (!json) return xr_null();
+    if (!json)
+        return xr_null();
 
     XrShape *shape = xr_json_shape(X, json);
     int idx = xr_shape_field_index(shape, symbol);
-    if (idx < 0) return xr_null();
+    if (idx < 0)
+        return xr_null();
 
     // In-object fast path
     if (idx < shape->in_object_capacity) {
@@ -164,9 +175,11 @@ XrValue xr_json_get(XrayIsolate *X, XrJson *json, SymbolId symbol) {
     }
     // Overflow path
     XrJsonOverflow *ov = json->overflow;
-    if (!ov) return xr_null();
-    uint16_t ov_idx = (uint16_t)(idx - shape->in_object_capacity);
-    if (ov_idx >= ov->length) return xr_null();
+    if (!ov)
+        return xr_null();
+    uint16_t ov_idx = (uint16_t) (idx - shape->in_object_capacity);
+    if (ov_idx >= ov->length)
+        return xr_null();
     XR_DCHECK(ov_idx < ov->capacity, "json_get: overflow index out of capacity");
     return ov->values[ov_idx];
 }
@@ -176,12 +189,13 @@ static XrJsonOverflow *overflow_grow(XrJsonOverflow *old, uint16_t min_cap) {
     XR_DCHECK(min_cap > 0, "overflow_grow: zero min_cap");
     uint16_t old_cap = old ? old->capacity : 0;
     uint16_t new_cap = old ? old->capacity * 2 : 8;
-    if (new_cap < min_cap) new_cap = min_cap;
+    if (new_cap < min_cap)
+        new_cap = min_cap;
     size_t old_bytes = old ? (sizeof(XrJsonOverflow) + old_cap * sizeof(XrValue)) : 0;
     size_t new_bytes = sizeof(XrJsonOverflow) + new_cap * sizeof(XrValue);
-    XrJsonOverflow *ov = (XrJsonOverflow *)xr_realloc(
-        old, new_bytes);
-    if (!ov) return old;
+    XrJsonOverflow *ov = (XrJsonOverflow *) xr_realloc(old, new_bytes);
+    if (!ov)
+        return old;
     if (!old) {
         ov->length = 0;
     }
@@ -193,14 +207,15 @@ static XrJsonOverflow *overflow_grow(XrJsonOverflow *old, uint16_t min_cap) {
     // Tell the per-coro GC about the buffer growth. xr_realloc may
     // either expand in place or move; either way the delta between
     // new_bytes and old_bytes is the new external footprint.
-    xr_gc_add_external(xr_current_coro_gc(), (int64_t)new_bytes - (int64_t)old_bytes);
+    xr_gc_add_external(xr_current_coro_gc(), (int64_t) new_bytes - (int64_t) old_bytes);
     return ov;
 }
 
 // Set field by Symbol
 void xr_json_set(XrayIsolate *X, XrJson *json, SymbolId symbol, XrValue value) {
     XR_DCHECK(X != NULL, "json_set: NULL isolate");
-    if (!json) return;
+    if (!json)
+        return;
 
     XrShape *shape = xr_json_shape(X, json);
 
@@ -213,7 +228,7 @@ void xr_json_set(XrayIsolate *X, XrJson *json, SymbolId symbol, XrValue value) {
         } else {
             XrJsonOverflow *ov = json->overflow;
             if (ov) {
-                uint16_t ov_idx = (uint16_t)(idx - shape->in_object_capacity);
+                uint16_t ov_idx = (uint16_t) (idx - shape->in_object_capacity);
                 if (ov_idx < ov->capacity) {
                     ov->values[ov_idx] = value;
                 }
@@ -235,7 +250,7 @@ void xr_json_set(XrayIsolate *X, XrJson *json, SymbolId symbol, XrValue value) {
             json->fields[new_idx] = value;
         } else {
             // Overflow: allocate/grow overflow array
-            uint16_t ov_idx = (uint16_t)(new_idx - shape->in_object_capacity);
+            uint16_t ov_idx = (uint16_t) (new_idx - shape->in_object_capacity);
             XrJsonOverflow *ov = json->overflow;
             if (!ov || ov_idx >= ov->capacity) {
                 ov = overflow_grow(ov, ov_idx + 1);
@@ -255,7 +270,8 @@ void xr_json_set(XrayIsolate *X, XrJson *json, SymbolId symbol, XrValue value) {
 // Get field by string key
 XrValue xr_json_get_by_key(XrayIsolate *X, XrJson *json, const char *key) {
     XR_DCHECK(X != NULL, "json_get_by_key: NULL isolate");
-    if (!json || !key) return xr_null();
+    if (!json || !key)
+        return xr_null();
 
     // Intern key as Symbol
     XrSymbolTable *table = get_symbol_table(X);
@@ -267,7 +283,8 @@ XrValue xr_json_get_by_key(XrayIsolate *X, XrJson *json, const char *key) {
 // Set field by string key
 void xr_json_set_by_key(XrayIsolate *X, XrJson *json, const char *key, XrValue value) {
     XR_DCHECK(X != NULL, "json_set_by_key: NULL isolate");
-    if (!json || !key) return;
+    if (!json || !key)
+        return;
 
     // Intern key as Symbol
     XrSymbolTable *table = get_symbol_table(X);
@@ -280,15 +297,13 @@ void xr_json_set_by_key(XrayIsolate *X, XrJson *json, const char *key, XrValue v
 
 // Destructor: release overflow malloc memory when Json is collected
 void xr_gc_destroy_json(XrGCHeader *obj, struct XrCoroGC *owning_gc) {
-    XrJson *json = (XrJson*)obj;
+    XrJson *json = (XrJson *) obj;
     if (json && json->overflow) {
-        size_t bytes = sizeof(XrJsonOverflow)
-                     + (size_t)json->overflow->capacity * sizeof(XrValue);
+        size_t bytes = sizeof(XrJsonOverflow) + (size_t) json->overflow->capacity * sizeof(XrValue);
         xr_free(json->overflow);
         json->overflow = NULL;
         // Balance overflow_grow's add_external so totalbytes returns
         // to the correct value when the json is reclaimed.
-        xr_gc_sub_external(owning_gc, (int64_t)bytes);
+        xr_gc_sub_external(owning_gc, (int64_t) bytes);
     }
 }
-

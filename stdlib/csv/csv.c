@@ -39,17 +39,16 @@ static void extract_config(XrayIsolate *X, XrValue config_val, CsvConfig *config
 /* ========== CSV Serialization ========== */
 
 typedef struct {
-    XrSerWriter sw;           // shared buffer: sw.data / sw.len / sw.cap
-    XrayIsolate *isolate;     // needed for nested JSON stringify
+    XrSerWriter sw;        // shared buffer: sw.data / sw.len / sw.cap
+    XrayIsolate *isolate;  // needed for nested JSON stringify
     char delimiter;
     char quote_char;
-    char escape_char;         // if != quote_char, use prefix escape
-    const char *linebreak;    // "\n" or "\r\n" (owned by caller config)
+    char escape_char;       // if != quote_char, use prefix escape
+    const char *linebreak;  // "\n" or "\r\n" (owned by caller config)
     size_t linebreak_len;
 } CsvWriter;
 
-static inline void cw_init(CsvWriter *w, XrayIsolate *isolate,
-                           char delim, char quote, char escape,
+static inline void cw_init(CsvWriter *w, XrayIsolate *isolate, char delim, char quote, char escape,
                            const char *linebreak) {
     xr_serw_init(&w->sw, 256);
     w->isolate = isolate;
@@ -60,16 +59,23 @@ static inline void cw_init(CsvWriter *w, XrayIsolate *isolate,
     w->linebreak_len = strlen(w->linebreak);
 }
 
-static inline void cw_free(CsvWriter *w) { xr_serw_free(&w->sw); }
-static inline void cw_append(CsvWriter *w, const char *s, size_t n) { xr_serw_append(&w->sw, s, n); }
-static inline void cw_char(CsvWriter *w, char c) { xr_serw_char(&w->sw, c); }
+static inline void cw_free(CsvWriter *w) {
+    xr_serw_free(&w->sw);
+}
+static inline void cw_append(CsvWriter *w, const char *s, size_t n) {
+    xr_serw_append(&w->sw, s, n);
+}
+static inline void cw_char(CsvWriter *w, char c) {
+    xr_serw_char(&w->sw, c);
+}
 
 // A field needs quoting if it contains the delimiter, quote, escape, or
 // any line-terminating byte. RFC 4180 additionally recommends quoting
 // leading / trailing whitespace so re-readers do not strip it; doing
 // that here keeps round-trip stable across dialects that auto-trim.
 static bool needs_quoting(const char *s, size_t len, char delim, char quote, char escape) {
-    if (len == 0) return false;
+    if (len == 0)
+        return false;
     if (s[0] == ' ' || s[0] == '\t' || s[len - 1] == ' ' || s[len - 1] == '\t') {
         return true;
     }
@@ -97,10 +103,10 @@ static void write_field(CsvWriter *w, const char *s, size_t len) {
     size_t start = 0;
     for (size_t i = 0; i < len; i++) {
         char c = s[i];
-        bool need_escape = (c == w->quote_char) ||
-                           (prefix_mode && c == w->escape_char);
+        bool need_escape = (c == w->quote_char) || (prefix_mode && c == w->escape_char);
         if (need_escape) {
-            if (i > start) cw_append(w, s + start, i - start);
+            if (i > start)
+                cw_append(w, s + start, i - start);
             if (prefix_mode) {
                 cw_char(w, w->escape_char);
                 cw_char(w, c);
@@ -111,7 +117,8 @@ static void write_field(CsvWriter *w, const char *s, size_t len) {
             start = i + 1;
         }
     }
-    if (start < len) cw_append(w, s + start, len - start);
+    if (start < len)
+        cw_append(w, s + start, len - start);
     cw_char(w, w->quote_char);
 }
 
@@ -123,7 +130,8 @@ static inline void cw_newline(CsvWriter *w) {
 static void write_row(CsvWriter *w, XrArray *row) {
     int count = row->length;
     for (int i = 0; i < count; i++) {
-        if (i > 0) cw_char(w, w->delimiter);
+        if (i > 0)
+            cw_char(w, w->delimiter);
 
         XrValue val = xr_array_get(row, i);
         if (XR_IS_STRING(val)) {
@@ -132,7 +140,7 @@ static void write_row(CsvWriter *w, XrArray *row) {
         } else if (XR_IS_INT(val)) {
             char buf[32];
             int n = snprintf(buf, sizeof(buf), "%" PRId64, XR_TO_INT(val));
-            cw_append(w, buf, (size_t)n);
+            cw_append(w, buf, (size_t) n);
         } else if (XR_IS_FLOAT(val)) {
             // %.17g guarantees IEEE 754 binary64 round-trip, which the
             // previous %g silently truncated (e.g. 0.1 -> "0.1" then
@@ -148,7 +156,8 @@ static void write_row(CsvWriter *w, XrArray *row) {
             } else {
                 n = snprintf(buf, sizeof(buf), "%.17g", d);
             }
-            if (n > 0) cw_append(w, buf, (size_t)n);
+            if (n > 0)
+                cw_append(w, buf, (size_t) n);
         } else if (XR_IS_BOOL(val)) {
             if (XR_TO_BOOL(val)) {
                 cw_append(w, "true", 4);
@@ -253,8 +262,9 @@ static XrValue csv_parse_detailed(XrayIsolate *X, XrValue *args, int argc) {
     xr_map_set(meta, key_delim, xr_string_value(xr_string_intern(X, delim_str, 1, 0)));
 
     XrValue key_lb = xr_string_value(xr_string_intern(X, "linebreak", 9, 0));
-    xr_map_set(meta, key_lb, xr_string_value(xr_string_intern(X,
-        parser.result.meta.linebreak, strlen(parser.result.meta.linebreak), 0)));
+    xr_map_set(meta, key_lb,
+               xr_string_value(xr_string_intern(X, parser.result.meta.linebreak,
+                                                strlen(parser.result.meta.linebreak), 0)));
 
     XrValue key_trunc = xr_string_value(xr_string_intern(X, "truncated", 9, 0));
     xr_map_set(meta, key_trunc, xr_bool(parser.result.meta.truncated));
@@ -338,8 +348,7 @@ static XrValue csv_stringify(XrayIsolate *X, XrValue *args, int argc) {
     }
 
     CsvWriter writer;
-    cw_init(&writer, X, config.delimiter, config.quote_char, config.escape_char,
-            config.linebreak);
+    cw_init(&writer, X, config.delimiter, config.quote_char, config.escape_char, config.linebreak);
 
     // Check if array of Maps (need to extract headers)
     XrArray *headers = NULL;
@@ -430,7 +439,8 @@ static XrValue csv_write_file(XrayIsolate *X, XrValue *args, int argc) {
     XrValue str_args[2] = {args[1], argc >= 3 ? args[2] : xr_null()};
     XrValue csv_str = csv_stringify(X, str_args, argc >= 3 ? 2 : 1);
 
-    if (!XR_IS_STRING(csv_str)) return xr_bool(false);
+    if (!XR_IS_STRING(csv_str))
+        return xr_bool(false);
     XrString *str = XR_TO_STRING(csv_str);
 
     return xr_bool(xrs_file_write_all_sync(path->data, str->data, str->length));
@@ -444,17 +454,26 @@ static XrValue csv_write_file(XrayIsolate *X, XrValue *args, int argc) {
 
 // @module csv
 
-XR_DEFINE_BUILTIN(csv_parse, "parse", "(data: string, options?: Json): Array<Array<string>>", "Parse CSV string")
-XR_DEFINE_BUILTIN(csv_parse_detailed, "parseDetailed", "(data: string, options?: Json): Json", "Parse CSV with headers")
-XR_DEFINE_BUILTIN(csv_parse_tsv, "parseTsv", "(data: string): Array<Array<string>>", "Parse TSV string")
-XR_DEFINE_BUILTIN(csv_parse_auto, "parseAuto", "(data: string): Array<Array<string>>", "Auto-detect delimiter and parse")
-XR_DEFINE_BUILTIN(csv_stringify, "stringify", "(data: Array<Array<string>>, options?: Json): string", "Convert to CSV string")
-XR_DEFINE_BUILTIN(csv_parse_file, "parseFile", "(path: string, options?: Json): Array<Array<string>>", "Parse CSV file")
-XR_DEFINE_BUILTIN(csv_write_file, "writeFile", "(path: string, data: Array<Array<string>>, options?: Json): bool", "Write CSV file")
+XR_DEFINE_BUILTIN(csv_parse, "parse", "(data: string, options?: Json): Array<Array<string>>",
+                  "Parse CSV string")
+XR_DEFINE_BUILTIN(csv_parse_detailed, "parseDetailed", "(data: string, options?: Json): Json",
+                  "Parse CSV with headers")
+XR_DEFINE_BUILTIN(csv_parse_tsv, "parseTsv", "(data: string): Array<Array<string>>",
+                  "Parse TSV string")
+XR_DEFINE_BUILTIN(csv_parse_auto, "parseAuto", "(data: string): Array<Array<string>>",
+                  "Auto-detect delimiter and parse")
+XR_DEFINE_BUILTIN(csv_stringify, "stringify",
+                  "(data: Array<Array<string>>, options?: Json): string", "Convert to CSV string")
+XR_DEFINE_BUILTIN(csv_parse_file, "parseFile",
+                  "(path: string, options?: Json): Array<Array<string>>", "Parse CSV file")
+XR_DEFINE_BUILTIN(csv_write_file, "writeFile",
+                  "(path: string, data: Array<Array<string>>, options?: Json): bool",
+                  "Write CSV file")
 
-XrModule* xr_load_module_csv(XrayIsolate *isolate) {
+XrModule *xr_load_module_csv(XrayIsolate *isolate) {
     XrModule *mod = xr_module_create_native(isolate, "csv");
-    if (!mod) return NULL;
+    if (!mod)
+        return NULL;
 
     XRS_EXPORT(mod, isolate, "parse", csv_parse);
     XRS_EXPORT(mod, isolate, "parseDetailed", csv_parse_detailed);

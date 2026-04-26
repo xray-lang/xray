@@ -34,7 +34,7 @@ typedef enum {
 
 typedef struct XrNetAddr {
     XrNetFamily family;
-    char host[256]; // Hostname or IP string
+    char host[256];  // Hostname or IP string
     uint16_t port;
     // Resolved address (internal use)
     union {
@@ -49,25 +49,25 @@ typedef struct XrUdpConn XrUdpConn;
 
 /*
  * Create UDP socket
- * 
+ *
  * local_addr: Bind address (NULL means system-assigned)
  * local_port: Bind port (0 means system-assigned)
  */
-XR_FUNC XrUdpConn* xr_udp_new(const char *local_addr, int local_port);
+XR_FUNC XrUdpConn *xr_udp_new(const char *local_addr, int local_port);
 
 /*
  * Send data to specified address
  */
-XR_FUNC int xr_udp_send_to(XrUdpConn *conn, const void *buf, size_t len,
-                   const char *host, int port);
+XR_FUNC int xr_udp_send_to(XrUdpConn *conn, const void *buf, size_t len, const char *host,
+                           int port);
 
 /*
  * Receive data (coroutine-friendly)
- * 
+ *
  * buf: Receive buffer
  * len: Buffer length
  * from: Output sender address (can be NULL)
- * 
+ *
  * Returns: Actual bytes received
  */
 XR_FUNC int xr_udp_recv_from(XrUdpConn *conn, void *buf, size_t len, XrNetAddr *from);
@@ -83,11 +83,11 @@ XR_FUNC void xr_udp_close(XrUdpConn *conn);
 
 /*
  * Synchronous DNS resolution
- * 
+ *
  * hostname: Hostname
  * addrs: Output address array
  * max_addrs: Array capacity
- * 
+ *
  * Returns: Number of resolved addresses, 0 means failure
  */
 XR_FUNC int xr_dns_lookup(const char *hostname, XrNetAddr *addrs, int max_addrs);
@@ -127,6 +127,6 @@ XR_FUNC void xr_net_shutdown(void);
 /*
  * Load net module
  */
-XR_FUNC struct XrModule* xr_load_module_net(struct XrayIsolate *isolate);
+XR_FUNC struct XrModule *xr_load_module_net(struct XrayIsolate *isolate);
 
-#endif // XR_STDLIB_NET_H
+#endif  // XR_STDLIB_NET_H

@@ -23,7 +23,7 @@
 typedef struct XrayCoreClasses {
     // Base
     XrClass *objectClass;
-    
+
     // Builtin types
     XrClass *stringClass;
     XrClass *arrayClass;
@@ -34,13 +34,13 @@ typedef struct XrayCoreClasses {
     XrClass *boolClass;
     XrClass *nullClass;
     XrClass *bigintClass;
-    
+
     // Function related
     XrClass *functionClass;
     XrClass *closureClass;
     XrClass *upvalueClass;
     XrClass *cfunctionClass;
-    
+
     // Reflection API
     XrClass *reflectClass;
     XrClass *typeClass;
@@ -48,13 +48,13 @@ typedef struct XrayCoreClasses {
     XrClass *methodClass;
     XrClass *constructorClass;
     XrClass *parameterClass;
-    
+
     // Enum
     XrClass *enumClass;
-    
+
     // Json utility (static methods only)
     XrClass *jsonClass;
-    
+
     // Utility
     XrClass *stringBuilderClass;
     XrClass *arraySliceClass;
@@ -73,11 +73,13 @@ typedef XrValue (*XrCFunctionPtr)(XrayIsolate *isolate, XrValue *args, int nargs
 #define XR_CFUNCTION_PTR_DEFINED
 #endif
 
-XR_FUNC void xr_bind_static_method(XrayIsolate *X, XrClass *klass, const char *name, XrCFunctionPtr func);
-XR_FUNC void xr_bind_instance_method(XrayIsolate *X, XrClass *klass, const char *name, XrCFunctionPtr func);
+XR_FUNC void xr_bind_static_method(XrayIsolate *X, XrClass *klass, const char *name,
+                                   XrCFunctionPtr func);
+XR_FUNC void xr_bind_instance_method(XrayIsolate *X, XrClass *klass, const char *name,
+                                     XrCFunctionPtr func);
 
 // Call after VM and core classes are initialized
 XR_FUNC void xr_bind_builtin_static_methods(XrayIsolate *X);
 XR_FUNC void xr_bind_primitive_type_methods(XrayIsolate *X);
 
-#endif // XCLASS_SYSTEM_H
+#endif  // XCLASS_SYSTEM_H

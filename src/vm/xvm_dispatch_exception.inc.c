@@ -34,11 +34,12 @@ vmcase(OP_TRY) {
     // Lazy allocate / grow exception handler array
     if (VM_HANDLER_COUNT >= vm_ctx->handler_capacity) {
         int new_cap = vm_ctx->handler_capacity == 0 ? 8 : vm_ctx->handler_capacity * 2;
-        if (new_cap > XR_EXCEPTION_HANDLERS_MAX) new_cap = XR_EXCEPTION_HANDLERS_MAX;
+        if (new_cap > XR_EXCEPTION_HANDLERS_MAX)
+            new_cap = XR_EXCEPTION_HANDLERS_MAX;
         if (VM_HANDLER_COUNT >= new_cap) {
             VM_RUNTIME_ERROR(XR_ERR_STACK_OVERFLOW, "exception handler nesting too deep");
         }
-        XrExceptionHandler *new_h = (XrExceptionHandler *)xr_realloc(
+        XrExceptionHandler *new_h = (XrExceptionHandler *) xr_realloc(
             vm_ctx->handlers, sizeof(XrExceptionHandler) * new_cap);
         if (!new_h) {
             VM_RUNTIME_ERROR(XR_ERR_STACK_OVERFLOW, "failed to allocate exception handlers");
@@ -47,16 +48,17 @@ vmcase(OP_TRY) {
         vm_ctx->handler_capacity = new_cap;
     }
 
-    int _hidx = VM_HANDLER_COUNT; VM_INC_HANDLER_COUNT;
+    int _hidx = VM_HANDLER_COUNT;
+    VM_INC_HANDLER_COUNT;
     XrExceptionHandler *handler = &VM_HANDLERS[_hidx];
     handler->catch_offset = catch_offset;
     handler->finally_offset = finally_offset;
-    handler->stack_size = (int)(VM_STACK_TOP - VM_STACK);
+    handler->stack_size = (int) (VM_STACK_TOP - VM_STACK);
     handler->frame_count = VM_FRAME_COUNT;
     handler->exception = xr_null();
     handler->caught = false;
     handler->in_finally = false;
-    handler->try_pc = pc - 2; // Save try instruction position
+    handler->try_pc = pc - 2;  // Save try instruction position
 
     vmbreak;
 }
@@ -122,11 +124,11 @@ vmcase(OP_END_TRY) {
         // Check for pending exception that needs re-throw:
         // 1. Uncaught exception (try-finally without catch)
         // 2. Exception thrown during catch, finally just finished
-        bool has_pending = !XR_IS_NULL(handler->exception) &&
-                           (!handler->caught || handler->in_finally);
+        bool has_pending =
+            !XR_IS_NULL(handler->exception) && (!handler->caught || handler->in_finally);
         if (has_pending) {
             XrValue exc = handler->exception;
-            VM_DEC_HANDLER_COUNT; // Pop handler
+            VM_DEC_HANDLER_COUNT;  // Pop handler
             xr_vm_throw_exception(isolate, exc);
 
             // Check if there are upper handlers
@@ -161,11 +163,11 @@ vmcase(OP_THROW) {
 
     // Debug hook: check exception breakpoint before unwinding
     {
-        XrDebugHooks *_eh = (XrDebugHooks *)isolate->debug_hooks;
+        XrDebugHooks *_eh = (XrDebugHooks *) isolate->debug_hooks;
         if (_eh && _eh->on_exception) {
             bool _unc = (VM_HANDLER_COUNT == 0);
-            const char *_msg = XR_IS_EXCEPTION(exception)
-                ? xr_exception_get_message(exception) : "<exception>";
+            const char *_msg =
+                XR_IS_EXCEPTION(exception) ? xr_exception_get_message(exception) : "<exception>";
             if (_eh->on_exception(isolate, _msg, _unc) == XR_DBG_ACTION_BREAK) {
                 VM_SET_EXCEPTION(exception);
                 ci->pc = pc - 1;

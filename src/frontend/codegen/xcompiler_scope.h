@@ -55,18 +55,18 @@ typedef struct XrLocalInfo {
     bool is_hoisted;       // Function name pre-declared for mutual recursion
     uint8_t storage_mode;  // 0=normal, 1=shared
     ComptimeValue comptime;
-    
+
     // Closure safety tracking
     bool is_closure;
     struct XrProto *closure_proto;
-    
+
     // Spill management
     int spill_slot;  // -1 if not spilled
-    
+
     // RELOAD cache (optimization)
     int cached_reg;  // -1 if no cache
     int cached_gen;
-    
+
     // Rematerialization
     bool can_rematerialize;
     int64_t remat_value;
@@ -90,12 +90,13 @@ static inline void xr_local_list_init(XrLocalList *list) {
     list->capacity = 0;
 }
 
-static inline void xr_local_list_add(XrLocalList *list, XrLocalInfo *local, void* (*alloc_fn)(size_t)) {
+static inline void xr_local_list_add(XrLocalList *list, XrLocalInfo *local,
+                                     void *(*alloc_fn)(size_t)) {
     if (list->count >= list->capacity) {
         int new_cap = list->capacity == 0 ? 8 : list->capacity * 2;
-        XrLocalInfo **new_items = (XrLocalInfo**)alloc_fn(sizeof(XrLocalInfo*) * new_cap);
+        XrLocalInfo **new_items = (XrLocalInfo **) alloc_fn(sizeof(XrLocalInfo *) * new_cap);
         if (list->items) {
-            memcpy(new_items, list->items, sizeof(XrLocalInfo*) * list->count);
+            memcpy(new_items, list->items, sizeof(XrLocalInfo *) * list->count);
             xr_free(list->items);
         }
         list->items = new_items;
@@ -104,8 +105,9 @@ static inline void xr_local_list_add(XrLocalList *list, XrLocalInfo *local, void
     list->items[list->count++] = local;
 }
 
-static inline XrLocalInfo* xr_local_list_get(XrLocalList *list, int index) {
-    if (index < 0 || index >= list->count) return NULL;
+static inline XrLocalInfo *xr_local_list_get(XrLocalList *list, int index) {
+    if (index < 0 || index >= list->count)
+        return NULL;
     return list->items[index];
 }
 
@@ -115,4 +117,4 @@ static inline void xr_local_list_pop_above_depth(XrLocalList *list, int depth) {
     }
 }
 
-#endif // XCOMPILER_SCOPE_H
+#endif  // XCOMPILER_SCOPE_H

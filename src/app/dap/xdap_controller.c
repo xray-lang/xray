@@ -29,7 +29,8 @@
 
 XdapController *xdap_controller_new(XdapTransport *transport) {
     XdapController *ctrl = xr_calloc(1, sizeof(XdapController));
-    if (!ctrl) return NULL;
+    if (!ctrl)
+        return NULL;
 
     ctrl->transport = transport;
     ctrl->vm_state = XDAP_VM_INITIALIZING;
@@ -39,7 +40,8 @@ XdapController *xdap_controller_new(XdapTransport *transport) {
 }
 
 void xdap_controller_free(XdapController *ctrl) {
-    if (!ctrl) return;
+    if (!ctrl)
+        return;
 
     // Free debug proto if not already freed
     if (ctrl->debug_proto && ctrl->isolate) {
@@ -73,16 +75,18 @@ void xdap_controller_free(XdapController *ctrl) {
 // VM Control
 // ============================================================================
 
-bool xdap_controller_launch(XdapController *ctrl, const char *program,
-                             char **args, int arg_count, bool stop_on_entry) {
-    if (!ctrl || !program) return false;
+bool xdap_controller_launch(XdapController *ctrl, const char *program, char **args, int arg_count,
+                            bool stop_on_entry) {
+    if (!ctrl || !program)
+        return false;
 
     // Store program info
     ctrl->program_path = xr_strdup(program);
-    if (!ctrl->program_path) return false;
+    if (!ctrl->program_path)
+        return false;
 
     if (args && arg_count > 0) {
-        ctrl->program_args = xr_calloc((size_t)arg_count, sizeof(char *));
+        ctrl->program_args = xr_calloc((size_t) arg_count, sizeof(char *));
         if (!ctrl->program_args) {
             xr_free(ctrl->program_path);
             ctrl->program_path = NULL;
@@ -144,7 +148,8 @@ bool xdap_controller_launch(XdapController *ctrl, const char *program,
 }
 
 void xdap_controller_continue(XdapController *ctrl) {
-    if (!ctrl) return;
+    if (!ctrl)
+        return;
     if (ctrl->isolate) {
         xr_debug_continue(ctrl->isolate);
         xr_debug_clear_var_refs(ctrl->isolate);
@@ -152,7 +157,8 @@ void xdap_controller_continue(XdapController *ctrl) {
 }
 
 void xdap_controller_step_in(XdapController *ctrl) {
-    if (!ctrl) return;
+    if (!ctrl)
+        return;
     if (ctrl->isolate) {
         xr_debug_step_in(ctrl->isolate);
         xr_debug_clear_var_refs(ctrl->isolate);
@@ -160,7 +166,8 @@ void xdap_controller_step_in(XdapController *ctrl) {
 }
 
 void xdap_controller_step_out(XdapController *ctrl) {
-    if (!ctrl) return;
+    if (!ctrl)
+        return;
     if (ctrl->isolate) {
         xr_debug_step_out(ctrl->isolate);
         xr_debug_clear_var_refs(ctrl->isolate);
@@ -168,7 +175,8 @@ void xdap_controller_step_out(XdapController *ctrl) {
 }
 
 void xdap_controller_step_over(XdapController *ctrl) {
-    if (!ctrl) return;
+    if (!ctrl)
+        return;
     if (ctrl->isolate) {
         xr_debug_step_over(ctrl->isolate);
         xr_debug_clear_var_refs(ctrl->isolate);
@@ -176,7 +184,8 @@ void xdap_controller_step_over(XdapController *ctrl) {
 }
 
 void xdap_controller_pause(XdapController *ctrl) {
-    if (!ctrl) return;
+    if (!ctrl)
+        return;
     atomic_store(&ctrl->pending_cmd, XDAP_CMD_PAUSE);
     atomic_store(&ctrl->cmd_pending, true);
 
@@ -191,22 +200,28 @@ void xdap_controller_pause(XdapController *ctrl) {
 // back to the previous session so the user's debugging context is
 // preserved — they can retry the restart or manually terminate.
 bool xdap_controller_restart(XdapController *ctrl) {
-    if (!ctrl || !ctrl->program_path) return false;
+    if (!ctrl || !ctrl->program_path)
+        return false;
 
     // 1. Snapshot program info as independent copies. `launch()` will
     //    strdup them again, so we release these locals when done.
     char *program = xr_strdup(ctrl->program_path);
-    if (!program) return false;
+    if (!program)
+        return false;
 
     char **args_copy = NULL;
     int arg_count = ctrl->arg_count;
     if (ctrl->program_args && arg_count > 0) {
-        args_copy = xr_calloc((size_t)arg_count, sizeof(char *));
-        if (!args_copy) { xr_free(program); return false; }
+        args_copy = xr_calloc((size_t) arg_count, sizeof(char *));
+        if (!args_copy) {
+            xr_free(program);
+            return false;
+        }
         for (int i = 0; i < arg_count; i++) {
             args_copy[i] = xr_strdup(ctrl->program_args[i]);
             if (!args_copy[i]) {
-                for (int j = 0; j < i; j++) xr_free(args_copy[j]);
+                for (int j = 0; j < i; j++)
+                    xr_free(args_copy[j]);
                 xr_free(args_copy);
                 xr_free(program);
                 return false;
@@ -218,23 +233,23 @@ bool xdap_controller_restart(XdapController *ctrl) {
     //    fields unconditionally, so we MUST null them first — otherwise
     //    the `ctrl->program_path = xr_strdup(...)` at the top of launch
     //    would silently leak our snapshot.
-    XrayIsolate *old_isolate      = ctrl->isolate;
-    XrProto     *old_debug_proto  = ctrl->debug_proto;
-    char        *old_program_path = ctrl->program_path;
-    char       **old_program_args = ctrl->program_args;
-    int          old_arg_count    = ctrl->arg_count;
+    XrayIsolate *old_isolate = ctrl->isolate;
+    XrProto *old_debug_proto = ctrl->debug_proto;
+    char *old_program_path = ctrl->program_path;
+    char **old_program_args = ctrl->program_args;
+    int old_arg_count = ctrl->arg_count;
 
-    ctrl->isolate       = NULL;
-    ctrl->debug_proto   = NULL;
-    ctrl->program_path  = NULL;
-    ctrl->program_args  = NULL;
-    ctrl->arg_count     = 0;
+    ctrl->isolate = NULL;
+    ctrl->debug_proto = NULL;
+    ctrl->program_path = NULL;
+    ctrl->program_args = NULL;
+    ctrl->arg_count = 0;
 
     // Also clear any stopped-session pointers now — whether restart
     // succeeds or fails, the old stop point is no longer meaningful.
-    ctrl->program_launched  = false;
-    ctrl->stopped_coro      = NULL;
-    ctrl->stopped_coro_id   = 0;
+    ctrl->program_launched = false;
+    ctrl->stopped_coro = NULL;
+    ctrl->stopped_coro_id = 0;
     atomic_store(&ctrl->cmd_pending, false);
 
     // 3. Build the new isolate. At this point the old one is still
@@ -246,7 +261,8 @@ bool xdap_controller_restart(XdapController *ctrl) {
     //    cleaned up in the rollback path below).
     xr_free(program);
     if (args_copy) {
-        for (int i = 0; i < arg_count; i++) xr_free(args_copy[i]);
+        for (int i = 0; i < arg_count; i++)
+            xr_free(args_copy[i]);
         xr_free(args_copy);
     }
 
@@ -260,11 +276,12 @@ bool xdap_controller_restart(XdapController *ctrl) {
         }
         xr_free(old_program_path);
         if (old_program_args) {
-            for (int i = 0; i < old_arg_count; i++) xr_free(old_program_args[i]);
+            for (int i = 0; i < old_arg_count; i++)
+                xr_free(old_program_args[i]);
             xr_free(old_program_args);
         }
 
-        ctrl->vm_state  = XDAP_VM_RUNNING;
+        ctrl->vm_state = XDAP_VM_RUNNING;
         ctrl->configured = true;
         return true;
     }
@@ -275,7 +292,8 @@ bool xdap_controller_restart(XdapController *ctrl) {
     //     session back in place so the DAP UI keeps a live target.
     xr_free(ctrl->program_path);
     if (ctrl->program_args) {
-        for (int i = 0; i < ctrl->arg_count; i++) xr_free(ctrl->program_args[i]);
+        for (int i = 0; i < ctrl->arg_count; i++)
+            xr_free(ctrl->program_args[i]);
         xr_free(ctrl->program_args);
     }
     if (ctrl->isolate) {
@@ -284,16 +302,17 @@ bool xdap_controller_restart(XdapController *ctrl) {
         xray_isolate_delete(ctrl->isolate);
     }
 
-    ctrl->isolate       = old_isolate;
-    ctrl->debug_proto   = old_debug_proto;
-    ctrl->program_path  = old_program_path;
-    ctrl->program_args  = old_program_args;
-    ctrl->arg_count     = old_arg_count;
+    ctrl->isolate = old_isolate;
+    ctrl->debug_proto = old_debug_proto;
+    ctrl->program_path = old_program_path;
+    ctrl->program_args = old_program_args;
+    ctrl->arg_count = old_arg_count;
     return false;
 }
 
 void xdap_controller_terminate(XdapController *ctrl) {
-    if (!ctrl) return;
+    if (!ctrl)
+        return;
     atomic_store(&ctrl->pending_cmd, XDAP_CMD_TERMINATE);
     atomic_store(&ctrl->cmd_pending, true);
     ctrl->vm_state = XDAP_VM_TERMINATED;
@@ -309,7 +328,8 @@ void xdap_controller_terminate(XdapController *ctrl) {
 // ============================================================================
 
 XrCoroutine *xdap_find_coro(XdapController *ctrl, int thread_id) {
-    if (!ctrl || !ctrl->isolate) return NULL;
+    if (!ctrl || !ctrl->isolate)
+        return NULL;
 
     // First check: stopped coroutine (most common case during debugging)
     if (ctrl->stopped_coro && ctrl->stopped_coro_id == thread_id) {
@@ -324,7 +344,8 @@ XrCoroutine *xdap_find_coro(XdapController *ctrl, int thread_id) {
     }
 
     // Check if main coroutine has matching ID
-    if (xr_isolate_get_main_coro(ctrl->isolate) && xr_isolate_get_main_coro(ctrl->isolate)->id == thread_id) {
+    if (xr_isolate_get_main_coro(ctrl->isolate) &&
+        xr_isolate_get_main_coro(ctrl->isolate)->id == thread_id) {
         return xr_isolate_get_main_coro(ctrl->isolate);
     }
 
@@ -333,8 +354,7 @@ XrCoroutine *xdap_find_coro(XdapController *ctrl, int thread_id) {
 }
 
 int xdap_coro_to_thread_id(XrCoroutine *coro) {
-    if (!coro) return 1;  // Default to main thread
+    if (!coro)
+        return 1;  // Default to main thread
     return coro->id > 0 ? coro->id : 1;
 }
-
-

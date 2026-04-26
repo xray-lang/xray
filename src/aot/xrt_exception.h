@@ -41,9 +41,9 @@
  * ========================================================================= */
 
 typedef struct XrtExcFrame {
-    jmp_buf              buf;        // setjmp/longjmp target
-    XrtValue             exception;  // exception value (set before longjmp)
-    struct XrtExcFrame  *prev;       // previous frame in stack
+    jmp_buf buf;               // setjmp/longjmp target
+    XrtValue exception;        // exception value (set before longjmp)
+    struct XrtExcFrame *prev;  // previous frame in stack
 } XrtExcFrame;
 
 /* =========================================================================
@@ -54,9 +54,9 @@ typedef struct XrtExcFrame {
  * ========================================================================= */
 
 #ifdef XRT_IMPL
-  XrtExcFrame *xrt_exc_top = NULL;
+XrtExcFrame *xrt_exc_top = NULL;
 #else
-  extern XrtExcFrame *xrt_exc_top;
+extern XrtExcFrame *xrt_exc_top;
 #endif
 
 /* =========================================================================
@@ -73,11 +73,11 @@ static _Noreturn void xrt_throw_exc(XrtValue exc) {
     }
     /* Uncaught exception */
     if (exc.tag == XRT_TAG_STR || exc.tag == XRT_TAG_STR_ARC) {
-        fprintf(stderr, "Uncaught exception: %s\n", (const char *)exc.ptr);
+        fprintf(stderr, "Uncaught exception: %s\n", (const char *) exc.ptr);
     } else {
         fprintf(stderr, "Uncaught exception (tag=%d)\n", exc.tag);
     }
     abort();
 }
 
-#endif // XRT_EXCEPTION_H
+#endif  // XRT_EXCEPTION_H

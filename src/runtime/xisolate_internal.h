@@ -34,23 +34,23 @@
 // Instance/Json pools removed, using per-coroutine heap
 #include "../runtime/xexec_frame.h"  // VM state types (XrBcCallFrame, etc.)
 #include "../runtime/xexec_state.h"  // XrVMState - VM execution state
-#include "object/xnative_type.h"  // XR_NATIVE_TYPE_MAX
+#include "object/xnative_type.h"     // XR_NATIVE_TYPE_MAX
 
 /* ========== Thread Local Storage ========== */
 
 // Thread-local storage macro definitions
 #ifdef __GNUC__
-    #define XRAY_THREAD_LOCAL __thread
+#define XRAY_THREAD_LOCAL __thread
 #elif defined(_MSC_VER)
-    #define XRAY_THREAD_LOCAL __declspec(thread)
+#define XRAY_THREAD_LOCAL __declspec(thread)
 #else
-    #warning "Thread local storage not supported on this compiler"
-    #define XRAY_THREAD_LOCAL
-#endif // ========== Required Headers ==========
+#warning "Thread local storage not supported on this compiler"
+#define XRAY_THREAD_LOCAL
+#endif  // ========== Required Headers ==========
 
 // xray_runtime_interface.h removed - single backend, no abstraction layer
 // VM type definitions in core/xforward_decl.h
-#include "../base/xconfig.h"   // XrayConfig configuration
+#include "../base/xconfig.h"  // XrayConfig configuration
 
 /* ========== Forward Declarations ========== */
 
@@ -63,7 +63,6 @@ typedef struct XrGlobalStringPool XrGlobalStringPool;
 // VM initialization and cleanup
 XR_FUNC int xr_vm_init(XrayIsolate *isolate);
 XR_FUNC void xr_vm_cleanup(XrayIsolate *isolate);
-
 
 /* ========== Fast Macros ========== */
 
@@ -82,50 +81,50 @@ struct XrayIsolate {
     /* ========== Common State ========== */
 
     // Core object system
-    XrayCoreClasses *core;             // Core classes (Object, Class, String, etc.)
-    XrTypeRegistry *type_registry;     // Type registry for reflection
+    XrayCoreClasses *core;          // Core classes (Object, Class, String, etc.)
+    XrTypeRegistry *type_registry;  // Type registry for reflection
 
     // Memory management - Per-Coroutine GC
     // - Runtime objects allocated on coroutine-private heap
     // - System objects (coroutines, classes, modules) on system heap
     // - Entire heap freed when coroutine exits
-    XrGC gc;                           // GC instance (manages fixedgc list only)
-    struct XrSystemHeap *sys_heap;     // System heap (coroutine pool, class Arena)
-    XrMemoryTracker *memory_tracker;     // Memory allocation tracker
+    XrGC gc;                          // GC instance (manages fixedgc list only)
+    struct XrSystemHeap *sys_heap;    // System heap (coroutine pool, class Arena)
+    XrMemoryTracker *memory_tracker;  // Memory allocation tracker
 
     // Main coroutine (unified GC architecture)
     // - All coroutines (including main) use XrCoroGC + XrCoroHeap
     // - Main coroutine: large heap (4MB), deferred GC (max_gen_gcs=100)
     // - O(1) heap release on program exit
-    struct XrCoroutine *main_coro;     // Main coroutine (owns large heap GC)
+    struct XrCoroutine *main_coro;  // Main coroutine (owns large heap GC)
 
     // Global state
-    XrGlobalsTable *globals;           // Dynamic global variables table
+    XrGlobalsTable *globals;                 // Dynamic global variables table
     XrGlobalStringPool *global_string_pool;  // Global string pool (read-only)
 
     // Type system
     XrTypeInferContext *type_infer_context;  // Type inference context
-    XrTypeTable *type_table;           // Compiler type table
-    struct XrTypePool *analyzer_pool;  // Static analyzer type pool (multi-instance safe)
+    XrTypeTable *type_table;                 // Compiler type table
+    struct XrTypePool *analyzer_pool;        // Static analyzer type pool (multi-instance safe)
 
     // Symbol system
-    XrSymbolTable *symbol_table;       // Per-Isolate symbol table
+    XrSymbolTable *symbol_table;  // Per-Isolate symbol table
 
     // Configuration
-    XrayIsolateParams params;          // Creation parameters
-    XrayConfig *config;                // Global configuration
-    void *userdata;                    // User data pointer
-    uint32_t init_flags;               // Which subsystems were initialized (XR_INIT_*)
+    XrayIsolateParams params;  // Creation parameters
+    XrayConfig *config;        // Global configuration
+    void *userdata;            // User data pointer
+    uint32_t init_flags;       // Which subsystems were initialized (XR_INIT_*)
 
     // Global object (simplified: embedded directly in Isolate)
-    XrGlobalObject *global_object;     // Global object
+    XrGlobalObject *global_object;  // Global object
 
     // Module system
-    XrModuleRegistry *module_registry; // Module registry
-    XrModule *current_module;          // Currently loading module (for export collection)
+    XrModuleRegistry *module_registry;  // Module registry
+    XrModule *current_module;           // Currently loading module (for export collection)
 
     // Storage mode context (for class instance shared)
-    uint8_t current_storage_mode;      // 0=normal, 1=shared
+    uint8_t current_storage_mode;  // 0=normal, 1=shared
 
     // Test mode: suppress [Uncaught Exception] stderr output
     bool suppress_exception_print;
@@ -178,7 +177,7 @@ struct XrayIsolate {
     void *debug_hooks;  // XrDebugHooks* for VM callback interface
 
     /* ========== Cluster (optional, enabled with XR_HAS_CLUSTER) ========== */
-    void *cluster;      // XrCluster* (stdlib/cluster), NULL if not started
+    void *cluster;  // XrCluster* (stdlib/cluster), NULL if not started
 
     /*
      * Distributed channel hook vtable. Populated by
@@ -198,11 +197,11 @@ struct XrayIsolate {
     // Per-type name strings (only extension slots used)
     const char *ext_type_names[XGC_MAX_TYPES];
     // Runtime bitmaps (OR'd with compile-time constants in GC hot path)
-    uint64_t ext_finalize_bitmap;   // types needing finalization
-    uint64_t ext_has_refs_bitmap;   // types needing GC traversal
+    uint64_t ext_finalize_bitmap;  // types needing finalization
+    uint64_t ext_has_refs_bitmap;  // types needing GC traversal
     // Per-type callbacks (only extension slots used)
     XrGCDestroyFn ext_destroy_funcs[XGC_MAX_TYPES];
-    void         *ext_traverse_funcs[XGC_MAX_TYPES]; // XrGCTraverseFn equivalent
+    void *ext_traverse_funcs[XGC_MAX_TYPES];  // XrGCTraverseFn equivalent
 
     /* ========== stdlib per-isolate cache ========== */
     // Opaque pointer owned by stdlib/stdlib_cache.h. Holds memoised
@@ -242,7 +241,7 @@ struct XrayIsolate {
 //   #endif // ========== Compilation and Execution API ==========
 
 // Compile AST to bytecode (no source file info)
-XR_FUNC XrProto* xr_compile_ast(XrayIsolate *isolate, AstNode *ast);
+XR_FUNC XrProto *xr_compile_ast(XrayIsolate *isolate, AstNode *ast);
 
 // xr_compile_ast_with_source, xr_execute, xr_free_code, xr_compile_source_with_path
 // declared in xisolate_api.h
@@ -251,13 +250,13 @@ XR_FUNC XrProto* xr_compile_ast(XrayIsolate *isolate, AstNode *ast);
 // JIT compile hot function (VM+JIT config only)
 // Returns compiled native function pointer, or NULL on failure
 // Implemented in: src/backends/jit/xr_jit_compiler.c
-typedef XrValue (*XrNativeFunc)(XrayIsolate*, XrValue*, int);
+typedef XrValue (*XrNativeFunc)(XrayIsolate *, XrValue *, int);
 XR_FUNC XrNativeFunc xr_jit_compile(XrayIsolate *isolate, XrProto *proto);
 
 // Check if function should be JIT compiled
 // Returns true if should compile, false to continue interpreting
 XR_FUNC bool xr_jit_should_compile(XrayIsolate *isolate, XrProto *proto);
-#endif // ========== Internal Helper Functions ==========
+#endif  // ========== Internal Helper Functions ==========
 
 // Initialize common state (called by xray_isolate_new)
 // Returns 0 on success, -1 on failure
@@ -270,15 +269,15 @@ XR_FUNC void xray_isolate_cleanup_common(XrayIsolate *isolate);
 
 // Global thread-local Isolate pointer
 // Each thread has its own Isolate instance
-extern XRAY_THREAD_LOCAL XrayIsolate* g_current_isolate;
+extern XRAY_THREAD_LOCAL XrayIsolate *g_current_isolate;
 
 // Get current thread's Isolate (fast inline version)
 // Returns NULL if not set
 // Performance: ~2ns (direct TLS access)
-static inline XrayIsolate* xray_isolate_get_current(void) {
+static inline XrayIsolate *xray_isolate_get_current(void) {
     return g_current_isolate;
 }
 
 // xray_isolate_enter/xray_isolate_exit declared in xisolate_api.h
 
-#endif // XISOLATE_INTERNAL_H
+#endif  // XISOLATE_INTERNAL_H

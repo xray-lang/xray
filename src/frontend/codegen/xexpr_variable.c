@@ -20,10 +20,10 @@
 #include "xcompiler_context.h"
 #include "xemit.h"
 #include "xexpr_desc.h"
-#include "../../runtime/value/xvalue.h"           // xr_int, xr_float, xr_string_value
+#include "../../runtime/value/xvalue.h"  // xr_int, xr_float, xr_string_value
 #include "../../runtime/xisolate_api.h"  // XrayIsolate full definition
-#include "../parser/xast_nodes.h"     // XR_STORAGE_OWNED
-#include "../../runtime/value/xchunk.h"           // MAXARG_sBx
+#include "../parser/xast_nodes.h"        // XR_STORAGE_OWNED
+#include "../../runtime/value/xchunk.h"  // MAXARG_sBx
 #include <stdio.h>
 #include <string.h>
 
@@ -36,12 +36,12 @@
 
 /*
  * Compile variable access expression (returns XrExprDesc)
- * 
+ *
  * Lookup order:
  * 1. Local variable: return XEXPR_LOCAL
  * 2. Upvalue: return XEXPR_RELOC (GETUPVAL)
  * 3. Global variable: return XEXPR_RELOC (GETGLOBAL)
- * 
+ *
  * @return Expression descriptor
  */
 XrExprDesc compile_variable(XrCompilerContext *ctx, XrCompiler *compiler, VariableNode *node) {
@@ -50,27 +50,27 @@ XrExprDesc compile_variable(XrCompilerContext *ctx, XrCompiler *compiler, Variab
     XR_DCHECK(node != NULL, "compile_variable: NULL node");
     XrExprDesc e = {0};
     xexpr_init(&e, XEXPR_VOID, -1);
-    
+
     // Use compile-time interning to ensure string comparability
     XrString *name_str = xr_compile_time_intern(ctx->X, node->name, strlen(node->name));
-    
+
     // 1. Lookup local variable
     XrLocalInfo *local_info = compiler_get_local_by_name(compiler, name_str->data);
     if (local_info) {
         int local_reg = local_info->reg;
-        
+
         // Check if variable is spilled (using variable's own spill_slot)
         if (local_info->spill_slot >= 0) {
             // Rematerialization optimization: constants don't need RELOAD, regenerate directly
             if (local_info->can_rematerialize) {
                 int temp = xreg_alloc_temp(compiler->regalloc);
                 // Regenerate constant value (faster than RELOAD)
-                xemit_loadi(compiler->emitter, temp, (int)local_info->remat_value);
+                xemit_loadi(compiler->emitter, temp, (int) local_info->remat_value);
                 e.kind = XEXPR_TEMP;
                 e.reg = temp;
                 return e;
             }
-            
+
             // After spill, need RELOAD
             int temp = xreg_alloc_temp(compiler->regalloc);
             emit_reload(compiler->emitter, temp, local_info->spill_slot);
@@ -78,7 +78,7 @@ XrExprDesc compile_variable(XrCompilerContext *ctx, XrCompiler *compiler, Variab
             e.reg = temp;
             return e;
         }
-        
+
         // Const propagation: inline compile-time constant value
         if (local_info->is_const && local_info->comptime.type != COMPTIME_NONE) {
             switch (local_info->comptime.type) {
@@ -101,7 +101,7 @@ XrExprDesc compile_variable(XrCompilerContext *ctx, XrCompiler *compiler, Variab
                     break;
             }
         }
-        
+
         // Cellified variable: register holds a cell ref, deref to get value.
         if (local_info->is_cellified) {
             int pc = xemit_cell_get(compiler->emitter, 0, local_info->reg);
@@ -118,7 +118,7 @@ XrExprDesc compile_variable(XrCompilerContext *ctx, XrCompiler *compiler, Variab
         // LIFO mode doesn't need to mark usage
         return e;
     }
-    
+
     // 2. Lookup shared variable (consider lexical scope, priority over upvalue)
     int shared_index = shared_get_in_scope(ctx, compiler, name_str);
     if (shared_index >= 0) {
@@ -126,20 +126,20 @@ XrExprDesc compile_variable(XrCompilerContext *ctx, XrCompiler *compiler, Variab
         if (!shared_is_const(ctx, shared_index) && shared_is_moved(ctx, shared_index)) {
             int moved_line, moved_column;
             shared_get_moved_location(ctx, shared_index, &moved_line, &moved_column);
-            xr_compiler_error(ctx, compiler, 
-                "use of moved value '%s' (moved at line %d)\n"
-                "hint: consider using copy() if you need to retain the value",
-                node->name, moved_line);
+            xr_compiler_error(ctx, compiler,
+                              "use of moved value '%s' (moved at line %d)\n"
+                              "hint: consider using copy() if you need to retain the value",
+                              node->name, moved_line);
             e.kind = XEXPR_NULL;
             return e;
         }
-        
+
         int pc = xemit_getshared(compiler->emitter, 0, shared_index);
         e.kind = XEXPR_RELOC;
         e.u.pc = pc;
         return e;
     }
-    
+
     // 3. Const inlining: check ConstEntry BEFORE upvalue (avoids GETUPVAL for constants)
     ConstEntry *const_entry = xr_compiler_ctx_find_const(ctx, name_str);
     if (const_entry) {
@@ -148,7 +148,7 @@ XrExprDesc compile_variable(XrCompilerContext *ctx, XrCompiler *compiler, Variab
             case CONST_INT: {
                 int64_t value = const_entry->value.int_val;
                 if (value >= -MAXARG_sBx && value <= MAXARG_sBx) {
-                    pc = xemit_loadi(compiler->emitter, 0, (int)value);
+                    pc = xemit_loadi(compiler->emitter, 0, (int) value);
                 } else {
                     XrValue val = xr_int(value);
                     int kidx = xr_vm_proto_add_constant(compiler->proto, val);
@@ -178,7 +178,7 @@ XrExprDesc compile_variable(XrCompilerContext *ctx, XrCompiler *compiler, Variab
                 break;
         }
     }
-    
+
     // 4. Lookup upvalue (after ConstEntry, so const values are inlined instead of CTX_LOAD)
     int upvalue = scope_resolve_upvalue(ctx, compiler, name_str);
     if (upvalue >= 0) {
@@ -198,7 +198,7 @@ XrExprDesc compile_variable(XrCompilerContext *ctx, XrCompiler *compiler, Variab
         e.u.pc = pc;
         return e;
     }
-    
+
     // 5. Lookup global variable (don't auto-create)
     int global_index = builtin_get(ctx, name_str);
     if (global_index < 0) {
@@ -207,7 +207,7 @@ XrExprDesc compile_variable(XrCompilerContext *ctx, XrCompiler *compiler, Variab
         e.kind = XEXPR_NULL;
         return e;
     }
-    
+
     // Global variable exists: generate GETGLOBAL, A=0 pending relocation
     int pc = xemit_getbuiltin(compiler->emitter, 0, global_index);
     e.kind = XEXPR_RELOC;

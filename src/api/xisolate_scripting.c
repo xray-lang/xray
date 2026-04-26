@@ -46,9 +46,10 @@
 // per-coroutine IC tables on the resolved VM context (IC state lives
 // ctx-side now, not on the immutable proto).
 static void dump_ic_feedback_recursive(XrVMContext *ctx, XrProto *proto) {
-    if (!proto || !ctx) return;
+    if (!proto || !ctx)
+        return;
 
-    const char *name = proto->name ? (const char*)proto->name->data : "<script>";
+    const char *name = proto->name ? (const char *) proto->name->data : "<script>";
     XrICMethodTable *icm = xr_vm_ctx_get_ic_methods(ctx, proto);
     if (icm) {
         xr_ic_method_table_dump_feedback(icm, name);
@@ -77,7 +78,7 @@ static int execute_and_dump(XrayIsolate *isolate, XrProto *code, const char *lab
 
 /* ========== File Reading Helpers ========== */
 
-static char* read_file_source(const char *filename) {
+static char *read_file_source(const char *filename) {
     FILE *file = fopen(filename, "r");
     if (file == NULL) {
         return NULL;
@@ -93,7 +94,7 @@ static char* read_file_source(const char *filename) {
     size_t read_size = 0;
 
     if (size > 0) {
-        source = (char *)xr_malloc(size + 1);
+        source = (char *) xr_malloc(size + 1);
         if (source == NULL) {
             fclose(file);
             return NULL;
@@ -103,7 +104,7 @@ static char* read_file_source(const char *filename) {
     } else {
         // Pipe/stdin fallback: read in 4KB blocks
         size_t capacity = 4096;
-        source = (char *)xr_malloc(capacity);
+        source = (char *) xr_malloc(capacity);
         if (source == NULL) {
             fclose(file);
             return NULL;
@@ -113,7 +114,7 @@ static char* read_file_source(const char *filename) {
             read_size += n;
             if (read_size + 1 >= capacity) {
                 capacity *= 2;
-                char *new_source = (char *)xr_realloc(source, capacity);
+                char *new_source = (char *) xr_realloc(source, capacity);
                 if (new_source == NULL) {
                     xr_free(source);
                     fclose(file);
@@ -235,11 +236,10 @@ int xray_isolate_dofile_debug(XrayIsolate *isolate, const char *filename, void *
 
 /* ========== Script Info ========== */
 
-void xray_isolate_set_script_info(XrayIsolate *isolate,
-                                   const char *script_file,
-                                   int argc,
-                                   char **argv) {
-    if (isolate == NULL) return;
+void xray_isolate_set_script_info(XrayIsolate *isolate, const char *script_file, int argc,
+                                  char **argv) {
+    if (isolate == NULL)
+        return;
 
     isolate->params.script_file = script_file;
     isolate->params.script_argc = argc;
@@ -275,7 +275,8 @@ void xray_isolate_set_script_info(XrayIsolate *isolate,
     if (isolate->core && isolate->core->processClass) {
         XrInstance *process = xr_instance_new(isolate, isolate->core->processClass);
         if (process) {
-            xr_instance_set_field_fast(process, 0, main_str ? xr_string_value(main_str) : xr_null());
+            xr_instance_set_field_fast(process, 0,
+                                       main_str ? xr_string_value(main_str) : xr_null());
             xr_instance_set_field_fast(process, 1, xr_value_from_array(args_array));
             xr_instance_set_field_fast(process, 2, dir_str ? xr_string_value(dir_str) : xr_null());
 

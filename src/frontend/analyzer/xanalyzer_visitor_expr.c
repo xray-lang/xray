@@ -32,17 +32,23 @@ XrType *xa_visit_optional_chain(XaInferContext *ctx, AstNode *node);
 
 // Check if an AST node is a typeof() call, return the argument variable name
 const char *get_typeof_arg_name(AstNode *node) {
-    if (!node || node->type != AST_CALL_EXPR) return NULL;
+    if (!node || node->type != AST_CALL_EXPR)
+        return NULL;
     CallExprNode *call = &node->as.call_expr;
-    if (!call->callee || call->callee->type != AST_VARIABLE) return NULL;
-    if (strcmp(call->callee->as.variable.name, "typeof") != 0) return NULL;
-    if (call->arg_count != 1 || !call->arguments[0]) return NULL;
-    if (call->arguments[0]->type != AST_VARIABLE) return NULL;
+    if (!call->callee || call->callee->type != AST_VARIABLE)
+        return NULL;
+    if (strcmp(call->callee->as.variable.name, "typeof") != 0)
+        return NULL;
+    if (call->arg_count != 1 || !call->arguments[0])
+        return NULL;
+    if (call->arguments[0]->type != AST_VARIABLE)
+        return NULL;
     return call->arguments[0]->as.variable.name;
 }
 
 XrType *xa_visit_variable(XaInferContext *ctx, AstNode *node) {
-    if (!ctx || !node) return xr_type_new_unknown(NULL);
+    if (!ctx || !node)
+        return xr_type_new_unknown(NULL);
 
     const char *name = node->as.variable.name;
     XaSymbol *sym = xa_scope_lookup(ctx->analyzer->current_scope, name);
@@ -54,30 +60,36 @@ XrType *xa_visit_variable(XaInferContext *ctx, AstNode *node) {
 
     if (!sym) {
         // Undeclared variable — detect common cross-language mistakes
-        XrLocation loc = { .file = ctx->file_path, .line = node->line, .column = node->column };
+        XrLocation loc = {.file = ctx->file_path, .line = node->line, .column = node->column};
         char msg[256];
         if (strcmp(name, "True") == 0) {
             snprintf(msg, sizeof(msg), "Undeclared variable 'True'. Use lowercase 'true' in Xray");
         } else if (strcmp(name, "False") == 0) {
-            snprintf(msg, sizeof(msg), "Undeclared variable 'False'. Use lowercase 'false' in Xray");
+            snprintf(msg, sizeof(msg),
+                     "Undeclared variable 'False'. Use lowercase 'false' in Xray");
         } else if (strcmp(name, "None") == 0) {
-            snprintf(msg, sizeof(msg), "Undeclared variable 'None'. Use 'null' instead of 'None' in Xray");
+            snprintf(msg, sizeof(msg),
+                     "Undeclared variable 'None'. Use 'null' instead of 'None' in Xray");
         } else if (strcmp(name, "nil") == 0) {
-            snprintf(msg, sizeof(msg), "Undeclared variable 'nil'. Use 'null' instead of 'nil' in Xray");
+            snprintf(msg, sizeof(msg),
+                     "Undeclared variable 'nil'. Use 'null' instead of 'nil' in Xray");
         } else if (strcmp(name, "undefined") == 0) {
             snprintf(msg, sizeof(msg), "Undeclared variable 'undefined'. Use 'null' in Xray");
         } else if (strcmp(name, "self") == 0) {
-            snprintf(msg, sizeof(msg), "Undeclared variable 'self'. Use 'this' to refer to the current instance in Xray");
+            snprintf(
+                msg, sizeof(msg),
+                "Undeclared variable 'self'. Use 'this' to refer to the current instance in Xray");
         } else {
             snprintf(msg, sizeof(msg), "Undeclared variable '%s'", name);
         }
-        xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_UNDEFINED_VAR, msg, &loc);
+        xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_UNDEFINED_VAR,
+                                   msg, &loc);
         return xr_type_new_unknown(NULL);
     }
 
     // Record dependency: current function depends on this symbol
     if (ctx->current_function && ctx->analyzer->incremental) {
-        XaIncrementalCtx *incr = (XaIncrementalCtx*)ctx->analyzer->incremental;
+        XaIncrementalCtx *incr = (XaIncrementalCtx *) ctx->analyzer->incremental;
         xa_dep_add(incr, ctx->current_function->id, sym->id, XA_DEP_REFERENCE);
     }
 
@@ -89,23 +101,22 @@ XrType *xa_visit_variable(XaInferContext *ctx, AstNode *node) {
     }
 
     // Definite assignment check: warn if variable used before initialization
-    if (links && !links->is_definitely_assigned &&
-        sym->kind == XA_SYM_VARIABLE && !sym->is_builtin) {
-        XrLocation loc = { .file = ctx->file_path, .line = node->line, .column = node->column };
+    if (links && !links->is_definitely_assigned && sym->kind == XA_SYM_VARIABLE &&
+        !sym->is_builtin) {
+        XrLocation loc = {.file = ctx->file_path, .line = node->line, .column = node->column};
         char msg[256];
         snprintf(msg, sizeof(msg), "Variable '%s' is used before being assigned", name);
-        xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
-            XR_ERR_ANALYZE_TYPE_MISMATCH, msg, &loc);
+        xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_TYPE_MISMATCH,
+                                   msg, &loc);
     }
 
     // Get declared type
     XrType *declared_type = xa_analyzer_get_type(ctx->analyzer, sym);
 
     // Apply flow-based type narrowing (only for variables, not functions/classes)
-    if (ctx->flow && ctx->flow->current_flow && declared_type &&
-        sym->kind == XA_SYM_VARIABLE) {
-        XrType *narrowed = xa_flow_get_type_of_reference(
-            ctx->flow, name, declared_type, ctx->flow->current_flow, ctx->cache);
+    if (ctx->flow && ctx->flow->current_flow && declared_type && sym->kind == XA_SYM_VARIABLE) {
+        XrType *narrowed = xa_flow_get_type_of_reference(ctx->flow, name, declared_type,
+                                                         ctx->flow->current_flow, ctx->cache);
         // Never means unreachable flow path — fall back to declared type
         if (narrowed && narrowed != declared_type && !XR_TYPE_IS_NEVER(narrowed)) {
             // Side table is the canonical type store.
@@ -120,7 +131,8 @@ XrType *xa_visit_variable(XaInferContext *ctx, AstNode *node) {
 }
 
 XrType *xa_visit_binary(XaInferContext *ctx, AstNode *node) {
-    if (!ctx || !node) return xr_type_new_unknown(NULL);
+    if (!ctx || !node)
+        return xr_type_new_unknown(NULL);
 
     XrType *left = xa_visit_infer_expr(ctx, node->as.binary.left);
     XrType *right = xa_visit_infer_expr(ctx, node->as.binary.right);
@@ -128,17 +140,25 @@ XrType *xa_visit_binary(XaInferContext *ctx, AstNode *node) {
     // Deterministic result types: language rules independent of operand types
     switch (node->type) {
         // Comparison → always bool
-        case AST_BINARY_EQ: case AST_BINARY_NE:
-        case AST_BINARY_EQ_STRICT: case AST_BINARY_NE_STRICT:
-        case AST_BINARY_LT: case AST_BINARY_LE:
-        case AST_BINARY_GT: case AST_BINARY_GE:
+        case AST_BINARY_EQ:
+        case AST_BINARY_NE:
+        case AST_BINARY_EQ_STRICT:
+        case AST_BINARY_NE_STRICT:
+        case AST_BINARY_LT:
+        case AST_BINARY_LE:
+        case AST_BINARY_GT:
+        case AST_BINARY_GE:
             return xr_type_new_bool(NULL);
         // Logical → always bool
-        case AST_BINARY_AND: case AST_BINARY_OR:
+        case AST_BINARY_AND:
+        case AST_BINARY_OR:
             return xr_type_new_bool(NULL);
         // Bitwise → always int
-        case AST_BINARY_BAND: case AST_BINARY_BOR: case AST_BINARY_BXOR:
-        case AST_BINARY_LSHIFT: case AST_BINARY_RSHIFT:
+        case AST_BINARY_BAND:
+        case AST_BINARY_BOR:
+        case AST_BINARY_BXOR:
+        case AST_BINARY_LSHIFT:
+        case AST_BINARY_RSHIFT:
             return xr_type_new_int(NULL);
         default:
             break;
@@ -178,7 +198,8 @@ XrType *xa_visit_binary(XaInferContext *ctx, AstNode *node) {
 }
 
 XrType *xa_visit_unary(XaInferContext *ctx, AstNode *node) {
-    if (!ctx || !node) return xr_type_new_unknown(NULL);
+    if (!ctx || !node)
+        return xr_type_new_unknown(NULL);
 
     XrType *operand = xa_visit_infer_expr(ctx, node->as.unary.operand);
 
@@ -194,12 +215,12 @@ XrType *xa_visit_unary(XaInferContext *ctx, AstNode *node) {
     }
 }
 
-
 /* ----------------------------------------------------------------------------
  * Member Access Type Inference
  * -------------------------------------------------------------------------- */
 XrType *xa_visit_member_access(XaInferContext *ctx, AstNode *node) {
-    if (!ctx || !node) return xr_type_new_unknown(NULL);
+    if (!ctx || !node)
+        return xr_type_new_unknown(NULL);
 
     MemberAccessNode *ma = &node->as.member_access;
     XrType *obj_type = xa_visit_infer_expr(ctx, ma->object);
@@ -210,8 +231,8 @@ XrType *xa_visit_member_access(XaInferContext *ctx, AstNode *node) {
         XaSymbol *sym = xa_scope_lookup(ctx->analyzer->current_scope, var_name);
         if (sym && sym->kind == XA_SYM_MODULE) {
             XaSymbolLinks *sym_links = xa_analyzer_get_links(ctx->analyzer, sym);
-            const char *mod_name = (sym_links && sym_links->module_name)
-                                   ? sym_links->module_name : var_name;
+            const char *mod_name =
+                (sym_links && sym_links->module_name) ? sym_links->module_name : var_name;
             const XaBuiltinModule *mod = xa_builtin_get_module_info(mod_name);
             if (mod) {
                 // Look up function signature in module type table
@@ -228,16 +249,16 @@ XrType *xa_visit_member_access(XaInferContext *ctx, AstNode *node) {
 
     // Class static member access: ClassName.staticMethod
     if (obj_type->kind == XR_KIND_CLASS && obj_type->instance.class_name) {
-        XaSymbol *class_sym = xa_scope_lookup(ctx->analyzer->global_scope,
-                                              obj_type->instance.class_name);
+        XaSymbol *class_sym =
+            xa_scope_lookup(ctx->analyzer->global_scope, obj_type->instance.class_name);
         if (class_sym && class_sym->kind == XA_SYM_CLASS) {
             XaSymbolLinks *class_links = xa_analyzer_get_links(ctx->analyzer, class_sym);
             if (class_links && class_links->class_info) {
-                XaSymbol *member = xa_class_info_lookup_member(
-                    class_links->class_info, ma->name);
+                XaSymbol *member = xa_class_info_lookup_member(class_links->class_info, ma->name);
                 if (member) {
                     XaSymbolLinks *ml = xa_analyzer_get_links(ctx->analyzer, member);
-                    if (ml && ml->type) return ml->type;
+                    if (ml && ml->type)
+                        return ml->type;
                 }
             }
         }
@@ -251,13 +272,14 @@ XrType *xa_visit_member_access(XaInferContext *ctx, AstNode *node) {
     // Handle built-in properties
     SymbolId prop_sym = xr_builtin_symbol_from_name(ma->name);
     if (prop_sym == SYMBOL_LENGTH) {
-        if (XR_TYPE_IS_ARRAY(obj_type) || XR_TYPE_IS_STRING(obj_type) ||
-            XR_TYPE_IS_MAP(obj_type) || (obj_type->kind == XR_KIND_SET)) {
+        if (XR_TYPE_IS_ARRAY(obj_type) || XR_TYPE_IS_STRING(obj_type) || XR_TYPE_IS_MAP(obj_type) ||
+            (obj_type->kind == XR_KIND_SET)) {
             return xr_type_new_int(NULL);
         }
     }
     if (obj_type->kind == XR_KIND_CHANNEL) {
-        if (prop_sym == SYMBOL_CANCELLED) return xr_type_new_bool(NULL);
+        if (prop_sym == SYMBOL_CANCELLED)
+            return xr_type_new_bool(NULL);
     }
 
     // Handle built-in methods (return function type for method access)
@@ -273,23 +295,25 @@ XrType *xa_visit_member_access(XaInferContext *ctx, AstNode *node) {
                      obj_type->kind == XR_KIND_CHANNEL) &&
                     obj_type->container.element_type &&
                     !XR_TYPE_IS_UNKNOWN(obj_type->container.element_type)) {
-                    const char *names[] = { "T" };
-                    XrType *types[] = { obj_type->container.element_type };
+                    const char *names[] = {"T"};
+                    XrType *types[] = {obj_type->container.element_type};
                     fn_type = xr_type_substitute(ctx->analyzer->isolate, fn_type, names, types, 1);
                 } else if (XR_TYPE_IS_MAP(obj_type)) {
                     XrType *kt = obj_type->map.key_type;
                     XrType *vt = obj_type->map.value_type;
                     if (kt && !XR_TYPE_IS_UNKNOWN(kt) && vt && !XR_TYPE_IS_UNKNOWN(vt)) {
-                        const char *names[] = { "K", "V" };
-                        XrType *types[] = { kt, vt };
-                        fn_type = xr_type_substitute(ctx->analyzer->isolate, fn_type, names, types, 2);
+                        const char *names[] = {"K", "V"};
+                        XrType *types[] = {kt, vt};
+                        fn_type =
+                            xr_type_substitute(ctx->analyzer->isolate, fn_type, names, types, 2);
                     }
                 }
             }
             return fn_type;
         }
         // Fallback: return function with unknown return type
-        XrType *return_type = xa_builtin_get_method_return_type(ctx->analyzer->isolate, obj_type, ma->name);
+        XrType *return_type =
+            xa_builtin_get_method_return_type(ctx->analyzer->isolate, obj_type, ma->name);
         if (return_type) {
             return xr_type_new_function(ctx->analyzer->isolate, NULL, 0, return_type, false);
         }
@@ -297,8 +321,8 @@ XrType *xa_visit_member_access(XaInferContext *ctx, AstNode *node) {
 
     // Handle class instance members
     if (XR_TYPE_IS_INSTANCE(obj_type) && obj_type->instance.class_name) {
-        XaSymbol *class_sym = xa_scope_lookup(ctx->analyzer->global_scope,
-            obj_type->instance.class_name);
+        XaSymbol *class_sym =
+            xa_scope_lookup(ctx->analyzer->global_scope, obj_type->instance.class_name);
         if (class_sym) {
             XaSymbolLinks *class_links = xa_analyzer_get_links(ctx->analyzer, class_sym);
             if (class_links && class_links->class_info) {
@@ -311,13 +335,15 @@ XrType *xa_visit_member_access(XaInferContext *ctx, AstNode *node) {
                         // Apply type substitution for generic instances
                         int type_param_count = xa_symbol_links_get_type_param_count(class_links);
                         if (type_param_count > 0 && obj_type->instance.type_arg_count > 0) {
-                            const char **param_names = xr_malloc(sizeof(const char*) * type_param_count);
+                            const char **param_names =
+                                xr_malloc(sizeof(const char *) * type_param_count);
                             for (int i = 0; i < type_param_count; i++) {
-                                param_names[i] = xa_symbol_links_get_type_param_name(class_links, i);
+                                param_names[i] =
+                                    xa_symbol_links_get_type_param_name(class_links, i);
                             }
-                            member_type = xr_type_substitute(ctx->analyzer->isolate, member_type, param_names,
-                                                             obj_type->instance.type_args,
-                                                             obj_type->instance.type_arg_count);
+                            member_type = xr_type_substitute(
+                                ctx->analyzer->isolate, member_type, param_names,
+                                obj_type->instance.type_args, obj_type->instance.type_arg_count);
                             xr_free(param_names);
                         }
                         return member_type;
@@ -336,7 +362,8 @@ XrType *xa_visit_member_access(XaInferContext *ctx, AstNode *node) {
                 if (obj_type->object.field_names[i] &&
                     strcmp(obj_type->object.field_names[i], ma->name) == 0) {
                     XrType *ft = obj_type->object.field_types[i];
-                    if (!ft) return xr_type_new_unknown(NULL);
+                    if (!ft)
+                        return xr_type_new_unknown(NULL);
                     return xr_type_make_nullable(ctx->analyzer->isolate, ft);
                 }
             }
@@ -351,7 +378,8 @@ XrType *xa_visit_member_access(XaInferContext *ctx, AstNode *node) {
 }
 
 XrType *xa_visit_index_get(XaInferContext *ctx, AstNode *node) {
-    if (!ctx || !node) return xr_type_new_unknown(NULL);
+    if (!ctx || !node)
+        return xr_type_new_unknown(NULL);
 
     IndexGetNode *ig = &node->as.index_get;
     XrType *container = xa_visit_infer_expr(ctx, ig->array);
@@ -370,14 +398,15 @@ XrType *xa_visit_index_get(XaInferContext *ctx, AstNode *node) {
     if (XR_TYPE_IS_JSON(container)) {
         // If index is a string literal and Json has schema, look up field type
         if (ig->index && ig->index->type == AST_LITERAL_STRING &&
-                   container->object.field_count > 0 &&
-                   container->object.field_names && container->object.field_types) {
-                   const char *key = ig->index->as.literal.raw_value.string_val;
+            container->object.field_count > 0 && container->object.field_names &&
+            container->object.field_types) {
+            const char *key = ig->index->as.literal.raw_value.string_val;
             for (int i = 0; i < container->object.field_count; i++) {
                 if (container->object.field_names[i] &&
                     strcmp(container->object.field_names[i], key) == 0) {
                     XrType *ft = container->object.field_types[i];
-                    if (ft) return xr_type_make_nullable(ctx->analyzer->isolate, ft);
+                    if (ft)
+                        return xr_type_make_nullable(ctx->analyzer->isolate, ft);
                 }
             }
         }
@@ -389,14 +418,16 @@ XrType *xa_visit_index_get(XaInferContext *ctx, AstNode *node) {
 }
 
 XrType *xa_visit_array_literal(XaInferContext *ctx, AstNode *node) {
-    if (!ctx || !node) return xr_type_new_array(ctx->analyzer->isolate, xr_type_new_unknown(NULL));
+    if (!ctx || !node)
+        return xr_type_new_array(ctx->analyzer->isolate, xr_type_new_unknown(NULL));
 
     ArrayLiteralNode *arr = &node->as.array_literal;
     if (arr->count == 0) {
         // Empty array: use expected type if available
         if (ctx->expected_type && XR_TYPE_IS_ARRAY(ctx->expected_type) &&
             ctx->expected_type->container.element_type) {
-            return xr_type_new_array(ctx->analyzer->isolate, ctx->expected_type->container.element_type);
+            return xr_type_new_array(ctx->analyzer->isolate,
+                                     ctx->expected_type->container.element_type);
         }
         return xr_type_new_array(ctx->analyzer->isolate, xr_type_new_unknown(NULL));
     }
@@ -426,7 +457,9 @@ XrType *xa_visit_array_literal(XaInferContext *ctx, AstNode *node) {
 }
 
 XrType *xa_visit_map_literal(XaInferContext *ctx, AstNode *node) {
-    if (!ctx || !node) return xr_type_new_map(ctx->analyzer->isolate, xr_type_new_unknown(NULL), xr_type_new_unknown(NULL));
+    if (!ctx || !node)
+        return xr_type_new_map(ctx->analyzer->isolate, xr_type_new_unknown(NULL),
+                               xr_type_new_unknown(NULL));
 
     MapLiteralNode *map = &node->as.map_literal;
     if (map->count == 0) {
@@ -434,9 +467,11 @@ XrType *xa_visit_map_literal(XaInferContext *ctx, AstNode *node) {
         if (ctx->expected_type && XR_TYPE_IS_MAP(ctx->expected_type)) {
             XrType *ek = ctx->expected_type->map.key_type;
             XrType *ev = ctx->expected_type->map.value_type;
-            return xr_type_new_map(ctx->analyzer->isolate, ek ? ek : xr_type_new_unknown(NULL), ev ? ev : xr_type_new_unknown(NULL));
+            return xr_type_new_map(ctx->analyzer->isolate, ek ? ek : xr_type_new_unknown(NULL),
+                                   ev ? ev : xr_type_new_unknown(NULL));
         }
-        return xr_type_new_map(ctx->analyzer->isolate, xr_type_new_unknown(NULL), xr_type_new_unknown(NULL));
+        return xr_type_new_map(ctx->analyzer->isolate, xr_type_new_unknown(NULL),
+                               xr_type_new_unknown(NULL));
     }
 
     // Propagate expected value type to children
@@ -469,14 +504,16 @@ XrType *xa_visit_map_literal(XaInferContext *ctx, AstNode *node) {
 }
 
 XrType *xa_visit_object_literal(XaInferContext *ctx, AstNode *node) {
-    if (!ctx || !node) return xr_type_new_json(NULL);
+    if (!ctx || !node)
+        return xr_type_new_json(NULL);
 
     ObjectLiteralNode *obj = &node->as.object_literal;
-    if (obj->count == 0) return xr_type_new_json(NULL);
+    if (obj->count == 0)
+        return xr_type_new_json(NULL);
 
     // Collect field names and types
-    const char **field_names = (const char**)xr_malloc(sizeof(char*) * obj->count);
-    XrType **field_types = (XrType**)xr_malloc(sizeof(XrType*) * obj->count);
+    const char **field_names = (const char **) xr_malloc(sizeof(char *) * obj->count);
+    XrType **field_types = (XrType **) xr_malloc(sizeof(XrType *) * obj->count);
 
     for (int i = 0; i < obj->count; i++) {
         // Get field name (computed properties have runtime-only keys)
@@ -496,21 +533,22 @@ XrType *xa_visit_object_literal(XaInferContext *ctx, AstNode *node) {
 
         // Reject non-JSON-standard types in Json object literals
         if (field_types[i] && !xr_type_is_json_field_compatible(field_types[i])) {
-            XrLocation loc = { .file = ctx->file_path,
-                               .line = obj->values[i]->line,
-                               .column = obj->values[i]->column };
+            XrLocation loc = {.file = ctx->file_path,
+                              .line = obj->values[i]->line,
+                              .column = obj->values[i]->column};
             char msg[256];
             const char *fname = field_names[i] ? field_names[i] : "<computed>";
             snprintf(msg, sizeof(msg),
-                "Json field '%s' has type '%s', which is not a valid JSON value type. "
-                "Valid types: null, bool, int, float, string, Json, Array",
-                fname, xr_type_to_string(field_types[i]));
+                     "Json field '%s' has type '%s', which is not a valid JSON value type. "
+                     "Valid types: null, bool, int, float, string, Json, Array",
+                     fname, xr_type_to_string(field_types[i]));
             xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
-                XR_ERR_ANALYZE_TYPE_MISMATCH, msg, &loc);
+                                       XR_ERR_ANALYZE_TYPE_MISMATCH, msg, &loc);
         }
     }
 
-    XrType *type = xr_type_new_json_with_fields(ctx->analyzer->isolate, field_names, field_types, obj->count);
+    XrType *type =
+        xr_type_new_json_with_fields(ctx->analyzer->isolate, field_names, field_types, obj->count);
     type->object.allow_extension = true;  // Json objects allow extension by default
 
     xr_free(field_names);
@@ -520,7 +558,8 @@ XrType *xa_visit_object_literal(XaInferContext *ctx, AstNode *node) {
 }
 
 XrType *xa_visit_new_expr(XaInferContext *ctx, AstNode *node) {
-    if (!ctx || !node) return xr_type_new_unknown(NULL);
+    if (!ctx || !node)
+        return xr_type_new_unknown(NULL);
 
     NewExprNode *ne = &node->as.new_expr;
 
@@ -544,12 +583,12 @@ XrType *xa_visit_new_expr(XaInferContext *ctx, AstNode *node) {
     if (ne->type_arg_count > 0) {
         int expected = class_links ? xa_symbol_links_get_type_param_count(class_links) : 0;
         if (expected > 0 && ne->type_arg_count != expected) {
-            XrLocation loc = { .file = ctx->file_path, .line = node->line, .column = node->column };
+            XrLocation loc = {.file = ctx->file_path, .line = node->line, .column = node->column};
             char msg[256];
-            snprintf(msg, sizeof(msg),
-                "Generic class '%s' expects %d type argument(s), but got %d",
-                ne->class_name, expected, ne->type_arg_count);
-            xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_GENERIC_COUNT, msg, &loc);
+            snprintf(msg, sizeof(msg), "Generic class '%s' expects %d type argument(s), but got %d",
+                     ne->class_name, expected, ne->type_arg_count);
+            xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
+                                       XR_ERR_ANALYZE_GENERIC_COUNT, msg, &loc);
         }
     }
 
@@ -565,8 +604,10 @@ XrType *xa_visit_new_expr(XaInferContext *ctx, AstNode *node) {
                     if (ctor_links && ctor_links->type && XR_TYPE_IS_FUNCTION(ctor_links->type)) {
                         // Build param_names array
                         const char *param_names_buf[8];
-                        const char **param_names = (type_param_count <= 8)
-                            ? param_names_buf : xr_malloc(sizeof(const char*) * type_param_count);
+                        const char **param_names =
+                            (type_param_count <= 8)
+                                ? param_names_buf
+                                : xr_malloc(sizeof(const char *) * type_param_count);
                         for (int i = 0; i < type_param_count; i++) {
                             param_names[i] = xa_symbol_links_get_type_param_name(class_links, i);
                         }
@@ -577,24 +618,32 @@ XrType *xa_visit_new_expr(XaInferContext *ctx, AstNode *node) {
 
                         for (int i = 0; i < check_count; i++) {
                             XrType *expected = ctor_params ? ctor_params[i] : NULL;
-                            if (!expected || XR_TYPE_IS_UNKNOWN(expected)) continue;
+                            if (!expected || XR_TYPE_IS_UNKNOWN(expected))
+                                continue;
                             // Substitute T -> actual type arg
-                            XrType *resolved = xr_type_substitute(ctx->analyzer->isolate, expected, param_names,
-                                                                   ne->type_args, ne->type_arg_count);
+                            XrType *resolved =
+                                xr_type_substitute(ctx->analyzer->isolate, expected, param_names,
+                                                   ne->type_args, ne->type_arg_count);
                             if (resolved && !XR_TYPE_IS_UNKNOWN(resolved)) {
                                 XrType *arg_type = xa_visit_infer_expr(ctx, ne->arguments[i]);
                                 if (arg_type && !xr_type_assignable(resolved, arg_type)) {
-                                    XrLocation loc = { .file = ctx->file_path, .line = node->line, .column = node->column };
+                                    XrLocation loc = {.file = ctx->file_path,
+                                                      .line = node->line,
+                                                      .column = node->column};
                                     char msg[256];
                                     snprintf(msg, sizeof(msg),
-                                        "Type '%s' is not assignable to parameter type '%s' in new %s<>()",
-                                        xr_type_to_string(arg_type), xr_type_to_string(resolved), ne->class_name);
+                                             "Type '%s' is not assignable to parameter type '%s' "
+                                             "in new %s<>()",
+                                             xr_type_to_string(arg_type),
+                                             xr_type_to_string(resolved), ne->class_name);
                                     xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
-                                        XR_ERR_ANALYZE_TYPE_MISMATCH, msg, &loc);
+                                                               XR_ERR_ANALYZE_TYPE_MISMATCH, msg,
+                                                               &loc);
                                 }
                             }
                         }
-                        if (param_names != param_names_buf) xr_free((void*)param_names);
+                        if (param_names != param_names_buf)
+                            xr_free((void *) param_names);
                     }
                 }
             }
@@ -616,13 +665,13 @@ XrType *xa_visit_new_expr(XaInferContext *ctx, AstNode *node) {
                     int ctor_param_count = ctor_links->type->function.param_count;
 
                     // Build type parameter names
-                    const char **param_names = xr_malloc(sizeof(const char*) * type_param_count);
+                    const char **param_names = xr_malloc(sizeof(const char *) * type_param_count);
                     for (int i = 0; i < type_param_count; i++) {
                         param_names[i] = xa_symbol_links_get_type_param_name(class_links, i);
                     }
 
                     // Infer type arguments from constructor arguments
-                    XrType **inferred_args = xr_malloc(sizeof(XrType*) * type_param_count);
+                    XrType **inferred_args = xr_malloc(sizeof(XrType *) * type_param_count);
                     bool all_inferred = true;
 
                     for (int i = 0; i < type_param_count; i++) {
@@ -632,8 +681,8 @@ XrType *xa_visit_new_expr(XaInferContext *ctx, AstNode *node) {
                         // Find constructor parameter that uses this type parameter
                         for (int j = 0; j < ctor_param_count && j < ne->arg_count; j++) {
                             XrType *pt = ctor_params ? ctor_params[j] : NULL;
-                            if (pt && (pt->kind == XR_KIND_TYPE_PARAM) &&
-                                pt->type_param.name && strcmp(pt->type_param.name, tp_name) == 0) {
+                            if (pt && (pt->kind == XR_KIND_TYPE_PARAM) && pt->type_param.name &&
+                                strcmp(pt->type_param.name, tp_name) == 0) {
                                 // Infer from argument type
                                 inferred_args[i] = xa_visit_infer_expr(ctx, ne->arguments[j]);
                                 break;
@@ -647,8 +696,9 @@ XrType *xa_visit_new_expr(XaInferContext *ctx, AstNode *node) {
 
                     // If all type parameters were inferred, create generic instance
                     if (all_inferred) {
-                        XrType *result = xr_type_new_generic_instance(ctx->analyzer->isolate, ne->class_name, class_info,
-                                                                       inferred_args, type_param_count);
+                        XrType *result = xr_type_new_generic_instance(
+                            ctx->analyzer->isolate, ne->class_name, class_info, inferred_args,
+                            type_param_count);
                         xr_free(param_names);
                         // Don't free inferred_args - it's now owned by the type
                         return result;
@@ -684,7 +734,8 @@ XrType *xa_visit_new_expr(XaInferContext *ctx, AstNode *node) {
 }
 
 XrType *xa_visit_struct_literal(XaInferContext *ctx, AstNode *node) {
-    if (!ctx || !node) return xr_type_new_unknown(NULL);
+    if (!ctx || !node)
+        return xr_type_new_unknown(NULL);
 
     StructLiteralNode *sl = &node->as.struct_literal;
     const char *struct_name = sl->struct_name;
@@ -723,7 +774,8 @@ XrType *xa_visit_struct_literal(XaInferContext *ctx, AstNode *node) {
 }
 
 XrType *xa_visit_ternary(XaInferContext *ctx, AstNode *node) {
-    if (!ctx || !node) return xr_type_new_unknown(NULL);
+    if (!ctx || !node)
+        return xr_type_new_unknown(NULL);
 
     TernaryNode *tern = &node->as.ternary;
     // Bidirectional inference: propagate outer expected_type to both branches
@@ -742,7 +794,8 @@ XrType *xa_visit_ternary(XaInferContext *ctx, AstNode *node) {
  * If a is T?, result is T | typeof(b). If a is T (non-nullable), result is T.
  * -------------------------------------------------------------------------- */
 XrType *xa_visit_nullish_coalesce(XaInferContext *ctx, AstNode *node) {
-    if (!ctx || !node) return xr_type_new_unknown(NULL);
+    if (!ctx || !node)
+        return xr_type_new_unknown(NULL);
 
     XrType *left = xa_visit_infer_expr(ctx, node->as.binary.left);
     XrType *right = xa_visit_infer_expr(ctx, node->as.binary.right);
@@ -767,7 +820,8 @@ XrType *xa_visit_nullish_coalesce(XaInferContext *ctx, AstNode *node) {
  * Result is always nullable: typeof(obj.prop) | null => T?
  * -------------------------------------------------------------------------- */
 XrType *xa_visit_optional_chain(XaInferContext *ctx, AstNode *node) {
-    if (!ctx || !node) return xr_type_new_unknown(NULL);
+    if (!ctx || !node)
+        return xr_type_new_unknown(NULL);
 
     XrType *obj_type = xa_visit_infer_expr(ctx, node->as.optional_chain.object);
 
@@ -793,17 +847,19 @@ XrType *xa_visit_optional_chain(XaInferContext *ctx, AstNode *node) {
 
         // Class instance member
         if (XR_TYPE_IS_INSTANCE(base_type) && base_type->instance.class_name) {
-            XaSymbol *class_sym = xa_scope_lookup(ctx->analyzer->global_scope,
-                                                   base_type->instance.class_name);
+            XaSymbol *class_sym =
+                xa_scope_lookup(ctx->analyzer->global_scope, base_type->instance.class_name);
             if (class_sym && class_sym->kind == XA_SYM_CLASS) {
                 XaSymbolLinks *class_links = xa_analyzer_get_links(ctx->analyzer, class_sym);
                 if (class_links && class_links->class_info) {
-                    XaSymbol *member = xa_class_info_lookup_member(class_links->class_info, prop_name);
+                    XaSymbol *member =
+                        xa_class_info_lookup_member(class_links->class_info, prop_name);
                     if (member) {
                         XaSymbolLinks *ml = xa_analyzer_get_links(ctx->analyzer, member);
                         if (ml && ml->type) {
                             XrType *result = xr_type_copy(ctx->analyzer->isolate, ml->type);
-                            if (result) result->is_nullable = true;
+                            if (result)
+                                result->is_nullable = true;
                             return result;
                         }
                     }
@@ -816,8 +872,10 @@ XrType *xa_visit_optional_chain(XaInferContext *ctx, AstNode *node) {
             for (int i = 0; i < base_type->object.field_count; i++) {
                 if (base_type->object.field_names[i] &&
                     strcmp(base_type->object.field_names[i], prop_name) == 0) {
-                    XrType *result = xr_type_copy(ctx->analyzer->isolate, base_type->object.field_types[i]);
-                    if (result) result->is_nullable = true;
+                    XrType *result =
+                        xr_type_copy(ctx->analyzer->isolate, base_type->object.field_types[i]);
+                    if (result)
+                        result->is_nullable = true;
                     return result;
                 }
             }
@@ -829,13 +887,16 @@ XrType *xa_visit_optional_chain(XaInferContext *ctx, AstNode *node) {
         xa_visit_infer_expr(ctx, node->as.optional_chain.index);
 
         if (XR_TYPE_IS_ARRAY(base_type) && base_type->container.element_type) {
-            XrType *result = xr_type_copy(ctx->analyzer->isolate, base_type->container.element_type);
-            if (result) result->is_nullable = true;
+            XrType *result =
+                xr_type_copy(ctx->analyzer->isolate, base_type->container.element_type);
+            if (result)
+                result->is_nullable = true;
             return result;
         }
         if (XR_TYPE_IS_MAP(base_type) && base_type->map.value_type) {
             XrType *result = xr_type_copy(ctx->analyzer->isolate, base_type->map.value_type);
-            if (result) result->is_nullable = true;
+            if (result)
+                result->is_nullable = true;
             return result;
         }
     }
@@ -848,11 +909,13 @@ XrType *xa_visit_optional_chain(XaInferContext *ctx, AstNode *node) {
  * Analyzer simply returns the target type without checking operand type.
  * Runtime will perform the actual type check. */
 XrType *xa_visit_as_expr(XaInferContext *ctx, AstNode *node) {
-    if (!ctx || !node) return xr_type_new_unknown(NULL);
+    if (!ctx || !node)
+        return xr_type_new_unknown(NULL);
     // Visit operand to ensure it's analyzed (side effects, narrowing)
     xa_visit_infer_expr(ctx, node->as.as_expr.expr);
     XrType *target = node->as.as_expr.type;
-    if (!target) return xr_type_new_unknown(NULL);
+    if (!target)
+        return xr_type_new_unknown(NULL);
     return target;
 }
 
@@ -860,9 +923,11 @@ XrType *xa_visit_as_expr(XaInferContext *ctx, AstNode *node) {
  * If operand is already non-nullable, the ! is a no-op (no warning for now).
  * If operand is null type, the ! is always a runtime panic. */
 XrType *xa_visit_force_unwrap(XaInferContext *ctx, AstNode *node) {
-    if (!ctx || !node) return xr_type_new_unknown(NULL);
+    if (!ctx || !node)
+        return xr_type_new_unknown(NULL);
     XrType *inner = xa_visit_infer_expr(ctx, node->as.unary.operand);
-    if (!inner) return xr_type_new_unknown(NULL);
+    if (!inner)
+        return xr_type_new_unknown(NULL);
     // Strip nullable: T? -> T
     if (inner->is_nullable) {
         return xr_type_non_nullable(ctx->analyzer->isolate, inner);
@@ -871,9 +936,10 @@ XrType *xa_visit_force_unwrap(XaInferContext *ctx, AstNode *node) {
     return inner;
 }
 
-
 XrType *xa_visit_function_expr(XaInferContext *ctx, AstNode *node) {
-    if (!ctx || !node) return xr_type_new_function(ctx->analyzer->isolate, NULL, 0, xr_type_new_unknown(NULL), false);
+    if (!ctx || !node)
+        return xr_type_new_function(ctx->analyzer->isolate, NULL, 0, xr_type_new_unknown(NULL),
+                                    false);
 
     FunctionDeclNode *fn = &node->as.function_expr;
 
@@ -894,12 +960,12 @@ XrType *xa_visit_function_expr(XaInferContext *ctx, AstNode *node) {
 
     XrType **param_types = NULL;
     if (fn->param_count > 0) {
-        param_types = xr_malloc(sizeof(XrType*) * fn->param_count);
+        param_types = xr_malloc(sizeof(XrType *) * fn->param_count);
         for (int i = 0; i < fn->param_count; i++) {
             XrParamNode *p = fn->params[i];
             // Check for explicit type annotation first
             if (p && p->type) {
-                param_types[i] = (XrType*)p->type;
+                param_types[i] = (XrType *) p->type;
             }
             // Use expected function type (bidirectional inference)
             else if (expected_fn && i < expected_fn->function.param_count &&
@@ -925,20 +991,21 @@ XrType *xa_visit_function_expr(XaInferContext *ctx, AstNode *node) {
                 // Cannot infer parameter type — report error
                 param_types[i] = xr_type_new_unknown(NULL);
                 if (p && p->name && !p->is_rest) {
-                    XrLocation loc = { .file = ctx->file_path, .line = p->line, .column = p->column };
+                    XrLocation loc = {.file = ctx->file_path, .line = p->line, .column = p->column};
                     char msg[256];
                     snprintf(msg, sizeof(msg),
-                        "Parameter '%s' of anonymous function cannot be inferred, add explicit type annotation",
-                        p->name);
+                             "Parameter '%s' of anonymous function cannot be inferred, add "
+                             "explicit type annotation",
+                             p->name);
                     xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
-                        XR_ERR_ANALYZE_MISSING_TYPE, msg, &loc);
+                                               XR_ERR_ANALYZE_MISSING_TYPE, msg, &loc);
                 }
             }
         }
     }
 
     // Use expected return type if not explicitly declared
-    XrType *return_type = fn->return_type ? (XrType*)fn->return_type : xr_type_new_unknown(NULL);
+    XrType *return_type = fn->return_type ? (XrType *) fn->return_type : xr_type_new_unknown(NULL);
     if (XR_TYPE_IS_UNKNOWN(return_type) && expected_fn && expected_fn->function.return_type) {
         return_type = expected_fn->function.return_type;
     }
@@ -979,7 +1046,7 @@ XrType *xa_visit_function_expr(XaInferContext *ctx, AstNode *node) {
             !XR_TYPE_IS_UNKNOWN(expected_fn->function.return_type)) {
             ctx->expected_return_type = expected_fn->function.return_type;
         } else if (fn->return_type) {
-            ctx->expected_return_type = (XrType *)fn->return_type;
+            ctx->expected_return_type = (XrType *) fn->return_type;
         } else {
             ctx->expected_return_type = NULL;
         }
@@ -998,7 +1065,8 @@ XrType *xa_visit_function_expr(XaInferContext *ctx, AstNode *node) {
         xa_analyzer_exit_scope(ctx->analyzer);
 
         // Restore outer function's return type state
-        if (ctx->return_types) xr_free(ctx->return_types);
+        if (ctx->return_types)
+            xr_free(ctx->return_types);
         ctx->return_types = saved_return_types;
         ctx->return_type_count = saved_return_count;
         ctx->return_type_capacity = saved_return_cap;
@@ -1006,16 +1074,19 @@ XrType *xa_visit_function_expr(XaInferContext *ctx, AstNode *node) {
 
     // After full body analysis, report error if return type still unknown
     if (XR_TYPE_IS_UNKNOWN(return_type) && fn->body && xa_body_has_return_expr(fn->body)) {
-        XrLocation loc = { .file = ctx->file_path, .line = node->line, .column = node->column };
-        xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
-            XR_ERR_ANALYZE_MISSING_TYPE,
+        XrLocation loc = {.file = ctx->file_path, .line = node->line, .column = node->column};
+        xa_analyzer_add_diagnostic(
+            ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_MISSING_TYPE,
             "Anonymous function returns a value but return type cannot be inferred, "
-            "add explicit type annotation", &loc);
+            "add explicit type annotation",
+            &loc);
     }
 
-    XrType *result = xr_type_new_function(ctx->analyzer->isolate, param_types, fn->param_count, return_type, has_rest);
+    XrType *result = xr_type_new_function(ctx->analyzer->isolate, param_types, fn->param_count,
+                                          return_type, has_rest);
 
-    if (param_types) xr_free(param_types);
+    if (param_types)
+        xr_free(param_types);
     return result;
 }
 
@@ -1025,7 +1096,8 @@ XrType *xa_visit_function_expr(XaInferContext *ctx, AstNode *node) {
  * Function arguments are deep-copied (safe), but closure captures need checking.
  * -------------------------------------------------------------------------- */
 void check_closure_capture(XaInferContext *ctx, AstNode *node, int line) {
-    if (!node) return;
+    if (!node)
+        return;
 
     switch (node->type) {
         case AST_VARIABLE: {
@@ -1033,32 +1105,43 @@ void check_closure_capture(XaInferContext *ctx, AstNode *node, int line) {
             XaSymbol *sym = xa_scope_lookup(ctx->analyzer->current_scope, name);
             if (sym && sym->kind != XA_SYM_PARAMETER) {
                 // Check if variable is shared, builtin, or a type (function/class)
-                if (!sym->is_shared && !sym->is_builtin &&
-                    sym->kind != XA_SYM_FUNCTION && sym->kind != XA_SYM_CLASS &&
-                    sym->kind != XA_SYM_MODULE && sym->kind != XA_SYM_IMPORT) {
+                if (!sym->is_shared && !sym->is_builtin && sym->kind != XA_SYM_FUNCTION &&
+                    sym->kind != XA_SYM_CLASS && sym->kind != XA_SYM_MODULE &&
+                    sym->kind != XA_SYM_IMPORT) {
                     // Non-shared variable captured in coroutine closure
-                    XrLocation loc = { .file = ctx->file_path, .line = line, .column = node->column };
+                    XrLocation loc = {.file = ctx->file_path, .line = line, .column = node->column};
                     char msg[512];
                     snprintf(msg, sizeof(msg),
-                        "go closure cannot capture mutable variable '%s'\n"
-                        "hint: use one of the following:\n"
-                        "  1. pass through argument: go worker(%s)  // deep-copied\n"
-                        "  2. declare as 'shared const %s = ...' for concurrent reads",
-                        name, name, name);
-                    xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_CLOSURE_CAPTURE, msg, &loc);
+                             "go closure cannot capture mutable variable '%s'\n"
+                             "hint: use one of the following:\n"
+                             "  1. pass through argument: go worker(%s)  // deep-copied\n"
+                             "  2. declare as 'shared const %s = ...' for concurrent reads",
+                             name, name, name);
+                    xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
+                                               XR_ERR_ANALYZE_CLOSURE_CAPTURE, msg, &loc);
                 }
             }
             break;
         }
-        case AST_BINARY_ADD: case AST_BINARY_SUB: case AST_BINARY_MUL:
-        case AST_BINARY_DIV: case AST_BINARY_MOD: case AST_BINARY_EQ:
-        case AST_BINARY_NE: case AST_BINARY_LT: case AST_BINARY_LE:
-        case AST_BINARY_GT: case AST_BINARY_GE: case AST_BINARY_AND:
+        case AST_BINARY_ADD:
+        case AST_BINARY_SUB:
+        case AST_BINARY_MUL:
+        case AST_BINARY_DIV:
+        case AST_BINARY_MOD:
+        case AST_BINARY_EQ:
+        case AST_BINARY_NE:
+        case AST_BINARY_LT:
+        case AST_BINARY_LE:
+        case AST_BINARY_GT:
+        case AST_BINARY_GE:
+        case AST_BINARY_AND:
         case AST_BINARY_OR:
             check_closure_capture(ctx, node->as.binary.left, line);
             check_closure_capture(ctx, node->as.binary.right, line);
             break;
-        case AST_UNARY_NEG: case AST_UNARY_NOT: case AST_UNARY_BNOT:
+        case AST_UNARY_NEG:
+        case AST_UNARY_NOT:
+        case AST_UNARY_BNOT:
             check_closure_capture(ctx, node->as.unary.operand, line);
             break;
         case AST_CALL_EXPR:
@@ -1126,7 +1209,8 @@ void check_closure_capture(XaInferContext *ctx, AstNode *node, int line) {
 // go fn(args) - args are passed by deep copy (safe)
 // go { ... }  - closure captures need checking
 void check_coro_capture(XaInferContext *ctx, AstNode *node, int line) {
-    if (!node) return;
+    if (!node)
+        return;
 
     // go fn(args) - function call with arguments passed by value (safe)
     if (node->type == AST_CALL_EXPR) {
@@ -1156,7 +1240,8 @@ void check_coro_capture(XaInferContext *ctx, AstNode *node, int line) {
 }
 
 XrType *xa_visit_go_expr(XaInferContext *ctx, AstNode *node) {
-    if (!ctx || !node) return xr_type_new_task(ctx->analyzer->isolate, xr_type_new_unknown(NULL));
+    if (!ctx || !node)
+        return xr_type_new_task(ctx->analyzer->isolate, xr_type_new_unknown(NULL));
 
     GoExprNode *go = &node->as.go_expr;
 
@@ -1183,7 +1268,8 @@ XrType *xa_visit_go_expr(XaInferContext *ctx, AstNode *node) {
 }
 
 XrType *xa_visit_await_expr(XaInferContext *ctx, AstNode *node) {
-    if (!ctx || !node) return xr_type_new_unknown(NULL);
+    if (!ctx || !node)
+        return xr_type_new_unknown(NULL);
 
     AwaitExprNode *await = &node->as.await_expr;
 
@@ -1211,7 +1297,8 @@ XrType *xa_visit_await_expr(XaInferContext *ctx, AstNode *node) {
 
         // Single await: extract result type from Task<T>
         if (xr_type_is_named_class(expr_type, "Task")) {
-            XrType *result_type = (expr_type->instance.type_arg_count > 0) ? expr_type->instance.type_args[0] : NULL;
+            XrType *result_type =
+                (expr_type->instance.type_arg_count > 0) ? expr_type->instance.type_args[0] : NULL;
             return result_type ? result_type : xr_type_new_unknown(NULL);
         }
 
@@ -1227,9 +1314,9 @@ XrType *xa_visit_await_expr(XaInferContext *ctx, AstNode *node) {
 
         // If not a Task, report error (skip for unknown type which means inference failed)
         if (expr_type && !XR_TYPE_IS_UNKNOWN(expr_type)) {
-            XrLocation loc = { .file = ctx->file_path, .line = node->line, .column = node->column };
+            XrLocation loc = {.file = ctx->file_path, .line = node->line, .column = node->column};
             xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_AWAIT_TYPE,
-                "await expects a Task type", &loc);
+                                       "await expects a Task type", &loc);
         }
     }
 
@@ -1245,16 +1332,18 @@ XrType *xa_visit_await_expr(XaInferContext *ctx, AstNode *node) {
  *   - cannot move value types (int/float/bool/string — no heap object)
  */
 XrType *xa_visit_move_expr(XaInferContext *ctx, AstNode *node) {
-    if (!ctx || !node) return xr_type_new_unknown(NULL);
+    if (!ctx || !node)
+        return xr_type_new_unknown(NULL);
 
     MoveExprNode *move = &node->as.move_expr;
     AstNode *inner = move->expr;
-    if (!inner) return xr_type_new_unknown(NULL);
+    if (!inner)
+        return xr_type_new_unknown(NULL);
 
     // Infer type of the variable being moved
     XrType *var_type = xa_visit_infer_expr(ctx, inner);
 
-    XrLocation loc = { .file = ctx->file_path, .line = node->line, .column = node->column };
+    XrLocation loc = {.file = ctx->file_path, .line = node->line, .column = node->column};
 
     // Check: variable must exist and be a let variable (not const)
     if (inner->type == AST_VARIABLE) {
@@ -1263,23 +1352,23 @@ XrType *xa_visit_move_expr(XaInferContext *ctx, AstNode *node) {
         if (sym && sym->is_const) {
             char msg[128];
             snprintf(msg, sizeof(msg), "cannot move const value '%s'", name);
-            xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_ARG_TYPE, msg, &loc);
+            xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_ARG_TYPE,
+                                       msg, &loc);
         }
     }
 
     // Check: cannot move Channel types
     if (var_type && var_type->kind == XR_KIND_CHANNEL) {
         xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_ARG_TYPE,
-            "cannot move Channel (thread-safe, shared by reference)", &loc);
+                                   "cannot move Channel (thread-safe, shared by reference)", &loc);
     }
 
     // Check: cannot move value types (no heap object to transfer)
     if (var_type && xr_kind_is_primitive(var_type->kind)) {
         xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_ARG_TYPE,
-            "move is not meaningful for value type", &loc);
+                                   "move is not meaningful for value type", &loc);
     }
 
     // move expr has the same type as the inner expression
     return var_type ? var_type : xr_type_new_unknown(NULL);
 }
-

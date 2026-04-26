@@ -36,7 +36,7 @@
 #include <inttypes.h>
 
 #include "../jit/xir_sentinels.h"
-#include "xrt_method_symbols.h"   // XRT_SYM_* constants only (avoids xrt_arc.h)
+#include "xrt_method_symbols.h"  // XRT_SYM_* constants only (avoids xrt_arc.h)
 
 /*
  * JIT_CALL_ARGS_OFFSET = 688 (from xir_offsets.h)
@@ -46,8 +46,8 @@
  * ...
  * jit_call_args[n] at offset 688 + n*8
  */
-#define AOT_CALL_ARGS_BASE  688
-#define AOT_CALL_ARGS_SLOT_SIZE  8
+#define AOT_CALL_ARGS_BASE 688
+#define AOT_CALL_ARGS_SLOT_SIZE 8
 
 // Forward declaration (defined below, after CALL_C helpers)
 static void emit_ref_as_tagged(XcgenBuf *b, XirFunc *func, XirRef ref);
@@ -58,10 +58,14 @@ bool xcg_resolve_const_i64(XirFunc *func, XirRef ref, int64_t *out_val) {
     XR_DCHECK(func != NULL && out_val != NULL, "xcg_resolve_const_i64: NULL arg");
     if (xir_ref_is_const(ref)) {
         uint32_t ci = XIR_REF_INDEX(ref);
-        if (ci < func->nconst) { *out_val = func->consts[ci].val.i64; return true; }
+        if (ci < func->nconst) {
+            *out_val = func->consts[ci].val.i64;
+            return true;
+        }
         return false;
     }
-    if (!xir_ref_is_vreg(ref)) return false;
+    if (!xir_ref_is_vreg(ref))
+        return false;
     uint32_t vi = XIR_REF_INDEX(ref);
     for (int hop = 0; hop < 8 && vi < func->nvreg; hop++) {
         bool found = false;
@@ -73,8 +77,10 @@ bool xcg_resolve_const_i64(XirFunc *func, XirRef ref, int64_t *out_val) {
                     continue;
                 if (def->op == XIR_CONST_I64 && xir_ref_is_const(def->args[0])) {
                     uint32_t ci = XIR_REF_INDEX(def->args[0]);
-                    if (ci < func->nconst)
-                        { *out_val = func->consts[ci].val.i64; return true; }
+                    if (ci < func->nconst) {
+                        *out_val = func->consts[ci].val.i64;
+                        return true;
+                    }
                     return false;
                 }
                 if (def->op == XIR_MOV && xir_ref_is_vreg(def->args[0])) {
@@ -82,10 +88,11 @@ bool xcg_resolve_const_i64(XirFunc *func, XirRef ref, int64_t *out_val) {
                     found = true;
                     break;
                 }
-                return false; // unknown def
+                return false;  // unknown def
             }
         }
-        if (!found) break;
+        if (!found)
+            break;
     }
     return false;
 }
@@ -94,7 +101,8 @@ bool xcg_resolve_const_i64(XirFunc *func, XirRef ref, int64_t *out_val) {
 // Returns the non-MOV defining XirIns*, or NULL if not found.
 XirIns *xcg_find_def(XirFunc *func, XirRef ref) {
     XR_DCHECK(func != NULL, "xcg_find_def: func is NULL");
-    if (!xir_ref_is_vreg(ref)) return NULL;
+    if (!xir_ref_is_vreg(ref))
+        return NULL;
     uint32_t vi = XIR_REF_INDEX(ref);
     for (int hop = 0; hop < 8 && vi < func->nvreg; hop++) {
         // Fast path: use SSA def pointer if available
@@ -122,7 +130,8 @@ XirIns *xcg_find_def(XirFunc *func, XirRef ref) {
                 return def;
             }
         }
-        if (!found) break;
+        if (!found)
+            break;
     }
     return NULL;
 }
@@ -133,26 +142,27 @@ XirIns *xcg_find_def(XirFunc *func, XirRef ref) {
 // Collect upvalue value refs from STORE_UPVAL instructions targeting cl_vreg.
 // Fills out_refs[0..nupvals-1] with the XirRef of each upvalue value.
 // Returns the number of upvals successfully collected.
-static int xcg_collect_upval_refs(XirFunc *func, uint32_t cl_vreg, int nupvals,
-                                   XirRef *out_refs) {
+static int xcg_collect_upval_refs(XirFunc *func, uint32_t cl_vreg, int nupvals, XirRef *out_refs) {
     XR_DCHECK(func != NULL, "xcg_collect_upval_refs: NULL func");
     XR_DCHECK(out_refs != NULL, "xcg_collect_upval_refs: NULL out_refs");
-    for (int i = 0; i < nupvals; i++) out_refs[i] = XIR_NONE;
+    for (int i = 0; i < nupvals; i++)
+        out_refs[i] = XIR_NONE;
     int found = 0;
     for (uint32_t bi = 0; bi < func->nblk && found < nupvals; bi++) {
         XirBlock *blk = func->blocks[bi];
         for (uint32_t ii = 0; ii < blk->nins && found < nupvals; ii++) {
             XirIns *ins = &blk->ins[ii];
-            if (ins->op != XIR_STORE_UPVAL) continue;
+            if (ins->op != XIR_STORE_UPVAL)
+                continue;
             // New convention: args[0]=closure(vreg), dst=idx(const)
-            if (!xir_ref_is_vreg(ins->args[0]) ||
-                XIR_REF_INDEX(ins->args[0]) != cl_vreg)
+            if (!xir_ref_is_vreg(ins->args[0]) || XIR_REF_INDEX(ins->args[0]) != cl_vreg)
                 continue;
             // Extract upval index from dst (const ref)
             int64_t uv_idx = 0;
             if (xir_ref_is_const(ins->dst)) {
                 uint32_t ci = XIR_REF_INDEX(ins->dst);
-                if (ci < func->nconst) uv_idx = func->consts[ci].val.i64;
+                if (ci < func->nconst)
+                    uv_idx = func->consts[ci].val.i64;
             }
             if (uv_idx >= 0 && uv_idx < nupvals) {
                 out_refs[uv_idx] = ins->args[1];
@@ -171,19 +181,22 @@ static void load_call_args_from_pool(XirFunc *func, XirIns *ins, XcgenFunc *cf) 
     for (int i = 0; i < cf->call_args_cap; i++)
         cf->call_args[i] = XIR_NONE;
     cf->call_args_count = 0;
-    if (!xir_ref_is_vreg(ins->dst)) return;
+    if (!xir_ref_is_vreg(ins->dst))
+        return;
     uint32_t vi = XIR_REF_INDEX(ins->dst);
-    if (vi >= func->nvreg) return;
+    if (vi >= func->nvreg)
+        return;
     XirVReg *vreg = &func->vregs[vi];
-    if (vreg->call_nargs == 0) return;
+    if (vreg->call_nargs == 0)
+        return;
     // Ensure capacity (aborts on OOM — consistent with the xr_malloc /
     // xr_free pair that owns cf->call_args elsewhere in xcgen).
-    int needed = (int)vreg->call_nargs;
+    int needed = (int) vreg->call_nargs;
     if (needed > cf->call_args_cap) {
         int new_cap = cf->call_args_cap;
-        while (new_cap < needed) new_cap *= 2;
-        XR_REALLOC_OR_ABORT(cf->call_args, new_cap * sizeof(XirRef),
-                            "xcgen cf->call_args");
+        while (new_cap < needed)
+            new_cap *= 2;
+        XR_REALLOC_OR_ABORT(cf->call_args, new_cap * sizeof(XirRef), "xcgen cf->call_args");
         for (int k = cf->call_args_cap; k < new_cap; k++)
             cf->call_args[k] = XIR_NONE;
         cf->call_args_cap = new_cap;
@@ -192,13 +205,13 @@ static void load_call_args_from_pool(XirFunc *func, XirIns *ins, XcgenFunc *cf) 
     uint32_t start = vreg->call_arg_start;
     for (uint16_t i = 0; i < vreg->call_nargs; i++)
         cf->call_args[i] = pool[start + i];
-    cf->call_args_count = (int)vreg->call_nargs;
+    cf->call_args_count = (int) vreg->call_nargs;
 }
 
 /* ========== CALL_KNOWN Translation ========== */
 
-static void emit_call_known(XcgenBuf *b, XirFunc *func, XirIns *ins,
-                             XcgenModule *mod, XcgenFunc *cf) {
+static void emit_call_known(XcgenBuf *b, XirFunc *func, XirIns *ins, XcgenModule *mod,
+                            XcgenFunc *cf) {
     XR_DCHECK(b != NULL, "emit_call_known: NULL buf");
     XR_DCHECK(func != NULL, "emit_call_known: NULL func");
     XR_DCHECK(ins != NULL, "emit_call_known: NULL ins");
@@ -211,12 +224,12 @@ static void emit_call_known(XcgenBuf *b, XirFunc *func, XirIns *ins,
     if (xir_ref_is_const(ins->args[0])) {
         uint32_t ci = XIR_REF_INDEX(ins->args[0]);
         if (ci < func->nconst)
-            callee_proto = (void *)(uintptr_t)func->consts[ci].val.raw;
+            callee_proto = (void *) (uintptr_t) func->consts[ci].val.raw;
     }
     if (xir_ref_is_const(ins->args[1])) {
         uint32_t ci = XIR_REF_INDEX(ins->args[1]);
         if (ci < func->nconst)
-            nargs = (int)func->consts[ci].val.i64;
+            nargs = (int) func->consts[ci].val.i64;
     } else if (xir_ref_is_vreg(ins->args[1])) {
         // nargs was loaded via XIR_CONST_I64 into a vreg by the builder.
         // Use SSA def pointer for O(1) lookup instead of full scan.
@@ -227,7 +240,7 @@ static void emit_call_known(XcgenBuf *b, XirFunc *func, XirIns *ins,
             if (def->op == XIR_CONST_I64 && xir_ref_is_const(def->args[0])) {
                 uint32_t ci2 = XIR_REF_INDEX(def->args[0]);
                 if (ci2 < func->nconst) {
-                    nargs = (int)func->consts[ci2].val.i64;
+                    nargs = (int) func->consts[ci2].val.i64;
                     found_nargs = true;
                 }
             }
@@ -239,17 +252,16 @@ static void emit_call_known(XcgenBuf *b, XirFunc *func, XirIns *ins,
 
     // Lookup callee C function name and compiled function index (for struct param info).
     // We store func_idx rather than a pointer because mod->funcs may realloc during compilation.
-    const char *callee_name     = callee_proto ? xcg_lookup_proto_name(mod, callee_proto) : NULL;
-    int         callee_func_idx = callee_proto ? xcg_lookup_proto_func_idx(mod, callee_proto) : -1;
+    const char *callee_name = callee_proto ? xcg_lookup_proto_name(mod, callee_proto) : NULL;
+    int callee_func_idx = callee_proto ? xcg_lookup_proto_func_idx(mod, callee_proto) : -1;
 
     // Detect class constructor call: GETSHARED loaded a class, CALL uses nargs < numparams.
     // In this case, the caller passes N args but the constructor expects N+1 (this, args...).
     // We must allocate the instance and prepend it as the first argument.
-    XrProto *cp = (XrProto *)callee_proto;
+    XrProto *cp = (XrProto *) callee_proto;
     bool is_ctor_call = false;
     int ctor_nfields = 0;
-    if (cp && cp->name && callee_name &&
-        strcmp(XR_STRING_CHARS(cp->name), "constructor") == 0 &&
+    if (cp && cp->name && callee_name && strcmp(XR_STRING_CHARS(cp->name), "constructor") == 0 &&
         nargs < cp->numparams) {
         is_ctor_call = true;
         // Compute instance size from max TFIELD_SET field index in constructor bytecode
@@ -259,7 +271,8 @@ static void emit_call_known(XcgenBuf *b, XirFunc *func, XirIns *ins,
             XrInstruction cins = PROTO_CODE(cp, ci2);
             if (GET_OPCODE(cins) == OP_TFIELD_SET) {
                 int fi = GETARG_B(cins);
-                if (fi > max_field) max_field = fi;
+                if (fi > max_field)
+                    max_field = fi;
             }
         }
         ctor_nfields = (max_field >= 0) ? max_field + 1 : 2;
@@ -267,7 +280,7 @@ static void emit_call_known(XcgenBuf *b, XirFunc *func, XirIns *ins,
 
     if (is_ctor_call && callee_name) {
         // Class constructor call: allocate instance via xrt_obj_alloc + type registration
-        int inst_bytes = ctor_nfields * 16; // sizeof(XrtValue) per field
+        int inst_bytes = ctor_nfields * 16;  // sizeof(XrtValue) per field
         const char *tagged_type = "XrValue";
 
         // Lookup class metadata for type registration
@@ -283,12 +296,12 @@ static void emit_call_known(XcgenBuf *b, XirFunc *func, XirIns *ins,
                 parent_tid = parent_buf;
             }
             xcgen_buf_printf(b,
-                "    { if (!_tid_%s) _tid_%s = xrt_type_register(\"%s\", %s,"
-                " NULL, 0, NULL, %d);\n",
-                cls->class_name, cls->class_name, cls->class_name,
-                parent_tid, inst_bytes);
-            xcgen_buf_printf(b,
-                "      %s _inst = xrt_mkptr(xrt_obj_alloc(_tid_%s, %d), XRT_TAG_PTR);\n",
+                             "    { if (!_tid_%s) _tid_%s = xrt_type_register(\"%s\", %s,"
+                             " NULL, 0, NULL, %d);\n",
+                             cls->class_name, cls->class_name, cls->class_name, parent_tid,
+                             inst_bytes);
+            xcgen_buf_printf(
+                b, "      %s _inst = xrt_mkptr(xrt_obj_alloc(_tid_%s, %d), XRT_TAG_PTR);\n",
                 tagged_type, cls->class_name, inst_bytes);
         } else {
             // Fallback: no class info → raw allocation (legacy path)
@@ -322,17 +335,15 @@ static void emit_call_known(XcgenBuf *b, XirFunc *func, XirIns *ins,
             callee_is_void = mod->funcs[callee_func_idx].void_return;
 
         // Skip assignment when dst vreg is unused (void call site) OR callee returns void.
-        bool dst_used = !callee_is_void && (
-                        xir_ref_is_none(ins->dst) ||
-                        !xir_ref_is_vreg(ins->dst) ||
-                        (dst_idx < func->nvreg && cf->used_vregs && cf->used_vregs[dst_idx]));
+        bool dst_used = !callee_is_void &&
+                        (xir_ref_is_none(ins->dst) || !xir_ref_is_vreg(ins->dst) ||
+                         (dst_idx < func->nvreg && cf->used_vregs && cf->used_vregs[dst_idx]));
         // Auto-unbox/box: bridge callee return type ↔ dst vreg type.
         // Callee's C return type depends on its proto's return_type_info.
         uint8_t dst_rep = (dst_idx < func->nvreg) ? func->vregs[dst_idx].rep : XR_REP_TAGGED;
-        uint8_t callee_ret_rep = (cp && cp->return_type_info)
-            ? xr_type_rep(cp->return_type_info) : XR_REP_TAGGED;
-        bool callee_ret_tagged = (callee_ret_rep == XR_REP_PTR ||
-                                  callee_ret_rep == XR_REP_STR ||
+        uint8_t callee_ret_rep =
+            (cp && cp->return_type_info) ? xr_type_rep(cp->return_type_info) : XR_REP_TAGGED;
+        bool callee_ret_tagged = (callee_ret_rep == XR_REP_PTR || callee_ret_rep == XR_REP_STR ||
                                   callee_ret_rep == XR_REP_TAGGED);
         bool needs_unbox_i64 = (dst_used && dst_rep == XR_REP_I64 && callee_ret_tagged);
         bool needs_unbox_f64 = (dst_used && dst_rep == XR_REP_F64 && callee_ret_tagged);
@@ -376,7 +387,7 @@ static void emit_call_known(XcgenBuf *b, XirFunc *func, XirIns *ins,
             }
             // Derive upval info from proto when proto_map doesn't have it yet
             if (callee_nupvals == 0 && cp) {
-                int proto_nupvals = (int)PROTO_UPVAL_COUNT(cp);
+                int proto_nupvals = (int) PROTO_UPVAL_COUNT(cp);
                 if (proto_nupvals > 0) {
                     callee_nupvals = proto_nupvals;
                     callee_needs_closure = true;
@@ -384,8 +395,8 @@ static void emit_call_known(XcgenBuf *b, XirFunc *func, XirIns *ins,
             }
         }
         if (callee_non_escaping && callee_nupvals > 0 &&
-            callee_nupvals <= XCGEN_MAX_NONESC_UPVALS &&
-            cf->call_args_count > 0 && !xir_ref_is_none(cf->call_args[0])) {
+            callee_nupvals <= XCGEN_MAX_NONESC_UPVALS && cf->call_args_count > 0 &&
+            !xir_ref_is_none(cf->call_args[0])) {
             // Non-escaping callee: pass upvalue values as direct XrtValue args
             uint32_t cl_vreg = 0;
             if (xir_ref_is_vreg(cf->call_args[0]))
@@ -400,7 +411,7 @@ static void emit_call_known(XcgenBuf *b, XirFunc *func, XirIns *ins,
                     xcgen_buf_puts(b, "(XrtValue){0}");
             }
         } else if (callee_needs_closure && cf->call_args_count > 0 &&
-            !xir_ref_is_none(cf->call_args[0])) {
+                   !xir_ref_is_none(cf->call_args[0])) {
             xcgen_buf_puts(b, ", (xrt_closure_t*)");
             emit_ref_as_tagged(b, func, cf->call_args[0]);
             xcgen_buf_puts(b, ".ptr");
@@ -409,15 +420,15 @@ static void emit_call_known(XcgenBuf *b, XirFunc *func, XirIns *ins,
         }
         // call_args[0] = closure (skip), call_args[1..n] = actual args
         for (int i = 0; i < nargs; i++) {
-            if (ctx_emitted || i > 0) xcgen_buf_puts(b, ", ");
+            if (ctx_emitted || i > 0)
+                xcgen_buf_puts(b, ", ");
             ctx_emitted = false;
             int slot = 1 + i;  // skip slot 0 (closure)
             if (slot < cf->call_args_cap && !xir_ref_is_none(cf->call_args[slot])) {
                 XirRef arg_ref = cf->call_args[slot];
                 uint8_t arg_type = xcg_ref_type(func, arg_ref);
-                bool arg_is_tagged = (arg_type == XR_REP_PTR ||
-                                      arg_type == XR_REP_TAGGED ||
-                                      arg_type == XR_REP_STR);
+                bool arg_is_tagged =
+                    (arg_type == XR_REP_PTR || arg_type == XR_REP_TAGGED || arg_type == XR_REP_STR);
 
                 // Check if callee expects a struct ptr for this param index.
                 // Re-derive callee_cf from mod->funcs each iteration — mod->funcs
@@ -439,7 +450,7 @@ static void emit_call_known(XcgenBuf *b, XirFunc *func, XirIns *ins,
                 bool arg_is_struct_ptr_param = false;
                 if (xir_ref_is_vreg(arg_ref) && cf->vreg_struct_id && mod->struct_reg) {
                     uint32_t arg_vi = XIR_REF_INDEX(arg_ref);
-                    if (arg_vi < (uint32_t)cf->num_params) {  // use cached num_params
+                    if (arg_vi < (uint32_t) cf->num_params) {  // use cached num_params
                         int asi = cf->vreg_struct_id[arg_vi];
                         arg_is_struct_ptr_param = (asi >= 0);
                     }
@@ -459,12 +470,14 @@ static void emit_call_known(XcgenBuf *b, XirFunc *func, XirIns *ins,
                     // Caller has some native type, pass directly
                     xcg_emit_ref(b, func, arg_ref);
                 } else {
-                    // Normal type coercion: if arg is XrtValue but callee expects native type, unbox
-                    XrProto *cp = (XrProto *)callee_proto;
+                    // Normal type coercion: if arg is XrtValue but callee expects native type,
+                    // unbox
+                    XrProto *cp = (XrProto *) callee_proto;
                     uint8_t param_type = 0;
                     if (cp && cp->param_types && i < cp->param_types_count && cp->param_types[i])
                         param_type = xr_type_to_slot_type(cp->param_types[i]);
-                    bool param_wants_i64 = (param_type == XR_SLOT_I64 || param_type == XR_SLOT_BOOL);
+                    bool param_wants_i64 =
+                        (param_type == XR_SLOT_I64 || param_type == XR_SLOT_BOOL);
                     bool param_wants_f64 = (param_type == XR_SLOT_F64);
                     if (arg_is_tagged && param_wants_i64) {
                         xcgen_buf_puts(b, "xrt_unbox_int(");
@@ -517,8 +530,8 @@ static void emit_call_known(XcgenBuf *b, XirFunc *func, XirIns *ins,
 
 /* ========== CALL_SELF_DIRECT Translation ========== */
 
-static void emit_call_self_direct(XcgenBuf *b, XirFunc *func, XirIns *ins,
-                                   const char *self_name, XcgenFunc *cf) {
+static void emit_call_self_direct(XcgenBuf *b, XirFunc *func, XirIns *ins, const char *self_name,
+                                  XcgenFunc *cf) {
     XR_DCHECK(b != NULL, "emit_call_self_direct: NULL buf");
     XR_DCHECK(func != NULL, "emit_call_self_direct: NULL func");
     uint32_t dst_idx = XIR_REF_INDEX(ins->dst);
@@ -532,7 +545,8 @@ static void emit_call_self_direct(XcgenBuf *b, XirFunc *func, XirIns *ins,
         // Register passing: args directly in ins->args[0..1]
         int nargs = func->num_params;
         for (int a = 0; a < nargs && a < 2; a++) {
-            if (need_comma || a > 0) xcgen_buf_puts(b, ", ");
+            if (need_comma || a > 0)
+                xcgen_buf_puts(b, ", ");
             need_comma = false;
             xcg_emit_ref(b, func, ins->args[a]);
         }
@@ -540,7 +554,8 @@ static void emit_call_self_direct(XcgenBuf *b, XirFunc *func, XirIns *ins,
         // Memory passing: args were stored via STORE_CORO
         int nargs = func->num_params;
         for (int i = 0; i < nargs; i++) {
-            if (need_comma || i > 0) xcgen_buf_puts(b, ", ");
+            if (need_comma || i > 0)
+                xcgen_buf_puts(b, ", ");
             need_comma = false;
             int slot = 1 + i;  // skip slot 0 (closure)
             if (slot < cf->call_args_cap && !xir_ref_is_none(cf->call_args[slot])) {
@@ -580,8 +595,7 @@ static void emit_ref_as_tagged(XcgenBuf *b, XirFunc *func, XirRef ref) {
     }
 }
 
-static void emit_call_c(XcgenBuf *b, XirFunc *func, XirIns *ins,
-                        XcgenFunc *cf, XcgenModule *mod) {
+static void emit_call_c(XcgenBuf *b, XirFunc *func, XirIns *ins, XcgenFunc *cf, XcgenModule *mod) {
     XR_DCHECK(b != NULL, "emit_call_c: NULL buf");
     XR_DCHECK(func != NULL, "emit_call_c: NULL func");
     XR_DCHECK(ins != NULL, "emit_call_c: NULL ins");
@@ -593,7 +607,7 @@ static void emit_call_c(XcgenBuf *b, XirFunc *func, XirIns *ins,
             void *fn_ptr = func->consts[ci].val.ptr;
 
             // Json struct promotion: CALL_C(xr_json_new_with_shape, shape_ptr)
-            if (fn_ptr == (void *)xr_json_new_with_shape && mod->struct_reg) {
+            if (fn_ptr == (void *) xr_json_new_with_shape && mod->struct_reg) {
                 // Extract shape pointer from args[1] (const ptr)
                 void *shape_ptr = NULL;
                 if (xir_ref_is_const(ins->args[1])) {
@@ -606,18 +620,20 @@ static void emit_call_c(XcgenBuf *b, XirFunc *func, XirIns *ins,
                     XcgenStruct *st = &mod->struct_reg->structs[sidx];
                     uint32_t dst_idx = XIR_REF_INDEX(ins->dst);
                     // ARC-allocate the struct (initial rc=1), wrap as tagged ptr
-                    xcgen_buf_printf(b, "    v%u = (%s){.ptr = xrt_arc_alloc(sizeof(%s)), .tag = XRT_TAG_PTR};\n",
-                                     dst_idx, tagged_type, st->c_name);
+                    xcgen_buf_printf(
+                        b,
+                        "    v%u = (%s){.ptr = xrt_arc_alloc(sizeof(%s)), .tag = XRT_TAG_PTR};\n",
+                        dst_idx, tagged_type, st->c_name);
                     // If struct has PTR fields, set type tag + HAS_DEINIT for recursive release
                     if (!st->all_native) {
                         xcgen_buf_printf(b,
-                            "    { XrtArcHdr *_h = XRT_ARC_HDR(v%u.ptr);"
-                            " _h->type = %d; _h->flags |= XRT_ARC_HAS_DEINIT; }\n",
-                            dst_idx, sidx);
+                                         "    { XrtArcHdr *_h = XRT_ARC_HDR(v%u.ptr);"
+                                         " _h->type = %d; _h->flags |= XRT_ARC_HAS_DEINIT; }\n",
+                                         dst_idx, sidx);
                     }
                     // Track this vreg as a promoted struct
                     if (cf->vreg_struct_id && dst_idx < func->nvreg)
-                        cf->vreg_struct_id[dst_idx] = (int16_t)sidx;
+                        cf->vreg_struct_id[dst_idx] = (int16_t) sidx;
                     cf->needs_gc = true;
                     cf->call_args_count = 0;
                     return;
@@ -629,18 +645,17 @@ static void emit_call_c(XcgenBuf *b, XirFunc *func, XirIns *ins,
 
             // GETPROP: CALL_C_LEAF(xr_jit_getprop, symbol_id)
             // obj in call_args[0], symbol_id in args[1] (vreg from CONST_I64)
-            if (fn_ptr == (void *)xr_jit_getprop && mod->struct_reg) {
+            if (fn_ptr == (void *) xr_jit_getprop && mod->struct_reg) {
                 uint32_t dst_idx = XIR_REF_INDEX(ins->dst);
                 // Extract symbol_id from args[1], tracing through MOV chains
                 int64_t symbol_id = -1;
                 xcg_resolve_const_i64(func, ins->args[1], &symbol_id);
                 // O(log n) lookup: binary search on sorted field_entries
-                const XcgenFieldEntry *fe = xcgen_find_field_by_symbol(
-                        mod->struct_reg, (uint32_t)symbol_id);
+                const XcgenFieldEntry *fe =
+                    xcgen_find_field_by_symbol(mod->struct_reg, (uint32_t) symbol_id);
                 if (fe) {
                     XcgenStruct *st = &mod->struct_reg->structs[fe->struct_idx];
-                    xcgen_buf_printf(b, "    v%u = ((%s*)v%u.ptr)->%s;\n",
-                                     dst_idx, st->c_name,
+                    xcgen_buf_printf(b, "    v%u = ((%s*)v%u.ptr)->%s;\n", dst_idx, st->c_name,
                                      XIR_REF_INDEX(cf->call_args[0]),
                                      st->fields[fe->field_idx].name);
                     cf->call_args_count = 0;
@@ -654,11 +669,11 @@ static void emit_call_c(XcgenBuf *b, XirFunc *func, XirIns *ins,
                     if (dst_type == XR_REP_I64) {
                         xcgen_buf_printf(b, "    v%u = xrt_getprop(", dst_idx);
                         emit_ref_as_tagged(b, func, cf->call_args[0]);
-                        xcgen_buf_printf(b, ", %lldLL).i;\n", (long long)symbol_id);
+                        xcgen_buf_printf(b, ", %lldLL).i;\n", (long long) symbol_id);
                     } else {
                         xcgen_buf_printf(b, "    v%u = xrt_getprop(", dst_idx);
                         emit_ref_as_tagged(b, func, cf->call_args[0]);
-                        xcgen_buf_printf(b, ", %lldLL);\n", (long long)symbol_id);
+                        xcgen_buf_printf(b, ", %lldLL);\n", (long long) symbol_id);
                     }
                     cf->needs_runtime = true;
                     cf->call_args_count = 0;
@@ -669,15 +684,15 @@ static void emit_call_c(XcgenBuf *b, XirFunc *func, XirIns *ins,
                     if (dst_type == XR_REP_I64) {
                         xcgen_buf_printf(b, "    v%u = xrt_getprop(", dst_idx);
                         emit_ref_as_tagged(b, func, cf->call_args[0]);
-                        xcgen_buf_printf(b, ", %lldLL).i;\n", (long long)symbol_id);
+                        xcgen_buf_printf(b, ", %lldLL).i;\n", (long long) symbol_id);
                     } else if (dst_type == XR_REP_F64) {
                         xcgen_buf_printf(b, "    v%u = xrt_getprop(", dst_idx);
                         emit_ref_as_tagged(b, func, cf->call_args[0]);
-                        xcgen_buf_printf(b, ", %lldLL).f;\n", (long long)symbol_id);
+                        xcgen_buf_printf(b, ", %lldLL).f;\n", (long long) symbol_id);
                     } else {
                         xcgen_buf_printf(b, "    v%u = xrt_getprop(", dst_idx);
                         emit_ref_as_tagged(b, func, cf->call_args[0]);
-                        xcgen_buf_printf(b, ", %lldLL);\n", (long long)symbol_id);
+                        xcgen_buf_printf(b, ", %lldLL);\n", (long long) symbol_id);
                     }
                     cf->needs_runtime = true;
                 } else {
@@ -687,7 +702,8 @@ static void emit_call_c(XcgenBuf *b, XirFunc *func, XirIns *ins,
                     } else if (dst_type == XR_REP_F64) {
                         xcgen_buf_printf(b, "    v%u = 0.0;\n", dst_idx);
                     } else {
-                        xcgen_buf_printf(b, "    v%u = (%s){.i = 0, .tag = XRT_TAG_NULL};\n", dst_idx, tagged_type);
+                        xcgen_buf_printf(b, "    v%u = (%s){.i = 0, .tag = XRT_TAG_NULL};\n",
+                                         dst_idx, tagged_type);
                         cf->needs_runtime = true;
                     }
                 }
@@ -695,7 +711,7 @@ static void emit_call_c(XcgenBuf *b, XirFunc *func, XirIns *ins,
                 return;
             }
 
-            if (fn_ptr == (void *)xr_jit_index_get && cf->call_args_count >= 2) {
+            if (fn_ptr == (void *) xr_jit_index_get && cf->call_args_count >= 2) {
                 // INDEX_GET: v{dst} = xrt_index_get(obj, key)
                 // For known I64/F64 result, emit direct payload access to avoid unbox overhead:
                 //   int64_t v = xrt_array_get_i64(arr, idx)  →  a->data[idx].i
@@ -740,7 +756,7 @@ static void emit_call_c(XcgenBuf *b, XirFunc *func, XirIns *ins,
                 return;
             }
 
-            if (fn_ptr == (void *)xr_jit_index_set && cf->call_args_count >= 3) {
+            if (fn_ptr == (void *) xr_jit_index_set && cf->call_args_count >= 3) {
                 // INDEX_SET: xrt_index_set(obj, key, val)
                 // For known I64/F64 val with I64 key, emit xrt_array_set_i/f for direct store
                 uint8_t key_type = xcg_ref_type(func, cf->call_args[1]);
@@ -779,7 +795,7 @@ static void emit_call_c(XcgenBuf *b, XirFunc *func, XirIns *ins,
             // Throw: CALL_C(xr_jit_throw, exception_value)
             // Same-function throw: store to local; goto catch handled by terminator.
             // Cross-function throw: use xrt_throw_exc() for longjmp propagation.
-            if (fn_ptr == (void *)xr_jit_throw) {
+            if (fn_ptr == (void *) xr_jit_throw) {
                 // Find the enclosing block to check if we have a local catch
                 XirIns *throw_ins = ins;
                 bool has_local_catch = false;
@@ -792,7 +808,7 @@ static void emit_call_c(XcgenBuf *b, XirFunc *func, XirIns *ins,
                         }
                     }
                 }
-throw_check_done:
+            throw_check_done:
                 if (has_local_catch) {
                     // Same-function: set local, goto is emitted by terminator
                     xcgen_buf_puts(b, "    xrt_exception = ");
@@ -812,7 +828,7 @@ throw_check_done:
 
             // Typed array get: CALL_C(xr_jit_tarray_get, unused)
             // call_args[0] = array, call_args[1] = index
-            if (fn_ptr == (void *)xr_jit_tarray_get) {
+            if (fn_ptr == (void *) xr_jit_tarray_get) {
                 uint32_t dst_idx = XIR_REF_INDEX(ins->dst);
                 xcgen_buf_printf(b, "    v%u = xrt_tarray_get(", dst_idx);
                 if (cf->call_args_count > 0)
@@ -832,7 +848,7 @@ throw_check_done:
 
             // Typed array set: CALL_C(xr_jit_tarray_set, unused)
             // call_args[0] = array, call_args[1] = index, call_args[2] = value
-            if (fn_ptr == (void *)xr_jit_tarray_set) {
+            if (fn_ptr == (void *) xr_jit_tarray_set) {
                 xcgen_buf_puts(b, "    xrt_tarray_set(");
                 if (cf->call_args_count > 0)
                     emit_ref_as_tagged(b, func, cf->call_args[0]);
@@ -856,7 +872,7 @@ throw_check_done:
 
             // Generic index get: CALL_C(xr_jit_index_get, encoded_tags)
             // call_args[0] = obj, call_args[1] = key
-            if (fn_ptr == (void *)xr_jit_index_get) {
+            if (fn_ptr == (void *) xr_jit_index_get) {
                 uint32_t dst_idx = XIR_REF_INDEX(ins->dst);
                 xcgen_buf_printf(b, "    v%u = xrt_index_get(", dst_idx);
                 if (cf->call_args_count > 0)
@@ -876,7 +892,7 @@ throw_check_done:
 
             // Generic index set: CALL_C(xr_jit_index_set, encoded_tags)
             // call_args[0] = obj, call_args[1] = key, call_args[2] = value
-            if (fn_ptr == (void *)xr_jit_index_set) {
+            if (fn_ptr == (void *) xr_jit_index_set) {
                 xcgen_buf_puts(b, "    xrt_index_set(");
                 if (cf->call_args_count > 0)
                     emit_ref_as_tagged(b, func, cf->call_args[0]);
@@ -900,7 +916,7 @@ throw_check_done:
 
             // Map get: CALL_C(xr_jit_map_get, key_tag)
             // call_args[0] = map, call_args[1] = key
-            if (fn_ptr == (void *)xr_jit_map_get) {
+            if (fn_ptr == (void *) xr_jit_map_get) {
                 uint32_t dst_idx = XIR_REF_INDEX(ins->dst);
                 xcgen_buf_printf(b, "    v%u = xrt_map_get((xrt_map_t *)", dst_idx);
                 if (cf->call_args_count > 0)
@@ -920,7 +936,7 @@ throw_check_done:
 
             // Map set: CALL_C(xr_jit_map_set, (key_tag << 8) | val_tag)
             // call_args[0] = map, call_args[1] = key, call_args[2] = value
-            if (fn_ptr == (void *)xr_jit_map_set) {
+            if (fn_ptr == (void *) xr_jit_map_set) {
                 xcgen_buf_puts(b, "    xrt_map_set((xrt_map_t *)");
                 if (cf->call_args_count > 0)
                     xcg_emit_ref(b, func, cf->call_args[0]);
@@ -944,7 +960,7 @@ throw_check_done:
 
             // Map increment: CALL_C(xr_jit_map_increment, key_tag)
             // call_args[0] = map, call_args[1] = key
-            if (fn_ptr == (void *)xr_jit_map_increment) {
+            if (fn_ptr == (void *) xr_jit_map_increment) {
                 xcgen_buf_puts(b, "    { xrt_map_t *_m = (xrt_map_t *)");
                 if (cf->call_args_count > 0)
                     xcg_emit_ref(b, func, cf->call_args[0]);
@@ -957,14 +973,15 @@ throw_check_done:
                 else
                     xcgen_buf_printf(b, "(%s){0}", tagged_type);
                 xcgen_buf_puts(b, "; XrtValue _cv = xrt_map_get(_m, _k); ");
-                xcgen_buf_puts(b, "xrt_map_set(_m, _k, xrt_box_int((_cv.tag == XRT_TAG_I64 ? _cv.i : 0) + 1)); }\n");
+                xcgen_buf_puts(b, "xrt_map_set(_m, _k, xrt_box_int((_cv.tag == XRT_TAG_I64 ? _cv.i "
+                                  ": 0) + 1)); }\n");
                 cf->needs_runtime = true;
                 cf->call_args_count = 0;
                 return;
             }
 
             // StringBuilder new: CALL_C(xrt_strbuf_new_sentinel, 0)
-            if (fn_ptr == (void *)xrt_strbuf_new_sentinel) {
+            if (fn_ptr == (void *) xrt_strbuf_new_sentinel) {
                 uint32_t dst_idx = XIR_REF_INDEX(ins->dst);
                 xcgen_buf_printf(b, "    v%u = xrt_strbuf_new();\n", dst_idx);
                 cf->needs_runtime = true;
@@ -974,7 +991,7 @@ throw_check_done:
 
             // StringBuilder append: CALL_C(xrt_strbuf_append_sentinel, 0)
             // call_args[0] = sb, call_args[1] = value
-            if (fn_ptr == (void *)xrt_strbuf_append_sentinel) {
+            if (fn_ptr == (void *) xrt_strbuf_append_sentinel) {
                 xcgen_buf_puts(b, "    xrt_strbuf_append(");
                 if (cf->call_args_count > 0)
                     emit_ref_as_tagged(b, func, cf->call_args[0]);
@@ -993,7 +1010,7 @@ throw_check_done:
 
             // StringBuilder finish: CALL_C(xrt_strbuf_finish_sentinel, 0)
             // call_args[0] = sb
-            if (fn_ptr == (void *)xrt_strbuf_finish_sentinel) {
+            if (fn_ptr == (void *) xrt_strbuf_finish_sentinel) {
                 uint32_t dst_idx = XIR_REF_INDEX(ins->dst);
                 xcgen_buf_printf(b, "    v%u = xrt_strbuf_finish(", dst_idx);
                 if (cf->call_args_count > 0)
@@ -1008,7 +1025,7 @@ throw_check_done:
 
             // Builtin method invocation: CALL_C(xrt_invoke_method_sentinel, encoded)
             // encoded = (method_symbol << 32) | nargs
-            if (fn_ptr == (void *)xrt_invoke_method_sentinel) {
+            if (fn_ptr == (void *) xrt_invoke_method_sentinel) {
                 // Decode method_symbol and nargs from args[1] (const i64).
                 // Trace through MOV chains (from GVN/CSE) to find CONST_I64.
                 int64_t encoded = 0;
@@ -1018,7 +1035,7 @@ throw_check_done:
                 if (encoded < 0) {
                     // TOSTRING: encoded = -(slot_hint + 1)
                     // call_args[0] = value to convert
-                    int slot_hint = (int)(-(encoded + 1));
+                    int slot_hint = (int) (-(encoded + 1));
                     xcgen_buf_printf(b, "    v%u = xrt_tostring(", dst_idx);
                     if (cf->call_args_count > 0)
                         emit_ref_as_tagged(b, func, cf->call_args[0]);
@@ -1027,36 +1044,47 @@ throw_check_done:
                     xcgen_buf_printf(b, ", %d);\n", slot_hint);
                 } else {
                     // Method invocation: encoded = (method_symbol << 32) | nargs
-                    int method_symbol = (int)(encoded >> 32);
-                    int nargs = (int)(encoded & 0xFF);
+                    int method_symbol = (int) (encoded >> 32);
+                    int nargs = (int) (encoded & 0xFF);
 
                     // Inline float math methods when receiver is F64 and dst is F64.
                     // This eliminates xrt_box_float + xrt_method_0 + xrt_unbox_float.
                     XirRef recv_ref = (cf->call_args_count > 0) ? cf->call_args[0] : XIR_NONE;
-                    uint8_t recv_type = xir_ref_is_none(recv_ref)
-                                        ? XR_REP_TAGGED : xcg_ref_type(func, recv_ref);
-                    uint8_t dst_vtype = (dst_idx < func->nvreg)
-                                        ? func->vregs[dst_idx].rep : XR_REP_TAGGED;
+                    uint8_t recv_type =
+                        xir_ref_is_none(recv_ref) ? XR_REP_TAGGED : xcg_ref_type(func, recv_ref);
+                    uint8_t dst_vtype =
+                        (dst_idx < func->nvreg) ? func->vregs[dst_idx].rep : XR_REP_TAGGED;
                     bool recv_is_float = xcg_is_float_type(recv_type);
-                    bool dst_is_float  = xcg_is_float_type(dst_vtype);
+                    bool dst_is_float = xcg_is_float_type(dst_vtype);
 
                     const char *math_fn = NULL;
                     if (recv_is_float && dst_is_float && nargs == 0) {
                         switch (method_symbol) {
-                            case XRT_SYM_FLOOR: math_fn = "floor"; break;
-                            case XRT_SYM_CEIL:  math_fn = "ceil";  break;
-                            case XRT_SYM_ROUND: math_fn = "round"; break;
-                            case XRT_SYM_ABS:   math_fn = "fabs";  break;
-                            case XRT_SYM_SQRT:  math_fn = "sqrt";  break;
-                            default: break;
+                            case XRT_SYM_FLOOR:
+                                math_fn = "floor";
+                                break;
+                            case XRT_SYM_CEIL:
+                                math_fn = "ceil";
+                                break;
+                            case XRT_SYM_ROUND:
+                                math_fn = "round";
+                                break;
+                            case XRT_SYM_ABS:
+                                math_fn = "fabs";
+                                break;
+                            case XRT_SYM_SQRT:
+                                math_fn = "sqrt";
+                                break;
+                            default:
+                                break;
                         }
                     }
                     if (recv_is_float && dst_is_float && nargs == 1 &&
                         method_symbol == XRT_SYM_POW) {
                         // XRT_SYM_POW: pow(receiver, arg)
                         XirRef arg1 = (cf->call_args_count > 1) ? cf->call_args[1] : XIR_NONE;
-                        uint8_t arg1_type = xir_ref_is_none(arg1)
-                                            ? XR_REP_TAGGED : xcg_ref_type(func, arg1);
+                        uint8_t arg1_type =
+                            xir_ref_is_none(arg1) ? XR_REP_TAGGED : xcg_ref_type(func, arg1);
                         if (xcg_is_float_type(arg1_type) || arg1_type == XR_REP_I64) {
                             xcgen_buf_printf(b, "    v%u = pow(", dst_idx);
                             xcg_emit_ref(b, func, recv_ref);
@@ -1079,9 +1107,8 @@ throw_check_done:
 
                     // Inline I64 methods when receiver is I64
                     bool recv_is_int = (recv_type == XR_REP_I64);
-                    bool dst_is_int  = (dst_vtype == XR_REP_I64);
-                    if (recv_is_int && dst_is_int && nargs == 0 &&
-                        method_symbol == XRT_SYM_ABS) {
+                    bool dst_is_int = (dst_vtype == XR_REP_I64);
+                    if (recv_is_int && dst_is_int && nargs == 0 && method_symbol == XRT_SYM_ABS) {
                         xcgen_buf_printf(b, "    v%u = (", dst_idx);
                         xcg_emit_ref(b, func, recv_ref);
                         xcgen_buf_puts(b, " < 0) ? -(");
@@ -1096,8 +1123,8 @@ throw_check_done:
                     // Inline string methods when receiver is STR
                     bool recv_is_str = (recv_type == XR_REP_STR);
                     if (recv_is_str && nargs == 0) {
-                        if (dst_is_int && (method_symbol == XRT_SYM_LENGTH ||
-                                           method_symbol == XRT_SYM_SIZE)) {
+                        if (dst_is_int &&
+                            (method_symbol == XRT_SYM_LENGTH || method_symbol == XRT_SYM_SIZE)) {
                             xcgen_buf_printf(b, "    v%u = (int64_t)strlen((const char *)",
                                              dst_idx);
                             xcg_emit_ref(b, func, recv_ref);
@@ -1126,11 +1153,11 @@ throw_check_done:
                     }
                     if (recv_is_str && nargs == 1) {
                         XirRef arg1 = (cf->call_args_count > 1) ? cf->call_args[1] : XIR_NONE;
-                        uint8_t arg1_type = xir_ref_is_none(arg1)
-                                            ? XR_REP_TAGGED : xcg_ref_type(func, arg1);
+                        uint8_t arg1_type =
+                            xir_ref_is_none(arg1) ? XR_REP_TAGGED : xcg_ref_type(func, arg1);
                         bool arg1_is_str = (arg1_type == XR_REP_STR);
-                        if ((dst_is_int || dst_vtype == XR_REP_TAGGED) &&
-                            arg1_is_str && method_symbol == XRT_SYM_CONTAINS) {
+                        if ((dst_is_int || dst_vtype == XR_REP_TAGGED) && arg1_is_str &&
+                            method_symbol == XRT_SYM_CONTAINS) {
                             if (dst_vtype == XR_REP_TAGGED)
                                 xcgen_buf_printf(b, "    v%u = xrt_box_bool(", dst_idx);
                             else
@@ -1160,35 +1187,45 @@ throw_check_done:
                             cf->call_args_count = 0;
                             return;
                         }
-                        if ((dst_is_int || dst_vtype == XR_REP_TAGGED) &&
-                            arg1_is_str && method_symbol == XRT_SYM_STARTSWITH) {
+                        if ((dst_is_int || dst_vtype == XR_REP_TAGGED) && arg1_is_str &&
+                            method_symbol == XRT_SYM_STARTSWITH) {
                             xcgen_buf_printf(b, "    { const char *_s = (const char *)");
                             xcg_emit_ref(b, func, recv_ref);
                             xcgen_buf_puts(b, ".ptr; const char *_p = (const char *)");
                             xcg_emit_ref(b, func, arg1);
                             xcgen_buf_puts(b, ".ptr; size_t _pl = strlen(_p); ");
                             if (dst_vtype == XR_REP_TAGGED)
-                                xcgen_buf_printf(b, "v%u = xrt_box_bool((strlen(_s) >= _pl && memcmp(_s, _p, _pl) == 0) ? 1 : 0); }\n",
+                                xcgen_buf_printf(b,
+                                                 "v%u = xrt_box_bool((strlen(_s) >= _pl && "
+                                                 "memcmp(_s, _p, _pl) == 0) ? 1 : 0); }\n",
                                                  dst_idx);
                             else
-                                xcgen_buf_printf(b, "v%u = (strlen(_s) >= _pl && memcmp(_s, _p, _pl) == 0) ? 1 : 0; }\n",
+                                xcgen_buf_printf(b,
+                                                 "v%u = (strlen(_s) >= _pl && memcmp(_s, _p, _pl) "
+                                                 "== 0) ? 1 : 0; }\n",
                                                  dst_idx);
                             cf->needs_runtime = true;
                             cf->call_args_count = 0;
                             return;
                         }
-                        if ((dst_is_int || dst_vtype == XR_REP_TAGGED) &&
-                            arg1_is_str && method_symbol == XRT_SYM_ENDSWITH) {
+                        if ((dst_is_int || dst_vtype == XR_REP_TAGGED) && arg1_is_str &&
+                            method_symbol == XRT_SYM_ENDSWITH) {
                             xcgen_buf_printf(b, "    { const char *_s = (const char *)");
                             xcg_emit_ref(b, func, recv_ref);
-                            xcgen_buf_puts(b, ".ptr; size_t _sl = strlen(_s); const char *_p = (const char *)");
+                            xcgen_buf_puts(
+                                b,
+                                ".ptr; size_t _sl = strlen(_s); const char *_p = (const char *)");
                             xcg_emit_ref(b, func, arg1);
                             xcgen_buf_puts(b, ".ptr; size_t _pl = strlen(_p); ");
                             if (dst_vtype == XR_REP_TAGGED)
-                                xcgen_buf_printf(b, "v%u = xrt_box_bool((_sl >= _pl && memcmp(_s + _sl - _pl, _p, _pl) == 0) ? 1 : 0); }\n",
+                                xcgen_buf_printf(b,
+                                                 "v%u = xrt_box_bool((_sl >= _pl && memcmp(_s + "
+                                                 "_sl - _pl, _p, _pl) == 0) ? 1 : 0); }\n",
                                                  dst_idx);
                             else
-                                xcgen_buf_printf(b, "v%u = (_sl >= _pl && memcmp(_s + _sl - _pl, _p, _pl) == 0) ? 1 : 0; }\n",
+                                xcgen_buf_printf(b,
+                                                 "v%u = (_sl >= _pl && memcmp(_s + _sl - _pl, _p, "
+                                                 "_pl) == 0) ? 1 : 0; }\n",
                                                  dst_idx);
                             cf->needs_runtime = true;
                             cf->call_args_count = 0;
@@ -1198,8 +1235,7 @@ throw_check_done:
 
                     // Inline array methods: push, pop, length, isEmpty
                     // Array push has a unique symbol (49), so receiver must be array.
-                    bool recv_is_tagged = (recv_type == XR_REP_PTR ||
-                                           recv_type == XR_REP_TAGGED);
+                    bool recv_is_tagged = (recv_type == XR_REP_PTR || recv_type == XR_REP_TAGGED);
                     if (recv_is_tagged && nargs == 1 && method_symbol == XRT_SYM_PUSH) {
                         XirRef arg1 = (cf->call_args_count > 1) ? cf->call_args[1] : XIR_NONE;
                         xcgen_buf_puts(b, "    xrt_array_push(");
@@ -1214,8 +1250,10 @@ throw_check_done:
                     if (recv_is_tagged && nargs == 0 && method_symbol == XRT_SYM_POP) {
                         xcgen_buf_printf(b, "    { xrt_array_t *_a = (xrt_array_t *)");
                         xcg_emit_ref(b, func, recv_ref);
-                        xcgen_buf_printf(b, ".ptr; v%u = (_a->len > 0) ? _a->data[--_a->len] : (XrtValue){0}; }\n",
-                                         dst_idx);
+                        xcgen_buf_printf(
+                            b,
+                            ".ptr; v%u = (_a->len > 0) ? _a->data[--_a->len] : (XrtValue){0}; }\n",
+                            dst_idx);
                         cf->needs_runtime = true;
                         cf->call_args_count = 0;
                         return;
@@ -1224,8 +1262,7 @@ throw_check_done:
                     // Inline map.get, map.has, map.set (unique symbols for maps)
                     if (recv_is_tagged && nargs == 1 && method_symbol == XRT_SYM_GET) {
                         XirRef arg1 = (cf->call_args_count > 1) ? cf->call_args[1] : XIR_NONE;
-                        xcgen_buf_printf(b, "    v%u = xrt_map_get((xrt_map_t *)",
-                                         dst_idx);
+                        xcgen_buf_printf(b, "    v%u = xrt_map_get((xrt_map_t *)", dst_idx);
                         xcg_emit_ref(b, func, recv_ref);
                         xcgen_buf_puts(b, ".ptr, ");
                         emit_ref_as_tagged(b, func, arg1);
@@ -1257,8 +1294,9 @@ throw_check_done:
                         xcgen_buf_puts(b, "if (xrt_key_eq(_m->entries[_i].key, ");
                         emit_ref_as_tagged(b, func, arg1);
                         if (dst_vtype == XR_REP_TAGGED)
-                            xcgen_buf_printf(b, ")) { _found = 1; break; } v%u = xrt_box_bool(_found); }\n",
-                                             dst_idx);
+                            xcgen_buf_printf(
+                                b, ")) { _found = 1; break; } v%u = xrt_box_bool(_found); }\n",
+                                dst_idx);
                         else
                             xcgen_buf_printf(b, ")) { _found = 1; break; } v%u = _found; }\n",
                                              dst_idx);
@@ -1270,11 +1308,9 @@ throw_check_done:
                     // Fixed-arity fallback: xrt_method_N (no varargs, inlinable)
                     if (nargs == 0) {
                         if (dst_is_float)
-                            xcgen_buf_printf(b, "    v%u = xrt_unbox_float(xrt_method_0(",
-                                             dst_idx);
+                            xcgen_buf_printf(b, "    v%u = xrt_unbox_float(xrt_method_0(", dst_idx);
                         else if (dst_is_int)
-                            xcgen_buf_printf(b, "    v%u = xrt_unbox_int(xrt_method_0(",
-                                             dst_idx);
+                            xcgen_buf_printf(b, "    v%u = xrt_unbox_int(xrt_method_0(", dst_idx);
                         else
                             xcgen_buf_printf(b, "    v%u = xrt_method_0(", dst_idx);
                         if (cf->call_args_count > 0)
@@ -1284,11 +1320,9 @@ throw_check_done:
                         xcgen_buf_printf(b, ", %d", method_symbol);
                     } else if (nargs == 1) {
                         if (dst_is_float)
-                            xcgen_buf_printf(b, "    v%u = xrt_unbox_float(xrt_method_1(",
-                                             dst_idx);
+                            xcgen_buf_printf(b, "    v%u = xrt_unbox_float(xrt_method_1(", dst_idx);
                         else if (dst_is_int)
-                            xcgen_buf_printf(b, "    v%u = xrt_unbox_int(xrt_method_1(",
-                                             dst_idx);
+                            xcgen_buf_printf(b, "    v%u = xrt_unbox_int(xrt_method_1(", dst_idx);
                         else
                             xcgen_buf_printf(b, "    v%u = xrt_method_1(", dst_idx);
                         if (cf->call_args_count > 0)
@@ -1305,11 +1339,9 @@ throw_check_done:
                     } else {
                         // 2+ args: use xrt_method_2
                         if (dst_is_float)
-                            xcgen_buf_printf(b, "    v%u = xrt_unbox_float(xrt_method_2(",
-                                             dst_idx);
+                            xcgen_buf_printf(b, "    v%u = xrt_unbox_float(xrt_method_2(", dst_idx);
                         else if (dst_is_int)
-                            xcgen_buf_printf(b, "    v%u = xrt_unbox_int(xrt_method_2(",
-                                             dst_idx);
+                            xcgen_buf_printf(b, "    v%u = xrt_unbox_int(xrt_method_2(", dst_idx);
                         else
                             xcgen_buf_printf(b, "    v%u = xrt_method_2(", dst_idx);
                         if (cf->call_args_count > 0)
@@ -1337,31 +1369,29 @@ throw_check_done:
 
             // GETSHARED: CALL_C(xr_jit_get_shared, shared_index)
             // Translate to: v<dst> = xrt_shared[<index>]
-            if (fn_ptr == (void *)xr_jit_get_shared) {
+            if (fn_ptr == (void *) xr_jit_get_shared) {
                 int64_t shared_idx = -1;
-                if (xcg_resolve_const_i64(func, ins->args[1], &shared_idx) &&
-                    shared_idx >= 0) {
+                if (xcg_resolve_const_i64(func, ins->args[1], &shared_idx) && shared_idx >= 0) {
                     uint32_t dst_idx = XIR_REF_INDEX(ins->dst);
-                    uint8_t dst_type = (dst_idx < func->nvreg)
-                                       ? func->vregs[dst_idx].rep : XR_REP_TAGGED;
-                    bool dst_tagged = (dst_type == XR_REP_STR ||
-                                       dst_type == XR_REP_PTR ||
+                    uint8_t dst_type =
+                        (dst_idx < func->nvreg) ? func->vregs[dst_idx].rep : XR_REP_TAGGED;
+                    bool dst_tagged = (dst_type == XR_REP_STR || dst_type == XR_REP_PTR ||
                                        dst_type == XR_REP_TAGGED);
                     // Always emit the load: even native-typed closures may be
                     // needed as call_args[0] for passing upvalues to callees.
                     if (dst_tagged) {
-                        xcgen_buf_printf(b, "    v%u = xrt_shared[%d];\n",
-                                         dst_idx, (int)shared_idx);
+                        xcgen_buf_printf(b, "    v%u = xrt_shared[%d];\n", dst_idx,
+                                         (int) shared_idx);
                     } else {
                         // Reinterpret as tagged for closure passing
-                        xcgen_buf_printf(b, "    v%u = xrt_shared[%d].i;\n",
-                                         dst_idx, (int)shared_idx);
+                        xcgen_buf_printf(b, "    v%u = xrt_shared[%d].i;\n", dst_idx,
+                                         (int) shared_idx);
                     }
                     // Track max shared index for array sizing
                     XcgenCompilation *comp = mod->comp;
                     XR_DCHECK(comp != NULL, "emit_call_c GETSHARED: NULL comp");
-                    if ((int)shared_idx > comp->max_shared_index)
-                        comp->max_shared_index = (int)shared_idx;
+                    if ((int) shared_idx > comp->max_shared_index)
+                        comp->max_shared_index = (int) shared_idx;
                     cf->needs_runtime = true;
                 } else {
                     // Could not resolve shared index — emit comment
@@ -1374,11 +1404,10 @@ throw_check_done:
             // SETSHARED: CALL_C(xr_jit_set_shared, encoded)
             // encoded = (val_bc_slot<<24) | (val_tag<<16) | shared_index
             // The value to store is in call_args[0]
-            if (fn_ptr == (void *)xr_jit_set_shared) {
+            if (fn_ptr == (void *) xr_jit_set_shared) {
                 int64_t encoded = -1;
-                if (xcg_resolve_const_i64(func, ins->args[1], &encoded) &&
-                    encoded >= 0) {
-                    int shared_idx = (int)(encoded & 0xFFFF);
+                if (xcg_resolve_const_i64(func, ins->args[1], &encoded) && encoded >= 0) {
+                    int shared_idx = (int) (encoded & 0xFFFF);
                     xcgen_buf_printf(b, "    xrt_shared[%d] = ", shared_idx);
                     if (cf->call_args_count > 0)
                         emit_ref_as_tagged(b, func, cf->call_args[0]);
@@ -1432,10 +1461,8 @@ throw_check_done:
                         XirBlock *blk2 = func->blocks[bi2];
                         for (uint32_t ii = 0; ii < blk2->nins; ii++) {
                             XirIns *def = &blk2->ins[ii];
-                            if (xir_ref_is_vreg(def->dst) &&
-                                XIR_REF_INDEX(def->dst) == vi &&
-                                def->op == XIR_CONST_I64 &&
-                                xir_ref_is_const(def->args[0])) {
+                            if (xir_ref_is_vreg(def->dst) && XIR_REF_INDEX(def->dst) == vi &&
+                                def->op == XIR_CONST_I64 && xir_ref_is_const(def->args[0])) {
                                 uint32_t ci2 = XIR_REF_INDEX(def->args[0]);
                                 if (ci2 < func->nconst)
                                     nupvals = func->consts[ci2].val.i64;
@@ -1443,8 +1470,8 @@ throw_check_done:
                         }
                     }
                 }
-                xcgen_buf_printf(b, "    v%u = xrt_closure_new((void*)%s, %d);\n",
-                                 dst_idx, closure_fn, (int)nupvals);
+                xcgen_buf_printf(b, "    v%u = xrt_closure_new((void*)%s, %d);\n", dst_idx,
+                                 closure_fn, (int) nupvals);
                 cf->needs_runtime = true;
                 cf->call_args_count = 0;
                 return;
@@ -1452,15 +1479,14 @@ throw_check_done:
             // Print: CALL_C(xr_jit_print, flags)
             // call_args[0] = value to print
             // AOT encoding: bit0=newline, bit1=add_space
-            if (fn_ptr == (void *)xr_jit_print) {
+            if (fn_ptr == (void *) xr_jit_print) {
                 int64_t flags = 0;
                 xcg_resolve_const_i64(func, ins->args[1], &flags);
-                int newline   = (int)(flags & 1);
-                int add_space = (int)((flags >> 1) & 1);
+                int newline = (int) (flags & 1);
+                int add_space = (int) ((flags >> 1) & 1);
                 if (add_space)
                     xcgen_buf_puts(b, "    printf(\" \");\n");
-                xcgen_buf_printf(b, "    %s(",
-                                 newline ? "xrt_println" : "xrt_print");
+                xcgen_buf_printf(b, "    %s(", newline ? "xrt_println" : "xrt_print");
                 if (cf->call_args_count > 0)
                     emit_ref_as_tagged(b, func, cf->call_args[0]);
                 else
@@ -1474,23 +1500,26 @@ throw_check_done:
             // Tagged arithmetic: CALL_C(xr_jit_rt_add/sub/mul/div/mod, tag_enc)
             // call_args[0]=lhs, call_args[1]=rhs.  Map to xrt_add/sub/mul/div/mod.
             const char *arith_name = NULL;
-            if (fn_ptr == (void *)xr_jit_rt_add) arith_name = "xrt_add";
-            else if (fn_ptr == (void *)xr_jit_rt_sub) arith_name = "xrt_sub";
-            else if (fn_ptr == (void *)xr_jit_rt_mul) arith_name = "xrt_mul";
-            else if (fn_ptr == (void *)xr_jit_rt_div) arith_name = "xrt_div";
-            else if (fn_ptr == (void *)xr_jit_rt_mod) arith_name = "xrt_mod";
+            if (fn_ptr == (void *) xr_jit_rt_add)
+                arith_name = "xrt_add";
+            else if (fn_ptr == (void *) xr_jit_rt_sub)
+                arith_name = "xrt_sub";
+            else if (fn_ptr == (void *) xr_jit_rt_mul)
+                arith_name = "xrt_mul";
+            else if (fn_ptr == (void *) xr_jit_rt_div)
+                arith_name = "xrt_div";
+            else if (fn_ptr == (void *) xr_jit_rt_mod)
+                arith_name = "xrt_mod";
             if (arith_name) {
                 uint32_t dst_idx = XIR_REF_INDEX(ins->dst);
-                uint8_t dst_type = (dst_idx < func->nvreg)
-                    ? func->vregs[dst_idx].rep : XR_REP_TAGGED;
+                uint8_t dst_type =
+                    (dst_idx < func->nvreg) ? func->vregs[dst_idx].rep : XR_REP_TAGGED;
                 bool dst_is_int = (dst_type == XR_REP_I64);
                 bool dst_is_float = (dst_type == XR_REP_F64);
                 if (dst_is_int)
-                    xcgen_buf_printf(b, "    v%u = xrt_unbox_int(%s(",
-                                     dst_idx, arith_name);
+                    xcgen_buf_printf(b, "    v%u = xrt_unbox_int(%s(", dst_idx, arith_name);
                 else if (dst_is_float)
-                    xcgen_buf_printf(b, "    v%u = xrt_unbox_float(%s(",
-                                     dst_idx, arith_name);
+                    xcgen_buf_printf(b, "    v%u = xrt_unbox_float(%s(", dst_idx, arith_name);
                 else
                     xcgen_buf_printf(b, "    v%u = %s(", dst_idx, arith_name);
                 if (cf->call_args_count > 0)
@@ -1518,9 +1547,8 @@ throw_check_done:
 
 /* ========== Public Entry Point ========== */
 
-bool xcg_emit_call_instruction(XcgenBuf *b, XirFunc *func, XirIns *ins,
-                                const char *self_name, XcgenModule *mod,
-                                XcgenFunc *cf) {
+bool xcg_emit_call_instruction(XcgenBuf *b, XirFunc *func, XirIns *ins, const char *self_name,
+                               XcgenModule *mod, XcgenFunc *cf) {
     XR_DCHECK(b != NULL, "xcg_emit_call_instruction: b is NULL");
     XR_DCHECK(func != NULL, "xcg_emit_call_instruction: func is NULL");
     XR_DCHECK(ins != NULL, "xcg_emit_call_instruction: ins is NULL");
@@ -1563,10 +1591,8 @@ bool xcg_emit_call_instruction(XcgenBuf *b, XirFunc *func, XirIns *ins,
                     XirBlock *blk2 = func->blocks[bi2];
                     for (uint32_t ii = 0; ii < blk2->nins; ii++) {
                         XirIns *def = &blk2->ins[ii];
-                        if (xir_ref_is_vreg(def->dst) &&
-                            XIR_REF_INDEX(def->dst) == vi &&
-                            def->op == XIR_CONST_I64 &&
-                            xir_ref_is_const(def->args[0])) {
+                        if (xir_ref_is_vreg(def->dst) && XIR_REF_INDEX(def->dst) == vi &&
+                            def->op == XIR_CONST_I64 && xir_ref_is_const(def->args[0])) {
                             uint32_t ci2 = XIR_REF_INDEX(def->args[0]);
                             if (ci2 < func->nconst)
                                 nargs = func->consts[ci2].val.i64;
@@ -1589,7 +1615,7 @@ bool xcg_emit_call_instruction(XcgenBuf *b, XirFunc *func, XirIns *ins,
             XirRef closure_ref = cf->call_args[0];
 
             xcgen_buf_printf(b, "    v%u = ((%s (*)(XrtContext, %s", dst_idx, ret_c, tagged_type);
-            for (int i = 0; i < (int)nargs; i++) {
+            for (int i = 0; i < (int) nargs; i++) {
                 XirRef arg_ref = cf->call_args[1 + i];
                 uint8_t arg_type = xcg_ref_type(func, arg_ref);
                 xcgen_buf_printf(b, ", %s", xcg_c_type(arg_type));
@@ -1599,7 +1625,7 @@ bool xcg_emit_call_instruction(XcgenBuf *b, XirFunc *func, XirIns *ins,
             xcgen_buf_puts(b, ".ptr)->fn)(");
             xcgen_buf_puts(b, "xrt_ctx, ");
             emit_ref_as_tagged(b, func, closure_ref);
-            for (int i = 0; i < (int)nargs; i++) {
+            for (int i = 0; i < (int) nargs; i++) {
                 xcgen_buf_puts(b, ", ");
                 xcg_emit_ref(b, func, cf->call_args[1 + i]);
             }

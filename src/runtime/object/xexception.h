@@ -23,19 +23,19 @@ typedef struct XrException XrException;
 
 struct XrException {
     XrGCHeader gc;
-    XrErrorCode code;          // error code
-    XrString *message;         // error message
+    XrErrorCode code;   // error code
+    XrString *message;  // error message
 
     // Source location
-    XrString *file;            // filename (GC managed)
-    int line;                  // line number
-    int column;                // column number
+    XrString *file;  // filename (GC managed)
+    int line;        // line number
+    int column;      // column number
 
     // Stack trace
-    XrArray *stackTrace;       // call stack array (GC managed)
+    XrArray *stackTrace;  // call stack array (GC managed)
 
     // User data
-    XrValue userData;          // custom data attached by user
+    XrValue userData;  // custom data attached by user
 };
 
 /* ========== Exception API ========== */
@@ -55,14 +55,14 @@ XR_FUNC XrValue xr_exception_from_value(XrayIsolate *X, XrValue value);
 /* ========== Exception Info ========== */
 
 XR_FUNC XrErrorCode xr_exception_get_code(XrValue exception);
-XR_FUNC const char* xr_exception_get_message(XrValue exception);
+XR_FUNC const char *xr_exception_get_message(XrValue exception);
 XR_FUNC XrValue xr_exception_get_stacktrace(XrayIsolate *iso, XrValue exception);
 
 /* ========== Stack Trace ========== */
 
 // Add stack frame to exception
-XR_FUNC void xr_exception_add_frame(XrayIsolate *X, XrValue exception,
-                            const char *funcName, int line);
+XR_FUNC void xr_exception_add_frame(XrayIsolate *X, XrValue exception, const char *funcName,
+                                    int line);
 
 /* ========== Output ========== */
 
@@ -72,16 +72,14 @@ XR_FUNC void xr_exception_print(XrayIsolate *X, XrValue exception);
 
 // XR_IS_EXCEPTION is defined in xvalue.h (single source of truth)
 
-#define XR_AS_EXCEPTION(v) \
-    ((XrException*)XR_TO_PTR(v))
+#define XR_AS_EXCEPTION(v) ((XrException *) XR_TO_PTR(v))
 
-#define XR_EXCEPTION_VAL(e) \
-    XR_FROM_PTR(e)
+#define XR_EXCEPTION_VAL(e) XR_FROM_PTR(e)
 
 /* ========== Convenience Macros ========== */
 
-#define xr_is_exception(v)    XR_IS_EXCEPTION(v)
-#define xr_as_exception(v)    XR_AS_EXCEPTION(v)
-#define xr_exception_val(e)   XR_EXCEPTION_VAL(e)
+#define xr_is_exception(v) XR_IS_EXCEPTION(v)
+#define xr_as_exception(v) XR_AS_EXCEPTION(v)
+#define xr_exception_val(e) XR_EXCEPTION_VAL(e)
 
-#endif // XEXCEPTION_H
+#endif  // XEXCEPTION_H

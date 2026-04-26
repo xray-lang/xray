@@ -18,46 +18,46 @@
 /* ========== OS Detection ========== */
 
 #if defined(_WIN32) || defined(_WIN64)
-    #define XR_OS_WINDOWS 1
+#define XR_OS_WINDOWS 1
 #elif defined(__linux__)
-    #define XR_OS_LINUX 1
+#define XR_OS_LINUX 1
 #elif defined(__APPLE__)
-    #define XR_OS_MACOS 1
+#define XR_OS_MACOS 1
 #elif defined(__FreeBSD__) || defined(__OpenBSD__) || defined(__NetBSD__)
-    #define XR_OS_BSD 1
-#endif // POSIX-like (non-Windows)
+#define XR_OS_BSD 1
+#endif  // POSIX-like (non-Windows)
 #if defined(XR_OS_LINUX) || defined(XR_OS_MACOS) || defined(XR_OS_BSD)
-    #define XR_OS_POSIX 1
-#endif // ========== Architecture Detection ==========
+#define XR_OS_POSIX 1
+#endif  // ========== Architecture Detection ==========
 
 #if defined(__x86_64__) || defined(_M_X64)
-    #define XR_ARCH_X86_64 1
+#define XR_ARCH_X86_64 1
 #elif defined(__i386__) || defined(_M_IX86)
-    #define XR_ARCH_X86 1
+#define XR_ARCH_X86 1
 #elif defined(__aarch64__) || defined(__arm64__) || defined(_M_ARM64)
-    #define XR_ARCH_ARM64 1
+#define XR_ARCH_ARM64 1
 #elif defined(__arm__) || defined(_M_ARM)
-    #define XR_ARCH_ARM 1
+#define XR_ARCH_ARM 1
 #elif defined(__riscv) && (__riscv_xlen == 64)
-    #define XR_ARCH_RISCV64 1
-#endif // ========== Compiler Detection ==========
+#define XR_ARCH_RISCV64 1
+#endif  // ========== Compiler Detection ==========
 
 #if defined(__clang__)
-    #define XR_COMPILER_CLANG 1
+#define XR_COMPILER_CLANG 1
 #elif defined(__GNUC__)
-    #define XR_COMPILER_GCC 1
+#define XR_COMPILER_GCC 1
 #elif defined(_MSC_VER)
-    #define XR_COMPILER_MSVC 1
-#endif // ========== CPU Primitives ==========
+#define XR_COMPILER_MSVC 1
+#endif  // ========== CPU Primitives ==========
 
 // Pause/yield hint for spin loops
 #if defined(XR_ARCH_X86_64) || defined(XR_ARCH_X86)
-    #define XR_CPU_PAUSE() __asm__ __volatile__("pause" ::: "memory")
+#define XR_CPU_PAUSE() __asm__ __volatile__("pause" ::: "memory")
 #elif defined(XR_ARCH_ARM64)
-    #define XR_CPU_PAUSE() __asm__ __volatile__("yield" ::: "memory")
+#define XR_CPU_PAUSE() __asm__ __volatile__("yield" ::: "memory")
 #else
-    #define XR_CPU_PAUSE() ((void)0)
-#endif // Cache line size (used for padding to avoid false sharing)
+#define XR_CPU_PAUSE() ((void) 0)
+#endif  // Cache line size (used for padding to avoid false sharing)
 #define XR_CACHE_LINE 64
 
-#endif // XPLATFORM_H
+#endif  // XPLATFORM_H

@@ -25,8 +25,8 @@
 // ========== Serialization Configuration ==========
 
 typedef struct {
-    int indent;       // Indentation spaces, default 2
-    int flow_level;   // Depth > flow_level uses flow style, default -1 (disabled)
+    int indent;      // Indentation spaces, default 2
+    int flow_level;  // Depth > flow_level uses flow style, default -1 (disabled)
 
     // Intended maximum output line width in characters (default 80).
     //
@@ -46,7 +46,7 @@ typedef struct {
 // ========== Output Buffer ==========
 
 typedef struct {
-    XrSerWriter sw;      // shared byte buffer (sw.data / sw.len / sw.cap)
+    XrSerWriter sw;  // shared byte buffer (sw.data / sw.len / sw.cap)
     XrayIsolate *isolate;
     YamlEmitConfig config;
     int current_line_len;
@@ -99,93 +99,122 @@ static bool looks_like_yaml11_bool_or_null(const char *s, size_t len) {
         return c == 'y' || c == 'Y' || c == 'n' || c == 'N';
     }
     if (len == 2) {
-        return (s[0] == 'n' || s[0] == 'N') && (s[1] == 'o' || s[1] == 'O'); // no/No/NO
+        return (s[0] == 'n' || s[0] == 'N') && (s[1] == 'o' || s[1] == 'O');  // no/No/NO
     }
     if (len == 3) {
         // yes / Yes / YES
-        if ((s[0] == 'y' || s[0] == 'Y') && (s[1] == 'e' || s[1] == 'E') && (s[2] == 's' || s[2] == 'S')) return true;
+        if ((s[0] == 'y' || s[0] == 'Y') && (s[1] == 'e' || s[1] == 'E') &&
+            (s[2] == 's' || s[2] == 'S'))
+            return true;
         // off / Off / OFF (3) handled below by length==3 branch? off is 3 chars
-        if ((s[0] == 'o' || s[0] == 'O') && (s[1] == 'f' || s[1] == 'F') && (s[2] == 'f' || s[2] == 'F')) return true;
+        if ((s[0] == 'o' || s[0] == 'O') && (s[1] == 'f' || s[1] == 'F') &&
+            (s[2] == 'f' || s[2] == 'F'))
+            return true;
     }
-    if (len == 2 && (s[0] == 'o' || s[0] == 'O') && (s[1] == 'n' || s[1] == 'N')) return true; // on / On / ON
+    if (len == 2 && (s[0] == 'o' || s[0] == 'O') && (s[1] == 'n' || s[1] == 'N'))
+        return true;  // on / On / ON
     return false;
 }
 
 // Check whether a scalar reparses as a YAML number or special float (.inf/.nan).
 // If so we must quote to keep it a string on round-trip.
 static bool looks_like_yaml_number(const char *s, size_t len) {
-    if (len == 0) return false;
+    if (len == 0)
+        return false;
     size_t i = 0;
-    if (s[i] == '+' || s[i] == '-') i++;
-    if (i >= len) return false;
+    if (s[i] == '+' || s[i] == '-')
+        i++;
+    if (i >= len)
+        return false;
     // .inf / .nan forms
     if (s[i] == '.') {
         // .inf / .Inf / .INF / .nan / .NaN / .NAN
         if (len - i == 4) {
-            if ((s[i+1]=='i'||s[i+1]=='I') && (s[i+2]=='n'||s[i+2]=='N') && (s[i+3]=='f'||s[i+3]=='F')) return true;
-            if ((s[i+1]=='n'||s[i+1]=='N') && (s[i+2]=='a'||s[i+2]=='A') && (s[i+3]=='n'||s[i+3]=='N')) return true;
+            if ((s[i + 1] == 'i' || s[i + 1] == 'I') && (s[i + 2] == 'n' || s[i + 2] == 'N') &&
+                (s[i + 3] == 'f' || s[i + 3] == 'F'))
+                return true;
+            if ((s[i + 1] == 'n' || s[i + 1] == 'N') && (s[i + 2] == 'a' || s[i + 2] == 'A') &&
+                (s[i + 3] == 'n' || s[i + 3] == 'N'))
+                return true;
         }
         // Fall through: ".5" is a number
     }
     bool has_digit = false, has_dot = false, has_exp = false;
     for (; i < len; i++) {
         char c = s[i];
-        if (c >= '0' && c <= '9') { has_digit = true; continue; }
-        if (c == '.' && !has_dot && !has_exp) { has_dot = true; continue; }
-        if ((c == 'e' || c == 'E') && has_digit && !has_exp) {
-            has_exp = true;
-            if (i + 1 < len && (s[i+1] == '+' || s[i+1] == '-')) i++;
+        if (c >= '0' && c <= '9') {
+            has_digit = true;
             continue;
         }
-        if (c == '_') continue;  // YAML allows _ as digit separator
+        if (c == '.' && !has_dot && !has_exp) {
+            has_dot = true;
+            continue;
+        }
+        if ((c == 'e' || c == 'E') && has_digit && !has_exp) {
+            has_exp = true;
+            if (i + 1 < len && (s[i + 1] == '+' || s[i + 1] == '-'))
+                i++;
+            continue;
+        }
+        if (c == '_')
+            continue;  // YAML allows _ as digit separator
         return false;
     }
     return has_digit;
 }
 
 static bool needs_quote(const char *s, size_t len) {
-    if (len == 0) return true;
+    if (len == 0)
+        return true;
 
     // YAML 1.2 null / bool keywords
-    if (len == 4 && strncmp(s, "null", 4) == 0) return true;
-    if (len == 4 && strncmp(s, "true", 4) == 0) return true;
-    if (len == 5 && strncmp(s, "false", 5) == 0) return true;
-    if (len == 1 && *s == '~') return true;
+    if (len == 4 && strncmp(s, "null", 4) == 0)
+        return true;
+    if (len == 4 && strncmp(s, "true", 4) == 0)
+        return true;
+    if (len == 5 && strncmp(s, "false", 5) == 0)
+        return true;
+    if (len == 1 && *s == '~')
+        return true;
     // True / TRUE / False / FALSE / Null / NULL variants
     if (len == 4 && (strncmp(s, "True", 4) == 0 || strncmp(s, "TRUE", 4) == 0 ||
-                     strncmp(s, "Null", 4) == 0 || strncmp(s, "NULL", 4) == 0)) return true;
-    if (len == 5 && (strncmp(s, "False", 5) == 0 || strncmp(s, "FALSE", 5) == 0)) return true;
+                     strncmp(s, "Null", 4) == 0 || strncmp(s, "NULL", 4) == 0))
+        return true;
+    if (len == 5 && (strncmp(s, "False", 5) == 0 || strncmp(s, "FALSE", 5) == 0))
+        return true;
 
     // Leading or trailing whitespace would be stripped by block scalar rules
-    if (s[0] == ' ' || s[0] == '\t' || s[len-1] == ' ' || s[len-1] == '\t') return true;
+    if (s[0] == ' ' || s[0] == '\t' || s[len - 1] == ' ' || s[len - 1] == '\t')
+        return true;
 
     // YAML 1.1 truthy/falsy tokens still parsed as bool by many readers
-    if (looks_like_yaml11_bool_or_null(s, len)) return true;
+    if (looks_like_yaml11_bool_or_null(s, len))
+        return true;
 
     // Looks-like-a-number: must quote to preserve string type
-    if (looks_like_yaml_number(s, len)) return true;
+    if (looks_like_yaml_number(s, len))
+        return true;
 
     for (size_t i = 0; i < len; i++) {
         char c = s[i];
-        if (c == '#' || c == '[' || c == ']' ||
-            c == '{' || c == '}' || c == ',' || c == '&' ||
-            c == '*' || c == '!' || c == '|' || c == '>' ||
-            c == '\'' || c == '"' || c == '%' || c == '@' ||
-            c == '`' || c == '\n' || c == '\r' || c == '\t' ||
-            (unsigned char)c < 0x20) {
+        if (c == '#' || c == '[' || c == ']' || c == '{' || c == '}' || c == ',' || c == '&' ||
+            c == '*' || c == '!' || c == '|' || c == '>' || c == '\'' || c == '"' || c == '%' ||
+            c == '@' || c == '`' || c == '\n' || c == '\r' || c == '\t' ||
+            (unsigned char) c < 0x20) {
             return true;
         }
         // ": " (colon followed by space) breaks block mapping
-        if (c == ':' && (i + 1 >= len || s[i+1] == ' ' || s[i+1] == '\t' || i + 1 == len)) {
+        if (c == ':' && (i + 1 >= len || s[i + 1] == ' ' || s[i + 1] == '\t' || i + 1 == len)) {
             return true;
         }
         // " #" (space then hash) starts a comment
-        if (c == ' ' && i + 1 < len && s[i+1] == '#') return true;
+        if (c == ' ' && i + 1 < len && s[i + 1] == '#')
+            return true;
     }
 
     char first = s[0];
-    if (first == '-' || first == '?' || first == ':' ||
-        first == ' ' || first == '\t' || isdigit((unsigned char)first)) {
+    if (first == '-' || first == '?' || first == ':' || first == ' ' || first == '\t' ||
+        isdigit((unsigned char) first)) {
         return true;
     }
 
@@ -218,7 +247,8 @@ static void emit_string(YamlEmitter *e, XrString *str, int level) {
             const char *end = str->data + str->length;
             while (line_start < end) {
                 const char *line_end = line_start;
-                while (line_end < end && *line_end != '\n') line_end++;
+                while (line_end < end && *line_end != '\n')
+                    line_end++;
                 emit_indent(e, level + 1);
                 emit_append(e, line_start, line_end - line_start);
                 emit_char(e, '\n');
@@ -229,12 +259,24 @@ static void emit_string(YamlEmitter *e, XrString *str, int level) {
             for (size_t i = 0; i < str->length; i++) {
                 char c = str->data[i];
                 switch (c) {
-                    case '"': emit_str(e, "\\\""); break;
-                    case '\\': emit_str(e, "\\\\"); break;
-                    case '\n': emit_str(e, "\\n"); break;
-                    case '\r': emit_str(e, "\\r"); break;
-                    case '\t': emit_str(e, "\\t"); break;
-                    default: emit_char(e, c); break;
+                    case '"':
+                        emit_str(e, "\\\"");
+                        break;
+                    case '\\':
+                        emit_str(e, "\\\\");
+                        break;
+                    case '\n':
+                        emit_str(e, "\\n");
+                        break;
+                    case '\r':
+                        emit_str(e, "\\r");
+                        break;
+                    case '\t':
+                        emit_str(e, "\\t");
+                        break;
+                    default:
+                        emit_char(e, c);
+                        break;
                 }
             }
             emit_char(e, '"');
@@ -274,13 +316,15 @@ static void emit_array(YamlEmitter *e, XrArray *arr, int level, bool flow_mode) 
     if (use_flow) {
         emit_char(e, '[');
         for (int i = 0; i < arr->length; i++) {
-            if (i > 0) emit_str(e, ", ");
+            if (i > 0)
+                emit_str(e, ", ");
             emit_value(e, xr_array_get(arr, i), level, true);
         }
         emit_char(e, ']');
     } else {
         for (int i = 0; i < arr->length; i++) {
-            if (i > 0) emit_indent(e, level);
+            if (i > 0)
+                emit_indent(e, level);
             emit_str(e, "- ");
             XrValue v = xr_array_get(arr, i);
             if (XR_IS_ARRAY(v) || XR_IS_MAP(v)) {
@@ -290,7 +334,8 @@ static void emit_array(YamlEmitter *e, XrArray *arr, int level, bool flow_mode) 
             } else {
                 emit_value(e, v, level + 1, false);
             }
-            if (i < arr->length - 1) emit_char(e, '\n');
+            if (i < arr->length - 1)
+                emit_char(e, '\n');
         }
     }
 }
@@ -303,12 +348,24 @@ static void emit_key_string(YamlEmitter *e, const char *data, size_t length) {
         for (size_t i = 0; i < length; i++) {
             char c = data[i];
             switch (c) {
-                case '"': emit_str(e, "\\\""); break;
-                case '\\': emit_str(e, "\\\\"); break;
-                case '\n': emit_str(e, "\\n"); break;
-                case '\r': emit_str(e, "\\r"); break;
-                case '\t': emit_str(e, "\\t"); break;
-                default: emit_char(e, c); break;
+                case '"':
+                    emit_str(e, "\\\"");
+                    break;
+                case '\\':
+                    emit_str(e, "\\\\");
+                    break;
+                case '\n':
+                    emit_str(e, "\\n");
+                    break;
+                case '\r':
+                    emit_str(e, "\\r");
+                    break;
+                case '\t':
+                    emit_str(e, "\\t");
+                    break;
+                default:
+                    emit_char(e, c);
+                    break;
             }
         }
         emit_char(e, '"');
@@ -338,7 +395,8 @@ static void emit_map(YamlEmitter *e, XrMap *map, int level, bool flow_mode) {
         for (uint32_t i = 0; i < size; i++) {
             XrMapNode *node = xr_map_node(map, i);
             if (node->key_tt > 0) {
-                if (!first) emit_str(e, ", ");
+                if (!first)
+                    emit_str(e, ", ");
                 first = false;
                 if (XR_IS_STRING(node->key)) {
                     XrString *key = XR_TO_STRING(node->key);
@@ -346,7 +404,7 @@ static void emit_map(YamlEmitter *e, XrMap *map, int level, bool flow_mode) {
                 } else {
                     char buf[32];
                     if (XR_IS_INT(node->key)) {
-                        snprintf(buf, sizeof(buf), "%lld", (long long)XR_TO_INT(node->key));
+                        snprintf(buf, sizeof(buf), "%lld", (long long) XR_TO_INT(node->key));
                         emit_str(e, buf);
                     }
                 }
@@ -372,7 +430,7 @@ static void emit_map(YamlEmitter *e, XrMap *map, int level, bool flow_mode) {
                 } else {
                     char buf[32];
                     if (XR_IS_INT(node->key)) {
-                        snprintf(buf, sizeof(buf), "%lld", (long long)XR_TO_INT(node->key));
+                        snprintf(buf, sizeof(buf), "%lld", (long long) XR_TO_INT(node->key));
                         emit_str(e, buf);
                     }
                 }
@@ -394,7 +452,7 @@ static void emit_map(YamlEmitter *e, XrMap *map, int level, bool flow_mode) {
 // ========== Json Output ==========
 
 static void emit_json(YamlEmitter *e, XrJson *json, int level, bool flow_mode) {
-    XrSymbolTable *symtab = (XrSymbolTable*)e->isolate->symbol_table;
+    XrSymbolTable *symtab = (XrSymbolTable *) e->isolate->symbol_table;
     uint16_t count = xr_json_field_count(e->isolate, json);
 
     if (count == 0) {
@@ -411,10 +469,12 @@ static void emit_json(YamlEmitter *e, XrJson *json, int level, bool flow_mode) {
     if (use_flow) {
         emit_char(e, '{');
         for (uint16_t i = 0; i < shape->field_count; i++) {
-            if (i > 0) emit_str(e, ", ");
+            if (i > 0)
+                emit_str(e, ", ");
             SymbolId sym = shape->field_symbols[i];
             const char *name = xr_symbol_get_name_in_table(symtab, sym);
-            if (name) emit_key_string(e, name, strlen(name));
+            if (name)
+                emit_key_string(e, name, strlen(name));
             emit_str(e, ": ");
             XrValue v = xr_json_get_field_any(e->isolate, json, i);
             emit_value(e, v, level, true);
@@ -428,7 +488,8 @@ static void emit_json(YamlEmitter *e, XrJson *json, int level, bool flow_mode) {
             }
             SymbolId sym = shape->field_symbols[i];
             const char *name = xr_symbol_get_name_in_table(symtab, sym);
-            if (name) emit_key_string(e, name, strlen(name));
+            if (name)
+                emit_key_string(e, name, strlen(name));
             emit_str(e, ": ");
             XrValue v = xr_json_get_field_any(e->isolate, json, i);
             if (XR_IS_ARRAY(v) || XR_IS_MAP(v) || xr_value_is_json(v)) {
@@ -463,7 +524,7 @@ static void emit_value(YamlEmitter *e, XrValue val, int level, bool flow_mode) {
         emit_str(e, XR_TO_BOOL(val) ? "true" : "false");
     } else if (XR_IS_INT(val)) {
         char buf[32];
-        snprintf(buf, sizeof(buf), "%lld", (long long)XR_TO_INT(val));
+        snprintf(buf, sizeof(buf), "%lld", (long long) XR_TO_INT(val));
         emit_str(e, buf);
     } else if (XR_IS_FLOAT(val)) {
         double d = XR_TO_FLOAT(val);
@@ -491,12 +552,11 @@ static void emit_value(YamlEmitter *e, XrValue val, int level, bool flow_mode) {
 
 // ========== Public API ===========
 
-XR_FUNCDEF XrValue yaml_emit(XrayIsolate *isolate, XrValue value, int indent, int flow_level, int line_width) {
-    YamlEmitConfig config = {
-        .indent = indent > 0 ? indent : 2,
-        .flow_level = flow_level,
-        .line_width = line_width > 0 ? line_width : 80
-    };
+XR_FUNCDEF XrValue yaml_emit(XrayIsolate *isolate, XrValue value, int indent, int flow_level,
+                             int line_width) {
+    YamlEmitConfig config = {.indent = indent > 0 ? indent : 2,
+                             .flow_level = flow_level,
+                             .line_width = line_width > 0 ? line_width : 80};
 
     YamlEmitter emitter;
     emit_init(&emitter, isolate, &config);

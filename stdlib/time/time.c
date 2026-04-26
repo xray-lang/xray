@@ -12,7 +12,7 @@
 #include "../common.h"
 #include "../../include/xray_platform.h"
 #include "../../src/vm/xvm_internal.h"  // XrCoroState, XrCoroutine
-#include "../../src/coro/xyieldable.h"   // xr_yield_for_timeout
+#include "../../src/coro/xyieldable.h"  // xr_yield_for_timeout
 #include "../../src/base/xchecks.h"
 #include <time.h>
 #include <stdio.h>
@@ -28,12 +28,12 @@ static int64_t get_timestamp_ms(void) {
 #ifdef XR_PLATFORM_WINDOWS
     FILETIME ft;
     GetSystemTimeAsFileTime(&ft);
-    int64_t t = ((int64_t)ft.dwHighDateTime << 32) | ft.dwLowDateTime;
+    int64_t t = ((int64_t) ft.dwHighDateTime << 32) | ft.dwLowDateTime;
     return (t - 116444736000000000LL) / 10000;
 #else
     struct timespec ts;
     clock_gettime(CLOCK_REALTIME, &ts);
-    return (int64_t)ts.tv_sec * 1000 + ts.tv_nsec / 1000000;
+    return (int64_t) ts.tv_sec * 1000 + ts.tv_nsec / 1000000;
 #endif
 }
 
@@ -44,20 +44,21 @@ static int64_t get_monotonic_ns(void) {
     // product never overflows int64 — the naive counter * 1e9 expression
     // wraps after a few days on a 10 MHz performance counter.
     static LARGE_INTEGER freq = {0};
-    if (freq.QuadPart == 0) QueryPerformanceFrequency(&freq);
+    if (freq.QuadPart == 0)
+        QueryPerformanceFrequency(&freq);
     LARGE_INTEGER counter;
     QueryPerformanceCounter(&counter);
     int64_t q = counter.QuadPart;
     int64_t f = freq.QuadPart;
-    int64_t sec     = q / f;
-    int64_t sub_ns  = ((q % f) * 1000000000LL) / f;
+    int64_t sec = q / f;
+    int64_t sub_ns = ((q % f) * 1000000000LL) / f;
     return sec * 1000000000LL + sub_ns;
 #elif defined(XR_PLATFORM_MACOS)
-    return (int64_t)clock_gettime_nsec_np(CLOCK_MONOTONIC);
+    return (int64_t) clock_gettime_nsec_np(CLOCK_MONOTONIC);
 #else
     struct timespec ts;
     clock_gettime(CLOCK_MONOTONIC, &ts);
-    return (int64_t)ts.tv_sec * 1000000000LL + ts.tv_nsec;
+    return (int64_t) ts.tv_sec * 1000000000LL + ts.tv_nsec;
 #endif
 }
 
@@ -65,7 +66,9 @@ static int64_t get_monotonic_ns(void) {
 
 // time.now() -> int (milliseconds)
 static XrValue xr_time_now(XrayIsolate *isolate, XrValue *args, int nargs) {
-    (void)isolate; (void)args; (void)nargs;
+    (void) isolate;
+    (void) args;
+    (void) nargs;
     return xr_int(get_timestamp_ms());
 }
 
@@ -75,43 +78,52 @@ static XrValue xr_time_now(XrayIsolate *isolate, XrValue *args, int nargs) {
 // overflows after ~70 minutes. Prefer CLOCK_PROCESS_CPUTIME_ID when
 // available, which is monotonic across the full 64-bit range.
 static XrValue xr_time_clock(XrayIsolate *isolate, XrValue *args, int nargs) {
-    (void)isolate; (void)args; (void)nargs;
+    (void) isolate;
+    (void) args;
+    (void) nargs;
 #if defined(XR_PLATFORM_MACOS) || defined(XR_PLATFORM_LINUX)
     struct timespec ts;
     if (clock_gettime(CLOCK_PROCESS_CPUTIME_ID, &ts) == 0) {
-        int64_t ms = (int64_t)ts.tv_sec * 1000 + ts.tv_nsec / 1000000;
+        int64_t ms = (int64_t) ts.tv_sec * 1000 + ts.tv_nsec / 1000000;
         return xr_int(ms);
     }
 #endif
     clock_t t = clock();
-    int64_t milliseconds = (int64_t)t * 1000 / CLOCKS_PER_SEC;
+    int64_t milliseconds = (int64_t) t * 1000 / CLOCKS_PER_SEC;
     return xr_int(milliseconds);
 }
 
 // time.monotonic() -> int (milliseconds)
 static XrValue xr_time_monotonic(XrayIsolate *isolate, XrValue *args, int nargs) {
-    (void)isolate; (void)args; (void)nargs;
+    (void) isolate;
+    (void) args;
+    (void) nargs;
     return xr_int(get_monotonic_ns() / 1000000);
 }
 
 // time.nanos() -> int (nanoseconds, monotonic)
 static XrValue xr_time_nanos(XrayIsolate *isolate, XrValue *args, int nargs) {
-    (void)isolate; (void)args; (void)nargs;
+    (void) isolate;
+    (void) args;
+    (void) nargs;
     return xr_int(get_monotonic_ns());
 }
 
 // time.micros() -> int (microseconds, monotonic)
 static XrValue xr_time_micros(XrayIsolate *isolate, XrValue *args, int nargs) {
-    (void)isolate; (void)args; (void)nargs;
+    (void) isolate;
+    (void) args;
+    (void) nargs;
     return xr_int(get_monotonic_ns() / 1000);
 }
 
 /*
  * Continuation for time.sleep — the timer has fired, just return null.
  */
-static XrCFuncResult time_sleep_done(XrayIsolate *X, int status,
-                                     void *ctx, XrValue *result) {
-    (void)X; (void)status; (void)ctx;
+static XrCFuncResult time_sleep_done(XrayIsolate *X, int status, void *ctx, XrValue *result) {
+    (void) X;
+    (void) status;
+    (void) ctx;
     *result = xr_null();
     return XR_CFUNC_DONE;
 }
@@ -126,15 +138,13 @@ static XrCFuncResult time_sleep_done(XrayIsolate *X, int status,
  * This yieldable C function is the dynamic-dispatch fallback that
  * was previously a blocking nanosleep.
  */
-static XrCFuncResult xr_time_sleep(XrayIsolate *X, XrValue *args, int nargs,
-                                   XrValue *result) {
+static XrCFuncResult xr_time_sleep(XrayIsolate *X, XrValue *args, int nargs, XrValue *result) {
     if (nargs < 1 || (!XR_IS_INT(args[0]) && !XR_IS_FLOAT(args[0]))) {
         *result = xr_null();
         return XR_CFUNC_DONE;
     }
 
-    int64_t ms = XR_IS_INT(args[0]) ? XR_TO_INT(args[0])
-                                    : (int64_t)XR_TO_FLOAT(args[0]);
+    int64_t ms = XR_IS_INT(args[0]) ? XR_TO_INT(args[0]) : (int64_t) XR_TO_FLOAT(args[0]);
     if (ms <= 0) {
         *result = xr_null();
         return XR_CFUNC_DONE;
@@ -142,7 +152,6 @@ static XrCFuncResult xr_time_sleep(XrayIsolate *X, XrValue *args, int nargs,
 
     return xr_yield_for_timeout(X, ms, time_sleep_done, NULL, result);
 }
-
 
 // ========== Module loader ==========
 
@@ -165,11 +174,12 @@ XR_DEFINE_BUILTIN(xr_time_nanos, "nanos", "(): int", "Monotonic time in nanoseco
 XR_DEFINE_BUILTIN(xr_time_micros, "micros", "(): int", "Monotonic time in microseconds")
 XR_DEFINE_BUILTIN(xr_time_sleep, "sleep", "(ms: int): void", "Sleep for milliseconds")
 
-XrModule* xr_load_module_time(XrayIsolate *isolate) {
+XrModule *xr_load_module_time(XrayIsolate *isolate) {
     XR_DCHECK(isolate != NULL, "xr_load_module_time: NULL isolate");
 
     XrModule *module = xr_module_create_native(isolate, "time");
-    if (!module) return NULL;
+    if (!module)
+        return NULL;
 
     // 2. Add exported functions
     XRS_EXPORT(module, isolate, "now", xr_time_now);
@@ -183,4 +193,3 @@ XrModule* xr_load_module_time(XrayIsolate *isolate) {
     module->loaded = true;
     return module;
 }
-

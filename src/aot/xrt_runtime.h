@@ -60,17 +60,22 @@ typedef struct XrtRuntime {
 /* xrt_runtime_init — set up allocators and any future global state.
  * Idempotent: safe to call twice on the same instance. */
 static inline void xrt_runtime_init(XrtRuntime *rt) {
-    if (rt && rt->initialized) return;
-    xrt_arc_init();          /* primes bump arena iff xrt_bump_enabled */
-    if (rt) rt->initialized = 1;
+    if (rt && rt->initialized)
+        return;
+    xrt_arc_init(); /* primes bump arena iff xrt_bump_enabled */
+    if (rt)
+        rt->initialized = 1;
 }
 
 /* xrt_runtime_shutdown — tear down allocators owned by the runtime.
  * Safe to call on a never-initialized instance (no-op). */
 static inline void xrt_runtime_shutdown(XrtRuntime *rt) {
-    if (rt && !rt->initialized) return;
-    if (xrt_bump_enabled) xrt_bump_destroy();
-    if (rt) rt->initialized = 0;
+    if (rt && !rt->initialized)
+        return;
+    if (xrt_bump_enabled)
+        xrt_bump_destroy();
+    if (rt)
+        rt->initialized = 0;
 }
 
 #endif /* XRT_RUNTIME_H */

@@ -24,7 +24,8 @@
 
 static int epoll_np_init(XrNetpoll *np) {
     np->poll_fd = epoll_create1(EPOLL_CLOEXEC);
-    if (np->poll_fd < 0) return -1;
+    if (np->poll_fd < 0)
+        return -1;
     np->backend_state = NULL;
 
     // Register wakeup pipe
@@ -59,35 +60,41 @@ static void epoll_np_del_fd(XrNetpoll *np, int fd) {
 
 static int epoll_np_poll_events(XrNetpoll *np, int64_t delta_ns, XrReadyList *list) {
     int timeout_ms;
-    if (delta_ns < 0)       timeout_ms = -1;
-    else if (delta_ns == 0) timeout_ms = 0;
+    if (delta_ns < 0)
+        timeout_ms = -1;
+    else if (delta_ns == 0)
+        timeout_ms = 0;
     else {
-        timeout_ms = (int)(delta_ns / 1000000);
-        if (timeout_ms == 0) timeout_ms = 1;
+        timeout_ms = (int) (delta_ns / 1000000);
+        if (timeout_ms == 0)
+            timeout_ms = 1;
     }
 
     struct epoll_event events[128];
     int n = epoll_wait(np->poll_fd, events, 128, timeout_ms);
-    if (n < 0) return (errno == EINTR) ? 0 : -1;
+    if (n < 0)
+        return (errno == EINTR) ? 0 : -1;
 
     for (int i = 0; i < n; i++) {
         struct epoll_event *ev = &events[i];
 
         if (ev->data.ptr == NULL) {
             char buf[16];
-            while (read(np->wakeup_pipe[0], buf, sizeof(buf)) > 0) {}
+            while (read(np->wakeup_pipe[0], buf, sizeof(buf)) > 0) {
+            }
             atomic_store(&np->break_pending, false);
             continue;
         }
 
-        XrPollDesc *pd = (XrPollDesc *)ev->data.ptr;
+        XrPollDesc *pd = (XrPollDesc *) ev->data.ptr;
         int mode = 0;
         if (ev->events & (EPOLLIN | EPOLLRDHUP | EPOLLHUP | EPOLLERR))
             mode |= XR_POLL_READ;
         if (ev->events & (EPOLLOUT | EPOLLHUP | EPOLLERR))
             mode |= XR_POLL_WRITE;
 
-        if (mode) xr_netpoll_ready(list, pd, mode);
+        if (mode)
+            xr_netpoll_ready(list, pd, mode);
     }
     return n;
 }
@@ -98,17 +105,19 @@ static void epoll_np_wakeup(XrNetpoll *np) {
         return;
     char c = 0;
     ssize_t n;
-    do { n = write(np->wakeup_pipe[1], &c, 1); } while (n < 0 && errno == EINTR);
+    do {
+        n = write(np->wakeup_pipe[1], &c, 1);
+    } while (n < 0 && errno == EINTR);
 }
 
 static const XrNetpollOps epoll_ops = {
-    .name        = "epoll",
-    .init        = epoll_np_init,
-    .cleanup     = epoll_np_cleanup,
-    .add_fd      = epoll_np_add_fd,
-    .del_fd      = epoll_np_del_fd,
+    .name = "epoll",
+    .init = epoll_np_init,
+    .cleanup = epoll_np_cleanup,
+    .add_fd = epoll_np_add_fd,
+    .del_fd = epoll_np_del_fd,
     .poll_events = epoll_np_poll_events,
-    .wakeup      = epoll_np_wakeup,
+    .wakeup = epoll_np_wakeup,
 };
 
-#endif // __linux__
+#endif  // __linux__

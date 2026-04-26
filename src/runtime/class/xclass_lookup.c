@@ -23,8 +23,9 @@
 #include "xclass.h"
 #include "xreflect_registry.h"
 
-XrClass* xr_class_lookup_by_name(XrayIsolate *X, const char *class_name) {
-    if (!X || !class_name) return NULL;
+XrClass *xr_class_lookup_by_name(XrayIsolate *X, const char *class_name) {
+    if (!X || !class_name)
+        return NULL;
 
     XrTypeMetadata *meta = xr_registry_find_type(X, class_name);
     return (meta && meta->klass) ? meta->klass : NULL;

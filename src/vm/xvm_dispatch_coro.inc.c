@@ -51,14 +51,12 @@ vmcase(OP_AWAIT) {
         XrValue _aw_tv = base[GETARG_B(i)];
         if (xr_value_is_task(_aw_tv)) {
             XrTask *_aw_task = xr_value_to_task(_aw_tv);
-            uint8_t _aw_st = atomic_load_explicit(
-                &_aw_task->state, memory_order_acquire);
+            uint8_t _aw_st = atomic_load_explicit(&_aw_task->state, memory_order_acquire);
             if (_aw_st == XR_TASK_COMPLETED) {
                 XrValue _aw_res = _aw_task->result;
                 if (!XR_IS_PTR(_aw_res)) {
                     // Immediate value: no deep copy
-                    base[_aw_a] = GETARG_C(i)
-                        ? xr_null() : _aw_res;
+                    base[_aw_a] = GETARG_C(i) ? xr_null() : _aw_res;
                     /* Detach executor only — do NOT recycle.
                      * Task lives on executor's Immix heap;
                      * parent's tasks array still references it.
@@ -102,7 +100,7 @@ vmcase(OP_YIELD) {
      *      This avoids context-switch storms while still ensuring
      *      fairness within a bounded number of iterations.
      */
-    XrCoroutine *current = (XrCoroutine *)VM_CURRENT_CORO;
+    XrCoroutine *current = (XrCoroutine *) VM_CURRENT_CORO;
     if (current != NULL) {
         int hint = GETARG_A(i);
         if (hint == 0) {
@@ -124,13 +122,13 @@ vmcase(OP_YIELD) {
 vmcase(OP_CANCELLED) {
     // R[A] = cancelled() - check if cancelled
     int a = GETARG_A(i);
-    R(a) = xr_bool(false); // Default: not cancelled
+    R(a) = xr_bool(false);  // Default: not cancelled
     vmbreak;
 }
 
 vmcase(OP_LOCK_THREAD) {
     // Coro.lockThread() - pin coro to current worker
-    XrCoroutine *coro = (XrCoroutine *)VM_CURRENT_CORO;
+    XrCoroutine *coro = (XrCoroutine *) VM_CURRENT_CORO;
     if (coro) {
         XrCoroExt *lext = xr_coro_ensure_ext(coro);
         if (lext) {
@@ -146,7 +144,7 @@ vmcase(OP_LOCK_THREAD) {
 
 vmcase(OP_UNLOCK_THREAD) {
     // Coro.unlockThread() - unpin coro
-    XrCoroutine *coro = (XrCoroutine *)VM_CURRENT_CORO;
+    XrCoroutine *coro = (XrCoroutine *) VM_CURRENT_CORO;
     if (coro && coro->ext) {
         int old_count = atomic_fetch_sub(&coro->ext->lock_count, 1);
         if (old_count <= 1) {
@@ -163,7 +161,7 @@ vmcase(OP_SET_LOCAL) {
     int b = GETARG_B(i);
     XrValue key = R(a);
     XrValue value = R(b);
-    XrCoroutine *current = (XrCoroutine *)VM_CURRENT_CORO;
+    XrCoroutine *current = (XrCoroutine *) VM_CURRENT_CORO;
     if (!current) {
         if (!isolate->vm.main_locals) {
             isolate->vm.main_locals = xr_map_new(VM_CURRENT_CORO);
@@ -186,7 +184,7 @@ vmcase(OP_GET_LOCAL) {
     int a = GETARG_A(i);
     int b = GETARG_B(i);
     XrValue key = R(b);
-    XrCoroutine *current = (XrCoroutine *)VM_CURRENT_CORO;
+    XrCoroutine *current = (XrCoroutine *) VM_CURRENT_CORO;
     XrMap *locals = NULL;
     if (!current) {
         locals = isolate->vm.main_locals;
@@ -221,14 +219,14 @@ vmcase(OP_SET_PRIORITY) {
     }
     XrCoroPriority new_prio = CORO_PRIORITY_NORMAL;
     if (XR_IS_INT(prio_val)) {
-        int prio_int = (int)XR_TO_INT(prio_val);
+        int prio_int = (int) XR_TO_INT(prio_val);
         if (prio_int >= 0 && prio_int < XR_CORO_PRIORITY_COUNT) {
-            new_prio = (XrCoroPriority)prio_int;
+            new_prio = (XrCoroPriority) prio_int;
         }
     }
     int old_prio = xr_coro_get_priority(xr_coro_flags_load(coro));
-    if (xr_coro_flags_has(coro, XR_CORO_FLG_READY) && old_prio != (int)new_prio) {
-        XrCoroState *sched = (XrCoroState *)isolate->vm.coro_state;
+    if (xr_coro_flags_has(coro, XR_CORO_FLG_READY) && old_prio != (int) new_prio) {
+        XrCoroState *sched = (XrCoroState *) isolate->vm.coro_state;
         if (sched) {
             xr_sched_remove(sched, coro);
             uint32_t old_flags = xr_coro_flags_load(coro);

@@ -30,24 +30,31 @@ static char *get_toml_str(XrTomlValue *tbl, const char *key) {
 
 /* ========== Project Loading ========== */
 
-XrProject* xr_project_load(XrayIsolate *isolate, const char *project_root) {
-    (void)isolate; /* no longer needed — base xtoml parser is pure C */
-    if (!project_root) return NULL;
+XrProject *xr_project_load(XrayIsolate *isolate, const char *project_root) {
+    (void) isolate; /* no longer needed — base xtoml parser is pure C */
+    if (!project_root)
+        return NULL;
 
     char *toml_path = xr_path_join(project_root, "xray.toml");
-    if (!toml_path) return NULL;
+    if (!toml_path)
+        return NULL;
 
     size_t content_size;
     char *content = xr_file_read_all(toml_path, "r", &content_size);
     xr_free(toml_path);
-    if (!content) return NULL;
+    if (!content)
+        return NULL;
 
     XrTomlValue *root = xtoml_parse(content, content_size);
     xr_free(content);
-    if (!root) return NULL;
+    if (!root)
+        return NULL;
 
-    XrProject *project = (XrProject*)xr_calloc(1, sizeof(XrProject));
-    if (!project) { xtoml_free(root); return NULL; }
+    XrProject *project = (XrProject *) xr_calloc(1, sizeof(XrProject));
+    if (!project) {
+        xtoml_free(root);
+        return NULL;
+    }
 
     project->root = xr_strdup(project_root);
     project->dependencies = xr_hashmap_new();
@@ -56,7 +63,8 @@ XrProject* xr_project_load(XrayIsolate *isolate, const char *project_root) {
     XrTomlValue *section = xtoml_get_table(root, "project");
     if (!section) {
         section = xtoml_get_table(root, "package");
-        if (section) project->is_package = true;
+        if (section)
+            project->is_package = true;
     }
 
     if (section) {
@@ -76,8 +84,9 @@ XrProject* xr_project_load(XrayIsolate *isolate, const char *project_root) {
             XrTomlMember *m = &deps->as.table.members[i];
             XR_DCHECK(m->key != NULL, "TOML member key must not be NULL");
 
-            XrDependency *dep = (XrDependency*)xr_calloc(1, sizeof(XrDependency));
-            if (!dep) continue;
+            XrDependency *dep = (XrDependency *) xr_calloc(1, sizeof(XrDependency));
+            if (!dep)
+                continue;
             dep->name = xr_strdup(m->key);
 
             if (m->value->type == XR_TOML_STRING) {
@@ -104,7 +113,8 @@ XrProject* xr_project_load(XrayIsolate *isolate, const char *project_root) {
  * Free a dependency structure.
  */
 static void free_dependency(XrDependency *dep) {
-    if (!dep) return;
+    if (!dep)
+        return;
     xr_free(dep->name);
     xr_free(dep->version);
     xr_free(dep->path);
@@ -112,7 +122,8 @@ static void free_dependency(XrDependency *dep) {
 }
 
 void xr_project_free(XrProject *project) {
-    if (!project) return;
+    if (!project)
+        return;
 
     xr_free(project->root);
     xr_free(project->name);
@@ -126,7 +137,7 @@ void xr_project_free(XrProject *project) {
         XrHashMap *map = project->dependencies;
         for (uint32_t i = 0; i < map->capacity; i++) {
             if (map->entries[i].key != NULL) {
-                free_dependency((XrDependency*)map->entries[i].value);
+                free_dependency((XrDependency *) map->entries[i].value);
             }
         }
         xr_hashmap_free(project->dependencies);
@@ -137,12 +148,12 @@ void xr_project_free(XrProject *project) {
 
 /* ========== Local Dependency Resolution ========== */
 
-char* xr_resolve_local_dependency(XrProject *project, const char *package_name) {
+char *xr_resolve_local_dependency(XrProject *project, const char *package_name) {
     if (!project || !package_name || !project->dependencies) {
         return NULL;
     }
 
-    XrDependency *dep = (XrDependency*)xr_hashmap_get(project->dependencies, package_name);
+    XrDependency *dep = (XrDependency *) xr_hashmap_get(project->dependencies, package_name);
     if (!dep || !dep->is_local || !dep->path) {
         return NULL;
     }
@@ -159,10 +170,11 @@ char* xr_resolve_local_dependency(XrProject *project, const char *package_name) 
 /*
  * Internal recursive file collector.
  */
-static bool collect_files_recursive(const char *dir_path, char ***files,
-                                     int *count, int *capacity) {
+static bool collect_files_recursive(const char *dir_path, char ***files, int *count,
+                                    int *capacity) {
     DIR *dir = opendir(dir_path);
-    if (!dir) return false;
+    if (!dir)
+        return false;
 
     struct dirent *entry;
     while ((entry = readdir(dir)) != NULL) {
@@ -172,7 +184,8 @@ static bool collect_files_recursive(const char *dir_path, char ***files,
         }
 
         char *full_path = xr_path_join(dir_path, entry->d_name);
-        if (!full_path) continue;
+        if (!full_path)
+            continue;
 
         struct stat st;
         if (stat(full_path, &st) != 0) {
@@ -191,7 +204,7 @@ static bool collect_files_recursive(const char *dir_path, char ***files,
                 // Expand array if needed
                 if (*count >= *capacity) {
                     int new_cap = *capacity * 2;
-                    char **new_files = (char**)xr_realloc(*files, sizeof(char*) * new_cap);
+                    char **new_files = (char **) xr_realloc(*files, sizeof(char *) * new_cap);
                     if (!new_files) {
                         xr_free(full_path);
                         closedir(dir);
@@ -215,20 +228,23 @@ static bool collect_files_recursive(const char *dir_path, char ***files,
 }
 
 bool xr_project_collect_files(const char *dir_path, char ***files, int *count) {
-    if (!dir_path || !files || !count) return false;
+    if (!dir_path || !files || !count)
+        return false;
 
     *files = NULL;
     *count = 0;
 
     int capacity = 16;
-    *files = (char**)xr_malloc(sizeof(char*) * capacity);
-    if (!*files) return false;
+    *files = (char **) xr_malloc(sizeof(char *) * capacity);
+    if (!*files)
+        return false;
 
     return collect_files_recursive(dir_path, files, count, &capacity);
 }
 
 void xr_project_free_files(char **files, int count) {
-    if (!files) return;
+    if (!files)
+        return;
 
     for (int i = 0; i < count; i++) {
         xr_free(files[i]);

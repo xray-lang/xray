@@ -17,7 +17,7 @@
 #include "../base/xchecks.h"
 #include "xcoroutine.h"
 #include "xworker.h"
-#include "../runtime/xvm_call.h"         // XrVMResult
+#include "../runtime/xvm_call.h"  // XrVMResult
 #include "xnetpoll.h"
 #include "../runtime/xray_debug.h"
 #include "xresume.h"
@@ -32,7 +32,7 @@
 
 // Get current coroutine via per-worker TLS (thread-safe for multi-worker)
 static inline XrCoroutine *get_current_coro(XrayIsolate *X) {
-    (void)X;
+    (void) X;
     XrWorker *worker = xr_current_worker();
     if (worker && worker->m && worker->m->current_coro)
         return worker->m->current_coro;
@@ -43,13 +43,13 @@ static inline XrCoroutine *get_current_coro(XrayIsolate *X) {
 static int64_t get_time_us(void) {
     struct timespec ts;
     clock_gettime(CLOCK_MONOTONIC, &ts);
-    return (int64_t)ts.tv_sec * 1000000 + ts.tv_nsec / 1000;
+    return (int64_t) ts.tv_sec * 1000000 + ts.tv_nsec / 1000;
 }
 
 // yield_setup_frame - Set frame state for yield.
 // Replaces memset with targeted field writes (Opt2: ~48B memset eliminated).
 static inline XrBcCallFrame *yield_setup_frame(XrayIsolate *X, XrCoroutine *coro,
-                                                XrContinuation cont, void *user_data) {
+                                               XrContinuation cont, void *user_data) {
     XrBcCallFrame *frames;
     int frame_count;
 
@@ -73,7 +73,7 @@ static inline XrBcCallFrame *yield_setup_frame(XrayIsolate *X, XrCoroutine *coro
 
     // Targeted field writes instead of memset(&frame->u, 0, sizeof(frame->u)).
     // Only write the fields we actually use — saves ~48B zero-fill per yield.
-    frame->u.c.continuation = (void*)cont;
+    frame->u.c.continuation = (void *) cont;
     frame->u.c.continuation_ctx = user_data;
     frame->u.c.has_cfunc_result = false;
     frame->u.c.cfunc_result = xr_null();
@@ -111,17 +111,17 @@ static inline XrBcCallFrame *yield_setup_frame(XrayIsolate *X, XrCoroutine *coro
 //
 // Returns: XR_CFUNC_BLOCKED
 XrCFuncResult xr_yield_for_io(XrayIsolate *X, int fd, int events, int64_t timeout_ms,
-                               XrContinuation cont, void *user_data,
-                               XrValue *result) {
+                              XrContinuation cont, void *user_data, XrValue *result) {
     XR_DCHECK(X != NULL, "yield_for_io: NULL isolate");
     XrCoroutine *coro = get_current_coro(X);
-    if (!coro) return XR_CFUNC_ERROR;
+    if (!coro)
+        return XR_CFUNC_ERROR;
 
     // Register with netpoll (single-direction, Go runtime netpoll design).
     // ensure_ext / yield_info writes are DEFERRED to the actual-yield path
     // so the IO-ready fast path pays zero overhead (Opt6).
     if (fd >= 0) {
-        XrRuntime *runtime = (XrRuntime *)X->vm.runtime;
+        XrRuntime *runtime = (XrRuntime *) X->vm.runtime;
         if (runtime) {
             XrPollDesc *pd = xr_netpoll_open(&runtime->netpoll, fd);
             if (pd) {
@@ -145,7 +145,8 @@ XrCFuncResult xr_yield_for_io(XrayIsolate *X, int fd, int events, int64_t timeou
                                 if (coro->jit_try_mode)
                                     return XR_CFUNC_WOULD_BLOCK;
                                 XrBcCallFrame *frame = yield_setup_frame(X, coro, cont, user_data);
-                                if (!frame) return XR_CFUNC_ERROR;
+                                if (!frame)
+                                    return XR_CFUNC_ERROR;
                                 return XR_CFUNC_YIELD;
                             }
                             return cont(X, XR_RESUME_IO_READY, user_data, result);
@@ -159,17 +160,19 @@ XrCFuncResult xr_yield_for_io(XrayIsolate *X, int fd, int events, int64_t timeou
                             return XR_CFUNC_WOULD_BLOCK;
                         // Actually yielding — set up frame now
                         XrBcCallFrame *frame = yield_setup_frame(X, coro, cont, user_data);
-                        if (!frame) return XR_CFUNC_ERROR;
+                        if (!frame)
+                            return XR_CFUNC_ERROR;
 
                         // CAS NIL → coro (prevents overwriting concurrent READY)
-                        if (atomic_compare_exchange_strong(gpp, &old, (uintptr_t)coro)) {
+                        if (atomic_compare_exchange_strong(gpp, &old, (uintptr_t) coro)) {
                             atomic_fetch_add(&runtime->netpoll.waiters, 1);
                             if (timeout_ms > 0) {
                                 int64_t deadline_ns = get_time_us() * 1000 + timeout_ms * 1000000LL;
                                 int mode = (events & XR_WAIT_READ) ? XR_POLL_READ : XR_POLL_WRITE;
                                 XrWorker *worker = xr_current_worker();
                                 XrTimerWheel *tw = worker ? worker->p.timer_wheel : NULL;
-                                xr_netpoll_set_deadline(&runtime->netpoll, pd, deadline_ns, mode, tw);
+                                xr_netpoll_set_deadline(&runtime->netpoll, pd, deadline_ns, mode,
+                                                        tw);
                             }
                             return XR_CFUNC_BLOCKED;
                         }
@@ -188,7 +191,8 @@ XrCFuncResult xr_yield_for_io(XrayIsolate *X, int fd, int events, int64_t timeou
             return XR_CFUNC_WOULD_BLOCK;
         // Pure timeout (no fd): set up frame + register timer in timer wheel
         XrBcCallFrame *frame = yield_setup_frame(X, coro, cont, user_data);
-        if (!frame) return XR_CFUNC_ERROR;
+        if (!frame)
+            return XR_CFUNC_ERROR;
         XrWorker *worker = xr_current_worker();
         if (worker) {
             xr_worker_add_sleep_timer(worker, coro, timeout_ms);
@@ -201,9 +205,8 @@ XrCFuncResult xr_yield_for_io(XrayIsolate *X, int fd, int events, int64_t timeou
 // xr_yield_for_timeout - Wait for timeout and yield (convenience function)
 //
 // Equivalent to xr_yield_for_io(X, -1, 0, timeout_ms, cont, user_data)
-XrCFuncResult xr_yield_for_timeout(XrayIsolate *X, int64_t timeout_ms,
-                                    XrContinuation cont, void *user_data,
-                                    XrValue *result) {
+XrCFuncResult xr_yield_for_timeout(XrayIsolate *X, int64_t timeout_ms, XrContinuation cont,
+                                   void *user_data, XrValue *result) {
     return xr_yield_for_io(X, -1, 0, timeout_ms, cont, user_data, result);
 }
 
@@ -262,14 +265,8 @@ bool xr_coro_has_continuation(XrCoroutine *coro) {
 //
 // Previously this lived in its own 131-line xyield_closure.c — folded in
 // here in this file; it shares get_current_coro with the wait helpers above.
-XrCFuncResult xr_yield_call_closure(
-    XrayIsolate *X,
-    XrClosure *closure,
-    XrValue *args, int nargs,
-    XrContinuation on_complete,
-    void *user_ctx,
-    XrValue *result)
-{
+XrCFuncResult xr_yield_call_closure(XrayIsolate *X, XrClosure *closure, XrValue *args, int nargs,
+                                    XrContinuation on_complete, void *user_ctx, XrValue *result) {
     XR_DCHECK(X != NULL, "yield_call_closure: NULL isolate");
     XR_DCHECK(closure != NULL, "yield_call_closure: NULL closure");
     XR_DCHECK(closure->proto != NULL, "yield_call_closure: NULL proto");
@@ -277,7 +274,8 @@ XrCFuncResult xr_yield_call_closure(
 
     XrCoroutine *coro = get_current_coro(X);
     XR_DCHECK(coro != NULL, "yield_call_closure: no current coroutine");
-    if (!coro) return XR_CFUNC_ERROR;
+    if (!coro)
+        return XR_CFUNC_ERROR;
 
     XrVMContext *ctx = &coro->vm_ctx;
     XrProto *proto = closure->proto;
@@ -292,16 +290,18 @@ XrCFuncResult xr_yield_call_closure(
     if (caller->closure && caller->closure->proto) {
         closure_base_offset = caller->base_offset + caller->closure->proto->maxstacksize;
     } else {
-        closure_base_offset = (int)(ctx->stack_top - ctx->stack);
+        closure_base_offset = (int) (ctx->stack_top - ctx->stack);
     }
 
     // Ensure stack and frame capacity
     int needed = closure_base_offset + proto->maxstacksize + 1;
     if (needed > ctx->stack_capacity || ctx->frame_count + 1 >= ctx->frame_capacity) {
         int extra = needed - ctx->stack_capacity + 64;
-        if (extra < 64) extra = 64;
+        if (extra < 64)
+            extra = 64;
         bool ok = xr_coro_grow_stack(coro, extra);
-        if (!ok) return XR_CFUNC_ERROR;
+        if (!ok)
+            return XR_CFUNC_ERROR;
         // Re-read after potential realloc
         caller = &ctx->frames[ctx->frame_count - 1];
     }
@@ -314,10 +314,10 @@ XrCFuncResult xr_yield_call_closure(
 
     // Mark caller frame: continuation will be called when closure returns
     caller->call_status |= XR_CALL_CLOSURE_PENDING | XR_CALL_HAS_CONT | XR_CALL_C;
-    caller->u.c.continuation = (void *)on_complete;
+    caller->u.c.continuation = (void *) on_complete;
     caller->u.c.continuation_ctx = user_ctx;
     caller->u.c.has_cfunc_result = false;
-    caller->u.c.result_slot = (int16_t)(return_slot_offset - caller->base_offset);
+    caller->u.c.result_slot = (int16_t) (return_slot_offset - caller->base_offset);
 
     // Push closure call frame
     XrBcCallFrame *frame = &ctx->frames[ctx->frame_count++];
@@ -339,7 +339,7 @@ XrCFuncResult xr_yield_call_closure(
     // Update stack top
     ctx->stack_top = ctx->stack + closure_base_offset + proto->maxstacksize;
 
-    (void)result;
+    (void) result;
     return XR_CFUNC_CALL_CLOSURE;
 }
 

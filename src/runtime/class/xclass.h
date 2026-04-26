@@ -19,7 +19,6 @@
 #ifndef XCLASS_H
 #define XCLASS_H
 
-
 #include "../value/xvalue.h"
 #include "../value/xtype.h"
 #include "../../base/xhash.h"
@@ -39,18 +38,18 @@ typedef struct XrReflectCache XrReflectCache;
 // Field descriptor (determined at compile time, immutable)
 typedef struct XrFieldDescriptor {
     const char *name;
-    const char *type_name;   // Declared type name (NULL = untyped), for reflection
+    const char *type_name;  // Declared type name (NULL = untyped), for reflection
     int symbol;
-    uint16_t offset;         // Byte offset in instance
+    uint16_t offset;  // Byte offset in instance
     uint16_t flags;
-    int16_t static_slot;     // Pre-computed static slot index (-1 if not static)
+    int16_t static_slot;  // Pre-computed static slot index (-1 if not static)
 } XrFieldDescriptor;
 
 // Field flags
-#define XR_FIELD_PRIVATE    (1 << 0)
-#define XR_FIELD_PROTECTED  (1 << 1)
-#define XR_FIELD_STATIC     (1 << 2)
-#define XR_FIELD_FINAL      (1 << 3)
+#define XR_FIELD_PRIVATE (1 << 0)
+#define XR_FIELD_PROTECTED (1 << 1)
+#define XR_FIELD_STATIC (1 << 2)
+#define XR_FIELD_FINAL (1 << 3)
 
 /* ========== Method Flags ========== */
 
@@ -91,7 +90,7 @@ struct XrClass {
     // target's depth fits in this window (depth < 8 is by far the
     // common case).
     struct XrClass *primary_supers[8];
-    uint8_t depth;                     // Inheritance depth (Object=0)
+    uint8_t depth;  // Inheritance depth (Object=0)
 
     // Secondary supers, populated only when depth >= 8. Open-addressing
     // hash table keyed by the ancestor XrClass* identity; capacity is a
@@ -107,16 +106,16 @@ struct XrClass {
     /* === Field Definition === */
     XrFieldDescriptor *fields;
     XrValue *field_default_values;
-    uint16_t field_count;              // Total fields (including inherited)
-    uint16_t own_field_count;          // Own fields (excluding inherited)
-    uint16_t instance_size;            // Instance size in bytes
+    uint16_t field_count;      // Total fields (including inherited)
+    uint16_t own_field_count;  // Own fields (excluding inherited)
+    uint16_t instance_size;    // Instance size in bytes
 
     // Field lookup: Symbol -> index
     int *field_symbol_to_index;
     int field_map_capacity;
 
     /* === Method Table === */
-    XrMethod *methods;                 // All methods (instance + static)
+    XrMethod *methods;  // All methods (instance + static)
     uint16_t method_count;
     uint16_t static_method_count;
 
@@ -127,7 +126,7 @@ struct XrClass {
     /* === VTable === */
     XrMethod **vtable;
     uint16_t vtable_size;
-    uint16_t own_method_start;         // Start index of own methods in vtable
+    uint16_t own_method_start;  // Start index of own methods in vtable
 
     /* === Static Fields === */
     XrValue *static_field_values;
@@ -142,7 +141,7 @@ struct XrClass {
     uint8_t itable_size;
 
     /* === Abstract Methods === */
-    int *abstract_methods;             // Abstract method Symbol list
+    int *abstract_methods;  // Abstract method Symbol list
     uint8_t abstract_method_count;
 
     /* === Flags === */
@@ -165,61 +164,63 @@ struct XrClass {
 };
 
 // Class flags
-#define XR_CLASS_BUILTIN      (1 << 0)
-#define XR_CLASS_FINAL        (1 << 1)
-#define XR_CLASS_ABSTRACT     (1 << 2)
-#define XR_CLASS_INTERFACE    (1 << 3)
-#define XR_CLASS_INITIALIZED  (1 << 4)  // Static constructor executed
-#define XR_CLASS_VALUE_TYPE   (1 << 5)  // Struct: value type with copy semantics
-#define XR_CLASS_FLAT_COPYABLE (1 << 6) // All non-pointer fields are primitive (memcpy safe)
-#define XR_CLASS_HAS_SUBCLASSES (1 << 7) // At least one subclass exists (CHA devirtualization)
+#define XR_CLASS_BUILTIN (1 << 0)
+#define XR_CLASS_FINAL (1 << 1)
+#define XR_CLASS_ABSTRACT (1 << 2)
+#define XR_CLASS_INTERFACE (1 << 3)
+#define XR_CLASS_INITIALIZED (1 << 4)     // Static constructor executed
+#define XR_CLASS_VALUE_TYPE (1 << 5)      // Struct: value type with copy semantics
+#define XR_CLASS_FLAT_COPYABLE (1 << 6)   // All non-pointer fields are primitive (memcpy safe)
+#define XR_CLASS_HAS_SUBCLASSES (1 << 7)  // At least one subclass exists (CHA devirtualization)
 
 /* ========== Operator Overload Flags ========== */
 
 // Fast check for operator overload, avoiding unnecessary method lookup
 
 // Arithmetic operators
-#define XR_OP_ADD_FLAG      (1U << 0)   // +
-#define XR_OP_SUB_FLAG      (1U << 1)   // -
-#define XR_OP_MUL_FLAG      (1U << 2)   // *
-#define XR_OP_DIV_FLAG      (1U << 3)   // /
-#define XR_OP_MOD_FLAG      (1U << 4)   // %
+#define XR_OP_ADD_FLAG (1U << 0)  // +
+#define XR_OP_SUB_FLAG (1U << 1)  // -
+#define XR_OP_MUL_FLAG (1U << 2)  // *
+#define XR_OP_DIV_FLAG (1U << 3)  // /
+#define XR_OP_MOD_FLAG (1U << 4)  // %
 
 // Comparison operators
-#define XR_OP_EQ_FLAG       (1U << 5)   // ==
-#define XR_OP_NE_FLAG       (1U << 6)   // !=
-#define XR_OP_LT_FLAG       (1U << 7)   // <
-#define XR_OP_LE_FLAG       (1U << 8)   // <=
-#define XR_OP_GT_FLAG       (1U << 9)   // >
-#define XR_OP_GE_FLAG       (1U << 10)  // >=
+#define XR_OP_EQ_FLAG (1U << 5)   // ==
+#define XR_OP_NE_FLAG (1U << 6)   // !=
+#define XR_OP_LT_FLAG (1U << 7)   // <
+#define XR_OP_LE_FLAG (1U << 8)   // <=
+#define XR_OP_GT_FLAG (1U << 9)   // >
+#define XR_OP_GE_FLAG (1U << 10)  // >=
 
 // Bitwise operators
-#define XR_OP_BAND_FLAG     (1U << 11)  // &
-#define XR_OP_BOR_FLAG      (1U << 12)  // |
-#define XR_OP_BXOR_FLAG     (1U << 13)  // ^
-#define XR_OP_BNOT_FLAG     (1U << 14)  // ~
-#define XR_OP_LSHIFT_FLAG   (1U << 15)  // <<
-#define XR_OP_RSHIFT_FLAG   (1U << 16)  // >>
+#define XR_OP_BAND_FLAG (1U << 11)    // &
+#define XR_OP_BOR_FLAG (1U << 12)     // |
+#define XR_OP_BXOR_FLAG (1U << 13)    // ^
+#define XR_OP_BNOT_FLAG (1U << 14)    // ~
+#define XR_OP_LSHIFT_FLAG (1U << 15)  // <<
+#define XR_OP_RSHIFT_FLAG (1U << 16)  // >>
 
 // Special operators
-#define XR_OP_INDEX_FLAG     (1U << 17)  // []
+#define XR_OP_INDEX_FLAG (1U << 17)      // []
 #define XR_OP_INDEX_SET_FLAG (1U << 18)  // []=
-#define XR_OP_INC_FLAG       (1U << 19)  // ++
-#define XR_OP_DEC_FLAG       (1U << 20)  // --
-#define XR_OP_NOT_FLAG       (1U << 21)  // !
+#define XR_OP_INC_FLAG (1U << 19)        // ++
+#define XR_OP_DEC_FLAG (1U << 20)        // --
+#define XR_OP_NOT_FLAG (1U << 21)        // !
 
 // Helper macros: operator category combinations
-#define XR_OP_ANY_ARITHMETIC (XR_OP_ADD_FLAG | XR_OP_SUB_FLAG | XR_OP_MUL_FLAG | XR_OP_DIV_FLAG | XR_OP_MOD_FLAG)
-#define XR_OP_ANY_COMPARISON (XR_OP_EQ_FLAG | XR_OP_NE_FLAG | XR_OP_LT_FLAG | XR_OP_LE_FLAG | XR_OP_GT_FLAG | XR_OP_GE_FLAG)
-#define XR_OP_ANY_BITWISE    (XR_OP_BAND_FLAG | XR_OP_BOR_FLAG | XR_OP_BXOR_FLAG | XR_OP_BNOT_FLAG | XR_OP_LSHIFT_FLAG | XR_OP_RSHIFT_FLAG)
+#define XR_OP_ANY_ARITHMETIC                                                                       \
+    (XR_OP_ADD_FLAG | XR_OP_SUB_FLAG | XR_OP_MUL_FLAG | XR_OP_DIV_FLAG | XR_OP_MOD_FLAG)
+#define XR_OP_ANY_COMPARISON                                                                       \
+    (XR_OP_EQ_FLAG | XR_OP_NE_FLAG | XR_OP_LT_FLAG | XR_OP_LE_FLAG | XR_OP_GT_FLAG | XR_OP_GE_FLAG)
+#define XR_OP_ANY_BITWISE                                                                          \
+    (XR_OP_BAND_FLAG | XR_OP_BOR_FLAG | XR_OP_BXOR_FLAG | XR_OP_BNOT_FLAG | XR_OP_LSHIFT_FLAG |    \
+     XR_OP_RSHIFT_FLAG)
 
 // Check if class has specific operator overload
-#define XCLASS_HAS_OP(cls, op_flag) \
-    ((cls) && ((cls)->operator_flags & (op_flag)))
+#define XCLASS_HAS_OP(cls, op_flag) ((cls) && ((cls)->operator_flags & (op_flag)))
 
 // Check if class has any operator overload
-#define XCLASS_HAS_ANY_OP(cls) \
-    ((cls) && ((cls)->operator_flags != 0))
+#define XCLASS_HAS_ANY_OP(cls) ((cls) && ((cls)->operator_flags != 0))
 
 // xr_symbol_to_op_flag and xr_class_compute_operator_flags are
 // build-time helpers; their declarations live in xclass_internal.h.
@@ -240,7 +241,7 @@ static inline uint16_t xr_class_instance_field_count(const XrClass *cls) {
 }
 
 // Returns NULL for invalid index
-XR_FUNC const XrFieldDescriptor* xr_class_get_field(const XrClass *cls, int index);
+XR_FUNC const XrFieldDescriptor *xr_class_get_field(const XrClass *cls, int index);
 
 // Lookup field index by name, returns -1 if not found.
 // Name is resolved via the isolate's symbol table, so the lookup is
@@ -250,12 +251,12 @@ XR_FUNC int xr_class_lookup_field_by_name(XrayIsolate *X, XrClass *cls, const ch
 // Lookup field index by symbol, returns -1 if not found
 XR_FUNC int xr_class_lookup_field(XrClass *cls, int symbol);
 
-static inline const char* xr_class_get_name(XrClass *cls) {
+static inline const char *xr_class_get_name(XrClass *cls) {
     return cls ? cls->name : NULL;
 }
 
 // Lookup method by symbol, returns NULL if not found
-XR_FUNC XrMethod* xr_class_lookup_method(XrClass *cls, int symbol);
+XR_FUNC XrMethod *xr_class_lookup_method(XrClass *cls, int symbol);
 
 // NOTE: No add/set/modify API! All modifications via XrClassBuilder.
 
@@ -265,11 +266,11 @@ XR_FUNC XrMethod* xr_class_lookup_method(XrClass *cls, int symbol);
 // this is a thin wrapper over XrClassBuilder; the returned object is
 // already finalised and immutable. Use the builder directly when members
 // need to be installed.
-XR_FUNC XrClass* xr_class_new(XrayIsolate *X, const char *name, XrClass *super);
+XR_FUNC XrClass *xr_class_new(XrayIsolate *X, const char *name, XrClass *super);
 XR_FUNC void xr_class_mark_abstract(XrClass *cls);
 
 // Get class for any value (instance, class, or primitive)
-XR_FUNC XrClass* xr_value_get_class(XrayIsolate *X, XrValue value);
+XR_FUNC XrClass *xr_value_get_class(XrayIsolate *X, XrValue value);
 
 /* ========== Access Control ========== */
 
@@ -312,14 +313,15 @@ static inline bool xr_class_instanceof(const XrClass *cls, const XrClass *target
         return cls->primary_supers[target->depth] == target;
     }
 
-    if (cls->secondary_supers_hash != NULL
-        && cls->secondary_supers_capacity > 0) {
-        uint32_t mask = (uint32_t)cls->secondary_supers_capacity - 1;
-        uint32_t h = xr_hash_int((int64_t)(uintptr_t)target) & mask;
+    if (cls->secondary_supers_hash != NULL && cls->secondary_supers_capacity > 0) {
+        uint32_t mask = (uint32_t) cls->secondary_supers_capacity - 1;
+        uint32_t h = xr_hash_int((int64_t) (uintptr_t) target) & mask;
         for (;;) {
             struct XrClass *slot = cls->secondary_supers_hash[h];
-            if (slot == target) return true;
-            if (slot == NULL) return false;
+            if (slot == target)
+                return true;
+            if (slot == NULL)
+                return false;
             h = (h + 1) & mask;
         }
     }
@@ -343,7 +345,7 @@ XR_FUNC void xr_class_print(XrClass *cls);
 
 /* ========== Interface Support ========== */
 
-XR_FUNC XrClass* xr_interface_new(XrayIsolate *X, const char *name);
+XR_FUNC XrClass *xr_interface_new(XrayIsolate *X, const char *name);
 
 // Pointer-identity interface check that walks cls's inheritance chain
 // and scans cls->interfaces[] for `iface`. No string compares -- every
@@ -360,4 +362,4 @@ XR_FUNC bool xr_class_can_instantiate(XrClass *cls);
 // deliberately no dedicated "static method count" accessor; the
 // static count is already a struct field on XrClass.
 
-#endif // XCLASS_H
+#endif  // XCLASS_H

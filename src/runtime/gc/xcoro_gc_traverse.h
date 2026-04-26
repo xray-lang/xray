@@ -28,4 +28,4 @@
 
 XR_FUNC void xr_gc_traverse_object(XrCoroGC *gc, XrGCHeader *obj);
 
-#endif // XCORO_GC_TRAVERSE_H
+#endif  // XCORO_GC_TRAVERSE_H

@@ -19,49 +19,48 @@
 #include "../../coro/xworker.h"
 #include "xcoro_gc.h"
 
-XrCoroGC* xr_coro_ensure_gc(struct XrCoroutine *coro) {
+XrCoroGC *xr_coro_ensure_gc(struct XrCoroutine *coro) {
     XR_DCHECK(coro != NULL, "coro_ensure_gc: NULL coro");
-    if (coro->coro_gc) return coro->coro_gc;
+    if (coro->coro_gc)
+        return coro->coro_gc;
     coro->coro_gc = xr_coro_gc_create(coro, NULL);
     return coro->coro_gc;
 }
 
-void* xr_coro_alloc(struct XrCoroutine *coro, size_t size, uint8_t type) {
+void *xr_coro_alloc(struct XrCoroutine *coro, size_t size, uint8_t type) {
     XR_DCHECK(size > 0, "coro_alloc: zero size");
     XR_DCHECK(type < XGC_MAX_TYPES, "coro_alloc: invalid GC type");
-    if (!coro || !coro->coro_gc) return NULL;
+    if (!coro || !coro->coro_gc)
+        return NULL;
     XrGCHeader *obj = xr_coro_gc_newobj(coro->coro_gc, type, size);
     return obj ? (obj + 1) : NULL;
 }
 
-XrCoroGC* xr_coro_get_coro_gc(struct XrCoroutine *coro) {
+XrCoroGC *xr_coro_get_coro_gc(struct XrCoroutine *coro) {
     return coro ? coro->coro_gc : NULL;
 }
 
-XrCoroGC* xr_current_coro_gc(void) {
+XrCoroGC *xr_current_coro_gc(void) {
     XrWorker *w = xr_current_worker();
     if (w && w->m && w->m->current_coro)
         return w->m->current_coro->coro_gc;
     return NULL;
 }
 
-void xr_coro_write_barrier(struct XrCoroutine *coro,
-                           XrGCHeader *parent,
-                           XrGCHeader *child) {
+void xr_coro_write_barrier(struct XrCoroutine *coro, XrGCHeader *parent, XrGCHeader *child) {
     XR_DCHECK(parent != NULL, "write_barrier: NULL parent");
     if (coro && coro->coro_gc && child) {
         xr_coro_gc_barrier(coro->coro_gc, parent, child);
     }
 }
 
-void xr_coro_write_barrier_back(struct XrCoroutine *coro,
-                                XrGCHeader *obj) {
+void xr_coro_write_barrier_back(struct XrCoroutine *coro, XrGCHeader *obj) {
     XR_DCHECK(obj != NULL, "write_barrier_back: NULL obj");
     if (coro && coro->coro_gc) {
         xr_coro_gc_barrierback(coro->coro_gc, obj);
     }
 }
 
-XrayIsolate* xr_coro_get_isolate(struct XrCoroutine *coro) {
+XrayIsolate *xr_coro_get_isolate(struct XrCoroutine *coro) {
     return coro ? coro->isolate : NULL;
 }

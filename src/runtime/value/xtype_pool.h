@@ -29,13 +29,13 @@
 // Type pool structure
 typedef struct XrTypePool {
     bool initialized;
-    
+
     // Per-pool ID counter (no global state)
     uint32_t next_type_id;
-    
+
     // Arena allocator (replaces old realloc-based memory pool)
     XrArena arena;
-    
+
 } XrTypePool;
 
 // Pool lifecycle
@@ -51,4 +51,4 @@ XR_FUNC XrType *xr_pool_alloc_type(XrTypePool *pool, XrTypeKind kind);
 XR_FUNC void *xr_pool_alloc(XrTypePool *pool, size_t size);
 XR_FUNC char *xr_pool_strdup(XrTypePool *pool, const char *str);
 
-#endif // XTYPE_POOL_H
+#endif  // XTYPE_POOL_H

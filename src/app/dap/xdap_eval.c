@@ -39,10 +39,14 @@
 
 // Truthiness check: null, false, 0, 0.0 are falsy; everything else is truthy
 static inline bool eval_is_truthy(XrValue v) {
-    if (XR_IS_NULL(v)) return false;
-    if (XR_IS_BOOL(v)) return XR_TO_BOOL(v);
-    if (XR_IS_INT(v)) return XR_TO_INT(v) != 0;
-    if (XR_IS_FLOAT(v)) return XR_TO_FLOAT(v) != 0.0;
+    if (XR_IS_NULL(v))
+        return false;
+    if (XR_IS_BOOL(v))
+        return XR_TO_BOOL(v);
+    if (XR_IS_INT(v))
+        return XR_TO_INT(v) != 0;
+    if (XR_IS_FLOAT(v))
+        return XR_TO_FLOAT(v) != 0.0;
     return true;
 }
 
@@ -63,9 +67,9 @@ typedef struct {
 static XrValue eval_ast(XrEvalContext *ctx, AstNode *node);
 
 // Lookup local variable by name in a specific frame
-static bool lookup_in_frame(XrBcCallFrame *frame, XrValue *stack,
-                             const char *name, XrValue *out) {
-    if (!frame || !frame->closure || !frame->closure->proto) return false;
+static bool lookup_in_frame(XrBcCallFrame *frame, XrValue *stack, const char *name, XrValue *out) {
+    if (!frame || !frame->closure || !frame->closure->proto)
+        return false;
     XrProto *proto = frame->closure->proto;
 
     int locvar_count = PROTO_LOCVAR_COUNT(proto);
@@ -82,9 +86,11 @@ static bool lookup_in_frame(XrBcCallFrame *frame, XrValue *stack,
 
 // Try to find a variable in closure upvalues by matching enclosing proto's locvar names
 static bool lookup_in_upvalues(XrClosure *closure, const char *name, XrValue *out) {
-    if (!closure || closure->upval_count == 0) return false;
+    if (!closure || closure->upval_count == 0)
+        return false;
     XrProto *proto = closure->proto;
-    if (!proto) return false;
+    if (!proto)
+        return false;
 
     // Walk the proto's upvalue descriptors and match against enclosing locvar names
     int upval_count = PROTO_UPVAL_COUNT(proto);
@@ -104,7 +110,7 @@ static bool lookup_in_upvalues(XrClosure *closure, const char *name, XrValue *ou
                     if (XR_IS_PTR(val)) {
                         XrGCHeader *hdr = XR_TO_PTR(val);
                         if (hdr->type == XR_TCELL) {
-                            val = ((XrCell *)hdr)->value;
+                            val = ((XrCell *) hdr)->value;
                         }
                     }
                     *out = val;
@@ -159,32 +165,32 @@ static XrValue eval_member_access(XrEvalContext *ctx, XrValue obj, const char *n
     if (XR_IS_PTR(obj)) {
         XrGCHeader *hdr = XR_TO_PTR(obj);
         if (hdr->type == XR_TJSON) {
-            XrJson *json = (XrJson *)hdr;
+            XrJson *json = (XrJson *) hdr;
             XrValue result = xr_json_get_by_key(ctx->isolate, json, name);
             return result;
         }
 
         // Class instance
         if (hdr->type == XR_TINSTANCE) {
-            XrInstance *inst = (XrInstance *)hdr;
+            XrInstance *inst = (XrInstance *) hdr;
             return xr_instance_get_field(ctx->isolate, inst, name);
         }
 
         // Array length
         if (hdr->type == XR_TARRAY && strcmp(name, "length") == 0) {
-            XrArray *arr = (XrArray *)hdr;
+            XrArray *arr = (XrArray *) hdr;
             return xr_int(xr_array_size(arr));
         }
 
         // String length
         if (hdr->type == XR_TSTRING && strcmp(name, "length") == 0) {
-            XrString *str = (XrString *)hdr;
+            XrString *str = (XrString *) hdr;
             return xr_int(str->length);
         }
 
         // Map length
         if (hdr->type == XR_TMAP && strcmp(name, "length") == 0) {
-            XrMap *map = (XrMap *)hdr;
+            XrMap *map = (XrMap *) hdr;
             return xr_int(map->count);
         }
     }
@@ -205,13 +211,13 @@ static XrValue eval_index_access(XrEvalContext *ctx, XrValue obj, XrValue idx) {
 
         // Array
         if (hdr->type == XR_TARRAY && XR_IS_INT(idx)) {
-            XrArray *arr = (XrArray *)hdr;
-            return xr_array_get(arr, (int)XR_TO_INT(idx));
+            XrArray *arr = (XrArray *) hdr;
+            return xr_array_get(arr, (int) XR_TO_INT(idx));
         }
 
         // Map
         if (hdr->type == XR_TMAP) {
-            XrMap *map = (XrMap *)hdr;
+            XrMap *map = (XrMap *) hdr;
             bool found = false;
             XrValue result = xr_map_get(map, idx, &found);
             if (found) {
@@ -222,9 +228,9 @@ static XrValue eval_index_access(XrEvalContext *ctx, XrValue obj, XrValue idx) {
 
         // String
         if (hdr->type == XR_TSTRING && XR_IS_INT(idx)) {
-            XrString *str = (XrString *)hdr;
-            int i = (int)XR_TO_INT(idx);
-            if (i >= 0 && i < (int)str->length) {
+            XrString *str = (XrString *) hdr;
+            int i = (int) XR_TO_INT(idx);
+            if (i >= 0 && i < (int) str->length) {
                 char buf[2] = {str->data[i], '\0'};
                 XrString *ch = xr_string_intern(ctx->isolate, buf, 1, 0);
                 return xr_string_value(ch);
@@ -245,46 +251,73 @@ static XrValue eval_binary(XrEvalContext *ctx, AstNodeType op, XrValue left, XrV
         int64_t r = XR_TO_INT(right);
 
         switch (op) {
-            case AST_BINARY_ADD: return xr_int(l + r);
-            case AST_BINARY_SUB: return xr_int(l - r);
-            case AST_BINARY_MUL: return xr_int(l * r);
-            case AST_BINARY_DIV: return r != 0 ? xr_int(l / r) : xr_null();
-            case AST_BINARY_MOD: return r != 0 ? xr_int(l % r) : xr_null();
-            case AST_BINARY_BAND: return xr_int(l & r);
-            case AST_BINARY_BOR: return xr_int(l | r);
-            case AST_BINARY_BXOR: return xr_int(l ^ r);
-            case AST_BINARY_LSHIFT: return (r >= 0 && r < 64) ? xr_int(l << r) : xr_int(0);
-            case AST_BINARY_RSHIFT: return (r >= 0 && r < 64) ? xr_int(l >> r) : xr_int(0);
-            case AST_BINARY_LT: return xr_bool(l < r);
-            case AST_BINARY_LE: return xr_bool(l <= r);
-            case AST_BINARY_GT: return xr_bool(l > r);
-            case AST_BINARY_GE: return xr_bool(l >= r);
+            case AST_BINARY_ADD:
+                return xr_int(l + r);
+            case AST_BINARY_SUB:
+                return xr_int(l - r);
+            case AST_BINARY_MUL:
+                return xr_int(l * r);
+            case AST_BINARY_DIV:
+                return r != 0 ? xr_int(l / r) : xr_null();
+            case AST_BINARY_MOD:
+                return r != 0 ? xr_int(l % r) : xr_null();
+            case AST_BINARY_BAND:
+                return xr_int(l & r);
+            case AST_BINARY_BOR:
+                return xr_int(l | r);
+            case AST_BINARY_BXOR:
+                return xr_int(l ^ r);
+            case AST_BINARY_LSHIFT:
+                return (r >= 0 && r < 64) ? xr_int(l << r) : xr_int(0);
+            case AST_BINARY_RSHIFT:
+                return (r >= 0 && r < 64) ? xr_int(l >> r) : xr_int(0);
+            case AST_BINARY_LT:
+                return xr_bool(l < r);
+            case AST_BINARY_LE:
+                return xr_bool(l <= r);
+            case AST_BINARY_GT:
+                return xr_bool(l > r);
+            case AST_BINARY_GE:
+                return xr_bool(l >= r);
             case AST_BINARY_EQ:
-            case AST_BINARY_EQ_STRICT: return xr_bool(l == r);
+            case AST_BINARY_EQ_STRICT:
+                return xr_bool(l == r);
             case AST_BINARY_NE:
-            case AST_BINARY_NE_STRICT: return xr_bool(l != r);
-            default: break;
+            case AST_BINARY_NE_STRICT:
+                return xr_bool(l != r);
+            default:
+                break;
         }
     }
 
     // Float operations
-    if ((XR_IS_INT(left) || XR_IS_FLOAT(left)) &&
-        (XR_IS_INT(right) || XR_IS_FLOAT(right))) {
-        double l = XR_IS_INT(left) ? (double)XR_TO_INT(left) : XR_TO_FLOAT(left);
-        double r = XR_IS_INT(right) ? (double)XR_TO_INT(right) : XR_TO_FLOAT(right);
+    if ((XR_IS_INT(left) || XR_IS_FLOAT(left)) && (XR_IS_INT(right) || XR_IS_FLOAT(right))) {
+        double l = XR_IS_INT(left) ? (double) XR_TO_INT(left) : XR_TO_FLOAT(left);
+        double r = XR_IS_INT(right) ? (double) XR_TO_INT(right) : XR_TO_FLOAT(right);
 
         switch (op) {
-            case AST_BINARY_ADD: return xr_float(l + r);
-            case AST_BINARY_SUB: return xr_float(l - r);
-            case AST_BINARY_MUL: return xr_float(l * r);
-            case AST_BINARY_DIV: return r != 0.0 ? xr_float(l / r) : xr_null();
-            case AST_BINARY_LT: return xr_bool(l < r);
-            case AST_BINARY_LE: return xr_bool(l <= r);
-            case AST_BINARY_GT: return xr_bool(l > r);
-            case AST_BINARY_GE: return xr_bool(l >= r);
-            case AST_BINARY_EQ: return xr_bool(l == r);
-            case AST_BINARY_NE: return xr_bool(l != r);
-            default: break;
+            case AST_BINARY_ADD:
+                return xr_float(l + r);
+            case AST_BINARY_SUB:
+                return xr_float(l - r);
+            case AST_BINARY_MUL:
+                return xr_float(l * r);
+            case AST_BINARY_DIV:
+                return r != 0.0 ? xr_float(l / r) : xr_null();
+            case AST_BINARY_LT:
+                return xr_bool(l < r);
+            case AST_BINARY_LE:
+                return xr_bool(l <= r);
+            case AST_BINARY_GT:
+                return xr_bool(l > r);
+            case AST_BINARY_GE:
+                return xr_bool(l >= r);
+            case AST_BINARY_EQ:
+                return xr_bool(l == r);
+            case AST_BINARY_NE:
+                return xr_bool(l != r);
+            default:
+                break;
         }
     }
 
@@ -293,7 +326,7 @@ static XrValue eval_binary(XrEvalContext *ctx, AstNodeType op, XrValue left, XrV
         XrString *ls = XR_TO_STRING(left);
         XrString *rs = XR_TO_STRING(right);
         size_t new_len = ls->length + rs->length;
-        char *buf = (char *)xr_malloc(new_len + 1);
+        char *buf = (char *) xr_malloc(new_len + 1);
         memcpy(buf, ls->data, ls->length);
         memcpy(buf + ls->length, rs->data, rs->length);
         buf[new_len] = '\0';
@@ -318,13 +351,16 @@ static XrValue eval_binary(XrEvalContext *ctx, AstNodeType op, XrValue left, XrV
 static XrValue eval_unary(XrEvalContext *ctx, AstNodeType op, XrValue operand) {
     switch (op) {
         case AST_UNARY_NEG:
-            if (XR_IS_INT(operand)) return xr_int(-XR_TO_INT(operand));
-            if (XR_IS_FLOAT(operand)) return xr_float(-XR_TO_FLOAT(operand));
+            if (XR_IS_INT(operand))
+                return xr_int(-XR_TO_INT(operand));
+            if (XR_IS_FLOAT(operand))
+                return xr_float(-XR_TO_FLOAT(operand));
             break;
         case AST_UNARY_NOT:
             return xr_bool(!eval_is_truthy(operand));
         case AST_UNARY_BNOT:
-            if (XR_IS_INT(operand)) return xr_int(~XR_TO_INT(operand));
+            if (XR_IS_INT(operand))
+                return xr_int(~XR_TO_INT(operand));
             break;
         default:
             break;
@@ -335,7 +371,8 @@ static XrValue eval_unary(XrEvalContext *ctx, AstNodeType op, XrValue operand) {
 
 // Main AST evaluation function
 static XrValue eval_ast(XrEvalContext *ctx, AstNode *node) {
-    if (!node || ctx->error) return xr_null();
+    if (!node || ctx->error)
+        return xr_null();
 
     switch (node->type) {
         // Literals
@@ -366,16 +403,19 @@ static XrValue eval_ast(XrEvalContext *ctx, AstNode *node) {
         // Member access
         case AST_MEMBER_ACCESS: {
             XrValue obj = eval_ast(ctx, node->as.member_access.object);
-            if (ctx->error) return xr_null();
+            if (ctx->error)
+                return xr_null();
             return eval_member_access(ctx, obj, node->as.member_access.name);
         }
 
         // Index access
         case AST_INDEX_GET: {
             XrValue obj = eval_ast(ctx, node->as.index_get.array);
-            if (ctx->error) return xr_null();
+            if (ctx->error)
+                return xr_null();
             XrValue idx = eval_ast(ctx, node->as.index_get.index);
-            if (ctx->error) return xr_null();
+            if (ctx->error)
+                return xr_null();
             return eval_index_access(ctx, obj, idx);
         }
 
@@ -401,9 +441,11 @@ static XrValue eval_ast(XrEvalContext *ctx, AstNode *node) {
         case AST_BINARY_AND:
         case AST_BINARY_OR: {
             XrValue left = eval_ast(ctx, node->as.binary.left);
-            if (ctx->error) return xr_null();
+            if (ctx->error)
+                return xr_null();
             XrValue right = eval_ast(ctx, node->as.binary.right);
-            if (ctx->error) return xr_null();
+            if (ctx->error)
+                return xr_null();
             return eval_binary(ctx, node->type, left, right);
         }
 
@@ -412,14 +454,16 @@ static XrValue eval_ast(XrEvalContext *ctx, AstNode *node) {
         case AST_UNARY_NOT:
         case AST_UNARY_BNOT: {
             XrValue operand = eval_ast(ctx, node->as.unary.operand);
-            if (ctx->error) return xr_null();
+            if (ctx->error)
+                return xr_null();
             return eval_unary(ctx, node->type, operand);
         }
 
         // Ternary
         case AST_TERNARY: {
             XrValue cond = eval_ast(ctx, node->as.ternary.condition);
-            if (ctx->error) return xr_null();
+            if (ctx->error)
+                return xr_null();
             return eval_is_truthy(cond) ? eval_ast(ctx, node->as.ternary.true_expr)
                                         : eval_ast(ctx, node->as.ternary.false_expr);
         }
@@ -427,8 +471,10 @@ static XrValue eval_ast(XrEvalContext *ctx, AstNode *node) {
         // Nullish coalesce
         case AST_NULLISH_COALESCE: {
             XrValue left = eval_ast(ctx, node->as.binary.left);
-            if (ctx->error) return xr_null();
-            if (!XR_IS_NULL(left)) return left;
+            if (ctx->error)
+                return xr_null();
+            if (!XR_IS_NULL(left))
+                return left;
             return eval_ast(ctx, node->as.binary.right);
         }
 
@@ -443,10 +489,11 @@ static XrValue eval_ast(XrEvalContext *ctx, AstNode *node) {
 // ============================================================================
 
 // Internal evaluate function that returns both string and value
-static char *debug_evaluate_internal(XrayIsolate *isolate, const char *expression,
-                                      int frame_idx, XrValue *out_value) {
+static char *debug_evaluate_internal(XrayIsolate *isolate, const char *expression, int frame_idx,
+                                     XrValue *out_value) {
     if (!expression || !isolate) {
-        if (out_value) *out_value = xr_null();
+        if (out_value)
+            *out_value = xr_null();
         return xr_strdup("<error: invalid arguments>");
     }
 
@@ -457,7 +504,8 @@ static char *debug_evaluate_internal(XrayIsolate *isolate, const char *expressio
 
     // Get frame and stack from coroutine or main VM
     XrCoroutine *coro = xr_debug_get_coro(isolate);
-    int frame_count = coro ? coro->vm_ctx.frame_count : xr_isolate_get_vm_state(isolate)->frame_count;
+    int frame_count =
+        coro ? coro->vm_ctx.frame_count : xr_isolate_get_vm_state(isolate)->frame_count;
     XrBcCallFrame *frames = coro ? coro->vm_ctx.frames : xr_isolate_get_vm_state(isolate)->frames;
     XrValue *stack = coro ? coro->vm_ctx.stack : xr_isolate_get_vm_state(isolate)->stack;
 
@@ -475,7 +523,8 @@ static char *debug_evaluate_internal(XrayIsolate *isolate, const char *expressio
     // xr_program_destroy() releases the program and its owning arena.
     AstNode *program = xr_parse_expression_string(isolate, expression, "<eval>");
     if (!program) {
-        if (out_value) *out_value = xr_null();
+        if (out_value)
+            *out_value = xr_null();
         char buf[256];
         snprintf(buf, sizeof(buf), "<parse error: %s>", expression);
         return xr_strdup(buf);
@@ -491,14 +540,16 @@ static char *debug_evaluate_internal(XrayIsolate *isolate, const char *expressio
 
     // Check for evaluation error
     if (ctx.error) {
-        if (out_value) *out_value = xr_null();
+        if (out_value)
+            *out_value = xr_null();
         char buf[512];
         snprintf(buf, sizeof(buf), "<error: %s>", ctx.error);
         xr_free(ctx.error);
         return xr_strdup(buf);
     }
 
-    if (out_value) *out_value = result;
+    if (out_value)
+        *out_value = result;
 
     // Convert result to string
     return xr_value_to_debug_string(isolate, result);
@@ -508,8 +559,8 @@ char *xr_debug_evaluate(XrayIsolate *isolate, const char *expression, int frame_
     return debug_evaluate_internal(isolate, expression, frame_idx, NULL);
 }
 
-char *xr_debug_evaluate_ex(XrayIsolate *isolate, const char *expression,
-                            int frame_idx, int *out_var_ref) {
+char *xr_debug_evaluate_ex(XrayIsolate *isolate, const char *expression, int frame_idx,
+                           int *out_var_ref) {
     XrValue result;
     char *str = debug_evaluate_internal(isolate, expression, frame_idx, &result);
 
@@ -517,8 +568,8 @@ char *xr_debug_evaluate_ex(XrayIsolate *isolate, const char *expression,
         *out_var_ref = 0;
         // Create variablesReference if result is expandable
         if (xr_debug_value_is_expandable(isolate, result)) {
-            *out_var_ref = xr_debug_create_var_ref(isolate,
-                xr_debug_get_ref_type(result), frame_idx, result);
+            *out_var_ref =
+                xr_debug_create_var_ref(isolate, xr_debug_get_ref_type(result), frame_idx, result);
         }
     }
 

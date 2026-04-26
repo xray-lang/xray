@@ -65,14 +65,14 @@
 // Populate the per-isolate err_keys cache on first access and return it.
 // Callers must not free or mutate the returned struct. The cache owns the
 // XrValue handles for the isolate's lifetime.
-static inline XrStdlibErrKeys* xrs_err_keys_get(XrayIsolate *X) {
+static inline XrStdlibErrKeys *xrs_err_keys_get(XrayIsolate *X) {
     XrStdlibCache *c = xr_stdlib_cache_get(X);
     XrStdlibErrKeys *k = &c->err_keys;
     if (!k->ready) {
-        k->type    = xr_string_value(xr_string_intern(X, "type",    4, 0));
-        k->line    = xr_string_value(xr_string_intern(X, "line",    4, 0));
-        k->row     = xr_string_value(xr_string_intern(X, "row",     3, 0));
-        k->column  = xr_string_value(xr_string_intern(X, "column",  6, 0));
+        k->type = xr_string_value(xr_string_intern(X, "type", 4, 0));
+        k->line = xr_string_value(xr_string_intern(X, "line", 4, 0));
+        k->row = xr_string_value(xr_string_intern(X, "row", 3, 0));
+        k->column = xr_string_value(xr_string_intern(X, "column", 6, 0));
         k->message = xr_string_value(xr_string_intern(X, "message", 7, 0));
         k->ready = true;
     }
@@ -91,19 +91,12 @@ static inline XrStdlibErrKeys* xrs_err_keys_get(XrayIsolate *X) {
 //
 // The function never fails; on allocator OOM the underlying xr_map_new /
 // xr_array_push already abort consistently with the rest of stdlib.
-static inline void xrs_error_push(XrayIsolate *X,
-                                  XrArray *errors,
-                                  const char *type_literal,
-                                  int line,
-                                  int row,
-                                  int column,
-                                  const char *msg)
-{
+static inline void xrs_error_push(XrayIsolate *X, XrArray *errors, const char *type_literal,
+                                  int line, int row, int column, const char *msg) {
     XrStdlibErrKeys *keys = xrs_err_keys_get(X);
     XrMap *err = xr_map_new(xr_current_coro(X));
 
-    XrValue v_type = xr_string_value(xr_string_intern(X, type_literal,
-                                                     strlen(type_literal), 0));
+    XrValue v_type = xr_string_value(xr_string_intern(X, type_literal, strlen(type_literal), 0));
     xr_map_set(err, keys->type, v_type);
 
     if (line >= 0) {
@@ -117,8 +110,7 @@ static inline void xrs_error_push(XrayIsolate *X,
     }
 
     if (msg) {
-        XrValue v_msg = xr_string_value(xr_string_intern(X, msg,
-                                                         strlen(msg), 0));
+        XrValue v_msg = xr_string_value(xr_string_intern(X, msg, strlen(msg), 0));
         xr_map_set(err, keys->message, v_msg);
     }
 
@@ -130,34 +122,34 @@ static inline void xrs_error_push(XrayIsolate *X,
 // Read a boolean-typed config field by key. If absent or wrong type, the
 // caller-supplied `*dst` is left untouched (preserving the default that
 // config_init() already stored).
-static inline void xrs_cfg_get_bool(XrayIsolate *X, XrJson *json,
-                                    const char *key, bool *dst)
-{
-    if (!json || !dst) return;
+static inline void xrs_cfg_get_bool(XrayIsolate *X, XrJson *json, const char *key, bool *dst) {
+    if (!json || !dst)
+        return;
     XrValue v = xr_json_get_by_key(X, json, key);
-    if (XR_IS_BOOL(v)) *dst = XR_TO_BOOL(v);
+    if (XR_IS_BOOL(v))
+        *dst = XR_TO_BOOL(v);
 }
 
 // Read an int32-typed config field by key; silently ignores non-int
 // values. Truncates negative sentinel values (e.g. -1) unchanged.
-static inline void xrs_cfg_get_int(XrayIsolate *X, XrJson *json,
-                                   const char *key, int *dst)
-{
-    if (!json || !dst) return;
+static inline void xrs_cfg_get_int(XrayIsolate *X, XrJson *json, const char *key, int *dst) {
+    if (!json || !dst)
+        return;
     XrValue v = xr_json_get_by_key(X, json, key);
-    if (XR_IS_INT(v)) *dst = (int)XR_TO_INT(v);
+    if (XR_IS_INT(v))
+        *dst = (int) XR_TO_INT(v);
 }
 
 // Read a single-char-typed config field (the first byte of the string
 // argument is taken). Empty strings leave *dst unchanged.
-static inline void xrs_cfg_get_char(XrayIsolate *X, XrJson *json,
-                                    const char *key, char *dst)
-{
-    if (!json || !dst) return;
+static inline void xrs_cfg_get_char(XrayIsolate *X, XrJson *json, const char *key, char *dst) {
+    if (!json || !dst)
+        return;
     XrValue v = xr_json_get_by_key(X, json, key);
     if (XR_IS_STRING(v)) {
         XrString *s = XR_TO_STRING(v);
-        if (s->length > 0) *dst = s->data[0];
+        if (s->length > 0)
+            *dst = s->data[0];
     }
 }
 
@@ -166,13 +158,13 @@ static inline void xrs_cfg_get_char(XrayIsolate *X, XrJson *json,
 // source is longer than `dst_cap - 1`, it is truncated. Returns the
 // number of bytes copied (not counting the trailing NUL); 0 means the
 // key was absent or not a string, in which case `dst` is untouched.
-static inline size_t xrs_cfg_get_fixed_str(XrayIsolate *X, XrJson *json,
-                                           const char *key,
-                                           char *dst, size_t dst_cap)
-{
-    if (!json || !dst || dst_cap == 0) return 0;
+static inline size_t xrs_cfg_get_fixed_str(XrayIsolate *X, XrJson *json, const char *key, char *dst,
+                                           size_t dst_cap) {
+    if (!json || !dst || dst_cap == 0)
+        return 0;
     XrValue v = xr_json_get_by_key(X, json, key);
-    if (!XR_IS_STRING(v)) return 0;
+    if (!XR_IS_STRING(v))
+        return 0;
     XrString *s = XR_TO_STRING(v);
     size_t n = s->length < dst_cap - 1 ? s->length : dst_cap - 1;
     memcpy(dst, s->data, n);
@@ -180,4 +172,4 @@ static inline size_t xrs_cfg_get_fixed_str(XrayIsolate *X, XrJson *json,
     return n;
 }
 
-#endif // XR_STDLIB_COMMON_PARSER_H
+#endif  // XR_STDLIB_COMMON_PARSER_H

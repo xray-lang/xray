@@ -30,23 +30,23 @@
 
 // Per-slot liveness entry at a loop header
 typedef struct {
-    uint8_t slot;   // bytecode register index
-    uint8_t tag;    // XR_TAG_* at this point
+    uint8_t slot;  // bytecode register index
+    uint8_t tag;   // XR_TAG_* at this point
 } XrBpLiveSlot;
 
 // Live variable map for a single loop header
 typedef struct {
-    uint16_t     header_pc;                     // bytecode PC of loop header
-    uint8_t      nlive;                         // number of live slots
-    XrBpLiveSlot live[XR_BP_MAX_LOOP_LIVE];     // live slot entries
+    uint16_t header_pc;                      // bytecode PC of loop header
+    uint8_t nlive;                           // number of live slots
+    XrBpLiveSlot live[XR_BP_MAX_LOOP_LIVE];  // live slot entries
 } XrBpLoopInfo;
 
 /* ========== Complete Blueprint ========== */
 
 typedef struct XrBlueprint {
     // Per-loop-header live variable maps (for OSR)
-    XrBpLoopInfo *loops;        // [nloops]
-    uint16_t      nloops;
+    XrBpLoopInfo *loops;  // [nloops]
+    uint16_t nloops;
 } XrBlueprint;
 
 /* ========== API ========== */
@@ -61,4 +61,4 @@ XR_FUNC XrBlueprint *xr_blueprint_generate(struct XrProto *proto);
 // Free Blueprint and all owned memory.
 XR_FUNC void xr_blueprint_free(XrBlueprint *bp);
 
-#endif // XIR_BLUEPRINT_H
+#endif  // XIR_BLUEPRINT_H

@@ -19,42 +19,35 @@
 #include "xemit.h"
 
 // Core instruction formats
-#define EMIT_ABC(ctx, c, op, a, b, cc) \
-    ((void)(ctx), (emit_abc)((c)->emitter, op, a, b, cc))
+#define EMIT_ABC(ctx, c, op, a, b, cc) ((void) (ctx), (emit_abc) ((c)->emitter, op, a, b, cc))
 
-#define EMIT_ABSC(ctx, c, op, a, b, sc) \
-    ((void)(ctx), (emit_abc)((c)->emitter, op, a, b, (uint8_t)((sc) & 0xFF)))
+#define EMIT_ABSC(ctx, c, op, a, b, sc)                                                            \
+    ((void) (ctx), (emit_abc) ((c)->emitter, op, a, b, (uint8_t) ((sc) & 0xFF)))
 
-#define EMIT_ABX(ctx, c, op, a, bx) \
-    ((void)(ctx), (emit_abx)((c)->emitter, op, a, bx))
+#define EMIT_ABX(ctx, c, op, a, bx) ((void) (ctx), (emit_abx) ((c)->emitter, op, a, bx))
 
-#define EMIT_ASBX(ctx, c, op, a, sbx) \
-    ((void)(ctx), (emit_asbx)((c)->emitter, op, a, sbx))
+#define EMIT_ASBX(ctx, c, op, a, sbx) ((void) (ctx), (emit_asbx) ((c)->emitter, op, a, sbx))
 
 // Jump and loop
-#define EMIT_JUMP(ctx, c, op) \
-    ((void)(ctx), (emit_jump)((c)->emitter, op))
+#define EMIT_JUMP(ctx, c, op) ((void) (ctx), (emit_jump) ((c)->emitter, op))
 
-#define EMIT_PATCH_JUMP(ctx, c, offset) \
-    ((void)(ctx), (patch_jump)((c)->emitter, offset, -1))
+#define EMIT_PATCH_JUMP(ctx, c, offset) ((void) (ctx), (patch_jump) ((c)->emitter, offset, -1))
 
-#define EMIT_LOOP(ctx, c, loop_start) \
-    ((void)(ctx), (emit_loop)((c)->emitter, loop_start))
+#define EMIT_LOOP(ctx, c, loop_start) ((void) (ctx), (emit_loop) ((c)->emitter, loop_start))
 
 // Common instructions
-#define EMIT_MOVE(ctx, c, dst, src)        emit_move((c)->emitter, dst, src)
-#define EMIT_LOADNULL(ctx, c, reg)         emit_loadnull((c)->emitter, reg)
-#define EMIT_LOADTRUE(ctx, c, reg)         emit_loadtrue((c)->emitter, reg)
-#define EMIT_LOADFALSE(ctx, c, reg)        emit_loadfalse((c)->emitter, reg)
-#define EMIT_RETURN(ctx, c, reg, n)        emit_return((c)->emitter, reg, n)
+#define EMIT_MOVE(ctx, c, dst, src) emit_move((c)->emitter, dst, src)
+#define EMIT_LOADNULL(ctx, c, reg) emit_loadnull((c)->emitter, reg)
+#define EMIT_LOADTRUE(ctx, c, reg) emit_loadtrue((c)->emitter, reg)
+#define EMIT_LOADFALSE(ctx, c, reg) emit_loadfalse((c)->emitter, reg)
+#define EMIT_RETURN(ctx, c, reg, n) emit_return((c)->emitter, reg, n)
 
 // Record a GC safepoint at the last emitted instruction.
 // Creates liveness bitmap [0, freereg) and records it in the stackmap builder.
 // Called after emitting allocation instructions (OP_NEWARRAY, OP_NEWMAP, etc.).
-#define EMIT_GC_SAFEPOINT(ctx, c) \
-    xr_codegen_record_gc_safepoint(c)
+#define EMIT_GC_SAFEPOINT(ctx, c) xr_codegen_record_gc_safepoint(c)
 
 // Implementation (defined in xcompiler.c)
 XR_FUNC void xr_codegen_record_gc_safepoint(struct XrCompiler *compiler);
 
-#endif // XCOMPILER_EMIT_H
+#endif  // XCOMPILER_EMIT_H

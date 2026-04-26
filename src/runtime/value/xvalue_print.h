@@ -28,4 +28,4 @@ XR_FUNC void xr_value_fprint(FILE *stream, XrValue value);
 
 XR_FUNC void xr_value_dump(XrValue value, int indent);
 
-#endif // XVALUE_PRINT_H
+#endif  // XVALUE_PRINT_H

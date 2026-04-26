@@ -108,11 +108,13 @@ typedef struct XrStdlibCache {
 // Retrieve (and lazily allocate) the per-isolate stdlib cache.
 // Never returns NULL in practice; on allocator OOM it aborts, matching the
 // xmalloc OOM policy used elsewhere by stdlib.
-static inline XrStdlibCache* xr_stdlib_cache_get(XrayIsolate *isolate) {
-    XrStdlibCache *c = (XrStdlibCache *)isolate->stdlib_cache;
-    if (c) return c;
-    c = (XrStdlibCache *)xr_malloc(sizeof(XrStdlibCache));
-    if (!c) return NULL;
+static inline XrStdlibCache *xr_stdlib_cache_get(XrayIsolate *isolate) {
+    XrStdlibCache *c = (XrStdlibCache *) isolate->stdlib_cache;
+    if (c)
+        return c;
+    c = (XrStdlibCache *) xr_malloc(sizeof(XrStdlibCache));
+    if (!c)
+        return NULL;
     memset(c, 0, sizeof(*c));
     isolate->stdlib_cache = c;
     return c;
@@ -121,8 +123,9 @@ static inline XrStdlibCache* xr_stdlib_cache_get(XrayIsolate *isolate) {
 // Release the cache and every lazily-populated object it owns. Safe to call
 // with a NULL isolate or with the cache already freed.
 static inline void xr_stdlib_cache_free(XrayIsolate *isolate) {
-    if (!isolate || !isolate->stdlib_cache) return;
-    XrStdlibCache *c = (XrStdlibCache *)isolate->stdlib_cache;
+    if (!isolate || !isolate->stdlib_cache)
+        return;
+    XrStdlibCache *c = (XrStdlibCache *) isolate->stdlib_cache;
 
     // Tear down the per-isolate log state (async thread, mutex, logger).
     if (c->log_state_cleanup && c->log_state) {
@@ -135,4 +138,4 @@ static inline void xr_stdlib_cache_free(XrayIsolate *isolate) {
     isolate->stdlib_cache = NULL;
 }
 
-#endif // XR_STDLIB_CACHE_H
+#endif  // XR_STDLIB_CACHE_H

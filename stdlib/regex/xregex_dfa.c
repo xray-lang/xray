@@ -22,13 +22,13 @@
 #include <stdlib.h>
 
 // DFA configuration
-#define DFA_CACHE_INIT_SIZE     1024    // initial hash table size
-#define DFA_MEM_BUDGET          (8 * 1024 * 1024)  // 8MB memory budget
-#define DFA_MAX_STATES          10000   // max state count
+#define DFA_CACHE_INIT_SIZE 1024          // initial hash table size
+#define DFA_MEM_BUDGET (8 * 1024 * 1024)  // 8MB memory budget
+#define DFA_MAX_STATES 10000              // max state count
 
 // qsort comparison function
 static int int_compare(const void *a, const void *b) {
-    return (*(const int*)a) - (*(const int*)b);
+    return (*(const int *) a) - (*(const int *) b);
 }
 
 /* ========================================================================
@@ -42,7 +42,8 @@ static uint64_t state_hash(const int *inst, int ninst) {
 
 // Compare if two NFA state sets are identical
 static bool state_equal(const int *a, int na, const int *b, int nb) {
-    if (na != nb) return false;
+    if (na != nb)
+        return false;
     return memcmp(a, b, na * sizeof(int)) == 0;
 }
 
@@ -51,23 +52,24 @@ static bool state_equal(const int *a, int na, const int *b, int nb) {
  * ======================================================================== */
 
 // Create DFA state
-static XrDFAState* dfa_state_new(XrDFA *dfa, const int *inst, int ninst, uint32_t flag) {
-    size_t mem = sizeof(XrDFAState) + ninst * sizeof(int) +
-                 dfa->prog->bytemap_range * sizeof(XrDFAState*);
+static XrDFAState *dfa_state_new(XrDFA *dfa, const int *inst, int ninst, uint32_t flag) {
+    size_t mem =
+        sizeof(XrDFAState) + ninst * sizeof(int) + dfa->prog->bytemap_range * sizeof(XrDFAState *);
 
-    if (dfa->mem_used + (int64_t)mem > dfa->mem_budget) {
+    if (dfa->mem_used + (int64_t) mem > dfa->mem_budget) {
         return NULL;  // memory limit exceeded
     }
 
-    XrDFAState *state = (XrDFAState*)xr_re_alloc(sizeof(XrDFAState));
-    if (!state) return NULL;
+    XrDFAState *state = (XrDFAState *) xr_re_alloc(sizeof(XrDFAState));
+    if (!state)
+        return NULL;
     state->ninst = ninst;
     state->flag = flag;
     state->inst = NULL;
     state->next = NULL;
 
     // Copy NFA state set
-    state->inst = (int*)xr_re_alloc(ninst * sizeof(int));
+    state->inst = (int *) xr_re_alloc(ninst * sizeof(int));
     if (!state->inst) {
         xr_re_free(state);
         return NULL;
@@ -76,13 +78,13 @@ static XrDFAState* dfa_state_new(XrDFA *dfa, const int *inst, int ninst, uint32_
 
     // Allocate transition table (initially all NULL, means not computed)
     int range = dfa->prog->bytemap_range;
-    state->next = (XrDFAState**)xr_re_alloc(range * sizeof(XrDFAState*));
+    state->next = (XrDFAState **) xr_re_alloc(range * sizeof(XrDFAState *));
     if (!state->next) {
         xr_re_free(state->inst);
         xr_re_free(state);
         return NULL;
     }
-    memset(state->next, 0, range * sizeof(XrDFAState*));
+    memset(state->next, 0, range * sizeof(XrDFAState *));
 
     dfa->mem_used += mem;
     return state;
@@ -90,14 +92,15 @@ static XrDFAState* dfa_state_new(XrDFA *dfa, const int *inst, int ninst, uint32_
 
 // Free DFA state
 static void dfa_state_free(XrDFAState *state) {
-    if (!state || state == XR_DFA_DEAD_STATE || state == XR_DFA_FULL_MATCH) return;
+    if (!state || state == XR_DFA_DEAD_STATE || state == XR_DFA_FULL_MATCH)
+        return;
     xr_re_free(state->inst);
     xr_re_free(state->next);
     xr_re_free(state);
 }
 
 // Lookup or insert state in cache
-static XrDFAState* dfa_cache_lookup(XrDFA *dfa, const int *inst, int ninst, uint32_t flag) {
+static XrDFAState *dfa_cache_lookup(XrDFA *dfa, const int *inst, int ninst, uint32_t flag) {
     uint64_t h = state_hash(inst, ninst);
     int idx = h % dfa->cache_size;
 
@@ -109,7 +112,8 @@ static XrDFAState* dfa_cache_lookup(XrDFA *dfa, const int *inst, int ninst, uint
         if (state == NULL) {
             // Empty slot, insert new state
             state = dfa_state_new(dfa, inst, ninst, flag);
-            if (state == NULL) return NULL;  // memory limit exceeded
+            if (state == NULL)
+                return NULL;  // memory limit exceeded
             dfa->state_cache[probe] = state;
             return state;
         }
@@ -133,14 +137,15 @@ static XrDFAState* dfa_cache_lookup(XrDFA *dfa, const int *inst, int ninst, uint
  * Compute epsilon closure from NFA state set
  * Handle NOP, ALT, CAPTURE, EMPTY_WIDTH and other epsilon transitions
  */
-static void compute_closure(XrProg *prog, XrSparseSet *q, const char *text,
-                            const char *p, const char *end, bool *is_match) {
+static void compute_closure(XrProg *prog, XrSparseSet *q, const char *text, const char *p,
+                            const char *end, bool *is_match) {
     *is_match = false;
 
     // Process epsilon transitions for all states in queue
     for (int i = 0; i < q->size; i++) {
         int pc = q->dense[i];
-        if (pc < 0 || pc >= prog->inst_count) continue;
+        if (pc < 0 || pc >= prog->inst_count)
+            continue;
 
         XrInst *ip = &prog->inst[pc];
         XrOpcode op = XR_INST_OP(ip);
@@ -191,15 +196,16 @@ static void compute_closure(XrProg *prog, XrSparseSet *q, const char *text,
 /*
  * Compute state transition: given current state set and input byte, compute next state set
  */
-static void step_nfa(XrProg *prog, XrSparseSet *curr, int byte_class, int c,
-                     XrSparseSet *next, const char *text, const char *p, const char *end) {
-    (void)byte_class;
+static void step_nfa(XrProg *prog, XrSparseSet *curr, int byte_class, int c, XrSparseSet *next,
+                     const char *text, const char *p, const char *end) {
+    (void) byte_class;
     xr_sparse_set_clear(next);
 
     // Traverse current state set
     for (int i = 0; i < curr->size; i++) {
         int pc = curr->dense[i];
-        if (pc < 0 || pc >= prog->inst_count) continue;
+        if (pc < 0 || pc >= prog->inst_count)
+            continue;
 
         XrInst *ip = &prog->inst[pc];
         XrOpcode op = XR_INST_OP(ip);
@@ -244,9 +250,10 @@ static void step_nfa(XrProg *prog, XrSparseSet *curr, int byte_class, int c,
  * ======================================================================== */
 
 // Create DFA
-XrDFA* xr_dfa_new(XrProg *prog) {
-    XrDFA *dfa = (XrDFA*)xr_re_alloc(sizeof(XrDFA));
-    if (!dfa) return NULL;
+XrDFA *xr_dfa_new(XrProg *prog) {
+    XrDFA *dfa = (XrDFA *) xr_re_alloc(sizeof(XrDFA));
+    if (!dfa)
+        return NULL;
     memset(dfa, 0, sizeof(XrDFA));
 
     dfa->prog = prog;
@@ -255,25 +262,26 @@ XrDFA* xr_dfa_new(XrProg *prog) {
     dfa->mem_used = 0;
 
     // Allocate state cache
-    dfa->state_cache = (XrDFAState**)xr_re_alloc(dfa->cache_size * sizeof(XrDFAState*));
+    dfa->state_cache = (XrDFAState **) xr_re_alloc(dfa->cache_size * sizeof(XrDFAState *));
     if (!dfa->state_cache) {
         xr_re_free(dfa);
         return NULL;
     }
-    memset(dfa->state_cache, 0, dfa->cache_size * sizeof(XrDFAState*));
+    memset(dfa->state_cache, 0, dfa->cache_size * sizeof(XrDFAState *));
 
     // Initialize work queues
     xr_sparse_set_init(&dfa->q[0], prog->inst_count);
     xr_sparse_set_init(&dfa->q[1], prog->inst_count);
 
-    dfa->mem_used += sizeof(XrDFA) + dfa->cache_size * sizeof(XrDFAState*);
+    dfa->mem_used += sizeof(XrDFA) + dfa->cache_size * sizeof(XrDFAState *);
 
     return dfa;
 }
 
 // Free DFA
 void xr_dfa_free(XrDFA *dfa) {
-    if (!dfa) return;
+    if (!dfa)
+        return;
 
     // Free all states
     for (int i = 0; i < dfa->cache_size; i++) {
@@ -288,7 +296,7 @@ void xr_dfa_free(XrDFA *dfa) {
 }
 
 // Get or create start state
-static XrDFAState* dfa_start_state(XrDFA *dfa, const char *text, const char *p, const char *end) {
+static XrDFAState *dfa_start_state(XrDFA *dfa, const char *text, const char *p, const char *end) {
     if (dfa->start_state) {
         return dfa->start_state;
     }
@@ -306,8 +314,9 @@ static XrDFAState* dfa_start_state(XrDFA *dfa, const char *text, const char *p, 
 
     // Build sorted PC array
     int ninst = q->size;
-    int *inst = (int*)xr_re_alloc(ninst * sizeof(int));
-    if (!inst) return NULL;
+    int *inst = (int *) xr_re_alloc(ninst * sizeof(int));
+    if (!inst)
+        return NULL;
     memcpy(inst, q->dense, ninst * sizeof(int));
 
     // Use qsort for sorting (faster than bubble sort)
@@ -323,10 +332,10 @@ static XrDFAState* dfa_start_state(XrDFA *dfa, const char *text, const char *p, 
 }
 
 // Compute state transition
-static XrDFAState* dfa_next_state(XrDFA *dfa, XrDFAState *state, int c,
-                                   const char *text, const char *p, const char *end) {
+static XrDFAState *dfa_next_state(XrDFA *dfa, XrDFAState *state, int c, const char *text,
+                                  const char *p, const char *end) {
     XrProg *prog = dfa->prog;
-    int byte_class = prog->bytemap[(unsigned char)c];
+    int byte_class = prog->bytemap[(unsigned char) c];
 
     // Check cache
     if (state->next[byte_class] != NULL) {
@@ -354,8 +363,9 @@ static XrDFAState* dfa_next_state(XrDFA *dfa, XrDFAState *state, int c,
 
     // Build sorted PC array
     int ninst = next->size;
-    int *inst = (int*)xr_re_alloc(ninst * sizeof(int));
-    if (!inst) return NULL;
+    int *inst = (int *) xr_re_alloc(ninst * sizeof(int));
+    if (!inst)
+        return NULL;
     memcpy(inst, next->dense, ninst * sizeof(int));
 
     // Use qsort for sorting (faster than bubble sort)
@@ -392,9 +402,10 @@ static XrDFAState* dfa_next_state(XrDFA *dfa, XrDFAState *state, int c,
  * Use DFA to search for match
  * Return: 1=match found, 0=no match, -1=DFA failed (need to fallback to NFA)
  */
-int xr_dfa_search(XrDFA *dfa, const char *text, int len,
-                   const char **match_start, const char **match_end) {
-    if (!dfa || len < 0) return -1;
+int xr_dfa_search(XrDFA *dfa, const char *text, int len, const char **match_start,
+                  const char **match_end) {
+    if (!dfa || len < 0)
+        return -1;
 
     XrProg *prog = dfa->prog;
     const char *p = text;
@@ -402,14 +413,16 @@ int xr_dfa_search(XrDFA *dfa, const char *text, int len,
 
     // Prefix optimization
     if (prog->prefix && prog->prefix_len > 0) {
-        p = (const char*)memmem(text, len, prog->prefix, prog->prefix_len);
-        if (!p) return 0;  // no match
+        p = (const char *) memmem(text, len, prog->prefix, prog->prefix_len);
+        if (!p)
+            return 0;  // no match
     }
 
     // Try match at each position
     while (p <= end) {
         XrDFAState *state = dfa_start_state(dfa, text, p, end);
-        if (state == NULL) return -1;  // DFA failed
+        if (state == NULL)
+            return -1;  // DFA failed
 
         const char *match_p = p;
         const char *curr_match_end = NULL;
@@ -421,11 +434,13 @@ int xr_dfa_search(XrDFA *dfa, const char *text, int len,
 
         // Follow DFA transitions
         while (match_p < end) {
-            int c = (unsigned char)*match_p;
+            int c = (unsigned char) *match_p;
             state = dfa_next_state(dfa, state, c, text, match_p, end);
 
-            if (state == NULL) return -1;  // DFA failed
-            if (state == XR_DFA_DEAD_STATE) break;  // dead state
+            if (state == NULL)
+                return -1;  // DFA failed
+            if (state == XR_DFA_DEAD_STATE)
+                break;  // dead state
 
             match_p++;
 
@@ -436,8 +451,10 @@ int xr_dfa_search(XrDFA *dfa, const char *text, int len,
 
         if (curr_match_end != NULL) {
             // Found match
-            if (match_start) *match_start = p;
-            if (match_end) *match_end = curr_match_end;
+            if (match_start)
+                *match_start = p;
+            if (match_end)
+                *match_end = curr_match_end;
             return 1;
         }
 

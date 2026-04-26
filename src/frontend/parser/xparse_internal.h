@@ -29,23 +29,23 @@
 // Operator precedence (higher value = higher precedence).
 typedef enum {
     PREC_NONE,
-    PREC_ASSIGNMENT,       // = (lowest)
-    PREC_TERNARY,          // ? : (ternary, just above assignment)
-    PREC_NULLISH_COALESCE, // ?? (nullish coalescing)
-    PREC_OR,               // ||
-    PREC_AND,              // &&
-    PREC_BIT_OR,           // | (bitwise or)
-    PREC_BIT_XOR,          // ^ (bitwise xor)
-    PREC_BIT_AND,          // & (bitwise and)
-    PREC_EQUALITY,         // == !=
-    PREC_COMPARISON,       // < > <= >=
-    PREC_SHIFT,            // << >>
-    PREC_TERM,             // + -
-    PREC_FACTOR,           // * / %
-    PREC_UNARY,            // ! - ~
-    PREC_CALL,             // . () []
-    PREC_POSTFIX,          // ++ --
-    PREC_PRIMARY           // literals, parentheses
+    PREC_ASSIGNMENT,        // = (lowest)
+    PREC_TERNARY,           // ? : (ternary, just above assignment)
+    PREC_NULLISH_COALESCE,  // ?? (nullish coalescing)
+    PREC_OR,                // ||
+    PREC_AND,               // &&
+    PREC_BIT_OR,            // | (bitwise or)
+    PREC_BIT_XOR,           // ^ (bitwise xor)
+    PREC_BIT_AND,           // & (bitwise and)
+    PREC_EQUALITY,          // == !=
+    PREC_COMPARISON,        // < > <= >=
+    PREC_SHIFT,             // << >>
+    PREC_TERM,              // + -
+    PREC_FACTOR,            // * / %
+    PREC_UNARY,             // ! - ~
+    PREC_CALL,              // . () []
+    PREC_POSTFIX,           // ++ --
+    PREC_PRIMARY            // literals, parentheses
 } Precedence;
 
 typedef AstNode *(*PrefixParseFn)(Parser *parser);
@@ -70,24 +70,25 @@ XR_FUNC char *ast_strdup(XrayIsolate *X, const char *s);
 
 // Arena-based dynamic-array push: doubles capacity by reallocating into the
 // arena. Original buffer is leaked into the arena and reclaimed in bulk.
-#define XR_PARSE_PUSH(parser, arr, count, cap, item) do { \
-    if ((count) >= (cap)) { \
-        int _new_cap = (cap) == 0 ? 4 : (cap) * 2; \
-        void *_new_arr = ast_alloc_array((parser)->X, sizeof(*(arr)), (size_t)_new_cap); \
-        if ((arr) != NULL && (count) > 0) { \
-            memcpy(_new_arr, (arr), sizeof(*(arr)) * (size_t)(count)); \
-        } \
-        (arr) = _new_arr; \
-        (cap) = _new_cap; \
-    } \
-    (arr)[(count)++] = (item); \
-} while (0)
+#define XR_PARSE_PUSH(parser, arr, count, cap, item)                                               \
+    do {                                                                                           \
+        if ((count) >= (cap)) {                                                                    \
+            int _new_cap = (cap) == 0 ? 4 : (cap) * 2;                                             \
+            void *_new_arr = ast_alloc_array((parser)->X, sizeof(*(arr)), (size_t) _new_cap);      \
+            if ((arr) != NULL && (count) > 0) {                                                    \
+                memcpy(_new_arr, (arr), sizeof(*(arr)) * (size_t) (count));                        \
+            }                                                                                      \
+            (arr) = _new_arr;                                                                      \
+            (cap) = _new_cap;                                                                      \
+        }                                                                                          \
+        (arr)[(count)++] = (item);                                                                 \
+    } while (0)
 
 /* ========== Token-Stream Helpers ========== */
 
 XR_FUNC void xr_parser_advance(Parser *parser);
-XR_FUNC int  xr_parser_check(Parser *parser, TokenType type);
-XR_FUNC int  xr_parser_match(Parser *parser, TokenType type);
+XR_FUNC int xr_parser_check(Parser *parser, TokenType type);
+XR_FUNC int xr_parser_match(Parser *parser, TokenType type);
 XR_FUNC void xr_parser_consume(Parser *parser, TokenType type, const char *message);
 
 // Soft-keyword helpers: TK_NAME tokens whose lexeme equals the given string.
@@ -143,9 +144,8 @@ XR_FUNC AstNode *xr_parse_nullish_coalesce(Parser *parser, AstNode *left);
 XR_FUNC AstNode *xr_parse_optional_chain(Parser *parser, AstNode *object);
 XR_FUNC AstNode *xr_parse_inc_dec(Parser *parser);
 XR_FUNC AstNode *xr_parse_postfix_inc_dec(Parser *parser, AstNode *left);
-XR_FUNC AstNode *xr_parse_arrow_function_body(Parser *parser,
-                                              XrParamNode **params,
-                                              int param_count, int line);
+XR_FUNC AstNode *xr_parse_arrow_function_body(Parser *parser, XrParamNode **params, int param_count,
+                                              int line);
 
 /* ========== Statement Parsing ========== */
 
@@ -179,9 +179,8 @@ XR_FUNC AstNode *xr_parse_struct_declaration(Parser *parser);
 XR_FUNC AstNode *xr_parse_interface_declaration(Parser *parser);
 XR_FUNC AstNode *xr_parse_interface_method(Parser *parser);
 XR_FUNC AstNode *xr_parse_field_declaration(Parser *parser, bool *is_method_out);
-XR_FUNC AstNode *xr_parse_method_declaration(Parser *parser, const char *name,
-                                             int name_line, int name_column,
-                                             bool is_private, bool is_static,
+XR_FUNC AstNode *xr_parse_method_declaration(Parser *parser, const char *name, int name_line,
+                                             int name_column, bool is_private, bool is_static,
                                              bool is_abstract);
 XR_FUNC AstNode *xr_parse_operator_method(Parser *parser, bool is_private, bool is_static);
 XR_FUNC AstNode *xr_parse_static_constructor(Parser *parser, bool is_private);
@@ -203,8 +202,10 @@ XR_FUNC XrDestructurePattern *xr_parse_object_pattern(Parser *parser);
 XR_FUNC XrDestructurePattern *xr_parse_destructure_pattern(Parser *parser);
 XR_FUNC AstNode *xr_parse_destructure_declaration(Parser *parser, bool is_const);
 
-XR_FUNC XrDestructurePattern *convert_array_literal_to_pattern(XrayIsolate *X, AstNode *array_literal);
-XR_FUNC XrDestructurePattern *convert_object_literal_to_pattern(XrayIsolate *X, AstNode *object_literal);
+XR_FUNC XrDestructurePattern *convert_array_literal_to_pattern(XrayIsolate *X,
+                                                               AstNode *array_literal);
+XR_FUNC XrDestructurePattern *convert_object_literal_to_pattern(XrayIsolate *X,
+                                                                AstNode *object_literal);
 
 /* ========== Coroutine Parsing ========== */
 
@@ -223,4 +224,4 @@ XR_FUNC AstNode *xr_parse_scope_block_with_mode(Parser *parser, uint8_t scope_mo
 
 XR_FUNC size_t xr_process_escapes(const char *src, size_t src_len, char *out);
 
-#endif // XPARSE_INTERNAL_H
+#endif  // XPARSE_INTERNAL_H

@@ -23,6 +23,6 @@
 #include "../../src/module/xmodule.h"
 #include "../../src/vm/xvm.h"
 
-XrModule* xr_load_module_math(XrayIsolate *isolate);
+XrModule *xr_load_module_math(XrayIsolate *isolate);
 
 #endif

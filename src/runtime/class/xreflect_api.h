@@ -129,4 +129,4 @@ XR_FUNC XrValue xr_parameter_getHasDefault(XrayIsolate *isolate, XrValue *args, 
 
 XR_FUNC XrValue xr_constructor_newInstance(XrayIsolate *isolate, XrValue *args, int nargs);
 
-#endif // XREFLECT_API_H
+#endif  // XREFLECT_API_H

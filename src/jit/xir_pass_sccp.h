@@ -28,4 +28,4 @@
  */
 XR_FUNC XirPassChange xir_pass_sccp(XirFunc *func);
 
-#endif // XIR_PASS_SCCP_H
+#endif  // XIR_PASS_SCCP_H

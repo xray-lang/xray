@@ -21,4 +21,4 @@ extern const char *xr_keywords[];
 // Builtin functions (defined in xlsp_keywords.c)
 extern const char *xr_builtins[];
 
-#endif // XLSP_KEYWORDS_H
+#endif  // XLSP_KEYWORDS_H

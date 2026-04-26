@@ -27,4 +27,4 @@ XR_FUNC void xir_print_ins(FILE *out, XirFunc *func, XirIns *ins);
 // Print a reference
 XR_FUNC void xir_print_ref(FILE *out, XirFunc *func, XirRef ref);
 
-#endif // XIR_PRINTER_H
+#endif  // XIR_PRINTER_H

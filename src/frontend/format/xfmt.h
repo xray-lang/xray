@@ -25,10 +25,10 @@ typedef struct XrayIsolate XrayIsolate;
 
 // Format configuration
 typedef struct XrFmtConfig {
-    int indent_size;        // Spaces per indent level (default: 4)
-    int use_tabs;           // Use tabs instead of spaces
-    int max_line_length;    // Max line length hint (default: 100)
-    int trailing_newline;   // Ensure trailing newline at EOF
+    int indent_size;                   // Spaces per indent level (default: 4)
+    int use_tabs;                      // Use tabs instead of spaces
+    int max_line_length;               // Max line length hint (default: 100)
+    int trailing_newline;              // Ensure trailing newline at EOF
     int blank_lines_around_functions;  // Blank lines around functions
     int blank_lines_around_classes;    // Blank lines around classes
     int space_around_operators;        // Space around binary operators
@@ -42,14 +42,14 @@ extern XrFmtConfig xfmt_default_config;
 
 // Format context
 typedef struct XrFmtContext {
-    char *output;           // Output buffer
-    size_t capacity;        // Buffer capacity
-    size_t length;          // Current length
-    int indent_level;       // Current indent level
-    int line_start;         // At line start flag
-    int column;             // Current column (for line length tracking)
-    XrFmtConfig *config;    // Configuration
-    XrayIsolate *X;         // Isolate for type printing
+    char *output;         // Output buffer
+    size_t capacity;      // Buffer capacity
+    size_t length;        // Current length
+    int indent_level;     // Current indent level
+    int line_start;       // At line start flag
+    int column;           // Current column (for line length tracking)
+    XrFmtConfig *config;  // Configuration
+    XrayIsolate *X;       // Isolate for type printing
 } XrFmtContext;
 
 // Initialize formatter context
@@ -68,4 +68,4 @@ XR_FUNC void xfmt_node(XrFmtContext *ctx, AstNode *node);
 // Format type annotation
 XR_FUNC void xfmt_type(XrFmtContext *ctx, XrType *type);
 
-#endif // XFMT_H
+#endif  // XFMT_H

@@ -30,14 +30,12 @@
 
 /* ========== Forward Declarations ========== */
 
-static void compile_select_nonblocking(XrCompilerContext *ctx, XrCompiler *c,
-                                       SelectStmtNode *node, int default_case,
-                                       int *end_jumps, int *end_jump_count);
+static void compile_select_nonblocking(XrCompilerContext *ctx, XrCompiler *c, SelectStmtNode *node,
+                                       int default_case, int *end_jumps, int *end_jump_count);
 
-static void compile_select_blocking(XrCompilerContext *ctx, XrCompiler *c,
-                                    SelectStmtNode *node, int timeout_case,
-                                    int channel_case_count,
-                                    int *end_jumps, int *end_jump_count);
+static void compile_select_blocking(XrCompilerContext *ctx, XrCompiler *c, SelectStmtNode *node,
+                                    int timeout_case, int channel_case_count, int *end_jumps,
+                                    int *end_jump_count);
 
 /* ========== Coroutine Closure Upvalue Check ========== */
 
@@ -52,7 +50,7 @@ static void compile_select_blocking(XrCompilerContext *ctx, XrCompiler *c,
  * @return true if all upvalues are legal, false if there are illegal upvalues
  */
 static bool check_coro_closure_upvalues(XrCompilerContext *ctx, XrCompiler *c,
-                                         XrCompiler *closure_compiler) {
+                                        XrCompiler *closure_compiler) {
     int upvalue_count = PROTO_UPVAL_COUNT(closure_compiler->proto);
     bool has_error = false;
 
@@ -74,20 +72,20 @@ static bool check_coro_closure_upvalues(XrCompilerContext *ctx, XrCompiler *c,
         // shared let - forbidden (move semantics only; pass via argument)
         if (uv->storage_mode == XR_STORAGE_SHARED && !uv->is_const) {
             xr_compiler_error(ctx, c,
-                "go closure cannot capture mutable 'shared let' variable '%s'\n"
-                "hint: pass it through an argument with 'move': go worker(move %s)",
-                var_name, var_name);
+                              "go closure cannot capture mutable 'shared let' variable '%s'\n"
+                              "hint: pass it through an argument with 'move': go worker(move %s)",
+                              var_name, var_name);
             has_error = true;
             continue;
         }
 
         // Normal mutable variables - forbidden (no implicit promotion)
         xr_compiler_error(ctx, c,
-            "go closure cannot capture mutable variable '%s'\n"
-            "hint: use one of the following:\n"
-            "  1. pass through argument: go worker(%s)  // deep-copied\n"
-            "  2. declare as 'shared const %s = ...' for concurrent reads",
-            var_name, var_name, var_name);
+                          "go closure cannot capture mutable variable '%s'\n"
+                          "hint: use one of the following:\n"
+                          "  1. pass through argument: go worker(%s)  // deep-copied\n"
+                          "  2. declare as 'shared const %s = ...' for concurrent reads",
+                          var_name, var_name, var_name);
         has_error = true;
     }
 
@@ -107,7 +105,8 @@ static bool check_coro_closure_upvalues(XrCompilerContext *ctx, XrCompiler *c,
  * @return true if safe, false if unsafe
  */
 static bool check_go_arg_closure_safety(XrCompilerContext *ctx, XrCompiler *c, AstNode *arg) {
-    if (arg == NULL) return true;
+    if (arg == NULL)
+        return true;
 
     // If argument is variable reference, check if the corresponding closure is safe
     if (arg->type == AST_VARIABLE) {
@@ -131,24 +130,25 @@ static bool check_go_arg_closure_safety(XrCompilerContext *ctx, XrCompiler *c, A
                             for (int j = 0; j < enc->local_count; j++) {
                                 XrLocalInfo *l = compiler_get_local_at(enc, j);
                                 if (l && l->reg == uv.index && uv.source == UPVAL_SRC_REG) {
-                                    if (len > 0) len += snprintf(unsafe_vars + len, 256 - len, ", ");
+                                    if (len > 0)
+                                        len += snprintf(unsafe_vars + len, 256 - len, ", ");
                                     len += snprintf(unsafe_vars + len, 256 - len, "'%s'",
-                                                   l->name ? l->name->data : "?");
+                                                    l->name ? l->name->data : "?");
                                     goto found;
                                 }
                             }
                             enc = enc->enclosing;
                         }
-                        found:;
+                    found:;
                     }
                 }
 
                 xr_compiler_error(ctx, c,
-                    "Function '%s' cannot be passed to coroutine (captured non-thread-safe variable %s)\n"
-                    "hint: Declare %s as shared, or pass through parameter",
-                    var->name,
-                    len > 0 ? unsafe_vars : "?",
-                    len > 0 ? unsafe_vars : "the variable");
+                                  "Function '%s' cannot be passed to coroutine (captured "
+                                  "non-thread-safe variable %s)\n"
+                                  "hint: Declare %s as shared, or pass through parameter",
+                                  var->name, len > 0 ? unsafe_vars : "?",
+                                  len > 0 ? unsafe_vars : "the variable");
                 return false;
             }
         }
@@ -175,10 +175,11 @@ static bool check_go_arg_closure_safety(XrCompilerContext *ctx, XrCompiler *c, A
  *   Bx = name string constant index
  */
 static void emit_coro_name_if_present(XrCompilerContext *ctx, XrCompiler *c, const char *name) {
-    if (name == NULL) return;
+    if (name == NULL)
+        return;
 
     // Add name to constant table
-    XrString *name_str = xr_compile_time_intern(ctx->X, name, (int)strlen(name));
+    XrString *name_str = xr_compile_time_intern(ctx->X, name, (int) strlen(name));
     int name_idx = xr_vm_proto_add_constant(c->proto, xr_string_value(name_str));
 
     // Emit name-carrying NOP: A=1 means coroutine name, Bx=constant index
@@ -196,17 +197,21 @@ static void emit_coro_name_if_present(XrCompilerContext *ctx, XrCompiler *c, con
  *   - Coro.LOW / Coro.NORMAL / Coro.HIGH (compile-time constants)
  *   - Numeric literals 0/1/2
  */
-static void emit_coro_priority_if_present(XrCompilerContext *ctx, XrCompiler *c, AstNode *priority) {
-    if (priority == NULL) return;
+static void emit_coro_priority_if_present(XrCompilerContext *ctx, XrCompiler *c,
+                                          AstNode *priority) {
+    if (priority == NULL)
+        return;
 
     int prio_val = 1;  // Default NORMAL
 
     // Try compile-time evaluation
     if (priority->type == AST_LITERAL_INT) {
         // Numeric literal
-        prio_val = (int)priority->as.literal.raw_value.int_val;
-        if (prio_val < 0) prio_val = 0;
-        if (prio_val > 2) prio_val = 2;
+        prio_val = (int) priority->as.literal.raw_value.int_val;
+        if (prio_val < 0)
+            prio_val = 0;
+        if (prio_val > 2)
+            prio_val = 2;
     } else if (priority->type == AST_MEMBER_ACCESS) {
         // Coro.LOW / Coro.NORMAL / Coro.HIGH
         MemberAccessNode *member = &priority->as.member_access;
@@ -220,18 +225,19 @@ static void emit_coro_priority_if_present(XrCompilerContext *ctx, XrCompiler *c,
                 prio_val = 2;
             } else {
                 xr_compiler_error(ctx, c,
-                    "Invalid priority constant 'Coro.%s', expected Coro.LOW / Coro.NORMAL / Coro.HIGH",
-                    member->name);
+                                  "Invalid priority constant 'Coro.%s', expected Coro.LOW / "
+                                  "Coro.NORMAL / Coro.HIGH",
+                                  member->name);
                 return;
             }
         } else {
-            xr_compiler_error(ctx, c,
-                "Priority must be Coro.LOW / Coro.NORMAL / Coro.HIGH or number 0/1/2");
+            xr_compiler_error(
+                ctx, c, "Priority must be Coro.LOW / Coro.NORMAL / Coro.HIGH or number 0/1/2");
             return;
         }
     } else {
         xr_compiler_error(ctx, c,
-            "Priority must be Coro.LOW / Coro.NORMAL / Coro.HIGH or number 0/1/2");
+                          "Priority must be Coro.LOW / Coro.NORMAL / Coro.HIGH or number 0/1/2");
         return;
     }
 
@@ -247,7 +253,8 @@ static void emit_coro_priority_if_present(XrCompilerContext *ctx, XrCompiler *c,
  *   Bx = link mode (1=LINKED, 2=MONITORED)
  */
 static void emit_link_mode_if_present(XrCompiler *c, uint8_t link_mode) {
-    if (link_mode == XR_LINK_NONE) return;
+    if (link_mode == XR_LINK_NONE)
+        return;
     emit_abx(c->emitter, OP_NOP, 3, link_mode);
 }
 
@@ -265,7 +272,8 @@ static void emit_link_mode_if_present(XrCompiler *c, uint8_t link_mode) {
  *   OP_GO A B C         - A=result, B=closure, C=argument count
  *   [OP_NOP 1 Bx]       - Optional, Bx=name constant index
  */
-void compile_go_expr(XrCompilerContext *ctx, XrCompiler *c, GoExprNode *node, int target, bool fire_and_forget) {
+void compile_go_expr(XrCompilerContext *ctx, XrCompiler *c, GoExprNode *node, int target,
+                     bool fire_and_forget) {
     XR_DCHECK(ctx != NULL, "compile_go_expr: NULL ctx");
     XR_DCHECK(c != NULL, "compile_go_expr: NULL compiler");
     XR_DCHECK(node != NULL, "compile_go_expr: NULL node");
@@ -298,7 +306,8 @@ void compile_go_expr(XrCompilerContext *ctx, XrCompiler *c, GoExprNode *node, in
             int protect_id = xreg_protect_begin(c->regalloc, base, 2 + arg_count, "go_invoke");
 
             /* Compile this to R[base+1]
-             * Key: first set freereg to base+2, ensure this compilation's temporary registers don't overwrite base */
+             * Key: first set freereg to base+2, ensure this compilation's temporary registers don't
+             * overwrite base */
             xreg_set_freereg(c->regalloc, base + 2);
             XrExprDesc obj_desc = xr_compile_expr(ctx, c, member->object);
             xexpr_to_specific_reg(ctx, c, &obj_desc, base + 1);
@@ -316,7 +325,7 @@ void compile_go_expr(XrCompilerContext *ctx, XrCompiler *c, GoExprNode *node, in
             xreg_protect_end(c->regalloc, protect_id);
 
             // Get method symbol (local index via per-function symbol table)
-            XrSymbolTable *symtab = (XrSymbolTable*)xr_isolate_get_symbol_table(ctx->X);
+            XrSymbolTable *symtab = (XrSymbolTable *) xr_isolate_get_symbol_table(ctx->X);
             int global_sym = xr_symbol_register_in_table(symtab, member->name);
             int local_sym = emitter_add_symbol(c->emitter, global_sym);
 
@@ -349,9 +358,11 @@ void compile_go_expr(XrCompilerContext *ctx, XrCompiler *c, GoExprNode *node, in
                 XrProto *callee_proto = callee_local->closure_proto;
                 if (!callee_proto->is_coro_safe) {
                     xr_compiler_error(ctx, c,
-                        "go: function '%s' captures non-thread-safe variables, cannot run in coroutine\n"
-                        "hint: use 'shared const' to declare shared variables, or pass via arguments",
-                        callee_name);
+                                      "go: function '%s' captures non-thread-safe variables, "
+                                      "cannot run in coroutine\n"
+                                      "hint: use 'shared const' to declare shared variables, or "
+                                      "pass via arguments",
+                                      callee_name);
                 }
             }
         }
@@ -432,9 +443,8 @@ void compile_go_expr(XrCompilerContext *ctx, XrCompiler *c, GoExprNode *node, in
         /* go { block } or go fn => ... - anonymous closure form
          * Inline compile closure to check upvalues
          */
-        FunctionDeclNode *func_expr = (expr->type == AST_FUNCTION_EXPR)
-            ? &expr->as.function_expr
-            : &expr->as.function_decl;
+        FunctionDeclNode *func_expr =
+            (expr->type == AST_FUNCTION_EXPR) ? &expr->as.function_expr : &expr->as.function_decl;
 
         // Create new compiler (nested)
         XrCompiler closure_compiler;
@@ -451,7 +461,8 @@ void compile_go_expr(XrCompilerContext *ctx, XrCompiler *c, GoExprNode *node, in
         // Define parameters as local variables
         for (int i = 0; i < func_expr->param_count; i++) {
             XrParamNode *param = func_expr->params[i];
-            if (!param) continue;
+            if (!param)
+                continue;
             XrString *param_str = xr_compile_time_intern(ctx->X, param->name, strlen(param->name));
             scope_define_local_reg(ctx, &closure_compiler, param_str, i);
         }
@@ -459,7 +470,7 @@ void compile_go_expr(XrCompilerContext *ctx, XrCompiler *c, GoExprNode *node, in
         // Set freereg
         if (closure_compiler.regalloc) {
             xreg_set_freereg(closure_compiler.regalloc,
-                            xreg_get_local_end(closure_compiler.regalloc));
+                             xreg_get_local_end(closure_compiler.regalloc));
         }
 
         // Compile function body
@@ -515,7 +526,6 @@ void compile_go_expr(XrCompilerContext *ctx, XrCompiler *c, GoExprNode *node, in
         emit_link_mode_if_present(c, node->link_mode);
     }
 }
-
 
 /* ========== await Expression Compilation ========== */
 
@@ -593,15 +603,14 @@ void compile_channel_new(XrCompilerContext *ctx, XrCompiler *c, ChannelNewNode *
 
     if (result.success && XR_IS_INT(result.value)) {
         // Compile-time constant: use OP_CHAN_NEW with immediate
-        int buffer_size = (int)XR_TO_INT(result.value);
+        int buffer_size = (int) XR_TO_INT(result.value);
         if (buffer_size < 0) {
             xr_compiler_error(ctx, c, "Channel buffer size cannot be negative");
             return;
         }
         if (buffer_size > XR_CHANNEL_MAX_BUFFER_SIZE) {
-            xr_compiler_error(ctx, c,
-                "Channel buffer size cannot exceed %d (current value: %d)",
-                XR_CHANNEL_MAX_BUFFER_SIZE, buffer_size);
+            xr_compiler_error(ctx, c, "Channel buffer size cannot exceed %d (current value: %d)",
+                              XR_CHANNEL_MAX_BUFFER_SIZE, buffer_size);
             return;
         }
         xemit_chan_new(c->emitter, target, buffer_size);
@@ -653,7 +662,8 @@ void compile_defer_stmt(XrCompilerContext *ctx, XrCompiler *c, DeferStmtNode *no
         int protect_id = xreg_protect_begin(c->regalloc, base_reg, 1 + arg_count, "defer_call");
 
         /* Compile callee to base
-         * Key: first set freereg to base+1, ensure callee compilation's temporary registers don't overwrite base */
+         * Key: first set freereg to base+1, ensure callee compilation's temporary registers don't
+         * overwrite base */
         xreg_set_freereg(c->regalloc, base_reg + 1);
         XrExprDesc callee_desc = xr_compile_expr(ctx, c, call->callee);
         xexpr_to_specific_reg(ctx, c, &callee_desc, base_reg);
@@ -701,7 +711,8 @@ void compile_select_stmt(XrCompilerContext *ctx, XrCompiler *c, SelectStmtNode *
     XR_DCHECK(c != NULL, "compile_select_stmt: NULL compiler");
     XR_DCHECK(node != NULL, "compile_select_stmt: NULL node");
     int case_count = node->case_count;
-    if (case_count == 0) return;
+    if (case_count == 0)
+        return;
 
     int end_jumps[64];
     int end_jump_count = 0;
@@ -723,7 +734,8 @@ void compile_select_stmt(XrCompilerContext *ctx, XrCompiler *c, SelectStmtNode *
     int channel_case_count = 0;
     for (int i = 0; i < case_count; i++) {
         SelectCaseNode *sc = &node->cases[i]->as.select_case;
-        if (!sc->is_default) channel_case_count++;
+        if (!sc->is_default)
+            channel_case_count++;
     }
 
     // Use non-blocking mode when has default
@@ -732,8 +744,8 @@ void compile_select_stmt(XrCompilerContext *ctx, XrCompiler *c, SelectStmtNode *
         compile_select_nonblocking(ctx, c, node, default_case, end_jumps, &end_jump_count);
     } else {
         // No default: use event-driven blocking wait
-        compile_select_blocking(ctx, c, node, timeout_case, channel_case_count,
-                               end_jumps, &end_jump_count);
+        compile_select_blocking(ctx, c, node, timeout_case, channel_case_count, end_jumps,
+                                &end_jump_count);
     }
 
     // Patch all end jumps
@@ -745,15 +757,15 @@ void compile_select_stmt(XrCompilerContext *ctx, XrCompiler *c, SelectStmtNode *
 /*
  * Non-blocking version select compilation (has default)
  */
-static void compile_select_nonblocking(XrCompilerContext *ctx, XrCompiler *c,
-                                       SelectStmtNode *node, int default_case,
-                                       int *end_jumps, int *end_jump_count) {
+static void compile_select_nonblocking(XrCompilerContext *ctx, XrCompiler *c, SelectStmtNode *node,
+                                       int default_case, int *end_jumps, int *end_jump_count) {
     int case_count = node->case_count;
 
     // Compile each non-default case
     for (int i = 0; i < case_count; i++) {
         SelectCaseNode *sc = &node->cases[i]->as.select_case;
-        if (sc->is_default) continue;
+        if (sc->is_default)
+            continue;
 
         // Compile channel expression
         XrExprDesc ch_desc = xr_compile_expr(ctx, c, sc->channel);
@@ -779,7 +791,8 @@ static void compile_select_nonblocking(XrCompilerContext *ctx, XrCompiler *c,
             // recv case
             xemit_chan_try_recv(c->emitter, result_reg, ch_reg);
             if (sc->var_name != NULL) {
-                XrString *var_str = xr_compile_time_intern(ctx->X, sc->var_name, strlen(sc->var_name));
+                XrString *var_str =
+                    xr_compile_time_intern(ctx->X, sc->var_name, strlen(sc->var_name));
                 int existing = scope_resolve_local(c, var_str);
                 if (existing < 0) {
                     scope_define_local_reg(ctx, c, var_str, result_reg);
@@ -826,12 +839,11 @@ static void compile_select_nonblocking(XrCompilerContext *ctx, XrCompiler *c,
  * 3. If all fail, emit OP_SELECT_BLOCK for true blocking
  * 4. After wakeup, jump back to poll and recheck
  */
-static void compile_select_blocking(XrCompilerContext *ctx, XrCompiler *c,
-                                    SelectStmtNode *node, int timeout_case,
-                                    int channel_case_count,
-                                    int *end_jumps, int *end_jump_count) {
+static void compile_select_blocking(XrCompilerContext *ctx, XrCompiler *c, SelectStmtNode *node,
+                                    int timeout_case, int channel_case_count, int *end_jumps,
+                                    int *end_jump_count) {
     int case_count = node->case_count;
-    (void)timeout_case;
+    (void) timeout_case;
 
     // Step 1: Put all channels in consecutive registers (for OP_SELECT_BLOCK)
     int ch_base_reg = xreg_alloc_temp(c->regalloc);
@@ -881,12 +893,13 @@ static void compile_select_blocking(XrCompilerContext *ctx, XrCompiler *c,
     // Compile each case's check
     for (int i = 0; i < case_count; i++) {
         SelectCaseNode *sc = &node->cases[i]->as.select_case;
-        if (sc->is_default) continue;
+        if (sc->is_default)
+            continue;
 
         int ch_reg = case_ch_regs[i];
 
         int result_reg = xreg_alloc_temp(c->regalloc);
-        xreg_alloc_temp(c->regalloc); // ok_reg
+        xreg_alloc_temp(c->regalloc);  // ok_reg
         int ok_reg = result_reg + 1;
 
         if (sc->is_send) {
@@ -898,7 +911,8 @@ static void compile_select_blocking(XrCompilerContext *ctx, XrCompiler *c,
             xemit_chan_try_recv(c->emitter, result_reg, ch_reg);
 
             if (sc->var_name != NULL && !sc->is_timeout) {
-                XrString *var_str = xr_compile_time_intern(ctx->X, sc->var_name, strlen(sc->var_name));
+                XrString *var_str =
+                    xr_compile_time_intern(ctx->X, sc->var_name, strlen(sc->var_name));
                 int existing = scope_resolve_local(c, var_str);
                 if (existing < 0) {
                     scope_define_local_reg(ctx, c, var_str, result_reg);
@@ -957,7 +971,8 @@ static void compile_select_blocking(XrCompilerContext *ctx, XrCompiler *c,
 void compile_scope_block(XrCompilerContext *ctx, XrCompiler *c, ScopeBlockNode *node, int target) {
     XR_DCHECK(ctx != NULL, "compile_scope_block: NULL ctx");
     XR_DCHECK(c != NULL, "compile_scope_block: NULL compiler");
-    if (!node || !node->body) return;
+    if (!node || !node->body)
+        return;
 
     int result_reg = 0;
     if (node->scope_mode == XR_SCOPE_SUPERVISOR) {
@@ -998,9 +1013,8 @@ void compile_scope_block(XrCompilerContext *ctx, XrCompiler *c, ScopeBlockNode *
  * Compile cancelled() expression.
  */
 void compile_cancelled_expr(XrCompilerContext *ctx, XrCompiler *c, int target) {
-    (void)ctx;  // Not used currently
+    (void) ctx;  // Not used currently
 
     // Emit OP_CANCELLED instruction: R[A] = cancelled()
     xemit_cancelled(c->emitter, target);
 }
-

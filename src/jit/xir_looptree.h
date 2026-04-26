@@ -40,7 +40,7 @@
 #include <stdbool.h>
 #include "../base/xdefs.h"
 
-typedef struct XirFunc  XirFunc;
+typedef struct XirFunc XirFunc;
 typedef struct XirBlock XirBlock;
 
 typedef struct XirLoop {
@@ -48,23 +48,23 @@ typedef struct XirLoop {
     struct XirLoop *child;    // first nested loop
     struct XirLoop *sibling;  // next loop sharing the same parent
 
-    XirBlock *header;         // loop header
-    XirBlock *preheader;      // unique out-of-loop predecessor, or NULL
-    XirBlock *latch;          // back-edge source (first latch if multiple)
+    XirBlock *header;     // loop header
+    XirBlock *preheader;  // unique out-of-loop predecessor, or NULL
+    XirBlock *latch;      // back-edge source (first latch if multiple)
 
-    XirBlock **body;          // blocks belonging to this loop (heap-allocated)
-    uint32_t   nbody;
+    XirBlock **body;  // blocks belonging to this loop (heap-allocated)
+    uint32_t nbody;
 
-    uint32_t   depth;         // 1-based nesting depth
-    uint32_t   id;             // position in XirLoopInfo::all_loops[]
+    uint32_t depth;  // 1-based nesting depth
+    uint32_t id;     // position in XirLoopInfo::all_loops[]
 } XirLoop;
 
 typedef struct XirLoopInfo {
-    XirLoop  *root_list;        // top-level loops linked via sibling
-    XirLoop **all_loops;        // heap array, innermost-first
-    XirLoop **block_to_loop;    // [nblk] innermost loop per block (NULL = none)
-    uint32_t  nloop;
-    uint32_t  nblk;             // size of block_to_loop[]
+    XirLoop *root_list;       // top-level loops linked via sibling
+    XirLoop **all_loops;      // heap array, innermost-first
+    XirLoop **block_to_loop;  // [nblk] innermost loop per block (NULL = none)
+    uint32_t nloop;
+    uint32_t nblk;  // size of block_to_loop[]
 } XirLoopInfo;
 
 /*
@@ -87,4 +87,4 @@ XR_FUNC void xir_func_invalidate_loops(XirFunc *func);
  */
 XR_FUNC uint32_t xir_block_loop_depth(XirFunc *func, uint32_t blk_id);
 
-#endif // XIR_LOOPTREE_H
+#endif  // XIR_LOOPTREE_H

@@ -28,4 +28,4 @@ struct XrError {
     const char *file;
 };
 
-#endif // XERROR_IMPL_H
+#endif  // XERROR_IMPL_H

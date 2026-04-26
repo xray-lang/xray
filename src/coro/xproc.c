@@ -84,7 +84,8 @@ void xr_proc_init(XrProc *p, int id, struct XrRuntime *runtime) {
 }
 
 void xr_proc_destroy(XrProc *p) {
-    if (!p) return;
+    if (!p)
+        return;
 
     // Destroy run queues
     for (int i = 0; i < XR_RUNQ_COUNT; i++) {
@@ -149,7 +150,8 @@ void xr_handoffp(XrProc *p) {
 // ========== P Run Queue Operations ==========
 
 XrCoroutine *xr_proc_pop(XrProc *p) {
-    if (!p) return NULL;
+    if (!p)
+        return NULL;
 
     // 1. HIGH queue first
     XrCoroutine *c = xr_steal_queue_pop(&p->runq[1].deque);
@@ -162,7 +164,8 @@ XrCoroutine *xr_proc_pop(XrProc *p) {
     if (nq->overflow_first && --nq->overflow_first->schedule_count <= 0) {
         c = nq->overflow_first;
         nq->overflow_first = c->sched_link;
-        if (!nq->overflow_first) nq->overflow_last = NULL;
+        if (!nq->overflow_first)
+            nq->overflow_last = NULL;
         nq->overflow_len--;
         c->sched_link = NULL;
         return c;
@@ -170,13 +173,15 @@ XrCoroutine *xr_proc_pop(XrProc *p) {
 
     // 3. NORMAL deque
     c = xr_steal_queue_pop(&nq->deque);
-    if (c && xr_coro_get_priority(xr_coro_flags_load(c)) == CORO_PRIORITY_LOW
-        && c->schedule_count > 1) {
+    if (c && xr_coro_get_priority(xr_coro_flags_load(c)) == CORO_PRIORITY_LOW &&
+        c->schedule_count > 1) {
         // LOW coroutine with remaining delay: put to overflow
         c->schedule_count--;
         c->sched_link = NULL;
-        if (nq->overflow_last) nq->overflow_last->sched_link = c;
-        else nq->overflow_first = c;
+        if (nq->overflow_last)
+            nq->overflow_last->sched_link = c;
+        else
+            nq->overflow_first = c;
         nq->overflow_last = c;
         nq->overflow_len++;
         return xr_proc_pop(p);  // Retry
@@ -185,11 +190,14 @@ XrCoroutine *xr_proc_pop(XrProc *p) {
 }
 
 void xr_proc_push(XrProc *p, XrCoroutine *coro) {
-    if (!p || !coro) return;
+    if (!p || !coro)
+        return;
 
     int priority = xr_coro_get_priority(xr_coro_flags_load(coro));
-    if (priority < 0) priority = 0;
-    if (priority >= XR_CORO_PRIORITY_COUNT) priority = XR_CORO_PRIORITY_COUNT - 1;
+    if (priority < 0)
+        priority = 0;
+    if (priority >= XR_CORO_PRIORITY_COUNT)
+        priority = XR_CORO_PRIORITY_COUNT - 1;
 
     int runq_idx;
     if (priority == CORO_PRIORITY_LOW) {
@@ -212,15 +220,16 @@ void xr_proc_push(XrProc *p, XrCoroutine *coro) {
 // ABA: XrProc is 1:1 with Worker and never freed during runtime lifetime.
 // idle_p_count is kept as a separate atomic for heuristics only.
 XrProc *xr_get_idle_p(struct XrRuntime *runtime) {
-    if (!runtime) return NULL;
+    if (!runtime)
+        return NULL;
 
     for (int retry = 0; retry < 8; retry++) {
         XrProc *head = atomic_load_explicit(&runtime->idle_p_head, memory_order_acquire);
-        if (!head) return NULL;
+        if (!head)
+            return NULL;
         XrProc *next = head->idle_link;
-        if (atomic_compare_exchange_weak_explicit(
-                &runtime->idle_p_head, &head, next,
-                memory_order_acq_rel, memory_order_acquire)) {
+        if (atomic_compare_exchange_weak_explicit(&runtime->idle_p_head, &head, next,
+                                                  memory_order_acq_rel, memory_order_acquire)) {
             head->idle_link = NULL;
             atomic_fetch_sub_explicit(&runtime->idle_p_count, 1, memory_order_relaxed);
             return head;
@@ -230,7 +239,8 @@ XrProc *xr_get_idle_p(struct XrRuntime *runtime) {
 }
 
 void xr_put_idle_p(struct XrRuntime *runtime, XrProc *p) {
-    if (!runtime || !p) return;
+    if (!runtime || !p)
+        return;
 
     atomic_store(&p->status, P_IDLE);
     atomic_store(&p->current_m, NULL);
@@ -239,8 +249,7 @@ void xr_put_idle_p(struct XrRuntime *runtime, XrProc *p) {
     do {
         head = atomic_load_explicit(&runtime->idle_p_head, memory_order_relaxed);
         p->idle_link = head;
-    } while (!atomic_compare_exchange_weak_explicit(
-        &runtime->idle_p_head, &head, p,
-        memory_order_release, memory_order_relaxed));
+    } while (!atomic_compare_exchange_weak_explicit(&runtime->idle_p_head, &head, p,
+                                                    memory_order_release, memory_order_relaxed));
     atomic_fetch_add_explicit(&runtime->idle_p_count, 1, memory_order_relaxed);
 }

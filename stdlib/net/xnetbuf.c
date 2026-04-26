@@ -22,9 +22,10 @@
 
 bool xr_netbuf_init(XrNetBuffer *buf, size_t initial_capacity) {
     assert(buf);
-    if (initial_capacity == 0) initial_capacity = XR_NETBUF_DEFAULT_CAP;
+    if (initial_capacity == 0)
+        initial_capacity = XR_NETBUF_DEFAULT_CAP;
 
-    char *mem = (char *)xr_malloc(initial_capacity);
+    char *mem = (char *) xr_malloc(initial_capacity);
     if (!mem) {
         memset(buf, 0, sizeof(*buf));
         return false;
@@ -38,7 +39,8 @@ bool xr_netbuf_init(XrNetBuffer *buf, size_t initial_capacity) {
 }
 
 void xr_netbuf_free(XrNetBuffer *buf) {
-    if (!buf) return;
+    if (!buf)
+        return;
     xr_free(buf->_base);
     buf->_base = NULL;
     buf->bytes = NULL;
@@ -46,7 +48,7 @@ void xr_netbuf_free(XrNetBuffer *buf) {
     buf->capacity = 0;
 }
 
-char* xr_netbuf_reserve(XrNetBuffer *buf, size_t min_avail) {
+char *xr_netbuf_reserve(XrNetBuffer *buf, size_t min_avail) {
     assert(buf && buf->_base);
 
     size_t consumed = xr_netbuf_consumed(buf);
@@ -72,8 +74,9 @@ char* xr_netbuf_reserve(XrNetBuffer *buf, size_t min_avail) {
         new_cap = (new_cap < 1024 * 1024) ? new_cap * 2 : new_cap + new_cap / 4;
     }
 
-    char *new_base = (char *)xr_malloc(new_cap);
-    if (!new_base) return NULL;
+    char *new_base = (char *) xr_malloc(new_cap);
+    if (!new_base)
+        return NULL;
 
     if (buf->size > 0) {
         memcpy(new_base, buf->bytes, buf->size);
@@ -111,7 +114,8 @@ void xr_netbuf_consume(XrNetBuffer *buf, size_t n) {
 void xr_netbuf_compact(XrNetBuffer *buf) {
     assert(buf);
     size_t consumed = xr_netbuf_consumed(buf);
-    if (consumed == 0) return;
+    if (consumed == 0)
+        return;
 
     if (buf->size > 0) {
         memmove(buf->_base, buf->bytes, buf->size);
@@ -136,10 +140,11 @@ typedef struct {
     int count;
 } XrNetBufPool;
 
-static _Thread_local XrNetBufPool tls_pool = { .count = 0 };
+static _Thread_local XrNetBufPool tls_pool = {.count = 0};
 
-XrNetBuffer* xr_netbuf_acquire(size_t initial_capacity) {
-    if (initial_capacity == 0) initial_capacity = XR_NETBUF_DEFAULT_CAP;
+XrNetBuffer *xr_netbuf_acquire(size_t initial_capacity) {
+    if (initial_capacity == 0)
+        initial_capacity = XR_NETBUF_DEFAULT_CAP;
 
     // Try TLS pool first
     if (tls_pool.count > 0) {
@@ -159,8 +164,9 @@ XrNetBuffer* xr_netbuf_acquire(size_t initial_capacity) {
     }
 
     // Allocate new
-    XrNetBuffer *buf = (XrNetBuffer *)xr_malloc(sizeof(XrNetBuffer));
-    if (!buf) return NULL;
+    XrNetBuffer *buf = (XrNetBuffer *) xr_malloc(sizeof(XrNetBuffer));
+    if (!buf)
+        return NULL;
 
     if (!xr_netbuf_init(buf, initial_capacity)) {
         xr_free(buf);
@@ -170,11 +176,11 @@ XrNetBuffer* xr_netbuf_acquire(size_t initial_capacity) {
 }
 
 void xr_netbuf_release(XrNetBuffer *buf) {
-    if (!buf) return;
+    if (!buf)
+        return;
 
     // Return to TLS pool if room and not oversized
-    if (tls_pool.count < XR_NETBUF_MAX_RECYCLE &&
-        buf->capacity <= XR_NETBUF_RECYCLE_MAXCAP) {
+    if (tls_pool.count < XR_NETBUF_MAX_RECYCLE && buf->capacity <= XR_NETBUF_RECYCLE_MAXCAP) {
         xr_netbuf_reset(buf);
         tls_pool.slots[tls_pool.count++] = buf;
         return;

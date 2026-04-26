@@ -22,7 +22,7 @@
 
 XR_FUNC int cmd_lsp(const XrCliInvocation *inv) {
     XR_DCHECK(inv != NULL, "inv is NULL");
-    (void)inv; /* --stdio is the only transport, no options to read */
+    (void) inv; /* --stdio is the only transport, no options to read */
 
     /* Create and run server */
     XrLspServer *server = xlsp_server_new();
@@ -37,4 +37,4 @@ XR_FUNC int cmd_lsp(const XrCliInvocation *inv) {
     return (result != 0) ? XR_CLI_EXIT_FAIL : XR_CLI_EXIT_OK;
 }
 
-#endif // XR_HAS_LSP
+#endif  // XR_HAS_LSP

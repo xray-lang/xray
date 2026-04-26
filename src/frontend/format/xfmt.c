@@ -29,18 +29,16 @@
 // Default configuration
 // ============================================================================
 
-XrFmtConfig xfmt_default_config = {
-    .indent_size = 4,
-    .use_tabs = 0,
-    .max_line_length = 100,
-    .trailing_newline = 1,
-    .blank_lines_around_functions = 1,
-    .blank_lines_around_classes = 1,
-    .space_around_operators = 1,
-    .space_after_comma = 1,
-    .space_in_parentheses = 0,
-    .brace_same_line = 1
-};
+XrFmtConfig xfmt_default_config = {.indent_size = 4,
+                                   .use_tabs = 0,
+                                   .max_line_length = 100,
+                                   .trailing_newline = 1,
+                                   .blank_lines_around_functions = 1,
+                                   .blank_lines_around_classes = 1,
+                                   .space_around_operators = 1,
+                                   .space_after_comma = 1,
+                                   .space_in_parentheses = 0,
+                                   .brace_same_line = 1};
 
 // ============================================================================
 // Buffer helpers (cross-TU; declared in xfmt_internal.h)
@@ -49,7 +47,7 @@ XrFmtConfig xfmt_default_config = {
 void xfmt_ensure_capacity(XrFmtContext *ctx, size_t additional) {
     if (ctx->length + additional >= ctx->capacity) {
         ctx->capacity = (ctx->capacity + additional) * 2;
-        ctx->output = (char *)xr_realloc(ctx->output, ctx->capacity);
+        ctx->output = (char *) xr_realloc(ctx->output, ctx->capacity);
     }
 }
 
@@ -67,9 +65,11 @@ void xfmt_write_char(XrFmtContext *ctx, char c) {
 }
 
 void xfmt_write_str(XrFmtContext *ctx, const char *str) {
-    if (!str) return;
+    if (!str)
+        return;
     size_t len = strlen(str);
-    if (len == 0) return;
+    if (len == 0)
+        return;
     xfmt_ensure_capacity(ctx, len);
     memcpy(ctx->output + ctx->length, str, len);
     ctx->length += len;
@@ -77,13 +77,14 @@ void xfmt_write_str(XrFmtContext *ctx, const char *str) {
     // Update line/column tracking
     const char *last_nl = NULL;
     for (size_t i = 0; i < len; i++) {
-        if (str[i] == '\n') last_nl = str + i;
+        if (str[i] == '\n')
+            last_nl = str + i;
     }
     if (last_nl) {
         ctx->line_start = 1;
-        ctx->column = (int)(str + len - 1 - last_nl);
+        ctx->column = (int) (str + len - 1 - last_nl);
     } else {
-        ctx->column += (int)len;
+        ctx->column += (int) len;
     }
 }
 
@@ -97,7 +98,8 @@ void xfmt_write_fmt(XrFmtContext *ctx, const char *fmt, ...) {
 }
 
 void xfmt_write_indent(XrFmtContext *ctx) {
-    if (!ctx->line_start) return;
+    if (!ctx->line_start)
+        return;
 
     if (ctx->config->use_tabs) {
         for (int i = 0; i < ctx->indent_level; i++) {
@@ -126,7 +128,7 @@ void xfmt_write_space(XrFmtContext *ctx) {
 
 void xfmt_init(XrFmtContext *ctx, XrFmtConfig *config, XrayIsolate *X) {
     ctx->capacity = 4096;
-    ctx->output = (char *)xr_malloc(ctx->capacity);
+    ctx->output = (char *) xr_malloc(ctx->capacity);
     XR_DCHECK(ctx->output != NULL, "xfmt: output buffer allocation failed");
     ctx->output[0] = '\0';
     ctx->length = 0;
@@ -149,7 +151,8 @@ void xfmt_free(XrFmtContext *ctx) {
 // ============================================================================
 
 void xfmt_node(XrFmtContext *ctx, AstNode *node) {
-    if (!node) return;
+    if (!node)
+        return;
 
     if (node->type == AST_PROGRAM) {
         xfmt_emit_program(ctx, node);

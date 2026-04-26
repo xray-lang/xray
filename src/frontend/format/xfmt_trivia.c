@@ -52,15 +52,15 @@ void xfmt_write_leading_comments(XrFmtContext *ctx, XrTrivia *trivia) {
 
 void xfmt_write_trailing_comment(XrFmtContext *ctx, XrTrivia *trivia) {
     XR_DCHECK(ctx != NULL, "xfmt_write_trailing_comment: NULL ctx");
-    if (!trivia) return;
+    if (!trivia)
+        return;
 
     // L-06: the lexer attaches at most one inline comment per token; we
     // intentionally emit only the first entry as trailing. A chain
     // longer than one would mean the lexer started returning multiple
     // -- treat that as a contract violation worth catching.
-    XR_DCHECK(trivia->next == NULL,
-              "xfmt_write_trailing_comment: lexer returned more than one "
-              "inline trailing trivia entry");
+    XR_DCHECK(trivia->next == NULL, "xfmt_write_trailing_comment: lexer returned more than one "
+                                    "inline trailing trivia entry");
 
     // Rewind the just-emitted terminating newline so the inline
     // comment lives on the same source line as the node body. If the
@@ -79,5 +79,6 @@ void xfmt_write_trailing_comment(XrFmtContext *ctx, XrTrivia *trivia) {
     xfmt_write_str(ctx, "  ");
     xfmt_write_trivia_body(ctx, trivia);
 
-    if (had_newline) xfmt_write_newline(ctx);
+    if (had_newline)
+        xfmt_write_newline(ctx);
 }

@@ -36,19 +36,19 @@
 // memmove()s the rest of the buffer down so the next frame can start
 // parsing without reallocation.
 typedef struct XrLspTransport {
-    int    read_fd;                 // Input fd (non-blocking)
-    int    write_fd;                // Output fd (retries on EAGAIN)
+    int read_fd;   // Input fd (non-blocking)
+    int write_fd;  // Output fd (retries on EAGAIN)
 
-    char  *read_buf;                // Incremental read accumulator
-    size_t read_cap;                // read_buf capacity
-    size_t read_len;                // Valid bytes in read_buf
+    char *read_buf;   // Incremental read accumulator
+    size_t read_cap;  // read_buf capacity
+    size_t read_len;  // Valid bytes in read_buf
 
     // Parser state between try_read() calls. Cleared each time a
     // complete frame is delivered.
-    int    pending_content_length;  // -1 until Content-Length header parsed
-    size_t header_end;              // Offset just past "\r\n\r\n"
+    int pending_content_length;  // -1 until Content-Length header parsed
+    size_t header_end;           // Offset just past "\r\n\r\n"
 
-    bool   connected;               // False after EOF / fatal read error
+    bool connected;  // False after EOF / fatal read error
 } XrLspTransport;
 
 // Create an stdio transport (stdin -> read_fd, stdout -> write_fd).
@@ -78,4 +78,4 @@ XR_FUNC int xlsp_transport_get_fd(XrLspTransport *t);
 // False once EOF / fatal read error has been observed.
 XR_FUNC bool xlsp_transport_is_connected(XrLspTransport *t);
 
-#endif // XLSP_TRANSPORT_H
+#endif  // XLSP_TRANSPORT_H

@@ -19,35 +19,39 @@ struct XrTypeScope {
 };
 
 static XrTypeAlias *find_local(XrTypeScope *scope, const char *name) {
-    if (!scope || !name) return NULL;
+    if (!scope || !name)
+        return NULL;
     for (XrTypeAlias *a = scope->aliases; a; a = a->next) {
-        if (a->name && strcmp(a->name, name) == 0) return a;
+        if (a->name && strcmp(a->name, name) == 0)
+            return a;
     }
     return NULL;
 }
 
 XrTypeScope *xr_type_scope_new(XrTypeScope *parent) {
-    XrTypeScope *scope = (XrTypeScope*)xr_malloc(sizeof(XrTypeScope));
-    if (!scope) return NULL;
+    XrTypeScope *scope = (XrTypeScope *) xr_malloc(sizeof(XrTypeScope));
+    if (!scope)
+        return NULL;
     scope->parent = parent;
     scope->aliases = NULL;
     return scope;
 }
 
 void xr_type_scope_free(XrTypeScope *scope) {
-    if (!scope) return;
+    if (!scope)
+        return;
     XrTypeAlias *a = scope->aliases;
     while (a) {
         XrTypeAlias *next = a->next;
-        if (a->name) xr_free((void*)a->name);
+        if (a->name)
+            xr_free((void *) a->name);
         xr_free(a);
         a = next;
     }
     xr_free(scope);
 }
 
-XrTypeAlias *xr_type_scope_define(XrTypeScope *scope,
-                                  const char *name, XrType *type) {
+XrTypeAlias *xr_type_scope_define(XrTypeScope *scope, const char *name, XrType *type) {
     XR_DCHECK(scope != NULL, "xr_type_scope_define: NULL scope");
     XR_DCHECK(name != NULL, "xr_type_scope_define: NULL name");
 
@@ -55,8 +59,9 @@ XrTypeAlias *xr_type_scope_define(XrTypeScope *scope,
         return NULL;  // Duplicate definition in this scope.
     }
 
-    XrTypeAlias *a = (XrTypeAlias*)xr_malloc(sizeof(XrTypeAlias));
-    if (!a) return NULL;
+    XrTypeAlias *a = (XrTypeAlias *) xr_malloc(sizeof(XrTypeAlias));
+    if (!a)
+        return NULL;
 
     char *name_copy = xr_strdup(name);
     if (!name_copy) {
@@ -72,10 +77,12 @@ XrTypeAlias *xr_type_scope_define(XrTypeScope *scope,
 }
 
 XrTypeAlias *xr_type_scope_lookup(XrTypeScope *scope, const char *name) {
-    if (!name) return NULL;
+    if (!name)
+        return NULL;
     for (XrTypeScope *s = scope; s; s = s->parent) {
         XrTypeAlias *a = find_local(s, name);
-        if (a) return a;
+        if (a)
+            return a;
     }
     return NULL;
 }

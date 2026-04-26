@@ -29,8 +29,9 @@
 // Map() - create empty map
 XrValue xr_builtin_map_construct(XrayIsolate *isolate, XrValue *args, int nargs) {
     XR_DCHECK(isolate != NULL, "map_construct: NULL isolate");
-    (void)args;
-    if (nargs != 0) return xr_null();
+    (void) args;
+    if (nargs != 0)
+        return xr_null();
     XrMap *map = xr_map_new(xr_current_coro(isolate));
     return xr_value_from_map(map);
 }
@@ -39,70 +40,67 @@ XrValue xr_builtin_map_construct(XrayIsolate *isolate, XrValue *args, int nargs)
 XrValue xr_builtin_map_from(XrayIsolate *isolate, XrValue *args, int nargs) {
     if (nargs == 1) {
         // Map.from(entries) - array of [key, value] pairs
-        if (!XR_IS_ARRAY(args[0])) return xr_null();
-        
+        if (!XR_IS_ARRAY(args[0]))
+            return xr_null();
+
         XrArray *entries = XR_TO_ARRAY(args[0]);
         XrMap *map = xr_map_new(xr_current_coro(isolate));
-        
-        XrValue *edata = (XrValue*)entries->data;
+
+        XrValue *edata = (XrValue *) entries->data;
         for (int i = 0; i < entries->length; i++) {
-            if (!XR_IS_ARRAY(edata[i])) return xr_null();
-            
+            if (!XR_IS_ARRAY(edata[i]))
+                return xr_null();
+
             XrArray *entry = XR_TO_ARRAY(edata[i]);
-            if (entry->length != 2) return xr_null();
-            
-            XrValue *pdata = (XrValue*)entry->data;
+            if (entry->length != 2)
+                return xr_null();
+
+            XrValue *pdata = (XrValue *) entry->data;
             xr_map_set(map, pdata[0], pdata[1]);
         }
-        
+
         return xr_value_from_map(map);
-    }
-    else if (nargs == 2) {
+    } else if (nargs == 2) {
         // Map.from(keys, values)
-        if (!XR_IS_ARRAY(args[0]) || !XR_IS_ARRAY(args[1])) return xr_null();
-        
+        if (!XR_IS_ARRAY(args[0]) || !XR_IS_ARRAY(args[1]))
+            return xr_null();
+
         XrArray *keys = XR_TO_ARRAY(args[0]);
         XrArray *values = XR_TO_ARRAY(args[1]);
-        
+
         int size = keys->length < values->length ? keys->length : values->length;
         XrMap *map = xr_map_new(xr_current_coro(isolate));
-        
+
         for (int i = 0; i < size; i++) {
-            xr_map_set(map, ((XrValue*)keys->data)[i], ((XrValue*)values->data)[i]);
+            xr_map_set(map, ((XrValue *) keys->data)[i], ((XrValue *) values->data)[i]);
         }
-        
+
         return xr_value_from_map(map);
     }
     return xr_null();
 }
 
 // Create Map class with all methods using XrClassBuilder
-XrClass* xr_map_create_class(XrayIsolate *X, XrClass *objectClass) {
+XrClass *xr_map_create_class(XrayIsolate *X, XrClass *objectClass) {
     XR_DCHECK(X != NULL, "map_create_class: NULL isolate");
     XrClassBuilder *builder = xr_class_builder_new(X, "Map", objectClass);
     if (!builder) {
         fprintf(stderr, "[Map] ERROR: Failed to create class builder\n");
         return NULL;
     }
-    
+
     // Static constructor
     xr_class_builder_add_static_method(builder, XR_KEYWORD_CONSTRUCTOR,
-        (XrCFunctionPtr)xr_builtin_map_construct, 0, 0);
-    
+                                       (XrCFunctionPtr) xr_builtin_map_construct, 0, 0);
+
     // Instance methods
-    xr_class_builder_add_method(builder, "set",
-        (XrCFunctionPtr)xr_map_method_set, 2, 0);
-    xr_class_builder_add_method(builder, "get",
-        (XrCFunctionPtr)xr_map_method_get, 1, 0);
-    xr_class_builder_add_method(builder, "has",
-        (XrCFunctionPtr)xr_map_method_has, 1, 0);
-    xr_class_builder_add_method(builder, "delete",
-        (XrCFunctionPtr)xr_map_method_delete, 1, 0);
-    xr_class_builder_add_method(builder, "clear",
-        (XrCFunctionPtr)xr_map_method_clear, 0, 0);
-    xr_class_builder_add_method(builder, "increment",
-        (XrCFunctionPtr)xr_map_method_increment, 1, 0);
-    
+    xr_class_builder_add_method(builder, "set", (XrCFunctionPtr) xr_map_method_set, 2, 0);
+    xr_class_builder_add_method(builder, "get", (XrCFunctionPtr) xr_map_method_get, 1, 0);
+    xr_class_builder_add_method(builder, "has", (XrCFunctionPtr) xr_map_method_has, 1, 0);
+    xr_class_builder_add_method(builder, "delete", (XrCFunctionPtr) xr_map_method_delete, 1, 0);
+    xr_class_builder_add_method(builder, "clear", (XrCFunctionPtr) xr_map_method_clear, 0, 0);
+    xr_class_builder_add_method(builder, "increment", (XrCFunctionPtr) xr_map_method_increment, 1,
+                                0);
+
     return xr_class_builder_finalize(builder);
 }
-

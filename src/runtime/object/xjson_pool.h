@@ -31,8 +31,8 @@ struct XrayIsolate;
 
 /* ========== Pool Configuration ========== */
 
-#define XR_JSON_POOL_MAX_SIZE 2048     // Max objects per pool
-#define XR_JSON_POOL_MAX_FIELDS 8      // Objects with more fields are not pooled
+#define XR_JSON_POOL_MAX_SIZE 2048  // Max objects per pool
+#define XR_JSON_POOL_MAX_FIELDS 8   // Objects with more fields are not pooled
 
 /* ========== Pool Structures ========== */
 
@@ -42,7 +42,7 @@ typedef struct XrJsonPool {
     int count;
     int capacity;
     int field_count;
-    
+
     // Stats
     uint64_t hits;
     uint64_t misses;
@@ -54,7 +54,7 @@ typedef struct XrJsonPool {
 typedef struct XrJsonPoolManager {
     XrJsonPool pools[XR_JSON_POOL_MAX_FIELDS];  // Pools grouped by field count
     bool enabled;
-    
+
     // Global stats
     uint64_t total_allocs;
     uint64_t pool_allocs;
@@ -67,7 +67,8 @@ XR_FUNC void xr_json_pool_init(XrJsonPoolManager *pm);
 XR_FUNC void xr_json_pool_cleanup(XrJsonPoolManager *pm);
 
 // Get Json from pool. Returns NULL if pool miss (caller should allocate).
-XR_FUNC struct XrJson* xr_json_pool_get(XrJsonPoolManager *pm, struct XrShape *shape, int field_count);
+XR_FUNC struct XrJson *xr_json_pool_get(XrJsonPoolManager *pm, struct XrShape *shape,
+                                        int field_count);
 
 // Return Json to pool. Returns true if returned, false if should be freed.
 XR_FUNC bool xr_json_pool_return(XrJsonPoolManager *pm, struct XrJson *json);
@@ -75,4 +76,4 @@ XR_FUNC bool xr_json_pool_return(XrJsonPoolManager *pm, struct XrJson *json);
 XR_FUNC void xr_json_pool_dump_stats(XrJsonPoolManager *pm);
 XR_FUNC void xr_json_pool_set_enabled(XrJsonPoolManager *pm, bool enabled);
 
-#endif // XJSON_POOL_H
+#endif  // XJSON_POOL_H

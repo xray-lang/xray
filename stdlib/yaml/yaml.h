@@ -62,6 +62,6 @@ XR_FUNC XrValue xr_yaml_parse_all(XrayIsolate *isolate, const char *data, size_t
 XR_FUNC XrValue xr_yaml_stringify(XrayIsolate *isolate, XrValue value, int indent);
 
 // Load yaml module
-XR_FUNC XrModule* xr_load_module_yaml(XrayIsolate *isolate);
+XR_FUNC XrModule *xr_load_module_yaml(XrayIsolate *isolate);
 
 #endif

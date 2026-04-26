@@ -18,7 +18,8 @@
 #include <string.h>
 
 void xray_isolate_params_init(XrayIsolateParams *params) {
-    if (params == NULL) return;
+    if (params == NULL)
+        return;
     memset(params, 0, sizeof(XrayIsolateParams));
 
     params->backend_type = XRAY_BACKEND_BYTECODE;

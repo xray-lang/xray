@@ -28,12 +28,12 @@
 /* ========== I/O Connection Context ========== */
 
 typedef struct XrIOConn {
-    int fd;                     // Socket file descriptor
-    XrPollDesc *pd;             // Netpoll descriptor
-    XrTlsConn *tls;             // TLS connection (optional)
-    bool is_tls;                // Whether TLS enabled
-    int timeout_ms;             // Default timeout (milliseconds)
-    XrNetError last_error;      // Last error
+    int fd;                 // Socket file descriptor
+    XrPollDesc *pd;         // Netpoll descriptor
+    XrTlsConn *tls;         // TLS connection (optional)
+    bool is_tls;            // Whether TLS enabled
+    int timeout_ms;         // Default timeout (milliseconds)
+    XrNetError last_error;  // Last error
 } XrIOConn;
 
 /* ========== Global Initialization ========== */
@@ -51,7 +51,7 @@ XR_FUNC void xr_io_init_with_netpoll(XrNetpoll *np);
 XR_FUNC void xr_io_shutdown(void);
 
 // Get active netpoll instance (owned or external)
-XR_FUNC XrNetpoll* xr_io_get_netpoll(void);
+XR_FUNC XrNetpoll *xr_io_get_netpoll(void);
 
 /* ========== Connection API ========== */
 
@@ -66,7 +66,7 @@ XR_FUNC XrNetpoll* xr_io_get_netpoll(void);
  *
  * Note: This function auto-yields until connection completes or times out
  */
-XR_FUNC XrIOConn* xr_io_connect(const char *host, int port, int timeout_ms);
+XR_FUNC XrIOConn *xr_io_connect(const char *host, int port, int timeout_ms);
 
 /*
  * Create TLS connection (coroutine-friendly)
@@ -77,7 +77,7 @@ XR_FUNC XrIOConn* xr_io_connect(const char *host, int port, int timeout_ms);
  *
  * Returns: Connection context, NULL on failure
  */
-XR_FUNC XrIOConn* xr_io_connect_tls(const char *host, int port, int timeout_ms);
+XR_FUNC XrIOConn *xr_io_connect_tls(const char *host, int port, int timeout_ms);
 
 /*
  * Create TLS connection using a caller-supplied TLS context.
@@ -93,8 +93,8 @@ XR_FUNC XrIOConn* xr_io_connect_tls(const char *host, int port, int timeout_ms);
  * Returns: coroutine-ready XrIOConn on success, NULL on connect /
  * handshake / verify failure.
  */
-XR_FUNC XrIOConn* xr_io_connect_tls_with_ctx(XrTlsContext *ctx, const char *host,
-                                      int port, int timeout_ms);
+XR_FUNC XrIOConn *xr_io_connect_tls_with_ctx(XrTlsContext *ctx, const char *host, int port,
+                                             int timeout_ms);
 
 // Close connection
 XR_FUNC void xr_io_close(XrIOConn *conn);
@@ -170,7 +170,7 @@ XR_FUNC int xr_io_listen(const char *addr, int port, int backlog);
  *
  * Note: This function auto-yields until new connection arrives
  */
-XR_FUNC XrIOConn* xr_io_accept(int listen_fd);
+XR_FUNC XrIOConn *xr_io_accept(int listen_fd);
 
 /*
  * Accept + server-side TLS handshake (coroutine-friendly).
@@ -187,7 +187,7 @@ XR_FUNC XrIOConn* xr_io_accept(int listen_fd);
  *
  * Returns: coroutine-ready XrIOConn on success, NULL otherwise.
  */
-XR_FUNC XrIOConn* xr_io_accept_tls_with_ctx(int listen_fd, XrTlsContext *ctx);
+XR_FUNC XrIOConn *xr_io_accept_tls_with_ctx(int listen_fd, XrTlsContext *ctx);
 
 /*
  * Wrap an existing file descriptor into an XrIOConn.
@@ -196,7 +196,7 @@ XR_FUNC XrIOConn* xr_io_accept_tls_with_ctx(int listen_fd, XrTlsContext *ctx);
  *
  * Returns: Connection context, NULL on failure
  */
-XR_FUNC XrIOConn* xr_io_conn_from_fd(int fd, int timeout_ms);
+XR_FUNC XrIOConn *xr_io_conn_from_fd(int fd, int timeout_ms);
 
 /* ========== Utility Functions ========== */
 
@@ -216,6 +216,6 @@ XR_FUNC int xr_io_set_nonblocking(int fd);
 XR_FUNC void xr_io_set_isolate(struct XrayIsolate *X);
 
 // Get current thread's VM instance
-XR_FUNC struct XrayIsolate* xr_io_get_isolate(void);
+XR_FUNC struct XrayIsolate *xr_io_get_isolate(void);
 
-#endif // XR_STDLIB_NET_IO_H
+#endif  // XR_STDLIB_NET_IO_H

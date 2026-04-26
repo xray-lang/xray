@@ -39,13 +39,13 @@ typedef struct XrReflectCache {
 
 /* ========== Cache Operations ========== */
 
-XR_FUNC XrReflectCache* xr_reflect_cache_create(XrayIsolate *X, XrClass *klass);
+XR_FUNC XrReflectCache *xr_reflect_cache_create(XrayIsolate *X, XrClass *klass);
 XR_FUNC void xr_reflect_cache_free(XrReflectCache *cache);
 
 XR_FUNC XrValue xr_reflect_cache_get_field(XrReflectCache *cache, int field_index);
 XR_FUNC XrValue xr_reflect_cache_get_method(XrReflectCache *cache, int method_index);
 
-XR_FUNC XrArray* xr_reflect_cache_get_all_fields(XrayIsolate *X, XrReflectCache *cache);
-XR_FUNC XrArray* xr_reflect_cache_get_all_methods(XrayIsolate *X, XrReflectCache *cache);
+XR_FUNC XrArray *xr_reflect_cache_get_all_fields(XrayIsolate *X, XrReflectCache *cache);
+XR_FUNC XrArray *xr_reflect_cache_get_all_methods(XrayIsolate *X, XrReflectCache *cache);
 
-#endif // XREFLECT_CACHE_H
+#endif  // XREFLECT_CACHE_H

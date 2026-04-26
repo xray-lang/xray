@@ -14,8 +14,7 @@
 #include "xvalue.h"
 #include "xdefs.h"
 
-
 // Global String constructor
 XR_FUNC XrValue xr_builtin_string_construct(XrayIsolate *isolate, XrValue *args, int nargs);
 
-#endif // XSTRING_BUILTINS_H
+#endif  // XSTRING_BUILTINS_H

@@ -32,10 +32,9 @@ XR_FUNC const XaBuiltinModule *xa_xrd_load_file(const char *xrd_path);
 // Try to find and load a .xrd for the given module name.
 // Searches: <script_dir>/<name>.xrd, then $XRAY_TYPEPATH/<name>.xrd
 // Returns NULL if no .xrd file found.
-XR_FUNC const XaBuiltinModule *xa_xrd_find_module(const char *module_name,
-                                           const char *script_dir);
+XR_FUNC const XaBuiltinModule *xa_xrd_find_module(const char *module_name, const char *script_dir);
 
 // Free all dynamically loaded .xrd modules (call at shutdown)
 XR_FUNC void xa_xrd_cleanup(void);
 
-#endif // XANALYZER_XRD_H
+#endif  // XANALYZER_XRD_H

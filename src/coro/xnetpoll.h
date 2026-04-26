@@ -27,7 +27,7 @@
 #include <stdatomic.h>
 #include <pthread.h>
 #include "../base/xdefs.h"
-#include "xtimer_wheel.h" // XrTWheelTimer
+#include "xtimer_wheel.h"  // XrTWheelTimer
 
 // Forward declarations
 struct XrCoroutine;
@@ -47,17 +47,17 @@ typedef enum {
 // ========== I/O Mode ==========
 
 typedef enum {
-    XR_POLL_READ  = 0x01,     // Read ready
-    XR_POLL_WRITE = 0x02,     // Write ready
-    XR_POLL_BOTH  = 0x03      // Both read and write
+    XR_POLL_READ = 0x01,   // Read ready
+    XR_POLL_WRITE = 0x02,  // Write ready
+    XR_POLL_BOTH = 0x03    // Both read and write
 } XrPollMode;
 
 // ========== Poll Descriptor State ==========
 
 typedef enum {
-    XR_PD_NIL   = 0,          // No state
-    XR_PD_READY = 1,          // I/O ready
-    XR_PD_WAIT  = 2           // Waiting
+    XR_PD_NIL = 0,    // No state
+    XR_PD_READY = 1,  // I/O ready
+    XR_PD_WAIT = 2    // Waiting
 } XrPdState;
 
 // ========== Poll Descriptor (one per fd, lock-free design) ==========
@@ -68,35 +68,35 @@ typedef enum {
 // - rg/wg store coroutine pointer directly, no blocked queue
 
 typedef struct XrPollDesc {
-    struct XrPollDesc *link;   // Free list link
+    struct XrPollDesc *link;  // Free list link
 
-    int fd;                    // File descriptor
-    _Atomic uint32_t fdseq;    // fd sequence (prevent stale notifications from fd reuse)
+    int fd;                  // File descriptor
+    _Atomic uint32_t fdseq;  // fd sequence (prevent stale notifications from fd reuse)
 
     // fd bound to fixed Worker (Port model)
-    int owner_worker_id;       // Bound Worker ID (-1 = unbound)
+    int owner_worker_id;  // Bound Worker ID (-1 = unbound)
 
     // Read/write waiting coroutine (atomic ops, state machine)
     // State: XR_PD_NIL -> XR_PD_WAIT -> coro ptr -> XR_PD_READY -> XR_PD_NIL
-    _Atomic uintptr_t rg;      // Read wait: XR_PD_NIL/XR_PD_READY/XR_PD_WAIT/coro ptr
-    _Atomic uintptr_t wg;      // Write wait: XR_PD_NIL/XR_PD_READY/XR_PD_WAIT/coro ptr
+    _Atomic uintptr_t rg;  // Read wait: XR_PD_NIL/XR_PD_READY/XR_PD_WAIT/coro ptr
+    _Atomic uintptr_t wg;  // Write wait: XR_PD_NIL/XR_PD_READY/XR_PD_WAIT/coro ptr
 
     // State flags
-    _Atomic bool closing;      // Closing
-    bool rrun;                 // Read timer running
-    bool wrun;                 // Write timer running
+    _Atomic bool closing;  // Closing
+    bool rrun;             // Read timer running
+    bool wrun;             // Write timer running
 
     // Read timeout (deadline + timer + seq)
-    _Atomic uintptr_t rseq;    // Read sequence (lock-free cancel: increment invalidates callback)
-    uintptr_t rseq_saved;      // Read sequence saved at timer set time (for callback check)
-    int64_t rd;                // Read deadline (ns, 0=no timeout, -1=expired)
-    XrTWheelTimer *rt;         // Read timeout timer pointer
+    _Atomic uintptr_t rseq;  // Read sequence (lock-free cancel: increment invalidates callback)
+    uintptr_t rseq_saved;    // Read sequence saved at timer set time (for callback check)
+    int64_t rd;              // Read deadline (ns, 0=no timeout, -1=expired)
+    XrTWheelTimer *rt;       // Read timeout timer pointer
 
     // Write timeout (deadline + timer + seq)
-    _Atomic uintptr_t wseq;    // Write sequence (lock-free cancel)
-    uintptr_t wseq_saved;      // Write sequence saved at timer set time (for callback check)
-    int64_t wd;                // Write deadline (ns, 0=no timeout, -1=expired)
-    XrTWheelTimer *wt;         // Write timeout timer pointer
+    _Atomic uintptr_t wseq;  // Write sequence (lock-free cancel)
+    uintptr_t wseq_saved;    // Write sequence saved at timer set time (for callback check)
+    int64_t wd;              // Write deadline (ns, 0=no timeout, -1=expired)
+    XrTWheelTimer *wt;       // Write timeout timer pointer
 
     // Embedded timer node storage (avoid dynamic alloc)
     XrTWheelTimer rt_storage;  // Read timer storage
@@ -127,7 +127,7 @@ typedef struct XrReadyList {
 // ========== Poll Descriptor Cache ==========
 
 typedef struct XrPollCache {
-    _Atomic(XrPollDesc*) head; // Treiber stack head (lock-free)
+    _Atomic(XrPollDesc *) head;  // Treiber stack head (lock-free)
 } XrPollCache;
 
 // ========== Backend Operations (function pointer table) ==========
@@ -138,13 +138,13 @@ typedef struct XrPollCache {
 typedef struct XrNetpoll XrNetpoll;
 
 typedef struct XrNetpollOps {
-    const char *name;                                              // "kqueue", "epoll", "io_uring"
-    int  (*init)(XrNetpoll *np);                                   // Create backend handle
-    void (*cleanup)(XrNetpoll *np);                                // Destroy backend handle
-    int  (*add_fd)(XrNetpoll *np, int fd, XrPollDesc *pd);         // Register fd
-    void (*del_fd)(XrNetpoll *np, int fd);                         // Unregister fd
-    int  (*poll_events)(XrNetpoll *np, int64_t delta_ns, XrReadyList *list); // Wait & collect
-    void (*wakeup)(XrNetpoll *np);                                 // Interrupt wait
+    const char *name;                                      // "kqueue", "epoll", "io_uring"
+    int (*init)(XrNetpoll *np);                            // Create backend handle
+    void (*cleanup)(XrNetpoll *np);                        // Destroy backend handle
+    int (*add_fd)(XrNetpoll *np, int fd, XrPollDesc *pd);  // Register fd
+    void (*del_fd)(XrNetpoll *np, int fd);                 // Unregister fd
+    int (*poll_events)(XrNetpoll *np, int64_t delta_ns, XrReadyList *list);  // Wait & collect
+    void (*wakeup)(XrNetpoll *np);                                           // Interrupt wait
 } XrNetpollOps;
 
 // ========== Global Netpoll State ==========
@@ -153,24 +153,24 @@ typedef struct XrNetpollOps {
 // First level: 256 page pointers (fixed, ~2KB)
 // Second level: 256-entry pages, allocated on demand (~2KB each)
 // Total capacity: 65536 fds, base overhead: ~2KB (vs ~512KB flat array)
-#define XR_FDMAP_PAGE_BITS   8
-#define XR_FDMAP_PAGE_SIZE   (1 << XR_FDMAP_PAGE_BITS)           // 256
-#define XR_FDMAP_PAGE_MASK   (XR_FDMAP_PAGE_SIZE - 1)            // 0xFF
-#define XR_FDMAP_PAGES       256                                  // 256 pages
-#define XR_NETPOLL_FD_MAX    (XR_FDMAP_PAGES * XR_FDMAP_PAGE_SIZE)  // 65536
+#define XR_FDMAP_PAGE_BITS 8
+#define XR_FDMAP_PAGE_SIZE (1 << XR_FDMAP_PAGE_BITS)             // 256
+#define XR_FDMAP_PAGE_MASK (XR_FDMAP_PAGE_SIZE - 1)              // 0xFF
+#define XR_FDMAP_PAGES 256                                       // 256 pages
+#define XR_NETPOLL_FD_MAX (XR_FDMAP_PAGES * XR_FDMAP_PAGE_SIZE)  // 65536
 
 typedef struct XrFdMapPage {
-    _Atomic(XrPollDesc*) entries[XR_FDMAP_PAGE_SIZE];
+    _Atomic(XrPollDesc *) entries[XR_FDMAP_PAGE_SIZE];
 } XrFdMapPage;
 
 struct XrNetpoll {
-    _Atomic bool inited;       // Whether initialized
-    _Atomic int waiters;       // Number of coroutines waiting for I/O
+    _Atomic bool inited;  // Whether initialized
+    _Atomic int waiters;  // Number of coroutines waiting for I/O
 
-    XrPollCache cache;         // Descriptor cache pool
+    XrPollCache cache;  // Descriptor cache pool
 
     // Two-level fd to pd mapping (lock-free, on-demand page allocation)
-    _Atomic(XrFdMapPage*) fd_pages[XR_FDMAP_PAGES];
+    _Atomic(XrFdMapPage *) fd_pages[XR_FDMAP_PAGES];
 
     // Backend dispatch (set once during init, never changes)
     const XrNetpollOps *ops;
@@ -182,8 +182,8 @@ struct XrNetpoll {
     void *backend_state;
 
     // Wakeup mechanism
-    int wakeup_pipe[2];        // Wakeup pipe (read/write ends)
-    _Atomic bool break_pending;// Whether there's pending wakeup
+    int wakeup_pipe[2];          // Wakeup pipe (read/write ends)
+    _Atomic bool break_pending;  // Whether there's pending wakeup
 };
 
 // ========== fd_map Two-Level Access Helpers ==========
@@ -194,11 +194,13 @@ struct XrNetpoll {
 
 // Get PollDesc for fd (lock-free read, returns NULL if page not allocated)
 static inline XrPollDesc *xr_fdmap_get(XrNetpoll *np, int fd) {
-    if (fd < 0 || fd >= XR_NETPOLL_FD_MAX) return NULL;
+    if (fd < 0 || fd >= XR_NETPOLL_FD_MAX)
+        return NULL;
     int page_idx = fd >> XR_FDMAP_PAGE_BITS;
     int entry_idx = fd & XR_FDMAP_PAGE_MASK;
     XrFdMapPage *page = atomic_load_explicit(&np->fd_pages[page_idx], memory_order_acquire);
-    if (!page) return NULL;
+    if (!page)
+        return NULL;
     return atomic_load_explicit(&page->entries[entry_idx], memory_order_acquire);
 }
 
@@ -206,16 +208,18 @@ static inline XrPollDesc *xr_fdmap_get(XrNetpoll *np, int fd) {
 static inline XrFdMapPage *xr_fdmap_ensure_page(XrNetpoll *np, int fd) {
     int page_idx = fd >> XR_FDMAP_PAGE_BITS;
     XrFdMapPage *page = atomic_load_explicit(&np->fd_pages[page_idx], memory_order_acquire);
-    if (page) return page;
+    if (page)
+        return page;
 
     // Allocate new page
-    XrFdMapPage *new_page = (XrFdMapPage *)xr_calloc(1, sizeof(XrFdMapPage));
-    if (!new_page) return NULL;
+    XrFdMapPage *new_page = (XrFdMapPage *) xr_calloc(1, sizeof(XrFdMapPage));
+    if (!new_page)
+        return NULL;
 
     // CAS to install (only one thread wins)
     XrFdMapPage *expected = NULL;
-    if (atomic_compare_exchange_strong_explicit(&np->fd_pages[page_idx],
-            &expected, new_page, memory_order_acq_rel, memory_order_acquire)) {
+    if (atomic_compare_exchange_strong_explicit(&np->fd_pages[page_idx], &expected, new_page,
+                                                memory_order_acq_rel, memory_order_acquire)) {
         return new_page;
     }
     // Another thread won, free ours and use theirs
@@ -224,21 +228,24 @@ static inline XrFdMapPage *xr_fdmap_ensure_page(XrNetpoll *np, int fd) {
 }
 
 // CAS set PollDesc for fd (returns true if set, false if already occupied)
-static inline bool xr_fdmap_cas(XrNetpoll *np, int fd,
-                                 XrPollDesc **expected, XrPollDesc *desired) {
-    if (fd < 0 || fd >= XR_NETPOLL_FD_MAX) return false;
+static inline bool xr_fdmap_cas(XrNetpoll *np, int fd, XrPollDesc **expected, XrPollDesc *desired) {
+    if (fd < 0 || fd >= XR_NETPOLL_FD_MAX)
+        return false;
     XrFdMapPage *page = xr_fdmap_ensure_page(np, fd);
-    if (!page) return false;
+    if (!page)
+        return false;
     int entry_idx = fd & XR_FDMAP_PAGE_MASK;
-    return atomic_compare_exchange_strong_explicit(&page->entries[entry_idx],
-        expected, desired, memory_order_acq_rel, memory_order_acquire);
+    return atomic_compare_exchange_strong_explicit(&page->entries[entry_idx], expected, desired,
+                                                   memory_order_acq_rel, memory_order_acquire);
 }
 
 // Set PollDesc for fd (unconditional store)
 static inline void xr_fdmap_store(XrNetpoll *np, int fd, XrPollDesc *pd) {
-    if (fd < 0 || fd >= XR_NETPOLL_FD_MAX) return;
+    if (fd < 0 || fd >= XR_NETPOLL_FD_MAX)
+        return;
     XrFdMapPage *page = xr_fdmap_ensure_page(np, fd);
-    if (!page) return;
+    if (!page)
+        return;
     int entry_idx = fd & XR_FDMAP_PAGE_MASK;
     atomic_store_explicit(&page->entries[entry_idx], pd, memory_order_release);
 }
@@ -262,8 +269,8 @@ static inline void xr_fdmap_destroy(XrNetpoll *np) {
 // The global XrNetpoll still owns the fd_map and PollDesc cache.
 
 typedef struct XrLocalPoll {
-    int poll_fd;               // per-worker kqueue/epoll fd (-1 = uninitialized)
-    int wakeup_pipe[2];        // per-worker wakeup pipe
+    int poll_fd;         // per-worker kqueue/epoll fd (-1 = uninitialized)
+    int wakeup_pipe[2];  // per-worker wakeup pipe
     _Atomic bool break_pending;
 } XrLocalPoll;
 
@@ -323,8 +330,8 @@ XR_FUNC bool xr_netpoll_any_waiters(XrNetpoll *np);
 // 1. Increment rseq/wseq to invalidate old callbacks
 // 2. New timer carries current sequence number
 // 3. Callback checks sequence on trigger, skip if mismatch
-XR_FUNC void xr_netpoll_set_deadline(XrNetpoll *np, XrPollDesc *pd, int64_t deadline,
-                              int mode, XrTimerWheel *tw);
+XR_FUNC void xr_netpoll_set_deadline(XrNetpoll *np, XrPollDesc *pd, int64_t deadline, int mode,
+                                     XrTimerWheel *tw);
 
 // Timeout callback (internal use)
 // Called by Timer Wheel, checks sequence then wakes coroutine
@@ -368,4 +375,4 @@ XR_FUNC void xr_netpoll_deferred_free(XrNetpoll *np, XrPollDesc *pd);
 // Drain deferred free queue on current worker (called during poll cycle)
 XR_FUNC void xr_netpoll_drain_deferred(XrNetpoll *np, struct XrProc *p);
 
-#endif // XNETPOLL_H
+#endif  // XNETPOLL_H

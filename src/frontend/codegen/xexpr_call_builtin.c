@@ -36,8 +36,8 @@
  * Compile unary builtin function: op result, arg
  * Pattern: compile arg -> allocate result -> emit instruction -> return result register
  */
-static int compile_unary_builtin(XrCompilerContext *ctx, XrCompiler *compiler,
-                                  AstNode *arg, OpCode op) {
+static int compile_unary_builtin(XrCompilerContext *ctx, XrCompiler *compiler, AstNode *arg,
+                                 OpCode op) {
     XR_DCHECK(ctx != NULL, "compile_unary_builtin: NULL ctx");
     XR_DCHECK(compiler != NULL, "compile_unary_builtin: NULL compiler");
     XrExprDesc arg_desc = xr_compile_expr(ctx, compiler, arg);
@@ -48,11 +48,10 @@ static int compile_unary_builtin(XrCompilerContext *ctx, XrCompiler *compiler,
     return result_reg;
 }
 
-static int compile_builtin_func(XrCompilerContext *ctx, XrCompiler *compiler,
-                                 AstNode *arg, OpCode op) {
+static int compile_builtin_func(XrCompilerContext *ctx, XrCompiler *compiler, AstNode *arg,
+                                OpCode op) {
     return compile_unary_builtin(ctx, compiler, arg, op);
 }
-
 
 /* ========== Builtin Function Table ========== */
 
@@ -67,7 +66,8 @@ typedef struct {
     BuiltinCompileFn compile;
 } BuiltinEntry;
 
-static int compile_builtin_assert(XrCompilerContext *ctx, XrCompiler *compiler, CallExprNode *node) {
+static int compile_builtin_assert(XrCompilerContext *ctx, XrCompiler *compiler,
+                                  CallExprNode *node) {
     XR_DCHECK(ctx != NULL, "compile_builtin_assert: NULL ctx");
     XR_DCHECK(compiler != NULL, "compile_builtin_assert: NULL compiler");
     if (node->arg_count == 1 || node->arg_count == 2) {
@@ -75,8 +75,8 @@ static int compile_builtin_assert(XrCompilerContext *ctx, XrCompiler *compiler, 
         int cond_reg = xexpr_to_anyreg(ctx, compiler, &cond_desc);
         char loc_buf[256];
         if (node->arg_count == 2 && node->arguments[1]->type == AST_LITERAL_STRING) {
-            snprintf(loc_buf, sizeof(loc_buf), "line %d: %s",
-                     node->arguments[0]->line, node->arguments[1]->as.literal.raw_value.string_val);
+            snprintf(loc_buf, sizeof(loc_buf), "line %d: %s", node->arguments[0]->line,
+                     node->arguments[1]->as.literal.raw_value.string_val);
         } else {
             snprintf(loc_buf, sizeof(loc_buf), "line %d", node->arguments[0]->line);
         }
@@ -89,10 +89,13 @@ static int compile_builtin_assert(XrCompilerContext *ctx, XrCompiler *compiler, 
         return result_reg;
     }
     xr_compiler_error(ctx, compiler, "assert() expects 1 or 2 arguments, got %d", node->arg_count);
-    int r = reg_alloc(ctx, compiler); xemit_loadnull(compiler->emitter, r); return r;
+    int r = reg_alloc(ctx, compiler);
+    xemit_loadnull(compiler->emitter, r);
+    return r;
 }
 
-static int compile_builtin_assert_eq(XrCompilerContext *ctx, XrCompiler *compiler, CallExprNode *node) {
+static int compile_builtin_assert_eq(XrCompilerContext *ctx, XrCompiler *compiler,
+                                     CallExprNode *node) {
     XR_DCHECK(ctx != NULL, "compile_builtin_assert_eq: NULL ctx");
     XR_DCHECK(compiler != NULL, "compile_builtin_assert_eq: NULL compiler");
     if (node->arg_count == 2) {
@@ -119,10 +122,13 @@ static int compile_builtin_assert_eq(XrCompilerContext *ctx, XrCompiler *compile
         return result_reg;
     }
     xr_compiler_error(ctx, compiler, "assert_eq() expects 2 arguments, got %d", node->arg_count);
-    int r = reg_alloc(ctx, compiler); xemit_loadnull(compiler->emitter, r); return r;
+    int r = reg_alloc(ctx, compiler);
+    xemit_loadnull(compiler->emitter, r);
+    return r;
 }
 
-static int compile_builtin_assert_false(XrCompilerContext *ctx, XrCompiler *compiler, CallExprNode *node) {
+static int compile_builtin_assert_false(XrCompilerContext *ctx, XrCompiler *compiler,
+                                        CallExprNode *node) {
     if (node->arg_count == 1) {
         XrExprDesc cond_desc = xr_compile_expr(ctx, compiler, node->arguments[0]);
         int cond_reg = xexpr_to_anyreg(ctx, compiler, &cond_desc);
@@ -137,10 +143,13 @@ static int compile_builtin_assert_false(XrCompilerContext *ctx, XrCompiler *comp
         return result_reg;
     }
     xr_compiler_error(ctx, compiler, "assert_false() expects 1 argument, got %d", node->arg_count);
-    int r = reg_alloc(ctx, compiler); xemit_loadnull(compiler->emitter, r); return r;
+    int r = reg_alloc(ctx, compiler);
+    xemit_loadnull(compiler->emitter, r);
+    return r;
 }
 
-static int compile_builtin_assert_ne(XrCompilerContext *ctx, XrCompiler *compiler, CallExprNode *node) {
+static int compile_builtin_assert_ne(XrCompilerContext *ctx, XrCompiler *compiler,
+                                     CallExprNode *node) {
     if (node->arg_count == 2) {
         // Use readonly to preserve raw type (no auto-boxing)
         XrExprDesc actual_desc = xr_compile_expr(ctx, compiler, node->arguments[0]);
@@ -165,10 +174,13 @@ static int compile_builtin_assert_ne(XrCompilerContext *ctx, XrCompiler *compile
         return result_reg;
     }
     xr_compiler_error(ctx, compiler, "assert_ne() expects 2 arguments, got %d", node->arg_count);
-    int r = reg_alloc(ctx, compiler); xemit_loadnull(compiler->emitter, r); return r;
+    int r = reg_alloc(ctx, compiler);
+    xemit_loadnull(compiler->emitter, r);
+    return r;
 }
 
-static int compile_builtin_assert_throws(XrCompilerContext *ctx, XrCompiler *compiler, CallExprNode *node) {
+static int compile_builtin_assert_throws(XrCompilerContext *ctx, XrCompiler *compiler,
+                                         CallExprNode *node) {
     if (node->arg_count == 1) {
         // Compile the closure argument
         XrExprDesc fn_desc = xr_compile_expr(ctx, compiler, node->arguments[0]);
@@ -235,11 +247,15 @@ static int compile_builtin_assert_throws(XrCompilerContext *ctx, XrCompiler *com
         xemit_loadnull(compiler->emitter, result_reg);
         return result_reg;
     }
-    xr_compiler_error(ctx, compiler, "assert_throws() expects 1 argument (a function), got %d", node->arg_count);
-    int r = reg_alloc(ctx, compiler); xemit_loadnull(compiler->emitter, r); return r;
+    xr_compiler_error(ctx, compiler, "assert_throws() expects 1 argument (a function), got %d",
+                      node->arg_count);
+    int r = reg_alloc(ctx, compiler);
+    xemit_loadnull(compiler->emitter, r);
+    return r;
 }
 
-static int compile_builtin_assert_true(XrCompilerContext *ctx, XrCompiler *compiler, CallExprNode *node) {
+static int compile_builtin_assert_true(XrCompilerContext *ctx, XrCompiler *compiler,
+                                       CallExprNode *node) {
     if (node->arg_count == 1) {
         XrExprDesc cond_desc = xr_compile_expr(ctx, compiler, node->arguments[0]);
         int cond_reg = xexpr_to_anyreg(ctx, compiler, &cond_desc);
@@ -254,12 +270,14 @@ static int compile_builtin_assert_true(XrCompilerContext *ctx, XrCompiler *compi
         return result_reg;
     }
     xr_compiler_error(ctx, compiler, "assert_true() expects 1 argument, got %d", node->arg_count);
-    int r = reg_alloc(ctx, compiler); xemit_loadnull(compiler->emitter, r); return r;
+    int r = reg_alloc(ctx, compiler);
+    xemit_loadnull(compiler->emitter, r);
+    return r;
 }
 
 static int compile_builtin_array(XrCompilerContext *ctx, XrCompiler *compiler, CallExprNode *node) {
     int result_reg = reg_alloc(ctx, compiler);
-    int c_field = ((int)ctx->current_elem_tid << 2) | ctx->current_storage_mode;
+    int c_field = ((int) ctx->current_elem_tid << 2) | ctx->current_storage_mode;
     if (node->arg_count == 0) {
         xemit_newarray(compiler->emitter, result_reg, 0, c_field);
     } else if (node->arg_count == 1) {
@@ -268,14 +286,16 @@ static int compile_builtin_array(XrCompilerContext *ctx, XrCompiler *compiler, C
         xemit_newarray(compiler->emitter, result_reg, arg_reg, c_field);
         xreg_set_freereg(compiler->regalloc, result_reg + 1);
     } else {
-        xr_compiler_error(ctx, compiler, "Array() expects 0 or 1 argument, got %d", node->arg_count);
+        xr_compiler_error(ctx, compiler, "Array() expects 0 or 1 argument, got %d",
+                          node->arg_count);
         xemit_newarray(compiler->emitter, result_reg, 0, c_field);
     }
     return result_reg;
 }
 
 static int compile_builtin_bool(XrCompilerContext *ctx, XrCompiler *compiler, CallExprNode *node) {
-    if (node->arg_count == 1) return compile_builtin_func(ctx, compiler, node->arguments[0], OP_TOBOOL);
+    if (node->arg_count == 1)
+        return compile_builtin_func(ctx, compiler, node->arguments[0], OP_TOBOOL);
     return BUILTIN_NOT_HANDLED;
 }
 
@@ -301,7 +321,8 @@ static int compile_builtin_bytes(XrCompilerContext *ctx, XrCompiler *compiler, C
 }
 
 static int compile_builtin_chr(XrCompilerContext *ctx, XrCompiler *compiler, CallExprNode *node) {
-    if (node->arg_count == 1) return compile_builtin_func(ctx, compiler, node->arguments[0], OP_CHR);
+    if (node->arg_count == 1)
+        return compile_builtin_func(ctx, compiler, node->arguments[0], OP_CHR);
     return BUILTIN_NOT_HANDLED;
 }
 
@@ -315,7 +336,9 @@ static int compile_builtin_copy(XrCompilerContext *ctx, XrCompiler *compiler, Ca
         return result_reg;
     }
     xr_compiler_error(ctx, compiler, "copy() expects 1 argument, got %d", node->arg_count);
-    int r = reg_alloc(ctx, compiler); xemit_loadnull(compiler->emitter, r); return r;
+    int r = reg_alloc(ctx, compiler);
+    xemit_loadnull(compiler->emitter, r);
+    return r;
 }
 
 static int compile_builtin_dump(XrCompilerContext *ctx, XrCompiler *compiler, CallExprNode *node) {
@@ -332,12 +355,14 @@ static int compile_builtin_dump(XrCompilerContext *ctx, XrCompiler *compiler, Ca
             AstNode *arg1 = node->arguments[1];
             if (arg1->type != AST_LITERAL_INT) {
                 xr_compiler_error(ctx, compiler,
-                    "dump() indent argument must be an integer literal");
+                                  "dump() indent argument must be an integer literal");
             } else {
                 int64_t v = arg1->as.literal.raw_value.int_val;
-                if (v < 0) v = 0;
-                if (v > 8) v = 8;
-                indent = (int)v;
+                if (v < 0)
+                    v = 0;
+                if (v > 8)
+                    v = 8;
+                indent = (int) v;
             }
         }
         xemit_dump(compiler->emitter, val_reg, indent);
@@ -349,31 +374,38 @@ static int compile_builtin_dump(XrCompilerContext *ctx, XrCompiler *compiler, Ca
         return result_reg;
     }
     xr_compiler_error(ctx, compiler, "dump() expects 1 or 2 arguments, got %d", node->arg_count);
-    int r = reg_alloc(ctx, compiler); xemit_loadnull(compiler->emitter, r); return r;
+    int r = reg_alloc(ctx, compiler);
+    xemit_loadnull(compiler->emitter, r);
+    return r;
 }
 
 static int compile_builtin_float(XrCompilerContext *ctx, XrCompiler *compiler, CallExprNode *node) {
-    if (node->arg_count == 1) return compile_builtin_func(ctx, compiler, node->arguments[0], OP_TOFLOAT);
+    if (node->arg_count == 1)
+        return compile_builtin_func(ctx, compiler, node->arguments[0], OP_TOFLOAT);
     return BUILTIN_NOT_HANDLED;
 }
 
 static int compile_builtin_int(XrCompilerContext *ctx, XrCompiler *compiler, CallExprNode *node) {
-    if (node->arg_count == 1) return compile_builtin_func(ctx, compiler, node->arguments[0], OP_TOINT);
+    if (node->arg_count == 1)
+        return compile_builtin_func(ctx, compiler, node->arguments[0], OP_TOINT);
     return BUILTIN_NOT_HANDLED;
 }
 
 static int compile_builtin_map(XrCompilerContext *ctx, XrCompiler *compiler, CallExprNode *node) {
-    (void)node;
+    (void) node;
     int result_reg = reg_alloc(ctx, compiler);
-    int key_kind = (ctx->current_key_tid == XR_TID_STRING) ? 1 : (ctx->current_key_tid == XR_TID_INT) ? 2 : 0;
-    int c_field = (key_kind << 7) | (((int)ctx->current_elem_tid & 0x1F) << 2) | ctx->current_storage_mode;
+    int key_kind = (ctx->current_key_tid == XR_TID_STRING) ? 1
+                   : (ctx->current_key_tid == XR_TID_INT)  ? 2
+                                                           : 0;
+    int c_field =
+        (key_kind << 7) | (((int) ctx->current_elem_tid & 0x1F) << 2) | ctx->current_storage_mode;
     xemit_newmap(compiler->emitter, result_reg, 0, c_field);
     return result_reg;
 }
 
 static int compile_builtin_set(XrCompilerContext *ctx, XrCompiler *compiler, CallExprNode *node) {
     int result_reg = reg_alloc(ctx, compiler);
-    int b_field = ((int)ctx->current_elem_tid << 2) | ctx->current_storage_mode;
+    int b_field = ((int) ctx->current_elem_tid << 2) | ctx->current_storage_mode;
     if (node->arg_count == 0) {
         xemit_newset(compiler->emitter, result_reg, b_field);
     } else if (node->arg_count == 1) {
@@ -390,16 +422,18 @@ static int compile_builtin_set(XrCompilerContext *ctx, XrCompiler *compiler, Cal
     return result_reg;
 }
 
-static int compile_builtin_string(XrCompilerContext *ctx, XrCompiler *compiler, CallExprNode *node) {
+static int compile_builtin_string(XrCompilerContext *ctx, XrCompiler *compiler,
+                                  CallExprNode *node) {
     if (node->arg_count == 1) {
         XrExprDesc arg_desc = xr_compile_expr(ctx, compiler, node->arguments[0]);
         // Preserve raw format — slot_hint tells VM to format directly
         int slot_hint = 0;
-        if (xexpr_is_raw_i64(&arg_desc))      slot_hint = 1;
-        else if (xexpr_is_raw_f64(&arg_desc)) slot_hint = 2;
-        int arg_reg = (slot_hint != 0)
-            ? xexpr_to_anyreg_readonly(ctx, compiler, &arg_desc)
-            : xexpr_to_anyreg(ctx, compiler, &arg_desc);
+        if (xexpr_is_raw_i64(&arg_desc))
+            slot_hint = 1;
+        else if (xexpr_is_raw_f64(&arg_desc))
+            slot_hint = 2;
+        int arg_reg = (slot_hint != 0) ? xexpr_to_anyreg_readonly(ctx, compiler, &arg_desc)
+                                       : xexpr_to_anyreg(ctx, compiler, &arg_desc);
         int result_reg = reg_alloc(ctx, compiler);
         xemit_tostring(compiler->emitter, result_reg, arg_reg, slot_hint);
         xreg_set_freereg(compiler->regalloc, result_reg + 1);
@@ -409,49 +443,59 @@ static int compile_builtin_string(XrCompilerContext *ctx, XrCompiler *compiler, 
 }
 
 // Helper: compile typeof/typename with given opcode
-static int compile_typeof_impl(XrCompilerContext *ctx, XrCompiler *compiler, CallExprNode *node, int opcode, const char *func_name) {
+static int compile_typeof_impl(XrCompilerContext *ctx, XrCompiler *compiler, CallExprNode *node,
+                               int opcode, const char *func_name) {
     XR_DCHECK(ctx != NULL, "compile_typeof_impl: NULL ctx");
     XR_DCHECK(compiler != NULL, "compile_typeof_impl: NULL compiler");
     if (node->arg_count == 1) {
         XrExprDesc arg_desc = xr_compile_expr(ctx, compiler, node->arguments[0]);
         int slot_hint = 0;
-        if (xexpr_is_raw_i64(&arg_desc))      slot_hint = 1;
-        else if (xexpr_is_raw_f64(&arg_desc)) slot_hint = 2;
-        int arg_reg = (slot_hint != 0)
-            ? xexpr_to_anyreg_readonly(ctx, compiler, &arg_desc)
-            : xexpr_to_anyreg(ctx, compiler, &arg_desc);
+        if (xexpr_is_raw_i64(&arg_desc))
+            slot_hint = 1;
+        else if (xexpr_is_raw_f64(&arg_desc))
+            slot_hint = 2;
+        int arg_reg = (slot_hint != 0) ? xexpr_to_anyreg_readonly(ctx, compiler, &arg_desc)
+                                       : xexpr_to_anyreg(ctx, compiler, &arg_desc);
         int result_reg = reg_alloc(ctx, compiler);
         emit_abc(compiler->emitter, opcode, result_reg, arg_reg, slot_hint);
         xreg_set_freereg(compiler->regalloc, result_reg + 1);
         return result_reg;
     }
     xr_compiler_error(ctx, compiler, "%s() expects 1 argument, got %d", func_name, node->arg_count);
-    int r = reg_alloc(ctx, compiler); xemit_loadnull(compiler->emitter, r); return r;
+    int r = reg_alloc(ctx, compiler);
+    xemit_loadnull(compiler->emitter, r);
+    return r;
 }
 
-static int compile_builtin_typeof(XrCompilerContext *ctx, XrCompiler *compiler, CallExprNode *node) {
+static int compile_builtin_typeof(XrCompilerContext *ctx, XrCompiler *compiler,
+                                  CallExprNode *node) {
     return compile_typeof_impl(ctx, compiler, node, OP_TYPEOF, "typeof");
 }
 
-static int compile_builtin_typename(XrCompilerContext *ctx, XrCompiler *compiler, CallExprNode *node) {
+static int compile_builtin_typename(XrCompilerContext *ctx, XrCompiler *compiler,
+                                    CallExprNode *node) {
     return compile_typeof_impl(ctx, compiler, node, OP_TYPENAME, "typename");
 }
 
-static int compile_builtin_weakmap(XrCompilerContext *ctx, XrCompiler *compiler, CallExprNode *node) {
+static int compile_builtin_weakmap(XrCompilerContext *ctx, XrCompiler *compiler,
+                                   CallExprNode *node) {
     if (node->arg_count == 0) {
         int result_reg = reg_alloc(ctx, compiler);
-        int key_kind = (ctx->current_key_tid == XR_TID_STRING) ? 1 : (ctx->current_key_tid == XR_TID_INT) ? 2 : 0;
-        int c_field = (key_kind << 7) | (((int)ctx->current_elem_tid & 0x1F) << 2) | 0x02;
+        int key_kind = (ctx->current_key_tid == XR_TID_STRING) ? 1
+                       : (ctx->current_key_tid == XR_TID_INT)  ? 2
+                                                               : 0;
+        int c_field = (key_kind << 7) | (((int) ctx->current_elem_tid & 0x1F) << 2) | 0x02;
         xemit_newmap(compiler->emitter, result_reg, 0, c_field);
         return result_reg;
     }
     return BUILTIN_NOT_HANDLED;
 }
 
-static int compile_builtin_weakset(XrCompilerContext *ctx, XrCompiler *compiler, CallExprNode *node) {
+static int compile_builtin_weakset(XrCompilerContext *ctx, XrCompiler *compiler,
+                                   CallExprNode *node) {
     if (node->arg_count == 0) {
         int result_reg = reg_alloc(ctx, compiler);
-        int b_field = ((int)ctx->current_elem_tid << 2) | 0x02;
+        int b_field = ((int) ctx->current_elem_tid << 2) | 0x02;
         xemit_newset(compiler->emitter, result_reg, b_field);
         return result_reg;
     }
@@ -460,27 +504,27 @@ static int compile_builtin_weakset(XrCompilerContext *ctx, XrCompiler *compiler,
 
 // Sorted by name for binary search (21 entries)
 static const BuiltinEntry builtin_functions[] = {
-    {"Array",        compile_builtin_array},
-    {"Bytes",        compile_builtin_bytes},
-    {"Map",          compile_builtin_map},
-    {"Set",          compile_builtin_set},
-    {"WeakMap",      compile_builtin_weakmap},
-    {"WeakSet",      compile_builtin_weakset},
-    {"assert",       compile_builtin_assert},
-    {"assert_eq",    compile_builtin_assert_eq},
+    {"Array", compile_builtin_array},
+    {"Bytes", compile_builtin_bytes},
+    {"Map", compile_builtin_map},
+    {"Set", compile_builtin_set},
+    {"WeakMap", compile_builtin_weakmap},
+    {"WeakSet", compile_builtin_weakset},
+    {"assert", compile_builtin_assert},
+    {"assert_eq", compile_builtin_assert_eq},
     {"assert_false", compile_builtin_assert_false},
-    {"assert_ne",      compile_builtin_assert_ne},
-    {"assert_throws",  compile_builtin_assert_throws},
-    {"assert_true",    compile_builtin_assert_true},
-    {"bool",         compile_builtin_bool},
-    {"chr",          compile_builtin_chr},
-    {"copy",         compile_builtin_copy},
-    {"dump",         compile_builtin_dump},
-    {"float",        compile_builtin_float},
-    {"int",          compile_builtin_int},
-    {"string",       compile_builtin_string},
-    {"typename",     compile_builtin_typename},
-    {"typeof",       compile_builtin_typeof},
+    {"assert_ne", compile_builtin_assert_ne},
+    {"assert_throws", compile_builtin_assert_throws},
+    {"assert_true", compile_builtin_assert_true},
+    {"bool", compile_builtin_bool},
+    {"chr", compile_builtin_chr},
+    {"copy", compile_builtin_copy},
+    {"dump", compile_builtin_dump},
+    {"float", compile_builtin_float},
+    {"int", compile_builtin_int},
+    {"string", compile_builtin_string},
+    {"typename", compile_builtin_typename},
+    {"typeof", compile_builtin_typeof},
 };
 #define BUILTIN_COUNT (sizeof(builtin_functions) / sizeof(builtin_functions[0]))
 
@@ -489,30 +533,36 @@ static const BuiltinEntry *builtin_lookup(const char *name) {
     while (lo <= hi) {
         int mid = (lo + hi) / 2;
         int cmp = strcmp(name, builtin_functions[mid].name);
-        if (cmp < 0) hi = mid - 1;
-        else if (cmp > 0) lo = mid + 1;
-        else return &builtin_functions[mid];
+        if (cmp < 0)
+            hi = mid - 1;
+        else if (cmp > 0)
+            lo = mid + 1;
+        else
+            return &builtin_functions[mid];
     }
     return NULL;
 }
 
 /* ========== Public dispatcher ========== */
 
-int xr_compile_call_builtin(XrCompilerContext *ctx, XrCompiler *compiler,
-                            CallExprNode *node, bool is_tail) {
+int xr_compile_call_builtin(XrCompilerContext *ctx, XrCompiler *compiler, CallExprNode *node,
+                            bool is_tail) {
     XR_DCHECK(ctx != NULL, "xr_compile_call_builtin: NULL ctx");
     XR_DCHECK(compiler != NULL, "xr_compile_call_builtin: NULL compiler");
     XR_DCHECK(node != NULL, "xr_compile_call_builtin: NULL node");
 
     // Builtins are recognised by call-site name only: foo(...).
     // `obj.method(...)` and other shapes are not in this table.
-    if (node->callee->type != AST_VARIABLE) return -1;
+    if (node->callee->type != AST_VARIABLE)
+        return -1;
 
     const BuiltinEntry *entry = builtin_lookup(node->callee->as.variable.name);
-    if (!entry) return -1;
+    if (!entry)
+        return -1;
 
     int result = entry->compile(ctx, compiler, node);
-    if (result == BUILTIN_NOT_HANDLED) return -1;
+    if (result == BUILTIN_NOT_HANDLED)
+        return -1;
 
     // Builtins emit specialised opcodes (e.g. OP_TOINT), not OP_CALL /
     // OP_TAILCALL. If called in tail position, the caller assumes

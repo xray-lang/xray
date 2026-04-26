@@ -30,7 +30,7 @@
 
 typedef struct XrPkgClientConfig {
     const char *registry_url;
-    const char *auth_token;     // Optional
+    const char *auth_token;  // Optional
     int timeout_ms;
     bool verbose;
 } XrPkgClientConfig;
@@ -64,30 +64,30 @@ XR_FUNC void xr_pkg_client_set_isolate(XrayIsolate *isolate);
 
 /* ========== Package Info API ========== */
 
-XR_FUNC XrPackageInfo* xr_pkg_client_get_info(const char *owner, const char *name);
-XR_FUNC bool xr_pkg_client_get_versions(const char *owner, const char *name,
-                                char ***versions, int *count);
-XR_FUNC XrPkgSearchResult* xr_pkg_client_search(const char *query);
+XR_FUNC XrPackageInfo *xr_pkg_client_get_info(const char *owner, const char *name);
+XR_FUNC bool xr_pkg_client_get_versions(const char *owner, const char *name, char ***versions,
+                                        int *count);
+XR_FUNC XrPkgSearchResult *xr_pkg_client_search(const char *query);
 XR_FUNC void xr_pkg_search_result_free(XrPkgSearchResult *result);
 
 /* ========== Download API ========== */
 
-XR_FUNC bool xr_pkg_client_download(const char *owner, const char *name,
-                            const char *version, const char *dest_dir);
-XR_FUNC bool xr_pkg_client_install(const char *owner, const char *name,
-                           const char *version, const char *dest_dir);
+XR_FUNC bool xr_pkg_client_download(const char *owner, const char *name, const char *version,
+                                    const char *dest_dir);
+XR_FUNC bool xr_pkg_client_install(const char *owner, const char *name, const char *version,
+                                   const char *dest_dir);
 
 /* ========== Publish API ========== */
 
 typedef struct XrPkgPublishInfo {
-    const char *name;        // e.g. "xray/sqlite"
-    const char *version;     // e.g. "1.0.0"
-    const char *description; // optional
-    const char *license;     // optional
+    const char *name;         // e.g. "xray/sqlite"
+    const char *version;      // e.g. "1.0.0"
+    const char *description;  // optional
+    const char *license;      // optional
 } XrPkgPublishInfo;
 
 XR_FUNC bool xr_pkg_client_publish(const char *tarball_path, const char *auth_token,
-                                    const XrPkgPublishInfo *info);
+                                   const XrPkgPublishInfo *info);
 
 /* ========== Auth API ========== */
 
@@ -98,10 +98,10 @@ XR_FUNC bool xr_pkg_client_load_token(char **token_out);
 
 /* ========== Low-level HTTP API ========== */
 
-XR_FUNC XrPkgResponse* xr_pkg_http_get(const char *url);
-XR_FUNC XrPkgResponse* xr_pkg_http_post(const char *url, const char *body,
-                                const char *content_type);
+XR_FUNC XrPkgResponse *xr_pkg_http_get(const char *url);
+XR_FUNC XrPkgResponse *xr_pkg_http_post(const char *url, const char *body,
+                                        const char *content_type);
 XR_FUNC bool xr_pkg_http_download_file(const char *url, const char *dest_path);
 XR_FUNC void xr_pkg_response_free(XrPkgResponse *response);
 
-#endif // XPKG_CLIENT_H
+#endif  // XPKG_CLIENT_H

@@ -28,4 +28,4 @@ XR_FUNC bool xr_swar_is_digits(const char *s, size_t len);
 XR_FUNC bool xr_swar_is_8_digits(const char *s);
 XR_FUNC uint64_t xr_swar_parse_8_digits(const char *s);
 
-#endif // XSWAR_H
+#endif  // XSWAR_H

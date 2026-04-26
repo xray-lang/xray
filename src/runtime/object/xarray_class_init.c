@@ -20,7 +20,7 @@
 #include <stdio.h>
 
 // Create Array class with all methods using XrClassBuilder
-XrClass* xr_array_create_class(XrayIsolate *X, XrClass *objectClass) {
+XrClass *xr_array_create_class(XrayIsolate *X, XrClass *objectClass) {
     XrClassBuilder *builder = xr_class_builder_new(X, "Array", objectClass);
     if (!builder) {
         fprintf(stderr, "[Array] ERROR: Failed to create class builder\n");
@@ -29,7 +29,7 @@ XrClass* xr_array_create_class(XrayIsolate *X, XrClass *objectClass) {
 
     // Static constructor
     xr_class_builder_add_static_method(builder, XR_KEYWORD_CONSTRUCTOR,
-        (XrCFunctionPtr)xr_builtin_array_construct, 0, 0);
+                                       (XrCFunctionPtr) xr_builtin_array_construct, 0, 0);
 
     return xr_class_builder_finalize(builder);
 }

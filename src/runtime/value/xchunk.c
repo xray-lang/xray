@@ -61,8 +61,10 @@ int xr_valuearray_add(ValueArray *array, XrValue value) {
     int count = DYNARRAY_COUNT(array);
     for (int i = 0; i < count; i++) {
         XrValue existing = DYNARRAY_GET(array, i, XrValue);
-        if (XR_IS_INT(existing) != XR_IS_INT(value)) continue;
-        if (XR_IS_FLOAT(existing) != XR_IS_FLOAT(value)) continue;
+        if (XR_IS_INT(existing) != XR_IS_INT(value))
+            continue;
+        if (XR_IS_FLOAT(existing) != XR_IS_FLOAT(value))
+            continue;
         if (xr_value_deep_eq(existing, value)) {
             return i;  // Found duplicate with same type, return existing index
         }
@@ -76,7 +78,7 @@ int xr_valuearray_add(ValueArray *array, XrValue value) {
 
 // Create new function prototype
 XrProto *xr_vm_proto_new(void) {
-    XrProto *proto = (XrProto *)xr_calloc(1, sizeof(XrProto));
+    XrProto *proto = (XrProto *) xr_calloc(1, sizeof(XrProto));
     if (proto == NULL) {
         return NULL;
     }
@@ -85,15 +87,14 @@ XrProto *xr_vm_proto_new(void) {
     // Only containers that require explicit init are called below.
     DYNARRAY_INIT(&proto->code, XrInstruction);
     xr_valuearray_init(&proto->constants);
-    DYNARRAY_INIT(&proto->protos, XrProto*);
+    DYNARRAY_INIT(&proto->protos, XrProto *);
     DYNARRAY_INIT(&proto->upvalues, UpvalInfo);
     DYNARRAY_INIT(&proto->lineinfo, int);
     DYNARRAY_INIT(&proto->locvars, XrLocVar);
 
     // Assign a globally-unique, never-reused id. IC tables on
     // XrVMContext index by this value to keep XrProto immutable.
-    proto->proto_id = atomic_fetch_add_explicit(&s_proto_id_counter, 1u,
-                                                memory_order_relaxed);
+    proto->proto_id = atomic_fetch_add_explicit(&s_proto_id_counter, 1u, memory_order_relaxed);
 
     return proto;
 }
@@ -107,7 +108,7 @@ void xr_vm_proto_free(XrProto *proto) {
     // Free nested functions (recursive)
     int proto_count = DYNARRAY_COUNT(&proto->protos);
     for (int i = 0; i < proto_count; i++) {
-        XrProto *child = DYNARRAY_GET(&proto->protos, i, XrProto*);
+        XrProto *child = DYNARRAY_GET(&proto->protos, i, XrProto *);
         xr_vm_proto_free(child);
     }
 
@@ -160,7 +161,7 @@ void xr_vm_proto_free(XrProto *proto) {
 
     // Free Blueprint (compiler-generated JIT metadata)
     if (proto->blueprint != NULL) {
-        xr_blueprint_free((struct XrBlueprint *)proto->blueprint);
+        xr_blueprint_free((struct XrBlueprint *) proto->blueprint);
         proto->blueprint = NULL;
     }
 
@@ -191,7 +192,7 @@ void xr_vm_proto_free(XrProto *proto) {
 
     // Free bytecode stack map (precise GC for interpreter)
     if (proto->bc_stackmap != NULL) {
-        xr_bc_stackmap_destroy((XrBcStackMap *)proto->bc_stackmap);
+        xr_bc_stackmap_destroy((XrBcStackMap *) proto->bc_stackmap);
         proto->bc_stackmap = NULL;
     }
 
@@ -207,8 +208,7 @@ int xr_proto_add_symbol(XrProto *proto, int32_t global_symbol) {
     XR_DCHECK(global_symbol >= 0, "proto_add_symbol: negative symbol id");
     XR_DCHECK(proto->symbol_count >= 0, "proto_add_symbol: negative count");
     XR_DCHECK(proto->symbol_capacity >= 0, "proto_add_symbol: negative capacity");
-    XR_DCHECK(proto->symbol_count <= proto->symbol_capacity,
-              "proto_add_symbol: count > capacity");
+    XR_DCHECK(proto->symbol_count <= proto->symbol_capacity, "proto_add_symbol: count > capacity");
     // Dedup: check if already registered
     for (int i = 0; i < proto->symbol_count; i++) {
         if (proto->symbols[i] == global_symbol) {
@@ -219,7 +219,7 @@ int xr_proto_add_symbol(XrProto *proto, int32_t global_symbol) {
     // Grow if needed
     if (proto->symbol_count >= proto->symbol_capacity) {
         int new_cap = proto->symbol_capacity < 8 ? 8 : proto->symbol_capacity * 2;
-        int32_t *new_buf = (int32_t *)xr_realloc(proto->symbols, new_cap * sizeof(int32_t));
+        int32_t *new_buf = (int32_t *) xr_realloc(proto->symbols, new_cap * sizeof(int32_t));
         if (!new_buf) {
             fprintf(stderr, "xr_proto_add_symbol: out of memory\n");
             return 0;
@@ -232,8 +232,7 @@ int xr_proto_add_symbol(XrProto *proto, int32_t global_symbol) {
     proto->symbols[local_idx] = global_symbol;
     proto->symbol_count++;
 
-    XR_CHECK(local_idx < 255,
-             "proto: too many unique symbols (>254), function too complex");
+    XR_CHECK(local_idx < 255, "proto: too many unique symbols (>254), function too complex");
 
     return local_idx;
 }
@@ -260,22 +259,23 @@ int xr_vm_proto_add_constant(XrProto *proto, XrValue value) {
 // Returns constant index
 int xr_proto_add_raw_constant(XrProto *proto, uint64_t value) {
     XR_DCHECK(proto != NULL, "proto_add_raw_constant: NULL proto");
-    XR_DCHECK(proto->raw_constant_count >= 0,
-              "proto_add_raw_constant: negative count");
-    XR_DCHECK(proto->raw_constant_capacity >= 0,
-              "proto_add_raw_constant: negative capacity");
+    XR_DCHECK(proto->raw_constant_count >= 0, "proto_add_raw_constant: negative count");
+    XR_DCHECK(proto->raw_constant_capacity >= 0, "proto_add_raw_constant: negative capacity");
     XR_DCHECK(proto->raw_constant_count <= proto->raw_constant_capacity,
               "proto_add_raw_constant: count > capacity");
     // Dedup check
     for (int i = 0; i < proto->raw_constant_count; i++) {
-        if (proto->raw_constants[i] == value) return i;
+        if (proto->raw_constants[i] == value)
+            return i;
     }
 
     // Grow if needed
     if (proto->raw_constant_count >= proto->raw_constant_capacity) {
         int new_cap = proto->raw_constant_capacity < 8 ? 8 : proto->raw_constant_capacity * 2;
-        uint64_t *new_buf = (uint64_t *)xr_realloc(proto->raw_constants, new_cap * sizeof(uint64_t));
-        if (!new_buf) return 0;
+        uint64_t *new_buf =
+            (uint64_t *) xr_realloc(proto->raw_constants, new_cap * sizeof(uint64_t));
+        if (!new_buf)
+            return 0;
         proto->raw_constants = new_buf;
         proto->raw_constant_capacity = new_cap;
     }
@@ -292,25 +292,23 @@ int xr_vm_proto_add_proto(XrProto *proto, XrProto *child) {
     XR_DCHECK(proto != NULL, "proto_add_proto: NULL proto");
     XR_DCHECK(child != NULL, "proto_add_proto: NULL child");
     child->enclosing = proto;
-    return DYNARRAY_ADD(&proto->protos, child, XrProto*);
+    return DYNARRAY_ADD(&proto->protos, child, XrProto *);
 }
 
 // Add upvalue info
 // Returns upvalue index
-int xr_vm_proto_add_upvalue(XrProto *proto, uint8_t index, uint8_t storage_mode, uint8_t is_const, uint8_t slot_type, uint8_t source, struct XrType *type_info) {
+int xr_vm_proto_add_upvalue(XrProto *proto, uint8_t index, uint8_t storage_mode, uint8_t is_const,
+                            uint8_t slot_type, uint8_t source, struct XrType *type_info) {
     XR_DCHECK(proto != NULL, "proto_add_upvalue: NULL proto");
     // No dedup here: dedup is done at compiler level in scope_add_upvalue.
     // proto->upvalues must stay in 1-to-1 correspondence with XrCompiler->upvalues[].
 
     // Add new upvalue
-    UpvalInfo new_uv = {
-        .index = index,
-        .storage_mode = storage_mode,
-        .is_const = is_const,
-        .slot_type = slot_type,
-        .source = source,
-        .type_info = type_info
-    };
+    UpvalInfo new_uv = {.index = index,
+                        .storage_mode = storage_mode,
+                        .is_const = is_const,
+                        .slot_type = slot_type,
+                        .source = source,
+                        .type_info = type_info};
     return DYNARRAY_ADD(&proto->upvalues, new_uv, UpvalInfo);
 }
-

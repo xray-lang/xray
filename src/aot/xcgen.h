@@ -32,7 +32,7 @@
 /* ========== Dynamic String Buffer ========== */
 
 typedef struct XcgenBuf {
-    char  *data;
+    char *data;
     size_t len;
     size_t cap;
 } XcgenBuf;
@@ -43,80 +43,81 @@ XR_FUNC void xcgen_buf_ensure(XcgenBuf *b, size_t extra);
 XR_FUNC void xcgen_buf_puts(XcgenBuf *b, const char *s);
 XR_FUNC void xcgen_buf_append(XcgenBuf *dst, const XcgenBuf *src);
 
-__attribute__((format(printf, 2, 3)))
-XR_FUNC void xcgen_buf_printf(XcgenBuf *b, const char *fmt, ...);
+__attribute__((format(printf, 2, 3))) XR_FUNC void xcgen_buf_printf(XcgenBuf *b, const char *fmt,
+                                                                    ...);
 
 /* ========== C File Sections ========== */
 
 typedef enum {
-    XCGEN_SEC_HEADERS,       // #include directives
-    XCGEN_SEC_FORWARD,       // forward declarations
-    XCGEN_SEC_TYPES,         // struct/typedef
-    XCGEN_SEC_DATA,          // static data (string literals, constants)
-    XCGEN_SEC_FUNCS,         // function bodies
-    XCGEN_SEC_MAIN,          // main() wrapper
+    XCGEN_SEC_HEADERS,  // #include directives
+    XCGEN_SEC_FORWARD,  // forward declarations
+    XCGEN_SEC_TYPES,    // struct/typedef
+    XCGEN_SEC_DATA,     // static data (string literals, constants)
+    XCGEN_SEC_FUNCS,    // function bodies
+    XCGEN_SEC_MAIN,     // main() wrapper
     XCGEN_SEC_COUNT,
 } XcgenSection;
 
 /* ========== Proto → C Name Mapping ========== */
 
-#define XCGEN_MAX_CALL_ARGS  65  // initial capacity: slot 0 (closure) + 64 args
+#define XCGEN_MAX_CALL_ARGS 65  // initial capacity: slot 0 (closure) + 64 args
 
 typedef struct {
-    void       *proto_ptr;   // XrProto* (opaque, compared by address)
-    const char *c_name;      // C function name (e.g. "xr_fib")
-    int         func_idx;    // index into mod->funcs (-1 = not yet compiled)
-    bool        non_escaping; // true if closure only called via CALL_KNOWN (never stored/returned)
-    int         num_upvals;   // upvalue count for non-escaping closures (0 if escaping)
+    void *proto_ptr;     // XrProto* (opaque, compared by address)
+    const char *c_name;  // C function name (e.g. "xr_fib")
+    int func_idx;        // index into mod->funcs (-1 = not yet compiled)
+    bool non_escaping;   // true if closure only called via CALL_KNOWN (never stored/returned)
+    int num_upvals;      // upvalue count for non-escaping closures (0 if escaping)
 } XcgenProtoEntry;
 
 /* ========== Per-Function Codegen State ========== */
 
 typedef struct XcgenFunc {
-    XirFunc       *xfunc;          // source XIR function (may be freed after compile)
-    const char    *c_name;         // generated C function name (e.g. "xr_fib")
-    int            num_params;     // cached from xfunc->num_params (valid after xfunc freed)
-    XcgenBuf       body;           // function body buffer
-    int            tmp_count;      // temp variable counter
-    bool           needs_runtime;  // true if function calls runtime APIs
-    bool           needs_gc;       // true if function allocates GC objects
-    bool           needs_closure_param; // true if function accesses upvalues (needs XrtValue xrt_closure param)
-    bool           non_escaping;        // true if all callers pass upvalues inline (no closure object)
-    int            num_upvals;          // upvalue count for non-escaping closures (upval params after regular params)
-    bool           needs_exception;     // true if function uses try/catch (needs XrtValue xrt_exception local)
-    bool           void_return;    // true if function always returns null → emit as void
+    XirFunc *xfunc;            // source XIR function (may be freed after compile)
+    const char *c_name;        // generated C function name (e.g. "xr_fib")
+    int num_params;            // cached from xfunc->num_params (valid after xfunc freed)
+    XcgenBuf body;             // function body buffer
+    int tmp_count;             // temp variable counter
+    bool needs_runtime;        // true if function calls runtime APIs
+    bool needs_gc;             // true if function allocates GC objects
+    bool needs_closure_param;  // true if function accesses upvalues (needs XrtValue xrt_closure
+                               // param)
+    bool non_escaping;         // true if all callers pass upvalues inline (no closure object)
+    int num_upvals;  // upvalue count for non-escaping closures (upval params after regular params)
+    bool needs_exception;  // true if function uses try/catch (needs XrtValue xrt_exception local)
+    bool void_return;      // true if function always returns null → emit as void
 
     // Exception frame tracking for finally support:
     // Maps catch/finally handler block IDs to their exception frame index,
     // and maintains a stack for TRY_END re-throw emission.
-    int            exc_catch_frame[256]; // block_id → frame_index (-1 = none)
-    int            exc_pending_stack[8]; // frame indices awaiting TRY_END re-throw
-    int            exc_pending_depth;    // depth of pending stack
-    bool           exc_has_finally[8];   // per-frame: true if this try has a finally block
+    int exc_catch_frame[256];  // block_id → frame_index (-1 = none)
+    int exc_pending_stack[8];  // frame indices awaiting TRY_END re-throw
+    int exc_pending_depth;     // depth of pending stack
+    bool exc_has_finally[8];   // per-frame: true if this try has a finally block
 
     // Dead code elimination: which vregs are actually read
-    bool          *used_vregs;
+    bool *used_vregs;
 
     // Struct promotion: vreg → struct index (-1 = not a struct)
-    int16_t       *vreg_struct_id;  // [nvreg] array, -1 = not promoted
+    int16_t *vreg_struct_id;  // [nvreg] array, -1 = not promoted
 
     // Call args buffer: tracks STORE_CORO writes to jit_call_args[]
     // Used by CALL_KNOWN to reconstruct direct C function calls.
     // Dynamically grown when a function has more than 64 parameters.
-    XirRef        *call_args;       // heap-allocated, capacity = call_args_cap
-    int            call_args_cap;   // current allocated size
-    int            call_args_count;
+    XirRef *call_args;  // heap-allocated, capacity = call_args_cap
+    int call_args_cap;  // current allocated size
+    int call_args_count;
 
     // Shadow stack: number of XrtValue locals registered for GC scanning
-    int            shadow_stack_count;
+    int shadow_stack_count;
 
     // Defer tracking: number of deferred closures in this function.
     // Codegen emits _defer_N / _defer_N_set locals and LIFO cleanup at returns.
-    int            defer_count;
+    int defer_count;
 
     // Conditional select: XIR_SELECT_COND stores the condition ref here,
     // XIR_SELECT reads it to emit a C ternary expression.
-    XirRef         last_select_cond;
+    XirRef last_select_cond;
 } XcgenFunc;
 
 /* ========== Forward Declarations ========== */
@@ -126,44 +127,44 @@ typedef struct XcgenCompilation XcgenCompilation;
 /* ========== Class Info (for type registration in generated code) ========== */
 
 typedef struct {
-    void       *ctor_proto;     // constructor XrProto* (matching key)
-    const char *class_name;     // class name (e.g. "Shape")
-    const char *parent_name;    // parent class name (NULL = no parent)
-    int         nfields;        // instance field count
+    void *ctor_proto;         // constructor XrProto* (matching key)
+    const char *class_name;   // class name (e.g. "Shape")
+    const char *parent_name;  // parent class name (NULL = no parent)
+    int nfields;              // instance field count
 } XcgenClassInfo;
 
 /* ========== Module-Level Export Entry ========== */
 
 typedef struct XcgenExport {
-    const char *name;       // export name (e.g. "pi", "add")
-    const char *c_var;      // C global variable name (e.g. "mod_math__pi")
-    int         shared_index; // index into xrt_shared[] array (-1 = named global)
-    bool        is_const;   // true if const export
+    const char *name;   // export name (e.g. "pi", "add")
+    const char *c_var;  // C global variable name (e.g. "mod_math__pi")
+    int shared_index;   // index into xrt_shared[] array (-1 = named global)
+    bool is_const;      // true if const export
 } XcgenExport;
 
 /* ========== Module-Level Codegen State ========== */
 
 typedef struct XcgenModule {
     // Module metadata
-    const char    *module_name;     // e.g. "math", "./utils"
-    const char    *module_path;     // absolute path
-    int16_t        module_id;       // unique id within compilation
+    const char *module_name;  // e.g. "math", "./utils"
+    const char *module_path;  // absolute path
+    int16_t module_id;        // unique id within compilation
 
-    XcgenBuf       sections[XCGEN_SEC_COUNT];
-    XcgenFunc     *funcs;          // compiled functions in this module
-    int            nfuncs;
-    int            funcs_cap;
+    XcgenBuf sections[XCGEN_SEC_COUNT];
+    XcgenFunc *funcs;  // compiled functions in this module
+    int nfuncs;
+    int funcs_cap;
 
     // Module-level exports (populated during GETSHARED/SETSHARED scan)
-    XcgenExport   *exports;
-    int            nexports;
-    int            exports_cap;
+    XcgenExport *exports;
+    int nexports;
+    int exports_cap;
 
     // Struct promotion registry (non-owning ptr → comp->struct_reg)
     XcgenStructRegistry *struct_reg;
 
     // Compilation flags
-    bool           emit_debug;     // true = #line directives
+    bool emit_debug;  // true = #line directives
 
     // Backpointer to parent compilation context
     XcgenCompilation *comp;
@@ -172,29 +173,29 @@ typedef struct XcgenModule {
 /* ========== Top-Level Compilation Context ========== */
 
 struct XcgenCompilation {
-    XcgenModule   **modules;       // array of module pointers
-    int             nmodules;
-    int             modules_cap;
+    XcgenModule **modules;  // array of module pointers
+    int nmodules;
+    int modules_cap;
 
     // Global proto registry (cross-module function lookup)
     XcgenProtoEntry *proto_map;
-    int              proto_map_count;
-    int              proto_map_cap;
+    int proto_map_count;
+    int proto_map_cap;
 
     // Global struct promotion registry (owned externally by cmd_build)
     XcgenStructRegistry *struct_reg;
 
     // Shared variable tracking (for GETSHARED/SETSHARED → C globals)
-    int             max_shared_index;  // highest shared index seen (-1 = none)
+    int max_shared_index;  // highest shared index seen (-1 = none)
 
     // Class info registry (for type registration codegen)
     XcgenClassInfo *class_infos;
-    int             nclass_infos;
-    int             class_infos_cap;
+    int nclass_infos;
+    int class_infos_cap;
 
     // Output configuration
-    bool            emit_debug;     // true = #line directives
-    bool            single_file;    // true = combine all modules into one .c
+    bool emit_debug;   // true = #line directives
+    bool single_file;  // true = combine all modules into one .c
 };
 
 /* ========== Compilation API ========== */
@@ -206,22 +207,18 @@ XR_FUNC XcgenCompilation *xcgen_compilation_new(void);
 XR_FUNC void xcgen_compilation_free(XcgenCompilation *comp);
 
 // Add a module to the compilation; returns the module pointer
-XR_FUNC XcgenModule *xcgen_compilation_add_module(XcgenCompilation *comp,
-                                                   const char *name,
-                                                   const char *path);
+XR_FUNC XcgenModule *xcgen_compilation_add_module(XcgenCompilation *comp, const char *name,
+                                                  const char *path);
 
 // Register a proto → C name mapping in the global registry
-XR_FUNC void xcgen_register_proto(XcgenCompilation *comp, void *proto_ptr,
-                                   const char *c_name);
+XR_FUNC void xcgen_register_proto(XcgenCompilation *comp, void *proto_ptr, const char *c_name);
 
 // Register a class for type registration codegen
-XR_FUNC void xcgen_register_class(XcgenCompilation *comp, void *ctor_proto,
-                                   const char *class_name,
-                                   const char *parent_name, int nfields);
+XR_FUNC void xcgen_register_class(XcgenCompilation *comp, void *ctor_proto, const char *class_name,
+                                  const char *parent_name, int nfields);
 
 // Lookup class info by constructor proto; returns NULL if not found
-XR_FUNC const XcgenClassInfo *xcgen_lookup_class(XcgenCompilation *comp,
-                                                  void *ctor_proto);
+XR_FUNC const XcgenClassInfo *xcgen_lookup_class(XcgenCompilation *comp, void *ctor_proto);
 
 // Emit combined C source for all modules (single-file mode)
 // Caller must free the returned string
@@ -230,12 +227,11 @@ XR_FUNC char *xcgen_emit_source(XcgenCompilation *comp);
 /* ========== Module API ========== */
 
 // Compile a single XIR function into a module
-XR_FUNC XcgenFunc *xcgen_compile_func(XcgenModule *mod, XirFunc *xfunc,
-                                       const char *c_name);
+XR_FUNC XcgenFunc *xcgen_compile_func(XcgenModule *mod, XirFunc *xfunc, const char *c_name);
 
 // Register an export in a module's export table
-XR_FUNC void xcgen_module_add_export(XcgenModule *mod, const char *name,
-                                      int shared_index, bool is_const);
+XR_FUNC void xcgen_module_add_export(XcgenModule *mod, const char *name, int shared_index,
+                                     bool is_const);
 
 // Free a single module (also called by xcgen_compilation_free)
 XR_FUNC void xcgen_module_free(XcgenModule *mod);
@@ -265,15 +261,13 @@ XR_FUNC bool xcg_resolve_const_i64(XirFunc *func, XirRef ref, int64_t *out_val);
 XR_FUNC XirIns *xcg_find_def(XirFunc *func, XirRef ref);
 
 // Emit a single XIR instruction as C code
-XR_FUNC void xcg_emit_instruction(XcgenBuf *b, XirFunc *func, XirIns *ins,
-                           const char *self_name, XcgenModule *mod,
-                           XcgenFunc *cf);
+XR_FUNC void xcg_emit_instruction(XcgenBuf *b, XirFunc *func, XirIns *ins, const char *self_name,
+                                  XcgenModule *mod, XcgenFunc *cf);
 
 // Call translation (xcgen_call.c)
 // Returns true if the instruction was handled as a call-related op
 XR_FUNC bool xcg_emit_call_instruction(XcgenBuf *b, XirFunc *func, XirIns *ins,
-                                const char *self_name, XcgenModule *mod,
-                                XcgenFunc *cf);
+                                       const char *self_name, XcgenModule *mod, XcgenFunc *cf);
 
 // Lookup proto → C name in module mapping
 XR_FUNC const char *xcg_lookup_proto_name(XcgenModule *mod, void *proto_ptr);
@@ -284,11 +278,10 @@ XR_FUNC int xcg_lookup_proto_func_idx(XcgenModule *mod, void *proto_ptr);
 XR_FUNC XcgenFunc *xcg_lookup_proto_cf(XcgenModule *mod, void *proto_ptr);
 
 // Emit phi copies for a control-flow edge
-XR_FUNC void xcg_emit_phi_copies_for_edge(XcgenBuf *b, XirFunc *func,
-                                   XirBlock *from, XirBlock *to);
+XR_FUNC void xcg_emit_phi_copies_for_edge(XcgenBuf *b, XirFunc *func, XirBlock *from, XirBlock *to);
 
 // Emit block terminator (branch/jump/return)
-XR_FUNC void xcg_emit_terminator(XcgenBuf *b, XirFunc *func, XirBlock *blk,
-                          const char *self_name, XcgenFunc *cf);
+XR_FUNC void xcg_emit_terminator(XcgenBuf *b, XirFunc *func, XirBlock *blk, const char *self_name,
+                                 XcgenFunc *cf);
 
-#endif // XCGEN_H
+#endif  // XCGEN_H

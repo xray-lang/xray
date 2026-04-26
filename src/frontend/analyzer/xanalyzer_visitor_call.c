@@ -29,7 +29,8 @@
  * for container methods (map, filter, reduce, etc.)
  * -------------------------------------------------------------------------- */
 XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
-    if (!ctx || !node) return xr_type_new_unknown(NULL);
+    if (!ctx || !node)
+        return xr_type_new_unknown(NULL);
 
     CallExprNode *call = &node->as.call_expr;
 
@@ -44,7 +45,7 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
             fn_links = xa_analyzer_get_links(ctx->analyzer, fn_sym);
 
             if (ctx->current_function && ctx->analyzer->incremental) {
-                XaIncrementalCtx *incr = (XaIncrementalCtx*)ctx->analyzer->incremental;
+                XaIncrementalCtx *incr = (XaIncrementalCtx *) ctx->analyzer->incremental;
                 xa_dep_add(incr, ctx->current_function->id, fn_sym->id, XA_DEP_CALL);
             }
         }
@@ -56,14 +57,16 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
 
         // Check count matches
         if (call->type_arg_count != expected_count) {
-            XrLocation loc = { .file = ctx->file_path, .line = node->line, .column = node->column };
+            XrLocation loc = {.file = ctx->file_path, .line = node->line, .column = node->column};
             char msg[256];
             const char *fn_name = call->callee && call->callee->type == AST_VARIABLE
-                ? call->callee->as.variable.name : "function";
+                                      ? call->callee->as.variable.name
+                                      : "function";
             snprintf(msg, sizeof(msg),
-                "Generic function '%s' expects %d type argument(s), but got %d",
-                fn_name, expected_count, call->type_arg_count);
-            xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_GENERIC_COUNT, msg, &loc);
+                     "Generic function '%s' expects %d type argument(s), but got %d", fn_name,
+                     expected_count, call->type_arg_count);
+            xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
+                                       XR_ERR_ANALYZE_GENERIC_COUNT, msg, &loc);
         }
 
         // Check constraints
@@ -72,14 +75,16 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
             XrType *constraint = xa_symbol_links_get_type_param_constraint(fn_links, i);
 
             if (constraint && type_arg && !xr_type_satisfies_constraint(type_arg, constraint)) {
-                XrLocation loc = { .file = ctx->file_path, .line = node->line, .column = node->column };
+                XrLocation loc = {
+                    .file = ctx->file_path, .line = node->line, .column = node->column};
                 const char *param_name = xa_symbol_links_get_type_param_name(fn_links, i);
                 char msg[256];
                 snprintf(msg, sizeof(msg),
-                    "Type '%s' does not satisfy constraint '%s' for type parameter '%s'",
-                    xr_type_to_string(type_arg), xr_type_to_string(constraint),
-                    param_name ? param_name : "?");
-                xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_GENERIC_CONSTRAINT, msg, &loc);
+                         "Type '%s' does not satisfy constraint '%s' for type parameter '%s'",
+                         xr_type_to_string(type_arg), xr_type_to_string(constraint),
+                         param_name ? param_name : "?");
+                xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
+                                           XR_ERR_ANALYZE_GENERIC_CONSTRAINT, msg, &loc);
             }
         }
     }
@@ -98,7 +103,8 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
         // Extract element type from container
         if (XR_TYPE_IS_ARRAY(callee_obj_type) && callee_obj_type->container.element_type) {
             container_elem_type = callee_obj_type->container.element_type;
-        } else if ((callee_obj_type->kind == XR_KIND_SET) && callee_obj_type->container.element_type) {
+        } else if ((callee_obj_type->kind == XR_KIND_SET) &&
+                   callee_obj_type->container.element_type) {
             container_elem_type = callee_obj_type->container.element_type;
         } else if (XR_TYPE_IS_MAP(callee_obj_type)) {
             // For Map, callback gets (value, key) or (key, value) depending on method
@@ -147,13 +153,13 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
         // Builtin method call: container.method() where member_access returned
         // the method's return type directly (e.g. arr.length() → int).
         // Accept primitive/container return types without warning.
-        if (call->callee && call->callee->type == AST_MEMBER_ACCESS &&
-            callee_type && !XR_TYPE_IS_UNKNOWN(callee_type)) {
+        if (call->callee && call->callee->type == AST_MEMBER_ACCESS && callee_type &&
+            !XR_TYPE_IS_UNKNOWN(callee_type)) {
             return callee_type;
         }
-        XrLocation loc = { .file = ctx->file_path, .line = node->line, .column = node->column };
+        XrLocation loc = {.file = ctx->file_path, .line = node->line, .column = node->column};
         xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_NOT_CALLABLE,
-            "Value is not callable", &loc);
+                                   "Value is not callable", &loc);
         return xr_type_new_unknown(NULL);
     }
 
@@ -165,19 +171,23 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
     // Check argument count (use min_params for functions with default parameters)
     int min_params = callee_type->function.min_params;
     if (arg_count < min_params && !is_variadic) {
-        XrLocation loc = { .file = ctx->file_path, .line = node->line, .column = node->column };
+        XrLocation loc = {.file = ctx->file_path, .line = node->line, .column = node->column};
         char msg[128];
         if (min_params == param_count) {
-            snprintf(msg, sizeof(msg), "Expected %d argument(s), but got %d", param_count, arg_count);
+            snprintf(msg, sizeof(msg), "Expected %d argument(s), but got %d", param_count,
+                     arg_count);
         } else {
-            snprintf(msg, sizeof(msg), "Expected %d to %d argument(s), but got %d", min_params, param_count, arg_count);
+            snprintf(msg, sizeof(msg), "Expected %d to %d argument(s), but got %d", min_params,
+                     param_count, arg_count);
         }
-        xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_WRONG_ARG_COUNT, msg, &loc);
+        xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_WRONG_ARG_COUNT,
+                                   msg, &loc);
     } else if (arg_count > param_count && !is_variadic) {
-        XrLocation loc = { .file = ctx->file_path, .line = node->line, .column = node->column };
+        XrLocation loc = {.file = ctx->file_path, .line = node->line, .column = node->column};
         char msg[128];
         snprintf(msg, sizeof(msg), "Expected %d argument(s), but got %d", param_count, arg_count);
-        xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_WRONG_ARG_COUNT, msg, &loc);
+        xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_WRONG_ARG_COUNT,
+                                   msg, &loc);
     }
 
     // Check argument types with generic inference for callbacks
@@ -224,17 +234,18 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
         ctx->expected_type = saved_expected;
 
         if (param_type && !XR_TYPE_IS_UNKNOWN(param_type)) {
-            XrLocation loc = { .file = ctx->file_path, .line = node->line, .column = node->column };
+            XrLocation loc = {.file = ctx->file_path, .line = node->line, .column = node->column};
             {
                 // Check null safety then assignability
-                bool null_err = xa_check_null_safety(ctx->analyzer, param_type, arg_type,
-                    "Argument", &loc);
+                bool null_err =
+                    xa_check_null_safety(ctx->analyzer, param_type, arg_type, "Argument", &loc);
                 if (!null_err && !xr_type_assignable(param_type, arg_type)) {
                     char msg[256];
                     snprintf(msg, sizeof(msg),
-                        "Argument %d: type '%s' is not assignable to parameter type '%s'",
-                        i + 1, xr_type_to_string(arg_type), xr_type_to_string(param_type));
-                    xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_ARG_TYPE, msg, &loc);
+                             "Argument %d: type '%s' is not assignable to parameter type '%s'",
+                             i + 1, xr_type_to_string(arg_type), xr_type_to_string(param_type));
+                    xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
+                                               XR_ERR_ANALYZE_ARG_TYPE, msg, &loc);
                 }
             }
         }
@@ -251,18 +262,19 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
     if (fn_links && arg_count > 0) {
         // Ensure inferred_param_types array is allocated
         if (!fn_links->inferred_param_types && fn_links->param_count > 0) {
-            fn_links->inferred_param_types = xr_calloc(fn_links->param_count, sizeof(XrType*));
+            fn_links->inferred_param_types = xr_calloc(fn_links->param_count, sizeof(XrType *));
             fn_links->inferred_param_count = fn_links->param_count;
         }
         for (int i = 0; i < arg_count && i < fn_links->inferred_param_count; i++) {
             // Only propagate for unannotated params (declared_type is NULL or unknown)
             XrType *declared = (fn_links->param_types && i < fn_links->param_count)
-                               ? fn_links->param_types[i] : NULL;
-            if (declared && !XR_TYPE_IS_UNKNOWN(declared)) continue;  // explicitly typed
+                                   ? fn_links->param_types[i]
+                                   : NULL;
+            if (declared && !XR_TYPE_IS_UNKNOWN(declared))
+                continue;  // explicitly typed
 
             // Read argument type from the analyzer side table.
-            XrType *arg_type = xa_analyzer_get_node_type(ctx->analyzer,
-                                                          call->arguments[i]);
+            XrType *arg_type = xa_analyzer_get_node_type(ctx->analyzer, call->arguments[i]);
             if (!arg_type || XR_TYPE_IS_UNKNOWN(arg_type))
                 continue;
 
@@ -296,11 +308,11 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
             // Use cached type from argument evaluation above (avoid re-evaluation
             // which would lose callback context)
             // Read callback type from the analyzer side table.
-            XrType *cb_type = xa_analyzer_get_node_type(ctx->analyzer,
-                                                         call->arguments[0]);
+            XrType *cb_type = xa_analyzer_get_node_type(ctx->analyzer, call->arguments[0]);
             if (cb_type && XR_TYPE_IS_FUNCTION(cb_type) && cb_type->function.return_type &&
                 !XR_TYPE_IS_UNKNOWN(cb_type->function.return_type)) {
-                return_type = xr_type_new_array(ctx->analyzer->isolate, cb_type->function.return_type);
+                return_type =
+                    xr_type_new_array(ctx->analyzer->isolate, cb_type->function.return_type);
             }
         } else if (strcmp(method_name, "filter") == 0) {
             // arr.filter(fn) -> same Array type as source
@@ -315,7 +327,8 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
             }
         } else if (strcmp(method_name, "find") == 0) {
             // arr.find(fn) -> element_type? (nullable)
-            return_type = xr_type_make_nullable(ctx->analyzer->isolate, xr_type_copy(ctx->analyzer->isolate, container_elem_type));
+            return_type = xr_type_make_nullable(
+                ctx->analyzer->isolate, xr_type_copy(ctx->analyzer->isolate, container_elem_type));
         } else if (strcmp(method_name, "findIndex") == 0) {
             return_type = xr_type_new_int(NULL);
         } else if (strcmp(method_name, "every") == 0 || strcmp(method_name, "some") == 0) {
@@ -325,7 +338,8 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
 
     // Apply type substitution for generic function calls
     if (return_type && fn_links) {
-        return_type = xa_substitute_generic_call(ctx, fn_links, callee_type, return_type, call, arg_count);
+        return_type =
+            xa_substitute_generic_call(ctx, fn_links, callee_type, return_type, call, arg_count);
     }
 
     // Apply type substitution for generic method calls: obj.method<T>()
@@ -334,29 +348,36 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
 
         // Look up method in class
         if (XR_TYPE_IS_INSTANCE(callee_obj_type) && callee_obj_type->instance.class_name) {
-            XaSymbol *class_sym = xa_scope_lookup(ctx->analyzer->global_scope,
-                                                  callee_obj_type->instance.class_name);
+            XaSymbol *class_sym =
+                xa_scope_lookup(ctx->analyzer->global_scope, callee_obj_type->instance.class_name);
             if (class_sym && class_sym->kind == XA_SYM_CLASS) {
                 XaSymbolLinks *class_links = xa_analyzer_get_links(ctx->analyzer, class_sym);
                 if (class_links && class_links->class_info) {
-                    XaSymbol *method_sym = xa_class_info_lookup_member(
-                        class_links->class_info, ma->name);
+                    XaSymbol *method_sym =
+                        xa_class_info_lookup_member(class_links->class_info, ma->name);
                     if (method_sym && method_sym->kind == XA_SYM_METHOD) {
-                        XaSymbolLinks *method_links = xa_analyzer_get_links(ctx->analyzer, method_sym);
+                        XaSymbolLinks *method_links =
+                            xa_analyzer_get_links(ctx->analyzer, method_sym);
                         if (method_links) {
                             // Apply method's own type parameters
                             return_type = xa_substitute_generic_call(ctx, method_links, callee_type,
-                                                                      return_type, call, arg_count);
+                                                                     return_type, call, arg_count);
 
                             // Also apply class type parameters substitution
-                            int class_type_param_count = xa_symbol_links_get_type_param_count(class_links);
-                            if (class_type_param_count > 0 && callee_obj_type->instance.type_arg_count > 0) {
-                                const char **class_param_names = xr_malloc(sizeof(const char*) * class_type_param_count);
+                            int class_type_param_count =
+                                xa_symbol_links_get_type_param_count(class_links);
+                            if (class_type_param_count > 0 &&
+                                callee_obj_type->instance.type_arg_count > 0) {
+                                const char **class_param_names =
+                                    xr_malloc(sizeof(const char *) * class_type_param_count);
                                 for (int i = 0; i < class_type_param_count; i++) {
-                                    class_param_names[i] = xa_symbol_links_get_type_param_name(class_links, i);
+                                    class_param_names[i] =
+                                        xa_symbol_links_get_type_param_name(class_links, i);
                                 }
-                                return_type = xr_type_substitute(ctx->analyzer->isolate, return_type, class_param_names,
-                                    callee_obj_type->instance.type_args, callee_obj_type->instance.type_arg_count);
+                                return_type = xr_type_substitute(
+                                    ctx->analyzer->isolate, return_type, class_param_names,
+                                    callee_obj_type->instance.type_args,
+                                    callee_obj_type->instance.type_arg_count);
                                 xr_free(class_param_names);
                             }
                         }

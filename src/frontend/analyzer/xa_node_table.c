@@ -47,19 +47,19 @@ struct XaNodeTable {
 // the standard pattern; xr_hash_int absorbs the high pointer bits via
 // its finalizer-style multiply-xor.
 static inline uint32_t hash_node_ptr(const void *p) {
-    return xr_hash_int((int64_t)(uintptr_t)p);
+    return xr_hash_int((int64_t) (uintptr_t) p);
 }
 
 static inline int bucket_of(const XaNodeTable *t, const void *p) {
-    return (int)(hash_node_ptr(p) % (uint32_t)t->bucket_count);
+    return (int) (hash_node_ptr(p) % (uint32_t) t->bucket_count);
 }
 
 XaNodeTable *xa_node_table_new(void) {
-    XaNodeTable *t = (XaNodeTable *)xr_malloc(sizeof(XaNodeTable));
-    if (!t) return NULL;
+    XaNodeTable *t = (XaNodeTable *) xr_malloc(sizeof(XaNodeTable));
+    if (!t)
+        return NULL;
     t->bucket_count = XA_NODE_TABLE_INITIAL_BUCKETS;
-    t->buckets = (XaNodeEntry **)xr_calloc(t->bucket_count,
-                                            sizeof(XaNodeEntry *));
+    t->buckets = (XaNodeEntry **) xr_calloc(t->bucket_count, sizeof(XaNodeEntry *));
     if (!t->buckets) {
         xr_free(t);
         return NULL;
@@ -69,7 +69,8 @@ XaNodeTable *xa_node_table_new(void) {
 }
 
 void xa_node_table_free(XaNodeTable *t) {
-    if (!t) return;
+    if (!t)
+        return;
     for (int i = 0; i < t->bucket_count; i++) {
         XaNodeEntry *e = t->buckets[i];
         while (e) {
@@ -83,7 +84,8 @@ void xa_node_table_free(XaNodeTable *t) {
 }
 
 void xa_node_table_clear(XaNodeTable *t) {
-    if (!t) return;
+    if (!t)
+        return;
     for (int i = 0; i < t->bucket_count; i++) {
         XaNodeEntry *e = t->buckets[i];
         while (e) {
@@ -102,16 +104,16 @@ int xa_node_table_size(const XaNodeTable *t) {
 
 static void xa_node_table_grow(XaNodeTable *t) {
     int new_count = t->bucket_count * XA_NODE_TABLE_GROWTH;
-    XaNodeEntry **new_buckets = (XaNodeEntry **)xr_calloc(new_count,
-                                                  sizeof(XaNodeEntry *));
-    if (!new_buckets) return;  // Best-effort: keep old buckets, take the
-                               // hit on chain length.
+    XaNodeEntry **new_buckets = (XaNodeEntry **) xr_calloc(new_count, sizeof(XaNodeEntry *));
+    if (!new_buckets)
+        return;  // Best-effort: keep old buckets, take the
+                 // hit on chain length.
 
     for (int i = 0; i < t->bucket_count; i++) {
         XaNodeEntry *e = t->buckets[i];
         while (e) {
             XaNodeEntry *next = e->next;
-            int b = (int)(hash_node_ptr(e->node) % (uint32_t)new_count);
+            int b = (int) (hash_node_ptr(e->node) % (uint32_t) new_count);
             e->next = new_buckets[b];
             new_buckets[b] = e;
             e = next;
@@ -122,9 +124,9 @@ static void xa_node_table_grow(XaNodeTable *t) {
     t->bucket_count = new_count;
 }
 
-void xa_node_table_set_type(XaNodeTable *t, struct AstNode *node,
-                            struct XrType *type) {
-    if (!t || !node) return;
+void xa_node_table_set_type(XaNodeTable *t, struct AstNode *node, struct XrType *type) {
+    if (!t || !node)
+        return;
 
     int b = bucket_of(t, node);
     XaNodeEntry **pp = &t->buckets[b];
@@ -145,10 +147,12 @@ void xa_node_table_set_type(XaNodeTable *t, struct AstNode *node,
         pp = &(*pp)->next;
     }
 
-    if (type == NULL) return;  // Nothing to clear.
+    if (type == NULL)
+        return;  // Nothing to clear.
 
-    XaNodeEntry *e = (XaNodeEntry *)xr_malloc(sizeof(XaNodeEntry));
-    if (!e) return;
+    XaNodeEntry *e = (XaNodeEntry *) xr_malloc(sizeof(XaNodeEntry));
+    if (!e)
+        return;
     e->node = node;
     e->type = type;
     e->next = t->buckets[b];
@@ -157,18 +161,19 @@ void xa_node_table_set_type(XaNodeTable *t, struct AstNode *node,
 
     // Grow on load-factor breach. Linear over t->bucket_count, so the
     // chain length stays O(1) amortised.
-    if ((int64_t)t->size * XA_NODE_TABLE_LOAD_DEN >
-        (int64_t)t->bucket_count * XA_NODE_TABLE_LOAD_NUM) {
+    if ((int64_t) t->size * XA_NODE_TABLE_LOAD_DEN >
+        (int64_t) t->bucket_count * XA_NODE_TABLE_LOAD_NUM) {
         xa_node_table_grow(t);
     }
 }
 
-struct XrType *xa_node_table_get_type(const XaNodeTable *t,
-                                      const struct AstNode *node) {
-    if (!t || !node) return NULL;
-    int b = (int)(hash_node_ptr(node) % (uint32_t)t->bucket_count);
+struct XrType *xa_node_table_get_type(const XaNodeTable *t, const struct AstNode *node) {
+    if (!t || !node)
+        return NULL;
+    int b = (int) (hash_node_ptr(node) % (uint32_t) t->bucket_count);
     for (XaNodeEntry *e = t->buckets[b]; e; e = e->next) {
-        if (e->node == node) return e->type;
+        if (e->node == node)
+            return e->type;
     }
     return NULL;
 }

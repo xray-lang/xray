@@ -62,11 +62,13 @@
  * mainstream runtime (Python, Java, JavaScript).
  */
 static void record_full_trace(XrayIsolate *isolate, XrValue exception) {
-    if (!xr_is_exception(exception)) return;
+    if (!xr_is_exception(exception))
+        return;
 
     XrVMContext *ctx = xr_vm_current_ctx(isolate);
     int top = ctx->frame_count;
-    if (top == 0) return;
+    if (top == 0)
+        return;
 
     /* Skip frames that have already been recorded — happens on
      * rethrow inside a catch block, where the catch's catch-handler
@@ -94,10 +96,11 @@ static void record_full_trace(XrayIsolate *isolate, XrValue exception) {
              * past the throwing op. Step back one when computing the
              * source line so the trace highlights the actual throw
              * site instead of the next instruction. */
-            int pc_offset = (int)(f->pc - PROTO_CODE_BASE(proto));
-            if (pc_offset > 0) pc_offset -= 1;
+            int pc_offset = (int) (f->pc - PROTO_CODE_BASE(proto));
+            if (pc_offset > 0)
+                pc_offset -= 1;
             size_t line_count = PROTO_LINE_COUNT(proto);
-            if (pc_offset >= 0 && (size_t)pc_offset < line_count) {
+            if (pc_offset >= 0 && (size_t) pc_offset < line_count) {
                 line = PROTO_LINE(proto, pc_offset);
             }
         }

@@ -34,4 +34,4 @@ XR_FUNC XrJsonValue *xmcp_handle_resources_read(XmcpServer *server, XrJsonValue 
 /* Handle "resources/templates/list" request. */
 XR_FUNC XrJsonValue *xmcp_handle_resource_templates_list(XmcpServer *server);
 
-#endif // XMCP_RESOURCES_H
+#endif  // XMCP_RESOURCES_H

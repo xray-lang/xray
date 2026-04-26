@@ -17,8 +17,8 @@
 #include <string.h>
 
 // SWAR magic constants for parallel detection
-#define SWAR_ZEROS    0x3030303030303030ULL  // '0' = 0x30
-#define SWAR_NINES    0x3939393939393939ULL  // '9' = 0x39
+#define SWAR_ZEROS 0x3030303030303030ULL     // '0' = 0x30
+#define SWAR_NINES 0x3939393939393939ULL     // '9' = 0x39
 #define SWAR_LOW_MASK 0x0F0F0F0F0F0F0F0FULL  // Low 4 bits mask
 #define SWAR_HIGH_BIT 0x8080808080808080ULL  // High bit mask
 
@@ -33,15 +33,15 @@
  * 1. Merge adjacent byte pairs: d0*10+d1, d2*10+d3, ...
  * 2. Merge into final result
  */
-#define SWAR_MUL1  0x000000FF00FF00FFULL
-#define SWAR_MUL2  0x000000010000FFFFULL
-#define SWAR_MUL3  0x0000000100000001ULL
+#define SWAR_MUL1 0x000000FF00FF00FFULL
+#define SWAR_MUL2 0x000000010000FFFFULL
+#define SWAR_MUL3 0x0000000100000001ULL
 
 /* ========== Internal Helper Functions ========== */
 
 // Scalar: check if single char is digit
 static inline bool is_digit(char c) {
-    return (unsigned char)(c - '0') <= 9;
+    return (unsigned char) (c - '0') <= 9;
 }
 
 // Scalar: parse single digit
@@ -78,9 +78,12 @@ static bool is_digits_scalar(const char *s, size_t len) {
 
 // Scalar: parse hex character
 static inline int hex_value(char c) {
-    if (c >= '0' && c <= '9') return c - '0';
-    if (c >= 'a' && c <= 'f') return c - 'a' + 10;
-    if (c >= 'A' && c <= 'F') return c - 'A' + 10;
+    if (c >= '0' && c <= '9')
+        return c - '0';
+    if (c >= 'a' && c <= 'f')
+        return c - 'a' + 10;
+    if (c >= 'A' && c <= 'F')
+        return c - 'A' + 10;
     return -1;
 }
 
@@ -232,15 +235,15 @@ bool xr_swar_parse_int(const char *s, size_t len, int64_t *result) {
 
     // Range check
     if (negative) {
-        if (uval > (uint64_t)INT64_MAX + 1) {
+        if (uval > (uint64_t) INT64_MAX + 1) {
             return false;
         }
-        *result = -(int64_t)uval;
+        *result = -(int64_t) uval;
     } else {
-        if (uval > (uint64_t)INT64_MAX) {
+        if (uval > (uint64_t) INT64_MAX) {
             return false;
         }
-        *result = (int64_t)uval;
+        *result = (int64_t) uval;
     }
 
     return true;

@@ -31,7 +31,7 @@
 #include <stdio.h>
 #include <sys/mman.h>
 #include "../../base/xmalloc.h"
-#include "xstackmap.h"  // XrStackMapTable, XrStackMapEntry
+#include "xstackmap.h"     // XrStackMapTable, XrStackMapEntry
 #include "xbc_stackmap.h"  // XrBcStackMap, bytecode precise GC scanning
 #include <pthread.h>
 
@@ -50,16 +50,16 @@
  * isolate owns its recycle stack and xr_sysheap_destroy reclaims the
  * remaining structs.
  */
-#define XR_GC_POOL_L1_MAX   32
+#define XR_GC_POOL_L1_MAX 32
 
 // Resolve the system heap that owns the L2 pool for a given coroutine
 // or coroutine GC. Returns NULL only when the bootstrap path has not
 // yet wired the isolate, in which case callers fall back to malloc/free.
-static inline XrSystemHeap* gc_pool_heap_from_coro(struct XrCoroutine *coro) {
+static inline XrSystemHeap *gc_pool_heap_from_coro(struct XrCoroutine *coro) {
     return (coro && coro->isolate) ? coro->isolate->sys_heap : NULL;
 }
 
-static inline XrSystemHeap* gc_pool_heap_from_gc(XrCoroGC *gc) {
+static inline XrSystemHeap *gc_pool_heap_from_gc(XrCoroGC *gc) {
     return (gc && gc->owner) ? gc_pool_heap_from_coro(gc->owner) : NULL;
 }
 
@@ -72,28 +72,34 @@ static inline XrSystemHeap* gc_pool_heap_from_gc(XrCoroGC *gc) {
 // registered via xr_register_extension_destroy / _traverse fall through
 // to the per-isolate tables on XrayIsolate.
 
-static inline XrayIsolate* gc_get_isolate(XrCoroGC *gc) {
+static inline XrayIsolate *gc_get_isolate(XrCoroGC *gc) {
     return (gc && gc->owner) ? gc->owner->isolate : NULL;
 }
 
 static inline bool xr_gc_has_refs_ext(XrCoroGC *gc, uint8_t type) {
-    if (type >= XR_NATIVE_TYPE_MAX) return false;
-    if (g_type_ops[type].traverse) return true;
+    if (type >= XR_NATIVE_TYPE_MAX)
+        return false;
+    if (g_type_ops[type].traverse)
+        return true;
     XrayIsolate *iso = gc_get_isolate(gc);
     return iso && (iso->ext_has_refs_bitmap & (1ULL << type));
 }
 
 static inline bool xr_gc_needs_finalize_ext(XrCoroGC *gc, uint8_t type) {
-    if (type >= XR_NATIVE_TYPE_MAX) return false;
-    if (g_type_ops[type].destroy) return true;
+    if (type >= XR_NATIVE_TYPE_MAX)
+        return false;
+    if (g_type_ops[type].destroy)
+        return true;
     XrayIsolate *iso = gc_get_isolate(gc);
     return iso && (iso->ext_finalize_bitmap & (1ULL << type));
 }
 
 static inline XrGCDestroyFn get_destroy_func_ext(XrCoroGC *gc, uint8_t type) {
-    if (type >= XGC_MAX_TYPES) return NULL;
+    if (type >= XGC_MAX_TYPES)
+        return NULL;
     XrGCDestroyFn fn = g_type_ops[type].destroy;
-    if (fn) return fn;
+    if (fn)
+        return fn;
     XrayIsolate *iso = gc_get_isolate(gc);
     return iso ? iso->ext_destroy_funcs[type] : NULL;
 }
@@ -102,7 +108,9 @@ static inline XrGCDestroyFn get_destroy_func_ext(XrCoroGC *gc, uint8_t type) {
 #if XR_GC_DEBUG
 static void xr_gc_verify_invariants(XrCoroGC *gc);
 #else
-static inline void xr_gc_verify_invariants(XrCoroGC *gc) { (void)gc; }
+static inline void xr_gc_verify_invariants(XrCoroGC *gc) {
+    (void) gc;
+}
 #endif
 
 /*
@@ -136,7 +144,7 @@ static void gc_init_runtime_state(XrCoroGC *gc) {
 
 /* ========== Coroutine GC Lifecycle ========== */
 
-XrCoroGC* xr_coro_gc_create(struct XrCoroutine *coro, const XrCoroGCConfig *config) {
+XrCoroGC *xr_coro_gc_create(struct XrCoroutine *coro, const XrCoroGCConfig *config) {
     XR_DCHECK(coro != NULL, "gc_create: NULL coroutine");
     XrCoroGC *gc = NULL;
 
@@ -144,7 +152,7 @@ XrCoroGC* xr_coro_gc_create(struct XrCoroutine *coro, const XrCoroGCConfig *conf
     XrWorker *w = xr_current_worker();
     if (w && w->p.gc_free_list) {
         gc = w->p.gc_free_list;
-        w->p.gc_free_list = *(XrCoroGC**)gc;
+        w->p.gc_free_list = *(XrCoroGC **) gc;
         w->p.gc_free_count--;
     } else {
         // L2 per-isolate pool (mutex). Bootstrap before sys_heap exists
@@ -152,10 +160,11 @@ XrCoroGC* xr_coro_gc_create(struct XrCoroutine *coro, const XrCoroGCConfig *conf
         XrSystemHeap *heap = gc_pool_heap_from_coro(coro);
         gc = heap ? xr_sysheap_gc_pool_pop(heap) : NULL;
         if (!gc) {
-            gc = (XrCoroGC*)xr_malloc(sizeof(XrCoroGC));
+            gc = (XrCoroGC *) xr_malloc(sizeof(XrCoroGC));
         }
     }
-    if (!gc) return NULL;
+    if (!gc)
+        return NULL;
 
     memset(gc, 0, sizeof(XrCoroGC));
 
@@ -170,17 +179,13 @@ XrCoroGC* xr_coro_gc_create(struct XrCoroutine *coro, const XrCoroGCConfig *conf
 
     gc_init_runtime_state(gc);
 
-    int64_t threshold = (config && config->gc_threshold > 0)
-        ? (int64_t)config->gc_threshold
-        : (int64_t)XR_SPAWN_CORO_GC_THRESHOLD;
+    int64_t threshold = (config && config->gc_threshold > 0) ? (int64_t) config->gc_threshold
+                                                             : (int64_t) XR_SPAWN_CORO_GC_THRESHOLD;
     gc->GCdebt = -threshold;
 
-    gc->gc_pause = config && config->gc_pause > 0
-        ? config->gc_pause
-        : XR_SPAWN_CORO_GC_PAUSE;
-    gc->gc_stepmul = config && config->gc_stepmul > 0
-        ? config->gc_stepmul
-        : XR_SPAWN_CORO_GC_STEPMUL;
+    gc->gc_pause = config && config->gc_pause > 0 ? config->gc_pause : XR_SPAWN_CORO_GC_PAUSE;
+    gc->gc_stepmul =
+        config && config->gc_stepmul > 0 ? config->gc_stepmul : XR_SPAWN_CORO_GC_STEPMUL;
 
     gc->owner = coro;
 
@@ -201,22 +206,21 @@ static void gc_free_root_callbacks(XrCoroGC *gc) {
 
 // Call finalizers on all Immix objects across all block lists
 static void gc_finalize_immix_objects(XrCoroGC *gc) {
-    XrImmixBlock *blists[] = {
-        gc->immix.full_blocks,
-        gc->immix.recycle_blocks,
-        gc->immix.current_block,
-        gc->immix.old_blocks
-    };
+    XrImmixBlock *blists[] = {gc->immix.full_blocks, gc->immix.recycle_blocks,
+                              gc->immix.current_block, gc->immix.old_blocks};
     for (int i = 0; i < 4; i++) {
         for (XrImmixBlock *b = blists[i]; b; b = b->next) {
-            if (!b->has_finalizers) continue;
+            if (!b->has_finalizers)
+                continue;
             for (XrGCHeader *obj = b->local_allgc; obj; obj = obj->gc_next) {
                 if (xr_gc_needs_finalize_ext(gc, obj->type)) {
                     XrGCDestroyFn destroy = get_destroy_func_ext(gc, obj->type);
-                    if (destroy) destroy(obj, gc);
+                    if (destroy)
+                        destroy(obj, gc);
                 }
             }
-            if (i == 2) break;  // current_block is single, not a list
+            if (i == 2)
+                break;  // current_block is single, not a list
         }
     }
 }
@@ -228,7 +232,8 @@ static void gc_free_large_objects(XrCoroGC *gc) {
         XrGCHeader *next = lo->gc_next;
         if (xr_gc_needs_finalize_ext(gc, lo->type)) {
             XrGCDestroyFn destroy = get_destroy_func_ext(gc, lo->type);
-            if (destroy) destroy(lo, gc);
+            if (destroy)
+                destroy(lo, gc);
         }
         gc->large_bytes -= lo->objsize;
         if (XR_GC_IS_MMAP(lo)) {
@@ -246,14 +251,16 @@ static void gc_decref_all_shared(XrCoroGC *gc) {
     for (int i = 0; i < gc->shared_refs_count; i++) {
         XrGCHeader *obj = gc->shared_refs[i];
         int new_refc = xr_shared_decref(obj);
-        if (new_refc == 0) xr_shared_destroy(obj);
+        if (new_refc == 0)
+            xr_shared_destroy(obj);
     }
 }
 
 /* ========== Lifecycle ========== */
 
 void xr_coro_gc_destroy(XrCoroGC *gc) {
-    if (!gc) return;
+    if (!gc)
+        return;
     XR_DCHECK(!gc->in_gc, "gc_destroy called during GC");
 
     gc_free_root_callbacks(gc);
@@ -266,13 +273,15 @@ void xr_coro_gc_destroy(XrCoroGC *gc) {
     xr_gclist_destroy(&gc->weak);
 
     gc_decref_all_shared(gc);
-    if (gc->shared_refs) xr_free(gc->shared_refs);
-    if (gc->prev_shared_refs) xr_free(gc->prev_shared_refs);
+    if (gc->shared_refs)
+        xr_free(gc->shared_refs);
+    if (gc->prev_shared_refs)
+        xr_free(gc->prev_shared_refs);
 
     // Recycle: try L1 (per-Worker), then L2 (per-isolate), then free
     XrWorker *w = xr_current_worker();
     if (w && w->p.gc_free_count < XR_GC_POOL_L1_MAX) {
-        *(XrCoroGC**)gc = w->p.gc_free_list;
+        *(XrCoroGC **) gc = w->p.gc_free_list;
         w->p.gc_free_list = gc;
         w->p.gc_free_count++;
     } else {
@@ -291,7 +300,7 @@ void xr_coro_gc_flush_pool(XrSystemHeap *heap, XrCoroGC **free_list, int *count)
     XR_DCHECK(count != NULL, "flush_pool: NULL count");
     while (*free_list) {
         XrCoroGC *gc = *free_list;
-        *free_list = *(XrCoroGC**)gc;
+        *free_list = *(XrCoroGC **) gc;
         if (!heap || !xr_sysheap_gc_pool_push(heap, gc)) {
             xr_free(gc);
         }
@@ -305,7 +314,8 @@ void xr_coro_gc_flush_pool(XrSystemHeap *heap, XrCoroGC **free_list, int *count)
  * Much cheaper than destroy+create cycle.
  */
 void xr_coro_gc_reset(XrCoroGC *gc, struct XrCoroutine *new_owner) {
-    if (!gc) return;
+    if (!gc)
+        return;
     XR_DCHECK(new_owner != NULL, "gc_reset: NULL new_owner");
     XR_DCHECK(!gc->in_gc, "gc_reset called during GC");
 
@@ -324,7 +334,7 @@ void xr_coro_gc_reset(XrCoroGC *gc, struct XrCoroutine *new_owner) {
 
     // Reset runtime state (keep tuning params and shared_refs buffers)
     gc_init_runtime_state(gc);
-    gc->GCdebt = -(int64_t)XR_SPAWN_CORO_GC_THRESHOLD;
+    gc->GCdebt = -(int64_t) XR_SPAWN_CORO_GC_THRESHOLD;
     gc->owner = new_owner;
 }
 
@@ -334,13 +344,13 @@ void xr_coro_gc_reset(XrCoroGC *gc, struct XrCoroutine *new_owner) {
  * Link Immix object to block's local_allgc list and mark allocation lines.
  * Shared by xr_coro_gc_newobj (interpreter) and xr_jit_alloc_post (JIT).
  */
-static inline void gc_post_immix_alloc(XrCoroGC *gc, XrGCHeader *obj,
-                                       uint8_t type, uint32_t total) {
+static inline void gc_post_immix_alloc(XrCoroGC *gc, XrGCHeader *obj, uint8_t type,
+                                       uint32_t total) {
     XrImmixBlock *block = XR_IMMIX_BLOCK_FROM_PTR(obj);
     obj->gc_next = block->local_allgc;
     block->local_allgc = obj;
     block->alloc_count++;
-    block->alloc_bytes += (int64_t)total;
+    block->alloc_bytes += (int64_t) total;
     if (xr_gc_needs_finalize_ext(gc, type))
         block->has_finalizers = 1;
 
@@ -358,11 +368,11 @@ static inline void gc_post_immix_alloc(XrCoroGC *gc, XrGCHeader *obj,
  * Shared by xr_coro_gc_newobj and xr_jit_alloc_post.
  */
 static inline void gc_update_alloc_stats(XrCoroGC *gc, uint32_t total) {
-    gc->totalbytes += (int64_t)total;
+    gc->totalbytes += (int64_t) total;
     gc->object_count++;
     XR_DCHECK(gc->totalbytes >= 0, "totalbytes underflow");
     if (gc->gc_disabled == 0) {
-        gc->GCdebt += (int64_t)total;
+        gc->GCdebt += (int64_t) total;
         gc->alloc_since_gc += total;
         if (gc->GCdebt > 0 && !gc->in_gc)
             gc->gc_requested = 1;
@@ -371,8 +381,9 @@ static inline void gc_update_alloc_stats(XrCoroGC *gc, uint32_t total) {
 
 /* ========== Allocation ========== */
 
-XrGCHeader* xr_coro_gc_newobj(XrCoroGC *gc, uint8_t type, size_t size) {
-    if (!gc) return NULL;
+XrGCHeader *xr_coro_gc_newobj(XrCoroGC *gc, uint8_t type, size_t size) {
+    if (!gc)
+        return NULL;
     XR_DCHECK(type < XGC_MAX_TYPES, "invalid GC type");
     XR_DCHECK(size >= sizeof(XrGCHeader), "alloc size too small for GC header");
     XR_DCHECK(gc->owner != NULL, "GC has no owner coroutine");
@@ -384,35 +395,39 @@ XrGCHeader* xr_coro_gc_newobj(XrCoroGC *gc, uint8_t type, size_t size) {
     if (total > XR_LARGE_OBJECT_THRESHOLD) {
         if (total >= XR_MMAP_THRESHOLD) {
             // Tier 2: very large — use mmap to avoid libc heap fragmentation
-            obj = (XrGCHeader*)mmap(NULL, total, PROT_READ | PROT_WRITE,
-                                     MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
-            if (obj == MAP_FAILED) return NULL;
+            obj = (XrGCHeader *) mmap(NULL, total, PROT_READ | PROT_WRITE,
+                                      MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+            if (obj == MAP_FAILED)
+                return NULL;
             use_mmap = true;
         } else {
             // Tier 1: medium large — use xr_malloc
-            obj = (XrGCHeader*)xr_malloc(total);
-            if (!obj) return NULL;
+            obj = (XrGCHeader *) xr_malloc(total);
+            if (!obj)
+                return NULL;
         }
         obj->gc_next = gc->large_objects;
         gc->large_objects = obj;
-        gc->large_bytes += (int64_t)total;
+        gc->large_bytes += (int64_t) total;
     } else {
-        obj = (XrGCHeader*)xr_immix_alloc(&gc->immix, total);
-        if (!obj) return NULL;
-        gc_post_immix_alloc(gc, obj, type, (uint32_t)total);
+        obj = (XrGCHeader *) xr_immix_alloc(&gc->immix, total);
+        if (!obj)
+            return NULL;
+        gc_post_immix_alloc(gc, obj, type, (uint32_t) total);
     }
 
     obj->type = type;
-    obj->objsize = (uint32_t)total;
+    obj->objsize = (uint32_t) total;
     obj->extra = 0;  // Always clear extra (Immix memory may be uninitialized)
-    if (use_mmap) XR_GC_SET_MMAP(obj);
+    if (use_mmap)
+        XR_GC_SET_MMAP(obj);
 
     // New objects born with currentwhite (in young blocks or large list)
     // INVARIANT 3: new objects carry currentwhite
     obj->marked = gc->currentwhite;
     XR_DCHECK(xr_gc_iswhite(obj), "new object must be white");
 
-    gc_update_alloc_stats(gc, (uint32_t)total);
+    gc_update_alloc_stats(gc, (uint32_t) total);
 
 #if XR_GC_STRESS
     // Stress mode: trigger a GC step on every allocation to expose
@@ -427,15 +442,16 @@ XrGCHeader* xr_coro_gc_newobj(XrCoroGC *gc, uint8_t type, size_t size) {
 /* ========== Shared Object Refcount Tracking ========== */
 
 static int ptr_compare(const void *a, const void *b) {
-    uintptr_t pa = (uintptr_t)*(XrGCHeader**)a;
-    uintptr_t pb = (uintptr_t)*(XrGCHeader**)b;
+    uintptr_t pa = (uintptr_t) * (XrGCHeader **) a;
+    uintptr_t pb = (uintptr_t) * (XrGCHeader **) b;
     return (pa > pb) - (pa < pb);
 }
 
 // Sort array and remove duplicates in-place. Returns new count.
 static int sort_and_dedup(XrGCHeader **arr, int count) {
-    if (count <= 1) return count;
-    qsort(arr, (size_t)count, sizeof(XrGCHeader*), ptr_compare);
+    if (count <= 1)
+        return count;
+    qsort(arr, (size_t) count, sizeof(XrGCHeader *), ptr_compare);
     int w = 1;
     for (int r = 1; r < count; r++) {
         if (arr[r] != arr[r - 1]) {
@@ -450,9 +466,12 @@ static bool sorted_contains(XrGCHeader **arr, int count, XrGCHeader *target) {
     int lo = 0, hi = count - 1;
     while (lo <= hi) {
         int mid = lo + (hi - lo) / 2;
-        if (arr[mid] == target) return true;
-        if ((uintptr_t)arr[mid] < (uintptr_t)target) lo = mid + 1;
-        else hi = mid - 1;
+        if (arr[mid] == target)
+            return true;
+        if ((uintptr_t) arr[mid] < (uintptr_t) target)
+            lo = mid + 1;
+        else
+            hi = mid - 1;
     }
     return false;
 }
@@ -460,7 +479,8 @@ static bool sorted_contains(XrGCHeader **arr, int count, XrGCHeader *target) {
 // Begin a new GC cycle: rotate shared_refs → prev_shared_refs
 static void gc_shared_refs_begin(XrCoroGC *gc) {
     XR_DCHECK(gc != NULL, "gc_shared_refs_begin: NULL gc");
-    if (gc->prev_shared_refs) xr_free(gc->prev_shared_refs);
+    if (gc->prev_shared_refs)
+        xr_free(gc->prev_shared_refs);
     gc->prev_shared_refs = gc->shared_refs;
     gc->prev_shared_refs_count = gc->shared_refs_count;
     gc->shared_refs = NULL;
@@ -471,14 +491,16 @@ static void gc_shared_refs_begin(XrCoroGC *gc) {
 // End a GC cycle: decref shared objects that were in prev but not in current.
 // Sort current shared_refs then binary-search for each prev entry: O(n log n).
 static void gc_shared_refs_end(XrCoroGC *gc) {
-    if (!gc->prev_shared_refs || gc->prev_shared_refs_count == 0) return;
+    if (!gc->prev_shared_refs || gc->prev_shared_refs_count == 0)
+        return;
     // Sort + dedup current refs for efficient lookup
     gc->shared_refs_count = sort_and_dedup(gc->shared_refs, gc->shared_refs_count);
     for (int i = 0; i < gc->prev_shared_refs_count; i++) {
         XrGCHeader *obj = gc->prev_shared_refs[i];
         if (!sorted_contains(gc->shared_refs, gc->shared_refs_count, obj)) {
             int new_refc = xr_shared_decref(obj);
-            if (new_refc == 0) xr_shared_destroy(obj);
+            if (new_refc == 0)
+                xr_shared_destroy(obj);
         }
     }
     xr_free(gc->prev_shared_refs);
@@ -513,8 +535,10 @@ static void gc_record_shared_ref(XrCoroGC *gc, XrGCHeader *obj) {
     XR_DCHECK(XR_GC_IS_SHARED(obj), "gc_record_shared_ref: not a shared object");
     if (gc->shared_refs_count >= gc->shared_refs_capacity) {
         int newcap = gc->shared_refs_capacity ? gc->shared_refs_capacity * 2 : 8;
-        XrGCHeader **newrefs = (XrGCHeader**)xr_realloc(gc->shared_refs, newcap * sizeof(XrGCHeader*));
-        if (!newrefs) return;
+        XrGCHeader **newrefs =
+            (XrGCHeader **) xr_realloc(gc->shared_refs, newcap * sizeof(XrGCHeader *));
+        if (!newrefs)
+            return;
         gc->shared_refs = newrefs;
         gc->shared_refs_capacity = newcap;
     }
@@ -522,13 +546,14 @@ static void gc_record_shared_ref(XrCoroGC *gc, XrGCHeader *obj) {
 }
 
 void xr_coro_gc_markobject(XrCoroGC *gc, XrGCHeader *obj) {
-    if (!obj) return;
+    if (!obj)
+        return;
     // Shared objects: track reference but don't mark (managed by refcount)
     if (XR_GC_IS_SHARED(obj)) {
         /* Global pool strings are owned by XrGlobalStringPool, not refcounted.
          * Skip shared_refs tracking to avoid refcount underflow. */
         if (XR_GC_GET_TYPE(obj) == XR_TSTRING && (obj->extra & STR_FLAG_GLOBAL)) {
-            XR_STR_SET_ACCESSED((XrString *)obj);
+            XR_STR_SET_ACCESSED((XrString *) obj);
             return;
         }
         gc_record_shared_ref(gc, obj);
@@ -562,20 +587,26 @@ void xr_coro_gc_markvalue(XrCoroGC *gc, XrValue value) {
  * and mark any XR_NATIVE_STRING fields.
  */
 static void mark_struct_string_fields(XrCoroGC *gc, XrVMContext *vm_ctx) {
-    if (!vm_ctx->struct_areas) return;
+    if (!vm_ctx->struct_areas)
+        return;
     int frame_count = vm_ctx->frame_count;
     XrBcCallFrame *frames = vm_ctx->frames;
-    if (!frames) return;
+    if (!frames)
+        return;
 
     for (int fi = 0; fi < frame_count; fi++) {
-        if (fi >= vm_ctx->struct_areas_cap) break;
+        if (fi >= vm_ctx->struct_areas_cap)
+            break;
         uint8_t *area = vm_ctx->struct_areas[fi];
-        if (!area) continue;
+        if (!area)
+            continue;
 
         XrBcCallFrame *f = &frames[fi];
-        if (!f->closure || !f->closure->proto) continue;
+        if (!f->closure || !f->closure->proto)
+            continue;
         uint16_t area_size = f->closure->proto->struct_area_size;
-        if (area_size == 0) continue;
+        if (area_size == 0)
+            continue;
 
         // Scan stack values in this frame to find live struct refs
         size_t base = f->base_offset;
@@ -583,27 +614,33 @@ static void mark_struct_string_fields(XrCoroGC *gc, XrVMContext *vm_ctx) {
         if (fi + 1 < frame_count) {
             frame_end = frames[fi + 1].base_offset;
             if (f->closure->proto) {
-                size_t proto_end = base + (size_t)f->closure->proto->maxstacksize;
-                if (proto_end > frame_end) frame_end = proto_end;
+                size_t proto_end = base + (size_t) f->closure->proto->maxstacksize;
+                if (proto_end > frame_end)
+                    frame_end = proto_end;
             }
         } else {
-            frame_end = vm_ctx->stack_top ? (size_t)(vm_ctx->stack_top - vm_ctx->stack) : base;
+            frame_end = vm_ctx->stack_top ? (size_t) (vm_ctx->stack_top - vm_ctx->stack) : base;
             if (f->closure->proto) {
-                size_t proto_end = base + (size_t)f->closure->proto->maxstacksize;
-                if (proto_end > frame_end) frame_end = proto_end;
+                size_t proto_end = base + (size_t) f->closure->proto->maxstacksize;
+                if (proto_end > frame_end)
+                    frame_end = proto_end;
             }
         }
 
         XrValue *stack = vm_ctx->stack;
         for (size_t si = base; si < frame_end; si++) {
             XrValue v = stack[si];
-            if (v.tag != XR_TAG_STRUCT_REF || v.ext != 0) continue;
-            uint8_t *sptr = (uint8_t*)v.ptr;
-            if (!sptr) continue;
+            if (v.tag != XR_TAG_STRUCT_REF || v.ext != 0)
+                continue;
+            uint8_t *sptr = (uint8_t *) v.ptr;
+            if (!sptr)
+                continue;
             // Verify pointer is within this frame's struct_area
-            if (sptr < area || sptr >= area + area_size) continue;
-            XrClass *cls = *(XrClass**)sptr;
-            if (!cls) continue;
+            if (sptr < area || sptr >= area + area_size)
+                continue;
+            XrClass *cls = *(XrClass **) sptr;
+            if (!cls)
+                continue;
             // A struct_ref in the area must point to a class that owns a
             // layout; otherwise the layout/area pairing has drifted and
             // this loop would reach into the area with a stale offset
@@ -611,7 +648,8 @@ static void mark_struct_string_fields(XrCoroGC *gc, XrVMContext *vm_ctx) {
             // the entry to avoid undefined reads.
             XR_DCHECK(cls->struct_layout != NULL,
                       "mark_struct_string_fields: struct_ref class has no struct_layout");
-            if (!cls->struct_layout) continue;
+            if (!cls->struct_layout)
+                continue;
             XrStructLayout *layout = cls->struct_layout;
             // Every layout offset is encoded relative to sptr+8 (the data
             // payload follows the embedded XrClass*). The deepest read is
@@ -619,14 +657,17 @@ static void mark_struct_string_fields(XrCoroGC *gc, XrVMContext *vm_ctx) {
             // declared area_size the bytecode/codegen and the runtime
             // disagree about the struct shape.
             for (int i = 0; i < layout->field_count; i++) {
-                if (layout->fields[i].native_type != XR_NATIVE_STRING) continue;
-                size_t field_end = (size_t)8 + (size_t)layout->fields[i].offset
-                                 + sizeof(XrString*);
-                XR_DCHECK(field_end <= (size_t)area_size,
+                if (layout->fields[i].native_type != XR_NATIVE_STRING)
+                    continue;
+                size_t field_end =
+                    (size_t) 8 + (size_t) layout->fields[i].offset + sizeof(XrString *);
+                XR_DCHECK(field_end <= (size_t) area_size,
                           "mark_struct_string_fields: layout field offset overruns area_size");
-                if (field_end > (size_t)area_size) continue;
-                XrString *s = *(XrString**)(sptr + 8 + layout->fields[i].offset);
-                if (s) xr_coro_gc_markobject(gc, (XrGCHeader*)s);
+                if (field_end > (size_t) area_size)
+                    continue;
+                XrString *s = *(XrString **) (sptr + 8 + layout->fields[i].offset);
+                if (s)
+                    xr_coro_gc_markobject(gc, (XrGCHeader *) s);
             }
         }
     }
@@ -645,11 +686,12 @@ static void mark_struct_string_fields(XrCoroGC *gc, XrVMContext *vm_ctx) {
 static void mark_coro_roots(XrCoroGC *gc) {
     XR_DCHECK(gc != NULL, "mark_coro_roots: NULL gc");
     struct XrCoroutine *coro = gc->owner;
-    if (!coro) return;
+    if (!coro)
+        return;
 
     // vm_ctx is the single source of truth for stack/frames
     XrValue *stack_top = coro->vm_ctx.stack_top;
-    size_t actual_size = stack_top ? (size_t)(stack_top - coro->vm_ctx.stack) : 0;
+    size_t actual_size = stack_top ? (size_t) (stack_top - coro->vm_ctx.stack) : 0;
 
     int frame_count = coro->vm_ctx.frame_count;
     XrBcCallFrame *frames = coro->vm_ctx.frames;
@@ -663,16 +705,17 @@ static void mark_coro_roots(XrCoroGC *gc) {
         for (int fi = 0; fi < frame_count; fi++) {
             XrBcCallFrame *f2 = &frames[fi];
             if (f2->closure && f2->closure->proto) {
-                size_t proto_end = (size_t)f2->base_offset +
-                                   (size_t)f2->closure->proto->maxstacksize;
-                if (proto_end > actual_size) actual_size = proto_end;
+                size_t proto_end =
+                    (size_t) f2->base_offset + (size_t) f2->closure->proto->maxstacksize;
+                if (proto_end > actual_size)
+                    actual_size = proto_end;
             }
         }
         // Also ensure the top frame itself is covered (handles the C-frame case
         // where its base_offset alone might be larger than stack_top).
         XrBcCallFrame *top_frame = &frames[frame_count - 1];
-        if ((size_t)top_frame->base_offset > actual_size) {
-            actual_size = (size_t)top_frame->base_offset;
+        if ((size_t) top_frame->base_offset > actual_size) {
+            actual_size = (size_t) top_frame->base_offset;
         }
     }
 
@@ -696,14 +739,17 @@ static void mark_coro_roots(XrCoroGC *gc) {
                     // that captured variables (e.g. arr, captured strings) stored
                     // in high-numbered registers are not missed by GC.
                     if (f->closure && f->closure->proto) {
-                        size_t proto_end = base + (size_t)f->closure->proto->maxstacksize;
-                        if (proto_end > frame_end) frame_end = proto_end;
+                        size_t proto_end = base + (size_t) f->closure->proto->maxstacksize;
+                        if (proto_end > frame_end)
+                            frame_end = proto_end;
                     }
                 } else {
                     frame_end = actual_size;
                 }
-                if (frame_end > actual_size) frame_end = actual_size;
-                if (base >= frame_end) continue;
+                if (frame_end > actual_size)
+                    frame_end = actual_size;
+                if (base >= frame_end)
+                    continue;
 
                 // C frames or missing proto: conservative scan
                 if ((f->call_status & XR_CALL_C) || !f->closure || !f->closure->proto) {
@@ -716,20 +762,20 @@ static void mark_coro_roots(XrCoroGC *gc) {
                 // If the current PC has a safepoint entry, scan only live slots.
                 // Otherwise fall back to conservative (scan all slots).
                 XrProto *proto = f->closure->proto;
-                const XrBcStackMap *bcmap = (const XrBcStackMap *)proto->bc_stackmap;
+                const XrBcStackMap *bcmap = (const XrBcStackMap *) proto->bc_stackmap;
                 const XrBcStackMapEntry *sme = NULL;
                 if (bcmap && f->pc) {
-                    uint32_t pc_off = (uint32_t)(f->pc - (XrInstruction*)proto->code.data);
+                    uint32_t pc_off = (uint32_t) (f->pc - (XrInstruction *) proto->code.data);
                     sme = xr_bc_stackmap_lookup(bcmap, pc_off);
                 }
                 if (sme) {
                     // Precise scan: only mark live slots
-                    uint32_t nslots = (uint32_t)(frame_end - base);
+                    uint32_t nslots = (uint32_t) (frame_end - base);
                     for (uint32_t w = 0; w < sme->num_words; w++) {
                         uint64_t bits = bcmap->bitmap_pool[sme->bitmap_offset + w];
                         while (bits) {
                             int bit = __builtin_ctzll(bits);
-                            uint32_t slot = w * 64 + (uint32_t)bit;
+                            uint32_t slot = w * 64 + (uint32_t) bit;
                             if (slot < nslots) {
                                 xr_coro_gc_markvalue(gc, stack[base + slot]);
                             }
@@ -745,7 +791,7 @@ static void mark_coro_roots(XrCoroGC *gc) {
 
             // Slots before frame[0].base_offset (e.g. varargs area)
             if (frames[0].base_offset > 0) {
-                for (size_t i = 0; i < (size_t)frames[0].base_offset && i < actual_size; i++)
+                for (size_t i = 0; i < (size_t) frames[0].base_offset && i < actual_size; i++)
                     xr_coro_gc_markvalue(gc, stack[i]);
             }
         } else {
@@ -761,7 +807,7 @@ static void mark_coro_roots(XrCoroGC *gc) {
 
     // Mark entry closure
     if (coro->entry_type == XR_CORO_ENTRY_CLOSURE && coro->entry.closure) {
-        xr_coro_gc_markobject(gc, (XrGCHeader*)coro->entry.closure);
+        xr_coro_gc_markobject(gc, (XrGCHeader *) coro->entry.closure);
     }
 
     // Mark shared array values (main coroutine only).
@@ -780,7 +826,7 @@ static void mark_coro_roots(XrCoroGC *gc) {
     // Without this root, per-coro GC collects the task while the coroutine runs,
     // causing use-after-free in worker_handle_vm_result → xr_task_complete.
     if (coro->task) {
-        xr_coro_gc_markobject(gc, (XrGCHeader*)coro->task);
+        xr_coro_gc_markobject(gc, (XrGCHeader *) coro->task);
     }
 
     // Mark coroutine result/error/pending_closure_result
@@ -801,7 +847,7 @@ static void mark_coro_roots(XrCoroGC *gc) {
                 xr_coro_gc_markvalue(gc, frame->u.c.cfunc_result);
             }
             if (frame->closure) {
-                xr_coro_gc_markobject(gc, (XrGCHeader*)frame->closure);
+                xr_coro_gc_markobject(gc, (XrGCHeader *) frame->closure);
             }
             // frame->context removed: context chain no longer used.
         }
@@ -813,7 +859,7 @@ static void mark_coro_roots(XrCoroGC *gc) {
     // inside a CALL_C helper (e.g. xr_jit_closure_new → xr_coro_gc_newobj) may
     // collect the live closure and recycle its memory, causing use-after-free.
     if (coro->jit_ctx && coro->jit_ctx->call_closure)
-        xr_coro_gc_markobject(gc, (XrGCHeader*)coro->jit_ctx->call_closure);
+        xr_coro_gc_markobject(gc, (XrGCHeader *) coro->jit_ctx->call_closure);
 
     // Mark JIT GC stack map roots (compile-time bitmap)
     // Innermost frame: scan registers (from safepoint_saved_sp) + spill slots
@@ -833,7 +879,7 @@ static void mark_coro_roots(XrCoroGC *gc) {
 
         // --- Scan innermost frame (where safepoint/call_c was triggered) ---
         uint32_t sid = coro->jit_ctx->active_safepoint_id;
-        XrStackMapTable *table = (XrStackMapTable *)coro->jit_ctx->active_stack_map;
+        XrStackMapTable *table = (XrStackMapTable *) coro->jit_ctx->active_stack_map;
         if (sid < table->count) {
             XrStackMapEntry *entry = &table->entries[sid];
 
@@ -845,16 +891,16 @@ static void mark_coro_roots(XrCoroGC *gc) {
 
                 if (idx < 15 && coro->jit_ctx->safepoint_saved_sp) {
                     // Caller-saved x1-x15: from safepoint stub's saved area
-                    int64_t *saved = (int64_t *)coro->jit_ctx->safepoint_saved_sp;
-                    ptr = (void *)saved[idx];
+                    int64_t *saved = (int64_t *) coro->jit_ctx->safepoint_saved_sp;
+                    ptr = (void *) saved[idx];
                 } else if (idx >= 15 && idx <= 21 && coro->jit_ctx->jit_frame_sp) {
                     // Callee-saved x21-x27: from JIT frame
                     int cs_off = callee_saved_offsets[idx - 15];
-                    ptr = (void *)*(int64_t *)((char *)coro->jit_ctx->jit_frame_sp + cs_off);
+                    ptr = (void *) *(int64_t *) ((char *) coro->jit_ctx->jit_frame_sp + cs_off);
                 }
 
                 if (ptr) {
-                    xr_coro_gc_markobject(gc, (XrGCHeader *)ptr);
+                    xr_coro_gc_markobject(gc, (XrGCHeader *) ptr);
                 }
                 rbits &= rbits - 1;
             }
@@ -864,9 +910,10 @@ static void mark_coro_roots(XrCoroGC *gc) {
             if (sbits && coro->jit_ctx->jit_frame_sp) {
                 while (sbits) {
                     int idx = __builtin_ctz(sbits);
-                    void *ptr = (void *)*(int64_t *)((char *)coro->jit_ctx->jit_frame_sp + 176 + idx * 8);
+                    void *ptr = (void *) *(int64_t *) ((char *) coro->jit_ctx->jit_frame_sp + 176 +
+                                                       idx * 8);
                     if (ptr) {
-                        xr_coro_gc_markobject(gc, (XrGCHeader *)ptr);
+                        xr_coro_gc_markobject(gc, (XrGCHeader *) ptr);
                     }
                     sbits &= sbits - 1;
                 }
@@ -878,15 +925,18 @@ static void mark_coro_roots(XrCoroGC *gc) {
         // ARM64 FP chain links all recursive frames. Walk up from innermost
         // FP, scanning each valid JIT frame's spill slots + callee-saved regs.
         if (coro->jit_ctx->jit_frame_sp) {
-            void *walk_fp = *(void **)coro->jit_ctx->jit_frame_sp;  // caller's FP
+            void *walk_fp = *(void **) coro->jit_ctx->jit_frame_sp;  // caller's FP
             int walk_depth = 0;
             while (walk_fp && walk_depth < 1024) {
-                XrStackMapTable *wt = *(XrStackMapTable **)((char *)walk_fp + 160);
-                if (!wt || (uintptr_t)wt < 0x1000 || ((uintptr_t)wt & 7) != 0) break;
-                if (wt->magic != XR_STACK_MAP_MAGIC) break;
+                XrStackMapTable *wt = *(XrStackMapTable **) ((char *) walk_fp + 160);
+                if (!wt || (uintptr_t) wt < 0x1000 || ((uintptr_t) wt & 7) != 0)
+                    break;
+                if (wt->magic != XR_STACK_MAP_MAGIC)
+                    break;
 
-                uint32_t wsid = *(uint32_t *)((char *)walk_fp + 168);
-                if (wsid >= wt->count) break;
+                uint32_t wsid = *(uint32_t *) ((char *) walk_fp + 168);
+                if (wsid >= wt->count)
+                    break;
 
                 XrStackMapEntry *we = &wt->entries[wsid];
 
@@ -896,8 +946,9 @@ static void mark_coro_roots(XrCoroGC *gc) {
                     int idx = __builtin_ctz(wrbits);
                     if (idx >= 15 && idx <= 21) {
                         int cs_off = callee_saved_offsets[idx - 15];
-                        void *ptr = (void *)*(int64_t *)((char *)walk_fp + cs_off);
-                        if (ptr) xr_coro_gc_markobject(gc, (XrGCHeader *)ptr);
+                        void *ptr = (void *) *(int64_t *) ((char *) walk_fp + cs_off);
+                        if (ptr)
+                            xr_coro_gc_markobject(gc, (XrGCHeader *) ptr);
                     }
                     wrbits &= wrbits - 1;
                 }
@@ -906,12 +957,13 @@ static void mark_coro_roots(XrCoroGC *gc) {
                 uint32_t wsbits = we->spill_bitmap;
                 while (wsbits) {
                     int idx = __builtin_ctz(wsbits);
-                    void *ptr = (void *)*(int64_t *)((char *)walk_fp + 176 + idx * 8);
-                    if (ptr) xr_coro_gc_markobject(gc, (XrGCHeader *)ptr);
+                    void *ptr = (void *) *(int64_t *) ((char *) walk_fp + 176 + idx * 8);
+                    if (ptr)
+                        xr_coro_gc_markobject(gc, (XrGCHeader *) ptr);
                     wsbits &= wsbits - 1;
                 }
 
-                walk_fp = *(void **)walk_fp;  // next caller's FP
+                walk_fp = *(void **) walk_fp;  // next caller's FP
                 walk_depth++;
             }
         }
@@ -921,19 +973,25 @@ static void mark_coro_roots(XrCoroGC *gc) {
         // The caller wrote PTR reg values to spill slots before the call,
         // and stored safepoint_id + stack_map_ptr in its frame.
         uint32_t depth = coro->jit_ctx->jit_frame_depth;
-        if (depth > XR_JIT_MAX_FRAME_DEPTH) depth = XR_JIT_MAX_FRAME_DEPTH;
+        if (depth > XR_JIT_MAX_FRAME_DEPTH)
+            depth = XR_JIT_MAX_FRAME_DEPTH;
         for (uint32_t d = 0; d < depth; d++) {
             void *caller_fp = coro->jit_ctx->jit_frame_stack[d];
-            if (!caller_fp) continue;
+            if (!caller_fp)
+                continue;
 
             // Read stack_map_ptr from caller's frame [FP+160]
-            XrStackMapTable *caller_table = *(XrStackMapTable **)((char *)caller_fp + 160);
-            if (!caller_table || (uintptr_t)caller_table < 0x1000 || ((uintptr_t)caller_table & 7) != 0) continue;
-            if (caller_table->magic != XR_STACK_MAP_MAGIC) continue;
+            XrStackMapTable *caller_table = *(XrStackMapTable **) ((char *) caller_fp + 160);
+            if (!caller_table || (uintptr_t) caller_table < 0x1000 ||
+                ((uintptr_t) caller_table & 7) != 0)
+                continue;
+            if (caller_table->magic != XR_STACK_MAP_MAGIC)
+                continue;
 
             // Read safepoint_id from caller's frame [FP+168]
-            uint32_t caller_sid = *(uint32_t *)((char *)caller_fp + 168);
-            if (caller_sid >= caller_table->count) continue;
+            uint32_t caller_sid = *(uint32_t *) ((char *) caller_fp + 168);
+            if (caller_sid >= caller_table->count)
+                continue;
 
             XrStackMapEntry *caller_entry = &caller_table->entries[caller_sid];
 
@@ -943,9 +1001,9 @@ static void mark_coro_roots(XrCoroGC *gc) {
                 int idx = __builtin_ctz(crbits);
                 if (idx >= 15 && idx <= 21) {
                     int cs_off = callee_saved_offsets[idx - 15];
-                    void *ptr = (void *)*(int64_t *)((char *)caller_fp + cs_off);
+                    void *ptr = (void *) *(int64_t *) ((char *) caller_fp + cs_off);
                     if (ptr) {
-                        xr_coro_gc_markobject(gc, (XrGCHeader *)ptr);
+                        xr_coro_gc_markobject(gc, (XrGCHeader *) ptr);
                     }
                 }
                 crbits &= crbits - 1;
@@ -955,9 +1013,9 @@ static void mark_coro_roots(XrCoroGC *gc) {
             uint32_t csbits = caller_entry->spill_bitmap;
             while (csbits) {
                 int idx = __builtin_ctz(csbits);
-                void *ptr = (void *)*(int64_t *)((char *)caller_fp + 176 + idx * 8);
+                void *ptr = (void *) *(int64_t *) ((char *) caller_fp + 176 + idx * 8);
                 if (ptr) {
-                    xr_coro_gc_markobject(gc, (XrGCHeader *)ptr);
+                    xr_coro_gc_markobject(gc, (XrGCHeader *) ptr);
                 }
                 csbits &= csbits - 1;
             }
@@ -971,9 +1029,10 @@ static void mark_coro_roots(XrCoroGC *gc) {
 }
 
 static void markroots(XrCoroGC *gc) {
-    if (!gc->owner) return;
+    if (!gc->owner)
+        return;
     XR_DCHECK(gc->gcstate == XGC_PAUSE || gc->gcstate == XGC_PROPAGATE,
-             "markroots: expected PAUSE or PROPAGATE state");
+              "markroots: expected PAUSE or PROPAGATE state");
     // Rotate shared_refs for this new GC cycle
     gc_shared_refs_begin(gc);
     // Single bitmap: no bitmap clearing at mark start
@@ -988,15 +1047,17 @@ static void traverse_object(XrCoroGC *gc, XrGCHeader *obj);
 static void propagatemark(XrCoroGC *gc) {
     // State can be PROPAGATE, ATOMIC, or PAUSE (youngcollection path)
     XrGCHeader *obj = xr_gclist_pop(&gc->gray);
-    if (!obj) return;
+    if (!obj)
+        return;
 
     // INVARIANT 2: object was gray (on gray list), now becomes black
     if (!xr_gc_isgray(obj)) {
-        fprintf(stderr, "[GC-DIAG] propagate: obj=%p type=%d marked=0x%02x objsize=%u "
+        fprintf(stderr,
+                "[GC-DIAG] propagate: obj=%p type=%d marked=0x%02x objsize=%u "
                 "iswhite=%d isblack=%d gcstate=%d gc_mode=%d gray.count=%d grayagain.count=%d\n",
-                (void*)obj, obj->type, obj->marked, obj->objsize,
-                xr_gc_iswhite(obj) ? 1 : 0, xr_gc_isblack(obj) ? 1 : 0,
-                gc->gcstate, gc->gc_mode, gc->gray.count, gc->grayagain.count);
+                (void *) obj, obj->type, obj->marked, obj->objsize, xr_gc_iswhite(obj) ? 1 : 0,
+                xr_gc_isblack(obj) ? 1 : 0, gc->gcstate, gc->gc_mode, gc->gray.count,
+                gc->grayagain.count);
         XR_DCHECK(false, "propagate: object from gray list not gray");
     }
     xr_gc_gray2black(obj);
@@ -1032,7 +1093,11 @@ static int sweep_block(XrCoroGC *gc, XrImmixBlock *block) {
                 XrGCHeader *next = obj->gc_next;
                 if (xr_gc_needs_finalize_ext(gc, obj->type)) {
                     XrGCDestroyFn destroy = get_destroy_func_ext(gc, obj->type);
-                    if (destroy) { destroy(obj, gc); gc->finalizer_count++; gc->objects_finalized++; }
+                    if (destroy) {
+                        destroy(obj, gc);
+                        gc->finalizer_count++;
+                        gc->objects_finalized++;
+                    }
                 }
                 obj = next;
             }
@@ -1089,7 +1154,7 @@ static int sweep_block(XrCoroGC *gc, XrImmixBlock *block) {
             }
 
             int first = XR_IMMIX_LINE_INDEX(curr);
-            int last  = XR_IMMIX_LINE_INDEX((char*)curr + curr->objsize - 1);
+            int last = XR_IMMIX_LINE_INDEX((char *) curr + curr->objsize - 1);
             for (int l = first; l <= last; l++)
                 XR_IMMIX_LINE_SET(new_marks, l);
 
@@ -1174,8 +1239,10 @@ static void setpause(XrCoroGC *gc);  // Forward declaration (defined after gen G
 static inline int64_t mark_step_budget(XrCoroGC *gc) {
     int64_t debt = gc->GCdebt > 0 ? gc->GCdebt : 0;
     int64_t work = debt * gc->gc_stepmul / 100;
-    if (work < XGC_MARK_STEP_MIN) work = XGC_MARK_STEP_MIN;
-    if (work > XGC_MARK_STEP_MAX) work = XGC_MARK_STEP_MAX;
+    if (work < XGC_MARK_STEP_MIN)
+        work = XGC_MARK_STEP_MIN;
+    if (work > XGC_MARK_STEP_MAX)
+        work = XGC_MARK_STEP_MAX;
     return work;
 }
 
@@ -1186,8 +1253,9 @@ static inline int64_t mark_step_budget(XrCoroGC *gc) {
 static inline int sweep_step_budget(XrCoroGC *gc) {
     int64_t debt = gc->GCdebt > 0 ? gc->GCdebt : 0;
     // Rough heuristic: 1 block per 4KB of debt
-    int units = (int)(debt / (4 * 1024)) + XGC_SWEEP_UNITS_MIN;
-    if (units > XGC_SWEEP_UNITS_MAX) units = XGC_SWEEP_UNITS_MAX;
+    int units = (int) (debt / (4 * 1024)) + XGC_SWEEP_UNITS_MIN;
+    if (units > XGC_SWEEP_UNITS_MAX)
+        units = XGC_SWEEP_UNITS_MAX;
     return units;
 }
 
@@ -1202,9 +1270,13 @@ static void sweep_start(XrCoroGC *gc) {
 static void maybe_shrink_graylist(XrGCGrayList *list) {
     if (list->capacity > 64 && list->capacity > list->peak * 4) {
         int newcap = list->peak * 2;
-        if (newcap < 64) newcap = 64;
-        XrGCHeader **p = xr_realloc(list->items, (size_t)newcap * sizeof(XrGCHeader*));
-        if (p) { list->items = p; list->capacity = newcap; }
+        if (newcap < 64)
+            newcap = 64;
+        XrGCHeader **p = xr_realloc(list->items, (size_t) newcap * sizeof(XrGCHeader *));
+        if (p) {
+            list->items = p;
+            list->capacity = newcap;
+        }
     }
     list->peak = 0;
 }
@@ -1305,7 +1377,7 @@ static void clearweaktables(XrCoroGC *gc) {
 
         if (obj->type == XR_TMAP) {
             // WeakMap: chained hash, scan node[] array
-            struct XrMap *map = (struct XrMap*)obj;
+            struct XrMap *map = (struct XrMap *) obj;
             uint32_t size = 1u << map->lsizenode;
 
             for (uint32_t i = 0; i < size; i++) {
@@ -1325,8 +1397,9 @@ static void clearweaktables(XrCoroGC *gc) {
             }
         } else if (obj->type == XR_TSET) {
             // WeakSet: open addressing, scan entries[] array
-            struct XrSet *set = (struct XrSet*)obj;
-            if (!set->entries) continue;
+            struct XrSet *set = (struct XrSet *) obj;
+            if (!set->entries)
+                continue;
 
             for (uint32_t i = 0; i < set->capacity; i++) {
                 XrSetEntry *e = &set->entries[i];
@@ -1351,8 +1424,7 @@ static void clearweaktables(XrCoroGC *gc) {
 static void atomic(XrCoroGC *gc) {
     // atomic() is called from: incremental (state=ATOMIC), entergen (state=PAUSE),
     // fullgc (state=ATOMIC). Gray list may have items from entergen path.
-    XR_DCHECK(gc->gcstate == XGC_ATOMIC || gc->gcstate == XGC_PAUSE,
-             "atomic: unexpected state");
+    XR_DCHECK(gc->gcstate == XGC_ATOMIC || gc->gcstate == XGC_PAUSE, "atomic: unexpected state");
     // 1. Re-mark coroutine roots to catch objects created during PROPAGATE.
     //    Objects born during PROPAGATE have old currentwhite. Without this
     //    re-scan, they become deadwhite after the flip and get swept while
@@ -1371,7 +1443,7 @@ static void atomic(XrCoroGC *gc) {
     gc->currentwhite ^= XGC_WHITEBITS;
     XR_DCHECK(gc->currentwhite != old_white, "white flip failed");
     XR_DCHECK((gc->currentwhite & XGC_WHITEBITS) != 0, "currentwhite has no white bits");
-    (void)old_white;
+    (void) old_white;
 
     // 5. Initialize block-level sweep state
     gc->sweep_phase = 0;
@@ -1387,7 +1459,8 @@ static void setpause(XrCoroGC *gc) {
     XR_DCHECK(gc->gcstate == XGC_PAUSE, "setpause: not in PAUSE state");
     // Calculate allocation rate (bytes per ms) for this cycle
     uint64_t cycle_time_ms = gc->last_gc_time_ns / 1000000;
-    if (cycle_time_ms == 0) cycle_time_ms = 1;
+    if (cycle_time_ms == 0)
+        cycle_time_ms = 1;
 
     uint64_t alloc_rate = gc->alloc_since_gc / cycle_time_ms;
     gc->alloc_since_gc = 0;  // Reset for next cycle
@@ -1400,11 +1473,13 @@ static void setpause(XrCoroGC *gc) {
     if (alloc_rate > 10000) {
         // High pressure: >10KB/ms, reduce pause
         adaptive_pause = gc->gc_pause * 80 / 100;
-        if (adaptive_pause < XGC_PAUSE_MIN) adaptive_pause = XGC_PAUSE_MIN;
+        if (adaptive_pause < XGC_PAUSE_MIN)
+            adaptive_pause = XGC_PAUSE_MIN;
     } else if (alloc_rate < 100) {
         // Low pressure: <100B/ms, increase pause
         adaptive_pause = gc->gc_pause * 150 / 100;
-        if (adaptive_pause > XGC_PAUSE_MAX) adaptive_pause = XGC_PAUSE_MAX;
+        if (adaptive_pause > XGC_PAUSE_MAX)
+            adaptive_pause = XGC_PAUSE_MAX;
     }
 
     // Calculate threshold: marked * (pause / 100)
@@ -1412,7 +1487,8 @@ static void setpause(XrCoroGC *gc) {
 
     // Debt = threshold - current, negative means "wait this much before next GC"
     int64_t debt = threshold - gc->totalbytes;
-    if (debt < 0) debt = 0;
+    if (debt < 0)
+        debt = 0;
     gc->GCdebt = -debt;
 }
 
@@ -1494,41 +1570,42 @@ static void youngcollection(XrCoroGC *gc) {
     // 5. Sweep young blocks + classify in single pass.
     // sweep_block updates alloc_marks; use those directly to classify blocks.
     {
-        XrImmixBlock *new_full    = NULL;
+        XrImmixBlock *new_full = NULL;
         XrImmixBlock *new_recycle = NULL;
-        XrImmixBlock *new_free    = gc->immix.free_blocks;
+        XrImmixBlock *new_free = gc->immix.free_blocks;
         int64_t promoted_bytes = 0;
 
-        // Helper macro: sweep block then classify based on live line count
-        #define SWEEP_AND_CLASSIFY(blk) do {                                    \
-            int live = sweep_block(gc, (blk));                                  \
-            if (live == 0) {                                                    \
-                (blk)->is_young = 1;                                            \
-                (blk)->local_allgc = NULL;                                      \
-                (blk)->has_black = 0;                                           \
-                (blk)->next = new_free;                                         \
-                new_free = (blk);                                               \
-                    } else if (live * 100 / XR_IMMIX_USABLE_LINES >= XGC_PROMOTE_THRESHOLD_PCT) { \
-                (blk)->is_young = 0;                                            \
-                for (XrGCHeader *_o = (blk)->local_allgc; _o; _o = _o->gc_next) \
-                    xr_gc_set2black(_o);                                        \
-                (blk)->has_black = 1;                                           \
-                (blk)->next = gc->immix.old_blocks;                             \
-                gc->immix.old_blocks = (blk);                                   \
-                gc->immix.old_block_count++;                                    \
-                promoted_bytes += (int64_t)live * XR_IMMIX_LINE_SIZE;           \
-            } else if (live < XR_IMMIX_USABLE_LINES) {                         \
-                (blk)->next_scan_line = XR_IMMIX_FIRST_LINE;                    \
-                (blk)->next = new_recycle;                                      \
-                new_recycle = (blk);                                            \
-            } else {                                                            \
-                (blk)->next = new_full;                                         \
-                new_full = (blk);                                               \
-            }                                                                   \
-        } while(0)
+// Helper macro: sweep block then classify based on live line count
+#define SWEEP_AND_CLASSIFY(blk)                                                                    \
+    do {                                                                                           \
+        int live = sweep_block(gc, (blk));                                                         \
+        if (live == 0) {                                                                           \
+            (blk)->is_young = 1;                                                                   \
+            (blk)->local_allgc = NULL;                                                             \
+            (blk)->has_black = 0;                                                                  \
+            (blk)->next = new_free;                                                                \
+            new_free = (blk);                                                                      \
+        } else if (live * 100 / XR_IMMIX_USABLE_LINES >= XGC_PROMOTE_THRESHOLD_PCT) {              \
+            (blk)->is_young = 0;                                                                   \
+            for (XrGCHeader *_o = (blk)->local_allgc; _o; _o = _o->gc_next)                        \
+                xr_gc_set2black(_o);                                                               \
+            (blk)->has_black = 1;                                                                  \
+            (blk)->next = gc->immix.old_blocks;                                                    \
+            gc->immix.old_blocks = (blk);                                                          \
+            gc->immix.old_block_count++;                                                           \
+            promoted_bytes += (int64_t) live * XR_IMMIX_LINE_SIZE;                                 \
+        } else if (live < XR_IMMIX_USABLE_LINES) {                                                 \
+            (blk)->next_scan_line = XR_IMMIX_FIRST_LINE;                                           \
+            (blk)->next = new_recycle;                                                             \
+            new_recycle = (blk);                                                                   \
+        } else {                                                                                   \
+            (blk)->next = new_full;                                                                \
+            new_full = (blk);                                                                      \
+        }                                                                                          \
+    } while (0)
 
         // Process full_blocks and recycle_blocks
-        XrImmixBlock *ylists[] = { gc->immix.full_blocks, gc->immix.recycle_blocks };
+        XrImmixBlock *ylists[] = {gc->immix.full_blocks, gc->immix.recycle_blocks};
         for (int li = 0; li < 2; li++) {
             XrImmixBlock *b = ylists[li];
             while (b) {
@@ -1541,7 +1618,7 @@ static void youngcollection(XrCoroGC *gc) {
             SWEEP_AND_CLASSIFY(gc->immix.current_block);
             gc->immix.current_block = NULL;
         }
-        #undef SWEEP_AND_CLASSIFY
+#undef SWEEP_AND_CLASSIFY
 
         gc->immix.full_blocks = new_full;
         gc->immix.recycle_blocks = new_recycle;
@@ -1596,15 +1673,18 @@ static void minor2inc(XrCoroGC *gc) {
 
     // Reset all object colors to current white for fresh mark-sweep
     uint8_t newcolor = gc->currentwhite & XGC_WHITEBITS;
-    XrImmixBlock *lists[] = { gc->immix.full_blocks, gc->immix.recycle_blocks, gc->immix.current_block };
+    XrImmixBlock *lists[] = {gc->immix.full_blocks, gc->immix.recycle_blocks,
+                             gc->immix.current_block};
     for (int i = 0; i < 3; i++) {
         for (XrImmixBlock *b = lists[i]; b; b = b->next) {
-            if (!b->local_allgc) continue;  // skip empty blocks
+            if (!b->local_allgc)
+                continue;  // skip empty blocks
             for (XrGCHeader *obj = b->local_allgc; obj; obj = obj->gc_next) {
                 obj->marked = (obj->marked & ~XGC_GCBITS) | newcolor;
             }
         }
-        if (i == 2) break;
+        if (i == 2)
+            break;
     }
     for (XrGCHeader *obj = gc->large_objects; obj; obj = obj->gc_next) {
         obj->marked = (obj->marked & ~XGC_GCBITS) | (gc->currentwhite & XGC_WHITEBITS);
@@ -1626,7 +1706,8 @@ static void atomic2gen(XrCoroGC *gc) {
     gc->GCest = gc->totalbytes;
 
     // Move all surviving blocks to old_blocks
-    XrImmixBlock *blists[] = { gc->immix.full_blocks, gc->immix.recycle_blocks, gc->immix.current_block };
+    XrImmixBlock *blists[] = {gc->immix.full_blocks, gc->immix.recycle_blocks,
+                              gc->immix.current_block};
     for (int i = 0; i < 3; i++) {
         XrImmixBlock *b = blists[i];
         while (b) {
@@ -1647,7 +1728,8 @@ static void atomic2gen(XrCoroGC *gc) {
                 gc->immix.free_blocks = b;
             }
             b = next;
-            if (i == 2) break;  // current_block is single
+            if (i == 2)
+                break;  // current_block is single
         }
     }
     gc->immix.full_blocks = NULL;
@@ -1663,8 +1745,10 @@ static void atomic2gen(XrCoroGC *gc) {
     // Recount total blocks
     {
         size_t old_cnt = 0, free_cnt = 0;
-        for (XrImmixBlock *p = gc->immix.old_blocks; p; p = p->next) old_cnt++;
-        for (XrImmixBlock *p = gc->immix.free_blocks; p; p = p->next) free_cnt++;
+        for (XrImmixBlock *p = gc->immix.old_blocks; p; p = p->next)
+            old_cnt++;
+        for (XrImmixBlock *p = gc->immix.free_blocks; p; p = p->next)
+            free_cnt++;
         gc->immix.old_block_count = old_cnt;
         gc->immix.total_blocks = old_cnt + free_cnt;
         gc->immix.total_block_bytes = gc->immix.total_blocks * XR_IMMIX_BLOCK_SIZE;
@@ -1714,7 +1798,8 @@ static void entergen(XrCoroGC *gc) {
 static void setminordebt(XrCoroGC *gc) {
     int64_t estimate = gc->GCest > 0 ? gc->GCest : gc->totalbytes;
     int64_t threshold = estimate * 50 / 100;
-    if (threshold < 4096) threshold = 4096;
+    if (threshold < 4096)
+        threshold = 4096;
     gc->GCdebt = -threshold;
 }
 
@@ -1725,7 +1810,8 @@ static void setminordebt(XrCoroGC *gc) {
  * old-object accumulation earlier, reducing peak RSS.
  */
 static bool check_minor_to_major(XrCoroGC *gc) {
-    if (gc->GCest <= 0) return false;
+    if (gc->GCest <= 0)
+        return false;
     int64_t limit = gc->GCest * XGC_MAJOR_TRIGGER_PCT / 100;
     return gc->young_promoted >= limit;
 }
@@ -1733,7 +1819,8 @@ static bool check_minor_to_major(XrCoroGC *gc) {
 /* ========== GC Step (Incremental, 4-State) ========== */
 
 void xr_coro_gc_step(XrCoroGC *gc) {
-    if (!gc || gc->in_gc || gc->gc_disabled > 0) return;
+    if (!gc || gc->in_gc || gc->gc_disabled > 0)
+        return;
 
     gc->in_gc = 1;
     XR_DCHECK(gc->gcstate <= XGC_SWEEP, "gc_step entry: invalid GC state");
@@ -1824,7 +1911,8 @@ void xr_coro_gc_step(XrCoroGC *gc) {
 /* ========== Full GC ========== */
 
 void xr_coro_gc_fullgc(XrCoroGC *gc) {
-    if (!gc) return;
+    if (!gc)
+        return;
     XR_DCHECK(!gc->in_gc, "fullgc: re-entry during GC");
 
     uint64_t t0 = xr_gc_time_ns();
@@ -1841,7 +1929,6 @@ void xr_coro_gc_fullgc(XrCoroGC *gc) {
     gc->gcstate = XGC_PAUSE;
     xr_gclist_reset(&gc->gray);
     xr_gclist_reset(&gc->grayagain);
-
 
     // PAUSE -> PROPAGATE: mark roots
     markroots(gc);
@@ -1899,10 +1986,12 @@ void xr_coro_gc_fullgc(XrCoroGC *gc) {
 /* ========== External Root Registration ========== */
 
 int xr_coro_gc_register_root(XrCoroGC *gc, XrCoroGCRootCallback callback, void *userdata) {
-    if (!gc || !callback) return -1;
+    if (!gc || !callback)
+        return -1;
 
-    XrCoroGCRootEntry *entry = (XrCoroGCRootEntry*)xr_malloc(sizeof(XrCoroGCRootEntry));
-    if (!entry) return -1;
+    XrCoroGCRootEntry *entry = (XrCoroGCRootEntry *) xr_malloc(sizeof(XrCoroGCRootEntry));
+    if (!entry)
+        return -1;
 
     entry->callback = callback;
     entry->userdata = userdata;
@@ -1912,7 +2001,8 @@ int xr_coro_gc_register_root(XrCoroGC *gc, XrCoroGCRootCallback callback, void *
 }
 
 int xr_coro_gc_unregister_root(XrCoroGC *gc, XrCoroGCRootCallback callback, void *userdata) {
-    if (!gc || !callback) return -1;
+    if (!gc || !callback)
+        return -1;
 
     XrCoroGCRootEntry **pp = &gc->root_callbacks;
     while (*pp) {
@@ -1942,16 +2032,13 @@ int xr_coro_gc_unregister_root(XrCoroGC *gc, XrCoroGCRootCallback callback, void
  * Only compiled when XR_GC_DEBUG=1. Cost: O(n) per call.
  */
 void xr_gc_verify_invariants(XrCoroGC *gc) {
-    if (!gc) return;
+    if (!gc)
+        return;
     int errors = 0;
 
     // INV-1 + INV-4: walk all Immix blocks, verify alloc_count and alloc_marks
-    XrImmixBlock *blists[] = {
-        gc->immix.full_blocks,
-        gc->immix.recycle_blocks,
-        gc->immix.current_block,
-        gc->immix.old_blocks
-    };
+    XrImmixBlock *blists[] = {gc->immix.full_blocks, gc->immix.recycle_blocks,
+                              gc->immix.current_block, gc->immix.old_blocks};
     for (int li = 0; li < 4; li++) {
         for (XrImmixBlock *b = blists[li]; b; b = b->next) {
             uint32_t counted = 0;
@@ -1960,24 +2047,29 @@ void xr_gc_verify_invariants(XrCoroGC *gc) {
                 // INV-1: every live object's lines must be set in alloc_marks
                 int first = XR_IMMIX_LINE_INDEX(obj);
                 if (!XR_IMMIX_LINE_GET(b->alloc_marks, first)) {
-                    fprintf(stderr, "[GC-INV] INV-1 FAIL: obj %p type=%d line %d not in alloc_marks (block %p)\n",
-                            (void*)obj, obj->type, first, (void*)b);
+                    fprintf(stderr,
+                            "[GC-INV] INV-1 FAIL: obj %p type=%d line %d not in alloc_marks (block "
+                            "%p)\n",
+                            (void *) obj, obj->type, first, (void *) b);
                     errors++;
                 }
                 // INV-3: Immix object size must be <= large threshold
                 if (obj->objsize > XR_LARGE_OBJECT_THRESHOLD) {
-                    fprintf(stderr, "[GC-INV] INV-3 FAIL: oversized obj %p size=%u in Immix block %p\n",
-                            (void*)obj, obj->objsize, (void*)b);
+                    fprintf(stderr,
+                            "[GC-INV] INV-3 FAIL: oversized obj %p size=%u in Immix block %p\n",
+                            (void *) obj, obj->objsize, (void *) b);
                     errors++;
                 }
             }
             // INV-4: counted must match block->alloc_count
             if (counted != b->alloc_count) {
-                fprintf(stderr, "[GC-INV] INV-4 FAIL: block %p alloc_count=%u but chain has %u objects\n",
-                        (void*)b, b->alloc_count, counted);
+                fprintf(stderr,
+                        "[GC-INV] INV-4 FAIL: block %p alloc_count=%u but chain has %u objects\n",
+                        (void *) b, b->alloc_count, counted);
                 errors++;
             }
-            if (li == 2) break;  // current_block is single
+            if (li == 2)
+                break;  // current_block is single
         }
     }
 
@@ -1986,7 +2078,7 @@ void xr_gc_verify_invariants(XrCoroGC *gc) {
         XrGCHeader *obj = gc->gray.items[i];
         if (!xr_gc_isgray(obj)) {
             fprintf(stderr, "[GC-INV] INV-2 FAIL: gray list item %p marked=0x%02x is NOT gray\n",
-                    (void*)obj, obj->marked);
+                    (void *) obj, obj->marked);
             errors++;
         }
     }
@@ -1996,7 +2088,7 @@ void xr_gc_verify_invariants(XrCoroGC *gc) {
     for (XrGCHeader *obj = gc->large_objects; obj; obj = obj->gc_next) {
         if (obj->objsize <= XR_LARGE_OBJECT_THRESHOLD) {
             fprintf(stderr, "[GC-INV] INV-3 FAIL: small obj %p size=%u in large_objects list\n",
-                    (void*)obj, obj->objsize);
+                    (void *) obj, obj->objsize);
             errors++;
         }
     }
@@ -2007,12 +2099,14 @@ void xr_gc_verify_invariants(XrCoroGC *gc) {
         for (int li = 0; li < 4; li++) {
             for (XrImmixBlock *b = blists[li]; b; b = b->next) {
                 computed += b->alloc_bytes;
-                if (li == 2) break;
+                if (li == 2)
+                    break;
             }
         }
         if (computed != gc->totalbytes) {
-            fprintf(stderr, "[GC-INV] INV-6 FAIL: totalbytes=%lld but computed=%lld (large_bytes=%lld)\n",
-                    (long long)gc->totalbytes, (long long)computed, (long long)gc->large_bytes);
+            fprintf(stderr,
+                    "[GC-INV] INV-6 FAIL: totalbytes=%lld but computed=%lld (large_bytes=%lld)\n",
+                    (long long) gc->totalbytes, (long long) computed, (long long) gc->large_bytes);
             errors++;
         }
     }
@@ -2023,7 +2117,8 @@ void xr_gc_verify_invariants(XrCoroGC *gc) {
         for (int li = 0; li < 4; li++) {
             for (XrImmixBlock *b = blists[li]; b; b = b->next) {
                 computed += b->alloc_count;
-                if (li == 2) break;
+                if (li == 2)
+                    break;
             }
         }
         uint32_t large_count = 0;
@@ -2042,7 +2137,7 @@ void xr_gc_verify_invariants(XrCoroGC *gc) {
                 errors, gc->gc_count, xr_gc_state_name(gc->gcstate));
     }
 }
-#endif // XR_GC_DEBUG
+#endif  // XR_GC_DEBUG
 
 /* ========== Debug ========== */
 
@@ -2054,9 +2149,9 @@ void xr_coro_gc_print_stats(XrCoroGC *gc) {
 
     printf("=== XrCoroGC (Incremental Immix) ===\n");
     printf("GC state:     %s\n", xr_gc_state_name(gc->gcstate));
-    printf("Total bytes:  %lld\n", (long long)gc->totalbytes);
-    printf("GC debt:      %lld\n", (long long)gc->GCdebt);
-    printf("GC marked:    %lld\n", (long long)gc->GCmarked);
+    printf("Total bytes:  %lld\n", (long long) gc->totalbytes);
+    printf("GC debt:      %lld\n", (long long) gc->GCdebt);
+    printf("GC marked:    %lld\n", (long long) gc->GCmarked);
     printf("GC count:     %u\n", gc->gc_count);
     printf("GC pause:     %d%%\n", gc->gc_pause);
     printf("GC stepmul:   %d\n", gc->gc_stepmul);
@@ -2064,44 +2159,39 @@ void xr_coro_gc_print_stats(XrCoroGC *gc) {
 
     XrImmixStats istats;
     xr_immix_get_stats(&gc->immix, &istats);
-    printf("Immix blocks:   %zu (full=%zu recycle=%zu free=%zu)\n",
-           istats.total_blocks, istats.full_blocks,
-           istats.recycle_blocks, istats.free_blocks);
+    printf("Immix blocks:   %zu (full=%zu recycle=%zu free=%zu)\n", istats.total_blocks,
+           istats.full_blocks, istats.recycle_blocks, istats.free_blocks);
     printf("Immix memory:   %zu bytes\n", istats.total_bytes);
-    printf("Immix lines:    live=%zu free=%zu\n",
-           istats.live_lines, istats.free_lines);
+    printf("Immix lines:    live=%zu free=%zu\n", istats.live_lines, istats.free_lines);
 
     size_t obj_count = 0;
-    XrImmixBlock *plists[] = {
-        gc->immix.full_blocks,
-        gc->immix.recycle_blocks,
-        gc->immix.current_block
-    };
+    XrImmixBlock *plists[] = {gc->immix.full_blocks, gc->immix.recycle_blocks,
+                              gc->immix.current_block};
     for (int i = 0; i < 3; i++) {
         for (XrImmixBlock *b = plists[i]; b; b = b->next) {
             for (XrGCHeader *o = b->local_allgc; o; o = o->gc_next)
                 obj_count++;
         }
-        if (i == 2) break;
+        if (i == 2)
+            break;
     }
     printf("Object count:   %zu\n", obj_count);
 
     size_t large_count = 0;
     for (XrGCHeader *obj = gc->large_objects; obj; obj = obj->gc_next)
         large_count++;
-    printf("Large objects:  %zu (%lld bytes)\n", large_count, (long long)gc->large_bytes);
+    printf("Large objects:  %zu (%lld bytes)\n", large_count, (long long) gc->large_bytes);
 
     // Timing
-    printf("GC time total:  %llu us\n", (unsigned long long)(gc->gc_time_ns / 1000));
+    printf("GC time total:  %llu us\n", (unsigned long long) (gc->gc_time_ns / 1000));
     printf("Last cycle:     %llu us (mark=%llu sweep=%llu)\n",
-           (unsigned long long)(gc->last_gc_time_ns / 1000),
-           (unsigned long long)(gc->mark_time_ns / 1000),
-           (unsigned long long)(gc->sweep_time_ns / 1000));
+           (unsigned long long) (gc->last_gc_time_ns / 1000),
+           (unsigned long long) (gc->mark_time_ns / 1000),
+           (unsigned long long) (gc->sweep_time_ns / 1000));
 
     // Per-cycle counters (from last completed cycle)
-    printf("Last cycle objects: marked=%u swept=%u finalized=%u promoted=%u\n",
-           gc->objects_marked, gc->objects_swept,
-           gc->objects_finalized, gc->objects_promoted);
+    printf("Last cycle objects: marked=%u swept=%u finalized=%u promoted=%u\n", gc->objects_marked,
+           gc->objects_swept, gc->objects_finalized, gc->objects_promoted);
     printf("Finalizers total: %u\n", gc->finalizer_count);
 
     printf("=====================================\n");
@@ -2112,10 +2202,11 @@ void xr_coro_gc_print_stats(XrCoroGC *gc) {
 // Slow path: full allocation when inline bump fails
 // CALL_C convention: (coro, packed_arg)
 // packed_arg = (uint64_t)gc_type << 32 | aligned_size
-XrGCHeader* xr_jit_alloc(struct XrCoroutine *coro, uint64_t type_and_size) {
-    uint8_t type = (uint8_t)(type_and_size >> 32);
-    uint32_t size = (uint32_t)(type_and_size & 0xFFFFFFFF);
-    if (!coro || !coro->coro_gc) return NULL;
+XrGCHeader *xr_jit_alloc(struct XrCoroutine *coro, uint64_t type_and_size) {
+    uint8_t type = (uint8_t) (type_and_size >> 32);
+    uint32_t size = (uint32_t) (type_and_size & 0xFFFFFFFF);
+    if (!coro || !coro->coro_gc)
+        return NULL;
     XR_DCHECK(type < XGC_MAX_TYPES, "jit_alloc: invalid GC type");
     XR_DCHECK(size >= sizeof(XrGCHeader), "jit_alloc: size too small");
     // Flush deferred alloc_marks from JIT inline allocs before calling
@@ -2131,10 +2222,11 @@ XrGCHeader* xr_jit_alloc(struct XrCoroutine *coro, uint64_t type_and_size) {
 // CALL_C convention: (coro, obj_ptr_as_uint64)
 // Only sets line occupancy bits; local_allgc and stats handled inline by JIT.
 void xr_jit_mark_lines(struct XrCoroutine *coro, uint64_t obj_ptr) {
-    (void)coro;
-    void *p = (void *)(uintptr_t)obj_ptr;
-    if (!p) return;
-    XrGCHeader *obj = (XrGCHeader *)p;
+    (void) coro;
+    void *p = (void *) (uintptr_t) obj_ptr;
+    if (!p)
+        return;
+    XrGCHeader *obj = (XrGCHeader *) p;
     xr_immix_mark_alloc_lines_fast(obj, obj->objsize);
 }
 
@@ -2145,9 +2237,10 @@ void xr_jit_mark_lines(struct XrCoroutine *coro, uint64_t obj_ptr) {
 //   3. stats update (totalbytes, object_count, GCdebt)
 // CALL_C convention: (coro, obj_ptr)
 void xr_jit_alloc_post(struct XrCoroutine *coro, void *obj_ptr) {
-    if (!coro || !coro->coro_gc || !obj_ptr) return;
+    if (!coro || !coro->coro_gc || !obj_ptr)
+        return;
     XrCoroGC *gc = coro->coro_gc;
-    XrGCHeader *obj = (XrGCHeader *)obj_ptr;
+    XrGCHeader *obj = (XrGCHeader *) obj_ptr;
     uint32_t total = obj->objsize;
     XR_DCHECK(total > 0, "jit_alloc_post: zero objsize");
     XR_DCHECK(total <= XR_LARGE_OBJECT_THRESHOLD, "jit_alloc_post: oversized for Immix");
@@ -2155,4 +2248,3 @@ void xr_jit_alloc_post(struct XrCoroutine *coro, void *obj_ptr) {
     gc_post_immix_alloc(gc, obj, obj->type, total);
     gc_update_alloc_stats(gc, total);
 }
-

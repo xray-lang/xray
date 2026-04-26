@@ -23,8 +23,8 @@
 struct XrayIsolate;
 
 // Builtin method dispatch signature.
-typedef XrValue (*MethodHandler)(struct XrayIsolate *isolate, XrValue receiver,
-                                 XrValue *args, int argc);
+typedef XrValue (*MethodHandler)(struct XrayIsolate *isolate, XrValue receiver, XrValue *args,
+                                 int argc);
 
 typedef struct XrBoundMethod {
     XrGCHeader gc;
@@ -32,8 +32,8 @@ typedef struct XrBoundMethod {
     MethodHandler handler;  // direct function pointer, zero-dispatch call
 } XrBoundMethod;
 
-XR_FUNC XrBoundMethod *xr_bound_method_new(struct XrayIsolate *isolate,
-                                           XrValue receiver, MethodHandler handler);
+XR_FUNC XrBoundMethod *xr_bound_method_new(struct XrayIsolate *isolate, XrValue receiver,
+                                           MethodHandler handler);
 XR_FUNC XrValue xr_value_from_bound_method(XrBoundMethod *bm);
 XR_FUNC XrBoundMethod *xr_value_to_bound_method(XrValue v);
 XR_FUNC bool xr_value_is_bound_method(XrValue v);
@@ -64,8 +64,7 @@ XR_FUNC MethodHandler xr_iterator_get_handler(int symbol);
 
 /* Enum.getMember(int) -> XrEnumValue. Exported as a MethodHandler so
  * GETPROP can wrap it in a bound method without a special opcode. */
-XR_FUNC XrValue xr_enum_get_member_handler(struct XrayIsolate *isolate,
-                                           XrValue receiver,
+XR_FUNC XrValue xr_enum_get_member_handler(struct XrayIsolate *isolate, XrValue receiver,
                                            XrValue *args, int argc);
 
-#endif // XBOUND_METHOD_H
+#endif  // XBOUND_METHOD_H

@@ -39,7 +39,6 @@
  * sites here use xr_compile_call_builtin() as a single dispatcher.
  */
 
-
 /* ========== Function Call Compilation ========== */
 
 /*
@@ -54,11 +53,12 @@
  * @param is_tail Whether this is a tail call position
  * @return Result register
  */
-int compile_call_internal(XrCompilerContext *ctx, XrCompiler *compiler, CallExprNode *node, bool is_tail, uint8_t *out_slot_type_unused) {
+int compile_call_internal(XrCompilerContext *ctx, XrCompiler *compiler, CallExprNode *node,
+                          bool is_tail, uint8_t *out_slot_type_unused) {
     XR_DCHECK(ctx != NULL, "compile_call_internal: NULL ctx");
     XR_DCHECK(compiler != NULL, "compile_call_internal: NULL compiler");
     XR_DCHECK(node != NULL, "compile_call_internal: NULL node");
-    (void)out_slot_type_unused;
+    (void) out_slot_type_unused;
 
     // Builtin function detection via table-driven dispatch.
     // The builtin call table lives in xexpr_call_builtin.c;
@@ -78,15 +78,12 @@ int compile_call_internal(XrCompilerContext *ctx, XrCompiler *compiler, CallExpr
         return xr_compile_call_method(ctx, compiler, node, is_tail);
     }
 
-
     // Recursion detection: check if calling self
     bool is_recursive = false;
 
-    if (node->callee->type == AST_VARIABLE &&
-        compiler->proto->name &&
+    if (node->callee->type == AST_VARIABLE && compiler->proto->name &&
         compiler->type == FUNCTION_FUNCTION) {
-
-        VariableNode *var = (VariableNode *)&node->callee->as;
+        VariableNode *var = (VariableNode *) &node->callee->as;
         if (strcmp(var->name, compiler->proto->name->data) == 0) {
             is_recursive = true;
         }
@@ -292,5 +289,3 @@ XrExprDesc compile_call(XrCompilerContext *ctx, XrCompiler *compiler, CallExprNo
     }
     return e;
 }
-
-

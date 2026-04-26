@@ -28,7 +28,7 @@ static __thread XrCoroDebugPool tls_debug_pool = {0};
 static uint64_t get_time_ns(void) {
     struct timespec ts;
     clock_gettime(CLOCK_MONOTONIC, &ts);
-    return (uint64_t)ts.tv_sec * 1000000000ULL + ts.tv_nsec;
+    return (uint64_t) ts.tv_sec * 1000000000ULL + ts.tv_nsec;
 }
 
 // Expand pool capacity
@@ -41,8 +41,7 @@ static bool expand_pool(XrCoroDebugPool *pool) {
         return false;  // Already at max capacity
     }
 
-    if (!XR_REALLOC(pool->entries,
-                    new_capacity * sizeof(XrCoroDebugInfo))) {
+    if (!XR_REALLOC(pool->entries, new_capacity * sizeof(XrCoroDebugInfo))) {
         return false;
     }
 
@@ -58,7 +57,8 @@ static bool expand_pool(XrCoroDebugPool *pool) {
 // ========== Pool Lifecycle API ==========
 
 bool xr_coro_debug_pool_init(XrCoroDebugPool *pool, uint32_t capacity) {
-    if (!pool) return false;
+    if (!pool)
+        return false;
 
     memset(pool, 0, sizeof(XrCoroDebugPool));
 
@@ -85,7 +85,8 @@ bool xr_coro_debug_pool_init(XrCoroDebugPool *pool, uint32_t capacity) {
 }
 
 void xr_coro_debug_pool_destroy(XrCoroDebugPool *pool) {
-    if (!pool || !pool->initialized) return;
+    if (!pool || !pool->initialized)
+        return;
 
     if (pool->entries) {
         xr_free(pool->entries);
@@ -98,10 +99,8 @@ void xr_coro_debug_pool_destroy(XrCoroDebugPool *pool) {
 
 // ========== Register/Query API ==========
 
-uint32_t xr_coro_debug_register(XrCoroDebugPool *pool,
-                                 const char *name,
-                                 const char *file,
-                                 int line) {
+uint32_t xr_coro_debug_register(XrCoroDebugPool *pool, const char *name, const char *file,
+                                int line) {
     if (!pool || !pool->initialized) {
         return XR_DEBUG_IDX_INVALID;
     }
@@ -136,7 +135,7 @@ uint32_t xr_coro_debug_register(XrCoroDebugPool *pool,
     return idx;
 }
 
-XrCoroDebugInfo* xr_coro_debug_get(XrCoroDebugPool *pool, uint32_t idx) {
+XrCoroDebugInfo *xr_coro_debug_get(XrCoroDebugPool *pool, uint32_t idx) {
     if (!pool || !pool->initialized) {
         return NULL;
     }
@@ -158,12 +157,10 @@ void xr_coro_debug_global_destroy(void) {
     xr_coro_debug_pool_destroy(&tls_debug_pool);
 }
 
-uint32_t xr_coro_debug_global_register(const char *name,
-                                        const char *file,
-                                        int line) {
+uint32_t xr_coro_debug_global_register(const char *name, const char *file, int line) {
     return xr_coro_debug_register(&tls_debug_pool, name, file, line);
 }
 
-XrCoroDebugInfo* xr_coro_debug_global_get(uint32_t idx) {
+XrCoroDebugInfo *xr_coro_debug_global_get(uint32_t idx) {
     return xr_coro_debug_get(&tls_debug_pool, idx);
 }

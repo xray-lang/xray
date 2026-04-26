@@ -37,13 +37,12 @@
 #include <stdio.h>
 #include <string.h>
 
-int xr_compile_call_method(XrCompilerContext *ctx, XrCompiler *compiler,
-                           CallExprNode *node, bool is_tail) {
+int xr_compile_call_method(XrCompilerContext *ctx, XrCompiler *compiler, CallExprNode *node,
+                           bool is_tail) {
     XR_DCHECK(ctx != NULL, "xr_compile_call_method: NULL ctx");
     XR_DCHECK(compiler != NULL, "xr_compile_call_method: NULL compiler");
     XR_DCHECK(node != NULL, "xr_compile_call_method: NULL node");
-    XR_DCHECK(node->callee != NULL,
-              "xr_compile_call_method: NULL callee");
+    XR_DCHECK(node->callee != NULL, "xr_compile_call_method: NULL callee");
     XR_DCHECK(node->callee->type == AST_MEMBER_ACCESS,
               "xr_compile_call_method: callee is not AST_MEMBER_ACCESS "
               "(caller must check before dispatching here)");
@@ -55,7 +54,7 @@ int xr_compile_call_method(XrCompilerContext *ctx, XrCompiler *compiler,
     int move_null_shared_idx = -1;
 
     // Convert method name to Symbol ID once (O(1) hash lookup)
-    XrSymbolTable *_st = (XrSymbolTable*)xr_isolate_get_symbol_table(ctx->X);
+    XrSymbolTable *_st = (XrSymbolTable *) xr_isolate_get_symbol_table(ctx->X);
     SymbolId member_sym = xr_symbol_register_in_table(_st, member->name);
 
     /* Method self-recursion → LOOP_BACK (converts tail recursion to loop).
@@ -69,8 +68,7 @@ int xr_compile_call_method(XrCompilerContext *ctx, XrCompiler *compiler,
 
         // Static method: ClassName.method() where ClassName is a registered class
         if (member->object->type == AST_VARIABLE && ctx->class_registry &&
-            xr_class_registry_is_class(ctx->class_registry,
-                                       member->object->as.variable.name)) {
+            xr_class_registry_is_class(ctx->class_registry, member->object->as.variable.name)) {
             is_method_self_recursive = true;
             skip = 0;
         }
@@ -84,8 +82,7 @@ int xr_compile_call_method(XrCompilerContext *ctx, XrCompiler *compiler,
             int func_reg = reg_alloc(ctx, compiler);
             int first_arg_reg = func_reg + 1;
             xreg_set_freereg(compiler->regalloc, first_arg_reg);
-            compile_args_to_base(ctx, compiler, node->arguments,
-                                 node->arg_count, first_arg_reg);
+            compile_args_to_base(ctx, compiler, node->arguments, node->arg_count, first_arg_reg);
             xemit_loop_back(compiler->emitter, func_reg, node->arg_count, skip);
             return -1;
         }
@@ -198,7 +195,7 @@ int xr_compile_call_method(XrCompilerContext *ctx, XrCompiler *compiler,
             if (strcmp(member->name, "dump") == 0 && node->arg_count <= 1) {
                 int limit = 0;
                 if (node->arg_count == 1 && node->arguments[0]->type == AST_LITERAL_INT) {
-                    limit = (int)node->arguments[0]->as.literal.raw_value.int_val;
+                    limit = (int) node->arguments[0]->as.literal.raw_value.int_val;
                 }
                 xemit_coro_ctrl(compiler->emitter, limit, 0, CORO_CTRL_DUMP);
                 int result_reg = reg_alloc(ctx, compiler);
@@ -254,8 +251,7 @@ int xr_compile_call_method(XrCompilerContext *ctx, XrCompiler *compiler,
                 return result_reg;
             }
             // Coro.kill(name) or Coro.kill(name, reason) -> bool
-            if (strcmp(member->name, "kill") == 0 &&
-                node->arg_count >= 1 && node->arg_count <= 2) {
+            if (strcmp(member->name, "kill") == 0 && node->arg_count >= 1 && node->arg_count <= 2) {
                 int result_reg = reg_alloc(ctx, compiler);
                 XrExprDesc name_desc = xr_compile_expr(ctx, compiler, node->arguments[0]);
                 int name_reg = xexpr_to_anyreg(ctx, compiler, &name_desc);
@@ -269,7 +265,6 @@ int xr_compile_call_method(XrCompilerContext *ctx, XrCompiler *compiler,
             // Only handle variable access case here, like CoroPool.xxx()
             // Constructor CoroPool(4) needs to be handled in AST_CALL direct variable call
         }
-
     }
 
     // (label removed: normal_method_call)
@@ -306,8 +301,7 @@ int xr_compile_call_method(XrCompilerContext *ctx, XrCompiler *compiler,
                 if (local->name == name_str ||
                     (local->name && strcmp(local->name->data, var_name) == 0)) {
                     XrType *ct = local->compile_type;
-                    if (ct &&
-                        (ct->kind == XR_KIND_CLASS || ct->kind == XR_KIND_INSTANCE) &&
+                    if (ct && (ct->kind == XR_KIND_CLASS || ct->kind == XR_KIND_INSTANCE) &&
                         ct->instance.class_name &&
                         strcmp(ct->instance.class_name, "StringBuilder") == 0) {
                         is_string_builder = true;
@@ -321,7 +315,8 @@ int xr_compile_call_method(XrCompilerContext *ctx, XrCompiler *compiler,
             /* Generate OP_STRBUF_APPEND instruction.
              *
              * Use readonly mode to get sb register, directly reuse local variable register.
-             * Avoid generating MOVE instruction, and prevent parameter compilation from overwriting sb.
+             * Avoid generating MOVE instruction, and prevent parameter compilation from overwriting
+             * sb.
              */
 
             // Compile object expression (StringBuilder), readonly doesn't generate MOVE
@@ -352,10 +347,8 @@ int xr_compile_call_method(XrCompilerContext *ctx, XrCompiler *compiler,
                 XrLocalInfo *local = compiler->local_list.items[i];
                 if (local->name == name_str ||
                     (local->name && strcmp(local->name->data, var_name) == 0)) {
-                    XrType *ct = (XrType*)(local->compile_type);
-                    if (ct &&
-                        ct->kind == XR_KIND_CLASS &&
-                        ct->instance.class_name &&
+                    XrType *ct = (XrType *) (local->compile_type);
+                    if (ct && ct->kind == XR_KIND_CLASS && ct->instance.class_name &&
                         strcmp(ct->instance.class_name, "StringBuilder") == 0) {
                         is_string_builder = true;
                     }
@@ -462,7 +455,7 @@ int xr_compile_call_method(XrCompilerContext *ctx, XrCompiler *compiler,
                 XrLocalInfo *local = compiler->local_list.items[i];
                 if (local->name == name_str ||
                     (local->name && strcmp(local->name->data, var_name) == 0)) {
-                    XrType *ct = (XrType*)(local->compile_type);
+                    XrType *ct = (XrType *) (local->compile_type);
                     if (ct && ct->kind == XR_KIND_MAP) {
                         is_map = true;
                     }
@@ -510,7 +503,7 @@ int xr_compile_call_method(XrCompilerContext *ctx, XrCompiler *compiler,
                 XrLocalInfo *local = compiler->local_list.items[i];
                 if (local->name == name_str ||
                     (local->name && strcmp(local->name->data, var_name) == 0)) {
-                    XrType *ct = (XrType*)(local->compile_type);
+                    XrType *ct = (XrType *) (local->compile_type);
                     if (ct && ct->kind == XR_KIND_MAP) {
                         is_map = true;
                     }
@@ -530,7 +523,8 @@ int xr_compile_call_method(XrCompilerContext *ctx, XrCompiler *compiler,
                 // String literal key: use MAP_GETK with constant
                 const char *key_str = key_node->as.literal.raw_value.string_val;
                 XrString *key_intern = xr_compile_time_intern(ctx->X, key_str, strlen(key_str));
-                int key_const = xr_vm_proto_add_constant(compiler->proto, xr_string_value(key_intern));
+                int key_const =
+                    xr_vm_proto_add_constant(compiler->proto, xr_string_value(key_intern));
 
                 int result_reg = reg_alloc(ctx, compiler);
                 xemit_map_getk(compiler->emitter, result_reg, map_reg, key_const);
@@ -563,7 +557,7 @@ int xr_compile_call_method(XrCompilerContext *ctx, XrCompiler *compiler,
                 XrLocalInfo *local = compiler->local_list.items[i];
                 if (local->name == name_str ||
                     (local->name && strcmp(local->name->data, var_name) == 0)) {
-                    XrType *ct = (XrType*)(local->compile_type);
+                    XrType *ct = (XrType *) (local->compile_type);
                     if (ct && ct->kind == XR_KIND_MAP) {
                         is_map = true;
                     }
@@ -583,7 +577,8 @@ int xr_compile_call_method(XrCompilerContext *ctx, XrCompiler *compiler,
                 // String literal key: use MAP_SETK with constant
                 const char *key_str = key_node->as.literal.raw_value.string_val;
                 XrString *key_intern = xr_compile_time_intern(ctx->X, key_str, strlen(key_str));
-                int key_const = xr_vm_proto_add_constant(compiler->proto, xr_string_value(key_intern));
+                int key_const =
+                    xr_vm_proto_add_constant(compiler->proto, xr_string_value(key_intern));
 
                 // Compile value (xexpr_to_anyreg auto-BOXes typed values)
                 XrExprDesc val_desc = xr_compile_expr(ctx, compiler, node->arguments[1]);
@@ -619,7 +614,7 @@ int xr_compile_call_method(XrCompilerContext *ctx, XrCompiler *compiler,
                 XrLocalInfo *local = compiler->local_list.items[i];
                 if (local->name == name_str ||
                     (local->name && strcmp(local->name->data, var_name) == 0)) {
-                    XrType *ct = (XrType*)(local->compile_type);
+                    XrType *ct = (XrType *) (local->compile_type);
                     if (ct && ct->kind == XR_KIND_ARRAY) {
                         is_array = true;
                     }
@@ -638,11 +633,13 @@ int xr_compile_call_method(XrCompilerContext *ctx, XrCompiler *compiler,
                     XrLocalInfo *local = compiler->local_list.items[i];
                     if (local->name == name_str ||
                         (local->name && strcmp(local->name->data, var_name) == 0)) {
-                        XrType *ct = (XrType*)(local->compile_type);
+                        XrType *ct = (XrType *) (local->compile_type);
                         if (ct && (ct->kind == XR_KIND_ARRAY)) {
                             XrType *elem = ct->container.element_type;
-                            if (elem && (elem->kind == XR_KIND_INT)) elem_slot = XR_SLOT_I64;
-                            else if (elem && (elem->kind == XR_KIND_FLOAT)) elem_slot = XR_SLOT_F64;
+                            if (elem && (elem->kind == XR_KIND_INT))
+                                elem_slot = XR_SLOT_I64;
+                            else if (elem && (elem->kind == XR_KIND_FLOAT))
+                                elem_slot = XR_SLOT_F64;
                         }
                         break;
                     }
@@ -670,45 +667,46 @@ int xr_compile_call_method(XrCompilerContext *ctx, XrCompiler *compiler,
         }
     }
 
-    // Channel method inline optimization (supports local, upvalue and shared)
+// Channel method inline optimization (supports local, upvalue and shared)
 
-    // Helper: check if variable is Channel type
-    #define CHECK_IS_CHANNEL(var_name) ({ \
-        bool _is_channel = false; \
-        XrString *_name_str = xr_compile_time_intern(ctx->X, var_name, strlen(var_name)); \
-        /* 1. Check local variables */ \
-        for (int i = compiler->local_list.count - 1; i >= 0; i--) { \
-            XrLocalInfo *local = compiler->local_list.items[i]; \
-            if (local->name == _name_str || \
-                (local->name && strcmp(local->name->data, var_name) == 0)) { \
-                XrType *ct = (XrType*)(local->compile_type); \
-                if (ct && (ct->kind == XR_KIND_CHANNEL)) { \
-                    _is_channel = true; \
-                } \
-                break; \
-            } \
-        } \
-        /* 2. Check upvalue (closure captured variables) */ \
-        if (!_is_channel) { \
-            int uv_idx = scope_resolve_upvalue(ctx, compiler, _name_str); \
-            if (uv_idx >= 0) { \
-                XrType *ct = (XrType*)(compiler->upvalues[uv_idx].type_info); \
-                if (ct && (ct->kind == XR_KIND_CHANNEL)) { \
-                    _is_channel = true; \
-                } \
-            } \
-        } \
-        /* 3. Check shared variables (e.g. shared const ch = Channel(...)) */ \
-        if (!_is_channel) { \
-            int _sh_idx = shared_get_in_scope(ctx, compiler, _name_str); \
-            if (_sh_idx >= 0) { \
-                XrType *ct = shared_get_type(ctx, _sh_idx); \
-                if (ct && (ct->kind == XR_KIND_CHANNEL)) { \
-                    _is_channel = true; \
-                } \
-            } \
-        } \
-        _is_channel; \
+// Helper: check if variable is Channel type
+#define CHECK_IS_CHANNEL(var_name)                                                                 \
+    ({                                                                                             \
+        bool _is_channel = false;                                                                  \
+        XrString *_name_str = xr_compile_time_intern(ctx->X, var_name, strlen(var_name));          \
+        /* 1. Check local variables */                                                             \
+        for (int i = compiler->local_list.count - 1; i >= 0; i--) {                                \
+            XrLocalInfo *local = compiler->local_list.items[i];                                    \
+            if (local->name == _name_str ||                                                        \
+                (local->name && strcmp(local->name->data, var_name) == 0)) {                       \
+                XrType *ct = (XrType *) (local->compile_type);                                     \
+                if (ct && (ct->kind == XR_KIND_CHANNEL)) {                                         \
+                    _is_channel = true;                                                            \
+                }                                                                                  \
+                break;                                                                             \
+            }                                                                                      \
+        }                                                                                          \
+        /* 2. Check upvalue (closure captured variables) */                                        \
+        if (!_is_channel) {                                                                        \
+            int uv_idx = scope_resolve_upvalue(ctx, compiler, _name_str);                          \
+            if (uv_idx >= 0) {                                                                     \
+                XrType *ct = (XrType *) (compiler->upvalues[uv_idx].type_info);                    \
+                if (ct && (ct->kind == XR_KIND_CHANNEL)) {                                         \
+                    _is_channel = true;                                                            \
+                }                                                                                  \
+            }                                                                                      \
+        }                                                                                          \
+        /* 3. Check shared variables (e.g. shared const ch = Channel(...)) */                      \
+        if (!_is_channel) {                                                                        \
+            int _sh_idx = shared_get_in_scope(ctx, compiler, _name_str);                           \
+            if (_sh_idx >= 0) {                                                                    \
+                XrType *ct = shared_get_type(ctx, _sh_idx);                                        \
+                if (ct && (ct->kind == XR_KIND_CHANNEL)) {                                         \
+                    _is_channel = true;                                                            \
+                }                                                                                  \
+            }                                                                                      \
+        }                                                                                          \
+        _is_channel;                                                                               \
     })
 
     // time.sleep(seconds) -> OP_SLEEP (coroutine friendly)
@@ -912,7 +910,7 @@ int xr_compile_call_method(XrCompilerContext *ctx, XrCompiler *compiler,
         }
     }
 
-    #undef CHECK_IS_CHANNEL  // Clean up macro
+#undef CHECK_IS_CHANNEL  // Clean up macro
 
     // task.info() - get coroutine info
     if (strcmp(member->name, "info") == 0 && node->arg_count == 0) {
@@ -926,8 +924,9 @@ int xr_compile_call_method(XrCompilerContext *ctx, XrCompiler *compiler,
                 XrLocalInfo *local = compiler->local_list.items[i];
                 if (local->name == name_str ||
                     (local->name && strcmp(local->name->data, var_name) == 0)) {
-                    XrType *ct = (XrType*)(local->compile_type);
-                    if (ct && (ct->kind == XR_KIND_CLASS || ct->kind == XR_KIND_INSTANCE) && ct->instance.class_name &&
+                    XrType *ct = (XrType *) (local->compile_type);
+                    if (ct && (ct->kind == XR_KIND_CLASS || ct->kind == XR_KIND_INSTANCE) &&
+                        ct->instance.class_name &&
                         strcmp(ct->instance.class_name, "Coroutine") == 0) {
                         is_coro = true;
                     }
@@ -968,7 +967,7 @@ int xr_compile_call_method(XrCompilerContext *ctx, XrCompiler *compiler,
     }
     // this.method(): infer type from current class context
     else if (member->object->type == AST_THIS_EXPR && ctx->current_class_node) {
-        ClassDeclNode *cls_node = (ClassDeclNode*)ctx->current_class_node;
+        ClassDeclNode *cls_node = (ClassDeclNode *) ctx->current_class_node;
         if (cls_node->name) {
             obj_type = xr_type_new_class(ctx->X, cls_node->name);
         }
@@ -984,7 +983,8 @@ int xr_compile_call_method(XrCompilerContext *ctx, XrCompiler *compiler,
             obj_type->kind == XR_KIND_INT || obj_type->kind == XR_KIND_FLOAT ||
             obj_type->kind == XR_KIND_JSON) {
             is_builtin = true;
-        } else if ((obj_type->kind == XR_KIND_CLASS || obj_type->kind == XR_KIND_INSTANCE) && obj_type->instance.class_name) {
+        } else if ((obj_type->kind == XR_KIND_CLASS || obj_type->kind == XR_KIND_INSTANCE) &&
+                   obj_type->instance.class_name) {
             // Check if it's a builtin class name
             const char *name = obj_type->instance.class_name;
             if (strcmp(name, TYPE_NAME_ARRAY) == 0 || strcmp(name, TYPE_NAME_MAP) == 0 ||
@@ -999,9 +999,13 @@ int xr_compile_call_method(XrCompilerContext *ctx, XrCompiler *compiler,
             // Determine opcode: int/float use specialized raw-receiver opcodes
             bool is_int_type = (obj_type->kind == XR_KIND_INT) != 0;
             bool is_float_type = (obj_type->kind == XR_KIND_FLOAT) != 0;
-            if (!is_int_type && !is_float_type && (obj_type->kind == XR_KIND_CLASS || obj_type->kind == XR_KIND_INSTANCE) && obj_type->instance.class_name) {
-                if (strcmp(obj_type->instance.class_name, "int64") == 0) is_int_type = true;
-                else if (strcmp(obj_type->instance.class_name, "float64") == 0) is_float_type = true;
+            if (!is_int_type && !is_float_type &&
+                (obj_type->kind == XR_KIND_CLASS || obj_type->kind == XR_KIND_INSTANCE) &&
+                obj_type->instance.class_name) {
+                if (strcmp(obj_type->instance.class_name, "int64") == 0)
+                    is_int_type = true;
+                else if (strcmp(obj_type->instance.class_name, "float64") == 0)
+                    is_float_type = true;
             }
 
             int base = reg_alloc(ctx, compiler);
@@ -1022,7 +1026,8 @@ int xr_compile_call_method(XrCompilerContext *ctx, XrCompiler *compiler,
 
             // Use auto-protect API (base allocated, now protect base and base+1)
             int first_arg_reg = base + 2;
-            int protect_id = xreg_protect_begin(compiler->regalloc, base, 2, "invoke_builtin_receiver");
+            int protect_id =
+                xreg_protect_begin(compiler->regalloc, base, 2, "invoke_builtin_receiver");
             xreg_set_freereg(compiler->regalloc, first_arg_reg);
             ASSERT_FREEREG(compiler->regalloc, first_arg_reg);
 
@@ -1061,11 +1066,13 @@ int xr_compile_call_method(XrCompilerContext *ctx, XrCompiler *compiler,
                     xexpr_to_specific_reg(ctx, compiler, &obj_desc, base + 1);
 
                     int first_arg_reg = base + 2;
-                    int protect_id = xreg_protect_begin(compiler->regalloc, base, 2, "invoke_direct_receiver");
+                    int protect_id =
+                        xreg_protect_begin(compiler->regalloc, base, 2, "invoke_direct_receiver");
                     xreg_set_freereg(compiler->regalloc, first_arg_reg);
                     ASSERT_FREEREG(compiler->regalloc, first_arg_reg);
 
-                    compile_args_to_base(ctx, compiler, node->arguments, node->arg_count, first_arg_reg);
+                    compile_args_to_base(ctx, compiler, node->arguments, node->arg_count,
+                                         first_arg_reg);
 
                     int c_arg = node->arg_count;
                     if (is_tail && compiler->type == FUNCTION_FUNCTION) {
@@ -1095,7 +1102,7 @@ int xr_compile_call_method(XrCompilerContext *ctx, XrCompiler *compiler,
 
         if (xexpr_is_raw_i64(&obj_desc) || xexpr_is_raw_f64(&obj_desc)) {
             bool is_int_chain = xexpr_is_raw_i64(&obj_desc);
-            (void)is_int_chain;
+            (void) is_int_chain;
             int obj_reg = xexpr_to_anyreg_readonly(ctx, compiler, &obj_desc);
             if (obj_reg != base + 1) {
                 xemit_move(compiler->emitter, base + 1, obj_reg);

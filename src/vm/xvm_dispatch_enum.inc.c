@@ -22,9 +22,9 @@ vmcase(OP_ENUM_ACCESS) {
     int a = GETARG_A(i);
     int b = GETARG_B(i);
     int c = GETARG_C(i);
-    XrEnumType *enum_type = (XrEnumType*)XR_TO_PTR(R(b));
-    int member_index = (int)XR_TO_INT(R(c));
-    if (member_index < 0 || (uint32_t)member_index >= enum_type->member_count) {
+    XrEnumType *enum_type = (XrEnumType *) XR_TO_PTR(R(b));
+    int member_index = (int) XR_TO_INT(R(c));
+    if (member_index < 0 || (uint32_t) member_index >= enum_type->member_count) {
         VM_RUNTIME_ERROR(XR_ERR_INDEX_OUT_OF_BOUNDS, "enum member index out of bounds");
     }
     R(a) = XR_FROM_PTR(enum_type->members[member_index].instance);
@@ -35,7 +35,7 @@ vmcase(OP_ENUM_CONVERT) {
     int a = GETARG_A(i);
     int b = GETARG_B(i);
     int c = GETARG_C(i);
-    XrEnumType *enum_type = (XrEnumType*)XR_TO_PTR(R(b));
+    XrEnumType *enum_type = (XrEnumType *) XR_TO_PTR(R(b));
     XrEnumValue *result = xr_enum_from_value(enum_type, R(c));
     R(a) = result ? XR_FROM_PTR(result) : xr_null();
     vmbreak;
@@ -49,12 +49,12 @@ vmcase(OP_ENUM_NAME) {
         R(a) = xr_null();
         vmbreak;
     }
-    XrGCHeader *gc = (XrGCHeader*)XR_TO_PTR(enum_val);
+    XrGCHeader *gc = (XrGCHeader *) XR_TO_PTR(enum_val);
     if (XR_GC_GET_TYPE(gc) != XR_TENUM_VALUE) {
         R(a) = xr_null();
         vmbreak;
     }
-    XrEnumValue *ev = (XrEnumValue*)gc;
+    XrEnumValue *ev = (XrEnumValue *) gc;
     size_t len = strlen(ev->member_name);
     uint32_t hash = xr_string_hash(ev->member_name, len);
     XrString *name_str = xr_string_intern(isolate, ev->member_name, len, hash);

@@ -23,14 +23,14 @@
 #include <stdint.h>
 
 // Embedded bytecode lookup — always returns NULL (no built-in embedded scripts)
-const uint8_t* xr_get_embedded_stdlib_bytecode(const char *module_name, size_t *out_size) {
-    (void)module_name;
-    (void)out_size;
+const uint8_t *xr_get_embedded_stdlib_bytecode(const char *module_name, size_t *out_size) {
+    (void) module_name;
+    (void) out_size;
     return NULL;
 }
 
 // Legacy source lookup — always returns NULL
-const char* xr_get_embedded_stdlib(const char *module_name) {
-    (void)module_name;
+const char *xr_get_embedded_stdlib(const char *module_name) {
+    (void) module_name;
     return NULL;
 }

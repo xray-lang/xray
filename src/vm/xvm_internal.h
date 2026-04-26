@@ -61,16 +61,20 @@
  */
 static inline bool vm_is_falsey(XrValue value) {
     // null is falsy
-    if (XR_IS_NULL(value)) return true;
+    if (XR_IS_NULL(value))
+        return true;
 
     // bool: payload 0=false (falsy), 1=true (truthy)
-    if (XR_IS_BOOL(value)) return value.i == 0;
+    if (XR_IS_BOOL(value))
+        return value.i == 0;
 
     // 0 is falsy
-    if (XR_IS_INT(value)) return XR_TO_INT(value) == 0;
+    if (XR_IS_INT(value))
+        return XR_TO_INT(value) == 0;
 
     // 0.0 is falsy
-    if (XR_IS_FLOAT(value)) return XR_TO_FLOAT(value) == 0.0;
+    if (XR_IS_FLOAT(value))
+        return XR_TO_FLOAT(value) == 0.0;
 
     // Empty string is falsy
     if (XR_IS_STRING(value)) {
@@ -107,15 +111,15 @@ static inline bool vm_is_truthy(XrValue value) {
 /* ========== Register Limits ========== */
 #ifndef MAXREGS
 #define MAXREGS 250
-#endif // ========== Debug Macros ==========
+#endif  // ========== Debug Macros ==========
 
 // #define XR_DEBUG_VM
 
 #ifdef XR_DEBUG_VM
-    #define VM_DEBUG_PRINT(...) printf("[VM DEBUG] " __VA_ARGS__)
+#define VM_DEBUG_PRINT(...) printf("[VM DEBUG] " __VA_ARGS__)
 #else
-    #define VM_DEBUG_PRINT(...) ((void)0)
-#endif // ========== Register Bounds Checking (Debug Mode) ==========
+#define VM_DEBUG_PRINT(...) ((void) 0)
+#endif  // ========== Register Bounds Checking (Debug Mode) ==========
 
 /*
 ** XR_DEBUG_REGS - Enable register bounds checking
@@ -131,63 +135,64 @@ static inline bool vm_is_truthy(XrValue value) {
 #ifdef XR_DEBUG_REGS
 
 // Check new frame base doesn't overlap current frame
-#define CHECK_FRAME_BOUNDARY(isolate, ci, new_base) do { \
-    if ((ci) && (ci)->closure && (ci)->closure->proto) { \
-        XrValue *_frame_end = (ci)->base + (ci)->closure->proto->maxstacksize; \
-        if ((new_base) < _frame_end) { \
-            fprintf(stderr, "\n[REG ERROR] Frame overlap detected!\n"); \
-            fprintf(stderr, "  Current frame: base=%p, end=%p, maxstacksize=%d\n", \
-                    (void*)(ci)->base, (void*)_frame_end, \
-                    (ci)->closure->proto->maxstacksize); \
-            fprintf(stderr, "  New frame base: %p (overlap by %ld slots)\n", \
-                    (void*)(new_base), (long)(_frame_end - (new_base))); \
-            if ((ci)->closure->proto->name) { \
-                fprintf(stderr, "  Current function: %s\n", \
-                        XR_STRING_CHARS((ci)->closure->proto->name)); \
-            } \
-            XR_CHECK(0, "New frame overlaps current frame"); \
-        } \
-    } \
-} while(0)
+#define CHECK_FRAME_BOUNDARY(isolate, ci, new_base)                                                \
+    do {                                                                                           \
+        if ((ci) && (ci)->closure && (ci)->closure->proto) {                                       \
+            XrValue *_frame_end = (ci)->base + (ci)->closure->proto->maxstacksize;                 \
+            if ((new_base) < _frame_end) {                                                         \
+                fprintf(stderr, "\n[REG ERROR] Frame overlap detected!\n");                        \
+                fprintf(stderr, "  Current frame: base=%p, end=%p, maxstacksize=%d\n",             \
+                        (void *) (ci)->base, (void *) _frame_end,                                  \
+                        (ci)->closure->proto->maxstacksize);                                       \
+                fprintf(stderr, "  New frame base: %p (overlap by %ld slots)\n",                   \
+                        (void *) (new_base), (long) (_frame_end - (new_base)));                    \
+                if ((ci)->closure->proto->name) {                                                  \
+                    fprintf(stderr, "  Current function: %s\n",                                    \
+                            XR_STRING_CHARS((ci)->closure->proto->name));                          \
+                }                                                                                  \
+                XR_CHECK(0, "New frame overlaps current frame");                                   \
+            }                                                                                      \
+        }                                                                                          \
+    } while (0)
 
 // Check register index is within current frame bounds
-#define CHECK_REG_INDEX(ci, reg_idx) do { \
-    if ((ci) && (ci)->closure && (ci)->closure->proto) { \
-        int _maxstack = (ci)->closure->proto->maxstacksize; \
-        if ((reg_idx) < 0 || (reg_idx) >= _maxstack) { \
-            fprintf(stderr, "\n[REG ERROR] Register index out of bounds!\n"); \
-            fprintf(stderr, "  Register: R[%d], maxstacksize: %d\n", \
-                    (reg_idx), _maxstack); \
-            if ((ci)->closure->proto->name) { \
-                fprintf(stderr, "  Function: %s\n", \
-                        (ci)->closure->proto->name->chars); \
-            } \
-            XR_CHECK(0, "Register index out of frame bounds"); \
-        } \
-    } \
-} while(0)
+#define CHECK_REG_INDEX(ci, reg_idx)                                                               \
+    do {                                                                                           \
+        if ((ci) && (ci)->closure && (ci)->closure->proto) {                                       \
+            int _maxstack = (ci)->closure->proto->maxstacksize;                                    \
+            if ((reg_idx) < 0 || (reg_idx) >= _maxstack) {                                         \
+                fprintf(stderr, "\n[REG ERROR] Register index out of bounds!\n");                  \
+                fprintf(stderr, "  Register: R[%d], maxstacksize: %d\n", (reg_idx), _maxstack);    \
+                if ((ci)->closure->proto->name) {                                                  \
+                    fprintf(stderr, "  Function: %s\n", (ci)->closure->proto->name->chars);        \
+                }                                                                                  \
+                XR_CHECK(0, "Register index out of frame bounds");                                 \
+            }                                                                                      \
+        }                                                                                          \
+    } while (0)
 
 // Check call stack won't overflow
-#define CHECK_FRAME_OVERFLOW(isolate) do { \
-    if ((isolate)->vm.frame_count >= XR_FRAMES_MAX) { \
-        fprintf(stderr, "\n[REG ERROR] Frame stack overflow!\n"); \
-        fprintf(stderr, "  frame_count: %d, XR_FRAMES_MAX: %d\n", \
-                (isolate)->vm.frame_count, XR_FRAMES_MAX); \
-        XR_CHECK(0, "Frame stack overflow"); \
-    } \
-} while(0)
+#define CHECK_FRAME_OVERFLOW(isolate)                                                              \
+    do {                                                                                           \
+        if ((isolate)->vm.frame_count >= XR_FRAMES_MAX) {                                          \
+            fprintf(stderr, "\n[REG ERROR] Frame stack overflow!\n");                              \
+            fprintf(stderr, "  frame_count: %d, XR_FRAMES_MAX: %d\n", (isolate)->vm.frame_count,   \
+                    XR_FRAMES_MAX);                                                                \
+            XR_CHECK(0, "Frame stack overflow");                                                   \
+        }                                                                                          \
+    } while (0)
 
 #else
 // Release mode: these checks are no-ops with zero overhead
-#define CHECK_FRAME_BOUNDARY(isolate, ci, new_base) ((void)(isolate), (void)(ci), (void)(new_base))
-#define CHECK_REG_INDEX(ci, reg_idx) ((void)(ci), (void)(reg_idx))
-#define CHECK_FRAME_OVERFLOW(isolate) ((void)(isolate))
-#endif // ========== Object Types ==========
+#define CHECK_FRAME_BOUNDARY(isolate, ci, new_base)                                                \
+    ((void) (isolate), (void) (ci), (void) (new_base))
+#define CHECK_REG_INDEX(ci, reg_idx) ((void) (ci), (void) (reg_idx))
+#define CHECK_FRAME_OVERFLOW(isolate) ((void) (isolate))
+#endif  // ========== Object Types ==========
 
 #define OBJ_CLOSURE 1
 
 // VM constants now in core/xconstants.h (included via xvm.h)
-
 
 /* Builtin method dispatch & bound method definitions:
  * see runtime/closure/xbound_method.h (included below via the runtime closure layer).
@@ -201,7 +206,7 @@ static inline bool vm_is_truthy(XrValue value) {
 XR_FUNC void xr_runtime_error(XrayIsolate *isolate, const char *format, ...);
 
 // Debug info: find local variable name by register and PC
-XR_FUNC const char* xr_vm_get_local_name(XrProto *proto, int reg, int pc);
+XR_FUNC const char *xr_vm_get_local_name(XrProto *proto, int reg, int pc);
 
 // C function operations
 XR_FUNC void xr_vm_cfunction_free(XrCFunction *cfunc);
@@ -230,7 +235,7 @@ XR_FUNC bool xr_vm_is_truthy(XrValue value);
 ** the VM module. Internal helpers must accept ctx as a parameter; they MUST
 ** NOT re-resolve via isolate->vm.* fields.
 */
-XR_FUNC XrVMContext* xr_vm_current_ctx(XrayIsolate *isolate);
+XR_FUNC XrVMContext *xr_vm_current_ctx(XrayIsolate *isolate);
 
 /*
 ** Ensure the context can host a new entry frame with the given prototype.
@@ -249,7 +254,8 @@ XR_FUNC XrVMContext* xr_vm_current_ctx(XrayIsolate *isolate);
 XR_FUNC bool xr_vm_prepare_entry(XrVMContext *ctx, int extra_stack);
 
 // Call closure from C code (coroutine-aware, unified implementation)
-XR_FUNC XrValue xr_vm_call_closure(XrayIsolate *isolate, XrClosure *closure, XrValue *args, int nargs);
+XR_FUNC XrValue xr_vm_call_closure(XrayIsolate *isolate, XrClosure *closure, XrValue *args,
+                                   int nargs);
 
 // VM execution
 XR_FUNC XrVMResult xr_vm_interpret_proto(XrayIsolate *isolate, XrProto *proto);
@@ -275,23 +281,20 @@ XR_FUNC void xr_vm_unwind_with_trace(XrayIsolate *isolate, XrValue exception);
 ** instruction count. Returns NULL on OOM. All slots are pre-allocated so
 ** cache_index = pc - PROTO_CODE_BASE remains a valid lookup index.
 */
-XR_FUNC struct XrICFieldTable *xr_vm_ctx_ensure_ic_fields(XrVMContext *ctx,
-                                                          XrProto *proto);
+XR_FUNC struct XrICFieldTable *xr_vm_ctx_ensure_ic_fields(XrVMContext *ctx, XrProto *proto);
 
 /*
 ** Lazily allocate a per-(ctx, proto) method IC table. Slots are zeroed
 ** by xr_ic_method_table_new and the count is set to PROTO_CODE_COUNT.
 */
-XR_FUNC struct XrICMethodTable *xr_vm_ctx_ensure_ic_methods(XrVMContext *ctx,
-                                                            XrProto *proto);
+XR_FUNC struct XrICMethodTable *xr_vm_ctx_ensure_ic_methods(XrVMContext *ctx, XrProto *proto);
 
 /*
 ** Lazily allocate a per-(ctx, proto) builtin-invoke IC table. Slots are
 ** zeroed and pre-allocated up to PROTO_CODE_COUNT so that
 ** cache_index = pc - PROTO_CODE_BASE is always a valid lookup index.
 */
-XR_FUNC struct XrICBuiltinTable *xr_vm_ctx_ensure_ic_builtin(XrVMContext *ctx,
-                                                             XrProto *proto);
+XR_FUNC struct XrICBuiltinTable *xr_vm_ctx_ensure_ic_builtin(XrVMContext *ctx, XrProto *proto);
 
 /*
 ** Read-only IC table accessors. Return NULL when no IC has been recorded
@@ -312,12 +315,9 @@ XR_FUNC struct XrICBuiltinTable *xr_vm_ctx_get_ic_builtin(const XrVMContext *ctx
 ** xr_ic_field_table_free / xr_ic_method_table_free /
 ** xr_ic_builtin_table_free. Returns NULL when no IC has been recorded.
 */
-XR_FUNC struct XrICFieldTable *xr_vm_ic_fields_snapshot(XrVMContext *ctx,
-                                                        XrProto *proto);
-XR_FUNC struct XrICMethodTable *xr_vm_ic_methods_snapshot(XrVMContext *ctx,
-                                                          XrProto *proto);
-XR_FUNC struct XrICBuiltinTable *xr_vm_ic_builtin_snapshot(XrVMContext *ctx,
-                                                           XrProto *proto);
+XR_FUNC struct XrICFieldTable *xr_vm_ic_fields_snapshot(XrVMContext *ctx, XrProto *proto);
+XR_FUNC struct XrICMethodTable *xr_vm_ic_methods_snapshot(XrVMContext *ctx, XrProto *proto);
+XR_FUNC struct XrICBuiltinTable *xr_vm_ic_builtin_snapshot(XrVMContext *ctx, XrProto *proto);
 
 /*
 ** Free every IC table currently held by `ctx` and reset capacity. Called
@@ -375,9 +375,8 @@ XR_FUNC XrVMResult run(XrayIsolate *isolate, XrVMContext *vm_ctx);
 // Type definitions moved to runtime/coroutine/xcoroutine.h
 
 // VM Coroutine API
-XR_FUNC XrCoroutine *xr_coro_create(XrayIsolate *X, XrClosure *closure,
-                            XrValue *args, int arg_count,
-                            const char *name, const char *file, int line);
+XR_FUNC XrCoroutine *xr_coro_create(XrayIsolate *X, XrClosure *closure, XrValue *args,
+                                    int arg_count, const char *name, const char *file, int line);
 
 XR_FUNC void xr_coro_free(XrCoroutine *coro);
 XR_FUNC void xr_coro_release_heap(XrCoroutine *coro);
@@ -399,11 +398,9 @@ XR_FUNC void xr_coro_ready(XrayIsolate *X, XrCoroutine *gp, bool next);
 XR_FUNC XrCoroutine *xr_current_coro(XrayIsolate *X);
 XR_FUNC void xr_coro_wake_waiter(XrayIsolate *X, XrCoroutine *coro);
 
-
 // Multicore runtime channel wake (auto fallback to single-thread mode)
 XR_FUNC XrCoroutine *xr_runtime_wake_channel(XrayIsolate *X, void *channel, bool wake_sender);
 XR_FUNC void xr_runtime_wake_channel_all(XrayIsolate *X, void *channel);
-
 
 // Coroutine control
 XR_FUNC void xr_coro_cancel(XrCoroutine *coro);
@@ -411,4 +408,4 @@ XR_FUNC void xr_coro_cancel(XrCoroutine *coro);
 // Scope structured concurrency
 XR_FUNC void xr_scope_add_coro(XrCoroState *sched, XrCoroutine *coro, XrCoroutine *parent);
 
-#endif // XVM_INTERNAL_H
+#endif  // XVM_INTERNAL_H

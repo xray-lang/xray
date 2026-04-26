@@ -18,7 +18,7 @@
 #include <stdio.h>
 #include "../base/xlog.h"
 
-XRAY_THREAD_LOCAL XrayIsolate* g_current_isolate = NULL;
+XRAY_THREAD_LOCAL XrayIsolate *g_current_isolate = NULL;
 
 void xray_isolate_enter(XrayIsolate *isolate) {
     if (isolate == NULL) {

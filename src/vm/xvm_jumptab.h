@@ -28,15 +28,16 @@
 // vmdispatch: jump to label pointed by disptab[opcode]
 // vmcase: define label L_OP_XXX
 // vmbreak: fetch next instruction and dispatch (with profiler)
-#define vmdispatch(x)     goto *disptab[x]
-#define vmcase(l)         L_##l:
-#define vmbreak           do { \
-                            i = *pc++; \
-                            VM_DEBUG_CHECK(); \
-                            OpCode _op = GET_OPCODE(i); \
-                            VM_PROFILE_COUNT(_op); \
-                            vmdispatch(_op); \
-                          } while(0)
+#define vmdispatch(x) goto *disptab[x]
+#define vmcase(l) L_##l:
+#define vmbreak                                                                                    \
+    do {                                                                                           \
+        i = *pc++;                                                                                 \
+        VM_DEBUG_CHECK();                                                                          \
+        OpCode _op = GET_OPCODE(i);                                                                \
+        VM_PROFILE_COUNT(_op);                                                                     \
+        vmdispatch(_op);                                                                           \
+    } while (0)
 
 static const void *const disptab[NUM_OPCODES] = {
 #define _XR_OPCODE_LABEL(name, fmt, kop, desc) [OP_##name] = &&L_OP_##name,

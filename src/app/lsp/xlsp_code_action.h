@@ -16,4 +16,4 @@
 
 XR_FUNC XrJsonValue *xlsp_handle_code_action(XrLspServer *server, XrJsonValue *params);
 
-#endif // XLSP_CODE_ACTION_H
+#endif  // XLSP_CODE_ACTION_H

@@ -34,13 +34,15 @@ int xr_cli_parse_global(int argc, char **argv, XrCliContext *ctx) {
     ctx->json_output = false;
     ctx->program = (argc > 0) ? argv[0] : "xray";
 
-    if (argc < 2) return 0;
+    if (argc < 2)
+        return 0;
 
     int consumed = 0;
     for (int i = 1; i < argc; i++) {
         const char *arg = argv[i];
         /* Stop at first non-flag or end-of-flags */
-        if (arg[0] != '-') break;
+        if (arg[0] != '-')
+            break;
 
         if (strcmp(arg, "--help") == 0 || strcmp(arg, "-h") == 0)
             return -1;
@@ -85,21 +87,23 @@ int xr_cli_parse_global(int argc, char **argv, XrCliContext *ctx) {
 /* ========== Option Matching Helpers ========== */
 
 /* Match --long-name or --long-name=value. Returns option index or -1. */
-static int match_long_option(const XrCliOptionSpec *opts, int count,
-                             const char *arg, const char **value_out) {
+static int match_long_option(const XrCliOptionSpec *opts, int count, const char *arg,
+                             const char **value_out) {
     XR_DCHECK(arg != NULL, "arg is NULL");
     *value_out = NULL;
 
     /* Skip leading -- */
     const char *name = arg + 2;
     const char *eq = strchr(name, '=');
-    size_t name_len = eq ? (size_t)(eq - name) : strlen(name);
+    size_t name_len = eq ? (size_t) (eq - name) : strlen(name);
 
     for (int i = 0; i < count; i++) {
-        if (!opts[i].long_name) continue;
+        if (!opts[i].long_name)
+            continue;
         if (strlen(opts[i].long_name) == name_len &&
             strncmp(opts[i].long_name, name, name_len) == 0) {
-            if (eq) *value_out = eq + 1;
+            if (eq)
+                *value_out = eq + 1;
             return i;
         }
     }
@@ -118,10 +122,8 @@ static int match_short_option(const XrCliOptionSpec *opts, int count, int ch) {
 
 /* ========== Command Parsing ========== */
 
-XrCliExitCode xr_cli_parse_command(const XrCliCommandSpec *spec,
-                                    int argc, char **argv,
-                                    const XrCliContext *ctx,
-                                    XrCliInvocation *inv) {
+XrCliExitCode xr_cli_parse_command(const XrCliCommandSpec *spec, int argc, char **argv,
+                                   const XrCliContext *ctx, XrCliInvocation *inv) {
     XR_DCHECK(spec != NULL, "spec is NULL");
     XR_DCHECK(ctx != NULL, "ctx is NULL");
     XR_DCHECK(inv != NULL, "inv is NULL");
@@ -137,10 +139,10 @@ XrCliExitCode xr_cli_parse_command(const XrCliCommandSpec *spec,
 
     /* Allocate option tracking arrays */
     if (opt_count > 0) {
-        inv->options.present = (bool *)xr_calloc((size_t)opt_count, sizeof(bool));
-        if (!inv->options.present) return XR_CLI_EXIT_INTERNAL;
-        inv->options.values = (const char **)xr_calloc((size_t)opt_count,
-                                                        sizeof(const char *));
+        inv->options.present = (bool *) xr_calloc((size_t) opt_count, sizeof(bool));
+        if (!inv->options.present)
+            return XR_CLI_EXIT_INTERNAL;
+        inv->options.values = (const char **) xr_calloc((size_t) opt_count, sizeof(const char *));
         if (!inv->options.values) {
             xr_free(inv->options.present);
             inv->options.present = NULL;
@@ -152,7 +154,7 @@ XrCliExitCode xr_cli_parse_command(const XrCliCommandSpec *spec,
     const char **positionals = NULL;
     int pos_count = 0;
     if (argc > 0) {
-        positionals = (const char **)xr_calloc((size_t)argc, sizeof(const char *));
+        positionals = (const char **) xr_calloc((size_t) argc, sizeof(const char *));
         if (!positionals) {
             xr_cli_invocation_free(inv);
             return XR_CLI_EXIT_INTERNAL;
@@ -170,8 +172,7 @@ XrCliExitCode xr_cli_parse_command(const XrCliCommandSpec *spec,
         /* `--` separator: everything after goes to passthrough */
         if (strcmp(arg, "--") == 0) {
             if (!spec->allow_passthrough) {
-                xr_cli_error(spec->name,
-                             "'--' separator not supported by this command");
+                xr_cli_error(spec->name, "'--' separator not supported by this command");
                 xr_free(positionals);
                 xr_cli_invocation_free(inv);
                 return XR_CLI_EXIT_USAGE;
@@ -210,11 +211,11 @@ XrCliExitCode xr_cli_parse_command(const XrCliCommandSpec *spec,
         /* Short option: -X or -Xvalue */
         if (arg[0] == '-' && arg[1] != '\0' && arg[1] != '-') {
             /* Handle short option (single char only for simplicity) */
-            int ch = (unsigned char)arg[1];
+            int ch = (unsigned char) arg[1];
             int idx = match_short_option(spec->options, opt_count, ch);
             if (idx < 0) {
                 /* Special case: -j<N> for test parallelism (short numeric) */
-                char short_buf[3] = {'-', (char)arg[1], '\0'};
+                char short_buf[3] = {'-', (char) arg[1], '\0'};
                 xr_cli_unknown_option(spec->name, short_buf);
                 xr_free(positionals);
                 xr_cli_invocation_free(inv);
@@ -229,7 +230,7 @@ XrCliExitCode xr_cli_parse_command(const XrCliCommandSpec *spec,
                 } else if (i + 1 < argc) {
                     inv->options.values[idx] = argv[++i];
                 } else {
-                    char short_buf[3] = {'-', (char)arg[1], '\0'};
+                    char short_buf[3] = {'-', (char) arg[1], '\0'};
                     xr_cli_missing_argument(spec->name, short_buf);
                     xr_free(positionals);
                     xr_cli_invocation_free(inv);
@@ -254,16 +255,16 @@ XrCliExitCode xr_cli_parse_command(const XrCliCommandSpec *spec,
         if (spec->positional_min == 1) {
             xr_cli_error(spec->name, "missing required argument");
         } else {
-            xr_cli_error(spec->name, "expected at least %d arguments, got %d",
-                         spec->positional_min, pos_count);
+            xr_cli_error(spec->name, "expected at least %d arguments, got %d", spec->positional_min,
+                         pos_count);
         }
         xr_free(positionals);
         xr_cli_invocation_free(inv);
         return XR_CLI_EXIT_USAGE;
     }
     if (spec->positional_max >= 0 && pos_count > spec->positional_max) {
-        xr_cli_error(spec->name, "too many arguments (max %d, got %d)",
-                     spec->positional_max, pos_count);
+        xr_cli_error(spec->name, "too many arguments (max %d, got %d)", spec->positional_max,
+                     pos_count);
         xr_free(positionals);
         xr_cli_invocation_free(inv);
         return XR_CLI_EXIT_USAGE;
@@ -276,17 +277,18 @@ XrCliExitCode xr_cli_parse_command(const XrCliCommandSpec *spec,
 }
 
 void xr_cli_invocation_free(XrCliInvocation *inv) {
-    if (!inv) return;
+    if (!inv)
+        return;
     if (inv->options.present) {
         xr_free(inv->options.present);
         inv->options.present = NULL;
     }
     if (inv->options.values) {
-        xr_free((void *)inv->options.values);
+        xr_free((void *) inv->options.values);
         inv->options.values = NULL;
     }
     if (inv->positionals) {
-        xr_free((void *)inv->positionals);
+        xr_free((void *) inv->positionals);
         inv->positionals = NULL;
     }
 }

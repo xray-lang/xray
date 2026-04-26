@@ -50,7 +50,7 @@
 static uint64_t get_monotonic_ms(void) {
     struct timespec ts;
     clock_gettime(CLOCK_MONOTONIC, &ts);
-    return (uint64_t)ts.tv_sec * 1000 + ts.tv_nsec / 1000000;
+    return (uint64_t) ts.tv_sec * 1000 + ts.tv_nsec / 1000000;
 }
 
 // Handler implementations extracted into separate files
@@ -148,9 +148,9 @@ void lsp_log(const char *fmt, ...) {
 // ============================================================================
 
 #define DOC_TABLE_INITIAL_SIZE 32
-#define DOC_TABLE_LOAD_FACTOR_NUM 3    // Numerator of load factor (75% = 3/4)
-#define DOC_TABLE_LOAD_FACTOR_DEN 4    // Denominator of load factor
-#define DOC_TABLE_MAX_SIZE (1 << 16)   // Max 65536 buckets
+#define DOC_TABLE_LOAD_FACTOR_NUM 3   // Numerator of load factor (75% = 3/4)
+#define DOC_TABLE_LOAD_FACTOR_DEN 4   // Denominator of load factor
+#define DOC_TABLE_MAX_SIZE (1 << 16)  // Max 65536 buckets
 
 static uint32_t hash_uri(const char *uri) {
     return xr_hash_bytes(uri, strlen(uri));
@@ -161,9 +161,10 @@ static void doc_table_resize(XrLspDocTable *table, int new_size);
 
 static XrLspDocTable *doc_table_new(void) {
     XrLspDocTable *table = xr_calloc(1, sizeof(XrLspDocTable));
-    if (!table) return NULL;
+    if (!table)
+        return NULL;
     table->bucket_count = DOC_TABLE_INITIAL_SIZE;
-    table->buckets = xr_calloc(table->bucket_count, sizeof(XrLspDocBucket*));
+    table->buckets = xr_calloc(table->bucket_count, sizeof(XrLspDocBucket *));
     if (!table->buckets) {
         xr_free(table);
         return NULL;
@@ -172,7 +173,8 @@ static XrLspDocTable *doc_table_new(void) {
 }
 
 static void doc_table_free(XrLspDocTable *table) {
-    if (!table) return;
+    if (!table)
+        return;
     for (int i = 0; i < table->bucket_count; i++) {
         XrLspDocBucket *bucket = table->buckets[i];
         while (bucket) {
@@ -196,7 +198,8 @@ static void doc_table_free(XrLspDocTable *table) {
 }
 
 static XrLspDocument *doc_table_get(XrLspDocTable *table, const char *uri) {
-    if (!table || !uri) return NULL;
+    if (!table || !uri)
+        return NULL;
     uint32_t hash = hash_uri(uri) % table->bucket_count;
     XrLspDocBucket *bucket = table->buckets[hash];
     while (bucket) {
@@ -210,11 +213,13 @@ static XrLspDocument *doc_table_get(XrLspDocTable *table, const char *uri) {
 
 // Resize hash table to new_size buckets (internal, called when load factor exceeded)
 static void doc_table_resize(XrLspDocTable *table, int new_size) {
-    if (!table || new_size <= table->bucket_count) return;
-    if (new_size > DOC_TABLE_MAX_SIZE) new_size = DOC_TABLE_MAX_SIZE;
+    if (!table || new_size <= table->bucket_count)
+        return;
+    if (new_size > DOC_TABLE_MAX_SIZE)
+        new_size = DOC_TABLE_MAX_SIZE;
 
     // Allocate new bucket array
-    XrLspDocBucket **new_buckets = xr_calloc(new_size, sizeof(XrLspDocBucket*));
+    XrLspDocBucket **new_buckets = xr_calloc(new_size, sizeof(XrLspDocBucket *));
     if (!new_buckets) {
         // Allocation failed, continue with current size (graceful degradation)
         lsp_log("Warning: Failed to resize doc table to %d buckets", new_size);
@@ -256,7 +261,8 @@ static inline bool doc_table_needs_resize(XrLspDocTable *table) {
 }
 
 static void doc_table_put(XrLspDocTable *table, XrLspDocument *doc) {
-    if (!table || !doc || !doc->uri) return;
+    if (!table || !doc || !doc->uri)
+        return;
 
     // Check if resize is needed before insertion
     if (doc_table_needs_resize(table) && table->bucket_count < DOC_TABLE_MAX_SIZE) {
@@ -276,7 +282,8 @@ static void doc_table_put(XrLspDocTable *table, XrLspDocument *doc) {
 }
 
 static void doc_table_remove(XrLspDocTable *table, const char *uri) {
-    if (!table || !uri) return;
+    if (!table || !uri)
+        return;
     uint32_t hash = hash_uri(uri) % table->bucket_count;
     XrLspDocBucket **pp = &table->buckets[hash];
     while (*pp) {
@@ -307,7 +314,8 @@ static void doc_table_remove(XrLspDocTable *table, const char *uri) {
 
 XrLspServer *xlsp_server_new(void) {
     XrLspServer *server = xr_calloc(1, sizeof(XrLspServer));
-    if (!server) return NULL;
+    if (!server)
+        return NULL;
 
     server->transport = xlsp_transport_stdio();
     if (!server->transport) {
@@ -338,7 +346,8 @@ XrLspServer *xlsp_server_new(void) {
     server->doc_table = doc_table_new();
     if (!server->doc_table) {
         xlsp_transport_free(server->transport);
-        if (server->isolate) xray_isolate_delete(server->isolate);
+        if (server->isolate)
+            xray_isolate_delete(server->isolate);
         xr_free(server);
         return NULL;
     }
@@ -358,7 +367,7 @@ XrLspServer *xlsp_server_new(void) {
         // as the main loop — otherwise every lsp_log() call from a task would
         // see tls_server == NULL and go to stderr only, bypassing the log
         // file entirely (see the comment in XrLspAsync::thread_init).
-        server->async->thread_init = (void (*)(void *))xlsp_set_log_server;
+        server->async->thread_init = (void (*)(void *)) xlsp_set_log_server;
         server->async->thread_init_ctx = server;
     }
 
@@ -386,7 +395,8 @@ XrLspServer *xlsp_server_new(void) {
 static void xlsp_request_id_free(XlspRequestId *id);
 
 void xlsp_server_free(XrLspServer *server) {
-    if (!server) return;
+    if (!server)
+        return;
 
     // Free document hash table (frees all documents)
     if (server->doc_table) {
@@ -469,11 +479,13 @@ static bool build_line_index(XrLspDocument *doc) {
     // Count lines
     int line_count = 1;
     for (size_t i = 0; i < doc->length; i++) {
-        if (doc->content[i] == '\n') line_count++;
+        if (doc->content[i] == '\n')
+            line_count++;
     }
 
     doc->line_offsets = xr_malloc(line_count * sizeof(uint32_t));
-    if (!doc->line_offsets) return false;
+    if (!doc->line_offsets)
+        return false;
 
     doc->line_count = line_count;
 
@@ -488,10 +500,11 @@ static bool build_line_index(XrLspDocument *doc) {
     return true;
 }
 
-XrLspDocument *xlsp_document_open(XrLspServer *server, const char *uri,
-                                   const char *text, int version) {
+XrLspDocument *xlsp_document_open(XrLspServer *server, const char *uri, const char *text,
+                                  int version) {
     XrLspDocument *doc = xr_calloc(1, sizeof(XrLspDocument));
-    if (!doc) return NULL;
+    if (!doc)
+        return NULL;
 
     doc->uri = xr_strdup(uri);
     if (!doc->uri) {
@@ -531,14 +544,15 @@ XrLspDocument *xlsp_document_open(XrLspServer *server, const char *uri,
     return doc;
 }
 
-void xlsp_document_change(XrLspDocument *doc, XrLspRange *range,
-                          const char *text) {
-    if (!doc || !text) return;
+void xlsp_document_change(XrLspDocument *doc, XrLspRange *range, const char *text) {
+    if (!doc || !text)
+        return;
 
     if (!range) {
         // Full document sync
         char *new_content = xr_strdup(text);
-        if (!new_content) return;  // Keep old content on failure
+        if (!new_content)
+            return;  // Keep old content on failure
 
         xr_free(doc->content);
         doc->content = new_content;
@@ -551,7 +565,8 @@ void xlsp_document_change(XrLspDocument *doc, XrLspRange *range,
         size_t new_len = doc->length - (end - start) + text_len;
 
         char *new_content = xr_malloc(new_len + 1);
-        if (!new_content) return;  // Keep old content on failure
+        if (!new_content)
+            return;  // Keep old content on failure
 
         memcpy(new_content, doc->content, start);
         memcpy(new_content + start, text, text_len);
@@ -597,13 +612,15 @@ XrLspDocument *xlsp_document_get(XrLspServer *server, const char *uri) {
 XrLspDocument *xlsp_document_get_or_load(XrLspServer *server, const char *uri) {
     // First check if already open
     XrLspDocument *doc = doc_table_get(server->doc_table, uri);
-    if (doc) return doc;
+    if (doc)
+        return doc;
 
     const char *path = xlsp_uri_to_path(uri);
 
     // Try to load from disk
     FILE *f = fopen(path, "r");
-    if (!f) return NULL;
+    if (!f)
+        return NULL;
 
     fseek(f, 0, SEEK_END);
     long size = ftell(f);
@@ -613,20 +630,20 @@ XrLspDocument *xlsp_document_get_or_load(XrLspServer *server, const char *uri) {
         fclose(f);
         return NULL;
     }
-    if ((size_t)size >= XLSP_MAX_DOCUMENT_BYTES) {
-        lsp_log("Refusing to load %s: %ld bytes exceeds %u-byte limit",
-                path, size, XLSP_MAX_DOCUMENT_BYTES);
+    if ((size_t) size >= XLSP_MAX_DOCUMENT_BYTES) {
+        lsp_log("Refusing to load %s: %ld bytes exceeds %u-byte limit", path, size,
+                XLSP_MAX_DOCUMENT_BYTES);
         fclose(f);
         return NULL;
     }
 
-    char *content = xr_malloc((size_t)size + 1);
+    char *content = xr_malloc((size_t) size + 1);
     if (!content) {
         fclose(f);
         return NULL;
     }
 
-    size_t read_size = fread(content, 1, (size_t)size, f);
+    size_t read_size = fread(content, 1, (size_t) size, f);
     content[read_size] = '\0';
     fclose(f);
 
@@ -663,7 +680,8 @@ XrLspDocument *xlsp_document_get_or_load(XrLspServer *server, const char *uri) {
 
 // Free a temporarily loaded document
 void xlsp_document_free_temp(XrLspDocument *doc) {
-    if (!doc) return;
+    if (!doc)
+        return;
     xlsp_invalidate_import_cache(doc);
     xlsp_free_document_cache(doc);
     xr_free(doc->uri);
@@ -674,8 +692,9 @@ void xlsp_document_free_temp(XrLspDocument *doc) {
 }
 
 uint32_t xlsp_position_to_offset(XrLspDocument *doc, XrLspPosition pos) {
-    if (!doc || !doc->line_offsets) return 0;
-    if ((int)pos.line >= doc->line_count) {
+    if (!doc || !doc->line_offsets)
+        return 0;
+    if ((int) pos.line >= doc->line_count) {
         return doc->length;
     }
 
@@ -683,7 +702,7 @@ uint32_t xlsp_position_to_offset(XrLspDocument *doc, XrLspPosition pos) {
 
     // Calculate line length (bytes until next line or end of document)
     uint32_t line_end;
-    if ((int)pos.line + 1 < doc->line_count) {
+    if ((int) pos.line + 1 < doc->line_count) {
         line_end = doc->line_offsets[pos.line + 1];
         // Exclude newline character from line content
         if (line_end > line_start && doc->content[line_end - 1] == '\n') {
@@ -695,17 +714,19 @@ uint32_t xlsp_position_to_offset(XrLspDocument *doc, XrLspPosition pos) {
     uint32_t line_len = line_end - line_start;
 
     // Convert UTF-16 code unit offset to byte offset within the line
-    size_t byte_offset_in_line = xr_utf8_utf16_to_byte_offset(
-        doc->content + line_start, line_len, pos.character);
+    size_t byte_offset_in_line =
+        xr_utf8_utf16_to_byte_offset(doc->content + line_start, line_len, pos.character);
 
-    uint32_t offset = line_start + (uint32_t)byte_offset_in_line;
-    if (offset > doc->length) offset = doc->length;
+    uint32_t offset = line_start + (uint32_t) byte_offset_in_line;
+    if (offset > doc->length)
+        offset = doc->length;
     return offset;
 }
 
 XrLspPosition xlsp_offset_to_position(XrLspDocument *doc, uint32_t offset) {
     XrLspPosition pos = {0, 0};
-    if (!doc || !doc->line_offsets) return pos;
+    if (!doc || !doc->line_offsets)
+        return pos;
 
     // Binary search for line
     int lo = 0, hi = doc->line_count - 1;
@@ -735,8 +756,8 @@ XrLspPosition xlsp_offset_to_position(XrLspDocument *doc, uint32_t offset) {
 
     // Convert byte offset within line to UTF-16 code units
     uint32_t byte_offset_in_line = offset - line_start;
-    pos.character = (uint32_t)xr_utf8_byte_to_utf16_offset(
-        doc->content + line_start, line_len, byte_offset_in_line);
+    pos.character = (uint32_t) xr_utf8_byte_to_utf16_offset(doc->content + line_start, line_len,
+                                                            byte_offset_in_line);
 
     return pos;
 }
@@ -750,12 +771,13 @@ XrLspPosition xlsp_offset_to_position(XrLspDocument *doc, uint32_t offset) {
 // released via xlsp_request_id_free. A missing / null id yields kind
 // XLSP_ID_NONE, which the caller uses to distinguish notifications.
 static XlspRequestId parse_request_id(XrJsonValue *msg) {
-    XlspRequestId id = { .kind = XLSP_ID_NONE, .as.number = 0 };
+    XlspRequestId id = {.kind = XLSP_ID_NONE, .as.number = 0};
     XrJsonValue *v = xjson_get(msg, "id");
-    if (!v) return id;
+    if (!v)
+        return id;
     if (v->type == XR_JSON_NUMBER) {
         id.kind = XLSP_ID_NUMBER;
-        id.as.number = v->is_integer ? (double)v->as.integer : v->as.number;
+        id.as.number = v->is_integer ? (double) v->as.integer : v->as.number;
     } else if (v->type == XR_JSON_STRING) {
         id.kind = XLSP_ID_STRING;
         id.as.string = xr_strdup(v->as.string ? v->as.string : "");
@@ -772,7 +794,8 @@ static XlspRequestId parse_request_id(XrJsonValue *msg) {
 }
 
 static void xlsp_request_id_free(XlspRequestId *id) {
-    if (!id) return;
+    if (!id)
+        return;
     if (id->kind == XLSP_ID_STRING) {
         xr_free(id->as.string);
         id->as.string = NULL;
@@ -781,27 +804,32 @@ static void xlsp_request_id_free(XlspRequestId *id) {
 }
 
 static XlspRequestId xlsp_request_id_clone(const XlspRequestId *src) {
-    XlspRequestId dst = { .kind = XLSP_ID_NONE, .as.number = 0 };
-    if (!src) return dst;
+    XlspRequestId dst = {.kind = XLSP_ID_NONE, .as.number = 0};
+    if (!src)
+        return dst;
     dst.kind = src->kind;
     if (src->kind == XLSP_ID_NUMBER) {
         dst.as.number = src->as.number;
     } else if (src->kind == XLSP_ID_STRING) {
         dst.as.string = xr_strdup(src->as.string ? src->as.string : "");
-        if (!dst.as.string) dst.kind = XLSP_ID_NONE;
+        if (!dst.as.string)
+            dst.kind = XLSP_ID_NONE;
     }
     return dst;
 }
 
 static bool xlsp_request_id_equals(const XlspRequestId *a, const XlspRequestId *b) {
-    if (!a || !b) return false;
-    if (a->kind != b->kind) return false;
+    if (!a || !b)
+        return false;
+    if (a->kind != b->kind)
+        return false;
     switch (a->kind) {
-        case XLSP_ID_NUMBER: return a->as.number == b->as.number;
+        case XLSP_ID_NUMBER:
+            return a->as.number == b->as.number;
         case XLSP_ID_STRING:
-            return a->as.string && b->as.string &&
-                   strcmp(a->as.string, b->as.string) == 0;
-        case XLSP_ID_NONE:   return true;  // both notifications (rare)
+            return a->as.string && b->as.string && strcmp(a->as.string, b->as.string) == 0;
+        case XLSP_ID_NONE:
+            return true;  // both notifications (rare)
     }
     return false;
 }
@@ -810,8 +838,10 @@ static bool xlsp_request_id_equals(const XlspRequestId *a, const XlspRequestId *
 // value (null for XLSP_ID_NONE — used only for error responses that
 // have to be emitted before we could parse the id).
 static XrJsonValue *xlsp_request_id_to_json(const XlspRequestId *id) {
-    if (!id || id->kind == XLSP_ID_NONE) return xjson_new_null();
-    if (id->kind == XLSP_ID_NUMBER) return xjson_new_number(id->as.number);
+    if (!id || id->kind == XLSP_ID_NONE)
+        return xjson_new_null();
+    if (id->kind == XLSP_ID_NUMBER)
+        return xjson_new_number(id->as.number);
     return xjson_new_string(id->as.string ? id->as.string : "");
 }
 
@@ -820,12 +850,12 @@ static XrJsonValue *xlsp_request_id_to_json(const XlspRequestId *id) {
 // called from the main loop or a thread that already holds tls_server).
 static const char *xlsp_request_id_debug(const XlspRequestId *id) {
     static _Thread_local char buf[64];
-    if (!id || id->kind == XLSP_ID_NONE) return "<notif>";
+    if (!id || id->kind == XLSP_ID_NONE)
+        return "<notif>";
     if (id->kind == XLSP_ID_NUMBER) {
         snprintf(buf, sizeof(buf), "%.0f", id->as.number);
     } else {
-        snprintf(buf, sizeof(buf), "\"%s\"",
-                 id->as.string ? id->as.string : "");
+        snprintf(buf, sizeof(buf), "\"%s\"", id->as.string ? id->as.string : "");
     }
     return buf;
 }
@@ -835,8 +865,7 @@ static const char *xlsp_request_id_debug(const XlspRequestId *id) {
 // ---------------------------------------------------------------------------
 
 // Send a JSON-RPC response echoing back the client's id exactly.
-static void send_response(XrLspServer *server, const XlspRequestId *id,
-                          XrJsonValue *result) {
+static void send_response(XrLspServer *server, const XlspRequestId *id, XrJsonValue *result) {
     XrJsonValue *resp = xjson_new_object();
     xjson_object_set(resp, "jsonrpc", xjson_new_string("2.0"));
     xjson_object_set(resp, "id", xlsp_request_id_to_json(id));
@@ -851,8 +880,8 @@ static void send_response(XrLspServer *server, const XlspRequestId *id,
 }
 
 // Send a JSON-RPC error response, mirroring the client's id shape.
-static void send_error(XrLspServer *server, const XlspRequestId *id,
-                       int code, const char *message) {
+static void send_error(XrLspServer *server, const XlspRequestId *id, int code,
+                       const char *message) {
     XrJsonValue *resp = xjson_new_object();
     xjson_object_set(resp, "jsonrpc", xjson_new_string("2.0"));
     xjson_object_set(resp, "id", xlsp_request_id_to_json(id));
@@ -912,8 +941,7 @@ void xlsp_send_request(XrLspServer *server, const char *method, XrJsonValue *par
 // Add a pending request to track (ring buffer: O(1) insert).
 // Takes ownership of *id (moves it into the slot). `method` is a static
 // string from the dispatch table and is stored by reference.
-static void pending_request_add(XrLspServer *server, XlspRequestId id,
-                                const char *method) {
+static void pending_request_add(XrLspServer *server, XlspRequestId id, const char *method) {
     XlspPendingRequests *pending = &server->pending_requests;
 
     // Write at head position (overwrites oldest if full). If we're
@@ -970,8 +998,7 @@ static bool pending_request_cancel(XrLspServer *server, const XlspRequestId *id)
     for (int i = 0; i < pending->count; i++) {
         if (xlsp_request_id_equals(&pending->requests[i].id, id)) {
             pending->requests[i].cancelled = true;
-            lsp_log("Request %s (%s) marked as cancelled",
-                    xlsp_request_id_debug(id),
+            lsp_log("Request %s (%s) marked as cancelled", xlsp_request_id_debug(id),
                     pending->requests[i].method ? pending->requests[i].method : "unknown");
             found = true;
             break;
@@ -979,29 +1006,29 @@ static bool pending_request_cancel(XrLspServer *server, const XlspRequestId *id)
     }
 
     if (server->async && id && id->kind == XLSP_ID_NUMBER) {
-        int async_cancelled = xlsp_async_cancel_request(server->async,
-                                                        (int64_t)id->as.number);
+        int async_cancelled = xlsp_async_cancel_request(server->async, (int64_t) id->as.number);
         if (async_cancelled > 0) {
-            lsp_log("Cancelled %d background tasks for request %s",
-                    async_cancelled, xlsp_request_id_debug(id));
+            lsp_log("Cancelled %d background tasks for request %s", async_cancelled,
+                    xlsp_request_id_debug(id));
         }
     }
 
     if (!found) {
-        lsp_log("Request %s not found for cancellation",
-                xlsp_request_id_debug(id));
+        lsp_log("Request %s not found for cancellation", xlsp_request_id_debug(id));
     }
     return found;
 }
 
 // Handle $/cancelRequest notification
 static void handle_cancel_request(XrLspServer *server, XrJsonValue *params) {
-    if (!params) return;
+    if (!params)
+        return;
 
     // params itself carries the id to cancel, same number-or-string
     // shape as an original request's id.
     XlspRequestId target = parse_request_id(params);
-    if (target.kind == XLSP_ID_NONE) return;
+    if (target.kind == XLSP_ID_NONE)
+        return;
 
     pending_request_cancel(server, &target);
     xlsp_request_id_free(&target);
@@ -1029,8 +1056,8 @@ void xlsp_publish_diagnostics(XrLspServer *server, XrLspDocument *doc) {
 // Begin progress reporting (with optional cancellation support).
 // The token counter lives on the server (see XrLspServer::progress_token_counter)
 // so that multiple concurrent XrLspServer instances do not collide on token names.
-static char *progress_begin_ex(XrLspServer *server, const char *title,
-                               const char *message, bool cancellable) {
+static char *progress_begin_ex(XrLspServer *server, const char *title, const char *message,
+                               bool cancellable) {
     XR_DCHECK(server != NULL, "progress_begin_ex: NULL server");
     char token[32];
     snprintf(token, sizeof(token), "xlsp-progress-%d", ++server->progress_token_counter);
@@ -1060,15 +1087,16 @@ static char *progress_begin_ex(XrLspServer *server, const char *title,
 }
 
 // Begin progress reporting (public API, with cancellation support)
-char *xlsp_progress_begin(XrLspServer *server, const char *title,
-                          const char *message, bool cancellable) {
+char *xlsp_progress_begin(XrLspServer *server, const char *title, const char *message,
+                          bool cancellable) {
     return progress_begin_ex(server, title, message, cancellable);
 }
 
 // Report progress (public API)
-void xlsp_progress_report(XrLspServer *server, const char *token,
-                          const char *message, int percentage) {
-    if (!server || !token) return;
+void xlsp_progress_report(XrLspServer *server, const char *token, const char *message,
+                          int percentage) {
+    if (!server || !token)
+        return;
 
     XrJsonValue *params = xjson_new_object();
     xjson_object_set(params, "token", xjson_new_string(token));
@@ -1088,7 +1116,8 @@ void xlsp_progress_report(XrLspServer *server, const char *token,
 
 // End progress reporting (public API)
 void xlsp_progress_end(XrLspServer *server, const char *token, const char *message) {
-    if (!server || !token) return;
+    if (!server || !token)
+        return;
 
     XrJsonValue *params = xjson_new_object();
     xjson_object_set(params, "token", xjson_new_string(token));
@@ -1111,24 +1140,27 @@ void xlsp_progress_end(XrLspServer *server, const char *token, const char *messa
 // Uses timer-based debounce in the main event loop instead of blocking
 // a background thread with usleep.
 void xlsp_schedule_diagnostics(XrLspServer *server, XrLspDocument *doc) {
-    if (!server->config.diagnostics_enabled) return;
+    if (!server->config.diagnostics_enabled)
+        return;
 
     uint64_t now = get_monotonic_ms();
     doc->last_change_time = now;
     int debounce_ms = server->config.diagnostic_debounce_ms > 0
-                    ? server->config.diagnostic_debounce_ms
-                    : DIAGNOSTIC_DEBOUNCE_MS;
-    doc->diagnostic_deadline = now + (uint64_t)debounce_ms;
+                          ? server->config.diagnostic_debounce_ms
+                          : DIAGNOSTIC_DEBOUNCE_MS;
+    doc->diagnostic_deadline = now + (uint64_t) debounce_ms;
 
     // O(1) dedup via per-document flag
-    if (doc->diag_pending) return;
+    if (doc->diag_pending)
+        return;
 
     // Grow queue if needed
     if (server->pending_diag_count >= server->pending_diag_capacity) {
         int new_cap = server->pending_diag_capacity ? server->pending_diag_capacity * 2 : 16;
-        XrLspDocument **tmp = xr_realloc(server->pending_diag,
-                                         (size_t)new_cap * sizeof(XrLspDocument *));
-        if (!tmp) return;
+        XrLspDocument **tmp =
+            xr_realloc(server->pending_diag, (size_t) new_cap * sizeof(XrLspDocument *));
+        if (!tmp)
+            return;
         server->pending_diag = tmp;
         server->pending_diag_capacity = new_cap;
     }
@@ -1139,7 +1171,8 @@ void xlsp_schedule_diagnostics(XrLspServer *server, XrLspDocument *doc) {
 // Publish empty diagnostics for all open documents (used when diagnostics
 // are disabled to clear stale squiggles on the client side).
 void xlsp_clear_all_diagnostics(XrLspServer *server) {
-    if (!server->doc_table) return;
+    if (!server->doc_table)
+        return;
     XrLspDocTable *table = server->doc_table;
     for (int i = 0; i < table->bucket_count; i++) {
         XrLspDocBucket *bucket = table->buckets[i];
@@ -1160,8 +1193,10 @@ void xlsp_clear_all_diagnostics(XrLspServer *server) {
 // Check and publish diagnostics for documents in the pending queue.
 // O(K) where K = pending count, instead of O(N) full table scan.
 static void flush_pending_diagnostics(XrLspServer *server) {
-    if (!server->config.diagnostics_enabled) return;
-    if (server->pending_diag_count == 0) return;
+    if (!server->config.diagnostics_enabled)
+        return;
+    if (server->pending_diag_count == 0)
+        return;
 
     uint64_t now = get_monotonic_ms();
     int write = 0;
@@ -1178,7 +1213,8 @@ static void flush_pending_diagnostics(XrLspServer *server) {
             server->pending_diag[write++] = doc;
         } else {
             // deadline == 0 means already published or cancelled, drop
-            if (doc) doc->diag_pending = false;
+            if (doc)
+                doc->diag_pending = false;
         }
     }
     server->pending_diag_count = write;
@@ -1258,7 +1294,8 @@ static uint32_t method_hash(const char *s) {
 }
 
 static void init_method_table(XrLspServer *server) {
-    if (server->method_table_initialized) return;
+    if (server->method_table_initialized)
+        return;
     for (size_t i = 0; i < LSP_METHOD_COUNT; i++) {
         uint32_t h = method_hash(lsp_methods[i].method);
         MethodHashEntry *e = xr_malloc(sizeof(MethodHashEntry));
@@ -1294,7 +1331,8 @@ static void free_method_table(XrLspServer *server) {
 static const LspMethodEntry *find_method(XrLspServer *server, const char *method) {
     uint32_t h = method_hash(method);
     for (MethodHashEntry *e = server->method_hash_table[h]; e; e = e->next) {
-        if (strcmp(e->entry->method, method) == 0) return e->entry;
+        if (strcmp(e->entry->method, method) == 0)
+            return e->entry;
     }
     return NULL;
 }
@@ -1333,8 +1371,7 @@ static void handle_message(XrLspServer *server, XrJsonValue *msg) {
     // `exit` remain legal. Reject requests with -32002 and silently
     // drop notifications (including $/cancelRequest handled above so
     // clients can still cancel outstanding work during teardown).
-    if (server->shutdown_received &&
-        strcmp(method, "shutdown") != 0 &&
+    if (server->shutdown_received && strcmp(method, "shutdown") != 0 &&
         strcmp(method, "exit") != 0) {
         if (is_request) {
             send_error(server, &id, -32002, "Server is shutting down");
@@ -1365,7 +1402,7 @@ static void handle_message(XrLspServer *server, XrJsonValue *msg) {
     // string (if any) moves into the ring buffer on success; we keep
     // a cloned copy here so we can still identify the slot when the
     // call returns.
-    XlspRequestId id_for_slot = { .kind = XLSP_ID_NONE, .as.number = 0 };
+    XlspRequestId id_for_slot = {.kind = XLSP_ID_NONE, .as.number = 0};
     if (is_request) {
         id_for_slot = xlsp_request_id_clone(&id);
         pending_request_add(server, id_for_slot, method);
@@ -1377,19 +1414,17 @@ static void handle_message(XrLspServer *server, XrJsonValue *msg) {
         if (entry->request_handler) {
             // Check if already cancelled before executing
             if (pending_request_is_cancelled(server, &id)) {
-                lsp_log("Request %s was cancelled before execution",
-                        xlsp_request_id_debug(&id));
-                send_error(server, &id, LSP_ERROR_REQUEST_CANCELLED,
-                           "Request cancelled");
+                lsp_log("Request %s was cancelled before execution", xlsp_request_id_debug(&id));
+                send_error(server, &id, LSP_ERROR_REQUEST_CANCELLED, "Request cancelled");
             } else {
                 XrJsonValue *result = entry->request_handler(server, params);
                 // Check if cancelled during execution
                 if (pending_request_is_cancelled(server, &id)) {
                     lsp_log("Request %s was cancelled during execution",
                             xlsp_request_id_debug(&id));
-                    send_error(server, &id, LSP_ERROR_REQUEST_CANCELLED,
-                               "Request cancelled");
-                    if (result) xjson_free(result);
+                    send_error(server, &id, LSP_ERROR_REQUEST_CANCELLED, "Request cancelled");
+                    if (result)
+                        xjson_free(result);
                 } else {
                     send_response(server, &id, result);
                 }
@@ -1483,13 +1518,20 @@ int xlsp_server_run(XrLspServer *server) {
 
         // Determine which sources are ready
         for (int i = 0; i < n; i++) {
-            XlspPollCtx *ctx = (XlspPollCtx *)events[i].user_data;
-            if (!ctx) continue;
+            XlspPollCtx *ctx = (XlspPollCtx *) events[i].user_data;
+            if (!ctx)
+                continue;
 
             switch (ctx->type) {
-                case 0: stdin_ready = true; break;
-                case 1: async_ready = true; break;
-                case 2: index_ready = true; break;
+                case 0:
+                    stdin_ready = true;
+                    break;
+                case 1:
+                    async_ready = true;
+                    break;
+                case 2:
+                    index_ready = true;
+                    break;
             }
         }
 
@@ -1551,7 +1593,6 @@ int xlsp_server_run(XrLspServer *server) {
     // Spec: exit with 0 iff `shutdown` arrived before `exit`, else 1.
     return server->shutdown_received ? 0 : 1;
 }
-
 
 // Handler implementations split into separate files.
 // Dispatch table references updated in xlsp_handlers_lifecycle.h,

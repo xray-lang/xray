@@ -35,33 +35,33 @@
 
 // Built-in interface identifiers
 typedef enum {
-    XA_IFACE_ITERABLE,      // for...in support
-    XA_IFACE_ITERATOR,      // iteration protocol
-    XA_IFACE_COMPARABLE,    // <, >, <=, >= operators
-    XA_IFACE_HASHABLE,      // Map key, Set element
-    XA_IFACE_STRINGABLE,    // toString() support
-    XA_IFACE_INDEXABLE,     // [] index access
-    XA_IFACE_EQUATABLE,     // ==, != operators
-    XA_IFACE_LENGTHABLE,    // .length property
-    XA_IFACE_CALLABLE,      // () invocation
-    XA_IFACE_CLOSEABLE,     // resource management (close)
-    XA_IFACE_COUNT          // total count
+    XA_IFACE_ITERABLE,    // for...in support
+    XA_IFACE_ITERATOR,    // iteration protocol
+    XA_IFACE_COMPARABLE,  // <, >, <=, >= operators
+    XA_IFACE_HASHABLE,    // Map key, Set element
+    XA_IFACE_STRINGABLE,  // toString() support
+    XA_IFACE_INDEXABLE,   // [] index access
+    XA_IFACE_EQUATABLE,   // ==, != operators
+    XA_IFACE_LENGTHABLE,  // .length property
+    XA_IFACE_CALLABLE,    // () invocation
+    XA_IFACE_CLOSEABLE,   // resource management (close)
+    XA_IFACE_COUNT        // total count
 } XaBuiltinInterface;
 
 // Interface method signature
 typedef struct {
-    const char *name;           // Method name
-    XrType *return_type;        // Return type (NULL = void)
-    XrType **param_types;       // Parameter types (excluding 'this')
-    int param_count;            // Number of parameters
+    const char *name;      // Method name
+    XrType *return_type;   // Return type (NULL = void)
+    XrType **param_types;  // Parameter types (excluding 'this')
+    int param_count;       // Number of parameters
 } XaInterfaceMethod;
 
 // Interface definition
 typedef struct {
-    const char *name;           // Interface name (e.g., "Comparable")
-    XaInterfaceMethod *methods; // Required methods
-    int method_count;           // Number of methods
-    XrType *type;               // Cached interface type
+    const char *name;            // Interface name (e.g., "Comparable")
+    XaInterfaceMethod *methods;  // Required methods
+    int method_count;            // Number of methods
+    XrType *type;                // Cached interface type
 } XaInterfaceDefinition;
 
 // Cleanup built-in interfaces
@@ -79,4 +79,4 @@ XR_FUNC bool xa_builtin_type_implements(XrType *type, XaBuiltinInterface iface);
 // Register built-in interfaces to a scope (for name resolution)
 XR_FUNC void xa_register_builtin_interfaces(XrayIsolate *X, XaScope *global_scope);
 
-#endif // XANALYZER_BUILTIN_INTERFACES_H
+#endif  // XANALYZER_BUILTIN_INTERFACES_H

@@ -14,10 +14,9 @@
 #include <stdio.h>
 #include "../../base/xmalloc.h"
 
-static const char *STDLIB_MODULES[] = {
-    "time", "json", "http", "log", "os", "fs", "math", "crypto",
-    "regex", "base64", "url", "path", "strings", "bytes", "fmt", NULL
-};
+static const char *STDLIB_MODULES[] = {"time",    "json",   "http",  "log",    "os",  "fs",
+                                       "math",    "crypto", "regex", "base64", "url", "path",
+                                       "strings", "bytes",  "fmt",   NULL};
 
 /*
  * Find the declaration of `name` as a `let NAME = ...` or `const NAME = ...`
@@ -25,18 +24,19 @@ static const char *STDLIB_MODULES[] = {
  * fills the 0-indexed line plus the column range covering just the
  * `let`/`const` keyword so the caller can rewrite it.
  */
-static bool find_plain_decl_keyword(const char *content, const char *name,
-                                    int *out_line, int *out_start_col,
-                                    int *out_end_col) {
-    if (!content || !name || !*name) return false;
+static bool find_plain_decl_keyword(const char *content, const char *name, int *out_line,
+                                    int *out_start_col, int *out_end_col) {
+    if (!content || !name || !*name)
+        return false;
     size_t name_len = strlen(name);
     int line = 0;
     const char *p = content;
     while (*p) {
         const char *line_start = p;
         const char *t = p;
-        while (*t == ' ' || *t == '\t') t++;
-        int col = (int)(t - line_start);
+        while (*t == ' ' || *t == '\t')
+            t++;
+        int col = (int) (t - line_start);
         const char *kw_end = NULL;
         int kw_len = 0;
         if (strncmp(t, "let ", 4) == 0) {
@@ -48,19 +48,27 @@ static bool find_plain_decl_keyword(const char *content, const char *name,
         }
         if (kw_end) {
             const char *n = kw_end;
-            while (*n == ' ' || *n == '\t') n++;
+            while (*n == ' ' || *n == '\t')
+                n++;
             if (strncmp(n, name, name_len) == 0) {
                 char after = n[name_len];
                 if (after == ' ' || after == '\t' || after == ':' || after == '=') {
-                    if (out_line) *out_line = line;
-                    if (out_start_col) *out_start_col = col;
-                    if (out_end_col) *out_end_col = col + kw_len;
+                    if (out_line)
+                        *out_line = line;
+                    if (out_start_col)
+                        *out_start_col = col;
+                    if (out_end_col)
+                        *out_end_col = col + kw_len;
                     return true;
                 }
             }
         }
-        while (*p && *p != '\n') p++;
-        if (*p == '\n') { p++; line++; }
+        while (*p && *p != '\n')
+            p++;
+        if (*p == '\n') {
+            p++;
+            line++;
+        }
     }
     return false;
 }
@@ -70,16 +78,20 @@ static bool find_plain_decl_keyword(const char *content, const char *name,
  * `after`. Writes up to buf_size-1 chars of the name into `buf`. Returns
  * true if a non-empty name was captured.
  */
-static bool extract_quoted_name_after(const char *msg, const char *after,
-                                      char *buf, size_t buf_size) {
-    if (!msg || !after || !buf || buf_size < 2) return false;
+static bool extract_quoted_name_after(const char *msg, const char *after, char *buf,
+                                      size_t buf_size) {
+    if (!msg || !after || !buf || buf_size < 2)
+        return false;
     const char *marker = strstr(msg, after);
-    if (!marker) return false;
+    if (!marker)
+        return false;
     const char *start = marker + strlen(after);
     const char *end = strchr(start, '\'');
-    if (!end || end == start) return false;
-    size_t n = (size_t)(end - start);
-    if (n >= buf_size) n = buf_size - 1;
+    if (!end || end == start)
+        return false;
+    size_t n = (size_t) (end - start);
+    if (n >= buf_size)
+        n = buf_size - 1;
     memcpy(buf, start, n);
     buf[n] = '\0';
     return n > 0;
@@ -90,11 +102,12 @@ static bool extract_quoted_name_after(const char *msg, const char *after,
  * variable declaration with `new_prefix`. No-op if the declaration
  * cannot be located in the document text.
  */
-static void push_decl_rewrite_action(XrJsonValue *actions, const char *uri,
-                                     const char *content, const char *var_name,
-                                     const char *new_prefix, const char *title) {
+static void push_decl_rewrite_action(XrJsonValue *actions, const char *uri, const char *content,
+                                     const char *var_name, const char *new_prefix,
+                                     const char *title) {
     int dline = 0, dsc = 0, dec = 0;
-    if (!find_plain_decl_keyword(content, var_name, &dline, &dsc, &dec)) return;
+    if (!find_plain_decl_keyword(content, var_name, &dline, &dsc, &dec))
+        return;
 
     XrJsonValue *action = xjson_new_object();
     xjson_object_set(action, "title", xjson_new_string(title));
@@ -106,8 +119,7 @@ static void push_decl_rewrite_action(XrJsonValue *actions, const char *uri,
 
     XrJsonValue *text_edit = xjson_new_object();
     xjson_object_set(text_edit, "newText", xjson_new_string(new_prefix));
-    xjson_object_set(text_edit, "range",
-        xjson_make_range(dline, dsc, dline, dec));
+    xjson_object_set(text_edit, "range", xjson_make_range(dline, dsc, dline, dec));
 
     xjson_array_push(edits, text_edit);
     xjson_object_set(changes, uri, edits);
@@ -120,11 +132,13 @@ XrJsonValue *xlsp_handle_code_action(XrLspServer *server, XrJsonValue *params) {
     XrJsonValue *textDocument = xjson_get_object(params, "textDocument");
     XrJsonValue *context = xjson_get_object(params, "context");
     XrJsonValue *range_obj = xjson_get_object(params, "range");
-    if (!textDocument) return xjson_new_array();
+    if (!textDocument)
+        return xjson_new_array();
 
     const char *uri = xjson_get_string(textDocument, "uri");
     XrLspDocument *doc = xlsp_document_get(server, uri);
-    if (!doc || !doc->content) return xjson_new_array();
+    if (!doc || !doc->content)
+        return xjson_new_array();
 
     XrJsonValue *actions = xjson_new_array();
 
@@ -168,7 +182,7 @@ XrJsonValue *xlsp_handle_code_action(XrLspServer *server, XrJsonValue *params) {
                     XrJsonValue *text_edit = xjson_new_object();
                     xjson_object_set(text_edit, "newText", xjson_new_string(""));
                     xjson_object_set(text_edit, "range",
-                        xjson_make_range(diag_line, 0, diag_line + 1, 0));
+                                     xjson_make_range(diag_line, 0, diag_line + 1, 0));
 
                     xjson_array_push(edits, text_edit);
                     xjson_object_set(changes, uri, edits);
@@ -196,7 +210,8 @@ XrJsonValue *xlsp_handle_code_action(XrLspServer *server, XrJsonValue *params) {
 
                         XrJsonValue *text_edit = xjson_new_object();
                         char import_text[64];
-                        snprintf(import_text, sizeof(import_text), "import %s\n", STDLIB_MODULES[m]);
+                        snprintf(import_text, sizeof(import_text), "import %s\n",
+                                 STDLIB_MODULES[m]);
                         xjson_object_set(text_edit, "newText", xjson_new_string(import_text));
                         xjson_object_set(text_edit, "range", xjson_make_range(0, 0, 0, 0));
 
@@ -217,15 +232,13 @@ XrJsonValue *xlsp_handle_code_action(XrLspServer *server, XrJsonValue *params) {
             // call-site `move` which is not a simple decl rewrite.)
             if (msg && strstr(msg, "go closure cannot capture mutable variable '")) {
                 char var_name[128];
-                if (extract_quoted_name_after(msg,
-                        "go closure cannot capture mutable variable '",
-                        var_name, sizeof(var_name))) {
+                if (extract_quoted_name_after(msg, "go closure cannot capture mutable variable '",
+                                              var_name, sizeof(var_name))) {
                     char title[192];
                     snprintf(title, sizeof(title),
-                        "Declare '%s' as 'shared const' (allow concurrent reads)",
-                        var_name);
-                    push_decl_rewrite_action(actions, uri, doc->content,
-                        var_name, "shared const", title);
+                             "Declare '%s' as 'shared const' (allow concurrent reads)", var_name);
+                    push_decl_rewrite_action(actions, uri, doc->content, var_name, "shared const",
+                                             title);
                 }
             }
 
@@ -233,14 +246,13 @@ XrJsonValue *xlsp_handle_code_action(XrLspServer *server, XrJsonValue *params) {
             // Matches: "'move' requires 'NAME' to be declared as 'shared let'"
             if (msg && strstr(msg, "'move' requires '")) {
                 char var_name[128];
-                if (extract_quoted_name_after(msg, "'move' requires '",
-                                              var_name, sizeof(var_name))) {
+                if (extract_quoted_name_after(msg, "'move' requires '", var_name,
+                                              sizeof(var_name))) {
                     char title[192];
                     snprintf(title, sizeof(title),
-                        "Declare '%s' as 'shared let' (allow ownership transfer)",
-                        var_name);
-                    push_decl_rewrite_action(actions, uri, doc->content,
-                        var_name, "shared let", title);
+                             "Declare '%s' as 'shared let' (allow ownership transfer)", var_name);
+                    push_decl_rewrite_action(actions, uri, doc->content, var_name, "shared let",
+                                             title);
                 }
             }
         }
@@ -252,19 +264,24 @@ XrJsonValue *xlsp_handle_code_action(XrLspServer *server, XrJsonValue *params) {
         const char *cur_line_start = doc->content;
         int cl = 0;
         while (cl < sel_start_line && *cur_line_start) {
-            if (*cur_line_start == '\n') cl++;
+            if (*cur_line_start == '\n')
+                cl++;
             cur_line_start++;
         }
         const char *trimmed = cur_line_start;
-        while (*trimmed == ' ' || *trimmed == '\t') trimmed++;
+        while (*trimmed == ' ' || *trimmed == '\t')
+            trimmed++;
 
         if (strncmp(trimmed, "let ", 4) == 0) {
             // Extract variable name
             const char *name_start = trimmed + 4;
-            while (*name_start == ' ' || *name_start == '\t') name_start++;
+            while (*name_start == ' ' || *name_start == '\t')
+                name_start++;
             const char *name_end = name_start;
-            while ((*name_end >= 'a' && *name_end <= 'z') || (*name_end >= 'A' && *name_end <= 'Z') ||
-                   (*name_end >= '0' && *name_end <= '9') || *name_end == '_') name_end++;
+            while ((*name_end >= 'a' && *name_end <= 'z') ||
+                   (*name_end >= 'A' && *name_end <= 'Z') ||
+                   (*name_end >= '0' && *name_end <= '9') || *name_end == '_')
+                name_end++;
 
             if (name_end > name_start) {
                 size_t name_len = name_end - name_start;
@@ -273,7 +290,8 @@ XrJsonValue *xlsp_handle_code_action(XrLspServer *server, XrJsonValue *params) {
                     memcpy(var_name, name_start, name_len);
                     var_name[name_len] = '\0';
 
-                    // Check if variable is reassigned (simple: look for "var_name =" not "var_name ==")
+                    // Check if variable is reassigned (simple: look for "var_name =" not "var_name
+                    // ==")
                     char assign_pat[136];
                     snprintf(assign_pat, sizeof(assign_pat), "%s =", var_name);
                     const char *sp = doc->content;
@@ -288,11 +306,11 @@ XrJsonValue *xlsp_handle_code_action(XrLspServer *server, XrJsonValue *params) {
                     }
                     // occurrences > 1 means reassignment (1 = declaration itself)
                     if (occurrences <= 1) {
-                        int let_col = (int)(trimmed - cur_line_start);
+                        int let_col = (int) (trimmed - cur_line_start);
 
                         XrJsonValue *action = xjson_new_object();
                         xjson_object_set(action, "title",
-                            xjson_new_string("Convert 'let' to 'const'"));
+                                         xjson_new_string("Convert 'let' to 'const'"));
                         xjson_object_set(action, "kind", xjson_new_string("refactor.rewrite"));
 
                         XrJsonValue *edit = xjson_new_object();
@@ -301,7 +319,8 @@ XrJsonValue *xlsp_handle_code_action(XrLspServer *server, XrJsonValue *params) {
 
                         XrJsonValue *text_edit = xjson_new_object();
                         xjson_object_set(text_edit, "newText", xjson_new_string("const"));
-                        xjson_object_set(text_edit, "range",
+                        xjson_object_set(
+                            text_edit, "range",
                             xjson_make_range(sel_start_line, let_col, sel_start_line, let_col + 3));
 
                         xjson_array_push(edits_arr, text_edit);
@@ -318,8 +337,8 @@ XrJsonValue *xlsp_handle_code_action(XrLspServer *server, XrJsonValue *params) {
 
     // Refactor: Extract Variable (only if there's a selection)
     if (has_selection) {
-        XrLspPosition start_pos = { .line = sel_start_line, .character = sel_start_char };
-        XrLspPosition end_pos = { .line = sel_end_line, .character = sel_end_char };
+        XrLspPosition start_pos = {.line = sel_start_line, .character = sel_start_char};
+        XrLspPosition end_pos = {.line = sel_end_line, .character = sel_end_char};
         uint32_t start_offset = xlsp_position_to_offset(doc, start_pos);
         uint32_t end_offset = xlsp_position_to_offset(doc, end_pos);
 
@@ -351,14 +370,14 @@ XrJsonValue *xlsp_handle_code_action(XrLspServer *server, XrJsonValue *params) {
                     snprintf(decl_text, sizeof(decl_text), "let extracted = %s\n", selected);
                     xjson_object_set(decl_edit, "newText", xjson_new_string(decl_text));
                     xjson_object_set(decl_edit, "range",
-                        xjson_make_range(sel_start_line, 0, sel_start_line, 0));
+                                     xjson_make_range(sel_start_line, 0, sel_start_line, 0));
                     xjson_array_push(edits, decl_edit);
 
                     XrJsonValue *repl_edit = xjson_new_object();
                     xjson_object_set(repl_edit, "newText", xjson_new_string("extracted"));
                     xjson_object_set(repl_edit, "range",
-                        xjson_make_range(sel_start_line + 1, sel_start_char,
-                                             sel_end_line + 1, sel_end_char));
+                                     xjson_make_range(sel_start_line + 1, sel_start_char,
+                                                      sel_end_line + 1, sel_end_char));
                     xjson_array_push(edits, repl_edit);
 
                     xjson_object_set(changes, uri, edits);
@@ -374,8 +393,8 @@ XrJsonValue *xlsp_handle_code_action(XrLspServer *server, XrJsonValue *params) {
 
     // Refactor: Extract Function (multi-line selection with statements)
     if (has_selection && sel_end_line > sel_start_line) {
-        XrLspPosition start_pos = { .line = sel_start_line, .character = sel_start_char };
-        XrLspPosition end_pos = { .line = sel_end_line, .character = sel_end_char };
+        XrLspPosition start_pos = {.line = sel_start_line, .character = sel_start_char};
+        XrLspPosition end_pos = {.line = sel_end_line, .character = sel_end_char};
         uint32_t s_off = xlsp_position_to_offset(doc, start_pos);
         uint32_t e_off = xlsp_position_to_offset(doc, end_pos);
 
@@ -389,7 +408,10 @@ XrJsonValue *xlsp_handle_code_action(XrLspServer *server, XrJsonValue *params) {
                 // Only offer if selection looks like statements (contains newline or ;)
                 bool has_stmt = false;
                 for (size_t i = 0; i < sel_len; i++) {
-                    if (selected[i] == '\n' || selected[i] == ';') { has_stmt = true; break; }
+                    if (selected[i] == '\n' || selected[i] == ';') {
+                        has_stmt = true;
+                        break;
+                    }
                 }
 
                 if (has_stmt) {
@@ -397,11 +419,13 @@ XrJsonValue *xlsp_handle_code_action(XrLspServer *server, XrJsonValue *params) {
                     const char *first_line = doc->content;
                     int fl = 0;
                     while (fl < sel_start_line && *first_line) {
-                        if (*first_line == '\n') fl++;
+                        if (*first_line == '\n')
+                            fl++;
                         first_line++;
                     }
                     int indent = 0;
-                    while (first_line[indent] == ' ' || first_line[indent] == '\t') indent++;
+                    while (first_line[indent] == ' ' || first_line[indent] == '\t')
+                        indent++;
 
                     // Build function definition
                     char *func_def = xr_malloc(sel_len + 256);
@@ -415,14 +439,16 @@ XrJsonValue *xlsp_handle_code_action(XrLspServer *server, XrJsonValue *params) {
                             func_def[pos++] = *lp++;
                         }
                         func_def[pos++] = '\n';
-                        if (*lp == '\n') lp++;
+                        if (*lp == '\n')
+                            lp++;
                     }
                     pos += snprintf(func_def + pos, sel_len + 256 - pos, "}\n");
                     func_def[pos] = '\0';
 
                     // Build indent string for call site
                     char indent_str[128];
-                    int ni = indent < (int)sizeof(indent_str) - 1 ? indent : (int)sizeof(indent_str) - 1;
+                    int ni = indent < (int) sizeof(indent_str) - 1 ? indent
+                                                                   : (int) sizeof(indent_str) - 1;
                     memset(indent_str, ' ', ni);
                     indent_str[ni] = '\0';
 
@@ -440,19 +466,23 @@ XrJsonValue *xlsp_handle_code_action(XrLspServer *server, XrJsonValue *params) {
                     // Replace selection with function call
                     XrJsonValue *repl = xjson_new_object();
                     xjson_object_set(repl, "newText", xjson_new_string(call_text));
-                    xjson_object_set(repl, "range",
+                    xjson_object_set(
+                        repl, "range",
                         xjson_make_range(sel_start_line, 0, sel_end_line, sel_end_char));
                     xjson_array_push(edits_arr, repl);
 
                     // Insert function definition at end of file
                     int last_line = 0;
                     const char *cp = doc->content;
-                    while (*cp) { if (*cp == '\n') last_line++; cp++; }
+                    while (*cp) {
+                        if (*cp == '\n')
+                            last_line++;
+                        cp++;
+                    }
 
                     XrJsonValue *ins = xjson_new_object();
                     xjson_object_set(ins, "newText", xjson_new_string(func_def));
-                    xjson_object_set(ins, "range",
-                        xjson_make_range(last_line, 0, last_line, 0));
+                    xjson_object_set(ins, "range", xjson_make_range(last_line, 0, last_line, 0));
                     xjson_array_push(edits_arr, ins);
 
                     xjson_object_set(changes, uri, edits_arr);

@@ -41,8 +41,8 @@ static int yaml_line_indent(YamlParser *p) {
     int n = yaml_count_indent(p);
     if (yaml_indent_has_tab(p, n)) {
         yaml_add_error(p, "tab_indent",
-            "tab characters must not be used for indentation "
-            "(YAML 1.2 §6.1)");
+                       "tab characters must not be used for indentation "
+                       "(YAML 1.2 §6.1)");
     }
     return n;
 }
@@ -61,17 +61,18 @@ void yaml_config_init(YamlConfig *config) {
 
 void yaml_config_from_json(XrayIsolate *X, YamlConfig *config, XrJson *json) {
     yaml_config_init(config);
-    if (!json) return;
+    if (!json)
+        return;
 
-    xrs_cfg_get_bool(X, json, "safe",               &config->safe);
+    xrs_cfg_get_bool(X, json, "safe", &config->safe);
     xrs_cfg_get_bool(X, json, "allowDuplicateKeys", &config->allow_duplicate_keys);
-    xrs_cfg_get_int (X, json, "maxDepth",           &config->max_depth);
+    xrs_cfg_get_int(X, json, "maxDepth", &config->max_depth);
 }
 
 // ========== Parser Initialization ==========
 
-void yaml_parser_init(YamlParser *parser, XrayIsolate *isolate,
-                      const char *data, size_t len, YamlConfig *config) {
+void yaml_parser_init(YamlParser *parser, XrayIsolate *isolate, const char *data, size_t len,
+                      YamlConfig *config) {
     memset(parser, 0, sizeof(YamlParser));
 
     parser->isolate = isolate;
@@ -83,8 +84,9 @@ void yaml_parser_init(YamlParser *parser, XrayIsolate *isolate,
 
     parser->anchor_capacity = YAML_ANCHOR_INIT_CAPACITY;
     parser->anchor_count = 0;
-    parser->anchors = (YamlAnchor *)xr_malloc(sizeof(YamlAnchor) * parser->anchor_capacity);
-    if (!parser->anchors) parser->anchor_capacity = 0;
+    parser->anchors = (YamlAnchor *) xr_malloc(sizeof(YamlAnchor) * parser->anchor_capacity);
+    if (!parser->anchors)
+        parser->anchor_capacity = 0;
 
     if (config) {
         parser->config = *config;
@@ -99,7 +101,8 @@ void yaml_parser_init(YamlParser *parser, XrayIsolate *isolate,
 }
 
 void yaml_parser_cleanup(YamlParser *parser) {
-    if (!parser) return;
+    if (!parser)
+        return;
     xr_free(parser->anchors);
     parser->anchors = NULL;
     parser->anchor_capacity = 0;
@@ -110,25 +113,27 @@ void yaml_parser_cleanup(YamlParser *parser) {
 // it into parser->result.errors. Used by parseStrict to surface issues
 // such as duplicate keys, max-depth, or unknown escape sequences.
 static void yaml_add_error(YamlParser *p, const char *type, const char *message) {
-    if (!p || !p->result.errors) return;
-    xrs_error_push(p->isolate, p->result.errors,
-                   type,
+    if (!p || !p->result.errors)
+        return;
+    xrs_error_push(p->isolate, p->result.errors, type,
                    /*line=*/p->line,
                    /*row=*/-1,
-                   /*column=*/p->col,
-                   message);
+                   /*column=*/p->col, message);
 }
 
 // ========== Anchor Operations ==========
 
 static void save_anchor(YamlParser *p, const char *name, size_t len, XrValue val) {
-    if (!p->anchors) return;
+    if (!p->anchors)
+        return;
     if (p->anchor_count >= p->anchor_capacity) {
         int new_cap = p->anchor_capacity > 0 ? p->anchor_capacity * 2 : YAML_ANCHOR_INIT_CAPACITY;
-        XR_REALLOC_OR_ABORT(p->anchors, sizeof(YamlAnchor) * (size_t)new_cap, "YAML anchor table grow");
+        XR_REALLOC_OR_ABORT(p->anchors, sizeof(YamlAnchor) * (size_t) new_cap,
+                            "YAML anchor table grow");
         p->anchor_capacity = new_cap;
     }
-    if (len >= 63) len = 63;
+    if (len >= 63)
+        len = 63;
     memcpy(p->anchors[p->anchor_count].name, name, len);
     p->anchors[p->anchor_count].name[len] = '\0';
     p->anchors[p->anchor_count].value = val;
@@ -138,8 +143,7 @@ static void save_anchor(YamlParser *p, const char *name, size_t len, XrValue val
 
 static XrValue find_anchor(YamlParser *p, const char *name, size_t len) {
     for (int i = 0; i < p->anchor_count; i++) {
-        if (strlen(p->anchors[i].name) == len &&
-            strncmp(p->anchors[i].name, name, len) == 0) {
+        if (strlen(p->anchors[i].name) == len && strncmp(p->anchors[i].name, name, len) == 0) {
             return p->anchors[i].value;
         }
     }
@@ -154,17 +158,24 @@ static XrValue parse_value(YamlParser *p, int min_indent);
 // xr_malloc as soon as the initial window is exhausted; on OOM the
 // surrounding function returns xr_null() rather than silently continuing
 // to write past the old buffer.
-#define YAML_STR_ENSURE(buf, len, cap, stack_buf, add) do {                          \
-        if ((len) + (size_t)(add) >= (cap)) {                                         \
-            size_t _new_cap = (cap) * 2;                                              \
-            while (_new_cap < (len) + (size_t)(add) + 1) _new_cap *= 2;                \
-            char *_nb = (char*)xr_malloc(_new_cap);                                   \
-            if (!_nb) { if ((buf) != (stack_buf)) xr_free(buf); return xr_null(); }   \
-            memcpy(_nb, (buf), (len));                                                \
-            if ((buf) != (stack_buf)) xr_free(buf);                                   \
-            (buf) = _nb;                                                              \
-            (cap) = _new_cap;                                                         \
-        }                                                                             \
+#define YAML_STR_ENSURE(buf, len, cap, stack_buf, add)                                             \
+    do {                                                                                           \
+        if ((len) + (size_t) (add) >= (cap)) {                                                     \
+            size_t _new_cap = (cap) * 2;                                                           \
+            while (_new_cap < (len) + (size_t) (add) + 1)                                          \
+                _new_cap *= 2;                                                                     \
+            char *_nb = (char *) xr_malloc(_new_cap);                                              \
+            if (!_nb) {                                                                            \
+                if ((buf) != (stack_buf))                                                          \
+                    xr_free(buf);                                                                  \
+                return xr_null();                                                                  \
+            }                                                                                      \
+            memcpy(_nb, (buf), (len));                                                             \
+            if ((buf) != (stack_buf))                                                              \
+                xr_free(buf);                                                                      \
+            (buf) = _nb;                                                                           \
+            (cap) = _new_cap;                                                                      \
+        }                                                                                          \
     } while (0)
 
 // ========== String Parsing ==========
@@ -193,14 +204,19 @@ static XrValue parse_single_quoted(YamlParser *p) {
         } else {
             YAML_STR_ENSURE(buf, len, cap, stack_buf, 1);
             buf[len++] = *p->ptr;
-            if (*p->ptr == '\n') { p->line++; p->col = 1; }
-            else { p->col++; }
+            if (*p->ptr == '\n') {
+                p->line++;
+                p->col = 1;
+            } else {
+                p->col++;
+            }
             p->ptr++;
         }
     }
 
     XrString *str = xr_string_intern(p->isolate, buf, len, 0);
-    if (buf != stack_buf) xr_free(buf);
+    if (buf != stack_buf)
+        xr_free(buf);
     return xr_string_value(str);
 }
 
@@ -217,32 +233,55 @@ static XrValue parse_double_quoted(YamlParser *p) {
         if (*p->ptr == '\\') {
             p->ptr++;
             p->col++;
-            if (p->ptr >= p->end) break;
+            if (p->ptr >= p->end)
+                break;
 
             YAML_STR_ENSURE(buf, len, cap, stack_buf, 8);
 
             switch (*p->ptr) {
-                case 'n': buf[len++] = '\n'; break;
-                case 't': buf[len++] = '\t'; break;
-                case 'r': buf[len++] = '\r'; break;
-                case '\\': buf[len++] = '\\'; break;
-                case '"': buf[len++] = '"'; break;
-                case '/': buf[len++] = '/'; break;
-                case 'a': buf[len++] = '\a'; break;
-                case 'b': buf[len++] = '\b'; break;
-                case 'e': buf[len++] = '\x1B'; break;
-                case 'v': buf[len++] = '\v'; break;
-                case '0': buf[len++] = '\0'; break;
+                case 'n':
+                    buf[len++] = '\n';
+                    break;
+                case 't':
+                    buf[len++] = '\t';
+                    break;
+                case 'r':
+                    buf[len++] = '\r';
+                    break;
+                case '\\':
+                    buf[len++] = '\\';
+                    break;
+                case '"':
+                    buf[len++] = '"';
+                    break;
+                case '/':
+                    buf[len++] = '/';
+                    break;
+                case 'a':
+                    buf[len++] = '\a';
+                    break;
+                case 'b':
+                    buf[len++] = '\b';
+                    break;
+                case 'e':
+                    buf[len++] = '\x1B';
+                    break;
+                case 'v':
+                    buf[len++] = '\v';
+                    break;
+                case '0':
+                    buf[len++] = '\0';
+                    break;
                 case 'N': {
                     // Unicode next line (U+0085)
-                    buf[len++] = (char)0xC2;
-                    buf[len++] = (char)0x85;
+                    buf[len++] = (char) 0xC2;
+                    buf[len++] = (char) 0x85;
                     break;
                 }
                 case '_': {
                     // Unicode non-breaking space (U+00A0)
-                    buf[len++] = (char)0xC2;
-                    buf[len++] = (char)0xA0;
+                    buf[len++] = (char) 0xC2;
+                    buf[len++] = (char) 0xA0;
                     break;
                 }
                 case 'x': {
@@ -256,17 +295,20 @@ static XrValue parse_double_quoted(YamlParser *p) {
                     for (int i = 0; i < 2 && p->ptr < p->end; i++, p->ptr++) {
                         char c = *p->ptr;
                         cp <<= 4;
-                        if (c >= '0' && c <= '9') cp |= c - '0';
-                        else if (c >= 'a' && c <= 'f') cp |= c - 'a' + 10;
-                        else if (c >= 'A' && c <= 'F') cp |= c - 'A' + 10;
+                        if (c >= '0' && c <= '9')
+                            cp |= c - '0';
+                        else if (c >= 'a' && c <= 'f')
+                            cp |= c - 'a' + 10;
+                        else if (c >= 'A' && c <= 'F')
+                            cp |= c - 'A' + 10;
                     }
                     p->ptr--;
                     if (cp < 0x80) {
-                        buf[len++] = (char)cp;
+                        buf[len++] = (char) cp;
                     } else {
                         // 0x80..0xFF -> two-byte UTF-8 sequence
-                        buf[len++] = (char)(0xC0 | (cp >> 6));
-                        buf[len++] = (char)(0x80 | (cp & 0x3F));
+                        buf[len++] = (char) (0xC0 | (cp >> 6));
+                        buf[len++] = (char) (0x80 | (cp & 0x3F));
                     }
                     break;
                 }
@@ -278,25 +320,28 @@ static XrValue parse_double_quoted(YamlParser *p) {
                     for (int i = 0; i < digits && p->ptr < p->end; i++, p->ptr++) {
                         char c = *p->ptr;
                         cp <<= 4;
-                        if (c >= '0' && c <= '9') cp |= c - '0';
-                        else if (c >= 'a' && c <= 'f') cp |= c - 'a' + 10;
-                        else if (c >= 'A' && c <= 'F') cp |= c - 'A' + 10;
+                        if (c >= '0' && c <= '9')
+                            cp |= c - '0';
+                        else if (c >= 'a' && c <= 'f')
+                            cp |= c - 'a' + 10;
+                        else if (c >= 'A' && c <= 'F')
+                            cp |= c - 'A' + 10;
                     }
                     p->ptr--;
                     if (cp < 0x80) {
-                        buf[len++] = (char)cp;
+                        buf[len++] = (char) cp;
                     } else if (cp < 0x800) {
-                        buf[len++] = (char)(0xC0 | (cp >> 6));
-                        buf[len++] = (char)(0x80 | (cp & 0x3F));
+                        buf[len++] = (char) (0xC0 | (cp >> 6));
+                        buf[len++] = (char) (0x80 | (cp & 0x3F));
                     } else if (cp < 0x10000) {
-                        buf[len++] = (char)(0xE0 | (cp >> 12));
-                        buf[len++] = (char)(0x80 | ((cp >> 6) & 0x3F));
-                        buf[len++] = (char)(0x80 | (cp & 0x3F));
+                        buf[len++] = (char) (0xE0 | (cp >> 12));
+                        buf[len++] = (char) (0x80 | ((cp >> 6) & 0x3F));
+                        buf[len++] = (char) (0x80 | (cp & 0x3F));
                     } else if (cp <= 0x10FFFF) {
-                        buf[len++] = (char)(0xF0 | (cp >> 18));
-                        buf[len++] = (char)(0x80 | ((cp >> 12) & 0x3F));
-                        buf[len++] = (char)(0x80 | ((cp >> 6) & 0x3F));
-                        buf[len++] = (char)(0x80 | (cp & 0x3F));
+                        buf[len++] = (char) (0xF0 | (cp >> 18));
+                        buf[len++] = (char) (0x80 | ((cp >> 12) & 0x3F));
+                        buf[len++] = (char) (0x80 | ((cp >> 6) & 0x3F));
+                        buf[len++] = (char) (0x80 | (cp & 0x3F));
                     }
                     break;
                 }
@@ -309,8 +354,12 @@ static XrValue parse_double_quoted(YamlParser *p) {
         } else {
             YAML_STR_ENSURE(buf, len, cap, stack_buf, 1);
             buf[len++] = *p->ptr;
-            if (*p->ptr == '\n') { p->line++; p->col = 1; }
-            else { p->col++; }
+            if (*p->ptr == '\n') {
+                p->line++;
+                p->col = 1;
+            } else {
+                p->col++;
+            }
             p->ptr++;
         }
     }
@@ -321,26 +370,30 @@ static XrValue parse_double_quoted(YamlParser *p) {
     }
 
     XrString *str = xr_string_intern(p->isolate, buf, len, 0);
-    if (buf != stack_buf) xr_free(buf);
+    if (buf != stack_buf)
+        xr_free(buf);
     return xr_string_value(str);
 }
 
 // ========== Scalar Parsing ==========
 
 static XrValue parse_plain_scalar(YamlParser *p, int min_indent) {
-    (void)min_indent;
+    (void) min_indent;
     const char *start = p->ptr;
     size_t len = 0;
 
     while (p->ptr < p->end) {
         char c = *p->ptr;
-        if (c == '\n' || c == '\r') break;
-        if (c == '#' && len > 0 && *(p->ptr - 1) == ' ') break;
+        if (c == '\n' || c == '\r')
+            break;
+        if (c == '#' && len > 0 && *(p->ptr - 1) == ' ')
+            break;
         if (c == ':' && p->ptr + 1 < p->end &&
             (*(p->ptr + 1) == ' ' || *(p->ptr + 1) == '\n' || *(p->ptr + 1) == '\r')) {
             break;
         }
-        if (c == ',' || c == ']' || c == '}') break;
+        if (c == ',' || c == ']' || c == '}')
+            break;
 
         p->ptr++;
         p->col++;
@@ -356,13 +409,20 @@ static XrValue parse_plain_scalar(YamlParser *p, int min_indent) {
     }
 
     // Special values
-    if (len == 4 && strncmp(start, "null", 4) == 0) return xr_null();
-    if (len == 1 && *start == '~') return xr_null();
-    if (len == 4 && strncmp(start, "true", 4) == 0) return xr_bool(true);
-    if (len == 5 && strncmp(start, "false", 5) == 0) return xr_bool(false);
-    if (len == 4 && strncasecmp(start, ".inf", 4) == 0) return xr_float(INFINITY);
-    if (len == 5 && strncasecmp(start, "-.inf", 5) == 0) return xr_float(-INFINITY);
-    if (len == 4 && strncasecmp(start, ".nan", 4) == 0) return xr_float(NAN);
+    if (len == 4 && strncmp(start, "null", 4) == 0)
+        return xr_null();
+    if (len == 1 && *start == '~')
+        return xr_null();
+    if (len == 4 && strncmp(start, "true", 4) == 0)
+        return xr_bool(true);
+    if (len == 5 && strncmp(start, "false", 5) == 0)
+        return xr_bool(false);
+    if (len == 4 && strncasecmp(start, ".inf", 4) == 0)
+        return xr_float(INFINITY);
+    if (len == 5 && strncasecmp(start, "-.inf", 5) == 0)
+        return xr_float(-INFINITY);
+    if (len == 4 && strncasecmp(start, ".nan", 4) == 0)
+        return xr_float(NAN);
 
     // Number detection
     bool is_number = true;
@@ -372,21 +432,27 @@ static XrValue parse_plain_scalar(YamlParser *p, int min_indent) {
 
     for (size_t i = 0; i < len; i++) {
         char c = start[i];
-        if (c == '.' || c == 'e' || c == 'E') is_float = true;
+        if (c == '.' || c == 'e' || c == 'E')
+            is_float = true;
         if (is_hex && i >= 2) {
-            if (!isxdigit((unsigned char)c)) { is_number = false; break; }
+            if (!isxdigit((unsigned char) c)) {
+                is_number = false;
+                break;
+            }
         } else if (is_oct && i >= 2) {
-            if (c < '0' || c > '7') { is_number = false; break; }
-        } else if (!isdigit((unsigned char)c) && c != '.' && c != '-' && c != '+' &&
-            c != 'e' && c != 'E' && c != 'x' && c != 'X' && c != 'o' && c != 'O') {
+            if (c < '0' || c > '7') {
+                is_number = false;
+                break;
+            }
+        } else if (!isdigit((unsigned char) c) && c != '.' && c != '-' && c != '+' && c != 'e' &&
+                   c != 'E' && c != 'x' && c != 'X' && c != 'o' && c != 'O') {
             is_number = false;
             break;
         }
     }
 
-    if (is_number && len > 0 && len < 64 && (isdigit((unsigned char)start[0]) ||
-        start[0] == '-' || start[0] == '+')) {
-
+    if (is_number && len > 0 && len < 64 &&
+        (isdigit((unsigned char) start[0]) || start[0] == '-' || start[0] == '+')) {
         char num_buf[64];
         memcpy(num_buf, start, len);
         num_buf[len] = '\0';
@@ -449,7 +515,8 @@ static XrValue parse_flow_sequence(YamlParser *p) {
         yaml_skip_ws(p);
         yaml_skip_empty_lines(p);
 
-        if (p->ptr >= p->end) break;
+        if (p->ptr >= p->end)
+            break;
 
         if (*p->ptr == ']') {
             p->ptr++;
@@ -498,11 +565,12 @@ static XrValue parse_flow_mapping(YamlParser *p) {
         }
 
         // Duplicate key check (YAML spec: last value wins, but we can detect it)
-        (void)0; // xr_map_set overwrites, which is correct YAML 1.2 behavior
+        (void) 0;  // xr_map_set overwrites, which is correct YAML 1.2 behavior
 
         yaml_skip_ws(p);
 
-        if (p->ptr >= p->end || *p->ptr != ':') break;
+        if (p->ptr >= p->end || *p->ptr != ':')
+            break;
         p->ptr++;
         p->col++;
 
@@ -514,7 +582,8 @@ static XrValue parse_flow_mapping(YamlParser *p) {
         yaml_skip_ws(p);
         yaml_skip_empty_lines(p);
 
-        if (p->ptr >= p->end) break;
+        if (p->ptr >= p->end)
+            break;
 
         if (*p->ptr == '}') {
             p->ptr++;
@@ -543,17 +612,20 @@ static XrValue parse_block_sequence(YamlParser *p, int seq_indent) {
     while (p->ptr < p->end) {
         if (!first) {
             yaml_skip_empty_lines(p);
-            if (p->ptr >= p->end) break;
+            if (p->ptr >= p->end)
+                break;
 
             int indent = yaml_line_indent(p);
-            if (indent < seq_indent) break;
+            if (indent < seq_indent)
+                break;
 
             p->ptr += indent;
             p->col += indent;
         }
         first = false;
 
-        if (p->ptr >= p->end || *p->ptr != '-') break;
+        if (p->ptr >= p->end || *p->ptr != '-')
+            break;
 
         p->ptr++;
         p->col++;
@@ -600,18 +672,20 @@ static XrValue parse_block_mapping(YamlParser *p, int map_indent) {
     while (p->ptr < p->end) {
         if (!first_entry) {
             yaml_skip_empty_lines(p);
-            if (p->ptr >= p->end) break;
+            if (p->ptr >= p->end)
+                break;
 
             current_indent = yaml_line_indent(p);
-            if (current_indent < map_indent) break;
+            if (current_indent < map_indent)
+                break;
 
             p->ptr += current_indent;
             p->col += current_indent;
         }
         first_entry = false;
 
-        if (*p->ptr == '-' && (p->ptr + 1 >= p->end ||
-            *(p->ptr + 1) == ' ' || *(p->ptr + 1) == '\n')) {
+        if (*p->ptr == '-' &&
+            (p->ptr + 1 >= p->end || *(p->ptr + 1) == ' ' || *(p->ptr + 1) == '\n')) {
             break;
         }
 
@@ -655,7 +729,7 @@ static XrValue parse_block_mapping(YamlParser *p, int map_indent) {
         bool is_dup = xr_map_has(map, key);
         if (is_dup && !p->config.allow_duplicate_keys) {
             yaml_add_error(p, "duplicate_key",
-                "duplicate mapping key (set allowDuplicateKeys:true to allow)");
+                           "duplicate mapping key (set allowDuplicateKeys:true to allow)");
         }
 
         if (p->ptr < p->end && *p->ptr != '\n' && *p->ptr != '\r' && *p->ptr != '#') {
@@ -698,9 +772,13 @@ static void parse_block_header(YamlParser *p, ChompMode *chomp, int *explicit_in
     *chomp = CHOMP_CLIP;
     *explicit_indent = 0;
     while (p->ptr < p->end && *p->ptr != '\n' && *p->ptr != '\r' && *p->ptr != '#') {
-        if (*p->ptr == '-') { *chomp = CHOMP_STRIP; }
-        else if (*p->ptr == '+') { *chomp = CHOMP_KEEP; }
-        else if (isdigit((unsigned char)*p->ptr)) { *explicit_indent = *p->ptr - '0'; }
+        if (*p->ptr == '-') {
+            *chomp = CHOMP_STRIP;
+        } else if (*p->ptr == '+') {
+            *chomp = CHOMP_KEEP;
+        } else if (isdigit((unsigned char) *p->ptr)) {
+            *explicit_indent = *p->ptr - '0';
+        }
         p->ptr++;
         p->col++;
     }
@@ -708,10 +786,13 @@ static void parse_block_header(YamlParser *p, ChompMode *chomp, int *explicit_in
 
 static void apply_chomping(char *buf, size_t *len, ChompMode chomp) {
     if (chomp == CHOMP_STRIP) {
-        while (*len > 0 && buf[*len - 1] == '\n') (*len)--;
+        while (*len > 0 && buf[*len - 1] == '\n')
+            (*len)--;
     } else if (chomp == CHOMP_CLIP) {
-        while (*len > 0 && buf[*len - 1] == '\n') (*len)--;
-        if (*len > 0) buf[(*len)++] = '\n';
+        while (*len > 0 && buf[*len - 1] == '\n')
+            (*len)--;
+        if (*len > 0)
+            buf[(*len)++] = '\n';
     }
     // CHOMP_KEEP: leave all trailing newlines as-is
 }
@@ -747,7 +828,8 @@ static XrValue parse_literal_block(YamlParser *p) {
             continue;
         }
 
-        if (indent < block_indent) break;
+        if (indent < block_indent)
+            break;
 
         p->ptr += block_indent;
         p->col += block_indent;
@@ -767,7 +849,8 @@ static XrValue parse_literal_block(YamlParser *p) {
     apply_chomping(buf, &len, chomp);
 
     XrString *str = xr_string_intern(p->isolate, buf, len, 0);
-    if (buf != stack_buf) xr_free(buf);
+    if (buf != stack_buf)
+        xr_free(buf);
     return xr_string_value(str);
 }
 
@@ -804,7 +887,8 @@ static XrValue parse_folded_block(YamlParser *p) {
             continue;
         }
 
-        if (indent < block_indent) break;
+        if (indent < block_indent)
+            break;
 
         if (len > 0 && !prev_was_newline) {
             YAML_STR_ENSURE(buf, len, cap, stack_buf, 1);
@@ -832,7 +916,8 @@ static XrValue parse_folded_block(YamlParser *p) {
     apply_chomping(buf, &len, chomp);
 
     XrString *str = xr_string_intern(p->isolate, buf, len, 0);
-    if (buf != stack_buf) xr_free(buf);
+    if (buf != stack_buf)
+        xr_free(buf);
     return xr_string_value(str);
 }
 
@@ -841,7 +926,8 @@ static XrValue parse_folded_block(YamlParser *p) {
 static XrValue parse_value(YamlParser *p, int min_indent) {
     yaml_skip_ws(p);
 
-    if (p->ptr >= p->end) return xr_null();
+    if (p->ptr >= p->end)
+        return xr_null();
 
     // Max depth check
     if (p->depth >= p->config.max_depth) {
@@ -859,13 +945,14 @@ static XrValue parse_value(YamlParser *p, int min_indent) {
         p->ptr++;
         p->col++;
         const char *start = p->ptr;
-        while (p->ptr < p->end && !isspace((unsigned char)*p->ptr) &&
-               *p->ptr != ':' && *p->ptr != ',' && *p->ptr != ']' && *p->ptr != '}') {
+        while (p->ptr < p->end && !isspace((unsigned char) *p->ptr) && *p->ptr != ':' &&
+               *p->ptr != ',' && *p->ptr != ']' && *p->ptr != '}') {
             p->ptr++;
             p->col++;
         }
         anchor_len = p->ptr - start;
-        if (anchor_len >= 64) anchor_len = 63;
+        if (anchor_len >= 64)
+            anchor_len = 63;
         memcpy(anchor_name, start, anchor_len);
         yaml_skip_ws(p);
         c = *p->ptr;
@@ -876,8 +963,8 @@ static XrValue parse_value(YamlParser *p, int min_indent) {
         p->ptr++;
         p->col++;
         const char *start = p->ptr;
-        while (p->ptr < p->end && !isspace((unsigned char)*p->ptr) &&
-               *p->ptr != ':' && *p->ptr != ',' && *p->ptr != ']' && *p->ptr != '}') {
+        while (p->ptr < p->end && !isspace((unsigned char) *p->ptr) && *p->ptr != ':' &&
+               *p->ptr != ',' && *p->ptr != ']' && *p->ptr != '}') {
             p->ptr++;
             p->col++;
         }
@@ -898,18 +985,20 @@ static XrValue parse_value(YamlParser *p, int min_indent) {
         result = parse_double_quoted(p);
     } else if (c == '\'') {
         result = parse_single_quoted(p);
-    } else if (c == '-' && (p->ptr + 1 >= p->end || *(p->ptr + 1) == ' ' || *(p->ptr + 1) == '\n')) {
+    } else if (c == '-' &&
+               (p->ptr + 1 >= p->end || *(p->ptr + 1) == ' ' || *(p->ptr + 1) == '\n')) {
         result = parse_block_sequence(p, min_indent);
     } else {
         const char *scan = p->ptr;
         bool is_mapping = false;
         while (scan < p->end && *scan != '\n' && *scan != '\r') {
-            if (*scan == ':' && (scan + 1 >= p->end || *(scan + 1) == ' ' ||
-                *(scan + 1) == '\n' || *(scan + 1) == '\r')) {
+            if (*scan == ':' && (scan + 1 >= p->end || *(scan + 1) == ' ' || *(scan + 1) == '\n' ||
+                                 *(scan + 1) == '\r')) {
                 is_mapping = true;
                 break;
             }
-            if (*scan == '#' || *scan == ',' || *scan == '}' || *scan == ']') break;
+            if (*scan == '#' || *scan == ',' || *scan == '}' || *scan == ']')
+                break;
             scan++;
         }
 
@@ -940,7 +1029,8 @@ static XrValue parse_document(YamlParser *p) {
         yaml_skip_empty_lines(p);
     }
 
-    if (p->ptr >= p->end) return xr_null();
+    if (p->ptr >= p->end)
+        return xr_null();
 
     int indent = yaml_line_indent(p);
     return parse_value(p, indent);
@@ -956,15 +1046,16 @@ XrValue yaml_parser_parse(YamlParser *parser) {
     return result;
 }
 
-XrArray* yaml_parser_parse_all(YamlParser *parser) {
+XrArray *yaml_parser_parse_all(YamlParser *parser) {
     XrArray *docs = xr_array_new(xr_current_coro(parser->isolate));
 
     while (parser->ptr < parser->end) {
         yaml_skip_empty_lines(parser);
-        if (parser->ptr >= parser->end) break;
+        if (parser->ptr >= parser->end)
+            break;
 
-        if (parser->ptr + 2 < parser->end &&
-            parser->ptr[0] == '.' && parser->ptr[1] == '.' && parser->ptr[2] == '.') {
+        if (parser->ptr + 2 < parser->end && parser->ptr[0] == '.' && parser->ptr[1] == '.' &&
+            parser->ptr[2] == '.') {
             parser->ptr += 3;
             yaml_skip_to_eol(parser);
             yaml_skip_newline(parser);

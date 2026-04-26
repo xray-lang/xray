@@ -25,4 +25,4 @@ XR_FUNC XrConstEvalResult xr_const_eval(XrayIsolate *X, AstNode *expr);
 XR_FUNC XrConstEvalResult xr_const_eval_with_ctx(XrCompilerContext *ctx, AstNode *expr);
 XR_FUNC bool xr_is_const_expr(AstNode *expr);
 
-#endif // XCONST_FOLD_H
+#endif  // XCONST_FOLD_H

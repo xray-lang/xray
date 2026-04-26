@@ -35,7 +35,7 @@ typedef int64_t xr_Integer;
 ** Create a new Xray isolate
 ** @return New isolate instance, or NULL on failure
 */
-XrayIsolate* xray_new(void);
+XrayIsolate *xray_new(void);
 
 /*
 ** Execute a Xray script file
@@ -60,7 +60,7 @@ int xray_dostring(XrayIsolate *iso, const char *source);
 ** @param iso Isolate instance
 ** @return Error message string, or NULL if no error
 */
-const char* xray_get_error(XrayIsolate *iso);
+const char *xray_get_error(XrayIsolate *iso);
 
 /*
 ** Check if an error occurred
@@ -108,5 +108,4 @@ void xray_set_trace(XrayIsolate *iso, bool enable);
 */
 void xray_print_stats(XrayIsolate *iso);
 
-#endif // XRAY_OLD_H
-
+#endif  // XRAY_OLD_H

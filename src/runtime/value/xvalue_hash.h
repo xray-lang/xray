@@ -36,4 +36,4 @@ XR_FUNC uint32_t xr_hash_string(XrString *str);
 // Shallow value equality: primitives by value, strings by content, objects by pointer
 XR_FUNC bool xr_value_eq(XrValue a, XrValue b);
 
-#endif // XVALUE_HASH_H
+#endif  // XVALUE_HASH_H

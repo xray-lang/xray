@@ -18,8 +18,8 @@
 #include "../base/xchecks.h"
 #include "xnetpoll.h"
 #include "xworker.h"
-#include "xcoroutine.h"                  // XrCoroutine
-#include "../runtime/xisolate_internal.h" // XrayIsolate definition
+#include "xcoroutine.h"                    // XrCoroutine
+#include "../runtime/xisolate_internal.h"  // XrayIsolate definition
 #include "../runtime/xray_debug.h"
 
 #include <stdio.h>
@@ -40,10 +40,10 @@
 // Set socket to non-blocking mode
 int xr_socket_set_nonblock(int fd) {
     int flags = fcntl(fd, F_GETFL, 0);
-    if (flags == -1) return -1;
+    if (flags == -1)
+        return -1;
     return fcntl(fd, F_SETFL, flags | O_NONBLOCK);
 }
-
 
 // ========== Connection Management ==========
 
@@ -73,7 +73,7 @@ int xr_socket_listen(const char *host, int port, int backlog) {
         addr.sin_addr.s_addr = INADDR_ANY;
     }
 
-    if (bind(fd, (struct sockaddr *)&addr, sizeof(addr)) < 0) {
+    if (bind(fd, (struct sockaddr *) &addr, sizeof(addr)) < 0) {
         fprintf(stderr, "bind() failed (port %d): %s\n", port, strerror(errno));
         close(fd);
         return -1;
@@ -94,14 +94,15 @@ int xr_socket_listen(const char *host, int port, int backlog) {
 // Note: This function truly blocks until a connection arrives.
 // In coroutine context, the coroutine is suspended, not the thread.
 int xr_socket_accept(XrayIsolate *X, int listen_fd) {
-    if (!X) return -1;
+    if (!X)
+        return -1;
 
-    XrRuntime *runtime = (XrRuntime *)X->vm.runtime;
+    XrRuntime *runtime = (XrRuntime *) X->vm.runtime;
     if (!runtime) {
         // No Runtime, use system blocking accept
         struct sockaddr_in client_addr;
         socklen_t addr_len = sizeof(client_addr);
-        return accept(listen_fd, (struct sockaddr *)&client_addr, &addr_len);
+        return accept(listen_fd, (struct sockaddr *) &client_addr, &addr_len);
     }
 
     // Get or create pollDesc
@@ -113,7 +114,7 @@ int xr_socket_accept(XrayIsolate *X, int listen_fd) {
     while (1) {
         struct sockaddr_in client_addr;
         socklen_t addr_len = sizeof(client_addr);
-        int client_fd = accept(listen_fd, (struct sockaddr *)&client_addr, &addr_len);
+        int client_fd = accept(listen_fd, (struct sockaddr *) &client_addr, &addr_len);
 
         if (client_fd >= 0) {
             xr_socket_set_nonblock(client_fd);
@@ -146,8 +147,9 @@ int xr_socket_accept(XrayIsolate *X, int listen_fd) {
 // - No RST packet from close
 // - curl and other clients receive response correctly
 void xr_socket_close(XrayIsolate *X, int fd) {
-    (void)X;
-    if (fd < 0) return;
+    (void) X;
+    if (fd < 0)
+        return;
 
     // 1. Close write end, send FIN
     shutdown(fd, SHUT_WR);
@@ -170,12 +172,13 @@ void xr_socket_close(XrayIsolate *X, int fd) {
 
 // Blocking read (coroutine-safe, uses yieldable protocol internally)
 int xr_socket_read(XrayIsolate *X, int fd, char *buf, size_t len) {
-    if (!X || fd < 0 || !buf || len == 0) return -1;
+    if (!X || fd < 0 || !buf || len == 0)
+        return -1;
 
-    XrRuntime *runtime = (XrRuntime *)X->vm.runtime;
+    XrRuntime *runtime = (XrRuntime *) X->vm.runtime;
     if (!runtime) {
         // No Runtime, use system blocking read
-        return (int)read(fd, buf, len);
+        return (int) read(fd, buf, len);
     }
 
     // Get or create pollDesc
@@ -188,7 +191,7 @@ int xr_socket_read(XrayIsolate *X, int fd, char *buf, size_t len) {
         ssize_t n = read(fd, buf, len);
 
         if (n > 0) {
-            return (int)n;
+            return (int) n;
         }
 
         if (n == 0) {
@@ -208,12 +211,13 @@ int xr_socket_read(XrayIsolate *X, int fd, char *buf, size_t len) {
 
 // Blocking write (coroutine-safe, uses yieldable protocol internally)
 int xr_socket_write(XrayIsolate *X, int fd, const char *buf, size_t len) {
-    if (!X || fd < 0 || !buf || len == 0) return -1;
+    if (!X || fd < 0 || !buf || len == 0)
+        return -1;
 
-    XrRuntime *runtime = (XrRuntime *)X->vm.runtime;
+    XrRuntime *runtime = (XrRuntime *) X->vm.runtime;
     if (!runtime) {
         // No Runtime, use system blocking write
-        return (int)write(fd, buf, len);
+        return (int) write(fd, buf, len);
     }
 
     // Get or create pollDesc
@@ -229,31 +233,32 @@ int xr_socket_write(XrayIsolate *X, int fd, const char *buf, size_t len) {
         if (n > 0) {
             total += n;
             if (total >= len) {
-                return (int)total;
+                return (int) total;
             }
             continue;
         }
 
         if (n == 0) {
-            return total > 0 ? (int)total : -1;
+            return total > 0 ? (int) total : -1;
         }
 
         if (errno == EAGAIN || errno == EWOULDBLOCK) {
             if (xr_netpoll_block(pd, XR_POLL_WRITE, X)) {
                 continue;
             }
-            return total > 0 ? (int)total : -1;
+            return total > 0 ? (int) total : -1;
         }
 
-        return total > 0 ? (int)total : -1;
+        return total > 0 ? (int) total : -1;
     }
 
-    return (int)total;
+    return (int) total;
 }
 
 // Blocking readline (coroutine-safe)
 int xr_socket_readline(XrayIsolate *X, int fd, char *buf, size_t maxlen) {
-    if (!buf || maxlen == 0) return -1;
+    if (!buf || maxlen == 0)
+        return -1;
 
     size_t pos = 0;
     while (pos < maxlen - 1) {
@@ -264,7 +269,7 @@ int xr_socket_readline(XrayIsolate *X, int fd, char *buf, size_t maxlen) {
             // EOF or error
             if (pos > 0) {
                 buf[pos] = '\0';
-                return (int)pos;
+                return (int) pos;
             }
             return n;
         }
@@ -275,9 +280,9 @@ int xr_socket_readline(XrayIsolate *X, int fd, char *buf, size_t maxlen) {
             // Remove \r (if present)
             if (pos > 0 && buf[pos - 1] == '\r') {
                 buf[pos - 1] = '\0';
-                return (int)(pos - 1);
+                return (int) (pos - 1);
             }
-            return (int)pos;
+            return (int) pos;
         }
 
         buf[pos++] = c;
@@ -285,20 +290,23 @@ int xr_socket_readline(XrayIsolate *X, int fd, char *buf, size_t maxlen) {
 
     // Line too long
     buf[pos] = '\0';
-    return (int)pos;
+    return (int) pos;
 }
 
 // ========== Timeout Settings ==========
 
 // Set read timeout
 void xr_socket_set_read_timeout(XrayIsolate *X, int fd, int timeout_ms) {
-    if (!X || fd < 0) return;
+    if (!X || fd < 0)
+        return;
 
-    XrRuntime *runtime = (XrRuntime *)X->vm.runtime;
-    if (!runtime) return;
+    XrRuntime *runtime = (XrRuntime *) X->vm.runtime;
+    if (!runtime)
+        return;
 
     XrPollDesc *pd = xr_netpoll_open(&runtime->netpoll, fd);
-    if (!pd) return;
+    if (!pd)
+        return;
 
     int64_t deadline = 0;
     if (timeout_ms > 0) {
@@ -328,34 +336,36 @@ void xr_socket_set_read_timeout(XrayIsolate *X, int fd, int timeout_ms) {
  *   > 0 readable, 0 timeout, < 0 error.
  */
 int xr_socket_wait_readable(XrayIsolate *X, int fd, int timeout_ms) {
-    if (!X || fd < 0) return -1;
+    if (!X || fd < 0)
+        return -1;
 
-    XrRuntime *runtime = (XrRuntime *)X->vm.runtime;
-    if (!runtime) return -1;
+    XrRuntime *runtime = (XrRuntime *) X->vm.runtime;
+    if (!runtime)
+        return -1;
 
     XrPollDesc *pd = xr_netpoll_open(&runtime->netpoll, fd);
-    if (!pd) return -1;
+    if (!pd)
+        return -1;
 
     // Arm read deadline. timeout_ms == 0 leaves the fd without a
     // deadline; xr_netpoll_block then sleeps until POLLIN.
     if (timeout_ms > 0) {
         struct timespec ts;
         clock_gettime(CLOCK_MONOTONIC, &ts);
-        int64_t deadline = (int64_t)ts.tv_sec * 1000000000LL + ts.tv_nsec
-                         + (int64_t)timeout_ms * 1000000LL;
+        int64_t deadline =
+            (int64_t) ts.tv_sec * 1000000000LL + ts.tv_nsec + (int64_t) timeout_ms * 1000000LL;
         XrTimerWheel *tw = NULL;
         XrWorker *worker = xr_current_worker();
-        if (worker) tw = worker->p.timer_wheel;
-        xr_netpoll_set_deadline(&runtime->netpoll, pd, deadline,
-                                XR_POLL_READ, tw);
+        if (worker)
+            tw = worker->p.timer_wheel;
+        xr_netpoll_set_deadline(&runtime->netpoll, pd, deadline, XR_POLL_READ, tw);
     }
 
     bool ready = xr_netpoll_block(pd, XR_POLL_READ, X);
 
     // Always clear any deadline we may have armed.
     if (timeout_ms > 0) {
-        xr_netpoll_set_deadline(&runtime->netpoll, pd, 0,
-                                XR_POLL_READ, NULL);
+        xr_netpoll_set_deadline(&runtime->netpoll, pd, 0, XR_POLL_READ, NULL);
     }
 
     return ready ? 1 : 0;
@@ -369,31 +379,33 @@ int xr_socket_wait_readable(XrayIsolate *X, int fd, int timeout_ms) {
  * the same fd.
  */
 int xr_socket_wait_writable(XrayIsolate *X, int fd, int timeout_ms) {
-    if (!X || fd < 0) return -1;
+    if (!X || fd < 0)
+        return -1;
 
-    XrRuntime *runtime = (XrRuntime *)X->vm.runtime;
-    if (!runtime) return -1;
+    XrRuntime *runtime = (XrRuntime *) X->vm.runtime;
+    if (!runtime)
+        return -1;
 
     XrPollDesc *pd = xr_netpoll_open(&runtime->netpoll, fd);
-    if (!pd) return -1;
+    if (!pd)
+        return -1;
 
     if (timeout_ms > 0) {
         struct timespec ts;
         clock_gettime(CLOCK_MONOTONIC, &ts);
-        int64_t deadline = (int64_t)ts.tv_sec * 1000000000LL + ts.tv_nsec
-                         + (int64_t)timeout_ms * 1000000LL;
+        int64_t deadline =
+            (int64_t) ts.tv_sec * 1000000000LL + ts.tv_nsec + (int64_t) timeout_ms * 1000000LL;
         XrTimerWheel *tw = NULL;
         XrWorker *worker = xr_current_worker();
-        if (worker) tw = worker->p.timer_wheel;
-        xr_netpoll_set_deadline(&runtime->netpoll, pd, deadline,
-                                XR_POLL_WRITE, tw);
+        if (worker)
+            tw = worker->p.timer_wheel;
+        xr_netpoll_set_deadline(&runtime->netpoll, pd, deadline, XR_POLL_WRITE, tw);
     }
 
     bool ready = xr_netpoll_block(pd, XR_POLL_WRITE, X);
 
     if (timeout_ms > 0) {
-        xr_netpoll_set_deadline(&runtime->netpoll, pd, 0,
-                                XR_POLL_WRITE, NULL);
+        xr_netpoll_set_deadline(&runtime->netpoll, pd, 0, XR_POLL_WRITE, NULL);
     }
 
     return ready ? 1 : 0;
@@ -401,13 +413,16 @@ int xr_socket_wait_writable(XrayIsolate *X, int fd, int timeout_ms) {
 
 // Set write timeout
 void xr_socket_set_write_timeout(XrayIsolate *X, int fd, int timeout_ms) {
-    if (!X || fd < 0) return;
+    if (!X || fd < 0)
+        return;
 
-    XrRuntime *runtime = (XrRuntime *)X->vm.runtime;
-    if (!runtime) return;
+    XrRuntime *runtime = (XrRuntime *) X->vm.runtime;
+    if (!runtime)
+        return;
 
     XrPollDesc *pd = xr_netpoll_open(&runtime->netpoll, fd);
-    if (!pd) return;
+    if (!pd)
+        return;
 
     int64_t deadline = 0;
     if (timeout_ms > 0) {
@@ -432,14 +447,15 @@ void xr_socket_set_write_timeout(XrayIsolate *X, int fd, int timeout_ms) {
 
 // Yieldable accept (supports coroutine yield)
 XrCFuncResult xr_socket_accept_yieldable(XrayIsolate *X, XrAcceptState *state) {
-    if (!X || !state) return XR_CFUNC_ERROR;
+    if (!X || !state)
+        return XR_CFUNC_ERROR;
 
-    XrRuntime *runtime = (XrRuntime *)X->vm.runtime;
+    XrRuntime *runtime = (XrRuntime *) X->vm.runtime;
     if (!runtime) {
         // No Runtime, use blocking accept
         struct sockaddr_in client_addr;
         socklen_t addr_len = sizeof(client_addr);
-        state->result_fd = accept(state->listen_fd, (struct sockaddr *)&client_addr, &addr_len);
+        state->result_fd = accept(state->listen_fd, (struct sockaddr *) &client_addr, &addr_len);
         return (state->result_fd >= 0) ? XR_CFUNC_DONE : XR_CFUNC_ERROR;
     }
 
@@ -454,7 +470,7 @@ XrCFuncResult xr_socket_accept_yieldable(XrayIsolate *X, XrAcceptState *state) {
     // Try non-blocking accept
     struct sockaddr_in client_addr;
     socklen_t addr_len = sizeof(client_addr);
-    int client_fd = accept(state->listen_fd, (struct sockaddr *)&client_addr, &addr_len);
+    int client_fd = accept(state->listen_fd, (struct sockaddr *) &client_addr, &addr_len);
 
     if (client_fd >= 0) {
         // Success
@@ -466,8 +482,8 @@ XrCFuncResult xr_socket_accept_yieldable(XrayIsolate *X, XrAcceptState *state) {
 
     if (errno == EAGAIN || errno == EWOULDBLOCK) {
         // Yield directly (no block_yieldable double-call)
-        return xr_yield_for_io(X, state->listen_fd, XR_WAIT_READ, -1,
-                               xr_socket_accept_continue, state, NULL);
+        return xr_yield_for_io(X, state->listen_fd, XR_WAIT_READ, -1, xr_socket_accept_continue,
+                               state, NULL);
     }
 
     // Other errors
@@ -477,9 +493,10 @@ XrCFuncResult xr_socket_accept_yieldable(XrayIsolate *X, XrAcceptState *state) {
 
 // Accept continuation (new signature: added result param)
 XrCFuncResult xr_socket_accept_continue(XrayIsolate *X, int status, void *ctx, XrValue *result) {
-    (void)result;  // accept returns result via state->result_fd
-    XrAcceptState *state = (XrAcceptState *)ctx;
-    if (!state) return XR_CFUNC_ERROR;
+    (void) result;  // accept returns result via state->result_fd
+    XrAcceptState *state = (XrAcceptState *) ctx;
+    if (!state)
+        return XR_CFUNC_ERROR;
 
     // Check resume status
     if (status == XR_RESUME_TIMEOUT || status == XR_RESUME_CANCELLED) {
@@ -495,13 +512,13 @@ XrCFuncResult xr_socket_accept_continue(XrayIsolate *X, int status, void *ctx, X
 
 // Non-blocking accept try
 XrIOTryResult xr_socket_accept_try(XrayIsolate *X, int listen_fd) {
-    (void)X;
+    (void) X;
     XrIOTryResult result = {false, -1, 0};
 
     struct sockaddr_in client_addr;
     socklen_t client_len = sizeof(client_addr);
 
-    int client_fd = accept(listen_fd, (struct sockaddr *)&client_addr, &client_len);
+    int client_fd = accept(listen_fd, (struct sockaddr *) &client_addr, &client_len);
 
     if (client_fd >= 0) {
         // Success: set new connection to non-blocking
@@ -527,14 +544,14 @@ XrIOTryResult xr_socket_accept_try(XrayIsolate *X, int listen_fd) {
 
 // Non-blocking read try
 XrIOTryResult xr_socket_read_try(XrayIsolate *X, int fd, char *buf, size_t len) {
-    (void)X;
+    (void) X;
     XrIOTryResult result = {false, 0, 0};
 
     ssize_t n = read(fd, buf, len);
 
     if (n > 0) {
         result.ready = true;
-        result.value = (int)n;
+        result.value = (int) n;
         return result;
     }
 
@@ -560,14 +577,14 @@ XrIOTryResult xr_socket_read_try(XrayIsolate *X, int fd, char *buf, size_t len) 
 
 // Non-blocking write try
 XrIOTryResult xr_socket_write_try(XrayIsolate *X, int fd, const char *buf, size_t len) {
-    (void)X;
+    (void) X;
     XrIOTryResult result = {false, 0, 0};
 
     ssize_t n = write(fd, buf, len);
 
     if (n >= 0) {
         result.ready = true;
-        result.value = (int)n;
+        result.value = (int) n;
         return result;
     }
 
@@ -583,4 +600,3 @@ XrIOTryResult xr_socket_write_try(XrayIsolate *X, int fd, const char *buf, size_
     result.error = errno;
     return result;
 }
-

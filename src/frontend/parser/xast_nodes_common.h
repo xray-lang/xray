@@ -117,4 +117,4 @@ typedef struct BlockNode {
     int capacity;
 } BlockNode;
 
-#endif // XAST_NODES_COMMON_H
+#endif  // XAST_NODES_COMMON_H

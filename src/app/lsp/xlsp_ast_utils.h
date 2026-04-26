@@ -22,10 +22,7 @@ typedef struct AstNode AstNode;
 
 // Check if character is valid in an identifier
 static inline bool xlsp_is_ident_char(char c) {
-    return c == '_' ||
-           (c >= 'a' && c <= 'z') ||
-           (c >= 'A' && c <= 'Z') ||
-           (c >= '0' && c <= '9');
+    return c == '_' || (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9');
 }
 
-#endif // XLSP_AST_UTILS_H
+#endif  // XLSP_AST_UTILS_H

@@ -34,59 +34,41 @@
 
 /* ========== Builder API ========== */
 
-XR_FUNC XrClassBuilder* xr_class_builder_new(XrayIsolate *isolate,
-                                      const char *name,
-                                      XrClass *super);
+XR_FUNC XrClassBuilder *xr_class_builder_new(XrayIsolate *isolate, const char *name,
+                                             XrClass *super);
 
 // Returns 0 on success, -1 on failure (e.g., duplicate field)
-XR_FUNC int xr_class_builder_add_field(XrClassBuilder *builder,
-                                const char *name,
-                                uint32_t flags);
+XR_FUNC int xr_class_builder_add_field(XrClassBuilder *builder, const char *name, uint32_t flags);
 
 // Returns 0 on success, -1 on failure (e.g., duplicate method)
-XR_FUNC int xr_class_builder_add_method(XrClassBuilder *builder,
-                                 const char *name,
-                                 XrCFunctionPtr impl,
-                                 int param_count,
-                                 uint32_t flags);
+XR_FUNC int xr_class_builder_add_method(XrClassBuilder *builder, const char *name,
+                                        XrCFunctionPtr impl, int param_count, uint32_t flags);
 
 // Add method with closure (for descriptor path)
-XR_FUNC int xr_class_builder_add_method_closure(XrClassBuilder *builder,
-                                         const char *name,
-                                         XrClosure *closure,
-                                         XrMethodType method_type,
-                                         int param_count,
-                                         uint32_t flags,
-                                         uint8_t op_type);
+XR_FUNC int xr_class_builder_add_method_closure(XrClassBuilder *builder, const char *name,
+                                                XrClosure *closure, XrMethodType method_type,
+                                                int param_count, uint32_t flags, uint8_t op_type);
 
-XR_FUNC int xr_class_builder_add_static_field(XrClassBuilder *builder,
-                                       const char *name,
-                                       XrValue value,
-                                       uint32_t flags);
+XR_FUNC int xr_class_builder_add_static_field(XrClassBuilder *builder, const char *name,
+                                              XrValue value, uint32_t flags);
 
-XR_FUNC int xr_class_builder_add_static_method(XrClassBuilder *builder,
-                                        const char *name,
-                                        XrCFunctionPtr impl,
-                                        int param_count,
-                                        uint32_t flags);
+XR_FUNC int xr_class_builder_add_static_method(XrClassBuilder *builder, const char *name,
+                                               XrCFunctionPtr impl, int param_count,
+                                               uint32_t flags);
 
 // Add static method with closure (for descriptor path)
-XR_FUNC int xr_class_builder_add_static_method_closure(XrClassBuilder *builder,
-                                                const char *name,
-                                                XrClosure *closure,
-                                                int param_count,
-                                                uint32_t flags);
+XR_FUNC int xr_class_builder_add_static_method_closure(XrClassBuilder *builder, const char *name,
+                                                       XrClosure *closure, int param_count,
+                                                       uint32_t flags);
 
-XR_FUNC int xr_class_builder_add_interface(XrClassBuilder *builder,
-                                    XrClass *interface);
+XR_FUNC int xr_class_builder_add_interface(XrClassBuilder *builder, XrClass *interface);
 
-XR_FUNC int xr_class_builder_add_abstract_method(XrClassBuilder *builder,
-                                          int method_symbol);
+XR_FUNC int xr_class_builder_add_abstract_method(XrClassBuilder *builder, int method_symbol);
 
 XR_FUNC void xr_class_builder_set_flags(XrClassBuilder *builder, uint32_t flags);
 
 // Finalize: compute offsets, generate vtable, freeze class, destroy builder
-XR_FUNC XrClass* xr_class_builder_finalize(XrClassBuilder *builder);
+XR_FUNC XrClass *xr_class_builder_finalize(XrClassBuilder *builder);
 
 // Manual cleanup if finalize fails
 XR_FUNC void xr_class_builder_destroy(XrClassBuilder *builder);
@@ -101,4 +83,4 @@ XR_FUNC bool xr_class_builder_has_method(const XrClassBuilder *builder, const ch
 // keeps vtable generation as a file-local static helper; no
 // consumer outside finalize ever needed it.
 
-#endif // XCLASS_BUILDER_H
+#endif  // XCLASS_BUILDER_H

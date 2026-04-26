@@ -29,14 +29,16 @@
 
 void xr_shape_registry_init(XrayIsolate *X) {
     XR_DCHECK(X != NULL, "shape_registry_init: NULL isolate");
-    if (X->shape_entries) return;
-    X->shape_entries = (XrShape**)xr_calloc(SHAPE_REGISTRY_INIT_CAP, sizeof(XrShape*));
+    if (X->shape_entries)
+        return;
+    X->shape_entries = (XrShape **) xr_calloc(SHAPE_REGISTRY_INIT_CAP, sizeof(XrShape *));
     X->shape_capacity = SHAPE_REGISTRY_INIT_CAP;
     X->shape_count = 0;
 }
 
 void xr_shape_registry_destroy(XrayIsolate *X) {
-    if (!X) return;
+    if (!X)
+        return;
     if (X->shape_entries) {
         // Each shape body is allocated via xr_calloc; the registry is
         // its only owner. Release every shape's malloc-backed side
@@ -44,7 +46,8 @@ void xr_shape_registry_destroy(XrayIsolate *X) {
         // through the per-object destroy hook, then free the body.
         for (uint16_t i = 0; i < X->shape_count; i++) {
             XrShape *shape = X->shape_entries[i];
-            if (!shape) continue;
+            if (!shape)
+                continue;
             xr_gc_destroy_shape(shape);
             xr_free(shape);
         }
@@ -57,22 +60,26 @@ void xr_shape_registry_destroy(XrayIsolate *X) {
 
 XrShape *xr_shape_get_by_id(XrayIsolate *X, uint16_t id) {
     XR_DCHECK(X != NULL, "shape_get_by_id: NULL isolate");
-    if (id >= X->shape_count) return NULL;
+    if (id >= X->shape_count)
+        return NULL;
     return X->shape_entries[id];
 }
 
 static uint16_t shape_registry_add(XrayIsolate *X, XrShape *shape) {
     XR_DCHECK(X != NULL, "shape_registry_add: NULL isolate");
-    if (!X->shape_entries) xr_shape_registry_init(X);
+    if (!X->shape_entries)
+        xr_shape_registry_init(X);
     if (X->shape_count >= XR_SHAPE_MAX_ID) {
         return 0;
     }
     if (X->shape_count >= X->shape_capacity) {
         uint16_t new_cap = X->shape_capacity * 2;
-        if (new_cap > XR_SHAPE_MAX_ID + 1) new_cap = XR_SHAPE_MAX_ID + 1;
-        XrShape **new_reg = (XrShape**)xr_realloc(X->shape_entries, new_cap * sizeof(XrShape*));
-        if (!new_reg) return 0;
-        memset(new_reg + X->shape_capacity, 0, (new_cap - X->shape_capacity) * sizeof(XrShape*));
+        if (new_cap > XR_SHAPE_MAX_ID + 1)
+            new_cap = XR_SHAPE_MAX_ID + 1;
+        XrShape **new_reg = (XrShape **) xr_realloc(X->shape_entries, new_cap * sizeof(XrShape *));
+        if (!new_reg)
+            return 0;
+        memset(new_reg + X->shape_capacity, 0, (new_cap - X->shape_capacity) * sizeof(XrShape *));
         X->shape_entries = new_reg;
         X->shape_capacity = new_cap;
     }
@@ -96,21 +103,23 @@ static void shape_build_index_table(XrShape *shape) {
 
     for (uint16_t i = 1; i < shape->field_count; i++) {
         SymbolId sym = shape->field_symbols[i];
-        if (sym < min_sym) min_sym = sym;
-        if (sym > max_sym) max_sym = sym;
+        if (sym < min_sym)
+            min_sym = sym;
+        if (sym > max_sym)
+            max_sym = sym;
     }
 
     shape->min_symbol = min_sym;
     shape->max_symbol = max_sym;
 
-    size_t table_size = (size_t)(max_sym - min_sym + 1);
-    shape->symbol_to_index = (int16_t*)xr_malloc(table_size * sizeof(int16_t));
+    size_t table_size = (size_t) (max_sym - min_sym + 1);
+    shape->symbol_to_index = (int16_t *) xr_malloc(table_size * sizeof(int16_t));
     memset(shape->symbol_to_index, -1, table_size * sizeof(int16_t));
 
     for (uint16_t i = 0; i < shape->field_count; i++) {
         SymbolId sym = shape->field_symbols[i];
         XR_DCHECK(sym >= min_sym && sym <= max_sym, "shape_build_index: symbol out of range");
-        shape->symbol_to_index[sym - min_sym] = (int16_t)i;
+        shape->symbol_to_index[sym - min_sym] = (int16_t) i;
     }
 }
 
@@ -121,8 +130,9 @@ XrShape *xr_shape_new(XrayIsolate *X, uint16_t capacity) {
     XR_DCHECK(X != NULL, "shape_new: NULL isolate");
     XR_DCHECK(capacity > 0, "shape_new: zero capacity");
 
-    XrShape *shape = (XrShape*)xr_calloc(1, sizeof(XrShape));
-    if (!shape) return NULL;
+    XrShape *shape = (XrShape *) xr_calloc(1, sizeof(XrShape));
+    if (!shape)
+        return NULL;
 
     shape->id = shape_registry_add(X, shape);
     shape->field_count = 0;
@@ -141,7 +151,8 @@ XrShape *xr_shape_new(XrayIsolate *X, uint16_t capacity) {
 
 // Alignment helper: round up offset to natural alignment of type
 static uint16_t compact_align_offset(uint16_t offset, uint8_t size) {
-    if (size == 0) return offset;
+    if (size == 0)
+        return offset;
     uint16_t align = (size >= 8) ? 8 : (size >= 4) ? 4 : (size >= 2) ? 2 : 1;
     return (offset + align - 1) & ~(align - 1);
 }
@@ -150,8 +161,9 @@ XrShape *xr_shape_new_compact(XrayIsolate *X, const XrCompactFieldDef *fields, u
     XR_DCHECK(X != NULL, "shape_new_compact: NULL isolate");
     XR_DCHECK(fields != NULL, "shape_new_compact: NULL fields");
     XR_DCHECK(count > 0, "shape_new_compact: zero count");
-    XrShape *shape = (XrShape*)xr_calloc(1, sizeof(XrShape));
-    if (!shape) return NULL;
+    XrShape *shape = (XrShape *) xr_calloc(1, sizeof(XrShape));
+    if (!shape)
+        return NULL;
 
     shape->id = shape_registry_add(X, shape);
     shape->field_count = count;
@@ -160,12 +172,12 @@ XrShape *xr_shape_new_compact(XrayIsolate *X, const XrCompactFieldDef *fields, u
     shape->has_gc_fields = false;
 
     // Allocate arrays
-    shape->field_symbols = (SymbolId*)xr_malloc(count * sizeof(SymbolId));
-    shape->field_types = (XrCompactType*)xr_malloc(count * sizeof(XrCompactType));
-    shape->field_offsets = (uint16_t*)xr_malloc(count * sizeof(uint16_t));
+    shape->field_symbols = (SymbolId *) xr_malloc(count * sizeof(SymbolId));
+    shape->field_types = (XrCompactType *) xr_malloc(count * sizeof(XrCompactType));
+    shape->field_offsets = (uint16_t *) xr_malloc(count * sizeof(uint16_t));
 
     // Register symbols + compute offsets with natural alignment
-    XrSymbolTable *symtab = X ? (XrSymbolTable*)xr_isolate_get_symbol_table(X) : NULL;
+    XrSymbolTable *symtab = X ? (XrSymbolTable *) xr_isolate_get_symbol_table(X) : NULL;
     uint16_t offset = 0;
 
     for (uint16_t i = 0; i < count; i++) {
@@ -200,8 +212,9 @@ XrShape *xr_shape_new_compact(XrayIsolate *X, const XrCompactFieldDef *fields, u
 
 /* ========== Transition Table ========== */
 
-static XrShape* transition_table_find(XrTransitionTable *table, SymbolId symbol) {
-    if (!table || !table->entries) return NULL;
+static XrShape *transition_table_find(XrTransitionTable *table, SymbolId symbol) {
+    if (!table || !table->entries)
+        return NULL;
 
     for (uint16_t i = 0; i < table->count; i++) {
         if (table->entries[i].symbol == symbol) {
@@ -213,17 +226,18 @@ static XrShape* transition_table_find(XrTransitionTable *table, SymbolId symbol)
 
 static void transition_table_add(XrTransitionTable *table, SymbolId symbol, XrShape *target) {
     XR_DCHECK(target != NULL, "transition_table_add: NULL target");
-    if (!table) return;
+    if (!table)
+        return;
 
     if (table->count >= table->capacity) {
         uint16_t new_cap = table->capacity == 0 ? 4 : table->capacity * 2;
         size_t old_size = table->capacity * sizeof(XrShapeTransition);
         size_t new_size = new_cap * sizeof(XrShapeTransition);
-        XrShapeTransition *new_entries = (XrShapeTransition*)xr_realloc(
-            table->entries, new_size);
-        if (!new_entries) return;
+        XrShapeTransition *new_entries = (XrShapeTransition *) xr_realloc(table->entries, new_size);
+        if (!new_entries)
+            return;
         if (new_size > old_size) {
-            memset((char*)new_entries + old_size, 0, new_size - old_size);
+            memset((char *) new_entries + old_size, 0, new_size - old_size);
         }
         table->entries = new_entries;
         table->capacity = new_cap;
@@ -243,7 +257,8 @@ static void transition_table_add(XrTransitionTable *table, SymbolId symbol, XrSh
 XrShape *xr_shape_transition(XrayIsolate *X, XrShape *from, SymbolId symbol) {
     XR_DCHECK(X != NULL, "shape_transition: NULL isolate");
     XR_DCHECK(symbol != SYMBOL_INVALID, "shape_transition: invalid symbol");
-    if (!from) return NULL;
+    if (!from)
+        return NULL;
 
     if (from->field_count >= SHAPE_MAX_TOTAL_FIELDS) {
         return NULL;
@@ -259,15 +274,15 @@ XrShape *xr_shape_transition(XrayIsolate *X, XrShape *from, SymbolId symbol) {
 
     // Create new Shape
     XrShape *to = xr_shape_new(X, from->in_object_capacity);
-    if (!to) return NULL;
+    if (!to)
+        return NULL;
 
     to->field_count = from->field_count + 1;
     to->parent = from;
 
-    to->field_symbols = (SymbolId*)xr_malloc(to->field_count * sizeof(SymbolId));
+    to->field_symbols = (SymbolId *) xr_malloc(to->field_count * sizeof(SymbolId));
     if (from->field_symbols && from->field_count > 0) {
-        memcpy(to->field_symbols, from->field_symbols,
-               from->field_count * sizeof(SymbolId));
+        memcpy(to->field_symbols, from->field_symbols, from->field_count * sizeof(SymbolId));
     }
     to->field_symbols[from->field_count] = symbol;
 
@@ -275,7 +290,7 @@ XrShape *xr_shape_transition(XrayIsolate *X, XrShape *from, SymbolId symbol) {
 
     // Cache transition
     if (!from->transitions) {
-        from->transitions = (XrTransitionTable*)xr_calloc(1, sizeof(XrTransitionTable));
+        from->transitions = (XrTransitionTable *) xr_calloc(1, sizeof(XrTransitionTable));
     }
     transition_table_add(from->transitions, symbol, to);
 
@@ -287,11 +302,13 @@ XrShape *xr_shape_transition(XrayIsolate *X, XrShape *from, SymbolId symbol) {
 XrShape *xr_shape_build_fixed(XrayIsolate *X, SymbolId *symbols, uint16_t count) {
     XR_DCHECK(X != NULL, "shape_build_fixed: NULL isolate");
     XrShape *shape = xr_shape_new(X, count);
-    if (!shape) return NULL;
+    if (!shape)
+        return NULL;
 
     for (uint16_t i = 0; i < count; i++) {
         XrShape *next = xr_shape_transition(X, shape, symbols[i]);
-        if (!next) return NULL;
+        if (!next)
+            return NULL;
         shape = next;
     }
     return shape;
@@ -301,7 +318,8 @@ XrShape *xr_shape_build_fixed(XrayIsolate *X, SymbolId *symbols, uint16_t count)
 
 bool xr_shape_is_descendant_of(XrShape *child, XrShape *ancestor) {
     while (child) {
-        if (child == ancestor) return true;
+        if (child == ancestor)
+            return true;
         child = child->parent;
     }
     return false;
@@ -310,8 +328,9 @@ bool xr_shape_is_descendant_of(XrShape *child, XrShape *ancestor) {
 /* ========== GC Integration ========== */
 
 void xr_gc_destroy_shape(void *obj) {
-    XrShape *shape = (XrShape*)obj;
-    if (!shape) return;
+    XrShape *shape = (XrShape *) obj;
+    if (!shape)
+        return;
 
     if (shape->field_symbols) {
         xr_free(shape->field_symbols);

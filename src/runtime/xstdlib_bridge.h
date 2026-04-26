@@ -37,10 +37,10 @@ XR_FUNC int xr_datetime_format(void *dt, const char *pattern, char *buf, size_t 
 /* ========== Regex Bridge ========== */
 
 // Get pattern string from regex object
-XR_FUNC const char* xr_regex_pattern(const struct XrRegex *re);
+XR_FUNC const char *xr_regex_pattern(const struct XrRegex *re);
 
 // Extract XrRegex* from an XrValue
-XR_FUNC struct XrRegex* xr_value_to_regex(XrValue v);
+XR_FUNC struct XrRegex *xr_value_to_regex(XrValue v);
 
 // Initialize regex native type in isolate
 XR_FUNC void xr_regex_init_native_type(struct XrayIsolate *isolate);
@@ -57,8 +57,8 @@ XR_FUNC void xr_regex_init_native_type(struct XrayIsolate *isolate);
  * src/vm — the same pattern xr_datetime_format / xr_value_to_regex
  * already use.
  */
-XR_FUNC XrValue xr_regex_compile_literal(struct XrayIsolate *isolate,
-                                         XrValue pattern, XrValue flags);
+XR_FUNC XrValue xr_regex_compile_literal(struct XrayIsolate *isolate, XrValue pattern,
+                                         XrValue flags);
 
 /* ========== Cluster Bridge ========== */
 
@@ -66,9 +66,9 @@ XR_FUNC XrValue xr_regex_compile_literal(struct XrayIsolate *isolate,
 XR_FUNC bool xr_cluster_is_running(void);
 
 // Find a named channel in the local cluster registry
-XR_FUNC struct XrChannel* xr_cluster_find_channel_local(const char *name);
+XR_FUNC struct XrChannel *xr_cluster_find_channel_local(const char *name);
 
 // Register a channel in the cluster registry
 XR_FUNC void xr_cluster_register_channel(const char *name, struct XrChannel *ch);
 
-#endif // XSTDLIB_BRIDGE_H
+#endif  // XSTDLIB_BRIDGE_H

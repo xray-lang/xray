@@ -27,7 +27,7 @@ struct XrCoroutine;
 // Push: CAS to prepend (sched_link set before visible — race-free)
 // Drain: O(1) atomic swap, no reverse needed
 typedef struct XrMPSCQueue {
-    _Atomic(struct XrCoroutine*) head;  // Stack top (newest pushed)
+    _Atomic(struct XrCoroutine *) head;  // Stack top (newest pushed)
 } XrMPSCQueue;
 
 // Initialize queue
@@ -37,9 +37,9 @@ XR_FUNC void xr_mpsc_init(XrMPSCQueue *q);
 XR_FUNC void xr_mpsc_push(XrMPSCQueue *q, struct XrCoroutine *coro);
 
 // Drain all elements via O(1) atomic swap, return list via sched_link
-XR_FUNC struct XrCoroutine* xr_mpsc_drain(XrMPSCQueue *q);
+XR_FUNC struct XrCoroutine *xr_mpsc_drain(XrMPSCQueue *q);
 
 // Check if empty (approximate)
 XR_FUNC bool xr_mpsc_empty(XrMPSCQueue *q);
 
-#endif // XMPSC_QUEUE_H
+#endif  // XMPSC_QUEUE_H

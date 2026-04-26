@@ -18,6 +18,6 @@
 #include "../../src/runtime/xisolate_internal.h"
 
 // Load gc module, registers for 'import gc'
-struct XrModule* xr_load_module_gc(XrayIsolate *isolate);
+struct XrModule *xr_load_module_gc(XrayIsolate *isolate);
 
 #endif

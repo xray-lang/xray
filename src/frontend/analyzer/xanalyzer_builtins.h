@@ -23,10 +23,10 @@
 // Built-in member info
 typedef struct XaBuiltinMember {
     const char *name;
-    const char *signature;      // e.g., "(index: int): T"
-    const char *doc;            // Documentation
-    bool is_method;             // true = method, false = property
-    bool is_static;             // true = static member
+    const char *signature;  // e.g., "(index: int): T"
+    const char *doc;        // Documentation
+    bool is_method;         // true = method, false = property
+    bool is_static;         // true = static member
 } XaBuiltinMember;
 
 // Built-in type info
@@ -39,20 +39,20 @@ typedef struct XaBuiltinType {
 // Handle type field info (for C module handle types like Connection, Listener)
 typedef struct XaBuiltinHandleField {
     const char *name;
-    const char *type_str;       // e.g., "int", "string", "bool"
+    const char *type_str;  // e.g., "int", "string", "bool"
     bool is_const;
 } XaBuiltinHandleField;
 
 // Handle type info
 typedef struct XaBuiltinHandle {
-    const char *name;           // e.g., "Connection", "Listener"
+    const char *name;  // e.g., "Connection", "Listener"
     const XaBuiltinHandleField *fields;
     int field_count;
 } XaBuiltinHandle;
 
 // Built-in C module info (for net, ws, http, etc.)
 typedef struct XaBuiltinModule {
-    const char *name;           // Module name (e.g., "net")
+    const char *name;  // Module name (e.g., "net")
     const XaBuiltinMember *functions;
     int function_count;
     const XaBuiltinHandle *handles;
@@ -80,7 +80,8 @@ XR_FUNC const char *xa_builtin_get_member_doc(XrType *type, const char *member_n
 // Get method return type (for type inference)
 // Returns the return type of a built-in method, with generic substitution
 // e.g., Array<int>.pop() returns int?, Array<int>.map(fn) returns Array<U>
-XR_FUNC XrType *xa_builtin_get_method_return_type(XrayIsolate *X, XrType *container_type, const char *method_name);
+XR_FUNC XrType *xa_builtin_get_method_return_type(XrayIsolate *X, XrType *container_type,
+                                                  const char *method_name);
 
 // Check if member is a method
 XR_FUNC bool xa_builtin_is_method(XrType *type, const char *member_name);
@@ -103,13 +104,15 @@ XR_FUNC const char *xa_builtin_get_type_name(XrType *type);
 XR_FUNC const XaBuiltinModule *xa_builtin_get_module_info(const char *module_name);
 
 // Get module function signature
-XR_FUNC const char *xa_builtin_get_module_func_signature(const char *module_name, const char *func_name);
+XR_FUNC const char *xa_builtin_get_module_func_signature(const char *module_name,
+                                                         const char *func_name);
 
 // Get module function doc
 XR_FUNC const char *xa_builtin_get_module_func_doc(const char *module_name, const char *func_name);
 
 // Get module handle type info
-XR_FUNC const XaBuiltinHandle *xa_builtin_get_handle_type(const char *module_name, const char *handle_name);
+XR_FUNC const XaBuiltinHandle *xa_builtin_get_handle_type(const char *module_name,
+                                                          const char *handle_name);
 
 // Set script directory for .xrd file search
 XR_FUNC void xa_builtin_set_script_dir(const char *dir);
@@ -121,4 +124,4 @@ XR_FUNC XrType *xa_builtin_parse_return_type_from_sig(XrayIsolate *X, const char
 // e.g., "(data: string, level?: int): string?" -> fn(string, int): string?
 XR_FUNC XrType *xa_builtin_parse_full_signature(XrayIsolate *X, const char *sig);
 
-#endif // XANALYZER_BUILTINS_H
+#endif  // XANALYZER_BUILTINS_H

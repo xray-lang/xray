@@ -14,6 +14,6 @@
 #include "xray.h"
 
 // Load test_yield module
-XrModule* xr_load_module_test_yield(XrayIsolate *isolate);
+XrModule *xr_load_module_test_yield(XrayIsolate *isolate);
 
 #endif

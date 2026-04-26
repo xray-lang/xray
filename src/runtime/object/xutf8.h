@@ -35,19 +35,23 @@
 
 // Get UTF-8 character byte length from first byte
 static inline int xr_utf8_char_size(uint8_t first_byte) {
-    if ((first_byte & 0x80) == 0x00) return 1; // 0xxxxxxx
-    if ((first_byte & 0xE0) == 0xC0) return 2; // 110xxxxx
-    if ((first_byte & 0xF0) == 0xE0) return 3; // 1110xxxx
-    if ((first_byte & 0xF8) == 0xF0) return 4; // 11110xxx
-    return 1;  // invalid sequence, treat as single byte
+    if ((first_byte & 0x80) == 0x00)
+        return 1;  // 0xxxxxxx
+    if ((first_byte & 0xE0) == 0xC0)
+        return 2;  // 110xxxxx
+    if ((first_byte & 0xF0) == 0xE0)
+        return 3;  // 1110xxxx
+    if ((first_byte & 0xF8) == 0xF0)
+        return 4;  // 11110xxx
+    return 1;      // invalid sequence, treat as single byte
 }
 
 // Decode one UTF-8 char to codepoint, returns bytes consumed (1 on error)
 XR_FUNC int xr_utf8_decode(const char *str, size_t len, uint32_t *out_cp);
 
 // Get n-th character's codepoint and byte position
-XR_FUNC bool xr_utf8_char_at(const char *str, size_t len, size_t index, 
-                     uint32_t *out_cp, size_t *out_pos);
+XR_FUNC bool xr_utf8_char_at(const char *str, size_t len, size_t index, uint32_t *out_cp,
+                             size_t *out_pos);
 
 /* ========== UTF-8 Encode ========== */
 
@@ -56,11 +60,15 @@ XR_FUNC int xr_utf8_encode(uint32_t cp, char *out);
 
 // Get bytes needed to encode codepoint
 static inline int xr_utf8_encode_size(uint32_t cp) {
-    if (cp <= 0x7F) return 1;       // U+0000..U+007F
-    if (cp <= 0x7FF) return 2;      // U+0080..U+07FF
-    if (cp <= 0xFFFF) return 3;     // U+0800..U+FFFF
-    if (cp <= 0x10FFFF) return 4;   // U+10000..U+10FFFF
-    return 0;  // invalid codepoint
+    if (cp <= 0x7F)
+        return 1;  // U+0000..U+007F
+    if (cp <= 0x7FF)
+        return 2;  // U+0080..U+07FF
+    if (cp <= 0xFFFF)
+        return 3;  // U+0800..U+FFFF
+    if (cp <= 0x10FFFF)
+        return 4;  // U+10000..U+10FFFF
+    return 0;      // invalid codepoint
 }
 
 /* ========== String-level Operations ========== */
@@ -75,9 +83,8 @@ XR_FUNC size_t xr_utf8_index_to_offset(const char *str, size_t len, size_t index
 XR_FUNC size_t xr_utf8_offset_to_index(const char *str, size_t len, size_t offset);
 
 // Get byte range for character range [start_idx, end_idx)
-XR_FUNC bool xr_utf8_char_range(const char *str, size_t len,
-                        size_t start_idx, size_t end_idx,
-                        size_t *out_start, size_t *out_end);
+XR_FUNC bool xr_utf8_char_range(const char *str, size_t len, size_t start_idx, size_t end_idx,
+                                size_t *out_start, size_t *out_end);
 
 /* ========== UTF-16 Code Unit Conversion (for LSP) ========== */
 
@@ -106,4 +113,4 @@ static inline bool xr_utf8_is_continuation(uint8_t byte) {
     return (byte & 0xC0) == 0x80;
 }
 
-#endif // XUTF8_H
+#endif  // XUTF8_H

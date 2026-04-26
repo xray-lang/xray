@@ -31,7 +31,7 @@
 
 // Hash function: Channel pointer -> bucket index (uses unified xr_hash_int)
 static inline int blocked_bucket_hash(void *channel) {
-    return (int)(xr_hash_int((int64_t)(intptr_t)channel) % XR_BLOCKED_BUCKET_SIZE);
+    return (int) (xr_hash_int((int64_t) (intptr_t) channel) % XR_BLOCKED_BUCKET_SIZE);
 }
 
 // Per-Worker version: find or create blocked bucket for Channel (lock-free)
@@ -40,12 +40,14 @@ XrBlockedBucket *worker_blocked_bucket_find_or_create(XrWorker *worker, void *ch
     XrBlockedBucket *bucket = worker->p.blocked_buckets[idx];
 
     while (bucket) {
-        if (bucket->channel == channel) return bucket;
+        if (bucket->channel == channel)
+            return bucket;
         bucket = bucket->next;
     }
 
-    bucket = (XrBlockedBucket *)xr_malloc(sizeof(XrBlockedBucket));
-    if (!bucket) return NULL;
+    bucket = (XrBlockedBucket *) xr_malloc(sizeof(XrBlockedBucket));
+    if (!bucket)
+        return NULL;
 
     memset(bucket, 0, sizeof(XrBlockedBucket));
     bucket->channel = channel;
@@ -61,7 +63,8 @@ XrBlockedBucket *worker_blocked_bucket_find(XrWorker *worker, void *channel) {
     XrBlockedBucket *bucket = worker->p.blocked_buckets[idx];
 
     while (bucket) {
-        if (bucket->channel == channel) return bucket;
+        if (bucket->channel == channel)
+            return bucket;
         bucket = bucket->next;
     }
     return NULL;
@@ -71,9 +74,7 @@ XrBlockedBucket *worker_blocked_bucket_find(XrWorker *worker, void *channel) {
 // send_head / recv_head are populated by xr_worker_block; select_head is
 // populated by xr_worker_block_select (xworker_sysmon.c).
 static inline bool bucket_is_empty(const XrBlockedBucket *b) {
-    return b->send_head == NULL
-        && b->recv_head == NULL
-        && b->select_head == NULL;
+    return b->send_head == NULL && b->recv_head == NULL && b->select_head == NULL;
 }
 
 // Reclaim an empty bucket: unlink it from the per-worker hash chain and
@@ -83,7 +84,8 @@ static inline bool bucket_is_empty(const XrBlockedBucket *b) {
 // channel ever blocked on — a slow leak that could also lengthen lookup time
 // after many short-lived channels had been garbage-collected.
 static void bucket_reclaim_if_empty(XrWorker *worker, XrBlockedBucket *bucket) {
-    if (!bucket || !bucket_is_empty(bucket)) return;
+    if (!bucket || !bucket_is_empty(bucket))
+        return;
 
     int idx = blocked_bucket_hash(bucket->channel);
     XrBlockedBucket **pp = &worker->p.blocked_buckets[idx];
@@ -99,7 +101,8 @@ static void bucket_reclaim_if_empty(XrWorker *worker, XrBlockedBucket *bucket) {
 
 // Per-Worker version: add coroutine to linear blocked queue (lock-free)
 void worker_blocked_list_add(XrWorker *worker, XrCoroutine *coro) {
-    if (!worker || !coro) return;
+    if (!worker || !coro)
+        return;
 
     coro->prev = worker->p.blocked_tail;
     coro->next = NULL;
@@ -115,7 +118,8 @@ void worker_blocked_list_add(XrWorker *worker, XrCoroutine *coro) {
 // Per-Worker version: remove coroutine from linear blocked queue (lock-free)
 // Returns true if coro was actually in the list and removed
 bool worker_blocked_list_remove(XrWorker *worker, XrCoroutine *coro) {
-    if (!coro) return false;
+    if (!coro)
+        return false;
 
     // Check if coro is actually in this worker's blocked list
     if (coro->prev == NULL && coro->next == NULL && worker->p.blocked_head != coro) {
@@ -141,7 +145,8 @@ bool worker_blocked_list_remove(XrWorker *worker, XrCoroutine *coro) {
 
 // xr_worker_block - Add coroutine to current Worker's blocked queue (lock-free)
 void xr_worker_block(XrWorker *worker, XrCoroutine *coro) {
-    if (!worker || !coro) return;
+    if (!worker || !coro)
+        return;
 
     // Prevent duplicate add: if coroutine already in blocked queue, return
     if (coro->next != NULL || coro->prev != NULL || worker->p.blocked_head == coro) {
@@ -191,39 +196,45 @@ void xr_worker_block(XrWorker *worker, XrCoroutine *coro) {
 
 // xr_worker_unblock - Remove coroutine from Worker's blocked queue (lock-free)
 void xr_worker_unblock(XrWorker *worker, XrCoroutine *coro) {
-    if (!worker || !coro) return;
+    if (!worker || !coro)
+        return;
 
     if (worker_blocked_list_remove(worker, coro)) {
         worker->p.blocked_count--;
     }
 }
 
-// xr_worker_wake_one - Wake one coroutine waiting on specified Channel on current Worker (lock-free)
-// MUST only be called from the owning worker thread.
+// xr_worker_wake_one - Wake one coroutine waiting on specified Channel on current Worker
+// (lock-free) MUST only be called from the owning worker thread.
 XrCoroutine *xr_worker_wake_one(XrWorker *worker, void *channel, bool wake_sender) {
-    if (!worker || !channel) return NULL;
+    if (!worker || !channel)
+        return NULL;
     XR_DCHECK(xr_current_worker() == NULL || xr_current_worker() == worker,
               "wake_one: cross-worker call detected (use chan_wake_queue)");
 
     XrBlockedBucket *bucket = worker_blocked_bucket_find(worker, channel);
-    if (!bucket) return NULL;
+    if (!bucket)
+        return NULL;
 
     XrCoroutine *coro = NULL;
     if (wake_sender) {
         coro = bucket->send_head;
         if (coro) {
             bucket->send_head = coro->wait_link;
-            if (!bucket->send_head) bucket->send_tail = NULL;
+            if (!bucket->send_head)
+                bucket->send_tail = NULL;
         }
     } else {
         coro = bucket->recv_head;
         if (coro) {
             bucket->recv_head = coro->wait_link;
-            if (!bucket->recv_head) bucket->recv_tail = NULL;
+            if (!bucket->recv_head)
+                bucket->recv_tail = NULL;
         }
     }
 
-    if (!coro) return NULL;
+    if (!coro)
+        return NULL;
 
     // Remove from linear queue
     worker_blocked_list_remove(worker, coro);
@@ -255,27 +266,32 @@ XrCoroutine *xr_worker_wake_one(XrWorker *worker, void *channel, bool wake_sende
 // xr_worker_dequeue_blocked - Dequeue coroutine from blocked queue but don't enqueue to run queue
 // For rendezvous value passing: caller needs to process value first then manually enqueue
 XrCoroutine *xr_worker_dequeue_blocked(XrWorker *worker, void *channel, bool wake_sender) {
-    if (!worker || !channel) return NULL;
+    if (!worker || !channel)
+        return NULL;
 
     XrBlockedBucket *bucket = worker_blocked_bucket_find(worker, channel);
-    if (!bucket) return NULL;
+    if (!bucket)
+        return NULL;
 
     XrCoroutine *coro = NULL;
     if (wake_sender) {
         coro = bucket->send_head;
         if (coro) {
             bucket->send_head = coro->wait_link;
-            if (!bucket->send_head) bucket->send_tail = NULL;
+            if (!bucket->send_head)
+                bucket->send_tail = NULL;
         }
     } else {
         coro = bucket->recv_head;
         if (coro) {
             bucket->recv_head = coro->wait_link;
-            if (!bucket->recv_head) bucket->recv_tail = NULL;
+            if (!bucket->recv_head)
+                bucket->recv_tail = NULL;
         }
     }
 
-    if (!coro) return NULL;
+    if (!coro)
+        return NULL;
 
     // Remove from linear queue
     worker_blocked_list_remove(worker, coro);
@@ -292,15 +308,17 @@ XrCoroutine *xr_worker_dequeue_blocked(XrWorker *worker, void *channel, bool wak
     return coro;
 }
 
-// xr_worker_wake_all - Wake all coroutines waiting on specified Channel on current Worker (lock-free)
-// MUST only be called from the owning worker thread.
+// xr_worker_wake_all - Wake all coroutines waiting on specified Channel on current Worker
+// (lock-free) MUST only be called from the owning worker thread.
 void xr_worker_wake_all(XrWorker *worker, void *channel) {
-    if (!worker || !channel) return;
+    if (!worker || !channel)
+        return;
     XR_DCHECK(xr_current_worker() == NULL || xr_current_worker() == worker,
               "wake_all: cross-worker call detected (use chan_wake_queue)");
 
     XrBlockedBucket *bucket = worker_blocked_bucket_find(worker, channel);
-    if (!bucket) return;
+    if (!bucket)
+        return;
 
     // Wake all senders
     XrCoroutine *coro = bucket->send_head;

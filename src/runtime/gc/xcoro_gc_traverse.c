@@ -18,7 +18,7 @@
 #include "../object/xjson.h"
 #include "../object/xiterator.h"
 #include "../object/xexception.h"
-#include "xalloc_unified.h"  // xr_coro_get_isolate
+#include "xalloc_unified.h"        // xr_coro_get_isolate
 #include "../xisolate_internal.h"  // XrayIsolate ext_traverse_funcs
 #include "../xerror_impl.h"
 #include "../class/xclass.h"
@@ -30,26 +30,27 @@
 /* ========== Array Traversal ========== */
 
 void xr_gc_traverse_array(XrCoroGC *gc, XrGCHeader *obj) {
-    if (!gc || !obj) return;
-    struct XrArray *arr = (struct XrArray*)obj;
+    if (!gc || !obj)
+        return;
+    struct XrArray *arr = (struct XrArray *) obj;
     XR_DCHECK(XR_GC_GET_TYPE(&arr->gc) == XR_TARRAY || XR_GC_GET_TYPE(&arr->gc) == XR_TARRAY_SLICE,
               "gc_traverse_array: object is not an array");
 
     // Mark source array (for slices)
     if (arr->source) {
-        xr_coro_gc_markobject(gc, (XrGCHeader*)arr->source);
+        xr_coro_gc_markobject(gc, (XrGCHeader *) arr->source);
     }
 
     // Mark data blob if it lives on GC heap (prevents sweep from reclaiming it)
     if (arr->data && arr->data_on_gc_heap) {
-        XrGCHeader *blob = ((XrGCHeader*)arr->data) - 1;
+        XrGCHeader *blob = ((XrGCHeader *) arr->data) - 1;
         xr_coro_gc_markobject(gc, blob);
     }
 
     // Only XR_ELEM_ANY arrays with GC pointers need element scanning
     if (arr->data && arr->length > 0 && XR_ARRAY_IS_GC_TRACED(arr) && arr->has_gc_ptrs) {
         XR_DCHECK(arr->length <= arr->capacity, "gc_traverse_array: length > capacity");
-        XrValue *data = (XrValue*)arr->data;
+        XrValue *data = (XrValue *) arr->data;
         for (int32_t i = 0; i < arr->length; i++) {
             xr_coro_gc_markvalue(gc, data[i]);
         }
@@ -59,19 +60,22 @@ void xr_gc_traverse_array(XrCoroGC *gc, XrGCHeader *obj) {
 /* ========== Map Traversal ========== */
 
 void xr_gc_traverse_map(XrCoroGC *gc, XrGCHeader *obj) {
-    if (!gc || !obj) return;
-    struct XrMap *map = (struct XrMap*)obj;
+    if (!gc || !obj)
+        return;
+    struct XrMap *map = (struct XrMap *) obj;
     XR_DCHECK(XR_GC_GET_TYPE(&map->gc) == XR_TMAP, "gc_traverse_map: object is not a map");
 
     // Skip dummy map
-    if (xr_map_isdummy(map)) return;
+    if (xr_map_isdummy(map))
+        return;
 
     // Skip uninitialized map (node pointer not yet set)
-    if (!map->node) return;
+    if (!map->node)
+        return;
 
     // Mark node blob if it lives on GC heap (prevents sweep from reclaiming it)
     if (map->flags & XR_MAP_FLAG_NODES_ON_GC) {
-        XrGCHeader *blob = ((XrGCHeader*)map->node) - 1;
+        XrGCHeader *blob = ((XrGCHeader *) map->node) - 1;
         xr_coro_gc_markobject(gc, blob);
     }
 
@@ -81,7 +85,7 @@ void xr_gc_traverse_map(XrCoroGC *gc, XrGCHeader *obj) {
     if (is_weak) {
         // Weak map: only mark values, not keys
         // Add to weak list for later processing in atomic phase
-        xr_gclist_push(&gc->weak, (XrGCHeader*)map);
+        xr_gclist_push(&gc->weak, (XrGCHeader *) map);
 
         // Only mark values (keys are weak references)
         uint32_t size = xr_map_sizenode(map);
@@ -108,12 +112,14 @@ void xr_gc_traverse_map(XrCoroGC *gc, XrGCHeader *obj) {
 /* ========== Set Traversal ========== */
 
 void xr_gc_traverse_set(XrCoroGC *gc, XrGCHeader *obj) {
-    if (!gc || !obj) return;
-    struct XrSet *set = (struct XrSet*)obj;
+    if (!gc || !obj)
+        return;
+    struct XrSet *set = (struct XrSet *) obj;
     XR_DCHECK(XR_GC_GET_TYPE(&set->gc) == XR_TSET, "gc_traverse_set: object is not a set");
 
     // XrSet uses open addressing (NOT XrMap's chained hash)
-    if (!set->entries || set->capacity == 0) return;
+    if (!set->entries || set->capacity == 0)
+        return;
 
     // entries[] always lives on malloc, not on the per-coro Immix heap,
     // so there is no GC blob to mark for the table itself.
@@ -122,7 +128,7 @@ void xr_gc_traverse_set(XrCoroGC *gc, XrGCHeader *obj) {
 
     if (is_weak) {
         // Weak set: don't mark elements, add to weak list
-        xr_gclist_push(&gc->weak, (XrGCHeader*)set);
+        xr_gclist_push(&gc->weak, (XrGCHeader *) set);
     } else {
         // Normal set: mark all elements
         for (uint32_t i = 0; i < set->capacity; i++) {
@@ -137,12 +143,14 @@ void xr_gc_traverse_set(XrCoroGC *gc, XrGCHeader *obj) {
 /* ========== Json Traversal ========== */
 
 void xr_coro_gc_traverse_json(XrCoroGC *gc, XrGCHeader *obj) {
-    if (!gc || !obj) return;
-    struct XrJson *json = (struct XrJson*)obj;
+    if (!gc || !obj)
+        return;
+    struct XrJson *json = (struct XrJson *) obj;
 
     XrayIsolate *X = gc->owner ? xr_coro_get_isolate(gc->owner) : NULL;
     XrShape *shape = xr_json_shape(X, json);
-    if (!shape) return;
+    if (!shape)
+        return;
 
     // Mark in-object fields
     uint16_t in_obj = shape->in_object_capacity;
@@ -157,7 +165,8 @@ void xr_coro_gc_traverse_json(XrCoroGC *gc, XrGCHeader *obj) {
     XrJsonOverflow *ov = json->overflow;
     if (ov && total > in_obj) {
         uint16_t ov_count = total - in_obj;
-        if (ov_count > ov->length) ov_count = ov->length;
+        if (ov_count > ov->length)
+            ov_count = ov->length;
         for (uint16_t i = 0; i < ov_count; i++) {
             xr_coro_gc_markvalue(gc, ov->values[i]);
         }
@@ -167,8 +176,9 @@ void xr_coro_gc_traverse_json(XrCoroGC *gc, XrGCHeader *obj) {
 /* ========== Closure Traversal ========== */
 
 void xr_gc_traverse_closure(XrCoroGC *gc, XrGCHeader *obj) {
-    if (!gc || !obj) return;
-    struct XrClosure *closure = (struct XrClosure*)obj;
+    if (!gc || !obj)
+        return;
+    struct XrClosure *closure = (struct XrClosure *) obj;
 
     // Mark flat upvals array (BY_VALUE snapshots may hold GC objects, including cells)
     for (int i = 0; i < closure->upval_count; i++) {
@@ -179,8 +189,9 @@ void xr_gc_traverse_closure(XrCoroGC *gc, XrGCHeader *obj) {
 /* ========== Instance Traversal ========== */
 
 void xr_gc_traverse_instance(XrCoroGC *gc, XrGCHeader *obj) {
-    if (!gc || !obj) return;
-    struct XrInstance *inst = (struct XrInstance*)obj;
+    if (!gc || !obj)
+        return;
+    struct XrInstance *inst = (struct XrInstance *) obj;
 
     // Note: XrClass is usually in system heap, skip marking
 
@@ -195,22 +206,23 @@ void xr_gc_traverse_instance(XrCoroGC *gc, XrGCHeader *obj) {
 /* ========== Iterator Traversal ========== */
 
 void xr_gc_traverse_iterator(XrCoroGC *gc, XrGCHeader *obj) {
-    if (!gc || !obj) return;
-    struct XrIterator *iter = (struct XrIterator*)obj;
+    if (!gc || !obj)
+        return;
+    struct XrIterator *iter = (struct XrIterator *) obj;
 
     // Mark the source container (map/set/json) by type
     switch (iter->type) {
         case XR_ITERATOR_MAP:
             if (iter->source.map)
-                xr_coro_gc_markobject(gc, (XrGCHeader*)iter->source.map);
+                xr_coro_gc_markobject(gc, (XrGCHeader *) iter->source.map);
             break;
         case XR_ITERATOR_SET:
             if (iter->source.set)
-                xr_coro_gc_markobject(gc, (XrGCHeader*)iter->source.set);
+                xr_coro_gc_markobject(gc, (XrGCHeader *) iter->source.set);
             break;
         case XR_ITERATOR_JSON:
             if (iter->source.json)
-                xr_coro_gc_markobject(gc, (XrGCHeader*)iter->source.json);
+                xr_coro_gc_markobject(gc, (XrGCHeader *) iter->source.json);
             break;
     }
     // coro is a raw runtime pointer, not a GC object; context is XrayIsolate* or
@@ -225,19 +237,19 @@ void xr_gc_traverse_iterator(XrCoroGC *gc, XrGCHeader *obj) {
 
 void xr_gc_traverse_cell(XrCoroGC *gc, XrGCHeader *obj) {
     // XrCell layout: { XrGCHeader gc; XrValue value; }
-    XrValue *cell_val = (XrValue*)((char*)obj + sizeof(XrGCHeader));
+    XrValue *cell_val = (XrValue *) ((char *) obj + sizeof(XrGCHeader));
     xr_coro_gc_markvalue(gc, *cell_val);
 }
 
 void xr_gc_traverse_bound_method(XrCoroGC *gc, XrGCHeader *obj) {
     // XrBoundMethod layout: { XrGCHeader gc; XrValue receiver; ... }
     // Mark receiver without including vm headers (avoid gc->vm dependency)
-    XrValue *receiver = (XrValue*)((char*)obj + sizeof(XrGCHeader));
+    XrValue *receiver = (XrValue *) ((char *) obj + sizeof(XrGCHeader));
     xr_coro_gc_markvalue(gc, *receiver);
 }
 
 void xr_gc_traverse_module(XrCoroGC *gc, XrGCHeader *obj) {
-    XrModule *mod = (XrModule*)obj;
+    XrModule *mod = (XrModule *) obj;
     if (mod->export_values && mod->export_count > 0) {
         for (uint16_t i = 0; i < mod->export_count; i++) {
             xr_coro_gc_markvalue(gc, mod->export_values[i]);
@@ -246,31 +258,35 @@ void xr_gc_traverse_module(XrCoroGC *gc, XrGCHeader *obj) {
 }
 
 void xr_gc_traverse_exception(XrCoroGC *gc, XrGCHeader *obj) {
-    XrException *exc = (XrException*)obj;
-    if (exc->message) xr_coro_gc_markobject(gc, (XrGCHeader*)exc->message);
-    if (exc->file) xr_coro_gc_markobject(gc, (XrGCHeader*)exc->file);
-    if (exc->stackTrace) xr_coro_gc_markobject(gc, (XrGCHeader*)exc->stackTrace);
+    XrException *exc = (XrException *) obj;
+    if (exc->message)
+        xr_coro_gc_markobject(gc, (XrGCHeader *) exc->message);
+    if (exc->file)
+        xr_coro_gc_markobject(gc, (XrGCHeader *) exc->file);
+    if (exc->stackTrace)
+        xr_coro_gc_markobject(gc, (XrGCHeader *) exc->stackTrace);
     xr_coro_gc_markvalue(gc, exc->userData);
 }
 
 void xr_gc_traverse_error(XrCoroGC *gc, XrGCHeader *obj) {
-    XrError *err = (XrError*)obj;
-    if (err->message) xr_coro_gc_markobject(gc, (XrGCHeader*)err->message);
+    XrError *err = (XrError *) obj;
+    if (err->message)
+        xr_coro_gc_markobject(gc, (XrGCHeader *) err->message);
 }
 
 void xr_gc_traverse_task(XrCoroGC *gc, XrGCHeader *obj) {
-    XrTask *task = (XrTask*)obj;
+    XrTask *task = (XrTask *) obj;
     xr_coro_gc_markvalue(gc, task->result);
     xr_coro_gc_markvalue(gc, task->error);
     // Mark parent-child hierarchy (structured concurrency)
     if (task->parent)
-        xr_coro_gc_markobject(gc, (XrGCHeader*)task->parent);
+        xr_coro_gc_markobject(gc, (XrGCHeader *) task->parent);
     for (XrTask *child = task->first_child; child; child = child->next_sibling)
-        xr_coro_gc_markobject(gc, (XrGCHeader*)child);
+        xr_coro_gc_markobject(gc, (XrGCHeader *) child);
     // Mark bidirectional link peers (task.link() API)
     for (XrTaskLink *lk = task->links; lk; lk = lk->next) {
         if (lk->peer)
-            xr_coro_gc_markobject(gc, (XrGCHeader*)lk->peer);
+            xr_coro_gc_markobject(gc, (XrGCHeader *) lk->peer);
     }
     // Mark closures in completion listeners
     for (XrCompletionNode *cn = task->on_completion; cn; cn = cn->next) {
@@ -291,7 +307,8 @@ void xr_gc_traverse_task(XrCoroGC *gc, XrGCHeader *obj) {
  * here when their type id falls outside the compile-time range. */
 
 void xr_gc_traverse_object(XrCoroGC *gc, XrGCHeader *obj) {
-    if (!gc || !obj) return;
+    if (!gc || !obj)
+        return;
     XR_DCHECK(obj->type < XGC_MAX_TYPES, "traverse_object: invalid GC type");
 
     XrGCTraverseFn traverse = g_type_ops[obj->type].traverse;
@@ -305,7 +322,7 @@ void xr_gc_traverse_object(XrCoroGC *gc, XrGCHeader *obj) {
     if (iso) {
         void *fn = iso->ext_traverse_funcs[obj->type];
         if (fn) {
-            ((XrGCTraverseFn)fn)(gc, obj);
+            ((XrGCTraverseFn) fn)(gc, obj);
         }
     }
 }

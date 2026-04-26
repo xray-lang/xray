@@ -17,7 +17,7 @@
  *   - Supports Unicode character classes \p{...}
  */
 
-#define _GNU_SOURCE // memmem
+#define _GNU_SOURCE  // memmem
 #include "xregex_internal.h"
 #include "../../src/base/xunicode.h"
 #include <string.h>
@@ -29,7 +29,7 @@ static int decode_utf8(const char *s, const char *end, uint32_t *out_cp) {
         return 0;
     }
 
-    uint8_t b0 = (uint8_t)*s;
+    uint8_t b0 = (uint8_t) *s;
     uint32_t cp;
     int len;
 
@@ -39,26 +39,32 @@ static int decode_utf8(const char *s, const char *end, uint32_t *out_cp) {
         return 1;
     } else if ((b0 & 0xE0) == 0xC0) {
         // 2 bytes
-        if (s + 1 >= end) goto invalid;
-        uint8_t b1 = (uint8_t)s[1];
-        if ((b1 & 0xC0) != 0x80) goto invalid;
+        if (s + 1 >= end)
+            goto invalid;
+        uint8_t b1 = (uint8_t) s[1];
+        if ((b1 & 0xC0) != 0x80)
+            goto invalid;
         cp = ((b0 & 0x1F) << 6) | (b1 & 0x3F);
         len = 2;
     } else if ((b0 & 0xF0) == 0xE0) {
         // 3 bytes
-        if (s + 2 >= end) goto invalid;
-        uint8_t b1 = (uint8_t)s[1];
-        uint8_t b2 = (uint8_t)s[2];
-        if ((b1 & 0xC0) != 0x80 || (b2 & 0xC0) != 0x80) goto invalid;
+        if (s + 2 >= end)
+            goto invalid;
+        uint8_t b1 = (uint8_t) s[1];
+        uint8_t b2 = (uint8_t) s[2];
+        if ((b1 & 0xC0) != 0x80 || (b2 & 0xC0) != 0x80)
+            goto invalid;
         cp = ((b0 & 0x0F) << 12) | ((b1 & 0x3F) << 6) | (b2 & 0x3F);
         len = 3;
     } else if ((b0 & 0xF8) == 0xF0) {
         // 4 bytes
-        if (s + 3 >= end) goto invalid;
-        uint8_t b1 = (uint8_t)s[1];
-        uint8_t b2 = (uint8_t)s[2];
-        uint8_t b3 = (uint8_t)s[3];
-        if ((b1 & 0xC0) != 0x80 || (b2 & 0xC0) != 0x80 || (b3 & 0xC0) != 0x80) goto invalid;
+        if (s + 3 >= end)
+            goto invalid;
+        uint8_t b1 = (uint8_t) s[1];
+        uint8_t b2 = (uint8_t) s[2];
+        uint8_t b3 = (uint8_t) s[3];
+        if ((b1 & 0xC0) != 0x80 || (b2 & 0xC0) != 0x80 || (b3 & 0xC0) != 0x80)
+            goto invalid;
         cp = ((b0 & 0x07) << 18) | ((b1 & 0x3F) << 12) | ((b2 & 0x3F) << 6) | (b3 & 0x3F);
         len = 4;
     } else {
@@ -69,7 +75,7 @@ static int decode_utf8(const char *s, const char *end, uint32_t *out_cp) {
     return len;
 
 invalid:
-    *out_cp = 0xFFFD; // Replacement character
+    *out_cp = 0xFFFD;  // Replacement character
     return 1;
 }
 
@@ -80,8 +86,8 @@ invalid:
  * ======================================================================== */
 
 typedef struct {
-    int pc;                             // current instruction index
-    const char *p;                      // current text position
+    int pc;                                        // current instruction index
+    const char *p;                                 // current text position
     const char *captures[XR_RE_MAX_CAPTURES * 2];  // capture positions
 } XrThread;
 
@@ -102,8 +108,8 @@ typedef struct {
     XrThreadList runq;
     XrThreadList nextq;
     XrSparseSet visited;
-    XrSparseSet fast_curr;   // for nfa_search_fast
-    XrSparseSet fast_next;   // for nfa_search_fast
+    XrSparseSet fast_curr;  // for nfa_search_fast
+    XrSparseSet fast_next;  // for nfa_search_fast
     int capacity;
     bool initialized;
 } XrNFAContext;
@@ -112,7 +118,7 @@ typedef struct {
 static __thread XrNFAContext g_nfa_ctx = {0};
 
 // Get or initialize NFA context
-static XrNFAContext* nfa_context_get(int inst_count) {
+static XrNFAContext *nfa_context_get(int inst_count) {
     if (!g_nfa_ctx.initialized || g_nfa_ctx.capacity < inst_count) {
         // Free old resources
         if (g_nfa_ctx.initialized) {
@@ -125,9 +131,9 @@ static XrNFAContext* nfa_context_get(int inst_count) {
 
         // Allocate new resources
         int cap = inst_count > XR_THREAD_POOL_SIZE ? inst_count : XR_THREAD_POOL_SIZE;
-        g_nfa_ctx.runq.threads = (XrThread*)xr_re_alloc(cap * sizeof(XrThread));
+        g_nfa_ctx.runq.threads = (XrThread *) xr_re_alloc(cap * sizeof(XrThread));
         g_nfa_ctx.runq.cap = cap;
-        g_nfa_ctx.nextq.threads = (XrThread*)xr_re_alloc(cap * sizeof(XrThread));
+        g_nfa_ctx.nextq.threads = (XrThread *) xr_re_alloc(cap * sizeof(XrThread));
         g_nfa_ctx.nextq.cap = cap;
         xr_sparse_set_init(&g_nfa_ctx.visited, inst_count);
         xr_sparse_set_init(&g_nfa_ctx.fast_curr, inst_count);
@@ -150,12 +156,11 @@ static void thread_list_clear(XrThreadList *list) {
     list->count = 0;
 }
 
-static XrThread* thread_list_add(XrThreadList *list) {
+static XrThread *thread_list_add(XrThreadList *list) {
     if (list->count >= list->cap) {
         // Expand
         int new_cap = list->cap * 2;
-        XR_REALLOC_OR_ABORT(list->threads,
-                            (size_t)new_cap * sizeof(XrThread),
+        XR_REALLOC_OR_ABORT(list->threads, (size_t) new_cap * sizeof(XrThread),
                             "regex NFA thread list grow");
         list->cap = new_cap;
     }
@@ -167,10 +172,7 @@ static XrThread* thread_list_add(XrThreadList *list) {
  * ======================================================================== */
 
 static inline bool is_word_char(int c) {
-    return (c >= 'a' && c <= 'z') ||
-           (c >= 'A' && c <= 'Z') ||
-           (c >= '0' && c <= '9') ||
-           c == '_';
+    return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '_';
 }
 
 /*
@@ -180,29 +182,34 @@ static inline bool is_word_char(int c) {
  * @param p     current position
  * @param end   text end
  */
-bool xr_re_check_empty_width(uint32_t flags, const char *text,
-                              const char *p, const char *end) {
+bool xr_re_check_empty_width(uint32_t flags, const char *text, const char *p, const char *end) {
     if (flags & XR_EMPTY_BEGIN_TEXT) {
-        if (p != text) return false;
+        if (p != text)
+            return false;
     }
     if (flags & XR_EMPTY_END_TEXT) {
-        if (p != end) return false;
+        if (p != end)
+            return false;
     }
     if (flags & XR_EMPTY_BEGIN_LINE) {
-        if (p != text && p[-1] != '\n') return false;
+        if (p != text && p[-1] != '\n')
+            return false;
     }
     if (flags & XR_EMPTY_END_LINE) {
-        if (p != end && *p != '\n') return false;
+        if (p != end && *p != '\n')
+            return false;
     }
     if (flags & XR_EMPTY_WORD_BOUNDARY) {
-        bool prev_word = (p > text) && is_word_char((unsigned char)p[-1]);
-        bool curr_word = (p < end) && is_word_char((unsigned char)*p);
-        if (prev_word == curr_word) return false;
+        bool prev_word = (p > text) && is_word_char((unsigned char) p[-1]);
+        bool curr_word = (p < end) && is_word_char((unsigned char) *p);
+        if (prev_word == curr_word)
+            return false;
     }
     if (flags & XR_EMPTY_NOT_WORD_BOUND) {
-        bool prev_word = (p > text) && is_word_char((unsigned char)p[-1]);
-        bool curr_word = (p < end) && is_word_char((unsigned char)*p);
-        if (prev_word != curr_word) return false;
+        bool prev_word = (p > text) && is_word_char((unsigned char) p[-1]);
+        bool curr_word = (p < end) && is_word_char((unsigned char) *p);
+        if (prev_word != curr_word)
+            return false;
     }
     return true;
 }
@@ -222,17 +229,17 @@ bool xr_re_check_empty_width(uint32_t flags, const char *text,
  * @param p       current position
  * @param end     text end
  */
-static void add_thread(XrThreadList *list, XrSparseSet *visited,
-                       XrProg *prog, int pc, const char **caps,
-                       const char *text, const char *p, const char *end,
+static void add_thread(XrThreadList *list, XrSparseSet *visited, XrProg *prog, int pc,
+                       const char **caps, const char *text, const char *p, const char *end,
                        int ncaps) {
     // Prevent duplicate visits
-    if (xr_sparse_set_contains(visited, pc)) return;
+    if (xr_sparse_set_contains(visited, pc))
+        return;
     xr_sparse_set_insert(visited, pc);
 
     XrInst *ip = &prog->inst[pc];
     XrOpcode op = XR_INST_OP(ip);
-    size_t caps_size = ncaps * sizeof(const char*);
+    size_t caps_size = ncaps * sizeof(const char *);
 
     switch (op) {
         case XR_OP_NOP:
@@ -273,13 +280,14 @@ static void add_thread(XrThreadList *list, XrSparseSet *visited,
  * ======================================================================== */
 
 // Fast search prefix (using memmem)
-static const char* find_prefix(const char *text, int len,
-                                const char *prefix, int prefix_len) {
-    if (prefix_len == 0) return text;
-    if (prefix_len > len) return NULL;
+static const char *find_prefix(const char *text, int len, const char *prefix, int prefix_len) {
+    if (prefix_len == 0)
+        return text;
+    if (prefix_len > len)
+        return NULL;
 
     // Use memmem for fast search (10-100x faster than char-by-char)
-    return (const char*)memmem(text, len, prefix, prefix_len);
+    return (const char *) memmem(text, len, prefix, prefix_len);
 }
 
 /* ========================================================================
@@ -298,9 +306,8 @@ static const char* find_prefix(const char *text, int len,
  * @param end_pos    output match end position
  * @return true if match successful
  */
-static bool onepass_match_simple(XrProg *prog, const char *text_start,
-                                  const char *p_start, const char *end,
-                                  const char **end_pos) {
+static bool onepass_match_simple(XrProg *prog, const char *text_start, const char *p_start,
+                                 const char *end, const char **end_pos) {
     const char *text = text_start;
     const char *p = p_start;
     int pc = prog->start;
@@ -312,11 +319,12 @@ static bool onepass_match_simple(XrProg *prog, const char *text_start,
         switch (op) {
             case XR_OP_MATCH:
                 // Match successful
-                if (end_pos) *end_pos = p;
+                if (end_pos)
+                    *end_pos = p;
                 return true;
 
             case XR_OP_BYTE:
-                if (p < end && (unsigned char)*p == ip->byte) {
+                if (p < end && (unsigned char) *p == ip->byte) {
                     p++;
                     pc = XR_INST_OUT(ip);
                 } else {
@@ -325,8 +333,7 @@ static bool onepass_match_simple(XrProg *prog, const char *text_start,
                 break;
 
             case XR_OP_BYTE_RANGE:
-                if (p < end && (unsigned char)*p >= ip->lo &&
-                    (unsigned char)*p <= ip->hi) {
+                if (p < end && (unsigned char) *p >= ip->lo && (unsigned char) *p <= ip->hi) {
                     p++;
                     pc = XR_INST_OUT(ip);
                 } else {
@@ -380,8 +387,8 @@ static bool onepass_match_simple(XrProg *prog, const char *text_start,
                 if (char_len > 0) {
                     uint32_t prop_idx = ip->unicode_idx;
                     XrProgUnicodeRange *prop = &prog->unicode_ranges[prop_idx];
-                    bool in_prop = xr_unicode_is_property(unicode_cp,
-                                                          (XrUnicodeProperty)prop->prop_id);
+                    bool in_prop =
+                        xr_unicode_is_property(unicode_cp, (XrUnicodeProperty) prop->prop_id);
                     bool match_ok = prop->negated ? !in_prop : in_prop;
                     if (match_ok) {
                         p += char_len;
@@ -405,8 +412,8 @@ static bool onepass_match_simple(XrProg *prog, const char *text_start,
 }
 
 // OnePass search (search for match in text)
-static bool onepass_search(XrProg *prog, const char *text, int len,
-                           const char **captures, int ncaptures) {
+static bool onepass_search(XrProg *prog, const char *text, int len, const char **captures,
+                           int ncaptures) {
     const char *p = text;
     const char *end = text + len;
     const char *match_end = NULL;
@@ -414,7 +421,8 @@ static bool onepass_search(XrProg *prog, const char *text, int len,
     // Use prefix optimization
     if (prog->prefix && prog->prefix_len > 0) {
         p = find_prefix(text, len, prog->prefix, prog->prefix_len);
-        if (!p) return false;
+        if (!p)
+            return false;
     }
 
     // Try each position
@@ -440,9 +448,9 @@ static bool onepass_search(XrProg *prog, const char *text, int len,
  * NFA Match Main Loop
  * ======================================================================== */
 
-bool xr_nfa_match(XrProg *prog, const char *text, int len,
-                  const char **captures, int ncaptures) {
-    if (len < 0) len = (int)strlen(text);
+bool xr_nfa_match(XrProg *prog, const char *text, int len, const char **captures, int ncaptures) {
+    if (len < 0)
+        len = (int) strlen(text);
 
     const char *p = text;
     const char *end = text + len;
@@ -454,8 +462,9 @@ bool xr_nfa_match(XrProg *prog, const char *text, int len,
     XrSparseSet *visited = &ctx->visited;
 
     // Clamp ncaptures to max
-    if (ncaptures > XR_RE_MAX_CAPTURES * 2) ncaptures = XR_RE_MAX_CAPTURES * 2;
-    size_t caps_size = ncaptures * sizeof(const char*);
+    if (ncaptures > XR_RE_MAX_CAPTURES * 2)
+        ncaptures = XR_RE_MAX_CAPTURES * 2;
+    size_t caps_size = ncaptures * sizeof(const char *);
 
     // Initial capture state
     const char *init_caps[XR_RE_MAX_CAPTURES * 2];
@@ -475,7 +484,7 @@ bool xr_nfa_match(XrProg *prog, const char *text, int len,
     // No min_p scan needed — all byte-level ops advance by 1.
     // UNICODE_RANGE threads that jump ahead are deferred until reached.
     for (p = text; p <= end && runq->count > 0; p++) {
-        int c = (p < end) ? (unsigned char)*p : -1;
+        int c = (p < end) ? (unsigned char) *p : -1;
 
         thread_list_clear(nextq);
         xr_sparse_set_clear(visited);
@@ -512,26 +521,26 @@ bool xr_nfa_match(XrProg *prog, const char *text, int len,
 
                 case XR_OP_BYTE:
                     if (c == ip->byte)
-                        add_thread(nextq, visited, prog, XR_INST_OUT(ip),
-                                   t->captures, text, p + 1, end, ncaptures);
+                        add_thread(nextq, visited, prog, XR_INST_OUT(ip), t->captures, text, p + 1,
+                                   end, ncaptures);
                     break;
 
                 case XR_OP_BYTE_RANGE:
                     if (c >= ip->lo && c <= ip->hi)
-                        add_thread(nextq, visited, prog, XR_INST_OUT(ip),
-                                   t->captures, text, p + 1, end, ncaptures);
+                        add_thread(nextq, visited, prog, XR_INST_OUT(ip), t->captures, text, p + 1,
+                                   end, ncaptures);
                     break;
 
                 case XR_OP_ANY_BYTE:
                     if (c >= 0 && c != '\n')
-                        add_thread(nextq, visited, prog, XR_INST_OUT(ip),
-                                   t->captures, text, p + 1, end, ncaptures);
+                        add_thread(nextq, visited, prog, XR_INST_OUT(ip), t->captures, text, p + 1,
+                                   end, ncaptures);
                     break;
 
                 case XR_OP_ANY_BYTE_NL:
                     if (c >= 0)
-                        add_thread(nextq, visited, prog, XR_INST_OUT(ip),
-                                   t->captures, text, p + 1, end, ncaptures);
+                        add_thread(nextq, visited, prog, XR_INST_OUT(ip), t->captures, text, p + 1,
+                                   end, ncaptures);
                     break;
 
                 case XR_OP_UNICODE_RANGE: {
@@ -540,12 +549,12 @@ bool xr_nfa_match(XrProg *prog, const char *text, int len,
                     if (char_len > 0) {
                         uint32_t prop_idx = ip->unicode_idx;
                         XrProgUnicodeRange *prop = &prog->unicode_ranges[prop_idx];
-                        bool in_prop = xr_unicode_is_property(unicode_cp,
-                                                              (XrUnicodeProperty)prop->prop_id);
+                        bool in_prop =
+                            xr_unicode_is_property(unicode_cp, (XrUnicodeProperty) prop->prop_id);
                         bool match_ok = prop->negated ? !in_prop : in_prop;
                         if (match_ok)
-                            add_thread(nextq, visited, prog, XR_INST_OUT(ip),
-                                       t->captures, text, p + char_len, end, ncaptures);
+                            add_thread(nextq, visited, prog, XR_INST_OUT(ip), t->captures, text,
+                                       p + char_len, end, ncaptures);
                     }
                     break;
                 }
@@ -555,7 +564,8 @@ bool xr_nfa_match(XrProg *prog, const char *text, int len,
             }
         }
 
-        if (matched && nextq->count == 0) break;
+        if (matched && nextq->count == 0)
+            break;
 
         // Swap queues
         XrThreadList *tmp = runq;
@@ -570,7 +580,7 @@ done:
         if (copy_count > XR_RE_MAX_CAPTURES * 2) {
             copy_count = XR_RE_MAX_CAPTURES * 2;
         }
-        memcpy(captures, best_caps, copy_count * sizeof(char*));
+        memcpy(captures, best_caps, copy_count * sizeof(char *));
     }
 
     // Context reuse, don't free resources
@@ -583,9 +593,10 @@ done:
  * ======================================================================== */
 
 // Add state to set (handle epsilon transitions)
-static void add_state_fast(XrSparseSet *states, XrProg *prog, int pc,
-                           const char *text, const char *p, const char *end) {
-    if (xr_sparse_set_contains(states, pc)) return;
+static void add_state_fast(XrSparseSet *states, XrProg *prog, int pc, const char *text,
+                           const char *p, const char *end) {
+    if (xr_sparse_set_contains(states, pc))
+        return;
     xr_sparse_set_insert(states, pc);
 
     XrInst *ip = &prog->inst[pc];
@@ -619,15 +630,16 @@ static void add_state_fast(XrSparseSet *states, XrProg *prog, int pc,
  * Only called when unicode_range_count == 0 (byte-oriented operations only).
  * Uses TLS context to avoid per-call malloc/free.
  */
-static bool nfa_search_fast(XrProg *prog, const char *text, int len,
-                            const char **match_start, const char **match_end) {
+static bool nfa_search_fast(XrProg *prog, const char *text, int len, const char **match_start,
+                            const char **match_end) {
     const char *p = text;
     const char *end = text + len;
 
     // Prefix optimization
     if (prog->prefix && prog->prefix_len > 0) {
         p = find_prefix(text, len, prog->prefix, prog->prefix_len);
-        if (!p) return false;
+        if (!p)
+            return false;
     }
 
     // Use TLS context (avoid repeated allocation)
@@ -649,7 +661,7 @@ static bool nfa_search_fast(XrProg *prog, const char *text, int len,
 
         // Simulate NFA execution (byte-oriented only)
         while (curr->size > 0 && try_p <= end) {
-            int c = (try_p < end) ? (unsigned char)*try_p : -1;
+            int c = (try_p < end) ? (unsigned char) *try_p : -1;
 
             xr_sparse_set_clear(next);
 
@@ -663,7 +675,8 @@ static bool nfa_search_fast(XrProg *prog, const char *text, int len,
                 }
             }
 
-            if (c < 0) break;  // Reached end of text
+            if (c < 0)
+                break;  // Reached end of text
 
             // State transition (byte-level operations only)
             for (int i = 0; i < curr->size; i++) {
@@ -715,15 +728,17 @@ static bool nfa_search_fast(XrProg *prog, const char *text, int len,
         }
 
         if (found_start) {
-            if (match_start) *match_start = found_start;
-            if (match_end) *match_end = found_end;
+            if (match_start)
+                *match_start = found_start;
+            if (match_end)
+                *match_end = found_end;
             return true;
         }
 
         // Prefix skip optimization: jump to next prefix position
         if (prog->prefix && prog->prefix_len > 0 && p + 1 < end) {
-            const char *next_prefix = find_prefix(p + 1, end - p - 1,
-                                                  prog->prefix, prog->prefix_len);
+            const char *next_prefix =
+                find_prefix(p + 1, end - p - 1, prog->prefix, prog->prefix_len);
             if (next_prefix) {
                 p = next_prefix;
             } else {
@@ -742,16 +757,16 @@ static bool nfa_search_fast(XrProg *prog, const char *text, int len,
  * ======================================================================== */
 
 // Search for match in text (non-anchored)
-bool xr_nfa_search(XrProg *prog, const char *text, int len,
-                   const char **captures, int ncaptures) {
-    if (len < 0) len = (int)strlen(text);
+bool xr_nfa_search(XrProg *prog, const char *text, int len, const char **captures, int ncaptures) {
+    if (len < 0)
+        len = (int) strlen(text);
 
     const char *p = text;
     const char *end = text + len;
 
     // Optimization 0: literal fast path (use memmem directly)
     if (prog->is_literal && prog->literal_len > 0) {
-        const char *found = (const char*)memmem(text, len, prog->literal, prog->literal_len);
+        const char *found = (const char *) memmem(text, len, prog->literal, prog->literal_len);
         if (found) {
             if (captures && ncaptures >= 2) {
                 captures[0] = found;
@@ -805,8 +820,9 @@ bool xr_nfa_search(XrProg *prog, const char *text, int len,
     XrSparseSet *visited = &ctx->visited;
 
     // Clamp ncaptures to max
-    if (ncaptures > XR_RE_MAX_CAPTURES * 2) ncaptures = XR_RE_MAX_CAPTURES * 2;
-    size_t caps_size = ncaptures * sizeof(const char*);
+    if (ncaptures > XR_RE_MAX_CAPTURES * 2)
+        ncaptures = XR_RE_MAX_CAPTURES * 2;
+    size_t caps_size = ncaptures * sizeof(const char *);
 
     const char *init_caps[XR_RE_MAX_CAPTURES * 2];
     memset(init_caps, 0, caps_size);
@@ -824,7 +840,8 @@ bool xr_nfa_search(XrProg *prog, const char *text, int len,
     while (p <= end) {
         // Seed new match attempt when queue empty and no match yet
         if (!matched && runq->count == 0) {
-            if (search_pos > end) break;
+            if (search_pos > end)
+                break;
             p = search_pos;
             init_caps[0] = p;
             xr_sparse_set_clear(visited);
@@ -839,9 +856,12 @@ bool xr_nfa_search(XrProg *prog, const char *text, int len,
             }
         }
 
-        if (runq->count == 0) { p++; continue; }
+        if (runq->count == 0) {
+            p++;
+            continue;
+        }
 
-        int c = (p < end) ? (unsigned char)*p : -1;
+        int c = (p < end) ? (unsigned char) *p : -1;
 
         thread_list_clear(nextq);
         xr_sparse_set_clear(visited);
@@ -878,26 +898,26 @@ bool xr_nfa_search(XrProg *prog, const char *text, int len,
 
                 case XR_OP_BYTE:
                     if (c == ip->byte)
-                        add_thread(nextq, visited, prog, XR_INST_OUT(ip),
-                                   t->captures, text, p + 1, end, ncaptures);
+                        add_thread(nextq, visited, prog, XR_INST_OUT(ip), t->captures, text, p + 1,
+                                   end, ncaptures);
                     break;
 
                 case XR_OP_BYTE_RANGE:
                     if (c >= ip->lo && c <= ip->hi)
-                        add_thread(nextq, visited, prog, XR_INST_OUT(ip),
-                                   t->captures, text, p + 1, end, ncaptures);
+                        add_thread(nextq, visited, prog, XR_INST_OUT(ip), t->captures, text, p + 1,
+                                   end, ncaptures);
                     break;
 
                 case XR_OP_ANY_BYTE:
                     if (c >= 0 && c != '\n')
-                        add_thread(nextq, visited, prog, XR_INST_OUT(ip),
-                                   t->captures, text, p + 1, end, ncaptures);
+                        add_thread(nextq, visited, prog, XR_INST_OUT(ip), t->captures, text, p + 1,
+                                   end, ncaptures);
                     break;
 
                 case XR_OP_ANY_BYTE_NL:
                     if (c >= 0)
-                        add_thread(nextq, visited, prog, XR_INST_OUT(ip),
-                                   t->captures, text, p + 1, end, ncaptures);
+                        add_thread(nextq, visited, prog, XR_INST_OUT(ip), t->captures, text, p + 1,
+                                   end, ncaptures);
                     break;
 
                 case XR_OP_UNICODE_RANGE: {
@@ -906,12 +926,12 @@ bool xr_nfa_search(XrProg *prog, const char *text, int len,
                     if (char_len > 0) {
                         uint32_t prop_idx = ip->unicode_idx;
                         XrProgUnicodeRange *prop = &prog->unicode_ranges[prop_idx];
-                        bool in_prop = xr_unicode_is_property(unicode_cp,
-                                                              (XrUnicodeProperty)prop->prop_id);
+                        bool in_prop =
+                            xr_unicode_is_property(unicode_cp, (XrUnicodeProperty) prop->prop_id);
                         bool match_ok = prop->negated ? !in_prop : in_prop;
                         if (match_ok)
-                            add_thread(nextq, visited, prog, XR_INST_OUT(ip),
-                                       t->captures, text, p + char_len, end, ncaptures);
+                            add_thread(nextq, visited, prog, XR_INST_OUT(ip), t->captures, text,
+                                       p + char_len, end, ncaptures);
                     }
                     break;
                 }
@@ -925,7 +945,8 @@ bool xr_nfa_search(XrProg *prog, const char *text, int len,
         runq = nextq;
         nextq = tmp;
 
-        if (runq->count == 0 && matched) break;
+        if (runq->count == 0 && matched)
+            break;
 
         p++;
     }
@@ -936,7 +957,7 @@ find_done:
         if (copy_count > XR_RE_MAX_CAPTURES * 2) {
             copy_count = XR_RE_MAX_CAPTURES * 2;
         }
-        memcpy(captures, best_caps, copy_count * sizeof(char*));
+        memcpy(captures, best_caps, copy_count * sizeof(char *));
     }
 
     // Context reuse, do not free resources

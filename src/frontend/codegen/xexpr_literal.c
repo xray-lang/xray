@@ -75,7 +75,7 @@ XrExprDesc compile_literal(XrCompilerContext *ctx, XrCompiler *compiler, Literal
 
             if (ival >= -MAXARG_sBx && ival <= MAXARG_sBx) {
                 // Small integer: LOADI (AsBx format)
-                pc = xemit_loadi(compiler->emitter, 0, (int)ival);
+                pc = xemit_loadi(compiler->emitter, 0, (int) ival);
                 e.kind = XEXPR_RELOC;
                 e.u.pc = pc;
             } else {
@@ -145,7 +145,8 @@ XrExprDesc compile_literal(XrCompilerContext *ctx, XrCompiler *compiler, Literal
             XrString *pattern_str = xr_compile_time_intern(ctx->X, pattern, strlen(pattern));
             XrString *flags_str = xr_compile_time_intern(ctx->X, flags, strlen(flags));
 
-            int pattern_idx = xr_vm_proto_add_constant(compiler->proto, xr_string_value(pattern_str));
+            int pattern_idx =
+                xr_vm_proto_add_constant(compiler->proto, xr_string_value(pattern_str));
             int flags_idx = xr_vm_proto_add_constant(compiler->proto, xr_string_value(flags_str));
 
             pc = xemit_regex_compile(compiler->emitter, 0, pattern_idx, flags_idx);
@@ -163,4 +164,3 @@ XrExprDesc compile_literal(XrCompilerContext *ctx, XrCompiler *compiler, Literal
 
     return e;
 }
-

@@ -40,11 +40,11 @@
 
 /* ========== Constants ========== */
 
-#define XR_IMMIX_BLOCK_SIZE     (16 * 1024)
-#define XR_IMMIX_LINE_SIZE      128
-#define XR_IMMIX_LINES          (XR_IMMIX_BLOCK_SIZE / XR_IMMIX_LINE_SIZE)  // 128
-#define XR_IMMIX_FIRST_LINE     1   // Line 0 reserved for metadata pointer
-#define XR_IMMIX_USABLE_LINES   (XR_IMMIX_LINES - XR_IMMIX_FIRST_LINE)     // 127
+#define XR_IMMIX_BLOCK_SIZE (16 * 1024)
+#define XR_IMMIX_LINE_SIZE 128
+#define XR_IMMIX_LINES (XR_IMMIX_BLOCK_SIZE / XR_IMMIX_LINE_SIZE)  // 128
+#define XR_IMMIX_FIRST_LINE 1  // Line 0 reserved for metadata pointer
+#define XR_IMMIX_USABLE_LINES (XR_IMMIX_LINES - XR_IMMIX_FIRST_LINE)  // 127
 
 /* ========== Line Mark Bitmap ========== */
 
@@ -54,25 +54,23 @@
  *   alloc_marks - the only bitmap, always reflects true line occupancy.
  *   SET on allocation, rebuilt during sweep (per-block).
  */
-#define XR_IMMIX_LINE_SET(bm, line) \
-    ((bm)[(line) >> 6] |= (1ULL << ((line) & 63)))
+#define XR_IMMIX_LINE_SET(bm, line) ((bm)[(line) >> 6] |= (1ULL << ((line) & 63)))
 
-#define XR_IMMIX_LINE_GET(bm, line) \
-    ((bm)[(line) >> 6] & (1ULL << ((line) & 63)))
+#define XR_IMMIX_LINE_GET(bm, line) ((bm)[(line) >> 6] & (1ULL << ((line) & 63)))
 
 /* ========== Address-to-Block/Line Mapping ========== */
 
 // Block data is BLOCK_SIZE-aligned
-#define XR_IMMIX_BLOCK_DATA(ptr) \
-    ((char*)((uintptr_t)(ptr) & ~((uintptr_t)(XR_IMMIX_BLOCK_SIZE - 1))))
+#define XR_IMMIX_BLOCK_DATA(ptr)                                                                   \
+    ((char *) ((uintptr_t) (ptr) & ~((uintptr_t) (XR_IMMIX_BLOCK_SIZE - 1))))
 
 // Get XrImmixBlock metadata directly from any object pointer (no indirection)
 // Metadata is embedded in Line 0 of the aligned block
-#define XR_IMMIX_BLOCK_FROM_PTR(ptr) \
-    ((XrImmixBlock*)((uintptr_t)(ptr) & ~((uintptr_t)(XR_IMMIX_BLOCK_SIZE - 1))))
+#define XR_IMMIX_BLOCK_FROM_PTR(ptr)                                                               \
+    ((XrImmixBlock *) ((uintptr_t) (ptr) & ~((uintptr_t) (XR_IMMIX_BLOCK_SIZE - 1))))
 
-#define XR_IMMIX_LINE_INDEX(ptr) \
-    ((int)(((uintptr_t)(ptr) & (XR_IMMIX_BLOCK_SIZE - 1)) / XR_IMMIX_LINE_SIZE))
+#define XR_IMMIX_LINE_INDEX(ptr)                                                                   \
+    ((int) (((uintptr_t) (ptr) & (XR_IMMIX_BLOCK_SIZE - 1)) / XR_IMMIX_LINE_SIZE))
 
 /* ========== Block Metadata ========== */
 
@@ -83,22 +81,21 @@
 struct XrGCHeader;
 
 typedef struct XrImmixBlock {
-    struct XrImmixBlock *next;      // 8B
-    uint64_t alloc_marks[2];        // 16B - line occupancy (alloc + live)
-    struct XrGCHeader *local_allgc; // 8B  - per-block object list (cache-friendly sweep)
-    uint8_t next_scan_line;         // 1B  - resume position for hole scanning
-    uint8_t is_young;               // 1B  - Sticky Immix: 1=young block, 0=old block
-    uint8_t has_marked;             // 1B  - set during mark if any object in block is marked
-    uint8_t has_finalizers;         // 1B  - set if any object with finalizer allocated here
-    uint8_t has_black;              // 1B  - set when any object in block is set2black (GEN survivors)
-    uint8_t _pad2[3];               // 3B  - padding
-    uint32_t alloc_count;           // 4B  - number of objects in local_allgc
-    int64_t alloc_bytes;            // 8B  - total bytes of objects in local_allgc
+    struct XrImmixBlock *next;       // 8B
+    uint64_t alloc_marks[2];         // 16B - line occupancy (alloc + live)
+    struct XrGCHeader *local_allgc;  // 8B  - per-block object list (cache-friendly sweep)
+    uint8_t next_scan_line;          // 1B  - resume position for hole scanning
+    uint8_t is_young;                // 1B  - Sticky Immix: 1=young block, 0=old block
+    uint8_t has_marked;              // 1B  - set during mark if any object in block is marked
+    uint8_t has_finalizers;          // 1B  - set if any object with finalizer allocated here
+    uint8_t has_black;     // 1B  - set when any object in block is set2black (GEN survivors)
+    uint8_t _pad2[3];      // 3B  - padding
+    uint32_t alloc_count;  // 4B  - number of objects in local_allgc
+    int64_t alloc_bytes;   // 8B  - total bytes of objects in local_allgc
     // Total: 56B (with alignment padding), fits in Line 0 (128B)
 } XrImmixBlock;
 
-_Static_assert(sizeof(XrImmixBlock) <= XR_IMMIX_LINE_SIZE,
-               "XrImmixBlock must fit in Line 0");
+_Static_assert(sizeof(XrImmixBlock) <= XR_IMMIX_LINE_SIZE, "XrImmixBlock must fit in Line 0");
 
 /* ========== Per-Coroutine Immix Heap ========== */
 
@@ -111,9 +108,9 @@ _Static_assert(sizeof(XrImmixBlock) <= XR_IMMIX_LINE_SIZE,
  */
 typedef struct XrImmixHeap {
     // Hot path: bump allocation (JIT inline candidates)
-    char *cursor;                // offset 0 — JIT hardcoded
-    char *limit;                 // offset 8 — JIT hardcoded
-    XrImmixBlock *current_block; // offset 16
+    char *cursor;                 // offset 0 — JIT hardcoded
+    char *limit;                  // offset 8 — JIT hardcoded
+    XrImmixBlock *current_block;  // offset 16
 
     // Deferred alloc_marks: JIT fast path bumps cursor without setting marks.
     // Before hole-scanning, flush marks from mark_cursor to cursor.
@@ -142,13 +139,13 @@ XR_FUNC void xr_immix_reset(XrImmixHeap *heap);
 /* ========== Allocation API ========== */
 
 // Slow path for allocation (hole scanning, new block)
-XR_FUNC void* xr_immix_alloc_slow(XrImmixHeap *heap, size_t size);
+XR_FUNC void *xr_immix_alloc_slow(XrImmixHeap *heap, size_t size);
 
 // Bump-pointer allocate `size` bytes (8-byte aligned).
 // Fast path inlined for cross-unit performance.
-static inline void* xr_immix_alloc(XrImmixHeap *heap, size_t size) {
+static inline void *xr_immix_alloc(XrImmixHeap *heap, size_t size) {
     XR_DCHECK(size > 0 && size <= XR_IMMIX_BLOCK_SIZE, "immix_alloc: invalid size");
-    size = (size + 7) & ~(size_t)7;
+    size = (size + 7) & ~(size_t) 7;
     char *result = heap->cursor;
     if (__builtin_expect(result != NULL, 1)) {
         char *new_cursor = result + size;
@@ -167,14 +164,15 @@ static inline void* xr_immix_alloc(XrImmixHeap *heap, size_t size) {
 // Must be called before any hole-scanning (slow path entry).
 static inline void xr_immix_flush_marks(XrImmixHeap *heap) {
     char *mc = heap->mark_cursor;
-    char *c  = heap->cursor;
-    if (mc >= c || !mc) return;
+    char *c = heap->cursor;
+    if (mc >= c || !mc)
+        return;
     XrImmixBlock *block = XR_IMMIX_BLOCK_FROM_PTR(mc);
     int first = XR_IMMIX_LINE_INDEX(mc);
-    int last  = XR_IMMIX_LINE_INDEX(c - 1);
+    int last = XR_IMMIX_LINE_INDEX(c - 1);
     // Bulk set bits [first..last] using bitmask operations
-    uint64_t lo_mask = ~((1ULL << (first & 63)) - 1);   // bits [first%64 .. 63]
-    uint64_t hi_bit  = (last & 63) == 63 ? UINT64_MAX : (1ULL << ((last & 63) + 1)) - 1;
+    uint64_t lo_mask = ~((1ULL << (first & 63)) - 1);  // bits [first%64 .. 63]
+    uint64_t hi_bit = (last & 63) == 63 ? UINT64_MAX : (1ULL << ((last & 63) + 1)) - 1;
     if ((first >> 6) == (last >> 6)) {
         block->alloc_marks[first >> 6] |= lo_mask & hi_bit;
     } else {
@@ -197,7 +195,7 @@ XR_FUNC void xr_immix_mark_alloc_lines(void *obj_ptr, size_t obj_size);
 static inline void xr_immix_mark_alloc_lines_fast(void *obj_ptr, size_t obj_size) {
     XrImmixBlock *block = XR_IMMIX_BLOCK_FROM_PTR(obj_ptr);
     int first = XR_IMMIX_LINE_INDEX(obj_ptr);
-    int last  = XR_IMMIX_LINE_INDEX((char*)obj_ptr + obj_size - 1);
+    int last = XR_IMMIX_LINE_INDEX((char *) obj_ptr + obj_size - 1);
     XR_IMMIX_LINE_SET(block->alloc_marks, first);
     for (int l = first + 1; l <= last; l++)
         XR_IMMIX_LINE_SET(block->alloc_marks, l);
@@ -238,4 +236,4 @@ typedef struct XrImmixStats {
 
 XR_FUNC void xr_immix_get_stats(XrImmixHeap *heap, XrImmixStats *stats);
 
-#endif // XIMMIX_H
+#endif  // XIMMIX_H

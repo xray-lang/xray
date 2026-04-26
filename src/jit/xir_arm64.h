@@ -29,14 +29,39 @@
 
 typedef enum {
     // General purpose registers (64-bit X, 32-bit W)
-    A64_X0 = 0, A64_X1, A64_X2, A64_X3, A64_X4, A64_X5, A64_X6, A64_X7,
-    A64_X8, A64_X9, A64_X10, A64_X11, A64_X12, A64_X13, A64_X14, A64_X15,
-    A64_X16, A64_X17, A64_X18, A64_X19, A64_X20, A64_X21, A64_X22, A64_X23,
-    A64_X24, A64_X25, A64_X26, A64_X27, A64_X28,
-    A64_FP = 29,    // frame pointer (x29)
-    A64_LR = 30,    // link register (x30)
-    A64_SP = 31,    // stack pointer (encoded as 31 in some contexts)
-    A64_XZR = 31,   // zero register (same encoding as SP, context-dependent)
+    A64_X0 = 0,
+    A64_X1,
+    A64_X2,
+    A64_X3,
+    A64_X4,
+    A64_X5,
+    A64_X6,
+    A64_X7,
+    A64_X8,
+    A64_X9,
+    A64_X10,
+    A64_X11,
+    A64_X12,
+    A64_X13,
+    A64_X14,
+    A64_X15,
+    A64_X16,
+    A64_X17,
+    A64_X18,
+    A64_X19,
+    A64_X20,
+    A64_X21,
+    A64_X22,
+    A64_X23,
+    A64_X24,
+    A64_X25,
+    A64_X26,
+    A64_X27,
+    A64_X28,
+    A64_FP = 29,   // frame pointer (x29)
+    A64_LR = 30,   // link register (x30)
+    A64_SP = 31,   // stack pointer (encoded as 31 in some contexts)
+    A64_XZR = 31,  // zero register (same encoding as SP, context-dependent)
 } A64Reg;
 
 // Callee-saved: x19-x28, fp(x29), lr(x30)
@@ -69,9 +94,9 @@ typedef enum {
 /* ========== Code Buffer ========== */
 
 typedef struct {
-    uint32_t *code;      // instruction buffer
-    uint32_t  count;     // instructions written
-    uint32_t  capacity;  // buffer capacity (in instructions)
+    uint32_t *code;     // instruction buffer
+    uint32_t count;     // instructions written
+    uint32_t capacity;  // buffer capacity (in instructions)
 } A64Buf;
 
 XR_FUNC void a64_buf_init(A64Buf *buf, uint32_t *mem, uint32_t cap_instructions);
@@ -321,4 +346,4 @@ XR_FUNC int a64_load_f64(A64Buf *buf, A64Reg dd, A64Reg scratch_gpr, double val)
 
 XR_FUNC uint32_t a64_nop(void);
 
-#endif // XIR_ARM64_H
+#endif  // XIR_ARM64_H

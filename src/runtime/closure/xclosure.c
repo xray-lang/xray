@@ -20,19 +20,18 @@
  * Upvalues are zero-initialised to null; callers populate them via OP_CLOSURE
  * or the JIT closure-creation path.
  */
-XrClosure *xr_closure_new(XrayIsolate *isolate, XrProto *proto,
-                          struct XrCoroutine *coro) {
+XrClosure *xr_closure_new(XrayIsolate *isolate, XrProto *proto, struct XrCoroutine *coro) {
     XR_DCHECK(isolate != NULL, "closure_new: NULL isolate");
     XR_DCHECK(proto != NULL, "closure_new: NULL proto");
 
     int nuv = DYNARRAY_COUNT(&proto->upvalues);
-    size_t size = sizeof(XrClosure) + (size_t)nuv * sizeof(XrValue);
+    size_t size = sizeof(XrClosure) + (size_t) nuv * sizeof(XrValue);
 
     XrClosure *closure;
     if (coro && coro->coro_gc) {
-        closure = (XrClosure *)xr_coro_gc_newobj(coro->coro_gc, XR_TFUNCTION, size);
+        closure = (XrClosure *) xr_coro_gc_newobj(coro->coro_gc, XR_TFUNCTION, size);
     } else {
-        closure = (XrClosure *)xr_gc_alloc(&isolate->gc, size, XR_TFUNCTION);
+        closure = (XrClosure *) xr_gc_alloc(&isolate->gc, size, XR_TFUNCTION);
     }
     if (closure == NULL) {
         return NULL;
@@ -40,7 +39,7 @@ XrClosure *xr_closure_new(XrayIsolate *isolate, XrProto *proto,
 
     xr_gc_header_init_type(&closure->gc, XR_TFUNCTION);
     closure->proto = proto;
-    closure->upval_count = (uint16_t)nuv;
+    closure->upval_count = (uint16_t) nuv;
 
     for (int i = 0; i < nuv; i++) {
         closure->upvals[i] = xr_null();

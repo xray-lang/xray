@@ -26,18 +26,26 @@
 
 // AOT sentinel: used as fn_ptr marker for builtin method invocation
 int64_t xrt_invoke_method_sentinel(struct XrCoroutine *c, int64_t x) {
-    (void)c; (void)x; return 0;
+    (void) c;
+    (void) x;
+    return 0;
 }
 
 // AOT sentinel: StringBuilder operations
 int64_t xrt_strbuf_new_sentinel(struct XrCoroutine *c, int64_t x) {
-    (void)c; (void)x; return 0;
+    (void) c;
+    (void) x;
+    return 0;
 }
 int64_t xrt_strbuf_append_sentinel(struct XrCoroutine *c, int64_t x) {
-    (void)c; (void)x; return 0;
+    (void) c;
+    (void) x;
+    return 0;
 }
 int64_t xrt_strbuf_finish_sentinel(struct XrCoroutine *c, int64_t x) {
-    (void)c; (void)x; return 0;
+    (void) c;
+    (void) x;
+    return 0;
 }
 
 // Layout macros now in xir_builder_internal.h
@@ -49,27 +57,40 @@ int64_t xrt_strbuf_finish_sentinel(struct XrCoroutine *c, int64_t x) {
 // 0=NONE, 1=INT, 2=FLOAT, 3=BOOL, 4=STRING, 5=ARRAY, 6=MAP, 7=SET, 8=JSON, 9=INSTANCE
 int builder_derive_type_hint(XirBuilder *b, int recv_reg) {
     XR_DCHECK(b != NULL, "derive_type_hint: NULL builder");
-    if (b->aot_mode) return 0;
-    if (recv_reg < 0 || recv_reg >= 256) return 0;
+    if (b->aot_mode)
+        return 0;
+    if (recv_reg < 0 || recv_reg >= 256)
+        return 0;
 
     uint8_t tag = b->slot_tag[recv_reg];
-    if (tag == VTAG_TAGGED) return 0;
-    if (tag == VTAG_I64) return 1;
-    if (tag == VTAG_F64) return 2;
-    if (tag == VTAG_BOOL) return 3;
+    if (tag == VTAG_TAGGED)
+        return 0;
+    if (tag == VTAG_I64)
+        return 1;
+    if (tag == VTAG_F64)
+        return 2;
+    if (tag == VTAG_BOOL)
+        return 3;
 
     // PTR tag: use param_types to distinguish string/array/map/etc.
-    if (tag == VTAG_PTR && b->proto->param_types &&
-        recv_reg < b->proto->param_types_count && b->proto->param_types[recv_reg]) {
+    if (tag == VTAG_PTR && b->proto->param_types && recv_reg < b->proto->param_types_count &&
+        b->proto->param_types[recv_reg]) {
         XrType *rt = b->proto->param_types[recv_reg];
         switch (rt->kind) {
-        case XR_KIND_STRING:   return 4;
-        case XR_KIND_ARRAY:    return 5;
-        case XR_KIND_MAP:      return 6;
-        case XR_KIND_SET:      return 7;
-        case XR_KIND_JSON:     return 8;
-        case XR_KIND_INSTANCE: return 9;
-        default: break;
+            case XR_KIND_STRING:
+                return 4;
+            case XR_KIND_ARRAY:
+                return 5;
+            case XR_KIND_MAP:
+                return 6;
+            case XR_KIND_SET:
+                return 7;
+            case XR_KIND_JSON:
+                return 8;
+            case XR_KIND_INSTANCE:
+                return 9;
+            default:
+                break;
         }
     }
     return 0;
@@ -79,20 +100,28 @@ int builder_derive_type_hint(XirBuilder *b, int recv_reg) {
 
 // Map XrSlotType to XrRep (machine representation)
 uint8_t xr_slot_to_rep(uint8_t slot_type) {
-    if (slot_type == XR_SLOT_ANY) return XR_REP_TAGGED;
-    if (XR_SLOT_IS_INT(slot_type) || slot_type == XR_SLOT_BOOL) return XR_REP_I64;
-    if (XR_SLOT_IS_FLOAT(slot_type)) return XR_REP_F64;
-    if (slot_type == XR_SLOT_PTR) return XR_REP_PTR;
+    if (slot_type == XR_SLOT_ANY)
+        return XR_REP_TAGGED;
+    if (XR_SLOT_IS_INT(slot_type) || slot_type == XR_SLOT_BOOL)
+        return XR_REP_I64;
+    if (XR_SLOT_IS_FLOAT(slot_type))
+        return XR_REP_F64;
+    if (slot_type == XR_SLOT_PTR)
+        return XR_REP_PTR;
     return XR_REP_TAGGED;
 }
 
 // Map XrRep to xr_tag for precise JIT value reconstruction.
 uint8_t xr_rep_to_tag(uint8_t rep) {
     switch (rep) {
-    case XR_REP_I64:    return VTAG_I64;
-    case XR_REP_F64:    return VTAG_F64;
-    case XR_REP_PTR:    return VTAG_PTR;
-    default:            return VTAG_TAGGED;
+        case XR_REP_I64:
+            return VTAG_I64;
+        case XR_REP_F64:
+            return VTAG_F64;
+        case XR_REP_PTR:
+            return VTAG_PTR;
+        default:
+            return VTAG_TAGGED;
     }
 }
 
@@ -104,11 +133,14 @@ bool builder_is_numeric_union(XirBuilder *b, int reg) {
     if (reg >= 0 && reg < b->proto->numparams && b->proto->param_types &&
         reg < b->proto->param_types_count)
         t = b->proto->param_types[reg];
-    if (!t || t->kind != XR_KIND_UNION) return false;
+    if (!t || t->kind != XR_KIND_UNION)
+        return false;
     for (int i = 0; i < t->union_type.member_count; i++) {
         struct XrType *m = t->union_type.members[i];
-        if (!m) return false;
-        if (m->kind != XR_KIND_INT && m->kind != XR_KIND_FLOAT) return false;
+        if (!m)
+            return false;
+        if (m->kind != XR_KIND_INT && m->kind != XR_KIND_FLOAT)
+            return false;
     }
     return t->union_type.member_count > 0;
 }
@@ -119,9 +151,8 @@ bool builder_is_numeric_union(XirBuilder *b, int reg) {
 // Uses param_types for parameters, falls back to TAGGED for non-params.
 void builder_tag_from_slot(XirBuilder *b, XirRef ref, int dest_slot) {
     uint8_t tag = VTAG_TAGGED;
-    if (dest_slot >= 0 && dest_slot < b->proto->numparams &&
-        b->proto->param_types && dest_slot < b->proto->param_types_count &&
-        b->proto->param_types[dest_slot]) {
+    if (dest_slot >= 0 && dest_slot < b->proto->numparams && b->proto->param_types &&
+        dest_slot < b->proto->param_types_count && b->proto->param_types[dest_slot]) {
         tag = value_tag_to_vtag(xr_type_to_xr_tag(b->proto->param_types[dest_slot]));
     }
     builder_tag_vreg(b, ref, tag, 0);
@@ -131,15 +162,18 @@ void builder_tag_from_slot(XirBuilder *b, XirRef ref, int dest_slot) {
 // Only returns type info for parameter slots (flow-insensitive is correct
 // for params). Non-param slots return NULL; callers use inst_types[pc].
 struct XrType *builder_slot_xrtype(XirBuilder *b, int reg) {
-    if (reg < 0 || reg >= b->proto->numparams) return NULL;
-    if (!b->proto->param_types || reg >= b->proto->param_types_count) return NULL;
+    if (reg < 0 || reg >= b->proto->numparams)
+        return NULL;
+    if (!b->proto->param_types || reg >= b->proto->param_types_count)
+        return NULL;
     return b->proto->param_types[reg];
 }
 
 // Get XrType* for the result of instruction at given PC (NULL if untyped).
 // Flow-sensitive: each PC has its own type, independent of register reuse.
 struct XrType *builder_inst_xrtype(XirBuilder *b, uint32_t pc) {
-    if (!b->proto->inst_types || pc >= b->proto->inst_types_count) return NULL;
+    if (!b->proto->inst_types || pc >= b->proto->inst_types_count)
+        return NULL;
     return b->proto->inst_types[pc];
 }
 
@@ -150,17 +184,16 @@ struct XrType *builder_inst_xrtype(XirBuilder *b, uint32_t pc) {
 // Used by CHA devirt to get receiver type via backward scan.
 struct XrType *builder_find_reg_type(XirBuilder *b, int reg) {
     // Fast path: parameter slots
-    if (reg >= 0 && reg < b->proto->numparams &&
-        b->proto->param_types && reg < b->proto->param_types_count &&
-        b->proto->param_types[reg])
+    if (reg >= 0 && reg < b->proto->numparams && b->proto->param_types &&
+        reg < b->proto->param_types_count && b->proto->param_types[reg])
         return b->proto->param_types[reg];
     // Backward scan: find last instruction that wrote to reg
-    if (!b->proto->inst_types) return NULL;
-    for (int32_t pc = (int32_t)b->cur_pc - 1; pc >= 0 && pc > (int32_t)b->cur_pc - 128; pc--) {
-        XrInstruction inst = PROTO_CODE(b->proto, (uint32_t)pc);
+    if (!b->proto->inst_types)
+        return NULL;
+    for (int32_t pc = (int32_t) b->cur_pc - 1; pc >= 0 && pc > (int32_t) b->cur_pc - 128; pc--) {
+        XrInstruction inst = PROTO_CODE(b->proto, (uint32_t) pc);
         int a = GETARG_A(inst);
-        if (a == reg && (uint32_t)pc < b->proto->inst_types_count &&
-            b->proto->inst_types[pc])
+        if (a == reg && (uint32_t) pc < b->proto->inst_types_count && b->proto->inst_types[pc])
             return b->proto->inst_types[pc];
     }
     return NULL;
@@ -170,11 +203,14 @@ struct XrType *builder_find_reg_type(XirBuilder *b, int reg) {
 // Called after builder_set_slot for ops that default to VTAG_TAGGED
 // (CELL_GET, CALL_DIRECT, etc.) to leverage xray's type annotations.
 void builder_refine_slot_from_inst_type(XirBuilder *b, int slot) {
-    if (slot < 0 || slot >= 256) return;
+    if (slot < 0 || slot >= 256)
+        return;
     struct XrType *t = builder_inst_xrtype(b, b->cur_pc);
-    if (!t) return;
+    if (!t)
+        return;
     uint8_t xr_tag = xr_type_to_xr_tag(t);
-    if (xr_tag == 0xFF) return;  // unknown
+    if (xr_tag == 0xFF)
+        return;  // unknown
     uint8_t vtag = value_tag_to_vtag(xr_tag);
     if (vtag_is_concrete(vtag)) {
         b->slot_tag[slot] = vtag;
@@ -191,7 +227,8 @@ void builder_refine_slot_from_inst_type(XirBuilder *b, int slot) {
 // Reads from slot_tag[] which is initialized from proto->param_types
 // and auto-synced from vreg.xr_tag in builder_set_slot().
 uint8_t builder_slot_xr_tag(XirBuilder *b, int slot) {
-    if (slot < 0 || slot >= 256) return VTAG_TAGGED;
+    if (slot < 0 || slot >= 256)
+        return VTAG_TAGGED;
     return b->slot_tag[slot];
 }
 
@@ -204,37 +241,41 @@ int builder_add_deopt_info(XirBuilder *b, uint32_t bc_pc) {
     XR_DCHECK(b != NULL, "add_deopt_info: NULL builder");
     XR_DCHECK(b->func != NULL, "add_deopt_info: NULL func");
     XirFunc *func = b->func;
-    if (func->ndeopt >= XIR_MAX_DEOPT_POINTS) return -1;
+    if (func->ndeopt >= XIR_MAX_DEOPT_POINTS)
+        return -1;
 
     // Grow deopt_infos array if needed
     if (func->ndeopt >= func->deopt_cap) {
         uint32_t new_cap = func->deopt_cap ? func->deopt_cap * 2 : 16;
-        if (new_cap > XIR_MAX_DEOPT_POINTS) new_cap = XIR_MAX_DEOPT_POINTS;
+        if (new_cap > XIR_MAX_DEOPT_POINTS)
+            new_cap = XIR_MAX_DEOPT_POINTS;
         XR_REALLOC_OR_ABORT(func->deopt_infos, new_cap * sizeof(XirDeoptInfo), "xir: deopt infos");
         func->deopt_cap = new_cap;
     }
 
     // Count live slots
     int max_slot = b->proto->maxstacksize;
-    if (max_slot > 256) max_slot = 256;
+    if (max_slot > 256)
+        max_slot = 256;
     uint16_t nlive = 0;
     for (int i = 0; i < max_slot; i++) {
-        if (b->slot_map[i] != XIR_NONE) nlive++;
+        if (b->slot_map[i] != XIR_NONE)
+            nlive++;
     }
 
     // Allocate slot entries via arena
     XirDeoptSlot *slots = NULL;
     if (nlive > 0) {
-        slots = (XirDeoptSlot *)xir_arena_alloc(func->arena,
-                    nlive * sizeof(XirDeoptSlot));
-        if (!slots) return -1;
+        slots = (XirDeoptSlot *) xir_arena_alloc(func->arena, nlive * sizeof(XirDeoptSlot));
+        if (!slots)
+            return -1;
     }
 
     // Fill slot entries
     uint16_t idx = 0;
     for (int i = 0; i < max_slot && idx < nlive; i++) {
         if (b->slot_map[i] != XIR_NONE) {
-            slots[idx].bc_slot = (int16_t)i;
+            slots[idx].bc_slot = (int16_t) i;
             // Use proto's bytecode slot type for deopt reconstruction:
             // if the proto declares the slot as untyped (any), use TAGGED
             // so deopt_reconstruct uses raw-value heuristic to detect ptrs.
@@ -260,13 +301,13 @@ int builder_add_deopt_info(XirBuilder *b, uint32_t bc_pc) {
         }
     }
 
-    uint16_t deopt_id = (uint16_t)func->ndeopt;
+    uint16_t deopt_id = (uint16_t) func->ndeopt;
     XirDeoptInfo *info = &func->deopt_infos[func->ndeopt++];
     info->bc_pc = bc_pc;
     info->nslots = nlive;
     info->deopt_id = deopt_id;
     info->slots = slots;
-    return (int)deopt_id;
+    return (int) deopt_id;
 }
 
 /*
@@ -279,16 +320,17 @@ uint8_t builder_ref_sf_tag(XirBuilder *b, XirRef ref, int slot_reg) {
         if (vi < b->func->nvreg) {
             uint8_t vtag = type_kind_to_vtag(xir_ref_ctype(b->func, ref).kind);
             // Concrete vtags (including VTAG_NULL) map directly to XrValue tags.
-            if (vtag_is_concrete(vtag)) return vtag_to_value_tag(vtag);
-            if (vtag != VTAG_TAGGED) return XIR_SF_TAG_RUNTIME;
+            if (vtag_is_concrete(vtag))
+                return vtag_to_value_tag(vtag);
+            if (vtag != VTAG_TAGGED)
+                return XIR_SF_TAG_RUNTIME;
             // VTAG_TAGGED: check for NULL literal (XIR_CONST_PTR with ptr=0)
             XirIns *def = b->func->vregs[vi].def;
             if (def && def->op == XIR_CONST_PTR) {
                 XirRef ca = def->args[0];
                 if (xir_ref_is_const(ca)) {
                     uint32_t ci = XIR_REF_INDEX(ca);
-                    if (ci < b->func->nconst &&
-                        b->func->consts[ci].val.ptr == NULL)
+                    if (ci < b->func->nconst && b->func->consts[ci].val.ptr == NULL)
                         return 0;  // XR_TAG_NULL
                 }
             }
@@ -296,8 +338,8 @@ uint8_t builder_ref_sf_tag(XirBuilder *b, XirRef ref, int slot_reg) {
     }
     // Fall back to slot_type hint
     uint8_t st = (slot_reg >= 0 && slot_reg < 256) ? b->slot_rep[slot_reg] : XR_REP_TAGGED;
-    uint8_t vt = (uint8_t)xr_rep_to_tag(st);
-    return vtag_is_concrete(vt) ? vtag_to_value_tag(vt) : (uint8_t)XIR_SF_TAG_RUNTIME;
+    uint8_t vt = (uint8_t) xr_rep_to_tag(st);
+    return vtag_is_concrete(vt) ? vtag_to_value_tag(vt) : (uint8_t) XIR_SF_TAG_RUNTIME;
 }
 
 /* ========== Builder Init / Cleanup ========== */
@@ -308,7 +350,7 @@ static void builder_init(XirBuilder *b, XirFunc *func, XrProto *proto) {
     XR_DCHECK(proto != NULL, "builder_init: NULL proto");
     b->func = func;
     b->proto = proto;
-    b->code_count = (uint32_t)PROTO_CODE_COUNT(proto);
+    b->code_count = (uint32_t) PROTO_CODE_COUNT(proto);
     b->ops_translated = 0;
     b->ops_skipped = 0;
     b->nloops = 0;
@@ -366,32 +408,40 @@ static void builder_init(XirBuilder *b, XirFunc *func, XrProto *proto) {
             OpCode op = GET_OPCODE(inst);
             int ra = GETARG_A(inst);
             switch (op) {
-            // Opcodes that write I64 to R[A]
-            case OP_LOADI:
-            case OP_ADDI: case OP_SUBI: case OP_MULI:
-            case OP_BAND: case OP_BOR: case OP_BXOR:
-            case OP_SHL: case OP_SHR: case OP_BNOT:
-                if (b->slot_rep[ra] == XR_REP_TAGGED)
-                    b->slot_rep[ra] = XR_REP_I64;
-                break;
-            // Opcodes that read R[A] as I64 (comparison immediates)
-            case OP_EQI: case OP_LTI: case OP_LEI:
-                if (b->slot_rep[ra] == XR_REP_TAGGED)
-                    b->slot_rep[ra] = XR_REP_I64;
-                break;
-            // Opcodes that write F64 to R[A]
-            case OP_LOADF:
-                if (b->slot_rep[ra] == XR_REP_TAGGED)
-                    b->slot_rep[ra] = XR_REP_F64;
-                break;
-            default:
-                break;
+                // Opcodes that write I64 to R[A]
+                case OP_LOADI:
+                case OP_ADDI:
+                case OP_SUBI:
+                case OP_MULI:
+                case OP_BAND:
+                case OP_BOR:
+                case OP_BXOR:
+                case OP_SHL:
+                case OP_SHR:
+                case OP_BNOT:
+                    if (b->slot_rep[ra] == XR_REP_TAGGED)
+                        b->slot_rep[ra] = XR_REP_I64;
+                    break;
+                // Opcodes that read R[A] as I64 (comparison immediates)
+                case OP_EQI:
+                case OP_LTI:
+                case OP_LEI:
+                    if (b->slot_rep[ra] == XR_REP_TAGGED)
+                        b->slot_rep[ra] = XR_REP_I64;
+                    break;
+                // Opcodes that write F64 to R[A]
+                case OP_LOADF:
+                    if (b->slot_rep[ra] == XR_REP_TAGGED)
+                        b->slot_rep[ra] = XR_REP_F64;
+                    break;
+                default:
+                    break;
             }
         }
     }
 
     // Allocate pc → block map
-    b->pc_to_block = (XirBlock **)xr_calloc(b->code_count + 1, sizeof(XirBlock *));
+    b->pc_to_block = (XirBlock **) xr_calloc(b->code_count + 1, sizeof(XirBlock *));
 }
 
 static void builder_cleanup(XirBuilder *b) {
@@ -431,12 +481,12 @@ XirRef builder_get_slot(XirBuilder *b, XirBlock *blk, int reg) {
     XR_DCHECK_BOUNDS(reg, 256, "builder_get_slot: reg out of range");
     if (b->block_defs) {
         XirRef ref = braun_read_var(b, blk->id, reg);
-        b->slot_map[reg] = ref; // keep slot_map in sync
+        b->slot_map[reg] = ref;  // keep slot_map in sync
         // Tag phi/new vregs with bc_slot for OSR mapping
         if (xir_ref_is_vreg(ref)) {
             uint32_t vi = XIR_REF_INDEX(ref);
             if (vi < b->func->nvreg && b->func->vregs[vi].bc_slot < 0) {
-                b->func->vregs[vi].bc_slot = (int16_t)reg;
+                b->func->vregs[vi].bc_slot = (int16_t) reg;
             }
         }
         return ref;
@@ -456,13 +506,15 @@ XirRef builder_get_slot(XirBuilder *b, XirBlock *blk, int reg) {
 // so callers don't need to worry about call order with builder_set_slot.
 void builder_tag_vreg(XirBuilder *b, XirRef ref, uint8_t xr_tag, uint16_t heap_type) {
     XR_DCHECK(b != NULL, "builder_tag_vreg: NULL builder");
-    if (!xir_ref_is_vreg(ref)) return;
+    if (!xir_ref_is_vreg(ref))
+        return;
     uint32_t vi = XIR_REF_INDEX(ref);
     if (vi < b->func->nvreg) {
         b->func->vregs[vi].heap_type = heap_type;
         // Set ctype on defining instruction
         XirIns *def = b->func->vregs[vi].def;
-        if (def) def->ctype = xir_type_from_vtag(xr_tag, heap_type);
+        if (def)
+            def->ctype = xir_type_from_vtag(xr_tag, heap_type);
         // Sync slot_tag for any slot currently holding this vreg.
         int16_t bc = b->func->vregs[vi].bc_slot;
         if (bc >= 0 && bc < 256 && b->slot_map[bc] == ref) {
@@ -484,8 +536,7 @@ void builder_set_slot(XirBuilder *b, int reg, XirRef ref) {
     XirRef old = b->slot_map[reg];
     if (xir_ref_is_vreg(old) && old != ref) {
         uint32_t old_vi = XIR_REF_INDEX(old);
-        if (old_vi < b->func->nvreg &&
-            b->func->vregs[old_vi].bc_slot == (int16_t)reg) {
+        if (old_vi < b->func->nvreg && b->func->vregs[old_vi].bc_slot == (int16_t) reg) {
             /* PHI dst vregs (def==NULL) must keep their original bc_slot.
              * OSR triggers at loop back-edges AFTER FORLOOP updates R[A+2]
              * but BEFORE the body re-executes (e.g. MOVE R[3] R[2]).
@@ -498,7 +549,7 @@ void builder_set_slot(XirBuilder *b, int reg, XirRef ref) {
                 int max = b->proto->maxstacksize;
                 for (int s = 0; s < max; s++) {
                     if (s != reg && b->slot_map[s] == old) {
-                        new_slot = (int16_t)s;
+                        new_slot = (int16_t) s;
                         break;
                     }
                 }
@@ -523,7 +574,7 @@ void builder_set_slot(XirBuilder *b, int reg, XirRef ref) {
         uint32_t vi = XIR_REF_INDEX(ref);
         if (vi < b->func->nvreg) {
             if (b->func->vregs[vi].bc_slot < 0)
-                b->func->vregs[vi].bc_slot = (int16_t)reg;
+                b->func->vregs[vi].bc_slot = (int16_t) reg;
 
             // Sync slot_rep from vreg's machine type so PHI creation
             // uses the correct representation.
@@ -558,14 +609,13 @@ void builder_set_slot(XirBuilder *b, int reg, XirRef ref) {
 // Write a slot in a specific block (cross-block variant of builder_set_slot).
 // Used for parameter initialization, CPS suspend results, and other cases
 // where we need to define a variable in a block other than the current one.
-void builder_set_slot_in_block(XirBuilder *b, uint32_t blk_id,
-                                int slot, XirRef ref) {
+void builder_set_slot_in_block(XirBuilder *b, uint32_t blk_id, int slot, XirRef ref) {
     braun_write_var(b, blk_id, slot, ref);
     if (xir_ref_is_vreg(ref)) {
         uint32_t vi = XIR_REF_INDEX(ref);
         if (vi < b->func->nvreg) {
             if (b->func->vregs[vi].bc_slot < 0)
-                b->func->vregs[vi].bc_slot = (int16_t)slot;
+                b->func->vregs[vi].bc_slot = (int16_t) slot;
             if (slot >= 0 && slot < 256)
                 b->slot_map[slot] = ref;
         }
@@ -575,18 +625,14 @@ void builder_set_slot_in_block(XirBuilder *b, uint32_t blk_id,
 // Emit GUARD_SHAPE for slot_shape fast paths.
 // The guard includes a null check (CBZ → deopt) and shape_id comparison.
 // GVN/CSE will eliminate redundant guards on the same object within a block.
-void builder_emit_shape_guard(XirBuilder *b, XirBlock *blk,
-                                     XirRef obj, struct XrShape *shape,
-                                     uint32_t pc) {
-    XirRef shape_id_ref = xir_const_i64(b->func,
-        (int64_t)(uint32_t)shape->id);
-    xir_emit(b->func, blk, XIR_GUARD_SHAPE, XR_REP_VOID,
-             obj, shape_id_ref);
+void builder_emit_shape_guard(XirBuilder *b, XirBlock *blk, XirRef obj, struct XrShape *shape,
+                              uint32_t pc) {
+    XirRef shape_id_ref = xir_const_i64(b->func, (int64_t) (uint32_t) shape->id);
+    xir_emit(b->func, blk, XIR_GUARD_SHAPE, XR_REP_VOID, obj, shape_id_ref);
     blk->ins[blk->nins - 1].flags |= XIR_FLAG_SIDE_EFFECT;
     int did = builder_add_deopt_info(b, pc);
     if (did >= 0) {
-        blk->ins[blk->nins - 1].dst =
-            xir_const_i64(b->func, (int64_t)did);
+        blk->ins[blk->nins - 1].dst = xir_const_i64(b->func, (int64_t) did);
     }
 }
 
@@ -594,7 +640,8 @@ void builder_emit_shape_guard(XirBuilder *b, XirBlock *blk,
 uint8_t ref_xir_type(XirFunc *func, XirRef ref) {
     if (xir_ref_is_vreg(ref)) {
         uint32_t idx = XIR_REF_INDEX(ref);
-        if (idx < func->nvreg) return func->vregs[idx].rep;
+        if (idx < func->nvreg)
+            return func->vregs[idx].rep;
     }
     return XR_REP_TAGGED;
 }
@@ -631,14 +678,14 @@ XirRef braun_read_var(XirBuilder *b, uint32_t blk_id, int slot) {
 
 // Fill phi operands from all predecessors
 static XirRef braun_add_phi_operands(XirBuilder *b, uint32_t blk_id, int slot, XirPhi *phi) {
-    if (blk_id >= b->func->nblk) return phi->dst;
+    if (blk_id >= b->func->nblk)
+        return phi->dst;
     XirBlock *blk = b->func->blocks[blk_id];
 
     // npred may have grown since phi was created (e.g. back-edges added
     // after the incomplete phi was created for an unsealed loop header).
     if (blk->npred > phi->narg) {
-        XirRef *new_args = (XirRef *)xir_arena_calloc(
-            b->func->arena, blk->npred, sizeof(XirRef));
+        XirRef *new_args = (XirRef *) xir_arena_calloc(b->func->arena, blk->npred, sizeof(XirRef));
         if (new_args) {
             for (uint16_t i = 0; i < phi->narg; i++)
                 new_args[i] = phi->args[i];
@@ -651,7 +698,8 @@ static XirRef braun_add_phi_operands(XirBuilder *b, uint32_t blk_id, int slot, X
 
     for (uint32_t p = 0; p < blk->npred; p++) {
         XirBlock *pred = blk->preds[p];
-        if (!pred) continue;
+        if (!pred)
+            continue;
         XirRef val = braun_read_var(b, pred->id, slot);
         xir_phi_set_arg(phi, p, val);
     }
@@ -666,7 +714,8 @@ static XirRef braun_add_phi_operands(XirBuilder *b, uint32_t blk_id, int slot, X
         bool trivial = true;
         for (uint32_t p = 0; p < phi->narg && trivial; p++) {
             XirRef arg = phi->args[p];
-            if (xir_ref_is_none(arg) || arg == phi->dst) continue;
+            if (xir_ref_is_none(arg) || arg == phi->dst)
+                continue;
             if (xir_ref_is_none(same_val)) {
                 same_val = arg;
             } else if (arg != same_val) {
@@ -688,13 +737,22 @@ static XirRef braun_add_phi_operands(XirBuilder *b, uint32_t blk_id, int slot, X
         bool rep_agree = true;
         for (uint32_t p = 0; p < phi->narg && rep_agree; p++) {
             XirRef arg = phi->args[p];
-            if (xir_ref_is_none(arg) || arg == phi->dst) continue;
-            if (!xir_ref_is_vreg(arg)) { rep_agree = false; break; }
+            if (xir_ref_is_none(arg) || arg == phi->dst)
+                continue;
+            if (!xir_ref_is_vreg(arg)) {
+                rep_agree = false;
+                break;
+            }
             uint32_t vi = XIR_REF_INDEX(arg);
-            if (vi >= b->func->nvreg) { rep_agree = false; break; }
+            if (vi >= b->func->nvreg) {
+                rep_agree = false;
+                break;
+            }
             uint8_t r = b->func->vregs[vi].rep;
-            if (common_rep == 0xFF) common_rep = r;
-            else if (r != common_rep) rep_agree = false;
+            if (common_rep == 0xFF)
+                common_rep = r;
+            else if (r != common_rep)
+                rep_agree = false;
         }
         if (rep_agree && common_rep != 0xFF && common_rep != phi->rep) {
             phi->rep = common_rep;
@@ -714,11 +772,14 @@ static XirRef braun_add_phi_operands(XirBuilder *b, uint32_t blk_id, int slot, X
         bool tag_valid = false;
         bool tag_mismatch = false;
         for (uint32_t p = 0; p < phi->narg && !tag_mismatch; p++) {
-            if (!xir_ref_is_vreg(phi->args[p])) continue;
+            if (!xir_ref_is_vreg(phi->args[p]))
+                continue;
             uint32_t ai = XIR_REF_INDEX(phi->args[p]);
-            if (ai >= b->func->nvreg) continue;
+            if (ai >= b->func->nvreg)
+                continue;
             uint8_t t = type_kind_to_vtag(xir_ref_ctype(b->func, phi->args[p]).kind);
-            if (t == VTAG_TAGGED) continue;
+            if (t == VTAG_TAGGED)
+                continue;
             if (!tag_valid) {
                 common_tag = t;
                 tag_valid = true;
@@ -730,7 +791,8 @@ static XirRef braun_add_phi_operands(XirBuilder *b, uint32_t blk_id, int slot, X
             uint32_t di = XIR_REF_INDEX(phi->dst);
             if (di < b->func->nvreg) {
                 XirIns *def = b->func->vregs[di].def;
-                if (def) def->ctype.kind = vtag_to_type_kind(common_tag);
+                if (def)
+                    def->ctype.kind = vtag_to_type_kind(common_tag);
             }
         }
     }
@@ -739,7 +801,8 @@ static XirRef braun_add_phi_operands(XirBuilder *b, uint32_t blk_id, int slot, X
 
 // Recursive variable lookup: create phi for multi-predecessor blocks
 static XirRef braun_read_var_recursive(XirBuilder *b, uint32_t blk_id, int slot) {
-    if (blk_id >= b->block_defs_size || blk_id >= b->func->nblk) return XIR_NONE;
+    if (blk_id >= b->block_defs_size || blk_id >= b->func->nblk)
+        return XIR_NONE;
     BraunBlockDef *bdef = &b->block_defs[blk_id];
     XirBlock *blk = b->func->blocks[blk_id];
     XirRef val;
@@ -751,7 +814,7 @@ static XirRef braun_read_var_recursive(XirBuilder *b, uint32_t blk_id, int slot)
         if (b->n_inc_phis < BRAUN_MAX_INC_PHIS) {
             BraunIncompletePhi *ip = &b->inc_phis[b->n_inc_phis++];
             ip->block_id = blk_id;
-            ip->slot = (uint16_t)slot;
+            ip->slot = (uint16_t) slot;
             ip->phi = phi;
         }
         val = phi->dst;
@@ -761,7 +824,8 @@ static XirRef braun_read_var_recursive(XirBuilder *b, uint32_t blk_id, int slot)
     } else if (blk->npred == 1) {
         // Single predecessor: recurse
         XirBlock *pred = blk->preds[0];
-        if (!pred) return XIR_NONE;
+        if (!pred)
+            return XIR_NONE;
         val = braun_read_var(b, pred->id, slot);
     } else {
         // Multiple predecessors: create phi, write BEFORE recursing (break cycles)
@@ -777,7 +841,7 @@ static XirRef braun_read_var_recursive(XirBuilder *b, uint32_t blk_id, int slot)
     if (xir_ref_is_vreg(val)) {
         uint32_t vi = XIR_REF_INDEX(val);
         if (vi < b->func->nvreg && b->func->vregs[vi].bc_slot < 0) {
-            b->func->vregs[vi].bc_slot = (int16_t)slot;
+            b->func->vregs[vi].bc_slot = (int16_t) slot;
         }
     }
 
@@ -792,8 +856,10 @@ void braun_seal_block(XirBuilder *b, XirBlock *blk) {
     XR_DCHECK(b != NULL, "braun_seal_block: NULL builder");
     XR_DCHECK(blk != NULL, "braun_seal_block: NULL block");
     uint32_t bid = blk->id;
-    if (bid >= b->block_defs_size) return;
-    if (b->block_defs[bid].sealed) return;
+    if (bid >= b->block_defs_size)
+        return;
+    if (b->block_defs[bid].sealed)
+        return;
 
     // Fill all incomplete phis for this block, then refine their reps.
     // Collect phis that belong to this block for post-seal rep refinement.
@@ -818,21 +884,31 @@ void braun_seal_block(XirBuilder *b, XirBlock *blk) {
     // to use native instructions instead of CALL_C slow paths.
     for (uint32_t pi = 0; pi < nsealed; pi++) {
         XirPhi *phi = sealed_phis[pi];
-        if (!phi || phi->narg == 0) continue;
+        if (!phi || phi->narg == 0)
+            continue;
         // Only refine if PHI is currently TAGGED (conservative default)
-        if (phi->rep != XR_REP_TAGGED) continue;
+        if (phi->rep != XR_REP_TAGGED)
+            continue;
 
         uint8_t common_rep = 0xFF;
         bool all_match = true;
         for (uint16_t ai = 0; ai < phi->narg && all_match; ai++) {
-            if (xir_ref_is_none(phi->args[ai])) continue;
-            if (!xir_ref_is_vreg(phi->args[ai])) continue;
+            if (xir_ref_is_none(phi->args[ai]))
+                continue;
+            if (!xir_ref_is_vreg(phi->args[ai]))
+                continue;
             uint32_t vi = XIR_REF_INDEX(phi->args[ai]);
-            if (vi >= b->func->nvreg) continue;
+            if (vi >= b->func->nvreg)
+                continue;
             uint8_t r = b->func->vregs[vi].rep;
-            if (r == XR_REP_TAGGED) { all_match = false; break; }
-            if (common_rep == 0xFF) common_rep = r;
-            else if (r != common_rep) all_match = false;
+            if (r == XR_REP_TAGGED) {
+                all_match = false;
+                break;
+            }
+            if (common_rep == 0xFF)
+                common_rep = r;
+            else if (r != common_rep)
+                all_match = false;
         }
         if (all_match && common_rep != 0xFF) {
             phi->rep = common_rep;
@@ -848,14 +924,16 @@ void braun_seal_block(XirBuilder *b, XirBlock *blk) {
 
 // Check if a block is sealed
 static bool braun_is_sealed(XirBuilder *b, uint32_t block_id) {
-    if (block_id >= b->block_defs_size) return true;
+    if (block_id >= b->block_defs_size)
+        return true;
     return b->block_defs[block_id].sealed;
 }
 
 // Check if a PC is a loop header (has backward edge targeting it)
 static bool braun_is_loop_header(XirBuilder *b, uint32_t pc) {
     for (int i = 0; i < b->nloops; i++) {
-        if (b->loops[i].header_pc == pc) return true;
+        if (b->loops[i].header_pc == pc)
+            return true;
     }
     return false;
 }
@@ -863,8 +941,8 @@ static bool braun_is_loop_header(XirBuilder *b, uint32_t pc) {
 // Initialize Braun block_defs array (call after builder_create_blocks)
 static void braun_init(XirBuilder *b) {
     uint32_t nblk = b->func->nblk;
-    b->block_defs_size = nblk + 8; // room for preheader etc.
-    b->block_defs = (BraunBlockDef *)xr_calloc(b->block_defs_size, sizeof(BraunBlockDef));
+    b->block_defs_size = nblk + 8;  // room for preheader etc.
+    b->block_defs = (BraunBlockDef *) xr_calloc(b->block_defs_size, sizeof(BraunBlockDef));
     b->n_inc_phis = 0;
 }
 
@@ -910,7 +988,7 @@ static void builder_create_blocks(XirBuilder *b) {
         switch (op) {
             case OP_JMP: {
                 int sJ = GETARG_sJ(inst);
-                target = (uint32_t)((int32_t)pc + 1 + sJ);
+                target = (uint32_t) ((int32_t) pc + 1 + sJ);
                 has_target = true;
                 // Also create block for fall-through after JMP (for TEST+JMP pattern)
                 if (pc + 1 < b->code_count && !b->pc_to_block[pc + 1]) {
@@ -920,12 +998,12 @@ static void builder_create_blocks(XirBuilder *b) {
             }
             case OP_TRY: {
                 // catch target from Bx field
-                target = (uint32_t)GETARG_Bx(inst);
+                target = (uint32_t) GETARG_Bx(inst);
                 has_target = true;
                 // Also check next instruction for finally offset
                 if (pc + 1 < b->code_count) {
                     XrInstruction next = PROTO_CODE(b->proto, pc + 1);
-                    uint32_t finally_target = (uint32_t)GETARG_Bx(next);
+                    uint32_t finally_target = (uint32_t) GETARG_Bx(next);
                     if (finally_target > 0 && finally_target < b->code_count &&
                         !b->pc_to_block[finally_target]) {
                         b->pc_to_block[finally_target] = xir_func_add_block(b->func, NULL);
@@ -980,8 +1058,7 @@ static BuilderLoop *builder_find_loop(XirBuilder *b, uint32_t header_pc) {
 /* ========== Opcode Translation ========== */
 
 // Translate a binary arithmetic op (ADD, SUB, MUL, etc.)
-static void translate_binop(XirBuilder *b, XirBlock *blk,
-                            XrInstruction inst, uint16_t xir_i64_op,
+static void translate_binop(XirBuilder *b, XirBlock *blk, XrInstruction inst, uint16_t xir_i64_op,
                             uint16_t xir_f64_op, uint16_t xir_rt_op) {
     int a = GETARG_A(inst);
     int ra_b = GETARG_B(inst);
@@ -1007,10 +1084,10 @@ static void translate_binop(XirBuilder *b, XirBlock *blk,
         // may skip tag write leaving stale tag.
         if (xir_ref_is_vreg(result)) {
             uint32_t vi = XIR_REF_INDEX(result);
-            if (vi < b->func->nvreg &&
-                xir_ref_ctype(b->func, result).kind == XIR_TK_UNKNOWN) {
+            if (vi < b->func->nvreg && xir_ref_ctype(b->func, result).kind == XIR_TK_UNKNOWN) {
                 XirIns *d = b->func->vregs[vi].def;
-                if (d && d->ctype.kind == XIR_TK_UNKNOWN) d->ctype.kind = XIR_TK_INT;
+                if (d && d->ctype.kind == XIR_TK_UNKNOWN)
+                    d->ctype.kind = XIR_TK_INT;
             }
         }
     } else if (type_b == XR_REP_F64 && type_c == XR_REP_F64) {
@@ -1019,10 +1096,10 @@ static void translate_binop(XirBuilder *b, XirBlock *blk,
         builder_set_slot(b, a, result);
         if (xir_ref_is_vreg(result)) {
             uint32_t vi = XIR_REF_INDEX(result);
-            if (vi < b->func->nvreg &&
-                xir_ref_ctype(b->func, result).kind == XIR_TK_UNKNOWN) {
+            if (vi < b->func->nvreg && xir_ref_ctype(b->func, result).kind == XIR_TK_UNKNOWN) {
                 XirIns *d = b->func->vregs[vi].def;
-                if (d && d->ctype.kind == XIR_TK_UNKNOWN) d->ctype.kind = XIR_TK_FLOAT;
+                if (d && d->ctype.kind == XIR_TK_UNKNOWN)
+                    d->ctype.kind = XIR_TK_FLOAT;
             }
         }
     } else {
@@ -1035,10 +1112,8 @@ static void translate_binop(XirBuilder *b, XirBlock *blk,
             blk->ins[blk->nins - 1].flags |= XIR_FLAG_SIDE_EFFECT | XIR_FLAG_MAY_THROW;
             builder_tag_vreg(b, result, VTAG_F64, 0);
             builder_set_slot(b, a, result);
-        } else if (!b_numeric && !c_numeric &&
-                   type_b == XR_REP_TAGGED && type_c == XR_REP_TAGGED &&
-                   builder_is_numeric_union(b, ra_b) &&
-                   builder_is_numeric_union(b, ra_c)) {
+        } else if (!b_numeric && !c_numeric && type_b == XR_REP_TAGGED && type_c == XR_REP_TAGGED &&
+                   builder_is_numeric_union(b, ra_b) && builder_is_numeric_union(b, ra_c)) {
             // Both operands are numeric-only unions (int|float): create I64+NUMERIC
             // vreg aliases so codegen generates inline tag-check + branch code
             // instead of a CALL_C function call.
@@ -1055,23 +1130,27 @@ static void translate_binop(XirBuilder *b, XirBlock *blk,
             // Map XIR_RT_* opcode to corresponding CALL_C helper function.
             typedef XrJitResult (*JitRtFn)(struct XrCoroutine *, int64_t);
             JitRtFn fn = NULL;
-            if (xir_rt_op == XIR_RT_ADD) fn = xr_jit_rt_add;
-            else if (xir_rt_op == XIR_RT_SUB) fn = xr_jit_rt_sub;
-            else if (xir_rt_op == XIR_RT_MUL) fn = xr_jit_rt_mul;
-            else if (xir_rt_op == XIR_RT_DIV) fn = xr_jit_rt_div;
-            else if (xir_rt_op == XIR_RT_MOD) fn = xr_jit_rt_mod;
+            if (xir_rt_op == XIR_RT_ADD)
+                fn = xr_jit_rt_add;
+            else if (xir_rt_op == XIR_RT_SUB)
+                fn = xr_jit_rt_sub;
+            else if (xir_rt_op == XIR_RT_MUL)
+                fn = xr_jit_rt_mul;
+            else if (xir_rt_op == XIR_RT_DIV)
+                fn = xr_jit_rt_div;
+            else if (xir_rt_op == XIR_RT_MOD)
+                fn = xr_jit_rt_mod;
             if (fn) {
-                XirRef bo_args[2] = { vb, vc };
+                XirRef bo_args[2] = {vb, vc};
                 // Encode operand tags for precise reconstruction
                 uint8_t btag = vtag_to_value_tag(builder_slot_xr_tag(b, ra_b));
                 uint8_t ctag = vtag_to_value_tag(builder_slot_xr_tag(b, ra_c));
-                int64_t tag_enc = ((int64_t)btag << 8) | ctag;
-                XirRef fn_ref = xir_const_ptr(b->func, (void *)fn);
+                int64_t tag_enc = ((int64_t) btag << 8) | ctag;
+                XirRef fn_ref = xir_const_ptr(b->func, (void *) fn);
                 XirRef enc_ref = xir_const_i64(b->func, tag_enc);
                 // AOT: tagged arithmetic returns XrtValue (struct), not raw i64
                 uint8_t rt_rep = b->aot_mode ? XR_REP_TAGGED : XR_REP_I64;
-                XirRef result = xir_emit(b->func, blk, XIR_CALL_C, rt_rep,
-                                         fn_ref, enc_ref);
+                XirRef result = xir_emit(b->func, blk, XIR_CALL_C, rt_rep, fn_ref, enc_ref);
                 blk->ins[blk->nins - 1].flags |= XIR_FLAG_SIDE_EFFECT;
                 builder_bind_call_args(b, result, bo_args, 2);
                 // DIV/MOD may throw division-by-zero exception
@@ -1091,15 +1170,14 @@ static void translate_binop(XirBuilder *b, XirBlock *blk,
 }
 
 // Translate immediate binary op (ADDI, SUBI, MULI)
-static void translate_binop_imm(XirBuilder *b, XirBlock *blk,
-                                XrInstruction inst, uint16_t xir_i64_op,
-                                uint16_t xir_rt_op) {
+static void translate_binop_imm(XirBuilder *b, XirBlock *blk, XrInstruction inst,
+                                uint16_t xir_i64_op, uint16_t xir_rt_op) {
     int a = GETARG_A(inst);
     int ra_b = GETARG_B(inst);
     int8_t sc = GETARG_sC(inst);
 
     XirRef vb = builder_get_slot(b, blk, ra_b);
-    XirRef vc = xir_const_i64(b->func, (int64_t)sc);
+    XirRef vc = xir_const_i64(b->func, (int64_t) sc);
 
     uint8_t type_b = ref_xir_type(b->func, vb);
     if (type_b == XR_REP_I64) {
@@ -1120,9 +1198,8 @@ static void translate_binop_imm(XirBuilder *b, XirBlock *blk,
 
 // Translate constant-pool binary op (ADDK, SUBK, MULK, DIVK, MODK)
 // R[A] = R[B] op K[C] where K[C] is from the bytecode constant pool
-static void translate_binop_const(XirBuilder *b, XirBlock *blk,
-                                  XrInstruction inst, uint16_t xir_i64_op,
-                                  uint16_t xir_f64_op, uint16_t xir_rt_op) {
+static void translate_binop_const(XirBuilder *b, XirBlock *blk, XrInstruction inst,
+                                  uint16_t xir_i64_op, uint16_t xir_f64_op, uint16_t xir_rt_op) {
     int a = GETARG_A(inst);
     int ra_b = GETARG_B(inst);
     int kc = GETARG_C(inst);
@@ -1164,9 +1241,9 @@ static void translate_binop_const(XirBuilder *b, XirBlock *blk,
         // When both operands are numeric (I64/F64), codegen inlines SCVTF+F-op
         // producing F64 in an FP register — mark result F64 for correct RETURN.
         bool kval_numeric = kval_is_float || XR_IS_INT(kval);
-        uint8_t res_type = (kval_numeric &&
-                            (type_b == XR_REP_I64 || type_b == XR_REP_F64))
-                           ? XR_REP_F64 : XR_REP_TAGGED;
+        uint8_t res_type = (kval_numeric && (type_b == XR_REP_I64 || type_b == XR_REP_F64))
+                               ? XR_REP_F64
+                               : XR_REP_TAGGED;
         XirRef result = xir_emit(b->func, blk, xir_rt_op, res_type, vb, vc_load);
         blk->ins[blk->nins - 1].flags |= XIR_FLAG_SIDE_EFFECT | XIR_FLAG_MAY_THROW;
         if (res_type == XR_REP_F64)
@@ -1179,9 +1256,8 @@ static void translate_binop_const(XirBuilder *b, XirBlock *blk,
 // Translate a single bytecode instruction
 static bool translate_instruction(XirBuilder *b, XirBlock **cur_blk, uint32_t pc) {
     // Bounds check: verify PC is within code array
-    if (pc >= (uint32_t)PROTO_CODE_COUNT(b->proto)) {
-        xr_log_debug("jit", "PC %u out of bounds (max %d)",
-                pc, PROTO_CODE_COUNT(b->proto));
+    if (pc >= (uint32_t) PROTO_CODE_COUNT(b->proto)) {
+        xr_log_debug("jit", "PC %u out of bounds (max %d)", pc, PROTO_CODE_COUNT(b->proto));
         b->ops_skipped++;
         return true;
     }
@@ -1193,7 +1269,7 @@ static bool translate_instruction(XirBuilder *b, XirBlock **cur_blk, uint32_t pc
     // Safety check: verify proto has valid symbol table
     if (b->proto->symbols == NULL && b->proto->symbol_count > 0) {
         xr_log_debug("jit", "invalid proto: symbols=NULL but symbol_count=%d at pc=%u",
-                b->proto->symbol_count, pc);
+                     b->proto->symbol_count, pc);
         b->ops_skipped++;
         return true;
     }
@@ -1204,7 +1280,7 @@ static bool translate_instruction(XirBuilder *b, XirBlock **cur_blk, uint32_t pc
             int a = GETARG_A(inst);
             int sbx = GETARG_sBx(inst);
             // Always raw i64 in JIT mode (no boxing support in codegen)
-            XirRef c = xir_const_i64(b->func, (int64_t)sbx);
+            XirRef c = xir_const_i64(b->func, (int64_t) sbx);
             XirRef v = xir_emit_unary(b->func, blk, XIR_CONST_I64, XR_REP_I64, c);
             builder_tag_vreg(b, v, VTAG_I64, 0);
             builder_set_slot(b, a, v);
@@ -1215,7 +1291,7 @@ static bool translate_instruction(XirBuilder *b, XirBlock **cur_blk, uint32_t pc
         case OP_LOADF: {
             int a = GETARG_A(inst);
             int sbx = GETARG_sBx(inst);
-            XirRef c = xir_const_f64(b->func, (double)sbx);
+            XirRef c = xir_const_f64(b->func, (double) sbx);
             XirRef v = xir_emit_unary(b->func, blk, XIR_CONST_F64, XR_REP_F64, c);
             builder_tag_vreg(b, v, VTAG_F64, 0);
             builder_set_slot(b, a, v);
@@ -1229,8 +1305,8 @@ static bool translate_instruction(XirBuilder *b, XirBlock **cur_blk, uint32_t pc
 
             // Bounds check for constant pool access
             if (bx >= PROTO_CONST_COUNT(b->proto)) {
-                xr_log_debug("jit", "constant index %d out of bounds (max %d) in OP_LOADK",
-                        bx, PROTO_CONST_COUNT(b->proto));
+                xr_log_debug("jit", "constant index %d out of bounds (max %d) in OP_LOADK", bx,
+                             PROTO_CONST_COUNT(b->proto));
                 b->ops_skipped++;
                 return true;
             }
@@ -1249,12 +1325,12 @@ static bool translate_instruction(XirBuilder *b, XirBlock **cur_blk, uint32_t pc
                 // String literal: store XrString* (GC object pointer, not data[])
                 // so JIT codegen loads the correct heap address for field stores
                 XrString *s = XR_TO_STRING(kval);
-                XirRef c = xir_const_ptr(b->func, (void *)s);
+                XirRef c = xir_const_ptr(b->func, (void *) s);
                 v = xir_emit_unary(b->func, blk, XIR_CONST_PTR, XR_REP_PTR, c);
                 builder_tag_vreg(b, v, VTAG_PTR, 0);
             } else {
                 // Other object/null: embed raw pointer as constant
-                XirRef c = xir_const_ptr(b->func, (void *)kval.ptr);
+                XirRef c = xir_const_ptr(b->func, (void *) kval.ptr);
                 v = xir_emit_unary(b->func, blk, XIR_CONST_PTR, XR_REP_PTR, c);
                 // VTAG_TAGGED for null (0 ptr); builder_ref_sf_tag detects null by const pool
                 builder_tag_vreg(b, v, kval.ptr ? VTAG_PTR : VTAG_TAGGED, 0);
@@ -1322,8 +1398,7 @@ static bool translate_instruction(XirBuilder *b, XirBlock **cur_blk, uint32_t pc
             // runtime (e.g. CALL_C result with tag in slot_runtime_tags).
             // builder_set_slot clears slot_tag_refs on writes, so restore it
             // from the source slot when MOVE is a pure alias.
-            if (a < 256 && ra_b < 256 &&
-                !xir_ref_is_none(b->slot_tag_refs[ra_b])) {
+            if (a < 256 && ra_b < 256 && !xir_ref_is_none(b->slot_tag_refs[ra_b])) {
                 b->slot_tag_refs[a] = b->slot_tag_refs[ra_b];
                 b->slot_value_refs[a] = src;
             }
@@ -1353,15 +1428,14 @@ static bool translate_instruction(XirBuilder *b, XirBlock **cur_blk, uint32_t pc
                 translate_binop(b, blk, inst, XIR_ADD, XIR_FADD, XIR_RT_ADD);
             } else {
                 // At least one operand is PTR/TAGGED: call runtime helper
-                XirRef add_ca[2] = { vb_add, vc_add };
+                XirRef add_ca[2] = {vb_add, vc_add};
                 // Encode operand tags (value_tag) for precise reconstruction
                 uint8_t btag_a = vtag_to_value_tag(builder_slot_xr_tag(b, rb_add));
                 uint8_t ctag_a = vtag_to_value_tag(builder_slot_xr_tag(b, rc_add));
-                int64_t tag_enc_a = ((int64_t)btag_a << 8) | ctag_a;
-                XirRef fn_ref = xir_const_ptr(b->func, (void *)xr_jit_rt_add);
+                int64_t tag_enc_a = ((int64_t) btag_a << 8) | ctag_a;
+                XirRef fn_ref = xir_const_ptr(b->func, (void *) xr_jit_rt_add);
                 XirRef enc_ref = xir_const_i64(b->func, tag_enc_a);
-                XirRef result = xir_emit(b->func, blk, XIR_CALL_C, XR_REP_PTR,
-                                         fn_ref, enc_ref);
+                XirRef result = xir_emit(b->func, blk, XIR_CALL_C, XR_REP_PTR, fn_ref, enc_ref);
                 blk->ins[blk->nins - 1].flags |= XIR_FLAG_SIDE_EFFECT;
                 builder_bind_call_args(b, result, add_ca, 2);
                 // Result type is polymorphic: tag stored in slot_runtime_tags[bc_slot]
@@ -1411,11 +1485,16 @@ static bool translate_instruction(XirBuilder *b, XirBlock **cur_blk, uint32_t pc
                 return true;
             }
             // Now safe to call translate_binop_const
-            if (op == OP_ADDK) translate_binop_const(b, blk, inst, XIR_ADD, XIR_FADD, XIR_RT_ADD);
-            else if (op == OP_SUBK) translate_binop_const(b, blk, inst, XIR_SUB, XIR_FSUB, XIR_RT_SUB);
-            else if (op == OP_MULK) translate_binop_const(b, blk, inst, XIR_MUL, XIR_FMUL, XIR_RT_MUL);
-            else if (op == OP_DIVK) translate_binop_const(b, blk, inst, XIR_DIV, XIR_FDIV, XIR_RT_DIV);
-            else if (op == OP_MODK) translate_binop_const(b, blk, inst, XIR_MOD, XIR_MOD, XIR_RT_MOD);
+            if (op == OP_ADDK)
+                translate_binop_const(b, blk, inst, XIR_ADD, XIR_FADD, XIR_RT_ADD);
+            else if (op == OP_SUBK)
+                translate_binop_const(b, blk, inst, XIR_SUB, XIR_FSUB, XIR_RT_SUB);
+            else if (op == OP_MULK)
+                translate_binop_const(b, blk, inst, XIR_MUL, XIR_FMUL, XIR_RT_MUL);
+            else if (op == OP_DIVK)
+                translate_binop_const(b, blk, inst, XIR_DIV, XIR_FDIV, XIR_RT_DIV);
+            else if (op == OP_MODK)
+                translate_binop_const(b, blk, inst, XIR_MOD, XIR_MOD, XIR_RT_MOD);
             return true;
         }
 
@@ -1571,26 +1650,22 @@ static bool translate_instruction(XirBuilder *b, XirBlock **cur_blk, uint32_t pc
             XirRef res;
             if (b->aot_mode) {
                 // AOT: emit LOAD_UPVAL (handled by xcgen_expr.c)
-                XirRef idx_ref = xir_const_i64(b->func, (int64_t)uv_idx);
-                res = xir_emit_unary(b->func, blk, XIR_LOAD_UPVAL,
-                                     XR_REP_TAGGED, idx_ref);
+                XirRef idx_ref = xir_const_i64(b->func, (int64_t) uv_idx);
+                res = xir_emit_unary(b->func, blk, XIR_LOAD_UPVAL, XR_REP_TAGGED, idx_ref);
             } else {
                 // JIT: use C bridge xr_jit_upval_get(coro, upval_index)
-                XirRef fn_ref = xir_const_ptr(b->func,
-                                               (void *)xr_jit_upval_get);
-                XirRef idx_ref = xir_const_i64(b->func, (int64_t)uv_idx);
-                XirRef idx_val = xir_emit_unary(b->func, blk, XIR_CONST_I64,
-                                                 XR_REP_I64, idx_ref);
-                res = xir_emit(b->func, blk, XIR_CALL_C, XR_REP_I64,
-                               fn_ref, idx_val);
+                XirRef fn_ref = xir_const_ptr(b->func, (void *) xr_jit_upval_get);
+                XirRef idx_ref = xir_const_i64(b->func, (int64_t) uv_idx);
+                XirRef idx_val = xir_emit_unary(b->func, blk, XIR_CONST_I64, XR_REP_I64, idx_ref);
+                res = xir_emit(b->func, blk, XIR_CALL_C, XR_REP_I64, fn_ref, idx_val);
             }
             blk->ins[blk->nins - 1].flags |= XIR_FLAG_SIDE_EFFECT;
             // Tag result: mutable captures store cell pointers (always PTR),
             // const captures store the value directly (use slot_type).
             {
-                bool is_cell_ref = true; // default: treat as cell ptr
-                if (uv_idx < (int)PROTO_UPVAL_COUNT(b->proto)) {
-                    UpvalInfo *uv = &((UpvalInfo*)b->proto->upvalues.data)[uv_idx];
+                bool is_cell_ref = true;  // default: treat as cell ptr
+                if (uv_idx < (int) PROTO_UPVAL_COUNT(b->proto)) {
+                    UpvalInfo *uv = &((UpvalInfo *) b->proto->upvalues.data)[uv_idx];
                     if (uv->is_const) {
                         is_cell_ref = false;
                         uint8_t st = uv->slot_type;
@@ -1629,28 +1704,33 @@ static bool translate_instruction(XirBuilder *b, XirBlock **cur_blk, uint32_t pc
                     init_tag = vtag_to_value_tag(_vk);
                 } else {
                     uint8_t rep = _vr ? _vr->rep : XR_REP_I64;
-                    if (rep == XR_REP_F64)      init_tag = XR_TAG_F64;
-                    else if (rep == XR_REP_PTR) init_tag = XR_TAG_NULL;
-                    else                        init_tag = XR_TAG_I64;
+                    if (rep == XR_REP_F64)
+                        init_tag = XR_TAG_F64;
+                    else if (rep == XR_REP_PTR)
+                        init_tag = XR_TAG_NULL;
+                    else
+                        init_tag = XR_TAG_I64;
                 }
             }
 
             // Allocate 32-byte XrCell via inline bump-pointer
-            int64_t packed = (int64_t)XR_TCELL;
+            int64_t packed = (int64_t) XR_TCELL;
             XirRef pack_ref = xir_const_i64(b->func, packed);
-            XirRef size_ref = xir_const_i64(b->func, 32); // sizeof(XrCell)
-            XirRef cell = xir_emit(b->func, blk, XIR_ALLOC, XR_REP_PTR,
-                                   pack_ref, size_ref);
+            XirRef size_ref = xir_const_i64(b->func, 32);  // sizeof(XrCell)
+            XirRef cell = xir_emit(b->func, blk, XIR_ALLOC, XR_REP_PTR, pack_ref, size_ref);
             blk->ins[blk->nins - 1].flags |= XIR_FLAG_SIDE_EFFECT;
 
             // Store initial value into cell->value (offset XIR_CELL_VALUE_OFFSET)
-            XirRef val_off = xir_const_i64(b->func, (int64_t)XIR_CELL_VALUE_OFFSET);
-            xir_emit_raw(b->func, blk, XIR_STORE_FIELD,
-                         init_tag, val_off, cell, va);
+            XirRef val_off = xir_const_i64(b->func, (int64_t) XIR_CELL_VALUE_OFFSET);
+            xir_emit_raw(b->func, blk, XIR_STORE_FIELD, init_tag, val_off, cell, va);
             blk->ins[blk->nins - 1].flags |= XIR_FLAG_SIDE_EFFECT;
 
             builder_tag_vreg(b, cell, VTAG_PTR, 0);
-            { XirVReg *_fv = builder_vreg_for_slot(b, a); if (_fv) _fv->is_fresh_alloc = true; }
+            {
+                XirVReg *_fv = builder_vreg_for_slot(b, a);
+                if (_fv)
+                    _fv->is_fresh_alloc = true;
+            }
             builder_set_slot(b, a, cell);
             b->ops_translated++;
             return true;
@@ -1661,7 +1741,7 @@ static bool translate_instruction(XirBuilder *b, XirBlock **cur_blk, uint32_t pc
             int a = GETARG_A(inst);
             int ra_b = GETARG_B(inst);
             XirRef vb = builder_get_slot(b, blk, ra_b);
-            XirRef off_ref = xir_const_i64(b->func, (int64_t)XIR_CELL_VALUE_OFFSET);
+            XirRef off_ref = xir_const_i64(b->func, (int64_t) XIR_CELL_VALUE_OFFSET);
             // Determine load rep: float cells need FP register.
             // Try inst_type first, then fall back to upvalue type_info/slot_type
             // from the preceding UPVAL_GET instruction.
@@ -1674,8 +1754,8 @@ static bool translate_instruction(XirBuilder *b, XirBlock **cur_blk, uint32_t pc
                 XrInstruction prev = PROTO_CODE(b->proto, b->cur_pc - 1);
                 if (GET_OPCODE(prev) == OP_UPVAL_GET) {
                     int uv_idx = GETARG_B(prev);
-                    if (uv_idx < (int)PROTO_UPVAL_COUNT(b->proto)) {
-                        UpvalInfo *uv = &((UpvalInfo*)b->proto->upvalues.data)[uv_idx];
+                    if (uv_idx < (int) PROTO_UPVAL_COUNT(b->proto)) {
+                        UpvalInfo *uv = &((UpvalInfo *) b->proto->upvalues.data)[uv_idx];
                         if (uv->type_info && xr_type_to_xr_tag(uv->type_info) == XR_TAG_F64)
                             load_rep = XR_REP_F64;
                         else if (uv->slot_type == XR_SLOT_F64)
@@ -1683,8 +1763,7 @@ static bool translate_instruction(XirBuilder *b, XirBlock **cur_blk, uint32_t pc
                     }
                 }
             }
-            XirRef res = xir_emit(b->func, blk, XIR_LOAD_FIELD, load_rep,
-                                  vb, off_ref);
+            XirRef res = xir_emit(b->func, blk, XIR_LOAD_FIELD, load_rep, vb, off_ref);
             blk->ins[blk->nins - 1].flags |= XIR_FLAG_SIDE_EFFECT;
             builder_tag_vreg(b, res, VTAG_TAGGED, 0);
             builder_set_slot(b, a, res);
@@ -1699,9 +1778,8 @@ static bool translate_instruction(XirBuilder *b, XirBlock **cur_blk, uint32_t pc
             int ra_b = GETARG_B(inst);
             XirRef va = builder_get_slot(b, blk, a);
             XirRef vb = builder_get_slot(b, blk, ra_b);
-            XirRef val_off = xir_const_i64(b->func, (int64_t)XIR_CELL_VALUE_OFFSET);
-            xir_emit_raw(b->func, blk, XIR_STORE_FIELD,
-                         XIR_SF_TAG_RUNTIME, val_off, va, vb);
+            XirRef val_off = xir_const_i64(b->func, (int64_t) XIR_CELL_VALUE_OFFSET);
+            xir_emit_raw(b->func, blk, XIR_STORE_FIELD, XIR_SF_TAG_RUNTIME, val_off, va, vb);
             blk->ins[blk->nins - 1].flags |= XIR_FLAG_SIDE_EFFECT;
             b->ops_translated++;
             return true;
@@ -1716,32 +1794,30 @@ static bool translate_instruction(XirBuilder *b, XirBlock **cur_blk, uint32_t pc
             if (b->aot_mode && bx < PROTO_PROTO_COUNT(b->proto)) {
                 // AOT: generate closure creation XIR
                 XrProto *child = PROTO_PROTO(b->proto, bx);
-                int nupvals = (int)PROTO_UPVAL_COUNT(child);
+                int nupvals = (int) PROTO_UPVAL_COUNT(child);
 
                 // xrt_closure_new(child_proto_ptr, nupvals) → XrtValue closure
-                XirRef proto_ref = xir_const_ptr(b->func, (void *)child);
-                XirRef nupvals_ref = xir_const_i64(b->func, (int64_t)nupvals);
-                XirRef nupvals_val = xir_emit_unary(b->func, blk, XIR_CONST_I64,
-                                                     XR_REP_I64, nupvals_ref);
-                XirRef closure = xir_emit(b->func, blk, XIR_CALL_C, XR_REP_TAGGED,
-                                          proto_ref, nupvals_val);
+                XirRef proto_ref = xir_const_ptr(b->func, (void *) child);
+                XirRef nupvals_ref = xir_const_i64(b->func, (int64_t) nupvals);
+                XirRef nupvals_val =
+                    xir_emit_unary(b->func, blk, XIR_CONST_I64, XR_REP_I64, nupvals_ref);
+                XirRef closure =
+                    xir_emit(b->func, blk, XIR_CALL_C, XR_REP_TAGGED, proto_ref, nupvals_val);
                 blk->ins[blk->nins - 1].flags |= XIR_FLAG_SIDE_EFFECT;
                 builder_tag_vreg(b, closure, VTAG_PTR, 0);
 
                 // Populate upvals from current frame registers / enclosing closure
                 for (int j = 0; j < nupvals; j++) {
-                    UpvalInfo *uv = &((UpvalInfo*)child->upvalues.data)[j];
-                    XirRef idx_ref = xir_const_i64(b->func, (int64_t)j);
+                    UpvalInfo *uv = &((UpvalInfo *) child->upvalues.data)[j];
+                    XirRef idx_ref = xir_const_i64(b->func, (int64_t) j);
                     XirRef src_val;
                     if (uv->source == UPVAL_SRC_REG) {
                         src_val = builder_get_slot(b, blk, uv->index);
                     } else if (uv->source == UPVAL_SRC_UPVAL) {
                         // Read from enclosing closure's upval
-                        XirRef enc_idx = xir_const_i64(b->func,
-                                                        (int64_t)uv->index);
-                        src_val = xir_emit_unary(b->func, blk,
-                                                  XIR_LOAD_UPVAL,
-                                                  XR_REP_TAGGED, enc_idx);
+                        XirRef enc_idx = xir_const_i64(b->func, (int64_t) uv->index);
+                        src_val =
+                            xir_emit_unary(b->func, blk, XIR_LOAD_UPVAL, XR_REP_TAGGED, enc_idx);
                         blk->ins[blk->nins - 1].flags |= XIR_FLAG_SIDE_EFFECT;
                     } else {
                         continue;
@@ -1749,55 +1825,60 @@ static bool translate_instruction(XirBuilder *b, XirBlock **cur_blk, uint32_t pc
                     // Convention: dst=idx(const), args[0]=closure, args[1]=value
                     // Avoids putting vreg in dst (which SSA defuse would
                     // interpret as a re-definition of the closure).
-                    xir_emit_raw(b->func, blk, XIR_STORE_UPVAL,
-                                 XR_REP_VOID, idx_ref, closure, src_val);
+                    xir_emit_raw(b->func, blk, XIR_STORE_UPVAL, XR_REP_VOID, idx_ref, closure,
+                                 src_val);
                     blk->ins[blk->nins - 1].flags |= XIR_FLAG_SIDE_EFFECT;
                 }
 
                 builder_set_slot(b, a, closure);
                 // Set callee_proto on the NEW closure vreg (after builder_set_slot)
-                { XirVReg *_cv = builder_vreg_for_slot(b, a);
-                  if (_cv) _cv->callee_proto = PROTO_PROTO(b->proto, bx); }
+                {
+                    XirVReg *_cv = builder_vreg_for_slot(b, a);
+                    if (_cv)
+                        _cv->callee_proto = PROTO_PROTO(b->proto, bx);
+                }
                 b->ops_translated++;
             } else if (bx < PROTO_PROTO_COUNT(b->proto)) {
                 // JIT: delegate to xr_jit_closure_new C bridge
                 // closure_new auto-populates UPVAL_SRC_UPVAL from enclosing closure.
                 XrProto *child = PROTO_PROTO(b->proto, bx);
-                int nupvals = (int)PROTO_UPVAL_COUNT(child);
+                int nupvals = (int) PROTO_UPVAL_COUNT(child);
 
                 // Call xr_jit_closure_new(coro, child_proto_ptr)
-                XirRef fn_ref = xir_const_ptr(b->func, (void *)xr_jit_closure_new);
-                XirRef proto_ref = xir_const_i64(b->func, (int64_t)(uintptr_t)child);
-                XirRef proto_val = xir_emit_unary(b->func, blk, XIR_CONST_I64,
-                                                   XR_REP_I64, proto_ref);
-                XirRef closure = xir_emit(b->func, blk, XIR_CALL_C, XR_REP_PTR,
-                                          fn_ref, proto_val);
+                XirRef fn_ref = xir_const_ptr(b->func, (void *) xr_jit_closure_new);
+                XirRef proto_ref = xir_const_i64(b->func, (int64_t) (uintptr_t) child);
+                XirRef proto_val =
+                    xir_emit_unary(b->func, blk, XIR_CONST_I64, XR_REP_I64, proto_ref);
+                XirRef closure = xir_emit(b->func, blk, XIR_CALL_C, XR_REP_PTR, fn_ref, proto_val);
                 blk->ins[blk->nins - 1].flags |= XIR_FLAG_SIDE_EFFECT;
                 builder_tag_vreg(b, closure, VTAG_PTR, 0);
 
                 // Populate UPVAL_SRC_REG entries from current frame's registers
                 for (int j = 0; j < nupvals; j++) {
-                    UpvalInfo *uv = &((UpvalInfo*)child->upvalues.data)[j];
-                    if (uv->source != UPVAL_SRC_REG) continue;
+                    UpvalInfo *uv = &((UpvalInfo *) child->upvalues.data)[j];
+                    if (uv->source != UPVAL_SRC_REG)
+                        continue;
                     int src_reg = uv->index;
                     XirRef src_val = builder_get_slot(b, blk, src_reg);
                     uint8_t tag = vtag_to_value_tag(builder_slot_xr_tag(b, src_reg));
-                    XirRef uv_args[2] = { closure, src_val };
+                    XirRef uv_args[2] = {closure, src_val};
                     // Call set_upval(coro, (idx << 8) | tag)
-                    int64_t encoded = ((int64_t)j << 8) | (int64_t)tag;
-                    XirRef set_fn = xir_const_ptr(b->func,
-                                        (void *)xr_jit_closure_set_upval);
+                    int64_t encoded = ((int64_t) j << 8) | (int64_t) tag;
+                    XirRef set_fn = xir_const_ptr(b->func, (void *) xr_jit_closure_set_upval);
                     XirRef enc_ref = xir_const_i64(b->func, encoded);
-                    XirRef set_res = xir_emit(b->func, blk, XIR_CALL_C, XR_REP_I64,
-                                              set_fn, enc_ref);
+                    XirRef set_res =
+                        xir_emit(b->func, blk, XIR_CALL_C, XR_REP_I64, set_fn, enc_ref);
                     blk->ins[blk->nins - 1].flags |= XIR_FLAG_SIDE_EFFECT;
                     builder_bind_call_args(b, set_res, uv_args, 2);
                 }
 
                 builder_set_slot(b, a, closure);
                 // Set callee_proto on the NEW closure vreg (after builder_set_slot)
-                { XirVReg *_cv = builder_vreg_for_slot(b, a);
-                  if (_cv) _cv->callee_proto = PROTO_PROTO(b->proto, bx); }
+                {
+                    XirVReg *_cv = builder_vreg_for_slot(b, a);
+                    if (_cv)
+                        _cv->callee_proto = PROTO_PROTO(b->proto, bx);
+                }
                 b->ops_translated++;
             } else {
                 b->ops_skipped++;
@@ -1805,11 +1886,10 @@ static bool translate_instruction(XirBuilder *b, XirBlock **cur_blk, uint32_t pc
             return true;
         }
 
-
         /* === Control Flow === */
         case OP_JMP: {
             int sJ = GETARG_sJ(inst);
-            uint32_t target = (uint32_t)((int32_t)pc + 1 + sJ);
+            uint32_t target = (uint32_t) ((int32_t) pc + 1 + sJ);
             XirBlock *target_blk = b->pc_to_block[target];
             if (target_blk) {
                 bool is_back_edge = (target <= pc);
@@ -1848,16 +1928,20 @@ static bool translate_instruction(XirBuilder *b, XirBlock **cur_blk, uint32_t pc
 
             uint16_t xir_op;
             OpCode op = GET_OPCODE(inst);
-            if (op == OP_LT) xir_op = XIR_LT;
-            else if (op == OP_LE) xir_op = XIR_LE;
-            else xir_op = XIR_EQ;
+            if (op == OP_LT)
+                xir_op = XIR_LT;
+            else if (op == OP_LE)
+                xir_op = XIR_LE;
+            else
+                xir_op = XIR_EQ;
 
-            // Classify semantic tag into type "kind" for cross-kind EQ detection.
-            // 0=unknown, 1=numeric(int/float), 2=bool, 3=null/ptr
-#define TAG_KIND(t) \
-    (((t) == VTAG_I64 || (t) == VTAG_F64 || (t) == VTAG_NUMERIC) ? 1 : \
-     ((t) == VTAG_BOOL) ? 2 : \
-     ((t) == VTAG_PTR) ? 3 : 0)
+                // Classify semantic tag into type "kind" for cross-kind EQ detection.
+                // 0=unknown, 1=numeric(int/float), 2=bool, 3=null/ptr
+#define TAG_KIND(t)                                                                                \
+    (((t) == VTAG_I64 || (t) == VTAG_F64 || (t) == VTAG_NUMERIC) ? 1                               \
+     : ((t) == VTAG_BOOL)                                        ? 2                               \
+     : ((t) == VTAG_PTR)                                         ? 3                               \
+                                                                 : 0)
 
             XirRef cond;
             // Cross-kind EQ: constant-fold to false when both tags are
@@ -1869,32 +1953,25 @@ static bool translate_instruction(XirBuilder *b, XirBlock **cur_blk, uint32_t pc
             // returns), so `x == null` must be evaluated at runtime.
             int kind_a = TAG_KIND(tag_a);
             int kind_b = TAG_KIND(tag_b);
-            if (op == OP_EQ && kind_a != 0 && kind_b != 0 && kind_a != kind_b
-                && tag_a != VTAG_TAGGED && tag_b != VTAG_TAGGED) {
+            if (op == OP_EQ && kind_a != 0 && kind_b != 0 && kind_a != kind_b &&
+                tag_a != VTAG_TAGGED && tag_b != VTAG_TAGGED) {
                 XirRef zero = xir_const_i64(b->func, 0);
-                cond = xir_emit_unary(b->func, blk, XIR_CONST_I64,
-                                      XR_REP_I64, zero);
-            } else if (op == OP_EQ && tag_b == VTAG_TAGGED &&
-                       ra_a < 256 &&
+                cond = xir_emit_unary(b->func, blk, XIR_CONST_I64, XR_REP_I64, zero);
+            } else if (op == OP_EQ && tag_b == VTAG_TAGGED && ra_a < 256 &&
                        !xir_ref_is_none(b->slot_tag_refs[ra_a])) {
                 // EQ(param_with_tag_ref, null): use runtime tag comparison
                 // to distinguish int(0) from null (default param check).
                 // No vreg match needed: builder_set_slot clears tag_refs on
                 // real overwrites; PHI merges don't invalidate the tag ref.
                 XirRef c_null = xir_const_i64(b->func, 0);
-                XirRef null_tag = xir_emit_unary(b->func, blk, XIR_CONST_I64,
-                                                  XR_REP_I64, c_null);
-                cond = xir_emit(b->func, blk, XIR_EQ, XR_REP_I64,
-                                b->slot_tag_refs[ra_a], null_tag);
-            } else if (op == OP_EQ && tag_a == VTAG_TAGGED &&
-                       ra_b < 256 &&
+                XirRef null_tag = xir_emit_unary(b->func, blk, XIR_CONST_I64, XR_REP_I64, c_null);
+                cond = xir_emit(b->func, blk, XIR_EQ, XR_REP_I64, b->slot_tag_refs[ra_a], null_tag);
+            } else if (op == OP_EQ && tag_a == VTAG_TAGGED && ra_b < 256 &&
                        !xir_ref_is_none(b->slot_tag_refs[ra_b])) {
                 // EQ(null, param_with_tag_ref): symmetric case
                 XirRef c_null = xir_const_i64(b->func, 0);
-                XirRef null_tag = xir_emit_unary(b->func, blk, XIR_CONST_I64,
-                                                  XR_REP_I64, c_null);
-                cond = xir_emit(b->func, blk, XIR_EQ, XR_REP_I64,
-                                b->slot_tag_refs[ra_b], null_tag);
+                XirRef null_tag = xir_emit_unary(b->func, blk, XIR_CONST_I64, XR_REP_I64, c_null);
+                cond = xir_emit(b->func, blk, XIR_EQ, XR_REP_I64, b->slot_tag_refs[ra_b], null_tag);
             } else if (ta == XR_REP_I64 && tb == XR_REP_I64) {
                 cond = xir_fold_emit(b->func, blk, xir_op, XR_REP_I64, va, vb);
             } else if (op == OP_EQ && ta == XR_REP_PTR && tb == XR_REP_PTR) {
@@ -1902,26 +1979,27 @@ static bool translate_instruction(XirBuilder *b, XirBlock **cur_blk, uint32_t pc
                 cond = xir_fold_emit(b->func, blk, XIR_EQ, XR_REP_I64, va, vb);
             } else if (op == OP_EQ && !((ta == XR_REP_I64 || ta == XR_REP_F64) &&
                                         (tb == XR_REP_I64 || tb == XR_REP_F64))) {
-                // Non-numeric EQ (PTR vs PTR, TAGGED, etc.): use C bridge.
-                eq_c_bridge:
-                {
-                XirRef eq_args[2] = { va, vb };
-                XirRef fn_ref = xir_const_ptr(b->func, (void *)xr_jit_rt_eq);
+            // Non-numeric EQ (PTR vs PTR, TAGGED, etc.): use C bridge.
+            eq_c_bridge: {
+                XirRef eq_args[2] = {va, vb};
+                XirRef fn_ref = xir_const_ptr(b->func, (void *) xr_jit_rt_eq);
                 uint8_t a_tag = vtag_to_value_tag(builder_slot_xr_tag(b, ra_a));
                 uint8_t b_tag = vtag_to_value_tag(builder_slot_xr_tag(b, ra_b));
-                int64_t eq_enc = ((int64_t)a_tag << 8) | (int64_t)b_tag;
+                int64_t eq_enc = ((int64_t) a_tag << 8) | (int64_t) b_tag;
                 XirRef enc_ref = xir_const_i64(b->func, eq_enc);
-                cond = xir_emit(b->func, blk, XIR_CALL_C, XR_REP_I64,
-                                fn_ref, enc_ref);
+                cond = xir_emit(b->func, blk, XIR_CALL_C, XR_REP_I64, fn_ref, enc_ref);
                 blk->ins[blk->nins - 1].flags |= XIR_FLAG_SIDE_EFFECT;
                 builder_bind_call_args(b, cond, eq_args, 2);
-                }
+            }
             } else {
                 // Numeric mixed (I64/F64) or LT/LE: use XIR_RT_* (codegen inlines)
                 uint16_t rt_op;
-                if (op == OP_LT) rt_op = XIR_RT_LT;
-                else if (op == OP_LE) rt_op = XIR_RT_LE;
-                else rt_op = XIR_RT_EQ;
+                if (op == OP_LT)
+                    rt_op = XIR_RT_LT;
+                else if (op == OP_LE)
+                    rt_op = XIR_RT_LE;
+                else
+                    rt_op = XIR_RT_EQ;
                 cond = xir_emit(b->func, blk, rt_op, XR_REP_I64, va, vb);
                 blk->ins[blk->nins - 1].flags |= XIR_FLAG_SIDE_EFFECT;
             }
@@ -1931,7 +2009,7 @@ static bool translate_instruction(XirBuilder *b, XirBlock **cur_blk, uint32_t pc
                 XrInstruction next_inst = PROTO_CODE(b->proto, pc + 1);
                 if (GET_OPCODE(next_inst) == OP_JMP) {
                     int sJ = GETARG_sJ(next_inst);
-                    uint32_t jump_target = (uint32_t)((int32_t)(pc + 1) + 1 + sJ);
+                    uint32_t jump_target = (uint32_t) ((int32_t) (pc + 1) + 1 + sJ);
                     uint32_t fall_target = pc + 2;
 
                     XirBlock *jump_blk = b->pc_to_block[jump_target];
@@ -1966,9 +2044,12 @@ static bool translate_instruction(XirBuilder *b, XirBlock **cur_blk, uint32_t pc
 
             uint16_t xir_op;
             OpCode op = GET_OPCODE(inst);
-            if (op == OP_LTI) xir_op = XIR_LT;
-            else if (op == OP_LEI) xir_op = XIR_LE;
-            else xir_op = XIR_EQ;
+            if (op == OP_LTI)
+                xir_op = XIR_LT;
+            else if (op == OP_LEI)
+                xir_op = XIR_LE;
+            else
+                xir_op = XIR_EQ;
 
             uint8_t eqi_tag = builder_slot_xr_tag(b, ra_a);
             int eqi_kind = TAG_KIND(eqi_tag);
@@ -1979,30 +2060,32 @@ static bool translate_instruction(XirBuilder *b, XirBlock **cur_blk, uint32_t pc
                 XirRef zero = xir_const_i64(b->func, 0);
                 cond = xir_emit_unary(b->func, blk, XIR_CONST_I64, XR_REP_I64, zero);
             } else if (ta == XR_REP_I64) {
-                XirRef ci = xir_const_i64(b->func, (int64_t)sb);
+                XirRef ci = xir_const_i64(b->func, (int64_t) sb);
                 XirRef vi = xir_emit_unary(b->func, blk, XIR_CONST_I64, XR_REP_I64, ci);
                 cond = xir_fold_emit(b->func, blk, xir_op, XR_REP_I64, va, vi);
             } else if (op == OP_EQI && ta != XR_REP_F64) {
                 // TAGGED == integer: use C bridge
-                XirRef ci = xir_const_i64(b->func, (int64_t)sb);
+                XirRef ci = xir_const_i64(b->func, (int64_t) sb);
                 XirRef vi = xir_emit_unary(b->func, blk, XIR_CONST_I64, XR_REP_I64, ci);
-                XirRef eqi_args[2] = { va, vi };
-                XirRef fn_ref = xir_const_ptr(b->func, (void *)xr_jit_rt_eq);
+                XirRef eqi_args[2] = {va, vi};
+                XirRef fn_ref = xir_const_ptr(b->func, (void *) xr_jit_rt_eq);
                 uint8_t a_tag = vtag_to_value_tag(builder_slot_xr_tag(b, ra_a));
                 uint8_t b_tag = XR_TAG_I64;
-                int64_t eq_enc = ((int64_t)a_tag << 8) | (int64_t)b_tag;
+                int64_t eq_enc = ((int64_t) a_tag << 8) | (int64_t) b_tag;
                 XirRef enc_ref = xir_const_i64(b->func, eq_enc);
-                cond = xir_emit(b->func, blk, XIR_CALL_C, XR_REP_I64,
-                                fn_ref, enc_ref);
+                cond = xir_emit(b->func, blk, XIR_CALL_C, XR_REP_I64, fn_ref, enc_ref);
                 blk->ins[blk->nins - 1].flags |= XIR_FLAG_SIDE_EFFECT;
                 builder_bind_call_args(b, cond, eqi_args, 2);
             } else {
-                XirRef ci = xir_const_i64(b->func, (int64_t)sb);
+                XirRef ci = xir_const_i64(b->func, (int64_t) sb);
                 XirRef vi = xir_emit_unary(b->func, blk, XIR_CONST_I64, XR_REP_I64, ci);
                 uint16_t rt_op;
-                if (op == OP_LTI) rt_op = XIR_RT_LT;
-                else if (op == OP_LEI) rt_op = XIR_RT_LE;
-                else rt_op = XIR_RT_EQ;
+                if (op == OP_LTI)
+                    rt_op = XIR_RT_LT;
+                else if (op == OP_LEI)
+                    rt_op = XIR_RT_LE;
+                else
+                    rt_op = XIR_RT_EQ;
                 cond = xir_emit(b->func, blk, rt_op, XR_REP_I64, va, vi);
                 blk->ins[blk->nins - 1].flags |= XIR_FLAG_SIDE_EFFECT;
             }
@@ -2011,7 +2094,7 @@ static bool translate_instruction(XirBuilder *b, XirBlock **cur_blk, uint32_t pc
                 XrInstruction next_inst = PROTO_CODE(b->proto, pc + 1);
                 if (GET_OPCODE(next_inst) == OP_JMP) {
                     int sJ = GETARG_sJ(next_inst);
-                    uint32_t jump_target = (uint32_t)((int32_t)(pc + 1) + 1 + sJ);
+                    uint32_t jump_target = (uint32_t) ((int32_t) (pc + 1) + 1 + sJ);
                     uint32_t fall_target = pc + 2;
 
                     XirBlock *jump_blk = b->pc_to_block[jump_target];
@@ -2058,16 +2141,14 @@ static bool translate_instruction(XirBuilder *b, XirBlock **cur_blk, uint32_t pc
             } else {
                 // Non-numeric constant (string etc.) — use C bridge for comparison
                 XirRef kraw = xir_const_i64(b->func, kval.i);
-                XirRef kraw_val = xir_emit_unary(b->func, blk, XIR_CONST_I64,
-                                                  XR_REP_I64, kraw);
-                XirRef eqk_args[2] = { va, kraw_val };
-                XirRef fn_ref = xir_const_ptr(b->func, (void *)xr_jit_eq_value);
+                XirRef kraw_val = xir_emit_unary(b->func, blk, XIR_CONST_I64, XR_REP_I64, kraw);
+                XirRef eqk_args[2] = {va, kraw_val};
+                XirRef fn_ref = xir_const_ptr(b->func, (void *) xr_jit_eq_value);
                 // Encode: (a_value_tag << 8) | kval.tag
                 uint8_t a_tag = vtag_to_value_tag(builder_slot_xr_tag(b, ra_a));
-                int64_t eq_enc = ((int64_t)a_tag << 8) | (int64_t)(kval.tag & 0xFF);
+                int64_t eq_enc = ((int64_t) a_tag << 8) | (int64_t) (kval.tag & 0xFF);
                 XirRef enc_ref = xir_const_i64(b->func, eq_enc);
-                vb = xir_emit(b->func, blk, XIR_CALL_C, XR_REP_I64,
-                              fn_ref, enc_ref);
+                vb = xir_emit(b->func, blk, XIR_CALL_C, XR_REP_I64, fn_ref, enc_ref);
                 blk->ins[blk->nins - 1].flags |= XIR_FLAG_SIDE_EFFECT;
                 builder_bind_call_args(b, vb, eqk_args, 2);
                 // vb is 1 if equal, 0 if not — use directly as condition
@@ -2087,7 +2168,7 @@ static bool translate_instruction(XirBuilder *b, XirBlock **cur_blk, uint32_t pc
                 XrInstruction next_inst = PROTO_CODE(b->proto, pc + 1);
                 if (GET_OPCODE(next_inst) == OP_JMP) {
                     int sJ = GETARG_sJ(next_inst);
-                    uint32_t jump_target = (uint32_t)((int32_t)(pc + 1) + 1 + sJ);
+                    uint32_t jump_target = (uint32_t) ((int32_t) (pc + 1) + 1 + sJ);
                     uint32_t fall_target = pc + 2;
                     XirBlock *jump_blk = b->pc_to_block[jump_target];
                     XirBlock *fall_blk = b->pc_to_block[fall_target];
@@ -2124,7 +2205,7 @@ static bool translate_instruction(XirBuilder *b, XirBlock **cur_blk, uint32_t pc
                 XrInstruction next_inst = PROTO_CODE(b->proto, pc + 1);
                 if (GET_OPCODE(next_inst) == OP_JMP) {
                     int sJ = GETARG_sJ(next_inst);
-                    uint32_t jump_target = (uint32_t)((int32_t)(pc + 1) + 1 + sJ);
+                    uint32_t jump_target = (uint32_t) ((int32_t) (pc + 1) + 1 + sJ);
                     uint32_t fall_target = pc + 2;
                     XirBlock *jump_blk = b->pc_to_block[jump_target];
                     XirBlock *fall_blk = b->pc_to_block[fall_target];
@@ -2179,7 +2260,7 @@ static bool translate_instruction(XirBuilder *b, XirBlock **cur_blk, uint32_t pc
                 XrInstruction next_inst = PROTO_CODE(b->proto, pc + 1);
                 if (GET_OPCODE(next_inst) == OP_JMP) {
                     int sJ = GETARG_sJ(next_inst);
-                    uint32_t jump_target = (uint32_t)((int32_t)(pc + 1) + 1 + sJ);
+                    uint32_t jump_target = (uint32_t) ((int32_t) (pc + 1) + 1 + sJ);
                     uint32_t fall_target = pc + 2;
                     XirBlock *jump_blk = b->pc_to_block[jump_target];
                     XirBlock *fall_blk = b->pc_to_block[fall_target];
@@ -2203,14 +2284,12 @@ static bool translate_instruction(XirBuilder *b, XirBlock **cur_blk, uint32_t pc
             // For nullable primitive params (int?/float?/bool?),
             // use tag comparison instead of payload==0 to correctly
             // distinguish int(0) from null.
-            if (a < 256 &&
-                !xir_ref_is_none(b->slot_tag_refs[a]) &&
+            if (a < 256 && !xir_ref_is_none(b->slot_tag_refs[a]) &&
                 !xir_ref_is_none(b->slot_value_refs[a]) &&
                 XIR_REF_INDEX(va) == XIR_REF_INDEX(b->slot_value_refs[a])) {
-                XirRef c_null = xir_const_i64(b->func, 0); // XR_TAG_NULL == 0
+                XirRef c_null = xir_const_i64(b->func, 0);  // XR_TAG_NULL == 0
                 XirRef null_tag = xir_emit_unary(b->func, blk, XIR_CONST_I64, XR_REP_I64, c_null);
-                is_null = xir_emit(b->func, blk, XIR_EQ, XR_REP_I64,
-                                   b->slot_tag_refs[a], null_tag);
+                is_null = xir_emit(b->func, blk, XIR_EQ, XR_REP_I64, b->slot_tag_refs[a], null_tag);
             } else {
                 XirRef c0 = xir_const_i64(b->func, 0);
                 XirRef zero = xir_emit_unary(b->func, blk, XIR_CONST_I64, XR_REP_I64, c0);
@@ -2221,7 +2300,7 @@ static bool translate_instruction(XirBuilder *b, XirBlock **cur_blk, uint32_t pc
                 XrInstruction next_inst = PROTO_CODE(b->proto, pc + 1);
                 if (GET_OPCODE(next_inst) == OP_JMP) {
                     int sJ = GETARG_sJ(next_inst);
-                    uint32_t jump_target = (uint32_t)((int32_t)(pc + 1) + 1 + sJ);
+                    uint32_t jump_target = (uint32_t) ((int32_t) (pc + 1) + 1 + sJ);
                     uint32_t fall_target = pc + 2;
                     XirBlock *jump_blk = b->pc_to_block[jump_target];
                     XirBlock *fall_blk = b->pc_to_block[fall_target];
@@ -2251,7 +2330,7 @@ static bool translate_instruction(XirBuilder *b, XirBlock **cur_blk, uint32_t pc
                                         ntag = VTAG_F64;
                                     else
                                         ntag = VTAG_I64;
-                                    b->narrow_slot = (int16_t)a;
+                                    b->narrow_slot = (int16_t) a;
                                     b->narrow_tag = ntag;
                                     b->narrow_rep = base;
                                     b->narrow_block = k ? fall_blk : jump_blk;
@@ -2272,14 +2351,12 @@ static bool translate_instruction(XirBuilder *b, XirBlock **cur_blk, uint32_t pc
             XirRef vb = builder_get_slot(b, blk, rb);
             XirRef r;
             // tag comparison for nullable primitive params
-            if (rb < 256 &&
-                !xir_ref_is_none(b->slot_tag_refs[rb]) &&
+            if (rb < 256 && !xir_ref_is_none(b->slot_tag_refs[rb]) &&
                 !xir_ref_is_none(b->slot_value_refs[rb]) &&
                 XIR_REF_INDEX(vb) == XIR_REF_INDEX(b->slot_value_refs[rb])) {
                 XirRef c_null = xir_const_i64(b->func, 0);
                 XirRef null_tag = xir_emit_unary(b->func, blk, XIR_CONST_I64, XR_REP_I64, c_null);
-                r = xir_emit(b->func, blk, XIR_EQ, XR_REP_I64,
-                             b->slot_tag_refs[rb], null_tag);
+                r = xir_emit(b->func, blk, XIR_EQ, XR_REP_I64, b->slot_tag_refs[rb], null_tag);
             } else {
                 XirRef c0 = xir_const_i64(b->func, 0);
                 XirRef zero = xir_emit_unary(b->func, blk, XIR_CONST_I64, XR_REP_I64, c0);
@@ -2303,7 +2380,7 @@ static bool translate_instruction(XirBuilder *b, XirBlock **cur_blk, uint32_t pc
                 XrInstruction next_inst = PROTO_CODE(b->proto, pc + 1);
                 if (GET_OPCODE(next_inst) == OP_JMP) {
                     int sJ = GETARG_sJ(next_inst);
-                    uint32_t jump_target = (uint32_t)((int32_t)(pc + 1) + 1 + sJ);
+                    uint32_t jump_target = (uint32_t) ((int32_t) (pc + 1) + 1 + sJ);
                     uint32_t fall_target = pc + 2;
 
                     XirBlock *jump_blk = b->pc_to_block[jump_target];
@@ -2362,11 +2439,10 @@ static bool translate_instruction(XirBuilder *b, XirBlock **cur_blk, uint32_t pc
 
                 // Store ret_count
                 {
-                    XirRef cnt_off = xir_const_i64(b->func, (int64_t)JIT_RET_COUNT_OFFSET);
-                    XirRef cnt_val = xir_const_i64(b->func, (int64_t)nret);
+                    XirRef cnt_off = xir_const_i64(b->func, (int64_t) JIT_RET_COUNT_OFFSET);
+                    XirRef cnt_val = xir_const_i64(b->func, (int64_t) nret);
                     XirRef cnt = xir_emit_unary(b->func, blk, XIR_CONST_I64, XR_REP_I64, cnt_val);
-                    xir_emit_raw(b->func, blk, XIR_STORE_CORO, XR_REP_VOID,
-                                 cnt_off, cnt, XIR_NONE);
+                    xir_emit_raw(b->func, blk, XIR_STORE_CORO, XR_REP_VOID, cnt_off, cnt, XIR_NONE);
                     blk->ins[blk->nins - 1].flags |= XIR_FLAG_SIDE_EFFECT;
                 }
 
@@ -2374,20 +2450,18 @@ static bool translate_instruction(XirBuilder *b, XirBlock **cur_blk, uint32_t pc
                 for (int i = 1; i < nret; i++) {
                     XirRef vi = builder_get_slot(b, blk, a + i);
                     int32_t val_offset = JIT_RET_VALS_OFFSET + (i - 1) * 8;
-                    XirRef off_ref = xir_const_i64(b->func, (int64_t)val_offset);
-                    xir_emit_raw(b->func, blk, XIR_STORE_CORO, XR_REP_VOID,
-                                 off_ref, vi, XIR_NONE);
+                    XirRef off_ref = xir_const_i64(b->func, (int64_t) val_offset);
+                    xir_emit_raw(b->func, blk, XIR_STORE_CORO, XR_REP_VOID, off_ref, vi, XIR_NONE);
                     blk->ins[blk->nins - 1].flags |= XIR_FLAG_SIDE_EFFECT;
 
                     // Store value_tag for each extra return value
                     uint8_t tag = vtag_to_value_tag(builder_slot_xr_tag(b, a + i));
                     int32_t tag_offset = JIT_RET_TAGS_OFFSET + (i - 1) * 8;
-                    XirRef tag_off = xir_const_i64(b->func, (int64_t)tag_offset);
-                    XirRef tag_val = xir_const_i64(b->func, (int64_t)tag);
-                    XirRef tag_v = xir_emit_unary(b->func, blk, XIR_CONST_I64,
-                                                   XR_REP_I64, tag_val);
-                    xir_emit_raw(b->func, blk, XIR_STORE_CORO, XR_REP_VOID,
-                                 tag_off, tag_v, XIR_NONE);
+                    XirRef tag_off = xir_const_i64(b->func, (int64_t) tag_offset);
+                    XirRef tag_val = xir_const_i64(b->func, (int64_t) tag);
+                    XirRef tag_v = xir_emit_unary(b->func, blk, XIR_CONST_I64, XR_REP_I64, tag_val);
+                    xir_emit_raw(b->func, blk, XIR_STORE_CORO, XR_REP_VOID, tag_off, tag_v,
+                                 XIR_NONE);
                     blk->ins[blk->nins - 1].flags |= XIR_FLAG_SIDE_EFFECT;
                 }
             } else {
@@ -2428,15 +2502,19 @@ static bool translate_instruction(XirBuilder *b, XirBlock **cur_blk, uint32_t pc
 
         default: {
             // Delegate to sub-translation functions (split for maintainability)
-            if (xir_translate_object_ops(b, cur_blk, pc, inst, op)) return true;
-            if (xir_translate_call_ops(b, cur_blk, pc, inst, op)) return true;
-            if (xir_translate_misc_ops(b, cur_blk, pc, inst, op)) return true;
+            if (xir_translate_object_ops(b, cur_blk, pc, inst, op))
+                return true;
+            if (xir_translate_call_ops(b, cur_blk, pc, inst, op))
+                return true;
+            if (xir_translate_misc_ops(b, cur_blk, pc, inst, op))
+                return true;
 
             // Unsupported opcode — not yet JIT-translated.
             // Skip gracefully so the builder can reject the function
             // and fall back to the interpreter (see ops_skipped check below).
             const char *name = xr_opcode_name(GET_OPCODE(inst));
-            if (!b->nyi_opcode) b->nyi_opcode = name;
+            if (!b->nyi_opcode)
+                b->nyi_opcode = name;
             b->ops_skipped++;
             return true;
         }
@@ -2445,34 +2523,27 @@ static bool translate_instruction(XirBuilder *b, XirBlock **cur_blk, uint32_t pc
 
 /* ========== Main Build Entry Point ========== */
 
-static XirFunc *build_from_proto_impl_ex(XrProto *proto,
-                                          XrProto **shared_protos, int nshared,
-                                          struct XrShape *dominant_shape,
-                                          bool aot_mode,
-                                          XrayIsolate *isolate,
-                                          const XirAotOptions *opts);
+static XirFunc *build_from_proto_impl_ex(XrProto *proto, XrProto **shared_protos, int nshared,
+                                         struct XrShape *dominant_shape, bool aot_mode,
+                                         XrayIsolate *isolate, const XirAotOptions *opts);
 
-static XirFunc *build_from_proto_impl(XrProto *proto,
-                                       XrProto **shared_protos, int nshared,
-                                       struct XrShape *dominant_shape,
-                                       bool aot_mode,
-                                       XrayIsolate *isolate) {
-    return build_from_proto_impl_ex(proto, shared_protos, nshared,
-                                     dominant_shape, aot_mode, isolate,
-                                     NULL);
+static XirFunc *build_from_proto_impl(XrProto *proto, XrProto **shared_protos, int nshared,
+                                      struct XrShape *dominant_shape, bool aot_mode,
+                                      XrayIsolate *isolate) {
+    return build_from_proto_impl_ex(proto, shared_protos, nshared, dominant_shape, aot_mode,
+                                    isolate, NULL);
 }
 
-static XirFunc *build_from_proto_impl_ex(XrProto *proto,
-                                          XrProto **shared_protos, int nshared,
-                                          struct XrShape *dominant_shape,
-                                          bool aot_mode,
-                                          XrayIsolate *isolate,
-                                          const XirAotOptions *opts) {
-    if (!proto) return NULL;
+static XirFunc *build_from_proto_impl_ex(XrProto *proto, XrProto **shared_protos, int nshared,
+                                         struct XrShape *dominant_shape, bool aot_mode,
+                                         XrayIsolate *isolate, const XirAotOptions *opts) {
+    if (!proto)
+        return NULL;
 
     const char *name = proto->name ? proto->name->data : "<anon>";
     XirFunc *func = xir_func_new(name);
-    if (!func) return NULL;
+    if (!func)
+        return NULL;
 
     XirBuilder b;
     builder_init(&b, func, proto);
@@ -2498,18 +2569,18 @@ static XirFunc *build_from_proto_impl_ex(XrProto *proto,
     b.ic_methods_snapshot = NULL;
     b.ic_builtin_snapshot = NULL;
     b.ic_snapshots_owned = false;
-    if (opts && (opts->ic_fields_snapshot || opts->ic_methods_snapshot ||
-                 opts->ic_builtin_snapshot)) {
-        b.ic_fields_snapshot  = opts->ic_fields_snapshot;
+    if (opts &&
+        (opts->ic_fields_snapshot || opts->ic_methods_snapshot || opts->ic_builtin_snapshot)) {
+        b.ic_fields_snapshot = opts->ic_fields_snapshot;
         b.ic_methods_snapshot = opts->ic_methods_snapshot;
         b.ic_builtin_snapshot = opts->ic_builtin_snapshot;
-        b.ic_snapshots_owned  = false;
+        b.ic_snapshots_owned = false;
     } else if (!aot_mode && isolate) {
         XrVMContext *ctx = xr_vm_current_ctx(isolate);
-        b.ic_fields_snapshot  = xr_vm_ic_fields_snapshot(ctx, proto);
+        b.ic_fields_snapshot = xr_vm_ic_fields_snapshot(ctx, proto);
         b.ic_methods_snapshot = xr_vm_ic_methods_snapshot(ctx, proto);
         b.ic_builtin_snapshot = xr_vm_ic_builtin_snapshot(ctx, proto);
-        b.ic_snapshots_owned  = true;
+        b.ic_snapshots_owned = true;
     }
 
     // Step 1: Create basic blocks from bb_leaders and jump targets
@@ -2517,8 +2588,8 @@ static XirFunc *build_from_proto_impl_ex(XrProto *proto,
 
     // Step 2: Create vregs for function parameters
     func->proto = proto;
-    func->num_params = (uint16_t)proto->numparams;
-    func->max_stack = (uint16_t)proto->maxstacksize;
+    func->num_params = (uint16_t) proto->numparams;
+    func->max_stack = (uint16_t) proto->maxstacksize;
     for (int i = 0; i < proto->numparams; i++) {
         uint8_t ptype = XR_REP_TAGGED;
         // Use param_types (authoritative per-parameter types)
@@ -2527,15 +2598,14 @@ static XirFunc *build_from_proto_impl_ex(XrProto *proto,
             // speculate rep for TAGGED params with stable feedback.
             // Covers numeric unions (int|float) and nullable primitives (int?/float?/bool?).
             // xir_jit_call guards against type mismatch at entry.
-            if (ptype == XR_REP_TAGGED &&
-                proto->type_feedback && proto->type_feedback->stable &&
+            if (ptype == XR_REP_TAGGED && proto->type_feedback && proto->type_feedback->stable &&
                 i < XFB_MAX_PARAMS) {
                 struct XrType *st = proto->param_types[i];
                 uint8_t fb_type = proto->type_feedback->arg_types[i];
                 bool speculatable =
                     value_tag_to_vtag(xr_type_to_xr_tag(st)) == VTAG_NUMERIC ||
-                    (st->is_nullable && (st->kind == XR_KIND_INT ||
-                     st->kind == XR_KIND_FLOAT || st->kind == XR_KIND_BOOL));
+                    (st->is_nullable && (st->kind == XR_KIND_INT || st->kind == XR_KIND_FLOAT ||
+                                         st->kind == XR_KIND_BOOL));
                 if (speculatable) {
                     if (fb_type == XFB_TYPE_INT || fb_type == XFB_TYPE_BOOL)
                         ptype = XR_REP_I64;
@@ -2567,7 +2637,8 @@ static XirFunc *build_from_proto_impl_ex(XrProto *proto,
         if (dominant_shape && ptype == XR_REP_PTR) {
             if (dominant_shape->symbol_to_index) {
                 XirVReg *pv = builder_vreg_ref(&b, param);
-                if (pv) pv->shape_hint = dominant_shape;
+                if (pv)
+                    pv->shape_hint = dominant_shape;
             }
         }
         // Pre-populate layout from parameter type annotation so STRUCT_GET
@@ -2576,13 +2647,14 @@ static XirFunc *build_from_proto_impl_ex(XrProto *proto,
             struct XrType *t = proto->param_types[i];
             struct XrStructLayout *sl = NULL;
             if (t) {
-                if ((t->kind == XR_KIND_INSTANCE || t->kind == XR_KIND_CLASS)
-                    && t->instance.class_ref && t->instance.class_ref->struct_layout)
+                if ((t->kind == XR_KIND_INSTANCE || t->kind == XR_KIND_CLASS) &&
+                    t->instance.class_ref && t->instance.class_ref->struct_layout)
                     sl = t->instance.class_ref->struct_layout;
             }
             if (sl) {
                 XirVReg *pv = builder_vreg_ref(&b, param);
-                if (pv) pv->layout = sl;
+                if (pv)
+                    pv->layout = sl;
             }
         }
     }
@@ -2592,22 +2664,19 @@ static XirFunc *build_from_proto_impl_ex(XrProto *proto,
     // vreg numbering (v0..vN-1) required by the codegen entry prologue.
     for (int i = 0; i < proto->numparams && i < 8; i++) {
         bool needs_tag = false;
-        if (proto->param_types && i < proto->param_types_count &&
-            proto->param_types[i]) {
+        if (proto->param_types && i < proto->param_types_count && proto->param_types[i]) {
             struct XrType *st = proto->param_types[i];
-            bool is_prim = (st->kind == XR_KIND_INT ||
-                            st->kind == XR_KIND_FLOAT ||
-                            st->kind == XR_KIND_BOOL);
+            bool is_prim =
+                (st->kind == XR_KIND_INT || st->kind == XR_KIND_FLOAT || st->kind == XR_KIND_BOOL);
             if (is_prim && st->is_nullable)
                 needs_tag = true;
             if (is_prim && i >= proto->min_params)
                 needs_tag = true;
         }
         if (needs_tag) {
-            int32_t tag_offset = (int32_t)(XIR_JIT_PARAM_TAGS_OFFSET + i * 8);
-            XirRef off = xir_const_i64(func, (int64_t)tag_offset);
-            XirRef tag_vr = xir_emit_unary(func, func->entry, XIR_LOAD_CORO,
-                                            XR_REP_I64, off);
+            int32_t tag_offset = (int32_t) (XIR_JIT_PARAM_TAGS_OFFSET + i * 8);
+            XirRef off = xir_const_i64(func, (int64_t) tag_offset);
+            XirRef tag_vr = xir_emit_unary(func, func->entry, XIR_LOAD_CORO, XR_REP_I64, off);
             b.slot_tag_refs[i] = tag_vr;
             b.slot_value_refs[i] = b.slot_map[i];
         }
@@ -2635,13 +2704,18 @@ static XirFunc *build_from_proto_impl_ex(XrProto *proto,
     // Pre-add back-edge predecessors for ALL loops so phi narg is correct
     for (int li = 0; li < b.nloops; li++) {
         BuilderLoop *lp = &b.loops[li];
-        if (lp->header_pc >= b.code_count) continue;
+        if (lp->header_pc >= b.code_count)
+            continue;
         XirBlock *header = b.pc_to_block[lp->header_pc];
-        if (!header) continue;
+        if (!header)
+            continue;
         XirBlock *back_blk = b.pc_to_block[lp->back_edge_pc];
         if (!back_blk) {
             for (uint32_t bpc = lp->back_edge_pc; bpc > 0; bpc--) {
-                if (b.pc_to_block[bpc]) { back_blk = b.pc_to_block[bpc]; break; }
+                if (b.pc_to_block[bpc]) {
+                    back_blk = b.pc_to_block[bpc];
+                    break;
+                }
             }
         }
         if (back_blk) {
@@ -2653,7 +2727,7 @@ static XirFunc *build_from_proto_impl_ex(XrProto *proto,
 
     // Entry-as-loop-header: create preheader for tail recursion
     BuilderLoop *entry_loop = NULL;
-    (void)entry_loop;
+    (void) entry_loop;
     {
         BuilderLoop *elp = builder_find_loop(&b, 0);
         if (elp) {
@@ -2681,15 +2755,13 @@ static XirFunc *build_from_proto_impl_ex(XrProto *proto,
             func->entry = preheader;
 
             // Ensure block_defs covers new block ids (AFTER swap)
-            uint32_t max_id = orig_entry->id > preheader->id
-                            ? orig_entry->id : preheader->id;
+            uint32_t max_id = orig_entry->id > preheader->id ? orig_entry->id : preheader->id;
             if (max_id >= b.block_defs_size) {
                 uint32_t new_size = max_id + 8;
-                XR_REALLOC_OR_ABORT(b.block_defs,
-                                    new_size * sizeof(BraunBlockDef),
+                XR_REALLOC_OR_ABORT(b.block_defs, new_size * sizeof(BraunBlockDef),
                                     "xir_builder block_defs grow");
                 memset(&b.block_defs[b.block_defs_size], 0,
-                    (new_size - b.block_defs_size) * sizeof(BraunBlockDef));
+                       (new_size - b.block_defs_size) * sizeof(BraunBlockDef));
                 b.block_defs_size = new_size;
             }
 
@@ -2730,7 +2802,8 @@ static XirFunc *build_from_proto_impl_ex(XrProto *proto,
             // Clear is_fresh_alloc on all currently-mapped vregs.
             for (int _fs = 0; _fs < 256; _fs++) {
                 XirVReg *_fv = builder_vreg_for_slot(&b, _fs);
-                if (_fv) _fv->is_fresh_alloc = false;
+                if (_fv)
+                    _fv->is_fresh_alloc = false;
             }
 
             // Nullable narrowing: after ISNULL+JMP, narrow the checked
@@ -2740,8 +2813,7 @@ static XirFunc *build_from_proto_impl_ex(XrProto *proto,
                 int ns = b.narrow_slot;
                 XirRef orig = builder_get_slot(&b, cur_blk, ns);
                 if (!xir_ref_is_none(orig)) {
-                    XirRef narrowed = xir_emit_unary(b.func, cur_blk,
-                                                      XIR_MOV, b.narrow_rep, orig);
+                    XirRef narrowed = xir_emit_unary(b.func, cur_blk, XIR_MOV, b.narrow_rep, orig);
                     builder_tag_vreg(&b, narrowed, b.narrow_tag, 0);
                     builder_set_slot(&b, ns, narrowed);
                 }
@@ -2754,8 +2826,7 @@ static XirFunc *build_from_proto_impl_ex(XrProto *proto,
 
                 // Catch block entry: restore slot_map from try entry
                 if (cur_blk == catch_blk) {
-                    memcpy(b.slot_map,
-                           b.try_stack[b.try_depth - 1].saved_slot_map,
+                    memcpy(b.slot_map, b.try_stack[b.try_depth - 1].saved_slot_map,
                            sizeof(b.slot_map));
                     // Catch block itself is NOT inside the try region
                 } else {
@@ -2781,10 +2852,9 @@ static XirFunc *build_from_proto_impl_ex(XrProto *proto,
         if (op == OP_JMP && pc > 0) {
             XrInstruction prev = PROTO_CODE(proto, pc - 1);
             OpCode prev_op = GET_OPCODE(prev);
-            if (prev_op == OP_TEST || prev_op == OP_TESTSET ||
-                prev_op == OP_LT || prev_op == OP_LE || prev_op == OP_EQ ||
-                prev_op == OP_LTI || prev_op == OP_LEI || prev_op == OP_EQI ||
-                prev_op == OP_EQK || prev_op == OP_ISNULL) {
+            if (prev_op == OP_TEST || prev_op == OP_TESTSET || prev_op == OP_LT ||
+                prev_op == OP_LE || prev_op == OP_EQ || prev_op == OP_LTI || prev_op == OP_LEI ||
+                prev_op == OP_EQI || prev_op == OP_EQK || prev_op == OP_ISNULL) {
                 // Already handled by the TEST translation
                 continue;
             }
@@ -2795,9 +2865,9 @@ static XirFunc *build_from_proto_impl_ex(XrProto *proto,
 
         // Immediate bail out on first NYI opcode — do not continue translating
         // subsequent instructions that may reference undefined vregs.
-        if (b.ops_skipped > 0) break;
+        if (b.ops_skipped > 0)
+            break;
     }
-
 
     // Ensure last block has a terminator
     if (cur_blk->jmp.type == XIR_JMP_NONE) {
@@ -2811,8 +2881,8 @@ static XirFunc *build_from_proto_impl_ex(XrProto *proto,
     // In Release builds we reach here; bail out cleanly so the function
     // continues running in the interpreter instead of executing corrupt JIT code.
     if (b.ops_skipped > 0) {
-        xr_log_warning("jit", "builder skipped %d ops in %s, first nyi: %s",
-                       b.ops_skipped, name, b.nyi_opcode ? b.nyi_opcode : "?");
+        xr_log_warning("jit", "builder skipped %d ops in %s, first nyi: %s", b.ops_skipped, name,
+                       b.nyi_opcode ? b.nyi_opcode : "?");
         xir_func_destroy(func);
         builder_cleanup(&b);
         return NULL;
@@ -2837,48 +2907,38 @@ XirFunc *xir_build_from_proto(XrProto *proto) {
     return build_from_proto_impl(proto, NULL, 0, NULL, false, NULL);
 }
 
-XirFunc *xir_build_from_proto_ex(XrProto *proto,
-                                  XrProto **shared_protos, int nshared) {
+XirFunc *xir_build_from_proto_ex(XrProto *proto, XrProto **shared_protos, int nshared) {
     XR_DCHECK(proto != NULL, "xir_build_from_proto_ex: proto is NULL");
     return build_from_proto_impl(proto, shared_protos, nshared, NULL, false, NULL);
 }
 
-XirFunc *xir_build_from_proto_shaped(XrProto *proto,
-                                      struct XrShape *dominant_shape) {
+XirFunc *xir_build_from_proto_shaped(XrProto *proto, struct XrShape *dominant_shape) {
     XR_DCHECK(proto != NULL, "xir_build_from_proto_shaped: proto is NULL");
     return build_from_proto_impl(proto, NULL, 0, dominant_shape, false, NULL);
 }
 
-XirFunc *xir_build_from_proto_jit_ex(XrProto *proto,
-                                      XrProto **shared_protos, int nshared,
-                                      struct XrShape *dominant_shape,
-                                      XrayIsolate *isolate,
-                                      const XirAotOptions *opts) {
+XirFunc *xir_build_from_proto_jit_ex(XrProto *proto, XrProto **shared_protos, int nshared,
+                                     struct XrShape *dominant_shape, XrayIsolate *isolate,
+                                     const XirAotOptions *opts) {
     XR_DCHECK(proto != NULL, "xir_build_from_proto_jit_ex: proto is NULL");
-    return build_from_proto_impl_ex(proto, shared_protos, nshared,
-                                     dominant_shape, false, isolate, opts);
+    return build_from_proto_impl_ex(proto, shared_protos, nshared, dominant_shape, false, isolate,
+                                    opts);
 }
 
-XirFunc *xir_build_from_proto_jit(XrProto *proto,
-                                   XrProto **shared_protos, int nshared,
-                                   struct XrShape *dominant_shape,
-                                   XrayIsolate *isolate) {
+XirFunc *xir_build_from_proto_jit(XrProto *proto, XrProto **shared_protos, int nshared,
+                                  struct XrShape *dominant_shape, XrayIsolate *isolate) {
     XR_DCHECK(proto != NULL, "xir_build_from_proto_jit: proto is NULL");
     return build_from_proto_impl(proto, shared_protos, nshared, dominant_shape, false, isolate);
 }
 
-XirFunc *xir_build_from_proto_aot(XrProto *proto,
-                                   XrProto **shared_protos, int nshared,
-                                   XrayIsolate *isolate) {
+XirFunc *xir_build_from_proto_aot(XrProto *proto, XrProto **shared_protos, int nshared,
+                                  XrayIsolate *isolate) {
     XR_DCHECK(proto != NULL, "xir_build_from_proto_aot: proto is NULL");
     return build_from_proto_impl(proto, shared_protos, nshared, NULL, true, isolate);
 }
 
-XirFunc *xir_build_from_proto_aot_ex(XrProto *proto,
-                                      XrProto **shared_protos, int nshared,
-                                      XrayIsolate *isolate,
-                                      const XirAotOptions *opts) {
+XirFunc *xir_build_from_proto_aot_ex(XrProto *proto, XrProto **shared_protos, int nshared,
+                                     XrayIsolate *isolate, const XirAotOptions *opts) {
     XR_DCHECK(proto != NULL, "xir_build_from_proto_aot_ex: proto is NULL");
-    return build_from_proto_impl_ex(proto, shared_protos, nshared, NULL, true,
-                                     isolate, opts);
+    return build_from_proto_impl_ex(proto, shared_protos, nshared, NULL, true, isolate, opts);
 }

@@ -32,13 +32,11 @@ XR_FUNC int xr_cli_parse_global(int argc, char **argv, XrCliContext *ctx);
  * Returns XR_CLI_EXIT_OK on success, XR_CLI_EXIT_USAGE on parse error.
  * On error, diagnostics are printed to stderr via xcli_diag.
  */
-XR_FUNC XrCliExitCode xr_cli_parse_command(const XrCliCommandSpec *spec,
-                                             int argc, char **argv,
-                                             const XrCliContext *ctx,
-                                             XrCliInvocation *inv);
+XR_FUNC XrCliExitCode xr_cli_parse_command(const XrCliCommandSpec *spec, int argc, char **argv,
+                                           const XrCliContext *ctx, XrCliInvocation *inv);
 
 /* Free resources allocated by xr_cli_parse_command.
  * Safe to call on a zero-initialized invocation. */
 XR_FUNC void xr_cli_invocation_free(XrCliInvocation *inv);
 
-#endif // XCLI_PARSER_H
+#endif  // XCLI_PARSER_H

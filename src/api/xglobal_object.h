@@ -27,25 +27,22 @@
 /* ========== Global Object Structure ========== */
 
 typedef struct XrGlobalObject {
-    XrayIsolate* isolate;
-    XrHashMap* properties;              // Core classes (String, Array, etc.)
-    XrHashMap* functions;               // Builtin functions (reserved)
+    XrayIsolate *isolate;
+    XrHashMap *properties;  // Core classes (String, Array, etc.)
+    XrHashMap *functions;   // Builtin functions (reserved)
     int registered_class_count;
 } XrGlobalObject;
 
 /* ========== Global Object API ========== */
 
-XR_FUNC XrGlobalObject* xr_global_object_create(XrayIsolate* isolate);
-XR_FUNC void xr_global_object_destroy(XrGlobalObject* global);
+XR_FUNC XrGlobalObject *xr_global_object_create(XrayIsolate *isolate);
+XR_FUNC void xr_global_object_destroy(XrGlobalObject *global);
 
-XR_FUNC bool xr_global_register_class(XrGlobalObject* global, 
-                               const char* name, 
-                               XrClass* klass);
+XR_FUNC bool xr_global_register_class(XrGlobalObject *global, const char *name, XrClass *klass);
 
 // Register all core classes (Object, String, Array, etc.)
-XR_FUNC bool xr_global_register_all_core_classes(XrGlobalObject* global,
-                                          XrayIsolate* isolate);
+XR_FUNC bool xr_global_register_all_core_classes(XrGlobalObject *global, XrayIsolate *isolate);
 
-XR_FUNC bool xr_global_register_all_builtin_functions(XrGlobalObject* global);
+XR_FUNC bool xr_global_register_all_builtin_functions(XrGlobalObject *global);
 
-#endif // XGLOBAL_OBJECT_H
+#endif  // XGLOBAL_OBJECT_H

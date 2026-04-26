@@ -38,7 +38,7 @@
 #define XRT_CLASS_H
 
 #include "xrt_value.h"
-#include "xrt_arc.h" // XrtArcHdr, XRT_ARC_HDR, xrt_arc_alloc, macros
+#include "xrt_arc.h"  // XrtArcHdr, XRT_ARC_HDR, xrt_arc_alloc, macros
 #include <stdint.h>
 #include <stdbool.h>
 #include <stdlib.h>
@@ -54,13 +54,13 @@ typedef void (*XrtDestructor)(void *obj);
 typedef XrtValue (*XrtMethodFn)(void);  // generic fn ptr placeholder
 
 typedef struct {
-    uint16_t       type_id;
-    uint16_t       parent_id;     // 0 = no parent
-    const char    *name;          // class name (e.g. "Point")
-    XrtMethodFn   *vtable;        // virtual method table (NULL if no virtuals)
-    int            vtable_size;
-    XrtDestructor  destructor;    // NULL for classes without custom dtor
-    uint32_t       instance_size; // byte size of instance fields
+    uint16_t type_id;
+    uint16_t parent_id;   // 0 = no parent
+    const char *name;     // class name (e.g. "Point")
+    XrtMethodFn *vtable;  // virtual method table (NULL if no virtuals)
+    int vtable_size;
+    XrtDestructor destructor;  // NULL for classes without custom dtor
+    uint32_t instance_size;    // byte size of instance fields
 } XrtTypeInfo;
 
 /* =========================================================================
@@ -73,29 +73,28 @@ typedef struct {
 #define XRT_MAX_TYPES 256
 
 #ifdef XRT_IMPL
-  XrtTypeInfo xrt_type_table[XRT_MAX_TYPES];
-  uint16_t    xrt_type_count = 1;  // 0 reserved
+XrtTypeInfo xrt_type_table[XRT_MAX_TYPES];
+uint16_t xrt_type_count = 1;  // 0 reserved
 #else
-  extern XrtTypeInfo xrt_type_table[];
-  extern uint16_t    xrt_type_count;
+extern XrtTypeInfo xrt_type_table[];
+extern uint16_t xrt_type_count;
 #endif
 
 /* Register a type; returns assigned type_id */
-static inline uint16_t xrt_type_register(const char *name, uint16_t parent_id,
-                                          XrtMethodFn *vtable, int vtable_size,
-                                          XrtDestructor dtor, uint32_t inst_size) {
+static inline uint16_t xrt_type_register(const char *name, uint16_t parent_id, XrtMethodFn *vtable,
+                                         int vtable_size, XrtDestructor dtor, uint32_t inst_size) {
     if (xrt_type_count >= XRT_MAX_TYPES) {
         fprintf(stderr, "xrt_type_register: type table full\n");
         abort();
     }
     uint16_t id = xrt_type_count++;
     XrtTypeInfo *ti = &xrt_type_table[id];
-    ti->type_id      = id;
-    ti->parent_id    = parent_id;
-    ti->name         = name;
-    ti->vtable       = vtable;
-    ti->vtable_size  = vtable_size;
-    ti->destructor   = dtor;
+    ti->type_id = id;
+    ti->parent_id = parent_id;
+    ti->name = name;
+    ti->vtable = vtable;
+    ti->vtable_size = vtable_size;
+    ti->destructor = dtor;
     ti->instance_size = inst_size;
     return id;
 }
@@ -108,10 +107,10 @@ static inline uint16_t xrt_type_register(const char *name, uint16_t parent_id,
  * ========================================================================= */
 
 static inline void *xrt_obj_alloc(uint16_t type_id, uint32_t size) {
-    void *obj = xrt_arc_alloc((size_t)size);
+    void *obj = xrt_arc_alloc((size_t) size);
     XrtArcHdr *h = XRT_ARC_HDR(obj);
-    h->type  = type_id;
-    h->flags |= XRT_ARC_HAS_DEINIT; // enable destructor dispatch on release
+    h->type = type_id;
+    h->flags |= XRT_ARC_HAS_DEINIT;  // enable destructor dispatch on release
     return obj;
 }
 
@@ -120,11 +119,13 @@ static inline void *xrt_obj_alloc(uint16_t type_id, uint32_t size) {
  * ========================================================================= */
 
 static inline bool xrt_instanceof(void *obj, uint16_t target_type_id) {
-    if (!obj) return false;
+    if (!obj)
+        return false;
     XrtArcHdr *h = XRT_ARC_HDR(obj);
     uint16_t tid = h->type;
     while (tid != 0) {
-        if (tid == target_type_id) return true;
+        if (tid == target_type_id)
+            return true;
         tid = xrt_type_table[tid].parent_id;
     }
     return false;
@@ -156,4 +157,4 @@ static inline void *xrt_unbox_obj(XrtValue v) {
     return v.ptr;
 }
 
-#endif // XRT_CLASS_H
+#endif  // XRT_CLASS_H

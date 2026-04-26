@@ -28,23 +28,23 @@
 #include <stdbool.h>
 
 // Protocol version
-#define XR_SERIAL_VERSION  0x03
+#define XR_SERIAL_VERSION 0x03
 
 // Wire tags
-#define XR_STAG_NULL       0x01
-#define XR_STAG_BOOL       0x02
-#define XR_STAG_INT        0x03
-#define XR_STAG_FLOAT      0x04
-#define XR_STAG_STRING     0x05
-#define XR_STAG_BYTES      0x06
-#define XR_STAG_ARRAY      0x07
-#define XR_STAG_MAP        0x08
-#define XR_STAG_SET        0x09
-#define XR_STAG_JSON       0x0A
-#define XR_STAG_ARRAY_I32  0x0B // Typed array int32, batch memcpy
-#define XR_STAG_ARRAY_I64  0x0C // Typed array int64, batch memcpy
-#define XR_STAG_ARRAY_F32  0x0D // Typed array float32, batch memcpy
-#define XR_STAG_ARRAY_F64  0x0E // Typed array float64, batch memcpy
+#define XR_STAG_NULL 0x01
+#define XR_STAG_BOOL 0x02
+#define XR_STAG_INT 0x03
+#define XR_STAG_FLOAT 0x04
+#define XR_STAG_STRING 0x05
+#define XR_STAG_BYTES 0x06
+#define XR_STAG_ARRAY 0x07
+#define XR_STAG_MAP 0x08
+#define XR_STAG_SET 0x09
+#define XR_STAG_JSON 0x0A
+#define XR_STAG_ARRAY_I32 0x0B  // Typed array int32, batch memcpy
+#define XR_STAG_ARRAY_I64 0x0C  // Typed array int64, batch memcpy
+#define XR_STAG_ARRAY_F32 0x0D  // Typed array float32, batch memcpy
+#define XR_STAG_ARRAY_F64 0x0E  // Typed array float64, batch memcpy
 
 // Max serialization depth to prevent stack overflow on recursive structures
 #define XR_SERIAL_MAX_DEPTH 128
@@ -60,9 +60,9 @@ struct XrayIsolate;
  */
 typedef struct {
     uint8_t *data;
-    size_t   len;
-    size_t   cap;
-    bool     error;  // set on allocation failure
+    size_t len;
+    size_t cap;
+    bool error;  // set on allocation failure
 } XrSerialBuf;
 
 XR_FUNC void xr_serial_buf_init(XrSerialBuf *buf);
@@ -86,14 +86,14 @@ XR_FUNC int xr_cluster_encode(struct XrayIsolate *X, XrValue value, XrSerialBuf 
  */
 typedef struct {
     const uint8_t *data;
-    size_t         len;
-    size_t         pos;
-    int            depth;
+    size_t len;
+    size_t pos;
+    int depth;
     struct XrayIsolate *X;
 } XrSerialReader;
 
-XR_FUNC void xr_serial_reader_init(XrSerialReader *r, struct XrayIsolate *X,
-                            const uint8_t *data, size_t len);
+XR_FUNC void xr_serial_reader_init(XrSerialReader *r, struct XrayIsolate *X, const uint8_t *data,
+                                   size_t len);
 
 /*
  * Decode a single XrValue from binary data.
@@ -109,8 +109,8 @@ XR_FUNC int xr_cluster_decode(XrSerialReader *r, XrValue *out);
  * Encode value to a newly allocated buffer.
  * Caller must call xr_serial_buf_free() on the result.
  */
-static inline int xr_cluster_encode_value(struct XrayIsolate *X, XrValue value,
-                                           uint8_t **out_data, size_t *out_len) {
+static inline int xr_cluster_encode_value(struct XrayIsolate *X, XrValue value, uint8_t **out_data,
+                                          size_t *out_len) {
     XrSerialBuf buf;
     xr_serial_buf_init(&buf);
     int rc = xr_cluster_encode(X, value, &buf);
@@ -128,9 +128,8 @@ static inline int xr_cluster_encode_value(struct XrayIsolate *X, XrValue value,
 /*
  * Decode value from a buffer.
  */
-static inline int xr_cluster_decode_value(struct XrayIsolate *X,
-                                           const uint8_t *data, size_t len,
-                                           XrValue *out) {
+static inline int xr_cluster_decode_value(struct XrayIsolate *X, const uint8_t *data, size_t len,
+                                          XrValue *out) {
     XrSerialReader r;
     xr_serial_reader_init(&r, X, data, len);
     return xr_cluster_decode(&r, out);

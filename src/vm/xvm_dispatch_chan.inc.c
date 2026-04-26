@@ -27,7 +27,7 @@ vmcase(OP_CHAN_NEW) {
     int buffer_size = GETARG_Bx(i);
 
     // Create GC-managed Channel
-    XrChannel *ch = xr_channel_new(isolate, (uint32_t)buffer_size);
+    XrChannel *ch = xr_channel_new(isolate, (uint32_t) buffer_size);
     if (!ch) {
         VM_RUNTIME_ERROR(XR_ERR_OUT_OF_MEMORY, "Channel creation failed");
     }
@@ -51,15 +51,15 @@ vmcase(OP_CHAN_NEW_NAMED) {
     uint32_t buf_size = 0;
     if (XR_IS_INT(R(b))) {
         int64_t v = XR_TO_INT(R(b));
-        if (v > 0 && v <= 262143) buf_size = (uint32_t)v;
+        if (v > 0 && v <= 262143)
+            buf_size = (uint32_t) v;
     }
 
     // Check for existing Named Channel (e.g. Proxy from CHANNEL_SYNC)
 #ifdef XR_HAS_CLUSTER
     if (XR_IS_STRING(R(c))) {
         if (xr_cluster_is_running()) {
-            XrChannel *existing_ch = xr_cluster_find_channel_local(
-                XR_TO_STRING(R(c))->data);
+            XrChannel *existing_ch = xr_cluster_find_channel_local(XR_TO_STRING(R(c))->data);
             if (existing_ch) {
                 R(a) = xr_value_from_channel(existing_ch);
                 vmbreak;
@@ -81,7 +81,7 @@ vmcase(OP_CHAN_NEW_NAMED) {
             xr_cluster_register_channel(name_str->data, ch);
         }
 #else
-        (void)name_str;
+        (void) name_str;
 #endif
     }
 
@@ -101,7 +101,7 @@ vmcase(OP_CHAN_SEND) {
     int c = GETARG_C(i);
 
     // Check if resumed from blocking
-    XrCoroutine *current = (XrCoroutine *)VM_CURRENT_CORO;
+    XrCoroutine *current = (XrCoroutine *) VM_CURRENT_CORO;
     if (current && xr_coro_resume_load(current) == XR_RESUME_CHANNEL) {
         xr_coro_resume_store(current, XR_RESUME_OK);
         R(a) = xr_null();
@@ -120,7 +120,8 @@ vmcase(OP_CHAN_SEND) {
     XrValue send_v = vm_chan_copy_send(isolate, R(c));
 
     // Pre-save frame
-    if (current) current->send_value = send_v;
+    if (current)
+        current->send_value = send_v;
     savepc();
     frame->pc = pc - 1;
     frame->call_status |= XR_CALL_YIELDED;
@@ -151,7 +152,7 @@ vmcase(OP_CHAN_RECV) {
     int b = GETARG_B(i);
 
     // Check if resumed from blocking (cache resume_load: 1 atomic instead of 2)
-    XrCoroutine *current = (XrCoroutine *)VM_CURRENT_CORO;
+    XrCoroutine *current = (XrCoroutine *) VM_CURRENT_CORO;
     if (current) {
         int _rs = xr_coro_resume_load(current);
         if (_rs == XR_RESUME_CHANNEL) {
@@ -177,7 +178,8 @@ vmcase(OP_CHAN_RECV) {
     XrChannel *ch = xr_value_to_channel(ch_val);
 
     // Set recv_slot before recv — see hot path comment for rationale
-    if (current) current->recv_slot = &R(a);
+    if (current)
+        current->recv_slot = &R(a);
     // Pre-save frame
     savepc();
     frame->pc = pc - 1;
@@ -229,7 +231,7 @@ vmcase(OP_CHAN_TRY_SEND) {
 
     // Send succeeded, wake waiting receivers
     if (success) {
-        xr_runtime_wake_channel(isolate, ch, false); // Wake receivers
+        xr_runtime_wake_channel(isolate, ch, false);  // Wake receivers
     }
     vmbreak;
 }
@@ -274,7 +276,7 @@ vmcase(OP_CHAN_TRY_RECV) {
 
     // Receive succeeded, wake waiting senders
     if (ok) {
-        xr_runtime_wake_channel(isolate, ch, true); // Wake senders
+        xr_runtime_wake_channel(isolate, ch, true);  // Wake senders
     }
     vmbreak;
 }
@@ -296,7 +298,7 @@ vmcase(OP_CHAN_CLOSE) {
     // Get Channel directly
     XrValue ch_val = R(a);
     if (!xr_value_is_channel(ch_val)) {
-        vmbreak; // Silently ignore non-Channel
+        vmbreak;  // Silently ignore non-Channel
     }
     XrChannel *ch = xr_value_to_channel(ch_val);
 

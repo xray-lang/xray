@@ -48,6 +48,6 @@
 #include "../../src/vm/xvm.h"
 
 // Load xml module
-XR_FUNC XrModule* xr_load_module_xml(XrayIsolate *isolate);
+XR_FUNC XrModule *xr_load_module_xml(XrayIsolate *isolate);
 
 #endif

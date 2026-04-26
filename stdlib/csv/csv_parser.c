@@ -47,22 +47,23 @@ void csv_config_init(CsvConfig *config) {
 
 void csv_config_from_json(XrayIsolate *X, CsvConfig *config, XrJson *json) {
     csv_config_init(config);
-    if (!json) return;
+    if (!json)
+        return;
 
     // Scalar fields routed through the shared config readers; they
     // silently no-op on missing / wrong-type values, preserving the
     // defaults already installed by csv_config_init().
-    xrs_cfg_get_char(X, json, "delimiter",      &config->delimiter);
-    xrs_cfg_get_char(X, json, "quoteChar",      &config->quote_char);
-    xrs_cfg_get_char(X, json, "escapeChar",     &config->escape_char);
-    xrs_cfg_get_bool(X, json, "header",         &config->header);
-    xrs_cfg_get_bool(X, json, "dynamicTyping",  &config->dynamic_typing);
-    xrs_cfg_get_bool(X, json, "trimFields",     &config->trim_fields);
+    xrs_cfg_get_char(X, json, "delimiter", &config->delimiter);
+    xrs_cfg_get_char(X, json, "quoteChar", &config->quote_char);
+    xrs_cfg_get_char(X, json, "escapeChar", &config->escape_char);
+    xrs_cfg_get_bool(X, json, "header", &config->header);
+    xrs_cfg_get_bool(X, json, "dynamicTyping", &config->dynamic_typing);
+    xrs_cfg_get_bool(X, json, "trimFields", &config->trim_fields);
     xrs_cfg_get_bool(X, json, "skipEmptyLines", &config->skip_empty_lines);
-    xrs_cfg_get_bool(X, json, "relaxQuotes",    &config->relax_quotes);
-    xrs_cfg_get_bool(X, json, "relaxColumns",   &config->relax_columns);
-    xrs_cfg_get_int (X, json, "skipRows",       &config->skip_rows);
-    xrs_cfg_get_int (X, json, "maxRows",        &config->max_rows);
+    xrs_cfg_get_bool(X, json, "relaxQuotes", &config->relax_quotes);
+    xrs_cfg_get_bool(X, json, "relaxColumns", &config->relax_columns);
+    xrs_cfg_get_int(X, json, "skipRows", &config->skip_rows);
+    xrs_cfg_get_int(X, json, "maxRows", &config->max_rows);
 
     // columns: user-supplied header list stays as a live XrArray ref so
     // the parser can index into it without copying.
@@ -82,9 +83,8 @@ void csv_config_from_json(XrayIsolate *X, CsvConfig *config, XrJson *json) {
 
     // comments — fixed-buffer copy (parser keeps a private copy so
     // config stays valid after the caller's XrJson is released).
-    size_t n = xrs_cfg_get_fixed_str(X, json, "comments",
-                                     config->comments,
-                                     sizeof(config->comments));
+    size_t n =
+        xrs_cfg_get_fixed_str(X, json, "comments", config->comments, sizeof(config->comments));
     config->has_comments = (n > 0);
 
     // linebreak ("\n" / "\r\n"); used by stringify only. Needs the
@@ -99,8 +99,8 @@ void csv_config_from_json(XrayIsolate *X, CsvConfig *config, XrJson *json) {
     }
 }
 
-void csv_parser_init(CsvParser *parser, XrayIsolate *isolate,
-                     const char *data, size_t len, CsvConfig *config) {
+void csv_parser_init(CsvParser *parser, XrayIsolate *isolate, const char *data, size_t len,
+                     CsvConfig *config) {
     memset(parser, 0, sizeof(CsvParser));
 
     parser->isolate = isolate;
@@ -154,28 +154,37 @@ void csv_parser_cleanup(CsvParser *parser) {
 static void add_error(CsvParser *parser, CsvErrorType type, const char *msg) {
     const char *type_str = "Unknown";
     switch (type) {
-        case CSV_ERROR_UNTERMINATED_QUOTE: type_str = "UnterminatedQuote"; break;
-        case CSV_ERROR_FIELD_MISMATCH:     type_str = "FieldMismatch";     break;
-        case CSV_ERROR_INVALID_ESCAPE:     type_str = "InvalidEscape";     break;
-        case CSV_ERROR_INVALID_ROW:        type_str = "InvalidRow";        break;
-        default: break;
+        case CSV_ERROR_UNTERMINATED_QUOTE:
+            type_str = "UnterminatedQuote";
+            break;
+        case CSV_ERROR_FIELD_MISMATCH:
+            type_str = "FieldMismatch";
+            break;
+        case CSV_ERROR_INVALID_ESCAPE:
+            type_str = "InvalidEscape";
+            break;
+        case CSV_ERROR_INVALID_ROW:
+            type_str = "InvalidRow";
+            break;
+        default:
+            break;
     }
-    xrs_error_push(parser->isolate, parser->result.errors,
-                   type_str,
+    xrs_error_push(parser->isolate, parser->result.errors, type_str,
                    /*line=*/-1,
                    /*row=*/parser->current_row_num,
-                   /*column=*/parser->current_col_num,
-                   msg);
+                   /*column=*/parser->current_col_num, msg);
 }
 
 // Ensure temp buffer capacity. Aborts on OOM rather than silently
 // leaving temp_buf shorter than `needed` — previously the parser would
 // carry on writing past the old tail via memcpy.
 static void ensure_temp_cap(CsvParser *parser, size_t needed) {
-    if (parser->temp_cap >= needed) return;
+    if (parser->temp_cap >= needed)
+        return;
 
     size_t new_cap = parser->temp_cap ? parser->temp_cap * 2 : 256;
-    while (new_cap < needed) new_cap *= 2;
+    while (new_cap < needed)
+        new_cap *= 2;
 
     XR_REALLOC_OR_ABORT(parser->temp_buf, new_cap, "csv temp buffer");
     parser->temp_cap = new_cap;
@@ -183,11 +192,11 @@ static void ensure_temp_cap(CsvParser *parser, size_t needed) {
 
 // Trim leading and trailing whitespace
 static void trim_field(const char **start, size_t *len) {
-    while (*len > 0 && isspace((unsigned char)(*start)[0])) {
+    while (*len > 0 && isspace((unsigned char) (*start)[0])) {
         (*start)++;
         (*len)--;
     }
-    while (*len > 0 && isspace((unsigned char)(*start)[*len - 1])) {
+    while (*len > 0 && isspace((unsigned char) (*start)[*len - 1])) {
         (*len)--;
     }
 }
@@ -201,14 +210,13 @@ static bool fast_parse_int(const char *s, size_t len, int64_t *result) {
 
 /* ========== Fast Float Parsing ========== */
 
-static const double powers_of_10[] = {
-    1e0,  1e1,  1e2,  1e3,  1e4,  1e5,  1e6,  1e7,
-    1e8,  1e9,  1e10, 1e11, 1e12, 1e13, 1e14, 1e15,
-    1e16, 1e17, 1e18, 1e19, 1e20, 1e21, 1e22
-};
+static const double powers_of_10[] = {1e0,  1e1,  1e2,  1e3,  1e4,  1e5,  1e6,  1e7,
+                                      1e8,  1e9,  1e10, 1e11, 1e12, 1e13, 1e14, 1e15,
+                                      1e16, 1e17, 1e18, 1e19, 1e20, 1e21, 1e22};
 
 static bool fast_parse_float(const char *s, size_t len, double *result) {
-    if (len == 0) return false;
+    if (len == 0)
+        return false;
 
     bool negative = false;
     size_t i = 0;
@@ -223,10 +231,11 @@ static bool fast_parse_float(const char *s, size_t len, double *result) {
     uint64_t int_part = 0;
     int digits = 0;
     while (i < len && s[i] >= '0' && s[i] <= '9') {
-        int_part = int_part * 10 + (uint64_t)(s[i] - '0');
+        int_part = int_part * 10 + (uint64_t) (s[i] - '0');
         digits++;
         i++;
-        if (digits > 18) return false;
+        if (digits > 18)
+            return false;
     }
 
     int frac_digits = 0;
@@ -234,10 +243,11 @@ static bool fast_parse_float(const char *s, size_t len, double *result) {
     if (i < len && s[i] == '.') {
         i++;
         while (i < len && s[i] >= '0' && s[i] <= '9') {
-            frac_part = frac_part * 10 + (uint64_t)(s[i] - '0');
+            frac_part = frac_part * 10 + (uint64_t) (s[i] - '0');
             frac_digits++;
             i++;
-            if (digits + frac_digits > 18) return false;
+            if (digits + frac_digits > 18)
+                return false;
         }
     }
 
@@ -255,20 +265,23 @@ static bool fast_parse_float(const char *s, size_t len, double *result) {
             exp = exp * 10 + (s[i] - '0');
             i++;
         }
-        if (exp_negative) exp = -exp;
+        if (exp_negative)
+            exp = -exp;
     }
 
-    if (i != len) return false;
+    if (i != len)
+        return false;
 
-    double val = (double)int_part;
+    double val = (double) int_part;
     if (frac_digits > 0 && frac_digits <= 22) {
-        val += (double)frac_part / powers_of_10[frac_digits];
+        val += (double) frac_part / powers_of_10[frac_digits];
     }
 
     int total_exp = exp;
     if (total_exp != 0) {
         int abs_exp = total_exp < 0 ? -total_exp : total_exp;
-        if (abs_exp > 22) return false;
+        if (abs_exp > 22)
+            return false;
         if (total_exp > 0) {
             val *= powers_of_10[abs_exp];
         } else {
@@ -289,19 +302,18 @@ XrValue csv_convert_value(XrayIsolate *isolate, const char *field, size_t len) {
 
     // Boolean / null check (portable, no endian dependency)
     if (len == 4) {
-        if ((field[0] | 0x20) == 't' && (field[1] | 0x20) == 'r' &&
-            (field[2] | 0x20) == 'u' && (field[3] | 0x20) == 'e') {
+        if ((field[0] | 0x20) == 't' && (field[1] | 0x20) == 'r' && (field[2] | 0x20) == 'u' &&
+            (field[3] | 0x20) == 'e') {
             return xr_bool(true);
         }
-        if ((field[0] | 0x20) == 'n' && (field[1] | 0x20) == 'u' &&
-            (field[2] | 0x20) == 'l' && (field[3] | 0x20) == 'l') {
+        if ((field[0] | 0x20) == 'n' && (field[1] | 0x20) == 'u' && (field[2] | 0x20) == 'l' &&
+            (field[3] | 0x20) == 'l') {
             return xr_null();
         }
     }
     if (len == 5) {
-        if ((field[0] | 0x20) == 'f' && (field[1] | 0x20) == 'a' &&
-            (field[2] | 0x20) == 'l' && (field[3] | 0x20) == 's' &&
-            (field[4] | 0x20) == 'e') {
+        if ((field[0] | 0x20) == 'f' && (field[1] | 0x20) == 'a' && (field[2] | 0x20) == 'l' &&
+            (field[3] | 0x20) == 's' && (field[4] | 0x20) == 'e') {
             return xr_bool(false);
         }
     }
@@ -328,8 +340,9 @@ XrValue csv_convert_value(XrayIsolate *isolate, const char *field, size_t len) {
             char *endptr;
             double d = strtod(buf, &endptr);
             if (endptr == buf + len) {
-                if (d == (double)(int64_t)d && d >= (double)INT64_MIN && d <= (double)INT64_MAX) {
-                    return xr_int((int64_t)d);
+                if (d == (double) (int64_t) d && d >= (double) INT64_MIN &&
+                    d <= (double) INT64_MAX) {
+                    return xr_int((int64_t) d);
                 }
                 return xr_float(d);
             }
@@ -358,9 +371,11 @@ char csv_detect_delimiter(const char *data, size_t len) {
             continue;
         }
 
-        if (in_quote) continue;
+        if (in_quote)
+            continue;
 
-        if (c == '\n' || c == '\r') continue;
+        if (c == '\n' || c == '\r')
+            continue;
 
         for (int j = 0; j < 4; j++) {
             if (c == candidates[j]) {
@@ -427,11 +442,11 @@ static void finish_field(CsvParser *parser) {
             int nscount = ns->length;
             for (int i = 0; i < nscount; i++) {
                 XrValue nv = xr_array_get(ns, i);
-                if (!XR_IS_STRING(nv)) continue;
+                if (!XR_IS_STRING(nv))
+                    continue;
                 XrString *ss = XR_TO_STRING(nv);
-                if (ss->length == field_len
-                    && (field_len == 0
-                        || memcmp(ss->data, field_data, field_len) == 0)) {
+                if (ss->length == field_len &&
+                    (field_len == 0 || memcmp(ss->data, field_data, field_len) == 0)) {
                     val = xr_null();
                     nulled = true;
                     break;
@@ -511,8 +526,8 @@ static void finish_row(CsvParser *parser, XrArray *header) {
         parser->result.meta.columns = col_count;
     } else if (col_count != parser->expected_columns && !parser->config.relax_columns) {
         char msg[128];
-        snprintf(msg, sizeof(msg), "Expected %d fields, got %d",
-                 parser->expected_columns, col_count);
+        snprintf(msg, sizeof(msg), "Expected %d fields, got %d", parser->expected_columns,
+                 col_count);
         add_error(parser, CSV_ERROR_FIELD_MISMATCH, msg);
     }
 
@@ -537,8 +552,7 @@ static void finish_row(CsvParser *parser, XrArray *header) {
     parser->current_row_num++;
 
     // max_rows check
-    if (parser->config.max_rows > 0 &&
-        parser->result.meta.rows >= parser->config.max_rows) {
+    if (parser->config.max_rows > 0 && parser->result.meta.rows >= parser->config.max_rows) {
         parser->result.meta.truncated = true;
         parser->state = CSV_STATE_ERROR;
     }
@@ -548,10 +562,8 @@ static void finish_row(CsvParser *parser, XrArray *header) {
 
 // Skip UTF-8 BOM (EF BB BF) at start of data
 static void skip_bom(CsvParser *parser) {
-    if (parser->len >= 3 &&
-        (unsigned char)parser->data[0] == 0xEF &&
-        (unsigned char)parser->data[1] == 0xBB &&
-        (unsigned char)parser->data[2] == 0xBF) {
+    if (parser->len >= 3 && (unsigned char) parser->data[0] == 0xEF &&
+        (unsigned char) parser->data[1] == 0xBB && (unsigned char) parser->data[2] == 0xBF) {
         parser->pos = 3;
     }
 }
@@ -572,8 +584,7 @@ static void handle_row_end(CsvParser *parser, XrArray **header_ptr) {
 
 // Skip \r\n and record linebreak style
 static void skip_crlf(CsvParser *parser, char c) {
-    if (c == '\r' && parser->pos + 1 < parser->len &&
-        parser->data[parser->pos + 1] == '\n') {
+    if (c == '\r' && parser->pos + 1 < parser->len && parser->data[parser->pos + 1] == '\n') {
         parser->pos++;
         parser->result.meta.linebreak[0] = '\r';
         parser->result.meta.linebreak[1] = '\n';
@@ -623,8 +634,8 @@ void csv_parser_parse(CsvParser *parser) {
                 // SIMD fast path: batch scan to delimiter or newline
                 size_t remaining = parser->len - parser->pos;
                 if (remaining >= 16) {
-                    const char *found = xr_simd_find_csv_delim(
-                        parser->data + parser->pos, remaining, delim, quote);
+                    const char *found =
+                        xr_simd_find_csv_delim(parser->data + parser->pos, remaining, delim, quote);
                     size_t skip = found - (parser->data + parser->pos);
                     if (skip > 0) {
                         parser->pos += skip - 1;  // -1 because loop end will +1
@@ -639,7 +650,8 @@ void csv_parser_parse(CsvParser *parser) {
                 } else if (c == '\r' || c == '\n') {
                     finish_field(parser);
                     handle_row_end(parser, &header);
-                    if (parser->state == CSV_STATE_ERROR) break;
+                    if (parser->state == CSV_STATE_ERROR)
+                        break;
                     skip_crlf(parser, c);
                     parser->state = CSV_STATE_FIELD_START;
                     parser->field_start = parser->pos + 1;
@@ -663,12 +675,10 @@ void csv_parser_parse(CsvParser *parser) {
                 if (remaining >= 16 && c != escape && c != quote) {
                     const char *found;
                     if (escape == quote) {
-                        found = xr_simd_find_char(
-                            parser->data + parser->pos, remaining, quote);
+                        found = xr_simd_find_char(parser->data + parser->pos, remaining, quote);
                     } else {
-                        char targets[2] = { quote, escape };
-                        found = xr_simd_find_any(
-                            parser->data + parser->pos, remaining, targets, 2);
+                        char targets[2] = {quote, escape};
+                        found = xr_simd_find_any(parser->data + parser->pos, remaining, targets, 2);
                     }
                     size_t skip = found - (parser->data + parser->pos);
                     if (skip > 1) {
@@ -687,8 +697,8 @@ void csv_parser_parse(CsvParser *parser) {
                         chunk_len--;
                     }
                     ensure_temp_cap(parser, parser->temp_len + chunk_len + 1);
-                    memcpy(parser->temp_buf + parser->temp_len,
-                           parser->data + parser->field_start, chunk_len);
+                    memcpy(parser->temp_buf + parser->temp_len, parser->data + parser->field_start,
+                           chunk_len);
                     parser->temp_len += chunk_len;
                     parser->temp_buf[parser->temp_len++] = quote;
                     parser->pos++;  // Skip escaped quote
@@ -716,7 +726,8 @@ void csv_parser_parse(CsvParser *parser) {
                 } else if (c == '\r' || c == '\n') {
                     finish_field(parser);
                     handle_row_end(parser, &header);
-                    if (parser->state == CSV_STATE_ERROR) break;
+                    if (parser->state == CSV_STATE_ERROR)
+                        break;
                     skip_crlf(parser, c);
                     parser->state = CSV_STATE_FIELD_START;
                     parser->field_start = parser->pos + 1;
@@ -754,8 +765,7 @@ void csv_parser_parse(CsvParser *parser) {
 
     // If there's an incomplete field
     if (parser->pos > parser->field_start || parser->current_col_num > 0) {
-        if (parser->state == CSV_STATE_UNQUOTED ||
-            parser->state == CSV_STATE_QUOTE_END ||
+        if (parser->state == CSV_STATE_UNQUOTED || parser->state == CSV_STATE_QUOTE_END ||
             parser->state == CSV_STATE_FIELD_START) {
             finish_field(parser);
         }

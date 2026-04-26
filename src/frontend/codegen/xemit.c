@@ -51,68 +51,64 @@ static inline bool opcode_is_gc_alloc(OpCode op) {
 // non-zero byte — that's the failure mode behind the OP_DUMP regression
 // where slot C should have been zero but landed as a stale register
 // index, silently making OP_DUMP read the wrong register.
-static void validate_field(XrEmitter *e, OpCode op, char slot,
-                           XrOpFieldKind kind, int value) {
-    XR_DCHECK(e != NULL && e->proto != NULL,
-              "validate_field: emitter/proto NULL");
+static void validate_field(XrEmitter *e, OpCode op, char slot, XrOpFieldKind kind, int value) {
+    XR_DCHECK(e != NULL && e->proto != NULL, "validate_field: emitter/proto NULL");
     const char *opname = xr_opcode_name(op);
     switch (kind) {
-    case XR_OPF_NONE:
-        XR_DCHECK_FMT(value == 0,
-            "emit %s: slot %c declared UNUSED but received %d "
-            "(must be 0; likely a swapped operand)",
-            opname, slot, value);
-        break;
-    case XR_OPF_REG_OUT:
-    case XR_OPF_REG_IN:
-    case XR_OPF_REG_INOUT:
-    case XR_OPF_REG_BASE:
-        XR_DCHECK_FMT(value >= 0 && value <= MAXARG_A,
-            "emit %s: slot %c expected register, got %d (out of 0..%d)",
-            opname, slot, value, MAXARG_A);
-        break;
-    case XR_OPF_LIT:
-        XR_DCHECK_FMT(value >= 0 && value <= MAXARG_B,
-            "emit %s: slot %c literal out of 0..%d, got %d",
-            opname, slot, MAXARG_B, value);
-        break;
-    case XR_OPF_LIT_S:
-        XR_DCHECK_FMT(value >= -128 && value <= 127,
-            "emit %s: slot %c signed literal out of -128..127, got %d",
-            opname, slot, value);
-        break;
-    case XR_OPF_LIT_FLAG:
-        XR_DCHECK_FMT(value == 0 || value == 1,
-            "emit %s: slot %c flag must be 0 or 1, got %d",
-            opname, slot, value);
-        break;
-    case XR_OPF_K_IDX:
-        XR_DCHECK_FMT(value >= 0 && value < PROTO_CONST_COUNT(e->proto),
-            "emit %s: slot %c K-index %d out of range (0..%d)",
-            opname, slot, value, PROTO_CONST_COUNT(e->proto) - 1);
-        break;
-    case XR_OPF_SYMBOL_IDX:
-        XR_DCHECK_FMT(value >= 0 && value < PROTO_SYMBOL_COUNT(e->proto),
-            "emit %s: slot %c symbol index %d out of range (0..%d) "
-            "— call emitter_add_symbol() before emitting",
-            opname, slot, value, PROTO_SYMBOL_COUNT(e->proto) - 1);
-        break;
-    case XR_OPF_PROTO_IDX:
-        XR_DCHECK_FMT(value >= 0 && value < PROTO_PROTO_COUNT(e->proto),
-            "emit %s: slot %c sub-proto index %d out of range (0..%d)",
-            opname, slot, value, PROTO_PROTO_COUNT(e->proto) - 1);
-        break;
-    case XR_OPF_GLOBAL_IDX:
-    case XR_OPF_BUILTIN_IDX:
-        XR_DCHECK_FMT(value >= 0,
-            "emit %s: slot %c global/builtin index must be >= 0, got %d",
-            opname, slot, value);
-        break;
-    case XR_OPF_JUMP:
-    case XR_OPF_SUB_OPCODE:
-    case XR_OPF_SPECIAL:
-        // No standard constraint; emitter-internal checks live elsewhere.
-        break;
+        case XR_OPF_NONE:
+            XR_DCHECK_FMT(value == 0,
+                          "emit %s: slot %c declared UNUSED but received %d "
+                          "(must be 0; likely a swapped operand)",
+                          opname, slot, value);
+            break;
+        case XR_OPF_REG_OUT:
+        case XR_OPF_REG_IN:
+        case XR_OPF_REG_INOUT:
+        case XR_OPF_REG_BASE:
+            XR_DCHECK_FMT(value >= 0 && value <= MAXARG_A,
+                          "emit %s: slot %c expected register, got %d (out of 0..%d)", opname, slot,
+                          value, MAXARG_A);
+            break;
+        case XR_OPF_LIT:
+            XR_DCHECK_FMT(value >= 0 && value <= MAXARG_B,
+                          "emit %s: slot %c literal out of 0..%d, got %d", opname, slot, MAXARG_B,
+                          value);
+            break;
+        case XR_OPF_LIT_S:
+            XR_DCHECK_FMT(value >= -128 && value <= 127,
+                          "emit %s: slot %c signed literal out of -128..127, got %d", opname, slot,
+                          value);
+            break;
+        case XR_OPF_LIT_FLAG:
+            XR_DCHECK_FMT(value == 0 || value == 1, "emit %s: slot %c flag must be 0 or 1, got %d",
+                          opname, slot, value);
+            break;
+        case XR_OPF_K_IDX:
+            XR_DCHECK_FMT(value >= 0 && value < PROTO_CONST_COUNT(e->proto),
+                          "emit %s: slot %c K-index %d out of range (0..%d)", opname, slot, value,
+                          PROTO_CONST_COUNT(e->proto) - 1);
+            break;
+        case XR_OPF_SYMBOL_IDX:
+            XR_DCHECK_FMT(value >= 0 && value < PROTO_SYMBOL_COUNT(e->proto),
+                          "emit %s: slot %c symbol index %d out of range (0..%d) "
+                          "— call emitter_add_symbol() before emitting",
+                          opname, slot, value, PROTO_SYMBOL_COUNT(e->proto) - 1);
+            break;
+        case XR_OPF_PROTO_IDX:
+            XR_DCHECK_FMT(value >= 0 && value < PROTO_PROTO_COUNT(e->proto),
+                          "emit %s: slot %c sub-proto index %d out of range (0..%d)", opname, slot,
+                          value, PROTO_PROTO_COUNT(e->proto) - 1);
+            break;
+        case XR_OPF_GLOBAL_IDX:
+        case XR_OPF_BUILTIN_IDX:
+            XR_DCHECK_FMT(value >= 0, "emit %s: slot %c global/builtin index must be >= 0, got %d",
+                          opname, slot, value);
+            break;
+        case XR_OPF_JUMP:
+        case XR_OPF_SUB_OPCODE:
+        case XR_OPF_SPECIAL:
+            // No standard constraint; emitter-internal checks live elsewhere.
+            break;
     }
 }
 
@@ -130,46 +126,42 @@ static void validate_abx(XrEmitter *e, OpCode op, int a, int bx) {
     XrOpFieldKind kind = info->field_kind[1];
     const char *opname = xr_opcode_name(op);
     switch (kind) {
-    case XR_OPF_K_IDX:
-        XR_DCHECK_FMT(bx >= 0 && bx < PROTO_CONST_COUNT(e->proto),
-            "emit %s: Bx K-index %d out of range (0..%d)",
-            opname, bx, PROTO_CONST_COUNT(e->proto) - 1);
-        break;
-    case XR_OPF_PROTO_IDX:
-        XR_DCHECK_FMT(bx >= 0 && bx < PROTO_PROTO_COUNT(e->proto),
-            "emit %s: Bx proto index %d out of range (0..%d)",
-            opname, bx, PROTO_PROTO_COUNT(e->proto) - 1);
-        break;
-    case XR_OPF_GLOBAL_IDX:
-    case XR_OPF_BUILTIN_IDX:
-        XR_DCHECK_FMT(bx >= 0,
-            "emit %s: Bx global/builtin index must be >= 0, got %d",
-            opname, bx);
-        break;
-    case XR_OPF_LIT:
-        XR_DCHECK_FMT(bx >= 0 && bx <= MAXARG_Bx,
-            "emit %s: Bx literal out of 0..%d, got %d",
-            opname, MAXARG_Bx, bx);
-        break;
-    case XR_OPF_LIT_S:
-    case XR_OPF_SPECIAL:
-        // Bx may be a pre-encoded signed value or composite payload;
-        // emitter cannot meaningfully range-check it here.
-        break;
-    default:
-        XR_DCHECK_FMT(bx >= 0 && bx <= MAXARG_Bx,
-            "emit %s: Bx out of 0..%d, got %d",
-            opname, MAXARG_Bx, bx);
-        break;
+        case XR_OPF_K_IDX:
+            XR_DCHECK_FMT(bx >= 0 && bx < PROTO_CONST_COUNT(e->proto),
+                          "emit %s: Bx K-index %d out of range (0..%d)", opname, bx,
+                          PROTO_CONST_COUNT(e->proto) - 1);
+            break;
+        case XR_OPF_PROTO_IDX:
+            XR_DCHECK_FMT(bx >= 0 && bx < PROTO_PROTO_COUNT(e->proto),
+                          "emit %s: Bx proto index %d out of range (0..%d)", opname, bx,
+                          PROTO_PROTO_COUNT(e->proto) - 1);
+            break;
+        case XR_OPF_GLOBAL_IDX:
+        case XR_OPF_BUILTIN_IDX:
+            XR_DCHECK_FMT(bx >= 0, "emit %s: Bx global/builtin index must be >= 0, got %d", opname,
+                          bx);
+            break;
+        case XR_OPF_LIT:
+            XR_DCHECK_FMT(bx >= 0 && bx <= MAXARG_Bx, "emit %s: Bx literal out of 0..%d, got %d",
+                          opname, MAXARG_Bx, bx);
+            break;
+        case XR_OPF_LIT_S:
+        case XR_OPF_SPECIAL:
+            // Bx may be a pre-encoded signed value or composite payload;
+            // emitter cannot meaningfully range-check it here.
+            break;
+        default:
+            XR_DCHECK_FMT(bx >= 0 && bx <= MAXARG_Bx, "emit %s: Bx out of 0..%d, got %d", opname,
+                          MAXARG_Bx, bx);
+            break;
     }
 }
 
 static void validate_asbx(XrEmitter *e, OpCode op, int a, int sbx) {
     const XrOpCodeInfo *info = xr_opcode_info(op);
     validate_field(e, op, 'A', info->field_kind[0], a);
-    XR_DCHECK_FMT(sbx >= LOADI_MIN && sbx <= LOADI_MAX,
-        "emit %s: sBx out of %d..%d, got %d",
-        xr_opcode_name(op), LOADI_MIN, LOADI_MAX, sbx);
+    XR_DCHECK_FMT(sbx >= LOADI_MIN && sbx <= LOADI_MAX, "emit %s: sBx out of %d..%d, got %d",
+                  xr_opcode_name(op), LOADI_MIN, LOADI_MAX, sbx);
 }
 
 static inline int current_pc(XrEmitter *e) {
@@ -194,8 +186,8 @@ void emitter_write_instruction(XrEmitter *e, XrInstruction inst) {
 
     // Debug mode: print instruction
     if (e->debug_mode) {
-        printf("[Emit] PC=%d, Line=%d, Inst=0x%08x, OP=%d\n",
-               e->pc - 1, line, inst, GET_OPCODE(inst));
+        printf("[Emit] PC=%d, Line=%d, Inst=0x%08x, OP=%d\n", e->pc - 1, line, inst,
+               GET_OPCODE(inst));
     }
 }
 
@@ -207,10 +199,10 @@ void emitter_update_window(XrEmitter *e, XrInstruction inst, int pc) {
     e->window.can_optimize = true;
 }
 
-XrEmitter* emitter_new(XrCompilerContext *ctx, XrProto *proto, XRegAlloc *regalloc) {
+XrEmitter *emitter_new(XrCompilerContext *ctx, XrProto *proto, XRegAlloc *regalloc) {
     XR_DCHECK(ctx != NULL, "emitter_new: NULL ctx");
     XR_DCHECK(proto != NULL, "emitter_new: NULL proto");
-    XrEmitter *e = (XrEmitter*)xr_malloc(sizeof(XrEmitter));
+    XrEmitter *e = (XrEmitter *) xr_malloc(sizeof(XrEmitter));
     if (!e) {
         xr_log_warning("emitter", "failed to allocate emitter");
         return NULL;
@@ -218,7 +210,7 @@ XrEmitter* emitter_new(XrCompilerContext *ctx, XrProto *proto, XRegAlloc *regall
 
     memset(e, 0, sizeof(XrEmitter));
 
-    e->ctx = ctx;               // Save context for getting line number
+    e->ctx = ctx;  // Save context for getting line number
     e->proto = proto;
     e->regalloc = regalloc;
     e->pc = current_pc(e);
@@ -426,8 +418,7 @@ void patch_jump(XrEmitter *e, int jump_pc, int target_pc) {
     *inst = CREATE_sJ(op, jump);
 
     if (e->debug_mode) {
-        printf("[Emit] Patch jump at PC=%d, offset=%d, target=%d\n",
-               jump_pc, jump, target_pc);
+        printf("[Emit] Patch jump at PC=%d, offset=%d, target=%d\n", jump_pc, jump, target_pc);
     }
 }
 
@@ -509,16 +500,15 @@ void patch_jump_list(XrEmitter *e, int list, int target_pc) {
         int jump = target_pc - current - 1;
 
         if (jump > MAXARG_sJ || jump < -MAXARG_sJ) {
-            xr_log_warning("emitter", "jump offset too large: %d at PC=%d",
-                    jump, current);
+            xr_log_warning("emitter", "jump offset too large: %d at PC=%d", jump, current);
         } else {
             XrInstruction *inst = PROTO_CODE_PTR(e->proto, current);
             OpCode op = GET_OPCODE(*inst);
             *inst = CREATE_sJ(op, jump);
 
             if (e->debug_mode) {
-                printf("[Emit] Patch jump list node at PC=%d, offset=%d, target=%d\n",
-                       current, jump, target_pc);
+                printf("[Emit] Patch jump list node at PC=%d, offset=%d, target=%d\n", current,
+                       jump, target_pc);
             }
         }
 
@@ -560,9 +550,9 @@ void emitter_print_stats(XrEmitter *e) {
     printf("Jump instructions:       %d\n", e->stats.jump_count);
     printf("Optimized out:           %d\n", e->stats.optimized_count);
     printf("Optimization rate:       %.2f%%\n",
-           e->stats.inst_count > 0
-           ? (e->stats.optimized_count * 100.0 / (e->stats.inst_count + e->stats.optimized_count))
-           : 0.0);
+           e->stats.inst_count > 0 ? (e->stats.optimized_count * 100.0 /
+                                      (e->stats.inst_count + e->stats.optimized_count))
+                                   : 0.0);
     printf("========================================\n\n");
 }
 
@@ -579,7 +569,8 @@ bool try_optimize_sequence(XrEmitter *e, XrInstruction inst) {
         return false;
     }
 
-    if (optimize_redundant_move(e, inst)) return true;
+    if (optimize_redundant_move(e, inst))
+        return true;
 
     return false;
 }
@@ -605,18 +596,17 @@ void emit_patch_instruction_A(XrEmitter *e, int pc, int new_A) {
     int old_a XR_UNUSED = GETARG_A(*inst);
 
     // Clear A field (bits 8-15) and set new value
-    *inst = (*inst & ~((XrInstruction)0xFFu << 8)) | ((XrInstruction)(new_A & 0xFF) << 8);
+    *inst = (*inst & ~((XrInstruction) 0xFFu << 8)) | ((XrInstruction) (new_A & 0xFF) << 8);
 
     if (e->debug_mode) {
-        printf("[Emitter] Patched PC=%d: A=%d->%d (op=%d)\n",
-               pc, old_a, new_A, GET_OPCODE(*inst));
+        printf("[Emitter] Patched PC=%d: A=%d->%d (op=%d)\n", pc, old_a, new_A, GET_OPCODE(*inst));
     }
 }
 
 /*
 ** Get generated instruction (for write-back modification)
 */
-XrInstruction* emit_get_instruction(XrEmitter *e, int pc) {
+XrInstruction *emit_get_instruction(XrEmitter *e, int pc) {
     XR_CHECK(e != NULL, "Emitter cannot be NULL");
     XR_CHECK(e->proto != NULL, "XrProto cannot be NULL");
     XR_CHECK(pc >= 0 && pc < PROTO_CODE_COUNT(e->proto), "Invalid PC");
@@ -653,4 +643,3 @@ int emit_reload(XrEmitter *e, int reg, int slot) {
     XR_CHECK(e != NULL, "Emitter cannot be NULL");
     return xemit_reload(e, reg, slot);
 }
-

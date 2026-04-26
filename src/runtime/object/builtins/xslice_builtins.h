@@ -17,7 +17,6 @@
 #include "xvalue.h"
 #include "xdefs.h"
 
-
 /* ========== ArraySlice Methods ========== */
 
 XR_FUNC XrValue xr_builtin_array_slice_length(XrayIsolate *isolate, XrValue *args, int nargs);
@@ -40,6 +39,6 @@ XR_FUNC XrValue xr_builtin_array_slice_some(XrayIsolate *isolate, XrValue *args,
 
 // Create slice classes (using XrClassBuilder)
 typedef struct XrClass XrClass;
-XR_FUNC XrClass* xr_array_slice_create_class(XrayIsolate *X, XrClass *objectClass);
+XR_FUNC XrClass *xr_array_slice_create_class(XrayIsolate *X, XrClass *objectClass);
 
-#endif // XSLICE_BUILTINS_H
+#endif  // XSLICE_BUILTINS_H

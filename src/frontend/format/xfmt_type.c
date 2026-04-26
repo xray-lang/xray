@@ -23,43 +23,75 @@
 
 const char *xfmt_binary_op(AstNodeType type) {
     switch (type) {
-        case AST_BINARY_ADD: return "+";
-        case AST_BINARY_SUB: return "-";
-        case AST_BINARY_MUL: return "*";
-        case AST_BINARY_DIV: return "/";
-        case AST_BINARY_MOD: return "%";
-        case AST_BINARY_BAND: return "&";
-        case AST_BINARY_BOR: return "|";
-        case AST_BINARY_BXOR: return "^";
-        case AST_BINARY_LSHIFT: return "<<";
-        case AST_BINARY_RSHIFT: return ">>";
-        case AST_BINARY_EQ: return "==";
-        case AST_BINARY_NE: return "!=";
-        case AST_BINARY_EQ_STRICT: return "===";
-        case AST_BINARY_NE_STRICT: return "!==";
-        case AST_BINARY_LT: return "<";
-        case AST_BINARY_LE: return "<=";
-        case AST_BINARY_GT: return ">";
-        case AST_BINARY_GE: return ">=";
-        case AST_BINARY_AND: return "&&";
-        case AST_BINARY_OR: return "||";
-        default: return "?";
+        case AST_BINARY_ADD:
+            return "+";
+        case AST_BINARY_SUB:
+            return "-";
+        case AST_BINARY_MUL:
+            return "*";
+        case AST_BINARY_DIV:
+            return "/";
+        case AST_BINARY_MOD:
+            return "%";
+        case AST_BINARY_BAND:
+            return "&";
+        case AST_BINARY_BOR:
+            return "|";
+        case AST_BINARY_BXOR:
+            return "^";
+        case AST_BINARY_LSHIFT:
+            return "<<";
+        case AST_BINARY_RSHIFT:
+            return ">>";
+        case AST_BINARY_EQ:
+            return "==";
+        case AST_BINARY_NE:
+            return "!=";
+        case AST_BINARY_EQ_STRICT:
+            return "===";
+        case AST_BINARY_NE_STRICT:
+            return "!==";
+        case AST_BINARY_LT:
+            return "<";
+        case AST_BINARY_LE:
+            return "<=";
+        case AST_BINARY_GT:
+            return ">";
+        case AST_BINARY_GE:
+            return ">=";
+        case AST_BINARY_AND:
+            return "&&";
+        case AST_BINARY_OR:
+            return "||";
+        default:
+            return "?";
     }
 }
 
 const char *xfmt_compound_op(TokenType type) {
     switch (type) {
-        case TK_PLUS_ASSIGN: return "+=";
-        case TK_MINUS_ASSIGN: return "-=";
-        case TK_MUL_ASSIGN: return "*=";
-        case TK_DIV_ASSIGN: return "/=";
-        case TK_MOD_ASSIGN: return "%=";
-        case TK_AND_ASSIGN: return "&=";
-        case TK_OR_ASSIGN: return "|=";
-        case TK_XOR_ASSIGN: return "^=";
-        case TK_LSHIFT_ASSIGN: return "<<=";
-        case TK_RSHIFT_ASSIGN: return ">>=";
-        default: return "?=";
+        case TK_PLUS_ASSIGN:
+            return "+=";
+        case TK_MINUS_ASSIGN:
+            return "-=";
+        case TK_MUL_ASSIGN:
+            return "*=";
+        case TK_DIV_ASSIGN:
+            return "/=";
+        case TK_MOD_ASSIGN:
+            return "%=";
+        case TK_AND_ASSIGN:
+            return "&=";
+        case TK_OR_ASSIGN:
+            return "|=";
+        case TK_XOR_ASSIGN:
+            return "^=";
+        case TK_LSHIFT_ASSIGN:
+            return "<<=";
+        case TK_RSHIFT_ASSIGN:
+            return ">>=";
+        default:
+            return "?=";
     }
 }
 
@@ -68,7 +100,8 @@ const char *xfmt_compound_op(TokenType type) {
 // ----------------------------------------------------------------------------
 
 void xfmt_emit_type(XrFmtContext *ctx, XrType *type) {
-    if (!type) return;
+    if (!type)
+        return;
     const char *type_str = xr_type_to_string(type);
     if (type_str) {
         xfmt_write_str(ctx, type_str);
@@ -78,13 +111,14 @@ void xfmt_emit_type(XrFmtContext *ctx, XrType *type) {
 }
 
 // Format generic type parameters <T, U: Constraint>
-void xfmt_emit_generic_params(XrFmtContext *ctx, XrGenericParam **params,
-                              int count) {
-    if (count <= 0) return;
+void xfmt_emit_generic_params(XrFmtContext *ctx, XrGenericParam **params, int count) {
+    if (count <= 0)
+        return;
 
     xfmt_write_char(ctx, '<');
     for (int i = 0; i < count; i++) {
-        if (i > 0) xfmt_write_str(ctx, ", ");
+        if (i > 0)
+            xfmt_write_str(ctx, ", ");
         xfmt_write_str(ctx, params[i]->name);
         if (params[i]->constraint) {
             xfmt_write_str(ctx, ": ");
@@ -96,11 +130,13 @@ void xfmt_emit_generic_params(XrFmtContext *ctx, XrGenericParam **params,
 
 // Format generic type arguments <int, string>
 void xfmt_emit_generic_args(XrFmtContext *ctx, XrType **args, int count) {
-    if (count <= 0) return;
+    if (count <= 0)
+        return;
 
     xfmt_write_char(ctx, '<');
     for (int i = 0; i < count; i++) {
-        if (i > 0) xfmt_write_str(ctx, ", ");
+        if (i > 0)
+            xfmt_write_str(ctx, ", ");
         xfmt_emit_type(ctx, args[i]);
     }
     xfmt_write_char(ctx, '>');
@@ -111,7 +147,8 @@ void xfmt_emit_generic_args(XrFmtContext *ctx, XrType **args, int count) {
 // ----------------------------------------------------------------------------
 
 void xfmt_emit_pattern(XrFmtContext *ctx, XrDestructurePattern *pattern) {
-    if (!pattern) return;
+    if (!pattern)
+        return;
 
     switch (pattern->type) {
         case PATTERN_IDENTIFIER:
@@ -125,7 +162,8 @@ void xfmt_emit_pattern(XrFmtContext *ctx, XrDestructurePattern *pattern) {
         case PATTERN_ARRAY:
             xfmt_write_char(ctx, '[');
             for (int i = 0; i < pattern->as.array.element_count; i++) {
-                if (i > 0) xfmt_write_str(ctx, ", ");
+                if (i > 0)
+                    xfmt_write_str(ctx, ", ");
                 xfmt_emit_pattern(ctx, pattern->as.array.elements[i]);
             }
             xfmt_write_char(ctx, ']');
@@ -134,7 +172,8 @@ void xfmt_emit_pattern(XrFmtContext *ctx, XrDestructurePattern *pattern) {
         case PATTERN_OBJECT:
             xfmt_write_char(ctx, '{');
             for (int i = 0; i < pattern->as.object.field_count; i++) {
-                if (i > 0) xfmt_write_str(ctx, ", ");
+                if (i > 0)
+                    xfmt_write_str(ctx, ", ");
                 xfmt_emit_pattern(ctx, pattern->as.object.patterns[i]);
             }
             xfmt_write_char(ctx, '}');

@@ -58,6 +58,6 @@
  *   sep                  - Path separator ("/" or "\\")
  *   eol                  - Line ending ("\n" or "\r\n")
  */
-XrModule* xr_load_module_os(XrayIsolate *isolate);
+XrModule *xr_load_module_os(XrayIsolate *isolate);
 
 #endif

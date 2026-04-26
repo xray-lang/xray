@@ -24,7 +24,6 @@
  * runtime/value/xopcode_info.{h,c}. The disassembler below queries them via
  * xr_opcode_info(). */
 
-
 /* ========== Formatting Output Functions ========== */
 
 // Format: no operand
@@ -60,7 +59,7 @@ static int disasm_abx(const char *name, XrProto *proto, XrInstruction inst, int 
 
 // Format: R[A] G[Bx] (global variable)
 static int disasm_abx_global(const char *name, XrProto *proto, XrInstruction inst, int offset) {
-    (void)proto;
+    (void) proto;
     uint8_t a = GETARG_A(inst);
     uint16_t bx = GETARG_Bx(inst);
 
@@ -109,9 +108,9 @@ static int disasm_ab(const char *name, XrInstruction inst, int offset) {
 
 // Format: R[A] <Bx as raw integer> (Bx is a direct integer, not a const index)
 static int disasm_abx_int(const char *name, XrInstruction inst, int offset) {
-    uint8_t  a  = GETARG_A(inst);
+    uint8_t a = GETARG_A(inst);
     uint16_t bx = GETARG_Bx(inst);
-    printf("%-16s R[%d] %d\n", name, a, (int)bx);
+    printf("%-16s R[%d] %d\n", name, a, (int) bx);
     return offset + 1;
 }
 
@@ -123,11 +122,10 @@ static int disasm_ab_imm(const char *name, XrInstruction inst, int offset) {
 
     // Check if comparison instruction (need to show k flag)
     OpCode op = GET_OPCODE(inst);
-    if (op == OP_EQ || op == OP_EQK || op == OP_LT || op == OP_LE ||
-        op == OP_TEST) {
+    if (op == OP_EQ || op == OP_EQK || op == OP_LT || op == OP_LE || op == OP_TEST) {
         printf("%-16s R[%d] R[%d] k=%d\n", name, a, b, c);
     } else {
-    printf("%-16s R[%d] %d\n", name, a, b);
+        printf("%-16s R[%d] %d\n", name, a, b);
     }
     return offset + 1;
 }
@@ -332,8 +330,8 @@ void xr_disassemble_proto(XrProto *proto, const char *name) {
     printf("==\n");
 
     // Print function info
-    printf("Parameters: %d, Stack: %d, Code: %d",
-           proto->numparams, proto->maxstacksize, PROTO_CODE_COUNT(proto));
+    printf("Parameters: %d, Stack: %d, Code: %d", proto->numparams, proto->maxstacksize,
+           PROTO_CODE_COUNT(proto));
     if (proto->return_type != NULL) {
         printf(", Returns: %s", proto->return_type);
     }
@@ -343,7 +341,8 @@ void xr_disassemble_proto(XrProto *proto, const char *name) {
     if (proto->param_types && proto->param_types_count > 0) {
         int typed = 0;
         for (int i = 0; i < proto->param_types_count; i++) {
-            if (proto->param_types[i]) typed++;
+            if (proto->param_types[i])
+                typed++;
         }
         printf("ParamTypes: %d/%d typed", typed, proto->param_types_count);
         if (typed > 0) {
@@ -351,10 +350,11 @@ void xr_disassemble_proto(XrProto *proto, const char *name) {
             for (int i = 0; i < proto->param_types_count; i++) {
                 if (proto->param_types[i]) {
                     uint8_t tag = xr_type_to_slot_type(proto->param_types[i]);
-                    const char *name = (tag == XR_SLOT_I64) ? "i64" :
-                                       (tag == XR_SLOT_F64) ? "f64" :
-                                       (tag == XR_SLOT_PTR) ? "ptr" :
-                                       (tag == XR_SLOT_BOOL) ? "bool" : "unknown";
+                    const char *name = (tag == XR_SLOT_I64)    ? "i64"
+                                       : (tag == XR_SLOT_F64)  ? "f64"
+                                       : (tag == XR_SLOT_PTR)  ? "ptr"
+                                       : (tag == XR_SLOT_BOOL) ? "bool"
+                                                               : "unknown";
                     printf("R%d=%s ", i, name);
                 }
             }
@@ -390,4 +390,3 @@ void xr_disassemble_proto(XrProto *proto, const char *name) {
         }
     }
 }
-

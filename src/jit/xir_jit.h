@@ -39,37 +39,38 @@ typedef struct XrCoroutine XrCoroutine;
 
 typedef struct XirJitState {
     XirCodeAlloc code_alloc;
-    struct XrayIsolate *isolate;   // owning isolate (for CHA class lookup)
-    int          threshold;        // call count threshold for Tier 1
-    int          compiled_count;
-    bool         enabled;
-    TfaState    *tfa;              // lazily allocated TFA state (NULL until first use)
-    void        *dominant_shape;   // XrShape* — most common NEWJSON shape in module (NULL if none/ambiguous)
-    bool         verbose;          // diagnostic logging (auto-enabled by --jit-force)
-    bool         stats_enabled;    // --jit-stats: print compilation statistics on exit
-    XirCompileQueue *bg_queue;     // background compilation queue (NULL if sync mode)
+    struct XrayIsolate *isolate;  // owning isolate (for CHA class lookup)
+    int threshold;                // call count threshold for Tier 1
+    int compiled_count;
+    bool enabled;
+    TfaState *tfa;  // lazily allocated TFA state (NULL until first use)
+    void
+        *dominant_shape;  // XrShape* — most common NEWJSON shape in module (NULL if none/ambiguous)
+    bool verbose;         // diagnostic logging (auto-enabled by --jit-force)
+    bool stats_enabled;         // --jit-stats: print compilation statistics on exit
+    XirCompileQueue *bg_queue;  // background compilation queue (NULL if sync mode)
 
     // Code cache eviction: track compiled protos for LRU reclaim
     struct XrProto **compiled_protos;  // array of compiled protos (for eviction scan)
-    uint32_t     compiled_protos_count;
-    uint32_t     compiled_protos_cap;
-    uint32_t     stats_evicted;        // number of evicted protos
+    uint32_t compiled_protos_count;
+    uint32_t compiled_protos_cap;
+    uint32_t stats_evicted;  // number of evicted protos
 
     // Statistics (populated during compilation, printed by xir_jit_destroy)
-    uint32_t     stats_tier1;          // functions compiled at Tier 1
-    uint32_t     stats_tier2;          // functions recompiled at Tier 2
-    uint32_t     stats_conservative;   // conservative recompiles (deopt_count >= 5)
-    uint32_t     stats_deopt_total;    // total deopts across all protos
-    uint32_t     stats_disabled;       // protos permanently disabled (deopt_count >= 20)
-    uint64_t     stats_compile_ns;     // cumulative compile time (nanoseconds)
-    uint64_t     stats_code_bytes;     // total generated code bytes
+    uint32_t stats_tier1;         // functions compiled at Tier 1
+    uint32_t stats_tier2;         // functions recompiled at Tier 2
+    uint32_t stats_conservative;  // conservative recompiles (deopt_count >= 5)
+    uint32_t stats_deopt_total;   // total deopts across all protos
+    uint32_t stats_disabled;      // protos permanently disabled (deopt_count >= 20)
+    uint64_t stats_compile_ns;    // cumulative compile time (nanoseconds)
+    uint64_t stats_code_bytes;    // total generated code bytes
 } XirJitState;
 
 /* ========== Deoptimization ========== */
 
 // Sentinel return value from JIT code when a guard fails.
 // Chosen to be an invalid XrValue bit pattern (NaN-boxed nonsense).
-#define XIR_DEOPT_MARKER  ((int64_t)0xDEAD0001DEAD0001LL)
+#define XIR_DEOPT_MARKER ((int64_t) 0xDEAD0001DEAD0001LL)
 
 /* ========== Suspend/Resume ========== */
 
@@ -77,12 +78,12 @@ typedef struct XirJitState {
 // JIT saves live registers to coro->jit_suspend and returns this.
 // xir_jit_call detects it and returns XR_VM_BLOCKED to the worker.
 // On resume, worker calls jit_resume_entry to re-enter JIT code.
-#define XIR_SUSPEND_MARKER ((int64_t)0xDEAD0002DEAD0002LL)
+#define XIR_SUSPEND_MARKER ((int64_t) 0xDEAD0002DEAD0002LL)
 
 /* ========== API ========== */
 
 XR_FUNC XirJitState *xir_jit_init(struct XrayIsolate *isolate, int threshold);
-XR_FUNC void         xir_jit_destroy(XirJitState *jit);
+XR_FUNC void xir_jit_destroy(XirJitState *jit);
 
 // Try to compile a proto to native code.
 // On success, sets proto->jit_entry and returns true.
@@ -98,12 +99,11 @@ XR_FUNC bool xir_jit_try_compile(XirJitState *jit, XrProto *proto);
 // result: output XrValue
 // Returns: XIR_JIT_OK on success, XIR_JIT_DEOPT on deopt, XIR_JIT_SUSPEND on
 // channel/await block. Thread-local return avoids gopark race on jit_ctx.
-#define XIR_JIT_OK      0
-#define XIR_JIT_DEOPT   1
+#define XIR_JIT_OK 0
+#define XIR_JIT_DEOPT 1
 #define XIR_JIT_SUSPEND 2
-XR_FUNC int xir_jit_call(void *jit_entry, XrCoroutine *coro,
-                  XrValue *args, int nargs,
-                  struct XrType *return_type_info, XrValue *result);
+XR_FUNC int xir_jit_call(void *jit_entry, XrCoroutine *coro, XrValue *args, int nargs,
+                         struct XrType *return_type_info, XrValue *result);
 
 // Multi-return value reconstruction: fill results[1..n] from jit_ctx->ret_vals[].
 // Called after xir_jit_call() succeeds when the caller expects multiple results.
@@ -131,23 +131,22 @@ XR_FUNC int xir_jit_resume(XrCoroutine *coro, XrValue *result);
 // values: array of raw int64 values (indexed by bytecode slot)
 // result: output XrValue
 // Returns true on success, false on deopt.
-XR_FUNC bool xir_jit_osr_enter(void *osr_entry, XrCoroutine *coro,
-                        int64_t *values, uint8_t return_type,
-                        XrValue *result);
+XR_FUNC bool xir_jit_osr_enter(void *osr_entry, XrCoroutine *coro, int64_t *values,
+                               uint8_t return_type, XrValue *result);
 
 /* Unified JIT result installation data.
  * Both sync and background paths fill this struct, then call
  * xir_jit_install_to_proto() which writes fields in the correct order
  * with a release fence before publishing jit_entry. */
 typedef struct {
-    void    *code;           // compiled machine code (becomes jit_entry)
-    void    *fast_entry;     // fast entry point (skip param setup)
-    void    *resume_entry;   // resume entry for suspend/resume (NULL = none)
-    uint8_t  opt_level;      // XIR_OPT_BASIC or XIR_OPT_FULL
-    void    *stack_map;      // XrStackMapTable* (ownership transferred)
-    void    *deopt_table;    // XirRtDeoptEntry* (heap-allocated, ownership transferred)
+    void *code;          // compiled machine code (becomes jit_entry)
+    void *fast_entry;    // fast entry point (skip param setup)
+    void *resume_entry;  // resume entry for suspend/resume (NULL = none)
+    uint8_t opt_level;   // XIR_OPT_BASIC or XIR_OPT_FULL
+    void *stack_map;     // XrStackMapTable* (ownership transferred)
+    void *deopt_table;   // XirRtDeoptEntry* (heap-allocated, ownership transferred)
     uint32_t ndeopt;
-    void    *osr_entries;    // XirOsrEntry* (heap-allocated, ownership transferred)
+    void *osr_entries;  // XirOsrEntry* (heap-allocated, ownership transferred)
     uint32_t nosr;
 } XirInstallData;
 
@@ -171,8 +170,7 @@ XR_FUNC void xir_jit_install_bg_result(XrProto *proto);
 // result: output XrValue (set on successful OSR)
 // Returns: XIR_JIT_OK on success, XIR_JIT_DEOPT on deopt/no-match,
 // XIR_JIT_SUSPEND on channel/await block.
-XR_FUNC int xir_jit_osr_trigger(XirJitState *jit, XrProto *proto, XrCoroutine *coro,
-                          uint32_t bc_pc, XrValue *base, int maxstack,
-                          uint8_t return_type, XrValue *result);
+XR_FUNC int xir_jit_osr_trigger(XirJitState *jit, XrProto *proto, XrCoroutine *coro, uint32_t bc_pc,
+                                XrValue *base, int maxstack, uint8_t return_type, XrValue *result);
 
-#endif // XIR_JIT_H
+#endif  // XIR_JIT_H

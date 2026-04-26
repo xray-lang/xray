@@ -48,7 +48,7 @@
  *   }
  */
 static XaInterfaceMethod iterable_methods[] = {
-    { "iterator", NULL, NULL, 0 }  // return type set during init
+    {"iterator", NULL, NULL, 0}  // return type set during init
 };
 
 /*
@@ -67,8 +67,8 @@ static XaInterfaceMethod iterable_methods[] = {
  * and return a built-in iterator type.
  */
 static XaInterfaceMethod iterator_methods[] = {
-    { "next", NULL, NULL, 0 },     // return type: T? (nullable element type)
-    { "hasNext", NULL, NULL, 0 }   // return type: bool
+    {"next", NULL, NULL, 0},    // return type: T? (nullable element type)
+    {"hasNext", NULL, NULL, 0}  // return type: bool
 };
 
 /*
@@ -112,7 +112,7 @@ static XaInterfaceMethod iterator_methods[] = {
  *   }
  */
 static XaInterfaceMethod comparable_methods[] = {
-    { "compareTo", NULL, NULL, 1 }  // param: other: any, return: int
+    {"compareTo", NULL, NULL, 1}  // param: other: any, return: int
 };
 
 /*
@@ -152,7 +152,7 @@ static XaInterfaceMethod comparable_methods[] = {
  * correct behavior, but xray uses === by default for reference equality.
  */
 static XaInterfaceMethod hashable_methods[] = {
-    { "hashCode", NULL, NULL, 0 }  // return: int
+    {"hashCode", NULL, NULL, 0}  // return: int
 };
 
 /*
@@ -192,7 +192,7 @@ static XaInterfaceMethod hashable_methods[] = {
  * so explicit toString() calls are rarely needed in practice.
  */
 static XaInterfaceMethod stringable_methods[] = {
-    { "toString", NULL, NULL, 0 }  // return: string
+    {"toString", NULL, NULL, 0}  // return: string
 };
 
 /*
@@ -237,8 +237,8 @@ static XaInterfaceMethod stringable_methods[] = {
  *   }
  */
 static XaInterfaceMethod indexable_methods[] = {
-    { "get", NULL, NULL, 1 },  // param: index, return: element type
-    { "set", NULL, NULL, 2 }   // params: index, value, return: void
+    {"get", NULL, NULL, 1},  // param: index, return: element type
+    {"set", NULL, NULL, 2}   // params: index, value, return: void
 };
 
 /*
@@ -280,7 +280,7 @@ static XaInterfaceMethod indexable_methods[] = {
  *   }
  */
 static XaInterfaceMethod equatable_methods[] = {
-    { "equals", NULL, NULL, 1 }  // param: other, return: bool
+    {"equals", NULL, NULL, 1}  // param: other, return: bool
 };
 
 /*
@@ -311,7 +311,7 @@ static XaInterfaceMethod equatable_methods[] = {
  * The compiler checks for .length property access.
  */
 static XaInterfaceMethod lengthable_methods[] = {
-    { "length", NULL, NULL, 0 }  // property getter, return: int
+    {"length", NULL, NULL, 0}  // property getter, return: int
 };
 
 /*
@@ -339,7 +339,7 @@ static XaInterfaceMethod lengthable_methods[] = {
  * as the base concept for all invocable types.
  */
 static XaInterfaceMethod callable_methods[] = {
-    { "call", NULL, NULL, 0 }  // variadic, return: varies
+    {"call", NULL, NULL, 0}  // variadic, return: varies
 };
 
 /*
@@ -369,7 +369,7 @@ static XaInterfaceMethod callable_methods[] = {
  *   defer file.close()  // automatic cleanup
  */
 static XaInterfaceMethod closeable_methods[] = {
-    { "close", NULL, NULL, 0 }  // return: void
+    {"close", NULL, NULL, 0}  // return: void
 };
 
 // ============================================================================
@@ -377,16 +377,16 @@ static XaInterfaceMethod closeable_methods[] = {
 // ============================================================================
 
 static XaInterfaceDefinition builtin_interfaces[XA_IFACE_COUNT] = {
-    [XA_IFACE_ITERABLE]   = { "Iterable",   iterable_methods,   1, NULL },
-    [XA_IFACE_ITERATOR]   = { "Iterator",   iterator_methods,   2, NULL },
-    [XA_IFACE_COMPARABLE] = { "Comparable", comparable_methods, 1, NULL },
-    [XA_IFACE_HASHABLE]   = { "Hashable",   hashable_methods,   1, NULL },
-    [XA_IFACE_STRINGABLE] = { "Stringable", stringable_methods, 1, NULL },
-    [XA_IFACE_INDEXABLE]  = { "Indexable",  indexable_methods,  2, NULL },
-    [XA_IFACE_EQUATABLE]  = { "Equatable",  equatable_methods,  1, NULL },
-    [XA_IFACE_LENGTHABLE] = { "Lengthable", lengthable_methods, 1, NULL },
-    [XA_IFACE_CALLABLE]   = { "Callable",   callable_methods,   1, NULL },
-    [XA_IFACE_CLOSEABLE]  = { "Closeable",  closeable_methods,  1, NULL },
+    [XA_IFACE_ITERABLE] = {"Iterable", iterable_methods, 1, NULL},
+    [XA_IFACE_ITERATOR] = {"Iterator", iterator_methods, 2, NULL},
+    [XA_IFACE_COMPARABLE] = {"Comparable", comparable_methods, 1, NULL},
+    [XA_IFACE_HASHABLE] = {"Hashable", hashable_methods, 1, NULL},
+    [XA_IFACE_STRINGABLE] = {"Stringable", stringable_methods, 1, NULL},
+    [XA_IFACE_INDEXABLE] = {"Indexable", indexable_methods, 2, NULL},
+    [XA_IFACE_EQUATABLE] = {"Equatable", equatable_methods, 1, NULL},
+    [XA_IFACE_LENGTHABLE] = {"Lengthable", lengthable_methods, 1, NULL},
+    [XA_IFACE_CALLABLE] = {"Callable", callable_methods, 1, NULL},
+    [XA_IFACE_CLOSEABLE] = {"Closeable", closeable_methods, 1, NULL},
 };
 
 // ============================================================================
@@ -400,23 +400,28 @@ static XaInterfaceDefinition builtin_interfaces[XA_IFACE_COUNT] = {
  *   ✓ = implements
  *   - = does not implement
  *
- *                  | Iterable | Comparable | Hashable | Stringable | Indexable | Equatable | Lengthable | Callable | Closeable |
+ *                  | Iterable | Comparable | Hashable | Stringable | Indexable | Equatable |
+ * Lengthable | Callable | Closeable |
  * -----------------|----------|------------|----------|------------|-----------|-----------|------------|----------|-----------|
- * int              |    -     |     ✓      |    ✓     |     ✓      |     -     |     ✓     |     -      |    -     |     -     |
- * float            |    -     |     ✓      |    ✓     |     ✓      |     -     |     ✓     |     -      |    -     |     -     |
- * string           |    ✓     |     ✓      |    ✓     |     ✓      |     ✓     |     ✓     |     ✓      |    -     |     -     |
- * bool             |    -     |     -      |    ✓     |     ✓      |     -     |     ✓     |     -      |    -     |     -     |
- * BigInt           |    -     |     ✓      |    ✓     |     ✓      |     -     |     ✓     |     -      |    -     |     -     |
- * Json             |    -     |     -      |    -     |     ✓      |     ✓     |     ✓     |     ✓      |    -     |     -     |
- * Array<T>         |    ✓     |     -      |    -     |     ✓      |     ✓     |     ✓     |     ✓      |    -     |     -     |
- * Map<K,V>         |    ✓     |     -      |    -     |     ✓      |     ✓     |     ✓     |     ✓      |    -     |     -     |
- * Set<T>           |    ✓     |     -      |    -     |     ✓      |     -     |     ✓     |     ✓      |    -     |     -     |
- * Array<uint8>     |    ✓     |     -      |    -     |     ✓      |     ✓     |     ✓     |     ✓      |    -     |     -     |
- * null             |    -     |     -      |    -     |     ✓      |     -     |     ✓     |     -      |    -     |     -     |
- * Function         |    -     |     -      |    -     |     ✓      |     -     |     -     |     -      |    ✓     |     -     |
- * Class            |    -     |     -      |    -     |     ✓      |     -     |     -     |     -      |    ✓     |     -     |
- * Channel          |    -     |     -      |    -     |     ✓      |     -     |     -     |     -      |    -     |     ✓     |
- * File             |    -     |     -      |    -     |     ✓      |     -     |     -     |     -      |    -     |     ✓     |
+ * int              |    -     |     ✓      |    ✓     |     ✓      |     -     |     ✓     |     -
+ * |    -     |     -     | float            |    -     |     ✓      |    ✓     |     ✓      |     -
+ * |     ✓     |     -      |    -     |     -     | string           |    ✓     |     ✓      |    ✓
+ * |     ✓      |     ✓     |     ✓     |     ✓      |    -     |     -     | bool             | -
+ * |     -      |    ✓     |     ✓      |     -     |     ✓     |     -      |    -     |     - |
+ * BigInt           |    -     |     ✓      |    ✓     |     ✓      |     -     |     ✓     |     -
+ * |    -     |     -     | Json             |    -     |     -      |    -     |     ✓      |     ✓
+ * |     ✓     |     ✓      |    -     |     -     | Array<T>         |    ✓     |     -      |    -
+ * |     ✓      |     ✓     |     ✓     |     ✓      |    -     |     -     | Map<K,V>         | ✓
+ * |     -      |    -     |     ✓      |     ✓     |     ✓     |     ✓      |    -     |     - |
+ * Set<T>           |    ✓     |     -      |    -     |     ✓      |     -     |     ✓     |     ✓
+ * |    -     |     -     | Array<uint8>     |    ✓     |     -      |    -     |     ✓      |     ✓
+ * |     ✓     |     ✓      |    -     |     -     | null             |    -     |     -      |    -
+ * |     ✓      |     -     |     ✓     |     -      |    -     |     -     | Function         | -
+ * |     -      |    -     |     ✓      |     -     |     -     |     -      |    ✓     |     - |
+ * Class            |    -     |     -      |    -     |     ✓      |     -     |     -     |     -
+ * |    ✓     |     -     | Channel          |    -     |     -      |    -     |     ✓      |     -
+ * |     -     |     -      |    -     |     ✓     | File             |    -     |     -      |    -
+ * |     ✓      |     -     |     -     |     -      |    -     |     ✓     |
  */
 
 // Check if a type flag indicates a specific built-in type
@@ -448,7 +453,6 @@ static bool is_set_type(XrType *type) {
     return type && (type->kind == XR_KIND_SET);
 }
 
-
 static bool is_bytes_type(XrType *type) {
     return type && (type->kind == XR_KIND_BYTES);
 }
@@ -468,7 +472,8 @@ static bool is_json_type(XrType *type) {
 static bool g_interfaces_initialized = false;
 
 static void xa_builtin_interfaces_init(XrayIsolate *X) {
-    if (g_interfaces_initialized) return;
+    if (g_interfaces_initialized)
+        return;
 
     // Create interface types
     for (int i = 0; i < XA_IFACE_COUNT; i++) {
@@ -502,12 +507,14 @@ void xa_builtin_interfaces_cleanup(void) {
 
 XrType *xa_get_builtin_interface(XaBuiltinInterface iface) {
     XR_DCHECK(iface >= 0, "xa_get_builtin_interface: invalid iface");
-    if (iface < 0 || iface >= XA_IFACE_COUNT) return NULL;
+    if (iface < 0 || iface >= XA_IFACE_COUNT)
+        return NULL;
     return builtin_interfaces[iface].type;
 }
 
 XrType *xa_get_builtin_interface_by_name(const char *name) {
-    if (!name) return NULL;
+    if (!name)
+        return NULL;
     for (int i = 0; i < XA_IFACE_COUNT; i++) {
         if (strcmp(builtin_interfaces[i].name, name) == 0) {
             return builtin_interfaces[i].type;
@@ -517,7 +524,8 @@ XrType *xa_get_builtin_interface_by_name(const char *name) {
 }
 
 bool xa_builtin_type_implements(XrType *type, XaBuiltinInterface iface) {
-    if (!type) return false;
+    if (!type)
+        return false;
 
     switch (iface) {
         case XA_IFACE_ITERABLE:
@@ -536,8 +544,8 @@ bool xa_builtin_type_implements(XrType *type, XaBuiltinInterface iface) {
 
         case XA_IFACE_HASHABLE:
             // Hashable: int, float, string, bool, BigInt
-            return is_int_type(type) || is_float_type(type) ||
-                   is_string_type(type) || is_bool_type(type) || is_bigint_type(type);
+            return is_int_type(type) || is_float_type(type) || is_string_type(type) ||
+                   is_bool_type(type) || is_bigint_type(type);
 
         case XA_IFACE_STRINGABLE:
             // Stringable: all types (everything can be converted to string)
@@ -545,8 +553,8 @@ bool xa_builtin_type_implements(XrType *type, XaBuiltinInterface iface) {
 
         case XA_IFACE_INDEXABLE:
             // Indexable: Array, string, Map, Json (Bytes = Array<uint8>)
-            return is_array_type(type) || is_string_type(type) ||
-                   is_map_type(type) || is_bytes_type(type) || is_json_type(type);
+            return is_array_type(type) || is_string_type(type) || is_map_type(type) ||
+                   is_bytes_type(type) || is_json_type(type);
 
         case XA_IFACE_EQUATABLE:
             // Equatable: all types support == and !=
@@ -563,10 +571,12 @@ bool xa_builtin_type_implements(XrType *type, XaBuiltinInterface iface) {
 
         case XA_IFACE_CLOSEABLE:
             // Channel has XR_KIND_CHANNEL flag, not XR_KIND_INSTANCE
-            if (type->kind == XR_KIND_CHANNEL) return true;
+            if (type->kind == XR_KIND_CHANNEL)
+                return true;
             if (type->kind == XR_KIND_INSTANCE) {
                 const char *name = type->instance.class_name;
-                if (name && strcmp(name, "File") == 0) return true;
+                if (name && strcmp(name, "File") == 0)
+                    return true;
             }
             return false;
 
@@ -576,8 +586,10 @@ bool xa_builtin_type_implements(XrType *type, XaBuiltinInterface iface) {
 }
 
 void xa_register_builtin_interfaces(XrayIsolate *X, XaScope *global_scope) {
-    if (!global_scope) return;
-    if (!g_interfaces_initialized) xa_builtin_interfaces_init(X);
+    if (!global_scope)
+        return;
+    if (!g_interfaces_initialized)
+        xa_builtin_interfaces_init(X);
 
     // Register each interface as a type alias in global scope
     for (int i = 0; i < XA_IFACE_COUNT; i++) {

@@ -37,8 +37,8 @@ XR_FUNC void *ast_alloc(XrayIsolate *X, size_t size) {
     XR_DCHECK(X != NULL, "ast_alloc: NULL isolate");
     XrArena *arena = get_arena(X);
     XR_CHECK(arena != NULL, "ast_alloc: parser requires an arena to be set "
-                             "on the Isolate (call xr_isolate_set_current_arena "
-                             "before parsing)");
+                            "on the Isolate (call xr_isolate_set_current_arena "
+                            "before parsing)");
     void *p = xr_arena_alloc(arena, size);
     XR_CHECK(p != NULL, "ast_alloc: arena allocation failed (out of memory)");
     return p;
@@ -46,12 +46,14 @@ XR_FUNC void *ast_alloc(XrayIsolate *X, size_t size) {
 
 XR_FUNC void *ast_alloc_array(XrayIsolate *X, size_t elem_size, size_t count) {
     XR_DCHECK(X != NULL, "ast_alloc_array: NULL isolate");
-    if (count == 0) return NULL;
+    if (count == 0)
+        return NULL;
     return ast_alloc(X, elem_size * count);
 }
 
 XR_FUNC char *ast_strdup(XrayIsolate *X, const char *s) {
-    if (!s) return NULL;
+    if (!s)
+        return NULL;
     XrArena *arena = get_arena(X);
     XR_CHECK(arena != NULL, "ast_strdup: parser requires an arena");
     char *dup = xr_arena_strdup(arena, s);
@@ -63,7 +65,7 @@ XR_FUNC char *ast_strdup(XrayIsolate *X, const char *s) {
 static AstNode *alloc_node(XrayIsolate *X, AstNodeType type, int line) {
     XR_DCHECK(X != NULL, "alloc_node: NULL isolate");
     XR_DCHECK(line >= 0, "alloc_node: negative line");
-    AstNode *node = (AstNode *)ast_alloc(X, sizeof(AstNode));
+    AstNode *node = (AstNode *) ast_alloc(X, sizeof(AstNode));
     memset(node, 0, sizeof(AstNode));
     node->type = type;
     node->line = line;
@@ -134,7 +136,8 @@ AstNode *xr_ast_template_string(XrayIsolate *X, AstNode **parts, int part_count,
     AstNode *node = alloc_node(X, AST_TEMPLATE_STRING, line);
 
     // Allocate and copy parts array
-    node->as.template_str.parts = (AstNode**)ast_alloc_array(X, sizeof(AstNode*), (size_t)part_count);
+    node->as.template_str.parts =
+        (AstNode **) ast_alloc_array(X, sizeof(AstNode *), (size_t) part_count);
     for (int i = 0; i < part_count; i++) {
         node->as.template_str.parts[i] = parts[i];
     }
@@ -158,8 +161,7 @@ AstNode *xr_ast_literal_bool(XrayIsolate *X, int value, int line) {
 // type: operator type (arithmetic, comparison, logical, etc.)
 // left: left operand
 // right: right operand
-AstNode *xr_ast_binary(XrayIsolate *X, AstNodeType type,
-                       AstNode *left, AstNode *right, int line) {
+AstNode *xr_ast_binary(XrayIsolate *X, AstNodeType type, AstNode *left, AstNode *right, int line) {
     AstNode *node = alloc_node(X, type, line);
     node->as.binary.left = left;
     node->as.binary.right = right;
@@ -169,8 +171,7 @@ AstNode *xr_ast_binary(XrayIsolate *X, AstNodeType type,
 // Create unary operator node
 // type: operator type (negation, logical not)
 // operand: operand
-AstNode *xr_ast_unary(XrayIsolate *X, AstNodeType type,
-                      AstNode *operand, int line) {
+AstNode *xr_ast_unary(XrayIsolate *X, AstNodeType type, AstNode *operand, int line) {
     AstNode *node = alloc_node(X, type, line);
     node->as.unary.operand = operand;
     return node;
@@ -198,7 +199,8 @@ AstNode *xr_ast_print_stmt(XrayIsolate *X, AstNode **exprs, int expr_count, int 
 
     // Copy expression array
     if (expr_count > 0 && exprs) {
-        node->as.print_stmt.exprs = (AstNode**)ast_alloc_array(X, sizeof(AstNode*), (size_t)expr_count);
+        node->as.print_stmt.exprs =
+            (AstNode **) ast_alloc_array(X, sizeof(AstNode *), (size_t) expr_count);
         for (int i = 0; i < expr_count; i++) {
             node->as.print_stmt.exprs[i] = exprs[i];
         }
@@ -228,14 +230,13 @@ void xr_ast_program_add(XrayIsolate *X, AstNode *program, AstNode *stmt) {
     // Ensure enough space
     if (program->as.program.count >= program->as.program.capacity) {
         int old_capacity = program->as.program.capacity;
-        int new_capacity = old_capacity < INITIAL_CAPACITY ?
-                          INITIAL_CAPACITY : old_capacity * 2;
+        int new_capacity = old_capacity < INITIAL_CAPACITY ? INITIAL_CAPACITY : old_capacity * 2;
 
-        AstNode **new_stmts = (AstNode **)ast_alloc_array(
-            X, sizeof(AstNode *), (size_t)new_capacity);
+        AstNode **new_stmts =
+            (AstNode **) ast_alloc_array(X, sizeof(AstNode *), (size_t) new_capacity);
         if (old_capacity > 0 && program->as.program.statements) {
             memcpy(new_stmts, program->as.program.statements,
-                   sizeof(AstNode *) * (size_t)old_capacity);
+                   sizeof(AstNode *) * (size_t) old_capacity);
         }
         program->as.program.statements = new_stmts;
         program->as.program.capacity = new_capacity;
@@ -263,14 +264,13 @@ void xr_ast_block_add(XrayIsolate *X, AstNode *block, AstNode *stmt) {
     // Ensure enough space
     if (block->as.block.count >= block->as.block.capacity) {
         int old_capacity = block->as.block.capacity;
-        int new_capacity = old_capacity < INITIAL_CAPACITY ?
-                          INITIAL_CAPACITY : old_capacity * 2;
+        int new_capacity = old_capacity < INITIAL_CAPACITY ? INITIAL_CAPACITY : old_capacity * 2;
 
-        AstNode **new_stmts = (AstNode **)ast_alloc_array(
-            X, sizeof(AstNode *), (size_t)new_capacity);
+        AstNode **new_stmts =
+            (AstNode **) ast_alloc_array(X, sizeof(AstNode *), (size_t) new_capacity);
         if (old_capacity > 0 && block->as.block.statements) {
             memcpy(new_stmts, block->as.block.statements,
-                   sizeof(AstNode *) * (size_t)old_capacity);
+                   sizeof(AstNode *) * (size_t) old_capacity);
         }
         block->as.block.statements = new_stmts;
         block->as.block.capacity = new_capacity;
@@ -286,8 +286,8 @@ void xr_ast_block_add(XrayIsolate *X, AstNode *block, AstNode *stmt) {
 // name: variable name
 // initializer: initialization expression (can be NULL)
 // is_const: whether it's a constant
-AstNode *xr_ast_var_decl(XrayIsolate *X, const char *name,
-                         AstNode *initializer, bool is_const, int line) {
+AstNode *xr_ast_var_decl(XrayIsolate *X, const char *name, AstNode *initializer, bool is_const,
+                         int line) {
     AstNode *node = alloc_node(X, is_const ? AST_CONST_DECL : AST_VAR_DECL, line);
     node->as.var_decl.name = ast_strdup(X, name);
     node->as.var_decl.initializer = initializer;
@@ -299,9 +299,8 @@ AstNode *xr_ast_var_decl(XrayIsolate *X, const char *name,
 
 // Create variable declaration node with storage mode
 // storage_mode: 0=normal, 1=shared
-AstNode *xr_ast_var_decl_with_mode(XrayIsolate *X, const char *name,
-                                   AstNode *initializer, bool is_const,
-                                   uint8_t storage_mode, int line) {
+AstNode *xr_ast_var_decl_with_mode(XrayIsolate *X, const char *name, AstNode *initializer,
+                                   bool is_const, uint8_t storage_mode, int line) {
     AstNode *node = alloc_node(X, is_const ? AST_CONST_DECL : AST_VAR_DECL, line);
     node->as.var_decl.name = ast_strdup(X, name);
     node->as.var_decl.initializer = initializer;
@@ -322,8 +321,7 @@ AstNode *xr_ast_variable(XrayIsolate *X, const char *name, int line) {
 // Create assignment node
 // name: variable name
 // value: assignment expression
-AstNode *xr_ast_assignment(XrayIsolate *X, const char *name,
-                           AstNode *value, int line) {
+AstNode *xr_ast_assignment(XrayIsolate *X, const char *name, AstNode *value, int line) {
     AstNode *node = alloc_node(X, AST_ASSIGNMENT, line);
     node->as.assignment.name = ast_strdup(X, name);
     node->as.assignment.value = value;
@@ -334,8 +332,8 @@ AstNode *xr_ast_assignment(XrayIsolate *X, const char *name,
 // name: variable name
 // op: compound assignment operator type
 // value: right-hand side expression
-AstNode *xr_ast_compound_assignment(XrayIsolate *X, const char *name,
-                                   TokenType op, AstNode *value, int line) {
+AstNode *xr_ast_compound_assignment(XrayIsolate *X, const char *name, TokenType op, AstNode *value,
+                                    int line) {
     AstNode *node = alloc_node(X, AST_COMPOUND_ASSIGNMENT, line);
     node->as.compound_assignment.name = ast_strdup(X, name);
     node->as.compound_assignment.op = op;
@@ -349,9 +347,8 @@ AstNode *xr_ast_compound_assignment(XrayIsolate *X, const char *name,
 // name: member name
 // op: compound assignment operator type
 // value: right-hand side expression
-AstNode *xr_ast_member_compound_assignment(XrayIsolate *X, AstNode *object,
-                                          const char *name, TokenType op,
-                                          AstNode *value, int line) {
+AstNode *xr_ast_member_compound_assignment(XrayIsolate *X, AstNode *object, const char *name,
+                                           TokenType op, AstNode *value, int line) {
     AstNode *node = alloc_node(X, AST_COMPOUND_ASSIGNMENT, line);
     node->as.compound_assignment.name = ast_strdup(X, name);
     node->as.compound_assignment.op = op;
@@ -382,8 +379,8 @@ AstNode *xr_ast_dec(XrayIsolate *X, const char *name, int line) {
 // condition: condition expression
 // then_branch: then branch (must be block)
 // else_branch: else branch (optional, can be block or if)
-AstNode *xr_ast_if_stmt(XrayIsolate *X, AstNode *condition,
-                        AstNode *then_branch, AstNode *else_branch, int line) {
+AstNode *xr_ast_if_stmt(XrayIsolate *X, AstNode *condition, AstNode *then_branch,
+                        AstNode *else_branch, int line) {
     AstNode *node = alloc_node(X, AST_IF_STMT, line);
     node->as.if_stmt.condition = condition;
     node->as.if_stmt.then_branch = then_branch;
@@ -394,8 +391,7 @@ AstNode *xr_ast_if_stmt(XrayIsolate *X, AstNode *condition,
 // Create while loop node
 // condition: loop condition
 // body: loop body (must be block)
-AstNode *xr_ast_while_stmt(XrayIsolate *X, AstNode *condition,
-                           AstNode *body, int line) {
+AstNode *xr_ast_while_stmt(XrayIsolate *X, AstNode *condition, AstNode *body, int line) {
     AstNode *node = alloc_node(X, AST_WHILE_STMT, line);
     node->as.while_stmt.condition = condition;
     node->as.while_stmt.body = body;
@@ -407,9 +403,8 @@ AstNode *xr_ast_while_stmt(XrayIsolate *X, AstNode *condition,
 // condition: condition (optional)
 // increment: update (optional)
 // body: loop body (must be block)
-AstNode *xr_ast_for_stmt(XrayIsolate *X, AstNode *initializer,
-                         AstNode *condition, AstNode *increment,
-                         AstNode *body, int line) {
+AstNode *xr_ast_for_stmt(XrayIsolate *X, AstNode *initializer, AstNode *condition,
+                         AstNode *increment, AstNode *body, int line) {
     AstNode *node = alloc_node(X, AST_FOR_STMT, line);
     node->as.for_stmt.initializer = initializer;
     node->as.for_stmt.condition = condition;
@@ -423,9 +418,8 @@ AstNode *xr_ast_for_stmt(XrayIsolate *X, AstNode *initializer,
 // item_type: optional type annotation (NULL for type inference)
 // collection: collection expression to iterate
 // body: loop body (must be block)
-AstNode *xr_ast_for_in_stmt(XrayIsolate *X, const char *item_name,
-                            XrType *item_type, AstNode *collection,
-                            AstNode *body, int line) {
+AstNode *xr_ast_for_in_stmt(XrayIsolate *X, const char *item_name, XrType *item_type,
+                            AstNode *collection, AstNode *body, int line) {
     AstNode *node = alloc_node(X, AST_FOR_IN_STMT, line);
 
     node->as.for_in_stmt.item_name = ast_strdup(X, item_name);
@@ -439,10 +433,9 @@ AstNode *xr_ast_for_in_stmt(XrayIsolate *X, const char *item_name,
 
 // Create for-in key-value loop node
 // for (key, value in map) { body }
-AstNode *xr_ast_for_in_keyvalue_stmt(XrayIsolate *X, const char *key_name,
-                                     const char *value_name,
-                                     XrType *item_type, AstNode *collection,
-                                     AstNode *body, int line) {
+AstNode *xr_ast_for_in_keyvalue_stmt(XrayIsolate *X, const char *key_name, const char *value_name,
+                                     XrType *item_type, AstNode *collection, AstNode *body,
+                                     int line) {
     AstNode *node = alloc_node(X, AST_FOR_IN_STMT, line);
 
     node->as.for_in_stmt.item_name = ast_strdup(X, key_name);
@@ -472,8 +465,8 @@ AstNode *xr_ast_continue_stmt(XrayIsolate *X, int line) {
 
 // Create parameter node
 XrParamNode *xr_param_node_new(XrayIsolate *X, const char *name, int line, int column) {
-    (void)X;  // May be used for arena allocation in future
-    XrParamNode *param = (XrParamNode *)ast_alloc(X, sizeof(XrParamNode));
+    (void) X;  // May be used for arena allocation in future
+    XrParamNode *param = (XrParamNode *) ast_alloc(X, sizeof(XrParamNode));
     param->name = ast_strdup(X, name);
     param->line = line;
     param->column = column;
@@ -486,9 +479,8 @@ XrParamNode *xr_param_node_new(XrayIsolate *X, const char *name, int line, int c
 }
 
 // Create function declaration node
-AstNode *xr_ast_function_decl(XrayIsolate *X, const char *name,
-                              XrParamNode **params, int param_count,
-                              AstNode *body, int line) {
+AstNode *xr_ast_function_decl(XrayIsolate *X, const char *name, XrParamNode **params,
+                              int param_count, AstNode *body, int line) {
     AstNode *node = alloc_node(X, AST_FUNCTION_DECL, line);
 
     // Copy function name
@@ -515,8 +507,8 @@ AstNode *xr_ast_function_decl(XrayIsolate *X, const char *name,
 }
 
 // Create function expression node (arrow function/anonymous function)
-AstNode *xr_ast_function_expr(XrayIsolate *X, XrParamNode **params, int param_count,
-                              AstNode *body, int line) {
+AstNode *xr_ast_function_expr(XrayIsolate *X, XrParamNode **params, int param_count, AstNode *body,
+                              int line) {
     AstNode *node = alloc_node(X, AST_FUNCTION_EXPR, line);
 
     // Anonymous function has no name
@@ -546,15 +538,16 @@ AstNode *xr_ast_function_expr(XrayIsolate *X, XrParamNode **params, int param_co
 // callee: expression being called (usually a variable)
 // arguments: argument list (expression array)
 // arg_count: argument count
-AstNode *xr_ast_call_expr(XrayIsolate *X, AstNode *callee,
-                          AstNode **arguments, int arg_count, int line) {
+AstNode *xr_ast_call_expr(XrayIsolate *X, AstNode *callee, AstNode **arguments, int arg_count,
+                          int line) {
     AstNode *node = alloc_node(X, AST_CALL_EXPR, line);
     node->as.call_expr.callee = callee;
     node->as.call_expr.arg_count = arg_count;
 
     // Copy parameter list
     if (arg_count > 0) {
-        node->as.call_expr.arguments = (AstNode **)ast_alloc_array(X, sizeof(AstNode *), (size_t)arg_count);
+        node->as.call_expr.arguments =
+            (AstNode **) ast_alloc_array(X, sizeof(AstNode *), (size_t) arg_count);
         for (int i = 0; i < arg_count; i++) {
             node->as.call_expr.arguments[i] = arguments[i];
         }
@@ -571,17 +564,16 @@ AstNode *xr_ast_call_expr(XrayIsolate *X, AstNode *callee,
 
 // Create function call node with generic type arguments
 // e.g.: foo<int, string>(arg1, arg2)
-AstNode *xr_ast_call_expr_generic(XrayIsolate *X, AstNode *callee,
-                                   AstNode **arguments, int arg_count,
-                                   XrType **type_args, int type_arg_count,
-                                   int line) {
+AstNode *xr_ast_call_expr_generic(XrayIsolate *X, AstNode *callee, AstNode **arguments,
+                                  int arg_count, XrType **type_args, int type_arg_count, int line) {
     AstNode *node = alloc_node(X, AST_CALL_EXPR, line);
     node->as.call_expr.callee = callee;
     node->as.call_expr.arg_count = arg_count;
 
     // Copy parameter list
     if (arg_count > 0) {
-        node->as.call_expr.arguments = (AstNode **)ast_alloc_array(X, sizeof(AstNode *), (size_t)arg_count);
+        node->as.call_expr.arguments =
+            (AstNode **) ast_alloc_array(X, sizeof(AstNode *), (size_t) arg_count);
         for (int i = 0; i < arg_count; i++) {
             node->as.call_expr.arguments[i] = arguments[i];
         }
@@ -592,7 +584,8 @@ AstNode *xr_ast_call_expr_generic(XrayIsolate *X, AstNode *callee,
     // Copy generic type arguments
     node->as.call_expr.type_arg_count = type_arg_count;
     if (type_arg_count > 0) {
-        node->as.call_expr.type_args = (XrType **)ast_alloc_array(X, sizeof(XrType *), (size_t)type_arg_count);
+        node->as.call_expr.type_args =
+            (XrType **) ast_alloc_array(X, sizeof(XrType *), (size_t) type_arg_count);
         for (int i = 0; i < type_arg_count; i++) {
             node->as.call_expr.type_args[i] = type_args[i];
         }
@@ -640,7 +633,8 @@ AstNode *xr_ast_array_literal(XrayIsolate *X, AstNode **elements, int count, int
 
     // Copy element array
     if (count > 0) {
-        node->as.array_literal.elements = (AstNode **)ast_alloc_array(X, sizeof(AstNode *), (size_t)count);
+        node->as.array_literal.elements =
+            (AstNode **) ast_alloc_array(X, sizeof(AstNode *), (size_t) count);
         for (int i = 0; i < count; i++) {
             node->as.array_literal.elements[i] = elements[i];
         }
@@ -658,22 +652,25 @@ AstNode *xr_ast_array_literal(XrayIsolate *X, AstNode **elements, int count, int
 // values: value expression array
 // computed: computed property flag array (can be NULL)
 // count: key-value pair count
-AstNode *xr_ast_object_literal(XrayIsolate *X, AstNode **keys, AstNode **values,
-                                bool *computed, int count, int line) {
+AstNode *xr_ast_object_literal(XrayIsolate *X, AstNode **keys, AstNode **values, bool *computed,
+                               int count, int line) {
     AstNode *node = alloc_node(X, AST_OBJECT_LITERAL, line);
     node->as.object_literal.count = count;
 
     // Copy key-value pair array
     if (count > 0) {
-        node->as.object_literal.keys = (AstNode **)ast_alloc_array(X, sizeof(AstNode *), (size_t)count);
-        node->as.object_literal.values = (AstNode **)ast_alloc_array(X, sizeof(AstNode *), (size_t)count);
+        node->as.object_literal.keys =
+            (AstNode **) ast_alloc_array(X, sizeof(AstNode *), (size_t) count);
+        node->as.object_literal.values =
+            (AstNode **) ast_alloc_array(X, sizeof(AstNode *), (size_t) count);
         for (int i = 0; i < count; i++) {
             node->as.object_literal.keys[i] = keys[i];
             node->as.object_literal.values[i] = values[i];
         }
         // Copy computed property flags (if any)
         if (computed) {
-            node->as.object_literal.computed = (bool *)ast_alloc_array(X, sizeof(bool), (size_t)count);
+            node->as.object_literal.computed =
+                (bool *) ast_alloc_array(X, sizeof(bool), (size_t) count);
             for (int i = 0; i < count; i++) {
                 node->as.object_literal.computed[i] = computed[i];
             }
@@ -699,8 +696,10 @@ AstNode *xr_ast_map_literal(XrayIsolate *X, AstNode **keys, AstNode **values, in
 
     // Copy key array
     if (count > 0) {
-        node->as.map_literal.keys = (AstNode **)ast_alloc_array(X, sizeof(AstNode *), (size_t)count);
-        node->as.map_literal.values = (AstNode **)ast_alloc_array(X, sizeof(AstNode *), (size_t)count);
+        node->as.map_literal.keys =
+            (AstNode **) ast_alloc_array(X, sizeof(AstNode *), (size_t) count);
+        node->as.map_literal.values =
+            (AstNode **) ast_alloc_array(X, sizeof(AstNode *), (size_t) count);
         for (int i = 0; i < count; i++) {
             node->as.map_literal.keys[i] = keys[i];
             node->as.map_literal.values[i] = values[i];
@@ -724,7 +723,8 @@ AstNode *xr_ast_set_literal(XrayIsolate *X, AstNode **elements, int count, int l
 
     // Copy element array
     if (count > 0) {
-        node->as.set_literal.elements = (AstNode **)ast_alloc_array(X, sizeof(AstNode *), (size_t)count);
+        node->as.set_literal.elements =
+            (AstNode **) ast_alloc_array(X, sizeof(AstNode *), (size_t) count);
         for (int i = 0; i < count; i++) {
             node->as.set_literal.elements[i] = elements[i];
         }
@@ -749,7 +749,8 @@ AstNode *xr_ast_index_get(XrayIsolate *X, AstNode *array, AstNode *index, int li
 // array: array expression
 // index: index expression
 // value: assignment expression
-AstNode *xr_ast_index_set(XrayIsolate *X, AstNode *array, AstNode *index, AstNode *value, int line) {
+AstNode *xr_ast_index_set(XrayIsolate *X, AstNode *array, AstNode *index, AstNode *value,
+                          int line) {
     AstNode *node = alloc_node(X, AST_INDEX_SET, line);
     node->as.index_set.array = array;
     node->as.index_set.index = index;
@@ -761,7 +762,8 @@ AstNode *xr_ast_index_set(XrayIsolate *X, AstNode *array, AstNode *index, AstNod
 // source: source object expression (Array, String, Bytes)
 // start: start index expression (can be NULL)
 // end: end index expression (can be NULL)
-AstNode *xr_ast_slice_expr(XrayIsolate *X, AstNode *source, AstNode *start, AstNode *end, int line) {
+AstNode *xr_ast_slice_expr(XrayIsolate *X, AstNode *source, AstNode *start, AstNode *end,
+                           int line) {
     AstNode *node = alloc_node(X, AST_SLICE_EXPR, line);
     node->as.slice_expr.source = source;
     node->as.slice_expr.start = start;
@@ -783,8 +785,8 @@ AstNode *xr_ast_member_access(XrayIsolate *X, AstNode *object, const char *name,
 // condition: condition expression
 // true_expr: true branch expression
 // false_expr: false branch expression
-AstNode *xr_ast_ternary(XrayIsolate *X, AstNode *condition,
-                        AstNode *true_expr, AstNode *false_expr, int line) {
+AstNode *xr_ast_ternary(XrayIsolate *X, AstNode *condition, AstNode *true_expr, AstNode *false_expr,
+                        int line) {
     AstNode *node = alloc_node(X, AST_TERNARY, line);
     node->as.ternary.condition = condition;
     node->as.ternary.true_expr = true_expr;
@@ -797,8 +799,7 @@ AstNode *xr_ast_ternary(XrayIsolate *X, AstNode *condition,
 // name: member name (for property access, optional)
 // index: index expression (for index access, optional)
 // chain_type: 0=property, 1=index, 2=method call
-AstNode *xr_ast_optional_chain(XrayIsolate *X, AstNode *object,
-                               const char *name, AstNode *index,
+AstNode *xr_ast_optional_chain(XrayIsolate *X, AstNode *object, const char *name, AstNode *index,
                                int chain_type, int line) {
     AstNode *node = alloc_node(X, AST_OPTIONAL_CHAIN, line);
     node->as.optional_chain.object = object;
@@ -828,11 +829,11 @@ AstNode *xr_ast_range(XrayIsolate *X, AstNode *start, AstNode *end, int line) {
 
 // Create class declaration node
 AstNode *xr_ast_class_decl(XrayIsolate *X, const char *name, const char *super_name,
-                           AstNode **fields, int field_count,
-                           AstNode **methods, int method_count, int line) {
+                           AstNode **fields, int field_count, AstNode **methods, int method_count,
+                           int line) {
     AstNode *node = alloc_node(X, AST_CLASS_DECL, line);
-    node->as.class_decl.name = (char*)name;
-    node->as.class_decl.super_name = (char*)super_name;
+    node->as.class_decl.name = (char *) name;
+    node->as.class_decl.super_name = (char *) super_name;
     node->as.class_decl.super_module = NULL;  // No module prefix by default
     node->as.class_decl.interfaces = NULL;
     node->as.class_decl.interface_count = 0;
@@ -845,11 +846,10 @@ AstNode *xr_ast_class_decl(XrayIsolate *X, const char *name, const char *super_n
 }
 
 // Create struct declaration node (value type)
-AstNode *xr_ast_struct_decl(XrayIsolate *X, const char *name,
-                            AstNode **fields, int field_count,
+AstNode *xr_ast_struct_decl(XrayIsolate *X, const char *name, AstNode **fields, int field_count,
                             AstNode **methods, int method_count, int line) {
     AstNode *node = alloc_node(X, AST_STRUCT_DECL, line);
-    node->as.struct_decl.name = (char*)name;
+    node->as.struct_decl.name = (char *) name;
     node->as.struct_decl.super_name = NULL;
     node->as.struct_decl.super_module = NULL;
     node->as.struct_decl.interfaces = NULL;
@@ -866,11 +866,10 @@ AstNode *xr_ast_struct_decl(XrayIsolate *X, const char *name,
 }
 
 // Create struct literal node: Point{x: 1.0, y: 2.0}
-AstNode *xr_ast_struct_literal(XrayIsolate *X, const char *name,
-                                char **field_names, AstNode **field_values,
-                                int field_count, int line) {
+AstNode *xr_ast_struct_literal(XrayIsolate *X, const char *name, char **field_names,
+                               AstNode **field_values, int field_count, int line) {
     AstNode *node = alloc_node(X, AST_STRUCT_LITERAL, line);
-    node->as.struct_literal.struct_name = (char*)name;
+    node->as.struct_literal.struct_name = (char *) name;
     node->as.struct_literal.field_names = field_names;
     node->as.struct_literal.field_values = field_values;
     node->as.struct_literal.field_count = field_count;
@@ -878,11 +877,10 @@ AstNode *xr_ast_struct_literal(XrayIsolate *X, const char *name,
 }
 
 // Create interface declaration node
-AstNode *xr_ast_interface_decl(XrayIsolate *X, const char *name,
-                               char **extends, int extends_count,
+AstNode *xr_ast_interface_decl(XrayIsolate *X, const char *name, char **extends, int extends_count,
                                AstNode **methods, int method_count, int line) {
     AstNode *node = alloc_node(X, AST_INTERFACE_DECL, line);
-    node->as.interface_decl.name = (char*)name;
+    node->as.interface_decl.name = (char *) name;
     node->as.interface_decl.extends = extends;
     node->as.interface_decl.extends_count = extends_count;
     node->as.interface_decl.methods = methods;
@@ -891,11 +889,11 @@ AstNode *xr_ast_interface_decl(XrayIsolate *X, const char *name,
 }
 
 // Create interface method signature node
-AstNode *xr_ast_interface_method(XrayIsolate *X, const char *name,
-                                 char **parameters, XrType **param_types, int param_count,
-                                 XrType *return_type, int line) {
+AstNode *xr_ast_interface_method(XrayIsolate *X, const char *name, char **parameters,
+                                 XrType **param_types, int param_count, XrType *return_type,
+                                 int line) {
     AstNode *node = alloc_node(X, AST_INTERFACE_METHOD, line);
-    node->as.interface_method.name = (char*)name;
+    node->as.interface_method.name = (char *) name;
     node->as.interface_method.parameters = parameters;
     node->as.interface_method.param_types = param_types;
     node->as.interface_method.param_count = param_count;
@@ -904,11 +902,10 @@ AstNode *xr_ast_interface_method(XrayIsolate *X, const char *name,
 }
 
 // Create field declaration node
-AstNode *xr_ast_field_decl(XrayIsolate *X, const char *name, XrType *field_type,
-                           bool is_private, bool is_static,
-                           AstNode *initializer, int line) {
+AstNode *xr_ast_field_decl(XrayIsolate *X, const char *name, XrType *field_type, bool is_private,
+                           bool is_static, AstNode *initializer, int line) {
     AstNode *node = alloc_node(X, AST_FIELD_DECL, line);
-    node->as.field_decl.name = (char*)name;
+    node->as.field_decl.name = (char *) name;
     node->as.field_decl.field_type = field_type;
     node->as.field_decl.is_private = is_private;
     node->as.field_decl.is_static = is_static;
@@ -917,13 +914,12 @@ AstNode *xr_ast_field_decl(XrayIsolate *X, const char *name, XrType *field_type,
 }
 
 // Create method declaration node
-AstNode *xr_ast_method_decl(XrayIsolate *X, const char *name,
-                            char **parameters, XrType **param_types, int param_count,
-                            XrType *return_type, AstNode *body,
-                            bool is_constructor, bool is_static, bool is_private,
+AstNode *xr_ast_method_decl(XrayIsolate *X, const char *name, char **parameters,
+                            XrType **param_types, int param_count, XrType *return_type,
+                            AstNode *body, bool is_constructor, bool is_static, bool is_private,
                             bool is_getter, bool is_setter, int line) {
     AstNode *node = alloc_node(X, AST_METHOD_DECL, line);
-    node->as.method_decl.name = (char*)name;
+    node->as.method_decl.name = (char *) name;
     node->as.method_decl.parameters = parameters;
     node->as.method_decl.param_types = param_types;
     node->as.method_decl.param_count = param_count;
@@ -945,8 +941,9 @@ AstNode *xr_ast_method_decl(XrayIsolate *X, const char *name,
     node->as.method_decl.default_values = NULL;
     node->as.method_decl.param_passing_modes = NULL;
 
-    node->as.method_decl.is_operator = false;       // Ensure is_operator is initialized
-    node->as.method_decl.op_type = OPTYPE_ADD;      // Default value (doesn't matter since is_operator=false)
+    node->as.method_decl.is_operator = false;  // Ensure is_operator is initialized
+    node->as.method_decl.op_type =
+        OPTYPE_ADD;  // Default value (doesn't matter since is_operator=false)
 
     // Initialize generic type parameters
     node->as.method_decl.type_param_names = NULL;
@@ -960,18 +957,19 @@ AstNode *xr_ast_method_decl(XrayIsolate *X, const char *name,
 //   new module.ClassName()    - module_name = "module"
 // Also supports generic type arguments: new Box<int>(42)
 AstNode *xr_ast_new_expr(XrayIsolate *X, const char *module_name, const char *class_name,
-                         AstNode **arguments, int arg_count,
-                         XrType **type_args, int type_arg_count, int line) {
+                         AstNode **arguments, int arg_count, XrType **type_args, int type_arg_count,
+                         int line) {
     AstNode *node = alloc_node(X, AST_NEW_EXPR, line);
     node->as.new_expr.module_name = ast_strdup(X, module_name);
-    node->as.new_expr.class_name = (char*)class_name;
+    node->as.new_expr.class_name = (char *) class_name;
     node->as.new_expr.arguments = arguments;
     node->as.new_expr.arg_count = arg_count;
 
     // Copy generic type arguments
     node->as.new_expr.type_arg_count = type_arg_count;
     if (type_arg_count > 0 && type_args) {
-        node->as.new_expr.type_args = (XrType **)ast_alloc_array(X, sizeof(XrType *), (size_t)type_arg_count);
+        node->as.new_expr.type_args =
+            (XrType **) ast_alloc_array(X, sizeof(XrType *), (size_t) type_arg_count);
         for (int i = 0; i < type_arg_count; i++) {
             node->as.new_expr.type_args[i] = type_args[i];
         }
@@ -989,18 +987,18 @@ AstNode *xr_ast_this_expr(XrayIsolate *X, int line) {
 }
 
 // Create super call node
-AstNode *xr_ast_super_call(XrayIsolate *X, const char *method_name,
-                           AstNode **arguments, int arg_count, int line) {
+AstNode *xr_ast_super_call(XrayIsolate *X, const char *method_name, AstNode **arguments,
+                           int arg_count, int line) {
     AstNode *node = alloc_node(X, AST_SUPER_CALL, line);
-    node->as.super_call.method_name = (char*)method_name;
+    node->as.super_call.method_name = (char *) method_name;
     node->as.super_call.arguments = arguments;
     node->as.super_call.arg_count = arg_count;
     return node;
 }
 
 // Create member assignment node
-AstNode *xr_ast_member_set(XrayIsolate *X, AstNode *object, const char *member,
-                           AstNode *value, int line) {
+AstNode *xr_ast_member_set(XrayIsolate *X, AstNode *object, const char *member, AstNode *value,
+                           int line) {
     AstNode *node = alloc_node(X, AST_MEMBER_SET, line);
     node->as.member_set.object = object;
     node->as.member_set.member = ast_strdup(X, member);  // Copy string to avoid dangling pointer
@@ -1019,7 +1017,8 @@ AstNode *xr_ast_enum_decl(XrayIsolate *X, const char *name, const char *type_hin
     node->as.enum_decl.type_hint = ast_strdup(X, type_hint);
 
     // Copy member array
-    node->as.enum_decl.members = (AstNode**)ast_alloc_array(X, sizeof(AstNode*), (size_t)member_count);
+    node->as.enum_decl.members =
+        (AstNode **) ast_alloc_array(X, sizeof(AstNode *), (size_t) member_count);
     for (int i = 0; i < member_count; i++) {
         node->as.enum_decl.members[i] = members[i];
     }
@@ -1039,8 +1038,8 @@ AstNode *xr_ast_enum_member(XrayIsolate *X, const char *name, AstNode *value, in
 
 // Create enum access node
 // Status.Success
-AstNode *xr_ast_enum_access(XrayIsolate *X, const char *enum_name,
-                            const char *member_name, int line) {
+AstNode *xr_ast_enum_access(XrayIsolate *X, const char *enum_name, const char *member_name,
+                            int line) {
     AstNode *node = alloc_node(X, AST_ENUM_ACCESS, line);
     node->as.enum_access.enum_name = ast_strdup(X, enum_name);
     node->as.enum_access.member_name = ast_strdup(X, member_name);
@@ -1049,8 +1048,7 @@ AstNode *xr_ast_enum_access(XrayIsolate *X, const char *enum_name,
 
 // Create enum conversion node
 // Status(200)
-AstNode *xr_ast_enum_convert(XrayIsolate *X, const char *enum_name,
-                             AstNode *value_expr, int line) {
+AstNode *xr_ast_enum_convert(XrayIsolate *X, const char *enum_name, AstNode *value_expr, int line) {
     AstNode *node = alloc_node(X, AST_ENUM_CONVERT, line);
     node->as.enum_convert.enum_name = ast_strdup(X, enum_name);
     node->as.enum_convert.value_expr = value_expr;
@@ -1058,8 +1056,7 @@ AstNode *xr_ast_enum_convert(XrayIsolate *X, const char *enum_name,
 }
 
 // Create enum index node (compiler-generated for for-in desugaring)
-AstNode *xr_ast_enum_index(XrayIsolate *X, AstNode *collection,
-                           AstNode *index_expr, int line) {
+AstNode *xr_ast_enum_index(XrayIsolate *X, AstNode *collection, AstNode *index_expr, int line) {
     AstNode *node = alloc_node(X, AST_ENUM_INDEX, line);
     node->as.enum_index.collection = collection;
     node->as.enum_index.index_expr = index_expr;
@@ -1070,8 +1067,7 @@ AstNode *xr_ast_enum_index(XrayIsolate *X, AstNode *collection,
 
 // Create match expression node
 // match x { 1 => "one", _ => "other" }
-AstNode *xr_ast_match_expr(XrayIsolate *X, AstNode *expr,
-                           AstNode **arms, int arm_count, int line) {
+AstNode *xr_ast_match_expr(XrayIsolate *X, AstNode *expr, AstNode **arms, int arm_count, int line) {
     AstNode *node = alloc_node(X, AST_MATCH_EXPR, line);
     node->as.match_expr.expr = expr;
     node->as.match_expr.arms = arms;
@@ -1081,7 +1077,8 @@ AstNode *xr_ast_match_expr(XrayIsolate *X, AstNode *expr,
 
 // Create match arm node
 // 1 => "one"
-AstNode *xr_ast_match_arm(XrayIsolate *X, AstNode *pattern, AstNode *guard, AstNode *body, int line) {
+AstNode *xr_ast_match_arm(XrayIsolate *X, AstNode *pattern, AstNode *guard, AstNode *body,
+                          int line) {
     AstNode *node = alloc_node(X, AST_MATCH_ARM, line);
     node->as.match_arm.pattern = pattern;
     node->as.match_arm.guard = guard;
@@ -1129,9 +1126,9 @@ AstNode *xr_ast_pattern_multi(XrayIsolate *X, AstNode **patterns, int count, int
 // The program node itself lives inside the arena, so we capture the arena
 // pointer into a local BEFORE xr_arena_destroy frees the segments.
 void xr_program_destroy(AstNode *program) {
-    if (program == NULL) return;
-    XR_CHECK(program->type == AST_PROGRAM,
-             "xr_program_destroy: expected AST_PROGRAM node");
+    if (program == NULL)
+        return;
+    XR_CHECK(program->type == AST_PROGRAM, "xr_program_destroy: expected AST_PROGRAM node");
 
     ProgramNode *prog = &program->as.program;
     if (prog->owns_arena && prog->arena) {
@@ -1147,86 +1144,165 @@ void xr_program_destroy(AstNode *program) {
 // Used for debugging and error reporting
 const char *xr_ast_typename(AstNodeType type) {
     switch (type) {
-        case AST_LITERAL_INT:       return "LiteralInt";
-        case AST_LITERAL_FLOAT:     return "LiteralFloat";
-        case AST_LITERAL_STRING:    return "LiteralString";
-        case AST_LITERAL_REGEX:     return "LiteralRegex";
-        case AST_LITERAL_NULL:      return "LiteralNull";
-        case AST_LITERAL_TRUE:      return "LiteralTrue";
-        case AST_LITERAL_FALSE:     return "LiteralFalse";
-        case AST_BINARY_ADD:        return "BinaryAdd";
-        case AST_BINARY_SUB:        return "BinarySub";
-        case AST_BINARY_MUL:        return "BinaryMul";
-        case AST_BINARY_DIV:        return "BinaryDiv";
-        case AST_BINARY_MOD:        return "BinaryMod";
-        case AST_BINARY_EQ:         return "BinaryEq";
-        case AST_BINARY_NE:         return "BinaryNe";
-        case AST_BINARY_LT:         return "BinaryLt";
-        case AST_BINARY_LE:         return "BinaryLe";
-        case AST_BINARY_GT:         return "BinaryGt";
-        case AST_BINARY_GE:         return "BinaryGe";
-        case AST_BINARY_AND:        return "BinaryAnd";
-        case AST_BINARY_OR:         return "BinaryOr";
-        case AST_UNARY_NEG:         return "UnaryNeg";
-        case AST_UNARY_NOT:         return "UnaryNot";
-        case AST_GROUPING:          return "Grouping";
-        case AST_EXPR_STMT:         return "ExprStmt";
-        case AST_PRINT_STMT:        return "PrintStmt";
-        case AST_BLOCK:             return "Block";
-        case AST_VAR_DECL:          return "VarDecl";
-        case AST_CONST_DECL:        return "ConstDecl";
-        case AST_VARIABLE:          return "Variable";
-        case AST_ASSIGNMENT:        return "Assignment";
-        case AST_COMPOUND_ASSIGNMENT: return "CompoundAssignment";
-        case AST_INC:               return "Inc";
-        case AST_DEC:               return "Dec";
-        case AST_IF_STMT:           return "IfStmt";
+        case AST_LITERAL_INT:
+            return "LiteralInt";
+        case AST_LITERAL_FLOAT:
+            return "LiteralFloat";
+        case AST_LITERAL_STRING:
+            return "LiteralString";
+        case AST_LITERAL_REGEX:
+            return "LiteralRegex";
+        case AST_LITERAL_NULL:
+            return "LiteralNull";
+        case AST_LITERAL_TRUE:
+            return "LiteralTrue";
+        case AST_LITERAL_FALSE:
+            return "LiteralFalse";
+        case AST_BINARY_ADD:
+            return "BinaryAdd";
+        case AST_BINARY_SUB:
+            return "BinarySub";
+        case AST_BINARY_MUL:
+            return "BinaryMul";
+        case AST_BINARY_DIV:
+            return "BinaryDiv";
+        case AST_BINARY_MOD:
+            return "BinaryMod";
+        case AST_BINARY_EQ:
+            return "BinaryEq";
+        case AST_BINARY_NE:
+            return "BinaryNe";
+        case AST_BINARY_LT:
+            return "BinaryLt";
+        case AST_BINARY_LE:
+            return "BinaryLe";
+        case AST_BINARY_GT:
+            return "BinaryGt";
+        case AST_BINARY_GE:
+            return "BinaryGe";
+        case AST_BINARY_AND:
+            return "BinaryAnd";
+        case AST_BINARY_OR:
+            return "BinaryOr";
+        case AST_UNARY_NEG:
+            return "UnaryNeg";
+        case AST_UNARY_NOT:
+            return "UnaryNot";
+        case AST_GROUPING:
+            return "Grouping";
+        case AST_EXPR_STMT:
+            return "ExprStmt";
+        case AST_PRINT_STMT:
+            return "PrintStmt";
+        case AST_BLOCK:
+            return "Block";
+        case AST_VAR_DECL:
+            return "VarDecl";
+        case AST_CONST_DECL:
+            return "ConstDecl";
+        case AST_VARIABLE:
+            return "Variable";
+        case AST_ASSIGNMENT:
+            return "Assignment";
+        case AST_COMPOUND_ASSIGNMENT:
+            return "CompoundAssignment";
+        case AST_INC:
+            return "Inc";
+        case AST_DEC:
+            return "Dec";
+        case AST_IF_STMT:
+            return "IfStmt";
 
-        case AST_WHILE_STMT:        return "WhileStmt";
-        case AST_FOR_STMT:          return "ForStmt";
-        case AST_BREAK_STMT:        return "BreakStmt";
-        case AST_CONTINUE_STMT:     return "ContinueStmt";
-        case AST_FUNCTION_DECL:     return "FunctionDecl";
-        case AST_FUNCTION_EXPR:     return "FunctionExpr";
-        case AST_CALL_EXPR:         return "CallExpr";
-        case AST_RETURN_STMT:       return "ReturnStmt";
-        case AST_ARRAY_LITERAL:     return "ArrayLiteral";
-        case AST_OBJECT_LITERAL:    return "ObjectLiteral";
-        case AST_MAP_LITERAL:       return "MapLiteral";
-        case AST_SET_LITERAL:       return "SetLiteral";
-        case AST_INDEX_GET:         return "IndexGet";
-        case AST_INDEX_SET:         return "IndexSet";
-        case AST_MEMBER_ACCESS:     return "MemberAccess";
-        case AST_TEMPLATE_STRING:   return "TemplateString";
-        case AST_CLASS_DECL:        return "ClassDecl";
-        case AST_STRUCT_DECL:       return "StructDecl";
-        case AST_STRUCT_LITERAL:    return "StructLiteral";
-        case AST_FIELD_DECL:        return "FieldDecl";
-        case AST_METHOD_DECL:       return "MethodDecl";
-        case AST_NEW_EXPR:          return "NewExpr";
-        case AST_THIS_EXPR:         return "ThisExpr";
-        case AST_SUPER_CALL:        return "SuperCall";
-        case AST_MEMBER_SET:        return "MemberSet";
-        case AST_ENUM_DECL:         return "EnumDecl";
-        case AST_ENUM_MEMBER:       return "EnumMember";
-        case AST_ENUM_ACCESS:       return "EnumAccess";
-        case AST_ENUM_CONVERT:      return "EnumConvert";
-        case AST_ENUM_INDEX:        return "EnumIndex";
-        case AST_TRY_CATCH:         return "TryCatch";
-        case AST_THROW_STMT:        return "ThrowStmt";
-        case AST_IMPORT_STMT:       return "ImportStmt";
-        case AST_EXPORT_STMT:       return "ExportStmt";
-        case AST_DESTRUCTURE_DECL:  return "DestructureDecl";
-        case AST_DESTRUCTURE_ASSIGN: return "DestructureAssign";
-        case AST_MATCH_EXPR:        return "MatchExpr";
-        case AST_MATCH_ARM:         return "MatchArm";
-        case AST_PATTERN_LITERAL:   return "PatternLiteral";
-        case AST_PATTERN_RANGE:     return "PatternRange";
-        case AST_PATTERN_WILDCARD:  return "PatternWildcard";
-        case AST_PATTERN_MULTI:     return "PatternMulti";
-        case AST_TYPE_ALIAS:        return "TypeAlias";
-        case AST_PROGRAM:           return "Program";
-        default:                    return "Unknown";
+        case AST_WHILE_STMT:
+            return "WhileStmt";
+        case AST_FOR_STMT:
+            return "ForStmt";
+        case AST_BREAK_STMT:
+            return "BreakStmt";
+        case AST_CONTINUE_STMT:
+            return "ContinueStmt";
+        case AST_FUNCTION_DECL:
+            return "FunctionDecl";
+        case AST_FUNCTION_EXPR:
+            return "FunctionExpr";
+        case AST_CALL_EXPR:
+            return "CallExpr";
+        case AST_RETURN_STMT:
+            return "ReturnStmt";
+        case AST_ARRAY_LITERAL:
+            return "ArrayLiteral";
+        case AST_OBJECT_LITERAL:
+            return "ObjectLiteral";
+        case AST_MAP_LITERAL:
+            return "MapLiteral";
+        case AST_SET_LITERAL:
+            return "SetLiteral";
+        case AST_INDEX_GET:
+            return "IndexGet";
+        case AST_INDEX_SET:
+            return "IndexSet";
+        case AST_MEMBER_ACCESS:
+            return "MemberAccess";
+        case AST_TEMPLATE_STRING:
+            return "TemplateString";
+        case AST_CLASS_DECL:
+            return "ClassDecl";
+        case AST_STRUCT_DECL:
+            return "StructDecl";
+        case AST_STRUCT_LITERAL:
+            return "StructLiteral";
+        case AST_FIELD_DECL:
+            return "FieldDecl";
+        case AST_METHOD_DECL:
+            return "MethodDecl";
+        case AST_NEW_EXPR:
+            return "NewExpr";
+        case AST_THIS_EXPR:
+            return "ThisExpr";
+        case AST_SUPER_CALL:
+            return "SuperCall";
+        case AST_MEMBER_SET:
+            return "MemberSet";
+        case AST_ENUM_DECL:
+            return "EnumDecl";
+        case AST_ENUM_MEMBER:
+            return "EnumMember";
+        case AST_ENUM_ACCESS:
+            return "EnumAccess";
+        case AST_ENUM_CONVERT:
+            return "EnumConvert";
+        case AST_ENUM_INDEX:
+            return "EnumIndex";
+        case AST_TRY_CATCH:
+            return "TryCatch";
+        case AST_THROW_STMT:
+            return "ThrowStmt";
+        case AST_IMPORT_STMT:
+            return "ImportStmt";
+        case AST_EXPORT_STMT:
+            return "ExportStmt";
+        case AST_DESTRUCTURE_DECL:
+            return "DestructureDecl";
+        case AST_DESTRUCTURE_ASSIGN:
+            return "DestructureAssign";
+        case AST_MATCH_EXPR:
+            return "MatchExpr";
+        case AST_MATCH_ARM:
+            return "MatchArm";
+        case AST_PATTERN_LITERAL:
+            return "PatternLiteral";
+        case AST_PATTERN_RANGE:
+            return "PatternRange";
+        case AST_PATTERN_WILDCARD:
+            return "PatternWildcard";
+        case AST_PATTERN_MULTI:
+            return "PatternMulti";
+        case AST_TYPE_ALIAS:
+            return "TypeAlias";
+        case AST_PROGRAM:
+            return "Program";
+        default:
+            return "Unknown";
     }
 }
 
@@ -1247,7 +1323,7 @@ void xr_ast_print(AstNode *node, int indent) {
     // Print node details - print raw values
     switch (node->type) {
         case AST_LITERAL_INT:
-            printf("(%lld)", (long long)node->as.literal.raw_value.int_val);  // Print raw value
+            printf("(%lld)", (long long) node->as.literal.raw_value.int_val);  // Print raw value
             break;
         case AST_LITERAL_FLOAT:
             printf("(%g)", node->as.literal.raw_value.float_val);  // Print raw value
@@ -1552,9 +1628,9 @@ void xr_ast_print(AstNode *node, int indent) {
 /* ========== Exception Handling AST Node Creation ========== */
 
 // Create try-catch-finally statement node
-AstNode *xr_ast_try_catch(XrayIsolate *X, AstNode *try_body,
-                          const char *catch_var, int catch_var_line, int catch_var_column,
-                          AstNode *catch_body, AstNode *finally_body, int line) {
+AstNode *xr_ast_try_catch(XrayIsolate *X, AstNode *try_body, const char *catch_var,
+                          int catch_var_line, int catch_var_column, AstNode *catch_body,
+                          AstNode *finally_body, int line) {
     AstNode *node = alloc_node(X, AST_TRY_CATCH, line);
     node->as.try_catch.try_body = try_body;
     node->as.try_catch.catch_var = ast_strdup(X, catch_var);
@@ -1593,8 +1669,8 @@ AstNode *xr_ast_import_stmt(XrayIsolate *X, const char *module_name, const char 
 // Create import statement node (extended version, supports selective import)
 // import { add, multiply } from "utils"
 AstNode *xr_ast_import_stmt_ex(XrayIsolate *X, const char *module_name, const char *alias,
-                               ImportType import_type, ImportMember *members,
-                               int member_count, int line) {
+                               ImportType import_type, ImportMember *members, int member_count,
+                               int line) {
     AstNode *node = alloc_node(X, AST_IMPORT_STMT, line);
     node->as.import_stmt.module_name = ast_strdup(X, module_name);
     node->as.import_stmt.alias = ast_strdup(X, alias);
@@ -1608,7 +1684,8 @@ AstNode *xr_ast_import_stmt_ex(XrayIsolate *X, const char *module_name, const ch
 // export fn add() {}
 // export let PI = 3.14
 // export class User {}
-AstNode *xr_ast_export_stmt(XrayIsolate *X, AstNode *declaration, const char *export_name, int line) {
+AstNode *xr_ast_export_stmt(XrayIsolate *X, AstNode *declaration, const char *export_name,
+                            int line) {
     AstNode *node = alloc_node(X, AST_EXPORT_STMT, line);
     node->as.export_stmt.declaration = declaration;
     node->as.export_stmt.export_name = export_name ? ast_strdup(X, export_name) : NULL;
@@ -1639,9 +1716,8 @@ AstNode *xr_ast_export_list(XrayIsolate *X, char **names, int count, int line) {
 // Create re-export statement node
 // export { a, b as c } from "./file"
 // export * from "./file"
-AstNode *xr_ast_export_reexport(XrayIsolate *X, const char *from_path,
-                                 ReexportMember *members, int count,
-                                 bool is_all, int line) {
+AstNode *xr_ast_export_reexport(XrayIsolate *X, const char *from_path, ReexportMember *members,
+                                int count, bool is_all, int line) {
     AstNode *node = alloc_node(X, AST_EXPORT_STMT, line);
     node->as.export_stmt.declaration = NULL;
     node->as.export_stmt.export_name = NULL;
@@ -1658,9 +1734,10 @@ AstNode *xr_ast_export_reexport(XrayIsolate *X, const char *from_path,
 
 // Create array destructuring pattern
 // let [a, b, c] = arr
-XrDestructurePattern* xr_pattern_array(XrayIsolate *X, XrDestructurePattern **elements, int count) {
-    (void)X;
-    XrDestructurePattern *pattern = (XrDestructurePattern*)ast_alloc(X, sizeof(XrDestructurePattern));
+XrDestructurePattern *xr_pattern_array(XrayIsolate *X, XrDestructurePattern **elements, int count) {
+    (void) X;
+    XrDestructurePattern *pattern =
+        (XrDestructurePattern *) ast_alloc(X, sizeof(XrDestructurePattern));
     pattern->type = PATTERN_ARRAY;
     pattern->as.array.elements = elements;
     pattern->as.array.element_count = count;
@@ -1669,9 +1746,12 @@ XrDestructurePattern* xr_pattern_array(XrayIsolate *X, XrDestructurePattern **el
 
 // Create object destructuring pattern (curly braces)
 // let {name, age} = person or let {name: userName} = person
-XrDestructurePattern* xr_pattern_object(XrayIsolate *X, char **fields, XrDestructurePattern **patterns, int count, bool use_shorthand) {
-    (void)X;
-    XrDestructurePattern *pattern = (XrDestructurePattern*)ast_alloc(X, sizeof(XrDestructurePattern));
+XrDestructurePattern *xr_pattern_object(XrayIsolate *X, char **fields,
+                                        XrDestructurePattern **patterns, int count,
+                                        bool use_shorthand) {
+    (void) X;
+    XrDestructurePattern *pattern =
+        (XrDestructurePattern *) ast_alloc(X, sizeof(XrDestructurePattern));
     pattern->type = PATTERN_OBJECT;
     pattern->as.object.field_names = fields;
     pattern->as.object.patterns = patterns;
@@ -1682,9 +1762,10 @@ XrDestructurePattern* xr_pattern_object(XrayIsolate *X, char **fields, XrDestruc
 
 // Create identifier destructuring pattern
 // a or a: int
-XrDestructurePattern* xr_pattern_identifier(XrayIsolate *X, const char *name, XrType *type) {
-    (void)X;
-    XrDestructurePattern *pattern = (XrDestructurePattern*)ast_alloc(X, sizeof(XrDestructurePattern));
+XrDestructurePattern *xr_pattern_identifier(XrayIsolate *X, const char *name, XrType *type) {
+    (void) X;
+    XrDestructurePattern *pattern =
+        (XrDestructurePattern *) ast_alloc(X, sizeof(XrDestructurePattern));
     pattern->type = PATTERN_IDENTIFIER;
     pattern->as.identifier.name = ast_strdup(X, name);
     pattern->as.identifier.type = type;
@@ -1693,16 +1774,17 @@ XrDestructurePattern* xr_pattern_identifier(XrayIsolate *X, const char *name, Xr
 
 // Create skip element pattern
 // _
-XrDestructurePattern* xr_pattern_skip(XrayIsolate *X) {
-    XrDestructurePattern *pattern = (XrDestructurePattern*)ast_alloc(X, sizeof(XrDestructurePattern));
+XrDestructurePattern *xr_pattern_skip(XrayIsolate *X) {
+    XrDestructurePattern *pattern =
+        (XrDestructurePattern *) ast_alloc(X, sizeof(XrDestructurePattern));
     pattern->type = PATTERN_SKIP;
     return pattern;
 }
 
 // Create destructuring declaration node
 // let [a, b] = arr or const {x, y} = obj
-AstNode* xr_ast_destructure_decl(XrayIsolate *X, XrDestructurePattern *pattern,
-                                  AstNode *initializer, bool is_const, int line) {
+AstNode *xr_ast_destructure_decl(XrayIsolate *X, XrDestructurePattern *pattern,
+                                 AstNode *initializer, bool is_const, int line) {
     AstNode *node = alloc_node(X, AST_DESTRUCTURE_DECL, line);
     node->as.destructure_decl.pattern = pattern;
     node->as.destructure_decl.initializer = initializer;
@@ -1712,8 +1794,8 @@ AstNode* xr_ast_destructure_decl(XrayIsolate *X, XrDestructurePattern *pattern,
 
 // Create destructuring assignment node
 // [a, b] = arr or {x, y} = obj
-AstNode* xr_ast_destructure_assign(XrayIsolate *X, XrDestructurePattern *pattern,
-                                    AstNode *value, int line) {
+AstNode *xr_ast_destructure_assign(XrayIsolate *X, XrDestructurePattern *pattern, AstNode *value,
+                                   int line) {
     AstNode *node = alloc_node(X, AST_DESTRUCTURE_ASSIGN, line);
     node->as.destructure_assign.pattern = pattern;
     node->as.destructure_assign.value = value;
@@ -1722,8 +1804,8 @@ AstNode* xr_ast_destructure_assign(XrayIsolate *X, XrDestructurePattern *pattern
 
 // Create multi-value declaration node
 // let a, b = 1, 2  or  let a, b = foo()  or  let a, b, c
-AstNode* xr_ast_multi_var_decl(XrayIsolate *X, char **names, int name_count,
-                                AstNode **values, int value_count, bool is_const, int line) {
+AstNode *xr_ast_multi_var_decl(XrayIsolate *X, char **names, int name_count, AstNode **values,
+                               int value_count, bool is_const, int line) {
     AstNode *node = alloc_node(X, AST_MULTI_VAR_DECL, line);
     node->as.multi_var_decl.names = names;
     node->as.multi_var_decl.name_count = name_count;
@@ -1735,8 +1817,8 @@ AstNode* xr_ast_multi_var_decl(XrayIsolate *X, char **names, int name_count,
 
 // Create multi-value assignment node
 // a, b = b, a
-AstNode* xr_ast_multi_assign(XrayIsolate *X, AstNode **targets, int target_count,
-                              AstNode **values, int value_count, int line) {
+AstNode *xr_ast_multi_assign(XrayIsolate *X, AstNode **targets, int target_count, AstNode **values,
+                             int value_count, int line) {
     AstNode *node = alloc_node(X, AST_MULTI_ASSIGN, line);
     node->as.multi_assign.targets = targets;
     node->as.multi_assign.target_count = target_count;
@@ -1751,9 +1833,8 @@ AstNode* xr_ast_multi_assign(XrayIsolate *X, AstNode **targets, int target_count
 
 // Create type alias node
 // type User = { name: string, age: int, email?: string }
-AstNode *xr_ast_type_alias(XrayIsolate *X, const char *name,
-                           char **field_names, XrType **field_types,
-                           bool *field_optional, int field_count, int line) {
+AstNode *xr_ast_type_alias(XrayIsolate *X, const char *name, char **field_names,
+                           XrType **field_types, bool *field_optional, int field_count, int line) {
     AstNode *node = alloc_node(X, AST_TYPE_ALIAS, line);
 
     // Copy type name
@@ -1762,17 +1843,20 @@ AstNode *xr_ast_type_alias(XrayIsolate *X, const char *name,
 
     if (field_count > 0) {
         // Copy field names array
-        node->as.type_alias.field_names = (char**)ast_alloc_array(X, sizeof(char*), (size_t)field_count);
+        node->as.type_alias.field_names =
+            (char **) ast_alloc_array(X, sizeof(char *), (size_t) field_count);
         for (int i = 0; i < field_count; i++) {
             node->as.type_alias.field_names[i] = ast_strdup(X, field_names[i]);
         }
 
         // Copy field types array (shallow copy, types managed by type pool)
-        node->as.type_alias.field_types = (XrType**)ast_alloc_array(X, sizeof(XrType*), (size_t)field_count);
-        memcpy(node->as.type_alias.field_types, field_types, sizeof(XrType*) * field_count);
+        node->as.type_alias.field_types =
+            (XrType **) ast_alloc_array(X, sizeof(XrType *), (size_t) field_count);
+        memcpy(node->as.type_alias.field_types, field_types, sizeof(XrType *) * field_count);
 
         // Copy optional flags array
-        node->as.type_alias.field_optional = (bool*)ast_alloc_array(X, sizeof(bool), (size_t)field_count);
+        node->as.type_alias.field_optional =
+            (bool *) ast_alloc_array(X, sizeof(bool), (size_t) field_count);
         memcpy(node->as.type_alias.field_optional, field_optional, sizeof(bool) * field_count);
     } else {
         node->as.type_alias.field_names = NULL;
@@ -1788,7 +1872,8 @@ AstNode *xr_ast_type_alias(XrayIsolate *X, const char *name,
 // Create go expression node
 // go fn() or go { block } or go(name: "xxx") fn() or go(priority: Coro.HIGH) fn()
 // linked go fn() or monitored go fn()
-AstNode *xr_ast_go_expr(XrayIsolate *X, AstNode *expr, const char *name, AstNode *priority, uint8_t link_mode, int line) {
+AstNode *xr_ast_go_expr(XrayIsolate *X, AstNode *expr, const char *name, AstNode *priority,
+                        uint8_t link_mode, int line) {
     AstNode *node = alloc_node(X, AST_GO_EXPR, line);
     node->as.go_expr.expr = expr;
     node->as.go_expr.name = name;
@@ -1799,7 +1884,8 @@ AstNode *xr_ast_go_expr(XrayIsolate *X, AstNode *expr, const char *name, AstNode
 
 // Create await expression node
 // await task, await(timeout: N) task, await.all/await.any/await.anySuccess [tasks]
-AstNode *xr_ast_await_expr(XrayIsolate *X, AstNode *expr, AstNode *timeout, bool is_any, bool is_all, bool is_any_success, int line) {
+AstNode *xr_ast_await_expr(XrayIsolate *X, AstNode *expr, AstNode *timeout, bool is_any,
+                           bool is_all, bool is_any_success, int line) {
     AstNode *node = alloc_node(X, AST_AWAIT_EXPR, line);
     node->as.await_expr.expr = expr;
     node->as.await_expr.timeout = timeout;
@@ -1819,9 +1905,9 @@ AstNode *xr_ast_channel_new(XrayIsolate *X, AstNode *buffer_size, int line) {
 
 // Create select case node
 // msg from ch => expr or ch.send(val) => expr
-AstNode *xr_ast_select_case(XrayIsolate *X, const char *var_name, AstNode *channel,
-                            AstNode *value, AstNode *body,
-                            bool is_send, bool is_default, bool is_timeout, int line) {
+AstNode *xr_ast_select_case(XrayIsolate *X, const char *var_name, AstNode *channel, AstNode *value,
+                            AstNode *body, bool is_send, bool is_default, bool is_timeout,
+                            int line) {
     AstNode *node = alloc_node(X, AST_SELECT_CASE, line);
     node->as.select_case.var_name = var_name ? ast_strdup(X, var_name) : NULL;
     node->as.select_case.channel = channel;
@@ -1839,8 +1925,9 @@ AstNode *xr_ast_select_stmt(XrayIsolate *X, AstNode **cases, int case_count, int
     AstNode *node = alloc_node(X, AST_SELECT_STMT, line);
 
     if (case_count > 0 && cases != NULL) {
-        node->as.select_stmt.cases = (AstNode**)ast_alloc_array(X, sizeof(AstNode*), (size_t)case_count);
-        memcpy(node->as.select_stmt.cases, cases, sizeof(AstNode*) * case_count);
+        node->as.select_stmt.cases =
+            (AstNode **) ast_alloc_array(X, sizeof(AstNode *), (size_t) case_count);
+        memcpy(node->as.select_stmt.cases, cases, sizeof(AstNode *) * case_count);
     } else {
         node->as.select_stmt.cases = NULL;
     }
@@ -1887,4 +1974,3 @@ AstNode *xr_ast_move_expr(XrayIsolate *X, AstNode *expr, int line, int column) {
     node->as.move_expr.expr = expr;
     return node;
 }
-

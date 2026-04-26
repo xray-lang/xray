@@ -29,8 +29,7 @@
 #include <sys/stat.h>
 
 // Check single file, returns: 0 = no error, 1 = has error
-static int check_file(XrayIsolate *X, XaAnalyzer *analyzer,
-                      const char *path, int verbose) {
+static int check_file(XrayIsolate *X, XaAnalyzer *analyzer, const char *path, int verbose) {
     char *source = xr_cli_read_file(path);
     if (!source) {
         fprintf(stderr, "Error: cannot read file '%s'\n", path);
@@ -45,7 +44,7 @@ static int check_file(XrayIsolate *X, XaAnalyzer *analyzer,
         // Error message already printed by parser
     } else if (analyzer) {
         // --strict mode: run analyzer type checking
-        xa_analyzer_analyze(analyzer, path, (XrAstNode *)ast);
+        xa_analyzer_analyze(analyzer, path, (XrAstNode *) ast);
         int diag_count = 0;
         XaDiagnostic *diags = xa_analyzer_get_diagnostics(analyzer, &diag_count);
         for (XaDiagnostic *d = diags; d; d = d->next) {
@@ -53,12 +52,14 @@ static int check_file(XrayIsolate *X, XaAnalyzer *analyzer,
                 has_error = 1;
             }
             const char *sev = "error";
-            if (d->severity == XR_DIAG_SEV_WARNING) sev = "warning";
-            else if (d->severity == XR_DIAG_SEV_INFO) sev = "info";
-            else if (d->severity == XR_DIAG_SEV_HINT) sev = "hint";
-            fprintf(stderr, "%s:%d:%d: %s: %s\n",
-                    path, d->location.line, d->location.column,
-                    sev, d->message);
+            if (d->severity == XR_DIAG_SEV_WARNING)
+                sev = "warning";
+            else if (d->severity == XR_DIAG_SEV_INFO)
+                sev = "info";
+            else if (d->severity == XR_DIAG_SEV_HINT)
+                sev = "hint";
+            fprintf(stderr, "%s:%d:%d: %s: %s\n", path, d->location.line, d->location.column, sev,
+                    d->message);
         }
         xa_analyzer_clear_diagnostics(analyzer);
         if (!has_error && verbose) {
@@ -77,10 +78,9 @@ static int check_file(XrayIsolate *X, XaAnalyzer *analyzer,
     return has_error;
 }
 
-
 // Recursively check directory, returns: error file count
-static int check_directory(XrayIsolate *X, XaAnalyzer *analyzer,
-                           const char *path, int verbose, int *total, int *passed) {
+static int check_directory(XrayIsolate *X, XaAnalyzer *analyzer, const char *path, int verbose,
+                           int *total, int *passed) {
     DIR *dir = opendir(path);
     if (!dir) {
         fprintf(stderr, "Error: cannot open directory '%s'\n", path);
@@ -100,7 +100,8 @@ static int check_directory(XrayIsolate *X, XaAnalyzer *analyzer,
         snprintf(filepath, sizeof(filepath), "%s/%s", path, entry->d_name);
 
         struct stat st;
-        if (stat(filepath, &st) != 0) continue;
+        if (stat(filepath, &st) != 0)
+            continue;
 
         if (S_ISDIR(st.st_mode)) {
             // Recursively check subdirectory
@@ -124,8 +125,8 @@ XR_FUNC int cmd_check(const XrCliInvocation *inv) {
     XR_DCHECK(inv != NULL, "inv is NULL");
 
     bool verbose = xr_cli_opt_bool(&inv->options, "verbose");
-    bool quiet   = xr_cli_opt_bool(&inv->options, "quiet");
-    bool strict  = xr_cli_opt_bool(&inv->options, "strict");
+    bool quiet = xr_cli_opt_bool(&inv->options, "quiet");
+    bool strict = xr_cli_opt_bool(&inv->options, "strict");
 
     /* Create shared isolate for all checks */
     XrayIsolate *X = xr_cli_isolate_new(XR_CLI_ISOLATE_ANALYZE);
@@ -149,8 +150,7 @@ XR_FUNC int cmd_check(const XrCliInvocation *inv) {
     if (inv->positional_count == 0) {
         struct stat st;
         if (stat(".", &st) == 0 && S_ISDIR(st.st_mode)) {
-            total_errors = check_directory(X, analyzer, ".", verbose,
-                                            &total_files, &passed_files);
+            total_errors = check_directory(X, analyzer, ".", verbose, &total_files, &passed_files);
         }
     } else {
         /* Check specified files or directories */
@@ -165,8 +165,8 @@ XR_FUNC int cmd_check(const XrCliInvocation *inv) {
             }
 
             if (S_ISDIR(st.st_mode)) {
-                total_errors += check_directory(X, analyzer, path, verbose,
-                                                &total_files, &passed_files);
+                total_errors +=
+                    check_directory(X, analyzer, path, verbose, &total_files, &passed_files);
             } else if (S_ISREG(st.st_mode)) {
                 total_files++;
                 if (check_file(X, analyzer, path, verbose) == 0) {
@@ -188,7 +188,8 @@ XR_FUNC int cmd_check(const XrCliInvocation *inv) {
         }
     }
 
-    if (analyzer) xa_analyzer_free(analyzer);
+    if (analyzer)
+        xa_analyzer_free(analyzer);
     xray_isolate_delete(X);
     return total_errors > 0 ? XR_CLI_EXIT_FAIL : XR_CLI_EXIT_OK;
 }

@@ -21,13 +21,13 @@
 
 /* ========== Internal Helpers ========== */
 
-static void suite_add_test(XrTestSuite *suite, XrProto *proto, int idx, AttributeKind attr, int timeout) {
+static void suite_add_test(XrTestSuite *suite, XrProto *proto, int idx, AttributeKind attr,
+                           int timeout) {
     // Expand capacity
     if (suite->test_count >= suite->test_capacity) {
         suite->test_capacity = suite->test_capacity == 0 ? 8 : suite->test_capacity * 2;
-        XR_REALLOC_OR_ABORT(suite->tests,
-            sizeof(XrTestFunc) * suite->test_capacity,
-            "suite_add_test: tests grow");
+        XR_REALLOC_OR_ABORT(suite->tests, sizeof(XrTestFunc) * suite->test_capacity,
+                            "suite_add_test: tests grow");
     }
 
     XrTestFunc *func = &suite->tests[suite->test_count++];
@@ -38,8 +38,7 @@ static void suite_add_test(XrTestSuite *suite, XrProto *proto, int idx, Attribut
 }
 
 static void suite_add_hook(XrTestFunc **hooks, int *count, XrProto *proto, int idx) {
-    XR_REALLOC_OR_ABORT(*hooks, sizeof(XrTestFunc) * (*count + 1),
-        "suite_add_hook: hooks grow");
+    XR_REALLOC_OR_ABORT(*hooks, sizeof(XrTestFunc) * (*count + 1), "suite_add_hook: hooks grow");
     XrTestFunc *func = &(*hooks)[*count];
     func->proto = proto;
     func->closure_idx = idx;
@@ -50,15 +49,17 @@ static void suite_add_hook(XrTestFunc **hooks, int *count, XrProto *proto, int i
 
 /* ========== Test Runner API ========== */
 
-XrTestRunner* xr_test_runner_new(void) {
-    XrTestRunner *runner = (XrTestRunner *)xr_malloc(sizeof(XrTestRunner));
-    if (!runner) return NULL;
+XrTestRunner *xr_test_runner_new(void) {
+    XrTestRunner *runner = (XrTestRunner *) xr_malloc(sizeof(XrTestRunner));
+    if (!runner)
+        return NULL;
     memset(runner, 0, sizeof(XrTestRunner));
     return runner;
 }
 
 void xr_test_runner_free(XrTestRunner *runner) {
-    if (!runner) return;
+    if (!runner)
+        return;
     for (int i = 0; i < runner->failure_record_count; i++) {
         xr_free(runner->failure_records[i].file);
         xr_free(runner->failure_records[i].test_name);
@@ -77,10 +78,11 @@ void xr_test_runner_configure(XrTestRunner *runner, XrTestConfig *config) {
 
 /* ========== Test Discovery ========== */
 
-XrTestSuite* xr_test_discover(XrProto *proto, const char *suite_name) {
+XrTestSuite *xr_test_discover(XrProto *proto, const char *suite_name) {
     XR_DCHECK(proto != NULL, "test_discover: NULL proto");
-    XrTestSuite *suite = (XrTestSuite *)xr_malloc(sizeof(XrTestSuite));
-    if (!suite) return NULL;
+    XrTestSuite *suite = (XrTestSuite *) xr_malloc(sizeof(XrTestSuite));
+    if (!suite)
+        return NULL;
     memset(suite, 0, sizeof(XrTestSuite));
     suite->name = suite_name;
 
@@ -90,7 +92,7 @@ XrTestSuite* xr_test_discover(XrProto *proto, const char *suite_name) {
         XrProto *child = PROTO_PROTO(proto, i);
 
         if (child->test_attr != ATTR_NONE) {
-            AttributeKind attr = (AttributeKind)child->test_attr;
+            AttributeKind attr = (AttributeKind) child->test_attr;
 
             switch (attr) {
                 case ATTR_TEST:
@@ -124,7 +126,7 @@ XrTestSuite* xr_test_discover(XrProto *proto, const char *suite_name) {
     // Allocate results array
     if (suite->test_count > 0) {
         size_t size = suite->test_count * sizeof(XrTestResult);
-        suite->results = (XrTestResult *)xr_malloc(size);
+        suite->results = (XrTestResult *) xr_malloc(size);
         memset(suite->results, 0, size);
     }
 
@@ -133,16 +135,15 @@ XrTestSuite* xr_test_discover(XrProto *proto, const char *suite_name) {
 
 /* ========== Failure Tracking ========== */
 
-void xr_test_runner_add_failure(XrTestRunner *runner, const char *file,
-                                const char *test_name, const char *message,
-                                XrTestStatus status) {
+void xr_test_runner_add_failure(XrTestRunner *runner, const char *file, const char *test_name,
+                                const char *message, XrTestStatus status) {
     XR_DCHECK(runner != NULL, "test_runner_add_failure: NULL runner");
     if (runner->failure_record_count >= runner->failure_record_capacity) {
-        runner->failure_record_capacity = runner->failure_record_capacity == 0
-            ? 8 : runner->failure_record_capacity * 2;
+        runner->failure_record_capacity =
+            runner->failure_record_capacity == 0 ? 8 : runner->failure_record_capacity * 2;
         XR_REALLOC_OR_ABORT(runner->failure_records,
-            runner->failure_record_capacity * sizeof(XrTestFailureRecord),
-            "test_runner failure_records grow");
+                            runner->failure_record_capacity * sizeof(XrTestFailureRecord),
+                            "test_runner failure_records grow");
     }
     XrTestFailureRecord *rec = &runner->failure_records[runner->failure_record_count++];
     const char *f = file ? file : "<unknown>";
@@ -154,7 +155,8 @@ void xr_test_runner_add_failure(XrTestRunner *runner, const char *file,
     rec->file = xr_malloc(flen);
     rec->test_name = xr_malloc(tlen);
     rec->message = xr_malloc(mlen);
-    if (!rec->file || !rec->test_name || !rec->message) return;
+    if (!rec->file || !rec->test_name || !rec->message)
+        return;
     memcpy(rec->file, f, flen);
     memcpy(rec->test_name, t, tlen);
     memcpy(rec->message, m, mlen);
@@ -179,7 +181,8 @@ void xr_test_print_report(XrTestRunner *runner) {
             strncpy(name_buf, base, sizeof(name_buf) - 1);
             name_buf[sizeof(name_buf) - 1] = '\0';
             char *dot = strrchr(name_buf, '.');
-            if (dot && strcmp(dot, ".xr") == 0) *dot = '\0';
+            if (dot && strcmp(dot, ".xr") == 0)
+                *dot = '\0';
             printf("  " XR_CLR_RED "\u2717" XR_CLR_RESET " %s " XR_CLR_DIM ">" XR_CLR_RESET " %s\n",
                    name_buf, rec->test_name);
             if (rec->message[0] != '\0') {
@@ -189,7 +192,11 @@ void xr_test_print_report(XrTestRunner *runner) {
     }
 
     // Summary
-    printf("\n " XR_CLR_DIM "\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500" XR_CLR_RESET "\n");
+    printf("\n " XR_CLR_DIM
+           "\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500"
+           "\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500"
+           "\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500"
+           "\u2500\u2500\u2500\u2500\u2500\u2500" XR_CLR_RESET "\n");
 
     // Test counts line
     printf(" " XR_CLR_BOLD " Tests" XR_CLR_RESET "  ");
@@ -220,7 +227,11 @@ void xr_test_print_report(XrTestRunner *runner) {
         printf("%.0fms\n", time_ms);
     }
 
-    printf(" " XR_CLR_DIM "\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500" XR_CLR_RESET "\n");
+    printf(" " XR_CLR_DIM
+           "\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500"
+           "\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500"
+           "\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500"
+           "\u2500\u2500\u2500\u2500\u2500\u2500" XR_CLR_RESET "\n");
 
     if (total_problems == 0) {
         printf("\n " XR_CLR_GREEN XR_CLR_BOLD "\u2713 All tests passed" XR_CLR_RESET "\n\n");
@@ -233,14 +244,21 @@ void xr_test_print_report(XrTestRunner *runner) {
 /* ========== Cleanup ========== */
 
 void xr_test_suite_free(XrTestSuite *suite) {
-    if (!suite) return;
+    if (!suite)
+        return;
 
-    if (suite->tests) xr_free(suite->tests);
-    if (suite->before_each) xr_free(suite->before_each);
-    if (suite->after_each) xr_free(suite->after_each);
-    if (suite->before_all) xr_free(suite->before_all);
-    if (suite->after_all) xr_free(suite->after_all);
-    if (suite->results) xr_free(suite->results);
+    if (suite->tests)
+        xr_free(suite->tests);
+    if (suite->before_each)
+        xr_free(suite->before_each);
+    if (suite->after_each)
+        xr_free(suite->after_each);
+    if (suite->before_all)
+        xr_free(suite->before_all);
+    if (suite->after_all)
+        xr_free(suite->after_all);
+    if (suite->results)
+        xr_free(suite->results);
 
     xr_free(suite);
 }

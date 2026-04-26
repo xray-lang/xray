@@ -24,9 +24,9 @@ XrCell *xr_cell_new(XrayIsolate *isolate, struct XrCoroutine *coro) {
 
     XrCell *cell;
     if (coro && coro->coro_gc) {
-        cell = (XrCell *)xr_coro_gc_newobj(coro->coro_gc, XR_TCELL, XR_CELL_SIZE);
+        cell = (XrCell *) xr_coro_gc_newobj(coro->coro_gc, XR_TCELL, XR_CELL_SIZE);
     } else {
-        cell = (XrCell *)xr_gc_alloc(&isolate->gc, XR_CELL_SIZE, XR_TCELL);
+        cell = (XrCell *) xr_gc_alloc(&isolate->gc, XR_CELL_SIZE, XR_TCELL);
     }
     if (cell == NULL) {
         return NULL;

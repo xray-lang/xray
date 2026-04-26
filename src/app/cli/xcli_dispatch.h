@@ -30,4 +30,4 @@ XR_FUNC int xr_cli_main(int argc, char **argv);
  * Prints suggestion to stderr. Returns true if a suggestion was printed. */
 XR_FUNC bool xr_cli_suggest_command(const char *input);
 
-#endif // XCLI_DISPATCH_H
+#endif  // XCLI_DISPATCH_H

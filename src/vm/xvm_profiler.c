@@ -26,22 +26,26 @@ typedef struct {
 
 // Comparison function for sorting by count
 static int compare_by_count(const void *a, const void *b) {
-    const SortedOpStats *sa = (const SortedOpStats *)a;
-    const SortedOpStats *sb = (const SortedOpStats *)b;
+    const SortedOpStats *sa = (const SortedOpStats *) a;
+    const SortedOpStats *sb = (const SortedOpStats *) b;
 
-    if (sb->stats.count > sa->stats.count) return 1;
-    if (sb->stats.count < sa->stats.count) return -1;
+    if (sb->stats.count > sa->stats.count)
+        return 1;
+    if (sb->stats.count < sa->stats.count)
+        return -1;
     return 0;
 }
 
 #if XR_PROFILE_TIMING
 // Comparison function for sorting by time
 static int compare_by_time(const void *a, const void *b) {
-    const SortedOpStats *sa = (const SortedOpStats *)a;
-    const SortedOpStats *sb = (const SortedOpStats *)b;
+    const SortedOpStats *sa = (const SortedOpStats *) a;
+    const SortedOpStats *sb = (const SortedOpStats *) b;
 
-    if (sb->stats.total_ns > sa->stats.total_ns) return 1;
-    if (sb->stats.total_ns < sa->stats.total_ns) return -1;
+    if (sb->stats.total_ns > sa->stats.total_ns)
+        return 1;
+    if (sb->stats.total_ns < sa->stats.total_ns)
+        return -1;
     return 0;
 }
 #endif
@@ -49,9 +53,10 @@ static int compare_by_time(const void *a, const void *b) {
 // Get opcode name (delegates to the single-source-of-truth table in
 // xopcode_info.c so the profiler never falls out of sync with the
 // OpCode enum or the disassembler).
-static const char* get_opcode_name(int op) {
-    if (op < 0 || op >= NUM_OPCODES) return "UNKNOWN";
-    return xr_opcode_name((OpCode)op);
+static const char *get_opcode_name(int op) {
+    if (op < 0 || op >= NUM_OPCODES)
+        return "UNKNOWN";
+    return xr_opcode_name((OpCode) op);
 }
 
 // Print performance report. Pass NULL when the build did not allocate
@@ -59,7 +64,8 @@ static const char* get_opcode_name(int op) {
 // caller opted in); the function bails early so callers can drop a
 // blanket vm_profiler_report() into teardown without checking first.
 void vm_profiler_report(const VMProfiler *p) {
-    if (!p) return;
+    if (!p)
+        return;
     uint64_t end_time_ms = vm_profiler_get_ms();
 
     printf("\n");
@@ -70,10 +76,10 @@ void vm_profiler_report(const VMProfiler *p) {
     double total_sec = (end_time_ms - p->start_time_ms) / 1000.0;
 #else
     double total_sec = 0.0;
-    (void)end_time_ms;
+    (void) end_time_ms;
 #endif
     printf("Summary\n");
-    printf("  Total instructions: %llu\n", (unsigned long long)p->total_instructions);
+    printf("  Total instructions: %llu\n", (unsigned long long) p->total_instructions);
 #if XR_PROFILE_TIMING
     printf("  Runtime: %.3f sec\n", total_sec);
     if (total_sec > 0) {
@@ -110,10 +116,9 @@ void vm_profiler_report(const VMProfiler *p) {
         int op = sorted_stats[i].op;
         VMOpStats *stats = &sorted_stats[i].stats;
         const char *name = get_opcode_name(op);
-        double percent = (double)stats->count * 100.0 / p->total_instructions;
+        double percent = (double) stats->count * 100.0 / p->total_instructions;
 
-        printf("%-20s %12llu %7.2f%%\n",
-               name, (unsigned long long)stats->count, percent);
+        printf("%-20s %12llu %7.2f%%\n", name, (unsigned long long) stats->count, percent);
     }
     printf("\n");
 
@@ -122,17 +127,17 @@ void vm_profiler_report(const VMProfiler *p) {
 
     printf("Slow Instructions (by time, Top 20)\n");
     printf("%-20s %12s %12s %10s\n", "Instruction", "Count", "Total(ms)", "Avg(ns)");
-    printf("%-20s %12s %12s %10s\n", "--------------------", "------------", "------------", "----------");
+    printf("%-20s %12s %12s %10s\n", "--------------------", "------------", "------------",
+           "----------");
 
     for (int i = 0; i < count && i < 20; i++) {
         int op = sorted_stats[i].op;
         VMOpStats *stats = &sorted_stats[i].stats;
         const char *name = get_opcode_name(op);
         double ms = stats->total_ns / 1000000.0;
-        double avg_ns = (double)stats->total_ns / stats->count;
+        double avg_ns = (double) stats->total_ns / stats->count;
 
-        printf("%-20s %12llu %12.2f %10.1f\n",
-               name, (unsigned long long)stats->count, ms, avg_ns);
+        printf("%-20s %12llu %12.2f %10.1f\n", name, (unsigned long long) stats->count, ms, avg_ns);
     }
     printf("\n");
 #endif
@@ -146,8 +151,7 @@ void vm_profiler_report(const VMProfiler *p) {
         VMOpStats *stats = &sorted_stats[i].stats;
         const char *name = get_opcode_name(op);
 
-        printf("%-20s %12llu\n",
-               name, (unsigned long long)stats->count);
+        printf("%-20s %12llu\n", name, (unsigned long long) stats->count);
     }
     printf("\n");
 }

@@ -46,16 +46,16 @@ struct XrType;
  */
 typedef enum XrOptHint {
     XR_OPT_NONE = 0,
-    XR_OPT_KNOWN_INT,       // Type is definitely int, skip type check
-    XR_OPT_KNOWN_FLOAT,     // Type is definitely float
-    XR_OPT_KNOWN_BOOL,      // Type is definitely bool
-    XR_OPT_KNOWN_STRING,    // Type is definitely string
-    XR_OPT_KNOWN_NULL,      // Type is definitely null
-    XR_OPT_INLINE_ARRAY,    // (Future) Array access inline cache
-    XR_OPT_INLINE_MAP,      // (Future) Map access inline cache
-    XR_OPT_INLINE_FIELD,    // (Future) Field access inline cache
-    XR_OPT_DEVIRT_CALL,     // (Future) Devirtualize method call
-    XR_OPT_ELIM_NULL_CHECK, // Skip null check (non-nullable type)
+    XR_OPT_KNOWN_INT,        // Type is definitely int, skip type check
+    XR_OPT_KNOWN_FLOAT,      // Type is definitely float
+    XR_OPT_KNOWN_BOOL,       // Type is definitely bool
+    XR_OPT_KNOWN_STRING,     // Type is definitely string
+    XR_OPT_KNOWN_NULL,       // Type is definitely null
+    XR_OPT_INLINE_ARRAY,     // (Future) Array access inline cache
+    XR_OPT_INLINE_MAP,       // (Future) Map access inline cache
+    XR_OPT_INLINE_FIELD,     // (Future) Field access inline cache
+    XR_OPT_DEVIRT_CALL,      // (Future) Devirtualize method call
+    XR_OPT_ELIM_NULL_CHECK,  // Skip null check (non-nullable type)
 } XrOptHint;
 
 // Classify a type into an optimisation hint. Returns XR_OPT_NONE on
@@ -64,12 +64,10 @@ XR_FUNC XrOptHint xr_opt_get_hint(struct XrType *type);
 
 // True if both operands of an arithmetic op are unboxable numeric
 // primitives (int / float). NULL operands -> false.
-XR_FUNC bool xr_opt_can_unbox_arith(struct XrType *left,
-                                    struct XrType *right);
+XR_FUNC bool xr_opt_can_unbox_arith(struct XrType *left, struct XrType *right);
 
 // True if the receiver type and method name allow devirtualising the
 // call (i.e. the concrete target is statically known). NULL -> false.
-XR_FUNC bool xr_opt_can_devirt(struct XrType *receiver_type,
-                               const char *method);
+XR_FUNC bool xr_opt_can_devirt(struct XrType *receiver_type, const char *method);
 
-#endif // XTYPE_OPT_HINT_H
+#endif  // XTYPE_OPT_HINT_H

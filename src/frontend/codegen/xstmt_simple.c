@@ -32,7 +32,6 @@
 #include <stdio.h>
 #include <string.h>
 
-
 /* ========== Expression Statement ========== */
 
 /*
@@ -127,7 +126,6 @@ void compile_expr_stmt(XrCompilerContext *ctx, XrCompiler *compiler, AstNode *ex
     reg_free(compiler, reg);
 }
 
-
 /* ========== Print Statement ========== */
 
 /*
@@ -165,14 +163,15 @@ void compile_print(XrCompilerContext *ctx, XrCompiler *compiler, PrintNode *node
 
         // C: bit0=newline, bit1-2=slot_hint (0=ANY, 1=I64, 2=F64)
         int slot_hint = 0;
-        if (xexpr_is_raw_i64(&expr))      slot_hint = 1;
-        else if (xexpr_is_raw_f64(&expr)) slot_hint = 2;
+        if (xexpr_is_raw_i64(&expr))
+            slot_hint = 1;
+        else if (xexpr_is_raw_f64(&expr))
+            slot_hint = 2;
 
         // Typed values: readonly (no BOX), hint tells VM the raw type
         // Any values: anyreg (auto-BOX if needed)
-        int reg = (slot_hint != 0)
-            ? xexpr_to_anyreg_readonly(ctx, compiler, &expr)
-            : xexpr_to_anyreg(ctx, compiler, &expr);
+        int reg = (slot_hint != 0) ? xexpr_to_anyreg_readonly(ctx, compiler, &expr)
+                                   : xexpr_to_anyreg(ctx, compiler, &expr);
 
         int add_space = (i > 0) ? 1 : 0;
         int newline = (i == node->expr_count - 1) ? 1 : 0;
@@ -233,19 +232,22 @@ void compile_assignment(XrCompilerContext *ctx, XrCompiler *compiler, Assignment
                 XrType *check_source = expr_type;
                 if (check_source && check_source->is_nullable) {
                     XrType *base = xr_type_non_nullable(ctx->X, check_source);
-                    if (base) check_source = base;
+                    if (base)
+                        check_source = base;
                 }
                 if (check_source && !xr_type_assignable(target_type, check_source)) {
-                    // Json/JsonValue→primitive/union: allowed with runtime type check (OP_CHECKTYPE)
+                    // Json/JsonValue→primitive/union: allowed with runtime type check
+                    // (OP_CHECKTYPE)
                     if (!xr_is_json_coercion(target_type, check_source)) {
                         if (XR_TYPE_IS_INT(target_type) && XR_TYPE_IS_FLOAT(check_source)) {
                             xr_compiler_error(ctx, compiler,
-                                "Cannot assign float to int variable '%s' (use int() for explicit conversion)",
-                                node->name);
+                                              "Cannot assign float to int variable '%s' (use int() "
+                                              "for explicit conversion)",
+                                              node->name);
                         } else {
-                            xr_compiler_error(ctx, compiler,
-                                "Cannot assign %s to %s variable '%s'",
-                                xstmt_type_flag_name(check_source), xstmt_type_flag_name(target_type), node->name);
+                            xr_compiler_error(ctx, compiler, "Cannot assign %s to %s variable '%s'",
+                                              xstmt_type_flag_name(check_source),
+                                              xstmt_type_flag_name(target_type), node->name);
                         }
                         return;
                     }
@@ -258,9 +260,11 @@ void compile_assignment(XrCompilerContext *ctx, XrCompiler *compiler, Assignment
             // Must NOT overwrite the cell ref in R[local].
             XrExprDesc expr = xr_compile_expr(ctx, compiler, node->value);
             int value_reg = xexpr_to_anyreg(ctx, compiler, &expr);
-            if (local_info) xstmt_emit_box_if_raw(compiler->emitter, value_reg, &expr);
+            if (local_info)
+                xstmt_emit_box_if_raw(compiler->emitter, value_reg, &expr);
             if (local_info && local_info->compile_type)
-                xstmt_emit_json_checktype(ctx, compiler, value_reg, local_info->compile_type, node->value);
+                xstmt_emit_json_checktype(ctx, compiler, value_reg, local_info->compile_type,
+                                          node->value);
             xemit_cell_set(compiler->emitter, local, value_reg, 0);
             reg_free(compiler, value_reg);
         } else {
@@ -272,7 +276,8 @@ void compile_assignment(XrCompilerContext *ctx, XrCompiler *compiler, Assignment
                 xstmt_emit_box_if_raw(compiler->emitter, local, &expr);
             }
             if (local_info && local_info->compile_type)
-                xstmt_emit_json_checktype(ctx, compiler, local, local_info->compile_type, node->value);
+                xstmt_emit_json_checktype(ctx, compiler, local, local_info->compile_type,
+                                          node->value);
             // Struct value semantics: copy-on-assign
             if (local_info && local_info->compile_type && local_info->compile_type->is_value_type) {
                 AstNodeType val_type = node->value->type;
@@ -310,13 +315,12 @@ void compile_assignment(XrCompilerContext *ctx, XrCompiler *compiler, Assignment
                 int global_index = builtin_get(ctx, name_str);
                 if (global_index < 0) {
                     xr_compiler_error(ctx, compiler,
-                        "Undefined variable '%s', use 'let %s = ...' to define first",
-                        name_str->data, name_str->data);
+                                      "Undefined variable '%s', use 'let %s = ...' to define first",
+                                      name_str->data, name_str->data);
                     reg_free(compiler, value_reg);
                     return;
                 }
-                xr_compiler_error(ctx, compiler,
-                    "Cannot assign to built-in '%s'", name_str->data);
+                xr_compiler_error(ctx, compiler, "Cannot assign to built-in '%s'", name_str->data);
                 reg_free(compiler, value_reg);
             }
         }
@@ -333,7 +337,8 @@ void compile_assignment(XrCompilerContext *ctx, XrCompiler *compiler, Assignment
  * (OP_ADD, OP_SUB, OP_MUL, OP_DIV, OP_MOD, OP_BAND, OP_BOR, OP_BXOR,
  * OP_SHL, OP_SHR), giving JIT/AOT independent type-inference per op.
  */
-void compile_compound_assignment(XrCompilerContext *ctx, XrCompiler *compiler, CompoundAssignmentNode *node) {
+void compile_compound_assignment(XrCompilerContext *ctx, XrCompiler *compiler,
+                                 CompoundAssignmentNode *node) {
     XR_DCHECK(ctx != NULL, "compile_compound_assignment: NULL ctx");
     XR_DCHECK(compiler != NULL, "compile_compound_assignment: NULL compiler");
     XR_DCHECK(node != NULL, "compile_compound_assignment: NULL node");
@@ -341,24 +346,43 @@ void compile_compound_assignment(XrCompilerContext *ctx, XrCompiler *compiler, C
     // Map token to binary opcode
     OpCode binary_op;
     switch (node->op) {
-        case TK_PLUS_ASSIGN:   binary_op = OP_ADD;  break;
-        case TK_MINUS_ASSIGN:  binary_op = OP_SUB;  break;
-        case TK_MUL_ASSIGN:    binary_op = OP_MUL;  break;
-        case TK_DIV_ASSIGN:    binary_op = OP_DIV;  break;
-        case TK_MOD_ASSIGN:    binary_op = OP_MOD;  break;
-        case TK_AND_ASSIGN:    binary_op = OP_BAND; break;
-        case TK_OR_ASSIGN:     binary_op = OP_BOR;  break;
-        case TK_XOR_ASSIGN:    binary_op = OP_BXOR; break;
-        case TK_LSHIFT_ASSIGN: binary_op = OP_SHL;  break;
-        case TK_RSHIFT_ASSIGN: binary_op = OP_SHR;  break;
+        case TK_PLUS_ASSIGN:
+            binary_op = OP_ADD;
+            break;
+        case TK_MINUS_ASSIGN:
+            binary_op = OP_SUB;
+            break;
+        case TK_MUL_ASSIGN:
+            binary_op = OP_MUL;
+            break;
+        case TK_DIV_ASSIGN:
+            binary_op = OP_DIV;
+            break;
+        case TK_MOD_ASSIGN:
+            binary_op = OP_MOD;
+            break;
+        case TK_AND_ASSIGN:
+            binary_op = OP_BAND;
+            break;
+        case TK_OR_ASSIGN:
+            binary_op = OP_BOR;
+            break;
+        case TK_XOR_ASSIGN:
+            binary_op = OP_BXOR;
+            break;
+        case TK_LSHIFT_ASSIGN:
+            binary_op = OP_SHL;
+            break;
+        case TK_RSHIFT_ASSIGN:
+            binary_op = OP_SHR;
+            break;
         default:
             xr_compiler_error(ctx, compiler, "Unsupported compound assignment operator");
             return;
     }
 
-    bool is_arithmetic = (binary_op == OP_ADD || binary_op == OP_SUB ||
-                          binary_op == OP_MUL || binary_op == OP_DIV ||
-                          binary_op == OP_MOD);
+    bool is_arithmetic = (binary_op == OP_ADD || binary_op == OP_SUB || binary_op == OP_MUL ||
+                          binary_op == OP_DIV || binary_op == OP_MOD);
 
     // Check if member access compound assignment (this.field += value)
     if (node->object != NULL) {
@@ -376,7 +400,7 @@ void compile_compound_assignment(XrCompilerContext *ctx, XrCompiler *compiler, C
 
         // Member name symbol index
         int global_sym = xr_symbol_register_in_table(
-            (XrSymbolTable*)xr_isolate_get_symbol_table(ctx->X), node->name);
+            (XrSymbolTable *) xr_isolate_get_symbol_table(ctx->X), node->name);
         int local_sym = emitter_add_symbol(compiler->emitter, global_sym);
 
         // Allocate temp register to store member value
@@ -417,16 +441,19 @@ void compile_compound_assignment(XrCompilerContext *ctx, XrCompiler *compiler, C
 
     if (local >= 0) {
         // Type compatibility check for compound assignment
-        if (ca_info && ca_info->compile_type && XR_TYPE_IS_INT(ca_info->compile_type) && is_arithmetic) {
+        if (ca_info && ca_info->compile_type && XR_TYPE_IS_INT(ca_info->compile_type) &&
+            is_arithmetic) {
             XrType *rhs_type = get_expr_type(ctx, compiler, node->value);
             if (rhs_type && XR_TYPE_IS_FLOAT(rhs_type) && !XR_TYPE_IS_INT(rhs_type)) {
                 xr_compiler_error(ctx, compiler,
-                    "Cannot use float in compound assignment to int variable '%s' (use int() for explicit conversion)",
-                    node->name);
+                                  "Cannot use float in compound assignment to int variable '%s' "
+                                  "(use int() for explicit conversion)",
+                                  node->name);
                 return;
             }
             if (rhs_type && !XR_TYPE_IS_INT(rhs_type) && !XR_TYPE_IS_FLOAT(rhs_type)) {
-                xr_compiler_error(ctx, compiler,
+                xr_compiler_error(
+                    ctx, compiler,
                     "Cannot use non-numeric value in compound assignment to int variable '%s'",
                     node->name);
                 return;
@@ -501,7 +528,6 @@ void compile_compound_assignment(XrCompilerContext *ctx, XrCompiler *compiler, C
     reg_free(compiler, value_reg);
 }
 
-
 /*
  * Compile increment statement.
  * ++x or x++ (uniformly handled as prefix)
@@ -520,7 +546,8 @@ void compile_inc(XrCompilerContext *ctx, XrCompiler *compiler, IncDecNode *node)
     int var_reg = -1;
     bool need_writeback = false;
 
-    XrLocalInfo *local_info = (local >= 0) ? compiler_get_local_by_name(compiler, node->name) : NULL;
+    XrLocalInfo *local_info =
+        (local >= 0) ? compiler_get_local_by_name(compiler, node->name) : NULL;
     if (local >= 0) {
         if (local_info && local_info->is_cellified) {
             var_reg = reg_alloc(ctx, compiler);
@@ -595,7 +622,8 @@ void compile_dec(XrCompilerContext *ctx, XrCompiler *compiler, IncDecNode *node)
     int var_reg = -1;
     bool need_writeback = false;
 
-    XrLocalInfo *local_info_dec = (local >= 0) ? compiler_get_local_by_name(compiler, node->name) : NULL;
+    XrLocalInfo *local_info_dec =
+        (local >= 0) ? compiler_get_local_by_name(compiler, node->name) : NULL;
     if (local >= 0) {
         if (local_info_dec && local_info_dec->is_cellified) {
             var_reg = reg_alloc(ctx, compiler);

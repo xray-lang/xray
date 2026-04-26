@@ -20,7 +20,7 @@
 
 typedef struct {
     uint32_t pc;
-    uint64_t *bitmap;   // Owned copy, num_words words
+    uint64_t *bitmap;  // Owned copy, num_words words
     uint16_t num_words;
     uint16_t live_count;
 } BuilderEntry;
@@ -35,9 +35,10 @@ struct XrBcStackMapBuilder {
 
 /* ========== Builder API ========== */
 
-XrBcStackMapBuilder* xr_bc_stackmap_builder_create(uint16_t maxslots) {
+XrBcStackMapBuilder *xr_bc_stackmap_builder_create(uint16_t maxslots) {
     XrBcStackMapBuilder *b = xr_malloc(sizeof(XrBcStackMapBuilder));
-    if (!b) return NULL;
+    if (!b)
+        return NULL;
     b->entries = NULL;
     b->count = 0;
     b->capacity = 0;
@@ -46,9 +47,7 @@ XrBcStackMapBuilder* xr_bc_stackmap_builder_create(uint16_t maxslots) {
     return b;
 }
 
-void xr_bc_stackmap_builder_add(XrBcStackMapBuilder *b,
-                                 uint32_t pc,
-                                 const uint64_t *live_bitmap) {
+void xr_bc_stackmap_builder_add(XrBcStackMapBuilder *b, uint32_t pc, const uint64_t *live_bitmap) {
     XR_DCHECK(b != NULL, "stackmap_builder_add: NULL builder");
     XR_DCHECK(live_bitmap != NULL, "stackmap_builder_add: NULL bitmap");
 
@@ -56,21 +55,23 @@ void xr_bc_stackmap_builder_add(XrBcStackMapBuilder *b,
     if (b->count >= b->capacity) {
         uint32_t newcap = b->capacity ? b->capacity * 2 : BC_SM_INIT_CAP;
         BuilderEntry *tmp = xr_realloc(b->entries, newcap * sizeof(BuilderEntry));
-        if (!tmp) return;  // OOM: silently skip (conservative scan fallback)
+        if (!tmp)
+            return;  // OOM: silently skip (conservative scan fallback)
         b->entries = tmp;
         b->capacity = newcap;
     }
 
     // Copy bitmap
-    size_t bm_bytes = (size_t)b->num_words * sizeof(uint64_t);
+    size_t bm_bytes = (size_t) b->num_words * sizeof(uint64_t);
     uint64_t *bm_copy = xr_malloc(bm_bytes);
-    if (!bm_copy) return;
+    if (!bm_copy)
+        return;
     memcpy(bm_copy, live_bitmap, bm_bytes);
 
     // Count live slots
     uint16_t live = 0;
     for (uint16_t w = 0; w < b->num_words; w++) {
-        live += (uint16_t)__builtin_popcountll(bm_copy[w]);
+        live += (uint16_t) __builtin_popcountll(bm_copy[w]);
     }
 
     BuilderEntry *e = &b->entries[b->count++];
@@ -82,12 +83,12 @@ void xr_bc_stackmap_builder_add(XrBcStackMapBuilder *b,
 
 // qsort comparator for BuilderEntry by pc
 static int entry_cmp(const void *a, const void *b) {
-    uint32_t pa = ((const BuilderEntry*)a)->pc;
-    uint32_t pb = ((const BuilderEntry*)b)->pc;
+    uint32_t pa = ((const BuilderEntry *) a)->pc;
+    uint32_t pb = ((const BuilderEntry *) b)->pc;
     return (pa > pb) - (pa < pb);
 }
 
-XrBcStackMap* xr_bc_stackmap_builder_finish(XrBcStackMapBuilder *b) {
+XrBcStackMap *xr_bc_stackmap_builder_finish(XrBcStackMapBuilder *b) {
     XR_DCHECK(b != NULL, "stackmap_builder_finish: NULL builder");
 
     if (b->count == 0) {
@@ -108,12 +109,17 @@ XrBcStackMap* xr_bc_stackmap_builder_finish(XrBcStackMapBuilder *b) {
 
     // Allocate result
     XrBcStackMap *map = xr_malloc(sizeof(XrBcStackMap));
-    if (!map) goto fail;
+    if (!map)
+        goto fail;
 
     map->entries = xr_malloc(b->count * sizeof(XrBcStackMapEntry));
-    if (!map->entries) { xr_free(map); map = NULL; goto fail; }
+    if (!map->entries) {
+        xr_free(map);
+        map = NULL;
+        goto fail;
+    }
 
-    map->bitmap_pool = xr_malloc((size_t)total_words * sizeof(uint64_t));
+    map->bitmap_pool = xr_malloc((size_t) total_words * sizeof(uint64_t));
     if (!map->bitmap_pool) {
         xr_free(map->entries);
         xr_free(map);
@@ -137,7 +143,7 @@ XrBcStackMap* xr_bc_stackmap_builder_finish(XrBcStackMapBuilder *b) {
         me->num_words = be->num_words;
 
         memcpy(&map->bitmap_pool[pool_offset], be->bitmap,
-               (size_t)be->num_words * sizeof(uint64_t));
+               (size_t) be->num_words * sizeof(uint64_t));
         pool_offset += be->num_words;
     }
 
@@ -154,7 +160,8 @@ fail:
 }
 
 void xr_bc_stackmap_destroy(XrBcStackMap *map) {
-    if (!map) return;
+    if (!map)
+        return;
     xr_free(map->entries);
     xr_free(map->bitmap_pool);
     xr_free(map);

@@ -33,35 +33,35 @@
 /* ========== Target Description ========== */
 
 typedef struct XirTarget {
-    const char *name;               // "arm64", "x86_64"
+    const char *name;  // "arm64", "x86_64"
 
     // --- Register inventory ---
-    int         ngpr;               // number of allocatable GP registers
-    int         nfpr;               // number of allocatable FP registers
+    int ngpr;  // number of allocatable GP registers
+    int nfpr;  // number of allocatable FP registers
 
     /* Allocatable register arrays (indexed 0..ngpr-1 / 0..nfpr-1).
      * Values are target-specific register enum values. */
-    const int  *gpr_alloc;          // GP allocatable registers
-    const int  *fpr_alloc;          // FP allocatable registers
+    const int *gpr_alloc;  // GP allocatable registers
+    const int *fpr_alloc;  // FP allocatable registers
 
     // Caller-saved register count (first N in alloc arrays are caller-saved)
-    int         ngpr_caller_save;   // e.g. 15 for ARM64 (x1-x15)
-    int         nfpr_caller_save;   // e.g. 8 for ARM64 (d0-d7)
+    int ngpr_caller_save;  // e.g. 15 for ARM64 (x1-x15)
+    int nfpr_caller_save;  // e.g. 8 for ARM64 (d0-d7)
 
     // Special-purpose registers (target-specific enum values)
-    int         scratch_gpr[2];     // scratch registers (not allocatable)
-    int         coro_reg;           // register holding coroutine pointer
-    int         sp_reg;             // stack pointer register
-    int         fp_reg;             // frame pointer register
-    int         lr_reg;             // link register (-1 if not applicable)
+    int scratch_gpr[2];  // scratch registers (not allocatable)
+    int coro_reg;        // register holding coroutine pointer
+    int sp_reg;          // stack pointer register
+    int fp_reg;          // frame pointer register
+    int lr_reg;          // link register (-1 if not applicable)
 
     // --- Frame layout ---
-    int         frame_base;         // size of callee-saved area (bytes)
-    int         spill_base;         // offset where spill slots start (bytes)
-    int         max_spill_slots;    // maximum number of spill slots
+    int frame_base;       // size of callee-saved area (bytes)
+    int spill_base;       // offset where spill slots start (bytes)
+    int max_spill_slots;  // maximum number of spill slots
 
     // --- Limits ---
-    int         max_vregs;          // maximum virtual registers supported
+    int max_vregs;  // maximum virtual registers supported
 } XirTarget;
 
 /* ========== Global Target Instance ========== */
@@ -76,4 +76,4 @@ extern const XirTarget *xir_current_target;
 extern const XirTarget xir_target_arm64;
 extern const XirTarget xir_target_x64;
 
-#endif // XIR_TARGET_H
+#endif  // XIR_TARGET_H

@@ -20,8 +20,8 @@
 typedef struct {
     int loop_depth;
     int loop_start;
-    int break_count;   // saved break_jumps.count
-    int continue_count; // saved continue_jumps.count
+    int break_count;     // saved break_jumps.count
+    int continue_count;  // saved continue_jumps.count
 } XrLoopState;
 
 static inline void loop_state_save(XrCompiler *compiler, XrLoopState *state) {
@@ -57,13 +57,16 @@ static inline void loop_state_restore(XrCompiler *compiler, XrLoopState *state) 
 
 XR_FUNC void compile_expr_stmt(XrCompilerContext *ctx, XrCompiler *c, AstNode *expr);
 XR_FUNC void compile_var_decl(XrCompilerContext *ctx, XrCompiler *c, VarDeclNode *node);
-XR_FUNC void compile_destructure_decl(XrCompilerContext *ctx, XrCompiler *c, DestructureDeclNode *node);
-XR_FUNC void compile_destructure_assign(XrCompilerContext *ctx, XrCompiler *c, DestructureAssignNode *node);
+XR_FUNC void compile_destructure_decl(XrCompilerContext *ctx, XrCompiler *c,
+                                      DestructureDeclNode *node);
+XR_FUNC void compile_destructure_assign(XrCompilerContext *ctx, XrCompiler *c,
+                                        DestructureAssignNode *node);
 XR_FUNC void compile_multi_var_decl(XrCompilerContext *ctx, XrCompiler *c, MultiVarDeclNode *node);
 XR_FUNC void compile_multi_assign(XrCompilerContext *ctx, XrCompiler *c, MultiAssignNode *node);
 XR_FUNC void compile_print(XrCompilerContext *ctx, XrCompiler *c, PrintNode *node);
 XR_FUNC void compile_assignment(XrCompilerContext *ctx, XrCompiler *c, AssignmentNode *node);
-XR_FUNC void compile_compound_assignment(XrCompilerContext *ctx, XrCompiler *c, CompoundAssignmentNode *node);
+XR_FUNC void compile_compound_assignment(XrCompilerContext *ctx, XrCompiler *c,
+                                         CompoundAssignmentNode *node);
 XR_FUNC void compile_inc(XrCompilerContext *ctx, XrCompiler *c, IncDecNode *node);
 XR_FUNC void compile_dec(XrCompilerContext *ctx, XrCompiler *c, IncDecNode *node);
 
@@ -77,7 +80,8 @@ XR_FUNC void compile_index_set(XrCompilerContext *ctx, XrCompiler *c, IndexSetNo
 XR_FUNC void compile_member_set(XrCompilerContext *ctx, XrCompiler *c, MemberSetNode *node);
 
 XR_FUNC void compile_function(XrCompilerContext *ctx, XrCompiler *c, FunctionDeclNode *node);
-XR_FUNC void compile_function_decl_only(XrCompilerContext *ctx, XrCompiler *c, FunctionDeclNode *node);
+XR_FUNC void compile_function_decl_only(XrCompilerContext *ctx, XrCompiler *c,
+                                        FunctionDeclNode *node);
 
 XR_FUNC void compile_try_catch(XrCompilerContext *ctx, XrCompiler *c, TryCatchNode *node);
 XR_FUNC void compile_throw(XrCompilerContext *ctx, XrCompiler *c, ThrowStmtNode *node);
@@ -85,12 +89,16 @@ XR_FUNC void compile_throw(XrCompilerContext *ctx, XrCompiler *c, ThrowStmtNode 
 XR_FUNC void compile_import(XrCompilerContext *ctx, XrCompiler *c, ImportStmtNode *node);
 XR_FUNC void compile_export(XrCompilerContext *ctx, XrCompiler *c, ExportStmtNode *node);
 
-XR_FUNC void compile_go_expr(XrCompilerContext *ctx, XrCompiler *c, GoExprNode *node, int target, bool fire_and_forget);
-XR_FUNC void compile_await_expr(XrCompilerContext *ctx, XrCompiler *c, AwaitExprNode *node, int target);
-XR_FUNC void compile_channel_new(XrCompilerContext *ctx, XrCompiler *c, ChannelNewNode *node, int target);
+XR_FUNC void compile_go_expr(XrCompilerContext *ctx, XrCompiler *c, GoExprNode *node, int target,
+                             bool fire_and_forget);
+XR_FUNC void compile_await_expr(XrCompilerContext *ctx, XrCompiler *c, AwaitExprNode *node,
+                                int target);
+XR_FUNC void compile_channel_new(XrCompilerContext *ctx, XrCompiler *c, ChannelNewNode *node,
+                                 int target);
 XR_FUNC void compile_defer_stmt(XrCompilerContext *ctx, XrCompiler *c, DeferStmtNode *node);
 XR_FUNC void compile_select_stmt(XrCompilerContext *ctx, XrCompiler *c, SelectStmtNode *node);
-XR_FUNC void compile_scope_block(XrCompilerContext *ctx, XrCompiler *c, ScopeBlockNode *node, int target);
+XR_FUNC void compile_scope_block(XrCompilerContext *ctx, XrCompiler *c, ScopeBlockNode *node,
+                                 int target);
 XR_FUNC void compile_cancelled_expr(XrCompilerContext *ctx, XrCompiler *c, int target);
 
-#endif // XSTMT_H
+#endif  // XSTMT_H

@@ -30,13 +30,12 @@ void xr_mpsc_push(XrMPSCQueue *q, struct XrCoroutine *coro) {
     do {
         old_head = atomic_load_explicit(&q->head, memory_order_relaxed);
         coro->sched_link = old_head;
-    } while (!atomic_compare_exchange_weak_explicit(
-        &q->head, &old_head, coro,
-        memory_order_release, memory_order_relaxed));
+    } while (!atomic_compare_exchange_weak_explicit(&q->head, &old_head, coro, memory_order_release,
+                                                    memory_order_relaxed));
 }
 
 // Drain: O(1) atomic swap, returns list via sched_link (newest first)
-struct XrCoroutine* xr_mpsc_drain(XrMPSCQueue *q) {
+struct XrCoroutine *xr_mpsc_drain(XrMPSCQueue *q) {
     return atomic_exchange_explicit(&q->head, NULL, memory_order_acquire);
 }
 

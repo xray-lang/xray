@@ -44,4 +44,4 @@ struct XrProto;
  */
 XR_FUNC bool is_jit_eligible(struct XrProto *proto, bool verbose);
 
-#endif // XIR_ELIGIBILITY_H
+#endif  // XIR_ELIGIBILITY_H

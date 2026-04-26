@@ -29,22 +29,22 @@
 #include "../../src/base/xdefs.h"
 
 // Multicast defaults
-#define XR_DISCOVERY_MCAST_GROUP   "239.42.42.42"
-#define XR_DISCOVERY_MCAST_PORT    47200
-#define XR_DISCOVERY_INTERVAL_MS   3000 // announce every 3 seconds
-#define XR_DISCOVERY_MAGIC         0x58524459 // "XRDY"
-#define XR_DISCOVERY_VERSION       2  // v2: all fields big-endian
+#define XR_DISCOVERY_MCAST_GROUP "239.42.42.42"
+#define XR_DISCOVERY_MCAST_PORT 47200
+#define XR_DISCOVERY_INTERVAL_MS 3000  // announce every 3 seconds
+#define XR_DISCOVERY_MAGIC 0x58524459  // "XRDY"
+#define XR_DISCOVERY_VERSION 2         // v2: all fields big-endian
 
 // Forward declarations
 struct XrCluster;
 
 // Discovery state
 typedef struct XrClusterDiscovery {
-    int               mcast_fd;     // multicast UDP socket (non-blocking)
-    uint16_t          mcast_port;   // multicast port (default 47200)
-    int               interval_ms;  // announce interval
+    int mcast_fd;         // multicast UDP socket (non-blocking)
+    uint16_t mcast_port;  // multicast port (default 47200)
+    int interval_ms;      // announce interval
     struct XrCluster *cluster;
-    uint64_t          cluster_hash; // hash of secret for filtering
+    uint64_t cluster_hash;  // hash of secret for filtering
     /*
      * Discovery runs as a native coroutine on the main worker pool.
      * coro_spawned is set in xr_cluster_discovery_start after
@@ -53,8 +53,8 @@ typedef struct XrClusterDiscovery {
      * spin-wait for clean teardown before closing mcast_fd (whose
      * PollDesc the coro may still hold via netpoll).
      */
-    bool              coro_spawned;
-    _Atomic(bool)     coro_exited;
+    bool coro_spawned;
+    _Atomic(bool) coro_exited;
 } XrClusterDiscovery;
 
 /*

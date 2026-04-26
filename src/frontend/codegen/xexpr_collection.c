@@ -27,17 +27,21 @@
 #include "../../runtime/value/xtype.h"
 #include "../analyzer/xanalyzer.h"
 #include <stdio.h>
-#include <string.h> // strlen
+#include <string.h>  // strlen
 
 // Detect typed array element type from compile-time type info.
 // Returns non-NULL XrType* for Array<int>/Array<float>, NULL otherwise.
 static XrType *get_typed_array_elem_type(XrCompilerContext *ctx, AstNode *array_node) {
-    if (!ctx->analyzer || !array_node) return NULL;
+    if (!ctx->analyzer || !array_node)
+        return NULL;
     XrType *arr_type = xa_analyzer_infer_expr_type(ctx->analyzer, array_node);
-    if (!arr_type || arr_type->kind != XR_KIND_ARRAY) return NULL;
+    if (!arr_type || arr_type->kind != XR_KIND_ARRAY)
+        return NULL;
     XrType *elem = arr_type->container.element_type;
-    if (!elem) return NULL;
-    if (elem->kind == XR_KIND_INT || elem->kind == XR_KIND_FLOAT) return elem;
+    if (!elem)
+        return NULL;
+    if (elem->kind == XR_KIND_INT || elem->kind == XR_KIND_FLOAT)
+        return elem;
     return NULL;
 }
 
@@ -46,13 +50,14 @@ static XrType *get_typed_array_elem_type(XrCompilerContext *ctx, AstNode *array_
 /*
  * Internal implementation: compile array literal (returns register)
  */
-static int compile_array_literal_internal(XrCompilerContext *ctx, XrCompiler *compiler, ArrayLiteralNode *node) {
+static int compile_array_literal_internal(XrCompilerContext *ctx, XrCompiler *compiler,
+                                          ArrayLiteralNode *node) {
     XR_DCHECK(ctx != NULL, "compile_array_literal: NULL ctx");
     XR_DCHECK(compiler != NULL, "compile_array_literal: NULL compiler");
     // Allocate target register
     int array_reg = reg_alloc(ctx, compiler);
 
-    int c_field = ((int)ctx->current_elem_tid << 2) | ctx->current_storage_mode;
+    int c_field = ((int) ctx->current_elem_tid << 2) | ctx->current_storage_mode;
 
     if (node->count > 0) {
         /* Compile elements BEFORE OP_NEWARRAY so that the registers
@@ -75,7 +80,8 @@ static int compile_array_literal_internal(XrCompilerContext *ctx, XrCompiler *co
 /*
  * Compile array literal (returns XrExprDesc)
  */
-XrExprDesc compile_array_literal(XrCompilerContext *ctx, XrCompiler *compiler, ArrayLiteralNode *node) {
+XrExprDesc compile_array_literal(XrCompilerContext *ctx, XrCompiler *compiler,
+                                 ArrayLiteralNode *node) {
     XR_DCHECK(ctx != NULL, "compile_array_literal: NULL ctx");
     XR_DCHECK(compiler != NULL, "compile_array_literal: NULL compiler");
     XrExprDesc e = {0};
@@ -84,26 +90,28 @@ XrExprDesc compile_array_literal(XrCompilerContext *ctx, XrCompiler *compiler, A
     return e;
 }
 
-
 // ========== Map Literals ==========
 
 /*
  * Internal implementation: compile Map literal (returns register)
  */
-static int compile_map_literal_internal(XrCompilerContext *ctx, XrCompiler *compiler, MapLiteralNode *node) {
+static int compile_map_literal_internal(XrCompilerContext *ctx, XrCompiler *compiler,
+                                        MapLiteralNode *node) {
     // LIFO mode: allocate and protect target register
     int map_reg = xreg_alloc_temp(compiler->regalloc);
     int map_protect_id = xreg_protect_begin(compiler->regalloc, map_reg, 1, "map_literal");
 
     // Create empty Map (use dedicated OP_NEWMAP instruction)
     // OP_NEWMAP A B C: R[A] = #{}, B=capacity hint, C=(key_kind<<7)|(value_tid<<2)|flags
-    int key_kind = (ctx->current_key_tid == XR_TID_STRING) ? 1 : (ctx->current_key_tid == XR_TID_INT) ? 2 : 0;
-    int c_field = (key_kind << 7) | (((int)ctx->current_elem_tid & 0x1F) << 2) | ctx->current_storage_mode;
+    int key_kind = (ctx->current_key_tid == XR_TID_STRING) ? 1
+                   : (ctx->current_key_tid == XR_TID_INT)  ? 2
+                                                           : 0;
+    int c_field =
+        (key_kind << 7) | (((int) ctx->current_elem_tid & 0x1F) << 2) | ctx->current_storage_mode;
     xemit_newmap(compiler->emitter, map_reg, node->count, c_field);
 
     // Set each key-value pair (map_reg already auto-protected)
     if (node->count > 0) {
-
         for (int i = 0; i < node->count; i++) {
             // Compile value expression (compile value first, since key might be constant)
             XrExprDesc value_expr = xr_compile_expr(ctx, compiler, node->values[i]);
@@ -112,9 +120,10 @@ static int compile_map_literal_internal(XrCompilerContext *ctx, XrCompiler *comp
 
             // Optimization: constant string key uses OP_MAP_SETK
             if (node->keys[i]->type == AST_LITERAL_STRING) {
-                LiteralNode *lit = (LiteralNode *)&node->keys[i]->as;
+                LiteralNode *lit = (LiteralNode *) &node->keys[i]->as;
                 const char *str_val = lit->raw_value.string_val;
-                // Use compile-time interned string, same content shares same object, Map key comparison can use pointer comparison
+                // Use compile-time interned string, same content shares same object, Map key
+                // comparison can use pointer comparison
                 XrString *key_str = xr_compile_time_intern(ctx->X, str_val, strlen(str_val));
                 int key_const = xr_vm_proto_add_constant(compiler->proto, xr_string_value(key_str));
 
@@ -151,7 +160,6 @@ XrExprDesc compile_map_literal(XrCompilerContext *ctx, XrCompiler *compiler, Map
     return e;
 }
 
-
 // ========== Index Access ==========
 
 /*
@@ -172,7 +180,7 @@ XrExprDesc compile_index_get(XrCompilerContext *ctx, XrCompiler *compiler, Index
 
     // Optimization: constant string key uses OP_MAP_GETK
     if (node->index->type == AST_LITERAL_STRING) {
-        LiteralNode *lit = (LiteralNode *)&node->index->as;
+        LiteralNode *lit = (LiteralNode *) &node->index->as;
         const char *str_val = lit->raw_value.string_val;
         // Use compile-time interned string, shares same object with Map key
         XrString *key_str = xr_compile_time_intern(ctx->X, str_val, strlen(str_val));
@@ -193,7 +201,7 @@ XrExprDesc compile_index_get(XrCompilerContext *ctx, XrCompiler *compiler, Index
 
     // Optimization: integer literal index uses OP_ARRAY_GETC (e.g. arr[0], arr[1])
     if (node->index->type == AST_LITERAL_INT) {
-        LiteralNode *lit = (LiteralNode *)&node->index->as;
+        LiteralNode *lit = (LiteralNode *) &node->index->as;
         int64_t idx = lit->raw_value.int_val;
 
         // C parameter only 8 bits (0-255), check range
@@ -201,7 +209,7 @@ XrExprDesc compile_index_get(XrCompilerContext *ctx, XrCompiler *compiler, Index
             XrType *elem_type = get_typed_array_elem_type(ctx, node->array);
             if (elem_type) {
                 // Typed array: use OP_TARRAY_GETC, output raw I64/F64
-                int pc = xemit_tarray_getc(compiler->emitter, 0, array_reg, (int)idx);
+                int pc = xemit_tarray_getc(compiler->emitter, 0, array_reg, (int) idx);
                 reg_free(compiler, array_reg);
                 e.kind = XEXPR_RELOC;
                 e.u.pc = pc;
@@ -210,7 +218,7 @@ XrExprDesc compile_index_get(XrCompilerContext *ctx, XrCompiler *compiler, Index
                 return e;
             }
             // OP_ARRAY_GETC A B C: R[A] = R[B][C]
-            int pc = xemit_array_getc(compiler->emitter, 0, array_reg, (int)idx);
+            int pc = xemit_array_getc(compiler->emitter, 0, array_reg, (int) idx);
             reg_free(compiler, array_reg);
 
             e.kind = XEXPR_RELOC;
@@ -290,7 +298,6 @@ XrExprDesc compile_index_get(XrCompilerContext *ctx, XrCompiler *compiler, Index
     return e;
 }
 
-
 // ========== Slice Expression ==========
 
 /*
@@ -358,7 +365,6 @@ XrExprDesc compile_slice_expr(XrCompilerContext *ctx, XrCompiler *compiler, Slic
     return e;
 }
 
-
 // ========== Object Literals (using Json V2 optimization) ==========
 
 /*
@@ -372,14 +378,14 @@ XrExprDesc compile_slice_expr(XrCompilerContext *ctx, XrCompiler *compiler, Slic
  * - Supports computed properties { [expr]: value }
  */
 // Emit a single field initializer for object literal at the given shape index
-static void emit_json_field_init(XrCompilerContext *ctx, XrCompiler *compiler,
-                                  int obj_reg, uint32_t shape_idx, AstNode *val_node) {
+static void emit_json_field_init(XrCompilerContext *ctx, XrCompiler *compiler, int obj_reg,
+                                 uint32_t shape_idx, AstNode *val_node) {
     if (val_node->type == AST_LITERAL_NULL) {
         xemit_json_init_n(compiler->emitter, obj_reg, shape_idx, 0);
     } else if (val_node->type == AST_LITERAL_INT) {
         int64_t int_val = val_node->as.literal.raw_value.int_val;
         if (int_val >= -128 && int_val <= 127) {
-            xemit_json_init_i(compiler->emitter, obj_reg, shape_idx, (int)(int_val) & 0xFF);
+            xemit_json_init_i(compiler->emitter, obj_reg, shape_idx, (int) (int_val) & 0xFF);
         } else {
             int value_reg = xr_compile_expression(ctx, compiler, val_node);
             xemit_json_init(compiler->emitter, obj_reg, shape_idx, value_reg);
@@ -392,7 +398,8 @@ static void emit_json_field_init(XrCompilerContext *ctx, XrCompiler *compiler,
     }
 }
 
-static int compile_object_literal_internal(XrCompilerContext *ctx, XrCompiler *compiler, ObjectLiteralNode *node) {
+static int compile_object_literal_internal(XrCompilerContext *ctx, XrCompiler *compiler,
+                                           ObjectLiteralNode *node) {
     uint32_t field_count = node->count;
 
     // Check if has computed properties
@@ -400,27 +407,25 @@ static int compile_object_literal_internal(XrCompilerContext *ctx, XrCompiler *c
     uint32_t static_count = 0;  // Static field count
 
     // Use interned strings to store static field names (pointer comparison O(1))
-    XrString** interned_names = NULL;
+    XrString **interned_names = NULL;
 
     // Strict type alias: reorder literal fields to match type definition order.
     // This ensures Shape field indices match compile-time field_idx used by
     // OP_JSON_GET/SET and OP_TFIELD_GET/SET.
     XrType *target_type = ctx->current_object_type;
     ctx->current_object_type = NULL;  // Consume: prevent nested literals from inheriting
-    bool needs_reorder = target_type
-                         && !target_type->object.allow_extension
-                         && target_type->object.field_count > 0
-                         && target_type->object.field_names;
+    bool needs_reorder = target_type && !target_type->object.allow_extension &&
+                         target_type->object.field_count > 0 && target_type->object.field_names;
 
     // reorder_map[target_idx] = literal_idx, or -1 if missing
     int *reorder_map = NULL;
 
     if (needs_reorder) {
         int target_count = target_type->object.field_count;
-        static_count = (uint32_t)target_count;
+        static_count = (uint32_t) target_count;
 
-        reorder_map = (int*)xr_malloc(target_count * sizeof(int));
-        interned_names = (XrString**)xr_malloc(target_count * sizeof(XrString*));
+        reorder_map = (int *) xr_malloc(target_count * sizeof(int));
+        interned_names = (XrString **) xr_malloc(target_count * sizeof(XrString *));
 
         for (int ti = 0; ti < target_count; ti++) {
             const char *target_name = target_type->object.field_names[ti];
@@ -429,11 +434,13 @@ static int compile_object_literal_internal(XrCompilerContext *ctx, XrCompiler *c
             // Find matching literal field
             reorder_map[ti] = -1;
             for (uint32_t li = 0; li < field_count; li++) {
-                if (has_computed && node->computed[li]) continue;
-                if (node->keys[li]->type != AST_LITERAL_STRING) continue;
+                if (has_computed && node->computed[li])
+                    continue;
+                if (node->keys[li]->type != AST_LITERAL_STRING)
+                    continue;
                 const char *lit_name = node->keys[li]->as.literal.raw_value.string_val;
                 if (strcmp(lit_name, target_name) == 0) {
-                    reorder_map[ti] = (int)li;
+                    reorder_map[ti] = (int) li;
                     break;
                 }
             }
@@ -447,7 +454,7 @@ static int compile_object_literal_internal(XrCompilerContext *ctx, XrCompiler *c
         }
 
         if (static_count > 0) {
-            interned_names = (XrString**)xr_malloc(static_count * sizeof(XrString*));
+            interned_names = (XrString **) xr_malloc(static_count * sizeof(XrString *));
             uint32_t idx = 0;
 
             for (uint32_t i = 0; i < field_count; i++) {
@@ -457,9 +464,9 @@ static int compile_object_literal_internal(XrCompilerContext *ctx, XrCompiler *c
 
                 // key must be string literal
                 if (node->keys[i]->type != AST_LITERAL_STRING) {
-                    xr_compiler_error(ctx, compiler,
-                        "Object literal keys must be string literals");
-                    if (interned_names) xr_free((void*)interned_names);
+                    xr_compiler_error(ctx, compiler, "Object literal keys must be string literals");
+                    if (interned_names)
+                        xr_free((void *) interned_names);
                     return reg_alloc(ctx, compiler);
                 }
 
@@ -470,19 +477,16 @@ static int compile_object_literal_internal(XrCompilerContext *ctx, XrCompiler *c
     }
 
     // Use Shape cache (static fields only)
-    XrShape *shape = xr_shape_cache_get_or_create(
-        ctx->X,
-        ctx->shape_cache,
-        interned_names,
-        static_count
-    );
+    XrShape *shape =
+        xr_shape_cache_get_or_create(ctx->X, ctx->shape_cache, interned_names, static_count);
 
     if (interned_names) {
-        xr_free((void*)interned_names);
+        xr_free((void *) interned_names);
     }
 
     if (!shape) {
-        if (reorder_map) xr_free(reorder_map);
+        if (reorder_map)
+            xr_free(reorder_map);
         xr_compiler_error(ctx, compiler, "Failed to create shape");
         return reg_alloc(ctx, compiler);
     }
@@ -494,10 +498,7 @@ static int compile_object_literal_internal(XrCompilerContext *ctx, XrCompiler *c
     // OP_NEWJSON: create Json object
     // Shape uses malloc allocation (not GC managed), stored as integer pointer
     // B = Shape constant index, C = storage mode
-    int shape_const_idx = xr_vm_proto_add_constant(
-        compiler->proto,
-        xr_int((intptr_t)shape)
-    );
+    int shape_const_idx = xr_vm_proto_add_constant(compiler->proto, xr_int((intptr_t) shape));
     xemit_newjson(compiler->emitter, obj_reg, shape_const_idx, ctx->current_storage_mode);
 
     // Initialize fields
@@ -521,7 +522,8 @@ static int compile_object_literal_internal(XrCompilerContext *ctx, XrCompiler *c
         uint32_t static_idx = 0;
         for (uint32_t i = 0; i < field_count; i++) {
             bool is_computed = has_computed && node->computed[i];
-            if (is_computed) continue;
+            if (is_computed)
+                continue;
 
             emit_json_field_init(ctx, compiler, obj_reg, static_idx, node->values[i]);
             static_idx++;
@@ -530,7 +532,8 @@ static int compile_object_literal_internal(XrCompilerContext *ctx, XrCompiler *c
         // Pass 2: emit computed properties via INDEX_SET (may convert to dictionary)
         if (has_computed) {
             for (uint32_t i = 0; i < field_count; i++) {
-                if (!node->computed[i]) continue;
+                if (!node->computed[i])
+                    continue;
 
                 int value_reg = xr_compile_expression(ctx, compiler, node->values[i]);
                 int key_reg = xr_compile_expression(ctx, compiler, node->keys[i]);
@@ -547,26 +550,27 @@ static int compile_object_literal_internal(XrCompilerContext *ctx, XrCompiler *c
     return obj_reg;
 }
 
-XrExprDesc compile_object_literal(XrCompilerContext *ctx, XrCompiler *compiler, ObjectLiteralNode *node) {
+XrExprDesc compile_object_literal(XrCompilerContext *ctx, XrCompiler *compiler,
+                                  ObjectLiteralNode *node) {
     XrExprDesc e = {0};
     int reg = compile_object_literal_internal(ctx, compiler, node);
     xexpr_init(&e, XEXPR_TEMP, reg);
     return e;
 }
 
-
 // ========== Set Literals ==========
 
 /*
  * Internal implementation: compile Set literal (returns register)
  */
-static int compile_set_literal_internal(XrCompilerContext *ctx, XrCompiler *compiler, SetLiteralNode *node) {
+static int compile_set_literal_internal(XrCompilerContext *ctx, XrCompiler *compiler,
+                                        SetLiteralNode *node) {
     // Allocate target register
     int set_reg = reg_alloc(ctx, compiler);
 
     // Use dedicated OP_NEWSET instruction to create Set object
     // B = (elem_tid << 2) | storage_mode
-    int b_field = ((int)ctx->current_elem_tid << 2) | ctx->current_storage_mode;
+    int b_field = ((int) ctx->current_elem_tid << 2) | ctx->current_storage_mode;
     xemit_newset(compiler->emitter, set_reg, b_field);
 
     // Generate set.add(elem) call for each element
@@ -611,5 +615,3 @@ XrExprDesc compile_set_literal(XrCompilerContext *ctx, XrCompiler *compiler, Set
     xexpr_init(&e, XEXPR_TEMP, reg);
     return e;
 }
-
-

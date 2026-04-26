@@ -42,7 +42,7 @@ typedef struct XirPassChange {
 
 /* Sentinel: "nothing changed" — shorthand for passes that early-exit. */
 static inline XirPassChange xir_pass_no_change(void) {
-    return (XirPassChange){ false, false, false, 0, 0, 0 };
+    return (XirPassChange){false, false, false, 0, 0, 0};
 }
 
 /* Sentinel: "everything changed" — matches the conservative reset the
@@ -50,7 +50,7 @@ static inline XirPassChange xir_pass_no_change(void) {
  * passes that touch mutation but have not yet grown fine-grained
  * bookkeeping. */
 static inline XirPassChange xir_pass_change_all(void) {
-    return (XirPassChange){ true, true, true, 0, 0, 0 };
+    return (XirPassChange){true, true, true, 0, 0, 0};
 }
 
 // Forward declaration
@@ -59,9 +59,9 @@ typedef struct XrProto XrProto;
 /* ========== Optimization Levels ========== */
 
 typedef enum {
-    XIR_OPT_NONE  = 0,  // -O0: DCE only (Tier 1 JIT — fast compile)
+    XIR_OPT_NONE = 0,   // -O0: DCE only (Tier 1 JIT — fast compile)
     XIR_OPT_BASIC = 1,  // -O1: DCE + ConstProp + ConstFold
-    XIR_OPT_FULL  = 2,  // -O2: full pipeline (Tier 2 JIT / AOT)
+    XIR_OPT_FULL = 2,   // -O2: full pipeline (Tier 2 JIT / AOT)
 } XirOptLevel;
 
 /* ========== Pipeline API ========== */
@@ -92,34 +92,34 @@ typedef XirPassChange (*XirPassFnProto)(XirFunc *func, XrProto *proto);
 /* Flags describing per-pass properties.  Currently advisory only;
  * used to drive logging and to pick the right verify macro
  * equivalent.  Future: fine-grained cache invalidation. */
-#define XIR_PASS_NONE          0u
-#define XIR_PASS_VERIFY_SE     (1u << 0)   // DCE/CSE/GVN/copy_prop: SE count must not drop
-#define XIR_PASS_NEEDS_PROTO   (1u << 1)   // pass takes (func, proto)
-#define XIR_PASS_SKIP_CFG_VERIFY (1u << 2) // builder may leave pred lists dirty pre-CFG
-#define XIR_PASS_NO_RESET      (1u << 3)   // pass does not touch IR (purely analysis)
+#define XIR_PASS_NONE 0u
+#define XIR_PASS_VERIFY_SE (1u << 0)        // DCE/CSE/GVN/copy_prop: SE count must not drop
+#define XIR_PASS_NEEDS_PROTO (1u << 1)      // pass takes (func, proto)
+#define XIR_PASS_SKIP_CFG_VERIFY (1u << 2)  // builder may leave pred lists dirty pre-CFG
+#define XIR_PASS_NO_RESET (1u << 3)         // pass does not touch IR (purely analysis)
 
 typedef struct XirPassDesc {
-    const char    *name;
+    const char *name;
     union {
-        XirPassFn      v;      // used when !NEEDS_PROTO
-        XirPassFnProto p;      // used when NEEDS_PROTO
+        XirPassFn v;       // used when !NEEDS_PROTO
+        XirPassFnProto p;  // used when NEEDS_PROTO
     } fn;
-    uint32_t       flags;
+    uint32_t flags;
 } XirPassDesc;
 
 typedef struct XirPipelineStats {
-    uint32_t rounds_run;          // number of complete sweeps performed
-    uint32_t invocations;         // sum of passes executed across all rounds
-    uint32_t converged;           // non-zero if driver stopped on convergence
-    uint32_t timed_out;           // non-zero if budget deadline was exceeded
+    uint32_t rounds_run;   // number of complete sweeps performed
+    uint32_t invocations;  // sum of passes executed across all rounds
+    uint32_t converged;    // non-zero if driver stopped on convergence
+    uint32_t timed_out;    // non-zero if budget deadline was exceeded
 } XirPipelineStats;
 
 /* Compile-time budget: caps pipeline wall-clock time so bg workers
  * are not blocked by pathological functions.  Pass NULL for no limit. */
 typedef struct XirCompileBudget {
-    uint64_t start_ns;            // pipeline start timestamp
-    uint64_t deadline_ns;         // start_ns + budget (default 50ms)
-    bool     timed_out;           // set by driver when deadline exceeded
+    uint64_t start_ns;     // pipeline start timestamp
+    uint64_t deadline_ns;  // start_ns + budget (default 50ms)
+    bool timed_out;        // set by driver when deadline exceeded
 } XirCompileBudget;
 
 /*
@@ -132,12 +132,9 @@ typedef struct XirCompileBudget {
  * of every round and bails out early if exceeded.  The partially
  * optimised IR is still valid — only remaining passes are skipped.
  */
-XR_FUNC XirPipelineStats xir_run_fixedpoint(XirFunc *func,
-                                             XrProto *proto,
-                                             const XirPassDesc *passes,
-                                             uint32_t npass,
-                                             uint32_t max_rounds,
-                                             XirCompileBudget *budget);
+XR_FUNC XirPipelineStats xir_run_fixedpoint(XirFunc *func, XrProto *proto,
+                                            const XirPassDesc *passes, uint32_t npass,
+                                            uint32_t max_rounds, XirCompileBudget *budget);
 
 /* ========== Individual Pass API ========== */
 
@@ -292,8 +289,7 @@ XR_FUNC XirPassChange xir_pass_range_analysis(XirFunc *func);
 // call_args: array of XirRef for callee parameters
 // nargs: number of arguments
 // Returns the XirRef of the inlined return value (or XIR_NONE on failure).
-XR_FUNC XirRef xir_inline_function(XirFunc *caller, XirBlock *call_block,
-                           uint32_t call_ins_idx, XirFunc *callee,
-                           XirRef *call_args, uint32_t nargs);
+XR_FUNC XirRef xir_inline_function(XirFunc *caller, XirBlock *call_block, uint32_t call_ins_idx,
+                                   XirFunc *callee, XirRef *call_args, uint32_t nargs);
 
-#endif // XIR_PASS_H
+#endif  // XIR_PASS_H

@@ -27,8 +27,7 @@ static void fmt_literal(XrFmtContext *ctx, AstNode *node) {
 
     switch (node->type) {
         case AST_LITERAL_INT:
-            xfmt_write_fmt(ctx, "%lld",
-                           (long long)node->as.literal.raw_value.int_val);
+            xfmt_write_fmt(ctx, "%lld", (long long) node->as.literal.raw_value.int_val);
             break;
         case AST_LITERAL_FLOAT:
             xfmt_write_fmt(ctx, "%g", node->as.literal.raw_value.float_val);
@@ -41,7 +40,7 @@ static void fmt_literal(XrFmtContext *ctx, AstNode *node) {
             // Re-escape via xfmt_emit_string so quotes / backslashes /
             // control bytes round-trip through the parser.
             const char *s = node->as.literal.raw_value.string_val;
-            xfmt_emit_string(ctx, s, s ? (int)strlen(s) : 0);
+            xfmt_emit_string(ctx, s, s ? (int) strlen(s) : 0);
             break;
         }
         case AST_LITERAL_REGEX:
@@ -77,10 +76,17 @@ static void fmt_binary(XrFmtContext *ctx, AstNode *node) {
 static void fmt_unary(XrFmtContext *ctx, AstNode *node) {
     xfmt_write_indent(ctx);
     switch (node->type) {
-        case AST_UNARY_NEG: xfmt_write_char(ctx, '-'); break;
-        case AST_UNARY_NOT: xfmt_write_char(ctx, '!'); break;
-        case AST_UNARY_BNOT: xfmt_write_char(ctx, '~'); break;
-        default: break;
+        case AST_UNARY_NEG:
+            xfmt_write_char(ctx, '-');
+            break;
+        case AST_UNARY_NOT:
+            xfmt_write_char(ctx, '!');
+            break;
+        case AST_UNARY_BNOT:
+            xfmt_write_char(ctx, '~');
+            break;
+        default:
+            break;
     }
     xfmt_emit_expression(ctx, node->as.unary.operand);
 }
@@ -91,7 +97,8 @@ static void fmt_call(XrFmtContext *ctx, AstNode *node) {
     xfmt_emit_generic_args(ctx, call->type_args, call->type_arg_count);
     xfmt_write_char(ctx, '(');
     for (int i = 0; i < call->arg_count; i++) {
-        if (i > 0) xfmt_write_str(ctx, ", ");
+        if (i > 0)
+            xfmt_write_str(ctx, ", ");
         xfmt_emit_expression(ctx, call->arguments[i]);
     }
     xfmt_write_char(ctx, ')');
@@ -109,7 +116,8 @@ static void fmt_new_expr(XrFmtContext *ctx, AstNode *node) {
     xfmt_emit_generic_args(ctx, new_expr->type_args, new_expr->type_arg_count);
     xfmt_write_char(ctx, '(');
     for (int i = 0; i < new_expr->arg_count; i++) {
-        if (i > 0) xfmt_write_str(ctx, ", ");
+        if (i > 0)
+            xfmt_write_str(ctx, ", ");
         xfmt_emit_expression(ctx, new_expr->arguments[i]);
     }
     xfmt_write_char(ctx, ')');
@@ -161,7 +169,8 @@ static void fmt_match_expr(XrFmtContext *ctx, AstNode *node) {
 // ----------------------------------------------------------------------------
 
 void xfmt_emit_expression(XrFmtContext *ctx, AstNode *node) {
-    if (!node) return;
+    if (!node)
+        return;
 
     switch (node->type) {
         // Literals
@@ -254,7 +263,8 @@ void xfmt_emit_expression(XrFmtContext *ctx, AstNode *node) {
             }
             xfmt_write_char(ctx, '(');
             for (int i = 0; i < sc->arg_count; i++) {
-                if (i > 0) xfmt_write_str(ctx, ", ");
+                if (i > 0)
+                    xfmt_write_str(ctx, ", ");
                 xfmt_emit_expression(ctx, sc->arguments[i]);
             }
             xfmt_write_char(ctx, ')');
@@ -267,7 +277,8 @@ void xfmt_emit_expression(XrFmtContext *ctx, AstNode *node) {
             xfmt_write_char(ctx, '[');
             ArrayLiteralNode *arr = &node->as.array_literal;
             for (int i = 0; i < arr->count; i++) {
-                if (i > 0) xfmt_write_str(ctx, ", ");
+                if (i > 0)
+                    xfmt_write_str(ctx, ", ");
                 xfmt_emit_expression(ctx, arr->elements[i]);
             }
             xfmt_write_char(ctx, ']');
@@ -283,7 +294,8 @@ void xfmt_emit_expression(XrFmtContext *ctx, AstNode *node) {
             } else {
                 xfmt_write_str(ctx, "{ ");
                 for (int i = 0; i < obj->count; i++) {
-                    if (i > 0) xfmt_write_str(ctx, ", ");
+                    if (i > 0)
+                        xfmt_write_str(ctx, ", ");
                     xfmt_emit_expression(ctx, obj->keys[i]);
                     xfmt_write_str(ctx, ": ");
                     xfmt_emit_expression(ctx, obj->values[i]);
@@ -302,7 +314,8 @@ void xfmt_emit_expression(XrFmtContext *ctx, AstNode *node) {
             } else {
                 xfmt_write_str(ctx, "{ ");
                 for (int i = 0; i < map->count; i++) {
-                    if (i > 0) xfmt_write_str(ctx, ", ");
+                    if (i > 0)
+                        xfmt_write_str(ctx, ", ");
                     xfmt_emit_expression(ctx, map->keys[i]);
                     xfmt_write_str(ctx, " => ");
                     xfmt_emit_expression(ctx, map->values[i]);
@@ -318,7 +331,8 @@ void xfmt_emit_expression(XrFmtContext *ctx, AstNode *node) {
             xfmt_write_str(ctx, "#[");
             SetLiteralNode *set = &node->as.set_literal;
             for (int i = 0; i < set->count; i++) {
-                if (i > 0) xfmt_write_str(ctx, ", ");
+                if (i > 0)
+                    xfmt_write_str(ctx, ", ");
                 xfmt_emit_expression(ctx, set->elements[i]);
             }
             xfmt_write_char(ctx, ']');
@@ -464,7 +478,8 @@ void xfmt_emit_expression(XrFmtContext *ctx, AstNode *node) {
             xfmt_emit_generic_params(ctx, fn->type_params, fn->type_param_count);
             xfmt_write_char(ctx, '(');
             for (int i = 0; i < fn->param_count; i++) {
-                if (i > 0) xfmt_write_str(ctx, ", ");
+                if (i > 0)
+                    xfmt_write_str(ctx, ", ");
                 xfmt_write_str(ctx, fn->params[i]->name);
                 if (fn->params[i]->type) {
                     xfmt_write_str(ctx, ": ");
@@ -518,7 +533,8 @@ void xfmt_emit_expression(XrFmtContext *ctx, AstNode *node) {
                     has_prev = 1;
                 }
                 if (go->priority) {
-                    if (has_prev) xfmt_write_str(ctx, ", ");
+                    if (has_prev)
+                        xfmt_write_str(ctx, ", ");
                     xfmt_write_str(ctx, "priority: ");
                     xfmt_emit_expression(ctx, go->priority);
                 }
@@ -537,8 +553,10 @@ void xfmt_emit_expression(XrFmtContext *ctx, AstNode *node) {
             xfmt_write_indent(ctx);
             AwaitExprNode *aw = &node->as.await_expr;
             xfmt_write_str(ctx, "await");
-            if (aw->is_any) xfmt_write_str(ctx, ".any");
-            if (aw->is_all) xfmt_write_str(ctx, ".all");
+            if (aw->is_any)
+                xfmt_write_str(ctx, ".any");
+            if (aw->is_all)
+                xfmt_write_str(ctx, ".all");
             xfmt_write_space(ctx);
             xfmt_emit_expression(ctx, aw->expr);
             if (aw->timeout) {
@@ -583,7 +601,8 @@ void xfmt_emit_expression(XrFmtContext *ctx, AstNode *node) {
         case AST_PATTERN_MULTI: {
             PatternMultiNode *pm = &node->as.pattern_multi;
             for (int i = 0; i < pm->count; i++) {
-                if (i > 0) xfmt_write_str(ctx, ", ");
+                if (i > 0)
+                    xfmt_write_str(ctx, ", ");
                 xfmt_emit_expression(ctx, pm->patterns[i]);
             }
             break;

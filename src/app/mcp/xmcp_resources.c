@@ -37,26 +37,14 @@ typedef struct {
 } ResourceDef;
 
 static const ResourceDef RESOURCES[] = {
-    {
-        "xray://spec/cheatsheet",
-        "Xray Language Cheatsheet",
-        "Complete syntax quick reference for the Xray programming language",
-        "text/markdown"
-    },
-    {
-        "xray://spec/concurrency",
-        "Xray Concurrency Model",
-        "Detailed reference for Xray's concurrency safety model, channels, and coroutines",
-        "text/markdown"
-    },
-    {
-        "xray://stdlib/modules",
-        "Xray Standard Library",
-        "List of all standard library modules with descriptions",
-        "text/markdown"
-    },
-    {NULL, NULL, NULL, NULL}
-};
+    {"xray://spec/cheatsheet", "Xray Language Cheatsheet",
+     "Complete syntax quick reference for the Xray programming language", "text/markdown"},
+    {"xray://spec/concurrency", "Xray Concurrency Model",
+     "Detailed reference for Xray's concurrency safety model, channels, and coroutines",
+     "text/markdown"},
+    {"xray://stdlib/modules", "Xray Standard Library",
+     "List of all standard library modules with descriptions", "text/markdown"},
+    {NULL, NULL, NULL, NULL}};
 
 /* --------------------------------------------------------------------------
  * Resource template definitions
@@ -70,23 +58,15 @@ typedef struct {
 } ResourceTemplateDef;
 
 static const ResourceTemplateDef TEMPLATES[] = {
-    {
-        "xray://spec/topic/{name}",
-        "Xray Syntax Topic",
-        "Look up a specific Xray language syntax topic by name. "
-        "Topics: variables, types, functions, control_flow, class, struct, "
-        "interface, enum, generics, collections, string, channel, coroutine, "
-        "concurrency_rules, modules, testing, operators, builtin_functions.",
-        "text/markdown"
-    },
-    {
-        "xray://stdlib/{module}",
-        "Xray Stdlib Module",
-        "Detailed information about a specific standard library module.",
-        "text/markdown"
-    },
-    {NULL, NULL, NULL, NULL}
-};
+    {"xray://spec/topic/{name}", "Xray Syntax Topic",
+     "Look up a specific Xray language syntax topic by name. "
+     "Topics: variables, types, functions, control_flow, class, struct, "
+     "interface, enum, generics, collections, string, channel, coroutine, "
+     "concurrency_rules, modules, testing, operators, builtin_functions.",
+     "text/markdown"},
+    {"xray://stdlib/{module}", "Xray Stdlib Module",
+     "Detailed information about a specific standard library module.", "text/markdown"},
+    {NULL, NULL, NULL, NULL}};
 
 /* --------------------------------------------------------------------------
  * URI template matching (RFC 6570 Level 1: simple {variable})
@@ -95,23 +75,25 @@ static const ResourceTemplateDef TEMPLATES[] = {
 /* Match a URI against a template. If matched, extract the variable value.
  * Returns the extracted variable string or NULL if no match.
  * The returned pointer points into the `uri` string (no allocation). */
-static const char *match_template(const char *uri, const char *tmpl,
-                                    int *var_len) {
+static const char *match_template(const char *uri, const char *tmpl, int *var_len) {
     XR_DCHECK(uri != NULL, "match_template: NULL uri");
     XR_DCHECK(tmpl != NULL, "match_template: NULL tmpl");
     XR_DCHECK(var_len != NULL, "match_template: NULL var_len");
 
     /* Find '{' in template */
     const char *lbrace = strchr(tmpl, '{');
-    if (!lbrace) return NULL;
+    if (!lbrace)
+        return NULL;
 
     /* Prefix must match */
-    size_t prefix_len = (size_t)(lbrace - tmpl);
-    if (strncmp(uri, tmpl, prefix_len) != 0) return NULL;
+    size_t prefix_len = (size_t) (lbrace - tmpl);
+    if (strncmp(uri, tmpl, prefix_len) != 0)
+        return NULL;
 
     /* Find '}' in template */
     const char *rbrace = strchr(lbrace, '}');
-    if (!rbrace) return NULL;
+    if (!rbrace)
+        return NULL;
 
     /* Extract the variable value from URI */
     const char *var_start = uri + prefix_len;
@@ -122,16 +104,18 @@ static const char *match_template(const char *uri, const char *tmpl,
 
     if (suffix_len == 0) {
         /* No suffix: rest of URI is the variable */
-        *var_len = (int)strlen(var_start);
+        *var_len = (int) strlen(var_start);
     } else {
         /* Find suffix in remaining URI */
         const char *suf_pos = strstr(var_start, suffix);
-        if (!suf_pos) return NULL;
-        *var_len = (int)(suf_pos - var_start);
+        if (!suf_pos)
+            return NULL;
+        *var_len = (int) (suf_pos - var_start);
     }
 
     /* Variable must be non-empty */
-    if (*var_len <= 0) return NULL;
+    if (*var_len <= 0)
+        return NULL;
     return var_start;
 }
 
@@ -140,27 +124,29 @@ static const char *match_template(const char *uri, const char *tmpl,
  * -------------------------------------------------------------------------- */
 
 /* Read xray://spec/topic/{name} — returns topic content from knowledge base */
-static const char *read_topic_resource(XmcpServer *server, const char *name,
-                                        int name_len) {
-    if (!server->knowledge) return NULL;
+static const char *read_topic_resource(XmcpServer *server, const char *name, int name_len) {
+    if (!server->knowledge)
+        return NULL;
 
     /* Copy name to stack for NUL termination */
     char buf[128];
-    if (name_len >= (int)sizeof(buf)) return NULL;
-    memcpy(buf, name, (size_t)name_len);
+    if (name_len >= (int) sizeof(buf))
+        return NULL;
+    memcpy(buf, name, (size_t) name_len);
     buf[name_len] = '\0';
 
     return xmcp_knowledge_lookup_topic(server->knowledge, buf);
 }
 
 /* Read xray://stdlib/{module} — returns module info from knowledge base */
-static char *read_stdlib_resource(XmcpServer *server, const char *module,
-                                    int module_len) {
-    if (!server->knowledge) return NULL;
+static char *read_stdlib_resource(XmcpServer *server, const char *module, int module_len) {
+    if (!server->knowledge)
+        return NULL;
 
     char buf[128];
-    if (module_len >= (int)sizeof(buf)) return NULL;
-    memcpy(buf, module, (size_t)module_len);
+    if (module_len >= (int) sizeof(buf))
+        return NULL;
+    memcpy(buf, module, (size_t) module_len);
     buf[module_len] = '\0';
 
     return xmcp_knowledge_search_stdlib(server->knowledge, buf, buf);
@@ -171,7 +157,7 @@ static char *read_stdlib_resource(XmcpServer *server, const char *module,
  * -------------------------------------------------------------------------- */
 
 XrJsonValue *xmcp_handle_resources_list(XmcpServer *server) {
-    (void)server;
+    (void) server;
 
     XrJsonValue *result = xjson_new_object();
     XrJsonValue *resources = xjson_new_array();
@@ -194,7 +180,7 @@ XrJsonValue *xmcp_handle_resources_list(XmcpServer *server) {
  * -------------------------------------------------------------------------- */
 
 XrJsonValue *xmcp_handle_resource_templates_list(XmcpServer *server) {
-    (void)server;
+    (void) server;
 
     XrJsonValue *result = xjson_new_object();
     XrJsonValue *templates = xjson_new_array();
@@ -242,16 +228,14 @@ XrJsonValue *xmcp_handle_resources_read(XmcpServer *server, XrJsonValue *params)
     /* Try template resources if no static match */
     if (!text) {
         int var_len = 0;
-        const char *var = match_template(uri, "xray://spec/topic/{name}",
-                                           &var_len);
+        const char *var = match_template(uri, "xray://spec/topic/{name}", &var_len);
         if (var) {
             text = read_topic_resource(server, var, var_len);
         }
     }
     if (!text && !dyn_text) {
         int var_len = 0;
-        const char *var = match_template(uri, "xray://stdlib/{module}",
-                                           &var_len);
+        const char *var = match_template(uri, "xray://stdlib/{module}", &var_len);
         if (var) {
             dyn_text = read_stdlib_resource(server, var, var_len);
         }

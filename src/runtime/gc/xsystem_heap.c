@@ -20,11 +20,11 @@
 #include "../xshared.h"
 #include "../../coro/xcoro_pool.h"
 #include "../../coro/xcoroutine.h"
-#include "xgc_header.h" // XR_TCOROUTINE
-#include "../object/xstring.h" // STR_FLAG_GLOBAL
+#include "xgc_header.h"         // XR_TCOROUTINE
+#include "../object/xstring.h"  // STR_FLAG_GLOBAL
 #include <string.h>
 #include <stdio.h>
-#include <sys/mman.h> // mmap for large objects
+#include <sys/mman.h>  // mmap for large objects
 
 // Large object threshold: use mmap for objects >= 64KB
 #define XR_SHARED_MMAP_THRESHOLD (64 * 1024)
@@ -33,7 +33,8 @@
 
 bool xr_sysheap_init(XrSystemHeap *heap, const XrSysHeapConfig *config) {
     XR_DCHECK(heap != NULL, "sysheap_init: NULL heap");
-    if (!heap) return false;
+    if (!heap)
+        return false;
 
     memset(heap, 0, sizeof(XrSystemHeap));
 
@@ -75,7 +76,8 @@ bool xr_sysheap_init(XrSystemHeap *heap, const XrSysHeapConfig *config) {
 }
 
 void xr_sysheap_destroy(XrSystemHeap *heap) {
-    if (!heap || !heap->initialized) return;
+    if (!heap || !heap->initialized)
+        return;
 
     // Drain XrCoroGC L2 pool: every recycled struct still owned by the
     // pool must be returned to malloc. Walk the linked stack stored in
@@ -83,7 +85,7 @@ void xr_sysheap_destroy(XrSystemHeap *heap) {
     pthread_mutex_lock(&heap->gc_pool_mu);
     struct XrCoroGC *gc = heap->gc_pool_head;
     while (gc) {
-        struct XrCoroGC *next = *(struct XrCoroGC**)gc;
+        struct XrCoroGC *next = *(struct XrCoroGC **) gc;
         xr_free(gc);
         gc = next;
     }
@@ -107,12 +109,13 @@ void xr_sysheap_destroy(XrSystemHeap *heap) {
 
 /* ========== XrCoroGC Struct Pool (L2) ========== */
 
-struct XrCoroGC* xr_sysheap_gc_pool_pop(XrSystemHeap *heap) {
-    if (!heap || !heap->initialized) return NULL;
+struct XrCoroGC *xr_sysheap_gc_pool_pop(XrSystemHeap *heap) {
+    if (!heap || !heap->initialized)
+        return NULL;
     pthread_mutex_lock(&heap->gc_pool_mu);
     struct XrCoroGC *gc = heap->gc_pool_head;
     if (gc) {
-        heap->gc_pool_head = *(struct XrCoroGC**)gc;
+        heap->gc_pool_head = *(struct XrCoroGC **) gc;
         heap->gc_pool_count--;
     }
     pthread_mutex_unlock(&heap->gc_pool_mu);
@@ -120,13 +123,14 @@ struct XrCoroGC* xr_sysheap_gc_pool_pop(XrSystemHeap *heap) {
 }
 
 bool xr_sysheap_gc_pool_push(XrSystemHeap *heap, struct XrCoroGC *gc) {
-    if (!heap || !heap->initialized || !gc) return false;
+    if (!heap || !heap->initialized || !gc)
+        return false;
     pthread_mutex_lock(&heap->gc_pool_mu);
     if (heap->gc_pool_count >= XR_SYSHEAP_GC_POOL_MAX) {
         pthread_mutex_unlock(&heap->gc_pool_mu);
         return false;
     }
-    *(struct XrCoroGC**)gc = heap->gc_pool_head;
+    *(struct XrCoroGC **) gc = heap->gc_pool_head;
     heap->gc_pool_head = gc;
     heap->gc_pool_count++;
     pthread_mutex_unlock(&heap->gc_pool_mu);
@@ -135,7 +139,7 @@ bool xr_sysheap_gc_pool_push(XrSystemHeap *heap, struct XrCoroGC *gc) {
 
 /* ========== Coroutine Allocation API ========== */
 
-struct XrCoroutine* xr_sysheap_alloc_coro(XrSystemHeap *heap) {
+struct XrCoroutine *xr_sysheap_alloc_coro(XrSystemHeap *heap) {
     if (!heap || !heap->initialized || !heap->coro_pool) {
         return NULL;
     }
@@ -161,30 +165,31 @@ void xr_sysheap_free_coro(XrSystemHeap *heap, struct XrCoroutine *coro) {
 
 /* ========== Shared Object Allocation API ========== */
 
-void* xr_sysheap_alloc_shared(XrSystemHeap *heap, size_t size, uint8_t type) {
+void *xr_sysheap_alloc_shared(XrSystemHeap *heap, size_t size, uint8_t type) {
     XR_DCHECK(size > 0, "sysheap_alloc_shared: zero size");
-    if (!heap || !heap->initialized) return NULL;
+    if (!heap || !heap->initialized)
+        return NULL;
 
     XrGCHeader *obj = NULL;
     bool use_mmap = (size >= XR_SHARED_MMAP_THRESHOLD);
 
     if (use_mmap) {
         // Large objects use mmap to avoid heap fragmentation
-        obj = (XrGCHeader*)mmap(NULL, size, PROT_READ | PROT_WRITE,
-                                 MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+        obj = (XrGCHeader *) mmap(NULL, size, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS,
+                                  -1, 0);
         if (obj == MAP_FAILED) {
             return NULL;
         }
         // MAP_ANONYMOUS guarantees zero-initialized memory
         obj->type = type;
-        obj->objsize = (uint32_t)size;
+        obj->objsize = (uint32_t) size;
         // Mark as shared and mmap-allocated (in extra bit 13)
         obj->extra = XR_GC_STORAGE_SHARED | XR_GC_FLAG_MMAP;
         obj->marked = 0;
         atomic_fetch_add(&heap->stats.shared_mmap_count, 1);
     } else {
         // Small objects use regular malloc
-        obj = (XrGCHeader*)xr_malloc(size);
+        obj = (XrGCHeader *) xr_malloc(size);
         if (obj) {
             memset(obj, 0, size);
             obj->type = type;
@@ -200,9 +205,10 @@ void* xr_sysheap_alloc_shared(XrSystemHeap *heap, size_t size, uint8_t type) {
 
 // Free shared object (handles both malloc and mmap)
 void xr_sysheap_free_shared(void *ptr, size_t size) {
-    if (!ptr) return;
+    if (!ptr)
+        return;
 
-    XrGCHeader *obj = (XrGCHeader*)ptr;
+    XrGCHeader *obj = (XrGCHeader *) ptr;
     if (XR_GC_IS_MMAP(obj)) {
         munmap(ptr, size);
     } else {
@@ -212,7 +218,7 @@ void xr_sysheap_free_shared(void *ptr, size_t size) {
 
 /* ========== Class/Module Allocation API ========== */
 
-void* xr_sysheap_alloc_class(XrSystemHeap *heap, size_t size) {
+void *xr_sysheap_alloc_class(XrSystemHeap *heap, size_t size) {
     XR_DCHECK(size > 0, "sysheap_alloc_class: zero size");
     if (!heap || !heap->initialized) {
         return NULL;
@@ -227,7 +233,7 @@ void* xr_sysheap_alloc_class(XrSystemHeap *heap, size_t size) {
     return ptr;
 }
 
-void* xr_sysheap_alloc_module(XrSystemHeap *heap, size_t size) {
+void *xr_sysheap_alloc_module(XrSystemHeap *heap, size_t size) {
     XR_DCHECK(size > 0, "sysheap_alloc_module: zero size");
     if (!heap || !heap->initialized) {
         return NULL;
@@ -244,7 +250,8 @@ void* xr_sysheap_alloc_module(XrSystemHeap *heap, size_t size) {
 /* ========== Statistics API ========== */
 
 void xr_sysheap_get_stats(XrSystemHeap *heap, XrSysHeapStats *stats) {
-    if (!heap || !stats) return;
+    if (!heap || !stats)
+        return;
 
     stats->coro_alloc_count = heap->stats.coro_alloc_count;
     stats->coro_free_count = heap->stats.coro_free_count;
@@ -267,21 +274,15 @@ void xr_sysheap_print_stats(XrSystemHeap *heap) {
     printf("=== Xray System Heap Stats ===\n");
     printf("Allocator: %s\n", xr_mem_get_allocator_name());
     printf("Coroutine Pool:\n");
-    printf("  Alloc: %llu, Free: %llu, Reuse: %llu\n",
-           (unsigned long long)stats.coro_alloc_count,
-           (unsigned long long)stats.coro_free_count,
-           (unsigned long long)stats.coro_reuse_count);
+    printf("  Alloc: %llu, Free: %llu, Reuse: %llu\n", (unsigned long long) stats.coro_alloc_count,
+           (unsigned long long) stats.coro_free_count, (unsigned long long) stats.coro_reuse_count);
     printf("Class Arena:\n");
-    printf("  Classes: %llu, Bytes: %llu\n",
-           (unsigned long long)stats.class_alloc_count,
-           (unsigned long long)stats.class_alloc_bytes);
-    printf("  Modules: %llu\n",
-           (unsigned long long)stats.module_alloc_count);
+    printf("  Classes: %llu, Bytes: %llu\n", (unsigned long long) stats.class_alloc_count,
+           (unsigned long long) stats.class_alloc_bytes);
+    printf("  Modules: %llu\n", (unsigned long long) stats.module_alloc_count);
     printf("Shared:\n");
-    printf("  Shared: %llu\n",
-           (unsigned long long)stats.shared_alloc_count);
-    printf("  Arena total: %zu bytes\n",
-           heap->class_arena.total_allocated);
+    printf("  Shared: %llu\n", (unsigned long long) stats.shared_alloc_count);
+    printf("  Arena total: %zu bytes\n", heap->class_arena.total_allocated);
     printf("==============================\n");
 }
 
@@ -290,7 +291,8 @@ void xr_sysheap_print_stats(XrSystemHeap *heap) {
 // g_type_ops declared in xgc_internal.h as extern const
 
 void xr_shared_destroy(XrGCHeader *obj) {
-    if (!obj) return;
+    if (!obj)
+        return;
 
     /* Global pool strings are owned by XrGlobalStringPool, not by coroutine GC.
      * They are freed in xr_global_pool_free during isolate shutdown. */

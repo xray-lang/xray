@@ -27,17 +27,25 @@
  */
 static XrType *xr_tag_to_xrtype(uint8_t tag) {
     switch (tag) {
-    case 1: case 2:                     // TRUE, FALSE
-        return xr_type_new_bool(NULL);
-    case 3: case 4: case 5: case 6:     // I8..I64
-    case 7: case 8: case 9: case 10:    // U8..U64
-        return xr_type_new_int(NULL);
-    case 11: case 12:                   // F32, F64
-        return xr_type_new_float(NULL);
-    case 13:                            // PTR
-        return NULL;                    // PTR needs heap_type for precision
-    default:
-        return NULL;
+        case 1:
+        case 2:  // TRUE, FALSE
+            return xr_type_new_bool(NULL);
+        case 3:
+        case 4:
+        case 5:
+        case 6:  // I8..I64
+        case 7:
+        case 8:
+        case 9:
+        case 10:  // U8..U64
+            return xr_type_new_int(NULL);
+        case 11:
+        case 12:  // F32, F64
+            return xr_type_new_float(NULL);
+        case 13:          // PTR
+            return NULL;  // PTR needs heap_type for precision
+        default:
+            return NULL;
     }
 }
 
@@ -45,21 +53,25 @@ static XrType *xr_tag_to_xrtype(uint8_t tag) {
  * Map XrType* to vtag (XrVRegTag) for compile-time type annotation.
  */
 static uint8_t xrtype_to_vtag(XrType *t) {
-    if (!t) return VTAG_TAGGED;
-    switch (t->kind) {
-    case XR_KIND_INT:   return VTAG_I64;
-    case XR_KIND_FLOAT: return VTAG_F64;
-    case XR_KIND_BOOL:  return VTAG_BOOL;
-    case XR_KIND_STRING:
-    case XR_KIND_ARRAY:
-    case XR_KIND_MAP:
-    case XR_KIND_CLASS:
-    case XR_KIND_FUNCTION:
-        return VTAG_PTR;
-    case XR_KIND_UNION:
-        return value_tag_to_vtag(xr_type_to_xr_tag(t));
-    default:
+    if (!t)
         return VTAG_TAGGED;
+    switch (t->kind) {
+        case XR_KIND_INT:
+            return VTAG_I64;
+        case XR_KIND_FLOAT:
+            return VTAG_F64;
+        case XR_KIND_BOOL:
+            return VTAG_BOOL;
+        case XR_KIND_STRING:
+        case XR_KIND_ARRAY:
+        case XR_KIND_MAP:
+        case XR_KIND_CLASS:
+        case XR_KIND_FUNCTION:
+            return VTAG_PTR;
+        case XR_KIND_UNION:
+            return value_tag_to_vtag(xr_type_to_xr_tag(t));
+        default:
+            return VTAG_TAGGED;
     }
 }
 
@@ -68,7 +80,8 @@ static uint8_t xrtype_to_vtag(XrType *t) {
  * - PTR with unknown heap_type → PTR with known heap_type
  * - xrtype upgrade from NULL to non-NULL */
 static void set_vreg_type(XirFunc *func, uint32_t vi, XrType *t, uint8_t vtag) {
-    if (vi >= func->nvreg) return;
+    if (vi >= func->nvreg)
+        return;
     if (!func->vregs[vi].xrtype)
         func->vregs[vi].xrtype = t;
     refine_vreg_vtag(func, vi, vtag);
@@ -77,7 +90,8 @@ static void set_vreg_type(XirFunc *func, uint32_t vi, XrType *t, uint8_t vtag) {
 /* Set heap_type on a vreg (for ALLOC, GUARD_CLASS, etc.).
  * Only sets if current heap_type is 0 (unknown). */
 static void set_vreg_heap_type(XirFunc *func, uint32_t vi, uint16_t ht) {
-    if (vi >= func->nvreg) return;
+    if (vi >= func->nvreg)
+        return;
     if (func->vregs[vi].heap_type == 0) {
         func->vregs[vi].heap_type = ht;
         // Sync heap_cid on defining instruction
@@ -94,7 +108,8 @@ static void set_vreg_heap_type(XirFunc *func, uint32_t vi, uint16_t ht) {
  *   concrete + TAGGED → TAGGED
  *   anything else → TAGGED */
 static uint8_t meet_vtag(uint8_t a, uint8_t b) {
-    if (a == b) return a;
+    if (a == b)
+        return a;
     // int + float → numeric union
     if ((a == VTAG_I64 && b == VTAG_F64) || (a == VTAG_F64 && b == VTAG_I64))
         return VTAG_NUMERIC;
@@ -127,13 +142,14 @@ static uint8_t meet_vtag(uint8_t a, uint8_t b) {
 /* One forward scan of the type lattice.  Wrapped by xir_pass_type_prop
  * below which iterates until no vreg type changes. */
 static void type_prop_scan_once(XirFunc *func) {
-    XrType *t_int   = xr_type_new_int(NULL);
+    XrType *t_int = xr_type_new_int(NULL);
     XrType *t_float = xr_type_new_float(NULL);
-    XrType *t_bool  = xr_type_new_bool(NULL);
+    XrType *t_bool = xr_type_new_bool(NULL);
 
     for (uint32_t bi = 0; bi < func->nblk; bi++) {
         XirBlock *blk = func->blocks[bi];
-        if (!blk) continue;
+        if (!blk)
+            continue;
 
         /* PHI type meet with lattice widening:
          *   all same → propagate
@@ -141,27 +157,43 @@ static void type_prop_scan_once(XirFunc *func) {
          *   PTR + PTR (different heap_type) → PTR
          *   any TAGGED input → give up */
         for (XirPhi *phi = blk->phis; phi; phi = phi->next) {
-            if (!xir_ref_is_vreg(phi->dst)) continue;
+            if (!xir_ref_is_vreg(phi->dst))
+                continue;
             uint32_t dvi = XIR_REF_INDEX(phi->dst);
-            if (dvi >= func->nvreg) continue;
-            if (xir_ref_ctype(func, phi->dst).kind != XIR_TK_UNKNOWN) continue;
-            if (phi->narg == 0) continue;
+            if (dvi >= func->nvreg)
+                continue;
+            if (xir_ref_ctype(func, phi->dst).kind != XIR_TK_UNKNOWN)
+                continue;
+            if (phi->narg == 0)
+                continue;
 
             uint8_t result_vtag = VTAG_TAGGED;
             bool valid = true;
 
             for (uint16_t a = 0; a < phi->narg; a++) {
-                if (!xir_ref_is_vreg(phi->args[a])) { valid = false; break; }
+                if (!xir_ref_is_vreg(phi->args[a])) {
+                    valid = false;
+                    break;
+                }
                 uint32_t ai = XIR_REF_INDEX(phi->args[a]);
-                if (ai >= func->nvreg) { valid = false; break; }
+                if (ai >= func->nvreg) {
+                    valid = false;
+                    break;
+                }
                 uint8_t atag = type_kind_to_vtag(xir_ref_ctype(func, phi->args[a]).kind);
-                if (atag == VTAG_TAGGED) { valid = false; break; }
+                if (atag == VTAG_TAGGED) {
+                    valid = false;
+                    break;
+                }
 
                 if (a == 0) {
                     result_vtag = atag;
                 } else {
                     result_vtag = meet_vtag(result_vtag, atag);
-                    if (result_vtag == VTAG_TAGGED) { valid = false; break; }
+                    if (result_vtag == VTAG_TAGGED) {
+                        valid = false;
+                        break;
+                    }
                 }
             }
 
@@ -170,10 +202,17 @@ static void type_prop_scan_once(XirFunc *func) {
                 // Set xrtype for uniform cases
                 if (!func->vregs[dvi].xrtype) {
                     switch (result_vtag) {
-                    case VTAG_I64:  func->vregs[dvi].xrtype = t_int; break;
-                    case VTAG_F64:  func->vregs[dvi].xrtype = t_float; break;
-                    case VTAG_BOOL: func->vregs[dvi].xrtype = t_bool; break;
-                    default: break;
+                        case VTAG_I64:
+                            func->vregs[dvi].xrtype = t_int;
+                            break;
+                        case VTAG_F64:
+                            func->vregs[dvi].xrtype = t_float;
+                            break;
+                        case VTAG_BOOL:
+                            func->vregs[dvi].xrtype = t_bool;
+                            break;
+                        default:
+                            break;
                     }
                 }
             }
@@ -183,451 +222,542 @@ static void type_prop_scan_once(XirFunc *func) {
             XirIns *ins = &blk->ins[i];
 
             switch (ins->op) {
+                // ---- Constants ----
+                case XIR_CONST_I64:
+                    if (xir_ref_is_vreg(ins->dst)) {
+                        uint32_t vi = XIR_REF_INDEX(ins->dst);
+                        set_vreg_type(func, vi, t_int, VTAG_I64);
+                    }
+                    break;
 
-            // ---- Constants ----
-            case XIR_CONST_I64:
-                if (xir_ref_is_vreg(ins->dst)) {
-                    uint32_t vi = XIR_REF_INDEX(ins->dst);
-                    set_vreg_type(func, vi, t_int, VTAG_I64);
+                case XIR_CONST_F64:
+                    if (xir_ref_is_vreg(ins->dst)) {
+                        uint32_t vi = XIR_REF_INDEX(ins->dst);
+                        set_vreg_type(func, vi, t_float, VTAG_F64);
+                    }
+                    break;
+
+                case XIR_CONST_PTR:
+                    if (xir_ref_is_vreg(ins->dst)) {
+                        uint32_t vi = XIR_REF_INDEX(ins->dst);
+                        refine_vreg_vtag(func, vi, VTAG_PTR);
+                    }
+                    break;
+
+                // ---- Guards: narrow guarded vreg ----
+                case XIR_GUARD_TAG: {
+                    if (!xir_ref_is_vreg(ins->args[0]))
+                        break;
+                    if (!xir_ref_is_const(ins->args[1]))
+                        break;
+                    uint32_t ci = XIR_REF_INDEX(ins->args[1]);
+                    if (ci >= func->nconst)
+                        break;
+                    uint8_t expected_tag = (uint8_t) func->consts[ci].val.raw;
+                    XrType *narrowed = xr_tag_to_xrtype(expected_tag);
+                    uint32_t vi = XIR_REF_INDEX(ins->args[0]);
+                    if (vi < func->nvreg) {
+                        if (narrowed && !func->vregs[vi].xrtype)
+                            func->vregs[vi].xrtype = narrowed;
+                        refine_vreg_vtag(func, vi, value_tag_to_vtag(expected_tag));
+                    }
+                    break;
                 }
-                break;
 
-            case XIR_CONST_F64:
-                if (xir_ref_is_vreg(ins->dst)) {
-                    uint32_t vi = XIR_REF_INDEX(ins->dst);
-                    set_vreg_type(func, vi, t_float, VTAG_F64);
-                }
-                break;
-
-            case XIR_CONST_PTR:
-                if (xir_ref_is_vreg(ins->dst)) {
-                    uint32_t vi = XIR_REF_INDEX(ins->dst);
+                case XIR_GUARD_NONNULL: {
+                    if (!xir_ref_is_vreg(ins->args[0]))
+                        break;
+                    uint32_t vi = XIR_REF_INDEX(ins->args[0]);
                     refine_vreg_vtag(func, vi, VTAG_PTR);
+                    break;
                 }
-                break;
 
-            // ---- Guards: narrow guarded vreg ----
-            case XIR_GUARD_TAG: {
-                if (!xir_ref_is_vreg(ins->args[0])) break;
-                if (!xir_ref_is_const(ins->args[1])) break;
-                uint32_t ci = XIR_REF_INDEX(ins->args[1]);
-                if (ci >= func->nconst) break;
-                uint8_t expected_tag = (uint8_t)func->consts[ci].val.raw;
-                XrType *narrowed = xr_tag_to_xrtype(expected_tag);
-                uint32_t vi = XIR_REF_INDEX(ins->args[0]);
-                if (vi < func->nvreg) {
-                    if (narrowed && !func->vregs[vi].xrtype)
-                        func->vregs[vi].xrtype = narrowed;
-                    refine_vreg_vtag(func, vi, value_tag_to_vtag(expected_tag));
-                }
-                break;
-            }
-
-            case XIR_GUARD_NONNULL: {
-                if (!xir_ref_is_vreg(ins->args[0])) break;
-                uint32_t vi = XIR_REF_INDEX(ins->args[0]);
-                refine_vreg_vtag(func, vi, VTAG_PTR);
-                break;
-            }
-
-            case XIR_GUARD_CLASS: {
-                if (!xir_ref_is_vreg(ins->args[0])) break;
-                uint32_t vi = XIR_REF_INDEX(ins->args[0]);
-                if (vi < func->nvreg) {
-                    refine_vreg_vtag(func, vi, VTAG_PTR);
-                    // Extract heap_type from guard constant
-                    if (xir_ref_is_const(ins->args[1])) {
-                        uint32_t ci = XIR_REF_INDEX(ins->args[1]);
-                        if (ci < func->nconst) {
-                            uint16_t ht = (uint16_t)func->consts[ci].val.raw;
-                            set_vreg_heap_type(func, vi, ht);
+                case XIR_GUARD_CLASS: {
+                    if (!xir_ref_is_vreg(ins->args[0]))
+                        break;
+                    uint32_t vi = XIR_REF_INDEX(ins->args[0]);
+                    if (vi < func->nvreg) {
+                        refine_vreg_vtag(func, vi, VTAG_PTR);
+                        // Extract heap_type from guard constant
+                        if (xir_ref_is_const(ins->args[1])) {
+                            uint32_t ci = XIR_REF_INDEX(ins->args[1]);
+                            if (ci < func->nconst) {
+                                uint16_t ht = (uint16_t) func->consts[ci].val.raw;
+                                set_vreg_heap_type(func, vi, ht);
+                            }
                         }
                     }
+                    break;
                 }
-                break;
-            }
 
-            case XIR_GUARD_KLASS: {
-                // After klass guard, receiver is known to be PTR (instance)
-                if (!xir_ref_is_vreg(ins->args[0])) break;
-                uint32_t vi = XIR_REF_INDEX(ins->args[0]);
-                if (vi < func->nvreg) {
-                    refine_vreg_vtag(func, vi, VTAG_PTR);
-                    set_vreg_heap_type(func, vi, XR_TINSTANCE);
+                case XIR_GUARD_KLASS: {
+                    // After klass guard, receiver is known to be PTR (instance)
+                    if (!xir_ref_is_vreg(ins->args[0]))
+                        break;
+                    uint32_t vi = XIR_REF_INDEX(ins->args[0]);
+                    if (vi < func->nvreg) {
+                        refine_vreg_vtag(func, vi, VTAG_PTR);
+                        set_vreg_heap_type(func, vi, XR_TINSTANCE);
+                    }
+                    break;
                 }
-                break;
-            }
 
-            // ---- Integer arithmetic ----
-            case XIR_ADD: case XIR_SUB: case XIR_MUL:
-            case XIR_AND: case XIR_OR:  case XIR_XOR:
-            case XIR_SHL: case XIR_SHR: {
-                if (!xir_ref_is_vreg(ins->dst)) break;
-                uint32_t dvi = XIR_REF_INDEX(ins->dst);
-                if (dvi >= func->nvreg || func->vregs[dvi].xrtype) break;
-                XrType *at = NULL, *bt = NULL;
-                if (xir_ref_is_vreg(ins->args[0])) {
-                    uint32_t ai = XIR_REF_INDEX(ins->args[0]);
-                    if (ai < func->nvreg) at = func->vregs[ai].xrtype;
-                }
-                if (xir_ref_is_vreg(ins->args[1])) {
-                    uint32_t bi2 = XIR_REF_INDEX(ins->args[1]);
-                    if (bi2 < func->nvreg) bt = func->vregs[bi2].xrtype;
-                }
-                if (at && bt) {
-                    if (at == t_int && bt == t_int)
+                // ---- Integer arithmetic ----
+                case XIR_ADD:
+                case XIR_SUB:
+                case XIR_MUL:
+                case XIR_AND:
+                case XIR_OR:
+                case XIR_XOR:
+                case XIR_SHL:
+                case XIR_SHR: {
+                    if (!xir_ref_is_vreg(ins->dst))
+                        break;
+                    uint32_t dvi = XIR_REF_INDEX(ins->dst);
+                    if (dvi >= func->nvreg || func->vregs[dvi].xrtype)
+                        break;
+                    XrType *at = NULL, *bt = NULL;
+                    if (xir_ref_is_vreg(ins->args[0])) {
+                        uint32_t ai = XIR_REF_INDEX(ins->args[0]);
+                        if (ai < func->nvreg)
+                            at = func->vregs[ai].xrtype;
+                    }
+                    if (xir_ref_is_vreg(ins->args[1])) {
+                        uint32_t bi2 = XIR_REF_INDEX(ins->args[1]);
+                        if (bi2 < func->nvreg)
+                            bt = func->vregs[bi2].xrtype;
+                    }
+                    if (at && bt) {
+                        if (at == t_int && bt == t_int)
+                            set_vreg_type(func, dvi, t_int, VTAG_I64);
+                        else if (at->kind == XR_KIND_FLOAT || bt->kind == XR_KIND_FLOAT)
+                            set_vreg_type(func, dvi, t_float, VTAG_F64);
+                    } else if (at == t_int || bt == t_int) {
                         set_vreg_type(func, dvi, t_int, VTAG_I64);
-                    else if (at->kind == XR_KIND_FLOAT || bt->kind == XR_KIND_FLOAT)
+                    }
+                    break;
+                }
+
+                case XIR_NOT: {
+                    if (!xir_ref_is_vreg(ins->dst))
+                        break;
+                    uint32_t dvi = XIR_REF_INDEX(ins->dst);
+                    if (dvi >= func->nvreg || func->vregs[dvi].xrtype)
+                        break;
+                    // Bitwise NOT preserves int type
+                    set_vreg_type(func, dvi, t_int, VTAG_I64);
+                    break;
+                }
+
+                case XIR_DIV:
+                case XIR_MOD: {
+                    if (!xir_ref_is_vreg(ins->dst))
+                        break;
+                    uint32_t dvi = XIR_REF_INDEX(ins->dst);
+                    if (dvi >= func->nvreg || func->vregs[dvi].xrtype)
+                        break;
+                    if (func->vregs[dvi].rep == XR_REP_F64)
                         set_vreg_type(func, dvi, t_float, VTAG_F64);
-                } else if (at == t_int || bt == t_int) {
-                    set_vreg_type(func, dvi, t_int, VTAG_I64);
+                    else if (func->vregs[dvi].rep == XR_REP_I64)
+                        set_vreg_type(func, dvi, t_int, VTAG_I64);
+                    break;
                 }
-                break;
-            }
 
-            case XIR_NOT: {
-                if (!xir_ref_is_vreg(ins->dst)) break;
-                uint32_t dvi = XIR_REF_INDEX(ins->dst);
-                if (dvi >= func->nvreg || func->vregs[dvi].xrtype) break;
-                // Bitwise NOT preserves int type
-                set_vreg_type(func, dvi, t_int, VTAG_I64);
-                break;
-            }
-
-            case XIR_DIV: case XIR_MOD: {
-                if (!xir_ref_is_vreg(ins->dst)) break;
-                uint32_t dvi = XIR_REF_INDEX(ins->dst);
-                if (dvi >= func->nvreg || func->vregs[dvi].xrtype) break;
-                if (func->vregs[dvi].rep == XR_REP_F64)
-                    set_vreg_type(func, dvi, t_float, VTAG_F64);
-                else if (func->vregs[dvi].rep == XR_REP_I64)
-                    set_vreg_type(func, dvi, t_int, VTAG_I64);
-                break;
-            }
-
-            // ---- Comparisons: always bool ----
-            case XIR_EQ: case XIR_NE: case XIR_LT:
-            case XIR_LE: case XIR_GT: case XIR_GE:
-            case XIR_FEQ: case XIR_FNE: case XIR_FLT: case XIR_FLE: {
-                if (!xir_ref_is_vreg(ins->dst)) break;
-                uint32_t dvi = XIR_REF_INDEX(ins->dst);
-                if (dvi >= func->nvreg) break;
-                set_vreg_type(func, dvi, t_bool, VTAG_BOOL);
-                break;
-            }
-
-            // ---- Mixed-type runtime comparisons: always bool ----
-            case XIR_RT_LT: case XIR_RT_LE: case XIR_RT_EQ: {
-                if (!xir_ref_is_vreg(ins->dst)) break;
-                uint32_t dvi = XIR_REF_INDEX(ins->dst);
-                if (dvi >= func->nvreg) break;
-                set_vreg_type(func, dvi, t_bool, VTAG_BOOL);
-                break;
-            }
-
-            // ---- Mixed-type runtime arithmetic: numeric result ----
-            case XIR_RT_ADD: case XIR_RT_SUB: case XIR_RT_MUL:
-            case XIR_RT_DIV: case XIR_RT_MOD: {
-                if (!xir_ref_is_vreg(ins->dst)) break;
-                uint32_t dvi = XIR_REF_INDEX(ins->dst);
-                if (dvi >= func->nvreg || func->vregs[dvi].xrtype) break;
-                // Infer from operand types if possible
-                uint8_t atag = type_kind_to_vtag(xir_ref_ctype(func, ins->args[0]).kind);
-                uint8_t btag = type_kind_to_vtag(xir_ref_ctype(func, ins->args[1]).kind);
-                if (atag == VTAG_I64 && btag == VTAG_I64 &&
-                    ins->op != XIR_RT_DIV) {
-                    set_vreg_type(func, dvi, t_int, VTAG_I64);
-                } else if (atag == VTAG_F64 || btag == VTAG_F64) {
-                    set_vreg_type(func, dvi, t_float, VTAG_F64);
-                } else if ((atag == VTAG_I64 || atag == VTAG_F64 ||
-                            atag == VTAG_NUMERIC) &&
-                           (btag == VTAG_I64 || btag == VTAG_F64 ||
-                            btag == VTAG_NUMERIC)) {
-                    // Both numeric but mixed → numeric union
-                    refine_vreg_vtag(func, dvi, VTAG_NUMERIC);
+                // ---- Comparisons: always bool ----
+                case XIR_EQ:
+                case XIR_NE:
+                case XIR_LT:
+                case XIR_LE:
+                case XIR_GT:
+                case XIR_GE:
+                case XIR_FEQ:
+                case XIR_FNE:
+                case XIR_FLT:
+                case XIR_FLE: {
+                    if (!xir_ref_is_vreg(ins->dst))
+                        break;
+                    uint32_t dvi = XIR_REF_INDEX(ins->dst);
+                    if (dvi >= func->nvreg)
+                        break;
+                    set_vreg_type(func, dvi, t_bool, VTAG_BOOL);
+                    break;
                 }
-                break;
-            }
 
-            case XIR_RT_UNM: {
-                if (!xir_ref_is_vreg(ins->dst)) break;
-                uint32_t dvi = XIR_REF_INDEX(ins->dst);
-                if (dvi >= func->nvreg || func->vregs[dvi].xrtype) break;
-                // Unary minus preserves operand type
-                if (xir_ref_is_vreg(ins->args[0])) {
-                    uint32_t ai = XIR_REF_INDEX(ins->args[0]);
-                    if (ai < func->nvreg && func->vregs[ai].xrtype)
-                        set_vreg_type(func, dvi, func->vregs[ai].xrtype,
-                                      type_kind_to_vtag(xir_ref_ctype(func, ins->args[0]).kind));
+                // ---- Mixed-type runtime comparisons: always bool ----
+                case XIR_RT_LT:
+                case XIR_RT_LE:
+                case XIR_RT_EQ: {
+                    if (!xir_ref_is_vreg(ins->dst))
+                        break;
+                    uint32_t dvi = XIR_REF_INDEX(ins->dst);
+                    if (dvi >= func->nvreg)
+                        break;
+                    set_vreg_type(func, dvi, t_bool, VTAG_BOOL);
+                    break;
                 }
-                break;
-            }
 
-            // ---- Runtime array/collection helpers ----
-            case XIR_RT_ARRAY_NEW:
-            case XIR_RT_MAP_NEW: {
-                if (!xir_ref_is_vreg(ins->dst)) break;
-                uint32_t dvi = XIR_REF_INDEX(ins->dst);
-                if (dvi >= func->nvreg) break;
-                refine_vreg_vtag(func, dvi, VTAG_PTR);
-                set_vreg_heap_type(func, dvi,
-                    ins->op == XIR_RT_ARRAY_NEW ? XR_TARRAY : XR_TMAP);
-                break;
-            }
-
-            case XIR_RT_ARRAY_LEN: {
-                if (!xir_ref_is_vreg(ins->dst)) break;
-                uint32_t dvi = XIR_REF_INDEX(ins->dst);
-                set_vreg_type(func, dvi, t_int, VTAG_I64);
-                break;
-            }
-
-            case XIR_RT_ISNULL: {
-                if (!xir_ref_is_vreg(ins->dst)) break;
-                uint32_t dvi = XIR_REF_INDEX(ins->dst);
-                set_vreg_type(func, dvi, t_bool, VTAG_BOOL);
-                break;
-            }
-
-            // ---- Calls with known return type ----
-            case XIR_CALL_KNOWN:
-            case XIR_CALL_KNOWN_REG: {
-                if (!xir_ref_is_vreg(ins->dst)) break;
-                uint32_t dvi = XIR_REF_INDEX(ins->dst);
-                if (dvi >= func->nvreg) break;
-                if (!xir_ref_is_const(ins->args[0])) break;
-                uint32_t ci = XIR_REF_INDEX(ins->args[0]);
-                if (ci >= func->nconst) break;
-                XrProto *callee = (XrProto *)func->consts[ci].val.ptr;
-                if (callee && callee->return_type_info) {
-                    XrType *rt = callee->return_type_info;
-                    if (!func->vregs[dvi].xrtype)
-                        func->vregs[dvi].xrtype = rt;
-                    uint8_t inferred = xrtype_to_vtag(rt);
-                    if (inferred != VTAG_TAGGED)
-                        refine_vreg_vtag(func, dvi, inferred);
-                }
-                break;
-            }
-
-            case XIR_CALL_SELF_DIRECT:
-            case XIR_CALL_DIRECT: {
-                // callee_proto stored on dst vreg by builder
-                if (!xir_ref_is_vreg(ins->dst)) break;
-                uint32_t dvi = XIR_REF_INDEX(ins->dst);
-                if (dvi >= func->nvreg) break;
-                XrProto *cp = func->vregs[dvi].callee_proto;
-                if (cp && cp->return_type_info) {
-                    XrType *rt = cp->return_type_info;
-                    if (!func->vregs[dvi].xrtype)
-                        func->vregs[dvi].xrtype = rt;
-                    uint8_t inferred = xrtype_to_vtag(rt);
-                    if (inferred != VTAG_TAGGED)
-                        refine_vreg_vtag(func, dvi, inferred);
-                }
-                break;
-            }
-
-            case XIR_CALL_C: {
-                // C calls: infer from dst rep when possible
-                if (!xir_ref_is_vreg(ins->dst)) break;
-                uint32_t dvi = XIR_REF_INDEX(ins->dst);
-                if (dvi >= func->nvreg) break;
-                // If codegen assigned a specific rep, trust it
-                if (ins->ctype.kind == XIR_TK_UNKNOWN) {
-                    uint8_t rv = VTAG_TAGGED;
-                    switch (func->vregs[dvi].rep) {
-                    case XR_REP_I64: rv = VTAG_I64; break;
-                    case XR_REP_F64: rv = VTAG_F64; break;
-                    case XR_REP_PTR: rv = VTAG_PTR; break;
-                    default: break;
+                // ---- Mixed-type runtime arithmetic: numeric result ----
+                case XIR_RT_ADD:
+                case XIR_RT_SUB:
+                case XIR_RT_MUL:
+                case XIR_RT_DIV:
+                case XIR_RT_MOD: {
+                    if (!xir_ref_is_vreg(ins->dst))
+                        break;
+                    uint32_t dvi = XIR_REF_INDEX(ins->dst);
+                    if (dvi >= func->nvreg || func->vregs[dvi].xrtype)
+                        break;
+                    // Infer from operand types if possible
+                    uint8_t atag = type_kind_to_vtag(xir_ref_ctype(func, ins->args[0]).kind);
+                    uint8_t btag = type_kind_to_vtag(xir_ref_ctype(func, ins->args[1]).kind);
+                    if (atag == VTAG_I64 && btag == VTAG_I64 && ins->op != XIR_RT_DIV) {
+                        set_vreg_type(func, dvi, t_int, VTAG_I64);
+                    } else if (atag == VTAG_F64 || btag == VTAG_F64) {
+                        set_vreg_type(func, dvi, t_float, VTAG_F64);
+                    } else if ((atag == VTAG_I64 || atag == VTAG_F64 || atag == VTAG_NUMERIC) &&
+                               (btag == VTAG_I64 || btag == VTAG_F64 || btag == VTAG_NUMERIC)) {
+                        // Both numeric but mixed → numeric union
+                        refine_vreg_vtag(func, dvi, VTAG_NUMERIC);
                     }
-                    if (rv != VTAG_TAGGED) refine_vreg_vtag(func, dvi, rv);
+                    break;
                 }
-                break;
-            }
 
-            // ---- Unary: NEG, FNEG ----
-            case XIR_NEG: {
-                if (!xir_ref_is_vreg(ins->dst)) break;
-                uint32_t dvi = XIR_REF_INDEX(ins->dst);
-                if (dvi >= func->nvreg || func->vregs[dvi].xrtype) break;
-                if (xir_ref_is_vreg(ins->args[0])) {
-                    uint32_t ai = XIR_REF_INDEX(ins->args[0]);
-                    if (ai < func->nvreg && func->vregs[ai].xrtype)
-                        set_vreg_type(func, dvi, func->vregs[ai].xrtype,
-                                      type_kind_to_vtag(xir_ref_ctype(func, ins->args[0]).kind));
-                }
-                break;
-            }
-
-            // ---- MOV: propagate type + tag ----
-            case XIR_MOV: {
-                if (!xir_ref_is_vreg(ins->dst)) break;
-                uint32_t dvi = XIR_REF_INDEX(ins->dst);
-                if (dvi >= func->nvreg) break;
-                if (xir_ref_is_vreg(ins->args[0])) {
-                    uint32_t ai = XIR_REF_INDEX(ins->args[0]);
-                    if (ai < func->nvreg) {
-                        if (!func->vregs[dvi].xrtype && func->vregs[ai].xrtype)
-                            func->vregs[dvi].xrtype = func->vregs[ai].xrtype;
-                        uint8_t ak = type_kind_to_vtag(xir_ref_ctype(func, ins->args[0]).kind);
-                        if (ak != VTAG_TAGGED)
-                            refine_vreg_vtag(func, dvi, ak);
-                        // Propagate heap_type
-                        if (func->vregs[dvi].heap_type == 0 &&
-                            func->vregs[ai].heap_type != 0)
-                            func->vregs[dvi].heap_type = func->vregs[ai].heap_type;
+                case XIR_RT_UNM: {
+                    if (!xir_ref_is_vreg(ins->dst))
+                        break;
+                    uint32_t dvi = XIR_REF_INDEX(ins->dst);
+                    if (dvi >= func->nvreg || func->vregs[dvi].xrtype)
+                        break;
+                    // Unary minus preserves operand type
+                    if (xir_ref_is_vreg(ins->args[0])) {
+                        uint32_t ai = XIR_REF_INDEX(ins->args[0]);
+                        if (ai < func->nvreg && func->vregs[ai].xrtype)
+                            set_vreg_type(
+                                func, dvi, func->vregs[ai].xrtype,
+                                type_kind_to_vtag(xir_ref_ctype(func, ins->args[0]).kind));
                     }
+                    break;
                 }
-                break;
-            }
 
-            // ---- SELECT: meet of true/false branches ----
-            case XIR_SELECT: {
-                if (!xir_ref_is_vreg(ins->dst)) break;
-                uint32_t dvi = XIR_REF_INDEX(ins->dst);
-                if (dvi >= func->nvreg) break;
-                if (ins->ctype.kind != XIR_TK_UNKNOWN) break;
-                uint8_t atag = type_kind_to_vtag(xir_ref_ctype(func, ins->args[0]).kind);
-                uint8_t btag = type_kind_to_vtag(xir_ref_ctype(func, ins->args[1]).kind);
-                if (atag != VTAG_TAGGED && btag != VTAG_TAGGED) {
-                    uint8_t mt = meet_vtag(atag, btag);
-                    if (mt != VTAG_TAGGED)
-                        refine_vreg_vtag(func, dvi, mt);
+                // ---- Runtime array/collection helpers ----
+                case XIR_RT_ARRAY_NEW:
+                case XIR_RT_MAP_NEW: {
+                    if (!xir_ref_is_vreg(ins->dst))
+                        break;
+                    uint32_t dvi = XIR_REF_INDEX(ins->dst);
+                    if (dvi >= func->nvreg)
+                        break;
+                    refine_vreg_vtag(func, dvi, VTAG_PTR);
+                    set_vreg_heap_type(func, dvi,
+                                       ins->op == XIR_RT_ARRAY_NEW ? XR_TARRAY : XR_TMAP);
+                    break;
                 }
-                break;
-            }
 
-            // ---- UNBOX: known result type ----
-            case XIR_UNBOX_I64: {
-                if (!xir_ref_is_vreg(ins->dst)) break;
-                uint32_t dvi = XIR_REF_INDEX(ins->dst);
-                set_vreg_type(func, dvi, t_int, VTAG_I64);
-                break;
-            }
-            case XIR_UNBOX_F64: {
-                if (!xir_ref_is_vreg(ins->dst)) break;
-                uint32_t dvi = XIR_REF_INDEX(ins->dst);
-                set_vreg_type(func, dvi, t_float, VTAG_F64);
-                break;
-            }
-
-            // ---- BOX: propagate source tag ----
-            case XIR_BOX_I64: {
-                if (!xir_ref_is_vreg(ins->dst)) break;
-                uint32_t dvi = XIR_REF_INDEX(ins->dst);
-                refine_vreg_vtag(func, dvi, VTAG_I64);
-                break;
-            }
-            case XIR_BOX_F64: {
-                if (!xir_ref_is_vreg(ins->dst)) break;
-                uint32_t dvi = XIR_REF_INDEX(ins->dst);
-                refine_vreg_vtag(func, dvi, VTAG_F64);
-                break;
-            }
-
-            // ---- Float arithmetic: always float ----
-            case XIR_FADD: case XIR_FSUB: case XIR_FMUL: case XIR_FDIV:
-            case XIR_FNEG: {
-                if (!xir_ref_is_vreg(ins->dst)) break;
-                uint32_t dvi = XIR_REF_INDEX(ins->dst);
-                set_vreg_type(func, dvi, t_float, VTAG_F64);
-                break;
-            }
-
-            // ---- Type conversions ----
-            case XIR_I2F: {
-                if (!xir_ref_is_vreg(ins->dst)) break;
-                uint32_t dvi = XIR_REF_INDEX(ins->dst);
-                set_vreg_type(func, dvi, t_float, VTAG_F64);
-                break;
-            }
-            case XIR_F2I: {
-                if (!xir_ref_is_vreg(ins->dst)) break;
-                uint32_t dvi = XIR_REF_INDEX(ins->dst);
-                set_vreg_type(func, dvi, t_int, VTAG_I64);
-                break;
-            }
-
-            // ---- ALLOC: PTR + extract heap_type from packed constant ----
-            case XIR_ALLOC: {
-                if (!xir_ref_is_vreg(ins->dst)) break;
-                uint32_t dvi = XIR_REF_INDEX(ins->dst);
-                if (dvi >= func->nvreg) break;
-                if (ins->ctype.kind == XIR_TK_UNKNOWN) {
-                    ins->ctype.kind = XIR_TK_PTR;
+                case XIR_RT_ARRAY_LEN: {
+                    if (!xir_ref_is_vreg(ins->dst))
+                        break;
+                    uint32_t dvi = XIR_REF_INDEX(ins->dst);
+                    set_vreg_type(func, dvi, t_int, VTAG_I64);
+                    break;
                 }
-                // Extract gc_type from args[0] packed constant:
-                // packed = (gc_extra << 8) | gc_type
-                if (xir_ref_is_const(ins->args[0])) {
+
+                case XIR_RT_ISNULL: {
+                    if (!xir_ref_is_vreg(ins->dst))
+                        break;
+                    uint32_t dvi = XIR_REF_INDEX(ins->dst);
+                    set_vreg_type(func, dvi, t_bool, VTAG_BOOL);
+                    break;
+                }
+
+                // ---- Calls with known return type ----
+                case XIR_CALL_KNOWN:
+                case XIR_CALL_KNOWN_REG: {
+                    if (!xir_ref_is_vreg(ins->dst))
+                        break;
+                    uint32_t dvi = XIR_REF_INDEX(ins->dst);
+                    if (dvi >= func->nvreg)
+                        break;
+                    if (!xir_ref_is_const(ins->args[0]))
+                        break;
                     uint32_t ci = XIR_REF_INDEX(ins->args[0]);
-                    if (ci < func->nconst) {
-                        uint16_t gc_type = (uint16_t)(func->consts[ci].val.i64 & 0xFF);
-                        set_vreg_heap_type(func, dvi, gc_type);
+                    if (ci >= func->nconst)
+                        break;
+                    XrProto *callee = (XrProto *) func->consts[ci].val.ptr;
+                    if (callee && callee->return_type_info) {
+                        XrType *rt = callee->return_type_info;
+                        if (!func->vregs[dvi].xrtype)
+                            func->vregs[dvi].xrtype = rt;
+                        uint8_t inferred = xrtype_to_vtag(rt);
+                        if (inferred != VTAG_TAGGED)
+                            refine_vreg_vtag(func, dvi, inferred);
                     }
+                    break;
                 }
-                func->vregs[dvi].is_fresh_alloc = true;
-                break;
-            }
 
-            // ---- Memory loads: deterministic result types ----
-            case XIR_LOAD_CORO:
-            case XIR_LOAD_CORO_BYTE:
-            case XIR_LOAD32S:
-            case XIR_LOAD8Z: case XIR_LOAD8S:
-            case XIR_LOAD16Z: case XIR_LOAD16S:
-            case XIR_LOAD32Z:
-            case XIR_TAG_LOAD: {
-                if (!xir_ref_is_vreg(ins->dst)) break;
-                uint32_t dvi = XIR_REF_INDEX(ins->dst);
-                set_vreg_type(func, dvi, t_int, VTAG_I64);
-                break;
-            }
-
-            case XIR_LOAD_F32: {
-                if (!xir_ref_is_vreg(ins->dst)) break;
-                uint32_t dvi = XIR_REF_INDEX(ins->dst);
-                set_vreg_type(func, dvi, t_float, VTAG_F64);
-                break;
-            }
-
-            // ---- LOAD_FIELD: infer from vreg rep ----
-            case XIR_LOAD_FIELD: {
-                if (!xir_ref_is_vreg(ins->dst)) break;
-                uint32_t dvi = XIR_REF_INDEX(ins->dst);
-                if (dvi >= func->nvreg) break;
-                if (ins->ctype.kind == XIR_TK_UNKNOWN) {
-                    uint8_t rv = VTAG_TAGGED;
-                    switch (func->vregs[dvi].rep) {
-                    case XR_REP_I64: rv = VTAG_I64; break;
-                    case XR_REP_F64: rv = VTAG_F64; break;
-                    case XR_REP_PTR: rv = VTAG_PTR; break;
-                    default: break;
+                case XIR_CALL_SELF_DIRECT:
+                case XIR_CALL_DIRECT: {
+                    // callee_proto stored on dst vreg by builder
+                    if (!xir_ref_is_vreg(ins->dst))
+                        break;
+                    uint32_t dvi = XIR_REF_INDEX(ins->dst);
+                    if (dvi >= func->nvreg)
+                        break;
+                    XrProto *cp = func->vregs[dvi].callee_proto;
+                    if (cp && cp->return_type_info) {
+                        XrType *rt = cp->return_type_info;
+                        if (!func->vregs[dvi].xrtype)
+                            func->vregs[dvi].xrtype = rt;
+                        uint8_t inferred = xrtype_to_vtag(rt);
+                        if (inferred != VTAG_TAGGED)
+                            refine_vreg_vtag(func, dvi, inferred);
                     }
-                    if (rv != VTAG_TAGGED) {
-                        ins->ctype.kind = vtag_to_type_kind(rv);
-                    }
+                    break;
                 }
-                break;
-            }
 
-            // ---- RT_PRINT: void, skip ----
-            case XIR_RT_PRINT:
-                break;
+                case XIR_CALL_C: {
+                    // C calls: infer from dst rep when possible
+                    if (!xir_ref_is_vreg(ins->dst))
+                        break;
+                    uint32_t dvi = XIR_REF_INDEX(ins->dst);
+                    if (dvi >= func->nvreg)
+                        break;
+                    // If codegen assigned a specific rep, trust it
+                    if (ins->ctype.kind == XIR_TK_UNKNOWN) {
+                        uint8_t rv = VTAG_TAGGED;
+                        switch (func->vregs[dvi].rep) {
+                            case XR_REP_I64:
+                                rv = VTAG_I64;
+                                break;
+                            case XR_REP_F64:
+                                rv = VTAG_F64;
+                                break;
+                            case XR_REP_PTR:
+                                rv = VTAG_PTR;
+                                break;
+                            default:
+                                break;
+                        }
+                        if (rv != VTAG_TAGGED)
+                            refine_vreg_vtag(func, dvi, rv);
+                    }
+                    break;
+                }
 
-            // ---- CATCH: exception object is always PTR ----
-            case XIR_CATCH: {
-                if (!xir_ref_is_vreg(ins->dst)) break;
-                uint32_t dvi = XIR_REF_INDEX(ins->dst);
-                if (dvi >= func->nvreg) break;
-                if (ins->ctype.kind == XIR_TK_UNKNOWN)
-                    ins->ctype.kind = XIR_TK_PTR;
-                break;
-            }
+                // ---- Unary: NEG, FNEG ----
+                case XIR_NEG: {
+                    if (!xir_ref_is_vreg(ins->dst))
+                        break;
+                    uint32_t dvi = XIR_REF_INDEX(ins->dst);
+                    if (dvi >= func->nvreg || func->vregs[dvi].xrtype)
+                        break;
+                    if (xir_ref_is_vreg(ins->args[0])) {
+                        uint32_t ai = XIR_REF_INDEX(ins->args[0]);
+                        if (ai < func->nvreg && func->vregs[ai].xrtype)
+                            set_vreg_type(
+                                func, dvi, func->vregs[ai].xrtype,
+                                type_kind_to_vtag(xir_ref_ctype(func, ins->args[0]).kind));
+                    }
+                    break;
+                }
 
-            default:
-                break;
+                // ---- MOV: propagate type + tag ----
+                case XIR_MOV: {
+                    if (!xir_ref_is_vreg(ins->dst))
+                        break;
+                    uint32_t dvi = XIR_REF_INDEX(ins->dst);
+                    if (dvi >= func->nvreg)
+                        break;
+                    if (xir_ref_is_vreg(ins->args[0])) {
+                        uint32_t ai = XIR_REF_INDEX(ins->args[0]);
+                        if (ai < func->nvreg) {
+                            if (!func->vregs[dvi].xrtype && func->vregs[ai].xrtype)
+                                func->vregs[dvi].xrtype = func->vregs[ai].xrtype;
+                            uint8_t ak = type_kind_to_vtag(xir_ref_ctype(func, ins->args[0]).kind);
+                            if (ak != VTAG_TAGGED)
+                                refine_vreg_vtag(func, dvi, ak);
+                            // Propagate heap_type
+                            if (func->vregs[dvi].heap_type == 0 && func->vregs[ai].heap_type != 0)
+                                func->vregs[dvi].heap_type = func->vregs[ai].heap_type;
+                        }
+                    }
+                    break;
+                }
+
+                // ---- SELECT: meet of true/false branches ----
+                case XIR_SELECT: {
+                    if (!xir_ref_is_vreg(ins->dst))
+                        break;
+                    uint32_t dvi = XIR_REF_INDEX(ins->dst);
+                    if (dvi >= func->nvreg)
+                        break;
+                    if (ins->ctype.kind != XIR_TK_UNKNOWN)
+                        break;
+                    uint8_t atag = type_kind_to_vtag(xir_ref_ctype(func, ins->args[0]).kind);
+                    uint8_t btag = type_kind_to_vtag(xir_ref_ctype(func, ins->args[1]).kind);
+                    if (atag != VTAG_TAGGED && btag != VTAG_TAGGED) {
+                        uint8_t mt = meet_vtag(atag, btag);
+                        if (mt != VTAG_TAGGED)
+                            refine_vreg_vtag(func, dvi, mt);
+                    }
+                    break;
+                }
+
+                // ---- UNBOX: known result type ----
+                case XIR_UNBOX_I64: {
+                    if (!xir_ref_is_vreg(ins->dst))
+                        break;
+                    uint32_t dvi = XIR_REF_INDEX(ins->dst);
+                    set_vreg_type(func, dvi, t_int, VTAG_I64);
+                    break;
+                }
+                case XIR_UNBOX_F64: {
+                    if (!xir_ref_is_vreg(ins->dst))
+                        break;
+                    uint32_t dvi = XIR_REF_INDEX(ins->dst);
+                    set_vreg_type(func, dvi, t_float, VTAG_F64);
+                    break;
+                }
+
+                // ---- BOX: propagate source tag ----
+                case XIR_BOX_I64: {
+                    if (!xir_ref_is_vreg(ins->dst))
+                        break;
+                    uint32_t dvi = XIR_REF_INDEX(ins->dst);
+                    refine_vreg_vtag(func, dvi, VTAG_I64);
+                    break;
+                }
+                case XIR_BOX_F64: {
+                    if (!xir_ref_is_vreg(ins->dst))
+                        break;
+                    uint32_t dvi = XIR_REF_INDEX(ins->dst);
+                    refine_vreg_vtag(func, dvi, VTAG_F64);
+                    break;
+                }
+
+                // ---- Float arithmetic: always float ----
+                case XIR_FADD:
+                case XIR_FSUB:
+                case XIR_FMUL:
+                case XIR_FDIV:
+                case XIR_FNEG: {
+                    if (!xir_ref_is_vreg(ins->dst))
+                        break;
+                    uint32_t dvi = XIR_REF_INDEX(ins->dst);
+                    set_vreg_type(func, dvi, t_float, VTAG_F64);
+                    break;
+                }
+
+                // ---- Type conversions ----
+                case XIR_I2F: {
+                    if (!xir_ref_is_vreg(ins->dst))
+                        break;
+                    uint32_t dvi = XIR_REF_INDEX(ins->dst);
+                    set_vreg_type(func, dvi, t_float, VTAG_F64);
+                    break;
+                }
+                case XIR_F2I: {
+                    if (!xir_ref_is_vreg(ins->dst))
+                        break;
+                    uint32_t dvi = XIR_REF_INDEX(ins->dst);
+                    set_vreg_type(func, dvi, t_int, VTAG_I64);
+                    break;
+                }
+
+                // ---- ALLOC: PTR + extract heap_type from packed constant ----
+                case XIR_ALLOC: {
+                    if (!xir_ref_is_vreg(ins->dst))
+                        break;
+                    uint32_t dvi = XIR_REF_INDEX(ins->dst);
+                    if (dvi >= func->nvreg)
+                        break;
+                    if (ins->ctype.kind == XIR_TK_UNKNOWN) {
+                        ins->ctype.kind = XIR_TK_PTR;
+                    }
+                    // Extract gc_type from args[0] packed constant:
+                    // packed = (gc_extra << 8) | gc_type
+                    if (xir_ref_is_const(ins->args[0])) {
+                        uint32_t ci = XIR_REF_INDEX(ins->args[0]);
+                        if (ci < func->nconst) {
+                            uint16_t gc_type = (uint16_t) (func->consts[ci].val.i64 & 0xFF);
+                            set_vreg_heap_type(func, dvi, gc_type);
+                        }
+                    }
+                    func->vregs[dvi].is_fresh_alloc = true;
+                    break;
+                }
+
+                // ---- Memory loads: deterministic result types ----
+                case XIR_LOAD_CORO:
+                case XIR_LOAD_CORO_BYTE:
+                case XIR_LOAD32S:
+                case XIR_LOAD8Z:
+                case XIR_LOAD8S:
+                case XIR_LOAD16Z:
+                case XIR_LOAD16S:
+                case XIR_LOAD32Z:
+                case XIR_TAG_LOAD: {
+                    if (!xir_ref_is_vreg(ins->dst))
+                        break;
+                    uint32_t dvi = XIR_REF_INDEX(ins->dst);
+                    set_vreg_type(func, dvi, t_int, VTAG_I64);
+                    break;
+                }
+
+                case XIR_LOAD_F32: {
+                    if (!xir_ref_is_vreg(ins->dst))
+                        break;
+                    uint32_t dvi = XIR_REF_INDEX(ins->dst);
+                    set_vreg_type(func, dvi, t_float, VTAG_F64);
+                    break;
+                }
+
+                // ---- LOAD_FIELD: infer from vreg rep ----
+                case XIR_LOAD_FIELD: {
+                    if (!xir_ref_is_vreg(ins->dst))
+                        break;
+                    uint32_t dvi = XIR_REF_INDEX(ins->dst);
+                    if (dvi >= func->nvreg)
+                        break;
+                    if (ins->ctype.kind == XIR_TK_UNKNOWN) {
+                        uint8_t rv = VTAG_TAGGED;
+                        switch (func->vregs[dvi].rep) {
+                            case XR_REP_I64:
+                                rv = VTAG_I64;
+                                break;
+                            case XR_REP_F64:
+                                rv = VTAG_F64;
+                                break;
+                            case XR_REP_PTR:
+                                rv = VTAG_PTR;
+                                break;
+                            default:
+                                break;
+                        }
+                        if (rv != VTAG_TAGGED) {
+                            ins->ctype.kind = vtag_to_type_kind(rv);
+                        }
+                    }
+                    break;
+                }
+
+                // ---- RT_PRINT: void, skip ----
+                case XIR_RT_PRINT:
+                    break;
+
+                // ---- CATCH: exception object is always PTR ----
+                case XIR_CATCH: {
+                    if (!xir_ref_is_vreg(ins->dst))
+                        break;
+                    uint32_t dvi = XIR_REF_INDEX(ins->dst);
+                    if (dvi >= func->nvreg)
+                        break;
+                    if (ins->ctype.kind == XIR_TK_UNKNOWN)
+                        ins->ctype.kind = XIR_TK_PTR;
+                    break;
+                }
+
+                default:
+                    break;
             }
         }
     }
@@ -643,14 +773,17 @@ static void type_prop_scan_once(XirFunc *func) {
 static uint64_t type_prop_checksum(XirFunc *func) {
     uint64_t h = 1469598103934665603ull;
     for (uint32_t v = 0; v < func->nvreg; v++) {
-        uintptr_t t = (uintptr_t)func->vregs[v].xrtype;
-        uint8_t   k = 0;
-        uint16_t  ht = func->vregs[v].heap_type;
+        uintptr_t t = (uintptr_t) func->vregs[v].xrtype;
+        uint8_t k = 0;
+        uint16_t ht = func->vregs[v].heap_type;
         if (func->vregs[v].def)
-            k = (uint8_t)func->vregs[v].def->ctype.kind;
-        h ^= (uint64_t)t; h *= 1099511628211ull;
-        h ^= k;            h *= 1099511628211ull;
-        h ^= ht;           h *= 1099511628211ull;
+            k = (uint8_t) func->vregs[v].def->ctype.kind;
+        h ^= (uint64_t) t;
+        h *= 1099511628211ull;
+        h ^= k;
+        h *= 1099511628211ull;
+        h ^= ht;
+        h *= 1099511628211ull;
     }
     return h;
 }
@@ -661,16 +794,17 @@ static uint64_t type_prop_checksum(XirFunc *func) {
 #define TYPE_PROP_MAX_ROUNDS 6
 
 XirPassChange xir_pass_type_prop(XirFunc *func) {
-    if (!func || func->nblk == 0) return xir_pass_no_change();
+    if (!func || func->nblk == 0)
+        return xir_pass_no_change();
     uint64_t initial = type_prop_checksum(func);
     for (int round = 0; round < TYPE_PROP_MAX_ROUNDS; round++) {
         uint64_t before = type_prop_checksum(func);
         type_prop_scan_once(func);
-        if (type_prop_checksum(func) == before) break;
+        if (type_prop_checksum(func) == before)
+            break;
     }
-    return type_prop_checksum(func) != initial
-        ? (XirPassChange){ false, false, true, 0, 0, 0 }
-        : xir_pass_no_change();
+    return type_prop_checksum(func) != initial ? (XirPassChange){false, false, true, 0, 0, 0}
+                                               : xir_pass_no_change();
 }
 
 /* ========== Type-Driven Specialization ========== */
@@ -692,12 +826,14 @@ XirPassChange xir_pass_type_prop(XirFunc *func) {
  *   they cannot do with opaque RT_* instructions.
  */
 XirPassChange xir_pass_specialize(XirFunc *func) {
-    if (!func || func->nblk == 0) return xir_pass_no_change();
+    if (!func || func->nblk == 0)
+        return xir_pass_no_change();
 
     uint32_t n_spec = 0;
     for (uint32_t bi = 0; bi < func->nblk; bi++) {
         XirBlock *blk = func->blocks[bi];
-        if (!blk) continue;
+        if (!blk)
+            continue;
 
         for (uint32_t i = 0; i < blk->nins; i++) {
             XirIns *ins = &blk->ins[i];
@@ -722,55 +858,71 @@ XirPassChange xir_pass_specialize(XirFunc *func) {
             }
 
             switch (ins->op) {
-
-            // ---- RT comparisons → native comparisons ----
-            case XIR_RT_LT: case XIR_RT_LE: case XIR_RT_EQ: {
-                if (ta == VTAG_I64 && tb == VTAG_I64 &&
-                    ra == XR_REP_I64 && rb == XR_REP_I64) {
-                    // Both proven I64: lower to native int compare
-                    if (ins->op == XIR_RT_LT)      ins->op = XIR_LT;
-                    else if (ins->op == XIR_RT_LE)  ins->op = XIR_LE;
-                    else                            ins->op = XIR_EQ;
-                    ins->rep = XR_REP_I64;
-                    ins->flags &= ~XIR_FLAG_SIDE_EFFECT;
-                } else if (ta == VTAG_F64 && tb == VTAG_F64 &&
-                           ra == XR_REP_F64 && rb == XR_REP_F64) {
-                    // Both proven F64: lower to native float compare
-                    if (ins->op == XIR_RT_LT)      ins->op = XIR_FLT;
-                    else if (ins->op == XIR_RT_LE)  ins->op = XIR_FLE;
-                    else                            ins->op = XIR_FEQ;
-                    ins->rep = XR_REP_I64;
-                    ins->flags &= ~XIR_FLAG_SIDE_EFFECT;
-                }
-                break;
-            }
-
-            // ---- RT arithmetic (both F64) → native float ops ----
-            case XIR_RT_ADD: case XIR_RT_SUB: case XIR_RT_MUL:
-            case XIR_RT_DIV: {
-                if (ra == XR_REP_F64 && rb == XR_REP_F64) {
-                    switch (ins->op) {
-                    case XIR_RT_ADD: ins->op = XIR_FADD; break;
-                    case XIR_RT_SUB: ins->op = XIR_FSUB; break;
-                    case XIR_RT_MUL: ins->op = XIR_FMUL; break;
-                    case XIR_RT_DIV: ins->op = XIR_FDIV; break;
-                    default: break;
+                // ---- RT comparisons → native comparisons ----
+                case XIR_RT_LT:
+                case XIR_RT_LE:
+                case XIR_RT_EQ: {
+                    if (ta == VTAG_I64 && tb == VTAG_I64 && ra == XR_REP_I64 && rb == XR_REP_I64) {
+                        // Both proven I64: lower to native int compare
+                        if (ins->op == XIR_RT_LT)
+                            ins->op = XIR_LT;
+                        else if (ins->op == XIR_RT_LE)
+                            ins->op = XIR_LE;
+                        else
+                            ins->op = XIR_EQ;
+                        ins->rep = XR_REP_I64;
+                        ins->flags &= ~XIR_FLAG_SIDE_EFFECT;
+                    } else if (ta == VTAG_F64 && tb == VTAG_F64 && ra == XR_REP_F64 &&
+                               rb == XR_REP_F64) {
+                        // Both proven F64: lower to native float compare
+                        if (ins->op == XIR_RT_LT)
+                            ins->op = XIR_FLT;
+                        else if (ins->op == XIR_RT_LE)
+                            ins->op = XIR_FLE;
+                        else
+                            ins->op = XIR_FEQ;
+                        ins->rep = XR_REP_I64;
+                        ins->flags &= ~XIR_FLAG_SIDE_EFFECT;
                     }
-                    ins->rep = XR_REP_F64;
-                    ins->flags &= ~XIR_FLAG_SIDE_EFFECT;
+                    break;
                 }
-                break;
-            }
 
-            default:
-                break;
+                // ---- RT arithmetic (both F64) → native float ops ----
+                case XIR_RT_ADD:
+                case XIR_RT_SUB:
+                case XIR_RT_MUL:
+                case XIR_RT_DIV: {
+                    if (ra == XR_REP_F64 && rb == XR_REP_F64) {
+                        switch (ins->op) {
+                            case XIR_RT_ADD:
+                                ins->op = XIR_FADD;
+                                break;
+                            case XIR_RT_SUB:
+                                ins->op = XIR_FSUB;
+                                break;
+                            case XIR_RT_MUL:
+                                ins->op = XIR_FMUL;
+                                break;
+                            case XIR_RT_DIV:
+                                ins->op = XIR_FDIV;
+                                break;
+                            default:
+                                break;
+                        }
+                        ins->rep = XR_REP_F64;
+                        ins->flags &= ~XIR_FLAG_SIDE_EFFECT;
+                    }
+                    break;
+                }
+
+                default:
+                    break;
             }
-            if (ins->op != orig_op) n_spec++;
+            if (ins->op != orig_op)
+                n_spec++;
         }
     }
-    return n_spec
-        ? (XirPassChange){ false, false, true, 0, 0, 0 }
-        : xir_pass_no_change();
+    return n_spec ? (XirPassChange){false, false, true, 0, 0, 0} : xir_pass_no_change();
 }
 
 /* ========== Write Barrier Elimination ========== */
@@ -797,29 +949,31 @@ XirPassChange xir_pass_specialize(XirFunc *func) {
  */
 static bool can_trigger_gc(uint16_t op) {
     switch (op) {
-    case XIR_SAFEPOINT:
-    case XIR_CALL_C:
-    case XIR_CALL_KNOWN:
-    case XIR_ALLOC:
-        return true;
-    default:
-        return false;
+        case XIR_SAFEPOINT:
+        case XIR_CALL_C:
+        case XIR_CALL_KNOWN:
+        case XIR_ALLOC:
+            return true;
+        default:
+            return false;
     }
 }
 
 XirPassChange xir_pass_elim_write_barriers(XirFunc *func) {
-    if (!func) return xir_pass_no_change();
+    if (!func)
+        return xir_pass_no_change();
 
     uint32_t n_elim = 0;
 
-    /* Track up to 32 "known-safe" parent vregs per block.
-     * A vreg is safe if it was freshly allocated (Rule 1) or
-     * already had a barrier (Rule 2) since the last GC point. */
-    #define WBE_MAX_SAFE 32
+/* Track up to 32 "known-safe" parent vregs per block.
+ * A vreg is safe if it was freshly allocated (Rule 1) or
+ * already had a barrier (Rule 2) since the last GC point. */
+#define WBE_MAX_SAFE 32
 
     for (uint32_t bi = 0; bi < func->nblk; bi++) {
         XirBlock *blk = func->blocks[bi];
-        if (!blk) continue;
+        if (!blk)
+            continue;
 
         XirRef safe_parents[WBE_MAX_SAFE];
         uint32_t nsafe = 0;
@@ -840,11 +994,13 @@ XirPassChange xir_pass_elim_write_barriers(XirFunc *func) {
                 continue;
             }
 
-            if (ins->op != XIR_BARRIER_FWD) continue;
+            if (ins->op != XIR_BARRIER_FWD)
+                continue;
 
             // args[0] = parent object
             XirRef parent = ins->args[0];
-            if (!xir_ref_is_vreg(parent)) continue;
+            if (!xir_ref_is_vreg(parent))
+                continue;
 
             // Check if parent is in safe set
             bool is_safe = false;
@@ -872,10 +1028,8 @@ XirPassChange xir_pass_elim_write_barriers(XirFunc *func) {
         }
     }
 
-    #undef WBE_MAX_SAFE
-    return n_elim
-        ? (XirPassChange){ false, true, false, n_elim, 0, 0 }
-        : xir_pass_no_change();
+#undef WBE_MAX_SAFE
+    return n_elim ? (XirPassChange){false, true, false, n_elim, 0, 0} : xir_pass_no_change();
 }
 
 /* ========== Range Analysis ========== */
@@ -901,21 +1055,26 @@ XirPassChange xir_pass_elim_write_barriers(XirFunc *func) {
 typedef struct {
     int64_t lo;        // inclusive lower bound
     int64_t hi;        // inclusive upper bound (constant)
-    XirRef  sym_bound; // symbolic strict upper bound: value < sym_bound
+    XirRef sym_bound;  // symbolic strict upper bound: value < sym_bound
                        // XIR_NONE if no symbolic bound
-    bool    known;     // true if range is valid
+    bool known;        // true if range is valid
 } XirRange;
 
 // Try to get constant value from a vreg
 static bool ra_get_const(XirFunc *func, XirRef ref, int64_t *out) {
-    if (!xir_ref_is_vreg(ref)) return false;
+    if (!xir_ref_is_vreg(ref))
+        return false;
     uint32_t vi = XIR_REF_INDEX(ref);
-    if (vi >= func->nvreg) return false;
+    if (vi >= func->nvreg)
+        return false;
     XirIns *def = func->vregs[vi].def;
-    if (!def || def->op != XIR_CONST_I64) return false;
-    if (!xir_ref_is_const(def->args[0])) return false;
+    if (!def || def->op != XIR_CONST_I64)
+        return false;
+    if (!xir_ref_is_const(def->args[0]))
+        return false;
     uint32_t ci = XIR_REF_INDEX(def->args[0]);
-    if (ci >= func->nconst) return false;
+    if (ci >= func->nconst)
+        return false;
     *out = func->consts[ci].val.i64;
     return true;
 }
@@ -923,10 +1082,12 @@ static bool ra_get_const(XirFunc *func, XirRef ref, int64_t *out) {
 /* Detect simple induction variable pattern:
  *   phi(init, update) where update = phi + stride
  * Returns true if detected, sets *init_val and *stride_val */
-static bool ra_detect_induction(XirFunc *func, XirPhi *phi,
-                                 int64_t *init_val, int64_t *stride_val) {
-    if (!phi || phi->narg != 2) return false;
-    if (!xir_ref_is_vreg(phi->dst)) return false;
+static bool ra_detect_induction(XirFunc *func, XirPhi *phi, int64_t *init_val,
+                                int64_t *stride_val) {
+    if (!phi || phi->narg != 2)
+        return false;
+    if (!xir_ref_is_vreg(phi->dst))
+        return false;
 
     // Try both orderings: (init, update) and (update, init)
     for (int order = 0; order < 2; order++) {
@@ -935,29 +1096,39 @@ static bool ra_detect_induction(XirFunc *func, XirPhi *phi,
 
         // init must be a constant
         int64_t init;
-        if (!ra_get_const(func, init_ref, &init)) continue;
+        if (!ra_get_const(func, init_ref, &init))
+            continue;
 
         // update must be phi +/- constant
-        if (!xir_ref_is_vreg(update_ref)) continue;
+        if (!xir_ref_is_vreg(update_ref))
+            continue;
         uint32_t ui = XIR_REF_INDEX(update_ref);
-        if (ui >= func->nvreg) continue;
+        if (ui >= func->nvreg)
+            continue;
         XirIns *udef = func->vregs[ui].def;
-        if (!udef) continue;
+        if (!udef)
+            continue;
 
         int64_t stride;
         if (udef->op == XIR_ADD) {
             // update = a + b, one of which is phi, the other is const stride
             if (udef->args[0] == phi->dst) {
-                if (!ra_get_const(func, udef->args[1], &stride)) continue;
+                if (!ra_get_const(func, udef->args[1], &stride))
+                    continue;
             } else if (udef->args[1] == phi->dst) {
-                if (!ra_get_const(func, udef->args[0], &stride)) continue;
-            } else continue;
+                if (!ra_get_const(func, udef->args[0], &stride))
+                    continue;
+            } else
+                continue;
         } else if (udef->op == XIR_SUB) {
             // update = phi - const
-            if (udef->args[0] != phi->dst) continue;
-            if (!ra_get_const(func, udef->args[1], &stride)) continue;
+            if (udef->args[0] != phi->dst)
+                continue;
+            if (!ra_get_const(func, udef->args[1], &stride))
+                continue;
             stride = -stride;
-        } else continue;
+        } else
+            continue;
 
         *init_val = init;
         *stride_val = stride;
@@ -971,15 +1142,17 @@ static bool ra_detect_induction(XirFunc *func, XirPhi *phi,
  * Returns true if a constant or symbolic bound is found.
  * sym_ref receives the symbolic bound vreg (e.g., arr.length) when
  * the bound is not a constant. sym_ref is XIR_NONE for constant bounds. */
-static bool ra_find_loop_bound(XirFunc *func, XirBlock *header, XirRef iv_ref,
-                                int64_t *bound_val, XirRef *sym_ref) {
+static bool ra_find_loop_bound(XirFunc *func, XirBlock *header, XirRef iv_ref, int64_t *bound_val,
+                               XirRef *sym_ref) {
     *sym_ref = XIR_NONE;
     for (uint32_t pi = 0; pi < header->npred; pi++) {
         XirBlock *pred = header->preds[pi];
-        if (!pred || pred->nins == 0) continue;
-        if (pred->jmp.type != XIR_BR) continue;
+        if (!pred || pred->nins == 0)
+            continue;
+        if (pred->jmp.type != XIR_BR)
+            continue;
 
-        for (int32_t ii = (int32_t)pred->nins - 1; ii >= 0; ii--) {
+        for (int32_t ii = (int32_t) pred->nins - 1; ii >= 0; ii--) {
             XirIns *ins = &pred->ins[ii];
 
             if (ins->op == XIR_LT || ins->op == XIR_LE) {
@@ -1006,32 +1179,39 @@ static bool ra_find_loop_bound(XirFunc *func, XirBlock *header, XirRef iv_ref,
                     }
                 }
             }
-            if ((int32_t)pred->nins - 1 - ii > 3) break;
+            if ((int32_t) pred->nins - 1 - ii > 3)
+                break;
         }
     }
     return false;
 }
 
 XirPassChange xir_pass_range_analysis(XirFunc *func) {
-    if (!func || func->nvreg == 0 || func->nblk == 0) return xir_pass_no_change();
+    if (!func || func->nvreg == 0 || func->nblk == 0)
+        return xir_pass_no_change();
 
     uint32_t nv = func->nvreg;
-    if (nv > XIR_MAX_FUNC_VREGS) return xir_pass_no_change(); // bail on very large functions
+    if (nv > XIR_MAX_FUNC_VREGS)
+        return xir_pass_no_change();  // bail on very large functions
 
     // Phase 1: Initialize range info for all vregs
-    XirRange *ranges = (XirRange *)xr_calloc(nv, sizeof(XirRange));
-    if (!ranges) return xir_pass_no_change();
+    XirRange *ranges = (XirRange *) xr_calloc(nv, sizeof(XirRange));
+    if (!ranges)
+        return xir_pass_no_change();
 
     // Set ranges for constants
     for (uint32_t bi = 0; bi < func->nblk; bi++) {
         XirBlock *blk = func->blocks[bi];
-        if (!blk) continue;
+        if (!blk)
+            continue;
 
         for (uint32_t i = 0; i < blk->nins; i++) {
             XirIns *ins = &blk->ins[i];
-            if (!xir_ref_is_vreg(ins->dst)) continue;
+            if (!xir_ref_is_vreg(ins->dst))
+                continue;
             uint32_t dvi = XIR_REF_INDEX(ins->dst);
-            if (dvi >= nv) continue;
+            if (dvi >= nv)
+                continue;
 
             if (ins->op == XIR_CONST_I64) {
                 int64_t val;
@@ -1048,12 +1228,15 @@ XirPassChange xir_pass_range_analysis(XirFunc *func) {
     // Phase 2: Detect induction variables and set their ranges
     for (uint32_t bi = 0; bi < func->nblk; bi++) {
         XirBlock *blk = func->blocks[bi];
-        if (!blk) continue;
+        if (!blk)
+            continue;
 
         for (XirPhi *phi = blk->phis; phi; phi = phi->next) {
-            if (!xir_ref_is_vreg(phi->dst)) continue;
+            if (!xir_ref_is_vreg(phi->dst))
+                continue;
             uint32_t pvi = XIR_REF_INDEX(phi->dst);
-            if (pvi >= nv) continue;
+            if (pvi >= nv)
+                continue;
 
             int64_t init, stride;
             if (ra_detect_induction(func, phi, &init, &stride)) {
@@ -1088,102 +1271,109 @@ XirPassChange xir_pass_range_analysis(XirFunc *func) {
 
         for (uint32_t bi = 0; bi < func->nblk; bi++) {
             XirBlock *blk = func->blocks[bi];
-            if (!blk) continue;
+            if (!blk)
+                continue;
 
             for (uint32_t i = 0; i < blk->nins; i++) {
                 XirIns *ins = &blk->ins[i];
-                if (!xir_ref_is_vreg(ins->dst)) continue;
+                if (!xir_ref_is_vreg(ins->dst))
+                    continue;
                 uint32_t dvi = XIR_REF_INDEX(ins->dst);
-                if (dvi >= nv || ranges[dvi].known) continue;
+                if (dvi >= nv || ranges[dvi].known)
+                    continue;
 
-                if (ins->rep != XR_REP_I64) continue;
+                if (ins->rep != XR_REP_I64)
+                    continue;
 
                 XirRange r0 = {0}, r1 = {0};
                 if (xir_ref_is_vreg(ins->args[0])) {
                     uint32_t ai = XIR_REF_INDEX(ins->args[0]);
-                    if (ai < nv) r0 = ranges[ai];
+                    if (ai < nv)
+                        r0 = ranges[ai];
                 }
                 if (xir_ref_is_vreg(ins->args[1])) {
                     uint32_t ai = XIR_REF_INDEX(ins->args[1]);
-                    if (ai < nv) r1 = ranges[ai];
+                    if (ai < nv)
+                        r1 = ranges[ai];
                 }
 
-                if (!r0.known || !r1.known) continue;
+                if (!r0.known || !r1.known)
+                    continue;
 
                 switch (ins->op) {
-                case XIR_ADD:
-                    if (r0.lo >= 0 && r1.lo >= 0 &&
-                        r0.hi <= INT64_MAX - r1.hi) {
-                        ranges[dvi].lo = r0.lo + r1.lo;
-                        ranges[dvi].hi = r0.hi + r1.hi;
-                        ranges[dvi].sym_bound = XIR_NONE;
-                        ranges[dvi].known = true;
-                        changed = true;
-                    }
-                    break;
-                case XIR_SUB:
-                    if (r0.lo >= r1.hi && r0.lo >= 0) {
-                        ranges[dvi].lo = r0.lo - r1.hi;
-                        ranges[dvi].hi = r0.hi - r1.lo;
-                        ranges[dvi].sym_bound = XIR_NONE;
-                        ranges[dvi].known = true;
-                        changed = true;
-                    }
-                    break;
-                case XIR_AND:
-                    if (r0.lo >= 0 && r1.lo >= 0) {
-                        ranges[dvi].lo = 0;
-                        ranges[dvi].hi = r0.hi < r1.hi ? r0.hi : r1.hi;
-                        ranges[dvi].sym_bound = XIR_NONE;
-                        ranges[dvi].known = true;
-                        changed = true;
-                    }
-                    break;
-                case XIR_MUL:
-                    if (r0.lo >= 0 && r1.lo >= 0 &&
-                        r0.hi <= 0x7FFFFFFF && r1.hi <= 0x7FFFFFFF) {
-                        ranges[dvi].lo = r0.lo * r1.lo;
-                        ranges[dvi].hi = r0.hi * r1.hi;
-                        ranges[dvi].sym_bound = XIR_NONE;
-                        ranges[dvi].known = true;
-                        changed = true;
-                    }
-                    break;
-                case XIR_MOD:
-                    if (r0.lo >= 0 && r1.lo > 0) {
-                        ranges[dvi].lo = 0;
-                        int64_t max_mod = r1.hi - 1;
-                        ranges[dvi].hi = (r0.hi < max_mod) ? r0.hi : max_mod;
-                        ranges[dvi].sym_bound = XIR_NONE;
-                        ranges[dvi].known = true;
-                        changed = true;
-                    }
-                    break;
-                case XIR_SHL:
-                    if (r0.lo >= 0 && r1.lo >= 0 && r1.lo == r1.hi &&
-                        r1.lo < 63 && r0.hi <= (INT64_MAX >> r1.lo)) {
-                        ranges[dvi].lo = r0.lo << r1.lo;
-                        ranges[dvi].hi = r0.hi << r1.lo;
-                        ranges[dvi].sym_bound = XIR_NONE;
-                        ranges[dvi].known = true;
-                        changed = true;
-                    }
-                    break;
-                case XIR_SHR:
-                    if (r0.lo >= 0 && r1.lo >= 0 && r1.lo == r1.hi && r1.lo < 64) {
-                        ranges[dvi].lo = 0;
-                        ranges[dvi].hi = r0.hi >> r1.lo;
-                        ranges[dvi].sym_bound = XIR_NONE;
-                        ranges[dvi].known = true;
-                        changed = true;
-                    }
-                    break;
-                default:
-                    break;
+                    case XIR_ADD:
+                        if (r0.lo >= 0 && r1.lo >= 0 && r0.hi <= INT64_MAX - r1.hi) {
+                            ranges[dvi].lo = r0.lo + r1.lo;
+                            ranges[dvi].hi = r0.hi + r1.hi;
+                            ranges[dvi].sym_bound = XIR_NONE;
+                            ranges[dvi].known = true;
+                            changed = true;
+                        }
+                        break;
+                    case XIR_SUB:
+                        if (r0.lo >= r1.hi && r0.lo >= 0) {
+                            ranges[dvi].lo = r0.lo - r1.hi;
+                            ranges[dvi].hi = r0.hi - r1.lo;
+                            ranges[dvi].sym_bound = XIR_NONE;
+                            ranges[dvi].known = true;
+                            changed = true;
+                        }
+                        break;
+                    case XIR_AND:
+                        if (r0.lo >= 0 && r1.lo >= 0) {
+                            ranges[dvi].lo = 0;
+                            ranges[dvi].hi = r0.hi < r1.hi ? r0.hi : r1.hi;
+                            ranges[dvi].sym_bound = XIR_NONE;
+                            ranges[dvi].known = true;
+                            changed = true;
+                        }
+                        break;
+                    case XIR_MUL:
+                        if (r0.lo >= 0 && r1.lo >= 0 && r0.hi <= 0x7FFFFFFF &&
+                            r1.hi <= 0x7FFFFFFF) {
+                            ranges[dvi].lo = r0.lo * r1.lo;
+                            ranges[dvi].hi = r0.hi * r1.hi;
+                            ranges[dvi].sym_bound = XIR_NONE;
+                            ranges[dvi].known = true;
+                            changed = true;
+                        }
+                        break;
+                    case XIR_MOD:
+                        if (r0.lo >= 0 && r1.lo > 0) {
+                            ranges[dvi].lo = 0;
+                            int64_t max_mod = r1.hi - 1;
+                            ranges[dvi].hi = (r0.hi < max_mod) ? r0.hi : max_mod;
+                            ranges[dvi].sym_bound = XIR_NONE;
+                            ranges[dvi].known = true;
+                            changed = true;
+                        }
+                        break;
+                    case XIR_SHL:
+                        if (r0.lo >= 0 && r1.lo >= 0 && r1.lo == r1.hi && r1.lo < 63 &&
+                            r0.hi <= (INT64_MAX >> r1.lo)) {
+                            ranges[dvi].lo = r0.lo << r1.lo;
+                            ranges[dvi].hi = r0.hi << r1.lo;
+                            ranges[dvi].sym_bound = XIR_NONE;
+                            ranges[dvi].known = true;
+                            changed = true;
+                        }
+                        break;
+                    case XIR_SHR:
+                        if (r0.lo >= 0 && r1.lo >= 0 && r1.lo == r1.hi && r1.lo < 64) {
+                            ranges[dvi].lo = 0;
+                            ranges[dvi].hi = r0.hi >> r1.lo;
+                            ranges[dvi].sym_bound = XIR_NONE;
+                            ranges[dvi].known = true;
+                            changed = true;
+                        }
+                        break;
+                    default:
+                        break;
                 }
             }
         }
-        if (!changed) break;
+        if (!changed)
+            break;
     }
 
     // Phase 4: Eliminate redundant GUARD_BOUNDS + constraint propagation
@@ -1199,11 +1389,13 @@ XirPassChange xir_pass_range_analysis(XirFunc *func) {
      * GUARD_BOUNDS on the same index in the same block. */
     for (uint32_t bi = 0; bi < func->nblk; bi++) {
         XirBlock *blk = func->blocks[bi];
-        if (!blk) continue;
+        if (!blk)
+            continue;
 
         for (uint32_t i = 0; i < blk->nins; i++) {
             XirIns *ins = &blk->ins[i];
-            if (ins->op != XIR_GUARD_BOUNDS) continue;
+            if (ins->op != XIR_GUARD_BOUNDS)
+                continue;
 
             XirRef idx_ref = ins->args[0];
             XirRef len_ref = ins->args[1];
@@ -1213,16 +1405,18 @@ XirPassChange xir_pass_range_analysis(XirFunc *func) {
 
             if (xir_ref_is_vreg(idx_ref)) {
                 uint32_t vi = XIR_REF_INDEX(idx_ref);
-                if (vi < nv) idx_range = ranges[vi];
+                if (vi < nv)
+                    idx_range = ranges[vi];
             }
             if (xir_ref_is_vreg(len_ref)) {
                 uint32_t vi = XIR_REF_INDEX(len_ref);
-                if (vi < nv) len_range = ranges[vi];
+                if (vi < nv)
+                    len_range = ranges[vi];
             }
 
             // (a) Constant elimination: index range provably within [0, length)
-            if (idx_range.known && len_range.known &&
-                idx_range.lo >= 0 && idx_range.hi < len_range.lo) {
+            if (idx_range.known && len_range.known && idx_range.lo >= 0 &&
+                idx_range.hi < len_range.lo) {
                 ins->op = XIR_NOP;
                 ins->dst = XIR_NONE;
                 ins->args[0] = XIR_NONE;
@@ -1235,8 +1429,7 @@ XirPassChange xir_pass_range_analysis(XirFunc *func) {
              * Pattern: for (i=0; i<arr.length; i++) arr[i] = ...
              * The IV i has sym_bound pointing to the arr.length vreg,
              * and GUARD_BOUNDS(i, arr.length) uses the same vreg. */
-            if (idx_range.known && idx_range.lo >= 0 &&
-                idx_range.sym_bound != XIR_NONE &&
+            if (idx_range.known && idx_range.lo >= 0 && idx_range.sym_bound != XIR_NONE &&
                 idx_range.sym_bound == len_ref) {
                 ins->op = XIR_NOP;
                 ins->dst = XIR_NONE;
@@ -1268,7 +1461,7 @@ XirPassChange xir_pass_range_analysis(XirFunc *func) {
     }
 
     xr_free(ranges);
-    return (XirPassChange){ false, false, true, 0, 0, 0 };
+    return (XirPassChange){false, false, true, 0, 0, 0};
 }
 
 #undef RA_MAX_ROUNDS
@@ -1289,7 +1482,8 @@ XirPassChange xir_pass_range_analysis(XirFunc *func) {
  * see the narrowed type. Uses before the guard keep the original type.
  */
 XirPassChange xir_pass_insert_redefines(XirFunc *func) {
-    if (!func || func->nblk == 0) return xir_pass_no_change();
+    if (!func || func->nblk == 0)
+        return xir_pass_no_change();
 
     bool any_inserted = false;
 
@@ -1297,10 +1491,11 @@ XirPassChange xir_pass_insert_redefines(XirFunc *func) {
 
     for (uint32_t bi = 0; bi < func->nblk; bi++) {
         XirBlock *blk = func->blocks[bi];
-        if (!blk) continue;
+        if (!blk)
+            continue;
 
         // Process guards from END to START to avoid index shift issues
-        for (int32_t ii = (int32_t)blk->nins - 1; ii >= 0; ii--) {
+        for (int32_t ii = (int32_t) blk->nins - 1; ii >= 0; ii--) {
             XirIns *ins = &blk->ins[ii];
 
             // Determine guarded vreg and narrowed type
@@ -1308,43 +1503,52 @@ XirPassChange xir_pass_insert_redefines(XirFunc *func) {
             XirType narrowed = XIR_TYPE_UNKNOWN;
 
             switch (ins->op) {
-            case XIR_GUARD_TAG: {
-                if (!xir_ref_is_vreg(ins->args[0])) continue;
-                if (!xir_ref_is_const(ins->args[1])) continue;
-                uint32_t ci = XIR_REF_INDEX(ins->args[1]);
-                if (ci >= func->nconst) continue;
-                uint8_t expected_tag = (uint8_t)func->consts[ci].val.raw;
-                guarded = ins->args[0];
-                narrowed.kind = vtag_to_type_kind(value_tag_to_vtag(expected_tag));
-                break;
-            }
-            case XIR_GUARD_NONNULL:
-                if (!xir_ref_is_vreg(ins->args[0])) continue;
-                guarded = ins->args[0];
-                narrowed.kind = XIR_TK_PTR;
-                break;
-            case XIR_GUARD_CLASS: {
-                if (!xir_ref_is_vreg(ins->args[0])) continue;
-                guarded = ins->args[0];
-                narrowed.kind = XIR_TK_PTR;
-                if (xir_ref_is_const(ins->args[1])) {
+                case XIR_GUARD_TAG: {
+                    if (!xir_ref_is_vreg(ins->args[0]))
+                        continue;
+                    if (!xir_ref_is_const(ins->args[1]))
+                        continue;
                     uint32_t ci = XIR_REF_INDEX(ins->args[1]);
-                    if (ci < func->nconst)
-                        narrowed.heap_cid = (uint16_t)func->consts[ci].val.raw;
+                    if (ci >= func->nconst)
+                        continue;
+                    uint8_t expected_tag = (uint8_t) func->consts[ci].val.raw;
+                    guarded = ins->args[0];
+                    narrowed.kind = vtag_to_type_kind(value_tag_to_vtag(expected_tag));
+                    break;
                 }
-                break;
-            }
-            case XIR_GUARD_KLASS:
-                if (!xir_ref_is_vreg(ins->args[0])) continue;
-                guarded = ins->args[0];
-                narrowed.kind = XIR_TK_PTR;
-                break;
-            default: continue;
+                case XIR_GUARD_NONNULL:
+                    if (!xir_ref_is_vreg(ins->args[0]))
+                        continue;
+                    guarded = ins->args[0];
+                    narrowed.kind = XIR_TK_PTR;
+                    break;
+                case XIR_GUARD_CLASS: {
+                    if (!xir_ref_is_vreg(ins->args[0]))
+                        continue;
+                    guarded = ins->args[0];
+                    narrowed.kind = XIR_TK_PTR;
+                    if (xir_ref_is_const(ins->args[1])) {
+                        uint32_t ci = XIR_REF_INDEX(ins->args[1]);
+                        if (ci < func->nconst)
+                            narrowed.heap_cid = (uint16_t) func->consts[ci].val.raw;
+                    }
+                    break;
+                }
+                case XIR_GUARD_KLASS:
+                    if (!xir_ref_is_vreg(ins->args[0]))
+                        continue;
+                    guarded = ins->args[0];
+                    narrowed.kind = XIR_TK_PTR;
+                    break;
+                default:
+                    continue;
             }
 
-            if (xir_ref_is_none(guarded)) continue;
+            if (xir_ref_is_none(guarded))
+                continue;
             uint32_t gvi = XIR_REF_INDEX(guarded);
-            if (gvi >= func->nvreg) continue;
+            if (gvi >= func->nvreg)
+                continue;
 
             // Skip if guarded vreg already has a concrete type (no narrowing needed)
             XirType gct = xir_ref_ctype(func, guarded);
@@ -1355,12 +1559,14 @@ XirPassChange xir_pass_insert_redefines(XirFunc *func) {
             uint8_t rep = func->vregs[gvi].rep;
             XirRef new_ref = xir_new_vreg(func, rep);
             uint32_t nvi = XIR_REF_INDEX(new_ref);
-            if (nvi >= func->nvreg) continue;
+            if (nvi >= func->nvreg)
+                continue;
 
             // Insert REDEFINE at position ii+1
-            uint32_t insert_pos = (uint32_t)ii + 1;
+            uint32_t insert_pos = (uint32_t) ii + 1;
             XirIns *redef = xir_block_insert_at(func, blk, insert_pos);
-            if (!redef) continue;
+            if (!redef)
+                continue;
 
             any_inserted = true;
             redef->op = XIR_REDEFINE;
@@ -1391,10 +1597,13 @@ XirPassChange xir_pass_insert_redefines(XirFunc *func) {
             // Rewrite uses in dominated blocks
             if (dt) {
                 for (uint32_t dbi = 0; dbi < func->nblk; dbi++) {
-                    if (dbi == bi) continue;
-                    if (!xir_dom_covers(dt, bi, dbi)) continue;
+                    if (dbi == bi)
+                        continue;
+                    if (!xir_dom_covers(dt, bi, dbi))
+                        continue;
                     XirBlock *dblk = func->blocks[dbi];
-                    if (!dblk) continue;
+                    if (!dblk)
+                        continue;
                     for (uint32_t j = 0; j < dblk->nins; j++) {
                         XirIns *use = &dblk->ins[j];
                         for (int a = 0; a < 2; a++) {
@@ -1415,8 +1624,5 @@ XirPassChange xir_pass_insert_redefines(XirFunc *func) {
             }
         }
     }
-    return any_inserted
-        ? (XirPassChange){ false, true, true, 0, 0, 0 }
-        : xir_pass_no_change();
+    return any_inserted ? (XirPassChange){false, true, true, 0, 0, 0} : xir_pass_no_change();
 }
-

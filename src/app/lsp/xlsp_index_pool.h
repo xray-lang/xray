@@ -41,26 +41,26 @@ typedef struct XrLspServer XrLspServer;
 
 // Lightweight symbol info (can be passed between threads)
 typedef struct XrLspIndexSymbol {
-    char *name;                  // Symbol name (owned, must free)
-    char *type_str;              // Type as string (owned, may be NULL)
-    XrLspSymbolKind kind;        // Symbol kind
-    int line;                    // Definition line (0-based)
-    int column;                  // Definition column (0-based)
-    int end_line;                // End line
-    int end_column;              // End column
-    bool is_exported;            // Is exported?
-    bool is_definition;          // Is definition (vs reference)?
+    char *name;                     // Symbol name (owned, must free)
+    char *type_str;                 // Type as string (owned, may be NULL)
+    XrLspSymbolKind kind;           // Symbol kind
+    int line;                       // Definition line (0-based)
+    int column;                     // Definition column (0-based)
+    int end_line;                   // End line
+    int end_column;                 // End column
+    bool is_exported;               // Is exported?
+    bool is_definition;             // Is definition (vs reference)?
     struct XrLspIndexSymbol *next;  // Linked list
 } XrLspIndexSymbol;
 
 // Index result for a single file
 typedef struct XrLspIndexResult {
-    char *uri;                   // File URI (owned)
-    char *path;                  // File path (owned)
-    XrLspIndexSymbol *symbols;   // Linked list of symbols
-    int symbol_count;            // Number of symbols
-    bool success;                // Parse succeeded?
-    char *error_message;         // Error message if failed (owned, may be NULL)
+    char *uri;                      // File URI (owned)
+    char *path;                     // File path (owned)
+    XrLspIndexSymbol *symbols;      // Linked list of symbols
+    int symbol_count;               // Number of symbols
+    bool success;                   // Parse succeeded?
+    char *error_message;            // Error message if failed (owned, may be NULL)
     struct XrLspIndexResult *next;  // Linked list for batch results
 } XrLspIndexResult;
 
@@ -68,21 +68,21 @@ typedef struct XrLspIndexResult {
 // Index Worker Pool
 // ============================================================================
 
-#define XLSP_INDEX_POOL_SIZE 4   // Number of worker threads
+#define XLSP_INDEX_POOL_SIZE 4  // Number of worker threads
 
 // Work item for the pool
 typedef struct XrLspIndexWork {
-    char *path;                  // File path to index (owned)
-    char *uri;                   // File URI (owned)
-    struct XrLspIndexWork *next; // Linked list
+    char *path;                   // File path to index (owned)
+    char *uri;                    // File URI (owned)
+    struct XrLspIndexWork *next;  // Linked list
 } XrLspIndexWork;
 
 // Worker thread state
 typedef struct XrLspIndexWorker {
-    pthread_t thread;            // Thread handle
-    XrayIsolate *isolate;        // Per-worker Isolate
-    int worker_id;               // Worker ID (0 to N-1)
-    struct XrLspIndexPool *pool; // Back-pointer to pool
+    pthread_t thread;             // Thread handle
+    XrayIsolate *isolate;         // Per-worker Isolate
+    int worker_id;                // Worker ID (0 to N-1)
+    struct XrLspIndexPool *pool;  // Back-pointer to pool
 } XrLspIndexWorker;
 
 // Index pool state
@@ -90,31 +90,31 @@ typedef struct XrLspIndexPool {
     // Workers
     XrLspIndexWorker workers[XLSP_INDEX_POOL_SIZE];
     int worker_count;
-    
+
     // Work queue (MPMC with mutex for simplicity)
     XrLspIndexWork *work_head;
     XrLspIndexWork *work_tail;
     int work_count;
     pthread_mutex_t work_mutex;
     pthread_cond_t work_cond;
-    
+
     // Result queue
     XrLspIndexResult *result_head;
     XrLspIndexResult *result_tail;
     int result_count;
     pthread_mutex_t result_mutex;
-    
+
     // Notification pipe (to wake main thread)
     int notify_fd[2];
-    
+
     // Control
     atomic_bool running;
-    atomic_int active_workers;   // Number of workers currently processing
-    
+    atomic_int active_workers;  // Number of workers currently processing
+
     // Progress tracking
     atomic_int files_submitted;
     atomic_int files_completed;
-    
+
     // Server reference (for result callback)
     XrLspServer *server;
 } XrLspIndexPool;
@@ -161,4 +161,4 @@ XR_FUNC void xlsp_index_result_free_list(XrLspIndexResult *list);
 // Free a single symbol
 XR_FUNC void xlsp_index_symbol_free(XrLspIndexSymbol *sym);
 
-#endif // XLSP_INDEX_POOL_H
+#endif  // XLSP_INDEX_POOL_H

@@ -90,4 +90,4 @@ typedef struct XrVMState XrVMState;
 typedef struct XrVMContext XrVMContext;
 typedef struct XrBcCallFrame XrBcCallFrame;
 
-#endif // XFORWARD_DECL_H
+#endif  // XFORWARD_DECL_H

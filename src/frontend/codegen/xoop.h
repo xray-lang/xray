@@ -22,4 +22,4 @@ XR_FUNC void compile_class(XrCompilerContext *ctx, XrCompiler *c, ClassDeclNode 
 XR_FUNC void compile_interface(XrCompilerContext *ctx, XrCompiler *c, InterfaceDeclNode *node);
 XR_FUNC void compile_enum_decl(XrCompilerContext *ctx, XrCompiler *c, EnumDeclNode *node);
 
-#endif // XOOP_H
+#endif  // XOOP_H

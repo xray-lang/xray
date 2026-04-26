@@ -54,7 +54,7 @@
 #include "../src/base/xmalloc.h"
 
 typedef struct XrCtxBuf {
-    char  *data;
+    char *data;
     size_t len;
     size_t cap;
 } XrCtxBuf;
@@ -64,11 +64,12 @@ typedef struct XrCtxBuf {
 // Initialise the buffer with an initial capacity hint. A hint of 0 is
 // treated as 64 so the first append does not immediately realloc.
 static inline void xr_ctxbuf_init(XrCtxBuf *b, size_t hint) {
-    if (hint < 64) hint = 64;
-    b->data = (char *)xr_malloc(hint);
+    if (hint < 64)
+        hint = 64;
+    b->data = (char *) xr_malloc(hint);
     if (!b->data) {
-        fprintf(stderr, "[FATAL] %s:%d: xr_ctxbuf_init OOM (%zu bytes)\n",
-                __FILE__, __LINE__, hint);
+        fprintf(stderr, "[FATAL] %s:%d: xr_ctxbuf_init OOM (%zu bytes)\n", __FILE__, __LINE__,
+                hint);
         abort();
     }
     b->data[0] = '\0';
@@ -79,7 +80,8 @@ static inline void xr_ctxbuf_init(XrCtxBuf *b, size_t hint) {
 // Release the backing storage. Safe to call on a zeroed / already-freed
 // buffer; fields are reset so re-use would require a fresh init.
 static inline void xr_ctxbuf_free(XrCtxBuf *b) {
-    if (!b) return;
+    if (!b)
+        return;
     if (b->data) {
         xr_free(b->data);
         b->data = NULL;
@@ -92,7 +94,7 @@ static inline void xr_ctxbuf_free(XrCtxBuf *b) {
 // the CtxBuf is left in the zero state, i.e. calling xr_ctxbuf_free()
 // on it becomes a no-op. The returned pointer must be released with
 // xr_free() by the caller.
-static inline char* xr_ctxbuf_steal(XrCtxBuf *b) {
+static inline char *xr_ctxbuf_steal(XrCtxBuf *b) {
     char *p = b->data;
     b->data = NULL;
     b->len = 0;
@@ -107,10 +109,12 @@ static inline char* xr_ctxbuf_steal(XrCtxBuf *b) {
 // diagnostic message on allocator failure (see XR_REALLOC_OR_ABORT
 // rationale in src/base/xmalloc.h).
 static inline void xr_ctxbuf_reserve(XrCtxBuf *b, size_t extra) {
-    size_t need = b->len + extra + 1;    // +1 for the NUL terminator
-    if (need <= b->cap) return;
+    size_t need = b->len + extra + 1;  // +1 for the NUL terminator
+    if (need <= b->cap)
+        return;
     size_t ncap = b->cap ? b->cap : 64;
-    while (ncap < need) ncap *= 2;
+    while (ncap < need)
+        ncap *= 2;
     XR_REALLOC_OR_ABORT(b->data, ncap, "xr_ctxbuf_reserve");
     b->cap = ncap;
 }
@@ -119,7 +123,8 @@ static inline void xr_ctxbuf_reserve(XrCtxBuf *b, size_t extra) {
 
 // Append `n` bytes from `s` verbatim. Preserves embedded NULs in `s`.
 static inline void xr_ctxbuf_append(XrCtxBuf *b, const char *s, size_t n) {
-    if (n == 0 || !s) return;
+    if (n == 0 || !s)
+        return;
     xr_ctxbuf_reserve(b, n);
     memcpy(b->data + b->len, s, n);
     b->len += n;
@@ -128,7 +133,8 @@ static inline void xr_ctxbuf_append(XrCtxBuf *b, const char *s, size_t n) {
 
 // Append a NUL-terminated C string. NULL is treated as empty.
 static inline void xr_ctxbuf_append_cstr(XrCtxBuf *b, const char *s) {
-    if (!s) return;
+    if (!s)
+        return;
     xr_ctxbuf_append(b, s, strlen(s));
 }
 
@@ -153,11 +159,15 @@ static inline void xr_ctxbuf_appendf(XrCtxBuf *b, const char *fmt, ...) {
     va_copy(probe, ap);
     int needed = vsnprintf(NULL, 0, fmt, probe);
     va_end(probe);
-    if (needed <= 0) { va_end(ap); return; }
-    xr_ctxbuf_reserve(b, (size_t)needed);
+    if (needed <= 0) {
+        va_end(ap);
+        return;
+    }
+    xr_ctxbuf_reserve(b, (size_t) needed);
     int written = vsnprintf(b->data + b->len, b->cap - b->len, fmt, ap);
     va_end(ap);
-    if (written > 0) b->len += (size_t)written;
+    if (written > 0)
+        b->len += (size_t) written;
 }
 
-#endif // XR_STDLIB_CTXBUF_H
+#endif  // XR_STDLIB_CTXBUF_H

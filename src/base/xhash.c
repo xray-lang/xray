@@ -13,4 +13,3 @@
 
 // All hash functions are now inline in xhash.h for hot path performance.
 // This file kept as compilation unit to ensure header parses correctly.
-

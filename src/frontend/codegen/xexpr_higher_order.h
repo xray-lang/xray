@@ -14,17 +14,16 @@
 #include "xcompiler.h"
 #include "../../base/xdefs.h"
 
-
 /*
  * Try to inline compile higher-order function call
- * 
+ *
  * @param ctx compiler context
  * @param compiler compiler
  * @param call call expression node
  * @param result_reg output parameter, if is higher-order function, write result register here
  * @return true if is higher-order function call, false otherwise
  */
-XR_FUNC bool try_compile_higher_order_call(XrCompilerContext *ctx, XrCompiler *compiler, 
-                                   CallExprNode *call, int *result_reg);
+XR_FUNC bool try_compile_higher_order_call(XrCompilerContext *ctx, XrCompiler *compiler,
+                                           CallExprNode *call, int *result_reg);
 
-#endif // XEXPR_HIGHER_ORDER_H
+#endif  // XEXPR_HIGHER_ORDER_H

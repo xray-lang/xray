@@ -28,7 +28,8 @@
 
 // Get coroutine object from pool (per-Worker + batch steal)
 XrCoroutine *xr_coro_pool_get(XrRuntime *runtime) {
-    if (!runtime) return NULL;
+    if (!runtime)
+        return NULL;
 
     XrWorker *worker = xr_current_worker();
 
@@ -64,8 +65,8 @@ XrCoroutine *xr_coro_pool_get(XrRuntime *runtime) {
         XrCoroStructPool *pool = runtime->isolate->sys_heap->coro_pool;
         if (pool && pool->initialized) {
             // Steal entire chain.
-            XrCoroutine *chain = atomic_exchange_explicit(
-                &pool->free_list, (XrCoroutine *)NULL, memory_order_acquire);
+            XrCoroutine *chain = atomic_exchange_explicit(&pool->free_list, (XrCoroutine *) NULL,
+                                                          memory_order_acquire);
 
             int batch = 0;
             XrCoroutine *tail_prev = NULL;  // last node we keep
@@ -82,15 +83,16 @@ XrCoroutine *xr_coro_pool_get(XrRuntime *runtime) {
                 tail_prev->next = NULL;
                 // Find remainder tail.
                 XrCoroutine *rtail = remainder;
-                while (rtail->next) rtail = rtail->next;
+                while (rtail->next)
+                    rtail = rtail->next;
                 // Treiber push the whole sub-chain: rtail->next = head; CAS.
                 XrCoroutine *head;
                 do {
                     head = atomic_load_explicit(&pool->free_list, memory_order_relaxed);
                     rtail->next = head;
-                } while (!atomic_compare_exchange_weak_explicit(
-                    &pool->free_list, &head, remainder,
-                    memory_order_release, memory_order_relaxed));
+                } while (!atomic_compare_exchange_weak_explicit(&pool->free_list, &head, remainder,
+                                                                memory_order_release,
+                                                                memory_order_relaxed));
             }
 
             // Adopt the kept chain as the worker's local free list (prepend).
@@ -119,7 +121,7 @@ XrCoroutine *xr_coro_pool_get(XrRuntime *runtime) {
         XrCoroStructPool *pool = runtime->isolate->sys_heap->coro_pool;
         if (pool && pool->initialized) {
             // Check local arena cache first (use cached block pointer)
-            XrCoroPoolBlock *cached_block = (XrCoroPoolBlock *)worker->p.arena_cache_block;
+            XrCoroPoolBlock *cached_block = (XrCoroPoolBlock *) worker->p.arena_cache_block;
             if (cached_block && worker->p.arena_cache_start < worker->p.arena_cache_end) {
                 uint32_t idx = worker->p.arena_cache_start++;
                 XrCoroutine *coro = &cached_block->coros[idx];
@@ -134,7 +136,8 @@ XrCoroutine *xr_coro_pool_get(XrRuntime *runtime) {
                 uint32_t global_base = atomic_fetch_add(&pool->alloc_idx, XR_ARENA_BATCH_SIZE);
                 uint32_t local_base = global_base - block->base_idx;
                 uint32_t local_end = local_base + XR_ARENA_BATCH_SIZE;
-                if (local_end > block->capacity) local_end = block->capacity;
+                if (local_end > block->capacity)
+                    local_end = block->capacity;
                 if (local_base < block->capacity) {
                     // Cache the block and LOCAL range for future allocations
                     worker->p.arena_cache_block = block;
@@ -160,7 +163,8 @@ XrCoroutine *xr_coro_pool_get(XrRuntime *runtime) {
 
 // Return coroutine object to pool (per-Worker + batch return)
 void xr_coro_pool_put(XrRuntime *runtime, XrCoroutine *coro) {
-    if (!runtime || !coro) return;
+    if (!runtime || !coro)
+        return;
 
     // Reset coroutine state
     coro->entry_type = XR_CORO_ENTRY_CLOSURE;
@@ -184,8 +188,7 @@ void xr_coro_pool_put(XrRuntime *runtime, XrCoroutine *coro) {
                     head = atomic_load_explicit(&pool->free_list, memory_order_relaxed);
                     coro->next = head;
                 } while (!atomic_compare_exchange_weak_explicit(
-                    &pool->free_list, &head, coro,
-                    memory_order_release, memory_order_relaxed));
+                    &pool->free_list, &head, coro, memory_order_release, memory_order_relaxed));
             }
         }
         return;
@@ -212,21 +215,23 @@ void xr_coro_pool_put(XrRuntime *runtime, XrCoroutine *coro) {
             XrCoroutine *batch_tail = NULL;
             for (int i = 0; i < batch; i++) {
                 XrCoroutine *c = worker->p.local_free_list;
-                if (!c) break;
+                if (!c)
+                    break;
                 worker->p.local_free_list = c->next;
                 worker->p.local_free_count--;
                 c->next = batch_head;
                 batch_head = c;
-                if (!batch_tail) batch_tail = c;
+                if (!batch_tail)
+                    batch_tail = c;
             }
             if (batch_head) {
                 XrCoroutine *head;
                 do {
                     head = atomic_load_explicit(&pool->free_list, memory_order_relaxed);
                     batch_tail->next = head;
-                } while (!atomic_compare_exchange_weak_explicit(
-                    &pool->free_list, &head, batch_head,
-                    memory_order_release, memory_order_relaxed));
+                } while (!atomic_compare_exchange_weak_explicit(&pool->free_list, &head, batch_head,
+                                                                memory_order_release,
+                                                                memory_order_relaxed));
             }
         }
     }

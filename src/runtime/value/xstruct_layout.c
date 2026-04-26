@@ -12,16 +12,18 @@
 #include "xtype.h"
 
 int xr_type_kind_to_native(int kind, uint8_t native_width) {
-    switch ((XrTypeKind)kind) {
+    switch ((XrTypeKind) kind) {
         case XR_KIND_BOOL:
             return XR_NATIVE_BOOL;
         case XR_KIND_INT:
             // native_width carries the explicit XrNativeType for sized
             // integers (i8/i16/i32/u8/...). Zero means "default int" (i64).
-            if (native_width != 0) return (int)native_width;
+            if (native_width != 0)
+                return (int) native_width;
             return XR_NATIVE_I64;
         case XR_KIND_FLOAT:
-            if (native_width == XR_NATIVE_F32) return XR_NATIVE_F32;
+            if (native_width == XR_NATIVE_F32)
+                return XR_NATIVE_F32;
             return XR_NATIVE_F64;
         case XR_KIND_STRING:
             return XR_NATIVE_STRING;
@@ -49,14 +51,14 @@ void xr_struct_layout_compute(XrStructLayout *layout) {
         if (f->native_type == XR_NATIVE_ARRAY) {
             // Fixed-size array: size = elem_count * elem_size
             uint8_t es = xr_native_type_size(f->elem_native_type);
-            f->size = (uint16_t)(f->elem_count * es);
+            f->size = (uint16_t) (f->elem_count * es);
         } else if (f->native_type != XR_NATIVE_STRUCT) {
             f->size = xr_native_type_size(f->native_type);
         }
 
         uint8_t field_align;
         if (f->native_type == XR_NATIVE_STRUCT) {
-            field_align = 8; // nested structs: 8-byte aligned
+            field_align = 8;  // nested structs: 8-byte aligned
         } else if (f->native_type == XR_NATIVE_ARRAY) {
             field_align = xr_native_type_align(f->elem_native_type);
         } else {

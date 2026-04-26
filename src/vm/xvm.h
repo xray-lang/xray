@@ -86,8 +86,10 @@ XR_FUNC XrVMResult xr_vm_interpret_proto_isolate(struct XrayIsolate *isolate, Xr
 
 /* ========== C Function API ========== */
 
-XR_FUNC XrCFunction *xr_vm_cfunction_new(XrayIsolate *isolate, XrCFunctionPtr func, const char *name);
-XR_FUNC XrCFunction *xr_vm_yieldable_cfunction_new(XrayIsolate *isolate, XrYieldableCFunctionPtr func, const char *name);
+XR_FUNC XrCFunction *xr_vm_cfunction_new(XrayIsolate *isolate, XrCFunctionPtr func,
+                                         const char *name);
+XR_FUNC XrCFunction *xr_vm_yieldable_cfunction_new(XrayIsolate *isolate,
+                                                   XrYieldableCFunctionPtr func, const char *name);
 XR_FUNC void xr_vm_cfunction_free(XrCFunction *cfunc);
 
 /* ========== Closure API ========== */
@@ -116,18 +118,15 @@ XR_FUNC bool xr_vm_is_truthy(XrValue value);
 
 // 16384 = 2^14: power-of-2 for alignment, ~1MB memory budget at 64 bytes/frame
 static_assert(XR_FRAMES_MAX > 0 && XR_FRAMES_MAX <= 16384,
-    "XR_FRAMES_MAX must be between 1 and 16384");
-static_assert(XR_STACK_MAX >= XR_FRAMES_MAX,
-    "XR_STACK_MAX must be at least XR_FRAMES_MAX");
-static_assert(XR_STACK_MAX <= 1024 * 1024,
-    "XR_STACK_MAX too large (max 1M)");
+              "XR_FRAMES_MAX must be between 1 and 16384");
+static_assert(XR_STACK_MAX >= XR_FRAMES_MAX, "XR_STACK_MAX must be at least XR_FRAMES_MAX");
+static_assert(XR_STACK_MAX <= 1024 * 1024, "XR_STACK_MAX too large (max 1M)");
 static_assert(XR_EXCEPTION_HANDLERS_MAX > 0 && XR_EXCEPTION_HANDLERS_MAX <= 256,
-    "XR_EXCEPTION_HANDLERS_MAX must be between 1 and 256");
+              "XR_EXCEPTION_HANDLERS_MAX must be between 1 and 256");
 
 // 128 bytes = 2 cache lines, ensures good cache locality for hot path
-static_assert(sizeof(XrBcCallFrame) <= 128,
-    "XrBcCallFrame should fit in two cache lines");
+static_assert(sizeof(XrBcCallFrame) <= 128, "XrBcCallFrame should fit in two cache lines");
 
 #endif
 
-#endif // XVM_H
+#endif  // XVM_H

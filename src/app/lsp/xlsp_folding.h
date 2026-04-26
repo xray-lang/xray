@@ -16,4 +16,4 @@
 
 XR_FUNC XrJsonValue *xlsp_handle_folding_range(XrLspServer *server, XrJsonValue *params);
 
-#endif // XLSP_FOLDING_H
+#endif  // XLSP_FOLDING_H

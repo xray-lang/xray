@@ -53,7 +53,7 @@
 /* ========== Lattice cell ========== */
 
 typedef enum {
-    SCCP_TOP = 0,       // unseen — default after xr_calloc
+    SCCP_TOP = 0,  // unseen — default after xr_calloc
     SCCP_CONST_I64,
     SCCP_CONST_F64,
     SCCP_CONST_BOOL,
@@ -63,9 +63,9 @@ typedef enum {
 
 typedef struct {
     SccpKind kind;
-    int64_t  i64;       // payload for I64 / BOOL
-    double   f64;       // payload for F64
-    void    *ptr;       // payload for PTR (only meaningful when ==NULL: null pointer)
+    int64_t i64;  // payload for I64 / BOOL
+    double f64;   // payload for F64
+    void *ptr;    // payload for PTR (only meaningful when ==NULL: null pointer)
 } SccpVal;
 
 /* ========== Worklists ========== */
@@ -76,24 +76,24 @@ typedef struct {
 } CfgEdge;
 
 typedef struct {
-    CfgEdge  *edges;
-    uint32_t  len;
-    uint32_t  cap;
+    CfgEdge *edges;
+    uint32_t len;
+    uint32_t cap;
 } CfgWl;
 
 typedef struct {
-    uint32_t *vregs;   // vreg indices pending re-evaluation
-    uint32_t  len;
-    uint32_t  cap;
+    uint32_t *vregs;  // vreg indices pending re-evaluation
+    uint32_t len;
+    uint32_t cap;
 } SsaWl;
 
 typedef struct {
-    XirFunc  *func;
-    SccpVal  *cells;         // [nvreg]
-    bool     *reachable;     // [nblk]
-    bool     *exec_edge;     // [nblk*2]  (ei*2+0 = s1 edge, +1 = s2 edge)
-    CfgWl     cfg;
-    SsaWl     ssa;
+    XirFunc *func;
+    SccpVal *cells;   // [nvreg]
+    bool *reachable;  // [nblk]
+    bool *exec_edge;  // [nblk*2]  (ei*2+0 = s1 edge, +1 = s2 edge)
+    CfgWl cfg;
+    SsaWl ssa;
 } SccpCtx;
 
 /* ========== Helpers ========== */
@@ -101,14 +101,14 @@ typedef struct {
 static void cfg_push(CfgWl *w, uint32_t from, uint32_t to) {
     if (w->len >= w->cap) {
         w->cap = w->cap ? w->cap * 2 : 64;
-        XR_REALLOC_OR_ABORT(w->edges, w->cap * sizeof(CfgEdge),
-                            "sccp cfg wl");
+        XR_REALLOC_OR_ABORT(w->edges, w->cap * sizeof(CfgEdge), "sccp cfg wl");
     }
-    w->edges[w->len++] = (CfgEdge){ from, to };
+    w->edges[w->len++] = (CfgEdge){from, to};
 }
 
 static bool cfg_pop(CfgWl *w, CfgEdge *out) {
-    if (w->len == 0) return false;
+    if (w->len == 0)
+        return false;
     *out = w->edges[--w->len];
     return true;
 }
@@ -116,14 +116,14 @@ static bool cfg_pop(CfgWl *w, CfgEdge *out) {
 static void ssa_push(SsaWl *w, uint32_t v) {
     if (w->len >= w->cap) {
         w->cap = w->cap ? w->cap * 2 : 64;
-        XR_REALLOC_OR_ABORT(w->vregs, w->cap * sizeof(uint32_t),
-                            "sccp ssa wl");
+        XR_REALLOC_OR_ABORT(w->vregs, w->cap * sizeof(uint32_t), "sccp ssa wl");
     }
     w->vregs[w->len++] = v;
 }
 
 static bool ssa_pop(SsaWl *w, uint32_t *out) {
-    if (w->len == 0) return false;
+    if (w->len == 0)
+        return false;
     *out = w->vregs[--w->len];
     return true;
 }
@@ -132,56 +132,84 @@ static bool ssa_pop(SsaWl *w, uint32_t *out) {
  * because it only runs during edge bookkeeping for terminators. */
 static uint32_t block_index(XirFunc *func, const XirBlock *blk) {
     for (uint32_t i = 0; i < func->nblk; i++)
-        if (func->blocks[i] == blk) return i;
+        if (func->blocks[i] == blk)
+            return i;
     return UINT32_MAX;
 }
 
 /* Convert a ref into a lattice value without touching cells[]. */
 static SccpVal ref_value(SccpCtx *ctx, XirRef ref) {
-    SccpVal v = { SCCP_TOP, 0, 0.0, NULL };
+    SccpVal v = {SCCP_TOP, 0, 0.0, NULL};
     XirFunc *func = ctx->func;
-    if (xir_ref_is_none(ref)) { v.kind = SCCP_BOT; return v; }
+    if (xir_ref_is_none(ref)) {
+        v.kind = SCCP_BOT;
+        return v;
+    }
     if (xir_ref_is_const(ref)) {
         uint32_t ci = XIR_REF_INDEX(ref);
-        if (ci >= func->nconst) { v.kind = SCCP_BOT; return v; }
+        if (ci >= func->nconst) {
+            v.kind = SCCP_BOT;
+            return v;
+        }
         XirConst *c = &func->consts[ci];
         switch (c->rep) {
-            case XR_REP_I64: v.kind = SCCP_CONST_I64; v.i64 = c->val.i64; break;
-            case XR_REP_F64: v.kind = SCCP_CONST_F64; v.f64 = c->val.f64; break;
-            case XR_REP_PTR: v.kind = SCCP_CONST_PTR; v.ptr = c->val.ptr; break;
-            default:         v.kind = SCCP_BOT; break;
+            case XR_REP_I64:
+                v.kind = SCCP_CONST_I64;
+                v.i64 = c->val.i64;
+                break;
+            case XR_REP_F64:
+                v.kind = SCCP_CONST_F64;
+                v.f64 = c->val.f64;
+                break;
+            case XR_REP_PTR:
+                v.kind = SCCP_CONST_PTR;
+                v.ptr = c->val.ptr;
+                break;
+            default:
+                v.kind = SCCP_BOT;
+                break;
         }
         return v;
     }
     if (xir_ref_is_vreg(ref)) {
         uint32_t vi = XIR_REF_INDEX(ref);
-        if (vi < func->nvreg) return ctx->cells[vi];
+        if (vi < func->nvreg)
+            return ctx->cells[vi];
     }
     v.kind = SCCP_BOT;
     return v;
 }
 
 static bool sccp_val_eq(SccpVal a, SccpVal b) {
-    if (a.kind != b.kind) return false;
+    if (a.kind != b.kind)
+        return false;
     switch (a.kind) {
-        case SCCP_CONST_I64:  return a.i64 == b.i64;
-        case SCCP_CONST_F64:  return a.f64 == b.f64;
-        case SCCP_CONST_BOOL: return a.i64 == b.i64;
-        case SCCP_CONST_PTR:  return a.ptr == b.ptr;
-        default:              return true;
+        case SCCP_CONST_I64:
+            return a.i64 == b.i64;
+        case SCCP_CONST_F64:
+            return a.f64 == b.f64;
+        case SCCP_CONST_BOOL:
+            return a.i64 == b.i64;
+        case SCCP_CONST_PTR:
+            return a.ptr == b.ptr;
+        default:
+            return true;
     }
 }
 
 /* Lattice meet: same const stays, otherwise the result is BOT. */
 static SccpVal sccp_meet(SccpVal a, SccpVal b) {
-    if (a.kind == SCCP_TOP) return b;
-    if (b.kind == SCCP_TOP) return a;
+    if (a.kind == SCCP_TOP)
+        return b;
+    if (b.kind == SCCP_TOP)
+        return a;
     if (a.kind == SCCP_BOT || b.kind == SCCP_BOT) {
-        SccpVal r = { SCCP_BOT, 0, 0.0, NULL };
+        SccpVal r = {SCCP_BOT, 0, 0.0, NULL};
         return r;
     }
-    if (sccp_val_eq(a, b)) return a;
-    SccpVal r = { SCCP_BOT, 0, 0.0, NULL };
+    if (sccp_val_eq(a, b))
+        return a;
+    SccpVal r = {SCCP_BOT, 0, 0.0, NULL};
     return r;
 }
 
@@ -195,19 +223,19 @@ static bool both_f64(SccpVal a, SccpVal b) {
 }
 
 static SccpVal sccp_bot(void) {
-    SccpVal r = { SCCP_BOT, 0, 0.0, NULL };
+    SccpVal r = {SCCP_BOT, 0, 0.0, NULL};
     return r;
 }
 static SccpVal sccp_i64(int64_t v) {
-    SccpVal r = { SCCP_CONST_I64, v, 0.0, NULL };
+    SccpVal r = {SCCP_CONST_I64, v, 0.0, NULL};
     return r;
 }
 static SccpVal sccp_f64(double v) {
-    SccpVal r = { SCCP_CONST_F64, 0, v, NULL };
+    SccpVal r = {SCCP_CONST_F64, 0, v, NULL};
     return r;
 }
 static SccpVal sccp_bool(bool b) {
-    SccpVal r = { SCCP_CONST_BOOL, b ? 1 : 0, 0.0, NULL };
+    SccpVal r = {SCCP_CONST_BOOL, b ? 1 : 0, 0.0, NULL};
     return r;
 }
 
@@ -225,9 +253,12 @@ static SccpVal eval_ins(SccpCtx *ctx, XirIns *ins) {
 
     switch (ins->op) {
         /* Literal materialisers: dst takes the const arg value. */
-        case XIR_CONST_I64: return a.kind == SCCP_CONST_I64 ? a : sccp_bot();
-        case XIR_CONST_F64: return a.kind == SCCP_CONST_F64 ? a : sccp_bot();
-        case XIR_CONST_PTR: return a.kind == SCCP_CONST_PTR ? a : sccp_bot();
+        case XIR_CONST_I64:
+            return a.kind == SCCP_CONST_I64 ? a : sccp_bot();
+        case XIR_CONST_F64:
+            return a.kind == SCCP_CONST_F64 ? a : sccp_bot();
+        case XIR_CONST_PTR:
+            return a.kind == SCCP_CONST_PTR ? a : sccp_bot();
 
         case XIR_MOV:
             /* Propagate the argument cell unchanged. */
@@ -235,84 +266,106 @@ static SccpVal eval_ins(SccpCtx *ctx, XirIns *ins) {
 
         /* --- Integer arithmetic --- */
         case XIR_NEG:
-            if (a.kind == SCCP_CONST_I64) return sccp_i64(-a.i64);
-            if (a.kind == SCCP_CONST_F64) return sccp_f64(-a.f64);
+            if (a.kind == SCCP_CONST_I64)
+                return sccp_i64(-a.i64);
+            if (a.kind == SCCP_CONST_F64)
+                return sccp_f64(-a.f64);
             return sccp_bot();
 
         case XIR_NOT:
-            if (a.kind == SCCP_CONST_I64) return sccp_i64(~a.i64);
+            if (a.kind == SCCP_CONST_I64)
+                return sccp_i64(~a.i64);
             return sccp_bot();
 
         case XIR_ADD:
-            if (both_i64(a, b)) return sccp_i64((int64_t)((uint64_t)a.i64 + (uint64_t)b.i64));
+            if (both_i64(a, b))
+                return sccp_i64((int64_t) ((uint64_t) a.i64 + (uint64_t) b.i64));
             return sccp_bot();
         case XIR_SUB:
-            if (both_i64(a, b)) return sccp_i64((int64_t)((uint64_t)a.i64 - (uint64_t)b.i64));
+            if (both_i64(a, b))
+                return sccp_i64((int64_t) ((uint64_t) a.i64 - (uint64_t) b.i64));
             return sccp_bot();
         case XIR_MUL:
-            if (both_i64(a, b)) return sccp_i64((int64_t)((uint64_t)a.i64 * (uint64_t)b.i64));
+            if (both_i64(a, b))
+                return sccp_i64((int64_t) ((uint64_t) a.i64 * (uint64_t) b.i64));
             return sccp_bot();
         case XIR_DIV:
-            if (both_i64(a, b) && b.i64 != 0) return sccp_i64(a.i64 / b.i64);
+            if (both_i64(a, b) && b.i64 != 0)
+                return sccp_i64(a.i64 / b.i64);
             return sccp_bot();
         case XIR_MOD:
-            if (both_i64(a, b) && b.i64 != 0) return sccp_i64(a.i64 % b.i64);
+            if (both_i64(a, b) && b.i64 != 0)
+                return sccp_i64(a.i64 % b.i64);
             return sccp_bot();
 
         case XIR_AND:
-            if (both_i64(a, b)) return sccp_i64(a.i64 & b.i64);
+            if (both_i64(a, b))
+                return sccp_i64(a.i64 & b.i64);
             return sccp_bot();
         case XIR_OR:
-            if (both_i64(a, b)) return sccp_i64(a.i64 | b.i64);
+            if (both_i64(a, b))
+                return sccp_i64(a.i64 | b.i64);
             return sccp_bot();
         case XIR_XOR:
-            if (both_i64(a, b)) return sccp_i64(a.i64 ^ b.i64);
+            if (both_i64(a, b))
+                return sccp_i64(a.i64 ^ b.i64);
             return sccp_bot();
         case XIR_SHL:
             if (both_i64(a, b) && b.i64 >= 0 && b.i64 < 64)
-                return sccp_i64((int64_t)((uint64_t)a.i64 << b.i64));
+                return sccp_i64((int64_t) ((uint64_t) a.i64 << b.i64));
             return sccp_bot();
         case XIR_SHR:
             if (both_i64(a, b) && b.i64 >= 0 && b.i64 < 64)
-                return sccp_i64((int64_t)((uint64_t)a.i64 >> b.i64));
+                return sccp_i64((int64_t) ((uint64_t) a.i64 >> b.i64));
             return sccp_bot();
 
         /* --- Float arithmetic --- */
         case XIR_FADD:
-            if (both_f64(a, b)) return sccp_f64(a.f64 + b.f64);
+            if (both_f64(a, b))
+                return sccp_f64(a.f64 + b.f64);
             return sccp_bot();
         case XIR_FSUB:
-            if (both_f64(a, b)) return sccp_f64(a.f64 - b.f64);
+            if (both_f64(a, b))
+                return sccp_f64(a.f64 - b.f64);
             return sccp_bot();
         case XIR_FMUL:
-            if (both_f64(a, b)) return sccp_f64(a.f64 * b.f64);
+            if (both_f64(a, b))
+                return sccp_f64(a.f64 * b.f64);
             return sccp_bot();
         case XIR_FDIV:
-            if (both_f64(a, b) && b.f64 != 0.0) return sccp_f64(a.f64 / b.f64);
+            if (both_f64(a, b) && b.f64 != 0.0)
+                return sccp_f64(a.f64 / b.f64);
             return sccp_bot();
         case XIR_FNEG:
-            if (a.kind == SCCP_CONST_F64) return sccp_f64(-a.f64);
+            if (a.kind == SCCP_CONST_F64)
+                return sccp_f64(-a.f64);
             return sccp_bot();
 
         /* --- Integer comparisons (produce BOOL) --- */
         case XIR_LT:
-            if (both_i64(a, b)) return sccp_bool(a.i64 <  b.i64);
+            if (both_i64(a, b))
+                return sccp_bool(a.i64 < b.i64);
             return sccp_bot();
         case XIR_LE:
-            if (both_i64(a, b)) return sccp_bool(a.i64 <= b.i64);
+            if (both_i64(a, b))
+                return sccp_bool(a.i64 <= b.i64);
             return sccp_bot();
         case XIR_EQ:
-            if (both_i64(a, b)) return sccp_bool(a.i64 == b.i64);
+            if (both_i64(a, b))
+                return sccp_bool(a.i64 == b.i64);
             return sccp_bot();
 
         case XIR_FLT:
-            if (both_f64(a, b)) return sccp_bool(a.f64 <  b.f64);
+            if (both_f64(a, b))
+                return sccp_bool(a.f64 < b.f64);
             return sccp_bot();
         case XIR_FLE:
-            if (both_f64(a, b)) return sccp_bool(a.f64 <= b.f64);
+            if (both_f64(a, b))
+                return sccp_bool(a.f64 <= b.f64);
             return sccp_bot();
         case XIR_FEQ:
-            if (both_f64(a, b)) return sccp_bool(a.f64 == b.f64);
+            if (both_f64(a, b))
+                return sccp_bool(a.f64 == b.f64);
             return sccp_bot();
 
         default:
@@ -325,30 +378,36 @@ static SccpVal eval_ins(SccpCtx *ctx, XirIns *ins) {
 
 /* Evaluate a Phi node: meet over args whose incoming edge is reachable. */
 static SccpVal eval_phi(SccpCtx *ctx, XirBlock *blk, XirPhi *phi) {
-    SccpVal acc = { SCCP_TOP, 0, 0.0, NULL };
+    SccpVal acc = {SCCP_TOP, 0, 0.0, NULL};
     for (uint32_t i = 0; i < phi->narg; i++) {
-        if (i >= blk->npred) break;
+        if (i >= blk->npred)
+            break;
         XirBlock *pred = blk->preds[i];
         uint32_t pi = block_index(ctx->func, pred);
-        if (pi == UINT32_MAX) continue;
+        if (pi == UINT32_MAX)
+            continue;
         /* Only consider arguments reaching us through an executable
          * edge.  This is the "conditional" part of SCCP. */
         bool edge_exec = false;
-        if (pred->s1 == blk && ctx->exec_edge[pi * 2 + 0]) edge_exec = true;
-        if (pred->s2 == blk && ctx->exec_edge[pi * 2 + 1]) edge_exec = true;
-        if (!edge_exec) continue;
+        if (pred->s1 == blk && ctx->exec_edge[pi * 2 + 0])
+            edge_exec = true;
+        if (pred->s2 == blk && ctx->exec_edge[pi * 2 + 1])
+            edge_exec = true;
+        if (!edge_exec)
+            continue;
         acc = sccp_meet(acc, ref_value(ctx, phi->args[i]));
-        if (acc.kind == SCCP_BOT) break;
+        if (acc.kind == SCCP_BOT)
+            break;
     }
     return acc;
 }
 
 /* Mark an edge executable; queue the target for re-visit if newly
  * reachable or if the edge transition changes anything. */
-static void mark_edge(SccpCtx *ctx, uint32_t from_bi, uint32_t to_bi,
-                      bool take_s1) {
+static void mark_edge(SccpCtx *ctx, uint32_t from_bi, uint32_t to_bi, bool take_s1) {
     uint32_t slot = from_bi * 2 + (take_s1 ? 0 : 1);
-    if (ctx->exec_edge[slot]) return;  // already executable
+    if (ctx->exec_edge[slot])
+        return;  // already executable
     ctx->exec_edge[slot] = true;
     if (!ctx->reachable[to_bi]) {
         ctx->reachable[to_bi] = true;
@@ -370,11 +429,13 @@ static void enqueue_uses(SccpCtx *ctx, uint32_t v) {
      * driver re-evaluates them.  Phi uses are covered at the block
      * level via the cfg worklist. */
     for (uint32_t bi = 0; bi < func->nblk; bi++) {
-        if (!ctx->reachable[bi]) continue;
+        if (!ctx->reachable[bi])
+            continue;
         XirBlock *blk = func->blocks[bi];
         for (uint32_t i = 0; i < blk->nins; i++) {
             XirIns *ins = &blk->ins[i];
-            if (!xir_ref_is_vreg(ins->dst)) continue;
+            if (!xir_ref_is_vreg(ins->dst))
+                continue;
             XirRef va = ins->args[0], vb = ins->args[1];
             if ((xir_ref_is_vreg(va) && XIR_REF_INDEX(va) == v) ||
                 (xir_ref_is_vreg(vb) && XIR_REF_INDEX(vb) == v)) {
@@ -382,7 +443,8 @@ static void enqueue_uses(SccpCtx *ctx, uint32_t v) {
             }
         }
         for (XirPhi *phi = blk->phis; phi; phi = phi->next) {
-            if (!xir_ref_is_vreg(phi->dst)) continue;
+            if (!xir_ref_is_vreg(phi->dst))
+                continue;
             for (uint32_t k = 0; k < phi->narg; k++) {
                 XirRef a = phi->args[k];
                 if (xir_ref_is_vreg(a) && XIR_REF_INDEX(a) == v) {
@@ -401,7 +463,8 @@ static void enqueue_uses(SccpCtx *ctx, uint32_t v) {
  * edges. */
 static void revisit_vreg(SccpCtx *ctx, uint32_t v) {
     XirFunc *func = ctx->func;
-    if (v >= func->nvreg) return;
+    if (v >= func->nvreg)
+        return;
     XirIns *def = func->vregs[v].def;
 
     SccpVal old = ctx->cells[v];
@@ -412,18 +475,19 @@ static void revisit_vreg(SccpCtx *ctx, uint32_t v) {
          * across reachable blocks. */
         bool found = false;
         for (uint32_t bi = 0; bi < func->nblk && !found; bi++) {
-            if (!ctx->reachable[bi]) continue;
+            if (!ctx->reachable[bi])
+                continue;
             XirBlock *blk = func->blocks[bi];
             for (XirPhi *phi = blk->phis; phi; phi = phi->next) {
-                if (xir_ref_is_vreg(phi->dst) &&
-                    XIR_REF_INDEX(phi->dst) == v) {
+                if (xir_ref_is_vreg(phi->dst) && XIR_REF_INDEX(phi->dst) == v) {
                     neu = eval_phi(ctx, blk, phi);
                     found = true;
                     break;
                 }
             }
         }
-        if (!found) neu = sccp_bot();  // parameters start BOT
+        if (!found)
+            neu = sccp_bot();  // parameters start BOT
     } else {
         neu = eval_ins(ctx, def);
     }
@@ -438,21 +502,26 @@ static void revisit_vreg(SccpCtx *ctx, uint32_t v) {
 static void visit_terminator(SccpCtx *ctx, XirBlock *blk, uint32_t bi) {
     if (blk->jmp.type == XIR_JMP_JMP && blk->s1) {
         uint32_t to = block_index(ctx->func, blk->s1);
-        if (to != UINT32_MAX) mark_edge(ctx, bi, to, true);
+        if (to != UINT32_MAX)
+            mark_edge(ctx, bi, to, true);
     } else if (blk->jmp.type == XIR_JMP_BR && blk->s1 && blk->s2) {
         SccpVal c = ref_value(ctx, blk->jmp.arg);
         uint32_t to1 = block_index(ctx->func, blk->s1);
         uint32_t to2 = block_index(ctx->func, blk->s2);
         if (c.kind == SCCP_CONST_BOOL || c.kind == SCCP_CONST_I64) {
             if (c.i64 != 0) {
-                if (to1 != UINT32_MAX) mark_edge(ctx, bi, to1, true);
+                if (to1 != UINT32_MAX)
+                    mark_edge(ctx, bi, to1, true);
             } else {
-                if (to2 != UINT32_MAX) mark_edge(ctx, bi, to2, false);
+                if (to2 != UINT32_MAX)
+                    mark_edge(ctx, bi, to2, false);
             }
         } else {
             /* Unknown condition: both edges may execute. */
-            if (to1 != UINT32_MAX) mark_edge(ctx, bi, to1, true);
-            if (to2 != UINT32_MAX) mark_edge(ctx, bi, to2, false);
+            if (to1 != UINT32_MAX)
+                mark_edge(ctx, bi, to1, true);
+            if (to2 != UINT32_MAX)
+                mark_edge(ctx, bi, to2, false);
         }
     }
     /* RET / NONE: no out-edge. */
@@ -506,7 +575,8 @@ static bool rewrite_function(SccpCtx *ctx) {
 
     for (uint32_t bi = 0; bi < func->nblk; bi++) {
         XirBlock *blk = func->blocks[bi];
-        if (!blk) continue;
+        if (!blk)
+            continue;
 
         if (!ctx->reachable[bi]) {
             /* Unreachable: NOP every instruction, drop terminator. */
@@ -530,13 +600,14 @@ static bool rewrite_function(SccpCtx *ctx) {
          * literal. */
         for (uint32_t i = 0; i < blk->nins; i++) {
             XirIns *ins = &blk->ins[i];
-            if (!xir_ref_is_vreg(ins->dst)) continue;
+            if (!xir_ref_is_vreg(ins->dst))
+                continue;
             uint32_t v = XIR_REF_INDEX(ins->dst);
-            if (v >= func->nvreg) continue;
+            if (v >= func->nvreg)
+                continue;
             SccpVal cell = ctx->cells[v];
             if (cell.kind == SCCP_CONST_I64 || cell.kind == SCCP_CONST_BOOL ||
-                cell.kind == SCCP_CONST_F64 ||
-                (cell.kind == SCCP_CONST_PTR && cell.ptr == NULL)) {
+                cell.kind == SCCP_CONST_F64 || (cell.kind == SCCP_CONST_PTR && cell.ptr == NULL)) {
                 rewrite_to_const(ctx, ins, cell);
                 any = true;
             }
@@ -563,14 +634,15 @@ static bool rewrite_function(SccpCtx *ctx) {
 /* ========== Driver ========== */
 
 XirPassChange xir_pass_sccp(XirFunc *func) {
-    if (!func || func->nblk == 0 || func->nvreg == 0) return xir_pass_no_change();
+    if (!func || func->nblk == 0 || func->nvreg == 0)
+        return xir_pass_no_change();
 
     SccpCtx ctx;
     memset(&ctx, 0, sizeof(ctx));
     ctx.func = func;
-    ctx.cells     = (SccpVal *)xr_calloc(func->nvreg, sizeof(SccpVal));
-    ctx.reachable = (bool *)xr_calloc(func->nblk, sizeof(bool));
-    ctx.exec_edge = (bool *)xr_calloc((size_t)func->nblk * 2, sizeof(bool));
+    ctx.cells = (SccpVal *) xr_calloc(func->nvreg, sizeof(SccpVal));
+    ctx.reachable = (bool *) xr_calloc(func->nblk, sizeof(bool));
+    ctx.exec_edge = (bool *) xr_calloc((size_t) func->nblk * 2, sizeof(bool));
     if (!ctx.cells || !ctx.reachable || !ctx.exec_edge) {
         xr_free(ctx.cells);
         xr_free(ctx.reachable);
@@ -603,12 +675,15 @@ XirPassChange xir_pass_sccp(XirFunc *func) {
         CfgEdge ce;
         if (cfg_pop(&ctx.cfg, &ce)) {
             XirBlock *blk = func->blocks[ce.to_bi];
-            if (!blk) continue;
+            if (!blk)
+                continue;
             /* First visit: evaluate every phi + instruction + terminator. */
             for (XirPhi *phi = blk->phis; phi; phi = phi->next) {
-                if (!xir_ref_is_vreg(phi->dst)) continue;
+                if (!xir_ref_is_vreg(phi->dst))
+                    continue;
                 uint32_t dv = XIR_REF_INDEX(phi->dst);
-                if (dv >= func->nvreg) continue;
+                if (dv >= func->nvreg)
+                    continue;
                 SccpVal neu = eval_phi(&ctx, blk, phi);
                 if (!sccp_val_eq(ctx.cells[dv], neu)) {
                     ctx.cells[dv] = neu;
@@ -617,9 +692,11 @@ XirPassChange xir_pass_sccp(XirFunc *func) {
             }
             for (uint32_t i = 0; i < blk->nins; i++) {
                 XirIns *ins = &blk->ins[i];
-                if (!xir_ref_is_vreg(ins->dst)) continue;
+                if (!xir_ref_is_vreg(ins->dst))
+                    continue;
                 uint32_t dv = XIR_REF_INDEX(ins->dst);
-                if (dv >= func->nvreg) continue;
+                if (dv >= func->nvreg)
+                    continue;
                 SccpVal neu = eval_ins(&ctx, ins);
                 if (!sccp_val_eq(ctx.cells[dv], neu)) {
                     ctx.cells[dv] = neu;
@@ -638,10 +715,10 @@ XirPassChange xir_pass_sccp(XirFunc *func) {
              * enough at Phase 1 granularity; a dedicated use list
              * would tighten this. */
             for (uint32_t bi = 0; bi < func->nblk; bi++) {
-                if (!ctx.reachable[bi]) continue;
+                if (!ctx.reachable[bi])
+                    continue;
                 XirBlock *blk = func->blocks[bi];
-                if (blk->jmp.type == XIR_JMP_BR &&
-                    xir_ref_is_vreg(blk->jmp.arg) &&
+                if (blk->jmp.type == XIR_JMP_BR && xir_ref_is_vreg(blk->jmp.arg) &&
                     XIR_REF_INDEX(blk->jmp.arg) == v) {
                     visit_terminator(&ctx, blk, bi);
                 }
@@ -670,7 +747,6 @@ XirPassChange xir_pass_sccp(XirFunc *func) {
     xr_free(ctx.exec_edge);
     xr_free(ctx.cfg.edges);
     xr_free(ctx.ssa.vregs);
-    return (any_rewrite || blocks_removed)
-        ? (XirPassChange){ blocks_removed, true, true, 0, 0, 0 }
-        : xir_pass_no_change();
+    return (any_rewrite || blocks_removed) ? (XirPassChange){blocks_removed, true, true, 0, 0, 0}
+                                           : xir_pass_no_change();
 }

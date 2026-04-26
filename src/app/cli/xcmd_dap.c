@@ -30,7 +30,7 @@
 XR_FUNC int cmd_dap(const XrCliInvocation *inv) {
     XR_DCHECK(inv != NULL, "inv is NULL");
 
-    int tcp_port = -1;  /* -1 means use stdio */
+    int tcp_port = -1; /* -1 means use stdio */
     bool port_set = xr_cli_opt_present(&inv->options, "port");
 
     if (port_set) {
@@ -84,4 +84,4 @@ XR_FUNC int cmd_dap(const XrCliInvocation *inv) {
     return (result != 0) ? XR_CLI_EXIT_FAIL : XR_CLI_EXIT_OK;
 }
 
-#endif // XR_HAS_DAP
+#endif  // XR_HAS_DAP

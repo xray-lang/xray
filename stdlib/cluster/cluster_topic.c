@@ -63,20 +63,20 @@
  */
 
 typedef struct XrTopicTrieChild {
-    char *seg;                              // owned literal segment
+    char *seg;  // owned literal segment
     struct XrTopicTrieNode *node;
     struct XrTopicTrieChild *next;
 } XrTopicTrieChild;
 
 typedef struct XrTopicTrieNode {
-    XrTopicSubscription *exact_subs;        // subs that terminate at this node
-    XrTopicSubscription *gt_subs;           // subs with ">" trailing here
-    struct XrTopicTrieNode *star_child;     // "*" wildcard child
-    XrTopicTrieChild *children;             // literal-segment children chain
+    XrTopicSubscription *exact_subs;     // subs that terminate at this node
+    XrTopicSubscription *gt_subs;        // subs with ">" trailing here
+    struct XrTopicTrieNode *star_child;  // "*" wildcard child
+    XrTopicTrieChild *children;          // literal-segment children chain
 } XrTopicTrieNode;
 
 static XrTopicTrieNode *trie_node_new(void) {
-    return (XrTopicTrieNode *)xr_calloc(1, sizeof(XrTopicTrieNode));
+    return (XrTopicTrieNode *) xr_calloc(1, sizeof(XrTopicTrieNode));
 }
 
 /*
@@ -86,18 +86,22 @@ static XrTopicTrieNode *trie_node_new(void) {
  * hierarchies is a few to a few dozen), and a hash table would cost
  * more in cache misses than it saves for that range.
  */
-static XrTopicTrieNode *trie_child_get_or_create(XrTopicTrieNode *parent,
-                                                  const char *seg, size_t seglen) {
+static XrTopicTrieNode *trie_child_get_or_create(XrTopicTrieNode *parent, const char *seg,
+                                                 size_t seglen) {
     XrTopicTrieChild *ch = parent->children;
     while (ch) {
         if (strlen(ch->seg) == seglen && memcmp(ch->seg, seg, seglen) == 0)
             return ch->node;
         ch = ch->next;
     }
-    XrTopicTrieChild *newc = (XrTopicTrieChild *)xr_calloc(1, sizeof(XrTopicTrieChild));
-    if (!newc) return NULL;
-    newc->seg = (char *)xr_malloc(seglen + 1);
-    if (!newc->seg) { xr_free(newc); return NULL; }
+    XrTopicTrieChild *newc = (XrTopicTrieChild *) xr_calloc(1, sizeof(XrTopicTrieChild));
+    if (!newc)
+        return NULL;
+    newc->seg = (char *) xr_malloc(seglen + 1);
+    if (!newc->seg) {
+        xr_free(newc);
+        return NULL;
+    }
     memcpy(newc->seg, seg, seglen);
     newc->seg[seglen] = '\0';
     newc->node = trie_node_new();
@@ -111,8 +115,8 @@ static XrTopicTrieNode *trie_child_get_or_create(XrTopicTrieNode *parent,
     return newc->node;
 }
 
-static XrTopicTrieNode *trie_child_lookup(const XrTopicTrieNode *parent,
-                                           const char *seg, size_t seglen) {
+static XrTopicTrieNode *trie_child_lookup(const XrTopicTrieNode *parent, const char *seg,
+                                          size_t seglen) {
     XrTopicTrieChild *ch = parent->children;
     while (ch) {
         if (strlen(ch->seg) == seglen && memcmp(ch->seg, seg, seglen) == 0)
@@ -128,20 +132,21 @@ static XrTopicTrieNode *trie_child_lookup(const XrTopicTrieNode *parent,
  * pointer is overwritten. Returns 0 on success, -1 on allocation
  * failure (caller must then free `sub` itself).
  */
-static int trie_insert(XrTopicTrieNode *root, const char *pattern,
-                        XrTopicSubscription *sub) {
+static int trie_insert(XrTopicTrieNode *root, const char *pattern, XrTopicSubscription *sub) {
     XrTopicTrieNode *cur = root;
     const char *p = pattern;
     while (*p) {
         const char *start = p;
-        while (*p && *p != '.') p++;
-        size_t seglen = (size_t)(p - start);
+        while (*p && *p != '.')
+            p++;
+        size_t seglen = (size_t) (p - start);
 
         if (seglen == 1 && start[0] == '>') {
             /* ">" terminates the pattern and attaches to gt_subs at the
              * current node. If anything follows it, that is a malformed
              * pattern; NATS rejects it so we do too. */
-            if (*p != '\0') return -1;
+            if (*p != '\0')
+                return -1;
             sub->next = cur->gt_subs;
             cur->gt_subs = sub;
             return 0;
@@ -151,15 +156,18 @@ static int trie_insert(XrTopicTrieNode *root, const char *pattern,
         if (seglen == 1 && start[0] == '*') {
             if (!cur->star_child) {
                 cur->star_child = trie_node_new();
-                if (!cur->star_child) return -1;
+                if (!cur->star_child)
+                    return -1;
             }
             next = cur->star_child;
         } else {
             next = trie_child_get_or_create(cur, start, seglen);
-            if (!next) return -1;
+            if (!next)
+                return -1;
         }
         cur = next;
-        if (*p == '.') p++;
+        if (*p == '.')
+            p++;
     }
     sub->next = cur->exact_subs;
     cur->exact_subs = sub;
@@ -176,18 +184,19 @@ static int trie_insert(XrTopicTrieNode *root, const char *pattern,
  * cluster stop. A pub/sub service that churns millions of patterns
  * per second would want pruning; typical workloads are fine.
  */
-static XrTopicSubscription *trie_remove(XrTopicTrieNode *root,
-                                         const char *pattern,
-                                         struct XrChannel *ch) {
+static XrTopicSubscription *trie_remove(XrTopicTrieNode *root, const char *pattern,
+                                        struct XrChannel *ch) {
     XrTopicTrieNode *cur = root;
     const char *p = pattern;
     while (*p) {
         const char *start = p;
-        while (*p && *p != '.') p++;
-        size_t seglen = (size_t)(p - start);
+        while (*p && *p != '.')
+            p++;
+        size_t seglen = (size_t) (p - start);
 
         if (seglen == 1 && start[0] == '>') {
-            if (*p != '\0') return NULL;
+            if (*p != '\0')
+                return NULL;
             XrTopicSubscription **pp = &cur->gt_subs;
             while (*pp) {
                 if ((*pp)->notify_ch == ch) {
@@ -206,9 +215,11 @@ static XrTopicSubscription *trie_remove(XrTopicTrieNode *root,
         } else {
             next = trie_child_lookup(cur, start, seglen);
         }
-        if (!next) return NULL;
+        if (!next)
+            return NULL;
         cur = next;
-        if (*p == '.') p++;
+        if (*p == '.')
+            p++;
     }
     XrTopicSubscription **pp = &cur->exact_subs;
     while (*pp) {
@@ -244,22 +255,24 @@ static void emit_subs(XrTopicEmit *e, XrTopicSubscription *subs) {
     while (subs) {
         struct XrChannel *ch = subs->notify_ch;
         if (ch && !xr_channel_is_closed(ch)) {
-            if (e->count >= e->hard_cap) return;  /* drop overflow */
+            if (e->count >= e->hard_cap)
+                return; /* drop overflow */
             if (e->count >= e->cap) {
                 int new_cap = e->cap * 2;
-                if (new_cap > e->hard_cap) new_cap = e->hard_cap;
+                if (new_cap > e->hard_cap)
+                    new_cap = e->hard_cap;
                 struct XrChannel **grown;
                 if (!e->grown_alloc) {
-                    grown = (struct XrChannel **)xr_malloc(
-                        (size_t)new_cap * sizeof(*grown));
-                    if (grown) memcpy(grown, e->targets,
-                                      (size_t)e->count * sizeof(*grown));
+                    grown = (struct XrChannel **) xr_malloc((size_t) new_cap * sizeof(*grown));
+                    if (grown)
+                        memcpy(grown, e->targets, (size_t) e->count * sizeof(*grown));
                     e->grown_alloc = true;
                 } else {
-                    grown = (struct XrChannel **)xr_realloc(
-                        e->targets, (size_t)new_cap * sizeof(*grown));
+                    grown = (struct XrChannel **) xr_realloc(e->targets,
+                                                             (size_t) new_cap * sizeof(*grown));
                 }
-                if (!grown) return;
+                if (!grown)
+                    return;
                 e->targets = grown;
                 e->cap = new_cap;
             }
@@ -269,42 +282,49 @@ static void emit_subs(XrTopicEmit *e, XrTopicSubscription *subs) {
     }
 }
 
-static void trie_match(XrTopicTrieNode *node, const char *topic,
-                        XrTopicEmit *e) {
-    if (!node) return;
+static void trie_match(XrTopicTrieNode *node, const char *topic, XrTopicEmit *e) {
+    if (!node)
+        return;
     const char *p = topic;
     /* The current segment bounds run from `p` to the next '.' (or end). */
     const char *seg_start = p;
-    while (*p && *p != '.') p++;
-    size_t seglen = (size_t)(p - seg_start);
+    while (*p && *p != '.')
+        p++;
+    size_t seglen = (size_t) (p - seg_start);
     bool more_segments = (*p == '.');
 
     /* ">" at this node matches if we have at least the current segment,
      * which is always true when we are invoked with a non-empty topic. */
-    if (seglen > 0) emit_subs(e, node->gt_subs);
+    if (seglen > 0)
+        emit_subs(e, node->gt_subs);
 
     if (seglen == 0) {
         /* Degenerate: empty topic or trailing dot. Treat as no match. */
         return;
     }
 
-    const char *rest = more_segments ? p + 1 : p;  /* next-segment start or '\0' */
+    const char *rest = more_segments ? p + 1 : p; /* next-segment start or '\0' */
 
     if (more_segments) {
         XrTopicTrieNode *lit = trie_child_lookup(node, seg_start, seglen);
-        if (lit) trie_match(lit, rest, e);
-        if (node->star_child) trie_match(node->star_child, rest, e);
+        if (lit)
+            trie_match(lit, rest, e);
+        if (node->star_child)
+            trie_match(node->star_child, rest, e);
     } else {
         /* Final segment: collect exact terminators from both literal and
          * "*" children. */
         XrTopicTrieNode *lit = trie_child_lookup(node, seg_start, seglen);
-        if (lit) emit_subs(e, lit->exact_subs);
-        if (node->star_child) emit_subs(e, node->star_child->exact_subs);
+        if (lit)
+            emit_subs(e, lit->exact_subs);
+        if (node->star_child)
+            emit_subs(e, node->star_child->exact_subs);
     }
 }
 
 static void trie_destroy(XrTopicTrieNode *node) {
-    if (!node) return;
+    if (!node)
+        return;
     XrTopicTrieChild *ch = node->children;
     while (ch) {
         XrTopicTrieChild *next = ch->next;
@@ -318,22 +338,32 @@ static void trie_destroy(XrTopicTrieNode *node) {
      * The channels they hold are closed by the caller (topics_destroy)
      * so we just free the XrTopicSubscription memory here. */
     XrTopicSubscription *s = node->exact_subs;
-    while (s) { XrTopicSubscription *n = s->next; xr_free(s); s = n; }
+    while (s) {
+        XrTopicSubscription *n = s->next;
+        xr_free(s);
+        s = n;
+    }
     s = node->gt_subs;
-    while (s) { XrTopicSubscription *n = s->next; xr_free(s); s = n; }
+    while (s) {
+        XrTopicSubscription *n = s->next;
+        xr_free(s);
+        s = n;
+    }
     xr_free(node);
 }
 
 /* ========== Public trie-lifecycle helpers (called from cluster.c) ========== */
 
 XR_FUNC int xr_cluster_topics_init(XrCluster *c) {
-    if (!c) return -1;
+    if (!c)
+        return -1;
     c->topic_root = trie_node_new();
     return c->topic_root ? 0 : -1;
 }
 
 XR_FUNC void xr_cluster_topics_destroy(XrCluster *c) {
-    if (!c) return;
+    if (!c)
+        return;
     /* Close every subscriber channel first so consumers unblock, then
      * tear the tree down. Doing it in two passes keeps the delicate
      * re-entrancy rules of xr_channel_close (can wake other coros)
@@ -358,14 +388,15 @@ XR_FUNC void xr_cluster_topics_destroy(XrCluster *c) {
         while (sp > 0) {
             XrTopicTrieNode *n = stack[--sp];
             for (XrTopicSubscription *s = n->exact_subs; s; s = s->next)
-                if (s->notify_ch) xr_channel_close(s->notify_ch);
+                if (s->notify_ch)
+                    xr_channel_close(s->notify_ch);
             for (XrTopicSubscription *s = n->gt_subs; s; s = s->next)
-                if (s->notify_ch) xr_channel_close(s->notify_ch);
-            if (n->star_child && sp < (int)(sizeof(stack)/sizeof(stack[0])))
+                if (s->notify_ch)
+                    xr_channel_close(s->notify_ch);
+            if (n->star_child && sp < (int) (sizeof(stack) / sizeof(stack[0])))
                 stack[sp++] = n->star_child;
             for (XrTopicTrieChild *c2 = n->children;
-                 c2 && sp < (int)(sizeof(stack)/sizeof(stack[0]));
-                 c2 = c2->next)
+                 c2 && sp < (int) (sizeof(stack) / sizeof(stack[0])); c2 = c2->next)
                 stack[sp++] = c2->node;
         }
         trie_destroy(root);
@@ -379,7 +410,8 @@ XR_FUNC void xr_cluster_topics_destroy(XrCluster *c) {
 //   ">" matches one or more remaining segments
 //   Exact segments must match literally
 bool xr_topic_match(const char *pattern, const char *topic) {
-    if (!pattern || !topic) return false;
+    if (!pattern || !topic)
+        return false;
 
     const char *p = pattern;
     const char *t = topic;
@@ -391,49 +423,69 @@ bool xr_topic_match(const char *pattern, const char *topic) {
         }
         if (*p == '*') {
             // "*" matches exactly one segment
-            while (*t && *t != '.') t++;
+            while (*t && *t != '.')
+                t++;
             p++;
-            if (*p == '.' && *t == '.') { p++; t++; continue; }
-            if (*p == '\0' && *t == '\0') return true;
-            if (*p == '\0' && *t == '.') return false;
+            if (*p == '.' && *t == '.') {
+                p++;
+                t++;
+                continue;
+            }
+            if (*p == '\0' && *t == '\0')
+                return true;
+            if (*p == '\0' && *t == '.')
+                return false;
             return (*p == '\0' && *t == '\0');
         }
         // Literal segment comparison
         while (*p && *p != '.' && *t && *t != '.') {
-            if (*p != *t) return false;
-            p++; t++;
+            if (*p != *t)
+                return false;
+            p++;
+            t++;
         }
-        if (*p == '.' && *t == '.') { p++; t++; continue; }
-        if (*p == '\0' && *t == '\0') return true;
+        if (*p == '.' && *t == '.') {
+            p++;
+            t++;
+            continue;
+        }
+        if (*p == '\0' && *t == '\0')
+            return true;
         break;
     }
 
     // Handle trailing ">" in pattern
-    if (*p == '>' && *t == '\0') return false; // ">" needs at least one segment
+    if (*p == '>' && *t == '\0')
+        return false;  // ">" needs at least one segment
     return (*p == '\0' && *t == '\0');
 }
 
 /* ========== Subscribe / Unsubscribe ========== */
 
-struct XrChannel *xr_cluster_topic_subscribe(XrayIsolate *X,
-                                              const char *pattern) {
-    XrCluster *c = (XrCluster *)X->cluster;
-    if (!c || !pattern || !c->topic_root) return NULL;
+struct XrChannel *xr_cluster_topic_subscribe(XrayIsolate *X, const char *pattern) {
+    XrCluster *c = (XrCluster *) X->cluster;
+    if (!c || !pattern || !c->topic_root)
+        return NULL;
 
-    XrTopicSubscription *sub = (XrTopicSubscription *)xr_calloc(1, sizeof(XrTopicSubscription));
-    if (!sub) return NULL;
+    XrTopicSubscription *sub = (XrTopicSubscription *) xr_calloc(1, sizeof(XrTopicSubscription));
+    if (!sub)
+        return NULL;
 
     strncpy(sub->pattern, pattern, XR_TOPIC_PATTERN_MAX);
     sub->pattern[XR_TOPIC_PATTERN_MAX] = '\0';
 
     // Buffered channel for receiving published values
     XrChannel *ch = xr_channel_new(X, 64);
-    if (!ch) { xr_free(sub); return NULL; }
+    if (!ch) {
+        xr_free(sub);
+        return NULL;
+    }
     sub->notify_ch = ch;
 
     xr_mutex_lock(&c->topics_lock);
     int rc = trie_insert(c->topic_root, sub->pattern, sub);
-    if (rc == 0) c->topic_sub_count++;
+    if (rc == 0)
+        c->topic_sub_count++;
     xr_mutex_unlock(&c->topics_lock);
 
     if (rc != 0) {
@@ -446,7 +498,7 @@ struct XrChannel *xr_cluster_topic_subscribe(XrayIsolate *X,
     }
 
     // Broadcast subscription to all connected nodes
-    uint8_t name_len = (uint8_t)strlen(pattern);
+    uint8_t name_len = (uint8_t) strlen(pattern);
     uint8_t payload[256];
     payload[0] = name_len;
     memcpy(payload + 1, pattern, name_len);
@@ -455,8 +507,7 @@ struct XrChannel *xr_cluster_topic_subscribe(XrayIsolate *X,
     XrClusterNode *node = c->nodes;
     while (node) {
         if (node->state == XR_NODE_CONNECTED) {
-            xr_cluster_node_send_frame(node, XR_FRAME_TOPIC_SUBSCRIBE,
-                                        payload, 1 + name_len);
+            xr_cluster_node_send_frame(node, XR_FRAME_TOPIC_SUBSCRIBE, payload, 1 + name_len);
         }
         node = node->next;
     }
@@ -466,7 +517,8 @@ struct XrChannel *xr_cluster_topic_subscribe(XrayIsolate *X,
 }
 
 void xr_cluster_topic_unsubscribe(XrCluster *c, const char *pattern) {
-    if (!c || !pattern || !c->topic_root) return;
+    if (!c || !pattern || !c->topic_root)
+        return;
 
     /*
      * Unsubscribe removes the FIRST subscription for this pattern that
@@ -492,38 +544,48 @@ void xr_cluster_topic_unsubscribe(XrCluster *c, const char *pattern) {
         bool ok = true;
         while (*p && ok) {
             const char *start = p;
-            while (*p && *p != '.') p++;
-            size_t seglen = (size_t)(p - start);
+            while (*p && *p != '.')
+                p++;
+            size_t seglen = (size_t) (p - start);
             if (seglen == 1 && start[0] == '>') {
-                if (*p != '\0') { ok = false; break; }
+                if (*p != '\0') {
+                    ok = false;
+                    break;
+                }
                 if (cur->gt_subs) {
-                    found = trie_remove(c->topic_root, pattern,
-                                        cur->gt_subs->notify_ch);
+                    found = trie_remove(c->topic_root, pattern, cur->gt_subs->notify_ch);
                 }
                 break;
             }
             XrTopicTrieNode *next;
-            if (seglen == 1 && start[0] == '*') next = cur->star_child;
-            else next = trie_child_lookup(cur, start, seglen);
-            if (!next) { ok = false; break; }
+            if (seglen == 1 && start[0] == '*')
+                next = cur->star_child;
+            else
+                next = trie_child_lookup(cur, start, seglen);
+            if (!next) {
+                ok = false;
+                break;
+            }
             cur = next;
-            if (*p == '.') p++;
+            if (*p == '.')
+                p++;
         }
         if (ok && !found && cur->exact_subs) {
-            found = trie_remove(c->topic_root, pattern,
-                                cur->exact_subs->notify_ch);
+            found = trie_remove(c->topic_root, pattern, cur->exact_subs->notify_ch);
         }
     }
-    if (found) c->topic_sub_count--;
+    if (found)
+        c->topic_sub_count--;
     xr_mutex_unlock(&c->topics_lock);
 
     if (found) {
-        if (found->notify_ch) xr_channel_close(found->notify_ch);
+        if (found->notify_ch)
+            xr_channel_close(found->notify_ch);
         xr_free(found);
     }
 
     // Broadcast unsubscription
-    uint8_t name_len = (uint8_t)strlen(pattern);
+    uint8_t name_len = (uint8_t) strlen(pattern);
     uint8_t payload[256];
     payload[0] = name_len;
     memcpy(payload + 1, pattern, name_len);
@@ -532,8 +594,7 @@ void xr_cluster_topic_unsubscribe(XrCluster *c, const char *pattern) {
     XrClusterNode *node = c->nodes;
     while (node) {
         if (node->state == XR_NODE_CONNECTED) {
-            xr_cluster_node_send_frame(node, XR_FRAME_TOPIC_UNSUBSCRIBE,
-                                        payload, 1 + name_len);
+            xr_cluster_node_send_frame(node, XR_FRAME_TOPIC_UNSUBSCRIBE, payload, 1 + name_len);
         }
         node = node->next;
     }
@@ -543,7 +604,8 @@ void xr_cluster_topic_unsubscribe(XrCluster *c, const char *pattern) {
 /* ========== Deliver & Publish ========== */
 
 void xr_cluster_topic_deliver_local(XrCluster *c, const char *topic, XrValue value) {
-    if (!c || !topic || !c->topic_root) return;
+    if (!c || !topic || !c->topic_root)
+        return;
 
     /*
      * Walk the trie under c->topics_lock to collect matching notify_ch
@@ -557,7 +619,10 @@ void xr_cluster_topic_deliver_local(XrCluster *c, const char *topic, XrValue val
      * overflow is silently dropped (at-most-once semantics, same as
      * the legacy path).
      */
-    enum { INLINE_CAP = 32, HARD_CAP = 256 };
+    enum {
+        INLINE_CAP = 32,
+        HARD_CAP = 256
+    };
     struct XrChannel *inline_buf[INLINE_CAP];
     XrTopicEmit e = {
         .targets = inline_buf,
@@ -580,7 +645,8 @@ void xr_cluster_topic_deliver_local(XrCluster *c, const char *topic, XrValue val
         xr_channel_try_send(e.targets[i], value);
     }
 
-    if (e.grown_alloc) xr_free(e.targets);
+    if (e.grown_alloc)
+        xr_free(e.targets);
 }
 
 /*
@@ -599,12 +665,10 @@ void xr_cluster_topic_deliver_local(XrCluster *c, const char *topic, XrValue val
  * Returns 0 on success, -1 on alloc failure. On success the caller
  * owns fb and must free with xr_frame_buf_free.
  */
-static int topic_build_publish_frame(XrayIsolate *X,
-                                      const char *topic,
-                                      const XrValue *value,
-                                      uint8_t hop_limit,
-                                      XrFrameBuf *fb_out) {
-    if (!topic || !value || !fb_out) return -1;
+static int topic_build_publish_frame(XrayIsolate *X, const char *topic, const XrValue *value,
+                                     uint8_t hop_limit, XrFrameBuf *fb_out) {
+    if (!topic || !value || !fb_out)
+        return -1;
 
     XrSerialBuf sbuf;
     xr_serial_buf_init(&sbuf);
@@ -613,8 +677,8 @@ static int topic_build_publish_frame(XrayIsolate *X,
         return -1;
     }
 
-    uint8_t topic_len = (uint8_t)strlen(topic);
-    uint32_t payload_len = 1 + topic_len + (uint32_t)sbuf.len + 1;
+    uint8_t topic_len = (uint8_t) strlen(topic);
+    uint32_t payload_len = 1 + topic_len + (uint32_t) sbuf.len + 1;
     xr_frame_buf_init(fb_out, payload_len);
     if (!fb_out->data) {
         xr_serial_buf_free(&sbuf);
@@ -626,7 +690,7 @@ static int topic_build_publish_frame(XrayIsolate *X,
     fb_out->data[1 + topic_len + sbuf.len] = hop_limit;
     xr_serial_buf_free(&sbuf);
 
-    return (int)payload_len;
+    return (int) payload_len;
 }
 
 /*
@@ -634,27 +698,24 @@ static int topic_build_publish_frame(XrayIsolate *X,
  * except `exclude` (used for split-horizon forwarding). Caller owns
  * the XrFrameBuf and is responsible for freeing it.
  */
-static void topic_broadcast_frame(XrCluster *c,
-                                   XrClusterNode *exclude,
-                                   const uint8_t *payload,
-                                   uint32_t payload_len) {
+static void topic_broadcast_frame(XrCluster *c, XrClusterNode *exclude, const uint8_t *payload,
+                                  uint32_t payload_len) {
     xr_mutex_lock(&c->nodes_lock);
     XrClusterNode *node = c->nodes;
     while (node) {
         if (node != exclude && node->state == XR_NODE_CONNECTED) {
-            xr_cluster_node_send_frame(node, XR_FRAME_TOPIC_PUBLISH,
-                                        payload, payload_len);
+            xr_cluster_node_send_frame(node, XR_FRAME_TOPIC_PUBLISH, payload, payload_len);
         }
         node = node->next;
     }
     xr_mutex_unlock(&c->nodes_lock);
 }
 
-void xr_cluster_topic_handle_publish(XrCluster *c, XrClusterNode *from,
-                                      const char *topic,
-                                      const uint8_t *value_data, uint32_t value_len,
-                                      uint8_t hop_limit) {
-    if (!c || !topic) return;
+void xr_cluster_topic_handle_publish(XrCluster *c, XrClusterNode *from, const char *topic,
+                                     const uint8_t *value_data, uint32_t value_len,
+                                     uint8_t hop_limit) {
+    if (!c || !topic)
+        return;
 
     // Decode the value
     XrValue value;
@@ -686,26 +747,28 @@ void xr_cluster_topic_handle_publish(XrCluster *c, XrClusterNode *from,
      * A proper fix would cache a recent message-id set per cluster
      * and drop duplicates; tracked as a separate item.
      */
-    if (hop_limit == 0) return;
+    if (hop_limit == 0)
+        return;
 
-    uint8_t next_hop = (uint8_t)(hop_limit - 1);
+    uint8_t next_hop = (uint8_t) (hop_limit - 1);
 
     // Re-serialize with the decremented hop byte. We cannot simply
     // forward the original payload buffer because the trailing
     // hop_limit byte needs to be updated; rebuilding is cheap
     // compared to the encode that would otherwise be required.
     XrFrameBuf fb;
-    int payload_len = topic_build_publish_frame(c->isolate, topic, &value,
-                                                 next_hop, &fb);
-    if (payload_len < 0) return;
+    int payload_len = topic_build_publish_frame(c->isolate, topic, &value, next_hop, &fb);
+    if (payload_len < 0)
+        return;
 
-    topic_broadcast_frame(c, from, fb.data, (uint32_t)payload_len);
+    topic_broadcast_frame(c, from, fb.data, (uint32_t) payload_len);
     xr_frame_buf_free(&fb);
 }
 
 int xr_cluster_topic_publish(XrayIsolate *X, const char *topic, XrValue value) {
-    XrCluster *c = (XrCluster *)X->cluster;
-    if (!c || !topic) return -1;
+    XrCluster *c = (XrCluster *) X->cluster;
+    if (!c || !topic)
+        return -1;
 
     // Deliver to local subscribers first
     xr_cluster_topic_deliver_local(c, topic, value);
@@ -717,13 +780,13 @@ int xr_cluster_topic_publish(XrayIsolate *X, const char *topic, XrValue value) {
      * cluster_proto.h for the depth-vs-damage trade-off.
      */
     XrFrameBuf fb;
-    int payload_len = topic_build_publish_frame(X, topic, &value,
-                                                 XR_TOPIC_DEFAULT_HOP_LIMIT, &fb);
-    if (payload_len < 0) return -1;
+    int payload_len = topic_build_publish_frame(X, topic, &value, XR_TOPIC_DEFAULT_HOP_LIMIT, &fb);
+    if (payload_len < 0)
+        return -1;
 
     // Forward to all connected nodes (no split-horizon — we are the
     // origin, so every peer is a valid destination).
-    topic_broadcast_frame(c, NULL, fb.data, (uint32_t)payload_len);
+    topic_broadcast_frame(c, NULL, fb.data, (uint32_t) payload_len);
     xr_frame_buf_free(&fb);
     return 0;
 }

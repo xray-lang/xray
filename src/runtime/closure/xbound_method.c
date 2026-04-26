@@ -18,12 +18,10 @@
 #include "../value/xtype_names.h"
 #include "../xisolate_internal.h"
 
-XrBoundMethod *xr_bound_method_new(XrayIsolate *isolate, XrValue receiver,
-                                   MethodHandler handler) {
+XrBoundMethod *xr_bound_method_new(XrayIsolate *isolate, XrValue receiver, MethodHandler handler) {
     XR_DCHECK(isolate != NULL, "bound_method_new: NULL isolate");
-    XrBoundMethod *bm = (XrBoundMethod *)xr_gc_alloc(&isolate->gc,
-                                                     sizeof(XrBoundMethod),
-                                                     XR_TBOUND_METHOD);
+    XrBoundMethod *bm =
+        (XrBoundMethod *) xr_gc_alloc(&isolate->gc, sizeof(XrBoundMethod), XR_TBOUND_METHOD);
     if (bm == NULL) {
         return NULL;
     }
@@ -45,7 +43,7 @@ XrBoundMethod *xr_value_to_bound_method(XrValue v) {
     if (!XR_IS_BOUND_METHOD(v)) {
         return NULL;
     }
-    return (XrBoundMethod *)XR_TO_PTR(v);
+    return (XrBoundMethod *) XR_TO_PTR(v);
 }
 
 /* ========== Symbol -> MethodHandler bridges ========== */
@@ -58,17 +56,20 @@ XrBoundMethod *xr_value_to_bound_method(XrValue v) {
  * xvm_dispatch_call.inc.c raises XR_ERR_TYPE_NO_METHOD with the
  * caller's PC. The error surfaces immediately at the call site
  * rather than masking the missing method as a null result. */
-static XrValue bound_method_stub(XrayIsolate *isolate, XrValue receiver,
-                                 XrValue *args, int argc) {
-    (void)isolate; (void)receiver; (void)args; (void)argc;
+static XrValue bound_method_stub(XrayIsolate *isolate, XrValue receiver, XrValue *args, int argc) {
+    (void) isolate;
+    (void) receiver;
+    (void) args;
+    (void) argc;
     return XR_NOTFOUND;
 }
 
 MethodHandler xr_map_get_handler(int symbol) {
-    const XrMethodSlot *slot = xr_method_table_lookup(
-        XR_TID_MAP, symbol, SYMBOL_BUILTIN_COUNT);
-    if (slot) return (MethodHandler)slot->fn;
-    if (symbol == SYMBOL_FOREACH) return bound_method_stub;
+    const XrMethodSlot *slot = xr_method_table_lookup(XR_TID_MAP, symbol, SYMBOL_BUILTIN_COUNT);
+    if (slot)
+        return (MethodHandler) slot->fn;
+    if (symbol == SYMBOL_FOREACH)
+        return bound_method_stub;
     return NULL;
 }
 
@@ -77,20 +78,19 @@ MethodHandler xr_array_get_handler(int symbol) {
      * signature, no duplicate registry. Closure-taking methods
      * (foreach / map / filter / reduce / find / ...) resolve through
      * the bound-method stub when the user grabs them as values. */
-    const XrMethodSlot *slot = xr_method_table_lookup(
-        XR_TID_ARRAY, symbol, SYMBOL_BUILTIN_COUNT);
-    if (slot) return (MethodHandler)slot->fn;
-    if (symbol == SYMBOL_ITERATOR) return bound_method_stub;
+    const XrMethodSlot *slot = xr_method_table_lookup(XR_TID_ARRAY, symbol, SYMBOL_BUILTIN_COUNT);
+    if (slot)
+        return (MethodHandler) slot->fn;
+    if (symbol == SYMBOL_ITERATOR)
+        return bound_method_stub;
     return NULL;
 }
 
 MethodHandler xr_set_get_handler(int symbol) {
-    const XrMethodSlot *slot = xr_method_table_lookup(
-        XR_TID_SET, symbol, SYMBOL_BUILTIN_COUNT);
-    if (slot) return (MethodHandler)slot->fn;
-    if (symbol == SYMBOL_FOREACH ||
-        symbol == SYMBOL_MAP_METHOD ||
-        symbol == SYMBOL_FILTER) {
+    const XrMethodSlot *slot = xr_method_table_lookup(XR_TID_SET, symbol, SYMBOL_BUILTIN_COUNT);
+    if (slot)
+        return (MethodHandler) slot->fn;
+    if (symbol == SYMBOL_FOREACH || symbol == SYMBOL_MAP_METHOD || symbol == SYMBOL_FILTER) {
         return bound_method_stub;
     }
     return NULL;
@@ -100,47 +100,57 @@ MethodHandler xr_string_get_handler(int symbol) {
     /* SYMBOL_ITERATOR remains a bound-method stub: the lazy
      * character iterator hasn't been lifted into a table entry
      * yet. */
-    const XrMethodSlot *slot = xr_method_table_lookup(
-        XR_TID_STRING, symbol, SYMBOL_BUILTIN_COUNT);
-    if (slot) return (MethodHandler)slot->fn;
-    if (symbol == SYMBOL_ITERATOR) return bound_method_stub;
+    const XrMethodSlot *slot = xr_method_table_lookup(XR_TID_STRING, symbol, SYMBOL_BUILTIN_COUNT);
+    if (slot)
+        return (MethodHandler) slot->fn;
+    if (symbol == SYMBOL_ITERATOR)
+        return bound_method_stub;
     return NULL;
 }
 
 /* Iterator methods touch receiver state (cursor advance), so they
  * stay outside the unified per-type table — wrap them directly. */
-static XrValue iterator_hasnext_handler(XrayIsolate *isolate, XrValue receiver,
-                                        XrValue *args, int argc) {
-    (void)isolate; (void)args; (void)argc;
+static XrValue iterator_hasnext_handler(XrayIsolate *isolate, XrValue receiver, XrValue *args,
+                                        int argc) {
+    (void) isolate;
+    (void) args;
+    (void) argc;
     XrIterator *iter = xr_value_to_iterator(receiver);
     return xr_bool(xr_iterator_has_next(iter));
 }
 
-static XrValue iterator_next_handler(XrayIsolate *isolate, XrValue receiver,
-                                     XrValue *args, int argc) {
-    (void)isolate; (void)args; (void)argc;
+static XrValue iterator_next_handler(XrayIsolate *isolate, XrValue receiver, XrValue *args,
+                                     int argc) {
+    (void) isolate;
+    (void) args;
+    (void) argc;
     XrIterator *iter = xr_value_to_iterator(receiver);
     return xr_iterator_next(iter);
 }
 
 MethodHandler xr_iterator_get_handler(int symbol) {
-    if (symbol == SYMBOL_HASNEXT) return iterator_hasnext_handler;
-    if (symbol == SYMBOL_NEXT) return iterator_next_handler;
+    if (symbol == SYMBOL_HASNEXT)
+        return iterator_hasnext_handler;
+    if (symbol == SYMBOL_NEXT)
+        return iterator_next_handler;
     return NULL;
 }
 
-XrValue xr_enum_get_member_handler(XrayIsolate *isolate, XrValue receiver,
-                                   XrValue *args, int argc) {
-    (void)isolate;
-    if (argc < 1 || !XR_IS_INT(args[0])) return xr_null();
-    if (!XR_IS_PTR(receiver)) return xr_null();
+XrValue xr_enum_get_member_handler(XrayIsolate *isolate, XrValue receiver, XrValue *args,
+                                   int argc) {
+    (void) isolate;
+    if (argc < 1 || !XR_IS_INT(args[0]))
+        return xr_null();
+    if (!XR_IS_PTR(receiver))
+        return xr_null();
 
-    XrGCHeader *gc = (XrGCHeader *)XR_TO_PTR(receiver);
-    if (XR_GC_GET_TYPE(gc) != XR_TENUM_TYPE) return xr_null();
+    XrGCHeader *gc = (XrGCHeader *) XR_TO_PTR(receiver);
+    if (XR_GC_GET_TYPE(gc) != XR_TENUM_TYPE)
+        return xr_null();
 
-    XrEnumType *enum_type = (XrEnumType *)gc;
+    XrEnumType *enum_type = (XrEnumType *) gc;
     int index = XR_TO_INT(args[0]);
-    if (index < 0 || index >= (int)enum_type->member_count) {
+    if (index < 0 || index >= (int) enum_type->member_count) {
         return xr_null();
     }
     return XR_FROM_PTR(enum_type->members[index].instance);

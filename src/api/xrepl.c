@@ -33,11 +33,13 @@
 
 #define REPL_SYMBOLS_INITIAL_CAPACITY 32
 
-XrReplSymbolTable* xr_repl_symbols_new(void) {
-    XrReplSymbolTable *table = (XrReplSymbolTable *)xr_malloc(sizeof(XrReplSymbolTable));
-    if (!table) return NULL;
+XrReplSymbolTable *xr_repl_symbols_new(void) {
+    XrReplSymbolTable *table = (XrReplSymbolTable *) xr_malloc(sizeof(XrReplSymbolTable));
+    if (!table)
+        return NULL;
 
-    table->symbols = (XrReplSymbol *)xr_malloc(sizeof(XrReplSymbol) * REPL_SYMBOLS_INITIAL_CAPACITY);
+    table->symbols =
+        (XrReplSymbol *) xr_malloc(sizeof(XrReplSymbol) * REPL_SYMBOLS_INITIAL_CAPACITY);
     if (!table->symbols) {
         xr_free(table);
         return NULL;
@@ -49,7 +51,8 @@ XrReplSymbolTable* xr_repl_symbols_new(void) {
 }
 
 void xr_repl_symbols_free(XrReplSymbolTable *table) {
-    if (!table) return;
+    if (!table)
+        return;
     if (table->symbols) {
         xr_free(table->symbols);
     }
@@ -57,29 +60,33 @@ void xr_repl_symbols_free(XrReplSymbolTable *table) {
 }
 
 void xr_repl_symbols_clear(XrReplSymbolTable *table) {
-    if (!table) return;
+    if (!table)
+        return;
     table->count = 0;
 }
 
 static void repl_symbols_ensure_capacity(XrReplSymbolTable *table, int needed) {
     XR_DCHECK(table != NULL, "repl_symbols_ensure_capacity: NULL table");
     XR_DCHECK(needed > 0, "repl_symbols_ensure_capacity: non-positive needed");
-    if (needed <= table->capacity) return;
+    if (needed <= table->capacity)
+        return;
 
     int new_capacity = table->capacity * 2;
-    if (new_capacity < needed) new_capacity = needed;
+    if (new_capacity < needed)
+        new_capacity = needed;
 
-    XrReplSymbol *new_syms = (XrReplSymbol *)xr_realloc(table->symbols,
-        sizeof(XrReplSymbol) * new_capacity);
-    if (!new_syms) return;
+    XrReplSymbol *new_syms =
+        (XrReplSymbol *) xr_realloc(table->symbols, sizeof(XrReplSymbol) * new_capacity);
+    if (!new_syms)
+        return;
 
     table->symbols = new_syms;
     table->capacity = new_capacity;
 }
 
 // Add or update a symbol in the REPL table
-static void repl_symbols_add_or_update(XrReplSymbolTable *table,
-                                        XrString *name, int shared_index, bool is_const) {
+static void repl_symbols_add_or_update(XrReplSymbolTable *table, XrString *name, int shared_index,
+                                       bool is_const) {
     // Check if already exists (update case: redefinition)
     for (int i = 0; i < table->count; i++) {
         if (table->symbols[i].name != NULL &&
@@ -101,15 +108,16 @@ static void repl_symbols_add_or_update(XrReplSymbolTable *table,
 void xr_repl_symbols_seed_context(XrReplSymbolTable *table, XrCompilerContext *ctx) {
     XR_DCHECK(table != NULL, "xr_repl_symbols_seed_context: NULL table");
     XR_DCHECK(ctx != NULL, "xr_repl_symbols_seed_context: NULL ctx");
-    if (!table || !ctx || table->count == 0) return;
+    if (!table || !ctx || table->count == 0)
+        return;
 
     // Ensure ctx->shared_vars has enough capacity
     while (ctx->shared_var_capacity < table->count) {
-        int new_capacity = ctx->shared_var_capacity < 8
-            ? 8 : ctx->shared_var_capacity * 2;
-        XrSharedVar *new_vars = (XrSharedVar *)xr_realloc(ctx->shared_vars,
-            sizeof(XrSharedVar) * new_capacity);
-        if (!new_vars) return;
+        int new_capacity = ctx->shared_var_capacity < 8 ? 8 : ctx->shared_var_capacity * 2;
+        XrSharedVar *new_vars =
+            (XrSharedVar *) xr_realloc(ctx->shared_vars, sizeof(XrSharedVar) * new_capacity);
+        if (!new_vars)
+            return;
         for (int i = ctx->shared_var_capacity; i < new_capacity; i++) {
             new_vars[i].name = NULL;
             new_vars[i].index = -1;
@@ -135,17 +143,15 @@ void xr_repl_symbols_seed_context(XrReplSymbolTable *table, XrCompilerContext *c
     ctx->shared_var_count = table->count;
 }
 
-void xr_repl_symbols_collect(XrReplSymbolTable *table, XrCompilerContext *ctx,
-                             int seeded_count) {
-    if (!table || !ctx) return;
+void xr_repl_symbols_collect(XrReplSymbolTable *table, XrCompilerContext *ctx, int seeded_count) {
+    if (!table || !ctx)
+        return;
 
     // Collect new definitions (indices beyond seeded_count)
     for (int i = seeded_count; i < ctx->shared_var_count; i++) {
         if (ctx->shared_vars[i].name != NULL) {
-            repl_symbols_add_or_update(table,
-                ctx->shared_vars[i].name,
-                ctx->shared_vars[i].index,
-                ctx->shared_vars[i].is_const);
+            repl_symbols_add_or_update(table, ctx->shared_vars[i].name, ctx->shared_vars[i].index,
+                                       ctx->shared_vars[i].is_const);
         }
     }
 }
@@ -153,7 +159,8 @@ void xr_repl_symbols_collect(XrReplSymbolTable *table, XrCompilerContext *ctx,
 /* ========== REPL Input Completeness Check ========== */
 
 XrInputStatus xr_repl_check_input(const char *source) {
-    if (!source || !*source) return XR_INPUT_COMPLETE;
+    if (!source || !*source)
+        return XR_INPUT_COMPLETE;
 
     Scanner scanner;
     xr_scanner_init(&scanner, source);
@@ -166,14 +173,30 @@ XrInputStatus xr_repl_check_input(const char *source) {
         Token token = xr_scanner_scan(&scanner);
 
         switch (token.type) {
-            case TK_LPAREN:         paren_depth++; break;
-            case TK_RPAREN:         paren_depth--; break;
-            case TK_LBRACKET:       bracket_depth++; break;
-            case TK_RBRACKET:       bracket_depth--; break;
-            case TK_LBRACE:         brace_depth++; break;
-            case TK_RBRACE:         brace_depth--; break;
-            case TK_SET_START:      bracket_depth++; break;  // #[
-            case TK_EMPTY_MAP_START: brace_depth++; break;   // #{
+            case TK_LPAREN:
+                paren_depth++;
+                break;
+            case TK_RPAREN:
+                paren_depth--;
+                break;
+            case TK_LBRACKET:
+                bracket_depth++;
+                break;
+            case TK_RBRACKET:
+                bracket_depth--;
+                break;
+            case TK_LBRACE:
+                brace_depth++;
+                break;
+            case TK_RBRACE:
+                brace_depth--;
+                break;
+            case TK_SET_START:
+                bracket_depth++;
+                break;  // #[
+            case TK_EMPTY_MAP_START:
+                brace_depth++;
+                break;  // #{
 
             case TK_EOF:
                 if (paren_depth > 0 || bracket_depth > 0 || brace_depth > 0) {
@@ -184,8 +207,7 @@ XrInputStatus xr_repl_check_input(const char *source) {
             case TK_ERROR:
                 // Unterminated string/comment/regex -> incomplete input.
                 // L-03: diagnostic text is in error_message; start points into source.
-                if (token.error_message &&
-                    strstr(token.error_message, "nterminated") != NULL) {
+                if (token.error_message && strstr(token.error_message, "nterminated") != NULL) {
                     return XR_INPUT_INCOMPLETE;
                 }
                 // Other lexer errors: let compiler report them
@@ -199,20 +221,23 @@ XrInputStatus xr_repl_check_input(const char *source) {
 
 /* ========== REPL Compilation ========== */
 
-XrProto* xr_repl_compile(XrayIsolate *isolate, const char *source) {
+XrProto *xr_repl_compile(XrayIsolate *isolate, const char *source) {
     XR_DCHECK(isolate != NULL, "xr_repl_compile: NULL isolate");
     XR_DCHECK(source != NULL, "xr_repl_compile: NULL source");
-    if (!isolate || !source) return NULL;
+    if (!isolate || !source)
+        return NULL;
 
     // Ensure REPL symbol table exists
     if (!isolate->repl_symbols) {
         isolate->repl_symbols = xr_repl_symbols_new();
-        if (!isolate->repl_symbols) return NULL;
+        if (!isolate->repl_symbols)
+            return NULL;
     }
 
     // Parse
     AstNode *ast = xr_parse(isolate, source);
-    if (!ast) return NULL;
+    if (!ast)
+        return NULL;
 
     // Create compiler context
     XrCompilerContext *ctx = xr_compiler_context_new(isolate);

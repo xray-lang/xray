@@ -49,8 +49,7 @@ static int find_method_in_parent_vtable(XrClass *parent_class, int symbol) {
     if (!parent_class || !parent_class->vtable || symbol < 0) {
         return -1;
     }
-    if (!parent_class->method_symbol_to_index
-        || symbol >= parent_class->method_map_capacity) {
+    if (!parent_class->method_symbol_to_index || symbol >= parent_class->method_map_capacity) {
         return -1;
     }
     int method_idx = parent_class->method_symbol_to_index[symbol];
@@ -71,12 +70,12 @@ static int find_method_in_parent_vtable(XrClass *parent_class, int symbol) {
 static int generate_vtable(XrClass *cls) {
     if (cls->super && cls->super->vtable) {
         cls->vtable_size = cls->super->vtable_size;
-        cls->vtable = (XrMethod**)xr_malloc(cls->vtable_size * sizeof(XrMethod*));
+        cls->vtable = (XrMethod **) xr_malloc(cls->vtable_size * sizeof(XrMethod *));
         if (!cls->vtable) {
             xr_log_warning("class", "generate_vtable: failed to allocate vtable");
             return -1;
         }
-        memcpy(cls->vtable, cls->super->vtable, cls->vtable_size * sizeof(XrMethod*));
+        memcpy(cls->vtable, cls->super->vtable, cls->vtable_size * sizeof(XrMethod *));
         cls->own_method_start = cls->super->vtable_size;
     } else {
         cls->vtable = NULL;
@@ -99,8 +98,8 @@ static int generate_vtable(XrClass *cls) {
             // Route realloc through a temporary so a failed grow does
             // not overwrite cls->vtable with NULL and leak the previous
             // buffer.
-            XrMethod **new_vtable = (XrMethod**)xr_realloc(cls->vtable,
-                (cls->vtable_size + 1) * sizeof(XrMethod*));
+            XrMethod **new_vtable =
+                (XrMethod **) xr_realloc(cls->vtable, (cls->vtable_size + 1) * sizeof(XrMethod *));
             if (!new_vtable) {
                 return -1;
             }
@@ -116,22 +115,16 @@ static int generate_vtable(XrClass *cls) {
 /* ========== Finalize Helpers (forward decls) ========== */
 
 static void finalize_basic_and_supers(const XrClassBuilder *b, XrClass *cls);
-static bool finalize_fields(const XrClassBuilder *b, XrClass *cls,
-                            int parent_instance_field_count,
-                            int own_instance_fields,
-                            int total_own_fields,
+static bool finalize_fields(const XrClassBuilder *b, XrClass *cls, int parent_instance_field_count,
+                            int own_instance_fields, int total_own_fields,
                             int total_instance_field_count);
 static void finalize_field_symbol_map(const XrClassBuilder *b, XrClass *cls,
-                                      int parent_instance_field_count,
-                                      int own_instance_fields,
+                                      int parent_instance_field_count, int own_instance_fields,
                                       int total_instance_field_count);
-static bool finalize_methods(XrClassBuilder *b, XrClass *cls,
-                             int parent_instance_method_count,
-                             int flat_instance_count,
-                             int total_method_count);
+static bool finalize_methods(XrClassBuilder *b, XrClass *cls, int parent_instance_method_count,
+                             int flat_instance_count, int total_method_count);
 static bool finalize_static_fields(const XrClassBuilder *b, XrClass *cls);
-static void finalize_static_methods(const XrClassBuilder *b, XrClass *cls,
-                                    int flat_instance_count,
+static void finalize_static_methods(const XrClassBuilder *b, XrClass *cls, int flat_instance_count,
                                     int total_method_count);
 static void finalize_interfaces(const XrClassBuilder *b, XrClass *cls);
 static void finalize_abstract_methods(const XrClassBuilder *b, XrClass *cls);
@@ -141,7 +134,7 @@ static void write_method_slot(XrMethod *method, XrMethodBuildItem *item, bool is
 
 /* ========== Finalize (top-level dispatcher) ========== */
 
-XrClass* xr_class_builder_finalize(XrClassBuilder *builder) {
+XrClass *xr_class_builder_finalize(XrClassBuilder *builder) {
     XR_DCHECK(builder != NULL, "class_builder_finalize: NULL builder");
     if (builder == NULL) {
         xr_log_warning("class", "finalize: NULL builder");
@@ -158,9 +151,10 @@ XrClass* xr_class_builder_finalize(XrClassBuilder *builder) {
     // sys-heap is wired up).
     XrClass *cls = NULL;
     if (builder->isolate && xr_isolate_get_sys_heap(builder->isolate)) {
-        cls = (XrClass*)xr_sysheap_alloc_class(xr_isolate_get_sys_heap(builder->isolate), sizeof(XrClass));
+        cls = (XrClass *) xr_sysheap_alloc_class(xr_isolate_get_sys_heap(builder->isolate),
+                                                 sizeof(XrClass));
     } else {
-        cls = (XrClass*)xr_malloc(sizeof(XrClass));
+        cls = (XrClass *) xr_malloc(sizeof(XrClass));
     }
     if (cls == NULL) {
         xr_log_warning("class", "finalize: failed to allocate class");
@@ -174,46 +168,37 @@ XrClass* xr_class_builder_finalize(XrClassBuilder *builder) {
     // Field counts shared by finalize_fields and finalize_field_symbol_map.
     int own_instance_fields = builder->field_count;
     int total_own_fields = builder->field_count + builder->static_field_count;
-    int parent_instance_field_count = (builder->super != NULL)
-        ? xr_class_instance_field_count(builder->super) : 0;
+    int parent_instance_field_count =
+        (builder->super != NULL) ? xr_class_instance_field_count(builder->super) : 0;
     int total_instance_field_count = parent_instance_field_count + own_instance_fields;
 
-    if (!finalize_fields(builder, cls,
-                         parent_instance_field_count,
-                         own_instance_fields,
-                         total_own_fields,
-                         total_instance_field_count)) {
+    if (!finalize_fields(builder, cls, parent_instance_field_count, own_instance_fields,
+                         total_own_fields, total_instance_field_count)) {
         xr_class_free(cls);
         return NULL;
     }
-    finalize_field_symbol_map(builder, cls,
-                              parent_instance_field_count,
-                              own_instance_fields,
+    finalize_field_symbol_map(builder, cls, parent_instance_field_count, own_instance_fields,
                               total_instance_field_count);
 
     // Method counts shared by finalize_methods / finalize_static_methods.
-    int parent_instance_method_count = (builder->super != NULL)
-        ? builder->super->method_count : 0;
+    int parent_instance_method_count = (builder->super != NULL) ? builder->super->method_count : 0;
 
     int override_count = 0;
     if (parent_instance_method_count > 0 && builder->super->method_symbol_to_index) {
         int cap = builder->super->method_map_capacity;
         for (int i = 0; i < builder->method_count; i++) {
             int sym = builder->methods[i].symbol;
-            if (sym >= 0 && sym < cap
-                && builder->super->method_symbol_to_index[sym] >= 0
-                && builder->super->method_symbol_to_index[sym] < parent_instance_method_count) {
+            if (sym >= 0 && sym < cap && builder->super->method_symbol_to_index[sym] >= 0 &&
+                builder->super->method_symbol_to_index[sym] < parent_instance_method_count) {
                 override_count++;
             }
         }
     }
-    int flat_instance_count = parent_instance_method_count
-        + (builder->method_count - override_count);
+    int flat_instance_count =
+        parent_instance_method_count + (builder->method_count - override_count);
     int total_method_count = flat_instance_count + builder->static_method_count;
 
-    if (!finalize_methods(builder, cls,
-                          parent_instance_method_count,
-                          flat_instance_count,
+    if (!finalize_methods(builder, cls, parent_instance_method_count, flat_instance_count,
                           total_method_count)) {
         xr_class_free(cls);
         return NULL;
@@ -255,7 +240,8 @@ static void finalize_basic_and_supers(const XrClassBuilder *b, XrClass *cls) {
     if (cls->super == NULL) {
         cls->depth = 0;
         cls->primary_supers[0] = cls;
-        for (int i = 1; i < 8; i++) cls->primary_supers[i] = NULL;
+        for (int i = 1; i < 8; i++)
+            cls->primary_supers[i] = NULL;
         return;
     }
 
@@ -265,7 +251,8 @@ static void finalize_basic_and_supers(const XrClassBuilder *b, XrClass *cls) {
             cls->primary_supers[i] = cls->super->primary_supers[i];
         }
         cls->primary_supers[cls->depth] = cls;
-        for (int i = cls->depth + 1; i < 8; i++) cls->primary_supers[i] = NULL;
+        for (int i = cls->depth + 1; i < 8; i++)
+            cls->primary_supers[i] = NULL;
         return;
     }
 
@@ -274,7 +261,8 @@ static void finalize_basic_and_supers(const XrClassBuilder *b, XrClass *cls) {
     // then build a secondary-supers hash keyed by ancestor identity.
     XrClass *chain[256];
     int n = 0;
-    for (XrClass *c = cls; c != NULL && n < 256; c = c->super) chain[n++] = c;
+    for (XrClass *c = cls; c != NULL && n < 256; c = c->super)
+        chain[n++] = c;
     for (int i = 0; i < 8 && n - 1 - i >= 0; i++) {
         cls->primary_supers[i] = chain[n - 1 - i];
     }
@@ -283,16 +271,19 @@ static void finalize_basic_and_supers(const XrClassBuilder *b, XrClass *cls) {
     // failed allocation is non-fatal: instanceof falls back to a
     // linear super-chain walk when secondary_supers_hash is NULL.
     uint16_t cap = 16;
-    while (cap < (uint16_t)(n * 2)) cap <<= 1;
-    cls->secondary_supers_hash = (XrClass**)xr_calloc(cap, sizeof(XrClass*));
-    if (cls->secondary_supers_hash == NULL) return;
+    while (cap < (uint16_t) (n * 2))
+        cap <<= 1;
+    cls->secondary_supers_hash = (XrClass **) xr_calloc(cap, sizeof(XrClass *));
+    if (cls->secondary_supers_hash == NULL)
+        return;
 
     cls->secondary_supers_capacity = cap;
-    uint32_t mask = (uint32_t)cap - 1;
+    uint32_t mask = (uint32_t) cap - 1;
     for (int i = 0; i < n; i++) {
         XrClass *c = chain[i];
-        uint32_t h = xr_hash_int((int64_t)(uintptr_t)c) & mask;
-        while (cls->secondary_supers_hash[h] != NULL) h = (h + 1) & mask;
+        uint32_t h = xr_hash_int((int64_t) (uintptr_t) c) & mask;
+        while (cls->secondary_supers_hash[h] != NULL)
+            h = (h + 1) & mask;
         cls->secondary_supers_hash[h] = c;
     }
 }
@@ -300,39 +291,35 @@ static void finalize_basic_and_supers(const XrClassBuilder *b, XrClass *cls) {
 // Populate cls->fields (instance + static descriptors), cls->instance_size,
 // and cls->field_default_values. Returns false on cls->fields alloc
 // failure (the only hard error in this stage).
-static bool finalize_fields(const XrClassBuilder *b, XrClass *cls,
-                            int parent_instance_field_count,
-                            int own_instance_fields,
-                            int total_own_fields,
+static bool finalize_fields(const XrClassBuilder *b, XrClass *cls, int parent_instance_field_count,
+                            int own_instance_fields, int total_own_fields,
                             int total_instance_field_count) {
     if (total_own_fields == 0) {
         cls->fields = NULL;
         cls->field_default_values = NULL;
         cls->field_count = parent_instance_field_count;
         cls->own_field_count = 0;
-        cls->instance_size = (b->super != NULL)
-            ? b->super->instance_size : sizeof(XrGCHeader);
+        cls->instance_size = (b->super != NULL) ? b->super->instance_size : sizeof(XrGCHeader);
         return true;
     }
 
-    cls->fields = (XrFieldDescriptor*)xr_malloc(
-        total_own_fields * sizeof(XrFieldDescriptor));
-    if (cls->fields == NULL) return false;
+    cls->fields = (XrFieldDescriptor *) xr_malloc(total_own_fields * sizeof(XrFieldDescriptor));
+    if (cls->fields == NULL)
+        return false;
 
     // Instance fields go first, at offsets that continue the parent's
     // instance layout so inherited accesses stay a plain offset read.
-    uint16_t offset = (b->super != NULL)
-        ? b->super->instance_size : (uint16_t)sizeof(XrGCHeader);
+    uint16_t offset = (b->super != NULL) ? b->super->instance_size : (uint16_t) sizeof(XrGCHeader);
     for (int i = 0; i < b->field_count; i++) {
         XrFieldBuildItem *item = &b->fields[i];
         XrFieldDescriptor *desc = &cls->fields[i];
-        desc->name = item->name;           // interned, shared
+        desc->name = item->name;  // interned, shared
         desc->type_name = NULL;
         desc->symbol = item->symbol;
         desc->offset = offset;
         desc->flags = item->flags;
         desc->static_slot = -1;
-        offset += sizeof(void*);
+        offset += sizeof(void *);
     }
     // Static fields share cls->fields but carry XR_FIELD_STATIC and a
     // pre-computed static_slot pointing into cls->static_field_values.
@@ -344,7 +331,7 @@ static bool finalize_fields(const XrClassBuilder *b, XrClass *cls,
         desc->symbol = item->symbol;
         desc->offset = 0;
         desc->flags = item->flags | XR_FIELD_STATIC;
-        desc->static_slot = (int16_t)i;
+        desc->static_slot = (int16_t) i;
     }
 
     cls->field_count = total_instance_field_count + b->static_field_count;
@@ -352,8 +339,8 @@ static bool finalize_fields(const XrClassBuilder *b, XrClass *cls,
     cls->instance_size = offset;
 
     if (total_instance_field_count > 0) {
-        cls->field_default_values = (XrValue*)xr_malloc(
-            total_instance_field_count * sizeof(XrValue));
+        cls->field_default_values =
+            (XrValue *) xr_malloc(total_instance_field_count * sizeof(XrValue));
         if (cls->field_default_values != NULL) {
             for (int i = 0; i < total_instance_field_count; i++) {
                 cls->field_default_values[i] = xr_null();
@@ -370,18 +357,20 @@ static bool finalize_fields(const XrClassBuilder *b, XrClass *cls,
 // symbol -> field index map. Best-effort (xr_class_lookup_field walks
 // the super chain recursively if this map is missing).
 static void finalize_field_symbol_map(const XrClassBuilder *b, XrClass *cls,
-                                      int parent_instance_field_count,
-                                      int own_instance_fields,
+                                      int parent_instance_field_count, int own_instance_fields,
                                       int total_instance_field_count) {
-    if (cls->own_field_count == 0) return;
+    if (cls->own_field_count == 0)
+        return;
 
     int max_symbol = 0;
     for (int i = 0; i < cls->own_field_count; i++) {
-        if (cls->fields[i].symbol > max_symbol) max_symbol = cls->fields[i].symbol;
+        if (cls->fields[i].symbol > max_symbol)
+            max_symbol = cls->fields[i].symbol;
     }
     cls->field_map_capacity = max_symbol + 1;
-    cls->field_symbol_to_index = (int*)xr_malloc(cls->field_map_capacity * sizeof(int));
-    if (cls->field_symbol_to_index == NULL) return;
+    cls->field_symbol_to_index = (int *) xr_malloc(cls->field_map_capacity * sizeof(int));
+    if (cls->field_symbol_to_index == NULL)
+        return;
 
     for (int i = 0; i < cls->field_map_capacity; i++) {
         cls->field_symbol_to_index[i] = -1;
@@ -392,8 +381,7 @@ static void finalize_field_symbol_map(const XrClassBuilder *b, XrClass *cls,
     }
     for (int i = 0; i < b->static_field_count; i++) {
         int field_idx = own_instance_fields + i;
-        cls->field_symbol_to_index[cls->fields[field_idx].symbol]
-            = total_instance_field_count + i;
+        cls->field_symbol_to_index[cls->fields[field_idx].symbol] = total_instance_field_count + i;
     }
 }
 
@@ -418,12 +406,13 @@ static void write_method_slot(XrMethod *method, XrMethodBuildItem *item, bool is
             break;
     }
 
-    uint32_t flag_mask = is_static
-        ? (XMETHOD_FLAG_PRIVATE | XMETHOD_FLAG_ABSTRACT | XMETHOD_FLAG_FINAL)
-        : (XMETHOD_FLAG_PRIVATE | XMETHOD_FLAG_STATIC | XMETHOD_FLAG_CONSTRUCTOR
-           | XMETHOD_FLAG_ABSTRACT | XMETHOD_FLAG_FINAL);
+    uint32_t flag_mask =
+        is_static ? (XMETHOD_FLAG_PRIVATE | XMETHOD_FLAG_ABSTRACT | XMETHOD_FLAG_FINAL)
+                  : (XMETHOD_FLAG_PRIVATE | XMETHOD_FLAG_STATIC | XMETHOD_FLAG_CONSTRUCTOR |
+                     XMETHOD_FLAG_ABSTRACT | XMETHOD_FLAG_FINAL);
     method->flags = item->flags & flag_mask;
-    if (is_static) method->flags |= XMETHOD_FLAG_STATIC;
+    if (is_static)
+        method->flags |= XMETHOD_FLAG_STATIC;
 
     method->op_type = item->op_type;
     method->symbol = item->symbol;
@@ -436,14 +425,14 @@ static void write_method_slot(XrMethod *method, XrMethodBuildItem *item, bool is
 // class's own methods (override-in-place when the symbol matches an
 // inherited slot), then run vtable generation. Returns false on any
 // allocation failure.
-static bool finalize_methods(XrClassBuilder *b, XrClass *cls,
-                             int parent_instance_method_count,
-                             int flat_instance_count,
-                             int total_method_count) {
-    if (total_method_count == 0) return true;
+static bool finalize_methods(XrClassBuilder *b, XrClass *cls, int parent_instance_method_count,
+                             int flat_instance_count, int total_method_count) {
+    if (total_method_count == 0)
+        return true;
 
-    cls->methods = (XrMethod*)xr_malloc(total_method_count * sizeof(XrMethod));
-    if (cls->methods == NULL) return false;
+    cls->methods = (XrMethod *) xr_malloc(total_method_count * sizeof(XrMethod));
+    if (cls->methods == NULL)
+        return false;
 
     // Inherited instance methods shallow-copied; names are interned so
     // sharing the pointer is correct without any transfer bookkeeping.
@@ -455,15 +444,14 @@ static bool finalize_methods(XrClassBuilder *b, XrClass *cls,
     for (int i = 0; i < b->method_count; i++) {
         XrMethodBuildItem *item = &b->methods[i];
         int override_slot = -1;
-        if (b->super && b->super->method_symbol_to_index
-            && item->symbol >= 0
-            && item->symbol < b->super->method_map_capacity) {
+        if (b->super && b->super->method_symbol_to_index && item->symbol >= 0 &&
+            item->symbol < b->super->method_map_capacity) {
             int idx = b->super->method_symbol_to_index[item->symbol];
-            if (idx >= 0 && idx < parent_instance_method_count) override_slot = idx;
+            if (idx >= 0 && idx < parent_instance_method_count)
+                override_slot = idx;
         }
-        XrMethod *method = (override_slot >= 0)
-            ? &cls->methods[override_slot]
-            : &cls->methods[append_idx++];
+        XrMethod *method =
+            (override_slot >= 0) ? &cls->methods[override_slot] : &cls->methods[append_idx++];
         write_method_slot(method, item, /*is_static=*/false);
     }
     cls->method_count = flat_instance_count;
@@ -476,11 +464,12 @@ static bool finalize_methods(XrClassBuilder *b, XrClass *cls,
 // Static fields: separate storage from instance fields. Returns false
 // on the only hard failure (alloc).
 static bool finalize_static_fields(const XrClassBuilder *b, XrClass *cls) {
-    if (b->static_field_count == 0) return true;
+    if (b->static_field_count == 0)
+        return true;
 
-    cls->static_field_values = (XrValue*)xr_malloc(
-        b->static_field_count * sizeof(XrValue));
-    if (cls->static_field_values == NULL) return false;
+    cls->static_field_values = (XrValue *) xr_malloc(b->static_field_count * sizeof(XrValue));
+    if (cls->static_field_values == NULL)
+        return false;
 
     for (int i = 0; i < b->static_field_count; i++) {
         cls->static_field_values[i] = b->static_fields[i].value;
@@ -491,10 +480,10 @@ static bool finalize_static_fields(const XrClassBuilder *b, XrClass *cls) {
 
 // Append static methods to the already-sized cls->methods[] (instance
 // capacity allocated by finalize_methods).
-static void finalize_static_methods(const XrClassBuilder *b, XrClass *cls,
-                                    int flat_instance_count,
+static void finalize_static_methods(const XrClassBuilder *b, XrClass *cls, int flat_instance_count,
                                     int total_method_count) {
-    if (b->static_method_count == 0) return;
+    if (b->static_method_count == 0)
+        return;
 
     for (int i = 0; i < b->static_method_count; i++) {
         XrMethod *method = &cls->methods[flat_instance_count + i];
@@ -508,11 +497,13 @@ static void finalize_static_methods(const XrClassBuilder *b, XrClass *cls,
 // NULL + interface_count == 0; implements_interface handles that
 // edge gracefully by returning false.
 static void finalize_interfaces(const XrClassBuilder *b, XrClass *cls) {
-    if (b->interface_count == 0) return;
+    if (b->interface_count == 0)
+        return;
 
-    cls->interfaces = (XrClass**)xr_malloc(b->interface_count * sizeof(XrClass*));
-    if (cls->interfaces == NULL) return;
-    memcpy(cls->interfaces, b->interfaces, b->interface_count * sizeof(XrClass*));
+    cls->interfaces = (XrClass **) xr_malloc(b->interface_count * sizeof(XrClass *));
+    if (cls->interfaces == NULL)
+        return;
+    memcpy(cls->interfaces, b->interfaces, b->interface_count * sizeof(XrClass *));
     cls->interface_count = b->interface_count;
 }
 
@@ -520,12 +511,13 @@ static void finalize_interfaces(const XrClassBuilder *b, XrClass *cls) {
 // interfaces -- consumers (xr_class_can_instantiate etc.) treat a
 // NULL abstract_methods + count == 0 as "no abstract methods".
 static void finalize_abstract_methods(const XrClassBuilder *b, XrClass *cls) {
-    if (b->abstract_method_count == 0) return;
+    if (b->abstract_method_count == 0)
+        return;
 
-    cls->abstract_methods = (int*)xr_malloc(b->abstract_method_count * sizeof(int));
-    if (cls->abstract_methods == NULL) return;
-    memcpy(cls->abstract_methods, b->abstract_methods,
-           b->abstract_method_count * sizeof(int));
+    cls->abstract_methods = (int *) xr_malloc(b->abstract_method_count * sizeof(int));
+    if (cls->abstract_methods == NULL)
+        return;
+    memcpy(cls->abstract_methods, b->abstract_methods, b->abstract_method_count * sizeof(int));
     cls->abstract_method_count = b->abstract_method_count;
 }
 
@@ -534,16 +526,18 @@ static void finalize_abstract_methods(const XrClassBuilder *b, XrClass *cls) {
 // lookups via cls->method_symbol_to_index instead of a linear scan
 // through cls->methods[].
 static void finalize_method_symbol_map(XrClass *cls) {
-    if (cls->method_count == 0) return;
+    if (cls->method_count == 0)
+        return;
 
     int max_symbol = 0;
     for (int i = 0; i < cls->method_count; i++) {
-        if (cls->methods[i].symbol > max_symbol) max_symbol = cls->methods[i].symbol;
+        if (cls->methods[i].symbol > max_symbol)
+            max_symbol = cls->methods[i].symbol;
     }
     cls->method_map_capacity = max_symbol + 1;
-    cls->method_symbol_to_index = (int*)xr_malloc(
-        cls->method_map_capacity * sizeof(int));
-    if (cls->method_symbol_to_index == NULL) return;
+    cls->method_symbol_to_index = (int *) xr_malloc(cls->method_map_capacity * sizeof(int));
+    if (cls->method_symbol_to_index == NULL)
+        return;
 
     for (int i = 0; i < cls->method_map_capacity; i++) {
         cls->method_symbol_to_index[i] = -1;
@@ -563,20 +557,19 @@ static void finalize_method_symbol_map(XrClass *cls) {
 // non-fatal: reader sites tolerate a NULL cache or a missing registry
 // entry and behave as if the old lazy path were still active.
 static void finalize_eager_reflection(XrClassBuilder *b, XrClass *cls) {
-    if (b->isolate == NULL) return;
+    if (b->isolate == NULL)
+        return;
 
     if (cls->reflect_cache == NULL) {
         XrReflectCache *rcache = xr_reflect_cache_create(b->isolate, cls);
         if (rcache != NULL) {
             cls->reflect_cache = rcache;
         } else {
-            xr_log_warning("class",
-                           "finalize: reflect_cache allocation failed for '%s'",
+            xr_log_warning("class", "finalize: reflect_cache allocation failed for '%s'",
                            cls->name ? cls->name : "<anonymous>");
         }
     }
-    if (cls->type_metadata == NULL
-        && xr_isolate_get_type_registry(b->isolate) != NULL) {
-        (void)xr_registry_register_class(b->isolate, cls);
+    if (cls->type_metadata == NULL && xr_isolate_get_type_registry(b->isolate) != NULL) {
+        (void) xr_registry_register_class(b->isolate, cls);
     }
 }

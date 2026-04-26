@@ -29,28 +29,34 @@
 #include <inttypes.h>
 
 static const char *type_names[] = {
-    [XR_REP_I64]    = "i64",
-    [XR_REP_F64]    = "f64",
-    [XR_REP_PTR]    = "ptr",
-    [XR_REP_TAGGED] = "val",
-    [XR_REP_VOID]   = "void",
+    [XR_REP_I64] = "i64",    [XR_REP_F64] = "f64",   [XR_REP_PTR] = "ptr",
+    [XR_REP_TAGGED] = "val", [XR_REP_VOID] = "void",
 };
 
 static const char *type_name(uint8_t type) {
-    if (type <= XR_REP_VOID) return type_names[type];
+    if (type <= XR_REP_VOID)
+        return type_names[type];
     return "???";
 }
 
 static const char *vtag_name(uint8_t vtag) {
     switch (vtag) {
-    case VTAG_TAGGED:      return NULL;  // default, don't show
-    case VTAG_I64:         return "i64";
-    case VTAG_F64:         return "f64";
-    case VTAG_PTR:         return "ptr";
-    case VTAG_BOOL:        return "bool";
-    case VTAG_NUMERIC:     return "numeric";
-    case VTAG_NULL:        return "null";
-    default:               return NULL;
+        case VTAG_TAGGED:
+            return NULL;  // default, don't show
+        case VTAG_I64:
+            return "i64";
+        case VTAG_F64:
+            return "f64";
+        case VTAG_PTR:
+            return "ptr";
+        case VTAG_BOOL:
+            return "bool";
+        case VTAG_NUMERIC:
+            return "numeric";
+        case VTAG_NULL:
+            return "null";
+        default:
+            return NULL;
     }
 }
 
@@ -65,12 +71,13 @@ void xir_print_ref(FILE *out, XirFunc *func, XirRef ref) {
                 XirType ct = xir_ref_ctype(func, ref);
                 uint8_t tag = type_kind_to_vtag(ct.kind);
                 uint8_t mtype = func->vregs[vi].rep;
-                bool show = (tag != VTAG_TAGGED) ||
-                            (tag == VTAG_TAGGED && mtype != XR_REP_TAGGED);
+                bool show = (tag != VTAG_TAGGED) || (tag == VTAG_TAGGED && mtype != XR_REP_TAGGED);
                 if (show) {
                     const char *tn = vtag_name(tag);
-                    if (tn) fprintf(out, "<%s>", tn);
-                    else    fprintf(out, "<vtag=%u>", tag);
+                    if (tn)
+                        fprintf(out, "<%s>", tn);
+                    else
+                        fprintf(out, "<vtag=%u>", tag);
                 }
             }
             break;
@@ -134,9 +141,12 @@ void xir_print_ins(FILE *out, XirFunc *func, XirIns *ins) {
     // Print flags
     if (ins->flags) {
         fprintf(out, "  ;");
-        if (ins->flags & XIR_FLAG_SAFEPOINT)   fprintf(out, " safepoint");
-        if (ins->flags & XIR_FLAG_MAY_THROW)   fprintf(out, " may_throw");
-        if (ins->flags & XIR_FLAG_SIDE_EFFECT) fprintf(out, " side_effect");
+        if (ins->flags & XIR_FLAG_SAFEPOINT)
+            fprintf(out, " safepoint");
+        if (ins->flags & XIR_FLAG_MAY_THROW)
+            fprintf(out, " may_throw");
+        if (ins->flags & XIR_FLAG_SIDE_EFFECT)
+            fprintf(out, " side_effect");
     }
 
     fprintf(out, "\n");
@@ -175,7 +185,8 @@ void xir_print_block(FILE *out, XirFunc *func, XirBlock *blk) {
         xir_print_ref(out, func, phi->dst);
         fprintf(out, " =%s phi", type_name(phi->rep));
         for (uint16_t i = 0; i < phi->narg; i++) {
-            if (i > 0) fprintf(out, ",");
+            if (i > 0)
+                fprintf(out, ",");
             fprintf(out, " ");
             if (i < blk->npred) {
                 print_block_label(out, blk->preds[i]);
@@ -196,15 +207,18 @@ void xir_print_block(FILE *out, XirFunc *func, XirBlock *blk) {
     switch (blk->jmp.type) {
         case XIR_JMP_JMP:
             fprintf(out, "jmp ");
-            if (blk->s1) print_block_label(out, blk->s1);
+            if (blk->s1)
+                print_block_label(out, blk->s1);
             break;
         case XIR_JMP_BR:
             fprintf(out, "br ");
             xir_print_ref(out, func, blk->jmp.arg);
             fprintf(out, ", ");
-            if (blk->s1) print_block_label(out, blk->s1);
+            if (blk->s1)
+                print_block_label(out, blk->s1);
             fprintf(out, ", ");
-            if (blk->s2) print_block_label(out, blk->s2);
+            if (blk->s2)
+                print_block_label(out, blk->s2);
             break;
         case XIR_JMP_RET:
             fprintf(out, "ret ");
@@ -227,12 +241,12 @@ void xir_print_func(FILE *out, XirFunc *func) {
 
     for (uint32_t i = 0; i < func->nblk; i++) {
         xir_print_block(out, func, func->blocks[i]);
-        if (i + 1 < func->nblk) fprintf(out, "\n");
+        if (i + 1 < func->nblk)
+            fprintf(out, "\n");
     }
 
     fprintf(out, "}\n");
 
     // Stats
-    fprintf(out, "; %u blocks, %u vregs, %u constants\n",
-            func->nblk, func->nvreg, func->nconst);
+    fprintf(out, "; %u blocks, %u vregs, %u constants\n", func->nblk, func->nvreg, func->nconst);
 }

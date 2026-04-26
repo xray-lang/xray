@@ -98,9 +98,12 @@ XR_FUNC void xir_jit_install_to_proto(XrProto *proto, const XirInstallData *data
     XR_DCHECK(data->code != NULL, "install: NULL code");
 
     /* Step 1: free old metadata (safe even on first compile — fields are NULL) */
-    if (proto->stack_map) xr_free(proto->stack_map);
-    if (proto->deopt_table) xr_free(proto->deopt_table);
-    if (proto->osr_entries) xr_free(proto->osr_entries);
+    if (proto->stack_map)
+        xr_free(proto->stack_map);
+    if (proto->deopt_table)
+        xr_free(proto->deopt_table);
+    if (proto->osr_entries)
+        xr_free(proto->osr_entries);
 
     /* Step 2: write all metadata BEFORE jit_entry */
     proto->stack_map = data->stack_map;
@@ -128,7 +131,8 @@ XR_FUNC void xir_jit_install_to_proto(XrProto *proto, const XirInstallData *data
 // If all NEWJSON use the same non-dictionary shape, return it.
 // Returns NULL if no NEWJSON found, or shapes are ambiguous.
 static struct XrShape *find_dominant_shape(XrProto *root) {
-    if (!root) return NULL;
+    if (!root)
+        return NULL;
 
     struct XrShape *found = NULL;
     bool ambiguous = false;
@@ -146,8 +150,9 @@ static struct XrShape *find_dominant_shape(XrProto *root) {
             if (GET_OPCODE(inst) == OP_NEWJSON) {
                 int bx = GETARG_B(inst);
                 XrValue shape_val = PROTO_CONST_FAST(p, bx);
-                struct XrShape *shape = (struct XrShape *)(intptr_t)XR_TO_INT(shape_val);
-                if (!shape) continue;
+                struct XrShape *shape = (struct XrShape *) (intptr_t) XR_TO_INT(shape_val);
+                if (!shape)
+                    continue;
                 if (!found) {
                     found = shape;
                 } else if (found != shape) {
@@ -159,7 +164,8 @@ static struct XrShape *find_dominant_shape(XrProto *root) {
         uint32_t nchild = PROTO_PROTO_COUNT(p);
         for (uint32_t c = 0; c < nchild && sp < 256; c++) {
             XrProto *child = PROTO_PROTO(p, c);
-            if (child) stack[sp++] = child;
+            if (child)
+                stack[sp++] = child;
         }
     }
 
@@ -170,8 +176,9 @@ static struct XrShape *find_dominant_shape(XrProto *root) {
 
 XirJitState *xir_jit_init(XrayIsolate *isolate, int threshold) {
     XR_DCHECK(threshold >= 0, "xir_jit_init: negative threshold");
-    XirJitState *jit = (XirJitState *)xr_calloc(1, sizeof(XirJitState));
-    if (!jit) return NULL;
+    XirJitState *jit = (XirJitState *) xr_calloc(1, sizeof(XirJitState));
+    if (!jit)
+        return NULL;
 
     xir_code_alloc_init(&jit->code_alloc);
     jit->isolate = isolate;
@@ -183,7 +190,7 @@ XirJitState *xir_jit_init(XrayIsolate *isolate, int threshold) {
     // Start background compilation thread (disabled in --jit-force mode
     // which needs synchronous compilation for immediate execution)
     if (threshold > 1) {
-        XirCompileQueue *q = (XirCompileQueue *)xr_calloc(1, sizeof(XirCompileQueue));
+        XirCompileQueue *q = (XirCompileQueue *) xr_calloc(1, sizeof(XirCompileQueue));
         if (q) {
             xjit_queue_init(q, jit);
             jit->bg_queue = q;
@@ -193,12 +200,12 @@ XirJitState *xir_jit_init(XrayIsolate *isolate, int threshold) {
     // Register JIT hooks so coro/ can call JIT without including jit/
     // headers (preserves the L3 → L5 dependency direction).
     static XrJitHooks hooks = {
-        .call             = xir_jit_call,
-        .resume           = xir_jit_resume,
+        .call = xir_jit_call,
+        .resume = xir_jit_resume,
         .install_bg_result = xir_jit_install_bg_result,
         .guard_page_alloc = jit_guard_page_alloc,
-        .guard_page_free  = jit_guard_page_free,
-        .guard_page_arm   = jit_guard_page_arm,
+        .guard_page_free = jit_guard_page_free,
+        .guard_page_arm = jit_guard_page_arm,
         .guard_page_disarm = jit_guard_page_disarm,
     };
     xr_jit_hooks = &hooks;
@@ -207,26 +214,27 @@ XirJitState *xir_jit_init(XrayIsolate *isolate, int threshold) {
 }
 
 void xir_jit_destroy(XirJitState *jit) {
-    if (!jit) return;
+    if (!jit)
+        return;
 
     // Print compilation statistics if --jit-stats was set
     if (jit->stats_enabled) {
         uint32_t total = jit->stats_tier1 + jit->stats_tier2 + jit->stats_conservative;
         uint64_t total_ms = jit->stats_compile_ns / 1000000ULL;
-        double avg_ms = total > 0 ? (double)total_ms / total : 0.0;
+        double avg_ms = total > 0 ? (double) total_ms / total : 0.0;
         fprintf(stderr,
-            "\n=== JIT Statistics ===\n"
-            "Functions compiled: %u (Tier1: %u, Tier2: %u, Conservative: %u)\n"
-            "Total compile time: %llums (avg %.1fms/func)\n"
-            "Code cache: %lluKB used / %lluKB allocated (budget %lluMB)\n"
-            "Deopts: %u  Permanently disabled: %u  Evicted: %u\n"
-            "======================\n",
-            total, jit->stats_tier1, jit->stats_tier2, jit->stats_conservative,
-            (unsigned long long)total_ms, avg_ms,
-            (unsigned long long)(jit->stats_code_bytes / 1024),
-            (unsigned long long)(jit->code_alloc.total_allocated / 1024),
-            (unsigned long long)(jit->code_alloc.budget / (1024 * 1024)),
-            jit->stats_deopt_total, jit->stats_disabled, jit->stats_evicted);
+                "\n=== JIT Statistics ===\n"
+                "Functions compiled: %u (Tier1: %u, Tier2: %u, Conservative: %u)\n"
+                "Total compile time: %llums (avg %.1fms/func)\n"
+                "Code cache: %lluKB used / %lluKB allocated (budget %lluMB)\n"
+                "Deopts: %u  Permanently disabled: %u  Evicted: %u\n"
+                "======================\n",
+                total, jit->stats_tier1, jit->stats_tier2, jit->stats_conservative,
+                (unsigned long long) total_ms, avg_ms,
+                (unsigned long long) (jit->stats_code_bytes / 1024),
+                (unsigned long long) (jit->code_alloc.total_allocated / 1024),
+                (unsigned long long) (jit->code_alloc.budget / (1024 * 1024)),
+                jit->stats_deopt_total, jit->stats_disabled, jit->stats_evicted);
     }
 
     // Shutdown background thread before freeing code allocator
@@ -265,32 +273,36 @@ void xir_jit_destroy(XirJitState *jit) {
  */
 static XrProto **jit_build_shared_protos(XrProto *proto, int *out_nshared) {
     *out_nshared = 0;
-    if (!proto->enclosing) return NULL;
+    if (!proto->enclosing)
+        return NULL;
 
     XrProto *parent = proto->enclosing;
     const uint32_t *bc = PROTO_CODE_BASE(parent);
     int nbc = PROTO_CODE_COUNT(parent);
-    if (nbc < 2) return NULL;
+    if (nbc < 2)
+        return NULL;
 
     // First pass: find max shared index to size the array
     int max_shared = -1;
     for (int i = 0; i < nbc; i++) {
         if (GET_OPCODE(bc[i]) == OP_SETSHARED) {
             int idx = GETARG_Bx(bc[i]) + parent->shared_offset;
-            if (idx > max_shared) max_shared = idx;
+            if (idx > max_shared)
+                max_shared = idx;
         }
     }
-    if (max_shared < 0) return NULL;
+    if (max_shared < 0)
+        return NULL;
 
     int nshared = max_shared + 1;
-    XrProto **mapping = (XrProto **)xr_calloc(nshared, sizeof(XrProto *));
-    if (!mapping) return NULL;
+    XrProto **mapping = (XrProto **) xr_calloc(nshared, sizeof(XrProto *));
+    if (!mapping)
+        return NULL;
 
     // Second pass: match CLOSURE R[x] immediately followed by SETSHARED R[x]
     int nproto = PROTO_PROTO_COUNT(parent);
     for (int i = 0; i + 1 < nbc; i++) {
-        if (GET_OPCODE(bc[i]) == OP_CLOSURE &&
-            GET_OPCODE(bc[i + 1]) == OP_SETSHARED &&
+        if (GET_OPCODE(bc[i]) == OP_CLOSURE && GET_OPCODE(bc[i + 1]) == OP_SETSHARED &&
             GETARG_A(bc[i]) == GETARG_A(bc[i + 1])) {
             int proto_idx = GETARG_Bx(bc[i]);
             int shared_idx = GETARG_Bx(bc[i + 1]) + parent->shared_offset;
@@ -309,13 +321,15 @@ static XrProto **jit_build_shared_protos(XrProto *proto, int *out_nshared) {
 // itself cannot be reclaimed (bump allocator) but future compilations can
 // reuse pages once all their occupants are evicted.
 static void xir_jit_evict_coldest(XirJitState *jit) {
-    if (!jit || jit->compiled_protos_count == 0) return;
+    if (!jit || jit->compiled_protos_count == 0)
+        return;
 
     uint32_t coldest_idx = 0;
     uint32_t coldest_exec = UINT32_MAX;
     for (uint32_t i = 0; i < jit->compiled_protos_count; i++) {
         XrProto *p = jit->compiled_protos[i];
-        if (!p->jit_entry) continue;  // already evicted
+        if (!p->jit_entry)
+            continue;  // already evicted
         uint32_t ec = atomic_load_explicit(&p->exec_count, memory_order_relaxed);
         if (ec < coldest_exec) {
             coldest_exec = ec;
@@ -336,7 +350,8 @@ static void xir_jit_evict_coldest(XirJitState *jit) {
 }
 
 bool xir_jit_try_compile(XirJitState *jit, XrProto *proto) {
-    if (!jit || !jit->enabled || !proto) return false;
+    if (!jit || !jit->enabled || !proto)
+        return false;
 
     // Code cache pressure: evict cold protos before attempting new compilation
     if (xir_code_alloc_over_budget(&jit->code_alloc)) {
@@ -354,10 +369,13 @@ bool xir_jit_try_compile(XirJitState *jit, XrProto *proto) {
     bool is_recompile = false;
     if (proto->jit_entry) {
         // Already at full optimization — nothing to do
-        if (proto->jit_opt_level >= XIR_OPT_FULL) return true;
+        if (proto->jit_opt_level >= XIR_OPT_FULL)
+            return true;
 
         // Not enough executions for recompilation yet
-        if (atomic_load_explicit(&proto->exec_count, memory_order_relaxed) < JIT_RECOMPILE_THRESHOLD) return true;
+        if (atomic_load_explicit(&proto->exec_count, memory_order_relaxed) <
+            JIT_RECOMPILE_THRESHOLD)
+            return true;
 
         is_recompile = true;
     }
@@ -378,7 +396,7 @@ bool xir_jit_try_compile(XirJitState *jit, XrProto *proto) {
          * captured here by value. */
         XirBgTask task;
         memset(&task, 0, sizeof(task));
-        task.proto        = proto;
+        task.proto = proto;
         task.is_recompile = is_recompile;
 
         if (proto->type_feedback) {
@@ -395,7 +413,8 @@ bool xir_jit_try_compile(XirJitState *jit, XrProto *proto) {
         XrProto **tmp = jit_build_shared_protos(proto, &nshared);
         if (tmp) {
             int n = nshared < XJIT_BG_SHARED_CAP ? nshared : XJIT_BG_SHARED_CAP;
-            for (int i = 0; i < n; i++) task.shared_protos[i] = tmp[i];
+            for (int i = 0; i < n; i++)
+                task.shared_protos[i] = tmp[i];
             task.nshared = n;
             xr_free(tmp);
         }
@@ -405,11 +424,10 @@ bool xir_jit_try_compile(XirJitState *jit, XrProto *proto) {
         if (jit->dominant_shape) {
             for (int i = 0; i < proto->numparams; i++) {
                 uint8_t gc = XR_SLOT_ANY;
-                if (proto->param_types && i < proto->param_types_count &&
-                    proto->param_types[i])
+                if (proto->param_types && i < proto->param_types_count && proto->param_types[i])
                     gc = xr_type_to_slot_type(proto->param_types[i]);
                 if (gc == XR_SLOT_PTR) {
-                    task.shape_hint = (struct XrShape *)jit->dominant_shape;
+                    task.shape_hint = (struct XrShape *) jit->dominant_shape;
                     break;
                 }
             }
@@ -420,15 +438,15 @@ bool xir_jit_try_compile(XirJitState *jit, XrProto *proto) {
          * read-only and frees them after compilation. */
         if (jit->isolate) {
             XrVMContext *cur_ctx = xr_vm_current_ctx(jit->isolate);
-            task.ic_fields_snapshot  = xr_vm_ic_fields_snapshot(cur_ctx, proto);
+            task.ic_fields_snapshot = xr_vm_ic_fields_snapshot(cur_ctx, proto);
             task.ic_methods_snapshot = xr_vm_ic_methods_snapshot(cur_ctx, proto);
             task.ic_builtin_snapshot = xr_vm_ic_builtin_snapshot(cur_ctx, proto);
         }
 
         // Set sentinel (0x1) to prevent duplicate queue entries from OSR triggers.
         // bg thread replaces this with the actual XirBgResult* when done.
-        atomic_store_explicit(&proto->jit_entry_pending,
-                              (void *)(uintptr_t)1, memory_order_release);
+        atomic_store_explicit(&proto->jit_entry_pending, (void *) (uintptr_t) 1,
+                              memory_order_release);
         if (xjit_queue_push(jit->bg_queue, &task)) {
             return false;  // enqueued, VM will interpret
         }
@@ -436,18 +454,19 @@ bool xir_jit_try_compile(XirJitState *jit, XrProto *proto) {
         // to sync while bg thread may be using code_alloc concurrently)
         atomic_store_explicit(&proto->jit_entry_pending, NULL, memory_order_release);
         // Drop snapshots that nobody will consume.
-        if (task.ic_fields_snapshot) xr_ic_field_table_free(task.ic_fields_snapshot);
-        if (task.ic_methods_snapshot) xr_ic_method_table_free(task.ic_methods_snapshot);
+        if (task.ic_fields_snapshot)
+            xr_ic_field_table_free(task.ic_fields_snapshot);
+        if (task.ic_methods_snapshot)
+            xr_ic_method_table_free(task.ic_methods_snapshot);
         return false;
     }
 
     // Run TFA to infer types for untyped params.
     // Per-module: only analyze each module root once; newly loaded modules
     // (with a different root proto) trigger fresh analysis automatically.
-    if (!is_recompile &&
-        proto->numparams > 0 && !proto->param_types && !proto->type_feedback) {
+    if (!is_recompile && proto->numparams > 0 && !proto->param_types && !proto->type_feedback) {
         if (!jit->tfa) {
-            jit->tfa = (TfaState *)xr_calloc(1, sizeof(TfaState));
+            jit->tfa = (TfaState *) xr_calloc(1, sizeof(TfaState));
         }
         if (jit->tfa) {
             XrProto *root = tfa_find_root(proto);
@@ -465,17 +484,20 @@ bool xir_jit_try_compile(XirJitState *jit, XrProto *proto) {
         if (jit->tfa && jit->tfa->n_analyzed_roots > 0) {
             for (uint32_t i = 0; i < jit->tfa->nsummary && !jit->dominant_shape; i++) {
                 struct XrShape *s = find_dominant_shape(jit->tfa->summaries[i].proto);
-                if (s) jit->dominant_shape = s;
+                if (s)
+                    jit->dominant_shape = s;
             }
         }
         if (!jit->dominant_shape) {
             struct XrShape *s = find_dominant_shape(proto);
-            if (s) jit->dominant_shape = s;
+            if (s)
+                jit->dominant_shape = s;
         }
     }
 
     // Check eligibility
-    if (!is_jit_eligible(proto, jit->verbose)) return false;
+    if (!is_jit_eligible(proto, jit->verbose))
+        return false;
 
     // Conservative mode: deopt_count >= 5 means type-unstable function.
     // Skip shape hints and type feedback to avoid repeated deopts.
@@ -517,7 +539,7 @@ bool xir_jit_try_compile(XirJitState *jit, XrProto *proto) {
             if (proto->param_types && i < proto->param_types_count && proto->param_types[i])
                 gc = xr_type_to_slot_type(proto->param_types[i]);
             if (gc == XR_SLOT_PTR) {
-                shape_hint = (struct XrShape *)jit->dominant_shape;
+                shape_hint = (struct XrShape *) jit->dominant_shape;
                 break;
             }
         }
@@ -530,12 +552,13 @@ bool xir_jit_try_compile(XirJitState *jit, XrProto *proto) {
         proto->type_feedback = NULL;
     }
     uint64_t compile_start_ms = xr_monotonic_ms();
-    XirFunc *func = xir_build_from_proto_jit(proto, shared_protos, nshared,
-                                              shape_hint, jit->isolate);
-    if (saved_feedback) proto->type_feedback = saved_feedback;
+    XirFunc *func =
+        xir_build_from_proto_jit(proto, shared_protos, nshared, shape_hint, jit->isolate);
+    if (saved_feedback)
+        proto->type_feedback = saved_feedback;
     if (!func) {
         xr_log_warning("jit", "builder failed for %s",
-                proto->name ? XR_STRING_CHARS(proto->name) : "?");
+                       proto->name ? XR_STRING_CHARS(proto->name) : "?");
         xr_free(shared_protos);
         return false;
     }
@@ -543,9 +566,8 @@ bool xir_jit_try_compile(XirJitState *jit, XrProto *proto) {
 
     // Guard: reject functions with too many vregs for fixed-size arrays
     if (func->nvreg > 4096) {
-        xr_log_warning("jit", "too many vregs (%u) for %s, skipping",
-                func->nvreg,
-                proto->name ? XR_STRING_CHARS(proto->name) : "?");
+        xr_log_warning("jit", "too many vregs (%u) for %s, skipping", func->nvreg,
+                       proto->name ? XR_STRING_CHARS(proto->name) : "?");
         xir_func_destroy(func);
         xr_free(shared_protos);
         return false;
@@ -556,7 +578,8 @@ bool xir_jit_try_compile(XirJitState *jit, XrProto *proto) {
     // Recompile: Tier 2 (full) with GVN, LICM, etc.
     XirOptLevel opt = is_recompile ? XIR_OPT_FULL : XIR_OPT_BASIC;
     // Conservative recompile: still use basic optimization (safe passes only)
-    if (conservative) opt = XIR_OPT_BASIC;
+    if (conservative)
+        opt = XIR_OPT_BASIC;
     xir_run_pipeline_ex(func, opt, proto);
 
     // Generate platform-specific machine code
@@ -565,11 +588,12 @@ bool xir_jit_try_compile(XirJitState *jit, XrProto *proto) {
 #elif defined(__x86_64__)
     XirCodegenResult res = xir_codegen_x64(func, &jit->code_alloc);
 #else
-    XirCodegenResult res = { .success = false, .error = "unsupported architecture" };
+    XirCodegenResult res = {.success = false, .error = "unsupported architecture"};
 #endif
     if (!res.success) {
         xr_log_warning("jit", "codegen failed for %s: %s",
-                proto->name ? XR_STRING_CHARS(proto->name) : "?", res.error ? res.error : "unknown");
+                       proto->name ? XR_STRING_CHARS(proto->name) : "?",
+                       res.error ? res.error : "unknown");
         xir_func_destroy(func);
         xr_free(shared_protos);
         return false;
@@ -584,49 +608,54 @@ bool xir_jit_try_compile(XirJitState *jit, XrProto *proto) {
     XirRtDeoptEntry *deopt_copy = NULL;
     if (res.ndeopt > 0) {
         size_t deopt_size = res.ndeopt * sizeof(XirRtDeoptEntry);
-        deopt_copy = (XirRtDeoptEntry *)xr_malloc(deopt_size);
-        if (deopt_copy) memcpy(deopt_copy, res.deopt_entries, deopt_size);
+        deopt_copy = (XirRtDeoptEntry *) xr_malloc(deopt_size);
+        if (deopt_copy)
+            memcpy(deopt_copy, res.deopt_entries, deopt_size);
     }
 
     // Heap-copy OSR entries from codegen result
     XirOsrEntry *osr_copy = NULL;
     if (res.nosr > 0) {
         size_t osr_size = res.nosr * sizeof(XirOsrEntry);
-        osr_copy = (XirOsrEntry *)xr_malloc(osr_size);
-        if (osr_copy) memcpy(osr_copy, res.osr_entries, osr_size);
+        osr_copy = (XirOsrEntry *) xr_malloc(osr_size);
+        if (osr_copy)
+            memcpy(osr_copy, res.osr_entries, osr_size);
     }
 
     // Install all metadata + jit_entry via unified helper (correct write order
     // with release fence — see xir_jit_install_to_proto for the contract).
     XirInstallData idata = {
-        .code         = res.code,
-        .fast_entry   = (char *)res.code + res.fast_entry_offset,
-        .resume_entry = res.resume_entry_offset
-            ? (char *)res.code + res.resume_entry_offset : NULL,
-        .opt_level    = (uint8_t)opt,
-        .stack_map    = res.stack_map,
-        .deopt_table  = deopt_copy,
-        .ndeopt       = deopt_copy ? res.ndeopt : 0,
-        .osr_entries  = osr_copy,
-        .nosr         = osr_copy ? res.nosr : 0,
+        .code = res.code,
+        .fast_entry = (char *) res.code + res.fast_entry_offset,
+        .resume_entry =
+            res.resume_entry_offset ? (char *) res.code + res.resume_entry_offset : NULL,
+        .opt_level = (uint8_t) opt,
+        .stack_map = res.stack_map,
+        .deopt_table = deopt_copy,
+        .ndeopt = deopt_copy ? res.ndeopt : 0,
+        .osr_entries = osr_copy,
+        .nosr = osr_copy ? res.nosr : 0,
     };
     xir_jit_install_to_proto(proto, &idata);
-    if (!is_recompile) jit->compiled_count++;
+    if (!is_recompile)
+        jit->compiled_count++;
 
     // Record compilation statistics
     uint64_t compile_elapsed_ms = xr_monotonic_ms() - compile_start_ms;
     jit->stats_compile_ns += compile_elapsed_ms * 1000000ULL;
     jit->stats_code_bytes += res.code_size;
-    if (conservative) jit->stats_conservative++;
-    else if (is_recompile) jit->stats_tier2++;
-    else jit->stats_tier1++;
+    if (conservative)
+        jit->stats_conservative++;
+    else if (is_recompile)
+        jit->stats_tier2++;
+    else
+        jit->stats_tier1++;
 
     // Track compiled proto for code cache eviction
     if (!is_recompile) {
         if (jit->compiled_protos_count >= jit->compiled_protos_cap) {
             uint32_t new_cap = jit->compiled_protos_cap ? jit->compiled_protos_cap * 2 : 32;
-            XR_REALLOC_OR_ABORT(jit->compiled_protos,
-                                new_cap * sizeof(struct XrProto *),
+            XR_REALLOC_OR_ABORT(jit->compiled_protos, new_cap * sizeof(struct XrProto *),
                                 "jit compiled_protos");
             jit->compiled_protos_cap = new_cap;
         }
@@ -639,15 +668,15 @@ bool xir_jit_try_compile(XirJitState *jit, XrProto *proto) {
     // so we freeze monomorphic feedback types into param_types here.
     if (proto->numparams > 0 && proto->type_feedback && proto->type_feedback->stable) {
         if (!proto->param_types) {
-            proto->param_types = (struct XrType **)xr_calloc(
-                proto->numparams, sizeof(struct XrType *));
+            proto->param_types =
+                (struct XrType **) xr_calloc(proto->numparams, sizeof(struct XrType *));
             if (proto->param_types)
                 proto->param_types_count = proto->numparams;
         }
         if (proto->param_types) {
             for (int i = 0; i < proto->numparams && i < 8; i++) {
-                if (i < proto->param_types_count && !proto->param_types[i] &&
-                    i < XFB_MAX_PARAMS && xfb_is_monomorphic(proto->type_feedback->arg_types[i])) {
+                if (i < proto->param_types_count && !proto->param_types[i] && i < XFB_MAX_PARAMS &&
+                    xfb_is_monomorphic(proto->type_feedback->arg_types[i])) {
                     uint8_t st = xfb_to_slot_type(proto->type_feedback->arg_types[i]);
                     proto->param_types[i] = xr_slot_type_to_type(NULL, st);
                 }
@@ -657,10 +686,9 @@ bool xir_jit_try_compile(XirJitState *jit, XrProto *proto) {
 
     if (jit->verbose) {
         xr_log_verbose("jit", "%s%s %s (O%d, %u bytes, %u vregs, %u blocks)",
-                conservative ? "conservative " : "",
-                is_recompile ? "recompile" : "compile",
-                proto->name ? XR_STRING_CHARS(proto->name) : "?",
-                (int)opt, res.code_size, func->nvreg, func->nblk);
+                       conservative ? "conservative " : "", is_recompile ? "recompile" : "compile",
+                       proto->name ? XR_STRING_CHARS(proto->name) : "?", (int) opt, res.code_size,
+                       func->nvreg, func->nblk);
     }
 
     // NOTE: deopt_table and osr_entries are now installed by
@@ -689,7 +717,8 @@ bool xir_jit_try_compile(XirJitState *jit, XrProto *proto) {
             if (blk2->jmp.type != XIR_JMP_RET || !xir_ref_is_vreg(blk2->jmp.arg))
                 continue;
             uint32_t vi = XIR_REF_INDEX(blk2->jmp.arg);
-            if (vi >= func->nvreg) continue;
+            if (vi >= func->nvreg)
+                continue;
             uint8_t vtype = func->vregs[vi].rep;
             XirType rct = xir_ref_ctype(func, blk2->jmp.arg);
             uint8_t vtag = type_kind_to_vtag(rct.kind);
@@ -723,10 +752,9 @@ bool xir_jit_try_compile(XirJitState *jit, XrProto *proto) {
 
 #ifndef NDEBUG
     fprintf(stderr, "[JIT] %s %s (%d params, %u bytes, tier %d%s) entry=%p fast=%p\n",
-            is_recompile ? "recompiled" : "compiled",
-            fname, proto->numparams, res.code_size, opt,
-            proto->type_feedback ? ", profile-guided" : "",
-            proto->jit_entry, proto->jit_fast_entry);
+            is_recompile ? "recompiled" : "compiled", fname, proto->numparams, res.code_size, opt,
+            proto->type_feedback ? ", profile-guided" : "", proto->jit_entry,
+            proto->jit_fast_entry);
     jit_debug_dump(fname, res.code, res.code_size, res.fast_entry_offset);
 #endif
 
@@ -771,7 +799,8 @@ bool xir_jit_try_compile(XirJitState *jit, XrProto *proto) {
 // Verify that an XrValue tag is compatible with the compiled slot type.
 // Profile-based compilation assumes monomorphic types; mismatches cause deopt.
 static inline bool jit_tag_matches_slot(uint32_t tag, uint8_t slot_type) {
-    if (slot_type == XR_SLOT_ANY) return true;
+    if (slot_type == XR_SLOT_ANY)
+        return true;
     if (XR_SLOT_IS_INT(slot_type) || slot_type == XR_SLOT_BOOL) {
         // Accept int, bool, and null (null as 0 handled by JIT null-checks)
         return tag == XR_TAG_I64 || tag == XR_TAG_BOOL || tag == XR_TAG_NULL;
@@ -787,15 +816,16 @@ static inline bool jit_tag_matches_slot(uint32_t tag, uint8_t slot_type) {
     return false;
 }
 
-int xir_jit_call(void *jit_entry, XrCoroutine *coro,
-                  XrValue *args, int nargs,
-                  struct XrType *return_type_info, XrValue *result) {
-    if (!jit_entry || !result) return XIR_JIT_DEOPT;
+int xir_jit_call(void *jit_entry, XrCoroutine *coro, XrValue *args, int nargs,
+                 struct XrType *return_type_info, XrValue *result) {
+    if (!jit_entry || !result)
+        return XIR_JIT_DEOPT;
 
     // Lazy-allocate jit_suspend on first JIT entry (saves 320B per non-JIT coro)
     if (!coro->jit_suspend) {
         coro->jit_suspend = xr_calloc(1, sizeof(XrJitSuspendState));
-        if (!coro->jit_suspend) return XIR_JIT_DEOPT;
+        if (!coro->jit_suspend)
+            return XIR_JIT_DEOPT;
     }
 
     // Reset frame stack: must be empty when entering JIT from interpreter.
@@ -803,12 +833,12 @@ int xir_jit_call(void *jit_entry, XrCoroutine *coro,
     coro->jit_ctx->jit_frame_depth = 0;
     // Set stack map for GC scanning (proto->stack_map populated by codegen)
     {
-        XrProto *p = (XrProto *)coro->jit_ctx->call_proto;
+        XrProto *p = (XrProto *) coro->jit_ctx->call_proto;
         coro->jit_ctx->active_stack_map = p ? p->stack_map : NULL;
     }
     coro->jit_ctx->active_safepoint_id = UINT32_MAX;
     coro->jit_ctx->invoke_deopt_id = UINT32_MAX;  // Safe default: no invoke recovery
-    coro->jit_ctx->yield_frame_pushed = false;     // clear stale yield state
+    coro->jit_ctx->yield_frame_pushed = false;    // clear stale yield state
     // Derive return slot type from return_type_info for reconstruction
     uint8_t return_type = return_type_info ? xr_type_to_slot_type(return_type_info) : XR_SLOT_ANY;
 
@@ -818,23 +848,25 @@ int xir_jit_call(void *jit_entry, XrCoroutine *coro,
     // speculated type (I64/F64) instead of ANY for strict matching.
     uint8_t speculated[8];
     {
-        XrProto *proto = (XrProto *)coro->jit_ctx->call_proto;
-        for (int i = 0; i < 8; i++) speculated[i] = XR_SLOT_ANY;
+        XrProto *proto = (XrProto *) coro->jit_ctx->call_proto;
+        for (int i = 0; i < 8; i++)
+            speculated[i] = XR_SLOT_ANY;
         if (proto) {
             for (int i = 0; i < nargs && i < 8; i++) {
-                uint8_t gc = (proto->param_types && i < proto->param_types_count && proto->param_types[i])
-                    ? xr_type_to_slot_type(proto->param_types[i]) : XR_SLOT_ANY;
+                uint8_t gc =
+                    (proto->param_types && i < proto->param_types_count && proto->param_types[i])
+                        ? xr_type_to_slot_type(proto->param_types[i])
+                        : XR_SLOT_ANY;
                 // Speculation: narrow ANY → I64/F64 from feedback for
                 // numeric unions (int|float) and nullable primitives (int?/float?/bool?)
-                if (gc == XR_SLOT_ANY && proto->param_types &&
-                    i < proto->param_types_count && proto->param_types[i] &&
-                    proto->type_feedback && proto->type_feedback->stable &&
+                if (gc == XR_SLOT_ANY && proto->param_types && i < proto->param_types_count &&
+                    proto->param_types[i] && proto->type_feedback && proto->type_feedback->stable &&
                     i < XFB_MAX_PARAMS) {
                     XrType *st = proto->param_types[i];
                     bool speculatable =
                         value_tag_to_vtag(xr_type_to_xr_tag(st)) == VTAG_NUMERIC ||
-                        (st->is_nullable && (st->kind == XR_KIND_INT ||
-                         st->kind == XR_KIND_FLOAT || st->kind == XR_KIND_BOOL));
+                        (st->is_nullable && (st->kind == XR_KIND_INT || st->kind == XR_KIND_FLOAT ||
+                                             st->kind == XR_KIND_BOOL));
                     if (speculatable) {
                         uint8_t fb = proto->type_feedback->arg_types[i];
                         if (fb == XFB_TYPE_INT || fb == XFB_TYPE_BOOL)
@@ -855,11 +887,11 @@ int xir_jit_call(void *jit_entry, XrCoroutine *coro,
     // Store param tags for nullable primitive null-check in JIT codegen.
     // Allows JIT to distinguish int(0) (tag=I64) from null (tag=NULL).
     for (int i = 0; i < nargs && i < 8; i++)
-        coro->jit_ctx->param_tags[i] = (int64_t)args[i].tag;
+        coro->jit_ctx->param_tags[i] = (int64_t) args[i].tag;
     // Missing params (default parameters) must have tag=NULL so
     // EQ(param, null) null-checks work correctly in JIT code.
     {
-        XrProto *p = (XrProto *)coro->jit_ctx->call_proto;
+        XrProto *p = (XrProto *) coro->jit_ctx->call_proto;
         int nparams = p ? p->numparams : 0;
         for (int i = nargs; i < nparams && i < 8; i++)
             coro->jit_ctx->param_tags[i] = 0;  // XR_TAG_NULL
@@ -879,7 +911,7 @@ int xir_jit_call(void *jit_entry, XrCoroutine *coro,
         }
     }
 
-    XrJitResult jr = ((XirJitFn)jit_entry)((intptr_t)coro, raw_args);
+    XrJitResult jr = ((XirJitFn) jit_entry)((intptr_t) coro, raw_args);
     int64_t ret = jr.payload;
 
     if (ret == XIR_SUSPEND_MARKER) {
@@ -908,7 +940,7 @@ int xir_jit_call(void *jit_entry, XrCoroutine *coro,
             exc.descriptor = 0;
             exc.tag = XR_TAG_PTR;
             exc.ptr = coro->jit_ctx->exception;
-            exc.heap_type = (uint16_t)((XrGCHeader *)exc.ptr)->type;
+            exc.heap_type = (uint16_t) ((XrGCHeader *) exc.ptr)->type;
             coro->jit_ctx->exception = NULL;
             xr_vm_unwind_with_trace(coro->isolate, exc);
         }
@@ -920,7 +952,7 @@ int xir_jit_call(void *jit_entry, XrCoroutine *coro,
     }
 
     // Use tag from XrJitResult.tag (set by JIT epilogue via x1).
-    uint8_t tag = (uint8_t)jr.tag;
+    uint8_t tag = (uint8_t) jr.tag;
     uint16_t ht = 0;
 
     if (tag == XR_RTAG_UNKNOWN) {
@@ -938,10 +970,9 @@ int xir_jit_call(void *jit_entry, XrCoroutine *coro,
             result->tag = XR_TAG_NULL;
         } else {
             result->tag = XR_TAG_PTR;
-            result->heap_type = ht ? ht : (uint16_t)((XrGCHeader *)(void *)ret)->type;
+            result->heap_type = ht ? ht : (uint16_t) ((XrGCHeader *) (void *) ret)->type;
         }
-    } else if (tag == XR_TAG_BOOL ||
-               (tag == XR_TAG_I64 && return_type == XR_SLOT_BOOL)) {
+    } else if (tag == XR_TAG_BOOL || (tag == XR_TAG_I64 && return_type == XR_SLOT_BOOL)) {
         // Bool return: payload is already 0/1, tag is XR_TAG_BOOL.
         result->descriptor = 0;
         result->i = ret;
@@ -959,13 +990,15 @@ int xir_jit_call(void *jit_entry, XrCoroutine *coro,
 
 int xir_jit_resume(XrCoroutine *coro, XrValue *result) {
     void *resume_entry = coro->jit_resume_entry;
-    if (!resume_entry || !result) return XIR_JIT_DEOPT;
+    if (!resume_entry || !result)
+        return XIR_JIT_DEOPT;
     // jit_suspend must exist if we were suspended (allocated in xir_jit_call)
     XR_DCHECK(coro->jit_suspend != NULL, "xir_jit_resume: NULL jit_suspend");
 
     // Restore JIT scratch context from the proto that was suspended
-    XrProto *proto = (XrProto *)coro->jit_resume_proto;
-    if (!proto) return XIR_JIT_DEOPT;
+    XrProto *proto = (XrProto *) coro->jit_resume_proto;
+    if (!proto)
+        return XIR_JIT_DEOPT;
 
     coro->jit_ctx->call_proto = proto;
     coro->jit_ctx->jit_frame_depth = 0;
@@ -979,10 +1012,10 @@ int xir_jit_resume(XrCoroutine *coro, XrValue *result) {
     // inline-resume path or worker resume path).
 
     // Call the resume entry stub: same calling convention as XirJitFn
-    XrJitResult jr = ((XirJitFn)resume_entry)((intptr_t)coro, NULL);
+    XrJitResult jr = ((XirJitFn) resume_entry)((intptr_t) coro, NULL);
     int64_t ret = jr.payload;
 
-    if (ret == (int64_t)XIR_SUSPEND_MARKER) {
+    if (ret == (int64_t) XIR_SUSPEND_MARKER) {
         // Nested suspend: another channel/await block hit during resume.
         // XIR_SUSPEND codegen already re-populated jit_resume_entry/proto.
         // Do NOT write to coro/jit_ctx — gopark race: another worker may
@@ -1006,7 +1039,7 @@ int xir_jit_resume(XrCoroutine *coro, XrValue *result) {
             exc.descriptor = 0;
             exc.tag = XR_TAG_PTR;
             exc.ptr = coro->jit_ctx->exception;
-            exc.heap_type = (uint16_t)((XrGCHeader *)exc.ptr)->type;
+            exc.heap_type = (uint16_t) ((XrGCHeader *) exc.ptr)->type;
             coro->jit_ctx->exception = NULL;
             xr_vm_unwind_with_trace(coro->isolate, exc);
         }
@@ -1014,7 +1047,7 @@ int xir_jit_resume(XrCoroutine *coro, XrValue *result) {
     }
 
     // Reconstruct return value (same logic as xir_jit_call)
-    uint8_t tag = (uint8_t)jr.tag;
+    uint8_t tag = (uint8_t) jr.tag;
     if (tag == XR_TAG_F64) {
         result->descriptor = 0;
         memcpy(&result->f, &ret, sizeof(double));
@@ -1026,7 +1059,7 @@ int xir_jit_resume(XrCoroutine *coro, XrValue *result) {
             result->tag = XR_TAG_NULL;
         } else {
             result->tag = XR_TAG_PTR;
-            result->heap_type = (uint16_t)((XrGCHeader *)(void *)ret)->type;
+            result->heap_type = (uint16_t) ((XrGCHeader *) (void *) ret)->type;
         }
     } else if (tag == XR_TAG_BOOL) {
         result->descriptor = 0;
@@ -1048,7 +1081,8 @@ int xir_jit_resume(XrCoroutine *coro, XrValue *result) {
 void xir_jit_read_multi_ret(XrCoroutine *coro, XrValue *results, int nresults) {
     XrJitScratch *ctx = coro->jit_ctx;
     int ret_count = ctx->ret_count;
-    if (ret_count <= 1) return;
+    if (ret_count <= 1)
+        return;
 
     int extra = (ret_count - 1 < nresults - 1) ? ret_count - 1 : nresults - 1;
     for (int i = 0; i < extra && i < 7; i++) {
@@ -1065,7 +1099,7 @@ void xir_jit_read_multi_ret(XrCoroutine *coro, XrValue *results, int nresults) {
                 results[i + 1].tag = XR_TAG_NULL;
             } else {
                 results[i + 1].tag = XR_TAG_PTR;
-                results[i + 1].heap_type = (uint16_t)((XrGCHeader *)(void *)raw)->type;
+                results[i + 1].heap_type = (uint16_t) ((XrGCHeader *) (void *) raw)->type;
             }
         } else if (tag == XR_TAG_BOOL) {
             results[i + 1].i = raw;
@@ -1087,8 +1121,9 @@ void xir_jit_read_multi_ret(XrCoroutine *coro, XrValue *results, int nresults) {
 /* ========== Mid-Function Deopt Recovery ========== */
 
 int32_t xir_jit_deopt_recover(XrCoroutine *coro, XrValue *frame, int maxstack) {
-    XrProto *proto = (XrProto *)coro->jit_ctx->call_proto;
-    if (!proto || !proto->deopt_table) return -1;
+    XrProto *proto = (XrProto *) coro->jit_ctx->call_proto;
+    if (!proto || !proto->deopt_table)
+        return -1;
 
     uint32_t did = coro->jit_ctx->deopt_id;
     // CALL_C invoke recovery: UINT32_MAX signals that the real deopt_id
@@ -1096,45 +1131,47 @@ int32_t xir_jit_deopt_recover(XrCoroutine *coro, XrValue *frame, int maxstack) {
     if (did == UINT32_MAX) {
         did = coro->jit_ctx->invoke_deopt_id;
     }
-    if (did >= proto->ndeopt) return -1;
+    if (did >= proto->ndeopt)
+        return -1;
 
-    XirRtDeoptEntry *entry = &((XirRtDeoptEntry *)proto->deopt_table)[did];
+    XirRtDeoptEntry *entry = &((XirRtDeoptEntry *) proto->deopt_table)[did];
 
     for (uint16_t i = 0; i < entry->nslots; i++) {
         XirRtDeoptSlot *s = &entry->slots[i];
         int bc = s->bc_slot;
-        if (bc < 0 || bc >= maxstack) continue;
+        if (bc < 0 || bc >= maxstack)
+            continue;
 
         int64_t raw = 0;
         switch (s->loc_kind) {
-        case DEOPT_LOC_REG:
-            if (s->loc.phys_reg < 29)
-                raw = coro->jit_ctx->deopt_regs[s->loc.phys_reg];
-            break;
-        case DEOPT_LOC_FP_REG:
-            if (s->loc.phys_reg < 16)
-                raw = coro->jit_ctx->deopt_fp_regs[s->loc.phys_reg];
-            break;
-        case DEOPT_LOC_SPILL: {
-            // Read from deopt_spill_save[] — spill data copied by deopt stub
-            // BEFORE epilogue destroys the frame. Safe to read at any time.
-            int16_t slot = (int16_t)(s->loc.spill_offset / 8);
-            XR_DCHECK(slot >= 0 && slot < 32, "spill slot out of range");
-            if (slot >= 0 && slot < 32)
-                raw = coro->jit_ctx->deopt_spill_save[slot];
-            break;
-        }
-        case DEOPT_LOC_CONST_I64:
-            raw = s->loc.const_i64;
-            break;
-        case DEOPT_LOC_CONST_F64:
-            memcpy(&raw, &s->loc.const_f64, sizeof(double));
-            break;
-        case DEOPT_LOC_CONST_PTR:
-            raw = (int64_t)(intptr_t)s->loc.const_ptr;
-            break;
-        default:
-            continue;
+            case DEOPT_LOC_REG:
+                if (s->loc.phys_reg < 29)
+                    raw = coro->jit_ctx->deopt_regs[s->loc.phys_reg];
+                break;
+            case DEOPT_LOC_FP_REG:
+                if (s->loc.phys_reg < 16)
+                    raw = coro->jit_ctx->deopt_fp_regs[s->loc.phys_reg];
+                break;
+            case DEOPT_LOC_SPILL: {
+                // Read from deopt_spill_save[] — spill data copied by deopt stub
+                // BEFORE epilogue destroys the frame. Safe to read at any time.
+                int16_t slot = (int16_t) (s->loc.spill_offset / 8);
+                XR_DCHECK(slot >= 0 && slot < 32, "spill slot out of range");
+                if (slot >= 0 && slot < 32)
+                    raw = coro->jit_ctx->deopt_spill_save[slot];
+                break;
+            }
+            case DEOPT_LOC_CONST_I64:
+                raw = s->loc.const_i64;
+                break;
+            case DEOPT_LOC_CONST_F64:
+                memcpy(&raw, &s->loc.const_f64, sizeof(double));
+                break;
+            case DEOPT_LOC_CONST_PTR:
+                raw = (int64_t) (intptr_t) s->loc.const_ptr;
+                break;
+            default:
+                continue;
         }
 
         // Resolve xr_tag: prefer compile-time tag, fallback to runtime tag
@@ -1147,7 +1184,7 @@ int32_t xir_jit_deopt_recover(XrCoroutine *coro, XrValue *frame, int maxstack) {
         frame[bc] = deopt_reconstruct(raw, s->type, tag);
     }
 
-    return (int32_t)entry->bc_pc;
+    return (int32_t) entry->bc_pc;
 }
 
 /* ========== JIT→JIT Self-Call (CALLSELF) ========== */

@@ -23,8 +23,8 @@ struct XrCoroutine;
 
 // XrStringBuilder - mutable string builder
 typedef struct XrStringBuilder {
-    XrGCHeader gc;          // GC header (must be first)
-    XrStrBuf *buffer;       // String buffer
+    XrGCHeader gc;     // GC header (must be first)
+    XrStrBuf *buffer;  // String buffer
 } XrStringBuilder;
 
 /* ========== Creation and Destruction ========== */
@@ -72,4 +72,4 @@ XR_FUNC bool xr_is_stringbuilder(XrValue v);
 // Convert to StringBuilder pointer
 XR_FUNC XrStringBuilder *xr_to_stringbuilder(XrValue v);
 
-#endif // XSTRINGBUILDER_H
+#endif  // XSTRINGBUILDER_H

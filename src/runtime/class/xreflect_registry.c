@@ -27,7 +27,9 @@
 #ifdef REFLECTION_DEBUG
 #define DEBUG_PRINT(...) fprintf(stderr, __VA_ARGS__)
 #else
-#define DEBUG_PRINT(...) do {} while(0)
+#define DEBUG_PRINT(...)                                                                           \
+    do {                                                                                           \
+    } while (0)
 #endif
 
 #define REGISTRY_INITIAL_CAPACITY 64
@@ -35,10 +37,11 @@
 /* ========== Zero-copy Helper ========== */
 
 // Create metadata with pointer to XrClass (no copy)
-static inline XrTypeMetadata* xr_metadata_create_type_zerocopy(XrayIsolate *X, XrClass *klass) {
-    (void)X;
-    XrTypeMetadata *meta = (XrTypeMetadata*)xr_malloc(sizeof(XrTypeMetadata));
-    if (!meta) return NULL;
+static inline XrTypeMetadata *xr_metadata_create_type_zerocopy(XrayIsolate *X, XrClass *klass) {
+    (void) X;
+    XrTypeMetadata *meta = (XrTypeMetadata *) xr_malloc(sizeof(XrTypeMetadata));
+    if (!meta)
+        return NULL;
 
     meta->klass = klass;
     meta->name = NULL;
@@ -49,16 +52,16 @@ static inline XrTypeMetadata* xr_metadata_create_type_zerocopy(XrayIsolate *X, X
 
 void xr_registry_init(XrayIsolate *X) {
     XR_DCHECK(X != NULL, "registry_init: NULL isolate");
-    XrTypeRegistry *registry = (XrTypeRegistry*)xr_malloc(sizeof(XrTypeRegistry));
+    XrTypeRegistry *registry = (XrTypeRegistry *) xr_malloc(sizeof(XrTypeRegistry));
     if (!registry) {
         xr_log_warning("reflect", "Failed to allocate XrTypeRegistry");
         return;
     }
 
     registry->capacity = REGISTRY_INITIAL_CAPACITY;
-    registry->types = (XrTypeMetadata**)xr_malloc(registry->capacity * sizeof(XrTypeMetadata*));
+    registry->types = (XrTypeMetadata **) xr_malloc(registry->capacity * sizeof(XrTypeMetadata *));
     if (registry->types) {
-        memset(registry->types, 0, registry->capacity * sizeof(XrTypeMetadata*));
+        memset(registry->types, 0, registry->capacity * sizeof(XrTypeMetadata *));
     }
     registry->type_count = 0;
     registry->type_map = xr_hashmap_new();
@@ -78,7 +81,8 @@ void xr_registry_init(XrayIsolate *X) {
 
 void xr_registry_free(XrayIsolate *X) {
     XrTypeRegistry *registry = xr_isolate_get_type_registry(X);
-    if (!registry) return;
+    if (!registry)
+        return;
 
     // Clear hashmap first to avoid dangling pointers
     if (registry->type_map) {
@@ -104,7 +108,8 @@ void xr_registry_free(XrayIsolate *X) {
 
 static void registry_grow(XrTypeRegistry *registry) {
     int new_capacity = registry->capacity * 2;
-    XrTypeMetadata **new_types = (XrTypeMetadata**)xr_realloc(registry->types, sizeof(XrTypeMetadata*) * new_capacity);
+    XrTypeMetadata **new_types =
+        (XrTypeMetadata **) xr_realloc(registry->types, sizeof(XrTypeMetadata *) * new_capacity);
     if (!new_types) {
         xr_log_warning("reflect", "failed to grow registry");
         return;
@@ -119,7 +124,7 @@ static void registry_grow(XrTypeRegistry *registry) {
 
 static int registry_find_index(XrTypeRegistry *registry, const char *name) {
     if (registry->type_map) {
-        XrTypeMetadata *meta = (XrTypeMetadata*)xr_hashmap_get(registry->type_map, name);
+        XrTypeMetadata *meta = (XrTypeMetadata *) xr_hashmap_get(registry->type_map, name);
         if (meta) {
             for (int i = 0; i < registry->type_count; i++) {
                 if (registry->types[i] == meta) {
@@ -145,10 +150,12 @@ bool xr_registry_register_type(XrayIsolate *X, XrTypeMetadata *meta) {
     XR_DCHECK(X != NULL, "registry_register_type: NULL isolate");
     XR_DCHECK(meta != NULL, "registry_register_type: NULL meta");
     XrTypeRegistry *registry = xr_isolate_get_type_registry(X);
-    if (!registry || !meta) return false;
+    if (!registry || !meta)
+        return false;
 
     const char *type_name = meta->klass ? meta->klass->name : meta->name;
-    if (!type_name) return false;
+    if (!type_name)
+        return false;
 
     if (registry_find_index(registry, type_name) >= 0) {
         xr_log_warning("reflect", "type '%s' already registered", type_name);
@@ -197,15 +204,18 @@ bool xr_registry_register_type(XrayIsolate *X, XrTypeMetadata *meta) {
 }
 
 // Lazy initialization: metadata created at registration, initialized on first access
-XrTypeMetadata* xr_registry_register_class(XrayIsolate *X, XrClass *klass) {
+XrTypeMetadata *xr_registry_register_class(XrayIsolate *X, XrClass *klass) {
     XR_DCHECK(X != NULL, "registry_register_class: NULL isolate");
-    if (!klass) return NULL;
+    if (!klass)
+        return NULL;
 
     XrTypeMetadata *existing = xr_registry_find_type(X, klass->name);
-    if (existing) return existing;
+    if (existing)
+        return existing;
 
     XrTypeMetadata *meta = xr_metadata_create_type_zerocopy(X, klass);
-    if (!meta) return NULL;
+    if (!meta)
+        return NULL;
 
     if (!xr_registry_register_type(X, meta)) {
         xr_free(meta);
@@ -218,10 +228,12 @@ XrTypeMetadata* xr_registry_register_class(XrayIsolate *X, XrClass *klass) {
 bool xr_registry_unregister_type(XrayIsolate *X, const char *name) {
     XR_DCHECK(X != NULL, "registry_unregister_type: NULL isolate");
     XrTypeRegistry *registry = xr_isolate_get_type_registry(X);
-    if (!registry || !name) return false;
+    if (!registry || !name)
+        return false;
 
     int index = registry_find_index(registry, name);
-    if (index < 0) return false;
+    if (index < 0)
+        return false;
 
     if (registry->type_map) {
         xr_hashmap_delete(registry->type_map, name);
@@ -242,32 +254,37 @@ bool xr_registry_unregister_type(XrayIsolate *X, const char *name) {
 
 /* ========== Lookup ========== */
 
-static XrTypeMetadata* resolve_type_by_name(XrayIsolate *X, const char *type_name);
+static XrTypeMetadata *resolve_type_by_name(XrayIsolate *X, const char *type_name);
 
 // Supports lazy registration
-XrTypeMetadata* xr_registry_find_type(XrayIsolate *X, const char *name) {
+XrTypeMetadata *xr_registry_find_type(XrayIsolate *X, const char *name) {
     XR_DCHECK(X != NULL, "registry_find_type: NULL isolate");
     XrTypeRegistry *registry = xr_isolate_get_type_registry(X);
-    if (!registry || !name) return NULL;
+    if (!registry || !name)
+        return NULL;
 
     if (registry->type_map) {
-        XrTypeMetadata *cached = (XrTypeMetadata*)xr_hashmap_get(registry->type_map, name);
-        if (cached) return cached;
+        XrTypeMetadata *cached = (XrTypeMetadata *) xr_hashmap_get(registry->type_map, name);
+        if (cached)
+            return cached;
     }
 
     return resolve_type_by_name(X, name);
 }
 
-XrTypeMetadata* xr_registry_find_type_by_class(XrayIsolate *X, XrClass *klass) {
+XrTypeMetadata *xr_registry_find_type_by_class(XrayIsolate *X, XrClass *klass) {
     XR_DCHECK(X != NULL, "registry_find_type_by_class: NULL isolate");
-    if (!klass) return NULL;
+    if (!klass)
+        return NULL;
 
     // O(1) cached lookup
-    if (klass->type_metadata) return klass->type_metadata;
+    if (klass->type_metadata)
+        return klass->type_metadata;
 
     // Fallback: linear scan (first access before registration)
     XrTypeRegistry *registry = xr_isolate_get_type_registry(X);
-    if (!registry) return NULL;
+    if (!registry)
+        return NULL;
 
     for (int i = 0; i < registry->type_count; i++) {
         if (registry->types[i]->klass == klass) {
@@ -288,15 +305,17 @@ XrTypeMetadata* xr_registry_find_type_by_class(XrayIsolate *X, XrClass *klass) {
 // time anyone queries it. The only name that has no XrClass and must
 // be minted on first access is "void" (signature-returning-nothing);
 // keep that tiny slow path and let everything else fall through.
-static XrTypeMetadata* resolve_type_by_name(XrayIsolate *X, const char *type_name) {
-    if (!X || !type_name) return NULL;
+static XrTypeMetadata *resolve_type_by_name(XrayIsolate *X, const char *type_name) {
+    if (!X || !type_name)
+        return NULL;
 
     if (strcmp(type_name, "void") != 0) {
         return NULL;
     }
 
-    XrTypeMetadata *meta = (XrTypeMetadata*)xr_malloc(sizeof(XrTypeMetadata));
-    if (!meta) return NULL;
+    XrTypeMetadata *meta = (XrTypeMetadata *) xr_malloc(sizeof(XrTypeMetadata));
+    if (!meta)
+        return NULL;
     meta->klass = NULL;
     meta->name = "void";
     if (!xr_registry_register_type(X, meta)) {
@@ -306,15 +325,18 @@ static XrTypeMetadata* resolve_type_by_name(XrayIsolate *X, const char *type_nam
     return meta;
 }
 
-XrTypeMetadata** xr_registry_get_all_types(XrayIsolate *X, int *count) {
+XrTypeMetadata **xr_registry_get_all_types(XrayIsolate *X, int *count) {
     XR_DCHECK(X != NULL, "registry_get_all_types: NULL isolate");
     XrTypeRegistry *registry = xr_isolate_get_type_registry(X);
-    if (!registry || !count) return NULL;
+    if (!registry || !count)
+        return NULL;
 
     *count = registry->type_count;
-    if (registry->type_count == 0) return NULL;
+    if (registry->type_count == 0)
+        return NULL;
 
-    XrTypeMetadata **result = (XrTypeMetadata**)xr_malloc(sizeof(XrTypeMetadata*) * registry->type_count);
+    XrTypeMetadata **result =
+        (XrTypeMetadata **) xr_malloc(sizeof(XrTypeMetadata *) * registry->type_count);
     for (int i = 0; i < registry->type_count; i++) {
         result[i] = registry->types[i];
     }
@@ -323,42 +345,42 @@ XrTypeMetadata** xr_registry_get_all_types(XrayIsolate *X, int *count) {
 
 /* ========== Builtin Type Accessors ========== */
 
-XrTypeMetadata* xr_registry_get_int_type(XrayIsolate *X) {
+XrTypeMetadata *xr_registry_get_int_type(XrayIsolate *X) {
     XrTypeRegistry *r = xr_isolate_get_type_registry(X);
     return r ? r->int_type : NULL;
 }
 
-XrTypeMetadata* xr_registry_get_float_type(XrayIsolate *X) {
+XrTypeMetadata *xr_registry_get_float_type(XrayIsolate *X) {
     XrTypeRegistry *r = xr_isolate_get_type_registry(X);
     return r ? r->float_type : NULL;
 }
 
-XrTypeMetadata* xr_registry_get_bool_type(XrayIsolate *X) {
+XrTypeMetadata *xr_registry_get_bool_type(XrayIsolate *X) {
     XrTypeRegistry *r = xr_isolate_get_type_registry(X);
     return r ? r->bool_type : NULL;
 }
 
-XrTypeMetadata* xr_registry_get_string_type(XrayIsolate *X) {
+XrTypeMetadata *xr_registry_get_string_type(XrayIsolate *X) {
     XrTypeRegistry *r = xr_isolate_get_type_registry(X);
     return r ? r->string_type : NULL;
 }
 
-XrTypeMetadata* xr_registry_get_array_type(XrayIsolate *X) {
+XrTypeMetadata *xr_registry_get_array_type(XrayIsolate *X) {
     XrTypeRegistry *r = xr_isolate_get_type_registry(X);
     return r ? r->array_type : NULL;
 }
 
-XrTypeMetadata* xr_registry_get_map_type(XrayIsolate *X) {
+XrTypeMetadata *xr_registry_get_map_type(XrayIsolate *X) {
     XrTypeRegistry *r = xr_isolate_get_type_registry(X);
     return r ? r->map_type : NULL;
 }
 
-XrTypeMetadata* xr_registry_get_object_type(XrayIsolate *X) {
+XrTypeMetadata *xr_registry_get_object_type(XrayIsolate *X) {
     XrTypeRegistry *r = xr_isolate_get_type_registry(X);
     return r ? r->object_type : NULL;
 }
 
-XrTypeMetadata* xr_registry_get_null_type(XrayIsolate *X) {
+XrTypeMetadata *xr_registry_get_null_type(XrayIsolate *X) {
     XrTypeRegistry *r = xr_isolate_get_type_registry(X);
     return r ? r->null_type : NULL;
 }
@@ -367,8 +389,8 @@ XrTypeMetadata* xr_registry_get_null_type(XrayIsolate *X) {
 
 // Zero-copy: all data accessed directly from XrClass
 void xr_registry_initialize_metadata(XrayIsolate *X, XrTypeMetadata *meta) {
-    (void)X;
-    (void)meta;
+    (void) X;
+    (void) meta;
 }
 
 /* ========== Debug ========== */
@@ -386,69 +408,100 @@ void xr_registry_print(XrayIsolate *X) {
 
     for (int i = 0; i < registry->type_count; i++) {
         XrTypeMetadata *meta = registry->types[i];
-        printf("  [%2d] %s - %d fields, %d methods\n",
-               i, meta->klass->name, meta->klass->field_count, meta->klass->method_count);
+        printf("  [%2d] %s - %d fields, %d methods\n", i, meta->klass->name,
+               meta->klass->field_count, meta->klass->method_count);
     }
 }
 
-void xr_registry_get_stats(XrayIsolate *X, int *total, int *classes,
-                           int *interfaces, int *builtins) {
+void xr_registry_get_stats(XrayIsolate *X, int *total, int *classes, int *interfaces,
+                           int *builtins) {
     XrTypeRegistry *registry = xr_isolate_get_type_registry(X);
     if (!registry) {
-        if (total) *total = 0;
-        if (classes) *classes = 0;
-        if (interfaces) *interfaces = 0;
-        if (builtins) *builtins = 0;
+        if (total)
+            *total = 0;
+        if (classes)
+            *classes = 0;
+        if (interfaces)
+            *interfaces = 0;
+        if (builtins)
+            *builtins = 0;
         return;
     }
 
-    if (total) *total = registry->type_count;
-    if (classes) *classes = registry->type_count;
-    if (interfaces) *interfaces = 0;
-    if (builtins) *builtins = 0;
+    if (total)
+        *total = registry->type_count;
+    if (classes)
+        *classes = registry->type_count;
+    if (interfaces)
+        *interfaces = 0;
+    if (builtins)
+        *builtins = 0;
 }
 
 /* ========== Static Analyzer Type Integration ========== */
 
 #include "../value/xtype.h"
 
-const char* xr_xr_type_kind_name(struct XrType *xa_type) {
-    if (!xa_type) return "object";
+const char *xr_xr_type_kind_name(struct XrType *xa_type) {
+    if (!xa_type)
+        return "object";
 
     switch (xa_type->kind) {
-    case XR_KIND_INT:       return "int";
-    case XR_KIND_FLOAT:     return "float";
-    case XR_KIND_BOOL:      return "bool";
-    case XR_KIND_STRING:    return "string";
-    case XR_KIND_NULL:      return "null";
-    case XR_KIND_ARRAY:     return "Array";
-    case XR_KIND_MAP:       return "Map";
-    case XR_KIND_CLASS:     return "class";
-    case XR_KIND_INSTANCE:  return "instance";
-    case XR_KIND_INTERFACE: return "interface";
-    case XR_KIND_FUNCTION:  return "function";
-    default: break;
+        case XR_KIND_INT:
+            return "int";
+        case XR_KIND_FLOAT:
+            return "float";
+        case XR_KIND_BOOL:
+            return "bool";
+        case XR_KIND_STRING:
+            return "string";
+        case XR_KIND_NULL:
+            return "null";
+        case XR_KIND_ARRAY:
+            return "Array";
+        case XR_KIND_MAP:
+            return "Map";
+        case XR_KIND_CLASS:
+            return "class";
+        case XR_KIND_INSTANCE:
+            return "instance";
+        case XR_KIND_INTERFACE:
+            return "interface";
+        case XR_KIND_FUNCTION:
+            return "function";
+        default:
+            break;
     }
 
     return "object";
 }
 
-XrTypeMetadata* xr_registry_from_xa_type(XrayIsolate *X, struct XrType *xa_type) {
-    if (!X || !xa_type) return NULL;
+XrTypeMetadata *xr_registry_from_xa_type(XrayIsolate *X, struct XrType *xa_type) {
+    if (!X || !xa_type)
+        return NULL;
 
     XrTypeRegistry *registry = xr_isolate_get_type_registry(X);
-    if (!registry) return NULL;
+    if (!registry)
+        return NULL;
 
     // For primitive types, return cached metadata
     switch (xa_type->kind) {
-    case XR_KIND_INT:    return registry->int_type;
-    case XR_KIND_FLOAT:  return registry->float_type;
-    case XR_KIND_BOOL:   return registry->bool_type;
-    case XR_KIND_STRING: return registry->string_type;
-    case XR_KIND_NULL:   return registry->null_type;
-    case XR_KIND_ARRAY:  return registry->array_type;
-    case XR_KIND_MAP:    return registry->map_type;
-    default: break;
+        case XR_KIND_INT:
+            return registry->int_type;
+        case XR_KIND_FLOAT:
+            return registry->float_type;
+        case XR_KIND_BOOL:
+            return registry->bool_type;
+        case XR_KIND_STRING:
+            return registry->string_type;
+        case XR_KIND_NULL:
+            return registry->null_type;
+        case XR_KIND_ARRAY:
+            return registry->array_type;
+        case XR_KIND_MAP:
+            return registry->map_type;
+        default:
+            break;
     }
 
     // For class/instance types, look up by name
@@ -460,4 +513,3 @@ XrTypeMetadata* xr_registry_from_xa_type(XrayIsolate *X, struct XrType *xa_type)
     // Default to object type
     return registry->object_type;
 }
-

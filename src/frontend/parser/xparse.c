@@ -26,7 +26,8 @@
 
 // Internal parser init with trivia collection option
 static void xr_parser_init_internal(Parser *parser, XrayIsolate *X, const char *source,
-                                     const char *source_file, struct XrArena *arena, bool collect_trivia);
+                                    const char *source_file, struct XrArena *arena,
+                                    bool collect_trivia);
 
 // Declarations now in xparse_internal.h; definitions in xparse_expr.c and xparse_decl.c
 
@@ -36,142 +37,142 @@ static void xr_parser_init_internal(Parser *parser, XrayIsolate *X, const char *
 // This is the core data structure of the Pratt parser
 static ParseRule rules[] = {
     // Token type              prefix fn        infix fn        precedence
-    [TK_LPAREN]     = {xr_parse_grouping, xr_parse_call_expr, PREC_CALL},
-    [TK_RPAREN]     = {NULL,              NULL,           PREC_NONE},
-    [TK_LBRACE]     = {xr_parse_object_literal, NULL,     PREC_NONE},  // Object literal
-    [TK_RBRACE]     = {NULL,              NULL,           PREC_NONE},
-    [TK_LBRACKET]   = {xr_parse_array_literal, xr_parse_index_access, PREC_CALL},
-    [TK_RBRACKET]   = {NULL,              NULL,           PREC_NONE},
-    [TK_COMMA]      = {NULL,              NULL,           PREC_NONE},
-    [TK_DOT]        = {NULL,              xr_parse_member_access, PREC_CALL},
-    [TK_RANGE]      = {NULL,              xr_parse_range, PREC_FACTOR},  // .. (range operator)
-    [TK_COLON]      = {NULL,              NULL,           PREC_NONE},
-    [TK_SEMICOLON]  = {NULL,              NULL,           PREC_NONE},
+    [TK_LPAREN] = {xr_parse_grouping, xr_parse_call_expr, PREC_CALL},
+    [TK_RPAREN] = {NULL, NULL, PREC_NONE},
+    [TK_LBRACE] = {xr_parse_object_literal, NULL, PREC_NONE},  // Object literal
+    [TK_RBRACE] = {NULL, NULL, PREC_NONE},
+    [TK_LBRACKET] = {xr_parse_array_literal, xr_parse_index_access, PREC_CALL},
+    [TK_RBRACKET] = {NULL, NULL, PREC_NONE},
+    [TK_COMMA] = {NULL, NULL, PREC_NONE},
+    [TK_DOT] = {NULL, xr_parse_member_access, PREC_CALL},
+    [TK_RANGE] = {NULL, xr_parse_range, PREC_FACTOR},  // .. (range operator)
+    [TK_COLON] = {NULL, NULL, PREC_NONE},
+    [TK_SEMICOLON] = {NULL, NULL, PREC_NONE},
 
     // Arithmetic operators
-    [TK_PLUS]       = {NULL,              xr_parse_binary, PREC_TERM},
-    [TK_MINUS]      = {xr_parse_unary,    xr_parse_binary, PREC_TERM},
-    [TK_STAR]       = {NULL,              xr_parse_binary, PREC_FACTOR},
-    [TK_SLASH]      = {xr_parse_regex_prefix, xr_parse_binary, PREC_FACTOR},
-    [TK_PERCENT]    = {NULL,              xr_parse_binary, PREC_FACTOR},
-    [TK_HASH]       = {NULL,              NULL,           PREC_NONE},  // # (standalone, reserved)
+    [TK_PLUS] = {NULL, xr_parse_binary, PREC_TERM},
+    [TK_MINUS] = {xr_parse_unary, xr_parse_binary, PREC_TERM},
+    [TK_STAR] = {NULL, xr_parse_binary, PREC_FACTOR},
+    [TK_SLASH] = {xr_parse_regex_prefix, xr_parse_binary, PREC_FACTOR},
+    [TK_PERCENT] = {NULL, xr_parse_binary, PREC_FACTOR},
+    [TK_HASH] = {NULL, NULL, PREC_NONE},  // # (standalone, reserved)
 
     // Bitwise operators
-    [TK_AMP]        = {NULL,              xr_parse_binary, PREC_BIT_AND},
-    [TK_PIPE]       = {NULL,              xr_parse_binary, PREC_BIT_OR},
-    [TK_CARET]      = {NULL,              xr_parse_binary, PREC_BIT_XOR},
-    [TK_TILDE]      = {xr_parse_unary,    NULL,           PREC_NONE},
+    [TK_AMP] = {NULL, xr_parse_binary, PREC_BIT_AND},
+    [TK_PIPE] = {NULL, xr_parse_binary, PREC_BIT_OR},
+    [TK_CARET] = {NULL, xr_parse_binary, PREC_BIT_XOR},
+    [TK_TILDE] = {xr_parse_unary, NULL, PREC_NONE},
 
     // Shift operators
-    [TK_LSHIFT]     = {NULL,              xr_parse_binary, PREC_SHIFT},
-    [TK_RSHIFT]     = {NULL,              xr_parse_binary, PREC_SHIFT},
+    [TK_LSHIFT] = {NULL, xr_parse_binary, PREC_SHIFT},
+    [TK_RSHIFT] = {NULL, xr_parse_binary, PREC_SHIFT},
 
     // New syntax tokens
     [TK_EMPTY_MAP_START] = {xr_parse_empty_map_literal, NULL, PREC_NONE},  // #{ - empty Map
-    [TK_SET_START]  = {xr_parse_set_literal_new, NULL,    PREC_NONE},  // #[ - Set literal
+    [TK_SET_START] = {xr_parse_set_literal_new, NULL, PREC_NONE},          // #[ - Set literal
 
     // Comparison operators
-    [TK_EQ]         = {NULL,              xr_parse_binary, PREC_EQUALITY},
-    [TK_NE]         = {NULL,              xr_parse_binary, PREC_EQUALITY},
-    [TK_EQ_STRICT]  = {NULL,              xr_parse_binary, PREC_EQUALITY},
-    [TK_NE_STRICT]  = {NULL,              xr_parse_binary, PREC_EQUALITY},
-    [TK_LT]         = {NULL,              xr_parse_lt_or_generic, PREC_COMPARISON},
-    [TK_LE]         = {NULL,              xr_parse_binary, PREC_COMPARISON},
-    [TK_GT]         = {NULL,              xr_parse_binary, PREC_COMPARISON},
-    [TK_GE]         = {NULL,              xr_parse_binary, PREC_COMPARISON},
-    [TK_IS]         = {NULL,              xr_parse_is,     PREC_COMPARISON},
-    [TK_AS]         = {NULL,              xr_parse_as_cast, PREC_COMPARISON},
+    [TK_EQ] = {NULL, xr_parse_binary, PREC_EQUALITY},
+    [TK_NE] = {NULL, xr_parse_binary, PREC_EQUALITY},
+    [TK_EQ_STRICT] = {NULL, xr_parse_binary, PREC_EQUALITY},
+    [TK_NE_STRICT] = {NULL, xr_parse_binary, PREC_EQUALITY},
+    [TK_LT] = {NULL, xr_parse_lt_or_generic, PREC_COMPARISON},
+    [TK_LE] = {NULL, xr_parse_binary, PREC_COMPARISON},
+    [TK_GT] = {NULL, xr_parse_binary, PREC_COMPARISON},
+    [TK_GE] = {NULL, xr_parse_binary, PREC_COMPARISON},
+    [TK_IS] = {NULL, xr_parse_is, PREC_COMPARISON},
+    [TK_AS] = {NULL, xr_parse_as_cast, PREC_COMPARISON},
 
     // Logical operators
-    [TK_AND]        = {NULL,              xr_parse_binary, PREC_AND},
-    [TK_OR]         = {NULL,              xr_parse_binary, PREC_OR},
-    [TK_NOT]        = {xr_parse_unary,    xr_parse_force_unwrap, PREC_POSTFIX},
+    [TK_AND] = {NULL, xr_parse_binary, PREC_AND},
+    [TK_OR] = {NULL, xr_parse_binary, PREC_OR},
+    [TK_NOT] = {xr_parse_unary, xr_parse_force_unwrap, PREC_POSTFIX},
 
     // Increment/Decrement
-    [TK_INC]        = {xr_parse_inc_dec,  xr_parse_postfix_inc_dec, PREC_POSTFIX},
-    [TK_DEC]        = {xr_parse_inc_dec,  xr_parse_postfix_inc_dec, PREC_POSTFIX},
+    [TK_INC] = {xr_parse_inc_dec, xr_parse_postfix_inc_dec, PREC_POSTFIX},
+    [TK_DEC] = {xr_parse_inc_dec, xr_parse_postfix_inc_dec, PREC_POSTFIX},
 
     // Ternary and nullish coalescing
-    [TK_QUESTION]   = {NULL,              xr_parse_ternary, PREC_TERNARY},
-    [TK_NULLISH_COALESCE] = {NULL,        xr_parse_nullish_coalesce, PREC_NULLISH_COALESCE},
-    [TK_QUESTION_DOT] = {NULL,            xr_parse_optional_chain, PREC_CALL},
+    [TK_QUESTION] = {NULL, xr_parse_ternary, PREC_TERNARY},
+    [TK_NULLISH_COALESCE] = {NULL, xr_parse_nullish_coalesce, PREC_NULLISH_COALESCE},
+    [TK_QUESTION_DOT] = {NULL, xr_parse_optional_chain, PREC_CALL},
 
     // Assignment
-    [TK_ASSIGN]     = {NULL,              xr_parse_assignment, PREC_ASSIGNMENT},
-    [TK_PLUS_ASSIGN] = {NULL,             xr_parse_compound_assignment, PREC_ASSIGNMENT},
-    [TK_MINUS_ASSIGN] = {NULL,            xr_parse_compound_assignment, PREC_ASSIGNMENT},
-    [TK_MUL_ASSIGN] = {NULL,              xr_parse_compound_assignment, PREC_ASSIGNMENT},
-    [TK_DIV_ASSIGN] = {NULL,              xr_parse_compound_assignment, PREC_ASSIGNMENT},
-    [TK_MOD_ASSIGN] = {NULL,              xr_parse_compound_assignment, PREC_ASSIGNMENT},
-    [TK_AND_ASSIGN] = {NULL,              xr_parse_compound_assignment, PREC_ASSIGNMENT},
-    [TK_OR_ASSIGN] = {NULL,               xr_parse_compound_assignment, PREC_ASSIGNMENT},
-    [TK_XOR_ASSIGN] = {NULL,              xr_parse_compound_assignment, PREC_ASSIGNMENT},
-    [TK_LSHIFT_ASSIGN] = {NULL,           xr_parse_compound_assignment, PREC_ASSIGNMENT},
-    [TK_RSHIFT_ASSIGN] = {NULL,           xr_parse_compound_assignment, PREC_ASSIGNMENT},
+    [TK_ASSIGN] = {NULL, xr_parse_assignment, PREC_ASSIGNMENT},
+    [TK_PLUS_ASSIGN] = {NULL, xr_parse_compound_assignment, PREC_ASSIGNMENT},
+    [TK_MINUS_ASSIGN] = {NULL, xr_parse_compound_assignment, PREC_ASSIGNMENT},
+    [TK_MUL_ASSIGN] = {NULL, xr_parse_compound_assignment, PREC_ASSIGNMENT},
+    [TK_DIV_ASSIGN] = {NULL, xr_parse_compound_assignment, PREC_ASSIGNMENT},
+    [TK_MOD_ASSIGN] = {NULL, xr_parse_compound_assignment, PREC_ASSIGNMENT},
+    [TK_AND_ASSIGN] = {NULL, xr_parse_compound_assignment, PREC_ASSIGNMENT},
+    [TK_OR_ASSIGN] = {NULL, xr_parse_compound_assignment, PREC_ASSIGNMENT},
+    [TK_XOR_ASSIGN] = {NULL, xr_parse_compound_assignment, PREC_ASSIGNMENT},
+    [TK_LSHIFT_ASSIGN] = {NULL, xr_parse_compound_assignment, PREC_ASSIGNMENT},
+    [TK_RSHIFT_ASSIGN] = {NULL, xr_parse_compound_assignment, PREC_ASSIGNMENT},
 
     // Keywords
-    [TK_LET]        = {NULL,              NULL,           PREC_NONE},
-    [TK_CONST]      = {NULL,              NULL,           PREC_NONE},
-    [TK_IF]         = {NULL,              NULL,           PREC_NONE},
-    [TK_ELSE]       = {NULL,              NULL,           PREC_NONE},
-    [TK_WHILE]      = {NULL,              NULL,           PREC_NONE},
-    [TK_FOR]        = {NULL,              NULL,           PREC_NONE},
-    [TK_RETURN]     = {NULL,              NULL,           PREC_NONE},
-    [TK_YIELD]      = {NULL,              NULL,           PREC_NONE},  // yield: parsed only as statement
-    [TK_NULL]       = {xr_parse_literal,  NULL,           PREC_NONE},
-    [TK_TRUE]       = {xr_parse_literal,  NULL,           PREC_NONE},
-    [TK_FALSE]      = {xr_parse_literal,  NULL,           PREC_NONE},
-    [TK_CLASS]      = {NULL,              NULL,           PREC_NONE},
-    [TK_EXTENDS]    = {NULL,              NULL,           PREC_NONE},
-    [TK_FN]         = {xr_parse_fn_expression, NULL,      PREC_NONE},
-    [TK_NEW]        = {xr_parse_new_expression, NULL,     PREC_NONE},
-    [TK_THIS]       = {xr_parse_this_expression, NULL,    PREC_NONE},
-    [TK_SUPER]      = {xr_parse_super_expression, NULL,   PREC_NONE},
-    [TK_CONSTRUCTOR] = {NULL,              NULL,          PREC_NONE},
-    [TK_STATIC]     = {NULL,              NULL,           PREC_NONE},
-    [TK_PRIVATE]    = {NULL,              NULL,           PREC_NONE},
-    [TK_PUBLIC]     = {NULL,              NULL,           PREC_NONE},
-    [TK_MATCH]      = {xr_parse_match_expr, NULL,         PREC_NONE},  // match expression
-    [TK_UNDERSCORE] = {NULL,              NULL,           PREC_NONE},  // _ wildcard (pattern only)
+    [TK_LET] = {NULL, NULL, PREC_NONE},
+    [TK_CONST] = {NULL, NULL, PREC_NONE},
+    [TK_IF] = {NULL, NULL, PREC_NONE},
+    [TK_ELSE] = {NULL, NULL, PREC_NONE},
+    [TK_WHILE] = {NULL, NULL, PREC_NONE},
+    [TK_FOR] = {NULL, NULL, PREC_NONE},
+    [TK_RETURN] = {NULL, NULL, PREC_NONE},
+    [TK_YIELD] = {NULL, NULL, PREC_NONE},  // yield: parsed only as statement
+    [TK_NULL] = {xr_parse_literal, NULL, PREC_NONE},
+    [TK_TRUE] = {xr_parse_literal, NULL, PREC_NONE},
+    [TK_FALSE] = {xr_parse_literal, NULL, PREC_NONE},
+    [TK_CLASS] = {NULL, NULL, PREC_NONE},
+    [TK_EXTENDS] = {NULL, NULL, PREC_NONE},
+    [TK_FN] = {xr_parse_fn_expression, NULL, PREC_NONE},
+    [TK_NEW] = {xr_parse_new_expression, NULL, PREC_NONE},
+    [TK_THIS] = {xr_parse_this_expression, NULL, PREC_NONE},
+    [TK_SUPER] = {xr_parse_super_expression, NULL, PREC_NONE},
+    [TK_CONSTRUCTOR] = {NULL, NULL, PREC_NONE},
+    [TK_STATIC] = {NULL, NULL, PREC_NONE},
+    [TK_PRIVATE] = {NULL, NULL, PREC_NONE},
+    [TK_PUBLIC] = {NULL, NULL, PREC_NONE},
+    [TK_MATCH] = {xr_parse_match_expr, NULL, PREC_NONE},  // match expression
+    [TK_UNDERSCORE] = {NULL, NULL, PREC_NONE},            // _ wildcard (pattern only)
 
     // Coroutine keywords
-    [TK_GO]         = {xr_parse_go_expr, NULL,           PREC_NONE},  // go expression
-    [TK_AWAIT]      = {xr_parse_await_expr, NULL,        PREC_NONE},  // await expression
-    [TK_SELECT]     = {NULL,              NULL,           PREC_NONE},  // select statement
-    [TK_DEFER]      = {NULL,              NULL,           PREC_NONE},  // defer statement
-    [TK_SCOPE]      = {NULL,              NULL,           PREC_NONE},  // scope block
+    [TK_GO] = {xr_parse_go_expr, NULL, PREC_NONE},        // go expression
+    [TK_AWAIT] = {xr_parse_await_expr, NULL, PREC_NONE},  // await expression
+    [TK_SELECT] = {NULL, NULL, PREC_NONE},                // select statement
+    [TK_DEFER] = {NULL, NULL, PREC_NONE},                 // defer statement
+    [TK_SCOPE] = {NULL, NULL, PREC_NONE},                 // scope block
     // cancelled() and move are now contextual keywords, handled in xr_parse_variable
-    [TK_TYPE_CHANNEL] = {xr_parse_channel_new, NULL,     PREC_NONE}, // Channel()
+    [TK_TYPE_CHANNEL] = {xr_parse_channel_new, NULL, PREC_NONE},  // Channel()
 
     // Literals and identifiers
-    [TK_LITERAL_INT]    = {xr_parse_literal,  NULL,           PREC_NONE},
-    [TK_LITERAL_FLOAT]  = {xr_parse_literal,  NULL,           PREC_NONE},
-    [TK_LITERAL_BIGINT] = {xr_parse_literal,  NULL,           PREC_NONE},
-    [TK_LITERAL_STRING] = {xr_parse_literal,  NULL,           PREC_NONE},
-    [TK_LITERAL_REGEX]  = {xr_parse_regex_literal, NULL,      PREC_NONE},
+    [TK_LITERAL_INT] = {xr_parse_literal, NULL, PREC_NONE},
+    [TK_LITERAL_FLOAT] = {xr_parse_literal, NULL, PREC_NONE},
+    [TK_LITERAL_BIGINT] = {xr_parse_literal, NULL, PREC_NONE},
+    [TK_LITERAL_STRING] = {xr_parse_literal, NULL, PREC_NONE},
+    [TK_LITERAL_REGEX] = {xr_parse_regex_literal, NULL, PREC_NONE},
     [TK_TEMPLATE_STRING] = {xr_parse_template_string, NULL, PREC_NONE},
     [TK_RAW_STRING] = {xr_parse_literal, NULL, PREC_NONE},
     [TK_RAW_TEMPLATE_STRING] = {xr_parse_template_string, NULL, PREC_NONE},
-    [TK_NAME]       = {xr_parse_variable, NULL,           PREC_NONE},
+    [TK_NAME] = {xr_parse_variable, NULL, PREC_NONE},
 
     // Type cast functions
-    [TK_INT]        = {xr_parse_type_cast, NULL,           PREC_NONE},
-    [TK_FLOAT]      = {xr_parse_type_cast, NULL,           PREC_NONE},
-    [TK_STRING]     = {xr_parse_type_cast, NULL,           PREC_NONE},
-    [TK_BOOL]       = {xr_parse_type_cast, NULL,           PREC_NONE},
+    [TK_INT] = {xr_parse_type_cast, NULL, PREC_NONE},
+    [TK_FLOAT] = {xr_parse_type_cast, NULL, PREC_NONE},
+    [TK_STRING] = {xr_parse_type_cast, NULL, PREC_NONE},
+    [TK_BOOL] = {xr_parse_type_cast, NULL, PREC_NONE},
 
     // Container constructors
     [TK_TYPE_ARRAY] = {xr_parse_container_constructor, NULL, PREC_NONE},
-    [TK_TYPE_MAP]   = {xr_parse_container_constructor, NULL, PREC_NONE},
-    [TK_TYPE_SET]   = {xr_parse_container_constructor, NULL, PREC_NONE},
-    [TK_TYPE_JSON]  = {xr_parse_type_keyword_as_variable, NULL, PREC_NONE},
+    [TK_TYPE_MAP] = {xr_parse_container_constructor, NULL, PREC_NONE},
+    [TK_TYPE_SET] = {xr_parse_container_constructor, NULL, PREC_NONE},
+    [TK_TYPE_JSON] = {xr_parse_type_keyword_as_variable, NULL, PREC_NONE},
     [TK_TYPE_DATETIME] = {xr_parse_type_keyword_as_variable, NULL, PREC_NONE},
     [TK_TYPE_BYTES] = {xr_parse_type_keyword_as_variable, NULL, PREC_NONE},
     [TK_TYPE_BIGINT] = {xr_parse_type_keyword_as_variable, NULL, PREC_NONE},
 
     // Special
-    [TK_EOF]        = {NULL,              NULL,           PREC_NONE},
-    [TK_ERROR]      = {NULL,              NULL,           PREC_NONE},
+    [TK_EOF] = {NULL, NULL, PREC_NONE},
+    [TK_ERROR] = {NULL, NULL, PREC_NONE},
 };
 
 /* ========== Escape Processing ========== */
@@ -184,17 +185,39 @@ size_t xr_process_escapes(const char *src, size_t src_len, char *out) {
         if (src[i] == '\\' && i + 1 < src_len) {
             i++;
             switch (src[i]) {
-                case 'n':  out[dst++] = '\n'; break;
-                case 'r':  out[dst++] = '\r'; break;
-                case 't':  out[dst++] = '\t'; break;
-                case '\\': out[dst++] = '\\'; break;
-                case '"':  out[dst++] = '"';  break;
-                case '\'': out[dst++] = '\''; break;
-                case 'b':  out[dst++] = '\b'; break;
-                case 'f':  out[dst++] = '\f'; break;
-                case '0':  out[dst++] = '\0'; break;
-                case '$':  out[dst++] = '$';  break;
-                case '`':  out[dst++] = '`';  break;
+                case 'n':
+                    out[dst++] = '\n';
+                    break;
+                case 'r':
+                    out[dst++] = '\r';
+                    break;
+                case 't':
+                    out[dst++] = '\t';
+                    break;
+                case '\\':
+                    out[dst++] = '\\';
+                    break;
+                case '"':
+                    out[dst++] = '"';
+                    break;
+                case '\'':
+                    out[dst++] = '\'';
+                    break;
+                case 'b':
+                    out[dst++] = '\b';
+                    break;
+                case 'f':
+                    out[dst++] = '\f';
+                    break;
+                case '0':
+                    out[dst++] = '\0';
+                    break;
+                case '$':
+                    out[dst++] = '$';
+                    break;
+                case '`':
+                    out[dst++] = '`';
+                    break;
                 default:
                     out[dst++] = '\\';
                     out[dst++] = src[i];
@@ -213,7 +236,7 @@ size_t xr_process_escapes(const char *src, size_t src_len, char *out) {
 const ParseRule *xr_get_rule(TokenType type) {
     size_t rules_size = sizeof(rules) / sizeof(rules[0]);
 
-    if (type >= (TokenType)rules_size || type < 0) {
+    if (type >= (TokenType) rules_size || type < 0) {
         // Return default rule (PREC_NONE, no prefix/infix)
         static ParseRule default_rule = {NULL, NULL, PREC_NONE};
         return &default_rule;
@@ -231,7 +254,8 @@ void xr_parser_advance(Parser *parser) {
     // Skip error tokens until valid token found
     while (1) {
         parser->current = xr_scanner_scan(&parser->scanner);
-        if (parser->current.type != TK_ERROR) break;
+        if (parser->current.type != TK_ERROR)
+            break;
 
         // TK_ERROR carries diagnostic text in error_message (L-03 contract).
         const char *msg = parser->current.error_message;
@@ -247,7 +271,8 @@ int xr_parser_check(Parser *parser, TokenType type) {
 
 // If current token matches, consume it and return true
 int xr_parser_match(Parser *parser, TokenType type) {
-    if (!xr_parser_check(parser, type)) return 0;
+    if (!xr_parser_check(parser, type))
+        return 0;
     xr_parser_advance(parser);
     return 1;
 }
@@ -261,8 +286,7 @@ void xr_parser_consume(Parser *parser, TokenType type, const char *message) {
     }
 
     // Better error when a keyword is used where an identifier is expected
-    if (type == TK_NAME &&
-        parser->current.type >= TK_FIRST_KEYWORD &&
+    if (type == TK_NAME && parser->current.type >= TK_FIRST_KEYWORD &&
         parser->current.type <= TK_LAST_KEYWORD) {
         xr_parser_error_expected_name(parser, message);
         return;
@@ -273,15 +297,16 @@ void xr_parser_consume(Parser *parser, TokenType type, const char *message) {
 
 // Contextual keyword check: current token is TK_NAME with specific string content.
 bool xr_parser_check_name(Parser *parser, const char *name) {
-    if (parser->current.type != TK_NAME) return false;
-    int len = (int)strlen(name);
-    return parser->current.length == len &&
-           memcmp(parser->current.start, name, len) == 0;
+    if (parser->current.type != TK_NAME)
+        return false;
+    int len = (int) strlen(name);
+    return parser->current.length == len && memcmp(parser->current.start, name, len) == 0;
 }
 
 // Contextual keyword match: if current is TK_NAME matching name, consume and return true.
 bool xr_parser_match_name(Parser *parser, const char *name) {
-    if (!xr_parser_check_name(parser, name)) return false;
+    if (!xr_parser_check_name(parser, name))
+        return false;
     xr_parser_advance(parser);
     return true;
 }
@@ -289,13 +314,13 @@ bool xr_parser_match_name(Parser *parser, const char *name) {
 // Unified keyword-as-identifier error reporting.
 // context examples: "expected variable name", "expected field name", etc.
 void xr_parser_error_expected_name(Parser *parser, const char *context) {
-    if (parser->current.type >= TK_FIRST_KEYWORD &&
-        parser->current.type <= TK_LAST_KEYWORD) {
+    if (parser->current.type >= TK_FIRST_KEYWORD && parser->current.type <= TK_LAST_KEYWORD) {
         char buf[128];
         int len = parser->current.length;
-        if (len > 60) len = 60;
-        snprintf(buf, sizeof(buf), "'%.*s' is a keyword and cannot be used as an identifier",
-                 len, parser->current.start);
+        if (len > 60)
+            len = 60;
+        snprintf(buf, sizeof(buf), "'%.*s' is a keyword and cannot be used as an identifier", len,
+                 parser->current.start);
         xr_parser_error_at_current(parser, buf);
     } else {
         xr_parser_error_at_current(parser, context);
@@ -306,29 +331,30 @@ void xr_parser_error_expected_name(Parser *parser, const char *context) {
 // When a statement ends but the next token on the same line isn't a semicolon,
 // check if it's a known cross-language keyword before reporting generic ASI error.
 bool xr_parser_check_asi_hint(Parser *parser) {
-    if (parser->current.type != TK_NAME) return false;
+    if (parser->current.type != TK_NAME)
+        return false;
 
     const char *s = parser->current.start;
     int len = parser->current.length;
 
     if (len == 3 && memcmp(s, "and", 3) == 0) {
         xr_parser_error_at_current(parser,
-            "'and' is not an operator. Use '&&' for logical AND in Xray");
+                                   "'and' is not an operator. Use '&&' for logical AND in Xray");
         return true;
     }
     if (len == 2 && memcmp(s, "or", 2) == 0) {
         xr_parser_error_at_current(parser,
-            "'or' is not an operator. Use '||' for logical OR in Xray");
+                                   "'or' is not an operator. Use '||' for logical OR in Xray");
         return true;
     }
     if (len == 3 && memcmp(s, "not", 3) == 0) {
         xr_parser_error_at_current(parser,
-            "'not' is not an operator. Use '!' for logical NOT in Xray");
+                                   "'not' is not an operator. Use '!' for logical NOT in Xray");
         return true;
     }
     if (len == 2 && memcmp(s, "do", 2) == 0) {
-        xr_parser_error_at_current(parser,
-            "'do...while' is not supported. Use 'while (condition) { }' in Xray");
+        xr_parser_error_at_current(
+            parser, "'do...while' is not supported. Use 'while (condition) { }' in Xray");
         return true;
     }
     return false;
@@ -337,8 +363,8 @@ bool xr_parser_check_asi_hint(Parser *parser) {
 /* ========== Error Handling ========== */
 
 // Set error callback for LSP integration
-void xr_parser_set_error_callback(Parser *parser, XrParseErrorCallback callback,
-                                   void *user_data, int max_errors) {
+void xr_parser_set_error_callback(Parser *parser, XrParseErrorCallback callback, void *user_data,
+                                  int max_errors) {
     parser->error_callback = callback;
     parser->error_callback_data = user_data;
     parser->max_errors = max_errors;
@@ -347,7 +373,8 @@ void xr_parser_set_error_callback(Parser *parser, XrParseErrorCallback callback,
 
 // Report error at a specific token (shared implementation)
 static void xr_parser_error_at(Parser *parser, Token *token, const char *message) {
-    if (parser->panic_mode) return;  // Avoid error cascade
+    if (parser->panic_mode)
+        return;  // Avoid error cascade
 
     parser->panic_mode = 1;
     parser->had_error = 1;
@@ -355,22 +382,13 @@ static void xr_parser_error_at(Parser *parser, Token *token, const char *message
 
     // Call error callback if set (for LSP)
     if (parser->error_callback) {
-        parser->error_callback(parser->error_callback_data,
-                               token->line, 0,
-                               token->line, token->length,
-                               message);
+        parser->error_callback(parser->error_callback_data, token->line, 0, token->line,
+                               token->length, message);
         return;
     }
 
-    xr_diag_print(
-        XR_DIAG_ERROR, 0, message,
-        parser->source_file,
-        token->line,
-        token->column,
-        token->type == TK_EOF ? 0 : token->length,
-        parser->scanner.source,
-        token->start
-    );
+    xr_diag_print(XR_DIAG_ERROR, 0, message, parser->source_file, token->line, token->column,
+                  token->type == TK_EOF ? 0 : token->length, parser->scanner.source, token->start);
 }
 
 // Report error at current token
@@ -418,13 +436,26 @@ void xr_parser_synchronize(Parser *parser) {
 
         // Track bracket depth
         switch (parser->previous.type) {
-            case TK_LBRACE: brace_depth++; break;
-            case TK_RBRACE: brace_depth--; break;
-            case TK_LPAREN: paren_depth++; break;
-            case TK_RPAREN: paren_depth--; break;
-            case TK_LBRACKET: bracket_depth++; break;
-            case TK_RBRACKET: bracket_depth--; break;
-            default: break;
+            case TK_LBRACE:
+                brace_depth++;
+                break;
+            case TK_RBRACE:
+                brace_depth--;
+                break;
+            case TK_LPAREN:
+                paren_depth++;
+                break;
+            case TK_RPAREN:
+                paren_depth--;
+                break;
+            case TK_LBRACKET:
+                bracket_depth++;
+                break;
+            case TK_RBRACKET:
+                bracket_depth--;
+                break;
+            default:
+                break;
         }
 
         // If we closed all brackets, we're at a good boundary
@@ -539,25 +570,28 @@ AstNode *xr_parse_expr_statement(Parser *parser) {
 
     // Check for multi-value assignment: expr, expr = expr, expr
     if (xr_parser_check(parser, TK_COMMA)) {
-        AstNode **targets = (AstNode**)ast_alloc_array(parser->X, sizeof(AstNode*), (size_t)16);
+        AstNode **targets = (AstNode **) ast_alloc_array(parser->X, sizeof(AstNode *), (size_t) 16);
         int target_count = 0;
         int target_capacity = 16;
         targets[target_count++] = first_expr;
 
         while (xr_parser_match(parser, TK_COMMA)) {
-            XR_PARSE_PUSH(parser, targets, target_count, target_capacity, xr_parse_precedence(parser, PREC_TERNARY));
+            XR_PARSE_PUSH(parser, targets, target_count, target_capacity,
+                          xr_parse_precedence(parser, PREC_TERNARY));
         }
 
         if (xr_parser_match(parser, TK_ASSIGN)) {
             // Parse right-side values
-            AstNode **values = (AstNode**)ast_alloc_array(parser->X, sizeof(AstNode*), (size_t)16);
+            AstNode **values =
+                (AstNode **) ast_alloc_array(parser->X, sizeof(AstNode *), (size_t) 16);
             int value_count = 0;
             int value_capacity = 16;
 
             values[value_count++] = xr_parse_expression(parser);
 
             while (xr_parser_match(parser, TK_COMMA)) {
-                XR_PARSE_PUSH(parser, values, value_count, value_capacity, xr_parse_expression(parser));
+                XR_PARSE_PUSH(parser, values, value_count, value_capacity,
+                              xr_parse_expression(parser));
             }
 
             return xr_ast_multi_assign(parser->X, targets, target_count, values, value_count, line);
@@ -591,7 +625,7 @@ AstNode *xr_parse_print_statement(Parser *parser) {
 
     int capacity = 8;
     int count = 0;
-    AstNode **exprs = (AstNode**)ast_alloc_array(parser->X, sizeof(AstNode*), (size_t)capacity);
+    AstNode **exprs = (AstNode **) ast_alloc_array(parser->X, sizeof(AstNode *), (size_t) capacity);
 
     exprs[count++] = xr_parse_expression(parser);
 
@@ -624,7 +658,8 @@ AstNode *xr_parse_statement(Parser *parser) {
 
             // Try to identify for-in pattern (support _ as blank identifier)
             // Also detect keywords used as loop variables to give better errors
-            bool might_be_forin = xr_parser_check(parser, TK_NAME) || xr_parser_check(parser, TK_UNDERSCORE);
+            bool might_be_forin =
+                xr_parser_check(parser, TK_NAME) || xr_parser_check(parser, TK_UNDERSCORE);
             if (!might_be_forin && parser->current.type >= TK_FIRST_KEYWORD &&
                 parser->current.type <= TK_LAST_KEYWORD) {
                 // Keyword used as loop variable — route to for-in for proper error
@@ -636,7 +671,8 @@ AstNode *xr_parse_statement(Parser *parser) {
                 // Check for comma (key-value pattern)
                 if (xr_parser_check(parser, TK_COMMA)) {
                     xr_parser_advance(parser);
-                    if (xr_parser_check(parser, TK_NAME) || xr_parser_check(parser, TK_UNDERSCORE)) {
+                    if (xr_parser_check(parser, TK_NAME) ||
+                        xr_parser_check(parser, TK_UNDERSCORE)) {
                         xr_parser_advance(parser);
                     }
                 }
@@ -644,8 +680,7 @@ AstNode *xr_parse_statement(Parser *parser) {
                 // Skip optional type annotation
                 if (xr_parser_check(parser, TK_COLON)) {
                     xr_parser_advance(parser);
-                    while (!xr_parser_check(parser, TK_IN) &&
-                           !xr_parser_check(parser, TK_RPAREN) &&
+                    while (!xr_parser_check(parser, TK_IN) && !xr_parser_check(parser, TK_RPAREN) &&
                            !xr_parser_check(parser, TK_EOF)) {
                         xr_parser_advance(parser);
                     }
@@ -689,13 +724,12 @@ AstNode *xr_parse_statement(Parser *parser) {
     // Prefix increment/decrement not supported (use postfix x++, x--)
     if (parser->current.type == TK_INC || parser->current.type == TK_DEC) {
         xr_parser_error_at_current(parser,
-            "prefix ++/-- not supported, use postfix form (x++, x--)");
+                                   "prefix ++/-- not supported, use postfix form (x++, x--)");
         return NULL;
     }
 
     // Recognize print builtin (as NAME token)
-    if (parser->current.type == TK_NAME &&
-        parser->current.length == 5 &&
+    if (parser->current.type == TK_NAME && parser->current.length == 5 &&
         memcmp(parser->current.start, "print", 5) == 0) {
         xr_parser_advance(parser);
         xr_parser_consume(parser, TK_LPAREN, "expected '(' after print");
@@ -711,8 +745,8 @@ AstNode *xr_parse_statement(Parser *parser) {
 
 // Initialize parser
 // arena: optional arena for AST allocation (NULL = use malloc)
-void xr_parser_init(Parser *parser, XrayIsolate *X, const char *source,
-                    const char *source_file, XrArena *arena) {
+void xr_parser_init(Parser *parser, XrayIsolate *X, const char *source, const char *source_file,
+                    XrArena *arena) {
     XR_DCHECK(parser != NULL, "parser_init: NULL parser");
     XR_DCHECK(source != NULL, "parser_init: NULL source");
     xr_parser_init_internal(parser, X, source, source_file, arena, false);
@@ -720,7 +754,7 @@ void xr_parser_init(Parser *parser, XrayIsolate *X, const char *source,
 
 // Internal init with trivia collection option
 static void xr_parser_init_internal(Parser *parser, XrayIsolate *X, const char *source,
-                                     const char *source_file, XrArena *arena, bool collect_trivia) {
+                                    const char *source_file, XrArena *arena, bool collect_trivia) {
     parser->X = X;
     parser->arena = arena;
     parser->had_error = 0;
@@ -750,7 +784,7 @@ static void xr_parser_init_internal(Parser *parser, XrayIsolate *X, const char *
 // The returned arena pointer is heap-allocated (xr_malloc) so it outlives
 // the stack frame; its memory is reclaimed by xr_program_destroy.
 static XrArena *xr_parse_setup_arena(XrayIsolate *X, XrArena **saved_out) {
-    XrArena *arena = (XrArena *)xr_malloc(sizeof(XrArena));
+    XrArena *arena = (XrArena *) xr_malloc(sizeof(XrArena));
     XR_CHECK(arena != NULL, "xr_parse: failed to allocate parse arena");
     xr_arena_init(arena, XR_ARENA_SEGMENT_SIZE);
     *saved_out = xr_isolate_get_current_arena(X);
@@ -783,8 +817,8 @@ AstNode *xr_parse_with_source(XrayIsolate *X, const char *source, const char *so
     Parser parser;
     xr_parser_init(&parser, X, source, source_file, arena);
 
-    // Default max errors for normal compilation
-    #define XR_PARSE_MAX_ERRORS 20
+// Default max errors for normal compilation
+#define XR_PARSE_MAX_ERRORS 20
 
     AstNode *program = xr_ast_program(X);
 
@@ -800,7 +834,8 @@ AstNode *xr_parse_with_source(XrayIsolate *X, const char *source, const char *so
         // Recover from panic mode to continue parsing
         if (parser.panic_mode) {
             xr_parser_synchronize(&parser);
-            if (xr_parser_check(&parser, TK_EOF)) break;
+            if (xr_parser_check(&parser, TK_EOF))
+                break;
         }
 
         int stmt_line = parser.current.line;
@@ -815,12 +850,11 @@ AstNode *xr_parse_with_source(XrayIsolate *X, const char *source, const char *so
             xr_parser_advance(&parser);
         } else {
             // TK_QUESTION and TK_COLON may be part of ternary, not statement separator
-            if (!xr_parser_check(&parser, TK_EOF) &&
-                parser.current.line == stmt_line &&
-                parser.current.type != TK_QUESTION &&
-                parser.current.type != TK_COLON) {
+            if (!xr_parser_check(&parser, TK_EOF) && parser.current.line == stmt_line &&
+                parser.current.type != TK_QUESTION && parser.current.type != TK_COLON) {
                 if (!xr_parser_check_asi_hint(&parser)) {
-                    xr_parser_error_at_current(&parser, "multiple statements on same line must be separated by semicolon");
+                    xr_parser_error_at_current(
+                        &parser, "multiple statements on same line must be separated by semicolon");
                 }
             }
         }
@@ -828,9 +862,8 @@ AstNode *xr_parse_with_source(XrayIsolate *X, const char *source, const char *so
 
     // Print error summary
     if (parser.error_count > 0) {
-        xr_diag_print_summary(
-            source_file, parser.error_count, 0,
-            parser.error_count >= XR_PARSE_MAX_ERRORS);
+        xr_diag_print_summary(source_file, parser.error_count, 0,
+                              parser.error_count >= XR_PARSE_MAX_ERRORS);
     }
 
     xr_type_scope_free(parser.type_scope);
@@ -875,7 +908,8 @@ AstNode *xr_parse_with_trivia(XrayIsolate *X, const char *source, const char *so
         // Recover from panic mode to continue parsing
         if (parser.panic_mode) {
             xr_parser_synchronize(&parser);
-            if (xr_parser_check(&parser, TK_EOF)) break;
+            if (xr_parser_check(&parser, TK_EOF))
+                break;
         }
 
         int stmt_line = parser.current.line;
@@ -899,12 +933,11 @@ AstNode *xr_parse_with_trivia(XrayIsolate *X, const char *source, const char *so
         if (xr_parser_check(&parser, TK_SEMICOLON)) {
             xr_parser_advance(&parser);
         } else {
-            if (!xr_parser_check(&parser, TK_EOF) &&
-                parser.current.line == stmt_line &&
-                parser.current.type != TK_QUESTION &&
-                parser.current.type != TK_COLON) {
+            if (!xr_parser_check(&parser, TK_EOF) && parser.current.line == stmt_line &&
+                parser.current.type != TK_QUESTION && parser.current.type != TK_COLON) {
                 if (!xr_parser_check_asi_hint(&parser)) {
-                    xr_parser_error_at_current(&parser, "multiple statements on same line must be separated by semicolon");
+                    xr_parser_error_at_current(
+                        &parser, "multiple statements on same line must be separated by semicolon");
                 }
             }
         }
@@ -948,8 +981,7 @@ AstNode *xr_parse_with_trivia(XrayIsolate *X, const char *source, const char *so
 //   AstNode *expr = prog->as.program.statements[0];
 //   ... evaluate expr ...
 //   xr_program_destroy(prog);
-AstNode *xr_parse_expression_string(XrayIsolate *X, const char *source,
-                                    const char *source_file) {
+AstNode *xr_parse_expression_string(XrayIsolate *X, const char *source, const char *source_file) {
     XR_DCHECK(source != NULL, "xr_parse_expression_string: NULL source");
 
     XrArena *saved_arena = NULL;
@@ -1007,7 +1039,7 @@ AstNode *xr_parse_recoverable(Parser *parser) {
     xr_parser_advance(parser);
 
     int iteration = 0;
-    (void)iteration;
+    (void) iteration;
     // Parse declarations until EOF or max errors reached
     while (!xr_parser_check(parser, TK_EOF)) {
         iteration++;
@@ -1019,7 +1051,8 @@ AstNode *xr_parse_recoverable(Parser *parser) {
         // Recover from panic mode
         if (parser->panic_mode) {
             xr_parser_synchronize(parser);
-            if (xr_parser_check(parser, TK_EOF)) break;
+            if (xr_parser_check(parser, TK_EOF))
+                break;
         }
 
         int stmt_line = parser->current.line;
@@ -1033,12 +1066,11 @@ AstNode *xr_parse_recoverable(Parser *parser) {
         if (xr_parser_check(parser, TK_SEMICOLON)) {
             xr_parser_advance(parser);
         } else {
-            if (!xr_parser_check(parser, TK_EOF) &&
-                parser->current.line == stmt_line &&
-                parser->current.type != TK_QUESTION &&
-                parser->current.type != TK_COLON) {
+            if (!xr_parser_check(parser, TK_EOF) && parser->current.line == stmt_line &&
+                parser->current.type != TK_QUESTION && parser->current.type != TK_COLON) {
                 if (!xr_parser_check_asi_hint(parser)) {
-                    xr_parser_error_at_current(parser, "multiple statements on same line must be separated by semicolon");
+                    xr_parser_error_at_current(
+                        parser, "multiple statements on same line must be separated by semicolon");
                 }
                 // Don't break - continue parsing for more errors
             }
@@ -1159,20 +1191,21 @@ AstNode *xr_parse_variable(Parser *parser) {
     if (prev.length == 3 && memcmp(prev.start, "not", 3) == 0) {
         const ParseRule *next_rule = xr_get_rule(parser->current.type);
         if (next_rule->prefix != NULL) {
-            xr_parser_error_at_previous(parser,
-                "'not' is not an operator. Use '!' for logical NOT in Xray");
+            xr_parser_error_at_previous(
+                parser, "'not' is not an operator. Use '!' for logical NOT in Xray");
         }
     }
     // Detect 'lambda' keyword misuse: lambda x: x + 1
     if (prev.length == 6 && memcmp(prev.start, "lambda", 6) == 0) {
         const ParseRule *next_rule = xr_get_rule(parser->current.type);
         if (next_rule->prefix != NULL || parser->current.type == TK_NAME) {
-            xr_parser_error_at_previous(parser,
+            xr_parser_error_at_previous(
+                parser,
                 "'lambda' is not supported. Use 'fn(params) { }' or '(params) => expr' in Xray");
         }
     }
 
-    char *name = (char *)ast_alloc(parser->X, (size_t)parser->previous.length + 1);
+    char *name = (char *) ast_alloc(parser->X, (size_t) parser->previous.length + 1);
     memcpy(name, parser->previous.start, parser->previous.length);
     name[parser->previous.length] = '\0';
     int line = parser->previous.line;
@@ -1198,23 +1231,26 @@ AstNode *xr_parse_variable(Parser *parser) {
                         int old_field_capacity = field_capacity;
                         field_capacity = field_capacity == 0 ? 4 : field_capacity * 2;
 
-                        char **new_names = (char **)ast_alloc_array(
-                            parser->X, sizeof(char *), (size_t)field_capacity);
+                        char **new_names = (char **) ast_alloc_array(parser->X, sizeof(char *),
+                                                                     (size_t) field_capacity);
                         if (old_field_capacity > 0 && field_names) {
-                            memcpy(new_names, field_names, sizeof(char *) * (size_t)old_field_capacity);
+                            memcpy(new_names, field_names,
+                                   sizeof(char *) * (size_t) old_field_capacity);
                         }
                         field_names = new_names;
 
-                        AstNode **new_values = (AstNode **)ast_alloc_array(
-                            parser->X, sizeof(AstNode *), (size_t)field_capacity);
+                        AstNode **new_values = (AstNode **) ast_alloc_array(
+                            parser->X, sizeof(AstNode *), (size_t) field_capacity);
                         if (old_field_capacity > 0 && field_values) {
-                            memcpy(new_values, field_values, sizeof(AstNode *) * (size_t)old_field_capacity);
+                            memcpy(new_values, field_values,
+                                   sizeof(AstNode *) * (size_t) old_field_capacity);
                         }
                         field_values = new_values;
                     }
 
                     xr_parser_consume(parser, TK_NAME, "expected field name in struct literal");
-                    char *fname = (char *)ast_alloc(parser->X, (size_t)parser->previous.length + 1);
+                    char *fname =
+                        (char *) ast_alloc(parser->X, (size_t) parser->previous.length + 1);
                     memcpy(fname, parser->previous.start, parser->previous.length);
                     fname[parser->previous.length] = '\0';
                     field_names[field_count] = fname;
@@ -1227,12 +1263,12 @@ AstNode *xr_parse_variable(Parser *parser) {
 
             xr_parser_consume(parser, TK_RBRACE, "expected '}' to end struct literal");
 
-            AstNode *node = xr_ast_struct_literal(parser->X, name,
-                                                   field_names, field_values,
-                                                   field_count, line);
+            AstNode *node = xr_ast_struct_literal(parser->X, name, field_names, field_values,
+                                                  field_count, line);
             node->column = column;
             // Attach generic type arguments for monomorphization
-            XrType **ta = (XrType **)ast_alloc_array(parser->X, sizeof(XrType *), (size_t)type_arg_count);
+            XrType **ta =
+                (XrType **) ast_alloc_array(parser->X, sizeof(XrType *), (size_t) type_arg_count);
             memcpy(ta, type_args, sizeof(XrType *) * type_arg_count);
             node->as.struct_literal.type_args = ta;
             node->as.struct_literal.type_arg_count = type_arg_count;
@@ -1252,20 +1288,20 @@ AstNode *xr_parse_variable(Parser *parser) {
 
         if (!xr_parser_check(parser, TK_RPAREN)) {
             do {
-                XR_PARSE_PUSH(parser, arguments, arg_count, arg_capacity, xr_parse_expression(parser));
+                XR_PARSE_PUSH(parser, arguments, arg_count, arg_capacity,
+                              xr_parse_expression(parser));
             } while (xr_parser_match(parser, TK_COMMA));
         }
 
         xr_parser_consume(parser, TK_RPAREN, "expected ')' after argument list");
 
-        return xr_ast_call_expr_generic(parser->X, callee, arguments, arg_count,
-                                        type_args, type_arg_count, line);
+        return xr_ast_call_expr_generic(parser->X, callee, arguments, arg_count, type_args,
+                                        type_arg_count, line);
     }
 
     // Check for struct literal: Name{field: value, ...}
     // Conditions: '{' on same line, no leading space, followed by 'name:' pattern
-    if (xr_parser_check(parser, TK_LBRACE) &&
-        !parser->current.has_leading_space &&
+    if (xr_parser_check(parser, TK_LBRACE) && !parser->current.has_leading_space &&
         parser->current.line == line) {
         // Lookahead: check if this is { name: ... } pattern (struct literal)
         // vs block statement (which would have statements, not name:value pairs)
@@ -1275,7 +1311,7 @@ AstNode *xr_parse_variable(Parser *parser) {
         int saved_had_error = parser->had_error;
         int saved_panic_mode = parser->panic_mode;
 
-        parser->panic_mode = 1;  // suppress errors during lookahead
+        parser->panic_mode = 1;     // suppress errors during lookahead
         xr_parser_advance(parser);  // consume '{'
 
         bool is_struct_literal = false;
@@ -1311,23 +1347,26 @@ AstNode *xr_parse_variable(Parser *parser) {
                         int old_field_capacity = field_capacity;
                         field_capacity = field_capacity == 0 ? 4 : field_capacity * 2;
 
-                        char **new_names = (char **)ast_alloc_array(
-                            parser->X, sizeof(char *), (size_t)field_capacity);
+                        char **new_names = (char **) ast_alloc_array(parser->X, sizeof(char *),
+                                                                     (size_t) field_capacity);
                         if (old_field_capacity > 0 && field_names) {
-                            memcpy(new_names, field_names, sizeof(char *) * (size_t)old_field_capacity);
+                            memcpy(new_names, field_names,
+                                   sizeof(char *) * (size_t) old_field_capacity);
                         }
                         field_names = new_names;
 
-                        AstNode **new_values = (AstNode **)ast_alloc_array(
-                            parser->X, sizeof(AstNode *), (size_t)field_capacity);
+                        AstNode **new_values = (AstNode **) ast_alloc_array(
+                            parser->X, sizeof(AstNode *), (size_t) field_capacity);
                         if (old_field_capacity > 0 && field_values) {
-                            memcpy(new_values, field_values, sizeof(AstNode *) * (size_t)old_field_capacity);
+                            memcpy(new_values, field_values,
+                                   sizeof(AstNode *) * (size_t) old_field_capacity);
                         }
                         field_values = new_values;
                     }
 
                     xr_parser_consume(parser, TK_NAME, "expected field name in struct literal");
-                    char *fname = (char *)ast_alloc(parser->X, (size_t)parser->previous.length + 1);
+                    char *fname =
+                        (char *) ast_alloc(parser->X, (size_t) parser->previous.length + 1);
                     memcpy(fname, parser->previous.start, parser->previous.length);
                     fname[parser->previous.length] = '\0';
                     field_names[field_count] = fname;
@@ -1340,9 +1379,8 @@ AstNode *xr_parse_variable(Parser *parser) {
 
             xr_parser_consume(parser, TK_RBRACE, "expected '}' to end struct literal");
 
-            AstNode *node = xr_ast_struct_literal(parser->X, name,
-                                                   field_names, field_values,
-                                                   field_count, line);
+            AstNode *node = xr_ast_struct_literal(parser->X, name, field_names, field_values,
+                                                  field_count, line);
             node->column = column;
             return node;
         }
@@ -1400,8 +1438,7 @@ AstNode *xr_parse_assignment(Parser *parser, AstNode *left) {
 
         AstNode *value = xr_parse_expression(parser);
         return xr_ast_destructure_assign(parser->X, pattern, value, line);
-    }
-    else if (left->type == AST_OBJECT_LITERAL) {
+    } else if (left->type == AST_OBJECT_LITERAL) {
         XrDestructurePattern *pattern = convert_object_literal_to_pattern(parser->X, left);
         if (!pattern) {
             xr_parser_error(parser, "destructure target must be variable list, e.g. {x, y}");
@@ -1413,7 +1450,8 @@ AstNode *xr_parse_assignment(Parser *parser, AstNode *left) {
     }
     // Invalid assignment target
     else {
-        xr_parser_error(parser, "assignment target must be variable, index, member or destructure pattern");
+        xr_parser_error(parser,
+                        "assignment target must be variable, index, member or destructure pattern");
         return NULL;
     }
 }
@@ -1427,7 +1465,8 @@ AstNode *xr_parse_compound_assignment(Parser *parser, AstNode *left) {
         // Variable compound assignment: x += 10
         char *var_name = ast_strdup(parser->X, left->as.variable.name);
         AstNode *right = xr_parse_expression(parser);
-        AstNode *compound_assignment = xr_ast_compound_assignment(parser->X, var_name, op_token, right, line);
+        AstNode *compound_assignment =
+            xr_ast_compound_assignment(parser->X, var_name, op_token, right, line);
         return compound_assignment;
     } else if (left->type == AST_MEMBER_ACCESS) {
         // Member compound assignment: this.field += 10
@@ -1494,7 +1533,8 @@ AstNode *xr_parse_postfix_inc_dec(Parser *parser, AstNode *left) {
 
     // Check if embedded in expression
     if (is_binary_operator(parser->current.type)) {
-        xr_parser_error(parser, "++/-- must be standalone statement, cannot be in expression (e.g. y = x++ or a + x++)");
+        xr_parser_error(parser, "++/-- must be standalone statement, cannot be in expression (e.g. "
+                                "y = x++ or a + x++)");
         return NULL;
     }
 
@@ -1512,10 +1552,10 @@ AstNode *xr_parse_postfix_inc_dec(Parser *parser, AstNode *left) {
 // Parse single variable declaration: let x = 10 or const PI = 3.14
 AstNode *xr_parse_single_var_declaration(Parser *parser, int is_const) {
     xr_parser_consume(parser, TK_NAME, "expected variable name");
-    char *name = (char *)ast_alloc(parser->X, (size_t)parser->previous.length + 1);
+    char *name = (char *) ast_alloc(parser->X, (size_t) parser->previous.length + 1);
     memcpy(name, parser->previous.start, parser->previous.length);
     name[parser->previous.length] = '\0';
-    int line   = parser->previous.line;
+    int line = parser->previous.line;
     int column = parser->previous.column;
     int name_length = parser->previous.length;
 
@@ -1538,10 +1578,10 @@ AstNode *xr_parse_single_var_declaration(Parser *parser, int is_const) {
     node->column = column;
     // End span extends to the initializer when present; otherwise just the name.
     if (initializer && initializer->end_line > 0) {
-        node->end_line   = initializer->end_line;
+        node->end_line = initializer->end_line;
         node->end_column = initializer->end_column;
     } else {
-        node->end_line   = line;
+        node->end_line = line;
         node->end_column = column + name_length;
     }
     node->as.var_decl.type_annotation = type_annotation;
@@ -1557,7 +1597,8 @@ AstNode *xr_parse_block(Parser *parser) {
         // Error recovery to avoid infinite loop
         if (parser->panic_mode) {
             xr_parser_synchronize(parser);
-            if (xr_parser_check(parser, TK_RBRACE) || xr_parser_check(parser, TK_EOF)) break;
+            if (xr_parser_check(parser, TK_RBRACE) || xr_parser_check(parser, TK_EOF))
+                break;
             continue;
         }
 
@@ -1586,13 +1627,12 @@ AstNode *xr_parse_block(Parser *parser) {
         if (xr_parser_check(parser, TK_SEMICOLON)) {
             xr_parser_advance(parser);
         } else {
-            if (!xr_parser_check(parser, TK_RBRACE) &&
-                !xr_parser_check(parser, TK_EOF) &&
-                parser->current.line == stmt_line &&
-                parser->current.type != TK_QUESTION &&
+            if (!xr_parser_check(parser, TK_RBRACE) && !xr_parser_check(parser, TK_EOF) &&
+                parser->current.line == stmt_line && parser->current.type != TK_QUESTION &&
                 parser->current.type != TK_COLON) {
                 if (!xr_parser_check_asi_hint(parser)) {
-                    xr_parser_error_at_current(parser, "multiple statements on same line must be separated by semicolon");
+                    xr_parser_error_at_current(
+                        parser, "multiple statements on same line must be separated by semicolon");
                 }
                 break;
             }
@@ -1601,15 +1641,15 @@ AstNode *xr_parse_block(Parser *parser) {
         // L-06: capture trailing AFTER smart-semicolon advance, then
         // commit the statement to the block.
         if (decl != NULL) {
-            if (parser->previous.trailing_trivia &&
-                !decl->trailing_comments) {
+            if (parser->previous.trailing_trivia && !decl->trailing_comments) {
                 decl->trailing_comments = parser->previous.trailing_trivia;
                 parser->previous.trailing_trivia = NULL;
             }
             xr_ast_block_add(parser->X, block, decl);
         }
 
-        if (parser->had_error) break;
+        if (parser->had_error)
+            break;
     }
 
     xr_parser_consume(parser, TK_RBRACE, "expected '}' to close block");
@@ -1617,11 +1657,10 @@ AstNode *xr_parse_block(Parser *parser) {
     // Record closing `}` location (exclusive end). `parser->previous` now
     // points to the consumed `}`; its column is 1-indexed, so the exclusive
     // end column is column + 1.
-    block->end_line   = parser->previous.line;
+    block->end_line = parser->previous.line;
     block->end_column = parser->previous.column + 1;
 
     return block;
 }
 
 // Control flow parsing moved to xparse_stmt.c
-

@@ -30,11 +30,11 @@ typedef enum {
     XR_VM_OK,
     XR_VM_COMPILE_ERROR,
     XR_VM_RUNTIME_ERROR,
-    XR_VM_BLOCKED,              // Coroutine blocked (waiting on Channel)
-    XR_VM_YIELD,                // Coroutine yielded (preemptive scheduling)
-    XR_VM_DEBUG_BREAK,          // Stopped at breakpoint
-    XR_VM_CANCELLED,            // Coroutine cancelled (sysmon or user cancel)
-    XR_VM_SPAWN_CONT            // Continuation stealing: child ready, parent saved
+    XR_VM_BLOCKED,      // Coroutine blocked (waiting on Channel)
+    XR_VM_YIELD,        // Coroutine yielded (preemptive scheduling)
+    XR_VM_DEBUG_BREAK,  // Stopped at breakpoint
+    XR_VM_CANCELLED,    // Coroutine cancelled (sysmon or user cancel)
+    XR_VM_SPAWN_CONT    // Continuation stealing: child ready, parent saved
 } XrVMResult;
 
 /* ========== VM Call Interface ========== */
@@ -45,10 +45,8 @@ struct XrClosure;
 // Call a script closure from C code.
 // Used by higher-order container methods (map/filter/reduce/forEach).
 // Implementation in vm/xvm.c.
-XR_FUNC XrValue xr_vm_call_closure(struct XrayIsolate *isolate,
-                           struct XrClosure *closure,
-                           XrValue *args,
-                           int nargs);
+XR_FUNC XrValue xr_vm_call_closure(struct XrayIsolate *isolate, struct XrClosure *closure,
+                                   XrValue *args, int nargs);
 
 // Truthy check for higher-order filter methods.
 // Implementation in vm/xvm.c.
@@ -63,4 +61,4 @@ struct XrVMContext;
 // including vm/xvm_internal.h (L5).
 XR_FUNC XrVMResult run(struct XrayIsolate *isolate, struct XrVMContext *vm_ctx);
 
-#endif // XVM_CALL_H
+#endif  // XVM_CALL_H

@@ -39,24 +39,25 @@
 #include "../coro/xtask.h"
 #include "../coro/xdeep_copy.h"
 
-__attribute__((noinline))
-int vm_select_block(XrayIsolate *isolate, XrVMContext *vm_ctx,
-                            XrInstruction instr, XrValue *base,
-                            XrBcCallFrame *frame, XrInstruction *pc) {
+__attribute__((noinline)) int vm_select_block(XrayIsolate *isolate, XrVMContext *vm_ctx,
+                                              XrInstruction instr, XrValue *base,
+                                              XrBcCallFrame *frame, XrInstruction *pc) {
     int base_reg = GETARG_A(instr);
     int ch_count = GETARG_B(instr);
     int case_count = GETARG_C(instr);
 
     XrCoroutine *coro = vm_cold_get_coro(vm_ctx);
-    if (!coro) return VM_COLD_BREAK;
+    if (!coro)
+        return VM_COLD_BREAK;
 
     XrWorker *worker = xr_current_worker();
-    if (!worker) return VM_COLD_BREAK;
+    if (!worker)
+        return VM_COLD_BREAK;
 
-    void **channels = xr_malloc(ch_count * sizeof(void*));
+    void **channels = xr_malloc(ch_count * sizeof(void *));
     XrChannel *timer_ch = NULL;
     int valid_count = 0;
-    (void)valid_count;
+    (void) valid_count;
 
     for (int ci = 0; ci < ch_count; ci++) {
         XrValue ch_val = base[base_reg + ci];
@@ -67,7 +68,8 @@ int vm_select_block(XrayIsolate *isolate, XrVMContext *vm_ctx,
         XrChannel *ch = xr_value_to_channel(ch_val);
         channels[ci] = ch;
         valid_count++;
-        if (atomic_load(&ch->is_timer)) timer_ch = ch;
+        if (atomic_load(&ch->is_timer))
+            timer_ch = ch;
     }
 
     XrSelectWait *sw = xr_malloc(sizeof(XrSelectWait));
@@ -95,7 +97,10 @@ int vm_select_block(XrayIsolate *isolate, XrVMContext *vm_ctx,
     atomic_store(&sw->triggered, false);
 
     for (int ci = 0; ci < ch_count; ci++) {
-        if (channels[ci] == timer_ch) { sw->timer_case_index = ci; break; }
+        if (channels[ci] == timer_ch) {
+            sw->timer_case_index = ci;
+            break;
+        }
     }
 
     coro->select_wait = sw;
@@ -110,7 +115,8 @@ int vm_select_block(XrayIsolate *isolate, XrVMContext *vm_ctx,
         int64_t now_ms = xr_monotonic_ticks();
         int64_t elapsed = now_ms - timer_ch->timer_start_ticks;
         int64_t remaining = timer_ch->timer_timeout_ms - elapsed;
-        if (remaining < 1) remaining = 1;
+        if (remaining < 1)
+            remaining = 1;
         if (worker->p.timer_wheel) {
             if (coro->ext && atomic_load_explicit(&coro->ext->timer_active, memory_order_relaxed)) {
                 xr_twheel_cancel_timer(worker->p.timer_wheel, &coro->ext->timer);
@@ -124,8 +130,9 @@ int vm_select_block(XrayIsolate *isolate, XrVMContext *vm_ctx,
     XrChannelDistHooks *dhooks = isolate ? isolate->channel_dist_hooks : NULL;
     if (dhooks && dhooks->on_select_enter) {
         for (int ci = 0; ci < ch_count; ci++) {
-            if (!channels[ci]) continue;
-            XrChannel *dch = (XrChannel *)channels[ci];
+            if (!channels[ci])
+                continue;
+            XrChannel *dch = (XrChannel *) channels[ci];
             if (dch->dist) {
                 dhooks->on_select_enter(dch);
             }
@@ -139,10 +146,9 @@ int vm_select_block(XrayIsolate *isolate, XrVMContext *vm_ctx,
     return VM_COLD_BLOCKED;
 }
 
-__attribute__((noinline))
-int vm_chan_send_timeout(XrayIsolate *isolate, XrVMContext *vm_ctx,
-                                XrInstruction instr, XrValue *base,
-                                XrBcCallFrame *frame, XrInstruction *pc) {
+__attribute__((noinline)) int vm_chan_send_timeout(XrayIsolate *isolate, XrVMContext *vm_ctx,
+                                                   XrInstruction instr, XrValue *base,
+                                                   XrBcCallFrame *frame, XrInstruction *pc) {
     int a = GETARG_A(instr);
     int b = GETARG_B(instr);
     int c = GETARG_C(instr);
@@ -157,9 +163,12 @@ int vm_chan_send_timeout(XrayIsolate *isolate, XrVMContext *vm_ctx,
     XrValue timeout_val = base[c + 1];
 
     int64_t timeout_ms = 0;
-    if (XR_IS_INT(timeout_val)) timeout_ms = XR_TO_INT(timeout_val);
-    else if (XR_IS_FLOAT(timeout_val)) timeout_ms = (int64_t)XR_TO_FLOAT(timeout_val);
-    if (timeout_ms < 0) timeout_ms = 0;
+    if (XR_IS_INT(timeout_val))
+        timeout_ms = XR_TO_INT(timeout_val);
+    else if (XR_IS_FLOAT(timeout_val))
+        timeout_ms = (int64_t) XR_TO_FLOAT(timeout_val);
+    if (timeout_ms < 0)
+        timeout_ms = 0;
 
     // Try immediate send
     if (xr_channel_try_send(ch, value)) {
@@ -180,7 +189,7 @@ int vm_chan_send_timeout(XrayIsolate *isolate, XrVMContext *vm_ctx,
     if (current) {
         struct timeval now;
         gettimeofday(&now, NULL);
-        int64_t now_us = (int64_t)now.tv_sec * 1000000LL + now.tv_usec;
+        int64_t now_us = (int64_t) now.tv_sec * 1000000LL + now.tv_usec;
 
         if (current->channel_deadline == 0)
             current->channel_deadline = now_us + timeout_ms * 1000LL;
@@ -212,8 +221,8 @@ int vm_chan_send_timeout(XrayIsolate *isolate, XrVMContext *vm_ctx,
     while (1) {
         struct timeval now;
         gettimeofday(&now, NULL);
-        int64_t elapsed_ms = (now.tv_sec - start_time.tv_sec) * 1000 +
-                             (now.tv_usec - start_time.tv_usec) / 1000;
+        int64_t elapsed_ms =
+            (now.tv_sec - start_time.tv_sec) * 1000 + (now.tv_usec - start_time.tv_usec) / 1000;
         if (elapsed_ms >= timeout_ms) {
             base[a] = xr_bool(false);
             break;
@@ -232,10 +241,9 @@ int vm_chan_send_timeout(XrayIsolate *isolate, XrVMContext *vm_ctx,
     return VM_COLD_BREAK;
 }
 
-__attribute__((noinline))
-int vm_chan_recv_timeout(XrayIsolate *isolate, XrVMContext *vm_ctx,
-                                XrInstruction instr, XrValue *base,
-                                XrBcCallFrame *frame, XrInstruction *pc) {
+__attribute__((noinline)) int vm_chan_recv_timeout(XrayIsolate *isolate, XrVMContext *vm_ctx,
+                                                   XrInstruction instr, XrValue *base,
+                                                   XrBcCallFrame *frame, XrInstruction *pc) {
     int a = GETARG_A(instr);
     int b = GETARG_B(instr);
     int c = GETARG_C(instr);
@@ -249,8 +257,10 @@ int vm_chan_recv_timeout(XrayIsolate *isolate, XrVMContext *vm_ctx,
     XrValue timeout_val = base[c];
 
     int64_t timeout_ms = 0;
-    if (XR_IS_INT(timeout_val)) timeout_ms = XR_TO_INT(timeout_val);
-    else if (XR_IS_FLOAT(timeout_val)) timeout_ms = (int64_t)XR_TO_FLOAT(timeout_val);
+    if (XR_IS_INT(timeout_val))
+        timeout_ms = XR_TO_INT(timeout_val);
+    else if (XR_IS_FLOAT(timeout_val))
+        timeout_ms = (int64_t) XR_TO_FLOAT(timeout_val);
 
     // Try immediate receive
     bool ok;
@@ -273,7 +283,7 @@ int vm_chan_recv_timeout(XrayIsolate *isolate, XrVMContext *vm_ctx,
     if (current) {
         struct timeval now;
         gettimeofday(&now, NULL);
-        int64_t now_us = (int64_t)now.tv_sec * 1000000LL + now.tv_usec;
+        int64_t now_us = (int64_t) now.tv_sec * 1000000LL + now.tv_usec;
 
         if (current->channel_deadline == 0)
             current->channel_deadline = now_us + timeout_ms * 1000LL;
@@ -306,8 +316,8 @@ int vm_chan_recv_timeout(XrayIsolate *isolate, XrVMContext *vm_ctx,
     while (1) {
         struct timeval now;
         gettimeofday(&now, NULL);
-        int64_t elapsed_ms = (now.tv_sec - start_time.tv_sec) * 1000 +
-                             (now.tv_usec - start_time.tv_usec) / 1000;
+        int64_t elapsed_ms =
+            (now.tv_sec - start_time.tv_sec) * 1000 + (now.tv_usec - start_time.tv_usec) / 1000;
         if (elapsed_ms >= timeout_ms) {
             base[a] = xr_null();
             break;
@@ -326,4 +336,3 @@ int vm_chan_recv_timeout(XrayIsolate *isolate, XrVMContext *vm_ctx,
     }
     return VM_COLD_BREAK;
 }
-

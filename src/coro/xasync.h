@@ -44,12 +44,12 @@ typedef struct XrAsyncJob {
     int worker_id;
 
     // Task function
-    void (*invoke)(void *data);        // Execute in async thread
+    void (*invoke)(void *data);  // Execute in async thread
     void *data;
 
     // Execution result
     XrValue result;
-    int error;                         // 0 = success
+    int error;  // 0 = success
 } XrAsyncJob;
 
 // ========== Completion Queue (one per Worker) ==========
@@ -103,9 +103,9 @@ XR_FUNC int xr_async_check_ready(XrAsyncPool *pool, int worker_id);
 
 // Create async task
 XR_FUNC XrAsyncJob *xr_async_job_create(struct XrCoroutine *coro, int worker_id,
-                                 void (*invoke)(void *), void *data);
+                                        void (*invoke)(void *), void *data);
 
 // Free async task
 XR_FUNC void xr_async_job_free(XrAsyncJob *job);
 
-#endif // XASYNC_H
+#endif  // XASYNC_H

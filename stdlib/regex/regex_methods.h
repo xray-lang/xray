@@ -35,4 +35,4 @@ extern const XrMethodSlot xr_regex_method_table[SYMBOL_BUILTIN_COUNT];
 }
 #endif
 
-#endif // XRAY_REGEX_METHODS_H
+#endif  // XRAY_REGEX_METHODS_H

@@ -24,11 +24,11 @@ typedef struct XrayIsolate XrayIsolate;
 /* ========== Proxy Config ========== */
 
 typedef struct XrProxyConfig {
-    char *host;             // Proxy host
-    int port;               // Proxy port
-    char *username;         // Username (optional)
-    char *password;         // Password (optional)
-    bool use_connect;       // Use CONNECT method (for HTTPS)
+    char *host;        // Proxy host
+    int port;          // Proxy port
+    char *username;    // Username (optional)
+    char *password;    // Password (optional)
+    bool use_connect;  // Use CONNECT method (for HTTPS)
 } XrProxyConfig;
 
 /* ========== API ========== */
@@ -36,7 +36,7 @@ typedef struct XrProxyConfig {
 /*
  * Parse proxy URL
  * Format: http://[user:pass@]host:port
- * 
+ *
  * Returns: 0 on success, -1 on failure
  */
 XR_FUNC int xr_proxy_parse(const char *proxy_url, XrProxyConfig *out);
@@ -50,14 +50,14 @@ XR_FUNC void xr_proxy_config_free(XrProxyConfig *config);
  * Build proxy auth header (Base64 encoded)
  * Returns: newly allocated string (caller must free)
  */
-XR_FUNC char* xr_proxy_auth_header(const char *username, const char *password);
+XR_FUNC char *xr_proxy_auth_header(const char *username, const char *password);
 
 /*
  * Build CONNECT request (for HTTPS proxy)
  * Returns: newly allocated string (caller must free)
  */
-XR_FUNC char* xr_proxy_connect_request(const char *target_host, int target_port,
-                                const char *proxy_auth);
+XR_FUNC char *xr_proxy_connect_request(const char *target_host, int target_port,
+                                       const char *proxy_auth);
 
 /*
  * Parse CONNECT response
@@ -75,7 +75,7 @@ XR_FUNC void xr_set_proxy(XrayIsolate *X, const char *proxy_url);
 /*
  * Get proxy config
  */
-XR_FUNC XrProxyConfig* xr_get_proxy(XrayIsolate *X);
+XR_FUNC XrProxyConfig *xr_get_proxy(XrayIsolate *X);
 
 /*
  * Clear proxy

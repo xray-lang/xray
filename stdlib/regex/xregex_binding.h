@@ -70,7 +70,7 @@
  *   - text                       Matched text
  *   - groups                     Capture group array (groups[0] is full match)
  */
-XrModule* xr_load_module_regex(XrayIsolate *isolate);
+XrModule *xr_load_module_regex(XrayIsolate *isolate);
 
 /*
  * Wrap XrRegex as XrValue (GC-managed XrRegexObject)
@@ -90,14 +90,13 @@ void xr_regex_init_native_type(XrayIsolate *isolate);
 bool xr_value_is_regex(XrValue v);
 
 // Get Regex pointer
-XrRegex* xr_value_to_regex(XrValue v);
+XrRegex *xr_value_to_regex(XrValue v);
 
 /*
  * Build a Json match result with shape { start, end, text, groups }.
  * Lifted from a static helper so stdlib/regex/regex_methods.c can
  * reuse the exact same shape used by the legacy native-type binding.
  */
-XrValue xr_regex_make_match_object(XrayIsolate *isolate, const char *text,
-                                   XrMatch *match);
+XrValue xr_regex_make_match_object(XrayIsolate *isolate, const char *text, XrMatch *match);
 
-#endif // XREGEX_BINDING_H
+#endif  // XREGEX_BINDING_H

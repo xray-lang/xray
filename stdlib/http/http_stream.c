@@ -34,9 +34,11 @@
 
 static XrConnPool *stream_get_pool(void) {
     struct XrayIsolate *X = xr_io_get_isolate();
-    if (!X) return NULL;
+    if (!X)
+        return NULL;
     XrHttpContext *ctx = xr_http_get_context(X);
-    if (!ctx) return NULL;
+    if (!ctx)
+        return NULL;
     if (!ctx->conn_pool) {
         ctx->conn_pool = xr_conn_pool_new();
     }
@@ -50,10 +52,11 @@ static int write_all(int fd, const char *buf, size_t len) {
     while (off < len) {
         ssize_t n = write(fd, buf + off, len - off);
         if (n < 0) {
-            if (errno == EINTR) continue;
+            if (errno == EINTR)
+                continue;
             return -1;
         }
-        off += (size_t)n;
+        off += (size_t) n;
     }
     return 0;
 }
@@ -61,17 +64,16 @@ static int write_all(int fd, const char *buf, size_t len) {
 /* ========== API Implementation ========== */
 
 void xr_stream_config_init(XrStreamConfig *config) {
-    if (!config) return;
+    if (!config)
+        return;
     memset(config, 0, sizeof(XrStreamConfig));
     config->buffer_size = DEFAULT_BUFFER_SIZE;
     config->timeout_ms = 30000;
     config->follow_redirects = true;
 }
 
-XrStreamResult xr_http_download(const char *url,
-                                 const char *output_path,
-                                 XrHttpProgressCallback on_progress,
-                                 void *user_data) {
+XrStreamResult xr_http_download(const char *url, const char *output_path,
+                                XrHttpProgressCallback on_progress, void *user_data) {
     XrStreamConfig config;
     xr_stream_config_init(&config);
     config.url = url;
@@ -102,7 +104,7 @@ XrStreamResult xr_http_stream(const XrStreamConfig *config) {
 
     XrConnPool *pool = NULL;
     XrPooledConn *conn = NULL;
-    int out_fd = -1;        // POSIX fd for output file
+    int out_fd = -1;  // POSIX fd for output file
     char *buffer = NULL;
 
     // --- Output file (POSIX fd, not FILE*) ---
@@ -126,7 +128,7 @@ XrStreamResult xr_http_stream(const XrStreamConfig *config) {
         goto cleanup;
     }
 
-    conn = xr_conn_pool_get(pool, url.host, (uint16_t)url.port, url.is_https);
+    conn = xr_conn_pool_get(pool, url.host, (uint16_t) url.port, url.is_https);
     if (!conn) {
         result.error = XR_HTTP_ERR_CONNECT;
         result.error_msg = xr_strdup("Connection failed");
@@ -150,8 +152,7 @@ XrStreamResult xr_http_stream(const XrStreamConfig *config) {
         // Range header (resume download)
         if (config->range_start > 0 || config->range_end > 0) {
             if (config->range_end > 0) {
-                p += sprintf(p, "Range: bytes=%zu-%zu\r\n",
-                            config->range_start, config->range_end);
+                p += sprintf(p, "Range: bytes=%zu-%zu\r\n", config->range_start, config->range_end);
             } else {
                 p += sprintf(p, "Range: bytes=%zu-\r\n", config->range_start);
             }
@@ -159,7 +160,7 @@ XrStreamResult xr_http_stream(const XrStreamConfig *config) {
 
         p += sprintf(p, "\r\n");
 
-        size_t req_len = (size_t)(p - request);
+        size_t req_len = (size_t) (p - request);
         if (xr_pooled_conn_write(conn, request, req_len) < 0) {
             result.error = XR_HTTP_ERR_SEND;
             result.error_msg = xr_strdup("Send failed");
@@ -168,9 +169,8 @@ XrStreamResult xr_http_stream(const XrStreamConfig *config) {
     }
 
     // --- Allocate I/O buffer ---
-    size_t buf_size = config->buffer_size > 0
-                      ? config->buffer_size : DEFAULT_BUFFER_SIZE;
-    buffer = (char *)xr_malloc(buf_size);
+    size_t buf_size = config->buffer_size > 0 ? config->buffer_size : DEFAULT_BUFFER_SIZE;
+    buffer = (char *) xr_malloc(buf_size);
     if (!buffer) {
         result.error = XR_HTTP_ERR_MEMORY;
         result.error_msg = xr_strdup("Memory allocation failed");
@@ -180,7 +180,7 @@ XrStreamResult xr_http_stream(const XrStreamConfig *config) {
     // --- Receive response headers ---
     {
         size_t hdr_cap = 8192;
-        char *hdr_buf = (char *)xr_malloc(hdr_cap);
+        char *hdr_buf = (char *) xr_malloc(hdr_cap);
         if (!hdr_buf) {
             result.error = XR_HTTP_ERR_MEMORY;
             result.error_msg = xr_strdup("Memory allocation failed");
@@ -190,10 +190,10 @@ XrStreamResult xr_http_stream(const XrStreamConfig *config) {
         const char *body_start = NULL;
 
         while (!body_start && hdr_len < hdr_cap - 1) {
-            int n = xr_pooled_conn_read(conn, hdr_buf + hdr_len,
-                                         hdr_cap - hdr_len - 1);
-            if (n <= 0) break;
-            hdr_len += (size_t)n;
+            int n = xr_pooled_conn_read(conn, hdr_buf + hdr_len, hdr_cap - hdr_len - 1);
+            if (n <= 0)
+                break;
+            hdr_len += (size_t) n;
             hdr_buf[hdr_len] = '\0';
             body_start = xr_http_find_header_end(hdr_buf, hdr_len);
         }
@@ -217,20 +217,19 @@ XrStreamResult xr_http_stream(const XrStreamConfig *config) {
         }
 
         // Content-Length
-        long long cl = xr_http_parse_content_length(
-                            hdr_buf, (size_t)(body_start - hdr_buf));
-        result.total_size = cl > 0 ? (size_t)cl : 0;
+        long long cl = xr_http_parse_content_length(hdr_buf, (size_t) (body_start - hdr_buf));
+        result.total_size = cl > 0 ? (size_t) cl : 0;
 
         // Body bytes that arrived together with the headers
-        size_t body_in_hdr = hdr_len - (size_t)(body_start - hdr_buf);
+        size_t body_in_hdr = hdr_len - (size_t) (body_start - hdr_buf);
         if (body_in_hdr > 0) {
-            if (out_fd >= 0) write_all(out_fd, body_start, body_in_hdr);
+            if (out_fd >= 0)
+                write_all(out_fd, body_start, body_in_hdr);
             if (config->on_data)
                 config->on_data(body_start, body_in_hdr, config->user_data);
             result.downloaded = body_in_hdr;
             if (config->on_progress)
-                config->on_progress(result.downloaded, result.total_size,
-                                    config->user_data);
+                config->on_progress(result.downloaded, result.total_size, config->user_data);
         }
 
         xr_free(hdr_buf);
@@ -239,42 +238,42 @@ XrStreamResult xr_http_stream(const XrStreamConfig *config) {
     // --- Stream body ---
     while (1) {
         int n = xr_pooled_conn_read(conn, buffer, buf_size);
-        if (n <= 0) break;
+        if (n <= 0)
+            break;
 
-        if (out_fd >= 0) write_all(out_fd, buffer, (size_t)n);
+        if (out_fd >= 0)
+            write_all(out_fd, buffer, (size_t) n);
         if (config->on_data) {
-            if (config->on_data(buffer, (size_t)n, config->user_data) != 0)
+            if (config->on_data(buffer, (size_t) n, config->user_data) != 0)
                 break;  // Callback returning non-0 → cancel
         }
 
-        result.downloaded += (size_t)n;
+        result.downloaded += (size_t) n;
 
         if (config->on_progress)
-            config->on_progress(result.downloaded, result.total_size,
-                                config->user_data);
+            config->on_progress(result.downloaded, result.total_size, config->user_data);
 
         if (result.total_size > 0 && result.downloaded >= result.total_size)
             break;
     }
 
-    result.completed = (result.total_size == 0) ||
-                       (result.downloaded >= result.total_size);
+    result.completed = (result.total_size == 0) || (result.downloaded >= result.total_size);
     result.error = XR_HTTP_OK;
 
 cleanup:
     // Connection: close — don't return to pool, just close.
-    if (conn && pool) xr_conn_pool_close(pool, conn);
-    if (out_fd >= 0) close(out_fd);
+    if (conn && pool)
+        xr_conn_pool_close(pool, conn);
+    if (out_fd >= 0)
+        close(out_fd);
     xr_free(buffer);
     xr_http_url_free(&url);
 
     return result;
 }
 
-XrStreamResult xr_http_resume_download(const char *url,
-                                        const char *output_path,
-                                        XrHttpProgressCallback on_progress,
-                                        void *user_data) {
+XrStreamResult xr_http_resume_download(const char *url, const char *output_path,
+                                       XrHttpProgressCallback on_progress, void *user_data) {
     XrStreamConfig config;
     xr_stream_config_init(&config);
     config.url = url;
@@ -285,7 +284,7 @@ XrStreamResult xr_http_resume_download(const char *url,
     // Check local file size for Range header
     struct stat st;
     if (stat(output_path, &st) == 0 && st.st_size > 0) {
-        config.range_start = (size_t)st.st_size;
+        config.range_start = (size_t) st.st_size;
     }
 
     return xr_http_stream(&config);
@@ -313,7 +312,8 @@ long long xr_http_get_content_length(XrayIsolate *X, const char *url) {
 }
 
 void xr_stream_result_free(XrStreamResult *result) {
-    if (!result) return;
+    if (!result)
+        return;
     xr_free(result->error_msg);
     result->error_msg = NULL;
 }

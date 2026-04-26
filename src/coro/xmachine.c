@@ -26,8 +26,9 @@
 
 XrMachine *xr_machine_alloc(struct XrRuntime *runtime, int id) {
     XR_DCHECK(runtime != NULL, "machine_alloc: NULL runtime");
-    XrMachine *m = (XrMachine *)xr_calloc(1, sizeof(XrMachine));
-    if (!m) return NULL;
+    XrMachine *m = (XrMachine *) xr_calloc(1, sizeof(XrMachine));
+    if (!m)
+        return NULL;
     xr_machine_init(m, id, runtime);
     return m;
 }
@@ -75,7 +76,8 @@ void xr_machine_init(XrMachine *m, int id, struct XrRuntime *runtime) {
 }
 
 void xr_machine_destroy(XrMachine *m) {
-    if (!m) return;
+    if (!m)
+        return;
 
     // Free string buffer
     if (m->vm_ctx.tmp_strbuf) {
@@ -84,7 +86,7 @@ void xr_machine_destroy(XrMachine *m) {
     }
 
     // Futex-based park: no resources to destroy
-    (void)m;
+    (void) m;
 }
 
 // ========== M Park/Unpark ==========
@@ -119,15 +121,16 @@ void xr_unpark_m(XrMachine *m) {
 // is on idle_m_head only after handoff has unbound it from its Worker
 // (see xr_handoff_thread_entry).
 XrMachine *xr_get_idle_m(struct XrRuntime *runtime) {
-    if (!runtime) return NULL;
+    if (!runtime)
+        return NULL;
 
     for (int retry = 0; retry < 8; retry++) {
         XrMachine *head = atomic_load_explicit(&runtime->idle_m_head, memory_order_acquire);
-        if (!head) return NULL;
+        if (!head)
+            return NULL;
         XrMachine *next = head->idle_link;
-        if (atomic_compare_exchange_weak_explicit(
-                &runtime->idle_m_head, &head, next,
-                memory_order_acq_rel, memory_order_acquire)) {
+        if (atomic_compare_exchange_weak_explicit(&runtime->idle_m_head, &head, next,
+                                                  memory_order_acq_rel, memory_order_acquire)) {
             head->idle_link = NULL;
             atomic_fetch_sub_explicit(&runtime->idle_m_count, 1, memory_order_relaxed);
             return head;
@@ -137,7 +140,8 @@ XrMachine *xr_get_idle_m(struct XrRuntime *runtime) {
 }
 
 void xr_put_idle_m(struct XrRuntime *runtime, XrMachine *m) {
-    if (!runtime || !m) return;
+    if (!runtime || !m)
+        return;
 
     atomic_store(&m->state, M_PARKED);
 
@@ -145,9 +149,8 @@ void xr_put_idle_m(struct XrRuntime *runtime, XrMachine *m) {
     do {
         head = atomic_load_explicit(&runtime->idle_m_head, memory_order_relaxed);
         m->idle_link = head;
-    } while (!atomic_compare_exchange_weak_explicit(
-        &runtime->idle_m_head, &head, m,
-        memory_order_release, memory_order_relaxed));
+    } while (!atomic_compare_exchange_weak_explicit(&runtime->idle_m_head, &head, m,
+                                                    memory_order_release, memory_order_relaxed));
     atomic_fetch_add_explicit(&runtime->idle_m_count, 1, memory_order_relaxed);
 }
 
@@ -155,9 +158,11 @@ void xr_put_idle_m(struct XrRuntime *runtime, XrMachine *m) {
 // If an idle M exists, start a handoff thread for it.
 // Otherwise, allocate a new M and start its handoff thread.
 void xr_startm(struct XrProc *p, bool spinning) {
-    if (!p) return;
+    if (!p)
+        return;
     struct XrRuntime *runtime = p->runtime;
-    if (!runtime) return;
+    if (!runtime)
+        return;
 
     // Try to get an idle M
     XrMachine *m = xr_get_idle_m(runtime);

@@ -40,10 +40,12 @@ void xcgen_struct_registry_init(XcgenStructRegistry *reg) {
 /* ========== Symbol-ID Lookup Table ========== */
 
 static int cmp_field_entry(const void *a, const void *b) {
-    const XcgenFieldEntry *ea = (const XcgenFieldEntry *)a;
-    const XcgenFieldEntry *eb = (const XcgenFieldEntry *)b;
-    if (ea->symbol_id < eb->symbol_id) return -1;
-    if (ea->symbol_id > eb->symbol_id) return  1;
+    const XcgenFieldEntry *ea = (const XcgenFieldEntry *) a;
+    const XcgenFieldEntry *eb = (const XcgenFieldEntry *) b;
+    if (ea->symbol_id < eb->symbol_id)
+        return -1;
+    if (ea->symbol_id > eb->symbol_id)
+        return 1;
     return 0;
 }
 
@@ -53,31 +55,36 @@ static void rebuild_field_entries(XcgenStructRegistry *reg) {
     for (int si = 0; si < reg->nstructs; si++) {
         XcgenStruct *st = &reg->structs[si];
         for (int fi = 0; fi < st->field_count; fi++) {
-            if (reg->nfield_entries >= XCGEN_MAX_FIELD_ENTRIES) break;
+            if (reg->nfield_entries >= XCGEN_MAX_FIELD_ENTRIES)
+                break;
             XcgenFieldEntry *e = &reg->field_entries[reg->nfield_entries++];
-            e->symbol_id  = st->fields[fi].symbol_id;
-            e->struct_idx = (uint8_t)si;
-            e->field_idx  = (uint8_t)fi;
+            e->symbol_id = st->fields[fi].symbol_id;
+            e->struct_idx = (uint8_t) si;
+            e->field_idx = (uint8_t) fi;
         }
     }
-    qsort(reg->field_entries, reg->nfield_entries,
-          sizeof(XcgenFieldEntry), cmp_field_entry);
+    qsort(reg->field_entries, reg->nfield_entries, sizeof(XcgenFieldEntry), cmp_field_entry);
 }
 
 void xcgen_rebuild_field_index(XcgenStructRegistry *reg) {
-    if (reg) rebuild_field_entries(reg);
+    if (reg)
+        rebuild_field_entries(reg);
 }
 
-const XcgenFieldEntry *xcgen_find_field_by_symbol(
-        const XcgenStructRegistry *reg, uint32_t symbol_id) {
-    if (!reg || reg->nfield_entries == 0) return NULL;
+const XcgenFieldEntry *xcgen_find_field_by_symbol(const XcgenStructRegistry *reg,
+                                                  uint32_t symbol_id) {
+    if (!reg || reg->nfield_entries == 0)
+        return NULL;
     int lo = 0, hi = reg->nfield_entries - 1;
     while (lo <= hi) {
         int mid = (lo + hi) / 2;
         uint32_t mid_sym = reg->field_entries[mid].symbol_id;
-        if (mid_sym == symbol_id) return &reg->field_entries[mid];
-        if (mid_sym < symbol_id) lo = mid + 1;
-        else                     hi = mid - 1;
+        if (mid_sym == symbol_id)
+            return &reg->field_entries[mid];
+        if (mid_sym < symbol_id)
+            lo = mid + 1;
+        else
+            hi = mid - 1;
     }
     return NULL;
 }
@@ -85,28 +92,34 @@ const XcgenFieldEntry *xcgen_find_field_by_symbol(
 /* ========== Promotability Check ========== */
 
 bool xcgen_shape_promotable(XrShape *shape) {
-    if (!shape) return false;
+    if (!shape)
+        return false;
     // Must have at least one field
-    if (shape->field_count == 0) return false;
+    if (shape->field_count == 0)
+        return false;
     // Too many fields
-    if (shape->field_count > XCGEN_MAX_STRUCT_FIELDS) return false;
+    if (shape->field_count > XCGEN_MAX_STRUCT_FIELDS)
+        return false;
     return true;
 }
 
 /* ========== Registry Lookup ========== */
 
 int xcgen_find_struct(XcgenStructRegistry *reg, void *shape_ptr) {
-    if (!reg || !shape_ptr) return -1;
+    if (!reg || !shape_ptr)
+        return -1;
     for (int i = 0; i < reg->nstructs; i++) {
-        if (reg->structs[i].shape_ptr == shape_ptr) return i;
+        if (reg->structs[i].shape_ptr == shape_ptr)
+            return i;
     }
     return -1;
 }
 
 int xcgen_field_by_offset(XcgenStruct *st, int64_t byte_offset) {
-    if (!st) return -1;
+    if (!st)
+        return -1;
     for (int i = 0; i < st->field_count; i++) {
-        if (st->fields[i].original_offset == (uint16_t)byte_offset)
+        if (st->fields[i].original_offset == (uint16_t) byte_offset)
             return i;
     }
     return -1;
@@ -120,46 +133,62 @@ static uint8_t infer_from_backward_scan(XrProto *proto, uint32_t from_pc, int rc
     // Fast path: check param_types for declared parameter type
     if (proto->param_types && rc >= 0 && rc < proto->param_types_count && proto->param_types[rc]) {
         uint8_t gc = xr_type_to_slot_type(proto->param_types[rc]);
-        if (gc == XR_SLOT_F64) return XR_REP_F64;
-        if (gc == XR_SLOT_I64) return XR_REP_I64;
+        if (gc == XR_SLOT_F64)
+            return XR_REP_F64;
+        if (gc == XR_SLOT_I64)
+            return XR_REP_I64;
     }
 
-    for (int32_t pc = (int32_t)from_pc - 1; pc >= 0 && pc > (int32_t)from_pc - 64; pc--) {
-        XrInstruction inst = PROTO_CODE(proto, (uint32_t)pc);
+    for (int32_t pc = (int32_t) from_pc - 1; pc >= 0 && pc > (int32_t) from_pc - 64; pc--) {
+        XrInstruction inst = PROTO_CODE(proto, (uint32_t) pc);
         OpCode op = GET_OPCODE(inst);
         int a = GETARG_A(inst);
-        if (a != rc) continue;
+        if (a != rc)
+            continue;
 
         switch (op) {
             case OP_LOADF:
-            case OP_MULK: case OP_DIVK: case OP_ADDK: case OP_SUBK:
+            case OP_MULK:
+            case OP_DIVK:
+            case OP_ADDK:
+            case OP_SUBK:
                 return XR_REP_F64;
             case OP_LOADI:
-            case OP_ADDI: case OP_SUBI: case OP_MULI:
+            case OP_ADDI:
+            case OP_SUBI:
+            case OP_MULI:
                 return XR_REP_I64;
             case OP_LOADK: {
                 int bx = GETARG_Bx(inst);
-                if (bx >= 0 && bx < (int)VALUEARRAY_COUNT(&proto->constants)) {
-                    XrValue cv = VALUEARRAY_GET(&proto->constants, (uint32_t)bx);
-                    if (XR_IS_FLOAT(cv)) return XR_REP_F64;
-                    if (XR_IS_INT(cv))   return XR_REP_I64;
+                if (bx >= 0 && bx < (int) VALUEARRAY_COUNT(&proto->constants)) {
+                    XrValue cv = VALUEARRAY_GET(&proto->constants, (uint32_t) bx);
+                    if (XR_IS_FLOAT(cv))
+                        return XR_REP_F64;
+                    if (XR_IS_INT(cv))
+                        return XR_REP_I64;
                 }
                 return XR_REP_TAGGED;
             }
-            case OP_ADD: case OP_SUB: case OP_MUL: case OP_DIV: case OP_MOD: {
+            case OP_ADD:
+            case OP_SUB:
+            case OP_MUL:
+            case OP_DIV:
+            case OP_MOD: {
                 // Use inst_types[pc] for arithmetic result type
-                if (proto->inst_types && (uint32_t)pc < proto->inst_types_count
-                    && proto->inst_types[pc]) {
+                if (proto->inst_types && (uint32_t) pc < proto->inst_types_count &&
+                    proto->inst_types[pc]) {
                     uint8_t gc = xr_type_to_slot_type(proto->inst_types[pc]);
-                    if (gc == XR_SLOT_F64) return XR_REP_F64;
-                    if (gc == XR_SLOT_I64) return XR_REP_I64;
+                    if (gc == XR_SLOT_F64)
+                        return XR_REP_F64;
+                    if (gc == XR_SLOT_I64)
+                        return XR_REP_I64;
                 }
                 return XR_REP_TAGGED;
             }
             case OP_MOVE: {
                 // Use inst_types for MOVE source type, or recurse
                 int src = GETARG_B(inst);
-                return infer_from_backward_scan(proto, (uint32_t)pc, src);
+                return infer_from_backward_scan(proto, (uint32_t) pc, src);
             }
             default:
                 break;
@@ -171,7 +200,7 @@ static uint8_t infer_from_backward_scan(XrProto *proto, uint32_t from_pc, int rc
 // Infer field type from JSON_INIT instruction sequence after NEWJSON
 // Scans up to 64 instructions after newjson_pc to find JSON_INIT for field_idx
 static uint8_t infer_field_type(XrProto *proto, uint32_t newjson_pc, int field_idx) {
-    uint32_t code_count = (uint32_t)proto->code.count;
+    uint32_t code_count = (uint32_t) proto->code.count;
     int a_reg = GETARG_A(PROTO_CODE(proto, newjson_pc));
 
     for (uint32_t pc = newjson_pc + 1; pc < code_count && pc < newjson_pc + 64; pc++) {
@@ -192,8 +221,8 @@ static uint8_t infer_field_type(XrProto *proto, uint32_t newjson_pc, int field_i
         }
 
         // If we hit another NEWJSON or a control flow instruction, stop scanning
-        if (op == OP_NEWJSON || op == OP_JMP || op == OP_RETURN ||
-            op == OP_RETURN0 || op == OP_RETURN1)
+        if (op == OP_NEWJSON || op == OP_JMP || op == OP_RETURN || op == OP_RETURN0 ||
+            op == OP_RETURN1)
             break;
     }
     return XR_REP_TAGGED;  // default: keep as XrtValue
@@ -202,19 +231,26 @@ static uint8_t infer_field_type(XrProto *proto, uint32_t newjson_pc, int field_i
 // Map XIR type to C type index: 0=int64_t, 1=double, 2=XrtValue
 static uint8_t xir_type_to_c_type(uint8_t xir_type) {
     switch (xir_type) {
-        case XR_REP_I64: return 0;
-        case XR_REP_F64: return 1;
-        default:           return 2;
+        case XR_REP_I64:
+            return 0;
+        case XR_REP_F64:
+            return 1;
+        default:
+            return 2;
     }
 }
 
 // Map C type index to byte size
 static int c_type_size(uint8_t c_type) {
     switch (c_type) {
-        case 0: return 8;   // int64_t
-        case 1: return 8;   // double
-        case 2: return 16;  // XrtValue
-        default: return 8;
+        case 0:
+            return 8;  // int64_t
+        case 1:
+            return 8;  // double
+        case 2:
+            return 16;  // XrtValue
+        default:
+            return 8;
     }
 }
 
@@ -226,8 +262,8 @@ static void make_c_safe_name(char *dst, size_t dst_size, const char *src) {
     size_t i = 0;
     for (; src[i] && i + 1 < dst_size; i++) {
         char c = src[i];
-        if ((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') ||
-            (c >= '0' && c <= '9') || c == '_') {
+        if ((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') ||
+            c == '_') {
             dst[i] = c;
         } else {
             dst[i] = '_';
@@ -239,18 +275,19 @@ static void make_c_safe_name(char *dst, size_t dst_size, const char *src) {
 /* ========== Register a Struct ========== */
 
 static bool xcgen_register_struct(XcgenStructRegistry *reg, XrShape *shape, void *isolate) {
-    if (reg->nstructs >= XCGEN_MAX_STRUCTS) return false;
+    if (reg->nstructs >= XCGEN_MAX_STRUCTS)
+        return false;
 
     XcgenStruct *st = &reg->structs[reg->nstructs];
     memset(st, 0, sizeof(*st));
-    st->shape_ptr = (void *)shape;
+    st->shape_ptr = (void *) shape;
     st->field_count = shape->field_count;
     st->all_native = true;
 
     // Resolve field names from SymbolId
     for (int i = 0; i < shape->field_count; i++) {
         SymbolId sym = shape->field_symbols[i];
-        const char *name = xr_symbol_get_name_by_id(isolate, (int)sym);
+        const char *name = xr_symbol_get_name_by_id(isolate, (int) sym);
 
         // Allocate a copy of the C-safe name
         char safe_name[64];
@@ -260,16 +297,15 @@ static bool xcgen_register_struct(XcgenStructRegistry *reg, XrShape *shape, void
             snprintf(safe_name, sizeof(safe_name), "f%d", i);
         }
         st->fields[i].name = strdup(safe_name);
-        st->fields[i].symbol_id = (uint32_t)sym;
+        st->fields[i].symbol_id = (uint32_t) sym;
 
         // Default type: will be refined by infer_field_type later
         st->fields[i].xir_type = XR_REP_TAGGED;
-        st->fields[i].c_type = 2;         // XrtValue (layout preserved)
+        st->fields[i].c_type = 2;                     // XrtValue (layout preserved)
         st->fields[i].val_hint_type = XR_REP_TAGGED;  // semantic hint, set later
 
         // Original byte offset in Json layout
-        st->fields[i].original_offset = (uint16_t)(XIR_JSON_FIELDS_OFFSET +
-                                                     i * XIR_XRVALUE_SIZE);
+        st->fields[i].original_offset = (uint16_t) (XIR_JSON_FIELDS_OFFSET + i * XIR_XRVALUE_SIZE);
     }
 
     // Generate C struct type name from shape id
@@ -285,28 +321,34 @@ static bool xcgen_register_struct(XcgenStructRegistry *reg, XrShape *shape, void
 /* ========== Collect Shapes from Proto ========== */
 
 void xcgen_collect_shapes(XrProto *proto, XcgenStructRegistry *reg, void *isolate) {
-    if (!proto || !reg) return;
+    if (!proto || !reg)
+        return;
 
-    uint32_t code_count = (uint32_t)proto->code.count;
+    uint32_t code_count = (uint32_t) proto->code.count;
     for (uint32_t pc = 0; pc < code_count; pc++) {
         XrInstruction inst = PROTO_CODE(proto, pc);
-        if (GET_OPCODE(inst) != OP_NEWJSON) continue;
+        if (GET_OPCODE(inst) != OP_NEWJSON)
+            continue;
 
         int storage_mode = GETARG_C(inst);
-        if (storage_mode != 0) continue;  // only normal mode
+        if (storage_mode != 0)
+            continue;  // only normal mode
 
         int bx = GETARG_B(inst);
         XrValue shape_val = PROTO_CONST_FAST(proto, bx);
-        XrShape *shape = (XrShape *)(intptr_t)XR_TO_INT(shape_val);
+        XrShape *shape = (XrShape *) (intptr_t) XR_TO_INT(shape_val);
 
         // Already registered?
-        if (xcgen_find_struct(reg, (void *)shape) >= 0) continue;
+        if (xcgen_find_struct(reg, (void *) shape) >= 0)
+            continue;
 
         // Check promotability
-        if (!xcgen_shape_promotable(shape)) continue;
+        if (!xcgen_shape_promotable(shape))
+            continue;
 
         // Register the struct
-        if (!xcgen_register_struct(reg, shape, isolate)) continue;
+        if (!xcgen_register_struct(reg, shape, isolate))
+            continue;
 
         int si = reg->nstructs - 1;
         XcgenStruct *st = &reg->structs[si];
@@ -328,7 +370,7 @@ void xcgen_collect_shapes(XrProto *proto, XcgenStructRegistry *reg, void *isolat
                 if (ct == XR_COMPACT_FLOAT64 || ct == XR_COMPACT_FLOAT32) {
                     xir_type = XR_REP_F64;
                 } else if (ct == XR_COMPACT_INT32 || ct == XR_COMPACT_INT64 ||
-                           ct == XR_COMPACT_BOOL  || ct == XR_COMPACT_UINT8  ||
+                           ct == XR_COMPACT_BOOL || ct == XR_COMPACT_UINT8 ||
                            ct == XR_COMPACT_UINT16 || ct == XR_COMPACT_UINT32) {
                     xir_type = XR_REP_I64;
                 } else {
@@ -345,31 +387,30 @@ void xcgen_collect_shapes(XrProto *proto, XcgenStructRegistry *reg, void *isolat
             uint8_t hint = xir_type;
             if (hint == XR_REP_TAGGED) {
                 // Try OP_LOADK-aware scan for better semantic type hint
-                uint32_t code_count = (uint32_t)proto->code.count;
+                uint32_t code_count = (uint32_t) proto->code.count;
                 int a_reg = GETARG_A(PROTO_CODE(proto, pc));
-                for (uint32_t hpc = pc + 1;
-                     hpc < code_count && hpc < pc + 64; hpc++) {
+                for (uint32_t hpc = pc + 1; hpc < code_count && hpc < pc + 64; hpc++) {
                     XrInstruction hinst = PROTO_CODE(proto, hpc);
                     OpCode hop = GET_OPCODE(hinst);
-                    if (hop == OP_NEWJSON || hop == OP_JMP ||
-                        hop == OP_RETURN || hop == OP_RETURN0 ||
-                        hop == OP_RETURN1) break;
-                    if (hop == OP_JSON_INIT && GETARG_A(hinst) == a_reg
-                        && GETARG_B(hinst) == fi) {
+                    if (hop == OP_NEWJSON || hop == OP_JMP || hop == OP_RETURN ||
+                        hop == OP_RETURN0 || hop == OP_RETURN1)
+                        break;
+                    if (hop == OP_JSON_INIT && GETARG_A(hinst) == a_reg && GETARG_B(hinst) == fi) {
                         int rc = GETARG_C(hinst);
                         // Try LOADK scan for this register
-                        for (int32_t hpc2 = (int32_t)hpc - 1;
-                             hpc2 >= 0 && hpc2 > (int32_t)hpc - 64; hpc2--) {
-                            XrInstruction h2 = PROTO_CODE(proto, (uint32_t)hpc2);
-                            if (GETARG_A(h2) != rc) continue;
+                        for (int32_t hpc2 = (int32_t) hpc - 1;
+                             hpc2 >= 0 && hpc2 > (int32_t) hpc - 64; hpc2--) {
+                            XrInstruction h2 = PROTO_CODE(proto, (uint32_t) hpc2);
+                            if (GETARG_A(h2) != rc)
+                                continue;
                             if (GET_OPCODE(h2) == OP_LOADK) {
                                 int bx = GETARG_Bx(h2);
-                                if (bx >= 0 && bx < (int)VALUEARRAY_COUNT(
-                                        &proto->constants)) {
-                                    XrValue cv = VALUEARRAY_GET(
-                                        &proto->constants, (uint32_t)bx);
-                                    if (XR_IS_FLOAT(cv)) hint = XR_REP_F64;
-                                    else if (XR_IS_INT(cv)) hint = XR_REP_I64;
+                                if (bx >= 0 && bx < (int) VALUEARRAY_COUNT(&proto->constants)) {
+                                    XrValue cv = VALUEARRAY_GET(&proto->constants, (uint32_t) bx);
+                                    if (XR_IS_FLOAT(cv))
+                                        hint = XR_REP_F64;
+                                    else if (XR_IS_INT(cv))
+                                        hint = XR_REP_I64;
                                 }
                             }
                             break;
@@ -391,14 +432,13 @@ void xcgen_collect_shapes(XrProto *proto, XcgenStructRegistry *reg, void *isolat
         }
         st->total_size = total;
 
-        printf("  [struct] Shape %u → %s (%d fields, %d bytes, %s)\n",
-               shape->id, st->c_name, st->field_count, st->total_size,
-               st->all_native ? "all-native" : "mixed");
+        printf("  [struct] Shape %u → %s (%d fields, %d bytes, %s)\n", shape->id, st->c_name,
+               st->field_count, st->total_size, st->all_native ? "all-native" : "mixed");
     }
 
     // Also scan child protos
     for (int i = 0; i < proto->protos.count; i++) {
-        XrProto *child = *(XrProto **)xr_dynarray_get_raw(&proto->protos, i);
+        XrProto *child = *(XrProto **) xr_dynarray_get_raw(&proto->protos, i);
         xcgen_collect_shapes(child, reg, isolate);
     }
 }
@@ -406,16 +446,25 @@ void xcgen_collect_shapes(XrProto *proto, XcgenStructRegistry *reg, void *isolat
 /* ========== Typedef Generation ========== */
 
 void xcgen_emit_struct_typedef(XcgenBuf *b, XcgenStruct *st) {
-    if (!b || !st) return;
+    if (!b || !st)
+        return;
     const char *tagged = "XrValue";
     xcgen_buf_printf(b, "typedef struct {\n");
     for (int i = 0; i < st->field_count; i++) {
         const char *ctype;
         switch (st->fields[i].c_type) {
-            case 0:  ctype = "int64_t";  break;
-            case 1:  ctype = "double";   break;
-            case 2:  ctype = tagged;      break;
-            default: ctype = "int64_t";  break;
+            case 0:
+                ctype = "int64_t";
+                break;
+            case 1:
+                ctype = "double";
+                break;
+            case 2:
+                ctype = tagged;
+                break;
+            default:
+                ctype = "int64_t";
+                break;
         }
         xcgen_buf_printf(b, "    %s %s;\n", ctype, st->fields[i].name);
     }
@@ -423,7 +472,8 @@ void xcgen_emit_struct_typedef(XcgenBuf *b, XcgenStruct *st) {
 }
 
 void xcgen_emit_all_typedefs(XcgenBuf *b, XcgenStructRegistry *reg) {
-    if (!b || !reg || reg->nstructs == 0) return;
+    if (!b || !reg || reg->nstructs == 0)
+        return;
     xcgen_buf_puts(b, "/* === Promoted Json structs === */\n\n");
     for (int i = 0; i < reg->nstructs; i++) {
         xcgen_emit_struct_typedef(b, &reg->structs[i]);
@@ -431,23 +481,26 @@ void xcgen_emit_all_typedefs(XcgenBuf *b, XcgenStructRegistry *reg) {
 }
 
 void xcgen_emit_struct_deinits(XcgenBuf *b, XcgenStructRegistry *reg) {
-    if (!b) return;
+    if (!b)
+        return;
 
     // If no structs or all structs are native-only: emit no-op xrt_arc_deinit
     // (satisfies the forward declaration in the ARC runtime section)
     bool any_ptr = false;
     if (reg) {
         for (int i = 0; i < reg->nstructs; i++) {
-            if (!reg->structs[i].all_native) { any_ptr = true; break; }
+            if (!reg->structs[i].all_native) {
+                any_ptr = true;
+                break;
+            }
         }
     }
     if (!any_ptr) {
         // No structs with PTR fields — emit class-only deinit via type table
-        xcgen_buf_puts(b,
-            "static void xrt_arc_deinit(void *p, uint16_t type) {\n"
-            "    if (type < xrt_type_count && xrt_type_table[type].destructor)\n"
-            "        xrt_type_table[type].destructor(p);\n"
-            "}\n\n");
+        xcgen_buf_puts(b, "static void xrt_arc_deinit(void *p, uint16_t type) {\n"
+                          "    if (type < xrt_type_count && xrt_type_table[type].destructor)\n"
+                          "        xrt_type_table[type].destructor(p);\n"
+                          "}\n\n");
         return;
     }
 
@@ -456,43 +509,43 @@ void xcgen_emit_struct_deinits(XcgenBuf *b, XcgenStructRegistry *reg) {
     // Emit one deinit function per struct that has XrtValue fields
     for (int i = 0; i < reg->nstructs; i++) {
         XcgenStruct *st = &reg->structs[i];
-        if (st->all_native) continue;
+        if (st->all_native)
+            continue;
 
         xcgen_buf_printf(b, "static void xrt_deinit_%d(void *p) {\n", i);
         xcgen_buf_printf(b, "    %s *s = (%s *)p;\n", st->c_name, st->c_name);
         for (int fi = 0; fi < st->field_count; fi++) {
             if (st->fields[fi].c_type == 2) {  // XrtValue
-                xcgen_buf_printf(b, "    xrt_arc_release_val(s->%s);\n",
-                                 st->fields[fi].name);
+                xcgen_buf_printf(b, "    xrt_arc_release_val(s->%s);\n", st->fields[fi].name);
             }
         }
         xcgen_buf_puts(b, "}\n\n");
     }
 
     // Emit dispatch table: indexed by type ID (struct index)
-    xcgen_buf_printf(b, "static void (*xrt_deinit_table[%d])(void *) = {\n",
-                     reg->nstructs);
+    xcgen_buf_printf(b, "static void (*xrt_deinit_table[%d])(void *) = {\n", reg->nstructs);
     for (int i = 0; i < reg->nstructs; i++) {
         XcgenStruct *st = &reg->structs[i];
         if (st->all_native)
             xcgen_buf_puts(b, "    NULL");
         else
             xcgen_buf_printf(b, "    xrt_deinit_%d", i);
-        if (i < reg->nstructs - 1) xcgen_buf_puts(b, ",");
+        if (i < reg->nstructs - 1)
+            xcgen_buf_puts(b, ",");
         xcgen_buf_puts(b, "\n");
     }
     xcgen_buf_puts(b, "};\n\n");
 
     // Emit the actual definition of xrt_arc_deinit (forward-declared in ARC runtime)
     // Checks struct deinit table first, then falls back to class type table
-    xcgen_buf_puts(b,
-        "static void xrt_arc_deinit(void *p, uint16_t type) {\n"
-        "    if (type < (uint16_t)(sizeof(xrt_deinit_table)/sizeof(xrt_deinit_table[0]))\n"
-        "        && xrt_deinit_table[type]) {\n"
-        "        xrt_deinit_table[type](p);\n"
-        "        return;\n"
-        "    }\n"
-        "    if (type < xrt_type_count && xrt_type_table[type].destructor)\n"
-        "        xrt_type_table[type].destructor(p);\n"
-        "}\n\n");
+    xcgen_buf_puts(
+        b, "static void xrt_arc_deinit(void *p, uint16_t type) {\n"
+           "    if (type < (uint16_t)(sizeof(xrt_deinit_table)/sizeof(xrt_deinit_table[0]))\n"
+           "        && xrt_deinit_table[type]) {\n"
+           "        xrt_deinit_table[type](p);\n"
+           "        return;\n"
+           "    }\n"
+           "    if (type < xrt_type_count && xrt_type_table[type].destructor)\n"
+           "        xrt_type_table[type].destructor(p);\n"
+           "}\n\n");
 }

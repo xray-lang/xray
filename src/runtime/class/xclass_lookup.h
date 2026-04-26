@@ -18,6 +18,6 @@
 #include "../../base/xforward_decl.h"
 #include "../../base/xdefs.h"
 
-XR_FUNC XrClass* xr_class_lookup_by_name(XrayIsolate *X, const char *class_name);
+XR_FUNC XrClass *xr_class_lookup_by_name(XrayIsolate *X, const char *class_name);
 
-#endif // XCLASS_LOOKUP_H
+#endif  // XCLASS_LOOKUP_H

@@ -19,19 +19,24 @@ void xr_method_print(const XrMethod *method) {
         return;
     }
 
-    printf("Method{ type=%s, flags=0x%02x }\n",
-           xr_method_type_name(method->type),
-           method->flags);
+    printf("Method{ type=%s, flags=0x%02x }\n", xr_method_type_name(method->type), method->flags);
 }
 
-const char* xr_method_type_name(XrMethodType type) {
+const char *xr_method_type_name(XrMethodType type) {
     switch (type) {
-        case XMETHOD_NONE:      return "None";
-        case XMETHOD_CLOSURE:   return "Closure";
-        case XMETHOD_PRIMITIVE: return "Primitive";
-        case XMETHOD_GETTER:    return "Getter";
-        case XMETHOD_SETTER:    return "Setter";
-        case XMETHOD_OPERATOR:  return "Operator";
-        default:                return "Unknown";
+        case XMETHOD_NONE:
+            return "None";
+        case XMETHOD_CLOSURE:
+            return "Closure";
+        case XMETHOD_PRIMITIVE:
+            return "Primitive";
+        case XMETHOD_GETTER:
+            return "Getter";
+        case XMETHOD_SETTER:
+            return "Setter";
+        case XMETHOD_OPERATOR:
+            return "Operator";
+        default:
+            return "Unknown";
     }
 }

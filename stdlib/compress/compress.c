@@ -23,7 +23,7 @@
 /* ========== External Declarations ========== */
 
 extern XrValue xr_string_value(XrString *str);
-extern XrString* xr_string_intern(XrayIsolate *X, const char *str, size_t len, uint32_t hash);
+extern XrString *xr_string_intern(XrayIsolate *X, const char *str, size_t len, uint32_t hash);
 
 /* ========== CRC32 Implementation ========== */
 
@@ -106,46 +106,42 @@ uint32_t xr_adler32(const uint8_t *data, size_t len) {
 
 /* ========== Deflate Constants ========== */
 
-#define MAX_BITS        15
-#define MAX_SYMBOLS     288
-#define MAX_DIST        32
-#define MAX_WINDOW      32768
-#define MAX_MATCH       258
-#define MIN_MATCH       3
+#define MAX_BITS 15
+#define MAX_SYMBOLS 288
+#define MAX_DIST 32
+#define MAX_WINDOW 32768
+#define MAX_MATCH 258
+#define MIN_MATCH 3
 
 // Fixed Huffman literal length codes
 static const uint8_t FIXED_LIT_LENGTHS[288] = {
-    8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,
-    8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,
-    8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,
-    8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,
-    8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,
-    9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,
-    9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,
-    9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,
-    7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,8,8,8,8,8,8,8,8
-};
+    8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8,
+    8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8,
+    8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8,
+    8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8,
+    8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9,
+    9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9,
+    9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9,
+    9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9,
+    7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 8, 8, 8, 8, 8, 8, 8, 8};
 
 // Length code extra bits
-static const uint8_t LEN_EXTRA_BITS[29] = {
-    0,0,0,0,0,0,0,0,1,1,1,1,2,2,2,2,3,3,3,3,4,4,4,4,5,5,5,5,0
-};
+static const uint8_t LEN_EXTRA_BITS[29] = {0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 2, 2, 2,
+                                           2, 3, 3, 3, 3, 4, 4, 4, 4, 5, 5, 5, 5, 0};
 
 // Length code base values
-static const uint16_t LEN_BASE[29] = {
-    3,4,5,6,7,8,9,10,11,13,15,17,19,23,27,31,35,43,51,59,67,83,99,115,131,163,195,227,258
-};
+static const uint16_t LEN_BASE[29] = {3,  4,  5,  6,   7,   8,   9,   10,  11, 13,
+                                      15, 17, 19, 23,  27,  31,  35,  43,  51, 59,
+                                      67, 83, 99, 115, 131, 163, 195, 227, 258};
 
 // Distance code extra bits
-static const uint8_t DIST_EXTRA_BITS[30] = {
-    0,0,0,0,1,1,2,2,3,3,4,4,5,5,6,6,7,7,8,8,9,9,10,10,11,11,12,12,13,13
-};
+static const uint8_t DIST_EXTRA_BITS[30] = {0, 0, 0, 0, 1, 1, 2, 2,  3,  3,  4,  4,  5,  5,  6,
+                                            6, 7, 7, 8, 8, 9, 9, 10, 10, 11, 11, 12, 12, 13, 13};
 
 // Distance code base values
 static const uint16_t DIST_BASE[30] = {
-    1,2,3,4,5,7,9,13,17,25,33,49,65,97,129,193,257,385,513,769,
-    1025,1537,2049,3073,4097,6145,8193,12289,16385,24577
-};
+    1,   2,   3,   4,   5,   7,    9,    13,   17,   25,   33,   49,   65,    97,    129,
+    193, 257, 385, 513, 769, 1025, 1537, 2049, 3073, 4097, 6145, 8193, 12289, 16385, 24577};
 
 /* ========== Bit Reader ========== */
 
@@ -169,7 +165,7 @@ static void br_init(BitReader *br, const uint8_t *data, size_t len) {
 
 static void br_fill(BitReader *br) {
     while (br->bits_in_buf <= 24 && br->byte_pos < br->len) {
-        br->bit_buf |= (uint32_t)br->data[br->byte_pos++] << br->bits_in_buf;
+        br->bit_buf |= (uint32_t) br->data[br->byte_pos++] << br->bits_in_buf;
         br->bits_in_buf += 8;
     }
 }
@@ -225,7 +221,8 @@ static bool bw_write(BitWriter *bw, uint32_t val, int n) {
     bw->bits_in_buf += n;
 
     while (bw->bits_in_buf >= 8) {
-        if (bw->byte_pos >= bw->cap) return false;
+        if (bw->byte_pos >= bw->cap)
+            return false;
         bw->data[bw->byte_pos++] = bw->bit_buf & 0xFF;
         bw->bit_buf >>= 8;
         bw->bits_in_buf -= 8;
@@ -235,11 +232,13 @@ static bool bw_write(BitWriter *bw, uint32_t val, int n) {
 
 static bool bw_flush(BitWriter *bw) {
     while (bw->bits_in_buf > 0) {
-        if (bw->byte_pos >= bw->cap) return false;
+        if (bw->byte_pos >= bw->cap)
+            return false;
         bw->data[bw->byte_pos++] = bw->bit_buf & 0xFF;
         bw->bit_buf >>= 8;
         bw->bits_in_buf -= 8;
-        if (bw->bits_in_buf < 0) bw->bits_in_buf = 0;
+        if (bw->bits_in_buf < 0)
+            bw->bits_in_buf = 0;
     }
     return true;
 }
@@ -255,7 +254,8 @@ static int build_huffman_table(HuffmanTable *ht, const uint8_t *lengths, int n) 
     // Count symbols per length
     memset(ht->counts, 0, sizeof(ht->counts));
     for (int i = 0; i < n; i++) {
-        if (lengths[i] > MAX_BITS) return -1;
+        if (lengths[i] > MAX_BITS)
+            return -1;
         ht->counts[lengths[i]]++;
     }
     ht->counts[0] = 0;
@@ -289,7 +289,7 @@ static int decode_huffman(BitReader *br, HuffmanTable *ht) {
         br_skip(br, 1);
 
         int count = ht->counts[len];
-        if ((int)(code - first) < count) {
+        if ((int) (code - first) < count) {
             return ht->symbols[index + (code - first)];
         }
 
@@ -303,9 +303,10 @@ static int decode_huffman(BitReader *br, HuffmanTable *ht) {
 
 /* ========== Inflate Implementation ========== */
 
-XrCompressError xr_inflate(const uint8_t *input, size_t in_len,
-                           uint8_t *output, size_t out_cap, size_t *out_len) {
-    if (!input || !output || !out_len) return XR_COMPRESS_ERR_DATA;
+XrCompressError xr_inflate(const uint8_t *input, size_t in_len, uint8_t *output, size_t out_cap,
+                           size_t *out_len) {
+    if (!input || !output || !out_len)
+        return XR_COMPRESS_ERR_DATA;
 
     BitReader br;
     br_init(&br, input, in_len);
@@ -322,7 +323,8 @@ XrCompressError xr_inflate(const uint8_t *input, size_t in_len,
             // Uncompressed block
             br_align(&br);
 
-            if (br.byte_pos + 4 > br.len) return XR_COMPRESS_ERR_DATA;
+            if (br.byte_pos + 4 > br.len)
+                return XR_COMPRESS_ERR_DATA;
 
             uint16_t len = br.data[br.byte_pos] | (br.data[br.byte_pos + 1] << 8);
             uint16_t nlen = br.data[br.byte_pos + 2] | (br.data[br.byte_pos + 3] << 8);
@@ -330,9 +332,12 @@ XrCompressError xr_inflate(const uint8_t *input, size_t in_len,
             br.bits_in_buf = 0;
             br.bit_buf = 0;
 
-            if ((uint16_t)(~nlen) != len) return XR_COMPRESS_ERR_DATA;
-            if (br.byte_pos + len > br.len) return XR_COMPRESS_ERR_DATA;
-            if (out_pos + len > out_cap) return XR_COMPRESS_ERR_BUFFER;
+            if ((uint16_t) (~nlen) != len)
+                return XR_COMPRESS_ERR_DATA;
+            if (br.byte_pos + len > br.len)
+                return XR_COMPRESS_ERR_DATA;
+            if (out_pos + len > out_cap)
+                return XR_COMPRESS_ERR_BUFFER;
 
             memcpy(output + out_pos, br.data + br.byte_pos, len);
             br.byte_pos += len;
@@ -358,9 +363,8 @@ XrCompressError xr_inflate(const uint8_t *input, size_t in_len,
                 int hclen = br_read(&br, 4) + 4;
 
                 // Read code length code lengths
-                static const uint8_t CLEN_ORDER[19] = {
-                    16,17,18,0,8,7,9,6,10,5,11,4,12,3,13,2,14,1,15
-                };
+                static const uint8_t CLEN_ORDER[19] = {16, 17, 18, 0, 8,  7, 9,  6, 10, 5,
+                                                       11, 4,  12, 3, 13, 2, 14, 1, 15};
 
                 uint8_t clen_lengths[19] = {0};
                 for (int i = 0; i < hclen; i++) {
@@ -375,21 +379,26 @@ XrCompressError xr_inflate(const uint8_t *input, size_t in_len,
                 int i = 0;
                 while (i < hlit + hdist) {
                     int sym = decode_huffman(&br, &clen_table);
-                    if (sym < 0) return XR_COMPRESS_ERR_DATA;
+                    if (sym < 0)
+                        return XR_COMPRESS_ERR_DATA;
 
                     if (sym < 16) {
                         lengths[i++] = sym;
                     } else if (sym == 16) {
-                        if (i == 0) return XR_COMPRESS_ERR_DATA;
+                        if (i == 0)
+                            return XR_COMPRESS_ERR_DATA;
                         int rep = br_read(&br, 2) + 3;
                         uint8_t prev = lengths[i - 1];
-                        while (rep-- > 0 && i < hlit + hdist) lengths[i++] = prev;
+                        while (rep-- > 0 && i < hlit + hdist)
+                            lengths[i++] = prev;
                     } else if (sym == 17) {
                         int rep = br_read(&br, 3) + 3;
-                        while (rep-- > 0 && i < hlit + hdist) lengths[i++] = 0;
+                        while (rep-- > 0 && i < hlit + hdist)
+                            lengths[i++] = 0;
                     } else {
                         int rep = br_read(&br, 7) + 11;
-                        while (rep-- > 0 && i < hlit + hdist) lengths[i++] = 0;
+                        while (rep-- > 0 && i < hlit + hdist)
+                            lengths[i++] = 0;
                     }
                 }
 
@@ -400,11 +409,13 @@ XrCompressError xr_inflate(const uint8_t *input, size_t in_len,
             // Decode data
             while (1) {
                 int sym = decode_huffman(&br, &lit_table);
-                if (sym < 0) return XR_COMPRESS_ERR_DATA;
+                if (sym < 0)
+                    return XR_COMPRESS_ERR_DATA;
 
                 if (sym < 256) {
                     // Literal
-                    if (out_pos >= out_cap) return XR_COMPRESS_ERR_BUFFER;
+                    if (out_pos >= out_cap)
+                        return XR_COMPRESS_ERR_BUFFER;
                     output[out_pos++] = sym;
 
                 } else if (sym == 256) {
@@ -414,17 +425,21 @@ XrCompressError xr_inflate(const uint8_t *input, size_t in_len,
                 } else {
                     // Length-distance pair
                     int len_idx = sym - 257;
-                    if (len_idx >= 29) return XR_COMPRESS_ERR_DATA;
+                    if (len_idx >= 29)
+                        return XR_COMPRESS_ERR_DATA;
 
                     int length = LEN_BASE[len_idx] + br_read(&br, LEN_EXTRA_BITS[len_idx]);
 
                     int dist_sym = decode_huffman(&br, &dist_table);
-                    if (dist_sym < 0 || dist_sym >= 30) return XR_COMPRESS_ERR_DATA;
+                    if (dist_sym < 0 || dist_sym >= 30)
+                        return XR_COMPRESS_ERR_DATA;
 
                     int distance = DIST_BASE[dist_sym] + br_read(&br, DIST_EXTRA_BITS[dist_sym]);
 
-                    if ((size_t)distance > out_pos) return XR_COMPRESS_ERR_DATA;
-                    if (out_pos + length > out_cap) return XR_COMPRESS_ERR_BUFFER;
+                    if ((size_t) distance > out_pos)
+                        return XR_COMPRESS_ERR_DATA;
+                    if (out_pos + length > out_cap)
+                        return XR_COMPRESS_ERR_BUFFER;
 
                     // Copy match
                     size_t src = out_pos - distance;
@@ -446,65 +461,66 @@ XrCompressError xr_inflate(const uint8_t *input, size_t in_len,
 /* ========== LZ77 + Fixed Huffman Deflate Implementation ========== */
 
 // LZ77 parameters
-#define LZ77_WINDOW_SIZE  32768   // Sliding window size
-#define LZ77_MIN_MATCH    3       // Minimum match length
-#define LZ77_MAX_MATCH    258     // Maximum match length
-#define LZ77_HASH_BITS    15
-#define LZ77_HASH_SIZE    (1 << LZ77_HASH_BITS)
-#define LZ77_HASH_MASK    (LZ77_HASH_SIZE - 1)
+#define LZ77_WINDOW_SIZE 32768  // Sliding window size
+#define LZ77_MIN_MATCH 3        // Minimum match length
+#define LZ77_MAX_MATCH 258      // Maximum match length
+#define LZ77_HASH_BITS 15
+#define LZ77_HASH_SIZE (1 << LZ77_HASH_BITS)
+#define LZ77_HASH_MASK (LZ77_HASH_SIZE - 1)
 
 // Compute 3-byte hash (multiplicative hash for better distribution)
 static inline uint32_t lz77_hash(const uint8_t *p) {
-    uint32_t h = ((uint32_t)p[0] << 16) | ((uint32_t)p[1] << 8) | p[2];
+    uint32_t h = ((uint32_t) p[0] << 16) | ((uint32_t) p[1] << 8) | p[2];
     return (h * 0x1E35A7BD) >> (32 - LZ77_HASH_BITS);
 }
 
 // Precomputed Fixed Huffman codes (reversed, ready for bitstream output)
-static const struct { uint16_t code; uint8_t bits; } FIXED_HUFF_CODES[288] = {
-    {0x00C,8}, {0x08C,8}, {0x04C,8}, {0x0CC,8}, {0x02C,8}, {0x0AC,8}, {0x06C,8}, {0x0EC,8},
-    {0x01C,8}, {0x09C,8}, {0x05C,8}, {0x0DC,8}, {0x03C,8}, {0x0BC,8}, {0x07C,8}, {0x0FC,8},
-    {0x002,8}, {0x082,8}, {0x042,8}, {0x0C2,8}, {0x022,8}, {0x0A2,8}, {0x062,8}, {0x0E2,8},
-    {0x012,8}, {0x092,8}, {0x052,8}, {0x0D2,8}, {0x032,8}, {0x0B2,8}, {0x072,8}, {0x0F2,8},
-    {0x00A,8}, {0x08A,8}, {0x04A,8}, {0x0CA,8}, {0x02A,8}, {0x0AA,8}, {0x06A,8}, {0x0EA,8},
-    {0x01A,8}, {0x09A,8}, {0x05A,8}, {0x0DA,8}, {0x03A,8}, {0x0BA,8}, {0x07A,8}, {0x0FA,8},
-    {0x006,8}, {0x086,8}, {0x046,8}, {0x0C6,8}, {0x026,8}, {0x0A6,8}, {0x066,8}, {0x0E6,8},
-    {0x016,8}, {0x096,8}, {0x056,8}, {0x0D6,8}, {0x036,8}, {0x0B6,8}, {0x076,8}, {0x0F6,8},
-    {0x00E,8}, {0x08E,8}, {0x04E,8}, {0x0CE,8}, {0x02E,8}, {0x0AE,8}, {0x06E,8}, {0x0EE,8},
-    {0x01E,8}, {0x09E,8}, {0x05E,8}, {0x0DE,8}, {0x03E,8}, {0x0BE,8}, {0x07E,8}, {0x0FE,8},
-    {0x001,8}, {0x081,8}, {0x041,8}, {0x0C1,8}, {0x021,8}, {0x0A1,8}, {0x061,8}, {0x0E1,8},
-    {0x011,8}, {0x091,8}, {0x051,8}, {0x0D1,8}, {0x031,8}, {0x0B1,8}, {0x071,8}, {0x0F1,8},
-    {0x009,8}, {0x089,8}, {0x049,8}, {0x0C9,8}, {0x029,8}, {0x0A9,8}, {0x069,8}, {0x0E9,8},
-    {0x019,8}, {0x099,8}, {0x059,8}, {0x0D9,8}, {0x039,8}, {0x0B9,8}, {0x079,8}, {0x0F9,8},
-    {0x005,8}, {0x085,8}, {0x045,8}, {0x0C5,8}, {0x025,8}, {0x0A5,8}, {0x065,8}, {0x0E5,8},
-    {0x015,8}, {0x095,8}, {0x055,8}, {0x0D5,8}, {0x035,8}, {0x0B5,8}, {0x075,8}, {0x0F5,8},
-    {0x00D,8}, {0x08D,8}, {0x04D,8}, {0x0CD,8}, {0x02D,8}, {0x0AD,8}, {0x06D,8}, {0x0ED,8},
-    {0x01D,8}, {0x09D,8}, {0x05D,8}, {0x0DD,8}, {0x03D,8}, {0x0BD,8}, {0x07D,8}, {0x0FD,8},
-    {0x013,9}, {0x113,9}, {0x093,9}, {0x193,9}, {0x053,9}, {0x153,9}, {0x0D3,9}, {0x1D3,9},
-    {0x033,9}, {0x133,9}, {0x0B3,9}, {0x1B3,9}, {0x073,9}, {0x173,9}, {0x0F3,9}, {0x1F3,9},
-    {0x00B,9}, {0x10B,9}, {0x08B,9}, {0x18B,9}, {0x04B,9}, {0x14B,9}, {0x0CB,9}, {0x1CB,9},
-    {0x02B,9}, {0x12B,9}, {0x0AB,9}, {0x1AB,9}, {0x06B,9}, {0x16B,9}, {0x0EB,9}, {0x1EB,9},
-    {0x01B,9}, {0x11B,9}, {0x09B,9}, {0x19B,9}, {0x05B,9}, {0x15B,9}, {0x0DB,9}, {0x1DB,9},
-    {0x03B,9}, {0x13B,9}, {0x0BB,9}, {0x1BB,9}, {0x07B,9}, {0x17B,9}, {0x0FB,9}, {0x1FB,9},
-    {0x007,9}, {0x107,9}, {0x087,9}, {0x187,9}, {0x047,9}, {0x147,9}, {0x0C7,9}, {0x1C7,9},
-    {0x027,9}, {0x127,9}, {0x0A7,9}, {0x1A7,9}, {0x067,9}, {0x167,9}, {0x0E7,9}, {0x1E7,9},
-    {0x017,9}, {0x117,9}, {0x097,9}, {0x197,9}, {0x057,9}, {0x157,9}, {0x0D7,9}, {0x1D7,9},
-    {0x037,9}, {0x137,9}, {0x0B7,9}, {0x1B7,9}, {0x077,9}, {0x177,9}, {0x0F7,9}, {0x1F7,9},
-    {0x00F,9}, {0x10F,9}, {0x08F,9}, {0x18F,9}, {0x04F,9}, {0x14F,9}, {0x0CF,9}, {0x1CF,9},
-    {0x02F,9}, {0x12F,9}, {0x0AF,9}, {0x1AF,9}, {0x06F,9}, {0x16F,9}, {0x0EF,9}, {0x1EF,9},
-    {0x01F,9}, {0x11F,9}, {0x09F,9}, {0x19F,9}, {0x05F,9}, {0x15F,9}, {0x0DF,9}, {0x1DF,9},
-    {0x03F,9}, {0x13F,9}, {0x0BF,9}, {0x1BF,9}, {0x07F,9}, {0x17F,9}, {0x0FF,9}, {0x1FF,9},
-    {0x000,7}, {0x040,7}, {0x020,7}, {0x060,7}, {0x010,7}, {0x050,7}, {0x030,7}, {0x070,7},
-    {0x008,7}, {0x048,7}, {0x028,7}, {0x068,7}, {0x018,7}, {0x058,7}, {0x038,7}, {0x078,7},
-    {0x004,7}, {0x044,7}, {0x024,7}, {0x064,7}, {0x014,7}, {0x054,7}, {0x034,7}, {0x074,7},
-    {0x003,8}, {0x083,8}, {0x043,8}, {0x0C3,8}, {0x023,8}, {0x0A3,8}, {0x063,8}, {0x0E3,8},
+static const struct {
+    uint16_t code;
+    uint8_t bits;
+} FIXED_HUFF_CODES[288] = {
+    {0x00C, 8}, {0x08C, 8}, {0x04C, 8}, {0x0CC, 8}, {0x02C, 8}, {0x0AC, 8}, {0x06C, 8}, {0x0EC, 8},
+    {0x01C, 8}, {0x09C, 8}, {0x05C, 8}, {0x0DC, 8}, {0x03C, 8}, {0x0BC, 8}, {0x07C, 8}, {0x0FC, 8},
+    {0x002, 8}, {0x082, 8}, {0x042, 8}, {0x0C2, 8}, {0x022, 8}, {0x0A2, 8}, {0x062, 8}, {0x0E2, 8},
+    {0x012, 8}, {0x092, 8}, {0x052, 8}, {0x0D2, 8}, {0x032, 8}, {0x0B2, 8}, {0x072, 8}, {0x0F2, 8},
+    {0x00A, 8}, {0x08A, 8}, {0x04A, 8}, {0x0CA, 8}, {0x02A, 8}, {0x0AA, 8}, {0x06A, 8}, {0x0EA, 8},
+    {0x01A, 8}, {0x09A, 8}, {0x05A, 8}, {0x0DA, 8}, {0x03A, 8}, {0x0BA, 8}, {0x07A, 8}, {0x0FA, 8},
+    {0x006, 8}, {0x086, 8}, {0x046, 8}, {0x0C6, 8}, {0x026, 8}, {0x0A6, 8}, {0x066, 8}, {0x0E6, 8},
+    {0x016, 8}, {0x096, 8}, {0x056, 8}, {0x0D6, 8}, {0x036, 8}, {0x0B6, 8}, {0x076, 8}, {0x0F6, 8},
+    {0x00E, 8}, {0x08E, 8}, {0x04E, 8}, {0x0CE, 8}, {0x02E, 8}, {0x0AE, 8}, {0x06E, 8}, {0x0EE, 8},
+    {0x01E, 8}, {0x09E, 8}, {0x05E, 8}, {0x0DE, 8}, {0x03E, 8}, {0x0BE, 8}, {0x07E, 8}, {0x0FE, 8},
+    {0x001, 8}, {0x081, 8}, {0x041, 8}, {0x0C1, 8}, {0x021, 8}, {0x0A1, 8}, {0x061, 8}, {0x0E1, 8},
+    {0x011, 8}, {0x091, 8}, {0x051, 8}, {0x0D1, 8}, {0x031, 8}, {0x0B1, 8}, {0x071, 8}, {0x0F1, 8},
+    {0x009, 8}, {0x089, 8}, {0x049, 8}, {0x0C9, 8}, {0x029, 8}, {0x0A9, 8}, {0x069, 8}, {0x0E9, 8},
+    {0x019, 8}, {0x099, 8}, {0x059, 8}, {0x0D9, 8}, {0x039, 8}, {0x0B9, 8}, {0x079, 8}, {0x0F9, 8},
+    {0x005, 8}, {0x085, 8}, {0x045, 8}, {0x0C5, 8}, {0x025, 8}, {0x0A5, 8}, {0x065, 8}, {0x0E5, 8},
+    {0x015, 8}, {0x095, 8}, {0x055, 8}, {0x0D5, 8}, {0x035, 8}, {0x0B5, 8}, {0x075, 8}, {0x0F5, 8},
+    {0x00D, 8}, {0x08D, 8}, {0x04D, 8}, {0x0CD, 8}, {0x02D, 8}, {0x0AD, 8}, {0x06D, 8}, {0x0ED, 8},
+    {0x01D, 8}, {0x09D, 8}, {0x05D, 8}, {0x0DD, 8}, {0x03D, 8}, {0x0BD, 8}, {0x07D, 8}, {0x0FD, 8},
+    {0x013, 9}, {0x113, 9}, {0x093, 9}, {0x193, 9}, {0x053, 9}, {0x153, 9}, {0x0D3, 9}, {0x1D3, 9},
+    {0x033, 9}, {0x133, 9}, {0x0B3, 9}, {0x1B3, 9}, {0x073, 9}, {0x173, 9}, {0x0F3, 9}, {0x1F3, 9},
+    {0x00B, 9}, {0x10B, 9}, {0x08B, 9}, {0x18B, 9}, {0x04B, 9}, {0x14B, 9}, {0x0CB, 9}, {0x1CB, 9},
+    {0x02B, 9}, {0x12B, 9}, {0x0AB, 9}, {0x1AB, 9}, {0x06B, 9}, {0x16B, 9}, {0x0EB, 9}, {0x1EB, 9},
+    {0x01B, 9}, {0x11B, 9}, {0x09B, 9}, {0x19B, 9}, {0x05B, 9}, {0x15B, 9}, {0x0DB, 9}, {0x1DB, 9},
+    {0x03B, 9}, {0x13B, 9}, {0x0BB, 9}, {0x1BB, 9}, {0x07B, 9}, {0x17B, 9}, {0x0FB, 9}, {0x1FB, 9},
+    {0x007, 9}, {0x107, 9}, {0x087, 9}, {0x187, 9}, {0x047, 9}, {0x147, 9}, {0x0C7, 9}, {0x1C7, 9},
+    {0x027, 9}, {0x127, 9}, {0x0A7, 9}, {0x1A7, 9}, {0x067, 9}, {0x167, 9}, {0x0E7, 9}, {0x1E7, 9},
+    {0x017, 9}, {0x117, 9}, {0x097, 9}, {0x197, 9}, {0x057, 9}, {0x157, 9}, {0x0D7, 9}, {0x1D7, 9},
+    {0x037, 9}, {0x137, 9}, {0x0B7, 9}, {0x1B7, 9}, {0x077, 9}, {0x177, 9}, {0x0F7, 9}, {0x1F7, 9},
+    {0x00F, 9}, {0x10F, 9}, {0x08F, 9}, {0x18F, 9}, {0x04F, 9}, {0x14F, 9}, {0x0CF, 9}, {0x1CF, 9},
+    {0x02F, 9}, {0x12F, 9}, {0x0AF, 9}, {0x1AF, 9}, {0x06F, 9}, {0x16F, 9}, {0x0EF, 9}, {0x1EF, 9},
+    {0x01F, 9}, {0x11F, 9}, {0x09F, 9}, {0x19F, 9}, {0x05F, 9}, {0x15F, 9}, {0x0DF, 9}, {0x1DF, 9},
+    {0x03F, 9}, {0x13F, 9}, {0x0BF, 9}, {0x1BF, 9}, {0x07F, 9}, {0x17F, 9}, {0x0FF, 9}, {0x1FF, 9},
+    {0x000, 7}, {0x040, 7}, {0x020, 7}, {0x060, 7}, {0x010, 7}, {0x050, 7}, {0x030, 7}, {0x070, 7},
+    {0x008, 7}, {0x048, 7}, {0x028, 7}, {0x068, 7}, {0x018, 7}, {0x058, 7}, {0x038, 7}, {0x078, 7},
+    {0x004, 7}, {0x044, 7}, {0x024, 7}, {0x064, 7}, {0x014, 7}, {0x054, 7}, {0x034, 7}, {0x074, 7},
+    {0x003, 8}, {0x083, 8}, {0x043, 8}, {0x0C3, 8}, {0x023, 8}, {0x0A3, 8}, {0x063, 8}, {0x0E3, 8},
 };
 
 // Precomputed 5-bit reversed distance codes
 static const uint8_t DIST_REV_CODES[32] = {
-    0x00, 0x10, 0x08, 0x18, 0x04, 0x14, 0x0C, 0x1C,
-    0x02, 0x12, 0x0A, 0x1A, 0x06, 0x16, 0x0E, 0x1E,
-    0x01, 0x11, 0x09, 0x19, 0x05, 0x15, 0x0D, 0x1D,
-    0x03, 0x13, 0x0B, 0x1B, 0x07, 0x17, 0x0F, 0x1F,
+    0x00, 0x10, 0x08, 0x18, 0x04, 0x14, 0x0C, 0x1C, 0x02, 0x12, 0x0A, 0x1A, 0x06, 0x16, 0x0E, 0x1E,
+    0x01, 0x11, 0x09, 0x19, 0x05, 0x15, 0x0D, 0x1D, 0x03, 0x13, 0x0B, 0x1B, 0x07, 0x17, 0x0F, 0x1F,
 };
 
 // Emit fixed Huffman code using precomputed table
@@ -517,8 +533,10 @@ static inline int find_len_code(int len) {
     int lo = 0, hi = 28;
     while (lo < hi) {
         int mid = (lo + hi + 1) >> 1;
-        if (len >= LEN_BASE[mid]) lo = mid;
-        else hi = mid - 1;
+        if (len >= LEN_BASE[mid])
+            lo = mid;
+        else
+            hi = mid - 1;
     }
     return 257 + lo;
 }
@@ -528,8 +546,10 @@ static inline int find_dist_code(int dist) {
     int lo = 0, hi = 29;
     while (lo < hi) {
         int mid = (lo + hi + 1) >> 1;
-        if (dist >= DIST_BASE[mid]) lo = mid;
-        else hi = mid - 1;
+        if (dist >= DIST_BASE[mid])
+            lo = mid;
+        else
+            hi = mid - 1;
     }
     return lo;
 }
@@ -557,9 +577,10 @@ static void emit_match(BitWriter *bw, int len, int dist) {
 }
 
 // LZ77 find longest match
-static int lz77_find_match(const uint8_t *input, size_t in_len, size_t pos,
-                           int *hash_table, int *prev_chain, int *match_dist) {
-    if (pos + LZ77_MIN_MATCH > in_len) return 0;
+static int lz77_find_match(const uint8_t *input, size_t in_len, size_t pos, int *hash_table,
+                           int *prev_chain, int *match_dist) {
+    if (pos + LZ77_MIN_MATCH > in_len)
+        return 0;
 
     uint32_t h = lz77_hash(input + pos);
     int best_len = 0;
@@ -570,12 +591,14 @@ static int lz77_find_match(const uint8_t *input, size_t in_len, size_t pos,
 
     int match_pos = hash_table[h];
     while (match_pos >= 0 && chain_len < max_chain) {
-        int dist = (int)pos - match_pos;
-        if (dist > LZ77_WINDOW_SIZE) break;
+        int dist = (int) pos - match_pos;
+        if (dist > LZ77_WINDOW_SIZE)
+            break;
 
         // Compare match length
-        int max_len = (int)(in_len - pos);
-        if (max_len > LZ77_MAX_MATCH) max_len = LZ77_MAX_MATCH;
+        int max_len = (int) (in_len - pos);
+        if (max_len > LZ77_MAX_MATCH)
+            max_len = LZ77_MAX_MATCH;
 
         int len = 0;
         while (len < max_len && input[match_pos + len] == input[pos + len]) {
@@ -585,7 +608,8 @@ static int lz77_find_match(const uint8_t *input, size_t in_len, size_t pos,
         if (len > best_len) {
             best_len = len;
             best_dist = dist;
-            if (len >= LZ77_MAX_MATCH) break;  // Maximum match
+            if (len >= LZ77_MAX_MATCH)
+                break;  // Maximum match
         }
 
         // Follow chain
@@ -602,11 +626,10 @@ static int lz77_find_match(const uint8_t *input, size_t in_len, size_t pos,
 }
 
 // Update hash chain
-static void lz77_update_hash(const uint8_t *input, size_t pos,
-                             int *hash_table, int *prev_chain) {
+static void lz77_update_hash(const uint8_t *input, size_t pos, int *hash_table, int *prev_chain) {
     uint32_t h = lz77_hash(input + pos);
     prev_chain[pos & (LZ77_WINDOW_SIZE - 1)] = hash_table[h];
-    hash_table[h] = (int)pos;
+    hash_table[h] = (int) pos;
 }
 
 size_t xr_deflate_bound(size_t in_len) {
@@ -615,10 +638,10 @@ size_t xr_deflate_bound(size_t in_len) {
     return in_len + blocks * 5 + 10;
 }
 
-XrCompressError xr_deflate(const uint8_t *input, size_t in_len,
-                           uint8_t *output, size_t out_cap, size_t *out_len,
-                           int level) {
-    if (!input || !output || !out_len) return XR_COMPRESS_ERR_DATA;
+XrCompressError xr_deflate(const uint8_t *input, size_t in_len, uint8_t *output, size_t out_cap,
+                           size_t *out_len, int level) {
+    if (!input || !output || !out_len)
+        return XR_COMPRESS_ERR_DATA;
 
     // Level 0 or small data uses uncompressed storage
     if (level == 0 || in_len < 10) {
@@ -627,10 +650,14 @@ XrCompressError xr_deflate(const uint8_t *input, size_t in_len,
 
         if (in_len == 0) {
             // Empty input: emit a single empty final stored block
-            if (out_cap < 5) return XR_COMPRESS_ERR_BUFFER;
-            if (!bw_write(&bw, 1, 1)) return XR_COMPRESS_ERR_BUFFER;  // BFINAL=1
-            if (!bw_write(&bw, 0, 2)) return XR_COMPRESS_ERR_BUFFER;  // BTYPE=0 (stored)
-            if (!bw_flush(&bw)) return XR_COMPRESS_ERR_BUFFER;
+            if (out_cap < 5)
+                return XR_COMPRESS_ERR_BUFFER;
+            if (!bw_write(&bw, 1, 1))
+                return XR_COMPRESS_ERR_BUFFER;  // BFINAL=1
+            if (!bw_write(&bw, 0, 2))
+                return XR_COMPRESS_ERR_BUFFER;  // BTYPE=0 (stored)
+            if (!bw_flush(&bw))
+                return XR_COMPRESS_ERR_BUFFER;
             output[bw.byte_pos++] = 0x00;  // LEN low
             output[bw.byte_pos++] = 0x00;  // LEN high
             output[bw.byte_pos++] = 0xFF;  // NLEN low
@@ -642,18 +669,23 @@ XrCompressError xr_deflate(const uint8_t *input, size_t in_len,
         size_t pos = 0;
         while (pos < in_len) {
             size_t chunk = in_len - pos;
-            if (chunk > 65535) chunk = 65535;
+            if (chunk > 65535)
+                chunk = 65535;
 
             bool is_final = (pos + chunk >= in_len);
 
-            if (!bw_write(&bw, is_final ? 1 : 0, 1)) return XR_COMPRESS_ERR_BUFFER;
-            if (!bw_write(&bw, 0, 2)) return XR_COMPRESS_ERR_BUFFER;
-            if (!bw_flush(&bw)) return XR_COMPRESS_ERR_BUFFER;
+            if (!bw_write(&bw, is_final ? 1 : 0, 1))
+                return XR_COMPRESS_ERR_BUFFER;
+            if (!bw_write(&bw, 0, 2))
+                return XR_COMPRESS_ERR_BUFFER;
+            if (!bw_flush(&bw))
+                return XR_COMPRESS_ERR_BUFFER;
 
-            uint16_t len = (uint16_t)chunk;
+            uint16_t len = (uint16_t) chunk;
             uint16_t nlen = ~len;
 
-            if (bw.byte_pos + 4 + chunk > out_cap) return XR_COMPRESS_ERR_BUFFER;
+            if (bw.byte_pos + 4 + chunk > out_cap)
+                return XR_COMPRESS_ERR_BUFFER;
 
             output[bw.byte_pos++] = len & 0xFF;
             output[bw.byte_pos++] = (len >> 8) & 0xFF;
@@ -672,8 +704,8 @@ XrCompressError xr_deflate(const uint8_t *input, size_t in_len,
     // LZ77 + Fixed Huffman compression
 
     // Allocate hash table and chain
-    int *hash_table = (int*)xr_malloc(LZ77_HASH_SIZE * sizeof(int));
-    int *prev_chain = (int*)xr_malloc(LZ77_WINDOW_SIZE * sizeof(int));
+    int *hash_table = (int *) xr_malloc(LZ77_HASH_SIZE * sizeof(int));
+    int *prev_chain = (int *) xr_malloc(LZ77_WINDOW_SIZE * sizeof(int));
 
     if (!hash_table || !prev_chain) {
         xr_free(hash_table);
@@ -682,7 +714,8 @@ XrCompressError xr_deflate(const uint8_t *input, size_t in_len,
     }
 
     // Initialize hash table
-    for (int i = 0; i < LZ77_HASH_SIZE; i++) hash_table[i] = -1;
+    for (int i = 0; i < LZ77_HASH_SIZE; i++)
+        hash_table[i] = -1;
 
     BitWriter bw;
     bw_init(&bw, output, out_cap);
@@ -736,22 +769,25 @@ XrCompressError xr_deflate(const uint8_t *input, size_t in_len,
 /* ========== Gzip Implementation ========== */
 
 bool xr_is_gzip(const uint8_t *data, size_t len) {
-    if (len < 10) return false;
+    if (len < 10)
+        return false;
     return data[0] == 0x1F && data[1] == 0x8B;
 }
 
 uint32_t xr_gzip_original_size(const uint8_t *data, size_t len) {
-    if (len < 18) return 0;  // valid gzip = 10-byte header + 8-byte trailer minimum
-    return data[len-4] | (data[len-3] << 8) | (data[len-2] << 16) | (data[len-1] << 24);
+    if (len < 18)
+        return 0;  // valid gzip = 10-byte header + 8-byte trailer minimum
+    return data[len - 4] | (data[len - 3] << 8) | (data[len - 2] << 16) | (data[len - 1] << 24);
 }
 
-XrCompressError xr_gzip(const uint8_t *input, size_t in_len,
-                        uint8_t *output, size_t out_cap, size_t *out_len,
-                        int level) {
-    if (!input || !output || !out_len) return XR_COMPRESS_ERR_DATA;
+XrCompressError xr_gzip(const uint8_t *input, size_t in_len, uint8_t *output, size_t out_cap,
+                        size_t *out_len, int level) {
+    if (!input || !output || !out_len)
+        return XR_COMPRESS_ERR_DATA;
 
     // Gzip header (10 bytes)
-    if (out_cap < 18) return XR_COMPRESS_ERR_BUFFER;
+    if (out_cap < 18)
+        return XR_COMPRESS_ERR_BUFFER;
 
     size_t pos = 0;
     output[pos++] = 0x1F;  // Magic number
@@ -767,10 +803,10 @@ XrCompressError xr_gzip(const uint8_t *input, size_t in_len,
 
     // Deflate compression
     size_t deflate_len;
-    XrCompressError err = xr_deflate(input, in_len,
-                                      output + pos, out_cap - pos - 8,
-                                      &deflate_len, level);
-    if (err != XR_COMPRESS_OK) return err;
+    XrCompressError err =
+        xr_deflate(input, in_len, output + pos, out_cap - pos - 8, &deflate_len, level);
+    if (err != XR_COMPRESS_OK)
+        return err;
 
     pos += deflate_len;
 
@@ -791,56 +827,67 @@ XrCompressError xr_gzip(const uint8_t *input, size_t in_len,
     return XR_COMPRESS_OK;
 }
 
-XrCompressError xr_gunzip(const uint8_t *input, size_t in_len,
-                          uint8_t *output, size_t out_cap, size_t *out_len) {
-    if (!input || !output || !out_len) return XR_COMPRESS_ERR_DATA;
-    if (!xr_is_gzip(input, in_len)) return XR_COMPRESS_ERR_HEADER;
+XrCompressError xr_gunzip(const uint8_t *input, size_t in_len, uint8_t *output, size_t out_cap,
+                          size_t *out_len) {
+    if (!input || !output || !out_len)
+        return XR_COMPRESS_ERR_DATA;
+    if (!xr_is_gzip(input, in_len))
+        return XR_COMPRESS_ERR_HEADER;
 
     // Parse gzip header
-    if (in_len < 18) return XR_COMPRESS_ERR_DATA;
+    if (in_len < 18)
+        return XR_COMPRESS_ERR_DATA;
 
-    if (input[2] != 0x08) return XR_COMPRESS_ERR_DATA;  // Must be deflate
+    if (input[2] != 0x08)
+        return XR_COMPRESS_ERR_DATA;  // Must be deflate
 
     uint8_t flags = input[3];
     size_t pos = 10;
 
     // Skip optional fields
     if (flags & 0x04) {  // FEXTRA
-        if (pos + 2 > in_len) return XR_COMPRESS_ERR_DATA;
+        if (pos + 2 > in_len)
+            return XR_COMPRESS_ERR_DATA;
         uint16_t xlen = input[pos] | (input[pos + 1] << 8);
         pos += 2 + xlen;
     }
     if (flags & 0x08) {  // FNAME
-        while (pos < in_len && input[pos] != 0) pos++;
+        while (pos < in_len && input[pos] != 0)
+            pos++;
         pos++;
     }
     if (flags & 0x10) {  // FCOMMENT
-        while (pos < in_len && input[pos] != 0) pos++;
+        while (pos < in_len && input[pos] != 0)
+            pos++;
         pos++;
     }
     if (flags & 0x02) {  // FHCRC
         pos += 2;
     }
 
-    if (pos + 8 > in_len) return XR_COMPRESS_ERR_DATA;
+    if (pos + 8 > in_len)
+        return XR_COMPRESS_ERR_DATA;
 
     // Decompress deflate data
     size_t deflate_len = in_len - pos - 8;
     XrCompressError err = xr_inflate(input + pos, deflate_len, output, out_cap, out_len);
-    if (err != XR_COMPRESS_OK) return err;
+    if (err != XR_COMPRESS_OK)
+        return err;
 
     // Verify CRC32
     pos += deflate_len;
-    uint32_t stored_crc = (uint32_t)input[pos] | ((uint32_t)input[pos+1] << 8) |
-                          ((uint32_t)input[pos+2] << 16) | ((uint32_t)input[pos+3] << 24);
+    uint32_t stored_crc = (uint32_t) input[pos] | ((uint32_t) input[pos + 1] << 8) |
+                          ((uint32_t) input[pos + 2] << 16) | ((uint32_t) input[pos + 3] << 24);
     uint32_t actual_crc = xr_crc32(output, *out_len);
-    if (stored_crc != actual_crc) return XR_COMPRESS_ERR_CHECKSUM;
+    if (stored_crc != actual_crc)
+        return XR_COMPRESS_ERR_CHECKSUM;
 
     // Verify original size
     pos += 4;
-    uint32_t stored_size = (uint32_t)input[pos] | ((uint32_t)input[pos+1] << 8) |
-                           ((uint32_t)input[pos+2] << 16) | ((uint32_t)input[pos+3] << 24);
-    if (stored_size != (*out_len & 0xFFFFFFFF)) return XR_COMPRESS_ERR_DATA;
+    uint32_t stored_size = (uint32_t) input[pos] | ((uint32_t) input[pos + 1] << 8) |
+                           ((uint32_t) input[pos + 2] << 16) | ((uint32_t) input[pos + 3] << 24);
+    if (stored_size != (*out_len & 0xFFFFFFFF))
+        return XR_COMPRESS_ERR_DATA;
 
     return XR_COMPRESS_OK;
 }
@@ -848,41 +895,47 @@ XrCompressError xr_gunzip(const uint8_t *input, size_t in_len,
 /* ========== Zlib Implementation ========== */
 
 bool xr_is_zlib(const uint8_t *data, size_t len) {
-    if (len < 2) return false;
+    if (len < 2)
+        return false;
     // zlib header: CMF + FLG, ((CMF * 256 + FLG) % 31 == 0)
     uint16_t check = (data[0] << 8) | data[1];
     return (check % 31 == 0) && ((data[0] & 0x0F) == 8);
 }
 
-XrCompressError xr_zlib_compress(const uint8_t *input, size_t in_len,
-                                  uint8_t *output, size_t out_cap, size_t *out_len,
-                                  int level) {
-    if (!input || !output || !out_len) return XR_COMPRESS_ERR_DATA;
-    if (out_cap < 6) return XR_COMPRESS_ERR_BUFFER;
+XrCompressError xr_zlib_compress(const uint8_t *input, size_t in_len, uint8_t *output,
+                                 size_t out_cap, size_t *out_len, int level) {
+    if (!input || !output || !out_len)
+        return XR_COMPRESS_ERR_DATA;
+    if (out_cap < 6)
+        return XR_COMPRESS_ERR_BUFFER;
 
     // zlib header (2 bytes): CMF + FLG
     // CMF = 0x78 (deflate method, 32K window)
     // FLG FLEVEL: 0=fastest, 1=fast, 2=default, 3=best
     uint8_t cmf = 0x78;
     uint8_t flevel;
-    if (level <= 1) flevel = 0;       // fastest
-    else if (level <= 5) flevel = 1;  // fast
-    else if (level <= 7) flevel = 2;  // default
-    else flevel = 3;                  // best
+    if (level <= 1)
+        flevel = 0;  // fastest
+    else if (level <= 5)
+        flevel = 1;  // fast
+    else if (level <= 7)
+        flevel = 2;  // default
+    else
+        flevel = 3;  // best
     uint8_t flg = (flevel << 6);
     // Adjust FLG so that (CMF*256 + FLG) % 31 == 0
-    uint16_t check = (uint16_t)cmf * 256 + flg;
+    uint16_t check = (uint16_t) cmf * 256 + flg;
     uint8_t rem = check % 31;
-    if (rem != 0) flg += (31 - rem);
+    if (rem != 0)
+        flg += (31 - rem);
     output[0] = cmf;
     output[1] = flg;
 
     // Deflate compression
     size_t deflate_len;
-    XrCompressError err = xr_deflate(input, in_len,
-                                      output + 2, out_cap - 6,
-                                      &deflate_len, level);
-    if (err != XR_COMPRESS_OK) return err;
+    XrCompressError err = xr_deflate(input, in_len, output + 2, out_cap - 6, &deflate_len, level);
+    if (err != XR_COMPRESS_OK)
+        return err;
 
     // Adler32 checksum
     size_t pos = 2 + deflate_len;
@@ -896,41 +949,47 @@ XrCompressError xr_zlib_compress(const uint8_t *input, size_t in_len,
     return XR_COMPRESS_OK;
 }
 
-XrCompressError xr_zlib_decompress(const uint8_t *input, size_t in_len,
-                                    uint8_t *output, size_t out_cap, size_t *out_len) {
-    if (!input || !output || !out_len) return XR_COMPRESS_ERR_DATA;
-    if (!xr_is_zlib(input, in_len)) return XR_COMPRESS_ERR_HEADER;
-    if (in_len < 6) return XR_COMPRESS_ERR_DATA;
+XrCompressError xr_zlib_decompress(const uint8_t *input, size_t in_len, uint8_t *output,
+                                   size_t out_cap, size_t *out_len) {
+    if (!input || !output || !out_len)
+        return XR_COMPRESS_ERR_DATA;
+    if (!xr_is_zlib(input, in_len))
+        return XR_COMPRESS_ERR_HEADER;
+    if (in_len < 6)
+        return XR_COMPRESS_ERR_DATA;
 
     // Skip zlib header: 2 bytes CMF+FLG, plus 4 bytes DICTID if FDICT is set
     size_t hdr_len = 2;
     if (input[1] & 0x20) {
         hdr_len += 4;  // FDICT flag set, skip DICTID
-        if (in_len < hdr_len + 4) return XR_COMPRESS_ERR_DATA;
+        if (in_len < hdr_len + 4)
+            return XR_COMPRESS_ERR_DATA;
     }
 
     // Decompress deflate data (trailer is 4 bytes Adler32)
-    XrCompressError err = xr_inflate(input + hdr_len, in_len - hdr_len - 4,
-                                      output, out_cap, out_len);
-    if (err != XR_COMPRESS_OK) return err;
+    XrCompressError err =
+        xr_inflate(input + hdr_len, in_len - hdr_len - 4, output, out_cap, out_len);
+    if (err != XR_COMPRESS_OK)
+        return err;
 
     // Verify Adler32
     size_t pos = in_len - 4;
-    uint32_t stored_adler = ((uint32_t)input[pos] << 24) | ((uint32_t)input[pos+1] << 16) |
-                            ((uint32_t)input[pos+2] << 8) | (uint32_t)input[pos+3];
+    uint32_t stored_adler = ((uint32_t) input[pos] << 24) | ((uint32_t) input[pos + 1] << 16) |
+                            ((uint32_t) input[pos + 2] << 8) | (uint32_t) input[pos + 3];
     uint32_t actual_adler = xr_adler32(output, *out_len);
-    if (stored_adler != actual_adler) return XR_COMPRESS_ERR_CHECKSUM;
+    if (stored_adler != actual_adler)
+        return XR_COMPRESS_ERR_CHECKSUM;
 
     return XR_COMPRESS_OK;
 }
 
 /* ========== Heap-Allocated Versions ========== */
 
-uint8_t* xr_gzip_alloc(const uint8_t *input, size_t in_len,
-                        size_t *out_len, int level) {
+uint8_t *xr_gzip_alloc(const uint8_t *input, size_t in_len, size_t *out_len, int level) {
     size_t bound = xr_deflate_bound(in_len) + 18;
-    uint8_t *output = (uint8_t*)xr_malloc(bound);
-    if (!output) return NULL;
+    uint8_t *output = (uint8_t *) xr_malloc(bound);
+    if (!output)
+        return NULL;
 
     XrCompressError err = xr_gzip(input, in_len, output, bound, out_len, level);
     if (err != XR_COMPRESS_OK) {
@@ -941,16 +1000,18 @@ uint8_t* xr_gzip_alloc(const uint8_t *input, size_t in_len,
     return output;
 }
 
-uint8_t* xr_gunzip_alloc(const uint8_t *input, size_t in_len, size_t *out_len) {
+uint8_t *xr_gunzip_alloc(const uint8_t *input, size_t in_len, size_t *out_len) {
     // Try to get original size from gzip trailer
     uint32_t orig_size = xr_gzip_original_size(input, in_len);
-    if (orig_size == 0) orig_size = in_len * 4;  // Estimate
+    if (orig_size == 0)
+        orig_size = in_len * 4;  // Estimate
 
     // Try to decompress, expand buffer if needed
     size_t cap = orig_size + 256;
     for (int tries = 0; tries < 4; tries++) {
-        uint8_t *output = (uint8_t*)xr_malloc(cap);
-        if (!output) return NULL;
+        uint8_t *output = (uint8_t *) xr_malloc(cap);
+        if (!output)
+            return NULL;
 
         XrCompressError err = xr_gunzip(input, in_len, output, cap, out_len);
         if (err == XR_COMPRESS_OK) {
@@ -969,23 +1030,32 @@ uint8_t* xr_gunzip_alloc(const uint8_t *input, size_t in_len, size_t *out_len) {
 
 /* ========== Error Messages ========== */
 
-const char* xr_compress_error_str(XrCompressError err) {
+const char *xr_compress_error_str(XrCompressError err) {
     switch (err) {
-        case XR_COMPRESS_OK: return "OK";
-        case XR_COMPRESS_ERR_MEMORY: return "Memory allocation failed";
-        case XR_COMPRESS_ERR_DATA: return "Invalid data";
-        case XR_COMPRESS_ERR_BUFFER: return "Buffer too small";
-        case XR_COMPRESS_ERR_STREAM: return "Stream error";
-        case XR_COMPRESS_ERR_HEADER: return "Invalid header";
-        case XR_COMPRESS_ERR_CHECKSUM: return "Checksum mismatch";
-        default: return "Unknown error";
+        case XR_COMPRESS_OK:
+            return "OK";
+        case XR_COMPRESS_ERR_MEMORY:
+            return "Memory allocation failed";
+        case XR_COMPRESS_ERR_DATA:
+            return "Invalid data";
+        case XR_COMPRESS_ERR_BUFFER:
+            return "Buffer too small";
+        case XR_COMPRESS_ERR_STREAM:
+            return "Stream error";
+        case XR_COMPRESS_ERR_HEADER:
+            return "Invalid header";
+        case XR_COMPRESS_ERR_CHECKSUM:
+            return "Checksum mismatch";
+        default:
+            return "Unknown error";
     }
 }
 
 /* ========== Helper Functions ========== */
 
 static XrValue make_string_n(XrayIsolate *X, const char *s, size_t len) {
-    if (!s) return xr_null();
+    if (!s)
+        return xr_null();
     return xrs_string_value_n(X, s, len);
 }
 
@@ -993,94 +1063,110 @@ static XrValue make_string_n(XrayIsolate *X, const char *s, size_t len) {
 
 // compress.gzip(data, level?) -> string
 static XrValue compress_gzip(XrayIsolate *X, XrValue *args, int nargs) {
-    if (nargs < 1) return xr_null();
+    if (nargs < 1)
+        return xr_null();
 
     size_t len;
     const char *data = xrs_string_arg(args[0], &len);
-    if (!data) return xr_null();
+    if (!data)
+        return xr_null();
 
     int level = XR_COMPRESS_DEFAULT_COMPRESSION;
     if (nargs >= 2 && XR_IS_INT(args[1])) {
-        level = (int)XR_TO_INT(args[1]);
-        if (level < 0) level = 0;
-        if (level > 9) level = 9;
+        level = (int) XR_TO_INT(args[1]);
+        if (level < 0)
+            level = 0;
+        if (level > 9)
+            level = 9;
     }
 
     size_t out_len;
-    uint8_t *output = xr_gzip_alloc((const uint8_t*)data, len, &out_len, level);
-    if (!output) return xr_null();
+    uint8_t *output = xr_gzip_alloc((const uint8_t *) data, len, &out_len, level);
+    if (!output)
+        return xr_null();
 
-    XrValue result = make_string_n(X, (char*)output, out_len);
+    XrValue result = make_string_n(X, (char *) output, out_len);
     xr_free(output);
     return result;
 }
 
 // compress.gunzip(data) -> string
 static XrValue compress_gunzip(XrayIsolate *X, XrValue *args, int nargs) {
-    if (nargs < 1) return xr_null();
+    if (nargs < 1)
+        return xr_null();
 
     size_t len;
     const char *data = xrs_string_arg(args[0], &len);
-    if (!data) return xr_null();
+    if (!data)
+        return xr_null();
 
     size_t out_len;
-    uint8_t *output = xr_gunzip_alloc((const uint8_t*)data, len, &out_len);
-    if (!output) return xr_null();
+    uint8_t *output = xr_gunzip_alloc((const uint8_t *) data, len, &out_len);
+    if (!output)
+        return xr_null();
 
-    XrValue result = make_string_n(X, (char*)output, out_len);
+    XrValue result = make_string_n(X, (char *) output, out_len);
     xr_free(output);
     return result;
 }
 
 // compress.deflate(data, level?) -> string
 static XrValue compress_deflate(XrayIsolate *X, XrValue *args, int nargs) {
-    if (nargs < 1) return xr_null();
+    if (nargs < 1)
+        return xr_null();
 
     size_t len;
     const char *data = xrs_string_arg(args[0], &len);
-    if (!data) return xr_null();
+    if (!data)
+        return xr_null();
 
     int level = XR_COMPRESS_DEFAULT_COMPRESSION;
     if (nargs >= 2 && XR_IS_INT(args[1])) {
-        level = (int)XR_TO_INT(args[1]);
-        if (level < 0) level = 0;
-        if (level > 9) level = 9;
+        level = (int) XR_TO_INT(args[1]);
+        if (level < 0)
+            level = 0;
+        if (level > 9)
+            level = 9;
     }
 
     size_t bound = xr_deflate_bound(len);
-    uint8_t *output = (uint8_t*)xr_malloc(bound);
-    if (!output) return xr_null();
+    uint8_t *output = (uint8_t *) xr_malloc(bound);
+    if (!output)
+        return xr_null();
 
     size_t out_len;
-    XrCompressError err = xr_deflate((const uint8_t*)data, len, output, bound, &out_len, level);
+    XrCompressError err = xr_deflate((const uint8_t *) data, len, output, bound, &out_len, level);
     if (err != XR_COMPRESS_OK) {
         xr_free(output);
         return xr_null();
     }
 
-    XrValue result = make_string_n(X, (char*)output, out_len);
+    XrValue result = make_string_n(X, (char *) output, out_len);
     xr_free(output);
     return result;
 }
 
 // compress.inflate(data) -> string
 static XrValue compress_inflate(XrayIsolate *X, XrValue *args, int nargs) {
-    if (nargs < 1) return xr_null();
+    if (nargs < 1)
+        return xr_null();
 
     size_t len;
     const char *data = xrs_string_arg(args[0], &len);
-    if (!data) return xr_null();
+    if (!data)
+        return xr_null();
 
     // Estimate output size (generous to handle high compression ratios)
     size_t cap = len * 8 + 1024;
     for (int tries = 0; tries < 8; tries++) {
-        uint8_t *output = (uint8_t*)xr_malloc(cap);
-        if (!output) return xr_null();
+        uint8_t *output = (uint8_t *) xr_malloc(cap);
+        if (!output)
+            return xr_null();
 
         size_t out_len;
-        XrCompressError err = xr_inflate((const uint8_t*)data, len, output, cap, &out_len);
+        XrCompressError err = xr_inflate((const uint8_t *) data, len, output, cap, &out_len);
         if (err == XR_COMPRESS_OK) {
-            XrValue result = make_string_n(X, (char*)output, out_len);
+            XrValue result = make_string_n(X, (char *) output, out_len);
             xr_free(output);
             return result;
         } else if (err == XR_COMPRESS_ERR_BUFFER) {
@@ -1097,52 +1183,62 @@ static XrValue compress_inflate(XrayIsolate *X, XrValue *args, int nargs) {
 
 // compress.zlibCompress(data, level?) -> string
 static XrValue compress_zlib_compress(XrayIsolate *X, XrValue *args, int nargs) {
-    if (nargs < 1) return xr_null();
+    if (nargs < 1)
+        return xr_null();
 
     size_t len;
     const char *data = xrs_string_arg(args[0], &len);
-    if (!data) return xr_null();
+    if (!data)
+        return xr_null();
 
     int level = XR_COMPRESS_DEFAULT_COMPRESSION;
     if (nargs >= 2 && XR_IS_INT(args[1])) {
-        level = (int)XR_TO_INT(args[1]);
-        if (level < 0) level = 0;
-        if (level > 9) level = 9;
+        level = (int) XR_TO_INT(args[1]);
+        if (level < 0)
+            level = 0;
+        if (level > 9)
+            level = 9;
     }
 
     size_t bound = xr_deflate_bound(len) + 6;
-    uint8_t *output = (uint8_t*)xr_malloc(bound);
-    if (!output) return xr_null();
+    uint8_t *output = (uint8_t *) xr_malloc(bound);
+    if (!output)
+        return xr_null();
 
     size_t out_len;
-    XrCompressError err = xr_zlib_compress((const uint8_t*)data, len, output, bound, &out_len, level);
+    XrCompressError err =
+        xr_zlib_compress((const uint8_t *) data, len, output, bound, &out_len, level);
     if (err != XR_COMPRESS_OK) {
         xr_free(output);
         return xr_null();
     }
 
-    XrValue result = make_string_n(X, (char*)output, out_len);
+    XrValue result = make_string_n(X, (char *) output, out_len);
     xr_free(output);
     return result;
 }
 
 // compress.zlibDecompress(data) -> string
 static XrValue compress_zlib_decompress(XrayIsolate *X, XrValue *args, int nargs) {
-    if (nargs < 1) return xr_null();
+    if (nargs < 1)
+        return xr_null();
 
     size_t len;
     const char *data = xrs_string_arg(args[0], &len);
-    if (!data) return xr_null();
+    if (!data)
+        return xr_null();
 
     size_t cap = len * 8 + 1024;
     for (int tries = 0; tries < 8; tries++) {
-        uint8_t *output = (uint8_t*)xr_malloc(cap);
-        if (!output) return xr_null();
+        uint8_t *output = (uint8_t *) xr_malloc(cap);
+        if (!output)
+            return xr_null();
 
         size_t out_len;
-        XrCompressError err = xr_zlib_decompress((const uint8_t*)data, len, output, cap, &out_len);
+        XrCompressError err =
+            xr_zlib_decompress((const uint8_t *) data, len, output, cap, &out_len);
         if (err == XR_COMPRESS_OK) {
-            XrValue result = make_string_n(X, (char*)output, out_len);
+            XrValue result = make_string_n(X, (char *) output, out_len);
             xr_free(output);
             return result;
         } else if (err == XR_COMPRESS_ERR_BUFFER) {
@@ -1159,50 +1255,58 @@ static XrValue compress_zlib_decompress(XrayIsolate *X, XrValue *args, int nargs
 
 // compress.isGzip(data) -> bool
 static XrValue compress_is_gzip(XrayIsolate *X, XrValue *args, int nargs) {
-    (void)X;
-    if (nargs < 1) return xr_bool(false);
+    (void) X;
+    if (nargs < 1)
+        return xr_bool(false);
 
     size_t len;
     const char *data = xrs_string_arg(args[0], &len);
-    if (!data) return xr_bool(false);
+    if (!data)
+        return xr_bool(false);
 
-    return xr_bool(xr_is_gzip((const uint8_t*)data, len));
+    return xr_bool(xr_is_gzip((const uint8_t *) data, len));
 }
 
 // compress.isZlib(data) -> bool
 static XrValue compress_is_zlib(XrayIsolate *X, XrValue *args, int nargs) {
-    (void)X;
-    if (nargs < 1) return xr_bool(false);
+    (void) X;
+    if (nargs < 1)
+        return xr_bool(false);
 
     size_t len;
     const char *data = xrs_string_arg(args[0], &len);
-    if (!data) return xr_bool(false);
+    if (!data)
+        return xr_bool(false);
 
-    return xr_bool(xr_is_zlib((const uint8_t*)data, len));
+    return xr_bool(xr_is_zlib((const uint8_t *) data, len));
 }
 
 // compress.crc32(data) -> int
 static XrValue compress_crc32(XrayIsolate *X, XrValue *args, int nargs) {
-    (void)X;
-    if (nargs < 1) return xr_int(0);
+    (void) X;
+    if (nargs < 1)
+        return xr_int(0);
 
     size_t len;
     const char *data = xrs_string_arg(args[0], &len);
-    if (!data) return xr_int(0);
+    if (!data)
+        return xr_int(0);
 
-    return xr_int((int64_t)xr_crc32((const uint8_t*)data, len));
+    return xr_int((int64_t) xr_crc32((const uint8_t *) data, len));
 }
 
 // compress.adler32(data) -> int
 static XrValue compress_adler32(XrayIsolate *X, XrValue *args, int nargs) {
-    (void)X;
-    if (nargs < 1) return xr_int(1);
+    (void) X;
+    if (nargs < 1)
+        return xr_int(1);
 
     size_t len;
     const char *data = xrs_string_arg(args[0], &len);
-    if (!data) return xr_int(1);
+    if (!data)
+        return xr_int(1);
 
-    return xr_int((int64_t)xr_adler32((const uint8_t*)data, len));
+    return xr_int((int64_t) xr_adler32((const uint8_t *) data, len));
 }
 
 /* ========== Module Loading ========== */
@@ -1216,17 +1320,21 @@ static XrValue compress_adler32(XrayIsolate *X, XrValue *args, int nargs) {
 XR_DEFINE_BUILTIN(compress_gzip, "gzip", "(data: string, level?: int): string?", "Gzip compress")
 XR_DEFINE_BUILTIN(compress_gunzip, "gunzip", "(data: string): string?", "Gzip decompress")
 XR_DEFINE_BUILTIN(compress_is_gzip, "isGzip", "(data: string): bool", "Check if gzip data")
-XR_DEFINE_BUILTIN(compress_deflate, "deflate", "(data: string, level?: int): string?", "Deflate compress")
+XR_DEFINE_BUILTIN(compress_deflate, "deflate", "(data: string, level?: int): string?",
+                  "Deflate compress")
 XR_DEFINE_BUILTIN(compress_inflate, "inflate", "(data: string): string?", "Inflate decompress")
-XR_DEFINE_BUILTIN(compress_zlib_compress, "zlibCompress", "(data: string, level?: int): string?", "Zlib compress")
-XR_DEFINE_BUILTIN(compress_zlib_decompress, "zlibDecompress", "(data: string): string?", "Zlib decompress")
+XR_DEFINE_BUILTIN(compress_zlib_compress, "zlibCompress", "(data: string, level?: int): string?",
+                  "Zlib compress")
+XR_DEFINE_BUILTIN(compress_zlib_decompress, "zlibDecompress", "(data: string): string?",
+                  "Zlib decompress")
 XR_DEFINE_BUILTIN(compress_is_zlib, "isZlib", "(data: string): bool", "Check if zlib data")
 XR_DEFINE_BUILTIN(compress_crc32, "crc32", "(data: string): int", "Compute CRC-32 checksum")
 XR_DEFINE_BUILTIN(compress_adler32, "adler32", "(data: string): int", "Compute Adler-32 checksum")
 
-XrModule* xr_load_module_compress(XrayIsolate *isolate) {
+XrModule *xr_load_module_compress(XrayIsolate *isolate) {
     XrModule *module = xr_module_create_native(isolate, "compress");
-    if (!module) return NULL;
+    if (!module)
+        return NULL;
 
     // Gzip
     XRS_EXPORT(module, isolate, "gzip", compress_gzip);

@@ -25,16 +25,17 @@
 ** Single authoritative VM context resolver.
 ** See xvm_internal.h for the documented resolution order and contract.
 */
-XrVMContext* xr_vm_current_ctx(XrayIsolate *isolate) {
+XrVMContext *xr_vm_current_ctx(XrayIsolate *isolate) {
     XR_DCHECK(isolate != NULL, "vm_current_ctx: NULL isolate");
     XrWorker *worker = xr_current_worker();
     if (worker && worker->m) {
-        XrCoroutine *coro = (XrCoroutine *)worker->m->vm_ctx.current_coro;
-        if (coro) return &coro->vm_ctx;
+        XrCoroutine *coro = (XrCoroutine *) worker->m->vm_ctx.current_coro;
+        if (coro)
+            return &coro->vm_ctx;
         return &worker->m->vm_ctx;
     }
     if (isolate->main_coro) {
-        return &((XrCoroutine *)isolate->main_coro)->vm_ctx;
+        return &((XrCoroutine *) isolate->main_coro)->vm_ctx;
     }
     return &isolate->vm_ctx;
 }
@@ -52,7 +53,7 @@ bool xr_vm_prepare_entry(XrVMContext *ctx, int extra_stack) {
     XR_DCHECK(ctx != NULL, "vm_prepare_entry: NULL ctx");
     XR_DCHECK(extra_stack >= 0, "vm_prepare_entry: negative extra_stack");
 
-    int stack_used = (int)(ctx->stack_top - ctx->stack);
+    int stack_used = (int) (ctx->stack_top - ctx->stack);
     int stack_needed = stack_used + extra_stack;
     int frames_needed = ctx->frame_count + 1;
 
@@ -63,7 +64,7 @@ bool xr_vm_prepare_entry(XrVMContext *ctx, int extra_stack) {
         return true;
     }
 
-    XrCoroutine *coro = (XrCoroutine *)ctx->current_coro;
+    XrCoroutine *coro = (XrCoroutine *) ctx->current_coro;
     if (!coro) {
         // Static fallback ctx (isolate->vm_ctx with no main coro): cannot grow.
         // Caller must surface XR_VM_RUNTIME_ERROR; we never silently truncate.
@@ -106,13 +107,13 @@ XrValue xr_vm_call_closure(XrayIsolate *isolate, XrClosure *closure, XrValue *ar
     // Argument count validation (aligned with OP_CALL semantics)
     if (proto->is_vararg) {
         if (nargs < proto->min_params) {
-            xr_log_warning("vm", "expected at least %d arguments but got %d",
-                    proto->min_params, nargs);
+            xr_log_warning("vm", "expected at least %d arguments but got %d", proto->min_params,
+                           nargs);
             return xr_null();
         }
     } else if (nargs < proto->min_params || nargs > proto->numparams) {
-        xr_log_warning("vm", "expected %d..%d arguments but got %d",
-                proto->min_params, proto->numparams, nargs);
+        xr_log_warning("vm", "expected %d..%d arguments but got %d", proto->min_params,
+                       proto->numparams, nargs);
         return xr_null();
     }
 
@@ -139,7 +140,7 @@ XrValue xr_vm_call_closure(XrayIsolate *isolate, XrClosure *closure, XrValue *ar
     // Advance ctx->stack_top to the projected start so prepare_entry computes
     // the right grow amount, then re-derive saved_stack_top via offset since
     // grow may relocate ctx->stack.
-    int stack_top_offset = (int)(saved_stack_top - ctx->stack);
+    int stack_top_offset = (int) (saved_stack_top - ctx->stack);
     XrValue *prev_stack_top = ctx->stack_top;
     ctx->stack_top = saved_stack_top;
     if (!xr_vm_prepare_entry(ctx, 1 + proto->maxstacksize)) {
@@ -162,7 +163,7 @@ XrValue xr_vm_call_closure(XrayIsolate *isolate, XrClosure *closure, XrValue *ar
     XrBcCallFrame *frame = &ctx->frames[ctx->frame_count++];
     frame->closure = closure;
     frame->pc = PROTO_CODE_BASE(proto);
-    frame->base_offset = (int)(func_base - ctx->stack);
+    frame->base_offset = (int) (func_base - ctx->stack);
     XR_DCHECK(frame->base_offset >= 0, "vm_call_closure: negative base_offset");
     frame->flags = 0;
     frame->call_status = 0;
@@ -177,7 +178,7 @@ XrValue xr_vm_call_closure(XrayIsolate *isolate, XrClosure *closure, XrValue *ar
     if (proto->is_vararg) {
         // Collect extra arguments into rest array (matches OP_CALL vararg path)
         int extra = nargs > proto->numparams ? nargs - proto->numparams : 0;
-        XrCoroutine *coro = (XrCoroutine *)ctx->current_coro;
+        XrCoroutine *coro = (XrCoroutine *) ctx->current_coro;
         XrArray *rest = xr_array_new(coro);
         if (extra > 0) {
             for (int j = 0; j < extra; j++) {
@@ -234,7 +235,7 @@ XrValue xr_vm_call_closure(XrayIsolate *isolate, XrClosure *closure, XrValue *ar
 XrVMResult xr_vm_interpret_proto(XrayIsolate *isolate, XrProto *proto) {
     XR_DCHECK(isolate != NULL, "vm_interpret_proto: NULL isolate");
     XR_DCHECK(proto != NULL, "vm_interpret_proto: NULL proto");
-    XrCoroutine *main_coro = (XrCoroutine*)isolate->main_coro;
+    XrCoroutine *main_coro = (XrCoroutine *) isolate->main_coro;
     XrClosure *closure = xr_closure_new(isolate, proto, main_coro);
     if (closure == NULL) {
         return XR_VM_RUNTIME_ERROR;
@@ -276,7 +277,7 @@ XrVMResult xr_vm_execute_module(XrayIsolate *isolate, XrProto *proto) {
     XrVMContext *ctx = xr_vm_current_ctx(isolate);
 
     // Create module closure on current coroutine's Immix heap (if any).
-    XrCoroutine *coro = (XrCoroutine *)ctx->current_coro;
+    XrCoroutine *coro = (XrCoroutine *) ctx->current_coro;
     XrClosure *closure = xr_closure_new(isolate, proto, coro);
     if (closure == NULL) {
         return XR_VM_RUNTIME_ERROR;
@@ -285,7 +286,7 @@ XrVMResult xr_vm_execute_module(XrayIsolate *isolate, XrProto *proto) {
     // Save state as offsets (pointer-stable across grow).
     int saved_frame_count = ctx->frame_count;
     int saved_module_base = ctx->module_base_frame;
-    int saved_top_offset = (int)(ctx->stack_top - ctx->stack);
+    int saved_top_offset = (int) (ctx->stack_top - ctx->stack);
 
     // Reserve room for one entry frame plus the proto's full register window
     // above the current stack_top. prepare_entry uses ctx->stack_top as the
@@ -328,13 +329,12 @@ XrVMResult xr_vm_execute_module(XrayIsolate *isolate, XrProto *proto) {
 ** Execute source code
 */
 XrVMResult xr_vm_interpret(const char *source) {
-    (void)source;
+    (void) source;
     // This function is now just for API compatibility
     // Currently requires xcompiler module
     fprintf(stderr, "XrCompiler not yet implemented\n");
     return XR_VM_COMPILE_ERROR;
 }
-
 
 /* ========== Exception Handling Implementation ========== */
 
@@ -371,9 +371,9 @@ void xr_vm_add_stacktrace(XrayIsolate *isolate, XrValue exception) {
         }
 
         // Calculate current line number (from lineinfo)
-        int pc_offset = (int)(frame->pc - PROTO_CODE_BASE(frame->closure->proto));
+        int pc_offset = (int) (frame->pc - PROTO_CODE_BASE(frame->closure->proto));
         size_t line_count = PROTO_LINE_COUNT(frame->closure->proto);
-        if (pc_offset >= 0 && (size_t)pc_offset < line_count) {
+        if (pc_offset >= 0 && (size_t) pc_offset < line_count) {
             line = PROTO_LINE(frame->closure->proto, pc_offset);
         }
     }
@@ -455,7 +455,7 @@ void xr_vm_throw_exception(XrayIsolate *isolate, XrValue exception) {
     ** Main coroutine or non-coroutine: print (fatal, program terminates). */
     bool is_child_coro = false;
     if (ctx->current_coro) {
-        XrCoroutine *coro = (XrCoroutine *)ctx->current_coro;
+        XrCoroutine *coro = (XrCoroutine *) ctx->current_coro;
         is_child_coro = !xr_coro_flags_has(coro, XR_CORO_FLG_MAIN);
     }
     if (!is_child_coro && !(isolate && isolate->suppress_exception_print)) {

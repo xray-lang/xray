@@ -24,4 +24,4 @@ XR_FUNC XrValue xr_map_method_increment(XrayIsolate *isolate, XrValue *args, int
 
 // Note: Methods are registered via XrClassBuilder in xr_map_create_class()
 
-#endif // XMAP_INSTANCE_METHODS_H
+#endif  // XMAP_INSTANCE_METHODS_H

@@ -41,21 +41,21 @@ struct XrStructLayout;
 // Virtual method slot for JIT devirtualization.
 // Populated by the analyzer (Pass 1.5); consumed by JIT.
 typedef struct XaMethodSlot {
-    const char *name;           // Method name
-    XaSymbol *symbol;           // Method symbol (analyzer-owned)
-    bool is_overridden;         // Overridden by a subclass
-    bool is_final;              // No subclass overrides (safe for direct call)
-    int vtable_index;           // Slot index in vtable (-1 if not virtual)
+    const char *name;    // Method name
+    XaSymbol *symbol;    // Method symbol (analyzer-owned)
+    bool is_overridden;  // Overridden by a subclass
+    bool is_final;       // No subclass overrides (safe for direct call)
+    int vtable_index;    // Slot index in vtable (-1 if not virtual)
 } XaMethodSlot;
 
 // Class metadata. Fields are filled during analysis and remain stable at runtime.
 typedef struct XrClassInfo XrClassInfo;
 struct XrClassInfo {
     const char *name;
-    const char *base_name;      // Base class name (for deferred linking)
-    XrClassInfo *base;          // Base class (NULL if none, linked after collect)
+    const char *base_name;  // Base class name (for deferred linking)
+    XrClassInfo *base;      // Base class (NULL if none, linked after collect)
 
-    XaScope *scope;             // Class body scope (analyzer-owned)
+    XaScope *scope;  // Class body scope (analyzer-owned)
 
     // Members (computed from scope)
     XaSymbol **fields;
@@ -71,15 +71,15 @@ struct XrClassInfo {
     struct XrHashMap *members_map;
 
     // Constructor info (set during class collection)
-    bool has_constructor;               // true if class explicitly defines a constructor
-    int constructor_required_params;    // number of params without default values
+    bool has_constructor;             // true if class explicitly defines a constructor
+    int constructor_required_params;  // number of params without default values
     XrType **constructor_params;
     int constructor_param_count;
 
     // Virtual method table (built in Pass 1.5 for JIT devirtualization)
-    XaMethodSlot *vtable;       // Virtual method slots (NULL if not built)
-    int vtable_size;            // Number of vtable entries
-    bool has_subclass;          // true if any class extends this one
+    XaMethodSlot *vtable;  // Virtual method slots (NULL if not built)
+    int vtable_size;       // Number of vtable entries
+    bool has_subclass;     // true if any class extends this one
 
     // Struct layout (VALUE_TYPE only, computed by analyzer)
     struct XrStructLayout *struct_layout;  // NULL for class, set for struct
@@ -91,4 +91,4 @@ struct XrClassInfo {
     XrLocation location;
 };
 
-#endif // XCLASS_INFO_H
+#endif  // XCLASS_INFO_H

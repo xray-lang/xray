@@ -60,8 +60,7 @@ XrJsonValue *xlsp_analyze_format(XrLspDocument *doc) {
 
     // Create single edit that replaces entire document
     XrJsonValue *edit = xjson_new_object();
-    xjson_object_set(edit, "range",
-        xjson_make_range(0, 0, doc->line_count, 0));
+    xjson_object_set(edit, "range", xjson_make_range(0, 0, doc->line_count, 0));
     xjson_object_set(edit, "newText", xjson_new_string(formatted));
 
     xjson_array_push(edits, edit);
@@ -69,4 +68,3 @@ XrJsonValue *xlsp_analyze_format(XrLspDocument *doc) {
     xr_free(formatted);
     return edits;
 }
-

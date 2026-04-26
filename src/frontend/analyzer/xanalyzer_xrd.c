@@ -25,11 +25,11 @@
 // Dynamic module storage (linked list, grows as .xrd files are loaded)
 typedef struct XrdModule {
     XaBuiltinModule module;
-    XaBuiltinMember *functions;     // owned, heap-allocated
+    XaBuiltinMember *functions;  // owned, heap-allocated
     int function_cap;
-    XaBuiltinHandle *handles;       // owned
+    XaBuiltinHandle *handles;  // owned
     int handle_cap;
-    char *name_buf;                 // owned string storage
+    char *name_buf;  // owned string storage
     struct XrdModule *next;
 } XrdModule;
 
@@ -40,14 +40,15 @@ static XrdModule *g_xrd_modules = NULL;
 
 // Skip whitespace
 static const char *skip_ws(const char *p) {
-    while (*p && (*p == ' ' || *p == '\t')) p++;
+    while (*p && (*p == ' ' || *p == '\t'))
+        p++;
     return p;
 }
 
 // Read identifier (alphanumeric + underscore)
 static const char *read_ident(const char *p, char *buf, size_t buf_size) {
     size_t i = 0;
-    while (*p && (isalnum((unsigned char)*p) || *p == '_') && i < buf_size - 1) {
+    while (*p && (isalnum((unsigned char) *p) || *p == '_') && i < buf_size - 1) {
         buf[i++] = *p++;
     }
     buf[i] = '\0';
@@ -62,7 +63,7 @@ static const char *read_to_eol(const char *p, char *buf, size_t buf_size) {
     }
     buf[i] = '\0';
     // Trim trailing whitespace
-    while (i > 0 && (buf[i-1] == ' ' || buf[i-1] == '\t')) {
+    while (i > 0 && (buf[i - 1] == ' ' || buf[i - 1] == '\t')) {
         buf[--i] = '\0';
     }
     return p;
@@ -73,19 +74,26 @@ static XaBuiltinHandleField *parse_handle_fields(const char *p, int *out_count) 
     *out_count = 0;
 
     // Skip to opening brace
-    while (*p && *p != '{') p++;
-    if (*p != '{') return NULL;
+    while (*p && *p != '{')
+        p++;
+    if (*p != '{')
+        return NULL;
     p++;
 
     // Count commas to estimate field count
     int cap = 8;
     XaBuiltinHandleField *fields = xr_calloc(cap, sizeof(XaBuiltinHandleField));
-    if (!fields) return NULL;
+    if (!fields)
+        return NULL;
 
     int count = 0;
     while (*p && *p != '}') {
         p = skip_ws(p);
-        if (*p == ',' || *p == '}') { if (*p == ',') p++; continue; }
+        if (*p == ',' || *p == '}') {
+            if (*p == ',')
+                p++;
+            continue;
+        }
 
         bool is_const = false;
         if (strncmp(p, "const ", 6) == 0) {
@@ -98,7 +106,8 @@ static XaBuiltinHandleField *parse_handle_fields(const char *p, int *out_count) 
         p = read_ident(p, name, sizeof(name));
         p = skip_ws(p);
 
-        if (*p == ':') p++;
+        if (*p == ':')
+            p++;
         p = skip_ws(p);
 
         char type_str[64];
@@ -107,8 +116,7 @@ static XaBuiltinHandleField *parse_handle_fields(const char *p, int *out_count) 
         if (name[0] && type_str[0]) {
             if (count >= cap) {
                 cap *= 2;
-                XR_REALLOC_OR_ABORT(fields,
-                                    (size_t)cap * sizeof(XaBuiltinHandleField),
+                XR_REALLOC_OR_ABORT(fields, (size_t) cap * sizeof(XaBuiltinHandleField),
                                     "xrd fields grow");
             }
             fields[count].name = xrd_strdup(name);
@@ -119,7 +127,8 @@ static XaBuiltinHandleField *parse_handle_fields(const char *p, int *out_count) 
 
         // Skip comma
         p = skip_ws(p);
-        if (*p == ',') p++;
+        if (*p == ',')
+            p++;
     }
 
     *out_count = count;
@@ -131,10 +140,11 @@ static XrdModule *parse_xrd_content(const char *content, const char *module_name
     XR_DCHECK(content != NULL, "parse_xrd_content: NULL content");
     XR_DCHECK(module_name != NULL, "parse_xrd_content: NULL module_name");
     XrdModule *xrd = xr_calloc(1, sizeof(XrdModule));
-    if (!xrd) return NULL;
+    if (!xrd)
+        return NULL;
 
     xrd->module.name = xrd_strdup(module_name);
-    xrd->name_buf = (char *)xrd->module.name;
+    xrd->name_buf = (char *) xrd->module.name;
 
     // Pre-allocate arrays
     xrd->function_cap = 32;
@@ -146,10 +156,15 @@ static XrdModule *parse_xrd_content(const char *content, const char *module_name
     while (*p) {
         // Skip blank lines and comments
         p = skip_ws(p);
-        if (*p == '\n' || *p == '\r') { p++; continue; }
+        if (*p == '\n' || *p == '\r') {
+            p++;
+            continue;
+        }
         if (*p == '/' && p[1] == '/') {
-            while (*p && *p != '\n') p++;
-            if (*p) p++;
+            while (*p && *p != '\n')
+                p++;
+            if (*p)
+                p++;
             continue;
         }
 
@@ -162,7 +177,8 @@ static XrdModule *parse_xrd_content(const char *content, const char *module_name
             p = read_ident(p, handle_name, sizeof(handle_name));
             p = skip_ws(p);
 
-            if (*p == '=') p++;
+            if (*p == '=')
+                p++;
             p = skip_ws(p);
 
             int field_count = 0;
@@ -173,7 +189,7 @@ static XrdModule *parse_xrd_content(const char *content, const char *module_name
                 if (idx >= xrd->handle_cap) {
                     xrd->handle_cap *= 2;
                     XR_REALLOC_OR_ABORT(xrd->handles,
-                                        (size_t)xrd->handle_cap * sizeof(XaBuiltinHandle),
+                                        (size_t) xrd->handle_cap * sizeof(XaBuiltinHandle),
                                         "xrd handles grow");
                 }
                 xrd->handles[idx].name = xrd_strdup(handle_name);
@@ -183,8 +199,10 @@ static XrdModule *parse_xrd_content(const char *content, const char *module_name
             }
 
             // Skip to next line
-            while (*p && *p != '\n') p++;
-            if (*p) p++;
+            while (*p && *p != '\n')
+                p++;
+            if (*p)
+                p++;
             continue;
         }
 
@@ -205,7 +223,7 @@ static XrdModule *parse_xrd_content(const char *content, const char *module_name
                 if (idx >= xrd->function_cap) {
                     xrd->function_cap *= 2;
                     XR_REALLOC_OR_ABORT(xrd->functions,
-                                        (size_t)xrd->function_cap * sizeof(XaBuiltinMember),
+                                        (size_t) xrd->function_cap * sizeof(XaBuiltinMember),
                                         "xrd functions grow");
                 }
                 xrd->functions[idx].name = xrd_strdup(func_name);
@@ -216,13 +234,16 @@ static XrdModule *parse_xrd_content(const char *content, const char *module_name
                 xrd->module.function_count++;
             }
 
-            if (*p) p++;
+            if (*p)
+                p++;
             continue;
         }
 
         // Skip unknown lines
-        while (*p && *p != '\n') p++;
-        if (*p) p++;
+        while (*p && *p != '\n')
+            p++;
+        if (*p)
+            p++;
     }
 
     xrd->module.functions = xrd->functions;
@@ -233,19 +254,23 @@ static XrdModule *parse_xrd_content(const char *content, const char *module_name
 // Read file into heap buffer
 static char *read_file_content(const char *path) {
     FILE *f = fopen(path, "r");
-    if (!f) return NULL;
+    if (!f)
+        return NULL;
 
     fseek(f, 0, SEEK_END);
     long size = ftell(f);
     fseek(f, 0, SEEK_SET);
 
-    if (size <= 0 || size > 1024 * 1024) { // Max 1MB
+    if (size <= 0 || size > 1024 * 1024) {  // Max 1MB
         fclose(f);
         return NULL;
     }
 
     char *buf = xr_malloc(size + 1);
-    if (!buf) { fclose(f); return NULL; }
+    if (!buf) {
+        fclose(f);
+        return NULL;
+    }
 
     size_t nread = fread(buf, 1, size, f);
     buf[nread] = '\0';
@@ -254,10 +279,12 @@ static char *read_file_content(const char *path) {
 }
 
 const XaBuiltinModule *xa_xrd_load_file(const char *xrd_path) {
-    if (!xrd_path) return NULL;
+    if (!xrd_path)
+        return NULL;
 
     char *content = read_file_content(xrd_path);
-    if (!content) return NULL;
+    if (!content)
+        return NULL;
 
     // Extract module name from filename
     const char *slash = strrchr(xrd_path, '/');
@@ -298,9 +325,9 @@ const XaBuiltinModule *xa_xrd_load_file(const char *xrd_path) {
     return &xrd->module;
 }
 
-const XaBuiltinModule *xa_xrd_find_module(const char *module_name,
-                                           const char *script_dir) {
-    if (!module_name) return NULL;
+const XaBuiltinModule *xa_xrd_find_module(const char *module_name, const char *script_dir) {
+    if (!module_name)
+        return NULL;
 
     // Check if already loaded
     for (XrdModule *m = g_xrd_modules; m; m = m->next) {
@@ -315,7 +342,8 @@ const XaBuiltinModule *xa_xrd_find_module(const char *module_name,
     if (script_dir && script_dir[0]) {
         snprintf(path, sizeof(path), "%s/%s.xrd", script_dir, module_name);
         const XaBuiltinModule *mod = xa_xrd_load_file(path);
-        if (mod) return mod;
+        if (mod)
+            return mod;
     }
 
     // 2. Search $XRAY_TYPEPATH
@@ -331,7 +359,8 @@ const XaBuiltinModule *xa_xrd_find_module(const char *module_name,
         while (dir) {
             snprintf(path, sizeof(path), "%s/%s.xrd", dir, module_name);
             const XaBuiltinModule *mod = xa_xrd_load_file(path);
-            if (mod) return mod;
+            if (mod)
+                return mod;
             dir = strtok_r(NULL, ":", &saveptr);
         }
     }
@@ -346,20 +375,20 @@ void xa_xrd_cleanup(void) {
 
         // Free function strings
         for (int i = 0; i < m->module.function_count; i++) {
-            xr_free((void *)m->functions[i].name);
-            xr_free((void *)m->functions[i].signature);
-            xr_free((void *)m->functions[i].doc);
+            xr_free((void *) m->functions[i].name);
+            xr_free((void *) m->functions[i].signature);
+            xr_free((void *) m->functions[i].doc);
         }
         xr_free(m->functions);
 
         // Free handle strings
         for (int i = 0; i < m->module.handle_count; i++) {
-            xr_free((void *)m->handles[i].name);
+            xr_free((void *) m->handles[i].name);
             for (int j = 0; j < m->handles[i].field_count; j++) {
-                xr_free((void *)m->handles[i].fields[j].name);
-                xr_free((void *)m->handles[i].fields[j].type_str);
+                xr_free((void *) m->handles[i].fields[j].name);
+                xr_free((void *) m->handles[i].fields[j].type_str);
             }
-            xr_free((void *)m->handles[i].fields);
+            xr_free((void *) m->handles[i].fields);
         }
         xr_free(m->handles);
 

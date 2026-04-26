@@ -40,17 +40,17 @@
 
 /* ========== Default Sizes ========== */
 
-#define XR_NETBUF_DEFAULT_CAP    4096 // Initial capacity
-#define XR_NETBUF_MAX_RECYCLE    16 // Max buffers per TLS recycle slot
-#define XR_NETBUF_RECYCLE_MAXCAP 65536 // Don't recycle buffers larger than this
+#define XR_NETBUF_DEFAULT_CAP 4096      // Initial capacity
+#define XR_NETBUF_MAX_RECYCLE 16        // Max buffers per TLS recycle slot
+#define XR_NETBUF_RECYCLE_MAXCAP 65536  // Don't recycle buffers larger than this
 
 /* ========== Self-Growing Buffer ========== */
 
 typedef struct XrNetBuffer {
-    char  *_base; // Allocated memory base
-    char  *bytes; // Data start (>= _base after consume)
-    size_t size; // Valid data length from bytes
-    size_t capacity; // Total allocated size from _base
+    char *_base;      // Allocated memory base
+    char *bytes;      // Data start (>= _base after consume)
+    size_t size;      // Valid data length from bytes
+    size_t capacity;  // Total allocated size from _base
 } XrNetBuffer;
 
 /*
@@ -70,7 +70,7 @@ XR_FUNC void xr_netbuf_free(XrNetBuffer *buf);
  * May reallocate or compact. Uses exponential growth.
  * Returns pointer to writable area, or NULL on allocation failure.
  */
-XR_FUNC char* xr_netbuf_reserve(XrNetBuffer *buf, size_t min_avail);
+XR_FUNC char *xr_netbuf_reserve(XrNetBuffer *buf, size_t min_avail);
 
 /*
  * Advance write cursor after filling n bytes into reserved area.
@@ -99,14 +99,14 @@ XR_FUNC void xr_netbuf_reset(XrNetBuffer *buf);
  * Available writable space at the end of the buffer.
  */
 static inline size_t xr_netbuf_available(const XrNetBuffer *buf) {
-    return buf->capacity - (size_t)(buf->bytes - buf->_base) - buf->size;
+    return buf->capacity - (size_t) (buf->bytes - buf->_base) - buf->size;
 }
 
 /*
  * Total consumed offset from _base.
  */
 static inline size_t xr_netbuf_consumed(const XrNetBuffer *buf) {
-    return (size_t)(buf->bytes - buf->_base);
+    return (size_t) (buf->bytes - buf->_base);
 }
 
 /* ========== TLS-Level Recycle Pool ========== */
@@ -115,7 +115,7 @@ static inline size_t xr_netbuf_consumed(const XrNetBuffer *buf) {
  * Acquire a buffer from TLS recycle pool, or allocate a new one.
  * Returns heap-allocated XrNetBuffer*, or NULL on failure.
  */
-XR_FUNC XrNetBuffer* xr_netbuf_acquire(size_t initial_capacity);
+XR_FUNC XrNetBuffer *xr_netbuf_acquire(size_t initial_capacity);
 
 /*
  * Release buffer back to TLS recycle pool (or free if pool full / oversized).
@@ -129,4 +129,4 @@ XR_FUNC void xr_netbuf_release(XrNetBuffer *buf);
  */
 XR_FUNC void xr_netbuf_pool_cleanup(void);
 
-#endif // XR_STDLIB_NETBUF_H
+#endif  // XR_STDLIB_NETBUF_H

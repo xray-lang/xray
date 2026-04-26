@@ -60,8 +60,7 @@ static void fmt_for_stmt(XrFmtContext *ctx, AstNode *node) {
         // Don't add newline for initializer
         int old_line_start = ctx->line_start;
         ctx->line_start = 0;
-        if (f->initializer->type == AST_VAR_DECL ||
-            f->initializer->type == AST_CONST_DECL) {
+        if (f->initializer->type == AST_VAR_DECL || f->initializer->type == AST_CONST_DECL) {
             VarDeclNode *decl = &f->initializer->as.var_decl;
             xfmt_write_str(ctx, decl->is_const ? "const " : "let ");
             xfmt_write_str(ctx, decl->name);
@@ -200,7 +199,8 @@ void xfmt_emit_block(XrFmtContext *ctx, AstNode *node) {
 }
 
 void xfmt_emit_statement(XrFmtContext *ctx, AstNode *node) {
-    if (!node) return;
+    if (!node)
+        return;
 
     // Output leading comments
     if (node->leading_comments) {
@@ -233,12 +233,14 @@ void xfmt_emit_statement(XrFmtContext *ctx, AstNode *node) {
             xfmt_write_indent(ctx);
             MultiAssignNode *ma = &node->as.multi_assign;
             for (int i = 0; i < ma->target_count; i++) {
-                if (i > 0) xfmt_write_str(ctx, ", ");
+                if (i > 0)
+                    xfmt_write_str(ctx, ", ");
                 xfmt_emit_expression(ctx, ma->targets[i]);
             }
             xfmt_write_str(ctx, " = ");
             for (int i = 0; i < ma->value_count; i++) {
-                if (i > 0) xfmt_write_str(ctx, ", ");
+                if (i > 0)
+                    xfmt_write_str(ctx, ", ");
                 xfmt_emit_expression(ctx, ma->values[i]);
             }
             xfmt_write_newline(ctx);
@@ -289,7 +291,8 @@ void xfmt_emit_statement(XrFmtContext *ctx, AstNode *node) {
             if (ret->value_count > 0) {
                 xfmt_write_space(ctx);
                 for (int i = 0; i < ret->value_count; i++) {
-                    if (i > 0) xfmt_write_str(ctx, ", ");
+                    if (i > 0)
+                        xfmt_write_str(ctx, ", ");
                     xfmt_emit_expression(ctx, ret->values[i]);
                 }
             }
@@ -327,7 +330,8 @@ void xfmt_emit_statement(XrFmtContext *ctx, AstNode *node) {
             if (imp->member_count > 0) {
                 xfmt_write_str(ctx, "import { ");
                 for (int i = 0; i < imp->member_count; i++) {
-                    if (i > 0) xfmt_write_str(ctx, ", ");
+                    if (i > 0)
+                        xfmt_write_str(ctx, ", ");
                     xfmt_write_str(ctx, imp->members[i].name);
                     if (imp->members[i].alias) {
                         xfmt_write_str(ctx, " as ");
@@ -339,8 +343,7 @@ void xfmt_emit_statement(XrFmtContext *ctx, AstNode *node) {
                 xfmt_write_str(ctx, "import ");
             }
 
-            if (imp->import_type == IMPORT_FILE ||
-                imp->import_type == IMPORT_DIR) {
+            if (imp->import_type == IMPORT_FILE || imp->import_type == IMPORT_DIR) {
                 xfmt_write_char(ctx, '"');
                 xfmt_write_str(ctx, imp->module_name);
                 xfmt_write_char(ctx, '"');
@@ -349,8 +352,7 @@ void xfmt_emit_statement(XrFmtContext *ctx, AstNode *node) {
             }
 
             // Only output "as alias" if alias is different from module name
-            if (imp->alias && imp->member_count == 0 &&
-                strcmp(imp->alias, imp->module_name) != 0) {
+            if (imp->alias && imp->member_count == 0 && strcmp(imp->alias, imp->module_name) != 0) {
                 xfmt_write_str(ctx, " as ");
                 xfmt_write_str(ctx, imp->alias);
             }
@@ -368,7 +370,8 @@ void xfmt_emit_statement(XrFmtContext *ctx, AstNode *node) {
                 xfmt_emit_statement(ctx, exp->declaration);
             } else if (exp->export_count > 0) {
                 for (int i = 0; i < exp->export_count; i++) {
-                    if (i > 0) xfmt_write_str(ctx, ", ");
+                    if (i > 0)
+                        xfmt_write_str(ctx, ", ");
                     xfmt_write_str(ctx, exp->export_names[i]);
                 }
                 xfmt_write_newline(ctx);
@@ -416,7 +419,8 @@ void xfmt_emit_statement(XrFmtContext *ctx, AstNode *node) {
             xfmt_write_str(ctx, "print(");
             PrintNode *p = &node->as.print_stmt;
             for (int i = 0; i < p->expr_count; i++) {
-                if (i > 0) xfmt_write_str(ctx, ", ");
+                if (i > 0)
+                    xfmt_write_str(ctx, ", ");
                 xfmt_emit_expression(ctx, p->exprs[i]);
             }
             xfmt_write_str(ctx, ")");
@@ -502,7 +506,8 @@ void xfmt_emit_statement(XrFmtContext *ctx, AstNode *node) {
 // ----------------------------------------------------------------------------
 
 void xfmt_emit_program(XrFmtContext *ctx, AstNode *node) {
-    if (!node || node->type != AST_PROGRAM) return;
+    if (!node || node->type != AST_PROGRAM)
+        return;
 
     // Output file-level leading comments
     if (node->leading_comments) {
@@ -515,10 +520,8 @@ void xfmt_emit_program(XrFmtContext *ctx, AstNode *node) {
     for (int i = 0; i < prog->count; i++) {
         AstNode *stmt = prog->statements[i];
 
-        int is_decl = (stmt->type == AST_FUNCTION_DECL ||
-                       stmt->type == AST_CLASS_DECL ||
-                       stmt->type == AST_STRUCT_DECL ||
-                       stmt->type == AST_INTERFACE_DECL ||
+        int is_decl = (stmt->type == AST_FUNCTION_DECL || stmt->type == AST_CLASS_DECL ||
+                       stmt->type == AST_STRUCT_DECL || stmt->type == AST_INTERFACE_DECL ||
                        stmt->type == AST_ENUM_DECL);
 
         if (i > 0 && (is_decl || last_was_decl)) {

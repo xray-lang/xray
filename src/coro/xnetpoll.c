@@ -14,9 +14,9 @@
 
 #include "xnetpoll.h"
 #include "../base/xchecks.h"
-#include "xcoroutine.h"                  // XrCoroutine
-#include "xworker.h" // XrRuntime, XrWorker
-#include "xyieldable.h" // XR_RESUME_TIMEOUT
+#include "xcoroutine.h"  // XrCoroutine
+#include "xworker.h"     // XrRuntime, XrWorker
+#include "xyieldable.h"  // XR_RESUME_TIMEOUT
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
@@ -65,7 +65,7 @@ XrPollDesc *xr_poll_cache_alloc(XrPollCache *cache) {
         pd = atomic_load_explicit(&cache->head, memory_order_acquire);
         if (!pd) {
             // Cache empty, allocate new and initialize mutex/cond ONCE
-            pd = (XrPollDesc *)xr_calloc(1, sizeof(XrPollDesc));
+            pd = (XrPollDesc *) xr_calloc(1, sizeof(XrPollDesc));
             if (pd) {
                 pthread_mutex_init(&pd->block_mu, NULL);
                 pthread_cond_init(&pd->block_cond, NULL);
@@ -73,9 +73,8 @@ XrPollDesc *xr_poll_cache_alloc(XrPollCache *cache) {
             }
             break;
         }
-    } while (!atomic_compare_exchange_weak_explicit(
-        &cache->head, &pd, pd->link,
-        memory_order_acq_rel, memory_order_acquire));
+    } while (!atomic_compare_exchange_weak_explicit(&cache->head, &pd, pd->link,
+                                                    memory_order_acq_rel, memory_order_acquire));
 
     if (pd) {
         // Reset all scalar fields except the (already-initialized) mutex/cond.
@@ -94,7 +93,7 @@ XrPollDesc *xr_poll_cache_alloc(XrPollCache *cache) {
         pd->wt_storage.slot = XR_TW_SLOT_INACTIVE;
         pd->user_data = NULL;
         pd->netpoll = NULL;
-        (void)is_new;  // currently informational; reserved for future asserts
+        (void) is_new;  // currently informational; reserved for future asserts
     }
 
     return pd;
@@ -109,9 +108,8 @@ void xr_poll_cache_free(XrPollCache *cache, XrPollDesc *pd) {
     do {
         old_head = atomic_load_explicit(&cache->head, memory_order_relaxed);
         pd->link = old_head;
-    } while (!atomic_compare_exchange_weak_explicit(
-        &cache->head, &old_head, pd,
-        memory_order_release, memory_order_relaxed));
+    } while (!atomic_compare_exchange_weak_explicit(&cache->head, &old_head, pd,
+                                                    memory_order_release, memory_order_relaxed));
 }
 
 // ========== Ready List Operations ==========
@@ -125,7 +123,8 @@ static void ready_list_init(XrReadyList *list) {
 
 // Add coroutine to ready list (using sched_link)
 static void ready_list_push(XrReadyList *list, struct XrCoroutine *coro) {
-    if (!coro) return;
+    if (!coro)
+        return;
 
     coro->sched_link = NULL;  // New node's next is NULL
 
@@ -151,7 +150,7 @@ static void ready_list_push(XrReadyList *list, struct XrCoroutine *coro) {
 //
 // Returns true if I/O ready, false if closed
 bool xr_netpoll_block(XrPollDesc *pd, int mode, XrayIsolate *X) {
-    (void)X;
+    (void) X;
     _Atomic uintptr_t *gpp = (mode == XR_POLL_READ) ? &pd->rg : &pd->wg;
 
     // CAS state machine: consume ready or set wait
@@ -222,7 +221,7 @@ struct XrCoroutine *xr_netpoll_unblock(XrPollDesc *pd, int mode, bool io_ready) 
                 if (pd->netpoll) {
                     atomic_fetch_sub(&pd->netpoll->waiters, 1);
                 }
-                return (struct XrCoroutine *)old;
+                return (struct XrCoroutine *) old;
             }
             return NULL;
         }
@@ -244,8 +243,10 @@ void xr_netpoll_ready(XrReadyList *list, XrPollDesc *pd, int mode) {
         wg = xr_netpoll_unblock(pd, XR_POLL_WRITE, true);
     }
 
-    if (rg) ready_list_push(list, rg);
-    if (wg) ready_list_push(list, wg);
+    if (rg)
+        ready_list_push(list, rg);
+    if (wg)
+        ready_list_push(list, wg);
 }
 
 // ========== Common Init/Cleanup ==========
@@ -253,12 +254,13 @@ void xr_netpoll_ready(XrReadyList *list, XrPollDesc *pd, int mode) {
 // Create wakeup pipe
 static int create_wakeup_pipe(int pipe_fds[2]) {
 #ifdef _WIN32
-    // Windows: a full IOCP-based wakeup integration is tracked separately
-    // (see xnetpoll_iocp.c which is not yet wired into netpoll_default_ops).
-    // Fail-fast here instead of silently returning -1 — callers that try to
-    // initialize netpoll on Windows will see a clear error rather than an
-    // ambiguous runtime hang.
-    #error "Windows netpoll wakeup pipe not implemented; wire xnetpoll_iocp.c or build without networking"
+// Windows: a full IOCP-based wakeup integration is tracked separately
+// (see xnetpoll_iocp.c which is not yet wired into netpoll_default_ops).
+// Fail-fast here instead of silently returning -1 — callers that try to
+// initialize netpoll on Windows will see a clear error rather than an
+// ambiguous runtime hang.
+#error                                                                                             \
+    "Windows netpoll wakeup pipe not implemented; wire xnetpoll_iocp.c or build without networking"
 #else
     if (pipe(pipe_fds) < 0) {
         return -1;
@@ -275,8 +277,10 @@ static int create_wakeup_pipe(int pipe_fds[2]) {
 // Close wakeup pipe
 static void close_wakeup_pipe(int pipe_fds[2]) {
 #ifndef _WIN32
-    if (pipe_fds[0] >= 0) close(pipe_fds[0]);
-    if (pipe_fds[1] >= 0) close(pipe_fds[1]);
+    if (pipe_fds[0] >= 0)
+        close(pipe_fds[0]);
+    if (pipe_fds[1] >= 0)
+        close(pipe_fds[1]);
     pipe_fds[0] = pipe_fds[1] = -1;
 #endif
 }
@@ -317,7 +321,8 @@ static const XrNetpollOps *netpoll_default_ops(void) {
 // cross-worker contention on the shared poller.
 
 int xr_local_poll_init(XrLocalPoll *lp) {
-    if (!lp) return -1;
+    if (!lp)
+        return -1;
     lp->poll_fd = -1;
     lp->wakeup_pipe[0] = lp->wakeup_pipe[1] = -1;
     atomic_store(&lp->break_pending, false);
@@ -329,7 +334,8 @@ int xr_local_poll_init(XrLocalPoll *lp) {
 #else
     return -1;
 #endif
-    if (lp->poll_fd < 0) return -1;
+    if (lp->poll_fd < 0)
+        return -1;
 
     if (create_wakeup_pipe(lp->wakeup_pipe) < 0) {
         close(lp->poll_fd);
@@ -343,14 +349,15 @@ int xr_local_poll_init(XrLocalPoll *lp) {
     EV_SET(&kev, lp->wakeup_pipe[0], EVFILT_READ, EV_ADD | EV_CLEAR, 0, 0, NULL);
     kevent(lp->poll_fd, &kev, 1, NULL, 0, NULL);
 #elif defined(__linux__)
-    struct epoll_event ev = { .events = EPOLLIN | EPOLLET, .data.fd = lp->wakeup_pipe[0] };
+    struct epoll_event ev = {.events = EPOLLIN | EPOLLET, .data.fd = lp->wakeup_pipe[0]};
     epoll_ctl(lp->poll_fd, EPOLL_CTL_ADD, lp->wakeup_pipe[0], &ev);
 #endif
     return 0;
 }
 
 void xr_local_poll_cleanup(XrLocalPoll *lp) {
-    if (!lp) return;
+    if (!lp)
+        return;
     close_wakeup_pipe(lp->wakeup_pipe);
     if (lp->poll_fd >= 0) {
         close(lp->poll_fd);
@@ -359,14 +366,15 @@ void xr_local_poll_cleanup(XrLocalPoll *lp) {
 }
 
 int xr_local_poll_add_fd(XrLocalPoll *lp, int fd, XrPollDesc *pd) {
-    if (!lp || lp->poll_fd < 0 || fd < 0) return -1;
+    if (!lp || lp->poll_fd < 0 || fd < 0)
+        return -1;
 #ifdef __APPLE__
     struct kevent kev[2];
-    EV_SET(&kev[0], fd, EVFILT_READ,  EV_ADD | EV_CLEAR, 0, 0, pd);
+    EV_SET(&kev[0], fd, EVFILT_READ, EV_ADD | EV_CLEAR, 0, 0, pd);
     EV_SET(&kev[1], fd, EVFILT_WRITE, EV_ADD | EV_CLEAR, 0, 0, pd);
     return kevent(lp->poll_fd, kev, 2, NULL, 0, NULL);
 #elif defined(__linux__)
-    struct epoll_event ev = { .events = EPOLLIN | EPOLLOUT | EPOLLET, .data.ptr = pd };
+    struct epoll_event ev = {.events = EPOLLIN | EPOLLOUT | EPOLLET, .data.ptr = pd};
     return epoll_ctl(lp->poll_fd, EPOLL_CTL_ADD, fd, &ev);
 #else
     return -1;
@@ -374,10 +382,11 @@ int xr_local_poll_add_fd(XrLocalPoll *lp, int fd, XrPollDesc *pd) {
 }
 
 void xr_local_poll_del_fd(XrLocalPoll *lp, int fd) {
-    if (!lp || lp->poll_fd < 0 || fd < 0) return;
+    if (!lp || lp->poll_fd < 0 || fd < 0)
+        return;
 #ifdef __APPLE__
     struct kevent kev[2];
-    EV_SET(&kev[0], fd, EVFILT_READ,  EV_DELETE, 0, 0, NULL);
+    EV_SET(&kev[0], fd, EVFILT_READ, EV_DELETE, 0, 0, NULL);
     EV_SET(&kev[1], fd, EVFILT_WRITE, EV_DELETE, 0, 0, NULL);
     kevent(lp->poll_fd, kev, 2, NULL, 0, NULL);
 #elif defined(__linux__)
@@ -386,13 +395,16 @@ void xr_local_poll_del_fd(XrLocalPoll *lp, int fd) {
 }
 
 int xr_local_poll_events(XrLocalPoll *lp, int64_t delta_ns, XrReadyList *list) {
-    if (!lp || lp->poll_fd < 0) return 0;
+    if (!lp || lp->poll_fd < 0)
+        return 0;
 
 #ifdef __APPLE__
     struct timespec ts;
     struct timespec *timeout = NULL;
     if (delta_ns == 0) {
-        ts.tv_sec = 0; ts.tv_nsec = 0; timeout = &ts;
+        ts.tv_sec = 0;
+        ts.tv_nsec = 0;
+        timeout = &ts;
     } else if (delta_ns > 0) {
         ts.tv_sec = delta_ns / 1000000000;
         ts.tv_nsec = delta_ns % 1000000000;
@@ -401,50 +413,67 @@ int xr_local_poll_events(XrLocalPoll *lp, int64_t delta_ns, XrReadyList *list) {
 
     struct kevent events[128];
     int n = kevent(lp->poll_fd, NULL, 0, events, 128, timeout);
-    if (n < 0) return (errno == EINTR) ? 0 : -1;
+    if (n < 0)
+        return (errno == EINTR) ? 0 : -1;
 
     for (int i = 0; i < n; i++) {
         struct kevent *ev = &events[i];
-        if ((int)ev->ident == lp->wakeup_pipe[0]) {
+        if ((int) ev->ident == lp->wakeup_pipe[0]) {
             char buf[16];
-            while (read(lp->wakeup_pipe[0], buf, sizeof(buf)) > 0) {}
+            while (read(lp->wakeup_pipe[0], buf, sizeof(buf)) > 0) {
+            }
             atomic_store(&lp->break_pending, false);
             continue;
         }
-        XrPollDesc *pd = (XrPollDesc *)ev->udata;
-        if (!pd) continue;
+        XrPollDesc *pd = (XrPollDesc *) ev->udata;
+        if (!pd)
+            continue;
         int mode = 0;
-        if (ev->filter == EVFILT_READ)  mode = XR_POLL_READ;
-        else if (ev->filter == EVFILT_WRITE) mode = XR_POLL_WRITE;
-        if (ev->flags & EV_ERROR) mode = XR_POLL_BOTH;
-        if (mode) xr_netpoll_ready(list, pd, mode);
+        if (ev->filter == EVFILT_READ)
+            mode = XR_POLL_READ;
+        else if (ev->filter == EVFILT_WRITE)
+            mode = XR_POLL_WRITE;
+        if (ev->flags & EV_ERROR)
+            mode = XR_POLL_BOTH;
+        if (mode)
+            xr_netpoll_ready(list, pd, mode);
     }
     return n;
 
 #elif defined(__linux__)
     int timeout_ms = 0;
-    if (delta_ns == 0) timeout_ms = 0;
-    else if (delta_ns > 0) timeout_ms = (int)(delta_ns / 1000000);
-    else timeout_ms = -1;
+    if (delta_ns == 0)
+        timeout_ms = 0;
+    else if (delta_ns > 0)
+        timeout_ms = (int) (delta_ns / 1000000);
+    else
+        timeout_ms = -1;
 
     struct epoll_event events[128];
     int n = epoll_wait(lp->poll_fd, events, 128, timeout_ms);
-    if (n < 0) return (errno == EINTR) ? 0 : -1;
+    if (n < 0)
+        return (errno == EINTR) ? 0 : -1;
 
     for (int i = 0; i < n; i++) {
         if (events[i].data.fd == lp->wakeup_pipe[0]) {
             char buf[16];
-            while (read(lp->wakeup_pipe[0], buf, sizeof(buf)) > 0) {}
+            while (read(lp->wakeup_pipe[0], buf, sizeof(buf)) > 0) {
+            }
             atomic_store(&lp->break_pending, false);
             continue;
         }
-        XrPollDesc *pd = (XrPollDesc *)events[i].data.ptr;
-        if (!pd) continue;
+        XrPollDesc *pd = (XrPollDesc *) events[i].data.ptr;
+        if (!pd)
+            continue;
         int mode = 0;
-        if (events[i].events & (EPOLLIN | EPOLLHUP)) mode |= XR_POLL_READ;
-        if (events[i].events & EPOLLOUT) mode |= XR_POLL_WRITE;
-        if (events[i].events & EPOLLERR) mode = XR_POLL_BOTH;
-        if (mode) xr_netpoll_ready(list, pd, mode);
+        if (events[i].events & (EPOLLIN | EPOLLHUP))
+            mode |= XR_POLL_READ;
+        if (events[i].events & EPOLLOUT)
+            mode |= XR_POLL_WRITE;
+        if (events[i].events & EPOLLERR)
+            mode = XR_POLL_BOTH;
+        if (mode)
+            xr_netpoll_ready(list, pd, mode);
     }
     return n;
 #else
@@ -453,29 +482,35 @@ int xr_local_poll_events(XrLocalPoll *lp, int64_t delta_ns, XrReadyList *list) {
 }
 
 void xr_local_poll_wakeup(XrLocalPoll *lp) {
-    if (!lp || lp->poll_fd < 0) return;
+    if (!lp || lp->poll_fd < 0)
+        return;
     bool expected = false;
     if (!atomic_compare_exchange_strong(&lp->break_pending, &expected, true))
         return;
     char c = 0;
     ssize_t n;
-    do { n = write(lp->wakeup_pipe[1], &c, 1); } while (n < 0 && errno == EINTR);
+    do {
+        n = write(lp->wakeup_pipe[1], &c, 1);
+    } while (n < 0 && errno == EINTR);
 }
 
 // ========== Unified Public API (ops dispatch) ==========
 
 int xr_netpoll_init(XrNetpoll *np) {
-    if (atomic_load(&np->inited)) return 0;
+    if (atomic_load(&np->inited))
+        return 0;
 
     np->ops = netpoll_default_ops();
-    if (!np->ops) return -1;
+    if (!np->ops)
+        return -1;
 
     poll_cache_init(&np->cache);
     memset(np->fd_pages, 0, sizeof(np->fd_pages));
     np->poll_fd = -1;
     np->backend_state = NULL;
 
-    if (create_wakeup_pipe(np->wakeup_pipe) < 0) return -1;
+    if (create_wakeup_pipe(np->wakeup_pipe) < 0)
+        return -1;
 
     if (np->ops->init(np) < 0) {
 #if defined(__linux__) && defined(XR_HAS_IO_URING)
@@ -498,10 +533,12 @@ int xr_netpoll_init(XrNetpoll *np) {
 }
 
 void xr_netpoll_cleanup(XrNetpoll *np) {
-    if (!atomic_load(&np->inited)) return;
+    if (!atomic_load(&np->inited))
+        return;
 
     close_wakeup_pipe(np->wakeup_pipe);
-    if (np->ops) np->ops->cleanup(np);
+    if (np->ops)
+        np->ops->cleanup(np);
     poll_cache_cleanup(&np->cache);
     xr_fdmap_destroy(np);
 
@@ -538,10 +575,12 @@ XrPollDesc *xr_netpoll_open(XrNetpoll *np, int fd) {
                     xr_twheel_cancel_timer(old_tw, &pd->wt_storage);
             } else if (old_tw) {
                 if (pd->rt_storage.slot != XR_TW_SLOT_INACTIVE &&
-                    atomic_load_explicit(&pd->rt_storage.state, memory_order_acquire) != XR_TIMER_STATE_ZOMBIE)
+                    atomic_load_explicit(&pd->rt_storage.state, memory_order_acquire) !=
+                        XR_TIMER_STATE_ZOMBIE)
                     xr_timer_queue_cancel(old_tw, &pd->rt_storage, NULL);
                 if (pd->wt_storage.slot != XR_TW_SLOT_INACTIVE &&
-                    atomic_load_explicit(&pd->wt_storage.state, memory_order_acquire) != XR_TIMER_STATE_ZOMBIE)
+                    atomic_load_explicit(&pd->wt_storage.state, memory_order_acquire) !=
+                        XR_TIMER_STATE_ZOMBIE)
                     xr_timer_queue_cancel(old_tw, &pd->wt_storage, NULL);
             }
         }
@@ -564,7 +603,8 @@ XrPollDesc *xr_netpoll_open(XrNetpoll *np, int fd) {
 
     // New fd: allocate pd, register with backend
     pd = xr_poll_cache_alloc(&np->cache);
-    if (!pd) return NULL;
+    if (!pd)
+        return NULL;
 
     pd->fd = fd;
     pd->netpoll = np;
@@ -586,7 +626,8 @@ XrPollDesc *xr_netpoll_open(XrNetpoll *np, int fd) {
 
 // Close fd: shared timer/cache/map logic, delegates backend_del to ops.
 void xr_netpoll_close(XrNetpoll *np, XrPollDesc *pd) {
-    if (!pd) return;
+    if (!pd)
+        return;
 
     atomic_store(&pd->closing, true);
 
@@ -597,11 +638,23 @@ void xr_netpoll_close(XrNetpoll *np, XrPollDesc *pd) {
         XrWorker *current = xr_current_worker();
         bool is_owner = current && (current->p.id == pd->owner_worker_id);
         if (is_owner) {
-            if (pd->rrun) { xr_twheel_cancel_timer(tw, &pd->rt_storage); pd->rrun = false; }
-            if (pd->wrun) { xr_twheel_cancel_timer(tw, &pd->wt_storage); pd->wrun = false; }
+            if (pd->rrun) {
+                xr_twheel_cancel_timer(tw, &pd->rt_storage);
+                pd->rrun = false;
+            }
+            if (pd->wrun) {
+                xr_twheel_cancel_timer(tw, &pd->wt_storage);
+                pd->wrun = false;
+            }
         } else {
-            if (pd->rrun) { xr_timer_queue_cancel(tw, &pd->rt_storage, NULL); pd->rrun = false; }
-            if (pd->wrun) { xr_timer_queue_cancel(tw, &pd->wt_storage, NULL); pd->wrun = false; }
+            if (pd->rrun) {
+                xr_timer_queue_cancel(tw, &pd->rt_storage, NULL);
+                pd->rrun = false;
+            }
+            if (pd->wrun) {
+                xr_timer_queue_cancel(tw, &pd->wt_storage, NULL);
+                pd->wrun = false;
+            }
             can_free_pd = false;
         }
     }
@@ -640,14 +693,16 @@ void xr_netpoll_close(XrNetpoll *np, XrPollDesc *pd) {
 XrReadyList xr_netpoll_poll(XrNetpoll *np, int64_t delta_ns) {
     XrReadyList list;
     ready_list_init(&list);
-    if (!atomic_load(&np->inited)) return list;
+    if (!atomic_load(&np->inited))
+        return list;
 
     np->ops->poll_events(np, delta_ns, &list);
     return list;
 }
 
 void xr_netpoll_break(XrNetpoll *np) {
-    if (!atomic_load(&np->inited) || !np->ops) return;
+    if (!atomic_load(&np->inited) || !np->ops)
+        return;
     np->ops->wakeup(np);
 }
 
@@ -686,7 +741,7 @@ int xr_netpoll_wait(XrNetpoll *np, XrPollDesc *pd, int mode, XrayIsolate *X) {
 
 // Read timeout callback (called by Timer Wheel)
 static void read_deadline_callback(void *arg) {
-    XrPollDesc *pd = (XrPollDesc *)arg;
+    XrPollDesc *pd = (XrPollDesc *) arg;
     // Use the saved sequence number from when the timer was set,
     // not the current sequence (which may have been incremented by new timer set)
     uintptr_t seq = pd->rseq_saved;
@@ -695,7 +750,7 @@ static void read_deadline_callback(void *arg) {
 
 // Write timeout callback (called by Timer Wheel)
 static void write_deadline_callback(void *arg) {
-    XrPollDesc *pd = (XrPollDesc *)arg;
+    XrPollDesc *pd = (XrPollDesc *) arg;
     // Use the saved sequence number from when the timer was set,
     // not the current sequence (which may have been incremented by new timer set)
     uintptr_t seq = pd->wseq_saved;
@@ -742,7 +797,7 @@ void xr_netpoll_deadline_impl(XrPollDesc *pd, uintptr_t seq, bool read) {
 
         // old is coroutine pointer, wake it
         if (atomic_compare_exchange_weak(gpp, &old, XR_PD_NIL)) {
-            XrCoroutine *coro = (XrCoroutine *)old;
+            XrCoroutine *coro = (XrCoroutine *) old;
             xr_coro_resume_store(coro, XR_RESUME_TIMEOUT);
 
             xr_coro_flags_clear(coro, XR_CORO_FLG_BLOCKED);
@@ -816,10 +871,10 @@ static void netpoll_rebind_worker(XrPollDesc *pd, XrWorker *current) {
 // If the coroutine has migrated to a different worker,
 // rebind the pd to the current worker so that deadline timers are always set.
 // The old "skip timer ops" silent degradation is eliminated.
-void xr_netpoll_set_deadline(XrNetpoll *np, XrPollDesc *pd, int64_t deadline,
-                              int mode, XrTimerWheel *tw) {
-    (void)np;
-    (void)tw;  // Ignore passed tw, use bound Worker's Timer Wheel
+void xr_netpoll_set_deadline(XrNetpoll *np, XrPollDesc *pd, int64_t deadline, int mode,
+                             XrTimerWheel *tw) {
+    (void) np;
+    (void) tw;  // Ignore passed tw, use bound Worker's Timer Wheel
 
     // Bind fd to current Worker on first I/O
     xr_netpoll_bind_worker(pd);
@@ -827,8 +882,7 @@ void xr_netpoll_set_deadline(XrNetpoll *np, XrPollDesc *pd, int64_t deadline,
     // If coro migrated, rebind pd to current worker instead of
     // silently skipping timer ops on the wrong wheel.
     XrWorker *current = xr_current_worker();
-    if (current && pd->owner_worker_id >= 0 &&
-        current->p.id != pd->owner_worker_id) {
+    if (current && pd->owner_worker_id >= 0 && current->p.id != pd->owner_worker_id) {
         netpoll_rebind_worker(pd, current);
     }
 
@@ -885,7 +939,8 @@ void xr_netpoll_set_deadline(XrNetpoll *np, XrPollDesc *pd, int64_t deadline,
 // Dual-registration (shared netpoll + local poll) is safe: the CAS state
 // machine in xr_netpoll_unblock ensures only one waker succeeds.
 int xr_netpoll_bind_worker(XrPollDesc *pd) {
-    if (!pd) return -1;
+    if (!pd)
+        return -1;
 
     // Already bound, return directly
     if (pd->owner_worker_id >= 0) {
@@ -934,8 +989,9 @@ XrTimerWheel *xr_netpoll_get_timer_wheel(XrPollDesc *pd) {
 // Queue PollDesc for deferred free on owner worker's Treiber stack.
 // Thread-safe: multiple producers can push concurrently.
 void xr_netpoll_deferred_free(XrNetpoll *np, XrPollDesc *pd) {
-    if (!pd) return;
-    (void)np;
+    if (!pd)
+        return;
+    (void) np;
 
     XrWorker *current = xr_current_worker();
     if (!current) {
@@ -954,22 +1010,22 @@ void xr_netpoll_deferred_free(XrNetpoll *np, XrPollDesc *pd) {
     XrProc *owner_p = &rt->workers[pd->owner_worker_id].p;
     void *old_head = atomic_load_explicit(&owner_p->deferred_free_head, memory_order_relaxed);
     do {
-        pd->link = (XrPollDesc *)old_head;
-    } while (!atomic_compare_exchange_weak_explicit(
-        &owner_p->deferred_free_head, &old_head, pd,
-        memory_order_release, memory_order_relaxed));
+        pd->link = (XrPollDesc *) old_head;
+    } while (!atomic_compare_exchange_weak_explicit(&owner_p->deferred_free_head, &old_head, pd,
+                                                    memory_order_release, memory_order_relaxed));
 }
 
 // Drain deferred free queue on current worker.
 // Called by owner worker during poll cycle — single consumer, no lock needed.
 void xr_netpoll_drain_deferred(XrNetpoll *np, XrProc *p) {
-    if (!p || !np) return;
+    if (!p || !np)
+        return;
 
     // Atomic swap to get entire list (O(1))
     void *head = atomic_exchange_explicit(&p->deferred_free_head, NULL, memory_order_acquire);
 
     // Walk list and free each PollDesc
-    XrPollDesc *pd = (XrPollDesc *)head;
+    XrPollDesc *pd = (XrPollDesc *) head;
     while (pd) {
         XrPollDesc *next = pd->link;
         xr_poll_cache_free(&np->cache, pd);

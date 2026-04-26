@@ -22,103 +22,101 @@
  *   OP_STRBUF_NEW / APPEND / FINISH   — StringBuilder hot path
  */
 
-            // Box/Unbox: typed storage (TypedArray/TypedField) ↔ tagged boundary
-            // BOX creates tagged value from raw payload
-            // UNBOX extracts raw payload with type check
-            vmcase(OP_BOX_I64) {
-                R(GETARG_A(i)) = XR_FROM_INT(R(GETARG_B(i)).i);
-                vmbreak;
-            }
-            vmcase(OP_BOX_F64) {
-                R(GETARG_A(i)) = XR_FROM_FLOAT(R(GETARG_B(i)).f);
-                vmbreak;
-            }
-            vmcase(OP_UNBOX_I64) {
-                int a = GETARG_A(i);
-                int b = GETARG_B(i);
-                XrValue src = R(b);
-                if (XR_IS_INT(src)) {
-                    XR_SET_INT(R(a), XR_TO_INT(src));
-                } else if (XR_IS_FLOAT(src)) {
-                    VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH,
-                        "cannot implicitly convert float to int (use int() for explicit conversion)");
-                } else {
-                    VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH,
-                        "cannot assign non-int value to int variable");
-                }
-                vmbreak;
-            }
-            vmcase(OP_UNBOX_F64) {
-                int a = GETARG_A(i);
-                int b = GETARG_B(i);
-                XrValue src = R(b);
-                if (XR_IS_FLOAT(src)) {
-                    R(a).f = XR_TO_FLOAT(src);
-                    R(a).tag = XR_TAG_F64;
-                } else if (XR_IS_INT(src)) {
-                    // int → float promotion (allowed)
-                    R(a).f = (double)XR_TO_INT(src);
-                    R(a).tag = XR_TAG_F64;
-                } else {
-                    // non-numeric → float is not allowed (second gate: runtime)
-                    VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH,
-                        "cannot implicitly convert non-numeric value to float");
-                }
-                vmbreak;
-            }
+// Box/Unbox: typed storage (TypedArray/TypedField) ↔ tagged boundary
+// BOX creates tagged value from raw payload
+// UNBOX extracts raw payload with type check
+vmcase(OP_BOX_I64) {
+    R(GETARG_A(i)) = XR_FROM_INT(R(GETARG_B(i)).i);
+    vmbreak;
+}
+vmcase(OP_BOX_F64) {
+    R(GETARG_A(i)) = XR_FROM_FLOAT(R(GETARG_B(i)).f);
+    vmbreak;
+}
+vmcase(OP_UNBOX_I64) {
+    int a = GETARG_A(i);
+    int b = GETARG_B(i);
+    XrValue src = R(b);
+    if (XR_IS_INT(src)) {
+        XR_SET_INT(R(a), XR_TO_INT(src));
+    } else if (XR_IS_FLOAT(src)) {
+        VM_RUNTIME_ERROR(
+            XR_ERR_TYPE_MISMATCH,
+            "cannot implicitly convert float to int (use int() for explicit conversion)");
+    } else {
+        VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, "cannot assign non-int value to int variable");
+    }
+    vmbreak;
+}
+vmcase(OP_UNBOX_F64) {
+    int a = GETARG_A(i);
+    int b = GETARG_B(i);
+    XrValue src = R(b);
+    if (XR_IS_FLOAT(src)) {
+        R(a).f = XR_TO_FLOAT(src);
+        R(a).tag = XR_TAG_F64;
+    } else if (XR_IS_INT(src)) {
+        // int → float promotion (allowed)
+        R(a).f = (double) XR_TO_INT(src);
+        R(a).tag = XR_TAG_F64;
+    } else {
+        // non-numeric → float is not allowed (second gate: runtime)
+        VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH,
+                         "cannot implicitly convert non-numeric value to float");
+    }
+    vmbreak;
+}
 
-            vmcase(OP_ARRAY_GET_NOCHECK) {
-                // Array access without bounds check (compiler proved index is valid)
-                int a = GETARG_A(i);
-                int b = GETARG_B(i);
-                int c = GETARG_C(i);
-                XrArray *arr = XR_TO_ARRAY(R(b));
-                int idx = (int)XR_TO_INT(R(c));
-                R(a) = (arr->elem_type == XR_ELEM_ANY)
-                    ? ((XrValue*)arr->data)[idx]
-                    : xr_array_get_element(arr, idx);
-                vmbreak;
-            }
+vmcase(OP_ARRAY_GET_NOCHECK) {
+    // Array access without bounds check (compiler proved index is valid)
+    int a = GETARG_A(i);
+    int b = GETARG_B(i);
+    int c = GETARG_C(i);
+    XrArray *arr = XR_TO_ARRAY(R(b));
+    int idx = (int) XR_TO_INT(R(c));
+    R(a) = (arr->elem_type == XR_ELEM_ANY) ? ((XrValue *) arr->data)[idx]
+                                           : xr_array_get_element(arr, idx);
+    vmbreak;
+}
 
-            /* === StringBuilder Instructions === */
+/* === StringBuilder Instructions === */
 
-            vmcase(OP_STRBUF_NEW) {
-                int a = GETARG_A(i);
+vmcase(OP_STRBUF_NEW) {
+    int a = GETARG_A(i);
 
-                XrStringBuilder *sb = xr_stringbuilder_new(VM_CURRENT_CORO);
-                R(a) = xr_stringbuilder_value(sb);
-                checkGC(base + a + 1);
-                vmbreak;
-            }
+    XrStringBuilder *sb = xr_stringbuilder_new(VM_CURRENT_CORO);
+    R(a) = xr_stringbuilder_value(sb);
+    checkGC(base + a + 1);
+    vmbreak;
+}
 
-            vmcase(OP_STRBUF_APPEND) {
-                int a = GETARG_A(i);
-                int b = GETARG_B(i);
+vmcase(OP_STRBUF_APPEND) {
+    int a = GETARG_A(i);
+    int b = GETARG_B(i);
 
-                XrStringBuilder *sb = xr_to_stringbuilder(R(a));
+    XrStringBuilder *sb = xr_to_stringbuilder(R(a));
 
-                XrValue vb = R(b);
-                if (XR_IS_STRING(vb)) {
-                    xr_stringbuilder_append_cstr(sb, xr_value_str_data(&vb), xr_value_str_len(&vb));
-                } else if (XR_IS_INT(vb)) {
-                    xr_stringbuilder_append_int(sb, XR_TO_INT(vb));
-                } else if (XR_IS_FLOAT(vb)) {
-                    xr_stringbuilder_append_float(sb, XR_TO_FLOAT(vb));
-                } else {
-                    XrString *str = xr_value_to_string(isolate, vb);
-                    xr_stringbuilder_append_str(sb, str);
-                }
-                vmbreak;
-            }
+    XrValue vb = R(b);
+    if (XR_IS_STRING(vb)) {
+        xr_stringbuilder_append_cstr(sb, xr_value_str_data(&vb), xr_value_str_len(&vb));
+    } else if (XR_IS_INT(vb)) {
+        xr_stringbuilder_append_int(sb, XR_TO_INT(vb));
+    } else if (XR_IS_FLOAT(vb)) {
+        xr_stringbuilder_append_float(sb, XR_TO_FLOAT(vb));
+    } else {
+        XrString *str = xr_value_to_string(isolate, vb);
+        xr_stringbuilder_append_str(sb, str);
+    }
+    vmbreak;
+}
 
-            vmcase(OP_STRBUF_FINISH) {
-                int a = GETARG_A(i);
+vmcase(OP_STRBUF_FINISH) {
+    int a = GETARG_A(i);
 
-                XrStringBuilder *sb = xr_to_stringbuilder(R(a));
-                XrString *result = xr_stringbuilder_to_string(sb);
+    XrStringBuilder *sb = xr_to_stringbuilder(R(a));
+    XrString *result = xr_stringbuilder_to_string(sb);
 
-                R(a) = xr_string_value(result);
-                checkGC(base + a + 1);
-                vmbreak;
-            }
-
+    R(a) = xr_string_value(result);
+    checkGC(base + a + 1);
+    vmbreak;
+}

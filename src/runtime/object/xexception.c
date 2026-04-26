@@ -34,15 +34,16 @@
 // very early bootstrap before main_coro exists; that path is hit only
 // when xray_isolate_init has to surface an error before scheduling
 // becomes available.
-static XrException* xr_exception_alloc(XrayIsolate *X) {
+static XrException *xr_exception_alloc(XrayIsolate *X) {
     XrException *exc = NULL;
     XrCoroutine *coro = xr_current_coro(X);
     if (coro) {
-        exc = (XrException*)xr_alloc(coro, sizeof(XrException), XR_TEXCEPTION);
+        exc = (XrException *) xr_alloc(coro, sizeof(XrException), XR_TEXCEPTION);
     } else {
-        exc = (XrException*)xr_gc_alloc(xr_isolate_get_gc(X), sizeof(XrException), XR_TEXCEPTION);
+        exc = (XrException *) xr_gc_alloc(xr_isolate_get_gc(X), sizeof(XrException), XR_TEXCEPTION);
     }
-    if (!exc) return NULL;
+    if (!exc)
+        return NULL;
 
     xr_gc_header_init_type(&exc->gc, XR_TEXCEPTION);
 
@@ -118,9 +119,9 @@ XrValue xr_exception_from_value(XrayIsolate *X, XrValue value) {
 
     // If error object, convert
     if (XR_IS_PTR(value)) {
-        XrGCHeader *gc = (XrGCHeader*)XR_TO_PTR(value);
+        XrGCHeader *gc = (XrGCHeader *) XR_TO_PTR(value);
         if (XR_GC_GET_TYPE(gc) == XR_TERROR) {
-            return xr_exception_from_error(X, (XrError*)gc);
+            return xr_exception_from_error(X, (XrError *) gc);
         }
     }
 
@@ -148,7 +149,7 @@ XrErrorCode xr_exception_get_code(XrValue exception) {
 }
 
 // Get exception message
-const char* xr_exception_get_message(XrValue exception) {
+const char *xr_exception_get_message(XrValue exception) {
     if (!XR_IS_EXCEPTION(exception)) {
         return "Not an exception";
     }
@@ -174,8 +175,7 @@ XrValue xr_exception_get_stacktrace(XrayIsolate *iso, XrValue exception) {
 /* ========== Stack Trace Operations ========== */
 
 // Add stack frame to exception
-void xr_exception_add_frame(XrayIsolate *X, XrValue exception,
-                            const char *funcName, int line) {
+void xr_exception_add_frame(XrayIsolate *X, XrValue exception, const char *funcName, int line) {
     XR_DCHECK(X != NULL, "exception_add_frame: NULL isolate");
     XR_DCHECK(funcName != NULL, "exception_add_frame: NULL funcName");
     if (!XR_IS_EXCEPTION(exception)) {
@@ -199,7 +199,7 @@ void xr_exception_add_frame(XrayIsolate *X, XrValue exception,
 
 // Print exception info
 void xr_exception_print(XrayIsolate *X, XrValue exception) {
-    (void)X;
+    (void) X;
     if (!XR_IS_EXCEPTION(exception)) {
         fprintf(stderr, "Error: Not an exception object\n");
         return;
@@ -208,26 +208,23 @@ void xr_exception_print(XrayIsolate *X, XrValue exception) {
     XrException *exc = XR_AS_EXCEPTION(exception);
 
     // Print error code and message
-    fprintf(stderr, "\033[1;31mUncaught Exception [%d]:\033[0m %s\n",
-            exc->code,
+    fprintf(stderr, "\033[1;31mUncaught Exception [%d]:\033[0m %s\n", exc->code,
             exc->message ? exc->message->data : "");
 
     // Print location info
     if (exc->file) {
-        fprintf(stderr, "  at %s:%d:%d\n",
-                exc->file->data, exc->line, exc->column);
+        fprintf(stderr, "  at %s:%d:%d\n", exc->file->data, exc->line, exc->column);
     }
 
     // Print stack trace
     if (exc->stackTrace && exc->stackTrace->length > 0) {
         fprintf(stderr, "\nStack trace:\n");
         for (int i = 0; i < exc->stackTrace->length; i++) {
-            XrValue frame = ((XrValue*)exc->stackTrace->data)[i];
+            XrValue frame = ((XrValue *) exc->stackTrace->data)[i];
             if (XR_IS_STRING(frame)) {
-                XrString *str = (XrString*)XR_TO_PTR(frame);
+                XrString *str = (XrString *) XR_TO_PTR(frame);
                 fprintf(stderr, "  %s\n", str->data);
             }
         }
     }
 }
-

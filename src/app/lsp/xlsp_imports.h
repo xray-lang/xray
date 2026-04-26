@@ -22,16 +22,16 @@
 
 // Import types
 typedef enum {
-    XLSP_IMPORT_STDLIB,     // import time
-    XLSP_IMPORT_LOCAL,      // import "./utils" or import "../lib/math"
-    XLSP_IMPORT_PACKAGE,    // import "somepackage" (future)
+    XLSP_IMPORT_STDLIB,   // import time
+    XLSP_IMPORT_LOCAL,    // import "./utils" or import "../lib/math"
+    XLSP_IMPORT_PACKAGE,  // import "somepackage" (future)
 } XlspImportType;
 
 // Imported module info
 typedef struct XlspImportInfo {
-    char *module_name;          // Alias used in code (e.g. "utils")
-    char *import_path;          // Original path (e.g. "./utils")
-    char *resolved_path;        // Absolute file path
+    char *module_name;    // Alias used in code (e.g. "utils")
+    char *import_path;    // Original path (e.g. "./utils")
+    char *resolved_path;  // Absolute file path
     XlspImportType type;
     struct XlspImportInfo *next;
 } XlspImportInfo;
@@ -39,8 +39,8 @@ typedef struct XlspImportInfo {
 // Exported symbol from a file
 typedef struct XlspExportedSymbol {
     char *name;
-    int kind;                   // LSP SymbolKind
-    char *signature;            // For functions
+    int kind;         // LSP SymbolKind
+    char *signature;  // For functions
     char *documentation;
     int line;
     struct XlspExportedSymbol *next;
@@ -50,7 +50,7 @@ typedef struct XlspExportedSymbol {
 typedef struct XlspFileExports {
     char *file_path;
     XlspExportedSymbol *symbols;
-    time_t mtime;               // File modification time for cache invalidation
+    time_t mtime;  // File modification time for cache invalidation
     struct XlspFileExports *next;
 } XlspFileExports;
 
@@ -79,11 +79,11 @@ XR_FUNC XrJsonValue *xlsp_get_import_completions(XrLspDocument *doc, const char 
 
 // Get hover info for an imported symbol
 XR_FUNC const char *xlsp_get_import_hover(XrLspDocument *doc, const char *module_name,
-                                   const char *symbol_name, char *buf, size_t buf_size);
+                                          const char *symbol_name, char *buf, size_t buf_size);
 
 // Go to definition for an imported symbol
 XR_FUNC XrJsonValue *xlsp_get_import_definition(XrLspDocument *doc, const char *module_name,
-                                         const char *symbol_name);
+                                                const char *symbol_name);
 
 // Get file location for a module name (for import statement goto definition)
 XR_FUNC XrJsonValue *xlsp_get_module_file_location(XrLspDocument *doc, const char *module_name);
@@ -107,4 +107,4 @@ XR_FUNC void xlsp_exports_cache_remove_prefix(XrLspServer *server, const char *p
 // Invalidate document's import cache (call when content changes)
 XR_FUNC void xlsp_invalidate_import_cache(XrLspDocument *doc);
 
-#endif // XLSP_IMPORTS_H
+#endif  // XLSP_IMPORTS_H

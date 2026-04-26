@@ -39,22 +39,22 @@ struct XrShape;
  * background compile task.  Functions referenced past this are simply
  * not elevated to CALL_KNOWN — JIT falls back to CALL_C, which is a
  * slower but fully correct path. */
-#define XJIT_BG_SHARED_CAP  32
+#define XJIT_BG_SHARED_CAP 32
 
 /* ========== Background Compile Result ========== */
 
 // Bundled compilation output written by bg thread, installed by main thread.
 // All fields are written BEFORE jit_entry_pending is published.
 typedef struct XirBgResult {
-    void    *code;              // compiled machine code entry point
-    void    *fast_entry;        // fast entry (skip param setup)
-    void    *deopt_table;       // XirRtDeoptEntry array
+    void *code;         // compiled machine code entry point
+    void *fast_entry;   // fast entry (skip param setup)
+    void *deopt_table;  // XirRtDeoptEntry array
     uint32_t ndeopt;
-    void    *osr_entries;       // XirOsrEntry array
+    void *osr_entries;  // XirOsrEntry array
     uint32_t nosr;
-    void    *stack_map;         // XrStackMapTable*
-    void    *resume_entry;      // resume entry for suspend/resume (NULL = none)
-    uint8_t  opt_level;         // XIR_OPT_BASIC or XIR_OPT_FULL
+    void *stack_map;     // XrStackMapTable*
+    void *resume_entry;  // resume entry for suspend/resume (NULL = none)
+    uint8_t opt_level;   // XIR_OPT_BASIC or XIR_OPT_FULL
 } XirBgResult;
 
 /* ========== Compile Task ========== */
@@ -72,13 +72,13 @@ typedef struct XirBgResult {
  * fields that are immutable after creation (bytecode, constants, etc.).
  */
 typedef struct XirBgTask {
-    XrProto *proto;             // target proto (immutable after creation)
-    bool     is_recompile;      // Tier 1 → Tier 2 recompilation
-    bool     has_feedback;      // feedback_snapshot is valid
+    XrProto *proto;     // target proto (immutable after creation)
+    bool is_recompile;  // Tier 1 → Tier 2 recompilation
+    bool has_feedback;  // feedback_snapshot is valid
     XirTypeFeedback feedback_snapshot;
-    int      nshared;           // number of valid shared_protos entries
+    int nshared;  // number of valid shared_protos entries
     XrProto *shared_protos[XJIT_BG_SHARED_CAP];
-    struct XrShape *shape_hint; // dominant-shape hint for param PTR shaping
+    struct XrShape *shape_hint;  // dominant-shape hint for param PTR shaping
 
     /*
      * Inline-cache snapshots captured on the foreground thread at task
@@ -86,36 +86,36 @@ typedef struct XirBgTask {
      * builder (read-only) and frees them after compilation completes.
      * Either may be NULL when the live ctx had no IC recorded yet.
      */
-    struct XrICFieldTable   *ic_fields_snapshot;
-    struct XrICMethodTable  *ic_methods_snapshot;
+    struct XrICFieldTable *ic_fields_snapshot;
+    struct XrICMethodTable *ic_methods_snapshot;
     struct XrICBuiltinTable *ic_builtin_snapshot;
 } XirBgTask;
 
 /* ========== MPSC Ring Buffer ========== */
 
 #define XJIT_QUEUE_CAPACITY 256  // power of 2, increased for multi-worker
-#define XJIT_MAX_WORKERS      4  // max background compile threads
+#define XJIT_MAX_WORKERS 4       // max background compile threads
 
 typedef struct XirCompileQueue {
     XirBgTask tasks[XJIT_QUEUE_CAPACITY];
-    _Atomic uint32_t head;      // written by producer (main thread)
-    _Atomic uint32_t tail;      // CAS-advanced by consumers (bg workers)
+    _Atomic uint32_t head;  // written by producer (main thread)
+    _Atomic uint32_t tail;  // CAS-advanced by consumers (bg workers)
 
     // Background worker threads
-    pthread_t        workers[XJIT_MAX_WORKERS];
-    uint32_t         n_workers;  // actual number of bg threads started
-    pthread_mutex_t  mutex;
-    pthread_cond_t   cond;
-    _Atomic bool     shutdown;  // signal background threads to exit
-    bool             started;   // at least one worker thread is running
+    pthread_t workers[XJIT_MAX_WORKERS];
+    uint32_t n_workers;  // actual number of bg threads started
+    pthread_mutex_t mutex;
+    pthread_cond_t cond;
+    _Atomic bool shutdown;  // signal background threads to exit
+    bool started;           // at least one worker thread is running
 
     // Owning JIT state (for compilation pipeline access)
-    XirJitState     *jit;
+    XirJitState *jit;
 
     // Per-worker dedicated code allocator.
     // Each worker owns one to eliminate contention with main thread
     // and with other workers.
-    XirCodeAlloc     worker_code_alloc[XJIT_MAX_WORKERS];
+    XirCodeAlloc worker_code_alloc[XJIT_MAX_WORKERS];
 } XirCompileQueue;
 
 /* ========== API ========== */
@@ -137,4 +137,4 @@ static inline bool xjit_queue_has_pending(XirCompileQueue *q) {
            atomic_load_explicit(&q->tail, memory_order_acquire);
 }
 
-#endif // XJIT_COMPILE_QUEUE_H
+#endif  // XJIT_COMPILE_QUEUE_H

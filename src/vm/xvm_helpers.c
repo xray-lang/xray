@@ -59,9 +59,11 @@ void xr_runtime_error(XrayIsolate *isolate, const char *format, ...) {
 
             if (line > 0 && proto->source_file) {
                 // Try to get source code line
-                const char *src_line = xr_source_cache_get_line(isolate->source_cache, proto->source_file, line);
+                const char *src_line =
+                    xr_source_cache_get_line(isolate->source_cache, proto->source_file, line);
                 if (src_line) {
-                    int line_len = xr_source_cache_get_line_length(isolate->source_cache, proto->source_file, line);
+                    int line_len = xr_source_cache_get_line_length(isolate->source_cache,
+                                                                   proto->source_file, line);
                     fprintf(stderr, "   |\n");
                     fprintf(stderr, " \033[1;34m%d\033[0m | %.*s\n", line, line_len, src_line);
                     fprintf(stderr, "   |\n");
@@ -74,7 +76,8 @@ void xr_runtime_error(XrayIsolate *isolate, const char *format, ...) {
     fprintf(stderr, "\033[1;36mstack trace:\033[0m\n");
     for (int i = frame_count - 1; i >= 0; i--) {
         XrBcCallFrame *frame = &frames[i];
-        if (!frame->closure || !frame->closure->proto) continue;
+        if (!frame->closure || !frame->closure->proto)
+            continue;
         XrProto *proto = frame->closure->proto;
 
         // Calculate instruction offset
@@ -111,7 +114,6 @@ void xr_runtime_error(XrayIsolate *isolate, const char *format, ...) {
             fprintf(stderr, " in <main>\n");
         }
     }
-
 }
 
 // ========== Debug Info Query ==========
@@ -123,16 +125,16 @@ void xr_runtime_error(XrayIsolate *isolate, const char *format, ...) {
  * @param pc Current instruction index
  * @return Variable name, NULL if not found
  */
-const char* xr_vm_get_local_name(XrProto *proto, int reg, int pc) {
-    if (!proto) return NULL;
+const char *xr_vm_get_local_name(XrProto *proto, int reg, int pc) {
+    if (!proto)
+        return NULL;
 
-    int count = (int)PROTO_LOCVAR_COUNT(proto);
+    int count = (int) PROTO_LOCVAR_COUNT(proto);
     // Search backwards, prefer most recently defined variable (handle same-name variable shadowing)
     for (int i = count - 1; i >= 0; i--) {
         XrLocVar lv = PROTO_LOCVAR(proto, i);
         // Check register match and within scope
-        if (lv.reg == reg && pc >= lv.start_pc &&
-            (lv.end_pc == -1 || pc <= lv.end_pc)) {
+        if (lv.reg == reg && pc >= lv.start_pc && (lv.end_pc == -1 || pc <= lv.end_pc)) {
             return lv.name;
         }
     }
@@ -148,7 +150,7 @@ const char* xr_vm_get_local_name(XrProto *proto, int reg, int pc) {
  */
 XrCFunction *xr_vm_cfunction_new(XrayIsolate *isolate, XrCFunctionPtr func, const char *name) {
     XR_DCHECK(func != NULL, "cfunction_new: NULL func");
-    XrCFunction *cfunc = (XrCFunction *)xr_malloc(sizeof(XrCFunction));
+    XrCFunction *cfunc = (XrCFunction *) xr_malloc(sizeof(XrCFunction));
     if (cfunc == NULL) {
         return NULL;
     }
@@ -167,9 +169,10 @@ XrCFunction *xr_vm_cfunction_new(XrayIsolate *isolate, XrCFunctionPtr func, cons
 /*
  * Create yieldable C function object
  */
-XrCFunction *xr_vm_yieldable_cfunction_new(XrayIsolate *isolate, XrYieldableCFunctionPtr func, const char *name) {
+XrCFunction *xr_vm_yieldable_cfunction_new(XrayIsolate *isolate, XrYieldableCFunctionPtr func,
+                                           const char *name) {
     XR_DCHECK(func != NULL, "yieldable_cfunction_new: NULL func");
-    XrCFunction *cfunc = (XrCFunction *)xr_malloc(sizeof(XrCFunction));
+    XrCFunction *cfunc = (XrCFunction *) xr_malloc(sizeof(XrCFunction));
     if (cfunc == NULL) {
         return NULL;
     }
@@ -214,10 +217,10 @@ void xr_vm_vm_init(XrayIsolate *isolate) {
 
     // Symbol table already initialized when XrayIsolate created (per-isolate)
     if (isolate && isolate->symbol_table) {
-        XrSymbolTable *symtab = (XrSymbolTable*)isolate->symbol_table;
-        (void)symtab;  // Avoid warning in non-DEBUG mode
+        XrSymbolTable *symtab = (XrSymbolTable *) isolate->symbol_table;
+        (void) symtab;  // Avoid warning in non-DEBUG mode
         VM_DEBUG_PRINT("Using isolate symbol table with %d builtin symbols\n",
-                      symtab->builtin_count);
+                       symtab->builtin_count);
     }
 
     // Initialize global variable array
@@ -234,7 +237,8 @@ void xr_vm_vm_init(XrayIsolate *isolate) {
         // Register Reflect class to global variable index 0
         if (isolate->core->reflectClass) {
             isolate->vm.builtins[0] = xr_value_from_class(isolate->core->reflectClass);
-            if (isolate->vm.builtin_count < 1) isolate->vm.builtin_count = 1;
+            if (isolate->vm.builtin_count < 1)
+                isolate->vm.builtin_count = 1;
             VM_DEBUG_PRINT("Reflect class registered as global variable (index=0)\n");
         }
     }
@@ -243,7 +247,8 @@ void xr_vm_vm_init(XrayIsolate *isolate) {
     if (isolate && isolate->core) {
         // Array class
         if (isolate->core->arrayClass) {
-            isolate->vm.builtins[XR_GLOBAL_VAR_ARRAY] = xr_value_from_class(isolate->core->arrayClass);
+            isolate->vm.builtins[XR_GLOBAL_VAR_ARRAY] =
+                xr_value_from_class(isolate->core->arrayClass);
         }
 
         // Set class
@@ -258,16 +263,20 @@ void xr_vm_vm_init(XrayIsolate *isolate) {
 
         // String class
         if (isolate->core->stringClass) {
-            isolate->vm.builtins[XR_GLOBAL_VAR_STRING] = xr_value_from_class(isolate->core->stringClass);
+            isolate->vm.builtins[XR_GLOBAL_VAR_STRING] =
+                xr_value_from_class(isolate->core->stringClass);
         }
 
         // Json utility class
         if (isolate->core->jsonClass) {
-            isolate->vm.builtins[XR_GLOBAL_VAR_JSON] = xr_value_from_class(isolate->core->jsonClass);
+            isolate->vm.builtins[XR_GLOBAL_VAR_JSON] =
+                xr_value_from_class(isolate->core->jsonClass);
         }
 
-        // process/__file__/__dir__ indices 5/6/7, user global variables start from XR_USER_GLOBALS_START
-        if (isolate->vm.builtin_count < XR_USER_GLOBALS_START) isolate->vm.builtin_count = XR_USER_GLOBALS_START;
+        // process/__file__/__dir__ indices 5/6/7, user global variables start from
+        // XR_USER_GLOBALS_START
+        if (isolate->vm.builtin_count < XR_USER_GLOBALS_START)
+            isolate->vm.builtin_count = XR_USER_GLOBALS_START;
         VM_DEBUG_PRINT("Global constructors registered: Array, Set, Map, String\n");
     }
 
@@ -286,7 +295,6 @@ void xr_vm_vm_init(XrayIsolate *isolate) {
 
     // Debug options
     isolate->vm.trace_execution = false;
-
 }
 
 /*

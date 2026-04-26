@@ -36,15 +36,15 @@ XR_FUNC bool xr_hex_valid(const char *hex, size_t len);
 /* ========== UTF-16 Encoding/Decoding ========== */
 
 typedef enum {
-    XR_UTF16_LE = 0,    // Little-endian
-    XR_UTF16_BE = 1     // Big-endian
+    XR_UTF16_LE = 0,  // Little-endian
+    XR_UTF16_BE = 1   // Big-endian
 } XrUtf16Endian;
 
-XR_FUNC int xr_utf16_encode(const uint8_t *utf8, size_t utf8_len,
-                            uint8_t *output, size_t out_cap, XrUtf16Endian endian);
+XR_FUNC int xr_utf16_encode(const uint8_t *utf8, size_t utf8_len, uint8_t *output, size_t out_cap,
+                            XrUtf16Endian endian);
 
-XR_FUNC int xr_utf16_decode(const uint8_t *utf16, size_t utf16_len,
-                            uint8_t *output, size_t out_cap, XrUtf16Endian endian);
+XR_FUNC int xr_utf16_decode(const uint8_t *utf16, size_t utf16_len, uint8_t *output, size_t out_cap,
+                            XrUtf16Endian endian);
 
 XR_FUNC int xr_utf16_encoded_len(const uint8_t *utf8, size_t utf8_len);
 
@@ -55,6 +55,6 @@ XR_FUNC int xr_utf16_to_utf8_len(const uint8_t *utf16, size_t utf16_len, XrUtf16
 
 /* ========== Module Loading ========== */
 
-XrModule* xr_load_module_encoding(XrayIsolate *isolate);
+XrModule *xr_load_module_encoding(XrayIsolate *isolate);
 
 #endif

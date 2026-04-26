@@ -24,17 +24,17 @@
 
 // Rename context - uses XaScope from analyzer for unified scope handling
 typedef struct {
-    const char *target_name;   // Name to find/rename
-    int target_name_len;       // Length of target name
-    int target_line;           // Line of cursor position (1-indexed)
-    int target_col;            // Column of cursor position (1-indexed)
-    XaScope *global_scope;     // Global scope from analyzer
-    XaScope *def_scope;        // Scope where symbol is defined
-    XaScope *current_scope;    // Current scope during traversal
-    bool found_def;            // Whether we found the definition
-    bool is_global;            // Whether the symbol is global
-    XrJsonValue *edits;        // Collected edit locations
-    const char *new_name;      // New name for replacement
+    const char *target_name;  // Name to find/rename
+    int target_name_len;      // Length of target name
+    int target_line;          // Line of cursor position (1-indexed)
+    int target_col;           // Column of cursor position (1-indexed)
+    XaScope *global_scope;    // Global scope from analyzer
+    XaScope *def_scope;       // Scope where symbol is defined
+    XaScope *current_scope;   // Current scope during traversal
+    bool found_def;           // Whether we found the definition
+    bool is_global;           // Whether the symbol is global
+    XrJsonValue *edits;       // Collected edit locations
+    const char *new_name;     // New name for replacement
 } RenameContext;
 
 // Forward declarations
@@ -47,10 +47,12 @@ static void add_rename_edit(RenameContext *ctx, int line, int col, int len);
 // Helper: check if cursor is on this identifier (line and column match)
 // Returns true if the cursor position matches this identifier location
 static bool is_cursor_on_identifier(RenameContext *ctx, int node_line, int node_col, int name_len) {
-    if (node_line != ctx->target_line) return false;
+    if (node_line != ctx->target_line)
+        return false;
 
     // If node column is 0 (unknown), only match by line
-    if (node_col <= 0) return true;
+    if (node_col <= 0)
+        return true;
 
     // Check if cursor column is within the identifier range
     // target_col is 1-indexed, node_col is 1-indexed
@@ -59,7 +61,8 @@ static bool is_cursor_on_identifier(RenameContext *ctx, int node_line, int node_
 
 // Helper: determine expected scope kind from AST node type
 static XaScopeKind get_expected_scope_kind(AstNode *node) {
-    if (!node) return XA_SCOPE_BLOCK;
+    if (!node)
+        return XA_SCOPE_BLOCK;
     switch (node->type) {
         case AST_FUNCTION_DECL:
         case AST_FUNCTION_EXPR:
@@ -79,9 +82,10 @@ static XaScopeKind get_expected_scope_kind(AstNode *node) {
 // Helper: find child scope by AST node with fallback strategies
 // Priority: 1) exact pointer match, 2) scope kind + position heuristic
 static XaScope *find_child_scope_xa(XaScope *parent, void *ast_node) {
-    if (!parent) return NULL;
+    if (!parent)
+        return NULL;
 
-    AstNode *node = (AstNode *)ast_node;
+    AstNode *node = (AstNode *) ast_node;
 
     // Strategy 1: exact AST node pointer match (preferred)
     for (int i = 0; i < parent->child_count; i++) {
@@ -130,11 +134,11 @@ static XaScope *find_child_scope_xa(XaScope *parent, void *ast_node) {
     return NULL;
 }
 
-
 // Phase 1: Find the scope where the symbol at cursor is defined
 // Uses XaScope from analyzer for unified scope handling
 static void find_symbol_definition(AstNode *node, RenameContext *ctx) {
-    if (!node || ctx->found_def) return;
+    if (!node || ctx->found_def)
+        return;
 
     switch (node->type) {
         case AST_PROGRAM:
@@ -148,7 +152,7 @@ static void find_symbol_definition(AstNode *node, RenameContext *ctx) {
             FunctionDeclNode *fn = &node->as.function_decl;
             // Check if cursor is on function name (defined in parent scope)
             if (fn->name && strcmp(fn->name, ctx->target_name) == 0 &&
-                is_cursor_on_identifier(ctx, node->line, node->column, (int)strlen(fn->name))) {
+                is_cursor_on_identifier(ctx, node->line, node->column, (int) strlen(fn->name))) {
                 ctx->def_scope = ctx->current_scope;
                 ctx->is_global = (ctx->current_scope == ctx->global_scope);
                 ctx->found_def = true;
@@ -158,13 +162,15 @@ static void find_symbol_definition(AstNode *node, RenameContext *ctx) {
             // Find function's scope
             XaScope *saved_scope = ctx->current_scope;
             XaScope *fn_scope = find_child_scope_xa(ctx->current_scope, node);
-            if (fn_scope) ctx->current_scope = fn_scope;
+            if (fn_scope)
+                ctx->current_scope = fn_scope;
 
             // Check parameters
             for (int i = 0; i < fn->param_count; i++) {
                 XrParamNode *param = fn->params[i];
                 if (param && param->name && strcmp(param->name, ctx->target_name) == 0 &&
-                    is_cursor_on_identifier(ctx, param->line, param->column, (int)strlen(param->name))) {
+                    is_cursor_on_identifier(ctx, param->line, param->column,
+                                            (int) strlen(param->name))) {
                     ctx->def_scope = ctx->current_scope;
                     ctx->is_global = false;
                     ctx->found_def = true;
@@ -182,7 +188,7 @@ static void find_symbol_definition(AstNode *node, RenameContext *ctx) {
         case AST_CONST_DECL: {
             VarDeclNode *var = &node->as.var_decl;
             if (var->name && strcmp(var->name, ctx->target_name) == 0 &&
-                is_cursor_on_identifier(ctx, node->line, node->column, (int)strlen(var->name))) {
+                is_cursor_on_identifier(ctx, node->line, node->column, (int) strlen(var->name))) {
                 ctx->def_scope = ctx->current_scope;
                 ctx->is_global = (ctx->current_scope == ctx->global_scope);
                 ctx->found_def = true;
@@ -195,7 +201,7 @@ static void find_symbol_definition(AstNode *node, RenameContext *ctx) {
         case AST_VARIABLE: {
             const char *var_name = node->as.variable.name;
             if (var_name && strcmp(var_name, ctx->target_name) == 0 &&
-                is_cursor_on_identifier(ctx, node->line, node->column, (int)strlen(var_name))) {
+                is_cursor_on_identifier(ctx, node->line, node->column, (int) strlen(var_name))) {
                 // Use XaScope API to find definition scope
                 ctx->def_scope = xa_scope_find_definition(ctx->current_scope, ctx->target_name);
                 if (!ctx->def_scope) {
@@ -211,7 +217,8 @@ static void find_symbol_definition(AstNode *node, RenameContext *ctx) {
         case AST_BLOCK: {
             XaScope *saved_scope = ctx->current_scope;
             XaScope *block_scope = find_child_scope_xa(ctx->current_scope, node);
-            if (block_scope) ctx->current_scope = block_scope;
+            if (block_scope)
+                ctx->current_scope = block_scope;
 
             for (int i = 0; i < node->as.block.count; i++) {
                 find_symbol_definition(node->as.block.statements[i], ctx);
@@ -234,7 +241,8 @@ static void find_symbol_definition(AstNode *node, RenameContext *ctx) {
         case AST_FOR_STMT: {
             XaScope *saved_scope = ctx->current_scope;
             XaScope *for_scope = find_child_scope_xa(ctx->current_scope, node);
-            if (for_scope) ctx->current_scope = for_scope;
+            if (for_scope)
+                ctx->current_scope = for_scope;
 
             find_symbol_definition(node->as.for_stmt.initializer, ctx);
             find_symbol_definition(node->as.for_stmt.condition, ctx);
@@ -250,10 +258,12 @@ static void find_symbol_definition(AstNode *node, RenameContext *ctx) {
 
             XaScope *saved_scope = ctx->current_scope;
             XaScope *for_scope = find_child_scope_xa(ctx->current_scope, node);
-            if (for_scope) ctx->current_scope = for_scope;
+            if (for_scope)
+                ctx->current_scope = for_scope;
 
             if (fi->item_name && strcmp(fi->item_name, ctx->target_name) == 0 &&
-                is_cursor_on_identifier(ctx, node->line, node->column, (int)strlen(fi->item_name))) {
+                is_cursor_on_identifier(ctx, node->line, node->column,
+                                        (int) strlen(fi->item_name))) {
                 ctx->def_scope = ctx->current_scope;
                 ctx->is_global = false;
                 ctx->found_def = true;
@@ -271,13 +281,15 @@ static void find_symbol_definition(AstNode *node, RenameContext *ctx) {
 
             XaScope *saved_scope = ctx->current_scope;
             XaScope *fn_scope = find_child_scope_xa(ctx->current_scope, node);
-            if (fn_scope) ctx->current_scope = fn_scope;
+            if (fn_scope)
+                ctx->current_scope = fn_scope;
 
             // Check parameters
             for (int i = 0; i < fn_expr->param_count; i++) {
                 XrParamNode *param = fn_expr->params[i];
                 if (param && param->name && strcmp(param->name, ctx->target_name) == 0 &&
-                    is_cursor_on_identifier(ctx, param->line, param->column, (int)strlen(param->name))) {
+                    is_cursor_on_identifier(ctx, param->line, param->column,
+                                            (int) strlen(param->name))) {
                     ctx->def_scope = ctx->current_scope;
                     ctx->is_global = false;
                     ctx->found_def = true;
@@ -296,7 +308,7 @@ static void find_symbol_definition(AstNode *node, RenameContext *ctx) {
             ClassDeclNode *cls = &node->as.class_decl;
             // Check if cursor is on class/struct name
             if (cls->name && strcmp(cls->name, ctx->target_name) == 0 &&
-                is_cursor_on_identifier(ctx, node->line, node->column, (int)strlen(cls->name))) {
+                is_cursor_on_identifier(ctx, node->line, node->column, (int) strlen(cls->name))) {
                 ctx->def_scope = ctx->current_scope;
                 ctx->is_global = (ctx->current_scope == ctx->global_scope);
                 ctx->found_def = true;
@@ -306,7 +318,8 @@ static void find_symbol_definition(AstNode *node, RenameContext *ctx) {
             // Enter class scope
             XaScope *saved_scope = ctx->current_scope;
             XaScope *class_scope = find_child_scope_xa(ctx->current_scope, node);
-            if (class_scope) ctx->current_scope = class_scope;
+            if (class_scope)
+                ctx->current_scope = class_scope;
 
             // Search in fields
             for (int i = 0; i < cls->field_count; i++) {
@@ -331,7 +344,7 @@ static void find_symbol_definition(AstNode *node, RenameContext *ctx) {
             // Check catch variable with precise position matching
             if (tc->catch_var && strcmp(tc->catch_var, ctx->target_name) == 0 &&
                 is_cursor_on_identifier(ctx, tc->catch_var_line, tc->catch_var_column,
-                                        (int)strlen(tc->catch_var))) {
+                                        (int) strlen(tc->catch_var))) {
                 // The catch variable is defined in the catch block scope
                 XaScope *catch_scope = find_child_scope_xa(ctx->current_scope, tc->catch_body);
                 if (catch_scope) {
@@ -346,7 +359,8 @@ static void find_symbol_definition(AstNode *node, RenameContext *ctx) {
             if (tc->catch_body) {
                 XaScope *saved_scope = ctx->current_scope;
                 XaScope *catch_scope = find_child_scope_xa(ctx->current_scope, tc->catch_body);
-                if (catch_scope) ctx->current_scope = catch_scope;
+                if (catch_scope)
+                    ctx->current_scope = catch_scope;
 
                 find_symbol_definition(tc->catch_body, ctx);
                 ctx->current_scope = saved_scope;
@@ -377,7 +391,7 @@ static void find_symbol_definition(AstNode *node, RenameContext *ctx) {
         case AST_ASSIGNMENT: {
             const char *assign_name = node->as.assignment.name;
             if (assign_name && strcmp(assign_name, ctx->target_name) == 0 &&
-                is_cursor_on_identifier(ctx, node->line, node->column, (int)strlen(assign_name))) {
+                is_cursor_on_identifier(ctx, node->line, node->column, (int) strlen(assign_name))) {
                 ctx->def_scope = xa_scope_find_definition(ctx->current_scope, ctx->target_name);
                 if (!ctx->def_scope) {
                     ctx->def_scope = ctx->global_scope;
@@ -462,8 +476,7 @@ static void find_symbol_definition(AstNode *node, RenameContext *ctx) {
 // Add a text edit for renaming
 static void add_rename_edit(RenameContext *ctx, int line, int col, int len) {
     XrJsonValue *edit = xjson_new_object();
-    xjson_object_set(edit, "range",
-        xjson_make_range(line - 1, col - 1, line - 1, col - 1 + len));
+    xjson_object_set(edit, "range", xjson_make_range(line - 1, col - 1, line - 1, col - 1 + len));
     xjson_object_set(edit, "newText", xjson_new_string(ctx->new_name));
     xjson_array_push(ctx->edits, edit);
 }
@@ -471,7 +484,8 @@ static void add_rename_edit(RenameContext *ctx, int line, int col, int len) {
 // Check if we should rename in the current context
 // Uses XaScope hierarchy to determine if current scope can see the definition
 static bool should_rename(RenameContext *ctx) {
-    if (!ctx->def_scope || !ctx->current_scope) return false;
+    if (!ctx->def_scope || !ctx->current_scope)
+        return false;
 
     // Check if current scope has a local definition that shadows the target
     if (ctx->current_scope != ctx->def_scope) {
@@ -489,7 +503,8 @@ static bool should_rename(RenameContext *ctx) {
 // Phase 2: Collect all locations to rename
 // Uses XaScope tracking to properly handle shadowing and upvalues
 static void collect_rename_locations(AstNode *node, RenameContext *ctx) {
-    if (!node) return;
+    if (!node)
+        return;
 
     switch (node->type) {
         case AST_PROGRAM:
@@ -504,7 +519,7 @@ static void collect_rename_locations(AstNode *node, RenameContext *ctx) {
             // Rename function name if it matches and is visible from def_scope
             if (fn->name && strcmp(fn->name, ctx->target_name) == 0 && should_rename(ctx)) {
                 add_rename_edit(ctx, node->line, node->column > 0 ? node->column : 1,
-                               (int)strlen(fn->name));
+                                (int) strlen(fn->name));
             }
 
             // Enter function scope
@@ -520,7 +535,7 @@ static void collect_rename_locations(AstNode *node, RenameContext *ctx) {
                     XrParamNode *param = fn->params[i];
                     if (param && param->name && strcmp(param->name, ctx->target_name) == 0) {
                         add_rename_edit(ctx, param->line, param->column > 0 ? param->column : 1,
-                                       (int)strlen(param->name));
+                                        (int) strlen(param->name));
                         break;
                     }
                 }
@@ -547,7 +562,7 @@ static void collect_rename_locations(AstNode *node, RenameContext *ctx) {
                     XrParamNode *param = fn_expr->params[i];
                     if (param && param->name && strcmp(param->name, ctx->target_name) == 0) {
                         add_rename_edit(ctx, param->line, param->column > 0 ? param->column : 1,
-                                       (int)strlen(param->name));
+                                        (int) strlen(param->name));
                         break;
                     }
                 }
@@ -563,7 +578,7 @@ static void collect_rename_locations(AstNode *node, RenameContext *ctx) {
             VarDeclNode *var = &node->as.var_decl;
             if (var->name && strcmp(var->name, ctx->target_name) == 0 && should_rename(ctx)) {
                 add_rename_edit(ctx, node->line, node->column > 0 ? node->column : 1,
-                               (int)strlen(var->name));
+                                (int) strlen(var->name));
             }
             collect_rename_locations(var->initializer, ctx);
             break;
@@ -573,7 +588,7 @@ static void collect_rename_locations(AstNode *node, RenameContext *ctx) {
             const char *var_name = node->as.variable.name;
             if (var_name && strcmp(var_name, ctx->target_name) == 0 && should_rename(ctx)) {
                 add_rename_edit(ctx, node->line, node->column > 0 ? node->column : 1,
-                               (int)strlen(var_name));
+                                (int) strlen(var_name));
             }
             break;
         }
@@ -582,7 +597,7 @@ static void collect_rename_locations(AstNode *node, RenameContext *ctx) {
             const char *assign_name = node->as.assignment.name;
             if (assign_name && strcmp(assign_name, ctx->target_name) == 0 && should_rename(ctx)) {
                 add_rename_edit(ctx, node->line, node->column > 0 ? node->column : 1,
-                               (int)strlen(assign_name));
+                                (int) strlen(assign_name));
             }
             collect_rename_locations(node->as.assignment.value, ctx);
             break;
@@ -641,9 +656,10 @@ static void collect_rename_locations(AstNode *node, RenameContext *ctx) {
             }
 
             // Rename loop variable if it matches
-            if (fi->item_name && strcmp(fi->item_name, ctx->target_name) == 0 && should_rename(ctx)) {
+            if (fi->item_name && strcmp(fi->item_name, ctx->target_name) == 0 &&
+                should_rename(ctx)) {
                 add_rename_edit(ctx, node->line, node->column > 0 ? node->column : 1,
-                               (int)strlen(fi->item_name));
+                                (int) strlen(fi->item_name));
             }
             collect_rename_locations(fi->body, ctx);
             ctx->current_scope = saved_scope;
@@ -656,7 +672,7 @@ static void collect_rename_locations(AstNode *node, RenameContext *ctx) {
             // Rename class/struct name if it matches
             if (cls->name && strcmp(cls->name, ctx->target_name) == 0 && should_rename(ctx)) {
                 add_rename_edit(ctx, node->line, node->column > 0 ? node->column : 1,
-                               (int)strlen(cls->name));
+                                (int) strlen(cls->name));
             }
 
             // Enter class scope
@@ -695,10 +711,11 @@ static void collect_rename_locations(AstNode *node, RenameContext *ctx) {
                 }
 
                 // Rename catch variable if it matches (now with precise position info)
-                if (tc->catch_var && strcmp(tc->catch_var, ctx->target_name) == 0 && should_rename(ctx)) {
+                if (tc->catch_var && strcmp(tc->catch_var, ctx->target_name) == 0 &&
+                    should_rename(ctx)) {
                     int var_line = tc->catch_var_line > 0 ? tc->catch_var_line : node->line;
                     int var_col = tc->catch_var_column > 0 ? tc->catch_var_column : 1;
-                    add_rename_edit(ctx, var_line, var_col, (int)strlen(tc->catch_var));
+                    add_rename_edit(ctx, var_line, var_col, (int) strlen(tc->catch_var));
                 }
 
                 collect_rename_locations(tc->catch_body, ctx);
@@ -797,11 +814,13 @@ static void collect_rename_locations(AstNode *node, RenameContext *ctx) {
 }
 
 XrJsonValue *xlsp_analyze_prepare_rename(XrLspDocument *doc, XrLspPosition pos) {
-    if (!doc || !doc->content) return NULL;
+    if (!doc || !doc->content)
+        return NULL;
 
     uint32_t start, end;
     char *word = xlsp_word_at_position(doc, pos, &start, &end);
-    if (!word) return NULL;
+    if (!word)
+        return NULL;
 
     // Check if it's a keyword (cannot rename)
     for (int i = 0; xr_keywords[i]; i++) {
@@ -827,21 +846,23 @@ XrJsonValue *xlsp_analyze_prepare_rename(XrLspDocument *doc, XrLspPosition pos) 
 
     XrJsonValue *result = xjson_new_object();
     xjson_object_set(result, "range",
-        xjson_make_range(range_start.line, range_start.character,
-                             range_end.line, range_end.character));
+                     xjson_make_range(range_start.line, range_start.character, range_end.line,
+                                      range_end.character));
 
     return result;
 }
 
-XrJsonValue *xlsp_analyze_rename(XrLspServer *server, XrLspDocument *doc,
-                                  XrLspPosition pos, const char *new_name) {
-    if (!doc || !doc->content || !new_name) return NULL;
+XrJsonValue *xlsp_analyze_rename(XrLspServer *server, XrLspDocument *doc, XrLspPosition pos,
+                                 const char *new_name) {
+    if (!doc || !doc->content || !new_name)
+        return NULL;
 
     uint32_t start, end;
     char *old_name = NULL;
 
     old_name = xlsp_word_at_position(doc, pos, &start, &end);
-    if (!old_name) return NULL;
+    if (!old_name)
+        return NULL;
 
     // Build WorkspaceEdit with changes
     XrJsonValue *result = xjson_new_object();
@@ -852,19 +873,17 @@ XrJsonValue *xlsp_analyze_rename(XrLspServer *server, XrLspDocument *doc,
     XaAnalyzer *analyzer = server ? server->workspace_analyzer : NULL;
     if (doc->ast && analyzer && analyzer->global_scope) {
         // Phase 1: Find the scope where the symbol is defined
-        RenameContext ctx = {
-            .target_name = old_name,
-            .target_name_len = (int)strlen(old_name),
-            .target_line = pos.line + 1,  // Convert to 1-indexed
-            .target_col = pos.character + 1,
-            .global_scope = analyzer->global_scope,
-            .def_scope = NULL,
-            .current_scope = analyzer->global_scope,
-            .found_def = false,
-            .is_global = false,
-            .edits = edits,
-            .new_name = new_name
-        };
+        RenameContext ctx = {.target_name = old_name,
+                             .target_name_len = (int) strlen(old_name),
+                             .target_line = pos.line + 1,  // Convert to 1-indexed
+                             .target_col = pos.character + 1,
+                             .global_scope = analyzer->global_scope,
+                             .def_scope = NULL,
+                             .current_scope = analyzer->global_scope,
+                             .found_def = false,
+                             .is_global = false,
+                             .edits = edits,
+                             .new_name = new_name};
 
         find_symbol_definition(doc->ast, &ctx);
 
@@ -873,11 +892,11 @@ XrJsonValue *xlsp_analyze_rename(XrLspServer *server, XrLspDocument *doc,
             ctx.current_scope = analyzer->global_scope;
             collect_rename_locations(doc->ast, &ctx);
 
-            lsp_log("Rename '%s' -> '%s': found %d locations",
-                    old_name, new_name, xjson_array_len(edits));
+            lsp_log("Rename '%s' -> '%s': found %d locations", old_name, new_name,
+                    xjson_array_len(edits));
         } else {
-            lsp_log("Rename '%s': symbol definition not found (line %d, col %d)",
-                    old_name, pos.line + 1, pos.character + 1);
+            lsp_log("Rename '%s': symbol definition not found (line %d, col %d)", old_name,
+                    pos.line + 1, pos.character + 1);
         }
     } else {
         lsp_log("Rename '%s': AST or analyzer not available", old_name);

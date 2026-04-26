@@ -37,16 +37,12 @@ extern "C" {
  * pointer to an interned XrString, so it is safe to keep across GC
  * safepoints.
  */
-static inline XrValue xr_bool_to_string(XrayIsolate *iso,
-                                        XrValue self,
-                                        XrValue *args,
-                                        int argc) {
-    (void)args;
-    (void)argc;
+static inline XrValue xr_bool_to_string(XrayIsolate *iso, XrValue self, XrValue *args, int argc) {
+    (void) args;
+    (void) argc;
     XR_DCHECK(iso != NULL, "xr_bool_to_string: NULL isolate");
-    return XR_TO_BOOL(self)
-        ? xr_string_value(xr_string_intern(iso, "true", 4, 0))
-        : xr_string_value(xr_string_intern(iso, "false", 5, 0));
+    return XR_TO_BOOL(self) ? xr_string_value(xr_string_intern(iso, "true", 4, 0))
+                            : xr_string_value(xr_string_intern(iso, "false", 5, 0));
 }
 
 /*

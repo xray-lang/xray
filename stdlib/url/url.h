@@ -47,6 +47,6 @@ XR_FUNC int xr_url_decode_form(const char *str, size_t len, char *buf, size_t bu
 
 // ========== Module Loading ==========
 
-XrModule* xr_load_module_url(XrayIsolate *isolate);
+XrModule *xr_load_module_url(XrayIsolate *isolate);
 
 #endif

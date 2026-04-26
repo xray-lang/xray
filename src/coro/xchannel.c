@@ -48,7 +48,8 @@ static inline uint32_t chan_advance_idx(uint32_t idx, uint32_t buf_size) {
 // isolate-aware xr_channel_get_close_count(X) below.
 
 uint64_t xr_channel_get_close_count(struct XrayIsolate *X) {
-    if (!X || !xr_isolate_get_sys_heap(X)) return 0;
+    if (!X || !xr_isolate_get_sys_heap(X))
+        return 0;
     return atomic_load(&xr_isolate_get_sys_heap(X)->stats.channel_close_count);
 }
 
@@ -112,7 +113,8 @@ static bool xr_waitq_remove(XrWaitQueue *q, XrCoroutine *coro) {
 
 // Remove coroutine from channel wait queue (called on timeout)
 void xr_channel_remove_waiter(XrChannel *ch, XrCoroutine *coro) {
-    if (!ch || !coro) return;
+    if (!ch || !coro)
+        return;
 
     xr_mutex_lock(&ch->lock);
 
@@ -129,19 +131,18 @@ void xr_channel_remove_waiter(XrChannel *ch, XrCoroutine *coro) {
 
 // Check if buffer is inline (allocated together with channel)
 static inline bool channel_buffer_is_inline(XrChannel *ch) {
-    return ch->buffer == (XrValue*)(ch + 1);
+    return ch->buffer == (XrValue *) (ch + 1);
 }
 
 // GC destroy: free buffer only if separately allocated
 void xr_gc_destroy_channel(XrGCHeader *obj, struct XrCoroGC *owning_gc) {
-    (void)owning_gc;
-    XrChannel *ch = (XrChannel *)obj;
+    (void) owning_gc;
+    XrChannel *ch = (XrChannel *) obj;
     if (ch->buffer && !channel_buffer_is_inline(ch)) {
         xr_free(ch->buffer);
         ch->buffer = NULL;
     }
 }
-
 
 // ========== Channel Creation and Destruction ==========
 
@@ -149,12 +150,15 @@ void xr_gc_destroy_channel(XrGCHeader *obj, struct XrCoroGC *owning_gc) {
 // buffer_size > 0: buffered async channel
 // Channel is always allocated on system heap (shared across coroutines)
 XrChannel *xr_channel_new(struct XrayIsolate *X, uint32_t buffer_size) {
-    if (!X || !xr_isolate_get_sys_heap(X)) return NULL;
+    if (!X || !xr_isolate_get_sys_heap(X))
+        return NULL;
 
     // Single allocation: XrChannel + inline buffer (like Go's makechan)
-    size_t alloc_size = sizeof(XrChannel) + (size_t)buffer_size * sizeof(XrValue);
-    XrChannel *ch = (XrChannel *)xr_sysheap_alloc_shared(xr_isolate_get_sys_heap(X), alloc_size, XR_TCHANNEL);
-    if (!ch) return NULL;
+    size_t alloc_size = sizeof(XrChannel) + (size_t) buffer_size * sizeof(XrValue);
+    XrChannel *ch =
+        (XrChannel *) xr_sysheap_alloc_shared(xr_isolate_get_sys_heap(X), alloc_size, XR_TCHANNEL);
+    if (!ch)
+        return NULL;
 
     // Set initial refcount to 1
     xr_shared_set_refc(&ch->gc_header, 1);
@@ -166,7 +170,7 @@ XrChannel *xr_channel_new(struct XrayIsolate *X, uint32_t buffer_size) {
     //   is_timer(0), timer_*(0), elem_tid(0), dist(NULL), name(NULL).
     // Only set non-zero fields.
     if (buffer_size > 0) {
-        ch->buffer = (XrValue*)(ch + 1);
+        ch->buffer = (XrValue *) (ch + 1);
         ch->buf_size = buffer_size;
     }
     ch->isolate = X;
@@ -180,12 +184,14 @@ XrChannel *xr_channel_new(struct XrayIsolate *X, uint32_t buffer_size) {
 // buffer so that any subsequent recv/tryRecv finds data immediately.
 // If a receiver is already blocked on this channel, wake it directly.
 static void timer_channel_fire_cb(void *arg) {
-    XrChannel *ch = (XrChannel *)arg;
+    XrChannel *ch = (XrChannel *) arg;
     XR_DCHECK(ch != NULL, "timer_channel_fire_cb: NULL channel");
-    if (!ch) return;
+    if (!ch)
+        return;
 
     // Double-check: callback should only fire once
-    if (atomic_load_explicit(&ch->timer_fired, memory_order_relaxed)) return;
+    if (atomic_load_explicit(&ch->timer_fired, memory_order_relaxed))
+        return;
 
     int64_t now = xr_monotonic_ticks();
     XrCoroutine *receiver = NULL;
@@ -197,7 +203,8 @@ static void timer_channel_fire_cb(void *arg) {
         if (receiver) {
             // Direct transfer to blocked receiver's slot
             XrValue *slot = receiver->recv_slot;
-            if (slot) *slot = xr_int(now);
+            if (slot)
+                *slot = xr_int(now);
         } else {
             // No receiver waiting: leave value in buffer for later recv
             ch->buffer[0] = xr_int(now);
@@ -217,18 +224,21 @@ static void timer_channel_fire_cb(void *arg) {
 // Returns a read-only channel that sends current time after timeout.
 // Uses the channel's embedded tw_timer for timer wheel registration.
 XrChannel *xr_channel_new_timer(struct XrayIsolate *X, int64_t timeout_ms) {
-    if (!X || !xr_isolate_get_sys_heap(X)) return NULL;
+    if (!X || !xr_isolate_get_sys_heap(X))
+        return NULL;
 
     // Single allocation: XrChannel + 1-element inline buffer
     size_t alloc_size = sizeof(XrChannel) + sizeof(XrValue);
-    XrChannel *ch = (XrChannel *)xr_sysheap_alloc_shared(xr_isolate_get_sys_heap(X), alloc_size, XR_TCHANNEL);
-    if (!ch) return NULL;
+    XrChannel *ch =
+        (XrChannel *) xr_sysheap_alloc_shared(xr_isolate_get_sys_heap(X), alloc_size, XR_TCHANNEL);
+    if (!ch)
+        return NULL;
 
     // Set initial refcount to 1
     xr_shared_set_refc(&ch->gc_header, 1);
 
     // Inline single-element buffer
-    ch->buffer = (XrValue*)(ch + 1);
+    ch->buffer = (XrValue *) (ch + 1);
     ch->buffer[0] = xr_null();
     ch->buf_size = 1;
     ch->buf_count = 0;
@@ -268,7 +278,8 @@ XrChannel *xr_channel_new_timer(struct XrayIsolate *X, int64_t timeout_ms) {
 // If the timeout has already elapsed (e.g. after 0), fire immediately
 // so that the first OP_CHAN_TRY_RECV poll finds data in the buffer.
 void xr_channel_timer_arm(XrChannel *ch, XrTimerWheel *tw) {
-    if (!ch || !tw) return;
+    if (!ch || !tw)
+        return;
     XR_DCHECK(atomic_load_explicit(&ch->is_timer, memory_order_relaxed),
               "xr_channel_timer_arm: not a timer channel");
 
@@ -285,7 +296,8 @@ void xr_channel_timer_arm(XrChannel *ch, XrTimerWheel *tw) {
 // Check if Timer Channel has fired (thin atomic check, no polling).
 // Returns true if the timer has already delivered its value to the buffer.
 bool xr_channel_timer_ready(XrChannel *ch) {
-    if (!ch) return false;
+    if (!ch)
+        return false;
     if (!atomic_load_explicit(&ch->is_timer, memory_order_relaxed)) {
         return false;
     }
@@ -293,7 +305,8 @@ bool xr_channel_timer_ready(XrChannel *ch) {
 }
 
 void xr_channel_destroy(XrChannel *ch) {
-    if (ch == NULL) return;
+    if (ch == NULL)
+        return;
 
     // Notify cluster layer before destroying
     XrChannelDistHooks *hooks = ch->isolate ? ch->isolate->channel_dist_hooks : NULL;
@@ -350,9 +363,11 @@ static void channel_wake_coro_ex(XrCoroutine *coro, bool is_close);
 // Returns true on success (lock released, wake dispatched).
 static inline bool chan_direct_send(XrChannel *ch, XrValue v) {
     XrCoroutine *receiver = xr_waitq_dequeue(&ch->recvq);
-    if (!receiver) return false;
+    if (!receiver)
+        return false;
     XrValue *slot = receiver->recv_slot;
-    if (slot) *slot = v;
+    if (slot)
+        *slot = v;
     xr_mutex_unlock(&ch->lock);
     channel_wake_coro(receiver);
     return true;
@@ -364,7 +379,8 @@ static inline bool chan_direct_send(XrChannel *ch, XrValue v) {
 // Returns true on success (lock released, *out assigned).
 static inline bool chan_direct_recv(XrChannel *ch, XrValue *out) {
     XrCoroutine *sender = xr_waitq_dequeue(&ch->sendq);
-    if (!sender) return false;
+    if (!sender)
+        return false;
     XrValue direct_val;
     if (ch->buf_size == 0) {
         direct_val = sender->send_value;
@@ -384,7 +400,8 @@ static inline bool chan_direct_recv(XrChannel *ch, XrValue *out) {
 
 // Buffer push: returns true if written. Lock remains held.
 static inline bool chan_buffer_push(XrChannel *ch, XrValue v) {
-    if (ch->buf_size == 0 || ch->buf_count >= ch->buf_size) return false;
+    if (ch->buf_size == 0 || ch->buf_count >= ch->buf_size)
+        return false;
     XR_DCHECK(ch->send_idx < ch->buf_size, "chan_buffer_push: send_idx OOR");
     ch->buffer[ch->send_idx] = v;
     ch->send_idx = chan_advance_idx(ch->send_idx, ch->buf_size);
@@ -395,7 +412,8 @@ static inline bool chan_buffer_push(XrChannel *ch, XrValue v) {
 
 // Buffer pop: returns true if read. Lock remains held.
 static inline bool chan_buffer_pop(XrChannel *ch, XrValue *out) {
-    if (ch->buf_size == 0 || ch->buf_count == 0) return false;
+    if (ch->buf_size == 0 || ch->buf_count == 0)
+        return false;
     XR_DCHECK(ch->recv_idx < ch->buf_size, "chan_buffer_pop: recv_idx OOR");
     *out = ch->buffer[ch->recv_idx];
     ch->buffer[ch->recv_idx] = xr_null();  // Help GC.
@@ -410,7 +428,8 @@ static inline bool chan_buffer_pop(XrChannel *ch, XrValue *out) {
 // Unlike try_send, this properly wakes receivers via channel_wake_coro
 // which sets resume_status = XR_RESUME_CHANNEL.
 bool xr_channel_notify_send(XrChannel *ch, XrValue value) {
-    if (!ch) return false;
+    if (!ch)
+        return false;
 
     xr_mutex_lock(&ch->lock);
 
@@ -420,7 +439,8 @@ bool xr_channel_notify_send(XrChannel *ch, XrValue value) {
     }
 
     // Direct transfer to a blocked receiver, or buffer push if space.
-    if (chan_direct_send(ch, value)) return true;
+    if (chan_direct_send(ch, value))
+        return true;
     if (chan_buffer_push(ch, value)) {
         xr_mutex_unlock(&ch->lock);
         return true;
@@ -456,7 +476,8 @@ bool xr_channel_try_send(XrChannel *ch, XrValue value) {
 
     // Direct transfer to waiting receiver (must be checked first, otherwise
     // blocked receivers are never woken by trySend).
-    if (chan_direct_send(ch, value)) return true;
+    if (chan_direct_send(ch, value))
+        return true;
     if (chan_buffer_push(ch, value)) {
         xr_mutex_unlock(&ch->lock);
         return true;
@@ -466,7 +487,6 @@ bool xr_channel_try_send(XrChannel *ch, XrValue value) {
     xr_mutex_unlock(&ch->lock);
     return false;
 }
-
 
 // ========== Non-blocking Receive ==========
 
@@ -544,7 +564,8 @@ static void channel_wake_coro_ex(XrCoroutine *coro, bool is_close) {
     xr_coro_transition_wake(coro);
 
     XrWorker *current = xr_current_worker();
-    if (!current || !current->p.runtime) return;
+    if (!current || !current->p.runtime)
+        return;
 
     XrRuntime *runtime = current->p.runtime;
     int target_id = atomic_load_explicit(&coro->affinity_p, memory_order_relaxed);
@@ -667,7 +688,7 @@ XrChanResult xr_channel_send(XrChannel *ch, XrValue value, XrCoroutine *coro) {
     // Distributed channel: delegate to cluster hooks
     XrChannelDistHooks *hooks = ch->isolate ? ch->isolate->channel_dist_hooks : NULL;
     if (ch->dist && hooks && hooks->send) {
-        return (XrChanResult)hooks->send(ch, value, coro);
+        return (XrChanResult) hooks->send(ch, value, coro);
     }
 
     // Fast path: lock-free check closed (relaxed OK, rechecked under lock)
@@ -678,8 +699,8 @@ XrChanResult xr_channel_send(XrChannel *ch, XrValue value, XrCoroutine *coro) {
     // Trylock fast path: for buffered channels with buffer space and no waiters.
     // Avoids spin contention under high concurrency (e.g. 20 coros on 1 channel).
     if (ch->buf_size > 0 && xr_mutex_trylock(&ch->lock)) {
-        if (!atomic_load_explicit(&ch->closed, memory_order_relaxed) &&
-            !ch->recvq.first && ch->buf_count < ch->buf_size) {
+        if (!atomic_load_explicit(&ch->closed, memory_order_relaxed) && !ch->recvq.first &&
+            ch->buf_count < ch->buf_size) {
             ch->buffer[ch->send_idx] = value;
             ch->send_idx = chan_advance_idx(ch->send_idx, ch->buf_size);
             ch->buf_count++;
@@ -700,7 +721,8 @@ send_locked:
     }
 
     // Direct transfer to waiting receiver, or buffer push if space.
-    if (chan_direct_send(ch, value)) return XR_CHAN_OK;
+    if (chan_direct_send(ch, value))
+        return XR_CHAN_OK;
     if (chan_buffer_push(ch, value)) {
         xr_mutex_unlock(&ch->lock);
         return XR_CHAN_OK;
@@ -724,8 +746,8 @@ send_locked:
     XrWorker *w = xr_current_worker();
     if (w) {
         atomic_store_explicit(&coro->affinity_p, w->p.id, memory_order_relaxed);
-        atomic_fetch_or_explicit(&ch->waiter_worker_mask,
-                                 (uint64_t)1 << w->p.id, memory_order_relaxed);
+        atomic_fetch_or_explicit(&ch->waiter_worker_mask, (uint64_t) 1 << w->p.id,
+                                 memory_order_relaxed);
     }
     xr_waitq_enqueue(&ch->sendq, coro);
 
@@ -748,7 +770,7 @@ XrChanResult xr_channel_recv(XrChannel *ch, XrValue *out, XrCoroutine *coro) {
     // Distributed channel: delegate to cluster hooks
     XrChannelDistHooks *hooks = ch->isolate ? ch->isolate->channel_dist_hooks : NULL;
     if (ch->dist && hooks && hooks->recv) {
-        return (XrChanResult)hooks->recv(ch, out, coro);
+        return (XrChanResult) hooks->recv(ch, out, coro);
     }
 
     // Trylock fast path: for buffered channels with data and no waiting senders.
@@ -770,7 +792,8 @@ XrChanResult xr_channel_recv(XrChannel *ch, XrValue *out, XrCoroutine *coro) {
 
 recv_locked:
     // Direct transfer from waiting sender, or buffer pop.
-    if (chan_direct_recv(ch, out)) return XR_CHAN_OK;
+    if (chan_direct_recv(ch, out))
+        return XR_CHAN_OK;
     if (chan_buffer_pop(ch, out)) {
         xr_mutex_unlock(&ch->lock);
         return XR_CHAN_OK;
@@ -799,8 +822,8 @@ recv_locked:
     XrWorker *w = xr_current_worker();
     if (w) {
         atomic_store_explicit(&coro->affinity_p, w->p.id, memory_order_relaxed);
-        atomic_fetch_or_explicit(&ch->waiter_worker_mask,
-                                 (uint64_t)1 << w->p.id, memory_order_relaxed);
+        atomic_fetch_or_explicit(&ch->waiter_worker_mask, (uint64_t) 1 << w->p.id,
+                                 memory_order_relaxed);
     }
     xr_waitq_enqueue(&ch->recvq, coro);
 

@@ -16,10 +16,11 @@
 #include "xbool_methods.h"
 
 const XrMethodSlot xr_bool_method_table[SYMBOL_BUILTIN_COUNT] = {
-    [SYMBOL_TOSTRING] = {
-        .fn       = xr_bool_to_string,
-        .min_args = 0,
-        .max_args = 0,
-        .flags    = XR_METHOD_FLAG_PURE | XR_METHOD_FLAG_NO_GC,
-    },
+    [SYMBOL_TOSTRING] =
+        {
+            .fn = xr_bool_to_string,
+            .min_args = 0,
+            .max_args = 0,
+            .flags = XR_METHOD_FLAG_PURE | XR_METHOD_FLAG_NO_GC,
+        },
 };

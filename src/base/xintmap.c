@@ -69,7 +69,7 @@ static void resize(XrIntMap *map, uint32_t new_capacity) {
         return;
     }
 
-    map->entries = (XrIntMapEntry*)xr_malloc(new_capacity * sizeof(XrIntMapEntry));
+    map->entries = (XrIntMapEntry *) xr_malloc(new_capacity * sizeof(XrIntMapEntry));
     if (!map->entries) {
         map->entries = old_entries;
         return;
@@ -87,8 +87,7 @@ static void resize(XrIntMap *map, uint32_t new_capacity) {
 
     // Rehash old entries
     for (uint32_t i = 0; i < old_capacity; i++) {
-        if (old_entries[i].key != XR_INTMAP_EMPTY &&
-            old_entries[i].key != XR_INTMAP_TOMBSTONE) {
+        if (old_entries[i].key != XR_INTMAP_EMPTY && old_entries[i].key != XR_INTMAP_TOMBSTONE) {
             xr_intmap_set(map, old_entries[i].key, old_entries[i].value);
         }
     }
@@ -96,16 +95,17 @@ static void resize(XrIntMap *map, uint32_t new_capacity) {
     xr_free(old_entries);
 }
 
-XrIntMap* xr_intmap_new(void) {
-    XrIntMap *map = (XrIntMap*)xr_malloc(sizeof(XrIntMap));
-    if (!map) return NULL;
+XrIntMap *xr_intmap_new(void) {
+    XrIntMap *map = (XrIntMap *) xr_malloc(sizeof(XrIntMap));
+    if (!map)
+        return NULL;
 
     map->capacity = XR_INTMAP_MIN_CAPACITY;
     map->count = 0;
     map->tombstones = 0;
     map->is_arena_allocated = false;
 
-    map->entries = (XrIntMapEntry*)xr_malloc(map->capacity * sizeof(XrIntMapEntry));
+    map->entries = (XrIntMapEntry *) xr_malloc(map->capacity * sizeof(XrIntMapEntry));
     if (!map->entries) {
         xr_free(map);
         return NULL;
@@ -120,15 +120,18 @@ XrIntMap* xr_intmap_new(void) {
     return map;
 }
 
-XrIntMap* xr_intmap_new_in_arena(struct XrArena *arena) {
-    if (!arena) return NULL;
+XrIntMap *xr_intmap_new_in_arena(struct XrArena *arena) {
+    if (!arena)
+        return NULL;
 
     XrIntMap *map = xr_arena_alloc(arena, sizeof(XrIntMap));
-    if (!map) return NULL;
+    if (!map)
+        return NULL;
 
     map->capacity = XR_INTMAP_MIN_CAPACITY;
     map->entries = xr_arena_alloc(arena, map->capacity * sizeof(XrIntMapEntry));
-    if (!map->entries) return NULL;
+    if (!map->entries)
+        return NULL;
 
     // Mark all slots as empty
     for (uint32_t i = 0; i < map->capacity; i++) {
@@ -142,13 +145,15 @@ XrIntMap* xr_intmap_new_in_arena(struct XrArena *arena) {
 }
 
 void xr_intmap_free(XrIntMap *map) {
-    if (!map || map->is_arena_allocated) return;
+    if (!map || map->is_arena_allocated)
+        return;
     xr_free(map->entries);
     xr_free(map);
 }
 
 void xr_intmap_set(XrIntMap *map, uint32_t key, void *value) {
-    if (!map) return;
+    if (!map)
+        return;
 
     // Don't allow reserved key values
     if (key == XR_INTMAP_EMPTY || key == XR_INTMAP_TOMBSTONE) {
@@ -162,7 +167,8 @@ void xr_intmap_set(XrIntMap *map, uint32_t key, void *value) {
     }
 
     uint32_t index = find_slot(map, key, true);
-    if (index >= map->capacity) return;  // Table full (shouldn't happen)
+    if (index >= map->capacity)
+        return;  // Table full (shouldn't happen)
 
     XrIntMapEntry *entry = &map->entries[index];
     bool is_new = (entry->key == XR_INTMAP_EMPTY || entry->key == XR_INTMAP_TOMBSTONE);
@@ -180,12 +186,15 @@ void xr_intmap_set(XrIntMap *map, uint32_t key, void *value) {
     XR_DCHECK(map->count <= map->capacity, "intmap set: count > capacity");
 }
 
-void* xr_intmap_get(XrIntMap *map, uint32_t key) {
-    if (!map) return NULL;
-    if (key == XR_INTMAP_EMPTY || key == XR_INTMAP_TOMBSTONE) return NULL;
+void *xr_intmap_get(XrIntMap *map, uint32_t key) {
+    if (!map)
+        return NULL;
+    if (key == XR_INTMAP_EMPTY || key == XR_INTMAP_TOMBSTONE)
+        return NULL;
 
     uint32_t index = find_slot(map, key, false);
-    if (index >= map->capacity) return NULL;
+    if (index >= map->capacity)
+        return NULL;
 
     XrIntMapEntry *entry = &map->entries[index];
     if (entry->key == key) {
@@ -195,24 +204,31 @@ void* xr_intmap_get(XrIntMap *map, uint32_t key) {
 }
 
 bool xr_intmap_has(XrIntMap *map, uint32_t key) {
-    if (!map) return false;
-    if (key == XR_INTMAP_EMPTY || key == XR_INTMAP_TOMBSTONE) return false;
+    if (!map)
+        return false;
+    if (key == XR_INTMAP_EMPTY || key == XR_INTMAP_TOMBSTONE)
+        return false;
 
     uint32_t index = find_slot(map, key, false);
-    if (index >= map->capacity) return false;
+    if (index >= map->capacity)
+        return false;
 
     return map->entries[index].key == key;
 }
 
 bool xr_intmap_delete(XrIntMap *map, uint32_t key) {
-    if (!map) return false;
-    if (key == XR_INTMAP_EMPTY || key == XR_INTMAP_TOMBSTONE) return false;
+    if (!map)
+        return false;
+    if (key == XR_INTMAP_EMPTY || key == XR_INTMAP_TOMBSTONE)
+        return false;
 
     uint32_t index = find_slot(map, key, false);
-    if (index >= map->capacity) return false;
+    if (index >= map->capacity)
+        return false;
 
     XrIntMapEntry *entry = &map->entries[index];
-    if (entry->key != key) return false;
+    if (entry->key != key)
+        return false;
 
     // Mark as tombstone
     entry->key = XR_INTMAP_TOMBSTONE;
@@ -224,7 +240,8 @@ bool xr_intmap_delete(XrIntMap *map, uint32_t key) {
 }
 
 void xr_intmap_clear(XrIntMap *map) {
-    if (!map) return;
+    if (!map)
+        return;
 
     for (uint32_t i = 0; i < map->capacity; i++) {
         map->entries[i].key = XR_INTMAP_EMPTY;
@@ -235,7 +252,8 @@ void xr_intmap_clear(XrIntMap *map) {
 }
 
 void xr_intmap_foreach(XrIntMap *map, XrIntMapIterFunc func, void *userdata) {
-    if (!map || !func) return;
+    if (!map || !func)
+        return;
 
     for (uint32_t i = 0; i < map->capacity; i++) {
         XrIntMapEntry *entry = &map->entries[i];

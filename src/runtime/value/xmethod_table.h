@@ -64,10 +64,7 @@ typedef struct XrayIsolate XrayIsolate;
  *   xr_null(). The VM dispatcher checks for a pending exception after
  *   the call and propagates accordingly.
  */
-typedef XrValue (*XrMethodFn)(XrayIsolate *iso,
-                              XrValue self,
-                              XrValue *args,
-                              int argc);
+typedef XrValue (*XrMethodFn)(XrayIsolate *iso, XrValue self, XrValue *args, int argc);
 
 /*
  * One entry in a per-type method table.
@@ -82,17 +79,17 @@ typedef XrValue (*XrMethodFn)(XrayIsolate *iso,
  */
 typedef struct XrMethodSlot {
     XrMethodFn fn;
-    int8_t     min_args;
-    int8_t     max_args;        /* -1 == vararg */
-    uint8_t    flags;
-    uint8_t    _reserved;       /* keep struct 16-byte aligned */
+    int8_t min_args;
+    int8_t max_args; /* -1 == vararg */
+    uint8_t flags;
+    uint8_t _reserved; /* keep struct 16-byte aligned */
 } XrMethodSlot;
 
 /* Method-slot flags (declarative; consumed by JIT/AOT specializers). */
-#define XR_METHOD_FLAG_PURE        (1u << 0) /* no observable side effects */
-#define XR_METHOD_FLAG_NO_GC       (1u << 1) /* never triggers GC */
-#define XR_METHOD_FLAG_MAY_THROW   (1u << 2) /* may raise on contract violation */
-#define XR_METHOD_FLAG_MAY_YIELD   (1u << 3) /* may yield the coroutine */
+#define XR_METHOD_FLAG_PURE (1u << 0)      /* no observable side effects */
+#define XR_METHOD_FLAG_NO_GC (1u << 1)     /* never triggers GC */
+#define XR_METHOD_FLAG_MAY_THROW (1u << 2) /* may raise on contract violation */
+#define XR_METHOD_FLAG_MAY_YIELD (1u << 3) /* may yield the coroutine */
 
 /*
  * Global registry: XrTypeId -> per-type method table.
@@ -119,13 +116,15 @@ extern const XrMethodSlot *const xr_builtin_method_tables[XR_TID_COUNT];
  *   The caller is responsible for argument-count and argument-type
  *   validation against slot->min_args / max_args / flags.
  */
-static inline const XrMethodSlot *xr_method_table_lookup(XrTypeId type_id,
-                                                         int symbol_id,
+static inline const XrMethodSlot *xr_method_table_lookup(XrTypeId type_id, int symbol_id,
                                                          int symbol_count) {
-    if ((unsigned)type_id >= (unsigned)XR_TID_COUNT) return NULL;
+    if ((unsigned) type_id >= (unsigned) XR_TID_COUNT)
+        return NULL;
     const XrMethodSlot *table = xr_builtin_method_tables[type_id];
-    if (!table) return NULL;
-    if ((unsigned)symbol_id >= (unsigned)symbol_count) return NULL;
+    if (!table)
+        return NULL;
+    if ((unsigned) symbol_id >= (unsigned) symbol_count)
+        return NULL;
     const XrMethodSlot *slot = &table[symbol_id];
     return slot->fn ? slot : NULL;
 }

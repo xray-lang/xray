@@ -21,12 +21,7 @@
 /*
  * Fold binary operation.
  */
-bool xr_opt_fold_binary(
-    TokenType op,
-    XrValue left,
-    XrValue right,
-    XrValue *result
-) {
+bool xr_opt_fold_binary(TokenType op, XrValue left, XrValue right, XrValue *result) {
     // 1. Type check: only fold numeric operations
     if (!XR_IS_INT(left) && !XR_IS_FLOAT(left)) {
         return false;
@@ -36,8 +31,8 @@ bool xr_opt_fold_binary(
     }
 
     // 2. Convert to floating point for calculation
-    double l = XR_IS_INT(left) ? (double)XR_TO_INT(left) : XR_TO_FLOAT(left);
-    double r = XR_IS_INT(right) ? (double)XR_TO_INT(right) : XR_TO_FLOAT(right);
+    double l = XR_IS_INT(left) ? (double) XR_TO_INT(left) : XR_TO_FLOAT(left);
+    double r = XR_IS_INT(right) ? (double) XR_TO_INT(right) : XR_TO_FLOAT(right);
     double res;
 
     // 3. Execute operation
@@ -66,7 +61,6 @@ bool xr_opt_fold_binary(
             }
             res = l / r;
             break;
-
 
         case TK_PERCENT:
             // Avoid division by zero
@@ -97,8 +91,8 @@ bool xr_opt_fold_binary(
 
     // 5. Folding succeeded - create value based on type
     // If both operands are integers and result is also integer, keep integer type
-    if (XR_IS_INT(left) && XR_IS_INT(right) && res == (double)(long long)res) {
-        *result = xr_int((xr_Integer)res);
+    if (XR_IS_INT(left) && XR_IS_INT(right) && res == (double) (long long) res) {
+        *result = xr_int((xr_Integer) res);
     } else {
         *result = xr_float(res);
     }
@@ -109,11 +103,7 @@ bool xr_opt_fold_binary(
 /*
  * Fold unary operation.
  */
-bool xr_opt_fold_unary(
-    TokenType op,
-    XrValue value,
-    XrValue *result
-) {
+bool xr_opt_fold_unary(TokenType op, XrValue value, XrValue *result) {
     switch (op) {
         case TK_MINUS:
             // Numeric negation
@@ -156,12 +146,7 @@ bool xr_opt_fold_unary(
 /*
  * Fold comparison operation.
  */
-bool xr_opt_fold_comparison(
-    TokenType op,
-    XrValue left,
-    XrValue right,
-    XrValue *result
-) {
+bool xr_opt_fold_comparison(TokenType op, XrValue left, XrValue right, XrValue *result) {
     // Only support numeric comparison
     if (!XR_IS_INT(left) && !XR_IS_FLOAT(left)) {
         return false;
@@ -171,8 +156,8 @@ bool xr_opt_fold_comparison(
     }
 
     // Convert to floating point
-    double l = XR_IS_INT(left) ? (double)XR_TO_INT(left) : XR_TO_FLOAT(left);
-    double r = XR_IS_INT(right) ? (double)XR_TO_INT(right) : XR_TO_FLOAT(right);
+    double l = XR_IS_INT(left) ? (double) XR_TO_INT(left) : XR_TO_FLOAT(left);
+    double r = XR_IS_INT(right) ? (double) XR_TO_INT(right) : XR_TO_FLOAT(right);
 
     // Execute comparison
     bool res_bool;
@@ -203,11 +188,9 @@ bool xr_opt_fold_comparison(
     return true;
 }
 
-
 /* ========== Type-Aware Optimization Implementation ==========
  * The XrType-classification helpers (xr_opt_get_hint,
  * xr_opt_can_unbox_arith, xr_opt_can_devirt) have moved to
  * runtime/value/xtype_opt_hint.c. This TU now hosts only the
  * codegen-time constant-folding implementations above.
  */
-

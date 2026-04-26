@@ -23,4 +23,4 @@
 #include "xcli_help.h"
 #include "xcli_diag.h"
 
-#endif // XCLI_H
+#endif  // XCLI_H

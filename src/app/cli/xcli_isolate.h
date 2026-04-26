@@ -23,18 +23,17 @@
 /* ========== Isolate Profiles ========== */
 
 typedef enum {
-    XR_CLI_ISOLATE_RUN,      /* Full runtime: VM + GC + compiler + stdlib + modules */
-    XR_CLI_ISOLATE_EVAL,     /* Same as RUN but for eval/stdin */
-    XR_CLI_ISOLATE_PARSE,    /* Parse only: compiler + source cache (no stdlib) */
-    XR_CLI_ISOLATE_ANALYZE,  /* Check/fmt: compiler + analyzer + source cache */
-    XR_CLI_ISOLATE_TEST,     /* Test: full runtime (JIT configurable) */
-    XR_CLI_ISOLATE_REPL,     /* REPL: full runtime + source cache */
+    XR_CLI_ISOLATE_RUN,     /* Full runtime: VM + GC + compiler + stdlib + modules */
+    XR_CLI_ISOLATE_EVAL,    /* Same as RUN but for eval/stdin */
+    XR_CLI_ISOLATE_PARSE,   /* Parse only: compiler + source cache (no stdlib) */
+    XR_CLI_ISOLATE_ANALYZE, /* Check/fmt: compiler + analyzer + source cache */
+    XR_CLI_ISOLATE_TEST,    /* Test: full runtime (JIT configurable) */
+    XR_CLI_ISOLATE_REPL,    /* REPL: full runtime + source cache */
 } XrCliIsolateProfile;
 
 /* Initialize params for the given profile.
  * Caller can then override fields before calling xr_cli_isolate_create(). */
-XR_FUNC void xr_cli_isolate_params(XrCliIsolateProfile profile,
-                                     XrayIsolateParams *out);
+XR_FUNC void xr_cli_isolate_params(XrCliIsolateProfile profile, XrayIsolateParams *out);
 
 /* Create isolate from pre-configured params.
  * Thin wrapper: calls xray_isolate_new and logs error on failure.
@@ -46,4 +45,4 @@ XR_FUNC XrayIsolate *xr_cli_isolate_create(const XrayIsolateParams *params);
  * For simple cases where no override is needed. */
 XR_FUNC XrayIsolate *xr_cli_isolate_new(XrCliIsolateProfile profile);
 
-#endif // XCLI_ISOLATE_H
+#endif  // XCLI_ISOLATE_H

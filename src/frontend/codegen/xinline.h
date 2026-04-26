@@ -15,9 +15,9 @@
 #include <stdbool.h>
 #include "../../base/xdefs.h"
 
-#define INLINE_MAX_INSTRUCTIONS  10
-#define INLINE_MAX_PARAMS        4
-#define INLINE_MAX_LOCALS        8
+#define INLINE_MAX_INSTRUCTIONS 10
+#define INLINE_MAX_PARAMS 4
+#define INLINE_MAX_LOCALS 8
 
 typedef struct InlineCandidate {
     bool can_inline;
@@ -32,7 +32,7 @@ typedef struct InlineCandidate {
 
 /*
 ** Analyze whether the function is suitable for inlining
-** 
+**
 ** Judgment conditions:
 **   1.  Instructions <= INLINE_MAX_INSTRUCTIONS
 **   2.  No looping (no JMP rebound)
@@ -49,9 +49,8 @@ XR_FUNC bool xr_inline_has_recursion(XrProto *proto);
 XR_FUNC bool xr_inline_has_closure(XrProto *proto);
 XR_FUNC void xr_inline_detect_indirect_recursion(XrProto *root);
 
-
-//Calculate the "complexity" of a function
-//The smaller the return value, the more suitable it is for inlining
+// Calculate the "complexity" of a function
+// The smaller the return value, the more suitable it is for inlining
 XR_FUNC int xr_inline_complexity(XrProto *proto);
 
 typedef struct InlineStats {
@@ -67,4 +66,4 @@ extern InlineStats g_inline_stats;
 XR_FUNC void xr_inline_reset_stats(void);
 XR_FUNC void xr_inline_print_stats(void);
 
-#endif // XINLINE_H
+#endif  // XINLINE_H

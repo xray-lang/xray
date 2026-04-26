@@ -22,4 +22,4 @@
 
 XR_FUNC void xr_json_api_init(XrayIsolate *X);
 
-#endif // XJSON_BUILTINS_H
+#endif  // XJSON_BUILTINS_H

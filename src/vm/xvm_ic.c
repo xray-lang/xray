@@ -48,15 +48,16 @@ static bool ic_tables_grow(XrVMContext *ctx, uint32_t needed) {
         new_cap *= 2u;
     }
 
-    size_t fbytes = sizeof(struct XrICFieldTable *) * (size_t)new_cap;
+    size_t fbytes = sizeof(struct XrICFieldTable *) * (size_t) new_cap;
     struct XrICFieldTable **new_field =
-        (struct XrICFieldTable **)xr_realloc(ctx->ic_field_tables, fbytes);
-    if (!new_field) return false;
+        (struct XrICFieldTable **) xr_realloc(ctx->ic_field_tables, fbytes);
+    if (!new_field)
+        return false;
     ctx->ic_field_tables = new_field;
 
-    size_t mbytes = sizeof(struct XrICMethodTable *) * (size_t)new_cap;
+    size_t mbytes = sizeof(struct XrICMethodTable *) * (size_t) new_cap;
     struct XrICMethodTable **new_method =
-        (struct XrICMethodTable **)xr_realloc(ctx->ic_method_tables, mbytes);
+        (struct XrICMethodTable **) xr_realloc(ctx->ic_method_tables, mbytes);
     if (!new_method) {
         // Field array already grew; leave capacity at old value so the
         // tail of new_field stays unused. Other call sites tolerate
@@ -65,9 +66,9 @@ static bool ic_tables_grow(XrVMContext *ctx, uint32_t needed) {
     }
     ctx->ic_method_tables = new_method;
 
-    size_t bbytes = sizeof(struct XrICBuiltinTable *) * (size_t)new_cap;
+    size_t bbytes = sizeof(struct XrICBuiltinTable *) * (size_t) new_cap;
     struct XrICBuiltinTable **new_builtin =
-        (struct XrICBuiltinTable **)xr_realloc(ctx->ic_builtin_tables, bbytes);
+        (struct XrICBuiltinTable **) xr_realloc(ctx->ic_builtin_tables, bbytes);
     if (!new_builtin) {
         // Field/method arrays already grew; leave capacity at old value
         // so their tails stay unused (per-array NULL convention).
@@ -92,15 +93,18 @@ XrICFieldTable *xr_vm_ctx_ensure_ic_fields(XrVMContext *ctx, XrProto *proto) {
 
     uint32_t pid = proto->proto_id;
     if (pid >= ctx->ic_tables_capacity) {
-        if (!ic_tables_grow(ctx, pid + 1u)) return NULL;
+        if (!ic_tables_grow(ctx, pid + 1u))
+            return NULL;
     }
 
     XrICFieldTable *table = ctx->ic_field_tables[pid];
-    if (table) return table;
+    if (table)
+        return table;
 
     int cache_count = PROTO_CODE_COUNT(proto);
     table = xr_ic_field_table_new(cache_count);
-    if (!table) return NULL;
+    if (!table)
+        return NULL;
 
     // Pre-allocate all IC slots so cache_index = pc - PROTO_CODE_BASE
     // is always a valid lookup key (matches pre-migration behaviour).
@@ -121,15 +125,18 @@ XrICMethodTable *xr_vm_ctx_ensure_ic_methods(XrVMContext *ctx, XrProto *proto) {
 
     uint32_t pid = proto->proto_id;
     if (pid >= ctx->ic_tables_capacity) {
-        if (!ic_tables_grow(ctx, pid + 1u)) return NULL;
+        if (!ic_tables_grow(ctx, pid + 1u))
+            return NULL;
     }
 
     XrICMethodTable *table = ctx->ic_method_tables[pid];
-    if (table) return table;
+    if (table)
+        return table;
 
     int cache_count = PROTO_CODE_COUNT(proto);
     table = xr_ic_method_table_new(cache_count);
-    if (!table) return NULL;
+    if (!table)
+        return NULL;
 
     // Method IC table relies on count == cache_count; xr_ic_method_table_new
     // already zeroes all entries, so we just publish the count.
@@ -145,17 +152,20 @@ XrICBuiltinTable *xr_vm_ctx_ensure_ic_builtin(XrVMContext *ctx, XrProto *proto) 
 
     uint32_t pid = proto->proto_id;
     if (pid >= ctx->ic_tables_capacity) {
-        if (!ic_tables_grow(ctx, pid + 1u)) return NULL;
+        if (!ic_tables_grow(ctx, pid + 1u))
+            return NULL;
     }
 
     XrICBuiltinTable *table = ctx->ic_builtin_tables[pid];
-    if (table) return table;
+    if (table)
+        return table;
 
     /* Pre-size to PROTO_CODE_COUNT so cache_index = pc - PROTO_CODE_BASE
      * is always a valid lookup key (matches the field/method tables). */
     int cache_count = PROTO_CODE_COUNT(proto);
     table = xr_ic_builtin_table_new(cache_count);
-    if (!table) return NULL;
+    if (!table)
+        return NULL;
     for (int i = 0; i < cache_count; i++) {
         if (xr_ic_builtin_table_alloc(table) < 0) {
             xr_ic_builtin_table_free(table);
@@ -169,27 +179,30 @@ XrICBuiltinTable *xr_vm_ctx_ensure_ic_builtin(XrVMContext *ctx, XrProto *proto) 
 
 /* ========== Read-side accessors ========== */
 
-XrICFieldTable *xr_vm_ctx_get_ic_fields(const XrVMContext *ctx,
-                                        const XrProto *proto) {
-    if (!ctx || !proto) return NULL;
+XrICFieldTable *xr_vm_ctx_get_ic_fields(const XrVMContext *ctx, const XrProto *proto) {
+    if (!ctx || !proto)
+        return NULL;
     uint32_t pid = proto->proto_id;
-    if (pid >= ctx->ic_tables_capacity || !ctx->ic_field_tables) return NULL;
+    if (pid >= ctx->ic_tables_capacity || !ctx->ic_field_tables)
+        return NULL;
     return ctx->ic_field_tables[pid];
 }
 
-XrICMethodTable *xr_vm_ctx_get_ic_methods(const XrVMContext *ctx,
-                                          const XrProto *proto) {
-    if (!ctx || !proto) return NULL;
+XrICMethodTable *xr_vm_ctx_get_ic_methods(const XrVMContext *ctx, const XrProto *proto) {
+    if (!ctx || !proto)
+        return NULL;
     uint32_t pid = proto->proto_id;
-    if (pid >= ctx->ic_tables_capacity || !ctx->ic_method_tables) return NULL;
+    if (pid >= ctx->ic_tables_capacity || !ctx->ic_method_tables)
+        return NULL;
     return ctx->ic_method_tables[pid];
 }
 
-XrICBuiltinTable *xr_vm_ctx_get_ic_builtin(const XrVMContext *ctx,
-                                            const XrProto *proto) {
-    if (!ctx || !proto) return NULL;
+XrICBuiltinTable *xr_vm_ctx_get_ic_builtin(const XrVMContext *ctx, const XrProto *proto) {
+    if (!ctx || !proto)
+        return NULL;
     uint32_t pid = proto->proto_id;
-    if (pid >= ctx->ic_tables_capacity || !ctx->ic_builtin_tables) return NULL;
+    if (pid >= ctx->ic_tables_capacity || !ctx->ic_builtin_tables)
+        return NULL;
     return ctx->ic_builtin_tables[pid];
 }
 
@@ -197,10 +210,12 @@ XrICBuiltinTable *xr_vm_ctx_get_ic_builtin(const XrVMContext *ctx,
 
 XrICFieldTable *xr_vm_ic_fields_snapshot(XrVMContext *ctx, XrProto *proto) {
     XrICFieldTable *src = xr_vm_ctx_get_ic_fields(ctx, proto);
-    if (!src || src->count == 0) return NULL;
+    if (!src || src->count == 0)
+        return NULL;
 
     XrICFieldTable *dst = xr_ic_field_table_new(src->count);
-    if (!dst) return NULL;
+    if (!dst)
+        return NULL;
     for (int i = 0; i < src->count; i++) {
         if (xr_ic_field_table_alloc(dst) < 0) {
             xr_ic_field_table_free(dst);
@@ -209,22 +224,23 @@ XrICFieldTable *xr_vm_ic_fields_snapshot(XrVMContext *ctx, XrProto *proto) {
     }
     XR_DCHECK(dst->count == src->count, "snapshot: count mismatch");
     if (src->count > 0) {
-        memcpy(dst->caches, src->caches, sizeof(XrICField) * (size_t)src->count);
+        memcpy(dst->caches, src->caches, sizeof(XrICField) * (size_t) src->count);
     }
     return dst;
 }
 
 XrICMethodTable *xr_vm_ic_methods_snapshot(XrVMContext *ctx, XrProto *proto) {
     XrICMethodTable *src = xr_vm_ctx_get_ic_methods(ctx, proto);
-    if (!src || src->count == 0) return NULL;
+    if (!src || src->count == 0)
+        return NULL;
 
     XrICMethodTable *dst = xr_ic_method_table_new(src->count);
-    if (!dst) return NULL;
+    if (!dst)
+        return NULL;
     dst->count = src->count;
 
     if (src->count > 0) {
-        memcpy(dst->caches, src->caches,
-               sizeof(XrICMethod) * (size_t)src->count);
+        memcpy(dst->caches, src->caches, sizeof(XrICMethod) * (size_t) src->count);
 
         // Mega caches are heap-allocated; deep-copy each one so the
         // snapshot is independent of the live ctx.
@@ -234,7 +250,7 @@ XrICMethodTable *xr_vm_ic_methods_snapshot(XrVMContext *ctx, XrProto *proto) {
                 dst->caches[i].mega_cache = NULL;
                 continue;
             }
-            XrMegaCache *mc_dst = (XrMegaCache *)xr_malloc(sizeof(XrMegaCache));
+            XrMegaCache *mc_dst = (XrMegaCache *) xr_malloc(sizeof(XrMegaCache));
             if (!mc_dst) {
                 // Best-effort: drop the mega cache on this entry; the JIT
                 // consumer can fall back to poly entries / class lookup.
@@ -250,10 +266,12 @@ XrICMethodTable *xr_vm_ic_methods_snapshot(XrVMContext *ctx, XrProto *proto) {
 
 XrICBuiltinTable *xr_vm_ic_builtin_snapshot(XrVMContext *ctx, XrProto *proto) {
     XrICBuiltinTable *src = xr_vm_ctx_get_ic_builtin(ctx, proto);
-    if (!src || src->count == 0) return NULL;
+    if (!src || src->count == 0)
+        return NULL;
 
     XrICBuiltinTable *dst = xr_ic_builtin_table_new(src->count);
-    if (!dst) return NULL;
+    if (!dst)
+        return NULL;
     for (int i = 0; i < src->count; i++) {
         if (xr_ic_builtin_table_alloc(dst) < 0) {
             xr_ic_builtin_table_free(dst);
@@ -262,7 +280,7 @@ XrICBuiltinTable *xr_vm_ic_builtin_snapshot(XrVMContext *ctx, XrProto *proto) {
     }
     XR_DCHECK(dst->count == src->count, "snapshot: count mismatch");
     if (src->count > 0) {
-        memcpy(dst->caches, src->caches, sizeof(XrICBuiltin) * (size_t)src->count);
+        memcpy(dst->caches, src->caches, sizeof(XrICBuiltin) * (size_t) src->count);
     }
     return dst;
 }
@@ -270,7 +288,8 @@ XrICBuiltinTable *xr_vm_ic_builtin_snapshot(XrVMContext *ctx, XrProto *proto) {
 /* ========== Teardown ========== */
 
 void xr_vm_ctx_free_ic_tables(XrVMContext *ctx) {
-    if (!ctx) return;
+    if (!ctx)
+        return;
 
     if (ctx->ic_field_tables) {
         for (uint32_t i = 0; i < ctx->ic_tables_capacity; i++) {

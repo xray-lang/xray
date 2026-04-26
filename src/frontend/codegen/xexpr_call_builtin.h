@@ -46,9 +46,7 @@ struct CallExprNode;
  *         regular method-call / OP_CALL dispatch path. The exact
  *         negative value is unspecified and not interesting.
  */
-XR_FUNC int xr_compile_call_builtin(struct XrCompilerContext *ctx,
-                                    struct XrCompiler *compiler,
-                                    struct CallExprNode *node,
-                                    bool is_tail);
+XR_FUNC int xr_compile_call_builtin(struct XrCompilerContext *ctx, struct XrCompiler *compiler,
+                                    struct CallExprNode *node, bool is_tail);
 
-#endif // XEXPR_CALL_BUILTIN_H
+#endif  // XEXPR_CALL_BUILTIN_H

@@ -9,7 +9,7 @@
  *
  * KEY CONCEPT:
  *   Module loading, caching, path resolution, and export management.
-*/
+ */
 
 #include "xmodule.h"
 #include "xproject.h"
@@ -42,16 +42,15 @@
 
 // xr_vm_execute_module declared in vm/xvm.h (included via xisolate_internal.h → xvm_state.h → ...)
 
-void xr_module_set_compiler_hooks(
-    XrayIsolate *isolate,
-    void *(*parse_fn)(void*, const char*, const char*),
-    void *(*compile_ast_fn)(void*, void*, const char*),
-    void *(*compile_src_fn)(void*, const char*, const char*),
-    void  (*ast_free_fn)(void*))
-{
-    XrModuleRegistry *registry = (XrModuleRegistry*)xr_isolate_get_module_registry(isolate);
+void xr_module_set_compiler_hooks(XrayIsolate *isolate,
+                                  void *(*parse_fn)(void *, const char *, const char *),
+                                  void *(*compile_ast_fn)(void *, void *, const char *),
+                                  void *(*compile_src_fn)(void *, const char *, const char *),
+                                  void (*ast_free_fn)(void *)) {
+    XrModuleRegistry *registry = (XrModuleRegistry *) xr_isolate_get_module_registry(isolate);
     XR_DCHECK(registry != NULL, "set_compiler_hooks: module system not initialized");
-    if (!registry) return;
+    if (!registry)
+        return;
     registry->fn_parse = parse_fn;
     registry->fn_compile_ast = compile_ast_fn;
     registry->fn_compile_src = compile_src_fn;
@@ -66,12 +65,14 @@ void xr_module_set_compiler_hooks(
 ** E.g. "a/b/./c" -> "a/b/c", "a/b/../c" -> "a/c"
 ** Does NOT touch the filesystem (purely lexical).
 */
-static char* normalize_path(const char *path) {
-    if (!path) return NULL;
+static char *normalize_path(const char *path) {
+    if (!path)
+        return NULL;
 
     size_t len = strlen(path);
-    char *buf = (char*)xr_malloc(len + 1);
-    if (!buf) return NULL;
+    char *buf = (char *) xr_malloc(len + 1);
+    if (!buf)
+        return NULL;
     memcpy(buf, path, len + 1);
 
     // Split into components and resolve in place using a stack of offsets
@@ -83,13 +84,16 @@ static char* normalize_path(const char *path) {
     char *p = buf;
     while (*p) {
         // Skip leading slashes
-        while (*p == '/') p++;
-        if (!*p) break;
+        while (*p == '/')
+            p++;
+        if (!*p)
+            break;
 
         // Find end of component
         char *comp = p;
-        while (*p && *p != '/') p++;
-        size_t clen = (size_t)(p - comp);
+        while (*p && *p != '/')
+            p++;
+        size_t clen = (size_t) (p - comp);
 
         if (clen == 1 && comp[0] == '.') {
             // "." — skip
@@ -106,19 +110,24 @@ static char* normalize_path(const char *path) {
         XR_DCHECK(top < 256, "normalize_path: path too deep");
         if (top < 256) {
             comp[clen] = '\0';  // NUL-terminate component
-            stack[top++] = (int)(comp - buf);
+            stack[top++] = (int) (comp - buf);
         }
     }
 
     // Rebuild path
-    char *result = (char*)xr_malloc(len + 1);
-    if (!result) { xr_free(buf); return NULL; }
+    char *result = (char *) xr_malloc(len + 1);
+    if (!result) {
+        xr_free(buf);
+        return NULL;
+    }
     char *dst = result;
 
-    if (absolute) *dst++ = '/';
+    if (absolute)
+        *dst++ = '/';
 
     for (int i = 0; i < top; i++) {
-        if (i > 0) *dst++ = '/';
+        if (i > 0)
+            *dst++ = '/';
         const char *comp = buf + stack[i];
         size_t clen = strlen(comp);
         memcpy(dst, comp, clen);
@@ -155,10 +164,11 @@ static void module_init_exports(XrModule *module) {
 /*
 ** Create Native module
 */
-XrModule* xr_module_create_native(XrayIsolate *isolate, const char *name) {
+XrModule *xr_module_create_native(XrayIsolate *isolate, const char *name) {
     XR_DCHECK(isolate != NULL, "module_create_native: NULL isolate");
     XR_DCHECK(name != NULL, "module_create_native: NULL name");
-    XrModule *module = (XrModule*)xr_gc_alloc(xr_isolate_get_gc(isolate), sizeof(XrModule), XR_TMODULE);
+    XrModule *module =
+        (XrModule *) xr_gc_alloc(xr_isolate_get_gc(isolate), sizeof(XrModule), XR_TMODULE);
     xr_gc_header_init_type(&module->gc, XR_TMODULE);
 
     module->name = xr_strdup(name);
@@ -179,10 +189,11 @@ XrModule* xr_module_create_native(XrayIsolate *isolate, const char *name) {
 /*
 ** Create Script module
 */
-XrModule* xr_module_create_script(XrayIsolate *isolate, const char *name, const char *path) {
+XrModule *xr_module_create_script(XrayIsolate *isolate, const char *name, const char *path) {
     XR_DCHECK(isolate != NULL, "module_create_script: NULL isolate");
     XR_DCHECK(name != NULL, "module_create_script: NULL name");
-    XrModule *module = (XrModule*)xr_gc_alloc(xr_isolate_get_gc(isolate), sizeof(XrModule), XR_TMODULE);
+    XrModule *module =
+        (XrModule *) xr_gc_alloc(xr_isolate_get_gc(isolate), sizeof(XrModule), XR_TMODULE);
     xr_gc_header_init_type(&module->gc, XR_TMODULE);
 
     module->name = xr_strdup(name);
@@ -203,15 +214,18 @@ XrModule* xr_module_create_script(XrayIsolate *isolate, const char *name, const 
 /*
 ** Add export by SymbolId (core function)
 */
-void xr_module_add_export_sym(XrayIsolate *isolate, XrModule *module, SymbolId sym, XrValue value, bool is_const) {
-    (void)isolate;
-    if (!module) return;
+void xr_module_add_export_sym(XrayIsolate *isolate, XrModule *module, SymbolId sym, XrValue value,
+                              bool is_const) {
+    (void) isolate;
+    if (!module)
+        return;
 
     // Check if symbol already exists (update case)
     for (uint16_t i = 0; i < module->export_count; i++) {
         if (module->export_symbols[i] == sym) {
             module->export_values[i] = value;
-            if (is_const) module->export_flags[i] |= XR_EXPORT_CONST;
+            if (is_const)
+                module->export_flags[i] |= XR_EXPORT_CONST;
             return;
         }
     }
@@ -219,20 +233,18 @@ void xr_module_add_export_sym(XrayIsolate *isolate, XrModule *module, SymbolId s
     // Grow arrays if needed
     if (module->export_count >= module->export_capacity) {
         uint16_t new_cap = module->export_capacity ? module->export_capacity * 2 : 8;
-        XR_REALLOC_OR_ABORT(module->export_values,
-                            (size_t)new_cap * sizeof(XrValue),
+        XR_REALLOC_OR_ABORT(module->export_values, (size_t) new_cap * sizeof(XrValue),
                             "module export_values grow");
-        XR_REALLOC_OR_ABORT(module->export_symbols,
-                            (size_t)new_cap * sizeof(SymbolId),
+        XR_REALLOC_OR_ABORT(module->export_symbols, (size_t) new_cap * sizeof(SymbolId),
                             "module export_symbols grow");
-        XR_REALLOC_OR_ABORT(module->export_flags,
-                            (size_t)new_cap * sizeof(uint8_t),
+        XR_REALLOC_OR_ABORT(module->export_flags, (size_t) new_cap * sizeof(uint8_t),
                             "module export_flags grow");
         module->export_capacity = new_cap;
     }
 
     uint16_t idx = module->export_count++;
-    XR_DCHECK(module->export_count <= module->export_capacity, "module_add_export: count > capacity");
+    XR_DCHECK(module->export_count <= module->export_capacity,
+              "module_add_export: count > capacity");
     module->export_values[idx] = value;
     module->export_symbols[idx] = sym;
     module->export_flags[idx] = is_const ? XR_EXPORT_CONST : 0;
@@ -249,9 +261,10 @@ void xr_module_add_export_sym(XrayIsolate *isolate, XrModule *module, SymbolId s
 ** Resolves name to SymbolId internally — stdlib modules use this unchanged
 */
 void xr_module_add_export(XrayIsolate *isolate, XrModule *module, const char *name, XrValue value) {
-    if (!isolate || !module || !name) return;
+    if (!isolate || !module || !name)
+        return;
 
-    XrSymbolTable *sym_table = (XrSymbolTable*)xr_isolate_get_symbol_table(isolate);
+    XrSymbolTable *sym_table = (XrSymbolTable *) xr_isolate_get_symbol_table(isolate);
     SymbolId sym = xr_symbol_register_in_table(sym_table, name);
     xr_module_add_export_sym(isolate, module, sym, value, false);
 }
@@ -260,11 +273,13 @@ void xr_module_add_export(XrayIsolate *isolate, XrModule *module, const char *na
 ** Get module export (string-based)
 */
 XrValue xr_module_get_export(XrayIsolate *isolate, XrModule *module, const char *name) {
-    if (!isolate || !module || !name) return xr_null();
+    if (!isolate || !module || !name)
+        return xr_null();
 
-    XrSymbolTable *sym_table = (XrSymbolTable*)xr_isolate_get_symbol_table(isolate);
+    XrSymbolTable *sym_table = (XrSymbolTable *) xr_isolate_get_symbol_table(isolate);
     SymbolId sym = xr_symbol_lookup_in_table(sym_table, name);
-    if (sym < 0) return xr_null();
+    if (sym < 0)
+        return xr_null();
     return xr_module_get_sym(module, sym);
 }
 
@@ -273,7 +288,8 @@ XrValue xr_module_get_export(XrayIsolate *isolate, XrModule *module, const char 
 ** Call after all exports are added (e.g. when module->loaded = true)
 */
 void xr_module_build_export_index(XrModule *module) {
-    if (!module || module->export_count == 0) return;
+    if (!module || module->export_count == 0)
+        return;
 
     // Free old index
     if (module->symbol_to_index) {
@@ -285,22 +301,25 @@ void xr_module_build_export_index(XrModule *module) {
     SymbolId min_sym = module->export_symbols[0];
     SymbolId max_sym = module->export_symbols[0];
     for (uint16_t i = 1; i < module->export_count; i++) {
-        if (module->export_symbols[i] < min_sym) min_sym = module->export_symbols[i];
-        if (module->export_symbols[i] > max_sym) max_sym = module->export_symbols[i];
+        if (module->export_symbols[i] < min_sym)
+            min_sym = module->export_symbols[i];
+        if (module->export_symbols[i] > max_sym)
+            max_sym = module->export_symbols[i];
     }
 
     int range = max_sym - min_sym + 1;
 
     // Safety: if range is absurdly large, skip index (linear scan fallback)
-    if (range > 4096) return;
+    if (range > 4096)
+        return;
 
     module->min_symbol = min_sym;
     module->max_symbol = max_sym;
-    module->symbol_to_index = (int16_t*)xr_malloc(range * sizeof(int16_t));
+    module->symbol_to_index = (int16_t *) xr_malloc(range * sizeof(int16_t));
     memset(module->symbol_to_index, 0xFF, range * sizeof(int16_t));  // -1 (0xFFFF)
 
     for (uint16_t i = 0; i < module->export_count; i++) {
-        module->symbol_to_index[module->export_symbols[i] - min_sym] = (int16_t)i;
+        module->symbol_to_index[module->export_symbols[i] - min_sym] = (int16_t) i;
     }
 }
 
@@ -308,16 +327,23 @@ void xr_module_build_export_index(XrModule *module) {
 ** Free module object
 */
 void xr_module_free(XrModule *module) {
-    if (!module) return;
+    if (!module)
+        return;
 
-    if (module->name) xr_free(module->name);
-    if (module->path) xr_free(module->path);
+    if (module->name)
+        xr_free(module->name);
+    if (module->path)
+        xr_free(module->path);
 
     // Free export arrays
-    if (module->export_values) xr_free(module->export_values);
-    if (module->export_symbols) xr_free(module->export_symbols);
-    if (module->export_flags) xr_free(module->export_flags);
-    if (module->symbol_to_index) xr_free(module->symbol_to_index);
+    if (module->export_values)
+        xr_free(module->export_values);
+    if (module->export_symbols)
+        xr_free(module->export_symbols);
+    if (module->export_flags)
+        xr_free(module->export_flags);
+    if (module->symbol_to_index)
+        xr_free(module->symbol_to_index);
 }
 
 /* ========== Module System Initialization ========== */
@@ -325,9 +351,10 @@ void xr_module_free(XrModule *module) {
 /*
 ** Create module registry
 */
-static XrModuleRegistry* create_registry(void) {
-    XrModuleRegistry *registry = (XrModuleRegistry*)xr_malloc(sizeof(XrModuleRegistry));
-    if (!registry) return NULL;
+static XrModuleRegistry *create_registry(void) {
+    XrModuleRegistry *registry = (XrModuleRegistry *) xr_malloc(sizeof(XrModuleRegistry));
+    if (!registry)
+        return NULL;
 
     registry->native_loaders = xr_hashmap_new();
     registry->loaded_modules = xr_hashmap_new();
@@ -343,7 +370,8 @@ static XrModuleRegistry* create_registry(void) {
 ** Destroy module registry
 */
 static void destroy_registry(XrModuleRegistry *registry) {
-    if (!registry) return;
+    if (!registry)
+        return;
 
     if (registry->native_loaders) {
         xr_hashmap_free(registry->native_loaders);
@@ -353,7 +381,7 @@ static void destroy_registry(XrModuleRegistry *registry) {
         for (uint32_t i = 0; i < registry->loaded_modules->capacity; i++) {
             XrHashMapEntry *entry = &registry->loaded_modules->entries[i];
             if (entry->key != NULL && entry->value != NULL) {
-                XrModule *mod = (XrModule*)entry->value;
+                XrModule *mod = (XrModule *) entry->value;
                 if (mod->compiled_code) {
                     xr_free(mod->compiled_code);
                     mod->compiled_code = NULL;
@@ -378,7 +406,8 @@ static void destroy_registry(XrModuleRegistry *registry) {
 ** Initialize module system
 */
 void xr_module_system_init(XrayIsolate *isolate) {
-    if (!isolate) return;
+    if (!isolate)
+        return;
 
     // Create module registry
     xr_isolate_set_module_registry(isolate, create_registry());
@@ -397,13 +426,14 @@ void xr_module_system_init(XrayIsolate *isolate) {
 ** Load project config (if xray.toml exists)
 */
 void xr_module_system_init_with_script(XrayIsolate *isolate, const char *script_path) {
-    if (!isolate) return;
+    if (!isolate)
+        return;
 
     // Get or create module registry
-    XrModuleRegistry *registry = (XrModuleRegistry*)xr_isolate_get_module_registry(isolate);
+    XrModuleRegistry *registry = (XrModuleRegistry *) xr_isolate_get_module_registry(isolate);
     if (!registry) {
         xr_isolate_set_module_registry(isolate, create_registry());
-        registry = (XrModuleRegistry*)xr_isolate_get_module_registry(isolate);
+        registry = (XrModuleRegistry *) xr_isolate_get_module_registry(isolate);
         if (!registry) {
             xr_log_warning("module", "failed to create module registry");
             return;
@@ -424,9 +454,10 @@ void xr_module_system_init_with_script(XrayIsolate *isolate, const char *script_
 ** Free module system
 */
 void xr_module_system_free(XrayIsolate *isolate) {
-    if (!isolate || !xr_isolate_get_module_registry(isolate)) return;
+    if (!isolate || !xr_isolate_get_module_registry(isolate))
+        return;
 
-    destroy_registry((XrModuleRegistry*)xr_isolate_get_module_registry(isolate));
+    destroy_registry((XrModuleRegistry *) xr_isolate_get_module_registry(isolate));
     xr_isolate_set_module_registry(isolate, NULL);
 }
 
@@ -441,14 +472,14 @@ void xr_module_register_native(XrayIsolate *isolate, const char *name, NativeMod
         return;
     }
 
-    XrModuleRegistry *registry = (XrModuleRegistry*)xr_isolate_get_module_registry(isolate);
+    XrModuleRegistry *registry = (XrModuleRegistry *) xr_isolate_get_module_registry(isolate);
     if (!registry) {
         xr_log_warning("module", "module registry not initialized");
         return;
     }
 
     // Store loader function pointer
-    xr_hashmap_set(registry->native_loaders, name, (void*)loader);
+    xr_hashmap_set(registry->native_loaders, name, (void *) loader);
 }
 
 /* ========== Path Resolution ========== */
@@ -463,10 +494,11 @@ void xr_module_register_native(XrayIsolate *isolate, const char *name, NativeMod
 ** 4. Current script directory: <script_dir>/<name>.xr
 ** 5. Standard library directory: stdlib/<name>/<name>.xr
 */
-char* xr_module_resolve_path(XrayIsolate *isolate, const char *module_name) {
-    if (!module_name || !isolate) return NULL;
+char *xr_module_resolve_path(XrayIsolate *isolate, const char *module_name) {
+    if (!module_name || !isolate)
+        return NULL;
 
-    XrModuleRegistry *registry = (XrModuleRegistry*)xr_isolate_get_module_registry(isolate);
+    XrModuleRegistry *registry = (XrModuleRegistry *) xr_isolate_get_module_registry(isolate);
     char path[PATH_MAX];
 
     // 1. Absolute path: return directly
@@ -509,15 +541,18 @@ char* xr_module_resolve_path(XrayIsolate *isolate, const char *module_name) {
             const char *ext = strrchr(module_name, '.');
             if (ext && strcmp(ext, ".xr") == 0) {
                 snprintf(path, sizeof(path), "%s/%s", script_dir, module_name);
-                if (access(path, F_OK) == 0) return xr_strdup(path);
+                if (access(path, F_OK) == 0)
+                    return xr_strdup(path);
             } else {
                 // First try path.xr
                 snprintf(path, sizeof(path), "%s/%s.xr", script_dir, module_name);
-                if (access(path, F_OK) == 0) return xr_strdup(path);
+                if (access(path, F_OK) == 0)
+                    return xr_strdup(path);
 
                 // Then try path/index.xr (directory entry)
                 snprintf(path, sizeof(path), "%s/%s/index.xr", script_dir, module_name);
-                if (access(path, F_OK) == 0) return xr_strdup(path);
+                if (access(path, F_OK) == 0)
+                    return xr_strdup(path);
             }
         }
         return NULL;  // Not found, return NULL
@@ -535,35 +570,32 @@ char* xr_module_resolve_path(XrayIsolate *isolate, const char *module_name) {
                 // Read version from xray.lock if present
                 if (xr_isolate_get_script_file(isolate)) {
                     char lock_dir[PATH_MAX];
-                    strncpy(lock_dir, xr_isolate_get_script_file(isolate),
-                            sizeof(lock_dir) - 1);
+                    strncpy(lock_dir, xr_isolate_get_script_file(isolate), sizeof(lock_dir) - 1);
                     lock_dir[sizeof(lock_dir) - 1] = '\0';
                     char *ls = strrchr(lock_dir, '/');
-                    if (ls) *ls = '\0';
+                    if (ls)
+                        *ls = '\0';
                     char lock_path[PATH_MAX];
                     snprintf(lock_path, sizeof(lock_path), "%s/xray.lock", lock_dir);
                     lock = xr_lockfile_load(lock_path);
                 }
                 if (lock) {
                     const XrLockedPackage *lp = xr_lockfile_find(lock, module_name);
-                    if (lp && lp->version) version = lp->version;
+                    if (lp && lp->version)
+                        version = lp->version;
                 }
 
                 if (version) {
                     // Exact version from lockfile
                     // Try xray script entry points
-                    const char *entries[] = {
-                        "src/main.xr", "main.xr", "%s.xr"
-                    };
+                    const char *entries[] = {"src/main.xr", "main.xr", "%s.xr"};
                     for (int e = 0; e < 3; e++) {
                         if (e == 2) {
-                            snprintf(path, sizeof(path),
-                                     "%s/.xray/packages/%s/%s/%s/%s.xr",
-                                     home, owner, name, version, name);
+                            snprintf(path, sizeof(path), "%s/.xray/packages/%s/%s/%s/%s.xr", home,
+                                     owner, name, version, name);
                         } else {
-                            snprintf(path, sizeof(path),
-                                     "%s/.xray/packages/%s/%s/%s/%s",
-                                     home, owner, name, version, entries[e]);
+                            snprintf(path, sizeof(path), "%s/.xray/packages/%s/%s/%s/%s", home,
+                                     owner, name, version, entries[e]);
                         }
                         if (access(path, F_OK) == 0) {
                             xr_lockfile_free(lock);
@@ -571,16 +603,14 @@ char* xr_module_resolve_path(XrayIsolate *isolate, const char *module_name) {
                         }
                     }
                     // Try native module (.dylib / .so)
-                    snprintf(path, sizeof(path),
-                             "%s/.xray/packages/%s/%s/%s/build/lib%s.dylib",
+                    snprintf(path, sizeof(path), "%s/.xray/packages/%s/%s/%s/build/lib%s.dylib",
                              home, owner, name, version, name);
                     if (access(path, F_OK) == 0) {
                         xr_lockfile_free(lock);
                         return xr_strdup(path);
                     }
-                    snprintf(path, sizeof(path),
-                             "%s/.xray/packages/%s/%s/%s/build/lib%s.so",
-                             home, owner, name, version, name);
+                    snprintf(path, sizeof(path), "%s/.xray/packages/%s/%s/%s/build/lib%s.so", home,
+                             owner, name, version, name);
                     if (access(path, F_OK) == 0) {
                         xr_lockfile_free(lock);
                         return xr_strdup(path);
@@ -591,21 +621,19 @@ char* xr_module_resolve_path(XrayIsolate *isolate, const char *module_name) {
 
                 // Fallback: scan version directories (no lockfile)
                 char pkg_base[PATH_MAX];
-                snprintf(pkg_base, sizeof(pkg_base),
-                         "%s/.xray/packages/%s/%s", home, owner, name);
+                snprintf(pkg_base, sizeof(pkg_base), "%s/.xray/packages/%s/%s", home, owner, name);
                 DIR *vdir = opendir(pkg_base);
                 if (vdir) {
                     struct dirent *ve;
                     while ((ve = readdir(vdir)) != NULL) {
-                        if (ve->d_name[0] == '.') continue;
-                        snprintf(path, sizeof(path), "%s/%s/src/main.xr",
-                                 pkg_base, ve->d_name);
+                        if (ve->d_name[0] == '.')
+                            continue;
+                        snprintf(path, sizeof(path), "%s/%s/src/main.xr", pkg_base, ve->d_name);
                         if (access(path, F_OK) == 0) {
                             closedir(vdir);
                             return xr_strdup(path);
                         }
-                        snprintf(path, sizeof(path), "%s/%s/main.xr",
-                                 pkg_base, ve->d_name);
+                        snprintf(path, sizeof(path), "%s/%s/main.xr", pkg_base, ve->d_name);
                         if (access(path, F_OK) == 0) {
                             closedir(vdir);
                             return xr_strdup(path);
@@ -620,14 +648,16 @@ char* xr_module_resolve_path(XrayIsolate *isolate, const char *module_name) {
     // 4. Current script directory: <script_dir>/<name>.xr
     if (script_dir) {
         snprintf(path, sizeof(path), "%s/%s.xr", script_dir, module_name);
-        if (access(path, F_OK) == 0) return xr_strdup(path);
+        if (access(path, F_OK) == 0)
+            return xr_strdup(path);
     }
 
     // 5. Standard library: stdlib/<name>/<name>.xr
     if (registry && registry->stdlib_path) {
-        snprintf(path, sizeof(path), "%s/%s/%s.xr",
-                 registry->stdlib_path, module_name, module_name);
-        if (access(path, F_OK) == 0) return xr_strdup(path);
+        snprintf(path, sizeof(path), "%s/%s/%s.xr", registry->stdlib_path, module_name,
+                 module_name);
+        if (access(path, F_OK) == 0)
+            return xr_strdup(path);
     }
 
     return NULL;
@@ -637,7 +667,8 @@ char* xr_module_resolve_path(XrayIsolate *isolate, const char *module_name) {
 ** Detect module type
 */
 ModuleType xr_module_detect_type(const char *path) {
-    if (!path) return MODULE_TYPE_NATIVE;
+    if (!path)
+        return MODULE_TYPE_NATIVE;
 
     // Check extension
     const char *ext = strrchr(path, '.');
@@ -663,7 +694,7 @@ ModuleType xr_module_detect_type(const char *path) {
 ** Exports in the script will be added to the module's export table, can override C module exports.
 */
 static bool load_script_extension(XrayIsolate *isolate, XrModule *module, const char *module_name) {
-    XrModuleRegistry *registry = (XrModuleRegistry*)xr_isolate_get_module_registry(isolate);
+    XrModuleRegistry *registry = (XrModuleRegistry *) xr_isolate_get_module_registry(isolate);
     if (!registry) {
         XR_DBG_MODULE("load_script_extension: no registry");
         return true;
@@ -688,8 +719,8 @@ static bool load_script_extension(XrayIsolate *isolate, XrModule *module, const 
     // ship both C and xray script layers. Built-in stdlib modules are
     // now pure C and do not use script extensions.
     if (registry->stdlib_path) {
-        snprintf(path, sizeof(path), "%s/%s/%s.xr",
-                 registry->stdlib_path, module_name, module_name);
+        snprintf(path, sizeof(path), "%s/%s/%s.xr", registry->stdlib_path, module_name,
+                 module_name);
 
         XR_DBG_MODULE("load_script_extension: trying %s", path);
 
@@ -722,12 +753,16 @@ static bool load_script_extension(XrayIsolate *isolate, XrModule *module, const 
 
     // Execute extension script
     XR_DBG_MODULE("before execute: current_module=%s",
-                  xr_isolate_get_current_module(isolate) ? xr_isolate_get_current_module(isolate)->name : "null");
+                  xr_isolate_get_current_module(isolate)
+                      ? xr_isolate_get_current_module(isolate)->name
+                      : "null");
 
     int result = xr_vm_execute_module(isolate, code);
 
-    XR_DBG_MODULE("after execute: result=%d, current_module=%s",
-                  result, xr_isolate_get_current_module(isolate) ? xr_isolate_get_current_module(isolate)->name : "null");
+    XR_DBG_MODULE("after execute: result=%d, current_module=%s", result,
+                  xr_isolate_get_current_module(isolate)
+                      ? xr_isolate_get_current_module(isolate)->name
+                      : "null");
 
     // Cleanup
     xr_free(source);
@@ -749,9 +784,10 @@ static bool load_script_extension(XrayIsolate *isolate, XrModule *module, const 
 ** 2. Find and execute same-named xray script extension (stdlib/<name>/<name>.xr)
 ** 3. Script extension can access C module exports and add/override exports
 */
-static XrModule* load_native_module(XrayIsolate *isolate, const char *module_name) {
-    XrModuleRegistry *registry = (XrModuleRegistry*)xr_isolate_get_module_registry(isolate);
-    if (!registry) return NULL;
+static XrModule *load_native_module(XrayIsolate *isolate, const char *module_name) {
+    XrModuleRegistry *registry = (XrModuleRegistry *) xr_isolate_get_module_registry(isolate);
+    if (!registry)
+        return NULL;
 
     // Find loader from static registry
     void *loader_ptr = xr_hashmap_get(registry->native_loaders, module_name);
@@ -759,7 +795,8 @@ static XrModule* load_native_module(XrayIsolate *isolate, const char *module_nam
     if (!loader_ptr) {
         // Try dlopen from installed package path
         char *dylib_path = xr_module_resolve_path(isolate, module_name);
-        if (!dylib_path) return NULL;
+        if (!dylib_path)
+            return NULL;
 
         // Only attempt dlopen for shared libraries
         const char *ext = strrchr(dylib_path, '.');
@@ -783,16 +820,16 @@ static XrModule* load_native_module(XrayIsolate *isolate, const char *module_nam
         // Look for xr_load_module_<name>(XrayIsolate*) symbol
         char sym[128];
         snprintf(sym, sizeof(sym), "xr_load_module_%s", short_name);
-        NativeModuleLoader dyn_loader = (NativeModuleLoader)dlsym(handle, sym);
+        NativeModuleLoader dyn_loader = (NativeModuleLoader) dlsym(handle, sym);
         if (!dyn_loader) {
             XR_DBG_MODULE("symbol '%s' not found in dylib", sym);
             dlclose(handle);
             return NULL;
         }
-        loader_ptr = (void*)dyn_loader;
+        loader_ptr = (void *) dyn_loader;
     }
 
-    NativeModuleLoader loader = (NativeModuleLoader)loader_ptr;
+    NativeModuleLoader loader = (NativeModuleLoader) loader_ptr;
 
     // 1. Call C loader
     XrModule *module = loader(isolate);
@@ -803,7 +840,8 @@ static XrModule* load_native_module(XrayIsolate *isolate, const char *module_nam
     }
 
     // 2. Add to cache BEFORE loading script extension
-    //    This prevents circular dependency when extension imports itself (e.g., "import ws as _native")
+    //    This prevents circular dependency when extension imports itself (e.g., "import ws as
+    //    _native")
     module->loading = true;
     xr_hashmap_set(registry->loaded_modules, module_name, module);
 
@@ -833,7 +871,7 @@ static XrModule* load_native_module(XrayIsolate *isolate, const char *module_nam
 **
 ** Note: module parameter is an already created module object (for circular dependency detection)
 */
-static XrModule* load_script_module(XrayIsolate *isolate, XrModule *module, const char *path) {
+static XrModule *load_script_module(XrayIsolate *isolate, XrModule *module, const char *path) {
     if (!isolate || !module || !path) {
         return NULL;
     }
@@ -856,7 +894,7 @@ static XrModule* load_script_module(XrayIsolate *isolate, XrModule *module, cons
     // Normalize path, remove redundant "./"
     char *clean_path = normalize_path(path);
 
-    XrModuleRegistry *registry = (XrModuleRegistry*)xr_isolate_get_module_registry(isolate);
+    XrModuleRegistry *registry = (XrModuleRegistry *) xr_isolate_get_module_registry(isolate);
     if (!registry || !registry->fn_parse || !registry->fn_compile_ast) {
         xr_isolate_set_current_module(isolate, prev_module);
         xr_free(source);
@@ -874,7 +912,8 @@ static XrModule* load_script_module(XrayIsolate *isolate, XrModule *module, cons
 
     void *code = registry->fn_compile_ast(isolate, ast, clean_path);
     if (!code) {
-        if (registry->fn_ast_free) registry->fn_ast_free(ast);
+        if (registry->fn_ast_free)
+            registry->fn_ast_free(ast);
         xr_isolate_set_current_module(isolate, prev_module);
         xr_free(source);
         xr_free(clean_path);
@@ -893,7 +932,8 @@ static XrModule* load_script_module(XrayIsolate *isolate, XrModule *module, cons
 
     // Execution error should cause module loading to fail
     if (result != 0) {
-        if (registry->fn_ast_free) registry->fn_ast_free(ast);
+        if (registry->fn_ast_free)
+            registry->fn_ast_free(ast);
         xr_free(source);
         xr_free(clean_path);
         xr_isolate_set_current_module(isolate, prev_module);
@@ -903,7 +943,8 @@ static XrModule* load_script_module(XrayIsolate *isolate, XrModule *module, cons
     // 7. Cleanup - Note: code cannot be freed because exported closures still reference proto
     // Save code to module, free when module is destroyed
     module->compiled_code = code;
-    if (registry->fn_ast_free) registry->fn_ast_free(ast);
+    if (registry->fn_ast_free)
+        registry->fn_ast_free(ast);
     xr_free(source);
     xr_free(clean_path);
 
@@ -931,31 +972,36 @@ static XrModule* load_script_module(XrayIsolate *isolate, XrModule *module, cons
 ** Expects module_name in "owner/name" format (e.g. "xray/sqlite").
 ** Returns loaded XrModule* or NULL if not a native package.
 */
-static XrModule* try_load_native_package(XrayIsolate *isolate,
-                                          const char *module_name) {
-    if (!isolate || !module_name) return NULL;
+static XrModule *try_load_native_package(XrayIsolate *isolate, const char *module_name) {
+    if (!isolate || !module_name)
+        return NULL;
 
     // 1. Parse owner/name (must be exactly "owner/name", no extra slashes)
     const char *slash = strchr(module_name, '/');
-    if (!slash || slash == module_name) return NULL;
-    if (strchr(slash + 1, '/')) return NULL;  // reject "a/b/c"
-    if (module_name[0] == '.' || module_name[0] == '/') return NULL;
+    if (!slash || slash == module_name)
+        return NULL;
+    if (strchr(slash + 1, '/'))
+        return NULL;  // reject "a/b/c"
+    if (module_name[0] == '.' || module_name[0] == '/')
+        return NULL;
 
     char owner[64], name[64];
-    size_t owner_len = (size_t)(slash - module_name);
-    size_t name_len  = strlen(slash + 1);
+    size_t owner_len = (size_t) (slash - module_name);
+    size_t name_len = strlen(slash + 1);
     if (owner_len >= sizeof(owner) || name_len >= sizeof(name) || name_len == 0)
         return NULL;
-    memcpy(owner, module_name, owner_len); owner[owner_len] = '\0';
-    memcpy(name, slash + 1, name_len);     name[name_len] = '\0';
+    memcpy(owner, module_name, owner_len);
+    owner[owner_len] = '\0';
+    memcpy(name, slash + 1, name_len);
+    name[name_len] = '\0';
 
     // 2. Find package directory
     const char *home = getenv("HOME");
-    if (!home) return NULL;
+    if (!home)
+        return NULL;
 
     char pkg_dir[PATH_MAX];
-    snprintf(pkg_dir, sizeof(pkg_dir),
-             "%s/.xray/packages/%s/%s/latest", home, owner, name);
+    snprintf(pkg_dir, sizeof(pkg_dir), "%s/.xray/packages/%s/%s/latest", home, owner, name);
 
     // 3. Find native library (try platform-preferred suffix first)
     char lib_path[PATH_MAX];
@@ -968,28 +1014,27 @@ static XrModule* try_load_native_package(XrayIsolate *isolate,
     };
     bool found = false;
     for (int i = 0; i < 2 && !found; i++) {
-        snprintf(lib_path, sizeof(lib_path),
-                 "%s/lib/libxray_%s%s", pkg_dir, name, suffixes[i]);
-        if (access(lib_path, F_OK) == 0) found = true;
+        snprintf(lib_path, sizeof(lib_path), "%s/lib/libxray_%s%s", pkg_dir, name, suffixes[i]);
+        if (access(lib_path, F_OK) == 0)
+            found = true;
     }
-    if (!found) return NULL;
+    if (!found)
+        return NULL;
 
     // 4. dlopen
     void *handle = dlopen(lib_path, RTLD_NOW | RTLD_LOCAL);
     if (!handle) {
-        xr_log_warning("module", "dlopen failed for '%s': %s",
-                       lib_path, dlerror());
+        xr_log_warning("module", "dlopen failed for '%s': %s", lib_path, dlerror());
         return NULL;
     }
 
     // 5. ABI version check
     char abi_sym[128];
     snprintf(abi_sym, sizeof(abi_sym), "xr_module_abi_version_%s", name);
-    int *abi_ver = (int*)dlsym(handle, abi_sym);
+    int *abi_ver = (int *) dlsym(handle, abi_sym);
     if (!abi_ver || *abi_ver != XRAY_MODULE_ABI_VERSION) {
-        xr_log_warning("module",
-            "ABI mismatch for '%s': package=%d, runtime=%d",
-            module_name, abi_ver ? *abi_ver : -1, XRAY_MODULE_ABI_VERSION);
+        xr_log_warning("module", "ABI mismatch for '%s': package=%d, runtime=%d", module_name,
+                       abi_ver ? *abi_ver : -1, XRAY_MODULE_ABI_VERSION);
         dlclose(handle);
         return NULL;
     }
@@ -998,11 +1043,9 @@ static XrModule* try_load_native_package(XrayIsolate *isolate,
     char sym_name[128];
     snprintf(sym_name, sizeof(sym_name), "xr_load_module_%s", name);
 
-    NativeModuleLoader loader =
-        (NativeModuleLoader)dlsym(handle, sym_name);
+    NativeModuleLoader loader = (NativeModuleLoader) dlsym(handle, sym_name);
     if (!loader) {
-        xr_log_warning("module", "symbol '%s' not found in '%s'",
-                       sym_name, lib_path);
+        xr_log_warning("module", "symbol '%s' not found in '%s'", sym_name, lib_path);
         dlclose(handle);
         return NULL;
     }
@@ -1018,8 +1061,7 @@ static XrModule* try_load_native_package(XrayIsolate *isolate,
     module->native_handle = handle;
 
     // 9. Cache and finalize
-    XrModuleRegistry *registry =
-        (XrModuleRegistry*)xr_isolate_get_module_registry(isolate);
+    XrModuleRegistry *registry = (XrModuleRegistry *) xr_isolate_get_module_registry(isolate);
     XR_DCHECK(registry != NULL, "try_load_native_package: NULL registry");
     module->loading = true;
     xr_hashmap_set(registry->loaded_modules, module_name, module);
@@ -1027,8 +1069,7 @@ static XrModule* try_load_native_package(XrayIsolate *isolate,
     module->loading = false;
     module->loaded = true;
 
-    xr_log_notice("module", "loaded native package '%s' from '%s'",
-                  module_name, lib_path);
+    xr_log_notice("module", "loaded native package '%s' from '%s'", module_name, lib_path);
 
     return module;
 }
@@ -1051,18 +1092,18 @@ XrValue xr_module_import(XrayIsolate *isolate, const char *module_name) {
         return xr_null();
     }
 
-    XrModuleRegistry *registry = (XrModuleRegistry*)xr_isolate_get_module_registry(isolate);
+    XrModuleRegistry *registry = (XrModuleRegistry *) xr_isolate_get_module_registry(isolate);
     if (!registry) {
         return xr_null();
     }
 
     // 1. Check cache (by module name or absolute path)
-    XrModule *module = (XrModule*)xr_hashmap_get(registry->loaded_modules, module_name);
+    XrModule *module = (XrModule *) xr_hashmap_get(registry->loaded_modules, module_name);
     if (module) {
         // For native modules with script extension: allow "import X as _native" pattern
         // The C layer is already loaded and exports are available
-        bool is_native_module = (module->module_type == MODULE_TYPE_NATIVE ||
-                                  module->module_type == MODULE_TYPE_MIXED);
+        bool is_native_module =
+            (module->module_type == MODULE_TYPE_NATIVE || module->module_type == MODULE_TYPE_MIXED);
         if (module->loading && is_native_module) {
             // Native module loading extension - return C layer exports
             return xr_value_from_module(module);
@@ -1113,7 +1154,7 @@ XrValue xr_module_import(XrayIsolate *isolate, const char *module_name) {
     }
 
     // 4. Check cache with absolute path (ensures module singleton)
-    module = (XrModule*)xr_hashmap_get(registry->loaded_modules, path);
+    module = (XrModule *) xr_hashmap_get(registry->loaded_modules, path);
     if (module) {
         xr_free(path);
         if (module->loading) {
@@ -1156,7 +1197,8 @@ XrValue xr_module_import(XrayIsolate *isolate, const char *module_name) {
 /*
 ** Import module member
 */
-XrValue xr_module_import_member(XrayIsolate *isolate, const char *module_name, const char *member_name) {
+XrValue xr_module_import_member(XrayIsolate *isolate, const char *module_name,
+                                const char *member_name) {
     if (!isolate || !module_name || !member_name) {
         return xr_null();
     }
@@ -1180,8 +1222,10 @@ XrValue xr_module_import_member(XrayIsolate *isolate, const char *module_name, c
 ** Add current module's export
 ** Called during OP_EXPORT execution
 */
-void xr_module_add_current_export(XrayIsolate *isolate, const char *name, XrValue value, bool is_const) {
-    if (!isolate || !name) return;
+void xr_module_add_current_export(XrayIsolate *isolate, const char *name, XrValue value,
+                                  bool is_const) {
+    if (!isolate || !name)
+        return;
 
     XrModule *module = xr_isolate_get_current_module(isolate);
     if (!module) {
@@ -1191,7 +1235,7 @@ void xr_module_add_current_export(XrayIsolate *isolate, const char *name, XrValu
 
     XR_DBG_MODULE("export '%s' to module '%s'", name, module->name);
 
-    XrSymbolTable *sym_table = (XrSymbolTable*)xr_isolate_get_symbol_table(isolate);
+    XrSymbolTable *sym_table = (XrSymbolTable *) xr_isolate_get_symbol_table(isolate);
     SymbolId sym = xr_symbol_register_in_table(sym_table, name);
     xr_module_add_export_sym(isolate, module, sym, value, is_const);
 }
@@ -1200,11 +1244,13 @@ void xr_module_add_current_export(XrayIsolate *isolate, const char *name, XrValu
 ** Check if export is a constant (string-based)
 */
 bool xr_module_is_export_const(XrayIsolate *isolate, XrModule *module, const char *name) {
-    if (!isolate || !module || !name) return false;
+    if (!isolate || !module || !name)
+        return false;
 
-    XrSymbolTable *sym_table = (XrSymbolTable*)xr_isolate_get_symbol_table(isolate);
+    XrSymbolTable *sym_table = (XrSymbolTable *) xr_isolate_get_symbol_table(isolate);
     SymbolId sym = xr_symbol_lookup_in_table(sym_table, name);
-    if (sym < 0) return false;
+    if (sym < 0)
+        return false;
     return xr_module_is_const_sym(module, sym);
 }
 
@@ -1218,32 +1264,32 @@ typedef struct {
 } StdlibEntry;
 
 static const StdlibEntry stdlib_core[] = {
-    {"time",     xr_load_module_time},
-    {"math",     xr_load_module_math},
-    {"json",     xr_load_module_json},
-    {"path",     xr_load_module_path},
-    {"base64",   xr_load_module_base64},
-    {"regex",    xr_load_module_regex},
-    {"gc",       xr_load_module_gc},
-    {"url",      xr_load_module_url},
+    {"time", xr_load_module_time},
+    {"math", xr_load_module_math},
+    {"json", xr_load_module_json},
+    {"path", xr_load_module_path},
+    {"base64", xr_load_module_base64},
+    {"regex", xr_load_module_regex},
+    {"gc", xr_load_module_gc},
+    {"url", xr_load_module_url},
     {"datetime", xr_load_module_datetime},
-    {"log",      xr_load_module_log},
+    {"log", xr_load_module_log},
     {"encoding", xr_load_module_encoding},
 };
 
 #if defined(XR_HAS_FILESYSTEM) || !defined(XR_STDLIB_MODULAR)
 static const StdlibEntry stdlib_filesystem[] = {
-    {"io",         xr_load_module_io},
-    {"os",         xr_load_module_os},
+    {"io", xr_load_module_io},
+    {"os", xr_load_module_os},
     {"test_yield", xr_load_module_test_yield},
 };
 #endif
 
 #if defined(XR_HAS_NETWORK) || !defined(XR_STDLIB_MODULAR)
 static const StdlibEntry stdlib_network[] = {
-    {"net",  xr_load_module_net},
+    {"net", xr_load_module_net},
     {"http", xr_load_module_http},
-    {"ws",   xr_load_module_ws},
+    {"ws", xr_load_module_ws},
 };
 #endif
 
@@ -1267,23 +1313,24 @@ static const StdlibEntry stdlib_cluster[] = {
 
 #if defined(XR_HAS_DATA_FORMATS) || !defined(XR_STDLIB_MODULAR)
 static const StdlibEntry stdlib_data_formats[] = {
-    {"csv",  xr_load_module_csv},
+    {"csv", xr_load_module_csv},
     {"toml", xr_load_module_toml},
     {"yaml", xr_load_module_yaml},
-    {"xml",  xr_load_module_xml},
+    {"xml", xr_load_module_xml},
 };
 #endif
 
-#define REGISTER_TABLE(table) \
-    for (int i = 0; i < (int)(sizeof(table) / sizeof(table[0])); i++) \
-        xr_module_register_native(isolate, table[i].name, table[i].loader)
+#define REGISTER_TABLE(table)                                                                      \
+    for (int i = 0; i < (int) (sizeof(table) / sizeof(table[0])); i++)                             \
+    xr_module_register_native(isolate, table[i].name, table[i].loader)
 
 /*
 ** Register all standard library modules
 ** Called after VM initialization
 */
 void xr_module_register_stdlib(XrayIsolate *isolate) {
-    if (!isolate) return;
+    if (!isolate)
+        return;
 
     REGISTER_TABLE(stdlib_core);
 
@@ -1308,4 +1355,3 @@ void xr_module_register_stdlib(XrayIsolate *isolate) {
 }
 
 #undef REGISTER_TABLE
-

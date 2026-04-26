@@ -91,4 +91,4 @@ XR_FUNC bool xr_class_is_abstract_method(XrClass *cls, int method_symbol);
 // on allocation failure.
 XR_FUNC void xr_class_free(XrClass *cls);
 
-#endif // XCLASS_INTERNAL_H
+#endif  // XCLASS_INTERNAL_H

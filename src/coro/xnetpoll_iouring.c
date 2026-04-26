@@ -38,12 +38,9 @@
 /* Per-fd poll state tracked in io_uring CQE user_data.
  * Encodes both the PollDesc pointer and direction so we can
  * distinguish multi-shot completions. */
-#define URING_UDATA(pd, is_write) \
-    ((uint64_t)(uintptr_t)(pd) | ((uint64_t)(is_write) << 63))
-#define URING_UDATA_PD(udata) \
-    ((XrPollDesc *)(uintptr_t)((udata) & ~(1ULL << 63)))
-#define URING_UDATA_IS_WRITE(udata) \
-    (((udata) >> 63) & 1)
+#define URING_UDATA(pd, is_write) ((uint64_t) (uintptr_t) (pd) | ((uint64_t) (is_write) << 63))
+#define URING_UDATA_PD(udata) ((XrPollDesc *) (uintptr_t) ((udata) & ~(1ULL << 63)))
+#define URING_UDATA_IS_WRITE(udata) (((udata) >> 63) & 1)
 
 // Wakeup sentinel: user_data == 0 means wakeup eventfd
 #define URING_UDATA_WAKEUP 0
@@ -55,22 +52,23 @@
 
 typedef struct XrUringState {
     struct io_uring ring;
-    int event_fd; // eventfd for wakeup (registered with ring)
+    int event_fd;  // eventfd for wakeup (registered with ring)
 } XrUringState;
 
 /* ========== Helper: submit a poll-add SQE ========== */
 
-static int uring_submit_poll(XrUringState *us, int fd, XrPollDesc *pd,
-                             short poll_mask, bool is_write) {
+static int uring_submit_poll(XrUringState *us, int fd, XrPollDesc *pd, short poll_mask,
+                             bool is_write) {
     struct io_uring_sqe *sqe = io_uring_get_sqe(&us->ring);
     if (!sqe) {
         // SQ full: flush pending submissions first
         io_uring_submit(&us->ring);
         sqe = io_uring_get_sqe(&us->ring);
-        if (!sqe) return -1;
+        if (!sqe)
+            return -1;
     }
     io_uring_prep_poll_add(sqe, fd, poll_mask);
-    sqe->flags |= IOSQE_IO_LINK; // no-op for standalone, harmless
+    sqe->flags |= IOSQE_IO_LINK;  // no-op for standalone, harmless
     sqe->flags = 0;
     io_uring_sqe_set_data64(sqe, URING_UDATA(pd, is_write));
     return 0;
@@ -79,8 +77,9 @@ static int uring_submit_poll(XrUringState *us, int fd, XrPollDesc *pd,
 /* ========== ops functions ========== */
 
 static int iouring_init(XrNetpoll *np) {
-    XrUringState *us = (XrUringState *)xr_calloc(1, sizeof(XrUringState));
-    if (!us) return -1;
+    XrUringState *us = (XrUringState *) xr_calloc(1, sizeof(XrUringState));
+    if (!us)
+        return -1;
 
     // Create io_uring instance
     struct io_uring_params params;
@@ -123,19 +122,22 @@ static int iouring_init(XrNetpoll *np) {
 }
 
 static void iouring_cleanup(XrNetpoll *np) {
-    XrUringState *us = (XrUringState *)np->backend_state;
-    if (!us) return;
+    XrUringState *us = (XrUringState *) np->backend_state;
+    if (!us)
+        return;
 
     io_uring_queue_exit(&us->ring);
-    if (us->event_fd >= 0) close(us->event_fd);
+    if (us->event_fd >= 0)
+        close(us->event_fd);
     xr_free(us);
     np->backend_state = NULL;
     np->poll_fd = -1;
 }
 
 static int iouring_add_fd(XrNetpoll *np, int fd, XrPollDesc *pd) {
-    XrUringState *us = (XrUringState *)np->backend_state;
-    if (!us) return -1;
+    XrUringState *us = (XrUringState *) np->backend_state;
+    if (!us)
+        return -1;
 
     /* Submit two poll-add SQEs: one for read, one for write.
      * io_uring poll is one-shot by default; we re-arm in poll_events
@@ -150,22 +152,24 @@ static int iouring_add_fd(XrNetpoll *np, int fd, XrPollDesc *pd) {
 }
 
 static void iouring_del_fd(XrNetpoll *np, int fd) {
-    XrUringState *us = (XrUringState *)np->backend_state;
-    if (!us) return;
+    XrUringState *us = (XrUringState *) np->backend_state;
+    if (!us)
+        return;
 
     /* Cancel outstanding poll SQEs for this fd.
      * io_uring_prep_cancel_fd cancels all SQEs matching the fd. */
     struct io_uring_sqe *sqe = io_uring_get_sqe(&us->ring);
     if (sqe) {
         io_uring_prep_cancel_fd(sqe, fd, 0);
-        io_uring_sqe_set_data64(sqe, URING_UDATA_WAKEUP); // ignore CQE
+        io_uring_sqe_set_data64(sqe, URING_UDATA_WAKEUP);  // ignore CQE
         io_uring_submit(&us->ring);
     }
 }
 
 static int iouring_poll_events(XrNetpoll *np, int64_t delta_ns, XrReadyList *list) {
-    XrUringState *us = (XrUringState *)np->backend_state;
-    if (!us) return -1;
+    XrUringState *us = (XrUringState *) np->backend_state;
+    if (!us)
+        return -1;
 
     // Flush any pending submissions
     io_uring_submit(&us->ring);
@@ -196,7 +200,8 @@ static int iouring_poll_events(XrNetpoll *np, int64_t delta_ns, XrReadyList *lis
             if (udata == URING_UDATA_WAKEUP) {
                 // Wakeup pipe or cancel CQE — drain pipe, re-arm
                 char buf[16];
-                while (read(np->wakeup_pipe[0], buf, sizeof(buf)) > 0) {}
+                while (read(np->wakeup_pipe[0], buf, sizeof(buf)) > 0) {
+                }
                 atomic_store(&np->break_pending, false);
 
                 // Re-arm wakeup poll (one-shot)
@@ -219,20 +224,20 @@ static int iouring_poll_events(XrNetpoll *np, int64_t delta_ns, XrReadyList *lis
             bool is_write = URING_UDATA_IS_WRITE(udata);
 
             int mode = 0;
-            int revents = cqe->res; // poll revents in result
+            int revents = cqe->res;  // poll revents in result
             if (!is_write && (revents & (POLLIN | POLLRDHUP | POLLHUP | POLLERR)))
                 mode |= XR_POLL_READ;
             if (is_write && (revents & (POLLOUT | POLLHUP | POLLERR)))
                 mode |= XR_POLL_WRITE;
 
-            if (mode) xr_netpoll_ready(list, pd, mode);
+            if (mode)
+                xr_netpoll_ready(list, pd, mode);
 
             // Re-arm poll for this direction (one-shot model)
             int fd = pd->fd;
             if (fd >= 0 && !atomic_load(&pd->closing)) {
-                short mask = is_write
-                    ? (POLLOUT | POLLHUP | POLLERR)
-                    : (POLLIN | POLLRDHUP | POLLHUP | POLLERR);
+                short mask = is_write ? (POLLOUT | POLLHUP | POLLERR)
+                                      : (POLLIN | POLLRDHUP | POLLHUP | POLLERR);
                 uring_submit_poll(us, fd, pd, mask, is_write);
             }
 
@@ -248,7 +253,8 @@ static int iouring_poll_events(XrNetpoll *np, int64_t delta_ns, XrReadyList *lis
             ret = io_uring_wait_cqe(&us->ring, &cqe);
         }
 
-        if (ret < 0) return (ret == -EINTR || ret == -ETIME) ? 0 : -1;
+        if (ret < 0)
+            return (ret == -EINTR || ret == -ETIME) ? 0 : -1;
 
         // Process all available CQEs after waking
         unsigned head;
@@ -257,7 +263,8 @@ static int iouring_poll_events(XrNetpoll *np, int64_t delta_ns, XrReadyList *lis
 
             if (udata == URING_UDATA_WAKEUP) {
                 char buf[16];
-                while (read(np->wakeup_pipe[0], buf, sizeof(buf)) > 0) {}
+                while (read(np->wakeup_pipe[0], buf, sizeof(buf)) > 0) {
+                }
                 atomic_store(&np->break_pending, false);
 
                 struct io_uring_sqe *sqe2 = io_uring_get_sqe(&us->ring);
@@ -269,7 +276,10 @@ static int iouring_poll_events(XrNetpoll *np, int64_t delta_ns, XrReadyList *lis
                 continue;
             }
 
-            if (cqe->res < 0) { count++; continue; }
+            if (cqe->res < 0) {
+                count++;
+                continue;
+            }
 
             XrPollDesc *pd = URING_UDATA_PD(udata);
             bool is_write = URING_UDATA_IS_WRITE(udata);
@@ -281,13 +291,13 @@ static int iouring_poll_events(XrNetpoll *np, int64_t delta_ns, XrReadyList *lis
             if (is_write && (revents & (POLLOUT | POLLHUP | POLLERR)))
                 mode |= XR_POLL_WRITE;
 
-            if (mode) xr_netpoll_ready(list, pd, mode);
+            if (mode)
+                xr_netpoll_ready(list, pd, mode);
 
             int fd = pd->fd;
             if (fd >= 0 && !atomic_load(&pd->closing)) {
-                short mask = is_write
-                    ? (POLLOUT | POLLHUP | POLLERR)
-                    : (POLLIN | POLLRDHUP | POLLHUP | POLLERR);
+                short mask = is_write ? (POLLOUT | POLLHUP | POLLERR)
+                                      : (POLLIN | POLLRDHUP | POLLHUP | POLLERR);
                 uring_submit_poll(us, fd, pd, mask, is_write);
             }
 
@@ -297,7 +307,8 @@ static int iouring_poll_events(XrNetpoll *np, int64_t delta_ns, XrReadyList *lis
     }
 
     // Flush any re-arm submissions
-    if (count > 0) io_uring_submit(&us->ring);
+    if (count > 0)
+        io_uring_submit(&us->ring);
 
     return count;
 }
@@ -310,17 +321,19 @@ static void iouring_wakeup(XrNetpoll *np) {
     // Write to wakeup pipe (registered as poll source in init)
     char c = 0;
     ssize_t n;
-    do { n = write(np->wakeup_pipe[1], &c, 1); } while (n < 0 && errno == EINTR);
+    do {
+        n = write(np->wakeup_pipe[1], &c, 1);
+    } while (n < 0 && errno == EINTR);
 }
 
 static const XrNetpollOps iouring_ops = {
-    .name        = "io_uring",
-    .init        = iouring_init,
-    .cleanup     = iouring_cleanup,
-    .add_fd      = iouring_add_fd,
-    .del_fd      = iouring_del_fd,
+    .name = "io_uring",
+    .init = iouring_init,
+    .cleanup = iouring_cleanup,
+    .add_fd = iouring_add_fd,
+    .del_fd = iouring_del_fd,
     .poll_events = iouring_poll_events,
-    .wakeup      = iouring_wakeup,
+    .wakeup = iouring_wakeup,
 };
 
-#endif // __linux__ && XR_HAS_IO_URING
+#endif  // __linux__ && XR_HAS_IO_URING

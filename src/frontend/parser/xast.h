@@ -18,4 +18,4 @@
 #include "xast_nodes.h"
 #include "xast_api.h"
 
-#endif // XAST_H
+#endif  // XAST_H

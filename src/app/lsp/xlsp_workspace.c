@@ -36,9 +36,10 @@
 
 // Recursively find all .xr files in a directory (with configurable ignore rules)
 static void find_xr_files_with_config(const char *dir_path, char ***files, int *count,
-                                       int *capacity, XlspConfig *config) {
+                                      int *capacity, XlspConfig *config) {
     DIR *dir = opendir(dir_path);
-    if (!dir) return;
+    if (!dir)
+        return;
 
     struct dirent *entry;
     while ((entry = readdir(dir)) != NULL) {
@@ -46,7 +47,8 @@ static void find_xr_files_with_config(const char *dir_path, char ***files, int *
         snprintf(path, sizeof(path), "%s/%s", dir_path, entry->d_name);
 
         struct stat st;
-        if (stat(path, &st) < 0) continue;
+        if (stat(path, &st) < 0)
+            continue;
 
         bool is_dir = S_ISDIR(st.st_mode);
 
@@ -64,10 +66,12 @@ static void find_xr_files_with_config(const char *dir_path, char ***files, int *
                 if (*count >= *capacity) {
                     int new_capacity = *capacity * 2;
                     // Overflow check
-                    if (new_capacity < *capacity) continue;
+                    if (new_capacity < *capacity)
+                        continue;
 
-                    char **new_files = xr_realloc(*files, new_capacity * sizeof(char*));
-                    if (!new_files) continue;  // Skip this file on failure
+                    char **new_files = xr_realloc(*files, new_capacity * sizeof(char *));
+                    if (!new_files)
+                        continue;  // Skip this file on failure
 
                     *files = new_files;
                     *capacity = new_capacity;
@@ -92,20 +96,18 @@ static void find_xr_files(const char *dir_path, char ***files, int *count, int *
 
 // Background task: scan and index files
 void xlsp_workspace_index_task_execute(void *data) {
-    XrLspIndexTaskData *task_data = (XrLspIndexTaskData *)data;
+    XrLspIndexTaskData *task_data = (XrLspIndexTaskData *) data;
 
     // Find all .xr files using server's ignore configuration
     int capacity = 64;
-    task_data->files = xr_malloc(capacity * sizeof(char*));
+    task_data->files = xr_malloc(capacity * sizeof(char *));
     task_data->file_count = 0;
 
     if (task_data->server) {
-        find_xr_files_with_config(task_data->root_path, &task_data->files,
-                                   &task_data->file_count, &capacity,
-                                   &task_data->server->config);
+        find_xr_files_with_config(task_data->root_path, &task_data->files, &task_data->file_count,
+                                  &capacity, &task_data->server->config);
     } else {
-        find_xr_files(task_data->root_path, &task_data->files,
-                      &task_data->file_count, &capacity);
+        find_xr_files(task_data->root_path, &task_data->files, &task_data->file_count, &capacity);
     }
 }
 
@@ -116,7 +118,8 @@ void xlsp_workspace_index_task_execute(void *data) {
 // Index a single file (helper function)
 static void index_single_file(XrLspServer *server, const char *path) {
     FILE *f = fopen(path, "r");
-    if (!f) return;
+    if (!f)
+        return;
 
     fseek(f, 0, SEEK_END);
     long size = ftell(f);
@@ -145,7 +148,7 @@ static void index_single_file(XrLspServer *server, const char *path) {
         AstNode *ast = xr_parse_recoverable(&parser);
 
         if (ast && !parser.had_error) {
-            xa_analyzer_analyze(server->workspace_analyzer, uri, (XrAstNode*)ast);
+            xa_analyzer_analyze(server->workspace_analyzer, uri, (XrAstNode *) ast);
         }
         if (ast) {
             xr_program_destroy(ast);
@@ -158,18 +161,18 @@ static void index_single_file(XrLspServer *server, const char *path) {
 // Task for incremental batch indexing
 static void index_batch_execute(void *data) {
     // Nothing to do in worker thread - just a placeholder
-    (void)data;
+    (void) data;
 }
 
 static void index_batch_complete(void *data, void *result) {
-    (void)result;
-    XrLspIndexTaskData *task_data = (XrLspIndexTaskData *)data;
+    (void) result;
+    XrLspIndexTaskData *task_data = (XrLspIndexTaskData *) data;
     XrLspServer *server = task_data->server;
 
     // Check if indexing was cancelled
     if (server->index_cancelled) {
-        lsp_log("Background indexing cancelled at %d/%d files",
-                task_data->current_file, task_data->file_count);
+        lsp_log("Background indexing cancelled at %d/%d files", task_data->current_file,
+                task_data->file_count);
 
         // Cleanup remaining files
         for (int i = task_data->current_file; i < task_data->file_count; i++) {
@@ -184,13 +187,14 @@ static void index_batch_complete(void *data, void *result) {
         return;
     }
 
-    // Process a small batch of files (max 3 per cycle to keep UI responsive)
-    #define BATCH_SIZE 3
+// Process a small batch of files (max 3 per cycle to keep UI responsive)
+#define BATCH_SIZE 3
     int processed = 0;
 
     while (task_data->current_file < task_data->file_count && processed < BATCH_SIZE) {
         // Check cancellation between files
-        if (server->index_cancelled) break;
+        if (server->index_cancelled)
+            break;
 
         char *path = task_data->files[task_data->current_file];
         index_single_file(server, path);
@@ -207,18 +211,19 @@ static void index_batch_complete(void *data, void *result) {
             for (int i = task_data->current_file; i < task_data->file_count; i++) {
                 xr_free(task_data->files[i]);
             }
-            lsp_log("Background indexing cancelled at %d/%d files",
-                    server->files_indexed, server->files_total);
+            lsp_log("Background indexing cancelled at %d/%d files", server->files_indexed,
+                    server->files_total);
             server->index_cancelled = false;
         } else {
             int symbol_count = 0;
             if (server->workspace_analyzer && server->workspace_analyzer->global_scope) {
-                XaSymbol **syms = xa_scope_get_all_symbols(server->workspace_analyzer->global_scope, &symbol_count);
+                XaSymbol **syms = xa_scope_get_all_symbols(server->workspace_analyzer->global_scope,
+                                                           &symbol_count);
                 xr_free(syms);
             }
 
-            lsp_log("Background indexing complete: %d/%d files, %d symbols",
-                    server->files_indexed, server->files_total, symbol_count);
+            lsp_log("Background indexing complete: %d/%d files, %d symbols", server->files_indexed,
+                    server->files_total, symbol_count);
         }
 
         // All files indexed or cancelled
@@ -229,21 +234,19 @@ static void index_batch_complete(void *data, void *result) {
         xr_free(task_data);
     } else {
         // Schedule next batch - this allows main thread to process other requests
-        XrLspTask *task = xlsp_task_new_ex(
-            index_batch_execute,
-            index_batch_complete,
-            task_data,
-            XLSP_TASK_LOW,  // Low priority so user requests take precedence
-            XLSP_TASK_TYPE_INDEX,
-            0  // No associated request ID
-        );
+        XrLspTask *task =
+            xlsp_task_new_ex(index_batch_execute, index_batch_complete, task_data,
+                             XLSP_TASK_LOW,  // Low priority so user requests take precedence
+                             XLSP_TASK_TYPE_INDEX,
+                             0  // No associated request ID
+            );
         xlsp_async_submit(server->async, task);
     }
 }
 
 void xlsp_workspace_index_task_complete(void *data, void *result) {
-    (void)result;
-    XrLspIndexTaskData *task_data = (XrLspIndexTaskData *)data;
+    (void) result;
+    XrLspIndexTaskData *task_data = (XrLspIndexTaskData *) data;
     XrLspServer *server = task_data->server;
 
     server->files_total = task_data->file_count;
@@ -261,10 +264,12 @@ void xlsp_workspace_index_task_complete(void *data, void *result) {
 
 // Index a single file by path (for file watcher updates)
 void xlsp_workspace_index_file(XrLspServer *server, const char *uri, const char *path) {
-    if (!server || !server->workspace_analyzer || !server->isolate || !path) return;
+    if (!server || !server->workspace_analyzer || !server->isolate || !path)
+        return;
 
     FILE *f = fopen(path, "r");
-    if (!f) return;
+    if (!f)
+        return;
 
     fseek(f, 0, SEEK_END);
     long size = ftell(f);
@@ -298,9 +303,8 @@ void xlsp_workspace_index_file(XrLspServer *server, const char *uri, const char 
         // 1. Skip re-analysis if content_hash unchanged
         // 2. Remove old symbols before adding new ones
         // 3. Propagate dirty flags to dependent files
-        xa_analyzer_refresh_file(server->workspace_analyzer, uri,
-                                 (XrAstNode*)ast, content_hash);
-        lsp_log("Indexed file: %s (hash: %llx)", path, (unsigned long long)content_hash);
+        xa_analyzer_refresh_file(server->workspace_analyzer, uri, (XrAstNode *) ast, content_hash);
+        lsp_log("Indexed file: %s (hash: %llx)", path, (unsigned long long) content_hash);
     }
     if (ast) {
         xr_program_destroy(ast);
@@ -316,7 +320,8 @@ void xlsp_workspace_index_file(XrLspServer *server, const char *uri, const char 
 // Merge index results into workspace analyzer (called from main thread)
 // This performs the actual symbol merging by re-analyzing files in the main thread
 void xlsp_workspace_merge_index_results(XrLspServer *server, XrLspIndexResult *results) {
-    if (!server || !results) return;
+    if (!server || !results)
+        return;
 
     // Check if indexing was cancelled
     if (server->index_cancelled) {
@@ -369,16 +374,15 @@ void xlsp_workspace_merge_index_results(XrLspServer *server, XrLspIndexResult *r
     }
 
     if (merged_count > 0 || error_count > 0) {
-        lsp_log("[IndexPool] Merged %d files (%d errors, %d symbols), total: %d/%d",
-                merged_count, error_count, symbols_added,
-                server->files_indexed, server->files_total);
+        lsp_log("[IndexPool] Merged %d files (%d errors, %d symbols), total: %d/%d", merged_count,
+                error_count, symbols_added, server->files_indexed, server->files_total);
 
         // Update progress
         if (server->index_progress_token && server->files_total > 0) {
             int percentage = (server->files_indexed * 100) / server->files_total;
             char msg[128];
-            snprintf(msg, sizeof(msg), "Indexed %d/%d files (%d symbols)",
-                     server->files_indexed, server->files_total, symbols_added);
+            snprintf(msg, sizeof(msg), "Indexed %d/%d files (%d symbols)", server->files_indexed,
+                     server->files_total, symbols_added);
             xlsp_progress_report(server, server->index_progress_token, msg, percentage);
         }
     }
@@ -394,7 +398,8 @@ void xlsp_workspace_merge_index_results(XrLspServer *server, XrLspIndexResult *r
             // Log final symbol count
             int total_symbols = 0;
             if (server->workspace_analyzer && server->workspace_analyzer->global_scope) {
-                XaSymbol **syms = xa_scope_get_all_symbols(server->workspace_analyzer->global_scope, &total_symbols);
+                XaSymbol **syms = xa_scope_get_all_symbols(server->workspace_analyzer->global_scope,
+                                                           &total_symbols);
                 xr_free(syms);
             }
 
@@ -404,8 +409,8 @@ void xlsp_workspace_merge_index_results(XrLspServer *server, XrLspIndexResult *r
             // End progress with success message
             if (server->index_progress_token) {
                 char msg[128];
-                snprintf(msg, sizeof(msg), "Indexed %d files (%d symbols)",
-                         completed, total_symbols);
+                snprintf(msg, sizeof(msg), "Indexed %d files (%d symbols)", completed,
+                         total_symbols);
                 xlsp_progress_end(server, server->index_progress_token, msg);
                 xr_free(server->index_progress_token);
                 server->index_progress_token = NULL;
@@ -416,7 +421,8 @@ void xlsp_workspace_merge_index_results(XrLspServer *server, XrLspIndexResult *r
 
 // Poll index pool and process results (call from main loop)
 void xlsp_workspace_poll_index_results(XrLspServer *server) {
-    if (!server || !server->index_pool) return;
+    if (!server || !server->index_pool)
+        return;
 
     XrLspIndexResult *results = xlsp_index_pool_poll(server->index_pool);
     if (results) {
@@ -427,24 +433,26 @@ void xlsp_workspace_poll_index_results(XrLspServer *server) {
 
 // Get index pool notify fd (for select/poll)
 int xlsp_workspace_get_index_notify_fd(XrLspServer *server) {
-    if (!server || !server->index_pool) return -1;
+    if (!server || !server->index_pool)
+        return -1;
     return xlsp_index_pool_get_notify_fd(server->index_pool);
 }
 
 // Start background workspace indexing (using parallel index pool)
 void xlsp_workspace_start_background_index(XrLspServer *server, const char *root_path) {
-    if (!server || !root_path) return;
+    if (!server || !root_path)
+        return;
 
     // If indexing is already running, scan files and enqueue them into the
     // pending analysis queue so they get processed after the current batch.
     if (server->indexing_in_progress) {
         int capacity = 64;
-        char **files = xr_malloc(capacity * sizeof(char*));
-        if (!files) return;
+        char **files = xr_malloc(capacity * sizeof(char *));
+        if (!files)
+            return;
         int file_count = 0;
 
-        find_xr_files_with_config(root_path, &files, &file_count, &capacity,
-                                   &server->config);
+        find_xr_files_with_config(root_path, &files, &file_count, &capacity, &server->config);
 
         for (int i = 0; i < file_count; i++) {
             char uri[XLSP_MAX_PATH + 8];
@@ -455,8 +463,8 @@ void xlsp_workspace_start_background_index(XrLspServer *server, const char *root
         xr_free(files);
 
         if (file_count > 0) {
-            lsp_log("[IndexPool] Queued %d files from %s (indexing in progress)",
-                    file_count, root_path);
+            lsp_log("[IndexPool] Queued %d files from %s (indexing in progress)", file_count,
+                    root_path);
         }
         return;
     }
@@ -476,7 +484,7 @@ void xlsp_workspace_start_background_index(XrLspServer *server, const char *root
 
     // Find all .xr files (using config-aware ignore rules)
     int capacity = 64;
-    char **files = xr_malloc(capacity * sizeof(char*));
+    char **files = xr_malloc(capacity * sizeof(char *));
     if (!files) {
         server->indexing_in_progress = false;
         return;
@@ -512,10 +520,12 @@ void xlsp_workspace_start_background_index(XrLspServer *server, const char *root
 }
 
 // Start background indexing for multiple roots (scanned into one batch)
-void xlsp_workspace_start_background_index_roots(XrLspServer *server,
-                                                  const char **roots, int root_count) {
-    if (!server || !roots || root_count <= 0) return;
-    if (server->indexing_in_progress) return;
+void xlsp_workspace_start_background_index_roots(XrLspServer *server, const char **roots,
+                                                 int root_count) {
+    if (!server || !roots || root_count <= 0)
+        return;
+    if (server->indexing_in_progress)
+        return;
 
     // Create index pool if not exists
     if (!server->index_pool) {
@@ -532,7 +542,7 @@ void xlsp_workspace_start_background_index_roots(XrLspServer *server,
 
     // Collect .xr files from all roots into a single batch
     int capacity = 64;
-    char **files = xr_malloc(capacity * sizeof(char*));
+    char **files = xr_malloc(capacity * sizeof(char *));
     if (!files) {
         server->indexing_in_progress = false;
         return;
@@ -541,8 +551,7 @@ void xlsp_workspace_start_background_index_roots(XrLspServer *server,
 
     for (int r = 0; r < root_count; r++) {
         if (roots[r]) {
-            find_xr_files_with_config(roots[r], &files, &file_count, &capacity,
-                                      &server->config);
+            find_xr_files_with_config(roots[r], &files, &file_count, &capacity, &server->config);
         }
     }
 
@@ -553,10 +562,8 @@ void xlsp_workspace_start_background_index_roots(XrLspServer *server,
             xr_free(server->index_progress_token);
         }
         char msg[128];
-        snprintf(msg, sizeof(msg), "Indexing %d files from %d roots...",
-                 file_count, root_count);
-        server->index_progress_token = xlsp_progress_begin(
-            server, "Indexing Workspace", msg, true);
+        snprintf(msg, sizeof(msg), "Indexing %d files from %d roots...", file_count, root_count);
+        server->index_progress_token = xlsp_progress_begin(server, "Indexing Workspace", msg, true);
 
         xlsp_index_pool_submit_batch(server->index_pool, files, file_count);
         lsp_log("[IndexPool] Submitted %d files from %d roots", file_count, root_count);
@@ -576,7 +583,8 @@ void xlsp_workspace_start_background_index_roots(XrLspServer *server,
 // ============================================================================
 
 void xlsp_enqueue_analysis(XrLspServer *server, const char *uri, const char *path) {
-    if (!server || !uri || !path) return;
+    if (!server || !uri || !path)
+        return;
 
     // O(n) dedup — queue is typically small (<100 entries per batch)
     for (int i = 0; i < server->pending_analysis_count; i++) {
@@ -587,27 +595,28 @@ void xlsp_enqueue_analysis(XrLspServer *server, const char *uri, const char *pat
 
     // Grow if needed
     if (server->pending_analysis_count >= server->pending_analysis_capacity) {
-        int new_cap = server->pending_analysis_capacity == 0
-                    ? 32
-                    : server->pending_analysis_capacity * 2;
-        XlspPendingAnalysis *tmp = xr_realloc(server->pending_analysis,
-                                              (size_t)new_cap * sizeof(XlspPendingAnalysis));
-        if (!tmp) return;
+        int new_cap =
+            server->pending_analysis_capacity == 0 ? 32 : server->pending_analysis_capacity * 2;
+        XlspPendingAnalysis *tmp =
+            xr_realloc(server->pending_analysis, (size_t) new_cap * sizeof(XlspPendingAnalysis));
+        if (!tmp)
+            return;
         server->pending_analysis = tmp;
         server->pending_analysis_capacity = new_cap;
     }
 
     int idx = server->pending_analysis_count++;
-    server->pending_analysis[idx].uri  = xr_strdup(uri);
+    server->pending_analysis[idx].uri = xr_strdup(uri);
     server->pending_analysis[idx].path = xr_strdup(path);
 }
 
 int xlsp_drain_pending_analysis(XrLspServer *server) {
-    if (!server || server->pending_analysis_count == 0) return 0;
+    if (!server || server->pending_analysis_count == 0)
+        return 0;
 
     struct timespec ts;
     clock_gettime(CLOCK_MONOTONIC, &ts);
-    uint64_t now_ms = (uint64_t)ts.tv_sec * 1000 + ts.tv_nsec / 1000000;
+    uint64_t now_ms = (uint64_t) ts.tv_sec * 1000 + ts.tv_nsec / 1000000;
     uint64_t deadline = now_ms + ANALYSIS_DRAIN_BUDGET_MS;
     int processed = 0;
 
@@ -629,19 +638,21 @@ int xlsp_drain_pending_analysis(XrLspServer *server) {
 
         // Respect time budget
         clock_gettime(CLOCK_MONOTONIC, &ts);
-        now_ms = (uint64_t)ts.tv_sec * 1000 + ts.tv_nsec / 1000000;
-        if (now_ms >= deadline) break;
+        now_ms = (uint64_t) ts.tv_sec * 1000 + ts.tv_nsec / 1000000;
+        if (now_ms >= deadline)
+            break;
     }
 
     if (processed > 0) {
-        lsp_log("[Drain] Analysed %d files, %d remaining",
-                processed, server->pending_analysis_count);
+        lsp_log("[Drain] Analysed %d files, %d remaining", processed,
+                server->pending_analysis_count);
     }
     return processed;
 }
 
 void xlsp_free_pending_analysis(XrLspServer *server) {
-    if (!server) return;
+    if (!server)
+        return;
     for (int i = 0; i < server->pending_analysis_count; i++) {
         xr_free(server->pending_analysis[i].uri);
         xr_free(server->pending_analysis[i].path);
@@ -654,10 +665,12 @@ void xlsp_free_pending_analysis(XrLspServer *server) {
 
 // Purge all analyzer/cache state for files under a path prefix
 void xlsp_workspace_purge_prefix(XrLspServer *server, const char *path_prefix) {
-    if (!server || !path_prefix) return;
+    if (!server || !path_prefix)
+        return;
 
     size_t prefix_len = strlen(path_prefix);
-    if (prefix_len == 0) return;
+    if (prefix_len == 0)
+        return;
 
     // Remove matching files from workspace analyzer
     if (server->workspace_analyzer) {

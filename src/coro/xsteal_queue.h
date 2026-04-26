@@ -26,18 +26,18 @@ struct XrCoroutine;
 
 // ========== Configuration ==========
 
-#define XR_STEAL_QUEUE_DEFAULT_SIZE     256        // Must be power of 2
-#define XR_STEAL_QUEUE_MAX_SIZE         (1 << 20)  // 1M
+#define XR_STEAL_QUEUE_DEFAULT_SIZE 256    // Must be power of 2
+#define XR_STEAL_QUEUE_MAX_SIZE (1 << 20)  // 1M
 
 // ========== Steal Queue Structure ==========
 
 // Lock-free work-stealing queue (Chase-Lev deque)
 // push/pop: owner thread, steal: other threads
 typedef struct XrStealQueue {
-    _Atomic(struct XrCoroutine*) *buffer;  // Ring buffer
-    _Atomic int64_t top;                   // Steal end (head)
-    _Atomic int64_t bottom;                // Local end (tail)
-    int64_t mask;                          // Size mask
+    _Atomic(struct XrCoroutine *) *buffer;  // Ring buffer
+    _Atomic int64_t top;                    // Steal end (head)
+    _Atomic int64_t bottom;                 // Local end (tail)
+    int64_t mask;                           // Size mask
     int capacity;
 } XrStealQueue;
 
@@ -53,12 +53,12 @@ XR_FUNC void xr_steal_queue_destroy(XrStealQueue *q);
 XR_FUNC bool xr_steal_queue_push(XrStealQueue *q, struct XrCoroutine *coro);
 
 // Pop coroutine (owner thread only, LIFO)
-XR_FUNC struct XrCoroutine* xr_steal_queue_pop(XrStealQueue *q);
+XR_FUNC struct XrCoroutine *xr_steal_queue_pop(XrStealQueue *q);
 
 // ========== Steal Operations (CAS) ==========
 
 // Steal coroutine (other threads, CAS, FIFO)
-XR_FUNC struct XrCoroutine* xr_steal_queue_steal(XrStealQueue *q);
+XR_FUNC struct XrCoroutine *xr_steal_queue_steal(XrStealQueue *q);
 
 // ========== Status Query ==========
 
@@ -77,11 +77,13 @@ XR_FUNC int xr_steal_queue_snapshot(XrStealQueue *q, struct XrCoroutine **out_bu
 // Peek at the oldest item (steal end) without removing it.
 // Racy but safe as a freshness hint — worst case we see a stale item.
 static inline struct XrCoroutine *xr_steal_queue_peek_top(XrStealQueue *q) {
-    if (!q || !q->buffer) return NULL;
+    if (!q || !q->buffer)
+        return NULL;
     int64_t t = atomic_load_explicit(&q->top, memory_order_relaxed);
     int64_t b = atomic_load_explicit(&q->bottom, memory_order_relaxed);
-    if (t >= b) return NULL;
+    if (t >= b)
+        return NULL;
     return atomic_load_explicit(&q->buffer[t & q->mask], memory_order_relaxed);
 }
 
-#endif // XSTEAL_QUEUE_H
+#endif  // XSTEAL_QUEUE_H

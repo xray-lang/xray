@@ -22,9 +22,9 @@
 
 /* Result of trying to parse a frame from a buffer. */
 typedef enum {
-    XR_FRAME_OK,       /* Complete frame found */
-    XR_FRAME_PARTIAL,  /* Need more data */
-    XR_FRAME_ERROR     /* Malformed header (missing/invalid Content-Length) */
+    XR_FRAME_OK,      /* Complete frame found */
+    XR_FRAME_PARTIAL, /* Need more data */
+    XR_FRAME_ERROR    /* Malformed header (missing/invalid Content-Length) */
 } XrFrameStatus;
 
 /*
@@ -42,9 +42,8 @@ typedef enum {
  * On XR_FRAME_ERROR:
  *   Header block was found but Content-Length is missing or invalid.
  */
-XR_FUNC XrFrameStatus xr_frame_parse(const char *buf, size_t buf_len,
-                                      size_t *header_end,
-                                      int *content_length);
+XR_FUNC XrFrameStatus xr_frame_parse(const char *buf, size_t buf_len, size_t *header_end,
+                                     int *content_length);
 
 /*
  * Write "Content-Length: <body_len>\r\n\r\n" into buf.
@@ -53,4 +52,4 @@ XR_FUNC XrFrameStatus xr_frame_parse(const char *buf, size_t buf_len,
  */
 XR_FUNC int xr_frame_write_header(char *buf, size_t buf_size, size_t body_len);
 
-#endif // XFRAMING_H
+#endif  // XFRAMING_H

@@ -18,29 +18,29 @@
 
 #include "../../base/xdefs.h"
 
-#define XMCP_MAX_TOPICS  64
+#define XMCP_MAX_TOPICS 64
 #define XMCP_MAX_MODULES 32
 
 /* A single topic entry (e.g., "channel" -> section text) */
 typedef struct XmcpTopic {
-    const char *name;       /* Topic key (e.g., "channel") */
-    const char *aliases;    /* Comma-separated aliases (e.g., "chan,Channel") */
-    const char *content;    /* Markdown content for this topic */
+    const char *name;    /* Topic key (e.g., "channel") */
+    const char *aliases; /* Comma-separated aliases (e.g., "chan,Channel") */
+    const char *content; /* Markdown content for this topic */
 } XmcpTopic;
 
 /* A standard library module entry */
 typedef struct XmcpModule {
-    const char *name;       /* Module name (e.g., "http") */
-    const char *description;/* Brief description */
+    const char *name;        /* Module name (e.g., "http") */
+    const char *description; /* Brief description */
 } XmcpModule;
 
 /* Knowledge base */
 typedef struct XmcpKnowledge {
-    XmcpTopic  topics[XMCP_MAX_TOPICS];
-    int        topic_count;
+    XmcpTopic topics[XMCP_MAX_TOPICS];
+    int topic_count;
 
     XmcpModule modules[XMCP_MAX_MODULES];
-    int        module_count;
+    int module_count;
 } XmcpKnowledge;
 
 /* Create an empty knowledge base. */
@@ -57,7 +57,7 @@ XR_FUNC const char *xmcp_knowledge_lookup_topic(XmcpKnowledge *kb, const char *q
 
 /* Search stdlib modules. Returns a formatted string (caller must xr_free). */
 XR_FUNC char *xmcp_knowledge_search_stdlib(XmcpKnowledge *kb, const char *query,
-                                            const char *module_filter);
+                                           const char *module_filter);
 
 /* Get the cheatsheet resource content. */
 XR_FUNC const char *xmcp_knowledge_get_cheatsheet(void);
@@ -68,4 +68,4 @@ XR_FUNC const char *xmcp_knowledge_get_concurrency(void);
 /* Get the stdlib modules list resource content. */
 XR_FUNC const char *xmcp_knowledge_get_stdlib_list(void);
 
-#endif // XMCP_KNOWLEDGE_H
+#endif  // XMCP_KNOWLEDGE_H

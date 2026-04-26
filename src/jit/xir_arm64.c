@@ -43,22 +43,21 @@ uint32_t a64_buf_offset(A64Buf *buf) {
 
 // Data Processing (register) - 3-source format
 //   sf=1 (64-bit), opc, shift=0, Rm, imm6=0, Rn, Rd
-static inline uint32_t dp_reg(uint32_t sf, uint32_t opc_top, uint32_t opc_lo,
-                               A64Reg rd, A64Reg rn, A64Reg rm) {
-    (void)opc_lo;
+static inline uint32_t dp_reg(uint32_t sf, uint32_t opc_top, uint32_t opc_lo, A64Reg rd, A64Reg rn,
+                              A64Reg rm) {
+    (void) opc_lo;
     // ADD/SUB shifted register: sf|op|S|01011|shift|0|Rm|imm6|Rn|Rd
-    return (sf << 31) | (opc_top << 29) | (0x0B << 24) | (0 << 22) |
-           (0 << 21) | ((uint32_t)rm << 16) | (0 << 10) |
-           ((uint32_t)rn << 5) | (uint32_t)rd;
+    return (sf << 31) | (opc_top << 29) | (0x0B << 24) | (0 << 22) | (0 << 21) |
+           ((uint32_t) rm << 16) | (0 << 10) | ((uint32_t) rn << 5) | (uint32_t) rd;
 }
 
 // Data Processing (immediate) - add/sub
 //   sf|op|S|100010|sh|imm12|Rn|Rd
-static inline uint32_t dp_imm(uint32_t sf, uint32_t op, uint32_t S,
-                               A64Reg rd, A64Reg rn, uint32_t imm12) {
+static inline uint32_t dp_imm(uint32_t sf, uint32_t op, uint32_t S, A64Reg rd, A64Reg rn,
+                              uint32_t imm12) {
     XR_DCHECK(imm12 < 4096, "assertion failed");
-    return (sf << 31) | (op << 30) | (S << 29) | (0x22 << 23) |
-           (0 << 22) | (imm12 << 10) | ((uint32_t)rn << 5) | (uint32_t)rd;
+    return (sf << 31) | (op << 30) | (S << 29) | (0x22 << 23) | (0 << 22) | (imm12 << 10) |
+           ((uint32_t) rn << 5) | (uint32_t) rd;
 }
 
 /* ========== Arithmetic ========== */
@@ -71,9 +70,8 @@ uint32_t a64_add(A64Reg rd, A64Reg rn, A64Reg rm) {
 uint32_t a64_add_lsl(A64Reg rd, A64Reg rn, A64Reg rm, uint32_t shift) {
     // ADD Xd, Xn, Xm, LSL #shift: sf|0|0|01011|00|0|Rm|imm6|Rn|Rd
     XR_DCHECK(shift < 64, "assertion failed");
-    return (1u << 31) | (0x0B << 24) | (0 << 22) |
-           (0 << 21) | ((uint32_t)rm << 16) | (shift << 10) |
-           ((uint32_t)rn << 5) | (uint32_t)rd;
+    return (1u << 31) | (0x0B << 24) | (0 << 22) | (0 << 21) | ((uint32_t) rm << 16) |
+           (shift << 10) | ((uint32_t) rn << 5) | (uint32_t) rd;
 }
 
 uint32_t a64_add_imm(A64Reg rd, A64Reg rn, uint32_t imm12) {
@@ -99,24 +97,21 @@ uint32_t a64_subs(A64Reg rd, A64Reg rn, A64Reg rm) {
 uint32_t a64_mul(A64Reg rd, A64Reg rn, A64Reg rm) {
     // MADD Xd, Xn, Xm, XZR (= MUL)
     // 1|00|11011|000|Rm|0|Ra(=11111)|Rn|Rd
-    return (1u << 31) | (0x0 << 29) | (0x1B << 24) | (0x0 << 21) |
-           ((uint32_t)rm << 16) | (0 << 15) | (0x1F << 10) |
-           ((uint32_t)rn << 5) | (uint32_t)rd;
+    return (1u << 31) | (0x0 << 29) | (0x1B << 24) | (0x0 << 21) | ((uint32_t) rm << 16) |
+           (0 << 15) | (0x1F << 10) | ((uint32_t) rn << 5) | (uint32_t) rd;
 }
 
 uint32_t a64_sdiv(A64Reg rd, A64Reg rn, A64Reg rm) {
     // SDIV Xd, Xn, Xm
     // 1|00|11010110|Rm|00001|1|Rn|Rd
-    return (1u << 31) | (0x0 << 29) | (0xD6 << 21) |
-           ((uint32_t)rm << 16) | (0x03 << 10) |
-           ((uint32_t)rn << 5) | (uint32_t)rd;
+    return (1u << 31) | (0x0 << 29) | (0xD6 << 21) | ((uint32_t) rm << 16) | (0x03 << 10) |
+           ((uint32_t) rn << 5) | (uint32_t) rd;
 }
 
 uint32_t a64_msub(A64Reg rd, A64Reg rn, A64Reg rm, A64Reg ra) {
     // MSUB Xd, Xn, Xm, Xa: sf=1|00|11011|000|Rm|1|Ra|Rn|Rd
-    return (1u << 31) | (0x0 << 29) | (0x1B << 24) | (0x0 << 21) |
-           ((uint32_t)rm << 16) | (1u << 15) | ((uint32_t)ra << 10) |
-           ((uint32_t)rn << 5) | (uint32_t)rd;
+    return (1u << 31) | (0x0 << 29) | (0x1B << 24) | (0x0 << 21) | ((uint32_t) rm << 16) |
+           (1u << 15) | ((uint32_t) ra << 10) | ((uint32_t) rn << 5) | (uint32_t) rd;
 }
 
 uint32_t a64_neg(A64Reg rd, A64Reg rm) {
@@ -128,9 +123,8 @@ uint32_t a64_neg(A64Reg rd, A64Reg rm) {
 // Logical shifted register: sf|opc|01010|shift|0|Rm|imm6|Rn|Rd
 static inline uint32_t log_reg(uint32_t opc, A64Reg rd, A64Reg rn, A64Reg rm, bool invert) {
     uint32_t N = invert ? 1 : 0;
-    return (1u << 31) | (opc << 29) | (0x0A << 24) | (0 << 22) |
-           (N << 21) | ((uint32_t)rm << 16) | (0 << 10) |
-           ((uint32_t)rn << 5) | (uint32_t)rd;
+    return (1u << 31) | (opc << 29) | (0x0A << 24) | (0 << 22) | (N << 21) | ((uint32_t) rm << 16) |
+           (0 << 10) | ((uint32_t) rn << 5) | (uint32_t) rd;
 }
 
 uint32_t a64_and(A64Reg rd, A64Reg rn, A64Reg rm) {
@@ -152,16 +146,14 @@ uint32_t a64_mvn(A64Reg rd, A64Reg rm) {
 
 uint32_t a64_lsl(A64Reg rd, A64Reg rn, A64Reg rm) {
     // LSLV: 1|00|11010110|Rm|0010|00|Rn|Rd
-    return (1u << 31) | (0x0 << 29) | (0xD6 << 21) |
-           ((uint32_t)rm << 16) | (0x08 << 10) |
-           ((uint32_t)rn << 5) | (uint32_t)rd;
+    return (1u << 31) | (0x0 << 29) | (0xD6 << 21) | ((uint32_t) rm << 16) | (0x08 << 10) |
+           ((uint32_t) rn << 5) | (uint32_t) rd;
 }
 
 uint32_t a64_asr(A64Reg rd, A64Reg rn, A64Reg rm) {
     // ASRV: 1|00|11010110|Rm|0010|10|Rn|Rd
-    return (1u << 31) | (0x0 << 29) | (0xD6 << 21) |
-           ((uint32_t)rm << 16) | (0x0A << 10) |
-           ((uint32_t)rn << 5) | (uint32_t)rd;
+    return (1u << 31) | (0x0 << 29) | (0xD6 << 21) | ((uint32_t) rm << 16) | (0x0A << 10) |
+           ((uint32_t) rn << 5) | (uint32_t) rd;
 }
 
 uint32_t a64_lsr_imm(A64Reg rd, A64Reg rn, uint32_t shift) {
@@ -169,16 +161,14 @@ uint32_t a64_lsr_imm(A64Reg rd, A64Reg rn, uint32_t shift) {
     // Encoding: 0|10|100110|0|immr:6|imms:6|Rn:5|Rd:5
     // sf=0 (32-bit), opc=10, N=0, immr=shift, imms=31
     XR_DCHECK(shift > 0 && shift < 32, "assertion failed");
-    return (0x53000000u) | (shift << 16) | (31u << 10) |
-           ((uint32_t)rn << 5) | (uint32_t)rd;
+    return (0x53000000u) | (shift << 16) | (31u << 10) | ((uint32_t) rn << 5) | (uint32_t) rd;
 }
 
 uint32_t a64_lsr_imm64(A64Reg rd, A64Reg rn, uint32_t shift) {
     // LSR Xd, Xn, #shift  →  UBFM Xd, Xn, #shift, #63
     // sf=1, opc=10, N=1, immr=shift, imms=63
     XR_DCHECK(shift > 0 && shift < 64, "assertion failed");
-    return (0xD3400000u) | (shift << 16) | (63u << 10) |
-           ((uint32_t)rn << 5) | (uint32_t)rd;
+    return (0xD3400000u) | (shift << 16) | (63u << 10) | ((uint32_t) rn << 5) | (uint32_t) rd;
 }
 
 uint32_t a64_ubfx64(A64Reg rd, A64Reg rn, uint32_t lsb, uint32_t width) {
@@ -186,8 +176,7 @@ uint32_t a64_ubfx64(A64Reg rd, A64Reg rn, uint32_t lsb, uint32_t width) {
     // sf=1, opc=10, N=1, immr=lsb, imms=lsb+width-1
     XR_DCHECK(lsb + width <= 64 && width > 0, "assertion failed");
     uint32_t imms = lsb + width - 1;
-    return (0xD3400000u) | (lsb << 16) | (imms << 10) |
-           ((uint32_t)rn << 5) | (uint32_t)rd;
+    return (0xD3400000u) | (lsb << 16) | (imms << 10) | ((uint32_t) rn << 5) | (uint32_t) rd;
 }
 
 /* ========== Compare ========== */
@@ -210,38 +199,39 @@ uint32_t a64_tst_imm(A64Reg rn, uint64_t bitmask_imm) {
     uint32_t ones = 0;
     uint64_t v = bitmask_imm;
     XR_DCHECK(v != 0, "bitmask_imm must be non-zero");
-    while (v & 1) { ones++; v >>= 1; }
+    while (v & 1) {
+        ones++;
+        v >>= 1;
+    }
     XR_DCHECK(v == 0 && ones > 0 && ones < 64 &&
-           "bitmask_imm must be (2^n - 1) for this simplified encoder", "assertion failed");
+                  "bitmask_imm must be (2^n - 1) for this simplified encoder",
+              "assertion failed");
     uint32_t N = 1, immr = 0, imms = ones - 1;
-    return (1u << 31) | (3u << 29) | (0x24u << 23) | (N << 22) |
-           (immr << 16) | (imms << 10) | ((uint32_t)rn << 5) | 0x1F;
+    return (1u << 31) | (3u << 29) | (0x24u << 23) | (N << 22) | (immr << 16) | (imms << 10) |
+           ((uint32_t) rn << 5) | 0x1F;
 }
 
 uint32_t a64_cset(A64Reg rd, A64Cond cond) {
     // CSINC Xd, XZR, XZR, invert(cond)
     // 1|00|11010100|Rm(=11111)|cond_inv|0|0|Rn(=11111)|Rd
     uint32_t cond_inv = cond ^ 1;  // invert condition
-    return (1u << 31) | (0x0 << 29) | (0xD4 << 21) |
-           (0x1F << 16) | (cond_inv << 12) | (0x1 << 10) |
-           (0x1F << 5) | (uint32_t)rd;
+    return (1u << 31) | (0x0 << 29) | (0xD4 << 21) | (0x1F << 16) | (cond_inv << 12) | (0x1 << 10) |
+           (0x1F << 5) | (uint32_t) rd;
 }
 
 uint32_t a64_csel(A64Reg rd, A64Reg rn, A64Reg rm, A64Cond cond) {
     // CSEL Xd, Xn, Xm, cond
     // 1|00|11010100|Rm|cond|0|0|Rn|Rd
-    return (1u << 31) | (0x0 << 29) | (0xD4 << 21) |
-           ((uint32_t)rm << 16) | ((uint32_t)cond << 12) | (0x0 << 10) |
-           ((uint32_t)rn << 5) | (uint32_t)rd;
+    return (1u << 31) | (0x0 << 29) | (0xD4 << 21) | ((uint32_t) rm << 16) |
+           ((uint32_t) cond << 12) | (0x0 << 10) | ((uint32_t) rn << 5) | (uint32_t) rd;
 }
 
 uint32_t a64_fcsel(A64Reg rd, A64Reg rn, A64Reg rm, A64Cond cond) {
     // FCSEL Dd, Dn, Dm, cond (double precision)
     // 0|00|11110|01|1|Rm|cond|11|Rn|Rd
-    return (0x0u << 31) | (0x0 << 29) | (0x1E << 24) | (0x1 << 22) |
-           (1u << 21) | ((uint32_t)(rm & 0x1F) << 16) |
-           ((uint32_t)cond << 12) | (0x3 << 10) |
-           ((uint32_t)(rn & 0x1F) << 5) | (uint32_t)(rd & 0x1F);
+    return (0x0u << 31) | (0x0 << 29) | (0x1E << 24) | (0x1 << 22) | (1u << 21) |
+           ((uint32_t) (rm & 0x1F) << 16) | ((uint32_t) cond << 12) | (0x3 << 10) |
+           ((uint32_t) (rn & 0x1F) << 5) | (uint32_t) (rd & 0x1F);
 }
 
 /* ========== Move / Constants ========== */
@@ -254,63 +244,63 @@ uint32_t a64_movz(A64Reg rd, uint16_t imm16, uint8_t shift) {
     // MOVZ: 1|10|100101|hw|imm16|Rd
     uint32_t hw = shift / 16;
     XR_DCHECK(hw <= 3, "assertion failed");
-    return (1u << 31) | (0x2 << 29) | (0x25 << 23) |
-           (hw << 21) | ((uint32_t)imm16 << 5) | (uint32_t)rd;
+    return (1u << 31) | (0x2 << 29) | (0x25 << 23) | (hw << 21) | ((uint32_t) imm16 << 5) |
+           (uint32_t) rd;
 }
 
 uint32_t a64_movk(A64Reg rd, uint16_t imm16, uint8_t shift) {
     // MOVK: 1|11|100101|hw|imm16|Rd
     uint32_t hw = shift / 16;
     XR_DCHECK(hw <= 3, "assertion failed");
-    return (1u << 31) | (0x3 << 29) | (0x25 << 23) |
-           (hw << 21) | ((uint32_t)imm16 << 5) | (uint32_t)rd;
+    return (1u << 31) | (0x3 << 29) | (0x25 << 23) | (hw << 21) | ((uint32_t) imm16 << 5) |
+           (uint32_t) rd;
 }
 
 /* ========== Branch ========== */
 
 uint32_t a64_b(int32_t offset_insts) {
     // B: 000101|imm26
-    uint32_t imm26 = (uint32_t)offset_insts & 0x3FFFFFF;
+    uint32_t imm26 = (uint32_t) offset_insts & 0x3FFFFFF;
     return (0x05 << 26) | imm26;
 }
 
 uint32_t a64_bcond(A64Cond cond, int32_t offset_insts) {
     // B.cond: 01010100|imm19|0|cond
-    uint32_t imm19 = (uint32_t)offset_insts & 0x7FFFF;
-    return (0x54 << 24) | (imm19 << 5) | (uint32_t)cond;
+    uint32_t imm19 = (uint32_t) offset_insts & 0x7FFFF;
+    return (0x54 << 24) | (imm19 << 5) | (uint32_t) cond;
 }
 
 uint32_t a64_bl(int32_t offset_insts) {
     // BL: 100101|imm26
-    uint32_t imm26 = (uint32_t)offset_insts & 0x3FFFFFF;
+    uint32_t imm26 = (uint32_t) offset_insts & 0x3FFFFFF;
     return (0x25u << 26) | imm26;
 }
 
 uint32_t a64_blr(A64Reg rn) {
     // BLR: 1101011000|1|11111|0000|00|Rn|00000
-    return (0xD63Fu << 16) | (0x0u << 10) | ((uint32_t)rn << 5) | 0x0u;
+    return (0xD63Fu << 16) | (0x0u << 10) | ((uint32_t) rn << 5) | 0x0u;
 }
 
 uint32_t a64_br(A64Reg rn) {
     // BR: 1101011000|0|11111|0000|00|Rn|00000
-    return (0xD61Fu << 16) | (0x0u << 10) | ((uint32_t)rn << 5) | 0x0u;
+    return (0xD61Fu << 16) | (0x0u << 10) | ((uint32_t) rn << 5) | 0x0u;
 }
 
 uint32_t a64_ret(void) {
     // RET X30: 1101011001|0|11111|0000|00|11110|00000
-    return (0xD65Fu << 16) | (0x0u << 10) | ((uint32_t)A64_LR << 5) | 0x0u;
+    return (0xD65Fu << 16) | (0x0u << 10) | ((uint32_t) A64_LR << 5) | 0x0u;
 }
 
 uint32_t a64_cbz(A64Reg rt, int32_t offset_insts) {
     // CBZ: 1|011010|0|imm19|Rt
-    uint32_t imm19 = (uint32_t)offset_insts & 0x7FFFF;
-    return (1u << 31) | (0x34 << 24) | (imm19 << 5) | (uint32_t)rt;
+    uint32_t imm19 = (uint32_t) offset_insts & 0x7FFFF;
+    return (1u << 31) | (0x34 << 24) | (imm19 << 5) | (uint32_t) rt;
 }
 
 uint32_t a64_cbnz(A64Reg rt, int32_t offset_insts) {
     // CBNZ: 1|011010|1|imm19|Rt
-    uint32_t imm19 = (uint32_t)offset_insts & 0x7FFFF;
-    return (1u << 31) | (0x35 << 24) | (imm19 << 5) | (uint32_t)rt;
+    uint32_t imm19 = (uint32_t) offset_insts & 0x7FFFF;
+    return (1u << 31) | (0x35 << 24) | (imm19 << 5) | (uint32_t) rt;
 }
 
 /* ========== Memory ========== */
@@ -319,18 +309,18 @@ uint32_t a64_ldr(A64Reg rt, A64Reg rn, int32_t offset) {
     // LDR Xt, [Xn, #offset] (unsigned offset, 64-bit)
     // Encoding: 11_111_0_01_01_imm12_Rn_Rt = base 0xF9400000
     XR_DCHECK((offset & 7) == 0 && offset >= 0, "assertion failed");
-    uint32_t imm12 = (uint32_t)(offset / 8);
+    uint32_t imm12 = (uint32_t) (offset / 8);
     XR_DCHECK(imm12 < 4096, "assertion failed");
-    return 0xF9400000u | (imm12 << 10) | ((uint32_t)rn << 5) | (uint32_t)rt;
+    return 0xF9400000u | (imm12 << 10) | ((uint32_t) rn << 5) | (uint32_t) rt;
 }
 
 uint32_t a64_str(A64Reg rt, A64Reg rn, int32_t offset) {
     // STR Xt, [Xn, #offset] (unsigned offset, 64-bit)
     // Encoding: 11_111_0_01_00_imm12_Rn_Rt = base 0xF9000000
     XR_DCHECK((offset & 7) == 0 && offset >= 0, "assertion failed");
-    uint32_t imm12 = (uint32_t)(offset / 8);
+    uint32_t imm12 = (uint32_t) (offset / 8);
     XR_DCHECK(imm12 < 4096, "assertion failed");
-    return 0xF9000000u | (imm12 << 10) | ((uint32_t)rn << 5) | (uint32_t)rt;
+    return 0xF9000000u | (imm12 << 10) | ((uint32_t) rn << 5) | (uint32_t) rt;
 }
 
 uint32_t a64_ldp(A64Reg rt1, A64Reg rt2, A64Reg rn, int32_t offset) {
@@ -338,9 +328,8 @@ uint32_t a64_ldp(A64Reg rt1, A64Reg rt2, A64Reg rn, int32_t offset) {
     // Encoding: 10_101_0_010_1_imm7_Rt2_Rn_Rt1 = base 0xA9400000
     int32_t imm7 = offset / 8;
     XR_DCHECK(imm7 >= -64 && imm7 < 64, "assertion failed");
-    return 0xA9400000u |
-           (((uint32_t)imm7 & 0x7F) << 15) | ((uint32_t)rt2 << 10) |
-           ((uint32_t)rn << 5) | (uint32_t)rt1;
+    return 0xA9400000u | (((uint32_t) imm7 & 0x7F) << 15) | ((uint32_t) rt2 << 10) |
+           ((uint32_t) rn << 5) | (uint32_t) rt1;
 }
 
 uint32_t a64_stp(A64Reg rt1, A64Reg rt2, A64Reg rn, int32_t offset) {
@@ -348,9 +337,8 @@ uint32_t a64_stp(A64Reg rt1, A64Reg rt2, A64Reg rn, int32_t offset) {
     // Encoding: 10_101_0_010_0_imm7_Rt2_Rn_Rt1 = base 0xA9000000
     int32_t imm7 = offset / 8;
     XR_DCHECK(imm7 >= -64 && imm7 < 64, "assertion failed");
-    return 0xA9000000u |
-           (((uint32_t)imm7 & 0x7F) << 15) | ((uint32_t)rt2 << 10) |
-           ((uint32_t)rn << 5) | (uint32_t)rt1;
+    return 0xA9000000u | (((uint32_t) imm7 & 0x7F) << 15) | ((uint32_t) rt2 << 10) |
+           ((uint32_t) rn << 5) | (uint32_t) rt1;
 }
 
 uint32_t a64_stp_pre(A64Reg rt1, A64Reg rt2, A64Reg rn, int32_t offset) {
@@ -358,9 +346,8 @@ uint32_t a64_stp_pre(A64Reg rt1, A64Reg rt2, A64Reg rn, int32_t offset) {
     // Encoding: 10_101_0_011_0_imm7_Rt2_Rn_Rt1 = base 0xA9800000
     int32_t imm7 = offset / 8;
     XR_DCHECK(imm7 >= -64 && imm7 < 64, "assertion failed");
-    return 0xA9800000u |
-           (((uint32_t)imm7 & 0x7F) << 15) | ((uint32_t)rt2 << 10) |
-           ((uint32_t)rn << 5) | (uint32_t)rt1;
+    return 0xA9800000u | (((uint32_t) imm7 & 0x7F) << 15) | ((uint32_t) rt2 << 10) |
+           ((uint32_t) rn << 5) | (uint32_t) rt1;
 }
 
 uint32_t a64_ldp_post(A64Reg rt1, A64Reg rt2, A64Reg rn, int32_t offset) {
@@ -368,9 +355,8 @@ uint32_t a64_ldp_post(A64Reg rt1, A64Reg rt2, A64Reg rn, int32_t offset) {
     // Encoding: 10_101_0_001_1_imm7_Rt2_Rn_Rt1 = base 0xA8C00000
     int32_t imm7 = offset / 8;
     XR_DCHECK(imm7 >= -64 && imm7 < 64, "assertion failed");
-    return 0xA8C00000u |
-           (((uint32_t)imm7 & 0x7F) << 15) | ((uint32_t)rt2 << 10) |
-           ((uint32_t)rn << 5) | (uint32_t)rt1;
+    return 0xA8C00000u | (((uint32_t) imm7 & 0x7F) << 15) | ((uint32_t) rt2 << 10) |
+           ((uint32_t) rn << 5) | (uint32_t) rt1;
 }
 
 /* ========== 8-bit Memory ========== */
@@ -379,16 +365,16 @@ uint32_t a64_ldrb(A64Reg rt, A64Reg rn, int32_t offset) {
     // LDRB Wt, [Xn, #uimm12] (8-bit unsigned byte load, offset NOT scaled)
     // 0011 1001 01 imm12 Rn:5 Rt:5 = base 0x39400000
     XR_DCHECK(offset >= 0 && offset < 4096, "assertion failed");
-    uint32_t imm12 = (uint32_t)offset;
-    return 0x39400000u | (imm12 << 10) | ((uint32_t)rn << 5) | (uint32_t)rt;
+    uint32_t imm12 = (uint32_t) offset;
+    return 0x39400000u | (imm12 << 10) | ((uint32_t) rn << 5) | (uint32_t) rt;
 }
 
 uint32_t a64_strb(A64Reg rt, A64Reg rn, int32_t offset) {
     // STRB Wt, [Xn, #uimm12] (8-bit byte store, offset NOT scaled)
     // 0011 1001 00 imm12 Rn:5 Rt:5 = base 0x39000000
     XR_DCHECK(offset >= 0 && offset < 4096, "assertion failed");
-    uint32_t imm12 = (uint32_t)offset;
-    return 0x39000000u | (imm12 << 10) | ((uint32_t)rn << 5) | (uint32_t)rt;
+    uint32_t imm12 = (uint32_t) offset;
+    return 0x39000000u | (imm12 << 10) | ((uint32_t) rn << 5) | (uint32_t) rt;
 }
 
 /* ========== 16-bit Memory ========== */
@@ -397,18 +383,18 @@ uint32_t a64_ldrh(A64Reg rt, A64Reg rn, int32_t offset) {
     // LDRH Wt, [Xn, #offset]  (16-bit unsigned load, offset scaled by 2)
     // 0111 1001 01 imm12 Rn:5 Rt:5 = base 0x79400000
     XR_DCHECK(offset >= 0 && (offset % 2) == 0, "assertion failed");
-    uint32_t imm12 = (uint32_t)(offset / 2);
+    uint32_t imm12 = (uint32_t) (offset / 2);
     XR_DCHECK(imm12 < 4096, "assertion failed");
-    return 0x79400000u | (imm12 << 10) | ((uint32_t)rn << 5) | (uint32_t)rt;
+    return 0x79400000u | (imm12 << 10) | ((uint32_t) rn << 5) | (uint32_t) rt;
 }
 
 uint32_t a64_strh(A64Reg rt, A64Reg rn, int32_t offset) {
     // STRH Wt, [Xn, #offset] (16-bit store, offset scaled by 2)
     // 0111 1001 00 imm12 Rn:5 Rt:5 = base 0x79000000
     XR_DCHECK(offset >= 0 && (offset % 2) == 0, "assertion failed");
-    uint32_t imm12 = (uint32_t)(offset / 2);
+    uint32_t imm12 = (uint32_t) (offset / 2);
     XR_DCHECK(imm12 < 4096, "assertion failed");
-    return 0x79000000u | (imm12 << 10) | ((uint32_t)rn << 5) | (uint32_t)rt;
+    return 0x79000000u | (imm12 << 10) | ((uint32_t) rn << 5) | (uint32_t) rt;
 }
 
 /* ========== 32-bit Memory ========== */
@@ -417,25 +403,25 @@ uint32_t a64_ldr_w(A64Reg rt, A64Reg rn, int32_t offset) {
     // LDR Wt, [Xn, #offset]  (32-bit, unsigned offset scaled by 4)
     // sf=0 | 11_1_00_10_1 | imm12 | Rn | Rt = base 0xB9400000
     XR_DCHECK(offset >= 0 && (offset % 4) == 0, "assertion failed");
-    uint32_t imm12 = (uint32_t)(offset / 4);
+    uint32_t imm12 = (uint32_t) (offset / 4);
     XR_DCHECK(imm12 < 4096, "assertion failed");
-    return 0xB9400000u | (imm12 << 10) | ((uint32_t)rn << 5) | (uint32_t)rt;
+    return 0xB9400000u | (imm12 << 10) | ((uint32_t) rn << 5) | (uint32_t) rt;
 }
 
 uint32_t a64_str_w(A64Reg rt, A64Reg rn, int32_t offset) {
     // STR Wt, [Xn, #offset]  (32-bit, unsigned offset scaled by 4)
     // sf=0 | 11_1_00_10_0 | imm12 | Rn | Rt = base 0xB9000000
     XR_DCHECK(offset >= 0 && (offset % 4) == 0, "assertion failed");
-    uint32_t imm12 = (uint32_t)(offset / 4);
+    uint32_t imm12 = (uint32_t) (offset / 4);
     XR_DCHECK(imm12 < 4096, "assertion failed");
-    return 0xB9000000u | (imm12 << 10) | ((uint32_t)rn << 5) | (uint32_t)rt;
+    return 0xB9000000u | (imm12 << 10) | ((uint32_t) rn << 5) | (uint32_t) rt;
 }
 
 uint32_t a64_subs_imm_w(A64Reg rd, A64Reg rn, uint32_t imm12) {
     // SUBS Wd, Wn, #imm12  (32-bit subtract setting flags)
     // sf=0 | 11 | 10001 | shift=0 | imm12 | Rn | Rd = base 0x71000000
     XR_DCHECK(imm12 < 4096, "assertion failed");
-    return 0x71000000u | (imm12 << 10) | ((uint32_t)rn << 5) | (uint32_t)rd;
+    return 0x71000000u | (imm12 << 10) | ((uint32_t) rn << 5) | (uint32_t) rd;
 }
 
 /* ========== Conditional Branch ========== */
@@ -443,8 +429,8 @@ uint32_t a64_subs_imm_w(A64Reg rd, A64Reg rn, uint32_t imm12) {
 uint32_t a64_b_cond(A64Cond cond, int32_t offset_insts) {
     // B.cond offset  (PC-relative conditional branch)
     // 0101010_0 | imm19 | 0 | cond = base 0x54000000
-    uint32_t imm19 = (uint32_t)offset_insts & 0x7FFFF;
-    return 0x54000000u | (imm19 << 5) | (uint32_t)cond;
+    uint32_t imm19 = (uint32_t) offset_insts & 0x7FFFF;
+    return 0x54000000u | (imm19 << 5) | (uint32_t) cond;
 }
 
 /* ========== Helper: Load 64-bit Immediate ========== */
@@ -458,25 +444,28 @@ int a64_load_imm64(A64Buf *buf, A64Reg rd, uint64_t imm) {
 
     // Count non-zero 16-bit chunks
     uint16_t chunks[4] = {
-        (uint16_t)(imm),
-        (uint16_t)(imm >> 16),
-        (uint16_t)(imm >> 32),
-        (uint16_t)(imm >> 48),
+        (uint16_t) (imm),
+        (uint16_t) (imm >> 16),
+        (uint16_t) (imm >> 32),
+        (uint16_t) (imm >> 48),
     };
 
     // Find first non-zero chunk for MOVZ
     int first = -1;
     for (int i = 0; i < 4; i++) {
-        if (chunks[i] != 0) { first = i; break; }
+        if (chunks[i] != 0) {
+            first = i;
+            break;
+        }
     }
 
-    a64_buf_emit(buf, a64_movz(rd, chunks[first], (uint8_t)(first * 16)));
+    a64_buf_emit(buf, a64_movz(rd, chunks[first], (uint8_t) (first * 16)));
     int count = 1;
 
     // MOVK for remaining non-zero chunks
     for (int i = first + 1; i < 4; i++) {
         if (chunks[i] != 0) {
-            a64_buf_emit(buf, a64_movk(rd, chunks[i], (uint8_t)(i * 16)));
+            a64_buf_emit(buf, a64_movk(rd, chunks[i], (uint8_t) (i * 16)));
             count++;
         }
     }
@@ -559,14 +548,14 @@ uint32_t a64_ldr_fp(A64Reg rt, A64Reg rn, int32_t offset) {
     // LDR Dt, [Xn, #offset]: 1111_1101_01 imm12 Rn Rt
     // offset must be 8-byte aligned, encoded as offset/8
     XR_DCHECK((offset & 7) == 0 && offset >= 0, "assertion failed");
-    uint32_t imm12 = (uint32_t)(offset / 8) & 0xFFF;
+    uint32_t imm12 = (uint32_t) (offset / 8) & 0xFFF;
     return 0xFD400000 | (imm12 << 10) | ((rn & 0x1F) << 5) | (rt & 0x1F);
 }
 
 uint32_t a64_str_fp(A64Reg rt, A64Reg rn, int32_t offset) {
     // STR Dt, [Xn, #offset]: 1111_1101_00 imm12 Rn Rt
     XR_DCHECK((offset & 7) == 0 && offset >= 0, "assertion failed");
-    uint32_t imm12 = (uint32_t)(offset / 8) & 0xFFF;
+    uint32_t imm12 = (uint32_t) (offset / 8) & 0xFFF;
     return 0xFD000000 | (imm12 << 10) | ((rn & 0x1F) << 5) | (rt & 0x1F);
 }
 
@@ -575,8 +564,7 @@ uint32_t a64_stp_fp(A64Reg rt1, A64Reg rt2, A64Reg rn, int32_t offset) {
     // opc=01 V=1 type=010 L=0: base 0x6D000000
     int32_t imm7 = offset / 8;
     XR_DCHECK(imm7 >= -64 && imm7 < 64, "assertion failed");
-    return 0x6D000000u |
-           (((uint32_t)imm7 & 0x7F) << 15) | ((rt2 & 0x1F) << 10) |
+    return 0x6D000000u | (((uint32_t) imm7 & 0x7F) << 15) | ((rt2 & 0x1F) << 10) |
            ((rn & 0x1F) << 5) | (rt1 & 0x1F);
 }
 
@@ -585,8 +573,7 @@ uint32_t a64_ldp_fp(A64Reg rt1, A64Reg rt2, A64Reg rn, int32_t offset) {
     // opc=01 V=1 type=010 L=1: base 0x6D400000
     int32_t imm7 = offset / 8;
     XR_DCHECK(imm7 >= -64 && imm7 < 64, "assertion failed");
-    return 0x6D400000u |
-           (((uint32_t)imm7 & 0x7F) << 15) | ((rt2 & 0x1F) << 10) |
+    return 0x6D400000u | (((uint32_t) imm7 & 0x7F) << 15) | ((rt2 & 0x1F) << 10) |
            ((rn & 0x1F) << 5) | (rt1 & 0x1F);
 }
 
@@ -615,4 +602,4 @@ uint32_t a64_nop(void) {
     return 0xD503201F;
 }
 
-#endif // __aarch64__
+#endif  // __aarch64__
