@@ -34,19 +34,19 @@ typedef struct XrEmitter {
     XrProto *proto;
     XrCompilerContext *ctx;
     XRegAlloc *regalloc;
-    
+
     int pc;
-    
+
     XrPeepholeWindow window;
     bool enable_peephole;
-    
+
     struct {
         int inst_count;
         int move_count;
         int optimized_count;
         int jump_count;
     } stats;
-    
+
     bool debug_mode;
 } XrEmitter;
 
@@ -96,5 +96,10 @@ XR_FUNC int emit_get_current_pc(XrEmitter *e);
 
 XR_FUNC int emit_spill(XrEmitter *e, int slot, int reg);
 XR_FUNC int emit_reload(XrEmitter *e, int reg, int slot);
+
+// Strongly typed per-opcode emit API (one inline function per VM opcode).
+// Generated from xopcode_def.h; included here so all codegen TUs that
+// already include xemit.h pick it up automatically.
+#include "xemit_typed.h"
 
 #endif // XEMIT_H
